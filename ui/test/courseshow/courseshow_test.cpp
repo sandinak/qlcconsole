@@ -2366,6 +2366,18 @@ HelpShots::Frame showTreeFrame(App *app, ShowTreeView *v)
     if (app->m_toolbar != nullptr && app->m_toolbar->isVisible())
         r |= QRect(app->m_toolbar->mapTo(app, QPoint(0, 0)), app->m_toolbar->size());
     f.crop = r;
+    /* A cue's page is taller than the window: scroll it so its Layers (the
+       list, or the dashed drop area while there are none) are on show,
+       as a student scrolls to them. The callouts are placed after this. */
+    if (QScrollArea *page = qobject_cast<QScrollArea *>(v->m_cuePage))
+        if (page->isVisible())
+        {
+            if (v->m_cueLayers != nullptr && v->m_cueLayers->isVisible())
+                page->ensureWidgetVisible(v->m_cueLayers, 0, 8);
+            if (QWidget *zone = v->findChild<QWidget *>(QStringLiteral("stCueDropZone")))
+                if (zone->isVisible())
+                    page->ensureWidgetVisible(zone, 0, 8);
+        }
     return f;
 }
 }

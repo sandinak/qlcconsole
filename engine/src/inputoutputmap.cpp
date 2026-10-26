@@ -209,6 +209,11 @@ quint32 InputOutputMap::invalidUniverse()
     return UINT_MAX;
 }
 
+quint32 InputOutputMap::maxUniverses()
+{
+    return 1024;
+}
+
 bool InputOutputMap::addUniverse(quint32 id)
 {
     {
@@ -218,6 +223,13 @@ bool InputOutputMap::addUniverse(quint32 id)
         if (id == InputOutputMap::invalidUniverse())
         {
             id = universesCount();
+        }
+
+        if (id >= maxUniverses())
+        {
+            qWarning() << Q_FUNC_INFO << "Universe" << id << "is past the limit of"
+                       << maxUniverses() << "universes";
+            return false;
         }
         else if (id < universesCount())
         {
@@ -2277,6 +2289,12 @@ bool InputOutputMap::loadXML(QXmlStreamReader &root)
             {
                 Universe *uni = m_universeArray.last();
                 uni->loadXML(root, m_universeArray.count() - 1, this);
+            }
+            else
+            {
+                /* Out of range or a duplicate: read past it, or its
+                   children would be taken for the map's own. */
+                root.skipCurrentElement();
             }
         }
         else if (root.name() == QStringLiteral("TargetAlias"))

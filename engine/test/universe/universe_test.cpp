@@ -131,9 +131,8 @@ void Universe_Test::blendModes()
     QVERIFY(m_uni->writeBlended(0, 255, 1, Universe::SubtractiveBlend) == true);
     QCOMPARE(quint8(m_uni->postGMValues()->at(0)), quint8(0));
 
-    /* check an unknown blend mode */
-    QVERIFY(m_uni->writeBlended(9, 255, 1, Universe::BlendMode(42)) == false);
-    QCOMPARE(quint8(m_uni->postGMValues()->at(9)), quint8(150));
+    /* No unknown blend mode to try: every value a BlendMode can hold (0..3)
+       is named, and casting 42 to it is undefined behaviour (UBSan). */
 }
 
 void Universe_Test::grandMasterIntensityReduce()

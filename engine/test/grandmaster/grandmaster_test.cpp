@@ -59,7 +59,8 @@ void GrandMaster_Test::channelMode()
 
     QCOMPARE(GrandMaster::channelModeToString(GrandMaster::AllChannels), QString("All"));
     QCOMPARE(GrandMaster::channelModeToString(GrandMaster::Intensity), QString("Intensity"));
-    QCOMPARE(GrandMaster::channelModeToString(GrandMaster::ChannelMode(42)), QString("Intensity"));
+    // Nothing else to try: both values a ChannelMode can hold are named, and
+    // casting 42 to it is undefined behaviour (UBSan).
 }
 
 void GrandMaster_Test::valueMode()
@@ -76,7 +77,8 @@ void GrandMaster_Test::valueMode()
 
     QCOMPARE(GrandMaster::valueModeToString(GrandMaster::Limit), QString("Limit"));
     QCOMPARE(GrandMaster::valueModeToString(GrandMaster::Reduce), QString("Reduce"));
-    QCOMPARE(GrandMaster::valueModeToString(GrandMaster::ValueMode(31337)), QString("Reduce"));
+    // Nothing else to try: both values a ValueMode can hold are named, and
+    // casting 31337 to it is undefined behaviour (UBSan).
 }
 
 void GrandMaster_Test::value()

@@ -114,6 +114,15 @@ public:
     static QString currentUserName();
 
     /**
+     * The organisation a plain QSettings() names qlcconsole's settings by,
+     * for code that has to name them itself (the engine, the fixture
+     * editor): on macOS the domain, "qlcplus.org" (the
+     * org.qlcplus.qlcconsole plist); elsewhere the name, "qlcplus".
+     * QSettings(settingsOrganisation(), "qlcconsole") is the app's own.
+     */
+    static QString settingsOrganisation();
+
+    /**
      * Method called just once to set the m_hasWindowManager flag
      */
     static void setHasWindowManager(bool enable);

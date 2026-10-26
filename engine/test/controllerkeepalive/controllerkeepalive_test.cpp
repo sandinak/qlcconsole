@@ -194,8 +194,9 @@ void ControllerKeepAlive_Test::wakingEndsWithInputOrTime()
 
 void ControllerKeepAlive_Test::unlockingIsNotWaking()
 {
-    ControllerKeepAlive keep;
+    // The counters first: keep's destructor ends the activity through them.
     int begun = 0, ended = 0, held = 0;
+    ControllerKeepAlive keep;
     keep.setBackend(new FakeBackend(&begun, &ended, &held));
     keep.setFocusActive(true);
     keep.setController(true);

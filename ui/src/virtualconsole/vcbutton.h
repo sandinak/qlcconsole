@@ -243,7 +243,9 @@ signals:
     void stateChanged(int state);
 
 protected:
-    ButtonState m_state;
+    /* Set here, not by setState()/setAction() in the constructor: those
+       compare with the value before, and read it uninitialised (M3). */
+    ButtonState m_state = Inactive;
     bool m_ledStyle;
 
     /*********************************************************************
@@ -376,7 +378,7 @@ protected:
     QList<quint32> m_selectionGroups;
     SelectionMode m_selectionMode;
 
-    Action m_action;
+    Action m_action = Toggle;
     int m_blackoutFadeOutTime;
 
     /** SaveProgrammer-action only: 500ms timer that toggles

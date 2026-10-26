@@ -467,6 +467,107 @@ void ShowFiles_Test::openingAShowNeverWritesIt()
                                          .arg(before.join('\n'), after.join('\n'))));
 }
 
+void ShowFiles_Test::aShowOpensUnmodified_data()
+{
+    addShowRows(false);
+}
+
+void ShowFiles_Test::aShowOpensUnmodified()
+{
+    QFETCH(QString, path);
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString copy = dir.filePath(QFileInfo(path).fileName());
+    QVERIFY(QFile::copy(path, copy));
+    QFile::setPermissions(copy, QFile::ReadOwner | QFile::WriteOwner);
+
+    QCOMPARE(open(m_app, copy), QFile::NoError);
+    QCoreApplication::processEvents();
+    QVERIFY2(!m_app->doc()->isModified(), "opened, not changed: nothing to save");
+}
+
+void ShowFiles_Test::aDamagedShowOpensAndIsNotSavedOver_data()
+{
+    QTest::addColumn<QString>("path");
+    QTest::addColumn<double>("kept");
+    const QStringList shows = {
+        QStringLiteral(SHOWFILES_WORKSPACES "/help-demo.qxw"),
+        QStringLiteral(SHOWFILES_WORKSPACES "/stage-structures-demo.qxw"),
+        QStringLiteral(SHOWFILES_WORKSPACES "/DanceHysteria-0.1.qlcc"),
+        QStringLiteral(SHOWFILES_SAMPLE),
+    };
+    for (const QString &show : shows)
+    {
+        if (!QFileInfo::exists(show))
+            continue;
+        for (double kept : { 0.3, 0.6, 0.95 })
+            QTest::newRow(qPrintable(QStringLiteral("%1 %2%").arg(QFileInfo(show).fileName())
+                                         .arg(int(kept * 100))))
+                << show << kept;
+    }
+}
+
+void ShowFiles_Test::aDamagedShowOpensAndIsNotSavedOver()
+{
+    QFETCH(QString, path);
+    QFETCH(double, kept);
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString copy = dir.filePath(QFileInfo(path).fileName());
+    const QByteArray whole = fileBytes(path);
+    QVERIFY(!whole.isEmpty());
+    {
+        QFile f(copy);
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write(whole.left(int(whole.size() * kept)));
+    }
+    const QByteArray cut = fileBytes(copy);
+
+    g_closed.clear();
+    QCOMPARE(open(m_app, copy), QFile::NoError);
+    QCOMPARE(m_app->damagedFile(), copy);
+    QCOMPARE(m_app->fileName(), copy);
+    QVERIFY2(g_closed.join('\n').contains(QStringLiteral("damaged or incomplete (line")),
+             qPrintable(QStringLiteral("said: ") + g_closed.join(QStringLiteral(" | "))));
+    QVERIFY2(m_app->doc()->errorLog().contains(QStringLiteral("damaged or incomplete")),
+             qPrintable(m_app->doc()->errorLog()));
+    QVERIFY(!m_app->doc()->isModified());
+
+    // Save: Save As, not the original. Its dialog closed: nothing written.
+    g_closed.clear();
+    {
+        ModalCloser closer;
+        m_app->doc()->setModified();
+        m_app->slotFileSave();
+        closeModalsFor(30);
+    }
+    /* Its Save As dialog -- or, first, the question about fixtures with no
+       definition on this computer (Sample, help-demo here), which Save As
+       asks too; closed, it saves nothing. */
+    const QString said = g_closed.join('\n');
+    QVERIFY2(said.contains(QStringLiteral("QFileDialog"))
+             || said.contains(QStringLiteral("standing in as dimmers")),
+             qPrintable(QStringLiteral("said: ") + g_closed.join(QStringLiteral(" | "))));
+    QCOMPARE(fileBytes(copy), cut);
+    QCOMPARE(m_app->damagedFile(), copy);
+
+    // Saved under a name of its own: an ordinary show, Save saves it.
+    const QString recovered = dir.filePath(QStringLiteral("recovered.") + QFileInfo(path).suffix());
+    QCOMPARE(save(m_app, recovered), QFile::NoError);
+    QVERIFY(m_app->damagedFile().isEmpty());
+    QCOMPARE(m_app->fileName(), recovered);
+    QCOMPARE(fileBytes(copy), cut);
+    QCOMPARE(open(m_app, recovered), QFile::NoError);
+    QVERIFY(m_app->damagedFile().isEmpty());
+    QVERIFY(!m_app->doc()->errorLog().contains(QStringLiteral("damaged or incomplete")));
+
+    // The whole show is not damaged.
+    const QString good = dir.filePath(QStringLiteral("whole.") + QFileInfo(path).suffix());
+    QVERIFY(QFile::copy(path, good));
+    QCOMPARE(open(m_app, good), QFile::NoError);
+    QVERIFY(m_app->damagedFile().isEmpty());
+}
+
 void ShowFiles_Test::aStockShowOpensWithAutoOpenOff_data()
 {
     addShowRows(true);

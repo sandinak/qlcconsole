@@ -115,13 +115,10 @@ void Chaser_Test::directionRunOrder()
     c.setRunOrder(Chaser::Loop);
     QVERIFY(c.runOrder() == Chaser::Loop);
 
-    /* Check that invalid direction results in a sane fallback value */
-    c.setDirection(Chaser::Direction(15));
-    QVERIFY(c.direction() == Chaser::Forward);
-
-    /* Check that invalid run order results in a sane fallback value */
-    c.setRunOrder(Chaser::RunOrder(42));
-    QVERIFY(c.runOrder() == Chaser::Loop);
+    /* No invalid direction or run order to try: every value the enums can
+       hold (0..1, 0..3) is named, and casting 15 or 42 to them is undefined
+       behaviour (UBSan). A file's unknown strings fall back in
+       Function_Test::stringToRunOrder and stringToDirection. */
 }
 
 void Chaser_Test::steps()
@@ -383,7 +380,8 @@ void Chaser_Test::speedModes()
     QCOMPARE(Chaser::speedModeToString(Chaser::Default), QString("Default"));
     QCOMPARE(Chaser::speedModeToString(Chaser::Common), QString("Common"));
     QCOMPARE(Chaser::speedModeToString(Chaser::PerStep), QString("PerStep"));
-    QCOMPARE(Chaser::speedModeToString(Chaser::SpeedMode(12345)), QString("Default"));
+    // 3: not a mode, though a value the enum can hold (0..3); 12345 is not.
+    QCOMPARE(Chaser::speedModeToString(Chaser::SpeedMode(3)), QString("Default"));
 
     QCOMPARE(Chaser::stringToSpeedMode("Default"), Chaser::Default);
     QCOMPARE(Chaser::stringToSpeedMode("Common"), Chaser::Common);

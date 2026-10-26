@@ -22,13 +22,40 @@ class Doc;
  */
 
 /**
+ * A time in seconds, typed with either decimal mark: "1.5" and "1,5" are
+ * both one and a half seconds, in every language. A plain QDoubleSpinBox
+ * takes the locale's group separator as a thousands mark, so in German
+ * "1.5" was 15 s, with no warning (L1). A time has no thousands, so both
+ * marks mean the decimal point here.
+ */
+class SecondsSpinBox : public QDoubleSpinBox
+{
+    Q_OBJECT
+
+public:
+    explicit SecondsSpinBox(QWidget *parent = nullptr);
+
+    /** @p text with each '.' and ',' as @p locale's decimal point. */
+    static QString withDecimalPoint(const QString &text, const QLocale &locale);
+
+protected:
+    QValidator::State validate(QString &input, int &pos) const override;
+    double valueFromText(const QString &text) const override;
+    void fixup(QString &input) const override;
+
+private:
+    /** @p text with its number's '.' and ',' as the decimal point. */
+    QString normalised(const QString &text) const;
+};
+
+/**
  * The one way a fade or transition time is entered: seconds, two decimals,
  * 0 to 600, " s" -- the scene's fade, a look's fade, a transition's time all
  * the same. Where a time can be left to something else (a look's fade
  * following the scene's), the spin's lowest value is that, named by
  * @p defaultLabel ("scene", "snap"); ms() is then -1.
  */
-class FadeTimeSpin final : public QDoubleSpinBox
+class FadeTimeSpin final : public SecondsSpinBox
 {
     Q_OBJECT
 

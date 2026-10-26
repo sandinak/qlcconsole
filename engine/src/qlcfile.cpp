@@ -149,6 +149,17 @@ QString QLCFile::errorString(QFile::FileError error)
     }
 }
 
+QString QLCFile::settingsOrganisation()
+{
+    /* As QSettings() picks it (App sets both): the domain on Apple
+       platforms, the name everywhere else. */
+#if defined(Q_OS_DARWIN)
+    return QStringLiteral("qlcplus.org");
+#else
+    return QStringLiteral("qlcplus");
+#endif
+}
+
 QString QLCFile::currentUserName()
 {
 #if defined(WIN32) || defined(Q_OS_WIN)

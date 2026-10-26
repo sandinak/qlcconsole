@@ -110,6 +110,16 @@ Which of these you see depends on the view (below).
   footer shows only the mode, the Grand Master and Ready.
 - **Everything** — every tab.
 
+![The Classic QLC+ view](../images/views-classic.png)
+
+The same show in **Classic QLC+**:
+
+1. QLC+'s main toolbar: New, Open, Save, Save As, the Monitor (the Rig
+   Overview), the address tool, help, dump and live edit.
+2. The tab's own row of buttons, as in QLC+ (here the Fixtures tab's).
+3. QLC+'s tabs, in QLC+'s order and names.
+4. The footer: Ready, the Grand Master and the mode.
+
 A view only shows and hides tabs. The show itself doesn't change, and
 nothing on a hidden tab stops working. The view is saved with the show: it
 marks the show changed, but it isn't an undo step. QLC+ ignores it when it
@@ -390,3 +400,6 @@ says, whatever this is set to.
 - [Effects](effects.md) — what each built-in effect does.
 - [Troubleshooting](troubleshooting.md) — when something isn't right.
 - The [feature guide index](README.md).
+- [The course](https://github.com/sandinak/qlcconsole/blob/main/docs/course/README.md) — *Lighting a show choir with the
+  Show Tree*: lessons from the first cue to running a show, on a virtual
+  stage (on GitHub).

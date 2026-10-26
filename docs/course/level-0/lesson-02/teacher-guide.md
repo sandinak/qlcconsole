@@ -73,7 +73,9 @@ On the projector:
    isn't connected to real lights, on purpose. We can't break anything.
    If that corner ever turns red, something is really wrong."
 3. **View → Rig Overview** (⇧⌘R). The stage, at 45°. Drag in the picture
-   to swing round; the mouse wheel zooms.
+   to swing round; the mouse wheel zooms. Its controls are in the bar
+   along the bottom: **View** at the right-hand end, **Live** and
+   **Room** on the left, **Fit** to bring the whole stage back.
 4. **Room: Work light**: the stage parts show clearly. Walk through them,
    front to back: the **audience towers** (AT1 on stage right, AT2 on
    stage left) in the **house**; the **proscenium** (the frame) and the
@@ -98,7 +100,7 @@ On the projector:
 |---|---|---|
 | The Rig Overview is gone | It was closed, or is behind the main window (it is a window of its own) | "**View → Rig Overview** (⇧⌘R) opens it again." |
 | Everything looks dark | **Room** is on Blackout or Dim | "Set **Room: Work light**." |
-| The view is upside down or far away | They dragged or zoomed a lot | "Pick **View: 45°** again." |
+| The view is upside down or far away | They dragged or zoomed a lot | "Pick **View: 45°** again, or click **Fit**." |
 | GO does nothing | The Run tab isn't the one showing, or the show isn't open | "Click the **Run** tab. Is the show open?" |
 | "It says No outputs" | Expected | "Not connected to real lights, on purpose: it's a preview." |
 | A line at the top: *GO played in Design…* **Switch to Operate** | The first GO in Design, once a session | "Close it with ×. Operate is for running a show; we'll use it in Lesson 1.5." |

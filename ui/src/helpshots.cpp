@@ -427,6 +427,24 @@ QList<HelpShots::Shot> HelpShots::shots()
         return f;
     }, nullptr };
 
+    // The Classic QLC+ view: QLC+'s tabs and toolbars, the same show.
+    list << Shot{ QStringLiteral("views-classic"), [=]() {
+        window();
+        app->setWorkspaceView(App::ClassicView, false);
+        settle();
+        Frame f;
+        f.grab = app;
+        // QLC+'s main toolbar, the tab's own row of buttons, QLC+'s tabs, the footer.
+        f.callouts << mark(app->m_classicToolbar, 1)
+                   << mark(app->m_toolbar, 2)
+                   << mark(app->m_tab->tabBar(), 3)
+                   << mark(app->statusBar(), 4);
+        return f;
+    }, [=]() {
+        app->setWorkspaceView(App::ConsoleView, false);
+        settle();
+    } };
+
     // Build: the section switch, the navigator, the Workbench and its editor pane.
     list << Shot{ QStringLiteral("build-tab-layout"), [=]() {
         window();

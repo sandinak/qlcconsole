@@ -5,10 +5,10 @@ nav_order: 2
 
 # Show Tree course — plan for review
 
-*Status (2026-10-22): Level 0 and Level 1 are written — 0.1, 0.2, 1.1–1.5
+*Status (2026-10-26): Level 0 and Level 1 are written — 0.1, 0.2, 1.1–1.5
 and the Level 1 check — each with teacher guide, handout, slides outline,
-exit ticket and at-home page, every app step checked by the course test,
-now on 0.3.0. Level 2 is an outline. Level 3 has
+exit ticket and at-home page, every app step checked by the course test
+on 0.3.0 (release candidate 4), their pictures retaken on it. Level 2 is an outline. Level 3 has
 four lessons written — 3.3 plot symbols, 3.6 focus and calibration (focus
 calls on the controller, venues, the scramble practice and its focus
 report, Focus this cue; with pictures), 3.7 house lights, work lights and power,
@@ -107,12 +107,12 @@ here.*
 
 | # | Lesson | In the tool |
 |---|---|---|
-| 3.1 | **DMX, universes and patching** | Addresses and channels; universes; Art-Net and sACN; the Patch dialog; Connections. *(First lesson on the real network, with Branson.)* |
+| 3.1 | **DMX, universes and patching** | Addresses and channels; universes; Art-Net and sACN; the Patch dialog; **Connections ▸ Devices** and its one connection window (**Edit connection…**); the **patch list** (by location, universe or type; XLSX) and **Print Labels…** for the cable ends. *(First lesson on the real network, with Branson.)* |
 | 3.2 | **Fixtures and definitions** | The Fixture Manager; definitions and modes; the Fixture Editor; groups by head type (a pixel box's RGB and white heads; colour rings). Shows that carry their own definitions. |
 | 3.3 | **Reading the plot: symbols** *(written)* | A plot and its symbol key. The Lighting Studio plot's **Show ▸ Show Auto fixtures as their closest plot symbol**; **Plot Symbol ▸** to correct the guesses (AT-W-ALL: *Moving head round wash*); the Lanterns as **practicals**. A symbol is only the picture. |
-| 3.4 | **Building the rig** | Lighting Studio: structures (walls with a door, towers, booms, stands; copy and paste them), mounting fixtures (a group Shift-dropped on a truss all hangs; **Mount on** for the selection), a fixed light's **Pan** / **Tilt** in **Aim & Mount**, layers, stage targets and lines; why the rig must match the room for aims to work. |
+| 3.4 | **Building the rig** | Lighting Studio: structures (walls with a door, towers, booms, stands; copy and paste them), mounting fixtures (a group Shift-dropped on a truss all hangs; **Mount on** for the selection), a fixed light's **Pan** / **Tilt** in **Aim & Mount**, **Plot layers** (what hangs on what; a layer's lock and an object's own lock), stage targets and lines; why the rig must match the room for aims to work. |
 | 3.5 | **Show control** | QLab (or a sound op) firing cues by number (and why renumbering matters then); OSC in, MIDI Show Control in and MIDI timecode, each a row in **Connections ▸ Devices**. |
-| 3.6 | **Focus and calibration** *(written)* | How a focus call runs: the electrician at the light, the designer at the point (back to the light), the words (hot spot, home, sharp and soft, spot down and flood out, "lock it"), the laptop's voice on the headsets. **Stage marks**: the curtain line, the number line, the apron; reading "SL 1' · DS 1' 1"" off the plot. **Focus calls** (Truss-Spots → Center, AT-Spots → Soloist DS, AT-W-ALL → Center) run on the controller or the keys, corrections kept for the venue *Classroom* in a file beside the show; touring: house rig and tour package, outputs per venue. Scored: **Practice (scramble)** on Easy. Hand-in: its **focus report** (PDF). **Refine** on a typed solo cue: spot down kept in the cue, one spot as an exception. On the real rig (Part 3): Focus mode's fixed lights, holds, dead lamps, the real report. |
+| 3.6 | **Focus and calibration** *(written)* | How a focus call runs: the electrician at the light, the designer at the point (back to the light), the words (hot spot, home, sharp and soft, spot down and flood out, "lock it"), the laptop's voice on the headsets. **Stage marks** (the plot's **Stage** layer in Plot layers): the curtain line, the number line, the apron; reading "SL 1' · DS 1' 1"" off the plot. **Venue focus** with the show's focus calls (Truss-Spots → Center, AT-Spots → Soloist DS, AT-W-ALL → Center) run on the controller or the keys, corrections kept for the venue *Classroom* in a file beside the show (the footer's **Venue: Classroom** chip); touring: house rig and tour package, outputs per venue. Scored: **Practice (scramble)** on Easy. Hand-in: its **focus report** (PDF). **Focus this cue** on a typed solo cue: spot down kept in the cue, one spot as an exception. On the real rig (Part 3): Quick focus's fixed lights, holds, dead lamps, the real report. |
 | 3.7 | **House lights, work lights and power** *(written)* | Three generic dimmers (House Lights, Work Lights, Stage Power); **Output Rules…**: Ignore Blackout, Ignore the Grand Master, Switch (relay), On when not in use; Settings ▸ Advanced ▸ Output; a preshow list typed; Blackout, the GM slider and Blind. Part 3 on the theatre's own house and work lights. |
 | 3.8 | **Running a real show** | Operate mode (it locks editing), the panic button, the preshow checklist, power. |
 | 3.9 | **Troubleshooting** | The Not ready list, a light that won't come on, a cue that looks wrong, Undo and backups. **Capstone** (below). |
@@ -401,7 +401,7 @@ Also: the classroom show was rebuilt from DanceHysteria-0.6 as it is now
 | 3 | Group names | The real show's style: the **Trusses** across the back, with letters for what's on them: **Truss-Spots**, **TrussW-RGB / -W**, **TrussC-RGB / -W**, **USTs** (the upstage beams), and likewise **Steps**, **StepTops**, **US / CS / DS**, **AT-Spots**, **AT-W-ALL**, **Lanterns**. |
 | 4 | Riser Line | Fine. |
 | 5 | 68 fixtures | Fine. |
-| 7 | What students install | **qlcconsole 0.2.0** from GitHub Releases (the DMG is being made; the lessons are checked on 0.2.0). |
+| 7 | What students install | **qlcconsole 0.3.0** or later from GitHub Releases (Levels 0 and 1 were written on 0.2.0; Level 3's lessons need 0.3.0, and every written lesson is checked on it by the course test). |
 | 8 | GitHub Pages | Yes — the workflow is ready (§6); it needs the merge to `main` and the settings in §6. |
 | 9 | Licence | CC BY 4.0 (text, pictures) + Apache-2.0 (show files, scripts): approved (§6). |
 | 10 | Real lights | First hands on the real rig in **December or January**. |
@@ -413,9 +413,10 @@ Also: the classroom show was rebuilt from DanceHysteria-0.6 as it is now
 1. ~~**Chromebooks**~~ **Answered (2026-10-21):** the school Chromebooks
    don't allow Linux. The browser practice version (§10) is the at-home and
    Chromebook path; every lesson keeps its paper *At home* version.
-2. **The 0.2.0 release's name and files**: the install page says "the
-   newest pre-release whose name starts with **Show Tree**" and "0.2.0 or
-   later" — check both when it's published.
+2. **The 0.3.0 release's name and files**: the install page says "0.3.0
+   or later", a full release (**qlcconsole 0.3.0**) or a pre-release
+   (**Show Tree 0.3.0 (beta)**) — check the name and the files when it's
+   published.
 3. ~~**The AT-Spots' shutter**~~ **Answered (2026-10-21):** auto-open
    shutters in the app, on by default (§8, 7). Lesson 1.3 drops the
    **Open** step; the practice version opens them the same way.

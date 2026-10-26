@@ -14,8 +14,70 @@
 #include "scene.h"
 #include "doc.h"
 
-FadeTimeSpin::FadeTimeSpin(QWidget *parent, const QString &defaultLabel)
+SecondsSpinBox::SecondsSpinBox(QWidget *parent)
     : QDoubleSpinBox(parent)
+{
+}
+
+QString SecondsSpinBox::withDecimalPoint(const QString &text, const QLocale &locale)
+{
+    const QString point = locale.decimalPoint();
+    QString out;
+    out.reserve(text.size());
+    for (const QChar &c : text)
+    {
+        if (c == QLatin1Char('.') || c == QLatin1Char(','))
+            out += point;
+        else
+            out += c;
+    }
+    return out;
+}
+
+QString SecondsSpinBox::normalised(const QString &text) const
+{
+    // The words around the number are left as they are ("auto", " s").
+    if (!specialValueText().isEmpty() && text == specialValueText())
+        return text;
+    QString body = text;
+    QString pre;
+    QString suf;
+    if (!prefix().isEmpty() && body.startsWith(prefix()))
+    {
+        pre = prefix();
+        body.remove(0, pre.size());
+    }
+    if (!suffix().isEmpty() && body.endsWith(suffix()))
+    {
+        suf = suffix();
+        body.chop(suf.size());
+    }
+    return pre + withDecimalPoint(body, locale()) + suf;
+}
+
+QValidator::State SecondsSpinBox::validate(QString &input, int &pos) const
+{
+    /* The same length, so the cursor stays where it was; the field then
+       shows the mark this language writes. */
+    const QString fixed = normalised(input);
+    if (fixed.size() == input.size())
+        input = fixed;
+    return QDoubleSpinBox::validate(input, pos);
+}
+
+double SecondsSpinBox::valueFromText(const QString &text) const
+{
+    return QDoubleSpinBox::valueFromText(normalised(text));
+}
+
+void SecondsSpinBox::fixup(QString &input) const
+{
+    input = normalised(input);
+    QDoubleSpinBox::fixup(input);
+}
+
+FadeTimeSpin::FadeTimeSpin(QWidget *parent, const QString &defaultLabel)
+    : SecondsSpinBox(parent)
     , m_defaultLabel(defaultLabel)
 {
     setDecimals(2);

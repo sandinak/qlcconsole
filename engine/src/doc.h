@@ -1216,7 +1216,9 @@ public:
      *
      * @param root The Engine XML root node to load from
      * @param loadIO Parse the InputOutputMap tag too
-     * @return true if successful, otherwise false
+     * @return true if successful; false without an Engine node, or when the
+     *         XML is cut short or not well formed (what came before the
+     *         fault is loaded, and errorLog() says so)
      */
     bool loadXML(QXmlStreamReader &doc, bool loadIO = true);
 
@@ -1228,6 +1230,13 @@ public:
      * @return true if successful, otherwise false
      */
     bool saveXML(QXmlStreamWriter *doc);
+
+    /**
+     * What to say about a show file whose XML is cut short or not well
+     * formed (@a doc has an error): its line, and that what came before it
+     * is what was opened.
+     */
+    static QString damagedFileMessage(const QXmlStreamReader &doc);
 
     /**
      * Append a message to the Doc error log. This can be used to display

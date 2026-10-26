@@ -65,6 +65,7 @@
 
 #include "mainbar.h"
 #include "moveinblackbutton.h"
+#include "fadetimespin.h"
 #include "programmercontroller.h"
 #include "showtreecontroller.h"
 #include "showtreecommand.h"
@@ -1504,7 +1505,7 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         m_cueMode->setToolTip(tr("Track: starts from the cue before. Block: starts from nothing. "
                                  "Cue-only: its changes don't pass on to the next cue."));
         auto seconds = [inner]() {
-            QDoubleSpinBox *s = new QDoubleSpinBox(inner);
+            QDoubleSpinBox *s = new SecondsSpinBox(inner);
             s->setDecimals(2);
             s->setRange(0, 3600);
             s->setSuffix(ShowTreeView::tr(" s"));

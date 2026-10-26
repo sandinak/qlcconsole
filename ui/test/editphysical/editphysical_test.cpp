@@ -22,6 +22,7 @@
 
 #include "editphysical_test.h"
 #include "measurementunits.h"
+#include "qlcfile.h"
 #include "measurementedit.h"
 #include "editphysical.h"
 
@@ -44,7 +45,7 @@ void EditPhysical_Test::cleanup()
 {
     // Settings are the test's own (common/testsettings.cpp); back to unset.
     QSettings(QSettings::defaultFormat(), QSettings::UserScope,
-              QStringLiteral("qlcplus"), QStringLiteral("qlcconsole")).remove(MU::settingsKey());
+              QLCFile::settingsOrganisation(), QStringLiteral("qlcconsole")).remove(MU::settingsKey());
 }
 
 void EditPhysical_Test::inchesTypedInInches()

@@ -24,6 +24,7 @@
 #include <QMenu>
 
 #include "moveinblackbutton.h"
+#include "fadetimespin.h"
 #include "programmercontroller.h"
 #include "showtreecontroller.h"
 #include "doc.h"
@@ -48,7 +49,7 @@ MoveInBlackButton::MoveInBlackButton(Doc *doc, QWidget *parent)
     rl->setContentsMargins(24, 2, 12, 2);
     rl->addWidget(new QLabel(tr("Lead time"), row));
     rl->addStretch(1);
-    m_leadSpin = new QDoubleSpinBox(row);
+    m_leadSpin = new SecondsSpinBox(row);
     m_leadSpin->setObjectName(QStringLiteral("moveInBlackLead"));
     m_leadSpin->setRange(0.1, 10.0);
     m_leadSpin->setSingleStep(0.1);

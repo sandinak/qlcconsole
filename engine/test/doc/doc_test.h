@@ -64,10 +64,19 @@ private slots:
 
     void load();
     void loadWrongRoot();
+    /** A file cut short loads what came before the cut, and says so:
+     *  loadXML() is false and the error log names the line (F2). */
+    void loadTruncated();
+    /** A fixture on a universe the show can't have (past the limit,
+     *  negative, not a number) loads unpatched, said, at once -- not a
+     *  hang adding universes up to it, nor an abort (F1). */
+    void loadUniverseOutOfRange_data();
+    void loadUniverseOutOfRange();
     void save();
 
 private:
-    void createFixtureNode(QXmlStreamWriter &doc, quint32 id, quint32 address, quint32 channels);
+    void createFixtureNode(QXmlStreamWriter &doc, quint32 id, quint32 address, quint32 channels,
+                           const QString &universe = QStringLiteral("3"));
     void createFixtureGroupNode(QXmlStreamWriter &doc, quint32 id);
     void createCollectionNode(QXmlStreamWriter &doc, quint32 id);
     void createBusNode(QXmlStreamWriter &doc, quint32 id, quint32 value);

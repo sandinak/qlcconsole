@@ -39,7 +39,7 @@ Students can:
 ## Vocabulary (introduce in this order)
 
 **focus**, **hot spot**, **home**, **sharp / soft**, **spot down / flood
-out**, **focus call**, **curtain line**, **number line**, **apron**,
+out**, **focus call**, **stage marks**, **curtain line**, **number line**, **apron**,
 **correction**, **venue**, **house rig / tour package**, **scramble**,
 **focus report**, **Focus this cue**. Each is in the handout's word table and the
 [Glossary](../../GLOSSARY.md).
@@ -113,9 +113,9 @@ room, a new venue, then the focus calls*)
    the class. Name the venue `Classroom` and say why the show was saved
    first.
 3. **Start venue focus**. Let the class hear the voice. Step to the
-   second truss spot, nudge it, lock it with A. Open Finder beside the
-   show: the `.venues.xml` file is there and the show file's date has
-   not changed.
+   second truss spot, nudge it, lock it with A. Point at the footer:
+   **Venue: Classroom**. Open Finder beside the show: the `.venues.xml`
+   file is there and the show file's date has not changed.
 4. Press **Y** (whole call), nudge, then **B**: everything back.
 
 ## 3. Hands-on (25 min)
@@ -154,7 +154,7 @@ room, a new venue, then the focus calls*)
 
 ## Extension (fast groups)
 
-The handout's extensions: Say the light and the feedback setting; a
+The handout's extensions: Say the light, Feedback and Voice; a
 Medium scramble compared with the Easy one; the venue's **Rig and
 universes…** page. For the last, ask what a house fixture is and where
 it is saved (*the room's own light; saved in that venue's file, not the
@@ -167,16 +167,29 @@ On the theatre's rig, with the real movers patched:
 - Run the class's calls for real. One student at the point (back to the
   light), one on the controller at the stage edge, one on the laptop
   with the voice in the headsets. The laptop is not watched: the stage
-  is.
-- Hold both stick clicks (or **H**) to hold every light while someone
-  walks to a mark; again to release.
+  is. On a busy headset channel, set **Voice** (beside **Feedback** on
+  the panel) to **Terse**: "F1 Spot 3", "Saved".
+- Click both sticks together (or press **H**) to hold every light while
+  someone walks to a mark; again to release.
 - **View + X** (or **D**) marks a light with a lamp out **dead**; it shows
   in the report.
 - Export the real focus report and compare it with the practice one:
   who checked each light and when.
 - A pad that drops out (asleep, flat) lets go of everything it held and
-  the laptop says "Controller lost. Lights held." When it is back, press
-  **Use the controller** on the panel before going on.
+  the laptop says "Controller lost. Lights held." When it is back the
+  laptop says "Controller back." and the pad drives again once the keys
+  are still (with **Keyboard** chosen on the panel, click **Use the
+  controller**).
+
+## In the user guide
+
+Background for the teacher, in the app's help (F1):
+[Venue focus](https://github.com/sandinak/qlcconsole/blob/main/docs/features/focus-calls.md) (the calls, venues, the
+report, the scramble, the venue focus cue),
+[Focus this cue](https://github.com/sandinak/qlcconsole/blob/main/docs/features/refine.md),
+[House rig and tour package](https://github.com/sandinak/qlcconsole/blob/main/docs/features/venues.md) (the venue
+chip and the venue page) and the Lighting Studio's
+[stage marks](https://github.com/sandinak/qlcconsole/blob/main/docs/features/lighting-studio.md#stage-marks-centre-line-curtain-line-number-line).
 
 ## At home
 

@@ -377,7 +377,7 @@ void QLCChannel_Test::copy()
 
     channel->setName("Foobar");
     channel->setGroup(QLCChannel::Tilt);
-    channel->setControlByte(QLCChannel::ControlByte(3));
+    channel->setControlByte(QLCChannel::LSB);   // not the default MSB
     channel->setColour(QLCChannel::Yellow);
 
     QLCCapability* cap1 = new QLCCapability(10, 19, "10-19");
@@ -409,7 +409,7 @@ void QLCChannel_Test::copy()
 
     QVERIFY(copy->name() == "Foobar");
     QVERIFY(copy->group() == QLCChannel::Tilt);
-    QVERIFY(copy->controlByte() == QLCChannel::ControlByte(3));
+    QVERIFY(copy->controlByte() == QLCChannel::LSB);
     QVERIFY(copy->colour() == QLCChannel::Yellow);
 
     /* Verify that the capabilities in the copied channel are also

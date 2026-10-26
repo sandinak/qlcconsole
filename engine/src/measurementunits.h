@@ -98,6 +98,11 @@ public:
     static QString lengthHelp(LengthUnit unit);
     static QString weightHelp(WeightUnit unit);
 
+    /** Units kept where an older build put them (on macOS, the
+     *  com.qlcplus.qlcconsole plist): moved into the app's own settings,
+     *  where a value already there wins. Done by itself, once a run. */
+    static void moveOldSettings();
+
     /** The settings key the preference lives under */
     static QString settingsKey();
 };

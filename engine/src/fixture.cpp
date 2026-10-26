@@ -32,6 +32,7 @@
 #include "qlccapability.h"
 #include "qlcchannel.h"
 #include "qlcfile.h"
+#include "inputoutputmap.h"
 
 #include "fixture.h"
 #include "doc.h"
@@ -1429,6 +1430,8 @@ bool Fixture::loadXML(QXmlStreamReader &xmlDoc, Doc *doc,
     QString name;
     quint32 id = Fixture::invalidId();
     quint32 universe = 0;
+    QString universeText = QStringLiteral("0");
+    bool universeOk = true;
     quint32 address = 0;
     bool patched = true;
     Connection connection = Dmx;
@@ -1482,7 +1485,9 @@ bool Fixture::loadXML(QXmlStreamReader &xmlDoc, Doc *doc,
         }
         else if (xmlDoc.name() == KXMLFixtureUniverse)
         {
-            universe = xmlDoc.readElementText().toInt();
+            universeText = xmlDoc.readElementText().trimmed();
+            universeOk = false;
+            universe = universeText.toUInt(&universeOk);
         }
         else if (xmlDoc.name() == KXMLFixturePatched)
         {
@@ -1628,6 +1633,21 @@ bool Fixture::loadXML(QXmlStreamReader &xmlDoc, Doc *doc,
                               .arg(QString::number(channels))
                               .arg(name));
         channels = 1;
+    }
+
+    /* A universe this show can have: not a number, negative (-1 read as
+       4294967295) or past the limit, the load would add universes up to it
+       one at a time and hang, or abort. Kept, unpatched, and said. */
+    if (!universeOk || universe >= InputOutputMap::maxUniverses())
+    {
+        qWarning() << Q_FUNC_INFO << "Fixture" << name << "has universe" << universeText
+                   << "out of range; loaded unpatched";
+        doc->appendToErrorLog(tr("Fixture <b>%1</b> names universe \"%2\", which this show "
+                                 "can't have (1 to %3): it is loaded unpatched.")
+                              .arg(name.toHtmlEscaped(), universeText.toHtmlEscaped())
+                              .arg(InputOutputMap::maxUniverses()));
+        universe = 0;
+        patched = false;
     }
 
     /* Make sure that address is something sensible */

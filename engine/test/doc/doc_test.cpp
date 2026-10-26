@@ -41,6 +41,7 @@
 #include "scene.h"
 #include "efx.h"
 #include "bus.h"
+#include "inputoutputmap.h"
 #include "doc.h"
 
 #include "doc_test.h"
@@ -1014,6 +1015,126 @@ void Doc_Test::load()
     QVERIFY(Bus::instance()->value(31) == 500);
 }
 
+void Doc_Test::loadTruncated()
+{
+    QBuffer buffer;
+    buffer.open(QIODevice::WriteOnly | QIODevice::Text);
+    QXmlStreamWriter xmlWriter(&buffer);
+    xmlWriter.setAutoFormatting(true);
+    xmlWriter.writeStartElement("Engine");
+    for (quint32 id = 0; id < 6; id++)
+        createFixtureNode(xmlWriter, id, id * 18, 18);
+    createCollectionNode(xmlWriter, 1);
+    createCollectionNode(xmlWriter, 2);
+    xmlWriter.writeEndDocument();
+    xmlWriter.setDevice(NULL);
+    buffer.close();
+
+    // Cut in the middle of the fourth fixture.
+    const QByteArray whole = buffer.data();
+    int cut = 0;
+    for (int i = 0; i < 4; i++)
+        cut = whole.indexOf("<Fixture>", cut + 1);
+    QVERIFY(cut > 0);
+    QByteArray part = whole.left(cut + 40);
+
+    QBuffer cutBuffer(&part);
+    cutBuffer.open(QIODevice::ReadOnly | QIODevice::Text);
+    QXmlStreamReader xmlReader(&cutBuffer);
+    xmlReader.readNextStartElement();
+
+    QVERIFY(m_doc->loadXML(xmlReader) == false);
+    QVERIFY(xmlReader.hasError());
+    QCOMPARE(m_doc->loadStatus(), Doc::Loaded);
+    QCOMPARE(m_doc->fixtures().size(), 3);      // what came before the cut
+    QCOMPARE(m_doc->functions().size(), 0);
+    QVERIFY2(m_doc->errorLog().contains(QStringLiteral("damaged or incomplete (line %1")
+                                            .arg(xmlReader.lineNumber())),
+             qPrintable(m_doc->errorLog()));
+
+    // The whole file: true, and nothing said.
+    m_doc->clearContents();
+    buffer.open(QIODevice::ReadOnly | QIODevice::Text);
+    QXmlStreamReader wholeReader(&buffer);
+    wholeReader.readNextStartElement();
+    QVERIFY(m_doc->loadXML(wholeReader) == true);
+    QCOMPARE(m_doc->fixtures().size(), 6);
+    QVERIFY(!m_doc->errorLog().contains(QStringLiteral("damaged")));
+}
+
+void Doc_Test::loadUniverseOutOfRange_data()
+{
+    QTest::addColumn<QString>("universe");
+    QTest::addColumn<bool>("patched");
+    QTest::newRow("in range") << QStringLiteral("3") << true;
+    QTest::newRow("the last one") << QString::number(InputOutputMap::maxUniverses() - 1) << true;
+    QTest::newRow("the limit") << QString::number(InputOutputMap::maxUniverses()) << false;
+    QTest::newRow("65536") << QStringLiteral("65536") << false;
+    QTest::newRow("-1") << QStringLiteral("-1") << false;
+    QTest::newRow("4294967295") << QStringLiteral("4294967295") << false;
+    QTest::newRow("not a number") << QStringLiteral("abc") << false;
+    QTest::newRow("empty") << QString() << false;
+}
+
+void Doc_Test::loadUniverseOutOfRange()
+{
+    QFETCH(QString, universe);
+    QFETCH(bool, patched);
+
+    QBuffer buffer;
+    buffer.open(QIODevice::WriteOnly | QIODevice::Text);
+    QXmlStreamWriter xmlWriter(&buffer);
+    xmlWriter.writeStartElement("Engine");
+    createFixtureNode(xmlWriter, 0, 0, 4);
+    createFixtureNode(xmlWriter, 1, 10, 4, universe);
+    xmlWriter.writeEndDocument();
+    xmlWriter.setDevice(NULL);
+    buffer.close();
+
+    buffer.open(QIODevice::ReadOnly | QIODevice::Text);
+    QXmlStreamReader xmlReader(&buffer);
+    xmlReader.readNextStartElement();
+
+    QElapsedTimer t;
+    t.start();
+    QVERIFY(m_doc->loadXML(xmlReader) == true);
+    QVERIFY2(t.elapsed() < 20000, "a universe out of range must not hold the load up");
+
+    QCOMPARE(m_doc->fixtures().size(), 2);
+    Fixture *fxi = m_doc->fixture(1);
+    QVERIFY(fxi != NULL);
+    QCOMPARE(fxi->isPatched(), patched);
+    QVERIFY(m_doc->inputOutputMap()->universesCount() <= InputOutputMap::maxUniverses());
+    if (patched)
+    {
+        QCOMPARE(fxi->universe(), universe.toUInt());
+        QVERIFY(!m_doc->errorLog().contains(QStringLiteral("names universe")));
+    }
+    else
+    {
+        QCOMPARE(fxi->universe(), 0u);
+        QVERIFY2(m_doc->errorLog().contains(QStringLiteral("names universe \"%1\"").arg(universe)),
+                 qPrintable(m_doc->errorLog()));
+    }
+    // The other fixture is where it was.
+    QVERIFY(m_doc->fixture(0)->isPatched());
+    QCOMPARE(m_doc->fixture(0)->universe(), 3u);
+
+    // Nor can a universe be added past the limit, by number or at the end.
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QVERIFY(iom->addUniverse(InputOutputMap::maxUniverses()) == false);
+    QVERIFY(iom->addUniverse(65536) == false);
+    while (iom->universesCount() < InputOutputMap::maxUniverses())
+        QVERIFY(iom->addUniverse());
+    QVERIFY(iom->addUniverse() == false);
+    QCOMPARE(iom->universesCount(), InputOutputMap::maxUniverses());
+
+    // Back to the universes the other tests expect.
+    m_doc->clearContents();
+    while (iom->universesCount() > 4)
+        QVERIFY(iom->removeUniverse(int(iom->universesCount()) - 1));
+}
+
 void Doc_Test::loadWrongRoot()
 {
     QBuffer buffer;
@@ -1167,13 +1288,14 @@ void Doc_Test::save()
     QVERIFY(m_doc->isModified() == true);
 }
 
-void Doc_Test::createFixtureNode(QXmlStreamWriter &doc, quint32 id, quint32 address, quint32 channels)
+void Doc_Test::createFixtureNode(QXmlStreamWriter &doc, quint32 id, quint32 address, quint32 channels,
+                                 const QString &universe)
 {
     doc.writeStartElement("Fixture");
 
     doc.writeTextElement("Channels", QString("%1").arg(channels));
     doc.writeTextElement("Name", QString("Fixture %1").arg(id));
-    doc.writeTextElement("Universe", "3");
+    doc.writeTextElement("Universe", universe);
     doc.writeTextElement("Model", "Foobar");
     doc.writeTextElement("Mode", "Foobar");
     doc.writeTextElement("Manufacturer", "Foobar");

@@ -141,6 +141,21 @@ can overwrite it.
 **The app stopped without saving.** Open it again — it offers to recover
 the unsaved work from its autosave.
 
+**"This show file is damaged or incomplete (line N)."** The file ends
+early or breaks at that line: a copy cut short, a disk that filled up
+while saving, a hand edit. Everything before that line is open; what came
+after it is missing, and the footer keeps the message until you close the
+show. The file itself is left as it is: **Save** asks for a new name
+(it offers *show (recovered)*), so a plain Save can't replace the whole
+show with the part that was read. Look for an earlier copy first (a
+backup, the `.autosave` beside it, a copy on another computer). To replace
+the original anyway, pick its name in the Save dialog.
+
+**A fixture is unpatched, and the footer says it names a universe this
+show can't have.** Its universe in the file is past the limit (1024
+universes), negative or not a number, so it opens unpatched rather than
+adding universes up to it. Patch it again in the Fixture Manager.
+
 **A show from another computer is missing fixtures.** Save it there as a
 **.qlcc**: it then carries every definition and script of its own (or use
 **File ▸ Collect for Transfer…** for a folder with them beside it). A .qxw

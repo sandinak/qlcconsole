@@ -152,7 +152,8 @@ void QLCFile_Test::errorString()
              tr("The file could not be accessed."));
     QCOMPARE(QLCFile::errorString(QFile::CopyError),
              tr("The file could not be copied."));
-    QCOMPARE(QLCFile::errorString(QFile::FileError(31337)),
+    // 15: no error of Qt's, though a value a FileError can hold (0..15).
+    QCOMPARE(QLCFile::errorString(QFile::FileError(15)),
              tr("An unknown error occurred."));
 }
 

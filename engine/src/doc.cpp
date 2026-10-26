@@ -1263,6 +1263,15 @@ void Doc::applyFixtureToUniverses(Fixture *fixture, bool crossUniverse)
     if (crossUniverse)
         uni = floor((fixture->universeAddress() + fixture->channels()) / 512);
 
+    /* Past the most universes a show can have (Fixture::loadXML() unpatches
+       one read from a file): adding universes up to it would hang. */
+    if (uni >= InputOutputMap::maxUniverses())
+    {
+        qWarning() << Q_FUNC_INFO << "fixture" << fixture->name() << "is on universe" << uni
+                   << ", past the limit of" << InputOutputMap::maxUniverses();
+        return;
+    }
+
     if (uni >= inputOutputMap()->universesCount())
     {
         for (i = inputOutputMap()->universesCount(); i <= uni; i++)
@@ -2575,7 +2584,25 @@ bool Doc::loadXML(QXmlStreamReader &doc, bool loadIO)
     m_loadStatus = Loaded;
     emit loaded();
 
+    /* Cut short (a truncated copy, a disk that filled up while saving) or
+       not well formed: what came before the fault is loaded, the rest is
+       not there. Said, and false, so the caller can keep the file from
+       being saved over with less. */
+    if (doc.hasError())
+    {
+        qWarning() << Q_FUNC_INFO << "XML error at line" << doc.lineNumber() << ":" << doc.errorString();
+        appendToErrorLog(damagedFileMessage(doc));
+        return false;
+    }
+
     return true;
+}
+
+QString Doc::damagedFileMessage(const QXmlStreamReader &doc)
+{
+    return tr("This show file is damaged or incomplete (line %1: %2). "
+              "It was opened as far as it could be read.")
+            .arg(doc.lineNumber()).arg(doc.errorString().toHtmlEscaped());
 }
 
 bool Doc::saveXML(QXmlStreamWriter *doc)

@@ -351,9 +351,10 @@ void Scenery_Test::xmlRoundTripAndStorage()
     QVERIFY(other.monitorProperties()->scenery(a->id()) != nullptr);
     QCOMPARE(other.monitorProperties()->scenery(a->id())->name(), QString("Cyc"));
 
-    props->removeScenery(a->id());
+    const quint32 aId = a->id();  // removeScenery() deletes a
+    props->removeScenery(aId);
     QCOMPARE(props->sceneries().size(), 1);
-    QVERIFY(props->scenery(a->id()) == nullptr);
+    QVERIFY(props->scenery(aId) == nullptr);
 }
 
 /* A 10 m main drape across the stage at y = 0.5, opening 8 m. */

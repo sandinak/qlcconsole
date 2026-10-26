@@ -37,7 +37,7 @@
 #include <QMenu>
 #include <QScopeGuard>
 #include <QSlider>
-#include <QElapsedTimer>
+#include <QMutex>
 
 #include "mainbar_test.h"
 #include "showtreecontroller.h"
@@ -451,21 +451,53 @@ void MainBar_Test::fadeOneSecondAndStopFadesTheLightOut()
     QVERIFY(fade1 != nullptr);
     QCOMPARE(fade1->data().toInt(), 1000);
 
-    QElapsedTimer clock;
-    clock.start();
+    // Every frame the universe sends while the light goes out. The fade
+    // advances one MasterTimer::tick() per frame, never by wall clock, so
+    // the frames are what to count: a machine that falls behind sends the
+    // late ones back to back (out after 173 ms on val, 70 ms on a GitHub
+    // runner), but it still sends every one of them.
+    QMutex levelsMutex;
+    QList<int> levels;
+    QObject listening;                       // gone before levels is
+    connect(uni, &Universe::universeWritten, &listening,
+            [&levelsMutex, &levels](quint32, const QByteArray &data) {
+                QMutexLocker locker(&levelsMutex);
+                levels << (data.isEmpty() ? -1 : int(uchar(data.at(0))));
+            }, Qt::DirectConnection);
+    auto framesSeen = [&levelsMutex, &levels]() {
+        QMutexLocker locker(&levelsMutex);
+        return levels;
+    };
+
     fade1->trigger();
-    QTRY_VERIFY_WITH_TIMEOUT(!scene->isRunning(), 5000);
-    // Mid-fade: neither at full nor out yet.
-    QTRY_VERIFY2_WITH_TIMEOUT(uni->postGMValue(0) > 0 && uni->postGMValue(0) < 255,
-                              qPrintable(QString("output %1").arg(uni->postGMValue(0))), 900);
-    // ...and out after the second, not before most of it has gone by.
+    QTRY_VERIFY_WITH_TIMEOUT(!scene->isRunning(), 5000);   // stopped at once...
+    // ...while the light goes out, all the way.
     QTRY_COMPARE_WITH_TIMEOUT(int(uni->postGMValue(0)), 0, 5000);
-    // The fade counts ticks: a shared CI runner that can't hold a 20 ms tick
-    // runs late ones back to back (out after 70 ms on a GitHub runner, the
-    // mid-fade step seen). The wall clock is only asserted where it can be
-    // trusted, as mastertimer_test does (CI=true on GitHub Actions).
-    if (!qEnvironmentVariableIsSet("CI"))
-        QVERIFY2(clock.elapsed() >= 500, qPrintable(QString("out after %1 ms").arg(clock.elapsed())));
+    QTRY_VERIFY(framesSeen().contains(0));
+    disconnect(uni, &Universe::universeWritten, &listening, nullptr);
+
+    const QList<int> seen = framesSeen();
+    QStringList shown;
+    for (int v : seen)
+        shown << QString::number(v);
+    const QString trace = QString("levels sent: %1").arg(shown.join(' '));
+    const int out = int(seen.indexOf(0));
+    // Down only, never back up, and through the fade a frame at a time:
+    // mid-fade frames, neither at full nor out yet...
+    int midFade = 0;
+    for (int i = 0; i <= out; i++)
+    {
+        QVERIFY2(i == 0 || seen.at(i) <= seen.at(i - 1), qPrintable(trace));
+        if (seen.at(i) > 0 && seen.at(i) < 255)
+            midFade++;
+    }
+    // ...for most of the second: 1 s is 50 frames at the 20 ms tick, and
+    // the light is out no sooner than half of them, the frame-count form
+    // of "not before 500 ms".
+    const int halfTheFade = int(1000 / MasterTimer::tick()) / 2;
+    QVERIFY2(midFade >= halfTheFade,
+             qPrintable(QString("out after %1 mid-fade frames, wanted at least %2; %3")
+                        .arg(midFade).arg(halfTheFade).arg(trace)));
     QTRY_VERIFY(!sc->stopAllButton()->isEnabled());         // nothing left running
 }
 

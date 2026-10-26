@@ -414,6 +414,16 @@ their house lights, relays and subs.
 - **The stock sample imports the same.** A chase of scenes with their own
   fades now plays in the cue list as in the chaser (it used to run at
   about half the level).
+- **A damaged show file says so.** A show cut short or broken opens as far
+  as it can be read, with *This show file is damaged or incomplete (line
+  N)*, and Save asks for a new name instead of writing over the original
+  with less. A fixture on a universe the show can't have opens unpatched,
+  and says so, instead of freezing the app. See
+  [Troubleshooting](troubleshooting.md#files-and-fixtures).
+- **Opened is not changed.** A show whose trusses had no group yet no
+  longer asks to save as soon as it opens.
+- **Times take either decimal mark.** "1.5" and "1,5" are both one and a
+  half seconds in every fade and time field, in any language.
 
 ### Fixtures and the plot
 

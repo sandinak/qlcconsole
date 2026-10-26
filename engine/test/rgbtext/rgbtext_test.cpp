@@ -74,7 +74,6 @@ void RGBText_Test::animationStyle()
     QCOMPARE(RGBText::animationStyleToString(RGBText::Vertical), QString("Vertical"));
     QCOMPARE(RGBText::animationStyleToString(RGBText::Horizontal), QString("Horizontal"));
     QCOMPARE(RGBText::animationStyleToString(RGBText::StaticLetters), QString("Letters"));
-    QCOMPARE(RGBText::animationStyleToString(RGBText::AnimationStyle(12345)), QString("Letters"));
 
     QCOMPARE(RGBText::stringToAnimationStyle("Vertical"), RGBText::Vertical);
     QCOMPARE(RGBText::stringToAnimationStyle("Horizontal"), RGBText::Horizontal);
@@ -100,11 +99,9 @@ void RGBText_Test::animationStyle()
     text.setAnimationStyle(RGBText::StaticLetters);
     QCOMPARE(text.animationStyle(), RGBText::StaticLetters);
 
-    text.setAnimationStyle(RGBText::AnimationStyle(31337));
-    QCOMPARE(text.animationStyle(), RGBText::StaticLetters);
-
-    text.setAnimationStyle(RGBText::AnimationStyle(-1));
-    QCOMPARE(text.animationStyle(), RGBText::StaticLetters);
+    // No invalid style to try: every value an AnimationStyle can hold (0..3)
+    // is named, and casting 12345, 31337 or -1 to it is undefined behaviour
+    // (UBSan). An unknown name falls back above ("Foobar").
 }
 
 void RGBText_Test::offset()

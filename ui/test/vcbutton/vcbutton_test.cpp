@@ -136,7 +136,8 @@ void VCButton_Test::action()
 
     QCOMPARE(VCButton::actionToString(VCButton::Toggle), QString("Toggle"));
     QCOMPARE(VCButton::actionToString(VCButton::Flash), QString("Flash"));
-    QCOMPARE(VCButton::actionToString((VCButton::Action) 31337), QString("Toggle"));
+    // 15: no action, though a value an Action can hold (0..15).
+    QCOMPARE(VCButton::actionToString(VCButton::Action(15)), QString("Toggle"));
     QCOMPARE(VCButton::stringToAction("Toggle"), VCButton::Toggle);
     QCOMPARE(VCButton::stringToAction("Flash"), VCButton::Flash);
     QCOMPARE(VCButton::stringToAction("Foobar"), VCButton::Toggle);
