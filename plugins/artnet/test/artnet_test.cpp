@@ -1843,3 +1843,4 @@ void ArtNet_Test::rdmFlagReachesTheNodesList()
     reply[23] = char(0x00);
     QVERIFY(ctrl->handlePacket(reply, cr041r));
     QVERIFY(ctrl->getNodesList().value(cr041r).rdmCapable);
+}
