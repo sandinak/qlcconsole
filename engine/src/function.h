@@ -840,6 +840,14 @@ public:
 
     bool startedAsChild() const;
 
+    /** True when everything that started this function is a preview
+     *  (FunctionParent::isPreview()), directly or through the collections
+     *  and chasers that started it: it plays to be looked at only. */
+    bool startedOnlyByPreview() const;
+
+private:
+    bool startedOnlyByPreview(int depth) const;
+
 private:
     /** Running state flags. The rules are:
      *  - m_stop resets also m_paused
@@ -856,7 +864,7 @@ private:
     std::atomic<bool> m_paused;
 
     QList<FunctionParent> m_sources;
-    QMutex m_sourcesMutex;
+    mutable QMutex m_sourcesMutex;
 
     QMutex m_stopMutex;
     QWaitCondition m_functionStopped;

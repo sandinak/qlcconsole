@@ -44,7 +44,7 @@ using namespace ShowTree;
  *  same scene doesn't stop it, and stopping it stops nothing else. */
 static FunctionParent soloParent()
 {
-    return FunctionParent(FunctionParent::AutoVCWidget, 0xFFFFFF55);
+    return FunctionParent::preview(0x5);
 }
 
 static QString seconds(uint ms)

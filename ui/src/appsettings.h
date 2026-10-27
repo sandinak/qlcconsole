@@ -68,6 +68,8 @@ private:
     // Advanced: the show's auto-open shutters (ShutterAutoOpen)
     QCheckBox *m_autoOpenCheck = nullptr;
     class QComboBox *m_onAtOpenCombo = nullptr;
+    // Advanced: Scripts -- "Allow scripts to run programs" (Script)
+    QCheckBox *m_allowProgramsCheck = nullptr;
 
     // Autosave widgets
     QCheckBox *m_autosaveEnabledCheck;

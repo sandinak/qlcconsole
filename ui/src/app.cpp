@@ -1081,6 +1081,17 @@ void App::initDoc()
     connect(m_doc, SIGNAL(needAutosave()), this, SLOT(slotDocAutosave()));
     connect(m_doc, SIGNAL(modeChanged(Doc::Mode)), this, SLOT(slotModeChanged(Doc::Mode)));
     connect(m_doc, SIGNAL(loadProgress(QString,int)), this, SLOT(slotLoadProgress(QString,int)));
+    // Something the show asked for and was refused (a Script's
+    // systemcommand, RC8): say so in the footer for a while. Queued: a
+    // Script runs on the MasterTimer thread.
+    connect(m_doc, &Doc::showActionRefused, this, [this](const QString &message) {
+        qWarning().noquote() << message;
+        setStatusMessage(message);
+        QTimer::singleShot(15000, this, [this, message]() {
+            if (m_statusMessage == message)
+                clearStatusMessage();
+        });
+    }, Qt::QueuedConnection);
 
     /* Fixtures not patched, or whose definition says nothing about how much
        light they put out, go in the footer's "Not ready" list. Re-checked a
@@ -5251,6 +5262,9 @@ void App::slotLoadDocFromMemory(QString xmlData)
 
     /* Clear existing document data */
     clearDocument();
+
+    /* A show from web access is never trusted to run programs (RC8) */
+    m_doc->setLoadedFromWeb(true);
 
     QBuffer databuf;
     databuf.setData(xmlData.simplified().toUtf8());

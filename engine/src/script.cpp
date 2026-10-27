@@ -22,6 +22,7 @@
 #include <QXmlStreamWriter>
 #if !defined(Q_OS_IOS)
 #include <QProcess>
+#include <QSettings>
 #endif
 #include <QDebug>
 #include <QUrl>
@@ -72,6 +73,21 @@ Script::Script(Doc* doc) : Function(doc, Function::ScriptType)
 
 Script::~Script()
 {
+}
+
+QString Script::allowProgramsSettingKey()
+{
+    return QStringLiteral("scripts/allowPrograms");
+}
+
+bool Script::programsAllowed()
+{
+    return QSettings().value(allowProgramsSettingKey(), false).toBool();
+}
+
+void Script::setProgramsAllowed(bool allow)
+{
+    QSettings().setValue(allowProgramsSettingKey(), allow);
 }
 
 QIcon Script::getIcon() const
@@ -341,6 +357,12 @@ void Script::preRun(MasterTimer *timer)
     m_currentCommand = 0;
     m_startedFunctions.clear();
     m_stopOnExit = true;
+    // A preview plays a look to be seen: a Script in it would act on the
+    // world (start and stop things, set channels, run programs). It runs
+    // nothing there.
+    m_previewOnly = startedOnlyByPreview();
+    if (m_previewOnly)
+        qDebug() << "Script" << name() << "not run: started by a preview";
 
     Function::preRun(timer);
 }
@@ -349,6 +371,17 @@ void Script::write(MasterTimer *timer, QList<Universe *> universes)
 {
     if (stopped() || isPaused())
         return;
+
+    if (m_previewOnly)
+    {
+        // Something real may have started it too since preRun()
+        if (startedOnlyByPreview())
+        {
+            stop(FunctionParent::master());
+            return;
+        }
+        m_previewOnly = false;
+    }
 
     incrementElapsed();
 
@@ -417,11 +450,16 @@ quint32 Script::getValueFromString(QString str, bool *ok)
         return -1;
 
     QStringList valList = strippedStr.split(",");
-    int min = Function::stringToSpeed(valList.at(0));
-    int max = Function::stringToSpeed(valList.at(1));
+    qint64 min = Function::stringToSpeed(valList.at(0));
+    qint64 max = Function::stringToSpeed(valList.at(1));
+    // random(1,0) and friends: the bounds either way round, never a modulo
+    // by zero (SIGFPE on x86) or by a negative span
+    if (max < min)
+        qSwap(min, max);
 
     *ok = true;
-      return QRandomGenerator::global()->generate() % ((max + 1) - min) + min;
+    const quint64 span = quint64(max - min) + 1;
+    return quint32(min + qint64(QRandomGenerator::global()->generate64() % span));
 }
 
 bool Script::executeCommand(int index, MasterTimer* timer, QList<Universe *> universes)
@@ -765,6 +803,11 @@ QString Script::handleSetFixture(const QList<QStringList>& tokens, QList<Univers
     Fixture *fxi = doc->fixture(id);
     if (fxi != NULL)
     {
+        // An unpatched fixture (staged, or an address clash) keeps a
+        // universe that may not exist: nothing to write to.
+        if (fxi->isPatched() == false || fxi->universe() >= quint32(universes.size()))
+            return QString("Fixture (%1) is not patched to a universe").arg(fxi->name());
+
         if (ch < fxi->channels())
         {
             int address = fxi->address() + ch;
@@ -812,6 +855,24 @@ QString Script::handleSystemCommand(const QList<QStringList> &tokens)
     QStringList programArgs;
     for (int i = 1; i < tokens.size(); i++)
         programArgs << tokens[i][1];
+
+    /* A show is data: running a program off this computer is the operator's
+       choice (Preferences > Allow scripts to run programs, off by default),
+       and never for a show that came in over web access. */
+    Doc *doc = qobject_cast<Doc*>(parent());
+    QString refusal;
+    if (doc != NULL && doc->loadedFromWeb())
+        refusal = tr("Script \"%1\" did not run %2: the show came in over web access, "
+                     "and its scripts never run programs.").arg(name(), programName);
+    else if (programsAllowed() == false)
+        refusal = tr("Script \"%1\" did not run %2: running programs is off "
+                     "(Preferences > Advanced > Allow scripts to run programs).").arg(name(), programName);
+    if (refusal.isEmpty() == false)
+    {
+        if (doc != NULL)
+            emit doc->showActionRefused(refusal);
+        return refusal;
+    }
 #if !defined(Q_OS_IOS)
     QProcess *newProcess = new QProcess();
 

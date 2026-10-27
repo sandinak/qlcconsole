@@ -86,6 +86,21 @@ public:
     {
         return FunctionParent(Master, 0);
     }
+
+    /** The parent of a preview -- the Workbench's, the Show Tree's, Solo:
+     *  what it starts plays to be looked at and listened to, never to act on
+     *  the world (a Script under one runs nothing). The AutoVCWidget ids
+     *  0xFFFFFF50..0xFFFFFF5F are kept for these; @a tag tells them apart. */
+    static FunctionParent preview(quint32 tag)
+    {
+        return FunctionParent(AutoVCWidget, 0xFFFFFF50 | (tag & 0xF));
+    }
+
+    /** True for a parent made by preview() */
+    bool isPreview() const
+    {
+        return type() == AutoVCWidget && (id() & 0xFFFFFFF0) == 0xFFFFFF50;
+    }
 };
 
 /** @} */

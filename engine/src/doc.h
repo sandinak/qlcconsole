@@ -22,6 +22,7 @@
 #define DOC_H
 
 #include <QObject>
+#include <atomic>
 #include "qlcengine_export.h"
 #include <QTimer>
 #include <QList>
@@ -139,6 +140,25 @@ public:
 private:
     QString m_workspacePath;
     QMap<QString, QString> m_componentPathOverrides;
+
+    /*********************************************************************
+     * Trust
+     *********************************************************************/
+public:
+    /** Mark the show as having come in over web access (RC8): its Scripts
+     *  never run programs, whatever "Allow scripts to run programs" says.
+     *  clearContents() clears it. */
+    void setLoadedFromWeb(bool fromWeb) { m_loadedFromWeb.store(fromWeb); }
+    bool loadedFromWeb() const { return m_loadedFromWeb.load(); }
+
+private:
+    std::atomic<bool> m_loadedFromWeb { false };
+
+signals:
+    /** Something the show asked for was refused (a Script's systemcommand
+     *  while running programs is off): @a message says what, for the footer.
+     *  May be emitted from the MasterTimer thread. */
+    void showActionRefused(const QString &message);
 
 signals:
     /** Emitted when clearContents() is called, before actually doing anything. */

@@ -55,6 +55,7 @@
 #include "rgbmatrix.h"
 #include "fixture.h"
 #include "chaser.h"
+#include "script.h"
 #include "scene.h"
 #include "efx.h"
 #include "inputoutputmap.h"
@@ -903,6 +904,71 @@ void Workbench_Test::operateRunsWhatIsLoadedAndStopsOnlyItsOwn()
         tickAndRead(m_doc, 3);
     QVERIFY(elsewhere->isRunning());
     elsewhere->stop(vcButton);
+    tickAndRead(m_doc, 0);
+}
+
+void Workbench_Test::aPreviewNeverRunsAScript()
+{
+    FixtureGroup *g = group("Washes", 2);
+    const quint32 f1 = g->fixtureList().at(0), f2 = g->fixtureList().at(1);
+    Scene *a = scene("A", QString());
+    a->setValue(f1, 0, 150);
+    // What the Script would do: wash 2 (address 3) to 200, held (a Script
+    // that ends lets its channels go).
+    Script *scr = new Script(m_doc);
+    scr->setName("Act");
+    QVERIFY(scr->setData(QString("setfixture:%1 ch:0 val:200\nwait:60s").arg(f2)));
+    m_doc->addFunction(scr);
+    Collection *c = new Collection(m_doc);
+    c->setName("Look with a script");
+    m_doc->addFunction(c);
+    c->addFunction(a->id());
+    c->addFunction(scr->id());
+    QVERIFY(m_doc->mode() == Doc::Design);
+
+    Workbench wb(m_doc);
+    wb.resize(1000, 700);
+    wb.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&wb));
+
+    // A collection previewed: its scene plays, its Script does nothing.
+    wb.load(c->id());
+    QCOMPARE(wb.m_previewFunction, c->id());
+    QTRY_COMPARE(tickAndRead(m_doc, 0), 150);
+    for (int i = 0; i < 10; ++i)
+        QCOMPARE(tickAndRead(m_doc, 3), 0);
+    QTRY_VERIFY(scr->isRunning() == false);
+
+    // A chaser walked to a Script step: the step is previewed on its own.
+    Chaser *ch = new Chaser(m_doc);
+    ch->setName("Walk");
+    m_doc->addFunction(ch);
+    ch->addStep(ChaserStep(scr->id()));
+    ch->addStep(ChaserStep(a->id()));
+    wb.load(ch->id());
+    QCOMPARE(wb.m_previewFunction, scr->id());
+    for (int i = 0; i < 10; ++i)
+        QCOMPARE(tickAndRead(m_doc, 3), 0);
+
+    // ...and a chaser whose step is the collection, walked to it.
+    Chaser *ch2 = new Chaser(m_doc);
+    ch2->setName("Walk 2");
+    m_doc->addFunction(ch2);
+    ch2->addStep(ChaserStep(c->id()));
+    wb.load(ch2->id());
+    QCOMPARE(wb.m_previewFunction, c->id());
+    QTRY_COMPARE(tickAndRead(m_doc, 0), 150);
+    for (int i = 0; i < 10; ++i)
+        QCOMPARE(tickAndRead(m_doc, 3), 0);
+    wb.hide();
+    for (int i = 0; i < 5; ++i)
+        tickAndRead(m_doc, 0);
+
+    // The control: the same collection from a VC button runs its Script.
+    const FunctionParent vcButton(FunctionParent::ManualVCWidget, 9);
+    c->start(m_doc->masterTimer(), vcButton);
+    QTRY_COMPARE(tickAndRead(m_doc, 3), 200);
+    c->stop(vcButton);
     tickAndRead(m_doc, 0);
 }
 
