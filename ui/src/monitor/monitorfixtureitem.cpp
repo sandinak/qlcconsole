@@ -1523,9 +1523,7 @@ void MonitorFixtureItem::contextMenuEvent(QGraphicsSceneContextMenuEvent *event)
     QAction *heightAct = NULL;
     if (m_editable)
     {
-        const QVector3D fp = props->fixturePosition(m_fid, 0, 0);
-        heightAct = menu.addAction(tr("Set mounting height… (%1 m)")
-                                   .arg(double(fp.z()) / 1000.0, 0, 'f', 2));
+        heightAct = menu.addAction(mountingHeightText(props, m_fid));
     }
 
     if (menu.isEmpty())
@@ -1578,21 +1576,39 @@ void MonitorFixtureItem::contextMenuEvent(QGraphicsSceneContextMenuEvent *event)
     else if (chosen == faceSL) { m_facingDeg = 270.0f; commitFacing(); update(); }
     else if (chosen == heightAct)
     {
-        const QVector3D fp = props->fixturePosition(m_fid, 0, 0);
-        bool ok = false;
-        const double h = QInputDialog::getDouble(nullptr, tr("Mounting Height"),
-                             tr("Height above the floor (metres):"),
-                             double(fp.z()) / 1000.0, 0.0, 100.0, 2, &ok);
-        if (ok)
+        if (askMountingHeight(nullptr, props, m_fid))
         {
-            QVector3D np = fp;
-            np.setZ(float(h * 1000.0));
-            props->setFixturePosition(m_fid, 0, 0, np);
             m_doc->setModified();
             emit mountingChanged(m_fid);
         }
     }
     event->accept();
+}
+
+QString MonitorFixtureItem::mountingHeightText(const MonitorProperties *props, quint32 fid)
+{
+    const bool feet = props->gridUnits() == MonitorProperties::Feet;
+    const double mm = double(props->fixturePosition(fid, 0, 0).z());
+    return feet ? tr("Set Mounting Height… (%1 ft)").arg(mm / 304.8, 0, 'f', 2)
+                : tr("Set Mounting Height… (%1 m)").arg(mm / 1000.0, 0, 'f', 2);
+}
+
+bool MonitorFixtureItem::askMountingHeight(QWidget *parent, MonitorProperties *props, quint32 fid)
+{
+    const bool feet = props->gridUnits() == MonitorProperties::Feet;
+    const double mmPerUnit = feet ? 304.8 : 1000.0;
+    const QVector3D cur = props->fixturePosition(fid, 0, 0);
+    bool ok = false;
+    const double h = QInputDialog::getDouble(parent, tr("Mounting Height"),
+                         feet ? tr("Height above the floor (feet):")
+                              : tr("Height above the floor (metres):"),
+                         double(cur.z()) / mmPerUnit, 0.0, feet ? 330.0 : 100.0, 2, &ok);
+    if (!ok)
+        return false;
+    QVector3D np = cur;
+    np.setZ(float(h * mmPerUnit));
+    props->setFixturePosition(fid, 0, 0, np);
+    return true;
 }
 
 void MonitorFixtureItem::computeTiltPosition(FixtureHead *h, uchar value)
