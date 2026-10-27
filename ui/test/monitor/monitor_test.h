@@ -885,6 +885,10 @@ private slots:
      *  says locked); a new one never lands on a locked layer; its end
      *  handle drags that end on the grid, one undo step; its body moves */
     void aLineTargetKeepsItsColourLocksAndSnaps();
+    /** u2: a line target has no ring or crosshair at its centre -- a small
+     *  diamond on the curve, hidden when a handle sits on it -- and its
+     *  handle grabs before the centre */
+    void aLineTargetHasNoRingOffItsCurve();
     /** A truss moved to a layer takes its folder, bars, hangers and
      *  fixtures with it; an old show's "Locked" layer is taken apart on
      *  load and a fixture can be dropped back onto its truss */

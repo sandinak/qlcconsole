@@ -26065,6 +26065,98 @@ void Monitor_Test::targetsFollowTheirLayersEyeAndLock()
     }
 }
 
+void Monitor_Test::aLineTargetHasNoRingOffItsCurve()
+{
+    QScopedPointer<Doc> owner(new Doc(this));
+    Doc *doc = owner.data();
+    MonitorProperties *props = doc->monitorProperties();
+
+    // The user's line: asymmetric, one end below the deck, so the 3-D
+    // half-way point sits a little off the mid handle in plan.
+    StageTarget *line = props->addStageTarget();
+    line->setName("Line 1");
+    line->setPosition(QVector3D(5.0f, 3.5f, 0.0f));
+    line->makeLine();
+    line->setLinePoints({ QVector3D(-4.670f, -1.139f, 0.002f), QVector3D(-0.045f, 0.001f, 0.002f),
+                          QVector3D(4.646f, -1.179f, -0.394f) });
+    line->recentreLine();
+    line->setColor(QColor("#FFB400"));
+
+    MonitorGraphicsView view(doc);
+    view.resize(1000, 700);
+    view.setGridMetrics(1000.0);
+    view.setGridSize(QSize(10, 7));
+    view.setViewPOV(MonitorGraphicsView::PovTop);
+    view.updateTargets();
+    view.show();
+    QCoreApplication::processEvents();
+
+    TargetItem *ti = view.m_targetItems.value(line->id(), nullptr);
+    QVERIFY(ti != nullptr && ti->isLine());
+
+    /* Amber on a circle of radius r round the item's origin, away from the
+       curve and the handles: what a ring would paint. */
+    auto ringPixels = [&](double r) {
+        const QRectF area = ti->sceneBoundingRect();
+        QImage img(area.size().toSize() + QSize(4, 4), QImage::Format_ARGB32);
+        img.fill(Qt::white);
+        QPainter p(&img);
+        view.m_scene->render(&p, QRectF(2, 2, area.width(), area.height()), area);
+        p.end();
+        const QPointF o = ti->scenePos() - area.topLeft() + QPointF(2, 2);
+        int n = 0;
+        for (int a = 0; a < 360; a += 3)
+        {
+            const double rad = qDegreesToRadians(double(a));
+            const QPointF local(r * std::cos(rad), r * std::sin(rad));
+            if (ti->lineHitAt(local) || ti->lineHandleAt(local) >= 0)
+                continue;      // the curve's own pixels
+            const QPoint px = (o + local).toPoint();
+            if (!img.rect().contains(px))
+                continue;
+            const QColor c = img.pixelColor(px);
+            if (c.red() > 200 && c.green() > 110 && c.green() < 220 && c.blue() < 120)
+                n++;
+        }
+        return n;
+    };
+
+    // The mid handle is a few pixels from the centre: no diamond, no ring.
+    const QPointF mid = ti->lineHandle(1);
+    QVERIFY2(QLineF(mid, QPointF(0, 0)).length() < 8.0,
+             qPrintable(QString("mid handle %1 px off").arg(QLineF(mid, QPointF(0, 0)).length())));
+    QVERIFY(!ti->showsCentreDiamond());
+    QCOMPARE(ringPixels(14.0), 0);
+    QCOMPARE(ringPixels(19.6), 0);     // the crosshair's arm tips
+    // Selected and locked are drawn along the curve, not as rings.
+    ti->setSelected(true);
+    view.setItemLocked("target", line->id(), true);
+    QCoreApplication::processEvents();
+    QCOMPARE(ringPixels(17.0), 0);
+    QCOMPARE(ringPixels(20.0), 0);
+    QVERIFY2(lockRedPixels(view.m_scene, ti->sceneBoundingRect()) > 20, "a locked line shows no red");
+    view.setItemLocked("target", line->id(), false);
+    ti->setSelected(false);
+
+    // The handle wins over the centre: the centre grab is small.
+    QCOMPARE(ti->lineHandleAt(mid), 1);
+    QVERIFY(!ti->onCentreMark(QPointF(10.0, 0.0)));
+    QVERIFY(!ti->shape().contains(QPointF(0.0, 13.0)));     // no ring in the shape
+
+    // A mid handle well off the centre: the diamond marks it, on the curve.
+    line->setLinePoints({ QVector3D(-2.0f, 0.0f, 0.0f), QVector3D(-1.2f, 1.2f, 0.0f),
+                          QVector3D(2.0f, 0.0f, 0.0f) });
+    line->recentreLine();
+    view.updateTargets();
+    QCoreApplication::processEvents();
+    ti = view.m_targetItems.value(line->id(), nullptr);
+    QVERIFY(ti != nullptr && ti->isLine());
+    QVERIFY(QLineF(ti->lineHandle(1), QPointF(0, 0)).length() >= 8.0);
+    QVERIFY(ti->showsCentreDiamond());
+    QVERIFY(ti->lineHitAt(QPointF(0, 0)));                   // the centre is on the curve
+    QCOMPARE(ringPixels(14.0), 0);
+}
+
 void Monitor_Test::aLineTargetKeepsItsColourLocksAndSnaps()
 {
     QScopedPointer<Doc> owner(new Doc(this));
