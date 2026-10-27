@@ -436,6 +436,68 @@ void VenueRig_Test::houseFixturesMoveIntoTheVenue()
     QVERIFY(v->venue(QStringLiteral("Lincoln HS")).rig.fixtures.isEmpty());
 }
 
+void VenueRig_Test::aVenueOffLeavesNoVenueFixtures()
+{
+    VenueCorrections *v = venues(m_doc);
+    dimmers(1, 0, 0, QStringLiteral("Tour spot"));
+    FixtureGroup *foh = makeGroup(m_doc, QStringLiteral("FOH wash"), {}, RigOwner::House);
+    const QString a = v->addVenue(QStringLiteral("Lincoln HS"));
+    QVERIFY(v->setActiveVenue(a));
+    const quint32 par = dimmers(1, 0, 100, QStringLiteral("Lincoln par"));
+    foh->assignFixture(par);
+    QVERIFY(v->isVenueFixture(par));
+
+    // A house fixture deleted while applied: its id is not the venue's any more.
+    const quint32 gone = dimmers(1, 0, 110, QStringLiteral("Lincoln gone"));
+    foh->assignFixture(gone);
+    QVERIFY(v->isVenueFixture(gone));
+    QVERIFY(m_doc->deleteFixture(gone));
+    QVERIFY(!v->isVenueFixture(gone));
+    Fixture *reuse = new Fixture(m_doc);
+    reuse->setName(QStringLiteral("Tour reuse"));
+    reuse->setUniverse(0);
+    reuse->setAddress(120);
+    reuse->setChannels(1);
+    QVERIFY(m_doc->addFixture(reuse, gone));
+    QVERIFY(!v->isVenueFixture(gone));
+    QVERIFY(engineXml(m_doc).contains("Tour reuse"));
+
+    // The venue off: its house rig goes, and nothing is the venue's.
+    QVERIFY(v->setActiveVenue(QString()));
+    QVERIFY(m_doc->fixture(par) == nullptr);
+    QVERIFY(!v->isVenueFixture(par));
+    QVERIFY(!m_doc->isVenueFixture(par));
+
+    // A show fixture given the old house id is the show's, saved with it.
+    Fixture *held = new Fixture(m_doc);
+    held->setName(QStringLiteral("Tour held"));
+    held->setUniverse(0);
+    held->setAddress(200);
+    held->setChannels(1);
+    QVERIFY(m_doc->addFixture(held, par));
+    QVERIFY(!v->isVenueFixture(par));
+    QVERIFY(engineXml(m_doc).contains("Tour held"));
+
+    // Set to House with no venue applied: still the show's.
+    held->setOwner(RigOwner::House);
+    QVERIFY(!v->isVenueFixture(par));
+    QVERIFY(engineXml(m_doc).contains("Tour held"));
+    held->setOwner(RigOwner::Unset);
+
+    // Applied again, then the show replaced (reset): the same holds.
+    QVERIFY(v->setActiveVenue(a));
+    const quint32 next = dimmers(1, 0, 300, QStringLiteral("Lincoln next"));
+    foh->assignFixture(next);
+    QVERIFY(v->isVenueFixture(next));
+    v->setShowFile(m_dir->filePath(QStringLiteral("Other.qlcc")), true);
+    QVERIFY(!v->isActive());
+    QVERIFY(!v->isVenueFixture(next));
+    QVERIFY(engineXml(m_doc).contains("Lincoln next"));
+    m_doc->fixture(next)->setOwner(RigOwner::House);
+    QVERIFY(!v->isVenueFixture(next));
+    QVERIFY(engineXml(m_doc).contains("Lincoln next"));
+}
+
 void VenueRig_Test::switchingVenuesSwapsTheHouseRig()
 {
     VenueCorrections *v = venues(m_doc);
@@ -627,13 +689,20 @@ void VenueRig_Test::sidecarRoundTrip()
     range.universe = 0;
     range.from = 400;
     range.to = 511;
-    QVERIFY(v->setNotOurs(a, { whole, range }));
+    /* Mid-universe, so the end is not clamped: read back 2 too far, it
+       grew on every load and save (mutation gap 3, RC6). */
+    VenueRig::NotOurs mid;
+    mid.universe = 1;
+    mid.from = 4;
+    mid.to = 7;
+    QVERIFY(v->setNotOurs(a, { whole, range, mid }));
     QVERIFY(v->keepPatch());
     QVERIFY(v->recordRig());
 
     const QByteArray xml = v->toXml();
     QVERIFY(xml.contains("<NotOurs Universe=\"4\"/>"));
     QVERIFY(xml.contains("<NotOurs Universe=\"1\" From=\"401\" To=\"512\"/>"));
+    QVERIFY(xml.contains("<NotOurs Universe=\"2\" From=\"5\" To=\"8\"/>"));
     QVERIFY(xml.contains("<Patch Universe=\"0\">"));
 
     Doc other(this);
@@ -648,15 +717,22 @@ void VenueRig_Test::sidecarRoundTrip()
     QCOMPARE(lv.rig.fills.size(), 1);
     QCOMPARE(lv.rig.fills.first().groupName, QStringLiteral("FOH wash"));
     QCOMPARE(lv.rig.fills.first().heads.size(), 2);
-    QCOMPARE(lv.rig.notOurs.size(), 2);
+    QCOMPARE(lv.rig.notOurs.size(), 3);
     QVERIFY(lv.rig.notOurs.contains(whole));
     QVERIFY(lv.rig.notOurs.contains(range));
+    QVERIFY(lv.rig.notOurs.contains(mid));
     QCOMPARE(lv.rig.patch.value(0).size(), 1);
     QCOMPARE(lv.rig.patch.value(0).first().plugin, stub(m_doc)->name());
     QVERIFY(!lv.rig.monitorXml.isEmpty());
     QVERIFY(back.isReservedFixtureId(par + 1));
     // Written again, the same bytes (but for the show it is beside).
     QCOMPARE(back.toXml(), QByteArray(xml).replace(" Show=\"Tour.qlcc\"", ""));
+    // And again: the range stays 5-8 however often it goes round.
+    Doc third(this);
+    VenueCorrections again(&third);
+    QVERIFY2(again.fromXml(back.toXml(), &why), qPrintable(why));
+    QVERIFY(again.venue(a).rig.notOurs.contains(mid));
+    QCOMPARE(again.toXml(), back.toXml());
 }
 
 void VenueRig_Test::oldShowsAndVenuesAreUnchanged()
