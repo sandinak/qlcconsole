@@ -999,7 +999,10 @@ void Chaser::createRunner(quint32 startTime)
         m_runner = new ChaserRunner(doc(), this, startTime);
     }
     m_runner->moveToThread(QCoreApplication::instance()->thread());
-    m_runner->setParent(this);
+    /* No QObject parent: this runs on the MasterTimer thread, and parenting
+       it to the GUI-thread Chaser (and unparenting it in postRun's delete)
+       changed the Chaser's children and sent events from the wrong thread
+       (TSan M2). ~Chaser and postRun delete it themselves. */
     m_runner->setExternalClock(m_showClocked);
     m_runner->setSubCueHeld(m_subCueHeld);
     m_runner->setSubCueFollow(m_subCueFollow);

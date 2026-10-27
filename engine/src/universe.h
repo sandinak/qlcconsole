@@ -222,8 +222,9 @@ protected:
     bool m_passthrough;
     /** Flag to monitor the universe changes */
     bool m_monitor;
-    /** Fork Blind: when true, dumpOutput() skips the physical plugins. */
-    bool m_inhibitOutput = false;
+    /** Fork Blind: when true, dumpOutput() skips the physical plugins. Set
+     *  on the GUI thread, read by the Universe thread each frame (TSan L3). */
+    std::atomic<bool> m_inhibitOutput { false };
 
     /************************************************************************
      * Patches

@@ -464,6 +464,48 @@ void MasterTimer_Test::restart()
     mt->stopAllFunctions();
 }
 
+void MasterTimer_Test::stopAllTakesTheQueuedFunctionsToo()
+{
+    MasterTimer* mt = m_doc->masterTimer();
+    QList<Function_Stub *> stubs;
+    // Stopped before the stubs go, whatever happens below.
+    const auto teardown = qScopeGuard([mt, &stubs]() {
+        mt->stop();
+        qDeleteAll(stubs);
+    });
+    mt->start();
+    QWAIT_MS(40);
+
+    for (int i = 0; i < 10; i++)
+    {
+        Function_Stub *fs = new Function_Stub(m_doc);
+        stubs << fs;
+        fs->start(mt, FunctionParent::master());     // queued; no tick yet
+        mt->stopAllFunctions();
+        {
+            QMutexLocker locker(&mt->m_functionListMutex);
+            QVERIFY2(mt->m_startQueue.isEmpty(), qPrintable(QString("round %1").arg(i)));
+            QVERIFY2(mt->m_functionList.isEmpty(), qPrintable(QString("round %1").arg(i)));
+        }
+        QVERIFY(mt->m_stopAllFunctions == false);
+    }
+
+    // And nothing it let through turns up running later.
+    QWAIT_MS(60);
+    QCOMPARE(mt->runningFunctions(), 0);
+    for (Function_Stub *fs : stubs)
+        QVERIFY(fs->isRunning() == false);
+
+    // stop() leaves no function behind, queued or running.
+    Function_Stub *last = new Function_Stub(m_doc);
+    stubs << last;
+    last->start(mt, FunctionParent::master());
+    mt->stop();
+    QMutexLocker locker(&mt->m_functionListMutex);
+    QVERIFY(mt->m_startQueue.isEmpty());
+    QVERIFY(mt->m_functionList.isEmpty());
+}
+
 /* A tick that takes longer than the period must delay the next one, not
    overlap it. The Windows timer used to hand every period to a thread-pool
    worker whether or not the last tick had finished: under a heavy show the

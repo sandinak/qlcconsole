@@ -43,6 +43,12 @@ private slots:
     void stopAllFunctions();
     void stop();
     void restart();
+    /** stopAllFunctions() returns only when nothing is running AND nothing
+     *  is waiting to start: a function started just before it, still in the
+     *  start queue, used to be started by the next tick after it returned
+     *  (TSan M1, a use-after-free on File > New/Open). stop() leaves no
+     *  function behind. */
+    void stopAllTakesTheQueuedFunctionsToo();
     void anOverrunningTickRunsAlone();
     void stopWaitsForATickInProgress();
     void stopRightAfterStartReturns();

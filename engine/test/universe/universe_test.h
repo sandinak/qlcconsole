@@ -35,6 +35,9 @@ private slots:
     void cleanup();
 
     void initial();
+    /** Blind is set on the GUI thread and read on the Universe thread each
+     *  frame: an atomic flag (TSan L3), seen from the other thread. */
+    void blindIsSeenFromTheOutputThread();
     void channelCapabilities();
     void blendModes();
     void grandMasterIntensityReduce();

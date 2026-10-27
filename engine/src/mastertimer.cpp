@@ -153,6 +153,13 @@ void MasterTimer::stop()
     Q_ASSERT(d_ptr != NULL);
     stopAllFunctions();
     d_ptr->stop();
+
+    /* After the timer thread has fully stopped, clear any remaining function
+     * pointers to prevent dangling references if a function slipped through
+     * the stopAllFunctions/startQueue race window. (Upstream 7e2f4ae84.) */
+    QMutexLocker locker(&m_functionListMutex);
+    m_functionList.clear();
+    m_startQueue.clear();
 }
 
 void MasterTimer::timerTick(bool wakeUniverses)
@@ -359,9 +366,22 @@ void MasterTimer::stopAllFunctions()
 {
     m_stopAllFunctions = true;
 
-    /* Wait until all functions have been stopped */
-    while (runningFunctions() > 0)
+    /* Wait until all functions have been stopped -- and the queued ones
+       with them. A tick stops the running functions and only then moves its
+       start queue into the list, so a check between the two used to see
+       none running and return; the queued function then started, and stayed
+       in the list for File > New/Open to delete under it (TSan M1). Checked
+       under the list's lock, so a check never lands mid-tick. With no timer
+       thread nothing would take the queue: it is dropped instead. */
+    for (;;)
     {
+        {
+            QMutexLocker locker(&m_functionListMutex);
+            if (m_startQueue.isEmpty() == false && d_ptr->isRunning() == false)
+                m_startQueue.clear();
+            if (m_functionList.isEmpty() && m_startQueue.isEmpty())
+                break;
+        }
 #if defined(WIN32) || defined(Q_OS_WIN)
         Sleep(10);
 #else
@@ -392,6 +412,9 @@ void MasterTimer::fadeAndStopAll(int timeout)
 
 int MasterTimer::runningFunctions() const
 {
+    // Locked: never a count from the middle of a tick (TSan M1). The lock is
+    // recursive and a tick is short, so a GUI caller waits at most one tick.
+    QMutexLocker locker(&m_functionListMutex);
     return m_functionList.size();
 }
 

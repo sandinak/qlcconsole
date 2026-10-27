@@ -201,12 +201,12 @@ bool Universe::monitor() const
 
 void Universe::setInhibitOutput(bool enable)
 {
-    m_inhibitOutput = enable;
+    m_inhibitOutput.store(enable, std::memory_order_relaxed);
 }
 
 bool Universe::inhibitOutput() const
 {
-    return m_inhibitOutput;
+    return m_inhibitOutput.load(std::memory_order_relaxed);
 }
 
 void Universe::slotGMValueChanged()
@@ -1087,7 +1087,7 @@ void Universe::dumpOutput(const QByteArray &data, bool dataChanged)
     // blindHoldsExempt(), through Blind -- which then sends what Blackout
     // would rather than nothing, so those circuits are not left to a node's
     // hold-last-look. A universe with none behaves exactly as before.
-    if (m_inhibitOutput)
+    if (m_inhibitOutput.load(std::memory_order_relaxed))
     {
         if (blindHoldsExempt() == false || hasBlackoutExempt(data.size()) == false)
             return;

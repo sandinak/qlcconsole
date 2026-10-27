@@ -22,6 +22,7 @@
 #define FUNCTION_H
 
 #include <QWaitCondition>
+#include <atomic>
 #include "qlcengine_export.h"
 #include <QObject>
 #include <QString>
@@ -845,9 +846,14 @@ private:
      *  - m_paused and m_running can be both true
      *  - if m_paused is true, a start(...) call will just reset it to false
      *  These are private to prevent Functions from modifying them. */
-    bool m_stop;
-    bool m_running;
-    bool m_paused;
+    /* Written on the GUI thread (start/stop/pause), read by the tick on the
+       MasterTimer thread and the other way round (preRun/postRun): atomics
+       (TSan L1). stop() writes m_preserveAttributes before a release-store of
+       m_stop, and stopped() loads m_stop with acquire, so the tick that sees
+       the stop sees the caller's preserve choice with it. */
+    std::atomic<bool> m_stop;
+    std::atomic<bool> m_running;
+    std::atomic<bool> m_paused;
 
     QList<FunctionParent> m_sources;
     QMutex m_sourcesMutex;
@@ -985,7 +991,7 @@ private:
     int m_lastOverrideAttributeId;
 
     /** Flag to preserve or discard attributes on stop calls */
-    bool m_preserveAttributes;
+    std::atomic<bool> m_preserveAttributes;   ///< See m_stop
 
     /*************************************************************************
      * Blend mode

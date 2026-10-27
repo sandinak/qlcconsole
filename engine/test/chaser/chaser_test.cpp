@@ -19,6 +19,8 @@
 */
 
 #include <QtTest>
+#include <QThread>
+#include <QPointer>
 #include <QScopeGuard>
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
@@ -1158,6 +1160,43 @@ void Chaser_Test::postRun()
     // The chaser has no steps so ChaserRunner::postrun() shouldn't do much
     c->postRun(&timer, ua);
     QCOMPARE(c->isRunning(), false); // Make sure Function::postRun() is called
+}
+
+void Chaser_Test::theRunnerHasNoParent()
+{
+    Chaser* c = new Chaser(m_doc);
+    m_doc->addFunction(c);
+
+    QList<Universe*> ua;
+    ua.append(new Universe(0, new GrandMaster()));
+    MasterTimerStub timer(m_doc, ua);
+
+    // Started from another thread, as the MasterTimer does.
+    QThread *tick = QThread::create([c, &timer]() { c->preRun(&timer); });
+    tick->start();
+    QVERIFY(tick->wait(5000));
+    delete tick;
+    QVERIFY(c->m_runner != NULL);
+    QPointer<ChaserRunner> runner(c->m_runner);
+    QVERIFY(runner->parent() == NULL);
+    QVERIFY(c->findChildren<ChaserRunner *>().isEmpty());
+    QCOMPARE(runner->thread(), QCoreApplication::instance()->thread());
+
+    // Stopped from that thread too: postRun deletes it.
+    tick = QThread::create([c, &timer, &ua]() { c->postRun(&timer, ua); });
+    tick->start();
+    QVERIFY(tick->wait(5000));
+    delete tick;
+    QVERIFY(runner.isNull());
+    QVERIFY(c->m_runner == NULL);
+
+    // Deleted while running, ~Chaser deletes it.
+    Chaser *d = new Chaser(m_doc);
+    d->preRun(&timer);
+    runner = d->m_runner;
+    QVERIFY(!runner.isNull());
+    delete d;
+    QVERIFY(runner.isNull());
 }
 
 void Chaser_Test::adjustIntensity()

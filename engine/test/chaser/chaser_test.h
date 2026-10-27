@@ -62,6 +62,11 @@ private slots:
     void writeHTP();
     void writeLTP();
     void postRun();
+    /** The runner is made and deleted on the MasterTimer thread: it has no
+     *  QObject parent (the GUI-thread Chaser's children were changed from
+     *  that thread, TSan M2), lives on the GUI thread, and postRun and
+     *  ~Chaser still delete it. */
+    void theRunnerHasNoParent();
     void adjustIntensity();
 
     void quickChaser();

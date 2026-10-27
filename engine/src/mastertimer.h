@@ -29,6 +29,7 @@
 #include <QMutex>
 #include <QRecursiveMutex>
 #include <QList>
+#include <atomic>
 
 class MasterTimerPrivate;
 class GenericFader;
@@ -185,10 +186,11 @@ private:
     /** Guards m_functionList and m_startQueue. Held by timerTickFunctions() for
      *  the whole tick; recursive so Function::write() -> startFunction() (same
      *  thread) can re-lock it. */
-    QRecursiveMutex m_functionListMutex;
+    mutable QRecursiveMutex m_functionListMutex;
 
-    /** Flag for stopping all functions */
-    bool m_stopAllFunctions;
+    /** Flag for stopping all functions: set on the GUI thread, read by the
+     *  tick on the MasterTimer thread. */
+    std::atomic<bool> m_stopAllFunctions;
 
     /*************************************************************************
      * DMX Sources

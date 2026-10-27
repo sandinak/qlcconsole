@@ -19,6 +19,10 @@
 */
 
 #include <QtTest>
+#include <QThread>
+#include <QElapsedTimer>
+#include <atomic>
+#include <type_traits>
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
 
@@ -225,6 +229,52 @@ void Function_Test::stopAndWaitFail()
 
     QSignalSpy spyStopped(stub, SIGNAL(stopped(quint32)));
     QVERIFY(stub->stopAndWait() == false);
+}
+
+void Function_Test::aStopFromAnotherThreadCarriesItsPreserveChoice()
+{
+    static_assert(std::is_same<decltype(Function::m_stop), std::atomic<bool>>::value, "m_stop");
+    static_assert(std::is_same<decltype(Function::m_running), std::atomic<bool>>::value, "m_running");
+    static_assert(std::is_same<decltype(Function::m_paused), std::atomic<bool>>::value, "m_paused");
+    static_assert(std::is_same<decltype(Function::m_preserveAttributes), std::atomic<bool>>::value,
+                  "m_preserveAttributes");
+
+    Doc doc(this);
+    Function_Stub *stub = new Function_Stub(&doc);
+
+    for (int round = 0; round < 200; round++)
+    {
+        const bool preserve = (round % 2) == 0;
+        stub->m_stop = false;
+        stub->preRun(NULL);
+        // An override (a submaster's, say): resetAttributes() drops it.
+        if (stub->getAttributeValue(Function::Intensity) == 1.0)
+            QVERIFY(stub->requestAttributeOverride(Function::Intensity, 0.5) != Function::invalidAttributeId());
+        QCOMPARE(stub->getAttributeValue(Function::Intensity), qreal(0.5));
+
+        // Stopped from another thread (the GUI, while the tick runs)...
+        QThread *gui = QThread::create([stub, preserve]() {
+            stub->stop(FunctionParent::master(), preserve);
+        });
+        gui->start();
+        // ...the tick polls stopped(), then runs postRun.
+        QElapsedTimer t;
+        t.start();
+        while (stub->stopped() == false && t.elapsed() < 5000)
+            QThread::yieldCurrentThread();
+        QVERIFY(stub->stopped());
+        stub->postRun(NULL, QList<Universe*>());
+        QVERIFY(gui->wait(5000));
+        delete gui;
+
+        QVERIFY(stub->isRunning() == false);
+        if (preserve)
+            QVERIFY2(stub->getAttributeValue(Function::Intensity) < 1.0,
+                     qPrintable(QString("round %1: the preserved intensity was reset").arg(round)));
+        else
+            QVERIFY2(stub->getAttributeValue(Function::Intensity) == 1.0,
+                     qPrintable(QString("round %1: the intensity was kept").arg(round)));
+    }
 }
 
 void Function_Test::adjustIntensity()
