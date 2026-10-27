@@ -78,12 +78,33 @@ public:
     /** Every line waiting, in the order they will be said. */
     QStringList queued() const;
 
+    /** An audio output the voice can be sent to: its ID (CoreAudio's, as
+     *  `say -a ?` lists it) and its name. Two pads are both "Wireless
+     *  Controller": the ID tells them apart. */
+    struct OutputDevice
+    {
+        QString id;
+        QString name;
+        bool operator==(const OutputDevice &o) const { return id == o.id && name == o.name; }
+    };
     /** The audio outputs this computer's voice can be sent to (macOS
-     *  `say -a`), by name; empty where it cannot choose. */
+     *  `say -a`); empty where it cannot choose. @p say: the program to ask
+     *  (empty: the system's `say`). */
+    static QList<OutputDevice> outputDeviceList(const QString &say = QString());
+    /** `say -a ?`'s listing ("   74 MacBook Pro Speakers"), read. */
+    static QList<OutputDevice> parseOutputDevices(const QString &listing);
+    /** The audio outputs, by name (outputDeviceList()). */
     static QStringList outputDevices();
-    /** The output chosen (Settings; empty: the system's). */
+    /** Which of @p devices the choice is: the one with ID @p id while it
+     *  still has @p name, else the first called @p name; -1 when it is not
+     *  there (unplugged, asleep, on Bluetooth). */
+    static int findOutputDevice(const QList<OutputDevice> &devices, const QString &id,
+                                const QString &name);
+    /** The output chosen (Settings; empty: the system's): its name, and
+     *  its ID when it was chosen from the list. */
     static QString outputDevice();
-    static void setOutputDevice(const QString &name);
+    static QString outputDeviceId();
+    static void setOutputDevice(const QString &name, const QString &id = QString());
 
     /** The best voice this computer has (none under a test, or with
      *  QLC_NO_VOICE set, so a test run is never heard). */
@@ -133,7 +154,13 @@ private:
 
 /** macOS's `say`, one process at a time. Linux (spd-say, espeak) and
  *  Windows (PowerShell's SpeechSynthesizer) would be the same with another
- *  command: see FOCUS_REFINE_DESIGN.md. */
+ *  command: see FOCUS_REFINE_DESIGN.md.
+ *
+ *  `say` speaks to the output chosen in "Voice to:" (`-a`). When that output
+ *  is not there -- the pad unplugged, asleep, on Bluetooth -- `say -a` fails
+ *  and the line used to be lost, "Controller lost. Lights held." with the
+ *  rest. Now the line goes to the system's output instead, and the first one
+ *  says so. */
 class CommandVoice final : public OperatorVoice
 {
     Q_OBJECT
@@ -142,13 +169,29 @@ public:
     ~CommandVoice() override;
     QString backend() const override;
     bool isAvailable() const override;
+    /** How long a look at the outputs (`say -a ?`) is trusted, in ms
+     *  (5 s; 0 looks before every line). */
+    void setDeviceCheckInterval(int ms) { m_checkInterval = ms; }
+    /** What the chosen output being gone is said as, before the line. */
+    static QString missingDeviceNotice(const QString &name);
 protected:
     void speakNow(const QString &text) override;
     void stopNow() override;
 private:
+    bool sendsToDevices() const;
+    /** The `-a` to give: the chosen output's ID, or empty for the system's
+     *  (none chosen, or it is not there). */
+    QString deviceArgument();
+    void start(const QString &text, const QString &device);
+private:
     QString m_program;
     QStringList m_args;
     QPointer<QProcess> m_process;
+    int m_checkInterval = 5000;
+    qint64 m_listedAt = -1;
+    QList<OutputDevice> m_devices;
+    /** The chosen output was found missing: said once, until it is back. */
+    bool m_missingSaid = false;
 };
 
 /**

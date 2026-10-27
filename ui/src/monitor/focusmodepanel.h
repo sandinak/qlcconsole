@@ -244,6 +244,8 @@ private:
     /** Group or fixture (Y), and where saves go (the venue, or the show). */
     QLabel *m_scopeLabel = nullptr;
     QLabel *m_nameLabel;
+    /** Under the name: "! Needs focus…" and "✕ Marked dead…", or nothing. */
+    QLabel *m_nameNoteLabel = nullptr;
     QLabel *m_referenceLabel;
     QLabel *m_offsetLabel;
     QLabel *m_beamLabel = nullptr;

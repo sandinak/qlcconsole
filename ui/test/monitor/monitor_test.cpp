@@ -2375,6 +2375,82 @@ void Monitor_Test::aFixedLightsEditorAimsItByPanAndTilt()
     QCOMPARE(rp.aimDown, 40.0f);
 }
 
+void Monitor_Test::theOrientationDiagramFollowsTheFace()
+{
+    DropRig rig;
+    QVERIFY(rig.build(m_doc, QVector3D(8000, 8000, 0)));
+    MonitorProperties *props = m_doc->monitorProperties();
+    Truss *truss = props->addTruss();
+    const quint32 trussId = truss->id();
+    // Gone after, whatever happens: later tests drop fixtures where it stood.
+    const auto removeTruss = qScopeGuard([props, trussId]() { props->removeTruss(trussId); });
+    const quint32 fid = rig.fxi->id();
+
+    struct Read { bool found = false; double bearing = -1; bool vertical = false; bool down = false; };
+    auto read = [](QWidget *dlg, Read &r) {
+        QWidget *preview = dlg->findChild<QWidget *>("fixtureFacingPreview");
+        if (preview == nullptr)
+            return false;
+        r.found = true;
+        r.bearing = preview->property("bearing").toDouble();
+        r.vertical = preview->property("vertical").toBool();
+        r.down = preview->property("pointsDown").toBool();
+        return true;
+    };
+
+    // Hung on a truss, its face chosen: each side of each plane.
+    const struct { FixtureRigProps::Face face; const char *name; double bearing; bool vertical; bool down; }
+    faces[] = {
+        { FixtureRigProps::FaceFront, "Front", 0.0, false, false },
+        { FixtureRigProps::FaceBack, "Back", 180.0, false, false },
+        { FixtureRigProps::FaceStageLeft, "Stage left", 270.0, false, false },
+        { FixtureRigProps::FaceStageRight, "Stage right", 90.0, false, false },
+        { FixtureRigProps::FaceTop, "Top", -1, true, false },
+        { FixtureRigProps::FaceBottom, "Bottom", -1, true, true },
+    };
+    for (const auto &c : faces)
+    {
+        FixtureRigProps rp = props->fixtureRigProps(fid);
+        rp.trussId = trussId;
+        props->setFixtureFace(rp, c.face);
+        rp.studioFaceChosen = true;
+        rp.fixedAim = false;
+        props->setFixtureRigProps(fid, rp);
+        Read r;
+        driveDialog([&](QWidget *dlg) { return read(dlg, r); }, false);
+        rig.mon->showFixtureItemEditor(fid);
+        QVERIFY2(r.found, c.name);
+        QVERIFY2(r.vertical == c.vertical, qPrintable(QString("%1: vertical %2").arg(c.name).arg(r.vertical)));
+        if (c.vertical)
+            QVERIFY2(r.down == c.down, qPrintable(QString("%1: down %2").arg(c.name).arg(r.down)));
+        else
+            QVERIFY2(qAbs(r.bearing - c.bearing) < 0.5,
+                     qPrintable(QString("%1: bearing %2, not %3").arg(c.name).arg(r.bearing).arg(c.bearing)));
+    }
+
+    // Aimed by Pan and Tilt (Q100): its bearing, and it follows the aim live.
+    FixtureRigProps rp = props->fixtureRigProps(fid);
+    props->setFixtureFace(rp, FixtureRigProps::FaceFront);
+    rp.fixedAim = true;
+    rp.panZeroDir = 135.0f;
+    rp.aimDown = 30.0f;
+    props->setFixtureRigProps(fid, rp);
+    Read aimed, steep;
+    driveDialog([&](QWidget *dlg) {
+        if (!read(dlg, aimed))
+            return false;
+        QDoubleSpinBox *down = dlg->findChild<QDoubleSpinBox *>("fixtureAimDown");
+        if (down == nullptr)
+            return false;
+        down->setValue(85.0);
+        return read(dlg, steep);
+    }, false);
+    rig.mon->showFixtureItemEditor(fid);
+    QVERIFY(aimed.found);
+    QVERIFY2(!aimed.vertical && qAbs(aimed.bearing - 135.0) < 0.5, qPrintable(QString::number(aimed.bearing)));
+    QVERIFY2(steep.vertical && steep.down, "aimed 85 degrees down: drawn end-on, down");
+}
+
 void Monitor_Test::aLensSetInFixturePropertiesIsTheLights()
 {
     DropRig rig;

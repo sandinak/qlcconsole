@@ -363,7 +363,11 @@ screen. Two things tell them where they are:
   Confirmations ("Saved fixture 3.") and warnings are queued and never
   dropped. **Voice to:** in
   the Venue Focus dialog sends it to a chosen output (a Mac's audio
-  interface for the headsets, say).
+  interface for the headsets, say). When that output is not there (a
+  controller unplugged, asleep or on Bluetooth), the voice speaks on the
+  computer's own output instead, and the first line says so; nothing is
+  lost. Two outputs with the same name (two "Wireless Controller" pads)
+  are told apart by ID.
   - stepping to a call: "Call 2, AT spots to Soloist DS. Fixture 1,
     Spot 5."
   - a fixture: "Fixture 3, Spot 3."

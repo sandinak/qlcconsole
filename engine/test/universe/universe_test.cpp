@@ -18,6 +18,8 @@
 */
 
 #include <QtTest>
+#include <QThread>
+#include <QElapsedTimer>
 #include <sys/time.h>
 
 #include "universe_test.h"
@@ -68,6 +70,33 @@ void Universe_Test::initial()
         QCOMPARE(int(preGM.at(i)), 0);
         QCOMPARE(int(postGM->at(i)), 0);
     }
+}
+
+void Universe_Test::blindIsSeenFromTheOutputThread()
+{
+    QVERIFY(m_uni->inhibitOutput() == false);
+    for (int round = 0; round < 50; round++)
+    {
+        const bool blind = (round % 2) == 0;
+        // Set from one thread (the GUI's Blind)...
+        QThread *gui = QThread::create([this, blind]() { m_uni->setInhibitOutput(blind); });
+        gui->start();
+        // ...and read from another (the Universe thread's dumpOutput()).
+        bool seen = !blind;
+        QThread *output = QThread::create([this, blind, &seen]() {
+            QElapsedTimer t;
+            t.start();
+            while ((seen = m_uni->inhibitOutput()) != blind && t.elapsed() < 5000)
+                QThread::yieldCurrentThread();
+        });
+        output->start();
+        QVERIFY(gui->wait(5000));
+        QVERIFY(output->wait(10000));
+        delete gui;
+        delete output;
+        QCOMPARE(seen, blind);
+    }
+    m_uni->setInhibitOutput(false);
 }
 
 void Universe_Test::channelCapabilities()

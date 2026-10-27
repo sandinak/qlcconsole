@@ -1059,7 +1059,7 @@ void Function::postRun(MasterTimer *timer, QList<Universe *> universes)
         QMutexLocker locker(&m_stopMutex);
 
         resetElapsed();
-        if (m_preserveAttributes == false)
+        if (m_preserveAttributes.load(std::memory_order_relaxed) == false)
             resetAttributes();
 
         // Drop any borrowed fader priority (e.g. lowered by the Show timeline)
@@ -1209,14 +1209,15 @@ void Function::stop(FunctionParent source, bool preserveAttributes)
 
     if (m_sources.size() == 0)
     {
-        m_stop = true;
-        m_preserveAttributes = preserveAttributes;
+        // The preserve choice first, then the stop that publishes it.
+        m_preserveAttributes.store(preserveAttributes, std::memory_order_relaxed);
+        m_stop.store(true, std::memory_order_release);
     }
 }
 
 bool Function::stopped() const
 {
-    return m_stop;
+    return m_stop.load(std::memory_order_acquire);
 }
 
 bool Function::startedAsChild() const

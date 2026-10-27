@@ -178,6 +178,8 @@ bool RGBMatrix::copyFrom(const Function* function)
         setAlgorithm(mtx->algorithm()->clone());
     else
         setAlgorithm(NULL);
+    // An algorithm this computer can't load travels with the copy unchanged
+    m_unknownAlgorithmXML = mtx->m_unknownAlgorithmXML;
 
     setControlMode(mtx->controlMode());
 
@@ -233,6 +235,7 @@ void RGBMatrix::setAlgorithm(RGBAlgorithm *algo)
         QMutexLocker algorithmLocker(&m_algorithmMutex);
         delete m_algorithm;
         m_algorithm = algo;
+        m_unknownAlgorithmXML.clear();
 
         // A different algorithm is a different effect: its step space and its
         // internal state are unrelated to the old one, so the resume point is
@@ -433,6 +436,35 @@ QString RGBMatrix::property(QString propName)
  * Load & Save
  ****************************************************************************/
 
+QString RGBMatrix::unknownAlgorithmXML() const
+{
+    return m_unknownAlgorithmXML;
+}
+
+namespace
+{
+/* Copy the element @a root is on, with everything inside it, into a string,
+   leaving @a root on its end element (as readElementText() does). */
+QString copyElement(QXmlStreamReader &root)
+{
+    QString xml;
+    QXmlStreamWriter w(&xml);
+    int depth = 0;
+    for (;;)
+    {
+        if (root.isStartElement())
+            depth++;
+        else if (root.isEndElement())
+            depth--;
+        w.writeCurrentToken(root);
+        if (depth <= 0 || root.atEnd() || root.hasError())
+            break;
+        root.readNext();
+    }
+    return xml;
+}
+}
+
 bool RGBMatrix::loadXML(QXmlStreamReader &root)
 {
     if (root.name() != KXMLQLCFunction)
@@ -460,7 +492,32 @@ bool RGBMatrix::loadXML(QXmlStreamReader &root)
         }
         else if (root.name() == KXMLQLCRGBAlgorithm)
         {
-            setAlgorithm(RGBAlgorithm::loader(doc(), root));
+            /* Keep the element: when its algorithm can't be loaded here (a
+               script that isn't installed on this computer), it is saved
+               back exactly as it came, rather than lost on the first save
+               and reopened as the default. */
+            const QString xml = copyElement(root);
+            QXmlStreamReader algoXML(xml);
+            algoXML.readNextStartElement();
+            const QString type = algoXML.attributes().value(KXMLQLCRGBAlgorithmType).toString();
+            RGBAlgorithm *algo = RGBAlgorithm::loader(doc(), algoXML);
+            setAlgorithm(algo);
+            if (algo == NULL)
+            {
+                QXmlStreamReader nameXML(xml);
+                nameXML.readNextStartElement();
+                const QString what = (type == KXMLQLCRGBScript)
+                        ? nameXML.readElementText(QXmlStreamReader::SkipChildElements).trimmed()
+                        : type;
+                m_unknownAlgorithmXML = xml;
+                qWarning() << Q_FUNC_INFO << "RGB matrix" << name()
+                           << "uses an algorithm that can't be loaded:" << type << what;
+                if (doc() != NULL)
+                    doc()->appendToErrorLog(
+                        tr("RGB matrix <b>%1</b> uses the effect <b>%2</b>, which isn't installed "
+                           "on this computer. It won't run here; saving keeps it as it was.")
+                            .arg(name().toHtmlEscaped(), what.toHtmlEscaped()));
+            }
         }
         else if (root.name() == KXMLQLCRGBMatrixFixtureGroup)
         {
@@ -541,7 +598,20 @@ bool RGBMatrix::saveXML(QXmlStreamWriter *doc) const
 
     /* Algorithm */
     if (m_algorithm != NULL)
+    {
         m_algorithm->saveXML(doc);
+    }
+    else if (m_unknownAlgorithmXML.isEmpty() == false)
+    {
+        /* One this computer can't load: write it back as it came */
+        QXmlStreamReader algoXML(m_unknownAlgorithmXML);
+        while (algoXML.readNext() != QXmlStreamReader::Invalid && algoXML.atEnd() == false)
+        {
+            if (algoXML.isStartDocument() || algoXML.isEndDocument())
+                continue;
+            doc->writeCurrentToken(algoXML);
+        }
+    }
 
     /* LEGACY - Dimmer Control */
     if (dimmerControl())

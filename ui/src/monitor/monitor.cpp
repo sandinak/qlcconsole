@@ -10123,16 +10123,35 @@ public:
         setMinimumSize(116, 116);
         setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
         setToolTip(tr("Orientation preview (DS=downstage, US=upstage, SR/SL=stage "
-                      "right/left).\nGREEN arrow = Front of device (Pan-zero) — drives "
-                      "the aim, shown in the 2D view.\nBLUE arrow = icon rotation — "
-                      "visual only, never affects the aim."));
+                      "right/left).\nGREEN arrow = where it throws: a mover's Front of "
+                      "device (Pan-zero), a fixed light's face (Back = upstage) or its "
+                      "Pan/Tilt aim; a dot when it points straight down (filled) or up "
+                      "(ring).\nBLUE arrow = icon rotation — visual only, never affects "
+                      "the aim."));
     }
 
     void setHasPan(bool h)      { m_hasPan = h; update(); }
     void setFacing(double deg)  { m_facing = float(deg); update(); }
     void setIconRotation(double deg) { m_rotation = float(deg); update(); }
     void setPanMax(double deg)  { m_panMax = deg > 0 ? float(deg) : 360.0f; update(); }
-    void setFace(int f)         { m_face = f; update(); }   ///< studioMount (0=Top,1=Front,2=Side)
+    /** A fixed light's throw, a world vector (+X stage left, +Y downstage,
+     *  +Z up): drawn as a bearing arrow, or a dot when it is near vertical.
+     *  Its bearing (degrees clockwise from downstage, 90 = stage right) and
+     *  whether it is drawn as a dot are the "bearing", "vertical" and
+     *  "pointsDown" properties (tests). */
+    void setThrow(const QVector3D &d)
+    {
+        m_throw = d.lengthSquared() > 1e-8f ? d.normalized() : QVector3D(0.0f, 1.0f, 0.0f);
+        const float plan = std::hypot(m_throw.x(), m_throw.y());
+        float b = float(qRadiansToDegrees(qAtan2(-m_throw.x(), m_throw.y())));
+        if (b < 0.0f)
+            b += 360.0f;
+        setProperty("vertical", plan < kVerticalPlan);
+        setProperty("pointsDown", m_throw.z() < 0.0f);
+        setProperty("bearing", double(b));
+        update();
+    }
+    QVector3D throwDir() const { return m_throw; }
 
 protected:
     void paintEvent(QPaintEvent *) override
@@ -10181,20 +10200,30 @@ protected:
             p.restore();
         };
 
-        // No pan: a FIXED fixture still faces a direction, from its mounting face —
-        // Front→DS (out to the audience), Side→SR, Top→straight down (a target).
+        /* No pan: a FIXED fixture throws where its face points -- the side
+           of the face included (Back = upstage, Bottom = down, Stage left =
+           SL), tilt included -- or where it was aimed by Pan/Tilt (Q100):
+           the 3D view's emitDirection() rule (setThrow()). */
         if (!m_hasPan)
         {
             drawBody(0);
-            if (m_face == 0)   // top face: beam perpendicular to this plan view
+            const QVector3D d = m_throw;
+            const float plan = std::hypot(d.x(), d.y());
+            if (plan < kVerticalPlan)   // within ~15 degrees of vertical: seen end-on
             {
-                p.setPen(QPen(QColor(80, 200, 120), 1.6)); p.setBrush(QColor(80, 200, 120));
+                const QColor g(80, 200, 120);
+                p.setPen(QPen(g, 1.6));
+                p.setBrush(d.z() < 0.0f ? QBrush(g) : QBrush(Qt::NoBrush));   // filled = down, ring = up
                 p.drawEllipse(QPointF(0, 0), 4.5, 4.5);
-                p.setBrush(Qt::NoBrush); p.drawEllipse(QPointF(0, 0), 9, 9);
+                p.setBrush(Qt::NoBrush);
+                p.drawEllipse(QPointF(0, 0), 9, 9);
             }
-            else               // front→DS (0°), side→SR (90°)
+            else
             {
-                drawArrow((m_face == 2) ? 90.0f : 0.0f, 28.0, 5.0, QColor(80, 200, 120));
+                // Bearing, the aim solver's convention: dir = (-sin b, cos b).
+                const float b = float(qRadiansToDegrees(qAtan2(-d.x(), d.y())));
+                // Shorter the steeper it points (a 45-degree-down unit reads as such).
+                drawArrow(b, 10.0 + 18.0 * plan, 5.0, QColor(80, 200, 120));
             }
             p.restore();
             return;
@@ -10216,12 +10245,31 @@ protected:
     }
 
 private:
+    static constexpr float kVerticalPlan = 0.26f;   ///< sin(~15 degrees)
     bool  m_hasPan   = true;
-    int   m_face     = 1;      ///< studioMount for a fixed fixture's facing
+    QVector3D m_throw = QVector3D(0.0f, 1.0f, 0.0f);   ///< a fixed light's throw; default downstage
     float m_facing   = 0.0f;
     float m_rotation = 0.0f;
     float m_panMax   = 360.0f;
 };
+
+/* Where a fixed light throws, as StructureStudioView::emitDirection() has it
+   (without the riser/deck "out of its host" case, which needs the view). */
+static QVector3D fixedPreviewThrow(const Fixture *fx, const FixtureRigProps &rp)
+{
+    QVector3D dir;
+    if (rp.fixedAimDirection(dir))
+        return dir;
+    if ((fx != nullptr && fx->heads() > 1) || rp.studioFaceChosen
+        || rp.trussId == Truss::invalidId())
+    {
+        QVector3D L, N, H;
+        RigHeads::frame(rp, L, N, H);
+        if (N.lengthSquared() > 1e-6f)
+            return N.normalized();
+    }
+    return rp.mountingType == Truss::TopHung ? QVector3D(0, 0, -1) : QVector3D(0, 0, 1);
+}
 
 void Monitor::showFixtureItemEditor(quint32 onlyFid)
 {
@@ -11028,14 +11076,23 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
             panMaxFx = float(fxi->fixtureMode()->physical().focusPanMax());
 
         FacingPreviewWidget *preview = new FacingPreviewWidget(posBox);
+        preview->setObjectName(QStringLiteral("fixtureFacingPreview"));
         preview->setHasPan(hasPanFx);
         preview->setPanMax(panMaxFx);
-        preview->setFace(rp.studioMount);   // fixed fixtures face by their mount face
+        // A fixed light: where it throws -- its face's side, tilt, or its Pan/Tilt aim.
+        preview->setThrow(fixedPreviewThrow(fxi, rp));
         preview->setFacing(panZeroSpin->value());
         preview->setIconRotation(rotSpin->value());
-        connect(fields, &FixtureFields::edited, preview, [this, preview, fxId_dlg]() {
-            preview->setFace(m_props->fixtureRigProps(fxId_dlg).studioMount);
-            preview->update();
+        /* Following every change to it while the dialog is open: a Fixture
+           row (face, side, angle, tilt) and the Pan/Tilt aim, which both
+           reach the rig through setFixtureRigProps -> rigPropsChanged. */
+        connect(m_props, &MonitorProperties::rigPropsChanged, preview,
+                [this, preview, fxi, fxId_dlg](quint32 f) {
+            if (f == fxId_dlg)
+                preview->setThrow(fixedPreviewThrow(fxi, m_props->fixtureRigProps(fxId_dlg)));
+        });
+        connect(fields, &FixtureFields::edited, preview, [this, preview, fxi, fxId_dlg]() {
+            preview->setThrow(fixedPreviewThrow(fxi, m_props->fixtureRigProps(fxId_dlg)));
         });
         posRow->addWidget(preview, 0, Qt::AlignTop);
 

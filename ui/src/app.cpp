@@ -20,6 +20,7 @@
   limitations under the License.
 */
 
+#include <QScopeGuard>
 #include <QContextMenuEvent>
 #include <QMenu>
 #include <QActionGroup>
@@ -5092,6 +5093,21 @@ bool App::loadXML(QXmlStreamReader& doc, bool goToConsole, bool fromMemory)
 
 QFile::FileError App::saveXML(const QString& fileName, bool autosave)
 {
+    /* A save (not an autosave or a copy) makes this file the show, so its
+       folder is the show's folder already while it is written: what the
+       show keeps beside it (truss and tower pictures, images/) goes there,
+       and its paths are relative to there -- not to the folder of the file
+       it was opened from (Save As to another folder, C3). Put back if the
+       save fails. */
+    const QString previousWorkspacePath = m_doc->workspacePath();
+    bool saved = false;
+    const auto restorePath = qScopeGuard([&]() {
+        if (!autosave && !saved)
+            m_doc->setWorkspacePath(previousWorkspacePath);
+    });
+    if (!autosave)
+        m_doc->setWorkspacePath(QFileInfo(fileName).absolutePath());
+
     QString tempFileName(fileName);
     tempFileName += ".temp";
     QFile file(tempFileName);
@@ -5201,6 +5217,7 @@ QFile::FileError App::saveXML(const QString& fileName, bool autosave)
         cacheShowDefinitions();     // what it uses, kept on this computer
     }
 
+    saved = true;
     return QFile::NoError;
 }
 

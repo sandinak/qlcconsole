@@ -30,6 +30,7 @@
 #include <QToolButton>
 #include <QComboBox>
 #include <QKeyEvent>
+#include <QFontMetrics>
 #include <QSettings>
 #include <QPainter>
 #include <QTimer>
@@ -55,6 +56,29 @@ QPointer<FocusModePanel> FocusModePanel::s_instance;
 
 namespace
 {
+/* A label that never moves the layout: word-wrapped into a fixed number of
+   lines (call after its font is set), ignoring its text's width, and keeping
+   its room while hidden -- so a press that changes it never resizes the
+   map below or widens the window. The full text is the tooltip. */
+void reserveLines(QLabel *label, int lines)
+{
+    label->setWordWrap(true);
+    label->setAlignment(Qt::AlignLeft | Qt::AlignTop);
+    QSizePolicy sp(QSizePolicy::Ignored, QSizePolicy::Fixed);
+    sp.setRetainSizeWhenHidden(true);
+    label->setSizePolicy(sp);
+    label->setFixedHeight(QFontMetrics(label->font()).lineSpacing() * lines
+                          + 2 * label->margin() + 2 * label->frameWidth() + 2);
+}
+
+/* Set a label's text, and the same as its tooltip: a label that keeps its
+   size (reserveLines) may clip, and the whole text is still to be read. */
+void setTextAndTip(QLabel *label, const QString &text)
+{
+    label->setText(text);
+    label->setToolTip(text);
+}
+
 /* The names of @p ids, at most @p max, then how many more. */
 QString lightNames(const Doc *doc, const QList<quint32> &ids, int max)
 {
@@ -689,28 +713,46 @@ FocusModePanel::FocusModePanel(Doc *doc, QWidget *parent)
         cf.setBold(true);
         m_callLabel->setFont(cf);
     }
+    /* Every label below keeps one size whatever it says (reserveLines): a
+       press changes the words, never the layout -- the map under them used
+       to grow and shrink, and the window to widen, as they changed. */
+    reserveLines(m_titleLabel, 2);          // room for the HOLDING prefix
+    // Focus calls only (the mode is fixed per panel): Quick focus gives it no room.
+    if (m_session->isRunningCalls())
+        reserveLines(m_callLabel, 3);
     m_callLabel->hide();
     m_scopeLabel = new QLabel(this);
     m_scopeLabel->setObjectName(QStringLiteral("focusScope"));
-    m_scopeLabel->setWordWrap(true);
+    reserveLines(m_scopeLabel, 3);
     m_nameLabel = new QLabel(this);
     m_nameLabel->setObjectName(QStringLiteral("focusFixture"));
     QFont big = m_nameLabel->font();
     big.setPointSizeF(big.pointSizeF() * 1.6);
     big.setBold(true);
     m_nameLabel->setFont(big);
+    reserveLines(m_nameLabel, 1);           // a long name is cut, not widened
+    m_nameNoteLabel = new QLabel(this);
+    m_nameNoteLabel->setObjectName(QStringLiteral("focusFixtureNote"));
+    m_nameNoteLabel->setStyleSheet(QStringLiteral("color: #d08a1c;"));
+    reserveLines(m_nameNoteLabel, 2);
     m_referenceLabel = new QLabel(this);
     m_referenceLabel->setObjectName(QStringLiteral("focusReferenceName"));
+    reserveLines(m_referenceLabel, 2);
     m_offsetLabel = new QLabel(this);
     m_offsetLabel->setObjectName(QStringLiteral("focusOffsets"));
     QFont mid = m_offsetLabel->font();
     mid.setPointSizeF(mid.pointSizeF() * 1.3);
+    // Digits of one width: "+12.5°" and "-1.0°" take the same room.
+    mid.setFeature(QFont::Tag("tnum"), 1);
     m_offsetLabel->setFont(mid);
+    reserveLines(m_offsetLabel, 1);
     m_beamLabel = new QLabel(this);
     m_beamLabel->setObjectName(QStringLiteral("focusBeam"));
+    reserveLines(m_beamLabel, 2);           // beam and focus, a line each
     m_beamLabel->hide();
     m_savedLabel = new QLabel(this);
     m_savedLabel->setObjectName(QStringLiteral("focusSaved"));
+    reserveLines(m_savedLabel, 2);
     /* The save status, to be read from the stage: the lamp and a few words. */
     m_lamp = new FocusStatusLamp(this);
     m_statusLabel = new QLabel(this);
@@ -720,6 +762,7 @@ FocusModePanel::FocusModePanel(Doc *doc, QWidget *parent)
     status.setPointSizeF(status.pointSizeF() * 1.3);
     status.setBold(true);
     m_statusLabel->setFont(status);
+    reserveLines(m_statusLabel, 2);
     m_stepLabel = new QLabel(this);
     m_stepLabel->setObjectName(QStringLiteral("focusStep"));
     m_progressLabel = new QLabel(this);
@@ -728,6 +771,7 @@ FocusModePanel::FocusModePanel(Doc *doc, QWidget *parent)
     vl->addWidget(m_titleLabel);
     vl->addWidget(m_callLabel);
     vl->addWidget(m_nameLabel);
+    vl->addWidget(m_nameNoteLabel);
     QHBoxLayout *lampRow = new QHBoxLayout;
     lampRow->addWidget(m_lamp);
     lampRow->addWidget(m_statusLabel, 1);
@@ -738,15 +782,17 @@ FocusModePanel::FocusModePanel(Doc *doc, QWidget *parent)
     m_deltaLabel = new QLabel(this);
     m_deltaLabel->setObjectName(QStringLiteral("focusDelta"));
     m_deltaLabel->setStyleSheet(QStringLiteral("color: #d08a1c; font-weight: bold;"));
+    reserveLines(m_deltaLabel, 1);
     vl->addWidget(m_deltaLabel);
     /* What was just confirmed -- "Spot 3 kept for Lincoln HS.", "All
        saved, 6 lights." -- shown as the voice says it. */
     QLabel *said = new QLabel(this);
     said->setObjectName(QStringLiteral("focusConfirmed"));
     said->setStyleSheet(QStringLiteral("font-weight: bold;"));
+    reserveLines(said, 2);
     connect(m_session, &FocusSession::announce, said, [said](const QString &text, int priority) {
         if (priority >= ControllerScheme::ConfirmPriority)
-            said->setText(text);
+            setTextAndTip(said, text);
     });
     vl->addWidget(said);
     vl->addWidget(m_beamLabel);
@@ -793,6 +839,8 @@ FocusModePanel::FocusModePanel(Doc *doc, QWidget *parent)
     use->addWidget(new QLabel(tr("Voice:"), this));
     use->addWidget(new VoiceDetailCombo(doc->programmer(), this));
     m_deviceLabel->setStyleSheet(QStringLiteral("color: palette(mid);"));
+    // A long device name is cut (its tooltip has it), not a wider window.
+    m_deviceLabel->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
     use->addWidget(m_deviceLabel, 1);
     vl->addLayout(use);
 
@@ -800,6 +848,7 @@ FocusModePanel::FocusModePanel(Doc *doc, QWidget *parent)
     m_pausedLabel->setObjectName(QStringLiteral("focusPausedNote"));
     m_pausedLabel->setWordWrap(true);
     m_pausedLabel->setStyleSheet(QStringLiteral("color: #d08a1c; font-weight: bold;"));
+    reserveLines(m_pausedLabel, 2);
     m_pausedLabel->hide();
     vl->addWidget(m_pausedLabel);
 
@@ -808,11 +857,18 @@ FocusModePanel::FocusModePanel(Doc *doc, QWidget *parent)
     m_noteLabel->setObjectName(QStringLiteral("focusInputNote"));
     m_noteLabel->setWordWrap(true);
     m_noteLabel->setStyleSheet(QStringLiteral("color: #d08a1c;"));
+    reserveLines(m_noteLabel, 2);
     m_noteLabel->hide();
     note->addWidget(m_noteLabel, 1);
     m_backButton = new QPushButton(tr("Use the controller"), this);
     m_backButton->setObjectName(QStringLiteral("focusControllerBack"));
     m_backButton->setFocusPolicy(Qt::NoFocus);
+    {
+        // Its room kept while hidden: showing it doesn't squeeze the note.
+        QSizePolicy bp = m_backButton->sizePolicy();
+        bp.setRetainSizeWhenHidden(true);
+        m_backButton->setSizePolicy(bp);
+    }
     m_backButton->hide();
     connect(m_backButton, &QPushButton::clicked, this, [this]() {
         setInputDevice(FocusSession::ControllerInput);
@@ -902,7 +958,7 @@ void FocusModePanel::refresh()
         double deg = 0.0, lo = 0.0, hi = 0.0;
         if (m_session->beamAngle(fid, deg, lo, hi))
         {
-            m_beamLabel->setText((m_session->beamKind(fid) == FocusSession::LensSetByHand
+            setTextAndTip(m_beamLabel, (m_session->beamKind(fid) == FocusSession::LensSetByHand
                                   ? tr("Beam %1\302\260 (lens %2\342\200\223%3\302\260, set by hand)  "
                                        "D-pad \342\206\221 spot down \342\206\223 flood out, or , .")
                                   : tr("Beam %1\302\260 (zoom %2\342\200\223%3\302\260, while focusing)  "
@@ -915,7 +971,7 @@ void FocusModePanel::refresh()
         double focus = 0.0;
         if (m_session->focusLevel(fid, focus))
         {
-            m_beamLabel->setText((m_beamLabel->isHidden() ? QString() : m_beamLabel->text() + QStringLiteral("\n"))
+            setTextAndTip(m_beamLabel, (m_beamLabel->isHidden() ? QString() : m_beamLabel->text() + QStringLiteral("\n"))
                                  + tr("Focus %1%  D-pad \342\206\222 sharper \342\206\220 softer, or ' ;").arg(qRound(focus * 100.0)));
             m_beamLabel->show();
         }
@@ -930,13 +986,14 @@ void FocusModePanel::refresh()
     if (m_doc->programmer()->isHolding())
         m_titleLabel->setText(tr("HOLDING \342\200\224 click both sticks (or H) to go on.  ")
                               + m_titleLabel->text());
+    m_titleLabel->setToolTip(m_titleLabel->text());
     // One layout, in this tool's words (ControllerScheme).
     m_map->setTool(m_session->isRunningCalls() ? ControllerScheme::FocusCallsTool
                                                : ControllerScheme::FocusTool);
     if (m_session->isRunningCalls())
     {
         const FocusSession::Call call = m_session->currentCall();
-        m_callLabel->setText(tr("Call %1 of %2: %3%4").arg(m_session->callIndex() + 1)
+        setTextAndTip(m_callLabel, tr("Call %1 of %2: %3%4").arg(m_session->callIndex() + 1)
                              .arg(m_session->callCount()).arg(call.name,
                                   call.note.isEmpty() ? QString()
                                                       : QStringLiteral("\n") + call.note));
@@ -949,7 +1006,7 @@ void FocusModePanel::refresh()
         const QString where = m_session->savesToVenue()
             ? tr("Saves to venue \342\200\234%1\342\200\235 (not the show file)").arg(venues->activeVenue())
             : tr("Saves to the show's own calibration");
-        m_scopeLabel->setText(tr("%1 \342\200\224 %2.  Y switches.  %3")
+        setTextAndTip(m_scopeLabel, tr("%1 \342\200\224 %2.  Y switches.  %3")
                               .arg(m_session->scope() == FocusSession::GroupScope
                                    ? tr("The whole %1 (%2)").arg(m_session->isRunningCalls()
                                                                  ? tr("call") : tr("list"))
@@ -960,24 +1017,26 @@ void FocusModePanel::refresh()
                                    : tr("bumpers step fixtures"),
                                    where));
     }
-    m_nameLabel->setText(fx != nullptr ? tr("%1  (ID %2)").arg(fx->name()).arg(fid) : QString());
+    setTextAndTip(m_nameLabel, fx != nullptr ? tr("%1  (ID %2)").arg(fx->name()).arg(fid) : QString());
     {
-        // Q133: its venue correction was skipped -- another fixture type now.
+        // Under the name, in a line of its own that keeps its room.
+        QStringList notes;
         VenueCorrections *venues = m_doc->programmer()->venueCorrections();
+        // Q133: its venue correction was skipped -- another fixture type now.
         if (fx != nullptr && venues->needsFocus(fid))
-            m_nameLabel->setText(m_nameLabel->text()
-                                 + tr("\n! Needs focus: not the fixture focused in %1 (%2)")
-                                   .arg(venues->activeVenue(), venues->correctedAs(fid)));
+            notes << tr("! Needs focus: not the fixture focused in %1 (%2)")
+                     .arg(venues->activeVenue(), venues->correctedAs(fid));
         // Q140: marked dead from the pad (View + X) or D.
         if (fx != nullptr && venues->isDead(fid))
-            m_nameLabel->setText(m_nameLabel->text()
-                                 + tr("\n\342\234\225 Marked dead in %1 (View + X or D again to clear)")
-                                   .arg(venues->activeVenue()));
+            notes << tr("\342\234\225 Marked dead in %1 (View + X or D again to clear)")
+                     .arg(venues->activeVenue());
+        setTextAndTip(m_nameNoteLabel, notes.join(QLatin1Char('\n')));
     }
     m_referenceLabel->setText(tr("Aimed at: %1%2").arg(m_session->referenceName(),
         m_session->isTargetPage()
             ? tr("  \u2014 target page: the stick moves it (A keeps, B puts it back)")
             : m_session->usingSecondReference() ? tr("  (second reference)") : QString()));
+    m_referenceLabel->setToolTip(m_referenceLabel->text());
     const FocusSession::Offset live = m_session->liveOffset(fid);
     const FocusSession::Offset saved = m_session->savedOffset(fid);
     m_offsetLabel->setText(tr("Pan %1    Tilt %2").arg(signedDegrees(live.pan), signedDegrees(live.tilt)));
@@ -987,7 +1046,7 @@ void FocusModePanel::refresh()
         const FixtureRigProps rp = m_doc->monitorProperties()->fixtureRigProps(fid);
         m_offsetLabel->setText(tr("Pan %1\302\260 from downstage    Tilt %2\302\260 down")
                                .arg(double(rp.panZeroDir), 0, 'f', 1).arg(double(rp.aimDown), 0, 'f', 1));
-        m_savedLabel->setText(m_session->isDirty(fid) ? tr("Unsaved (A or Return to save, B to revert)")
+        setTextAndTip(m_savedLabel, m_session->isDirty(fid) ? tr("Unsaved (A or Return to save, B to revert)")
                               : m_session->isChecked(fid) ? tr("Saved \342\234\223") : tr("As it was"));
         m_savedLabel->setStyleSheet(m_session->isDirty(fid) ? QStringLiteral("color: #d08a1c;")
                                                             : QStringLiteral("color: #3a9a4a;"));
@@ -999,13 +1058,13 @@ void FocusModePanel::refresh()
     }
     if (m_session->isDirty(fid))
     {
-        m_savedLabel->setText(tr("Unsaved \342\200\224 saved is pan %1, tilt %2 (A to save, B to revert)")
+        setTextAndTip(m_savedLabel, tr("Unsaved \342\200\224 saved is pan %1, tilt %2 (A to save, B to revert)")
                               .arg(signedDegrees(saved.pan), signedDegrees(saved.tilt)));
         m_savedLabel->setStyleSheet(QStringLiteral("color: #d08a1c;"));
     }
     else
     {
-        m_savedLabel->setText(m_session->isChecked(fid) ? tr("Saved \342\234\223") : tr("As saved"));
+        setTextAndTip(m_savedLabel, m_session->isChecked(fid) ? tr("Saved \342\234\223") : tr("As saved"));
         m_savedLabel->setStyleSheet(QStringLiteral("color: #3a9a4a;"));
     }
     m_stepLabel->setText(tr("Step %1\302\260").arg(double(m_session->stepDegrees()), 0, 'g', 3));
@@ -1066,7 +1125,7 @@ void FocusModePanel::refreshSaveStatus()
                                               : FocusStatusLamp::AllSaved;
     m_lamp->setState(state);
     m_lamp->setCount(unsaved.size());
-    m_statusLabel->setText(saveStatusText());
+    setTextAndTip(m_statusLabel, saveStatusText());
     // The words in the lamp's colour -- the darker yellow reads on a light theme.
     m_statusLabel->setStyleSheet(elsewhere ? QStringLiteral("color: #c05a00;")
                                  : here ? QStringLiteral("color: #b08a10;")
@@ -1135,7 +1194,7 @@ void FocusModePanel::refreshController()
     m_useController->setToolTip(pad.present ? tr("Nudge from %1").arg(pad.name)
                                             : tr("No controller that can focus is connected"));
     const QString owner = m_doc->programmer()->controllerOwnerName();
-    m_deviceLabel->setText(!owner.isEmpty() ? tr("%1 has it (any other is ignored)").arg(owner)
+    setTextAndTip(m_deviceLabel, !owner.isEmpty() ? tr("%1 has it (any other is ignored)").arg(owner)
                            : pad.present ? pad.name : tr("No controller connected"));
 
     const bool arrived = pad.present && !m_padWasPresent;

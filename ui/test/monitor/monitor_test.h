@@ -125,6 +125,10 @@ private slots:
     void aTrussEditorsDoubleClickEditsItsSelectedRows();
     /** Q100: a fixed light's editor aims it by Pan and Tilt. */
     void aFixedLightsEditorAimsItByPanAndTilt();
+    /** Fixture Properties' orientation diagram draws a fixed light where it
+     *  throws: each of the six faces (Back upstage, Bottom down, Stage left
+     *  SL), and a Pan/Tilt aim, following the aim as it is edited (RC5). */
+    void theOrientationDiagramFollowsTheFace();
     /** Q103: a light whose lens is zoomed by hand (a lens range, no zoom
      *  channel) has "Beam (lens set to)" in Fixture Properties; setting it
      *  sets the light's lens, which is what its beam is drawn at. */

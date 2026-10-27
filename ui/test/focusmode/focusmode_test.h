@@ -70,6 +70,12 @@ private slots:
     void theLampSaysWhatIsUnsaved();
     /** Leaving with unsaved lights names them. */
     void exitNamesTheUnsavedLights();
+    /** Quick focus: no press moves the panel's layout -- the window keeps
+     *  its size and every row and the map keep their place, whatever the
+     *  labels say (a long name, a zoom light next to one without, a nudge,
+     *  save, revert, zero, scope, reference, beam, hold, the pad going and
+     *  coming back). */
+    void aPressNeverMovesTheLayout();
     /** With FOCUSUI_SHOTS set: the panel, both maps, in each theme, saved
      *  there (for the docs and a look). */
     void shots();

@@ -25,6 +25,7 @@
 #include <QKeyEvent>
 #include <QCheckBox>
 #include <QLabel>
+#include <QFontMetrics>
 
 #include "programmercontroller.h"
 #include "showtreecontroller.h"
@@ -35,6 +36,33 @@
 #include "focusmodepanel.h"
 #include "fixture.h"
 #include "doc.h"
+
+namespace
+{
+/* A label that never moves the layout: word-wrapped into a fixed number of
+   lines (call after its font is set), ignoring its text's width, and keeping
+   its room while hidden -- so a press that changes it never resizes the
+   map below or widens the window. Its tooltip has the whole text. (The same
+   as FocusModePanel's.) */
+void reserveLines(QLabel *label, int lines)
+{
+    label->setWordWrap(true);
+    label->setAlignment(Qt::AlignLeft | Qt::AlignTop);
+    QSizePolicy sp(QSizePolicy::Ignored, QSizePolicy::Fixed);
+    sp.setRetainSizeWhenHidden(true);
+    label->setSizePolicy(sp);
+    label->setFixedHeight(QFontMetrics(label->font()).lineSpacing() * lines
+                          + 2 * label->margin() + 2 * label->frameWidth() + 2);
+}
+
+/* Keep @p w's room while it is hidden. */
+void retainWhenHidden(QWidget *w)
+{
+    QSizePolicy sp = w->sizePolicy();
+    sp.setRetainSizeWhenHidden(true);
+    w->setSizePolicy(sp);
+}
+}
 
 QPointer<RefinePanel> RefinePanel::s_instance;
 
@@ -126,12 +154,17 @@ RefinePanel::RefinePanel(Doc *doc, QWidget *parent)
     m_layer->setFont(big);
     m_scope = new QLabel(this);
     m_scope->setObjectName(QStringLiteral("refineScope"));
-    m_scope->setWordWrap(true);
     m_pending = new QLabel(this);
     m_pending->setObjectName(QStringLiteral("refinePending"));
-    m_pending->setWordWrap(true);
     m_device = new QLabel(this);
     m_device->setStyleSheet(QStringLiteral("color: palette(mid);"));
+    /* Each keeps one size whatever it says: a press changes the words,
+       never the layout (the map under them grew and shrank). */
+    reserveLines(m_title, 2);       // room for the HOLDING prefix
+    reserveLines(m_layer, 1);
+    reserveLines(m_scope, 2);
+    reserveLines(m_pending, 2);
+    reserveLines(m_device, 1);
     for (QLabel *l : { m_title, m_layer, m_scope })
         vl->addWidget(l);
     // The same lamp as Focus mode's: blue all kept, yellow here, orange elsewhere.
@@ -150,6 +183,7 @@ RefinePanel::RefinePanel(Doc *doc, QWidget *parent)
     m_toSource->setToolTip(tr("Off (the default): A keeps the change in this cue, and the layer becomes "
                               "its own here. On: A keeps it in the cue its values track from, so it "
                               "changes there and in every cue that tracks it. S switches."));
+    retainWhenHidden(m_toSource);
     m_toSource->hide();
     connect(m_toSource, &QCheckBox::toggled, this, [this](bool on) {
         if (on != m_session->keepsToSource())
@@ -166,12 +200,14 @@ RefinePanel::RefinePanel(Doc *doc, QWidget *parent)
         m_sharedLabel->setObjectName(QStringLiteral("refineSharedText"));
         m_sharedLabel->setWordWrap(true);
         m_sharedLabel->setStyleSheet(QStringLiteral("color: #d08a1c; font-weight: bold;"));
+        reserveLines(m_sharedLabel, 2);     // the warning, and who else uses it
         sh->addWidget(m_sharedLabel, 1);
         QPushButton *all = new QPushButton(tr("Change them all"), m_shared);
         all->setObjectName(QStringLiteral("refineSharedConfirm"));
         all->setFocusPolicy(Qt::NoFocus);
         connect(all, &QPushButton::clicked, this, [this]() { m_session->confirmShared(); });
         sh->addWidget(all);
+        retainWhenHidden(m_shared);
         m_shared->hide();
         vl->addWidget(m_shared);
     }
@@ -218,6 +254,7 @@ RefinePanel::RefinePanel(Doc *doc, QWidget *parent)
                           : pc->isControllerLost()
                             ? tr("Controller lost: the lights are held. The keys work (see Help).")
                             : tr("No controller connected: the keys work (see Help)."));
+        m_device->setToolTip(m_device->text());
     };
     controls();
     connect(pc, &ProgrammerController::focusControllerChanged, this, controls);
@@ -293,7 +330,9 @@ void RefinePanel::refresh()
     // The freeze chord (Q140): say so where it is seen first.
     if (m_doc->programmer()->isHolding())
         m_title->setText(tr("HOLDING \342\200\224 click both sticks (or H) to go on.  ") + m_title->text());
+    m_title->setToolTip(m_title->text());
     m_layer->setText(m_session->wherePhrase(ControllerScheme::VerboseVoice));
+    m_layer->setToolTip(m_layer->text());
     QString scope;
     switch (m_session->scope())
     {
@@ -323,6 +362,7 @@ void RefinePanel::refresh()
                        : m_session->page() == RefineSession::ColourPage ? tr("colour palettes")
                                                                         : tr("gobo palettes");
     m_scope->setText(tr("%1  Y changes the scope.  D-pad: %2 (LS click changes it).").arg(scope, page));
+    m_scope->setToolTip(m_scope->text());
     if (m_session->isTrackedLayer())
     {
         const ShowTree::Cue *src = m_doc->showTree()->cue(m_session->trackedSource());

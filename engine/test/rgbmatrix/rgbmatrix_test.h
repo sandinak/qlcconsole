@@ -40,6 +40,7 @@ private slots:
     void previewMaps();
     void property();
     void loadSave();
+    void anUninstalledScriptSurvivesASave();
 
 private:
     Doc* m_doc;

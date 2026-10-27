@@ -21,6 +21,8 @@
 #include <QGuiApplication>
 #include <QSettings>
 #include <QProcess>
+#include <QDateTime>
+#include <QFileInfo>
 
 #ifdef QLC_HAVE_TEXTTOSPEECH
 #include <QTextToSpeech>
@@ -34,6 +36,7 @@ namespace
 {
 const QString kEnabledSetting = QStringLiteral("operatorVoice/enabled");
 const QString kDeviceSetting = QStringLiteral("operatorVoice/device");
+const QString kDeviceIdSetting = QStringLiteral("operatorVoice/deviceId");
 const QString kFeedbackSetting = QStringLiteral("controllerTools/feedback");
 const QString kVoiceDetailSetting = QStringLiteral("controllerTools/voiceDetail");
 
@@ -139,27 +142,60 @@ void OperatorVoice::finished()
     speakNow(next);
 }
 
-QStringList OperatorVoice::outputDevices()
+QList<OperatorVoice::OutputDevice> OperatorVoice::parseOutputDevices(const QString &listing)
 {
-    QStringList out;
-#if defined(Q_OS_MACOS)
-    const QString say = QStandardPaths::findExecutable(QStringLiteral("say"));
-    if (say.isEmpty())
-        return out;
-    QProcess p;
-    p.start(say, { QStringLiteral("-a"), QStringLiteral("?") });
-    if (!p.waitForFinished(3000))
-        return out;
+    QList<OutputDevice> out;
     // "   74 MacBook Pro Speakers"
-    for (const QString &line : QString::fromUtf8(p.readAllStandardOutput()).split(QLatin1Char('\n')))
+    for (const QString &line : listing.split(QLatin1Char('\n')))
     {
         const QString t = line.trimmed();
         const int sp = t.indexOf(QLatin1Char(' '));
         if (sp > 0)
-            out << t.mid(sp + 1).trimmed();
+            out << OutputDevice{ t.left(sp), t.mid(sp + 1).trimmed() };
     }
-#endif
     return out;
+}
+
+QList<OperatorVoice::OutputDevice> OperatorVoice::outputDeviceList(const QString &sayProgram)
+{
+    QString say = sayProgram;
+#if defined(Q_OS_MACOS)
+    if (say.isEmpty())
+        say = QStandardPaths::findExecutable(QStringLiteral("say"));
+#endif
+    if (say.isEmpty())
+        return QList<OutputDevice>();
+    QProcess p;
+    p.start(say, { QStringLiteral("-a"), QStringLiteral("?") });
+    if (!p.waitForFinished(3000))
+    {
+        p.kill();
+        p.waitForFinished(200);
+        return QList<OutputDevice>();
+    }
+    return parseOutputDevices(QString::fromUtf8(p.readAllStandardOutput()));
+}
+
+QStringList OperatorVoice::outputDevices()
+{
+    QStringList out;
+    for (const OutputDevice &d : outputDeviceList())
+        out << d.name;
+    return out;
+}
+
+int OperatorVoice::findOutputDevice(const QList<OutputDevice> &devices, const QString &id,
+                                    const QString &name)
+{
+    if (!id.isEmpty())
+        for (int i = 0; i < devices.size(); ++i)
+            if (devices.at(i).id == id && (name.isEmpty() || devices.at(i).name == name))
+                return i;
+    if (!name.isEmpty())
+        for (int i = 0; i < devices.size(); ++i)
+            if (devices.at(i).name == name)
+                return i;
+    return -1;
 }
 
 QString OperatorVoice::outputDevice()
@@ -167,12 +203,25 @@ QString OperatorVoice::outputDevice()
     return QSettings().value(kDeviceSetting).toString();
 }
 
-void OperatorVoice::setOutputDevice(const QString &name)
+QString OperatorVoice::outputDeviceId()
 {
+    return QSettings().value(kDeviceIdSetting).toString();
+}
+
+void OperatorVoice::setOutputDevice(const QString &name, const QString &id)
+{
+    QSettings settings;
     if (name.isEmpty())
-        QSettings().remove(kDeviceSetting);
+    {
+        settings.remove(kDeviceSetting);
+        settings.remove(kDeviceIdSetting);
+        return;
+    }
+    settings.setValue(kDeviceSetting, name);
+    if (id.isEmpty())
+        settings.remove(kDeviceIdSetting);
     else
-        QSettings().setValue(kDeviceSetting, name);
+        settings.setValue(kDeviceIdSetting, id);
 }
 
 bool OperatorVoice::isEnabled()
@@ -211,17 +260,73 @@ bool CommandVoice::isAvailable() const
     return !m_program.isEmpty();
 }
 
+QString CommandVoice::missingDeviceNotice(const QString &name)
+{
+    return tr("The voice output %1 is not there: speaking on this computer.").arg(name);
+}
+
+bool CommandVoice::sendsToDevices() const
+{
+    // `say` takes an output (-a); it is the voice on a Mac.
+    return QFileInfo(m_program).fileName() == QLatin1String("say");
+}
+
+QString CommandVoice::deviceArgument()
+{
+    const QString name = outputDevice();
+    if (name.isEmpty() || !sendsToDevices())
+        return QString();
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    if (m_listedAt < 0 || now - m_listedAt >= m_checkInterval)
+    {
+        m_devices = outputDeviceList(m_program);
+        m_listedAt = now;
+    }
+    const int at = findOutputDevice(m_devices, outputDeviceId(), name);
+    if (at < 0)
+        return QString();
+    m_missingSaid = false;      // there (again): say so again if it goes
+    return m_devices.at(at).id;
+}
+
 void CommandVoice::speakNow(const QString &text)
+{
+    const QString device = deviceArgument();
+    QString line = text;
+    if (device.isEmpty() && sendsToDevices() && !outputDevice().isEmpty() && !m_missingSaid)
+    {
+        // Chosen, and not there: this computer says it, and says why once.
+        m_missingSaid = true;
+        line = missingDeviceNotice(outputDevice()) + QLatin1Char(' ') + text;
+    }
+    start(line, device);
+}
+
+void CommandVoice::start(const QString &text, const QString &device)
 {
     QProcess *p = new QProcess(this);
     // Done (or failed): the next line, if one is waiting.
-    connect(p, &QProcess::finished, this, [this, p]() {
+    connect(p, &QProcess::finished, this, [this, p, text, device](int exitCode, QProcess::ExitStatus status) {
         p->deleteLater();
-        if (m_process == p)
+        if (m_process != p)
+            return;
+        m_process.clear();
+        if (!device.isEmpty() && (exitCode != 0 || status != QProcess::NormalExit))
         {
-            m_process.clear();
-            finished();
+            /* The output went between the look and the line (`say -a`
+               fails, and the line was lost): this line on the system's
+               output, said why, and the outputs looked at again next time. */
+            m_listedAt = -1;
+            QString line = text;
+            if (!m_missingSaid)
+            {
+                m_missingSaid = true;
+                line = missingDeviceNotice(outputDevice()) + QLatin1Char(' ') + text;
+            }
+            start(line, QString());
+            return;
         }
+        finished();
     });
     connect(p, &QProcess::errorOccurred, this, [this, p](QProcess::ProcessError) {
         p->deleteLater();
@@ -233,12 +338,9 @@ void CommandVoice::speakNow(const QString &text)
     });
     m_process = p;
     QStringList args = m_args;
-#if defined(Q_OS_MACOS)
     // To the output chosen: the headsets' feed, say.
-    const QString device = outputDevice();
-    if (!device.isEmpty() && m_program.endsWith(QLatin1String("/say")))
+    if (!device.isEmpty())
         args << QStringLiteral("-a") << device;
-#endif
     p->start(m_program, args << text);
 }
 

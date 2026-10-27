@@ -36,6 +36,10 @@ private slots:
     void preRunPostRun();
     void stopAndWait();
     void stopAndWaitFail();
+    /** The run-state flags are atomics, and a stop from another thread
+     *  carries its preserve-attributes choice to the tick that sees it
+     *  (TSan L1). */
+    void aStopFromAnotherThreadCarriesItsPreserveChoice();
     void adjustIntensity();
     void slotFixtureRemoved();
     void invalidId();
