@@ -84,7 +84,7 @@ never put on it.
   the number line runs through the spike, the number line's own **CL**
   labels it.
 - **Curtain line:** where the main curtain hangs, labelled **Curtain line**.
-  It's the stage's main reference (the plaster line). Every horizontal truss
+  It's the stage's main reference. Every horizontal truss
   or pipe hung downstage of it, like the FOH electric out over the audience,
   is labelled with how far: **FOH · 4.2 m DS of curtain line**.
 - **Number line:** a line across the stage, ticked every foot or metre (the
@@ -332,7 +332,9 @@ floor units).
 
 **Add ▸ Add Image** puts a picture (a ground plan, a venue drawing) on
 the plot as an object: it sits on a layer, drags, locks and hides like a
-structure, and a double-click edits it.
+structure, and a double-click edits it. When the show is saved, a picture
+from outside the show's folder is copied into its **images** folder, as
+truss and tower pictures are (see [Truss socks](#truss-socks)).
 
 ### Truss socks
 
@@ -592,8 +594,10 @@ which only turns the symbol and never the aim. The diagram follows each
 field as you change it.
 
 **Right-click a fixture** on the plot for **Facing (pan zero) ▸**
-(Downstage, Stage Right, Upstage, Stage Left) and **Unmount from "…"**,
-as well as Mount on, Patch and the rest.
+(Downstage, Stage Right, Upstage, Stage Left), **Set Mounting Height…**
+(its height above the floor, in the show's units: feet on a feet show,
+metres on a metric one) and **Unmount from "…"**, as well as Mount on,
+Patch and the rest.
 
 **Working on several fixtures at once.** Every row applies to every
 selected fixture (select a folder row — a group or "Ungrouped" — to take

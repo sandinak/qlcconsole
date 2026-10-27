@@ -423,12 +423,22 @@ their house lights, relays and subs.
 - **Opened is not changed.** A show whose trusses had no group yet no
   longer asks to save as soon as it opens.
 - **Times take either decimal mark.** In the Show Tree's cue times, the
-  Look Editor's fades and the outline's times, "1.5" and "1,5" are both
-  one and a half seconds, in any language. A chaser step's Fade and Hold
-  still want ".".
+  Look Editor's fades, the outline's times and a chaser step's Fade and
+  Hold (in the Chaser editor and the Workbench's step header), "1.5" and
+  "1,5" are both one and a half seconds, in any language. "1,5s" works
+  too. See [The Workbench](build.md#the-workbench).
 - **Save As keeps the pictures.** Saving to another folder copies the
-  truss and tower pictures into that folder's **images**. See
-  [Truss socks](lighting-studio.md#truss-socks).
+  truss and tower pictures, and the pictures placed on the plot, into
+  that folder's **images**. See [Truss socks](lighting-studio.md#truss-socks).
+- **Collect for Transfer carries the pictures.** The folder it makes has
+  an **images** folder with every picture the show uses (truss socks,
+  tower faces, pictures on the plot, RGB matrix images, Virtual Console
+  backgrounds and icons), and the collected show finds them there on
+  another computer. See [Collect for Transfer](fixture-manager.md#collect-for-transfer).
+- **Mounting height in the show's units.** A fixture's right-click
+  **Set Mounting Height…** asks in feet on a feet show and in metres on a
+  metric one, like the plot's other dialogs. See
+  [Fixture Properties](lighting-studio.md#fixture-properties).
 - **An RGB matrix whose script isn't here keeps it.** It doesn't run on
   that computer, the footer says which, and saving keeps it as it was.
   See [Troubleshooting](troubleshooting.md#files-and-fixtures).

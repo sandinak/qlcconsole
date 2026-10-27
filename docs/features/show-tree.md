@@ -135,7 +135,7 @@ right-click menu, or type **`wb`** (`wb 0.0.3` for another cue of the
 list). The Library and the tree stay where they are: click another cue in
 the tree and the Workbench follows it.
 
-![A cue in the Workbench: its own layers, and Washes tracking in grey](../images/show-tree-workbench.png)
+![A cue in the Workbench: its own Movers layer, and the Pars tracking in grey from cue 1](../images/show-tree-workbench.png)
 
 - **The header** names the cue, its list and production, its mode, fades
   and hold, how many layers are its own and how many are carried in, its

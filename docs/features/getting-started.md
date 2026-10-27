@@ -56,8 +56,8 @@ not opened — and saving then can write an empty workspace over it.
   complete on another computer; where that computer's copy differs, the
   show keeps its own until you choose. See
   [Opening a show on another computer](fixture-manager.md#opening-a-show-on-another-computer).
-  **File ▸ Collect for Transfer…** writes the show and those files into one
-  folder.
+  **File ▸ Collect for Transfer…** writes the show, those files, its
+  venues and its pictures into one folder.
 - This computer also keeps a copy of every non-shipped definition a show
   uses — the **show cache** — for shows saved as .qxw. See
   [Missing definitions and the show cache](fixture-manager.md#missing-definitions-and-the-show-cache).
