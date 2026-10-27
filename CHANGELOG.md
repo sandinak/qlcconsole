@@ -611,6 +611,42 @@ as code.
   so Excel, Numbers or Lightwright show it as text instead of running it
   as a formula; XLSX cells stay inline text (`CsvField::escape()`;
   `PatchList_Test::aFormulaInANameIsNotRunBySpreadsheets`).
+- **The Mac app no longer includes the builder's personal fixtures**
+  (RC8 packaging, board Q177). The 0.2.x DMGs folded the build Mac's own
+  user folder into the app: 95 personal fixture definitions, 38
+  Finder copies like `ADJ-DP-415 2.qxf`, 23 extra RGB scripts (some
+  replacing the stock ones of the same name), MIDI and modifier templates
+  and a bundle. The app now carries the repository's resources only, and
+  the release check fails a DMG with any resource file that is not
+  byte-identical to the repository's. Your own fixtures and scripts in
+  your user folder load as before.
+- **Windows: the uninstaller removes the settings** (RC8 packaging). It
+  deleted `HKCU\Software\qlcconsole`, which only the installer writes;
+  the app's settings are `HKCU\Software\qlcplus\qlcconsole`, and those go
+  now too (and `HKCU\Software\qlcplus` when nothing else is in it).
+- **Windows: one qlcconsole per user** (RC8 packaging). Installing into a
+  second folder used to take the first install's Apps & features entry,
+  file associations and Start Menu over without a word. Now the installer
+  asks (install over the existing one, or go back), and a silent install
+  (`/S`) into another folder is refused with exit code 3. The in-app
+  updater installs into the folder it runs from, so it is not affected.
+- **Windows: Apps & features shows a publisher** (RC8 packaging).
+- **Windows: LGPL FFmpeg** (RC8 packaging). The installer carried MSYS2's
+  FFmpeg, built `--enable-gpl` (GPL 3, with x264/x265). It now carries an
+  LGPL build of the same FFmpeg (BtbN's FFmpeg-Builds `lgpl-shared`, pinned
+  by release and checksum), as the Mac and Linux builds always had.
+- **Licence texts ship with the app** (RC8 packaging): `licenses/` in the
+  Windows install folder, `Resources/licenses` in the Mac app,
+  `share/qlcconsole/licenses` in the AppImage -- LGPL 2.1 and 3, GPL 2 and
+  3, Apache 2.0, and THIRD-PARTY.txt saying which library is under which.
+- **Every installer can run headless** (RC8 packaging): each carries Qt's
+  offscreen platform plugin, so `qlcconsole -platform offscreen` works as
+  shipped (scripted checks, CI, the release checks).
+- **A workspace file on its own opens** (RC8 packaging):
+  `qlcconsole show.qlcc` opens it like `-o show.qlcc` (an existing .qlcc
+  or .qxw only), which is how a Linux file manager passes it. The Linux
+  .desktop file runs `qlcconsole %f`, so `./qlcconsole.AppImage --version`
+  and `-o FILE` work through the AppImage too.
 
 - **The Labels dialog finds a Brother PT-P710BT** (RC4, board Q163-1).
   With a printer installed whose name, description or model says PT-P710BT
@@ -935,6 +971,21 @@ as code.
   universe the show doesn't have, wrote past the universe list; it is
   refused (`HostileShow_Test::randomWithEqualBoundsDoesNotCrashTheTimer`,
   `::randomTakesItsBoundsEitherWayRound`, `::setFixtureOnAnUnpatchedFixtureIsSafe`).
+- **The Linux AppImage runs without Qt installed** (RC8 packaging). It
+  carried a hand-kept list of Qt libraries that missed PrintSupport, the
+  Qml/Quick libraries the multimedia plugin needs and FFmpeg's stubs, and
+  took libftdi1, FFTW, libmad and FFmpeg itself (a GPL build) from
+  whatever machine ran it. It now carries every library it needs beyond a
+  desktop's base system (`platforms/linux/appimage-bundle.sh`), with
+  `$ORIGIN`-relative library paths, Qt's LGPL FFmpeg, and the JPEG, GIF,
+  ICO and SVG-icon plugins; checked on clean Ubuntu 22.04 and 24.04.
+- **`./qlcconsole.AppImage --version` started the app** (RC8 packaging):
+  the .desktop file's `Exec=qlcconsole --open %f` put `--open` before
+  every argument.
+- **Finder knew .qlcc, .qxw and .qxf only as "document"** (RC8
+  packaging): the Mac app now declares them (`UTExportedTypeDeclarations`
+  for .qlcc, `UTImportedTypeDeclarations` for QLC+'s .qxw and .qxf, all
+  XML), so they get a kind and an icon of their own.
 
 - **A chaser step's Fade or Hold typed with a comma read as 0** (RC7).
   "1,5" in the Chaser editor's Fade In / Hold / Fade Out cells or the

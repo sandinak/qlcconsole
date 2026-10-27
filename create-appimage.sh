@@ -69,11 +69,12 @@ if [ "$1" == "qmlui" ]; then
     rm -rf QtQuick/Controls.2/Universal QtQuick/Controls.2/Fusion
     rm -rf QtQuick/Controls.2/Imagine QtQuick/Controls.2/Scene2D
     popd
-    sed -i -e 's/Exec=qlcconsole --open %f/Exec=qlcconsole-qml/g' $TARGET_DIR/qlcconsole.desktop
+    sed -i -e 's/Exec=qlcconsole %f/Exec=qlcconsole-qml %f/g' $TARGET_DIR/qlcconsole.desktop
 else
     strip $TARGET_DIR/usr/bin/qlcconsole
-    chrpath -r "../lib" $TARGET_DIR/usr/bin/qlcconsole || true
-    sed -i -e 's/Exec=qlcconsole --open %f/Exec=qlcconsole/g' $TARGET_DIR/qlcconsole.desktop
+    # Qt, its plugins and every other non-base library, $ORIGIN RUNPATHs
+    # (what CI does; needs patchelf).
+    ../platforms/linux/appimage-bundle.sh $TARGET_DIR "${QTDIR:-/usr/lib/x86_64-linux-gnu/qt6}"
 fi
 
 # There might be a new version of the tool available.

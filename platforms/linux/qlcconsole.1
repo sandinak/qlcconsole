@@ -57,8 +57,9 @@ Enable kiosk-mode (only virtual console is visible and the application is locked
 Use the given locale for translation. Currently supported: ca_ES, cz_CZ, de_DE, en_GB, es_ES, fi_FI, fr_FR, it_IT, ja_JP, nl_NL, pt_BR
 .IP "-n or --nogui"
 Start the application with the GUI hidden (Raspberry Pi only).
-.IP "-o or --open <filename.qxw>"
-Open the given workspace file.
+.IP "-o or --open <filename.qlcc|.qxw>"
+Open the given workspace file. An existing .qlcc or .qxw file given on its
+own, without -o, opens too (the way a file manager passes it).
 .IP "-p or --operate"
 Start the application in Operate mode.
 .IP "-v or --version"

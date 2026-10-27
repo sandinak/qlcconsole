@@ -20,6 +20,8 @@
 !define QLCCONSOLE_SRC "@QLC_NSIS_SRCDIR@"
 !define VERSION "@QLCCONSOLE_VERSION@"
 !define UNINSTALL_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\qlcconsole"
+!define PUBLISHER "Branson Matheson"
+!define SETTINGS_KEY "Software\qlcplus\qlcconsole"
 !define MUI_ICON "${QLCCONSOLE_SRC}\resources\icons\qlcconsole.ico"
 !define MUI_UNICON "${NSISDIR}\Contrib\Graphics\Icons\nsis3-uninstall.ico"
 !define MUI_HEADERIMAGE
@@ -43,7 +45,7 @@ VIAddVersionKey /LANG=0 "FileVersion" "${VERSION}"
 VIAddVersionKey /LANG=0 "FileDescription" "qlcconsole installer"
 VIAddVersionKey /LANG=0 "LegalCopyright" "Apache License 2.0"
 
-!define MUI_LICENSEPAGE_TEXT_TOP "Do you accept the following statement of the Apache 2.0 license?"
+!define MUI_LICENSEPAGE_TEXT_TOP "Do you accept the following statement of the Apache 2.0 license? (The libraries qlcconsole carries are under their own licences: licenses\THIRD-PARTY.txt in the install folder.)"
 
 !insertmacro MUI_PAGE_LICENSE "${QLCCONSOLE_SRC}\platforms\windows\apache_2.0.txt"
 
@@ -62,9 +64,62 @@ VIAddVersionKey /LANG=0 "LegalCopyright" "Apache License 2.0"
 
 ;--------------------------------
 ; Pages
-Page directory
+Page directory "" "" DirectoryLeave
 Page custom StartMenuGroupSelect "" ": Start Menu Folder"
 Page instfiles
+
+;--------------------------------
+; One qlcconsole per user. The Apps & features entry, the file associations
+; and the Start Menu folder are per user, not per folder: a second install
+; into another folder would silently take them over from the first. So an
+; install that finds qlcconsole in another folder asks (interactive: use that
+; folder, or go back) or refuses (silent /S, exit code 3). The updater runs
+; /S /D=<the folder it runs from>, which is the same folder.
+
+Var ExistingDir
+
+; $0 = the registered install folder still holding qlcconsole.exe, or "".
+Function FindExisting
+	ReadRegStr $0 HKCU "${UNINSTALL_KEY}" "InstallLocation"
+	StrCmp $0 "" done
+	IfFileExists "$0\qlcconsole.exe" done
+		StrCpy $0 ""
+	done:
+FunctionEnd
+
+; Sets $1 to 1 when $INSTDIR is not $ExistingDir (case-insensitive, either
+; spelled with or without a trailing backslash).
+Function OtherThanExisting
+	StrCpy $1 0
+	StrCmp $ExistingDir "" done
+	GetFullPathName $2 "$INSTDIR\."
+	GetFullPathName $3 "$ExistingDir\."
+	StrCmp $2 $3 done
+		StrCpy $1 1
+	done:
+FunctionEnd
+
+Function .onInit
+	Call FindExisting
+	StrCpy $ExistingDir $0
+	IfSilent 0 done
+	Call OtherThanExisting
+	StrCmp $1 1 0 done
+		; Nothing to ask in a silent install: refuse, before touching anything.
+		SetErrorLevel 3
+		Quit
+	done:
+FunctionEnd
+
+Function DirectoryLeave
+	Call OtherThanExisting
+	StrCmp $1 1 0 done
+	MessageBox MB_OKCANCEL|MB_ICONEXCLAMATION "qlcconsole is already installed in$\r$\n$\r$\n$ExistingDir$\r$\n$\r$\nOK installs this version there, over it. Cancel goes back. (To move qlcconsole to another folder, uninstall it first.)" IDOK useexisting
+		Abort
+	useexisting:
+		StrCpy $INSTDIR $ExistingDir
+	done:
+FunctionEnd
 
 Function StartMenuGroupSelect
 	Push $R1
@@ -128,6 +183,8 @@ Section
 	; Apps & features entry
 	WriteRegStr HKCU "${UNINSTALL_KEY}" "DisplayName" "qlcconsole"
 	WriteRegStr HKCU "${UNINSTALL_KEY}" "DisplayVersion" "${VERSION}"
+	WriteRegStr HKCU "${UNINSTALL_KEY}" "Publisher" "${PUBLISHER}"
+	WriteRegStr HKCU "${UNINSTALL_KEY}" "URLInfoAbout" "https://github.com/sandinak/qlcconsole"
 	WriteRegStr HKCU "${UNINSTALL_KEY}" "DisplayIcon" "$INSTDIR\qlcconsole.exe,0"
 	WriteRegStr HKCU "${UNINSTALL_KEY}" "InstallLocation" "$INSTDIR"
 	WriteRegStr HKCU "${UNINSTALL_KEY}" "UninstallString" '"$INSTDIR\uninstall.exe"'
@@ -167,6 +224,10 @@ Section "Uninstall"
 
 	DeleteRegKey HKCU "${UNINSTALL_KEY}"
 
-	; This will delete all settings
+	; The installer's own key, and the app's settings (QSettings
+	; "qlcplus"/"qlcconsole"). Software\qlcplus goes too only when nothing
+	; else is in it: QLC+ itself keeps its settings there.
 	DeleteRegKey HKCU "Software\qlcconsole"
+	DeleteRegKey HKCU "${SETTINGS_KEY}"
+	DeleteRegKey /ifempty HKCU "Software\qlcplus"
 SectionEnd

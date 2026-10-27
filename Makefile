@@ -12,7 +12,7 @@ SHELL := /bin/bash
 DEV_APP ?= $(HOME)/Applications/qlcconsole-dev.app
 export DEV_APP
 
-.PHONY: help test run check quick pool pool-status dmg beta release attach publish
+.PHONY: help test run check quick pool pool-status dmg release-check beta release attach publish
 
 help:
 	@v=$$(cat VERSION); \
@@ -40,6 +40,13 @@ help:
 	echo "                  dist/qlcconsole-$$v-universal-<date>-<rev>.dmg + dist/SHA256SUMS."; \
 	echo "                  REPLACES ~/qlcconsole.app (old one -> ~/qlcconsole.app.prev);"; \
 	echo "                  /Applications is never touched. Tags and publishes nothing."; \
+	echo "                  Ends with 'make release-check' on the new DMG (RELEASE_CHECK=0 skips)."; \
+	echo "  make release-check [DMG=dist/...] [HOST=ssh-host]"; \
+	echo "                  platforms/macos/release-check.sh on the newest dist/*.dmg: signature,"; \
+	echo "                  notarization, Gatekeeper, SHA256SUMS, universal + relocatable Mach-O,"; \
+	echo "                  plugins, Info.plist and file types, resources, headless runs. Never"; \
+	echo "                  opens a window. HOST= runs it on another (clean) Mac; WAIVE=id,id"; \
+	echo "                  reports known failures as TODO. Windows/Linux: RELEASE.md."; \
 	echo ""; \
 	echo "PUBLIC -- push tag v$$v to origin and publish on GitHub Releases, where the in-app"; \
 	echo "updater offers it to users. Each shows its plan and asks you to type 'publish':"; \
@@ -78,6 +85,11 @@ pool-status:
 
 dmg:
 	@platforms/macos/make-release.sh
+
+release-check:
+	@dmg="$(DMG)"; [ -n "$$dmg" ] || dmg=$$(ls -t dist/*.dmg 2>/dev/null | head -1); \
+	[ -n "$$dmg" ] || { echo "no dist/*.dmg -- 'make dmg' first, or DMG=path"; exit 1; }; \
+	platforms/macos/release-check.sh "$$dmg" $(if $(HOST),--host $(HOST)) $(if $(WAIVE),--waive $(WAIVE))
 
 beta:
 	@platforms/macos/publish.sh beta
