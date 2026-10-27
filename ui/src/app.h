@@ -122,6 +122,12 @@ protected:
     /** Clicking the status-bar MTC chip opens the timecode-bind menu. */
     bool eventFilter(QObject *watched, QEvent *event) override;
 
+public slots:
+    /** Help > Troubleshooting > Copy Layout Report (LayoutDiagnostics). */
+    void copyLayoutReport();
+
+protected:
+
 #if defined(WIN32) || defined(Q_OS_WIN)
     bool nativeEvent(const QByteArray &eventType, void *message, qintptr *result) override;
     void disableTimerResolutionThrottling();

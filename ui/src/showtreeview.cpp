@@ -115,6 +115,21 @@ using namespace ShowTree;
 // "2": the columns were reordered (Library | Tree | Editor, 2026-10-17), so
 // sizes saved for the old order are not read back.
 #define SETTINGS_SPLITTER QStringLiteral("showtree/splitter2")
+
+/* Is a saved QSplitter state one for @p panes panes, with pane @p mustShow
+   wider than nothing? (QSplitter::saveState(): a marker, a version, then the
+   sizes.) */
+static bool splitterStateUsable(const QByteArray &state, int panes, int mustShow)
+{
+    QDataStream in(state);
+    in.setVersion(QDataStream::Qt_5_0);
+    qint32 marker = 0, version = 0;
+    QList<int> sizes;
+    in >> marker >> version >> sizes;
+    if (in.status() != QDataStream::Ok || marker != 0xff || sizes.size() != panes)
+        return false;
+    return mustShow < 0 || mustShow >= sizes.size() || sizes.at(mustShow) > 0;
+}
 #define SETTINGS_BADGE_COLUMN QStringLiteral("showtree/badgeColumn")
 #define SETTINGS_EDITOR_SPLITTER QStringLiteral("showtree/editorSplitter")
 
@@ -2018,9 +2033,19 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
     {
         QSettings settings;
         const QVariant state = settings.value(SETTINGS_SPLITTER);
-        if (state.isValid())
+        /* Only a Library | Tree | page split, with the page showing. One
+           saved while the Workbench was docked here is four panes, the
+           hidden page's at 0 -- restored, the page came back at no width.
+           Such a state is dropped and the default split used. */
+        if (state.isValid() && splitterStateUsable(state.toByteArray(), 3, 2))
             split->restoreState(state.toByteArray());
-        connect(split, &QSplitter::splitterMoved, this, [split]() {
+        else if (state.isValid())
+            settings.remove(SETTINGS_SPLITTER);
+        connect(split, &QSplitter::splitterMoved, this, [this, split]() {
+            // Docked, the panes are not the page's: closeWorkbench() puts the
+            // split back as it was, and that is what is kept.
+            if (isWorkbenchDocked())
+                return;
             QSettings s;
             s.setValue(SETTINGS_SPLITTER, split->saveState());
         });

@@ -81,6 +81,9 @@
 #include "speedmastersfooter.h"
 #include "updatemanager.h"
 #include "app.h"
+#include "layoutdiagnostics.h"
+#include <QClipboard>
+#include <QGuiApplication>
 #include "measurementunits.h"
 #include "effectscriptrunner.h"
 #include <QPointer>
@@ -422,6 +425,10 @@ void App::init()
     // bar is a plain row here rather than a QMainWindow toolbar: it holds a
     // tab's own QToolBar, and a toolbar inside a toolbar pays both their
     // margins (8 px of the height this bar exists to save).
+    /* If the platform resizes the window without Qt hearing of it, the
+       contents stay at the old size (Q178 #11): re-sync and log it. */
+    WindowSizeGuard::watch(this);
+
     QWidget *central = new QWidget(this);
     central->setObjectName("MainCentral");
     QVBoxLayout *centralLayout = new QVBoxLayout(central);
@@ -2677,6 +2684,17 @@ void App::initMenuBar()
     for (const auto &g : guides)
     {
         const QString topic = g.second;
+        if (topic == QStringLiteral("troubleshooting.md"))
+        {
+            /* The guide, and what to send when the window misbehaves: one
+               click copies what every level of it measures (Q178 #11). */
+            QMenu *trouble = helpMenu->addMenu(g.first);
+            trouble->setObjectName(QStringLiteral("troubleshootingMenu"));
+            trouble->addAction(tr("Troubleshooting Guide"), this, [topic]() { HelpBrowser::open(topic); });
+            QAction *report = trouble->addAction(tr("Copy Layout Report"), this, &App::copyLayoutReport);
+            report->setObjectName(QStringLiteral("copyLayoutReport"));
+            continue;
+        }
         helpMenu->addAction(g.first, this, [topic]() { HelpBrowser::open(topic); });
     }
     helpMenu->addSeparator();
@@ -4423,6 +4441,14 @@ void App::slotDetachContext(int index)
     openContextWindow(context, tabLabel);
 }
 
+void App::copyLayoutReport()
+{
+    const QString text = LayoutDiagnostics::report(this);
+    QGuiApplication::clipboard()->setText(text);
+    if (statusBar() != nullptr)
+        statusBar()->showMessage(tr("Layout report copied to the clipboard: paste it into your report"), 6000);
+}
+
 void App::openContextWindow(QWidget *context, const QString &tabLabel)
 {
     DetachedContext *detachedWindow = new DetachedContext(this);
@@ -4437,6 +4463,7 @@ void App::openContextWindow(QWidget *context, const QString &tabLabel)
         title += tr(" - New Workspace");
     title += QString(" - ") + tabLabel;
     detachedWindow->setWindowTitle(title);
+    WindowSizeGuard::watch(detachedWindow);     // the Q178 #11 self-heal
     detachedWindow->show();
     context->show();
     // In front, not opened behind the main window (where it looks as if the

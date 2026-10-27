@@ -50,6 +50,12 @@ private slots:
      *  a real session's saved window and splitter states. */
     void theWindowFollowsResizesAroundADetach();
 
+    /** Help > Troubleshooting > Copy Layout Report puts every level's size
+     *  on the clipboard (detached windows too); and the self-heal: the
+     *  platform window resized without the widget hearing of it is put
+     *  back in step on the next expose, repainted and logged (Q178 #11). */
+    void theLayoutReportAndTheSelfHeal();
+
     /** Classic QLC+: picking a scene, a chaser or an EFX in the Functions
      *  tab opens its editor beside the tree, as in QLC+ -- even from a saved
      *  splitter state that had the editor collapsed. */

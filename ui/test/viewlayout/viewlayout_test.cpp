@@ -47,6 +47,9 @@
 #include <QCheckBox>
 #include <QSlider>
 #include "apputil.h"
+#include "layoutdiagnostics.h"
+#include <QClipboard>
+#include <QGuiApplication>
 #include "horizontalpan.h"
 #include "fixtureconsole.h"
 #include "fixturegroup.h"
@@ -422,6 +425,92 @@ void ViewLayout_Test::theWindowFollowsResizesAroundADetach()
 }
 
 /* Select one function in the Functions tab's tree, as a click does. */
+/* Eats what a window would be told of a resize: the platform window grows,
+   the widget never hears (what the Mac seems to do after a detach). */
+class SwallowResize : public QObject
+{
+public:
+    bool eventFilter(QObject *, QEvent *e) override
+    {
+        return e->type() == QEvent::Resize || e->type() == QEvent::Expose;
+    }
+};
+
+void ViewLayout_Test::theLayoutReportAndTheSelfHeal()
+{
+    QTabWidget *tabs = m_app->m_tab;
+    m_app->setWorkspaceView(App::ConsoleView, false);
+    m_app->resize(1280, 800);
+    QCoreApplication::processEvents();
+
+    // Help > Troubleshooting > Copy Layout Report.
+    QMenu *help = m_app->menuBar()->findChild<QMenu *>("helpMenu");
+    QVERIFY(help != nullptr);
+    QMenu *trouble = help->findChild<QMenu *>("troubleshootingMenu");
+    QVERIFY(trouble != nullptr);
+    QAction *copy = nullptr;
+    for (QAction *a : trouble->actions())
+    {
+        if (a->objectName() == QStringLiteral("copyLayoutReport"))
+            copy = a;
+    }
+    QVERIFY(copy != nullptr);
+
+    // A tab out in its own window, so the report has one to tell.
+    const int at = tabs->currentIndex() == 0 ? 1 : 0;
+    const QString label = tabs->tabText(at);
+    m_app->slotDetachContext(at);
+    QCoreApplication::processEvents();
+
+    QGuiApplication::clipboard()->clear();
+    copy->trigger();
+    const QString report = QGuiApplication::clipboard()->text();
+    QVERIFY2(!report.isEmpty(), "nothing on the clipboard");
+    for (const QString &want : { QStringLiteral("Qt %1").arg(QString::fromLatin1(qVersion())),
+                                 QStringLiteral("Screens:"), QStringLiteral("device pixel ratio"),
+                                 QStringLiteral("platform window:"), QStringLiteral("(matches)"),
+                                 QStringLiteral("central (MainCentral)"), QStringLiteral("tabs: "),
+                                 QStringLiteral("page ("), QStringLiteral("Other windows:"),
+                                 label, QStringLiteral("Self-heal: nothing healed") })
+        QVERIFY2(report.contains(want), qPrintable(QString("the report lacks '%1':\n%2").arg(want, report)));
+    QVERIFY(!m_app->statusBar()->currentMessage().isEmpty());
+    m_app->reattachAllContexts();
+    QCoreApplication::processEvents();
+
+    /* The self-heal: the platform window resized without the widget being
+       told. The next expose finds them apart, re-syncs, repaints, logs. */
+    WindowSizeGuard::clearLog();
+    WindowSizeGuard *guard = m_app->findChild<WindowSizeGuard *>(QString(), Qt::FindDirectChildrenOnly);
+    QVERIFY(guard != nullptr);
+    QWindow *handle = m_app->windowHandle();
+    QVERIFY(handle != nullptr);
+    SwallowResize swallow;
+    handle->installEventFilter(&swallow);
+    const QSize was = m_app->size();
+    handle->resize(1500, 900);
+    QCoreApplication::processEvents();
+    QCoreApplication::processEvents();
+    handle->removeEventFilter(&swallow);
+    QCOMPARE(handle->size(), QSize(1500, 900));
+    QVERIFY2(m_app->size() == was, "the widget heard of the resize: the test no longer makes the fault");
+    {
+        QExposeEvent expose{QRegion(QRect(QPoint(0, 0), handle->size()))};
+        QCoreApplication::sendEvent(handle, &expose);
+    }
+    QTRY_COMPARE_WITH_TIMEOUT(m_app->size(), QSize(1500, 900), 2000);
+    QCOMPARE(m_app->centralWidget()->width(), 1500);
+    QCOMPARE(WindowSizeGuard::log().size(), 1);
+    QVERIFY(WindowSizeGuard::log().first().contains("1500x900"));
+    // The report says it happened.
+    copy->trigger();
+    QVERIFY(QGuiApplication::clipboard()->text().contains(QStringLiteral("Self-heal, 1 time(s)")));
+    // In step, nothing to heal.
+    QVERIFY(!guard->checkNow());
+    WindowSizeGuard::clearLog();
+    m_app->resize(1280, 800);
+    QCoreApplication::processEvents();
+}
+
 static void pick(FunctionManager *fm, quint32 fid)
 {
     QTreeWidgetItem *item = fm->m_tree->functionItem(fm->m_doc->function(fid));
