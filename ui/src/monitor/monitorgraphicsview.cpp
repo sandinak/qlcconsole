@@ -10017,7 +10017,6 @@ QPolygonF MonitorGraphicsView::fixtureProjection(quint32 fid) const
         return out;
 
     const FixtureVisualTraits traits = classifyFixture(fx);
-    const FixtureRigProps rp = props->fixtureRigProps(fid);
     const QVector3D apex = fixtureWorldCentre(m_doc, fid);
 
     /* Where it points.
