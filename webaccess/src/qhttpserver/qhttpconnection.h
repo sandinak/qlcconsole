@@ -27,6 +27,8 @@
 #include "qhttpserverfwd.h"
 
 #include <QObject>
+#include <QPointer>
+#include <QTcpSocket>
 
 /// @cond nodoc
 
@@ -67,7 +69,9 @@ private:
     static int MessageComplete(http_parser *parser);
 
 private:
-    QTcpSocket *m_socket;
+    /* The server owns the socket too (its parent): when the server goes
+       first, this must not delete it again. */
+    QPointer<QTcpSocket> m_socket;
     http_parser *m_parser;
     http_parser_settings *m_parserSettings;
 
@@ -105,6 +109,10 @@ private Q_SLOTS:
 
 private:
     QWebSocketServer *m_websocketServer;
+    /** The request was refused for its size (413, not 400) */
+    bool m_tooLarge = false;
+    /** m_request went out in newRequest(): its user owns it now */
+    bool m_requestHandedOut = false;
     QWebSocket *m_webSocket;
     bool m_isWebSocket;
     QTimer *m_pollTimer;

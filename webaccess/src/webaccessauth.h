@@ -46,6 +46,9 @@ struct WebAccessUser
     WebAccessUserLevel level;
     QString hashType;
     QString passwordSalt;
+    /** A visitor on this computer while -wa has no admin account yet: may
+     *  create the first admin and look, nothing else (RC8). */
+    bool setupOnly = false;
 
     WebAccessUser(
         const QString& _username,
@@ -142,11 +145,15 @@ public:
 
     QList<WebAccessUser> getUsers() const;
 
+    /** True when at least one account has the admin level. Until then
+     *  nobody is let in (RC8: it used to mean everybody was admin), except
+     *  to create the first admin from this computer (WebAccessBase). */
+    bool hasAtLeastOneAdmin() const;
+
 private:
     QString generateSalt() const;
     QString hashPassword(const QString& hashType, const QString& password, const QString& passwordSalt) const;
     bool verifyPassword(const QString& password, const WebAccessUser& user) const;
-    bool hasAtLeastOneAdmin() const;
 
 private:
     QMap<QString, WebAccessUser> m_passwords;

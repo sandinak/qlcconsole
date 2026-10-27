@@ -25,7 +25,7 @@ function grandMasterValueChanged(value, displayValue) {
  obj = document.getElementById("vcGMSlider");
  obj.value = value;
  var labelObj = document.getElementById("vcGMSliderLabel");
- labelObj.innerHTML = displayValue;
+ labelObj.textContent = displayValue;
 }
 
 function grandMasterValueChange() {
@@ -130,7 +130,7 @@ function setCueProgress(id, percent, text) {
  var progressBarObj = document.getElementById("vccuelistPB" + id);
  var progressValObj = document.getElementById("vccuelistPV" + id);
  progressBarObj.style.width = percent + "%";
- progressValObj.innerHTML = text;
+ progressValObj.textContent = text;
 }
 
 function changeCueNoteToEditMode(id, idx) {
@@ -147,7 +147,7 @@ function changeCueNoteToTextMode(id, idx) {
  cueNoteSpanObj.style.display = "block";
  cueNoteInputObj.style.display = "none";
  var newNote = cueNoteInputObj.value;
- cueNoteSpanObj.innerHTML = newNote;
+ cueNoteSpanObj.textContent = newNote;
  websocket.send(id + "|CUE_STEP_NOTE|" + idx + "|" + newNote);
 }
 
@@ -156,7 +156,7 @@ function setCueStepNote(id, idx, note) {
  var cueNoteInputObj = document.getElementById("cueNoteInput" + id + "_" + idx);
  cueNoteSpanObj.style.display = "block";
  cueNoteInputObj.style.display = "none";
- cueNoteSpanObj.innerHTML = note;
+ cueNoteSpanObj.textContent = note;
  cueNoteInputObj.value = note;
 }
 
@@ -264,7 +264,7 @@ var framesPageNames = new Array();
 function updateFrameLabel(id) {
   var framePageObj = document.getElementById("fr" + id + "Page");
   var newLabel = framesPageNames[id][framesCurrentPage[id]];
-  framePageObj.innerHTML = newLabel;
+  framePageObj.textContent = newLabel;
 
   var frameCaptionObj = document.getElementById("fr" + id + "Caption");
   var frMpHdr = document.getElementById("frMpHdr" + id);
@@ -272,7 +272,7 @@ function updateFrameLabel(id) {
   if (frMpHdr) { // if multi page mode
     newCaption = frameCaption[id] ? frameCaption[id] + " - " + newLabel : newLabel;
   }
-  frameCaptionObj.innerHTML = newCaption;
+  frameCaptionObj.textContent = newCaption;
 }
 
 function frameToggleCollapse(id) {
@@ -364,7 +364,7 @@ function wsSetSliderValue(id, sliderValue, displayValue) {
  var obj = document.getElementById(id);
  obj.value = sliderValue;
  var labelObj = document.getElementById("slv" + id);
- labelObj.innerHTML = displayValue;
+ labelObj.textContent = displayValue;
  // knob
  getPositionFromValue(sliderValue, id);
 }

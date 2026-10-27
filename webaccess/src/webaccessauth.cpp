@@ -116,9 +116,10 @@ bool WebAccessAuth::savePasswordsFile() const
 
 WebAccessUser WebAccessAuth::authenticateRequest(const QHttpRequest* req, QHttpResponse* res) const
 {
-    // Disable authentication when no administrative accounts are proviced
+    // No admin account yet: nobody is anybody. (Upstream let everyone in as
+    // admin here, so the first visitor from anywhere owned the console.)
     if (!this->hasAtLeastOneAdmin())
-        return WebAccessUser(NOT_PROVIDED_LEVEL);
+        return WebAccessUser();
 
     QString header = QString("Basic realm=\"") + m_realm + QString("\"");
     res->setHeader("WWW-Authenticate", header);

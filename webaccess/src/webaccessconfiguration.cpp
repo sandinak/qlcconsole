@@ -19,8 +19,10 @@
 
 #include <QSettings>
 
+
 #include "webaccessconfiguration.h"
 #include "webaccessauth.h"
+#include "webaccessbase.h"
 #include "audioplugincache.h"
 #include "inputoutputmap.h"
 #include "commonjscss.h"
@@ -29,6 +31,9 @@
 #include "qlcconfig.h"
 #include "qlcfile.h"
 #include "doc.h"
+
+/* Everything a show, a device or a user names is text on this page */
+static QString esc(const QString &text) { return WebAccessBase::htmlEscaped(text); }
 
 WebAccessConfiguration::WebAccessConfiguration()
 {
@@ -86,7 +91,7 @@ QString WebAccessConfiguration::getIOConfigHTML(Doc *doc)
         quint32 currentFeedback = (fp == NULL)?QLCChannel::invalid():fp->output();
         QString currentProfileName = (ip == NULL)?KInputNone:ip->profileName();
 
-        html += "<tr align=center><td>" + uniName + "</td>\n";
+        html += "<tr align=center><td>" + esc(uniName) + "</td>\n";
         html += "<td><select onchange=\"ioChanged('INPUT', " + QString::number(i) + ", this.value);\">\n";
         for (int in = 0; in < inputLines.count(); in++)
         {
@@ -94,8 +99,8 @@ QString WebAccessConfiguration::getIOConfigHTML(Doc *doc)
             QString selected = "";
             if (currentInputPluginName == strList.at(0) && currentInput == strList.at(2).toUInt())
                 selected = "selected";
-            html += "<option value=\"" + QString("%1|%2").arg(strList.at(0)).arg(strList.at(2)) + "\" " + selected + ">" +
-                    QString("[%1] %2").arg(strList.at(0)).arg(strList.at(1)) + "</option>\n";
+            html += "<option value=\"" + esc(QString("%1|%2").arg(strList.at(0)).arg(strList.at(2))) + "\" " + selected + ">" +
+                    esc(QString("[%1] %2").arg(strList.at(0)).arg(strList.at(1))) + "</option>\n";
         }
         html += "</select></td>\n";
         html += "<td><select onchange=\"ioChanged('OUTPUT', " + QString::number(i) + ", this.value);\">\n";
@@ -105,8 +110,8 @@ QString WebAccessConfiguration::getIOConfigHTML(Doc *doc)
             QString selected = "";
             if (currentOutputPluginName == strList.at(0) && currentOutput == strList.at(2).toUInt())
                 selected = "selected";
-            html += "<option value=\"" + QString("%1|%2").arg(strList.at(0)).arg(strList.at(2)) + "\" " + selected + ">" +
-                    QString("[%1] %2").arg(strList.at(0)).arg(strList.at(1)) + "</option>\n";
+            html += "<option value=\"" + esc(QString("%1|%2").arg(strList.at(0)).arg(strList.at(2))) + "\" " + selected + ">" +
+                    esc(QString("[%1] %2").arg(strList.at(0)).arg(strList.at(1))) + "</option>\n";
         }
         html += "</select></td>\n";
         html += "<td><select onchange=\"ioChanged('FB', " + QString::number(i) + ", this.value);\">\n";
@@ -116,8 +121,8 @@ QString WebAccessConfiguration::getIOConfigHTML(Doc *doc)
             QString selected = "";
             if (currentFeedbackPluginName == strList.at(0) && currentFeedback == strList.at(2).toUInt())
                 selected = "selected";
-            html += "<option value=\"" + QString("%1|%2").arg(strList.at(0)).arg(strList.at(2)) + "\" " + selected + ">" +
-                    QString("[%1] %2").arg(strList.at(0)).arg(strList.at(1)) + "</option>\n";
+            html += "<option value=\"" + esc(QString("%1|%2").arg(strList.at(0)).arg(strList.at(2))) + "\" " + selected + ">" +
+                    esc(QString("[%1] %2").arg(strList.at(0)).arg(strList.at(1))) + "</option>\n";
         }
         html += "</select></td>\n";
         html += "<td><select onchange=\"ioChanged('PROFILE', " + QString::number(i) + ", this.value);\">\n";
@@ -126,7 +131,7 @@ QString WebAccessConfiguration::getIOConfigHTML(Doc *doc)
             QString selected = "";
             if (currentProfileName == profiles.at(p))
                 selected = "selected";
-            html += "<option value=\"" + profiles.at(p) + "\" " + selected + ">" + profiles.at(p) + "</option>\n";
+            html += "<option value=\"" + esc(profiles.at(p)) + "\" " + selected + ">" + esc(profiles.at(p)) + "</option>\n";
         }
         html += "</select></td>\n";
         html += "<td><label><input type=\"checkbox\" ";
@@ -169,13 +174,13 @@ QString WebAccessConfiguration::getAudioConfigHTML(Doc *doc)
     foreach (AudioDeviceInfo info, devList)
     {
         if (info.capabilities & AUDIO_CAP_INPUT)
-            audioInSelect += "<option value=\"" + info.privateName + "\" " +
+            audioInSelect += "<option value=\"" + esc(info.privateName) + "\" " +
                              ((info.privateName == inputName)?"selected":"") + ">" +
-                             info.deviceName + "</option>\n";
+                             esc(info.deviceName) + "</option>\n";
         if (info.capabilities & AUDIO_CAP_OUTPUT)
-            audioOutSelect += "<option value=\"" + info.privateName + "\" " +
+            audioOutSelect += "<option value=\"" + esc(info.privateName) + "\" " +
                     ((info.privateName == outputName)?"selected":"") + ">" +
-                    info.deviceName + "</option>\n";
+                    esc(info.deviceName) + "</option>\n";
     }
     audioInSelect += "</select></td>\n";
     audioOutSelect += "</select></td>\n";
@@ -202,7 +207,7 @@ QString WebAccessConfiguration::getUserFixturesConfigHTML()
         QString path(it.next());
 
         if (path.toLower().endsWith(".qxf") || path.toLower().endsWith(".d4"))
-                html += "<tr><td>" + path + "</td></tr>\n";
+                html += "<tr><td>" + esc(path) + "</td></tr>\n";
     }
     html += "</table>\n";
     html += "<br><a class=\"button button-blue\" href=\"javascript:document.getElementById('loadTrigger').click();\">\n"
@@ -225,7 +230,9 @@ QString WebAccessConfiguration::getPasswordsConfigHTML(WebAccessAuth *auth)
 
     foreach (WebAccessUser user, auth->getUsers())
     {
-        QString username = user.username;
+        const QString username = esc(user.username);
+        // a JavaScript string in an HTML attribute
+        const QString jsName = esc(WebAccessBase::jsString(user.username));
         int level = user.level;
 
         html += "<tr id=\"auth-row-" + username + "\">";
@@ -253,9 +260,9 @@ QString WebAccessConfiguration::getPasswordsConfigHTML(WebAccessAuth *auth)
             html += "</select>";
         html += "</td>";
         html += "<td>";
-            html += "<button onclick=\"authChangeUser('" + username + "')\">"
+            html += "<button onclick=\"authChangeUser(" + jsName + ")\">"
                  + tr("Change") + "</button>";
-            html += "<button onclick=\"authDeleteUser('" + username + "')\">"
+            html += "<button onclick=\"authDeleteUser(" + jsName + ")\">"
                  + tr("Delete user") + "</button>";
         html += "</td>";
         html += "</tr>";
