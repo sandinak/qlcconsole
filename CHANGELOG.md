@@ -67,6 +67,15 @@ truss and tower pictures with the new show; four thread races found by
 ThreadSanitizer (stop-all on File ▸ New or Open, a chaser's runner, the
 run-state flags, Blind); and the show-file tests fit CI Windows' time.
 
+Release candidate 6 fixes, from the overnight fuzzing and mutation runs:
+a show with a fixture claiming more channels than a universe holds loads
+it unpatched instead of writing past the universe; a fixture definition
+with a huge head channel number no longer reads past its mode;
+Connections ▸ Universes lists only the open show's universes, however
+many shows were opened, and renames the universe picked; and new tests pin
+the venue's fixtures after it is turned off or the show replaced, a Show
+Tree of only productions, and a not-ours range's end.
+
 ### Added
 
 - **The venue chip and one venue menu** (RC3, board Q150). The footer, beside
@@ -808,6 +817,35 @@ run-state flags, Blind); and the show-file tests fit CI Windows' time.
 
 ### Fixed
 
+- **A fixture with more channels than a universe holds loads unpatched**
+  (RC6, test matrix 2 fuzzing: N1). A damaged or hand-edited show with,
+  say, `<Channels>926</Channels>` on a fixture kept all 926 channels with
+  only its address reset, and opening it wrote past the universe's
+  512-channel buffers (an unchecked heap write in the release build). The
+  fixture now loads unpatched and the error log says why, as for a
+  universe out of range; the address check counts the mode's own
+  channels; and a universe ignores a channel default past its end, as it
+  already did a channel's role and modifier. Also in upstream QLC+.
+- **A fixture definition with a huge head channel number no longer reads
+  past its mode** (RC6, test matrix 2 fuzzing: N2). A head `<Channel>` of
+  2^31 or more (from a user fixture, an imported .qxf or a definition
+  carried in a .qlcc) passed a signed bounds check and was read as a
+  channel, a crash. It is skipped as an undefined channel, here and in
+  the power, definition-check and stage-view code that reads head
+  channels. Also in upstream QLC+.
+- **Connections ▸ Universes lists the open show's universes, no more**
+  (RC6, test matrix 2: M1). Each show opened added its universes to the
+  list without removing the last show's (78, then 156, then 234 rows),
+  and a rename went by row number, so a stale row renamed another
+  universe. The list now follows the show's universes exactly, and
+  rename, passthrough, the slot and Delete act on the row's own universe.
+- **New tests for saved data the mutation run found unguarded** (RC6, test
+  matrix 2 mutation gaps 1-3). With a venue turned off or the show
+  replaced, no fixture id stays the venue's (a show fixture holding a
+  former house id is saved with the show); a Show Tree of only a
+  production, nothing baked yet, is saved and reopens; a not-ours range
+  in the middle of a universe reads back with the same end. All three
+  already behaved: the tests keep them so.
 - **The Focus screen keeps its layout while you work** (RC5). Pressing the
   controller's buttons in Quick focus or Venue focus made the panel jump:
   every label that gained or lost a line, or appeared (the beam, the
