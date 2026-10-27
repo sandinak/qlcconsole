@@ -18,6 +18,7 @@
 */
 
 #include <QDockWidget>
+#include <QListWidget>
 #include <QShortcut>
 #include <QtTest>
 #include <QMenu>
@@ -2664,6 +2665,65 @@ void AppViews_Test::theReadinessChipIsGreyWithNoOutputs()
 
     m_app->clearDocument();
     stub->m_openOutputs.clear();
+}
+
+void AppViews_Test::theUniverseListMirrorsEachShowOpened()
+{
+    QTemporaryDir dir;
+    InputOutputMap *io = m_app->doc()->inputOutputMap();
+    auto build = [&](const QString &file, int universes, const QString &tag) {
+        m_app->clearDocument();
+        while (int(io->universesCount()) < universes)
+            QVERIFY(io->addUniverse());
+        while (int(io->universesCount()) > universes)
+            QVERIFY(io->removeUniverse(int(io->universesCount()) - 1));
+        for (int i = 0; i < universes; i++)
+            io->setUniverseName(i, QStringLiteral("%1 %2").arg(tag).arg(i + 1));
+        QCOMPARE(m_app->saveXML(dir.filePath(file)), QFile::NoError);
+    };
+    build(QStringLiteral("six.qxw"), 6, QStringLiteral("Six"));
+    build(QStringLiteral("three.qxw"), 3, QStringLiteral("Three"));
+
+    InputOutputManager *mgr = InputOutputManager::instance();
+    QVERIFY(mgr != nullptr);
+    QListWidget *list = mgr->m_list;
+
+    auto open = [&](const QString &file, int universes, const QString &tag) {
+        m_app->clearDocument();
+        QCOMPARE(m_app->loadXML(dir.filePath(file)), QFile::NoError);
+        QCOMPARE(int(io->universesCount()), universes);
+        QCOMPARE(list->count(), universes);
+        for (int i = 0; i < universes; i++)
+        {
+            QCOMPARE(list->item(i)->data(Qt::UserRole).toUInt(), quint32(i));
+            QCOMPARE(list->item(i)->data(Qt::DisplayRole).toString(),
+                     QStringLiteral("%1 %2").arg(tag).arg(i + 1));
+        }
+    };
+    // Bigger, smaller, the same again: never a row more than the show has.
+    for (int round = 0; round < 3; round++)
+    {
+        open(QStringLiteral("six.qxw"), 6, QStringLiteral("Six"));
+        open(QStringLiteral("three.qxw"), 3, QStringLiteral("Three"));
+    }
+
+    // Renaming the last row renames the last universe, and only it.
+    open(QStringLiteral("six.qxw"), 6, QStringLiteral("Six"));
+    list->setCurrentRow(list->count() - 1);
+    mgr->m_uniNameEdit->setText(QStringLiteral("Renamed"));
+    QCOMPARE(io->getUniverseNameByIndex(5), QStringLiteral("Renamed"));
+    QCOMPARE(list->item(5)->data(Qt::DisplayRole).toString(), QStringLiteral("Renamed"));
+    for (int i = 0; i < 5; i++)
+        QCOMPARE(io->getUniverseNameByIndex(i), QStringLiteral("Six %1").arg(i + 1));
+
+    // A universe added and taken away keeps the list in step too.
+    QVERIFY(io->addUniverse());
+    QCOMPARE(list->count(), 7);
+    QVERIFY(io->removeUniverse(6));
+    QCOMPARE(list->count(), 6);
+
+    m_app->clearDocument();
+    m_app->doc()->resetModified();
 }
 
 void AppViews_Test::quittingWithTheShowTreeShowing()

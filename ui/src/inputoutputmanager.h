@@ -94,6 +94,11 @@ private:
     /** Update the contents of the input universe to the item */
     void updateItem(QListWidgetItem *item, quint32 universe);
 
+    /** The universe the current row stands for (its Qt::UserRole), or
+     *  InputOutputMap::invalidUniverse() when there is none. Never the row
+     *  number: a row that outlived its universe renamed another one. */
+    quint32 currentUniverse() const;
+
 private slots:
     /** Listens to input data and displays a small icon to indicate a
         working connection between a plugin and an input device. */
@@ -119,6 +124,15 @@ private slots:
     void slotDeleteUniverse();
     void slotUniverseNameChanged(QString name);
     void slotUniverseAdded(quint32 universe);
+
+    /** One row per universe of the map, in order, no more: rows past the
+     *  last universe go, missing ones are added. The map adds a universe
+     *  with a signal but drops a show's all at once without one (on open),
+     *  so the list grew by a show's worth at every open. */
+    void syncRows();
+
+    /** A show was opened: every row describes it, and the editor too. */
+    void slotDocLoaded();
     void slotPassthroughChanged(bool checked);
     void slotRescanPlugins();
 

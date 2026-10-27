@@ -183,6 +183,11 @@ private slots:
     /** "resize still has problems": no qlcconsole page holds the window
      *  wide (a page narrower than it is cut off on the right). */
     void pagesSquashWithTheWindow();
+    /** M1 (RC6): Connections ▸ Universes lists the open show's universes,
+     *  no more: opening shows (File ▸ Open: clearDocument() + loadXML())
+     *  added a show's worth of rows each time, and a rename went by row
+     *  number, to another universe. */
+    void theUniverseListMirrorsEachShowOpened();
 
     /** Quitting with the window still up and the Show Tree in front: the
      *  tab goes before the Doc, so its hide event (which stops its preview)

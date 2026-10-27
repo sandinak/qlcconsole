@@ -233,9 +233,9 @@ InputOutputManager::InputOutputManager(QWidget* parent, Doc* doc)
                                   "that venue's (its file), and the show keeps its own."));
     m_toolbar->addWidget(m_uniSlotCombo);
     connect(m_uniSlotCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) {
-        if (m_list->currentItem() == NULL)
+        const quint32 uniIdx = currentUniverse();
+        if (uniIdx == InputOutputMap::invalidUniverse())
             return;
-        const int uniIdx = m_list->currentRow();
         const RigOwner::Owner o = RigOwner::Owner(m_uniSlotCombo->currentData().toInt());
         if (m_ioMap->universeSlotOwner(uniIdx) == o)
             return;
@@ -337,6 +337,9 @@ InputOutputManager::InputOutputManager(QWidget* parent, Doc* doc)
 
     connect(m_ioMap, SIGNAL(universeAdded(quint32)),
             this, SLOT(slotUniverseAdded(quint32)));
+    connect(m_ioMap, SIGNAL(universeRemoved(quint32)), this, SLOT(syncRows()));
+    connect(m_doc, SIGNAL(cleared()), this, SLOT(syncRows()));
+    connect(m_doc, SIGNAL(loaded()), this, SLOT(slotDocLoaded()));
 
     updateList();
     m_list->setCurrentItem(m_list->item(0));
@@ -574,7 +577,7 @@ void InputOutputManager::slotCurrentItemChanged()
     connect(m_editor, SIGNAL(mappingChanged()), this, SLOT(slotMappingChanged()));
     connect(m_editor, SIGNAL(audioInputDeviceChanged()), this, SLOT(slotAudioInputChanged()));
     m_editor->show();
-    int uniIdx = m_list->currentRow();
+    const int uniIdx = int(universe);
     m_uniNameEdit->setText(m_ioMap->getUniverseNameByIndex(uniIdx));
     m_uniPassthroughCheck->setChecked(m_ioMap->getUniversePassthrough(uniIdx));
     m_uniSlotCombo->setCurrentIndex(qMax(0, m_uniSlotCombo->findData(int(m_ioMap->universeSlotOwner(uniIdx)))));
@@ -679,9 +682,10 @@ void InputOutputManager::slotDeleteUniverse()
     if (m_ioMap != NULL && m_ioMap->patchUndo() != NULL)
         m_ioMap->patchUndo()->captureUniverses(tr("delete a universe"));
 
-    int uniIdx = m_list->currentRow();
-
-    Q_ASSERT((uniIdx + 1) == (int)(m_ioMap->universesCount()));
+    const quint32 current = currentUniverse();
+    if (current == InputOutputMap::invalidUniverse() || current + 1 != m_ioMap->universesCount())
+        return;
+    const int uniIdx = int(current);
 
     // Check if the universe is patched
     if (m_ioMap->isUniversePatched(uniIdx) == true)
@@ -734,10 +738,11 @@ void InputOutputManager::slotRescanPlugins()
 void InputOutputManager::slotUniverseNameChanged(QString name)
 {
     QListWidgetItem *currItem = m_list->currentItem();
-    if (currItem == NULL)
+    const quint32 universe = currentUniverse();
+    if (currItem == NULL || universe == InputOutputMap::invalidUniverse())
         return;
 
-    int uniIdx = m_list->currentRow();
+    const int uniIdx = int(universe);
     if (name.isEmpty())
         name = tr("Universe %1").arg(uniIdx + 1);
     m_ioMap->setUniverseName(uniIdx, name);
@@ -746,18 +751,48 @@ void InputOutputManager::slotUniverseNameChanged(QString name)
 
 void InputOutputManager::slotUniverseAdded(quint32 universe)
 {
-    QListWidgetItem *item = new QListWidgetItem(m_list);
-    updateItem(item, universe);
+    /* Its row, and any the map added before it to fill a gap (it says
+       only the last). */
+    syncRows();
+    if (QListWidgetItem *item = m_list->item(int(universe)))
+        updateItem(item, universe);
+}
+
+void InputOutputManager::syncRows()
+{
+    const int count = int(m_ioMap->universesCount());
+    while (m_list->count() > count)
+        delete m_list->takeItem(m_list->count() - 1);
+    while (m_list->count() < count)
+        updateItem(new QListWidgetItem(m_list), quint32(m_list->count()));
+}
+
+void InputOutputManager::slotDocLoaded()
+{
+    // Rebuilt for the show just opened, editor included.
+    m_editorUniverse = UINT_MAX;
+    updateList();
+}
+
+quint32 InputOutputManager::currentUniverse() const
+{
+    const QListWidgetItem *item = m_list->currentItem();
+    if (item == NULL)
+        return InputOutputMap::invalidUniverse();
+    bool ok = false;
+    const quint32 universe = item->data(Qt::UserRole).toUInt(&ok);
+    if (!ok || universe >= m_ioMap->universesCount())
+        return InputOutputMap::invalidUniverse();
+    return universe;
 }
 
 void InputOutputManager::slotPassthroughChanged(bool checked)
 {
-    QListWidgetItem *currItem = m_list->currentItem();
-    if (currItem == NULL)
+    const quint32 universe = currentUniverse();
+    if (universe == InputOutputMap::invalidUniverse())
         return;
 
-    int uniIdx = m_list->currentRow();
-    m_ioMap->setUniversePassthrough(uniIdx, checked);
+    m_ioMap->setUniversePassthrough(int(universe), checked);
     m_doc->inputOutputMap()->saveDefaults();
 }
 
