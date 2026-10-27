@@ -391,6 +391,216 @@ matrix-1 M/L rows):
 - Scratch: `…/scratchpad/m2b` (builds, `shows/` copies, `out-qlc/`, `out-up/`,
   `dmx/run2.{pcap,log,analysis}`, `harness/`).
 
+## Matrix 2: scale, leaks and clean installs on RC4 (items 2, 4)
+
+Run 2026-10-26 21:00 → 2026-10-27 11:10 against RC4, `fbee52ab5`: the DMG
+`qlcconsole-0.3.0-universal-20261026-fbee52ab5.dmg` (sha256 `f71c61a9…`) and CI
+run 40419087623's Windows installer (attempt 2,
+`qlcconsole-0.3.0-20261027-fbee52ab5-win64-setup.exe`, sha256 `3fa5d2a0…`).
+The source builds were `git archive` copies (Linux `~/matrix2/rc4`, ender
+scratchpad), never a checkout. No network plugin was loaded in any run.
+The DMG copies had `libartnet/libe131/libosc/libos2l/libwled` moved out.
+Windows had the same DLLs moved out of its temp install. The build trees had
+no plugins. WLED `<IPAddress>` and Art-Net `ManualTarget`s were stripped from
+the soak shows, so the WLED config check had nothing to poll.
+
+**Item 2, scale (Linux build host, Release, after the mutation job ended at
+09:30).**
+
+- `run.py validate`: all seven scenarios ran within budget. Its one "FAIL" is
+  `efx-40-16u` at +25.3% (p99 1.17 ms against 0.94 ms). That baseline was
+  captured on ender (arm64), so cross-machine numbers aren't comparable.
+  Everything else ran 24–65% faster than baseline.
+- `capability`: the light ceiling is 180 universes (p99 11.3 ms). The heavy
+  ceiling is 40 universes; at 60 the p99 is 24.5 ms.
+- Realtime, 75 universes × 67 fixtures (15,075 channels), 600 s: the gap
+  p50 was 20.01 ms and p99 21.1 ms. 4 of 29,992 ticks were more than 1.5×
+  late, and the worst was 65.8 ms. The harness reports "running funcs=0" in
+  this mode, so this is a timer/universe test, not a function-load test.
+- Chaos: 120 s, 119,101 ops, survived. Concurrency: 300 s, 5.0 M ops,
+  survived. Both ran on Linux, where the harness doesn't measure RSS
+  (`RSS 0.0 MB`; the sampler is Mach-only), so their "leak 0.00 MB/hr" means
+  nothing there.
+- Full app, 80 universes × 64 fixtures, 110 functions, 900 s of WebSocket
+  torture:
+  - 2,105 rounds, every one answered, no crash.
+  - CPU averaged 361%.
+  - RSS went 256 → 488 MB within the first ~3 minutes and then stayed flat
+    at 488 MB for 12 minutes. The driver's "POSSIBLE LEAK (+232 MB)" verdict
+    is the start-vs-end threshold catching warm-up.
+
+**Item 2, leaks.** The harness is `m2leak`, an offscreen program on the real
+`App` (`QSettings` in a temp INI, `HOME` in a sandbox). Each cycle does the
+following:
+
+1. `clearDocument` + `loadXML`.
+2. Build edits: 6 collections opened on the Workbench, each with a layer
+   added, a layer moved, and undo / undo / redo / undo; 8 scenes opened in
+   the Look Editor; all three sections.
+3. Run: Operate mode, 12 collections/chasers/matrices started for 2 s, then
+   stopped.
+4. `clearDocument`.
+
+The shows alternated between DanceHysteria-0.3 (stripped) and
+`Sample.qxw`.
+
+- ender, macOS `leaks` + MallocStackLogging, 20 cycles: footprint stayed
+  flat at 146–160 MB. Unreachable memory was 168 KB after cycle 2 and
+  2.1 MB after cycle 20, about 110 KB a cycle.
+- Linux, ASan + LSan + UBSan Debug, 40 cycles with full teardown: 2.96 MB
+  in 20,469 allocations. A 1-cycle control showed 64 KB, so about 74 KB a
+  cycle.
+- The two agree on three sources (L1–L3 below). `heap` class census on ender
+  (cycle 2 vs 16) adds the reachable growth in L4 and the list growth in M1.
+- A first harness version never ran `deleteLater()` (no `exec()`), and
+  showed ~15 MB/cycle of Workbench stacks and Look Editors. That was the
+  harness: with deferred deletes processed, those are freed.
+
+**Item 2, 24 h soak on val** (Intel i7-10700K, macOS 26.7.2).
+
+- Setup:
+  - The DMG's own app, copied to `~/matrix2/rc4-soak/qlcconsole.app` with the
+    network plugins removed and Qt 6.9.3's `libqoffscreen.dylib` added.
+  - Started directly with `QT_QPA_PLATFORM=offscreen` and
+    `HOME`/`CFFIXED_USER_HOME` set to a sandbox, at nice 10. It is not on
+    screen; the October soaks were.
+  - `stresstest/soak24/run_soak.py`, patched in the copy for a direct
+    launch, `--strip-outputs`, 3 × 8 h.
+  - The same DanceHysteria-0.3 / -STRESS shows as the Linux soaks, with that
+    host's 102 fixture definitions in the sandbox.
+- Started 2026-10-26 21:50:03 EDT; due to end around 2026-10-27 21:51.
+- A first start at 21:04 was stopped at 21:49 because the sandbox lacked
+  those definitions: ender's user folder holds symlinks into the legacy QLC+
+  folder, which were dangling on val.
+
+| Run | Real: over budget/h, worst | Scaled: over/h, worst | Rough | RSS (real) | Crashes |
+|---|---|---|---|---|---|
+| **val RC4, 2026-10-27** | **9.9/h (79 in 8 h), 40.3 ms** | interim at 07:09: 47 in 1.3 h (~36/h), 90.9 ms | pending | 156 → 360 peak → 352 MB | 0 so far |
+| Linux 2026-10-25 (2.67 h phases) | 11.6/h, 37.4 ms | 5,300/h, 56.2 ms | 19.5/h, 55.4 ms | 340 → 365 MB | 0 |
+| Linux 2026-10-16 (8 h phases) | 11.3/h, 44.0 ms | 7,045/h, 101.2 ms | 20.6/h, 57.1 ms | 234 → 291 → 277 MB | 0 |
+| kronk 2026-10-16 (on screen, `--heap-track`) | – | – | – | 312 → 492 → 486 MB | 0 |
+
+The final numbers are in `val:~/matrix2/rc4-soak/run24/summary.json`. Scaled
+ticks over budget on val's i7 are far below the Linux host's.
+
+**Item 4, clean-machine macOS (EvoAudioMBP).** Intel, macOS 13.7.8, stock
+QLC+.app in /Applications, Xcode CLT already present, nothing installed.
+
+- Gatekeeper, with `com.apple.quarantine` set as Safari would:
+  - DMG: `spctl -t open` accepted (Notarized Developer ID); `hdiutil verify`
+    VALID.
+  - App: `spctl -t execute` accepted (Notarized Developer ID);
+    `codesign --verify --deep --strict` OK.
+  - Ticket stapled on both the app and the DMG.
+- `LSMinimumSystemVersion` is 12.0. Every Mach-O in the bundle has `minos`
+  ≤ 12.0 in both slices (66 binaries; 4 at 11.0), and nothing links outside
+  the bundle or /System and /usr/lib. Below 13.7, so fine.
+- The x86_64 slice runs (`vmmap`: Code Type X86-64):
+  - `--version` prints `0.3.0 (build 4.14.2+qlcconsole.2302, fbee52ab5)`.
+  - A headless `-o Sample.qxw -w`: the web page served 224 VC buttons and
+    18 sliders.
+  - Sockets: TCP *:9998 listen, and UDP *:3330 (the ENTTEC Wing plugin),
+    listening only.
+  - This needed the offscreen plugin added and an ad hoc re-sign (see I1).
+- First run created:
+  - `~/Library/Preferences/org.qlcplus.qlcconsole.plist` (`monitor.rulers`,
+    `units.seededFromShow`, `workspace.recent0`).
+  - `~/Library/Application Support/qlcconsole/{Bundles,EffectPresets,EffectScripts,Fixtures,InputProfiles,MidiTemplates,ModifiersTemplates,RGBScripts}`.
+  - `~/Library/Application Support/QLC+/HIDProfiles` (L5).
+  - A CoreMIDI `ByHost/com.apple.MIDI.*.plist`.
+- The update check doesn't run offscreen (`backgroundChecksAllowed()`), so it
+  can't be seen headless.
+- The first-launch dialog itself needs the screen and wasn't exercised.
+- RC5 (`38e1963b8`, `…20261027-38e1963b8.dmg`) got a quick check on the same
+  Mac: notarized and stapled, `spctl` accepted, `LSMinimumSystemVersion`
+  12.0, and `--version` printed `build 4.14.2+qlcconsole.2307, 38e1963b8`.
+
+**Item 4, Windows 10 VM.** The VM was **not clean**:
+
+- qlcconsole 0.3.0 (Matrix 1's `05534ef92`) at `C:\qlcconsole`, with its
+  Apps & features entry, file associations and Start Menu.
+- Stock QLC+ at `C:\QLC+`.
+- `%USERPROFILE%\qlcconsole` (Branson's data) and `%USERPROFILE%\QLC+`
+  (empty folders).
+- `HKCU\Software\qlcplus\{qlcconsole,Q Light Controller Plus}`.
+- VC++ runtimes 2008–2022 (x86 and x64).
+- Python 3.9.
+- The `qlcsoak-*` scheduled tasks.
+- No Qt or MinGW on PATH.
+
+The registry keys and Start Menu folder an install overwrites were exported
+first and restored byte-for-byte afterwards.
+
+- Silent install: `/S /D=%TEMP%\qlcrc4\inst` exited 0 in 11.6 s (3,321
+  files, 308 MB). The installer is **not Authenticode-signed**, and
+  `qlcconsole.exe` has no FileVersion resource.
+- Dependencies: a PE import walk of all 176 EXE/DLLs resolves every import
+  to the install folder, its own folder or System32. Only `qwindows.dll` is
+  shipped as a platform plugin.
+- `--version` and `-platform offscreen --version` print `0.3.0 … fbee52ab5`
+  with `qoffscreen.dll` from CI's rig bundle of the same run (identical
+  `Qt6Core.dll`) via `QT_QPA_PLATFORM_PLUGIN_PATH`. Without it, both hang
+  (I1).
+- Headless `-o Sample.qxw -w`: the same 224 buttons and 18 sliders. The
+  sockets were TCP :9997 and UDP :3330 only, and no module loaded from
+  outside the install or Windows.
+- The log says `FFmpeg version 9.0.2 GPL version 3 or later` (I2).
+- Uninstall: `uninstall.exe /S _?=` exited 0 and removed every file (only
+  `uninstall.exe` stays, which `_?=` causes). It also removed the Uninstall
+  key, the associations, `HKCU\Software\qlcconsole` and the Start Menu
+  folder. **`HKCU\Software\qlcplus\qlcconsole` (the real settings) stays**
+  (L6).
+
+| ID | Where | Symptom | Reproduction | Severity |
+|---|---|---|---|---|
+| **M1** | `InputOutputManager::slotUniverseAdded` (`ui/src/inputoutputmanager.cpp:747-751`) with no reset on close/open; `updateList()` (`:393`) is not called on a load | **Each opened show appends its universes to the Inputs/Outputs list without removing the previous show's rows.** The rows keep the old show's names. Rename uses `currentRow()` as the universe index (`:740`, `:759`), so a stale row renames the wrong universe or none. | `m2leak` counts the `QListWidget` under InputOutputManager after each `clearDocument()`+`loadXML()` (the File ▸ Open path, `app.cpp:2876-2883`): 78 → 156 → 234 for DanceHysteria-0.3 opened 3 times. In the app: open a show, open another, look at Inputs/Outputs. | **Medium** (to confirm on screen) |
+| **M2** | `QLCFile::mergeLegacyUserData()` (`engine/src/qlcfile.cpp:259-275`) on Windows | (a) `newRoot` is `getenv("HOME")/qlcconsole`. With HOME unset (a normal desktop session; OpenSSH and MSYS set it), that is `\qlcconsole` on the **current drive**: `C:\qlcconsole`, the default install folder. (b) `QFile::link` makes Windows shell links (`4c 00 00 00…`) named `*.qxf`, which the loader can't read: "Fixture definition loading from …Legacy-Test.qxf failed: Resource error occurred", at every start. **Old QLC+ user fixtures never reach qlcconsole on Windows.** | VM, isolated: profile with `QLC+\Fixtures\Legacy-Test.qxf`, HOME removed, cwd a `subst` drive: the run wrote `Q:\qlcconsole\Fixtures\Legacy-Test.qxf` (a .lnk) and `Q:\qlcconsole\.legacy-linked`, and nothing under the profile. With HOME = the profile, the link lands right but fails to load. | **Medium** |
+| L1 | `Fixture::genericDimmerDef/genericDimmerMode` (`engine/src/fixture.cpp:1090-1135`, from `setChannels:188` and `loadXML:1671/1694`) | Every generic dimmer gets its own `QLCFixtureDef` that nothing deletes (`~Fixture` is empty). `setChannels` after `loadXML` makes a second one. Same in upstream. | LSan: 1,160 channels/capabilities and 200 modes over 40 cycles; `leaks`: the largest group | Low (≈50 KB per DanceHysteria open) |
+| L2 | `RGBAudio::~RGBAudio()` (`engine/src/rgbaudio.cpp:45-51`) → `Doc::audioInputCapture()` (`doc.cpp:900`) | Destroying an RGBAudio calls `audioInputCapture()`, which **creates** the Doc's `AudioCaptureQt6` (buffers, FFTW plan, BeatTracker). `RGBAlgorithm::algorithm()` builds and destroys a temporary RGBAudio for every RGB matrix constructed. One capture leaks per loaded show. | LSan: 20 captures, ~1.3 MB (BeatTracker FFT buffers) over 20 DanceHysteria loads | Low |
+| L3 | `QLCFixtureDef::loadXML(const QString&)` (`engine/src/qlcfixturedef.cpp:464-469`) | When the file can't be read, it returns `ReadError` without `QLCFile::releaseXMLReader()`, leaking the reader and its QFile. It's hit by `Fixture::loadXML`'s "project local path" fallback (`fixture.cpp:1594-1602`). For a show posted to `/loadProject` (no file name), that fallback reads `"/<Man>-<Model>.qxf"` at the filesystem root (137 log lines per load on val). | LSan: 1,200 objects; `leaks`: 158 | Low |
+| L4 | `FixtureManager::updateGroupMenu()` (`ui/src/fixturemanager.cpp:1596-1597`) | `removeAction()` doesn't delete the menu's own actions, so every call leaves them as children of `m_groupMenu`. That is 1,323 `QAction`s (~0.6 MB) per DanceHysteria open, growing for the session. Same in upstream (`m_groupMenu->clear()` would delete them). | `heap` census: QAction +18,522 over 14 opens; `m2leak` counts 1,578 → 2,901 → 4,224 menu-child actions | Low |
+| L5 | `plugins/hid/hidplugin.cpp:41` | The user HID profile folder is hard-coded to `Library/Application Support/QLC+/HIDProfiles` under the home folder on every platform. On a clean Mac it creates stock QLC+'s folder, the same on Linux (`~/Library/…` on the build host), and on Windows `%USERPROFILE%\Library\Application Support\QLC+\HIDProfiles`. | First run on EvoAudio and in the Windows temp profile | Low |
+| L6 | NSIS uninstaller (`platforms/windows/qlcconsole.nsi.in`, "This will delete all settings") | It deletes `HKCU\Software\qlcconsole` (`Install_Dir`, `StartMenu_Dir`); the app's settings are under `HKCU\Software\qlcplus\qlcconsole` and stay. Installing a second copy also takes over the first one's Apps & features entry, associations and shortcuts with no warning. | VM: present after the uninstall | Low |
+| L7 | `OutputLayer::~OutputLayer → clear() → set()` (`engine/src/outputlayer.cpp:25, 53`) from `FocusSession::~FocusSession` (`focussession.cpp:150`) during `~Doc`'s child deletion | UBSan: a member call on a `Doc` whose destructor has run (`doc.cpp:516`). It's safe today only because `~Doc` nulls `m_ioMap`. Also `UpdateManager::eventFilter` compares a `QPointer<QLabel>` while the label is mid-destruction (`updatemanager.cpp:126`). | ASan/UBSan `m2leak` with full teardown (`delete app`) | Low (UB at quit) |
+| I1 | DMG, installer | Neither ships an offscreen platform plugin (DMG: `libqcocoa` only; Windows: `qwindows.dll` only). So `qlcconsole --version` builds a `QApplication` first (`main.cpp:313`), needs a display, and fails over SSH. On Windows it hangs on Qt's invisible "no platform plugin" message box. On macOS 13, an offscreen plugin added to the notarized bundle needs an ad hoc re-sign, because a modified bundle stalls in dyld (unquarantined) or gets Gatekeeper's "can't be verified" dialog (quarantined). | `QT_QPA_PLATFORM=offscreen …/qlcconsole --version` | Info (headless checks only) |
+| I2 | Windows installer | It ships MSYS2's FFmpeg 9.0.2 built "GPL version 3 or later". The DMG ships LGPL FFmpeg 7.1.1. The licence notice/source offer for the Windows package should match. | `-d 1` log line on the VM | Info (licence) |
+| I3 | CI artifacts | Run 40419087623 has two installers for one SHA: `…-20261026-…` from attempt 1 and `…-20261027-…` from attempt 2. They differ in bytes and in name, because the name carries the UTC build date. | `gh api …/runs/40419087623/artifacts` | Info |
+| E1 | `stresstest/` | (a) `run.py validate` compares against an arm64 baseline on any host. (b) RSS is sampled only through Mach, so chaos/concurrency "leak 0.00" on Linux is unmeasured. (c) `--mode realtime` started no functions. (d) `stress_driver.py` calls warm-up a leak. | as above | Test |
+
+**Side effects and clean-up.**
+
+- **EvoAudioMBP:** A Gatekeeper window appeared on its screen at 21:08:
+  CoreServicesUIAgent's `CSUIGatekeeperProgressWindow`, then an alert. It was
+  caused by running a quarantined, modified copy (quarantine had been copied
+  onto the inner files by `ditto` from the quarantined DMG). The process was
+  killed. `killall CoreServicesUIAgent` didn't end the agent, so the alert
+  may still be on that screen until dismissed. Everything added was removed,
+  including:
+  - `org.qlcplus.qlcconsole.plist`
+  - `~/Library/Application Support/{qlcconsole,QLC+}`
+  - the CoreMIDI ByHost plist
+  - `com.apple.coreservices.uiagent.plist` and `com.apple.ReportCrash.plist`
+    (created by that run)
+  - `~/Library/Logs/DiagnosticReports/qlcconsole-2026-10-26-212348.ips` (my
+    SIGABRT: offscreen plugin refused)
+  - hdiutil's `Application Support/DiskImages` and `Logs/fsck_hfs.log`
+  - the LaunchServices registrations of the temp copies (`lsregister -u`)
+  - `/tmp/qlcrc4`, `/tmp/qlcrc5`
+
+  syspolicyd's own record of that assessment is root-owned and was left.
+- **ender:** At 21:02 a mistyped `--help` (no `QT_QPA_PLATFORM`) started the
+  DMG copy with the Cocoa platform on ender's screen for about 2 minutes
+  before it was killed. The settings plists' times show they were not
+  written.
+- **Windows VM:** It ended as it started. `%TEMP%\qlcrc4` and val's
+  `~/qlcconsole-windows/rc4-matrix2` were removed.
+- **Linux:** `~/matrix2/rc4` keeps only the logs and JSON (18 MB). The
+  driver's Release run rewrote `~/.config/qlcplus/qlcconsole.conf`, as the
+  earlier soaks there did.
+- **val:** The soak writes `~/Library/Preferences/org.qlcplus.qlcconsole.plist`
+  (cfprefsd ignores `CFFIXED_USER_HOME`). It is new on val: delete it, and
+  `~/matrix2/rc4-soak`, after collecting the results.
+
 ## Notes
 
 - **RC3 and val.** Four RC3 gates ran on val during this matrix (`29a7b787acff`,
