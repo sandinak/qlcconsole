@@ -115,6 +115,29 @@ void Universe_Test::channelCapabilities()
     QCOMPARE(m_uni->totalChannels(), ushort(5));
 }
 
+void Universe_Test::perChannelSettersStopAtTheUniverseEnd()
+{
+    /* The last channel is still taken... */
+    m_uni->setChannelDefaultValue(511, 42);
+    QCOMPARE(m_uni->usedChannels(), ushort(512));
+    QCOMPARE(m_uni->totalChannels(), ushort(512));
+    QCOMPARE(m_uni->preGMValue(511), uchar(42));
+
+    /* ...and past it nothing is written, nor counted: setChannelDefaultValue
+       wrote past the 512-byte buffers in a release build. */
+    m_uni->setChannelDefaultValue(512, 7);
+    m_uni->setChannelDefaultValue(925, 7);
+    m_uni->setChannelDefaultValue(ushort(65535), 7);
+    m_uni->setChannelCapability(925, QLCChannel::Intensity);
+    m_uni->setChannelModifier(925, NULL);
+    QCOMPARE(m_uni->usedChannels(), ushort(512));
+    QCOMPARE(m_uni->totalChannels(), ushort(512));
+    QCOMPARE(m_uni->preGMValues().size(), 512);
+    QCOMPARE(m_uni->postGMValues()->size(), 512);
+    QVERIFY(m_uni->channelCapabilities(925) == Universe::Undefined);
+    QVERIFY(m_uni->channelModifier(925) == NULL);
+}
+
 void Universe_Test::blendModes()
 {
     QVERIFY(Universe::blendModeToString(Universe::NormalBlend) == "Normal");

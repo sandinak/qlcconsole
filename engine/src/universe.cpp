@@ -1271,6 +1271,11 @@ uchar Universe::channelCapabilities(ushort channel)
 void Universe::setChannelDefaultValue(ushort channel, uchar value)
 {
     QMutexLocker frameLocker(&m_frameMutex);
+    /* Past the universe (a fixture with more channels than it holds), the
+       write below landed past the 512-byte buffers in a release build. */
+    if (channel >= (ushort)m_preGMValues->length())
+        return;
+
     if (channel >= m_totalChannels)
     {
         m_totalChannels = channel + 1;

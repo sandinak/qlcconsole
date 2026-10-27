@@ -39,6 +39,8 @@ private slots:
      *  frame: an atomic flag (TSan L3), seen from the other thread. */
     void blindIsSeenFromTheOutputThread();
     void channelCapabilities();
+    /** N1 (RC6): the per-channel setters ignore a channel past the universe. */
+    void perChannelSettersStopAtTheUniverseEnd();
     void blendModes();
     void grandMasterIntensityReduce();
     void grandMasterIntensityLimit();
