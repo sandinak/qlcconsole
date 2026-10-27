@@ -1,9 +1,11 @@
 #!/bin/bash
 # Build a shareable, self-contained QLC+ (fork) .app + .dmg for macOS.
 # Mirrors the upstream build-v4 CI recipe (.github/workflows/build.yml) but
-# runs locally against Homebrew qt@5, in a dedicated build dir, and folds in
-# Branson's custom user content (RGB scripts / fixtures / templates / bundle)
-# so the effects work on a fresh machine.
+# runs locally in a dedicated build dir. The app carries the repo's resources
+# only: nothing from the builder's home (~/Library/Application Support/QLC+
+# held personal fixtures, Finder duplicates and test scripts that shipped in
+# 0.2.x DMGs). release-check.sh fails a DMG with any resource file that is not
+# byte-identical to the repo's.
 #
 # Result: ~/qlcconsole.app  and
 #         <repo>/dist/qlcconsole-<release>-<universal|arm64>-<date>-<rev>.dmg
@@ -30,7 +32,6 @@ set -euo pipefail
 SCRIPTDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # The checkout this script is in (a worktree builds itself, not the main tree).
 REPO="${REPO:-$(cd "$SCRIPTDIR/../.." && pwd)}"
-USERDATA="$HOME/Library/Application Support/QLC+"
 APP="$HOME/qlcconsole.app"
 UNIVERSAL="${UNIVERSAL:-1}"
 UNIDEPS="${UNIDEPS:-$HOME/unideps}"
@@ -90,22 +91,9 @@ if [ -d "$APP" ]; then
 fi
 cmake --install "$BUILD"
 
-step "4/7 Fold in custom user content (faithful clone)"
-RES="$APP/Contents/Resources"
-copy_into() { # <src-glob-dir> <dest-subdir>
-  local src="$1" dest="$RES/$2"
-  mkdir -p "$dest"
-  if compgen -G "$src/"'*' >/dev/null; then
-    cp -f "$src/"* "$dest/" 2>/dev/null || true
-    echo "  + $(ls -1 "$src" | wc -l | tr -d ' ') file(s) -> Resources/$2"
-  fi
-}
-copy_into "$USERDATA/RGBScripts"         RGBScripts
-copy_into "$USERDATA/Fixtures"           Fixtures
-copy_into "$USERDATA/MidiTemplates"      MidiTemplates
-copy_into "$USERDATA/ModifiersTemplates" ModifiersTemplates
-copy_into "$USERDATA/Bundles"            Bundles
-
+step "4/7 Resources: the repo's only (cmake --install put them there)"
+# No user content: whatever is in this Mac's ~/Library/Application Support
+# stays there. Anything a show needs ships from resources/ in the repo.
 # Files copied from the Homebrew Cellar keep their read-only (0444) perms,
 # which makes macdeployqt's strip pass and the final codesign fail with
 # "not writable". Make the whole bundle user-writable before we touch it.
@@ -129,6 +117,10 @@ if [ -d "$QTPLUGINS/iconengines" ]; then
   mkdir -p "$APP/Contents/PlugIns/iconengines"
   cp -f "$QTPLUGINS/iconengines/"*.dylib "$APP/Contents/PlugIns/iconengines/" 2>/dev/null || true
 fi
+# The offscreen platform plugin: `qlcconsole -platform offscreen` runs headless
+# (scripted checks, release-check.sh) without a window. Signed with the rest.
+mkdir -p "$APP/Contents/PlugIns/platforms"
+cp -f "$QTPLUGINS/platforms/libqoffscreen.dylib" "$APP/Contents/PlugIns/platforms/"
 if [ "$UNIVERSAL" = 1 ]; then
   # Official Qt names its frameworks @rpath/..., which bundlefix.py (made for
   # Homebrew's absolute names) never follows: macdeployqt brings in what the
@@ -165,6 +157,9 @@ if [ ! -f "$APP/Contents/PlugIns/platforms/libqcocoa.dylib" ]; then
   echo "ERROR: $APP has no PlugIns/platforms/libqcocoa.dylib -- it won't launch."
   exit 1
 fi
+for need in PlugIns/platforms/libqoffscreen.dylib Resources/licenses/LGPL-2.1.txt Resources/licenses/THIRD-PARTY.txt; do
+  [ -f "$APP/Contents/$need" ] || { echo "ERROR: $APP has no $need"; exit 1; }
+done
 
 step "6/7 Ad-hoc codesign"
 set +e   # codesign loops hit benign non-Mach-O files; gate explicitly below

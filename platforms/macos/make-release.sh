@@ -79,11 +79,11 @@ spctl -a -t exec -v "$APP"
 
 if [ "${RELEASE_CHECK:-1}" = 1 ]; then
   step "Pre-release check (release-check.sh; RELEASE_CHECK=0 skips)"
-  # It runs the app headless itself (an offscreen copy): the signed app has
-  # no offscreen platform plugin, and a bare --version would open a window.
+  # It runs the app headless itself (an offscreen copy with the bundle's own
+  # offscreen platform plugin); a bare --version would open a window.
   "$REPO/platforms/macos/release-check.sh" "$DMG" ||
     { echo "ERROR: the release check failed (above; results in build-release-check/)."
-      echo "Fix it, or RELEASE_CHECK_WAIVE=<id,...> for a known failure -- the DMG is in dist/ but is not fit to publish."
+      echo "Fix it (RELEASE_CHECK_WAIVE=<id,...> lets a known failure through, reported, never silently) -- the DMG is in dist/ but is not fit to publish."
       exit 1; }
   if [ -n "${RELEASE_CHECK_HOST:-}" ]; then
     "$REPO/platforms/macos/release-check.sh" "$DMG" --host "$RELEASE_CHECK_HOST" ||

@@ -22,6 +22,12 @@
 #   --ls-real             register the LaunchServices test copy outside the
 #                         temp dirs, so it can become the default handler
 #                         (on by default with --host: a clean machine)
+#   --resource-manifest <f> sha256 of every resource file the repo installs
+#                         (default: made from the checkout's resources/; a
+#                         --host run sends it along): every file in the
+#                         bundle's Fixtures, RGBScripts, ... must be one of
+#                         them, byte for byte -- nothing from the builder's
+#                         home folder
 #   --out <dir>           where the TAP / JSON results go
 #                         (default: build-release-check/ in the repo, or a
 #                         temp dir)
@@ -53,7 +59,7 @@ LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Versions/A/Framewor
 
 die() { echo "release-check: $*" >&2; exit 2; }
 
-DMG="" HOST="" SUMS="" EXP_VERSION="" EXP_REV="" ENT="" OFFSCREEN="" LS_REAL=0 OUT=""
+DMG="" HOST="" SUMS="" EXP_VERSION="" EXP_REV="" ENT="" OFFSCREEN="" LS_REAL=0 OUT="" MANIFEST=""
 WAIVE="${RELEASE_CHECK_WAIVE:-}"
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -65,6 +71,7 @@ while [ $# -gt 0 ]; do
     --offscreen-plugin) OFFSCREEN="$2"; shift 2 ;;
     --ls-real) LS_REAL=1; shift ;;
     --no-ls-real) LS_REAL=0; shift ;;
+    --resource-manifest) MANIFEST="$2"; shift 2 ;;
     --out) OUT="$2"; shift 2 ;;
     --waive) WAIVE="${WAIVE:+$WAIVE,}$2"; shift 2 ;;
     -h|--help) sed -n "2,/^# No pipefail/p" "$0" | sed "\$d; s/^# \{0,1\}//"; exit 0 ;;
@@ -99,6 +106,22 @@ fi
 EXPECT_HELP="${EXPECT_HELP:-getting-started.md whats-new.md README.md updates.md}"
 IO_PLUGINS="${IO_PLUGINS:-artnet dmxusb e131 enttecwing hidplugin loopback midiplugin os2l osc peperoni udmx wled}"
 
+# Resource folders: <repo resources/ dir>:<bundle Resources/ dir>.
+RES_DIRS="fixtures:Fixtures rgbscripts:RGBScripts miditemplates:MidiTemplates modifierstemplates:ModifiersTemplates
+  bundles:Bundles inputprofiles:InputProfiles effectscripts:EffectScripts effectpresets:EffectPresets gobos:Gobos
+  deviceprofiles:DeviceProfiles hidprofiles:HIDProfiles licenses:licenses"
+make_manifest() { # -> stdout: "<sha256>  <BundleDir>/<path>" for every file the repo installs
+  local pair src dst
+  for pair in $RES_DIRS; do
+    src="${pair%%:*}"; dst="${pair#*:}"
+    [ -d "$REPO/resources/$src" ] || continue
+    ( cd "$REPO/resources/$src" && find . -type f ! -name CMakeLists.txt ! -name Makefile ! -name '.*' -print0 \
+        | xargs -0 shasum -a 256 ) | sed "s|  \./|  $dst/|"
+  done
+  # COPYING is installed as licenses/Apache-2.0.txt.
+  echo "$(shasum -a 256 "$REPO/COPYING" | awk '{print $1}')  licenses/Apache-2.0.txt"
+}
+
 # ---------------------------------------------------------------------------
 # --host: run all of this on another Mac, then clean up there.
 # ---------------------------------------------------------------------------
@@ -126,6 +149,10 @@ if [ -n "$HOST" ]; then
   trap cleanup_remote EXIT
   echo "# copying the DMG and the check to $HOST:$R"
   files=("$0" "$DMG" "$ENT")
+  if [ -z "$MANIFEST" ] && [ -n "$REPO" ]; then
+    mkdir -p "$OUT/.manifest"; make_manifest > "$OUT/.manifest/resources.sha256"; MANIFEST="$OUT/.manifest/resources.sha256"
+  fi
+  [ -n "$MANIFEST" ] && files+=("$MANIFEST")
   [ -f "$SUMS" ] && { mkdir -p "$OUT/.sums"; cp "$SUMS" "$OUT/.sums/SHA256SUMS"; files+=("$OUT/.sums/SHA256SUMS"); }
   [ -n "$OFFSCREEN" ] && files+=("$OFFSCREEN")
   scp -q -o BatchMode=yes "${files[@]}" "$HOST:$R/" || die "copy to $HOST failed"
@@ -133,6 +160,7 @@ if [ -n "$HOST" ]; then
   args=("$R/$DMGNAME" --sums "$R/SHA256SUMS" --entitlements "$R/$(basename "$ENT")"
         --version "$EXP_VERSION" --rev "$EXP_REV" --out "$R/out")
   [ -n "$OFFSCREEN" ] && args+=(--offscreen-plugin "$R/$(basename "$OFFSCREEN")")
+  [ -n "$MANIFEST" ] && args+=(--resource-manifest "$R/$(basename "$MANIFEST")")
   [ "${LS_REAL_REMOTE:-1}" = 1 ] && args+=(--ls-real)
   [ -n "$WAIVE" ] && args+=(--waive "$WAIVE")
   q=""; for a in "${args[@]}"; do q="$q '$a'"; done
@@ -141,6 +169,7 @@ if [ -n "$HOST" ]; then
     /bin/bash '$R/$(basename "$0")' $q"
   rc=$?
   scp -q -o BatchMode=yes "$HOST:$R/out/*" "$OUT/" 2>/dev/null || true
+  rm -rf "$OUT/.manifest"
   echo "# results copied to $OUT"
   exit $rc
 fi
@@ -526,8 +555,26 @@ if [ -s "$FM" ]; then
 else
   fail res.fixtures-map "no Resources/Fixtures/FixturesMap.xml"
 fi
-loose="$(find "$R/Fixtures" -maxdepth 1 -name '*.qxf' | wc -l | tr -d ' ')"
-[ "$loose" = 0 ] || note "$loose fixture definitions loose in Fixtures/ (not in FixturesMap.xml; package-local.sh copies them from the builder's user folder)"
+loose="$(find "$R/Fixtures" -maxdepth 1 -name '*.qxf' | sed "s|$R/||")"
+[ -z "$loose" ] && pass res.fixtures-no-loose "every definition is in a maker folder, as the repo has them" \
+  || fail res.fixtures-no-loose "$(echo "$loose" | wc -l | tr -d ' ') definitions loose in Fixtures/, not from the repo (a builder's user folder?): $(echo "$loose" | head -6 | tr '\n' ';')"
+# Every resource file is the repo's, byte for byte: nothing from the
+# builder's home folder (personal fixtures, test scripts, a newer copy of a
+# stock script) rides along.
+if [ -z "$MANIFEST" ] && [ -n "$REPO" ]; then MANIFEST="$WORK/resources.sha256"; make_manifest > "$MANIFEST"; fi
+if [ -n "$MANIFEST" ] && [ -s "$MANIFEST" ]; then
+  for pair in $RES_DIRS; do
+    dst="${pair#*:}"
+    [ -d "$R/$dst" ] || continue
+    ( cd "$R" && find "$dst" -type f -print0 | xargs -0 shasum -a 256 ) > "$WORK/shipped.sha256"
+    foreign="$(awk 'NR==FNR { want[$0] = 1; next } !($0 in want) { sub(/^[0-9a-f]+  /, ""); print }' "$MANIFEST" "$WORK/shipped.sha256")"
+    n="$(grep -c . "$WORK/shipped.sha256")"
+    [ -z "$foreign" ] && pass "res.from-repo.$dst" "$n files, all byte-identical to the repo's" \
+      || fail "res.from-repo.$dst" "$(echo "$foreign" | wc -l | tr -d ' ') of $n files are not the repo's: $(echo "$foreign" | head -6 | tr '\n' ';')"
+  done
+else
+  skip res.from-repo "no repo checkout and no --resource-manifest to compare with"
+fi
 dups="$(find "$R" -name '* [0-9].*' -o -name '* copy.*' -o -name '* copy [0-9]*.*' | sed "s|$R/||")"
 [ -z "$dups" ] && pass res.no-finder-duplicates \
   || fail res.no-finder-duplicates "$(echo "$dups" | wc -l | tr -d ' ') Finder-duplicate files ship: $(echo "$dups" | head -6 | tr '\n' ';')"

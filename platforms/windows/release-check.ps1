@@ -332,7 +332,13 @@ try {
     Note "qlcconsole Windows release check: $SetupName"
     Note "host $env:COMPUTERNAME $([Environment]::OSVersion.VersionString); expect version=$Version rev=$Rev"
     $prior = RegVal $Uk 'InstallLocation'
-    if ($prior) { Note "a qlcconsole is already installed at $prior (its registration is exported and restored)" }
+    if ($prior) {
+        # The installer refuses a second install into another folder (see the
+        # takeover check): hide the real one's entry for the duration. It was
+        # exported above and is restored at the end.
+        Note "a qlcconsole is already installed at $prior (its registration is exported, hidden for the check and restored)"
+        & reg.exe delete $Uk /f *> $null
+    }
 
     # =========================================================================
     Section "Installer"
@@ -500,6 +506,8 @@ try {
         $notLoaded = $io | Where-Object { $loaded -notcontains $_ }
         Check 'win.run.io-plugins-loaded' (-not $notLoaded) "not loaded: $($notLoaded -join ', ')"
         $ff = ($txt -split "`n" | Where-Object { $_ -match 'FFmpeg version' } | Select-Object -First 1)
+        # QtMultimedia's FFmpeg backend loaded (it logs its FFmpeg build at -d 0).
+        Check 'win.run.multimedia' ([bool]$ff) "the FFmpeg multimedia backend did not load (see $log)"
         if ($ff) { Note $ff.Trim() }
     } else {
         Skip 'win.run.version' 'no offscreen plugin (-OffscreenDir)'
@@ -539,8 +547,16 @@ try {
     } else {
         Section "A second install into another folder"
         $rcA = Install-To $InstA; $rcB = Install-To $InstB
-        if ($rcA -ne 0 -or $rcB -ne 0) {
-            Fail 'win.takeover' "installs failed ($rcA, $rcB)"
+        $bExe = Test-Path -LiteralPath (Join-Path $InstB 'qlcconsole.exe')
+        if ($rcA -ne 0) {
+            Fail 'win.takeover' "the first install failed ($rcA)"
+        } elseif ($rcB -ne 0 -and $bExe) {
+            Fail 'win.takeover' "the second install failed ($rcB) but left files in $InstB"
+        } elseif ($rcB -ne 0 -and -not ((RegVal $Uk 'InstallLocation') -eq $InstA)) {
+            Fail 'win.takeover' "the second install was refused ($rcB) but the first one's entry is gone or changed"
+        } elseif ($rcB -ne 0) {
+            # The answer we want in a silent install: refuse (exit 3), touch nothing.
+            Pass 'win.takeover' "a silent install into another folder is refused (exit $rcB); the first install is untouched"
         } else {
             $why = @()
             $il = RegVal $Uk 'InstallLocation'

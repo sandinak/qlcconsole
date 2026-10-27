@@ -1,0 +1,58 @@
+qlcconsole: third-party software
+================================
+
+qlcconsole is a fork of Q Light Controller Plus (QLC+), licensed under the
+Apache License, Version 2.0 (Apache-2.0.txt in this folder).
+
+The installers (macOS DMG, Windows setup, Linux AppImage) also carry the
+libraries below, each under its own licence. The full licence texts are in
+this folder:
+
+  LGPL-2.1.txt   GNU Lesser General Public License, version 2.1
+  LGPL-3.0.txt   GNU Lesser General Public License, version 3
+  GPL-2.0.txt    GNU General Public License, version 2
+  GPL-3.0.txt    GNU General Public License, version 3 (LGPL 3 is a set
+                 of additional permissions on top of it)
+  Apache-2.0.txt Apache License, Version 2.0 (qlcconsole itself)
+
+Which libraries an installer carries depends on the platform; what each
+licence covers:
+
+Qt 6 (The Qt Company and contributors)                LGPL-3.0
+  QtCore, QtGui, QtWidgets, QtNetwork, QtMultimedia, QtSvg, QtSerialPort,
+  QtWebSockets, QtQml and the rest, and their plugins. Unmodified, linked
+  dynamically: they can be replaced with your own build of the same Qt
+  version. Source: https://download.qt.io/official_releases/qt/
+
+FFmpeg (the FFmpeg developers)                         LGPL-2.1 or later
+  libavcodec, libavformat, libavutil, libswresample, libswscale, used by
+  QtMultimedia for audio and video. Built WITHOUT --enable-gpl and without
+  --enable-nonfree; linked dynamically, so they can be replaced.
+  - macOS and Linux: the FFmpeg build Qt ships with its multimedia module
+    (LGPL 2.1 or later).
+  - Windows: BtbN's FFmpeg-Builds "lgpl-shared" release build (configured
+    --enable-version3, so LGPL 3 or later), autobuild-2026-09-30-13-08,
+    FFmpeg n9.0.2-17-g2a571b6068. Source:
+    https://github.com/BtbN/FFmpeg-Builds (build scripts) and
+    https://git.ffmpeg.org/ffmpeg.git (FFmpeg, that commit).
+  Source for every FFmpeg release: https://ffmpeg.org/download.html
+
+libusb                                                 LGPL-2.1 or later
+libftdi1 (Intra2net AG)                                LGPL-2.1
+libsndfile (Erik de Castro Lopo)                       LGPL-2.1 or later
+libmpg123, LAME                                        LGPL-2.1 or later
+FLAC, Ogg, Vorbis, Opus (Xiph.Org)                     BSD-style
+FFTW 3 (Matteo Frigo, MIT)                             GPL-2.0 or later
+libmad (Underbit Technologies)                         GPL-2.0 or later
+ICU (Unicode, Inc.)                                    Unicode licence
+zlib, libpng, libjpeg-turbo, FreeType, HarfBuzz,
+  PCRE2, Brotli, double-conversion, md4c                permissive (zlib,
+                                                       BSD, MIT, FTL)
+
+FFTW and libmad are GPL: they are used, unmodified and dynamically linked,
+by the audio input spectrum (FFTW) and the MP3 decoder plugin (libmad), as
+in upstream QLC+. Their source is at https://www.fftw.org/ and
+https://www.underbit.com/products/mad/ (and every Linux distribution).
+
+To get the exact source of any of these libraries as shipped, open an issue
+at https://github.com/sandinak/qlcconsole/issues and it will be provided.

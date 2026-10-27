@@ -58,6 +58,12 @@
 			<array>
 				<string>qlcc</string>
 			</array>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>com.bransonmatheson.qlcconsole.workspace</string>
+			</array>
+			<key>LSHandlerRank</key>
+			<string>Owner</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 		</dict>
@@ -69,6 +75,10 @@
 			<key>CFBundleTypeExtensions</key>
 			<array>
 				<string>qxw</string>
+			</array>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>org.qlcplus.workspace</string>
 			</array>
 			<key>CFBundleTypeRole</key>
 			<string>Viewer</string>
@@ -82,8 +92,98 @@
 			<array>
 				<string>qxf</string>
 			</array>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>org.qlcplus.fixture</string>
+			</array>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
+		</dict>
+	</array>
+
+	<!-- The file types behind CFBundleDocumentTypes' LSItemContentTypes. Without
+	     a declaration macOS gives each extension a dyn.* type: Finder shows no
+	     kind or icon, and Quick Look and Spotlight see opaque data. .qlcc is
+	     ours, so exported; .qxw and .qxf are QLC+'s formats, so imported: if
+	     QLC+ itself ever exports them, its declaration wins and ours defers.
+	     All three are XML. (Linux: platforms/linux/qlcconsole.xml.) -->
+	<key>UTExportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>com.bransonmatheson.qlcconsole.workspace</string>
+			<key>UTTypeDescription</key>
+			<string>qlcconsole Workspace</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.xml</string>
+				<string>public.data</string>
+			</array>
+			<key>UTTypeIconFile</key>
+			<string>qlcconsole.icns</string>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>qlcc</string>
+				</array>
+				<key>public.mime-type</key>
+				<array>
+					<string>application/x-qlcconsole-workspace</string>
+				</array>
+			</dict>
+		</dict>
+	</array>
+
+	<key>UTImportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>org.qlcplus.workspace</string>
+			<key>UTTypeDescription</key>
+			<string>QLC+ Workspace</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.xml</string>
+				<string>public.data</string>
+			</array>
+			<key>UTTypeIconFile</key>
+			<string>qlcconsole.icns</string>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>qxw</string>
+				</array>
+				<key>public.mime-type</key>
+				<array>
+					<string>application/x-qlc-workspace</string>
+				</array>
+			</dict>
+		</dict>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>org.qlcplus.fixture</string>
+			<key>UTTypeDescription</key>
+			<string>QLC+ Fixture Definition</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.xml</string>
+				<string>public.data</string>
+			</array>
+			<key>UTTypeIconFile</key>
+			<string>qlcconsole.icns</string>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>qxf</string>
+				</array>
+				<key>public.mime-type</key>
+				<array>
+					<string>application/x-qlc-fixture</string>
+				</array>
+			</dict>
 		</dict>
 	</array>
 </dict>

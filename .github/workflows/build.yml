@@ -44,6 +44,7 @@ jobs:
         libxml2-utils
         xvfb
         chrpath
+        patchelf
         libfuse2
         wget
       PACKAGES_V5_BASE:
@@ -187,11 +188,6 @@ jobs:
           APPVERSION=$(awk -F\" '/^#define APPVERSION/ {gsub(/ /,"-",$2); print $2}' engine/src/qlcconfig.h)
           echo "APPVERSION=$APPVERSION" >> $GITHUB_ENV
 
-      - name: Adapt qlcconsole for AppImage (v4)
-        if: ${{ matrix.task == 'build-v4' }}
-        run: |
-          chrpath -r "../lib" ${INSTALL_ROOT}/usr/bin/qlcconsole
-
       - name: Store original install artifacts before stripping and AppImage
         # Activate for debugging
         if: ${{ false && ! startsWith( matrix.task, 'coverage') }}
@@ -216,6 +212,14 @@ jobs:
           rm -rf ${INSTALL_ROOT}/usr/bin/QtQuick/Controls.2/Universal QtQuick/Controls.2/Fusion
           rm -rf ${INSTALL_ROOT}/usr/bin/QtQuick/Controls.2/Imagine QtQuick/Controls.2/Scene2D
 
+      # Everything the AppImage runs with, from Qt and this machine, except the
+      # base system of a desktop Linux; RUNPATHs $ORIGIN-relative
+      # (platforms/linux/appimage-bundle.sh). The release check then runs
+      # it with nothing else from here.
+      - name: Bundle libraries and plugins (AppImage)
+        if: ${{ matrix.task == 'build-v4' }}
+        run: platforms/linux/appimage-bundle.sh ${INSTALL_ROOT} ${QTDIR}
+
       - name: Build AppImage
         if: ${{ ! startsWith( matrix.task, 'coverage') }}
         run: |
@@ -238,10 +242,9 @@ jobs:
 
       # The pre-release check (RELEASE.md): extract the AppImage, its ELF
       # dependencies, .desktop + MIME types, plugins, data, and --version and
-      # a headless load of Sample.qxw (offscreen, with aqt's libqoffscreen.so
-      # since the AppImage ships none). Not blocking while the known
-      # failures stand: set the repository variable RELEASE_CHECK_BLOCKING
-      # to 'true' to make a failure fail the job.
+      # a headless load of Sample.qxw (offscreen, with the AppImage's own
+      # libqoffscreen.so). A failure fails the job when the repository
+      # variable RELEASE_CHECK_BLOCKING is 'true'; otherwise it is a warning.
       - name: Release check (AppImage)
         if: ${{ matrix.task == 'build-v4' }}
         continue-on-error: ${{ vars.RELEASE_CHECK_BLOCKING != 'true' }}
@@ -377,6 +380,39 @@ jobs:
       - name: Install
         run: cmake --install build
 
+      # MSYS2's FFmpeg is built --enable-gpl (and pulls in x264/x265), which
+      # an Apache-2.0 installer must not carry; macOS and Linux ship Qt's LGPL
+      # FFmpeg. Swap in BtbN's LGPL shared build of the same FFmpeg major,
+      # pinned by release and sha256, over MSYS2's DLLs in the prefix before
+      # anything is deployed: windeployqt and the ldd sweep then take the
+      # LGPL ones, and none of the GPL build's own dependencies. The ABI
+      # within an FFmpeg major is stable, so Qt's ffmpeg plugin (built
+      # against MSYS2's headers) loads them; the release check proves it
+      # (win.run.multimedia). When MSYS2 moves to a new FFmpeg major, this
+      # step fails: pick a BtbN month-end autobuild of that major (those are
+      # kept) and update the three values below.
+      - name: Use an LGPL FFmpeg (BtbN FFmpeg-Builds)
+        env:
+          FFMPEG_LGPL_TAG: autobuild-2026-09-30-13-08
+          FFMPEG_LGPL_ZIP: ffmpeg-n9.0.2-17-g2a571b6068-win64-lgpl-shared-9.0.zip
+          FFMPEG_LGPL_SHA256: 7157177b8a6cb2174c1650ba8c71b363f2c78cba5330f88c4c02cf5b2b880646
+        run: |
+          set -e
+          cd "${RUNNER_TEMP}"
+          wget -q "https://github.com/BtbN/FFmpeg-Builds/releases/download/${FFMPEG_LGPL_TAG}/${FFMPEG_LGPL_ZIP}" -O ffmpeg-lgpl.zip
+          echo "${FFMPEG_LGPL_SHA256}  ffmpeg-lgpl.zip" | sha256sum -c -
+          rm -rf ffmpeg-lgpl && mkdir ffmpeg-lgpl && unzip -q ffmpeg-lgpl.zip -d ffmpeg-lgpl
+          LGPLBIN=$(ls -d ffmpeg-lgpl/*/bin)
+          if strings "$LGPLBIN"/avcodec-*.dll | grep -q -- '--enable-gpl'; then echo "the pinned FFmpeg is a GPL build"; exit 1; fi
+          PLUGIN=${MINGW_PREFIX}/share/qt6/plugins/multimedia/ffmpegmediaplugin.dll
+          NEED=$(objdump -p "$PLUGIN" | sed -n 's/.*DLL Name: \(\(av\|sw\)[a-z]*-[0-9]*\.dll\)/\1/p' | sort -u)
+          echo "Qt's ffmpeg plugin imports: $NEED"
+          [ -n "$NEED" ] || { echo "found no FFmpeg imports in $PLUGIN"; exit 1; }
+          for d in $NEED; do
+            [ -f "$LGPLBIN/$d" ] || { echo "MSYS2's Qt wants $d, the pinned LGPL FFmpeg has: $(cd "$LGPLBIN" && ls *.dll | tr '\n' ' ')"; exit 1; }
+          done
+          for d in "$LGPLBIN"/*.dll; do cp -v "$d" "${MINGW_PREFIX}/bin/"; done
+
       - name: Deploy Qt and runtime libraries
         run: |
           set -e
@@ -389,6 +425,9 @@ jobs:
           "$WINDEPLOYQT" --release --no-translations \
             qlcconsole.exe qlcconsole-fixtureeditor.exe \
             qlcplusengine.dll qlcplusui.dll qlcpluswebaccess.dll Plugins/dmxusb.dll
+          # The offscreen platform plugin too: -platform offscreen runs the app
+          # headless (scripted checks, the release check).
+          cp -v ${MINGW_PREFIX}/share/qt6/plugins/platforms/qoffscreen.dll platforms/
           # MSYS2's Qt is linked against shared system libraries windeployqt
           # knows nothing about. ldd lists the whole dependency closure; copy
           # in everything that resolves into the MSYS2 prefix.
@@ -400,6 +439,10 @@ jobs:
           if find . \( -iname '*.exe' -o -iname '*.dll' \) -print0 | xargs -0 -n1 ldd 2>/dev/null | grep -i "not found"; then
             echo "Unresolved DLLs remain in the deploy dir" ; exit 1
           fi
+          # No GPL FFmpeg, and none of its GPL codecs, in what ships.
+          ls -1 | grep -iE '^(postproc|libx264|libx265|libxvidcore|librubberband|libvidstab)' && { echo "GPL libraries in the deploy dir"; exit 1; } || true
+          if strings avcodec-*.dll | grep -q -- '--enable-gpl'; then echo "the deployed avcodec is a GPL build"; exit 1; fi
+          ls licenses/LGPL-3.0.txt licenses/THIRD-PARTY.txt
 
       - name: Smoke test
         run: |
@@ -428,11 +471,11 @@ jobs:
 
       # The pre-release check (RELEASE.md): a silent NSIS install into a temp
       # folder on the runner, files, DLL imports, registry, associations,
-      # shortcuts, --version and a headless load (offscreen, with MSYS2's
-      # qoffscreen.dll since the installer ships none), the FFmpeg licence,
-      # then uninstall /S and nothing left behind. Not blocking while the
-      # known failures stand: set the repository variable
-      # RELEASE_CHECK_BLOCKING to 'true' to make a failure fail the job.
+      # shortcuts, --version and a headless load (offscreen, with the
+      # installer's own qoffscreen.dll), the FFmpeg licence, then uninstall
+      # /S and nothing left behind, and a second install refused. A failure
+      # fails the job when the repository variable RELEASE_CHECK_BLOCKING is
+      # 'true'; otherwise it is a warning.
       - name: Locate the offscreen plugin for the release check
         run: echo "QT_PLUGINS_WIN=$(cygpath -w ${MINGW_PREFIX}/share/qt6/plugins)" >> $GITHUB_ENV
 

@@ -302,6 +302,10 @@ if [ -n "$av" ]; then
   case "$av" in "$D"/*) where="bundled" ;; *) where="from this machine: $av" ;; esac
   if echo "$conf" | grep -q -- '--enable-gpl'; then fail ffmpeg.licence "FFmpeg ($where) is built --enable-gpl"
   else pass ffmpeg.licence "LGPL ($where)"; fi
+  # (L)GPL code ships with its licence text.
+  want="GNU LESSER GENERAL PUBLIC LICENSE"; echo "$conf" | grep -q -- '--enable-gpl' && want="GNU GENERAL PUBLIC LICENSE"
+  if grep -rlq "$want" "$SH" 2>/dev/null; then pass ffmpeg.licence-text "$want shipped"
+  else fail ffmpeg.licence-text "FFmpeg ships without the $want text"; fi
 fi
 
 # ===========================================================================

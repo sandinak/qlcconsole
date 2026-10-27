@@ -182,17 +182,24 @@ to users. Run them deliberately, not as part of routine iteration.
 One command per platform proves an installer, and what it installs, is
 right before anything is published. Each prints TAP (and writes
 `release-check.tap` + `release-check.json`) with a summary at the end, and
-exits non-zero on any failure. A known failure can be let through with a
-waiver (`--waive id,id` / `-Waive id,id`, or `RELEASE_CHECK_WAIVE`): it is
-reported as `TODO waived`, not hidden. None of them ever opens a window --
+exits non-zero on any failure. All three pass with no waiver as of 0.3.0
+(RC8). A failure is a release bug: fix it. If one must ship anyway, waive
+it by id (`--waive id,id` / `-Waive id,id`, or `RELEASE_CHECK_WAIVE=id,id`
+for `make dmg` / `make release-check`): it is then reported as
+`TODO waived` with its reason, never hidden, and the waiver goes in the
+release notes. None of them ever opens a window --
 every run of the app is `QT_QPA_PLATFORM=offscreen` + `-platform offscreen`
 with its own HOME/settings -- or launches a quarantined app.
 
 | Platform | Command | Where |
 |---|---|---|
 | macOS | `platforms/macos/release-check.sh <dmg> [--host <ssh-host>]` (`make release-check`) | here, and a clean Mac with `--host` (e.g. EvoAudio, Intel macOS 13) |
-| Windows | `powershell -ExecutionPolicy Bypass -File platforms\windows\release-check.ps1 <setup.exe> -OffscreenDir <Qt plugins dir>` | the Windows VM (under `~/qlcconsole-windows`), and CI's `build-windows` job |
-| Linux | `platforms/linux/release-check.sh <AppImage> [--host <ssh-host>] --offscreen-plugin <libqoffscreen.so>` | the Linux build host, and CI's `build-v4` job |
+| Windows | `powershell -ExecutionPolicy Bypass -File platforms\windows\release-check.ps1 <setup.exe>` | the Windows VM (under `~/qlcconsole-windows`), and CI's `build-windows` job |
+| Linux | `platforms/linux/release-check.sh <AppImage> [--host <ssh-host>]` | CI's `build-v4` job, and a clean Ubuntu 22.04 / 24.04 with no Qt (below) |
+
+Every installer ships Qt's offscreen platform plugin, so the checks run the
+app headless with what it ships. (`--offscreen-plugin` / `-OffscreenDir`
+supply one only to check an older installer that lacks it.)
 
 **macOS** (`make dmg` runs it on the DMG it made; `RELEASE_CHECK_HOST=evo`
 also runs it on another Mac):
@@ -205,52 +212,83 @@ also runs it on another Mac):
   universal, no absolute library path outside the OS, only `@loader_path` /
   `@executable_path` rpaths, every `@rpath` reference inside the bundle, no
   binary newer than `LSMinimumSystemVersion`;
-- Qt plugins (cocoa, styles, iconengines, imageformats, tls, multimedia;
-  sqldrivers if anything links QtSql), the I/O plugins, the audio plugin,
-  an offscreen platform plugin, FFmpeg's licence and its text;
+- Qt plugins (cocoa, offscreen, styles, iconengines, imageformats, tls,
+  multimedia; sqldrivers if anything links QtSql), the I/O plugins, the
+  audio plugin, FFmpeg's licence (LGPL, not `--enable-gpl`) and its text in
+  `Resources/licenses/`;
 - Info.plist: bundle id, version = VERSION, build = the binary's, minimum
   macOS, executable, icon, usage strings, every document type with a UTI
-  declared for it;
-- resources: FixturesMap.xml against the files, no Finder-duplicate files
-  (`* 2.qxf`), Sample.qxw, the data folders, translations, the help guides
-  compiled into libqlcplusui;
+  declared for it (`UTExportedTypeDeclarations` for .qlcc,
+  `UTImportedTypeDeclarations` for QLC+'s .qxw and .qxf);
+- resources: FixturesMap.xml against the files, no definitions loose in
+  Fixtures/, no Finder-duplicate files (`* 2.qxf`), and every file in
+  Fixtures, RGBScripts, MidiTemplates, ModifiersTemplates, Bundles,
+  InputProfiles, EffectScripts, EffectPresets, Gobos, DeviceProfiles,
+  HIDProfiles and licenses byte-identical to the repo's (`res.from-repo.*`;
+  a manifest of the checkout's `resources/`, sent along with `--host`):
+  nothing from the builder's home folder; Sample.qxw, the data folders,
+  translations, the help guides compiled into libqlcplusui;
 - file types: a copy registered with `lsregister -f`, its claimed types read
   back, the default handler for .qlcc (with `--ls-real`, the default for
   `--host`, the copy is registered outside the temp dirs so it can become
   the handler), then unregistered;
 - Gatekeeper on a quarantined copy, with `spctl` only;
 - headless: `--version` on each slice this Mac can run and a load of
-  Sample.qxw, on a copy given an offscreen plugin (from `--offscreen-plugin`,
-  `$QTDIR` or `~/Qt-aqt/<Qt version>`) and re-signed ad hoc -- the I/O and
-  audio plugins must load;
+  Sample.qxw, on a copy (quarantine stripped, re-signed ad hoc) with the
+  bundle's own offscreen plugin -- the I/O and audio plugins must load;
 - and no crash report, no LaunchServices record of its copies, nothing left
   (the remote temp dir included).
 
 **Windows** (`-SkipTakeover` skips the second install): Authenticode
 (unsigned is reported as expected for now), the installer's version, a
 silent install (`/S /D=`), the files, every EXE/DLL import resolvable and
-x64 (a PE reader, no dumpbin), FFmpeg's configure line (GPL or LGPL) and its
-licence text, the Apps & features entry (name, version, publisher,
+x64 (a PE reader, no dumpbin), the offscreen plugin, FFmpeg's configure
+line (LGPL, not `--enable-gpl`) and its licence text in `licenses\`, the
+Apps & features entry (name, version, publisher,
 InstallLocation, UninstallString), the .qlcc/.qxw/.qxf associations (ProgID,
 icon, quoted open command), the Start Menu shortcuts' targets, `--version`
-and a headless load, then uninstall `/S` and NOTHING left: files, entry,
-associations, shortcuts, `HKCU\Software\qlcconsole` and the app's own
-settings `HKCU\Software\qlcplus\qlcconsole`; and a second install into
-another folder must not take over the first one's registration. Every key
-and Start Menu item it can touch is exported first and restored after.
+and a headless load with QtMultimedia's FFmpeg backend loaded, then
+uninstall `/S` and NOTHING left: files, entry, associations, shortcuts,
+`HKCU\Software\qlcconsole` and the app's own settings
+`HKCU\Software\qlcplus\qlcconsole`; and a second silent install into
+another folder must be refused (exit 3) without touching the first. (An
+interactive install that finds qlcconsole in another folder asks: install
+there instead, or go back.) Every key and Start Menu item it can touch is
+exported first and restored after; a qlcconsole already installed on the
+machine has its entry hidden for the run and restored.
 
 **Linux**: `--appimage-extract`, every ELF's dependencies with AppRun's
 library path (none missing, no Qt from the system, nothing beyond a base
 desktop system taken from the machine, RPATH only `$ORIGIN`-relative), the
-.desktop file (`desktop-file-validate`, icon, Exec, MimeType), the MIME
-definitions for .qlcc/.qxw/.qxf, AppStream metainfo, Qt and I/O plugins,
-data, `--version` both directly and through AppRun, and a headless load of
-Sample.qxw through AppRun.
+.desktop file (`desktop-file-validate`, icon, `Exec=qlcconsole %f` with
+nothing before the user's arguments, MimeType), the MIME definitions for
+.qlcc/.qxw/.qxf, AppStream metainfo, Qt plugins (xcb, offscreen, jpeg, gif,
+ico, svg, svgicon, ffmpeg) and I/O plugins, data, FFmpeg's licence and its
+text, `--version` both directly and through AppRun, and a headless load of
+Sample.qxw through AppRun with the FFmpeg multimedia backend loaded.
+
+What makes the AppImage self-contained is `platforms/linux/appimage-bundle.sh`
+(CI runs it after `cmake --install`): the Qt plugins above, then every
+library any ELF in the tree needs except the base system of a desktop Linux
+(glibc, libstdc++, GL/X11/xcb, fontconfig, freetype, glib, dbus,
+ALSA/PulseAudio, libusb, libudev -- the same list the check accepts), then
+`$ORIGIN`-relative RUNPATHs. The real test is a machine with none of the
+build's libraries: a clean Ubuntu 22.04 (and 24.04) with only that base
+system installed -- no Qt, no FFmpeg, no libftdi/FFTW/libmad. On the Linux
+build host these are minbase debootstrap chroots, `/srv/clean-jammy` and
+`/srv/clean-noble` (podman is not installed there):
+
+    sudo chroot /srv/clean-jammy bash /tmp/rc/release-check.sh /tmp/rc/<AppImage> --out /tmp/rc/out
+
+after copying the AppImage and `release-check.sh` into `/tmp/rc` inside it
+(and bind-mounting /proc and /dev).
 
 In CI the Windows and Linux checks run after the build and upload their
-results (`release-check-windows`, `release-check-linux`). They do not fail
-the job until the repository variable `RELEASE_CHECK_BLOCKING` is `true`;
-set it once the known failures are fixed.
+results (`release-check-windows`, `release-check-linux`). They fail the job
+only when the repository variable `RELEASE_CHECK_BLOCKING` is `true`
+(Settings > Secrets and variables > Actions > Variables); with it unset a
+failure shows as a warning on a green job. All three pass since RC8: set it
+to `true`.
 
 ## What the in-app updater needs from a release
 

@@ -30,6 +30,7 @@
 #include <QTimer>
 #include <QHash>
 #include <QDir>
+#include <QFileInfo>
 
 #include "qlcconfig.h"
 #include "qlci18n.h"
@@ -160,7 +161,7 @@ void printUsage()
     QTextStream cout(stdout, QIODevice::WriteOnly);
 
     cout << "Usage:";
-    cout << "  qlcconsole [options]" << endl;
+    cout << "  qlcconsole [options] [workspace.qlcc|.qxw]" << endl;
     cout << "Options:" << endl;
     cout << "  -c or --closebutton <x,y,w,h>\tPlace a close button in virtual console (only when -k is specified)" << endl;
     cout << "  -d or --debug <level>\t\tSet debug output level (0-3, see QtMsgType)" << endl;
@@ -190,6 +191,16 @@ void printUsage()
  *
  * @return true to continue with application launch; otherwise false
  */
+static bool isWorkspaceFile(const QString &arg)
+{
+    if (arg.startsWith(QLatin1Char('-')))
+        return false;
+    if (arg.endsWith(KExtWorkspace, Qt::CaseInsensitive) == false &&
+        arg.endsWith(KExtWorkspaceConsole, Qt::CaseInsensitive) == false)
+        return false;
+    return QFileInfo(arg).isFile();
+}
+
 bool parseArgs()
 {
     QStringListIterator it(QCoreApplication::arguments());
@@ -306,6 +317,13 @@ bool parseArgs()
                printed before anything else. Just make the app
                exit by returning false. */
             return false;
+        }
+        else if (QLCArgs::workspace.isEmpty() && isWorkspaceFile(arg))
+        {
+            /* A workspace on its own, the way a file manager passes it
+               (the Linux .desktop file's Exec=qlcconsole %f). Only an
+               existing .qlcc/.qxw: anything else stays ignored. */
+            QLCArgs::workspace = arg;
         }
     }
 
