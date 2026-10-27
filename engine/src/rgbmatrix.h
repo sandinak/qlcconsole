@@ -192,6 +192,12 @@ public:
     /** Get the current RGB Algorithm. */
     RGBAlgorithm* algorithm() const;
 
+    /** The <Algorithm> element, verbatim, of an algorithm this computer
+     *  can't load (a script that isn't installed here); empty otherwise.
+     *  saveXML() writes it back unchanged, so opening and saving a show
+     *  doesn't turn the matrix into something else. */
+    QString unknownAlgorithmXML() const;
+
     /** Get the algorithm protection mutex */
     QRecursiveMutex& algorithmMutex();
 
@@ -209,6 +215,8 @@ private:
     RGBAlgorithm *m_runAlgorithm;
     RGBAlgorithm *m_algorithm;
     QRecursiveMutex m_algorithmMutex;
+    /** See unknownAlgorithmXML(); cleared by setAlgorithm(). */
+    QString m_unknownAlgorithmXML;
 
     /************************************************************************
      * Color

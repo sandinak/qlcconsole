@@ -200,6 +200,88 @@ void RGBMatrix_Test::property()
     QCOMPARE(mtx.property("orientation"), QString("Vertical"));
 }
 
+/* A matrix whose script isn't installed on this computer (here "Plasma
+   (Colors)", from an older QLC+) used to lose its algorithm on the first
+   save and reopen as Stripes, without a word. It now loads with no
+   algorithm, says so in the load log, and saves the <Algorithm> element
+   back exactly as it came, along with its properties. */
+void RGBMatrix_Test::anUninstalledScriptSurvivesASave()
+{
+    const QString in = QStringLiteral(
+        "<Function ID=\"727\" Type=\"RGBMatrix\" Name=\"Safe-R/W Plazma\" Path=\"Safe\">"
+        "<Speed FadeIn=\"0\" FadeOut=\"0\" Duration=\"50\"/>"
+        "<Direction>Forward</Direction>"
+        "<RunOrder>Loop</RunOrder>"
+        "<Algorithm Type=\"Script\">Plasma (Colors)</Algorithm>"
+        "<ControlMode>RGB</ControlMode>"
+        "<FixtureGroup>0</FixtureGroup>"
+        "<Property Name=\"ramp\" Value=\"15\"/>"
+        "<Property Name=\"color1Index\" Value=\"Dim Red\"/>"
+        "</Function>");
+
+    m_doc->clearErrorLog();
+    QXmlStreamReader reader(in);
+    reader.readNextStartElement();
+    RGBMatrix mtx(m_doc);
+    mtx.setName("Safe-R/W Plazma");
+    QVERIFY(mtx.loadXML(reader));
+    QVERIFY(mtx.algorithm() == NULL);
+    QVERIFY(mtx.unknownAlgorithmXML().contains("Plasma (Colors)"));
+    QVERIFY(m_doc->errorLog().contains("Plasma (Colors)"));
+    QVERIFY(m_doc->errorLog().contains("Safe-R/W Plazma"));
+    m_doc->clearErrorLog();
+    QCOMPARE(mtx.property("ramp"), QString("15"));
+
+    // The rest of the load carried on after the algorithm
+    QCOMPARE(mtx.fixtureGroup(), quint32(0));
+    QCOMPARE(mtx.controlMode(), RGBMatrix::ControlModeRgb);
+
+    auto save = [](const RGBMatrix &m) {
+        QString out;
+        QXmlStreamWriter w(&out);
+        m.saveXML(&w);
+        return out;
+    };
+    const QString out = save(mtx);
+    QVERIFY2(out.contains("<Algorithm Type=\"Script\">Plasma (Colors)</Algorithm>"), qPrintable(out));
+    QVERIFY(out.contains("<Property Name=\"ramp\" Value=\"15\"/>"));
+    QVERIFY(out.contains("<Property Name=\"color1Index\" Value=\"Dim Red\"/>"));
+    QCOMPARE(out.count("<Algorithm"), 1);
+
+    // ... and the saved form reads back the same, again and again
+    QXmlStreamReader reader2(out);
+    reader2.readNextStartElement();
+    RGBMatrix again(m_doc);
+    again.setName(mtx.name());
+    QVERIFY(again.loadXML(reader2));
+    m_doc->clearErrorLog();
+    QVERIFY(again.algorithm() == NULL);
+    QCOMPARE(save(again), out);
+
+    // A copy keeps it too
+    RGBMatrix copy(m_doc);
+    QVERIFY(copy.copyFrom(&again));
+    QVERIFY(save(copy).contains("<Algorithm Type=\"Script\">Plasma (Colors)</Algorithm>"));
+
+    // Choosing an algorithm replaces it: no second <Algorithm>
+    again.setAlgorithm(RGBAlgorithm::algorithm(m_doc, "Stripes"));
+    QVERIFY(again.unknownAlgorithmXML().isEmpty());
+    const QString chosen = save(again);
+    QCOMPARE(chosen.count("<Algorithm"), 1);
+    QVERIFY(chosen.contains("Stripes"));
+    QVERIFY(chosen.contains("Plasma") == false);
+
+    // An installed script still loads as itself, with nothing kept aside
+    QXmlStreamReader reader3(QString(in).replace("Plasma (Colors)", "Stripes"));
+    reader3.readNextStartElement();
+    RGBMatrix known(m_doc);
+    QVERIFY(known.loadXML(reader3));
+    QVERIFY(known.algorithm() != NULL);
+    QCOMPARE(known.algorithm()->name(), QString("Stripes"));
+    QVERIFY(known.unknownAlgorithmXML().isEmpty());
+    QVERIFY(m_doc->errorLog().isEmpty());
+}
+
 void RGBMatrix_Test::loadSave()
 {
     RGBMatrix* mtx = new RGBMatrix(m_doc);
