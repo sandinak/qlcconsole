@@ -45,6 +45,7 @@
 #include "rgbitem.h"
 #include "rgbtext.h"
 #include "scene.h"
+#include "showtreecontroller.h"
 
 #define SETTINGS_GEOMETRY "rgbmatrixeditor/geometry"
 #define RECT_SIZE 30
@@ -271,6 +272,14 @@ void RGBMatrixEditor::init()
     // Test slots
     connect(m_testButton, SIGNAL(clicked(bool)),
             this, SLOT(slotTestClicked()));
+    // RC8: GO takes the stage from a Test play.
+    connect(m_doc->showTree(), &ShowTreeController::stageTakenForRun, this, [this](QStringList *held) {
+        if (!m_testButton->isChecked())
+            return;
+        m_testButton->click();
+        if (held != nullptr)
+            held->append(tr("the RGB Matrix test"));
+    });
 
     m_preview->setScene(m_scene);
     if (createPreviewItems() == true)

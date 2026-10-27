@@ -102,6 +102,11 @@ public:
     QString inputChannelName(quint32 input, quint32 channel) const override
     { Q_UNUSED(input) return m_channelNames.value(channel); }
 
+    /** @reimp m_buttonActions for @p channel, whatever the line (a HID
+     *  profile's action=) */
+    QString inputButtonAction(quint32 input, quint32 channel) const override
+    { Q_UNUSED(input) return m_buttonActions.value(channel); }
+
     /** @reimp m_connectionInfo for @p input */
     QString inputConnectionInfo(quint32 input) const override
     { return m_connectionInfo.value(input); }
@@ -128,6 +133,8 @@ public:
     QList<QVariant> m_feedbackParams;
     /** What inputChannelName() reports, by channel ("Cross", "L1"...) */
     QMap<quint32, QString> m_channelNames;
+    /** What inputButtonAction() reports, by channel ("followspot_toggle"...) */
+    QMap<quint32, QString> m_buttonActions;
     /** What inputConnectionInfo() / inputProblem() report, by input line */
     QMap<quint32, QString> m_connectionInfo;
     QMap<quint32, QString> m_inputProblems;

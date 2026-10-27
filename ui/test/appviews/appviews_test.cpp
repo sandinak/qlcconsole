@@ -111,6 +111,9 @@
 #include "itemicons.h"
 #include "universe.h"
 #include "chaser.h"
+#include "fixturegroup.h"
+#include "qlcpalette.h"
+#include "showcontrol.h"
 #include "scene.h"
 #include <QBuffer>
 #include <QXmlStreamWriter>
@@ -1474,6 +1477,100 @@ void AppViews_Test::goInDesignStillPlays()
     QCOMPARE(doc->mode(), Doc::Design);                 // offered, not switched
     QTRY_VERIFY_WITH_TIMEOUT(list->isRunning() && list->currentStepIndex() == 0, 5000);
     QTRY_COMPARE_WITH_TIMEOUT(int(outputAt(doc, 200)), 170, 5000);
+}
+
+void AppViews_Test::goHoldsThePreviewSoOnlyTheRunPlays()
+{
+    Doc *doc = m_app->m_doc;
+    ShowTreeController *st = doc->showTree();
+    QList<quint32> fixtures, functions;
+    quint32 prod = ShowTree::invalidId();
+    QList<quint32> groups, palettes;
+    auto tidy = qScopeGuard([&]() {
+        st->stopPreview();
+        if (prod != ShowTree::invalidId())
+            st->removeProduction(prod);
+        takeAway(doc, fixtures, functions);
+        for (quint32 g : groups)
+            doc->deleteFixtureGroup(g);
+        for (quint32 p : palettes)
+            doc->deletePalette(p);
+        m_app->hideViewNotice();
+    });
+    // Three dimmers: Run on 230, the preview on 231, a busk on 232.
+    Scene *busk = litScene(doc, 232, 90, &fixtures, &functions);
+    QVERIFY(litScene(doc, 230, 1, &fixtures, &functions) != nullptr);
+    QVERIFY(litScene(doc, 231, 1, &fixtures, &functions) != nullptr);
+    QVERIFY(busk != nullptr);
+    auto groupOf = [&](quint32 fid, const QString &name) {
+        FixtureGroup *g = new FixtureGroup(doc);
+        g->setName(name);
+        doc->addFixtureGroup(g);
+        g->assignFixture(fid);
+        groups << g->id();
+        return g->id();
+    };
+    const quint32 runGroup = groupOf(fixtures.at(1), "Run");
+    const quint32 previewGroup = groupOf(fixtures.at(2), "Preview");
+    QLCPalette *full = new QLCPalette(QLCPalette::Dimmer, doc);
+    full->setName("Full");
+    full->setValue(255);
+    doc->addPalette(full);
+    palettes << full->id();
+    prod = st->addProduction("RC8");
+    const quint32 listId = st->addCueList(prod, "Full Show", ShowTree::ListMode::NonTracking);
+    const quint32 c1 = st->addCue(listId, -1, "One");
+    const quint32 c2 = st->addCue(listId, 0, "Two");        // after One
+    ShowTree::Target t1, t2;
+    t1.groups << runGroup;
+    t2.groups << previewGroup;
+    st->setLayerLook(c1, st->addLayer(c1, t1), st->lookForPalette(full->id()));
+    st->setLayerLook(c2, st->addLayer(c2, t2), st->lookForPalette(full->id()));
+    Chaser *list = qobject_cast<Chaser *>(doc->function(st->cueList(listId)->chaser));
+    QVERIFY(list != nullptr);
+    doc->showControl()->setMainCueList(list->id());
+
+    doc->setMode(Doc::Design);
+    m_app->hideViewNotice();
+    m_app->m_operateOffered = true;      // the Operate offer said already
+    busk->start(doc->masterTimer(), FunctionParent::master());
+    st->previewCue(c2);
+    QCOMPARE(int(st->previewState()), int(ShowTreeController::PreviewState::Playing));
+    QTRY_COMPARE_WITH_TIMEOUT(int(outputAt(doc, 231)), 255, 5000);
+    QTRY_COMPARE_WITH_TIMEOUT(int(outputAt(doc, 232)), 90, 5000);
+
+    // GO: the preview holds before the GO acts, and the notice says so.
+    m_app->m_cueGoAction->trigger();
+    QCOMPARE(int(st->previewState()), int(ShowTreeController::PreviewState::Held));
+    QVERIFY(st->previewFunctions().isEmpty());
+    QVERIFY(!m_app->m_viewNotice->isHidden());
+    QCOMPARE(m_app->m_viewNoticeText->text(),
+             QString("Stopped the Show Tree preview so GO plays alone — Play brings it back."));
+    QTRY_VERIFY_WITH_TIMEOUT(list->isRunning() && list->currentStepIndex() == 0, 5000);
+    QTRY_COMPARE_WITH_TIMEOUT(int(outputAt(doc, 230)), 255, 5000);
+    QTRY_COMPARE_WITH_TIMEOUT(int(outputAt(doc, 231)), 0, 5000);
+    // Not a preview: the busk keeps running.
+    QVERIFY(busk->isRunning());
+    QCOMPARE(int(outputAt(doc, 232)), 90);
+
+    // Selecting a cue while the list runs stays off stage...
+    st->previewCue(c2);
+    QCOMPARE(int(st->previewState()), int(ShowTreeController::PreviewState::Held));
+    QTest::qWait(100);
+    QCOMPARE(int(outputAt(doc, 231)), 0);
+    // ...until Play, which previews over the run.
+    st->resumePreview();
+    QTRY_COMPARE_WITH_TIMEOUT(int(outputAt(doc, 231)), 255, 5000);
+    QCOMPARE(int(outputAt(doc, 230)), 255);
+
+    // The Run tab's GO comes the same way, before it acts.
+    m_app->hideViewNotice();
+    CueRunner runTab(doc, CueRunner::Full);
+    runTab.go();
+    QCOMPARE(int(st->previewState()), int(ShowTreeController::PreviewState::Held));
+    QVERIFY(st->previewFunctions().isEmpty());
+    QVERIFY(!m_app->m_viewNotice->isHidden());
+    QTRY_VERIFY_WITH_TIMEOUT(list->currentStepIndex() == 1, 5000);
 }
 
 /* CHANGELOG 0.2.2, "Esc backs out": "plain Esc is no playback action (Stop

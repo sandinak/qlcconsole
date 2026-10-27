@@ -59,6 +59,7 @@
 #include "scene.h"
 #include "doc.h"
 #include "qlceventpos.h"
+#include "showtreecontroller.h"
 
 #define SETTINGS_GEOMETRY "chasereditor/geometry"
 #define PROP_STEP Qt::UserRole
@@ -445,6 +446,16 @@ ChaserEditor::ChaserEditor(QWidget* parent, Chaser* chaser, Doc* doc, bool liveM
     //connect(m_testButton, SIGNAL(toggled(bool)), this, SLOT(slotTestToggled(bool)));
     connect(m_testPlayButton, SIGNAL(clicked()), this, SLOT(slotTestPlay()));
     connect(m_testStopButton, SIGNAL(clicked()), this, SLOT(slotTestStop()));
+    // RC8: GO takes the stage from a Test play -- not when what is tested
+    // is a Show Tree list itself (its start is the run).
+    connect(m_doc->showTree(), &ShowTreeController::stageTakenForRun, this, [this](QStringList *held) {
+        if (!m_testNextButton->isEnabled() || !m_chaser->isRunning()
+            || m_doc->showTree()->productionOfChaser(m_chaser->id()) != ShowTree::invalidId())
+            return;
+        slotTestStop();
+        if (held != nullptr)
+            held->append(tr("the chaser test"));
+    });
     connect(m_testPreviousButton, SIGNAL(clicked()), this, SLOT(slotTestPreviousClicked()));
     connect(m_testNextButton, SIGNAL(clicked()), this, SLOT(slotTestNextClicked()));
     connect(m_doc, SIGNAL(modeChanged(Doc::Mode)), this, SLOT(slotModeChanged(Doc::Mode)));

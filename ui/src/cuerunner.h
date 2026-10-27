@@ -115,9 +115,16 @@ public:
      *  This Show…, set by the App; a test's own). Null: no button. */
     static void setUpgradeAction(QAction *action);
     static QAction *upgradeAction();
-    /** Q92: called when the Run tab's GO is pressed (set by the App, which
-     *  offers Operate if it was pressed in Design). Not for Compact. */
-    static void setGoHook(const std::function<void()> &hook);
+    /** RC8: the one path every console GO takes -- App::runCommand(),
+     *  set by the App: the previews hold first (ShowTreeController::
+     *  takeStageForRun()), then ShowControl::execute(); @a fromConsole
+     *  (the Run tab, the keys, the pad) also says so in the notice and
+     *  offers Operate after a GO in Design (Q92). Null: execute only (it
+     *  still holds the previews, through ShowControl::aboutToTakeStage). */
+    using RunHook = std::function<bool(const ShowControl::Request &request, bool fromConsole)>;
+    static void setRunHook(const RunHook &hook);
+    /** Carry out @a request on @a doc through the run hook. */
+    static bool runCommand(Doc *doc, const ShowControl::Request &request, bool fromConsole);
     /** The Run tab's empty state (no main cue list) shown now. */
     bool isEmptyStateShown() const;
     QPushButton *upgradeButton() const { return m_upgrade; }

@@ -2007,18 +2007,29 @@ void ShowTree_Test::inDesignTheEditWinsOverARunningList()
     Chaser *chaser = qobject_cast<Chaser *>(m_doc->function(st->cueList(listId)->chaser));
     QCOMPARE(st->listsRunning(), QStringList());
 
-    // The list runs cue One for real (footer GO, a VC cue list).
+    // The list runs cue One for real (a VC cue list): it takes the stage.
     go(chaser);
     QCOMPARE(int(settle()[0]), 255);
+    QCoreApplication::processEvents();
     QCOMPARE(st->listsRunning(), QStringList() << "L");
+    QVERIFY(st->previewHeld());
 
-    // Selecting the running cue previews it, and an edit DOWN shows: the
-    // preview wins over the running cue (HTP alone would keep 255).
+    // RC8: selecting a cue while a list runs stays off stage -- Held.
+    st->previewCue(c2);
+    QCOMPARE(int(st->previewState()), int(ShowTreeController::PreviewState::Held));
+    QVERIFY(st->previewFunctions().isEmpty());
+    QHash<quint32, uchar> v = settle();
+    QCOMPARE(int(v[0]), 255);
+    QCOMPARE(int(v[2]), 0);
+
+    // Play (resumePreview) previews over the run, and an edit DOWN shows:
+    // the preview wins over the running cue (HTP alone would keep 255).
     st->previewCue(c1);
+    st->resumePreview();
     QCOMPARE(int(st->previewState()), int(ShowTreeController::PreviewState::Playing));
     QVERIFY(!st->previewFunctions().isEmpty());
     QVERIFY(st->setLayerLook(c1, l1, st->lookForPalette(d50)));
-    QHash<quint32, uchar> v = settle();
+    v = settle();
     QCOMPARE(int(v[0]), 127);
     QVERIFY(chaser->isRunning());
 
@@ -2029,8 +2040,8 @@ void ShowTree_Test::inDesignTheEditWinsOverARunningList()
     QCOMPARE(int(v[0]), 255);
     QVERIFY(chaser->isRunning());
 
-    // Another cue of the running list: it shows on top; the running cue
-    // stays on the channels the preview doesn't play.
+    // After Play, another cue of the running list shows on top; the
+    // running cue stays on the channels the preview doesn't play.
     st->previewCue(c2);
     v = settle();
     QCOMPARE(int(v[0]), 255);
@@ -2040,20 +2051,37 @@ void ShowTree_Test::inDesignTheEditWinsOverARunningList()
     QCOMPARE(int(v[0]), 255);
     QCOMPARE(int(v[2]), 0);
 
-    // The list starting while previewing doesn't take the preview away.
+    // The list starting while previewing holds the preview: only the run
+    // cue reaches the stage.
     chaser->stop(FunctionParent::master());
     tick(5);
     QCoreApplication::processEvents();
-    st->previewCue(c1);
-    QCOMPARE(int(settle()[0]), 127);
+    st->previewCue(c2);                 // no list running: it plays
+    QCOMPARE(int(st->previewState()), int(ShowTreeController::PreviewState::Playing));
+    v = settle();
+    QCOMPARE(int(v[2]), 255);
     go(chaser);
     tick(2);
     QCoreApplication::processEvents();
-    QCOMPARE(int(st->previewState()), int(ShowTreeController::PreviewState::Playing));
-    QCOMPARE(int(settle()[0]), 127);
+    QCOMPARE(int(st->previewState()), int(ShowTreeController::PreviewState::Held));
+    v = settle();
+    QCOMPARE(int(v[2]), 0);             // cue Two's fixture dark
+    QCOMPARE(int(v[0]), 127);           // the run cue only (One, as edited)
+    // Play brings it back, over the run.
+    st->resumePreview();
+    v = settle();
+    QCOMPARE(int(v[2]), 255);
+    QCOMPARE(int(v[0]), 127);
+
+    // GO through show control (OSC, MSC, a key) holds it at once, before
+    // the GO acts -- no tick late.
+    ShowControl::Request r;
+    r.command = ShowControl::Go;
+    r.chaser = chaser->id();
+    QVERIFY(m_doc->showControl()->execute(r));
+    QCOMPARE(int(st->previewState()), int(ShowTreeController::PreviewState::Held));
+    QVERIFY(st->previewFunctions().isEmpty());
     st->stopPreview();
-    // GO baked the edit into cue One: the running cue now plays it.
-    QCOMPARE(int(settle()[0]), 127);
 }
 
 /****************************************************************************

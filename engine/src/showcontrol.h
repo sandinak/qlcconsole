@@ -147,6 +147,12 @@ signals:
     void commandFrom(ShowControl::Source source, quint32 universe,
                      const QString &what, bool done);
 
+    /** A GO, Back, Sub GO or Sub Back is about to put a cue on stage, from
+     *  anywhere (a key, the Run tab, OSC, MSC, the VC): emitted before it
+     *  acts, on the thread the command arrived on. The Show Tree holds its
+     *  Design previews on it (RC8, "GO holds previews"). */
+    void aboutToTakeStage(ShowControl::Source source);
+
     /*********************************************************************
      * MIDI Show Control
      *********************************************************************/

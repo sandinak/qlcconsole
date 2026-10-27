@@ -29,6 +29,8 @@
 #include <QClipboard>
 #include <QTreeWidget>
 #include <QMessageBox>
+#include <QXmlStreamReader>
+#include <QScopeGuard>
 
 #include "focusmode_test.h"
 #include "../common/layoutstability.h"
@@ -51,6 +53,13 @@
 #include "qlcchannel.h"
 #include "fixture.h"
 #include "app.h"
+#include "programmingmanager.h"
+#include "showtreecontroller.h"
+#include "showcontrol.h"
+#include "mastertimer.h"
+#include "chaserstep.h"
+#include "chaser.h"
+#include "scene.h"
 #include "doc.h"
 
 using R = GamepadRole::Role;
@@ -153,6 +162,98 @@ void FocusMode_Test::cleanupTestCase()
     unplugPad();
     delete m_doc;
     m_doc = nullptr;
+}
+
+void FocusMode_Test::aPadPressMovesNoRunningList()
+{
+    plugInPad();
+    auto unbind = qScopeGuard([this]() { m_stub->m_buttonActions.clear(); });
+    // The shipped Xbox profile's button actions, as the HID plugin reports
+    // them, by the role each button has.
+    {
+        QFile f(QString(QLC_TEST_RESOURCE_ROOT) + "hidprofiles/xbox.qxhid");
+        QVERIFY(f.open(QIODevice::ReadOnly));
+        QXmlStreamReader xml(&f);
+        while (!xml.atEnd())
+            if (xml.readNext() == QXmlStreamReader::StartElement && xml.name() == QLatin1String("Button"))
+            {
+                const QString role = xml.attributes().value("role").toString();
+                const QString action = xml.attributes().value("action").toString();
+                for (auto it = m_stub->m_channelRoles.cbegin(); it != m_stub->m_channelRoles.cend(); ++it)
+                    if (it.value() == role && !action.isEmpty())
+                        m_stub->m_buttonActions.insert(it.key(), action);
+            }
+    }
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    ProgrammerController *pc = m_doc->programmer();
+    QVERIFY(!pc->focusSession()->isActive());
+    ProgrammingManager mgr(nullptr, m_doc);
+
+    // A Show Tree list, running its first cue, and a plain chaser (a VC
+    // cue list), running its first step.
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("Pad");
+    const quint32 listId = st->addCueList(prod, "Full Show", ShowTree::ListMode::NonTracking);
+    st->addCue(listId, -1, "One");
+    st->addCue(listId, -1, "Two");
+    st->addCue(listId, -1, "Three");
+    Chaser *list = qobject_cast<Chaser *>(m_doc->function(st->cueList(listId)->chaser));
+    QVERIFY(list != nullptr);
+    Chaser *vcList = new Chaser(m_doc);
+    vcList->setDuration(Function::infiniteSpeed());
+    m_doc->addFunction(vcList);
+    QList<quint32> made { vcList->id() };
+    for (int i = 0; i < 3; ++i)
+    {
+        Scene *s = new Scene(m_doc);
+        m_doc->addFunction(s);
+        made << s->id();
+        vcList->addStep(ChaserStep(s->id()));
+    }
+    m_doc->masterTimer()->start();
+    auto tidy = qScopeGuard([&]() {
+        m_doc->masterTimer()->stopAllFunctions();
+        m_doc->masterTimer()->stop();
+        st->removeProduction(prod);
+        for (quint32 id : made)
+            m_doc->deleteFunction(id);
+    });
+    auto ticks = [](int n) { QTest::qWait(n * 40); };
+    ShowControl::Request go;
+    go.command = ShowControl::Go;
+    go.chaser = list->id();
+    QVERIFY(m_doc->showControl()->execute(go));
+    vcList->start(m_doc->masterTimer(), FunctionParent::master());
+    QTRY_VERIFY(list->isRunning() && vcList->isRunning());
+    ticks(3);
+    QCOMPARE(list->currentStepIndex(), 0);
+    QCOMPARE(vcList->currentStepIndex(), 0);
+
+    QSignalSpy actions(pc, &ProgrammerController::buttonActionTriggered);
+    QSignalSpy commands(m_doc->showControl(), &ShowControl::commandHandled);
+    auto press = [iom](quint32 ch) {
+        emit iom->inputValueChanged(0, ch, 255, QString());
+        emit iom->inputValueChanged(0, ch, 0, QString());
+    };
+    // Picked up mid-show: A, B, A again. Nothing moves.
+    press(BtnA);
+    press(BtnB);
+    press(BtnA);
+    ticks(3);
+    QCOMPARE(actions.count(), 0);
+    QCOMPARE(commands.count(), 0);
+    QCOMPARE(list->currentStepIndex(), 0);
+    QCOMPARE(vcList->currentStepIndex(), 0);
+
+    // Bound on purpose (the profile editor): the VC chaser steps as in
+    // QLC+; the Show Tree list moves only as a GO through show control.
+    m_stub->m_buttonActions.insert(BtnA, QStringLiteral("chaser_step_forward"));
+    press(BtnA);
+    QCOMPARE(actions.count(), 1);
+    QCOMPARE(commands.count(), 1);
+    QVERIFY(commands.first().first().toString().startsWith("GO"));
+    QTRY_COMPARE(list->currentStepIndex(), 1);
+    QTRY_COMPARE(vcList->currentStepIndex(), 1);
 }
 
 void FocusMode_Test::plugInPad()

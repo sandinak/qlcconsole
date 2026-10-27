@@ -18,6 +18,7 @@
 */
 
 #include <QtTest>
+#include <QScopeGuard>
 #include <QTreeWidgetItemIterator>
 #include <QXmlStreamReader>
 #include <QStackedWidget>
@@ -67,6 +68,7 @@
 #include "doc.h"
 
 #include "workbench_test.h"
+#include "showcontrol.h"
 
 using Row = ProgrammingOutline::Row;
 
@@ -637,6 +639,59 @@ void Workbench_Test::whatIsLoadedPlays()
     wb.hide();
     QTRY_VERIFY(!a->isRunning());
     m_doc->masterTimer()->stop();
+}
+
+void Workbench_Test::goHoldsTheBuildPreview()
+{
+    FixtureGroup *g = group("Washes", 2);
+    QLCPalette *half = palette(QLCPalette::Dimmer, "Half");
+    Scene *a = scene("A", QString());
+    a->addFixtureGroup(g->id());
+    a->addPalette(half->id());
+    Scene *b = scene("B", QString());
+    b->setValue(g->fixtureList().first(), 1, 200);
+    Collection *c = collection("Look", { a->id() });
+    // The show: a Show Tree list, one empty cue.
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 listId = st->addCueList(st->addProduction("P"), "Full Show", ShowTree::ListMode::NonTracking);
+    st->addCue(listId, -1, "One");
+    Chaser *list = qobject_cast<Chaser *>(m_doc->function(st->cueList(listId)->chaser));
+    QVERIFY(list != nullptr);
+    QVERIFY(m_doc->mode() == Doc::Design);
+
+    Workbench wb(m_doc);
+    wb.resize(1000, 700);
+    wb.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&wb));
+    m_doc->masterTimer()->start();
+    auto stopTimer = qScopeGuard([this]() { m_doc->masterTimer()->stop(); });
+    wb.load(c->id());
+    QTRY_VERIFY(c->isRunning());
+
+    // GO (OSC, MSC, a key: all through show control) takes the stage.
+    ShowControl::Request go;
+    go.command = ShowControl::Go;
+    go.chaser = list->id();
+    QVERIFY(m_doc->showControl()->execute(go));
+    QTRY_VERIFY(!c->isRunning());
+    QTRY_VERIFY(list->isRunning());
+    QVERIFY2(wb.m_onRig->text().startsWith("■ Held"), qPrintable(wb.m_onRig->text()));
+    QCOMPARE(wb.m_playBtn->text(), QString("Play"));
+
+    // Another load while the show runs: still held.
+    wb.load(b->id());
+    QTest::qWait(100);
+    QVERIFY(!b->isRunning());
+    QVERIFY(wb.m_onRig->text().startsWith("■ Held"));
+
+    // Play: it previews over the show.
+    wb.m_playBtn->click();
+    QTRY_VERIFY(b->isRunning());
+    QVERIFY(list->isRunning());
+    QCOMPARE(wb.m_playBtn->text(), QString("Stop"));
+    wb.hide();
+    list->stop(FunctionParent::master());
+    QTRY_VERIFY(!list->isRunning() && !b->isRunning());
 }
 
 void Workbench_Test::theNavigatorDrivesTheWorkbench()

@@ -151,6 +151,12 @@ public:
 
     QList<Item> items() const { return m_items; }
     bool hasItem(const QString &key) const;
+    /** RC8: the fixture definition @a manufacturer @a model in use is the
+     *  show's own copy, and this computer has a different one the operator
+     *  has not dealt with (Item::isUnreviewedDifference()). @a newer, when
+     *  given, says which looks newer. Never switches anything. */
+    bool definitionDiffers(const QString &manufacturer, const QString &model,
+                           Newer *newer = nullptr) const;
     Item item(const QString &key) const;
     /** What went wrong reading the show's copies (one line each): an
      *  altered copy, one that does not load. Cleared with the show. */

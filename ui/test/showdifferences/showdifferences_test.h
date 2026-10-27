@@ -32,6 +32,11 @@ private slots:
     void theFooterSaysWhatCameWithTheShow();
     void reviewSwitchesTheCompatibleAndKeepsTheRest();
     void theAppCarriesThemInAQlccOnly();
+    /** RC8 u1: a show drawn from its own copy of a definition this computer
+     *  has another of says so on the plot's tooltip and once as it opens,
+     *  with Review…; after Use This Computer's, neither. Never switched by
+     *  itself. */
+    void anOlderEmbeddedDefinitionIsSaidOnThePlot();
 
 private:
     QByteArray m_realHome;

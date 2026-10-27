@@ -76,6 +76,11 @@ private slots:
      *  save, revert, zero, scope, reference, beam, hold, the pad going and
      *  coming back). */
     void aPressNeverMovesTheLayout();
+    /** u8: with no focus tool running, a pad picked up mid-show and pressed
+     *  moves no cue list -- the shipped profile binds nothing on A/B. A
+     *  deliberate binding steps a Show Tree list only through show
+     *  control (a GO), never behind its back. */
+    void aPadPressMovesNoRunningList();
     /** With FOCUSUI_SHOTS set: the panel, both maps, in each theme, saved
      *  there (for the docs and a look). */
     void shots();

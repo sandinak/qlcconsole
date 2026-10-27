@@ -971,7 +971,8 @@ public:
         Off,            //!< nothing wanted
         Playing,        //!< the wanted cue plays
         NotDesign,      //!< Live (Operate) mode: edits are blind until GO
-        Dark            //!< the cue plays nothing
+        Dark,           //!< the cue plays nothing
+        Held            //!< a run took the stage (GO): off until Play
     };
 
     /** Play cue @a cueId on the rig as a preview, as the Programming tab
@@ -999,9 +1000,28 @@ public:
      *  anything a chaser, a VC widget or another tab started. */
     static FunctionParent previewParent();
 
+    /** RC8, "GO holds previews": a GO, Back or Sub GO from anywhere, or a
+     *  cue list starting for real, takes the stage. The preview stops and
+     *  is held -- selecting a cue keeps it off stage -- until Play
+     *  (resumePreview()) or, with no list running, the next cue selected.
+     *  stageTakenForRun() asks the Workbench, Solo and the editors' Test
+     *  plays to stop theirs too. Returns what was stopped, for the notice
+     *  ("the Show Tree preview"...); empty when nothing was playing. Simple
+     *  Desk, the VC, Focus/Refine and the programmer are not previews and
+     *  keep running. UI thread. */
+    QStringList takeStageForRun();
+    /** Play: the held preview comes back, over the run (the edit wins on
+     *  the channels it plays), until the next GO. */
+    void resumePreview();
+    bool previewHeld() const { return m_previewHeld; }
+
 signals:
     /** The preview started, stopped or moved to another cue. */
     void previewChanged();
+    /** A run took the stage (takeStageForRun()): whatever previews stops
+     *  and holds; a listener that stopped something appends what to
+     *  @a held (non-null; direct connections only). */
+    void stageTakenForRun(QStringList *held);
 
 private slots:
     void slotModeChanged();
@@ -1014,6 +1034,8 @@ private:
     void syncPreview();
 
     quint32 m_previewCue = 0xFFFFFFFF;
+    /** A run took the stage: the preview stays off until Play. */
+    bool m_previewHeld = false;
     PreviewState m_previewState = PreviewState::Off;
     QList<quint32> m_previewRunning;
     /** Sweeps, by a bake, the generated scenes the preview let go of. */

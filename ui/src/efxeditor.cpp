@@ -38,6 +38,7 @@
 #include "efxeditor.h"
 #include "fixture.h"
 #include "doc.h"
+#include "showtreecontroller.h"
 
 #define SETTINGS_GEOMETRY "efxeditor/geometry"
 
@@ -176,6 +177,14 @@ void EFXEditor::initGeneralPage()
     // Test slots
     connect(m_testButton, SIGNAL(clicked()),
             this, SLOT(slotTestClicked()));
+    // RC8: GO takes the stage from a Test play.
+    connect(m_doc->showTree(), &ShowTreeController::stageTakenForRun, this, [this](QStringList *held) {
+        if (!m_testButton->isChecked())
+            return;
+        m_testButton->click();
+        if (held != nullptr)
+            held->append(tr("the EFX test"));
+    });
     connect(m_raiseFixtureButton, SIGNAL(clicked()),
             this, SLOT(slotRestartTest()));
     connect(m_lowerFixtureButton, SIGNAL(clicked()),

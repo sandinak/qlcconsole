@@ -294,6 +294,8 @@ private:
     bool m_solo = false;
     bool m_reloadQueued = false;
     bool m_previewStarted = false;
+    /** RC8: a GO took the stage -- no preview until an edit asks again. */
+    bool m_heldByRun = false;
     /** The show was saved (not modified) when this draft was made: Cancel
      *  puts it back that way. */
     bool m_cleanAtStart = false;

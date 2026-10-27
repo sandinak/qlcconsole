@@ -73,11 +73,18 @@ void CueRunner::setUpgradeAction(QAction *action)
     s_upgradeAction = action;
 }
 
-static std::function<void()> s_goHook;
+static CueRunner::RunHook s_runHook;
 
-void CueRunner::setGoHook(const std::function<void()> &hook)
+void CueRunner::setRunHook(const RunHook &hook)
 {
-    s_goHook = hook;
+    s_runHook = hook;
+}
+
+bool CueRunner::runCommand(Doc *doc, const ShowControl::Request &request, bool fromConsole)
+{
+    if (s_runHook)
+        return s_runHook(request, fromConsole);
+    return doc != nullptr && doc->showControl()->execute(request);
 }
 
 QAction *CueRunner::upgradeAction()
@@ -1016,7 +1023,9 @@ bool CueRunner::execute(ShowControl::Command command, const QString &cue)
     r.command = command;
     r.cue = cue;
     r.chaser = ch->id();
-    const bool ok = m_doc->showControl()->execute(r);
+    // The Run tab speaks for the console (a notice, the Operate offer); a
+    // VC Cue Runner is the VC's: the previews hold, quietly.
+    const bool ok = runCommand(m_doc, r, m_size == Full);
     refresh();
     return ok;
 }
@@ -1063,8 +1072,6 @@ QString CueRunner::focusArmedText() const
 void CueRunner::go()
 {
     execute(ShowControl::Go);
-    if (m_size == Full && s_goHook)
-        s_goHook();
 }
 
 void CueRunner::back()

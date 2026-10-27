@@ -241,6 +241,10 @@ Workbench::Workbench(Doc *doc, QWidget *parent)
         clear();
     });
     connect(m_doc, SIGNAL(modeChanged(Doc::Mode)), this, SLOT(slotModeChanged()));
+    // RC8: a GO (from anywhere) takes the stage: what previews here stops
+    // and holds until Play -- the run's values alone reach the rig.
+    if (m_doc->showTree() != nullptr)
+        connect(m_doc->showTree(), &ShowTreeController::stageTakenForRun, this, &Workbench::holdForRun);
     // Any step on the shared history (here, in the Show Tree): the scene as
     // it now is becomes the baseline, and everything shows as it now is.
     if (PaletteOps *ops = m_doc->paletteOps())
@@ -434,14 +438,25 @@ void Workbench::buildHeader(QWidget *column)
     m_playBtn->setObjectName(QStringLiteral("workbenchPlay"));
     m_playBtn->setToolButtonStyle(Qt::ToolButtonTextOnly);
     connect(m_playBtn, &QToolButton::clicked, this, [this]() {
-        if (m_previewFunction != Function::invalidId() || m_ownPreview)
+        if (m_ownPreview && m_stack != nullptr && m_stack->ownPreviewHeld())
+        {
+            // Play over a running list (RC8): the hold lets go.
+            m_heldByRun = false;
+            m_stack->releaseRunHold();
+            m_stack->startOwnPreview();
+        }
+        else if (m_previewFunction != Function::invalidId() || m_ownPreview)
         {
             m_previewHeld = true;
+            m_heldByRun = false;
             stopPreview();
         }
         else
         {
             m_previewHeld = false;
+            if (m_heldByRun && m_stack != nullptr)
+                m_stack->releaseRunHold();
+            m_heldByRun = false;
             startPreview();
         }
         updateOnRig();
@@ -788,7 +803,10 @@ void Workbench::setStackImpl(WorkbenchStack *stack, History history)
     if (old != nullptr)
         old->deleteLater();
     installStackWidget();
-    m_previewHeld = false;
+    // Held by a GO: loading something else keeps it off stage while the
+    // show runs (RC8); otherwise what is loaded plays.
+    m_heldByRun = m_heldByRun && m_doc->showTree() != nullptr && !m_doc->showTree()->listsRunning().isEmpty();
+    m_previewHeld = m_heldByRun;
     updateHeader();
 
     // What to show first: a scene's own layer, a function's own editor; a
@@ -1022,6 +1040,16 @@ void Workbench::updateOnRig()
         QSignalBlocker block(m_soloBtn);
         m_soloBtn->setChecked(m_stack != nullptr && m_stack->solo());
     }
+    if (m_ownPreview && m_stack != nullptr && m_stack->ownPreviewHeld())
+    {
+        // RC8: a list runs and GO took the stage -- Play previews over it.
+        m_onRig->setText(m_stack->ownPreviewText());
+        m_onRig->setStyleSheet(QString());
+        m_playBtn->setText(tr("Play"));
+        m_playBtn->setToolTip(tr("Preview this over the running show (the edit wins on the channels it plays)"));
+        m_playBtn->setVisible(true);
+        return;
+    }
     if (m_ownPreview && m_stack != nullptr)
     {
         // W3: the back end says what plays (the Show Tree's words).
@@ -1054,10 +1082,13 @@ void Workbench::updateOnRig()
             m_onRig->setText(QString());
         else if (m_doc->mode() != Doc::Design)
             m_onRig->setText(tr("Operate: nothing previews here"));
+        else if (m_heldByRun)
+            m_onRig->setText(tr("■ Held — GO took the stage. Play to preview over the show."));
         else
             m_onRig->setText(tr("■ Not playing"));
         m_playBtn->setText(tr("Play"));
-        m_playBtn->setToolTip(tr("Play what is loaded on the rig (Design mode)"));
+        m_playBtn->setToolTip(m_heldByRun ? tr("Preview this over the running show")
+                                          : tr("Play what is loaded on the rig (Design mode)"));
         m_playBtn->setVisible(canPlay && m_doc->mode() == Doc::Design);
     }
 }
@@ -2200,6 +2231,26 @@ void Workbench::showEvent(QShowEvent *ev)
     QWidget::showEvent(ev);
     startPreview();
     startOperate();
+}
+
+void Workbench::holdForRun(QStringList *held)
+{
+    // Only what previews here: an Operate run (startOperate) is the
+    // operator's, not a preview.
+    if (m_previewFunction == Function::invalidId() && !m_ownPreview)
+        return;
+    if (held != nullptr)
+    {
+        if (!m_ownPreview)
+            held->append(tr("the Workbench preview"));
+        else if (m_stack != nullptr && m_stack->solo())
+            held->append(tr("the Solo preview"));
+        // In context, it is the Show Tree's preview: said already.
+    }
+    m_previewHeld = true;
+    m_heldByRun = true;
+    stopPreview();
+    updateOnRig();
 }
 
 void Workbench::hideEvent(QHideEvent *ev)

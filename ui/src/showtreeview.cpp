@@ -988,6 +988,14 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
     m_previewLabel = new QLabel(this);
     m_previewLabel->setObjectName("stPreview");
     bar->addWidget(m_previewLabel);
+    m_previewPlay = new QToolButton(this);
+    m_previewPlay->setObjectName("stPreviewPlay");
+    m_previewPlay->setText(tr("Play"));
+    m_previewPlay->setToolTip(tr("Preview the selected cue over the running show (the edit wins on the "
+                                 "channels it plays), until the next GO"));
+    connect(m_previewPlay, &QToolButton::clicked, this, [this]() { m_st->resumePreview(); });
+    m_previewPlayAction = bar->addWidget(m_previewPlay);
+    m_previewPlayAction->setVisible(false);
     headerRow->addWidget(bar, 1);
     // Auto move-in-black: the show's one setting (Programming's Move in
     // black menu and Settings show it too). Beside the bar, not in it, so a
@@ -3186,6 +3194,14 @@ QString ShowTreeView::previewText() const
             return tr("▶ On the rig: %1 (plays nothing yet)").arg(cue);
         case ShowTreeController::PreviewState::NotDesign:
             return tr("Live: editing is blind, changes reach the stage on GO");
+        case ShowTreeController::PreviewState::Held:
+        {
+            // RC8: GO took the stage; selecting stays off it until Play.
+            const QStringList running = m_st->listsRunning();
+            if (running.isEmpty())
+                return tr("■ Held — GO took the stage. Play to preview %1.").arg(cue);
+            return tr("■ Held — %1 running. Play to preview %2 over it.").arg(running.join(", "), cue);
+        }
         case ShowTreeController::PreviewState::Off:
         break;
     }
@@ -3195,10 +3211,16 @@ QString ShowTreeView::previewText() const
 void ShowTreeView::slotPreviewChanged()
 {
     m_previewLabel->setText(previewText());
+    // Play, beside the line, while a run holds the preview -- the docked
+    // Workbench has its own.
+    if (m_previewPlayAction != nullptr)
+        m_previewPlayAction->setVisible(m_st->previewState() == ShowTreeController::PreviewState::Held
+                                    && !isWorkbenchDocked());
     m_previewLabel->setToolTip(m_st->previewState() == ShowTreeController::PreviewState::Playing
                                ? tr("Design mode: the selected cue plays on the rig, and changes show at "
-                                    "once, also over a cue list running for real (it keeps going "
-                                    "underneath). Leaving the tab or selecting no cue stops it.")
+                                    "once. GO holds it so the show plays alone; Play previews over a "
+                                    "running list (it keeps going underneath). Leaving the tab or "
+                                    "selecting no cue stops it.")
                                : QString());
 }
 

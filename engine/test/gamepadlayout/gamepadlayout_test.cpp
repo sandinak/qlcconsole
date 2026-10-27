@@ -394,4 +394,20 @@ void GamepadLayout_Test::matchesTheXboxProfile()
     delete p;
 }
 
+void GamepadLayout_Test::noShippedProfileStepsAList()
+{
+    for (const char *name : { "xbox.qxhid", "playstation.qxhid" })
+    {
+        const QString path = QString(QLC_TEST_RESOURCE_ROOT) + "hidprofiles/" + name;
+        HIDProfile *p = HIDProfile::load(path);
+        QVERIFY2(p != nullptr, qPrintable(path));
+        for (int b = 0; b < ButtonCount; ++b)
+            QVERIFY2(!p->buttonAction(b).startsWith(QLatin1String("chaser_step")),
+                     qPrintable(QString("%1: %2 is %3").arg(name, p->buttonName(b), p->buttonAction(b))));
+        QVERIFY(p->buttonAction(A).isEmpty());
+        QVERIFY(p->buttonAction(B).isEmpty());
+        delete p;
+    }
+}
+
 QTEST_GUILESS_MAIN(GamepadLayout_Test)

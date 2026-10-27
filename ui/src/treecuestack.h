@@ -102,6 +102,8 @@ public:
     void startOwnPreview() override;
     void stopOwnPreview() override;
     QString ownPreviewText() const override;
+    bool ownPreviewHeld() const override;
+    void releaseRunHold() override;
     bool canSolo() const override { return true; }
     bool solo() const override { return m_solo; }
     void setSolo(bool solo) override;

@@ -37,6 +37,7 @@
 #include "speeddial.h"
 #include "script.h"
 #include "doc.h"
+#include "showtreecontroller.h"
 
 ScriptEditor::ScriptEditor(QWidget* parent, Script* script, Doc* doc)
     : QWidget(parent)
@@ -65,6 +66,14 @@ ScriptEditor::ScriptEditor(QWidget* parent, Script* script, Doc* doc)
     connect(m_document, SIGNAL(contentsChanged()), this, SLOT(slotContentsChanged()));
 
     connect(m_testPlayButton, SIGNAL(clicked()), this, SLOT(slotTestRun()));
+    // RC8: GO takes the stage from a Test play.
+    connect(m_doc->showTree(), &ShowTreeController::stageTakenForRun, this, [this](QStringList *held) {
+        if (!m_testPlayButton->isChecked())
+            return;
+        m_testPlayButton->click();
+        if (held != nullptr)
+            held->append(tr("the script test"));
+    });
     connect(m_checkButton, SIGNAL(clicked()), this, SLOT(slotCheckSyntax()));
 
     connect(m_script, SIGNAL(stopped(quint32)), this, SLOT(slotFunctionStopped(quint32)));

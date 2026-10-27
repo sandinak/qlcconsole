@@ -329,6 +329,16 @@ EffectDesigner::EffectDesigner(Doc *doc, QWidget *parent)
 
     if (doc != nullptr)
     {
+        // RC8: GO takes the stage from the preview; an edit brings it back.
+        connect(doc->showTree(), &ShowTreeController::stageTakenForRun, this, [this](QStringList *held) {
+            if (!m_previewStarted)
+                return;
+            if (held != nullptr)
+                held->append(tr("the Effect designer preview"));
+            stopPreview();
+            m_heldByRun = true;
+            updateHeader();
+        });
         connect(doc, &Doc::modeChanged, this, [this]() {
             if (m_doc != nullptr && m_doc->mode() == Doc::Design)
                 startPreview();
@@ -1307,14 +1317,25 @@ bool EffectDesigner::isPreviewing() const
     return m_previewStarted && m_doc != nullptr && m_doc->function(m_sceneId) != nullptr;
 }
 
+/* Its own preview parent: GO can hold it alone, and stopping it never
+   stops what something else started (a Master parent would). */
+static FunctionParent designerParent()
+{
+    return FunctionParent::preview(0x9);
+}
+
 void EffectDesigner::startPreview()
 {
     if (m_doc == nullptr || m_doc->mode() != Doc::Design || !isVisible())
         return;
+    // Held by a GO while the show runs; with none running, it plays again.
+    if (m_heldByRun && !m_doc->showTree()->listsRunning().isEmpty())
+        return;
+    m_heldByRun = false;
     Function *f = m_doc->function(m_sceneId);
     if (f == nullptr || m_previewStarted)
         return;
-    f->start(m_doc->masterTimer(), FunctionParent::master());
+    f->start(m_doc->masterTimer(), designerParent());
     m_previewStarted = true;
     m_lastSignature.clear();
     updateHeader();
@@ -1324,7 +1345,7 @@ void EffectDesigner::stopPreview()
 {
     Function *f = m_doc == nullptr ? nullptr : m_doc->function(m_sceneId);
     if (f != nullptr && m_previewStarted)
-        f->stop(FunctionParent::master());
+        f->stop(designerParent());
     m_previewStarted = false;
     updateHeader();
 }
@@ -1336,6 +1357,7 @@ void EffectDesigner::refreshPreview(bool params)
         return;
     if (!m_previewStarted)
     {
+        m_heldByRun = false;          // an edit asks to see it (RC8)
         startPreview();
         return;
     }
@@ -1381,6 +1403,8 @@ QString EffectDesigner::previewText() const
         return isBench() ? tr("Pick groups to Try on, to see it on the rig") : tr("No fixtures to play on");
     if (effectName().isEmpty())
         return tr("Pick an effect: it plays at once on %n fixture(s)", "", heads);
+    if (!isPreviewing() && m_heldByRun)
+        return tr("■ Held — GO took the stage. An edit previews it over the show.");
     if (!isPreviewing())
         return tr("Not playing (shows when this is on screen)");
     return tr("▶ On the rig: %1 on %n fixture(s)", "", heads).arg(effectName());

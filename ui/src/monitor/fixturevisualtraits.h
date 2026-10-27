@@ -219,6 +219,10 @@ float poolEdgeSoftness(bool shapesItsBeam, int fixtureType, const QString &lensN
  */
 QVector3D fixtureWorldCentre(Doc *doc, quint32 fid);
 
+/** How fast a star laser's pattern turns, degrees a second, from its prism
+ *  rotation channel: 0 = still. The 3D views and the 2D plot turn it alike. */
+double starTurnRate(const Fixture *fx, const QByteArray &vals);
+
 /** A fixture's LIVE look, from the DMX values it is being sent right now.
  *
  *  One colour and one level for the whole fixture, which is what a rig-wide

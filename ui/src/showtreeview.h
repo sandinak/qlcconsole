@@ -786,6 +786,8 @@ private:
     QToolButton *m_merge;
     QLabel *m_hint;
     QLabel *m_previewLabel;
+    QToolButton *m_previewPlay = nullptr;   //!< RC8: Play over a running show
+    QAction *m_previewPlayAction = nullptr; //!< ...its place on the bar
 
     QTreeWidget *m_tree = nullptr;
     QSet<int> m_hiddenColumns;      ///< flag columns hidden from the header menu (Q104)

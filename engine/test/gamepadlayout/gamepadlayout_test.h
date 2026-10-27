@@ -48,6 +48,9 @@ private slots:
     void playStationElements();
     /** ...and the profile names them, with the same roles. */
     void matchesThePlayStationProfile();
+    /** u8: neither shipped profile steps a cue list from a button: a pad
+     *  picked up mid-show must never move the show. */
+    void noShippedProfileStepsAList();
 };
 
 #endif

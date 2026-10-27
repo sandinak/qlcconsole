@@ -23362,6 +23362,212 @@ void Monitor_Test::lasersThrowStarsAndPencilBeams()
                             .arg(wash.box.width()).arg(wash.box.height())));
 }
 
+namespace
+{
+/* A 4-channel sky laser (Intensity, R, G, B), one head, emitting @a e, on a
+   truss 3 m up at y = 4 m, faced Back (upstage, toward -y). */
+Fixture *rigFacedLaser(Doc *doc, QLCPhysical::Emission e, Truss **trussOut = nullptr)
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test"); def->setModel(e == QLCPhysical::StarEmission ? "Sky" : "Pencil");
+    def->setType(QLCFixtureDef::Laser);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("4ch");
+    const QList<QPair<QString, QLCChannel::Preset> > chans = {
+        { "Intensity", QLCChannel::IntensityDimmer }, { "Red", QLCChannel::IntensityRed },
+        { "Green", QLCChannel::IntensityGreen }, { "Blue", QLCChannel::IntensityBlue } };
+    QLCFixtureHead hd;
+    for (int i = 0; i < chans.size(); ++i)
+    {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(chans.at(i).first);
+        ch->setPreset(chans.at(i).second);
+        def->addChannel(ch);
+        mode->insertChannel(ch, i);
+        hd.addChannel(quint32(i));
+    }
+    mode->insertHead(-1, hd);
+    QLCPhysical ph;
+    ph.setWidth(200); ph.setHeight(100); ph.setDepth(200);
+    ph.setBulbLumens(500);
+    ph.setLensDegreesMin(100); ph.setLensDegreesMax(100);
+    ph.setEmission(e);
+    mode->setPhysical(ph);
+    def->addMode(mode);
+    Fixture *laser = new Fixture(doc);
+    laser->setName(e == QLCPhysical::StarEmission ? "Stars" : "Pencil");
+    laser->setFixtureDefinition(def, mode);
+    laser->setAddress(quint32(doc->fixtures().size()) * 10);     // one after another
+    if (!doc->addFixture(laser))
+        return nullptr;
+    MonitorProperties *props = doc->monitorProperties();
+    props->setFixturePosition(laser->id(), 0, 0, QVector3D(5000.0f, 4000.0f, 3.0f));
+    Truss *t = props->addTruss();
+    t->setOrigin(QVector3D(2.0f, 4.0f, 3.0f));
+    t->setDirection(QPointF(1.0, 0.0));
+    t->setLength(6.0f);
+    t->setWidth(0.3f);
+    FixtureRigProps rp;
+    rp.trussId = t->id();
+    rp.trussOffset = 3.0f;
+    rp.mountingType = Truss::TopHung;
+    rp.studioMount = 1;              // the front plane...
+    rp.studioFlip = true;            // ...its back: faced Back, upstage
+    rp.studioFaceChosen = true;
+    props->setFixtureRigProps(laser->id(), rp);
+    if (trussOut != nullptr)
+        *trussOut = t;
+    return laser;
+}
+}
+
+void Monitor_Test::starFieldShowsOnTheTopPlot()
+{
+    QScopedPointer<Doc> docOwner(new Doc(this));
+    Doc *doc = docOwner.data();
+    MonitorProperties *props = doc->monitorProperties();
+    Fixture *laser = rigFacedLaser(doc, QLCPhysical::StarEmission);
+    QVERIFY(laser != nullptr);
+    QVERIFY(classifyFixture(laser).stars);
+    Fixture *pencil = rigFacedLaser(doc, QLCPhysical::LaserEmission);      // dark till the end
+    QVERIFY(pencil != nullptr && classifyFixture(pencil).laser);
+    // A cyc upstage of it, 6 m tall, along the 0.5 m line.
+    Scenery *cyc = props->addScenery();
+    cyc->setKind(Scenery::Cyclorama);
+    cyc->setOriginX(5.0f); cyc->setOriginY(0.5f);
+    cyc->setWidth(10.0f); cyc->setHeight(6.0f);
+    cyc->setBow(0.0f);
+
+    MonitorGraphicsView view(doc);
+    view.resize(1000, 700);
+    view.setGridMetrics(1000.0);
+    view.setGridSize(QSize(10, 7));
+    view.setViewPOV(MonitorGraphicsView::PovTop);
+    view.setEmissionOverlayVisible(true);
+    auto restore = qScopeGuard([&view]() { view.setEmissionOverlayVisible(true); });
+
+    auto setValues = [&](uchar level, uchar r, uchar g, uchar b) {
+        QByteArray u(4, char(0));
+        u[0] = char(level); u[1] = char(r); u[2] = char(g); u[3] = char(b);
+        laser->setChannelValues(u);
+        view.rebuildEmissionOverlay();
+    };
+
+    // Full, green: a sky of stars, all green, most of them on the cyc.
+    setValues(255, 0, 255, 0);
+    const QVector<QPointF> stars = view.emissionLandings(laser->id());
+    QVERIFY2(stars.size() > 50, qPrintable(QString("%1 stars").arg(stars.size())));
+    const QColor c = view.emissionColour(laser->id());
+    QVERIFY2(c.green() > 150 && c.red() < 60 && c.blue() < 60, qPrintable(c.name()));
+    int onCyc = 0;
+    for (const QPointF &p : stars)
+        if (qAbs(p.y() - 0.5) < 0.2)
+            ++onCyc;
+    QVERIFY2(onCyc * 10 >= stars.size() * 6,
+             qPrintable(QString("%1 of %2 stars on the cyc").arg(onCyc).arg(stars.size())));
+    // Drawn: dots in its colour, under nothing that takes the mouse.
+    bool drawn = false;
+    for (QGraphicsItem *gi : view.m_scene->items())
+        if (QGraphicsPathItem *pi = dynamic_cast<QGraphicsPathItem *>(gi))
+            if (pi->zValue() == 1.7 && pi->brush().color() == c && pi->acceptedMouseButtons() == Qt::NoButton)
+                drawn = true;
+    QVERIFY(drawn);
+
+    // Dark: none. Black (no colour on): none -- no black light.
+    setValues(0, 0, 255, 0);
+    QVERIFY(view.emissionLandings(laser->id()).isEmpty());
+    setValues(255, 0, 0, 0);
+    QVERIFY(view.emissionLandings(laser->id()).isEmpty());
+
+    // Show ▸ Laser & star output off: none; on again, back.
+    setValues(255, 0, 255, 0);
+    QVERIFY(!view.emissionLandings(laser->id()).isEmpty());
+    view.setEmissionOverlayVisible(false);
+    QVERIFY(view.emissionLandings(laser->id()).isEmpty());
+    view.setEmissionOverlayVisible(true);
+    QVERIFY(!view.emissionLandings(laser->id()).isEmpty());
+
+    // Any other view than Top: none (a plan of where it lands).
+    view.setViewPOV(MonitorGraphicsView::PovFront);
+    QVERIFY(view.emissionLandings(laser->id()).isEmpty());
+    view.setViewPOV(MonitorGraphicsView::PovTop);
+
+    // A laser: pencil lines out to where its beams land, on the cyc.
+    QVERIFY(view.emissionLandings(pencil->id()).isEmpty());
+    QByteArray red(512, char(0));          // the universe: it reads from its address
+    red[int(pencil->address())] = char(255); red[int(pencil->address()) + 1] = char(255);
+    pencil->setChannelValues(red);
+    view.rebuildEmissionOverlay();
+    const QVector<QPointF> beams = view.emissionLandings(pencil->id());
+    QVERIFY(!beams.isEmpty());
+    for (const QPointF &p : beams)
+        QVERIFY2(qAbs(p.y() - 0.5) < 0.2, qPrintable(QString("a beam landed at y %1").arg(p.y())));
+    QVERIFY(view.emissionColour(pencil->id()).red() > 150);
+}
+
+void Monitor_Test::theThrowIsOneRuleIn2DAnd3D()
+{
+    QScopedPointer<Doc> docOwner(new Doc(this));
+    Doc *doc = docOwner.data();
+    MonitorProperties *props = doc->monitorProperties();
+    Fixture *laser = rigFacedLaser(doc, QLCPhysical::StarEmission);
+    QVERIFY(laser != nullptr);
+    const FixtureVisualTraits traits = classifyFixture(laser);
+
+    MonitorGraphicsView view(doc);
+    view.resize(1000, 700);
+    view.setGridMetrics(1000.0);
+    view.setGridSize(QSize(10, 7));
+    view.setViewPOV(MonitorGraphicsView::PovTop);
+    StructureStudioView rig(doc, StructureStudioView::StageKind, 0);
+    rig.reload();
+
+    auto same = [](const QVector3D &a, const QVector3D &b) { return (a - b).length() < 1e-4f; };
+    auto str = [](const QVector3D &v) {
+        return QString("(%1, %2, %3)").arg(double(v.x()), 0, 'f', 3).arg(double(v.y()), 0, 'f', 3)
+                                      .arg(double(v.z()), 0, 'f', 3);
+    };
+    auto check = [&](const QVector3D &want, const char *what) {
+        const FixtureRigProps rp = props->fixtureRigProps(laser->id());
+        QVector3D in2d, in3d, rule;
+        QVERIFY2(view.throwDirection(laser->id(), in2d), what);
+        QVERIFY2(rig.emitDirection(laser, rp, traits, in3d), what);
+        QVERIFY2(RigHeads::fixedThrow(doc, laser->id(), traits.headCount, false, rule), what);
+        QVERIFY2(same(in2d, in3d) && same(in3d, rule),
+                 qPrintable(QString("%1: 2D %2, 3D %3, rule %4").arg(what, str(in2d), str(in3d), str(rule))));
+        QVERIFY2(same(in2d, want), qPrintable(QString("%1: %2").arg(what, str(in2d))));
+    };
+
+    // Faced Back on its truss: upstage, level -- not a pool under the truss.
+    check(QVector3D(0, -1, 0), "faced Back");
+    // Its fixed pan and tilt (Q100), when set, win in both.
+    FixtureRigProps rp = props->fixtureRigProps(laser->id());
+    rp.studioFlip = false;                      // Front: downstage
+    props->setFixtureRigProps(laser->id(), rp);
+    check(QVector3D(0, 1, 0), "faced Front");
+    // No face chosen, one head, hung: down in both.
+    rp.studioFaceChosen = false;
+    props->setFixtureRigProps(laser->id(), rp);
+    check(QVector3D(0, 0, -1), "hung, no face");
+    // Rigged Inside its structure: no throw anywhere.
+    rp.placement = FixtureRigProps::Inside;
+    props->setFixtureRigProps(laser->id(), rp);
+    QVector3D none;
+    QVERIFY(!view.throwDirection(laser->id(), none));
+    QVERIFY(!RigHeads::fixedThrow(doc, laser->id(), 1, false, none));
+
+    // The 2D footprint follows the same rule: faced Back it throws level,
+    // so nothing lands on the deck under it.
+    rp.placement = FixtureRigProps::OnSurface;
+    rp.studioFaceChosen = true;
+    rp.studioFlip = true;
+    props->setFixtureRigProps(laser->id(), rp);
+    QVERIFY(view.fixtureProjection(laser->id()).isEmpty());
+    rp.studioFaceChosen = false;
+    props->setFixtureRigProps(laser->id(), rp);
+    QVERIFY(!view.fixtureProjection(laser->id()).isEmpty());      // hung: its pool below
+}
+
 /* "I moved a light that's at the base of a tower with a bar on top .. and it
    added it to the bar .. they're in different Z planes": over the bar on the
    plan is not on it. A fixture at the foot of a tower stays on the tower; a

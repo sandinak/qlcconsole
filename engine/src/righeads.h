@@ -35,6 +35,17 @@ namespace RigHeads
      *  (roll about L) and flip included. */
     void frame(const FixtureRigProps &rp, QVector3D &L, QVector3D &N, QVector3D &H);
 
+    /** Which way a fixture that cannot aim itself throws its light: ONE rule
+     *  for the 3D views, the 2D plot's footprint and its star field (RC8,
+     *  laser-design.md A.1). In order: rigged Inside a structure -- none
+     *  (false); a fixed light aimed by pan and tilt (Q100) -- there; a
+     *  fixture of @a headCount heads, or whose face was chosen -- out of
+     *  that face (an upstage laser throws upstage, not down); on a riser or
+     *  a deck -- out from it; on a truss -- down when hung, up when
+     *  standing. @a mover: a moving head that has no aim of its own here,
+     *  which only the last two apply to. False when there is no answer. */
+    bool fixedThrow(Doc *doc, quint32 fid, int headCount, bool mover, QVector3D &dir);
+
     /** A fixture's world CENTRE. A derived position (truss, pipe, tower,
      *  riser, studio frame) already is one; a free or deck-mounted fixture's
      *  stored XY is the TOP-LEFT of its plot icon, so it is moved by half its

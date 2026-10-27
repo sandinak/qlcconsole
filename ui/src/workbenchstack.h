@@ -169,6 +169,11 @@ public:
     virtual void stopOwnPreview() {}
     /** "▶ On the rig: …" while it plays (empty: the Workbench's words). */
     virtual QString ownPreviewText() const { return QString(); }
+    /** RC8: its own preview is held by a running show (a GO took the
+     *  stage): the Workbench offers Play instead of Stop. */
+    virtual bool ownPreviewHeld() const { return false; }
+    /** Play over the running show: the run's hold lets go. */
+    virtual void releaseRunHold() {}
     /** In context (all of it) or Solo (only the selected layer). */
     virtual bool canSolo() const { return false; }
     virtual bool solo() const { return false; }

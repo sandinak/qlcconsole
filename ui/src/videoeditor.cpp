@@ -26,6 +26,7 @@
 #include "videoeditor.h"
 #include "video.h"
 #include "doc.h"
+#include "showtreecontroller.h"
 
 VideoEditor::VideoEditor(QWidget* parent, Video *video, Doc* doc)
     : QWidget(parent)
@@ -53,6 +54,14 @@ VideoEditor::VideoEditor(QWidget* parent, Video *video, Doc* doc)
 
     connect(m_previewButton, SIGNAL(toggled(bool)),
             this, SLOT(slotPreviewToggled(bool)));
+    // RC8: GO takes the stage from a Test play.
+    connect(m_doc->showTree(), &ShowTreeController::stageTakenForRun, this, [this](QStringList *held) {
+        if (!m_previewButton->isChecked())
+            return;
+        m_previewButton->setChecked(false);
+        if (held != nullptr)
+            held->append(tr("the video preview"));
+    });
 
     m_filenameLabel->setText(m_video->sourceUrl());
     m_durationLabel->setText(Function::speedToString(m_video->totalDuration()));

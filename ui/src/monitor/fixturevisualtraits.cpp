@@ -29,6 +29,7 @@
 #include <QtMath>
 #include <QRegularExpression>
 #include "qlcchannel.h"
+#include "beamoptics.h"
 #include "truss.h"
 #include "qlcfixturehead.h"
 #include "qlccapability.h"
@@ -1284,6 +1285,35 @@ double fixtureBeamAngle(Fixture *fx, const QByteArray &v,
     /* The engine's rule -- zoom, and an iris -- so the beam drawn is the one
        the follow spot aims (RigHeads::beamAngle()). */
     return RigHeads::beamAngle(fx, v);
+}
+
+/* How fast a star laser's pattern turns, degrees a second: its prism
+   rotation channel ("Prisim Rotation", PrismRotationSlowFast), or any prism
+   rotation capability. 0 = still. */
+double starTurnRate(const Fixture *fx, const QByteArray &vals)
+{
+    const QLCFixtureMode *mode = (fx != nullptr) ? fx->fixtureMode() : nullptr;
+    if (mode == nullptr)
+        return 0.0;
+    const int count = qMin(mode->channels().size(), vals.size());
+    for (int c = 0; c < count; ++c)
+    {
+        const QLCChannel *ch = mode->channel(quint32(c));
+        if (ch == nullptr)
+            continue;
+        const int v = uchar(vals.at(c));
+        if (ch->preset() == QLCChannel::PrismRotationSlowFast)
+            return v > 0 ? 10.0 + 170.0 * v / 255.0 : 0.0;
+        if (ch->preset() == QLCChannel::PrismRotationFastSlow)
+            return v > 0 ? 10.0 + 170.0 * (255 - v) / 255.0 : 0.0;
+        if (ch->group() == QLCChannel::Prism)
+        {
+            const double s = BeamOptics::rotationSpeed(ch->searchCapability(uchar(v)), v);
+            if (s != 0.0)
+                return s;
+        }
+    }
+    return 0.0;
 }
 
 QVector3D fixtureWorldCentre(Doc *doc, quint32 fid)
