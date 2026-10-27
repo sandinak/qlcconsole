@@ -23,6 +23,7 @@
 
 #include <algorithm>
 
+#include "csvfield.h"
 #include "programmercontroller.h"
 #include "monitorproperties.h"
 #include "venuecorrections.h"
@@ -330,10 +331,7 @@ QStringList FocusReport::csvColumns()
 
 QString FocusReport::csvField(const QString &text)
 {
-    if (!text.contains(QLatin1Char(',')) && !text.contains(QLatin1Char('"'))
-        && !text.contains(QLatin1Char('\n')))
-        return text;
-    return QLatin1Char('"') + QString(text).replace(QLatin1Char('"'), QStringLiteral("\"\"")) + QLatin1Char('"');
+    return CsvField::escape(text);
 }
 
 QString FocusReport::csv(Doc *doc, const QString &venueName)
