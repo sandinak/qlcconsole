@@ -986,6 +986,74 @@ as code.
   packaging): the Mac app now declares them (`UTExportedTypeDeclarations`
   for .qlcc, `UTImportedTypeDeclarations` for QLC+'s .qxw and .qxf, all
   XML), so they get a kind and an icon of their own.
+- **A drag on a locked plot could throw a deck away and save it** (RC8).
+  With the plot locked, dragging a riser in a tight deck left it in place
+  while the pointer moved, then stored it on release: snapped to the grid,
+  pushed clear of its neighbour, it landed decks away and the show was
+  marked changed (in Front, five metres downstage and off its riser). A
+  drag of anything held still (the plot's lock, its layer's, its own)
+  now stores nothing and says why on the status line: **Plot locked —
+  Edit Plot to move**, **Layer locked — unlock it in Layers to move**
+  (`Monitor_Test::aHeldObjectIsNeverMovedByADrag`, every structure kind,
+  Top and Front, plot and layer locks).
+- **A locked plot moves nothing, aim targets included** (RC8, board Q183).
+  Targets used to stay draggable with the plot locked, so a mis-click on a
+  target standing on a riser moved it. **Targets stay adjustable**, beside
+  the lock while the plot is locked, lets them be dragged anyway; it is
+  your setting (kept on this computer, not in the show) and off to start
+  with.
+- **Plot layers selected one row on the plot** (RC8). Cmd/Ctrl- or
+  Shift-clicking several rows selected them all in the tree but only the
+  last on the plot; a stage piece or a hanger in a multi-selection wasn't
+  selected at all. Every selected row is now selected on the plot
+  (`Monitor_Test::theLayersTreeSelectsEveryRowOnThePlot`).
+- **A layer-locked object couldn't be selected even from Plot layers**
+  (RC8, board Q178). It is now selectable from the tree (to read its
+  properties) and click-through on the plot: a click, a rubber band or
+  Select All reaches what is under it. It still can't be moved or deleted.
+- **The rulers' band sat beside the item** (RC8). On a target it was
+  offset by a foot and three and a half feet too wide (it included the
+  room kept for the warning text), on a fixture its label and facing
+  arrow; it went stale after a zoom, a scroll or a selection made without
+  the mouse; the rulers were unreadable with the plot turned 90°; and in
+  metres the teal centre line was 0.12 m off the readouts' centre. The
+  band now hugs the object, follows the view, and every overlay works
+  from one unrounded mapping (`PlotAlignment_Test`, 62 checks at 1x and
+  2x pixel ratios).
+- **The rulers count from the centre line** (RC8, board Q179): 0 on the
+  centre line, marked **CL**, numbers out to each side with **SR | SL** in
+  the corner, and the footer reads **SR 3.20** / **SL 1.50**, the same
+  zero as the target readouts. A ⌖ origin you set still wins.
+- **Two targets' readouts printed on top of each other** (RC8, board
+  Q179). The second now sits under the first; a line target's readout
+  shows only while the line is selected
+  (`Monitor_Test::targetReadoutsStackAndALineShowsItsWhenSelected`).
+- **Align and Distribute lined up corners and dropped lights to the
+  floor** (RC8, board Q179). They lined up the fixtures' top-left corners,
+  so different-sized fixtures didn't line up, and wrote a height of 0.
+  They now line up centres (Same X/Y) or edges (Left/Right/Upstage/
+  Downstage), space centres evenly, keep each height, and one Undo puts
+  them back (`Monitor_Test::alignAndDistributeUseCentresAndKeepHeight`).
+- **A free or deck fixture dragged in a structure editor landed half a
+  fixture away and crept** (RC8, board Q179). The editor stored the
+  fixture's centre where the plot keeps its corner: in Top it landed half
+  its size off the pointer, and in Front and Side it crept along the
+  hidden axis on every mouse move. It also jumped its centre to the
+  pointer instead of keeping the spot you grabbed. Both fixed
+  (`Monitor_Test::aStudioDragKeepsTheCornerAndTheGrab`).
+- **The window's contents could stop following its size** (RC8, board
+  Q178). After a tab was moved into its own window, the main window could
+  grow on a Mac while its contents stayed at the old size. When the
+  window and its contents disagree, the app now re-syncs and redraws them,
+  and logs it; **Help ▸ Troubleshooting ▸ Copy Layout Report** copies
+  every level's size for a bug report
+  (`ViewLayout_Test::theLayoutReportAndTheSelfHeal`,
+  `::theWindowFollowsResizesAroundADetach`).
+- **The Show Tree's page came back at no width** (RC8). A split saved
+  while the Workbench was docked there (four panes, the page's at 0) was
+  restored on the next start; it is now dropped, and a split moved while
+  docked isn't saved
+  (`ShowTreeView_Test::aSplitSavedWhileDockedDoesNotHideThePage`).
 
 - **A chaser step's Fade or Hold typed with a comma read as 0** (RC7).
   "1,5" in the Chaser editor's Fade In / Hold / Fade Out cells or the

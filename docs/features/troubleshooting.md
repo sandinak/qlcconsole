@@ -250,6 +250,30 @@ Scenes).
 
 **Help** — F1 opens the help for whatever you're looking at.
 
+## The window
+
+**The window grew but its contents didn't** (the old picture in the
+top-left corner, blank beyond it), most often after a tab was moved into its
+own window. The app watches for it: when the window and its contents
+disagree on their size, it puts the contents back to the window's size and
+redraws all of it, and notes the time. If you still see it, first try
+switching tabs and back, and minimising and restoring the window; then use
+**Help ▸ Troubleshooting ▸ Copy Layout Report** while it is wrong, and paste
+the report into your bug report. It lists, as text: the Qt version and
+platform; each screen and its pixel ratio; for the main window and every
+tab moved into its own window, the window's size as the system sees it
+against the size of what is drawn in it, the central area, the tabs, the
+page in front, its splitters and plot views; and each self-heal this
+session. Say also how you made the window bigger: dragging a corner,
+double-clicking the title bar, full screen, Window ▸ Fill, or moving it to
+another display.
+
+**A Show Tree pane is missing.** The page (the editor column to the right
+of the tree) came back at no width when its split had been saved while the
+Workbench was docked there. That saved split is no longer used: the
+default split comes back, and a split you change while the Workbench is
+docked isn't kept (closing the Workbench puts it back as it was).
+
 ## Security
 
 **The web page doesn't open on a tablet.** Web access listens on this

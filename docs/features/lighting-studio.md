@@ -63,7 +63,17 @@ nothing is faded there.
 **Rulers follow what you move.** While anything is selected — fixtures,
 trusses, decks, scenery — the rulers band its extent; while you drag it,
 the ruler mark sits at its **middle**, not wherever the pointer grabbed it.
-So dragging a drape reads its centre line on the ruler.
+So dragging a drape reads its centre line on the ruler. The band hugs the
+object itself (a fixture's icon, a target's ring), not the room its label
+or warning text takes, and it follows a zoom, a scroll, a turn of the plot
+and a selection made in Plot layers without the mouse having to move.
+
+**The rulers count from the centre line.** Across the stage (Top and Front),
+the ruler reads **0 at the centre line**, marked with a teal **CL** tick,
+and counts out to each side; its corner says which side is which (**SR | SL**,
+or **SL | SR** with the plot turned round). The footer's readout does the
+same: **SR 3.20**, **CL**, **SL 1.50**. That's the same zero as the target
+readouts below. Set a **⌖ 0,0** and the rulers count from your point instead.
 
 ### Stage marks: centre line, curtain line, number line
 
@@ -181,6 +191,11 @@ figure and area, and under the person Quick focus stands where a fixed light
 lands, so it follows that spot as you nudge it. To hide the readouts, untick
 **Show ▸ Target positions** on the plot's footer (or the Rig Overview's).
 It's on by default and saved with the show.
+
+Two targets close together don't print their readouts on top of each other:
+the second one sits just under the first. A **line target's** readout (where
+the line's centre is) shows only while the line is selected, so it never
+covers the readout of a person or mark standing on the line.
 
 The lines are drawn in the **Top** view, over the rig so they're never
 hidden. The **Rig Overview** draws them on its floor, from above and at 45°,
@@ -516,7 +531,11 @@ its face.
 Double-clicking a structure opens its own **Lighting Studio Editor** — the
 truss shown above has eight movers on it. Geometry
 fields on the left, a live elevation preview in the middle (drag a fixture
-in it to reposition), and a **Fixtures on this object** list.
+in it to reposition), and a **Fixtures on this object** list. A dragged
+fixture keeps the spot you grabbed under the pointer, and lands where you
+let go in every view, the 2D plot agreeing: a free or deck-standing fixture
+no longer jumps half its size, or creeps along the axis Front or Side can't
+see.
 
 Click a fixture in that list (or in the preview) to see its own mount panel:
 
@@ -794,9 +813,19 @@ Either one is enough.
 | Lock | Set from | Freezes |
 |---|---|---|
 | **Object lock** | An object's right-click menu → **Lock Position** / **Unlock Position** (**Lock Their Positions** for several), or a power source's or network node's own toggle | That one object. It stays selectable, so you can unlock it again; its Plot layers row shows a padlock |
-| **Layer lock** | An object's right-click menu → **Lock Layer "Rig"** (named for its layer), or the layer's padlock in the Plot layers panel | Everything on that layer, which can't be selected either |
+| **Layer lock** | An object's right-click menu → **Lock Layer "Rig"** (named for its layer), or the layer's padlock in the Plot layers panel | Everything on that layer. On the plot it is click-through: a click, a rubber band or Select All passes it by and reaches what is under it. Select it from the Plot layers tree to inspect it (Properties and the right-click menu work); it still can't be moved or deleted |
 | **Folder ("group") position lock** | The Plot layers panel / group properties | Every member's position, but they stay selectable (locking a parent folder locks its children too) |
-| **Global layout lock** | The 🔒 "Edit Plot" toolbar button | The whole plot at once, still selectable |
+| **Global layout lock** | The 🔒 "Edit Plot" toolbar button | The whole plot at once, aim targets included, still selectable. **Targets stay adjustable**, beside the button while the plot is locked, lets aim targets be dragged anyway |
+
+**Dragging something locked** moves nothing and says why on the plot's
+status line: **Plot locked — Edit Plot to move**, **Layer locked — unlock it
+in Layers to move**, or **Locked — unlock it to move**. Nothing is stored, so
+the show isn't marked changed and there is nothing to undo.
+
+**Targets stay adjustable** (off to start with) is for re-aiming during a
+show with the rig frozen: on, aim targets drag while the plot is locked;
+off, a locked plot moves nothing at all. It is your setting, kept on this
+computer, not saved in the show.
 
 Unlocking a layer leaves the objects on it that are locked on their own
 still locked. **Locked draws red**, always: every locked object, and
@@ -852,7 +881,11 @@ of, and doesn't override, the real locks above.
 - **Group** (Ctrl/⌘+G) makes the selection one piece that selects and
   moves together; **Ungroup** (Ctrl/⌘+Shift+G) splits it again.
 - **Align fixtures ▸** (two or more selected) and **Distribute fixtures
-  ▸** (three or more) are on the plot's right-click menu.
+  ▸** (three or more) are on the plot's right-click menu. They work on
+  what the plot draws: **Same X** and **Same Y** line up the fixtures'
+  centres, **Left**, **Right**, **Upstage** and **Downstage** line up those
+  edges, and **Distribute** spaces the centres evenly between the outer
+  two. A fixture's hanging height is kept, and one Undo puts them back.
 - **Select All** (Ctrl/⌘+A, or **More → Select All**) selects every
   visible, selectable object on the plot at once.
 - **Undo** (Ctrl/⌘+Z, or the toolbar's **Undo**) puts back the last move,
@@ -902,6 +935,8 @@ of, and doesn't override, the real locks above.
   same fixtures laid out the same way.
 - Selecting on the plot selects the same objects in Plot layers, and vice
   versa; clicking a fixture group's row selects its fixtures on the plot.
+  Cmd/Ctrl-click and Shift-click rows to select several: every one of
+  them is selected on the plot, stage pieces and hangers included.
   See [Plot layers](#plot-layers) below.
 - Count badges follow their structure through drags and undo, and keep one
   screen size at any zoom, so zooming in uncovers what's under them.
@@ -924,7 +959,12 @@ of, and doesn't override, the real locks above.
    tower's or boom's row -- or onto a fixture already hung there -- to hang
    it there.
 5. **A layer's lock** (and its eye and labels). The list keeps clear of an
-   overlay scroll bar, so the bar never covers these.
+   overlay scroll bar, so the bar never covers these. What a locked layer
+   holds is still picked here (the plot lets clicks through it), so this
+   is where you reach it to read its properties.
+
+Select several rows with Cmd/Ctrl-click or Shift-click: the plot selects
+all of them, not just the last one clicked.
 
 Right-click a layer for **New Folder** (named in place) or **New Layer**;
 right-click a folder for **New Folder Inside**. **Move to Layer** on a
