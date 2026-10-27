@@ -55,6 +55,11 @@ private slots:
     void closingPutsThisComputersBack();
     void aFileThatIsNotAShowLeavesTheOpenOneAlone();
     void aCollectedFolderOpensCompleteAsQxw();
+    /** transferPictures(): one in the show's folder keeps its place, one
+     *  from elsewhere goes into images/, a different picture of the same
+     *  name gets "-2", the same picture shares its copy, a missing file is
+     *  left out; RGB matrix images count; the folder gets them all. */
+    void transferPicturesHaveAPlaceEach();
 
 private:
     /** A computer: HOME at a fresh folder, with these user files. */

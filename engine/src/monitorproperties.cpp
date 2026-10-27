@@ -176,6 +176,33 @@ void MonitorProperties::keepPatternsWithShow(const Doc *mainDocument)
         if (kept != t->facesPattern())
             t->setFacesPattern(kept);
     }
+    for (auto it = m_images.begin(); it != m_images.end(); ++it)
+    {
+        const QString kept = mainDocument->keepWithShow(it->source);
+        if (kept != it->source)
+            it->source = kept;
+    }
+}
+
+QStringList MonitorProperties::picturePaths() const
+{
+    QStringList paths;
+    auto add = [&paths](const QString &path) {
+        if (!path.isEmpty() && !paths.contains(path))
+            paths << path;
+    };
+    foreach (const Truss *t, m_trusses)
+        add(t->sockPattern());
+    foreach (const Tower *t, m_towers)
+        add(t->facesPattern());
+    foreach (const MonitorImage &img, m_images)
+        add(img.source);
+    add(m_commonBackgroundImage);
+    for (auto it = m_customBackgroundImages.constBegin(); it != m_customBackgroundImages.constEnd(); ++it)
+        add(it.value());
+    // Not the gobo swaps: those are names in this computer's gobo library
+    // (GoboLibrary::resolve()), not files beside the show.
+    return paths;
 }
 
 void MonitorProperties::deleteStructure(QObject *structure)
@@ -3591,7 +3618,10 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
             MonitorImage img;
             img.id      = a.value(QStringLiteral("ID")).toUInt();
             img.name    = a.value(QStringLiteral("Name")).toString();
+            // Saved relative to the show when it's in the show's folder.
             img.source  = a.value(QStringLiteral("Source")).toString();
+            if (mainDocument != NULL && !img.source.isEmpty())
+                img.source = mainDocument->denormalizeComponentPath(img.source);
             img.plane   = a.value(QStringLiteral("Plane")).toInt();
             img.originX = a.value(QStringLiteral("X")).toFloat();
             img.originY = a.value(QStringLiteral("Y")).toFloat();
@@ -4499,7 +4529,8 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument, 
         doc->writeStartElement(QStringLiteral("MonitorImage"));
         doc->writeAttribute(QStringLiteral("ID"),     QString::number(img.id));
         doc->writeAttribute(QStringLiteral("Name"),   img.name);
-        doc->writeAttribute(QStringLiteral("Source"), img.source);
+        doc->writeAttribute(QStringLiteral("Source"), mainDocument != NULL
+                              ? mainDocument->normalizeComponentPath(img.source) : img.source);
         doc->writeAttribute(QStringLiteral("Plane"),  QString::number(img.plane));
         doc->writeAttribute(QStringLiteral("X"),      QString::number(double(img.originX), 'f', 3));
         doc->writeAttribute(QStringLiteral("Y"),      QString::number(double(img.originY), 'f', 3));

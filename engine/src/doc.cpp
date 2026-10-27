@@ -409,12 +409,24 @@ QString Doc::workspacePath() const
     return m_workspacePath;
 }
 
+void Doc::setComponentPathOverrides(const QMap<QString, QString> &overrides)
+{
+    m_componentPathOverrides = overrides;
+}
+
 QString Doc::normalizeComponentPath(const QString& filePath) const
 {
     if (filePath.isEmpty())
         return filePath;
 
     QFileInfo f(filePath);
+
+    if (!m_componentPathOverrides.isEmpty())
+    {
+        const auto it = m_componentPathOverrides.constFind(f.absoluteFilePath());
+        if (it != m_componentPathOverrides.constEnd())
+            return it.value();
+    }
 
     // No workspace path (an unsaved show): keep the absolute path, rather
     // than one relative to whatever the current directory happens to be.

@@ -197,10 +197,23 @@ public:
     /*********************************************************************
      * Collect for Transfer
      *********************************************************************/
+    /** Where each picture the show uses goes in a transfer folder: its
+     *  absolute path -> a path relative to the folder. One under the show's
+     *  folder keeps its place there (images/stones.jpg); one from anywhere
+     *  else goes into images/, "-2", "-3"... when a different picture has
+     *  its name. The plot's pictures (MonitorProperties::picturePaths()),
+     *  RGB matrix images, and @p extra (the Virtual Console's, which the
+     *  engine doesn't see); files that don't exist are left out. Give it to
+     *  Doc::setComponentPathOverrides() while the show is written into the
+     *  folder, and to writeTransferFolder(). */
+    QMap<QString, QString> transferPictures(const QStringList &extra = QStringList()) const;
+
     /** Write the items (collect() first) as files in @p folder: Fixtures/,
-     *  EffectScripts/, RGBScripts/, and the show's LED maps as HeadLayouts/.
-     *  @p written gets each file's path. False when one cannot be written. */
-    bool writeTransferFolder(const QString &folder, QStringList *written = nullptr) const;
+     *  EffectScripts/, RGBScripts/, the show's LED maps as HeadLayouts/,
+     *  and @p pictures (transferPictures()) at their places. @p written
+     *  gets each file's path. False when one cannot be written. */
+    bool writeTransferFolder(const QString &folder, QStringList *written = nullptr,
+                             const QMap<QString, QString> &pictures = QMap<QString, QString>()) const;
 
     /*********************************************************************
      * Helpers

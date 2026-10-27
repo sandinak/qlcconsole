@@ -120,6 +120,14 @@ public:
     QString keepWithShow(const QString& filePath,
                          const QString& subdir = QStringLiteral("images")) const;
 
+    /** While set, normalizeComponentPath() names each of these files
+     *  (absolute path -> path relative to the folder the show is written
+     *  to) by its key's value: a copy of the show written elsewhere
+     *  (Collect for Transfer) names the copies of its pictures that go
+     *  beside it, not the originals. keepWithShow() leaves them where they
+     *  are. Cleared with an empty map. */
+    void setComponentPathOverrides(const QMap<QString, QString> &overrides);
+
     /** If filePath is relative path, it is resolved relative to the workspace
      *  directory (absolute path is returned).
      *  If filePath is absolute, it is returned unchanged (symlinks and .. are resolved).
@@ -130,6 +138,7 @@ public:
 
 private:
     QString m_workspacePath;
+    QMap<QString, QString> m_componentPathOverrides;
 
 signals:
     /** Emitted when clearContents() is called, before actually doing anything. */

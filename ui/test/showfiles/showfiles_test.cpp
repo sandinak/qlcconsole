@@ -771,4 +771,113 @@ void ShowFiles_Test::saveAsToAnotherFolderTakesThePictures()
     QCOMPARE(m_app->doc()->workspacePath(), folderBefore);
 }
 
+/* File ▸ Collect for Transfer… into @p parent, answering its questions
+   (Save anyway, the folder, the result) from a timer. Returns what it said. */
+static QString collectInto(App *app, const QString &parent)
+{
+    QString told;
+    QTimer answer;
+    answer.setInterval(30);
+    QObject::connect(&answer, &QTimer::timeout, app, [&told, &answer, parent]() {
+        QWidget *w = QApplication::activeModalWidget();
+        if (QFileDialog *fd = qobject_cast<QFileDialog *>(w))
+        {
+            fd->setDirectory(parent);
+            static_cast<QDialog *>(fd)->accept();
+        }
+        else if (QMessageBox *box = qobject_cast<QMessageBox *>(w))
+        {
+            if (box->button(QMessageBox::Save) != nullptr)
+                box->button(QMessageBox::Save)->click();
+            else
+            {
+                told = box->text();
+                answer.stop();
+                box->accept();
+            }
+        }
+    });
+    answer.start();
+    app->slotFileCollectForTransfer();
+    QCoreApplication::processEvents();
+    return told;
+}
+
+void ShowFiles_Test::collectForTransferTakesThePictures()
+{
+    QTemporaryDir base;
+    QVERIFY(base.isValid());
+    QDir root(base.path());
+    QVERIFY(root.mkpath(QStringLiteral("Show")) && root.mkpath(QStringLiteral("Downloads"))
+            && root.mkpath(QStringLiteral("Away")));
+    const QString showFolder = root.absoluteFilePath(QStringLiteral("Show"));
+    auto picture = [&root](const QString &rel, const QByteArray &bytes) {
+        const QString path = root.absoluteFilePath(rel);
+        QFile f(path);
+        if (f.open(QIODevice::WriteOnly))
+            f.write(bytes);
+        return path;
+    };
+    const QString stones = picture(QStringLiteral("Downloads/stones.jpg"), "stones");
+    const QString bricks = picture(QStringLiteral("Downloads/bricks.png"), "bricks");
+    const QString plan = picture(QStringLiteral("Downloads/plan.png"), "plan");
+
+    // A show in "Show": a truss sock and tower faces, a picture on the plot.
+    // (A gobo swap is a name in this computer's gobo library: not a file of the show.)
+    const QString demo = QDir(showFolder).absoluteFilePath(QStringLiteral("demo.qxw"));
+    QVERIFY(QFile::copy(QStringLiteral(SHOWFILES_WORKSPACES) + QStringLiteral("help-demo.qxw"), demo));
+    QCOMPARE(open(m_app, demo), QFile::NoError);
+    Doc *doc = m_app->doc();
+    MonitorProperties *mp = doc->monitorProperties();
+    Truss *truss = mp->addTruss();
+    truss->setSock(true);
+    truss->setSockPattern(stones);
+    Tower *tower = mp->addTower();
+    tower->setFaces(true);
+    tower->setFacesPattern(bricks);
+    const quint32 imageId = mp->addImage(plan);
+    const QString show = QDir(showFolder).absoluteFilePath(QStringLiteral("Tour.qlcc"));
+    QCOMPARE(save(m_app, show), QFile::NoError);
+    const QString sockBefore = mp->trusses().last()->sockPattern();
+    const QString imageBefore = mp->image(imageId).source;
+
+    // Collected into a folder of its own, somewhere else.
+    const QString told = collectInto(m_app, root.absoluteFilePath(QStringLiteral("Away")));
+    QVERIFY2(told.startsWith(QStringLiteral("Collected")), qPrintable(told));
+    const QString folder = root.absoluteFilePath(QStringLiteral("Away/Tour"));
+    const QString moved = QDir(folder).absoluteFilePath(QStringLiteral("Tour.qlcc"));
+    QVERIFY(QFile::exists(moved));
+    const QDir images(QDir(folder).absoluteFilePath(QStringLiteral("images")));
+    QCOMPARE(fileBytes(images.absoluteFilePath(QStringLiteral("stones.jpg"))), QByteArray("stones"));
+    QCOMPARE(fileBytes(images.absoluteFilePath(QStringLiteral("bricks.png"))), QByteArray("bricks"));
+    QCOMPARE(fileBytes(images.absoluteFilePath(QStringLiteral("plan.png"))), QByteArray("plan"));
+
+    // The collected show names them there, relatively: nothing outside it.
+    const QByteArray xml = fileBytes(moved);
+    QVERIFY2(xml.contains("SockPattern=\"images/stones.jpg\""), xml.constData());
+    QVERIFY(xml.contains("FacesPattern=\"images/bricks.png\""));
+    QVERIFY(xml.contains("Source=\"images/plan.png\""));
+    QVERIFY(!xml.contains(base.path().toUtf8()));
+
+    // This window's show still names its own.
+    QCOMPARE(m_app->fileName(), show);
+    QCOMPARE(mp->trusses().last()->sockPattern(), sockBefore);
+    QCOMPARE(mp->image(imageId).source, imageBefore);
+
+    // Another computer: only the folder. It finds every picture in it.
+    QVERIFY(QDir(showFolder).removeRecursively());
+    QVERIFY(QDir(root.absoluteFilePath(QStringLiteral("Downloads"))).removeRecursively());
+    QCOMPARE(open(m_app, moved), QFile::NoError);
+    mp = m_app->doc()->monitorProperties();
+    auto inImages = [&images](const QString &path) {
+        return QFileInfo(path).isFile()
+               && QFileInfo(QFileInfo(path).absolutePath()).canonicalFilePath()
+                      == QFileInfo(images.absolutePath()).canonicalFilePath();
+    };
+    QVERIFY(!mp->trusses().isEmpty() && !mp->towers().isEmpty() && !mp->images().isEmpty());
+    QVERIFY2(inImages(mp->trusses().last()->sockPattern()), qPrintable(mp->trusses().last()->sockPattern()));
+    QVERIFY2(inImages(mp->towers().last()->facesPattern()), qPrintable(mp->towers().last()->facesPattern()));
+    QVERIFY2(inImages(mp->images().last().source), qPrintable(mp->images().last().source));
+}
+
 QTEST_MAIN(ShowFiles_Test)
