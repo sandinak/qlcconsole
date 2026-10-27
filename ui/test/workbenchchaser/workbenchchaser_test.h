@@ -51,6 +51,10 @@ private slots:
     /** Q60: a time typed in the header goes to the step it was typed for
      *  when the walker moves on (◀ ▶, the table); Esc puts it back. */
     void typedStepTimesGoToTheirStep();
+    /** A step's Fade / Hold typed with a comma ('1,5') is 1.5 s, not 0:
+     *  in the walker and in the Chaser editor's cells, in any locale. */
+    void stepTimesTakeEitherDecimalMark_data();
+    void stepTimesTakeEitherDecimalMark();
     /** A step's note opens up while it is typed in -- the walker's header,
      *  its step table, the Chaser editor's Notes column: it grows to fit,
      *  Return commits (one step on the history), Shift+Return starts a new
