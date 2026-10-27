@@ -613,7 +613,11 @@ if [ -s "$WORK/ls.rec" ]; then
   claimed="$(grep -m1 '^claimed UTIs:' "$WORK/ls.rec" | sed 's/^claimed UTIs: *//')"
   note "LaunchServices claims: $claimed"
   for e in $CLAIMED; do
+    # A declared type is claimed by its UTI; an undeclared one as "dyn.* (.ext)".
     u="$(echo "$claimed" | tr ',' '\n' | sed -n "s/^ *\([^ ]*\) (\.$e)\$/\1/p" | head -1)"
+    if [ -z "$u" ] && d="$(utidecl "$e")"; then
+      echo "$claimed" | tr ',' '\n' | sed 's/^ *//; s/ .*//' | grep -qxF "$d" && u="$d"
+    fi
     if [ -z "$u" ]; then fail "ls.claims.$e" "LaunchServices has no claim for .$e"
     else pass "ls.claims.$e" "$u"; fi
   done

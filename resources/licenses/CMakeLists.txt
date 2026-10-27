@@ -5,5 +5,6 @@ project(licenses)
 # the macOS bundle, licenses\ in the Windows install folder,
 # share/qlcconsole/licenses on Linux.
 file(GLOB LICENSE_FILES "${CMAKE_CURRENT_SOURCE_DIR}/*.txt")
+list(REMOVE_ITEM LICENSE_FILES "${CMAKE_CURRENT_SOURCE_DIR}/CMakeLists.txt")
 install(FILES ${LICENSE_FILES} DESTINATION ${SAMPLESDIR}/licenses)
 install(FILES ${CMAKE_SOURCE_DIR}/COPYING DESTINATION ${SAMPLESDIR}/licenses RENAME Apache-2.0.txt)
