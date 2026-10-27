@@ -1,0 +1,12 @@
+#!/bin/sh
+export LD_LIBRARY_PATH=../../src:../../../engine/src
+export DYLD_FALLBACK_LIBRARY_PATH=../../src:../../../engine/src
+if [ -x ./plotalignment_test.app/Contents/MacOS/plotalignment_test ]; then
+    BIN=./plotalignment_test.app/Contents/MacOS/plotalignment_test
+else
+    BIN=./plotalignment_test
+fi
+# Once at the screen's own scale, once as a Retina screen draws it: the
+# overlays have to line up to the device pixel at both.
+"$BIN" "$@" || exit 1
+QT_SCALE_FACTOR=2 exec "$BIN" "$@"

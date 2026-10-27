@@ -312,6 +312,8 @@ private:
     /** Remap a dragged fixture's mount param from a screen point (edits pipe
      *  offset / tower U-V-shelf / truss offset in place). Returns true if moved. */
     bool dragFixtureTo(quint32 fid, const QPointF &px);
+    /** Centre minus stored corner (metres, X/Y) of a free or deck fixture. */
+    QPointF freeCornerOffset(quint32 fid) const;
     /** Same idea as dragFixtureTo(), but for a bar hung on this truss: the
      *  drag's component along the PARENT truss's own run becomes the bar's
      *  new parentOffset. Refuses on a locked parent/bar or in Angled, same
@@ -1234,6 +1236,7 @@ private:
     QList<quint32> m_dragGroup;
     QHash<quint32, QPointF> m_dragGroupStart;  ///< each one's screen centre at the press
     QPointF  m_dragPressPx;
+    QPointF  m_dragFidStartPx;   ///< the dragged fixture's screen centre at the press
     bool     m_pressedSelected = false;  ///< pressed one of several: a click narrows to it
     RotateHandle m_rotate;          ///< handle being dragged (mode None = not rotating)
     double   m_rotateLastMouse = 0.0;   ///< pointer's plane angle at the last move

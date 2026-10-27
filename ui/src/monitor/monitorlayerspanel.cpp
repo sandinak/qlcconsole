@@ -18,6 +18,7 @@
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QTreeWidget>
+#include <QGuiApplication>
 #include <QTreeWidgetItem>
 #include <QTreeWidgetItemIterator>
 #include <QHeaderView>
@@ -2099,7 +2100,16 @@ void MonitorLayersPanel::slotItemClicked(QTreeWidgetItem *item, int)
            had just selected was cleared again ("they select and deselect
            immediately .. T1-W which I need to rename"). */
         m_syncingSelection = true;
-        if (type == NodeGroup)
+        /* Cmd/Ctrl- or Shift-click adds a row: itemSelectionChanged has already
+           put every selected row on the plot, and the single-row selects below
+           would clear it back to the one clicked (the tree kept three rows, the
+           plot one). With more than one row, the plot takes them all. */
+        const Qt::KeyboardModifiers mods = QGuiApplication::keyboardModifiers();
+        const bool several = m_tree->selectedItems().size() > 1
+            || (mods & (Qt::ShiftModifier | Qt::ControlModifier | Qt::MetaModifier));
+        if (several)
+            m_view->selectMapItems(selectedObjects());
+        else if (type == NodeGroup)
             m_view->selectItemsInGroup(id);
         else if (type == NodeFixtureGroup)
             /* Its fixtures, as the selection already picked them. Taken as an

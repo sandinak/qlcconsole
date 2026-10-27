@@ -193,6 +193,15 @@ public:
     /** Return true if the layout is currently locked */
     bool layoutLocked() const { return m_layoutLocked; }
 
+    /** "Targets stay adjustable" (Q183): while the plot is locked, aim targets
+     *  may still be dragged. Off by default: a locked plot moves nothing. */
+    void setTargetsAdjustableWhenLocked(bool on);
+    bool targetsAdjustableWhenLocked() const { return m_targetsAdjustableWhenLocked; }
+
+    /** Hold @p gi for its layer's lock: drawn red, click-through on the plot
+     *  (no mouse buttons) but still selectable, so the Layers tree reaches it. */
+    static void applyLayerLock(QGraphicsItem *gi, bool layerLocked);
+
     /** Set the snap-to-grid level (0 = off, 1 = full, 2 = 1/2, 4 = 1/4) */
     void setSnapDivisions(int divisions);
 
@@ -269,10 +278,25 @@ public:
      *  labels flag. Call after a layer's labels toggle changes. */
     void refreshFixtureLabels();
 
-    /** Bounding rect (viewport pixels) of what is selected -- fixtures,
-     *  structures, scenery -- or an invalid QRect if nothing is. Used to band the rulers with the selection's
-     *  extent while it is moved. */
-    QRect selectionViewportRect() const;
+    /** The extent (viewport pixels, unrounded) of what is selected --
+     *  fixtures, structures, scenery -- or an invalid rect if nothing is. It
+     *  is each item's own geometry (itemGeometryRect()), not its paint
+     *  extent: a target's name and readout, a fixture's facing arrow and
+     *  halo, a truss's grab padding are not on the stage, so they are not
+     *  on the ruler either. The rulers band it. */
+    QRectF selectionViewportRect() const;
+
+    /** What @p item IS on the stage, in its own coordinates: a fixture's
+     *  icon, a truss's or tower's footprint, a target's mark/area/line, a
+     *  platform's deck... Falls back to boundingRect() for anything else.
+     *  The one place an overlay asks "where is this thing?". */
+    static QRectF itemGeometryRect(const QGraphicsItem *item);
+
+    /** Scene -> viewport pixels, unrounded. mapFromScene() rounds to whole
+     *  pixels (QPoint); every overlay that has to line up with the canvas
+     *  (ruler ticks, the band, the cursor mark) maps through this instead. */
+    QPointF sceneToViewport(const QPointF &scene) const
+    { return viewportTransform().map(scene); }
 
     /** The Patch view on structure @p key ("truss:1") and its @p like ones,
      *  matched to it (PatchPlanner::matchLike()). */
@@ -471,6 +495,8 @@ public:
        deleting itself -- tearing down the item from inside its own context
        menu handler is not survivable. */
     Q_INVOKABLE void updateTargets();
+    /** Stack target readouts that would print over each other (screen px). */
+    void stackTargetReadouts();
 
     /** Delete every target item and aim line, without rebuilding: for when
      *  the StageTargets they point at are about to be deleted. */
@@ -546,7 +572,7 @@ public:
     /** Align the selected fixtures' XY (Top view). Modes: 0=same X (column),
      *  1=left, 2=right, 3=same Y (row), 4=top, 5=bottom. Returns count moved. */
     int alignSelectedFixtures(int mode);
-    /** Evenly space the selected fixtures along X (horizontal) or Y. */
+    /** Evenly space the selected fixtures' centres along X (horizontal) or Y. */
     int distributeSelectedFixtures(bool horizontal);
 
     /** Reassign every item on layer @p fromLayerId to @p toLayerId, then
@@ -812,12 +838,30 @@ public:
 
     /** A single ruler graduation: its position along the ruler in *viewport*
      *  pixels, the label to draw, and whether it's a major (labelled) tick. */
-    struct RulerTick { qreal pixel; QString label; bool major; };
+    struct RulerTick { qreal pixel; QString label; bool major; qreal value = 0.0; };
 
     /** Graduations for the top (horizontal=true) or left (horizontal=false)
      *  ruler, already mapped through the current zoom/pan to viewport pixels
      *  and offset by the stage origin. POV-aware (Top X/Y, Front X/Z, Side Y/Z). */
     QVector<RulerTick> rulerTicks(bool horizontal) const;
+
+    /** Which scene axis runs along the top (horizontal=true) or left ruler
+     *  as the view is turned: false = scene X, true = scene Y. A quarter
+     *  turn swaps them. */
+    bool rulerAlongSceneY(bool horizontal) const;
+
+    /** Along the stage's width (scene X in Top and Front), with no ⌖ origin
+     *  set, the rulers count from the centre line: 0 (marked CL) at centre,
+     *  stage right and stage left either side, as the target readouts do. */
+    bool rulerCountsFromCentreLine() const;
+    /** ...and whether the top (horizontal) or left ruler is that ruler now. */
+    bool rulerFromCentreLine(bool horizontal) const
+    { return rulerCountsFromCentreLine() && !rulerAlongSceneY(horizontal); }
+    /** Where a ruler along scene X (sceneY false) or scene Y reads 0, in grid
+     *  units from the grid's corner: the centre line, else the ⌖ origin. */
+    qreal rulerZeroUnits(bool sceneY) const;
+    /** Is stage RIGHT on the low-pixel side (left / top) of that ruler? */
+    bool stageRightFirst(bool horizontal) const;
 
     /** Axis short name for the current POV: horizontal → X or Y; vertical →
      *  Y or Z (height in elevation views). */
@@ -1063,6 +1107,10 @@ signals:
     /** Signal emitted after fixture point -> metrics conversion */
     void fixtureMoved(quint32 id, QPointF pos);
 
+    /** A drag was refused because what it grabbed is held still; @p why is
+     *  for the status line ("Plot locked — Edit Plot to move"). */
+    void dragRefused(const QString &why);
+
     /** Signal emitted when a platform is moved (new origin in metres). */
     void platformMoved(quint32 id, QPointF originMetres);
 
@@ -1171,6 +1219,18 @@ signals:
     void originPicked();
 
 private:
+    /** Aim targets may move: the plot is open, or they stay adjustable. */
+    bool targetsFreeOfPlotLock() const { return !m_layoutLocked || m_targetsAdjustableWhenLocked; }
+    /** A rubber band passes layer-locked objects by (they're click-through). */
+    void dropLayerLockedFromRubberBand();
+
+    /** Push the captureMoveUndo() snapshot as one undo step, if anything moved. */
+    void commitMoveUndo();
+    /** A free fixture's icon size in mm (its stored XY is the icon's corner). */
+    QSizeF fixtureIconSizeMm(const MonitorFixtureItem *item) const;
+    /** Store an aligned free fixture's new corner, keeping its height. */
+    void storeAlignedFixture(quint32 fid, MonitorFixtureItem *item, const QPointF &cornerMm);
+
     Doc *m_doc;
     QGraphicsScene *m_scene;
     class QGraphicsEllipseItem *m_focusGhost = nullptr;
@@ -1312,6 +1372,20 @@ private:
      *  current selection's positions for no reason. */
     QPoint m_pressViewPos;
 
+    /** The press landed on something the plot holds still -- the plot is
+     *  locked, or the object, its layer or its folder is. Until the release,
+     *  no move reaches the scene and no drop is stored: a held object must
+     *  never be snapped, pushed off a neighbour or re-read from an elevation
+     *  (a locked drag once threw a riser two decks away). */
+    bool m_dragRefused = false;
+    /** The refusal was already said on the status line, this press. */
+    bool m_dragRefusedNoted = false;
+    /** The press was on an object on a locked layer: the status line names
+     *  the layer lock, not the object's own. */
+    bool m_pressOnLockedLayer = false;
+    /** Whether a drag on @p item may move it: its own movable rule. */
+    static bool itemDraggable(const QGraphicsItem *item);
+
     /** Tagged undo entry — covers fixture moves, truss moves and stage-feature
      *  pastes so that Ctrl+Z replays operations in the order they were
      *  performed. */
@@ -1365,6 +1439,7 @@ private:
      *  handler clears the selection. Used by mouseDoubleClickEvent to restore
      *  a multi-selection that was active when the user double-clicked. */
     QList<QGraphicsItem *> m_savedSelection;
+    bool m_targetsAdjustableWhenLocked = false;
 
     /** Positions snapshot taken at move-start, committed to m_moveUndo on
      *  drop if anything actually moved. */

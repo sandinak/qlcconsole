@@ -713,11 +713,12 @@ void Monitor_Test::theRulerMarksTheMiddleOfADraggedDrape()
         QVERIFY(item != nullptr);
         QVERIFY(mon.m_hRuler != nullptr);
         item->setSelected(true);
-        const QRect band = gv->selectionViewportRect();
-        QVERIFY(band.isValid());
+        // A drape seen from above is a line: no depth, but a band across.
+        const QRectF band = gv->selectionViewportRect();
+        QVERIFY(!band.isNull() && band.width() > 0);
 
         // Grabbed well off its middle: a quarter of the way along it.
-        const QPoint grab(band.left() + band.width() / 4, band.center().y());
+        const QPoint grab(qRound(band.left() + band.width() / 4), qRound(band.center().y()));
         auto move = [&](Qt::MouseButtons buttons) {
             QMouseEvent me(QEvent::MouseMove, QPointF(grab), QPointF(gv->viewport()->mapToGlobal(grab)),
                            Qt::NoButton, buttons, Qt::NoModifier);
@@ -727,7 +728,7 @@ void Monitor_Test::theRulerMarksTheMiddleOfADraggedDrape()
         QCOMPARE(mon.m_hRuler->cursorPixel(), grab.x());
         QCOMPARE(mon.m_hRuler->itemRange(), qMakePair(band.left(), band.right()));
         move(Qt::LeftButton);
-        QCOMPARE(mon.m_hRuler->cursorPixel(), band.center().x());
+        QCOMPARE(mon.m_hRuler->cursorPixel(), qRound(band.center().x()));
     }
     delete doc;
 }
@@ -4312,6 +4313,110 @@ void Monitor_Test::clearTopAndInsidePlacement()
     props->removePlatform(pl->id());
 }
 
+void Monitor_Test::aStudioDragKeepsTheCornerAndTheGrab()
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    StagePlatform *pl = props->addPlatform();
+    pl->setName("Deck"); pl->setOriginX(0.0f); pl->setOriginY(0.0f);
+    pl->setWidth(6.0f); pl->setDepth(4.0f); pl->setHeight(0.4f);
+
+    // A 0.6 x 0.4 m light: the plot pins its corner, its centre is 0.3, 0.2 in.
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test"); def->setModel("Wash 600");
+    def->setType(QLCFixtureDef::Dimmer);
+    QLCChannel *ch = new QLCChannel();
+    ch->setName("Dimmer"); ch->setGroup(QLCChannel::Intensity);
+    def->addChannel(ch);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("1ch");
+    QLCPhysical phys;
+    phys.setWidth(600); phys.setHeight(400); phys.setDepth(300);
+    mode->setPhysical(phys);
+    mode->insertChannel(ch, 0);
+    def->addMode(mode);
+    Fixture *fxi = new Fixture(m_doc);
+    fxi->setName("Wash 600");
+    fxi->setFixtureDefinition(def, mode);
+    fxi->setAddress(470);
+    QVERIFY(m_doc->addFixture(fxi));
+    const quint32 fid = fxi->id();
+    const quint32 plId = pl->id();
+    auto tidy = qScopeGuard([this, props, fid, plId]() {
+        m_doc->deleteFixture(fid);
+        props->removePlatform(plId);
+    });
+
+    StructureStudioView view(m_doc, StructureStudioView::PlatformKind, pl->id());
+    view.resize(800, 600);
+    view.setLocked(false);
+
+    auto run = [&](const QString &how) {
+        view.reload();
+        // Top: the centre goes where it is dragged, the corner is stored.
+        view.setPlane(StructureStudioView::Top);
+        const QVector3D c0 = view.fixtureCentre(fid);
+        QVERIFY(view.dragFixtureTo(fid, view.w2s(c0) + QPointF(view.m_scale * 0.5, view.m_scale * 0.25)));
+        const QVector3D c1 = view.fixtureCentre(fid);
+        QVERIFY2(qAbs(double(c1.x() - c0.x()) - 0.5) < 0.005 && qAbs(double(c1.y() - c0.y()) - 0.25) < 0.005,
+                 qPrintable(QString("%1, Top: dragged 0.5, 0.25 m, the centre moved %2, %3 m")
+                            .arg(how).arg(double(c1.x() - c0.x())).arg(double(c1.y() - c0.y()))));
+        const QVector3D stored = props->fixturePosition(fid, 0, 0);
+        QVERIFY2(qAbs(double(stored.x()) - (double(c1.x()) - 0.3) * 1000.0) < 1.0
+                 && qAbs(double(stored.y()) - (double(c1.y()) - 0.2) * 1000.0) < 1.0,
+                 qPrintable(QString("%1: the centre was stored in the corner field (%2, %3 mm for centre %4, %5 m)")
+                            .arg(how).arg(double(stored.x())).arg(double(stored.y()))
+                            .arg(double(c1.x())).arg(double(c1.y()))));
+        // Front and Side: holding still does not creep along the hidden axis.
+        for (StructureStudioView::Plane plane : { StructureStudioView::Front, StructureStudioView::Side })
+        {
+            view.setPlane(plane);
+            const QVector3D at = view.fixtureCentre(fid);
+            for (int i = 0; i < 8; i++)
+                view.dragFixtureTo(fid, view.w2s(view.fixtureCentre(fid)));
+            const QVector3D now = view.fixtureCentre(fid);
+            QVERIFY2((now - at).length() < 0.002f,
+                     qPrintable(QString("%1, %2: eight still moves crept %3, %4 m")
+                                .arg(how, plane == StructureStudioView::Front ? "Front" : "Side")
+                                .arg(double(now.x() - at.x())).arg(double(now.y() - at.y()))));
+        }
+    };
+
+    // Free-placed, hung at 3 m.
+    props->setFixturePosition(fid, 0, 0, QVector3D(2000, 1000, 3.0f));
+    props->setFixtureRigProps(fid, FixtureRigProps());
+    run("free");
+    // Standing on the deck.
+    props->setFixturePosition(fid, 0, 0, QVector3D(2000, 1000, 0.0f));
+    FixtureRigProps rp;
+    rp.deckPlatformId = pl->id();
+    props->setFixtureRigProps(fid, rp);
+    QVERIFY(props->fixtureRigProps(fid).onDeck());
+    run("on the deck");
+
+    /* A real drag keeps the grab: pressed off-centre, the spot under the
+       pointer stays under it -- the centre no longer jumps to the pointer. */
+    props->setFixturePosition(fid, 0, 0, QVector3D(2000, 1000, 0.0f));
+    props->setFixtureRigProps(fid, rp);         // on the deck: this editor lists it
+    view.reload();
+    view.setPlane(StructureStudioView::Top);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    view.setHighlight({ fid });
+    const QVector3D c0 = view.fixtureCentre(fid);
+    // Along the bar, a fifth of a metre right of its centre (the hit test is the bar's line).
+    const QPoint grab = (view.w2s(c0) + QPointF(view.m_scale * 0.2, 3.0)).toPoint();
+    QCOMPARE(view.hitTestFixture(grab), fid);
+    QTest::mousePress(&view, Qt::LeftButton, Qt::NoModifier, grab);
+    QTest::mouseMove(&view, grab + QPoint(10, 0));
+    QTest::mouseMove(&view, grab + QPoint(40, 20));
+    QTest::mouseRelease(&view, Qt::LeftButton, Qt::NoModifier, grab + QPoint(40, 20));
+    const QVector3D c1 = view.fixtureCentre(fid);
+    const QPointF moved = view.w2s(c1) - view.w2s(c0);
+    QVERIFY2(qAbs(moved.x() - 40.0) < 1.5 && qAbs(moved.y() - 20.0) < 1.5,
+             qPrintable(QString("a 40, 20 px drag moved the centre %1, %2 px").arg(moved.x()).arg(moved.y())));
+
+}
+
 void Monitor_Test::freePlacedFixtureIsDraggable()
 {
     MonitorProperties *props = m_doc->monitorProperties();
@@ -4336,7 +4441,8 @@ void Monitor_Test::freePlacedFixtureIsDraggable()
     view.setPlane(StructureStudioView::Top);
     view.setLocked(false);
 
-    const QVector3D before = props->fixtureRigPosition(fxi->id());
+    // Its centre: what the editor draws and drags (the store keeps the plot's corner).
+    const QVector3D before = view.fixtureCentre(fxi->id());
 
     /* Drag it half a metre downstage. This used to `return false` -- a fixture
        with neither a structural mount nor a frame group fell off the end of
@@ -4346,7 +4452,7 @@ void Monitor_Test::freePlacedFixtureIsDraggable()
     QVERIFY2(view.dragFixtureTo(fxi->id(), startPx + QPointF(0.0, view.m_scale * 0.5)),
              "the editor refused to move a free-placed fixture");
 
-    const QVector3D after = props->fixtureRigPosition(fxi->id());
+    const QVector3D after = view.fixtureCentre(fxi->id());
     QVERIFY2(qAbs(double(after.y() - before.y()) - 0.5) < 0.05,
              qPrintable(QString("dragged 0.5 m but y moved %1 m — check the mixed "
                                 "mm/metre storage in setFixturePosition")
@@ -4526,9 +4632,10 @@ void Monitor_Test::deckMountedFixtureMovesVerticallyToo()
 
     // Horizontal, in plan.
     view.setPlane(StructureStudioView::Top);
-    const QVector3D b0 = props->fixtureRigPosition(fxi->id());
+    // By its centre, which is what the editor draws (the store keeps the plot's corner).
+    const QVector3D b0 = view.fixtureCentre(fxi->id());
     QVERIFY(view.dragFixtureTo(fxi->id(), view.w2s(b0) + QPointF(view.m_scale * 0.4, 0.0)));
-    QVERIFY2(qAbs(double(props->fixtureRigPosition(fxi->id()).x() - b0.x()) - 0.4) < 0.05,
+    QVERIFY2(qAbs(double(view.fixtureCentre(fxi->id()).x() - b0.x()) - 0.4) < 0.05,
              "a deck fixture would not move horizontally in plan");
 
     /* Vertical, in an elevation. This did nothing at all before: with no deck
@@ -16907,7 +17014,7 @@ void Monitor_Test::selectAllTakesEverythingSelectable()
     Fixture *spot = new Fixture(doc);
     spot->setChannels(4);
     QVERIFY(doc->addFixture(spot));
-    // One on a hidden layer, one on a locked layer: neither can be selected.
+    // One on a hidden layer, one on a locked layer (click-through): Select All takes neither.
     const quint32 hidden = props->addLayer("Hidden");
     const quint32 locked = props->addLayer("Locked");
     Stand *gone = props->addStand();
@@ -17186,7 +17293,9 @@ void Monitor_Test::anObjectAndItsLayerEachHaveALock()
         QVERIFY(!view.itemLocked("fixture", 999));
         QVERIFY(!(view.m_standItems.value(stand->id())->flags() & QGraphicsItem::ItemIsMovable));
         QVERIFY(view.m_standItems.value(other->id())->flags() & QGraphicsItem::ItemIsMovable);
-        QVERIFY(!(view.m_trussItems.value(t->id())->flags() & QGraphicsItem::ItemIsSelectable));
+        // Held by its layer: selectable (from the Layers tree), click-through on the plot.
+        QVERIFY(view.m_trussItems.value(t->id())->flags() & QGraphicsItem::ItemIsSelectable);
+        QCOMPARE(view.m_trussItems.value(t->id())->acceptedMouseButtons(), Qt::MouseButtons(Qt::NoButton));
         QVERIFY(!(fi->flags() & QGraphicsItem::ItemIsMovable));
         QVERIFY(fi->isGhosted());
 
@@ -18063,13 +18172,15 @@ void Monitor_Test::networkNodesJoinLayersGroupsLocksAndRenames()
     emit view.m_networkNodeItems.at(1)->lockToggleRequested(1);
     QVERIFY(!props->layer(rack).locked);
     QVERIFY(m_doc->networkTopology()->nodes().at(1).locked);
-    // The layer's lock: the node is held by it, and unselectable.
+    // The layer's lock: the node is held by it, and click-through on the plot
+    // (still selectable, from the Layers tree).
     view.setItemLocked("network", 1, false);
     view.setItemLayerLocked("network", 1, true);
     QVERIFY(props->layer(rack).locked);
     QVERIFY(!m_doc->networkTopology()->nodes().at(1).locked);
     QVERIFY(view.itemLocked("network", 1));
-    QVERIFY(!(view.m_networkNodeItems.at(1)->flags() & QGraphicsItem::ItemIsSelectable));
+    QVERIFY(!(view.m_networkNodeItems.at(1)->flags() & QGraphicsItem::ItemIsMovable));
+    QCOMPARE(view.m_networkNodeItems.at(1)->acceptedMouseButtons(), Qt::MouseButtons(Qt::NoButton));
     view.setItemLayerLocked("network", 1, false);
     view.slotNetworkNodeLockToggled(99);                 // ignored
     view.setItemLocked("network", 1, false);
@@ -25921,10 +26032,12 @@ void Monitor_Test::targetsFollowTheirLayersEyeAndLock()
         view.refreshItemLayerState();
         QVERIFY(item()->isVisible());
 
-        // The layer's lock: held, and not picked.
+        // The layer's lock: held, and not picked on the plot (click-through);
+        // the Layers tree can still select it.
         props->setLayerLocked(marks, true);
         view.refreshItemLayerState();
-        QVERIFY(!movable() && !selectable());
+        QVERIFY(!movable() && selectable());
+        QCOMPARE(item()->acceptedMouseButtons(), Qt::MouseButtons(Qt::NoButton));
         QVERIFY(view.itemLocked("target", a->id()));
         // From the front as well (an elevation used to ignore the layer).
         view.setViewPOV(MonitorGraphicsView::PovFront);
@@ -26641,4 +26754,559 @@ void Monitor_Test::placingOnALockedLayerAsksWhere()
     QVERIFY(offered.isEmpty());
     QVERIFY(said.contains("so is every other"));
     QCOMPARE(people().size(), 3);
+}
+
+void Monitor_Test::alignAndDistributeUseCentresAndKeepHeight()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    // Three lights of different widths: a 1 m bar, a 0.25 m par, a 0.5 m wash.
+    auto sized = [doc](const QString &name, int wMm, int hMm) {
+        QLCFixtureDef *def = new QLCFixtureDef();
+        def->setManufacturer("Test");
+        def->setModel(name);
+        def->setType(QLCFixtureDef::Dimmer);
+        QLCChannel *ch = new QLCChannel();
+        ch->setName("Dimmer");
+        ch->setGroup(QLCChannel::Intensity);
+        def->addChannel(ch);
+        QLCFixtureMode *mode = new QLCFixtureMode(def);
+        mode->setName("1ch");
+        QLCPhysical phys;
+        phys.setWidth(wMm);
+        phys.setHeight(hMm);
+        phys.setDepth(100);
+        mode->setPhysical(phys);
+        mode->insertChannel(ch, 0);
+        def->addMode(mode);
+        Fixture *f = new Fixture(doc);
+        f->setName(name);
+        f->setFixtureDefinition(def, mode);
+        return f;
+    };
+    QList<Fixture *> fx { sized("Bar", 1000, 200), sized("Par", 250, 250), sized("Wash", 500, 300) };
+    for (int i = 0; i < fx.size(); i++)
+    {
+        fx[i]->setAddress(quint32(i * 4));
+        QVERIFY(doc->addFixture(fx[i]));
+    }
+
+    QWidget parent;
+    parent.resize(1400, 900);
+    Monitor *mon = new Monitor(&parent, doc);
+    auto gone = qScopeGuard([mon]() { delete mon; });
+    mon->resize(1400, 900);
+    mon->showGraphicsView();
+    MonitorGraphicsView *gv = mon->m_graphicsView;
+    gv->setGridMetrics(1000.0);
+    gv->setGridSize(QSize(20, 12));
+    const QList<QPointF> at { QPointF(2000, 2000), QPointF(6300, 3700), QPointF(9100, 5200) };
+    const QList<float> heights { 4.0f, 5.5f, 3.25f };    // hung: they must stay up
+    auto place = [&]() {
+        for (int i = 0; i < fx.size(); i++)
+        {
+            props->setFixturePosition(fx[i]->id(), 0, 0,
+                                      QVector3D(float(at[i].x()), float(at[i].y()), heights[i]));
+            if (gv->fixtureItemForId(fx[i]->id()) == nullptr)
+                gv->addFixture(fx[i]->id(), at[i]);
+            else
+                gv->moveFixtureTo(fx[i]->id(), at[i]);
+        }
+    };
+    place();
+    parent.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&parent));
+
+    auto item = [&](int i) { return gv->fixtureItemForId(fx[i]->id()); };
+    auto icon = [&](int i) { return item(i)->mapRectToScene(item(i)->iconRect()); };
+    auto selectAll = [&](int n) {
+        gv->scene()->clearSelection();
+        for (int i = 0; i < n; i++)
+            item(i)->setSelected(true);
+    };
+    auto heightsKept = [&](const char *what) {
+        for (int i = 0; i < fx.size(); i++)
+            QVERIFY2(qFuzzyCompare(props->fixturePosition(fx[i]->id(), 0, 0).z(), heights[i]),
+                     qPrintable(QString("%1 dropped %2 from %3 to %4").arg(what, fx[i]->name())
+                                .arg(double(heights[i])).arg(double(props->fixturePosition(fx[i]->id(), 0, 0).z()))));
+    };
+    QVERIFY(icon(0).width() > icon(1).width() + 10.0);   // the widths differ on the plot
+    const double tol = 0.5;    // px
+
+    // Same X: one column through the CENTRES, not the corners.
+    selectAll(3);
+    QCOMPARE(gv->alignSelectedFixtures(0), 3);
+    QVERIFY2(qAbs(icon(0).center().x() - icon(1).center().x()) <= tol
+             && qAbs(icon(1).center().x() - icon(2).center().x()) <= tol,
+             qPrintable(QString("centres %1 %2 %3").arg(icon(0).center().x()).arg(icon(1).center().x()).arg(icon(2).center().x())));
+    heightsKept("Align same X");
+    // The model is what the plot shows: the stored XY is the icon's corner.
+    for (int i = 0; i < fx.size(); i++)
+    {
+        const QVector3D p = props->fixturePosition(fx[i]->id(), 0, 0);
+        const QPointF corner = gv->realPositionToPixels(p.x(), p.y());
+        QVERIFY(qAbs(corner.x() - icon(i).left()) <= tol && qAbs(corner.y() - icon(i).top()) <= tol);
+    }
+
+    // Left / right / upstage / downstage: the EDGES line up.
+    place();
+    selectAll(3);
+    gv->alignSelectedFixtures(1);
+    QVERIFY(qAbs(icon(0).left() - icon(1).left()) <= tol && qAbs(icon(1).left() - icon(2).left()) <= tol);
+    QCOMPARE(qRound(icon(0).left()), qRound(gv->realPositionToPixels(2000, 0).x()));   // the leftmost edge
+    heightsKept("Align left");
+    place();
+    selectAll(3);
+    gv->alignSelectedFixtures(2);
+    QVERIFY(qAbs(icon(0).right() - icon(1).right()) <= tol && qAbs(icon(1).right() - icon(2).right()) <= tol);
+    heightsKept("Align right");
+    place();
+    selectAll(3);
+    gv->alignSelectedFixtures(3);
+    QVERIFY(qAbs(icon(0).center().y() - icon(1).center().y()) <= tol
+            && qAbs(icon(1).center().y() - icon(2).center().y()) <= tol);
+    place();
+    selectAll(3);
+    gv->alignSelectedFixtures(5);
+    QVERIFY(qAbs(icon(0).bottom() - icon(1).bottom()) <= tol && qAbs(icon(1).bottom() - icon(2).bottom()) <= tol);
+    heightsKept("Align downstage");
+
+    // Distribute: the centres evenly spaced, the outer two where they were.
+    place();
+    selectAll(3);
+    const double c0 = icon(0).center().x(), c2 = icon(2).center().x();
+    QCOMPARE(gv->distributeSelectedFixtures(true), 3);
+    QVERIFY(qAbs(icon(0).center().x() - c0) <= tol && qAbs(icon(2).center().x() - c2) <= tol);
+    QVERIFY2(qAbs(icon(1).center().x() - (c0 + c2) / 2.0) <= tol,
+             qPrintable(QString("middle centre %1, wanted %2").arg(icon(1).center().x()).arg((c0 + c2) / 2.0)));
+    heightsKept("Distribute");
+
+    // One undo puts the distribute back.
+    QVERIFY(gv->canUndo());
+
+    delete mon;
+    gone.dismiss();
+    delete doc;
+}
+
+void Monitor_Test::targetReadoutsStackAndALineShowsItsWhenSelected()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    props->setTargetPositionsVisible(true);
+    // The Announcer and Line 1's centre, an inch apart (the user's "SR 1''").
+    StageTarget *announcer = props->addStageTarget();
+    announcer->setName("Announcer");
+    announcer->setPosition(QVector3D(5.0f, 4.0f, 0.0f));
+    StageTarget *mark = props->addStageTarget();
+    mark->setName("Mark");
+    mark->setPosition(QVector3D(5.025f, 4.0f, 0.0f));
+    StageTarget *line = props->addStageTarget();
+    line->setName("Line 1");
+    line->setPosition(QVector3D(8.0f, 4.0f, 0.0f));
+    line->setLinePoints({ QVector3D(-1, 0, 0), QVector3D(1, 0, 0) });
+    line->makeLine();
+    {
+        MonitorGraphicsView view(doc);
+        view.resize(900, 700);
+        view.setGridMetrics(1000.0);
+        view.setGridSize(QSize(12, 8));
+        view.updateTargets();
+        TargetItem *a = view.m_targetItems.value(announcer->id());
+        TargetItem *b = view.m_targetItems.value(mark->id());
+        TargetItem *l = view.m_targetItems.value(line->id());
+        QVERIFY(a != nullptr && b != nullptr && l != nullptr);
+        QVERIFY(l->isLine());
+        auto shownRect = [&view](TargetItem *ti) {
+            return ti->readoutScreenRect().translated(view.sceneToViewport(ti->readoutAnchorScene()))
+                                          .translated(0.0, ti->readoutStackOffset());
+        };
+        // Both point readouts shown, one under the other, not on top.
+        QVERIFY(a->readoutShown() && b->readoutShown());
+        QVERIFY2(!shownRect(a).intersects(shownRect(b)),
+                 "two readouts an inch apart print over each other");
+        // And still after a zoom (the labels keep their size, the gap shrinks).
+        view.scale(0.5, 0.5);
+        view.stackTargetReadouts();
+        QVERIFY(!shownRect(a).intersects(shownRect(b)));
+        // Far apart again: nothing stacked.
+        mark->setPosition(QVector3D(10.0f, 6.0f, 0.0f));
+        view.updateTargets();
+        a = view.m_targetItems.value(announcer->id());
+        b = view.m_targetItems.value(mark->id());
+        l = view.m_targetItems.value(line->id());
+        QCOMPARE(a->readoutStackOffset(), 0.0);
+        QCOMPARE(b->readoutStackOffset(), 0.0);
+
+        // A line target's readout: only while it is selected.
+        QVERIFY2(!l->readoutShown(), "an unselected line target shows its readout");
+        l->setSelected(true);
+        QVERIFY(l->readoutShown());
+        l->setSelected(false);
+        QVERIFY(!l->readoutShown());
+    }
+    delete doc;
+}
+
+void Monitor_Test::theLayersTreeSelectsEveryRowOnThePlot()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    QList<Fixture *> pars;
+    for (int i = 0; i < 3; i++)
+    {
+        Fixture *f = new Fixture(doc);
+        f->setName(QString("Par %1").arg(QChar('A' + i)));
+        f->setChannels(1);
+        f->setAddress(quint32(i * 10));
+        QVERIFY(doc->addFixture(f));
+        pars << f;
+    }
+    Stand *stand = props->addStand();
+    stand->setName("Stand S");
+    stand->setOriginX(12.0f); stand->setOriginY(8.0f);
+    Tower *tower = props->addTower();
+    tower->setName("AT9"); tower->setOriginX(15.0f); tower->setOriginY(8.0f);
+    tower->setWidth(0.4f); tower->setDepth(0.4f); tower->setHeight(3.0f);
+    Hanger *hanger = props->addHanger(Hanger::OnTower, tower->id());
+    hanger->setArm(0.5f);
+    props->setCurtainLineY(5.5f);
+    props->setStageMarks(MonitorProperties::CurtainLineFlag);
+
+    QWidget parent;
+    parent.resize(1400, 900);
+    Monitor *mon = new Monitor(&parent, doc);
+    auto gone = qScopeGuard([mon]() { delete mon; });
+    mon->resize(1400, 900);
+    mon->showGraphicsView();
+    MonitorGraphicsView *gv = mon->m_graphicsView;
+    gv->setGridMetrics(1000.0);
+    gv->setGridSize(QSize(20, 12));
+    for (int i = 0; i < pars.size(); i++)
+    {
+        const QPointF mm(3000.0 + 2000.0 * i, 3000.0);
+        props->setFixturePosition(pars[i]->id(), 0, 0, QVector3D(float(mm.x()), float(mm.y()), 0.0f));
+        if (gv->fixtureItemForId(pars[i]->id()) == nullptr)
+            gv->addFixture(pars[i]->id(), mm);
+    }
+    gv->refreshAllItems();
+    gv->updateHangers();
+    mon->slotToggleLayersPanel(true);
+    parent.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&parent));
+    MonitorLayersPanel *panel = mon->m_layersPanel;
+    QVERIFY(panel != nullptr);
+    panel->reload();
+
+    auto clickRow = [panel](const QString &name, Qt::KeyboardModifiers mods) {
+        QTreeWidgetItem *row = layersRow(*panel, name);
+        QVERIFY2(row != nullptr, qPrintable("no Layers row " + name));
+        panel->m_tree->scrollToItem(row);
+        const QPoint at = panel->m_tree->visualItemRect(row).center();
+        QTest::mouseClick(panel->m_tree->viewport(), Qt::LeftButton, mods, at);
+        QCoreApplication::processEvents();
+    };
+    auto parItem = [gv, &pars](int i) { return gv->fixtureItemForId(pars[i]->id()); };
+
+    // 1. A click, then Cmd/Ctrl-clicks: all three on the plot, not the last one.
+    clickRow("Par A", Qt::NoModifier);
+    QVERIFY(parItem(0)->isSelected());
+    clickRow("Par B", Qt::ControlModifier);
+    clickRow("Par C", Qt::ControlModifier);
+    QCOMPARE(panel->m_tree->selectedItems().size(), 3);
+    for (int i = 0; i < 3; i++)
+        QVERIFY2(parItem(i)->isSelected(), qPrintable(QString("Par %1 dropped from the plot").arg(QChar('A' + i))));
+    // ...and Shift-click a range: the same.
+    gv->scene()->clearSelection();
+    clickRow("Par A", Qt::NoModifier);
+    clickRow("Par C", Qt::ShiftModifier);
+    QVERIFY(panel->m_tree->selectedItems().size() >= 3);
+    for (int i = 0; i < 3; i++)
+        QVERIFY2(parItem(i)->isSelected(), qPrintable(QString("Shift: Par %1 not on the plot").arg(QChar('A' + i))));
+
+    // 2. Stage pieces and hangers are in a multi-selection too.
+    StagePieceItem *curtain = gv->stagePieceItem(MonitorProperties::CurtainPiece);
+    QGraphicsItem *hangerItem = gv->itemFor("hanger", hanger->id());
+    QVERIFY(curtain != nullptr && hangerItem != nullptr);
+    QCOMPARE(gv->itemFor("stage", quint32(MonitorProperties::CurtainPiece)), static_cast<QGraphicsItem *>(curtain));
+    gv->selectMapItems({ qMakePair(QString("stage"), quint32(MonitorProperties::CurtainPiece)),
+                         qMakePair(QString("hanger"), hanger->id()),
+                         qMakePair(QString("stand"), stand->id()) });
+    QVERIFY2(curtain->isSelected(), "a stage piece in a multi-selection was dropped");
+    QVERIFY2(hangerItem->isSelected(), "a hanger in a multi-selection was dropped");
+    QVERIFY(gv->m_standItems.value(stand->id())->isSelected());
+
+    // 3. A locked layer: selectable from the tree, click-through on the plot,
+    //    held still, and a drag says why.
+    const quint32 lockedLayer = props->addLayer("Held");
+    for (Fixture *f : pars)
+        props->setFixtureLayer(f->id(), lockedLayer);
+    props->setLayerLocked(lockedLayer, true);
+    gv->refreshItemLayerState();
+    panel->reload();
+    gv->scene()->clearSelection();
+    clickRow("Par B", Qt::NoModifier);
+    QVERIFY2(parItem(1)->isSelected(), "a layer-locked fixture can't be selected from the tree");
+    QVERIFY(!(parItem(1)->flags() & QGraphicsItem::ItemIsMovable));
+    const QPointF parAt = parItem(1)->iconCentreScene();
+    QVERIFY2(gv->topPickableAt(parAt) != parItem(1), "a layer-locked fixture is not click-through");
+    const QPointF posBefore = parItem(1)->pos();
+    const QPoint from = gv->mapFromScene(parAt);
+    QWidget *vp = gv->viewport();
+    mon->m_noticeLabel->clear();
+    QTest::mousePress(vp, Qt::LeftButton, Qt::NoModifier, from);
+    QTest::mouseMove(vp, from + QPoint(30, 15));
+    QTest::mouseMove(vp, from + QPoint(60, 30));
+    QTest::mouseRelease(vp, Qt::LeftButton, Qt::NoModifier, from + QPoint(60, 30));
+    QCoreApplication::processEvents();
+    QCOMPARE(parItem(1)->pos(), posBefore);
+    QCOMPARE(mon->m_noticeLabel->text(), QString::fromUtf8("Layer locked — unlock it in Layers to move"));
+    // A plain click on it reaches what is under it, not it.
+    gv->scene()->clearSelection();
+    QTest::mouseClick(vp, Qt::LeftButton, Qt::NoModifier, from);
+    QCoreApplication::processEvents();
+    QVERIFY2(!parItem(1)->isSelected(), "a click on the plot selected a layer-locked fixture");
+    // A rubber band across all three passes them by.
+    gv->scene()->clearSelection();
+    const QPoint bandFrom = gv->mapFromScene(gv->realPositionToPixels(1500.0, 1500.0));
+    const QPoint bandTo = gv->mapFromScene(gv->realPositionToPixels(8500.0, 4500.0));
+    QTest::mousePress(vp, Qt::LeftButton, Qt::NoModifier, bandFrom);
+    QTest::mouseMove(vp, (bandFrom + bandTo) / 2);
+    QTest::mouseMove(vp, bandTo);
+    QTest::mouseRelease(vp, Qt::LeftButton, Qt::NoModifier, bandTo);
+    QCoreApplication::processEvents();
+    for (int i = 0; i < 3; i++)
+        QVERIFY2(!parItem(i)->isSelected(), "a rubber band selected a layer-locked fixture");
+    // Unlocked again, the plot takes clicks on it.
+    props->setLayerLocked(lockedLayer, false);
+    gv->refreshItemLayerState();
+    QCOMPARE(gv->topPickableAt(parAt), static_cast<QGraphicsItem *>(parItem(1)));
+    QTest::mouseClick(vp, Qt::LeftButton, Qt::NoModifier, from);
+    QCoreApplication::processEvents();
+    QVERIFY(parItem(1)->isSelected());
+
+    // 4. The plot locked: selected from the tree, and a drag says so.
+    mon->m_lockAction->setChecked(true);
+    gv->scene()->clearSelection();
+    panel->reload();
+    clickRow("Stand S", Qt::NoModifier);
+    StandItem *si = gv->m_standItems.value(stand->id());
+    QVERIFY(si->isSelected());
+    const QPointF standAt = si->pos();
+    const float standX = stand->originX();
+    mon->m_noticeLabel->clear();
+    dragOnPlot(gv, si, QPoint(70, 35));
+    QCOMPARE(si->pos(), standAt);
+    QCOMPARE(stand->originX(), standX);
+    QCOMPARE(mon->m_noticeLabel->text(), QString::fromUtf8("Plot locked — Edit Plot to move"));
+    mon->m_lockAction->setChecked(false);
+
+    delete mon;
+    gone.dismiss();
+    delete doc;
+}
+
+void Monitor_Test::aHeldObjectIsNeverMovedByADrag()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+
+    /* A tight deck, the way a show builds one: decks butted edge to edge,
+       off the snap grid, with a stackable step riding on one. Grid snap is
+       on, so a drop of the middle deck would snap it a hair into its
+       neighbour and the no-overlap rule would push it clear. */
+    auto deck = [props](const char *name, float x) {
+        StagePlatform *p = props->addPlatform();
+        p->setName(name);
+        p->setOriginX(x); p->setOriginY(3.0f);
+        p->setWidth(2.438f); p->setDepth(1.219f); p->setHeight(0.396f);
+        return p;
+    };
+    StagePlatform *csp1 = deck("CSP1", 2.0f);
+    StagePlatform *csp2 = deck("CSP2", 4.438f);
+    StagePlatform *csp3 = deck("CSP3", 6.876f);
+    StagePlatform *step = props->addPlatform();
+    step->setName("US-2");
+    step->setOriginX(4.6f); step->setOriginY(3.1f);
+    step->setWidth(2.0f); step->setDepth(0.204f); step->setHeight(0.204f);
+    step->setStackable(true);
+
+    Truss *truss = props->addTruss();
+    truss->setName("T-1");
+    truss->setOrigin(QVector3D(2.0f, 1.0f, 4.0f));
+    truss->setLength(3.0f);
+    Tower *tower = props->addTower();
+    tower->setName("AT1"); tower->setOriginX(11.0f); tower->setOriginY(7.0f);
+    tower->setWidth(0.4f); tower->setDepth(0.4f); tower->setHeight(2.4f);
+    Stand *stand = props->addStand();
+    stand->setName("Stand"); stand->setOriginX(13.0f); stand->setOriginY(7.0f);
+    Pipe *boom = props->addPipe();
+    boom->setName("Boom"); boom->setOriginX(15.0f); boom->setOriginY(7.0f);
+    Scenery *flat = props->addScenery();
+    flat->setName("Flat"); flat->setOriginX(9.0f); flat->setOriginY(9.5f);
+    StageTarget *mark = props->addStageTarget();
+    mark->setName("DSC");
+    // Clear of everything in plan AND in Front, so no drag grabs it instead.
+    mark->setPosition(QVector3D(19.0f, 11.0f, 0.0f));
+    Fixture *par = new Fixture(doc);
+    par->setName("Free Par");
+    par->setChannels(1);
+    QVERIFY(doc->addFixture(par));
+    props->setCurtainLineY(5.5f);
+    props->setStageMarks(MonitorProperties::CurtainLineFlag);
+
+    // Everything the model says about where things are, as a save writes it.
+    auto saved = [doc]() {
+        QByteArray ws;
+        QXmlStreamWriter ww(&ws);
+        ww.writeStartDocument();
+        doc->saveXML(&ww);
+        ww.writeEndDocument();
+        return ws;
+    };
+    auto deckXY = [](const StagePlatform *p) {
+        return QString("%1,%2").arg(double(p->originX()), 0, 'f', 4).arg(double(p->originY()), 0, 'f', 4);
+    };
+
+    QWidget parent;
+    parent.resize(1400, 900);
+    Monitor *mon = new Monitor(&parent, doc);
+    auto gone = qScopeGuard([mon]() { delete mon; });
+    mon->resize(1400, 900);
+    mon->showGraphicsView();
+    MonitorGraphicsView *gv = mon->m_graphicsView;
+    gv->setGridMetrics(1000.0);
+    gv->setGridSize(QSize(20, 12));
+    gv->setGridSubdivisions(3);
+    gv->setSnapDivisions(1);
+    props->setFixturePosition(par->id(), 0, 0, QVector3D(17000.0f, 9000.0f, 0.0f));
+    if (gv->fixtureItemForId(par->id()) == nullptr)
+        gv->addFixture(par->id(), QPointF(17000.0, 9000.0));
+    gv->refreshAllItems();
+    parent.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&parent));
+
+    struct Held { QString kind; QGraphicsItem *item; };
+    auto heldItems = [&]() {
+        QList<Held> out;
+        out << Held{ "deck CSP1", gv->m_platformItems.value(csp1->id()) }
+            << Held{ "deck CSP2", gv->m_platformItems.value(csp2->id()) }
+            << Held{ "deck CSP3", gv->m_platformItems.value(csp3->id()) }
+            << Held{ "riser step", gv->m_platformItems.value(step->id()) }
+            << Held{ "truss", gv->m_trussItems.value(truss->id()) }
+            << Held{ "tower", gv->m_towerItems.value(tower->id()) }
+            << Held{ "stand", gv->m_standItems.value(stand->id()) }
+            << Held{ "pipe", gv->m_pipeItems.value(boom->id()) }
+            << Held{ "scenery", gv->m_sceneryItems.value(flat->id()) }
+            << Held{ "target", gv->m_targetItems.value(mark->id()) }
+            << Held{ "stage piece", gv->stagePieceItem(MonitorProperties::CurtainPiece) }
+            << Held{ "fixture", gv->fixtureItemForId(par->id()) };
+        return out;
+    };
+
+    /* Drag each one, from a point on it, and require that nothing at all
+       changed: not the item (position, shown, still in the scene, still the
+       view's item), not the model, not what a save would write. */
+    auto dragEverything = [&](const QString &why, bool targetHeld) {
+        gv->refreshItemLayerState();
+        gv->updateStageMarks();
+        doc->resetModified();
+        gv->m_moveUndo.clear();
+        const QByteArray before = saved();
+        const QString csp2At = deckXY(csp2);
+        for (const Held &h : heldItems())
+        {
+            QVERIFY2(h.item != nullptr, qPrintable(why + ": no item for the " + h.kind));
+            if (h.kind == "target" && !targetHeld)
+                continue;           // "Targets stay adjustable": checked below
+            const QPointF pos = h.item->pos();
+            const bool shown = h.item->isVisible();
+            QPointF on = h.item->sceneBoundingRect().center();
+            if (h.kind == "stage piece")       // its handle is the curtain line
+                on = gv->realPositionToPixels(8000.0, 5500.0);
+            gv->scene()->clearSelection();
+            const QPoint from = gv->mapFromScene(on);
+            QWidget *vp = gv->viewport();
+            QTest::mousePress(vp, Qt::LeftButton, Qt::NoModifier, from);
+            QTest::mouseMove(vp, from + QPoint(40, 20));
+            QTest::mouseMove(vp, from + QPoint(80, 40));
+            QTest::mouseRelease(vp, Qt::LeftButton, Qt::NoModifier, from + QPoint(80, 40));
+            QCoreApplication::processEvents();
+
+            bool stillThere = false;
+            for (const Held &now : heldItems())
+                if (now.kind == h.kind)
+                    stillThere = (now.item == h.item);
+            QVERIFY2(stillThere && h.item->scene() == gv->scene(),
+                     qPrintable(why + ": the " + h.kind + " left the plot"));
+            QVERIFY2(h.item->pos() == pos,
+                     qPrintable(QString("%1: the %2 moved from %3,%4 to %5,%6").arg(why, h.kind)
+                                .arg(pos.x(), 0, 'f', 3).arg(pos.y(), 0, 'f', 3)
+                                .arg(h.item->pos().x(), 0, 'f', 3).arg(h.item->pos().y(), 0, 'f', 3)));
+            QVERIFY2(h.item->isVisible() == shown, qPrintable(why + ": the " + h.kind + " was hidden"));
+            QVERIFY2(deckXY(csp2) == csp2At,
+                     qPrintable(why + ": dragging the " + h.kind + " moved CSP2 to " + deckXY(csp2)));
+        }
+        QCOMPARE(props->platforms().size(), 4);
+        QVERIFY2(saved() == before, qPrintable(why + ": a save would write a different plot"));
+        QVERIFY2(!doc->isModified(), qPrintable(why + ": the show was marked changed"));
+        QVERIFY2(!gv->canUndo(), qPrintable(why + ": a refused drag left an undo step"));
+    };
+
+    // 1. Edit Plot locked: nothing moves -- aim targets included (Q183) --
+    //    in plan or in an elevation, and the status line says how to move it.
+    QVERIFY(mon->m_targetsAdjustableAction != nullptr);
+    mon->m_targetsAdjustableAction->setChecked(false);     // the default
+    QVERIFY(!gv->targetsAdjustableWhenLocked());
+    mon->m_lockAction->setChecked(true);
+    QVERIFY(gv->layoutLocked());
+    QVERIFY(mon->m_targetsAdjustableAction->isVisible());   // offered beside the lock
+    dragEverything("plot locked, Top", true);
+    QCOMPARE(mon->m_noticeLabel->text(), QString::fromUtf8("Plot locked — Edit Plot to move"));
+    gv->setViewPOV(MonitorGraphicsView::PovFront);
+    dragEverything("plot locked, Front", true);
+    gv->setViewPOV(MonitorGraphicsView::PovTop);
+
+    /* 1b. "Targets stay adjustable" on: the plot still holds everything else,
+       but an aim target drags -- in plan and, for its height, in Front. */
+    mon->m_targetsAdjustableAction->setChecked(true);
+    QVERIFY(gv->targetsAdjustableWhenLocked());
+    QVERIFY(gv->layoutLocked());
+    dragEverything("plot locked, targets adjustable, Top", false);
+    {
+        TargetItem *tgi = gv->m_targetItems.value(mark->id());
+        QVERIFY(tgi != nullptr);
+        const QVector3D was = mark->position();
+        gv->scene()->clearSelection();
+        dragOnPlot(gv, tgi, QPoint(60, 30));
+        QVERIFY2(mark->position() != was,
+                 "with Targets stay adjustable on, a locked plot's aim target did not drag");
+        gv->undoLastMove();
+        QCOMPARE(mark->position(), was);
+    }
+    mon->m_targetsAdjustableAction->setChecked(false);
+    QVERIFY(!gv->targetsAdjustableWhenLocked());
+
+    // 2. Plot open, every layer locked: the same.
+    mon->m_lockAction->setChecked(false);
+    QVERIFY(!gv->layoutLocked());
+    for (const MonitorProperties::MonitorLayer &l : props->layers())
+        props->setLayerLocked(l.id, true);
+    dragEverything("layer locked, Top", true);
+    QCOMPARE(mon->m_noticeLabel->text(), QString::fromUtf8("Layer locked \u2014 unlock it in Layers to move"));
+    gv->setViewPOV(MonitorGraphicsView::PovFront);
+    dragEverything("layer locked, Front", true);
+    gv->setViewPOV(MonitorGraphicsView::PovTop);
+
+    // 3. And open, the same drag does move the deck -- the test reaches it.
+    for (const MonitorProperties::MonitorLayer &l : props->layers())
+        props->setLayerLocked(l.id, false);
+    gv->refreshItemLayerState();
+    const QString was = deckXY(csp2);
+    gv->scene()->clearSelection();
+    dragOnPlot(gv, gv->m_platformItems.value(csp2->id()), QPoint(0, 160));
+    QVERIFY2(deckXY(csp2) != was, "an unlocked deck did not move: the drag is not reaching it");
+    delete mon;
+    gone.dismiss();
+    delete doc;
 }

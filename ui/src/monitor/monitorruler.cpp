@@ -81,54 +81,76 @@ void MonitorRuler::paintEvent(QPaintEvent *)
     const QVector<MonitorGraphicsView::RulerTick> ticks = m_view->rulerTicks(horiz);
     const QColor tickCol(150, 150, 150);
     const QColor textCol(190, 190, 190);
+    // The centre line, in the plot's own teal: its tick runs the ruler's depth.
+    const QColor centreCol(0, 190, 175);
+    const bool fromCentre = m_view->rulerFromCentreLine(horiz);
 
     for (const MonitorGraphicsView::RulerTick &t : ticks)
     {
-        const int c = int(t.pixel + 0.5);
+        const qreal c = t.pixel;
+        const bool centre = fromCentre && t.value == 0.0;
         if (horiz)
         {
             if (c < -20 || c > width() + 20)
                 continue;
-            p.setPen(tickCol);
-            p.drawLine(c, height() - 6, c, height() - 1);
-            p.setPen(textCol);
-            p.drawText(QRect(c - 24, 1, 48, height() - 7),
-                       Qt::AlignHCenter | Qt::AlignVCenter, t.label);
+            p.setPen(centre ? centreCol : tickCol);
+            p.drawLine(QLineF(c, centre ? 0.0 : height() - 6, c, height() - 1));
+            p.setPen(centre ? centreCol : textCol);
+            // The CL label sits beside its full-height tick, not across it.
+            p.drawText(centre ? QRectF(c + 2, 1, 30, height() - 7) : QRectF(c - 24, 1, 48, height() - 7),
+                       (centre ? Qt::AlignLeft : Qt::AlignHCenter) | Qt::AlignVCenter, t.label);
         }
         else
         {
             if (c < -20 || c > height() + 20)
                 continue;
-            p.setPen(tickCol);
-            p.drawLine(width() - 6, c, width() - 1, c);
+            p.setPen(centre ? centreCol : tickCol);
+            p.drawLine(QLineF(centre ? 0.0 : width() - 6, c, width() - 1, c));
             // Vertical text: rotate the painter so labels read bottom-to-top.
             p.save();
             p.translate(0, c);
             p.rotate(-90);
-            p.setPen(textCol);
-            p.drawText(QRect(-24, 0, 48, width() - 7),
-                       Qt::AlignHCenter | Qt::AlignVCenter, t.label);
+            p.setPen(centre ? centreCol : textCol);
+            p.drawText(centre ? QRectF(2, 0, 30, width() - 7) : QRectF(-24, 0, 48, width() - 7),
+                       (centre ? Qt::AlignLeft : Qt::AlignHCenter) | Qt::AlignVCenter, t.label);
             p.restore();
         }
     }
 
-    // Axis label in the near corner.
+    /* Axis label in the near corner. Counting from the centre line, the
+       numbers carry no sign: the label says which side is which. */
     p.setPen(QColor(120, 160, 220));
-    const QString axis = m_view->axisName(horiz) + " (" + m_view->unitSuffix() + ")";
+    QString axis = m_view->axisName(horiz) + " (" + m_view->unitSuffix() + ")";
+    if (fromCentre)
+        axis = (m_view->stageRightFirst(horiz) ? tr("SR | SL") : tr("SL | SR"))
+               + " (" + m_view->unitSuffix() + ")";
     if (horiz)
-        p.drawText(QRect(2, 1, 60, height() - 2), Qt::AlignLeft | Qt::AlignVCenter, axis);
+    {
+        const QRectF box(0, 0, p.fontMetrics().horizontalAdvance(axis) + 6, height() - 1);
+        p.fillRect(box, QColor(26, 26, 26));     // over any tick label under it
+        p.drawText(box.adjusted(2, 1, 0, -1), Qt::AlignLeft | Qt::AlignVCenter, axis);
+    }
 
     // Selection / dragged-item extent band (drawn under the cursor marker).
-    if (m_rangeA >= 0 && m_rangeB >= 0)
+    if (m_rangeA != -1 || m_rangeB != -1)
     {
-        const int a = qMin(m_rangeA, m_rangeB);
-        const int b = qMax(m_rangeA, m_rangeB);
-        p.fillRect(horiz ? QRect(a, 0, qMax(2, b - a), height())
-                         : QRect(0, a, width(), qMax(2, b - a)),
+        /* Unrounded edges: the band's edges are where the item's are, to the
+           device pixel. A narrow item still gets a visible band. */
+        qreal a = qMin(m_rangeA, m_rangeB);
+        qreal b = qMax(m_rangeA, m_rangeB);
+        if (b - a < 2.0)
+        {
+            const qreal mid = (a + b) / 2.0;
+            a = mid - 1.0;
+            b = mid + 1.0;
+        }
+        p.fillRect(horiz ? QRectF(a, 0, b - a, height())
+                         : QRectF(0, a, width(), b - a),
                    QColor(255, 196, 64, 90));
-        p.setPen(QPen(QColor(255, 196, 64), 1));
-        if (horiz) { p.drawLine(a, 0, a, height()); p.drawLine(b, 0, b, height()); }
-        else       { p.drawLine(0, a, width(), a);  p.drawLine(0, b, width(), b); }
+        QPen edge(QColor(255, 196, 64), 0);     // cosmetic: one device pixel
+        p.setPen(edge);
+        if (horiz) { p.drawLine(QLineF(a, 0, a, height())); p.drawLine(QLineF(b, 0, b, height())); }
+        else       { p.drawLine(QLineF(0, a, width(), a));  p.drawLine(QLineF(0, b, width(), b)); }
     }
 
     // Live cursor marker.
@@ -142,7 +164,7 @@ void MonitorRuler::paintEvent(QPaintEvent *)
     }
 }
 
-void MonitorRuler::setItemRange(int pxA, int pxB)
+void MonitorRuler::setItemRange(qreal pxA, qreal pxB)
 {
     if (pxA == m_rangeA && pxB == m_rangeB)
         return;

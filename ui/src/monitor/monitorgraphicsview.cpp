@@ -229,6 +229,16 @@ MonitorGraphicsView::MonitorGraphicsView(Doc *doc, QWidget *parent)
             this, &MonitorGraphicsView::scheduleReachOverlay);
     /* A reveal lasts until you select something else: the fixtures a bubble
        stands for go back under it, and their tags and footprints with them. */
+    /* Readouts are stacked on screen, so again when the view moves or a line
+       target's readout comes or goes with its selection. */
+    connect(this, &MonitorGraphicsView::rulersChanged, this, [this]() {
+        if (!m_itemsRebuilding)
+            stackTargetReadouts();
+    });
+    connect(m_scene, &QGraphicsScene::selectionChanged, this, [this]() {
+        if (!m_itemsRebuilding)    // the scene says so while items are torn down
+            stackTargetReadouts();
+    });
     connect(m_scene, &QGraphicsScene::selectionChanged, this, [this]() {
         if (m_settingRevealSelection)
             return;
@@ -416,6 +426,9 @@ void MonitorGraphicsView::mousePressEvent(QMouseEvent *event)
     // via its private m_dragMoved before deciding whether to emit
     // itemDropped() at all.
     m_pressViewPos = event->pos();
+    m_dragRefused = false;
+    m_dragRefusedNoted = false;
+    m_pressOnLockedLayer = false;
 
     /* A reveal is a question about one stack -- "which of these is it?" -- and
        it ends the moment you look somewhere else. Selecting another item ends
@@ -583,6 +596,54 @@ void MonitorGraphicsView::mousePressEvent(QMouseEvent *event)
         captureMoveUndo();
 
     QGraphicsView::mousePressEvent(event);
+
+    /* What the press grabbed decides whether this can be a move at all. Qt
+       already leaves a non-movable item where it is while the pointer moves,
+       but the release used to store it anyway: the item's own drop signal and
+       the cross-kind sweep below both re-read its position, snapped it to the
+       grid and ran a platform's no-overlap push -- so a riser in a tight
+       deck, nudged a hair by the snap, was shoved off its neighbours and
+       landed decks away ("it disappeared"), and the move was saved. */
+    if (event->button() == Qt::LeftButton && m_scene != nullptr)
+    {
+        MonitorProperties *props = m_doc->monitorProperties();
+        auto onLockedLayer = [props](const QGraphicsItem *top) {
+            if (top->data(ItemLock::LayerLockedKey).toBool())
+                return true;
+            // Stage pieces live on the Stage layer, which they don't carry.
+            return dynamic_cast<const StagePieceItem *>(top) != nullptr && props != nullptr
+                   && props->hasStageLayer() && props->layer(props->stageLayerId()).locked;
+        };
+        if (QGraphicsItem *grabber = m_scene->mouseGrabberItem())
+        {
+            const QGraphicsItem *top = grabber->topLevelItem();
+            m_dragRefused = !itemDraggable(grabber)
+                            && (top->flags() & QGraphicsItem::ItemIsSelectable);
+            m_pressOnLockedLayer = m_dragRefused && onLockedLayer(top);
+        }
+        else
+        {
+            // Through an object on a locked layer: the drag rubber-bands, but say why.
+            foreach (QGraphicsItem *gi, m_scene->items(mapToScene(event->pos())))
+                if (onLockedLayer(gi->topLevelItem()))
+                {
+                    m_pressOnLockedLayer = true;
+                    break;
+                }
+        }
+    }
+}
+
+bool MonitorGraphicsView::itemDraggable(const QGraphicsItem *item)
+{
+    if (item == nullptr)
+        return false;
+    const QGraphicsItem *top = item->topLevelItem();
+    // A stage piece drags by its own rule, not Qt's movable flag.
+    if (const StagePieceItem *spi = dynamic_cast<const StagePieceItem *>(top))
+        return spi->isMovable();
+    return (item->flags() & QGraphicsItem::ItemIsMovable)
+           || (top->flags() & QGraphicsItem::ItemIsMovable);
 }
 
 MonitorGraphicsView::~MonitorGraphicsView()
@@ -882,10 +943,58 @@ void MonitorGraphicsView::setLayoutLocked(bool locked)
 {
     m_layoutLocked = locked;
     // refreshItemLayerState folds the global lock together with each item's own
-    // lock and its layer lock. Targets stay movable when only the layout is
-    // locked (the operator still nudges aim targets for the selected scene) —
-    // that exception lives in refreshItemLayerState.
+    // lock and its layer lock. A locked plot holds aim targets too, unless
+    // "Targets stay adjustable" is on (setTargetsAdjustableWhenLocked()).
     refreshItemLayerState();
+}
+
+void MonitorGraphicsView::setTargetsAdjustableWhenLocked(bool on)
+{
+    if (m_targetsAdjustableWhenLocked == on)
+        return;
+    m_targetsAdjustableWhenLocked = on;
+    refreshItemLayerState();
+}
+
+void MonitorGraphicsView::applyLayerLock(QGraphicsItem *gi, bool layerLocked)
+{
+    if (gi == nullptr)
+        return;
+    /* Selectable whatever its layer says: QGraphicsItem::setSelected() is a
+       no-op on an item that isn't, which is what kept a layer-locked object
+       from being selected even from the Layers tree. The plot leaves it alone
+       instead: it takes no mouse button, so Qt hands a click to whatever is
+       under it, and topPickableAt() and the rubber band skip it too. */
+    gi->setFlag(QGraphicsItem::ItemIsSelectable, true);
+    static const int kOpenButtonsKey = 0x4C42;   // the buttons it takes when open
+    if (layerLocked)
+    {
+        if (gi->acceptedMouseButtons() != Qt::NoButton)
+            gi->setData(kOpenButtonsKey, int(gi->acceptedMouseButtons()));
+        gi->setAcceptedMouseButtons(Qt::NoButton);
+    }
+    else if (gi->data(kOpenButtonsKey).isValid())
+    {
+        gi->setAcceptedMouseButtons(Qt::MouseButtons(gi->data(kOpenButtonsKey).toInt()));
+    }
+    if (gi->data(ItemLock::LayerLockedKey).toBool() != layerLocked)
+    {
+        gi->setData(ItemLock::LayerLockedKey, layerLocked);
+        gi->update();
+    }
+}
+
+void MonitorGraphicsView::dropLayerLockedFromRubberBand()
+{
+    if (m_scene == nullptr || rubberBandRect().isNull())
+        return;
+    /* A rubber band selects whatever is selectable inside it, and a
+       layer-locked object is selectable (for the tree). On the plot it is
+       click-through, so the band passes it by -- unless it was selected
+       before the band started. */
+    foreach (QGraphicsItem *gi, m_scene->selectedItems())
+        if (gi->data(ItemLock::LayerLockedKey).toBool() && !m_savedSelection.contains(gi))
+            gi->setSelected(false);
 }
 
 int MonitorGraphicsView::setSelectedItemsLayer(quint32 layerId)
@@ -986,6 +1095,34 @@ static QList<QPair<quint32, MonitorFixtureItem *> >
     return out;
 }
 
+/* A free fixture's stored XY is the top-left corner of its icon (updateFixture()
+   pins the item's corner there), so lining up stored points lined up CORNERS:
+   a wide and a narrow light "aligned" left their centres apart. Align and
+   Distribute work on what the plot draws -- the icon's centre and edges --
+   and convert back to the corner only to store it. */
+QSizeF MonitorGraphicsView::fixtureIconSizeMm(const MonitorFixtureItem *item) const
+{
+    if (item == nullptr || m_cellPixels <= 0)
+        return QSizeF();
+    const QRectF r = item->iconRect();
+    const double k = double(m_unitValue) / double(m_cellPixels);   // px -> mm
+    return QSizeF(r.width() * k, r.height() * k);
+}
+
+void MonitorGraphicsView::storeAlignedFixture(quint32 fid, MonitorFixtureItem *item,
+                                              const QPointF &cornerMm)
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    /* Keep the hanging height: an XY tidy-up must never drop a light to the
+       floor (it wrote Z = 0, and Monitor::slotFixtureMoved then "preserved"
+       that 0). */
+    const float z = props->fixturePosition(fid, 0, 0).z();
+    item->setRealPosition(cornerMm);
+    item->setPos(realPositionToPixels(cornerMm.x(), cornerMm.y()));
+    props->setFixturePosition(fid, 0, 0, QVector3D(cornerMm.x(), cornerMm.y(), z));
+    emit fixtureMoved(fid, cornerMm);
+}
+
 int MonitorGraphicsView::alignSelectedFixtures(int mode)
 {
     if (m_pov != PovTop)   // alignment is an XY (top-view) operation
@@ -995,36 +1132,36 @@ int MonitorGraphicsView::alignSelectedFixtures(int mode)
     if (items.size() < 2)
         return 0;
 
-    // Gather current mm positions.
+    // Each icon's extent in mm: the corner is stored, the size is the icon's.
+    QList<QRectF> boxes;
     double sumX = 0, sumY = 0, minX = 1e18, maxX = -1e18, minY = 1e18, maxY = -1e18;
     for (const auto &it : items)
     {
-        const QPointF p = it.second->realPosition();
-        sumX += p.x(); sumY += p.y();
-        minX = qMin(minX, p.x()); maxX = qMax(maxX, p.x());
-        minY = qMin(minY, p.y()); maxY = qMax(maxY, p.y());
+        const QRectF b(it.second->realPosition(), fixtureIconSizeMm(it.second));
+        boxes << b;
+        sumX += b.center().x(); sumY += b.center().y();
+        minX = qMin(minX, b.left()); maxX = qMax(maxX, b.right());
+        minY = qMin(minY, b.top());  maxY = qMax(maxY, b.bottom());
     }
     const double avgX = sumX / items.size(), avgY = sumY / items.size();
 
     captureMoveUndo();
-    for (const auto &it : items)
+    for (int i = 0; i < items.size(); i++)
     {
-        QPointF p = it.second->realPosition();
+        QRectF b = boxes.at(i);
         switch (mode)
         {
-            case 0: p.setX(avgX); break;   // same X (column)
-            case 1: p.setX(minX); break;   // left
-            case 2: p.setX(maxX); break;   // right
-            case 3: p.setY(avgY); break;   // same Y (row)
-            case 4: p.setY(minY); break;   // top (upstage)
-            case 5: p.setY(maxY); break;   // bottom (downstage)
+            case 0: b.moveCenter(QPointF(avgX, b.center().y())); break;  // same X (column)
+            case 1: b.moveLeft(minX); break;                             // left edges
+            case 2: b.moveRight(maxX); break;                            // right edges
+            case 3: b.moveCenter(QPointF(b.center().x(), avgY)); break;  // same Y (row)
+            case 4: b.moveTop(minY); break;                              // upstage edges
+            case 5: b.moveBottom(maxY); break;                           // downstage edges
             default: break;
         }
-        it.second->setRealPosition(p);
-        it.second->setPos(realPositionToPixels(p.x(), p.y()));
-        props->setFixturePosition(it.first, 0, 0, QVector3D(p.x(), p.y(), 0));
-        emit fixtureMoved(it.first, p);
+        storeAlignedFixture(items.at(i).first, items.at(i).second, b.topLeft());
     }
+    commitMoveUndo();       // one Ctrl+Z puts them back (it was captured, never kept)
     m_doc->setModified();
     refreshOffGridTally();      // aligning can push a fixture off the grid
     return items.size();
@@ -1039,27 +1176,30 @@ int MonitorGraphicsView::distributeSelectedFixtures(bool horizontal)
     if (items.size() < 3)
         return 0;
 
-    // Sort by the axis, then evenly space between the two extremes.
-    std::sort(items.begin(), items.end(), [horizontal](const auto &a, const auto &b) {
-        return horizontal ? a.second->realPosition().x() < b.second->realPosition().x()
-                          : a.second->realPosition().y() < b.second->realPosition().y();
+    // Evenly space the CENTRES between the two outermost centres.
+    auto centreOf = [this](const MonitorFixtureItem *mfi) {
+        return QRectF(mfi->realPosition(), fixtureIconSizeMm(mfi)).center();
+    };
+    std::sort(items.begin(), items.end(), [&](const auto &a, const auto &b) {
+        const QPointF ca = centreOf(a.second), cb = centreOf(b.second);
+        return horizontal ? ca.x() < cb.x() : ca.y() < cb.y();
     });
-    const double lo = horizontal ? items.first().second->realPosition().x()
-                                 : items.first().second->realPosition().y();
-    const double hi = horizontal ? items.last().second->realPosition().x()
-                                 : items.last().second->realPosition().y();
+    const QPointF first = centreOf(items.first().second);
+    const QPointF last = centreOf(items.last().second);
+    const double lo = horizontal ? first.x() : first.y();
+    const double hi = horizontal ? last.x() : last.y();
     const double step = (hi - lo) / double(items.size() - 1);
 
     captureMoveUndo();
     for (int i = 0; i < items.size(); i++)
     {
-        QPointF p = items[i].second->realPosition();
-        if (horizontal) p.setX(lo + step * i); else p.setY(lo + step * i);
-        items[i].second->setRealPosition(p);
-        items[i].second->setPos(realPositionToPixels(p.x(), p.y()));
-        props->setFixturePosition(items[i].first, 0, 0, QVector3D(p.x(), p.y(), 0));
-        emit fixtureMoved(items[i].first, p);
+        QRectF b(items[i].second->realPosition(), fixtureIconSizeMm(items[i].second));
+        QPointF c = b.center();
+        if (horizontal) c.setX(lo + step * i); else c.setY(lo + step * i);
+        b.moveCenter(c);
+        storeAlignedFixture(items[i].first, items[i].second, b.topLeft());
     }
+    commitMoveUndo();       // one Ctrl+Z puts them back (it was captured, never kept)
     m_doc->setModified();
     refreshOffGridTally();
     return items.size();
@@ -2428,36 +2568,7 @@ void MonitorGraphicsView::selectItemsInGroup(quint32 gid)
 
 void MonitorGraphicsView::selectMapItem(const QString &kind, quint32 id)
 {
-    QGraphicsItem *target = nullptr;
-    if (kind == QStringLiteral("fixture"))
-        target = m_fixtures.value(id, nullptr);
-    else if (kind == QStringLiteral("truss"))
-        target = m_trussItems.value(id, nullptr);
-    else if (kind == QStringLiteral("platform"))
-        target = m_platformItems.value(id, nullptr);
-    else if (kind == QStringLiteral("pipe"))
-        target = m_pipeItems.value(id, nullptr);
-    else if (kind == QStringLiteral("stand"))
-        target = m_standItems.value(id, nullptr);
-    else if (kind == QStringLiteral("scenery"))
-        target = m_sceneryItems.value(id, nullptr);
-    else if (kind == QStringLiteral("tower"))
-        target = m_towerItems.value(id, nullptr);
-    else if (kind == QStringLiteral("target"))
-        target = m_targetItems.value(id, nullptr);
-    else if (kind == QStringLiteral("power"))
-        target = (int(id) < m_powerSourceItems.size()) ? m_powerSourceItems.at(int(id)) : nullptr;
-    else if (kind == QStringLiteral("network"))
-        target = (int(id) < m_networkNodeItems.size()) ? m_networkNodeItems.at(int(id)) : nullptr;
-    else if (kind == QStringLiteral("image"))
-        target = m_imageItems.value(id, nullptr);
-    else if (kind == QStringLiteral("hanger"))
-        target = m_hangerItems.value(id, nullptr);
-    else if (kind == QStringLiteral("stage"))
-    {
-        StagePieceItem *spi = m_stagePieceItems.value(int(id), nullptr);
-        target = (spi != nullptr && spi->isVisible()) ? spi : nullptr;
-    }
+    QGraphicsItem *target = itemFor(kind, id);
 
     // Selecting from the tree targets exactly ONE item so it can be edited /
     // repositioned individually — suppress the select-together group extension.
@@ -2496,30 +2607,26 @@ void MonitorGraphicsView::requestEditItem(const QString &kind, quint32 id)
 
 void MonitorGraphicsView::selectMapItems(const QList<QPair<QString, quint32> > &items)
 {
+    /* Every row the Layers tree has selected, all of them -- the same lookup
+       as a single row (itemFor()), so a stage piece or a hanger in a
+       multi-selection is selected too instead of quietly dropped. */
     m_extendingSelection = true;   // suppress select-together until we're done
     m_scene->clearSelection();
+    QGraphicsItem *first = nullptr;
     for (const QPair<QString, quint32> &it : items)
     {
-        const QString &kind = it.first;
-        const quint32 id = it.second;
-        QGraphicsItem *target = nullptr;
-        if (kind == QStringLiteral("fixture"))       target = m_fixtures.value(id, nullptr);
-        else if (kind == QStringLiteral("truss"))    target = m_trussItems.value(id, nullptr);
-        else if (kind == QStringLiteral("platform")) target = m_platformItems.value(id, nullptr);
-        else if (kind == QStringLiteral("pipe"))     target = m_pipeItems.value(id, nullptr);
-        else if (kind == QStringLiteral("stand"))    target = m_standItems.value(id, nullptr);
-        else if (kind == QStringLiteral("scenery"))  target = m_sceneryItems.value(id, nullptr);
-        else if (kind == QStringLiteral("tower"))    target = m_towerItems.value(id, nullptr);
-        else if (kind == QStringLiteral("target"))   target = m_targetItems.value(id, nullptr);
-        else if (kind == QStringLiteral("power"))
-            target = (int(id) < m_powerSourceItems.size()) ? m_powerSourceItems.at(int(id)) : nullptr;
-        else if (kind == QStringLiteral("network"))
-            target = (int(id) < m_networkNodeItems.size()) ? m_networkNodeItems.at(int(id)) : nullptr;
-        else if (kind == QStringLiteral("image"))    target = m_imageItems.value(id, nullptr);
-        else if (kind == QStringLiteral("hanger"))   target = m_hangerItems.value(id, nullptr);
-        if (target)
+        QGraphicsItem *target = itemFor(it.first, it.second);
+        if (target == nullptr)
+            continue;
+        if (StagePieceItem *spi = dynamic_cast<StagePieceItem *>(target))
+            spi->selectNow(true);      // only ever picked on purpose
+        else
             target->setSelected(true);
+        if (first == nullptr)
+            first = target;
     }
+    if (first != nullptr)
+        first->ensureVisible();    // scroll the canvas to the first of them
     m_extendingSelection = false;
     extendSelectionToGroups();
     emit mapSelectionChanged();
@@ -2540,6 +2647,13 @@ QGraphicsItem *MonitorGraphicsView::itemFor(const QString &kind, quint32 id) con
     if (kind == QStringLiteral("network"))
         return (int(id) < m_networkNodeItems.size()) ? m_networkNodeItems.at(int(id)) : nullptr;
     if (kind == QStringLiteral("image"))    return m_imageItems.value(id, nullptr);
+    if (kind == QStringLiteral("hanger"))   return m_hangerItems.value(id, nullptr);
+    if (kind == QStringLiteral("stage"))
+    {
+        // A stage piece that isn't drawn has nothing on the plot to select.
+        StagePieceItem *spi = m_stagePieceItems.value(int(id), nullptr);
+        return (spi != nullptr && spi->isVisible()) ? spi : nullptr;
+    }
     return nullptr;
 }
 
@@ -2742,26 +2856,18 @@ void MonitorGraphicsView::refreshItemLayerState()
     auto repaintAll = qScopeGuard([this]() { if (m_scene) m_scene->update(); });
 
     // What holds an item still, by SOURCE:
-    //   • LAYER lock → the item can't be moved AND can't be selected, and
-    //     draws red (told to the item: ItemLock::LayerLockedKey).
+    //   • LAYER lock → the item can't be moved, draws red (told to the item:
+    //     ItemLock::LayerLockedKey) and is CLICK-THROUGH on the plot -- a click
+    //     or a rubber band reaches what is under it (Q178 #5). It stays
+    //     selectable, so the Layers tree can still select it, and Properties
+    //     and the menu work on it.
     //   • its OWN lock → can't be moved, draws red, but CAN still be selected
     //     (so it can be unlocked from its menu).
     //   • folder lock / global "Edit Plot" lock → can't be moved, but CAN
     //     still be selected (so it can be inspected / rubber-banded).
-    // A helper keeps ItemIsSelectable in sync and drops a stale selection when an
-    // item becomes unselectable.
-    auto applySelectable = [](QGraphicsItem *gi, bool selectable) {
-        gi->setFlag(QGraphicsItem::ItemIsSelectable, selectable);
-        if (!selectable && gi->isSelected())
-            gi->setSelected(false);
-        // Its layer's lock, for drawing it red: the inverse of selectable.
-        if (gi->data(ItemLock::LayerLockedKey).toBool() == selectable)
-        {
-            gi->setData(ItemLock::LayerLockedKey, !selectable);
-            gi->update();
-        }
+    auto applySelectable = [](QGraphicsItem *gi, bool open) {
+        applyLayerLock(gi, !open);
     };
-
     // Fixtures (no per-item lock): layer drives visibility + selectability;
     // movable unless the global layout or the layer is locked.
     for (auto it = m_fixtures.constBegin(); it != m_fixtures.constEnd(); ++it)
@@ -2837,8 +2943,9 @@ void MonitorGraphicsView::refreshItemLayerState()
         }
     }
 
-    // Targets: aim points stay draggable in Design mode regardless of the global
-    // layout lock, but a locked layer still freezes them; a hidden layer hides.
+    // Targets: draggable in Design mode. The plot lock holds them like
+    // everything else (Q183) unless "Targets stay adjustable" is on; a locked
+    // layer always freezes them; a hidden layer hides.
     foreach (TargetItem *ti, m_targetItems)
     {
         StageTarget *t = ti->target();
@@ -2849,7 +2956,7 @@ void MonitorGraphicsView::refreshItemLayerState()
            "Lock Target" menu item set a flag that this function overwrote on
            the very next refresh -- locking a target did nothing at all, while
            the equivalent line for trusses above has always honoured it. */
-        ti->setMovable(m_doc->mode() == Doc::Design
+        ti->setMovable(m_doc->mode() == Doc::Design && targetsFreeOfPlotLock()
                        && !(t && t->locked()) && !lyr.locked && !grpLock);
         applySelectable(ti, !lyr.locked);
     }
@@ -2920,8 +3027,9 @@ void MonitorGraphicsView::refreshItemLayerState()
                 props->layer(props->fixtureLayer(it.key()));
             const bool frozen = m_layoutLocked || flyr.locked
                               || props->groupChainLocked(props->fixtureGroup(it.key()));
-            it.value()->setMovable(bound ? elevationFixtureDraggable(it.key())
-                                         : !frozen);
+            // Held is held in every view: a bound fixture's slide along its
+            // truss ignored the plot and layer locks here.
+            it.value()->setMovable(!frozen && (!bound || elevationFixtureDraggable(it.key())));
         }
         /* Trusses: a tower crossbar has always been draggable here, and a
            free-standing truss now is too -- dragging one up or down in Front is
@@ -2944,7 +3052,8 @@ void MonitorGraphicsView::refreshItemLayerState()
         foreach (TargetItem *i, m_targetItems)
         {
             StageTarget *t = i->target();
-            i->setMovable(m_doc->mode() == Doc::Design && !(t && t->locked())
+            i->setMovable(m_doc->mode() == Doc::Design && targetsFreeOfPlotLock()
+                          && !(t && t->locked())
                           && !props->layer(t ? t->layerId() : 0).locked
                           && !props->groupChainLocked(t ? t->groupId() : 0));
         }
@@ -3065,18 +3174,51 @@ void MonitorGraphicsView::refreshFixtureLabels()
             pi->showLabel(props->layer(p->layerId()).labels);
 }
 
-QRect MonitorGraphicsView::selectionViewportRect() const
+QRectF MonitorGraphicsView::itemGeometryRect(const QGraphicsItem *item)
+{
+    if (item == nullptr)
+        return QRectF();
+    if (auto *f = dynamic_cast<const MonitorFixtureItem *>(item))
+        return f->iconRect();
+    if (auto *t = dynamic_cast<const TargetItem *>(item))
+        return t->geometryRect();
+    if (auto *tr = dynamic_cast<const TrussItem *>(item))
+        return tr->footprintRect();
+    if (auto *tw = dynamic_cast<const TowerItem *>(item))
+        return tw->footprintRect();
+    if (auto *pl = dynamic_cast<const PlatformItem *>(item))
+        return pl->geometryRect();
+    if (auto *pp = dynamic_cast<const PipeItem *>(item))
+        return pp->geometryRect();
+    if (auto *st = dynamic_cast<const StandItem *>(item))
+        return st->geometryRect();
+    if (auto *sc = dynamic_cast<const SceneryItem *>(item))
+        return sc->geometryRect();
+    if (auto *sp = dynamic_cast<const StagePieceItem *>(item))
+        return sp->geometryRect();
+    return item->boundingRect();
+}
+
+QRectF MonitorGraphicsView::selectionViewportRect() const
 {
     /* Whatever is selected, not only fixtures: a drape, a truss or a deck
-       being moved reads on the rulers the same way. */
+       being moved reads on the rulers the same way. Each item's own
+       geometry, mapped through its transform (a turned deck) and the view's
+       (zoom, scroll, a quarter turn), unrounded: the band starts and ends
+       where the item does. sceneBoundingRect() was the paint extent -- a
+       target's name to its right made the band a foot and more wider, and
+       off centre ("the band does not line up with the target"). */
     const QList<QGraphicsItem *> items = m_scene->selectedItems();
-    if (items.isEmpty())
-        return QRect();
-    QRectF scene;
+    QRectF out;
     foreach (QGraphicsItem *it, items)
-        scene = scene.isNull() ? it->sceneBoundingRect()
-                               : scene.united(it->sceneBoundingRect());
-    return mapFromScene(scene).boundingRect();
+    {
+        const QRectF g = itemGeometryRect(it);
+        if (g.isNull())
+            continue;
+        const QRectF vp = viewportTransform().map(it->mapToScene(g)).boundingRect();
+        out = out.isNull() ? vp : out.united(vp);
+    }
+    return out;
 }
 
 QColor MonitorGraphicsView::fixtureGelColor(quint32 id)
@@ -3490,8 +3632,10 @@ int MonitorGraphicsView::selectAllMapItems()
     foreach (QGraphicsItem *gi, m_scene->items())
     {
         // Top-level map objects only: labels and handles belong to their item.
+        // Nor what a locked layer holds: on the plot that is click-through.
         if (gi->parentItem() != NULL || !gi->isVisible()
-            || !(gi->flags() & QGraphicsItem::ItemIsSelectable))
+            || !(gi->flags() & QGraphicsItem::ItemIsSelectable)
+            || gi->data(ItemLock::LayerLockedKey).toBool())
             continue;
         gi->setSelected(true);
         n++;
@@ -3983,7 +4127,7 @@ void MonitorGraphicsView::slotImageMoved(MonitorImageItem *item)
     // `item`; position applies to the whole selection.
     QList<MonitorImageItem *> moved;
     foreach (QGraphicsItem *gi, m_scene->selectedItems())
-        if (auto *ii = dynamic_cast<MonitorImageItem *>(gi))
+        if (auto *ii = dynamic_cast<MonitorImageItem *>(gi); ii != nullptr && itemDraggable(ii))
             moved.append(ii);
     if (!moved.contains(item))
         moved.append(item);
@@ -4428,7 +4572,7 @@ void MonitorGraphicsView::slotTrussMoved(TrussItem *item)
     {
         QList<TrussItem *> moved;
         foreach (QGraphicsItem *gi, m_scene->selectedItems())
-            if (auto *ti = dynamic_cast<TrussItem *>(gi)) moved.append(ti);
+            if (auto *ti = dynamic_cast<TrussItem *>(gi); ti != nullptr && itemDraggable(ti)) moved.append(ti);
         if (item != nullptr && !moved.contains(item)) moved.append(item);
 
         MonitorProperties *props = m_doc->monitorProperties();
@@ -4512,7 +4656,7 @@ void MonitorGraphicsView::slotTrussMoved(TrussItem *item)
     // together — persist them all, not just the one that received the drop.
     QList<TrussItem *> moved;
     foreach (QGraphicsItem *gi, m_scene->selectedItems())
-        if (auto *ti = dynamic_cast<TrussItem *>(gi))
+        if (auto *ti = dynamic_cast<TrussItem *>(gi); ti != nullptr && itemDraggable(ti))
             moved.append(ti);
     if (item != nullptr && !moved.contains(item))
         moved.append(item);
@@ -4984,7 +5128,7 @@ void MonitorGraphicsView::slotTowerMoved(TowerItem *item)
     // item the mouse happened to grab actually got saved.
     QList<TowerItem *> moved;
     foreach (QGraphicsItem *gi, m_scene->selectedItems())
-        if (auto *ti = dynamic_cast<TowerItem *>(gi))
+        if (auto *ti = dynamic_cast<TowerItem *>(gi); ti != nullptr && itemDraggable(ti))
             moved.append(ti);
     if (!moved.contains(item))
         moved.append(item);
@@ -5041,7 +5185,7 @@ void MonitorGraphicsView::slotStandMoved(StandItem *item)
     // comment for why this rebuild from the live selection is necessary.
     QList<StandItem *> moved;
     foreach (QGraphicsItem *gi, m_scene->selectedItems())
-        if (auto *si = dynamic_cast<StandItem *>(gi))
+        if (auto *si = dynamic_cast<StandItem *>(gi); si != nullptr && itemDraggable(si))
             moved.append(si);
     if (!moved.contains(item))
         moved.append(item);
@@ -5159,7 +5303,7 @@ void MonitorGraphicsView::slotSceneryMoved(SceneryItem *item)
 
     QList<SceneryItem *> moved;
     foreach (QGraphicsItem *gi, m_scene->selectedItems())
-        if (auto *sc = dynamic_cast<SceneryItem *>(gi))
+        if (auto *sc = dynamic_cast<SceneryItem *>(gi); sc != nullptr && itemDraggable(sc))
             moved.append(sc);
     if (!moved.contains(item))
         moved.append(item);
@@ -5205,7 +5349,7 @@ void MonitorGraphicsView::slotPipeMoved(PipeItem *item)
     // comment for why this rebuild from the live selection is necessary.
     QList<PipeItem *> moved;
     foreach (QGraphicsItem *gi, m_scene->selectedItems())
-        if (auto *pi = dynamic_cast<PipeItem *>(gi))
+        if (auto *pi = dynamic_cast<PipeItem *>(gi); pi != nullptr && itemDraggable(pi))
             moved.append(pi);
     if (!moved.contains(item))
         moved.append(item);
@@ -5247,7 +5391,7 @@ void MonitorGraphicsView::slotPlatformMoved(PlatformItem *item)
     // Persist every selected platform (group move), not just the dropped one.
     QList<PlatformItem *> moved;
     foreach (QGraphicsItem *gi, m_scene->selectedItems())
-        if (auto *pi = dynamic_cast<PlatformItem *>(gi))
+        if (auto *pi = dynamic_cast<PlatformItem *>(gi); pi != nullptr && itemDraggable(pi))
             moved.append(pi);
     if (item != nullptr && !moved.contains(item))
         moved.append(item);
@@ -5387,7 +5531,7 @@ void MonitorGraphicsView::slotPowerSourceMoved(PowerSourceItem *item)
     // Persist every selected source (group move), not just the dropped one.
     QList<PowerSourceItem *> moved;
     foreach (QGraphicsItem *gi, m_scene->selectedItems())
-        if (auto *ps = dynamic_cast<PowerSourceItem *>(gi))
+        if (auto *ps = dynamic_cast<PowerSourceItem *>(gi); ps != nullptr && itemDraggable(ps))
             moved.append(ps);
     if (item != nullptr && !moved.contains(item))
         moved.append(item);
@@ -5657,7 +5801,7 @@ void MonitorGraphicsView::slotNetworkNodeMoved(NetworkNodeItem *item)
     // Persist every selected node (group move), not just the dropped one.
     QList<NetworkNodeItem *> moved;
     foreach (QGraphicsItem *gi, m_scene->selectedItems())
-        if (auto *nn = dynamic_cast<NetworkNodeItem *>(gi))
+        if (auto *nn = dynamic_cast<NetworkNodeItem *>(gi); nn != nullptr && itemDraggable(nn))
             moved.append(nn);
     if (item != nullptr && !moved.contains(item))
         moved.append(item);
@@ -5831,7 +5975,7 @@ void MonitorGraphicsView::updateTargets()
         // Targets are a DESIGN-time aim point: draggable while editing (even when
         // the rig layout is locked), but frozen in Run/Operate — in a show the
         // operator drives the follow-spot pin, not the target.
-        ti->setMovable(m_doc->mode() == Doc::Design);
+        ti->setMovable(m_doc->mode() == Doc::Design && targetsFreeOfPlotLock());
         ti->setAimed(aimedTargetIds.contains(t->id()));
         m_scene->addItem(ti);
         m_targetItems.insert(t->id(), ti);
@@ -5854,6 +5998,53 @@ void MonitorGraphicsView::updateTargets()
 
     refreshItemLayerState();
     updateAimLines();
+    stackTargetReadouts();
+}
+
+void MonitorGraphicsView::stackTargetReadouts()
+{
+    /* Two targets an inch apart printed their readouts on the same spot, so
+       one read as the other's (Q179). Each readout that would cover one
+       already placed goes under it instead. On screen: the labels keep their
+       size at any zoom, so this runs again when the view changes. */
+    if (m_scene == nullptr)
+        return;
+    struct Placed { TargetItem *ti; QRectF rect; QPointF anchor; };
+    QList<Placed> todo;
+    foreach (TargetItem *ti, m_targetItems)
+    {
+        if (ti == nullptr)
+            continue;
+        ti->setReadoutStackOffset(0.0);
+        if (!ti->isVisible() || !ti->readoutShown())
+            continue;
+        const QPointF anchor = sceneToViewport(ti->readoutAnchorScene());
+        todo << Placed{ ti, ti->readoutScreenRect().translated(anchor), anchor };
+    }
+    std::sort(todo.begin(), todo.end(), [](const Placed &a, const Placed &b) {
+        if (!qFuzzyCompare(a.anchor.y() + 1.0, b.anchor.y() + 1.0))
+            return a.anchor.y() < b.anchor.y();
+        if (!qFuzzyCompare(a.anchor.x() + 1.0, b.anchor.x() + 1.0))
+            return a.anchor.x() < b.anchor.x();
+        return a.ti->targetId() < b.ti->targetId();
+    });
+    QList<QRectF> placed;
+    for (const Placed &p : todo)
+    {
+        QRectF r = p.rect;
+        for (bool moved = true; moved; )
+        {
+            moved = false;
+            for (const QRectF &other : placed)
+                if (r.intersects(other))
+                {
+                    r.moveTop(other.bottom() + 1.0);
+                    moved = true;
+                }
+        }
+        p.ti->setReadoutStackOffset(r.top() - p.rect.top());
+        placed << r;
+    }
 }
 
 void MonitorGraphicsView::slotTargetMoved(TargetItem *item)
@@ -5861,7 +6052,7 @@ void MonitorGraphicsView::slotTargetMoved(TargetItem *item)
     // Persist every selected target (group move), not just the dropped one.
     QList<TargetItem *> moved;
     foreach (QGraphicsItem *gi, m_scene->selectedItems())
-        if (auto *tg = dynamic_cast<TargetItem *>(gi))
+        if (auto *tg = dynamic_cast<TargetItem *>(gi); tg != nullptr && itemDraggable(tg))
             moved.append(tg);
     if (item != nullptr && !moved.contains(item))
         moved.append(item);
@@ -5973,6 +6164,7 @@ void MonitorGraphicsView::slotTargetMoved(TargetItem *item)
             }
         }
     }
+    stackTargetReadouts();      // where it landed may cover another's readout
 }
 
 void MonitorGraphicsView::refreshLineItem(TargetItem *item)
@@ -6671,7 +6863,8 @@ QString MonitorGraphicsView::unitSuffix() const
 
 QString MonitorGraphicsView::axisName(bool horizontal) const
 {
-    if (horizontal)
+    // Named for the scene axis the ruler runs along, which a quarter turn swaps.
+    if (!rulerAlongSceneY(horizontal))
         return (m_pov == PovSide) ? QStringLiteral("Y") : QStringLiteral("X");
     return (m_pov == PovTop) ? QStringLiteral("Y") : QStringLiteral("Z");
 }
@@ -6684,18 +6877,67 @@ static QString formatRulerLabel(qreal value)
     return QString::number(value, 'f', 1);
 }
 
+bool MonitorGraphicsView::rulerCountsFromCentreLine() const
+{
+    /* Side has no stage width on screen; a ⌖ origin the user placed is a
+       zero they chose, and wins. */
+    if (m_pov == PovSide || m_doc->monitorProperties() == nullptr)
+        return false;
+    return stageOriginMetres().isNull();
+}
+
+qreal MonitorGraphicsView::rulerZeroUnits(bool sceneY) const
+{
+    if (sceneY)
+        return originUnitsV();
+    if (rulerCountsFromCentreLine() && m_unitValue > 0.0)
+        return qreal(m_doc->monitorProperties()->stageCentre().x()) * 1000.0 / m_unitValue;
+    return originUnitsH();
+}
+
+bool MonitorGraphicsView::stageRightFirst(bool horizontal) const
+{
+    // +X is stage LEFT (see drawOrientationLabels()): stage right comes first
+    // when scene X runs the way this ruler's pixels do.
+    const QTransform t = transform();
+    const qreal along = horizontal ? t.m11() : t.m12();
+    return along >= 0.0;
+}
+
+bool MonitorGraphicsView::rulerAlongSceneY(bool horizontal) const
+{
+    // Where scene X's unit vector lands in the viewport: (m11, m12).
+    const QTransform t = transform();
+    const bool sceneXAcross = qAbs(t.m11()) >= qAbs(t.m12());
+    return horizontal ? !sceneXAcross : sceneXAcross;
+}
+
+/* The ruler value at a scene coordinate along one scene axis: what the
+   ticks are labelled with and what the footer reads, so the two agree. */
+static qreal axisValueAt(qreal sceneCoord, bool sceneY, bool elevation,
+                         qreal xOffset, qreal yOffset, qreal floorY, qreal cell,
+                         qreal originH, qreal originV)
+{
+    if (!sceneY)
+        return (sceneCoord - xOffset) / cell - originH;
+    if (elevation)
+        return (floorY - sceneCoord) / cell;          // height off the floor
+    return (sceneCoord - yOffset) / cell - originV;
+}
+
 QPointF MonitorGraphicsView::viewportToReadout(const QPoint &vp) const
 {
     if (m_cellPixels <= 0)
         return QPointF(0, 0);
     const QPointF scene = mapToScene(vp);
-    const qreal h = (scene.x() - m_xOffset) / m_cellPixels - originUnitsH();
-    qreal v;
-    if (isElevation())
-        v = (floorPixelY() - scene.y()) / m_cellPixels;   // height off the floor
-    else
-        v = (scene.y() - m_yOffset) / m_cellPixels - originUnitsV();
-    return QPointF(h, v);
+    /* Read along the rulers: (top ruler, left ruler). A quarter turn puts
+       scene Y along the top. */
+    auto along = [&](bool horizontal) {
+        const bool sy = rulerAlongSceneY(horizontal);
+        return axisValueAt(sy ? scene.y() : scene.x(), sy, isElevation(), m_xOffset, m_yOffset,
+                           floorPixelY(), m_cellPixels, rulerZeroUnits(false), originUnitsV());
+    };
+    return QPointF(along(true), along(false));
 }
 
 QVector<MonitorGraphicsView::RulerTick> MonitorGraphicsView::rulerTicks(bool horizontal) const
@@ -6704,20 +6946,41 @@ QVector<MonitorGraphicsView::RulerTick> MonitorGraphicsView::rulerTicks(bool hor
     if (m_cellPixels <= 0)
         return ticks;
 
+    /* One mapping for every tick: scene -> viewport through the view's own
+       transform (zoom, scroll, quarter turn), unrounded. Which scene axis
+       this ruler measures follows the turn: at 90/270 degrees the top ruler
+       runs along scene Y. Only the coordinate along the ruler matters, so
+       the other is the middle of what is visible. */
+    const bool sceneY = rulerAlongSceneY(horizontal);
     const QRectF vis = mapToScene(viewport()->rect()).boundingRect();
+    auto pixelOf = [&](qreal sceneCoord) {
+        const QPointF sp = sceneY ? QPointF(vis.center().x(), sceneCoord)
+                                  : QPointF(sceneCoord, vis.center().y());
+        const QPointF v = sceneToViewport(sp);
+        return horizontal ? v.x() : v.y();
+    };
 
-    if (horizontal)
+    if (!sceneY && rulerCountsFromCentreLine())
+    {
+        /* From the centre line: a tick on it, labelled CL, and whole units
+           out to each side, unsigned -- the side says SR or SL, as the
+           readouts do. Value keeps the sign (stage right negative). */
+        const qreal anchor = m_xOffset + rulerZeroUnits(false) * m_cellPixels;
+        int kMin = qFloor((vis.left()  - anchor) / m_cellPixels) - 1;
+        int kMax = qCeil ((vis.right() - anchor) / m_cellPixels) + 1;
+        for (int k = kMin; k <= kMax; k++)
+            ticks.append({ pixelOf(anchor + qreal(k) * m_cellPixels),
+                           k == 0 ? QStringLiteral("CL") : QString::number(qAbs(k)), true, qreal(k) });
+    }
+    else if (!sceneY)
     {
         const qreal anchor = m_xOffset;
         const qreal originU = originUnitsH();
         int kMin = qFloor((vis.left()  - anchor) / m_cellPixels) - 1;
         int kMax = qCeil ((vis.right() - anchor) / m_cellPixels) + 1;
         for (int k = kMin; k <= kMax; k++)
-        {
-            const qreal sceneX = anchor + qreal(k) * m_cellPixels;
-            const qreal px = mapFromScene(QPointF(sceneX, vis.top())).x();
-            ticks.append({ px, formatRulerLabel(qreal(k) - originU), true });
-        }
+            ticks.append({ pixelOf(anchor + qreal(k) * m_cellPixels),
+                           formatRulerLabel(qreal(k) - originU), true, qreal(k) - originU });
     }
     else if (isElevation())
     {
@@ -6729,9 +6992,7 @@ QVector<MonitorGraphicsView::RulerTick> MonitorGraphicsView::rulerTicks(bool hor
         {
             if (k < 0)
                 continue;   // nothing below the floor
-            const qreal sceneY = anchor - qreal(k) * m_cellPixels;
-            const qreal px = mapFromScene(QPointF(vis.left(), sceneY)).y();
-            ticks.append({ px, formatRulerLabel(qreal(k)), true });
+            ticks.append({ pixelOf(anchor - qreal(k) * m_cellPixels), formatRulerLabel(qreal(k)), true, qreal(k) });
         }
     }
     else
@@ -6741,11 +7002,8 @@ QVector<MonitorGraphicsView::RulerTick> MonitorGraphicsView::rulerTicks(bool hor
         int kMin = qFloor((vis.top()    - anchor) / m_cellPixels) - 1;
         int kMax = qCeil ((vis.bottom() - anchor) / m_cellPixels) + 1;
         for (int k = kMin; k <= kMax; k++)
-        {
-            const qreal sceneY = anchor + qreal(k) * m_cellPixels;
-            const qreal px = mapFromScene(QPointF(vis.left(), sceneY)).y();
-            ticks.append({ px, formatRulerLabel(qreal(k) - originU), true });
-        }
+            ticks.append({ pixelOf(anchor + qreal(k) * m_cellPixels),
+                           formatRulerLabel(qreal(k) - originU), true, qreal(k) - originU });
     }
     return ticks;
 }
@@ -7093,6 +7351,8 @@ void MonitorGraphicsView::updateStagePieceItems()
         item->setHitShape(hit);
         item->setDragShape(drag);
         item->setMovable(design && !m_layoutLocked && !drag.isEmpty() && props->stagePieceMovable(piece));
+        // On a locked Stage layer: click-through like every other layer-locked object.
+        applyLayerLock(item, props->hasStageLayer() && props->layer(props->stageLayerId()).locked);
         item->update();
     }
 }
@@ -7290,8 +7550,22 @@ void MonitorGraphicsView::updateGrid()
         centerPen.setWidth(1);
         const qreal gridW = m_gridSize.width()  * m_cellPixels;
         const qreal gridH = m_gridSize.height() * m_cellPixels;
-        const qreal cx = m_xOffset + gridW / 2.0;
-        const qreal cy = m_yOffset + gridH / 2.0;
+        /* Centre stage is MonitorProperties::stageCentre() -- what the stage
+           marks are drawn from and the target readout counts SL/SR from --
+           not the middle of the whole cells drawn: the grid size is cut to
+           whole units here (a 50 ft stage is 15.24 m, drawn 15 cells), and
+           the half-unit difference put this line 0.12 m off the readout's
+           centre line in metres. */
+        qreal cx = m_xOffset + gridW / 2.0;
+        qreal cy = m_yOffset + gridH / 2.0;
+        if (const MonitorProperties *mp = m_doc->monitorProperties())
+        {
+            const QVector3D sc = mp->stageCentre();
+            const qreal ppmm = (m_unitValue > 0.0) ? qreal(m_cellPixels) / m_unitValue : 0.0;
+            cx = m_xOffset + qreal(m_pov == PovSide ? sc.y() : sc.x()) * 1000.0 * ppmm;
+            if (m_pov == PovTop)
+                cy = m_yOffset + qreal(sc.y()) * 1000.0 * ppmm;
+        }
         m_centerLineV = m_scene->addLine(cx, m_yOffset, cx, m_yOffset + gridH, centerPen);
         m_centerLineV->setZValue(2);
         m_centerLineV->setAcceptedMouseButtons(Qt::NoButton);   // above trusses, but not in their way
@@ -7420,12 +7694,24 @@ void MonitorGraphicsView::mouseReleaseEvent(QMouseEvent *e)
     for (TrussItem *ti : m_trussItems)
         ti->setHighlighted(false);
 
+    /* Held still: nothing is stored -- not by the item's own drop signal
+       (several kinds emit it on every release, drag or not) and not by the
+       sweep below. */
+    const bool refused = m_dragRefused && e->button() == Qt::LeftButton;
+    m_dragRefused = false;
+    m_pressOnLockedLayer = false;
+    QObject *heldGrabber = (refused && m_scene != nullptr && m_scene->mouseGrabberItem() != nullptr)
+        ? dynamic_cast<QObject *>(m_scene->mouseGrabberItem()->topLevelItem()) : nullptr;
+
     // The release that follows a mouseDoubleClickEvent must not emit viewClicked
     // (that would immediately close the editor the double-click just opened).
     if (m_suppressNextViewClick)
     {
         m_suppressNextViewClick = false;
-        QGraphicsView::mouseReleaseEvent(e);
+        {
+            const QSignalBlocker quiet(heldGrabber);
+            QGraphicsView::mouseReleaseEvent(e);
+        }
         if (dragMode() == QGraphicsView::ScrollHandDrag)
             setDragMode(QGraphicsView::RubberBandDrag);
         return;
@@ -7433,7 +7719,10 @@ void MonitorGraphicsView::mouseReleaseEvent(QMouseEvent *e)
 
     emit viewClicked(e);
 
-    QGraphicsView::mouseReleaseEvent(e);
+    {
+        const QSignalBlocker quiet(heldGrabber);
+        QGraphicsView::mouseReleaseEvent(e);
+    }
 
     // A multi-selection drag only delivers mouse press/move/release to the
     // ONE item Qt actually grabbed -- every co-selected item just moved on
@@ -7462,7 +7751,7 @@ void MonitorGraphicsView::mouseReleaseEvent(QMouseEvent *e)
     // kind's slot for no reason, needlessly marking the document modified.
     const bool wasDrag = (e->pos() - m_pressViewPos).manhattanLength()
                           >= QApplication::startDragDistance();
-    if (wasDrag && m_scene != nullptr)
+    if (wasDrag && !refused && m_scene != nullptr)
     {
         MonitorFixtureItem *repFixture = nullptr;
         TrussItem          *repTruss   = nullptr;
@@ -7478,6 +7767,9 @@ void MonitorGraphicsView::mouseReleaseEvent(QMouseEvent *e)
 
         foreach (QGraphicsItem *gi, m_scene->selectedItems())
         {
+            // Only what Qt actually moved: a held item rode along with nothing.
+            if (!itemDraggable(gi))
+                continue;
             if (repFixture == nullptr)  repFixture  = dynamic_cast<MonitorFixtureItem *>(gi);
             if (repTruss == nullptr)    repTruss    = dynamic_cast<TrussItem *>(gi);
             if (repPlatform == nullptr) repPlatform = dynamic_cast<PlatformItem *>(gi);
@@ -7515,6 +7807,27 @@ void MonitorGraphicsView::mouseReleaseEvent(QMouseEvent *e)
 
 void MonitorGraphicsView::mouseMoveEvent(QMouseEvent *event)
 {
+    /* A press on something held still: the pointer moves, nothing else does.
+       Said once on the status line (Q178), and the move never reaches the
+       scene, so no item thinks it was dragged. */
+    if ((event->buttons() & Qt::LeftButton) && (m_dragRefused || m_pressOnLockedLayer)
+        && !m_dragRefusedNoted
+        && (event->pos() - m_pressViewPos).manhattanLength() >= QApplication::startDragDistance())
+    {
+        m_dragRefusedNoted = true;
+        emit dragRefused(m_layoutLocked ? tr("Plot locked \u2014 Edit Plot to move")
+                         : m_pressOnLockedLayer
+                             ? tr("Layer locked \u2014 unlock it in Layers to move")
+                         : isElevation() ? tr("Not movable in this view \u2014 move it in Top")
+                                         : tr("Locked \u2014 unlock it to move"));
+    }
+    if (m_dragRefused && (event->buttons() & Qt::LeftButton))
+    {
+        emit cursorReadout(viewportToReadout(event->pos()));
+        event->accept();
+        return;
+    }
+
     // While a fixture item is being dragged, highlight any truss the cursor hovers.
     if (event->buttons() & Qt::LeftButton)
     {
@@ -7559,6 +7872,8 @@ void MonitorGraphicsView::mouseMoveEvent(QMouseEvent *event)
     emit cursorReadout(viewportToReadout(event->pos()));
 
     QGraphicsView::mouseMoveEvent(event);
+    if (event->buttons() & Qt::LeftButton)
+        dropLayerLockedFromRubberBand();
 }
 
 void MonitorGraphicsView::clickAgainToPickOut(QGraphicsItem *item)
@@ -10488,27 +10803,30 @@ void MonitorGraphicsView::slotFixtureMoved(MonitorFixtureItem *item)
         emit fixtureMoved(fid, mmPos);
     }
 
-    // Commit the undo snapshot if anything actually moved.
-    if (m_pendingMoveUndo.isEmpty() == false)
-    {
-        QHash<quint32, QPointF> changed;
-        QHashIterator<quint32, QPointF> it(m_pendingMoveUndo);
-        while (it.hasNext())
-        {
-            it.next();
-            MonitorFixtureItem *mfi = m_fixtures.value(it.key(), NULL);
-            if (mfi != NULL && mfi->realPosition() != it.value())
-                changed.insert(it.key(), it.value());
-        }
-        if (changed.isEmpty() == false)
-        {
-            UndoEntry e; e.type = UndoEntry::FixtureMove; e.fixturePositions = changed;
-            pushUndo(e);
-        }
-        m_pendingMoveUndo.clear();
-    }
-
+    commitMoveUndo();
     updateTrussAnchorLines();
+}
+
+void MonitorGraphicsView::commitMoveUndo()
+{
+    // Commit the undo snapshot if anything actually moved.
+    if (m_pendingMoveUndo.isEmpty())
+        return;
+    QHash<quint32, QPointF> changed;
+    QHashIterator<quint32, QPointF> it(m_pendingMoveUndo);
+    while (it.hasNext())
+    {
+        it.next();
+        MonitorFixtureItem *mfi = m_fixtures.value(it.key(), NULL);
+        if (mfi != NULL && mfi->realPosition() != it.value())
+            changed.insert(it.key(), it.value());
+    }
+    if (changed.isEmpty() == false)
+    {
+        UndoEntry e; e.type = UndoEntry::FixtureMove; e.fixturePositions = changed;
+        pushUndo(e);
+    }
+    m_pendingMoveUndo.clear();
 }
 
 QPointF MonitorGraphicsView::snapScenePos(const QPointF &p) const

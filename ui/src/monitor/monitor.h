@@ -661,6 +661,9 @@ protected:
     QLabel    *m_modeLabel = nullptr;        ///< prominent current-mode chip
     /** Refresh the footer mode chip from the POV / overlay / Build state. */
     void updateModeIndicator();
+    /** Band the rulers with the selection's extent, as the view stands now;
+     *  returns the extent (viewport pixels, invalid: nothing selected). */
+    QRectF refreshRulerBand();
     QAction   *m_rulersAction = nullptr;     ///< show/hide rulers toggle
     /** Build the footer bar (grid/units/snap controls + rulers toggle + origin
      *  + live readout) and the ruler widgets around the graphics view. */
@@ -674,6 +677,9 @@ protected:
     void applyMapView(int view);
     QAction *m_labelsAction;
     QAction *m_lockAction;
+    /** "Targets stay adjustable" (Q183), beside the plot lock and shown only
+     *  while it is on. Per user (QSettings), off by default. */
+    QAction *m_targetsAdjustableAction = nullptr;
     QAction *m_undoAction = nullptr;
     QAction *m_layersAction;
     QAction *m_inventoryAction;

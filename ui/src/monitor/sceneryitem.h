@@ -66,6 +66,10 @@ public:
     Scenery::Pose pose() const { return m_pose; }
 
     QRectF boundingRect() const override;
+    /** What the item IS on the stage, in item coordinates: its own outline,
+     *  without the padding, halos and labels boundingRect() adds for painting.
+     *  The rulers band this (MonitorGraphicsView::itemGeometryRect()). */
+    QRectF geometryRect() const { return m_bounds; }
     QPainterPath shape() const override;
     void   paint(QPainter *painter, const QStyleOptionGraphicsItem *option,
                  QWidget *widget) override;

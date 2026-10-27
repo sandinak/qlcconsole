@@ -25,6 +25,9 @@
 #include <QTabBar>
 #include <QTabWidget>
 #include <QTreeWidget>
+#include <QMenuBar>
+#include <QStatusBar>
+#include <QWindow>
 #include <QtMath>
 
 #include "viewlayout_test.h"
@@ -83,6 +86,29 @@ static QByteArray collapsedTreeState()
     return sp.saveState();
 }
 
+/* A real session's saved window and splitter states (a 2560-wide screen):
+   the tabs are built from these, as they are on the user's Mac. */
+static void seedRealisticSettings()
+{
+    static const struct { const char *key; const char *state; } kSaved[] = {
+        { "workspace/geometry", "AdnQywADAAAAAAAAAAAAHwAACN0AAAWfAAAAAAAAAD8AAAjdAAAFnwAAAAAAAAAACgAAAAAAAAAAPwAACN0AAAWf" },
+        { "monitor/vsplitter2", "AAAA/wAAAAEAAAADAAABBAAAAVQAAAC0AP////8BAAAAAQA=" },
+        { "programming/buildSplitter", "AAAA/wAAAAEAAAACAAABXQAAA/EA/////wEAAAABAA==" },
+        { "programming/canvasSplitter", "AAAA/wAAAAEAAAACAAABRAAAAaIA/////wEAAAACAA==" },
+        { "programming/workbenchSplitter", "AAAA/wAAAAEAAAACAAABuwAAAsgA/////wEAAAABAA==" },
+        { "simpledesk/splitter", "AAAA/wAAAAEAAAACAAABxAAAAYwB/////wEAAAACAA==" },
+        { "inputmanager/splitter", "AAAA/wAAAAEAAAACAAAA9gAAAUgB/////wEAAAABAA==" },
+        { "showmanager/hsplitter", "AAAA/wAAAAEAAAACAAAAXwAAADIB/////wEAAAACAA==" },
+        { "showmanager/vsplitter", "AAAA/wAAAAEAAAACAAAAwgAAADIB/////wEAAAABAA==" },
+        { "effectdesigner/split", "AAAA/wAAAAEAAAACAAACGQAAAtMA/////wEAAAABAA==" },
+        { "fixturemanager/splitterstate_pwr", "AAAA/wAAAAEAAAACAAACVgAAA20B/////wEAAAABAA==" },
+    };
+    QSettings settings;
+    for (const auto &s : kSaved)
+        settings.setValue(QLatin1String(s.key), QByteArray::fromBase64(s.state));
+    settings.setValue("monitor/layerspanel3", true);
+}
+
 void ViewLayout_Test::initTestCase()
 {
     QVERIFY(m_dir.isValid());
@@ -90,6 +116,7 @@ void ViewLayout_Test::initTestCase()
     // Seeded once App has named the settings (its constructor does), before
     // init() builds the tabs that read them.
     m_app = new App();
+    seedRealisticSettings();
     QSettings().setValue("functionmanager/splitter", collapsedEditorState());
     m_app->init();
     m_app->resize(1280, 800);
@@ -230,6 +257,167 @@ void ViewLayout_Test::everyTabFillsTheWindow()
         }
     }
     m_app->resize(1280, 800);
+    QVERIFY2(bad.isEmpty(), qPrintable(bad.join(QLatin1Char('\n'))));
+}
+
+/* Whatever in the main window doesn't fill it; empty if all does. */
+static QStringList mainWindowProblems(App *app, const QString &where)
+{
+    QStringList bad;
+    QCoreApplication::processEvents();
+    if (app->windowHandle() != nullptr && app->windowHandle()->size() != app->size())
+        bad << where + QStringLiteral(": the window is %1x%2 but its widget %3x%4")
+               .arg(app->windowHandle()->width()).arg(app->windowHandle()->height())
+               .arg(app->width()).arg(app->height());
+    QWidget *central = app->centralWidget();
+    if (central->geometry().right() < app->width() - 1 - kSlack)
+        bad << where + QStringLiteral(": the central area is %1 px wide in a %2 px window")
+               .arg(central->width()).arg(app->width());
+    QTabWidget *tabs = app->m_tab;
+    if (tabs->width() < central->width() - kSlack)
+        bad << where + QStringLiteral(": the tabs are %1 px wide in a %2 px central area")
+               .arg(tabs->width()).arg(central->width());
+    if (QWidget *page = tabs->currentWidget())
+    {
+        if (page->width() < tabs->width() - 2 * kSlack)
+            bad << where + QStringLiteral(": %1 is %2 px wide in %3 px of tabs")
+                   .arg(describe(page)).arg(page->width()).arg(tabs->width());
+        for (const QString &p : layoutProblems(page))
+            bad << where + QStringLiteral(": ") + p;
+    }
+    // Nothing else of the window's own sits on it: a page put away (parked)
+    // or back from a window of its own, shown where it was left.
+    for (QObject *o : app->children())
+    {
+        QWidget *c = qobject_cast<QWidget *>(o);
+        if (c == nullptr || c->isWindow() || !c->isVisible() || c == central
+            || c == app->menuBar() || c == app->statusBar())
+            continue;
+        bad << where + QStringLiteral(": %1 is shown loose on the window at %2,%3 %4x%5")
+               .arg(describe(c)).arg(c->x()).arg(c->y()).arg(c->width()).arg(c->height());
+    }
+    return bad;
+}
+
+void ViewLayout_Test::theWindowFollowsResizesAroundADetach()
+{
+    QTabWidget *tabs = m_app->m_tab;
+    const QList<QSize> sizes = { QSize(900, 700), QSize(1280, 800), QSize(2000, 1200), QSize(1280, 800) };
+    QStringList bad;
+    auto indexOf = [tabs](const QString &label) {
+        for (int i = 0; i < tabs->count(); ++i)
+            if (tabs->tabBar()->tabData(i).toString() == label)
+                return i;
+        return -1;
+    };
+    // As a drag of the window's corner arrives (through the platform
+    // window) and as a program resizes it, turn about.
+    auto resizeTo = [this](const QSize &size, int step) {
+        if (step % 2 == 0 && m_app->windowHandle() != nullptr)
+            m_app->windowHandle()->resize(size);
+        else
+            m_app->resize(size);
+        QCoreApplication::processEvents();
+    };
+
+    for (App::WorkspaceView view : { App::ConsoleView, App::EverythingView })
+    {
+        m_app->setWorkspaceView(view, false);
+        m_app->resize(1280, 800);
+        QCoreApplication::processEvents();
+        // Each tab once: Everything adds the QLC+ tabs to qlcconsole's.
+        QStringList labels;
+        for (int i = 0; i < tabs->count(); ++i)
+            labels << tabs->tabBar()->tabData(i).toString();
+        if (view == App::EverythingView)
+            for (const QString &done : App::workspaceViewTabs(App::ConsoleView))
+                labels.removeAll(done);
+
+        for (const QString &label : labels)
+        {
+            const QString at = App::workspaceViewName(view) + QStringLiteral(", ") + label;
+            const int idx = indexOf(label);
+            QVERIFY2(idx >= 0, qPrintable(at));
+            tabs->setCurrentIndex(idx);
+            QCoreApplication::processEvents();
+            QWidget *page = tabs->widget(idx);
+
+            m_app->slotDetachContext(idx);
+            QCoreApplication::processEvents();
+            DetachedContext *window = qobject_cast<DetachedContext *>(page->window());
+            QVERIFY2(window != nullptr && window != static_cast<QWidget *>(m_app), qPrintable(at));
+
+            int step = 0;
+            for (const QSize &size : sizes)
+            {
+                resizeTo(size, step++);
+                bad << mainWindowProblems(m_app, QStringLiteral("%1 in its own window, main window at %2x%3")
+                                          .arg(at).arg(size.width()).arg(size.height()));
+                // Another tab between sizes, as the user goes on working.
+                if (tabs->count() > 1)
+                {
+                    tabs->setCurrentIndex((tabs->currentIndex() + 1) % tabs->count());
+                    bad << mainWindowProblems(m_app, QStringLiteral("%1 in its own window, %2 at %3x%4")
+                                              .arg(at, tabs->tabBar()->tabData(tabs->currentIndex()).toString())
+                                              .arg(size.width()).arg(size.height()));
+                }
+            }
+
+            // Its own window follows its own resizes too.
+            window->resize(1100, 700);
+            QCoreApplication::processEvents();
+            if (window->centralWidget() != page || page->width() < window->width() - kSlack)
+                bad << at + QStringLiteral(": its window is %1 px wide, the page %2 px")
+                       .arg(window->width()).arg(page->width());
+
+            // Put back by closing its window: back on the bar, and the main
+            // window still follows.
+            window->close();
+            QCoreApplication::processEvents();
+            const int back = indexOf(label);
+            if (back < 0 || page->window() != static_cast<QWidget *>(m_app))
+            {
+                bad << at + QStringLiteral(": not back on the bar after its window closed");
+                continue;
+            }
+            tabs->setCurrentIndex(back);
+            for (const QSize &size : { QSize(2000, 1200), QSize(900, 700) })
+            {
+                resizeTo(size, step++);
+                bad << mainWindowProblems(m_app, QStringLiteral("%1 back on the bar, at %2x%3")
+                                          .arg(at).arg(size.width()).arg(size.height()));
+            }
+        }
+
+        // Two at once, the first put back while the second is still out.
+        if (tabs->count() >= 3)
+        {
+            const QString first = tabs->tabBar()->tabData(0).toString();
+            const QString second = tabs->tabBar()->tabData(1).toString();
+            m_app->slotDetachContext(indexOf(first));
+            m_app->slotDetachContext(indexOf(second));
+            QCoreApplication::processEvents();
+            int step = 0;
+            for (const QSize &size : sizes)
+            {
+                resizeTo(size, step++);
+                bad << mainWindowProblems(m_app, QStringLiteral("%1: %2 and %3 out, at %4x%5")
+                                          .arg(App::workspaceViewName(view), first, second)
+                                          .arg(size.width()).arg(size.height()));
+            }
+            m_app->reattachContext(first);
+            resizeTo(QSize(2000, 1200), 0);
+            bad << mainWindowProblems(m_app, QStringLiteral("%1: %2 back, %3 out")
+                                      .arg(App::workspaceViewName(view), first, second));
+            m_app->reattachAllContexts();
+            QCoreApplication::processEvents();
+            QVERIFY(m_app->detachedContexts().isEmpty());
+        }
+    }
+
+    m_app->setWorkspaceView(App::ConsoleView, false);
+    m_app->resize(1280, 800);
+    QCoreApplication::processEvents();
     QVERIFY2(bad.isEmpty(), qPrintable(bad.join(QLatin1Char('\n'))));
 }
 

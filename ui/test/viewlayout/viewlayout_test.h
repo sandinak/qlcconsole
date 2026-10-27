@@ -42,6 +42,14 @@ private slots:
      *  and no pane is left empty but for a strip of something. */
     void everyTabFillsTheWindow();
 
+    /** Every tab of the qlcconsole and Everything views, opened in its own
+     *  window: the main window still fills as it is resized smaller and
+     *  larger (through its platform window and by hand), between tab
+     *  switches; the page fills its own window; and closing that window puts
+     *  it back, the main window still following. Two out at once, too. From
+     *  a real session's saved window and splitter states. */
+    void theWindowFollowsResizesAroundADetach();
+
     /** Classic QLC+: picking a scene, a chaser or an EFX in the Functions
      *  tab opens its editor beside the tree, as in QLC+ -- even from a saved
      *  splitter state that had the editor collapsed. */

@@ -18,6 +18,7 @@
   limitations under the License.
 */
 
+#include <QGraphicsScene>
 #include <QDateTime>
 #include <QApplication>
 #include <QActionGroup>
@@ -154,6 +155,7 @@
 #include "outputpatch.h"
 #include "qlccapability.h"
 #include "monitor.h"
+#include "itemlock.h"
 #include "rigowner.h"
 #include "shrinkablebar.h"
 #include "patchplanner.h"
@@ -436,6 +438,8 @@ void Monitor::initGraphicsView()
     viewGrid->setSpacing(0);
 
     m_graphicsView = new MonitorGraphicsView(m_doc, this);
+    if (m_targetsAdjustableAction != NULL)
+        m_graphicsView->setTargetsAdjustableWhenLocked(m_targetsAdjustableAction->isChecked());
     // Lights whose venue correction was skipped: badged on the plot (Q133).
     if (ProgrammerController *pc = m_doc->programmer())
     {
@@ -470,6 +474,8 @@ void Monitor::initGraphicsView()
         connect(m_graphicsView, &MonitorGraphicsView::undoChanged, m_undoAction,
                 [this]() { m_undoAction->setEnabled(m_graphicsView->canUndo()); });
     }
+    // A drag on something held still says why on the status line (Q178).
+    connect(m_graphicsView, &MonitorGraphicsView::dragRefused, this, &Monitor::showNotice);
     m_graphicsView->setRenderHint(QPainter::Antialiasing);
     m_graphicsView->setAcceptDrops(true);
     // No frame border so the rulers (aligned to the widget edge) line up
@@ -702,18 +708,36 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
     // ruler cursor markers.
     connect(m_graphicsView, &MonitorGraphicsView::cursorReadout,
             this, [this](QPointF hv) {
-        if (m_readoutLabel != NULL)
-            m_readoutLabel->setText(tr("%1: %2   %3: %4  %5")
-                .arg(m_graphicsView->axisName(true))
-                .arg(hv.x(), 0, 'f', 2)
-                .arg(m_graphicsView->axisName(false))
-                .arg(hv.y(), 0, 'f', 2)
-                .arg(m_graphicsView->unitSuffix()));
+        if (m_readoutLabel == NULL)
+            return;
+        /* Along the stage's width the rulers count from the centre line:
+           read it the same way, SR or SL of it (stage right is -X). */
+        auto part = [this](bool horizontal, qreal v) {
+            if (!m_graphicsView->rulerFromCentreLine(horizontal))
+                return tr("%1: %2").arg(m_graphicsView->axisName(horizontal)).arg(v, 0, 'f', 2);
+            if (qAbs(v) < 0.005)
+                return tr("CL");
+            return tr("%1 %2").arg(v < 0 ? tr("SR") : tr("SL")).arg(qAbs(v), 0, 'f', 2);
+        };
+        m_readoutLabel->setText(tr("%1   %2  %3")
+            .arg(part(true, hv.x()), part(false, hv.y()), m_graphicsView->unitSuffix()));
     });
     // Move the ruler cursor markers in sync (needs the viewport pixel, which we
     // recompute from the readout is awkward — instead track the raw mouse via an
     // event filter on the viewport).
     m_graphicsView->viewport()->installEventFilter(this);
+
+    /* The band follows the view and the selection, not only the mouse: it
+       was recomputed on a mouse move over the canvas alone, so a zoom from
+       the keyboard, a scroll, a quarter turn, a selection made in the Layers
+       panel or a nudge left it where the item USED to be on screen. Queued:
+       the scene says its selection changed while items are being rebuilt. */
+    connect(m_graphicsView, &MonitorGraphicsView::rulersChanged,
+            this, [this]() { refreshRulerBand(); }, Qt::QueuedConnection);
+    connect(m_graphicsView->scene(), &QGraphicsScene::selectionChanged,
+            this, [this]() { refreshRulerBand(); }, Qt::QueuedConnection);
+    connect(m_graphicsView->scene(), &QGraphicsScene::changed,
+            this, [this]() { refreshRulerBand(); }, Qt::QueuedConnection);
 
     // After an origin pick completes, un-arm any UI affordance and refresh.
     connect(m_graphicsView, &MonitorGraphicsView::originPicked,
@@ -1251,24 +1275,14 @@ bool Monitor::eventFilter(QObject *watched, QEvent *event)
             if (m_vRuler != NULL) m_vRuler->setCursorPixel(me->pos().y());
             // Band the rulers with the selection's extent, so while you drag a
             // fixture you can read exactly where it sits on the ruler.
-            const QRect sr = m_graphicsView->selectionViewportRect();
-            if (sr.isValid())
+            const QRectF sr = refreshRulerBand();
+            /* Dragging it, the mark is its middle, not wherever it was
+               grabbed ("when moving the drape .. the mark on the ruler
+               should be the center of the drape"). */
+            if (!sr.isNull() && (me->buttons() & Qt::LeftButton))
             {
-                if (m_hRuler != NULL) m_hRuler->setItemRange(sr.left(), sr.right());
-                if (m_vRuler != NULL) m_vRuler->setItemRange(sr.top(), sr.bottom());
-                /* Dragging it, the mark is its middle, not wherever it was
-                   grabbed ("when moving the drape .. the mark on the ruler
-                   should be the center of the drape"). */
-                if (me->buttons() & Qt::LeftButton)
-                {
-                    if (m_hRuler != NULL) m_hRuler->setCursorPixel(sr.center().x());
-                    if (m_vRuler != NULL) m_vRuler->setCursorPixel(sr.center().y());
-                }
-            }
-            else
-            {
-                if (m_hRuler != NULL) m_hRuler->setItemRange(-1, -1);
-                if (m_vRuler != NULL) m_vRuler->setItemRange(-1, -1);
+                if (m_hRuler != NULL) m_hRuler->setCursorPixel(qRound(sr.center().x()));
+                if (m_vRuler != NULL) m_vRuler->setCursorPixel(qRound(sr.center().y()));
             }
         }
         else if (event->type() == QEvent::Leave)
@@ -1279,6 +1293,22 @@ bool Monitor::eventFilter(QObject *watched, QEvent *event)
         }
     }
     return QWidget::eventFilter(watched, event);
+}
+
+QRectF Monitor::refreshRulerBand()
+{
+    const QRectF sr = (m_graphicsView != NULL) ? m_graphicsView->selectionViewportRect() : QRectF();
+    if (!sr.isNull())
+    {
+        if (m_hRuler != NULL) m_hRuler->setItemRange(sr.left(), sr.right());
+        if (m_vRuler != NULL) m_vRuler->setItemRange(sr.top(), sr.bottom());
+    }
+    else
+    {
+        if (m_hRuler != NULL) m_hRuler->setItemRange(-1, -1);
+        if (m_vRuler != NULL) m_vRuler->setItemRange(-1, -1);
+    }
+    return sr;
 }
 
 void Monitor::updateModeIndicator()
@@ -1957,6 +1987,24 @@ void Monitor::initGraphicsToolbar()
     m_lockAction->setChecked(m_props->layoutLocked());
     updatePlotLockAppearance(m_props->layoutLocked());
     connect(m_lockAction, SIGNAL(toggled(bool)), this, SLOT(slotLockToggled(bool)));
+
+    /* A locked plot moves nothing, aim targets included (Q183). Someone who
+       re-aims during a show turns this on: it is theirs, not the show's, so
+       it lives in their settings and a show file never changes it. */
+    m_targetsAdjustableAction = m_graphicsToolBar->addAction(tr("Targets stay adjustable"));
+    m_targetsAdjustableAction->setObjectName(QStringLiteral("targetsAdjustableAction"));
+    m_targetsAdjustableAction->setCheckable(true);
+    m_targetsAdjustableAction->setChecked(
+        QSettings().value(QStringLiteral("monitor/targetsAdjustableWhenLocked"), false).toBool());
+    m_targetsAdjustableAction->setToolTip(
+        tr("While the plot is locked, still let aim targets be dragged.\n"
+           "Off: a locked plot moves nothing. This is your setting, not the show's."));
+    connect(m_targetsAdjustableAction, &QAction::toggled, this, [this](bool on) {
+        QSettings().setValue(QStringLiteral("monitor/targetsAdjustableWhenLocked"), on);
+        if (m_graphicsView != NULL)
+            m_graphicsView->setTargetsAdjustableWhenLocked(on);
+    });
+    updatePlotLockAppearance(m_props->layoutLocked());
 
     m_inventoryAction = m_graphicsToolBar->addAction(QIcon(":/fixture.png"), tr("Inventory"));
     m_inventoryAction->setCheckable(true);
@@ -3128,10 +3176,17 @@ void Monitor::updatePlotLockAppearance(bool locked)
     m_lockAction->setIcon(QIcon(locked ? ":/lock.png" : ":/unlock.png"));
     // The toggle flips between editing the plot and freezing it for the show.
     m_lockAction->setText(locked ? tr("Plot Locked") : tr("Edit Plot"));
+    if (m_targetsAdjustableAction != NULL)
+        m_targetsAdjustableAction->setVisible(locked);
+    const bool targetsFree = m_targetsAdjustableAction != NULL && m_targetsAdjustableAction->isChecked();
     m_lockAction->setToolTip(locked
-        ? tr("Plot locked — the rig is frozen for the show.\n"
-             "Fixtures can be selected but not moved, and facing arrows are hidden;\n"
-             "aim targets stay adjustable. Click to edit the plot.")
+        ? (targetsFree
+            ? tr("Plot locked — the rig is frozen for the show.\n"
+                 "Everything can be selected but not moved, and facing arrows are hidden;\n"
+                 "aim targets stay adjustable. Click to edit the plot.")
+            : tr("Plot locked — the rig is frozen for the show.\n"
+                 "Everything can be selected but nothing moves, aim targets included,\n"
+                 "and facing arrows are hidden. Click to edit the plot."))
         : tr("Editing the plot — arrange & aim the rig.\n"
              "Drag a fixture to move it; Alt-drag a moving head to rotate its facing.\n"
              "Click to lock the plot for the show."));
@@ -3328,6 +3383,20 @@ void Monitor::slotSetBackgroundColor()
 void Monitor::slotRemoveSelected()
 {
     Q_ASSERT(m_graphicsView != NULL);
+
+    /* A layer-locked object can be selected from the Layers tree (to inspect
+       it), but its layer still holds it: Delete leaves it alone. */
+    bool heldBack = false;
+    foreach (QGraphicsItem *gi, m_graphicsView->scene()->selectedItems())
+        if (gi->data(ItemLock::LayerLockedKey).toBool())
+        {
+            gi->setSelected(false);
+            heldBack = true;
+        }
+    if (heldBack)
+        showNotice(tr("Layer locked \u2014 unlock it in Layers to delete"));
+    if (m_graphicsView->scene()->selectedItems().isEmpty() && heldBack)
+        return;
 
     // Gather EVERY selected structural feature, by type (was: truss/platform/
     // target only — booms, stands and towers fell through and silently no-op'd).
