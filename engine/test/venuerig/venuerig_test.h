@@ -40,6 +40,10 @@ private slots:
     void sidecarRoundTrip();
     void oldShowsAndVenuesAreUnchanged();
     void houseFixturesMoveIntoTheVenue();
+    /** Mutation gap 1 (RC6): with the venue off, or the show replaced, no
+     *  id is still the venue's: a show fixture holding a former house id
+     *  (or set to House with no venue applied) is in the show file. */
+    void aVenueOffLeavesNoVenueFixtures();
     void switchingVenuesSwapsTheHouseRig();
     void aGroupCuePlaysOnEachVenuesHouseRig();
     void aTakenIdIsRenumbered();

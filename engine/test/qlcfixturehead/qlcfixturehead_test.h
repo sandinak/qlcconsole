@@ -40,6 +40,8 @@ private slots:
     void cacheChannelsPanTilt();
     void cacheChannelsColor();
     void doublePanTilt();
+    /** N2 (RC6): a head channel of 2^31 or more is skipped, not read. */
+    void cacheChannelsPastTheIntRange();
 
     void cleanupTestCase();
 

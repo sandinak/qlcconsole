@@ -35,6 +35,8 @@
 #include "fixture_test.h"
 #include "fixture.h"
 #include "doc.h"
+#include "inputoutputmap.h"
+#include "universe.h"
 
 #include "../common/resource_paths.h"
 
@@ -854,6 +856,52 @@ void Fixture_Test::loadWrongUniverse()
     QVERIFY(fxi.channels() == 18);
     QVERIFY(fxi.address() == 25);
     QVERIFY(fxi.universe() == 4);
+}
+
+/* N1 (RC6): a fixture claiming more channels than a universe holds (the
+   fuzzer's 63-byte show) kept them all with its address reset to 0, and
+   adding it wrote the defaults past the universe's 512-byte buffers. It
+   loads unpatched, says so, and the universe is untouched. */
+void Fixture_Test::loadMoreChannelsThanAUniverse()
+{
+    QByteArray xml("<Fixture><ID></ID><Channels>926</Channels></Fixture>");
+    QXmlStreamReader xmlReader(xml);
+    xmlReader.readNextStartElement();
+
+    QVERIFY(m_doc->fixtures().size() == 0);
+    QVERIFY(Fixture::loader(xmlReader, m_doc) == true);
+    QCOMPARE(m_doc->fixtures().size(), 1);
+
+    Fixture *fxi = m_doc->fixtures().first();
+    QCOMPARE(fxi->channels(), quint32(926));
+    QVERIFY(fxi->isPatched() == false);
+    QCOMPARE(fxi->address(), quint32(0));
+    QVERIFY(m_doc->errorLog().contains("926 channels"));
+
+    QList<Universe *> unis = m_doc->inputOutputMap()->claimUniverses();
+    QVERIFY(unis.size() > 0);
+    QVERIFY(unis.at(0)->usedChannels() <= 512);
+    QVERIFY(unis.at(0)->totalChannels() <= 512);
+    m_doc->inputOutputMap()->releaseUniverses(false);
+
+    /* Nor can it be patched afterwards: no address holds it. */
+    QVERIFY(m_doc->patchFixture(fxi->id(), 0, 0) == false);
+    QVERIFY(fxi->isPatched() == false);
+
+    /* A fixture that fits but at the wrong address still moves to 1, patched. */
+    QByteArray fits("<Fixture><ID>5</ID><Channels>512</Channels><Address>3</Address></Fixture>");
+    QXmlStreamReader fitsReader(fits);
+    fitsReader.readNextStartElement();
+    QVERIFY(Fixture::loader(fitsReader, m_doc) == true);
+    Fixture *whole = m_doc->fixture(5);
+    QVERIFY(whole != NULL);
+    QVERIFY(whole->isPatched());
+    QCOMPARE(whole->address(), quint32(0));
+    QCOMPARE(whole->channels(), quint32(512));
+
+    QVERIFY(m_doc->deleteFixture(5));
+    QVERIFY(m_doc->deleteFixture(fxi->id()));
+    QCOMPARE(m_doc->fixtures().size(), 0);
 }
 
 void Fixture_Test::loadWrongID()

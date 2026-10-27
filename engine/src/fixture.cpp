@@ -1650,15 +1650,6 @@ bool Fixture::loadXML(QXmlStreamReader &xmlDoc, Doc *doc,
         patched = false;
     }
 
-    /* Make sure that address is something sensible */
-    if (!crossUniverse() && (address > 511 || address + (channels - 1) > 511))
-    {
-        doc->appendToErrorLog(QString("Fixture address range %1-%2 is out of DMX bounds")
-                              .arg(QString::number(address))
-                              .arg(QString::number(address + channels - 1)));
-        address = 0;
-    }
-
     /* Check that the invalid ID is not used */
     if (id == Fixture::invalidId())
     {
@@ -1702,6 +1693,32 @@ bool Fixture::loadXML(QXmlStreamReader &xmlDoc, Doc *doc,
         m_unavailableManufacturer = manufacturer;
         m_unavailableModel = model;
         m_unavailableMode = modeName;
+    }
+
+    /* What it really has: the mode's channels, not only <Channels> */
+    const quint32 fitChannels = qMax(1u, this->channels());
+
+    /* More channels than a universe holds: no address fits it, and the
+       universe writes (Doc::applyFixtureToUniverses) would run past the
+       512-channel buffers. Kept, unpatched, and said, as a universe out of
+       range is above. */
+    if (!crossUniverse() && fitChannels > 512)
+    {
+        qWarning() << Q_FUNC_INFO << "Fixture" << name << "has" << fitChannels
+                   << "channels, more than a universe holds; loaded unpatched";
+        doc->appendToErrorLog(tr("Fixture <b>%1</b> has %2 channels, more than a universe "
+                                 "holds (512): it is loaded unpatched.")
+                              .arg(name.toHtmlEscaped()).arg(fitChannels));
+        address = 0;
+        patched = false;
+    }
+    /* Make sure that address is something sensible */
+    else if (!crossUniverse() && (address > 511 || address + (fitChannels - 1) > 511))
+    {
+        doc->appendToErrorLog(QString("Fixture address range %1-%2 is out of DMX bounds")
+                              .arg(QString::number(address))
+                              .arg(QString::number(address + fitChannels - 1)));
+        address = 0;
     }
 
     setAddress(address);

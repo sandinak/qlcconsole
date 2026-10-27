@@ -345,6 +345,39 @@ void QLCFixtureHead_Test::cacheChannelsColor()
     QCOMPARE(head.colorWheels().at(1), quint32(3));
 }
 
+void QLCFixtureHead_Test::cacheChannelsPastTheIntRange()
+{
+    /* The guard was (int)i >= size: 2999999999 and 2^31 went negative as an
+       int, passed, and mode->channels().at(i) read past the list. */
+    QLCFixtureMode mode(m_fixtureDef);
+    m_ch1->setGroup(QLCChannel::Pan);
+    m_ch1->setControlByte(QLCChannel::MSB);
+    mode.insertChannel(m_ch1, 0);
+
+    QLCFixtureHead head;
+    head.addChannel(quint32(2999999999u));
+    head.addChannel(quint32(0x80000000u));
+    head.addChannel(quint32(0xFFFFFFFEu));
+    head.addChannel(0);
+    head.cacheChannels(&mode);
+    QCOMPARE(head.channelNumber(QLCChannel::Pan, QLCChannel::MSB), quint32(0));
+    QCOMPARE(head.channelNumber(QLCChannel::Tilt, QLCChannel::MSB), QLCChannel::invalid());
+
+    /* The fuzzer's definition, cut short as found and whole: it loads,
+       and caching the mode's heads skips the channel. */
+    const QByteArray cut("<!DOCTYPE FixtureDefinition><FixtureDefinition><Mode Name=\"H\"><Head><Channel>2999999999<");
+    const QByteArray whole("<!DOCTYPE FixtureDefinition><FixtureDefinition><Channel Name=\"D\"><Group Byte=\"0\">Intensity</Group></Channel>"
+                           "<Mode Name=\"H\"><Channel Number=\"0\">D</Channel><Head><Channel>2999999999</Channel><Channel>0</Channel></Head></Mode></FixtureDefinition>");
+    QLCFixtureDef cutDef;
+    cutDef.loadXMLData(cut);
+    QLCFixtureDef wholeDef;
+    QVERIFY(wholeDef.loadXMLData(whole));
+    QCOMPARE(wholeDef.modes().size(), 1);
+    QLCFixtureMode *m = wholeDef.modes().first();
+    QCOMPARE(m->heads().size(), 1);
+    QCOMPARE(m->heads().at(0).channelNumber(QLCChannel::Intensity, QLCChannel::MSB), quint32(0));
+}
+
 void QLCFixtureHead_Test::cleanupTestCase()
 {
     QVERIFY(m_fixtureDef != NULL);

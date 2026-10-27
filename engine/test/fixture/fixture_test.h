@@ -56,6 +56,7 @@ private slots:
     void loadDimmer();
     void loadWrongAddress();
     void loadWrongUniverse();
+    void loadMoreChannelsThanAUniverse();
     void loadWrongID();
     void loader();
     void save();

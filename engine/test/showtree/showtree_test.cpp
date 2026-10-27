@@ -8070,6 +8070,46 @@ void ShowTree_Test::textColoursAreMadeReadable()
     QCOMPARE(textColourName("#123456"), QString("#123456"));
 }
 
+void ShowTree_Test::saveKeepsAProductionWithNothingBaked()
+{
+    ShowTreeController *st = m_doc->showTree();
+    QVERIFY(st->productions().isEmpty());
+    QVERIFY(!engineXml(m_doc).contains("<ShowTree"));     // no tree: saved as it always was
+
+    auto reopen = [this](const QByteArray &show) {
+        Doc *other = new Doc(this);
+        QXmlStreamReader sr(show);
+        sr.readNextStartElement();
+        other->loadXML(sr, false);
+        return other;
+    };
+
+    // Only a production: nothing baked, nothing generated -- still saved.
+    const quint32 prod = st->addProduction("Tour 2026");
+    QVERIFY(prod != ShowTree::invalidId());
+    QByteArray show = engineXml(m_doc);
+    QVERIFY(show.contains("<ShowTree"));
+    QVERIFY(show.contains("Tour 2026"));
+    Doc *other = reopen(show);
+    QCOMPARE(other->showTree()->productions().size(), 1);
+    QCOMPARE(other->showTree()->productions().first().name, QString("Tour 2026"));
+    delete other;
+
+    // With an empty cue list, and a second production with none.
+    const quint32 listId = st->addCueList(prod, "Main", ListMode::Tracking);
+    QVERIFY(listId != ShowTree::invalidId());
+    QVERIFY(st->addProduction("Spare") != ShowTree::invalidId());
+    show = engineXml(m_doc);
+    other = reopen(show);
+    const QList<Production> &back = other->showTree()->productions();
+    QCOMPARE(back.size(), 2);
+    QCOMPARE(back.at(0).name, QString("Tour 2026"));
+    QVERIFY(back.at(0).list(listId) != nullptr);
+    QCOMPARE(back.at(0).list(listId)->name, QString("Main"));
+    QCOMPARE(back.at(1).name, QString("Spare"));
+    delete other;
+}
+
 QTEST_MAIN(ShowTree_Test)
 
 /****************************************************************************

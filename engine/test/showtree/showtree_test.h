@@ -37,6 +37,11 @@ private slots:
     void init();
     void cleanup();
 
+    /** Mutation gap 2 (RC6): a show whose tree is only a production --
+     *  no list, nothing baked or generated -- still saves the tree, and
+     *  opens with it; so does one with an empty cue list. */
+    void saveKeepsAProductionWithNothingBaked();
+
     // The model and the cascade (§2, §3), no Doc behind them
     void globalLayerEffect_3_1();
     void trackingAcrossThreeCues_3_2();
