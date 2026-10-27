@@ -243,7 +243,7 @@ BeamOptics::Optics BeamOptics::opticsFor(const Fixture *fx, const QByteArray &va
         return out;
 
     auto valueOf = [&](quint32 ch) {
-        return int(ch) < values.size() ? int(uchar(values.at(int(ch)))) : 0;
+        return ch < quint32(values.size()) ? int(uchar(values.at(int(ch)))) : 0;
     };
 
     QList<Wheel> wheels;

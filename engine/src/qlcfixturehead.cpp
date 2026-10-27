@@ -186,7 +186,9 @@ void QLCFixtureHead::cacheChannels(const QLCFixtureMode* mode)
 
     foreach (quint32 i, m_channels)
     {
-        if ((int)i >= mode->channels().size())
+        /* Unsigned: a channel of 2^31 or more read from a definition went
+           negative as an int, passed, and was read past the list. */
+        if (i >= quint32(mode->channels().size()))
         {
             qDebug() << "Head contains undefined channel" << i;
             continue;

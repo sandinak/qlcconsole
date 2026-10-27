@@ -871,7 +871,7 @@ QList<Issue> FixtureDefCheck::check(const QLCFixtureDef *def)
         const QVector<QLCFixtureHead> &heads = mode->heads();
         for (int h = 0; h < heads.size(); ++h)
             foreach (quint32 c, heads.at(h).channels())
-                if (int(c) >= mch.size())
+                if (c >= quint32(mch.size()))
                     add(Issue::Error, Issue::Modes, mode->name(),
                         QString("Mode \"%1\": head %2 uses channel %3, which the mode does not have.")
                             .arg(mode->name()).arg(h + 1).arg(c + 1));

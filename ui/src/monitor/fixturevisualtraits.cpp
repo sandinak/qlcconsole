@@ -875,7 +875,7 @@ static bool channelSetLiveState(QLCFixtureMode *mode, const QByteArray &v,
 
     foreach (quint32 c, chans)
     {
-        if (int(c) >= v.size())
+        if (c >= quint32(v.size()))
             continue;
         QLCChannel *ch = mode->channel(c);
         if (ch == nullptr)
@@ -1208,7 +1208,7 @@ bool fixtureAimDirection(Fixture *fx, const FixtureRigProps &rp, QVector3D &dir,
        about where a head is looking: the centre DMX value is 0 degrees and the
        range is centred on it. */
     auto degrees = [&](quint32 ch, double maxDeg) {
-        if (ch == QLCChannel::invalid() || int(ch) >= v.size())
+        if (ch == QLCChannel::invalid() || ch >= quint32(v.size()))
             return 0.0;
         const double val = double(uchar(v.at(int(ch))));
         return (val * maxDeg) / 255.0 - (maxDeg / 2.0);

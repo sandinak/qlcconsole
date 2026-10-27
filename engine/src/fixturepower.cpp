@@ -115,11 +115,11 @@ PowerModel PowerModel::build(const Fixture *fx, const PowerProfile &profile)
         const QList<quint32> hc = mode->heads().at(h).channels();
         int dim = -1;
         foreach (quint32 c, hc)
-            if (int(c) < chans.size() && isLevel(chans.at(int(c)))
+            if (c < quint32(chans.size()) && isLevel(chans.at(int(c)))
                 && chans.at(int(c))->colour() == QLCChannel::NoColour && c != master)
                 dim = int(c);
         foreach (quint32 c, hc)
-            if (int(c) < chans.size())
+            if (c < quint32(chans.size()))
                 headDimmer[int(c)] = dim;
     }
 
