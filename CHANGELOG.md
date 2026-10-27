@@ -84,6 +84,17 @@ Transfer carries the show's pictures with it; and Set Mounting Height…
 asks in the show's units. Two labels say what the app really does: the
 autosave file names in Settings and the Patch List… tooltip.
 
+Release candidate 8 is a security release, from a red-team review of
+RC7 (board Q175). Web access listens on this computer only unless told
+otherwise, and only this computer, or a logged-in user with the right
+level, may change the show through it; pages on other sites can't drive
+it. A Script runs a program only when this computer's operator allows it,
+never for a show that came in over the web, and previews never run
+scripts. Malformed OSC packets, short or unknown web commands, a huge
+upload and quitting with a browser open no longer crash or hang the
+console; names in the web pages and in exported CSVs can no longer run
+as code.
+
 ### Added
 
 - **The venue chip and one venue menu** (RC3, board Q150). The footer, beside
@@ -543,6 +554,64 @@ autosave file names in Settings and the Patch List… tooltip.
 
 ### Changed
 
+- **Web access listens on this computer only** (RC8, red team H2). `-w`
+  used to listen on every network the computer was on; it now listens on
+  127.0.0.1 unless started with **--web-bind** (**-wb**) and an address
+  (0.0.0.0 for every network). On start it prints the address, and warns
+  when it is reachable from the network (`WebAccessBase::defaultBindAddress()`;
+  `WebAccess_Test::itListensOnlyOnLoopbackByDefault`, `::itListensWhereItIsTold`).
+- **Web access: only this computer, or a user with the level for it,
+  changes the show** (RC8, red team H1, H4, H8). With `-w` alone a browser
+  on this computer can do everything and one anywhere else can look but
+  change nothing (no widgets, Grand Master, channels, Operate, show or
+  fixture loading, patching, users, system commands); "this computer" is a
+  loopback connection under a loopback name, so a site that resolves to
+  127.0.0.1 doesn't count. With `-wa`, every request needs an account with
+  the level for it, the Grand Master needs Virtual Console and Simple Desk,
+  Operate and the Pi's reboot / halt / network / hotspot / autostart need
+  Everything; and until an admin account exists nobody is let in, except
+  this computer to create the first admin (it used to make every visitor
+  an admin). Usernames are letters, digits and `. _ @ -`
+  (`WebAccessBase::authenticateRequest()`, `::permits()`;
+  `WebAccess_Test::withoutAuthAProjectCannotBeLoaded`,
+  `::withoutAuthThisComputerStillHasFullAccess`,
+  `::withoutAuthTheNetworkCanLookButNotTouch`, `::aRebindingNameIsNotThisComputer`,
+  `::authWithNoUsersIsNotOpenToEveryone`, `::theFirstVisitorCannotMakeThemselvesAdmin`,
+  `::theFirstAdminComesFromThisComputer`, `::aLoggedInGuestCannotBlackOutTheShow`,
+  `::systemCommandsNeedAnAdmin`).
+- **Pages on other sites can't drive web access** (RC8, red team M1). A
+  WebSocket or a POST whose Origin is neither the console's own page nor
+  this computer is refused with 403 (cross-site WebSocket hijacking and
+  cross-site forms) (`WebAccessBase::originAllowed()`;
+  `WebAccess_Test::aPageOnAnotherSiteCannotDriveTheShow`,
+  `::aFormOnAnotherSiteCannotLoadAProject`).
+- **Scripts run programs only when allowed** (RC8, red team H3). A
+  Script's `systemcommand` runs only with **Settings ▸ Advanced ▸ Allow
+  scripts to run programs** on (this computer's, off by default); off, the
+  line is skipped and the footer says which script asked for which
+  program. A show loaded over web access never runs programs, whatever the
+  setting (`Script::programsAllowed()`, `Doc::loadedFromWeb()`,
+  `Doc::showActionRefused`; `HostileShow_Test::aSystemCommandIsOffUntilTheOperatorTurnsItOn`,
+  `::aShowFromWebAccessNeverRunsPrograms`).
+- **Previews never run scripts** (RC8, red team H3). A Script started by
+  the Workbench (Build, and the Show Tree's docked Workbench, in Design or
+  Operate), the Show Tree's preview or Solo -- itself, or as a member of a
+  collection or chaser they play -- runs nothing and stops; started from
+  the Virtual Console, a cue or the Function Manager it runs as before
+  (`FunctionParent::preview()`, `Function::startedOnlyByPreview()`;
+  `Workbench_Test::aPreviewNeverRunsAScript`).
+- **OSC input listens on its own interface** (RC8, red team M6). An OSC
+  universe patched to 127.0.0.1 listened on every network; it now binds
+  the interface address it is patched to, so packets sent to a broadcast
+  address or to another interface no longer arrive
+  (`OSC_Test::theInputListensOnlyOnItsInterface`).
+- **Spreadsheet-safe CSV** (RC8, red team M7). The patch list, focus
+  report and network report put an apostrophe before a cell that starts
+  with `=`, `+`, `-`, `@`, a tab or a carriage return and isn't a number,
+  so Excel, Numbers or Lightwright show it as text instead of running it
+  as a formula; XLSX cells stay inline text (`CsvField::escape()`;
+  `PatchList_Test::aFormulaInANameIsNotRunBySpreadsheets`).
+
 - **The Labels dialog finds a Brother PT-P710BT** (RC4, board Q163-1).
   With a printer installed whose name, description or model says PT-P710BT
   (or PT-P710), and no stock chosen before, the dialog opens on the
@@ -824,6 +893,48 @@ autosave file names in Settings and the Patch List… tooltip.
   black in the move-in-black tooltips, *Fade 10 / 30 seconds and stop*.
 
 ### Fixed
+
+- **One OSC packet could hang or crash the console** (RC8, red team H9,
+  H10, M5). A bundle element size of 0xFFFFFFFC stepped the parser back
+  and forth forever on the GUI thread; a huge size, a size cut short, type
+  tags or a string with no end read past the datagram; a float of NaN,
+  infinity or out of 0..1 became any byte. `OSCPacketizer::parsePacket()`
+  now checks every length against the datagram as an unsigned size, ends
+  a bundle on an element that doesn't fit, nests bundles eight deep at
+  most, and clamps values to 0..255; the multi-value path cache and the
+  path hash table keep 4096 paths at most (`OSC_Test`: 14 tests, 20000
+  seeded random datagrams).
+- **One short web command could crash the console** (RC8, red team H5,
+  H6, L1, L2). `GM_VALUE` alone, `CH|1`, the cue list, frame, clock,
+  matrix, IO and user commands read arguments that weren't there; an
+  unknown widget id in `getWidgetType`/`getWidgetSubIdList` dereferenced
+  null; a URL the parser can't read asserted; a body of any
+  Content-Length was buffered (now 413 over 64 MB); and quitting with a
+  browser connected deleted each connection twice. Each is checked
+  (`WebAccess_Test::shortCommandsDoNotCrash`, `::unknownWidgetIdsDoNotCrash`,
+  `::aMalformedUrlDoesNotAbort`, `::aHugeUploadIsRefusedEarly`,
+  `::shutdownWithALiveClientIsClean`).
+- **A fixture upload could write outside the fixture folder** (RC8, red
+  team H7). The name the browser sent went straight into the path
+  (`../escaped.qxf`); it is now the file name only, a `.qxf`, or refused.
+  Files outside the web folder are served only when the show's Virtual
+  Console uses them as a picture, and `..` never leaves it
+  (`WebAccessBase::sanitizedFixtureFileName()`;
+  `WebAccess_Test::anUploadedFixtureStaysInTheFixtureFolder`,
+  `::withoutAuthAFixtureCannotBeStored`, `::uploadNamesAreSanitised`,
+  `::filesOutsideTheWebFolderAreNotServed`).
+- **Names in the web pages could run as script** (RC8, red team M2). Button,
+  slider, label, frame, page, audio trigger and matrix captions, cue list
+  function names and notes, universe, profile, device, fixture-file and
+  user names were written into the pages as HTML; they are escaped, and
+  the page's own updates set text, not HTML
+  (`WebAccess_Test::namesFromTheShowAreEscapedInThePage`).
+- **Two script lines could crash the timer** (RC8, red team M3, M4).
+  `random(1,0)` divided by zero (a crash on x86); the bounds are taken
+  either way round. `setfixture` on an unpatched fixture, or one whose
+  universe the show doesn't have, wrote past the universe list; it is
+  refused (`HostileShow_Test::randomWithEqualBoundsDoesNotCrashTheTimer`,
+  `::randomTakesItsBoundsEitherWayRound`, `::setFixtureOnAnUnpatchedFixtureIsSafe`).
 
 - **A chaser step's Fade or Hold typed with a comma read as 0** (RC7).
   "1,5" in the Chaser editor's Fade In / Hold / Fade Out cells or the

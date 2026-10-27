@@ -10,6 +10,19 @@ QLC+ shows open in a **Classic QLC+** view and can be upgraded in one
 step. Fixtures get plot symbols and output rules, and Eos shows import with
 their house lights, relays and subs.
 
+### Security
+
+- **Web access stays on this computer.** Started with **-w**, the web page
+  listens on this computer only; **--web-bind** opens it to a network,
+  and anyone not on this computer needs **-wa** and an account to change
+  anything. Pages on other sites can't send it commands. See [Web
+  access](other-improvements.md#web-access).
+- **Scripts run programs only when you say so.** A Script's
+  `systemcommand` needs **Settings ▸ Advanced ▸ Allow scripts to run
+  programs** (off by default), never runs for a show loaded over the web,
+  and previews in Build and the Show Tree never run scripts. See
+  [Security](troubleshooting.md#security).
+
 ### The venue chip
 
 - **Which room, always in sight.** The footer says the venue applied —

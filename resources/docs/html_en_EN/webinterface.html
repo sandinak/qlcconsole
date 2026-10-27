@@ -28,6 +28,15 @@ A test page with the available APIs can be found <a href="https://www.qlcplus.or
 </P>
 
 <P>
+<B>Security (qlcconsole):</B> web access listens on this computer only (http://127.0.0.1:9999)
+unless started with <B>--web-bind</B> (for example <B>-wa --web-bind 0.0.0.0</B>). Started with
+<B>-w</B> alone, a browser on this computer can do everything and a browser anywhere else can only
+look; to control the show from another device start with <B>-wa</B> and give each person an account.
+Until an admin account exists nobody is let in, except a browser on this computer, which may create
+the first admin in Configuration, Users. Pages on other web sites may not send commands to the
+console, and a show loaded through the web page never runs programs from its scripts.
+</P>
+<P>
 To access the QLC+ web interface simply connect to this address:<BR>
 <B>http://[IP address]:9999</B><BR>
 <BR>

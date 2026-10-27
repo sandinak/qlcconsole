@@ -291,7 +291,9 @@ Using command line parameters can be tricky depending on the operating system yo
   <TD STYLE="background-color: #eeeeee;">
    <H2>-w or --web</H2>
    <P>
-    <B>Description:</B> Enable remote web access on port 9999
+    <B>Description:</B> Enable web access on port 9999. It listens on this computer
+    only (127.0.0.1) unless --web-bind says otherwise. Without -wa, a browser on this
+    computer can do everything and a browser anywhere else can only look.
    </P>
 
    <P>
@@ -329,7 +331,9 @@ Using command line parameters can be tricky depending on the operating system yo
   <TD STYLE="background-color: #eeeeee;">
    <H2>-wa or --web-auth</H2>
    <P>
-    <B>Description:</B> Enable remote web access with users authentication
+    <B>Description:</B> Enable web access with users authentication. Until an admin
+    account exists nobody is let in, except a browser on this computer, which may create
+    the first admin (Configuration, Users).
    </P>
 
    <P>
@@ -346,6 +350,27 @@ Using command line parameters can be tricky depending on the operating system yo
 
  <TR>
   <TD STYLE="background-color: #ffffff;">
+   <H2>-wb or --web-bind</H2>
+   <P>
+    <B>Description:</B> Listen for web access on this address instead of 127.0.0.1:
+    this computer's address on a network, or 0.0.0.0 for every network. A warning is
+    printed when web access is reachable from the network; use -wa so others must log in.
+   </P>
+
+   <P>
+    <B>Parameters:</B> IP address
+   </P>
+
+   <P>
+    <B>Examples:</B><BR>
+    qlcconsole -wa -wb 0.0.0.0<BR>
+    qlcconsole --web-auth --web-bind 192.168.1.20<BR>
+   </P>
+  </TD>
+ </TR>
+
+ <TR>
+  <TD STYLE="background-color: #eeeeee;">
    <H2>-a or --web-auth-file</H2>
    <P>
     <B>Description:</B> Specify a file where to store web access basic authentication credentials
