@@ -1568,7 +1568,7 @@ void FixtureManager::initActions()
             this, SLOT(slotRemap()));
 
     m_patchListAction = new QAction(QIcon(":/fileexport.png"), tr("Patch List..."), this);
-    m_patchListAction->setToolTip(tr("Every fixture's patch, output and mount, to save as CSV or PDF"));
+    m_patchListAction->setToolTip(tr("Every fixture's patch, output and mount: copy it, save it as CSV, XLSX or PDF, or print fixture labels"));
     connect(m_patchListAction, &QAction::triggered, this, &FixtureManager::slotPatchList);
 
     // Icon-less, matching ConnectionsTree::appendUniversalMenuActions()'s

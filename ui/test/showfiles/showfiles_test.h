@@ -85,6 +85,14 @@ private slots:
      *  starts the new one's ("Show 2" -> "Show"). */
     void saveAsToAnotherFolderTakesThePictures();
 
+    /** File ▸ Collect for Transfer…: every picture the show uses (truss
+     *  socks, tower faces, plot images), from the show's own
+     *  images/ or from anywhere else, is copied into the folder's images/
+     *  and the collected show names it there, relatively. Opened from the
+     *  folder on a computer without the originals, it finds them all; the
+     *  open show keeps its own paths. */
+    void collectForTransferTakesThePictures();
+
 
 private:
     QStringList fingerprint() const;

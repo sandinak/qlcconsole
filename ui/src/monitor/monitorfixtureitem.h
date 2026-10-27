@@ -28,6 +28,8 @@
 #include "fixturevisualtraits.h"
 
 class Doc;
+class MonitorProperties;
+class QWidget;
 
 /** \addtogroup ui_mon DMX Monitor
  * @{
@@ -410,6 +412,13 @@ private:
 public:
     /** The ring's segments as drawn now (tests); empty: no ring. */
     QVector<QColor> ringSegments() const;
+
+    /** "Set Mounting Height… (2.50 m)" -- in the show's units (feet on a
+     *  feet show), as the plot's other dialogs. */
+    static QString mountingHeightText(const MonitorProperties *props, quint32 fid);
+    /** Ask for @p fid's height above the floor, in the show's units, and
+     *  set it. True when it was set. */
+    static bool askMountingHeight(QWidget *parent, MonitorProperties *props, quint32 fid);
 private:
 
     /** True when the canvas's current POV is Front/Side (an elevation), set

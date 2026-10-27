@@ -24,6 +24,8 @@
 #include <QTreeWidget>
 #include <QStatusBar>
 #include <QMenu>
+#include <QToolButton>
+#include <memory>
 #include <QTabWidget>
 #include <QListWidget>
 #include <QCheckBox>
@@ -57,6 +59,8 @@
 #include "stageplatform.h"
 #include "programmingoutline.h"
 #include "workbench.h"
+#include "showtreeview.h"
+#include "effectdesigner.h"
 #include "patchinventorydialog.h"
 #include "patchlabelsdialog.h"
 #include "patchlistdialog.h"
@@ -247,7 +251,14 @@ bool HelpShots::save(const QString &name, const Frame &frame)
             ok = false;
         }
 
-    const QImage img = annotate(frame.grab->grab().toImage(), frame);
+    QImage shot = frame.grab->grab().toImage();
+    if (!frame.overlay.isNull())
+    {
+        const QImage over = frame.overlay->grab().toImage();
+        QPainter p(&shot);
+        p.drawImage(frame.overlayAt, over);
+    }
+    const QImage img = annotate(shot, frame);
     const QString path = m_outDir + QLatin1Char('/') + name + QStringLiteral(".png");
     if (img.save(path))
         fprintf(stderr, "[HELPSHOT] %s\n", qPrintable(path));
@@ -1543,6 +1554,152 @@ QList<HelpShots::Shot> HelpShots::shots()
         if (FocusModePanel *p = FocusModePanel::instance())
             p->controlMap()->clearInput();
         doc->programmer()->focusSession()->stop();
+        settle();
+    } };
+
+    /* Pictures that were taken by hand (help audit, RC7): the Show Tree
+       with a cue in its Workbench, Build ▸ Effects with its right-click
+       menu over the designer, and the bench's Make a layer menu. */
+    auto treeProduction = std::make_shared<quint32>(ShowTree::invalidId());
+    list << Shot{ QStringLiteral("show-tree-workbench"), [=]() {
+        Frame f;
+        window();
+        ShowTreeController *st = doc->showTree();
+        ShowTreeView *view = app->findChild<ShowTreeView *>();
+        QLCPalette *cyan = palette(QStringLiteral("Cyan"));
+        QLCPalette *white = palette(QStringLiteral("White"));
+        QLCPalette *full = palette(QStringLiteral("Full"));
+        QLCPalette *aim = palette(QStringLiteral("Aim: Centre"));
+        FixtureGroup *pars = nullptr, *movers = nullptr;
+        for (FixtureGroup *g : doc->fixtureGroups())
+        {
+            if (g->name() == QLatin1String("Pars"))
+                pars = g;
+            else if (g->name() == QLatin1String("Movers"))
+                movers = g;
+        }
+        if (view == nullptr || cyan == nullptr || white == nullptr || full == nullptr
+            || aim == nullptr || pars == nullptr || movers == nullptr)
+            return f;
+        auto look = [](const QString &key, quint32 paletteId) {
+            ShowTree::Look l;
+            l.key = key;
+            l.palettes << paletteId;
+            return l;
+        };
+        // Setup lights the Pars; Announcer adds the Movers, the Pars tracking.
+        const quint32 prod = st->addProduction(QStringLiteral("Dance Show"));
+        *treeProduction = prod;
+        const quint32 cueList = st->addCueList(prod, QStringLiteral("Main"));
+        const quint32 setup = st->addCueNumbered(cueList, QStringLiteral("1"), QStringLiteral("Setup"));
+        const quint32 announcer = st->addCueNumbered(cueList, QStringLiteral("2"), QStringLiteral("Announcer"));
+        ShowTree::Target washes;
+        washes.groups << pars->id();
+        const quint32 wl = st->addLayer(setup, washes);
+        st->setLayerLook(setup, wl, look(ShowTree::KeyColour, cyan->id()));
+        st->setLayerLook(setup, wl, look(ShowTree::KeyDimmer, full->id()));
+        ShowTree::Target spots;
+        spots.groups << movers->id();
+        const quint32 ml = st->addLayer(announcer, spots);
+        st->setLayerLook(announcer, ml, look(ShowTree::KeyColour, white->id()));
+        st->setLayerLook(announcer, ml, look(ShowTree::KeyDimmer, full->id()));
+        st->setLayerLook(announcer, ml, look(ShowTree::KeyPosition, aim->id()));
+        showTab(view);
+        view->selectNode(announcer);
+        view->openInWorkbench(announcer, ml);
+        settle();
+        doc->resetModified();       // the footer as for a saved show
+        settle();
+        f.grab = app;
+        return f;
+    }, [=]() {
+        if (ShowTreeView *view = app->findChild<ShowTreeView *>())
+            view->closeWorkbench();
+        doc->showTree()->removeProduction(*treeProduction);
+        doc->resetModified();
+        settle();
+    } };
+
+    list << Shot{ QStringLiteral("build-effects-menu"), [=]() {
+        Frame f;
+        window();
+        if (pm == nullptr)
+            return f;
+        showTab(pm);
+        QLCPalette *phaser = palette(QStringLiteral("Phaser per beat"));
+        if (phaser == nullptr || !pm->designEffect(phaser->id()))
+            return f;
+        settle();
+        QTreeWidgetItem *row = pm->m_effectsList->currentItem();
+        if (row == nullptr)
+            return f;
+        QMenu *menu = pm->effectsContextMenu(row, pm);
+        menu->setAttribute(Qt::WA_DeleteOnClose);
+        // Opened from the row, as a right-click there would.
+        const QRect r = pm->m_effectsList->visualItemRect(row);
+        const QPoint at = pm->m_effectsList->viewport()->mapTo(app, r.center());
+        menu->popup(app->mapToGlobal(at));
+        settle();
+        menu->move(app->mapToGlobal(at));
+        settle();
+        f.grab = app;
+        f.overlay = menu;
+        f.overlayAt = at;
+        return f;
+    }, [=]() {
+        if (QMenu *menu = app->findChild<QMenu *>(QStringLiteral("buildEffectsMenu")))
+            menu->close();
+        if (pm != nullptr)
+        {
+            pm->m_workbench->clear();
+            pm->setSection(ProgrammingManager::ScenesSection);
+        }
+        doc->resetModified();
+        settle();
+    } };
+
+    list << Shot{ QStringLiteral("make-a-layer"), [=]() {
+        Frame f;
+        window();
+        openScene(QStringLiteral("05 Stage Shape"), QString());
+        Function *scene = function(QStringLiteral("05 Stage Shape"));
+        QLCPalette *phaser = palette(QStringLiteral("Phaser per beat"));
+        if (pm == nullptr || scene == nullptr || phaser == nullptr)
+            return f;
+        // The bench, opened from the scene in the Workbench.
+        Workbench::EffectRequest req;
+        req.palette = phaser->id();
+        req.fromScene = scene->id();
+        pm->setSection(ProgrammingManager::EffectsSection);
+        if (!pm->m_workbench->designEffect(req))
+            return f;
+        settle();
+        QToolButton *make = qobject_cast<QToolButton *>(named(pm, "edMakeLayer"));
+        if (make == nullptr || make->menu() == nullptr)
+            return f;
+        QMenu *menu = make->menu();
+        // Above the button, its right edge on the button's, as it opens
+        // at the foot of the window.
+        menu->popup(make->mapToGlobal(QPoint(0, 0)));
+        settle();
+        const QSize size = menu->sizeHint();
+        const QPoint at = make->mapTo(app, QPoint(make->width() - size.width(), -size.height()));
+        menu->move(app->mapToGlobal(at));
+        menu->resize(size);         // whole: the offscreen screen is narrower than the window
+        settle();
+        f.grab = app;
+        f.overlay = menu;
+        f.overlayAt = at;
+        return f;
+    }, [=]() {
+        if (QMenu *menu = app->findChild<QMenu *>(QStringLiteral("edMakeLayerMenu")))
+            menu->close();
+        if (pm != nullptr)
+        {
+            pm->m_workbench->clear();
+            pm->setSection(ProgrammingManager::ScenesSection);
+        }
+        doc->resetModified();
         settle();
     } };
 

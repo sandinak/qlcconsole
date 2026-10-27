@@ -32,6 +32,9 @@
 #include "monitorproperties.h"
 #include "headlayout.h"
 #include "rgbmatrix.h"
+#include "rgbimage.h"
+#include "truss.h"
+#include "tower.h"
 #include "fixture.h"
 #include "qlcfile.h"
 #include "doc.h"
@@ -830,6 +833,64 @@ void ShowEmbedding_Test::aCollectedFolderOpensCompleteAsQxw()
     delete doc;
     // ...and the folder's files were never touched by closing it.
     QVERIFY(QFile::exists(folder + "/Fixtures/Test-Maker-Step-Row.qxf"));
+}
+
+void ShowEmbedding_Test::transferPicturesHaveAPlaceEach()
+{
+    const QString show = m_root->filePath("Show");
+    QVERIFY(write(show + "/images/pic.png", "pic"));
+    QVERIFY(write(m_root->filePath("A/a.png"), "one"));
+    QVERIFY(write(m_root->filePath("B/a.png"), "two"));
+    QVERIFY(write(m_root->filePath("C/a.png"), "one"));
+    Doc *doc = startDoc();
+    doc->setWorkspacePath(show);
+    MonitorProperties *mp = doc->monitorProperties();
+    mp->addImage(m_root->filePath("A/a.png"));
+    Tower *tower = mp->addTower();
+    tower->setFaces(true);
+    tower->setFacesPattern(m_root->filePath("B/a.png"));
+    Truss *truss = mp->addTruss();
+    truss->setSock(true);
+    truss->setSockPattern(m_root->filePath("C/a.png"));
+    mp->addImage(m_root->filePath("gone/missing.png"));
+    RGBMatrix *matrix = new RGBMatrix(doc);
+    RGBImage *image = new RGBImage(doc);
+    image->setFilename(show + "/images/pic.png");
+    matrix->setAlgorithm(image);
+    QVERIFY(doc->addFunction(matrix));
+
+    const QMap<QString, QString> places = doc->showEmbedding()->transferPictures(
+        QStringList() << m_root->filePath("A/a.png"));
+    QCOMPARE(places.size(), 4);
+    QCOMPARE(places.value(QFileInfo(show + "/images/pic.png").absoluteFilePath()), QString("images/pic.png"));
+    const QString a = places.value(QFileInfo(m_root->filePath("A/a.png")).absoluteFilePath());
+    const QString b = places.value(QFileInfo(m_root->filePath("B/a.png")).absoluteFilePath());
+    const QString c = places.value(QFileInfo(m_root->filePath("C/a.png")).absoluteFilePath());
+    QCOMPARE(a, QString("images/a.png"));
+    QCOMPARE(c, a);
+    QCOMPARE(b, QString("images/a-2.png"));
+
+    const QString folder = m_root->filePath("transfer/Show");
+    QStringList written;
+    QVERIFY(doc->showEmbedding()->writeTransferFolder(folder, &written, places));
+    QCOMPARE(written.size(), 3);
+    QCOMPARE(read(folder + "/images/pic.png"), QByteArray("pic"));
+    QCOMPARE(read(folder + "/images/a.png"), QByteArray("one"));
+    QCOMPARE(read(folder + "/images/a-2.png"), QByteArray("two"));
+
+    // Written with them as its paths, the show names its copies.
+    doc->setComponentPathOverrides(places);
+    save(doc, folder + "/Show.qxw", false);
+    doc->setComponentPathOverrides(QMap<QString, QString>());
+    const QByteArray xml = read(folder + "/Show.qxw");
+    QVERIFY2(xml.contains("Source=\"images/a.png\""), xml.constData());
+    QVERIFY(xml.contains("FacesPattern=\"images/a-2.png\""));
+    QVERIFY(xml.contains("SockPattern=\"images/a.png\""));
+    QVERIFY(xml.contains("<Filename>images/pic.png</Filename>"));
+    // ... and the open show still names its own, nothing copied beside it.
+    QCOMPARE(tower->facesPattern(), m_root->filePath("B/a.png"));
+    QVERIFY(!QFile::exists(show + "/images/a.png"));
+    delete doc;
 }
 
 QTEST_MAIN(ShowEmbedding_Test)

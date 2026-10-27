@@ -77,6 +77,7 @@
 #include "studiotemplate.h"
 #include "monitorproperties.h"
 #include "vcframe.h"
+#include "vcbutton.h"
 #include "speedmastersfooter.h"
 #include "updatemanager.h"
 #include "app.h"
@@ -3403,17 +3404,39 @@ void App::slotFileCollectForTransfer()
         return;
     }
 
+    /* Every picture it uses goes into the folder with it (truss socks, tower
+       faces, plot images, RGB matrix images, the Virtual Console's),
+       and the copy names them there, relative: not the originals here. */
+    QStringList vcPictures;
+    if (VirtualConsole *vc = VirtualConsole::instance())
+    {
+        if (vc->contents() != nullptr)
+        {
+            QList<VCWidget *> widgets = vc->contents()->findChildren<VCWidget *>();
+            widgets.prepend(vc->contents());
+            foreach (VCWidget *w, widgets)
+            {
+                vcPictures << w->backgroundImage();
+                if (VCButton *button = qobject_cast<VCButton *>(w))
+                    vcPictures << button->iconPath();
+            }
+        }
+    }
+    const QMap<QString, QString> pictures = m_doc->showEmbedding()->transferPictures(vcPictures);
+
     /* The show as a .qlcc (it carries the same files), saved as a copy: this
        window goes on with the show it has open. */
     const QString show = dir.absoluteFilePath(base + KExtWorkspaceConsole);
+    m_doc->setComponentPathOverrides(pictures);
     const QFile::FileError error = saveXML(show, true);
+    m_doc->setComponentPathOverrides(QMap<QString, QString>());
     if (error != QFile::NoError)
     {
         handleFileError(error);
         return;
     }
     QStringList written;
-    bool ok = m_doc->showEmbedding()->writeTransferFolder(dir.absolutePath(), &written);
+    bool ok = m_doc->showEmbedding()->writeTransferFolder(dir.absolutePath(), &written, pictures);
     // The venues travel with it (gap 8): the room's focus corrections.
     VenueCorrections *venues = m_doc->programmer()->venueCorrections();
     if (!venues->venueNames().isEmpty())
@@ -3430,7 +3453,7 @@ void App::slotFileCollectForTransfer()
     else
         QMessageBox::information(this, tr("Collect for Transfer"),
             tr("Collected in %1: the show, and %n file(s) it uses that are not part of the "
-               "app (fixture definitions, scripts, LED maps).", "", written.size())
+               "app (fixture definitions, scripts, LED maps, pictures).", "", written.size())
                 .arg(QDir::toNativeSeparators(dir.absolutePath())));
 }
 

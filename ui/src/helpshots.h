@@ -26,6 +26,7 @@
 #include <QImage>
 #include <QList>
 #include <QRect>
+#include <QPoint>
 
 #include <functional>
 
@@ -65,6 +66,10 @@ public:
         QRect crop;             // part of the grab to keep; empty = all of it
         QMargins pad;           // room added round the grab, for numbers outside it
         bool saved = false;     // the setup took the picture itself (a modal dialog)
+        /** A window of its own (a popup menu) drawn over the grab at
+            @a at, in the grab's coordinates: the grab alone leaves it out. */
+        QPointer<QWidget> overlay;
+        QPoint overlayAt;
     };
 
     struct Shot

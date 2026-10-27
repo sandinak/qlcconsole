@@ -8904,23 +8904,15 @@ void MonitorGraphicsView::populateItemMenu(QMenu *menu, const QString &kind, qui
             a->setChecked(qAbs(rp.panZeroDir - deg) < 0.5f);
         }
     }
-    const QVector3D fp = props->fixturePosition(fid, 0, 0);
-    menu->addAction(tr("Set Mounting Height… (%1 m)").arg(double(fp.z()) / 1000.0, 0, 'f', 2),
+    // In the show's units, as the plot's other dialogs.
+    QAction *heightAct = menu->addAction(MonitorFixtureItem::mountingHeightText(props, fid),
                     this, [this, fid]() {
-        MonitorProperties *p = m_doc->monitorProperties();
-        const QVector3D cur = p->fixturePosition(fid, 0, 0);
-        bool ok = false;
-        const double h = QInputDialog::getDouble(this, tr("Mounting Height"),
-                             tr("Height above the floor (metres):"),
-                             double(cur.z()) / 1000.0, 0.0, 100.0, 2, &ok);
-        if (!ok)
+        if (!MonitorFixtureItem::askMountingHeight(this, m_doc->monitorProperties(), fid))
             return;
-        QVector3D np = cur;
-        np.setZ(float(h * 1000.0));
-        p->setFixturePosition(fid, 0, 0, np);
         m_doc->setModified();
         updateFixture(fid);
     });
+    heightAct->setObjectName(QStringLiteral("plotSetMountingHeight"));
 
     // Grouping.
     menu->addSeparator();

@@ -183,8 +183,7 @@ fixture, the scope, and where saves go.
 
 Held, a D-pad arm keeps zooming or focusing until you let go; the
 bumpers and triggers step once a press. **A** must be held for a full
-second to save every light, and a hold never answers a warning: only a
-fresh press does. **View** undoes when you let it go, so View + RS (how
+second to save every light (a press saves just this one). **View** undoes when you let it go, so View + RS (how
 many are not saved) does not undo.
 
 **X** puts a light back to the show's own calibration while a venue is
@@ -229,8 +228,9 @@ not kept is refused until you choose.
 **While you nudge,** the panel says what has changed since the light was
 last saved ("Since the save: +2.5° pan, −1.0° tilt") and the plot shows a
 dashed ghost where the saved focus lands. **A save** says the light
-and where it went ("Saved fixture 3 to Lincoln HS.") and makes an Xbox pad
-buzz — twice if another light is still unsaved. **Leaving** with lights unsaved says how many ("2 lights not
+and where it went ("Saved fixture 3 to Lincoln HS.") and makes the pad
+buzz (a pad read through Apple's GameController framework on a Mac, Xbox
+or PlayStation) — twice if another light is still unsaved. **Leaving** with lights unsaved says how many ("2 lights not
 saved.") before the panel asks.
 
 **The lamp** is colour-blind safe: **blue** with a tick, all saved;
@@ -243,8 +243,9 @@ pads read through Apple's GameController framework: a PlayStation pad
 (DualShock 4 or DualSense) shows the lamp's colour on its light bar and
 buzzes on a save. An Xbox pad has no coloured light, so you see the lamp
 only on the panel. On a PlayStation pad, Cross is A, Circle B, Square X,
-Triangle Y, L1/R1 the bumpers, L2/R2 the triggers, Create View and
-Options Menu.
+Triangle Y, L1/R1 the bumpers, L2/R2 the triggers, **L3/R3 the stick
+clicks** (so L3 + R3 holds every light, and R3 says the light), Create
+View and Options Menu. The PS button and the touchpad aren't used.
 
 **The whole call** (Y): a nudge moves every fixture of the call by the
 same amount — the truss came in a little low — and **A** saves them all,
@@ -362,8 +363,10 @@ screen. Two things tell them where they are:
   "where" line waits (the fixtures you passed are not read out).
   Confirmations ("Saved fixture 3.") and warnings are queued and never
   dropped. **Voice to:** in
-  the Venue Focus dialog sends it to a chosen output (a Mac's audio
-  interface for the headsets, say). When that output is not there (a
+  the Venue Focus dialog (on a Mac) sends it to a chosen output (an audio
+  interface for the headsets, say); **The system's output** is the
+  default, and a chosen output that isn't connected stays chosen, marked
+  *(not connected)*. When that output is not there (a
   controller unplugged, asleep or on Bluetooth), the voice speaks on the
   computer's own output instead, and the first line says so; nothing is
   lost. Two outputs with the same name (two "Wireless Controller" pads)
@@ -390,7 +393,7 @@ Venue focus and Focus this cue, kept with Feedback on this computer):
 | A fixture | "F1 Spot 3." | "Fixture 1, Spot 3." | "Fixture 1 of 8, Spot 3." (with the call) |
 | A call | "Call 2." | "Call 2, AT spots to Soloist DS." | "Call 2 of 5, AT spots to Soloist DS, SL 2, US 1." |
 | A save | "Saved." | "Saved fixture 1 to Lincoln HS." | "Saved Spot 3 to Lincoln HS." |
-| A held | "Saved all." | "Saved all, 6 lights." | "Saved all, 6 lights." |
+| A held | "Saved all." | "Saved all, 6 lights." (in a venue: "Saved all to Lincoln HS, 6 lights.") | as Standard |
 | B / B held | "Reverted." / "Reverted all." | "Fixture 1 reverted." / "Reverted all, 3 lights." | "Spot 3 back to its last save." / "3 lights back to their last save." |
 | Say the light | "Spot 3." | "Spot 3. Fixture 1." | "Spot 3. Call 2 of 5, AT spots to DSC, CL, US 3. Fixture 1 of 8." |
 
@@ -413,7 +416,8 @@ lights only.").
 
 **Important lines are always spoken,** in Lights only too, and the rig
 gives a slow long blink and the pad one long buzz (a save is a quick
-double blink and a short buzz):
+double blink and a short buzz; holding every light gives the long buzz,
+letting go a short one):
 
 - warnings and refusals ("Spot 3 not saved.", "This call has no target
   to move.");

@@ -18,6 +18,9 @@
 */
 
 #include <QLabel>
+#include <QApplication>
+#include <QInputDialog>
+#include <QTimer>
 #include <QtTest>
 #include <QImage>
 #include <QPainter>
@@ -402,6 +405,54 @@ void MonitorFixtureItem_Test::aPracticeDrawsTheGaugesWhereTheLightPoints()
     QVERIFY2(render() != before, "the gauges do not show the calibration at all");
     mfi.reset();
     m_doc->deleteFixture(fid);
+}
+
+void MonitorFixtureItem_Test::mountingHeightIsInTheShowsUnits()
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    const MonitorProperties::GridUnits before = props->gridUnits();
+    const quint32 fid = 4242;
+    props->setFixturePosition(fid, 0, 0, QVector3D(1000.0f, 2000.0f, 3048.0f));
+
+    // Answers the dialog: what it asked and showed, then the typed value.
+    QString asked;
+    double shown = -1.0;
+    auto answerWith = [&](double value) {
+        QTimer::singleShot(0, [&asked, &shown, value]() {
+            QInputDialog *d = qobject_cast<QInputDialog *>(QApplication::activeModalWidget());
+            if (d == nullptr)
+                return;
+            asked = d->labelText();
+            shown = d->doubleValue();
+            d->setDoubleValue(value);
+            d->accept();
+        });
+    };
+
+    // A feet show: 3048 mm is 10 ft; 12 typed is 12 ft.
+    props->setGridUnits(MonitorProperties::Feet);
+    QVERIFY2(MonitorFixtureItem::mountingHeightText(props, fid).contains("10.00 ft"),
+             qPrintable(MonitorFixtureItem::mountingHeightText(props, fid)));
+    answerWith(12.0);
+    QVERIFY(MonitorFixtureItem::askMountingHeight(nullptr, props, fid));
+    QVERIFY2(asked.contains("feet"), qPrintable(asked));
+    QCOMPARE(shown, 10.0);
+    QCOMPARE(qRound(props->fixturePosition(fid, 0, 0).z()), qRound(12 * 304.8));
+    // Where it is on the floor is left alone.
+    QCOMPARE(props->fixturePosition(fid, 0, 0).x(), 1000.0f);
+
+    // A metric show: metres.
+    props->setGridUnits(MonitorProperties::Meters);
+    props->setFixturePosition(fid, 0, 0, QVector3D(1000.0f, 2000.0f, 2500.0f));
+    QVERIFY(MonitorFixtureItem::mountingHeightText(props, fid).contains("2.50 m"));
+    answerWith(4.0);
+    QVERIFY(MonitorFixtureItem::askMountingHeight(nullptr, props, fid));
+    QVERIFY2(asked.contains("metres"), qPrintable(asked));
+    QCOMPARE(shown, 2.5);
+    QCOMPARE(qRound(props->fixturePosition(fid, 0, 0).z()), 4000);
+
+    props->removeFixture(fid);
+    props->setGridUnits(before);
 }
 
 QTEST_MAIN(MonitorFixtureItem_Test)

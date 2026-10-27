@@ -29,11 +29,12 @@ from the target merely existing (a target is always drawn once created).
 
 ## Creating and binding a target
 
-Targets are created from the **2D Monitor plot** (Lighting Studio's Top
-view or the standalone Monitor window):
+Targets are created on the Lighting Studio plot (Top, Front or Side):
 
-1. Right-click the floor, or a structure, and choose **"Target Here"** (or
-   **"Person Here"** for a ready-made Person target).
+1. Right-click an empty part of the plot ▸ **Add Here ▸ Target Position**
+   (or **Person** for a ready-made Person target), or right-click a deck,
+   stand, tower or truss ▸ **Add ▸ Target Here** (or **Person Here**). The
+   toolbar's **Add ▸ Add Target Position** works too.
 2. The **Edit Target** dialog opens: name, X/Y/Z, a **Subject** kind
    (None/Person/Drum Kit/Structure/Area), a **Follows** structure picker
    (for a Structure-kind target), a per-target aim-height override, size

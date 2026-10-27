@@ -1293,9 +1293,15 @@ public:
     /** Pattern pictures travel with the show: a truss sock or tower face
      *  picture picked from elsewhere (~/Downloads, say) is copied into the
      *  show's images/ folder (Doc::keepWithShow()) and the rig uses the copy
-     *  from then on, which saveXML() writes relative (board Q85). Called
+     *  from then on, which saveXML() writes relative (board Q85). So is a
+     *  picture placed on the plot (Add Image). Called
      *  when the show is saved, not for undo snapshots. */
     void keepPatternsWithShow(const Doc *mainDocument);
+
+    /** Every picture file the plot uses, as it names them (absolute once
+     *  loaded): truss socks, tower faces, plot images, the old background
+     *  pictures. Collect for Transfer copies them. */
+    QStringList picturePaths() const;
 
     /** @p showFile: writing the show file itself (Doc::saveXML), which
      *  leaves out a venue's house fixtures -- they are in the venue's file

@@ -20,6 +20,7 @@
 
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
+#include <QRegularExpression>
 #include <QElapsedTimer>
 #include <QString>
 #include <QDebug>
@@ -762,6 +763,18 @@ uint Function::stringToSpeed(QString speed)
 
     if (speed == QChar(0x221E)) // Infinity symbol
         return infiniteSpeed();
+
+    // Either decimal mark: '1,5' is 1.5 seconds, as in a German or French
+    // locale, the same as '1.5' (as SecondsSpinBox reads a time).
+    speed.replace(QLatin1Char(','), QLatin1Char('.'));
+    speed = speed.trimmed();
+
+    // '1.5s': seconds with a fraction, written with their unit.
+    static const QRegularExpression fractionalSeconds(
+        QStringLiteral("^(\\d*\\.\\d+)\\s*s$"));
+    const QRegularExpressionMatch fraction = fractionalSeconds.match(speed);
+    if (fraction.hasMatch())
+        return speedNormalize(uint(lround(fraction.captured(1).toDouble() * 1000.0)));
 
     value += speedSplit(speed, "h") * 1000 * 60 * 60;
     value += speedSplit(speed, "m") * 1000 * 60;

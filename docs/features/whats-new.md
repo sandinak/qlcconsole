@@ -56,7 +56,7 @@ their house lights, relays and subs.
 - **Cues on groups play on any room's rig.** A cue on "FOH wash" plays
   on whichever house fixtures fill FOH wash in the venue applied.
 - **Universes per room.** Each universe is a **Tour** or **House** slot
-  (Connections, beside its name). A venue keeps the room's outputs for
+  (**Connections ▸ Universes**, on the toolbar beside its name). A venue keeps the room's outputs for
   every universe (an output changed while it is applied is the venue's),
   and can mark universes or ranges **not ours**: nothing is sent there.
 - **The clash check.** Apply now lists a house fixture on a tour
@@ -102,8 +102,8 @@ their house lights, relays and subs.
   held A says "Saved all, 6 lights."; a save in a venue names the venue.
 - **One layout.** Y is now the scope in Quick focus too (one head, or all
   of them); the second reference moved to the left stick click.
-- **Still at the venue?** A show whose venue was last changed over a day
-  ago asks on open, New venue being the default; a venue focus cue always
+- **Still at the venue?** A show whose venue was last changed more than 20
+  hours ago asks on open, New venue being the default; a venue focus cue always
   asks. The footer shows **Venue:** and its name. Venues also keep the
   room's truss trims and target positions, and the **target page** (left
   stick click in Venue focus) moves a call's target with every head on
@@ -422,11 +422,42 @@ their house lights, relays and subs.
   [Troubleshooting](troubleshooting.md#files-and-fixtures).
 - **Opened is not changed.** A show whose trusses had no group yet no
   longer asks to save as soon as it opens.
-- **Times take either decimal mark.** "1.5" and "1,5" are both one and a
-  half seconds in every fade and time field, in any language.
+- **Times take either decimal mark.** In the Show Tree's cue times, the
+  Look Editor's fades, the outline's times and a chaser step's Fade and
+  Hold (in the Chaser editor and the Workbench's step header), "1.5" and
+  "1,5" are both one and a half seconds, in any language. "1,5s" works
+  too. See [The Workbench](build.md#the-workbench).
+- **Save As keeps the pictures.** Saving to another folder copies the
+  truss and tower pictures, and the pictures placed on the plot, into
+  that folder's **images**. See [Truss socks](lighting-studio.md#truss-socks).
+- **Collect for Transfer carries the pictures.** The folder it makes has
+  an **images** folder with every picture the show uses (truss socks,
+  tower faces, pictures on the plot, RGB matrix images, Virtual Console
+  backgrounds and icons), and the collected show finds them there on
+  another computer. See [Collect for Transfer](fixture-manager.md#collect-for-transfer).
+- **Mounting height in the show's units.** A fixture's right-click
+  **Set Mounting Height…** asks in feet on a feet show and in metres on a
+  metric one, like the plot's other dialogs. See
+  [Fixture Properties](lighting-studio.md#fixture-properties).
+- **An RGB matrix whose script isn't here keeps it.** It doesn't run on
+  that computer, the footer says which, and saving keeps it as it was.
+  See [Troubleshooting](troubleshooting.md#files-and-fixtures).
 
 ### Fixtures and the plot
 
+- **The orientation diagram shows the throw.** In Fixture Properties a
+  fixed light's green arrow now points where it really throws — its face,
+  or its Pan and Tilt aim — shorter the steeper it points, with a dot for
+  straight down and a ring for straight up. See
+  [Fixture Properties](lighting-studio.md#fixture-properties).
+- **The Focus screen holds still.** The Quick focus, Venue focus and
+  Focus this cue panels keep their layout as the controller's buttons
+  change what they say, so nothing jumps under the operator's eye.
+- **The voice survives a missing output.** When the output chosen in
+  **Voice to:** is gone (a pad asleep, a headset interface unplugged),
+  the voice speaks on the computer's own output and says so, rather than
+  losing every line. See
+  [Telling the operator](focus-calls.md#telling-the-operator-where-they-are).
 - **Plot layers follows the plot.** Pick on the plot and Plot layers picks
   the same rows, opens just their branches and scrolls to them. The
   **Selected only** funnel shows only the selection and what holds it.
@@ -545,10 +576,11 @@ their house lights, relays and subs.
   tightens the focus and left loosens it (' and ;). See [Fixed lights](lighting-studio.md#fixed-lights-pars-and-fixed-spots)
   and [The beam](lighting-studio.md#the-beam).
 - **Quick focus shows what is saved.** A big lamp in the panel, to read
-  from the stage: **green** all saved, **yellow** the light you're on has
-  unsaved changes, **red** another light has, and a red ring round a
-  yellow centre for both, with the names beside it ("Unsaved: 2 other
-  lights (Spot 3, Spot 7)"). A save flashes it green, and the real light
+  from the stage: **blue** with a tick, all saved; **yellow** with "!",
+  the light you're on has unsaved changes; **orange**, another light
+  has; an orange ring round a yellow centre for both, with the count on
+  its rim and the names beside it ("Unsaved: 2 other lights (Spot 3,
+  Spot 7)"). A save flashes it blue, and the real light
   dips to dark and back twice so whoever is on stage sees it was kept.
   Every light with unsaved changes is marked in yellow on the plot and in
   the Rig Overview, and leaving names them. See
@@ -627,6 +659,18 @@ their house lights, relays and subs.
   "All channels" on channel 1 only); it now matches the MIDI plugin.
 - **Fixture Properties opens for every fixture**, on the plot or not; a
   fixture not on the plot has its position rows greyed.
+- **A steady RDM flag.** An Art-Net node whose poll replies carry a junk
+  status byte no longer flickers between **RDM** and **no RDM**: the row
+  changes only once the node says the same thing several replies running.
+  See [Connections &amp; patch](other-improvements.md#connections--patch).
+- **Universes lists this show's universes.** **Connections ▸ Universes**
+  shows exactly the open show's universes, however many shows were opened
+  before it, and rename, passthrough, the slot and Delete act on the
+  universe picked.
+- **A fixture too big for a universe opens unpatched.** A fixture whose
+  mode takes more than 512 channels loads unpatched, and the footer says
+  why, instead of writing past the end of the universe. See
+  [Troubleshooting](troubleshooting.md#files-and-fixtures).
 
 ## 0.2.1 (October 2026)
 

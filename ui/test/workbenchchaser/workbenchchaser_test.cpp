@@ -345,6 +345,74 @@ void WorkbenchChaser_Test::typedStepTimesGoToTheirStep()
     QCOMPARE(ch->steps().at(1).fadeIn, 0u);
 }
 
+void WorkbenchChaser_Test::stepTimesTakeEitherDecimalMark_data()
+{
+    QTest::addColumn<QString>("locale");
+    QTest::newRow("de_DE") << QStringLiteral("de_DE");
+    QTest::newRow("en_US") << QStringLiteral("en_US");
+    QTest::newRow("C") << QStringLiteral("C");
+}
+
+void WorkbenchChaser_Test::stepTimesTakeEitherDecimalMark()
+{
+    QFETCH(QString, locale);
+    const QLocale before;
+    QLocale::setDefault(QLocale(locale));
+
+    Scene *a = scene("A");
+    Scene *b = scene("B");
+    Chaser *ch = new Chaser(m_doc);
+    ch->setName("Marks");
+    m_doc->addFunction(ch);
+    ch->setFadeInMode(Chaser::PerStep);
+    ch->setFadeOutMode(Chaser::PerStep);
+    ch->setDurationMode(Chaser::PerStep);
+    ch->addStep(ChaserStep(a->id(), 0, 1000, 0));
+    ch->addStep(ChaserStep(b->id(), 0, 1000, 0));
+
+    // The walker's step header.
+    {
+        Workbench wb(m_doc);
+        wb.resize(1300, 800);
+        wb.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&wb));
+        wb.load(ch->id());
+        ChaserWalker *walker = walkerOf(wb);
+        QVERIFY(walker != nullptr);
+        walker->m_fadeIn->setText(QStringLiteral("1,5"));
+        emit walker->m_fadeIn->editingFinished();
+        QCOMPARE(ch->steps().at(0).fadeIn, 1500u);
+        walker->m_hold->setText(QStringLiteral("2.25"));
+        emit walker->m_hold->editingFinished();
+        QCOMPARE(ch->steps().at(0).hold, 2250u);
+        walker->m_fadeOut->setText(QStringLiteral("0,5s"));
+        emit walker->m_fadeOut->editingFinished();
+        QCOMPARE(ch->steps().at(0).fadeOut, 500u);
+    }
+
+    // The Chaser editor's Fade In / Hold / Fade Out cells.
+    {
+        ChaserEditor ed(nullptr, ch, m_doc);
+        ed.resize(900, 400);
+        ed.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&ed));
+        QTreeWidget *tree = ed.findChild<QTreeWidget *>("m_tree");
+        QVERIFY(tree != nullptr);
+        QTreeWidgetItem *row = tree->topLevelItem(1);
+        QVERIFY(row != nullptr);
+        row->setText(2, QStringLiteral("1,5"));  // Fade In
+        QCOMPARE(ch->steps().at(1).fadeIn, 1500u);
+        row = tree->topLevelItem(1);
+        row->setText(3, QStringLiteral("3,0"));  // Hold
+        QCOMPARE(ch->steps().at(1).hold, 3000u);
+        row = tree->topLevelItem(1);
+        row->setText(4, QStringLiteral("0.75"));  // Fade Out
+        QCOMPARE(ch->steps().at(1).fadeOut, 750u);
+    }
+
+    QLocale::setDefault(before);
+}
+
 void WorkbenchChaser_Test::theStepHeaderEditsTheStep()
 {
     Scene *a = scene("A");

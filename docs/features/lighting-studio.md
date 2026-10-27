@@ -18,12 +18,13 @@ isn't really implemented until the model derives from it, the UI can set it,
 
 ## Opening it
 
-- **Window → Lighting Studio** (⇧⌘3) opens the 2D plot with the Plot layers panel,
+- **Window → Lighting Studio** (⇧⌘M, in any view; or its tab number,
+  ⇧⌘3 in the qlcconsole view) opens the 2D plot with the Plot layers panel,
   where you build the rig and place structures/fixtures.
 - **Double-click any structure** (truss, tower, pipe, stand, platform) opens
   its own dedicated editor — geometry fields, a live elevation preview, and
   everything mounted on it.
-- **View → Rig Overview…** (Ctrl/⌘+Shift+R) opens a read-only,
+- **View → Rig Overview…** (Ctrl/⌘+Shift+R; also on the **Window** menu) opens a read-only,
   freely-rotatable 3D view of the *whole* rig at once — the fastest way to
   sanity-check a build. It stands on the floor at **centre stage** (the
   middle of the stage grid): that point sits across the middle of the
@@ -83,7 +84,7 @@ never put on it.
   the number line runs through the spike, the number line's own **CL**
   labels it.
 - **Curtain line:** where the main curtain hangs, labelled **Curtain line**.
-  It's the stage's main reference (the plaster line). Every horizontal truss
+  It's the stage's main reference. Every horizontal truss
   or pipe hung downstage of it, like the FOH electric out over the audience,
   is labelled with how far: **FOH · 4.2 m DS of curtain line**.
 - **Number line:** a line across the stage, ticked every foot or metre (the
@@ -221,15 +222,20 @@ the two coordinates that view has, the third shown as "—".
 Drag to swing the camera, shift-drag to pan, wheel to zoom; **Fit** puts
 the whole rig back in view. Toggle **Live** to shade fixtures by their
 actual current output, and **Beams** to draw light cones from anything
-currently emitting. This is the same rendering a per-structure editor's own
-Angled tab uses, just showing everything at once.
+currently emitting. This is the same drawing as the **45°** entry in a structure editor's
+**View**, just showing everything at once. There, **Angle** sets the
+camera by number (**Around the stage**, **Height of eye**), and the turn
+button rotates the view 90° (a view setting only; nothing moves).
 
 **Its controls are along the foot**, in a footer bar like the Lighting
 Studio plot's: **Show** (with **Target positions**) and **Plot layers** on
 the left, then **Live**, **Beams**, **Room**, **Haze**, **Quality**,
-**GPU**, the frame rate, **Focus** and **Fit**, and **View** (Top, Front,
-Side, 45°) on the right, where the plot has its own View. The window's
-title bar moves and closes it as before.
+**GPU**, the frame rate, **Quick focus** and **Fit**, and **View** (Top,
+Front, Side, 45°) on the right, where the plot has its own View. The
+window's title bar moves and closes it as before. Click a box (View,
+Room, Haze, Quality) to step to its next choice; its arrow lists them
+all. **Room** is how much light there is in the house apart from the
+rig: **Work light**, **House** (the default), **Dim** or **Blackout**.
 
 **It follows the Studio's layers.** Hide a layer in the Plot layers panel and
 everything on it — structures, scenery, stage figures and fixtures — leaves
@@ -314,9 +320,21 @@ drapes):
 - **Network node** — an Art-Net/sACN node or wireless DMX transmitter,
   placed where it's rigged (see [Network nodes and cable runs](#network-nodes-and-cable-runs)).
 
-Add one from the **Add** menu on the toolbar or the Plot layers panel; each
-type's own editor exposes width/depth/height, position, and (for
-pipes/booms) run angle.
+Add one from the plot. The toolbar's **Add** has trusses, platforms and
+risers, steps, scenery, fountains, images, network nodes, targets and
+people. Right-click an empty part of the plot for **Add Here**, which has
+all of those plus **Boom**, **Electric** (a horizontal pipe), **Stand**
+and **Tower**, placed where you clicked. Right-click a truss for **Add ▸
+Bar…**, or a boom for **Add ▸ Crossbar…**. Each type's own editor has
+width/depth/height, position, and (for pipes/booms) run angle. A truss is
+**Horizontal**, **Vertical** or **Ground** (on the floor, for a run of
+floor units).
+
+**Add ▸ Add Image** puts a picture (a ground plan, a venue drawing) on
+the plot as an object: it sits on a layer, drags, locks and hides like a
+structure, and a double-click edits it. When the show is saved, a picture
+from outside the show's folder is copied into its **images** folder, as
+truss and tower pictures are (see [Truss socks](#truss-socks)).
 
 ### Truss socks
 
@@ -332,7 +350,9 @@ and a PNG's clear parts show the sock colour beneath.
 When the show is saved, a picture chosen from outside the show's folder
 (your Downloads, say) is copied into an **images** folder next to the
 show, and the show keeps the copy: move or share the show's folder and its
-pictures go with it. Tower faces' pictures work the same way.
+pictures go with it. **File ▸ Save As** into another folder copies them
+into that folder's **images** and leaves the old folder as it was. Tower
+faces' pictures work the same way.
 
 ### Tower faces
 
@@ -532,6 +552,52 @@ These are the same rows, with the same names, as the **Fixture** box at the
 top of **Fixture Properties** (the **Fixture Properties…** button under
 them opens it): the panel is its quick subset, the dialog has everything —
 name, X / Y, aim and calibration, Test and Identify.
+
+### The Inventory panel
+
+**Inventory** on the plot's toolbar shows the fixtures added to the show
+but not yet on the plot. A network fixture is marked **[network]**, and
+one that isn't the tour's **[House]** or **[Rental]**; **Filter** narrows
+the list by name, and its foot says how many are waiting to be placed.
+Drag one onto a truss, riser or tower to mount it there, or onto the
+floor to set it down. **Add to inventory...** opens Add Fixture with no
+address. Patching is a separate step: see
+[The Patch dialog](fixture-manager.md#patching-the-patch-dialog).
+
+### Fixture Properties
+
+**Fixture Properties** (double-click a fixture, or right-click ▸
+**Fixture Properties…**) opens for every fixture, placed on the plot or
+not, in three boxes:
+
+- **Fixture**: the panel's rows, plus **Owner** (Tour, House or Rental;
+  see [Owner](venues.md#owner-tour-house-or-rental)), **Position** on a
+  tower (top, a shelf or the base), **Colour**, and where they apply
+  **WLED** (**Fix on Device…**) and **Max draw**.
+- **Aim &amp; Mount**: **Height offset** (raised or lowered from its mount,
+  a followspot on a riser above the truss, say); **Aim** — a mover's front
+  of device, or a fixed light's **Pan** and **Tilt**; **Beam (lens set
+  to)**, the angle a lens zoomed by hand is set to (see
+  [The beam](#the-beam)); the [calibration offsets](#calibration-offsets);
+  **Invert pan** / **Invert tilt**; **Test orientation**; and **Identify**.
+- **Position &amp; Orientation**: X, Y and icon rotation on the plot, and
+  **Stage position**, where the light really is once its mount is counted.
+  A fixture not on the plot has these greyed, *Not on the plot*.
+
+**The orientation diagram** beside Position &amp; Orientation shows the
+light from above, DS at the bottom. The **green** arrow is where it
+throws: a mover's front of device (pan zero), or a fixed light's face
+(Back points upstage, Stage left to stage left) or its Pan and Tilt aim
+— the steeper it points, the shorter the arrow; straight down is a
+filled dot, straight up a ring. The **blue** arrow is the icon rotation,
+which only turns the symbol and never the aim. The diagram follows each
+field as you change it.
+
+**Right-click a fixture** on the plot for **Facing (pan zero) ▸**
+(Downstage, Stage Right, Upstage, Stage Left), **Set Mounting Height…**
+(its height above the floor, in the show's units: feet on a feet show,
+metres on a metric one) and **Unmount from "…"**, as well as Mount on,
+Patch and the rest.
 
 **Working on several fixtures at once.** Every row applies to every
 selected fixture (select a folder row — a group or "Ungrouped" — to take
@@ -769,11 +835,24 @@ of, and doesn't override, the real locks above.
 
 ## Selecting and undo on the plot
 
+- **The plot's footer bar**: **Grid** (stage size, units, subdivisions);
+  **Snap** (below); **Show** — **Rulers**, **Fixture labels**, **Fixtures
+  on the rig** (hide the mounted fixtures while you place structures),
+  **Stage centre lines** (the teal cross) and the beam and reach views;
+  **⌖ 0,0**, where the rulers read 0 (click a point, **Stage centre**,
+  **Downstage centre** or the top-left corner); **Overlay** (Normal,
+  Power, DMX, Network, Owner, Stage only); **View** (Top, Front, Side)
+  and the button that turns the plot 90° (a view setting; nothing moves).
+  Click a box to step to its next choice; its arrow lists them all.
 - **Snap**, on the plot's footer bar, puts what you drag on the grid:
   fixtures, trusses, towers, stands, pipes, scenery, platforms, power
   sources and network nodes. Its arrow picks the step (**Snap to:**
   Full, 1/2 or 1/4 of a grid square). A grouped selection moves by the
   same amount as the piece you drag, so it keeps its shape.
+- **Group** (Ctrl/⌘+G) makes the selection one piece that selects and
+  moves together; **Ungroup** (Ctrl/⌘+Shift+G) splits it again.
+- **Align fixtures ▸** (two or more selected) and **Distribute fixtures
+  ▸** (three or more) are on the plot's right-click menu.
 - **Select All** (Ctrl/⌘+A, or **More → Select All**) selects every
   visible, selectable object on the plot at once.
 - **Undo** (Ctrl/⌘+Z, or the toolbar's **Undo**) puts back the last move,
@@ -1036,8 +1115,8 @@ other light, and follow a mover's pan and tilt.
 
 ## Calibration offsets
 
-A moving head's **Pan offset** and **Tilt offset** (Fixture Properties →
-the rig box, or [Quick focus](#quick-focus)) correct the *physical* head: a
+A moving head's **Pan offset** and **Tilt offset** (Fixture Properties ▸
+**Aim &amp; Mount**, or [Quick focus](#quick-focus)) correct the *physical* head: a
 yoke bolted a few degrees round, a tilt that homes a little high. They are
 calibration, not design:
 
@@ -1082,13 +1161,15 @@ toolbar, **Focus ▾**, beside **Add ▾**:
   ([The focus report](focus-calls.md#the-focus-report)).
 
 An entry that cannot be used yet is greyed, and its tooltip says why: no
-lights placed on the plot, no focus calls yet, no venue yet, or a show
-not saved yet.
+lights placed on the plot, no focus calls yet, none of the calls with a
+light placed on the plot, no moving head in the calls (Practice), a
+practice applied already, no venue yet, or a show not saved yet.
 
 ## Quick focus
 
-Aligning the rig before a show, one head at a time, with the Xbox
-controller or the keyboard.
+Aligning the rig before a show, one head at a time, with a game
+controller (an Xbox pad, or on a Mac a PlayStation DualShock 4 or
+DualSense) or the keyboard.
 
 **Start it** from **Focus ▸ Quick focus…** on the Lighting Studio toolbar,
 **Quick focus** on the Rig Overview's bar, **View → Quick Focus…** (⌘⌥F),
@@ -1155,15 +1236,18 @@ and jump as you nudged.)
 | Back to what was saved | B | Backspace |
 | Zero the offsets | X | 0 |
 | This head / all of them (scope) | Y | G |
-| The other reference | LS (left stick click) | R |
+| The other reference | LS (left stick click) | R (or T) |
 | Say the light (its name, then where you are) | RS (right stick click) | W |
 | Feedback: lights / voice / both | RS held | ⇧W |
 | Save every light not saved | A held | ⇧Return |
 | Every light not saved back to its last save | B held | ⇧Backspace |
 | The next light not saved | LB + RB together | U |
-| Next / previous focus call | RT / LT | PgDn / PgUp |
+| Next / previous focus call (Venue focus only) | RT / LT | PgDn / PgUp |
 | Undo the last save | View (on release) | ⌘Z |
 | How many are not saved | View + RS | N |
+| Mark this light dead, or not (with a venue applied) | View + X | D |
+| Hold every light where it is (again: let go) | Both stick clicks | H |
+| Go to a light | — | Click it on the plot |
 | Leave | Menu | Esc |
 
 Hold **A** a full second to save every light; a press saves this one. In
@@ -1301,6 +1385,10 @@ can look mirrored on stage, and the numbers say which way it went.
 by number: a controller profile (`.qxhid`) can say so with `role="…"` on each
 axis and button, and one without roles still works if its controls have the
 usual names. The Xbox profile has roles, and the D-pad as buttons 11–14.
+So does the PlayStation profile: on a Mac a DualShock 4 or DualSense is
+read into the same layout — Cross is A, Circle B, Square X, Triangle Y,
+L1 / R1 the bumpers, L2 / R2 the triggers, L3 / R3 the stick clicks,
+Create (Share) View and Options Menu.
 While Quick focus is on it has the controller to itself: chaser stepping
 and the follow spot wait.
 
@@ -1398,7 +1486,7 @@ the arrow keys (⇧ for bigger steps; **+** / **−** change the step). The pane
 (° down from level) as you go: they are set from where it lands (see
 Aiming a fixed light, under [Mounting a fixture](#mounting-a-fixture)).
 
-**A** (or Return) saves it, **B** (or ⌫) puts it back as it was, and Back
+**A** (or Return) saves it, **B** (or ⌫) puts it back as it was, and **View**
 (⌘Z) undoes a save, as for moving heads. Leaving with unsaved lights asks
 first.
 
@@ -1502,7 +1590,7 @@ Two small but load-bearing visual cues:
 | **Bar** | A short cross-piece truss hung on a parent truss — modeled as a child truss, not a separate object type. |
 | **Placement: Inside** | A fixture centred in its host structure's volume rather than seated on its face/top — for fixtures rigged inside a truss or under a see-through platform top. |
 | **Face** | Which way a mounted fixture faces — Top, Bottom, Front, Back, Stage left, or Stage right — has to agree with how it's actually attached. |
-| **Layer lock** | The one object lock: locking anything locks its layer and everything on it, drawn red. |
+| **Layer lock** | Holds everything on a layer; nothing on it can be selected. An object's own lock (**Lock Position**) is separate and leaves it selectable. Both draw red. |
 | **Position lock** | A folder-level lock that freezes every member's position but leaves them selectable. |
 | **Hanger** | Rigging on a truss or tower — clamp, arm, and chain to one hook a fixture hangs from. |
 | **Sock / Faces** | Fabric over a truss that bars inside glow through / opaque panels on a tower's sides. |

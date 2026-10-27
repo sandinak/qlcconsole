@@ -6,7 +6,12 @@ from a show file you're bringing to a venue. Each step links to the guide
 with the detail.
 
 Press **F1** anywhere for the help on what you're looking at; **Help ▸
-qlcconsole Help** opens this guide set. The numbered pictures are shrunk to fit the
+qlcconsole Help** opens this guide set. The **Help** menu also has
+Getting Started, What's New, Keyboard and Mouse, Effects, Troubleshooting
+and **All Guides**, **QLC+ Reference (online)** (⇧F1, the stock manual)
+and **Check for Updates…**. In the help window ◀ ▶ go back and forward,
+**Getting Started** comes home, and the search box lists the guides that
+have a word, with how often. The numbered pictures are shrunk to fit the
 page — click one to see it full size.
 
 ## Starting the app
@@ -30,21 +35,29 @@ not opened — and saving then can write an empty workspace over it.
 
 ### Show files
 
-- **.qlcc** is qlcconsole's own format, and what **Save** writes.
-- **.qxw** (stock QLC+) opens fine; save it as .qlcc to keep everything this
-  fork adds (the rig, palettes, looks, power profiles, layers…).
+- **.qlcc** is qlcconsole's own format, and what **Save As** offers.
+- **.qxw** (stock QLC+) opens fine, and **Save** writes a show back in the
+  format it was opened in. A .qxw saved here keeps the rig, palettes,
+  looks and layers, but not the show's own copies of definitions and
+  scripts (below): save it as .qlcc before taking it to another computer.
+- **Beside the show** live its pictures (truss socks and tower faces, in
+  **images**), its venues (*Show*.venues.xml) and, while there are unsaved
+  changes, its recovery copy. **Save As** to another folder copies the
+  pictures there with the new show.
 - **Autosave** writes a recovery copy every 5 minutes while there are
-  unsaved changes (**Settings ▸ General ▸ Autosave** sets it on or off and how
-  often). If the app stops without saving,
-  the next launch offers to **recover the unsaved work**. A clean quit
-  removes the recovery copy.
+  unsaved changes (**Settings ▸ General ▸ Autosave**: on or off, 1 to 60
+  minutes); the footer reads **● Unsaved changes**, then **Autosaved** and
+  the time. For a show never saved, the next launch offers to **recover
+  the unsaved work**. For a saved show the copy is *Show*.qlcc.autosave
+  beside it (see [Troubleshooting](troubleshooting.md#files-and-fixtures)).
+  Saving, or a clean quit, removes it.
 - A .qlcc **carries its own copies** of every fixture definition, effect
   script and RGB script it uses that isn't part of the app, so it opens
   complete on another computer; where that computer's copy differs, the
   show keeps its own until you choose. See
   [Opening a show on another computer](fixture-manager.md#opening-a-show-on-another-computer).
-  **File ▸ Collect for Transfer…** writes the show and those files into one
-  folder.
+  **File ▸ Collect for Transfer…** writes the show, those files, its
+  venues and its pictures into one folder.
 - This computer also keeps a copy of every non-shipped definition a show
   uses — the **show cache** — for shows saved as .qxw. See
   [Missing definitions and the show cache](fixture-manager.md#missing-definitions-and-the-show-cache).
@@ -221,8 +234,11 @@ needs an address until the end.
    four step units — right-click one → **Patch Others Like This** so they're
    all addressed the same in their own universes.
    ([Patching](fixture-manager.md#patching-the-patch-dialog))
-7. **Wire the universes.** Connections → right-click an interface → patch
-   a universe to it. Select a universe to see what it's sending.
+7. **Wire the universes.** Connections ▸ Devices: double-click a universe
+   (or right-click ▸ **Edit connection…**) and pick the protocol, the
+   interface and the node's port. For a node not heard yet, right-click
+   the interface ▸ **Add a target on this interface…**. Select a universe
+   to see what it's sending.
 8. **Group the fixtures** for effects and looks: select on the plot →
    **Create Fixture Group from Selection**, or lay a group out from the
    stage. ([Groups](fixture-manager.md#creating-a-group))
@@ -258,11 +274,18 @@ hired rig with a patch sheet):
    **Review…** them. If it says definitions are missing, click it: they
    come from the show cache, your library, or can be repaired in the
    Fixture Editor.
-2. **Connections**: are the nodes there? **Rescan**; check each universe
+2. **Pick the room.** Click the **Venue** chip in the footer (or **View ▸
+   Venue…**): **Switch venue ▸** this room if the show has been here
+   before, or **New venue…** for a new one. Its clashes with the show (a
+   house light on a tour light's channels, channels the house keeps) are
+   listed before it goes on; the room's house rig and patch come in with
+   it, and the tour package stays as it is.
+   ([House rig and tour package](venues.md))
+3. **Connections**: are the nodes there? **Rescan**; check each universe
    goes where it should (**By universe** lists them in order with where
    each goes). Select a universe to watch what it sends.
-3. **Check the footer** and work down its list.
-4. **Test the rig.**
+4. **Check the footer** and work down its list.
+5. **Test the rig.**
    - Fixture Properties → **Locate** flashes a fixture; **Test
      orientation** points a mover **straight up / down / out** (named for
      how it's mounted) or at a target, to check pan/tilt and calibration.
@@ -270,10 +293,16 @@ hired rig with a patch sheet):
      shows each strip's number, each step's name and a spinner that stops
      if output freezes.
      ([Step Test Pattern](build.md#step-test-pattern))
-5. **Power.** Fixtures that draw more than a circuit allows can be held to a
+6. **Power.** Fixtures that draw more than a circuit allows can be held to a
    maximum — measure them once and copy the profile to the same fixtures.
    ([A fixture's maximum draw](other-improvements.md#a-fixtures-maximum-draw))
-6. Save under a new name for the venue.
+7. **Focus for the room** if the show has focus calls: **Focus ▸ Venue
+   focus** (or the venue menu's **Venue focus…**); corrections are kept
+   for the venue. ([Venue focus](focus-calls.md))
+8. **Save.** The show file keeps the tour package and its own patch; the
+   room's house rig, patch and focus corrections are kept with the venue,
+   in the file beside the show, so there's no need for a copy of the show
+   per room.
 
 ### Importing into a show
 
@@ -357,10 +386,23 @@ Steps, towers and booms usually come in sets that should all be the same:
   locked, including programmer faders on the Virtual Console and the Shows
   timeline. The Grand Master still works. GO works in Design too, for
   trying a list out; the first time you press it there in a session, a
-  line at the top offers **Switch to Operate**.
+  line at the top offers **Switch to Operate**. Going back to **Design**
+  while functions run asks first: **Yes** stops them all and switches.
 - **Overrides** — an amber footer chip lists anything holding the rig over
   the show (Park, Highlight, Hold at end, Quick focus, Blind); click it to
   clear them all.
+- **Control ▸ Hold at End** — when a show (the Shows timeline) stops or
+  ends in Operate, its last look stays on the rig until the next cue
+  takes over, instead of going dark. **Control ▸ Clear Hold at End** lets
+  it go (the held channels go dark).
+- **Control ▸ Exit Timeline Control** (Operate, while a show runs) hands
+  the rig to the Virtual Console while the timeline's playhead keeps
+  following timecode; untick it and the timeline takes over again from
+  where it now is.
+- **Control ▸ Live Edit ▸ Capture Live Edits** records what Virtual
+  Console faders and XY pads change in running scenes; **Store** opens
+  the list of changes to write into those scenes, and **Undo Last Store**
+  takes the last one back.
 - **Stop all** (⌘⇧Esc), or its menu's **Fade and stop** (hold the button),
   is the panic button.
 - **From QLab**: QLab (or anything that speaks MIDI Show Control or OSC)

@@ -52,6 +52,8 @@ private slots:
     void stringToDirection();
     void speedToString();
     void stringToSpeed();
+    void stringToSpeedTakesEitherDecimalMark_data();
+    void stringToSpeedTakesEitherDecimalMark();
     void speedOperations();
     void tempo();
     void attributes();

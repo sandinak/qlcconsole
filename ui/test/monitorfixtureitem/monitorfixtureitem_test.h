@@ -39,6 +39,10 @@ private slots:
      *  where the light really points */
     void aPracticeDrawsTheGaugesWhereTheLightPoints();
 
+    /** Set Mounting Height… asks and shows in the show's units: feet on a
+     *  feet show, metres on a metric one. */
+    void mountingHeightIsInTheShowsUnits();
+
 private:
     Doc* m_doc;
 };

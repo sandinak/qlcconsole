@@ -463,6 +463,40 @@ void Function_Test::stringToSpeed()
     QCOMPARE(Function::stringToSpeed(QString(QChar(0x221E))), Function::infiniteSpeed());
 }
 
+void Function_Test::stringToSpeedTakesEitherDecimalMark_data()
+{
+    QTest::addColumn<QString>("locale");
+    QTest::newRow("de_DE") << QStringLiteral("de_DE");
+    QTest::newRow("en_US") << QStringLiteral("en_US");
+    QTest::newRow("C") << QStringLiteral("C");
+}
+
+void Function_Test::stringToSpeedTakesEitherDecimalMark()
+{
+    // A chaser step's Fade or Hold typed with a comma was read as 0. Either
+    // mark is read the same, whatever the locale.
+    QFETCH(QString, locale);
+    const QLocale before;
+    QLocale::setDefault(QLocale(locale));
+
+    QCOMPARE(Function::stringToSpeed("1,5"), uint(1500));
+    QCOMPARE(Function::stringToSpeed("1.5"), uint(1500));
+    QCOMPARE(Function::stringToSpeed(",25"), uint(250));
+    QCOMPARE(Function::stringToSpeed("0,031"), uint(31));
+    QCOMPARE(Function::stringToSpeed("1,5s"), uint(1500));
+    QCOMPARE(Function::stringToSpeed("1.5s"), uint(1500));
+    QCOMPARE(Function::stringToSpeed(" 2,75 "), uint(2750));
+    QCOMPARE(Function::stringToSpeed("1m1s,5"), uint(500 + 1000 + 60 * 1000));
+
+    // The written forms still read back as they did.
+    QCOMPARE(Function::stringToSpeed("1s500ms"), uint(1500));
+    QCOMPARE(Function::stringToSpeed("1"), uint(1));
+    QCOMPARE(Function::stringToSpeed(Function::speedToString(1500)), uint(1500));
+    QCOMPARE(Function::stringToSpeed(Function::speedToString(3723004)), uint(3723004));
+
+    QLocale::setDefault(before);
+}
+
 void Function_Test::speedOperations()
 {
     QCOMPARE(Function::speedNormalize(-1), Function::infiniteSpeed());

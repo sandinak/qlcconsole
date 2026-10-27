@@ -60,6 +60,12 @@ pick one of these:
   (a portable .qxfx file) and **Import…** it there. The browser's presets —
   the ones that come with qlcconsole and any you saved before — are still
   starting points.
+- **Save as Effect…** is in the Look Editor with an effect palette open,
+  under **Import…** and **Export…** (not in the designer). It keeps the generator and its
+  current settings as a named effect among the browser's presets on this
+  computer, and the palette then plays that effect. An effect of the same
+  name is replaced only if you say so. To take it to another computer,
+  use **Export…**.
 - **Cancel** (or closing the window) throws the copy away. The show is
   left as it was, and a show that was saved stays saved. On the bench in
   Build, **Esc** goes back to the scene you came from and asks first if

@@ -41,6 +41,7 @@
 #include "monitorproperties.h"
 #include "headlayout.h"
 #include "rgbmatrix.h"
+#include "rgbimage.h"
 #include "qlcfile.h"
 #include "fixture.h"
 #include "scene.h"
@@ -1429,7 +1430,66 @@ bool ShowEmbedding::embedsIn(const QString &fileName)
     return fileName.endsWith(KExtWorkspaceConsole, Qt::CaseInsensitive);
 }
 
-bool ShowEmbedding::writeTransferFolder(const QString &folder, QStringList *written) const
+QMap<QString, QString> ShowEmbedding::transferPictures(const QStringList &extra) const
+{
+    QStringList paths;
+    if (m_doc->monitorProperties() != nullptr)
+        paths << m_doc->monitorProperties()->picturePaths();
+    foreach (Function *f, m_doc->functionsByType(Function::RGBMatrixType))
+    {
+        RGBMatrix *matrix = qobject_cast<RGBMatrix *>(f);
+        const RGBImage *image = matrix != nullptr ? dynamic_cast<const RGBImage *>(matrix->algorithm())
+                                                  : nullptr;
+        if (image != nullptr)
+            paths << image->filename();
+    }
+    paths << extra;
+
+    QMap<QString, QString> places;
+    QMap<QString, QString> takenBy;     // relative place -> the file that has it
+    QStringList elsewhere;
+    for (const QString &path : std::as_const(paths))
+    {
+        if (path.isEmpty())
+            continue;
+        const QFileInfo fi(m_doc->denormalizeComponentPath(path));
+        const QString abs = fi.absoluteFilePath();
+        if (!fi.isFile() || places.contains(abs) || elsewhere.contains(abs))
+            continue;
+        const QString rel = m_doc->normalizeComponentPath(abs);
+        if (rel != abs && !QFileInfo(rel).isAbsolute())
+        {
+            places.insert(abs, rel);     // in the show's folder: the same place
+            takenBy.insert(rel, abs);
+        }
+        else
+            elsewhere << abs;
+    }
+    auto bytesOf = [](const QString &path) {
+        QFile f(path);
+        return f.open(QIODevice::ReadOnly) ? f.readAll() : QByteArray();
+    };
+    for (const QString &abs : std::as_const(elsewhere))
+    {
+        const QFileInfo src(abs);
+        for (int n = 1; n < 1000; n++)
+        {
+            const QString name = n == 1 ? safeFileName(src.fileName())
+                : safeFileName(QStringLiteral("%1-%2.%3").arg(src.completeBaseName()).arg(n).arg(src.suffix()));
+            const QString rel = QStringLiteral("images/") + name;
+            const auto taken = takenBy.constFind(rel);
+            if (taken != takenBy.constEnd() && bytesOf(taken.value()) != bytesOf(abs))
+                continue;
+            places.insert(abs, rel);     // the same picture: shares the copy
+            takenBy.insert(rel, abs);
+            break;
+        }
+    }
+    return places;
+}
+
+bool ShowEmbedding::writeTransferFolder(const QString &folder, QStringList *written,
+                                        const QMap<QString, QString> &pictures) const
 {
     const QDir root(folder);
     bool ok = true;
@@ -1458,6 +1518,20 @@ bool ShowEmbedding::writeTransferFolder(const QString &folder, QStringList *writ
                 put(QStringLiteral("HeadLayouts/") + HeadLayoutLibrary::fileNameFor(l.key),
                     HeadLayoutLibrary::toJson(l));
         }
+    }
+    QSet<QString> pictured;
+    for (auto it = pictures.constBegin(); it != pictures.constEnd(); ++it)
+    {
+        if (pictured.contains(it.value()))
+            continue;               // two names for one picture: one copy
+        pictured.insert(it.value());
+        QFile in(it.key());
+        if (!in.open(QIODevice::ReadOnly))
+        {
+            ok = false;
+            continue;
+        }
+        put(it.value(), in.readAll());
     }
     return ok;
 }
