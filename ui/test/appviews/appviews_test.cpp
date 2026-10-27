@@ -1488,6 +1488,7 @@ void AppViews_Test::goHoldsThePreviewSoOnlyTheRunPlays()
     QList<quint32> groups, palettes;
     auto tidy = qScopeGuard([&]() {
         st->stopPreview();
+        doc->masterTimer()->stopAllFunctions();
         if (prod != ShowTree::invalidId())
             st->removeProduction(prod);
         takeAway(doc, fixtures, functions);
@@ -1496,6 +1497,11 @@ void AppViews_Test::goHoldsThePreviewSoOnlyTheRunPlays()
         for (quint32 p : palettes)
             doc->deletePalette(p);
         m_app->hideViewNotice();
+        /* What the stops queued (the Show Tree's sweep after a preview,
+           the timer's started/stopped signals) lands here, not in the
+           next test -- on a loaded machine it can be late. */
+        QTest::qWait(400);
+        QCoreApplication::processEvents();
     });
     // Three dimmers: Run on 230, the preview on 231, a busk on 232.
     Scene *busk = litScene(doc, 232, 90, &fixtures, &functions);
