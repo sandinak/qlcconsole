@@ -236,6 +236,30 @@ jobs:
           name: ${{ matrix.task }}-AppImage
           path: qlcconsole-${{env.TASK}}-${{env.APPVERSION}}-${{env.BUILD_DATE}}-${{env.GIT_REV}}.AppImage
 
+      # The pre-release check (RELEASE.md): extract the AppImage, its ELF
+      # dependencies, .desktop + MIME types, plugins, data, and --version and
+      # a headless load of Sample.qxw (offscreen, with aqt's libqoffscreen.so
+      # since the AppImage ships none). Not blocking while the known
+      # failures stand: set the repository variable RELEASE_CHECK_BLOCKING
+      # to 'true' to make a failure fail the job.
+      - name: Release check (AppImage)
+        if: ${{ matrix.task == 'build-v4' }}
+        continue-on-error: ${{ vars.RELEASE_CHECK_BLOCKING != 'true' }}
+        run: |
+          sudo apt-get install -y -q desktop-file-utils > /dev/null || true
+          platforms/linux/release-check.sh \
+            qlcconsole-${{env.TASK}}-${{env.APPVERSION}}-${{env.BUILD_DATE}}-${{env.GIT_REV}}.AppImage \
+            --rev "${GIT_REV}" --offscreen-plugin "${QTDIR}/plugins/platforms/libqoffscreen.so" \
+            --out release-check-linux
+
+      - name: Store release check results (AppImage)
+        if: ${{ always() && matrix.task == 'build-v4' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-check-linux
+          path: release-check-linux
+          if-no-files-found: warn
+
 
   build-windows:
     runs-on: windows-2025
@@ -401,6 +425,37 @@ jobs:
           name: qlcconsole-${{env.QLCCONSOLE_VERSION}}-${{env.BUILD_DATE}}-${{env.GIT_REV}}-win64-setup.exe
           path: qlcconsole-${{env.QLCCONSOLE_VERSION}}-${{env.BUILD_DATE}}-${{env.GIT_REV}}-win64-setup.exe
           if-no-files-found: error
+
+      # The pre-release check (RELEASE.md): a silent NSIS install into a temp
+      # folder on the runner, files, DLL imports, registry, associations,
+      # shortcuts, --version and a headless load (offscreen, with MSYS2's
+      # qoffscreen.dll since the installer ships none), the FFmpeg licence,
+      # then uninstall /S and nothing left behind. Not blocking while the
+      # known failures stand: set the repository variable
+      # RELEASE_CHECK_BLOCKING to 'true' to make a failure fail the job.
+      - name: Locate the offscreen plugin for the release check
+        run: echo "QT_PLUGINS_WIN=$(cygpath -w ${MINGW_PREFIX}/share/qt6/plugins)" >> $GITHUB_ENV
+
+      - name: Release check (installer)
+        continue-on-error: ${{ vars.RELEASE_CHECK_BLOCKING != 'true' }}
+        timeout-minutes: 30
+        shell: pwsh
+        run: |
+          ./platforms/windows/release-check.ps1 `
+            "qlcconsole-${env:QLCCONSOLE_VERSION}-${env:BUILD_DATE}-${env:GIT_REV}-win64-setup.exe" `
+            -WorkDir "${env:RUNNER_TEMP}\relcheck" -OffscreenDir "${env:QT_PLUGINS_WIN}"
+          $rc = $LASTEXITCODE
+          New-Item -ItemType Directory -Force release-check-windows | Out-Null
+          Copy-Item "${env:RUNNER_TEMP}\relcheck\out\*" release-check-windows -Recurse -ErrorAction SilentlyContinue
+          exit $rc
+
+      - name: Store release check results (installer)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-check-windows
+          path: release-check-windows
+          if-no-files-found: warn
 
       # After the artifact on purpose, so a failing test still leaves the
       # installer to look at -- but a failure fails the job: while this step

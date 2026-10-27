@@ -52,6 +52,12 @@ this Mac; **`make beta`, `make release` and `make attach` are public**.
   is made without driving Finder (`create-dmg --skip-jenkins`: a plain
   window, no background layout); `DMG_FINDER=1` brings back the laid-out
   window, at the cost of an AppleScript opening the volume on the screen.
+  It ends with the pre-release check of the new DMG (below), and fails if
+  that fails; `RELEASE_CHECK=0` skips it.
+- `make release-check` — the pre-release check of the newest `dist/*.dmg`
+  (`DMG=…` for another, `HOST=<ssh-host>` to run it on another Mac,
+  `WAIVE=id,…`); see [Pre-release checks](#pre-release-checks). `make dmg`
+  runs it at the end by itself.
 - `make beta` — **public**: a GitHub **pre-release** (the updater's
   Pre-release channel), titled "Show Tree <VERSION> (beta)".
 - `make release` — **public**: a full GitHub release (Stable channel: every
@@ -162,13 +168,89 @@ Steps:
 
    CI's names carry the build date and commit (and, for the AppImage, the
    build id rather than the release number); the copies above give users
-   plain names. Check the installer's `--version` says X.Y.Z (CI's smoke
-   test already does) and, if the Windows VM is free, install it there.
+   plain names. Before attaching, read CI's `release-check-windows` and
+   `release-check-linux` results (or run the checks yourself, below): any
+   FAIL there is a release bug.
 6. Sanity-check the release page, then announce it.
 
 `make beta` / `make release` / `make attach` push a tag and publish on
 GitHub — real, visible actions, and the in-app updater offers the result
 to users. Run them deliberately, not as part of routine iteration.
+
+## Pre-release checks
+
+One command per platform proves an installer, and what it installs, is
+right before anything is published. Each prints TAP (and writes
+`release-check.tap` + `release-check.json`) with a summary at the end, and
+exits non-zero on any failure. A known failure can be let through with a
+waiver (`--waive id,id` / `-Waive id,id`, or `RELEASE_CHECK_WAIVE`): it is
+reported as `TODO waived`, not hidden. None of them ever opens a window --
+every run of the app is `QT_QPA_PLATFORM=offscreen` + `-platform offscreen`
+with its own HOME/settings -- or launches a quarantined app.
+
+| Platform | Command | Where |
+|---|---|---|
+| macOS | `platforms/macos/release-check.sh <dmg> [--host <ssh-host>]` (`make release-check`) | here, and a clean Mac with `--host` (e.g. EvoAudio, Intel macOS 13) |
+| Windows | `powershell -ExecutionPolicy Bypass -File platforms\windows\release-check.ps1 <setup.exe> -OffscreenDir <Qt plugins dir>` | the Windows VM (under `~/qlcconsole-windows`), and CI's `build-windows` job |
+| Linux | `platforms/linux/release-check.sh <AppImage> [--host <ssh-host>] --offscreen-plugin <libqoffscreen.so>` | the Linux build host, and CI's `build-v4` job |
+
+**macOS** (`make dmg` runs it on the DMG it made; `RELEASE_CHECK_HOST=evo`
+also runs it on another Mac):
+- the DMG: SHA256SUMS line, Developer ID signature and Team, stapled
+  ticket, Gatekeeper (`spctl -t open`), its layout;
+- the app: `codesign --verify --deep --strict`, Team, timestamp, stapled
+  ticket, Gatekeeper, hardened runtime on every Mach-O, entitlements of the
+  three executables equal to `qlcconsole.entitlements`;
+- every Mach-O (read by a small Perl reader, no Xcode tools needed):
+  universal, no absolute library path outside the OS, only `@loader_path` /
+  `@executable_path` rpaths, every `@rpath` reference inside the bundle, no
+  binary newer than `LSMinimumSystemVersion`;
+- Qt plugins (cocoa, styles, iconengines, imageformats, tls, multimedia;
+  sqldrivers if anything links QtSql), the I/O plugins, the audio plugin,
+  an offscreen platform plugin, FFmpeg's licence and its text;
+- Info.plist: bundle id, version = VERSION, build = the binary's, minimum
+  macOS, executable, icon, usage strings, every document type with a UTI
+  declared for it;
+- resources: FixturesMap.xml against the files, no Finder-duplicate files
+  (`* 2.qxf`), Sample.qxw, the data folders, translations, the help guides
+  compiled into libqlcplusui;
+- file types: a copy registered with `lsregister -f`, its claimed types read
+  back, the default handler for .qlcc (with `--ls-real`, the default for
+  `--host`, the copy is registered outside the temp dirs so it can become
+  the handler), then unregistered;
+- Gatekeeper on a quarantined copy, with `spctl` only;
+- headless: `--version` on each slice this Mac can run and a load of
+  Sample.qxw, on a copy given an offscreen plugin (from `--offscreen-plugin`,
+  `$QTDIR` or `~/Qt-aqt/<Qt version>`) and re-signed ad hoc -- the I/O and
+  audio plugins must load;
+- and no crash report, no LaunchServices record of its copies, nothing left
+  (the remote temp dir included).
+
+**Windows** (`-SkipTakeover` skips the second install): Authenticode
+(unsigned is reported as expected for now), the installer's version, a
+silent install (`/S /D=`), the files, every EXE/DLL import resolvable and
+x64 (a PE reader, no dumpbin), FFmpeg's configure line (GPL or LGPL) and its
+licence text, the Apps & features entry (name, version, publisher,
+InstallLocation, UninstallString), the .qlcc/.qxw/.qxf associations (ProgID,
+icon, quoted open command), the Start Menu shortcuts' targets, `--version`
+and a headless load, then uninstall `/S` and NOTHING left: files, entry,
+associations, shortcuts, `HKCU\Software\qlcconsole` and the app's own
+settings `HKCU\Software\qlcplus\qlcconsole`; and a second install into
+another folder must not take over the first one's registration. Every key
+and Start Menu item it can touch is exported first and restored after.
+
+**Linux**: `--appimage-extract`, every ELF's dependencies with AppRun's
+library path (none missing, no Qt from the system, nothing beyond a base
+desktop system taken from the machine, RPATH only `$ORIGIN`-relative), the
+.desktop file (`desktop-file-validate`, icon, Exec, MimeType), the MIME
+definitions for .qlcc/.qxw/.qxf, AppStream metainfo, Qt and I/O plugins,
+data, `--version` both directly and through AppRun, and a headless load of
+Sample.qxw through AppRun.
+
+In CI the Windows and Linux checks run after the build and upload their
+results (`release-check-windows`, `release-check-linux`). They do not fail
+the job until the repository variable `RELEASE_CHECK_BLOCKING` is `true`;
+set it once the known failures are fixed.
 
 ## What the in-app updater needs from a release
 

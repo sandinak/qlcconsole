@@ -7,6 +7,11 @@
 #   sign-notarize.sh   Developer ID sign, notarize (qlc-notary), staple the
 #                      app; rebuild, sign, notarize and staple the DMG
 #   then               dist/SHA256SUMS for that DMG, and a Gatekeeper check
+#   release-check.sh   the pre-release check of that DMG (RELEASE.md): any
+#                      failure fails the build. RELEASE_CHECK=0 skips it;
+#                      RELEASE_CHECK_WAIVE=id,id lets known failures through
+#                      (reported as TODO), RELEASE_CHECK_HOST=<ssh-host> runs
+#                      it on another Mac as well.
 #
 # It builds the checkout it's in, which has to be committed: the DMG is named
 # after HEAD's rev, so local edits would ship under a rev that doesn't hold
@@ -71,7 +76,22 @@ cat "$REPO/dist/SHA256SUMS"
 xcrun stapler validate "$DMG"
 spctl -a -t open --context context:primary-signature -v "$DMG"
 spctl -a -t exec -v "$APP"
-echo "  app version: $("$APP/Contents/MacOS/qlcconsole" --version 2>/dev/null | grep -m1 '^qlcconsole ' || echo '?')"
+
+if [ "${RELEASE_CHECK:-1}" = 1 ]; then
+  step "Pre-release check (release-check.sh; RELEASE_CHECK=0 skips)"
+  # It runs the app headless itself (an offscreen copy): the signed app has
+  # no offscreen platform plugin, and a bare --version would open a window.
+  "$REPO/platforms/macos/release-check.sh" "$DMG" ||
+    { echo "ERROR: the release check failed (above; results in build-release-check/)."
+      echo "Fix it, or RELEASE_CHECK_WAIVE=<id,...> for a known failure -- the DMG is in dist/ but is not fit to publish."
+      exit 1; }
+  if [ -n "${RELEASE_CHECK_HOST:-}" ]; then
+    "$REPO/platforms/macos/release-check.sh" "$DMG" --host "$RELEASE_CHECK_HOST" ||
+      { echo "ERROR: the release check failed on $RELEASE_CHECK_HOST."; exit 1; }
+  fi
+else
+  echo; echo "WARNING: RELEASE_CHECK=0 -- the pre-release check was skipped."
+fi
 
 echo
 echo "DMG:        $DMG"
