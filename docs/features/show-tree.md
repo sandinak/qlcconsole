@@ -98,8 +98,12 @@ from the Library lands in the tree right beside it.
     and its **timecode** source ([Productions](#productions)).
   - **A cue list** shows its mode and base cue, **Convert to tracking…**
     and **Detach to plain chaser…**.
-  - **A cue** shows its number, name, note, mode, base check box, includes,
-    fade in / out, hold, its **sub-cues** (and + Sub-cue), cue looks, every
+  - **A cue** shows its number, name, note, **Text colour**, mode, base
+    check box, **Overlapping layers mix**, **Skip**, **Don't move in black
+    into this cue**, **Make this a venue focus cue**
+    ([A venue focus cue](focus-calls.md#a-venue-focus-cue-pre-show)),
+    **Focus this cue…** ([Focus this cue](refine.md)), includes, fade in /
+    out, hold, its **sub-cues** (and + Sub-cue), cue looks, every
     layer on stage in it, a dashed drop area, and *Next cue receives*. A
     **sub-cue** shows **Advance** (Sub GO, or Auto-follow after a wait) in
     place of the mode, base, includes and hold. The **note** opens up
@@ -294,14 +298,16 @@ By hand instead (or after it, to go further):
 A show made the QLC+ way (scenes, collections, chasers, no Show Tree)
 opens as it is: nothing is converted on load, and it plays and saves as
 before. The Show Tree tab says so once, in a line at the top: *This show
-uses chasers: 2 look like cue lists (Full Show, New Chaser 8)…*.
+has 2 chasers that work like cue lists (Full Show, New Chaser 8). They
+play as they are; Upgrade this show… makes them Show Tree cue lists,
+checked, when you want.*
 **Upgrade this show…** opens the upgrade (below); **✕** puts the line
 away for this show. **Upgrade This Show…** is the one way in: in the File
 menu, the Show Tree's header, the Run tab when there is no cue list, and
 Build's **Send to Show Tree…** (the same dialog with just that chaser
 ticked; [below](#send-to-show-tree-from-build)).
 
-**The converter** lists every chaser of the show, told apart by how it
+**Upgrade This Show…** lists every chaser of the show, told apart by how it
 runs:
 
 - **Cue list**: it waits for GO on some step, has notes or cue numbers,
@@ -315,8 +321,8 @@ runs:
   layer wherever you drop it on a cue. Tick it if you want it as a list
   anyway.
 
-**Convert** imports each ticked chaser, each its own undo step, in one of
-two ways (**Convert by**):
+**Upgrade** imports each ticked chaser in one of two ways (**Convert
+by**), and the whole upgrade is one undo step:
 
 - **Import in place** (the default). The list takes over from the chaser:
   - the list is linked to the chaser it came from;
@@ -409,7 +415,7 @@ palettes** (as above): the row shows how many layers and palettes it
 makes and what stays raw; select it for the looks. None is ticked for
 you. A scene that can't be captured says why (its own fades, say).
 
-**Convert by** is the converter's: in place (the default) or beside the
+**Convert by**: in place (the default) or beside the
 chaser. **Upgrade** converts the ticked chasers, then captures the ticked
 scenes. A capture still keeps the scene in any cue that would come out
 different. The whole upgrade is **one undo step** (*Undo Upgrade this
@@ -440,8 +446,8 @@ Use your own group and palette names in place of Towers, USTs, Blue and Red.
      it in this cue.
 5. **+ Cue** → **1.0.2** `Out`. Set its **Mode** to **Block**: it starts
    from nothing, so with no layers it is dark.
-6. The list plays as the chaser **01-Opener**. GO it from the footer, or pick
-   it in a Virtual Console Cue List.
+6. The list plays as the chaser **01-Opener**. GO it from the **Run** tab (⌘↩ from
+   anywhere), or pick it in a Virtual Console Cue List.
 
 ### The same, typed
 
@@ -1435,14 +1441,15 @@ In the command line, ⌘Z undoes your typing. Type `undo` to undo the tree
   palette's delete brings it back with its id, and every cue, layer, look,
   reusable, scene and effect slot the delete cleared has it back in its
   place — one step, the show exactly as it was.
+- **A value changed in the Look Editor** (a colour dragged, a level
+  moved) is a step too: a drag is one step, with the rename when the
+  name follows the value.
 - **What undo doesn't cover:**
-  - a palette's values changed in the Look Editor (a colour dragged, a
-    level moved): those are the palette's, as in the Build tab;
   - a palette a command made (`dimmer 30` with none at 30%): undo takes the
     value off the cue, and the palette stays, as an ordinary palette;
   - a VC page made by **Make VC page** (delete the frame on the console).
 - **The Build tab is on the same history.** ⌘Z / ⇧⌘Z there take
-  back whatever was done last: an edit to the look open on its canvas, a
+  back whatever was done last: an edit in the Workbench, a
   Bundle stamp, or a step of this one history (a tree change or a palette
   operation, from either tab). The **Edit** menu's Undo / Redo name the
   step the tab you are in would take back.
@@ -1812,8 +1819,12 @@ Console widget is the same runner on a VC page.
 - **Header:** the production and cue list it plays (switch with the box:
   the current production, or any list of any production; with only one
   list there is nothing to choose and no box), the **timecode** once
-  there is a source (*TC 01:02:03:15*, *hold* when it stops arriving) and
-  **LIVE / DESIGN** (⌘F12 switches).
+  there is a source (*TC 01:02:03:15*, *hold* when it stops arriving),
+  **LIVE / DESIGN** (⌘F12 switches), and **Venue focus…** (greyed, with
+  why, while there is nothing to focus). With a
+  [venue focus cue](focus-calls.md#a-venue-focus-cue-pre-show) armed, a
+  line says *Venue focus: waiting for the controller — press Start*, with
+  **Start venue focus**.
 - **The list:** every cue, its sub-cues under it, each with its state —
   **▶** running (with its fade's progress), **▷ STANDBY** (loaded), **NEXT**,
   **SUB NEXT** — its timing (fade; *with GO*, *Sub GO* or *auto 0.5s*) and
@@ -1886,7 +1897,8 @@ Cue Runner back into a Cue List).
   cue numbers, fades, holds and notes.
 - Play it from the **Run** tab or a **Cue Runner** widget
   ([The cue runner](#the-cue-runner)), pick the chaser in a Virtual Console
-  Cue List, GO it from the footer, or fire its cues from QLab by number
+  Cue List, GO it with ⌘↩ (the footer's **Next:** says what it plays, and
+  a click on it brings the Run tab forward), or fire its cues from QLab by number
   ([Show control](show-control.md)). What GO plays is the **current
   production's** main list ([Productions](#productions)).
 - The cue collections and layer scenes are hidden, in
@@ -2008,9 +2020,7 @@ and *MIB · n* counts the lights a list set **On** is moving.
 - **A hit has no fade, transition or speed master of its own** yet; a VC
   button's Flash and the hit's scenes' own settings are what there is. A
   hit's MIDI trigger is set on its VC button.
-- **The Look Editor's value changes** (a colour dragged) are not on Undo, in
-  either tab. **Make VC page** isn't on Undo either (the console has its
-  own Delete).
+- **Make VC page** isn't on Undo (the console has its own Delete).
 - **A Dimmer dims a colour it doesn't own** (no dimmer channel) only when
   the Dimmer's layer has no Colour of its own, and one colour look per
   layer; otherwise each layer's colour is scaled by its own Dimmer.

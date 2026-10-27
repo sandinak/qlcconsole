@@ -19,8 +19,10 @@
 | ⇧⌘1 … ⇧⌘9, ⇧⌘0 | Bring forward the view's tabs, numbered as they are on screen (⇧⌘0 the tenth). qlcconsole: Connections, Fixtures, Lighting Studio, Build, Show Tree, Virtual Console, Simple Desk, **Run** ([the cue runner](show-tree.md#the-cue-runner)). Classic QLC+: Fixtures, Functions, Shows, Virtual Console, Simple Desk, Inputs/Outputs. Everything: Connections, Fixtures, Lighting Studio, Functions, Build, Show Tree, Shows, Virtual Console, Simple Desk, Run. They renumber when the [view](getting-started.md#views) changes; a tab the view hides has no number in the Window menu, and choosing it switches to Everything |
 | Space (in the Run tab) | **GO** for the list the Run tab plays |
 | ⇧⌘M | Lighting Studio |
+| ⌥⌘F | **Quick focus** (View ▸ Quick Focus…) |
 | ⇧⌘R | **Rig Overview** — and again to close it when it's in front |
-| ⌘W | Close the window in front (Rig Overview, a broken-out view…) |
+| ⌘W | Close the window in front: the Rig Overview, a structure's editor (as Cancel), a dialog. In the Classic Functions tab ⌘W is the Function Wizard |
+| ⌘Q | Quit |
 | ⌘M | Minimize |
 | ⇧F1 | The stock QLC+ reference (online) |
 
@@ -49,17 +51,43 @@ Shift-click off, if it gets in the way.
 | ⌘Z | Undo the last move, paste or edit |
 | ] / [ | Turn the selection 15° clockwise / anticlockwise |
 | } / { | Turn it 1° |
+| ⌘G / ⇧⌘G | Group / ungroup the selection |
+| Pinch | Zoom |
+| Click a footer box (View, Overlay) | Its next choice; its arrow lists them all |
+| ⇧-drag / ⌥-drag a line target's handle | Keep it level or upright / extend an end along the line |
 
-**In a structure's editor:** drag fixtures to place them, ⌘Z undoes the
-editor's last change, a selected bar's ring rotates it (⇧ snaps to 15°).
+**In a structure's editor:** drag fixtures to place them, drag empty
+canvas to pan (in 45°, to swing), scroll or pinch to zoom, ⌘- or ⇧-click
+to add to the selection, double-click to edit, ⌘Z undoes the editor's
+last change, a selected bar's ring rotates it (⇧ snaps to 15°), Return or
+F2 renames a folder in its list. **⌘W closes it as Cancel**, putting back
+everything it did.
+
+**In Plot layers:** Return or F2 renames a row, Esc cancels; drag a
+fixture's row onto a hanger, bar, tower or boom to hang it there.
 
 **In the Rig Overview / Angled view:** drag to swing, ⇧-drag to pan, scroll
-to zoom, ⇧⌘R or ⌘W to close.
+or pinch to zoom, right-click a fixture for **Fixture Properties…** or
+**LED Layout…**, ⇧⌘R or ⌘W to close.
 
-**Quick focus** (⌘⌥F, or View + Menu on the controller): ] / [ next and
-previous head, arrows nudge 0.1° (⇧ for 1°), + / − step size, . / , zoom
-wider / narrower, ' / ; focus, Return save, Backspace revert, 0 zero, R the
-other reference, ⌘Z undo the last save, Esc leave. See [Quick focus](lighting-studio.md#quick-focus).
+**Quick focus** (⌘⌥F, or View + Menu on the controller) and **Venue
+focus**: ] / [ (or Tab / ⇧Tab) next and previous light, arrows nudge 0.1°
+(⇧ for 1°), + / − step size, , / . spot down / flood out (⇧ 5°), ; / '
+softer / sharper, G one light or all, Return save (⇧Return save all),
+Backspace revert (⇧Backspace every unsaved light), 0 zero, R the other
+reference (in Venue focus R or T, the target page), PgDn / PgUp next /
+previous focus call, U next unsaved, N how many unsaved, D mark dead, H
+hold every light, W say the light (⇧W feedback), ⌘Z undo the last save,
+Esc leave. See [Quick focus](lighting-studio.md#quick-focus) and
+[Running venue focus](focus-calls.md#running-venue-focus).
+
+**Focus this cue / Focus this look**: PgDn / PgUp layers, ] / [ (or
+Tab / ⇧Tab) fixtures or groups, G scope, arrows move 1° (⇧ 5°), , / .
+spot down / flood out, ; / ' softer / sharper, P the D-pad page, Return
+keep (⇧Return keep in the cue it tracks from), S make that the rule,
+Backspace back to the cue, 0 clear the exception, U next change not kept,
+W say the light (⇧W feedback), H hold, ⌘Z undo, Esc leave. See
+[Focus this cue](refine.md#changing-values).
 
 ## Build
 
@@ -75,7 +103,17 @@ other reference, ⌘Z undo the last save, Esc leave. See [Quick focus](lighting-
 | ⌘→ / ⌘← | Expand / collapse every row |
 | ⌘Z / ⇧⌘Z | Undo / redo the last change, here or in the Show Tree (one history) |
 | ⇧⌘N | New here: a scene in the selected folder; in the Workbench a scene layer (collection) or the next step (chaser); in Effects a new effect ([New here](build.md#new-here)) |
-| Double-click a scene / function | Open it on the canvas |
+| Click a row (outline) | Load it in the Workbench |
+| Double-click a palette / a group | The palette in the Look Editor / the group's head layout |
+| **Return** (navigator / Workbench rows) | To the Workbench's layers / to the editor pane |
+| **Return** / **F2** (Palettes, Effects, Groups &amp; fixtures) | Rename in place |
+| ⌫ (Palettes, Effects) | Delete what's selected, asking first and saying where it's used |
+| ⌫ (a look or target row) | Take it out of the scene; on a cue's value row in the Workbench, clear it |
+| ⌥→ / ⌥← · ⌥-click a triangle | Open / close the row and everything under it |
+| **⌥ held as you drop** rows | Copy instead of move |
+| **Esc** (a step's Fade, Hold or Cue field) | Put back what the step has |
+| ⇧↩ / ⌥↩ (in a note) | New line |
+| ⌘X / ⌘C / ⌘V (chaser editor) | Cut / copy / paste steps |
 
 ## Show Tree
 
@@ -100,6 +138,14 @@ other reference, ⌘Z undo the last save, Esc leave. See [Quick focus](lighting-
 | `help` / `?` (in the command line) | Every word, or `help <word>` with examples |
 | ↑ / ↓ (in the command line) | Earlier / later commands |
 | ⌘Z / ⇧⌘Z | Undo / Redo in the tree (in the command line ⌘Z undoes typing: type `undo`) |
+| **⌘/** (in the tree) | Skip the selected cues, or put them back |
+| **⌥↩** (Library) | A layer for each group selected |
+| ↓ / Esc (Library filter) | Into the list / back to the tree |
+| **F2** / ⌫ (Library) | Rename / delete the palette or folder |
+| **?** typed first, or **F1** (command line) | The syntax lines |
+| **Esc** (a cue's fade, hold or wait) | Put the cue's own time back |
+| Return / Esc (the Level… / Colour… strip) | Apply / cancel |
+| Click / double-click a cue (Run tab, Cue Runner) | LOAD it / jump to it now |
 
 ## Connections
 
@@ -107,7 +153,9 @@ other reference, ⌘Z undo the last save, Esc leave. See [Quick focus](lighting-
 |---|---|
 | ⌘N | Add a universe (Universes tab) |
 | ⌘D | Delete the selected universe (Universes tab) |
-| ⌘Z | Undo the last patch change (any of the three tabs) |
+| ⌘Z | Undo the last patch change (**Undo Patch Change**; Devices or Universes) |
+| Double-click a universe | Its connection window: protocol, interface, port, input and feedback ([Editing a connection](other-improvements.md#editing-a-connection)) |
+| ⌘-click universes, then right-click | Retarget them, or set their transmit mode, all at once |
 
 ## Fixtures
 
@@ -115,6 +163,8 @@ other reference, ⌘Z undo the last save, Esc leave. See [Quick focus](lighting-
 |---|---|
 | **Return** / **F2** | Rename the selected fixture, group, group folder or universe in place; Esc cancels ([Layout](fixture-manager.md#layout)) |
 | Double-click | A group opens its grid editor, a fixture its properties, a folder renames |
+| ⌘Z | Undo the rig's last change: a Patch dialog **Apply**, properties, renames, plot symbols, output rules |
+| Drag fixtures or a group onto a universe | The **Patch** dialog, packed into that universe, to review and apply |
 
 ## Build ▸ Scenes (what the Functions window had)
 
@@ -124,7 +174,7 @@ other reference, ⌘Z undo the last save, Esc leave. See [Quick focus](lighting-
 | ⌘C then ⌘V | Duplicate (the Functions window's Clone) |
 | ⌫ / Delete | Delete |
 | F2 | Rename |
-| ⌥→ / ⌥← | Next / previous fixture tab in a sequence's scene editor |
+| ⌥→ / ⌥← | Next / previous fixture tab in a scene editor |
 
 The Function Wizard and the startup function are on **+ Scene ▾**; a new
 folder is **+ Scene ▾ → New scene in a new folder…**.
@@ -142,6 +192,18 @@ folder is **+ Scene ▾ → New scene in a new folder…**.
 | ⌘T | Item start time and duration |
 | ⌘K | Lock item |
 | ⌘Z | Undo |
+| ⌘L | Change the item's colour |
+
+## Functions (Classic QLC+ and Everything)
+
+| Keys | Does |
+|---|---|
+| ⌘1 … ⌘9 | New scene, chaser, sequence, EFX, collection, RGB matrix, script, audio, video |
+| ⌘L | New folder |
+| ⌘W | Function Wizard |
+| ⌘C | Clone |
+| Delete | Delete |
+| ⌘A | Select all |
 
 ## Virtual Console (Design mode)
 
@@ -152,5 +214,6 @@ folder is **+ Scene ▾ → New scene in a new folder…**.
 | ⌘E | Widget properties |
 | ⇧B / ⇧I / ⇧F / ⇧O | Background colour / image, foreground colour, font (⇧⌥ resets) |
 | ⇧S / ⇧R / ⇧⌥S | Sunken / raised / no frame |
+| ⇧C / ⇧⌥C | Choose a button's icon / no icon |
 | ⇧↑ / ⇧↓ | Raise / lower |
 | Drag a Cue Runner's dotted bars | Its buttons' height; GO's share of the row ([the cue runner](show-tree.md#the-cue-runner)) |

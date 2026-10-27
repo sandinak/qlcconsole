@@ -10,8 +10,8 @@ listed there with a fix.
 
 **Nothing comes out of a universe, or only part of a rig lights.**
 Connections → tick **By universe**: every universe with where it goes.
-One reading "not patched" has no output — right-click it and patch it to
-an interface. Select a universe to see the channels it is actually
+One reading "not patched" has no output — double-click it (or
+right-click ▸ **Edit connection…**) and pick where it goes. Select a universe to see the channels it is actually
 sending: if the values are there, the problem is downstream (node, cable,
 the fixture's address); if not, it's the look or the patch.
 
@@ -124,6 +124,30 @@ and a graphics driver can't get it wrong. See [Keeping it quick](getting-started
 crowded structures in Front/Side collapse their fixtures into a count
 badge you can click.
 
+## Focusing
+
+**The controller does nothing in Quick focus or Venue focus.** Look at
+the top of the panel. With **Use: Keyboard** chosen the pad is ignored on
+purpose: click **Use the controller**. If the panel names another pad,
+that pad pressed Start first and has the tools: leave and start again
+from the pad you want. If the title says **HOLDING**, every light is
+held: click both sticks (or press H). **Controller paused:** says why
+(see [Working in the background](lighting-studio.md#working-in-the-background)).
+A pad that isn't connected at all puts the tool on the keyboard, and it
+says so.
+
+**The laptop says nothing.** Check **Feedback** isn't **Lights only**
+(warnings are spoken whatever it says). On a Mac, check **Voice to:** in
+the Venue Focus dialog: a chosen output that's gone (a pad asleep, a
+headset interface unplugged) shows *(not connected)*, and the voice
+falls back to the computer's own output and says so on its first line.
+On Linux the voice needs `spd-say`.
+
+**The light being focused doesn't change on the rig.** The voice and
+the panel say why: Blackout is on, the Grand Master is at zero, or the
+light's universe has no output. Fix that and step to the light again.
+See [Telling the operator](focus-calls.md#telling-the-operator-where-they-are).
+
 ## Files and fixtures
 
 **A fixture definition won't load.** The footer lists it; **Repair in
@@ -138,8 +162,17 @@ effect scripts, RGB scripts and LED maps are in **EffectScripts**,
 (`qlcconsole -o show.qlcc`); a bare file name isn't opened, and saving then
 can overwrite it.
 
-**The app stopped without saving.** Open it again — it offers to recover
-the unsaved work from its autosave.
+**The app stopped without saving.** A show never saved is offered back
+at the next launch. A saved show isn't: its recovery copy is
+*Show*.qlcc.autosave beside it. **File ▸ Open**, choose **All Files**,
+open that copy and check it, then **File ▸ Save As…** over the show's own
+name (a plain Save would write to the .autosave).
+
+**An RGB matrix runs nothing, and the footer says its effect isn't
+installed.** The show uses a matrix script this computer doesn't have. It
+won't run here, but saving keeps it as it was, so it plays again on a
+computer that has the script. Put the script in **RGBScripts** in your
+user folder, or open the show from a .qlcc that carries it.
 
 **"This show file is damaged or incomplete (line N)."** The file ends
 early or breaks at that line: a copy cut short, a disk that filled up
@@ -155,6 +188,12 @@ the original anyway, pick its name in the Save dialog.
 show can't have.** Its universe in the file is past the limit (1024
 universes), negative or not a number, so it opens unpatched rather than
 adding universes up to it. Patch it again in the Fixture Manager.
+
+**A fixture is unpatched, and the footer says it has more channels than
+a universe holds.** Its mode in the file takes more than 512 channels, so
+no address fits it in one universe; it opens unpatched rather than
+writing past the end of the universe. Pick a smaller mode, or check the
+definition: a mode that size is usually a damaged or mistyped file.
 
 **A show from another computer is missing fixtures.** Save it there as a
 **.qlcc**: it then carries every definition and script of its own (or use

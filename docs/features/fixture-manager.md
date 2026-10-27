@@ -908,8 +908,9 @@ again.
 **File → Collect for Transfer…** makes a folder named after the show
 holding the show as a .qlcc and, beside it, **Fixtures/**, **EffectScripts/**,
 **RGBScripts/** and **HeadLayouts/** (the show's LED maps) — everything it
-uses that isn't part of the app, as plain files. The show you have open
-stays as it is.
+uses that isn't part of the app, as plain files. The show's venues
+(*Show*.venues.xml: each room's focus corrections, house rig and patch)
+go in beside it. The show you have open stays as it is.
 
 Opening a show also looks in its own folder's **Fixtures/**,
 **EffectScripts/** and **RGBScripts/** for anything neither the show nor

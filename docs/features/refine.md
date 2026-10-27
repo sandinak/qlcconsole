@@ -96,6 +96,11 @@ On the **colour** and **gobo** pages, D-pad right and left step forward
 and back through the show's colour or gobo palettes, once a press, and
 say the name of each.
 
+**B held** does what B does: back to the cue. **View + X**, which marks
+a light dead in Quick focus and Venue focus, only says "Dead lights are
+marked in the focus calls." here. The panel's **Keep (A)**, **Back to
+the cue (B)** and **Exit** buttons do the same from the laptop.
+
 What you change is **pending**: the rig shows it at once, but the cue is
 not changed until **A**. Then everything pending is kept as **one** Show
 Tree step (⌘Z or View undoes it), and the voice says where it went

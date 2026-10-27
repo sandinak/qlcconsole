@@ -13,7 +13,16 @@ Two sub-tabs — **Devices** (shown above) and **Universes** (QLC+'s own
 Inputs/Outputs page) — give the same information at different levels of
 depth. Classic QLC+ opens on **Universes**; the other views on
 **Devices**. (0.3 folded the old **Overview** spreadsheet into Devices:
-its columns are By universe's, below.) At the bottom of Devices, **Show control &amp; sync** lists
+its columns are By universe's, below.)
+
+**Universes** lists the open show's universes, one row each — only that
+show's, however many shows were opened before it. Its toolbar works on
+the universe selected: **Add Universe** (⌘N), **Delete Universe** (⌘D),
+**Undo Patch Change** (⌘Z), **Universe name** (rename it in place),
+**Passthrough**, and **Slot**, **Tour** or **House** (see
+[Universes: slots](venues.md#universes-slots-the-rooms-patch-not-ours)).
+
+At the bottom of Devices, **Show control &amp; sync** lists
 what controls or clocks the show from outside — OSC and MIDI Show Control
 cue commands in, MIDI timecode with its sync health — each row with its
 state; click one to set it up on the right. See
@@ -62,10 +71,28 @@ of each patched fixture shaded together and named where they start. The
 values are what goes out, after the grand master; hover a channel for whose
 it is ("Front Par, channel 1 — Dimmer").
 
-Right-click an interface to patch a universe to it or configure the
-protocol. Right-click a universe for **Edit connection…** (or just
-double-click it), **Rename universe…**, **Unpatch from this interface** and
-**Delete universe entirely…**. Those act on the one row you right-clicked.
+Each row's right-click offers what that level of the wiring owns:
+
+- **The top row:** **Add a protocol ▸**.
+- **A protocol:** **Add an interface…**, **Add a target…** and
+  **Configure &lt;protocol&gt;…**.
+- **An interface:** **Name this interface…**; on Art-Net and sACN **Add a
+  target on this interface…** or **Add a target from device library…**; on a
+  USB widget or MIDI line, where the line itself is the destination, **Patch
+  a universe here (output)…** / **(input)…**. **Reroute N universes to a
+  different interface…** moves everything patched there to another network
+  card in one step, and **Stop showing this interface** hides one with
+  nothing on it.
+- **A node (target):** **Name this target…** and **Set node IP address…**;
+  on a node you added by hand, also **Add a port…** and **Forget this
+  target…**.
+- **A port:** **Patch a universe to this port…**, and **Remove this port**
+  on one you added.
+- **A universe:** **Edit connection…** (or just double-click it), **Rename
+  universe…**, **Unpatch from this interface** and **Delete universe
+  entirely…**. Those act on the one row you right-clicked; ⌘-click several
+  universes first for **Retarget N selected universes…** and **Transmit
+  mode of N selected universes**.
 
 ### Editing a connection
 
@@ -155,6 +182,7 @@ node sends in every poll reply. Some nodes fill that byte with junk (the
 CR041R's changes from reply to reply), so the row only changes once the
 node has said the same thing five replies running, and a node whose
 status keeps changing reads **no RDM** until it settles for a few minutes.
+A node just heard reads **no RDM** until its first few replies agree.
 A node that answers RDM discovery with its table of devices reads **RDM**
 whatever its status byte says.
 
@@ -195,7 +223,7 @@ the VPN comes up — they reconnect by themselves within a few seconds. The
 same holds for **inputs and feedback** patched to a device or interface
 that isn't present, and for any patch whose plugin isn't installed on this
 computer. Patching or unpatching an offline universe by hand works as
-usual; **Forget patch** (right-click it) drops a kept patch for good.
+usual; **Forget this patch (unpatch)…** (right-click it) drops a kept patch for good.
 
 Saved shows keep the interface address and line number older versions
 read, plus the network they're on (a `Network` attribute older versions
@@ -565,6 +593,18 @@ problem can be fixed on the spot. It checks for:
   [Cloud storage](#cloud-storage));
 - **fixtures with no definition here** — standing in as plain dimmers until
   their definition is back.
+- **problems loading the show** — what the file asked for that couldn't
+  be done as written, one line each: a damaged file, a universe the show
+  can't have, a fixture with more channels than a universe holds, an RGB
+  matrix whose script isn't installed (see
+  [Troubleshooting](troubleshooting.md#files-and-fixtures));
+- **effect looks that cannot run** — no effect chosen in the look, or its
+  script gone;
+- **fixture definitions older than the current version**, **items in this
+  show that differ from this computer's** (with **Review…**), and **the
+  show's own copies that cannot be used** (see
+  [Definition updates](definition-updates.md) and
+  [Opening a show on another computer](fixture-manager.md#opening-a-show-on-another-computer)).
 
 Select the rows you want (shift-click for a range; click a heading to take
 everything under it) and use the fix offered for that problem:
@@ -665,8 +705,10 @@ Reachable from the Plot layers tree (double-click a group node) or the plot
 
 ## DMX &amp; power overlay lenses
 
-Two "More → Overlay" modes on the main 2D plot (distinct from the rig
-view's beam/footprint overlays):
+The **Overlay** box on the Lighting Studio plot's footer — **Normal**,
+**Power**, **DMX**, **Network**, **Owner** or **Stage only** — colours the
+plot by what you are checking (distinct from the rig view's
+beam/footprint overlays). Two of them in detail:
 
 - **DMX lens** — colours every fixture by its DMX universe, so fixtures
   sharing a colour share a physical DMX run, and flags overlapping address

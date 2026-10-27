@@ -43,6 +43,13 @@ Venues** in the Lighting Studio open the same menu.
 7. **Clashes (n)…**, only when there are any: the venue page, its clash
    list in front.
 
+The venue menu needs a saved show: a venue's corrections are kept in a
+file beside it, so until the show is saved its entries are greyed with
+**Save the show first**. While Quick focus or Venue focus is running,
+switching venue is refused (the heads are being worked on): leave it
+first. **New venue…** then makes the venue but doesn't apply it, and a
+name the show already has is refused — switch to that venue instead.
+
 The chip follows everything that changes it: a venue applied, renamed or
 deleted, a fixture patched onto the room's channels. When the show was
 last focused for a venue more than 20 hours ago, the chip says **Venue:
@@ -100,8 +107,8 @@ another venue's rig. Use groups for house lights.
 
 ## Universes: slots, the room's patch, not ours
 
-On the **Connections** tab each universe has a **Slot** beside its
-name: **Tour** or **House**. It says which kind of fixture you mean to
+On **Connections ▸ Universes**, select a universe and set its **Slot**
+on the toolbar, beside **Universe name**: **Tour** or **House**. It says which kind of fixture you mean to
 put there ("U1 to U4 Tour, U5 and U6 House"). The clash check lists a
 house fixture in a Tour slot and a tour fixture in a House slot.
 
@@ -145,7 +152,7 @@ patch; **Not ours** and the clash check work either way.
   the show's house fixtures in** when there are any (while the venue is
   applied).
 - **Universes**: each universe with its **Slot** (Tour or House; change
-  it here or on the Connections toolbar), its **Output in this
+  it here or on the **Connections ▸ Universes** toolbar), its **Output in this
   venue** (the venue's own, or the show's), and **Not ours** (type
   `all`, a range such as `401-512`, or several: `1-24, 500-512`).
 - **Keep this patch for Lincoln HS** makes the outputs on the
@@ -181,9 +188,11 @@ dialog lists the venue's clashes under its table.
   from and whose file a house fixture is in.
 - The **Inventory** panel shows **[House]** or **[Rental]** beside a
   fixture that is not Tour.
-- The **patch list** (Fixture Manager ▸ **Patch List…**) marks each
-  fixture that is not Tour, and its spreadsheet gains an **Owner**
-  column.
+- The **patch list** (**Fixtures ▸ Patch List…**, or the Lighting
+  Studio's **More ▸ Patch List…**) has an **Owner** column once any
+  fixture is not Tour, and its **Owner** filter shows only the Tour,
+  House or Rental fixtures; the copy, CSV, XLSX, PDF and labels follow
+  it.
 
 ## Old shows
 
