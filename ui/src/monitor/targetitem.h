@@ -70,6 +70,15 @@ public:
     void refreshPositionReadout();
     /** The readout as it stands; empty when there is none. */
     QString positionReadout() const;
+    /** Is the readout on screen? A line target's shows only while selected. */
+    bool readoutShown() const;
+    /** Push the readout down @p dy screen px, under another it would cover. */
+    void setReadoutStackOffset(qreal dy);
+    qreal readoutStackOffset() const;
+    /** The readout's box in screen px around its anchor, unstacked. */
+    QRectF readoutScreenRect() const;
+    /** Where the readout hangs from, in scene coordinates. */
+    QPointF readoutAnchorScene() const;
 
     /** Enable or disable movement (global layout lock). */
     void setMovable(bool movable);
@@ -128,6 +137,12 @@ public:
     /** True if @p local is on the centre mark. */
     bool onCentreMark(const QPointF &local) const;
 
+    /** What the target IS on the stage, in item coordinates: the mark's
+     *  ring, an area's footprint, a line's curve, a person's figure -- not
+     *  its name, readout, halo or the room boundingRect() keeps for them.
+     *  The rulers band this (MonitorGraphicsView::itemGeometryRect()). */
+    QRectF geometryRect() const;
+
     // QGraphicsItem interface
     QRectF   boundingRect() const override;
     /** A line is picked on its curve, handles and mark -- not on the empty
@@ -167,6 +182,7 @@ private:
     StageTarget       *m_target;
     Doc               *m_doc;
     QGraphicsTextItem *m_label;
+    void refreshReadoutVisibility();
     StageMarkLabel    *m_readout = nullptr;
     std::function<QString(const QPointF &)> m_readoutText;
     bool               m_aimed = false;

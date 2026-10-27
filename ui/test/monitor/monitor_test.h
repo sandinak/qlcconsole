@@ -648,6 +648,7 @@ private slots:
      *  simply laid on a step -- must still be draggable in the editor that
      *  lists it. */
     void freePlacedFixtureIsDraggable();
+    void aStudioDragKeepsTheCornerAndTheGrab();
     /** Dragging the background pans the view, and a later resize must not
      *  silently recentre what was moved by hand. */
     void draggingBackgroundPansAndSurvivesResize();
@@ -843,6 +844,14 @@ private slots:
     /** Edit Plot's lock refuses a drag of a placed fixture or truss; off,
      *  the same drag moves them */
     void aLockedPlotRefusesADrag();
+    /** A drag on anything held still -- the plot locked, or its layer --
+     *  moves, hides, deletes and stores nothing, in plan or elevation: a
+     *  locked riser in a tight deck used to be snapped, pushed off its
+     *  neighbour and thrown decks away, and the move was saved (Q178) */
+    void aHeldObjectIsNeverMovedByADrag();
+    void theLayersTreeSelectsEveryRowOnThePlot();
+    void targetReadoutsStackAndALineShowsItsWhenSelected();
+    void alignAndDistributeUseCentresAndKeepHeight();
     /** A folder's position lock refuses moving a member, and a folder
      *  inside it is held by it too */
     void aLockedFolderHoldsItsMembersAndItsSubFolders();

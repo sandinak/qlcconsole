@@ -585,14 +585,22 @@ bool StructureStudioView::dragFixtureTo(quint32 fid, const QPointF &px)
         const QPointF ab = screenToPlane(px);
         const QVector3D cur = fixtureCentre(fid);
 
+        /* The drag places the CENTRE; the store keeps the plot's corner (see
+           freeCornerOffset()). Writing the centre there put the light half a
+           fixture off the pointer in Top, and in Front and Side the axis the
+           view can't see was re-read as a centre and stored as a corner on
+           every mouse move -- it crept by half its size each time. */
+        const QPointF half = freeCornerOffset(fid);
         double xMm = double(cur.x()) * 1000.0;
         double yMm = double(cur.y()) * 1000.0;
         if (m_plane == Top)        { xMm = ab.x() * 1000.0; yMm = ab.y() * 1000.0; }
         else if (m_plane == Front) { xMm = ab.x() * 1000.0; }
         else if (m_plane == Side)  { yMm = ab.x() * 1000.0; }
         else                       { return false; }        // Angled: no inverse
+        const float storedZ = props->fixturePosition(fid, 0, 0).z();
         props->setFixturePosition(fid, 0, 0,
-                                  QVector3D(float(xMm), float(yMm), 0.0f));
+                                  QVector3D(float(xMm - half.x() * 1000.0),
+                                            float(yMm - half.y() * 1000.0), storedZ));
 
         /* Height. Inside a step it is measured up from the platform's floor and
            clamped to its thickness; standing on the deck it is a lift above the
@@ -752,9 +760,25 @@ bool StructureStudioView::dragFixtureTo(quint32 fid, const QPointF &px)
     else if (m_plane == Side)  { w.setY(float(ab.x())); w.setZ(float(ab.y())); }
     else                       { return false; }            // Angled: no inverse
 
+    // w is where the CENTRE goes; the store keeps the corner (freeCornerOffset()).
+    const QPointF half = freeCornerOffset(fid);
     props->setFixturePosition(fid, 0, 0,
-                              QVector3D(w.x() * 1000.0f, w.y() * 1000.0f, w.z()));
+                              QVector3D(float((w.x() - half.x()) * 1000.0),
+                                        float((w.y() - half.y()) * 1000.0), w.z()));
     return true;
+}
+
+QPointF StructureStudioView::freeCornerOffset(quint32 fid) const
+{
+    /* A free or deck fixture's stored X/Y is the CORNER the 2D plot pins its
+       icon by; fixtureCentre() (RigHeads::fixtureCentre) adds half the width
+       and height to it. Whatever it adds, a drag has to take off again, so
+       measure it rather than repeat the rule. Metres. */
+    MonitorProperties *props = m_doc->monitorProperties();
+    const QVector3D stored = props->fixturePosition(fid, 0, 0);   // X/Y mm
+    const QVector3D c = fixtureCentre(fid);                       // metres
+    return QPointF(double(c.x()) - double(stored.x()) / 1000.0,
+                   double(c.y()) - double(stored.y()) / 1000.0);
 }
 
 bool StructureStudioView::dragBarTo(quint32 barId, const QPointF &px)
@@ -9797,6 +9821,14 @@ void StructureStudioView::mousePressEvent(QMouseEvent *e)
         }
         m_dragFid = hitTestFixture(e->pos());   // invalidId() if empty space
         m_dragged = false;
+        /* Where the fixture's centre was, on screen, at the press: a drag moves
+           it by the pointer's travel, keeping the spot you grabbed under the
+           pointer, rather than jumping the centre to it. */
+        if (m_dragFid != Fixture::invalidId())
+        {
+            m_dragPressPx = e->pos();
+            m_dragFidStartPx = w2s(fixtureCentre(m_dragFid));
+        }
 
         if (m_dragFid == Fixture::invalidId())
         {
@@ -10004,7 +10036,7 @@ void StructureStudioView::mouseMoveEvent(QMouseEvent *e)
     {
         if (!m_dragged)
             emit editAboutToStart();   // snapshot for undo before the first change
-        if (dragFixtureTo(m_dragFid, e->pos()))
+        if (dragFixtureTo(m_dragFid, m_dragFidStartPx + (QPointF(e->pos()) - m_dragPressPx)))
             m_dragged = true;
     }
     else if (m_dragBarId != UINT_MAX && !m_locked)

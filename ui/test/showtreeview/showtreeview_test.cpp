@@ -3758,6 +3758,62 @@ void ShowTreeView_Test::copyPasteAndHelp()
    cue; and adding without dragging -- Return / double-click in the Library
    acts on the tree's selection, ⌘F or / goes to the filter, Return there
    adds the first match. One undo step each; the hint says what Return does. */
+/* A split saved while the Workbench was docked in the Show Tree (four panes,
+   the hidden page's at 0) brought the page back at no width on the next
+   start. Such a state is dropped; and a split moved while docked is not
+   saved at all -- closing the Workbench puts the split back as it was. */
+void ShowTreeView_Test::aSplitSavedWhileDockedDoesNotHideThePage()
+{
+    // The user's own showtree/splitter2: 127 | 171 | 0 | 1162.
+    const QByteArray users = QByteArray::fromBase64("AAAA/wAAAAEAAAAEAAAAfwAAAKsAAAAAAAAEigH/////AQAAAAEA");
+    QSettings().setValue("showtree/splitter2", users);
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L");
+    const quint32 c1 = st->addCueNumbered(list, "1", "One");
+    {
+        ShowTreeView view(nullptr, m_doc);
+        view.resize(1400, 800);
+        view.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&view));
+        QSplitter *split = view.findChild<QSplitter *>("stSplitter");
+        QSplitter *page = view.findChild<QSplitter *>("stVSplitter");
+        QVERIFY(split != nullptr && page != nullptr);
+        QCOMPARE(split->count(), 3);
+        QVERIFY2(page->width() > 200, qPrintable(QString("the page came back %1 px wide").arg(page->width())));
+        QVERIFY2(!QSettings().contains("showtree/splitter2"), "the four-pane state was kept");
+
+        // Docked: moving the split saves nothing.
+        QVERIFY(view.openInWorkbench(c1));
+        QVERIFY(view.isWorkbenchDocked());
+        QCOMPARE(split->count(), 4);
+        emit split->splitterMoved(300, 1);
+        QVERIFY2(!QSettings().contains("showtree/splitter2"), "a split was saved with the Workbench docked");
+        QVERIFY(view.closeWorkbench());
+        QVERIFY(page->isVisible() && page->width() > 200);
+        // Back to the page: a move is saved, three panes, the page showing.
+        emit split->splitterMoved(300, 1);
+        const QByteArray saved = QSettings().value("showtree/splitter2").toByteArray();
+        QVERIFY(!saved.isEmpty());
+        QDataStream in(saved);
+        in.setVersion(QDataStream::Qt_5_0);
+        qint32 marker = 0, version = 0;
+        QList<int> sizes;
+        in >> marker >> version >> sizes;
+        QCOMPARE(sizes.size(), 3);
+        QVERIFY(sizes.at(2) > 0);
+    }
+    // A good three-pane state is still restored.
+    {
+        ShowTreeView view(nullptr, m_doc);
+        view.resize(1400, 800);
+        view.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&view));
+        QVERIFY(QSettings().contains("showtree/splitter2"));
+        QVERIFY(view.findChild<QSplitter *>("stVSplitter")->width() > 200);
+    }
+    QSettings().remove("showtree/splitter2");
+}
+
 void ShowTreeView_Test::libraryTreeEditorAndAddingWithoutDragging()
 {
     FixtureGroup *towers = group("Towers", 0, 2);

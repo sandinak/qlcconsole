@@ -99,6 +99,7 @@ private slots:
     void planViewOfALineAim();
     void copyPasteAndHelp();
     void libraryTreeEditorAndAddingWithoutDragging();
+    void aSplitSavedWhileDockedDoesNotHideThePage();
     void namedLayersShowWhatTheyHold();
     void editSeveralLayersAtOnce();
 

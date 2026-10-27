@@ -59,9 +59,24 @@ public:
         if (m_align & Qt::AlignRight)  x = -sz.width() - 3.0;
         if (m_align & Qt::AlignTop)    y = 3.0;          // below the anchor
         if (m_align & Qt::AlignBottom) y = -sz.height() - 3.0;
-        m_rect = QRectF(QPointF(x, y), sz);
+        m_base = QRectF(QPointF(x, y), sz);
+        m_rect = m_base.translated(0.0, m_stack);
         update();
     }
+
+    /** Shift the label down @p dy screen px (stacked under another), and its
+     *  box before any shift. */
+    void setStackOffset(qreal dy)
+    {
+        if (qFuzzyCompare(dy + 1.0, m_stack + 1.0))
+            return;
+        prepareGeometryChange();
+        m_stack = dy;
+        m_rect = m_base.translated(0.0, m_stack);
+        update();
+    }
+    qreal stackOffset() const { return m_stack; }
+    QRectF baseRect() const { return m_base; }
 
     QRectF boundingRect() const override { return m_rect; }
     void paint(QPainter *p, const QStyleOptionGraphicsItem *, QWidget *) override
@@ -80,6 +95,8 @@ private:
     Qt::Alignment m_align;
     QFont m_font;
     QRectF m_rect;
+    QRectF m_base;
+    qreal m_stack = 0.0;
 };
 
 /** @} */

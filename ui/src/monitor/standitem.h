@@ -54,6 +54,14 @@ public:
     void showLabel(bool visible);
 
     QRectF boundingRect() const override;
+    /** What the item IS on the stage, in item coordinates: its own outline,
+     *  without the padding, halos and labels boundingRect() adds for painting.
+     *  The rulers band this (MonitorGraphicsView::itemGeometryRect()). */
+    QRectF geometryRect() const
+    {
+        return m_elevation ? QRectF(-m_pxBaseR, -m_pxHeight, 2 * m_pxBaseR, m_pxHeight)
+                           : QRectF(-m_pxBaseR, -m_pxBaseR, 2 * m_pxBaseR, 2 * m_pxBaseR);
+    }
     void   paint(QPainter *painter, const QStyleOptionGraphicsItem *option,
                  QWidget *widget) override;
 

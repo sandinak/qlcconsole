@@ -87,6 +87,44 @@ void TargetItem::setPositionReadout(std::function<QString(const QPointF &)> text
         m_readout->setPos(0.0, kRadius);
     }
     m_readout->setText(m_readoutText(scenePos()));
+    refreshReadoutVisibility();
+}
+
+void TargetItem::refreshReadoutVisibility()
+{
+    /* A line target's readout says where its centre is, which is not where
+       the line is; next to a person or a mark it printed on top of theirs
+       ("SR 1\u2033" was Line 1's, an inch from the Announcer). Shown when
+       the line is the one selected (Q179). */
+    if (m_readout != nullptr)
+        m_readout->setVisible(!isLine() || isSelected());
+}
+
+void TargetItem::setReadoutStackOffset(qreal dy)
+{
+    if (m_readout != nullptr)
+        m_readout->setStackOffset(dy);
+}
+
+qreal TargetItem::readoutStackOffset() const
+{
+    return m_readout != nullptr ? m_readout->stackOffset() : 0.0;
+}
+
+QRectF TargetItem::readoutScreenRect() const
+{
+    // The label ignores the view's transform: its rect is in screen pixels.
+    return m_readout != nullptr ? m_readout->baseRect() : QRectF();
+}
+
+bool TargetItem::readoutShown() const
+{
+    return m_readout != nullptr && m_readout->isVisible() && !m_readout->text().isEmpty();
+}
+
+QPointF TargetItem::readoutAnchorScene() const
+{
+    return m_readout != nullptr ? m_readout->scenePos() : scenePos();
 }
 
 void TargetItem::refreshPositionReadout()
@@ -196,6 +234,7 @@ void TargetItem::setLineGeometry(const QPolygonF &curve, const QVector<double> &
     m_curve = curve;
     m_curveFractions = fractions;
     m_handles = handles;
+    refreshReadoutVisibility();
     update();
 }
 
@@ -277,6 +316,20 @@ QPainterPath TargetItem::shape() const
     if (m_label != nullptr)
         path.addRect(m_label->mapRectToParent(m_label->boundingRect()));
     return path;
+}
+
+QRectF TargetItem::geometryRect() const
+{
+    QRectF rect(-kRadius, -kRadius, 2 * kRadius, 2 * kRadius);
+    const QPainterPath fig = figurePath();
+    if (fig.isEmpty() == false)
+        rect |= fig.boundingRect();
+    const QRectF foot = footprintRect();
+    if (foot.isValid())
+        rect |= foot;
+    if (isLine())
+        rect |= m_curve.boundingRect();
+    return rect;
 }
 
 QRectF TargetItem::boundingRect() const
@@ -480,6 +533,8 @@ QVariant TargetItem::itemChange(GraphicsItemChange change, const QVariant &value
     // Moved -- dragged, or put somewhere new: say where it is now.
     if (change == ItemPositionHasChanged && m_readout != nullptr && m_readoutText)
         m_readout->setText(m_readoutText(value.toPointF()));
+    if (change == ItemSelectedHasChanged)
+        refreshReadoutVisibility();
     return QGraphicsItem::itemChange(change, value);
 }
 

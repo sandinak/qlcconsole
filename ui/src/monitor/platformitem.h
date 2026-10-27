@@ -62,6 +62,10 @@ public:
 
     // QGraphicsItem interface
     QRectF boundingRect() const override;
+    /** What the item IS on the stage, in item coordinates: its own outline,
+     *  without the padding, halos and labels boundingRect() adds for painting.
+     *  The rulers band this (MonitorGraphicsView::itemGeometryRect()). */
+    QRectF geometryRect() const { return QRectF(0, 0, m_pxW, m_pxD); }
     void   paint(QPainter *painter, const QStyleOptionGraphicsItem *option,
                  QWidget *widget) override;
     QVariant itemChange(GraphicsItemChange change, const QVariant &value) override;
