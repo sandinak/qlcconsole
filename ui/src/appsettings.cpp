@@ -241,9 +241,11 @@ AppSettings::AppSettings(App *app, QWidget *parent)
 
     // Info label
     QLabel *infoLabel = new QLabel(
-        tr("Autosave creates a backup file (.qxw.autosave) that can be\n"
-           "recovered if the application closes unexpectedly."),
+        tr("Autosave keeps a recovery copy: Show.qlcc.autosave (or Show.qxw.autosave)\n"
+           "beside a saved show, untitled.qxw.autosave in the app's user folder for\n"
+           "a show not saved yet. It can be recovered if the application closes unexpectedly."),
         autosaveGroup);
+    infoLabel->setObjectName(QStringLiteral("autosaveInfo"));
     infoLabel->setStyleSheet("color: gray; font-size: 10px;");
     autosaveLayout->addWidget(infoLabel);
 
