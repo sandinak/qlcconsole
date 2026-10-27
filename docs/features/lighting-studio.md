@@ -195,7 +195,9 @@ It's on by default and saved with the show.
 Two targets close together don't print their readouts on top of each other:
 the second one sits just under the first. A **line target's** readout (where
 the line's centre is) shows only while the line is selected, so it never
-covers the readout of a person or mark standing on the line.
+covers the readout of a person or mark standing on the line. A line target
+marks its centre with a small diamond on the curve, not a point target's
+ring and crosshair (see [Line targets](stage-targets.md#line-targets)).
 
 The lines are drawn in the **Top** view, over the rig so they're never
 hidden. The **Rig Overview** draws them on its floor, from above and at 45°,
@@ -1145,7 +1147,30 @@ lasers:
   prism-rotation channel (or a Prism capability with a speed) turns the field.
 
 Both take their colour and level from the fixture's live output, like any
-other light, and follow a mover's pan and tilt.
+other light, and follow a mover's pan and tilt. A laser shows only when it
+is lit: a level on its Intensity channel **and** some colour (with red,
+green and blue all at 0 it puts out nothing).
+
+- **On the 2D plot too.** In the Top view, **Show ▸ Laser & star output**
+  (on to start with, remembered) draws every lit laser's beams as pencil
+  lines out to where they land, and every star laser's stars as dots where
+  they land — on the floor, a deck, or along the cyc's line — in the live
+  colour, following the DMX about 15 times a second and turning with a
+  prism rotation. Not just the selected ones: every lit one.
+- **Which way it throws.** A laser that can't aim itself throws the same
+  way in 2D and 3D: its Pan/Tilt aim if set, else out of the face it was
+  put on (faced **Back** on a truss, it throws upstage — at the cyc, not
+  into a pool under the truss), else out from its riser or deck, else down
+  off a truss when hung, up when standing. The light footprint follows the
+  same rule.
+- **An older definition.** If the show carries its own copy of the
+  fixture's definition and this computer has a different one, the show's
+  is used (nothing switches by itself) — and the plot's tooltip says
+  *Definition: the show's copy — this computer has a newer one* (or *a
+  different one*), and the
+  line at the top says so once as the show opens. **Review… ▸ Use This
+  Computer's** switches (see
+  [Troubleshooting](troubleshooting.md#files-and-fixtures)).
 
 - **Silk flame** — a fan blowing a sheet of silk up over its own orange and
   yellow lights, switched by a relay: when its channel is past half, tongues

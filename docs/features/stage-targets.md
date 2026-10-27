@@ -89,15 +89,19 @@ choosing **Line** as its Subject in the Edit Target dialog.
 | ⌘Z | Undoes the last of any of these |
 
 With **Snap** on, a dragged handle and a dragged target land on the grid.
-A line is drawn in the colour set in Edit Target; locked (its own lock,
-from its right-click menu, or its layer's) it gets a red ring and its
+A line is drawn in the colour set in Edit Target, with a small hollow
+**diamond** on the curve at its centre (where every light goes at spread 0)
+— no ring or crosshair; when a handle sits on the centre the diamond steps
+aside, and a handle always grabs before the centre. Selected, the line
+glows along its length; locked (its own lock, from its right-click menu,
+or its layer's) it gets a red dashed outline along the curve and its
 handles don't drag -- unlock it to shape it. A target is shown, hidden and
 locked with its layer like everything else, and a new one never lands on
 a locked layer (see [Locks](lighting-studio.md#locks)).
 
 From above, a handle keeps its height above whatever is under it; the
 **Front** and **Side** views drag it up and down — so between the views a
-line can curve in any direction. Double-click the centre crosshair (or
+line can curve in any direction. Double-click the centre diamond (or
 right-click > Edit) for the target's dialog.
 
 **Which light goes where:** by where the lights hang, measured along the

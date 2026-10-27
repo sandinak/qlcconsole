@@ -208,6 +208,16 @@ show is using its own copy, so nothing has changed under the rig.
 work in its place; pick **Use This Computer's**, **Keep the Show's** or
 **Install the Show's** for each.
 
+**A fixture looks wrong or shows nothing after its definition was
+updated** (a laser with no stars, a bar with the wrong heads). The show
+still uses the copy of the definition it carries, not the one you just
+fixed on this computer: a show never switches by itself. The plot's
+tooltip on that fixture says *Definition: the show's copy — this computer
+has a newer one* (or *a different one*), and the line at the top said so
+when the show opened.
+Footer ▸ **Review…** ▸ select it ▸ **Use This Computer's**, then save: the
+show then carries the new copy.
+
 ## Finding things
 
 **A tab is missing.** The show's workspace view hides it: **View ▸
