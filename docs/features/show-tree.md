@@ -170,8 +170,10 @@ the tree and the Workbench follows it.
   in too — and every edit shows at once; the selected layer's fixtures are
   highlighted on the 2D view, and clicking a fixture there selects the
   layer that lights it. **Solo** plays only the selected layer. **Stop**
-  holds the preview, **Play** brings it back. In Operate nothing previews,
-  as everywhere in the tree.
+  holds the preview, **Play** brings it back. A GO holds it too, and while
+  the list runs it says **■ Held** until you press **Play** (see
+  [Seeing it on the rig](#seeing-it-on-the-rig)). In Operate nothing
+  previews, as everywhere in the tree.
 - **Undo.** Every edit is one step of the tree's, on the one history:
   **⌘Z** in the Show Tree takes it back.
 - **↩ Show Tree** puts the page back, with the cue — and the layer the
@@ -1247,11 +1249,24 @@ under you.
 - Selecting another cue moves the preview there. A layer both cues share
   keeps running, with no re-fade.
 - Selecting the list or nothing, or leaving the tab, stops the preview.
-- This holds **also while a cue list is running for real**, its own or
-  another (*"▶ On the rig: 1.0.1 Verse, over Full Show running"*). The cue
-  you are on takes precedence on every channel it sets, so a dimmer you edit
-  down shows even over a running cue at full. The running list keeps going
-  underneath.
+- **GO holds the preview.** GO, Back or Sub GO — from the Run tab, ⌘↩,
+  the Control menu, OSC, MSC, the Virtual Console or a controller button
+  bound to step a list — stops the preview *before* the cue plays, so
+  only the run's values reach the stage. From the console the line at the
+  top says *"Stopped the Show Tree preview so GO plays alone — Play brings
+  it back"*; from OSC, MSC and the VC it happens without a word. The
+  Workbench (in Build or docked here, Solo too), the Effect designer and
+  the editors' Test plays hold the same way. Simple Desk, the Virtual
+  Console, Focus and Refine and the programmer's flash are not previews:
+  GO leaves them running.
+- **While a list runs, selecting a cue stays off stage.** The top right
+  says *"■ Held — Full Show running. Play to preview 1.0.1 Verse over
+  it."* **Play** (beside it, or the Workbench's) previews over the run
+  until the next GO: the cue you are on takes precedence on every channel
+  it sets, so a dimmer you edit down shows even over a running cue at
+  full (*"▶ On the rig: 1.0.1 Verse, over Full Show running"*). The
+  running list keeps going underneath. Once no list runs, selecting a cue
+  plays it again.
 - **What you see is what GO plays.** The preview puts out what the cue puts
   out when it is played — the same values on every channel, also where
   layers overlap and in a cue that mixes (its own layers mix with each
@@ -1849,6 +1864,13 @@ Console widget is the same runner on a VC page.
 - **One state everywhere.** The Run tab, every Cue Runner widget, the
   footer, the keys and QLab / OSC / MSC all drive the same list: what one
   does, all show.
+- **GO plays alone.** GO, Back and Sub GO hold every Design preview first
+  (the Show Tree's, the Workbench's, Solo, the editors' Test plays), so
+  only the run reaches the stage; **Play** brings a preview back over the
+  run (see [Seeing it on the rig](#seeing-it-on-the-rig)). A controller's
+  A and B don't step the list: outside the focus tools they do nothing
+  unless you bind them in its profile, and then a Show Tree list moves only
+  as a GO or Back.
 
 **The Cue Runner VC widget.** Virtual Console → Add → **New Cue Runner**.
 Its properties (double-click in Design) choose what it **plays** (the
@@ -2027,8 +2049,8 @@ and *MIB · n* counts the lights a list set **On** is moving.
 - **Convert to tracking** leaves cue looks alone (taking one out could
   change which value wins where layers overlap).
 
-- **Effects in the cue don't take precedence in the Design preview.** The
-  cue's looks win over a running list, but an EFX, RGB Matrix or other
+- **Effects in the cue don't take precedence in the Design preview.** Played
+  over a running list (Play), the cue's looks win, but an EFX, RGB Matrix or other
   function played as it is mixes with what runs, as it normally would.
 - **Gobo names ignore numbers** in the singular/plural step. So "Gobo 3
   Shake" can find a wheel's only "Gobo 2 Shake" (with several, it is

@@ -238,6 +238,12 @@ signals:
 protected:
     void showEvent(QShowEvent *ev) override;
     void hideEvent(QHideEvent *ev) override;
+public:
+    /** RC8, "GO holds previews" (ShowTreeController::stageTakenForRun):
+     *  what previews here stops and holds until Play; says so in
+     *  @a held. Public for the tests. */
+    void holdForRun(QStringList *held);
+protected:
     /** Esc: backOut(). */
     void keyPressEvent(QKeyEvent *ev) override;
 
@@ -386,6 +392,7 @@ private:
     quint32 m_operateFunction = Function::invalidId();
     quint32 m_trialScene = Function::invalidId();
     bool m_previewHeld = false;              //!< Stop pressed: don't replay until Play / a load
+    bool m_heldByRun = false;                //!< RC8: a GO held the preview (Play brings it back)
     QList<quint32> m_selectedFixtures;
     quint32 m_selectedFixturesScene = UINT_MAX;
     QList<quint32> m_previewMembers;         //!< a collection's layers as last played

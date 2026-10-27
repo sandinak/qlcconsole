@@ -32,6 +32,9 @@
 #include "fixture.h"
 #include "qlcfile.h"
 #include "doc.h"
+#include "monitorfixtureitem.h"
+#include <QLabel>
+#include <QPushButton>
 #define private public
 #define protected public
 #include "app.h"
@@ -288,6 +291,68 @@ void ShowDifferences_Test::theAppCarriesThemInAQlccOnly()
 
     app->clearDocument();
     QVERIFY(entry("embedded.differ").key.isEmpty());
+    delete app;
+    restoreHome(m_realHome, m_realProfile);
+}
+
+void ShowDifferences_Test::anOlderEmbeddedDefinitionIsSaidOnThePlot()
+{
+    QTemporaryDir root;
+    setHome(root.filePath("A"));
+    write(QLCFixtureDefCache::userDefinitionDirectory().absoluteFilePath("Test-Maker-Bar.qxf"), definition("A"));
+    App *app = new App();
+    app->init();
+    Doc *doc = app->doc();
+    QLCFixtureDef *def = doc->fixtureDefCache()->fixtureDef("Test Maker", "Bar");
+    QVERIFY(def != nullptr);
+    Fixture *fx = new Fixture(doc);
+    fx->setName("Bar 1");
+    fx->setUniverse(0);
+    fx->setAddress(0);
+    fx->setFixtureDefinition(def, def->mode("2ch"));
+    QVERIFY(doc->addFixture(fx));
+    const QString qlcc = root.filePath("show.qlcc");
+    QCOMPARE(app->saveXML(qlcc), QFile::NoError);
+    {
+        // The same as this computer's: nothing to say.
+        MonitorFixtureItem same(doc, fx->id());
+        QVERIFY(!same.baseToolTip().contains("Definition:"));
+        QVERIFY(!app->noticeDifferingDefinitions());
+    }
+
+    // This computer's copy is edited (newer); the show, opened again, keeps
+    // its own -- and says so, on the plot and once as it opens.
+    write(QLCFixtureDefCache::userDefinitionDirectory().absoluteFilePath("Test-Maker-Bar.qxf"), definition("A, edited"));
+    app->clearDocument();
+    app->hideViewNotice();
+    QCOMPARE(app->loadXML(qlcc), QFile::NoError);
+    QCOMPARE(doc->fixtures().size(), 1);
+    Fixture *loaded = doc->fixtures().first();
+    QVERIFY(loaded->fixtureDef()->definitionSourceFile().startsWith(doc->showEmbedding()->workingDirectory()));
+    QVERIFY(!app->m_viewNotice->isHidden());
+    QVERIFY2(app->m_viewNoticeText->text().contains("use this show's own copy of Test Maker Bar"),
+             qPrintable(app->m_viewNoticeText->text()));
+    QCOMPARE(app->m_viewNoticeButton->text(), QString("Review…"));
+    {
+        MonitorFixtureItem item(doc, loaded->id());
+        const QString tip = item.baseToolTip();
+        // "a newer one" when this computer's file is known to be newer,
+        // else "a different one".
+        QVERIFY2(tip.contains("Definition: the show's copy — this computer has a ")
+                 && tip.contains("Review… ▸ Use This Computer's to switch."), qPrintable(tip));
+    }
+
+    // Use This Computer's: both gone.
+    ShowDifferencesDialog dlg(doc);
+    dlg.useComputersForAllCompatible();
+    QVERIFY(dlg.keys().isEmpty());
+    {
+        MonitorFixtureItem item(doc, doc->fixtures().first()->id());
+        QVERIFY(!item.baseToolTip().contains("Definition:"));
+    }
+    QVERIFY(!app->noticeDifferingDefinitions());
+
+    app->clearDocument();
     delete app;
     restoreHome(m_realHome, m_realProfile);
 }

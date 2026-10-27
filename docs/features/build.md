@@ -261,7 +261,11 @@ puts it back. See
 all its layers — and what you edit plays as you edit it. A layer added or
 taken out of a playing collection is played at once. **Stop** in the header
 holds it; **Play** (or loading something) plays again. Leaving the tab stops
-it. In Operate mode what is loaded runs as the show output, as before.
+it. A **GO** (the Run tab, ⌘↩, OSC, MSC, the Virtual Console) holds it too,
+so the show plays alone: the header says **■ Held — GO took the stage**,
+loading something else keeps it off while the show runs, and **Play**
+previews over the show. In Operate mode what is loaded runs as the show
+output, as before.
 
 **Undo.** Every Workbench edit — a layer added, removed or reordered, a new
 EFX or RGB Matrix (Undo takes the new function away too; Redo brings it

@@ -20,6 +20,9 @@
 #include <QContextMenuEvent>
 #include <QApplication>
 #include <QTimer>
+#include <QSettings>
+#include <QDateTime>
+#include <QGraphicsPathItem>
 #include <QDebug>
 #include <QWheelEvent>
 #include <QMouseEvent>
@@ -239,6 +242,18 @@ MonitorGraphicsView::MonitorGraphicsView(Doc *doc, QWidget *parent)
         if (!m_itemsRebuilding)    // the scene says so while items are torn down
             stackTargetReadouts();
     });
+    /* RC8: what lit lasers and star lasers throw, on the Top plot: about 15
+       times a second while any could be lit (rebuildEmissionOverlay()). */
+    m_emissionVisible = QSettings().value(QStringLiteral("monitor/laserOutput"), true).toBool();
+    m_emissionTimer = new QTimer(this);
+    m_emissionTimer->setInterval(66);
+    connect(m_emissionTimer, &QTimer::timeout, this, &MonitorGraphicsView::rebuildEmissionOverlay);
+    {
+        auto stale = [this]() { m_emissiveStale = true; QTimer::singleShot(0, this, &MonitorGraphicsView::rebuildEmissionOverlay); };
+        connect(m_doc, &Doc::fixtureAdded, this, stale);
+        connect(m_doc, &Doc::fixtureRemoved, this, stale);
+        connect(m_doc, &Doc::fixtureChanged, this, stale);
+    }
     connect(m_scene, &QGraphicsScene::selectionChanged, this, [this]() {
         if (m_settingRevealSelection)
             return;
@@ -726,6 +741,8 @@ void MonitorGraphicsView::showEvent(QShowEvent *event)
     QGraphicsView::showEvent(event);
     // paintEvent() does the real work; this just guarantees one repaint.
     update();
+    // The lasers' output follows again (it rests while the plot is hidden).
+    QTimer::singleShot(0, this, &MonitorGraphicsView::rebuildEmissionOverlay);
 }
 
 void MonitorGraphicsView::paintEvent(QPaintEvent *event)
@@ -3751,6 +3768,7 @@ void MonitorGraphicsView::setViewPOV(ViewPOV pov)
     updateGrid();
     refreshAllItems();
     refreshItemLayerState();
+    rebuildEmissionOverlay();
     emit rulersChanged();
 }
 
@@ -9999,7 +10017,6 @@ QPolygonF MonitorGraphicsView::fixtureProjection(quint32 fid) const
         return out;
 
     const FixtureVisualTraits traits = classifyFixture(fx);
-    const FixtureRigProps rp = props->fixtureRigProps(fid);
     const QVector3D apex = fixtureWorldCentre(m_doc, fid);
 
     /* Where it points.
@@ -10046,8 +10063,11 @@ QPolygonF MonitorGraphicsView::fixtureProjection(quint32 fid) const
             break;
         }
     }
-    if (!aimed && (!fixtureAimDirection(fx, rp, dir) || dir.isNull())
-            && !rp.fixedAimDirection(dir))          // a fixed light aimed by pan/tilt (Q100)
+    /* Not aimed by a scene: where it throws by itself -- the rule the 3D
+       views use (RigHeads::fixedThrow): a fixed light's pan and tilt (Q100),
+       its chosen face (a laser faced Back throws upstage, not into a pool on
+       the deck under its truss), its riser or deck; down off a truss. */
+    if (!aimed && !throwDirection(fid, dir))
         dir = QVector3D(0.0f, 0.0f, -1.0f);
     if (dir.z() > -0.02f)
         return out;                       // level or upward: nothing lands
@@ -10089,6 +10109,240 @@ QPolygonF MonitorGraphicsView::fixtureProjection(quint32 fid) const
         out << realPositionToPixels(double(at.x()) * 1000.0, double(at.y()) * 1000.0);
     }
     return out;
+}
+
+bool MonitorGraphicsView::throwDirection(quint32 fid, QVector3D &dir) const
+{
+    Fixture *fx = m_doc->fixture(fid);
+    MonitorProperties *props = m_doc->monitorProperties();
+    if (fx == nullptr || props == nullptr)
+        return false;
+    const FixtureRigProps rp = props->fixtureRigProps(fid);
+    const FixtureVisualTraits traits = classifyFixture(fx);
+    if (traits.kind == FixtureSilhouette::Mover && fixtureAimDirection(fx, rp, dir) && !dir.isNull())
+        return true;
+    return RigHeads::fixedThrow(m_doc, fid, traits.headCount,
+                                traits.kind == FixtureSilhouette::Mover, dir);
+}
+
+void MonitorGraphicsView::setEmissionOverlayVisible(bool on)
+{
+    if (m_emissionVisible == on)
+        return;
+    m_emissionVisible = on;
+    QSettings().setValue(QStringLiteral("monitor/laserOutput"), on);
+    rebuildEmissionOverlay();
+}
+
+void MonitorGraphicsView::rebuildEmissionOverlay()
+{
+    MonitorProperties *props = m_doc ? m_doc->monitorProperties() : nullptr;
+    if (m_emissiveStale && m_doc != nullptr)
+    {
+        m_emissiveFixtures.clear();
+        foreach (Fixture *fx, m_doc->fixtures())
+        {
+            const FixtureVisualTraits t = classifyFixture(fx);
+            if (t.stars || t.laser)
+                m_emissiveFixtures << fx->id();
+        }
+        m_emissiveStale = false;
+    }
+    const bool wanted = props != nullptr && m_emissionVisible && m_pov == PovTop
+                        && !m_emissiveFixtures.isEmpty() && m_cellPixels > 0;
+
+    /* What it would draw, said once: unchanged (a still laser at the same
+       level), nothing is torn down and built again. */
+    struct Out { quint32 fid; QColor colour; double level; QVector3D apex, dir; double half;
+                 bool stars; int beams; double turn; };
+    QList<Out> outs;
+    QString sig;
+    bool turning = false;
+    if (wanted)
+    {
+        foreach (quint32 fid, m_emissiveFixtures)
+        {
+            Fixture *fx = m_doc->fixture(fid);
+            if (fx == nullptr || !fixtureItemShouldBeVisible(fid))
+                continue;
+            const FixtureVisualTraits traits = classifyFixture(fx);
+            const QByteArray vals = fx->channelValues();
+            QColor live(Qt::white);
+            uchar dim = 0;
+            QVector3D dir;
+            /* Lit: a level, and some colour -- "no black light": with
+               red, green and blue all at 0 the level is 0 too. */
+            if (!fixtureLiveState(fx, vals, live, dim) || dim <= 2 || !throwDirection(fid, dir))
+                continue;
+            const double declared = fixtureBeamAngle(fx, vals, traits);
+            Out o;
+            o.fid = fid;
+            o.colour = live;
+            o.level = dim / 255.0;
+            o.apex = fixtureWorldCentre(m_doc, fid);
+            o.dir = dir.normalized();
+            o.stars = traits.stars;
+            o.beams = qMax(1, traits.beamsPerHead);
+            const double deg = traits.stars ? ((declared > 0.0 && declared < 170.0) ? declared : 100.0)
+                                             : ((declared > 0.0 && declared < 170.0) ? declared : 40.0);
+            o.half = qDegreesToRadians(deg / 2.0);
+            const double rate = starTurnRate(fx, vals);
+            if (rate != 0.0)
+                turning = true;
+            o.turn = qDegreesToRadians(rate * (QDateTime::currentMSecsSinceEpoch() % 3600000) / 1000.0);
+            outs << o;
+            sig += QStringLiteral("%1:%2:%3:%4,%5,%6:%7,%8,%9;")
+                       .arg(fid).arg(live.name()).arg(dim)
+                       .arg(double(o.apex.x())).arg(double(o.apex.y())).arg(double(o.apex.z()))
+                       .arg(double(o.dir.x())).arg(double(o.dir.y())).arg(double(o.dir.z()));
+        }
+    }
+
+    // About 15 times a second while any of them could be lit and showing.
+    if (wanted && isVisible())
+    {
+        if (!m_emissionTimer->isActive())
+            m_emissionTimer->start();
+    }
+    else
+        m_emissionTimer->stop();
+
+    if (!turning && sig == m_emissionSignature && (sig.isEmpty() == m_emissionItems.isEmpty()))
+        return;
+    m_emissionSignature = sig;
+    foreach (QGraphicsPathItem *pi, m_emissionItems)
+    {
+        m_scene->removeItem(pi);
+        delete pi;
+    }
+    m_emissionItems.clear();
+    m_emissionLandings.clear();
+    m_emissionColours.clear();
+    if (outs.isEmpty())
+        return;
+
+    /* Where a ray lands: the first of the floor or a deck (marched: the
+       stage is a height field of platforms) and the scenery standing in its
+       way (a cyc is how a sky laser is seen). Nothing within 24 m: none. */
+    auto land = [&](const QVector3D &apex, const QVector3D &ray, QVector3D &at) {
+        static const double MAX_THROW = 24.0;
+        double best = -1.0;
+        foreach (Scenery *sc, props->sceneries())
+        {
+            if (sc == nullptr || !props->layer(sc->layerId()).visible)
+                continue;
+            double t = 0.0;
+            if (sc->rayHit(apex, ray, t, best > 0.0 ? best : MAX_THROW) && t > 0.05)
+                best = t;
+        }
+        const double reach = best > 0.0 ? best : MAX_THROW;
+        if (ray.z() < -1e-4f)
+        {
+            // Never past the floor; decks on the way, in 10 cm steps.
+            const double floorT = -double(apex.z()) / double(ray.z());
+            const double stop = qMin(reach, floorT);
+            for (double t = 0.05; t < stop; t += 0.1)
+            {
+                const QVector3D p = apex + ray * float(t);
+                if (double(p.z()) <= double(props->platformHeightAt(p.x(), p.y())))
+                {
+                    best = t;
+                    break;
+                }
+            }
+            if (best < 0.0 || floorT < best)
+                best = (floorT > 0.05 && floorT <= MAX_THROW) ? floorT : best;
+        }
+        if (best <= 0.0)
+            return false;
+        at = apex + ray * float(best);
+        return true;
+    };
+
+    foreach (const Out &o, outs)
+    {
+        QVector3D u = QVector3D::crossProduct(o.dir, QVector3D(0, 0, 1));
+        if (u.length() < 1e-3f)
+            u = QVector3D(1, 0, 0);
+        u.normalize();
+        const QVector3D v = QVector3D::crossProduct(o.dir, u).normalized();
+        QVector<QVector3D> rays;
+        if (o.stars)
+        {
+            // The rig view's sky: a sunflower spiral, nudged by a hash of
+            // each index, the same every frame (drawStarField()).
+            static const int N = 120;
+            const double spread = qTan(qMin(o.half, qDegreesToRadians(80.0)));
+            for (int i = 0; i < N; ++i)
+            {
+                double j = qSin((i + 1) * 12.9898 + o.fid * 78.233) * 43758.5453;
+                j -= qFloor(j);
+                const double r = spread * qSqrt((i + 0.5) / N) * (0.85 + 0.3 * j);
+                const double a = i * 2.399963 + o.turn + j * 0.5;
+                rays << (o.dir + u * float(r * qCos(a)) + v * float(r * qSin(a))).normalized();
+            }
+        }
+        else
+        {
+            // A laser: its beams fanned across its beam angle, as in 3D.
+            for (int b = 0; b < o.beams; ++b)
+            {
+                const double a = (o.beams > 1) ? 2.0 * o.half * ((b / double(o.beams - 1)) - 0.5) : 0.0;
+                rays << (o.dir * float(qCos(a)) + u * float(qSin(a))).normalized();
+            }
+        }
+
+        const QPointF head = realPositionToPixels(double(o.apex.x()) * 1000.0, double(o.apex.y()) * 1000.0);
+        QPainterPath dots, lines;
+        QVector<QPointF> landed;
+        const double dotR = qMax(1.2, 0.03 * m_cellPixels * 1000.0 / m_unitValue);
+        foreach (const QVector3D &ray, rays)
+        {
+            QVector3D at;
+            if (!land(o.apex, ray, at))
+                continue;
+            landed << QPointF(double(at.x()), double(at.y()));
+            const QPointF px = realPositionToPixels(double(at.x()) * 1000.0, double(at.y()) * 1000.0);
+            dots.addEllipse(px, dotR, dotR);
+            if (!o.stars)
+            {
+                lines.moveTo(head);
+                lines.lineTo(px);
+            }
+        }
+        if (landed.isEmpty())
+            continue;
+        m_emissionLandings.insert(o.fid, landed);
+        const QColor hsv = o.colour.toHsv();
+        QColor c = QColor::fromHsvF(qMax(0.0, double(hsv.hsvHueF())), hsv.hsvSaturationF() * 0.9,
+                                    qMin(1.0, 0.45 + 0.55 * o.level));
+        c.setAlphaF(qBound(0.35, 0.35 + 0.65 * o.level, 1.0));
+        m_emissionColours.insert(o.fid, c);
+        Fixture *fx = m_doc->fixture(o.fid);
+        const QString tip = fx == nullptr ? QString()
+                          : o.stars ? tr("%1: where its stars land").arg(fx->name())
+                                    : tr("%1: where its beams land").arg(fx->name());
+        if (!lines.isEmpty())
+        {
+            QGraphicsPathItem *li = new QGraphicsPathItem(lines);
+            QPen pen(c, 1.2);
+            pen.setCosmetic(true);
+            li->setPen(pen);
+            li->setZValue(1.7);
+            li->setAcceptedMouseButtons(Qt::NoButton);
+            li->setToolTip(tip);
+            m_scene->addItem(li);
+            m_emissionItems << li;
+        }
+        QGraphicsPathItem *di = new QGraphicsPathItem(dots);
+        di->setPen(Qt::NoPen);
+        di->setBrush(c);
+        di->setZValue(1.7);
+        di->setAcceptedMouseButtons(Qt::NoButton);
+        di->setToolTip(tip);
+        m_scene->addItem(di);
+        m_emissionItems << di;
+    }
 }
 
 void MonitorGraphicsView::rebuildProjectionOverlay()

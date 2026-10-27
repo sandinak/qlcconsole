@@ -4607,38 +4607,6 @@ void StructureStudioView::setBeams(bool on)
     update();
 }
 
-namespace
-{
-/* How fast a star laser's pattern turns, degrees a second: its prism
-   rotation channel ("Prisim Rotation", PrismRotationSlowFast), or any prism
-   rotation capability. 0 = still. */
-double starTurnRate(const Fixture *fx, const QByteArray &vals)
-{
-    const QLCFixtureMode *mode = (fx != nullptr) ? fx->fixtureMode() : nullptr;
-    if (mode == nullptr)
-        return 0.0;
-    const int count = qMin(mode->channels().size(), vals.size());
-    for (int c = 0; c < count; ++c)
-    {
-        const QLCChannel *ch = mode->channel(quint32(c));
-        if (ch == nullptr)
-            continue;
-        const int v = uchar(vals.at(c));
-        if (ch->preset() == QLCChannel::PrismRotationSlowFast)
-            return v > 0 ? 10.0 + 170.0 * v / 255.0 : 0.0;
-        if (ch->preset() == QLCChannel::PrismRotationFastSlow)
-            return v > 0 ? 10.0 + 170.0 * (255 - v) / 255.0 : 0.0;
-        if (ch->group() == QLCChannel::Prism)
-        {
-            const double s = BeamOptics::rotationSpeed(ch->searchCapability(uchar(v)), v);
-            if (s != 0.0)
-                return s;
-        }
-    }
-    return 0.0;
-}
-}
-
 void StructureStudioView::drawLaserBeam(QPainter &p, const QVector3D &apex, const QVector3D &dir,
                                         const QColor &colour, double level) const
 {
@@ -7045,62 +7013,11 @@ bool StructureStudioView::emitDirection(Fixture *fx, const FixtureRigProps &rp,
         return false;
     if (traits.kind == FixtureSilhouette::Mover && fixtureAimDirection(fx, rp, dir))
         return true;
-    if (rp.placement == FixtureRigProps::Inside)
-        return false;
-    // A fixed light aimed by pan and tilt (Q100): where it was pointed.
-    if (traits.kind != FixtureSilhouette::Mover && rp.fixedAimDirection(dir))
-        return true;
-
-    /* Out of its FACE. A bar's light leaves the face its pixels are on -- the
-       FART bars hang vertically off their truss facing the audience, and
-       "hung means pointing down" sent their light to the floor behind the
-       truss ("the effect on these bars appears to be going backwards .. are
-       the bars set facing downstage?"). Likewise anything whose face was
-       chosen. Tilt and flip included (fixtureFrame()). */
-    if (traits.kind != FixtureSilhouette::Mover && (traits.headCount > 1 || rp.studioFaceChosen))
-    {
-        QVector3D L, N, H;
-        fixtureFrame(rp, L, N, H);
-        if (N.lengthSquared() > 1e-6f)
-        {
-            dir = N.normalized();
-            return true;
-        }
-    }
-
-    MonitorProperties *props = m_doc->monitorProperties();
-    QVector3D hostCentre;
-    bool haveHost = false;
-
-    const quint32 plId = rp.onRiser() ? rp.riserPlatformId
-                       : rp.onDeck()  ? rp.deckPlatformId
-                                      : FixtureRigProps::invalidPlatformId();
-    if (StagePlatform *host = props->platform(plId))
-    {
-        const float b0 = props->platformBaseZ(plId);
-        hostCentre = QVector3D(host->originX() + host->width() * 0.5f,
-                               host->originY() + host->depth() * 0.5f,
-                               b0 + host->height() * 0.5f);
-        haveHost = true;
-    }
-    else if (rp.trussId != Truss::invalidId())
-    {
-        /* A truss runs along its length, so "out" across it is meaningless --
-           but a hung fixture points DOWN and a floor-mounted one points up,
-           which is the part that matters. */
-        dir = (rp.mountingType == Truss::TopHung) ? QVector3D(0.0f, 0.0f, -1.0f)
-                                                  : QVector3D(0.0f, 0.0f, 1.0f);
-        return true;
-    }
-
-    if (haveHost == false)
-        return false;
-
-    dir = fixtureCentre(fx->id()) - hostCentre;
-    if (dir.length() < 1e-4f)
-        return false;
-    dir.normalize();
-    return true;
+    /* Anything that does not aim itself: the one rule the 2D plot's
+       footprint and star field use too (RigHeads::fixedThrow, RC8) -- out
+       of its face, its riser or deck; down off a truss. */
+    return RigHeads::fixedThrow(m_doc, fx->id(), traits.headCount,
+                                traits.kind == FixtureSilhouette::Mover, dir);
 }
 
 /* How much of a fixture's OUTPUT reaches the camera, 0..1.

@@ -147,6 +147,11 @@ ShowTreeController::ShowTreeController(Doc *doc)
             this, &ShowTreeController::slotTimerFunctionStarted, Qt::QueuedConnection);
     connect(m_doc->masterTimer(), &MasterTimer::functionStopped,
             this, &ShowTreeController::slotTimerFunctionStopped, Qt::QueuedConnection);
+    // GO from anywhere (OSC, MSC, the VC, a key) holds the preview (RC8).
+    // Auto: an MSC command arrives on its plugin's thread and is queued.
+    if (m_doc->showControl() != nullptr)
+        connect(m_doc->showControl(), &ShowControl::aboutToTakeStage, this,
+                [this]() { takeStageForRun(); });
     // The main cue list set elsewhere (a chaser editor) moves the current
     // production with it (P5): one source of truth for what GO plays.
     if (m_doc->showControl() != nullptr)
@@ -5655,6 +5660,29 @@ void ShowTreeController::previewCue(quint32 cueId)
     // Again for the same cue is fine: it brings back what something else
     // stopped (Stop all), and changes nothing otherwise.
     m_previewCue = cueId;
+    // Held by a run: selecting stays off stage while a list runs; with
+    // none running any more, a cue selected plays again.
+    if (m_previewHeld && listsRunning().isEmpty())
+        m_previewHeld = false;
+    syncPreview();
+}
+
+QStringList ShowTreeController::takeStageForRun()
+{
+    QStringList held;
+    if (m_previewState == PreviewState::Playing)
+        held << tr("the Show Tree preview");
+    m_previewHeld = true;
+    syncPreview();
+    emit stageTakenForRun(&held);
+    return held;
+}
+
+void ShowTreeController::resumePreview()
+{
+    if (!m_previewHeld)
+        return;
+    m_previewHeld = false;
     syncPreview();
 }
 
@@ -5699,10 +5727,15 @@ void ShowTreeController::syncPreview()
         // Live: the running list owns the stage; edits land on GO.
         state = PreviewState::NotDesign;
     }
+    else if (m_previewHeld)
+    {
+        // A run took the stage (GO): nothing previews until Play.
+        state = PreviewState::Held;
+    }
     else
     {
         // Design: what is in edit is what shows -- also over a list running
-        // for real (its own or another), which keeps going underneath.
+        // for real once Play asked for it, which keeps going underneath.
         if (const Collection *coll = qobject_cast<const Collection *>(m_doc->function(c->collection)))
             for (quint32 fid : coll->functions())
                 if (m_doc->function(fid) != nullptr && !want.contains(fid))
@@ -5770,16 +5803,37 @@ void ShowTreeController::slotModeChanged()
         for (quint32 fid : m_previewRunning)
             setEditOverride(m_doc->function(fid), false);
         m_previewRunning.clear();
+        // Into Design the app stopped every list too: nothing holds now.
+        if (listsRunning().isEmpty())
+            m_previewHeld = false;
     }
     syncPreview();
 }
 
 void ShowTreeController::slotTimerFunctionStarted(quint32 fid)
 {
-    // A list started or stopped for real under a preview: the preview stays
-    // (Design: the edit wins), only what the header says changes.
-    if (m_previewCue == invalidId() || m_previewState != PreviewState::Playing)
-        return;
+    // A cue list started for real -- from anywhere, a VC cue list too --
+    // takes the stage: the preview holds (RC8). Not one a preview itself
+    // plays (the Workbench on a list's chaser).
+    for (const Production &p : m_productions)
+        for (const CueList &l : p.lists)
+            if (l.chaser == fid && !l.isSubCues())
+            {
+                const Function *f = m_doc->function(fid);
+                if (f != nullptr && f->isRunning() && !f->startedOnlyByPreview()
+                    && m_doc->mode() == Doc::Design && !m_previewHeld)
+                    takeStageForRun();
+                else
+                    emit previewChanged();   // what the header says changes
+                return;
+            }
+}
+
+void ShowTreeController::slotTimerFunctionStopped(quint32 fid)
+{
+    // A list stopping changes what the header says; the hold stays until
+    // the next cue selected or Play (a Stop all never brings a preview
+    // back on stage by itself).
     for (const Production &p : m_productions)
         for (const CueList &l : p.lists)
             if (l.chaser == fid)
@@ -5787,9 +5841,4 @@ void ShowTreeController::slotTimerFunctionStarted(quint32 fid)
                 emit previewChanged();
                 return;
             }
-}
-
-void ShowTreeController::slotTimerFunctionStopped(quint32 fid)
-{
-    slotTimerFunctionStarted(fid);
 }

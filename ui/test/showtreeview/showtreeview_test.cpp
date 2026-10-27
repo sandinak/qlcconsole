@@ -35,6 +35,7 @@
 #include <QLabel>
 #include <QCheckBox>
 #include <QToolButton>
+#include <QToolBar>
 #include <QSplitter>
 #include <QHeaderView>
 #include <QScrollBar>
@@ -1381,12 +1382,35 @@ void ShowTreeView_Test::inDesignTheEditShowsOverItsRunningList()
     // The list runs cue One at full, for real.
     goList(m_doc, chaser);
     QCOMPARE(int(settleDmx(m_doc)[0]), 255);
+    QCoreApplication::processEvents();     // its start reaches the Show Tree
 
-    // Design: select the running cue and edit its dimmer DOWN -- the edit
-    // is what shows (HTP stacking alone would keep the running 255).
+    // RC8: the list started, so selecting a cue stays off stage -- Held,
+    // with Play beside the line.
     QVERIFY(view.selectNode(l1, c1));
     QCOMPARE(st->previewedCue(), c1);
+    QCOMPARE(int(st->previewState()), int(ShowTreeController::PreviewState::Held));
+    QCOMPARE(view.previewText(), QString("■ Held — Full Show running. Play to preview 1 One over it."));
+    QToolButton *play = view.findChild<QToolButton *>("stPreviewPlay");
+    QVERIFY(play != nullptr);
+    // On the bar (its action shown; a narrow window may put it in the
+    // bar's overflow).
+    auto playShown = [play]() {
+        QToolBar *bar = qobject_cast<QToolBar *>(play->parentWidget());
+        if (bar == nullptr)
+            return false;
+        for (QAction *a : bar->actions())
+            if (bar->widgetForAction(a) == play)
+                return a->isVisible();
+        return false;
+    };
+    QVERIFY(playShown());
+    QCOMPARE(int(settleDmx(m_doc)[0]), 255);
+
+    // Design, Play: the cue previews over the run, and an edit DOWN shows
+    // (HTP stacking alone would keep the running 255).
+    play->click();
     QCOMPARE(int(st->previewState()), int(ShowTreeController::PreviewState::Playing));
+    QVERIFY(!playShown());
     QVERIFY(st->setLayerLook(c1, l1, st->lookForPalette(d50)));
     QCoreApplication::processEvents();
     QCOMPARE(view.previewText(), QString("▶ On the rig: 1 One, over Full Show running"));

@@ -27,8 +27,8 @@
     <Axis index="5" role="rt">R2</Axis>
   </Axes>
   <Buttons>
-    <Button index="0" action="chaser_step_forward" role="a">Cross</Button>
-    <Button index="1" action="chaser_step_back" role="b">Circle</Button>
+    <Button index="0" role="a">Cross</Button>
+    <Button index="1" role="b">Circle</Button>
     <Button index="2" role="x">Square</Button>
     <Button index="3" role="y">Triangle</Button>
     <Button index="4" role="lb">L1</Button>

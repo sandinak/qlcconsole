@@ -30,6 +30,7 @@
 #include "audioeditor.h"
 #include "audio.h"
 #include "doc.h"
+#include "showtreecontroller.h"
 
 AudioEditor::AudioEditor(QWidget* parent, Audio *audio, Doc* doc)
     : QWidget(parent)
@@ -66,6 +67,14 @@ AudioEditor::AudioEditor(QWidget* parent, Audio *audio, Doc* doc)
 
     connect(m_previewButton, SIGNAL(toggled(bool)),
             this, SLOT(slotPreviewToggled(bool)));
+    // RC8: GO takes the stage from a Test play.
+    connect(m_doc->showTree(), &ShowTreeController::stageTakenForRun, this, [this](QStringList *held) {
+        if (!m_previewButton->isChecked())
+            return;
+        m_previewButton->setChecked(false);
+        if (held != nullptr)
+            held->append(tr("the audio preview"));
+    });
 
     AudioDecoder *adec = m_audio->getAudioDecoder();
 

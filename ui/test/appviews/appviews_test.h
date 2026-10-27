@@ -160,6 +160,10 @@ private slots:
     /** Q92: ...and GO in Design still plays: the list runs, its first
      *  cue's level on the output. */
     void goInDesignStillPlays();
+    /** RC8 u5: GO (⌘↩) holds the Show Tree preview first -- only the run
+     *  cue's values reach the universe -- says so, and Play brings it
+     *  back; a busked scene (the VC, Simple Desk) keeps running. */
+    void goHoldsThePreviewSoOnlyTheRunPlays();
     /** Plain Esc is no playback action: in the main window, the Show Tree
      *  and the Workbench it leaves a function and the main list running;
      *  ⌘⇧Esc (Stop all) stops them. */

@@ -309,6 +309,22 @@ ShowEmbedding::Item ShowEmbedding::item(const QString &key) const
     return Item();
 }
 
+bool ShowEmbedding::definitionDiffers(const QString &manufacturer, const QString &model,
+                                      Newer *newer) const
+{
+    const QString key = QStringLiteral("fixture:") + manufacturer + QLatin1Char('|') + model;
+    for (const Item &it : m_items)
+        if (it.kind == FixtureDefinition && it.key() == key)
+        {
+            if (!it.isUnreviewedDifference())
+                return false;
+            if (newer != nullptr)
+                *newer = this->newer(it);
+            return true;
+        }
+    return false;
+}
+
 QList<ShowEmbedding::Item> ShowEmbedding::differences() const
 {
     QList<Item> out;

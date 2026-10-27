@@ -974,6 +974,18 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
         projectionBtn->setChecked(on);
     });
 
+    /* RC8: what lit lasers and star lasers throw, on the Top plot -- every
+       lit one, in its live colour. A view choice, remembered; on. */
+    QAction *laserBtn = showMenu->addAction(tr("Laser && star output"));
+    laserBtn->setObjectName(QStringLiteral("showLaserOutput"));
+    laserBtn->setCheckable(true);
+    laserBtn->setChecked(m_graphicsView->emissionOverlayVisible());
+    laserBtn->setToolTip(tr("In the top view, where each lit laser's beams and each star laser's "
+                            "stars land -- the floor, a deck, the cyc -- in its live colour"));
+    connect(laserBtn, &QAction::toggled, this, [this](bool on) {
+        m_graphicsView->setEmissionOverlayVisible(on);
+    });
+
     /* Line of sight: what stands in a beam's way. The kinds are the
        stage's own (saved with the show) and are what a follow spot's Fade
        When Blocked, an Aim look's "Dim lights that can't see the target" and

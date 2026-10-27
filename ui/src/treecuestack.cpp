@@ -765,8 +765,26 @@ void TreeCueStack::stopOwnPreview()
         st()->stopPreview();
 }
 
+bool TreeCueStack::ownPreviewHeld() const
+{
+    if (st() == nullptr || !m_playing)
+        return false;
+    if (m_solo)
+        return st()->previewHeld() && !st()->listsRunning().isEmpty();
+    return st()->previewState() == ShowTreeController::PreviewState::Held && st()->previewedCue() == m_cue;
+}
+
+void TreeCueStack::releaseRunHold()
+{
+    if (st() != nullptr)
+        st()->resumePreview();
+}
+
 QString TreeCueStack::ownPreviewText() const
 {
+    if (m_solo && ownPreviewHeld())
+        return tr("■ Solo held — %1 running. Play to preview over it.")
+                   .arg(st()->listsRunning().join(QStringLiteral(", ")));
     if (m_solo)
     {
         const QList<Layer> ls = layers();
@@ -779,6 +797,8 @@ QString TreeCueStack::ownPreviewText() const
     if (!m_view.isNull())
     {
         const QString text = m_view->previewText();
+        if (!text.isEmpty() && ownPreviewHeld())
+            return text;
         if (!text.isEmpty())
             return text + tr(" — in context");
     }
@@ -824,6 +844,12 @@ void TreeCueStack::setFocusLayer(int layer)
 
 void TreeCueStack::playSolo()
 {
+    // RC8: held by a running show until Play, as the cue in context is.
+    if (st() != nullptr && st()->previewHeld() && !st()->listsRunning().isEmpty())
+    {
+        stopSolo();
+        return;
+    }
     const quint32 sid = layerScene(focusIndex());
     Function *f = m_doc->function(sid);
     if (f != nullptr && sid == m_soloScene && f->isRunning())

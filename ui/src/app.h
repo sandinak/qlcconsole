@@ -37,6 +37,7 @@
 #include "dmxdumpfactoryproperties.h"
 #include "qlcfixturedefcache.h"
 #include "doc.h"
+#include "showcontrol.h"
 #include "qlcui_export.h"
 
 class QProgressDialog;
@@ -199,8 +200,27 @@ public:
      *  the show is next opened. Run on every view change and load. */
     void updateShowTreeNotice();
     /** Q92: the first GO pressed in Design this session (Run tab or Control
-     *  ▸ GO) offers Operate in the notice bar. Once a session. */
-    void offerOperateAfterGo();
+     *  ▸ GO) offers Operate in the notice bar. Once a session. With
+     *  @a held, the notice says first that GO held the previews (RC8).
+     *  True when it offered. */
+    bool offerOperateAfterGo(bool held = false);
+
+    /** RC8, "GO holds previews": the one path every console GO, Back and
+     *  Sub GO takes (⌘↩, the Run tab, the Control menu, a pad button bound
+     *  to step a cue list; CueRunner::setRunHook()). The Show Tree, the
+     *  Workbench, Solo and the editors' Test plays hold first
+     *  (ShowTreeController::takeStageForRun()), then ShowControl::execute()
+     *  runs it, so only the run's values reach the stage. @a fromConsole:
+     *  the notice says so, and a GO in Design offers Operate. Simple Desk,
+     *  the VC, Focus/Refine and the programmer keep running. */
+    bool runCommand(const ShowControl::Request &request, bool fromConsole = true);
+    /** The notice runCommand() shows when it held something. */
+    static QString heldForRunText();
+    /** RC8: as a show opens, when any fixture is drawn from the show's own
+     *  copy of a definition that differs from this computer's (and was not
+     *  dealt with), say so once in the notice bar, with Review… -- never
+     *  switch by itself. True when it said so. */
+    bool noticeDifferingDefinitions();
 
 private:
     /** The current view's tabs, in order, with Functions in or out by

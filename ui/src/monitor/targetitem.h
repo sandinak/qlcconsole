@@ -136,6 +136,10 @@ public:
     bool lineHitAt(const QPointF &local, double *fraction = nullptr) const;
     /** True if @p local is on the centre mark. */
     bool onCentreMark(const QPointF &local) const;
+    /** A line's centre is drawn as a small diamond on the curve, not the
+     *  point target's ring and crosshair -- unless a handle sits within
+     *  8 px of it, which then marks the centre itself. */
+    bool showsCentreDiamond() const;
 
     /** What the target IS on the stage, in item coordinates: the mark's
      *  ring, an area's footprint, a line's curve, a person's figure -- not

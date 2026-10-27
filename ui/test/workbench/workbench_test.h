@@ -64,6 +64,10 @@ private slots:
     /** Design mode: what is loaded plays; a changed collection plays its new
      *  layers; Stop / Play; hidden, nothing plays. */
     void whatIsLoadedPlays();
+    /** RC8 u5: a GO from anywhere holds the Build preview -- it stops, the
+     *  header says Held, a load keeps it off while the show runs -- and
+     *  Play previews over the show. */
+    void goHoldsTheBuildPreview();
     /** Operate mode: what is loaded runs as the show's output; to Design,
      *  a function started elsewhere keeps running; hidden, the Workbench
      *  stops only what it started. */

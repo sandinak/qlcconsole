@@ -224,6 +224,11 @@ bool ShowControl::execute(const Request &request)
             return finish(false, tr("no such cue in %1").arg(name));
     }
 
+    // What runs takes the stage from the previews first (RC8).
+    if (request.command == Go || request.command == Back
+            || request.command == SubGo || request.command == SubBack)
+        emit aboutToTakeStage(m_source);
+
     switch (request.command)
     {
         case Go:

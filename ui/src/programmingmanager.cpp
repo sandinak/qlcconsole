@@ -54,6 +54,7 @@
 #include "vcbutton.h"
 #include "vcframe.h"
 #include "showcontrol.h"
+#include "cuerunner.h"
 #include "helpbrowser.h"
 #include "programmercontroller.h"
 #include "functionstreewidget.h"
@@ -3256,7 +3257,13 @@ void ProgrammingManager::slotButtonAction(const QString &action)
         return;
     }
 
-    /* Step chaser forward or back: act on all currently running chasers */
+    /* Step chaser forward or back: only where a profile binds it on
+       purpose (the bundled Xbox and PlayStation profiles no longer put it
+       on A/B: a pad picked up mid-show must never move the show, u8).
+       A Show Tree cue list is never stepped behind show control's back:
+       its step is a GO or Back through the console's one run path, with
+       its sub-cues, LOAD and the preview hold. Any other running chaser
+       (a VC cue list) steps, as in QLC+. */
     ChaserActionType stepType = ChaserNoAction;
     if (action == QLatin1String("chaser_step_forward"))
         stepType = ChaserNextStep;
@@ -3273,11 +3280,32 @@ void ProgrammingManager::slotButtonAction(const QString &action)
     chaserAction.m_fadeMode = 0;
     chaserAction.m_stepIndex = -1;
 
+    ShowTreeController *st = m_doc->showTree();
     foreach (Function *f, m_doc->functions())
     {
         Chaser *ch = qobject_cast<Chaser*>(f);
-        if (ch && ch->isRunning())
-            ch->setAction(chaserAction);
+        if (ch == nullptr || !ch->isRunning())
+            continue;
+        bool treeList = false, mainOrParallel = false;
+        if (st != nullptr)
+            for (const ShowTree::Production &p : st->productions())
+                for (const ShowTree::CueList &l : p.lists)
+                    if (l.chaser == ch->id())
+                    {
+                        treeList = true;
+                        mainOrParallel = !l.looks && !l.isSubCues();
+                    }
+        if (treeList && !mainOrParallel)
+            continue;              // sub-cues and hits: Sub GO / their own keys
+        if (treeList)
+        {
+            ShowControl::Request r;
+            r.command = stepType == ChaserNextStep ? ShowControl::Go : ShowControl::Back;
+            r.chaser = ch->id();
+            CueRunner::runCommand(m_doc, r, true);
+            continue;
+        }
+        ch->setAction(chaserAction);
     }
 }
 

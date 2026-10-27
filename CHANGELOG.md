@@ -647,6 +647,35 @@ as code.
   or .qxw only), which is how a Linux file manager passes it. The Linux
   .desktop file runs `qlcconsole %f`, so `./qlcconsole.AppImage --version`
   and `-o FILE` work through the AppImage too.
+- **GO holds the previews** (RC8, board Q178). GO, Back and Sub GO --
+  from the Run tab, ⌘↩, the Control menu, OSC, MSC, the VC or a pad
+  button bound to step a list -- now stop the Show Tree preview, the
+  Workbench (Build or docked, Solo too), the Effect designer and the
+  editors' Test plays **before** the command acts, so only the run's
+  values reach the stage. From the console the line at the top says
+  *Stopped the Show Tree preview so GO plays alone — Play brings it
+  back*; from OSC, MSC and the VC it happens without a word. While a list
+  runs in Design, selecting a cue stays off stage (**■ Held**) until you
+  press **Play**, which previews over the run as before. Simple Desk, the
+  VC, Focus/Refine and the programmer's flash keep running. Every console
+  GO goes through one path (`App::runCommand()`), which the Run tab's GO
+  used to call only after the GO
+  (`AppViews_Test::goHoldsThePreviewSoOnlyTheRunPlays`,
+  `Workbench_Test::goHoldsTheBuildPreview`).
+- **A pad's A and B no longer step every running chaser** (RC8). The
+  bundled Xbox and PlayStation profiles bound A/B to *step chaser*, so a
+  pad picked up mid-show and pressed once moved every running list,
+  behind show control's back. They now do nothing outside the focus
+  tools; bind them in the profile editor if you want them. A Show Tree
+  list stepped by a binding moves only as a GO or Back through show
+  control (`FocusMode_Test::aPadPressMovesNoRunningList`,
+  `GamepadLayout_Test::noShippedProfileStepsAList`).
+- **One throw rule for fixed lights in 2D and 3D** (RC8). The plot's
+  light footprint dropped every fixed light straight down; it now uses
+  the 3D views' rule (`RigHeads::fixedThrow`): its pan/tilt aim, its
+  chosen face, its riser or deck, then down off a truss. A laser faced
+  Back throws upstage on the plot too
+  (`Monitor_Test::theThrowIsOneRuleIn2DAnd3D`).
 
 - **The Labels dialog finds a Brother PT-P710BT** (RC4, board Q163-1).
   With a printer installed whose name, description or model says PT-P710BT
@@ -1049,6 +1078,27 @@ as code.
   every level's size for a bug report
   (`ViewLayout_Test::theLayoutReportAndTheSelfHeal`,
   `::theWindowFollowsResizesAroundADetach`).
+- **A laser showed nothing on the 2D plot** (RC8, board Q178). The Top
+  view never drew a laser's beams or a sky laser's stars. With **Show ▸
+  Laser & star output** (on by default) every lit laser and star laser
+  now shows where its light lands -- on the floor, a deck or the cyc's
+  line -- in its live colour and level, about 15 times a second, turning
+  with its prism rotation; lasers draw pencil lines out to their landings
+  (`Monitor_Test::starFieldShowsOnTheTopPlot`).
+- **A show's older copy of a definition was used without a word** (RC8,
+  board Q178). When a show carries its own copy of a fixture definition
+  and this computer has a different one, the show's stays in use (as
+  before), but now the fixture's tooltip on the plot says so, and the line
+  at the top says it once as the show opens, with **Review…** for **Use
+  This Computer's**. Nothing switches by itself
+  (`ShowDifferences_Test::anOlderEmbeddedDefinitionIsSaidOnThePlot`).
+- **A line target's ring sat off its dot** (RC8, board Q178). A line
+  target drew a point target's ring and crosshair at its 3-D half-way
+  point, a few pixels off the mid handle, which read as a misplaced
+  target. It now draws a small diamond on the curve at its centre, hidden
+  when a handle sits on it; selected and locked are drawn along the curve,
+  and its handles always grab before the centre
+  (`Monitor_Test::aLineTargetHasNoRingOffItsCurve`).
 - **The Show Tree's page came back at no width** (RC8). A split saved
   while the Workbench was docked there (four panes, the page's at 0) was
   restored on the next start; it is now dropped, and a split moved while

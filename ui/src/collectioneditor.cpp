@@ -40,6 +40,7 @@
 #include "function.h"
 #include "doc.h"
 #include "app.h"
+#include "showtreecontroller.h"
 
 #define PROP_ID Qt::UserRole
 
@@ -65,6 +66,14 @@ CollectionEditor::CollectionEditor(QWidget* parent, Collection* fc, Doc* doc)
     connect(m_moveDown, SIGNAL(clicked()), this, SLOT(slotMoveDown()));
     connect(m_testButton, SIGNAL(clicked()),
             this, SLOT(slotTestClicked()));
+    // RC8: GO takes the stage from a Test play.
+    connect(m_doc->showTree(), &ShowTreeController::stageTakenForRun, this, [this](QStringList *held) {
+        if (!m_testButton->isChecked())
+            return;
+        m_testButton->click();
+        if (held != nullptr)
+            held->append(tr("the collection test"));
+    });
 
     m_nameEdit->setText(m_collection->name());
 

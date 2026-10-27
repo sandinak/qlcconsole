@@ -129,6 +129,7 @@
 #include "showstatusdialog.h"
 #include "showembedding.h"
 #include "showdifferencesdialog.h"
+#include "qlcfixturedef.h"
 #include "definitionupdatesdialog.h"
 #include "qlcioplugin.h"
 #include "startupwindow.h"
@@ -263,6 +264,9 @@ App::App()
 App::~App()
 {
     QSettings settings;
+
+    // The Run tab's GO path points at this App: not once it is gone.
+    CueRunner::setRunHook(nullptr);
 
     // Stop autosave timer
     if (m_autosaveTimer != NULL)
@@ -2053,15 +2057,18 @@ void App::initActions()
             m_doc->programmer()->focusCallCue()->start();
             return;
         }
-        m_doc->showControl()->execute({ ShowControl::Go, QString(), QString() });
-        offerOperateAfterGo();
+        runCommand({ ShowControl::Go, QString(), QString() });
     });
-    CueRunner::setGoHook([this]() { offerOperateAfterGo(); });
+    // RC8: the Run tab's GO, Back and Sub GO come through runCommand() too,
+    // before they act (the hook used to run after the GO).
+    CueRunner::setRunHook([this](const ShowControl::Request &r, bool fromConsole) {
+        return runCommand(r, fromConsole);
+    });
     m_cueBackAction = new QAction(tr("Back (Main Cue List)"), this);
     m_cueBackAction->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Return));
     m_cueBackAction->setShortcutContext(Qt::ApplicationShortcut);
     connect(m_cueBackAction, &QAction::triggered, this, [this]() {
-        m_doc->showControl()->execute({ ShowControl::Back, QString(), QString() });
+        runCommand({ ShowControl::Back, QString(), QString() });
     });
     /* ...and its Sub GO / Sub Back (SUBCUES_DESIGN.md): through the sub-cues
        of the cue playing, 4.1, 4.2..., while GO goes on to 5. ⌥⌘↩ / ⌥⌘⇧↩
@@ -2072,13 +2079,13 @@ void App::initActions()
     // Through show control, as GO is: what came of it is reported the
     // same way (Connections → Devices → Show control & sync, last command).
     connect(m_cueSubGoAction, &QAction::triggered, this, [this]() {
-        m_doc->showControl()->execute({ ShowControl::SubGo, QString(), QString() });
+        runCommand({ ShowControl::SubGo, QString(), QString() });
     });
     m_cueSubBackAction = new QAction(tr("Sub Back (Main Cue List)"), this);
     m_cueSubBackAction->setShortcut(cueSubBackShortcut());
     m_cueSubBackAction->setShortcutContext(Qt::ApplicationShortcut);
     connect(m_cueSubBackAction, &QAction::triggered, this, [this]() {
-        m_doc->showControl()->execute({ ShowControl::SubBack, QString(), QString() });
+        runCommand({ ShowControl::SubBack, QString(), QString() });
     });
 
     m_helpIndexAction = new QAction(tr("QLC+ Reference (online)"), this);
@@ -4196,21 +4203,80 @@ void App::showInputDeviceNotice(const QString &text, bool warning)
     });
 }
 
-void App::offerOperateAfterGo()
+bool App::offerOperateAfterGo(bool held)
 {
     /* Q92: GO in Design plays, but Design isn't for running a show (a
        click on a cue puts it on stage, edits go live). Say so once a
        session, from the Run tab's GO or Control ▸ GO only -- never from
        OSC, MSC or the VC -- and never hold GO up. */
     if (m_operateOffered || m_doc == nullptr || m_doc->mode() != Doc::Design)
-        return;
+        return false;
     m_operateOffered = true;
-    showViewNotice(tr("GO played in Design. To run the show, switch to Operate: "
-                      "clicking a cue no longer puts it on stage, and the show is locked."),
+    const QString offer = tr("GO played in Design. To run the show, switch to Operate: "
+                             "clicking a cue no longer puts it on stage, and the show is locked.");
+    showViewNotice(held ? heldForRunText() + QStringLiteral(" ") + offer : offer,
                    tr("Switch to Operate"), [this]() {
         hideViewNotice();
         slotModeOperate();
     });
+    return true;
+}
+
+bool App::noticeDifferingDefinitions()
+{
+    if (m_doc == nullptr || m_doc->showEmbedding() == nullptr)
+        return false;
+    ShowEmbedding *e = m_doc->showEmbedding();
+    QStringList defs;
+    int fixtures = 0;
+    foreach (Fixture *fx, m_doc->fixtures())
+    {
+        const QLCFixtureDef *def = fx->fixtureDef();
+        if (def == nullptr || !e->definitionDiffers(def->manufacturer(), def->model()))
+            continue;
+        ++fixtures;
+        const QString name = def->manufacturer() + QLatin1Char(' ') + def->model();
+        if (!defs.contains(name))
+            defs << name;
+    }
+    if (fixtures == 0)
+        return false;
+    showViewNotice(tr("%n fixture(s) use this show's own copy of %1, and this computer has a different "
+                      "one. Nothing switches by itself: Review… ▸ Use This Computer's to switch.",
+                      "", fixtures).arg(defs.join(QStringLiteral(", "))),
+                   tr("Review…"), [this]() {
+        hideViewNotice();
+        ShowDifferencesDialog dlg(m_doc, this);
+        dlg.exec();
+    });
+    return true;
+}
+
+QString App::heldForRunText()
+{
+    return tr("Stopped the Show Tree preview so GO plays alone \u2014 Play brings it back.");
+}
+
+bool App::runCommand(const ShowControl::Request &request, bool fromConsole)
+{
+    if (m_doc == nullptr)
+        return false;
+    /* RC8: what GO plays is all that reaches the stage. The previews hold
+       BEFORE the command acts (ShowControl would hold them too, through
+       aboutToTakeStage, but this says what it held). */
+    QStringList held;
+    const bool takesStage = request.command == ShowControl::Go || request.command == ShowControl::Back
+                         || request.command == ShowControl::SubGo || request.command == ShowControl::SubBack;
+    if (takesStage && m_doc->showTree() != nullptr)
+        held = m_doc->showTree()->takeStageForRun();
+    const bool ok = m_doc->showControl()->execute(request);
+    if (!fromConsole)
+        return ok;
+    if (request.command == ShowControl::Go && offerOperateAfterGo(!held.isEmpty()))
+        return ok;
+    if (!held.isEmpty())
+        showViewNotice(heldForRunText());
+    return ok;
 }
 
 bool App::offerConsoleViewAfterUpgrade()
@@ -5131,6 +5197,10 @@ bool App::loadXML(QXmlStreamReader& doc, bool goToConsole, bool fromMemory)
     // Perform post-load operations
     VirtualConsole::instance()->postLoad();
     updateShowTreeNotice();
+    // RC8: a fixture drawn from the show's own, different definition: said
+    // once as the show opens (never switched by itself).
+    if (fromMemory == false)
+        noticeDifferingDefinitions();
 
     /* Cut short or not well formed, wherever it was (the Engine says so
        itself; the Virtual Console and the rest after it do not). */

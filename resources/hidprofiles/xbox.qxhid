@@ -40,8 +40,8 @@
     <Axis index="5" role="rt">Right Trigger</Axis>
   </Axes>
   <Buttons>
-    <Button index="0" action="chaser_step_forward" role="a">A</Button>
-    <Button index="1" action="chaser_step_back" role="b">B</Button>
+    <Button index="0" role="a">A</Button>
+    <Button index="1" role="b">B</Button>
     <Button index="2" role="x">X</Button>
     <Button index="3" role="y">Y</Button>
     <Button index="4" role="lb">LB</Button>

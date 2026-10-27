@@ -1545,6 +1545,28 @@ public:
      *  declared beam at all. */
     QPolygonF fixtureProjection(quint32 fid) const;
 
+    /** Which way fixture @a fid throws its light now: its pan and tilt when
+     *  it has them, else the rule the 3D views use (RigHeads::fixedThrow) --
+     *  out of a chosen face, a riser or a deck, down off a truss. False when
+     *  there is no answer (rigged Inside). */
+    bool throwDirection(quint32 fid, QVector3D &dir) const;
+
+    /** RC8: what lit lasers and star lasers throw, on the Top plot -- each
+     *  star where it lands (the floor, a deck, the cyc's line), laser
+     *  beams as pencil lines out to theirs -- for every LIT one, not just
+     *  the selection, in its live colour and level. Show ▸ Laser & star
+     *  output; on by default. */
+    void setEmissionOverlayVisible(bool on);
+    bool emissionOverlayVisible() const { return m_emissionVisible; }
+    /** Where @a fid's stars or beams land now, world metres (x, y); empty
+     *  when it is dark or draws none. For the tests. */
+    QVector<QPointF> emissionLandings(quint32 fid) const { return m_emissionLandings.value(fid); }
+    /** The colour they are drawn in. */
+    QColor emissionColour(quint32 fid) const { return m_emissionColours.value(fid); }
+    /** Rebuild them now (they follow the live values about 15 times a
+     *  second). */
+    void rebuildEmissionOverlay();
+
     /** Every part of the stage this head can put light on: the deck and the
      *  platform tops, sampled, keeping the points its pan and tilt can actually
      *  reach. This is what "show me its footprint" means for a head that moves
@@ -1571,6 +1593,15 @@ private:
     bool m_settingRevealSelection = false;
     QList<class QGraphicsItem *> m_revealTags;
     QList<class QGraphicsPathItem *> m_projectionItems;
+    // RC8: the lasers' and star lasers' output (setEmissionOverlayVisible()).
+    bool m_emissionVisible = true;
+    QTimer *m_emissionTimer = nullptr;
+    QList<class QGraphicsPathItem *> m_emissionItems;
+    QHash<quint32, QVector<QPointF> > m_emissionLandings;
+    QHash<quint32, QColor> m_emissionColours;
+    QString m_emissionSignature;           ///< what was drawn: unchanged, no redraw
+    QList<quint32> m_emissiveFixtures;     ///< the lasers and star lasers in the show
+    bool m_emissiveStale = true;
     QList<class QGraphicsPixmapItem *> m_coverageItems;
     class QGraphicsPixmapItem *m_reachItem = nullptr;
     bool m_reachVisible = false;

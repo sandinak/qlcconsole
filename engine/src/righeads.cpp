@@ -19,6 +19,7 @@
 #include "righeads.h"
 #include "fixture.h"
 #include "truss.h"
+#include "stageplatform.h"
 #include "doc.h"
 
 /* Its length within its face, before any turn about the vertical. */
@@ -47,6 +48,61 @@ static QVector3D yawed(const FixtureRigProps &rp, const QVector3D &v)
 QVector3D RigHeads::axis(const FixtureRigProps &rp)
 {
     return yawed(rp, faceAxis(rp));
+}
+
+bool RigHeads::fixedThrow(Doc *doc, quint32 fid, int headCount, bool mover, QVector3D &dir)
+{
+    if (doc == nullptr || doc->monitorProperties() == nullptr)
+        return false;
+    MonitorProperties *props = doc->monitorProperties();
+    const FixtureRigProps rp = props->fixtureRigProps(fid);
+    if (rp.placement == FixtureRigProps::Inside)
+        return false;
+    // A fixed light aimed by pan and tilt (Q100): where it was pointed.
+    if (!mover && rp.fixedAimDirection(dir))
+        return true;
+
+    /* Out of its FACE. A bar's light leaves the face its pixels are on -- the
+       FART bars hang vertically off their truss facing the audience, and
+       "hung means pointing down" sent their light to the floor behind the
+       truss. Likewise anything whose face was chosen: a laser on the back of
+       a truss, faced Back, throws upstage. Tilt and flip included. */
+    if (!mover && (headCount > 1 || rp.studioFaceChosen))
+    {
+        QVector3D L, N, H;
+        frame(rp, L, N, H);
+        if (N.lengthSquared() > 1e-6f)
+        {
+            dir = N.normalized();
+            return true;
+        }
+    }
+
+    const quint32 plId = rp.onRiser() ? rp.riserPlatformId
+                       : rp.onDeck()  ? rp.deckPlatformId
+                                      : FixtureRigProps::invalidPlatformId();
+    if (StagePlatform *host = props->platform(plId))
+    {
+        const float b0 = props->platformBaseZ(plId);
+        const QVector3D hostCentre(host->originX() + host->width() * 0.5f,
+                                   host->originY() + host->depth() * 0.5f,
+                                   b0 + host->height() * 0.5f);
+        dir = fixtureCentre(doc, fid) - hostCentre;
+        if (dir.length() < 1e-4f)
+            return false;
+        dir.normalize();
+        return true;
+    }
+    if (rp.trussId != Truss::invalidId())
+    {
+        /* A truss runs along its length, so "out" across it is meaningless --
+           but a hung fixture points DOWN and a floor-mounted one points up,
+           which is the part that matters. */
+        dir = (rp.mountingType == Truss::TopHung) ? QVector3D(0.0f, 0.0f, -1.0f)
+                                                  : QVector3D(0.0f, 0.0f, 1.0f);
+        return true;
+    }
+    return false;
 }
 
 void RigHeads::frame(const FixtureRigProps &rp, QVector3D &L, QVector3D &N, QVector3D &H)

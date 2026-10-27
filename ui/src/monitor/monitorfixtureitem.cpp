@@ -76,6 +76,7 @@ static QCursor smallOpenHandCursor()
 #include "qlcfixturedef.h"
 #include "truss.h"
 #include "doc.h"
+#include "showembedding.h"
 #include "programmercontroller.h"
 
 #define MOVEMENT_THICKNESS    3
@@ -970,6 +971,16 @@ QString MonitorFixtureItem::baseToolTip() const
                .arg(fx->universe() + 1)
                .arg(fx->address() + 1)
                .arg(fx->address() + fx->channels());
+    /* RC8: drawn from the show's own copy of its definition while this
+       computer has another -- said here, never switched by itself. */
+    ShowEmbedding::Newer newer = ShowEmbedding::NewerUnknown;
+    if (def != NULL && m_doc->showEmbedding() != nullptr
+        && m_doc->showEmbedding()->definitionDiffers(def->manufacturer(), def->model(), &newer))
+        tip += newer == ShowEmbedding::ComputerNewer
+               ? QObject::tr("\nDefinition: the show's copy — this computer has a newer one. "
+                             "Review… ▸ Use This Computer's to switch.")
+               : QObject::tr("\nDefinition: the show's copy — this computer has a different one. "
+                             "Review… ▸ Use This Computer's to switch.");
     return tip;
 }
 

@@ -289,9 +289,24 @@ bool TargetItem::lineHitAt(const QPointF &local, double *fraction) const
     return true;
 }
 
+static constexpr double kDiamond = 4.0;        // px: a line's centre mark, half its width
+static constexpr double kDiamondClear = 8.0;   // px: a handle this near hides it
+
 bool TargetItem::onCentreMark(const QPointF &local) const
 {
-    return QLineF(local, QPointF(0, 0)).length() <= double(kRadius);
+    // A line's centre is a small diamond on the curve: grabbing it never
+    // reaches over a handle beside it.
+    return QLineF(local, QPointF(0, 0)).length() <= (isLine() ? kHandleRadius : double(kRadius));
+}
+
+bool TargetItem::showsCentreDiamond() const
+{
+    if (!isLine())
+        return false;
+    for (const QPointF &h : m_handles)
+        if (QLineF(h, QPointF(0, 0)).length() < kDiamondClear)
+            return false;
+    return true;
 }
 
 QPainterPath TargetItem::shape() const
@@ -304,7 +319,8 @@ QPainterPath TargetItem::shape() const
     }
     QPainterPath path;
     path.setFillRule(Qt::WindingFill);
-    path.addEllipse(QPointF(0, 0), double(kRadius) + 3.0, double(kRadius) + 3.0);
+    // The centre: a small disc, not the point target's ring (u2).
+    path.addEllipse(QPointF(0, 0), kHandleRadius, kHandleRadius);
     QPainterPath curve;
     curve.addPolygon(m_curve);
     QPainterPathStroker stroker;
@@ -410,10 +426,38 @@ void TargetItem::paint(QPainter *painter,
         painter->drawRoundedRect(foot, 3.0, 3.0);
     }
 
-    /* A line: the curve, its ends as squares and its mid points as dots. The
-       mark stays at the centre -- where every light goes at spread 0. */
+    /* A line: the curve, its ends as squares and its mid points as dots, and
+       a small diamond on the curve at its centre -- where every light goes
+       at spread 0. No ring or crosshair: the point target's mark, a little
+       off the user's mid handle, read as a misplaced target (u2). Selected
+       and locked are drawn along the curve. */
     if (isLine())
     {
+        QPainterPath curvePath;
+        curvePath.addPolygon(m_curve);
+        if (selected)
+        {
+            QColor glow = col.lighter(130);
+            glow.setAlpha(110);
+            QPen glowPen(glow, 9.0);
+            glowPen.setCapStyle(Qt::RoundCap);
+            glowPen.setJoinStyle(Qt::RoundJoin);
+            painter->setPen(glowPen);
+            painter->setBrush(Qt::NoBrush);
+            painter->drawPath(curvePath);
+        }
+        if (locked)
+        {
+            QPainterPathStroker stroker;
+            stroker.setWidth(10.0);
+            stroker.setCapStyle(Qt::RoundCap);
+            stroker.setJoinStyle(Qt::RoundJoin);
+            QPen lockPen(QColor(200, 60, 60), 1.6);
+            lockPen.setStyle(Qt::DashLine);
+            painter->setPen(lockPen);
+            painter->setBrush(Qt::NoBrush);
+            painter->drawPath(stroker.createStroke(curvePath).simplified());
+        }
         QPen linePen(col, selected ? 3.5 : 2.5);
         linePen.setCapStyle(Qt::RoundCap);
         linePen.setJoinStyle(Qt::RoundJoin);
@@ -432,6 +476,29 @@ void TargetItem::paint(QPainter *painter,
             else
                 painter->drawEllipse(h, kHandleRadius - 1.5, kHandleRadius - 1.5);
         }
+        if (showsCentreDiamond())
+        {
+            QPolygonF diamond;
+            diamond << QPointF(0, -kDiamond) << QPointF(kDiamond, 0)
+                    << QPointF(0, kDiamond) << QPointF(-kDiamond, 0);
+            painter->setBrush(Qt::NoBrush);   // hollow: the stage reads through it
+            painter->setPen(QPen(selected ? col.lighter(130) : col, 1.6));
+            painter->drawPolygon(diamond);
+        }
+        // Heads that cannot reach: the count beside the readout, in red.
+        if (m_unreachable > 0)
+        {
+            const QColor warn(235, 70, 60);
+            QFont f = painter->font();
+            f.setBold(true);
+            f.setPointSizeF(8.0);
+            painter->setFont(f);
+            painter->setPen(warn);
+            painter->drawText(QRectF(-kRadius, kRadius + 1.0, 88.0, 16.0),
+                              Qt::AlignLeft | Qt::AlignVCenter,
+                              QStringLiteral("\u26A0 %1/%2").arg(m_unreachable).arg(m_aimedHeads));
+        }
+        return;
     }
 
     /* What stands here, under the mark: the mark still says where it is aimed,

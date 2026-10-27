@@ -251,6 +251,15 @@ private slots:
     /** "how are we handling laser projectors .. one that just does color
      *  stars": a star field of points, a laser's pencil beams -- not a wash. */
     void lasersThrowStarsAndPencilBeams();
+    /** RC8 u1: a lit star laser's stars show on the 2D Top plot too, in its
+     *  live colour, where they land (on the cyc upstage of it); dark, black
+     *  or Show ▸ Laser & star output off, none. A laser draws pencil lines
+     *  out to its landings. */
+    void starFieldShowsOnTheTopPlot();
+    /** RC8 u1: one throw rule for a fixed light in 2D and 3D
+     *  (RigHeads::fixedThrow): faced Back on a truss it throws upstage in
+     *  both -- the 2D footprint no longer drops it straight down. */
+    void theThrowIsOneRuleIn2DAnd3D();
     void hangersAreRiggingCopiedToEveryTower();
     void theSplitWizardOffersAViewAndKeepsAnExistingGroup();
     /** "I can't click on any side arrow to open any of the groups": an
@@ -885,6 +894,10 @@ private slots:
      *  says locked); a new one never lands on a locked layer; its end
      *  handle drags that end on the grid, one undo step; its body moves */
     void aLineTargetKeepsItsColourLocksAndSnaps();
+    /** u2: a line target has no ring or crosshair at its centre -- a small
+     *  diamond on the curve, hidden when a handle sits on it -- and its
+     *  handle grabs before the centre */
+    void aLineTargetHasNoRingOffItsCurve();
     /** A truss moved to a layer takes its folder, bars, hangers and
      *  fixtures with it; an old show's "Locked" layer is taken apart on
      *  load and a fixture can be dropped back onto its truss */
