@@ -300,6 +300,8 @@ function Run-App([string]$exe, [string[]]$appArgs, [int]$timeoutS, [string]$log)
     $home2 = Join-Path $script:RunDir 'home'
     New-Item -ItemType Directory -Force -Path $home2 | Out-Null
     $psi.EnvironmentVariables['QT_QPA_PLATFORM'] = 'offscreen'
+    # Logs every plugin load (the FFmpeg backend's included) for the checks.
+    $psi.EnvironmentVariables['QT_DEBUG_PLUGINS'] = '1'
     $psi.EnvironmentVariables['QLC_HELP_SHOTS'] = (Join-Path $script:RunDir 'shots')
     $psi.EnvironmentVariables['QLC_HELP_SHOTS_ONLY'] = '__relcheck_none__'
     $psi.EnvironmentVariables['USERPROFILE'] = $home2
@@ -506,6 +508,7 @@ try {
         $notLoaded = $io | Where-Object { $loaded -notcontains $_ }
         Check 'win.run.io-plugins-loaded' (-not $notLoaded) "not loaded: $($notLoaded -join ', ')"
         $ff = ($txt -split "`n" | Where-Object { $_ -match 'FFmpeg version' } | Select-Object -First 1)
+        if (-not $ff) { $ff = ($txt -split "`n" | Where-Object { $_ -match 'ffmpegmediaplugin\.dll" loaded library' } | Select-Object -First 1) }
         # QtMultimedia's FFmpeg backend loaded (it logs its FFmpeg build at -d 0).
         Check 'win.run.multimedia' ([bool]$ff) "the FFmpeg multimedia backend did not load (see $log)"
         if ($ff) { Note $ff.Trim() }

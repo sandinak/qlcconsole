@@ -339,7 +339,7 @@ if [ -f "$QP/platforms/libqoffscreen.so" ]; then
   # comes first, as a file manager passes it: AppRun puts Exec='s --open
   # before it.
   cp "$SH/Sample.qxw" "$WORK/run/Sample.qxw"
-  runapp 240 "$WORK/load.log" env QLC_HELP_SHOTS="$WORK/shots" QLC_HELP_SHOTS_ONLY=__relcheck_none__ \
+  runapp 240 "$WORK/load.log" env QLC_HELP_SHOTS="$WORK/shots" QLC_HELP_SHOTS_ONLY=__relcheck_none__ QT_DEBUG_PLUGINS=1 \
     "$D/AppRun" "$WORK/run/Sample.qxw" -platform offscreen -d 0; rc=$?
   cp "$WORK/load.log" "$OUT/load-sample.log"
   if [ $rc = 0 ] && grep -q '^\[HELPSHOT\] done, 0 failed' "$WORK/load.log" && grep -q 'addWidgetInMap' "$WORK/load.log"; then
@@ -349,7 +349,10 @@ if [ -f "$QP/platforms/libqoffscreen.so" ]; then
   fi
   missp=""; for p in $IO_PLUGINS; do grep -q "from \"lib$p.so\"" "$WORK/load.log" || missp="$missp $p"; done
   [ -z "$missp" ] && pass run.io-plugins-loaded "$(echo $IO_PLUGINS | wc -w) I/O plugins" || fail run.io-plugins-loaded "not loaded:$missp"
+  # Qt 6.9 and later log the FFmpeg build; 6.8 only the plugin load
+  # (QT_DEBUG_PLUGINS=1 above).
   ff="$(grep -m1 'FFmpeg version' "$WORK/load.log")"
+  [ -n "$ff" ] || ff="$(grep -m1 'libffmpegmediaplugin.so" loaded library' "$WORK/load.log" | sed 's|.*/||')"
   [ -n "$ff" ] && pass run.multimedia "$ff" || fail run.multimedia "the FFmpeg multimedia backend did not load (see $OUT/load-sample.log)"
 else
   skip run.version "no offscreen plugin (--offscreen-plugin)"; skip run.load-sample "no offscreen plugin"

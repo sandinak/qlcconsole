@@ -278,10 +278,17 @@ system installed -- no Qt, no FFmpeg, no libftdi/FFTW/libmad. On the Linux
 build host these are minbase debootstrap chroots, `/srv/clean-jammy` and
 `/srv/clean-noble` (podman is not installed there):
 
-    sudo chroot /srv/clean-jammy bash /tmp/rc/release-check.sh /tmp/rc/<AppImage> --out /tmp/rc/out
+    sudo chroot /srv/clean-jammy bash /tmp/rc/release-check.sh /tmp/rc/<AppImage> \
+        --version <VERSION> --rev <rev> --out /tmp/rc/out
 
 after copying the AppImage and `release-check.sh` into `/tmp/rc` inside it
-(and bind-mounting /proc and /dev).
+(and bind-mounting /proc, /sys and /dev). The chroots hold the base system
+the bundler leaves out and nothing else: GL/EGL/OpenGL, X11 and the core
+xcb libraries, xkbcommon, fontconfig, freetype, harfbuzz, glib, dbus,
+ALSA, PulseAudio (with libsndfile), libusb, libudev, krb5's GSSAPI, plus
+`file`, `binutils` and `procps` for the check. `--version`/`--rev` are
+needed there because CI's AppImage name carries the build id, not the
+release.
 
 In CI the Windows and Linux checks run after the build and upload their
 results (`release-check-windows`, `release-check-linux`). They fail the job
