@@ -31,6 +31,7 @@
 #include <QtTest>
 
 #include "focuscallsui_test.h"
+#include "../common/layoutstability.h"
 #include "programmercontroller.h"
 #include "showtreecontroller.h"
 #include "monitorproperties.h"
@@ -765,6 +766,306 @@ void FocusCallsUi_Test::theRefinePanelHasTheLamp()
     QCOMPARE(lamp->state(), FocusStatusLamp::AllSaved);
     r->stop();
     QTRY_VERIFY(panel.isNull());
+}
+
+void FocusCallsUi_Test::theCallPanelNeverMovesTheLayout()
+{
+    // A second group: a light with a long name and a zoom, and a plain one.
+    Fixture *longName = makeSpot(m_doc, QString("Upstage centre profile spot on the second electric, "
+                                                "far end by the fly rail"), 3.0f);
+    QLCFixtureMode *mode = const_cast<QLCFixtureMode *>(longName->fixtureMode());
+    {
+        QLCFixtureDef *def = mode->fixtureDef();
+        QLCChannel *z = new QLCChannel();
+        z->setName("Zoom"); z->setGroup(QLCChannel::Beam);
+        z->setPreset(QLCChannel::BeamZoomSmallBig);
+        def->addChannel(z); mode->insertChannel(z, 3);
+        QLCChannel *f = new QLCChannel();
+        f->setName("Focus"); f->setGroup(QLCChannel::Beam);
+        f->setPreset(QLCChannel::BeamFocusNearFar);
+        def->addChannel(f); mode->insertChannel(f, 4);
+        QLCPhysical ph = mode->physical();
+        ph.setLensDegreesMin(10.0);
+        ph.setLensDegreesMax(40.0);
+        mode->setPhysical(ph);
+        longName->setFixtureDefinition(def, mode);
+    }
+    FixtureGroup *g2 = new FixtureGroup(m_doc);
+    g2->setName("Electric 2 by the fly rail");
+    g2->setSize(QSize(2, 1));
+    g2->assignFixture(longName->id(), QLCPoint(0, 0));
+    g2->assignFixture(m_spots.first(), QLCPoint(1, 0));
+    m_doc->addFixtureGroup(g2);
+
+    // Saves to a venue with a long name.
+    VenueCorrections *venues = m_doc->programmer()->venueCorrections();
+    venues->setShowFile(m_dir->filePath("Spring.qlcc"), false);
+    QVERIFY(venues->setActiveVenue(venues->addVenue(
+        "Lincoln High School Performing Arts Center, main stage (spring tour)")));
+
+    FocusCall c1;
+    c1.groups << m_group;
+    c1.target.kind = FocusSession::Reference::Target;
+    c1.target.id = m_target;
+    c1.note = "Cut off the pros\nKeep the shutters off the legs";
+    FocusCall c2;
+    c2.groups << g2->id();
+    c2.target.kind = FocusSession::Reference::Target;
+    c2.target.id = m_target;
+    m_doc->programmer()->focusCalls()->setCalls({ c1, c2 });
+    FocusSession::Options o;
+    o.calls = m_doc->programmer()->focusCalls()->sessionCalls();
+    QString why;
+    QPointer<FocusModePanel> panel = FocusModePanel::startWith(m_doc, nullptr, o, &why,
+                                                               int(FocusSession::KeyboardInput));
+    QVERIFY2(panel != nullptr, qPrintable(why));
+    FocusSession *s = m_doc->programmer()->focusSession();
+    QVERIFY(s->isRunningCalls() && s->savesToVenue());
+    panel->resize(720, 900);
+    panel->show();
+    QVERIFY(QTest::qWaitForWindowExposed(panel));
+
+    const QStringList names = { "focusTitle", "focusCall", "focusFixture", "focusFixtureNote",
+                                "focusSaveStatus", "focusReferenceName", "focusOffsets", "focusDelta",
+                                "focusConfirmed", "focusBeam", "focusSaved", "focusScope", "focusStep",
+                                "focusPausedNote", "focusInputNote", "focusExit" };
+    const QHash<QString, QWidget *> extra = { { "map", panel->controlMap() } };
+    const LayoutSnapshot base = LayoutSnapshot::take(panel, names, extra);
+    QStringList moved;
+    auto check = [&](const QString &step) {
+        const QString what = LayoutSnapshot::take(panel, names, extra).movedSince(base, step);
+        if (!what.isEmpty())
+            moved << what;
+        if (panel->minimumSizeHint().width() > 720)
+            moved << QStringLiteral("after %1: wants %2 px wide").arg(step)
+                     .arg(panel->minimumSizeHint().width());
+    };
+    auto key = [&](int k, Qt::KeyboardModifiers m = Qt::NoModifier) {
+        QTest::keyClick(panel, Qt::Key(k), m);
+    };
+
+    check("opening");
+    QVERIFY(panel->findChild<QLabel *>("focusCall")->text().contains("Keep the shutters"));
+    for (int i = 0; i < 3; ++i)
+    {
+        key(Qt::Key_BracketRight);
+        check(QStringLiteral("next fixture %1").arg(i + 1));
+    }
+    key(Qt::Key_D);
+    QVERIFY(venues->isDead(s->currentFixture()));
+    QVERIFY(!panel->findChild<QLabel *>("focusFixtureNote")->text().isEmpty());
+    check("marked dead");
+    key(Qt::Key_D);
+    check("not dead");
+    key(Qt::Key_Right, Qt::ShiftModifier);
+    check("a nudge");
+    key(Qt::Key_Return);
+    check("save");
+    key(Qt::Key_Left, Qt::ShiftModifier);
+    key(Qt::Key_Backspace);
+    check("revert");
+    key(Qt::Key_G);
+    check("the whole call");
+    key(Qt::Key_G);
+    check("one fixture");
+    key(Qt::Key_PageDown);
+    QVERIFY(panel->findChild<QLabel *>("focusCall")->text().startsWith("Call 2 of 2"));
+    check("the next call (no note)");
+    for (int i = 0; i < 2; ++i)
+    {
+        key(Qt::Key_BracketRight);
+        check(QStringLiteral("call 2, next fixture %1").arg(i + 1));
+    }
+    s->setIndex(0);
+    check("the long name");
+    key(Qt::Key_Period, Qt::ShiftModifier);
+    key(Qt::Key_Apostrophe, Qt::ShiftModifier);
+    check("zoom and focus");
+    key(Qt::Key_R);
+    check("second reference");
+    key(Qt::Key_R);
+    key(Qt::Key_H);
+    check("holding");
+    key(Qt::Key_H);
+    key(Qt::Key_PageUp);
+    check("back to call 1");
+
+    QVERIFY2(moved.isEmpty(), qPrintable(moved.join(QStringLiteral("\n"))));
+    s->discardAll();
+}
+
+void FocusCallsUi_Test::theRefinePanelNeverMovesTheLayout()
+{
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("Spring");
+    const quint32 list = st->addCueList(prod, "Main");
+    const quint32 cue = st->addCue(list, -1, "Ballad with a long name for the cue in act two");
+    ShowTree::Target t;
+    t.groups << m_group;
+    const quint32 layer = st->addLayer(cue, t);
+    QLCPalette *centre = new QLCPalette(QLCPalette::PanTilt);
+    centre->setName("Centre");
+    centre->setValues({ 270, 135 });
+    m_doc->addPalette(centre);
+    ShowTree::Look pos;
+    pos.key = ShowTree::KeyPosition;
+    pos.palettes << centre->id();
+    QVERIFY(st->setLayerLook(cue, layer, pos));
+    const quint32 verse = st->addCue(list, 0, "Verse");
+
+    for (const quint32 c : { cue, verse })
+    {
+        QString why;
+        QPointer<RefinePanel> panel = RefinePanel::open(m_doc, nullptr, c,
+                                                        c == cue ? layer : 0xFFFFFFFF, &why);
+        QVERIFY2(panel != nullptr, qPrintable(why));
+        panel->resize(720, 820);
+        panel->show();
+        QVERIFY(QTest::qWaitForWindowExposed(panel));
+        const QStringList names = { "refineTitle", "refineLayer", "refineScope", "refinePending",
+                                    "refineToSource", "refineShared", "refineExit" };
+        const QHash<QString, QWidget *> extra = { { "map", panel->controlMap() } };
+        const LayoutSnapshot base = LayoutSnapshot::take(panel, names, extra);
+        QStringList moved;
+        auto check = [&](const QString &step) {
+            const QString what = LayoutSnapshot::take(panel, names, extra).movedSince(base, step);
+            if (!what.isEmpty())
+                moved << what;
+        };
+        auto key = [&](int k) { QTest::keyClick(panel, Qt::Key(k)); };
+        check("opening");
+        key(Qt::Key_Right);
+        check("pending");
+        key(Qt::Key_G);
+        check("scope");
+        key(Qt::Key_BracketRight);
+        check("next fixture");
+        key(Qt::Key_G);
+        key(Qt::Key_G);
+        check("scope back");
+        key(Qt::Key_Return);
+        check("kept");
+        key(Qt::Key_S);
+        check("keep to source");
+        key(Qt::Key_S);
+        key(Qt::Key_H);
+        check("holding");
+        key(Qt::Key_H);
+        QVERIFY2(moved.isEmpty(), qPrintable(QStringLiteral("cue %1: ").arg(c)
+                                             + moved.join(QStringLiteral("\n"))));
+        m_doc->programmer()->refineSession()->stop();
+        delete panel;
+    }
+}
+
+void FocusCallsUi_Test::aMissingVoiceOutputFallsBackToTheSystem()
+{
+#ifdef Q_OS_WIN
+    QSKIP("the fake say is a shell script");
+#else
+    // A `say` of its own: lists the outputs in "devices", fails like say -a
+    // on one not listed, and writes "<output>|<line>" to "log" for the rest.
+    const QString dir = m_dir->path();
+    const QString say = dir + "/say";
+    {
+        QFile f(say);
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write("#!/bin/sh\n"
+                "dir=$(dirname \"$0\")\n"
+                "dev=\"\"; prev=\"\"; last=\"\"\n"
+                "for a in \"$@\"; do\n"
+                "  if [ \"$prev\" = \"-a\" ]; then dev=\"$a\"; fi\n"
+                "  prev=\"$a\"; last=\"$a\"\n"
+                "done\n"
+                "if [ \"$dev\" = \"?\" ]; then cat \"$dir/devices\"; exit 0; fi\n"
+                "if [ -n \"$dev\" ] && ! grep -q \"^ *$dev \" \"$dir/devices\"; then\n"
+                "  echo \"Invalid device\" >&2; exit 1\n"
+                "fi\n"
+                "printf '%s|%s\\n' \"$dev\" \"$last\" >> \"$dir/log\"\n");
+        f.close();
+        QFile::setPermissions(say, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
+    }
+    auto setDevices = [dir](const QString &listing) {
+        QFile f(dir + "/devices");
+        QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        f.write(listing.toUtf8());
+    };
+    auto log = [dir]() {
+        QFile f(dir + "/log");
+        if (!f.open(QIODevice::ReadOnly))
+            return QStringList();
+        return QString::fromUtf8(f.readAll()).split('\n', Qt::SkipEmptyParts);
+    };
+    const QString all = "   74 MacBook Pro Speakers\n   91 Wireless Controller\n   92 Wireless Controller\n";
+    setDevices(all);
+
+    // Read as say -a ? lists them; one name twice, told apart by ID.
+    const QList<OperatorVoice::OutputDevice> listed = OperatorVoice::outputDeviceList(say);
+    QCOMPARE(listed.size(), 3);
+    QCOMPARE(listed.at(2).id, QString("92"));
+    QCOMPARE(listed.at(2).name, QString("Wireless Controller"));
+    QCOMPARE(OperatorVoice::findOutputDevice(listed, "92", "Wireless Controller"), 2);
+    QCOMPARE(OperatorVoice::findOutputDevice(listed, "17", "Wireless Controller"), 1);   // a new ID: by name
+    QCOMPARE(OperatorVoice::findOutputDevice(listed, "92", "AirPods"), -1);
+    QCOMPARE(OperatorVoice::findOutputDevice(listed, "", "MacBook Pro Speakers"), 0);
+
+    OperatorVoice::setOutputDevice("Wireless Controller", "92");
+    QCOMPARE(OperatorVoice::outputDeviceId(), QString("92"));
+    CommandVoice voice(say, { "-r", "210" });
+    voice.setDeviceCheckInterval(0);
+    auto sayAndWait = [&voice](const QString &line, int priority) {
+        voice.say(line, priority);
+        QTRY_VERIFY_WITH_TIMEOUT(!voice.isSpeaking(), 5000);
+    };
+
+    // The chosen pad, by its ID.
+    sayAndWait("Fixture 1, T1.", ControllerScheme::WherePriority);
+    QCOMPARE(log(), QStringList({ "92|Fixture 1, T1." }));
+
+    /* Its ID gone but the name there: a pad plugged in again gets a new
+       ID, so the name finds it. */
+    setDevices("   74 MacBook Pro Speakers\n   93 Wireless Controller\n");
+    sayAndWait("Fixture 2, T2.", ControllerScheme::WherePriority);
+    QStringList heard = log();
+    QCOMPARE(heard.size(), 2);
+    QCOMPARE(heard.at(1), QString("93|Fixture 2, T2."));
+
+    // Not there at all: the system's output, never lost, and said why once.
+    OperatorVoice::setOutputDevice("Headset feed", "50");
+    sayAndWait("Controller lost. Lights held.", ControllerScheme::ImportantPriority);
+    heard = log();
+    QCOMPARE(heard.size(), 3);
+    QCOMPARE(heard.at(2), "|" + CommandVoice::missingDeviceNotice("Headset feed")
+                          + " Controller lost. Lights held.");
+    sayAndWait("Saved.", ControllerScheme::ConfirmPriority);
+    sayAndWait("Fixture 3, T3.", ControllerScheme::WherePriority);
+    heard = log();
+    QCOMPARE(heard.size(), 5);
+    QCOMPARE(heard.at(3), QString("|Saved."));
+    QCOMPARE(heard.at(4), QString("|Fixture 3, T3."));
+
+    // Gone between the look and the line (say -a fails): the line again, on the system's.
+    setDevices("   74 MacBook Pro Speakers\n   50 Headset feed\n");
+    sayAndWait("Fixture 4, T4.", ControllerScheme::WherePriority);
+    QCOMPARE(log().last(), QString("50|Fixture 4, T4."));
+    voice.setDeviceCheckInterval(60000);        // trusts that look...
+    setDevices("   74 MacBook Pro Speakers\n");  // ...and the output goes
+    sayAndWait("Controller lost. Lights held.", ControllerScheme::ImportantPriority);
+    QCOMPARE(log().last(), "|" + CommandVoice::missingDeviceNotice("Headset feed")
+                           + " Controller lost. Lights held.");
+    voice.setDeviceCheckInterval(0);
+
+    // Back: to it again.
+    setDevices("   74 MacBook Pro Speakers\n   50 Headset feed\n");
+    sayAndWait("Fixture 5, T5.", ControllerScheme::WherePriority);
+    QCOMPARE(log().last(), QString("50|Fixture 5, T5."));
+
+    // The system's output chosen: no -a at all.
+    OperatorVoice::setOutputDevice(QString());
+    QVERIFY(OperatorVoice::outputDeviceId().isEmpty());
+    sayAndWait("Fixture 6, T6.", ControllerScheme::WherePriority);
+    QCOMPARE(log().last(), QString("|Fixture 6, T6."));
+#endif
 }
 
 void FocusCallsUi_Test::oneCorrectionIsSeenAndCleared()

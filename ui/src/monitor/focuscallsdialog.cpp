@@ -216,8 +216,9 @@ FocusCallsDialog::FocusCallsDialog(Doc *doc, QWidget *parent)
     vl->addLayout(reportRow);
     // The voice is the crew's cue: send it to the output that feeds the headsets.
     {
-        const QStringList devices = QGuiApplication::platformName() == QLatin1String("offscreen")
-                                    ? QStringList() : OperatorVoice::outputDevices();
+        const QList<OperatorVoice::OutputDevice> devices
+            = QGuiApplication::platformName() == QLatin1String("offscreen")
+              ? QList<OperatorVoice::OutputDevice>() : OperatorVoice::outputDeviceList();
         if (!devices.isEmpty())
         {
             QHBoxLayout *voiceRow = new QHBoxLayout;
@@ -225,13 +226,34 @@ FocusCallsDialog::FocusCallsDialog(Doc *doc, QWidget *parent)
             QComboBox *voice = new QComboBox(this);
             voice->setObjectName(QStringLiteral("fcVoiceDevice"));
             voice->addItem(tr("The system's output"), QString());
-            for (const QString &d : devices)
-                voice->addItem(d, d);
-            const int at = voice->findData(OperatorVoice::outputDevice());
-            voice->setCurrentIndex(qMax(0, at));
-            voice->setToolTip(tr("Where the spoken calls go: the output that feeds the crew's headsets"));
+            /* Kept by ID as well as name: two pads are both "Wireless
+               Controller", so one of the same name shows its ID. */
+            QStringList names;
+            for (const OperatorVoice::OutputDevice &d : devices)
+                names << d.name;
+            for (const OperatorVoice::OutputDevice &d : devices)
+            {
+                voice->addItem(names.count(d.name) > 1 ? tr("%1 (ID %2)").arg(d.name, d.id) : d.name,
+                               d.name);
+                voice->setItemData(voice->count() - 1, d.id, Qt::UserRole + 1);
+            }
+            const int at = OperatorVoice::findOutputDevice(devices, OperatorVoice::outputDeviceId(),
+                                                           OperatorVoice::outputDevice());
+            if (at >= 0)
+                voice->setCurrentIndex(at + 1);
+            else if (!OperatorVoice::outputDevice().isEmpty())
+            {
+                // Chosen and not here now: kept, and shown as missing.
+                voice->addItem(tr("%1 (not connected)").arg(OperatorVoice::outputDevice()),
+                               OperatorVoice::outputDevice());
+                voice->setItemData(voice->count() - 1, OperatorVoice::outputDeviceId(), Qt::UserRole + 1);
+                voice->setCurrentIndex(voice->count() - 1);
+            }
+            voice->setToolTip(tr("Where the spoken calls go: the output that feeds the crew's headsets. "
+                                 "When it is not there, the calls are spoken on this computer."));
             connect(voice, &QComboBox::currentIndexChanged, this, [voice]() {
-                OperatorVoice::setOutputDevice(voice->currentData().toString());
+                OperatorVoice::setOutputDevice(voice->currentData().toString(),
+                                               voice->currentData(Qt::UserRole + 1).toString());
             });
             voiceRow->addWidget(voice, 1);
             vl->addLayout(voiceRow);

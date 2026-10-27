@@ -56,6 +56,17 @@ ASan and UBSan, with no generic fader test hang. On Windows, the Build
 outline, Build ▸ Effects and the Show Tree Library refresh when the show
 changes (signals across DLLs), and CI's Windows tests now fail the build.
 
+Release candidate 5 fixes, from testing RC4: the Focus screen no longer
+changes its layout as the controller's buttons change what it says (nor
+does Focus this cue); the voice falls back to the computer's own output
+when the chosen "Voice to:" output is gone, instead of losing every line;
+and Fixture Properties' orientation diagram draws a fixed light where it
+really throws. From the test matrices: an RGB matrix whose script isn't
+installed keeps it through a save; Save As to another folder keeps the
+truss and tower pictures with the new show; four thread races found by
+ThreadSanitizer (stop-all on File ▸ New or Open, a chaser's runner, the
+run-state flags, Blind); and the show-file tests fit CI Windows' time.
+
 ### Added
 
 - **The venue chip and one venue menu** (RC3, board Q150). The footer, beside
@@ -797,6 +808,52 @@ changes (signals across DLLs), and CI's Windows tests now fail the build.
 
 ### Fixed
 
+- **The Focus screen keeps its layout while you work** (RC5). Pressing the
+  controller's buttons in Quick focus or Venue focus made the panel jump:
+  every label that gained or lost a line, or appeared (the beam, the
+  change since the save, what was just confirmed), resized the controller
+  drawing under it, and a long fixture or device name widened the window.
+  Each line now keeps a fixed room whatever it says (cut text is in its
+  tooltip), the warnings under a fixture's name have a line of their own,
+  the pan and tilt digits are all one width, and the "Use the controller"
+  button keeps its place. Focus this cue's panel does the same. Switching
+  between the controller and keyboard maps still resizes, as before.
+- **The voice is never lost when its output is gone** (RC5). With "Voice
+  to:" set to an output that isn't there (a controller unplugged, asleep
+  or on Bluetooth), every spoken line, "Controller lost. Lights held."
+  included, failed silently. The voice now speaks on the computer's own
+  output instead, says once why, and goes back to the chosen output when
+  it returns. The output is kept by ID as well as name, so two pads both
+  called "Wireless Controller" are told apart.
+- **Fixture Properties' orientation diagram shows where a fixed light
+  throws** (RC5). It knew only the face's plane: Back drew downstage,
+  Bottom drew like Top, and Stage left drew stage right; tilt and a
+  Pan/Tilt aim were ignored. It now follows the 3D view's rule (the face's
+  side, its tilt, or the aim), draws a light pointing straight down or up
+  as a filled dot or a ring, and follows the aim as it is edited.
+- **An RGB matrix whose script isn't installed keeps it** (RC5, test
+  matrix C1). Its algorithm was dropped on the first save and the show
+  reopened as Stripes, without a word (CORP-DEV-1.0's Plasma (Colors)
+  matrices). The `<Algorithm>` is now kept as it was and written back
+  unchanged, and opening the show says which matrix uses a script this
+  computer doesn't have.
+- **Save As to another folder keeps the pictures with the new show** (RC5,
+  test matrix C3). A truss or tower picture was copied into the old show's
+  images/ folder and the new file named images/… where there was none,
+  for any save that hadn't set the show's folder first. The save now
+  makes the target's folder the show's folder while it writes (and puts it
+  back if the save fails), and a folder whose name merely starts the
+  same ("Show 2" and "Show") is no longer taken for the show's own.
+- **Thread races found by ThreadSanitizer** (RC5, test matrix 2: M1, M2,
+  L1, L3). Stop-all could return while a function waited to start, which
+  then ran on for File ▸ New or Open to delete under the timer (a rare
+  crash; upstream's fix 7e2f4ae84 included). A chaser's runner was
+  parented to the chaser from the timer thread. A function's run-state
+  flags and Blind are now atomic, and a stop that keeps the function's
+  attributes is seen with that choice.
+- **The show-file tests fit CI Windows' five minutes** (RC5): each show is
+  opened fewer times for the same checks, and Fixture Properties for every
+  fixture is its own test program.
 - **On Windows, Build and the Show Tree follow the show again** (RC4, test
   matrix W1–W3). The Build outline, Build ▸ Effects and the Show Tree
   Library never refreshed when a function, group, fixture or palette

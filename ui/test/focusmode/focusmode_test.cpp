@@ -31,6 +31,7 @@
 #include <QMessageBox>
 
 #include "focusmode_test.h"
+#include "../common/layoutstability.h"
 #include "iopluginstub.h"
 #include "qlcfile.h"
 #include "programmercontroller.h"
@@ -977,6 +978,172 @@ void FocusMode_Test::exitNamesTheUnsavedLights()
     QVERIFY(!panel->requestExit());
     QCOMPARE(asked, QStringLiteral("2 lights have changes you have not saved: A, B."));
     QVERIFY(s->isActive());
+}
+
+/* A spot with a zoom and focus channel over 10-40 degrees, or without. */
+static Fixture *makeLayoutSpot(Doc *doc, const QString &name, float x, bool zoom)
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test"); def->setModel("Focus Layout " + name);
+    def->setType(QLCFixtureDef::MovingHead);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("ch");
+    QList<QPair<QString, QLCChannel::Group>> chans = {
+        { "Pan", QLCChannel::Pan }, { "Tilt", QLCChannel::Tilt }, { "Dimmer", QLCChannel::Intensity } };
+    QLCFixtureHead head;
+    for (int k = 0; k < chans.size(); ++k)
+    {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(chans.at(k).first);
+        ch->setGroup(chans.at(k).second);
+        ch->setControlByte(QLCChannel::MSB);
+        def->addChannel(ch);
+        mode->insertChannel(ch, k);
+        head.addChannel(k);
+    }
+    if (zoom)
+    {
+        QLCChannel *z = new QLCChannel();
+        z->setName("Zoom"); z->setGroup(QLCChannel::Beam);
+        z->setPreset(QLCChannel::BeamZoomSmallBig);
+        def->addChannel(z); mode->insertChannel(z, 3);
+        QLCChannel *f = new QLCChannel();
+        f->setName("Focus"); f->setGroup(QLCChannel::Beam);
+        f->setPreset(QLCChannel::BeamFocusNearFar);
+        def->addChannel(f); mode->insertChannel(f, 4);
+    }
+    QLCPhysical ph;
+    ph.setFocusPanMax(540);
+    ph.setFocusTiltMax(270);
+    ph.setLensDegreesMin(10.0);
+    ph.setLensDegreesMax(40.0);
+    mode->setPhysical(ph);
+    mode->insertHead(-1, head);
+    def->addMode(mode);
+    Fixture *fxi = new Fixture(doc);
+    fxi->setName(name);
+    fxi->setFixtureDefinition(def, mode);
+    fxi->setUniverse(0);
+    fxi->setAddress(quint32(100 + doc->fixtures().size() * 8));
+    if (!doc->addFixture(fxi))
+        return nullptr;
+    doc->monitorProperties()->setFixturePosition(fxi->id(), 0, 0, QVector3D(x * 1000.0f, 3000.0f, 5.0f));
+    return fxi;
+}
+
+void FocusMode_Test::aPressNeverMovesTheLayout()
+{
+    plugInPad();
+    Fixture *longName = makeLayoutSpot(m_doc, QString("Upstage centre profile spot on the second electric, %1")
+                                       .arg("far end by the fly rail"), 1.0f, false);
+    Fixture *zoom = makeLayoutSpot(m_doc, "Wash Z", 3.0f, true);
+    Fixture *plain = makeLayoutSpot(m_doc, "Spot P", 5.0f, false);
+    QVERIFY(longName != nullptr && zoom != nullptr && plain != nullptr);
+    const QList<quint32> added = { longName->id(), zoom->id(), plain->id() };
+    FocusSession::Options o = optionsFor(added, m_target);
+    o.order = FocusSession::AsGiven;
+
+    QString why;
+    QPointer<FocusModePanel> panel = FocusModePanel::startWith(
+        m_doc, nullptr, o, &why, int(FocusSession::ControllerInput));
+    QVERIFY2(panel != nullptr, qPrintable(why));
+    FocusSession *s = m_doc->programmer()->focusSession();
+    panel->resize(720, 900);
+    panel->show();
+    QVERIFY(QTest::qWaitForWindowExposed(panel));
+
+    const QStringList names = { "focusTitle", "focusFixture", "focusFixtureNote", "focusSaveStatus",
+                                "focusReferenceName", "focusOffsets", "focusDelta", "focusConfirmed",
+                                "focusBeam", "focusSaved", "focusScope", "focusStep",
+                                "focusPausedNote", "focusInputNote", "focusExit" };
+    const QHash<QString, QWidget *> extra = { { "map", panel->controlMap() } };
+    const LayoutSnapshot base = LayoutSnapshot::take(panel, names, extra);
+    QVERIFY(base.rects.value("focusFixtureNote").isValid());
+    QStringList moved;
+    auto check = [&](const QString &step, bool mapMayChange = false) {
+        LayoutSnapshot now = LayoutSnapshot::take(panel, names, extra);
+        LayoutSnapshot was = base;
+        if (mapMayChange)
+        {
+            /* Controller <-> keyboard map: the map and the window are meant
+               to change size (the keys take less room); nothing above it is. */
+            for (const char *n : { "map", "focusExit" })
+                was.rects.remove(n), now.rects.remove(n);
+            now.size = was.size;
+        }
+        const QString what = now.movedSince(was, step);
+        if (!what.isEmpty())
+            moved << what;
+        if (panel->minimumSizeHint().width() > 720)
+            moved << QStringLiteral("after %1: wants %2 px wide").arg(step)
+                     .arg(panel->minimumSizeHint().width());
+    };
+    auto key = [&](int k, Qt::KeyboardModifiers m = Qt::NoModifier) {
+        QTest::keyClick(panel, Qt::Key(k), m);
+    };
+
+    check("opening");
+    // Through every fixture and back: a long name, a zoom light, a plain one.
+    for (int i = 0; i < added.size(); ++i)
+    {
+        s->next();
+        check(QStringLiteral("next to %1").arg(m_doc->fixture(s->currentFixture())->name()));
+    }
+    s->previous();
+    check("previous");
+    s->setIndex(1);     // the zoom light
+    check("the zoom light");
+    // A nudge: unsaved, the change since the save shown.
+    key(Qt::Key_Right, Qt::ShiftModifier);
+    QVERIFY(!panel->deltaLine().isEmpty());
+    check("a nudge");
+    key(Qt::Key_Return);
+    check("save");
+    key(Qt::Key_Up, Qt::ShiftModifier);
+    key(Qt::Key_Backspace);
+    check("revert");
+    key(Qt::Key_0);
+    check("zero");
+    key(Qt::Key_G);
+    check("the whole list");
+    key(Qt::Key_G);
+    check("one fixture");
+    key(Qt::Key_R);
+    check("second reference");
+    key(Qt::Key_R);
+    check("first reference");
+    key(Qt::Key_Period, Qt::ShiftModifier);
+    check("zoom");
+    key(Qt::Key_Apostrophe, Qt::ShiftModifier);
+    check("focus");
+    key(Qt::Key_H);
+    QVERIFY(m_doc->programmer()->isHolding());
+    check("holding");
+    key(Qt::Key_H);
+    check("hold off");
+    key(Qt::Key_D);             // no venue: said why not
+    check("dead, no venue");
+    s->setIndex(0);      // the long name, unsaved elsewhere
+    key(Qt::Key_Left, Qt::ShiftModifier);
+    s->setIndex(2);
+    key(Qt::Key_Left, Qt::ShiftModifier);
+    check("unsaved here and elsewhere");
+    // The pad goes and comes back.
+    unplugPad();
+    QCOMPARE(panel->controlMap()->mode(), FocusControlMap::KeyboardMap);
+    check("controller gone", true);
+    plugInPad();
+    // It takes over once the keys have been still a moment.
+    QTRY_COMPARE_WITH_TIMEOUT(panel->controlMap()->mode(), FocusControlMap::ControllerMap, 5000);
+    check("controller back", true);
+
+    QVERIFY2(moved.isEmpty(), qPrintable(moved.join(QStringLiteral("\n"))));
+
+    s->discardAll();
+    panel->requestExit();
+    QTRY_VERIFY(panel.isNull());
+    for (quint32 id : added)
+        m_doc->deleteFixture(id);
 }
 
 void FocusMode_Test::shots()

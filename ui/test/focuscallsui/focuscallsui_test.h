@@ -77,6 +77,20 @@ private slots:
     void aSiblingsVenuesAreOffered();
     /** Gap 10: the Refine panel has the same lamp: kept, here, elsewhere. */
     void theRefinePanelHasTheLamp();
+    /** "Voice to:" an output that is not there (the pad unplugged): every
+     *  line goes to the system's output instead of being lost -- "Controller
+     *  lost. Lights held." with the rest -- the first says why, and the
+     *  output is used again when it is back. Two outputs of one name are
+     *  told apart by ID (RC5; a fake `say` that records). */
+    void aMissingVoiceOutputFallsBackToTheSystem();
+    /** Venue focus (Focus calls): no press moves the panel's layout -- a
+     *  call with a two-line note and one without, a long venue name, a long
+     *  fixture name, a zoom light, a light marked dead, nudge, save, revert,
+     *  scope, reference, beam, hold (RC5). */
+    void theCallPanelNeverMovesTheLayout();
+    /** The Refine panel likewise: pending, kept, scope, the next layer, a
+     *  tracked cue's "keep in the cue it tracks from" (RC5). */
+    void theRefinePanelNeverMovesTheLayout();
     /** One light's venue correction seen and cleared (the venue manager). */
     void oneCorrectionIsSeenAndCleared();
     /** Q134: the venue manager exports the focus report -- PDF, web page
