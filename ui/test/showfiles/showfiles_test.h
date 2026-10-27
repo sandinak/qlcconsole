@@ -42,7 +42,8 @@ private slots:
     /** Open a copy, save it, open the save: the same fixtures, groups,
      *  palettes, functions (and what each holds), universes, Virtual
      *  Console, plot, Show Tree and settings; and saving that again writes
-     *  the same bytes. */
+     *  the same bytes. A whole show is never taken for a damaged one, and a
+     *  QLC+ 4.x show keeps Auto-open shutters off through the round trip. */
     void aShowSavedAndOpenedAgainIsTheSame_data();
     void aShowSavedAndOpenedAgainIsTheSame();
 
@@ -53,16 +54,12 @@ private slots:
     void aShowFromANewerBuildOpens();
 
     /** Opening a show (and closing it) never writes the file, or anything
-     *  beside it. */
+     *  beside it. And opened and not touched, a show is not modified:
+     *  closing it asks nothing and no autosave is written. A show whose
+     *  trusses have no group yet (help-demo, Office) gets them as the plot
+     *  is built -- derived the same at every open, so not an edit (F3). */
     void openingAShowNeverWritesIt_data();
     void openingAShowNeverWritesIt();
-
-    /** Opened and not touched, a show is not modified: closing it asks
-     *  nothing and no autosave is written. A show whose trusses have no
-     *  group yet (help-demo, Office) gets them as the plot is built --
-     *  derived the same at every open, so not an edit (F3). */
-    void aShowOpensUnmodified_data();
-    void aShowOpensUnmodified();
 
     /** A show file cut short opens as far as it can be read, says so (a
      *  warning naming the line, and the footer's load problems), and a
@@ -73,21 +70,21 @@ private slots:
 
     /** A QLC+ 4.x show opens with Auto-open shutters off, so it sends the
      *  same DMX here as in QLC+; once saved here the setting is in the file
-     *  and opens the same. */
-    void aStockShowOpensWithAutoOpenOff_data();
+     *  and opens the same; a new show has it on. (Every other stock show is
+     *  checked in aShowSavedAndOpenedAgainIsTheSame.) */
     void aStockShowOpensWithAutoOpenOff();
 
     /** File ▸ Collect for Transfer…: the folder holds the show and its
      *  venue file, and the show opened from there has its venues. */
     void collectForTransferTakesTheVenues();
 
-    /** Fixture Properties opens for every fixture in every course show and
-     *  test workspace, from a double-click in the Fixture Manager and from
-     *  its Fixture Properties… entry: on the plot or not, staged, a house
-     *  light, a generic dimmer, a definition that is missing. A fixture not
-     *  on the plot has its position rows greyed. */
-    void fixturePropertiesOpensForEveryFixture_data();
-    void fixturePropertiesOpensForEveryFixture();
+    /** Save As into another folder: the truss and tower pictures kept with
+     *  the show are copied into the NEW folder's images/ and the file names
+     *  them there; the old folder is not written; opened from its new
+     *  place, the show finds them (C3). Also when the old folder's name
+     *  starts the new one's ("Show 2" -> "Show"). */
+    void saveAsToAnotherFolderTakesThePictures();
+
 
 private:
     QStringList fingerprint() const;

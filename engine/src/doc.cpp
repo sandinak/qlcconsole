@@ -418,7 +418,12 @@ QString Doc::normalizeComponentPath(const QString& filePath) const
 
     // No workspace path (an unsaved show): keep the absolute path, rather
     // than one relative to whatever the current directory happens to be.
-    if (!workspacePath().isEmpty() && f.absolutePath().startsWith(workspacePath()))
+    // Under the show's folder: the folder itself or one inside it (not a
+    // sibling whose name merely starts the same, /Shows/A vs /Shows/AB).
+    const QString ws = QDir(workspacePath()).absolutePath();
+    const QString in = f.absolutePath();
+    if (!workspacePath().isEmpty()
+        && (in == ws || in.startsWith(ws.endsWith(QLatin1Char('/')) ? ws : ws + QLatin1Char('/'))))
     {
         return QDir(workspacePath()).relativeFilePath(f.absoluteFilePath());
     }

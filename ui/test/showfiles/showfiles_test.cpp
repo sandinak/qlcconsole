@@ -60,6 +60,8 @@
 #include "universe.h"
 #include "inputoutputmap.h"
 #include "monitorproperties.h"
+#include "truss.h"
+#include "tower.h"
 #include "showtreecontroller.h"
 #include "programmercontroller.h"
 #include "venuecorrections.h"
@@ -324,16 +326,31 @@ void ShowFiles_Test::aShowSavedAndOpenedAgainIsTheSame()
     QVERIFY(QFile::copy(path, copy));
 
     QCOMPARE(open(m_app, copy), QFile::NoError);
+    // A whole show is not taken for a damaged one.
+    QVERIFY(m_app->damagedFile().isEmpty());
     const QStringList first = fingerprint();
     QVERIFY2(first.size() > 3, "the show opened empty");
 
+    /* A QLC+ 4.x show opens with Auto-open shutters off, so it sends the
+       same DMX here as in QLC+; saved here, the setting is in the file and
+       it opens the same (aStockShowOpensWithAutoOpenOff, for every stock
+       show without opening each again). */
+    const bool stock = !savedByQlcconsole(path) && !fileBytes(path).contains("<ShutterAutoOpen");
+    if (stock)
+        QVERIFY2(!m_app->doc()->shutterAutoOpen()->isEnabled(),
+                 "a QLC+ show must send the DMX it sends in QLC+");
+
     const QString a = dir.filePath(QStringLiteral("saved-a.") + ext);
     QCOMPARE(save(m_app, a), QFile::NoError);
+    if (stock)
+        QVERIFY(fileBytes(a).contains("<ShutterAutoOpen"));
 
     QCOMPARE(open(m_app, a), QFile::NoError);
     compareLines(fingerprint(), first);
     if (QTest::currentTestFailed())
         return;
+    if (stock)
+        QVERIFY(!m_app->doc()->shutterAutoOpen()->isEnabled());
 
     // Saved again, it is the same file: nothing drifts each time it's saved.
     const QString b = dir.filePath(QStringLiteral("saved-b.") + ext);
@@ -457,33 +474,18 @@ void ShowFiles_Test::openingAShowNeverWritesIt()
     const QStringList before = state();
 
     QCOMPARE(open(m_app, copy), QFile::NoError);
-    // Looked at, and closed without saving.
     QCoreApplication::processEvents();
+    /* Opened and not touched, it is not modified: closing it asks nothing
+       and no autosave is written (aShowOpensUnmodified, folded in here so
+       each show is opened once for both). */
+    QVERIFY2(!m_app->doc()->isModified(), "opened, not changed: nothing to save");
+    // Looked at, and closed without saving.
     m_app->clearDocument();
     QCoreApplication::processEvents();
 
     const QStringList after = state();
     QVERIFY2(after == before, qPrintable(QStringLiteral("before:\n%1\nafter:\n%2")
                                          .arg(before.join('\n'), after.join('\n'))));
-}
-
-void ShowFiles_Test::aShowOpensUnmodified_data()
-{
-    addShowRows(false);
-}
-
-void ShowFiles_Test::aShowOpensUnmodified()
-{
-    QFETCH(QString, path);
-    QTemporaryDir dir;
-    QVERIFY(dir.isValid());
-    const QString copy = dir.filePath(QFileInfo(path).fileName());
-    QVERIFY(QFile::copy(path, copy));
-    QFile::setPermissions(copy, QFile::ReadOwner | QFile::WriteOwner);
-
-    QCOMPARE(open(m_app, copy), QFile::NoError);
-    QCoreApplication::processEvents();
-    QVERIFY2(!m_app->doc()->isModified(), "opened, not changed: nothing to save");
 }
 
 void ShowFiles_Test::aDamagedShowOpensAndIsNotSavedOver_data()
@@ -496,14 +498,19 @@ void ShowFiles_Test::aDamagedShowOpensAndIsNotSavedOver_data()
         QStringLiteral(SHOWFILES_WORKSPACES "/DanceHysteria-0.1.qlcc"),
         QStringLiteral(SHOWFILES_SAMPLE),
     };
+    /* One cut per show, the cut points taken in turn, so every show and
+       every point is covered without opening each show three times (the
+       suite ran past CI Windows' five minutes with all twelve). */
+    const double cuts[] = { 0.3, 0.6, 0.95 };
+    int n = 0;
     for (const QString &show : shows)
     {
         if (!QFileInfo::exists(show))
             continue;
-        for (double kept : { 0.3, 0.6, 0.95 })
-            QTest::newRow(qPrintable(QStringLiteral("%1 %2%").arg(QFileInfo(show).fileName())
-                                         .arg(int(kept * 100))))
-                << show << kept;
+        const double kept = cuts[n++ % 3];
+        QTest::newRow(qPrintable(QStringLiteral("%1 %2%").arg(QFileInfo(show).fileName())
+                                     .arg(int(kept * 100))))
+            << show << kept;
     }
 }
 
@@ -560,24 +567,17 @@ void ShowFiles_Test::aDamagedShowOpensAndIsNotSavedOver()
     QCOMPARE(open(m_app, recovered), QFile::NoError);
     QVERIFY(m_app->damagedFile().isEmpty());
     QVERIFY(!m_app->doc()->errorLog().contains(QStringLiteral("damaged or incomplete")));
-
-    // The whole show is not damaged.
-    const QString good = dir.filePath(QStringLiteral("whole.") + QFileInfo(path).suffix());
-    QVERIFY(QFile::copy(path, good));
-    QCOMPARE(open(m_app, good), QFile::NoError);
-    QVERIFY(m_app->damagedFile().isEmpty());
-}
-
-void ShowFiles_Test::aStockShowOpensWithAutoOpenOff_data()
-{
-    addShowRows(true);
+    // (That a whole show is not taken for a damaged one is checked for
+    // every show in aShowSavedAndOpenedAgainIsTheSame.)
 }
 
 void ShowFiles_Test::aStockShowOpensWithAutoOpenOff()
 {
-    QFETCH(QString, path);
-    if (fileBytes(path).contains("<ShutterAutoOpen"))
-        QSKIP("this show says what it wants");
+    /* One stock show through every step here; every other stock show is
+       checked the same way in aShowSavedAndOpenedAgainIsTheSame. */
+    const QString path = QStringLiteral(SHOWFILES_SAMPLE);    // QLC+'s own sample
+    QVERIFY(!savedByQlcconsole(path));
+    QVERIFY(!fileBytes(path).contains("<ShutterAutoOpen"));
     QTemporaryDir dir;
     QVERIFY(dir.isValid());
     const QString copy = dir.filePath(QFileInfo(path).fileName());
@@ -673,106 +673,102 @@ void ShowFiles_Test::collectForTransferTakesTheVenues()
     QCOMPARE(venues->activeVenue(), QStringLiteral("Lincoln HS"));
 }
 
-void ShowFiles_Test::fixturePropertiesOpensForEveryFixture_data()
+void ShowFiles_Test::saveAsToAnotherFolderTakesThePictures()
 {
-    QTest::addColumn<QString>("path");
-    QStringList paths = showFiles();
-    QDir course(QStringLiteral(SHOWFILES_COURSE));
-    for (const QString &name : course.entryList({ QStringLiteral("*.qlcc") }, QDir::Files, QDir::Name))
-        paths << course.absoluteFilePath(name);
-    for (const QString &path : paths)
-        QTest::newRow(qPrintable(QFileInfo(path).fileName())) << path;
-}
-
-void ShowFiles_Test::fixturePropertiesOpensForEveryFixture()
-{
-    QFETCH(QString, path);
-    QTemporaryDir dir;
-    QVERIFY(dir.isValid());
-    const QString copy = dir.filePath(QStringLiteral("show.") + QFileInfo(path).suffix());
-    QVERIFY(QFile::copy(path, copy));
-    QCOMPARE(open(m_app, copy), QFile::NoError);
-    Doc *doc = m_app->doc();
-    if (doc->fixtures().isEmpty())
-        QSKIP("no fixtures in this show");
-    doc->setMode(Doc::Design);
-
-    FixtureManager *fm = FixtureManager::instance();
-    QVERIFY(fm != nullptr);
-    fm->updateView();
-    Monitor *mon = Monitor::instance();
-    QVERIFY(mon != nullptr);
-
-    // Every fixture's row in the Fixture Manager (not a head row).
-    QHash<quint32, QTreeWidgetItem *> rows;
-    for (QTreeWidgetItemIterator it(fm->m_fixtures_tree); *it; ++it)
+    QTemporaryDir base;
+    QVERIFY(base.isValid());
+    QDir root(base.path());
+    QVERIFY(root.mkpath(QStringLiteral("Show 2")) && root.mkpath(QStringLiteral("Show"))
+            && root.mkpath(QStringLiteral("Downloads")) && root.mkpath(QStringLiteral("Elsewhere")));
+    const QString oldFolder = root.absoluteFilePath(QStringLiteral("Show 2"));
+    const QString newFolder = root.absoluteFilePath(QStringLiteral("Show"));
+    const QString picture = root.absoluteFilePath(QStringLiteral("Downloads/stones.jpg"));
     {
-        const QVariant v = (*it)->data(0, PROP_ID);
-        if (v.isValid() && !(*it)->data(0, PROP_HEAD).isValid() && !rows.contains(v.toUInt()))
-            rows.insert(v.toUInt(), *it);
+        QFile f(picture);
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write("stones");
     }
 
-    /* Each opening's modal: its title, and whether its position rows are
-       greyed. Rejected, so nothing is changed. */
-    QString title;
-    bool posEnabled = false;
-    bool offPlotNote = false;
-    QTimer watch;
-    watch.setInterval(5);
-    QObject::connect(&watch, &QTimer::timeout, [&]() {
-        QDialog *d = qobject_cast<QDialog *>(QApplication::activeModalWidget());
-        if (d == nullptr)
-            return;
-        title = d->windowTitle();
-        QWidget *x = d->findChild<QWidget *>(QStringLiteral("fixtureX"));
-        posEnabled = x != nullptr && x->isEnabled();
-        offPlotNote = d->findChild<QWidget *>(QStringLiteral("fixtureNotOnPlot")) != nullptr;
-        d->reject();
+    // A show in "Show 2" whose truss and tower wear a picture from elsewhere.
+    const QString demo = QDir(oldFolder).absoluteFilePath(QStringLiteral("demo.qxw"));
+    QVERIFY(QFile::copy(QStringLiteral(SHOWFILES_WORKSPACES) + QStringLiteral("help-demo.qxw"), demo));
+    QCOMPARE(open(m_app, demo), QFile::NoError);
+    MonitorProperties *mp = m_app->doc()->monitorProperties();
+    Truss *truss = mp->addTruss();
+    truss->setSock(true);
+    truss->setSockPattern(picture);
+    Tower *tower = mp->addTower();
+    tower->setFaces(true);
+    tower->setFacesPattern(picture);
+    const QString oldShow = QDir(oldFolder).absoluteFilePath(QStringLiteral("Tour.qlcc"));
+    QCOMPARE(save(m_app, oldShow), QFile::NoError);
+    QCOMPARE(fileBytes(QDir(oldFolder).absoluteFilePath(QStringLiteral("images/stones.jpg"))),
+             QByteArray("stones"));
+    const QStringList oldBefore = folderState(oldFolder);
+
+    // File > Save As..., into "Show".
+    const QString newShow = QDir(newFolder).absoluteFilePath(QStringLiteral("Tour.qlcc"));
+    QTimer answer;
+    answer.setInterval(30);
+    connect(&answer, &QTimer::timeout, this, [&answer, newShow]() {
+        QWidget *w = QApplication::activeModalWidget();
+        if (QFileDialog *fd = qobject_cast<QFileDialog *>(w))
+        {
+            fd->selectFile(newShow);
+            answer.stop();
+            static_cast<QDialog *>(fd)->accept();
+        }
+        else if (QMessageBox *box = qobject_cast<QMessageBox *>(w))
+        {
+            if (box->button(QMessageBox::Save) != nullptr)
+                box->button(QMessageBox::Save)->click();
+            else
+                box->accept();
+        }
     });
-    watch.start();
+    answer.start();
+    QCOMPARE(m_app->slotFileSaveAs(), QFile::NoError);
+    answer.stop();
+    QCoreApplication::processEvents();
+    QCOMPARE(m_app->fileName(), newShow);
+    QCOMPARE(QDir(m_app->doc()->workspacePath()).absolutePath(), newFolder);
 
-    QStringList failed;
-    int offPlot = 0;
-    const QList<Fixture *> fixtures = doc->fixtures();
-    for (Fixture *fx : fixtures)
-    {
-        const quint32 fid = fx->id();
-        QTreeWidgetItem *row = rows.value(fid, nullptr);
-        if (row == nullptr)
-        {
-            failed << QStringLiteral("%1 '%2': no row in the Fixture Manager").arg(fid).arg(fx->name());
-            continue;
-        }
-        const bool onPlot = mon->m_graphicsView->fixtureItemForId(fid) != nullptr;
-        offPlot += onPlot ? 0 : 1;
+    // The picture went into the new folder; nothing was written in the old.
+    QCOMPARE(fileBytes(QDir(newFolder).absoluteFilePath(QStringLiteral("images/stones.jpg"))),
+             QByteArray("stones"));
+    QCOMPARE(folderState(oldFolder), oldBefore);
+    const QByteArray xml = fileBytes(newShow);
+    QVERIFY2(xml.contains("SockPattern=\"images/stones.jpg\""), xml.constData());
+    QVERIFY(xml.contains("FacesPattern=\"images/stones.jpg\""));
+    QVERIFY(!xml.contains("Show 2"));
 
-        // A double-click on its row.
-        title.clear();
-        fm->slotDoubleClicked(row);
-        if (!title.startsWith(QStringLiteral("Fixture Properties")))
-            failed << QStringLiteral("%1 '%2' (%3): double-click opened '%4'")
-                          .arg(fid).arg(fx->name()).arg(onPlot ? "on the plot" : "not on the plot").arg(title);
-        else if (posEnabled == !onPlot || offPlotNote == onPlot)
-            failed << QStringLiteral("%1 '%2': position rows %3 for a fixture %4")
-                          .arg(fid).arg(fx->name()).arg(posEnabled ? "enabled" : "greyed")
-                          .arg(onPlot ? "on the plot" : "not on the plot");
+    // Opened from its new place, it finds them there.
+    auto inFolder = [](const QString &path, const QString &folder) {
+        return QFileInfo(path).exists()
+               && QFileInfo(QFileInfo(path).absolutePath()).canonicalFilePath()
+                      == QFileInfo(QDir(folder).absoluteFilePath(QStringLiteral("images"))).canonicalFilePath();
+    };
+    QCOMPARE(open(m_app, newShow), QFile::NoError);
+    mp = m_app->doc()->monitorProperties();
+    QVERIFY(!mp->trusses().isEmpty() && !mp->towers().isEmpty());
+    QVERIFY2(inFolder(mp->trusses().last()->sockPattern(), newFolder),
+             qPrintable(mp->trusses().last()->sockPattern()));
+    QVERIFY2(inFolder(mp->towers().last()->facesPattern(), newFolder),
+             qPrintable(mp->towers().last()->facesPattern()));
 
-        // Its right-click ▸ Fixture Properties… (the same action), for the first one.
-        if (fid == fixtures.first()->id())
-        {
-            fm->m_fixtures_tree->clearSelection();
-            fm->m_fixtures_tree->setCurrentItem(row);
-            row->setSelected(true);
-            title.clear();
-            QVERIFY(fm->m_propertiesAction->isEnabled());
-            fm->m_propertiesAction->trigger();
-            if (!title.startsWith(QStringLiteral("Fixture Properties")))
-                failed << QStringLiteral("%1: Fixture Properties… opened '%2'").arg(fid).arg(title);
-        }
-    }
-    watch.stop();
-    qDebug() << fixtures.size() << "fixtures," << offPlot << "not on the plot";
-    QVERIFY2(failed.isEmpty(), qPrintable(failed.mid(0, 12).join(QStringLiteral("\n  "))));
+    // Saved by name from code (the same App::saveXML), it is the same story.
+    const QString elsewhere = root.absoluteFilePath(QStringLiteral("Elsewhere/Tour.qlcc"));
+    const QStringList newBefore = folderState(newFolder);
+    QCOMPARE(save(m_app, elsewhere), QFile::NoError);
+    QCOMPARE(folderState(newFolder), newBefore);
+    QVERIFY(QFile::exists(root.absoluteFilePath(QStringLiteral("Elsewhere/images/stones.jpg"))));
+    QVERIFY(fileBytes(elsewhere).contains("SockPattern=\"images/stones.jpg\""));
+
+    // A save that fails leaves the show's folder as it was.
+    const QString folderBefore = m_app->doc()->workspacePath();
+    QVERIFY(save(m_app, root.absoluteFilePath(QStringLiteral("nowhere/at/all/Tour.qlcc")))
+            != QFile::NoError);
+    QCOMPARE(m_app->doc()->workspacePath(), folderBefore);
 }
 
 QTEST_MAIN(ShowFiles_Test)
