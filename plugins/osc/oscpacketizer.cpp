@@ -22,6 +22,9 @@
 #include <QStringList>
 #include <QDebug>
 
+#include <cmath>
+#include <cstring>
+
 OSCPacketizer::OSCPacketizer()
 {
 }
@@ -95,13 +98,58 @@ void OSCPacketizer::setupOSCGeneric(QByteArray &data, QString &path, QString typ
 /*********************************************************************
  * Receiver functions
  *********************************************************************/
+namespace
+{
+    /* Everything below reads from a datagram a stranger on the network sent:
+       every offset is checked against its size before a byte is read, and
+       sizes are unsigned (a "negative" bundle size used to step the parser
+       backwards forever). */
+
+    quint32 readBE32(const QByteArray &data, int pos)
+    {
+        return (quint32(uchar(data.at(pos))) << 24) | (quint32(uchar(data.at(pos + 1))) << 16) |
+               (quint32(uchar(data.at(pos + 2))) << 8) | quint32(uchar(data.at(pos + 3)));
+    }
+
+    quint64 readBE64(const QByteArray &data, int pos)
+    {
+        return (quint64(readBE32(data, pos)) << 32) | quint64(readBE32(data, pos + 4));
+    }
+
+    /* 0.0..1.0 to a DMX byte; NaN, infinities and anything out of range are
+       clamped (a plain (char)(255 * f) of those is undefined behaviour). */
+    char normalToByte(double v)
+    {
+        if (std::isnan(v))
+            return 0;
+        const double scaled = 255.0 * v;
+        if (scaled <= 0.0)
+            return 0;
+        if (scaled >= 255.0)
+            return char(255);
+        return char(uchar(scaled));
+    }
+
+    /* The end of an OSC string that starts at @p pos: the position after its
+       NUL and padding, or -1 when it has no NUL inside the data. */
+    int skipOSCString(const QByteArray &data, int pos)
+    {
+        const int nul = data.indexOf('\0', pos);
+        if (nul < 0)
+            return -1;
+        return (nul + 4) & ~3;
+    }
+
+    /* A bundle nested inside a bundle inside...: a sane sender nests a few. */
+    const int kMaxBundleDepth = 8;
+}
+
 bool OSCPacketizer::parseMessage(QByteArray const& data, QString& path, QByteArray& values)
 {
     path.clear();
     values.clear();
 
     QList<TagType> typeArray;
-    bool tagsEnded = false;
 
     //qDebug() << "[OSC] data:" << data;
 
@@ -115,12 +163,15 @@ bool OSCPacketizer::parseMessage(QByteArray const& data, QString& path, QByteArr
     path.remove(QChar(0x00));
     //qDebug() << "[OSC] path extracted:" << path;
 
-    int currPos = commaPos + 1;
-    while (tagsEnded == false)
+    // the type tags run from the comma to a NUL, which must be in the data
+    const int tagsEnd = data.indexOf('\0', commaPos + 1);
+    if (tagsEnd < 0)
+        return false;
+
+    for (int i = commaPos + 1; i < tagsEnd; i++)
     {
-        switch (data.at(currPos))
+        switch (data.at(i))
         {
-            case '\0': tagsEnded = true; break;
             case 'b': typeArray.append(BlobTag); break;
             case 'f': typeArray.append(FloatTag); break;
             case 'd': typeArray.append(DoubleTag); break;
@@ -129,28 +180,25 @@ bool OSCPacketizer::parseMessage(QByteArray const& data, QString& path, QByteArr
             case 't': typeArray.append(TimeTag); break;
             default: break;
         }
-        currPos++;
     }
-    // round current position to 4
-    int left = (typeArray.count() + 1) % 4;
-    currPos += 3 - left;
+    // the arguments start at the next multiple of 4 after the tags' NUL
+    int currPos = (tagsEnd + 4) & ~3;
 
     //qDebug () << "[OSC] Tags found:" << typeArray.count() << "currpos at" << currPos;
 
     foreach (TagType tag, typeArray)
     {
+        if (currPos < 0 || currPos >= data.size())
+            break;
+        const int left = data.size() - currPos;
+
         switch (tag)
         {
             case IntegerTag:
             {
-                if (currPos + 4 > data.size())
-                    break;
-                quint32 iVal;
-
-                *((uchar*)(&iVal) + 3) = data.at(currPos);
-                *((uchar*)(&iVal) + 2) = data.at(currPos + 1);
-                *((uchar*)(&iVal) + 1) = data.at(currPos + 2);
-                *((uchar*)(&iVal) + 0) = data.at(currPos + 3);
+                if (left < 4)
+                    return true;
+                quint32 iVal = readBE32(data, currPos);
 
                 if (iVal < 256)
                     values.append((char)iVal);
@@ -163,16 +211,13 @@ bool OSCPacketizer::parseMessage(QByteArray const& data, QString& path, QByteArr
             break;
             case FloatTag:
             {
-                if (currPos + 4 > data.size())
-                    break;
+                if (left < 4)
+                    return true;
+                quint32 bits = readBE32(data, currPos);
                 float fVal;
+                memcpy(&fVal, &bits, sizeof(fVal));
 
-                *((uchar*)(&fVal) + 3) = data.at(currPos);
-                *((uchar*)(&fVal) + 2) = data.at(currPos + 1);
-                *((uchar*)(&fVal) + 1) = data.at(currPos + 2);
-                *((uchar*)(&fVal) + 0) = data.at(currPos + 3);
-
-                values.append((char)(255.0 * fVal));
+                values.append(normalToByte(fVal));
 
                 qDebug() << "[OSC] fVal:" << fVal;
 
@@ -181,20 +226,14 @@ bool OSCPacketizer::parseMessage(QByteArray const& data, QString& path, QByteArr
             break;
             case DoubleTag:
             {
-                if (currPos + 8 > data.size())
-                    break;
+                if (left < 8)
+                    return true;
 
+                quint64 bits = readBE64(data, currPos);
                 double dVal;
-                *((uchar*)(&dVal) + 7) = data.at(currPos);
-                *((uchar*)(&dVal) + 6) = data.at(currPos + 1);
-                *((uchar*)(&dVal) + 5) = data.at(currPos + 2);
-                *((uchar*)(&dVal) + 4) = data.at(currPos + 3);
-                *((uchar*)(&dVal) + 3) = data.at(currPos + 4);
-                *((uchar*)(&dVal) + 2) = data.at(currPos + 5);
-                *((uchar*)(&dVal) + 1) = data.at(currPos + 6);
-                *((uchar*)(&dVal) + 0) = data.at(currPos + 7);
+                memcpy(&dVal, &bits, sizeof(dVal));
 
-                values.append((char)(255.0 * dVal));
+                values.append(normalToByte(dVal));
 
                 qDebug() << "[OSC] dVal:" << dVal;
                 currPos += 8;
@@ -202,12 +241,22 @@ bool OSCPacketizer::parseMessage(QByteArray const& data, QString& path, QByteArr
             break;
             case StringTag:
             {
-                int firstZeroPos = data.indexOf('\0', currPos);
-                QString str = QString(data.mid(currPos, firstZeroPos - currPos));
-                qDebug() << "[OSC] string:" << str;
-                // align current position to a multiple of 4
-                int zeroNumber = 4 - (str.length() % 4);
-                currPos = firstZeroPos + zeroNumber;
+                const int next = skipOSCString(data, currPos);
+                if (next < 0)
+                    return true;
+                qDebug() << "[OSC] string:" << QString(data.mid(currPos, next - currPos));
+                currPos = next;
+            }
+            break;
+            case BlobTag:
+            {
+                if (left < 4)
+                    return true;
+                const quint32 blobSize = readBE32(data, currPos);
+                if (quint64(blobSize) > quint64(left - 4))
+                    return true;
+                // skip the blob and its padding; its content is not a value
+                currPos += 4 + int((blobSize + 3) & ~3u);
             }
             break;
             case TimeTag:
@@ -225,56 +274,65 @@ bool OSCPacketizer::parseMessage(QByteArray const& data, QString& path, QByteArr
     return true;
 }
 
-QList<QPair<QString, QByteArray> > OSCPacketizer::parsePacket(QByteArray const& data)
+void OSCPacketizer::parseBundle(QByteArray const& data, int depth,
+                                QList<QPair<QString, QByteArray> > &messages)
 {
-    int bufPos = 0;
-    QList<QPair<QString, QByteArray> > messages;
-
-    while (bufPos < data.size())
+    // 8 bytes for '#bundle\0' and 8 bytes for a timestamp that we don't handle
+    if (depth > kMaxBundleDepth || data.size() < 16 || !data.startsWith(QByteArray("#bundle", 8)))
     {
-        QString path;
-        QByteArray values;
+        qWarning() << "[OSC] Found an unsupported message type!";
+        return;
+    }
 
-        // check wether we need to parse a bundle or a single message
-        if (data.at(bufPos) == '#')
+    // a bundle holds elements, each a 4-byte size followed by that many bytes
+    // of message or of another bundle
+    int bufPos = 16;
+    while (data.size() - bufPos >= 4)
+    {
+        const quint32 elemSize = readBE32(data, bufPos);
+        bufPos += 4;
+
+        // an element past the end of the datagram ends the bundle: what is
+        // left cannot be trusted to be anything
+        if (elemSize == 0 || quint64(elemSize) > quint64(data.size() - bufPos))
+            return;
+
+        const QByteArray elem = data.mid(bufPos, int(elemSize));
+        if (elem.startsWith('#'))
         {
-            if (data.size() < 20 || data.startsWith("#bundle") == false)
-            {
-                qWarning() << "[OSC] Found an unsupported message type!" << data;
-                return messages;
-            }
-            // 8 bytes for '#bundle\0' and 8 bytes for a timestamp that we don't handle
-            bufPos += 16;
-
-            // now, a bundle can contain another bundle or a message, starting with the message size
-            // Check where we are here
-            while (bufPos < data.size() && data.at(bufPos) != '#')
-            {
-                quint32 msgSize = (uchar(data.at(bufPos)) << 24) + (uchar(data.at(bufPos + 1)) << 16) + (uchar(data.at(bufPos + 2)) << 8) + uchar(data.at(bufPos + 3));
-                qDebug() << "[OSC] Bundle message size:" << msgSize;
-                bufPos += 4;
-
-                if (data.size() >= bufPos + (int)msgSize)
-                {
-                    QByteArray msgData = data.mid(bufPos, msgSize);
-                    if (parseMessage(msgData, path, values) == true)
-                        messages.append(QPair<QString, QByteArray>(path, values));
-                }
-                bufPos += msgSize;
-            }
-            //qDebug() << "Buf pos=" << bufPos << "data size=" << data.size();
+            parseBundle(elem, depth + 1, messages);
         }
         else
         {
-            if (parseMessage(data, path, values) == true)
+            QString path;
+            QByteArray values;
+            if (parseMessage(elem, path, values) == true)
                 messages.append(QPair<QString, QByteArray>(path, values));
-
-            bufPos += data.size();
         }
+        // elemSize is >= 1, so this always moves forward
+        bufPos += int(elemSize);
+    }
+}
+
+QList<QPair<QString, QByteArray> > OSCPacketizer::parsePacket(QByteArray const& data)
+{
+    QList<QPair<QString, QByteArray> > messages;
+
+    if (data.isEmpty())
+        return messages;
+
+    // check wether we need to parse a bundle or a single message
+    if (data.at(0) == '#')
+    {
+        parseBundle(data, 0, messages);
+    }
+    else
+    {
+        QString path;
+        QByteArray values;
+        if (parseMessage(data, path, values) == true)
+            messages.append(QPair<QString, QByteArray>(path, values));
     }
 
     return messages;
 }
-
-
-

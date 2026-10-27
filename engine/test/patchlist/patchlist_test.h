@@ -53,6 +53,7 @@ private slots:
     void theMultiUniverseFlagIsTheShows();
     void theCsvFollowsTheGrouping();
     void theXlsxIsAWorkbook();
+    void aFormulaInANameIsNotRunBySpreadsheets();
 
 private:
     Doc *m_doc = nullptr;

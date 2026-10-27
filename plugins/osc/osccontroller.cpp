@@ -130,7 +130,10 @@ QSharedPointer<QUdpSocket> OSCController::getInputSocket(quint16 port)
     }
 
     QSharedPointer<QUdpSocket> inputSocket(new QUdpSocket(this));
-    inputSocket->bind(QHostAddress::Any, port, QUdpSocket::ShareAddress | QUdpSocket::ReuseAddressHint);
+    /* Listen on this controller's own interface only: binding Any let a
+       sender on any network the computer is on (the venue Wi-Fi) drive the
+       input of a controller meant for one interface. */
+    inputSocket->bind(m_ipAddr, port, QUdpSocket::ShareAddress | QUdpSocket::ReuseAddressHint);
     connect(inputSocket.data(), SIGNAL(readyRead()),
             this, SLOT(processPendingPackets()));
     return inputSocket;
@@ -232,9 +235,11 @@ quint16 OSCController::getHash(QString path)
         hash = m_hashMap[path];
     else
     {
-        /** No existing hash found. Add a new key to the table */
+        /** No existing hash found. Add a new key to the table, unless a
+         *  sender has already invented more paths than any real surface has */
         hash = Utils::getChecksum(path.toUtf8());
-        m_hashMap[path] = hash;
+        if (m_hashMap.size() < kMaxOSCPaths)
+            m_hashMap[path] = hash;
     }
 
     return hash;
@@ -378,7 +383,9 @@ void OSCController::handlePacket(QUdpSocket* socket, QByteArray const& datagram,
             {
                 if (values.length() > 1)
                 {
-                    info.multipartCache[path] = values;
+                    // a sender inventing paths must not grow this forever
+                    if (info.multipartCache.contains(path) || info.multipartCache.size() < kMaxOSCPaths)
+                        info.multipartCache[path] = values;
                     for (int i = 0; i < values.length(); i++)
                     {
                         QString modPath = QString("%1_%2").arg(path).arg(i);

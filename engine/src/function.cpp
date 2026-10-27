@@ -1195,6 +1195,40 @@ void Function::start(MasterTimer* timer, FunctionParent source, quint32 startTim
     timer->startFunction(this);
 }
 
+bool Function::startedOnlyByPreview() const
+{
+    return startedOnlyByPreview(0);
+}
+
+bool Function::startedOnlyByPreview(int depth) const
+{
+    // Collections inside chasers inside collections: a real show nests a
+    // few; a loop of them must not recurse without end.
+    if (depth > 16)
+        return false;
+
+    QList<FunctionParent> sources;
+    {
+        QMutexLocker sourcesLocker(&m_sourcesMutex);
+        sources = m_sources;
+    }
+    if (sources.isEmpty())
+        return false;
+
+    for (const FunctionParent &source : sources)
+    {
+        if (source.isPreview())
+            continue;
+        if (source.type() != FunctionParent::Function || source.id() == id())
+            return false;
+        Doc *d = doc();
+        const Function *parentFunction = d != NULL ? d->function(source.id()) : NULL;
+        if (parentFunction == NULL || parentFunction->startedOnlyByPreview(depth + 1) == false)
+            return false;
+    }
+    return true;
+}
+
 void Function::setPause(bool enable)
 {
     if (enable && isRunning() == false)

@@ -196,6 +196,10 @@ blackout:off</PRE>
     <I>arg1 ... argN</I> are the arguments to be used when executing <I>programPath</I>. If no arguments are
     needed, then the arg: keywords are not necessary.<br>
     If an argument contans spaces it must be written between quotes.<br>
+    <B>qlcconsole</B>: off unless <I>Settings, Advanced, Allow scripts to run programs</I> is on
+    (a setting of this computer, off by default). Off, the line is skipped and the footer says which
+    script asked for which program. A show loaded over web access never runs programs, and Build or
+    Show Tree previews never run scripts at all.<br>
     <B>Examples</B>:
       <PRE>systemcommand:/usr/bin/vlc arg:-f arg:/home/user/video.mp4 // plays my video with VLC in fullscreen
 systemcommand:"C:\Program Files\Tools\My Tool.exe" arg:"D:\My Files\My file.txt"</PRE>

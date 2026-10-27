@@ -44,6 +44,7 @@
 #include "updatechecker.h"
 #include "shutterautoopen.h"
 #include "outputrulekeeper.h"
+#include "script.h"
 #include "programmercontroller.h"
 #include "doc.h"
 #include "app.h"
@@ -212,6 +213,29 @@ AppSettings::AppSettings(App *app, QWidget *parent)
     });
     padLayout->addWidget(padTest);
     advLayout->addWidget(padGroup);
+
+    // --- Advanced: Scripts (this computer) ---
+    // A show is data: a Script's systemcommand runs a program here only
+    // when the operator says so (RC8). Never for a show from web access.
+    QGroupBox *scriptGroup = new QGroupBox(tr("Scripts (this computer)"), advancedPage);
+    scriptGroup->setObjectName(QStringLiteral("settingsScripts"));
+    scriptGroup->setProperty("helpTopic", QStringLiteral("troubleshooting.md#security"));
+    QVBoxLayout *scriptLayout = new QVBoxLayout(scriptGroup);
+    m_allowProgramsCheck = new QCheckBox(tr("Allow scripts to run programs"), scriptGroup);
+    m_allowProgramsCheck->setObjectName(QStringLiteral("settingsAllowScriptPrograms"));
+    m_allowProgramsCheck->setChecked(Script::programsAllowed());
+    m_allowProgramsCheck->setToolTip(tr("A Script's systemcommand line starts a program on this "
+                                        "computer. Off: the line is skipped and the footer says so. "
+                                        "A show loaded over web access never runs programs, even "
+                                        "with this on. A setting of this computer, not the show."));
+    scriptLayout->addWidget(m_allowProgramsCheck);
+    QLabel *scriptInfo = new QLabel(
+        tr("Turn on only for shows you trust: a show's script can run any program you can."),
+        scriptGroup);
+    scriptInfo->setWordWrap(true);
+    scriptInfo->setStyleSheet("color: gray; font-size: 10px;");
+    scriptLayout->addWidget(scriptInfo);
+    advLayout->addWidget(scriptGroup);
 
     // Autosave Group
     QGroupBox *autosaveGroup = new QGroupBox(tr("Autosave"), this);
@@ -582,6 +606,10 @@ void AppSettings::accept()
     if (m_onAtOpenCombo != nullptr)
         m_app->doc()->outputRuleKeeper()->setOnAtOpenWhen(
             OutputRuleKeeper::OnAtOpenWhen(m_onAtOpenCombo->currentData().toInt()));
+
+    // Scripts: running programs (this computer's)
+    if (m_allowProgramsCheck->isChecked() != Script::programsAllowed())
+        Script::setProgramsAllowed(m_allowProgramsCheck->isChecked());
 
     // Apply autosave settings
     m_app->setAutosaveEnabled(m_autosaveEnabledCheck->isChecked());

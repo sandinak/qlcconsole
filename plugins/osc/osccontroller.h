@@ -38,6 +38,10 @@
 #include "oscpacketizer.h"
 #include "qlcioplugin.h"
 
+/** The most distinct OSC paths kept per cache (far more than any real
+ *  control surface sends). */
+static const int kMaxOSCPaths = 4096;
+
 typedef struct _uinfo
 {
     QSharedPointer<QUdpSocket> inputSocket;
@@ -51,7 +55,8 @@ typedef struct _uinfo
     quint16 outputPort;
 
     // cache of the OSC paths with multiple values, used to correctly
-    // handle the flow of input and feedback values
+    // handle the flow of input and feedback values. At most kMaxOSCPaths
+    // entries: a sender inventing paths must not grow it without end.
     QHash<QString, QByteArray> multipartCache;
     int type;
 } UniverseInfo;

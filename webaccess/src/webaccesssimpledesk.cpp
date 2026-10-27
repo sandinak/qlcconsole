@@ -21,6 +21,7 @@
 #include <QDebug>
 
 #include "webaccesssimpledesk.h"
+#include "webaccessbase.h"
 #include "commonjscss.h"
 #include "simpledesk.h"
 #include "qlcconfig.h"
@@ -77,7 +78,7 @@ QString WebAccessSimpleDesk::getHTML(Doc *doc, SimpleDesk *sd)
     QStringList uniList = doc->inputOutputMap()->universeNames();
     for (int i = 0; i < uniList.count(); i++)
     {
-        bodyHTML += "<option value=\"" + QString::number(i) + "\">" + uniList.at(i) + "</option>\n";
+        bodyHTML += "<option value=\"" + QString::number(i) + "\">" + WebAccessBase::htmlEscaped(uniList.at(i)) + "</option>\n";
     }
     bodyHTML += "</select></div>\n";
     bodyHTML += "</div>\n";

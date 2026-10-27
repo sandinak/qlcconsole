@@ -19,3 +19,13 @@ engine/test/effectinstance
 # codesign): system services every leg and every other gate share. Next to
 # the other legs' copies a prepare took over its 120 s budget.
 ui/test/updates
+
+# The seeded UI monkey runs for a wall-clock budget (QLC_MONKEY_MS: 20 s in
+# the gate and CI from its test.sh, 60 s by hand): it must have the machine
+# to itself or it does far less and the budget's guarantee is hollow.
+ui/test/monkey
+
+# Web access opens real loopback sockets and waits on connect/close timers,
+# and several cases run in a child process. Under load the waits miss and the
+# WebSocket connects flake; it measures wall-clock time, so it runs alone.
+webaccess/test

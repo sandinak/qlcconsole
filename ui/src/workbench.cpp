@@ -112,7 +112,7 @@ static QWidget *sequenceEditor(QWidget *parent, Sequence *sequence, Doc *doc)
  *  Function::stop(master()) would clear every source. */
 static FunctionParent workbenchParent()
 {
-    return FunctionParent(FunctionParent::AutoVCWidget, 0xFFFFFF57);
+    return FunctionParent::preview(0x7);
 }
 
 static QList<quint32> membersOf(Function *f)

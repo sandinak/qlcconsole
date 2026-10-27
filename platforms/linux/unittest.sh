@@ -254,7 +254,11 @@ list_tests()
     echo plugins/midi/test
     echo plugins/artnet/test
     echo plugins/E1.31/test
+    echo plugins/osc/test
     echo plugins/wled/test
+    if [ "$TARGET" != "qmlui" ]; then
+        echo webaccess/test
+    fi
     # The HID plugin's GameController side: a Mac's framework only.
     [[ "$OSTYPE" == "darwin"* ]] && echo plugins/hid/test
     return 0

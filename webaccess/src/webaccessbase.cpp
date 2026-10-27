@@ -23,6 +23,10 @@
 #include <QHostAddress>
 #include <QProcess>
 #include <QSettings>
+#include <QTcpServer>
+#include <QFileInfo>
+#include <QUrl>
+#include <QRegularExpression>
 
 #include "webaccessbase.h"
 
@@ -46,7 +50,7 @@
 
 WebAccessBase::WebAccessBase(Doc *doc, VirtualConsole *vcInstance, SimpleDesk *sdInstance,
                              int portNumber, bool enableAuth, const QString &passwdFile,
-                             QObject *parent)
+                             const QHostAddress &bindAddress, QObject *parent)
     : QObject(parent)
     , m_doc(doc)
     , m_vc(vcInstance)
@@ -75,7 +79,21 @@ WebAccessBase::WebAccessBase(Doc *doc, VirtualConsole *vcInstance, SimpleDesk *s
     connect(m_httpServer, SIGNAL(webSocketConnectionClose(QHttpConnection*)),
             this, SLOT(slotHandleWebSocketClose(QHttpConnection*)));
 
-    m_httpServer->listen(QHostAddress::Any, portNumber ? portNumber : DEFAULT_PORT_NUMBER);
+    const QHostAddress address = bindAddress.isNull() ? defaultBindAddress() : bindAddress;
+    if (m_httpServer->listen(address, portNumber ? portNumber : DEFAULT_PORT_NUMBER) == false)
+    {
+        qWarning().noquote() << "Web access could not listen on"
+                             << address.toString() << "port" << (portNumber ? portNumber : DEFAULT_PORT_NUMBER);
+    }
+    else
+    {
+        qInfo().noquote() << "Web access:" << url();
+        if (listenAddress().isLoopback() == false)
+            qWarning().noquote() << "Web access listens on" << listenAddress().toString()
+                                 << "-- reachable from the network."
+                                 << (enableAuth ? "Users must log in (-wa)."
+                                                : "Without -wa, visitors from the network can look but change nothing.");
+    }
 
 #if defined(Q_WS_X11) || defined(Q_OS_LINUX)
     m_netConfig = new WebAccessNetwork();
@@ -92,10 +110,91 @@ WebAccessBase::~WebAccessBase()
 #if defined(Q_WS_X11) || defined(Q_OS_LINUX)
     delete m_netConfig;
 #endif
-    foreach (QHttpConnection *conn, m_webSocketsList)
+    /* Deleting a connection closes its socket, whose disconnected() reached
+       slotHandleWebSocketClose -- which deleteLater()'d the same connection
+       and edited this list mid-loop: a crash on every quit with a browser
+       open. Take the list first and cut each connection off from us. */
+    const QList<QHttpConnection *> conns = m_webSocketsList;
+    m_webSocketsList.clear();
+    for (QHttpConnection *conn : conns)
+    {
+        conn->disconnect();         // its close no longer reaches us
+        delete static_cast<WebAccessUser *>(conn->userData);
+        conn->userData = nullptr;
         delete conn;
+    }
 
     delete m_auth;
+}
+
+QHostAddress WebAccessBase::defaultBindAddress()
+{
+    return QHostAddress(QHostAddress::LocalHost);
+}
+
+QHostAddress WebAccessBase::listenAddress() const
+{
+    QTcpServer *srv = m_httpServer != nullptr ? m_httpServer->findChild<QTcpServer *>() : nullptr;
+    return srv != nullptr && srv->isListening() ? srv->serverAddress() : QHostAddress();
+}
+
+quint16 WebAccessBase::listenPort() const
+{
+    QTcpServer *srv = m_httpServer != nullptr ? m_httpServer->findChild<QTcpServer *>() : nullptr;
+    return srv != nullptr && srv->isListening() ? srv->serverPort() : 0;
+}
+
+QString WebAccessBase::url() const
+{
+    QHostAddress addr = listenAddress();
+    QString host;
+    if (addr == QHostAddress(QHostAddress::AnyIPv4) || addr == QHostAddress(QHostAddress::Any)
+        || addr == QHostAddress(QHostAddress::AnyIPv6))
+        host = QStringLiteral("<this computer's address>");
+    else if (addr.protocol() == QAbstractSocket::IPv6Protocol)
+        host = QStringLiteral("[%1]").arg(addr.toString());
+    else
+        host = addr.toString();
+    return QStringLiteral("http://%1:%2/").arg(host).arg(listenPort());
+}
+
+QString WebAccessBase::htmlEscaped(const QString &text)
+{
+    return QString(text).toHtmlEscaped().replace(QLatin1Char('\''), QStringLiteral("&#39;"));
+}
+
+QString WebAccessBase::jsString(const QString &text)
+{
+    QString out = QStringLiteral("\"");
+    for (const QChar c : text)
+    {
+        const ushort u = c.unicode();
+        if (u == '\\')
+            out += QStringLiteral("\\\\");
+        else if (u < 0x20 || u == '"' || u == '\'' || u == '<' || u == '>' || u == '&'
+                 || u == 0x2028 || u == 0x2029)
+            out += QStringLiteral("\\u%1").arg(u, 4, 16, QLatin1Char('0'));
+        else
+            out += c;
+    }
+    out += QLatin1Char('"');
+    return out;
+}
+
+QString WebAccessBase::sanitizedFixtureFileName(const QString &name)
+{
+    // Only what follows the last separator of either kind: a name never
+    // picks the folder it lands in.
+    QString base = name;
+    const int cut = qMax(base.lastIndexOf(QLatin1Char('/')), base.lastIndexOf(QLatin1Char('\\')));
+    if (cut >= 0)
+        base = base.mid(cut + 1);
+    base = base.trimmed();
+    if (base.isEmpty() || base.startsWith(QLatin1Char('.')) || base.contains(QLatin1Char(':'))
+        || base.contains(QChar(0)) || base.endsWith(QLatin1String(".qxf"), Qt::CaseInsensitive) == false
+        || base.size() > 200)
+        return QString();
+    return base;
 }
 
 bool WebAccessBase::sendFile(QHttpResponse *response, QString filename, QString contentType) const
@@ -142,13 +241,17 @@ QString WebAccessBase::webFilePath(const QString &relativePath) const
 
 bool WebAccessBase::servePng(QHttpResponse *resp, const QString &reqUrl) const
 {
+    if (reqUrl.contains(QLatin1String("..")))
+        return false;
     QString localFilePath = QString(":%1").arg(reqUrl);
     QFile resFile(localFilePath);
     if (!resFile.exists())
     {
+        // A picture of the show (a widget's background, a button's icon), by
+        // its path on this computer -- only those, not any file on the disk.
         localFilePath = reqUrl;
         resFile.setFileName(localFilePath);
-        if (!resFile.exists())
+        if (!resFile.exists() || !isShowImage(reqUrl))
             localFilePath = webFilePath(reqUrl.mid(1));
     }
 
@@ -157,13 +260,44 @@ bool WebAccessBase::servePng(QHttpResponse *resp, const QString &reqUrl) const
 
 bool WebAccessBase::serveWebFile(QHttpResponse *resp, const QString &reqUrl, const QString &contentType) const
 {
-    return sendFile(resp, webFilePath(reqUrl.mid(1)), contentType);
+    // The web folder's own files only: no way out of it with ../
+    const QString rel = reqUrl.mid(1);
+    if (rel.contains(QLatin1String("..")) || rel.contains(QLatin1Char('\\')) || QFileInfo(rel).isAbsolute())
+        return false;
+    return sendFile(resp, webFilePath(rel), contentType);
+}
+
+bool WebAccessBase::isShowImage(const QString &path) const
+{
+    Q_UNUSED(path)
+    return false;
 }
 
 bool WebAccessBase::authenticateRequest(QHttpRequest *req, QHttpResponse *resp, WebAccessUser &user)
 {
+    const bool local = isLocalRequest(req);
+
     if (!m_auth)
+    {
+        // -w alone: this computer's operator does everything; a visitor
+        // from the network may look, not touch (start with -wa for that).
+        user = WebAccessUser(local ? SUPER_ADMIN_LEVEL : LOGGED_IN_LEVEL);
         return true;
+    }
+
+    if (!m_auth->hasAtLeastOneAdmin())
+    {
+        // -wa before anyone has an account: only this computer, and only
+        // to create the first admin (Configuration > Users).
+        if (local)
+        {
+            user = WebAccessUser(LOGGED_IN_LEVEL);
+            user.setupOnly = true;
+            return true;
+        }
+        m_auth->sendUnauthorizedResponse(resp);
+        return false;
+    }
 
     user = m_auth->authenticateRequest(req, resp);
     if (user.level < LOGGED_IN_LEVEL)
@@ -173,6 +307,84 @@ bool WebAccessBase::authenticateRequest(QHttpRequest *req, QHttpResponse *resp, 
     }
 
     return true;
+}
+
+static bool isLoopbackHostName(QString host)
+{
+    host = host.trimmed().toLower();
+    if (host.startsWith(QLatin1Char('[')))
+    {
+        const int end = host.indexOf(QLatin1Char(']'));
+        host = host.mid(1, end > 0 ? end - 1 : -1);
+    }
+    else if (host.count(QLatin1Char(':')) == 1)
+    {
+        host = host.left(host.indexOf(QLatin1Char(':')));      // host:port
+    }
+    if (host == QLatin1String("localhost") || host.endsWith(QLatin1String(".localhost")))
+        return true;
+    QHostAddress addr;
+    return addr.setAddress(host) && addr.isLoopback();
+}
+
+bool WebAccessBase::isLocalRequest(const QHttpRequest *req) const
+{
+    if (req == nullptr || m_trustLoopback == false)
+        return false;
+    QHostAddress peer(req->remoteAddress());
+    bool mapped = false;
+    const quint32 v4 = peer.toIPv4Address(&mapped);
+    if (mapped)
+        peer = QHostAddress(v4);
+    if (peer.isLoopback() == false)
+        return false;
+    // A page on some other site whose name resolves to 127.0.0.1 (DNS
+    // rebinding) comes from loopback too, but under that site's name.
+    const QString host = req->header(QStringLiteral("host"));
+    return host.isEmpty() || isLoopbackHostName(host);
+}
+
+bool WebAccessBase::originAllowed(const QHttpRequest *req) const
+{
+    if (req == nullptr)
+        return false;
+    const QString origin = req->header(QStringLiteral("origin")).trimmed();
+    // No Origin: not a browser page on another site (a script, an app).
+    if (origin.isEmpty())
+        return true;
+    const QUrl o(origin);
+    if (o.isValid() == false || o.host().isEmpty())
+        return false;           // "null" (a sandboxed page, a file://) included
+    if (isLoopbackHostName(o.host()))
+        return true;
+    // Same origin: the page was served by this console, under the name the
+    // browser asked for.
+    const QString host = req->header(QStringLiteral("host")).trimmed().toLower();
+    const int defaultPort = o.scheme() == QLatin1String("https") ? 443 : 80;
+    const QString originHostPort = o.port(defaultPort) == defaultPort
+            ? o.host().toLower() : QStringLiteral("%1:%2").arg(o.host().toLower()).arg(o.port());
+    const QString originHostPortExplicit = QStringLiteral("%1:%2").arg(o.host().toLower()).arg(o.port(defaultPort));
+    return host == originHostPort || host == originHostPortExplicit;
+}
+
+void WebAccessBase::sendForbidden(QHttpResponse *resp, const QString &why) const
+{
+    if (resp == nullptr)
+        return;
+    const QByteArray text = QStringLiteral("403 Forbidden\n%1\n").arg(why).toUtf8();
+    resp->setHeader("Content-Type", "text/plain; charset=utf-8");
+    resp->setHeader("Content-Length", QString::number(text.size()));
+    resp->writeHead(403);
+    resp->end(text);
+}
+
+bool WebAccessBase::permits(const WebAccessUser *user, WebAccessUserLevel level) const
+{
+    if (user == nullptr)
+        return false;
+    if (user->setupOnly)
+        return level <= LOGGED_IN_LEVEL;
+    return user->level >= level;
 }
 
 bool WebAccessBase::acceptWebSocket(QHttpResponse *resp, const WebAccessUser &user)
@@ -247,12 +459,14 @@ void WebAccessBase::sendHtmlResponse(QHttpResponse *resp, const QString &content
 
 bool WebAccessBase::requireAuthLevel(QHttpResponse *resp, const WebAccessUser &user, WebAccessUserLevel level) const
 {
-    if (m_auth && user.level < level)
-    {
+    if (permits(&user, level))
+        return true;
+    if (m_auth)
         m_auth->sendUnauthorizedResponse(resp);
-        return false;
-    }
-    return true;
+    else
+        sendForbidden(resp, tr("Web access lets this computer change the show. To change it "
+                               "from another device, start qlcconsole with -wa and log in."));
+    return false;
 }
 
 WebAccessBase::CommonRequestResult WebAccessBase::handleCommonHTTPRequest(QHttpRequest *req, QHttpResponse *resp,
@@ -260,6 +474,15 @@ WebAccessBase::CommonRequestResult WebAccessBase::handleCommonHTTPRequest(QHttpR
                                                                           const QString &reqUrl,
                                                                           QString &content)
 {
+    // A page on another site may not drive the console (CSWSH, CSRF)
+    if ((reqUrl == "/qlcplusWS" || req->method() == QHttpRequest::HTTP_POST) && !originAllowed(req))
+    {
+        qWarning().noquote() << "Web access: refused a request from the page at"
+                             << req->header(QStringLiteral("origin"));
+        sendForbidden(resp, tr("A page on another site may not control this console."));
+        return CommonRequestResult::Handled;
+    }
+
     if (reqUrl == "/qlcplusWS")
     {
         if (acceptWebSocket(resp, user))
@@ -287,7 +510,15 @@ WebAccessBase::CommonRequestResult WebAccessBase::handleCommonHTTPRequest(QHttpR
             return CommonRequestResult::Handled;
         QByteArray fixtureXML = req->body();
         int fnamePos = fixtureXML.indexOf("filename=") + 10;
-        QString fxName = fixtureXML.mid(fnamePos, fixtureXML.indexOf("\"", fnamePos) - fnamePos);
+        // the name the browser sent, reduced to a plain .qxf file name: it
+        // never chooses the folder (../escaped.qxf wrote outside it)
+        const QString fxName = sanitizedFixtureFileName(QString::fromUtf8(
+                fixtureXML.mid(fnamePos, fixtureXML.indexOf("\"", fnamePos) - fnamePos)));
+        if (fxName.isEmpty())
+        {
+            sendForbidden(resp, tr("A fixture definition is a .qxf file."));
+            return CommonRequestResult::Handled;
+        }
 
         fixtureXML.remove(0, fixtureXML.indexOf("\n\r\n") + 3);
         fixtureXML.truncate(fixtureXML.lastIndexOf("\n\r\n"));
@@ -311,7 +542,9 @@ WebAccessBase::CommonRequestResult WebAccessBase::handleCommonHTTPRequest(QHttpR
     }
     else if (reqUrl == "/config")
     {
-        if (!requireAuthLevel(resp, user, SUPER_ADMIN_LEVEL))
+        // the page where this computer creates the first admin (-wa, no
+        // account yet): shown to it; everything else on it stays refused
+        if (!user.setupOnly && !requireAuthLevel(resp, user, SUPER_ADMIN_LEVEL))
             return CommonRequestResult::Handled;
         content = WebAccessConfiguration::getHTML(m_doc, m_auth);
         return CommonRequestResult::ContentReady;
@@ -339,17 +572,17 @@ WebAccessBase::CommonRequestResult WebAccessBase::handleCommonHTTPRequest(QHttpR
     }
     else if (reqUrl.endsWith(".jpg") || reqUrl.endsWith(".jpeg"))
     {
-        if (sendFile(resp, reqUrl, "image/jpg"))
+        if (isShowImage(reqUrl) && sendFile(resp, reqUrl, "image/jpg"))
             return CommonRequestResult::Handled;
     }
     else if (reqUrl.endsWith(".bmp"))
     {
-        if (sendFile(resp, reqUrl, "image/bmp"))
+        if (isShowImage(reqUrl) && sendFile(resp, reqUrl, "image/bmp"))
             return CommonRequestResult::Handled;
     }
     else if (reqUrl.endsWith(".svg"))
     {
-        if (sendFile(resp, reqUrl, "image/svg+xml"))
+        if (isShowImage(reqUrl) && sendFile(resp, reqUrl, "image/svg+xml"))
             return CommonRequestResult::Handled;
     }
     else if (reqUrl.endsWith(".ico"))
@@ -378,6 +611,14 @@ WebAccessBase::CommonRequestResult WebAccessBase::handleCommonHTTPRequest(QHttpR
         return CommonRequestResult::Handled;
     }
 
+    // A file asked for and not served (missing, or not ours to serve) is a
+    // 404, not the console page under its name.
+    if (reqUrl != "/")
+    {
+        sendNotFound(resp);
+        return CommonRequestResult::Handled;
+    }
+
     return CommonRequestResult::NotHandled;
 }
 
@@ -397,10 +638,16 @@ bool WebAccessBase::handleCommonWebSocketCommand(QHttpConnection *conn, WebAcces
 
     if (cmdList[0] == "QLC+IO")
     {
-        if (m_auth && user && user->level < SUPER_ADMIN_LEVEL)
+        if (!permits(user, SUPER_ADMIN_LEVEL))
             return true;
 
         if (cmdList.count() < 3)
+            return true;
+        // the patch commands carry a plugin and a line, PROFILE and
+        // PASSTHROUGH one more value
+        if ((cmdList[1] == "INPUT" || cmdList[1] == "OUTPUT" || cmdList[1] == "FB") && cmdList.count() < 5)
+            return true;
+        if ((cmdList[1] == "PROFILE" || cmdList[1] == "PASSTHROUGH") && cmdList.count() < 4)
             return true;
 
         int universe = cmdList[2].toInt();
@@ -466,17 +713,33 @@ bool WebAccessBase::handleCommonWebSocketCommand(QHttpConnection *conn, WebAcces
         if (!m_auth)
             return true;
 
-        if (user && user->level < SUPER_ADMIN_LEVEL)
+        if (cmdList.count() < 2)
             return true;
 
-        if (cmdList.count() < 2)
+        // An admin manages the accounts. Before there is one, this
+        // computer's operator may create it -- the first admin, nothing else.
+        const bool firstAdmin = user != nullptr && user->setupOnly && !m_auth->hasAtLeastOneAdmin()
+                && cmdList.at(1) == "ADD_USER" && cmdList.count() >= 5
+                && cmdList.at(4).toInt() >= SUPER_ADMIN_LEVEL;
+        if (!permits(user, SUPER_ADMIN_LEVEL) && !firstAdmin)
             return true;
 
         if (cmdList.at(1) == "ADD_USER")
         {
+            if (cmdList.count() < 5)
+                return true;
             QString username = cmdList.at(2);
             QString password = cmdList.at(3);
             int level = cmdList.at(4).toInt();
+            // a name is shown in the page and written to the password file
+            // (name:hash:level:...): no markup, no separator
+            static const QRegularExpression okName(QStringLiteral("^[A-Za-z0-9._@-]{1,64}$"));
+            if (!username.isEmpty() && !okName.match(username).hasMatch())
+            {
+                if (conn)
+                    conn->webSocketWrite(QString("ALERT|" + tr("A username is letters, digits and . _ @ - only.")));
+                return true;
+            }
             if (username.isEmpty() || password.isEmpty())
             {
                 QString wsMessage = QString("ALERT|" + tr("Username and password are required fields."));
@@ -496,12 +759,16 @@ bool WebAccessBase::handleCommonWebSocketCommand(QHttpConnection *conn, WebAcces
         }
         else if (cmdList.at(1) == "DEL_USER")
         {
+            if (cmdList.count() < 3)
+                return true;
             QString username = cmdList.at(2);
             if (!username.isEmpty())
                 m_auth->deleteUser(username);
         }
         else if (cmdList.at(1) == "SET_USER_LEVEL")
         {
+            if (cmdList.count() < 4)
+                return true;
             QString username = cmdList.at(2);
             int level = cmdList.at(3).toInt();
             if (username.isEmpty())
@@ -539,14 +806,21 @@ bool WebAccessBase::handleCommonWebSocketCommand(QHttpConnection *conn, WebAcces
 #if defined(Q_WS_X11) || defined(Q_OS_LINUX)
     else if (cmdList[0] == "QLC+SYS")
     {
-        if (m_auth && user && user->level < SUPER_ADMIN_LEVEL)
+        // Reboot, halt, the network, the hotspot: the computer's admin only
+        if (!permits(user, SUPER_ADMIN_LEVEL))
+        {
+            qWarning() << logTag << "refused" << cmdList.value(1) << "from a client without admin access";
             return true;
+        }
 
         if (cmdList.count() < 2)
             return true;
 
         if (cmdList.at(1) == "NETWORK")
         {
+            // interface, method, address, mask, gateway, SSID, password
+            if (cmdList.count() < 9)
+                return true;
             QString wsMessage;
             if (m_netConfig->updateNetworkSettings(cmdList))
                 wsMessage = QString("ALERT|" + tr("Network configuration changed. Reboot to apply the changes."));

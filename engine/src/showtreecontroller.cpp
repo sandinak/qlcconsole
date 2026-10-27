@@ -5642,7 +5642,7 @@ FunctionParent ShowTreeController::previewParent()
     // Its own parent: a chaser's collection, a VC button or the Programming
     // tab holding the same scene keep it when the preview lets go, and the
     // preview never stops what they started (a Master parent would).
-    return FunctionParent(FunctionParent::AutoVCWidget, 0xFFFFFF53);
+    return FunctionParent::preview(0x3);
 }
 
 void ShowTreeController::previewCue(quint32 cueId)

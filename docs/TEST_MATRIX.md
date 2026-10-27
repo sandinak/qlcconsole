@@ -285,6 +285,53 @@ the top three were written up as tests first. Approved for RC6 as Q173.
 | **Gap 2** | `ShowTreeController::saveXML` (`showtreecontroller.cpp` 5554) | Untested: a tree of only a production (nothing generated) would not be saved | **Test gap, not a bug**: passed on main, kills the `(A && B) \|\| (C && …)` mutant. A cue list, even empty, generates its chaser at once, so the production alone is the case. `0225832a9` | `ShowTree_Test::saveKeepsAProductionWithNothingBaked` |
 | **Gap 3** | `VenueRig` sidecar read of `<NotOurs To=…>` (`venuerig.cpp` 323) | Untested: an end read 2 too far would grow the range on every load and save; the only test range ended at 512, which the clamp hid | **Test gap, not a bug**: a 5–8 range round-trips write, read, write; kills the `+ 1` mutant. `0225832a9` | `VenueRig_Test::sidecarRoundTrip` |
 
+## Red-team review of RC7, fixed in RC8
+
+A red-team pass (2026-10-27) on `3108a5504` went after what the two matrices
+had not: the OSC parser (never fuzzed), web access, the Script engine and
+whole-program chaos. Static review plus four new offscreen QTest suites
+(`webaccess/test`, `plugins/osc/test`, `engine/test/hostileshow`,
+`ui/test/monkey`, with `engine/test/common/hostilecase.h` running each
+crash-prone case in a child process), built on the Linux host (Qt 6.8.2,
+Debug) and dink (ASan + UBSan, Qt 6.11), loopback only. 23 of its tests
+failed, each on a real bug. Approved for RC8 as Q175. Policy chosen for
+`-w` without `-wa`: **this computer (loopback, under a loopback name) has
+full access; anyone else may look, not touch**; `-wa` with no admin yet lets
+only this computer create the first admin.
+
+| ID | Where | Symptom | Fix | Test(s) |
+|---|---|---|---|---|
+| **H1** | `WebAccessBase` level checks (`m_auth && …`) | `-w` without `-wa`: no auth object, so every check was skipped: anyone on the network could load a show, run functions, toggle Operate, set channels, black out | Every state-changing request checks `permits()`; without `-wa` only a loopback request under a loopback name (not DNS rebinding) is admin, anyone else `LOGGED_IN` (look only). **`Fixed in `c04eb39ba``** | `WebAccess_Test::withoutAuthAProjectCannotBeLoaded`, `::withoutAuthAFixtureCannotBeStored`, `::withoutAuthThisComputerStillHasFullAccess`, `::withoutAuthTheNetworkCanLookButNotTouch`, `::aRebindingNameIsNotThisComputer` |
+| **H2** | `WebAccessBase` (`listen(QHostAddress::Any…)`) | Reachable from every network the console was on | Listens on 127.0.0.1 unless `--web-bind`/`-wb`; prints the URL, warns when not loopback. **`Fixed in `c04eb39ba``** | `WebAccess_Test::itListensOnlyOnLoopbackByDefault`, `::itListensWhereItIsTold` |
+| **H3** | `Script::handleSystemCommand` | `systemcommand` ran any program, detached, from any show, VC button, autostart or web-loaded project | Off unless **Settings ▸ Advanced ▸ Allow scripts to run programs** (QSettings `scripts/allowPrograms`, default off); refused, with a footer message, for a show from web access (`Doc::loadedFromWeb`); a Script started only by a preview (`FunctionParent::preview()`, Workbench / Show Tree preview / Solo, directly or through collections and chasers) runs nothing. **`Fixed in `76af9c636``** | `HostileShow_Test::aSystemCommandIsOffUntilTheOperatorTurnsItOn`, `::aShowFromWebAccessNeverRunsPrograms`, `::aSystemCommandIsNotRunMerelyByLoadingTheShow`, `Workbench_Test::aPreviewNeverRunsAScript` |
+| **H4** | `WebAccessAuth::authenticateRequest` | `-wa` with no admin yet returned `NOT_PROVIDED_LEVEL` (= admin): the first visitor owned the console | No admin = nobody; only this computer may create the first admin (an admin, nothing else), `/config` opens for that. **`Fixed in `c04eb39ba``** | `WebAccess_Test::authWithNoUsersIsNotOpenToEveryone`, `::theFirstVisitorCannotMakeThemselvesAdmin`, `::theFirstAdminComesFromThisComputer` |
+| **H5** | `WebAccess::slotHandleWebSocketRequest`, `handleCommonWebSocketCommand` | `GM_VALUE`, `CH`, cue/frame/clock/matrix, IO and user commands read `cmdList[n]` unchecked: one short frame aborted | Every index checked against the count. **`Fixed in `c04eb39ba``** | `WebAccess_Test::shortCommandsDoNotCrash` |
+| **H6** | `getWidgetType` / `getWidgetSubIdList` | Unknown widget id dereferenced null | Null checked, `VCWidget::typeToString` called statically. **`Fixed in `c04eb39ba``** | `WebAccess_Test::unknownWidgetIdsDoNotCrash` |
+| **H7** | `/loadFixture` | Upload name went into the path: `../escaped.qxf` wrote outside the fixture folder | `sanitizedFixtureFileName()`: base name only, `.qxf` only, else 403; `..` never leaves the web folder, outside files only when a VC widget uses them as its picture. **`Fixed in `c04eb39ba``** | `WebAccess_Test::anUploadedFixtureStaysInTheFixtureFolder`, `::uploadNamesAreSanitised`, `::filesOutsideTheWebFolderAreNotServed` |
+| **H8** | `QLC+SYS` (Linux/Pi) | Reboot, halt, network, hotspot, autostart reachable without auth (H1) | Admin only (`permits(SUPER_ADMIN_LEVEL)`), refused and logged otherwise; NETWORK's arguments counted. **`Fixed in `c04eb39ba``** | `WebAccess_Test::systemCommandsNeedAnAdmin` |
+| **H9** | `OSCPacketizer::parsePacket` | Bundle size 0xFFFFFFFC: the loop stepped back and forth forever on the GUI thread | Unsigned sizes; an element of 0 or past the datagram ends the bundle; the offset only moves forward. **`Fixed in `82b23d7fc``** | `OSC_Test::aBundleWithANegativeSizeEnds` |
+| **H10** | `OSCPacketizer::parseMessage` / `parsePacket` | Huge or cut sizes, unterminated tags or strings: signed overflow (UBSan) and reads past the datagram | Every read bounded by the datagram; nested bundles 8 deep at most; blobs skipped by their size. **`Fixed in `82b23d7fc``** | `OSC_Test::aBundleWithAHugeSizeEnds`, `::aBundleCutInsideASizeIsDropped`, `::tagsWithNoEndAreDropped`, `::aStringWithNoEndIsDropped`, `::randomDatagramsNeverCrash` |
+| **M1** | WebSocket upgrade, POST | No Origin check: any site the operator visited could drive the show (CSWSH, CSRF) | `originAllowed()`: no Origin, this computer, or the console's own origin; else 403. **`Fixed in `c04eb39ba``** | `WebAccess_Test::aPageOnAnotherSiteCannotDriveTheShow`, `::aFormOnAnotherSiteCannotLoadAProject` |
+| **M2** | `WebAccess` HTML builders, configuration and simple desk pages, `virtualconsole.js` | Captions, function names, notes, universe/profile/device/file/user names written as HTML: stored XSS | `htmlEscaped()` / `jsString()` everywhere a name is written; the page's live updates use `textContent`; new usernames limited to `[A-Za-z0-9._@-]`. **`Fixed in `c04eb39ba``** | `WebAccess_Test::namesFromTheShowAreEscapedInThePage` |
+| **M3** | `Script::getValueFromString` | `random(1,0)`: modulo by zero (SIGFPE on x86) | Bounds taken either way round, 64-bit span. **`Fixed in `76af9c636``** | `HostileShow_Test::randomWithEqualBoundsDoesNotCrashTheTimer`, `::randomTakesItsBoundsEitherWayRound` |
+| **M4** | `Script::handleSetFixture` | Unpatched fixture or one past the show's universes: `universes[universe]` out of range on the timer thread | Refused unless patched and in range. **`Fixed in `76af9c636``** | `HostileShow_Test::setFixtureOnAnUnpatchedFixtureIsSafe` |
+| **M5** | `OSCPacketizer` float/double | `(char)(255 * f)` of NaN, inf, out-of-range: UB | Clamped to 0..255, NaN 0. **`Fixed in `82b23d7fc``** | `OSC_Test::outOfRangeNumbersAreClamped` |
+| **M6** | `OSCController::getInputSocket` | Input bound `QHostAddress::Any` | Binds the controller's interface address; multipart cache and path hash table at most 4096 paths. **`Fixed in `82b23d7fc``** | `OSC_Test::theInputListensOnlyOnItsInterface`, `::manyPathsDoNotGrowMemoryWithoutBound` |
+| **M7** | `PatchList`, `FocusReport`, `NetworkReport` CSV | No formula-injection guard | `CsvField::escape()`: `'` before `= + - @` TAB CR unless a number; XLSX already wrote inline strings, now tested. **`Fixed in `2da8bbc72``** | `PatchList_Test::aFormulaInANameIsNotRunBySpreadsheets` |
+| **L1** | `WebAccessBase::~WebAccessBase`, `QHttpConnection` | Quit with a browser open: connections deleted twice; a plain connection's socket deleted after the server | The list is taken and each connection cut off before delete; the socket pointer is a `QPointer`. **`Fixed in `c04eb39ba``** | `WebAccess_Test::shutdownWithALiveClientIsClean`, `::aHugeUploadIsRefusedEarly` |
+| **L2** | `QHttpConnection` | No body limit; an unparsable URL asserted | 413 over 64 MB (Content-Length or chunked total), 400 for a bad URL, never an assert. **`Fixed in `c04eb39ba``** | `WebAccess_Test::aHugeUploadIsRefusedEarly`, `::aMalformedUrlDoesNotAbort` |
+| **L3** | `/tmp/qlc_showdebug.log` (`QLC_SHOW_DEBUG` only) | Predictable world path | **Open**: debug-only, left for a later pass | — |
+
+The red team's `http()` test helper waited with blocking `waitFor*()` while
+the server ran in the same thread, so no test could read a reply; it waits
+with the event loop running now, and the suite takes ~35 s instead of ~110 s.
+The tests that stand in for a visitor from the network turn off
+`WebAccessBase::m_trustLoopback`, since a test can only reach loopback. The
+monkey (`88923d58c`) runs 20 s in the gate and CI (`QLC_MONKEY_MS` from its test.sh, 60 s
+by hand); it and web access are in the serial list. Not hardened: the QML
+UI's web access (`webaccess-qml.cpp`, qmlui is off) and argument splitting
+in the Pi's nmcli commands (admin only now).
+
 ## Matrix 2: show compatibility, real Art-Net, TSan with an instrumented Qt (items 1, 3, 7)
 
 Run 2026-10-26 on ender (items 1, 3) and val (item 7). Items 1 and 3 used a

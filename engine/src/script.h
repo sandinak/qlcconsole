@@ -63,6 +63,18 @@ public:
     static const QString blackoutOff;
 
     /************************************************************************
+     * Running programs (systemcommand)
+     ************************************************************************/
+public:
+    /** The QSettings key of "Allow scripts to run programs" (Preferences):
+     *  this computer's, off unless the operator turns it on. */
+    static QString allowProgramsSettingKey();
+
+    /** Whether a Script's systemcommand may run a program on this computer */
+    static bool programsAllowed();
+    static void setProgramsAllowed(bool allow);
+
+    /************************************************************************
      * Initialization
      ************************************************************************/
 public:
@@ -287,6 +299,8 @@ private:
     QMap <QString,int> m_labels; //! Labels and their line numbers
     QList <Function*> m_startedFunctions; //! Functions started by this script
     QList <int> m_syntaxErrorLines;
+    /** Started only by a preview (the Workbench, the Show Tree): runs nothing */
+    bool m_previewOnly = false;
 
     GenericFader* m_fader;
 };

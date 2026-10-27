@@ -91,6 +91,12 @@ private:
      * @return true on successful parsing, otherwise false
      */
     bool parseMessage(QByteArray const& data, QString& path, QByteArray& values);
+
+    /** Append the messages of the bundle in @p data (and of the bundles
+     *  nested in it, up to a depth) to @p messages. A malformed element
+     *  ends the bundle. */
+    void parseBundle(QByteArray const& data, int depth,
+                     QList<QPair<QString, QByteArray> > &messages);
 public:
     /**
      * Parse a OSC packet received from the network.

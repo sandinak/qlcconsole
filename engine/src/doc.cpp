@@ -289,6 +289,8 @@ void Doc::clearContents()
 {
     emit clearing();
 
+    m_loadedFromWeb.store(false);
+
     if (m_lastLook != NULL)
         m_lastLook->clear();
 

@@ -41,6 +41,9 @@
 
 #include "virtualconsole.h"
 #include "simpledesk.h"
+#include <QHostAddress>
+#include <cstdio>
+
 #include "webaccess.h"
 #include "webaccessauth.h"
 #include "helpshots.h"
@@ -77,6 +80,9 @@ namespace QLCArgs
 
     /** Path to passwords file for web access basic authentication */
     QString webAccessPasswordFile;
+
+    /** Where web access listens (--web-bind): this computer only unless told */
+    QHostAddress webAccessBindAddress;
 
     /** If true, enable a 5% of overscan when in fullscreen mode (Raspberry Only) */
     bool enableOverscan = false;
@@ -169,6 +175,8 @@ void printUsage()
     cout << "  -v or --version\t\tPrint version information" << endl;
     cout << "  -w or --web\t\t\tEnable remote web access" << endl;
     cout << "  -wp or --web-port <port>\t\tSet the port to use for web access" << endl;
+    cout << "  -wb or --web-bind <address>\tListen for web access on <address> (default 127.0.0.1, this computer only;" << endl;
+    cout << "\t\t\t\t0.0.0.0 for every network). Others can change the show only with -wa" << endl;
     cout << "  -wa or --web-auth\t\tEnable remote web access with users authentication" << endl;
     cout << "  -a or --web-auth-file <file>\tSpecify a file where to store web access basic authentication credentials" << endl;
     cout << endl;
@@ -262,6 +270,25 @@ bool parseArgs()
         {
             if (it.hasNext() == true)
                 QLCArgs::webAccessPort = it.next().toInt();
+        }
+        else if (arg == "-wb" || arg == "--web-bind")
+        {
+            if (it.hasNext())
+            {
+                const QString addr = it.next();
+                QHostAddress bind;
+                if (addr == "any" || addr == "*")
+                    bind = QHostAddress(QHostAddress::AnyIPv4);
+                else if (addr == "localhost")
+                    bind = QHostAddress(QHostAddress::LocalHost);
+                else
+                    bind = QHostAddress(addr);
+                if (bind.isNull())
+                    fprintf(stderr, "Ignoring --web-bind %s: not an IP address. "
+                                    "Web access stays on this computer only.\n", qPrintable(addr));
+                else
+                    QLCArgs::webAccessBindAddress = bind;
+            }
         }
         else if (arg == "-wa" || arg == "--web-auth")
         {
@@ -388,7 +415,25 @@ int main(int argc, char** argv)
     if (QLCArgs::enableWebAccess == true)
     {
         WebAccess *webAccess = new WebAccess(app.doc(), VirtualConsole::instance(), SimpleDesk::instance(),
-                                             QLCArgs::webAccessPort, QLCArgs::enableWebAuth, QLCArgs::webAccessPasswordFile);
+                                             QLCArgs::webAccessPort, QLCArgs::enableWebAuth, QLCArgs::webAccessPasswordFile,
+                                             QLCArgs::webAccessBindAddress);
+        if (webAccess->listenPort() == 0)
+        {
+            fprintf(stderr, "Web access could not start: the address or port is in use, "
+                            "or not this computer's.\n");
+        }
+        else
+        {
+            fprintf(stdout, "Web access: %s\n", qPrintable(webAccess->url()));
+            if (webAccess->listenAddress().isLoopback() == false)
+            {
+                fprintf(stderr, "WARNING: web access is reachable from the network (%s).\n",
+                        qPrintable(webAccess->listenAddress().toString()));
+                if (QLCArgs::enableWebAuth == false)
+                    fprintf(stderr, "         Without -wa, other devices can look but not change the show.\n");
+            }
+            fflush(stdout);
+        }
 
         QObject::connect(webAccess, SIGNAL(toggleDocMode()),
                 &app, SLOT(slotModeToggle()));

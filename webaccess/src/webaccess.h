@@ -44,8 +44,11 @@ class WebAccess final : public WebAccessBase
 {
     Q_OBJECT
 public:
+    /** @a bindAddress: where to listen (--web-bind); null for this
+     *  computer only (WebAccessBase::defaultBindAddress()) */
     explicit WebAccess(Doc *doc, VirtualConsole *vcInstance, SimpleDesk *sdInstance,
                        int portNumber, bool enableAuth, QString passwdFile = QString(),
+                       const QHostAddress &bindAddress = QHostAddress(),
                        QObject *parent = 0);
     /** Destructor */
     ~WebAccess();
@@ -107,6 +110,7 @@ protected:
 
     void handleProjectLoad(const QByteArray &projectXml) override;
     bool storeFixtureDefinition(const QString &fxName, const QByteArray &fixtureXML) override;
+    bool isShowImage(const QString &path) const override;
     void handleAutostartProject(const QString &path) override;
 
 signals:

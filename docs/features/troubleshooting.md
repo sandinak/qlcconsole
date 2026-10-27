@@ -249,3 +249,35 @@ only in its Design mode, ⌘1 … ⌘9 for a new function only in Build ▸
 Scenes).
 
 **Help** — F1 opens the help for whatever you're looking at.
+
+## Security
+
+**The web page doesn't open on a tablet.** Web access listens on this
+computer only unless it is started with **--web-bind** (for example
+`-wa --web-bind 0.0.0.0`), and the tablet can change the show only with
+**-wa** and an account. See [Web access](other-improvements.md#web-access).
+
+**The web page says 401 Unauthorized.** It was started with **-wa**: log
+in with an account. With no account yet, open the page on this computer
+and create the first admin under **Configuration ▸ Users**.
+
+**The web page says 403 Forbidden.** The browser isn't on this computer
+and the app was started with **-w** alone (look, don't touch), or the
+request came from a page on another site.
+
+**The footer says a script did not run a program.** A Script's
+`systemcommand` line is skipped unless **Settings ▸ Advanced ▸ Allow
+scripts to run programs** is on, and always for a show loaded over web
+access. Turn it on only for shows you trust. A Script inside what Build or
+the Show Tree previews never runs: preview plays looks, not scripts; run
+it from the Virtual Console or a cue.
+
+**An OSC controller stopped reaching the console.** OSC input now listens
+on the interface its universe is patched to, not on every network: patch
+the OSC input to the interface the controller sends to (127.0.0.1 for an
+app on this computer).
+
+**A name in a CSV opens with an apostrophe.** The patch list, focus report
+and network report put an apostrophe before a cell that starts with `=`,
+`+`, `-` or `@` (and isn't a number), so a spreadsheet shows it as text
+instead of running it as a formula. XLSX files keep such names as text.

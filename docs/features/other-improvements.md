@@ -830,6 +830,13 @@ users and the show's output behaviour:
 - **Effects**: which editor opens an effect script (the in-app editor, or
   your computer's editor for .js files). It used to be on the one Settings
   page.
+- **Scripts (this computer)**: **Allow scripts to run programs**, off
+  unless you turn it on. A Script's `systemcommand` line starts a program
+  on this computer; with this off the line is skipped and the footer says
+  which script asked for which program. A show loaded over
+  [web access](#web-access) never runs programs, even with this on. Turn
+  it on only for shows you trust: a show's script can run anything you
+  can. See [Security](troubleshooting.md#security).
 
 ### Appearance settings
 
@@ -906,6 +913,51 @@ the same on any computer.
 Turn it off when a show wants every shutter to be programmed by hand, as
 in QLC+. While it is on, the Build tab no longer warns "no look for:
 shutter".
+
+## Web access
+
+qlcconsole can serve its Virtual Console, Simple Desk and Configuration
+pages to a web browser. It is **off** unless the app is started with
+**-w** (or **-wa**):
+
+```
+qlcconsole -o show.qlcc -w                        # this computer only
+qlcconsole -o show.qlcc -wa --web-bind 0.0.0.0    # tablets on the network, with logins
+```
+
+- **It listens on this computer only.** By default the page is at
+  **http://127.0.0.1:9999/**, reachable from a browser on the same
+  computer and nowhere else. To reach it from a tablet or another
+  computer, add **--web-bind** (**-wb**) with the address to listen on:
+  this computer's address on the network the tablet is on, or
+  **0.0.0.0** for every network. On start the app prints the address it
+  listens on, and a warning when it is reachable from the network.
+  **-wp** picks another port.
+- **Anyone else needs -wa.** Started with **-w** alone, a browser on this
+  computer can do everything; a browser anywhere else can look at the
+  pages but change nothing (no buttons, faders, Grand Master, Simple
+  Desk, show loading, patching or system commands). To control the show
+  from another device, start with **-wa** and give each person an account.
+- **Setting up users (-wa).** Until there is an admin account, nobody is
+  let in, except a browser on this computer, which may create the first
+  admin and nothing else: on this computer open the page, go to
+  **Configuration ▸ Users**, and add a user with **Everything**. From then
+  on everyone logs in, this computer included. Levels: **Only Virtual
+  Console** (buttons, faders, cue lists), **Virtual Console and Simple
+  Desk** (plus single channels and the Grand Master), **Everything**
+  (loading a show, fixture definitions, patching, users, and on the
+  Raspberry Pi image reboot, shut down, network and hotspot). Names are
+  letters, digits and `. _ @ -`. Accounts live in **web_passwd** in the
+  app's folder in your home folder, or the file given with **-a**.
+- **Other sites can't drive it.** A page on another web site, open in a
+  browser on this computer or on a logged-in tablet, is refused: the
+  console only takes commands from its own pages.
+- A show loaded through the web page never runs programs from its
+  scripts (see **Allow scripts to run programs** in
+  [Advanced settings](#advanced-settings)).
+
+Web access has no encryption (plain http): use it on the show network,
+not on a network shared with the public.
 
 ## Show timeline &amp; MTC follow
 

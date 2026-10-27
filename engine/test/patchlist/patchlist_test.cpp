@@ -27,6 +27,7 @@
 #include "truss.h"
 #include "inputoutputmap.h"
 #include "patchlist.h"
+#include "csvfield.h"
 #include "fixture.h"
 #include "doc.h"
 
@@ -503,6 +504,42 @@ void PatchList_Test::theXlsxIsAWorkbook()
     QVERIFY(!PatchList::build(m_doc).writeXlsx(QStringLiteral("/nonexistent-dir/x.xlsx"),
                                                PatchList::ByNone, &error));
     QVERIFY(!error.isEmpty());
+}
+
+/* RC8 (red team M7): a fixture named like a formula must not run in Excel,
+   Numbers or Lightwright. CSV: an apostrophe makes it text. XLSX: an inline
+   string, never a formula cell. A plain negative number is left alone. */
+void PatchList_Test::aFormulaInANameIsNotRunBySpreadsheets()
+{
+    dimmer(m_doc, QStringLiteral("=cmd|'/C calc'!A1"), 0, 0);
+    dimmer(m_doc, QStringLiteral("+SUM(A1)"), 0, 10);
+    dimmer(m_doc, QStringLiteral("@x"), 0, 20);
+    dimmer(m_doc, QStringLiteral("-1+1"), 0, 30);
+    const QString csv = PatchList::build(m_doc).toCsv();
+    const QStringList lines = csv.split(QLatin1Char('\n'));
+    for (int i = 1; i < lines.size(); i++)
+    {
+        const QString &l = lines.at(i);
+        if (l.isEmpty())
+            continue;
+        QVERIFY2(!l.startsWith(QLatin1Char('=')) && !l.startsWith(QLatin1Char('+'))
+                 && !l.startsWith(QLatin1Char('@')) && !l.startsWith(QLatin1Char('-')),
+                 qPrintable(l));
+        QVERIFY2(!l.contains(QStringLiteral(",=")) && !l.contains(QStringLiteral(",+")), qPrintable(l));
+    }
+    QVERIFY2(csv.contains(QStringLiteral("'=cmd|'/C calc'!A1")), qPrintable(csv));
+    QVERIFY2(csv.contains(QStringLiteral("'+SUM(A1)")), qPrintable(csv));
+    QVERIFY2(csv.contains(QStringLiteral("'@x")), qPrintable(csv));
+    QVERIFY2(csv.contains(QStringLiteral("'-1+1")), qPrintable(csv));
+
+    QCOMPARE(CsvField::escape(QStringLiteral("-1.5")), QStringLiteral("-1.5"));
+    QCOMPARE(CsvField::escape(QStringLiteral("\t=1+1")), QStringLiteral("'\t=1+1"));
+    QCOMPARE(CsvField::escape(QStringLiteral("=A1,B1")), QStringLiteral("\"'=A1,B1\""));
+
+    const QHash<QString, QByteArray> files = unzip(PatchList::build(m_doc).toXlsx(PatchList::ByNone));
+    const QString sheet = QString::fromUtf8(files.value(QStringLiteral("xl/worksheets/sheet1.xml")));
+    QVERIFY(sheet.contains(QStringLiteral("t=\"inlineStr\"><is><t xml:space=\"preserve\">=cmd|")));
+    QVERIFY2(!sheet.contains(QStringLiteral("<f>")), "a cell was written as a formula");
 }
 
 QTEST_MAIN(PatchList_Test)

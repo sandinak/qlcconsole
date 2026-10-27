@@ -69,6 +69,11 @@ private slots:
      *  stops only what it started. */
     void operateRunsWhatIsLoadedAndStopsOnlyItsOwn();
     void designPreviewLeavesAnotherRunAlone();
+    /** RC8: a preview plays a look, never a Script in it -- a collection's
+     *  member or a chaser's step -- which would act on the world (set
+     *  channels, start things, run programs). Started from anywhere else
+     *  the same Script runs. */
+    void aPreviewNeverRunsAScript();
     /** Two layers set one channel: the lower layer wins on the DMX; ▲
      *  swaps them and the output follows; ⌘Z puts it back. */
     void theLowerLayerWinsAndFollowsAReorder();

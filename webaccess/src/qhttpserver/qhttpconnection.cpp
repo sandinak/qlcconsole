@@ -29,11 +29,18 @@
 #include <QTimer>
 #include <QDebug>
 
+#include <climits>
+
 #include "http_parser.h"
 #include "qhttprequest.h"
 #include "qhttpresponse.h"
 
 /// @cond nodoc
+
+/* The most a request body may hold: a show or a fixture definition. A
+   larger Content-Length is refused before a byte of it is kept (one
+   client must not fill the memory of the computer running the show). */
+static const quint64 kMaxRequestBody = 64ull * 1024 * 1024;
 
 QHttpConnection::QHttpConnection(QTcpSocket *socket, QObject *parent)
     : QObject(parent),
@@ -121,11 +128,30 @@ void QHttpConnection::parseRequest()
 {
     Q_ASSERT(m_parser);
 
-    while (m_socket->bytesAvailable())
+    while (m_socket && m_socket->bytesAvailable())
     {
         m_socket->startTransaction();
         QByteArray data = m_socket->readAll();
         http_parser_execute(m_parser, m_parserSettings, data.constData(), data.size());
+
+        if (HTTP_PARSER_ERRNO(m_parser) != HPE_OK)
+        {
+            // A request it can't (or won't) take: say so if nothing has
+            // been answered yet, and hang up. Never an assert.
+            m_socket->commitTransaction();
+            if (m_request != NULL && m_requestHandedOut == false)
+            {
+                QHttpRequest *req = m_request;
+                m_request = NULL;
+                req->deleteLater();
+            }
+            const QByteArray reply = m_tooLarge
+                    ? QByteArray("HTTP/1.1 413 Request Entity Too Large\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+                    : QByteArray("HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+            m_socket->write(reply);
+            m_socket->disconnectFromHost();
+            break;
+        }
 
         if (!m_isWebSocket)
         {
@@ -143,24 +169,28 @@ void QHttpConnection::parseRequest()
 
 void QHttpConnection::write(const QByteArray &data)
 {
+    if (!m_socket)
+        return;
     m_socket->write(data);
     m_transmitLen += data.size();
 }
 
 void QHttpConnection::flush()
 {
-    m_socket->flush();
+    if (m_socket)
+        m_socket->flush();
 }
 
 void QHttpConnection::waitForBytesWritten()
 {
-    m_socket->waitForBytesWritten();
+    if (m_socket)
+        m_socket->waitForBytesWritten();
 }
 
 void QHttpConnection::responseDone()
 {
     QHttpResponse *response = qobject_cast<QHttpResponse *>(QObject::sender());
-    if (response->m_last && m_isWebSocket == false)
+    if (response->m_last && m_isWebSocket == false && m_socket)
         m_socket->disconnectFromHost();
 }
 
@@ -208,6 +238,7 @@ int QHttpConnection::MessageBegin(http_parser *parser)
     // The QHttpRequest should not be parented to this, since it's memory
     // management is the responsibility of the user of the library.
     theConnection->m_request = new QHttpRequest(theConnection);
+    theConnection->m_requestHandedOut = false;
 
     // Invalidate the request when it is deleted to prevent keep-alive requests
     // from calling a signal on a deleted object.
@@ -233,8 +264,18 @@ int QHttpConnection::HeadersComplete(http_parser *parser)
     int r = http_parser_parse_url(theConnection->m_currentUrl.constData(),
                                   theConnection->m_currentUrl.size(),
                                   parser->method == HTTP_CONNECT, &urlInfo);
-    Q_ASSERT(r == 0);
-    Q_UNUSED(r);
+    // a URL it cannot parse ("http://[") ends the request: a 400, not an
+    // assert (which a stranger's one line turned into a crash)
+    if (r != 0)
+        return 1;
+
+    // a body too big for us is refused before any of it is kept
+    if ((parser->flags & F_CHUNKED) == 0 && parser->content_length != ULLONG_MAX
+        && quint64(parser->content_length) > kMaxRequestBody)
+    {
+        theConnection->m_tooLarge = true;
+        return 1;
+    }
 
     theConnection->m_request->setUrl(createUrl(theConnection->m_currentUrl.constData(), urlInfo));
 
@@ -263,6 +304,7 @@ int QHttpConnection::HeadersComplete(http_parser *parser)
     else
     {
         // we are good to go!
+        theConnection->m_requestHandedOut = true;
         Q_EMIT theConnection->newRequest(theConnection->m_request, response);
     }
 
@@ -281,6 +323,7 @@ int QHttpConnection::MessageComplete(http_parser *parser)
     {
         theConnection->m_postPending = false;
         QHttpResponse *response = new QHttpResponse(theConnection);
+        theConnection->m_requestHandedOut = true;
         Q_EMIT theConnection->newRequest(theConnection->m_request, response);
     }
     return 0;
@@ -333,6 +376,13 @@ int QHttpConnection::Body(http_parser *parser, const char *at, size_t length)
 {
     QHttpConnection *theConnection = static_cast<QHttpConnection *>(parser->data);
     Q_ASSERT(theConnection->m_request);
+
+    // chunked bodies have no Content-Length to refuse up front
+    if (quint64(theConnection->m_request->body().size()) + length > kMaxRequestBody)
+    {
+        theConnection->m_tooLarge = true;
+        return 1;
+    }
 
     Q_EMIT theConnection->m_request->data(QByteArray(at, length));
     return 0;

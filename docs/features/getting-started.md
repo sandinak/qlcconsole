@@ -26,12 +26,17 @@ From a terminal:
 qlcconsole -o path/to/show.qlcc     # open a show
 qlcconsole -o show.qlcc -p          # open it straight into Operate mode
 qlcconsole -k -o show.qlcc          # kiosk: Virtual Console only, operate mode
-qlcconsole -w                       # also serve the web interface (port 9999)
+qlcconsole -w                       # also serve the web interface, to this computer only
+qlcconsole -wa --web-bind 0.0.0.0   # ...to the network, with logins (see Web access)
 qlcconsole -h                       # every option
 ```
 
 Always pass the show with **-o**. A bare file name on the command line is
 not opened — and saving then can write an empty workspace over it.
+
+Web access is off unless started with **-w**, and then listens on this
+computer only; see [Web access](other-improvements.md#web-access) for
+reaching it from a tablet and setting up users.
 
 ### Show files
 

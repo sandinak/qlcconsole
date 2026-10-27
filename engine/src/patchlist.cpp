@@ -29,6 +29,7 @@
 
 #include <algorithm>
 
+#include "csvfield.h"
 #include "monitorproperties.h"
 #include "qlcioplugin.h"
 #include "inputoutputmap.h"
@@ -321,15 +322,11 @@ PatchList PatchList::build(Doc *doc, const QList<quint32> &ids)
     return list;
 }
 
-/* One CSV field: quoted when it holds a comma, quote or line break. */
+/* One CSV field: a formula defused, quoted when it holds a comma, quote or
+   line break (CsvField). */
 static QString csv(const QString &field)
 {
-    if (!field.contains(QLatin1Char(',')) && !field.contains(QLatin1Char('"'))
-        && !field.contains(QLatin1Char('\n')))
-        return field;
-    QString f = field;
-    f.replace(QLatin1Char('"'), QStringLiteral("\"\""));
-    return QStringLiteral("\"%1\"").arg(f);
+    return CsvField::escape(field);
 }
 
 static QString csvRow(const QStringList &fields)
