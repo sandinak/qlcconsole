@@ -1056,6 +1056,7 @@ void App::clearDocument()
     m_doc->inputOutputMap()->resetUniverses();
     setFileName(QString());
     m_damagedFile.clear();
+    m_doc->setLoadedFromWeb(false);     // the next show says where it came from
     // A new show: the qlcconsole view, or Classic by the preference (a
     // loaded one sets its own, loadXML()).
     m_loadedCreator.clear();
@@ -5073,6 +5074,9 @@ QFile::FileError App::loadXML(const QString& fileName)
         return QFile::OpenError;
 
     m_damagedFile.clear();
+    /* A show opened from a file is the operator's, whatever came in over
+       web access before it (Script programs, RC8) */
+    m_doc->setLoadedFromWeb(false);
 
     /* The definitions and scripts the show carries, put in use before any of
        it loads: where this computer has none, or a different one, the show's
@@ -5523,12 +5527,6 @@ void App::slotLoadDocFromMemory(QString xmlData)
     if (xmlData.isEmpty())
         return;
 
-    /* Clear existing document data */
-    clearDocument();
-
-    /* A show from web access is never trusted to run programs (RC8) */
-    m_doc->setLoadedFromWeb(true);
-
     QBuffer databuf;
     databuf.setData(xmlData.simplified().toUtf8());
     databuf.open(QIODevice::ReadOnly | QIODevice::Text);
@@ -5549,14 +5547,24 @@ void App::slotLoadDocFromMemory(QString xmlData)
     }
     if (doc.hasError())
     {
-        qDebug() << "XML has errors:" << doc.errorString();
+        qWarning() << Q_FUNC_INFO << "XML has errors:" << doc.errorString() << ": the show is left as it was";
         return;
     }
 
-    if (doc.dtdName() == KXMLQLCWorkspace)
-        loadXML(doc, true, true);
-    else
-        qDebug() << "XML doesn't have a Workspace tag";
+    if (doc.dtdName() != KXMLQLCWorkspace)
+    {
+        qWarning() << Q_FUNC_INFO << "XML doesn't have a Workspace tag: the show is left as it was";
+        return;
+    }
+
+    /* Only now that it is a show: the open one used to be cleared before
+       anything was read, so a file that was not a show emptied the console */
+    clearDocument();
+
+    /* A show from web access is never trusted to run programs (RC8) */
+    m_doc->setLoadedFromWeb(true);
+
+    loadXML(doc, true, true);
 }
 
 void App::slotSaveAutostart(QString fileName)
