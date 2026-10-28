@@ -1990,85 +1990,89 @@ void Monitor_Test::anObjectHeldByItsLayerVsItsOwnLock()
     open->setName("Open Truss");
     open->setLayerId(lyr);
 
-    MonitorGraphicsView view(doc);
-    view.resize(900, 700);
-    view.setGridMetrics(1000.0);
-    view.setGridSize(QSize(10, 8));
-    view.updateTrusses();
-    MonitorLayersPanel panel(doc, &view);
-    panel.reload();
-
-    const QString ownBadge = QString::fromUtf8("\xF0\x9F\x94\x92");
-    const QString heldBadge = QString::fromUtf8("\xE2\x86\x91\xF0\x9F\x94\x92");
-    auto row = [&](Truss *t) { return objectRow(&panel, "truss", t->id()); };
-
-    // Layer open: one locked on its own, the other free.
-    QVERIFY(row(mine) != nullptr && row(open) != nullptr);
-    QVERIFY2(row(mine)->text(0).endsWith(ownBadge) && !row(mine)->text(0).contains(heldBadge),
-             qPrintable(row(mine)->text(0)));
-    QVERIFY2(!row(open)->text(0).contains(ownBadge), qPrintable(row(open)->text(0)));
-    QCOMPARE(row(mine)->data(0, Qt::UserRole + 4).toInt(), int(ItemLock::HeldOwn));
-    QCOMPARE(row(open)->data(0, Qt::UserRole + 4).toInt(), int(ItemLock::NotHeld));
-    QVERIFY(row(mine)->toolTip(0).contains("Locked on its own"));
-
-    // A fixture on the layer too: its row's badge must never become its name.
-    Fixture *fx = new Fixture(doc);
-    fx->setName("Spot");
-    fx->setChannels(4);
-    doc->addFixture(fx);
-    view.addFixture(fx->id(), QPointF(2000, 2000));
-    props->setFixtureLayer(fx->id(), lyr);
-
-    // The layer locked: the open one is held by its layer (↑🔒), the other
-    // still shows its own lock -- and says the layer holds it as well.
-    props->setLayerLocked(lyr, true);
-    view.refreshItemLayerState();
-    doc->resetModified();
-    panel.reload();
-    /* Marking the rows (tooltips, NodeHoldRole) is part of the rebuild:
-       done after it, each change was taken for a rename -- the fixture
-       renamed, the list reloaded, for ever (a hang in viewlayout_test). */
-    QCOMPARE(fx->name(), QString("Spot"));
-    QVERIFY(!doc->isModified());
-    QVERIFY(objectRow(&panel, "fixture", fx->id()) != nullptr);
-    QVERIFY(objectRow(&panel, "fixture", fx->id())->text(0).endsWith(heldBadge));
-    QVERIFY2(row(open)->text(0).endsWith(heldBadge), qPrintable(row(open)->text(0)));
-    QVERIFY2(row(mine)->text(0).endsWith(ownBadge) && !row(mine)->text(0).contains(heldBadge),
-             qPrintable(row(mine)->text(0)));
-    QCOMPARE(row(open)->data(0, Qt::UserRole + 4).toInt(), int(ItemLock::HeldLayer));
-    QCOMPARE(row(mine)->data(0, Qt::UserRole + 4).toInt(), int(ItemLock::HeldOwn | ItemLock::HeldLayer));
-    QCOMPARE(ItemLock::primaryHold(row(mine)->data(0, Qt::UserRole + 4).toInt()), ItemLock::HeldOwn);
-    QVERIFY2(row(open)->toolTip(0).contains(QString::fromUtf8("Held by layer “Rig”'s lock")),
-             qPrintable(row(open)->toolTip(0)));
-    QVERIFY(!row(open)->toolTip(0).contains("Locked on its own"));
-    QVERIFY(row(mine)->toolTip(0).contains("Locked on its own"));
-    QVERIFY(row(mine)->toolTip(0).contains(QString::fromUtf8("Held by layer “Rig”'s lock")));
-    QVERIFY(!open->locked());                       // its own lock untouched
-
-    // The plot locked as well: named in the tooltip; no badge on every row.
-    props->setLayerLocked(lyr, false);
-    view.setLayoutLocked(true);
-    panel.reload();
-    QVERIFY2(!row(open)->text(0).contains(ownBadge), qPrintable(row(open)->text(0)));
-    QCOMPARE(row(open)->data(0, Qt::UserRole + 4).toInt(), int(ItemLock::HeldPlot));
-    QVERIFY(row(open)->toolTip(0).contains("Held by the plot lock"));
-    QCOMPARE(view.itemHolds("truss", mine->id()), int(ItemLock::HeldOwn | ItemLock::HeldPlot));
-
-    // And the plot's menu on it says the plot holds it too.
+    /* The view and the list go before the Doc: the view's fixture items
+       ask the Doc for their fixture as they go (a use-after-free on Linux). */
     {
-        QMenu menu;
-        view.buildItemMenu(&menu, "truss", open->id(), MonitorGraphicsView::MenuPlace());
-        QAction *held = menu.findChild<QAction *>(QStringLiteral("itemHeldByPlot"));
-        QVERIFY(held != nullptr && !held->isEnabled());
-    }
+        MonitorGraphicsView view(doc);
+        view.resize(900, 700);
+        view.setGridMetrics(1000.0);
+        view.setGridSize(QSize(10, 8));
+        view.updateTrusses();
+        MonitorLayersPanel panel(doc, &view);
+        panel.reload();
 
-    // Unlocked again: just as it was.
-    view.setLayoutLocked(false);
-    panel.reload();
-    QVERIFY(row(mine)->text(0).endsWith(ownBadge));
-    QCOMPARE(row(open)->data(0, Qt::UserRole + 4).toInt(), int(ItemLock::NotHeld));
-    QVERIFY(mine->locked());
-    QVERIFY(!open->locked());
+        const QString ownBadge = QString::fromUtf8("\xF0\x9F\x94\x92");
+        const QString heldBadge = QString::fromUtf8("\xE2\x86\x91\xF0\x9F\x94\x92");
+        auto row = [&](Truss *t) { return objectRow(&panel, "truss", t->id()); };
+
+        // Layer open: one locked on its own, the other free.
+        QVERIFY(row(mine) != nullptr && row(open) != nullptr);
+        QVERIFY2(row(mine)->text(0).endsWith(ownBadge) && !row(mine)->text(0).contains(heldBadge),
+                 qPrintable(row(mine)->text(0)));
+        QVERIFY2(!row(open)->text(0).contains(ownBadge), qPrintable(row(open)->text(0)));
+        QCOMPARE(row(mine)->data(0, Qt::UserRole + 4).toInt(), int(ItemLock::HeldOwn));
+        QCOMPARE(row(open)->data(0, Qt::UserRole + 4).toInt(), int(ItemLock::NotHeld));
+        QVERIFY(row(mine)->toolTip(0).contains("Locked on its own"));
+
+        // A fixture on the layer too: its row's badge must never become its name.
+        Fixture *fx = new Fixture(doc);
+        fx->setName("Spot");
+        fx->setChannels(4);
+        doc->addFixture(fx);
+        view.addFixture(fx->id(), QPointF(2000, 2000));
+        props->setFixtureLayer(fx->id(), lyr);
+
+        // The layer locked: the open one is held by its layer (↑🔒), the other
+        // still shows its own lock -- and says the layer holds it as well.
+        props->setLayerLocked(lyr, true);
+        view.refreshItemLayerState();
+        doc->resetModified();
+        panel.reload();
+        /* Marking the rows (tooltips, NodeHoldRole) is part of the rebuild:
+           done after it, each change was taken for a rename -- the fixture
+           renamed, the list reloaded, for ever (a hang in viewlayout_test). */
+        QCOMPARE(fx->name(), QString("Spot"));
+        QVERIFY(!doc->isModified());
+        QVERIFY(objectRow(&panel, "fixture", fx->id()) != nullptr);
+        QVERIFY(objectRow(&panel, "fixture", fx->id())->text(0).endsWith(heldBadge));
+        QVERIFY2(row(open)->text(0).endsWith(heldBadge), qPrintable(row(open)->text(0)));
+        QVERIFY2(row(mine)->text(0).endsWith(ownBadge) && !row(mine)->text(0).contains(heldBadge),
+                 qPrintable(row(mine)->text(0)));
+        QCOMPARE(row(open)->data(0, Qt::UserRole + 4).toInt(), int(ItemLock::HeldLayer));
+        QCOMPARE(row(mine)->data(0, Qt::UserRole + 4).toInt(), int(ItemLock::HeldOwn | ItemLock::HeldLayer));
+        QCOMPARE(ItemLock::primaryHold(row(mine)->data(0, Qt::UserRole + 4).toInt()), ItemLock::HeldOwn);
+        QVERIFY2(row(open)->toolTip(0).contains(QString::fromUtf8("Held by layer “Rig”'s lock")),
+                 qPrintable(row(open)->toolTip(0)));
+        QVERIFY(!row(open)->toolTip(0).contains("Locked on its own"));
+        QVERIFY(row(mine)->toolTip(0).contains("Locked on its own"));
+        QVERIFY(row(mine)->toolTip(0).contains(QString::fromUtf8("Held by layer “Rig”'s lock")));
+        QVERIFY(!open->locked());                       // its own lock untouched
+
+        // The plot locked as well: named in the tooltip; no badge on every row.
+        props->setLayerLocked(lyr, false);
+        view.setLayoutLocked(true);
+        panel.reload();
+        QVERIFY2(!row(open)->text(0).contains(ownBadge), qPrintable(row(open)->text(0)));
+        QCOMPARE(row(open)->data(0, Qt::UserRole + 4).toInt(), int(ItemLock::HeldPlot));
+        QVERIFY(row(open)->toolTip(0).contains("Held by the plot lock"));
+        QCOMPARE(view.itemHolds("truss", mine->id()), int(ItemLock::HeldOwn | ItemLock::HeldPlot));
+
+        // And the plot's menu on it says the plot holds it too.
+        {
+            QMenu menu;
+            view.buildItemMenu(&menu, "truss", open->id(), MonitorGraphicsView::MenuPlace());
+            QAction *held = menu.findChild<QAction *>(QStringLiteral("itemHeldByPlot"));
+            QVERIFY(held != nullptr && !held->isEnabled());
+        }
+
+        // Unlocked again: just as it was.
+        view.setLayoutLocked(false);
+        panel.reload();
+        QVERIFY(row(mine)->text(0).endsWith(ownBadge));
+        QCOMPARE(row(open)->data(0, Qt::UserRole + 4).toInt(), int(ItemLock::NotHeld));
+        QVERIFY(mine->locked());
+        QVERIFY(!open->locked());
+    }
     delete doc;
 }
 
