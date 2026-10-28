@@ -48,6 +48,7 @@
 #include "webaccess.h"
 #include "webaccessauth.h"
 #include "helpshots.h"
+#include "connectionstree.h"
 #include "apputil.h"
 #include "app.h"
 #include "doc.h"
@@ -433,8 +434,19 @@ int main(int argc, char** argv)
     // A -o/--open workspace loads here too, under the same StartupWindow as
     // the rest of boot, so the main window only ever appears once fully
     // ready -- see App::startup()'s doc comment.
+    // A Connections tab the show reopens on is shown here, before anyone
+    // chose it: it must not poll the network by itself (an Art-Net rescan
+    // broadcasts ArtPoll on every interface, patched or not). The operator's
+    // own arrival at the tab polls, once the event loop runs -- except
+    // headless, where nobody arrives anywhere (pb3).
+    ConnectionsTree::setArrivalScanEnabled(false);
     app.startup(QLCArgs::workspace);
     app.show();
+    {
+        const QString platform = QGuiApplication::platformName();
+        if (platform != QLatin1String("offscreen") && platform != QLatin1String("minimal"))
+            QTimer::singleShot(0, []() { ConnectionsTree::setArrivalScanEnabled(true); });
+    }
 
     if (QLCArgs::operate == true)
         app.slotModeOperate();

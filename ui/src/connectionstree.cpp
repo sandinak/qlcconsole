@@ -44,6 +44,7 @@
 #include <QStackedWidget>
 #include <QTreeWidgetItemIterator>
 #include <QToolButton>
+#include <QShowEvent>
 
 #include "connectionstree.h"
 #include "shrinkablebar.h"
@@ -174,6 +175,7 @@ ConnectionsTree::ConnectionsTree(Doc *doc, QWidget *parent)
     , m_linesBaselined(false)
     , m_populatedOnce(false)
     , m_shownOnce(false)
+    , m_arrivalPolled(false)
     , m_rebuilding(false)
     , m_since(new QElapsedTimer)
     , m_tree(NULL)
@@ -548,6 +550,18 @@ void ConnectionsTree::slotActivityTimeout()
     m_activeUniverses.clear();
 }
 
+bool ConnectionsTree::s_arrivalScanEnabled = true;
+
+void ConnectionsTree::setArrivalScanEnabled(bool enable)
+{
+    s_arrivalScanEnabled = enable;
+}
+
+bool ConnectionsTree::arrivalScanEnabled()
+{
+    return s_arrivalScanEnabled;
+}
+
 void ConnectionsTree::showEvent(QShowEvent *ev)
 {
     QWidget::showEvent(ev);
@@ -559,8 +573,17 @@ void ConnectionsTree::showEvent(QShowEvent *ev)
     {
         m_shownOnce = true;
         m_since->restart();
-        /* One poll on first arrival, so an unpatched interface has had a
-           chance to answer before the operator concludes it is empty. */
+    }
+
+    /* One poll on first arrival, so an unpatched interface has had a chance
+       to answer before the operator concludes it is empty -- but only an
+       arrival the operator made: not the tab a show reopens on at startup,
+       nor a headless run (pb3: those broadcast ArtPoll onto a show network
+       with nothing patched), nor the window coming back from minimised
+       (a spontaneous show). */
+    if (m_arrivalPolled == false && s_arrivalScanEnabled && ev->spontaneous() == false)
+    {
+        m_arrivalPolled = true;
         slotRescan();
     }
     else

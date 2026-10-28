@@ -75,6 +75,16 @@ public:
     /** Back to the wiring: nothing picked, the output view on the right. */
     void clearShowControlSelection();
 
+    /** Whether arriving at the tab polls for devices by itself (one
+     *  QLCIOPlugin::rescan(): Art-Net broadcasts an ArtPoll on every
+     *  interface, patched or not). True by default. The app turns it off
+     *  across startup, so a show saved with Connections in front, or a
+     *  headless (offscreen) run, sends nothing onto the network nobody
+     *  asked for; the operator's own arrival at the tab, or Rescan, polls
+     *  (pb3). A first show while it is off leaves the poll for the next. */
+    static void setArrivalScanEnabled(bool enable);
+    static bool arrivalScanEnabled();
+
 signals:
     /** A show-control row was picked: @p key, empty for the branch. */
     void showControlRowSelected(const QString &key);
@@ -392,6 +402,9 @@ private:
     /* First show is the moment to go looking; the constructor may run long
        before anyone opens the tab. */
     bool m_shownOnce;
+    /* The first-arrival poll has run (it waits for arrivalScanEnabled()). */
+    bool m_arrivalPolled;
+    static bool s_arrivalScanEnabled;
     /** Suppresses itemChanged while refresh() rebuilds the tree. */
     bool m_rebuilding;
     /* Nodes announce roughly once a second, so an empty tree in the first

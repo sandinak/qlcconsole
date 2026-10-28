@@ -41,6 +41,9 @@ private slots:
     /* Visibility gating -- a hidden tab must cost nothing */
     void timerOnlyRunsWhileVisible();
     void firstShowRescansAndRestartsTheClock();
+    /** With the arrival scan off (startup, headless) a first show polls
+     *  nothing; the next operator arrival once it is on polls once (pb3). */
+    void arrivalScanWaitsForTheOperator();
 
     /* Rescan reaches every plugin, not just the ones with a dialog */
     void rescanReachesEveryPlugin();

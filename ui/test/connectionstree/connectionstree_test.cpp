@@ -182,6 +182,7 @@ void ConnectionsTree_Test::cleanup()
        must not leave every later test looking at the universe list. */
     QSettings().setValue(QStringLiteral("connections/byUniverse"), false);
     QSettings().remove(QStringLiteral("connections/universeColumns"));
+    ConnectionsTree::setArrivalScanEnabled(true);
     delete m_doc;
     m_doc = NULL;
 }
@@ -260,6 +261,32 @@ void ConnectionsTree_Test::firstShowRescansAndRestartsTheClock()
     tree.hide();
     tree.show();
     QCOMPARE(stub->m_rescanCalled, after);
+}
+
+void ConnectionsTree_Test::arrivalScanWaitsForTheOperator()
+{
+    IOPluginStub *stub = stubOf(m_doc);
+
+    // As at startup: the tab a show reopens on is shown before anyone chose it.
+    ConnectionsTree::setArrivalScanEnabled(false);
+    ConnectionsTree tree(m_doc);
+    tree.show();
+    QVERIFY(tree.m_shownOnce == true);
+    QCOMPARE(stub->m_rescanCalled, 0);
+
+    // The operator's own arrival, after startup: one poll, then no more.
+    ConnectionsTree::setArrivalScanEnabled(true);
+    tree.hide();
+    tree.show();
+    QCOMPARE(stub->m_rescanCalled, 1);
+    tree.hide();
+    tree.show();
+    QCOMPARE(stub->m_rescanCalled, 1);
+
+    // Rescan by hand always polls, whatever the arrival setting.
+    ConnectionsTree::setArrivalScanEnabled(false);
+    tree.slotRescan();
+    QCOMPARE(stub->m_rescanCalled, 2);
 }
 
 /****************************************************************************
