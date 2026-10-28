@@ -141,6 +141,11 @@ void ArtNetPacketizer::setupArtNetDmx(QByteArray& data, const int &universe, con
     data.append(m_commonHeader);
     const char opCodeMSB = (ARTNET_DMX >> 8);
     data[9] = opCodeMSB;
+    /* Sequence runs 1..255 per Port-Address; 0 means "not sequenced". Only
+       Port-Addresses 0-3 were seeded with 1, so any other universe's first
+       packet went out as 0. */
+    if (m_sequence.contains(universe) == false)
+        m_sequence[universe] = 1;
     data.append(m_sequence[universe]); // Sequence
     data.append('\0'); // Physical
     data.append((char)(universe & 0x00FF));
