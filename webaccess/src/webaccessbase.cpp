@@ -214,6 +214,9 @@ bool WebAccessBase::sendFile(QHttpResponse *response, QString filename, QString 
         QByteArray resContent = resFile.readAll();
         resFile.close();
 
+        if (response == nullptr)
+            return false;
+
         response->setHeader("Content-Type", contentType);
         response->setHeader("Content-Length", QString::number(resContent.size()));
         response->writeHead(200);
@@ -474,6 +477,10 @@ WebAccessBase::CommonRequestResult WebAccessBase::handleCommonHTTPRequest(QHttpR
                                                                           const QString &reqUrl,
                                                                           QString &content)
 {
+    // nothing to answer, or nothing asked: before anything reads them
+    if (resp == nullptr || req == nullptr)
+        return CommonRequestResult::NotHandled;
+
     // A page on another site may not drive the console (CSWSH, CSRF)
     if ((reqUrl == "/qlcplusWS" || req->method() == QHttpRequest::HTTP_POST) && !originAllowed(req))
     {
@@ -561,6 +568,8 @@ WebAccessBase::CommonRequestResult WebAccessBase::handleCommonHTTPRequest(QHttpR
     {
         if (!requireAuthLevel(resp, user, SUPER_ADMIN_LEVEL))
             return CommonRequestResult::Handled;
+        if (m_netConfig == nullptr)
+            return CommonRequestResult::NotHandled;
         content = m_netConfig->getHTML();
         return CommonRequestResult::ContentReady;
     }
@@ -816,7 +825,7 @@ bool WebAccessBase::handleCommonWebSocketCommand(QHttpConnection *conn, WebAcces
         if (cmdList.count() < 2)
             return true;
 
-        if (cmdList.at(1) == "NETWORK")
+        if (cmdList.at(1) == "NETWORK" && m_netConfig != nullptr)
         {
             // interface, method, address, mask, gateway, SSID, password
             if (cmdList.count() < 9)
@@ -831,7 +840,7 @@ bool WebAccessBase::handleCommonWebSocketCommand(QHttpConnection *conn, WebAcces
                 conn->webSocketWrite(wsMessage);
             return true;
         }
-        else if (cmdList.at(1) == "HOTSPOT")
+        else if (cmdList.at(1) == "HOTSPOT" && m_netConfig != nullptr)
         {
             QString wsMessage;
             if (cmdList.count() < 5)
