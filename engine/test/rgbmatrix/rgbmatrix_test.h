@@ -41,6 +41,11 @@ private slots:
     void property();
     void loadSave();
     void anUninstalledScriptSurvivesASave();
+    /** Running (coverage campaign: preRun/write/postRun were never run):
+     *  a Plain matrix writes its colour to every head and follows a change;
+     *  stopped, it lets go; a scripted one steps on its duration */
+    void aRunningMatrixWritesItsColour();
+    void aScriptedMatrixStepsOnItsDuration();
 
 private:
     Doc* m_doc;

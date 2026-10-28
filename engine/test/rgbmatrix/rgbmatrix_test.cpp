@@ -34,6 +34,9 @@
 #include "fixture.h"
 #include "qlcfile.h"
 #include "doc.h"
+#include "universe.h"
+#include "inputoutputmap.h"
+#include "rgbalgorithm.h"
 #undef private
 #undef protected
 
@@ -468,6 +471,95 @@ void RGBMatrix_Test::loadSave()
     xmlReader.readNextStartElement();
     QVERIFY(mtx2.loadXML(xmlReader) == false); // Not an RGBMatrix node
 
+}
+
+static int level(Doc *doc, int address)
+{
+    QList<Universe *> ua = doc->inputOutputMap()->claimUniverses();
+    ua.first()->processFaders();
+    const int v = uchar(ua.first()->preGMValues().at(address));
+    doc->inputOutputMap()->releaseUniverses(false);
+    return v;
+}
+
+static void tick(Doc *doc, int n)
+{
+    for (int i = 0; i < n; i++)
+        doc->masterTimer()->timerTick();
+}
+
+void RGBMatrix_Test::aRunningMatrixWritesItsColour()
+{
+    RGBMatrix *mtx = new RGBMatrix(m_doc);
+    mtx->setFixtureGroup(m_doc->fixtureGroups().first()->id());
+    mtx->setAlgorithm(RGBAlgorithm::algorithm(m_doc, "Plain Color"));
+    QVERIFY(mtx->algorithm() != NULL);
+    mtx->setColor(0, QColor(255, 0, 0));
+    mtx->setDuration(MasterTimer::tick() * 2);
+    m_doc->addFunction(mtx);
+    auto tidy = qScopeGuard([this, mtx]() {
+        mtx->stop(FunctionParent::master());
+        tick(m_doc, 3);
+        m_doc->deleteFunction(mtx->id());
+    });
+
+    mtx->start(m_doc->masterTimer(), FunctionParent::master());
+    tick(m_doc, 4);
+    QVERIFY(mtx->isRunning());
+    // 25 PAR56s, 5 channels each: Mode, Red, Green, Blue, Speed
+    for (int f = 0; f < 25; f++)
+    {
+        QVERIFY2(level(m_doc, f * 5 + 1) == 255, qPrintable(QString("fixture %1 red").arg(f)));
+        QCOMPARE(level(m_doc, f * 5 + 2), 0);
+        QCOMPARE(level(m_doc, f * 5 + 3), 0);
+        QCOMPARE(level(m_doc, f * 5 + 0), 0);          // not a colour channel
+    }
+
+    // A new colour while it runs is what it writes from its next step on
+    mtx->setColor(0, QColor(0, 0, 200));
+    tick(m_doc, 6);
+    QCOMPARE(level(m_doc, 1), 0);
+    QCOMPARE(level(m_doc, 3), 200);
+    QCOMPARE(level(m_doc, 24 * 5 + 3), 200);
+
+    // Stopped: it lets go of every channel
+    mtx->stop(FunctionParent::master());
+    tick(m_doc, 4);
+    QVERIFY(!mtx->isRunning());
+    for (int f = 0; f < 25; f++)
+        QCOMPARE(level(m_doc, f * 5 + 3), 0);
+}
+
+void RGBMatrix_Test::aScriptedMatrixStepsOnItsDuration()
+{
+    RGBMatrix *mtx = new RGBMatrix(m_doc);
+    mtx->setFixtureGroup(m_doc->fixtureGroups().first()->id());
+    mtx->setAlgorithm(RGBAlgorithm::algorithm(m_doc, "Stripes"));
+    QVERIFY(mtx->algorithm() != NULL);
+    mtx->setColor(0, QColor(255, 0, 0));
+    mtx->setDuration(MasterTimer::tick() * 4);
+    m_doc->addFunction(mtx);
+    auto tidy = qScopeGuard([this, mtx]() {
+        mtx->stop(FunctionParent::master());
+        tick(m_doc, 3);
+        m_doc->deleteFunction(mtx->id());
+    });
+
+    mtx->start(m_doc->masterTimer(), FunctionParent::master());
+    tick(m_doc, 2);
+    const int first = mtx->m_stepHandler->currentStepIndex();
+    QList<int> reds;
+    for (int f = 0; f < 25; f++)
+        reds << level(m_doc, f * 5 + 1);
+    QVERIFY(reds.contains(255));                        // a stripe is lit...
+    QVERIFY(reds.contains(0));                          // ...and not all of it
+
+    tick(m_doc, 5);
+    QVERIFY(mtx->m_stepHandler->currentStepIndex() != first);
+    QList<int> next;
+    for (int f = 0; f < 25; f++)
+        next << level(m_doc, f * 5 + 1);
+    QVERIFY(next != reds);                              // the stripe moved
 }
 
 QTEST_MAIN(RGBMatrix_Test)
