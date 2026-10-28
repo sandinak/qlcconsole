@@ -665,6 +665,91 @@ first and restored byte-for-byte afterwards.
   (cfprefsd ignores `CFFIXED_USER_HOME`). It is new on val: delete it, and
   `~/matrix2/rc4-soak`, after collecting the results.
 
+## Coverage
+
+The 0.3.1 coverage campaign: measure the whole build, find the gaps in the
+code that matters most, fill them with tests. The bugs those tests found are
+in CHANGELOG [0.3.1] (13 issues in 11 fix commits).
+
+### Where and how
+
+- **Host:** the Linux build host (Debian 13, GCC 14.2, Qt 6.8.2, lcov 2.0).
+- **Build:** Debug with gcov (`-Dcoverage=ON`, which adds
+  `-fprofile-update=atomic`), from a `git archive` of one SHA.
+- **Measured:** `coverage.sh ui`: every test program, and every source file
+  in the build tree, the plugins and web access included (Matrix 2's 68.6%
+  counted only engine/ and ui/, 188,753 lines), with branch coverage and a
+  per-file table (`coverage/per-file.tsv`).
+- **Runs:** before, `8294d8d17` (main `d126d4f6d` plus the coverage.sh
+  change); after, `a703121f1` (the three test batches merged). Build
+  12.5 min at -j6, tests 15-25 min at three programs at a time.
+
+### Result
+
+| | lines | functions | branches |
+|---|---|---|---|
+| Before (`8294d8d17`) | 65.4% (137,250 / 209,907) | 70.8% (11,103 / 15,691) | 38.2% (179,434 / 469,740) |
+| After (`a703121f1`) | **66.0%** (138,605 / 209,928) | **71.4%** (11,203 / 15,692) | **38.5%** (181,084 / 469,748) |
+
+By risk area (line % and branch %, before → after):
+
+| Area | lines | line % | branch % |
+|---|---|---|---|
+| Show-file load/save | 11,192 | 78.5 → 78.9 | 43.9 → 44.2 |
+| Engine output and merge | 10,188 | 83.6 → 86.8 | 51.3 → 53.7 |
+| Network plugins (Art-Net, E1.31, OSC, RDM) | 4,226 | 49.0 → 67.5 | 26.0 → 35.3 |
+| Show Tree controller | 11,217 | 88.7 → 88.7 | 53.6 → 53.7 |
+| Venues | 1,824 | 87.2 → 91.8 | 52.7 → 56.8 |
+| Focus/refine sessions | 3,677 | 88.2 → 88.9 | 54.5 → 55.6 |
+| Web access (auth, base) | 642 | 61.4 → 64.5 | 34.2 → 36.2 |
+| Undo | 3,365 | 88.6 → 89.0 | 51.9 → 52.2 |
+
+The files that moved most: artnetcontroller.cpp 65.8 → 96.2%, osccontroller.cpp
+44.0 → 95.2%, script.cpp 63.5 → 92.1%, rdmprotocol.cpp 35.7 → 69.3%,
+e131controller.cpp 31.4 → 63.4%, rgbmatrix.cpp 51.8 → 71.3%, cuelookahead.cpp
+46.8 → 91.9%, venue.cpp 0 → 100%, artnetpacketizer.cpp 85.7 → 100%. By
+directory, the network plugins gained most (plugins/osc +29.3, interfaces
++24.4, E1.31 +18.3, artnet +12.3 points); engine/src went 83.9 → 84.7%;
+ui/src stayed at 62.4%, the next place to look.
+
+### Caveats
+
+- **trackback.cpp under-reports.** `TrackBack_Test` hits its 300 s watchdog
+  under gcov (signal 6 at 372 s, in both runs): the instrumented Debug build
+  is several times slower and the test does real-time work, so that program
+  writes no counters. It passes in every normal gate.
+- **Network plugins read 67.5% here, 69.0% in the batch 1-2 run**
+  (`c76caa077`). Nothing lost a test: `a703121f1` ("a missing line is
+  refused at once") sets `m_ifaceWaitTime = 0` in the Art-Net, E1.31 and OSC
+  plugin tests, so `requestLine()` no longer waits and re-runs `init()` for a
+  missing line. The lines that went with it are `init()`'s interface walk
+  and the retry in e131plugin.cpp (134 → 104 hit) and oscplugin.cpp
+  (90 → 59), and four in artnetplugin.cpp (318 → 314). The tests are right
+  to skip the wait (it depended on the user's setting and the host's
+  interfaces); covering `init()` needs a test of its own.
+- These are unit-test numbers. The wire, soak and scale runs in this file
+  and in docs/performance.md exercise far more than the tests reach.
+
+### Reproduce
+
+```sh
+# On a Linux host with the build packages (see .github/workflows/build.yml):
+git archive <sha> | (mkdir -p ~/coverage/run/src && tar -x -C ~/coverage/run/src)
+cd ~/coverage/run/src
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug -Dcoverage=ON
+nice -n 19 cmake --build build --parallel 6
+COVERAGE_MEASURE_FAILED=1 QLC_TEST_JOBS=3 QT_QPA_PLATFORM=offscreen \
+    nice -n 19 ./coverage.sh ui
+# coverage/coverage.info, coverage/html/index.html, coverage/per-file.tsv;
+# the totals are the last lines of the run's output.
+python3 -I tools/coverage-areas.py coverage/per-file.tsv            # one run
+python3 -I tools/coverage-areas.py before/per-file.tsv after/per-file.tsv
+```
+
+`COVERAGE_MEASURE_FAILED=1` measures even when a test fails (here, the
+trackback watchdog). Disable ccache (`CCACHE_DISABLE=1`) if it holds
+non-coverage objects for the same tree.
+
 ## Notes
 
 - **RC3 and val.** Four RC3 gates ran on val during this matrix (`29a7b787acff`,
