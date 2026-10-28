@@ -54,6 +54,7 @@
 #include "fixturetreewidget.h"
 #include "monitor.h"
 #include "monitorgraphicsview.h"
+#include "structurestudioview.h"
 #include "stagepiecedialog.h"
 #include "truss.h"
 #include "stageplatform.h"
@@ -1102,7 +1103,7 @@ QList<HelpShots::Shot> HelpShots::shots()
 
     /* A truss's own editor, then with one of its fixtures picked. The editor
        is modal: each picture is taken from inside its event loop. */
-    auto trussEditor = [=](const QString &name, bool pickFixture) {
+    auto trussEditor = [=](const QString &name, bool pickFixture, bool fromBehind = false) {
         Frame done;
         done.saved = true;
         Monitor *mon = studio(MonitorGraphicsView::PovTop);
@@ -1120,6 +1121,11 @@ QList<HelpShots::Shot> HelpShots::shots()
             {
                 dlg->resize(1500, 780);
                 settle();
+                // The Back view, chosen in the View list as you would.
+                if (fromBehind)
+                    for (QComboBox *cb : dlg->findChildren<QComboBox *>())
+                        if (cb->findData(int(StructureStudioView::Back)) >= 0)
+                            cb->setCurrentIndex(cb->findData(int(StructureStudioView::Back)));
                 if (pickFixture)
                     for (QTreeWidget *tree : dlg->findChildren<QTreeWidget *>())
                         for (QTreeWidgetItemIterator it(tree); *it != NULL; ++it)
@@ -1145,6 +1151,10 @@ QList<HelpShots::Shot> HelpShots::shots()
     list << Shot{ QStringLiteral("lighting-studio-truss-editor"), [=]() {
         window();
         return trussEditor(QStringLiteral("lighting-studio-truss-editor"), false);
+    }, nullptr };
+    list << Shot{ QStringLiteral("lighting-studio-truss-editor-back"), [=]() {
+        window();
+        return trussEditor(QStringLiteral("lighting-studio-truss-editor-back"), false, true);
     }, nullptr };
     list << Shot{ QStringLiteral("lighting-studio-fixture-mount-properties"), [=]() {
         window();

@@ -50,6 +50,15 @@ back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
   back exactly what each layer had. An object held by its layer or folder
   shows ↑🔒, one locked on its own 🔒; its tooltip names every lock
   holding it, and the plot's right-click menu says when the plot does.
+- **A Back view in every structure editor** (truss, bar, pipe and boom,
+  electric, stand, tower, platform, group) and in the Rig Overview: the
+  Front elevation seen from upstage, looking downstage, with stage left on
+  the left. **View** lists Top, Front, Back, Side, 45°; in an editor
+  ⌘1–⌘5 (Ctrl elsewhere) switch between them. In Back a fixture on the
+  upstage face of a truss is drawn on top and is the one a click picks.
+  Dragging, **Put on Face** (it sets the Back face), **Distribute**, the
+  rulers ("from behind: SL ◀ ▶ SR") and the H / V / Z readout work as in
+  Front, and text reads normally, not mirrored.
 
 ### Changed
 
@@ -58,6 +67,8 @@ back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
 
 ### Fixed
 
+- **A fixture put on the back face of a platform's frame group jumped to
+  the front face** the first time it was dragged in a structure editor.
 - **A Virtual Console Flash button on a Show Tree hit played nothing**:
   only scenes flashed, and a hit is a collection. Flash now plays the hit
   while held and lets go on release; a hit already on stays on.

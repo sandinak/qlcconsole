@@ -194,6 +194,40 @@ Monitor* Monitor::s_instance = NULL;
  * Initialization
  *****************************************************************************/
 
+namespace {
+/* The structure views, in the order they read: the plan, the front plane from
+   the audience and from behind, the side, the angled look. Each item carries
+   its StructureStudioView::Plane, so the list order is free to read well --
+   Back sits beside Front although its enum value came last. @p withKeys adds
+   the Ctrl+1.. numbers the editors bind (see makeStudioPane()). */
+void fillStudioPlanes(QComboBox *cb, bool withKeys)
+{
+    typedef StructureStudioView SSV;
+    const struct { QString name; SSV::Plane plane; QString tip; } views[] = {
+        { Monitor::tr("Top"),   SSV::Top,   Monitor::tr("From above: the plan.") },
+        { Monitor::tr("Front"), SSV::Front, Monitor::tr("From the audience, looking upstage.") },
+        { Monitor::tr("Back"),  SSV::Back,
+          Monitor::tr("From behind, looking downstage: stage left is on the left, and "
+                      "whatever is rigged on the upstage face is in front.") },
+        { Monitor::tr("Side"),  SSV::Side,  Monitor::tr("From stage right.") },
+        { Monitor::tr("45°"),   SSV::Angled,
+          Monitor::tr("An angled look from above and to the side. For viewing only "
+                      "— drag in Top / Front / Back / Side to move things.") },
+    };
+    int i = 0;
+    for (const auto &v : views)
+    {
+        cb->addItem(v.name, int(v.plane));
+        const QString key = withKeys
+            ? QStringLiteral(" (%1)").arg(QKeySequence(Qt::CTRL | Qt::Key(Qt::Key_1 + i))
+                                              .toString(QKeySequence::NativeText))
+            : QString();
+        cb->setItemData(i, v.tip + key, Qt::ToolTipRole);
+        ++i;
+    }
+}
+} // namespace
+
 Monitor::Monitor(QWidget* parent, Doc* doc, Qt::WindowFlags f)
     : QWidget(parent, f)
     , m_doc(doc)
@@ -2894,13 +2928,15 @@ void Monitor::showStageOverview()
        stays the first combo in the window, then Room. */
     QComboBox *planeCombo = new QComboBox(footer);
     planeCombo->setObjectName(QStringLiteral("rigView"));
-    planeCombo->addItems({ tr("Top"), tr("Front"), tr("Side"), tr("45°") });
-    planeCombo->setCurrentIndex(int(StructureStudioView::Angled));
+    fillStudioPlanes(planeCombo, false);
+    planeCombo->setCurrentIndex(planeCombo->findData(int(StructureStudioView::Angled)));
     planeCombo->setProperty("cycleOnClick", true);   // same as the plot's View
     planeCombo->installEventFilter(this);
     planeCombo->setToolTip(tr("Point of view — click to cycle, arrow for the full list"));
     connect(planeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), &dlg,
-            [view](int i) { view->setPlane(StructureStudioView::Plane(i)); });
+            [view, planeCombo](int i) {
+        view->setPlane(StructureStudioView::Plane(planeCombo->itemData(i).toInt()));
+    });
 
     /* How much light is in the ROOM. Without it the rendered colours are as
        vivid as a test card whatever the rig is doing, and a blackout still
@@ -4210,10 +4246,18 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
     QHBoxLayout *bar = new QHBoxLayout;
     bar->addWidget(new QLabel(tr("View:"), center));
     QComboBox *planeCombo = new QComboBox(center);
-    planeCombo->addItems({ tr("Top"), tr("Front"), tr("Side"), tr("45°") });
-    planeCombo->setItemData(3, tr("An angled look from above and to the side. "
-                                  "For viewing only — drag in Top / Front / Side "
-                                  "to move things."), Qt::ToolTipRole);
+    fillStudioPlanes(planeCombo, true);
+    /* A key for each, in list order: Ctrl+3 is Back, beside Front. Scoped to
+       this editor's window, so the main window's Ctrl+number keys are not
+       touched. */
+    for (int i = 0; i < planeCombo->count(); ++i)
+    {
+        QShortcut *sc = new QShortcut(QKeySequence(Qt::CTRL | Qt::Key(Qt::Key_1 + i)), dlg);
+        sc->setObjectName(QStringLiteral("studioViewKey%1").arg(i + 1));
+        connect(sc, &QShortcut::activated, planeCombo, [planeCombo, i]() {
+            planeCombo->setCurrentIndex(i);
+        });
+    }
     // Click-to-cycle, exactly as the plot's View combo behaves.
     planeCombo->setProperty("cycleOnClick", true);
     planeCombo->installEventFilter(this);
@@ -4269,7 +4313,7 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
     QHBoxLayout *actBar = new QHBoxLayout;
     QPushButton *faceBtn = new QPushButton(tr("Put on Face"), center);
     faceBtn->setToolTip(tr("Pin the selected fixtures (or all) to the current "
-                           "view's face (Top / Front / Side)."));
+                           "view's face (Top / Front / Back / Side)."));
     actBar->addWidget(faceBtn);
     QPushButton *distBtn = new QPushButton(tr("Distribute"), center);
     distBtn->setToolTip(tr("Space the selected fixtures evenly, in a line: all of "
@@ -4289,7 +4333,7 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
     StructureStudioView *view = new StructureStudioView(
         m_doc, StructureStudioView::Kind(kind), id, center);
     view->setMinimumSize(320, 300);
-    planeCombo->setCurrentIndex(int(view->plane()));
+    planeCombo->setCurrentIndex(planeCombo->findData(int(view->plane())));
 
     auto pushAngle = [view, azSpin, elSpin]() {
         view->setAngledView(azSpin->value(), elSpin->value());
@@ -4900,8 +4944,8 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
 
     angleBtn->setEnabled(view->plane() == StructureStudioView::Angled);
     connect(planeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), body,
-            [view, angleBtn](int i){
-        view->setPlane(StructureStudioView::Plane(i));
+            [view, angleBtn, planeCombo](int i){
+        view->setPlane(StructureStudioView::Plane(planeCombo->itemData(i).toInt()));
         angleBtn->setEnabled(view->plane() == StructureStudioView::Angled);
     });
     view->setLocked(true);

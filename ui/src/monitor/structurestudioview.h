@@ -12,6 +12,9 @@
     - Top   : a = X (stage right +),  b = Y (upstage +, screen-down)
     - Front : a = X,                  b = Z (height, screen-up)
     - Side  : a = Y,                  b = Z (height, screen-up)
+    - Back  : the Front projection seen from upstage: the same a = X, b = Z,
+              with the screen's horizontal running the other way (see
+              planeToScreenVec()), so stage left is on the left.
 
   Slice 1 is a read-only reference drawing; dragging/adding land in later slices.
 
@@ -78,14 +81,22 @@ public:
      *  Angled is an axonometric look from above and to the side. It is
      *  VIEW-ONLY: at an angle a screen point maps to a ray rather than a point,
      *  so there is no honest inverse and dragging is refused rather than
-     *  silently moving the wrong thing. */
-    enum Plane { Top = 0, Front = 1, Side = 2, Angled = 3 };
+     *  silently moving the wrong thing.
+     *
+     *  Back is the Front elevation seen from behind, looking downstage: the
+     *  same two axes (X across, Z up), with stage left on the LEFT of the
+     *  screen. It is Front in every other respect -- editable, the same
+     *  in-plane coordinates, the same drag/pick/face rules -- and differs only
+     *  where the eye does: the horizontal screen direction (planeToScreenVec())
+     *  and which side is nearer (fixturesInDrawOrder()). Numbered after Angled
+     *  so the values a file or a setting may hold keep their meaning. */
+    enum Plane { Top = 0, Front = 1, Side = 2, Angled = 3, Back = 4 };
 
     StructureStudioView(Doc *doc, Kind kind, quint32 id, QWidget *parent = nullptr);
     ~StructureStudioView() override;
 
     void setPlane(Plane p);
-    Plane plane() const { return m_plane; }
+    Plane plane() const { return m_fromBehind ? Back : m_plane; }
 
     /** Turn the view in 90-degree steps (0..3, clockwise). A pure VIEW
      *  transform -- stored coordinates never move -- so a designer who reads a
@@ -222,8 +233,10 @@ public:
     /** Same idea as setBarHighlight(), for a Pipe crossbar. */
     void setPipeBarHighlight(quint32 barId);
 
-    /** Assign @p ids to the CURRENT view's face (Top/Front/Side): set their
-     *  studioMount and pin them to that face surface. Empty = all mounted. */
+    /** Assign @p ids to the CURRENT view's face (Top/Front/Back/Side): set
+     *  their studioMount and pin them to that face surface. Front and Back are
+     *  the two faces of one plane, so they also set which way it faces
+     *  (studioFlip: Back faces upstage). Empty = all mounted. */
     void putOnFace(const QList<quint32> &ids);
 
     /** Lay @p ids out evenly on the current face (name order). Auto-orients: if
@@ -1143,8 +1156,10 @@ private:
     bool rotateDragTo(const QPointF &px, bool snap);
 
     /** For the anchor platform: which local component the given face pins, and to
-     *  what value. mount 0=Top(pin Z),1=Front(pin Y),2=Side(pin X). */
-    void facePin(int mount, int &pinComp, double &pinVal) const;
+     *  what value. mount 0=Top(pin Z),1=Front(pin Y),2=Side(pin X). @p flip
+     *  (studioFlip) on the Front plane is the BACK face: on a platform that is
+     *  its upstage edge, y = 0, not the downstage one. */
+    void facePin(int mount, int &pinComp, double &pinVal, bool flip = false) const;
 
     QList<const class Pipe *> standPipes(quint32 id) const;  ///< pipes on that stand
 
@@ -1152,7 +1167,14 @@ private:
     Doc     *m_doc;
     Kind     m_kind;
     quint32  m_id;
+    /** The PROJECTION: Top, Front, Side or Angled. Back is kept as Front
+     *  with m_fromBehind set, so every rule written for the Front elevation
+     *  (which axes a drag sets, which face a pin uses, how a tower shelf is
+     *  drawn) holds for Back without a second copy; plane() reports Back. */
     Plane    m_plane = Front;
+    /** Looking at the Front projection from upstage (Plane::Back): the
+     *  horizontal screen axis is reversed and the upstage side is nearer. */
+    bool     m_fromBehind = false;
     bool     m_beams = true;   ///< draw beam cones for lit movers
     quint32  m_activeSceneId = 0xFFFFFFFF;
     /** The active scene is playing: its heads go where the DMX sends them. */

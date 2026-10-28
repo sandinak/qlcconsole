@@ -248,7 +248,7 @@ button rotates the view 90° (a view setting only; nothing moves).
 Studio plot's: **Show** (with **Target positions**) and **Plot layers** on
 the left, then **Live**, **Beams**, **Room**, **Haze**, **Quality**,
 **GPU**, the frame rate, **Quick focus** and **Fit**, and **View** (Top,
-Front, Side, 45°) on the right, where the plot has its own View. The
+Front, Back, Side, 45°) on the right, where the plot has its own View. The
 window's title bar moves and closes it as before. Click a box (View,
 Room, Haze, Quality) to step to its next choice; its arrow lists them
 all. **Room** is how much light there is in the house apart from the
@@ -538,6 +538,41 @@ fixture keeps the spot you grabbed under the pointer, and lands where you
 let go in every view, the 2D plot agreeing: a free or deck-standing fixture
 no longer jumps half its size, or creeps along the axis Front or Side can't
 see.
+
+### Front, Back and Side
+
+![The same truss's editor in the Back view: looking downstage, stage left on the left](../images/lighting-studio-truss-editor-back.png)
+
+Every structure editor (truss, bar, pipe and boom, electric, stand, tower,
+platform, group) has five entries in its **View** list: **Top**, **Front**,
+**Back**, **Side** and **45°**, with **⌘1** to **⌘5** (Ctrl on Windows and
+Linux) to switch between them while the editor is open. The Rig Overview's
+**View** has the same list.
+
+**Back** is the Front elevation seen from behind, looking downstage. Stage
+left is on the **left** and stage right on the right, and the corner labels
+and the badge ("2D — Back, looking downstage") say so. The ruler under the
+canvas still counts out from the structure's centre either way, and reads
+**from behind: SL ◀ ▶ SR** to remind you which side is which. Only the
+picture is reversed: names and numbers read normally.
+
+In Back, everything on a structure's **upstage** side is nearest you. A
+laser or a wash hung on the back chord of a truss is drawn on top of
+whatever is on the front chord at the same spot, and a click there picks
+it, the way Front picks the downstage one. Back works like Front in every
+other way:
+
+- Drag a fixture to move it. The spot you grabbed stays under the pointer.
+  Dragging to the right moves it toward stage **right**.
+- **Put on Face** puts the selected fixtures on the **Back** face: facing
+  upstage, against the structure's upstage side. In Front it puts them on
+  the Front face.
+- **Distribute** spaces them left to right as you see them.
+- The rulers, the crosshair readout (H / V / Z) and the dimension
+  callouts measure the same as in Front.
+
+**Side** is the view from stage right: upstage on the left, downstage on
+the right.
 
 Click a fixture in that list (or in the preview) to see its own mount panel:
 
@@ -1685,7 +1720,7 @@ Two small but load-bearing visual cues:
 
 | Term | Meaning |
 |---|---|
-| **Plane** | Which of Top/Front/Side/Angled the view is currently showing. |
+| **Plane** | Which of Top/Front/Side/Angled the view is currently showing (a structure editor also has Back: the Front elevation from upstage). |
 | **Bar** | A short cross-piece truss hung on a parent truss — modeled as a child truss, not a separate object type. |
 | **Placement: Inside** | A fixture centred in its host structure's volume rather than seated on its face/top — for fixtures rigged inside a truss or under a see-through platform top. |
 | **Face** | Which way a mounted fixture faces — Top, Bottom, Front, Back, Stage left, or Stage right — has to agree with how it's actually attached. |

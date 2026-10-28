@@ -923,6 +923,25 @@ private slots:
      *  locked on its own (🔒); the tooltip names what holds it */
     void anObjectHeldByItsLayerVsItsOwnLock();
 
+    /** a1: Back is the Front plane seen from upstage: the shared mapping
+     *  round-trips at every turn, it is Front mirrored and the angled camera
+     *  at 180/0, and the rulers and readout sit on what is drawn (0.5 px) */
+    void theBackViewIsTheFrontSeenFromBehind();
+    /** a1: a fixture on a truss's back face is drawn on top, and picked, in
+     *  Back (the front-face one, in Front) */
+    void theBackFaceFixtureIsOnTopInTheBackView();
+    /** a1: Put on Face in Back sets the BACK face and pins to the upstage
+     *  edge; a drag keeps it there; Front puts it back */
+    void putOnFaceInTheBackViewSetsTheBackFace();
+    /** a1: a drag in Back moves toward stage right on the right, stores the
+     *  corner, and keeps the grab */
+    void aBackViewDragKeepsTheGrabAndTheCorner();
+    /** a1: Back reverses the coordinates, not the painter: labels read the
+     *  same as in Front */
+    void theBackViewDoesNotMirrorText();
+    /** a1: every structure editor lists Back beside Front, with Ctrl+3 */
+    void theEditorsOfferBackBesideFront();
+
 private:
     Doc* m_doc;
 };
