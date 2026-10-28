@@ -7845,6 +7845,63 @@ void ShowTree_Test::hitCommandMakesAndPlaysAHit()
     stopAll();
 }
 
+/* 0.3.1 (k2): the help says a hit fires from a VC button "as you would
+   any function (Toggle or Flash)", but only a Scene flashed: a hit is a
+   Collection, and Function::flash() played nothing. A Flash button now
+   plays the hit while held, and lets go of it on release -- also once the
+   show has been saved and opened again. A plain Collection flashes as in
+   QLC+ (not at all), and a hit already toggled on stays on. */
+void ShowTree_Test::aFlashButtonPlaysAHitWhileHeld()
+{
+    FixtureGroup *towers = group("Towers", { m_fixtures[0] });
+    const quint32 full = dimmer(255, "Full");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("P");
+    const quint32 hit = st->addLook(prod, "Blast");
+    st->setLayerLook(hit, st->addLayer(hit, groupTarget(towers->id())), st->lookForPalette(full));
+    Collection *fired = qobject_cast<Collection *>(m_doc->function(st->lookFunction(hit)));
+    QVERIFY(fired != nullptr);
+    QVERIFY(fired->flashPlays());
+    stopAll();
+    QCOMPARE(settle(5).value(0), uchar(0));
+
+    // Held: on. Released: off.
+    fired->flash(m_doc->masterTimer(), false, false);
+    QVERIFY(fired->flashing());
+    QCOMPARE(settle(10).value(0), uchar(255));
+    fired->unFlash(m_doc->masterTimer());
+    QVERIFY(!fired->flashing());
+    QCOMPARE(settle(10).value(0), uchar(0));
+    QVERIFY(!fired->isRunning());
+
+    // Toggled on already: a flash on top doesn't turn it off on release.
+    fired->start(m_doc->masterTimer(), FunctionParent::master());
+    QCOMPARE(settle(10).value(0), uchar(255));
+    fired->flash(m_doc->masterTimer(), false, false);
+    fired->unFlash(m_doc->masterTimer());
+    QCOMPARE(settle(10).value(0), uchar(255));
+    stopAll();
+    QCOMPARE(settle(5).value(0), uchar(0));
+
+    // Saved and opened again: still a hit that flashes.
+    QByteArray xml = engineXml(m_doc);
+    QScopedPointer<Doc> other(new Doc(this));
+    QXmlStreamReader r(xml);
+    r.readNextStartElement();
+    QVERIFY(other->loadXML(r, false));
+    Collection *again = qobject_cast<Collection *>(other->function(other->showTree()->lookFunction(hit)));
+    QVERIFY(again != nullptr);
+    QVERIFY(again->flashPlays());
+
+    // A Collection of your own is not a hit: QLC+'s Flash, which plays nothing.
+    Collection *own = new Collection(m_doc);
+    m_doc->addFunction(own);
+    QVERIFY(!own->flashPlays());
+    own->flash(m_doc->masterTimer(), false, false);
+    QVERIFY(!own->isRunning());
+    own->unFlash(m_doc->masterTimer());
+}
+
 /* CHANGELOG 0.2.2 (Q77): "New sections are named Hits; older shows open as
    they were": a section an older build saved as "Looks" keeps that name
    through a load and a save. */

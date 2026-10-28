@@ -72,6 +72,7 @@ private:
     QCheckBox *m_allowProgramsCheck = nullptr;
 
     // Autosave widgets
+    QCheckBox *m_newShowsClassicCheck = nullptr;
     QCheckBox *m_autosaveEnabledCheck;
     QSpinBox  *m_autosaveIntervalSpin;
 

@@ -10,6 +10,48 @@ active work in [TODO.md](TODO.md).
 Versions here are independent of the QLC+ base version embedded in the
 in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
 
+## [0.3.1] - Unreleased
+
+A home for QLC+ 4 users: QLC+ 4's habits that qlcconsole had dropped are
+back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
+
+### Added
+
+- **Save As offers QLC+ 4's .qxw** ("QLC+ 4 Workspaces"), starting on it
+  for a show opened from a .qxw; the extension follows the type chosen. A
+  .qxw save works as before.
+- **Full Screen**, as QLC+ 4 had it: **View ▸ Full Screen** and Classic's
+  toolbar, Ctrl+F11 (⌃⌘F on macOS, ⌘F11 too), and the **-f** / **-f
+  resize** command-line flag. They went with the slim toolbar in July.
+- **New… and Delete input profiles** beside Edit in a universe's patch
+  editor, as QLC+ 4's Add and Remove: a new profile is saved in your own
+  profile folder and used by the universe; Delete asks, then removes the
+  file.
+- **Settings ▸ General ▸ Start new shows in the Classic view** (off by
+  default; this computer's). An opened show keeps its own view.
+- **The DMX Monitor**, QLC+ 4's Monitor: each patched fixture's channels
+  and values, live, a universe at a time, in a window of its own from
+  **View ▸ DMX Monitor** and Classic's toolbar.
+- **Saving a .qxw says what QLC+ 4 will leave out**: the Show Tree, the
+  Lighting Studio's rigging, speed masters, a venue's house fixtures and
+  the like, named once a file in the line above the tabs after the save
+  (never in its way), with **Save as .qlcc…**.
+- **A gate test that stock QLC+ 4.14.4 opens a .qxw saved here** with its
+  fixtures, groups, channel groups, palettes and functions whole: QLC+
+  4.14.4's own engine, built from a pinned copy of its source, reads a
+  show the app saved (ui/test/stockroundtrip).
+
+### Changed
+
+- Classic QLC+'s main toolbar has the DMX Monitor where QLC+ had its
+  Monitor, then the Rig Overview, the address tool and Full Screen.
+
+### Fixed
+
+- **A Virtual Console Flash button on a Show Tree hit played nothing**:
+  only scenes flashed, and a hit is a collection. Flash now plays the hit
+  while held and lets go on release; a hit already on stays on.
+
 ## [0.3.0] - 2026-10-26
 
 qlcconsole 0.3.0: the Build tab and its Workbench (scenes, collections and

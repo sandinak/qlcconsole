@@ -97,6 +97,8 @@
 #include "fixture.h"
 #include "programmercontroller.h"
 #include "qxwimporter.h"
+#include "dmxmonitorwindow.h"
+#include "stockqlccheck.h"
 #include "importselectiondialog.h"
 #include "eosimportwizard.h"
 #include "eosimporter.h"
@@ -746,10 +748,11 @@ void App::init()
     w = new CueRunner(m_doc, CueRunner::Full, m_tab);
     w->setObjectName(QStringLiteral("runTab"));
     addTab(w, ItemIcons::runIcon(), tr("Run"));
-    /* The view (View ▸ Workspace): qlcconsole until a show says otherwise.
-       Functions has no tab in it (board Q32): Window → Functions switches
-       to a view that has the stock Functions tab (Q73). */
-    setWorkspaceView(ConsoleView, false);
+    /* The view (View ▸ Workspace): qlcconsole until a show says otherwise
+       (Classic, for someone who said new shows start there). Functions has
+       no tab in it (board Q32): Window → Functions switches to a view that
+       has the stock Functions tab (Q73). */
+    setWorkspaceView(newShowView(), false);
     // Load and apply the tab label mode preference.
     {
         QSettings settings;
@@ -1053,14 +1056,15 @@ void App::clearDocument()
     m_doc->inputOutputMap()->resetUniverses();
     setFileName(QString());
     m_damagedFile.clear();
-    // A new show: the qlcconsole view (a loaded one sets its own, loadXML()).
+    // A new show: the qlcconsole view, or Classic by the preference (a
+    // loaded one sets its own, loadXML()).
     m_loadedCreator.clear();
     m_upgradeOfferMade = false;
     m_showTreeNoticeDismissed = false;
     hideViewNotice();
     if (m_inputNotices != nullptr)
         m_inputNotices->reset();
-    setWorkspaceView(ConsoleView, false);
+    setWorkspaceView(newShowView(), false);
     m_doc->resetModified();
     m_doc->inputOutputMap()->startUniverses();
     m_doc->masterTimer()->start();
@@ -1894,6 +1898,28 @@ void App::initActions()
     m_addressToolAction = new QAction(QIcon(":/diptool.png"), tr("Address Tool"), this);
     connect(m_addressToolAction, SIGNAL(triggered()), this, SLOT(slotAddressTool()));
 
+    /* QLC+ 4's Full Screen, back (it went with the slim toolbar): Ctrl+F11
+       as QLC+ had it, and on macOS the system's own ⌃⌘F (Ctrl+F11 there is
+       ⌘F11, which QLC+ 4 used too and still works). The -f flag sets it. */
+    m_controlFullScreenAction = new QAction(QIcon(":/fullscreen.png"), tr("Full Screen"), this);
+    m_controlFullScreenAction->setObjectName(QStringLiteral("viewFullScreen"));
+    m_controlFullScreenAction->setCheckable(true);
+#if defined(Q_OS_MACOS)
+    m_controlFullScreenAction->setShortcuts({ QKeySequence(Qt::META | Qt::CTRL | Qt::Key_F),
+                                              QKeySequence(Qt::CTRL | Qt::Key_F11) });
+#else
+    m_controlFullScreenAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_F11));
+#endif
+    m_controlFullScreenAction->setToolTip(tr("Fill the screen with the main window, or put it back"));
+    connect(m_controlFullScreenAction, SIGNAL(triggered(bool)), this, SLOT(slotControlFullScreen()));
+
+    /* QLC+ 4's Monitor: each fixture's channels and their values, a
+       universe at a time, in a window of its own (Classic's toolbar has it). */
+    m_dmxMonitorAction = new QAction(QIcon(":/monitor.png"), tr("DMX Monitor"), this);
+    m_dmxMonitorAction->setObjectName(QStringLiteral("viewDmxMonitor"));
+    m_dmxMonitorAction->setToolTip(tr("Every fixture's channels and their values, live, a universe at a time"));
+    connect(m_dmxMonitorAction, &QAction::triggered, this, &App::slotDmxMonitor);
+
     m_controlBlackoutAction = new QAction(QIcon(":/blackout.png"), tr("Toggle &Blackout"), this);
     m_controlBlackoutAction->setCheckable(true);
     m_controlBlackoutAction->setIconText(tr("Blackout"));
@@ -2511,6 +2537,7 @@ void App::initMenuBar()
     // just duplicate it. The action itself (and its shortcut) still exists
     // and still works via slotControlMonitor().
     viewMenu->addAction(m_addressToolAction);
+    viewMenu->addAction(m_dmxMonitorAction);
 
     /* The rig overview is a way of LOOKING at the show, so it belongs in the
        View menu next to the tab jumps rather than buried in the Lighting Studio
@@ -2538,6 +2565,9 @@ void App::initMenuBar()
     venueAct->setObjectName(QStringLiteral("viewVenueAction"));
     venueAct->setToolTip(tr("Switch, make, rename or check the venue: the room the show is in"));
     connect(venueAct, &QAction::triggered, this, [this]() { openVenueMenu(); });
+
+    viewMenu->addSeparator();
+    viewMenu->addAction(m_controlFullScreenAction);
 
     /* Appearance -- theme, toolbar style, which chips the footer shows and
        the speed masters' beat -- is in Settings ▸ Appearance (Q65); View is
@@ -3367,15 +3397,18 @@ QFile::FileError App::slotFileSaveAs()
         dialog.selectFile(fileName());
     }
 
-    /* Append file filters to the dialog */
-    QStringList filters;
-    filters << tr("qlcconsole Workspaces (*%1)").arg(KExtWorkspaceConsole);
-#if defined(WIN32) || defined(Q_OS_WIN)
-    filters << tr("All Files (*.*)");
-#else
-    filters << tr("All Files (*)");
-#endif
-    dialog.setNameFilters(filters);
+    /* The file types: qlcconsole's .qlcc, and QLC+ 4's .qxw for a show
+       that goes back to QLC+ (it starts on that one for a .qxw). */
+    const QString startFilter = m_saveAsQlccOnce ? saveAsFilters().at(0) : saveAsDefaultFilter(fileName());
+    m_saveAsQlccOnce = false;
+    dialog.setNameFilters(saveAsFilters());
+    dialog.selectNameFilter(startFilter);
+    dialog.setDefaultSuffix(startFilter == saveAsFilters().at(1)
+                            ? KExtWorkspace.mid(1) : KExtWorkspaceConsole.mid(1));
+    connect(&dialog, &QFileDialog::filterSelected, &dialog, [&dialog](const QString &filter) {
+        dialog.setDefaultSuffix(filter == saveAsFilters().at(1) ? KExtWorkspace.mid(1)
+                                                                : KExtWorkspaceConsole.mid(1));
+    });
 
     /* Append useful URLs to the dialog */
     QList <QUrl> sidebar;
@@ -3391,9 +3424,8 @@ QFile::FileError App::slotFileSaveAs()
     if (fn.isEmpty() == true)
         return QFile::NoError;
 
-    /* Default to .qlcc; also accept .qxw (QLC+ import) */
-    if (fn.right(5) != KExtWorkspaceConsole && fn.right(4) != KExtWorkspace)
-        fn += KExtWorkspaceConsole;
+    /* The extension the file type says, unless the name has one of ours */
+    fn = saveAsFileName(fn, dialog.selectedNameFilter());
 
     /* Set the workspace path before saving the new XML. In this way local files
        can be loaded even if the workspace file will be moved */
@@ -3412,6 +3444,67 @@ QFile::FileError App::slotFileSaveAs()
 
     updateFileOpenMenu(fn);
     return error;
+}
+
+bool App::noticeStockLosses(const QString &fileName)
+{
+    if (!fileName.endsWith(KExtWorkspace, Qt::CaseInsensitive))
+        return false;
+    const QString key = QFileInfo(fileName).absoluteFilePath();
+    if (m_stockNoticeShown.contains(key))
+        return false;
+
+    QStringList losses = StockQlcCheck::lossesInFile(fileName);
+    // A venue's house fixtures are in its file beside the show, never in it.
+    int house = 0;
+    foreach (Fixture *fxi, m_doc->fixtures())
+        if (m_doc->isVenueFixture(fxi->id()))
+            ++house;
+    if (house > 0)
+        losses << tr("the venue's %n house fixture(s) (they are in the venue file beside the show)", "", house);
+    m_lastStockLosses = losses;
+    if (losses.isEmpty())
+        return false;
+
+    m_stockNoticeShown.insert(key);
+    QString list = losses.first();
+    if (losses.count() > 1)
+        list = tr("%1 and %2").arg(QStringList(losses.mid(0, losses.count() - 1)).join(QStringLiteral(", ")),
+                                   losses.last());
+    showViewNotice(tr("Saved. QLC+ 4 can open this .qxw but leaves out what only qlcconsole has: %1. "
+                      "Save it as .qlcc as well to keep everything.").arg(list),
+                   tr("Save as .qlcc…"), [this]() {
+        m_saveAsQlccOnce = true;
+        slotFileSaveAs();
+    });
+    return true;
+}
+
+QStringList App::saveAsFilters()
+{
+    QStringList filters;
+    filters << tr("qlcconsole Workspaces (*%1)").arg(KExtWorkspaceConsole);
+    filters << tr("QLC+ 4 Workspaces (*%1)").arg(KExtWorkspace);
+#if defined(WIN32) || defined(Q_OS_WIN)
+    filters << tr("All Files (*.*)");
+#else
+    filters << tr("All Files (*)");
+#endif
+    return filters;
+}
+
+QString App::saveAsDefaultFilter(const QString &fileName)
+{
+    const QStringList filters = saveAsFilters();
+    return fileName.endsWith(KExtWorkspace, Qt::CaseInsensitive) ? filters.at(1) : filters.at(0);
+}
+
+QString App::saveAsFileName(const QString &chosen, const QString &filter)
+{
+    if (chosen.endsWith(KExtWorkspaceConsole, Qt::CaseInsensitive)
+            || chosen.endsWith(KExtWorkspace, Qt::CaseInsensitive))
+        return chosen;
+    return chosen + (filter == saveAsFilters().at(1) ? KExtWorkspace : KExtWorkspaceConsole);
 }
 
 void App::slotFileCollectForTransfer()
@@ -3518,6 +3611,49 @@ void App::slotFocusMode()
 void App::slotControlMonitor()
 {
     Monitor::createAndShow(this, m_doc);
+}
+
+void App::slotDmxMonitor()
+{
+    if (m_dmxMonitor == nullptr)
+        m_dmxMonitor = new DmxMonitorWindow(m_doc, this);
+    m_dmxMonitor->show();
+    m_dmxMonitor->raise();
+    m_dmxMonitor->activateWindow();
+}
+
+void App::slotControlFullScreen()
+{
+    if (windowState() & Qt::WindowFullScreen)
+    {
+        if (m_stateBeforeFullScreen & Qt::WindowMaximized)
+            showMaximized();
+        else
+            showNormal();
+    }
+    else
+    {
+        m_stateBeforeFullScreen = windowState();
+        showFullScreen();
+    }
+    // Checked as the window is, however it got there (the -f flag too).
+    if (m_controlFullScreenAction != nullptr)
+        m_controlFullScreenAction->setChecked(windowState() & Qt::WindowFullScreen);
+}
+
+void App::slotControlFullScreen(bool usingGeometry)
+{
+    if (usingGeometry == true)
+    {
+        // -f resize: the first screen's size, for a system without a
+        // window manager that would honour a full-screen request.
+        QScreen *screen = QGuiApplication::screens().first();
+        setGeometry(screen->geometry());
+    }
+    else
+    {
+        slotControlFullScreen();
+    }
 }
 
 void App::slotAddressTool()
@@ -3916,6 +4052,26 @@ QString App::workspaceViewName(WorkspaceView view)
     }
 }
 
+QString App::newShowsClassicSettingKey()
+{
+    return QStringLiteral("workspace/newShowsClassic");
+}
+
+bool App::newShowsClassic()
+{
+    return QSettings().value(newShowsClassicSettingKey(), false).toBool();
+}
+
+void App::setNewShowsClassic(bool on)
+{
+    QSettings().setValue(newShowsClassicSettingKey(), on);
+}
+
+App::WorkspaceView App::newShowView()
+{
+    return newShowsClassic() ? ClassicView : ConsoleView;
+}
+
 App::WorkspaceView App::defaultViewForLoadedShow() const
 {
     /* A show with a Show Tree was made here: qlcconsole. One without, saved
@@ -4101,7 +4257,8 @@ void App::applyClassicChrome()
         // Stop all, Blackout and Design/Operate are already in the top bar.
         const QList<QAction *> actions = {
             m_fileNewAction, m_fileOpenAction, m_fileSaveAction, m_fileSaveAsAction, nullptr,
-            m_rigOverviewAction, m_addressToolAction, nullptr, m_helpIndexAction, nullptr,
+            m_dmxMonitorAction, m_rigOverviewAction, m_addressToolAction, nullptr,
+            m_controlFullScreenAction, m_helpIndexAction, nullptr,
             m_dumpDmxAction, m_liveEditAction, m_liveEditVirtualConsoleAction };
         for (QAction *a : actions)
         {
@@ -4110,10 +4267,12 @@ void App::applyClassicChrome()
             else
                 m_classicToolbar->addAction(a);
         }
-        // QLC+'s Monitor and Help buttons had icons; these actions are menu
-        // items here, so give the toolbar's buttons theirs.
+        // The Help button had an icon in QLC+; these actions are menu items
+        // here, so give the toolbar's buttons theirs. The monitor icon is
+        // the DMX Monitor's (QLC+'s Monitor); the Rig Overview has the
+        // Lighting Studio's.
         if (m_rigOverviewAction != nullptr && m_rigOverviewAction->icon().isNull())
-            m_rigOverviewAction->setIcon(QIcon(":/monitor.png"));
+            m_rigOverviewAction->setIcon(QIcon(":/grid.png"));
         if (m_helpIndexAction != nullptr && m_helpIndexAction->icon().isNull())
             m_helpIndexAction->setIcon(QIcon(":/help.png"));
         addToolBar(Qt::TopToolBarArea, m_classicToolbar);
@@ -5349,6 +5508,10 @@ QFile::FileError App::saveXML(const QString& fileName, bool autosave)
     }
 
     saved = true;
+    /* A .qxw for QLC+ 4: what it will leave out, said once, after the save
+       is done -- never in its way. */
+    if (!autosave)
+        noticeStockLosses(fileName);
     return QFile::NoError;
 }
 

@@ -1735,7 +1735,10 @@ them looks; they open as they were.)
 - **Fire it from VC.** Each hit plays as a **collection** of its own,
   named after it and shown in the function pickers under
   `Productions/<production>/Hits/<folder>` — assign it to any VC button as
-  you would any function (Toggle or Flash). Its id stays the same as you
+  you would any function: **Toggle** turns it on and off, **Flash** plays
+  it while the button is held and lets go on release (a hit already on
+  stays on; Flash's Override and Force LTP don't apply to hits). Its id
+  stays the same as you
   edit the hit, so the button keeps firing it. **Make VC page** (on Hits,
   a folder, a hit's page, or `vcpage`) puts a frame on the Virtual Console
   with one Toggle button per hit there, captioned with its name and

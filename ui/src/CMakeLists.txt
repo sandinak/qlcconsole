@@ -24,6 +24,7 @@ add_library(${module_name}
     addchannelsgroup.cpp addchannelsgroup.h addchannelsgroup.ui
     addfixture.cpp addfixture.h addfixture.ui
     addresstool.cpp addresstool.h addresstool.ui
+    dmxmonitorwindow.cpp dmxmonitorwindow.h
     addrgbpanel.cpp addrgbpanel.h addrgbpanel.ui
     app.cpp app.h
     appsettings.cpp appsettings.h

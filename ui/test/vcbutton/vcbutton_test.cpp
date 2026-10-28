@@ -35,6 +35,7 @@
 #include "vcbutton.h"
 #include "vcframe.h"
 #include "scene.h"
+#include "collection.h"
 #include "doc.h"
 #undef private
 #undef protected
@@ -707,6 +708,42 @@ void VCButton_Test::paint()
     m_doc->setMode(Doc::Operate);
     btn.update();
     QTest::qWait(1);
+}
+
+/* 0.3.1 (k2): a Flash button on a Show Tree hit (a Collection the tree
+   marks flashPlays) plays it while held and stops it on release. */
+void VCButton_Test::flashPlaysAHit()
+{
+    QWidget w;
+
+    Scene *sc = new Scene(m_doc);
+    sc->setValue(0, 0, 255);
+    m_doc->addFunction(sc);
+    Collection *hit = new Collection(m_doc);
+    hit->addFunction(sc->id());
+    hit->setFlashPlays(true);
+    m_doc->addFunction(hit);
+
+    VCButton btn(&w, m_doc);
+    btn.setFunction(hit->id());
+    btn.setAction(VCButton::Flash);
+    btn.setKeySequence(QKeySequence(keySequenceB));
+
+    m_doc->setMode(Doc::Operate);
+    btn.slotKeyPressed(QKeySequence(keySequenceB));
+    m_doc->masterTimer()->timerTick();
+    QCOMPARE(btn.state(), VCButton::Active);
+    QVERIFY(m_doc->masterTimer()->m_functionList.contains(hit));
+    QVERIFY(hit->flashing());
+
+    btn.slotKeyReleased(QKeySequence(keySequenceB));
+    QCOMPARE(btn.state(), VCButton::Inactive);
+    QVERIFY(!hit->flashing());
+    QCOMPARE(hit->m_stop, true);
+    m_doc->masterTimer()->timerTick();
+    m_doc->masterTimer()->timerTick();
+    QVERIFY(!m_doc->masterTimer()->m_functionList.contains(hit));
+    m_doc->setMode(Doc::Design);
 }
 
 void VCButton_Test::toggleAndFlash()

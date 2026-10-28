@@ -79,6 +79,20 @@ private:
     bool isHidPlugin() const;          // true when m_currentInputPluginName is HID-style
     QString fullProfilePath(const QString& manufacturer, const QString& model) const;
 
+public:
+    /** New… beside the profile list (QLC+ 4's Add): edit a new input
+     *  profile and save it in the user's profile folder. Its name, or
+     *  empty when cancelled. */
+    QString createInputProfile();
+    /** Save a copy of @p edited to @p path (the user folder's
+     *  Manufacturer-Model.qxi when empty), load it, and give it to this
+     *  universe. Its name, or empty when it could not be saved. */
+    QString addInputProfile(class QLCInputProfile *edited, const QString &path = QString());
+    /** Delete… (QLC+ 4's Remove): the profile's file and the profile;
+     *  a universe using it has none. @p ask: confirm first. */
+    bool deleteInputProfile(const QString &name, bool ask);
+private:
+
     QTreeWidgetItem *itemLookup(QString pluginName, QString devName);
     void fillMappingTree();
     QTreeWidgetItem* pluginItem(const QString& pluginName);

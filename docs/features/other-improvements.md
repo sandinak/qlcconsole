@@ -134,6 +134,14 @@ unicast with no address. In the lists, **port** is the socket on the node
 e.g. 0:0:1). Classic QLC+'s **Universes** page keeps QLC+'s own patch
 editor.
 
+**Input profiles.** In that patch editor the row of a patched input has its
+profile: the list, **Edit**, and QLC+ 4's **New…** and **Delete**. **New…**
+opens the profile editor on an empty profile for a controller none of the
+list describes; on OK it is saved in your own profile folder (as
+*Manufacturer*-*Model*.qxi, asking before it replaces a file of that name)
+and this universe uses it. **Delete** asks, then deletes the chosen
+profile's file; a universe that used it has none.
+
 **Several universes at once.** Ctrl-click (⌘-click on a Mac) universes —
 in either view, patched or not — and right-click one of them:
 

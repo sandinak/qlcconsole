@@ -34,6 +34,7 @@
 #include <QDebug>
 #include <QFile>
 #include <QDir>
+#include <QFileInfo>
 
 #include "qlcinputprofile.h"
 #include "qlcioplugin.h"
@@ -279,14 +280,37 @@ void InputOutputPatchEditor::updateProfileColumnWidget(QTreeWidgetItem *item)
         lay->addWidget(combo, 1);
 
         QPushButton *editBtn = new QPushButton(tr("Edit"), cell);
+        editBtn->setObjectName(QStringLiteral("profileEdit"));
         editBtn->setEnabled(!cur.isEmpty());
         lay->addWidget(editBtn);
+        /* QLC+ 4's Add and Remove, beside Edit: a new profile of your own
+           (a controller nothing describes yet), and deleting one. */
+        QPushButton *newBtn = new QPushButton(tr("New…"), cell);
+        newBtn->setObjectName(QStringLiteral("profileNew"));
+        newBtn->setToolTip(tr("Make a new input profile, for a controller none of these describes"));
+        lay->addWidget(newBtn);
+        QPushButton *deleteBtn = new QPushButton(tr("Delete"), cell);
+        deleteBtn->setObjectName(QStringLiteral("profileDelete"));
+        deleteBtn->setToolTip(tr("Delete the chosen input profile's file"));
+        deleteBtn->setEnabled(!cur.isEmpty());
+        lay->addWidget(deleteBtn);
+
+        connect(newBtn, &QPushButton::clicked, this, [this, item]() {
+            if (createInputProfile().isEmpty() == false)
+                updateProfileColumnWidget(item);
+        });
+        connect(deleteBtn, &QPushButton::clicked, this, [this, combo, item]() {
+            const QString name = combo->currentData().toString();
+            if (name.isEmpty() == false && deleteInputProfile(name, true))
+                updateProfileColumnWidget(item);
+        });
 
         connect(combo, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
-                [this, combo, editBtn](int) {
+                [this, combo, editBtn, deleteBtn](int) {
             const QString name = combo->currentData().toString();
             m_currentProfileName = name.isEmpty() ? KInputNone : name;
             editBtn->setEnabled(!name.isEmpty());
+            deleteBtn->setEnabled(!name.isEmpty());
             if (m_ioMap->patchUndo() != NULL)
                 m_ioMap->patchUndo()->capture(QList<quint32>() << m_universe,
                                               tr("change input profile on universe %1")
@@ -330,6 +354,104 @@ void InputOutputPatchEditor::applyCurrentProfile()
     }
 }
 
+
+QString InputOutputPatchEditor::createInputProfile()
+{
+    /* As QLC+ 4's Add: edit a new profile, then save it in the user's
+       profile folder, asking before a file of the same name is replaced. */
+    InputProfileEditor ite(this, NULL, m_ioMap);
+    while (ite.exec() == QDialog::Accepted)
+    {
+        QString path = fullProfilePath(ite.profile()->manufacturer().remove(QChar(' ')),
+                                       ite.profile()->model().remove(QChar(' ')));
+        if (QFile::exists(path) == true)
+        {
+            const int r = QMessageBox::warning(this, tr("Existing Input Profile"),
+                    tr("An input profile at %1 already exists. Do you wish to overwrite it?")
+                        .arg(QDir::toNativeSeparators(path)),
+                    QMessageBox::Yes | QMessageBox::No | QMessageBox::Cancel, QMessageBox::No);
+            if (r == QMessageBox::Cancel)
+                continue;
+            if (r == QMessageBox::No)
+            {
+                path = QFileDialog::getSaveFileName(this, tr("Save Input Profile"), path,
+                                                    tr("Input Profiles (*%1)").arg(KExtInputProfile));
+                if (path.isEmpty() == true)
+                    continue;
+            }
+        }
+        const QString name = addInputProfile(ite.profile(), path);
+        if (name.isEmpty() == false)
+            return name;
+        QMessageBox::warning(this, tr("Saving failed"),
+                             tr("Unable to save the profile to %1").arg(QDir::toNativeSeparators(path)));
+    }
+    return QString();
+}
+
+QString InputOutputPatchEditor::addInputProfile(QLCInputProfile *edited, const QString &path)
+{
+    if (edited == NULL)
+        return QString();
+    const QString file = path.isEmpty()
+            ? fullProfilePath(edited->manufacturer().remove(QChar(' ')),
+                              edited->model().remove(QChar(' ')))
+            : path;
+    QDir().mkpath(QFileInfo(file).absolutePath());
+    QLCInputProfile *profile = edited->createCopy();
+    if (profile->saveXML(file) == false)
+    {
+        delete profile;
+        return QString();
+    }
+    const QString name = profile->name();
+    // Replaced on disk: the one loaded goes too.
+    if (m_ioMap->profile(name) != NULL)
+        m_ioMap->removeProfile(name);
+    m_ioMap->addProfile(profile);
+
+    /* And this universe uses it, as a profile picked from the list would be */
+    if (m_ioMap->patchUndo() != NULL)
+        m_ioMap->patchUndo()->capture(QList<quint32>() << m_universe,
+                                      tr("change input profile on universe %1").arg(m_universe + 1));
+    m_currentProfileName = name;
+    if (m_ioMap->inputPatch(m_universe) != NULL
+            && m_ioMap->setInputProfile(m_universe, m_currentProfileName) == false)
+        showPluginMappingError();
+    emit mappingChanged();
+    return name;
+}
+
+bool InputOutputPatchEditor::deleteInputProfile(const QString &name, bool ask)
+{
+    QLCInputProfile *profile = m_ioMap->profile(name);
+    if (profile == NULL)
+        return false;
+    if (ask && QMessageBox::question(this, tr("Delete profile"),
+                                     tr("Do you wish to permanently delete profile \"%1\"?").arg(name),
+                                     QMessageBox::Yes, QMessageBox::No) != QMessageBox::Yes)
+        return false;
+
+    QFile file(profile->path());
+    if (file.remove() == false)
+    {
+        if (ask)
+            QMessageBox::warning(this, tr("File deletion failed"),
+                                 tr("Unable to delete file %1").arg(file.errorString()));
+        return false;
+    }
+
+    /* The universe that used it has none now. */
+    if (m_currentProfileName == name)
+    {
+        m_currentProfileName = KInputNone;
+        if (m_ioMap->inputPatch(m_universe) != NULL)
+            m_ioMap->setInputProfile(m_universe, m_currentProfileName);
+    }
+    m_ioMap->removeProfile(name);
+    emit mappingChanged();
+    return true;
+}
 
 QString InputOutputPatchEditor::fullProfilePath(const QString& manufacturer,
                                                 const QString& model) const
