@@ -4,159 +4,277 @@
 <context>
     <name>QObject</name>
     <message>
-        <location filename="webaccessauth.cpp" line="195"/>
+        <location filename="webaccessauth.cpp" line="201"/>
         <source>Unauthorized</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="webaccessauth.cpp" line="198"/>
+        <location filename="webaccessauth.cpp" line="204"/>
         <source>401 Unauthorized</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="webaccessauth.cpp" line="199"/>
+        <location filename="webaccessauth.cpp" line="205"/>
         <source>Access to this resource requires proper authorization and you have failed to authenticate.</source>
         <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="webaccess-qml.cpp" line="218"/>
+        <source>Simple Desk</source>
+        <translation type="unfinished">シンプル卓</translation>
+    </message>
+    <message>
+        <location filename="webaccess-qml.cpp" line="223"/>
+        <source>Universe</source>
+        <translation type="unfinished">ユニバース</translation>
+    </message>
+    <message>
+        <location filename="webaccess-qml.cpp" line="237"/>
+        <source>Reset universe</source>
+        <translation type="unfinished">変更を戻す</translation>
+    </message>
+    <message>
+        <location filename="webaccess-qml.cpp" line="239"/>
+        <source>Faders</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="webaccess-qml.cpp" line="250"/>
+        <source>Page</source>
+        <translation type="unfinished">ページ</translation>
+    </message>
+    <message>
+        <location filename="webaccess-qml.cpp" line="258"/>
+        <source>Back</source>
+        <translation type="unfinished">戻る</translation>
     </message>
 </context>
 <context>
     <name>WebAccess</name>
     <message>
-        <location filename="webaccess.cpp" line="174"/>
         <source>Loading project...</source>
-        <translation>プロジェクトを開いています...</translation>
+        <translation type="vanished">プロジェクトを開いています...</translation>
     </message>
     <message>
-        <location filename="webaccess.cpp" line="210"/>
         <source>Fixture stored and loaded</source>
-        <translation>機器の読み込み</translation>
+        <translation type="vanished">機器の読み込み</translation>
     </message>
     <message>
-        <location filename="webaccess.cpp" line="438"/>
         <source>Username and password are required fields.</source>
-        <translation>これより先はユーザー名とパスワードが必要です</translation>
+        <translation type="vanished">これより先はユーザー名とパスワードが必要です</translation>
     </message>
     <message>
-        <location filename="webaccess.cpp" line="444"/>
-        <location filename="webaccess.cpp" line="469"/>
         <source>User level has to be a positive integer.</source>
-        <translation>ユーザーレベルは正の整数で入力してください</translation>
+        <translation type="vanished">ユーザーレベルは正の整数で入力してください</translation>
     </message>
     <message>
-        <location filename="webaccess.cpp" line="463"/>
         <source>Username is required.</source>
-        <translation>ユーザー名を入力してください</translation>
+        <translation type="vanished">ユーザー名を入力してください</translation>
     </message>
     <message>
-        <location filename="webaccess.cpp" line="481"/>
         <source>Error while saving passwords file.</source>
-        <translation>パスワードファイルの保存中に問題が発生しました</translation>
+        <translation type="vanished">パスワードファイルの保存中に問題が発生しました</translation>
     </message>
     <message>
-        <location filename="webaccess.cpp" line="496"/>
         <source>Network configuration changed. Reboot to apply the changes.</source>
-        <translation>変更したネットワーク設定を有効化するには再起動してください</translation>
+        <translation type="vanished">変更したネットワーク設定を有効化するには再起動してください</translation>
     </message>
     <message>
-        <location filename="webaccess.cpp" line="498"/>
-        <source>An error occurred while updating the network configuration.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="webaccess.cpp" line="514"/>
-        <source>Wi-Fi hotspot successfully activated.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="webaccess.cpp" line="516"/>
-        <source>An error occurred while creating a Wi-Fi hotspot.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="webaccess.cpp" line="521"/>
-        <source>Wi-Fi hotspot successfully deactivated.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location filename="webaccess.cpp" line="537"/>
         <source>Autostart configuration changed</source>
-        <translation>自動起動設定を変更しました</translation>
+        <translation type="vanished">自動起動設定を変更しました</translation>
     </message>
     <message>
-        <location filename="webaccess.cpp" line="1112"/>
+        <location filename="webaccess.cpp" line="652"/>
         <source>Widget not supported (yet) for web access</source>
         <translation>このウィジェットはまだwebアクセスでは使えません</translation>
     </message>
     <message>
-        <location filename="webaccess.cpp" line="1185"/>
-        <location filename="webaccess.cpp" line="1294"/>
+        <location filename="webaccess.cpp" line="725"/>
+        <location filename="webaccess.cpp" line="834"/>
         <source>Page: %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="webaccess.cpp" line="1576"/>
+        <location filename="webaccess.cpp" line="732"/>
+        <location filename="webaccess.cpp" line="841"/>
+        <source>Expand/Collapse</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="webaccess.cpp" line="746"/>
+        <source>Enable/Disable frame</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="webaccess.cpp" line="761"/>
+        <location filename="webaccess.cpp" line="870"/>
+        <source>Back</source>
+        <translation type="unfinished">戻る</translation>
+    </message>
+    <message>
+        <location filename="webaccess.cpp" line="768"/>
+        <location filename="webaccess.cpp" line="877"/>
+        <source>Forward</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="webaccess.cpp" line="855"/>
+        <source>Enable/Disable Solo frame</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="webaccess.cpp" line="1116"/>
         <source>Enable</source>
         <translation>有効化</translation>
     </message>
     <message>
-        <location filename="webaccess.cpp" line="1779"/>
+        <location filename="webaccess.cpp" line="1319"/>
         <source>Name</source>
         <translation>名前</translation>
     </message>
     <message>
-        <location filename="webaccess.cpp" line="1780"/>
+        <location filename="webaccess.cpp" line="1320"/>
         <source>Fade In</source>
         <translation>フェードイン</translation>
     </message>
     <message>
-        <location filename="webaccess.cpp" line="1781"/>
+        <location filename="webaccess.cpp" line="1321"/>
         <source>Fade Out</source>
         <translation>フェードアウト</translation>
     </message>
     <message>
-        <location filename="webaccess.cpp" line="1782"/>
+        <location filename="webaccess.cpp" line="1322"/>
         <source>Duration</source>
         <translation>再生ホールド時間</translation>
     </message>
     <message>
-        <location filename="webaccess.cpp" line="1783"/>
+        <location filename="webaccess.cpp" line="1323"/>
         <source>Notes</source>
         <translation>メモ</translation>
     </message>
     <message>
-        <location filename="webaccess.cpp" line="2172"/>
+        <location filename="webaccess.cpp" line="1439"/>
+        <source>Slider</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="webaccess.cpp" line="1473"/>
+        <source>Play Cue list</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="webaccess.cpp" line="1477"/>
+        <source>Stop Cue list</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="webaccess.cpp" line="1481"/>
+        <source>Go to the previous step in the list</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="webaccess.cpp" line="1485"/>
+        <source>Go to the next step in the list</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="webaccess.cpp" line="1707"/>
         <source>Color 2 Reset</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="webaccess.cpp" line="2181"/>
+        <location filename="webaccess.cpp" line="1716"/>
         <source>Color 3 Reset</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="webaccess.cpp" line="2190"/>
+        <location filename="webaccess.cpp" line="1725"/>
         <source>Color 4 Reset</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="webaccess.cpp" line="2199"/>
+        <location filename="webaccess.cpp" line="1734"/>
         <source>Color 5 Reset</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="webaccess.cpp" line="2440"/>
+        <location filename="webaccess.cpp" line="1975"/>
         <source>Load project</source>
         <translation>プロジェクトを開く</translation>
     </message>
     <message>
-        <location filename="webaccess.cpp" line="2442"/>
+        <location filename="webaccess.cpp" line="1977"/>
         <source>Simple Desk</source>
         <translation>シンプル卓</translation>
     </message>
     <message>
-        <location filename="webaccess.cpp" line="2444"/>
+        <location filename="webaccess.cpp" line="1979"/>
         <source>Configuration</source>
         <translation>設定</translation>
+    </message>
+</context>
+<context>
+    <name>WebAccessBase</name>
+    <message>
+        <location filename="webaccessbase.cpp" line="226"/>
+        <source>Loading project...</source>
+        <translation type="unfinished">プロジェクトを開いています...</translation>
+    </message>
+    <message>
+        <location filename="webaccessbase.cpp" line="318"/>
+        <source>Fixture stored and loaded</source>
+        <translation type="unfinished">機器の読み込み</translation>
+    </message>
+    <message>
+        <location filename="webaccessbase.cpp" line="501"/>
+        <source>Username and password are required fields.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="webaccessbase.cpp" line="508"/>
+        <location filename="webaccessbase.cpp" line="535"/>
+        <source>User level has to be a positive integer.</source>
+        <translation type="unfinished">ユーザーレベルは正の整数で入力してください</translation>
+    </message>
+    <message>
+        <location filename="webaccessbase.cpp" line="528"/>
+        <source>Username is required.</source>
+        <translation type="unfinished">ユーザー名を入力してください</translation>
+    </message>
+    <message>
+        <location filename="webaccessbase.cpp" line="550"/>
+        <source>Error while saving passwords file.</source>
+        <translation type="unfinished">パスワードファイルの保存中に問題が発生しました</translation>
+    </message>
+    <message>
+        <location filename="webaccessbase.cpp" line="571"/>
+        <source>Network configuration changed. Reboot to apply the changes.</source>
+        <translation type="unfinished">変更したネットワーク設定を有効化するには再起動してください</translation>
+    </message>
+    <message>
+        <location filename="webaccessbase.cpp" line="573"/>
+        <source>An error occurred while updating the network configuration.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="webaccessbase.cpp" line="590"/>
+        <source>Wi-Fi hotspot successfully activated.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="webaccessbase.cpp" line="592"/>
+        <source>An error occurred while creating a Wi-Fi hotspot.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="webaccessbase.cpp" line="597"/>
+        <source>Wi-Fi hotspot successfully deactivated.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="webaccessbase.cpp" line="614"/>
+        <source>Autostart configuration changed</source>
+        <translation type="unfinished">自動起動設定を変更しました</translation>
     </message>
 </context>
 <context>
@@ -189,6 +307,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <location filename="webaccessconfiguration.cpp" line="71"/>
         <location filename="webaccessconfiguration.cpp" line="136"/>
         <source>Passthrough</source>
         <translation>パススルー</translation>
@@ -291,32 +410,32 @@
         <translation>少なくとも１人以上のユーザーが「制限なし」に設定されいない場合はこの設定は無効になります</translation>
     </message>
     <message>
-        <location filename="webaccessconfiguration.cpp" line="321"/>
+        <location filename="webaccessconfiguration.cpp" line="324"/>
         <source>System</source>
         <translation>システム</translation>
     </message>
     <message>
-        <location filename="webaccessconfiguration.cpp" line="330"/>
+        <location filename="webaccessconfiguration.cpp" line="333"/>
         <source>Back</source>
         <translation>戻る</translation>
     </message>
     <message>
-        <location filename="webaccessconfiguration.cpp" line="338"/>
+        <location filename="webaccessconfiguration.cpp" line="341"/>
         <source>Universes configuration</source>
         <translation>入力/出力設定</translation>
     </message>
     <message>
-        <location filename="webaccessconfiguration.cpp" line="345"/>
+        <location filename="webaccessconfiguration.cpp" line="348"/>
         <source>Audio configuration</source>
         <translation>オーディオ設定</translation>
     </message>
     <message>
-        <location filename="webaccessconfiguration.cpp" line="353"/>
+        <location filename="webaccessconfiguration.cpp" line="356"/>
         <source>User loaded fixtures</source>
         <translation>読み込まれているユーザ定義のフィクスチャー</translation>
     </message>
     <message>
-        <location filename="webaccessconfiguration.cpp" line="362"/>
+        <location filename="webaccessconfiguration.cpp" line="365"/>
         <source>Authorized users</source>
         <translation>パスワード制限設定</translation>
     </message>

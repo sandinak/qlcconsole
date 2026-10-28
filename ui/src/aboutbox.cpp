@@ -51,7 +51,7 @@ AboutBox::AboutBox(QWidget* parent) : QDialog (parent)
     m_versionLabel->setText(versionText());
     m_versionLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
     m_copyrightLabel->setText(tr("by <B>Branson Matheson</B><br>%1")
-                              .arg(tr("Fork of QLC+ 4.14.2, based on the work of Heikki Junnila, "
+                              .arg(tr("Based on QLC+ 4.14.4 and the work of Heikki Junnila, "
                                       "Massimo Callegari, and the QLC+ project — not affiliated with QLC+:")));
     m_websiteLabel->setText(tr("QLC+: %1").arg("<A HREF=\"https://www.qlcplus.org/\">https://www.qlcplus.org/</A>"));
     connect(m_websiteLabel, SIGNAL(linkActivated(QString)),

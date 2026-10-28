@@ -113,6 +113,7 @@ private slots:
     void manualTargetPorts();
     void universesWithInputOn();
     void aliasesAndTargetsSurviveSaveLoad();
+    void networkServerSurvivesASave();
     void universeIdAlwaysEqualsItsArrayIndex();
 
 private:

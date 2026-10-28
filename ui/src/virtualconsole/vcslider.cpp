@@ -855,7 +855,7 @@ void VCSlider::setChannelsMonitorEnabled(bool enable)
     if (enable)
     {
         m_resetButton = new QToolButton(this);
-        m_cngButton->setFixedSize(32, 32);
+        m_resetButton->setFixedSize(32, 32);
         m_resetButton->setIconSize(QSize(32, 32));
         m_resetButton->setStyle(AppUtil::saneStyle());
         m_resetButton->setIcon(QIcon(":/fileclose.png"));
@@ -1110,8 +1110,9 @@ QKeySequence VCSlider::overrideResetKeySequence() const
 void VCSlider::slotResetButtonClicked()
 {
     m_isOverriding = false;
-    m_resetButton->setStyleSheet(QString("QToolButton{ background: %1; }")
-                                 .arg(m_slider->palette().window().color().name()));
+    if (m_resetButton != nullptr)
+        m_resetButton->setStyleSheet(QString("QToolButton{ background: %1; }")
+                                     .arg(m_slider->palette().window().color().name()));
 
     // request to delete all the active fader channels. Snapshot under the lock:
     // the MasterTimer thread may be inserting into m_fadersMap concurrently.
@@ -1837,7 +1838,8 @@ void VCSlider::setSliderValue(uchar value, bool scale, bool external)
         {
             if (m_monitorEnabled == true && m_isOverriding == false && m_slider->isSliderDown())
             {
-                m_resetButton->setStyleSheet(QString("QToolButton{ background: red; }"));
+                if (m_resetButton != nullptr)
+                    m_resetButton->setStyleSheet(QString("QToolButton{ background: red; }"));
                 m_isOverriding = true;
                 updateOverrideFeedback(true);
             }
@@ -1894,7 +1896,8 @@ void VCSlider::setSliderShadowValue(int value)
     if (m_widgetMode == WSlider)
     {
         ClickAndGoSlider *sl = qobject_cast<ClickAndGoSlider*> (m_slider);
-        sl->setShadowLevel(value);
+        if (sl != nullptr)
+            sl->setShadowLevel(value);
     }
 }
 

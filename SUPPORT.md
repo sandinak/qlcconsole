@@ -39,13 +39,14 @@ Please:
   for this fork's own architecture and development log.
 - Make sure you're on the latest qlcconsole build — check
   Help → About for the version string
-  (`4.14.2+qlcconsole.<N>`, where `N` tracks this fork's own commit count).
+  (`4.14.4+qlcconsole.<N>`, where `N` tracks this fork's own commit count;
+  builds before 0.3.1 say `4.14.2+qlcconsole.<N>`).
 
 ## How to Report Issues Effectively
 
 When reporting a bug, include the following:
 
-- **qlcconsole version:** from Help → About, e.g. `4.14.2+qlcconsole.1197`
+- **qlcconsole version:** from Help → About, e.g. `4.14.4+qlcconsole.2390`
 - **Operating System:** e.g., Windows 11, Ubuntu 22.04, macOS Ventura
 - **Steps to Reproduce:** Clear instructions to trigger the issue
 - **Expected Behavior:** What you expected to happen

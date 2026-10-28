@@ -73,7 +73,7 @@ QString WebAccessConfiguration::getIOConfigHTML(Doc *doc)
     profiles.prepend("None");
 
     html += "<table class=\"hovertable\" style=\"width: 100%;\">\n";
-    html += "<tr><th>" + tr("Universe") + "</th><th>" + tr("Input") + "</th><th>" + tr("Output") + "</th><th>" + tr("Feedback") + "</th><th>" + tr("Profile") + "</th></tr>\n";
+    html += "<tr><th>" + tr("Universe") + "</th><th>" + tr("Input") + "</th><th>" + tr("Output") + "</th><th>" + tr("Feedback") + "</th><th>" + tr("Profile") + "</th><th style=\"display: none;\">" + tr("Passthrough") + "</th></tr>\n";
 
     for (quint32 i = 0; i < ioMap->universesCount(); i++)
     {
@@ -91,7 +91,7 @@ QString WebAccessConfiguration::getIOConfigHTML(Doc *doc)
         quint32 currentFeedback = (fp == NULL)?QLCChannel::invalid():fp->output();
         QString currentProfileName = (ip == NULL)?KInputNone:ip->profileName();
 
-        html += "<tr align=center><td>" + esc(uniName) + "</td>\n";
+        html += "<tr style=\"text-align: center;\"><td>" + esc(uniName) + "</td>\n";
         html += "<td><select onchange=\"ioChanged('INPUT', " + QString::number(i) + ", this.value);\">\n";
         for (int in = 0; in < inputLines.count(); in++)
         {
@@ -154,7 +154,7 @@ QString WebAccessConfiguration::getAudioConfigHTML(Doc *doc)
 
     html += "<table class=\"hovertable\" style=\"width: 100%;\">\n";
     html += "<tr><th>" + tr("Input") + "</th><th>" + tr("Output") + "</th></tr>\n";
-    html += "<tr align=center>";
+    html += "<tr style=\"text-align: center;\">";
 
     QString audioInSelect = "<td><select onchange=\"ioChanged('AUDIOIN', this.value);\">\n"
                             "<option value=\"__qlcplusdefault__\">" + tr("Default device") + "</option>\n";
@@ -308,19 +308,22 @@ QString WebAccessConfiguration::getHTML(Doc *doc, WebAccessAuth *auth)
     m_JScode += "<script src=\"configuration.js\"></script>\n";
 
     QString m_CSScode =
-                 "<style type=\"text/css\" media=\"screen\">\n"
-                 "html { height: 100%; background-color: #222; }\n"
+                 "<style media=\"screen\">\n"
+                 "html {\n"
+                 " height: 100%;\n"
+                 " background-color: #222;\n"
+                 "}\n\n"
                  "body {\n"
                  " margin: 0px;\n"
                  " background: #222;\n"
                  "}\n\n"
                  "form {\n"
-                 "position: absolute;\n"
-                 "top: -100px;\n"
-                 "visibility: hidden;\n"
+                 " position: absolute;\n"
+                 " top: -100px;\n"
+                 " visibility: hidden;\n"
                  "}\n"
                  "</style>\n"
-                 "<link href=\"common.css\" rel=\"stylesheet\" type=\"text/css\" media=\"screen\">\n";
+                 "<link href=\"common.css\" rel=\"stylesheet\" media=\"screen\">\n";
 
     QString extraButtons = "";
     if (!QLCFile::hasWindowManager())
@@ -329,7 +332,7 @@ QString WebAccessConfiguration::getHTML(Doc *doc, WebAccessAuth *auth)
     }
 
     QString bodyHTML = "<form action=\"/loadFixture\" method=\"POST\" enctype=\"multipart/form-data\">\n"
-                       "<input id=\"loadTrigger\" type=\"file\" "
+                       "<input id=\"loadTrigger\" type=\"file\" accept=\".qxf,.d4\" "
                        "onchange=\"document.getElementById('submitTrigger').click();\" name=\"qlcfxi\">\n"
                        "<input id=\"submitTrigger\" type=\"submit\"></form>"
 
@@ -341,14 +344,14 @@ QString WebAccessConfiguration::getHTML(Doc *doc, WebAccessAuth *auth)
 
     // ********************* IO mapping ***********************
     bodyHTML += "<div style=\"margin: 30px 7% 30px 7%; width: 86%;\" >\n";
-    bodyHTML += "<div style=\"font-family: verdana,arial,sans-serif; font-size:20px; text-align:center; color:#CCCCCC;\">";
+    bodyHTML += "<div style=\"font-family: verdana, arial, sans-serif; font-size: 20px; text-align: center; color:#cccccc;\">";
     bodyHTML += tr("Universes configuration") + "</div><br>\n";
     bodyHTML += getIOConfigHTML(doc);
     bodyHTML += "</div>";
 
     // ********************* audio devices ********************
     bodyHTML += "<div style=\"margin: 30px 7% 30px 7%;\" >\n";
-    bodyHTML += "<div style=\"font-family: verdana,arial,sans-serif; font-size:20px; text-align:center; color:#CCCCCC;\">";
+    bodyHTML += "<div style=\"font-family: verdana, arial, sans-serif; font-size: 20px; text-align: center; color:#cccccc;\">";
     bodyHTML += tr("Audio configuration") + "</div><br>\n";
     bodyHTML += getAudioConfigHTML(doc);
     bodyHTML += "</div>";
@@ -356,7 +359,7 @@ QString WebAccessConfiguration::getHTML(Doc *doc, WebAccessAuth *auth)
     // **************** User loaded fixtures ******************
 
     bodyHTML += "<div style=\"margin: 30px 7% 30px 7%;\" >\n";
-    bodyHTML += "<div style=\"font-family: verdana,arial,sans-serif; font-size:20px; text-align:center; color:#CCCCCC;\">";
+    bodyHTML += "<div style=\"font-family: verdana, arial, sans-serif; font-size: 20px; text-align: center; color:#cccccc;\">";
     bodyHTML += tr("User loaded fixtures") + "</div><br>\n";
     bodyHTML += getUserFixturesConfigHTML();
     bodyHTML += "</div>";
@@ -365,7 +368,7 @@ QString WebAccessConfiguration::getHTML(Doc *doc, WebAccessAuth *auth)
     if (auth)
     {
         bodyHTML += "<div style=\"margin: 30px 7% 30px 7%;\" >\n";
-        bodyHTML += "<div style=\"font-family: verdana,arial,sans-serif; font-size:20px; text-align:center; color:#CCCCCC;\">";
+        bodyHTML += "<div style=\"font-family: verdana, arial, sans-serif; font-size: 20px; text-align: center; color:#cccccc;\">";
         bodyHTML += tr("Authorized users") + "</div><br>\n";
         bodyHTML += getPasswordsConfigHTML(auth);
         bodyHTML += "</div>";

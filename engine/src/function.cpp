@@ -633,6 +633,9 @@ bool Function::loadXMLTempoType(QXmlStreamReader &root)
 
 void Function::setFadeInSpeed(uint ms)
 {
+    if (m_fadeInSpeed == ms)
+        return;
+
     m_fadeInSpeed = ms;
     emit changed(m_id);
 }
@@ -644,6 +647,9 @@ uint Function::fadeInSpeed() const
 
 void Function::setFadeOutSpeed(uint ms)
 {
+    if (m_fadeOutSpeed == ms)
+        return;
+
     m_fadeOutSpeed = ms;
     emit changed(m_id);
 }
@@ -655,6 +661,9 @@ uint Function::fadeOutSpeed() const
 
 void Function::setDuration(uint ms)
 {
+    if (m_duration == ms)
+        return;
+
     m_duration = ms;
     emit changed(m_id);
 }

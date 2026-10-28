@@ -99,6 +99,8 @@ InputOutputMap::InputOutputMap(const Doc *doc, quint32 universes)
     , m_currentBPM(0)
     , m_beatTime(new QElapsedTimer())
     , m_inputCapture(NULL)
+    , m_networkServerType(NativeServer)
+    , m_networkServerAutoStart(false)
 {
     raiseOpenFileLimit();
 
@@ -2136,6 +2138,64 @@ void InputOutputMap::slotPluginBeat(quint32 universe, quint32 channel, uchar val
 }
 
 /*********************************************************************
+ * Network server
+ *********************************************************************/
+
+void InputOutputMap::setNetworkServerType(InputOutputMap::NetworkServerType type)
+{
+    m_networkServerType = type;
+}
+
+InputOutputMap::NetworkServerType InputOutputMap::networkServerType() const
+{
+    return m_networkServerType;
+}
+
+QString InputOutputMap::networkServerTypeToString(InputOutputMap::NetworkServerType type) const
+{
+    if (type == WebServer)
+        return "Web";
+    return "Native";
+}
+
+InputOutputMap::NetworkServerType InputOutputMap::stringToNetworkServerType(const QString &str) const
+{
+    if (str.compare("Web", Qt::CaseInsensitive) == 0)
+        return WebServer;
+    return NativeServer;
+}
+
+void InputOutputMap::setNetworkServerAutoStart(bool enable)
+{
+    m_networkServerAutoStart = enable;
+}
+
+bool InputOutputMap::networkServerAutoStart() const
+{
+    return m_networkServerAutoStart;
+}
+
+void InputOutputMap::setNetworkServerName(QString name)
+{
+    m_networkServerName = name;
+}
+
+QString InputOutputMap::networkServerName() const
+{
+    return m_networkServerName;
+}
+
+void InputOutputMap::setNetworkServerPassword(QString password)
+{
+    m_networkServerPassword = password;
+}
+
+QString InputOutputMap::networkServerPassword() const
+{
+    return m_networkServerPassword;
+}
+
+/*********************************************************************
  * Defaults - !! FALLBACK !!
  *********************************************************************/
 
@@ -2309,6 +2369,12 @@ bool InputOutputMap::loadXML(QXmlStreamReader &root)
        anyway" was said about the show being replaced. */
     m_rigNetworks.clear();
     m_transmitOverride = false;
+    /* Stock 4.14.4's network-server settings belong to the show they came
+       with: an older show has none, and gets the defaults. */
+    m_networkServerType = NativeServer;
+    m_networkServerAutoStart = false;
+    m_networkServerName.clear();
+    m_networkServerPassword.clear();
 
     while (root.readNextStartElement())
     {
@@ -2390,6 +2456,31 @@ bool InputOutputMap::loadXML(QXmlStreamReader &root)
 
             if (attrs.hasAttribute(KXMLIOBeatsPerMinute))
                 setBpmNumber(attrs.value(KXMLIOBeatsPerMinute).toInt());
+
+            root.skipCurrentElement();
+        }
+        else if (root.name() == KXMLIONetworkServer)
+        {
+            QXmlStreamAttributes attrs = root.attributes();
+            NetworkServerType type = NativeServer;
+
+            if (attrs.hasAttribute(KXMLIONetworkType))
+                type = stringToNetworkServerType(attrs.value(KXMLIONetworkType).toString());
+            setNetworkServerType(type);
+
+            if (attrs.hasAttribute(KXMLIONetworkAutoStart))
+                setNetworkServerAutoStart(attrs.value(KXMLIONetworkAutoStart) == KXMLQLCTrue);
+
+            if (type == NativeServer)
+            {
+                setNetworkServerName(attrs.value(KXMLIONetworkName).toString());
+                setNetworkServerPassword(attrs.value(KXMLIONetworkPassword).toString());
+            }
+            else
+            {
+                setNetworkServerName(QString());
+                setNetworkServerPassword(QString());
+            }
 
             root.skipCurrentElement();
         }
@@ -2548,6 +2639,16 @@ bool InputOutputMap::saveXML(QXmlStreamWriter *doc) const
        and transmits as it always did. */
     foreach (const QString &net, m_rigNetworks)
         doc->writeTextElement(KXMLIORigNetwork, net);
+
+    doc->writeStartElement(KXMLIONetworkServer);
+    doc->writeAttribute(KXMLIONetworkType, networkServerTypeToString(m_networkServerType));
+    doc->writeAttribute(KXMLIONetworkAutoStart, m_networkServerAutoStart ? KXMLQLCTrue : KXMLQLCFalse);
+    if (m_networkServerType == NativeServer)
+    {
+        doc->writeAttribute(KXMLIONetworkName, m_networkServerName);
+        doc->writeAttribute(KXMLIONetworkPassword, m_networkServerPassword);
+    }
+    doc->writeEndElement();
 
     foreach (Universe *uni, m_universeArray)
         uni->saveXML(doc);

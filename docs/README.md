@@ -87,6 +87,7 @@ and the user guide disagree, the user guide describes the app as it is.
 | [CONTRIBUTING.md](../CONTRIBUTING.md) | Contributing, coding style, pictures without colour profiles |
 | [Test map](TEST_MAP.md) · [Test matrix](TEST_MATRIX.md) | Which test covers what in this release; the extended test matrix |
 | [RELEASE.md](../RELEASE.md) | Version numbers, signed macOS releases, Windows and Linux builds |
+| [Upstream intake](UPSTREAM.md) | The QLC+ base (4.14.4), what each intake of upstream fixes took, adapted and skipped, and how to do the next one |
 | [CHANGELOG.md](../CHANGELOG.md) · [TODO.md](../TODO.md) · [DONE.md](../DONE.md) | What changed; open work; the detailed development log |
 | [Live-rig test plan](../RIG_TEST_PLAN.md) · [Stress test report](../STRESS_TEST_REPORT.md) | Testing on real hardware and under load |
 

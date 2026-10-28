@@ -19,8 +19,8 @@
 </p>
 
 **qlcconsole** is a lighting console for macOS (with Windows and Linux
-builds), a fork of [QLC+](https://www.qlcplus.org/) 4.14.2 (Q Light
-Controller Plus). It keeps everything QLC+ does and adds a console-style
+builds), a fork of [QLC+](https://www.qlcplus.org/) (Q Light Controller
+Plus), based on QLC+ 4.14.4. It keeps everything QLC+ does and adds a console-style
 way to work: the rig built in 3D before anything is patched, the show
 written as cue lists with tracking, the focus done from the stage with a
 game controller, and a show that moves from room to room with its

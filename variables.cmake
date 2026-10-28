@@ -20,13 +20,16 @@ if(qmlui)
     add_definitions(-DQMLUI)
     set(QLC_BASE_VERSION "5.1.1")
 else()
-    set(QLC_BASE_VERSION "4.14.2")
+    set(QLC_BASE_VERSION "4.14.4")
 endif()
 
-# APPVERSION = <QLC+ base we forked from>+qlcconsole.<N>, where N is the
-# number of commits on top of the QLC+_4.14.2 fork point (SemVer build
-# metadata, not a pre-release: qlcconsole isn't "less than" the base it
-# tracks, just iterating on top of it). N is git-derived so it moves with
+# APPVERSION = <QLC+ base>+qlcconsole.<N>. The base is the upstream QLC+
+# release whose fixes the fork carries (4.14.4 since 0.3.1; docs/UPSTREAM.md).
+# N is the number of commits on top of the original QLC+_4.14.2 fork point --
+# still counted from there when the base moves, so build numbers never go
+# backwards (4.14.4 came in as cherry-picks, not as an ancestor). SemVer
+# build metadata, not a pre-release: qlcconsole isn't "less than" the base
+# it tracks, just iterating on top of it. N is git-derived so it moves with
 # the tree instead of needing a manual bump; falls back to "0" outside a
 # git checkout or if the fork-point tag is missing (e.g. a shallow clone).
 set(QLCCONSOLE_REV "0")

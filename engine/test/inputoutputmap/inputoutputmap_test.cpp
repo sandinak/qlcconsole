@@ -1688,6 +1688,44 @@ void InputOutputMap_Test::aliasesAndTargetsSurviveSaveLoad()
     QCOMPARE(mt.ports.at(1), quint32(0x012));
 }
 
+/* Stock QLC+ 4.14.4 keeps its network-server settings in the IO map; a
+   4.14.4 show saved here keeps them (TEST_MATRIX C6), and the next show
+   opened doesn't inherit them. */
+void InputOutputMap_Test::networkServerSurvivesASave()
+{
+    const QString stock = QStringLiteral(
+        "<InputOutputMap>"
+        "<BeatGenerator BeatType=\"Disabled\" BPM=\"0\"/>"
+        "<NetworkServer Type=\"Native\" AutoStart=\"True\" Name=\"FOH\" Password=\"pw\"/>"
+        "</InputOutputMap>");
+
+    InputOutputMap iom(m_doc, 4);
+    QVERIFY(loadIOMap(iom, stock));
+    QCOMPARE(iom.networkServerType(), InputOutputMap::NativeServer);
+    QCOMPARE(iom.networkServerAutoStart(), true);
+    QCOMPARE(iom.networkServerName(), QString("FOH"));
+    QCOMPARE(iom.networkServerPassword(), QString("pw"));
+
+    InputOutputMap again(m_doc, 4);
+    QVERIFY(loadIOMap(again, saveIOMap(iom)));
+    QCOMPARE(again.networkServerAutoStart(), true);
+    QCOMPARE(again.networkServerName(), QString("FOH"));
+    QCOMPARE(again.networkServerPassword(), QString("pw"));
+
+    // A web server has no name or password of its own
+    QVERIFY(loadIOMap(again, QStringLiteral(
+        "<InputOutputMap><NetworkServer Type=\"Web\" AutoStart=\"False\"/></InputOutputMap>")));
+    QCOMPARE(again.networkServerType(), InputOutputMap::WebServer);
+    QVERIFY(saveIOMap(again).contains("Name=") == false);
+
+    // A show without the element gets the defaults, not the last show's
+    QVERIFY(loadIOMap(iom, QStringLiteral("<InputOutputMap/>")));
+    QCOMPARE(iom.networkServerType(), InputOutputMap::NativeServer);
+    QCOMPARE(iom.networkServerAutoStart(), false);
+    QVERIFY(iom.networkServerName().isEmpty());
+    QVERIFY(iom.networkServerPassword().isEmpty());
+}
+
 /** The invariant the whole patch API rests on.
  *
  *  universe(id) resolves by ID, while outputPatch(), setOutputPatch() and

@@ -75,7 +75,7 @@ void printVersion()
     cout << "This program is licensed under the terms of the ";
     cout << "Apache 2.0 license." << endl;
     cout << "By Branson Matheson" << endl;
-    cout << "Fork of QLC+ 4.14.2, based on the work of Heikki Junnila and Massimo Callegari" << endl;
+    cout << "Based on QLC+ 4.14.4 and the work of Heikki Junnila and Massimo Callegari" << endl;
     cout << endl;
 }
 

@@ -23,6 +23,7 @@
 
 #include <QMutex>
 #include <atomic>
+#include <climits>
 #include <QHash>
 #include <QList>
 #include <QSet>
@@ -341,6 +342,11 @@ private:
     SceneTransition m_transitionOut;
     TransitionMap m_transitionMapIn;        ///< built as the scene starts
     bool m_applyTransitionIn = false;       ///< processValue(): this is the start
+    /** One "time to the next beat" for every channel a Beats scene lays on
+        in one go (beatOffsetForThisPass()). It is read off the wall clock:
+        read per channel, a millisecond tick between two channels gave them
+        different fades (168 169 169 a frame later). INT_MIN: not in a pass. */
+    int m_passBeatOffset = INT_MIN;
 
     /*********************************************************************
      * Palettes
