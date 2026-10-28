@@ -86,6 +86,30 @@ back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
   without ReportCrash's "quit unexpectedly" dialog (QLC_TEST_CRASH_REPORTS=1
   keeps it). The gate fails when a test.sh or a test program lacks the guard
   (platforms/linux/check-test-guard.sh, with its own self-test).
+- **sACN (E1.31) universes above 255 had no multicast address**: the
+  default group was written 239.255.0.<n>, which is no address from
+  universe 256 on, so such a universe's output went nowhere and its
+  configuration dialog could crash. It is now 239.255.<high>.<low>, as
+  E1.31 says; universes 1-255 are unchanged.
+- **Art-Net**: an ArtPoll answered from an interface with no hardware
+  address (a VPN tunnel, some USB adapters) was 5 bytes short, with its
+  later fields out of place; every universe's first ArtDmx now carries
+  Sequence 1, not 0 ("not sequenced"), above Port-Address 3 too; and a
+  QLC+ workspace from before 2016 whose output IP was saved as its last
+  two or three octets ("3.11") sends to the right address again.
+- **A Script line with a syntax error no longer runs half of itself**:
+  `setfixture:1 chanel:2 val:255` (a typo) set channel 0 of fixture 1 to
+  0. A line the editor marks as an error now does nothing. And
+  `wait:random(5)` (no upper bound) is reported as an error instead of
+  waiting 49 days.
+- **OSC feedback with no path** sent an empty datagram to the feedback
+  target; it sends nothing.
+- **Code coverage campaign** (for developers): coverage.sh measures the
+  whole build, the plugins and web access included, with branch coverage
+  and a per-file table; the gaps that matter (show files, output, the
+  network plugins, the Show Tree, venues, focus and Refine, web access
+  auth, scripts) have new tests, and the bugs above came out of them.
+  Numbers and how to reproduce them: docs/TEST_MATRIX.md, "Coverage".
 
 ## [0.3.0] - 2026-10-26
 
