@@ -19,6 +19,7 @@
 #include <QSignalSpy>
 #include <QRegularExpression>
 #include <QNetworkInterface>
+#include <QUdpSocket>
 
 #define private public
 #include "e131_test.h"
@@ -154,6 +155,175 @@ void E131_Test::pluginGroupsAProblemsUniverses()
     QVERIFY(plugin.outputProblems(3, 0).isEmpty());
 
     plugin.m_IOmapping.clear();
+}
+
+static int be16(const QByteArray &d, int at)
+{
+    return (uchar(d.at(at)) << 8) | uchar(d.at(at + 1));
+}
+
+void E131_Test::dmxPacketLayout()
+{
+    E131Packetizer p("02:4D:48:12:02:0A");
+    QByteArray values(512, char(0));
+    values[0] = char(0x11);
+    values[511] = char(0x22);
+    QByteArray d;
+    p.setupE131Dmx(d, 0x0123, 150, values);
+
+    QCOMPARE(d.size(), 126 + 512);
+    QCOMPARE(d.mid(4, 12), QByteArray("ASC-E1.17\0\0\0", 12));
+    // Each layer's flags (0x7) and length, to the end of the packet
+    QCOMPARE(be16(d, 16), 0x7000 | (d.size() - 16));
+    QCOMPARE(be16(d, 38), 0x7000 | (d.size() - 38));
+    QCOMPARE(be16(d, 115), 0x7000 | (d.size() - 115));
+    QCOMPARE(d.mid(18, 4), QByteArray::fromHex("00000004"));      // root vector
+    QCOMPARE(d.mid(40, 4), QByteArray::fromHex("00000002"));      // E1.31 data
+    QCOMPARE(d.mid(32, 6), QByteArray::fromHex("024d4812020a"));  // CID ends with the MAC
+    QCOMPARE(d.mid(44, 31), QByteArray("Q Light Controller Plus - E1.31"));
+    QCOMPARE(d.mid(75, 33), QByteArray(33, char(0)));             // name padded to 64
+    QCOMPARE(int(uchar(d.at(108))), 150);                          // priority
+    QCOMPARE(be16(d, 113), 0x0123);                                // universe
+    QCOMPARE(int(uchar(d.at(117))), 0x02);                         // DMP set property
+    QCOMPARE(int(uchar(d.at(118))), 0xa1);
+    QCOMPARE(be16(d, 121), 1);                                     // address increment
+    QCOMPARE(be16(d, 123), 513);                                   // start code + slots
+    QCOMPARE(int(uchar(d.at(125))), 0);                            // DMX start code
+    QCOMPARE(d.mid(126), values);
+    QVERIFY(p.checkPacket(d));
+
+    // What it sends, it reads back
+    QByteArray dmx;
+    quint32 universe = 0;
+    QVERIFY(p.fillDMXdata(d, dmx, universe));
+    QCOMPARE(universe, 0x0123u);
+    QCOMPARE(dmx, values);
+
+    // A short frame carries only its slots; sequence counts per universe
+    const int seq = uchar(d.at(111));
+    p.setupE131Dmx(d, 0x0123, 100, QByteArray(24, char(7)));
+    QCOMPARE(d.size(), 126 + 24);
+    QCOMPARE(be16(d, 123), 25);
+    QCOMPARE(be16(d, 16), 0x7000 | (d.size() - 16));
+    QCOMPARE(int(uchar(d.at(108))), 100);
+    QCOMPARE(int(uchar(d.at(111))), seq + 1);
+    p.setupE131Dmx(d, 7, 100, QByteArray(24, char(7)));
+    const int other = uchar(d.at(111));
+    p.setupE131Dmx(d, 7, 100, QByteArray(24, char(7)));
+    QCOMPARE(int(uchar(d.at(111))), other + 1);
+
+    // A MAC that isn't one: the built-in CID tail
+    E131Packetizer noMac("");
+    noMac.setupE131Dmx(d, 1, 100, values);
+    QCOMPARE(d.mid(32, 6), QByteArray::fromHex("317a07c10052"));
+
+    // Not sACN: not checked further
+    QByteArray bad = d;
+    bad[4] = 'B';
+    QVERIFY(!p.checkPacket(bad));
+    bad = d;
+    bad[43] = char(0x03);                                         // not a data packet
+    QVERIFY(!p.checkPacket(bad));
+    bad = d.left(124);
+    QVERIFY(!p.checkPacket(bad));
+    bad = d;
+    bad[125] = char(0xcc);                                        // an RDM start code
+    QVERIFY(!p.fillDMXdata(bad, dmx, universe));
+    QVERIFY(dmx.isEmpty());
+}
+
+void E131_Test::universeDefaultsFollowTheSpec()
+{
+    QObject owner;
+    E131Controller *ctrl = testController(&owner, { 0, 299 });
+
+    UniverseInfo *info = ctrl->getUniverseInfo(0);
+    QVERIFY(info != NULL);
+    QCOMPARE(info->outputMcastAddress, QHostAddress("239.255.0.1"));
+    QCOMPARE(info->inputMcastAddress, QHostAddress("239.255.0.1"));
+    QCOMPARE(info->outputUniverse, 1u);
+    QCOMPARE(info->inputUniverse, 1u);
+    QCOMPARE(info->outputPriority, quint32(E131_PRIORITY_DEFAULT));
+    QCOMPARE(info->outputMulticast, true);
+    QCOMPARE(int(info->outputUcastPort), E131_DEFAULT_PORT);
+    QCOMPARE(info->outputUcastAddress, QHostAddress::LocalHost);
+    QCOMPARE(info->outputTransmissionMode, int(E131Controller::Full));
+
+    /* sACN universe 300 is 239.255.1.44 (0x012C): the high byte goes in
+       the third octet. It used to be "239.255.0.300", which is no address. */
+    info = ctrl->getUniverseInfo(299);
+    QCOMPARE(info->outputUniverse, 300u);
+    QCOMPARE(info->outputMcastAddress, QHostAddress("239.255.1.44"));
+    QCOMPARE(info->inputMcastAddress, QHostAddress("239.255.1.44"));
+    QVERIFY(!info->outputMcastAddress.isNull());
+
+    QCOMPARE(int(ctrl->type()), int(E131Controller::Output));
+    QCOMPARE(ctrl->universesList(), QList<quint32>({ 0, 299 }));
+    ctrl->removeUniverse(299, E131Controller::Output);
+    QVERIFY(ctrl->getUniverseInfo(299) == NULL);
+
+    // The saved forms of the multicast address: the legacy last octet, or whole
+    ctrl->setOutputMCastAddress(0, "7", true);
+    QCOMPARE(ctrl->getUniverseInfo(0)->outputMcastAddress, QHostAddress("239.255.0.7"));
+    ctrl->setOutputMCastAddress(0, "239.255.2.9", false);
+    QCOMPARE(ctrl->getUniverseInfo(0)->outputMcastAddress, QHostAddress("239.255.2.9"));
+
+    typedef E131Controller EC;
+    QCOMPARE(EC::stringToTransmissionMode(EC::transmissionModeToString(EC::Partial)), EC::Partial);
+    QCOMPARE(EC::stringToTransmissionMode(EC::transmissionModeToString(EC::Full)), EC::Full);
+    QCOMPARE(EC::stringToTransmissionMode("bogus"), EC::Full);
+
+    // Setters on a universe that isn't there change nothing
+    ctrl->setOutputUniverse(5, 9);
+    ctrl->setOutputPriority(5, 9);
+    ctrl->setOutputMulticast(5, false);
+    QCOMPARE(ctrl->universesList(), QList<quint32>({ 0 }));
+}
+
+void E131_Test::aUniverseSendsWhereItIsTold()
+{
+    /* Unicast to a socket of our own on 127.0.0.1: the one thing here that
+       is really sent, and it never leaves the machine. */
+    QUdpSocket rx;
+    QVERIFY(rx.bind(QHostAddress::LocalHost, 0));
+    QObject owner;
+    E131Controller *ctrl = testController(&owner, { 0 });
+    ctrl->setOutputMulticast(0, false);
+    ctrl->setOutputUCastAddress(0, "127.0.0.1");
+    ctrl->setOutputUCastPort(0, rx.localPort());
+    ctrl->setOutputUniverse(0, 7);
+    ctrl->setOutputPriority(0, 150);
+
+    auto receive = [&rx]() {
+        QByteArray d;
+        if (rx.hasPendingDatagrams() || rx.waitForReadyRead(5000))
+        {
+            d.resize(int(rx.pendingDatagramSize()));
+            rx.readDatagram(d.data(), d.size());
+        }
+        return d;
+    };
+
+    const quint64 sent = ctrl->getPacketSentNumber();
+    ctrl->sendDmx(0, QByteArray::fromHex("010203"));
+    QByteArray d = receive();
+    QCOMPARE(d.size(), 126 + 512);                 // Full: the whole universe
+    QCOMPARE(be16(d, 113), 7);
+    QCOMPARE(int(uchar(d.at(108))), 150);
+    QCOMPARE(d.mid(126, 4), QByteArray::fromHex("01020300"));
+    QCOMPARE(ctrl->getPacketSentNumber(), sent + 1);
+
+    ctrl->setOutputTransmissionMode(0, E131Controller::Partial);
+    ctrl->sendDmx(0, QByteArray::fromHex("010203"));
+    d = receive();
+    QCOMPARE(d.size(), 126 + 3);                   // Partial: what it was given
+    QCOMPARE(be16(d, 123), 4);
+
+    // Held off the rig network: nothing
+    ctrl->m_held.store(true);
+    ctrl->sendDmx(0, QByteArray::fromHex("010203"));
+    QVERIFY(!rx.waitForReadyRead(50));
+    QCOMPARE(ctrl->getPacketSentNumber(), sent + 2);
 }
 
 QTEST_MAIN(E131_Test)

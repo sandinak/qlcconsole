@@ -37,6 +37,12 @@ private slots:
        never read past (the Art-Net fuzz findings, matrix 2, checked here
        too); a valid one parses as before. */
     void dmxPacketsAreBoundedByTheDatagramAndAUniverse();
+
+    /* What goes on the wire (coverage campaign): the packet's layers, and
+       where each universe sends by default and as configured. */
+    void dmxPacketLayout();
+    void universeDefaultsFollowTheSpec();
+    void aUniverseSendsWhereItIsTold();
 };
 
 #endif
