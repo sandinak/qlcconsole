@@ -203,12 +203,15 @@ bool ArtNetController::setOutputIPAddress(quint32 universe, QString address)
     QMutexLocker locker(&m_dataMutex);
 
     QHostAddress hostAddress(address);
-    if (hostAddress.isNull() || !address.contains("."))
+    const QStringList addList = address.split(".");
+    /* IP addresses are now always fully saved. Before 2016 only the octets
+       that differed from the line's own address were ("10", "3.11"). Go by
+       the number of octets: QHostAddress reads "3.11" as 3.0.0.11, and a
+       string of five or more could index before the start of the list. */
+    if (addList.count() < 4)
     {
-        // IP addresses are now always fully saved
         qDebug() << "[setOutputIPAddress] Legacy IP style detected:" << address;
         QStringList iFaceIP = m_ipAddr.toString().split(".");
-        QStringList addList = address.split(".");
 
         for (int i = 0; i < addList.count(); i++)
             iFaceIP.replace(4 - addList.count() + i , addList.at(i));
