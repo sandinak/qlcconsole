@@ -2850,9 +2850,19 @@ void ConnectionsTree_Test::inputProfilesCanBeMadeAndDeleted()
 {
     QTemporaryDir home;
     QVERIFY(home.isValid());
+    // The user's profile folder is under the home folder: a scratch one
+    // (HOME; USERPROFILE on Windows), never the real one.
     const QByteArray oldHome = qgetenv("HOME");
+    const QByteArray oldProfile = qgetenv("USERPROFILE");
     qputenv("HOME", home.path().toUtf8());
-    const auto restore = qScopeGuard([oldHome]() { qputenv("HOME", oldHome); });
+    qputenv("USERPROFILE", home.path().toUtf8());
+    const auto restore = qScopeGuard([oldHome, oldProfile]() {
+        qputenv("HOME", oldHome);
+        if (oldProfile.isEmpty())
+            qunsetenv("USERPROFILE");
+        else
+            qputenv("USERPROFILE", oldProfile);
+    });
 
     IOPluginStub *stub = stubOf(m_doc);
     InputOutputMap *ioMap = m_doc->inputOutputMap();
@@ -2883,7 +2893,10 @@ void ConnectionsTree_Test::inputProfilesCanBeMadeAndDeleted()
     QCOMPARE(name, made.name());
     const QString file = InputOutputMap::userProfileDirectory().absoluteFilePath("TestWorks-Pad8.qxi");
     QVERIFY2(QFile::exists(file), qPrintable(file));
-    QVERIFY(file.startsWith(home.path()) || QFileInfo(file).canonicalFilePath().startsWith(QFileInfo(home.path()).canonicalFilePath()));
+#if !defined(Q_OS_WIN)
+    // Windows' user folder is %APPDATA%, which a test can't move.
+    QVERIFY(QFileInfo(file).canonicalFilePath().startsWith(QFileInfo(home.path()).canonicalFilePath()));
+#endif
     QVERIFY(ioMap->profile(name) != nullptr);
     QCOMPARE(ioMap->inputPatch(0)->profileName(), name);
     QVERIFY(ioMap->profileNames().contains(name));
