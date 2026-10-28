@@ -22,6 +22,7 @@
 #include <QRegularExpression>
 #include <QSignalSpy>
 #include <QBuffer>
+#include <QTimer>
 #include <QtTest>
 
 #define private public
@@ -44,6 +45,8 @@
 #include "iopluginstub.h"
 #include "chaseraction.h"
 #include "fixturegroup.h"
+#include "grouphead.h"
+#include "qlcpoint.h"
 #include "mastertimer.h"
 #include "outputpatch.h"
 #include "qlcpalette.h"
@@ -203,6 +206,38 @@ Scene *fullScene(Doc *doc, const QList<quint32> &fixtures)
         s->setValue(id, 0, 255);
     doc->addFunction(s);
     return s;
+}
+/* One fixture of @p channels generic dimmer channels (a head each), named
+   @p name exactly, its owner set before it is added (so only the add can
+   tell a venue applied of it); null when the doc refused it. */
+Fixture *addFixture(Doc *doc, const QString &name, quint32 universe, quint32 address, quint32 channels,
+                    RigOwner::Owner owner = RigOwner::Unset, bool patched = true)
+{
+    Fixture *fx = new Fixture(doc);
+    fx->setName(name);
+    fx->setUniverse(universe);
+    fx->setAddress(address);
+    fx->setChannels(channels);
+    fx->setOwner(owner);
+    fx->setPatched(patched);
+    if (!doc->addFixture(fx))
+    {
+        delete fx;
+        return nullptr;
+    }
+    return fx;
+}
+
+/* A house fixture as the venue keeps it, for a dry run by hand. */
+VenueRig::HouseFixture houseFixture(const QString &name, quint32 universe, quint32 address, quint32 channels)
+{
+    VenueRig::HouseFixture hf;
+    hf.id = 9000 + address + universe * 512;
+    hf.name = name;
+    hf.universe = universe;
+    hf.address = address;
+    hf.channels = channels;
+    return hf;
 }
 } // namespace
 
@@ -1540,6 +1575,708 @@ void VenueRig_Test::aPracticeNeverReachesTheShowFile()
     QCOMPARE(v->activeVenue(), lincoln);
     QCOMPARE(props->fixtureRigProps(a->id()).panOffsetDeg, 1.0f);
     QCOMPARE(engineXml(m_doc), show);
+}
+
+/****************************************************************************
+ * Mutation gaps in venuerig.cpp (the RC6 survivors)
+ ****************************************************************************/
+
+/* The venue's patch is every universe's, not only the first's: a repatch of
+   U2 alone is kept (patchChanged() looks past U1), and put on again when
+   the venue is (apply() walks every universe of it). */
+void VenueRig_Test::aVenuePatchOnASecondUniverse()
+{
+    VenueCorrections *v = venues(m_doc);
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    IOPluginStub *plugin = stub(m_doc);
+    QVERIFY(iom->setOutputPatch(0, plugin->name(), QString(), 0));
+    QVERIFY(iom->setOutputPatch(1, plugin->name(), QString(), 1));
+    const QString a = v->addVenue(QStringLiteral("Lincoln HS"));
+    QVERIFY(v->setActiveVenue(a));
+    QVERIFY(!v->hasPatch(a));
+
+    QVERIFY(iom->setOutputPatch(1, plugin->name(), QString(), 3));
+    QVERIFY(v->hasPatch(a));
+    QCOMPARE(v->venue(a).rig.patch.value(0).first().line, 0u);
+    QCOMPARE(v->venue(a).rig.patch.value(1).first().line, 3u);
+
+    QVERIFY(v->setActiveVenue(QString()));
+    QCOMPARE(iom->outputPatch(1)->output(), 1u);            // the show's back
+    QVERIFY(v->setActiveVenue(a));
+    QCOMPARE(iom->outputPatch(0)->output(), 0u);
+    QCOMPARE(iom->outputPatch(1)->output(), 3u);            // the room's on
+}
+
+/* The show replaced (VenueCorrections::reset, VenueRig::forget): no
+   universe still holds the old show's patch as its base, and nothing is
+   not ours -- Universe::reset() clears neither. */
+void VenueRig_Test::resetClearsTheUniverses()
+{
+    VenueCorrections *v = venues(m_doc);
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QVERIFY(iom->setOutputPatch(0, stub(m_doc)->name(), QString(), 0));
+    const QString a = v->addVenue(QStringLiteral("Lincoln HS"));
+    VenueRig::NotOurs range;
+    range.universe = 0;
+    range.from = 4;
+    range.to = 7;
+    QVERIFY(v->setNotOurs(a, { range }));
+    QVERIFY(v->setActiveVenue(a));
+    QVERIFY(v->keepPatch());
+    QList<Universe *> unis = iom->universes();
+    QVERIFY(unis.at(0)->isNotOurs(5));
+    QVERIFY(unis.at(0)->hasShowOutputBase());
+
+    v->setShowFile(m_dir->filePath(QStringLiteral("Other.qlcc")), true);
+    QVERIFY(!v->isActive());
+    for (Universe *u : iom->universes())
+    {
+        QVERIFY(!u->hasShowOutputBase());
+        for (int c : { 0, 5, 7, 300 })
+            QVERIFY(!u->isNotOurs(c));
+    }
+}
+
+/* Two house fixtures, one of two heads, filling a group at cells that
+   differ in x and y. Returns the venue; the fixtures from @p first. */
+static QString captureSetup(Doc *doc, FixtureGroup *&foh, quint32 &first, quint32 &duo)
+{
+    VenueCorrections *v = venues(doc);
+    addFixture(doc, QStringLiteral("Tour spot"), 0, 0, 1);
+    foh = makeGroup(doc, QStringLiteral("FOH wash"), {});
+    makeGroup(doc, QStringLiteral("Side"), {});
+    const QString a = v->addVenue(QStringLiteral("Lincoln HS"));
+    if (!v->setActiveVenue(a))
+        return QString();
+    first = addFixture(doc, QStringLiteral("Lincoln par 1"), 0, 100, 1, RigOwner::House)->id();
+    addFixture(doc, QStringLiteral("Lincoln par 2"), 0, 101, 1, RigOwner::House);
+    addFixture(doc, QStringLiteral("Lincoln par 3"), 0, 102, 1, RigOwner::House);
+    duo = addFixture(doc, QStringLiteral("Lincoln duo"), 0, 110, 2, RigOwner::House)->id();
+    doc->monitorProperties()->setFixturePosition(first, 0, 0, QVector3D(1200, 3400, 0));
+    foh->setSize(QSize(3, 3));
+    foh->assignHead(QLCPoint(1, 2), GroupHead(first, 0));
+    foh->assignHead(QLCPoint(2, 1), GroupHead(first + 1, 0));
+    foh->assignHead(QLCPoint(1, 1), GroupHead(duo, 0));
+    v->recordRig();
+    return a;
+}
+
+/* Nothing changed: capture() says so, however often -- and reads no
+   further than the lists it has (a spurious "changed" only rewrote the
+   sidecar; reading past them is undefined). */
+void VenueRig_Test::captureSeesNoChange()
+{
+    VenueCorrections *v = venues(m_doc);
+    FixtureGroup *foh = nullptr;
+    quint32 first = 0, duo = 0;
+    const QString a = captureSetup(m_doc, foh, first, duo);
+    QVERIFY(!a.isEmpty());
+
+    VenueRig::Data copy = v->venue(a).rig;
+    QCOMPARE(copy.fixtures.size(), 4);
+    QCOMPARE(copy.fills.size(), 1);
+    QCOMPARE(copy.fills.first().heads.size(), 3);
+    QVERIFY(!v->rig()->capture(copy));
+    QVERIFY(!v->rig()->capture(copy));
+    QCOMPARE(copy.fills.first().heads.size(), 3);
+}
+
+/* Each change capture() must see, or it is never saved: a house fixture
+   moved on the plot only, a head added to a group (and to a second one),
+   the group renamed, two heads swapped, a fill head's fixture head. */
+void VenueRig_Test::captureSeesEachChange()
+{
+    VenueCorrections *v = venues(m_doc);
+    MonitorProperties *props = m_doc->monitorProperties();
+    FixtureGroup *foh = nullptr;
+    quint32 first = 0, duo = 0;
+    const QString a = captureSetup(m_doc, foh, first, duo);
+    QVERIFY(!a.isEmpty());
+    FixtureGroup *side = nullptr;
+    for (FixtureGroup *g : m_doc->fixtureGroups())
+        if (g->name() == QStringLiteral("Side"))
+            side = g;
+    QVERIFY(side != nullptr);
+
+    // Moved on the plot, nothing else: only its <Monitor> differs.
+    VenueRig::Data before = v->venue(a).rig;
+    props->setFixturePosition(first, 0, 0, QVector3D(4321, 3400, 0));
+    QVERIFY(v->rig()->capture(before));
+    QVERIFY(v->recordRig());
+    QVERIFY(readFile(v->filePath()).contains("4321"));
+
+    // A head added to the group's fill, after the others: same fill count.
+    before = v->venue(a).rig;
+    QVERIFY(foh->assignHead(QLCPoint(2, 2), GroupHead(first + 2, 0)));
+    QVERIFY(v->rig()->capture(before));
+    QCOMPARE(v->venue(a).rig.fills.first().heads.size(), 4);
+
+    // A house head in a second group: a second fill.
+    before = v->venue(a).rig;
+    QVERIFY(side->assignHead(QLCPoint(1, 1), GroupHead(first, 0)));
+    QVERIFY(v->rig()->capture(before));
+    QCOMPARE(v->venue(a).rig.fills.size(), 2);
+
+    // The group renamed.
+    before = v->venue(a).rig;
+    foh->setName(QStringLiteral("FOH front"));
+    QVERIFY(v->rig()->capture(before));
+    QVERIFY(readFile(v->filePath()).contains("Name=\"FOH front\""));
+
+    // Two heads swapped: the same cells and head indexes, other fixtures.
+    before = v->venue(a).rig;
+    foh->swap(QLCPoint(1, 2), QLCPoint(2, 1));
+    QVERIFY(v->rig()->capture(before));
+    QCOMPARE(foh->head(QLCPoint(2, 1)).fxi, first);
+
+    // The other head of the same fixture, in the same cell.
+    before = v->venue(a).rig;
+    QVERIFY(foh->resignHead(QLCPoint(1, 1)));
+    QVERIFY(foh->assignHead(QLCPoint(1, 1), GroupHead(duo, 1)));
+    QVERIFY(v->rig()->capture(before));
+    QVERIFY(v->recordRig());
+    QVERIFY(readFile(v->filePath()).contains(QStringLiteral("Fixture=\"%1\" Head=\"1\" X=\"1\" Y=\"1\"")
+                                                 .arg(duo).toUtf8()));
+}
+
+/* While a venue is applied, owners are followed on every way in and out:
+   a fixture added already House, a house fixture deleted, a House group
+   added holding a show fixture, and that group deleted again. */
+void VenueRig_Test::ownersFollowAddsAndRemoves()
+{
+    VenueCorrections *v = venues(m_doc);
+    addFixture(m_doc, QStringLiteral("Tour spot"), 0, 0, 1);
+    const QString a = v->addVenue(QStringLiteral("Lincoln HS"));
+    QVERIFY(v->setActiveVenue(a));
+
+    Fixture *par = addFixture(m_doc, QStringLiteral("Lincoln par"), 0, 100, 1, RigOwner::House);
+    QVERIFY(par != nullptr);
+    const quint32 id = par->id();
+    QVERIFY(v->isVenueFixture(id));
+    QVERIFY(!engineXml(m_doc).contains("Lincoln par"));
+    QVERIFY(m_doc->deleteFixture(id));
+    QVERIFY(!v->isVenueFixture(id));
+
+    const quint32 show = addFixture(m_doc, QStringLiteral("Show par"), 0, 200, 1)->id();
+    QVERIFY(!v->isVenueFixture(show));
+    // Its fixture assigned before the group is the doc's: only the add says.
+    FixtureGroup *g = new FixtureGroup(m_doc);
+    g->setName(QStringLiteral("House wash"));
+    g->setOwner(RigOwner::House);
+    QVERIFY(g->assignFixture(show));
+    QVERIFY(m_doc->addFixtureGroup(g));
+    QVERIFY(v->isVenueFixture(show));
+    QVERIFY(!engineXml(m_doc).contains("Show par"));
+
+    QVERIFY(m_doc->deleteFixtureGroup(g->id()));
+    QVERIFY(!v->isVenueFixture(show));
+    QVERIFY(engineXml(m_doc).contains("Show par"));
+}
+
+/* samePatch() compares every field of every patch, and the size; with
+   nothing edited, nothing is pinned: the show saved leaves no venue patch. */
+void VenueRig_Test::samePatchComparesEveryField()
+{
+    Universe::OfflinePatch p;
+    p.plugin = QStringLiteral("ArtNet");
+    p.uid = QStringLiteral("ArtNet 10.0.0.5");
+    p.line = 1;
+    p.network = QStringLiteral("show");
+    p.params.insert(QStringLiteral("UniverseID"), 3);
+    const QList<Universe::OfflinePatch> l{ p };
+    QVERIFY(VenueRig::samePatch(l, l));
+    QVERIFY(VenueRig::samePatch({}, {}));
+    QVERIFY(!VenueRig::samePatch(l, {}));
+    QVERIFY(!VenueRig::samePatch({}, l));
+    QVERIFY(!VenueRig::samePatch(l, l + l));
+
+    for (int field = 0; field < 5; ++field)
+    {
+        Universe::OfflinePatch m = p;
+        switch (field)
+        {
+            case 0: m.plugin = QStringLiteral("E1.31"); break;
+            case 1: m.uid = QStringLiteral("ArtNet 10.0.0.6"); break;
+            case 2: m.line = 2; break;
+            case 3: m.network = QStringLiteral("house"); break;
+            case 4: m.params.insert(QStringLiteral("UniverseID"), 4); break;
+        }
+        QVERIFY2(!VenueRig::samePatch(l, { m }), qPrintable(QString("field %1").arg(field)));
+        QVERIFY2(!VenueRig::samePatch({ m }, l), qPrintable(QString("field %1").arg(field)));
+    }
+
+    VenueCorrections *v = venues(m_doc);
+    QVERIFY(m_doc->inputOutputMap()->setOutputPatch(0, stub(m_doc)->name(), QString(), 0));
+    const QString a = v->addVenue(QStringLiteral("Lincoln HS"));
+    QVERIFY(v->setActiveVenue(a));
+    QVERIFY(!v->rig()->patchChanged(v->venue(a).rig));
+    v->setShowFile(showFile(), false);
+    QVERIFY(!v->hasPatch(a));
+}
+
+/* A venue with a house fixture on a universe the show does not have (U5
+   of 4) and a patch for U6, past those: the dry run, applying it with a
+   House slot in the show, never reads past the show's universes. */
+void VenueRig_Test::aVenueBeyondTheShowsUniverses()
+{
+    VenueCorrections *v = venues(m_doc);
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QCOMPARE(int(iom->universesCount()), 4);
+    QVERIFY(iom->setOutputPatch(0, stub(m_doc)->name(), QString(), 0));
+    addFixture(m_doc, QStringLiteral("Tour spot"), 0, 0, 1);
+    const QString a = v->addVenue(QStringLiteral("Lincoln HS"));
+    QVERIFY(v->setActiveVenue(a));
+    const quint32 par = addFixture(m_doc, QStringLiteral("Far par"), 0, 10, 1, RigOwner::House)->id();
+    QVERIFY(v->keepPatch());
+    QVERIFY(v->recordRig());
+    QVERIFY(v->setActiveVenue(QString()));
+
+    // The venue file edited: the par on U5, a patch for U6.
+    QByteArray sc = readFile(v->filePath());
+    QVERIFY(sc.contains("<Universe>0</Universe>"));
+    sc.replace("<Universe>0</Universe>", "<Universe>4</Universe>");
+    QVERIFY(sc.contains("<Patch Universe=\"0\">"));
+    sc.replace("<Patch Universe=\"0\">", "<Patch Universe=\"5\">");
+    QVERIFY(writeFile(v->filePath(), sc));
+    v->setShowFile(showFile(), true);
+    QVERIFY(!v->isActive());
+    QCOMPARE(v->venue(a).rig.fixtures.first().universe, 4u);
+    QVERIFY(v->venue(a).rig.patch.contains(5));
+    iom->setUniverseSlotOwner(1, RigOwner::House);
+
+    // The dry run: no slot clash for a universe the show lacks.
+    for (const VenueRig::Clash &c : v->clashes(a))
+        QVERIFY2(c.universe != 4u, qPrintable(c.text));
+
+    QVERIFY(v->setActiveVenue(a));
+    QVERIFY(m_doc->fixture(par) != nullptr);
+    QCOMPARE(m_doc->fixture(par)->universe(), 4u);
+    QVERIFY(m_doc->fixture(par)->isPatched());
+    QCOMPARE(int(iom->universesCount()), 5);
+    v->clashes(a);
+}
+
+/* A house fixture ending just before channels the room keeps goes in
+   patched; one unpatched on them is not an address clash. */
+void VenueRig_Test::houseFixturesBesideNotOurs()
+{
+    VenueCorrections *v = venues(m_doc);
+    addFixture(m_doc, QStringLiteral("Tour spot"), 0, 20, 1);
+    const QString a = v->addVenue(QStringLiteral("Lincoln HS"));
+    QVERIFY(v->setActiveVenue(a));
+    const quint32 par = addFixture(m_doc, QStringLiteral("House par"), 0, 3, 1, RigOwner::House)->id();
+    const quint32 spare = addFixture(m_doc, QStringLiteral("House spare"), 0, 5, 1, RigOwner::House, false)->id();
+    QVERIFY(v->isVenueFixture(par));
+    QVERIFY(v->isVenueFixture(spare));
+    VenueRig::NotOurs keep;
+    keep.universe = 0;
+    keep.from = 4;
+    keep.to = 6;
+    QVERIFY(v->setNotOurs(a, { keep }));
+    QVERIFY(v->recordRig());
+    QVERIFY(v->setActiveVenue(QString()));
+    QVERIFY(v->setActiveVenue(a));
+
+    QVERIFY(m_doc->fixture(par) != nullptr);
+    QVERIFY(m_doc->fixture(par)->isPatched());
+    QVERIFY(!m_doc->fixture(par)->addressClash());
+    QVERIFY(m_doc->fixture(spare) != nullptr);
+    QVERIFY(!m_doc->fixture(spare)->isPatched());
+    QVERIFY(!m_doc->fixture(spare)->addressClash());
+}
+
+/* A fill head keeps its fixture head index and its cell -- captured,
+   written, read and put back: the second head of a two-head house fixture
+   at (2, 1). */
+void VenueRig_Test::fillHeadGeometryRoundTrips()
+{
+    VenueCorrections *v = venues(m_doc);
+    addFixture(m_doc, QStringLiteral("Tour spot"), 0, 0, 1);
+    FixtureGroup *foh = makeGroup(m_doc, QStringLiteral("FOH wash"), {});
+    const QString a = v->addVenue(QStringLiteral("Lincoln HS"));
+    QVERIFY(v->setActiveVenue(a));
+    Fixture *duo = addFixture(m_doc, QStringLiteral("Lincoln duo"), 0, 100, 2, RigOwner::House);
+    QVERIFY(duo != nullptr);
+    QCOMPARE(duo->heads(), 2);
+    const quint32 id = duo->id();
+    foh->setSize(QSize(3, 2));
+    QVERIFY(foh->assignHead(QLCPoint(2, 1), GroupHead(id, 1)));
+    QVERIFY(v->recordRig());
+
+    auto check = [id](const VenueRig::Data &d) {
+        QCOMPARE(d.fills.size(), 1);
+        QCOMPARE(d.fills.first().heads.size(), 1);
+        const VenueRig::FillHead h = d.fills.first().heads.first();
+        QCOMPARE(h.fixture, id);
+        QCOMPARE(h.head, 1);
+        QCOMPARE(h.x, 2);
+        QCOMPARE(h.y, 1);
+    };
+    check(v->venue(a).rig);
+    if (QTest::currentTestFailed())
+        return;
+
+    Doc other(this);
+    VenueCorrections back(&other);
+    QString why;
+    QVERIFY2(back.fromXml(v->toXml(), &why), qPrintable(why));
+    check(back.venue(a).rig);
+    if (QTest::currentTestFailed())
+        return;
+
+    QVERIFY(v->setActiveVenue(QString()));
+    QVERIFY(!foh->head(QLCPoint(2, 1)).isValid());
+    QVERIFY(v->setActiveVenue(a));
+    QCOMPARE(foh->head(QLCPoint(2, 1)).fxi, id);
+    QCOMPARE(foh->head(QLCPoint(2, 1)).head, 1);
+    QCOMPARE(foh->headList().size(), 1);
+}
+
+/* A fill whose group id is gone finds the group again by name; and a fill
+   for a group the show deleted while the venue is applied is kept. */
+void VenueRig_Test::aFillFindsItsGroupByName()
+{
+    VenueCorrections *v = venues(m_doc);
+    addFixture(m_doc, QStringLiteral("Tour spot"), 0, 0, 1);
+    FixtureGroup *foh = makeGroup(m_doc, QStringLiteral("FOH wash"), {});
+    const QString a = v->addVenue(QStringLiteral("Lincoln HS"));
+    QVERIFY(v->setActiveVenue(a));
+    const quint32 par = addFixture(m_doc, QStringLiteral("Lincoln par"), 0, 100, 1, RigOwner::House)->id();
+    QVERIFY(foh->assignFixture(par));
+    QCOMPARE(v->venue(a).rig.fills.size(), 1);
+    QVERIFY(v->setActiveVenue(QString()));
+
+    // Deleted and made again (another id): the same group to the venue.
+    const quint32 oldId = foh->id();
+    QVERIFY(m_doc->deleteFixtureGroup(oldId));
+    FixtureGroup *again = new FixtureGroup(m_doc);
+    again->setName(QStringLiteral("FOH wash"));
+    QVERIFY(m_doc->addFixtureGroup(again, oldId + 7));
+    QVERIFY(v->setActiveVenue(a));
+    QVERIFY(again->fixtureList().contains(par));
+    QVERIFY(v->recordRig());
+    QCOMPARE(v->venue(a).rig.fills.size(), 1);
+    QCOMPARE(v->venue(a).rig.fills.first().group, again->id());
+
+    // Deleted with the venue applied: the fill is kept, it may come back.
+    QVERIFY(m_doc->deleteFixtureGroup(again->id()));
+    QVERIFY(v->recordRig());
+    QCOMPARE(v->venue(a).rig.fills.size(), 1);
+    QCOMPARE(v->venue(a).rig.fills.first().groupName, QStringLiteral("FOH wash"));
+    QCOMPARE(v->venue(a).rig.fills.first().heads.first().fixture, par);
+}
+
+/* The venue's patch in the sidecar keeps the interface's uid and network
+   and the plugin's parameters, so it binds to the same interface again. */
+void VenueRig_Test::sidecarPatchKeepsUidAndNetwork()
+{
+    Universe::OfflinePatch p;
+    p.plugin = QStringLiteral("ArtNet");
+    p.uid = QStringLiteral("ArtNet 10.0.0.5");
+    p.line = 1;
+    p.network = QStringLiteral("show");
+    p.params.insert(QStringLiteral("UniverseID"), QStringLiteral("3"));
+    VenueRig::Data d;
+    d.patch.insert(2, { p });
+
+    QByteArray xml;
+    {
+        QXmlStreamWriter w(&xml);
+        w.writeStartElement(QStringLiteral("Venue"));
+        VenueRig::writeXml(w, d);
+        w.writeEndElement();
+    }
+    VenueRig::Data back;
+    QXmlStreamReader r(xml);
+    QVERIFY(r.readNextStartElement());
+    while (r.readNextStartElement())
+        QVERIFY(VenueRig::readXml(r, back));
+    QCOMPARE(back.patch.keys(), QList<quint32>{ 2 });
+    const Universe::OfflinePatch q = back.patch.value(2).first();
+    QCOMPARE(q.plugin, p.plugin);
+    QCOMPARE(q.uid, p.uid);
+    QCOMPARE(q.line, 1u);
+    QCOMPARE(q.network, p.network);
+    QCOMPARE(q.params.value(QStringLiteral("UniverseID")).toString(), QStringLiteral("3"));
+    QVERIFY(VenueRig::samePatch(back.patch.value(2), d.patch.value(2)));
+}
+
+/* A first output patched on a universe that had none (only its count
+   changes) is the venue's too; and forgetting the venue's patch leaves a
+   universe added since it was applied as it is. */
+void VenueRig_Test::patchEditsOnNewOutputsAndUniverses()
+{
+    VenueCorrections *v = venues(m_doc);
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    IOPluginStub *plugin = stub(m_doc);
+    QVERIFY(iom->setOutputPatch(0, plugin->name(), QString(), 0));
+    const QString a = v->addVenue(QStringLiteral("Lincoln HS"));
+    QVERIFY(v->setActiveVenue(a));
+    QVERIFY(!v->hasPatch(a));
+
+    QVERIFY(iom->outputPatch(2) == nullptr);
+    QVERIFY(iom->setOutputPatch(2, plugin->name(), QString(), 1));
+    QVERIFY(v->hasPatch(a));
+    QCOMPARE(v->venue(a).rig.patch.value(2).size(), 1);
+    QCOMPARE(v->venue(a).rig.patch.value(2).first().line, 1u);
+    QVERIFY(v->setActiveVenue(QString()));
+    QVERIFY(iom->outputPatch(2) == nullptr);
+    QVERIFY(v->setActiveVenue(a));
+    QCOMPARE(iom->outputPatch(2)->output(), 1u);
+
+    QVERIFY(iom->addUniverse());
+    const quint32 added = iom->universesCount() - 1;
+    QVERIFY(!iom->universes().at(int(added))->hasShowOutputBase());
+    QVERIFY(iom->setOutputPatch(added, plugin->name(), QString(), 2));
+    QVERIFY(v->forgetPatch());
+    QVERIFY(iom->outputPatch(2) == nullptr);                 // the show's again
+    QVERIFY(iom->outputPatch(added) != nullptr);             // not wiped
+    QCOMPARE(iom->outputPatch(added)->output(), 2u);
+}
+
+/* Fill heads outside the group's grid (shrunk while the venue was away)
+   grow it, each axis on its own, so no head is off the grid. */
+void VenueRig_Test::fillHeadsOutsideTheGridGrowIt()
+{
+    VenueCorrections *v = venues(m_doc);
+    addFixture(m_doc, QStringLiteral("Tour spot"), 0, 0, 1);
+    FixtureGroup *foh = makeGroup(m_doc, QStringLiteral("FOH wash"), {});
+    const QString a = v->addVenue(QStringLiteral("Lincoln HS"));
+    QVERIFY(v->setActiveVenue(a));
+    const quint32 p = addFixture(m_doc, QStringLiteral("Lincoln par 1"), 0, 100, 1, RigOwner::House)->id();
+    const quint32 q = addFixture(m_doc, QStringLiteral("Lincoln par 2"), 0, 101, 1, RigOwner::House)->id();
+    foh->setSize(QSize(2, 2));
+    QVERIFY(foh->assignHead(QLCPoint(1, 0), GroupHead(p, 0)));
+    QVERIFY(foh->assignHead(QLCPoint(0, 1), GroupHead(q, 0)));
+    QVERIFY(v->recordRig());
+    QVERIFY(v->setActiveVenue(QString()));
+
+    foh->setSize(QSize(1, 1));
+    QVERIFY(v->setActiveVenue(a));
+    QCOMPARE(foh->head(QLCPoint(1, 0)).fxi, p);
+    QCOMPARE(foh->head(QLCPoint(0, 1)).fxi, q);
+    QCOMPARE(foh->size(), QSize(2, 2));
+}
+
+/* The dry run checks what the venue keeps of each house fixture: its
+   universe, its channels and whether it is patched -- captured from the
+   rig, and read back from the sidecar. */
+void VenueRig_Test::theDryRunReadsTheHouseFixtures()
+{
+    VenueCorrections *v = venues(m_doc);
+    addFixture(m_doc, QStringLiteral("Tour spot"), 0, 0, 1);
+    const QString a = v->addVenue(QStringLiteral("Lincoln HS"));
+    QVERIFY(v->setActiveVenue(a));
+    QVERIFY(addFixture(m_doc, QStringLiteral("House strip"), 1, 10, 3, RigOwner::House) != nullptr);
+    QVERIFY(addFixture(m_doc, QStringLiteral("House spare"), 0, 30, 1, RigOwner::House, false) != nullptr);
+    QVERIFY(v->recordRig());
+    QVERIFY(v->setActiveVenue(QString()));
+    // Meanwhile: a tour fixture on the strip's third channel, one where
+    // the spare would be if it were patched.
+    QVERIFY(addFixture(m_doc, QStringLiteral("Tour U2"), 1, 12, 1) != nullptr);
+    QVERIFY(addFixture(m_doc, QStringLiteral("Tour U1"), 0, 30, 1) != nullptr);
+
+    auto check = [](const QList<VenueRig::Clash> &clashes) {
+        QCOMPARE(clashes.size(), 1);
+        const VenueRig::Clash c = clashes.first();
+        QCOMPARE(c.kind, VenueRig::Clash::Overlap);
+        QCOMPARE(c.universe, 1u);
+        QCOMPARE(c.address, 12u);
+        QCOMPARE(c.channels, 1u);
+        QVERIFY2(c.text.startsWith(QStringLiteral("U2 13:")), qPrintable(c.text));
+        QVERIFY(c.text.contains(QStringLiteral("House strip")));
+    };
+    auto fields = [](const VenueRig::Data &d) {
+        QCOMPARE(d.fixtures.size(), 2);
+        for (const VenueRig::HouseFixture &hf : d.fixtures)
+        {
+            const bool strip = hf.name == QStringLiteral("House strip");
+            QCOMPARE(hf.universe, strip ? 1u : 0u);
+            QCOMPARE(hf.address, strip ? 10u : 30u);
+            QCOMPARE(hf.channels, strip ? 3u : 1u);
+            QCOMPARE(hf.patched, strip);
+        }
+    };
+    fields(v->venue(a).rig);
+    check(v->clashes(a));
+    if (QTest::currentTestFailed())
+        return;
+
+    Doc other(this);
+    VenueCorrections back(&other);
+    QString why;
+    QVERIFY2(back.fromXml(v->toXml(), &why), qPrintable(why));
+    fields(back.venue(a).rig);
+    check(v->rig()->clashes(back.venue(a).rig, false));
+}
+
+/* What the clash report says: each clash's universe, first address and
+   channel count, and its text, exact -- and nothing for fixtures that only
+   touch, or sit on another universe. */
+void VenueRig_Test::theClashReportFieldsAndText()
+{
+    const QString dash = QStringLiteral("–");
+    VenueRig::NotOurs whole;
+    whole.universe = 3;
+    QCOMPARE(VenueRig::notOursText(whole), QStringLiteral("U4 (all of it)"));
+    VenueRig::NotOurs top;
+    top.universe = 0;
+    top.from = 400;
+    top.to = 511;
+    QCOMPARE(VenueRig::notOursText(top), QStringLiteral("U1 401") + dash + QStringLiteral("512"));
+
+    addFixture(m_doc, QStringLiteral("Tour A"), 0, 50, 3);
+    addFixture(m_doc, QStringLiteral("Tour B"), 0, 60, 1);
+    addFixture(m_doc, QStringLiteral("Tour D"), 0, 3, 1);      // ends where not ours starts
+    addFixture(m_doc, QStringLiteral("Tour E"), 0, 5, 3);      // 5-7 over not ours 4-6
+    addFixture(m_doc, QStringLiteral("Tour F"), 0, 19, 2);     // 19-20, ends inside 20-30
+    VenueRig::Data d;
+    d.fixtures << houseFixture(QStringLiteral("House wide"), 0, 50, 3)     // over Tour A
+               << houseFixture(QStringLiteral("House beside"), 0, 59, 1)   // touches Tour B
+               << houseFixture(QStringLiteral("House one"), 0, 60, 1)      // on Tour B
+               << houseFixture(QStringLiteral("House U2"), 1, 60, 1);      // Tour B's address, U2
+    VenueRig::NotOurs keep;
+    keep.universe = 0;
+    keep.from = 4;
+    keep.to = 6;
+    VenueRig::NotOurs desk;
+    desk.universe = 0;
+    desk.from = 20;
+    desk.to = 30;
+    d.notOurs << keep << desk << whole;
+
+    VenueRig *rig = venues(m_doc)->rig();
+    QList<VenueRig::Clash> clashes = rig->clashes(d, false);
+    QStringList texts;
+    for (const VenueRig::Clash &c : clashes)
+        texts << c.text;
+    QCOMPARE(clashes.size(), 4);
+    int seen = 0;
+    for (const VenueRig::Clash &c : clashes)
+    {
+        QCOMPARE(c.universe, 0u);
+        if (c.kind == VenueRig::Clash::Overlap && c.address == 50)
+        {
+            ++seen;
+            QCOMPARE(c.channels, 3u);
+            QVERIFY2(c.text.startsWith(QStringLiteral("U1 51") + dash + QStringLiteral("53: ")), qPrintable(c.text));
+            QVERIFY(c.text.contains(QStringLiteral("Tour A")) && c.text.contains(QStringLiteral("House wide")));
+        }
+        else if (c.kind == VenueRig::Clash::Overlap && c.address == 60)
+        {
+            ++seen;
+            QCOMPARE(c.channels, 1u);
+            QVERIFY2(c.text.startsWith(QStringLiteral("U1 61: ")), qPrintable(c.text));
+            QVERIFY(c.text.contains(QStringLiteral("Tour B")) && c.text.contains(QStringLiteral("House one")));
+        }
+        else if (c.kind == VenueRig::Clash::NotOursKind && c.address == 20)
+        {
+            ++seen;
+            QCOMPARE(c.channels, 1u);
+            QVERIFY2(c.text.startsWith(QStringLiteral("U1 21: Tour F (tour)")), qPrintable(c.text));
+        }
+        else if (c.kind == VenueRig::Clash::NotOursKind)
+        {
+            ++seen;
+            QCOMPARE(c.address, 5u);
+            QCOMPARE(c.channels, 2u);
+            QCOMPARE(c.text, QStringLiteral("U1 6") + dash + QStringLiteral("7: Tour E (tour) is on channels this "
+                                                                             "venue keeps (not ours: U1 5")
+                                 + dash + QStringLiteral("7)"));
+        }
+    }
+    QVERIFY2(seen == 4, qPrintable(texts.join(QLatin1Char('\n'))));
+
+    // A House slot: a house fixture in a Tour slot, where it is.
+    m_doc->inputOutputMap()->setUniverseSlotOwner(1, RigOwner::House);
+    bool slot = false;
+    for (const VenueRig::Clash &c : rig->clashes(d, false))
+    {
+        if (c.kind != VenueRig::Clash::Slot || !c.text.contains(QStringLiteral("House wide")))
+            continue;
+        slot = true;
+        QCOMPARE(c.universe, 0u);
+        QCOMPARE(c.address, 50u);
+        QCOMPARE(c.channels, 3u);
+        QCOMPARE(c.text, QStringLiteral("U1 51") + dash + QStringLiteral("53: House wide (house) is in a Tour slot"));
+    }
+    QVERIFY(slot);
+}
+
+/* A house fixture's calibration edited (the fixture dialog, the Lighting
+   Studio) starts the venue's write timer, and the timer's firing writes
+   it into the sidecar -- driven here without waiting for it. */
+void VenueRig_Test::aHouseCalibrationEditIsRecordedOnTheTimer()
+{
+    VenueCorrections *v = venues(m_doc);
+    MonitorProperties *props = m_doc->monitorProperties();
+    addFixture(m_doc, QStringLiteral("Tour spot"), 0, 0, 1);
+    const QString a = v->addVenue(QStringLiteral("Lincoln HS"));
+    QVERIFY(v->setActiveVenue(a));
+    const quint32 par = addFixture(m_doc, QStringLiteral("Lincoln par"), 0, 100, 1, RigOwner::House)->id();
+    QVERIFY(v->recordRig());
+    const QList<QTimer *> timers = v->findChildren<QTimer *>(QString(), Qt::FindDirectChildrenOnly);
+    QCOMPARE(timers.size(), 1);
+    QTimer *timer = timers.first();
+    QVERIFY(!timer->isActive());
+
+    FixtureRigProps rp = props->fixtureRigProps(par);
+    rp.panOffsetDeg = 2.25f;
+    props->setFixtureRigProps(par, rp);
+    QVERIFY(timer->isActive());
+    timer->stop();
+    QVERIFY(QMetaObject::invokeMethod(timer, "timeout"));
+    QVERIFY(readFile(v->filePath()).contains("PanOfs=\"2.25\""));
+    QVERIFY(v->venue(a).rig.monitorXml.contains("PanOfs=\"2.25\""));
+}
+
+/* A show fixture set to House with a venue applied moves in, and its
+   calibration is the room's from then on: the show's base is dropped. */
+void VenueRig_Test::aFixtureMovedInLosesItsCalibrationBase()
+{
+    VenueCorrections *v = venues(m_doc);
+    MonitorProperties *props = m_doc->monitorProperties();
+    const quint32 fx = addFixture(m_doc, QStringLiteral("Tour par"), 0, 0, 1)->id();
+    const QString a = v->addVenue(QStringLiteral("Lincoln HS"));
+    QVERIFY(v->setActiveVenue(a));
+    QVERIFY(props->hasCalibrationBase(fx));
+    m_doc->fixture(fx)->setOwner(RigOwner::House);
+    QVERIFY(v->isVenueFixture(fx));
+    QVERIFY(!props->hasCalibrationBase(fx));
+}
+
+/* A house fixture renumbered because the show took its id takes none of
+   another venue's house ids either. */
+void VenueRig_Test::aRenumberedIdSkipsOtherVenuesIds()
+{
+    VenueCorrections *v = venues(m_doc);
+    addFixture(m_doc, QStringLiteral("Tour spot"), 0, 0, 1);
+    const QString a = v->addVenue(QStringLiteral("Lincoln HS"));
+    const QString b = v->addVenue(QStringLiteral("Grand Hall"));
+    QVERIFY(v->setActiveVenue(a));
+    const quint32 par = addFixture(m_doc, QStringLiteral("Lincoln par"), 0, 100, 1, RigOwner::House)->id();
+    QVERIFY(v->setActiveVenue(b));
+    const quint32 hall = addFixture(m_doc, QStringLiteral("Hall par"), 0, 200, 1, RigOwner::House)->id();
+    // The next id after the show's and the taken one: what a renumber
+    // ignoring the other venues would pick.
+    QCOMPARE(hall, par + 1);
+    QVERIFY(v->setActiveVenue(QString()));
+
+    Fixture *intruder = addFixture(m_doc, QStringLiteral("Tour intruder"), 0, 10, 1);
+    QVERIFY(intruder != nullptr);
+    QVERIFY(m_doc->deleteFixture(intruder->id()));
+    intruder = new Fixture(m_doc);
+    intruder->setName(QStringLiteral("Tour intruder"));
+    intruder->setChannels(1);
+    intruder->setAddress(10);
+    QVERIFY(m_doc->addFixture(intruder, par));
+
+    QVERIFY(v->setActiveVenue(a));
+    const quint32 moved = v->venue(a).rig.fixtures.first().id;
+    QVERIFY(moved != par);
+    QVERIFY(moved != hall);
+    QVERIFY(!v->venue(b).rig.fixtureIds().contains(moved));
+    QCOMPARE(m_doc->fixture(moved)->name(), QStringLiteral("Lincoln par"));
 }
 
 QTEST_GUILESS_MAIN(VenueRig_Test)

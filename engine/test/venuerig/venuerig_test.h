@@ -71,6 +71,44 @@ private slots:
      *  venue's section of the sidecar */
     void aPracticeNeverReachesTheShowFile();
 
+    /* Mutation gaps in venuerig.cpp (the RC6 survivors) */
+    /** The venue's patch on U2: kept, put back on, taken off */
+    void aVenuePatchOnASecondUniverse();
+    /** The show replaced: no held patch base, nothing not ours left */
+    void resetClearsTheUniverses();
+    /** capture() with nothing changed says so */
+    void captureSeesNoChange();
+    /** capture() sees each kind of house-rig change */
+    void captureSeesEachChange();
+    /** Owners followed on fixture and group add and remove */
+    void ownersFollowAddsAndRemoves();
+    /** samePatch() compares every field; nothing edited, nothing kept */
+    void samePatchComparesEveryField();
+    /** A house fixture and a patch past the show's universes */
+    void aVenueBeyondTheShowsUniverses();
+    /** A house fixture just beside not ours, or unpatched on it */
+    void houseFixturesBesideNotOurs();
+    /** A fill head's fixture head index and cell, through every path */
+    void fillHeadGeometryRoundTrips();
+    /** A fill found again by its group's name; kept for a deleted group */
+    void aFillFindsItsGroupByName();
+    /** The sidecar patch keeps its uid, network and parameters */
+    void sidecarPatchKeepsUidAndNetwork();
+    /** A first output added; a universe added after apply */
+    void patchEditsOnNewOutputsAndUniverses();
+    /** Fill heads outside a shrunk group grow it again */
+    void fillHeadsOutsideTheGridGrowIt();
+    /** The dry run reads the house fixtures' universe, size, patched */
+    void theDryRunReadsTheHouseFixtures();
+    /** The clash report's universe, address, channels and text */
+    void theClashReportFieldsAndText();
+    /** A house fixture's calibration edit is recorded when the timer fires */
+    void aHouseCalibrationEditIsRecordedOnTheTimer();
+    /** A fixture set to House drops its show calibration base */
+    void aFixtureMovedInLosesItsCalibrationBase();
+    /** A renumbered house fixture skips every venue's house ids */
+    void aRenumberedIdSkipsOtherVenuesIds();
+
 private:
     QString showFile() const;
     quint32 dimmers(int count, quint32 universe, quint32 address, const QString &name);
