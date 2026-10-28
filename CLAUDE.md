@@ -46,6 +46,14 @@ header, a plugin's test; everything if CMake files or the runner changed.
 It is not the gate — run the full one before pushing. One test dir by hand:
 `QLC_TEST_ONLY="ui/test/workbench" ./check-all.sh --quick`.
 
+Tests never touch the real screen: every test.sh and every test program
+(`engine/test/common/testguard.cpp`, linked into each by the top-level
+CMakeLists) force `QT_QPA_PLATFORM=offscreen`, and on macOS a crashing test
+exits with no "quit unexpectedly" dialog; `platforms/linux/check-test-guard.sh`
+fails the gate on a test without the guard. Opt out only on purpose:
+`QLC_TEST_REAL_SCREEN=1` (+ `QT_QPA_PLATFORM=cocoa`); `QLC_TEST_CRASH_REPORTS=1`
+keeps crash reports.
+
 **The gate pool** runs the full gate of a *committed* SHA on whichever Mac is
 idle: `./check-all.sh --remote auto [--rev SHA]` (= `make pool`;
 `platforms/macos/gate-pool.sh`, hosts in `platforms/macos/gate-hosts.conf`:

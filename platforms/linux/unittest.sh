@@ -31,35 +31,24 @@ if [ "$CURRUSER" == "runner" ] \
   IS_CI=1
 fi
 
-# Which Qt platform the tests get. This decides HOW the UI tests run, never
-# WHETHER: every branch below runs them. An earlier version only ran ui/test
-# when it could find an X server (`pidof X` / `pidof Xorg`) or the login was a
-# known CI user, so on a headless Linux box under a normal login all the UI
-# test programs -- a third of the suite -- were silently skipped while the gate
-# still printed "Unit tests passed". The run is now also counted (see the end
-# of this script), so a skip can't pass quietly again.
-if [ -n "${QT_QPA_PLATFORM:-}" ]; then
-  # The caller chose a platform (cocoa to watch the tests on macOS, xcb to
-  # watch them on a Linux desktop, offscreen from the top-level unittest.sh).
-  echo "Using the caller's QT_QPA_PLATFORM='$QT_QPA_PLATFORM'"
-  TESTPREFIX=""
-elif [[ "$OSTYPE" == "linux-gnu"* ]] && [ "$IS_CI" -eq 1 ]; then
-  # CI: offscreen, as macOS, Windows and headless Linux run. It used to be
-  # the minimal platform under Xvfb, which has no real fonts: every width
-  # taken from text is wrong there (a 1280 px window's top bar asked for
-  # 1133 px, a label for 768), so tests of what folds or fits, and clicks
-  # aimed at a row's rectangle, failed with nothing wrong -- MainBar_Test,
-  # ShowTreeView_Test, ProgrammingManager_Test. The whole suite passes on
-  # offscreen on Linux (Debian 13, Qt 6.8.2, 2026-10-21).
-  TESTPREFIX="QT_QPA_PLATFORM=offscreen"
-elif [[ "$OSTYPE" == "linux-gnu"* ]] && [ -n "${DISPLAY:-}" ] \
-    && command -v xdpyinfo >/dev/null 2>&1 && xdpyinfo >/dev/null 2>&1; then
-  # A real, reachable X session: use it, as headed runs always have.
+# Which Qt platform the tests get: offscreen, always, on every OS -- no test
+# may open a window on the real screen (or, crashing, leave a dialog there).
+# This decides HOW the UI tests run, never WHETHER: every branch runs them.
+# (An earlier version only ran ui/test when it found an X server, so on a
+# headless Linux box all the UI programs were silently skipped; the run is
+# now also counted, see the end of this script.) Offscreen needs no display,
+# and has real fonts where Xvfb's minimal platform didn't (every width taken
+# from text was wrong there). Three walls: this, each test.sh, and
+# engine/test/common/testguard.cpp in every program; check-test-guard.sh,
+# below, fails the run when one is missing.
+#
+# QLC_TEST_REAL_SCREEN=1 lifts all three, to watch the tests on purpose:
+# then the caller's QT_QPA_PLATFORM (cocoa, xcb), or Qt's default.
+if [ "${QLC_TEST_REAL_SCREEN:-}" = 1 ]; then
+  echo "QLC_TEST_REAL_SCREEN=1: the tests may use the real screen (QT_QPA_PLATFORM='${QT_QPA_PLATFORM:-}')"
   TESTPREFIX=""
 else
-  # Headless Linux, macOS, anything else: Qt's offscreen platform needs no
-  # display at all. (xvfb-run is no substitute for this check: its server is
-  # named Xvfb, which `pidof X` never matched.)
+  export QT_QPA_PLATFORM=offscreen
   TESTPREFIX="QT_QPA_PLATFORM=offscreen"
 fi
 
@@ -68,14 +57,9 @@ fi
 # which finds DLLs on PATH. Put every build dir holding one there.
 # QT_FORCE_STDERR_LOGGING: a Windows process without a console (CI's piped
 # output) has QTest send its whole log to OutputDebugString instead of stdout,
-# so every test, failing ones included, ran silently. A caller's
-# QT_QPA_PLATFORM still wins, as above.
+# so every test, failing ones included, ran silently.
 if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]]; then
-  if [ -n "${QT_QPA_PLATFORM:-}" ]; then
-    TESTPREFIX="QT_FORCE_STDERR_LOGGING=1"
-  else
-    TESTPREFIX="QT_QPA_PLATFORM=offscreen QT_FORCE_STDERR_LOGGING=1"
-  fi
+  TESTPREFIX="$TESTPREFIX QT_FORCE_STDERR_LOGGING=1"
   DLLDIRS=$(find "$PWD" -name '*.dll' -not -path '*/CMakeFiles/*' -exec dirname {} \; | sort -u | tr '\n' ':')
   export PATH="${DLLDIRS}${PATH}"
 fi
@@ -265,6 +249,16 @@ list_tests()
 }
 
 ALL_TESTS=$(list_tests)
+
+# Every test.sh starts offscreen and every program has the test guard (see
+# the top of this script), or nothing runs. Once per run: not again for the
+# serial phase.
+if [ "$PHASE" != "serial" ]; then
+  if ! ./check-test-guard.sh --build . $ALL_TESTS; then
+    echo "A test could open a window on the real screen. This is not a pass."
+    exit 1
+  fi
+fi
 if [ -n "${QLC_TEST_ONLY:-}" ]; then
     SELECTED=""
     for t in $ALL_TESTS; do
