@@ -2184,3 +2184,798 @@ void ArtNet_Test::malformedPacketsThroughTheController()
     QCOMPARE(ctrl->getPacketReceivedNumber(), before);
     QVERIFY(ctrl->getNodesList().isEmpty());
 }
+
+/*****************************************************************************
+ * The controller's send and receive paths, byte for byte (coverage campaign,
+ * from the matrix 2 mutation survivors: each test pins what a surviving
+ * mutant changed without any test noticing). Every send goes to a test
+ * sink; nothing leaves the machine.
+ *****************************************************************************/
+
+/** A controller on "the show network", 172.18.2.219/24, with no universes,
+ *  sending into @a sink. No real interface and no rig network gate (the
+ *  parent is not a plugin). */
+static ArtNetController *sinkController(QObject *parent, QList<QNetworkDatagram> *sink)
+{
+    QNetworkAddressEntry entry;
+    entry.setIp(QHostAddress("172.18.2.219"));
+    entry.setPrefixLength(24);
+    entry.setBroadcast(QHostAddress("172.18.2.255"));
+    QSharedPointer<QUdpSocket> sock(new QUdpSocket());
+    ArtNetController *ctrl = new ArtNetController(QNetworkInterface(), entry, sock, 0, parent);
+    ctrl->m_testSink = sink;
+    return ctrl;
+}
+
+static int artOpCode(const QByteArray &d)
+{
+    return (uchar(d.at(9)) << 8) | uchar(d.at(8));
+}
+
+static int artDmxPortAddress(const QByteArray &d)
+{
+    return (uchar(d.at(15)) << 8) | uchar(d.at(14));
+}
+
+static int artDmxLength(const QByteArray &d)
+{
+    return (uchar(d.at(16)) << 8) | uchar(d.at(17));
+}
+
+static const char kArtPollBytes[] = "4172742d4e6574000020000e0200";
+
+void ArtNet_Test::addUniverseMapsItsOwnUniverse()
+{
+    QObject owner;
+    QList<QNetworkDatagram> sink;
+    ArtNetController *ctrl = sinkController(&owner, &sink);
+    QCOMPARE(int(ctrl->type()), int(ArtNetController::Unknown));
+
+    ctrl->addUniverse(5, ArtNetController::Output);
+    UniverseInfo *info = ctrl->getUniverseInfo(5);
+    QVERIFY(info != NULL);
+    QCOMPARE(int(info->outputUniverse), 5);
+    QCOMPARE(int(info->inputUniverse), 5);
+    QCOMPARE(info->outputAddress, QHostAddress("172.18.2.255"));
+    QCOMPARE(info->outputTransmissionMode, int(ArtNetController::Standard));
+    QCOMPARE(int(ctrl->type()), int(ArtNetController::Output));
+
+    sink.clear();
+    ctrl->sendDmx(5, QByteArray(512, char(1)), true);
+    QCOMPARE(sink.count(), 1);
+    QCOMPARE(sink.last().destinationAddress(), QHostAddress("172.18.2.255"));
+    QCOMPARE(sink.last().destinationPort(), ARTNET_PORT);
+    const QByteArray d = sink.last().data();
+    QCOMPARE(artOpCode(d), ARTNET_DMX);
+    QCOMPARE(artDmxPortAddress(d), 5);
+    QCOMPARE(d.mid(18), QByteArray(512, char(1)));
+
+    // A universe that isn't ours sends nothing
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression("sendDmx: universe 9 not registered"));
+    ctrl->sendDmx(9, QByteArray(512, char(1)), true);
+    QCOMPARE(sink.count(), 1);
+
+    // Input on a universe of its own, then on the output one
+    ctrl->addUniverse(6, ArtNetController::Input);
+    QCOMPARE(int(ctrl->getUniverseInfo(6)->inputUniverse), 6);
+    QCOMPARE(ctrl->getUniverseInfo(6)->type, int(ArtNetController::Input));
+    ctrl->addUniverse(5, ArtNetController::Input);
+    QCOMPARE(ctrl->getUniverseInfo(5)->type, int(ArtNetController::Input | ArtNetController::Output));
+    QCOMPARE(int(ctrl->type()), int(ArtNetController::Input | ArtNetController::Output));
+    QCOMPARE(ctrl->universesList(), QList<quint32>({ 5, 6 }));
+    QVERIFY(ctrl->getUniverseInfo(7) == NULL);
+
+    // Removing one direction keeps the other; removing the last drops it
+    ctrl->removeUniverse(5, ArtNetController::Input);
+    QCOMPARE(ctrl->getUniverseInfo(5)->type, int(ArtNetController::Output));
+    ctrl->removeUniverse(6, ArtNetController::Input);
+    QVERIFY(ctrl->getUniverseInfo(6) == NULL);
+    QCOMPARE(ctrl->universesList(), QList<quint32>({ 5 }));
+}
+
+void ArtNet_Test::transmissionModes()
+{
+    typedef ArtNetController AC;
+    foreach (AC::TransmissionMode m, QList<AC::TransmissionMode>({ AC::Standard, AC::Full, AC::Partial }))
+        QCOMPARE(AC::stringToTransmissionMode(AC::transmissionModeToString(m)), m);
+    QCOMPARE(AC::transmissionModeToString(AC::Full), QString("Full"));
+    QCOMPARE(AC::transmissionModeToString(AC::Partial), QString("Partial"));
+    QCOMPARE(AC::transmissionModeToString(AC::Standard), QString("Standard"));
+    QCOMPARE(AC::stringToTransmissionMode("bogus"), AC::Standard);
+
+    QObject owner;
+    QList<QNetworkDatagram> sink;
+    ArtNetController *ctrl = sinkController(&owner, &sink);
+    ctrl->addUniverse(0, AC::Output);
+    ctrl->addUniverse(1, AC::Output);
+    ctrl->addUniverse(2, AC::Output);
+
+    /* The setters say whether the value is the default, which the plugin
+       stores as "no parameter": a Full or Partial universe must not read
+       as default, or its mode is dropped from the saved workspace. */
+    QCOMPARE(ctrl->setTransmissionMode(1, AC::Full), false);
+    QCOMPARE(ctrl->setTransmissionMode(2, AC::Partial), false);
+    QCOMPARE(ctrl->setTransmissionMode(0, AC::Standard), true);
+    QCOMPARE(ctrl->setTransmissionMode(99, AC::Full), false);
+    QCOMPARE(ctrl->setOutputUniverse(99, 1), false);
+    QCOMPARE(ctrl->setOutputUniverse(0, 0), true);
+    QCOMPARE(ctrl->setInputUniverse(99, 1), false);
+    QCOMPARE(ctrl->setInputUniverse(0, 0), true);
+    QCOMPARE(ctrl->setInputUniverse(0, 4), false);
+    QCOMPARE(ctrl->setOutputIPAddress(99, "172.18.2.10"), false);
+
+    const QByteArray some(24, char(0x33));
+
+    // Standard: the first frame goes out as a whole universe, tail zeroed;
+    // an unchanged one is left to the refresh timer
+    sink.clear();
+    ctrl->sendDmx(0, some, true);
+    QCOMPARE(sink.count(), 1);
+    QByteArray d = sink.last().data();
+    QCOMPARE(artDmxLength(d), 512);
+    QCOMPARE(d.size(), 18 + 512);
+    QCOMPARE(d.mid(18, 24), some);
+    QCOMPARE(d.mid(18 + 24), QByteArray(512 - 24, char(0)));
+    ctrl->sendDmx(0, some, false);
+    QCOMPARE(sink.count(), 1);
+
+    // Full: 512 channels every frame, changed or not
+    ctrl->sendDmx(1, some, false);
+    ctrl->sendDmx(1, some, false);
+    QCOMPARE(sink.count(), 3);
+    d = sink.last().data();
+    QCOMPARE(artDmxPortAddress(d), 1);
+    QCOMPARE(artDmxLength(d), 512);
+    QCOMPARE(d.mid(18, 24), some);
+
+    // Partial: only the channels given (padded to an even count)
+    ctrl->sendDmx(2, some, true);
+    QCOMPARE(sink.count(), 4);
+    d = sink.last().data();
+    QCOMPARE(artDmxPortAddress(d), 2);
+    QCOMPARE(artDmxLength(d), 24);
+    QCOMPARE(d.size(), 18 + 24);
+    ctrl->sendDmx(2, some.left(23), true);
+    d = sink.last().data();
+    QCOMPARE(artDmxLength(d), 24);
+    QCOMPARE(d.size(), 18 + 24);
+}
+
+void ArtNet_Test::standardModeRefreshes()
+{
+    QObject owner;
+    QList<QNetworkDatagram> sink;
+    ArtNetController *ctrl = sinkController(&owner, &sink);
+    ctrl->addUniverse(0, ArtNetController::Output);
+    QVERIFY(ctrl->m_sendTimer.isActive());
+    QCOMPARE(ctrl->m_sendTimer.interval(), 2000);
+
+    ctrl->addUniverse(1, ArtNetController::Output);
+    ctrl->setOutputUniverse(1, 7);
+    ctrl->addUniverse(2, ArtNetController::Output);
+    ctrl->setTransmissionMode(2, ArtNetController::Full);
+    ctrl->addUniverse(3, ArtNetController::Input);
+
+    // Both Standard universes, from an all-zero universe until set
+    ctrl->sendDmx(0, QByteArray(3, char(0x7f)), true);
+    sink.clear();
+    QVERIFY(QMetaObject::invokeMethod(&ctrl->m_sendTimer, "timeout", Qt::DirectConnection));
+    QCOMPARE(sink.count(), 2);
+    QCOMPARE(artDmxPortAddress(sink.at(0).data()), 0);
+    QCOMPARE(sink.at(0).data().mid(18, 4), QByteArray::fromHex("7f7f7f00"));
+    QCOMPARE(artDmxPortAddress(sink.at(1).data()), 7);
+    QCOMPARE(sink.at(1).data().mid(18), QByteArray(512, char(0)));
+    QCOMPARE(sink.at(1).destinationAddress(), QHostAddress("172.18.2.255"));
+
+    // A refresh that fails is announced once, when the universe turns failing
+    QSignalSpy changed(ctrl, SIGNAL(problemsChanged()));
+    ctrl->m_testNowMs = 0;
+    ctrl->m_testSinkFails = true;
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression("universe 1 output to .172\\.18\\.2\\.255. is failing"));
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression("universe 2 output to .172\\.18\\.2\\.255. is failing"));
+    for (int i = 0; i < 4; i++)
+    {
+        QVERIFY(QMetaObject::invokeMethod(ctrl, "slotSendAllUniverses", Qt::DirectConnection));
+        ctrl->m_testNowMs += 600;
+    }
+    QCOMPARE(changed.count(), 1);
+    QCOMPARE(texts(ctrl->outputProblems()).count(), 2);
+}
+
+void ArtNet_Test::dmxSequenceRunsOneTo255PerUniverse()
+{
+    /* Sequence 0 means "not sequenced": a receiver that reorders by it
+       would see every packet from 1 to 255 and back to 1, never 0. */
+    ArtNetPacketizer ap;
+    QByteArray d;
+    for (int u : { 0, 5, 0x105 })
+    {
+        for (int i = 1; i <= 255; i++)
+        {
+            ap.setupArtNetDmx(d, u, QByteArray(2, char(0)));
+            QVERIFY2(uchar(d.at(12)) == i, qPrintable(QString("universe %1 packet %2 had %3")
+                                                       .arg(u).arg(i).arg(uchar(d.at(12)))));
+        }
+        ap.setupArtNetDmx(d, u, QByteArray(2, char(0)));
+        QCOMPARE(int(uchar(d.at(12))), 1);
+    }
+    // Each universe counts on its own
+    ap.setupArtNetDmx(d, 1, QByteArray(2, char(0)));
+    QCOMPARE(int(uchar(d.at(12))), 1);
+    ap.setupArtNetDmx(d, 0, QByteArray(2, char(0)));
+    QCOMPARE(int(uchar(d.at(12))), 2);
+}
+
+void ArtNet_Test::artDmxInputEmitsChangedChannels()
+{
+    QObject owner;
+    QList<QNetworkDatagram> sink;
+    ArtNetController *ctrl = sinkController(&owner, &sink);
+    ctrl->addUniverse(0, ArtNetController::Input);
+    QCOMPARE(ctrl->setInputUniverse(0, 3), false);
+    ctrl->addUniverse(1, ArtNetController::Output);   // output only: not an input
+    ctrl->setInputUniverse(1, 3);
+    QSignalSpy values(ctrl, SIGNAL(valueChanged(quint32,quint32,quint32,uchar)));
+
+    QByteArray dmx(512, char(0));
+    dmx[0] = char(1);
+    dmx[10] = char(0x80);
+    dmx[100] = char(0xff);
+    dmx[511] = char(42);
+    ArtNetPacketizer ap;
+    QByteArray pkt;
+    ap.setupArtNetDmx(pkt, 3, dmx);
+
+    const quint64 before = ctrl->getPacketReceivedNumber();
+    QVERIFY(ctrl->handlePacket(pkt, QHostAddress("172.18.2.10")));
+    QCOMPARE(values.count(), 4);
+    const QList<QPair<int, int> > expect = { { 0, 1 }, { 10, 0x80 }, { 100, 0xff }, { 511, 42 } };
+    for (int i = 0; i < 4; i++)
+    {
+        QCOMPARE(values.at(i).at(0).toUInt(), 0u);                  // QLC+ universe
+        QCOMPARE(values.at(i).at(1).toUInt(), 0u);                  // line
+        QCOMPARE(int(values.at(i).at(2).toUInt()), expect.at(i).first);
+        QCOMPARE(int(values.at(i).at(3).value<uchar>()), expect.at(i).second);
+    }
+    QCOMPARE(ctrl->getPacketReceivedNumber(), before + 1);
+
+    // Nothing changed: nothing said
+    QVERIFY(ctrl->handlePacket(pkt, QHostAddress("172.18.2.10")));
+    QCOMPARE(values.count(), 4);
+
+    // One channel back to 0
+    dmx[10] = char(0);
+    ap.setupArtNetDmx(pkt, 3, dmx);
+    ctrl->handlePacket(pkt, QHostAddress("172.18.2.10"));
+    QCOMPARE(values.count(), 5);
+    QCOMPARE(int(values.last().at(2).toUInt()), 10);
+    QCOMPARE(int(values.last().at(3).value<uchar>()), 0);
+
+    // Another Art-Net universe isn't ours
+    ap.setupArtNetDmx(pkt, 4, QByteArray(512, char(9)));
+    ctrl->handlePacket(pkt, QHostAddress("172.18.2.10"));
+    QCOMPARE(values.count(), 5);
+    QCOMPARE(ctrl->getPacketReceivedNumber(), before + 3);
+}
+
+void ArtNet_Test::pollTimerFollowsOutputs()
+{
+    QObject owner;
+    QList<QNetworkDatagram> sink;
+    ArtNetController *ctrl = sinkController(&owner, &sink);
+
+    // An input doesn't poll
+    ctrl->addUniverse(9, ArtNetController::Input);
+    QVERIFY(!ctrl->m_pollTimer.isActive());
+    QVERIFY(sink.isEmpty());
+
+    // The first output polls at once and every 3 s
+    ctrl->addUniverse(0, ArtNetController::Output);
+    QVERIFY(ctrl->m_pollTimer.isActive());
+    QCOMPARE(ctrl->m_pollTimer.interval(), 3000);
+    QCOMPARE(sink.count(), 1);
+    QCOMPARE(sink.first().data(), QByteArray::fromHex(kArtPollBytes));
+    QCOMPARE(sink.first().destinationAddress(), QHostAddress("172.18.2.255"));
+
+    // A second output: no second poll, and one poll per tick
+    ctrl->addUniverse(1, ArtNetController::Output);
+    QCOMPARE(sink.count(), 1);
+    QVERIFY(QMetaObject::invokeMethod(&ctrl->m_pollTimer, "timeout", Qt::DirectConnection));
+    QCOMPARE(sink.count(), 2);
+    QCOMPARE(sink.last().data(), QByteArray::fromHex(kArtPollBytes));
+
+    // Polling goes on while any output is left
+    ctrl->removeUniverse(0, ArtNetController::Output);
+    QVERIFY(ctrl->m_pollTimer.isActive());
+    QCOMPARE(int(ctrl->type()), int(ArtNetController::Input | ArtNetController::Output));
+    ctrl->removeUniverse(9, ArtNetController::Input);
+    QVERIFY(ctrl->m_pollTimer.isActive());
+    QCOMPARE(int(ctrl->type()), int(ArtNetController::Output));
+
+    // ...and stops with the last one
+    ctrl->removeUniverse(1, ArtNetController::Output);
+    QVERIFY(!ctrl->m_pollTimer.isActive());
+    QCOMPARE(int(ctrl->type()), int(ArtNetController::Unknown));
+    sink.clear();
+    QVERIFY(QMetaObject::invokeMethod(&ctrl->m_pollTimer, "timeout", Qt::DirectConnection));
+    QVERIFY(sink.isEmpty());
+
+    // Opened again: connected once, not twice
+    ctrl->addUniverse(1, ArtNetController::Output);
+    QCOMPARE(sink.count(), 1);
+    QVERIFY(QMetaObject::invokeMethod(&ctrl->m_pollTimer, "timeout", Qt::DirectConnection));
+    QCOMPARE(sink.count(), 2);
+}
+
+void ArtNet_Test::pollBytes()
+{
+    QByteArray poll;
+    ArtNetPacketizer().setupArtNetPoll(poll);
+    QCOMPARE(poll, QByteArray::fromHex(kArtPollBytes));
+
+    quint16 op = 0;
+    QVERIFY(ArtNetPacketizer().checkPacketAndCode(poll, op));
+    QCOMPARE(int(op), ARTNET_POLL);
+    // A bare 12-byte header is a header
+    QVERIFY(ArtNetPacketizer().checkPacketAndCode(poll.left(12), op));
+    QVERIFY(!ArtNetPacketizer().checkPacketAndCode(poll.left(11), op));
+    QByteArray notOurs = poll;
+    notOurs[7] = 'x';
+    QVERIFY(!ArtNetPacketizer().checkPacketAndCode(notOurs, op));
+    QVERIFY(!ArtNetPacketizer().checkPacketAndCode(QByteArray("Art-Nyt") + poll.mid(7), op));
+}
+
+void ArtNet_Test::pollReplyLayout()
+{
+    ArtNetPacketizer ap;
+    QByteArray reply;
+    ap.setupArtNetPollReply(reply, QHostAddress("172.18.2.219"), "02:4D:48:12:02:0A", 0x23, false);
+    QCOMPARE(reply.size(), 239);
+    QCOMPARE(reply.left(10), QByteArray::fromHex("4172742d4e6574000021"));
+    QCOMPARE(int(uchar(reply.at(14))), 0x36);     // port 6454, little end first
+    QCOMPARE(int(uchar(reply.at(15))), 0x19);
+
+    ArtNetNodeInfo info;
+    QVERIFY(ap.fillArtPollReplyInfo(reply, info));
+    QCOMPARE(info.shortName, QString("QLC+"));
+    QCOMPARE(info.longName, QString("Q Light Controller Plus - ArtNet interface"));
+    QCOMPARE(info.ipAddress, QString("172.18.2.219"));
+    QCOMPARE(info.macAddress, QString("02:4D:48:12:02:0A"));
+    QCOMPARE(int(info.firmwareVersion), 0x0420);
+    QCOMPARE(int(info.netSwitch), 0);
+    QCOMPARE(int(info.subSwitch), 2);
+    QCOMPARE(int(info.status1), 0xF0);
+    QCOMPARE(int(info.oemCode), 0xFFFF);
+    QCOMPARE(int(info.estaCode), 0xFFFF);
+    QCOMPARE(info.portsNumber, 1);
+    QCOMPARE(int(info.portTypes[0]), 0x80);
+    QCOMPARE(int(info.goodOutput[0]), 0x80);
+    QCOMPARE(int(info.goodInput[0]), 0);
+    QCOMPARE(int(info.swIn[0]), 0);
+    // The Port-Address the reply announces: Net, Sub-Net, Universe
+    QCOMPARE((info.netSwitch << 8) | (info.subSwitch << 4) | (info.swOut[0] & 0x0f), 0x23);
+    for (int i = 1; i < 4; i++)
+    {
+        QCOMPARE(int(info.portTypes[i]), 0);
+        QCOMPARE(int(info.goodOutput[i]), 0);
+        QCOMPARE(int(info.swOut[i]), 0);
+    }
+    QCOMPARE(info.bindIpAddress, QString("0.0.0.0"));
+    QCOMPARE(int(info.bindIndex), 0);
+    QCOMPARE(int(info.status2), 0);
+
+    // An input port
+    ap.setupArtNetPollReply(reply, QHostAddress("172.18.2.219"), "02:4D:48:12:02:0A", 0x23, true);
+    QCOMPARE(reply.size(), 239);
+    QVERIFY(ap.fillArtPollReplyInfo(reply, info));
+    QCOMPARE(int(info.portTypes[0]), 0x40);
+    QCOMPARE(int(info.goodInput[0]), 0x80);
+    QCOMPARE(int(info.goodOutput[0]), 0);
+    QCOMPARE(int(info.swIn[0] & 0x0f), 3);
+    QCOMPARE(int(info.swOut[0]), 0);
+
+    /* An interface without a hardware address (a VPN tunnel, some USB
+       adapters) still answers with a well-formed reply: the MAC field is
+       six bytes whatever the string held, and the fields after it stay
+       where they belong. */
+    for (const QString &mac : { QString(), QString("02:4D:48") })
+    {
+        ap.setupArtNetPollReply(reply, QHostAddress("172.18.2.219"), mac, 0x23, false);
+        QVERIFY2(reply.size() == 239, qPrintable(QString("MAC '%1': %2 bytes").arg(mac).arg(reply.size())));
+        QVERIFY(ap.fillArtPollReplyInfo(reply, info));
+        QVERIFY(info.macAddress.startsWith(mac.isEmpty() ? "00:00:00" : mac));
+        QVERIFY(info.macAddress.endsWith("00:00:00"));
+    }
+}
+
+void ArtNet_Test::pollIsAnsweredOncePerUniverse()
+{
+    QObject owner;
+    QList<QNetworkDatagram> sink;
+    ArtNetController *ctrl = sinkController(&owner, &sink);
+    ctrl->addUniverse(0, ArtNetController::Input);
+    ctrl->addUniverse(1, ArtNetController::Output);
+    ctrl->setOutputUniverse(1, 0x23);
+    sink.clear();
+    const quint64 sent = ctrl->getPacketSentNumber();
+    const quint64 received = ctrl->getPacketReceivedNumber();
+
+    const QHostAddress asker("172.18.2.50");
+    QVERIFY(ctrl->handlePacket(QByteArray::fromHex(kArtPollBytes), asker));
+    QCOMPARE(sink.count(), 2);
+    ArtNetPacketizer ap;
+    for (int i = 0; i < 2; i++)
+    {
+        const QNetworkDatagram &dg = sink.at(i);
+        QCOMPARE(dg.destinationAddress(), asker);
+        QCOMPARE(dg.destinationPort(), ARTNET_PORT);
+        QCOMPARE(dg.data().size(), 239);
+        ArtNetNodeInfo info;
+        QVERIFY(ap.fillArtPollReplyInfo(dg.data(), info));
+        QCOMPARE(info.ipAddress, QString("172.18.2.219"));
+    }
+    // In universe order: the input, then the output. The second reply is
+    // built afresh, not appended to the first.
+    QCOMPARE(int(uchar(sink.at(0).data().at(174))), 0x40);
+    QCOMPARE(int(uchar(sink.at(1).data().at(174))), 0x80);
+    QCOMPARE(ctrl->getPacketSentNumber(), sent + 2);
+    QCOMPARE(ctrl->getPacketReceivedNumber(), received + 1);
+}
+
+void ArtNet_Test::rdmCommandsGoToThePatchedNode()
+{
+    QObject owner;
+    QList<QNetworkDatagram> sink;
+    ArtNetController *ctrl = sinkController(&owner, &sink);
+    ctrl->addUniverse(0, ArtNetController::Output);
+    QCOMPARE(ctrl->setOutputIPAddress(0, "172.18.2.10"), false);
+    QCOMPARE(ctrl->setOutputUniverse(0, 0x105), false);
+    sink.clear();
+    quint64 sent = ctrl->getPacketSentNumber();
+
+    // Discovery: an ArtTodRequest for the mapped Port-Address, to the node
+    QVERIFY(ctrl->sendRDMCommand(0, DISCOVERY_COMMAND, QVariantList()));
+    QCOMPARE(sink.count(), 1);
+    QByteArray d = sink.last().data();
+    QCOMPARE(sink.last().destinationAddress(), QHostAddress("172.18.2.10"));
+    QCOMPARE(artOpCode(d), ARTNET_TODREQUEST);
+    QCOMPARE(d.size(), 25);
+    QCOMPARE(int(uchar(d.at(21))), 0x01);   // Net
+    QCOMPARE(int(uchar(d.at(22))), 0x00);   // TodFull
+    QCOMPARE(int(uchar(d.at(23))), 0x01);   // AddCount
+    QCOMPARE(int(uchar(d.at(24))), 0x05);   // Address
+    QCOMPARE(ctrl->getPacketSentNumber(), sent + 1);
+
+    // Mute and un-mute mean nothing to Art-Net: not sent
+    QVERIFY(!ctrl->sendRDMCommand(0, DISCOVERY_COMMAND, QVariantList({ QString("ffffffffffff"), PID_DISC_MUTE })));
+    QCOMPARE(sink.count(), 1);
+
+    // A GET: an ArtRdm to the same place
+    QVERIFY(ctrl->sendRDMCommand(0, GET_COMMAND, QVariantList({ QString("7a7000000001"), PID_DMX_START_ADDRESS })));
+    QCOMPARE(sink.count(), 2);
+    d = sink.last().data();
+    QCOMPARE(sink.last().destinationAddress(), QHostAddress("172.18.2.10"));
+    QCOMPARE(artOpCode(d), ARTNET_RDM);
+    QCOMPARE(int(uchar(d.at(21))), 0x01);
+    QCOMPARE(int(uchar(d.at(23))), 0x05);
+    QCOMPARE(d.mid(24, 1), QByteArray(1, char(RDM_SC_SUB_MESSAGE)));
+    QCOMPARE(d.mid(26, 6), QByteArray::fromHex("7a7000000001"));
+    QCOMPARE(ctrl->getPacketSentNumber(), sent + 2);
+
+    // A universe not on this line: the broadcast, its own number
+    QVERIFY(ctrl->sendRDMCommand(3, DISCOVERY_COMMAND, QVariantList()));
+    QCOMPARE(sink.last().destinationAddress(), QHostAddress("172.18.2.255"));
+    QCOMPARE(int(uchar(sink.last().data().at(24))), 3);
+
+    // A held line sends nothing and says so
+    ctrl->m_held.store(true);
+    QVERIFY(!ctrl->sendRDMCommand(0, DISCOVERY_COMMAND, QVariantList()));
+    QCOMPARE(sink.count(), 3);
+    ctrl->m_held.store(false);
+
+    // A write that fails is a failure, not counted
+    sent = ctrl->getPacketSentNumber();
+    ctrl->m_testSinkFails = true;
+    QTest::ignoreMessage(QtWarningMsg, "sendDmx failed");
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression("^Errno:"));
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression("^Errmgs:"));
+    QVERIFY(!ctrl->sendRDMCommand(0, DISCOVERY_COMMAND, QVariantList()));
+    QCOMPARE(ctrl->getPacketSentNumber(), sent);
+}
+
+void ArtNet_Test::rdmRepliesReachTheSignal()
+{
+    QObject owner;
+    QList<QNetworkDatagram> sink;
+    ArtNetController *ctrl = sinkController(&owner, &sink);
+    QSignalSpy rdm(ctrl, SIGNAL(rdmValueChanged(quint32,quint32,QVariantMap)));
+    const QHostAddress node("172.18.2.10");
+
+    // A table of devices: one emit, with every UID
+    QByteArray tod = artHeader(ARTNET_TODDATA, 28)
+                     + QByteArray::fromHex("4d4812345678" "7a70deadbeef");
+    tod[21] = char(0x01);
+    tod[23] = char(0x93);
+    tod[27] = char(2);
+    QVERIFY(ctrl->handlePacket(tod, node));
+    QCOMPARE(rdm.count(), 1);
+    QCOMPARE(rdm.last().at(0).toUInt(), 0x0193u);
+    QVariantMap values = rdm.last().at(2).toMap();
+    QCOMPARE(values.size(), 3);
+    QCOMPARE(values.value("DISCOVERY_COUNT").toInt(), 2);
+    QCOMPARE(values.value("UID-1").toString(), QString("7A70DEADBEEF"));
+
+    // An empty table: the count alone
+    ArtNetPacketizer ap;
+    quint32 universe = 0;
+    values.clear();
+    QVERIFY(ap.processTODdata(artHeader(ARTNET_TODDATA, 28), universe, values));
+    QCOMPARE(values.size(), 1);
+
+    // An RDM answer: one emit
+    QVERIFY(ctrl->handlePacket(artRdmReply(PID_DMX_START_ADDRESS, QByteArray::fromHex("002a")), node));
+    QCOMPARE(rdm.count(), 2);
+    QCOMPARE(rdm.last().at(0).toUInt(), 0x0003u);
+    QVERIFY(!rdm.last().at(2).toMap().isEmpty());
+
+    // A bad checksum: none
+    QByteArray bad = artRdmReply(PID_DMX_START_ADDRESS, QByteArray::fromHex("002a"));
+    bad[bad.size() - 1] = char(bad.at(bad.size() - 1) ^ 0x01);
+    ctrl->handlePacket(bad, node);
+    QCOMPARE(rdm.count(), 2);
+}
+
+void ArtNet_Test::pollTickDrivesTheNodeWatchAndOffSubnetPolls()
+{
+    QObject owner;
+    QList<QNetworkDatagram> sink;
+    ArtNetController *ctrl = sinkController(&owner, &sink);
+    ctrl->m_testNowMs = 0;
+    ctrl->addUniverse(0, ArtNetController::Output);
+    ctrl->setOutputIPAddress(0, "10.0.0.5");            // off this subnet
+    ctrl->addUniverse(1, ArtNetController::Output);
+    ctrl->setOutputIPAddress(1, "172.18.2.10");         // on it: the CR041R
+    ctrl->addUniverse(2, ArtNetController::Input);
+    ctrl->setOutputIPAddress(2, "10.0.0.6");            // input only: no poll
+    ctrl->addUniverse(3, ArtNetController::Output);     // the broadcast
+
+    // One broadcast poll, plus one unicast poll to the off-subnet target
+    sink.clear();
+    QVERIFY(QMetaObject::invokeMethod(ctrl, "slotPollTick", Qt::DirectConnection));
+    QCOMPARE(sink.count(), 2);
+    QCOMPARE(sink.at(0).destinationAddress(), QHostAddress("172.18.2.255"));
+    QCOMPARE(sink.at(1).destinationAddress(), QHostAddress("10.0.0.5"));
+    QCOMPARE(sink.at(1).data(), QByteArray::fromHex(kArtPollBytes));
+
+    // The node watch runs on the same tick: heard, then silent for 4 polls
+    const QHostAddress node("172.18.2.10");
+    for (int i = 0; i < 3; i++)
+    {
+        QVERIFY(QMetaObject::invokeMethod(ctrl, "slotPollTick", Qt::DirectConnection));
+        ctrl->handlePacket(cr041rWith(1, 0x80), node);
+        ctrl->m_testNowMs += kPollMs;
+    }
+    QVERIFY(texts(ctrl->outputProblems(1)).isEmpty());
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression("^\\[ArtNet\\] Art-Net node CR041R \\(172\\.18\\.2\\.10\\): stopped answering"));
+    for (int i = 0; i < 4; i++)
+    {
+        QVERIFY(QMetaObject::invokeMethod(ctrl, "slotPollTick", Qt::DirectConnection));
+        ctrl->m_testNowMs += kPollMs;
+    }
+    const QStringList t = texts(ctrl->outputProblems(1));
+    QCOMPARE(t.count(), 1);
+    QVERIFY2(t.first().startsWith("Art-Net node CR041R (172.18.2.10): stopped answering since "),
+             qPrintable(t.first()));
+}
+
+void ArtNet_Test::checkDataMutexIsFree()
+{
+    m_lockChecks++;
+    if (m_lockCheck->m_dataMutex.tryLock())
+        m_lockCheck->m_dataMutex.unlock();
+    else
+        m_lockHeld++;
+}
+
+void ArtNet_Test::problemsChangedIsNeverEmittedUnderTheLock()
+{
+    /* A listener connected directly (the plugin forwards problemsChanged,
+       and the Connections tree asks for the problems at once) calls back
+       into the controller: emitting with m_dataMutex held deadlocks it. */
+    QObject owner;
+    QList<QNetworkDatagram> sink;
+    ArtNetController *ctrl = sinkController(&owner, &sink);
+    ctrl->addUniverse(0, ArtNetController::Output);
+    m_lockCheck = ctrl;
+    m_lockChecks = m_lockHeld = 0;
+    QVERIFY(connect(ctrl, SIGNAL(problemsChanged()), this, SLOT(checkDataMutexIsFree()),
+                    Qt::DirectConnection));
+
+    ctrl->setOutputIPAddress(0, "");
+    ctrl->setOutputIPAddress(0, "172.18.2.10");
+    QCOMPARE(m_lockChecks, 2);
+
+    ctrl->m_testNowMs = 0;
+    ctrl->m_testSinkFails = true;
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression("universe 1 output to .172\\.18\\.2\\.10. is failing"));
+    for (int i = 0; i < 3; i++)
+    {
+        QVERIFY(QMetaObject::invokeMethod(ctrl, "slotSendAllUniverses", Qt::DirectConnection));
+        ctrl->m_testNowMs += 600;
+    }
+    QCOMPARE(m_lockChecks, 3);
+    ctrl->setOutputIPAddress(0, "172.18.2.11");     // a clean slate
+    ctrl->m_testNowMs = 0;
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression("universe 1 output to .172\\.18\\.2\\.11. is failing"));
+    for (int i = 0; i < 3; i++)
+    {
+        ctrl->sendDmx(0, QByteArray(512, char(i)), true);
+        ctrl->m_testNowMs += 600;
+    }
+    QCOMPARE(m_lockChecks, 5);
+    QCOMPARE(m_lockHeld, 0);
+    disconnect(ctrl, SIGNAL(problemsChanged()), this, SLOT(checkDataMutexIsFree()));
+    m_lockCheck = nullptr;
+}
+
+void ArtNet_Test::steadySendsAnnounceNothing()
+{
+    QObject owner;
+    QList<QNetworkDatagram> sink;
+    ArtNetController *ctrl = sinkController(&owner, &sink);
+    ctrl->addUniverse(0, ArtNetController::Output);
+    ctrl->m_testNowMs = 0;
+    QSignalSpy changed(ctrl, SIGNAL(problemsChanged()));
+    for (int i = 0; i < 100; i++)
+    {
+        ctrl->sendDmx(0, QByteArray(512, char(i)), true);
+        ctrl->m_testNowMs += 23;
+    }
+    QCOMPARE(sink.count(), 1 + 100);    // the first poll, then the frames
+    QCOMPARE(changed.count(), 0);
+    QVERIFY(!ctrl->reportSendResult(ctrl->m_universeMap[0], 0, QHostAddress("172.18.2.255"), true));
+}
+
+void ArtNet_Test::pollReplyOptionalFields()
+{
+    ArtNetPacketizer ap;
+    ArtNetNodeInfo info;
+    const QByteArray reply(cr041rPollReply, sizeof(cr041rPollReply));
+    QVERIFY(ap.fillArtPollReplyInfo(reply, info));
+    QCOMPARE(info.nodeReport, QString("0006 [8443] ArtNet"));
+    QCOMPARE(int(info.reportCode), 6);
+    QCOMPARE(int(info.bindIndex), 1);
+    QCOMPARE(info.bindIpAddress, QString("172.18.2.10"));
+    QCOMPARE(int(info.status2), 0x08);
+
+    /* An older node stops after BindIndex: Status2 and its DHCP bits are 0,
+       not left as they were */
+    info.status2 = 0xff;
+    info.dhcpCapable = info.dhcpConfigured = true;
+    QVERIFY(ap.fillArtPollReplyInfo(reply.left(212), info));
+    QCOMPARE(int(info.bindIndex), 1);
+    QCOMPARE(info.bindIpAddress, QString("172.18.2.10"));
+    QCOMPARE(int(info.status2), 0);
+    QCOMPARE(info.dhcpCapable, false);
+    QCOMPARE(info.dhcpConfigured, false);
+    QVERIFY(!ap.fillArtPollReplyInfo(reply.left(211), info));
+
+    // A name is cut at its NUL, whatever follows it
+    QByteArray junk = reply;
+    junk[26] = char(0);
+    QVERIFY(ap.fillArtPollReplyInfo(junk, info));
+    QVERIFY(info.shortName.isEmpty());
+
+    // A report with a '#' code
+    QByteArray hashed = reply;
+    const QByteArray rep("#0007 [0001] renamed");
+    hashed.replace(108, rep.size(), rep);
+    QVERIFY(ap.fillArtPollReplyInfo(hashed, info));
+    QCOMPARE(int(info.reportCode), 7);
+}
+
+void ArtNet_Test::ipProgReplyBoundaries()
+{
+    ArtNetPacketizer ap;
+    QByteArray data = artHeader(ARTNET_IPREPLY, 34);
+    data.replace(16, 4, QByteArray::fromHex("0a000005"));
+    data.replace(20, 4, QByteArray::fromHex("ff000000"));
+    data[26] = char(0x00);                                   // static
+    data.replace(28, 4, QByteArray::fromHex("0a000001"));
+
+    ArtNetIpProgReply reply;
+    reply.dhcpEnabled = true;
+    QVERIFY(ap.fillArtIpProgReply(data, reply));
+    QCOMPARE(reply.dhcpEnabled, false);
+    QCOMPARE(reply.ip, QHostAddress("10.0.0.5"));
+    QCOMPARE(reply.gateway, QHostAddress("10.0.0.1"));
+
+    QVERIFY(ap.fillArtIpProgReply(data.left(27), reply));    // up to Status
+    QCOMPARE(reply.hasGateway, false);
+    QVERIFY(!ap.fillArtIpProgReply(data.left(26), reply));
+    QVERIFY(ap.fillArtIpProgReply(data.left(32), reply));
+    QCOMPARE(reply.hasGateway, true);
+    QCOMPARE(reply.gateway, QHostAddress("10.0.0.1"));
+    QVERIFY(ap.fillArtIpProgReply(data.left(31), reply));
+    QCOMPARE(reply.hasGateway, false);
+
+    // Through the controller: the plugin hears it, the counter goes up
+    QObject owner;
+    QList<QNetworkDatagram> sink;
+    ArtNetController *ctrl = sinkController(&owner, &sink);
+    QSignalSpy replied(ctrl, SIGNAL(ipProgReplied(QString,ArtNetIpProgReply)));
+    const quint64 before = ctrl->getPacketReceivedNumber();
+    QVERIFY(ctrl->handlePacket(data, QHostAddress("10.0.0.5")));
+    QCOMPARE(replied.count(), 1);
+    QCOMPARE(replied.last().at(0).toString(), QString("10.0.0.5"));
+    QCOMPARE(ctrl->getPacketReceivedNumber(), before + 1);
+}
+
+void ArtNet_Test::legacyPartialOutputIPs()
+{
+    /* Old workspaces saved only the host part of the output address: it is
+       completed from this line's own address. */
+    QObject owner;
+    QList<QNetworkDatagram> sink;
+    ArtNetController *ctrl = sinkController(&owner, &sink);
+    ctrl->addUniverse(0, ArtNetController::Output);
+
+    QCOMPARE(ctrl->setOutputIPAddress(0, "10"), false);
+    QCOMPARE(ctrl->getUniverseInfo(0)->outputAddress, QHostAddress("172.18.2.10"));
+    QCOMPARE(ctrl->setOutputIPAddress(0, "3.11"), false);
+    QCOMPARE(ctrl->getUniverseInfo(0)->outputAddress, QHostAddress("172.18.3.11"));
+    QCOMPARE(ctrl->setOutputIPAddress(0, "255"), true);       // our broadcast
+    QCOMPARE(ctrl->getUniverseInfo(0)->outputAddress, QHostAddress("172.18.2.255"));
+    QCOMPARE(ctrl->setOutputIPAddress(0, "192.168.1.20"), false);
+    QCOMPARE(ctrl->getUniverseInfo(0)->outputAddress, QHostAddress("192.168.1.20"));
+    // Not an address at all: nowhere, and no crash (five octets indexed
+    // before the start of the line's own four)
+    ctrl->setOutputIPAddress(0, "1.2.3.4.5");
+    QVERIFY(ctrl->getUniverseInfo(0)->outputAddress.isNull());
+    QCOMPARE(ctrl->setOutputIPAddress(0, ""), true);          // back to the default
+    QCOMPARE(ctrl->getUniverseInfo(0)->outputAddress, QHostAddress("172.18.2.255"));
+}
+
+void ArtNet_Test::failedWritesAreReported()
+{
+    QObject owner;
+    QList<QNetworkDatagram> sink;
+    ArtNetController *ctrl = sinkController(&owner, &sink);
+    const quint64 sent = ctrl->getPacketSentNumber();
+
+    // Counted when they go
+    ArtNetIpProgRequest query;
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression("ArtIpProg \\(query\\)"));
+    QVERIFY(ctrl->sendIpProg(QHostAddress("172.18.2.10"), query));
+    QCOMPARE(ctrl->getPacketSentNumber(), sent + 1);
+    ctrl->sendPollTo(QHostAddress("10.0.0.5"));
+    QCOMPARE(ctrl->getPacketSentNumber(), sent + 2);
+    ctrl->sendPollTo(QHostAddress());
+    QCOMPARE(sink.count(), 2);
+
+    // Failures: reported to the caller, not counted; the periodic unicast
+    // poll stays quiet, an explicit one warns
+    ctrl->m_testSinkFails = true;
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression("ArtIpProg \\(query\\)"));
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression("ArtIpProg to .172\\.18\\.2\\.10. failed"));
+    QVERIFY(!ctrl->sendIpProg(QHostAddress("172.18.2.10"), query));
+    QTest::failOnWarning(QRegularExpression("Unable to send Poll packet to .10\\.0\\.0\\.6"));
+    ctrl->sendPollTo(QHostAddress("10.0.0.6"), true);
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression("Unable to send Poll packet to .10\\.0\\.0\\.5"));
+    ctrl->sendPollTo(QHostAddress("10.0.0.5"));
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression("Unable to send Poll packet: errno="));
+    ctrl->sendPoll();
+    QCOMPARE(ctrl->getPacketSentNumber(), sent + 2);
+}
+
+void ArtNet_Test::socketBound()
+{
+    QNetworkAddressEntry entry;
+    entry.setIp(QHostAddress::LocalHost);
+    entry.setPrefixLength(8);
+    QSharedPointer<QUdpSocket> sock(new QUdpSocket());
+    ArtNetController ctrl(QNetworkInterface(), entry, sock, 0);
+    QVERIFY(!ctrl.socketBound());
+    QVERIFY(sock->bind(QHostAddress::LocalHost, 0));
+    QVERIFY(ctrl.socketBound());
+}

@@ -42,6 +42,7 @@ ArtNetController::ArtNetController(QNetworkInterface const& iface, QNetworkAddre
     , m_address(address)
     , m_ipAddr(address.ip())
     , m_testSink(NULL)
+    , m_testSinkFails(false)
     , m_testNowMs(-1)
     , m_packetSent(0)
     , m_packetReceived(0)
@@ -754,6 +755,8 @@ qint64 ArtNetController::writeDatagram(const QNetworkDatagram &dg)
 
     if (m_testSink != NULL)
     {
+        if (m_testSinkFails)
+            return -1;
         m_testSink->append(dg);
         return dg.data().size();
     }

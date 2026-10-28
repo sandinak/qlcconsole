@@ -22,6 +22,8 @@
 
 #include <QObject>
 
+class ArtNetController;
+
 class ArtNet_Test final : public QObject
 {
     Q_OBJECT
@@ -109,6 +111,39 @@ private slots:
     void rdmEveryTruncationIsDropped();
     void rdmFuzzCrashesAreDroppedQuietly();
     void malformedPacketsThroughTheController();
+
+    /* The controller's send and receive paths, byte for byte (coverage
+       campaign: the mutation survivors of matrix 2). Every send goes to a
+       test sink; nothing leaves. */
+    void addUniverseMapsItsOwnUniverse();
+    void transmissionModes();
+    void standardModeRefreshes();
+    void dmxSequenceRunsOneTo255PerUniverse();
+    void artDmxInputEmitsChangedChannels();
+    void pollTimerFollowsOutputs();
+    void pollBytes();
+    void pollReplyLayout();
+    void pollIsAnsweredOncePerUniverse();
+    void rdmCommandsGoToThePatchedNode();
+    void rdmRepliesReachTheSignal();
+    void pollTickDrivesTheNodeWatchAndOffSubnetPolls();
+    void problemsChangedIsNeverEmittedUnderTheLock();
+    void steadySendsAnnounceNothing();
+    void pollReplyOptionalFields();
+    void ipProgReplyBoundaries();
+    void legacyPartialOutputIPs();
+    void failedWritesAreReported();
+    void socketBound();
+
+public slots:
+    /* Not a test: connected to problemsChanged() by
+       problemsChangedIsNeverEmittedUnderTheLock(). */
+    void checkDataMutexIsFree();
+
+private:
+    ArtNetController *m_lockCheck = nullptr;
+    int m_lockChecks = 0;
+    int m_lockHeld = 0;
 };
 
 #endif

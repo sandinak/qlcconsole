@@ -260,6 +260,10 @@ private:
      *  nothing a test does should reach a real network. */
     QList<QNetworkDatagram> *m_testSink;
 
+    /** With m_testSink: writeDatagram() records nothing and fails (-1), as
+     *  a write to an unreachable target does. Tests only. */
+    bool m_testSinkFails;
+
     /** When >= 0, the time nowMs() returns instead of the clock. Tests only. */
     qint64 m_testNowMs;
 
