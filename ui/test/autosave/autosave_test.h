@@ -51,6 +51,11 @@ private slots:
     void aRecoveryFileIsKeptWhenThereIsNobodyToAsk();
     /** Saved, or discarded on purpose: the recovery copy goes */
     void savingOrDiscardingRemovesTheRecoveryCopy();
+    /** A show sent over web access (/loadProject): what is not a show
+     *  leaves the open one as it was; a show replaces it and is marked as
+     *  from the web, until a show is opened from a file */
+    void aWebLoadThatIsNotAShowKeepsTheShow();
+    void aWebLoadReplacesTheShowAndIsMarkedFromTheWeb();
 
 private:
     App *m_app;

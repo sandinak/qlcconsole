@@ -381,5 +381,74 @@ void Autosave_Test::savingOrDiscardingRemovesTheRecoveryCopy()
     QVERIFY(!QFile::exists(copy));
 }
 
+void Autosave_Test::aWebLoadThatIsNotAShowKeepsTheShow()
+{
+    Doc *doc = m_app->doc();
+    doc->clearContents();
+    auto tidy = qScopeGuard([doc]() { doc->clearContents(); });
+    Fixture *f = new Fixture(doc);
+    f->setName("Kept");
+    f->setChannels(1);
+    QVERIFY(doc->addFixture(f));
+
+    m_app->slotLoadDocFromMemory(QString());
+    QCOMPARE(doc->fixtures().size(), 1);
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression("doesn't have a Workspace tag"));
+    m_app->slotLoadDocFromMemory("<!DOCTYPE html><html><body>not a show</body></html>");
+    QCOMPARE(doc->fixtures().size(), 1);
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression("doesn't have a Workspace tag"));
+    m_app->slotLoadDocFromMemory("<?xml version=\"1.0\"?><Workspace><Engine/></Workspace>");   // no DTD
+    QCOMPARE(doc->fixtures().size(), 1);
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression("XML has errors"));
+    m_app->slotLoadDocFromMemory("<?xml version=\"1.0\"?><!DOCTYPE Workspace<<<");
+    QCOMPARE(doc->fixtures().size(), 1);
+    QCOMPARE(doc->fixtures().first()->name(), QString("Kept"));
+    QVERIFY(!doc->loadedFromWeb());
+}
+
+void Autosave_Test::aWebLoadReplacesTheShowAndIsMarkedFromTheWeb()
+{
+    Doc *doc = m_app->doc();
+    doc->clearContents();
+    auto tidy = qScopeGuard([doc]() { doc->clearContents(); doc->setLoadedFromWeb(false); });
+
+    // A show of three fixtures, as a file
+    QTemporaryDir dir;
+    const QString path = dir.filePath("Web.qxw");
+    for (int i = 0; i < 3; ++i)
+    {
+        Fixture *f = new Fixture(doc);
+        f->setName(QString("Web %1").arg(i + 1));
+        f->setChannels(2);
+        f->setAddress(quint32(i) * 2);
+        QVERIFY(doc->addFixture(f));
+    }
+    QCOMPARE(m_app->saveXML(path), QFile::NoError);
+    QFile file(path);
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    const QString xml = QString::fromUtf8(file.readAll());
+    file.close();
+
+    // The open show is something else
+    doc->clearContents();
+    Fixture *other = new Fixture(doc);
+    other->setName("Before");
+    other->setChannels(1);
+    QVERIFY(doc->addFixture(other));
+
+    m_app->slotLoadDocFromMemory(xml);
+    QCOMPARE(doc->fixtures().size(), 3);
+    QCOMPARE(doc->fixtures().first()->name(), QString("Web 1"));
+    QVERIFY(doc->loadedFromWeb());                  // its scripts run no programs
+
+    // Opened from a file, or a new show: the operator's again
+    QCOMPARE(m_app->loadXML(path), QFile::NoError);
+    QVERIFY(!doc->loadedFromWeb());
+    m_app->slotLoadDocFromMemory(xml);
+    QVERIFY(doc->loadedFromWeb());
+    m_app->clearDocument();
+    QVERIFY(!doc->loadedFromWeb());
+}
+
 QTEST_MAIN(Autosave_Test)
 
