@@ -151,6 +151,18 @@ private slots:
      *  trims and targets, a practice from it goes back to it, and the one
      *  sidecar has the new name only. */
     void renamingAVenueKeepsEverything();
+    /** jumpTo the light already picked, from the whole call, picks it
+     *  alone; a jump leaves the target page; a stick straight across or
+     *  straight up moves the target that way. */
+    void aJumpLeavesTheTargetPageAndTheWholeCall();
+    /** Stepping flashes the light stepped to; a hold ends the flash, and
+     *  the release doesn't bring it back. */
+    void aStepFlashesAndAHoldEndsTheFlash();
+    /** A call's fixtures in stage order by default, as listed with AsGiven. */
+    void callsRunInStageOrder();
+    /** Calls starting: starting(), the first call, then started(); the
+     *  whole of a call with no "who" is said as "All N". */
+    void callsStartingAreToldFirst();
 
 private:
     Doc *m_doc = nullptr;

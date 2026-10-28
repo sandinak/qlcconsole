@@ -2727,3 +2727,133 @@ void FocusCalls_Test::renamingAVenueKeepsEverything()
     QVERIFY(!xml.contains(dated.toUtf8() + "\""));
     QCOMPARE(QDir(m_dir->path()).entryList({ "*.venues.xml" }).size(), 1);
 }
+
+void FocusCalls_Test::aJumpLeavesTheTargetPageAndTheWholeCall()
+{
+    Fixture *a = makeSpot(m_doc, "A", 2.0f, 2.0f);
+    Fixture *b = makeSpot(m_doc, "B", 4.0f, 2.0f);
+    StageTarget *dsc = makeTarget(m_doc, "DSC", QVector3D(5.0f, 6.0f, 0.0f));
+    FocusSession::Call c;
+    c.name = "Spots";
+    c.fixtures = { a->id(), b->id() };
+    c.target = targetRef(dsc->id());
+    FocusSession *s = m_doc->programmer()->focusSession();
+    FocusSession::Options o;
+    o.calls = { c };
+    o.order = FocusSession::AsGiven;
+    QVERIFY(s->start(o));
+    QCOMPARE(s->currentFixture(), a->id());
+
+    // From the whole call, the light already picked: that light, alone.
+    s->setScope(FocusSession::GroupScope);
+    QVERIFY(s->jumpTo(a->id()));
+    QCOMPARE(s->scope(), FocusSession::FixtureScope);
+
+    // A light picked on the plot leaves the target page (nothing moved on it).
+    QVERIFY(s->toggleTargetPage());
+    QVERIFY(s->jumpTo(b->id()));
+    QVERIFY(!s->isTargetPage());
+    QCOMPARE(s->currentFixture(), b->id());
+    // So the stick moves the light again, not the target.
+    s->nudge(1.0f, 0.0f);
+    QCOMPARE(s->liveOffset(b->id()).pan, 1.0f);
+    QVERIFY((dsc->position() - QVector3D(5.0f, 6.0f, 0.0f)).length() < 0.001f);
+
+    // On the page, a stick straight across moves the target straight across,
+    // and straight up moves it straight upstage.
+    QVERIFY(s->toggleTargetPage());
+    s->nudge(10.0f, 0.0f);
+    QVERIFY((dsc->position() - QVector3D(6.0f, 6.0f, 0.0f)).length() < 0.001f);
+    s->nudge(0.0f, 5.0f);
+    QVERIFY((dsc->position() - QVector3D(6.0f, 6.5f, 0.0f)).length() < 0.001f);
+    s->revertTarget();
+    QVERIFY((dsc->position() - QVector3D(5.0f, 6.0f, 0.0f)).length() < 0.001f);
+    s->stop();
+}
+
+void FocusCalls_Test::aStepFlashesAndAHoldEndsTheFlash()
+{
+    Fixture *a = makeSpot(m_doc, "A", 2.0f, 2.0f);
+    Fixture *b = makeSpot(m_doc, "B", 4.0f, 2.0f);
+    StageTarget *dsc = makeTarget(m_doc, "DSC", QVector3D(5.0f, 6.0f, 0.0f));
+    FocusSession *s = m_doc->programmer()->focusSession();
+    FocusSession::Options o;
+    o.fixtures = { a->id(), b->id() };
+    o.first = targetRef(dsc->id());
+    o.order = FocusSession::AsGiven;
+    QVERIFY(s->start(o));
+    QVERIFY(!s->isFlashing());                  // started with the flash off
+
+    // Each light stepped to flashes, so the crew can find it.
+    s->setFlashEnabled(true);
+    s->next();
+    QCOMPARE(s->currentFixture(), b->id());
+    QVERIFY(s->isFlashing());
+
+    // A hold ends the flash: every light steady as it is, none caught dark.
+    s->setHolding(true);
+    QVERIFY(!s->isFlashing());
+    QCOMPARE(int(s->pendingWrites().value(qMakePair(0, int(b->address()) + 2))), qRound(0.8 * 255));
+    // Released, it doesn't pick the flash up again.
+    s->setHolding(false);
+    QVERIFY(!s->isFlashing());
+    s->previous();
+    QCOMPARE(s->currentFixture(), a->id());
+    QVERIFY(s->isFlashing());
+    s->setHolding(true);
+    s->setHolding(false);
+    s->stop();
+}
+
+void FocusCalls_Test::callsRunInStageOrder()
+{
+    // Listed stage left first; house left (stage right, -X) comes first.
+    Fixture *left = makeSpot(m_doc, "House left", 2.0f, 2.0f);
+    Fixture *right = makeSpot(m_doc, "House right", 6.0f, 2.0f);
+    StageTarget *dsc = makeTarget(m_doc, "DSC", QVector3D(5.0f, 6.0f, 0.0f));
+    FocusSession::Call c;
+    c.name = "Spots";
+    c.fixtures = { right->id(), left->id() };
+    c.target = targetRef(dsc->id());
+    FocusSession *s = m_doc->programmer()->focusSession();
+    FocusSession::Options o;
+    o.calls = { c };
+    QVERIFY(s->start(o));                       // by stage position: the default
+    QCOMPARE(s->order(), QList<quint32>({ left->id(), right->id() }));
+    QCOMPARE(s->currentFixture(), left->id());
+    s->stop();
+
+    o.order = FocusSession::AsGiven;
+    QVERIFY(s->start(o));
+    QCOMPARE(s->order(), QList<quint32>({ right->id(), left->id() }));
+    QCOMPARE(s->currentFixture(), right->id());
+    s->stop();
+}
+
+void FocusCalls_Test::callsStartingAreToldFirst()
+{
+    Fixture *a = makeSpot(m_doc, "A", 2.0f, 2.0f);
+    Fixture *b = makeSpot(m_doc, "B", 4.0f, 2.0f);
+    StageTarget *dsc = makeTarget(m_doc, "DSC", QVector3D(5.0f, 6.0f, 0.0f));
+    FocusSession::Call c;
+    c.name = "Spots";                           // no "who"
+    c.fixtures = { a->id(), b->id() };
+    c.target = targetRef(dsc->id());
+    FocusSession *s = m_doc->programmer()->focusSession();
+
+    // starting (the "no controller" line) before the first call, then started.
+    QStringList told;
+    QObject ctx;
+    connect(s, &FocusSession::starting, &ctx, [&told]() { told << "starting"; });
+    connect(s, &FocusSession::callChanged, &ctx, [&told](int i) { told << QString("call %1").arg(i); });
+    connect(s, &FocusSession::started, &ctx, [&told]() { told << "started"; });
+    FocusSession::Options o;
+    o.calls = { c };
+    QVERIFY(s->start(o));
+    QCOMPARE(told, QStringList({ "starting", "call 0", "started" }));
+
+    // The whole call, with no "who" to name it: "All 2" is said first.
+    s->setScope(FocusSession::GroupScope);
+    QVERIFY2(s->lightPhrase().startsWith("All 2"), qPrintable(s->lightPhrase()));
+    s->stop();
+}
