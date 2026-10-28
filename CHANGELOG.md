@@ -40,6 +40,16 @@ back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
   fixtures, groups, channel groups, palettes and functions whole: QLC+
   4.14.4's own engine, built from a pinned copy of its source, reads a
   show the app saved (ui/test/stockroundtrip).
+- **Always start with the plot locked**, in the menu on the Lighting
+  Studio's lock button (off by default; this computer's): every show you
+  open starts with its whole plot locked, without being marked changed.
+- **Plot layers shows what holds each thing still.** While the plot is
+  locked, every layer's lock is drawn held from above (the padlock faded,
+  an up-arrow badge, a dashed outline, "Locked by the plot") with the
+  layer's own lock still readable under it, and unlocking the plot puts
+  back exactly what each layer had. An object held by its layer or folder
+  shows ↑🔒, one locked on its own 🔒; its tooltip names every lock
+  holding it, and the plot's right-click menu says when the plot does.
 
 ### Changed
 

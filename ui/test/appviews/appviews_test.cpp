@@ -66,6 +66,7 @@
 #include "fixture.h"
 #include "doc.h"
 #include "monitor.h"
+#include "monitorgraphicsview.h"
 #include "monitorproperties.h"
 #define protected public
 #include "app.h"
@@ -2980,6 +2981,43 @@ void AppViews_Test::theDmxMonitorIsInClassic()
 
 /* 0.3.1 (k) 4: a QLC+ 4 user can have new shows start in Classic. A
    setting of this computer, off by default; an opened show keeps its own. */
+void AppViews_Test::aShowOpensLockedWhenTheUserAsks()
+{
+    const bool was = Monitor::startPlotLocked();
+    const auto restore = qScopeGuard([was]() { Monitor::setStartPlotLocked(was); });
+
+    // A show saved with its plot open.
+    QTemporaryDir dir;
+    const QString show = dir.filePath(QStringLiteral("open-plot.qlcc"));
+    m_app->clearDocument();
+    MonitorProperties *mp = m_app->doc()->monitorProperties();
+    mp->setLayoutLocked(false);
+    const quint32 lyr = mp->addLayer(QStringLiteral("Booms"));
+    Q_UNUSED(lyr);
+    QCOMPARE(m_app->saveXML(show), QFile::NoError);
+
+    // Off (the default): it opens as saved.
+    Monitor::setStartPlotLocked(false);
+    QCOMPARE(m_app->loadXML(show), QFile::NoError);
+    QVERIFY(!m_app->doc()->monitorProperties()->layoutLocked());
+    QVERIFY(Monitor::instance() != nullptr);
+    QVERIFY(!Monitor::instance()->findChild<MonitorGraphicsView *>()->layoutLocked());
+
+    // On: the whole plot locked as it opens; the show is not "changed".
+    Monitor::setStartPlotLocked(true);
+    QCOMPARE(m_app->loadXML(show), QFile::NoError);
+    mp = m_app->doc()->monitorProperties();
+    QVERIFY(mp->layoutLocked());
+    QVERIFY(!m_app->doc()->isModified());
+    Monitor *mon = Monitor::instance();
+    QVERIFY(mon->findChild<MonitorGraphicsView *>()->layoutLocked());
+    // Each layer's own lock as saved, under the plot's.
+    for (const MonitorProperties::MonitorLayer &l : mp->layers())
+        if (l.name == QStringLiteral("Booms"))
+            QVERIFY(!l.locked);
+    m_app->clearDocument();
+}
+
 void AppViews_Test::newShowsCanStartInClassic()
 {
     const QVariant was = QSettings().value(App::newShowsClassicSettingKey());

@@ -46,6 +46,7 @@
 #include <QMenu>
 #include <QCheckBox>
 #include <QScopeGuard>
+#include <QToolBar>
 #include <QDialog>
 #include <QDockWidget>
 #include <QTreeWidget>
@@ -74,6 +75,7 @@
 #include "effectscriptrunner.h"
 #include "effectscriptcache.h"
 #include "monitorlayerspanel.h"
+#include "itemlock.h"
 #include "monitorinventorypanel.h"
 #include "networktopologydialog.h"
 #include "networkreportdialog.h"
@@ -1808,6 +1810,265 @@ void Monitor_Test::stageMarksAreDrawnOnThePlotAndTheOverview()
         props->setStageMarks(MonitorProperties::NoStageMarks);
         props->removeTruss(fohOver->id());
     }
+    delete doc;
+}
+
+/*****************************************************************************
+ * a0: plot locking -- start locked, and what holds a layer or an object
+ *****************************************************************************/
+
+void Monitor_Test::alwaysStartLockedLocksAnOpenedShow()
+{
+    const bool was = Monitor::startPlotLocked();
+    auto restore = qScopeGuard([was]() { Monitor::setStartPlotLocked(was); });
+
+    // Off (the default): a show opens as it was saved.
+    Monitor::setStartPlotLocked(false);
+    {
+        Doc *doc = new Doc(this);
+        doc->monitorProperties()->setLayoutLocked(false);
+        doc->resetModified();
+        Monitor::applyStartPlotLock(doc);
+        QVERIFY(!doc->monitorProperties()->layoutLocked());
+        delete doc;
+    }
+
+    // On: the show opens with its whole plot locked, and is not "changed".
+    Monitor::setStartPlotLocked(true);
+    QVERIFY(QSettings().value("monitor/startPlotLocked").toBool());
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    props->setLayoutLocked(false);
+    const quint32 lyr = props->addLayer("Upper");
+    doc->resetModified();
+    Monitor::applyStartPlotLock(doc);
+    QVERIFY(props->layoutLocked());
+    QVERIFY(!doc->isModified());
+    QVERIFY(!props->layer(lyr).locked);           // a layer's own lock is left alone
+
+    {
+        QWidget parent;
+        Monitor mon(&parent, doc);
+        QVERIFY(mon.m_graphicsView->layoutLocked());
+        QVERIFY(mon.m_lockAction->isChecked());
+        QCOMPARE(mon.m_lockAction->text(), QString("Plot Locked"));
+        // The setting is in the lock button's own menu.
+        QVERIFY(mon.m_startLockedAction != nullptr);
+        QVERIFY(mon.m_lockAction->menu() != nullptr);
+        QVERIFY(mon.m_lockAction->menu()->actions().contains(mon.m_startLockedAction));
+        QVERIFY(mon.m_startLockedAction->isChecked());
+        QToolButton *btn = qobject_cast<QToolButton *>(
+            mon.m_graphicsToolBar->widgetForAction(mon.m_lockAction));
+        QVERIFY(btn != nullptr);
+        QCOMPARE(btn->popupMode(), QToolButton::MenuButtonPopup);
+
+        // Turned off from that menu: stored for the next show.
+        mon.m_startLockedAction->setChecked(false);
+        QVERIFY(!Monitor::startPlotLocked());
+        // The plot open now stays locked until it is unlocked.
+        QVERIFY(mon.m_graphicsView->layoutLocked());
+    }
+    delete doc;
+}
+
+namespace
+{
+/* The lock switch on the Layers row of layer @p id. */
+QToolButton *layerLockButton(MonitorLayersPanel *panel, quint32 id)
+{
+    for (int i = 0; i < panel->m_tree->topLevelItemCount(); ++i)
+    {
+        QTreeWidgetItem *row = panel->m_tree->topLevelItem(i);
+        if (row->data(0, Qt::UserRole + 1).toUInt() != id)
+            continue;
+        QWidget *w = panel->m_tree->itemWidget(row, 1);
+        return w != nullptr ? w->findChild<QToolButton *>(QStringLiteral("layerLock")) : nullptr;
+    }
+    return nullptr;
+}
+
+QTreeWidgetItem *objectRow(MonitorLayersPanel *panel, const QString &kind, quint32 id)
+{
+    for (QTreeWidgetItemIterator it(panel->m_tree); *it != nullptr; ++it)
+        if ((*it)->data(0, Qt::UserRole).toInt() == int(MonitorLayersPanel::NodeItem)
+            && (*it)->data(0, Qt::UserRole + 2).toString() == kind
+            && (*it)->data(0, Qt::UserRole + 1).toUInt() == id)
+            return *it;
+    return nullptr;
+}
+} // namespace
+
+void Monitor_Test::layersShowTheirLockHeldByThePlot()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    props->setLayoutLocked(false);
+    const quint32 free = props->addLayer("Free");
+    const quint32 fixed = props->addLayer("Fixed");
+    props->setLayerLocked(fixed, true);
+
+    QWidget parent;
+    Monitor *mon = new Monitor(&parent, doc);
+    MonitorLayersPanel *panel = mon->m_layersPanel;
+    QVERIFY(panel != nullptr);
+    panel->reload();
+
+    // Every layer's switch, as each one is on its own.
+    QHash<quint32, bool> own;
+    for (const MonitorProperties::MonitorLayer &l : props->layers())
+        own.insert(l.id, l.locked);
+    auto check = [&](bool plot, const char *why) {
+        for (const MonitorProperties::MonitorLayer &l : props->layers())
+        {
+            QToolButton *lock = layerLockButton(panel, l.id);
+            QVERIFY2(lock != nullptr, why);
+            const QString what = QString("%1, layer %2").arg(why, l.name);
+            QVERIFY2(lock->isChecked() == own.value(l.id), qPrintable(what + ": its own lock changed"));
+            QVERIFY2(props->layer(l.id).locked == own.value(l.id), qPrintable(what + ": the model changed"));
+            QVERIFY2(lock->property("ownLocked").toBool() == own.value(l.id), qPrintable(what));
+            if (plot)
+            {
+                QCOMPARE(lock->property("lockHold").toString(), QString("held"));
+                QVERIFY2(!lock->icon().isNull() && lock->text().isEmpty(),
+                         qPrintable(what + ": not drawn as held from above"));
+                QVERIFY2(lock->toolTip().contains("Locked by the plot"), qPrintable(lock->toolTip()));
+                QVERIFY2(lock->toolTip().contains(own.value(l.id) ? "locked on its own"
+                                                                  : "own lock is off"),
+                         qPrintable(lock->toolTip()));
+                QVERIFY2(lock->styleSheet().contains("dashed"), qPrintable(lock->styleSheet()));
+            }
+            else
+            {
+                QCOMPARE(lock->property("lockHold").toString(),
+                         own.value(l.id) ? QString("own") : QString());
+                QVERIFY(lock->icon().isNull());
+                QVERIFY(!lock->text().isEmpty());
+                QVERIFY(!lock->toolTip().contains("plot"));
+            }
+        }
+    };
+    check(false, "plot open");
+
+    // Plot Locked: every row held by the plot, the free layer too.
+    mon->m_lockAction->setChecked(true);
+    QVERIFY(mon->m_graphicsView->layoutLocked());
+    check(true, "plot locked");
+    QVERIFY(layerLockButton(panel, free)->toolTip().contains("own lock is off"));
+    QVERIFY(layerLockButton(panel, fixed)->toolTip().contains("locked on its own"));
+
+    // A layer's own switch still works under the hold, and is kept.
+    layerLockButton(panel, free)->click();
+    QVERIFY(props->layer(free).locked);
+    own[free] = true;
+    check(true, "plot locked, Free locked on its own");
+    layerLockButton(panel, free)->click();
+    QVERIFY(!props->layer(free).locked);
+    own[free] = false;
+    check(true, "plot locked, Free unlocked again");
+
+    // Unlocked: exactly what each layer had.
+    mon->m_lockAction->setChecked(false);
+    check(false, "plot unlocked");
+    QVERIFY(!props->layer(free).locked);
+    QVERIFY(props->layer(fixed).locked);
+
+    delete mon;
+    delete doc;
+}
+
+void Monitor_Test::anObjectHeldByItsLayerVsItsOwnLock()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    props->setLayoutLocked(false);
+    const quint32 lyr = props->addLayer("Rig");
+    Truss *mine = props->addTruss();   // locked on its own
+    mine->setName("Own Truss");
+    mine->setLayerId(lyr);
+    mine->setLocked(true);
+    Truss *open = props->addTruss();   // only its layer could hold it
+    open->setName("Open Truss");
+    open->setLayerId(lyr);
+
+    MonitorGraphicsView view(doc);
+    view.resize(900, 700);
+    view.setGridMetrics(1000.0);
+    view.setGridSize(QSize(10, 8));
+    view.updateTrusses();
+    MonitorLayersPanel panel(doc, &view);
+    panel.reload();
+
+    const QString ownBadge = QString::fromUtf8("\xF0\x9F\x94\x92");
+    const QString heldBadge = QString::fromUtf8("\xE2\x86\x91\xF0\x9F\x94\x92");
+    auto row = [&](Truss *t) { return objectRow(&panel, "truss", t->id()); };
+
+    // Layer open: one locked on its own, the other free.
+    QVERIFY(row(mine) != nullptr && row(open) != nullptr);
+    QVERIFY2(row(mine)->text(0).endsWith(ownBadge) && !row(mine)->text(0).contains(heldBadge),
+             qPrintable(row(mine)->text(0)));
+    QVERIFY2(!row(open)->text(0).contains(ownBadge), qPrintable(row(open)->text(0)));
+    QCOMPARE(row(mine)->data(0, Qt::UserRole + 4).toInt(), int(ItemLock::HeldOwn));
+    QCOMPARE(row(open)->data(0, Qt::UserRole + 4).toInt(), int(ItemLock::NotHeld));
+    QVERIFY(row(mine)->toolTip(0).contains("Locked on its own"));
+
+    // A fixture on the layer too: its row's badge must never become its name.
+    Fixture *fx = new Fixture(doc);
+    fx->setName("Spot");
+    fx->setChannels(4);
+    doc->addFixture(fx);
+    view.addFixture(fx->id(), QPointF(2000, 2000));
+    props->setFixtureLayer(fx->id(), lyr);
+
+    // The layer locked: the open one is held by its layer (↑🔒), the other
+    // still shows its own lock -- and says the layer holds it as well.
+    props->setLayerLocked(lyr, true);
+    view.refreshItemLayerState();
+    doc->resetModified();
+    panel.reload();
+    /* Marking the rows (tooltips, NodeHoldRole) is part of the rebuild:
+       done after it, each change was taken for a rename -- the fixture
+       renamed, the list reloaded, for ever (a hang in viewlayout_test). */
+    QCOMPARE(fx->name(), QString("Spot"));
+    QVERIFY(!doc->isModified());
+    QVERIFY(objectRow(&panel, "fixture", fx->id()) != nullptr);
+    QVERIFY(objectRow(&panel, "fixture", fx->id())->text(0).endsWith(heldBadge));
+    QVERIFY2(row(open)->text(0).endsWith(heldBadge), qPrintable(row(open)->text(0)));
+    QVERIFY2(row(mine)->text(0).endsWith(ownBadge) && !row(mine)->text(0).contains(heldBadge),
+             qPrintable(row(mine)->text(0)));
+    QCOMPARE(row(open)->data(0, Qt::UserRole + 4).toInt(), int(ItemLock::HeldLayer));
+    QCOMPARE(row(mine)->data(0, Qt::UserRole + 4).toInt(), int(ItemLock::HeldOwn | ItemLock::HeldLayer));
+    QCOMPARE(ItemLock::primaryHold(row(mine)->data(0, Qt::UserRole + 4).toInt()), ItemLock::HeldOwn);
+    QVERIFY2(row(open)->toolTip(0).contains(QString::fromUtf8("Held by layer “Rig”'s lock")),
+             qPrintable(row(open)->toolTip(0)));
+    QVERIFY(!row(open)->toolTip(0).contains("Locked on its own"));
+    QVERIFY(row(mine)->toolTip(0).contains("Locked on its own"));
+    QVERIFY(row(mine)->toolTip(0).contains(QString::fromUtf8("Held by layer “Rig”'s lock")));
+    QVERIFY(!open->locked());                       // its own lock untouched
+
+    // The plot locked as well: named in the tooltip; no badge on every row.
+    props->setLayerLocked(lyr, false);
+    view.setLayoutLocked(true);
+    panel.reload();
+    QVERIFY2(!row(open)->text(0).contains(ownBadge), qPrintable(row(open)->text(0)));
+    QCOMPARE(row(open)->data(0, Qt::UserRole + 4).toInt(), int(ItemLock::HeldPlot));
+    QVERIFY(row(open)->toolTip(0).contains("Held by the plot lock"));
+    QCOMPARE(view.itemHolds("truss", mine->id()), int(ItemLock::HeldOwn | ItemLock::HeldPlot));
+
+    // And the plot's menu on it says the plot holds it too.
+    {
+        QMenu menu;
+        view.buildItemMenu(&menu, "truss", open->id(), MonitorGraphicsView::MenuPlace());
+        QAction *held = menu.findChild<QAction *>(QStringLiteral("itemHeldByPlot"));
+        QVERIFY(held != nullptr && !held->isEnabled());
+    }
+
+    // Unlocked again: just as it was.
+    view.setLayoutLocked(false);
+    panel.reload();
+    QVERIFY(row(mine)->text(0).endsWith(ownBadge));
+    QCOMPARE(row(open)->data(0, Qt::UserRole + 4).toInt(), int(ItemLock::NotHeld));
+    QVERIFY(mine->locked());
+    QVERIFY(!open->locked());
     delete doc;
 }
 

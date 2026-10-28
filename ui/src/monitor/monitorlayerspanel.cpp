@@ -36,6 +36,7 @@
 #include <QSet>
 #include <QMessageBox>
 #include <QPainter>
+#include "itemlock.h"
 #include <QPixmap>
 #include <QTimer>
 #include <QStyledItemDelegate>
@@ -160,6 +161,69 @@ static const int NodeTypeRole = Qt::UserRole;       // MonitorLayersPanel::NodeT
 static const int NodeIdRole   = Qt::UserRole + 1;   // layer / group / item id
 static const int NodeKindRole = Qt::UserRole + 2;   // item kind (QString)
 static const int NodeBadgeRole = Qt::UserRole + 3;  // trailing "what kind of grouping" badge
+static const int NodeHoldRole  = Qt::UserRole + 4;  // ItemLock::Hold flags: what holds the object
+
+/* What holds a row still, shown apart from the row's own switch (a0).
+
+   A lock that is the row's own is the padlock as always: amber on the
+   layer's switch, a plain 🔒 after an object's name. A lock that comes from
+   ABOVE -- the plot's over a layer, a layer's or a folder's over an object --
+   is the padlock faded, with a small up-arrow: "held from above". The row's
+   own switch stays as it is under that, so lifting the lock above leaves
+   exactly what was there. */
+static const char *kHeldBadge = "  \xE2\x86\x91\xF0\x9F\x94\x92";   // ↑🔒
+
+/** The layer switch's face while the plot holds it: the padlock faded, an
+ *  up-arrow on a blue disc in the corner. */
+static QIcon heldLockIcon(const QFont &font)
+{
+    QIcon icon;
+    for (const qreal dpr : { 1.0, 2.0 })
+    {
+        QPixmap pm(QSize(18, 18) * dpr);
+        pm.setDevicePixelRatio(dpr);
+        pm.fill(Qt::transparent);
+        QPainter p(&pm);
+        p.setRenderHint(QPainter::Antialiasing);
+        p.setOpacity(0.45);
+        QFont f = font;
+        f.setPixelSize(13);
+        p.setFont(f);
+        p.drawText(QRectF(0, 0, 16, 16), Qt::AlignCenter, QString::fromUtf8(kLockOn));
+        p.setOpacity(1.0);
+        p.setPen(Qt::NoPen);
+        p.setBrush(QColor(70, 130, 210));
+        p.drawEllipse(QRectF(9, 9, 9, 9));
+        QPen pen(Qt::white, 1.4);
+        pen.setCapStyle(Qt::RoundCap);
+        p.setPen(pen);
+        p.drawLine(QPointF(13.5, 16.0), QPointF(13.5, 11.2));
+        p.drawLine(QPointF(11.5, 13.2), QPointF(13.5, 11.2));
+        p.drawLine(QPointF(15.5, 13.2), QPointF(13.5, 11.2));
+        p.end();
+        icon.addPixmap(pm);
+    }
+    return icon;
+}
+
+/** Show @p b, a lock switch whose own state is @p own, as held from above
+ *  (@p heldBy names what, for the tooltip). Its checked state is left as
+ *  it is: that is its own lock, kept under the hold. */
+static void styleHeldLock(QToolButton *b, bool own, const QString &tip)
+{
+    b->setText(QString());
+    b->setIcon(heldLockIcon(b->font()));
+    b->setIconSize(QSize(18, 18));
+    b->setProperty("lockHold", QStringLiteral("held"));
+    b->setProperty("ownLocked", own);
+    b->setToolTip(tip);
+    // Amber faded when locked on its own too, grey when not: still readable.
+    b->setStyleSheet(QString(
+        "QToolButton{border:1px dashed rgba(120,165,225,0.9);border-radius:4px;background:%1;}"
+        "QToolButton:hover{border:1px solid rgba(255,255,255,0.5);}"
+        "QToolButton:disabled{background:rgba(90,90,94,0.25);}")
+        .arg(QLatin1String(own ? "rgba(168,120,30,0.45)" : "rgba(64,64,68,0.55)")));
+}
 
 /* A folder in this tree can be any of four unrelated things -- the fixtures on
    a truss, the fixtures on a riser, a studio frame, or a plain folder -- and
@@ -750,9 +814,76 @@ void MonitorLayersPanel::createFixtureGroupFrom(const QList<quint32> &fixtureIds
 
 QString MonitorLayersPanel::lockBadge(const QString &kind, quint32 id) const
 {
-    // A padlock after the name: this one is locked on its own.
-    return (m_view != nullptr && m_view->itemOwnLocked(kind, id))
-           ? QString::fromUtf8("  \xF0\x9F\x94\x92") : QString();
+    /* After the name: 🔒 when it is locked on its own; ↑🔒 when its own lock
+       is off but its folder or its layer holds it. The plot's lock is shown
+       on the layer rows, not repeated on every object. */
+    if (m_view == nullptr)
+        return QString();
+    const int h = m_view->itemHolds(kind, id);
+    if (h & ItemLock::HeldOwn)
+        return QString::fromUtf8("  \xF0\x9F\x94\x92");
+    if (h & (ItemLock::HeldFolder | ItemLock::HeldLayer))
+        return QString::fromUtf8(kHeldBadge);
+    return QString();
+}
+
+QString MonitorLayersPanel::holdText(const QString &kind, quint32 id) const
+{
+    if (m_view == nullptr)
+        return QString();
+    const int h = m_view->itemHolds(kind, id);
+    if (h == ItemLock::NotHeld)
+        return QString();
+    QStringList lines;
+    if (h & ItemLock::HeldOwn)
+        lines << tr("Locked on its own");
+    if (h & ItemLock::HeldFolder)
+    {
+        quint32 gid = m_view->objectGroupId(kind, id);
+        // The nearest locked folder up the chain.
+        while (gid != 0 && m_props->hasGroup(gid) && !m_props->group(gid).locked)
+            gid = m_props->group(gid).parentGroupId;
+        lines << (gid != 0 && m_props->hasGroup(gid)
+                  ? tr("Held by folder “%1”'s lock").arg(m_props->group(gid).name)
+                  : tr("Held by its folder's lock"));
+    }
+    if (h & ItemLock::HeldLayer)
+        lines << tr("Held by layer “%1”'s lock")
+                 .arg(m_props->layer(m_view->objectLayerId(kind, id)).name);
+    if (h & ItemLock::HeldPlot)
+        lines << tr("Held by the plot lock (Plot Locked)");
+    return lines.join(QLatin1Char('\n'));
+}
+
+void MonitorLayersPanel::annotateHolds()
+{
+    /* Every object row (and a truss, riser, tower or pipe shown as its
+       folder) says in its tooltip what holds it, and keeps the flags for
+       anything that asks (NodeHoldRole). */
+    for (QTreeWidgetItemIterator it(m_tree); *it != nullptr; ++it)
+    {
+        QTreeWidgetItem *row = *it;
+        const int type = row->data(0, NodeTypeRole).toInt();
+        QString kind;
+        quint32 id = 0;
+        if (type == NodeItem)
+        {
+            kind = row->data(0, NodeKindRole).toString();
+            id = row->data(0, NodeIdRole).toUInt();
+        }
+        else if (type == NodeGroup)
+        {
+            const MonitorProperties::MonitorGroup g = m_props->group(row->data(0, NodeIdRole).toUInt());
+            kind = g.anchorKind;
+            id = g.anchorId;
+        }
+        if (kind.isEmpty() || kind == QStringLiteral("stage") || m_view == nullptr)
+            continue;
+        row->setData(0, NodeHoldRole, m_view->itemHolds(kind, id));
+        const QString why = holdText(kind, id);
+        if (!why.isEmpty())
+            row->setToolTip(0, row->toolTip(0) + QLatin1Char('\n') + why);
+    }
 }
 
 void MonitorLayersPanel::addItemLeaf(QTreeWidgetItem *parent, const ItemDesc &d)
@@ -821,6 +952,23 @@ void MonitorLayersPanel::addStagePieceToggles(QTreeWidgetItem *node, MonitorProp
     lock->setEnabled(m_editable);
     lock->setToolTip(locked ? tr("Locked — click to unlock") : tr("Unlocked — click to lock"));
     style(lock, locked, QString::fromUtf8(locked ? kLockOn : kLockOff), "rgb(168,120,30)", "rgb(64,64,68)");
+    lock->setProperty("lockHold", locked ? QStringLiteral("own") : QString());
+    lock->setProperty("ownLocked", locked);
+    {
+        // Held from above by the Stage layer's lock or the plot's.
+        const MonitorProperties::MonitorLayer stage = m_props->layer(m_props->stageLayerId());
+        const bool plot = m_view != nullptr && m_view->layoutLocked();
+        if (stage.locked || plot)
+        {
+            QString by = plot && stage.locked
+                ? tr("Held by the plot lock and the “%1” layer's lock.").arg(stage.name)
+                : plot ? tr("Held by the plot lock.")
+                       : tr("Held by the “%1” layer's lock.").arg(stage.name);
+            styleHeldLock(lock, locked, by + QLatin1Char('\n')
+                + (locked ? tr("Locked on its own as well. Click to unlock it on its own.")
+                          : tr("Its own lock is off. Click to lock it on its own as well.")));
+        }
+    }
     h->addWidget(lock);
     h->addStretch(1);
     m_tree->padRowWidget(row);
@@ -1340,6 +1488,7 @@ void MonitorLayersPanel::reload()
 
     const QList<ItemDesc> items = gatherItems();
     const quint32 activeId = m_props->activeLayerId();
+    const bool plotLocked = m_view != nullptr && m_view->layoutLocked();
     QTreeWidgetItem *activeNode = nullptr;
     QHash<quint32, QTreeWidgetItem *> layerNodes;
 
@@ -1438,6 +1587,16 @@ void MonitorLayersPanel::reload()
         lock->setFixedSize(20, 20);
         styleToggle(lock, lyr.locked, lyr.locked ? kLockOn : kLockOff,
                     "rgb(168,120,30)", "rgb(64,64,68)");
+        lock->setProperty("lockHold", lyr.locked ? QStringLiteral("own") : QString());
+        lock->setProperty("ownLocked", lyr.locked);
+        /* The plot's lock over this one: held from above, its own switch
+           kept under it and still working. */
+        if (plotLocked)
+            styleHeldLock(lock, lyr.locked, lyr.locked
+                ? tr("Locked by the plot, and locked on its own.\n"
+                     "Unlocking the plot leaves this layer locked. Click to unlock it on its own.")
+                : tr("Locked by the plot — this layer's own lock is off.\n"
+                     "Unlocking the plot frees it again. Click to lock it on its own as well."));
         h->addWidget(lock);
         row->setLayout(h);
         m_tree->padRowWidget(row);
@@ -1559,6 +1718,12 @@ void MonitorLayersPanel::reload()
     // Restore the scroll position (overriding the scrollTo that setCurrentItem
     // just did), so a reload doesn't jump the view around.
     m_tree->verticalScrollBar()->setValue(scroll);
+
+    /* What holds each object still, in its tooltip. Still under
+       m_reloading: each setData() emits itemChanged, and outside the guard
+       slotItemChanged() takes it for a rename -- which renamed the fixture,
+       reloaded, and did it again for ever. */
+    annotateHolds();
 
     m_reloading = false;
 

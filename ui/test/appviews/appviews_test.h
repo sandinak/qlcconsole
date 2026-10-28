@@ -206,6 +206,9 @@ private slots:
     void newShowsCanStartInClassic();
     /** A .qxw save holding what QLC+ 4 drops says so once, after saving. */
     void aQxwSaveSaysWhatQlcPlus4Leaves();
+    /** a0: "Always start with the plot locked" on: a show saved unlocked
+     *  opens with its plot locked, not marked changed; off, as saved. */
+    void aShowOpensLockedWhenTheUserAsks();
 
     /** Quitting with the window still up and the Show Tree in front: the
      *  tab goes before the Doc, so its hide event (which stops its preview)

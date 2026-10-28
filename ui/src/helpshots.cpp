@@ -162,6 +162,17 @@ QRect seenRect(QWidget *w, QWidget *grab)
     return r;
 }
 
+/** @a w's place, taken now, in @a grab's coordinates: for a control a
+    later reload may rebuild (the Plot layers row buttons), where a callout
+    holding the widget would find it gone. */
+HelpShots::Callout markPlace(QWidget *w, QWidget *grab, int number)
+{
+    HelpShots::Callout c;
+    c.number = number;
+    c.rect = seenRect(w, grab);
+    return c;
+}
+
 const int kWidth = 1280;
 const int kHeight = 780;
 }
@@ -963,7 +974,12 @@ QList<HelpShots::Shot> HelpShots::shots()
         f.callouts << markRow(tree, picked, panel, 2);
         f.callouts << markRow(tree, barRow, panel, 3);
         f.callouts << markRow(tree, hook, panel, 4);
-        f.callouts << mark(named(panel, "layerLock"), 5);
+        // The first layer's own row (findChild can meet one a reload left).
+        QWidget *layerRow = tree != NULL && tree->topLevelItemCount() > 0
+                            ? tree->itemWidget(tree->topLevelItem(0), 1) : NULL;
+        f.callouts << markPlace(layerRow != NULL
+                                ? layerRow->findChild<QToolButton *>(QStringLiteral("layerLock"))
+                                : NULL, panel, 5);
         return f;
     }, [=]() {
         Monitor *mon = Monitor::instance();
@@ -979,6 +995,74 @@ QList<HelpShots::Shot> HelpShots::shots()
         mon->m_graphicsView->updateTrusses();
         mon->m_graphicsView->updatePlatforms();
         mon->m_graphicsView->updateHangers();
+        if (mon->m_layersPanel != NULL)
+            mon->m_layersPanel->reload();
+    } };
+
+    // Plot locked: each layer's lock held by the plot, its own kept under it.
+    list << Shot{ QStringLiteral("lighting-studio-plot-locked-layers"), [=]() {
+        window();
+        Frame f;
+        Monitor *mon = studio(MonitorGraphicsView::PovTop);
+        if (mon == NULL || mon->m_layersPanel == NULL)
+            return f;
+        MonitorProperties *p = mon->m_props;
+        // The Stage layer locked on its own, the DS truss too; then the plot.
+        p->setLayerLocked(p->stageLayerId(), true);
+        quint32 ds = Truss::invalidId();
+        foreach (Truss *t, p->trusses())
+            if (t->name() == QLatin1String("DS Truss"))
+                ds = t->id();
+        if (ds != Truss::invalidId())
+            mon->m_graphicsView->setItemLocked(QStringLiteral("truss"), ds, true);
+        mon->m_graphicsView->refreshItemLayerState();
+        mon->m_lockAction->setChecked(true);
+        mon->m_graphicsView->scene()->clearSelection();
+        mon->m_layersPanel->reload();
+        settle();
+        MonitorLayersPanel *panel = mon->m_layersPanel;
+        f.grab = panel;
+        QTreeWidget *tree = panel->findChild<QTreeWidget *>();
+        if (tree == NULL)
+            return f;
+        QToolButton *freeLock = NULL, *stageLock = NULL, *pieceLock = NULL;
+        QTreeWidgetItem *dsRow = NULL;
+        for (int i = 0; i < tree->topLevelItemCount(); ++i)
+        {
+            QTreeWidgetItem *row = tree->topLevelItem(i);
+            QWidget *w = tree->itemWidget(row, 1);
+            QToolButton *b = w != NULL ? w->findChild<QToolButton *>(QStringLiteral("layerLock")) : NULL;
+            if (row->data(0, Qt::UserRole + 1).toUInt() == p->stageLayerId())
+                stageLock = b;
+            else if (freeLock == NULL)
+                freeLock = b;
+        }
+        for (QTreeWidgetItemIterator it(tree); *it != NULL; ++it)
+        {
+            if ((*it)->text(0).startsWith(QLatin1String("DS Truss")) && dsRow == NULL)
+                dsRow = *it;
+            if (pieceLock == NULL)
+                if (QWidget *w = tree->itemWidget(*it, 1))
+                    pieceLock = w->findChild<QToolButton *>(QStringLiteral("stagePieceLock"));
+        }
+        if (freeLock == NULL || stageLock == NULL || pieceLock == NULL || dsRow == NULL)
+            fprintf(stderr, "[HELPSHOT] plot-locked layers rows missing\n");
+        f.callouts << markPlace(freeLock, panel, 1);
+        f.callouts << markPlace(stageLock, panel, 2);
+        f.callouts << markRow(tree, dsRow, panel, 3);
+        f.callouts << markPlace(pieceLock, panel, 4);
+        return f;
+    }, [=]() {
+        Monitor *mon = Monitor::instance();
+        if (mon == NULL)
+            return;
+        MonitorProperties *p = mon->m_props;
+        mon->m_lockAction->setChecked(false);
+        p->setLayerLocked(p->stageLayerId(), false);
+        foreach (Truss *t, p->trusses())
+            if (t->name() == QLatin1String("DS Truss"))
+                mon->m_graphicsView->setItemLocked(QStringLiteral("truss"), t->id(), false);
+        mon->m_graphicsView->refreshItemLayerState();
         if (mon->m_layersPanel != NULL)
             mon->m_layersPanel->reload();
     } };

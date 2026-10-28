@@ -912,6 +912,16 @@ private slots:
      *  Lantern, Truss > Bar > Spot, Stand > Truss, Boom > Crossbar; a
      *  fixture dropped on a hanger or a bar's row is hung there */
     void mountsNestInPlotLayers();
+    /** a0: "Always start with the plot locked" (the user's, off by
+     *  default) locks a show as it opens, without marking it changed */
+    void alwaysStartLockedLocksAnOpenedShow();
+    /** a0: while the plot is locked, every layer's lock shows held by the
+     *  plot (its own state kept under it), and unlocking the plot puts back
+     *  exactly what each layer had */
+    void layersShowTheirLockHeldByThePlot();
+    /** a0: an object held by its layer's lock (↑🔒) is told apart from one
+     *  locked on its own (🔒); the tooltip names what holds it */
+    void anObjectHeldByItsLayerVsItsOwnLock();
 
 private:
     Doc* m_doc;

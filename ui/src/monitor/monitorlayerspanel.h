@@ -213,8 +213,15 @@ private:
     void nestByMounts(QTreeWidgetItem *layerNode);
     /** "kind:id" of what @p kind / @p id is mounted on, or empty. */
     QString mountParentKey(const QString &kind, quint32 id) const;
-    /** A row's lock badge: a padlock when the object is locked on its own. */
+    /** A row's lock badge: 🔒 when the object is locked on its own, ↑🔒
+     *  when only its folder or layer holds it (ItemLock::Hold). */
     QString lockBadge(const QString &kind, quint32 id) const;
+    /** What holds @p kind / @p id still, a line each (own, folder, layer,
+     *  plot); empty when nothing does. */
+    QString holdText(const QString &kind, quint32 id) const;
+    /** After a rebuild: each object row's tooltip says what holds it, and
+     *  NodeHoldRole keeps the flags. */
+    void annotateHolds();
     /** A new empty folder on @p layerId (inside @p parentGroupId when not 0),
      *  its name ready to type. */
     void addFolder(quint32 layerId, quint32 parentGroupId);
