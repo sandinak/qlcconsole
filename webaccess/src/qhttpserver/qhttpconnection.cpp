@@ -51,8 +51,11 @@ QHttpConnection::QHttpConnection(QTcpSocket *socket, QObject *parent)
       m_transmitLen(0),
       m_transmitPos(0),
       m_postPending(false),
+      m_websocketServer(nullptr),
+      m_webSocket(nullptr),
       m_isWebSocket(false),
-      m_pollTimer(NULL)
+      m_pollTimer(NULL),
+      userData(nullptr)
 {
     m_parser = (http_parser *)malloc(sizeof(http_parser));
     http_parser_init(m_parser, HTTP_REQUEST);
@@ -422,6 +425,7 @@ void QHttpConnection::slotWebSocketNewConnection()
                 this, SLOT(slotWebSocketTextMessage(const QString&)));
         connect(m_webSocket, SIGNAL(disconnected()),
                 this, SLOT(slotWebSocketDisconnected()));
+        connect(m_webSocket, &QObject::destroyed, this, [this](QObject *) { m_webSocket = nullptr; });
 
         // activate ping to WS
         m_pollTimer = new QTimer(this);
@@ -436,6 +440,14 @@ void QHttpConnection::slotWebSocketNewConnection()
 
 void QHttpConnection::slotWebSocketDisconnected()
 {
+    // no more pings to a socket that has gone
+    if (m_pollTimer != nullptr)
+    {
+        m_pollTimer->stop();
+        m_pollTimer->deleteLater();
+        m_pollTimer = nullptr;
+    }
+
     Q_EMIT webSocketConnectionClose(this);
 }
 
@@ -455,7 +467,7 @@ void QHttpConnection::webSocketWrite(const QString &message)
 {
     qDebug() << "[webSocketWrite] message length:" << message.size() << "message:" << message;
 
-    if (m_webSocket)
+    if (m_webSocket && m_webSocket->state() == QAbstractSocket::ConnectedState)
         m_webSocket->sendTextMessage(message);
 }
 
