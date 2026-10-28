@@ -95,6 +95,15 @@ private slots:
     void theFocusLookTakesTheBeamOut();
     /** A fixed light's save is undone: the aim before it, then as it was. */
     void aFixedLightsSaveIsUndone();
+    /** An LED head with no plain dimmer is lit white (RGB full, CMY out);
+     *  a prism rotation known by its name is left alone. */
+    void aColourMixingHeadIsLitWhite();
+    /** Sticks left pushed when the keyboard takes over don't drift the
+     *  head when the controller comes back. */
+    void aStaleStickDoesNotDriftAfterTheKeyboard();
+    /** The breath and flash timers have an interval: none spins the GUI
+     *  thread. */
+    void itsTimersNeverSpin();
 
 private:
     Doc *m_doc = nullptr;

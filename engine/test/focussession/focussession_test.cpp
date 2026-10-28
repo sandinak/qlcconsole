@@ -303,6 +303,9 @@ void FocusSession_Test::saveRevertZeroUndo()
     s->zero();
     QCOMPARE(s->liveOffset(a->id()).pan, 0.0f);
     QCOMPARE(s->liveOffset(a->id()).tilt, 0.0f);
+    // On the rig too, where the solver aims from: the light moves on "Zeroed."
+    QCOMPARE(m_doc->monitorProperties()->fixtureRigProps(a->id()).panOffsetDeg, 0.0f);
+    QCOMPARE(m_doc->monitorProperties()->fixtureRigProps(a->id()).tiltOffsetDeg, 0.0f);
     QVERIFY(s->isDirty(a->id()));          // zero is unsaved until A
     QCOMPARE(s->savedOffset(a->id()).pan, 3.0f);
 
@@ -950,6 +953,7 @@ void FocusSession_Test::aFixedLightIsFocusedByWhereItLands()
     FocusSession *s = m_doc->programmer()->focusSession();
     QString why;
     QVERIFY2(s->start(o, &why), qPrintable(why));
+    QVERIFY(!s->toggleReference());                 // a fixed light has no second reference
     QVector3D at;
     QVERIFY(s->referencePoint(par->id(), at));
     QVERIFY(qAbs(at.x() - 4.0f) < 1e-3f && qAbs(at.y()) < 1e-3f);
@@ -1050,6 +1054,12 @@ void FocusSession_Test::theBeamIsSetWithinTheLensRange()
     s->nudgeBeam(-5.0f);
     QCOMPARE(props->fixtureRigProps(spot->id()).lensDeg, 30.0f);
     QCOMPARE(RigHeads::beamAngle(spot, QByteArray(1, '\0')), 30.0);
+    // The next nudge builds on the lens it is set to, not on its widest.
+    s->nudgeBeam(-5.0f);
+    QCOMPARE(props->fixtureRigProps(spot->id()).lensDeg, 25.0f);
+    double deg = 0.0, lo = 0.0, hi = 0.0;
+    QVERIFY(s->beamAngle(spot->id(), deg, lo, hi));
+    QCOMPARE(deg, 25.0);
     s->nudgeBeam(-100.0f);
     QCOMPARE(props->fixtureRigProps(spot->id()).lensDeg, 15.0f);
     QVERIFY(s->isDirty(spot->id()));
@@ -1064,6 +1074,8 @@ void FocusSession_Test::theBeamIsSetWithinTheLensRange()
     QCOMPARE(s->currentFixture(), wash->id());
     s->nudgeBeam(-10.0f);                                    // 40 -> 30
     QCOMPARE(s->pendingWrites().value(qMakePair(0, 41)), uchar(qRound((30.0 - 10.0) / 30.0 * 255.0)));
+    QVERIFY(s->beamAngle(wash->id(), deg, lo, hi));         // the zoom asked for
+    QCOMPARE(deg, 30.0);
     QVERIFY(!s->isDirty(wash->id()));
     QCOMPARE(props->fixtureRigProps(wash->id()).lensDeg, 0.0f);
     // Focus on the D-pad's left/right: its channel, from the middle.
@@ -1093,6 +1105,21 @@ void FocusSession_Test::theBeamIsSetWithinTheLensRange()
     s->tick(1.0);
     QVERIFY(s->focusLevel(wash->id(), focus));
     QCOMPARE(focus, 0.62);
+    // On the keyboard the controller is ignored: a held arm doesn't repeat.
+    s->setInputDevice(FocusSession::KeyboardInput);
+    s->press(tighter, true);
+    QVERIFY(s->focusLevel(wash->id(), focus));
+    QCOMPARE(focus, 0.64);                                   // the press itself
+    s->tick(1.0);
+    QVERIFY(s->focusLevel(wash->id(), focus));
+    QCOMPARE(focus, 0.64);
+    s->press(tighter, false);
+    s->setInputDevice(FocusSession::ControllerInput);
+    // All the way near is a level too: it is sent, not left where it was.
+    s->nudgeFocus(-1.0f);
+    QVERIFY(s->focusLevel(wash->id(), focus));
+    QCOMPARE(focus, 0.0);
+    QCOMPARE(s->pendingWrites().value(qMakePair(0, 42), uchar(99)), uchar(0));
     // A button that isn't on the D-pad doesn't repeat.
     QVERIFY(!FocusSession::repeats(FocusSession::controlFor(GamepadRole::RB)));
     s->stop();
@@ -1317,4 +1344,111 @@ void FocusSession_Test::theViewsAreToldTheIntentNotTheNudge()
     QVERIFY(s->intendedDirection(b->id(), dir));
     s->stop();
     QVERIFY(!s->intendedDirection(b->id(), dir));
+}
+
+void FocusSession_Test::aColourMixingHeadIsLitWhite()
+{
+    /* An LED head with no plain dimmer: pan, tilt, red, green, blue, cyan,
+       and a prism rotation known only by its name. */
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test"); def->setModel("Focus LED Spot");
+    def->setType(QLCFixtureDef::MovingHead);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("7ch");
+    const QLCChannel::Group groups[] = { QLCChannel::Pan, QLCChannel::Tilt, QLCChannel::Intensity,
+                                         QLCChannel::Intensity, QLCChannel::Intensity,
+                                         QLCChannel::Intensity, QLCChannel::Prism };
+    const QLCChannel::PrimaryColour colours[] = { QLCChannel::NoColour, QLCChannel::NoColour,
+                                                  QLCChannel::Red, QLCChannel::Green, QLCChannel::Blue,
+                                                  QLCChannel::Cyan, QLCChannel::NoColour };
+    const char *names[] = { "Pan", "Tilt", "Red", "Green", "Blue", "Cyan", "Prism rotation" };
+    QLCFixtureHead head;
+    for (int k = 0; k < 7; ++k)
+    {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(names[k]);
+        ch->setGroup(groups[k]);
+        ch->setColour(colours[k]);
+        ch->setControlByte(QLCChannel::MSB);
+        if (groups[k] == QLCChannel::Prism)
+        {
+            ch->addCapability(new QLCCapability(0, 9, "Off"));
+            ch->addCapability(new QLCCapability(10, 255, "Rotate"));
+        }
+        def->addChannel(ch);
+        mode->insertChannel(ch, k);
+        head.addChannel(k);
+    }
+    QLCPhysical ph;
+    ph.setFocusPanMax(540);
+    ph.setFocusTiltMax(270);
+    mode->setPhysical(ph);
+    mode->insertHead(-1, head);
+    def->addMode(mode);
+    Fixture *led = new Fixture(m_doc);
+    led->setName("LED");
+    led->setFixtureDefinition(def, mode);
+    led->setAddress(50);
+    QVERIFY(m_doc->addFixture(led));
+    m_doc->monitorProperties()->setFixturePosition(led->id(), 0, 0, QVector3D(2000, 2000, 5));
+    StageTarget *mark = makeTarget(m_doc, "Mark", QVector3D(5.0f, 6.0f, 0.0f));
+
+    FocusSession *s = m_doc->programmer()->focusSession();
+    QString why;
+    QVERIFY2(s->start(optionsFor({ led->id() }, mark->id()), &why), qPrintable(why));
+    const QHash<QPair<int, int>, uchar> w = s->pendingWrites();
+    // White: every additive colour full, the subtractive one out.
+    QCOMPARE(w.value(qMakePair(0, 52), uchar(1)), uchar(255));
+    QCOMPARE(w.value(qMakePair(0, 53), uchar(1)), uchar(255));
+    QCOMPARE(w.value(qMakePair(0, 54), uchar(1)), uchar(255));
+    QCOMPARE(w.value(qMakePair(0, 55), uchar(1)), uchar(0));
+    // A prism rotation is not in the beam's way: left alone, even with an "Off".
+    QVERIFY(!w.contains(qMakePair(0, 56)));
+}
+
+void FocusSession_Test::aStaleStickDoesNotDriftAfterTheKeyboard()
+{
+    Fixture *a = makeSpot(m_doc, "A", 2.0f, 2.0f);
+    StageTarget *mark = makeTarget(m_doc, "Mark", QVector3D(5.0f, 6.0f, 0.0f));
+    FocusSession *s = m_doc->programmer()->focusSession();
+    QVERIFY(s->start(optionsFor({ a->id() }, mark->id())));
+    s->setStickResponse(0.05f, 1.0f);
+
+    // Both sticks pushed as the operator turns to the keyboard...
+    s->setStick(FocusSession::Coarse, 1.0f, 0.5f);
+    s->setStick(FocusSession::Fine, 1.0f, 1.0f);
+    s->setInputDevice(FocusSession::KeyboardInput);
+    s->tick(0.1);
+    QCOMPARE(s->liveOffset(a->id()).pan, 0.0f);
+    QCOMPARE(s->liveOffset(a->id()).tilt, 0.0f);
+    // ...and back to the controller: neither stick says anything until it moves.
+    s->setInputDevice(FocusSession::ControllerInput);
+    s->tick(0.1);
+    QCOMPARE(s->liveOffset(a->id()).pan, 0.0f);
+    QCOMPARE(s->liveOffset(a->id()).tilt, 0.0f);
+    s->setStick(FocusSession::Fine, 1.0f, 0.5f);
+    s->tick(0.1);
+    QVERIFY(s->liveOffset(a->id()).pan > 0.0f);
+}
+
+void FocusSession_Test::itsTimersNeverSpin()
+{
+    Fixture *a = makeSpot(m_doc, "A", 2.0f, 2.0f);
+    StageTarget *mark = makeTarget(m_doc, "Mark", QVector3D(5.0f, 6.0f, 0.0f));
+    FocusSession *s = m_doc->programmer()->focusSession();
+    s->setFlashEnabled(true);
+    QVERIFY(s->start(optionsFor({ a->id() }, mark->id())));
+    s->nudge(1.0f, 0.0f);
+    QVERIFY(s->isBreathing());
+    // The unsaved light breathes on a timer, not on every pass of the event loop.
+    const QList<QTimer *> timers = s->findChildren<QTimer *>();
+    QVERIFY(timers.size() >= 2);
+    bool anyActive = false;
+    for (const QTimer *t : timers)
+    {
+        QVERIFY2(t->interval() > 0, qPrintable(t->objectName()));
+        anyActive = anyActive || t->isActive();
+    }
+    QVERIFY(anyActive);
+    s->stop();
 }
