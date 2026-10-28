@@ -72,6 +72,13 @@ back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
 - **A Virtual Console Flash button on a Show Tree hit played nothing**:
   only scenes flashed, and a hit is a collection. Flash now plays the hit
   while held and lets go on release; a hit already on stays on.
+- **A flaky test steadied**: AppViews_Test's GO-holds-the-preview test
+  (and the two GO tests beside it) read a dimmer's output from the live
+  universe array, which the output thread zeroes at the start of every
+  frame before writing it again; on a loaded machine a read landed in
+  between and saw 0 for a dimmer at full. They now read a whole frame
+  (the copy taken under the frame lock), and wait for the run to stop and
+  the Show Tree's sweep to fire instead of a fixed 400 ms.
 
 ## [0.3.0] - 2026-10-26
 
