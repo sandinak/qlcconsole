@@ -24,11 +24,14 @@ them:
    and what shows up in the GitHub Release title and the DMG volume label.
 2. **`APPVERSION`** (computed in [`variables.cmake`](variables.cmake), shown
    in the About box and `--version`) — `<QLC_BASE_VERSION>+qlcconsole.<N>`,
-   where `N` is the git commit count since the `QLC+_4.14.2` fork point.
-   This is fully automatic; you never edit it directly. `QLC_BASE_VERSION`
-   only changes when the fork is rebased onto a newer upstream QLC+ tag —
-   that's a deliberate, separate decision from cutting a qlcconsole release,
-   so it's not tied to bumping `VERSION`.
+   e.g. `4.14.4+qlcconsole.2390`, where `N` is the git commit count since
+   the original `QLC+_4.14.2` fork point (still counted from there when the
+   base moves, so it never goes backwards). This is fully automatic; you
+   never edit it directly. `QLC_BASE_VERSION` (4.14.4 since 0.3.1) only
+   changes when an upstream intake takes in a newer QLC+ release
+   ([docs/UPSTREAM.md](docs/UPSTREAM.md)) — that's a deliberate, separate
+   decision from cutting a qlcconsole release, so it's not tied to bumping
+   `VERSION`.
 
 In short: `VERSION` answers "what qlcconsole release is this," `APPVERSION`
 answers "what's actually in the binary and what QLC+ base is it built on."

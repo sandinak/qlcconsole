@@ -330,9 +330,9 @@ int compareVersions(const QString &a, const QString &b, bool *known)
     for (int i = 0; i < 3 && base == 0; ++i)
         if (va[i] != vb[i])
             base = va[i] < vb[i] ? -1 : 1;
-    /* A qlcconsole build carries the QLC+ release it grew from (4.14.2):
-       a later QLC+ (4.14.4) is a different line, not a newer one -- unless
-       it is the same release or an older one. */
+    /* A qlcconsole build carries the QLC+ release it is based on (4.14.4;
+       4.14.2 before 0.3.1): a later QLC+ is a different line, not a newer
+       one -- unless it is the same release or an older one. */
     const bool qa = va[3] >= 0, qb = vb[3] >= 0;
     if (qa != qb)
     {

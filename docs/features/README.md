@@ -1,7 +1,7 @@
 # qlcconsole feature guide
 
-qlcconsole is a fork of [QLC+](https://www.qlcplus.org/) 4.14.2 (Q Light
-Controller Plus). Stock QLC+ programs a show as a flat list of fixtures, each
+qlcconsole is a fork of [QLC+](https://www.qlcplus.org/) (Q Light Controller
+Plus), based on QLC+ 4.14.4. Stock QLC+ programs a show as a flat list of fixtures, each
 edited with raw per-channel DMX sliders. This fork adds a layer on top of
 that aimed at designing and running a **physical rig**: build the truss/riser
 structure the fixtures actually hang from, place fixtures on it, aim them at

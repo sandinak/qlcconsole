@@ -27,6 +27,17 @@ The latest changes, newest first. Each links to the guide with the detail.
 - **Start new shows in Classic.** **Settings ▸ General ▸ Start new shows
   in the Classic view**. See [Views](getting-started.md#views).
 
+### Based on QLC+ 4.14.4
+
+- qlcconsole now carries **QLC+ 4.14.4**'s fixes (it was based on
+  4.14.2): Help ▸ About and `--version` say `4.14.4+qlcconsole.<N>`.
+  Among them: New and Open forget the last show's startup function,
+  audio triggers hear the spectrum in logarithmic bands, nested
+  submasters follow their outer frame, and a 4.14.4 show's
+  network-server settings are kept when saved here.
+- **31 fixture definitions from QLC+**: 28 new and 3 updated. See
+  [Definition updates](definition-updates.md).
+
 ### Fixed
 
 - **A hit on a Flash button plays.** A Virtual Console button set to

@@ -284,6 +284,12 @@ void FixtureDefUpdates_Test::versions()
     QVERIFY(!known);
     QCOMPARE(compareVersions("4.14.2+qlcconsole.1", "4.14.2", &known), 1);
     QVERIFY(known);
+    // Since 0.3.1 a build is based on 4.14.4: newer than 4.14.4 itself and
+    // than every build before it, whose base was 4.14.2.
+    QCOMPARE(compareVersions("4.14.4+qlcconsole.2390", "4.14.4", &known), 1);
+    QVERIFY(known);
+    QCOMPARE(compareVersions("4.14.4+qlcconsole.2390", "4.14.2+qlcconsole.2347", &known), 1);
+    QVERIFY(known);
     QCOMPARE(compareVersions("", "4.12.0", &known), 0);
     QVERIFY(!known);
 }

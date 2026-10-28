@@ -15,6 +15,46 @@ in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
 A home for QLC+ 4 users: QLC+ 4's habits that qlcconsole had dropped are
 back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
 
+### Based on QLC+ 4.14.4
+
+qlcconsole's QLC+ base moves from 4.14.2 to **4.14.4**: the build string
+reads `4.14.4+qlcconsole.<N>` (N keeps counting, so it never goes back).
+4.14.3 was already in from February's upstream sync; 4.14.4's fixes are
+taken in, each recorded with its upstream commit
+([docs/UPSTREAM.md](docs/UPSTREAM.md) logs what was taken, adapted and
+skipped). Upstream fixes taken:
+
+- **New and Open forget the last show's startup function** (#1963).
+- **A show or collection holding a deleted function** no longer reaches
+  for it while playing or totting up its length; a Show's copied
+  functions get IDs of their own.
+- **Dimmer palettes keep a fractional value** from the file instead of
+  reading it as 0.
+- **Audio triggers split the spectrum in logarithmic bands** (40 Hz to
+  5 kHz), with a level that rises fast and falls smoothly, as in QLC+
+  4.14.4; RGB Audio and effect scripts hear the same bands.
+- **Nested submasters**: a submaster in a frame inside another frame
+  follows the outer one.
+- A Virtual Console slider's channel-monitor reset button is sized
+  properly and can't be reached before it exists.
+- **Web access**: valid HTML, button tooltips, a cue-list row that closed
+  its cell instead of the row, upload pickers that offer only .qxf/.d4,
+  a rewritten keypad page (Clear, Enter sends), sturdier web-socket
+  connections, and the slider's top label escaped like everything else.
+- **Stock 4.14.4's network-server settings** in a show are kept when it
+  is saved here, instead of dropped.
+- **DMX USB**: udev rules for more FTDI chips (Linux). GPIO: libgpiod 2
+  and input-level fixes. SPI: frequency label.
+- **Translations**: updated Catalan, Czech, Dutch, Finnish, French,
+  German, Italian, Japanese, Portuguese (Brazil) and Spanish.
+- **Novation Launchpad MK2**: input profile with its colours and
+  channels, and a welcome message template.
+- **31 fixture definitions from QLC+ upstream**: 28 new (Acme Deluge,
+  Robe Robin T.5 Profile, Robert Juliat Dalis 860, GLP Matrix Eye 2 and
+  4, Chauvet FXpar3, Equinox Fusion 140 / 260ZR, Starway SupraKolor and
+  more) and 3 updated (American DJ Jolt 300, Cameo ROOT PAR 6, beamZ
+  LCB244).
+
 ### Added
 
 - **Save As offers QLC+ 4's .qxw** ("QLC+ 4 Workspaces"), starting on it

@@ -1,7 +1,9 @@
 # CLAUDE.md
 
-Guidance for working in this repo. This is a **fork of QLC+ 4.14.2** (Q Light
-Controller Plus) — the Qt6 **widgets** desktop UI, not the QML UI. The fork adds
+Guidance for working in this repo. This is a **fork of QLC+** (Q Light
+Controller Plus), forked at 4.14.2 and **based on QLC+ 4.14.4** since 0.3.1
+(upstream fixes are taken in each release and logged in
+[docs/UPSTREAM.md](docs/UPSTREAM.md)) — the Qt6 **widgets** desktop UI, not the QML UI. The fork adds
 a *programmer-mode* workflow and a dedicated **Build** tab (was Programming) for building
 scenes/"looks".
 
