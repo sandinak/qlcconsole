@@ -52,6 +52,13 @@ private slots:
      *  black, one firing at least that far off is, and a pre-set already
      *  made is left be when the cue draws nearer. */
     void aCueTooSoonIsNotMovedInBlack();
+    /** CueLookahead (coverage campaign): a running Show timeline is asked
+     *  first, its nearest item on an unmuted track after the playhead,
+     *  within the horizon */
+    void theLookaheadAsksARunningShowFirst();
+    /** A chaser step that holds for GO is always ahead; a show-clocked
+     *  chaser is the Show's to answer for; past the horizon is nothing */
+    void theLookaheadOfAChaser();
 
 private:
     Doc *m_doc = nullptr;

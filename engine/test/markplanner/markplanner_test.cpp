@@ -29,6 +29,9 @@
 #include "qlcchannel.h"
 #include "scene.h"
 #include "chaser.h"
+#include "show.h"
+#include "track.h"
+#include "showfunction.h"
 #include "markeffect.h"
 #include "markplanner.h"
 #include "cuelookahead.h"
@@ -447,6 +450,116 @@ void MarkPlanner_Test::aCueTooSoonIsNotMovedInBlack()
     QMetaObject::invokeMethod(&early, "evaluate");
     QVERIFY(m_mark->isMarked(m_fixtureA));
     early.setEnabled(false);
+}
+
+void MarkPlanner_Test::theLookaheadAsksARunningShowFirst()
+{
+    QVERIFY(CueLookahead::upcoming(nullptr).isEmpty());
+    QVERIFY(CueLookahead::upcoming(m_doc).isEmpty());          // nothing running
+
+    // A standalone chaser running too: the Show still answers
+    startChaserLightingFixtureA(m_doc, m_fixtureA);
+    QCOMPARE(CueLookahead::upcoming(m_doc).count(), 1);
+
+    QList<Scene *> sc;
+    for (int i = 0; i < 5; i++)
+    {
+        sc << new Scene(m_doc);
+        m_doc->addFunction(sc.last());
+    }
+    Show *show = new Show(m_doc);
+    m_doc->addFunction(show);
+    Track *t1 = new Track(Function::invalidId(), show);
+    QVERIFY(show->addTrack(t1));
+    ShowFunction *now = t1->createShowFunction(sc[0]->id());   // already playing
+    now->setStartTime(0);
+    now->setDuration(600000);
+    ShowFunction *later = t1->createShowFunction(sc[2]->id());
+    later->setStartTime(5000);
+    later->setDuration(1000);
+    Track *t2 = new Track(Function::invalidId(), show);
+    QVERIFY(show->addTrack(t2));
+    ShowFunction *next = t2->createShowFunction(sc[1]->id());  // the nearest
+    next->setStartTime(3000);
+    next->setDuration(1000);
+    ShowFunction *nobody = t2->createShowFunction(Function::invalidId());
+    nobody->setStartTime(2000);
+    Track *muted = new Track(Function::invalidId(), show);
+    QVERIFY(show->addTrack(muted));
+    muted->setMute(true);
+    ShowFunction *silent = muted->createShowFunction(sc[3]->id());
+    silent->setStartTime(1000);
+    silent->setDuration(1000);
+
+    MasterTimer timer(m_doc);
+    show->start(&timer, FunctionParent::master());
+    timer.timerTick();
+    QVERIFY(show->isRunning());
+    const quint32 pos = show->runningTime();
+    QVERIFY(pos < 1000);
+
+    QList<CueLookahead::UpcomingCue> cues = CueLookahead::upcoming(m_doc, 60000);
+    QCOMPARE(cues.count(), 1);
+    QCOMPARE(cues.first().functionId, sc[1]->id());
+    QCOMPARE(cues.first().fireInMs, int(3000 - pos));
+    QCOMPARE(cues.first().chaserId, Function::invalidId());   // a timeline item
+    QCOMPARE(cues.first().step, -1);
+
+    // Exactly at the horizon is in; one short of it is out
+    QCOMPARE(CueLookahead::upcoming(m_doc, int(3000 - pos)).count(), 1);
+    QVERIFY(CueLookahead::upcoming(m_doc, int(3000 - pos) - 1).isEmpty());
+
+    // Nothing after the playhead: nothing ahead (the chaser isn't asked)
+    next->setStartTime(0);
+    later->setStartTime(0);
+    QVERIFY(CueLookahead::upcoming(m_doc, 60000).isEmpty());
+
+    show->stop(FunctionParent::master());
+    timer.timerTick();
+}
+
+void MarkPlanner_Test::theLookaheadOfAChaser()
+{
+    Scene *a = new Scene(m_doc);
+    Scene *b = new Scene(m_doc);
+    m_doc->addFunction(a);
+    m_doc->addFunction(b);
+    Chaser *chaser = new Chaser(m_doc);
+    chaser->setDuration(0);                    // every step holds for GO
+    chaser->addStep(a->id());
+    chaser->addStep(b->id());
+    m_doc->addFunction(chaser);
+
+    MasterTimer timer(m_doc);
+    chaser->start(&timer, FunctionParent::master());
+    timer.timerTick();
+    QCOMPARE(chaser->currentStepIndex(), 0);
+
+    // Held: ahead whatever the horizon, with its chaser and step
+    QList<CueLookahead::UpcomingCue> cues = CueLookahead::upcoming(m_doc, 10);
+    QCOMPARE(cues.count(), 1);
+    QCOMPARE(cues.first().fireInMs, INT_MAX);
+    QCOMPARE(cues.first().functionId, b->id());
+    QCOMPARE(cues.first().chaserId, chaser->id());
+    QCOMPARE(cues.first().step, 1);
+
+    // Timed: the time left in the step, within the horizon only
+    chaser->setDuration(MasterTimer::tick() * 100);
+    cues = CueLookahead::upcoming(m_doc, 60000);
+    QCOMPARE(cues.count(), 1);
+    const int fire = cues.first().fireInMs;
+    QVERIFY2(fire > 0 && fire <= int(MasterTimer::tick() * 100), qPrintable(QString::number(fire)));
+    QVERIFY(CueLookahead::upcoming(m_doc, fire - 1).isEmpty());
+
+    // A chaser the Show Tree's clock steps: not a standalone one
+    chaser->setShowClocked(true);
+    QVERIFY(CueLookahead::upcoming(m_doc, 60000).isEmpty());
+    chaser->setShowClocked(false);
+
+    chaser->stop(FunctionParent::master());
+    timer.timerTick();
+    QVERIFY(!chaser->isRunning());
+    QVERIFY(CueLookahead::upcoming(m_doc, 60000).isEmpty());
 }
 
 QTEST_GUILESS_MAIN(MarkPlanner_Test)
