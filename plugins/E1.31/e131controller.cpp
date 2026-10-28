@@ -27,6 +27,15 @@
 #define TRANSMIT_FULL    "Full"
 #define TRANSMIT_PARTIAL "Partial"
 
+/** E1.31's multicast group for an sACN universe: 239.255.<high byte>.<low
+ *  byte> (ANSI E1.31 9.3.1). "239.255.0.<n>" was right only up to 255: from
+ *  QLC+ universe 256 on it was no address at all, so the default output went
+ *  nowhere and the configuration dialog read past the end of its octets. */
+static QHostAddress multicastFor(quint32 e131Universe)
+{
+    return QHostAddress(quint32(0xEFFF0000) | (e131Universe & 0xFFFF));
+}
+
 E131Controller::E131Controller(QNetworkInterface const& iface, QNetworkAddressEntry const& address,
                                quint32 line, QObject *parent)
     : QObject(parent)
@@ -72,12 +81,12 @@ void E131Controller::addUniverse(quint32 universe, E131Controller::Type type)
     {
         UniverseInfo info;
         info.inputMulticast = true;
-        info.inputMcastAddress = QHostAddress(QString("239.255.0.%1").arg(universe + 1));
+        info.inputMcastAddress = multicastFor(universe + 1);
         info.inputUcastPort = E131_DEFAULT_PORT;
         info.inputUniverse = universe + 1;
         info.inputSocket.clear();
         info.outputMulticast = true;
-        info.outputMcastAddress = QHostAddress(QString("239.255.0.%1").arg(universe + 1));
+        info.outputMcastAddress = multicastFor(universe + 1);
         if (m_ipAddr != QHostAddress::LocalHost)
             info.outputUcastAddress = QHostAddress(quint32((m_ipAddr.toIPv4Address() & 0xFFFFFF00) + (universe + 1)));
         else
@@ -357,7 +366,7 @@ void E131Controller::sendDmx(const quint32 universe, const QByteArray &data)
 
     QMutexLocker locker(&m_dataMutex);
     QByteArray dmxPacket;
-    QHostAddress outAddress = QHostAddress(QString("239.255.0.%1").arg(universe + 1));
+    QHostAddress outAddress = multicastFor(universe + 1);
     quint16 outPort = E131_DEFAULT_PORT;
     quint32 outUniverse = universe;
     quint32 outPriority = E131_PRIORITY_DEFAULT;
