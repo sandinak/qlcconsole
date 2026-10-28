@@ -28193,7 +28193,12 @@ void Monitor_Test::theBackViewDoesNotMirrorText()
             lit += (qGray(front.pixel(x, y)) > 0) ? 1 : 0;
     QVERIFY2(lit > 10, "no label found to compare");
     QVERIFY2(front == back, "the Back view's label is not the Front view's label");
-    QVERIFY2(back != back.mirrored(true, false), "the probe cannot tell mirrored text apart");
+    // By hand: QImage::mirrored() is deprecated from Qt 6.9, flipped() new in it.
+    QImage reversed(back.size(), back.format());
+    for (int y = 0; y < back.height(); ++y)
+        for (int x = 0; x < back.width(); ++x)
+            reversed.setPixelColor(back.width() - 1 - x, y, back.pixelColor(x, y));
+    QVERIFY2(back != reversed, "the probe cannot tell mirrored text apart");
 }
 
 void Monitor_Test::theEditorsOfferBackBesideFront()
