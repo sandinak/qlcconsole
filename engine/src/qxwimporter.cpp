@@ -703,15 +703,15 @@ QxwImportResult QxwImporter::import(Doc *sourceDoc, Doc *targetDoc,
         }
         case Function::CollectionType:
         {
+            /* All at once, in order. One at a time, a remap that chains
+               (1 to 2, 2 to 3) removed the member just moved onto 2, and
+               the collection lost it; a remapped member also moved last. */
             Collection *coll = qobject_cast<Collection *>(f);
-            foreach (quint32 memberId, coll->components())
-            {
-                if (functionMap.contains(memberId) && functionMap.value(memberId) != memberId)
-                {
-                    coll->removeFunction(memberId);
-                    coll->addFunction(functionMap.value(memberId));
-                }
-            }
+            const QList<quint32> members = coll->components();
+            foreach (quint32 memberId, members)
+                coll->removeFunction(memberId);
+            foreach (quint32 memberId, members)
+                coll->addFunction(functionMap.value(memberId, memberId));
             break;
         }
         case Function::ShowType:
