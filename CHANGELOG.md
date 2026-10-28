@@ -1078,6 +1078,20 @@ as code.
   every level's size for a bug report
   (`ViewLayout_Test::theLayoutReportAndTheSelfHeal`,
   `::theWindowFollowsResizesAroundADetach`).
+- **The main window follows every resize again** (RC8, u9). It could get
+  stuck after a tab was moved to its own window: the window grew or shrank
+  but the tabs and the status bar stayed at their old size. The cause was
+  moving the Rig Overview by its title bar. Qt took that move as a drag
+  towards the main window's dock areas. The panel can dock nowhere, so the
+  drag ended without being put back, and the main window's layout kept the
+  state it had saved for the drag. In that state Qt ignores every resize
+  until the app quits. The Rig Overview now moves as a plain window. The
+  self-heal also checks that the main window's layout follows: if it is
+  stuck, the heal ends a drag that is still holding the mouse, restores
+  the layout's own state and lays it out again, and logs it. **Copy
+  Layout Report** says whether the layout follows
+  (`ViewLayout_Test::aRigOverviewMoveLeavesTheWindowFollowing`,
+  `::aStuckMainLayoutIsHealedOnTheNextResize`).
 - **A laser showed nothing on the 2D plot** (RC8, board Q178). The Top
   view never drew a laser's beams or a sky laser's stars. With **Show ▸
   Laser & star output** (on by default) every lit laser and star laser

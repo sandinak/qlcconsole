@@ -28,6 +28,10 @@
 #include <QSplitter>
 #include <QMenuBar>
 #include <QSysInfo>
+#include <QToolBar>
+#include <QDockWidget>
+#include <QMouseEvent>
+#include <QCursor>
 #include <QScreen>
 #include <QWindow>
 #include <QTimer>
@@ -136,30 +140,108 @@ bool WindowSizeGuard::checkNow()
     if (m_widget == nullptr || m_window == nullptr || !m_widget->isVisible()
         || (m_widget->windowState() & Qt::WindowMinimized))
         return false;
+
+    bool healed = false;
     const QSize handle = m_window->size();
     const QSize widget = m_widget->size();
-    if (handle == widget || handle.isEmpty())
-        return false;
+    if (handle != widget && !handle.isEmpty())
+    {
+        addToLog(QStringLiteral("%1 %2: the window is %3 but its contents were %4; re-synced and repainted")
+                 .arg(QDateTime::currentDateTime().toString(Qt::ISODate), windowName(m_widget), sz(handle), sz(widget)));
 
-    const QString line = QStringLiteral("%1 %2: the window is %3 but its contents were %4; re-synced and repainted")
-        .arg(QDateTime::currentDateTime().toString(Qt::ISODate), windowName(m_widget), sz(handle), sz(widget));
+        /* The widget takes the platform window's size, lays out again and
+           repaints all of it: the stale picture was old content top-left and
+           nothing beyond. */
+        m_widget->resize(handle);
+        if (m_widget->layout() != nullptr)
+            m_widget->layout()->activate();
+        healed = true;
+    }
+    if (QMainWindow *mw = qobject_cast<QMainWindow *>(m_widget.data()))
+        healed = healMainLayout(mw) || healed;
+
+    if (healed)
+        repaintAll();
+    return healed;
+}
+
+void WindowSizeGuard::addToLog(const QString &line)
+{
     qWarning().noquote() << "Layout self-heal:" << line;
     QStringList &log = healLog();
     log << line;
     while (log.size() > 50)
         log.removeFirst();
+}
 
-    /* The widget takes the platform window's size, lays out again and
-       repaints all of it: the stale picture was old content top-left and
-       nothing beyond. */
-    m_widget->resize(handle);
-    if (m_widget->layout() != nullptr)
-        m_widget->layout()->activate();
+void WindowSizeGuard::repaintAll()
+{
     m_widget->update();
     foreach (QWidget *child, m_widget->findChildren<QWidget *>())
         if (child->isVisible())
             child->update();
     m_widget->repaint();
+}
+
+namespace
+{
+    /* Lay the main window out again now, as a resize does: invalidate() lets
+       activate() run its pass, which hands the layout the window's rect. */
+    void relayout(QMainWindow *mw)
+    {
+        if (mw->layout() == nullptr)
+            return;
+        mw->layout()->invalidate();
+        mw->layout()->activate();
+    }
+}
+
+bool WindowSizeGuard::healMainLayout(QMainWindow *mw)
+{
+    if (LayoutDiagnostics::mainLayoutProblem(mw).isEmpty())
+        return false;
+    // Not laid out since the last change: one pass puts it right, nothing stuck.
+    relayout(mw);
+    const QString problem = LayoutDiagnostics::mainLayoutProblem(mw);
+    if (problem.isEmpty())
+        return false;
+
+    /* Stuck: Qt's main window layout ignores every resize while it holds the
+       state it saved when a toolbar or dock drag began, until that drag ends
+       (QMainWindowLayout::setGeometry returns at once while savedState is
+       valid). First end a drag still under way whose release went elsewhere:
+       a toolbar or dock of this window holding the mouse is told the button
+       came up, and its own drop puts the layout back. */
+    QString how;
+    QWidget *grabber = QWidget::mouseGrabber();
+    if (grabber != nullptr && grabber->parentWidget() == mw
+        && (qobject_cast<QToolBar *>(grabber) != nullptr || qobject_cast<QDockWidget *>(grabber) != nullptr))
+    {
+        const QPoint global = QCursor::pos();
+        QMouseEvent release(QEvent::MouseButtonRelease, QPointF(grabber->mapFromGlobal(global)), QPointF(global),
+                            Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+        QCoreApplication::sendEvent(grabber, &release);
+        if (QWidget::mouseGrabber() == grabber)
+            grabber->releaseMouse();
+        relayout(mw);
+        how = QStringLiteral("ended the drag of %1").arg(windowName(grabber));
+    }
+    /* A drag that did end and left the saved state behind (a floating dock
+       the layout never held, u9): restoring the layout's own state clears it
+       (QMainWindowLayout::restoreState ends with savedState.clear()), and a
+       pass then gives it the window's size. */
+    if (!LayoutDiagnostics::mainLayoutProblem(mw).isEmpty())
+    {
+        const bool restored = mw->restoreState(mw->saveState());
+        relayout(mw);
+        if (!how.isEmpty())
+            how += QStringLiteral(", then ");
+        how += restored ? QStringLiteral("restored its state") : QStringLiteral("could not restore its state");
+    }
+    const QString after = LayoutDiagnostics::mainLayoutProblem(mw);
+    addToLog(QStringLiteral("%1 %2: the window's layout was stuck mid-drag, not following a resize (%3); %4 and laid it out again%5")
+             .arg(QDateTime::currentDateTime().toString(Qt::ISODate), windowName(mw), problem, how,
+                  after.isEmpty() ? QString() : QStringLiteral(" -- STILL STUCK: ") + after));
     return true;
 }
 
@@ -207,8 +289,19 @@ namespace
         {
             if (mw->menuWidget() != nullptr && mw->menuWidget()->isVisible())
                 out << indent + QStringLiteral("menu bar: %1").arg(rect(mw->menuWidget()->geometry()));
-            if (mw->statusBar() != nullptr && mw->statusBar()->isVisible())
-                out << indent + QStringLiteral("status bar: %1").arg(rect(mw->statusBar()->geometry()));
+            QStatusBar *sb = mw->findChild<QStatusBar *>(QString(), Qt::FindDirectChildrenOnly);
+            if (sb != nullptr && sb->isVisible())
+                out << indent + QStringLiteral("status bar: %1").arg(rect(sb->geometry()));
+            if (QLayout *l = mw->layout())
+            {
+                // Empty after any invalidate() until the next pass: not a fault by itself.
+                const QRect g = l->geometry();
+                out << indent + QStringLiteral("layout geometry: %1")
+                           .arg(g.isValid() ? rect(g) : QStringLiteral("none (not laid out since it last changed)"));
+            }
+            const QString stuck = LayoutDiagnostics::mainLayoutProblem(mw);
+            out << indent + (stuck.isEmpty() ? QStringLiteral("main window layout: follows the window")
+                                             : QStringLiteral("main window layout: STUCK -- ") + stuck);
         }
         if (central == nullptr)
             return;
@@ -258,6 +351,28 @@ namespace
                             sz(gv->viewport()->size()));
         }
     }
+}
+
+QString LayoutDiagnostics::mainLayoutProblem(const QMainWindow *mw)
+{
+    if (mw == nullptr)
+        return QString();
+    const QStatusBar *sb = mw->findChild<QStatusBar *>(QString(), Qt::FindDirectChildrenOnly);
+    const bool hasBar = sb != nullptr && sb->isVisible();
+    if (hasBar && (sb->geometry().bottom() != mw->height() - 1 || sb->width() != mw->width()))
+        return QStringLiteral("the status bar is %1 in a %2 window").arg(rect(sb->geometry()), sz(mw->size()));
+
+    // The central area reaches the right edge and the status bar (or the
+    // bottom), unless its own maximum stops it.
+    const QWidget *central = mw->centralWidget();
+    if (central == nullptr || !central->isVisible())
+        return QString();
+    const QRect c = central->geometry();
+    const int floor = hasBar ? sb->geometry().top() - 1 : mw->height() - 1;
+    if ((c.right() < mw->width() - 1 && c.width() < central->maximumWidth())
+        || (c.bottom() < floor && c.height() < central->maximumHeight()))
+        return QStringLiteral("the central area is %1 in a %2 window").arg(rect(c), sz(mw->size()));
+    return QString();
 }
 
 QString LayoutDiagnostics::report(QWidget *mainWindow)
