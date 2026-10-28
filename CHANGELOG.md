@@ -104,6 +104,12 @@ back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
   waiting 49 days.
 - **OSC feedback with no path** sent an empty datagram to the feedback
   target; it sends nothing.
+- **Unpatching a universe could wipe another universe's output settings**
+  (an Art-Net or sACN target, a port) from the next save, and left its
+  own behind for the next line it was patched to: every plugin passed
+  the line and the universe the wrong way round (also in QLC+).
+- **RDM**: a SET to a device whose UID reads as a number (000000000001)
+  carried a stray byte, and a discovery branch with no range could crash.
 - **Code coverage campaign** (for developers): coverage.sh measures the
   whole build, the plugins and web access included, with branch coverage
   and a per-file table; the gaps that matter (show files, output, the
