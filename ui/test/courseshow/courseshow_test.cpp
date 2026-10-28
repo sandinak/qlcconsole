@@ -1741,7 +1741,7 @@ void CourseShow_Test::lessonZeroTwoTheVirtualStage()
         views << combos.at(0)->itemText(i);
     for (int i = 0; i < combos.at(1)->count(); ++i)
         rooms << combos.at(1)->itemText(i);
-    QCOMPARE(views, QStringList({ "Top", "Front", "Side", "45°" }));
+    QCOMPARE(views, QStringList({ "Top", "Front", "Back", "Side", "45°" }));
     QCOMPARE(rooms, QStringList({ "Work light", "House", "Dim", "Blackout" }));
     QCOMPARE(combos.at(0)->currentText(), QStringLiteral("45°"));
     QCOMPARE(combos.at(1)->currentText(), QStringLiteral("House"));

@@ -3436,10 +3436,10 @@ void Monitor_Test::studioTrussDragInEveryPlane()
     // in the plane of the view." For a VERTICAL truss, Top sees the run
     // end-on -- there is no axis to slide along there -- but both elevations
     // must work.
-    const StructureStudioView::Plane elevations[2] =
-        { StructureStudioView::Front, StructureStudioView::Side };
+    const StructureStudioView::Plane elevations[3] =
+        { StructureStudioView::Front, StructureStudioView::Side, StructureStudioView::Back };
 
-    for (int i = 0; i < 2; ++i)
+    for (int i = 0; i < 3; ++i)
     {
         rig.view->setPlane(elevations[i]);
         const QVector3D before = rig.pos();
@@ -4632,7 +4632,8 @@ void Monitor_Test::aStudioDragKeepsTheCornerAndTheGrab()
                             .arg(how).arg(double(stored.x())).arg(double(stored.y()))
                             .arg(double(c1.x())).arg(double(c1.y()))));
         // Front and Side: holding still does not creep along the hidden axis.
-        for (StructureStudioView::Plane plane : { StructureStudioView::Front, StructureStudioView::Side })
+        for (StructureStudioView::Plane plane : { StructureStudioView::Front, StructureStudioView::Side,
+                                                  StructureStudioView::Back })
         {
             view.setPlane(plane);
             const QVector3D at = view.fixtureCentre(fid);
@@ -4641,7 +4642,8 @@ void Monitor_Test::aStudioDragKeepsTheCornerAndTheGrab()
             const QVector3D now = view.fixtureCentre(fid);
             QVERIFY2((now - at).length() < 0.002f,
                      qPrintable(QString("%1, %2: eight still moves crept %3, %4 m")
-                                .arg(how, plane == StructureStudioView::Front ? "Front" : "Side")
+                                .arg(how, plane == StructureStudioView::Front ? "Front"
+                                        : plane == StructureStudioView::Back ? "Back" : "Side")
                                 .arg(double(now.x() - at.x())).arg(double(now.y() - at.y()))));
         }
     };
@@ -27871,5 +27873,367 @@ void Monitor_Test::aHeldObjectIsNeverMovedByADrag()
     QVERIFY2(deckXY(csp2) != was, "an unlocked deck did not move: the drag is not reaching it");
     delete mon;
     gone.dismiss();
+    delete doc;
+}
+
+/*********************************************************************
+ * a1: the Back view -- the Front plane seen from upstage
+ *********************************************************************/
+
+void Monitor_Test::theBackViewIsTheFrontSeenFromBehind()
+{
+    StudioRig rig;
+    QVERIFY(rig.build(m_doc, Truss::Horizontal));
+    StructureStudioView *v = rig.view;
+    const QVector3D c = rig.pos();
+    const QList<QVector3D> pts = {
+        rig.truss->origin(), rig.truss->positionAt(rig.truss->length()), c,
+        QVector3D(1.25f, 0.4f, 0.0f), QVector3D(6.5f, 3.0f, 4.75f)
+    };
+
+    v->setPlane(StructureStudioView::Back);
+    QCOMPARE(int(v->plane()), int(StructureStudioView::Back));
+    QVERIFY(!v->isViewOnly());
+
+    // The shared mapping round-trips in Back at every quarter turn: what a
+    // drag reads back is where the point was drawn, to well under half a pixel.
+    for (int turn = 0; turn < 4; ++turn)
+    {
+        v->setRotation(turn);
+        v->reload();
+        foreach (const QVector3D &w, pts)
+        {
+            const QPointF ab = v->screenToPlane(v->w2s(w));
+            const double ex = (ab.x() - double(w.x())) * v->m_scale;
+            const double ez = (ab.y() - double(w.z())) * v->m_scale;
+            QVERIFY2(qAbs(ex) < 0.5 && qAbs(ez) < 0.5,
+                     qPrintable(QString("turn %1: (%2, %3, %4) came back %5, %6 px off")
+                                .arg(turn).arg(double(w.x())).arg(double(w.y())).arg(double(w.z()))
+                                .arg(ex).arg(ez)));
+        }
+    }
+    v->setRotation(0);
+    v->reload();
+
+    // Front, mirrored left to right: the same scale, the same heights.
+    auto deltas = [&](StructureStudioView::Plane plane) {
+        v->setPlane(plane);
+        QList<QPointF> out;
+        foreach (const QVector3D &w, pts)
+            out << (v->w2s(w) - v->w2s(pts.first())) / v->m_scale;
+        return out;
+    };
+    const QList<QPointF> front = deltas(StructureStudioView::Front);
+    const double scale = v->m_scale;
+    const QList<QPointF> back = deltas(StructureStudioView::Back);
+    QCOMPARE(v->m_scale, scale);
+    for (int i = 0; i < pts.size(); ++i)
+    {
+        QVERIFY2(qAbs((back[i].x() + front[i].x()) * scale) < 0.5
+                 && qAbs((back[i].y() - front[i].y()) * scale) < 0.5,
+                 qPrintable(QString("point %1: Back %2, %3 vs Front %4, %5 (m)")
+                            .arg(i).arg(back[i].x()).arg(back[i].y())
+                            .arg(front[i].x()).arg(front[i].y())));
+    }
+    // Stage left (+X) is on the LEFT seen from behind.
+    QVERIFY(v->w2s(QVector3D(5, 0, 0)).x() < v->w2s(QVector3D(1, 0, 0)).x());
+
+    /* And it is the picture the angled camera derives at 180 degrees round
+       with no height: the same projection, not a second private one. */
+    v->setAngledView(180.0, 0.0);
+    const QList<QPointF> angled = deltas(StructureStudioView::Angled);
+    for (int i = 0; i < pts.size(); ++i)
+        QVERIFY2(qAbs((angled[i].x() - back[i].x()) * scale) < 0.5
+                 && qAbs((angled[i].y() - back[i].y()) * scale) < 0.5,
+                 qPrintable(QString("point %1: Back %2, %3 vs angled 180/0 %4, %5 (m)")
+                            .arg(i).arg(back[i].x()).arg(back[i].y())
+                            .arg(angled[i].x()).arg(angled[i].y())));
+
+    /* The rulers and the readout agree with the drawing: the width ruler's
+       tick for the fixture's X, and its height ruler's for its Z, sit on the
+       fixture's drawn centre, and the crosshair readout over it reads its X
+       and Z back. */
+    v->setPlane(StructureStudioView::Back);
+    const QPointF at = v->w2s(c);
+    QVERIFY(qAbs(v->w2s(v->axisWorldPoint(false, double(c.x()))).x() - at.x()) < 0.5);
+    QVERIFY(qAbs(v->w2s(v->axisWorldPoint(true, double(c.z()))).y() - at.y()) < 0.5);
+    int known = 0;
+    bool onSurface = false;
+    const QVector3D read = v->worldAt(at, &known, &onSurface);
+    QVERIFY(known & 1);
+    QVERIFY(known & 4);
+    QVERIFY2(qAbs(double(read.x() - c.x())) * v->m_scale < 0.5
+             && qAbs(double(read.z() - c.z())) * v->m_scale < 0.5,
+             qPrintable(QString("readout %1, %2 for a fixture at %3, %4")
+                        .arg(double(read.x())).arg(double(read.z()))
+                        .arg(double(c.x())).arg(double(c.z()))));
+}
+
+void Monitor_Test::theBackFaceFixtureIsOnTopInTheBackView()
+{
+    StudioRig rig;
+    QVERIFY(rig.build(m_doc, Truss::Horizontal, 2));
+    MonitorProperties *props = m_doc->monitorProperties();
+
+    // The laser on the upstage face, a wash on the downstage face, at the
+    // same point along the run: one on top of the other in either elevation.
+    FixtureRigProps rp = props->fixtureRigProps(rig.fxi->id());
+    props->setFixtureFace(rp, FixtureRigProps::FaceFront);
+    props->setFixtureRigProps(rig.fxi->id(), rp);
+
+    Fixture *laser = new Fixture(m_doc);
+    laser->setName("Laser");
+    laser->setChannels(1);
+    laser->setAddress(300);
+    QVERIFY(m_doc->addFixture(laser));
+    auto tidy = qScopeGuard([this, laser]() { m_doc->deleteFixture(laser->id()); });
+    props->setFixturePosition(laser->id(), 0, 0, QVector3D(0, 0, 0));
+    FixtureRigProps lp = rp;
+    props->setFixtureFace(lp, FixtureRigProps::FaceBack);
+    props->setFixtureRigProps(laser->id(), lp);
+    QCOMPARE(props->fixtureRigProps(laser->id()).face(), FixtureRigProps::FaceBack);
+
+    const QVector3D washAt = rig.pos();
+    const QVector3D laserAt = props->fixtureRigPosition(laser->id());
+    QVERIFY2(washAt.y() > laserAt.y(), "the wash is not downstage of the laser");
+    rig.view->reload();
+
+    // Front: the wash is nearer, drawn last, and a click there picks it.
+    rig.view->setPlane(StructureStudioView::Front);
+    QCOMPARE(rig.view->fixturesInDrawOrder().last(), rig.fxi->id());
+    QCOMPARE(rig.view->hitTestFixture(rig.view->w2s(laserAt)), rig.fxi->id());
+
+    // Back: the laser is nearer -- drawn over the wash, and picked.
+    rig.view->setPlane(StructureStudioView::Back);
+    QCOMPARE(rig.view->fixturesInDrawOrder().last(), laser->id());
+    QCOMPARE(rig.view->hitTestFixture(rig.view->w2s(laserAt)), laser->id());
+    QCOMPARE(rig.view->hitTestFixture(rig.view->w2s(washAt)), laser->id());
+}
+
+void Monitor_Test::putOnFaceInTheBackViewSetsTheBackFace()
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    StagePlatform *pl = props->addPlatform();
+    pl->setName("Riser"); pl->setOriginX(0.0f); pl->setOriginY(0.0f);
+    pl->setWidth(2.4f); pl->setDepth(1.0f); pl->setHeight(0.4f);
+    const quint32 gid = 78;
+    props->ensureGroup(gid, 0);
+    props->setGroupHasFrame(gid, true);
+    props->setGroupAnchor(gid, QStringLiteral("platform"), pl->id());
+
+    Fixture *fxi = new Fixture(m_doc);
+    fxi->setName("Strip"); fxi->setChannels(1); fxi->setAddress(560);
+    QVERIFY(m_doc->addFixture(fxi));
+    const quint32 fid = fxi->id(), plId = pl->id();
+    auto tidy = qScopeGuard([this, props, fid, plId]() {
+        m_doc->deleteFixture(fid);
+        props->removePlatform(plId);
+    });
+    props->setFixturePosition(fid, 0, 0, QVector3D(600, 500, 0));
+    props->setFixtureGroup(fid, gid);
+    QCOMPARE(props->fixtureFrameGroup(fid), gid);
+    FixtureRigProps rp;
+    rp.studioMount = 0;
+    rp.groupLocal = QVector3D(0.6f, 0.5f, pl->height());
+    props->setFixtureRigProps(fid, rp);
+
+    StructureStudioView view(m_doc, StructureStudioView::PlatformKind, pl->id());
+    view.resize(900, 500);
+    view.reload();
+    view.setLocked(false);
+
+    // "Put on Face" in Back: the BACK face -- the front plane, faced upstage,
+    // pinned to the riser's upstage edge.
+    view.setPlane(StructureStudioView::Back);
+    view.putOnFace({ fid });
+    FixtureRigProps now = props->fixtureRigProps(fid);
+    QCOMPARE(now.face(), FixtureRigProps::FaceBack);
+    QCOMPARE(now.studioMount, 1);
+    QVERIFY(now.studioFaceChosen);
+    QCOMPARE(double(now.groupLocal.y()), 0.0);
+
+    // Dragged about in Back, it stays on the back face -- the pin used to
+    // send it to the front edge on the first move.
+    const QVector3D at = props->fixtureRigPosition(fid);
+    QVERIFY(view.dragFixtureTo(fid, view.w2s(at) + QPointF(view.m_scale * 0.3, -view.m_scale * 0.1)));
+    now = props->fixtureRigProps(fid);
+    QCOMPARE(double(now.groupLocal.y()), 0.0);
+    QCOMPARE(now.face(), FixtureRigProps::FaceBack);
+    // Screen right seen from behind is stage RIGHT: X went down.
+    QVERIFY2(props->fixtureRigPosition(fid).x() < at.x() - 0.2f,
+             qPrintable(QString("a drag to the right in Back moved x %1 -> %2")
+                        .arg(double(at.x())).arg(double(props->fixtureRigPosition(fid).x()))));
+
+    // And Front puts it back on the front face, at the downstage edge.
+    view.setPlane(StructureStudioView::Front);
+    view.putOnFace({ fid });
+    now = props->fixtureRigProps(fid);
+    QCOMPARE(now.face(), FixtureRigProps::FaceFront);
+    QCOMPARE(double(now.groupLocal.y()), double(pl->depth()));
+}
+
+void Monitor_Test::aBackViewDragKeepsTheGrabAndTheCorner()
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    StagePlatform *pl = props->addPlatform();
+    pl->setName("Deck"); pl->setOriginX(0.0f); pl->setOriginY(0.0f);
+    pl->setWidth(6.0f); pl->setDepth(4.0f); pl->setHeight(0.4f);
+
+    // A 0.6 x 0.4 m light, as aStudioDragKeepsTheCornerAndTheGrab: the plot
+    // pins its corner, its centre is 0.3, 0.2 in from it.
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test"); def->setModel("Wash 600 B");
+    def->setType(QLCFixtureDef::Dimmer);
+    QLCChannel *ch = new QLCChannel();
+    ch->setName("Dimmer"); ch->setGroup(QLCChannel::Intensity);
+    def->addChannel(ch);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("1ch");
+    QLCPhysical phys;
+    phys.setWidth(600); phys.setHeight(400); phys.setDepth(300);
+    mode->setPhysical(phys);
+    mode->insertChannel(ch, 0);
+    def->addMode(mode);
+    Fixture *fxi = new Fixture(m_doc);
+    fxi->setName("Wash 600 B");
+    fxi->setFixtureDefinition(def, mode);
+    fxi->setAddress(480);
+    QVERIFY(m_doc->addFixture(fxi));
+    const quint32 fid = fxi->id(), plId = pl->id();
+    auto tidy = qScopeGuard([this, props, fid, plId]() {
+        m_doc->deleteFixture(fid);
+        props->removePlatform(plId);
+    });
+
+    props->setFixturePosition(fid, 0, 0, QVector3D(2000, 1000, 0.0f));
+    FixtureRigProps rp;
+    rp.deckPlatformId = pl->id();
+    props->setFixtureRigProps(fid, rp);
+    QVERIFY(props->fixtureRigProps(fid).onDeck());
+
+    StructureStudioView view(m_doc, StructureStudioView::PlatformKind, pl->id());
+    view.resize(800, 600);
+    view.setLocked(false);
+    view.reload();
+    view.setPlane(StructureStudioView::Back);
+
+    // Half a metre to the right on screen, seen from behind: 0.5 m toward
+    // stage right, the corner (not the centre) stored, Y untouched.
+    const QVector3D c0 = view.fixtureCentre(fid);
+    QVERIFY(view.dragFixtureTo(fid, view.w2s(c0) + QPointF(view.m_scale * 0.5, 0.0)));
+    const QVector3D c1 = view.fixtureCentre(fid);
+    QVERIFY2(qAbs(double(c1.x() - c0.x()) + 0.5) < 0.005 && qAbs(double(c1.y() - c0.y())) < 0.002,
+             qPrintable(QString("Back: dragged 0.5 m right, the centre moved %1, %2 m")
+                        .arg(double(c1.x() - c0.x())).arg(double(c1.y() - c0.y()))));
+    const QVector3D stored = props->fixturePosition(fid, 0, 0);
+    QVERIFY2(qAbs(double(stored.x()) - (double(c1.x()) - 0.3) * 1000.0) < 1.0
+             && qAbs(double(stored.y()) - (double(c1.y()) - 0.2) * 1000.0) < 1.0,
+             qPrintable(QString("Back: stored %1, %2 mm for a centre at %3, %4 m")
+                        .arg(double(stored.x())).arg(double(stored.y()))
+                        .arg(double(c1.x())).arg(double(c1.y()))));
+    // Held still, it does not creep.
+    for (int i = 0; i < 8; i++)
+        view.dragFixtureTo(fid, view.w2s(view.fixtureCentre(fid)));
+    QVERIFY((view.fixtureCentre(fid) - c1).length() < 0.002f);
+
+    /* A real drag keeps the grab: pressed off-centre, the spot under the
+       pointer stays under it. */
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    view.setHighlight({ fid });
+    const QVector3D g0 = view.fixtureCentre(fid);
+    const QPoint grab = (view.w2s(g0) + QPointF(view.m_scale * 0.2, 0.0)).toPoint();
+    QCOMPARE(view.hitTestFixture(grab), fid);
+    QTest::mousePress(&view, Qt::LeftButton, Qt::NoModifier, grab);
+    QTest::mouseMove(&view, grab + QPoint(10, 0));
+    QTest::mouseMove(&view, grab + QPoint(40, -20));
+    QTest::mouseRelease(&view, Qt::LeftButton, Qt::NoModifier, grab + QPoint(40, -20));
+    const QVector3D g1 = view.fixtureCentre(fid);
+    const QPointF moved = view.w2s(g1) - view.w2s(g0);
+    QVERIFY2(qAbs(moved.x() - 40.0) < 1.5 && qAbs(moved.y() + 20.0) < 1.5,
+             qPrintable(QString("Back: a 40, -20 px drag moved the centre %1, %2 px")
+                        .arg(moved.x()).arg(moved.y())));
+    QVERIFY(g1.x() < g0.x());              // right on screen = toward stage right
+}
+
+void Monitor_Test::theBackViewDoesNotMirrorText()
+{
+    StudioRig rig;
+    QVERIFY(rig.build(m_doc, Truss::Horizontal));
+    rig.fxi->setName("FL7");            // reads differently mirrored
+    StructureStudioView *v = rig.view;
+    const double dpr = v->devicePixelRatioF();
+
+    /* The name label, as light pixels in a box above and right of the
+       fixture: the label is placed in screen space from the drawn centre, so
+       Front and Back put it at the same offset and it must read the same --
+       not reversed. */
+    auto label = [&](StructureStudioView::Plane plane) {
+        v->setPlane(plane);
+        const QImage img = v->grab().toImage();
+        const QPointF c = v->w2s(rig.pos());
+        const QRect box = QRectF((c.x() + 6) * dpr, (c.y() - 22) * dpr,
+                                 60 * dpr, 15 * dpr).toRect() & img.rect();
+        QImage mask(box.size(), QImage::Format_Grayscale8);
+        mask.fill(0);
+        for (int y = 0; y < box.height(); ++y)
+            for (int x = 0; x < box.width(); ++x)
+            {
+                const QColor px = img.pixelColor(box.x() + x, box.y() + y);
+                if (px.red() > 190 && px.green() > 190 && px.blue() > 190)
+                    mask.setPixel(x, y, 255);
+            }
+        return mask;
+    };
+    const QImage front = label(StructureStudioView::Front);
+    const QImage back = label(StructureStudioView::Back);
+    int lit = 0;
+    for (int y = 0; y < front.height(); ++y)
+        for (int x = 0; x < front.width(); ++x)
+            lit += (qGray(front.pixel(x, y)) > 0) ? 1 : 0;
+    QVERIFY2(lit > 10, "no label found to compare");
+    QVERIFY2(front == back, "the Back view's label is not the Front view's label");
+    QVERIFY2(back != back.mirrored(true, false), "the probe cannot tell mirrored text apart");
+}
+
+void Monitor_Test::theEditorsOfferBackBesideFront()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    Truss *t = props->addTruss();
+    t->setName("T-B");
+    t->setLength(3.0f);
+    {
+        QWidget parent;
+        Monitor mon(&parent, doc);
+        QDialog dlg;
+        StructureStudioView *view = nullptr;
+        QVERIFY(mon.makeStudioPane(&dlg, 2 /* truss */, t->id(), nullptr, &view) != nullptr);
+
+        QComboBox *views = nullptr;
+        foreach (QComboBox *cb, dlg.findChildren<QComboBox *>())
+            if (cb->findData(int(StructureStudioView::Back)) >= 0 && cb->count() == 5)
+                views = cb;
+        QVERIFY2(views != nullptr, "no Back in the editor's View list");
+        const int front = views->findData(int(StructureStudioView::Front));
+        const int back = views->findData(int(StructureStudioView::Back));
+        QCOMPARE(back, front + 1);
+        QCOMPARE(views->itemText(back), QStringLiteral("Back"));
+
+        // Choosing it in the list sets the view...
+        views->setCurrentIndex(back);
+        QCOMPARE(int(view->plane()), int(StructureStudioView::Back));
+        views->setCurrentIndex(front);
+        QCOMPARE(int(view->plane()), int(StructureStudioView::Front));
+
+        // ...and so does its key, Ctrl+3, scoped to the editor.
+        QShortcut *key = dlg.findChild<QShortcut *>(QStringLiteral("studioViewKey%1").arg(back + 1));
+        QVERIFY(key != nullptr);
+        QCOMPARE(key->key(), QKeySequence(Qt::CTRL | Qt::Key_3));
+        emit key->activated();
+        QCOMPARE(int(view->plane()), int(StructureStudioView::Back));
+        QCOMPARE(views->currentIndex(), back);
+        QVERIFY(views->itemData(back, Qt::ToolTipRole).toString().contains("downstage"));
+    }
     delete doc;
 }

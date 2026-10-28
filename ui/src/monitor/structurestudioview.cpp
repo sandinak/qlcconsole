@@ -136,9 +136,11 @@ StructureStudioView::StructureStudioView(Doc *doc, Kind kind, quint32 id, QWidge
 
 void StructureStudioView::setPlane(Plane p)
 {
-    if (m_plane == p)
+    if (plane() == p)
         return;
-    m_plane = p;
+    // Back is the Front projection from the other side (see m_fromBehind).
+    m_fromBehind = (p == Back);
+    m_plane = m_fromBehind ? Front : p;
     m_zoomed = false;   // re-frame: this is a deliberate view change
     refit();
     update();
@@ -292,13 +294,23 @@ void StructureStudioView::setAngledView(double azimuthDeg, double elevationDeg)
  * handedness of the plot is preserved: a rotated plan still tells the truth
  * about which side of the stage a fixture is on. (A MIRROR would not, which is
  * why "downstage at the top with stage right still on the left" is not offered
- * here -- that flips the sense of every direction on the plot.) */
+ * here -- that flips the sense of every direction on the plot.)
+ *
+ * Back reverses the horizontal, and that is NOT such a mirror: it is where
+ * the eye really is. Standing upstage and looking downstage, stage left IS on
+ * your left -- the same picture the angled view gives at 180 degrees round
+ * and no height (project() there gives a = -X). Doing it here, in the one
+ * mapping, rather than with a negated 'a' in project(), keeps Back's in-plane
+ * coordinates identical to Front's, so every drag, pin and pick rule written
+ * for Front applies to Back unchanged; and since only coordinates are mapped
+ * -- the painter is never scaled by -1 -- text and icons are not mirrored. */
 QPointF StructureStudioView::planeToScreenVec(const QPointF &ab) const
 {
     // Top reads Y downward like a plan; every other view (including Angled)
     // has "up the screen" as its b axis.
     const double vSign = (m_plane == Top) ? 1.0 : -1.0;
-    const QPointF v(ab.x() * m_scale, vSign * ab.y() * m_scale);
+    const double hSign = m_fromBehind ? -1.0 : 1.0;   // Back: seen from upstage
+    const QPointF v(hSign * ab.x() * m_scale, vSign * ab.y() * m_scale);
     switch (m_rotation & 3)
     {
     case 1:  return QPointF(-v.y(),  v.x());   // 90 deg clockwise
@@ -319,7 +331,8 @@ QPointF StructureStudioView::screenVecToPlane(const QPointF &vIn) const
     default: break;
     }
     const double vSign = (m_plane == Top) ? 1.0 : -1.0;
-    return QPointF(v.x() / m_scale, v.y() / (vSign * m_scale));
+    const double hSign = m_fromBehind ? -1.0 : 1.0;
+    return QPointF(v.x() / (hSign * m_scale), v.y() / (vSign * m_scale));
 }
 
 QPointF StructureStudioView::w2s(const QVector3D &w) const
@@ -724,7 +737,7 @@ bool StructureStudioView::dragFixtureTo(quint32 fid, const QPointF &px)
          * top, so every vertical drag was overwritten with the surface height
          * and the fixture could never be positioned within the step. Clamp it
          * to the structure instead of pinning it to the skin. */
-        int pinComp; double pinVal; facePin(rp.studioMount, pinComp, pinVal);
+        int pinComp; double pinVal; facePin(rp.studioMount, pinComp, pinVal, rp.studioFlip);
         StagePlatform *inPl = (m_kind == PlatformKind) ? props->platform(m_id) : nullptr;
         if (rp.placement == FixtureRigProps::Inside && inPl != nullptr)
         {
@@ -2979,7 +2992,8 @@ void StructureStudioView::drawOneStructure(QPainter &p, Kind kind, quint32 id) c
             const QPointF r = w2s(QVector3D(cx + radiusM, cy + radiusM, 0));
             const double y0 = l.y();
             const double th = 5.0;   // slab thickness in px
-            p.drawRect(QRectF(QPointF(l.x(), y0 - th), QPointF(r.x(), y0)));
+            // normalized(): in Back the -X end is on the right.
+            p.drawRect(QRectF(QPointF(l.x(), y0 - th), QPointF(r.x(), y0)).normalized());
             p.setPen(QPen(plate.darker(150), 1.4));   // end ticks (feet)
             p.drawLine(l.x(), y0 - th, l.x(), y0 + 3);
             p.drawLine(r.x(), y0 - th, r.x(), y0 + 3);
@@ -3105,7 +3119,8 @@ void StructureStudioView::drawOneStructure(QPainter &p, Kind kind, quint32 id) c
             p.drawRect(QRectF(a, b).normalized());
             /* Its faces, seen flat: the stretch they cover filled -- the print
                when there is one -- so the shelves and lines still read over it. */
-            const int facing = (m_plane == Front) ? int(Tower::FrontSide)
+            const int facing = (m_plane == Front) ? int(m_fromBehind ? Tower::BackSide
+                                                                     : Tower::FrontSide)
                              : int(Tower::LeftSide | Tower::RightSide);
             if (t->hasFaces() && (t->facesSides() & facing))
             {
@@ -3685,7 +3700,7 @@ QVector3D StructureStudioView::fixtureEndB(quint32 fid) const
     return fixtureCentre(fid) + fixtureAxisLocal(rp) * float(half);
 }
 
-void StructureStudioView::facePin(int mount, int &pinComp, double &pinVal) const
+void StructureStudioView::facePin(int mount, int &pinComp, double &pinVal, bool flip) const
 {
     if (mount == 1)      pinComp = 1;    // Front → pin Y (depth)
     else if (mount == 2) pinComp = 0;    // Side  → pin X
@@ -3696,6 +3711,11 @@ void StructureStudioView::facePin(int mount, int &pinComp, double &pinVal) const
     if (pl != nullptr)
     {
         pinVal = (pinComp == 1) ? pl->depth() : (pinComp == 2) ? pl->height() : 0.0;
+        /* The Front plane faced the other way is the BACK face: the upstage
+           edge. Without this a fixture put on the back of a deck went back to
+           the front the first time it was dragged. */
+        if (pinComp == 1 && flip)
+            pinVal = 0.0;
         return;
     }
     // A bare group (no platform): pin to the members' AVERAGE on that component.
@@ -8207,12 +8227,15 @@ QList<quint32> StructureStudioView::fixturesInDrawOrder() const
     MonitorProperties *props = m_doc->monitorProperties();
 
     /* Depth toward the eye of a flat view, larger = nearer: Front looks
-       upstage from downstage (+Y), Side looks from stage right (-X), Top looks
-       down (+Z). The same conventions the angled projection degenerates to. */
+       upstage from downstage (+Y), Back downstage from upstage (-Y), Side
+       looks from stage right (-X), Top looks down (+Z). The same conventions
+       the angled projection degenerates to. So in Back the fixtures on a
+       truss's upstage face draw last -- on top -- and win a tied pick
+       (hitTestFixture() walks this same order). */
     auto depthOf = [this](const QVector3D &w) -> double {
         switch (m_plane)
         {
-        case Front: return double(w.y());
+        case Front: return m_fromBehind ? -double(w.y()) : double(w.y());
         case Side:  return -double(w.x());
         case Top:   return double(w.z());
         default:    return viewDepth(w);
@@ -8316,7 +8339,7 @@ void StructureStudioView::distributeOnFace(const QList<quint32> &sel)
             else                      { W = pl->width(); H = pl->depth();  }
         }
         const int mount = int(m_plane);
-        int pinComp; double pinVal; facePin(mount, pinComp, pinVal);
+        int pinComp; double pinVal; facePin(mount, pinComp, pinVal, m_fromBehind);
         double L = 0.0;
         foreach (quint32 fid, ids) L = qMax(L, fixtureLenM(fid));
         const bool stackVertical = (double(n) * L > W + 1e-6);
@@ -8333,11 +8356,14 @@ void StructureStudioView::distributeOnFace(const QList<quint32> &sel)
             }
             else
             {
-                a = W * (i + 0.5) / n;                              // left → right
+                // Left to right as SEEN: in Back that runs from +X to -X.
+                a = m_fromBehind ? W * (n - i - 0.5) / n : W * (i + 0.5) / n;
                 b = H * 0.5;                                        // centred vertically
             }
             FixtureRigProps rp = props->fixtureRigProps(ids[i]);
             rp.setStudioMount(mount);
+            if (m_plane == Front)
+                rp.studioFlip = m_fromBehind;   // the face being looked at
             QVector3D lp;
             if (m_plane == Front)     lp = QVector3D(float(a), 0.0f, float(b));
             else if (m_plane == Side) lp = QVector3D(0.0f, float(a), float(b));
@@ -8464,7 +8490,7 @@ void StructureStudioView::setFixtureFace(quint32 fid, int face)
     // riser) strip just changes which plane its bar lies in.
     if (props->fixtureFrameGroup(fid) != 0)
     {
-        int pinComp; double pinVal; facePin(face, pinComp, pinVal);
+        int pinComp; double pinVal; facePin(face, pinComp, pinVal, rp.studioFlip);
         QVector3D lp = rp.groupLocal;
         if (pinComp == 0)      lp.setX(float(pinVal));
         else if (pinComp == 1) lp.setY(float(pinVal));
@@ -8740,7 +8766,10 @@ void StructureStudioView::putOnFace(const QList<quint32> &ids)
     MonitorProperties *props = m_doc->monitorProperties();
     QList<quint32> fids = ids.isEmpty() ? mountedFixtures() : ids;
     const int mount = int(m_plane);            // Top/Front/Side ↔ studioMount 0/1/2
-    int pinComp; double pinVal; facePin(mount, pinComp, pinVal);
+    /* Front and Back are the two faces of one plane: which one is the side
+       of it being looked at. Top and Side keep whichever way it faced, there
+       being no view of the underside or of the other side to say otherwise. */
+    int pinComp; double pinVal; facePin(mount, pinComp, pinVal, m_plane == Front && m_fromBehind);
     bool any = false;
     foreach (quint32 fid, fids)
     {
@@ -8748,6 +8777,11 @@ void StructureStudioView::putOnFace(const QList<quint32> &ids)
         if (fg == 0) continue;                 // only frame-group fixtures have a face
         FixtureRigProps rp = props->fixtureRigProps(fid);
         rp.setStudioMount(mount);
+        if (m_plane == Front)
+        {
+            rp.studioFlip = m_fromBehind;      // FaceFront, or FaceBack
+            rp.studioFaceChosen = true;        // a load must not repair it away
+        }
         QVector3D lp = rp.groupLocal;
         if (pinComp == 0)      lp.setX(float(pinVal));
         else if (pinComp == 1) lp.setY(float(pinVal));
@@ -9059,8 +9093,20 @@ void StructureStudioView::drawRulers(QPainter &p) const
             p.drawText(QRectF(sx - 16, by + 6, 32, 14), Qt::AlignHCenter | Qt::AlignVCenter, QString::number(qAbs(k)));
         }
     }
-    p.setPen(axisCol); p.drawText(QRectF(GW + 3, by + 4, 40, 14), Qt::AlignLeft | Qt::AlignVCenter,
-                                  QString("↔ %1").arg(sfx));
+    /* From behind, the numbers still count out from the structure's centre
+       either way -- but the side they count toward is the other one, so the
+       ruler says so rather than leave a reader assuming the Front view. */
+    p.setPen(axisCol);
+    if (m_fromBehind)
+    {
+        const QString note = tr("↔ %1 · from behind: SL ◀ ▶ SR").arg(sfx);
+        const QRectF nr(GW + 3, by + 4, QFontMetricsF(p.font()).horizontalAdvance(note) + 6, 14);
+        p.fillRect(nr, band);           // over the ticks it sits on, legibly
+        p.drawText(nr, Qt::AlignLeft | Qt::AlignVCenter, note);
+    }
+    else
+        p.drawText(QRectF(GW + 3, by + 4, 40, 14), Qt::AlignLeft | Qt::AlignVCenter,
+                   QString("↔ %1").arg(sfx));
 
     // Cursor marker (blue, like the main window) + selected-fixture marker (green).
     if (m_hasCursor)
@@ -9260,12 +9306,16 @@ void StructureStudioView::drawOrientationLabels(QPainter &p) const
     case Front:                                // a = X, b = Z (screen-up)
         leftLbl  = tr("stage right");  rightLbl  = tr("stage left");
         topLbl   = tr("up");           bottomLbl = tr("floor");
+        // Back: the same plane from upstage, so the two sides change places.
+        if (m_fromBehind)
+            qSwap(leftLbl, rightLbl);
         break;
     case Side:                                 // a = Y, b = Z (screen-up)
         leftLbl  = tr("upstage");      rightLbl  = tr("downstage");
         topLbl   = tr("up");           bottomLbl = tr("floor");
         break;
     case Angled:                               // no flat axes to name
+    case Back:                                 // never held: Back is Front + m_fromBehind
         break;
     }
 
@@ -9572,10 +9622,11 @@ void StructureStudioView::paintEvent(QPaintEvent *)
     p.setPen(QColor(160, 164, 175));
     // One entry per Plane -- adding Angled to the enum without adding it here
     // read off the end of the array.
-    const char *names[] = { "Top", "Front", "Side", "45°" };
-    const int idx = qBound(0, int(m_plane), int(sizeof(names) / sizeof(names[0])) - 1);
+    const char *names[] = { "Top", "Front", "Side", "45°", "Back" };
+    const int idx = qBound(0, int(plane()), int(sizeof(names) / sizeof(names[0])) - 1);
     p.drawText(rect().adjusted(0, 6, -8, 0), Qt::AlignTop | Qt::AlignRight,
                (m_plane == Angled) ? tr("%1 — view only").arg(names[idx])
+               : m_fromBehind      ? tr("2D — %1, looking downstage").arg(names[idx])
                                    : tr("2D — %1").arg(names[idx]));
     drawOrientationLabels(p);
 
