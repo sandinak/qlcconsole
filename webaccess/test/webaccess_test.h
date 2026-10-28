@@ -70,6 +70,12 @@ private slots:
     void systemCommandsNeedAnAdmin();
     void uploadNamesAreSanitised();
 
+    /* The password file and Basic authentication, WebAccessAuth on its own
+       (coverage campaign): no server, no network. */
+    void passwordFileFormats();
+    void passwordFileRoundTrip();
+    void basicAuthChecksTheCredentials();
+
 private:
     void startWeb(bool auth, const QString &passwdFile = QString());
     QByteArray http(const QByteArray &request, int timeoutMs = 5000);

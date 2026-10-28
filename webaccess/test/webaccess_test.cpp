@@ -33,6 +33,8 @@
 #include "webaccess.h"
 #include "webaccessbase.h"
 #include "webaccessauth.h"
+#include "qhttprequest.h"
+#include "qhttpresponse.h"
 #undef private
 #undef protected
 #include "virtualconsole.h"
@@ -73,10 +75,13 @@ void WebAccess_Test::cleanup()
     /* Let any WebSocket close land (deleteLater of the connection) before the
        server is torn down: see shutdownWithALiveClientIsClean, which pins the
        re-entrant-delete crash in WebAccessBase::~WebAccessBase. */
-    QTest::qWait(600);
-    delete m_web;
-    m_web = nullptr;
-    QTest::qWait(50);
+    if (m_web != nullptr)
+    {
+        QTest::qWait(600);
+        delete m_web;
+        m_web = nullptr;
+        QTest::qWait(50);
+    }
     delete m_sd;
     m_sd = nullptr;
     delete m_vc;
@@ -618,3 +623,169 @@ void WebAccess_Test::uploadNamesAreSanitised()
 }
 
 QTEST_MAIN(WebAccess_Test)
+
+/*****************************************************************************
+ * WebAccessAuth on its own
+ *****************************************************************************/
+
+static QString sha(QCryptographicHash::Algorithm a, const QString &text)
+{
+    return QCryptographicHash::hash(text.toUtf8(), a).toHex();
+}
+
+void WebAccess_Test::passwordFileFormats()
+{
+    /* username:passwordHash[:level[:hashType[:salt]]]: a bare name and
+       hash is an admin with an unsalted SHA-256 (htpasswd-like files
+       written by hand), the rest as given. */
+    const QString path = m_home.filePath("formats_passwd");
+    QFile f(path);
+    QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Text));
+    f.write(QString("alice:%1\n"
+                    "not a line\n"
+                    "\n"
+                    "bob:%2:10\n"
+                    "carol:%3:20:sha1:pepper\n"
+                    "dave:%4:1:md5:s\n"
+                    "erin:%5:1:whirlpool:s\n"
+                    "bob:%6:1\n")
+            .arg(sha(QCryptographicHash::Sha256, "a-pass"),
+                 sha(QCryptographicHash::Sha256, "b-pass"),
+                 sha(QCryptographicHash::Sha1, "c-passpepper"),
+                 sha(QCryptographicHash::Md5, "d-passs"),
+                 sha(QCryptographicHash::Sha1, "e-passs"),
+                 sha(QCryptographicHash::Sha256, "b-new")).toUtf8());
+    f.close();
+
+    WebAccessAuth auth("QLC+");
+    QVERIFY(!auth.loadPasswordsFile(m_home.filePath("no_such_passwd")));
+    QVERIFY(auth.getUsers().isEmpty());
+    QVERIFY(!auth.hasAtLeastOneAdmin());
+
+    QVERIFY(auth.loadPasswordsFile(path));
+    QMap<QString, WebAccessUser> users;
+    for (const WebAccessUser &u : auth.getUsers())
+        users.insert(u.username, u);
+    QCOMPARE(users.keys(), QStringList({ "alice", "bob", "carol", "dave", "erin" }));
+    QCOMPARE(int(users["alice"].level), int(SUPER_ADMIN_LEVEL));
+    QCOMPARE(users["alice"].hashType, QString("sha256"));
+    QVERIFY(users["alice"].passwordSalt.isEmpty());
+    QCOMPARE(int(users["bob"].level), 1);                  // the later line wins
+    QCOMPARE(int(users["carol"].level), 20);
+    QCOMPARE(users["carol"].passwordSalt, QString("pepper"));
+    QVERIFY(auth.hasAtLeastOneAdmin());
+
+    QVERIFY(auth.verifyPassword("a-pass", users["alice"]));
+    QVERIFY(!auth.verifyPassword("a-pas", users["alice"]));
+    QVERIFY(auth.verifyPassword("b-new", users["bob"]));
+    QVERIFY(!auth.verifyPassword("b-pass", users["bob"]));
+    QVERIFY(auth.verifyPassword("c-pass", users["carol"]));
+    QVERIFY(auth.verifyPassword("d-pass", users["dave"]));
+    // An unknown hash type is taken as SHA-1
+    QVERIFY(auth.verifyPassword("e-pass", users["erin"]));
+
+    // Only an admin is an admin
+    auth.deleteUser("alice");
+    QVERIFY(!auth.hasAtLeastOneAdmin());
+    QVERIFY(auth.setUserLevel("dave", SUPER_ADMIN_LEVEL));
+    QVERIFY(auth.hasAtLeastOneAdmin());
+}
+
+void WebAccess_Test::passwordFileRoundTrip()
+{
+    const QString path = m_home.filePath("roundtrip_passwd");
+    QFile::remove(path);
+
+    WebAccessAuth auth("QLC+");
+    QVERIFY(!auth.loadPasswordsFile(path));         // not there yet: remembered
+    auth.addUser("admin", "s3cret:with:colons", SUPER_ADMIN_LEVEL);
+    auth.addUser("desk", "deskpw", SIMPLE_DESK_AND_VC_LEVEL);
+    auth.addUser("gone", "x", VC_ONLY_LEVEL);
+    auth.deleteUser("gone");
+    auth.deleteUser("never-was");
+    QVERIFY(!auth.setUserLevel("never-was", VC_ONLY_LEVEL));
+    QVERIFY(auth.setUserLevel("desk", VC_ONLY_LEVEL));
+    QVERIFY(auth.savePasswordsFile());
+
+    // Salted per user: one password, two users, two hashes
+    auth.addUser("twin1", "same", VC_ONLY_LEVEL);
+    auth.addUser("twin2", "same", VC_ONLY_LEVEL);
+    WebAccessUser t1, t2;
+    for (const WebAccessUser &u : auth.getUsers())
+    {
+        if (u.username == "twin1") t1 = u;
+        if (u.username == "twin2") t2 = u;
+    }
+    QCOMPARE(t1.passwordSalt.size(), 32);
+    QVERIFY(QRegularExpression("^[0-9a-f]{32}$").match(t1.passwordSalt).hasMatch());
+    QVERIFY(t1.passwordSalt != t2.passwordSalt);
+    QVERIFY(t1.passwordHash != t2.passwordHash);
+    QCOMPARE(t1.hashType, QString("sha256"));
+
+    WebAccessAuth again("QLC+");
+    QVERIFY(again.loadPasswordsFile(path));
+    QMap<QString, WebAccessUser> users;
+    for (const WebAccessUser &u : again.getUsers())
+        users.insert(u.username, u);
+    QCOMPARE(users.keys(), QStringList({ "admin", "desk" }));
+    QCOMPARE(int(users["admin"].level), int(SUPER_ADMIN_LEVEL));
+    QCOMPARE(int(users["desk"].level), int(VC_ONLY_LEVEL));
+    QVERIFY(again.verifyPassword("s3cret:with:colons", users["admin"]));
+    QVERIFY(again.verifyPassword("deskpw", users["desk"]));
+    QVERIFY(!again.verifyPassword("deskpw", users["admin"]));
+
+    // Nowhere to write
+    WebAccessAuth nowhere("QLC+");
+    nowhere.loadPasswordsFile(m_home.filePath("no/such/dir/passwd"));
+    nowhere.addUser("admin", "x", SUPER_ADMIN_LEVEL);
+    QVERIFY(!nowhere.savePasswordsFile());
+}
+
+void WebAccess_Test::basicAuthChecksTheCredentials()
+{
+    WebAccessAuth auth("QLC+ test");
+    QHttpRequest req(nullptr);
+    QHttpResponse res(nullptr);        // headers only: nothing is written
+
+    auto ask = [&](const QByteArray &authorization) {
+        HeaderHash h;
+        if (!authorization.isNull())
+            h.insert("authorization", authorization);
+        req.m_headers = h;
+        res.m_headers.clear();
+        return auth.authenticateRequest(&req, &res);
+    };
+    auto basic = [](const QString &userPass) {
+        return QByteArray("Basic ") + userPass.toUtf8().toBase64();
+    };
+
+    // No admin yet: nobody is anybody, whatever they send
+    auth.addUser("guest", "pw", VC_ONLY_LEVEL);
+    WebAccessUser u = ask(basic("guest:pw"));
+    QVERIFY(u.username.isEmpty());
+    QCOMPARE(int(u.level), int(GUEST_LEVEL));
+
+    auth.addUser("admin", "pa:ss", SUPER_ADMIN_LEVEL);
+
+    // Asked for, with the realm
+    u = ask(QByteArray());
+    QVERIFY(u.username.isEmpty());
+    QCOMPARE(int(u.level), int(GUEST_LEVEL));
+    QCOMPARE(res.m_headers.value("WWW-Authenticate"), QString("Basic realm=\"QLC+ test\""));
+
+    QVERIFY(ask("Bearer abc").username.isEmpty());
+    QVERIFY(ask(basic("admin")).username.isEmpty());          // no colon
+    QVERIFY(ask(basic("admin:pa")).username.isEmpty());       // wrong
+    QVERIFY(ask(basic("admin:pa:sss")).username.isEmpty());
+    QVERIFY(ask(basic("nobody:pa:ss")).username.isEmpty());
+    QVERIFY(ask(basic(":pa:ss")).username.isEmpty());
+    QVERIFY(ask(basic("guest:")).username.isEmpty());
+
+    // The password is everything after the first colon
+    u = ask(basic("admin:pa:ss"));
+    QCOMPARE(u.username, QString("admin"));
+    QCOMPARE(int(u.level), int(SUPER_ADMIN_LEVEL));
+    u = ask(basic("guest:pw"));
+    QCOMPARE(u.username, QString("guest"));
+    QCOMPARE(int(u.level), int(VC_ONLY_LEVEL));
+}
