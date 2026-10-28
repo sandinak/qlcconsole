@@ -16,6 +16,11 @@
 #include "monitorproperties.h"
 #include "powerdistribution.h"
 #include "fixture.h"
+#include "collection.h"
+#include "chaser.h"
+#include "chaserstep.h"
+#include "efx.h"
+#include "efxfixture.h"
 #undef protected
 #undef private
 
@@ -374,6 +379,92 @@ void QxwImporter_Test::anImportedFixtureNameAlreadyInTheShowIsNumbered()
     foreach (Fixture *f, m_target->fixtures()) names << f->name();
     QVERIFY(names.contains("AT1-3z #2"));
     QVERIFY(r.warnings.join("\n").contains("imported as \"AT1-3z #2\""));
+}
+
+void QxwImporter_Test::collectionMembersFollowChainedRemaps()
+{
+    // Source: scenes 1 and 2, a collection of both in that order
+    Scene *a = new Scene(m_source);
+    a->setName("A");
+    QVERIFY(m_source->addFunction(a, 1));
+    Scene *b = new Scene(m_source);
+    b->setName("B");
+    QVERIFY(m_source->addFunction(b, 2));
+    Collection *coll = new Collection(m_source);
+    coll->setName("Both");
+    QVERIFY(m_source->addFunction(coll, 5));
+    QVERIFY(coll->addFunction(1));
+    QVERIFY(coll->addFunction(2));
+
+    /* Target has functions 0 and 1: A can't keep its id */
+    QVERIFY(m_target->addFunction(new Scene(m_target), 0));
+    Scene *occupant = new Scene(m_target);
+    occupant->setName("Occupant");
+    QVERIFY(m_target->addFunction(occupant, 1));
+
+    QxwImportResult r = QxwImporter::import(m_source, m_target, QList<quint32>(),
+                                            QList<quint32>(), QList<quint32>() << 5);
+    QCOMPARE(r.functionsImported, 3);
+    const quint32 newA = r.functionMap.value(1);
+    const quint32 newB = r.functionMap.value(2);
+    /* Which of the two is cloned first is up to a hash's order: A on 2 and
+       B on 3 (the chain the old loop broke), or B kept on 2 and A on 3 */
+    QVERIFY(newA != 1 && newA != newB);
+    QVERIFY((newA == 2 && newB == 3) || (newA == 3 && newB == 2));
+    QCOMPARE(m_target->function(newA)->name(), QString("A"));
+    QCOMPARE(m_target->function(newB)->name(), QString("B"));
+
+    Collection *imported = qobject_cast<Collection *>(m_target->function(r.functionMap.value(5)));
+    QVERIFY(imported != NULL);
+    QCOMPARE(imported->components(), QList<quint32>({ newA, newB }));
+    QCOMPARE(m_target->function(1)->name(), QString("Occupant"));     // untouched
+}
+
+void QxwImporter_Test::chaserStepsAndEfxHeadsFollowRemaps()
+{
+    Fixture *fx = new Fixture(m_source);
+    fx->setName("Mover");
+    fx->setChannels(4);
+    QVERIFY(m_source->addFixture(fx, 0));
+    EFX *efx = new EFX(m_source);
+    efx->setName("Circle");
+    QVERIFY(m_source->addFunction(efx, 3));
+    EFXFixture *ef = new EFXFixture(efx);
+    ef->setHead(GroupHead(0, 0));
+    QVERIFY(efx->addFixture(ef));
+    Scene *s = new Scene(m_source);
+    QVERIFY(m_source->addFunction(s, 4));
+    Chaser *ch = new Chaser(m_source);
+    QVERIFY(m_source->addFunction(ch, 6));
+    QVERIFY(ch->addStep(ChaserStep(4)));
+    QVERIFY(ch->addStep(ChaserStep(3)));
+
+    // The target already has fixture 0 and functions 3 and 4
+    Fixture *tfx = new Fixture(m_target);
+    tfx->setName("House");
+    tfx->setChannels(1);
+    tfx->setAddress(100);
+    QVERIFY(m_target->addFixture(tfx, 0));
+    QVERIFY(m_target->addFunction(new Scene(m_target), 3));
+    QVERIFY(m_target->addFunction(new Scene(m_target), 4));
+
+    QxwImportResult r = QxwImporter::import(m_source, m_target, QList<quint32>(),
+                                            QList<quint32>(), QList<quint32>() << 6);
+    Chaser *ich = qobject_cast<Chaser *>(m_target->function(r.functionMap.value(6)));
+    QVERIFY(ich != NULL);
+    QCOMPARE(ich->steps().size(), 2);
+    QCOMPARE(ich->steps().at(0).fid, r.functionMap.value(4));
+    QCOMPARE(ich->steps().at(1).fid, r.functionMap.value(3));
+    QVERIFY(r.functionMap.value(3) != 3);
+
+    EFX *iefx = qobject_cast<EFX *>(m_target->function(r.functionMap.value(3)));
+    QVERIFY(iefx != NULL);
+    QCOMPARE(iefx->fixtures().size(), 1);
+    const quint32 movedFx = iefx->fixtures().first()->head().fxi;
+    QVERIFY(movedFx != 0);
+    QVERIFY(m_target->fixture(movedFx) != NULL);
+    QCOMPARE(m_target->fixture(movedFx)->name(), QString("Mover"));
+    QCOMPARE(m_target->fixture(0)->name(), QString("House"));
 }
 
 QTEST_APPLESS_MAIN(QxwImporter_Test)

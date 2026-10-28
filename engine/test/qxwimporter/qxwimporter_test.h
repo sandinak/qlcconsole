@@ -52,6 +52,12 @@ private slots:
     /** A nested group brings its ancestry with it. */
     void mapGroupParentChainFollows();
 
+    /** Coverage campaign: references rewritten when ids collide -- a
+        collection keeps every member (remaps that chain, 1 to 2 and 2 to
+        3, used to drop one), a chaser's steps, an EFX's heads */
+    void collectionMembersFollowChainedRemaps();
+    void chaserStepsAndEfxHeadsFollowRemaps();
+
 private:
     Doc *m_source;
     Doc *m_target;
