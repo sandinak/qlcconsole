@@ -337,6 +337,9 @@ void E131_Test::pluginAppliesAndKeepsTheParameters()
     io.controller = NULL;
     plugin.m_IOmapping.clear();
     plugin.m_IOmapping.append(io);
+    /* A line that isn't there is refused at once: no waiting for
+       interfaces (the user's setting), and no rescan to re-sort the lines */
+    plugin.m_ifaceWaitTime = 0;
     typedef QLCIOPlugin P;
 
     QVERIFY(!plugin.openOutput(1, 3));                  // no such line

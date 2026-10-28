@@ -3001,6 +3001,7 @@ void ArtNet_Test::pluginKeepsOnlyWhatDiffersFromTheDefault()
 {
     ArtNetPlugin plugin;
     plugin.m_IOmapping.clear();
+    plugin.m_ifaceWaitTime = 0;     // a missing line is refused at once, no rescan
     QList<QNetworkDatagram> sink;
     addSinkLine(plugin, &sink, 2);
     typedef QLCIOPlugin P;
