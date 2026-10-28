@@ -332,6 +332,35 @@ function(qlc_skip_testcase_dirs dir)
 endfunction()
 qlc_skip_testcase_dirs("${CMAKE_CURRENT_SOURCE_DIR}")
 
+# No test program may open a window on the real screen, or leave a crash
+# dialog there, however it is started: engine/test/common/testguard.cpp goes
+# into every executable defined under a test/ directory or linking Qt Test.
+# platforms/linux/check-test-guard.sh checks the built programs for it.
+add_library(qlc_test_guard OBJECT engine/test/common/testguard.cpp)
+function(qlc_guard_test_programs dir)
+    get_property(targets DIRECTORY "${dir}" PROPERTY BUILDSYSTEM_TARGETS)
+    foreach(t IN LISTS targets)
+        get_target_property(type ${t} TYPE)
+        if(NOT type STREQUAL "EXECUTABLE")
+            continue()
+        endif()
+        get_target_property(srcdir ${t} SOURCE_DIR)
+        get_target_property(libs ${t} LINK_LIBRARIES)
+        if(srcdir MATCHES "/test(/|$)" OR libs MATCHES "Qt[0-9]*::Test")
+            target_sources(${t} PRIVATE $<TARGET_OBJECTS:qlc_test_guard>)
+            set_property(GLOBAL APPEND PROPERTY QLC_TEST_GUARDED ${t})
+        endif()
+    endforeach()
+    get_property(subdirs DIRECTORY "${dir}" PROPERTY SUBDIRECTORIES)
+    foreach(d IN LISTS subdirs)
+        qlc_guard_test_programs("${d}")
+    endforeach()
+endfunction()
+qlc_guard_test_programs("${CMAKE_CURRENT_SOURCE_DIR}")
+get_property(_guarded GLOBAL PROPERTY QLC_TEST_GUARDED)
+list(LENGTH _guarded _guarded_count)
+message(STATUS "Test guard (offscreen, no crash dialogs) in ${_guarded_count} test programs")
+
 # HELPER: PRINT ALL VARIABLES KNOWN BY CMAKE
 
 #message("QTDIR: ${QT_DIR}")

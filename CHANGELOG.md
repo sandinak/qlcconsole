@@ -79,6 +79,13 @@ back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
   between and saw 0 for a dimmer at full. They now read a whole frame
   (the copy taken under the frame lock), and wait for the run to stop and
   the Show Tree's sweep to fire instead of a fixed 400 ms.
+- **No test can put a window, or a crash dialog, on the screen** (for
+  developers): every test.sh, unittest.sh and every test program itself
+  (engine/test/common/testguard.cpp, linked into each) run Qt offscreen
+  unless QLC_TEST_REAL_SCREEN=1; a crashing test program on macOS exits
+  without ReportCrash's "quit unexpectedly" dialog (QLC_TEST_CRASH_REPORTS=1
+  keeps it). The gate fails when a test.sh or a test program lacks the guard
+  (platforms/linux/check-test-guard.sh, with its own self-test).
 
 ## [0.3.0] - 2026-10-26
 

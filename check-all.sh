@@ -226,6 +226,17 @@ if ! command -v xmllint >/dev/null 2>&1 || ! python3 -c 'import lxml.etree' >/de
     exit 1
 fi
 
+# No test may open a window on the real screen: every test.sh starts
+# offscreen (each leg's unittest.sh then checks the built programs for the
+# test guard too). The check's own test first.
+if ! GUARD_OUT=$("$REPO/platforms/linux/check-test-guard.sh" --self-test 2>&1 \
+        && "$REPO/platforms/linux/check-test-guard.sh" --source "$REPO" 2>&1); then
+    echo >&2 "$GUARD_OUT"
+    { echo "gate=1 host=$GATE_HOST qt=$QT_VERSION rev=$GATE_REV"
+      echo "check-test-guard.sh failed: a test could open a window on the screen. Nothing built or tested."; } | tee "$LOGS/summary.txt"
+    exit 1
+fi
+
 echo "Gate in $REPO on $GATE_HOST: $JOBS cores, Qt $QT_VERSION at $QT6, $CCACHE_STATE; logs in $LOGS"
 
 #############################################################################

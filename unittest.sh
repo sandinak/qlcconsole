@@ -2,10 +2,11 @@
 
 # Never put a test's windows on the real screen. On macOS the UI tests ran on
 # the desktop: every dialog a test drives, and every widget one shows, popped
-# up in front of whatever was being worked on (CI's Linux job has xvfb, so it
-# never showed). Offscreen unless the caller asked for a platform -- set
-# QT_QPA_PLATFORM=cocoa to watch them on purpose.
-if [ "$(uname)" = "Darwin" ] && [ -z "$QT_QPA_PLATFORM" ]; then
+# up in front of whatever was being worked on. Offscreen on every OS, whatever
+# QT_QPA_PLATFORM says, unless QLC_TEST_REAL_SCREEN=1 asks to watch them (then
+# set QT_QPA_PLATFORM=cocoa or xcb as well, or take Qt's default). Each test.sh
+# and each test program does the same (platforms/linux/check-test-guard.sh).
+if [ "${QLC_TEST_REAL_SCREEN:-}" != 1 ]; then
   export QT_QPA_PLATFORM=offscreen
 fi
 
@@ -82,6 +83,8 @@ done
 cp $SOURCE_DIR/platforms/linux/unittest.sh $DEST_DIR/
 # The tests that must run alone, after the concurrent batch (see there).
 cp $SOURCE_DIR/platforms/linux/unittest-serial.txt $DEST_DIR/
+# The check that every test.sh and test program keeps off the real screen.
+cp $SOURCE_DIR/platforms/linux/check-test-guard.sh $DEST_DIR/
 
 # Propagate the runner's exit status. Without capturing it, this script's exit
 # status is popd's -- always 0 -- so "make check" reported failures in its
