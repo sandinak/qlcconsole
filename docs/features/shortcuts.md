@@ -24,6 +24,7 @@
 | ⌘W | Close the window in front: the Rig Overview, a structure's editor (as Cancel), a dialog. In the Classic Functions tab ⌘W is the Function Wizard |
 | ⌘Q | Quit |
 | ⌘M | Minimize |
+| ⌃⌘F (also ⌘F11; Ctrl+F11 on Windows and Linux) | **Full Screen** (View ▸ Full Screen), and back |
 | ⇧F1 | The stock QLC+ reference (online) |
 
 **Right-click** a **tab** → **Open in Its Own Window**, or **Shift-click**

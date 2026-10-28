@@ -49,6 +49,7 @@ private slots:
     void customMenu();
     void toggle();
     void flash();
+    void flashPlaysAHit();
     void input();
     void paint();
 

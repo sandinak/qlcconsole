@@ -4383,6 +4383,8 @@ void ShowTreeController::bake()
                     coll->setPath(collPath);
                 if (coll->isVisible() != list.looks)
                     coll->setVisible(list.looks);
+                // A hit on a VC Flash button plays while the button is held.
+                coll->setFlashPlays(list.looks);
                 if (coll->functions() != members)
                 {
                     m_lastChanged << cue.id;
@@ -5533,6 +5535,10 @@ void ShowTreeController::loadState(QXmlStreamReader &root, bool snapshot)
                 m_nextId = qMax(m_nextId, c.id + 1);
                 for (const Layer &layer : c.layers)
                     m_nextId = qMax(m_nextId, layer.id + 1);
+                // A hit's Collection, as the file left it: flashes as a hit.
+                if (l.looks)
+                    if (Collection *coll = qobject_cast<Collection *>(m_doc->function(c.collection)))
+                        coll->setFlashPlays(true);
             }
         }
     }

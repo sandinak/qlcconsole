@@ -97,6 +97,9 @@ private slots:
     void multiPatchSkipsAPortAnotherUniverseHolds();
     void multiUnpatchRemovesEveryOneInOneStep();
 
+    /* 0.3.1 (k): QLC+ 4's Add and Remove input profile, beside Edit */
+    void inputProfilesCanBeMadeAndDeleted();
+
     /* Reachability probing */
     void rescanProbesUnheardTargetsOnly();
     void rescanProbesAddressesNamedByPatches();

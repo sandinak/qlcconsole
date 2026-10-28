@@ -56,6 +56,9 @@
 #include "networkroute.h"
 #include "inputoutputmanager.h"
 #include "connectioneditor.h"
+#include "inputoutputpatcheditor.h"
+#include "qlcinputprofile.h"
+#include "inputpatch.h"
 
 #undef private
 #undef protected
@@ -2836,4 +2839,59 @@ void ConnectionsTree_Test::connectionEditorSetsAMidiInputsChannel()
     showUniverseList(tree);
     QVERIFY2(universeRow(tree.m_tree, 0)->text(COL_INPUT).endsWith(" · all channels"),
              qPrintable(universeRow(tree.m_tree, 0)->text(COL_INPUT)));
+}
+
+/* 0.3.1 (k): the profile cell had only Edit; QLC+ 4 also made and deleted
+   profiles there (InputOutputPatchEditor's Add and Remove, dropped when the
+   profile tree became a cell). New… and Delete are back beside Edit: a new
+   profile is saved in the user's folder and used by the universe; Delete
+   removes its file and the universe has none. */
+void ConnectionsTree_Test::inputProfilesCanBeMadeAndDeleted()
+{
+    QTemporaryDir home;
+    QVERIFY(home.isValid());
+    const QByteArray oldHome = qgetenv("HOME");
+    qputenv("HOME", home.path().toUtf8());
+    const auto restore = qScopeGuard([oldHome]() { qputenv("HOME", oldHome); });
+
+    IOPluginStub *stub = stubOf(m_doc);
+    InputOutputMap *ioMap = m_doc->inputOutputMap();
+    QVERIFY(ioMap->setInputPatch(0, stub->name(), QString(), 0));
+
+    InputOutputPatchEditor ed(nullptr, 0, ioMap, m_doc);
+    // The input's row carries the profile cell: list, Edit, New…, Delete.
+    QWidget *cell = nullptr;
+    QTreeWidget *map = ed.findChild<QTreeWidget *>("m_mapTree");
+    QVERIFY(map != nullptr);
+    for (QTreeWidgetItemIterator it(map); *it != nullptr; ++it)
+        if (QWidget *w = map->itemWidget(*it, 5))
+            cell = w;
+    QVERIFY2(cell != nullptr, "the patched input's row has its profile cell");
+    QPushButton *newBtn = cell->findChild<QPushButton *>("profileNew");
+    QPushButton *delBtn = cell->findChild<QPushButton *>("profileDelete");
+    QVERIFY(newBtn != nullptr && cell->findChild<QPushButton *>("profileEdit") != nullptr);
+    QVERIFY(delBtn != nullptr);
+    QVERIFY(newBtn->isEnabled());
+    QVERIFY(!delBtn->isEnabled());      // None chosen: nothing to delete
+
+    // New…: what the editor made, saved in the user's folder, and used.
+    QLCInputProfile made;
+    made.setManufacturer("Test Works");
+    made.setModel("Pad 8");
+    made.setType(QLCInputProfile::MIDI);
+    const QString name = ed.addInputProfile(&made);
+    QCOMPARE(name, made.name());
+    const QString file = InputOutputMap::userProfileDirectory().absoluteFilePath("TestWorks-Pad8.qxi");
+    QVERIFY2(QFile::exists(file), qPrintable(file));
+    QVERIFY(file.startsWith(home.path()) || QFileInfo(file).canonicalFilePath().startsWith(QFileInfo(home.path()).canonicalFilePath()));
+    QVERIFY(ioMap->profile(name) != nullptr);
+    QCOMPARE(ioMap->inputPatch(0)->profileName(), name);
+    QVERIFY(ioMap->profileNames().contains(name));
+
+    // Delete: the file, the profile, and the universe's use of it.
+    QVERIFY(ed.deleteInputProfile(name, false));
+    QVERIFY(!QFile::exists(file));
+    QVERIFY(ioMap->profile(name) == nullptr);
+    QVERIFY(ioMap->inputPatch(0)->profileName() != name);
+    QVERIFY(!ed.deleteInputProfile(name, false));   // gone already
 }

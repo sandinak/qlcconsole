@@ -193,6 +193,20 @@ private slots:
      *  number, to another universe. */
     void theUniverseListMirrorsEachShowOpened();
 
+    /** 0.3.1 (k), the QLC+ 4 home: Save As offers QLC+ 4's .qxw, starting
+     *  on it for a .qxw show, and a .qxw save still works. */
+    void saveAsOffersTheQlcPlus4Format();
+    /** Full Screen is back: View ▸ Full Screen, Ctrl+F11 (⌃⌘F on macOS),
+     *  Classic's toolbar, and the -f flag's slot. */
+    void fullScreenIsBack();
+    /** The DMX Monitor (QLC+ 4's Monitor) opens from Classic's toolbar and
+     *  View, and shows each patched fixture's channels. */
+    void theDmxMonitorIsInClassic();
+    /** Settings ▸ General ▸ Start new shows in the Classic view. */
+    void newShowsCanStartInClassic();
+    /** A .qxw save holding what QLC+ 4 drops says so once, after saving. */
+    void aQxwSaveSaysWhatQlcPlus4Leaves();
+
     /** Quitting with the window still up and the Show Tree in front: the
      *  tab goes before the Doc, so its hide event (which stops its preview)
      *  doesn't land on a freed Doc. Last: it deletes the app. */

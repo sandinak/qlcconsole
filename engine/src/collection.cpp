@@ -511,3 +511,28 @@ void Collection::setBlendMode(Universe::BlendMode mode)
 
     Function::setBlendMode(mode);
 }
+
+/*****************************************************************************
+ * Flash (a Show Tree hit)
+ *****************************************************************************/
+
+void Collection::flash(MasterTimer *timer, bool shouldOverride, bool forceLTP)
+{
+    if (m_flashPlays && flashing() == false && timer != NULL && isRunning() == false)
+    {
+        // Held, it plays; already on (toggled), it stays as it is.
+        start(timer, FunctionParent::master());
+        m_flashStarted = true;
+    }
+    Function::flash(timer, shouldOverride, forceLTP);
+}
+
+void Collection::unFlash(MasterTimer *timer)
+{
+    if (m_flashStarted && flashing())
+    {
+        m_flashStarted = false;
+        stop(FunctionParent::master());
+    }
+    Function::unFlash(timer);
+}

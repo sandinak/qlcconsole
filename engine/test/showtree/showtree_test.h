@@ -210,6 +210,7 @@ private slots:
     void lookCommands();
     void hitCommandMakesAndPlaysAHit();
     void anOlderLooksSectionKeepsItsName();
+    void aFlashButtonPlaysAHitWhileHeld();
 
     // Answers 12-20 (2026-10-18)
     void oneRuleUpAndDownTheChain();

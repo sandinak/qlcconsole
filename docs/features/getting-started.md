@@ -28,6 +28,7 @@ qlcconsole -o show.qlcc -p          # open it straight into Operate mode
 qlcconsole -k -o show.qlcc          # kiosk: Virtual Console only, operate mode
 qlcconsole -w                       # also serve the web interface, to this computer only
 qlcconsole -wa --web-bind 0.0.0.0   # ...to the network, with logins (see Web access)
+qlcconsole -f -o show.qlcc          # full screen, as QLC+ 4's -f ("-f resize" fills the screen by size)
 qlcconsole -h                       # every option
 ```
 
@@ -40,11 +41,14 @@ reaching it from a tablet and setting up users.
 
 ### Show files
 
-- **.qlcc** is qlcconsole's own format, and what **Save As** offers.
+- **.qlcc** is qlcconsole's own format, and what **Save As** starts on.
 - **.qxw** (stock QLC+) opens fine, and **Save** writes a show back in the
-  format it was opened in. A .qxw saved here keeps the rig, palettes,
-  looks and layers, but not the show's own copies of definitions and
-  scripts (below): save it as .qlcc before taking it to another computer.
+  format it was opened in. **Save As** offers it too (**QLC+ 4
+  Workspaces**), and starts on it for a show opened from a .qxw. A .qxw
+  saved here keeps the rig, palettes, looks and layers, but not the show's
+  own copies of definitions and scripts (below): save it as .qlcc before
+  taking it to another computer. See [Saving for QLC+ 4](#saving-for-qlc-4)
+  for what QLC+ 4 itself reads from it.
 - **Beside the show** live its pictures (truss socks and tower faces, in
   **images**), its venues (*Show*.venues.xml) and, while there are unsaved
   changes, its recovery copy. **Save As** to another folder copies the
@@ -123,17 +127,18 @@ Which of these you see depends on the view (below).
 - **Classic QLC+** — the QLC+ tabs in QLC+'s order and names: Fixtures,
   Functions, Shows, Virtual Console, Simple Desk, Inputs/Outputs (the
   Connections tab), with QLC+'s toolbars: the main one (New, Open, Save,
-  Save As, the Rig Overview as QLC+'s Monitor, the address tool, help, dump,
-  live edit) and the Fixtures and Functions tabs' full rows of buttons. The
-  footer shows only the mode, the Grand Master and Ready.
+  Save As, the [DMX Monitor](#the-dmx-monitor), the Rig Overview, the
+  address tool, Full Screen, help, dump, live edit) and the Fixtures and
+  Functions tabs' full rows of buttons. The footer shows only the mode,
+  the Grand Master and Ready.
 - **Everything** — every tab.
 
 ![The Classic QLC+ view](../images/views-classic.png)
 
 The same show in **Classic QLC+**:
 
-1. QLC+'s main toolbar: New, Open, Save, Save As, the Monitor (the Rig
-   Overview), the address tool, help, dump and live edit.
+1. QLC+'s main toolbar: New, Open, Save, Save As, the DMX Monitor, the
+   Rig Overview, the address tool, Full Screen, help, dump and live edit.
 2. The tab's own row of buttons, as in QLC+ (here the Fixtures tab's).
 3. QLC+'s tabs, in QLC+'s order and names.
 4. The footer: Ready, the Grand Master and the mode.
@@ -143,8 +148,11 @@ nothing on a hidden tab stops working. The view is saved with the show: it
 marks the show changed, but it isn't an undo step. QLC+ ignores it when it
 opens the file. A show saved without a view opens in **Classic QLC+** if
 it is an old QLC+ show with no Show Tree, and in **qlcconsole** otherwise.
-A new show, and the first launch, start in **qlcconsole**. **View ▸
-Workspace** is the one place to change it.
+A new show, and the first launch, start in **qlcconsole** — or in
+**Classic QLC+** with **Settings ▸ General ▸ Start new shows in the
+Classic view** ticked (this computer's setting, off at first; a show you
+open keeps its own view). **View ▸ Workspace** is the one place to change
+a show's view.
 
 Choosing a tab the view hides (from **Window** or a link such as *Open in
 Build*) switches to **Everything**. A line above the tabs says so and has
@@ -175,6 +183,38 @@ scripts, audio, video) is the stock tab in the Classic QLC+ and Everything
 views; **Window ▸ Functions** opens it, switching view from qlcconsole.
 Build edits any of them in the Workbench. **View ▸ Rig Overview** (⇧⌘R) opens the whole rig
 in 3D.
+
+**View ▸ Full Screen** (⌃⌘F on a Mac, Ctrl+F11 elsewhere; ⌘F11 too, as
+QLC+ 4 had it) fills the screen with the main window; again puts it back.
+Classic QLC+'s toolbar has it, and **-f** starts the app that way.
+
+### The DMX Monitor
+
+QLC+ 4's **Monitor**: a box for each patched fixture, its channels and
+their values as they go out, live. **View ▸ DMX Monitor**, or the monitor
+button on Classic QLC+'s toolbar (where QLC+ had it), opens it in a window
+of its own. Pick **All universes** or one; show the channels as DMX
+addresses or the fixture's own numbers, and the values as 0-255 or
+percent. A fixture added while it is open shows up. The Lighting Studio is
+the Monitor's 2D view here, as a tab.
+
+### Saving for QLC+ 4
+
+QLC+ 4 opens a .qxw saved here: every fixture, group, channel group,
+palette and function (scenes, chasers, collections, EFX, RGB matrices,
+sequences, shows, scripts) as you saved it — the gate checks this
+against QLC+ 4.14.4's own engine on every build. What only qlcconsole has
+it reads past and leaves out, and drops the next time it saves: the Show
+Tree (cue lists, cues and hits), the speed masters, the power plan, the
+network map, the timecode source, parked and marked channels, focus
+calls, the Lighting Studio's rigging (trusses, towers, scenery), Cue
+Runner and Show Control widgets, and a venue's house fixtures (those are
+in the venue file beside the show, which QLC+ doesn't read).
+
+When a .qxw you save holds any of these, the line above the tabs says
+which, once for that file, after the save is done — it never stops the
+save. **Save as .qlcc…** there keeps a copy with everything; the .qxw
+stays as you saved it.
 
 **Design and Operate.** In **Design** mode (the default) you build: the
 open scene plays live so you can see it, and nothing runs that you didn't

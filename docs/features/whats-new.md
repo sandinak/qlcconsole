@@ -2,6 +2,37 @@
 
 The latest changes, newest first. Each links to the guide with the detail.
 
+## 0.3.1 (unreleased)
+
+### A home for QLC+ 4 users
+
+- **Save As offers .qxw.** **QLC+ 4 Workspaces** is a type in Save As,
+  and it starts there for a show opened from a .qxw. See [Show
+  files](getting-started.md#show-files).
+- **What QLC+ 4 will leave out, said once.** Saving a .qxw that holds
+  what only qlcconsole has (the Show Tree, the Lighting Studio's rigging,
+  a venue's house fixtures…) says which in the line above the tabs, after
+  the save, with **Save as .qlcc…**. Every build checks that QLC+ 4.14.4
+  itself opens a .qxw saved here with its fixtures, groups, palettes and
+  functions whole. See [Saving for QLC+ 4](getting-started.md#saving-for-qlc-4).
+- **Full Screen is back**: **View ▸ Full Screen** (⌃⌘F on a Mac, Ctrl+F11
+  elsewhere), Classic's toolbar, and the **-f** flag. See
+  [Views](getting-started.md#views).
+- **The DMX Monitor.** QLC+ 4's Monitor — each fixture's channels and
+  values, live — from **View ▸ DMX Monitor** and Classic's toolbar. See
+  [The DMX Monitor](getting-started.md#the-dmx-monitor).
+- **New and Delete input profiles** beside Edit in the universe's patch
+  editor, as QLC+ 4 had them. See [Input
+  profiles](other-improvements.md#editing-a-connection).
+- **Start new shows in Classic.** **Settings ▸ General ▸ Start new shows
+  in the Classic view**. See [Views](getting-started.md#views).
+
+### Fixed
+
+- **A hit on a Flash button plays.** A Virtual Console button set to
+  **Flash** on a Show Tree hit now plays the hit while it is held; it did
+  nothing before (only scenes flashed). See [Hits](show-tree.md#hits-busking).
+
 ## 0.3.0 (October 2026)
 
 The Programming tab is now **Build**, with a Workbench that edits scenes,

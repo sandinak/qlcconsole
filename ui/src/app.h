@@ -22,6 +22,7 @@
 #define APP_H
 
 #include <QMainWindow>
+#include <QSet>
 #include <QKeySequence>
 #include <QApplication>
 #include <QString>
@@ -180,6 +181,14 @@ public:
     /** A show saved without a view: Classic for an old QLC+ show (no Show
      *  Tree, not saved by qlcconsole), else qlcconsole. */
     WorkspaceView defaultViewForLoadedShow() const;
+    /** Settings ▸ General, "Start new shows in the Classic view": this
+     *  computer's, off by default. File ▸ New and the app's start use it;
+     *  an opened show keeps its own view. */
+    static QString newShowsClassicSettingKey();
+    static bool newShowsClassic();
+    static void setNewShowsClassic(bool on);
+    /** The view a new show starts in: Classic QLC+ by the preference, else qlcconsole. */
+    static WorkspaceView newShowView();
     /** What tab @p label reads as in the current view ("Inputs/Outputs" for
      *  Connections in Classic QLC+); its identity stays @p label. */
     QString tabDisplayLabel(const QString &label) const;
@@ -520,6 +529,15 @@ public slots:
     void slotFileCollectForTransfer();
 
     void slotControlMonitor();
+    /** View ▸ DMX Monitor (Classic's toolbar too): QLC+ 4's Monitor, the
+     *  channels and values of a universe's fixtures, in its own window. */
+    void slotDmxMonitor();
+    /** View ▸ Full Screen (Ctrl+F11; ⌃⌘F on macOS), as QLC+ 4 had it:
+     *  full screen, or back to how the window was. */
+    void slotControlFullScreen();
+    /** The -f command-line flag: full screen, or with @p usingGeometry
+     *  ("-f resize") the window made the first screen's size. */
+    void slotControlFullScreen(bool usingGeometry);
     /** Open the rig overview (View menu). Delegates to the Monitor, which owns
      *  the window, so the menu and the studio footer share one instance. */
     void slotRigOverview();
@@ -651,6 +669,10 @@ private:
     QAction* m_controlMonitorAction;
     QAction* m_addressToolAction;
     QAction* m_rigOverviewAction;
+    QAction* m_controlFullScreenAction = nullptr;
+    QAction* m_dmxMonitorAction = nullptr;
+    class DmxMonitorWindow* m_dmxMonitor = nullptr;
+    Qt::WindowStates m_stateBeforeFullScreen = Qt::WindowNoState;
     /** Classic QLC+'s main toolbar (Q78); hidden in the other views. */
     class QToolBar* m_classicToolbar = nullptr;
     /** Classic QLC+'s footer: no load, power, timecode, Next or speed chips. */
@@ -768,6 +790,27 @@ public:
      * @return QFile::NoError if successful.
      */
     QFile::FileError saveXML(const QString& fileName, bool autosave = false);
+
+    /** Save As's file types: qlcconsole's .qlcc, QLC+ 4's .qxw, any file. */
+    static QStringList saveAsFilters();
+    /** The type Save As starts on for the show @p fileName: .qxw for a
+     *  .qxw, else .qlcc. */
+    static QString saveAsDefaultFilter(const QString &fileName);
+    /** @p chosen, given the extension @p filter stands for unless it ends
+     *  in .qlcc or .qxw already. */
+    static QString saveAsFileName(const QString &chosen, const QString &filter);
+    /** After a save to the .qxw @p fileName: what QLC+ 4 leaves out of it
+     *  (StockQlcCheck, and a venue's house fixtures), in one sentence in
+     *  the notice bar with "Save as .qlcc…". Once a file a session; the
+     *  save is done by then. True when it said so. */
+    bool noticeStockLosses(const QString &fileName);
+    /** What the last noticeStockLosses() found (tests). */
+    QStringList lastStockLosses() const { return m_lastStockLosses; }
+private:
+    QSet<QString> m_stockNoticeShown;
+    QStringList m_lastStockLosses;
+    bool m_saveAsQlccOnce = false;      ///< the notice's Save as .qlcc…
+public:
 
     /*********************************************************************
      * Definitions a show needs, kept on this computer

@@ -276,7 +276,21 @@ AppSettings::AppSettings(App *app, QWidget *parent)
     mainLayout->addWidget(autosaveGroup);
 
     // The show's workspace view is View ▸ Workspace's alone (Q67), and the
-    // toolbar style is on Appearance.
+    // toolbar style is on Appearance. Which one a NEW show starts in is
+    // this computer's: QLC+ 4 users can start in Classic.
+    {
+        QGroupBox *viewGroup = new QGroupBox(tr("New Shows"), this);
+        viewGroup->setProperty("helpTopic", QStringLiteral("getting-started.md#views"));
+        QVBoxLayout *viewLayout = new QVBoxLayout(viewGroup);
+        m_newShowsClassicCheck = new QCheckBox(tr("Start new shows in the Classic view"), viewGroup);
+        m_newShowsClassicCheck->setObjectName(QStringLiteral("settingsNewShowsClassic"));
+        m_newShowsClassicCheck->setChecked(App::newShowsClassic());
+        m_newShowsClassicCheck->setToolTip(tr("File ▸ New (and the app with no show) opens in Classic "
+                                              "QLC+: QLC+ 4's tabs and toolbar. A show you open keeps "
+                                              "the view it was saved in."));
+        viewLayout->addWidget(m_newShowsClassicCheck);
+        mainLayout->addWidget(viewGroup);
+    }
 
     // --- Show controls: Stop all, Blackout, Blind, Design | Operate ---
     // One row at the top with the tab's own tools (the default), or in the
@@ -610,6 +624,10 @@ void AppSettings::accept()
     // Scripts: running programs (this computer's)
     if (m_allowProgramsCheck->isChecked() != Script::programsAllowed())
         Script::setProgramsAllowed(m_allowProgramsCheck->isChecked());
+
+    // The view new shows start in (this computer's)
+    if (m_newShowsClassicCheck->isChecked() != App::newShowsClassic())
+        App::setNewShowsClassic(m_newShowsClassicCheck->isChecked());
 
     // Apply autosave settings
     m_app->setAutosaveEnabled(m_autosaveEnabledCheck->isChecked());

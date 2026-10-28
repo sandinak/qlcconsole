@@ -43,6 +43,8 @@
 #include <QScopeGuard>
 #include <QTimer>
 #include <QMessageBox>
+#include <QSettings>
+#include <QFileDialog>
 
 #include "cuerunner.h"
 #include "showtreemodel.h"
@@ -54,6 +56,8 @@
 #include "focusmenu.h"
 #include "venuecorrections.h"
 #include "programmercontroller.h"
+#include "rigowner.h"
+#include "universe.h"
 
 #define private public
 #include "qlcfixturedefcache.h"
@@ -65,6 +69,7 @@
 #include "monitorproperties.h"
 #define protected public
 #include "app.h"
+#include "dmxmonitorwindow.h"
 #include "appsettings.h"
 #include "shutterautoopen.h"
 #include <QTabWidget>
@@ -1055,8 +1060,9 @@ void AppViews_Test::theViewMenuIsOnlyViews()
     foreach (QAction *a, view->actions())
         if (!a->isSeparator())
             items << a->text();
-    QCOMPARE(items, QStringList() << "Workspace" << "Address Tool" << "Rig Overview…"
-                                  << "Quick Focus…" << "Venue…");
+    // 0.3.1 (k): QLC+ 4's Monitor and Full Screen are ways of looking too.
+    QCOMPARE(items, QStringList() << "Workspace" << "Address Tool" << "DMX Monitor" << "Rig Overview…"
+                                  << "Quick Focus…" << "Venue…" << "Full Screen");
 }
 
 void AppViews_Test::theGridFollowsTheUnitPreference()
@@ -2827,6 +2833,280 @@ void AppViews_Test::theUniverseListMirrorsEachShowOpened()
 
     m_app->clearDocument();
     m_app->doc()->resetModified();
+}
+
+/* 0.3.1 (k) 1: QLC+ 4 users save for QLC+ 4 from Save As, not only a
+   .qlcc. The type list, the type it starts on, the extension it gives, and
+   a real Save As to .qxw through the dialog. */
+void AppViews_Test::saveAsOffersTheQlcPlus4Format()
+{
+    const QStringList filters = App::saveAsFilters();
+    QCOMPARE(filters.count(), 3);
+    QVERIFY(filters.at(0).contains("*.qlcc"));
+    QVERIFY(filters.at(1).contains("QLC+ 4") && filters.at(1).contains("*.qxw"));
+    QCOMPARE(App::saveAsDefaultFilter(QString()), filters.at(0));
+    QCOMPARE(App::saveAsDefaultFilter("/shows/Spring.qlcc"), filters.at(0));
+    QCOMPARE(App::saveAsDefaultFilter("/shows/Spring.QXW"), filters.at(1));
+    QCOMPARE(App::saveAsFileName("/s/Spring", filters.at(1)), QString("/s/Spring.qxw"));
+    QCOMPARE(App::saveAsFileName("/s/Spring", filters.at(0)), QString("/s/Spring.qlcc"));
+    QCOMPARE(App::saveAsFileName("/s/Spring", filters.at(2)), QString("/s/Spring.qlcc"));
+    QCOMPARE(App::saveAsFileName("/s/Spring.qlcc", filters.at(1)), QString("/s/Spring.qlcc"));
+    QCOMPARE(App::saveAsFileName("/s/Spring.qxw", filters.at(0)), QString("/s/Spring.qxw"));
+
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    m_app->clearDocument();
+    // A show opened from a .qxw: Save As starts on QLC+ 4's type.
+    QCOMPARE(m_app->saveXML(dir.filePath("Spring.qxw")), QFile::NoError);
+    QString startedOn;
+    QStringList offered;
+    QTimer::singleShot(0, [&]() {
+        QFileDialog *dlg = qobject_cast<QFileDialog *>(QApplication::activeModalWidget());
+        if (dlg == nullptr)
+            return;
+        startedOn = dlg->selectedNameFilter();
+        offered = dlg->nameFilters();
+        dlg->selectFile(dir.filePath("Copy"));
+        QMetaObject::invokeMethod(dlg, "accept");
+    });
+    QCOMPARE(m_app->slotFileSaveAs(), QFile::NoError);
+    QCOMPARE(offered, filters);
+    QCOMPARE(startedOn, filters.at(1));
+    QVERIFY2(QFile::exists(dir.filePath("Copy.qxw")), qPrintable(m_app->fileName()));
+    QCOMPARE(m_app->fileName(), dir.filePath("Copy.qxw"));
+    // As QLC+ reads it: a <Workspace> with the <Engine> in it.
+    {
+        QFile f(dir.filePath("Copy.qxw"));
+        QVERIFY(f.open(QIODevice::ReadOnly));
+        QXmlStreamReader xml(&f);
+        QVERIFY(xml.readNextStartElement());
+        QCOMPARE(xml.name().toString(), QString("Workspace"));
+    }
+    // And it opens again.
+    m_app->clearDocument();
+    QCOMPARE(m_app->loadXML(dir.filePath("Copy.qxw")), QFile::NoError);
+    m_app->clearDocument();
+}
+
+/* 0.3.1 (k) 2: QLC+ 4's Toggle Full Screen went with the slim toolbar
+   (c91466e9b); it is back on View, Classic's toolbar, its keys and -f. */
+void AppViews_Test::fullScreenIsBack()
+{
+    QAction *fs = m_app->findChild<QAction *>("viewFullScreen");
+    QVERIFY(fs != nullptr);
+    QVERIFY(fs->isCheckable());
+    QVERIFY(fs->shortcuts().contains(QKeySequence(Qt::CTRL | Qt::Key_F11)));
+#if defined(Q_OS_MACOS)
+    QCOMPARE(fs->shortcuts().first(), QKeySequence(Qt::META | Qt::CTRL | Qt::Key_F));
+#endif
+    bool inView = false;
+    for (QAction *menu : m_app->menuBar()->actions())
+        if (menu->menu() != nullptr && menu->menu()->actions().contains(fs))
+            inView = menu->text().remove('&') == QLatin1String("View");
+    QVERIFY2(inView, "Full Screen is on the View menu");
+
+    m_app->setWorkspaceView(App::ClassicView);
+    QToolBar *classic = m_app->findChild<QToolBar *>("classicToolbar");
+    QVERIFY(classic != nullptr && classic->actions().contains(fs));
+    m_app->setWorkspaceView(App::ConsoleView);
+
+    m_app->show();
+    QVERIFY(QTest::qWaitForWindowExposed(m_app));
+    QVERIFY(!(m_app->windowState() & Qt::WindowFullScreen));
+    fs->trigger();
+    QTRY_VERIFY(m_app->windowState() & Qt::WindowFullScreen);
+    QVERIFY(fs->isChecked());
+    fs->trigger();
+    QTRY_VERIFY(!(m_app->windowState() & Qt::WindowFullScreen));
+    QVERIFY(!fs->isChecked());
+    // -f: as the action does, and checks it.
+    m_app->slotControlFullScreen(false);
+    QTRY_VERIFY(m_app->windowState() & Qt::WindowFullScreen);
+    QVERIFY(fs->isChecked());
+    m_app->slotControlFullScreen();
+    QTRY_VERIFY(!(m_app->windowState() & Qt::WindowFullScreen));
+    // -f resize: the first screen's size, by geometry.
+    m_app->slotControlFullScreen(true);
+    QCOMPARE(m_app->geometry(), QGuiApplication::screens().first()->geometry());
+    m_app->showNormal();
+    m_app->hide();
+}
+
+/* 0.3.1 (k) 5: QLC+ 4's Monitor -- the channels and their values -- from
+   Classic's toolbar (where QLC+ had it) and View. */
+void AppViews_Test::theDmxMonitorIsInClassic()
+{
+    m_app->clearDocument();
+    Doc *doc = m_app->doc();
+    Fixture *fx = new Fixture(doc);
+    fx->setName("Dimmer Pack");
+    fx->setChannels(4);
+    fx->setUniverse(0);
+    fx->setAddress(10);
+    QVERIFY(doc->addFixture(fx));
+
+    m_app->setWorkspaceView(App::ClassicView);
+    QToolBar *classic = m_app->findChild<QToolBar *>("classicToolbar");
+    QAction *act = m_app->findChild<QAction *>("viewDmxMonitor");
+    QVERIFY(classic != nullptr && act != nullptr);
+    QVERIFY(classic->actions().contains(act));
+    // Where QLC+ had its Monitor: before the Address Tool.
+    QVERIFY(classic->actions().indexOf(act) < classic->actions().indexOf(m_app->m_addressToolAction));
+
+    act->trigger();
+    DmxMonitorWindow *mon = m_app->findChild<DmxMonitorWindow *>("dmxMonitorWindow");
+    QVERIFY(mon != nullptr);
+    QVERIFY(mon->isVisible());
+    QCOMPARE(mon->shownFixtures(), QList<quint32>() << fx->id());
+    QVERIFY(doc->inputOutputMap()->universe(0)->monitor());
+    // A fixture added while it is open shows up.
+    Fixture *fx2 = new Fixture(doc);
+    fx2->setChannels(2);
+    fx2->setUniverse(1);
+    fx2->setAddress(0);
+    QVERIFY(doc->addFixture(fx2));
+    QCOMPARE(mon->shownFixtures().count(), 2);
+    // One universe at a time.
+    mon->setUniverse(doc->inputOutputMap()->getUniverseID(1));
+    QCOMPARE(mon->shownFixtures(), QList<quint32>() << fx2->id());
+    mon->setUniverse(Universe::invalid());
+    mon->setValueStyle(MonitorProperties::PercentageValues);
+    mon->close();
+    QVERIFY(mon->shownFixtures().isEmpty());
+
+    m_app->setWorkspaceView(App::ConsoleView);
+    m_app->clearDocument();
+}
+
+/* 0.3.1 (k) 4: a QLC+ 4 user can have new shows start in Classic. A
+   setting of this computer, off by default; an opened show keeps its own. */
+void AppViews_Test::newShowsCanStartInClassic()
+{
+    const QVariant was = QSettings().value(App::newShowsClassicSettingKey());
+    const auto restore = qScopeGuard([was]() {
+        if (was.isValid())
+            QSettings().setValue(App::newShowsClassicSettingKey(), was);
+        else
+            QSettings().remove(App::newShowsClassicSettingKey());
+    });
+    QSettings().remove(App::newShowsClassicSettingKey());
+    QVERIFY(!App::newShowsClassic());
+    QCOMPARE(App::newShowView(), App::ConsoleView);
+
+    {
+        AppSettings dlg(m_app);
+        QCheckBox *box = dlg.findChild<QCheckBox *>("settingsNewShowsClassic");
+        QVERIFY(box != nullptr);
+        QVERIFY(!box->isChecked());
+        box->setChecked(true);
+        dlg.accept();
+    }
+    QVERIFY(App::newShowsClassic());
+    m_app->clearDocument();
+    QCOMPARE(m_app->workspaceView(), App::ClassicView);
+    QVERIFY(!m_app->doc()->isModified());
+
+    // A show saved in the qlcconsole view opens in it all the same.
+    QTemporaryDir dir;
+    m_app->setWorkspaceView(App::ConsoleView);
+    QCOMPARE(m_app->saveXML(dir.filePath("console.qlcc")), QFile::NoError);
+    m_app->clearDocument();
+    QCOMPARE(m_app->workspaceView(), App::ClassicView);
+    QCOMPARE(m_app->loadXML(dir.filePath("console.qlcc")), QFile::NoError);
+    QCOMPARE(m_app->workspaceView(), App::ConsoleView);
+
+    {
+        AppSettings dlg(m_app);
+        QCheckBox *box = dlg.findChild<QCheckBox *>("settingsNewShowsClassic");
+        QVERIFY(box->isChecked());
+        box->setChecked(false);
+        dlg.accept();
+    }
+    QVERIFY(!App::newShowsClassic());
+    m_app->clearDocument();
+    QCOMPARE(m_app->workspaceView(), App::ConsoleView);
+}
+
+/* 0.3.1 (k) 6: a .qxw is for QLC+ 4, which reads past what it doesn't know.
+   Saving one that holds such things says what, once, after the save is
+   done (the file is there, whole), with Save as .qlcc… -- never a dialog
+   in the way. A plain show says nothing. */
+void AppViews_Test::aQxwSaveSaysWhatQlcPlus4Leaves()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    m_app->clearDocument();
+    m_app->hideViewNotice();
+    Doc *doc = m_app->doc();
+    Fixture *fx = new Fixture(doc);
+    fx->setChannels(1);
+    fx->setUniverse(0);
+    fx->setAddress(0);
+    QVERIFY(doc->addFixture(fx));
+
+    // Nothing QLC+ 4 would miss: no word.
+    const QString plain = dir.filePath("Plain.qxw");
+    QCOMPARE(m_app->saveXML(plain), QFile::NoError);
+    QVERIFY2(m_app->lastStockLosses().isEmpty(), qPrintable(m_app->lastStockLosses().join(" | ")));
+    QVERIFY(m_app->m_viewNotice->isHidden());
+
+    // A Show Tree and a venue house fixture: said, after the file is saved.
+    ShowTreeController *st = doc->showTree();
+    const quint32 prod = st->addProduction("Spring");
+    st->addCue(st->addCueList(prod, "Act 1"), -1, "One");
+    VenueCorrections *venues = doc->programmer()->venueCorrections();
+    const QString show = dir.filePath("Spring.qxw");
+    venues->setShowFile(show, false);
+    Fixture *house = new Fixture(doc);
+    house->setName("House Wash");
+    house->setChannels(1);
+    house->setUniverse(0);
+    house->setAddress(20);
+    QVERIFY(doc->addFixture(house));
+    house->setOwner(RigOwner::House);
+    QVERIFY(venues->setActiveVenue(venues->addVenue("Lincoln HS")));
+    venues->moveShowHouseIn();
+    QVERIFY(doc->isVenueFixture(house->id()));
+
+    QElapsedTimer t;
+    t.start();
+    QCOMPARE(m_app->saveXML(show), QFile::NoError);
+    QVERIFY(QFile::exists(show));
+    QVERIFY(!doc->isModified());
+    QVERIFY(QApplication::activeModalWidget() == nullptr);
+    const QStringList losses = m_app->lastStockLosses();
+    QVERIFY2(losses.count() == 2, qPrintable(losses.join(" | ")));
+    QVERIFY(losses.at(0).contains("Show Tree"));
+    QVERIFY(losses.at(1).contains("house fixture"));
+    QVERIFY(!m_app->m_viewNotice->isHidden());
+    const QString said = m_app->m_viewNoticeText->text();
+    QVERIFY2(said.contains("QLC+ 4") && said.contains("Show Tree") && said.contains(".qlcc"), qPrintable(said));
+    QCOMPARE(m_app->m_viewNoticeButton->text(), QString("Save as .qlcc…"));
+    QVERIFY(!m_app->m_viewNoticeButton->isHidden());
+
+    // Once a file: the next save of it says nothing.
+    m_app->hideViewNotice();
+    QCOMPARE(m_app->saveXML(show), QFile::NoError);
+    QVERIFY(m_app->m_viewNotice->isHidden());
+    // A .qlcc keeps it all: nothing to say.
+    QCOMPARE(m_app->saveXML(dir.filePath("Spring.qlcc")), QFile::NoError);
+    QVERIFY(m_app->m_viewNotice->isHidden());
+
+    // The button: Save As, starting on .qlcc.
+    QCOMPARE(m_app->saveXML(dir.filePath("Spring2.qxw")), QFile::NoError);
+    QVERIFY(!m_app->m_viewNotice->isHidden());
+    QString startedOn;
+    QTimer::singleShot(0, [&]() {
+        if (QFileDialog *dlg = qobject_cast<QFileDialog *>(QApplication::activeModalWidget()))
+        {
+            startedOn = dlg->selectedNameFilter();
+            dlg->reject();
+        }
+    });
+    m_app->m_viewNoticeButton->click();
+    QCOMPARE(startedOn, App::saveAsFilters().at(0));
+    m_app->hideViewNotice();
+    m_app->clearDocument();
 }
 
 void AppViews_Test::quittingWithTheShowTreeShowing()

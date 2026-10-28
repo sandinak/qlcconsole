@@ -74,6 +74,7 @@ add_library(${module_name} SHARED
     stageplatform.cpp stageplatform.h
     pipe.cpp pipe.h
     scenery.cpp scenery.h
+    stockqlccheck.cpp stockqlccheck.h
     gobolibrary.cpp gobolibrary.h
     headlayout.cpp headlayout.h
     righeads.cpp righeads.h

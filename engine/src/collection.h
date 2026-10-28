@@ -181,6 +181,26 @@ public:
 public:
     /** @reimp */
     void setBlendMode(Universe::BlendMode mode) override;
+
+    /*************************************************************************
+     * Flash (a Show Tree hit)
+     *************************************************************************/
+public:
+    /** A Show Tree hit's Collection: a VC Flash button plays it while held
+     *  (flash() starts it, unFlash() stops the run it started). Set by
+     *  ShowTreeController as it bakes the hit; not saved. Off, a Collection
+     *  flashes as in QLC+: not at all. */
+    void setFlashPlays(bool on) { m_flashPlays = on; }
+    bool flashPlays() const { return m_flashPlays; }
+
+    /** @reimp */
+    void flash(MasterTimer *timer, bool shouldOverride, bool forceLTP) override;
+    /** @reimp */
+    void unFlash(MasterTimer *timer) override;
+
+private:
+    bool m_flashPlays = false;
+    bool m_flashStarted = false;    ///< flash() started the run unFlash() stops
 };
 
 /** @} */
