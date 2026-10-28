@@ -110,6 +110,13 @@ back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
   the line and the universe the wrong way round (also in QLC+).
 - **RDM**: a SET to a device whose UID reads as a number (000000000001)
   carried a stray byte, and a discovery branch with no range could crash.
+- **A web access upload that isn't a show no longer empties the console**:
+  the open show was cleared before the file was read. And a show opened
+  from a file after one sent over web access can run Script programs
+  again (if allowed); the web mark stuck.
+- **Importing from another show kept every member of a collection**: when
+  the imported ids chained (one landing on the id the next one had), a
+  member was dropped.
 - **Code coverage campaign** (for developers): coverage.sh measures the
   whole build, the plugins and web access included, with branch coverage
   and a per-file table; the gaps that matter (show files, output, the
