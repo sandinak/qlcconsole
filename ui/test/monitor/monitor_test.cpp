@@ -41,6 +41,7 @@
 #include <QPointer>
 #include <QPushButton>
 #include <QPainter>
+#include <QPaintEngine>
 #include <QTemporaryDir>
 #include <QToolButton>
 #include <QMenu>
@@ -28156,49 +28157,117 @@ void Monitor_Test::aBackViewDragKeepsTheGrabAndTheCorner()
     QVERIFY(g1.x() < g0.x());              // right on screen = toward stage right
 }
 
+namespace {
+/* A paint device that draws nothing and writes down every piece of text it
+   is asked to draw, with the painter's transform at that moment. A pixel
+   comparison of the label depended on the host's fonts (no label at all on
+   the Linux CI, different anti-aliasing on Windows); this asks the one thing
+   that matters -- was the text drawn mirrored -- of every host alike. */
+class TextProbeEngine : public QPaintEngine
+{
+public:
+    struct Item { QString text; QTransform transform; QPointF at; };
+    QList<Item> items;
+    TextProbeEngine() : QPaintEngine(QPaintEngine::AllFeatures) {}
+    bool begin(QPaintDevice *) override { return true; }
+    bool end() override { return true; }
+    void updateState(const QPaintEngineState &) override {}
+    // Everything else: drawn nowhere. Each must be here -- the defaults turn
+    // one into another (a polygon into a path into a polygon...).
+    void drawPixmap(const QRectF &, const QPixmap &, const QRectF &) override {}
+    void drawImage(const QRectF &, const QImage &, const QRectF &, Qt::ImageConversionFlags) override {}
+    void drawTiledPixmap(const QRectF &, const QPixmap &, const QPointF &) override {}
+    void drawPath(const QPainterPath &) override {}
+    void drawPolygon(const QPointF *, int, PolygonDrawMode) override {}
+    void drawPolygon(const QPoint *, int, PolygonDrawMode) override {}
+    void drawRects(const QRectF *, int) override {}
+    void drawRects(const QRect *, int) override {}
+    void drawLines(const QLineF *, int) override {}
+    void drawLines(const QLine *, int) override {}
+    void drawPoints(const QPointF *, int) override {}
+    void drawPoints(const QPoint *, int) override {}
+    void drawEllipse(const QRectF &) override {}
+    void drawEllipse(const QRect &) override {}
+    void drawTextItem(const QPointF &p, const QTextItem &ti) override
+    {
+        items << Item{ ti.text(), painter()->transform(), p };
+    }
+    Type type() const override { return QPaintEngine::User; }
+};
+
+class TextProbeDevice : public QPaintDevice
+{
+public:
+    explicit TextProbeDevice(const QSize &size) : m_size(size) {}
+    QPaintEngine *paintEngine() const override { return &m_engine; }
+    QList<TextProbeEngine::Item> items() const { return m_engine.items; }
+protected:
+    int metric(PaintDeviceMetric m) const override
+    {
+        switch (m)
+        {
+        case PdmWidth:            return m_size.width();
+        case PdmHeight:           return m_size.height();
+        case PdmWidthMM:          return m_size.width() / 4;
+        case PdmHeightMM:         return m_size.height() / 4;
+        case PdmNumColors:        return INT_MAX;
+        case PdmDepth:            return 32;
+        case PdmDpiX: case PdmDpiY: case PdmPhysicalDpiX: case PdmPhysicalDpiY:
+                                  return 96;
+        case PdmDevicePixelRatio: return 1;
+        case PdmDevicePixelRatioScaled: return int(QPaintDevice::devicePixelRatioFScale());
+        default:                  return 0;
+        }
+    }
+private:
+    QSize m_size;
+    mutable TextProbeEngine m_engine;
+};
+} // namespace
+
 void Monitor_Test::theBackViewDoesNotMirrorText()
 {
     StudioRig rig;
     QVERIFY(rig.build(m_doc, Truss::Horizontal));
-    rig.fxi->setName("FL7");            // reads differently mirrored
+    rig.fxi->setName("FL7");
     StructureStudioView *v = rig.view;
-    const double dpr = v->devicePixelRatioF();
 
-    /* The name label, as light pixels in a box above and right of the
-       fixture: the label is placed in screen space from the drawn centre, so
-       Front and Back put it at the same offset and it must read the same --
-       not reversed. */
-    auto label = [&](StructureStudioView::Plane plane) {
+    /* Back reverses the coordinates, never the painter: every piece of text
+       -- the fixture's name, the badge, the corner labels, the ruler numbers
+       -- is drawn with a transform that does not flip it. And the name sits
+       at the same offset from the drawn fixture as in Front. */
+    auto texts = [&](StructureStudioView::Plane plane) {
         v->setPlane(plane);
-        const QImage img = v->grab().toImage();
-        const QPointF c = v->w2s(rig.pos());
-        const QRect box = QRectF((c.x() + 6) * dpr, (c.y() - 22) * dpr,
-                                 60 * dpr, 15 * dpr).toRect() & img.rect();
-        QImage mask(box.size(), QImage::Format_Grayscale8);
-        mask.fill(0);
-        for (int y = 0; y < box.height(); ++y)
-            for (int x = 0; x < box.width(); ++x)
-            {
-                const QColor px = img.pixelColor(box.x() + x, box.y() + y);
-                if (px.red() > 190 && px.green() > 190 && px.blue() > 190)
-                    mask.setPixel(x, y, 255);
-            }
-        return mask;
+        TextProbeDevice dev(v->size());
+        v->render(&dev);
+        return dev.items();
     };
-    const QImage front = label(StructureStudioView::Front);
-    const QImage back = label(StructureStudioView::Back);
-    int lit = 0;
-    for (int y = 0; y < front.height(); ++y)
-        for (int x = 0; x < front.width(); ++x)
-            lit += (qGray(front.pixel(x, y)) > 0) ? 1 : 0;
-    QVERIFY2(lit > 10, "no label found to compare");
-    QVERIFY2(front == back, "the Back view's label is not the Front view's label");
-    // By hand: QImage::mirrored() is deprecated from Qt 6.9, flipped() new in it.
-    QImage reversed(back.size(), back.format());
-    for (int y = 0; y < back.height(); ++y)
-        for (int x = 0; x < back.width(); ++x)
-            reversed.setPixelColor(back.width() - 1 - x, y, back.pixelColor(x, y));
-    QVERIFY2(back != reversed, "the probe cannot tell mirrored text apart");
+    for (StructureStudioView::Plane plane : { StructureStudioView::Front, StructureStudioView::Back })
+    {
+        const QList<TextProbeEngine::Item> items = texts(plane);
+        QVERIFY2(items.size() > 5, "no text was drawn");
+        bool sawName = false, sawBadge = false;
+        foreach (const TextProbeEngine::Item &it, items)
+        {
+            QVERIFY2(it.transform.m11() > 0.0 && it.transform.m22() > 0.0
+                     && qFuzzyIsNull(it.transform.m12()) && qFuzzyIsNull(it.transform.m21()),
+                     qPrintable(QString("'%1' drawn with a flipped or turned transform").arg(it.text)));
+            if (it.text == QLatin1String("FL7"))
+            {
+                sawName = true;
+                const QPointF c = v->w2s(rig.pos());
+                const QPointF at = it.transform.map(it.at);
+                // Right of the fixture and above it, as drawOneFixture() places it.
+                QVERIFY2(at.x() > c.x() && at.y() < c.y(),
+                         qPrintable(QString("name at %1, %2 for a fixture at %3, %4")
+                                    .arg(at.x()).arg(at.y()).arg(c.x()).arg(c.y())));
+            }
+            if (it.text.contains(QLatin1String("looking downstage")))
+                sawBadge = true;
+        }
+        QVERIFY2(sawName, "the fixture's name was not drawn");
+        QCOMPARE(sawBadge, plane == StructureStudioView::Back);
+    }
 }
 
 void Monitor_Test::theEditorsOfferBackBesideFront()
