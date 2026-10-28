@@ -125,11 +125,14 @@ void ArtNetPacketizer::setupArtNetPollReply(QByteArray &data, QHostAddress ipAdd
     data.append((char)0x00);     // SwOut[3] - port 4
     for (i = 0; i < 7; i++)
         data.append((char)0x00);  // SwVideo, SwMacro, SwRemote and 4 spare bytes
+    /* Always six bytes: an interface without a hardware address (a VPN
+       tunnel, some USB adapters) gave an empty string, one byte here, and a
+       reply 5 bytes short with BindIp and Status2 out of place. */
     QStringList MAC = MACaddr.split(":");
-    foreach (QString couple, MAC)
+    for (i = 0; i < 6; i++)
     {
         bool ok;
-        data.append((char)couple.toInt(&ok, 16));
+        data.append(i < MAC.count() ? (char)MAC.at(i).toInt(&ok, 16) : (char)0x00);
     }
     for (i = 0; i < 32; i++)
         data.append((char)0x00); // bindIp[4], BindIndex, Status2 and filler
