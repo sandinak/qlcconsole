@@ -8889,6 +8889,14 @@ void MonitorGraphicsView::populateItemMenu(QMenu *menu, const QString &kind, qui
                         this, [this, kind, id, layerLocked]() {
             setItemLayerLocked(kind, id, !layerLocked);
         });
+        /* The plot's lock is over both: either can be changed, but the
+           object stays put until the plot is unlocked. */
+        if (m_layoutLocked)
+        {
+            QAction *held = menu->addAction(tr("Held by the plot lock — Edit Plot to move"));
+            held->setObjectName(QStringLiteral("itemHeldByPlot"));
+            held->setEnabled(false);
+        }
 
         if (withRemoval)
             addItemRemoval(menu, kind, id);
@@ -9302,6 +9310,25 @@ bool MonitorGraphicsView::itemLocked(const QString &kind, quint32 id) const
     bool found = false;
     const quint32 lid = objectLayerId(kind, id, &found);
     return found && (m_doc->monitorProperties()->layer(lid).locked || itemOwnLocked(kind, id));
+}
+
+quint32 MonitorGraphicsView::objectGroupId(const QString &kind, quint32 id) const
+{
+    if (kind == QLatin1String("fixture"))
+        return m_doc->monitorProperties()->fixtureGroup(id);
+    QGraphicsItem *gi = itemFor(kind, id);
+    return gi != nullptr ? itemGroupId(gi) : 0;
+}
+
+int MonitorGraphicsView::itemHolds(const QString &kind, quint32 id) const
+{
+    bool found = false;
+    const quint32 lid = objectLayerId(kind, id, &found);
+    if (!found)
+        return ItemLock::NotHeld;
+    MonitorProperties *props = m_doc->monitorProperties();
+    return ItemLock::holds(itemOwnLocked(kind, id), props->groupChainLocked(objectGroupId(kind, id)),
+                           props->layer(lid).locked, m_layoutLocked);
 }
 
 bool MonitorGraphicsView::kindHasOwnLock(const QString &kind)

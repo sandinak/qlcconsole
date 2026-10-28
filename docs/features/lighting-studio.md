@@ -817,7 +817,7 @@ Either one is enough.
 | **Object lock** | An object's right-click menu → **Lock Position** / **Unlock Position** (**Lock Their Positions** for several), or a power source's or network node's own toggle | That one object. It stays selectable, so you can unlock it again; its Plot layers row shows a padlock |
 | **Layer lock** | An object's right-click menu → **Lock Layer "Rig"** (named for its layer), or the layer's padlock in the Plot layers panel | Everything on that layer. On the plot it is click-through: a click, a rubber band or Select All passes it by and reaches what is under it. Select it from the Plot layers tree to inspect it (Properties and the right-click menu work); it still can't be moved or deleted |
 | **Folder ("group") position lock** | The Plot layers panel / group properties | Every member's position, but they stay selectable (locking a parent folder locks its children too) |
-| **Global layout lock** | The 🔒 "Edit Plot" toolbar button | The whole plot at once, aim targets included, still selectable. **Targets stay adjustable**, beside the button while the plot is locked, lets aim targets be dragged anyway |
+| **Global layout lock** | The 🔒 "Edit Plot" toolbar button | The whole plot at once, aim targets included, still selectable. **Targets stay adjustable**, beside the button while the plot is locked, lets aim targets be dragged anyway. The arrow on the button opens **Always start with the plot locked** |
 
 **Dragging something locked** moves nothing and says why on the plot's
 status line: **Plot locked — Edit Plot to move**, **Layer locked — unlock it
@@ -828,6 +828,40 @@ the show isn't marked changed and there is nothing to undo.
 show with the rig frozen: on, aim targets drag while the plot is locked;
 off, a locked plot moves nothing at all. It is your setting, kept on this
 computer, not saved in the show.
+
+**Always start with the plot locked** (off to start with) is in the menu
+on the lock button's arrow. On, every show you open starts with its whole
+plot locked, ready to run; the show isn't marked changed by it. Like
+Targets stay adjustable it is yours, kept on this computer, not the
+show's. It sits on the lock button because that is where you look when a
+plot is locked, and it is there whether the plot is locked or not.
+
+### What holds it: the Plot layers list
+
+![Plot layers with the plot locked: each layer's lock held by the plot, the Stage layer locked on its own as well, a truss locked on its own, a stage piece held from above](../images/lighting-studio-plot-locked-layers.png)
+
+A lock that comes **from above** is drawn apart from the row's own: the
+padlock faded, with a small **up-arrow** in a blue disc, and a dashed
+outline. A row's own lock is the padlock as always.
+
+1. **Held by the plot.** While the plot is locked, every layer's lock is
+   drawn held from above, and its tooltip says **Locked by the plot**. Its
+   own switch is kept under that: grey when the layer's own lock is off.
+2. **Locked by the plot, and on its own:** amber under the hold. Click a
+   layer's lock while the plot is locked and you change the layer's own
+   lock; **unlocking the plot puts back exactly what each layer had.**
+3. **An object locked on its own:** 🔒 after its name.
+4. **Held by its layer** (or the plot): a stage piece's lock is drawn held
+   from above while the Stage layer or the plot holds it. An object row
+   shows **↑🔒** after its name when its own lock is off but its layer or a
+   folder holds it.
+
+Each object's tooltip lists everything holding it, nearest first:
+**Locked on its own**, **Held by folder "Booms"'s lock**, **Held by layer
+"Rig"'s lock**, **Held by the plot lock**. The plot's lock isn't repeated
+as a ↑🔒 on every object: the layer rows show it. On the plot, an object's
+right-click menu says **Held by the plot lock — Edit Plot to move** while the
+plot is locked.
 
 Unlocking a layer leaves the objects on it that are locked on their own
 still locked. **Locked draws red**, always: every locked object, and

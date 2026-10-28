@@ -90,6 +90,15 @@ public:
      *  exists once the app has started up. */
     static void createAndShow(QWidget* parent, Doc* doc);
 
+    /** "Always start with the plot locked": a per-user setting (QSettings
+     *  monitor/startPlotLocked), off by default. */
+    static bool startPlotLocked();
+    static void setStartPlotLocked(bool on);
+    /** A show just opened: lock its whole plot when that setting is on.
+     *  Called by App before the views are built; the show is not marked
+     *  changed by it. */
+    static void applyStartPlotLock(Doc *doc);
+
     /** Apply the workspace tab-label mode (icons only / text only / text under
      *  icon) to the monitor's own toolbars, so this window matches the main
      *  window. Reads the same "workspace/tabLabelMode" setting; called at
@@ -680,6 +689,8 @@ protected:
     /** "Targets stay adjustable" (Q183), beside the plot lock and shown only
      *  while it is on. Per user (QSettings), off by default. */
     QAction *m_targetsAdjustableAction = nullptr;
+    /** "Always start with the plot locked", in the lock button's menu. */
+    QAction *m_startLockedAction = nullptr;
     QAction *m_undoAction = nullptr;
     QAction *m_layersAction;
     QAction *m_inventoryAction;

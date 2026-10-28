@@ -741,7 +741,7 @@ Findings that are not marked as bugs:
 
 ## 0.3.1: the QLC+ 4 home, and Flash on a hit
 
-CHANGELOG **[0.3.1] - Unreleased**, items (k) and (k2).
+CHANGELOG **[0.3.1] - Unreleased**, items (k), (k2) and (a0).
 
 | ID | Feature | Behaviour | Test(s) | Before | After | Risk | Gap / note |
 |---|---|---|---|---|---|---|---|
@@ -753,6 +753,9 @@ CHANGELOG **[0.3.1] - Unreleased**, items (k) and (k2).
 | M596 | A .qxw save says what QLC+ 4 leaves out (k6) | A plain .qxw: nothing said; with a Show Tree and a venue house fixture: saved first, no dialog, the notice names both and offers Save as .qlcc… (Save As on .qlcc); once a file; a .qlcc says nothing | **AppViews_Test::aQxwSaveSaysWhatQlcPlus4Leaves** (new), **StockQlcCheck_Test** (engine/test/stockqlccheck, new) | none | covered | high | — |
 | M597 | Stock QLC+ 4.14.4 opens a .qxw saved here (k7) | App::saveXML writes a show (dimmers, RGB pars, a multi-head bar, a mover, group, channel group, palettes, scene, chaser, collection, EFX, RGB matrix, sequence, script, show, plus a Show Tree and speed masters); stock 4.14.4's engine, built from the pinned source, loads it and its fingerprint matches ours line for line | **StockRoundTrip_Test::aQxwSavedHereOpensInStockQlcPlus4**, ::theNoticeNamesWhatStockLeavesOut (ui/test/stockroundtrip, new) | none | covered | high | The engine only: stock's Virtual Console and Simple Desk loaders are not built |
 | M598 | A hit on a Flash button plays (k2 fix) | Flash plays the hit while held and stops it on release; a hit toggled on stays on; still so after save and load; a plain Collection still flashes as in QLC+ (nothing) | **ShowTree_Test::aFlashButtonPlaysAHitWhileHeld** (new; failed before the fix), **VCButton_Test::flashPlaysAHit** (new) | none | covered | med | — |
+| M599 | Always start with the plot locked (a0) | Off by default: a show opens as saved; on, a show saved unlocked opens through App::loadXML with its whole plot locked, the Studio's view and button locked, not marked changed, each layer's own lock as saved; the setting is in the lock button's menu (MenuButtonPopup) and turned off there | **AppViews_Test::aShowOpensLockedWhenTheUserAsks** (new), **Monitor_Test::alwaysStartLockedLocksAnOpenedShow** (new) | none | covered | low | The menu is not opened by a click (offscreen) |
+| M600 | Layers held by the plot lock (a0) | Plot locked: every layer's lock drawn held (icon, dashed, "Locked by the plot" tooltip naming own on/off), its own state (checked, ownLocked) unchanged; a layer's own switch still toggles under the hold; unlocked, each layer exactly as before | **Monitor_Test::layersShowTheirLockHeldByThePlot** (new) | none | covered | med | The icon's pixels are not compared; the help picture shows them |
+| M601 | Held by its layer vs its own lock (a0) | An object locked on its own: 🔒; its layer locked: ↑🔒 on the others, own kept; NodeHoldRole flags and the tooltip name own / folder / layer / plot; the plot's lock in the tooltip and the plot's right-click menu, not as a badge; unlocked, as before | **Monitor_Test::anObjectHeldByItsLayerVsItsOwnLock** (new) | none | covered | low | Folder hold is computed (groupChainLocked) but not asserted here |
 
 ## Data safety across features (old shows, file formats)
 

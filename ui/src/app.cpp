@@ -5165,6 +5165,9 @@ QFile::FileError App::loadXML(const QString& fileName)
             // correctly into the doc (confirmed present in Fixture Manager,
             // whose tab is built lazily on first view and so isn't affected).
             slotLoadProgress(tr("Building views"), 0);
+            // "Always start with the plot locked" (the user's): before the
+            // Studio is built from the show, so it opens locked.
+            Monitor::applyStartPlotLock(m_doc);
             updateOutputReadiness();
             if (m_inputNotices != nullptr)
                 m_inputNotices->reset();

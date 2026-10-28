@@ -746,6 +746,12 @@ public:
     bool itemLocked(const QString &kind, quint32 id) const;
     /** The object's OWN lock (not its layer's). A fixture has none. */
     bool itemOwnLocked(const QString &kind, quint32 id) const;
+    /** Everything that holds @p kind / @p id still, as ItemLock::Hold
+     *  flags: its own lock, a folder's, its layer's and the plot's, each
+     *  told apart (the Layers list names them). */
+    int itemHolds(const QString &kind, quint32 id) const;
+    /** The folder an object is directly in (fixture included), 0 for none. */
+    quint32 objectGroupId(const QString &kind, quint32 id) const;
     /** Whether the object's kind has a lock of its own. */
     static bool kindHasOwnLock(const QString &kind);
     /** Lock or unlock the object itself; its layer is left as it is. */

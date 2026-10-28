@@ -2000,6 +2000,29 @@ void Monitor::initGraphicsToolbar()
     updatePlotLockAppearance(m_props->layoutLocked());
     connect(m_lockAction, SIGNAL(toggled(bool)), this, SLOT(slotLockToggled(bool)));
 
+    /* "Always start with the plot locked" sits in the lock button's own menu:
+       next to the control it is about, and there whenever the plot is shown
+       (Preferences is a long way from the plot, and "Targets stay
+       adjustable" beside the button is only there while it is locked).
+       It is the user's, not the show's: QSettings. */
+    {
+        QMenu *lockMenu = new QMenu(this);
+        m_startLockedAction = lockMenu->addAction(tr("Always start with the plot locked"));
+        m_startLockedAction->setObjectName(QStringLiteral("startPlotLockedAction"));
+        m_startLockedAction->setCheckable(true);
+        m_startLockedAction->setChecked(startPlotLocked());
+        m_startLockedAction->setToolTip(tr("Every show you open starts with its whole plot locked.\n"
+                                           "This is your setting, not the show's."));
+        lockMenu->setToolTipsVisible(true);
+        connect(m_startLockedAction, &QAction::toggled, this, [](bool on) {
+            setStartPlotLocked(on);
+        });
+        m_lockAction->setMenu(lockMenu);
+        if (QToolButton *lockBtn = qobject_cast<QToolButton *>(
+                m_graphicsToolBar->widgetForAction(m_lockAction)))
+            lockBtn->setPopupMode(QToolButton::MenuButtonPopup);
+    }
+
     /* A locked plot moves nothing, aim targets included (Q183). Someone who
        re-aims during a show turns this on: it is theirs, not the show's, so
        it lives in their settings and a show file never changes it. */
@@ -2657,6 +2680,26 @@ void Monitor::slotLockToggled(bool locked)
     updatePlotLockAppearance(locked);
     m_props->setLayoutLocked(locked);
     m_doc->setModified();
+    // The Layers list shows each layer held by the plot, or free again.
+    if (m_layersPanel != NULL)
+        m_layersPanel->reload();
+}
+
+bool Monitor::startPlotLocked()
+{
+    return QSettings().value(QStringLiteral("monitor/startPlotLocked"), false).toBool();
+}
+
+void Monitor::setStartPlotLocked(bool on)
+{
+    QSettings().setValue(QStringLiteral("monitor/startPlotLocked"), on);
+}
+
+void Monitor::applyStartPlotLock(Doc *doc)
+{
+    if (doc == NULL || doc->monitorProperties() == NULL || !startPlotLocked())
+        return;
+    doc->monitorProperties()->setLayoutLocked(true);
 }
 
 void Monitor::slotToggleLayersPanel(bool show)
