@@ -137,7 +137,7 @@ void OlaIO::closeOutput(quint32 output, quint32 universe)
     if (output >= UNIVERSE_COUNT)
         qWarning() << "[OLA] output" << output << "is out of range";
     else
-        removeFromMap(output, universe, Output);
+        removeFromMap(universe, output, Output);
 }
 
 QStringList OlaIO::outputs()

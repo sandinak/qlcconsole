@@ -188,7 +188,7 @@ void GPIOPlugin::closeOutput(quint32 output, quint32 universe)
 
     m_outputUniverse = UINT_MAX;
 
-    removeFromMap(output, universe, Output);
+    removeFromMap(universe, output, Output);
 }
 
 QStringList GPIOPlugin::outputs()
@@ -362,7 +362,7 @@ void GPIOPlugin::closeInput(quint32 input, quint32 universe)
 
     m_inputUniverse = UINT_MAX;
 
-    removeFromMap(input, universe, Input);
+    removeFromMap(universe, input, Input);
 }
 
 QStringList GPIOPlugin::inputs()

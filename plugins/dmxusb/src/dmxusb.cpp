@@ -118,7 +118,7 @@ void DMXUSB::closeOutput(quint32 output, quint32 universe)
             disconnect(pro, SIGNAL(rdmValueChanged(quint32, quint32, QVariantMap)),
                        this , SIGNAL(rdmValueChanged(quint32, quint32, QVariantMap)));
         }
-        removeFromMap(output, universe, Output);
+        removeFromMap(universe, output, Output);
         m_outputs.at(output)->close(output, false);
     }
 }
@@ -228,7 +228,7 @@ void DMXUSB::closeInput(quint32 input, quint32 universe)
     if (input < quint32(m_inputs.size()))
     {
         DMXUSBWidget *widget = m_inputs.at(input);
-        removeFromMap(input, universe, Input);
+        removeFromMap(universe, input, Input);
         widget->close(input, true);
         if (widget->type() == DMXUSBWidget::ProRXTX ||
             widget->type() == DMXUSBWidget::ProMk2 ||

@@ -378,7 +378,7 @@ void HIDPlugin::closeInput(quint32 input, quint32 universe)
     HIDDevice* dev = device(input);
     if (dev != NULL)
     {
-        removeFromMap(input, universe, Input);
+        removeFromMap(universe, input, Input);
         dev->closeInput();
         disconnect(dev, SIGNAL(valueChanged(quint32,quint32,quint32,uchar)),
                    this, SIGNAL(valueChanged(quint32,quint32,quint32,uchar)));
@@ -460,7 +460,7 @@ void HIDPlugin::closeOutput(quint32 output, quint32 universe)
     HIDDevice* dev = deviceOutput(output);
     if (dev != NULL)
     {
-        removeFromMap(output, universe, Output);
+        removeFromMap(universe, output, Output);
         dev->closeOutput();
     }
     else

@@ -77,7 +77,7 @@ void UARTPlugin::closeOutput(quint32 output, quint32 universe)
 {
     if (output < quint32(m_widgets.count()))
     {
-        removeFromMap(output, universe, Output);
+        removeFromMap(universe, output, Output);
 
         m_widgets.at(output)->close(UARTWidget::Output);
     }
@@ -157,7 +157,7 @@ void UARTPlugin::closeInput(quint32 input, quint32 universe)
 {
     if (input < quint32(m_widgets.count()))
     {
-        removeFromMap(input, universe, Input);
+        removeFromMap(universe, input, Input);
         m_widgets.at(input)->close(UARTWidget::Input);
     }
 }

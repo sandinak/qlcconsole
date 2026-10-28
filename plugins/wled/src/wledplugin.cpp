@@ -123,7 +123,7 @@ void WledPlugin::closeOutput(quint32 output, quint32 universe)
 {
     if (output != 0)
         return;
-    removeFromMap(output, universe, Output);
+    removeFromMap(universe, output, Output);
     {
         QMutexLocker locker(&m_mutex);
         m_targets.remove(universe);

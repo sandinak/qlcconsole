@@ -94,7 +94,7 @@ void OS2LPlugin::closeInput(quint32 input, quint32 universe)
 {
     enableTCPServer(false);
 
-    removeFromMap(input, universe, Input);
+    removeFromMap(universe, input, Input);
 
     m_inputUniverse = UINT_MAX;
 }

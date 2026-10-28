@@ -69,7 +69,7 @@ void UDMX::closeOutput(quint32 output, quint32 universe)
 {
     if (output < quint32(m_devices.size()))
     {
-        removeFromMap(output, universe, Output);
+        removeFromMap(universe, output, Output);
         m_devices.at(output)->close();
     }
 }

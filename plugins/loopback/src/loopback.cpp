@@ -81,7 +81,7 @@ void Loopback::closeOutput(quint32 output, quint32 universe)
 {
     m_outputMap.remove(output);
     m_channelData.remove(output);
-    removeFromMap(output, universe, Output);
+    removeFromMap(universe, output, Output);
 }
 
 QStringList Loopback::outputs()
@@ -107,7 +107,7 @@ bool Loopback::openInput(quint32 input, quint32 universe)
 void Loopback::closeInput(quint32 input, quint32 universe)
 {
     m_inputMap.remove(input);
-    removeFromMap(input, universe, Input);
+    removeFromMap(universe, input, Input);
 }
 
 QStringList Loopback::inputs()

@@ -205,7 +205,7 @@ void E131Plugin::closeOutput(quint32 output, quint32 universe)
     if (output >= (quint32)m_IOmapping.length())
         return;
 
-    removeFromMap(output, universe, Output);
+    removeFromMap(universe, output, Output);
     E131Controller *controller = m_IOmapping.at(output).controller;
     if (controller != NULL)
     {
@@ -331,7 +331,7 @@ void E131Plugin::closeInput(quint32 input, quint32 universe)
     if (input >= (quint32)m_IOmapping.length())
         return;
 
-    removeFromMap(input, universe, Input);
+    removeFromMap(universe, input, Input);
     E131Controller *controller = m_IOmapping.at(input).controller;
     if (controller != NULL)
     {

@@ -102,7 +102,7 @@ void SPIPlugin::closeOutput(quint32 output, quint32 universe)
     if (output != 0)
         return;
 
-    removeFromMap(output, universe, Output);
+    removeFromMap(universe, output, Output);
 
     m_referenceCount--;
 

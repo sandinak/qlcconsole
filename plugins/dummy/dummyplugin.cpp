@@ -71,7 +71,7 @@ void DummyPlugin::closeOutput(quint32 output, quint32 universe)
 {
     /** Check for output index validity and, in case, return */
 
-    removeFromMap(output, universe, Output);
+    removeFromMap(universe, output, Output);
 
     /** Do the plugin specific operations to
      *  close the requested output line */
@@ -165,7 +165,7 @@ void DummyPlugin::closeInput(quint32 input, quint32 universe)
 {
     /** Check for input index validity and, in case, return */
 
-    removeFromMap(input, universe, Input);
+    removeFromMap(universe, input, Input);
 
     /** Do the plugin specific operations to
      *  close the requested input line */

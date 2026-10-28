@@ -111,7 +111,7 @@ void MidiPlugin::closeOutput(quint32 output, quint32 universe)
     MidiOutputDevice* dev = outputDevice(output);
     if (dev != NULL)
     {
-        removeFromMap(output, universe, Output);
+        removeFromMap(universe, output, Output);
         dev->close();
     }
 }
@@ -232,7 +232,7 @@ void MidiPlugin::closeInput(quint32 input, quint32 universe)
     MidiInputDevice* dev = inputDevice(input);
     if (dev != NULL && dev->isOpen() == true)
     {
-        removeFromMap(input, universe, Input);
+        removeFromMap(universe, input, Input);
         dev->close();
         disconnect(dev, SIGNAL(valueChanged(QVariant,ushort,uchar)),
                    this, SLOT(slotValueChanged(QVariant,ushort,uchar)));
