@@ -3083,3 +3083,228 @@ void ArtNet_Test::closingAUniverseDropsOnlyItsOwnParameters()
     QVERIFY(plugin.getParameters(1, 1, P::Output).isEmpty());
     plugin.closeOutput(1, 1);
 }
+
+/** The RDM checksum of @p b from its first byte (no start code in @p b) */
+static quint16 rdmSum(const QByteArray &b, bool startCodeIncluded)
+{
+    quint16 cs = startCodeIncluded ? 0 : RDM_START_CODE;
+    for (char c : b)
+        cs += uchar(c);
+    return cs;
+}
+
+void ArtNet_Test::rdmCommandsAreBuiltToE120()
+{
+    RDMProtocol rdm;
+    QByteArray b;
+    const QString dest("4d4812345678");
+
+    // No destination: nothing to build
+    QVERIFY(!rdm.packetizeCommand(GET_COMMAND, QVariantList(), false, b));
+    QVERIFY(!rdm.packetizeCommand(GET_COMMAND, QVariantList({ dest }), false, b));
+
+    // A plain GET, no start code: header, PID, PDL 0, checksum
+    QVERIFY(rdm.packetizeCommand(GET_COMMAND, QVariantList({ dest, PID_DEVICE_INFO }), false, b));
+    QCOMPARE(b.size(), 23 + 2);
+    QCOMPARE(int(uchar(b.at(0))), RDM_SC_SUB_MESSAGE);
+    QCOMPARE(int(uchar(b.at(1))), 24);                                  // with the start code
+    QCOMPARE(b.mid(2, 6), QByteArray::fromHex("4d4812345678"));
+    QCOMPARE(b.mid(8, 6), RDMProtocol().UIDToByteArray(QLCPLUS_ESTA_ID, QLCPLUS_DEVICE_ID));
+    const int tn = uchar(b.at(14));
+    QCOMPARE(int(uchar(b.at(15))), 1);                                   // port
+    QCOMPARE(int(uchar(b.at(19))), GET_COMMAND);
+    QCOMPARE(RDMProtocol().byteArrayToShort(b, 20), quint16(PID_DEVICE_INFO));
+    QCOMPARE(int(uchar(b.at(22))), 0);                                   // PDL
+    QCOMPARE(RDMProtocol().byteArrayToShort(b, 23), rdmSum(b.left(23), false));
+
+    // A GET with a 2-byte parameter, with the start code; the next transaction
+    QVERIFY(rdm.packetizeCommand(GET_COMMAND,
+                                 QVariantList({ dest, PID_SLOT_DESCRIPTION, 2, 0x0102 }), true, b));
+    QCOMPARE(int(uchar(b.at(0))), RDM_START_CODE);
+    QCOMPARE(int(uchar(b.at(2))), 24 + 2);
+    QCOMPARE(int(uchar(b.at(15))), (tn + 1) & 0xff);
+    QCOMPARE(int(uchar(b.at(23))), 2);
+    QCOMPARE(b.mid(24, 2), QByteArray::fromHex("0102"));
+    QCOMPARE(RDMProtocol().byteArrayToShort(b, 26), rdmSum(b.left(26), true));
+    for (int size : { 1, 4 })
+    {
+        QVERIFY(rdm.packetizeCommand(GET_COMMAND,
+                                     QVariantList({ dest, PID_SLOT_DESCRIPTION, size, 0x0a0b0c0d }), false, b));
+        QCOMPARE(int(uchar(b.at(22))), size);
+        QCOMPARE(b.mid(23, size), size == 1 ? QByteArray::fromHex("0d") : QByteArray::fromHex("0a0b0c0d"));
+    }
+
+    // Discovery: unique branch with its range, mute with none
+    QVERIFY(rdm.packetizeCommand(DISCOVERY_COMMAND,
+                                 QVariantList({ RDMProtocol::broadcastAddress(), PID_DISC_UNIQUE_BRANCH,
+                                                qulonglong(0), qulonglong(0xffffffffffffULL) }), false, b));
+    QCOMPARE(b.mid(2, 6), QByteArray::fromHex("ffffffffffff"));
+    QCOMPARE(int(uchar(b.at(19))), DISCOVERY_COMMAND);
+    QCOMPARE(int(uchar(b.at(22))), 12);
+    QCOMPARE(b.mid(23, 12), QByteArray::fromHex("000000000000ffffffffffff"));
+    QVERIFY(rdm.packetizeCommand(DISCOVERY_COMMAND,
+                                 QVariantList({ dest, PID_DISC_MUTE }), false, b));
+    QCOMPARE(int(uchar(b.at(22))), 0);
+    QCOMPARE(b.size(), 25);
+    // A unique branch without its range is refused, not read past
+    QVERIFY(!rdm.packetizeCommand(DISCOVERY_COMMAND,
+                                  QVariantList({ dest, PID_DISC_UNIQUE_BRANCH }), false, b));
+
+    // The helpers
+    QCOMPARE(RDMProtocol().longToByteArray(0x01020304), QByteArray::fromHex("01020304"));
+    QCOMPARE(RDMProtocol().byteArrayToLong(QByteArray::fromHex("01020304"), 0), 0x01020304u);
+    QCOMPARE(RDMProtocol().byteArrayToLong(QByteArray::fromHex("010203"), 0), 0u);
+    QCOMPARE(RDMProtocol().byteArrayToShort(QByteArray::fromHex("01"), 0), quint16(0));
+    QCOMPARE(RDMProtocol().byteArrayToShort(QByteArray::fromHex("0102"), -1), quint16(0));
+    QCOMPARE(RDMProtocol::broadcastAddress().toLower(), QString("ffffffffffff"));
+    QCOMPARE(RDMProtocol::responseToString(RESPONSE_TYPE_NACK_REASON), QString("NACK"));
+    QCOMPARE(RDMProtocol::responseToString(RESPONSE_TYPE_ACK_TIMER), QString("TIMEOUT"));
+    QCOMPARE(RDMProtocol::responseToString(RESPONSE_TYPE_ACK_OVERFLOW), QString("OVERFLOW"));
+    QCOMPARE(RDMProtocol::responseToString(0x77), QString("UNKNOWN"));
+    QCOMPARE(RDMProtocol::categoryToString(0x0102), QString("Fixture Moving Yoke"));
+    QCOMPARE(RDMProtocol::categoryToString(0x1234), QString("Unknown"));
+    QCOMPARE(RDMProtocol::pidToString(PID_IDENTIFY_DEVICE), QString("PID_IDENTIFY_DEVICE"));
+}
+
+void ArtNet_Test::rdmSetCommandsCarryTheirValues()
+{
+    RDMProtocol rdm;
+    QByteArray b;
+
+    /* SET: (size, value) pairs after the UID and the PID. The loop read
+       the UID and the PID as a pair too, so a UID whose text read as 1, 2,
+       4 or 99 put the PID into the parameter data. */
+    for (const QString &dest : { QString("4d4812345678"), QString("000000000001"),
+                                 QString("000000000002"), QString("000000000099") })
+    {
+        QVERIFY(rdm.packetizeCommand(SET_COMMAND,
+                                     QVariantList({ dest, PID_DMX_START_ADDRESS, 1, 5, 2, 0x1234, 4, 0xdeadbeef }),
+                                     false, b));
+        QVERIFY2(int(uchar(b.at(22))) == 7, qPrintable(dest + ": PDL " + QString::number(uchar(b.at(22)))));
+        QCOMPARE(b.mid(23, 7), QByteArray::fromHex("051234deadbeef"));
+        QCOMPARE(int(uchar(b.at(1))), 24 + 7);
+        QCOMPARE(RDMProtocol().byteArrayToShort(b, 30), rdmSum(b.left(30), false));
+    }
+
+    // A byte array (99) is taken whole, and ends the list
+    QVERIFY(rdm.packetizeCommand(SET_COMMAND,
+                                 QVariantList({ QString("4d4812345678"), PID_DMX_START_ADDRESS,
+                                                99, QByteArray("label"), 1, 9 }), false, b));
+    QCOMPARE(int(uchar(b.at(22))), 5);
+    QCOMPARE(b.mid(23, 5), QByteArray("label"));
+
+    // A size with no value: nothing read past the list
+    QVERIFY(rdm.packetizeCommand(SET_COMMAND,
+                                 QVariantList({ QString("4d4812345678"), PID_DMX_START_ADDRESS, 2 }), false, b));
+    QCOMPARE(int(uchar(b.at(22))), 0);
+    QVERIFY(!rdm.packetizeCommand(SET_COMMAND, QVariantList({ QString("4d4812345678") }), false, b));
+}
+
+/** A DISC_UNIQUE_BRANCH response for @p uid (E1.20 7.5.4): preamble,
+ *  separator, the EUID and its checksum, each byte as b|0xAA, b|0x55 */
+static QByteArray discoveryReply(const QByteArray &uid)
+{
+    QByteArray b(7, char(0xfe));
+    b.append(char(0xaa));
+    QByteArray euid;
+    for (char c : uid)
+        euid.append(char(uchar(c) | 0xaa)).append(char(uchar(c) | 0x55));
+    quint16 cs = 0;
+    for (char c : euid)
+        cs += uchar(c);
+    b.append(euid);
+    b.append(char((cs >> 8) | 0xaa)).append(char((cs >> 8) | 0x55));
+    b.append(char((cs & 0xff) | 0xaa)).append(char((cs & 0xff) | 0x55));
+    return b;
+}
+
+void ArtNet_Test::rdmDiscoveryRepliesAreDecoded()
+{
+    RDMProtocol rdm;
+    QVariantMap values;
+    const QByteArray good = discoveryReply(QByteArray::fromHex("4d4812345678"));
+    QCOMPARE(good.size(), 24);
+    QVERIFY(rdm.parseDiscoveryReply(good, values));
+    QCOMPARE(values.value("DISCOVERY_COUNT").toInt(), 1);
+    QCOMPARE(values.value("UID-0").toString(), QString("4D4812345678"));
+
+    values.clear();
+    QVERIFY(!rdm.parseDiscoveryReply(good.left(23), values));
+    QByteArray bad = good;
+    bad[3] = char(0x00);                                    // preamble
+    QVERIFY(!rdm.parseDiscoveryReply(bad, values));
+    bad = good;
+    bad[7] = char(0x00);                                    // separator
+    QVERIFY(!rdm.parseDiscoveryReply(bad, values));
+    bad = good;
+    bad[10] = char(uchar(bad.at(10)) ^ 0x01);               // EUID, checksum unchanged
+    QVERIFY(!rdm.parseDiscoveryReply(bad, values));
+    QVERIFY(values.isEmpty());
+}
+
+void ArtNet_Test::rdmMoreRepliesParse()
+{
+    ArtNetPacketizer p;
+    quint32 universe = 0;
+    QVariantMap v;
+
+    QVERIFY(p.processRDMdata(artRdmReply(PID_DEVICE_MODEL_DESCRIPTION, "Spot 575"), universe, v));
+    QCOMPARE(v.value("MODEL_NAME").toString(), QString("Spot 575"));
+    v.clear();
+    QVERIFY(p.processRDMdata(artRdmReply(PID_MANUFACTURER_LABEL, "Acme"), universe, v));
+    QCOMPARE(v.value("MANUFACTURER").toString(), QString("Acme"));
+
+    v.clear();
+    QVERIFY(p.processRDMdata(artRdmReply(PID_DMX_PERSONALITY, QByteArray::fromHex("0204")), universe, v));
+    QCOMPARE(v.value("PERS_CURRENT").toInt(), 2);
+    QCOMPARE(v.value("PERS_COUNT").toInt(), 4);
+
+    // PARAMETER_DESCRIPTION: 20 fixed bytes, then the text
+    v.clear();
+    const QByteArray pd = QByteArray::fromHex("8001" "02" "03" "01" "05" "06" "00"
+                                              "00000001" "000000ff" "00000010") + "Fan speed";
+    QVERIFY(p.processRDMdata(artRdmReply(PID_PARAMETER_DESCRIPTION, pd), universe, v));
+    QCOMPARE(v.value("PID_INFO").toInt(), 0x8001);
+    QCOMPARE(v.value("PDL Size").toInt(), 2);
+    QCOMPARE(v.value("Min Valid Value").toUInt(), 1u);
+    QCOMPARE(v.value("Max Valid Value").toUInt(), 255u);
+    QCOMPARE(v.value("Default Value").toUInt(), 16u);
+    QCOMPARE(v.value("PID_DESC").toString(), QString("Fan speed"));
+
+    // SLOT_INFO: 5 bytes a slot; a part slot is not one
+    v.clear();
+    QVERIFY(p.processRDMdata(artRdmReply(PID_SLOT_INFO,
+                                         QByteArray::fromHex("0000000001" "0001000002" "0002")), universe, v));
+    QCOMPARE(v.value("SLOT_LIST").value<QVector<quint16>>(), QVector<quint16>({ 0, 1 }));
+    v.clear();
+    QVERIFY(p.processRDMdata(artRdmReply(PID_SLOT_DESCRIPTION, QByteArray::fromHex("0003") + "Gobo"),
+                             universe, v));
+    QCOMPARE(v.value("SLOT_ID").toInt(), 3);
+    QCOMPARE(v.value("SLOT_DESC").toString(), QString("Gobo"));
+
+    // Too short for their fields: parsed, the fields left out
+    for (quint16 pid : { quint16(PID_DEVICE_INFO), quint16(PID_PARAMETER_DESCRIPTION),
+                         quint16(PID_DMX_PERSONALITY), quint16(PID_DMX_START_ADDRESS),
+                         quint16(PID_SLOT_DESCRIPTION) })
+    {
+        v.clear();
+        QVERIFY(p.processRDMdata(artRdmReply(pid, QByteArray::fromHex("01")), universe, v));
+        QCOMPARE(v.value("PID").toInt(), int(pid));
+        QVERIFY(!v.contains("DMX_START_ADDRESS") && !v.contains("PID_INFO")
+                && !v.contains("PERS_CURRENT") && !v.contains("SLOT_ID"));
+    }
+
+    // Any other PID: the raw data, control bytes shown as #
+    v.clear();
+    QVERIFY(p.processRDMdata(artRdmReply(PID_IDENTIFY_DEVICE, QByteArray::fromHex("01") + "A"), universe, v));
+    QCOMPARE(v.value("RAW_DATA").toByteArray(), QByteArray("01,41"));
+    QCOMPARE(v.value("RAW_DATA_STRING").toString(), QString("#A"));
+
+    // Our own request, heard back: not a reply
+    RDMProtocol rdm;
+    QByteArray own;
+    QVERIFY(rdm.packetizeCommand(GET_COMMAND, QVariantList({ QString("4d4812345678"), PID_DEVICE_INFO }), true, own));
+    v.clear();
+    QVERIFY(!rdm.parsePacket(own, v));
+    QVERIFY(!rdm.parsePacket(QByteArray(), v));
+}

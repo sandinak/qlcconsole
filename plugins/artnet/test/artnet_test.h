@@ -140,6 +140,13 @@ private slots:
     void pluginKeepsOnlyWhatDiffersFromTheDefault();
     void closingAUniverseDropsOnlyItsOwnParameters();
 
+    /* RDM (plugins/interfaces/rdmprotocol.cpp, shared with DMX USB): the
+       commands we build, byte for byte, and the replies we read */
+    void rdmCommandsAreBuiltToE120();
+    void rdmSetCommandsCarryTheirValues();
+    void rdmDiscoveryRepliesAreDecoded();
+    void rdmMoreRepliesParse();
+
 public slots:
     /* Not a test: connected to problemsChanged() by
        problemsChangedIsNeverEmittedUnderTheLock(). */
