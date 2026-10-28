@@ -1332,7 +1332,8 @@ void Scene::processValue(MasterTimer *timer, QList<Universe*> ua, uint fadeIn, S
         if (tempoType() == Beats)
         {
             int fadeInTime = beatsToTime(fadeIn, timer->beatTimeDuration());
-            int beatOffset = timer->nextBeatTimeOffset();
+            const int beatOffset = (m_passBeatOffset != INT_MIN)
+                    ? m_passBeatOffset : timer->nextBeatTimeOffset();
 
             if (fadeInTime - beatOffset > 0)
                 fc->setFadeTime(fadeInTime - beatOffset);
@@ -1453,6 +1454,7 @@ void Scene::followGroupMembers(MasterTimer *timer, QList<Universe *> ua)
         }
     }
     const int lookDim = QLCPalette::lookDimmerValue(doc(), pals);
+    m_passBeatOffset = (tempoType() == Beats) ? timer->nextBeatTimeOffset() : INT_MIN;
     for (int i = 0; i < stack.size(); ++i)
     {
         SceneValue &scv = stack[i].first;
@@ -1460,6 +1462,7 @@ void Scene::followGroupMembers(MasterTimer *timer, QList<Universe *> ua)
                                                       scv.value, lookDim);
         processValue(timer, ua, stack.at(i).second, scv);
     }
+    m_passBeatOffset = INT_MIN;
 }
 
 QList<quint32> Scene::transitionFixtures() const
@@ -1810,6 +1813,8 @@ void Scene::write(MasterTimer *timer, QList<Universe*> ua)
             QHash<quint32, QList<quint32> > sightChannels;
             foreach (quint32 fid, m_sightDimmed)
                 sightChannels.insert(fid, sightDimChannels(doc()->fixture(fid)));
+            // every channel of this start fades to the same beat
+            m_passBeatOffset = (tempoType() == Beats) ? timer->nextBeatTimeOffset() : INT_MIN;
             for (int i = 0; i < stack.size(); ++i)
             {
                 SceneValue &scv = stack[i].first;
@@ -1819,6 +1824,7 @@ void Scene::write(MasterTimer *timer, QList<Universe*> ua)
                     scv.value = 0;
                 processValue(timer, ua, stack.at(i).second, scv);
             }
+            m_passBeatOffset = INT_MIN;
             m_applyTransitionIn = false;   // the start only, not a later re-aim
         }
         else
