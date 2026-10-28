@@ -68,6 +68,20 @@ class Monitor:
         self.samples.append((time.time(), cpu, rss))
         return True
 
+    def slope_after(self, warmup):
+        """Least-squares RSS slope (MB/h) over the samples after warm-up."""
+        if not self.samples:
+            return None
+        t0 = self.samples[0][0]
+        pts = [(t - t0, r) for t, _, r in self.samples if t - t0 >= warmup]
+        if len(pts) < 5:
+            return None
+        n = len(pts)
+        mx = sum(p[0] for p in pts) / n
+        my = sum(p[1] for p in pts) / n
+        d = sum((p[0] - mx) ** 2 for p in pts)
+        return sum((p[0] - mx) * (p[1] - my) for p in pts) / d * 3600.0 if d else None
+
     def report(self):
         if not self.samples:
             return "monitor: no samples"
@@ -220,8 +234,11 @@ def main():
     ap.add_argument("--port", type=int, default=9999)
     ap.add_argument("--duration", type=int, default=120, help="seconds to torture")
     ap.add_argument("--seed", type=int, default=1)
-    ap.add_argument("--leak-threshold", type=float, default=200.0,
-                    help="flag if RSS grows more than this many MB")
+    ap.add_argument("--leak-threshold", type=float, default=50.0,
+                    help="flag if RSS grows faster than this many MB/h after warm-up")
+    ap.add_argument("--warmup", type=float, default=300.0,
+                    help="seconds of warm-up left out of the leak slope (the show's first "
+                         "minutes allocate caches, previews, fader maps)")
     ap.add_argument("--ticklog", type=int, default=100,
                     help="QLC_TICKLOG interval for engine tick-overrun logging (0=off)")
     args = ap.parse_args()
@@ -302,10 +319,17 @@ def main():
 
         # final assessment
         log(mon.report())
-        if mon.rss0 is not None and (mon.rss_peak - mon.rss0) > args.leak_threshold:
-            log(f"*** POSSIBLE LEAK: RSS grew {mon.rss_peak - mon.rss0:.0f} MB "
-                f"(> {args.leak_threshold:.0f} MB threshold)")
-            verdict = max(verdict, 1)
+        # Leak verdict on the slope AFTER warm-up (MB/h), not start-vs-peak:
+        # the first minutes' growth is warm-up, which the old check called a leak.
+        slope = mon.slope_after(args.warmup)
+        if slope is None:
+            log(f"leak: run too short for a slope after {args.warmup:.0f} s of warm-up")
+        else:
+            log(f"leak: RSS slope after warm-up {slope:+.1f} MB/h")
+            if slope > args.leak_threshold:
+                log(f"*** POSSIBLE LEAK: {slope:.1f} MB/h after warm-up "
+                    f"(> {args.leak_threshold:.0f} MB/h)")
+                verdict = max(verdict, 1)
         if verdict == 0:
             log("RESULT: survived torture run within thresholds")
         else:

@@ -1,0 +1,19 @@
+function,host,last_ok,hard_break,at_least,jitter_from
+Static 170-fixture looks,pi,256,512,,512
+Static 170-fixture looks,linux,2048,,2048,
+Static 170-fixture looks,m4,2048,,2048,
+"Chasers, per-step timing",pi,256,512,,512
+"Chasers, per-step timing",linux,512,1024,,1024
+"Chasers, per-step timing",m4,1024,2048,,
+Chasers stepping every tick (worst case),pi,,8,,8
+Chasers stepping every tick (worst case),linux,16,32,,32
+Chasers stepping every tick (worst case),m4,1024,,1024,
+Scripted RGB matrices,pi,128,256,,128
+Scripted RGB matrices,linux,256,512,,256
+Scripted RGB matrices,m4,512,1024,,128
+EFX,pi,512,1024,,1024
+EFX,linux,1024,2048,,2048
+EFX,m4,4096,,4096,
+"Cue lists (8 cues x 4 layers, 2 s fades)",pi,64,128,,128
+"Cue lists (8 cues x 4 layers, 2 s fades)",linux,256,,256,
+"Cue lists (8 cues x 4 layers, 2 s fades)",m4,256,,256,

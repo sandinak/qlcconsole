@@ -59,6 +59,14 @@ back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
   Dragging, **Put on Face** (it sets the Back face), **Distribute**, the
   rulers ("from behind: SL ◀ ▶ SR") and the H / V / Z readout work as in
   Front, and text reads normally, not mirrored.
+- **A [Performance](docs/performance.md) page**: how much one computer can
+  drive, measured on a Raspberry Pi 5, a Linux i7 and an Apple M4 (about
+  80, 256 and 768 universes of a load heavier than a real show; Art-Net at
+  the full 50 fps to 32, 64 and 128 universes), with long runs, memory,
+  input load, the method and the data. **Getting started ▸ Choosing a
+  computer** in the help sums it up. The charts are made by
+  `tools/perf/plot.py` from `docs/perf-data/`; the measuring tools are in
+  `stresstest/`.
 
 ### Changed
 

@@ -1,0 +1,106 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="450" viewBox="0 0 760 450" font-family="system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" role="img" aria-labelledby="t d">
+<title id="t">CPU use vs universes</title>
+<desc id="d">Same runs. Whole process, mean after warm-up; 1 = one core fully busy.</desc>
+<rect x="0.5" y="0.5" width="759" height="449" rx="8" fill="#fcfcfb" stroke="#d9d8d2"/>
+<text x="20" y="30" font-size="16" font-weight="600" fill="#0b0b0b">CPU use vs universes</text>
+<text x="20" y="50" font-size="12.5" fill="#52514e">Same runs. Whole process, mean after warm-up; 1 = one core fully busy.</text>
+<line x1="20" y1="70" x2="42" y2="70" stroke="#2a78d6" stroke-width="2"/>
+<circle cx="31" cy="70" r="4.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="1.5"></circle>
+<text x="50" y="74.5" font-size="12.5" fill="#0b0b0b">Raspberry Pi 5</text>
+<line x1="176" y1="70" x2="198" y2="70" stroke="#eb6834" stroke-width="2"/>
+<rect x="183.8" y="66" width="8" height="8" fill="#eb6834" stroke="#fcfcfb" stroke-width="1.5"></rect>
+<text x="206" y="74.5" font-size="12.5" fill="#0b0b0b">Intel i7-9750H (Linux container)</text>
+<line x1="463" y1="70" x2="485" y2="70" stroke="#1baf7a" stroke-width="2"/>
+<polygon points="474.2,64.3 478.8,74.1 469.6,74.1" fill="#1baf7a" stroke="#fcfcfb" stroke-width="1.5"></polygon>
+<text x="493" y="74.5" font-size="12.5" fill="#0b0b0b">Apple M4 Mac</text>
+<text x="20" y="93" font-size="11.5" fill="#6f6d68">Hollow marker: past the safe envelope</text>
+<line x1="70" y1="388" x2="610" y2="388" stroke="#e9e8e2" stroke-width="1"/>
+<text x="62" y="392" font-size="12" fill="#52514e" text-anchor="end">0</text>
+<line x1="70" y1="353.5" x2="610" y2="353.5" stroke="#e9e8e2" stroke-width="1"/>
+<text x="62" y="357.5" font-size="12" fill="#52514e" text-anchor="end">1</text>
+<line x1="70" y1="319" x2="610" y2="319" stroke="#e9e8e2" stroke-width="1"/>
+<text x="62" y="323" font-size="12" fill="#52514e" text-anchor="end">2</text>
+<line x1="70" y1="284.5" x2="610" y2="284.5" stroke="#e9e8e2" stroke-width="1"/>
+<text x="62" y="288.5" font-size="12" fill="#52514e" text-anchor="end">3</text>
+<line x1="70" y1="250" x2="610" y2="250" stroke="#e9e8e2" stroke-width="1"/>
+<text x="62" y="254" font-size="12" fill="#52514e" text-anchor="end">4</text>
+<line x1="70" y1="215.5" x2="610" y2="215.5" stroke="#e9e8e2" stroke-width="1"/>
+<text x="62" y="219.5" font-size="12" fill="#52514e" text-anchor="end">5</text>
+<line x1="70" y1="181" x2="610" y2="181" stroke="#e9e8e2" stroke-width="1"/>
+<text x="62" y="185" font-size="12" fill="#52514e" text-anchor="end">6</text>
+<line x1="70" y1="146.5" x2="610" y2="146.5" stroke="#e9e8e2" stroke-width="1"/>
+<text x="62" y="150.5" font-size="12" fill="#52514e" text-anchor="end">7</text>
+<line x1="70" y1="112" x2="610" y2="112" stroke="#e9e8e2" stroke-width="1"/>
+<text x="62" y="116" font-size="12" fill="#52514e" text-anchor="end">8</text>
+<line x1="70" y1="388" x2="70" y2="393" stroke="#c3c2b7" stroke-width="1"/>
+<text x="70" y="408" font-size="12" fill="#52514e" text-anchor="middle">1</text>
+<line x1="124" y1="388" x2="124" y2="393" stroke="#c3c2b7" stroke-width="1"/>
+<text x="124" y="408" font-size="12" fill="#52514e" text-anchor="middle">2</text>
+<line x1="178" y1="388" x2="178" y2="393" stroke="#c3c2b7" stroke-width="1"/>
+<text x="178" y="408" font-size="12" fill="#52514e" text-anchor="middle">4</text>
+<line x1="232" y1="388" x2="232" y2="393" stroke="#c3c2b7" stroke-width="1"/>
+<text x="232" y="408" font-size="12" fill="#52514e" text-anchor="middle">8</text>
+<line x1="286" y1="388" x2="286" y2="393" stroke="#c3c2b7" stroke-width="1"/>
+<text x="286" y="408" font-size="12" fill="#52514e" text-anchor="middle">16</text>
+<line x1="340" y1="388" x2="340" y2="393" stroke="#c3c2b7" stroke-width="1"/>
+<text x="340" y="408" font-size="12" fill="#52514e" text-anchor="middle">32</text>
+<line x1="394" y1="388" x2="394" y2="393" stroke="#c3c2b7" stroke-width="1"/>
+<text x="394" y="408" font-size="12" fill="#52514e" text-anchor="middle">64</text>
+<line x1="448" y1="388" x2="448" y2="393" stroke="#c3c2b7" stroke-width="1"/>
+<text x="448" y="408" font-size="12" fill="#52514e" text-anchor="middle">128</text>
+<line x1="502" y1="388" x2="502" y2="393" stroke="#c3c2b7" stroke-width="1"/>
+<text x="502" y="408" font-size="12" fill="#52514e" text-anchor="middle">256</text>
+<line x1="556" y1="388" x2="556" y2="393" stroke="#c3c2b7" stroke-width="1"/>
+<text x="556" y="408" font-size="12" fill="#52514e" text-anchor="middle">512</text>
+<line x1="610" y1="388" x2="610" y2="393" stroke="#c3c2b7" stroke-width="1"/>
+<text x="610" y="408" font-size="12" fill="#52514e" text-anchor="middle">1,024</text>
+<line x1="70" y1="388" x2="610" y2="388" stroke="#c3c2b7" stroke-width="1"/>
+<text x="340" y="432" font-size="12.5" fill="#52514e" text-anchor="middle">Universes (log scale)</text>
+<text transform="translate(20 250) rotate(-90)" font-size="12.5" fill="#52514e" text-anchor="middle">CPU (cores busy)</text>
+<path d="M70 386.8 L232 384.7 L286 380.1 L340 370.1 L394 351.2 L411.4 342 L448 309.5 L479.6 283.7 L502 286.7 L533.6 286.9" fill="none" stroke="#2a78d6" stroke-width="2" stroke-linejoin="round"/>
+<circle cx="70" cy="386.8" r="4.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="1.5"><title>Raspberry Pi 5, 1 universes: 0 cores busy, RSS peak 50.3 MB</title></circle>
+<circle cx="232" cy="384.7" r="4.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="1.5"><title>Raspberry Pi 5, 8 universes: 0.1 cores busy, RSS peak 53.9 MB</title></circle>
+<circle cx="286" cy="380.1" r="4.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="1.5"><title>Raspberry Pi 5, 16 universes: 0.2 cores busy, RSS peak 59.6 MB</title></circle>
+<circle cx="340" cy="370.1" r="4.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="1.5"><title>Raspberry Pi 5, 32 universes: 0.5 cores busy, RSS peak 74.1 MB</title></circle>
+<circle cx="394" cy="351.2" r="4.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="1.5"><title>Raspberry Pi 5, 64 universes: 1.1 cores busy, RSS peak 110 MB</title></circle>
+<circle cx="411.4" cy="342" r="4.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="1.5"><title>Raspberry Pi 5, 80 universes: 1.3 cores busy, RSS peak 130.8 MB</title></circle>
+<circle cx="448" cy="309.5" r="4.5" fill="#fcfcfb" stroke="#2a78d6" stroke-width="2"><title>Raspberry Pi 5, 128 universes: 2.3 cores busy, RSS peak 202.5 MB</title></circle>
+<circle cx="479.6" cy="283.7" r="4.5" fill="#fcfcfb" stroke="#2a78d6" stroke-width="2"><title>Raspberry Pi 5, 192 universes: 3 cores busy, RSS peak 300.1 MB</title></circle>
+<circle cx="502" cy="286.7" r="4.5" fill="#fcfcfb" stroke="#2a78d6" stroke-width="2"><title>Raspberry Pi 5, 256 universes: 2.9 cores busy, RSS peak 407 MB</title></circle>
+<circle cx="533.6" cy="286.9" r="4.5" fill="#fcfcfb" stroke="#2a78d6" stroke-width="2"><title>Raspberry Pi 5, 384 universes: 2.9 cores busy, RSS peak 616.3 MB</title></circle>
+<path d="M70 387.1 L232 385 L286 382.5 L340 377.5 L394 366.5 L411.4 360.7 L448 339.9 L479.6 313.7 L502 284.2 L533.6 230.9 L556 217.2 L587.6 226.7" fill="none" stroke="#eb6834" stroke-width="2" stroke-linejoin="round"/>
+<rect x="66" y="383.1" width="8" height="8" fill="#eb6834" stroke="#fcfcfb" stroke-width="1.5"><title>Intel i7-9750H (Linux container), 1 universes: 0 cores busy, RSS peak 50.2 MB</title></rect>
+<rect x="228" y="381" width="8" height="8" fill="#eb6834" stroke="#fcfcfb" stroke-width="1.5"><title>Intel i7-9750H (Linux container), 8 universes: 0.1 cores busy, RSS peak 53.3 MB</title></rect>
+<rect x="282" y="378.5" width="8" height="8" fill="#eb6834" stroke="#fcfcfb" stroke-width="1.5"><title>Intel i7-9750H (Linux container), 16 universes: 0.2 cores busy, RSS peak 59.1 MB</title></rect>
+<rect x="336" y="373.5" width="8" height="8" fill="#eb6834" stroke="#fcfcfb" stroke-width="1.5"><title>Intel i7-9750H (Linux container), 32 universes: 0.3 cores busy, RSS peak 73.1 MB</title></rect>
+<rect x="390" y="362.5" width="8" height="8" fill="#eb6834" stroke="#fcfcfb" stroke-width="1.5"><title>Intel i7-9750H (Linux container), 64 universes: 0.6 cores busy, RSS peak 109.4 MB</title></rect>
+<rect x="407.4" y="356.7" width="8" height="8" fill="#eb6834" stroke="#fcfcfb" stroke-width="1.5"><title>Intel i7-9750H (Linux container), 80 universes: 0.8 cores busy, RSS peak 129.6 MB</title></rect>
+<rect x="444" y="335.9" width="8" height="8" fill="#eb6834" stroke="#fcfcfb" stroke-width="1.5"><title>Intel i7-9750H (Linux container), 128 universes: 1.4 cores busy, RSS peak 200.9 MB</title></rect>
+<rect x="475.6" y="309.7" width="8" height="8" fill="#eb6834" stroke="#fcfcfb" stroke-width="1.5"><title>Intel i7-9750H (Linux container), 192 universes: 2.1 cores busy, RSS peak 298.5 MB</title></rect>
+<rect x="498" y="280.2" width="8" height="8" fill="#eb6834" stroke="#fcfcfb" stroke-width="1.5"><title>Intel i7-9750H (Linux container), 256 universes: 3 cores busy, RSS peak 403.2 MB</title></rect>
+<rect x="529.6" y="226.9" width="8" height="8" fill="#fcfcfb" stroke="#eb6834" stroke-width="2"><title>Intel i7-9750H (Linux container), 384 universes: 4.5 cores busy, RSS peak 610.2 MB</title></rect>
+<rect x="552" y="213.2" width="8" height="8" fill="#fcfcfb" stroke="#eb6834" stroke-width="2"><title>Intel i7-9750H (Linux container), 512 universes: 5 cores busy, RSS peak 827 MB</title></rect>
+<rect x="583.6" y="222.7" width="8" height="8" fill="#fcfcfb" stroke="#eb6834" stroke-width="2"><title>Intel i7-9750H (Linux container), 768 universes: 4.7 cores busy, RSS peak 1262.6 MB</title></rect>
+<path d="M70 386.7 L232 384.7 L286 382.6 L340 377.8 L394 361.8 L411.4 351.5 L448 328.6 L479.6 307.3 L502 293.8 L533.6 281.4 L556 255.5 L587.6 157.4 L610 122.8" fill="none" stroke="#1baf7a" stroke-width="2" stroke-linejoin="round"/>
+<polygon points="70,381 74.6,390.8 65.4,390.8" fill="#1baf7a" stroke="#fcfcfb" stroke-width="1.5"><title>Apple M4 Mac, 1 universes: 0 cores busy, RSS peak 12.6 MB</title></polygon>
+<polygon points="232,379 236.6,388.8 227.4,388.8" fill="#1baf7a" stroke="#fcfcfb" stroke-width="1.5"><title>Apple M4 Mac, 8 universes: 0.1 cores busy, RSS peak 16.3 MB</title></polygon>
+<polygon points="286,376.9 290.6,386.8 281.4,386.8" fill="#1baf7a" stroke="#fcfcfb" stroke-width="1.5"><title>Apple M4 Mac, 16 universes: 0.2 cores busy, RSS peak 21.5 MB</title></polygon>
+<polygon points="340,372.1 344.6,382 335.4,382" fill="#1baf7a" stroke="#fcfcfb" stroke-width="1.5"><title>Apple M4 Mac, 32 universes: 0.3 cores busy, RSS peak 35.6 MB</title></polygon>
+<polygon points="394,356.1 398.6,365.9 389.4,365.9" fill="#1baf7a" stroke="#fcfcfb" stroke-width="1.5"><title>Apple M4 Mac, 64 universes: 0.8 cores busy, RSS peak 71.3 MB</title></polygon>
+<polygon points="411.4,345.8 416,355.6 406.8,355.6" fill="#1baf7a" stroke="#fcfcfb" stroke-width="1.5"><title>Apple M4 Mac, 80 universes: 1.1 cores busy, RSS peak 91.6 MB</title></polygon>
+<polygon points="448,322.9 452.6,332.7 443.4,332.7" fill="#1baf7a" stroke="#fcfcfb" stroke-width="1.5"><title>Apple M4 Mac, 128 universes: 1.7 cores busy, RSS peak 162.6 MB</title></polygon>
+<polygon points="479.6,301.6 484.2,311.5 475,311.5" fill="#1baf7a" stroke="#fcfcfb" stroke-width="1.5"><title>Apple M4 Mac, 192 universes: 2.3 cores busy, RSS peak 261.7 MB</title></polygon>
+<polygon points="502,288.1 506.6,297.9 497.4,297.9" fill="#1baf7a" stroke="#fcfcfb" stroke-width="1.5"><title>Apple M4 Mac, 256 universes: 2.7 cores busy, RSS peak 367.8 MB</title></polygon>
+<polygon points="533.6,275.7 538.2,285.6 529,285.6" fill="#1baf7a" stroke="#fcfcfb" stroke-width="1.5"><title>Apple M4 Mac, 384 universes: 3.1 cores busy, RSS peak 575.6 MB</title></polygon>
+<polygon points="556,249.8 560.6,259.7 551.4,259.7" fill="#1baf7a" stroke="#fcfcfb" stroke-width="1.5"><title>Apple M4 Mac, 512 universes: 3.8 cores busy, RSS peak 793.4 MB</title></polygon>
+<polygon points="587.6,151.7 592.2,161.5 583,161.5" fill="#1baf7a" stroke="#fcfcfb" stroke-width="1.5"><title>Apple M4 Mac, 768 universes: 6.7 cores busy, RSS peak 1268.2 MB</title></polygon>
+<polygon points="610,117.1 614.6,126.9 605.4,126.9" fill="#fcfcfb" stroke="#1baf7a" stroke-width="2"><title>Apple M4 Mac, 1024 universes: 7.7 cores busy, RSS peak 1808.1 MB</title></polygon>
+<polygon points="628,117.8 632.1,126.4 623.9,126.4" fill="#1baf7a" stroke="#fcfcfb" stroke-width="1.5"></polygon>
+<text x="637" y="126.8" font-size="12" fill="#0b0b0b">M4 (10 cores)</text>
+<line x1="594.6" y1="226.7" x2="621" y2="226.7" stroke="#c3c2b7" stroke-width="1"/>
+<rect x="624.5" y="223.2" width="7" height="7" fill="#eb6834" stroke="#fcfcfb" stroke-width="1.5"></rect>
+<text x="637" y="230.7" font-size="12" fill="#0b0b0b">i7 (8 cores)</text>
+<line x1="540.6" y1="286.9" x2="621" y2="286.9" stroke="#c3c2b7" stroke-width="1"/>
+<circle cx="628" cy="286.9" r="4" fill="#2a78d6" stroke="#fcfcfb" stroke-width="1.5"></circle>
+<text x="637" y="290.9" font-size="12" fill="#0b0b0b">Pi 5 (4 cores)</text>
+</svg>

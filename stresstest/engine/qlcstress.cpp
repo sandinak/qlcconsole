@@ -59,7 +59,14 @@
 #endif
 #include <fcntl.h>
 #include <unistd.h>
+#include <sys/resource.h>
+#include <cerrno>
 #include <QTextStream>
+#include <QMutex>
+#include <QDateTime>
+#include <QThread>
+#include <QJsonObject>
+#include <QJsonDocument>
 
 static const double kTickBudgetMs = 20.0; // 50Hz default tick
 
@@ -83,8 +90,88 @@ static double residentMB()
     if (task_info(mach_task_self(), MACH_TASK_BASIC_INFO,
                   (task_info_t)&info, &count) == KERN_SUCCESS)
         return double(info.resident_size) / (1024.0 * 1024.0);
+#elif defined(Q_OS_LINUX)
+    // Linux (x86_64 build host, Raspberry Pi): resident set from /proc. It
+    // used to return 0 here, so every Linux "leak 0.00 MB/hr" meant nothing.
+    long pages = 0, resident = 0;
+    if (FILE *f = fopen("/proc/self/statm", "r"))
+    {
+        if (fscanf(f, "%ld %ld", &pages, &resident) != 2)
+            resident = 0;
+        fclose(f);
+    }
+    return double(resident) * double(sysconf(_SC_PAGESIZE)) / (1024.0 * 1024.0);
 #endif
     return 0.0;
+}
+
+// ---- process CPU seconds (user + system, all threads) -----------------------
+static double processCpuSec()
+{
+    struct rusage ru;
+    if (getrusage(RUSAGE_SELF, &ru) != 0)
+        return 0.0;
+    return ru.ru_utime.tv_sec + ru.ru_utime.tv_usec / 1e6
+         + ru.ru_stime.tv_sec + ru.ru_stime.tv_usec / 1e6;
+}
+
+// ---- least-squares slope (per hour) of y over t (seconds) -------------------
+static double slopePerHour(const QVector<double> &t, const QVector<double> &y)
+{
+    const int n = int(qMin(t.size(), y.size()));
+    if (n < 2) return 0.0;
+    double sx = 0, sy = 0, sxx = 0, sxy = 0;
+    for (int i = 0; i < n; i++) { sx += t[i]; sy += y[i]; sxx += t[i] * t[i]; sxy += t[i] * y[i]; }
+    const double d = n * sxx - sx * sx;
+    return d != 0 ? (n * sxy - sx * sy) / d * 3600.0 : 0.0;
+}
+
+// ---- fixed-size latency histogram (0.01 ms bins to 1 s) ---------------------
+// Preallocated once, so a 24 h run's statistics cost no memory growth (which
+// the RSS slope would otherwise read as a leak in the harness itself).
+struct LatHist
+{
+    static const int kBins = 100000;          // 0.01 ms .. 1000 ms
+    QVector<quint32> bins;
+    quint64 n = 0;
+    double sum = 0, mx = 0;
+    LatHist() { bins.fill(0, kBins + 1); }
+    void add(double ms)
+    {
+        int i = int(ms * 100.0);
+        if (i < 0) i = 0;
+        if (i > kBins) i = kBins;
+        bins[i]++; n++; sum += ms;
+        if (ms > mx) mx = ms;
+    }
+    void clear() { bins.fill(0); n = 0; sum = 0; mx = 0; }
+    double mean() const { return n ? sum / double(n) : 0.0; }
+    double pct(double p) const
+    {
+        if (n == 0) return 0.0;
+        const quint64 target = quint64(std::ceil(p / 100.0 * double(n)));
+        quint64 acc = 0;
+        for (int i = 0; i <= kBins; i++)
+        {
+            acc += bins[i];
+            if (acc >= target)
+                return i == kBins ? mx : qMin(mx, (i + 1) / 100.0);
+        }
+        return mx;
+    }
+    quint64 countAbove(double ms) const
+    {
+        quint64 c = 0;
+        for (int i = int(ms * 100.0) + 1; i <= kBins; i++) c += bins[i];
+        return c;
+    }
+};
+
+static QString hostName()
+{
+    char buf[256] = {0};
+    gethostname(buf, sizeof(buf) - 1);
+    return QString::fromLocal8Bit(buf).section('.', 0, 0);
 }
 
 // ---- open file-descriptor count (for soak FD-leak detection) ----------------
@@ -257,77 +344,304 @@ static void churnTick(Doc *doc, QRandomGenerator &rng)
     }
 }
 
-// ---- REALTIME tick cadence probe (runs in MasterTimer thread) ---------------
-class CadenceProbe : public QObject
+// ---- REALTIME / SOAK: the real MasterTimer, measured per tick ----------------
+// Each tick the timer thread itself (DirectConnection on tickReady) records:
+//   gap      ms since the previous tick (cadence; a late tick = > 1.5x period)
+//   compute  ms of wall time MasterTimer::timerTick spent in the functions'
+//            write() and the DMX sources (m_tickComputeUs) -- the per-tick
+//            work that must fit in the period; "over budget" = compute > period
+//   cpu      ms of the timer thread's own CPU in that tick (m_tickCpuUs)
+//   running  functions in the MasterTimer's list
+// The universes' fader processing runs on their own threads and is not in
+// "compute"; the process CPU% (getrusage) covers it.
+// Ticks in the first --warmup-seconds are left out of every statistic, and
+// the RSS slope (MB/h) is fitted to the samples after warm-up only.
+// Outputs (with --out PREFIX): PREFIX.timeline.csv (one row per sample
+// interval), PREFIX.ticks.csv (one row per tick, --tick-csv), PREFIX.json.
+struct TimedOpts
 {
-public:
-    QVector<double> gaps;        // ms between consecutive ticks
-    qint64 lastNs = 0;
-    QElapsedTimer clock;
-    double rssStart = 0, rssEnd = 0;
-
-    void onTick()
-    {
-        qint64 now = clock.nsecsElapsed();
-        if (lastNs != 0)
-            gaps.append((now - lastNs) / 1.0e6);
-        lastNs = now;
-    }
+    QString mode = "realtime";
+    int seconds = 15;
+    int warmupSec = 10;
+    int sampleMs = 1000;
+    bool tickCsv = false;
+    QString out;
+    QList<int> probeUniverses;   // diagnostics: does this universe's output change?
 };
 
-static int runRealtime(Doc *doc, const QList<Function*> &funcs, int seconds, const ShowSpec &spec)
+struct TickRow { float t, gap, compute, cpu; quint16 running; };
+
+struct TickRecorder
+{
+    QMutex lock;
+    QElapsedTimer clock;
+    qint64 lastNs = 0;
+    double warmupMs = 0;
+    double budgetMs = 20.0;
+    // whole run after warm-up
+    LatHist gapAll, compAll, cpuAll;
+    quint64 overAll = 0, lateAll = 0, ticksAll = 0;
+    // current sample interval (cleared by the sampler)
+    LatHist compIv, gapIv;
+    quint64 overIv = 0, lateIv = 0, ticksIv = 0;
+    int running = 0;
+    quint64 runningSum = 0; int runningMax = 0;
+    QVector<TickRow> rows;            // reserved up front when --tick-csv
+    bool keepRows = false;
+};
+
+static QVariantMap histMap(const LatHist &h)
+{
+    QVariantMap m;
+    m["mean"] = h.mean(); m["p50"] = h.pct(50); m["p90"] = h.pct(90); m["p95"] = h.pct(95);
+    m["p99"] = h.pct(99); m["p999"] = h.pct(99.9); m["max"] = h.mx; m["count"] = double(h.n);
+    return m;
+}
+
+static int runTimed(Doc *doc, const QList<Function*> &funcs, const ShowSpec &spec,
+                    const TimedOpts &o)
 {
     MasterTimer *mt = doc->masterTimer();
     doc->setMode(Doc::Operate);
     doc->inputOutputMap()->startUniverses();
 
-    CadenceProbe probe;
-    probe.clock.start();
-    probe.rssStart = residentMB();
-    // DirectConnection -> the lambda runs in the timer thread at each tick
-    QObject::connect(mt, &MasterTimer::tickReady, &probe,
-                     [&probe]() { probe.onTick(); }, Qt::DirectConnection);
+    const double period = 1000.0 / MasterTimer::frequency();
+    TickRecorder rec;
+    rec.warmupMs = o.warmupSec * 1000.0;
+    rec.budgetMs = period;
+    rec.keepRows = o.tickCsv;
+    if (rec.keepRows)
+        rec.rows.reserve(int((o.seconds + 5) * MasterTimer::frequency()) + 100);
+    rec.clock.start();
+
+    QMetaObject::Connection probeConn = QObject::connect(mt, &MasterTimer::tickReady, mt, [&rec, mt]()
+    {
+        const qint64 now = rec.clock.nsecsElapsed();
+        const double gap = rec.lastNs ? (now - rec.lastNs) / 1.0e6 : -1.0;
+        rec.lastNs = now;
+        const double comp = mt->m_tickComputeUs.loadRelaxed() / 1000.0;
+        const double cpu = mt->m_tickCpuUs.loadRelaxed() / 1000.0;
+        const int running = int(mt->m_functionList.size());   // timer thread: its own list
+        const double tms = now / 1.0e6;
+        QMutexLocker l(&rec.lock);
+        rec.running = running;
+        rec.compIv.add(comp);
+        if (gap >= 0) rec.gapIv.add(gap);
+        rec.ticksIv++;
+        const bool over = comp > rec.budgetMs;
+        const bool late = gap > rec.budgetMs * 1.5;
+        if (over) rec.overIv++;
+        if (late) rec.lateIv++;
+        if (tms >= rec.warmupMs)
+        {
+            rec.compAll.add(comp); rec.cpuAll.add(cpu);
+            if (gap >= 0) rec.gapAll.add(gap);
+            rec.ticksAll++;
+            if (over) rec.overAll++;
+            if (late) rec.lateAll++;
+            rec.runningSum += quint64(running);
+            rec.runningMax = qMax(rec.runningMax, running);
+        }
+        if (rec.keepRows && rec.rows.size() < rec.rows.capacity())
+            rec.rows.append({ float(tms / 1000.0), float(gap), float(comp), float(cpu), quint16(qMin(running, 65535)) });
+    }, Qt::DirectConnection);
 
     mt->start();
     startAll(doc, funcs);
 
-    fprintf(stdout, "realtime: running %d s at %u Hz (budget %.1f ms/tick), RSS start %.1f MB ...\n",
-            seconds, MasterTimer::frequency(), kTickBudgetMs, probe.rssStart);
+    QFile tl;
+    QTextStream tls;
+    if (!o.out.isEmpty())
+    {
+        tl.setFileName(o.out + ".timeline.csv");
+        if (tl.open(QIODevice::WriteOnly | QIODevice::Text))
+        {
+            tls.setDevice(&tl);
+            tls << "t_s,wall,rss_mb,cpu_pct,running,fds,ticks,over,late,compute_p50_ms,compute_p99_ms,"
+                   "compute_max_ms,gap_p99_ms,gap_max_ms,nice,uni_backlog_max,uni_backlog_sum\n";
+            tls.flush();
+        }
+    }
+
+    fprintf(stdout, "%s: %d s at %u Hz (period %.1f ms), warm-up %d s, %d functions started, RSS %.1f MB\n",
+            qPrintable(o.mode), o.seconds, MasterTimer::frequency(), period, o.warmupSec,
+            int(funcs.size()), residentMB());
     fflush(stdout);
 
     QElapsedTimer wall; wall.start();
-    double rssPeak = probe.rssStart;
+    const double rss0 = residentMB();
+    double rssPeak = rss0;
+    const int fd0 = openFdCount();
+    double cpuPrev = processCpuSec(), cpuWarm = -1, wallWarm = 0;
+    qint64 prevSampleMs = 0, nextSample = o.sampleMs;
+    QVector<double> slopeT, slopeY, cpuPcts;
+    // Universe threads: each tick releases one permit of the universe's
+    // semaphore and its thread takes one per frame it processes (faders,
+    // output). Permits left over = frames the universe thread is behind.
+    // Sampled each interval; a backlog that stays > 0 means the universes,
+    // not the MasterTimer, are the limit (and output frames come late).
+    const QList<Universe*> uniArray = doc->inputOutputMap()->universes();
+    int backlogMaxAll = 0; double backlogSumAll = 0; int backlogSamples = 0, backlogLaggingSamples = 0;
+    QMap<int, quint64> probeHash; QMap<int, int> probeChanged, probeSamples;
     QRandomGenerator churnRng(spec.seed);
     qint64 nextChurn = g_churnMs;
-    while (wall.elapsed() < qint64(seconds) * 1000)
+    int fdEnd = fd0;
+    double rssEnd = rss0;
+    while (wall.elapsed() < qint64(o.seconds) * 1000)
     {
         QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
-        rssPeak = qMax(rssPeak, residentMB());
         if (g_churnMs > 0 && wall.elapsed() >= nextChurn)
         {
             churnTick(doc, churnRng);
             nextChurn += g_churnMs;
         }
+        const qint64 el = wall.elapsed();
+        if (el < nextSample)
+        {
+            QThread::msleep(5);
+            continue;
+        }
+        nextSample += o.sampleMs;
+        const double cpuNow = processCpuSec();
+        const double cpuPct = 100.0 * (cpuNow - cpuPrev) / qMax(0.001, (el - prevSampleMs) / 1000.0);
+        cpuPrev = cpuNow; prevSampleMs = el;
+        const double rss = residentMB();
+        rssPeak = qMax(rssPeak, rss);
+        rssEnd = rss;
+        const int fds = openFdCount();
+        fdEnd = fds;
+        if (el >= o.warmupSec * 1000)
+        {
+            if (cpuWarm < 0) { cpuWarm = cpuNow; wallWarm = el / 1000.0; }
+            slopeT << el / 1000.0; slopeY << rss; cpuPcts << cpuPct;
+        }
+        double c50, c99, cmx, g99, gmx; quint64 tk, ov, lt; int running;
+        {
+            QMutexLocker l(&rec.lock);
+            c50 = rec.compIv.pct(50); c99 = rec.compIv.pct(99); cmx = rec.compIv.mx;
+            g99 = rec.gapIv.pct(99); gmx = rec.gapIv.mx;
+            tk = rec.ticksIv; ov = rec.overIv; lt = rec.lateIv; running = rec.running;
+            rec.compIv.clear(); rec.gapIv.clear(); rec.ticksIv = rec.overIv = rec.lateIv = 0;
+        }
+        for (int pu : o.probeUniverses)
+        {
+            if (pu < 0 || pu >= uniArray.size() || uniArray.at(pu) == nullptr)
+                continue;
+            const QByteArray *pg = uniArray.at(pu)->postGMValues();
+            const quint64 h = fnv1a(reinterpret_cast<const uchar*>(pg->constData()), pg->size());
+            if (probeSamples.value(pu) > 0 && h != probeHash.value(pu))
+                probeChanged[pu]++;
+            probeHash[pu] = h; probeSamples[pu]++;
+        }
+        int blMax = 0, blSum = 0;
+        for (Universe *u : uniArray)
+            if (u != nullptr)
+            {
+                const int b = u->m_semaphore.available();
+                blMax = qMax(blMax, b); blSum += b;
+            }
+        if (el >= o.warmupSec * 1000)
+        {
+            backlogMaxAll = qMax(backlogMaxAll, blMax);
+            backlogSumAll += blSum; backlogSamples++;
+            if (blMax > 1) backlogLaggingSamples++;
+        }
+        errno = 0;
+        const int niceNow = getpriority(PRIO_PROCESS, 0);
+        if (tls.device())
+        {
+            tls << QString::asprintf("%.1f,%s,%.2f,%.1f,%d,%d,%llu,%llu,%llu,%.3f,%.3f,%.3f,%.3f,%.3f,%d,%d,%d\n",
+                                     el / 1000.0, qPrintable(QDateTime::currentDateTime().toString(Qt::ISODate)),
+                                     rss, cpuPct, running, fds, (unsigned long long)tk,
+                                     (unsigned long long)ov, (unsigned long long)lt, c50, c99, cmx, g99, gmx, niceNow,
+                                     blMax, blSum);
+            tls.flush();
+        }
+        if (o.mode == "soak" || o.sampleMs >= 10000)
+            fprintf(stdout, "%s: t=%7.0fs rss=%7.1f MB cpu=%5.1f%% running=%d ticks=%llu over=%llu late=%llu "
+                    "compute p99=%.2f max=%.2f ms\n", qPrintable(o.mode), el / 1000.0, rss, cpuPct, running,
+                    (unsigned long long)tk, (unsigned long long)ov, (unsigned long long)lt, c99, cmx);
     }
-    if (g_churnMs > 0)
-        fprintf(stdout, "realtime: churn toggled %lld functions\n", g_churnOps);
-    probe.rssEnd = residentMB();
-
+    const double cpuEnd = processCpuSec();
+    const double wallEnd = wall.elapsed() / 1000.0;
+    const int runningAtEnd = mt->runningFunctions();   // before stop(): stop() stops them all
     mt->stop();
+    QObject::disconnect(probeConn);
 
-    // cadence stats: expected gap = 1000/freq; overrun = gap noticeably late
-    double expected = 1000.0 / MasterTimer::frequency();
-    int late = 0;
-    for (double g : probe.gaps) if (g > expected * 1.5) late++;
-    TickStats s = summarize(probe.gaps);
-    fprintf(stdout, "realtime: observed inter-tick gap (expected %.2f ms):\n", expected);
-    printStats("gap", s);
-    fprintf(stdout, "realtime: late ticks(>1.5x)=%d/%d  running funcs=%d  RSS start=%.1f peak=%.1f end=%.1f MB (growth %.1f MB)\n",
-            late, s.count, mt->runningFunctions(), probe.rssStart, rssPeak, probe.rssEnd, probe.rssEnd - probe.rssStart);
+    const double measuredSec = qMax(0.001, wallEnd - (cpuWarm < 0 ? 0 : wallWarm));
+    const double cpuPctMean = cpuWarm < 0 ? 0.0 : 100.0 * (cpuEnd - cpuWarm) / measuredSec;
+    const double slope = slopePerHour(slopeT, slopeY);
+    QMutexLocker l(&rec.lock);
+    const double hours = qMax(1e-9, double(rec.ticksAll) * period / 3.6e6);
+
+    fprintf(stdout, "%s: %llu ticks after warm-up; compute p50=%.3f p95=%.3f p99=%.3f p99.9=%.3f max=%.3f ms; "
+            "over budget %llu (%.1f/h); gap p99=%.3f max=%.3f ms, late %llu; running funcs mean=%.1f max=%d (at end %d)\n",
+            qPrintable(o.mode), (unsigned long long)rec.ticksAll, rec.compAll.pct(50), rec.compAll.pct(95),
+            rec.compAll.pct(99), rec.compAll.pct(99.9), rec.compAll.mx, (unsigned long long)rec.overAll,
+            rec.overAll / hours, rec.gapAll.pct(99), rec.gapAll.mx, (unsigned long long)rec.lateAll,
+            rec.ticksAll ? double(rec.runningSum) / rec.ticksAll : 0.0, rec.runningMax, runningAtEnd);
+    for (int pu : o.probeUniverses)
+        fprintf(stdout, "%s: probe universe %d (id %u): output changed in %d of %d samples\n", qPrintable(o.mode),
+                pu, pu < uniArray.size() && uniArray.at(pu) ? uniArray.at(pu)->id() : 0u,
+                probeChanged.value(pu), qMax(0, probeSamples.value(pu) - 1));
+    fprintf(stdout, "%s: universe threads: backlog max %d frames, behind in %.1f%% of samples\n",
+            qPrintable(o.mode), backlogMaxAll,
+            backlogSamples ? 100.0 * backlogLaggingSamples / backlogSamples : 0.0);
+    fprintf(stdout, "%s: CPU %.1f%% of one core (mean after warm-up); RSS start=%.1f peak=%.1f end=%.1f MB, "
+            "slope after warm-up %.2f MB/h; fds %d -> %d\n", qPrintable(o.mode), cpuPctMean, rss0, rssPeak,
+            rssEnd, slope, fd0, fdEnd);
     fflush(stdout);
-    // for realtime the "budget" is the expected gap; withinBudget = cadence held
-    emitJson("realtime", g_scenario, spec, s, rssPeak, expected * 1.5);
-    return s.overruns > 0 || late > s.count / 20 ? 1 : 0;
+
+    QVariantMap r;
+    r["mode"] = o.mode; r["scenario"] = g_scenario; r["host"] = hostName();
+    r["cores"] = QThread::idealThreadCount();
+    r["when"] = QDateTime::currentDateTime().toString(Qt::ISODate);
+    r["frequencyHz"] = MasterTimer::frequency(); r["periodMs"] = period;
+    r["seconds"] = o.seconds; r["warmupSec"] = o.warmupSec;
+    r["universes"] = doc->inputOutputMap()->universesCount();
+    r["fixturesPerUni"] = spec.fixturesPerUni; r["fixtures"] = int(doc->fixtures().size());
+    int channels = 0; for (Fixture *fx : doc->fixtures()) channels += int(fx->channels());
+    r["channels"] = channels;
+    r["functionsTotal"] = int(doc->functions().size()); r["functionsStarted"] = int(funcs.size());
+    r["scenes"] = spec.scenes; r["chasers"] = spec.chasers; r["matrices"] = spec.matrices; r["efx"] = spec.efx;
+    r["collections"] = spec.collections; r["scripts"] = spec.scripts; r["sequences"] = spec.sequences;
+    r["shows"] = spec.shows; r["cuelists"] = spec.cuelists; r["sceneFixtures"] = spec.sceneFixtures;
+    r["ticks"] = double(rec.ticksAll);
+    r["compute"] = histMap(rec.compAll); r["gap"] = histMap(rec.gapAll); r["tickCpu"] = histMap(rec.cpuAll);
+    r["overBudget"] = double(rec.overAll); r["overPerHour"] = rec.overAll / hours;
+    r["late"] = double(rec.lateAll); r["latePerHour"] = rec.lateAll / hours;
+    r["runningMean"] = rec.ticksAll ? double(rec.runningSum) / rec.ticksAll : 0.0;
+    r["runningMax"] = rec.runningMax; r["runningAtEnd"] = runningAtEnd;
+    r["cpuPct"] = cpuPctMean;
+    r["cpuPctP95"] = cpuPcts.isEmpty() ? 0.0 : pct(cpuPcts, 95);
+    r["rssStart"] = rss0; r["rssPeak"] = rssPeak; r["rssEnd"] = rssEnd; r["rssSlopeMBh"] = slope;
+    r["fdStart"] = fd0; r["fdEnd"] = fdEnd;
+    r["uniBacklogMax"] = backlogMaxAll;
+    r["uniBacklogMeanSum"] = backlogSamples ? backlogSumAll / backlogSamples : 0.0;
+    r["uniLaggingSampleFrac"] = backlogSamples ? double(backlogLaggingSamples) / backlogSamples : 0.0;
+    r["withinBudget"] = rec.compAll.pct(99) < period && rec.gapAll.pct(99) < period * 1.5
+                        && (backlogSamples == 0 || double(backlogLaggingSamples) / backlogSamples < 0.05);
+    const QByteArray js = QJsonDocument(QJsonObject::fromVariantMap(r)).toJson(QJsonDocument::Compact);
+    if (g_json)
+        fprintf(stdout, "RESULT_JSON %s\n", js.constData());
+    if (!o.out.isEmpty())
+    {
+        QFile jf(o.out + ".json");
+        if (jf.open(QIODevice::WriteOnly)) { jf.write(js); jf.write("\n"); }
+        if (rec.keepRows)
+        {
+            QFile tf(o.out + ".ticks.csv");
+            if (tf.open(QIODevice::WriteOnly | QIODevice::Text))
+            {
+                QTextStream ts(&tf);
+                ts << "t_s,gap_ms,compute_ms,cpu_ms,running\n";
+                for (const TickRow &row : rec.rows)
+                    ts << QString::asprintf("%.4f,%.3f,%.3f,%.3f,%u\n", row.t, row.gap, row.compute,
+                                            row.cpu, unsigned(row.running));
+            }
+        }
+    }
+    return 0;
 }
 
 // ---- RAMP: scale universes until the tick budget is blown -------------------
@@ -440,82 +754,6 @@ static int runGolden(Doc *doc, const QList<Function*> &funcs, int ticks,
     fprintf(stdout, "golden: MISMATCH - output changed (combined %llx vs stored %llx); first divergence at tick %d\n",
             combined, storedComb, divergeTick);
     return 1;
-}
-
-// ---- SOAK: long realtime run, sample RSS/FD/jitter, report leak rate ---------
-static int runSoak(Doc *doc, const QList<Function*> &funcs, int seconds, int sampleSec)
-{
-    MasterTimer *mt = doc->masterTimer();
-    doc->setMode(Doc::Operate);
-    doc->inputOutputMap()->startUniverses();
-    mt->start();
-    startAll(doc, funcs);
-
-    fprintf(stdout, "soak: %d s at %u Hz, sampling every %d s (running funcs target=%d)\n",
-            seconds, MasterTimer::frequency(), sampleSec, funcs.size());
-
-    struct Sample { double t, rss; int fd, funcs; };
-    QVector<Sample> samples;
-    QElapsedTimer wall; wall.start();
-    qint64 nextSample = 0;
-    double rss0 = residentMB(), rssPeak = rss0;
-    int fd0 = openFdCount();
-
-    QRandomGenerator churnRng(1);
-    qint64 nextChurn = g_churnMs;
-    while (wall.elapsed() < qint64(seconds) * 1000)
-    {
-        QCoreApplication::processEvents(QEventLoop::AllEvents, 100);
-        rssPeak = qMax(rssPeak, residentMB());
-        if (g_churnMs > 0 && wall.elapsed() >= nextChurn)
-        {
-            churnTick(doc, churnRng);
-            nextChurn += g_churnMs;
-        }
-        if (wall.elapsed() >= nextSample)
-        {
-            double t = wall.elapsed() / 1000.0;
-            double rss = residentMB();
-            int fd = openFdCount();
-            int rf = mt->runningFunctions();
-            samples.append({t, rss, fd, rf});
-            fprintf(stdout, "soak: t=%6.0fs  rss=%7.1f MB  fd=%d  runningFuncs=%d  churn=%lld\n",
-                    t, rss, fd, rf, g_churnOps);
-            fflush(stdout);
-            nextSample += qint64(sampleSec) * 1000;
-        }
-    }
-    mt->stop();
-
-    // Leak rate via least-squares slope of rss over time (MB/hr). Skip the first
-    // ~60s (or the first sample) so the startup RSS ramp (functions spinning up,
-    // caches warming) isn't mistaken for a leak. Meaningful only for runs of a
-    // few minutes+; short runs are reported but flagged as low-confidence.
-    double leakPerHr = 0;
-    QVector<Sample> fit;
-    for (auto &s : samples) if (s.t >= 60.0) fit.append(s);
-    if (fit.size() < 2 && samples.size() >= 2)        // run too short to warm up
-        fit = samples.mid(1);                         // at least drop the first point
-    int n = fit.size();
-    if (n >= 2)
-    {
-        double sx=0, sy=0, sxx=0, sxy=0;
-        for (auto &s : fit) { sx+=s.t; sy+=s.rss; sxx+=s.t*s.t; sxy+=s.t*s.rss; }
-        double denom = n*sxx - sx*sx;
-        if (denom != 0) leakPerHr = (n*sxy - sx*sy) / denom * 3600.0;
-    }
-    bool lowConfidence = (seconds < 300);
-    int fdEnd = samples.isEmpty() ? fd0 : samples.last().fd;
-    fprintf(stdout, "soak: rss start=%.1f peak=%.1f end=%.1f MB; leak rate=%.2f MB/hr%s; fd start=%d end=%d\n",
-            rss0, rssPeak, samples.isEmpty()?rss0:samples.last().rss, leakPerHr,
-            lowConfidence ? " (low confidence: run >=5min for a real figure)" : "", fd0, fdEnd);
-    if (g_json)
-        fprintf(stdout, "RESULT_JSON {\"mode\":\"soak\",\"scenario\":\"%s\",\"seconds\":%d,"
-                "\"rssStart\":%.1f,\"rssEnd\":%.1f,\"rssPeak\":%.1f,\"leakMBperHr\":%.2f,"
-                "\"fdStart\":%d,\"fdEnd\":%d,\"samples\":%d}\n",
-                qPrintable(g_scenario), seconds, rss0, samples.isEmpty()?rss0:samples.last().rss,
-                rssPeak, leakPerHr, fd0, fdEnd, n);
-    return 0;
 }
 
 // ---- load a .qxw into a Doc (positions reader at <Engine> then loadXML) ------
@@ -697,8 +935,8 @@ static int runChaos(Doc *doc, const ShowSpec &spec, const QString &fixtureDir,
             case 4: { // add a fixture
                 if (rgbDef && rgbMode) {
                     Fixture *fx = new Fixture(doc); fx->setName("ChaosFix");
+                    fx->setAddress((addr += 3) % 500);     // address first: see showbuilder.cpp
                     fx->setUniverse(rng.bounded(qMax(1, spec.universes)));
-                    fx->setAddress((addr += 3) % 500);
                     fx->setFixtureDefinition(rgbDef, rgbMode);
                     if (!doc->addFixture(fx)) delete fx;
                 } break; }
@@ -951,6 +1189,19 @@ int main(int argc, char *argv[])
     QCommandLineOption oShows("shows", "Show function count", "n", "0");
     QCommandLineOption oChurn("churn-ms", "realtime/soak: every N ms toggle 4 random Scenes/Collections/Chasers (look cycling)", "ms", "0");
     QCommandLineOption oUserFix("user-fixtures-dir", "with --load: also load the fixture definitions (.qxf) in this dir", "dir", "");
+    QCommandLineOption oWarm("warmup-seconds", "realtime/soak: seconds left out of every statistic and of the RSS slope", "s", "10");
+    QCommandLineOption oOut("out", "realtime/soak: write PREFIX.json, PREFIX.timeline.csv (and PREFIX.ticks.csv)", "prefix", "");
+    QCommandLineOption oTickCsv("tick-csv", "realtime: also write one CSV row per tick");
+    QCommandLineOption oSampleMs("sample-ms", "realtime/soak: timeline sample interval in ms (default: 1000 realtime, sample-seconds soak)", "ms", "0");
+    QCommandLineOption oStartTypes("start-types", "synthetic show: start only these top-level types (scene,chaser,matrix,efx,collection,script,sequence,show,cuelist; default all)", "list", "");
+    QCommandLineOption oSceneFix("scene-fixtures", "fixtures each scene touches (0 = all fixtures / 8)", "n", "0");
+    QCommandLineOption oCueLists("cuelists", "Show Tree-style cue lists (Chaser of Collections of layer Scenes, with fades)", "n", "0");
+    QCommandLineOption oCues("cues-per-list", "cues per cue list", "n", "8");
+    QCommandLineOption oLayers("layers-per-cue", "layer scenes per cue", "n", "4");
+    QCommandLineOption oCueFade("cue-fade-ms", "cue fade in/out ms", "ms", "2000");
+    QCommandLineOption oEfxPerUni("efx-per-universe", "one EFX per universe over all its fixtures: every channel changes every tick");
+    QCommandLineOption oProbe("probe-universes", "diagnostics: report whether these universes' output changes (comma list of indexes)", "list", "");
+    QCommandLineOption oChaserPerStep("chaser-perstep", "chasers use their steps' fade/hold times (default: Common duration 0 = a step every tick)");
     QCommandLineOption oJson("json", "emit RESULT_JSON lines for the orchestrator");
     QCommandLineOption oScenario("scenario", "scenario name (for JSON)", "name", "adhoc");
     QCommandLineOption oLoad("load", "engine modes: load a real .qxw instead of building a synthetic show", "file", "");
@@ -963,7 +1214,8 @@ int main(int argc, char *argv[])
                   oMode, oTicks, oSecs, oFreq, oFix, oScr,
                   oScripts, oSequences, oShows, oJson, oScenario,
                   oSampleSec, oGoldenFile, oGoldenVerify, oChaosAggr, oLoad, oStart, oInject, oEffDir,
-                  oArtnet, oPluginDir, oChurn, oUserFix});
+                  oArtnet, oPluginDir, oChurn, oUserFix, oWarm, oOut, oTickCsv, oSampleMs,
+                  oStartTypes, oSceneFix, oCueLists, oCues, oLayers, oCueFade, oEfxPerUni, oChaserPerStep, oProbe});
     p.process(app);
 
     const QStringList args = p.positionalArguments();
@@ -995,6 +1247,13 @@ int main(int argc, char *argv[])
     spec.sequences      = p.value(oSequences).toInt();
     spec.shows          = p.value(oShows).toInt();
     spec.seed           = p.value(oSeed).toUInt();
+    spec.sceneFixtures  = p.value(oSceneFix).toInt();
+    spec.cuelists       = p.value(oCueLists).toInt();
+    spec.cuesPerList    = p.value(oCues).toInt();
+    spec.layersPerCue   = p.value(oLayers).toInt();
+    spec.cueFadeMs      = p.value(oCueFade).toInt();
+    spec.efxPerUniverse = p.isSet(oEfxPerUni);
+    spec.chaserPerStep  = p.isSet(oChaserPerStep);
     g_json              = p.isSet(oJson);
     g_churnMs           = p.value(oChurn).toInt();
     g_scenario          = p.value(oScenario);
@@ -1131,6 +1390,31 @@ int main(int argc, char *argv[])
         else
         {
             funcs = buildShow(doc, spec, fixDir, scrDir);
+            const QStringList types = p.value(oStartTypes).split(',', Qt::SkipEmptyParts);
+            if (!types.isEmpty())
+            {
+                QList<Function*> keep;
+                for (Function *f : funcs)
+                {
+                    QString ty;
+                    switch (f->type())
+                    {
+                        case Function::SceneType: ty = "scene"; break;
+                        case Function::ChaserType: ty = f->name().startsWith("CueList") ? "cuelist" : "chaser"; break;
+                        case Function::RGBMatrixType: ty = "matrix"; break;
+                        case Function::EFXType: ty = f->name().startsWith("UniverseWave") ? "wave" : "efx"; break;
+                        case Function::CollectionType: ty = "collection"; break;
+                        case Function::ScriptType: ty = "script"; break;
+                        case Function::SequenceType: ty = "sequence"; break;
+                        case Function::ShowType: ty = "show"; break;
+                        default: break;
+                    }
+                    if (types.contains(ty)) keep << f;
+                }
+                fprintf(stdout, "start-types %s: starting %d of %d top-level functions\n",
+                        qPrintable(types.join(',')), int(keep.size()), int(funcs.size()));
+                funcs = keep;
+            }
         }
 
         // Optional real ArtNet output (isolated VLAN). Patch AFTER the universes
@@ -1142,10 +1426,22 @@ int main(int argc, char *argv[])
         }
 
         int rc = 0;
-        if (mode == "realtime")
-            rc = runRealtime(doc, funcs, seconds, spec);
-        else if (mode == "soak")
-            rc = runSoak(doc, funcs, seconds, p.value(oSampleSec).toInt());
+        if (mode == "realtime" || mode == "soak")
+        {
+            TimedOpts o;
+            o.mode = mode;
+            o.seconds = seconds;
+            o.warmupSec = p.value(oWarm).toInt();
+            o.out = p.value(oOut);
+            o.tickCsv = p.isSet(oTickCsv);
+            for (const QString &s : p.value(oProbe).split(',', Qt::SkipEmptyParts))
+                o.probeUniverses << s.toInt();
+            const int sms = p.value(oSampleMs).toInt();
+            o.sampleMs = sms > 0 ? sms : (mode == "soak" ? p.value(oSampleSec).toInt() * 1000 : 1000);
+            if (mode == "soak" && !p.isSet(oWarm))
+                o.warmupSec = 300;            // a soak's own warm-up: 5 min
+            rc = runTimed(doc, funcs, spec, o);
+        }
         else if (mode == "chaos")
             rc = runChaos(doc, spec, fixDir, scrDir, seconds, p.isSet(oChaosAggr));
         else if (mode == "concurrency")
@@ -1160,8 +1456,8 @@ int main(int argc, char *argv[])
             emitJson("flatout", g_scenario, spec, s, residentMB(), kTickBudgetMs);
             rc = s.p99 < kTickBudgetMs ? 0 : 1;
         }
-        if (mode == "realtime")
-            doc->masterTimer()->stopAllFunctions(); // timer thread is running here
+        if (mode == "realtime" || mode == "soak")
+            doc->masterTimer()->stopAllFunctions(); // as before: after MasterTimer::stop()
         delete doc;
         return rc;
     }

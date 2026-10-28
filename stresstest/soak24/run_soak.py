@@ -141,6 +141,15 @@ else:
         "~/Library/Application Support/qlcconsole/untitled.qxw.autosave")
 STOP = False
 STOP_FILE = None            # DIR/STOP: a stop asked for from outside
+# Headless runs (perf campaign): the app in a sandbox HOME (--home), its I/O
+# plugins from --ioplugin-dir (QLC_IOPLUGIN_DIR; an empty folder loads none),
+# offscreen on every platform (--qpa), started directly on macOS too (no
+# LaunchServices, nothing on screen). RSS slope fitted after --warmup-min.
+SOAK_HOME = None
+IOPLUGIN_DIR = None
+QPA = "offscreen"
+WARMUP_MIN = 30.0
+MAC_CHILDREN = []
 START_ERROR = [None]        # Windows: why the app could not be started
 
 
@@ -170,7 +179,9 @@ class Run:
                                "threads", "answers", "ticks_over", "tick_mean_ms",
                                "tick_max_ms", "overrun_pct", "running_note"]
                               + (["private_mb", "handles"] if WIN else [])
-                              + (["private_mb", "fds"] if LINUX else []))
+                              + (["private_mb", "fds"] if LINUX else [])
+                              + (["footprint_mb", "nice"] if MAC else [])
+                              + ["interval_worst_ms"])
 
     def event(self, phase, msg):
         line = "%s [%s] %s" % (now(), phase, msg)
@@ -493,15 +504,26 @@ def _lx_lib_path():
 
 def _lx_start_app(port, log_path, ticklog):
     env = dict(os.environ, QLC_TICKLOG=str(ticklog), QLC_NO_RECOVERY_PROMPT="1",
-               QT_FORCE_STDERR_LOGGING="1", QT_QPA_PLATFORM="xcb",
+               QT_FORCE_STDERR_LOGGING="1", QT_QPA_PLATFORM=QPA,
                DISPLAY=_xvfb["display"] or os.environ.get("DISPLAY", ""),
                LD_LIBRARY_PATH=_lx_lib_path())
+    if SOAK_HOME:
+        env["HOME"] = SOAK_HOME
+    if IOPLUGIN_DIR is not None:
+        env["QLC_IOPLUGIN_DIR"] = IOPLUGIN_DIR
     with open(log_path, "wb") as logf:
         try:
+            def allow_core():   # a crash leaves a core in the phase folder
+                import resource
+                try:
+                    resource.setrlimit(resource.RLIMIT_CORE, (resource.getrlimit(resource.RLIMIT_CORE)[1],) * 2)
+                except (ValueError, OSError):
+                    pass
             p = subprocess.Popen([EXE, "-d", "1", "-w", "-wp", str(port)],
                                  cwd=os.path.dirname(os.path.abspath(log_path)), env=env,
                                  stdin=subprocess.DEVNULL, stdout=logf,
-                                 stderr=subprocess.STDOUT, start_new_session=True)
+                                 stderr=subprocess.STDOUT, start_new_session=True,
+                                 preexec_fn=allow_core)
         except OSError as e:
             START_ERROR[0] = str(e)
             return None
@@ -639,6 +661,8 @@ def strip_outputs(src, dst):
 def app_pids():
     if WIN:
         return sorted(_win_procs())
+    for c in MAC_CHILDREN if MAC else []:
+        c.poll()                                # reap: a zombie is not running
     out = subprocess.run(["pgrep", "-f", "^" + re.escape(EXE) + "( |$)"],
                          capture_output=True, text=True).stdout.split()
     return [int(p) for p in out]
@@ -649,6 +673,20 @@ def start_app(port, log_path, ticklog):
         return _win_start_app(port, log_path, ticklog)
     if LINUX:
         return _lx_start_app(port, log_path, ticklog)
+    if SOAK_HOME:
+        env = dict(os.environ, QT_QPA_PLATFORM=QPA, QLC_TICKLOG=str(ticklog),
+                   QLC_NO_RECOVERY_PROMPT="1", HOME=SOAK_HOME, CFFIXED_USER_HOME=SOAK_HOME)
+        if IOPLUGIN_DIR is not None:
+            env["QLC_IOPLUGIN_DIR"] = IOPLUGIN_DIR
+        if HEAP_TRACK:
+            env["MallocStackLogging"] = "lite"
+        logf = open(log_path, "ab")
+        MAC_CHILDREN.append(subprocess.Popen([EXE, "-d", "1", "-w", "-wp", str(port)], env=env,
+                                             stdin=subprocess.DEVNULL, stdout=logf, stderr=subprocess.STDOUT,
+                                             start_new_session=True, cwd=os.path.dirname(log_path)))
+        logf.close()
+        time.sleep(1)
+        return MAC_CHILDREN[-1].pid if MAC_CHILDREN[-1].poll() is None else None
     # -d 1: warnings and up reach the log (the tick log is warnings; the app
     # shows only criticals otherwise). No recovery prompt on screen between
     # launches: the run's own autosave is not the user's work.
@@ -752,6 +790,20 @@ def functions(ws):
                        expect_prefix="QLC+API|getFunctionType", wait=3.0) or ""
         typed.append((fid, name, t.split("|")[-1] if t else "?"))
     return typed
+
+
+def mac_footprint(pid):
+    """phys_footprint in MB (footprint(1)): ps rss counts shared and
+    reclaimable pages on Apple Silicon and drifts upward on its own."""
+    try:
+        out = subprocess.check_output(["footprint", "-f", "bytes", "-p", str(pid)],
+                                      stderr=subprocess.DEVNULL, text=True, timeout=60)
+        m = re.search(r"Footprint:\s*([\d.]+)\s*(B|KB|MB|GB)", out)
+        if m:
+            return float(m.group(1)) / {"B": 1048576.0, "KB": 1024.0, "MB": 1.0, "GB": 1 / 1024.0}[m.group(2)]
+    except (OSError, subprocess.SubprocessError, ValueError):
+        pass
+    return None
 
 
 def ps(pid):
@@ -887,6 +939,7 @@ def run_phase(run, name, show, hours, port, ticklog, sample_s, rng):
                       "fds_first": None, "fds_peak": 0, "fds_last": None,
                       "exit_codes": []})
     launch = 0
+    slope_pts = []              # (elapsed, rss, leak signal) after each launch's warm-up
     while not stopping() and time.time() < end:
         launch += 1
         log_path = os.path.join(phase_dir, "app-%d.log" % launch)
@@ -1009,6 +1062,19 @@ def run_phase(run, name, show, hours, port, ticklog, sample_s, rng):
                         stats[hk + "_peak"] = max(stats[hk + "_peak"], handles)
                         stats[hk + "_last"] = handles
                     row += [None if priv is None else round(priv, 1), handles]
+                fp = None
+                if MAC:
+                    fp = mac_footprint(pid)
+                    try:
+                        nic = subprocess.check_output(["ps", "-o", "nice=", "-p", str(pid)], text=True).strip()
+                    except subprocess.CalledProcessError:
+                        nic = ""
+                    row += [None if fp is None else round(fp, 1), nic]
+                el = time.time() - t0
+                row.append(round(worst, 2) if over else "")
+                leak_sig = fp if MAC else (priv if (WIN or LINUX) else None)
+                if el >= WARMUP_MIN * 60 and rss is not None:
+                    slope_pts.append((time.time() - started, rss, leak_sig))
                 run.csv.writerow(row)
                 if misses >= 3:
                     stats["hangs"] += 1
@@ -1045,6 +1111,20 @@ def run_phase(run, name, show, hours, port, ticklog, sample_s, rng):
             run.event(name, "could not remove %s: %s" % (p, e))
     cpu = stats.pop("cpu")
     stats["cpu_mean"] = round(sum(cpu) / len(cpu), 1) if cpu else None
+
+    def slope(pts, k):
+        xs = [q[0] for q in pts if q[k] is not None]
+        ys = [q[k] for q in pts if q[k] is not None]
+        n = len(xs)
+        if n < 3:
+            return None
+        mx, my = sum(xs) / n, sum(ys) / n
+        d = sum((x - mx) ** 2 for x in xs)
+        return round(sum((x - mx) * (y - my) for x, y in zip(xs, ys)) / d * 3600.0, 3) if d else None
+    stats["warmup_min"] = WARMUP_MIN
+    stats["rss_slope_mb_per_h_after_warmup"] = slope(slope_pts, 1)
+    stats["leak_signal"] = "footprint_mb" if MAC else ("private_mb" if (WIN or LINUX) else "rss_mb")
+    stats["leak_signal_slope_mb_per_h_after_warmup"] = slope(slope_pts, 2)
     stats["hours"] = round((time.time() - started) / 3600, 2)
     run.event(name, "phase done: %s" % json.dumps(stats))
     return stats
@@ -1100,6 +1180,27 @@ def detach_linux(a):
     print("  stop:     %s %s --out %s --stop" % (sys.executable, script, out))
 
 
+def detach_posix(a):
+    """Linux / macOS: this run again in a session of its own (nohup), with
+    every option it was given except --detach; output to DIR/runner.log."""
+    out = os.path.abspath(a.out)
+    os.makedirs(out, exist_ok=True)
+    argv = [x for x in sys.argv[1:] if x != "--detach"]
+    if a.nice is not None:
+        i = argv.index("--nice")
+        del argv[i:i + 2]
+    args = [sys.executable, os.path.abspath(__file__)] + argv
+    if a.nice is not None:
+        args = ["nice", "-n", str(a.nice)] + args
+    log = open(os.path.join(out, "runner.log"), "ab")
+    p = subprocess.Popen(["nohup"] + args, cwd=os.path.dirname(os.path.abspath(__file__)),
+                         stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT,
+                         start_new_session=True)
+    print("soak started (pid %d)" % p.pid)
+    print("  progress: %s" % os.path.join(out, "events.log"))
+    print("  stop:     %s %s --out %s --stop" % (sys.executable, os.path.abspath(__file__), out))
+
+
 def ask_stop(out):
     """Ask a running soak to stop (DIR/STOP) and wait for it to finish."""
     with open(os.path.join(out, "STOP"), "w") as f:
@@ -1138,6 +1239,11 @@ def main():
     ap.add_argument("--keep-outputs", dest="strip_outputs", action="store_false",
                     help="run the shows as they are, outputs and all")
     ap.add_argument("--stop", action="store_true", help="ask the soak in --out to stop")
+    ap.add_argument("--app-exe", default=None, help="the app binary (any platform)")
+    ap.add_argument("--home", default=None, help="sandbox HOME for the app (headless runs)")
+    ap.add_argument("--ioplugin-dir", default=None, help="QLC_IOPLUGIN_DIR for the app (empty dir: no I/O plugins)")
+    ap.add_argument("--qpa", default="offscreen", help="QT_QPA_PLATFORM (Linux xcb starts an Xvfb)")
+    ap.add_argument("--warmup-min", type=float, default=30.0, help="minutes after each launch left out of the RSS slope")
     ap.add_argument("--heap-track", action="store_true",
                     help="macOS: MallocStackLogging=lite + hourly heap/vmmap summaries")
     if WIN:
@@ -1149,11 +1255,23 @@ def main():
                         help="run through a scheduled task, past the end of the SSH session")
     if LINUX:
         ap.add_argument("--linux-exe", default=EXE, help="the app binary (a build tree's)")
+    if LINUX or MAC:
         ap.add_argument("--detach", action="store_true",
-                        help="run under setsid nohup, past the end of the shell")
+                        help="run in a session of its own under nohup, past the end of the shell")
+        ap.add_argument("--nice", type=int, default=None, help="with --detach: start at this nice")
     a = ap.parse_args()
-    global HEAP_TRACK
+    global HEAP_TRACK, SOAK_HOME, IOPLUGIN_DIR, QPA, WARMUP_MIN, UNTITLED_AUTOSAVE
     HEAP_TRACK = a.heap_track
+    QPA, WARMUP_MIN = a.qpa, a.warmup_min
+    if a.app_exe:
+        EXE = os.path.abspath(a.app_exe)
+    if a.home:
+        SOAK_HOME = os.path.abspath(a.home)
+        os.makedirs(SOAK_HOME, exist_ok=True)
+        UNTITLED_AUTOSAVE = os.path.join(SOAK_HOME, ".qlcconsole/untitled.qxw.autosave") if LINUX else \
+            os.path.join(SOAK_HOME, "Library/Application Support/qlcconsole/untitled.qxw.autosave")
+    if a.ioplugin_dir is not None:
+        IOPLUGIN_DIR = os.path.abspath(a.ioplugin_dir)
 
     if a.stop:
         ask_stop(a.out)
@@ -1162,7 +1280,7 @@ def main():
         ap.error("--show and --scaled-show are needed")
     if WIN:
         EXE, WIN_LAUNCH = a.win_exe, a.win_launch
-    if LINUX:
+    if LINUX and not a.app_exe:
         EXE = os.path.abspath(a.linux_exe)
     STOP_FILE = os.path.join(a.out, "STOP")
 
@@ -1171,8 +1289,8 @@ def main():
     if WIN and a.detach:
         detach(a)
         return
-    if LINUX and a.detach:
-        detach_linux(a)
+    if (LINUX or MAC) and getattr(a, "detach", False):
+        detach_posix(a)
         return
     if os.path.exists(STOP_FILE):
         os.remove(STOP_FILE)                     # from a run before
@@ -1202,7 +1320,7 @@ def main():
             run.event("soak", "%s: %d output patches removed -> %s" % (src, n, dst))
             shows = {k: (dst if v == src else v) for k, v in shows.items()}
     run.event("soak", "start: phases %s, %.1f h each" % (a.phases, a.hours))
-    if LINUX:
+    if LINUX and QPA == "xcb":
         _lx_start_xvfb(run)
     results = []
     try:

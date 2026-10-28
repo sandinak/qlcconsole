@@ -236,6 +236,10 @@ show; schools can turn that off
 course's [install page](docs/course/install.md), which says which release
 the lessons use.
 
+How big a show a computer can run (about 80 universes on a Raspberry Pi 5,
+256 on a Linux i7, 768 on an Apple M4, at a load heavier than a real show)
+is measured on the [Performance](docs/performance.md) page.
+
 ## Getting started
 
 Open the app, then **File ▸ Open** a show, or start a new one. Start with
@@ -274,6 +278,8 @@ All of it is in [`docs/`](docs/README.md):
 - [User guide](docs/features/README.md): every feature, the same pages as
   the in-app help.
 - [Course](docs/course/README.md): lessons, handouts and teacher guides.
+- [Performance](docs/performance.md): how much one computer can drive,
+  measured, with the method and the data.
 - [Design notes and reviews](docs/README.md#design-notes): why things work
   the way they do.
 - [Developer docs](docs/README.md#for-developers): building, the test

@@ -84,8 +84,12 @@ QList<Function*> buildShow(Doc *doc, const ShowSpec &spec,
         {
             Fixture *fx = new Fixture(doc);
             fx->setName(QString("U%1-F%2").arg(u).arg(i));
-            fx->setUniverse(u);
+            // Address first, then universe: Fixture::setAddress() keeps only 7
+            // universe bits (m_address & 0xFE00), so setting the address after
+            // the universe moves a fixture on universe 128+ to (universe % 128).
+            // Fixture::loadXML() sets them in this order too.
             fx->setAddress(i * ShowSpec::channelsPerFix);
+            fx->setUniverse(u);
             if (rgbDef != nullptr && rgbMode != nullptr)
                 fx->setFixtureDefinition(rgbDef, rgbMode);
             else
@@ -112,7 +116,8 @@ QList<Function*> buildShow(Doc *doc, const ShowSpec &spec,
         Scene *scene = new Scene(doc);
         scene->setName(QString("Scene %1").arg(s));
         // touch a random slice of fixtures so different scenes overlap channels
-        int touch = qMax(1, fixtureIds.size() / 8);
+        int touch = spec.sceneFixtures > 0 ? qMin(spec.sceneFixtures, int(fixtureIds.size()))
+                                           : qMax(1, int(fixtureIds.size()) / 8);
         for (int t = 0; t < touch; t++)
         {
             quint32 fid = fixtureIds.at(rng.bounded(fixtureIds.size()));
@@ -132,7 +137,14 @@ QList<Function*> buildShow(Doc *doc, const ShowSpec &spec,
     {
         Chaser *chaser = new Chaser(doc);
         chaser->setName(QString("Chaser %1").arg(c));
-        chaser->setDurationMode(Chaser::Common);
+        if (spec.chaserPerStep)
+        {
+            chaser->setDurationMode(Chaser::PerStep);
+            chaser->setFadeInMode(Chaser::PerStep);
+            chaser->setFadeOutMode(Chaser::PerStep);
+        }
+        else
+            chaser->setDurationMode(Chaser::Common);   // duration 0: a step every tick
         int steps = 4 + rng.bounded(12);
         for (int st = 0; st < steps; st++)
         {
@@ -197,6 +209,36 @@ QList<Function*> buildShow(Doc *doc, const ShowSpec &spec,
     }
 
     // ---- collections (group scenes + chasers) -------------------------------
+    if (spec.efxPerUniverse)
+    {
+        for (int u = 0; u < spec.universes; u++)
+        {
+            EFX *efx = new EFX(doc);
+            efx->setName(QString("UniverseWave %1").arg(u));
+            efx->setAlgorithm(EFX::Circle);
+            efx->setWidth(127);
+            efx->setHeight(127);
+            // Serial: every head at its own phase, so some channel of the
+            // universe changes on every tick (Parallel heads all sit at the
+            // same point, and near the circle's extremes two ticks can round
+            // to the same 8-bit values -- an unchanged universe sends no frame)
+            efx->setPropagationMode(EFX::Serial);
+            for (int i = 0; i < fpu; i++)
+            {
+                const int idx = u * fpu + i;
+                if (idx >= fixtureIds.size())
+                    break;
+                EFXFixture *ef = new EFXFixture(efx);
+                ef->setHead(GroupHead(fixtureIds.at(idx), 0));
+                ef->setMode(EFXFixture::RGB);
+                efx->addFixture(ef);
+            }
+            efx->setDuration(1000);
+            if (doc->addFunction(efx) == false) { delete efx; continue; }
+            topLevel.append(efx);
+        }
+    }
+
     for (int c = 0; c < spec.collections; c++)
     {
         Collection *col = new Collection(doc);
@@ -293,11 +335,53 @@ QList<Function*> buildShow(Doc *doc, const ShowSpec &spec,
         topLevel.append(show);
     }
 
+    // ---- Show Tree-style cue lists ------------------------------------------
+    int cueListCount = 0;
+    for (int cl = 0; cl < spec.cuelists; cl++)
+    {
+        Chaser *list = new Chaser(doc);
+        list->setName(QString("CueList %1").arg(cl));
+        list->setDurationMode(Chaser::PerStep);
+        list->setFadeInMode(Chaser::PerStep);
+        list->setFadeOutMode(Chaser::PerStep);
+        list->setRunOrder(Function::Loop);
+        list->setDirection(Function::Forward);
+        for (int q = 0; q < spec.cuesPerList; q++)
+        {
+            Collection *cue = new Collection(doc);
+            cue->setName(QString("CueList %1 Cue %2").arg(cl).arg(q + 1));
+            for (int l = 0; l < spec.layersPerCue; l++)
+            {
+                Scene *layer = new Scene(doc);
+                layer->setName(QString("CueList %1 Cue %2 Layer %3").arg(cl).arg(q + 1).arg(l));
+                int touch = spec.sceneFixtures > 0 ? qMin(spec.sceneFixtures, int(fixtureIds.size()))
+                                                   : qMax(1, int(fixtureIds.size()) / 8);
+                // a layer is a block of neighbouring fixtures (a group), as a
+                // Show Tree layer targets a group
+                int start = rng.bounded(qMax(1, int(fixtureIds.size()) - touch + 1));
+                for (int t = 0; t < touch; t++)
+                    for (int c = 0; c < ShowSpec::channelsPerFix; c++)
+                        layer->setValue(fixtureIds.at(start + t), c, uchar(rng.bounded(256)));
+                if (doc->addFunction(layer) == false) { delete layer; continue; }
+                cue->addFunction(layer->id());
+            }
+            if (doc->addFunction(cue) == false) { delete cue; continue; }
+            list->addStep(ChaserStep(cue->id(), uint(spec.cueFadeMs), 2000 + rng.bounded(4000),
+                                     uint(spec.cueFadeMs)));
+        }
+        if (doc->addFunction(list) == false) { delete list; continue; }
+        topLevel.append(list);
+        cueListCount++;
+    }
+
     fprintf(stdout, "stress: created %d functions (%d scenes, %d chasers, %d matrices, %d efx, "
             "%d collections, %d scripts, %d sequences, %d shows)\n",
             int(doc->functions().size()), int(sceneIds.size()), int(chaserIds.size()),
             int(matrixIds.size()), spec.efx, spec.collections, spec.scripts,
             int(sequenceIds.size()), spec.shows);
+    if (cueListCount)
+        fprintf(stdout, "stress: %d Show Tree-style cue lists x %d cues x %d layers (fade %d ms)\n",
+                cueListCount, spec.cuesPerList, spec.layersPerCue, spec.cueFadeMs);
 
     return topLevel;
 }

@@ -37,7 +37,15 @@ DEF_QLCSTRESS = os.path.join(HERE, "engine", "build", "qlcstress")
 DEF_FIXTURES = os.path.join(HERE, "..", "resources", "fixtures")
 DEF_SCRIPTS = os.path.join(HERE, "..", "resources", "rgbscripts")
 SCENARIOS = os.path.join(HERE, "scenarios.json")
-BASELINE = os.path.join(HERE, "baseline.json")
+# Each host compares against ITS OWN baseline: baselines/<host>-<arch>.json
+# (QLC_STRESS_BASELINE overrides). The old single baseline.json was captured
+# on ender (arm64) and every other host was judged against it.
+def _host_key():
+    import platform
+    return "%s-%s" % (platform.node().split(".")[0], platform.machine())
+
+
+BASELINE = os.environ.get("QLC_STRESS_BASELINE") or os.path.join(HERE, "baselines", _host_key() + ".json")
 RESULTS_DIR = os.path.join(HERE, "results")
 
 # sanitizer report markers -> any of these in output means a real bug
@@ -117,7 +125,7 @@ def cmd_validate(args, cfg, save_as_baseline=False):
         ticks = max(50, ticks // 8)
     baseline = {} if save_as_baseline else (load(BASELINE) if os.path.exists(BASELINE) else {})
     if not save_as_baseline and not baseline:
-        print("NOTE: no baseline.json yet — run `run.py baseline` first to enable "
+        print(f"NOTE: no baseline for this host ({BASELINE}) — run `run.py baseline` here first to enable "
               "regression checks. Proceeding with budget-only checks.\n")
 
     san_env = sanitizer_env(args.sanitize) if args.sanitize else None
@@ -163,6 +171,7 @@ def cmd_validate(args, cfg, save_as_baseline=False):
               f"{delta_s:>8}  {verdict}")
 
     if save_as_baseline:
+        os.makedirs(os.path.dirname(BASELINE), exist_ok=True)
         with open(BASELINE, "w") as f:
             json.dump(results, f, indent=2)
         print(f"\nbaseline written: {BASELINE} ({len(results)} scenarios)")

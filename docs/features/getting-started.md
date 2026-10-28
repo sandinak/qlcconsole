@@ -73,6 +73,30 @@ reaching it from a tablet and setting up users.
 - A show kept in a **cloud folder** (iCloud, Dropbox, Synology…) is saved
   safely; see [Cloud storage](other-improvements.md#cloud-storage).
 
+### Choosing a computer
+
+How big a show one computer can run, measured on the 0.3.0 release
+candidate with a load heavier than a real show (170 RGB fixtures per
+universe, a look on each, and chasers, RGB matrices, EFX and cue lists all
+running at once):
+
+| Computer | Runs smoothly | Art-Net out at the full 50 fps |
+|---|---|---|
+| Raspberry Pi 5 | up to about 80 universes | 32 universes |
+| Intel Core i7 laptop (6 cores), Linux | up to about 256 universes | 64 universes |
+| Apple M4 Mac | up to about 768 universes | 128 universes |
+
+Size a rig by the smaller of the two columns: the Art-Net column is every
+channel of every universe changing every frame. A typical school or
+small-venue show, a few hundred fixtures on a handful of universes, uses
+well under one core on any of these. Heavy Art-Net *input* (a dozen or
+more universes coming in) slows the windows and the web interface, though
+the output keeps its rate. On Linux, the light timing is steadier when the
+app may use real-time priority (an rtprio limit for your user).
+
+The measurements, charts and method are on the
+[Performance page](https://github.com/sandinak/qlcconsole/blob/main/docs/performance.md).
+
 ## Finding your way around
 
 ![The main window: the top bar, the open tab, the tabs, the footer](../images/getting-started-main-window.png)
