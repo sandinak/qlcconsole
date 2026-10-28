@@ -1455,10 +1455,20 @@ static void takeAway(Doc *doc, const QList<quint32> &fixtures, const QList<quint
         doc->deleteFixture(id);
 }
 
+/* What the functions put on @a address, as the last whole frame left it.
+   preGMValues() is copied under the universe's frame lock; postGMValue()
+   reads the live array, which the universe thread zeroes (every intensity
+   channel) at the start of each frame and only then writes again -- a read
+   landing between the two saw 0 for a dimmer at full. Idle that is a few
+   microseconds a frame; on a loaded machine the thread can be preempted
+   there, and a QCOMPARE (or the last check of a QTRY) failed with 0. */
 static uchar outputAt(Doc *doc, quint32 address)
 {
     const QList<Universe *> unis = doc->inputOutputMap()->universes();
-    return unis.isEmpty() ? 0 : unis.first()->postGMValue(address);
+    if (unis.isEmpty())
+        return 0;
+    const QByteArray frame = unis.first()->preGMValues();
+    return address < quint32(frame.size()) ? uchar(frame.at(int(address))) : 0;
 }
 
 /* CHANGELOG 0.2.2: "GO in Design offers Operate (Q92), once a session, in
@@ -1504,10 +1514,13 @@ void AppViews_Test::goHoldsThePreviewSoOnlyTheRunPlays()
         for (quint32 p : palettes)
             doc->deletePalette(p);
         m_app->hideViewNotice();
-        /* What the stops queued (the Show Tree's sweep after a preview,
-           the timer's started/stopped signals) lands here, not in the
-           next test -- on a loaded machine it can be late. */
-        QTest::qWait(400);
+        /* What the stops queued lands here, not in the next test: the
+           timer's started/stopped signals once nothing runs, the Show
+           Tree's sweep (a single-shot bake after a preview lets go) once it
+           has fired. Waited for, not timed: a loaded machine is late. */
+        QTRY_COMPARE_WITH_TIMEOUT(doc->masterTimer()->runningFunctions(), 0, 5000);
+        if (const QTimer *sweep = st->findChild<QTimer *>(QString(), Qt::FindDirectChildrenOnly))
+            QTRY_VERIFY_WITH_TIMEOUT(!sweep->isActive(), 5000);
         QCoreApplication::processEvents();
     });
     // Three dimmers: Run on 230, the preview on 231, a busk on 232.
