@@ -342,6 +342,11 @@ void OSCController::sendFeedback(const quint32 universe, quint32 channel, uchar 
     pTypes.fill('f', values.length());
 
     m_packetizer->setupOSCGeneric(oscPacket, path, pTypes, values);
+    /* No path (an empty key whose channel no input has hashed yet): no
+       message. This used to send an empty datagram to the feedback target
+       and count it as a packet. */
+    if (oscPacket.isEmpty())
+        return;
     qint64 sent = m_outputSocket->writeDatagram(oscPacket.data(), oscPacket.size(),
                                              outAddress, outPort);
     if (sent < 0)
