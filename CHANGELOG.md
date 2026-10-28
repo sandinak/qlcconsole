@@ -84,16 +84,30 @@ Transfer carries the show's pictures with it; and Set Mounting Height…
 asks in the show's units. Two labels say what the app really does: the
 autosave file names in Settings and the Patch List… tooltip.
 
-Release candidate 8 is a security release, from a red-team review of
-RC7 (board Q175). Web access listens on this computer only unless told
-otherwise, and only this computer, or a logged-in user with the right
-level, may change the show through it; pages on other sites can't drive
-it. A Script runs a program only when this computer's operator allows it,
-never for a show that came in over the web, and previews never run
-scripts. Malformed OSC packets, short or unknown web commands, a huge
-upload and quitting with a browser open no longer crash or hang the
-console; names in the web pages and in exported CSVs can no longer run
-as code.
+Release candidate 8 is a security and packaging release, with fixes
+from testing RC7. Security, from a red-team review (board Q175): **web
+access listens on this computer only** (`--web-bind` opens it to the
+network), and from anywhere else a browser can look but only a
+logged-in user (`-wa`) with the right level may change the show; pages
+on other sites can't drive it. **A Script's `systemcommand` is off by
+default**: it runs a program only with Settings ▸ Advanced ▸ Allow
+scripts to run programs on, never for a show that came in over the web,
+and previews never run scripts. Malformed OSC packets, short or unknown
+web commands, a huge upload and quitting with a browser open no longer
+crash or hang the console; names in the web pages and in exported CSVs
+can no longer run as code. Packaging (board Q177): the Mac app no longer
+carries the build Mac's own fixtures and scripts; every installer ships
+its licence texts and runs headless, and passes a new pre-release check
+with no waiver; the Linux AppImage runs without Qt installed; on
+Windows, an LGPL FFmpeg, one install per user, and an uninstaller that
+removes the settings. On the plot: a locked plot or layer moves nothing
+when dragged, aim targets included; the rulers count from the centre
+line and hug what they measure; Align and Distribute line up centres
+and keep heights; Plot layers selects every row picked; and lasers show
+on the 2D plot. On the run: GO, Back and Sub GO stop the previews first,
+so only the run reaches the stage, and a game pad's A and B no longer
+step running chasers. And the main window follows every resize again
+after a panel was moved to its own window.
 
 ### Added
 
