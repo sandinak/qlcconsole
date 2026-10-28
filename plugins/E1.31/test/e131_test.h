@@ -43,6 +43,9 @@ private slots:
     void dmxPacketLayout();
     void universeDefaultsFollowTheSpec();
     void aUniverseSendsWhereItIsTold();
+    /** A universe's saved parameters reach its controller, and are kept
+     *  per universe and line until it is closed */
+    void pluginAppliesAndKeepsTheParameters();
 };
 
 #endif

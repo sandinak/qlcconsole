@@ -135,6 +135,11 @@ private slots:
     void failedWritesAreReported();
     void socketBound();
 
+    /* What the plugin keeps for the show file: only what differs from the
+       default, per universe and line; closing a universe drops its own */
+    void pluginKeepsOnlyWhatDiffersFromTheDefault();
+    void closingAUniverseDropsOnlyItsOwnParameters();
+
 public slots:
     /* Not a test: connected to problemsChanged() by
        problemsChangedIsNeverEmittedUnderTheLock(). */

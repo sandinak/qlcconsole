@@ -29,6 +29,7 @@
 #define private public
 #define protected public
 #include "osccontroller.h"
+#include "oscplugin.h"
 #undef private
 #undef protected
 
@@ -485,6 +486,61 @@ void OSC_Test::multiValueInputIsSplitPerValue()
     // A message with no values: nothing
     c.handlePacket(info->inputSocket.data(), oscString("/1/go") + oscString(","), QHostAddress::LocalHost);
     QCOMPARE(spy.count(), 2);
+}
+
+void OSC_Test::pluginKeepsOnlyWhatDiffersFromTheDefault()
+{
+    OSCPlugin plugin;
+    OSCIO io;
+    io.IPAddress = "127.0.0.1";
+    io.controller = nullptr;
+    plugin.m_IOmapping.clear();
+    plugin.m_IOmapping.append(io);
+    typedef QLCIOPlugin P;
+
+    QVERIFY(!plugin.openOutput(2, 1));                  // no such line
+    QVERIFY(plugin.openOutput(0, 1));
+    OSCController *ctrl = plugin.m_IOmapping.at(0).controller;
+    QVERIFY(ctrl != nullptr);
+    auto out = [&plugin]() { return plugin.getParameters(1, 0, P::Output); };
+
+    QUdpSocket rx;
+    QVERIFY(rx.bind(QHostAddress::LocalHost, 0));
+    plugin.setParameter(1, 0, P::Output, OSC_OUTPUTPORT, rx.localPort());
+    QCOMPARE(out().value(OSC_OUTPUTPORT).toUInt(), uint(rx.localPort()));
+    plugin.setParameter(1, 0, P::Output, OSC_OUTPUTIP, "127.0.0.1");   // the default here
+    QVERIFY(!out().contains(OSC_OUTPUTIP));
+    plugin.setParameter(1, 0, P::Output, OSC_OUTPUTIP, "127.0.0.2");
+    QCOMPARE(out().value(OSC_OUTPUTIP).toString(), QString("127.0.0.2"));
+    plugin.setParameter(1, 0, P::Output, OSC_OUTPUTIP, "127.0.0.1");
+    QVERIFY(!out().contains(OSC_OUTPUTIP));
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression("is not a valid OSC parameter"));
+    plugin.setParameter(1, 0, P::Output, "colour", "red");
+    QCOMPARE(out().count(), 1);
+
+    // Its frames reach the controller and go out
+    QByteArray dmx(512, '\0');
+    dmx[4] = char(255);
+    plugin.writeUniverse(1, 0, dmx, true);
+    plugin.writeUniverse(1, 5, dmx, true);                // no such line
+    QString path;
+    QByteArray values;
+    QVERIFY(parseOne(nextDatagram(rx), path, values));
+    QCOMPARE(path, QString("/1/dmx/4"));
+
+    // Feedback goes through the line's controller to its feedback port
+    plugin.setParameter(1, 0, P::Output, OSC_FEEDBACKPORT, rx.localPort());
+    QCOMPARE(out().value(OSC_FEEDBACKPORT).toUInt(), uint(rx.localPort()));
+    plugin.sendFeedBack(1, 0, 0, 255, QVariant(QString("/1/toggle1")));
+    plugin.sendFeedBack(1, 9, 0, 255, QVariant(QString("/1/toggle1")));   // no such line
+    QVERIFY(parseOne(nextDatagram(rx), path, values));
+    QCOMPARE(path, QString("/1/toggle1"));
+    QVERIFY(nextDatagram(rx, 50).isEmpty());
+
+    // Closed: its parameters go, and the controller with its last universe
+    plugin.closeOutput(0, 1);
+    QVERIFY(out().isEmpty());
+    QVERIFY(plugin.m_IOmapping.at(0).controller == nullptr);
 }
 
 QTEST_GUILESS_MAIN(OSC_Test)

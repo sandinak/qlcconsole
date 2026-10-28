@@ -49,6 +49,9 @@ private slots:
     void onlyChangedChannelsAreSent();
     void feedbackKeepsMultiValuePaths();
     void multiValueInputIsSplitPerValue();
+    /** What the plugin keeps for the show file: only what differs from
+     *  the default; its writes and feedback reach the controller */
+    void pluginKeepsOnlyWhatDiffersFromTheDefault();
 };
 
 #endif

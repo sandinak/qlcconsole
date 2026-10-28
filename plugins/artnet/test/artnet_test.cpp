@@ -2979,3 +2979,107 @@ void ArtNet_Test::socketBound()
     QVERIFY(sock->bind(QHostAddress::LocalHost, 0));
     QVERIFY(ctrl.socketBound());
 }
+
+/** A line of @p plugin on 172.18.<net>.219/24 whose controller sends into
+ *  @p sink */
+static void addSinkLine(ArtNetPlugin &plugin, QList<QNetworkDatagram> *sink, int net)
+{
+    QNetworkAddressEntry entry;
+    entry.setIp(QHostAddress(QString("172.18.%1.219").arg(net)));
+    entry.setPrefixLength(24);
+    entry.setBroadcast(QHostAddress(QString("172.18.%1.255").arg(net)));
+    ArtNetIO io;
+    io.address = entry;
+    io.controller = new ArtNetController(QNetworkInterface(), entry,
+                                         QSharedPointer<QUdpSocket>(new QUdpSocket()),
+                                         quint32(plugin.m_IOmapping.count()), &plugin);
+    io.controller->m_testSink = sink;
+    plugin.m_IOmapping.append(io);
+}
+
+void ArtNet_Test::pluginKeepsOnlyWhatDiffersFromTheDefault()
+{
+    ArtNetPlugin plugin;
+    plugin.m_IOmapping.clear();
+    QList<QNetworkDatagram> sink;
+    addSinkLine(plugin, &sink, 2);
+    typedef QLCIOPlugin P;
+
+    QVERIFY(plugin.openOutput(0, 4));
+    QVERIFY(plugin.openInput(0, 4));
+    QVERIFY(!plugin.openOutput(3, 4));                       // no such line
+    auto out = [&plugin]() { return plugin.getParameters(4, 0, P::Output); };
+    auto in = [&plugin]() { return plugin.getParameters(4, 0, P::Input); };
+
+    plugin.setParameter(4, 0, P::Output, ARTNET_OUTPUTIP, "172.18.2.10");
+    QCOMPARE(out().value(ARTNET_OUTPUTIP).toString(), QString("172.18.2.10"));
+    plugin.setParameter(4, 0, P::Output, ARTNET_OUTPUTUNI, 9);
+    QCOMPARE(out().value(ARTNET_OUTPUTUNI).toUInt(), 9u);
+    plugin.setParameter(4, 0, P::Output, ARTNET_TRANSMITMODE, "Partial");
+    QCOMPARE(out().value(ARTNET_TRANSMITMODE).toString(), QString("Partial"));
+    plugin.setParameter(4, 0, P::Input, ARTNET_INPUTUNI, 7);
+    QCOMPARE(in().value(ARTNET_INPUTUNI).toUInt(), 7u);
+
+    // What goes out follows them
+    sink.clear();
+    plugin.writeUniverse(4, 0, QByteArray(10, char(5)), true);
+    plugin.writeUniverse(4, 9, QByteArray(10, char(5)), true);     // no such line
+    QCOMPARE(sink.count(), 1);
+    QCOMPARE(sink.first().destinationAddress(), QHostAddress("172.18.2.10"));
+    QCOMPARE(artDmxPortAddress(sink.first().data()), 9);
+    QCOMPARE(artDmxLength(sink.first().data()), 10);
+
+    // Back to the defaults: nothing kept
+    plugin.setParameter(4, 0, P::Output, ARTNET_OUTPUTIP, "172.18.2.255");
+    plugin.setParameter(4, 0, P::Output, ARTNET_OUTPUTUNI, 4);
+    plugin.setParameter(4, 0, P::Output, ARTNET_TRANSMITMODE, "Standard");
+    plugin.setParameter(4, 0, P::Input, ARTNET_INPUTUNI, 4);
+    QVERIFY(out().isEmpty());
+    QVERIFY(in().isEmpty());
+
+    // Not ours: not kept
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression("is not a valid ArtNet output parameter"));
+    plugin.setParameter(4, 0, P::Output, "colour", "red");
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression("is not a valid ArtNet input parameter"));
+    plugin.setParameter(4, 0, P::Input, ARTNET_OUTPUTIP, "1.2.3.4");
+    QVERIFY(out().isEmpty());
+    QVERIFY(in().isEmpty());
+
+    // The line's controller goes with its last universe
+    plugin.closeOutput(0, 4);
+    QVERIFY(plugin.m_IOmapping.at(0).controller != NULL);
+    plugin.closeInput(0, 4);
+    QVERIFY(plugin.m_IOmapping.at(0).controller == NULL);
+}
+
+void ArtNet_Test::closingAUniverseDropsOnlyItsOwnParameters()
+{
+    /* Universe 0 on line 1, universe 1 on line 0, each with a target. The
+       plugins called removeFromMap(line, universe) -- the wrong way round
+       -- so unpatching universe 0 from line 1 wiped universe 1's settings
+       (gone from the next save, while still live), and unpatching universe
+       1 left its own behind for whatever line it was patched to next. */
+    ArtNetPlugin plugin;
+    plugin.m_IOmapping.clear();
+    QList<QNetworkDatagram> sink;
+    addSinkLine(plugin, &sink, 2);
+    addSinkLine(plugin, &sink, 3);
+    typedef QLCIOPlugin P;
+
+    QVERIFY(plugin.openOutput(1, 0));
+    QVERIFY(plugin.openOutput(0, 1));
+    plugin.setParameter(0, 1, P::Output, ARTNET_OUTPUTIP, "172.18.3.10");
+    plugin.setParameter(1, 0, P::Output, ARTNET_OUTPUTIP, "172.18.2.10");
+
+    plugin.closeOutput(1, 0);
+    QCOMPARE(plugin.getParameters(1, 0, P::Output).value(ARTNET_OUTPUTIP).toString(),
+             QString("172.18.2.10"));
+    QVERIFY(plugin.getParameters(0, 1, P::Output).isEmpty());
+
+    // Universe 1 moved to line 1: it starts clean there
+    plugin.closeOutput(0, 1);
+    QVERIFY(plugin.getParameters(1, 0, P::Output).isEmpty());
+    QVERIFY(plugin.openOutput(1, 1));
+    QVERIFY(plugin.getParameters(1, 1, P::Output).isEmpty());
+    plugin.closeOutput(1, 1);
+}

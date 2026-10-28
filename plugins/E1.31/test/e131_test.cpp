@@ -326,6 +326,71 @@ void E131_Test::aUniverseSendsWhereItIsTold()
     QCOMPARE(ctrl->getPacketSentNumber(), sent + 2);
 }
 
+void E131_Test::pluginAppliesAndKeepsTheParameters()
+{
+    E131Plugin plugin;
+    QNetworkAddressEntry lo;
+    lo.setIp(QHostAddress::LocalHost);
+    lo.setPrefixLength(8);
+    E131IO io;
+    io.address = lo;
+    io.controller = NULL;
+    plugin.m_IOmapping.clear();
+    plugin.m_IOmapping.append(io);
+    typedef QLCIOPlugin P;
+
+    QVERIFY(!plugin.openOutput(1, 3));                  // no such line
+    QVERIFY(plugin.openOutput(0, 3));
+    E131Controller *ctrl = plugin.m_IOmapping.at(0).controller;
+    QVERIFY(ctrl != NULL);
+
+    QUdpSocket rx;
+    QVERIFY(rx.bind(QHostAddress::LocalHost, 0));
+    // As a show's patch is restored: each saved parameter in turn
+    plugin.setParameter(3, 0, P::Output, E131_MULTICAST, 0);
+    plugin.setParameter(3, 0, P::Output, E131_UCASTIP, "127.0.0.1");
+    plugin.setParameter(3, 0, P::Output, E131_UCASTPORT, rx.localPort());
+    plugin.setParameter(3, 0, P::Output, E131_UNIVERSE, 9);
+    plugin.setParameter(3, 0, P::Output, E131_PRIORITY, 150);
+    plugin.setParameter(3, 0, P::Output, E131_TRANSMITMODE, "Partial");
+    plugin.setParameter(3, 0, P::Output, E131_MCASTFULLIP, "239.255.0.77");
+    UniverseInfo *info = ctrl->getUniverseInfo(3);
+    QCOMPARE(info->outputMulticast, false);
+    QCOMPARE(info->outputUcastAddress, QHostAddress::LocalHost);
+    QCOMPARE(info->outputUniverse, 9u);
+    QCOMPARE(info->outputPriority, 150u);
+    QCOMPARE(info->outputTransmissionMode, int(E131Controller::Partial));
+    QCOMPARE(info->outputMcastAddress, QHostAddress("239.255.0.77"));
+    plugin.setParameter(3, 0, P::Output, E131_MCASTIP, "78");     // the legacy form
+    QCOMPARE(info->outputMcastAddress, QHostAddress("239.255.0.78"));
+
+    const QMap<QString, QVariant> kept = plugin.getParameters(3, 0, P::Output);
+    QCOMPARE(kept.value(E131_UNIVERSE).toUInt(), 9u);
+    QCOMPARE(kept.value(E131_PRIORITY).toUInt(), 150u);
+    QCOMPARE(kept.value(E131_TRANSMITMODE).toString(), QString("Partial"));
+    QVERIFY(plugin.getParameters(3, 1, P::Output).isEmpty());   // another line's
+
+    // What it writes goes there
+    plugin.writeUniverse(3, 0, QByteArray::fromHex("0102"), true);
+    plugin.writeUniverse(3, 7, QByteArray::fromHex("0102"), true);   // no such line
+    QVERIFY(rx.hasPendingDatagrams() || rx.waitForReadyRead(5000));
+    QByteArray d(int(rx.pendingDatagramSize()), '\0');
+    rx.readDatagram(d.data(), d.size());
+    QCOMPARE(be16(d, 113), 9);
+    QCOMPARE(int(uchar(d.at(108))), 150);
+    QCOMPARE(d.size(), 126 + 2);
+
+    // An input parameter that isn't one: refused, not kept
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression("is not a valid E1.31 input parameter"));
+    plugin.setParameter(3, 0, P::Input, E131_PRIORITY, 1);
+    QVERIFY(plugin.getParameters(3, 0, P::Input).isEmpty());
+
+    // Closed: its parameters go, and the line's controller with its last universe
+    plugin.closeOutput(0, 3);
+    QVERIFY(plugin.getParameters(3, 0, P::Output).isEmpty());
+    QVERIFY(plugin.m_IOmapping.at(0).controller == NULL);
+}
+
 QTEST_MAIN(E131_Test)
 
 void E131_Test::dmxPacketsAreBoundedByTheDatagramAndAUniverse()
