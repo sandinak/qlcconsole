@@ -92,6 +92,10 @@ bool RDMProtocol::packetizeCommand(ushort command, QVariantList params, bool sta
             }
             else
             {
+                // the branch's lower and upper bound
+                if (params.length() < 4)
+                    return false;
+
                 buffer.append(char(0x0C)); // PDL
                 qulonglong start = params.at(2).toULongLong();
                 qulonglong end = params.at(3).toULongLong();
@@ -147,7 +151,10 @@ bool RDMProtocol::packetizeCommand(ushort command, QVariantList params, bool sta
             // Will be fixed after parameters append
             buffer.append(char(0));
 
-            for (int i = 0; i < params.length(); i += 2)
+            /* (size, value) pairs after the UID and the PID. From 0, the
+               UID and the PID were read as a pair too: a UID whose text
+               read as 1, 2, 4 or 99 put the PID into the data. */
+            for (int i = 2; i + 1 < params.length(); i += 2)
             {
                 int size = params.at(i).toInt();
 
