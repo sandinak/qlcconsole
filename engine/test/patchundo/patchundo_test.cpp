@@ -370,6 +370,29 @@ void PatchUndo_Test::captureUniversesCanRestoreToAnEmptyWorkspace()
     QCOMPARE(iom.universesCount(), quint32(0));
 }
 
+void PatchUndo_Test::undoRestoresTheFeedbackPatch()
+{
+    InputOutputMap iom(m_doc, 4);
+    const QString stub = stubName(m_doc);
+
+    QVERIFY(iom.setOutputPatch(1, stub, "", 0, true, 0) == true);
+    QVERIFY(iom.feedbackPatch(1) != NULL);
+    iom.feedbackPatch(1)->setPluginParameter("feedbackIP", "172.18.2.20");
+
+    iom.patchUndo()->capture(QList<quint32>() << 1 << 2, "move the feedback");
+
+    QVERIFY(iom.setOutputPatch(1, stub, "", 1, true, 0) == true);
+    iom.feedbackPatch(1)->setPluginParameter("feedbackIP", "10.0.0.9");
+    QVERIFY(iom.setOutputPatch(2, stub, "", 2, true, 0) == true);     // none before
+
+    QVERIFY(iom.patchUndo()->undo() == true);
+    QVERIFY(iom.feedbackPatch(1) != NULL);
+    QCOMPARE(iom.feedbackPatch(1)->output(), quint32(0));
+    QCOMPARE(iom.feedbackPatch(1)->getPluginParameters().value("feedbackIP").toString(),
+             QString("172.18.2.20"));
+    QVERIFY(iom.feedbackPatch(2) == NULL || iom.feedbackPatch(2)->plugin() == NULL);
+}
+
 void PatchUndo_Test::clearForgetsTheHeldStep()
 {
     InputOutputMap iom(m_doc, 4);

@@ -48,6 +48,9 @@ private slots:
     void undoRestoresNameAndPassthroughOnlyWithTheList();
     void captureUniversesCanRestoreToAnEmptyWorkspace();
 
+    /** The feedback patch goes back with its line and parameters, and one
+     *  that did not exist is cleared (coverage campaign) */
+    void undoRestoresTheFeedbackPatch();
     void clearForgetsTheHeldStep();
     void changedSignalTracksAvailability();
 
