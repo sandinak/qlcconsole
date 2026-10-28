@@ -167,7 +167,11 @@ bool Script::setData(const QString& str)
             bool ok = false;
             if (line.isEmpty() == false)
             {
-                m_lines << tokenizeLine(line + QString("\n"), &ok);
+                /* A line with a syntax error doesn't run. It ran up to the
+                   error: "setfixture:1 chanel:2 val:255" set channel 0 of
+                   fixture 1 to 0. */
+                const QList<QStringList> tokens = tokenizeLine(line + QString("\n"), &ok);
+                m_lines << (ok ? tokens : QList<QStringList>());
                 if (ok == false)
                     m_syntaxErrorLines.append(i);
             }
@@ -199,7 +203,9 @@ void Script::scanForLabels()
 bool Script::appendData(const QString &str)
 {
     m_data.append(str + QString("\n"));
-    m_lines << tokenizeLine(str + QString("\n"));
+    bool ok = false;
+    const QList<QStringList> tokens = tokenizeLine(str + QString("\n"), &ok);
+    m_lines << (ok ? tokens : QList<QStringList>());    // as setData()
 
     return true;
 }
