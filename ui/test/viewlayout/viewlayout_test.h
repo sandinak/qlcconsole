@@ -56,6 +56,17 @@ private slots:
      *  back in step on the next expose, repainted and logged (Q178 #11). */
     void theLayoutReportAndTheSelfHeal();
 
+    /** The Rig Overview (a floating panel the main window owns) moved by
+     *  its title bar, as the Mac reports it, with the Lighting Studio out
+     *  in its own window: the main window still follows every resize. Its
+     *  drag once left the main window's layout mid-drag for good (u9). */
+    void aRigOverviewMoveLeavesTheWindowFollowing();
+
+    /** A main window layout stuck mid-drag (a toolbar pressed and dragged,
+     *  never released) ignores resizes; the self-heal sees it, puts the
+     *  layout back and logs it, and the report says so. */
+    void aStuckMainLayoutIsHealedOnTheNextResize();
+
     /** Classic QLC+: picking a scene, a chaser or an EFX in the Functions
      *  tab opens its editor beside the tree, as in QLC+ -- even from a saved
      *  splitter state that had the editor collapsed. */

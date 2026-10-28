@@ -266,15 +266,21 @@ Scenes).
 top-left corner, blank beyond it), most often after a tab was moved into its
 own window. The app watches for it: when the window and its contents
 disagree on their size, it puts the contents back to the window's size and
-redraws all of it, and notes the time. If you still see it, first try
+redraws all of it, and notes the time. It also checks that the main
+window's own layout followed the resize. The tabs and the status bar can
+stay at their old size when a drag of a window's panel or toolbar never
+finished; moving the Rig Overview by its title bar did this before RC8.
+When that happens, the app ends the drag, puts the layout back, lays it
+out to the window's size and notes it. If you still see it, first try
 switching tabs and back, and minimising and restoring the window; then use
 **Help ▸ Troubleshooting ▸ Copy Layout Report** while it is wrong, and paste
 the report into your bug report. It lists, as text: the Qt version and
 platform; each screen and its pixel ratio; for the main window and every
 tab moved into its own window, the window's size as the system sees it
 against the size of what is drawn in it, the central area, the tabs, the
-page in front, its splitters and plot views; and each self-heal this
-session. Say also how you made the window bigger: dragging a corner,
+page in front, its splitters and plot views; whether the main window's
+layout follows the window (and the size it was last laid out at); and
+each self-heal this session. Say also how you made the window bigger: dragging a corner,
 double-clicking the title bar, full screen, Window ▸ Fill, or moving it to
 another display.
 

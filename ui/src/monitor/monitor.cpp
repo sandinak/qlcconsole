@@ -2761,8 +2761,16 @@ void Monitor::showStageOverview()
        double-click on the title "docked" the panel -- into no dock area, so
        it stayed a plain child of the main window, painted over the tabs. A
        floating panel without the feature can still be moved and closed, and
-       anything else that docks it is undone. */
-    dock->setFeatures(QDockWidget::DockWidgetClosable | QDockWidget::DockWidgetMovable);
+       anything else that docks it is undone.
+       Not DockWidgetMovable either (u9): a floating panel is moved by its
+       window's own title bar all the same, but with the feature, Qt took
+       that move for a drag towards the main window's dock areas. The panel
+       was never in the main window's layout and may dock nowhere, so the
+       drag ended without being put back, and the main window's layout kept
+       the state it saved as the drag began -- in which it ignores every
+       resize (QMainWindowLayout::setGeometry). The window grew, its
+       contents stayed. Without the feature Qt moves it and nothing more. */
+    dock->setFeatures(QDockWidget::DockWidgetClosable);
     dock->setAllowedAreas(Qt::NoDockWidgetArea);
     connect(dock, &QDockWidget::topLevelChanged, dock, [dock](bool floating) {
         if (!floating)

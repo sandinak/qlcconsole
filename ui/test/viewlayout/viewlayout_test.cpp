@@ -44,10 +44,14 @@
 #include <QScrollArea>
 #include <QScrollBar>
 #include <QStyle>
+#include <QStyleOption>
 #include <QCheckBox>
 #include <QSlider>
 #include "apputil.h"
 #include "layoutdiagnostics.h"
+#include "monitor.h"
+#include <QDockWidget>
+#include <QToolBar>
 #include <QClipboard>
 #include <QGuiApplication>
 #include "horizontalpan.h"
@@ -160,6 +164,26 @@ static QString describe(const QWidget *w)
     return name;
 }
 
+/* The main window's own layout follows the window: the status bar spans
+   the bottom edge and the central area reaches it and the right edge. A
+   QMainWindowLayout left mid-drag ignores every resize, leaving both where
+   they were (u9). (Not QLayout::geometry(): any invalidate() empties it
+   until the next activate.) Empty if all is well. */
+static QString mainLayoutProblem(const QMainWindow *mw)
+{
+    const QRect c = mw->centralWidget() != nullptr ? mw->centralWidget()->geometry() : QRect();
+    const QStatusBar *sb = mw->statusBar();
+    const bool hasBar = sb != nullptr && sb->isVisible();
+    const int floor = hasBar ? sb->geometry().top() - 1 : mw->height() - 1;
+    if (hasBar && (sb->geometry().bottom() != mw->height() - 1 || sb->width() != mw->width()))
+        return QStringLiteral("the status bar is %1x%2 at y=%3 in a %4x%5 window")
+               .arg(sb->width()).arg(sb->height()).arg(sb->y()).arg(mw->width()).arg(mw->height());
+    if (c.isValid() && (c.right() != mw->width() - 1 || c.bottom() != floor))
+        return QStringLiteral("the central area is %1x%2 at %3,%4 in a %5x%6 window")
+               .arg(c.width()).arg(c.height()).arg(c.x()).arg(c.y()).arg(mw->width()).arg(mw->height());
+    return QString();
+}
+
 /* The bounding box of a widget's visible children, in its own coordinates. */
 static QRect childrenBox(const QWidget *w)
 {
@@ -248,7 +272,10 @@ void ViewLayout_Test::everyTabFillsTheWindow()
                         .arg(App::workspaceViewName(view), tabs->tabText(i))
                         .arg(size.width()).arg(size.height());
 
-                // The window's central area itself, then the page in it.
+                // The window's own layout, its central area, then the page.
+                const QString stuck = mainLayoutProblem(m_app);
+                if (!stuck.isEmpty())
+                    bad << where + QStringLiteral(": ") + stuck;
                 QWidget *central = m_app->centralWidget();
                 if (central->geometry().right() < m_app->width() - 1 - kSlack)
                     bad << where + QStringLiteral(": the central area stops short of the window");
@@ -268,6 +295,9 @@ static QStringList mainWindowProblems(App *app, const QString &where)
 {
     QStringList bad;
     QCoreApplication::processEvents();
+    const QString stuck = mainLayoutProblem(app);
+    if (!stuck.isEmpty())
+        bad << where + QStringLiteral(": ") + stuck;
     if (app->windowHandle() != nullptr && app->windowHandle()->size() != app->size())
         bad << where + QStringLiteral(": the window is %1x%2 but its widget %3x%4")
                .arg(app->windowHandle()->width()).arg(app->windowHandle()->height())
@@ -509,6 +539,198 @@ void ViewLayout_Test::theLayoutReportAndTheSelfHeal()
     WindowSizeGuard::clearLog();
     m_app->resize(1280, 800);
     QCoreApplication::processEvents();
+}
+
+/* A floating dock moved by its title bar as the Mac reports it: a press in
+   the window frame above the contents, the window manager moving the
+   window, the release. (On Windows a move in the frame ends it instead.) */
+static void moveByTitleBar(QDockWidget *dock, const QPoint &by)
+{
+    const QRect geo = dock->geometry();
+    const QPoint grab(geo.left() + 40, geo.top() - 1);
+    QMouseEvent press(QEvent::NonClientAreaMouseButtonPress, QPointF(dock->mapFromGlobal(grab)),
+                      QPointF(grab), Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+    QCoreApplication::sendEvent(dock, &press);
+    for (int i = 1; i <= 4; ++i)
+    {
+        dock->move(geo.topLeft() + by * i / 4);
+        QCoreApplication::processEvents();
+    }
+    const QPoint to = grab + by;
+    QMouseEvent move(QEvent::NonClientAreaMouseMove, QPointF(dock->mapFromGlobal(to)), QPointF(to),
+                     Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
+    QCoreApplication::sendEvent(dock, &move);
+    QMouseEvent release(QEvent::NonClientAreaMouseButtonRelease, QPointF(dock->mapFromGlobal(to)),
+                        QPointF(to), Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+    QCoreApplication::sendEvent(dock, &release);
+    QCoreApplication::processEvents();
+}
+
+void ViewLayout_Test::aRigOverviewMoveLeavesTheWindowFollowing()
+{
+    QTabWidget *tabs = m_app->m_tab;
+    m_app->setWorkspaceView(App::ConsoleView, false);
+    m_app->resize(1280, 800);
+    QCoreApplication::processEvents();
+    WindowSizeGuard::clearLog();
+
+    // The Lighting Studio out in its own window, as the user had it.
+    Monitor *studio = Monitor::instance();
+    QVERIFY(studio != nullptr);
+    int idx = -1;
+    for (int i = 0; i < tabs->count(); ++i)
+        if (tabs->widget(i) == studio || tabs->widget(i)->isAncestorOf(studio))
+            idx = i;
+    QVERIFY(idx >= 0);
+    m_app->slotDetachContext(idx);
+    QCoreApplication::processEvents();
+    QVERIFY(studio->window() != static_cast<QWidget *>(m_app));
+
+    studio->showStageOverview();
+    QCoreApplication::processEvents();
+    QDockWidget *rig = m_app->findChild<QDockWidget *>(QStringLiteral("rigOverviewDock"));
+    QVERIFY(rig != nullptr);
+    QVERIFY(QTest::qWaitForWindowExposed(rig));
+    QVERIFY(rig->isFloating());
+
+    // Moved about by its title bar, twice, over the main window and off it.
+    moveByTitleBar(rig, QPoint(-200, 120));
+    moveByTitleBar(rig, QPoint(300, -60));
+
+    // The main window still follows: by hand and through its platform window.
+    QStringList bad;
+    for (const QSize &size : { QSize(1500, 900), QSize(1000, 700), QSize(1280, 800) })
+    {
+        if (size.width() == 1000)
+            m_app->windowHandle()->resize(size);
+        else
+            m_app->resize(size);
+        QCoreApplication::processEvents();
+        bad << mainWindowProblems(m_app, QStringLiteral("Rig Overview moved, main window at %1x%2")
+                                  .arg(size.width()).arg(size.height()));
+        QCOMPARE(m_app->size(), size);
+    }
+    rig->close();
+    QCoreApplication::processEvents();
+    m_app->reattachAllContexts();
+    QCoreApplication::processEvents();
+    QVERIFY2(bad.isEmpty(), qPrintable(bad.join(QLatin1Char('\n'))));
+    // Nothing was stuck, so nothing healed: the fix, not the self-heal.
+    QVERIFY2(WindowSizeGuard::log().isEmpty(), qPrintable(WindowSizeGuard::log().join(QLatin1Char('\n'))));
+}
+
+void ViewLayout_Test::aStuckMainLayoutIsHealedOnTheNextResize()
+{
+    m_app->setWorkspaceView(App::ConsoleView, false);
+    m_app->resize(1280, 800);
+    QCoreApplication::processEvents();
+    WindowSizeGuard::clearLog();
+
+    /* A movable toolbar on the main window, pressed by its handle and
+       dragged, the release never arriving: Qt's main window layout keeps
+       the state it had when the drag began and ignores every resize until
+       the drop. */
+    QToolBar *bar = new QToolBar(QStringLiteral("Stuck test bar"), m_app);
+    bar->setObjectName(QStringLiteral("stuckTestBar"));
+    bar->addAction(QStringLiteral("x"));
+    m_app->addToolBar(Qt::TopToolBarArea, bar);
+    QCoreApplication::processEvents();
+    QVERIFY(mainLayoutProblem(m_app).isEmpty());
+    QStyleOptionToolBar opt;
+    opt.initFrom(bar);
+    opt.features = QStyleOptionToolBar::Movable;
+    opt.state |= QStyle::State_Horizontal;
+    const QRect handleRect = bar->style()->subElementRect(QStyle::SE_ToolBarHandle, &opt, bar);
+    QVERIFY2(handleRect.isValid(), "the toolbar has no handle to drag it by");
+    const QPoint handle = handleRect.center();
+    {
+        QMouseEvent press(QEvent::MouseButtonPress, QPointF(handle), QPointF(bar->mapToGlobal(handle)),
+                          Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+        QCoreApplication::sendEvent(bar, &press);
+    }
+    for (int i = 1; i <= 6; ++i)
+    {
+        QMouseEvent move(QEvent::MouseMove, QPointF(handle + QPoint(0, 40 * i)),
+                         QPointF(bar->mapToGlobal(handle + QPoint(0, 40 * i))),
+                         Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
+        QCoreApplication::sendEvent(bar, &move);
+    }
+    QCoreApplication::processEvents();
+    QVERIFY2(QWidget::mouseGrabber() == bar, "the toolbar drag didn't start");
+
+    // The fault: the window grows, its contents don't. Healing waits on the
+    // guard's timer, so look before the events run.
+    m_app->resize(1500, 900);
+    QVERIFY2(!mainLayoutProblem(m_app).isEmpty(), "the layout followed: the test no longer makes the fault");
+
+    // The self-heal finds it once the resize has settled.
+    QTRY_VERIFY2_WITH_TIMEOUT(mainLayoutProblem(m_app).isEmpty(), qPrintable(mainLayoutProblem(m_app)), 2000);
+    QCOMPARE(m_app->centralWidget()->width(), 1500);
+    QCOMPARE(m_app->statusBar()->geometry().bottom(), 899);
+    QCOMPARE(WindowSizeGuard::log().size(), 1);
+    QVERIFY2(WindowSizeGuard::log().first().contains(QStringLiteral("ended the drag of Stuck test bar"))
+             && !WindowSizeGuard::log().first().contains(QStringLiteral("STILL STUCK")),
+             qPrintable(WindowSizeGuard::log().first()));
+
+    // And it keeps following.
+    m_app->resize(1100, 750);
+    QCoreApplication::processEvents();
+    QVERIFY2(mainLayoutProblem(m_app).isEmpty(), qPrintable(mainLayoutProblem(m_app)));
+
+    // The report tells the layout's geometry, and that it healed.
+    QMenu *help = m_app->menuBar()->findChild<QMenu *>("helpMenu");
+    QAction *copy = nullptr;
+    for (QAction *a : help->findChild<QMenu *>("troubleshootingMenu")->actions())
+        if (a->objectName() == QStringLiteral("copyLayoutReport"))
+            copy = a;
+    QVERIFY(copy != nullptr);
+    copy->trigger();
+    const QString report = QGuiApplication::clipboard()->text();
+    QVERIFY2(report.contains(QStringLiteral("main window layout: follows the window")), qPrintable(report));
+    QVERIFY2(report.contains(QStringLiteral("layout geometry: ")), qPrintable(report));
+    QVERIFY2(report.contains(QStringLiteral("Self-heal, 1 time(s)")), qPrintable(report));
+
+    // The self-heal ended the drag; the button coming up after all does nothing.
+    QVERIFY(QWidget::mouseGrabber() == nullptr);
+    {
+        QMouseEvent release(QEvent::MouseButtonRelease, QPointF(handle), QPointF(bar->mapToGlobal(handle)),
+                            Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+        QCoreApplication::sendEvent(bar, &release);
+    }
+    m_app->removeToolBar(bar);
+    delete bar;
+    m_app->resize(1280, 800);
+    QCoreApplication::processEvents();
+    QVERIFY(mainLayoutProblem(m_app).isEmpty());
+    QCOMPARE(WindowSizeGuard::log().size(), 1);
+
+    /* The state u9 left: the Rig Overview made movable the way it was, and
+       moved by its title bar. Its drag ends but leaves the layout's saved
+       state behind; the self-heal clears it on the next resize. */
+    WindowSizeGuard::clearLog();
+    Monitor *studio = Monitor::instance();
+    QVERIFY(studio != nullptr);
+    studio->showStageOverview();
+    QCoreApplication::processEvents();
+    QDockWidget *rig = m_app->findChild<QDockWidget *>(QStringLiteral("rigOverviewDock"));
+    QVERIFY(rig != nullptr);
+    QVERIFY(QTest::qWaitForWindowExposed(rig));
+    rig->setFeatures(QDockWidget::DockWidgetClosable | QDockWidget::DockWidgetMovable);
+    moveByTitleBar(rig, QPoint(-150, 90));
+    m_app->resize(1500, 900);
+    QVERIFY2(!mainLayoutProblem(m_app).isEmpty(), "the layout followed: the test no longer makes the u9 fault");
+    QTRY_VERIFY2_WITH_TIMEOUT(mainLayoutProblem(m_app).isEmpty(), qPrintable(mainLayoutProblem(m_app)), 2000);
+    QCOMPARE(m_app->centralWidget()->width(), 1500);
+    QCOMPARE(WindowSizeGuard::log().size(), 1);
+    QVERIFY2(WindowSizeGuard::log().first().contains(QStringLiteral("restored its state"))
+             && !WindowSizeGuard::log().first().contains(QStringLiteral("STILL STUCK")),
+             qPrintable(WindowSizeGuard::log().first()));
+    m_app->resize(1280, 800);
+    QCoreApplication::processEvents();
+    QVERIFY(mainLayoutProblem(m_app).isEmpty());
+    rig->close();
+    QCoreApplication::processEvents();
+    WindowSizeGuard::clearLog();
 }
 
 static void pick(FunctionManager *fm, quint32 fid)

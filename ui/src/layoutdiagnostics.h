@@ -26,6 +26,7 @@
 
 #include "qlcui_export.h"
 
+class QMainWindow;
 class QWidget;
 class QWindow;
 
@@ -45,6 +46,15 @@ class QWindow;
  * from the widget's, it re-syncs the widget to the platform window, forces a
  * full repaint and logs it (qWarning and log()), so the next layout report
  * says whether it happened.
+ *
+ * On a main window it also checks that the window's own layout followed
+ * (u9): Qt's QMainWindowLayout ignores every resize while it holds the
+ * state it saved as a toolbar or dock drag began, and a drag that never
+ * finishes that cleanly (a release lost, or a floating dock the layout
+ * never held) leaves the central area and status bar where they were for
+ * good. Found stuck after a layout pass, it ends a drag still holding the
+ * mouse, then restores the layout's own state (which clears the saved one)
+ * and lays it out again, and logs it.
  */
 class QLC_UI_EXPORT WindowSizeGuard final : public QObject
 {
@@ -54,7 +64,8 @@ public:
     /** Watch @p topLevel (idempotent). The guard is the widget's child. */
     static WindowSizeGuard *watch(QWidget *topLevel);
 
-    /** Compare now, and heal if they differ. True if it healed. */
+    /** Compare now, and heal if they differ or the main window's layout is
+     *  stuck. True if it healed. */
     bool checkNow();
 
     /** What every guard healed, newest last (at most 50 lines). */
@@ -69,6 +80,9 @@ private:
     explicit WindowSizeGuard(QWidget *topLevel);
     void attachToWindow();
     void scheduleCheck();
+    bool healMainLayout(QMainWindow *mw);
+    void addToLog(const QString &line);
+    void repaintAll();
 
     QPointer<QWidget> m_widget;
     QPointer<QWindow> m_window;
@@ -83,6 +97,11 @@ namespace LayoutDiagnostics
      *  viewports in it, detached windows, the screens and their pixel
      *  ratios, the Qt version -- and the self-heal log. Plain text. */
     QLC_UI_EXPORT QString report(QWidget *mainWindow);
+
+    /** What of @p mw's own layout doesn't follow the window -- the status bar
+     *  off the bottom edge or not its width, the central area short of the
+     *  right edge or the status bar -- or empty if it all does (u9). */
+    QLC_UI_EXPORT QString mainLayoutProblem(const QMainWindow *mw);
 }
 
 /** @} */
