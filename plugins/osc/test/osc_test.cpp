@@ -252,4 +252,239 @@ void OSC_Test::aLoopbackSenderDrivesTheInput()
     QCOMPARE(spy.first().at(4).toString(), QString("/1/go"));
 }
 
+namespace
+{
+    float floatAt(const QByteArray &d, int at)
+    {
+        const quint32 bits = qFromBigEndian<quint32>(d.constData() + at);
+        float f;
+        memcpy(&f, &bits, 4);
+        return f;
+    }
+
+    /* The next datagram on @p rx, or an empty one when none comes. A send
+       to 127.0.0.1 has arrived by the time writeDatagram() returns on every
+       OS this runs on; the wait is only a bound. */
+    QByteArray nextDatagram(QUdpSocket &rx, int waitMs = 3000)
+    {
+        if (!rx.hasPendingDatagrams() && !rx.waitForReadyRead(waitMs))
+            return QByteArray();
+        QByteArray d(int(rx.pendingDatagramSize()), '\0');
+        rx.readDatagram(d.data(), d.size());
+        return d;
+    }
+
+    /* The one message in @p d, as the input would read it */
+    bool parseOne(const QByteArray &d, QString &path, QByteArray &values)
+    {
+        const QList<QPair<QString, QByteArray> > msgs = OSCPacketizer().parsePacket(d);
+        if (msgs.count() != 1)
+            return false;
+        path = msgs.first().first;
+        values = msgs.first().second;
+        return true;
+    }
+}
+
+void OSC_Test::dmxAndGenericMessageLayout()
+{
+    OSCPacketizer p;
+    QByteArray d;
+
+    // "/1/dmx/23" is 9 bytes: a NUL and padding to 12, ",f" to 4, a float
+    p.setupOSCDmx(d, 1, 23, 255);
+    QCOMPARE(d.size(), 20);
+    QCOMPARE(d.left(12), QByteArray("/1/dmx/23\0\0\0", 12));
+    QCOMPARE(d.mid(12, 4), QByteArray(",f\0\0", 4));
+    QCOMPARE(floatAt(d, 16), 1.0f);
+    // A path that fills its 4 bytes still gets its NUL: 4 more
+    p.setupOSCDmx(d, 0, 0, 51);
+    QCOMPARE(d.left(12), QByteArray("/0/dmx/0\0\0\0\0", 12));
+    QCOMPARE(floatAt(d, 16), 0.2f);
+
+    QString path;
+    QByteArray values;
+    QVERIFY(parseOne(d, path, values));
+    QCOMPARE(path, QString("/0/dmx/0"));
+    QCOMPARE(values, QByteArray(1, char(51)));
+
+    // Generic: several floats, the type tags padded too
+    QString gpath("/xy");
+    QByteArray gvals = QByteArray::fromHex("00ff");
+    p.setupOSCGeneric(d, gpath, "ff", gvals);
+    QCOMPARE(d.size(), 4 + 4 + 8);
+    QCOMPARE(d.left(8), QByteArray("/xy\0,ff\0", 8));
+    QCOMPARE(floatAt(d, 8), 0.0f);
+    QCOMPARE(floatAt(d, 12), 1.0f);
+    QVERIFY(parseOne(d, path, values));
+    QCOMPARE(path, QString("/xy"));
+    QCOMPARE(values, gvals);
+
+    QString none;
+    p.setupOSCGeneric(d, none, "f", gvals);
+    QVERIFY(d.isEmpty());
+}
+
+void OSC_Test::universeDefaultsAndTheirReturns()
+{
+    OSCController c(QStringLiteral("127.0.0.1"), OSCController::Output, 3);
+    QCOMPARE(c.line(), 3u);
+    QCOMPARE(c.getNetworkIP(), QHostAddress(QHostAddress::LocalHost));
+    c.addUniverse(2, OSCController::Output);
+    UniverseInfo *info = c.getUniverseInfo(2);
+    QVERIFY(info != nullptr);
+    QCOMPARE(int(info->inputPort), 7702);
+    QCOMPARE(int(info->outputPort), 9002);
+    QCOMPARE(int(info->feedbackPort), 9002);
+    QCOMPARE(info->outputAddress, QHostAddress(QHostAddress::LocalHost));
+    QCOMPARE(info->feedbackAddress, QHostAddress(QHostAddress::LocalHost));
+    QVERIFY(info->inputSocket.isNull());                 // an output listens to nothing
+    QCOMPARE(int(c.type()), int(OSCController::Output));
+
+    /* The setters say whether the value is the default: the plugin then
+       stores no parameter. */
+    QCOMPARE(c.setOutputPort(2, 9002), true);
+    QCOMPARE(c.setOutputPort(2, 9100), false);
+    QCOMPARE(c.setFeedbackPort(2, 9002), true);
+    QCOMPARE(c.setFeedbackPort(2, 9101), false);
+    QCOMPARE(c.setOutputIPAddress(2, "127.0.0.1"), true);
+    QCOMPARE(c.setOutputIPAddress(2, "10.0.0.5"), false);
+    QCOMPARE(c.getUniverseInfo(2)->outputAddress, QHostAddress("10.0.0.5"));
+    QCOMPARE(c.setFeedbackIPAddress(2, "127.0.0.1"), true);
+    QCOMPARE(c.setFeedbackIPAddress(2, "10.0.0.6"), false);
+    QCOMPARE(int(c.getUniverseInfo(2)->outputPort), 9100);
+    QCOMPARE(int(c.getUniverseInfo(2)->feedbackPort), 9101);
+
+    // Not ours
+    QCOMPARE(c.setOutputPort(9, 9009), false);
+    QCOMPARE(c.setFeedbackPort(9, 9009), false);
+    QCOMPARE(c.setOutputIPAddress(9, "127.0.0.1"), false);
+    QCOMPARE(c.setFeedbackIPAddress(9, "127.0.0.1"), false);
+    QCOMPARE(c.setInputPort(9, 7709), false);
+    QVERIFY(c.getUniverseInfo(9) == nullptr);
+
+    // On a real address the default target is nobody until set
+    OSCController lan(QStringLiteral("172.18.2.219"), OSCController::Output, 0);
+    lan.addUniverse(0, OSCController::Output);
+    QVERIFY(lan.getUniverseInfo(0)->outputAddress.isNull());
+    QCOMPARE(lan.setOutputIPAddress(0, ""), true);
+    QCOMPARE(lan.setOutputIPAddress(0, "172.18.2.10"), false);
+
+    c.removeUniverse(2, OSCController::Output);
+    QCOMPARE(c.universesList(), QList<quint32>());
+}
+
+void OSC_Test::onlyChangedChannelsAreSent()
+{
+    QUdpSocket rx;
+    QVERIFY(rx.bind(QHostAddress::LocalHost, 0));
+    OSCController c(QStringLiteral("127.0.0.1"), OSCController::Output, 0);
+    c.addUniverse(1, OSCController::Output);
+    c.setOutputPort(1, rx.localPort());
+
+    QByteArray dmx(512, '\0');
+    dmx[0] = char(255);
+    dmx[9] = char(51);
+    c.sendDmx(1, dmx);
+    QString path;
+    QByteArray values;
+    QVERIFY(parseOne(nextDatagram(rx), path, values));
+    QCOMPARE(path, QString("/1/dmx/0"));
+    QCOMPARE(values, QByteArray(1, char(255)));
+    QVERIFY(parseOne(nextDatagram(rx), path, values));
+    QCOMPARE(path, QString("/1/dmx/9"));
+    QCOMPARE(values, QByteArray(1, char(51)));
+    QCOMPARE(c.getPacketSentNumber(), quint64(2));
+
+    // The same frame again: nothing; one channel back to 0: that one
+    c.sendDmx(1, dmx);
+    dmx[9] = '\0';
+    c.sendDmx(1, dmx);
+    QVERIFY(parseOne(nextDatagram(rx), path, values));
+    QCOMPARE(path, QString("/1/dmx/9"));
+    QCOMPARE(values, QByteArray(1, '\0'));
+    QVERIFY(nextDatagram(rx, 50).isEmpty());
+    QCOMPARE(c.getPacketSentNumber(), quint64(3));
+
+    // Held off the rig network: nothing
+    c.m_held.store(true);
+    dmx[1] = char(1);
+    c.sendDmx(1, dmx);
+    QVERIFY(nextDatagram(rx, 50).isEmpty());
+}
+
+void OSC_Test::feedbackKeepsMultiValuePaths()
+{
+    QUdpSocket rx;
+    QVERIFY(rx.bind(QHostAddress::LocalHost, 0));
+    OSCController c(QStringLiteral("127.0.0.1"), OSCController::Input, 0);
+    c.addUniverse(0, OSCController::Input);
+    c.setInputPort(0, freeUdpPort());
+    c.setFeedbackPort(0, rx.localPort());
+    QString path;
+    QByteArray values;
+
+    // A single value
+    c.sendFeedback(0, 0, 255, "/1/fader1");
+    QVERIFY(parseOne(nextDatagram(rx), path, values));
+    QCOMPARE(path, QString("/1/fader1"));
+    QCOMPARE(values, QByteArray(1, char(255)));
+
+    /* "/xy_1" is the second value of "/xy": the message carries both, the
+       other one as last sent */
+    c.sendFeedback(0, 0, 51, "/1/xy_1");
+    QVERIFY(parseOne(nextDatagram(rx), path, values));
+    QCOMPARE(path, QString("/1/xy"));
+    QCOMPARE(values, QByteArray::fromHex("0033"));
+    c.sendFeedback(0, 0, 255, "/1/xy_0");
+    QVERIFY(parseOne(nextDatagram(rx), path, values));
+    QCOMPARE(path, QString("/1/xy"));
+    QCOMPARE(values, QByteArray::fromHex("ff33"));
+
+    // No key: the path the channel's hash came from
+    const quint16 hash = c.getHash("/2/push3");
+    c.sendFeedback(0, hash, 255, QString());
+    QVERIFY(parseOne(nextDatagram(rx), path, values));
+    QCOMPARE(path, QString("/2/push3"));
+
+    // No key and no such hash: no message at all
+    const quint64 sent = c.getPacketSentNumber();
+    c.sendFeedback(0, quint16(hash + 1), 255, QString());
+    QVERIFY(nextDatagram(rx, 50).isEmpty());
+    QCOMPARE(c.getPacketSentNumber(), sent);
+}
+
+void OSC_Test::multiValueInputIsSplitPerValue()
+{
+    OSCController c(QStringLiteral("127.0.0.1"), OSCController::Input, 4);
+    c.addUniverse(0, OSCController::Input);
+    c.setInputPort(0, freeUdpPort());
+    QSignalSpy spy(&c, SIGNAL(valueChanged(quint32,quint32,quint32,uchar,QString)));
+    UniverseInfo *info = c.getUniverseInfo(0);
+
+    // Two floats on one path: two values, "/xy_0" and "/xy_1"
+    QByteArray msg = oscString("/xy") + oscString(",ff") + be32(0) + be32(0x3f800000);
+    c.handlePacket(info->inputSocket.data(), msg, QHostAddress::LocalHost);
+    QCOMPARE(spy.count(), 2);
+    QCOMPARE(spy.at(0).at(0).toUInt(), 0u);
+    QCOMPARE(spy.at(0).at(1).toUInt(), 4u);
+    QCOMPARE(spy.at(0).at(4).toString(), QString("/xy_0"));
+    QCOMPARE(int(spy.at(0).at(3).value<uchar>()), 0);
+    QCOMPARE(spy.at(1).at(4).toString(), QString("/xy_1"));
+    QCOMPARE(int(spy.at(1).at(3).value<uchar>()), 255);
+    QCOMPARE(spy.at(1).at(2).toUInt(), uint(c.getHash("/xy_1")));
+    QCOMPARE(info->multipartCache.value("/xy"), QByteArray::fromHex("00ff"));
+    QCOMPARE(c.getPacketReceivedNumber(), quint64(1));
+
+    // A socket that isn't this universe's: counted, not delivered
+    QUdpSocket other;
+    c.handlePacket(&other, floatMessage("/1/go", 1.0f), QHostAddress::LocalHost);
+    QCOMPARE(spy.count(), 2);
+    QCOMPARE(c.getPacketReceivedNumber(), quint64(2));
+
+    // A message with no values: nothing
+    c.handlePacket(info->inputSocket.data(), oscString("/1/go") + oscString(","), QHostAddress::LocalHost);
+    QCOMPARE(spy.count(), 2);
+}
+
 QTEST_GUILESS_MAIN(OSC_Test)

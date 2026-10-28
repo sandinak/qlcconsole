@@ -41,6 +41,14 @@ private slots:
     void theInputListensOnlyOnItsInterface();
     void manyPathsDoNotGrowMemoryWithoutBound();
     void aLoopbackSenderDrivesTheInput();
+
+    /* What it sends and where (coverage campaign): to sockets of the test's
+       own on 127.0.0.1, nothing else. */
+    void dmxAndGenericMessageLayout();
+    void universeDefaultsAndTheirReturns();
+    void onlyChangedChannelsAreSent();
+    void feedbackKeepsMultiValuePaths();
+    void multiValueInputIsSplitPerValue();
 };
 
 #endif
