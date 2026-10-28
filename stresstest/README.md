@@ -214,6 +214,28 @@ into the real one). The script header has the details.
   in the runner's own session: a headless soak, e.g. when the Task Scheduler
   refuses interactive tasks.
 
+## 4. Performance campaign — `perf_sweep.py`, `wire/`, `m2leak/`
+
+The tools behind [docs/performance.md](../docs/performance.md):
+
+- `perf_sweep.py`: sweeps of `qlcstress engine --mode realtime` (universes,
+  fixtures per universe, one function type at a time) into one
+  `results.csv`; `--only-first N` runs N steps per sweep as a smoke test.
+- `wire/wire_sweep.py`, `wire/wire_stats.py`, `wire/sniff_lo.py`: Art-Net
+  output on loopback, captured and checked per universe;
+  `wire/run_netns.sh` runs a command in a loopback-only network namespace
+  (Linux).
+- `wire/io_load.py`: the full app under Art-Net, OSC and web input load.
+- `m2leak/`: open / Build edits / Run / close cycles of the real app under
+  ASan/LSan (not built by default; see its CMakeLists.txt), and
+  `lsan_parse.py` for bytes per cycle.
+- `rt_ab.sh`: SCHED_FIFO on and off at the same load (Linux).
+- `chain_linux.sh`, `chain_mac.sh`, `daynice.sh`: the whole campaign on one
+  host, in order, under `~/perf`.
+
+`tools/perf/extract.py` and `tools/perf/plot.py` turn the results into the
+page's data and charts.
+
 ## Sanitizers: known host limitation (macOS 26.2)
 
 On this host (macOS 26.2 beta, arm64) the Apple-clang **ASan runtime

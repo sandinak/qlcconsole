@@ -29,6 +29,13 @@ lists them all.
 | [Keyboard and mouse](features/shortcuts.md) · [Troubleshooting](features/troubleshooting.md) | Every shortcut; what to check when something isn't working |
 | [Generator API](../EFFECTSCRIPT_API.md) | Writing your own effects |
 
+## Performance
+
+[**Performance**](performance.md) — how much one computer can drive: the
+safe operating envelope on a Raspberry Pi 5, a Linux i7 and an Apple M4,
+Art-Net output rates, long runs and memory, with charts, the method and
+the data ([`perf-data/`](perf-data/)) to reproduce them.
+
 ## The course
 
 [**docs/course/**](course/README.md) — *Lighting a show choir with the
