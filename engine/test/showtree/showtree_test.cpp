@@ -9101,3 +9101,107 @@ void ShowTree_Test::importAndConvertKeepTheSkip()
     made = qobject_cast<Chaser *>(m_doc->function(list->chaser));
     QVERIFY(made != nullptr && made->isStepSkipped(1));
 }
+
+/* Between two values tracked in from different earlier cues, the later
+   cue's wins -- not the lower layer that happens to hold the older one. */
+void ShowTree_Test::theLaterTrackedValueWinsOverAnEarlierOne()
+{
+    FixtureGroup *all = group("All", { m_fixtures[0], m_fixtures[1], m_fixtures[2], m_fixtures[3] });
+    FixtureGroup *one = group("One", { m_fixtures[2] });
+    const quint32 full = dimmer(255, "Full");
+    const quint32 half = dimmer(127, "Half");
+    const quint32 low = dimmer(40, "Low");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 listId = st->addCueList(st->addProduction("P"), "Tracked");     // Tracking
+    QList<quint32> q;
+    for (int i = 0; i < 3; ++i)
+        q << st->addCue(listId, i - 1, QString("Q%1").arg(i + 1));
+    // Q1: All half, then One low (the lower layer); Q2: All full; Q3: nothing.
+    QVERIFY(st->setLayerLook(q[0], st->addLayer(q[0], groupTarget(all->id())), st->lookForPalette(half)));
+    QVERIFY(st->setLayerLook(q[0], st->addLayer(q[0], groupTarget(one->id())), st->lookForPalette(low)));
+    QVERIFY(st->setLayerLook(q[1], st->addLayer(q[1], groupTarget(all->id())), st->lookForPalette(full)));
+
+    Chaser *ch = qobject_cast<Chaser *>(m_doc->function(st->cueList(listId)->chaser));
+    QVERIFY(ch != nullptr);
+    const QList<QHash<quint32, uchar>> played = playAll(ch);
+    QCOMPARE(played.count(), 3);
+    QCOMPARE(int(played[0].value(2)), 40);      // Q1: One's own low
+    QCOMPARE(int(played[1].value(2)), 255);     // Q2: this cue's All
+    // Q3: All's full (from Q2) tracked over One's low (from Q1).
+    QCOMPARE(int(played[2].value(0)), 255);
+    QCOMPARE(int(played[2].value(2)), 255);
+}
+
+/* previewChanged() says when what the preview plays changes -- and only
+   then: not for the same cue again, but for an edit that swaps the scene
+   while it keeps playing. */
+void ShowTree_Test::previewChangedOnlyWhenWhatPlaysChanges()
+{
+    FixtureGroup *a = group("Towers", { m_fixtures[0] });
+    const quint32 d50 = dimmer(127, "Half");
+    const quint32 d100 = dimmer(255, "Full");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 listId = st->addCueList(st->addProduction("P"), "L", ListMode::NonTracking);
+    const quint32 c1 = st->addCue(listId, -1, "One");
+    const quint32 l1 = st->addLayer(c1, groupTarget(a->id()));
+    QVERIFY(st->setLayerLook(c1, l1, st->lookForPalette(d50)));
+
+    QSignalSpy changed(st, &ShowTreeController::previewChanged);
+    st->previewCue(c1);
+    QCOMPARE(changed.count(), 1);
+    const quint32 old = st->previewFunctions().first();
+    st->previewCue(c1);                          // the same: nothing to say
+    QCOMPARE(changed.count(), 1);
+
+    // An edit bakes a new scene: still Playing, but something else plays.
+    QVERIFY(st->setLayerLook(c1, l1, st->lookForPalette(d100)));
+    QCOMPARE(int(st->previewState()), int(ShowTreeController::PreviewState::Playing));
+    QVERIFY(!st->previewFunctions().contains(old));
+    QCOMPARE(changed.count(), 2);
+
+    st->stopPreview();
+    QCOMPARE(changed.count(), 3);
+    st->stopPreview();
+    QCOMPARE(changed.count(), 3);
+}
+
+void ShowTree_Test::recordSourceStrings()
+{
+    using RS = ShowTreeController::RecordSource;
+    const QList<QPair<QString, RS>> words = {
+        { "selected", RS::Selected }, { "sel", RS::Selected },
+        { "running", RS::Running }, { "run", RS::Running }, { " Running ", RS::Running },
+        { "lit", RS::Lit }, { "everything", RS::Lit }, { "all", RS::Lit },
+    };
+    for (const auto &w : words)
+    {
+        RS src = w.second == RS::Selected ? RS::Lit : RS::Selected;
+        QVERIFY2(ShowTreeController::stringToRecordSource(w.first, &src), qPrintable(w.first));
+        QCOMPARE(int(src), int(w.second));
+        QVERIFY(ShowTreeController::stringToRecordSource(w.first, nullptr));
+    }
+    RS src = RS::Running;
+    QVERIFY(!ShowTreeController::stringToRecordSource("bogus", &src));
+    QCOMPARE(int(src), int(RS::Running));       // untouched
+    QVERIFY(!ShowTreeController::stringToRecordSource(QString(), nullptr));
+    // And back: each one's word reads as itself.
+    for (RS r : { RS::Selected, RS::Running, RS::Lit })
+    {
+        QVERIFY(ShowTreeController::stringToRecordSource(ShowTreeController::recordSourceToString(r), &src));
+        QCOMPARE(int(src), int(r));
+    }
+    QCOMPARE(ShowTreeController::recordSourceToString(RS::Running), QString("running"));
+}
+
+void ShowTree_Test::effectKindIsForEffectsOnly()
+{
+    ShowTreeController *st = m_doc->showTree();
+    QVERIFY(st->effectKind(nullptr).isEmpty());
+    QLCPalette dim(QLCPalette::Dimmer, m_doc);
+    QVERIFY(st->effectKind(&dim).isEmpty());
+    QLCPalette colour(QLCPalette::Color, m_doc);
+    QVERIFY(st->effectKind(&colour).isEmpty());
+    // An effect with no script to say what it moves: Other.
+    QLCPalette effect(QLCPalette::Effect, m_doc);
+    QCOMPARE(st->effectKind(&effect), QString("Other"));
+}

@@ -632,6 +632,21 @@ void ShowTreePlay_Test::subCuesBakeToAHeldChaser()
     const quint32 before = inner->id();
     st->bake();
     QCOMPARE(qobject_cast<Chaser *>(m_doc->function(st->cueList(ids[0])->chaser))->steps().at(1).fid, before);
+
+    // A note goes on the step: a sub-cue's on the Sub GO chaser's, a cue's
+    // on the list's.
+    ShowTree::Cue sub = *st->cue(ids[4]);
+    sub.note = "On the downbeat";
+    QVERIFY(st->setCue(sub));
+    ShowTree::Cue first = *st->cue(ids[1]);
+    first.note = "House to half";
+    QVERIFY(st->setCue(first));
+    Chaser *song2 = qobject_cast<Chaser *>(m_doc->function(st->cueList(ids[0])->chaser));
+    Chaser *subs2 = qobject_cast<Chaser *>(m_doc->function(st->cueList(st->subCueList(ids[2]))->chaser));
+    QVERIFY(song2 != nullptr && subs2 != nullptr);
+    QCOMPARE(subs2->steps().at(0).note, QString("On the downbeat"));
+    QVERIFY(subs2->steps().at(1).note.isEmpty());
+    QCOMPARE(song2->steps().at(0).note, QString("House to half"));
 }
 
 void ShowTreePlay_Test::subGoPlaysThemOnTheRig()

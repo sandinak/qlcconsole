@@ -234,6 +234,15 @@ private slots:
     void textColoursAnOlderReaderIgnores();
     void textColourTyped();
     void textColoursAreMadeReadable();
+    // Mutation gaps (2026-10-28)
+    /** Between two tracked values on a fixture, the later cue's wins. */
+    void theLaterTrackedValueWinsOverAnEarlierOne();
+    /** previewChanged() fires when what the preview plays changes, only. */
+    void previewChangedOnlyWhenWhatPlaysChanges();
+    /** Every word for a record source parses; nonsense doesn't. */
+    void recordSourceStrings();
+    /** effectKind() is empty for a non-effect, "Other" for a bare effect. */
+    void effectKindIsForEffectsOnly();
 
 private:
     /** What a dry run of the import on a show file found (importARealShow). */
