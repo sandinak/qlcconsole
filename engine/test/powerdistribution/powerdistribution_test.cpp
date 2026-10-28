@@ -28,6 +28,9 @@
 #include "qlcchannel.h"
 #include "fixture.h"
 #include "doc.h"
+#include "venue.h"
+
+#include <QTemporaryDir>
 
 /* A definition of @p type: @p heads heads of @p presets each, after
    @p master (a master dimmer, when not Custom); rated @p watts (0: none). */
@@ -359,6 +362,128 @@ void PowerDistribution_Test::theLoadGroupsByTypeBiggestFirst()
     QCOMPARE(rows.at(1).watts, 180.0);
     QCOMPARE(rows.at(1).ratedWatts, 100.0);
     QCOMPARE(rows.at(1).basis, PowerEstimator::Rated);
+}
+
+static PowerSource distro()
+{
+    PowerSource src;
+    src.name = "House Distro";
+    src.voltage = 208.0;
+    PowerCircuit c1;
+    c1.name = "SR Circuit";
+    c1.ratedAmps = 20.0;
+    c1.fixtures << 1 << 2;
+    PowerCircuit c2;
+    c2.name = "SL Circuit";
+    c2.ratedAmps = 30.0;
+    c2.fixtures << 3;
+    src.circuits << c1 << c2;
+    return src;
+}
+
+void PowerDistribution_Test::venueFileCarriesCircuitsNotFixtures()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString path = dir.filePath("house.venue");
+
+    Doc house(this);
+    house.powerDistribution()->sources().append(distro());
+    QVERIFY(Venue::exportToFile(&house, path, Venue::AllSections));
+
+    QFile f(path);
+    QVERIFY(f.open(QIODevice::ReadOnly));
+    const QByteArray xml = f.readAll();
+    f.close();
+    QVERIFY(xml.contains("<Venue Version=\"1\">"));
+    QVERIFY(xml.contains("House Distro"));
+    QVERIFY(xml.contains("SL Circuit"));
+    QCOMPARE(Venue::sectionsInFile(path), QStringList({ "Power distribution" }));
+
+    /* Into another show that has its own distro with fixtures on it: the
+       venue's circuits replace it, and none of the venue show's fixture ids
+       come along (they mean other fixtures here). */
+    Doc show(this);
+    PowerSource own;
+    own.name = "Tour Distro";
+    own.circuits << PowerCircuit();
+    own.circuits[0].fixtures << 7;
+    show.powerDistribution()->sources().append(own);
+    show.resetModified();
+    QVERIFY(Venue::importFromFile(&show, path));
+    QVERIFY(show.isModified());
+    QList<PowerSource> &got = show.powerDistribution()->sources();
+    QCOMPARE(got.count(), 1);
+    QCOMPARE(got[0].name, QString("House Distro"));
+    QCOMPARE(got[0].voltage, 208.0);
+    QCOMPARE(got[0].circuits.count(), 2);
+    QCOMPARE(got[0].circuits[0].name, QString("SR Circuit"));
+    QCOMPARE(got[0].circuits[0].ratedAmps, 20.0);
+    QCOMPARE(got[0].circuits[1].ratedAmps, 30.0);
+    QVERIFY(got[0].circuits[0].fixtures.isEmpty());
+    QVERIFY(got[0].circuits[1].fixtures.isEmpty());
+
+    // No sections: a venue file with nothing in it, which applies nothing
+    QVERIFY(Venue::exportToFile(&house, path, 0));
+    QVERIFY(Venue::sectionsInFile(path).isEmpty());
+    show.resetModified();
+    QVERIFY(!Venue::importFromFile(&show, path));
+    QVERIFY(!show.isModified());
+    QCOMPARE(show.powerDistribution()->sources().count(), 1);
+}
+
+void PowerDistribution_Test::venueFileRefusesWhatIsNotAVenue()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    Doc show(this);
+    show.powerDistribution()->sources().append(distro());
+    show.resetModified();
+
+    QVERIFY(!Venue::exportToFile(NULL, dir.filePath("x.venue"), Venue::AllSections));
+    QVERIFY(!Venue::importFromFile(NULL, dir.filePath("x.venue")));
+
+    // Nowhere to write, nothing to read
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression("cannot write venue file"));
+    QVERIFY(!Venue::exportToFile(&show, dir.filePath("no/such/dir/x.venue"), Venue::AllSections));
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression("cannot read venue file"));
+    QVERIFY(!Venue::importFromFile(&show, dir.filePath("missing.venue")));
+    QVERIFY(Venue::sectionsInFile(dir.filePath("missing.venue")).isEmpty());
+
+    // A show file is not a venue: nothing replaced
+    const QString notVenue = dir.filePath("show.venue");
+    QFile f(notVenue);
+    QVERIFY(f.open(QIODevice::WriteOnly));
+    f.write("<?xml version=\"1.0\"?><Workspace><PowerDistribution><PowerSource Name=\"X\"/>"
+            "</PowerDistribution></Workspace>");
+    f.close();
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression("is not a venue file"));
+    QVERIFY(!Venue::importFromFile(&show, notVenue));
+    QVERIFY(Venue::sectionsInFile(notVenue).isEmpty());
+    QVERIFY(!show.isModified());
+    QCOMPARE(show.powerDistribution()->sources().count(), 1);
+    QCOMPARE(show.powerDistribution()->sources()[0].name, QString("House Distro"));
+
+    // A venue with a section this version doesn't know: skipped, the rest read
+    Doc later(this);
+    PowerSource l = distro();
+    l.name = "Later";
+    later.powerDistribution()->sources().append(l);
+    QVERIFY(Venue::exportToFile(&later, notVenue, Venue::AllSections));
+    QVERIFY(f.open(QIODevice::ReadOnly));
+    QByteArray xml = f.readAll();
+    f.close();
+    const int at = xml.indexOf("<PowerDistribution");
+    QVERIFY(at > 0);
+    xml.insert(at, "<Trusses><Truss Name=\"Upstage\"/></Trusses>");
+    QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    f.write(xml);
+    f.close();
+    QCOMPARE(Venue::sectionsInFile(notVenue), QStringList({ "Power distribution" }));
+    QVERIFY(Venue::importFromFile(&show, notVenue));
+    QCOMPARE(show.powerDistribution()->sources().count(), 1);
+    QCOMPARE(show.powerDistribution()->sources()[0].name, QString("Later"));
+    QCOMPARE(show.powerDistribution()->sources()[0].circuits.count(), 2);
 }
 
 QTEST_MAIN(PowerDistribution_Test)

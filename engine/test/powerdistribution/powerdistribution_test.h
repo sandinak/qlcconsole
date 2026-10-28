@@ -38,6 +38,11 @@ private slots:
     void guessesForMoversDimmerPacksAndUnlitFixtures();
     void aRatedFixtureScalesWithItsLevel();
     void theLoadGroupsByTypeBiggestFirst();
+
+    /* The .venue file (Venue::exportToFile/importFromFile/sectionsInFile):
+       the circuits travel, this show's fixture assignments don't. */
+    void venueFileCarriesCircuitsNotFixtures();
+    void venueFileRefusesWhatIsNotAVenue();
 };
 
 #endif
