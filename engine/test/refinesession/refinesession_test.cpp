@@ -61,7 +61,7 @@ const int kChannels = 7;   // pan, pan fine, tilt, tilt fine, dimmer, zoom, focu
 
 /* A 540/270 spot with 16-bit pan and tilt, a dimmer, a 10-40 degree zoom and
    a focus channel, placed at (x, 2 m), hung at 5 m. */
-Fixture *makeSpot(Doc *doc, const QString &name, float x)
+Fixture *makeSpot(Doc *doc, const QString &name, float x, int panMax = 540)
 {
     QLCFixtureDef *def = new QLCFixtureDef();
     def->setManufacturer("Test"); def->setModel("Refine Spot " + name);
@@ -92,7 +92,7 @@ Fixture *makeSpot(Doc *doc, const QString &name, float x)
         head.addChannel(k);
     }
     QLCPhysical ph;
-    ph.setFocusPanMax(540);
+    ph.setFocusPanMax(panMax);
     ph.setFocusTiltMax(270);
     ph.setLensDegreesMin(10.0);
     ph.setLensDegreesMax(40.0);
@@ -151,6 +151,88 @@ Look lookOf(const QString &key, const QList<quint32> &palettes)
     l.key = key;
     l.palettes = palettes;
     return l;
+}
+
+/* A light whose focus is its first channel, then a dimmer, at @p address. */
+Fixture *makeFocusFirst(Doc *doc, const QString &name, quint32 address)
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test"); def->setModel("Refine Focus First");
+    def->setType(QLCFixtureDef::MovingHead);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("2ch");
+    QLCChannel *focus = new QLCChannel();
+    focus->setName("Focus");
+    focus->setGroup(QLCChannel::Beam);
+    focus->setPreset(QLCChannel::BeamFocusNearFar);
+    def->addChannel(focus);
+    mode->insertChannel(focus, 0);
+    QLCChannel *dim = new QLCChannel();
+    dim->setName("Dimmer");
+    dim->setGroup(QLCChannel::Intensity);
+    def->addChannel(dim);
+    mode->insertChannel(dim, 1);
+    QLCFixtureHead head;
+    head.addChannel(1);
+    mode->insertHead(-1, head);
+    def->addMode(mode);
+
+    Fixture *fxi = new Fixture(doc);
+    fxi->setName(name);
+    fxi->setFixtureDefinition(def, mode);
+    fxi->setUniverse(0);
+    fxi->setAddress(address);
+    doc->addFixture(fxi);
+    return fxi;
+}
+
+quint32 addDimmerPalette(Doc *doc, const QString &name, int value)
+{
+    QLCPalette *p = new QLCPalette(QLCPalette::Dimmer);
+    p->setName(name);
+    p->setValue(value);
+    doc->addPalette(p);
+    return p->id();
+}
+
+quint32 addColourPalette(Doc *doc, const QString &name, const QColor &colour)
+{
+    QLCPalette *p = new QLCPalette(QLCPalette::Color);
+    p->setName(name);
+    p->setValue(colour.name());
+    doc->addPalette(p);
+    return p->id();
+}
+
+/* A PanTilt palette fanned linearly across the rig. */
+QLCPalette *addFannedPosition(Doc *doc, int pan, int tilt, QLCPalette::FanningLayout layout,
+                              int amount, int fanBy)
+{
+    QLCPalette *p = new QLCPalette(QLCPalette::PanTilt);
+    p->setName("Fan");
+    p->setValues({ pan, tilt });
+    p->setFanningType(QLCPalette::Linear);
+    p->setFanningLayout(layout);
+    p->setFanningAmount(amount);
+    p->setFanningValue(fanBy);
+    doc->addPalette(p);
+    return p;
+}
+
+/* Universe 0, @p fid's channel @p ch. */
+QPair<int, int> chAt(Doc *doc, quint32 fid, int ch)
+{
+    return qMakePair(0, int(doc->fixture(fid)->address()) + ch);
+}
+
+/* @p values as writes, (universe, address) -> value. */
+QHash<QPair<int, int>, uchar> asWrites(Doc *doc, const QList<SceneValue> &values)
+{
+    QHash<QPair<int, int>, uchar> w;
+    for (const SceneValue &sv : values)
+        if (Fixture *fx = doc->fixture(sv.fxi))
+            w.insert(qMakePair(int(fx->universe()), int(fx->address() + sv.channel)), sv.value);
+    return w;
 }
 
 /* pan, tilt degrees @p fid is sent at in @p writes. */
@@ -1269,5 +1351,981 @@ void RefineSession_Test::holdingTakesNoStick()
     m_doc->programmer()->setHolding(false);
     QVERIFY(!r->isHolding());
     r->revert();
+    r->stop();
+}
+
+void RefineSession_Test::splitIntoTwoGroups(quint32 *left, quint32 *right)
+{
+    FixtureGroup *l = new FixtureGroup(m_doc);
+    l->setName("AT left");
+    l->setSize(QSize(2, 1));
+    l->assignFixture(m_spots.at(0), QLCPoint(0, 0));
+    l->assignFixture(m_spots.at(1), QLCPoint(1, 0));
+    m_doc->addFixtureGroup(l);
+    FixtureGroup *r = new FixtureGroup(m_doc);
+    r->setName("AT right");
+    r->setSize(QSize(2, 1));
+    r->assignFixture(m_spots.at(2), QLCPoint(0, 0));
+    r->assignFixture(m_spots.at(3), QLCPoint(1, 0));
+    m_doc->addFixtureGroup(r);
+    Target both;
+    both.groups << l->id() << r->id();
+    QVERIFY(m_doc->showTree()->setLayerTarget(m_cue, m_layer, both));
+    *left = l->id();
+    *right = r->id();
+}
+
+/* G1: into Operate with the cue not running, Refine goes blind at once --
+   the Design dims and the pending preview leave the live rig. */
+void RefineSession_Test::operateDropsTheDesignFeedback()
+{
+    QVERIFY(m_doc->showTree()->setLayerLook(m_cue, m_layer,
+                                            lookOf(KeyDimmer, { addDimmerPalette(m_doc, "80", 204) })));
+    RefineSession *r = m_doc->programmer()->refineSession();
+    QVERIFY(r->start(m_cue));
+    r->setScope(RefineSession::FixtureScope);
+    QVERIFY(r->nudgePosition(1.0f, 0.0f));
+    const QHash<QPair<int, int>, uchar> w = r->pendingWrites();
+    QVERIFY(w.contains(chAt(m_doc, m_spots.at(1), 4)));    // the rest dimmed
+    QVERIFY(w.contains(chAt(m_doc, m_spots.at(0), 0)));    // the nudge
+
+    r->setRunningCueProbe([](quint32) { return invalidId(); });
+    m_doc->setMode(Doc::Operate);
+    QVERIFY(r->isBlind());
+    QVERIFY(r->pendingWrites().isEmpty());
+    r->tick(0.02);                                          // and stays so
+    QVERIFY(r->pendingWrites().isEmpty());
+    m_doc->setMode(Doc::Design);
+    r->stop();
+    r->setRunningCueProbe({});
+}
+
+/* G1: the GO is said once; the next ticks say nothing more. */
+void RefineSession_Test::aMovedOnCueIsSaidOnce()
+{
+    m_doc->setMode(Doc::Operate);
+    RefineSession *r = m_doc->programmer()->refineSession();
+    quint32 running = m_cue;
+    r->setRunningCueProbe([&running](quint32) { return running; });
+    QVERIFY(r->start(m_cue));
+    QSignalSpy said(r, &RefineSession::announce);
+    running = invalidId() - 1;
+    for (int i = 0; i < 6; ++i)
+        r->tick(0.02);
+    int movedOn = 0;
+    for (const QList<QVariant> &s : said)
+        if (s.at(0).toString().startsWith("Cue 1 has moved on"))
+            ++movedOn;
+    QCOMPARE(movedOn, 1);
+    running = m_cue;
+    r->tick(0.02);
+    QVERIFY(!r->isBlind());
+    r->stop();
+    r->setRunningCueProbe({});
+    m_doc->setMode(Doc::Design);
+}
+
+/* G2: a fixture's kept zoom is found again (its own child) and refined
+   from there, in the same session and in a new one. */
+void RefineSession_Test::aKeptExceptionIsRefinedAgain()
+{
+    ShowTreeController *st = m_doc->showTree();
+    RefineSession *r = m_doc->programmer()->refineSession();
+    QVERIFY(r->start(m_cue));
+    r->setScope(RefineSession::FixtureScope);
+    r->nextItem();
+    QVERIFY(r->nudgeZoom(-1.0f));
+    QVERIFY(r->keep());
+    QCOMPARE(st->cue(m_cue)->layers.size(), 2);
+    QVERIFY(r->nudgeZoom(-1.0f));
+    float deg = 0.0f;
+    QVERIFY(r->pendingZoom(m_spots.at(1), deg));
+    QCOMPARE(deg, 38.0f);
+    QVERIFY(r->keep());
+    r->stop();
+
+    QVERIFY(r->start(m_cue));
+    r->setScope(RefineSession::FixtureScope);
+    r->nextItem();
+    QVERIFY(r->nudgeZoom(-1.0f));
+    QVERIFY(r->pendingZoom(m_spots.at(1), deg));
+    QCOMPARE(deg, 37.0f);
+    QVERIFY(r->keep());
+    QCOMPARE(st->cue(m_cue)->layers.size(), 2);
+    QCOMPARE(m_doc->palette(st->cue(m_cue)->layers.at(1).look(KeyZoom)->palettes.first())->value().toFloat(),
+             37.0f);
+    r->stop();
+}
+
+/* G3: the second A answers one warning, not every keep after it; and a
+   warning left unanswered goes with the session. */
+void RefineSession_Test::theSharedWarningIsAskedEveryKeep()
+{
+    ShowTreeController *st = m_doc->showTree();
+    QString why;
+    const quint32 reusable = st->makeLayerReusable(m_cue, m_layer, "Specials", &why);
+    QVERIFY2(reusable != invalidId(), qPrintable(why));
+    const quint32 cue2 = st->addCue(st->listOfCue(m_cue)->id, 0, "Verse");
+    QVERIFY(st->insertReusableLayer(cue2, reusable) != invalidId());
+
+    RefineSession *r = m_doc->programmer()->refineSession();
+    QVERIFY(r->start(m_cue));
+    QVERIFY(r->nudgePosition(3.0f, 0.0f));
+    QVERIFY(!r->keep());                    // warned
+    QVERIFY(r->keep());                     // A again
+    QVERIFY(r->nudgePosition(1.0f, 0.0f));
+    QVERIFY(!r->keep());                    // warned again
+    QVERIFY(r->hasWarningPending());
+    r->revert();
+
+    QVERIFY(r->nudgePosition(1.0f, 0.0f));
+    QVERIFY(!r->keep());                    // warned, not answered
+    r->stop();
+    QVERIFY(r->start(m_cue));
+    QVERIFY(r->nudgePosition(1.0f, 0.0f));
+    QVERIFY(!r->keep());                    // a new session asks again
+    r->stop();
+}
+
+/* G4 (937) and G22: an exception is a child layer in this cue only -- no
+   warning for a reusable parent; the warning's users are listed until B. */
+void RefineSession_Test::anExceptionOnAReusableLayerIsThisCuesOwn()
+{
+    ShowTreeController *st = m_doc->showTree();
+    QString why;
+    const quint32 reusable = st->makeLayerReusable(m_cue, m_layer, "Specials", &why);
+    QVERIFY2(reusable != invalidId(), qPrintable(why));
+    const quint32 cue2 = st->addCue(st->listOfCue(m_cue)->id, 0, "Verse");
+    QVERIFY(st->insertReusableLayer(cue2, reusable) != invalidId());
+
+    RefineSession *r = m_doc->programmer()->refineSession();
+    QVERIFY(r->start(m_cue));
+    r->setScope(RefineSession::FixtureScope);
+    QVERIFY(r->nudgePosition(2.0f, 0.0f));
+    why.clear();
+    QVERIFY2(r->keep(&why), qPrintable(why));
+    QVERIFY(!r->hasWarningPending());
+
+    r->setScope(RefineSession::LayerScope);
+    QVERIFY(r->nudgePosition(2.0f, 0.0f));
+    QVERIFY(!r->keep());
+    QCOMPARE(r->sharedUsers().size(), 1);
+    r->revert();
+    QVERIFY(r->sharedUsers().isEmpty());
+    QVERIFY(r->sharedWarning().isEmpty());
+    r->stop();
+}
+
+/* G25 (and G24): X is ONE Show Tree step, so one undo brings back every
+   position it took off; a pending change at that scope goes with it, off
+   the rig too. */
+void RefineSession_Test::clearingAnExceptionIsOneUndoStep()
+{
+    ShowTreeController *st = m_doc->showTree();
+    quint32 left = 0, right = 0;
+    splitIntoTwoGroups(&left, &right);
+    auto positionOf = [&](quint32 fid) {
+        Target t;
+        t.fixtures << fid;
+        for (const Layer &l : st->cue(m_cue)->layers)
+            if (l.parent == m_layer && l.target == t && l.look(KeyPosition) != nullptr)
+                return m_doc->palette(l.look(KeyPosition)->palettes.first())->values().first().toInt();
+        return -1;
+    };
+
+    RefineSession *r = m_doc->programmer()->refineSession();
+    QVERIFY(r->start(m_cue));
+    r->cycleScope();
+    QCOMPARE(r->scope(), RefineSession::GroupScope);
+    QVERIFY(r->nudgePosition(5.0f, 0.0f));
+    QVERIFY(r->keep());
+    QCOMPARE(positionOf(m_spots.at(0)), 275);
+    QCOMPARE(positionOf(m_spots.at(1)), 275);
+
+    QVERIFY(r->nudgePosition(1.0f, 0.0f));
+    QVERIFY(r->pendingWrites().contains(chAt(m_doc, m_spots.at(0), 0)));
+    QVERIFY(r->clearException());
+    QVERIFY(!r->hasPending());
+    QVERIFY(!r->pendingWrites().contains(chAt(m_doc, m_spots.at(0), 0)));
+    QCOMPARE(positionOf(m_spots.at(0)), -1);
+    QCOMPARE(positionOf(m_spots.at(1)), -1);
+    QVERIFY(r->undo());
+    QCOMPARE(positionOf(m_spots.at(0)), 275);
+    QCOMPARE(positionOf(m_spots.at(1)), 275);
+    // A keep after it is a step of its own.
+    QVERIFY(r->nudgePosition(1.0f, 0.0f));
+    QVERIFY(r->keep());
+    QCOMPARE(positionOf(m_spots.at(0)), 276);
+    QVERIFY(r->undo());
+    QCOMPARE(positionOf(m_spots.at(0)), 275);
+
+    // At Fixture scope: the child's looks and the child, one step.
+    r->setScope(RefineSession::FixtureScope);
+    r->nextItem();
+    r->nextItem();
+    QCOMPARE(r->currentFixture(), m_spots.at(2));
+    QVERIFY(r->nudgePosition(0.0f, 5.0f));
+    QVERIFY(r->nudgeZoom(-1.0f));
+    QVERIFY(r->keep());
+    const int withChild = st->cue(m_cue)->layers.size();
+    QVERIFY(r->clearException());
+    QCOMPARE(st->cue(m_cue)->layers.size(), withChild - 1);
+    QVERIFY(r->undo());
+    QCOMPARE(st->cue(m_cue)->layers.size(), withChild);
+    QCOMPARE(positionOf(m_spots.at(2)), 270);
+    QVERIFY(r->nudgePosition(1.0f, 0.0f));
+    QVERIFY(r->keep());
+    QCOMPARE(positionOf(m_spots.at(2)), 271);
+    QVERIFY(r->undo());
+    QCOMPARE(positionOf(m_spots.at(2)), 270);
+    r->stop();
+}
+
+/* G26: X on the Beam page takes the beam keys off; the exception's colour
+   (another page's) stays, and so does its child. */
+void RefineSession_Test::xOnTheBeamPageKeepsTheColour()
+{
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 blue = addColourPalette(m_doc, "Blue", Qt::blue);
+    RefineSession *r = m_doc->programmer()->refineSession();
+    QSignalSpy said(r, &RefineSession::announce);
+    QVERIFY(r->start(m_cue));
+    r->setScope(RefineSession::FixtureScope);
+    QVERIFY(r->nudgePosition(0.0f, 5.0f));
+    QVERIFY(r->keep());
+    r->apply(ControllerScheme::Alternate);          // colour page
+    QVERIFY(r->stepPalette(1));
+    QVERIFY(r->keep());
+    QCOMPARE(st->cue(m_cue)->layers.size(), 2);
+    QVERIFY(st->cue(m_cue)->layers.at(1).look(KeyPosition) != nullptr);
+    QVERIFY(st->cue(m_cue)->layers.at(1).look(KeyColour) != nullptr);
+
+    r->apply(ControllerScheme::Alternate);
+    r->apply(ControllerScheme::Alternate);          // the Beam page
+    QCOMPARE(r->page(), RefineSession::BeamPage);
+    QVERIFY(r->clearException());
+    QCOMPARE(said.last().at(0).toString(), QString("Exception cleared."));
+    QCOMPARE(st->cue(m_cue)->layers.size(), 2);
+    const Layer &child = st->cue(m_cue)->layers.at(1);
+    QVERIFY(child.look(KeyPosition) == nullptr);
+    QVERIFY(child.look(KeyColour) != nullptr);
+    QCOMPARE(child.look(KeyColour)->palettes, QList<quint32>({ blue }));
+    r->stop();
+}
+
+/* G4: at Group scope, what is not a position is kept on the group's child
+   (zoom, focus, colour, gobo alone each); a position alone is kept on the
+   fixtures and makes no group child. */
+void RefineSession_Test::groupScopeKeepsEveryAttribute()
+{
+    ShowTreeController *st = m_doc->showTree();
+    quint32 left = 0, right = 0;
+    splitIntoTwoGroups(&left, &right);
+    addColourPalette(m_doc, "Red", Qt::red);
+    QLCPalette *star = new QLCPalette(QLCPalette::Gobo);
+    star->setName("Star");
+    star->setGoboName("Star");
+    m_doc->addPalette(star);
+    Target leftT;
+    leftT.groups << left;
+    auto groupChild = [&]() -> const Layer * {
+        for (const Layer &l : st->cue(m_cue)->layers)
+            if (l.parent == m_layer && l.target == leftT)
+                return &l;
+        return nullptr;
+    };
+
+    RefineSession *r = m_doc->programmer()->refineSession();
+    QVERIFY(r->start(m_cue));
+    r->cycleScope();
+    QCOMPARE(r->scope(), RefineSession::GroupScope);
+    QVERIFY(r->nudgePosition(2.0f, 0.0f));
+    QVERIFY(r->keep());
+    QCOMPARE(st->cue(m_cue)->layers.size(), 3);     // the layer, two fixtures
+    QVERIFY(groupChild() == nullptr);
+
+    QVERIFY(r->nudgeZoom(-1.0f));
+    QVERIFY(r->keep());
+    QVERIFY(groupChild() != nullptr);
+    QVERIFY(groupChild()->look(KeyZoom) != nullptr);
+    QCOMPARE(m_doc->palette(groupChild()->look(KeyZoom)->palettes.first())->value().toFloat(), 39.0f);
+
+    QVERIFY(r->nudgeFocus(5));
+    QVERIFY(r->keep());
+    QVERIFY(groupChild()->look(KeyBeam) != nullptr);
+
+    r->apply(ControllerScheme::Alternate);          // colour
+    QVERIFY(r->stepPalette(1));
+    QVERIFY(r->keep());
+    QVERIFY(groupChild()->look(KeyColour) != nullptr);
+
+    r->apply(ControllerScheme::Alternate);          // gobo
+    QVERIFY(r->stepPalette(1));
+    QVERIFY(r->keep());
+    QVERIFY(groupChild()->look(KeyGobo) != nullptr);
+    QCOMPARE(groupChild()->look(KeyGobo)->palettes, QList<quint32>({ star->id() }));
+    r->stop();
+}
+
+/* G5: a fanned or aimed layer is read per fixture, from that fixture's own
+   DMX -- not the palette's one value, not another fixture's. */
+void RefineSession_Test::cuePositionReadsEachFixture()
+{
+    ShowTreeController *st = m_doc->showTree();
+    QLCPalette *fan = addFannedPosition(m_doc, 200, 100, QLCPalette::XAscending, 100, 40);
+    QVERIFY(st->setLayerLook(m_cue, m_layer, lookOf(KeyPosition, { fan->id() })));
+    const QHash<QPair<int, int>, uchar> fanned = asWrites(m_doc, fan->valuesFromFixtures(m_doc, m_spots));
+
+    RefineSession *r = m_doc->programmer()->refineSession();
+    QVERIFY(r->start(m_cue));
+    float first = 0.0f, last = 0.0f;
+    for (quint32 fid : m_spots)
+    {
+        float pan = 0.0f, tilt = 0.0f, wantPan = 0.0f, wantTilt = 0.0f;
+        QVERIFY(r->cuePosition(fid, pan, tilt));
+        QVERIFY(sentDegrees(m_doc, fanned, fid, wantPan, wantTilt));
+        QVERIFY2(qAbs(pan - wantPan) < 0.05f, qPrintable(QString("%1 %2").arg(pan).arg(wantPan)));
+        QVERIFY(qAbs(tilt - wantTilt) < 0.05f);
+        if (fid == m_spots.first())
+            first = pan;
+        last = pan;
+    }
+    QVERIFY(last - first > 30.0f);                  // a fan
+    r->stop();
+
+    // Aimed: a fixture's exception starts from where it is aimed.
+    StageTarget *dsc = m_doc->monitorProperties()->addStageTarget();
+    dsc->setName("DSC");
+    dsc->setPosition(QVector3D(5.0f, 6.0f, 0.0f));
+    QLCPalette *aim = new QLCPalette(QLCPalette::Aim);
+    aim->setName("Aim DSC");
+    aim->setStageTargetId(dsc->id());
+    m_doc->addPalette(aim);
+    QVERIFY(st->setLayerLook(m_cue, m_layer, lookOf(KeyPosition, { aim->id() })));
+    const QHash<QPair<int, int>, uchar> aimed = asWrites(m_doc, aim->valuesFromFixtures(m_doc, m_spots));
+    QVERIFY(r->start(m_cue));
+    r->setScope(RefineSession::FixtureScope);
+    float aim0 = 0.0f, aim1 = 0.0f, tilt = 0.0f;
+    QVERIFY(sentDegrees(m_doc, aimed, m_spots.at(0), aim0, tilt));
+    QVERIFY(sentDegrees(m_doc, aimed, m_spots.at(1), aim1, tilt));
+    QVERIFY(qAbs(aim0 - aim1) > 1.0f);
+    r->nextItem();
+    QVERIFY(r->nudgePosition(1.0f, 0.0f));
+    float pan = 0.0f;
+    QVERIFY(r->pendingPosition(m_spots.at(1), pan, tilt));
+    QVERIFY2(qAbs(pan - (aim1 + 1.0f)) < 0.05f, qPrintable(QString("%1 %2").arg(pan).arg(aim1)));
+    r->stop();
+}
+
+/* G6: a first zoom nudge starts from the wide end when the cue sets none;
+   it is sent as absolute DMX; a position nudge sends no zoom; a focus on
+   a fixture's first channel is found. */
+void RefineSession_Test::zoomAndFocusStartWhereTheyAre()
+{
+    RefineSession *r = m_doc->programmer()->refineSession();
+    QVERIFY(r->start(m_cue));
+    QVERIFY(r->nudgePosition(1.0f, 0.0f));
+    QVERIFY(!r->pendingWrites().contains(chAt(m_doc, m_spots.at(0), 5)));
+    float deg = 0.0f;
+    QVERIFY(!r->pendingZoom(m_spots.at(0), deg));
+    r->revert();
+
+    QVERIFY(r->nudgeZoom(-1.0f));
+    QVERIFY(r->pendingZoom(m_spots.at(0), deg));
+    QCOMPARE(deg, 39.0f);
+    QVERIFY(r->nudgeZoom(-17.0f));
+    QVERIFY(r->pendingZoom(m_spots.at(0), deg));
+    QCOMPARE(deg, 22.0f);
+    Fixture *fx = m_doc->fixture(m_spots.at(0));
+    const QList<SceneValue> zoom = fx->zoomToValues(22.0f, false);
+    QCOMPARE(zoom.size(), 1);
+    QCOMPARE(r->pendingWrites().value(chAt(m_doc, m_spots.at(0), int(zoom.first().channel))),
+             zoom.first().value);
+    r->stop();
+
+    ShowTreeController *st = m_doc->showTree();
+    Fixture *ff = makeFocusFirst(m_doc, "Focus first", 100);
+    const quint32 cue = st->addCue(st->listOfCue(m_cue)->id, -1, "Focus");
+    Target t;
+    t.fixtures << ff->id();
+    QVERIFY(st->addLayer(cue, t) != invalidId());
+    QVERIFY(r->start(cue));
+    QVERIFY(r->nudgeFocus(5));
+    int focus = 0;
+    QVERIFY(r->pendingFocus(ff->id(), focus));
+    QCOMPARE(focus, 133);
+    QCOMPARE(int(r->pendingWrites().value(qMakePair(0, 100))), 133);
+    r->stop();
+}
+
+/* G7: a layer keep makes a new palette with the old one's fanning. */
+void RefineSession_Test::aLayerKeepKeepsTheFan()
+{
+    ShowTreeController *st = m_doc->showTree();
+    QLCPalette *fan = addFannedPosition(m_doc, 200, 100, QLCPalette::YDescending, 60, 40);
+    QVERIFY(st->setLayerLook(m_cue, m_layer, lookOf(KeyPosition, { fan->id() })));
+    RefineSession *r = m_doc->programmer()->refineSession();
+    QVERIFY(r->start(m_cue));
+    QVERIFY(r->nudgePosition(2.0f, 0.0f));
+    QVERIFY(r->keep());
+    const QLCPalette *kept = m_doc->palette(st->cue(m_cue)->layers.first().look(KeyPosition)->palettes.first());
+    QVERIFY(kept != nullptr && kept != fan);
+    QCOMPARE(kept->values(), QVariantList({ 202, 100 }));
+    QCOMPARE(kept->fanningType(), QLCPalette::Linear);
+    QCOMPARE(kept->fanningLayout(), QLCPalette::YDescending);
+    QCOMPARE(kept->fanningAmount(), 60);
+    QCOMPARE(kept->fanningValue().toInt(), 40);
+    r->stop();
+}
+
+/* G8: two layers tracked in are two stand-ins; a keep here on the second
+   leaves Refine on that layer, now the cue's own; two keeps at the source
+   add up there. */
+void RefineSession_Test::twoTrackedLayersStayApart()
+{
+    ShowTreeController *st = m_doc->showTree();
+    Fixture *x = makeSpot(m_doc, "X", 12.0f);
+    Target xT;
+    xT.fixtures << x->id();
+    const quint32 layerX = st->addLayer(m_cue, xT, "Special");
+    const quint32 away = st->createInlinePalette(QLCPalette::PanTilt, { 100, 100 }, "Away");
+    QVERIFY(st->setLayerLook(m_cue, layerX, lookOf(KeyPosition, { away })));
+    const quint32 cue2 = st->addCue(st->listOfCue(m_cue)->id, 0, "Verse");
+
+    RefineSession *r = m_doc->programmer()->refineSession();
+    QVERIFY(r->start(cue2));
+    QCOMPARE(r->layers().size(), 2);
+    QVERIFY(r->layers().at(0) != r->layers().at(1));
+    r->nextLayer();
+    QVERIFY(r->isTrackedLayer());
+    QVERIFY(r->scopeTarget() == xT);
+    QVERIFY(r->nudgePosition(3.0f, 0.0f));
+    QVERIFY(r->keep());
+    QVERIFY(!r->isTrackedLayer());
+    QVERIFY(r->scopeTarget() == xT);
+    QCOMPARE(st->cue(cue2)->layers.size(), 1);
+
+    // The group still tracks in: kept twice at its source, both count.
+    r->previousLayer();
+    QVERIFY(r->isTrackedLayer());
+    Target groupT;
+    groupT.groups << m_group;
+    QVERIFY(r->scopeTarget() == groupT);
+    r->setKeepToSource(true);
+    QVERIFY(r->nudgePosition(1.0f, 0.0f));
+    QVERIFY(r->keep());
+    QVERIFY(r->nudgePosition(1.0f, 0.0f));
+    QVERIFY(r->keep());
+    QCOMPARE(m_doc->palette(st->cue(m_cue)->layers.first().look(KeyPosition)->palettes.first())->values(),
+             QVariantList({ 272, 135 }));
+    r->stop();
+}
+
+/* G17: stick Y tilts; the response's sensitivity scales the stick; a held
+   D-pad arm does not repeat into the next session. */
+void RefineSession_Test::theSticksAndTheHeldArm()
+{
+    RefineSession *r = m_doc->programmer()->refineSession();
+    QVERIFY(r->start(m_cue));
+    float pan = 0.0f, tilt = 0.0f;
+    r->setStick(RefineSession::Coarse, 0.5f, 1.0f);
+    r->tick(0.5);
+    QVERIFY(r->pendingPosition(m_spots.at(0), pan, tilt));
+    QCOMPARE(pan, 270.0f);
+    QVERIFY(tilt < 134.0f);
+    r->revert();
+
+    r->setStick(RefineSession::Coarse, 1.0f, 0.5f);
+    r->tick(0.5);
+    QVERIFY(r->pendingPosition(m_spots.at(0), pan, tilt));
+    const float once = pan - 270.0f;
+    QVERIFY(once > 1.0f);
+    r->revert();
+    r->setStickResponse(0.05f, 2.0f);
+    r->tick(0.5);
+    QVERIFY(r->pendingPosition(m_spots.at(0), pan, tilt));
+    QVERIFY2(qAbs((pan - 270.0f) - 2.0f * once) < 0.1f, qPrintable(QString::number(pan)));
+    r->setStick(RefineSession::Coarse, 0.5f, 0.5f);
+    r->revert();
+
+    r->press(ControllerScheme::ZoomWider, true);
+    QVERIFY(r->hasPending());
+    r->stop();
+    QVERIFY(r->start(m_cue));
+    r->tick(1.0);
+    QVERIFY(!r->hasPending());
+    r->press(ControllerScheme::ZoomWider, false);
+    r->stop();
+}
+
+/* G9: a layer that tracks in dark (it plays nothing) is not one to refine. */
+void RefineSession_Test::aDarkTrackedLayerIsNotOffered()
+{
+    ShowTreeController *st = m_doc->showTree();
+    Fixture *x = makeSpot(m_doc, "X", 12.0f);
+    Target xT;
+    xT.fixtures << x->id();
+    const quint32 layerX = st->addLayer(m_cue, xT, "Dark");
+    Look none = lookOf(KeyPosition, {});
+    none.none = true;
+    QVERIFY(st->setLayerLook(m_cue, layerX, none));
+    const quint32 cue2 = st->addCue(st->listOfCue(m_cue)->id, 0, "Verse");
+
+    RefineSession *r = m_doc->programmer()->refineSession();
+    QVERIFY(r->start(m_cue));
+    QCOMPARE(r->layers().size(), 2);                // its own, dark or not
+    r->stop();
+    QVERIFY(r->start(cue2));
+    QCOMPARE(r->layers().size(), 1);
+    QVERIFY(r->scopeTarget().groups.contains(m_group));
+    r->stop();
+}
+
+/* G10: a fixture with no pan range in its physical maps through 360
+   degrees, as Fixture::positionToValues() does. */
+void RefineSession_Test::degreesWithoutAPanRange()
+{
+    Fixture *fx = makeSpot(m_doc, "No range", 12.0f, 0);
+    for (float deg : { 0.0f, 90.0f, 200.0f, 359.0f })
+    {
+        quint16 v = 0;
+        for (const SceneValue &sv : fx->positionToValues(QLCChannel::Pan, deg))
+            v = sv.channel == 0 ? quint16((v & 0xFF) | (sv.value << 8)) : quint16((v & 0xFF00) | sv.value);
+        QVERIFY2(qAbs(RefineSession::dmxToDegrees(fx, QLCChannel::Pan, v) - deg) < 0.02f,
+                 qPrintable(QString::number(RefineSession::dmxToDegrees(fx, QLCChannel::Pan, v))));
+    }
+}
+
+/* G11: the colour page steps on from the colour the cue has, then from
+   what it stepped to, round both ways. */
+void RefineSession_Test::palettesStepFromTheCuesOwn()
+{
+    addColourPalette(m_doc, "Amber", QColor(255, 191, 0));
+    const quint32 blue = addColourPalette(m_doc, "Blue", Qt::blue);
+    addColourPalette(m_doc, "Red", Qt::red);
+    QVERIFY(m_doc->showTree()->setLayerLook(m_cue, m_layer, lookOf(KeyColour, { blue })));
+    RefineSession *r = m_doc->programmer()->refineSession();
+    QSignalSpy said(r, &RefineSession::announce);
+    QVERIFY(r->start(m_cue));
+    r->apply(ControllerScheme::Alternate);
+    QVERIFY(r->stepPalette(1));
+    QCOMPARE(said.last().at(0).toString(), QString("Red"));
+    QVERIFY(r->stepPalette(1));
+    QCOMPARE(said.last().at(0).toString(), QString("Amber"));
+    QVERIFY(r->stepPalette(1));
+    QCOMPARE(said.last().at(0).toString(), QString("Blue"));
+    QVERIFY(r->stepPalette(-1));
+    QCOMPARE(said.last().at(0).toString(), QString("Amber"));
+    QVERIFY(r->stepPalette(-1));
+    QCOMPARE(said.last().at(0).toString(), QString("Red"));
+    r->stop();
+}
+
+/* G12: LT from the first layer goes to the last; a new layer starts at
+   its first fixture, and the old layer's dims go. */
+void RefineSession_Test::layersStepRoundAndStartFresh()
+{
+    ShowTreeController *st = m_doc->showTree();
+    QVERIFY(st->setLayerLook(m_cue, m_layer, lookOf(KeyDimmer, { addDimmerPalette(m_doc, "80", 204) })));
+    Fixture *x = makeSpot(m_doc, "X", 12.0f);
+    Fixture *y = makeSpot(m_doc, "Y", 14.0f);
+    Target xT, yT;
+    xT.fixtures << x->id();
+    yT.fixtures << y->id();
+    const quint32 layer2 = st->addLayer(m_cue, xT, "Two");
+    const quint32 layer3 = st->addLayer(m_cue, yT, "Three");
+
+    RefineSession *r = m_doc->programmer()->refineSession();
+    QVERIFY(r->start(m_cue));
+    QCOMPARE(r->layers().size(), 3);
+    r->previousLayer();
+    QCOMPARE(r->currentLayer(), layer3);
+    r->setLayerIndex(0);
+    QCOMPARE(r->currentLayer(), m_layer);
+    r->setScope(RefineSession::FixtureScope);
+    r->nextItem();
+    r->nextItem();
+    QCOMPARE(r->currentFixture(), m_spots.at(2));
+    QVERIFY(r->pendingWrites().contains(chAt(m_doc, m_spots.at(0), 4)));
+    r->nextLayer();
+    QCOMPARE(r->currentLayer(), layer2);
+    QCOMPARE(r->scope(), RefineSession::LayerScope);
+    QVERIFY(r->pendingWrites().isEmpty());
+    r->cycleScope();
+    QCOMPARE(r->currentFixture(), x->id());
+    r->stop();
+}
+
+/* G13: a fanned Dimmer look is read per fixture (one under the dim level
+   is left alone); with no Dimmer look the level comes from the rig, read
+   again after a trip through Operate. */
+void RefineSession_Test::dimsReadTheFanAndTheRig()
+{
+    ShowTreeController *st = m_doc->showTree();
+    QLCPalette *fan = new QLCPalette(QLCPalette::Dimmer);
+    fan->setName("Fan");
+    fan->setValue(10);
+    fan->setFanningType(QLCPalette::Linear);
+    fan->setFanningLayout(QLCPalette::XAscending);
+    fan->setFanningAmount(100);
+    fan->setFanningValue(255);
+    m_doc->addPalette(fan);
+    QVERIFY(st->setLayerLook(m_cue, m_layer, lookOf(KeyDimmer, { fan->id() })));
+    const int dim = qRound(RefineSession::dimLevel() * 255.0f);
+
+    RefineSession *r = m_doc->programmer()->refineSession();
+    QVERIFY(r->start(m_cue));
+    r->setScope(RefineSession::FixtureScope);
+    r->nextItem();
+    r->nextItem();
+    QHash<QPair<int, int>, uchar> w = r->pendingWrites();
+    QVERIFY(!w.contains(chAt(m_doc, m_spots.at(0), 4)));        // 10: under it
+    QCOMPARE(int(w.value(chAt(m_doc, m_spots.at(1), 4))), dim);
+    QCOMPARE(int(w.value(chAt(m_doc, m_spots.at(3), 4))), dim);
+    r->stop();
+
+    // No Dimmer look: what the rig has.
+    const quint32 plain = st->addCue(st->addCueList(st->addProduction("Plain"), "Main"), -1, "Plain");
+    Target t;
+    t.groups << m_group;
+    QVERIFY(st->addLayer(plain, t) != invalidId());
+    Universe *uni = m_doc->inputOutputMap()->universes().at(0);
+    QVERIFY(uni->write(chAt(m_doc, m_spots.at(0), 4).second, 200));
+    QVERIFY(r->start(plain));
+    r->setScope(RefineSession::FixtureScope);
+    r->nextItem();
+    r->nextItem();
+    w = r->pendingWrites();
+    QCOMPARE(int(w.value(chAt(m_doc, m_spots.at(0), 4))), dim);
+    QVERIFY(!w.contains(chAt(m_doc, m_spots.at(1), 4)));        // at 0
+    // Brought up meanwhile: read again after Operate.
+    QVERIFY(uni->write(chAt(m_doc, m_spots.at(1), 4).second, 200));
+    r->setRunningCueProbe([plain](quint32) { return plain; });
+    m_doc->setMode(Doc::Operate);
+    m_doc->setMode(Doc::Design);
+    QCOMPARE(int(r->pendingWrites().value(chAt(m_doc, m_spots.at(1), 4))), dim);
+    r->stop();
+    r->setRunningCueProbe({});
+}
+
+/* G14: a fixture's row picks it, the first one too; one not in the layer is
+   refused; a pick at Fixture scope is said and moves the dims. */
+void RefineSession_Test::pickFixtureFromARow()
+{
+    QVERIFY(m_doc->showTree()->setLayerLook(m_cue, m_layer,
+                                            lookOf(KeyDimmer, { addDimmerPalette(m_doc, "80", 204) })));
+    Fixture *x = makeSpot(m_doc, "X", 12.0f);
+    RefineSession *r = m_doc->programmer()->refineSession();
+    QSignalSpy said(r, &RefineSession::announce);
+    QVERIFY(r->start(m_cue));
+    QVERIFY(!r->pickFixture(x->id()));
+    QCOMPARE(r->scope(), RefineSession::LayerScope);
+    QVERIFY(r->pickFixture(m_spots.first()));
+    QCOMPARE(r->scope(), RefineSession::FixtureScope);
+    QCOMPARE(r->currentFixture(), m_spots.first());
+    QVERIFY(r->pickFixture(m_spots.at(2)));
+    QCOMPARE(r->currentFixture(), m_spots.at(2));
+    QCOMPARE(said.last().at(0).toString(), QString("Fixture 3, AT 3."));
+    const QHash<QPair<int, int>, uchar> w = r->pendingWrites();
+    QVERIFY(w.contains(chAt(m_doc, m_spots.at(0), 4)));
+    QVERIFY(!w.contains(chAt(m_doc, m_spots.at(2), 4)));
+    r->stop();
+}
+
+/* G15: the layer, or a fixture, deleted while an edit is pending: the
+   preview is rebuilt without them, no crash. */
+void RefineSession_Test::aLayerOrFixtureGoneUnderAnEdit()
+{
+    ShowTreeController *st = m_doc->showTree();
+    RefineSession *r = m_doc->programmer()->refineSession();
+    QVERIFY(r->start(m_cue));
+    QVERIFY(r->nudgePosition(1.0f, 0.0f));
+    QVERIFY(st->removeLayer(m_cue, m_layer));
+    r->setLightsFeedback(false);                    // a rebuild
+    float pan = 0.0f, tilt = 0.0f;
+    r->pendingPosition(m_spots.at(0), pan, tilt);
+    r->setLightsFeedback(true);
+    r->stop();
+    QVERIFY(st->undo());
+
+    QVERIFY(r->start(m_cue));
+    r->setScope(RefineSession::FixtureScope);
+    r->nextItem();
+    QVERIFY(r->nudgePosition(0.0f, 5.0f));
+    const quint32 gone = m_spots.at(1);
+    QVERIFY(m_doc->deleteFixture(gone));
+    r->setLightsFeedback(false);
+    QVERIFY(!r->pendingWrites().contains(qMakePair(0, int(kChannels))));
+    r->setLightsFeedback(true);
+    r->stop();
+    m_spots.removeAll(gone);
+}
+
+/* G16: with the flash off nothing blinks; on, a start, a new layer and
+   both bumpers blink, on the flash's timer. */
+void RefineSession_Test::theFlashIsGatedAndTimed()
+{
+    RefineSession *r = m_doc->programmer()->refineSession();
+    QVERIFY(r->start(m_cue));
+    r->flashSelection();
+    QVERIFY(!r->isFlashing());
+    r->flashWarning();
+    QVERIFY(!r->isFlashing());
+    r->stop();
+
+    r->setFlashEnabled(true);
+    QTimer *timer = r->findChild<QTimer *>();
+    QVERIFY(timer != nullptr);
+    QVERIFY(r->start(m_cue));
+    QVERIFY(r->isFlashing());
+    QVERIFY(timer->isActive());
+    auto quiet = [r]() { r->setHolding(true); r->setHolding(false); };
+    quiet();
+    QVERIFY(!r->isFlashing());
+    r->nextLayer();
+    QVERIFY(r->isFlashing());
+    r->setScope(RefineSession::FixtureScope);
+    QVERIFY(r->nudgePosition(1.0f, 0.0f));
+    quiet();
+    QVERIFY(r->nextPending());
+    QVERIFY(r->isFlashing());
+    r->setFlashEnabled(false);
+    r->stop();
+}
+
+/* G18: after stop() nothing of the session is left to read. */
+void RefineSession_Test::stopLeavesNothingBehind()
+{
+    RefineSession *r = m_doc->programmer()->refineSession();
+    QVERIFY(r->start(m_cue));
+    QVERIFY(r->nudgePosition(1.0f, 0.0f));
+    QVERIFY(!r->pendingWrites().isEmpty());
+    r->stop();
+    QVERIFY(r->layers().isEmpty());
+    QCOMPARE(r->layerIndex(), -1);
+    QCOMPARE(r->cueId(), invalidId());
+    QVERIFY(r->pendingWrites().isEmpty());
+}
+
+/* G19: the panel and the pad light follow changed(). */
+void RefineSession_Test::everyActionSaysChanged()
+{
+    quint32 left = 0, right = 0;
+    splitIntoTwoGroups(&left, &right);
+    RefineSession *r = m_doc->programmer()->refineSession();
+    QSignalSpy changed(r, &RefineSession::changed);
+    auto says = [&changed](const std::function<void()> &action) {
+        changed.clear();
+        action();
+        return changed.count() > 0;
+    };
+    QVERIFY(r->start(m_cue));
+    r->setScope(RefineSession::FixtureScope);
+    QVERIFY(says([r]() { r->previousItem(); }));
+    QVERIFY(says([r]() { r->nudgeZoom(-1.0f); }));
+    QVERIFY(says([r]() { r->nudgeFocus(5); }));
+    QVERIFY(says([r]() { r->setKeepToSource(false); }));
+    r->setScope(RefineSession::LayerScope);
+    QVERIFY(says([r]() { r->nextPending(); }));
+    QVERIFY(says([r]() { r->keep(); }));
+    // X with nothing there, and at Group scope.
+    r->setScope(RefineSession::FixtureScope);
+    r->nextItem();                                  // off the one just kept
+    QVERIFY(says([r]() { QVERIFY(!r->clearException()); }));
+    r->setScope(RefineSession::GroupScope);
+    QVERIFY(r->nudgePosition(1.0f, 0.0f));
+    QVERIFY(r->keep());
+    QVERIFY(says([r]() { QVERIFY(r->clearException()); }));
+    r->stop();
+
+    // The GO in Operate.
+    m_doc->setMode(Doc::Operate);
+    quint32 running = m_cue;
+    r->setRunningCueProbe([&running](quint32) { return running; });
+    QVERIFY(r->start(m_cue));
+    running = invalidId() - 1;
+    QVERIFY(says([r]() { r->tick(0.02); }));
+    r->stop();
+    r->setRunningCueProbe({});
+    m_doc->setMode(Doc::Design);
+}
+
+/* G20, G21: only what is pending is pending; A with nothing pending keeps
+   nothing. */
+void RefineSession_Test::pendingIsOnlyWhatIsPending()
+{
+    ShowTreeController *st = m_doc->showTree();
+    RefineSession *r = m_doc->programmer()->refineSession();
+    QSignalSpy kept(r, &RefineSession::kept);
+    QVERIFY(r->start(m_cue));
+    const QString undoBefore = st->undoText();
+    QVERIFY(!r->keep());
+    QCOMPARE(kept.count(), 0);
+    QCOMPARE(st->undoText(), undoBefore);
+
+    int focus = 0;
+    float deg = 0.0f;
+    QVERIFY(!r->pendingFocus(m_spots.at(0), focus));
+    QVERIFY(r->nudgePosition(1.0f, 0.0f));
+    QVERIFY(!r->pendingZoom(m_spots.at(0), deg));
+    QVERIFY(!r->pendingFocus(m_spots.at(0), focus));
+    r->revert();
+    r->setScope(RefineSession::FixtureScope);
+    r->nextItem();
+    QVERIFY(r->nudgeZoom(-1.0f));
+    QVERIFY(r->pendingZoom(m_spots.at(1), deg));
+    QVERIFY(!r->pendingZoom(m_spots.at(0), deg));
+    r->stop();
+}
+
+/* G23: both bumpers go to the pending edit's layer and fixture, and the
+   rig shows that selection. */
+void RefineSession_Test::nextPendingLandsOnTheEdit()
+{
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 bright = addDimmerPalette(m_doc, "80", 204);
+    QVERIFY(st->setLayerLook(m_cue, m_layer, lookOf(KeyDimmer, { bright })));
+    QList<quint32> more;
+    Target t2;
+    for (int i = 0; i < 3; ++i)
+    {
+        more << makeSpot(m_doc, QString("X%1").arg(i + 1), 12.0f + i)->id();
+        t2.fixtures << more.last();
+    }
+    const quint32 layer2 = st->addLayer(m_cue, t2, "Specials");
+    QVERIFY(st->setLayerLook(m_cue, layer2, lookOf(KeyDimmer, { bright })));
+
+    RefineSession *r = m_doc->programmer()->refineSession();
+    QVERIFY(r->start(m_cue));
+    r->nextLayer();
+    r->setScope(RefineSession::FixtureScope);
+    r->nextItem();
+    r->nextItem();
+    QCOMPARE(r->currentFixture(), more.at(2));
+    QVERIFY(r->nudgePosition(1.0f, 0.0f));
+    r->previousLayer();
+    r->setScope(RefineSession::FixtureScope);
+    QCOMPARE(r->currentFixture(), m_spots.at(0));
+    QVERIFY(r->nextPending());
+    QCOMPARE(r->currentLayer(), layer2);
+    QCOMPARE(r->scope(), RefineSession::FixtureScope);
+    QCOMPARE(r->currentFixture(), more.at(2));
+    const QHash<QPair<int, int>, uchar> w = r->pendingWrites();
+    QVERIFY(w.contains(chAt(m_doc, more.at(0), 4)));
+    QVERIFY(!w.contains(chAt(m_doc, more.at(2), 4)));
+    QVERIFY(!w.contains(chAt(m_doc, m_spots.at(1), 4)));
+    r->stop();
+}
+
+/* G24: X with no exception drops the pending change off the rig too; undo
+   rebases what is pending on the look it restored. */
+void RefineSession_Test::theRigFollowsXAndUndo()
+{
+    RefineSession *r = m_doc->programmer()->refineSession();
+    QVERIFY(r->start(m_cue));
+    r->setScope(RefineSession::FixtureScope);
+    r->nextItem();
+    QVERIFY(r->nudgePosition(0.0f, 5.0f));
+    QVERIFY(r->pendingWrites().contains(chAt(m_doc, m_spots.at(1), 0)));
+    QVERIFY(!r->clearException());
+    QVERIFY(!r->hasPending());
+    QVERIFY(!r->pendingWrites().contains(chAt(m_doc, m_spots.at(1), 0)));
+
+    r->setScope(RefineSession::LayerScope);
+    QVERIFY(r->nudgePosition(4.0f, 0.0f));
+    QVERIFY(r->keep());
+    QVERIFY(r->nudgePosition(1.0f, 0.0f));
+    float pan = 0.0f, tilt = 0.0f;
+    QVERIFY(sentDegrees(m_doc, r->pendingWrites(), m_spots.at(0), pan, tilt));
+    QVERIFY(qAbs(pan - 275.0f) < 0.05f);
+    QVERIFY(r->undo());
+    QVERIFY(r->hasPending());
+    QVERIFY(sentDegrees(m_doc, r->pendingWrites(), m_spots.at(0), pan, tilt));
+    QVERIFY2(qAbs(pan - 271.0f) < 0.05f, qPrintable(QString::number(pan)));
+    r->stop();
+}
+
+/* G27: where at Group scope, and the crew's word for a beam press. */
+void RefineSession_Test::groupAndCrewWordsAreSaid()
+{
+    quint32 left = 0, right = 0;
+    splitIntoTwoGroups(&left, &right);
+    RefineSession *r = m_doc->programmer()->refineSession();
+    QSignalSpy said(r, &RefineSession::announce);
+    QVERIFY(r->start(m_cue));
+    r->cycleScope();
+    QCOMPARE(said.last().at(0).toString(), QString("AT left, group 1 of 2."));
+    r->press(ControllerScheme::ZoomWider, true);
+    r->press(ControllerScheme::ZoomWider, false);
+    QCOMPARE(said.last().at(0).toString(), ControllerScheme::crewWord(ControllerScheme::ZoomWider));
+    QVERIFY(!said.last().at(0).toString().isEmpty());
+    r->stop();
+}
+
+/* G28, G30: with lights feedback off nothing is dimmed, and back on it is;
+   an unpatched light is never dimmed. */
+void RefineSession_Test::lightsFeedbackOffAndUnpatched()
+{
+    QVERIFY(m_doc->showTree()->setLayerLook(m_cue, m_layer,
+                                            lookOf(KeyDimmer, { addDimmerPalette(m_doc, "80", 204) })));
+    m_doc->fixture(m_spots.at(3))->setPatched(false);
+    RefineSession *r = m_doc->programmer()->refineSession();
+    QVERIFY(r->start(m_cue));
+    r->setScope(RefineSession::FixtureScope);
+    QVERIFY(r->pendingWrites().contains(chAt(m_doc, m_spots.at(1), 4)));
+    QVERIFY(!r->pendingWrites().contains(chAt(m_doc, m_spots.at(3), 4)));
+    r->setLightsFeedback(false);
+    QVERIFY(r->pendingWrites().isEmpty());
+    r->setLightsFeedback(true);
+    QVERIFY(r->pendingWrites().contains(chAt(m_doc, m_spots.at(1), 4)));
+    r->stop();
+}
+
+/* G29: a Build scene's fixture exception (its own values) is not moved by
+   a nudge of the scene as a whole. */
+void RefineSession_Test::aSceneLayerNudgeLeavesAnException()
+{
+    Scene *s = new Scene(m_doc);
+    s->setName("Ballad look");
+    s->addFixtureGroup(m_group);
+    s->addPalette(m_position);
+    QVERIFY(m_doc->addFunction(s));
+    RefineSession *r = m_doc->programmer()->refineSession();
+    QVERIFY(r->startScene({ s->id() }, s->id()));
+    r->setScope(RefineSession::FixtureScope);
+    r->nextItem();
+    QVERIFY(r->nudgePosition(3.0f, 0.0f));
+    QVERIFY(r->keep());
+    QVERIFY(s->excludedFixtures(m_position).contains(m_spots.at(1)));
+    r->setScope(RefineSession::LayerScope);
+    QVERIFY(r->nudgePosition(10.0f, 0.0f));
+    const QHash<QPair<int, int>, uchar> w = r->pendingWrites();
+    float pan = 0.0f, tilt = 0.0f;
+    QVERIFY(sentDegrees(m_doc, w, m_spots.at(0), pan, tilt));
+    QVERIFY(qAbs(pan - 280.0f) < 0.05f);
+    QVERIFY(!w.contains(chAt(m_doc, m_spots.at(1), 0)));
+    r->revert();
+    r->stop();
+}
+
+/* G30: a light whose last channel would be past 512 gets nothing there --
+   not wrapped into the next universe's first channel. */
+void RefineSession_Test::outputStaysInTheUniverse()
+{
+    ShowTreeController *st = m_doc->showTree();
+    Fixture *end = makeSpot(m_doc, "End", 12.0f);
+    end->setAddress(UNIVERSE_SIZE - kChannels + 1);  // focus (ch 6) at 512
+    QCOMPARE(int(end->address()) + 6, UNIVERSE_SIZE);
+    const quint32 cue = st->addCue(st->listOfCue(m_cue)->id, -1, "End");
+    Target t;
+    t.fixtures << end->id();
+    QVERIFY(st->addLayer(cue, t) != invalidId());
+    RefineSession *r = m_doc->programmer()->refineSession();
+    QVERIFY(r->start(cue));
+    QVERIFY(r->nudgeFocus(5));
+    const QHash<QPair<int, int>, uchar> w = r->pendingWrites();
+    for (auto it = w.constBegin(); it != w.constEnd(); ++it)
+        QVERIFY(it.key().second < UNIVERSE_SIZE);
+    QVERIFY(!w.contains(qMakePair(0, UNIVERSE_SIZE)));
     r->stop();
 }

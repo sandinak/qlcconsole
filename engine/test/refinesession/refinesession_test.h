@@ -87,7 +87,79 @@ private slots:
      *  once, kept by A as one Show Tree step on the layer's Gobo look. */
     void aGoboAtLayerScopeIsPreviewedAndKept();
 
+    /* The coverage review's gaps (class-refinesession, G1..G30). */
+    /** Into Operate on a cue not running: the Design dims and the pending
+     *  values leave the rig at once, not at the next change. */
+    void operateDropsTheDesignFeedback();
+    /** A cue that moved on is said once, not on every tick. */
+    void aMovedOnCueIsSaidOnce();
+    /** A kept fixture exception is refined again from its own value. */
+    void aKeptExceptionIsRefinedAgain();
+    /** A reusable layer warns at every keep, and a warning not answered
+     *  does not outlive the session. */
+    void theSharedWarningIsAskedEveryKeep();
+    /** A fixture exception on a reusable layer is this cue's own: no
+     *  warning; the warning lists who else uses it until B. */
+    void anExceptionOnAReusableLayerIsThisCuesOwn();
+    /** X is one Show Tree step at Group and at Fixture scope. */
+    void clearingAnExceptionIsOneUndoStep();
+    /** X on the Beam page leaves the exception's colour. */
+    void xOnTheBeamPageKeepsTheColour();
+    /** A group keeps zoom, focus, colour and gobo; a position alone makes
+     *  no empty group child. */
+    void groupScopeKeepsEveryAttribute();
+    /** cuePosition() reads each fixture's own fanned or aimed value. */
+    void cuePositionReadsEachFixture();
+    /** Zoom starts at the wide end, is sent absolute and only when moved;
+     *  a focus on channel 0 is found. */
+    void zoomAndFocusStartWhereTheyAre();
+    /** A layer keep keeps the palette's fanning. */
+    void aLayerKeepKeepsTheFan();
+    /** Two tracked layers stay apart; a keep here stays on that layer; two
+     *  keeps at the source add up. */
+    void twoTrackedLayersStayApart();
+    /** Stick Y tilts, the response scales it, a held arm ends with the
+     *  session. */
+    void theSticksAndTheHeldArm();
+    /** A layer tracked in dark is not offered. */
+    void aDarkTrackedLayerIsNotOffered();
+    /** A fixture with no pan range in its physical maps through 360. */
+    void degreesWithoutAPanRange();
+    /** Colour palettes step on from the cue's own, and round. */
+    void palettesStepFromTheCuesOwn();
+    /** Layers step round both ways and start fresh. */
+    void layersStepRoundAndStartFresh();
+    /** Dim levels per fixture of a fan, and from the rig when the cue has
+     *  no Dimmer look (read again after Operate). */
+    void dimsReadTheFanAndTheRig();
+    /** pickFixture() from a Workbench row, the first one too. */
+    void pickFixtureFromARow();
+    /** A layer or fixture removed under a pending edit: no crash. */
+    void aLayerOrFixtureGoneUnderAnEdit();
+    /** The flash only when enabled; it runs on its timer. */
+    void theFlashIsGatedAndTimed();
+    /** stop() leaves nothing behind. */
+    void stopLeavesNothingBehind();
+    /** Each action tells the panel (changed()). */
+    void everyActionSaysChanged();
+    /** pendingZoom/Focus only for what is pending; keep() with nothing. */
+    void pendingIsOnlyWhatIsPending();
+    /** Both bumpers land on the edit's layer and fixture. */
+    void nextPendingLandsOnTheEdit();
+    /** The preview follows X with nothing to clear, and undo. */
+    void theRigFollowsXAndUndo();
+    /** "group 1 of 2", the crew's word. */
+    void groupAndCrewWordsAreSaid();
+    /** Lights feedback off: no dims; an unpatched light never dims. */
+    void lightsFeedbackOffAndUnpatched();
+    /** In a scene, a layer nudge leaves a fixture exception alone. */
+    void aSceneLayerNudgeLeavesAnException();
+    /** Nothing is sent past the universe's last channel. */
+    void outputStaysInTheUniverse();
+
 private:
+    /** AT left (spots 1, 2) and AT right (spots 3, 4) as m_layer's target. */
+    void splitIntoTwoGroups(quint32 *left, quint32 *right);
     Doc *m_doc = nullptr;
     QList<quint32> m_spots;
     quint32 m_group = 0;
