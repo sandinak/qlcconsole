@@ -1230,6 +1230,16 @@ bool Doc::addFixture(Fixture* fixture, quint32 id, bool crossUniverse)
        claim on universe 1's first channels. */
     if (fixture->isPatched())
     {
+        /* Past the most universes a show can have: refused, said, rather than
+           added with no universe under it (a function writing to it would
+           index past the universe list and crash). */
+        if (!fitsUniverseLimit(fixture))
+        {
+            qWarning() << Q_FUNC_INFO << "fixture" << id << "on universe" << fixture->universe() + 1
+                       << "is past the limit of" << InputOutputMap::maxUniverses() << "universes";
+            return false;
+        }
+
         /* Check for overlapping address */
         for (i = fixture->universeAddress();
              i < fixture->universeAddress() + fixture->channels(); i++)
@@ -1273,6 +1283,17 @@ bool Doc::addFixture(Fixture* fixture, quint32 id, bool crossUniverse)
     setModified();
 
     return true;
+}
+
+bool Doc::fitsUniverseLimit(const Fixture *fixture)
+{
+    if (fixture == NULL || !fixture->isPatched())
+        return true;
+    const quint32 channels = qMax(fixture->channels(), quint32(1));
+    /* The last channel's universe, so one running over a universe's end
+       (cross-universe) counts where it ends. 64-bit: no wrap at the top. */
+    const quint64 last = quint64(fixture->universeAddress()) + channels - 1;
+    return (last >> 9) < InputOutputMap::maxUniverses();
 }
 
 void Doc::applyFixtureToUniverses(Fixture *fixture, bool crossUniverse)
@@ -1395,6 +1416,9 @@ bool Doc::canPatchFixtures(const QList<FixturePatch> &patches, QString *why,
         if (n == 0 || p.address + n > 512)
             return refuse(QStringLiteral("%1 (%2 ch) does not fit at universe %3, address %4")
                               .arg(fxi->name()).arg(n).arg(p.universe + 1).arg(p.address + 1));
+        if (p.universe >= InputOutputMap::maxUniverses())
+            return refuse(QStringLiteral("%1: universe %2 is past the limit of %3 universes")
+                              .arg(fxi->name()).arg(p.universe + 1).arg(InputOutputMap::maxUniverses()));
         const quint32 base = (p.universe << 9) | p.address;
         /* Channels the venue applied keeps for itself (VENUES.md section 5):
            nothing of ours is sent there, so nothing is patched there. */
@@ -1833,9 +1857,14 @@ void Doc::slotFixtureChanged(quint32 id)
        address it asked for, as a clash on load does. A fixture that was
        already there (the venue came on after it) stays: it's the show's. */
     if (fxi->isPatched() && fxi->universeAddress() != oldBase
-        && isOnNotOurs(fxi->universe(), fxi->address(), fxi->channels()))
+        && (!fitsUniverseLimit(fxi)
+            || isOnNotOurs(fxi->universe(), fxi->address(), fxi->channels())))
     {
-        qWarning() << Q_FUNC_INFO << "fixture" << id << "moved onto channels the venue keeps (not ours): refused";
+        if (!fitsUniverseLimit(fxi))
+            qWarning() << Q_FUNC_INFO << "fixture" << id << "moved past the limit of"
+                       << InputOutputMap::maxUniverses() << "universes: refused";
+        else
+            qWarning() << Q_FUNC_INFO << "fixture" << id << "moved onto channels the venue keeps (not ours): refused";
         fxi->blockSignals(true);
         if (oldBase != UINT_MAX)
         {

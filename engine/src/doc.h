@@ -789,6 +789,13 @@ public:
     bool isOnNotOurs(quint32 universe, quint32 address, quint32 channels,
                      quint32 *first = NULL) const;
 
+    /** Whether a patched @p fixture lies wholly below
+     *  InputOutputMap::maxUniverses() (its last channel counts, for one
+     *  running over a universe's end). An unpatched one always fits.
+     *  addFixture(), patchFixtures() and a patched fixture's move refuse
+     *  one that doesn't. */
+    static bool fitsUniverseLimit(const Fixture *fixture);
+
     /** Fixtures that loaded unpatched because their address clashed with
      *  another fixture's (see Fixture::addressClash()), in id order. */
     QList<quint32> addressClashes() const;

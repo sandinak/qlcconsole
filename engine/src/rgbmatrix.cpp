@@ -1024,6 +1024,10 @@ void RGBMatrix::updateMapChannels(const RGBMap& map, const FixtureGroup *grp, QL
                 continue;
 
             quint32 universeIndex = floor((absAddress + channelList.at(i)) / 512);
+            /* A fixture past the universe list (one added on a universe
+               the show doesn't have) has nothing to write to. */
+            if (universeIndex >= quint32(universes.count()))
+                continue;
 
             GenericFader::ChannelRef fc = getFader(universes.at(universeIndex), grpHead.fxi, channelList.at(i));
             updateFaderValues(fc.get(), valueList.at(i), fadeTime);

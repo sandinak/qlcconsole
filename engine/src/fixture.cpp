@@ -128,7 +128,7 @@ QLCFixtureDef::FixtureType Fixture::type() const
 
 void Fixture::setUniverse(quint32 universe)
 {
-    /* The universe part is stored in the highest 7 bits */
+    /* The universe part is stored above the lowest 9 bits */
     m_address = (m_address & 0x01FF) | (universe << 9);
 
     emit changed(m_id);
@@ -136,7 +136,7 @@ void Fixture::setUniverse(quint32 universe)
 
 quint32 Fixture::universe() const
 {
-    /* The universe part is stored in the highest 7 bits */
+    /* The universe part is stored above the lowest 9 bits */
     return (m_address >> 9);
 }
 
@@ -160,8 +160,10 @@ void Fixture::setAddress(quint32 address)
     if (address > 511)
         return;
 
-    /* The address part is stored in the lowest 9 bits */
-    m_address = (m_address & 0xFE00) | (address & 0x01FF);
+    /* The address part is stored in the lowest 9 bits. Keep every bit
+       above them: masking with 0xFE00 kept only 7 bits of the universe,
+       so re-addressing a fixture on universe 128+ moved it 128 down. */
+    m_address = (m_address & ~quint32(0x01FF)) | (address & 0x01FF);
 
     emit changed(m_id);
 }

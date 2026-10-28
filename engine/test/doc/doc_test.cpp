@@ -228,6 +228,88 @@ void Doc_Test::addFixture()
     QVERIFY(spy.at(2).at(0) == f3->id());
 }
 
+void Doc_Test::addFixturePastUniverseLimit()
+{
+    const quint32 max = InputOutputMap::maxUniverses();
+
+    Fixture *past = new Fixture(m_doc);
+    past->setName("Past");
+    past->setChannels(4);
+    past->setUniverse(max);
+    past->setAddress(0);
+    QVERIFY(m_doc->addFixture(past) == false);
+    QCOMPARE(m_doc->fixtures().size(), 0);
+    QVERIFY(m_doc->inputOutputMap()->universesCount() <= max);
+    delete past;
+
+    /* Starting on the last universe but running over its end into one the
+       show can't have: refused too. */
+    Fixture *over = new Fixture(m_doc);
+    over->setName("Over");
+    over->setChannels(20);
+    over->setUniverse(max - 1);
+    over->setAddress(500);
+    QVERIFY(m_doc->addFixture(over, Fixture::invalidId(), true) == false);
+    QCOMPARE(m_doc->fixtures().size(), 0);
+    delete over;
+
+    /* Wholly on the last universe: fine. */
+    Fixture *last = new Fixture(m_doc);
+    last->setName("Last");
+    last->setChannels(4);
+    last->setUniverse(max - 1);
+    last->setAddress(508);
+    QVERIFY(m_doc->addFixture(last) == true);
+    QCOMPARE(last->universe(), max - 1);
+    QCOMPARE(m_doc->inputOutputMap()->universesCount(), max);
+
+    /* An unpatched (inventory) fixture claims no universe: it goes in. */
+    Fixture *staged = new Fixture(m_doc);
+    staged->setName("Staged");
+    staged->setChannels(4);
+    staged->setUniverse(max + 5);
+    staged->setPatched(false);
+    QVERIFY(m_doc->addFixture(staged) == true);
+}
+
+void Doc_Test::moveFixturePastUniverseLimit()
+{
+    Fixture *f = new Fixture(m_doc);
+    f->setName("Mover");
+    f->setChannels(4);
+    f->setUniverse(2);
+    f->setAddress(10);
+    QVERIFY(m_doc->addFixture(f) == true);
+
+    f->setUniverse(InputOutputMap::maxUniverses() + 3);
+    QCOMPARE(f->universe(), quint32(2));
+    QCOMPARE(f->address(), quint32(10));
+    QVERIFY(f->isPatched());
+    QVERIFY(m_doc->inputOutputMap()->universesCount() <= InputOutputMap::maxUniverses());
+}
+
+void Doc_Test::readdressHighUniverseFixture()
+{
+    Fixture *f = new Fixture(m_doc);
+    f->setName("High");
+    f->setChannels(4);
+    f->setUniverse(129);
+    f->setAddress(0);
+    QVERIFY(m_doc->addFixture(f) == true);
+    QCOMPARE(f->universe(), quint32(129));
+
+    f->setAddress(100);
+    QCOMPARE(f->universe(), quint32(129));
+    QCOMPARE(f->address(), quint32(100));
+    /* Doc follows it there: the channels it now claims are on 129. */
+    Fixture *probe = new Fixture(m_doc);
+    probe->setName("Probe");
+    probe->setChannels(4);
+    probe->setUniverse(1);
+    probe->setAddress(100);
+    QVERIFY(m_doc->addFixture(probe) == true);   // u2 100 is free: f didn't land there
+}
+
 void Doc_Test::deleteFixture()
 {
     QSignalSpy spy(m_doc, SIGNAL(fixtureRemoved(quint32)));
