@@ -680,6 +680,10 @@ QString Script::handleWait(const QList<QStringList>& tokens)
 
     bool ok = false;
     uint time = getValueFromString(tokens[0][1], &ok);
+    /* "random(5)": no upper bound, unread. It returned -1, and the script
+       waited that many milliseconds (49 days). */
+    if (ok == false)
+        return QString("Invalid wait time: %1").arg(tokens[0][1]);
 
     qDebug() << "Wait time:" << time;
 
