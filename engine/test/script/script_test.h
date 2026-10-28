@@ -21,6 +21,7 @@
 #define SCRIPT_TEST_H
 
 #include <QObject>
+#include <QTemporaryDir>
 
 class Script_Test final : public QObject
 {
@@ -28,7 +29,23 @@ class Script_Test final : public QObject
 
 private slots:
     void initTestCase();
+    void init();
+    void cleanup();
     void initial();
+
+    /* What a script does (coverage campaign): it was run once, unchecked */
+    void linesAreTokenizedAndBadOnesNamed();
+    void aScriptSavesAndLoadsAsWritten();
+    void functionsStartStopAndStopOnExit();
+    void setFixtureWritesItsChannel();
+    void waitsJumpsAndBlackout();
+    void waitingForAFunction();
+    void anUnreadableWaitDoesNotHang();
+    void programsRunOnlyWhenAllowed();
+
+private:
+    class Doc *m_doc = nullptr;
+    QTemporaryDir m_settings;
 };
 
 #endif
