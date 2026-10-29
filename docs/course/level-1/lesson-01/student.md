@@ -77,7 +77,7 @@ Roles: **Driver** (mouse), **Navigator** (reads each step), **Designer**
 
    ![Dragging a group onto the cue](../../images/lesson-1-1/drop-group.png)
 
-   {% include inapp.html do="Undo a mistake" path="Edit ▸ Undo" mac="⌘Z" win="Ctrl+Z" see="**⇧⌘Z** (Ctrl+Y) redoes. Edit ▸ Undo names the step it will undo." %}
+   {% include inapp.html do="Undo a mistake" path="Edit ▸ Undo" mac="⌘Z" win="Ctrl+Z" see="**⇧⌘Z** (Ctrl+Shift+Z) redoes. Edit ▸ Undo names the step it will undo." %}
 
 9. From **Palettes → Colour**, drag **Blue** onto the TrussC-RGB row;
    from **Dimmer**, drag **Full** onto it. The cyc turns blue. Always give

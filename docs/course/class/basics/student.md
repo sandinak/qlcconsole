@@ -27,7 +27,7 @@ app: true
 | Open one you used lately | File ▸ Open Recent | | |
 | Save | File ▸ Save | ⌘S | Ctrl+S |
 | Save under a new name | File ▸ Save As… | | |
-| Undo / redo | Edit ▸ Undo / Redo | ⌘Z / ⇧⌘Z | Ctrl+Z / Ctrl+Y |
+| Undo / redo | Edit ▸ Undo / Redo | ⌘Z / ⇧⌘Z | Ctrl+Z / Ctrl+Shift+Z |
 | Go to a tab | Window ▸ Show Tree, Run… | ⇧⌘5, ⇧⌘8… | Ctrl+Shift+5, Ctrl+Shift+8… |
 | See the stage | View ▸ Rig Overview | ⇧⌘R | Ctrl+Shift+R |
 | Help on what you're looking at | Help ▸ qlcconsole Help | F1 (laptop: fn F1) | F1 |
@@ -81,7 +81,7 @@ qlcconsole** (USB stick, school drive or email).
 
 ## Undo
 
-- **⌘Z** (Ctrl+Z) undoes the last change; **⇧⌘Z** (Ctrl+Y) redoes it.
+- **⌘Z** (Ctrl+Z) undoes the last change; **⇧⌘Z** (Ctrl+Shift+Z) redoes it.
 - **Edit ▸ Undo** names the step first: *Undo …*.
 - Each tab keeps its own undo: Build, Show Tree, Fixtures, Lighting Studio
   and Connections. Undo on the tab where you made the change. The Run tab
