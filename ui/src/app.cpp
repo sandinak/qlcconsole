@@ -4089,7 +4089,8 @@ void App::clearOverrides()
         m_doc->lastLook()->clear();
     if (m_doc->inputOutputMap() != nullptr && m_doc->inputOutputMap()->outputInhibited())
         slotControlBlind(false);
-    if (m_controlBlindAction != nullptr)
+    // The Blind VIEW (Operate) isn't an override of the stage: it stays.
+    if (m_controlBlindAction != nullptr && m_doc->mode() == Doc::Design)
         m_controlBlindAction->setChecked(false);
 }
 
