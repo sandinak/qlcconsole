@@ -329,8 +329,9 @@ The tests that stand in for a visitor from the network turn off
 `WebAccessBase::m_trustLoopback`, since a test can only reach loopback. The
 monkey (`88923d58c`) runs 20 s in the gate and CI (`QLC_MONKEY_MS` from its test.sh, 60 s
 by hand); it and web access are in the serial list. Not hardened: the QML
-UI's web access (`webaccess-qml.cpp`, qmlui is off) and argument splitting
-in the Pi's nmcli commands (admin only now).
+UI's web access (`webaccess-qml.cpp`, qmlui is off). The Pi's nmcli
+commands no longer split an SSID or password on spaces (0.3.1 batch d,
+`WebAccess_Test::networkSettingsAreSingleArguments`).
 
 ## Matrix 2: show compatibility, real Art-Net, TSan with an instrumented Qt (items 1, 3, 7)
 

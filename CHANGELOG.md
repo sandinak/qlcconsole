@@ -224,6 +224,10 @@ skipped). Upstream fixes taken:
   with the rest and the collected show names them there; a gobo from the
   app's library stays a name. A swap's picture beside the show is saved
   relative to it.
+- **Web access on a Pi**: an SSID or password typed on the network page
+  is passed to nmcli whole; it was split on spaces ("My Show Net" became
+  three arguments, and a password could add nmcli options), and the
+  hotspot's name kept literal quote marks.
 - **`QLC_SHOW_DEBUG`'s log** is written to `showdebug.log` in the user's
   qlcconsole folder instead of the fixed `/tmp/qlc_showdebug.log`, a name
   another user of the machine could take first (red team L3).
