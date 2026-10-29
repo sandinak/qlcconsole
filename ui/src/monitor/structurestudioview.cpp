@@ -38,6 +38,7 @@
 #include "programmercontroller.h"
 #include "righeads.h"
 #include "humanfigure.h"
+#include "performerfill.h"
 #include "fixturevisualtraits.h"
 #include "lanternpixels.h"
 #include "monitorproperties.h"
@@ -1195,7 +1196,6 @@ void StructureStudioView::drawStageFigures(QPainter &p) const
        what gives it form; the beams add their colour on top. */
     const QVector3D roomDir = QVector3D(0.25f, 0.55f, 0.80f).normalized();
     const double roomLevel = 0.18 + 0.82 * m_ambient;
-    static const int SEG = 12;
 
     /* Focus mode on a fixed light (Q102): a person stands where it lands,
        its head in the light, to show what the light gives. Drawn as one,
@@ -1274,11 +1274,20 @@ void StructureStudioView::drawStageFigures(QPainter &p) const
         const QVector3D foot(aim.x(), aim.y(), aim.z() - props->targetAimHeight(t, true));
         const QColor mark = t->color().isValid() ? t->color() : QColor(255, 180, 0);
 
+        /* Facets round the body by how big it is on screen: a choir of
+           seventy across the overview is under a hundred pixels each, where
+           twelve facets and every section cost far more than they show
+           (Performers_Test::manyPeopleRenderCost: 70 people added 190 ms of
+           CPU a frame in a debug build, 77 ms with this). */
+        const double tallPx = QLineF(w2s(foot), w2s(foot + QVector3D(0.0f, 0.0f, tall))).length();
+        const int SEG = tallPx < 100.0 ? 6 : (tallPx < 180.0 ? 8 : 12);
+        const bool coarse = tallPx < 120.0;
+
         /* The target's own mark on the deck, in the target's colour: which
            target this is. The body itself is neutral, so what colour it shows
            is the light on it. */
         {
-            static const int MARK_SEG = 24;
+            const int MARK_SEG = coarse ? SEG : 2 * SEG;
             const double r = 0.34 * double(tall) / 1.75;
             QVector3D prev;
             for (int k = 0; k <= MARK_SEG; ++k)
@@ -1318,16 +1327,26 @@ void StructureStudioView::drawStageFigures(QPainter &p) const
             return (v <= k) ? v : k + 75.0 * (1.0 - qExp(-(v - k) / 75.0));
         };
 
+        /* A costume reflects the light in its own colour: a red robe under
+           a blue wash goes dark, as on stage. No costume: the neutral body,
+           which shows the light as it is. */
+        const QColor costume = t->costumeColor();
+        const bool dressed = costume.isValid();
+        const double cr = dressed ? costume.redF() : 1.0;
+        const double cg = dressed ? costume.greenF() : 1.0;
+        const double cb = dressed ? costume.blueF() : 1.0;
         auto shade = [&](const QVector3D &at, const QVector3D &n) {
             const double diffuse =
                 roomLevel * (0.50 + 0.50 * double(qMax(0.0f, QVector3D::dotProduct(n, roomDir))));
-            double r = 150.0 * diffuse, g = 146.0 * diffuse, b = 140.0 * diffuse;
+            double r = dressed ? 190.0 * cr * diffuse : 150.0 * diffuse;
+            double g = dressed ? 190.0 * cg * diffuse : 146.0 * diffuse;
+            double b = dressed ? 190.0 * cb * diffuse : 140.0 * diffuse;
             /* Every beam that passes through this part of the body and falls
                on the side facing it, added: a red spot from the front and a
                blue one from the side leave a red front and a blue side, and a
                face both reach shows the mix. */
             const QVector3D lit = beamLightAt(at, n) * float(exposure);
-            r += lit.x(); g += lit.y(); b += lit.z();
+            r += lit.x() * cr; g += lit.y() * cg; b += lit.z() * cb;
             return QColor(qBound(0, qRound(knee(r)), 255), qBound(0, qRound(knee(g)), 255),
                           qBound(0, qRound(knee(b)), 255));
         };
@@ -1358,8 +1377,13 @@ void StructureStudioView::drawStageFigures(QPainter &p) const
         foreach (const FigureLoft &loft, humanFigureLofts())
         {
             QVector<QVector<QVector3D> > rings;
-            for (const FigureRing &fr : loft)
+            for (int ri = 0; ri < loft.size(); ++ri)
             {
+                /* Small on screen, every other section (the ends kept): the
+                   outline reads the same at a few dozen pixels. */
+                if (coarse && ri % 2 == 1 && ri + 1 < loft.size())
+                    continue;
+                const FigureRing &fr = loft.at(ri);
                 QVector<QVector3D> ring;
                 for (int s = 0; s < SEG; ++s)
                 {
@@ -1988,6 +2012,8 @@ QList<QPair<QString, QRectF> > StructureStudioView::targetReadouts(const QFont &
                           && !t->footprint().isEmpty();
         if (!person && !area && !t->isLine())
             continue;           // the overview draws nothing for it to label
+        if (PerformerFill::isPerformer(props, t))
+            continue;           // one of a set: seventy readouts read as none
         QVector3D at = props->targetAimPoint(t, true);
         at.setZ(props->platformHeightAt(at.x(), at.y()));
         spots << at;

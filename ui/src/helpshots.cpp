@@ -58,6 +58,7 @@
 #include "stagepiecedialog.h"
 #include "truss.h"
 #include "stageplatform.h"
+#include "performerfill.h"
 #include "programmingoutline.h"
 #include "workbench.h"
 #include "showtreeview.h"
@@ -1099,6 +1100,72 @@ QList<HelpShots::Shot> HelpShots::shots()
         Monitor *mon = Monitor::instance();
         if (mon != NULL && mon->m_overviewDlg != NULL)
             mon->m_overviewDlg->close();
+    } };
+
+    /* People on the risers: two choir risers upstage, filled with students
+       in navy, seen in the rig view. Taken out again afterwards. */
+    list << Shot{ QStringLiteral("lighting-studio-performers-3d"), [=]() {
+        window();
+        Frame f;
+        Monitor *mon = studio(MonitorGraphicsView::PovTop);
+        if (mon == NULL)
+            return f;
+        QList<quint32> risers;
+        for (int k = 0; k < 2; ++k)
+        {
+            StagePlatform *p = mon->m_props->addPlatform();
+            p->setName(QStringLiteral("HelpShot Riser %1").arg(k + 1));
+            p->setOriginX(3.6f + 3.6f * k);
+            p->setOriginY(2.9f);
+            p->setSteps(3, 0.3f, 0.7f, 3.2f, StagePlatform::ClimbUpstage);
+            p->setColor(QColor(70, 70, 76));
+            risers << p->id();
+        }
+        mon->m_graphicsView->updatePlatforms();
+        PerformerFill::Options o;
+        o.setName = QStringLiteral("Choir");
+        o.height = PerformerFill::presetHeight(PerformerFill::Students);
+        o.costume = QColor(40, 50, 110);
+        mon->fillWithPeople(risers, o);
+        // A white wash on them, so the costume shows in the light.
+        if (Function *wash = function(QStringLiteral("10.4 Chase step - White")))
+            wash->start(doc->masterTimer(), FunctionParent::master());
+        settle();
+        mon->showStageOverview();
+        settle();
+        if (mon->m_overviewDlg == NULL)
+            return f;
+        if (QCheckBox *gpu = mon->m_overviewDlg->findChild<QCheckBox *>(QStringLiteral("rigGpu")))
+            gpu->setChecked(false);
+        mon->m_overviewDlg->setFloating(true);
+        mon->m_overviewDlg->resize(1100, 760);
+        settle();
+        f.grab = mon->m_overviewDlg;
+        return f;
+    }, [=]() {
+        Monitor *mon = Monitor::instance();
+        if (mon == NULL)
+            return;
+        if (mon->m_overviewDlg != NULL)
+            mon->m_overviewDlg->close();
+        if (Function *wash = function(QStringLiteral("10.4 Chase step - White")))
+            wash->stop(FunctionParent::master());
+        // Put the show back as it was.
+        const quint32 layer = PerformerFill::ensureLayer(mon->m_props);
+        foreach (StageTarget *t, mon->m_props->stageTargets())
+            if (t->layerId() == layer)
+            {
+                if (t->groupId() != 0)
+                    mon->m_props->removeGroup(t->groupId());
+                mon->m_props->removeStageTarget(t->id());
+            }
+        mon->m_props->removeLayer(layer);
+        foreach (StagePlatform *p, mon->m_props->platforms())
+            if (p->name().startsWith(QStringLiteral("HelpShot Riser")))
+                mon->m_props->removePlatform(p->id());
+        mon->m_graphicsView->updatePlatforms();
+        mon->m_graphicsView->updateTargets();
+        doc->resetModified();
     } };
 
     /* A truss's own editor, then with one of its fixtures picked. The editor

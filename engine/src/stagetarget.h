@@ -144,6 +144,12 @@ public:
     { return hasPersonHeight() ? m_personHeight : defaultPersonHeight(); }
     static constexpr float defaultPersonHeight() { return 1.75f; }
 
+    /** What a Person wears: the colour the body takes light in, so a blue
+     *  wash on a red robe reads dark in the rig view, as it would on stage.
+     *  Invalid (the default) = the neutral body every person had before. */
+    QColor costumeColor() const { return m_costume; }
+    void   setCostumeColor(const QColor &c) { m_costume = c; }
+
     /** Where on a person light is aimed, as a share of their height: the
      *  chest. */
     static constexpr float chestShare() { return 0.8f; }
@@ -251,6 +257,7 @@ private:
     Kind      m_kind = Kind::None;
     float     m_aimHeightOverride = -1.0f;   ///< < 0 = use the kind's default
     float     m_personHeight = -1.0f;        ///< Person: how tall; < 0 = not given
+    QColor    m_costume;                     ///< Person: costume; invalid = neutral
     QString   m_boundType;                   ///< "platform" | "truss" | "tower"
     quint32   m_boundId = UINT_MAX;
     QSizeF    m_footprint;                   ///< metres; empty = a point

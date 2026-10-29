@@ -86,6 +86,7 @@ add_library(${module_name} SHARED
     networkgearcatalog.cpp networkgearcatalog.h
     stand.cpp stand.h
     tower.cpp tower.h
+    performerfill.cpp performerfill.h
     stagetarget.cpp stagetarget.h
     truss.cpp truss.h
     networkroute.cpp networkroute.h

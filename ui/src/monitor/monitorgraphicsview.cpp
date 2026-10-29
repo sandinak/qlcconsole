@@ -89,6 +89,7 @@
 #include "truss.h"
 #include "stageplatform.h"
 #include "stagetarget.h"
+#include "performerfill.h"
 #include "monitor.h"
 #include "aimsolver.h"
 #include "linecurve.h"
@@ -2322,6 +2323,16 @@ int MonitorGraphicsView::rotateSelectedItems(double deg)
             StagePlatform *pl = pi->platform();
             if (pl == nullptr)
                 continue;
+            /* Who stands on it turns with it (one selected turns itself). */
+            foreach (StageTarget *t, PerformerFill::standingOn(props, pl->id()))
+            {
+                TargetItem *tgi = m_targetItems.value(t->id(), nullptr);
+                if (tgi != nullptr && tgi->isSelected())
+                    continue;
+                const QPointF o = turnPt(double(t->x()), double(t->y()));
+                t->setX(float(o.x()));
+                t->setY(float(o.y()));
+            }
             const QPointF nc = turnPt(pl->centre().x(), pl->centre().y());
             pl->setOriginX(float(nc.x() - double(pl->width()) / 2.0));
             pl->setOriginY(float(nc.y() - double(pl->depth()) / 2.0));
@@ -5429,6 +5440,24 @@ void MonitorGraphicsView::slotPlatformMoved(PlatformItem *item)
 
     MonitorProperties *mprops = m_doc->monitorProperties();
     UndoEntry e; e.type = UndoEntry::PlatformMove;
+
+    /* The people standing on a riser ride it, as its deck fixtures do --
+       found before anything moves, while they are still over it. One that
+       was dragged with it moves itself (slotTargetMoved). */
+    QHash<quint32, QList<StageTarget *> > riders;
+    foreach (PlatformItem *pi, moved)
+    {
+        if (pi->platform() == nullptr)
+            continue;
+        foreach (StageTarget *t, PerformerFill::standingOn(mprops, pi->platformId()))
+        {
+            TargetItem *ti = m_targetItems.value(t->id(), nullptr);
+            if (ti != nullptr && ti->isSelected() && itemDraggable(ti))
+                continue;
+            riders[pi->platformId()] << t;
+        }
+    }
+
     foreach (PlatformItem *pi, moved)
     {
         StagePlatform *p = pi->platform();
@@ -5456,6 +5485,14 @@ void MonitorGraphicsView::slotPlatformMoved(PlatformItem *item)
                 fp.setY(fp.y() + dyMm);
                 mprops->setFixturePosition(it.key(), 0, 0, fp);
             }
+            foreach (StageTarget *t, riders.value(p->id()))
+            {
+                if (!e.targetPositions.contains(t->id()))
+                    e.targetPositions.insert(t->id(), QPointF(double(t->x()), double(t->y())));
+                t->setX(t->x() + dxMm / 1000.0f);
+                t->setY(t->y() + dyMm / 1000.0f);
+                t->setZ(mprops->platformHeightAt(t->x(), t->y()));
+            }
             emit platformMoved(pi->platformId(),
                                QPointF(double(p->originX()), double(p->originY())));
         }
@@ -5465,6 +5502,12 @@ void MonitorGraphicsView::slotPlatformMoved(PlatformItem *item)
     {
         pushUndo(e);
         m_doc->setModified();
+    }
+    if (!e.targetPositions.isEmpty())
+    {
+        repositionTargetItems();
+        updateAimLines();
+        mprops->notifyStageTargetsChanged();
     }
 
     // Re-slave platform-anchored studio frames, then let mounted AND frame
@@ -5945,7 +5988,8 @@ void MonitorGraphicsView::updateTargets()
            the item is while it is dragged in the Top view, from the target
            itself in an elevation (where the plot shows no Y). Unless Show >
            Stage marks > Target positions is off. */
-        if (m_doc->monitorProperties() != nullptr && m_doc->monitorProperties()->targetPositionsVisible())
+        if (m_doc->monitorProperties() != nullptr && m_doc->monitorProperties()->targetPositionsVisible()
+            && !PerformerFill::isPerformer(props, t))
         {
             ti->setPositionReadout([this, at](const QPointF &scenePos) {
                 MonitorProperties *mp = m_doc->monitorProperties();
@@ -8851,6 +8895,14 @@ void MonitorGraphicsView::populateItemMenu(QMenu *menu, const QString &kind, qui
             adds()->addAction(tr("Person Here"), this, [this, at]() {
                 emit addItemRequested(QStringLiteral("person"), at);
             });
+            /* A riser full of people (a choir, a band): rows on every tread,
+               as a set in the Performers layer. */
+            if (kind == QLatin1String("platform"))
+            {
+                adds()->addAction(tr("People on the Risers…"), this, [this, at]() {
+                    emit addItemRequested(QStringLiteral("people"), at);
+                });
+            }
         }
 
         /* What the things ON it light. Asking a truss is how you compare its
@@ -11291,6 +11343,20 @@ void MonitorGraphicsView::undoOne(const UndoEntry &entry)
                 fp.setY(fp.y() + dyMm);
                 props->setFixturePosition(fit.key(), 0, 0, fp);
             }
+        }
+        // And the people who rode it, onto what is under them again.
+        for (auto tit = entry.targetPositions.constBegin(); props != nullptr && tit != entry.targetPositions.constEnd(); ++tit)
+            if (StageTarget *t = props->stageTarget(tit.key()))
+            {
+                t->setX(float(tit.value().x()));
+                t->setY(float(tit.value().y()));
+                t->setZ(props->platformHeightAt(t->x(), t->y()));
+            }
+        if (!entry.targetPositions.isEmpty())
+        {
+            updateTargets();
+            if (props != nullptr)
+                props->notifyStageTargetsChanged();
         }
         if (props != nullptr)
             props->recomputeAnchoredFrames();

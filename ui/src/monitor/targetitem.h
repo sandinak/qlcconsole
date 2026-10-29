@@ -112,6 +112,7 @@ public:
                    bool sideOn);
     /** The figure's outline in item coordinates; empty when there is none. */
     QPainterPath figurePath() const;
+    QPainterPath buildFigurePath() const;
 
     /** The ground this target covers, in scene pixels, centred on the mark:
      *  width x depth from above, or a strip of width (height 0) in an
@@ -198,6 +199,11 @@ private:
     QPointF            m_crown;
     double             m_pxPerMetre = 0.0;   ///< 0 = no figure set
     bool               m_sideOn = false;
+    /** figurePath(), kept until the figure changes: simplifying the body's
+     *  outline on every paint was most of a choir's plot cost. */
+    mutable QPainterPath m_figureCache;
+    mutable bool       m_figureCached = false;
+    mutable bool       m_figureCachePerson = false;
 
     QPolygonF          m_curve;            ///< line: the curve, item coords
     QVector<double>    m_curveFractions;   ///< parallel to m_curve

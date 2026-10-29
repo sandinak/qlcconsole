@@ -37,6 +37,14 @@ docs/design/VENUES.md section 11; the Rig Overview (3D) owner filter; the focus
 report's owner column; a real-rig check that a not-ours universe stays
 silent on Art-Net/sACN.
 
+## People on the risers: follow-ons (v1 shipped 2026-10-29, DONE.md)
+
+v1 is in (fill risers, Performers layer, costume, rides the riser). Open:
+a set's costume/height changed in one place (now: fill again, or each
+person's dialog); keep performers out of aim-target pickers if 70 names
+get in the way; per-person height variation; facing for a turned riser
+(everyone faces the house).
+
 ## Show Review: an auditor for the show's design (post-0.3, asked 2026-10-25)
 
 Design in [docs/design/SHOW_REVIEW.md](../design/SHOW_REVIEW.md); nothing built, after

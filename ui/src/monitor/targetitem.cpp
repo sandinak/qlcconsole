@@ -169,10 +169,25 @@ void TargetItem::setFigure(const QPointF &feet, const QPointF &crown,
     m_crown = crown;
     m_pxPerMetre = pxPerMetre;
     m_sideOn = sideOn;
+    m_figureCached = false;
     update();
 }
 
 QPainterPath TargetItem::figurePath() const
+{
+    /* The kind is read too: a target edited into or out of a Person keeps
+       its item until the next rebuild. */
+    const bool person = m_target != nullptr && m_target->kind() == StageTarget::Kind::Person;
+    if (!m_figureCached || m_figureCachePerson != person)
+    {
+        m_figureCache = buildFigurePath();
+        m_figureCached = true;
+        m_figureCachePerson = person;
+    }
+    return m_figureCache;
+}
+
+QPainterPath TargetItem::buildFigurePath() const
 {
     QPainterPath path;
     path.setFillRule(Qt::WindingFill);    // overlapping parts, not holes
@@ -506,7 +521,9 @@ void TargetItem::paint(QPainter *painter,
     const QPainterPath fig = figurePath();
     if (fig.isEmpty() == false)
     {
-        QColor fill = col;
+        // What they wear, when a costume is set; else the target's colour.
+        QColor fill = (m_target != nullptr && m_target->costumeColor().isValid())
+                      ? m_target->costumeColor() : col;
         fill.setAlpha(selected ? 150 : 100);
         painter->setPen(QPen(col, 1.2));
         painter->setBrush(fill);

@@ -131,6 +131,7 @@
 #include "monitorimageitem.h"
 #include "feetinchesspinbox.h"
 #include "rigeditsession.h"
+#include "performersdialog.h"
 #include "stagepiecedialog.h"
 #include "colourswatchbutton.h"
 #include "targetitem.h"
@@ -659,6 +660,16 @@ void Monitor::initGraphicsView()
         else if (what == QLatin1String("target")) slotAddTarget();
         else if (what == QLatin1String("targetline")) slotAddTargetLine();
         else if (what == QLatin1String("person")) slotAddPerson();
+        else if (what == QLatin1String("people"))
+        {
+            /* On a riser: that riser, with any others selected. */
+            QList<quint32> ids = selectedPlatformIds();
+            const QPointF mm = m_graphicsView->pixelsToRealPosition(scenePos.x(), scenePos.y());
+            const quint32 at = m_props->platformIdAt(float(mm.x() / 1000.0), float(mm.y() / 1000.0));
+            if (m_props->platform(at) != nullptr && !ids.contains(at))
+                ids.prepend(at);
+            slotFillWithPeople(ids);
+        }
     });
     connect(m_graphicsView, &MonitorGraphicsView::contextMenuRequested,
             this, &Monitor::slotCanvasContextMenu);
@@ -2127,8 +2138,20 @@ void Monitor::initGraphicsToolbar()
                            this, SLOT(slotAddTarget()));
         addMenu->addAction(tr("Add Target Line"),
                            this, SLOT(slotAddTargetLine()));
-        addMenu->addAction(tr("Add Person"),
-                           this, SLOT(slotAddPerson()));
+        /* With risers selected it fills them with people instead of placing
+           one: the same entry, so the menu does not grow. */
+        QAction *person = addMenu->addAction(tr("Add Person"), this, [this]() {
+            if (selectedPlatformIds().isEmpty())
+                slotAddPerson();
+            else
+                slotFillWithPeople();
+        });
+        person->setObjectName(QStringLiteral("addPersonAction"));
+        connect(addMenu, &QMenu::aboutToShow, this, [this, person]() {
+            const int n = selectedPlatformIds().size();
+            person->setText(n == 0 ? tr("Add Person")
+                                   : tr("Fill %n Selected Riser(s) with People…", "", n));
+        });
         addBtn->setMenu(addMenu);
     }
     m_graphicsToolBar->addWidget(addBtn);
@@ -6571,6 +6594,52 @@ void Monitor::slotAddPerson()
     m_doc->setModified();
 }
 
+QList<quint32> Monitor::selectedPlatformIds() const
+{
+    QList<quint32> ids;
+    if (m_graphicsView == nullptr || m_graphicsView->scene() == nullptr)
+        return ids;
+    foreach (QGraphicsItem *gi, m_graphicsView->scene()->selectedItems())
+        if (auto *pi = dynamic_cast<PlatformItem *>(gi))
+            if (!ids.contains(pi->platformId()) && m_props->platform(pi->platformId()) != nullptr)
+                ids << pi->platformId();
+    return ids;
+}
+
+void Monitor::slotFillWithPeople(const QList<quint32> &platformIds)
+{
+    const QList<quint32> ids = platformIds.isEmpty() ? selectedPlatformIds() : platformIds;
+    if (ids.isEmpty())
+    {
+        showNotice(tr("Select the risers to fill with people first"));
+        return;
+    }
+    PerformersDialog dlg(m_props, ids, this);
+    if (dlg.exec() != QDialog::Accepted)
+        return;
+    fillWithPeople(ids, dlg.options());
+}
+
+PerformerFill::Result Monitor::fillWithPeople(const QList<quint32> &platformIds,
+                                              const PerformerFill::Options &options)
+{
+    RigEditSession edit(this);
+    /* One an aim palette points at stays: a refill must not quietly take
+       the soloist out from under a scene. */
+    auto inUse = [this](quint32 tid) {
+        foreach (QLCPalette *pal, m_doc->palettes())
+            if (pal != nullptr && pal->stageTargetId() == tid)
+                return true;
+        return false;
+    };
+    const PerformerFill::Result res = PerformerFill::fill(m_props, platformIds, options, inUse);
+    m_graphicsView->updateTargets();
+    if (m_layersPanel) m_layersPanel->reload();
+    m_doc->setModified();
+    showNotice(tr("%n person(s) on the risers, in the Performers layer", "", res.targets.size()));
+    return res;
+}
+
 void Monitor::slotEditTarget(quint32 tid)
 {
     StageTarget *t = m_props->stageTarget(tid);
@@ -6747,6 +6816,18 @@ void Monitor::slotEditTarget(quint32 tid)
     connect(colorBtn, &ColourSwatchButton::colourChanged, &dlg, [&](const QColor &c) { chosenColor = c; });
     form->addRow(tr("Colour:"), colorBtn);
 
+    // What a Person wears: the rig view lights the body in it. None = neutral.
+    ColourSwatchButton *costumeBtn = new ColourSwatchButton(t->costumeColor(), tr("Costume colour"), &dlg);
+    costumeBtn->setObjectName(QStringLiteral("personCostume"));
+    costumeBtn->setResetColour(QColor());
+    QColor chosenCostume = t->costumeColor();
+    connect(costumeBtn, &ColourSwatchButton::colourChanged, &dlg, [&](const QColor &c) { chosenCostume = c; });
+    form->addRow(tr("Costume:"), costumeBtn);
+    connect(kindCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), &dlg, [&](int) {
+        costumeBtn->setEnabled(StageTarget::Kind(kindCombo->currentData().toInt()) == StageTarget::Kind::Person);
+    });
+    costumeBtn->setEnabled(t->kind() == StageTarget::Kind::Person);
+
     vl->addLayout(form);
     QDialogButtonBox *bb = new QDialogButtonBox(
         QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);
@@ -6761,6 +6842,7 @@ void Monitor::slotEditTarget(quint32 tid)
         t->setY(float(ySpin->value() * fromDisp_t));
         t->setZ(float(zSpin->value() * fromDisp_t));
         t->setColor(chosenColor);
+        t->setCostumeColor(chosenCostume);
         m_props->setAimSubjectHeight(float(subjSpin->value() * fromDisp_t));
         // Position and subject height both change what a head can reach.
         m_props->notifyStageTargetsChanged();

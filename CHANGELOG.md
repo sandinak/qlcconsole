@@ -57,6 +57,16 @@ skipped). Upstream fixes taken:
 
 ### Added
 
+- **People on the risers**: select risers (steps or decks) and **Add ▸
+  Fill Selected Risers with People…** (the Add Person entry, while risers
+  are selected; or right-click a riser, **Add ▸ People on the Risers…**)
+  stands a row on every tread, at its height and facing the house, by
+  spacing or so many to a row, staggered. Children, students or adults,
+  and a costume colour the rig view lights the body in. They are one set
+  in a **Performers** layer (its eye hides them, its lock holds them),
+  ride their riser when it moves or turns, and are saved with the show.
+  The rig view draws a small figure with fewer facets, so seventy cost
+  about a third of what they did.
 - **Web access saved with the show**: **Connections ▸ Devices ▸ Show
   control & sync ▸ Web access** turns on "Start web access with this show,
   on port" (9999 by default), with **Reachable from other devices on the
