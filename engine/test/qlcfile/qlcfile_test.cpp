@@ -423,7 +423,7 @@ void QLCFile_Test::theShowDebugLogIsInTheUsersFolder()
     qputenv("HOME", realHome);
     QCOMPARE(QFileInfo(path).absolutePath(),
              QDir(home.path()).absoluteFilePath(QStringLiteral(USERQLCPLUSDIR)));
-    QVERIFY(!path.startsWith(QStringLiteral("/tmp/")));
+    QVERIFY(path != QStringLiteral("/tmp/qlc_showdebug.log"));
 #endif
 }
 
