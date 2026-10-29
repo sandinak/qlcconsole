@@ -9,6 +9,12 @@ nav_order: 2
 
 **Student handout**
 
+## Why this matters
+
+A plot is how a crew agrees what hangs where. A symbol tells you what
+kind of light it is, and so which part of a look it can be: a wash, a
+spot, a special ([Lesson 0.3](../../level-0/lesson-03/handout.md)).
+
 ## Today you will
 
 - read a lighting plot: what each symbol says about the light;

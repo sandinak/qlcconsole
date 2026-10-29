@@ -1,0 +1,21 @@
+---
+title: "Lesson 0.8 — The virtual stage"
+parent: "Level 0 — Lighting concepts"
+nav_order: 8
+has_children: true
+---
+
+# Lesson 0.8 — The virtual stage
+
+Students open qlcconsole for the first time, find every part of our stage
+in the **Rig Overview**, learn the stage directions, and play a finished
+cue list with **GO**: the first app lesson, after the concepts of
+Lessons 0.1–0.7. Ends with part 2 of the Level 0 check: label the stage.
+
+| For | File |
+|---|---|
+| Teacher | [Teacher guide](https://github.com/sandinak/qlcconsole/blob/main/docs/course/level-0/lesson-08/teacher-guide.md) · [Slides outline](https://github.com/sandinak/qlcconsole/blob/main/docs/course/level-0/lesson-08/slides.md) |
+| Students | [Handout](handout.md) · [Exit ticket: label the stage](exit-ticket.md) · [At home](at-home.md) |
+| Show files | [`lesson-1-1-finish.qlcc`](../../shows/lesson-1-1-finish.qlcc) |
+
+![The stage with the work light on](../../images/lesson-0-8/stage-45.png)

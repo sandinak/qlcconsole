@@ -25,7 +25,7 @@ teacher says. It can be turned into a deck as it is.*
 
 ## 3. Warm and cool; deep and pale
 
-- Pictures: `images/lesson-0-1/colour-warm.png`, `colour-cool.png`.
+- Pictures: `images/lesson-0-2/colour-warm.png`, `colour-cool.png`.
 - Saturated (deep) shouts; pale whispers.
 
 ## 4. Bright isn't always better

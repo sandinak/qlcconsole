@@ -31,6 +31,13 @@ words:
     means: "Changing a cue's own values from the stage. Venue focus fixes the rig; this changes the cue."
 ---
 
+## Why
+
+A cue is only as good as where its light lands. Aimed a foot off, a
+special misses the soloist and the look loses its focus
+([Lesson 0.4](../0-4/)). Focus puts every light back on its mark in each
+room.
+
 ## A focus call (no computer)
 
 The **electrician** is at the light and moves it. The **designer** stands

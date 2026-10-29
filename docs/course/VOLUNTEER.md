@@ -209,7 +209,7 @@ Branson reviews it, checks the steps on the app, and merges it.
 | Part | Status |
 |---|---|
 | [Course plan](COURSE_PLAN.md), [teaching show](rig.md), [install](install.md), [glossary](GLOSSARY.md) | written |
-| [Level 0](level-0/index.md): 0.1 *What light does*, 0.2 *The virtual stage* (with the Level 0 check) | written |
+| [Level 0](level-0/index.md): 0.1–0.7 lighting concepts (*Why we light a show*, *What light does*, *Building a look*, *What the audience reads*, *Lighting a song*, *Anticipation and momentum*, *Running a show*), 0.8 *The virtual stage* (with the Level 0 check in two parts) | written |
 | [Level 1](level-1/index.md): 1.1–1.5, the [Level 1 check and rubric](level-1/lesson-05/level-check.md) | written |
 | [Level 3](level-3/index.md): 3.3 *Reading the plot: symbols*, 3.6 *Focus and calibration* (with pictures), 3.7 *House lights, work lights and power*, 3.10 *Coming from Eos* (optional) | written; 3.3, 3.7 and 3.10 have no pictures yet |
 | Level 2 (7 lessons), the rest of Level 3 | planned: outlines in the [course plan](COURSE_PLAN.md#2-levels-and-lessons) |
@@ -220,8 +220,11 @@ Good first jobs for you:
 - **Do Level 0 and Level 1 as a student**, start to finish, and note
   anything confusing, too long for 50 minutes, or too hard for a ninth
   grader.
-- Suggest **video clips** for Lesson 0.1 (a 2-minute show choir number with
-  clear light changes; YouTube links are fine).
+- Suggest **video clips** for Level 0 (the list is in the course plan,
+  §9): a 2–3 minute show choir number with clear light changes for 0.1–0.2,
+  and short clips of a soloist picked out (0.4), a button (0.6) and a
+  stage manager calling a show (0.7). Links are fine; say what to watch
+  for.
 - Try the **Level 1 rubric** (in the Level 1 check) on a made-up group:
   is it fair and clear?
 - Draft the **Level 2** lessons from the plan, starting with 2.1.

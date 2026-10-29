@@ -9,6 +9,12 @@ nav_order: 2
 
 **Student handout**
 
+## Why this matters
+
+The ideas you learnt in Level 0 (cues, looks, calls) don't belong to one
+console ([Lesson 0.7](../../level-0/lesson-07/handout.md)). If you've
+run an Eos desk, your show and your habits can come with you.
+
 ## Today you will
 
 - bring an Eos show into qlcconsole;

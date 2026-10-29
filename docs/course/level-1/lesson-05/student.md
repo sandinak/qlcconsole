@@ -23,6 +23,12 @@ words:
     means: "Building (clicking a cue shows it) / running: the Run tab says **LIVE** and only GO changes the stage."
 ---
 
+## Why
+
+A cue only works if it happens on the moment. The stage manager calls it
+and the board op takes it on GO ([Lesson 0.7](../0-7/)); today you run
+that with the real tool.
+
 ## The call
 
 | Who | Says |

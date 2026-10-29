@@ -269,8 +269,11 @@ writes the first cues of a song on the teaching show, with the mouse.
 [**Lighting a show choir with the Show Tree**](docs/course/README.md) is a
 course for high-school show choir tech crews, released under CC BY 4.0:
 
-- Level 0, *First look*, and Level 1, *Basics*: a song into cues (colour,
-  intensity, direction, timing, GO), written and checked against the app.
+- Level 0, *Lighting concepts*: why a show is lit, what the audience
+  reads, lighting a song, building momentum, running a show and busking,
+  with no computers; then the virtual stage.
+- Level 1, *Basics*: a song into cues (colour, intensity, direction,
+  timing, GO), written and checked against the app.
 - Level 2, *Intermediate* (tracking, palettes, effects, moving lights,
   busking), and Level 3, *Advanced* (patching, the rig, focus and venues,
   show control, running a real show), with four of Level 3's lessons

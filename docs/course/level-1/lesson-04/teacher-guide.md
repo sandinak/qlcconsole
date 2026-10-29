@@ -13,6 +13,8 @@ nav_order: 1
 
 <img src="../../images/qr/class-1-4.svg" width="120" alt="QR code for https://sandinak.github.io/qlcconsole/class/1-4/">
 
+**Builds on:** Lesson [0.6](../../level-0/lesson-06/teacher-guide.md). Open with the handout's *Why this matters* before any clicks.
+
 ## Objectives
 
 Students can:

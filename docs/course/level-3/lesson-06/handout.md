@@ -9,6 +9,13 @@ nav_order: 2
 
 **Student handout**
 
+## Why this matters
+
+A cue is only as good as where its light lands. Aimed a foot off, a
+special misses the soloist and the look loses its focus
+([Lesson 0.4](../../level-0/lesson-04/handout.md)). Focus puts every
+light back on its mark in each room.
+
 ## Today you will
 
 - read a target's place on stage from the stage marks: "SL 1 · DS 1";

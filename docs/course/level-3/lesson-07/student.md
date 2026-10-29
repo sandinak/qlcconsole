@@ -21,6 +21,13 @@ words:
     means: "Per fixture: **Ignore Blackout**, **Ignore the Grand Master**, **Switch (relay)**, **On when not in use**."
 ---
 
+## Why
+
+House lights and work lights aren't part of the design, but they frame
+it: the house going out tells the audience the show is starting
+([Lesson 0.7](../0-7/)), and a work light must never vanish on a
+Blackout while the crew is on stage.
+
 ## On paper
 
 For a show day (load-in, house opens, the show, intermission, strike):

@@ -1,64 +1,57 @@
 ---
 title: "0.2 Slides outline"
-parent: "Lesson 0.2 — The virtual stage"
-grand_parent: "Level 0 — First look"
+parent: "Lesson 0.2 — What light does"
+grand_parent: "Level 0 — Lighting concepts"
 nav_order: 3
 ---
 
-# Slides — Lesson 0.2: The virtual stage
+# Slides — Lesson 0.2: What light does
 
 *An outline: one heading per slide, with what's on it and what the
-teacher says. It can be turned into a deck as it is.*
+teacher says.*
 
 ---
 
-## 1. The virtual stage
+## 1. What light does
 
-- Title, Level 0 · Lesson 2
-- Picture: `images/lesson-0-2/stage-45.png`
-- *Say:* "This is our stage, inside the computer. We'll light it all year."
+- Title, Level 0 · Lesson 2.
+- *Say:* "Last lesson: the jobs. Today: the controls."
 
-## 2. Stage directions
+## 2. Intensity
 
-- A plan with **Upstage** at the top, **Downstage** at the bottom, **Stage
-  right** on the left, **Stage left** on the right.
-- *Say:* "Always the singers' left and right."
+- Pictures: `images/lesson-0-2/intensity-full.png`, `intensity-low.png`.
+- *Ask:* "Same lights, only the brightness changed. Which is the big
+  moment?"
 
-## 3. The game
+## 3. Colour
 
-- "Downstage left!" "Upstage right!" — everyone moves.
+- Pictures: `colour-warm.png`, `colour-cool.png`.
+- Warm (amber, warm white) and cool (blue, lavender); saturated and pale.
+- *Ask:* "Which is the love song? Which is night?"
 
-## 4. Our stage, part by part
+## 4. Direction
 
-- Picture: `images/lesson-0-2/stage-45.png`, pointing at: cyc, risers (US,
-  CS, DS), trusses (SR, SL), audience towers (AT1, AT2), proscenium,
-  house.
+- Pictures: `direction-front.png`, `direction-back.png`,
+  `direction-below.png`.
+- Front: faces. Back: outlines. Side: shape. Below: drama.
+- *Say:* "Every number needs faces lit, from the front."
 
-## 5. From above
+## 5. Movement
 
-- Picture: `images/lesson-0-2/stage-top.png`
-- *Ask:* "Where's stage right in this picture?" (*Left.*)
+- Fades, snaps, chases, moving beams.
 
-## 6. Nothing to break
+## 6. Say it exactly
 
-- The footer says **No outputs: preview only**: no real lights.
-- *Say:* "Try anything. Undo (⌘Z) takes it back."
+- *Say:* "'Make it different' isn't a note. 'Cooler and dimmer' is."
 
-## 7. The Rig Overview
+## 7. Light log
 
-- Picture: `images/lesson-0-2/rig-overview.png`
-- View · Live · Room.
+- The log on the handout: when, which quality, which job.
 
-## 8. GO
+## 8. Share
 
-- Picture: `images/lesson-0-2/stage-chorus.png`
-- Run tab → GO three times.
+- One change per group. Picture sort: a ballad? An opener?
 
-## 9. Your turn
+## 9. Exit ticket
 
-- Roles: Driver · Navigator · Designer.
-- Handout Part 2.
-
-## 10. Level check
-
-- Label the stage plan, alone, on paper.
+- Three questions.

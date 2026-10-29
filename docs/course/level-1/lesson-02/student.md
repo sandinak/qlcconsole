@@ -25,6 +25,13 @@ words:
     means: "A colour or level for the **whole cue**: it reaches every layer that doesn't set its own."
 ---
 
+## Why
+
+Colour and level are how the audience reads a moment's mood
+([Lesson 0.4](../0-4/)). The director's note is about how the verse
+feels; the fix is a change of colour and intensity, and the scream is a
+hit ([Lesson 0.6](../0-6/)).
+
 ## The plan
 
 The director: *"The verse is too cosy. Make it cold and a little eerie.

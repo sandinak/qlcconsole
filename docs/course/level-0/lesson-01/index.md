@@ -1,15 +1,15 @@
 ---
-title: "Lesson 0.1 — What light does"
-parent: "Level 0 — First look"
+title: "Lesson 0.1 — Why we light a show"
+parent: "Level 0 — Lighting concepts"
 nav_order: 1
 has_children: true
 ---
 
-# Lesson 0.1 — What light does
+# Lesson 0.1 — Why we light a show
 
-No computers today. Students watch a show choir number twice, once for the
-singers and once only for the light, and learn the words to say what the
-light did: its four **qualities** and its four **jobs**.
+No computers. Where the course starts: what a show gets from its
+lighting, the six **jobs** of stage light, and who on a lighting crew does
+what. About 25 minutes; pairs with Lesson 0.2.
 
 | For | File |
 |---|---|
@@ -17,6 +17,6 @@ light did: its four **qualities** and its four **jobs**.
 | Students | [Handout](handout.md) · [Exit ticket](exit-ticket.md) · [At home](at-home.md) |
 | Show files | none (no computers) |
 
-| Bright | Dim |
+| Work light: everything seen, nothing said | Show light: a moment |
 |---|---|
-| ![Steps at full](../../images/lesson-0-1/intensity-full.png) | ![Steps at 25%](../../images/lesson-0-1/intensity-low.png) |
+| ![The stage in work light](../../images/lesson-0-8/stage-45.png) | ![The solo: two spots on one singer](../../images/lesson-1-3/rig-solo.png) |

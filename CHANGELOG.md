@@ -144,7 +144,7 @@ skipped). Upstream fixes taken:
   channels, start/stop and chaser steps leave no faders behind, a matrix
   computes one map per step, not per frame.
 - **Course: a student page per lesson**, a short link to give the class
-  (`https://sandinak.github.io/qlcconsole/class/1-1/`, and 0.1, 0.2,
+  (`https://sandinak.github.io/qlcconsole/class/1-1/`, and 0.1–0.8,
   1.1–1.5, the Level 1 check, 3.3, 3.6, 3.7, 3.10, plus a student install
   page). Each is everything a student needs for that lesson and nothing
   else: the show file to download, the steps with the lesson's pictures,
@@ -161,6 +161,20 @@ skipped). Upstream fixes taken:
   entry went with the old Programming tab's function list, and the README
   no longer offers it. A MIDI or OSC control fires a function through a
   Virtual Console widget's external input, as in QLC+.
+- **Course: Level 0 is lighting concepts, before any app.** Seven short
+  lessons with no computers (20–30 minutes; two share a period) teach the
+  why before the how: 0.1 why we light a show (the six jobs of light, the
+  crew), 0.2 what light does, 0.3 building a look (front, fill, back,
+  side, wash, special), 0.4 what the audience reads, 0.5 lighting a song
+  (sections, a song map, lighting the staging), 0.6 anticipation and
+  momentum (builds, hits, the button, pacing), 0.7 running a show (calls,
+  standby / GO, busking). The virtual stage moves from 0.2 to **0.8**
+  (`/class/0-8/`). The Level 0 check adds a song map: every change with
+  what the audience should feel. Every app lesson (Level 1, Level 3's
+  written lessons) now opens with a short *why* linked to the concept it
+  applies, and the glossary has the concept words (busking, look, cue,
+  build, sting, button, standby, call, contrast, wash, special,
+  silhouette and more).
 - **The project's direction is written down**:
   [docs/project/STRATEGY.md](docs/project/STRATEGY.md) (what qlcconsole is
   for, the roadmap to 0.5, the guardrails and what it won't build), and

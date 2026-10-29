@@ -9,6 +9,13 @@ nav_order: 2
 
 **Student handout**
 
+## Why this matters
+
+House lights and work lights aren't part of the design, but they frame
+it: the house going out tells the audience the show is starting
+([Lesson 0.7](../../level-0/lesson-07/handout.md)), and a work light
+must never vanish on a Blackout while the crew is on stage.
+
 ## Today you will
 
 - add the house lights, the work lights and a power relay to the show;

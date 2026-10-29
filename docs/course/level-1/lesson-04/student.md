@@ -19,6 +19,11 @@ words:
     means: "A cue that plays on its own after the previous cue's hold: *follow 2s* in the Run tab."
 ---
 
+## Why
+
+Timing is part of the look. A snap lands a hit, a slow fade is a breath,
+and a cue a beat late feels wrong ([Lesson 0.6](../0-6/)).
+
 ## The plan
 
 Listen to the song. Write **why** each time fits.

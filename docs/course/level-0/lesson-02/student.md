@@ -1,106 +1,69 @@
 ---
 layout: student
 lesson: "Lesson 0.2"
-title: "The virtual stage"
+title: "What light does"
 permalink: /class/0-2/
 nav_exclude: true
 search_exclude: true
-today: "Learn the stage directions, find every part of our stage in qlcconsole, and play a finished sequence with **GO**."
-files: [lesson-1-1-finish.qlcc]
-app: true
+today: "Learn the four qualities of light, then watch the clip again only for the lighting and log each change by quality and job."
 words:
-  - term: Upstage / downstage (US / DS)
-    means: "Toward the back / the front of the stage."
-  - term: Stage right / stage left (SR / SL)
-    means: "The **performers'** right and left. From the house, stage right is on your **left**."
-  - term: Centre stage (CS)
-    means: "The middle. On our risers, the middle row."
-  - term: Risers
-    means: "The platforms the choir stands on: rows **US**, **CS** and **DS**."
-  - term: Cyc
-    means: "The white cloth across the back, lit with colour. Said \"sike\"."
-  - term: Truss
-    means: "A metal frame lights are rigged on. We have four across the back."
-  - term: Audience tower (AT)
-    means: "A tower of lights in the house: **AT1** stage right, **AT2** stage left. Our front light."
-  - term: House / rig
-    means: "Where the audience sits / all the lights and what they hang on."
-  - term: Rig Overview
-    means: "qlcconsole's 3D view of our stage."
+  - term: Intensity
+    means: "How bright a light is, from **Full** down to **Out**. Also called **level**."
+  - term: Colour
+    means: "**Warm** (amber, warm white) reads friendly and close; **cool** (blue, lavender) reads calm, cold or night. **Saturated** is deep; **pale** has white mixed in."
+  - term: Direction
+    means: "Where light comes from. **Front** shows faces, **back** outlines performers, **side** sculpts bodies, **below** looks dramatic."
+  - term: Movement
+    means: "Light that changes while you watch: a fade, a chase, sweeping beams."
+  - term: Fade / snap
+    means: "A change that takes time / a change with no time at all."
 ---
 
-## Stage directions
+## Why
 
-Stand facing the board as if it were the audience, follow your teacher's
-calls, then fill in:
+The jobs from Lesson 0.1 need controls. Every change you will program
+changes one of four qualities. Name the quality and you can say exactly
+what you want: "cooler and dimmer", not "different".
 
-- The back of the stage is ______.
-- The performers' right is ______.
-- From a seat in the house, stage right is on my ______.
+## The four qualities
 
-Roles: Driver, Navigator, Designer. Switch after each part.
+| Quality | |
+|---|---|
+| **Intensity**: bright and dim | ![Bright](../../images/lesson-0-2/intensity-full.png) ![Dim](../../images/lesson-0-2/intensity-low.png) |
+| **Colour**: warm and cool | ![Warm](../../images/lesson-0-2/colour-warm.png) ![Cool](../../images/lesson-0-2/colour-cool.png) |
+| **Direction**: front, back, below | ![Front](../../images/lesson-0-2/direction-front.png) ![Back](../../images/lesson-0-2/direction-back.png) ![Below](../../images/lesson-0-2/direction-below.png) |
+| **Movement** | Fades, chases and moving beams: watch for them. |
 
 ## Steps
 
-1. **File → Open** → `lesson-1-1-finish.qlcc`. The footer reads *No
-   outputs: preview only*: expected in class.
-2. **View → Rig Overview** (⇧⌘R).
+1. For each pair of pictures, say which quality changed and what it does
+   to the moment.
+2. Watch the clip again, **only for the lighting**. Each time it changes,
+   log a row:
 
-   ![The Rig Overview's controls](../../images/lesson-0-2/rig-overview.png)
+   | When | What changed (which quality?) | Why? (which job?) |
+   |---|---|---|
+   | | | |
+   | | | |
+   | | | |
 
-   **View** sets the angle, **Live** shows what the lights do (leave it
-   blue), **Room** sets the room light, **Fit** brings the whole stage
-   back.
+   *Example:* "First chorus: brighter and pinker (intensity, colour), for
+   the jump in energy (rhythm, mood)."
 
-3. Set **Room** to **Work light**.
-4. Drag to orbit; scroll (or two fingers) to zoom. Find each:
-   - the **cyc**;
-   - the risers: **DS**, **CS** and **US** rows;
-   - the four **trusses**, two SR and two SL;
-   - **AT1** (stage right) and **AT2** (stage left);
-   - the **proscenium**, the frame round the stage opening;
-   - the **house**;
-   - two stand-in singers: one on CS, one **downstage centre**.
+## Exit ticket
 
-   ![The stage in work light](../../images/lesson-0-2/stage-45.png)
-
-5. Set **View** to **Top**: stage right on the left, downstage at the
-   bottom.
-
-   ![The stage from above](../../images/lesson-0-2/stage-top.png)
-
-6. Set **View** to **Front**, then back to **45°**.
-7. Set **Room** back to **House**.
-8. In the main window, click the **Run** tab (⇧⌘8).
-9. Press **GO** (or Space) three times: a blue cyc, then warm risers, then
-   magenta on the risers. Close the **Switch to Operate** line with **×**.
-
-   ![The third cue](../../images/lesson-0-2/stage-chorus.png)
-
-10. Press **Stop**.
-
-**Stuck?** Rig Overview gone: **View → Rig Overview** (⇧⌘R). Everything
-dark: **Room → Work light**, and **Live** blue. Stage tiny or upside
-down: **Fit**.
-
-## Exit ticket: label the stage
-
-Name each numbered part and the four directions **A–D**.
-
-![Our stage from above, to label](../../images/lesson-0-2/stage-plan.svg)
-
-1. Stage left is *whose* left?
-2. A singer walks from the DS row to the US row. Upstage or downstage?
-3. In qlcconsole, where can you see what the lights are doing?
+1. Name the **four qualities** of light.
+2. A singer's face is in shadow. Light from which **direction** would
+   fix it?
+3. Describe **one** change from the clip: which quality changed, and
+   which job did it do?
 
 ## At home
 
 Do one:
 
-- **App:** make a folder **Documents → qlcconsole**, download
-  `lesson-1-1-finish.qlcc` into it, and open the Rig Overview. With
-  **Room: Work light**, screenshot the stage and label five parts. Play
-  the three cues: which works best for you, and why?
-- **Paper:** teach the stage directions to someone at home, then swap.
-  Draw a plan of a stage you know and label US, DS, SL and SR, and where
-  the lights were.
+- **Watch:** a live performance with stage lighting. Log **three**
+  changes in the same three columns and bring the log, with what you
+  watched.
+- **Paper:** for each of the seven pictures above, name a song or moment
+  it would suit, and why.

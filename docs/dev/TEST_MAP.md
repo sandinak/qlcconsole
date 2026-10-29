@@ -1126,8 +1126,8 @@ to B9, are all fixed. Their tests no longer use QEXPECT_FAIL.
 
 | Feature | Test(s) | Before | After | Risk |
 |---|---|---|---|---|
-| L0.2 Rig Overview opens, Run tab GO ×3 | CourseShow_Test::lessonZeroTwoTheVirtualStage | covered | covered | low |
-| L0.2 room light and views actually switch the render | CourseShow_Test::lessonZeroTwoTheVirtualStage (lists the combos only) | partial | partial | low |
+| L0.8 Rig Overview opens, Run tab GO ×3 | CourseShow_Test::lessonZeroEightTheVirtualStage | covered | covered | low |
+| L0.8 room light and views actually switch the render | CourseShow_Test::lessonZeroEightTheVirtualStage (lists the combos only) | partial | partial | low |
 | L1.1 production, list, cues, drops, Set in this cue, typed, plays in the Run tab | CourseShow_Test::lessonOneWithTheMouse, ::lessonOneSetInThisCue, ::lessonOneTyped, ::lessonOnePlaysInTheRunTab | covered | covered | high |
 | L1.2 Set to, Level one-off, Make reusable, undo/redo, cue looks, colour picker | CourseShow_Test::lessonsOneTwoToOneFourWithTheMouse, ::lessonTwoColourPicker | covered | covered | high |
 | L1.3 aim, Block cue (⊘ badge, dark stage), auto-open spots, extensions | CourseShow_Test::lessonsOneTwoToOneFourWithTheMouse (Block badge and dark stage now asserted), ::lessonThreeExtension | partial | covered | high |

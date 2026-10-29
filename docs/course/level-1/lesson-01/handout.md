@@ -9,6 +9,14 @@ nav_order: 2
 
 **Student handout**
 
+## Why this matters
+
+A song has sections, and each should feel different
+([Lesson 0.5](../../level-0/lesson-05/handout.md)). A cue is how that
+change reaches the stage, and each cue is built in layers, one group
+doing one job ([Lesson 0.3](../../level-0/lesson-03/handout.md)).
+Today's three cues are the first three rows of a song map.
+
 ## Today you will
 
 - break a song down into the moments where the lighting changes (its
