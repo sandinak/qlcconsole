@@ -160,6 +160,10 @@ private slots:
      *  Split makes a layer each, More ▾ → Merge puts them back. */
     void lessonTwoThreeExtension();
 
+    /** Lesson 2.4's extension: an effect on a speed master (the Look
+     *  Editor's Speed), shown in the footer. */
+    void lessonTwoFourExtension();
+
     /** COURSE_BUILD=1: makes Level 2's start and finish files, each lesson
      *  done with the mouse from the one before's finish (COURSE_LESSON=2.N:
      *  that lesson only). Skipped otherwise. */

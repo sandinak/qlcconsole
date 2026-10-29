@@ -154,7 +154,7 @@ skipped). Upstream fixes taken:
   light and dark, no JavaScript) and are left out of the course site's
   menu and search. Each teacher guide starts with its link and a QR code;
   `docs/course/tools/student-pages.py` checks the pages.
-- **Course: Level 2, a lesson at a time** (`/class/2-1/` to `/class/2-3/`):
+- **Course: Level 2, a lesson at a time** (`/class/2-1/` to `/class/2-4/`):
   **2.1 Tracking and Block**: what tracks into a cue (S / T / R / M,
   *Tracked in*, *Next cue receives*), **Release** on the verse's step
   tops, a **Cue-only** flash, the Solo as the **Block** hard start, the
@@ -162,7 +162,9 @@ skipped). Upstream fixes taken:
   named for its job in the Look Editor, a folder per song), a note taken
   with one change. **2.3 Parts of a group**: the bridge as a call and
   response: a group set, child layers (right-click and ⇧-drop), Split and
-  Merge. Each lesson's start and finish shows, pictures and
+  Merge. **2.4 Effects**: effect palettes of the song's own (the effect
+  picker), a sparkle with its own colour, a wave, a speed master. Each
+  lesson's start and finish shows, pictures and
   every step are made and checked by
   `courseshow_test` (`levelTwoWithTheMouse`, `buildLevelTwoShows`,
   `levelTwoPictures`).
