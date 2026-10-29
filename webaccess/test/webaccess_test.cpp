@@ -1031,7 +1031,8 @@ void WebAccess_Test::aShowLoadedFromTheWebKeepsItRunning()
 {
     ShowWebAccess *web = m_doc->webAccess();
     WebAccessController ctl(m_doc, m_vc, m_sd);
-    QSignalSpy relayed(&ctl, &WebAccessController::loadProject);
+    // By name: a signal of the webaccess DLL (engine/test/dllsignals).
+    QSignalSpy relayed(&ctl, SIGNAL(loadProject(QString)));
     web->setEnabled(true);
     web->setPort(freePort());
     QTRY_VERIFY(ctl.server() != nullptr);
