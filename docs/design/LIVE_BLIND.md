@@ -45,6 +45,11 @@ show the edit"*; the Show Tree's line is blue.
   (`cueLevels()`); the stage keeps playing the run and nothing on the wire
   changes. The footer turns blue and names the cue.
 
+Stage targets follow the same rule: the plot and the Rig Overview draw the
+targets the cue on show uses (Live: what plays and Build's loaded scene;
+Blind: the cue in edit), all of them when nothing is on show or with
+**Show ▸ All targets** (item 10).
+
 ## Where it is
 
 - **View ▸ Blind**, moved from the Control menu (the menus keep their

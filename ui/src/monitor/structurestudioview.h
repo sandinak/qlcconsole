@@ -177,6 +177,10 @@ public:
      *  is no live DMX saying otherwise. The studio draws these as dashed lines;
      *  this is the same association, shown as the direction it actually means. */
     void setActiveScene(quint32 sceneId);
+    /** Which stage targets are drawn (item 10, "only show targets if
+     *  they're in scope for the cue"): @a all, or those in @a ids. */
+    void setTargetScope(bool all, const QSet<quint32> &ids);
+    bool targetInScope(quint32 targetId) const { return m_targetScopeAll || m_targetScope.contains(targetId); }
 
     /** Line of sight in the rig views: a beam stops at the first solid
      *  feature in its way -- a tower, a truss -- as it always does at
@@ -360,6 +364,8 @@ private:
     /** Whether the Lighting Studio shows layer @p layerId -- the whole-rig
      *  view hides what it hides; an editor shows its own object regardless. */
     bool layerShown(quint32 layerId) const;
+    bool m_targetScopeAll = true;
+    QSet<quint32> m_targetScope;
     bool fixtureShown(quint32 fid) const;
     void collectPointsFor(QList<QVector3D> &pts, Kind kind, quint32 id) const;
     /** collectPoints() for the floor grid, which a frame needs every time:

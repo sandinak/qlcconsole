@@ -53,6 +53,8 @@
 #include <QTreeWidget>
 #include <QProxyStyle>
 #include <QSettings>
+#include "showtreecontroller.h"
+#include "fixturegroup.h"
 
 #define protected public
 #define private public
@@ -9528,6 +9530,94 @@ void Monitor_Test::theReachOverlayShadesWhereASpotCannotAim()
     }
 
     delete doc;
+}
+
+/* Item 10: "in rig view we should only show targets if they're in scope
+   for the cue". A cue aiming at A shows A, not B; one aiming at B swaps
+   them; nothing on show, or Show ▸ All targets: both. One placed since the
+   show opened stays drawn. */
+void Monitor_Test::onlyTheTargetsTheCueUsesAreDrawn()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    StageTarget *a = props->addStageTarget();
+    a->setName("A");
+    a->setPosition(QVector3D(2.0f, 2.0f, 0.0f));
+    StageTarget *b = props->addStageTarget();
+    b->setName("B");
+    b->setPosition(QVector3D(5.0f, 3.0f, 0.0f));
+    auto aimScene = [doc](StageTarget *t, const QString &name) {
+        QLCPalette *aim = new QLCPalette(QLCPalette::Aim, doc);
+        aim->setName("At " + t->name());
+        aim->setStageTargetId(t->id());
+        doc->addPalette(aim);
+        Scene *scene = new Scene(doc);
+        scene->setName(name);
+        scene->addPalette(aim->id());
+        doc->addFunction(scene);
+        return scene;
+    };
+    Scene *atA = aimScene(a, "At A");
+    Scene *atB = aimScene(b, "At B");
+    QSettings().remove("monitor/allTargets");
+
+    QWidget parent;
+    Monitor mon(&parent, doc);
+    parent.resize(1200, 800);
+    parent.show();
+    MonitorGraphicsView *gv = mon.m_graphicsView;
+    auto shown = [gv](StageTarget *t) {
+        TargetItem *ti = gv->m_targetItems.value(t->id());
+        return ti != nullptr && ti->isVisible();
+    };
+    mon.refreshTargetScope();
+    QVERIFY(shown(a) && shown(b));                  // nothing on show: all
+
+    mon.setActiveScene(atA->id());
+    mon.refreshTargetScope();
+    QVERIFY(shown(a));
+    QVERIFY(!shown(b));
+    mon.setActiveScene(atB->id());
+    mon.refreshTargetScope();
+    QVERIFY(!shown(a));
+    QVERIFY(shown(b));
+
+    // The cue in edit, blind: its targets, whatever is loaded.
+    Fixture *fx = new Fixture(doc);
+    fx->setName("Spot");
+    fx->setChannels(1);
+    doc->addFixture(fx);
+    FixtureGroup *grp = new FixtureGroup(doc);
+    grp->setName("Spots");
+    doc->addFixtureGroup(grp);
+    grp->assignFixture(fx->id());
+    ShowTreeController *st = doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L");
+    const quint32 cue = st->addCue(list, -1, "One");
+    ShowTree::Target tt;
+    tt.groups << grp->id();
+    QVERIFY(st->setLayerLook(cue, st->addLayer(cue, tt), st->lookForPalette(atA->palettes().first())));
+    mon.setBlindCue(cue);                           // aims at A
+    QVERIFY(shown(a));
+    QVERIFY(!shown(b));
+    mon.setBlindCue(ShowTree::invalidId());         // Live again: Build's, at B
+    QVERIFY(!shown(a) && shown(b));
+
+    // Show ▸ All targets.
+    mon.setAllTargets(true);
+    QVERIFY(shown(a) && shown(b));
+    QVERIFY(QSettings().value("monitor/allTargets").toBool());
+    mon.setAllTargets(false);
+    QVERIFY(!shown(a) && shown(b));
+
+    // One placed now stays drawn, though the cue doesn't use it.
+    StageTarget *c = props->addStageTarget();
+    c->setName("C");
+    gv->updateTargets();
+    mon.refreshTargetScope();
+    QVERIFY(shown(c));
+    QVERIFY(!shown(a));
+    QSettings().remove("monitor/allTargets");
 }
 
 void Monitor_Test::aTargetSaysWhichHeadsCannotReachIt()

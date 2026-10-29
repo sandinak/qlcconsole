@@ -6,6 +6,17 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
+### 2026-10-29 — The rig shows the targets the cue uses *(fix/031-target-scope, lb item 10)*
+
+- `Monitor::refreshTargetScope()`: targets of the scenes on show
+  (`targetsUsedBy`: Aim `stageTargetId`, effect target bindings) -- the
+  Blind cue's collection (`setBlindCue`, from App), else running scenes +
+  Build's loaded scene; nothing on show or Show ▸ All targets
+  (`monitor/allTargets`): all. Plot (`MonitorGraphicsView::setTargetScope`,
+  a target placed since the show opened or selected stays) and Rig
+  Overview (`StructureStudioView::setTargetScope`). Test
+  `monitor_test::onlyTheTargetsTheCueUsesAreDrawn`.
+
 ### 2026-10-29 — Effects stack, drag, take live edits; Library follows Build; rename selects the words *(fix/031-effects-stack, lb items 6-9)*
 
 - **Stacking (6):** the engine already played a movement and a dimmer
