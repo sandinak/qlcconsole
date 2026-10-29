@@ -37,7 +37,8 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
   function, no connection without bindings) through the stub plugin and
   a real input patch; `ui/test/controlmapui` (7: dialog, menus in Build and
   the Show Tree, panel, page row); showcontrol_ui and stockqlccheck
-  updated.
+  updated; stockroundtrip saves two triggers and stock QLC+ 4.14.4's own
+  engine reads the show whole past `<ControlMap>`.
 - **Decisions (can change):** the list lives in Show control & sync (the
   page for "outside that controls the show") rather than a dialog; one
   control per target; on lists and cues Start only = GO, so the dialog

@@ -30,6 +30,7 @@
 #include <QFile>
 
 #include "stockroundtrip_test.h"
+#include "controlmap.h"
 #include "fingerprint.h"
 #include "../../../engine/test/common/resource_paths.h"
 
@@ -241,8 +242,11 @@ void StockRoundTrip_Test::aQxwSavedHereOpensInStockQlcPlus4()
     ShowTreeController *st = doc->showTree();
     const quint32 prod = st->addProduction("Spring");
     st->addCue(st->addCueList(prod, "Act 1"), -1, "One");
-    st->addLook(prod, "Blast");
+    const quint32 blast = st->addLook(prod, "Blast");
     doc->speedMasters()->setName(0, "Song");
+    // ... and the Control Map: a MIDI note on a scene, another on the hit.
+    doc->controlMap()->setBinding({ 0, 188, ControlMap::function(warm->id()), ControlMap::Momentary });
+    doc->controlMap()->setBinding({ 0, 189, ControlMap::hit(blast), ControlMap::Toggle });
 
     QTemporaryDir dir;
     QVERIFY(dir.isValid());
@@ -268,6 +272,8 @@ void StockRoundTrip_Test::aQxwSavedHereOpensInStockQlcPlus4()
     QCOMPARE(back->name(), QStringLiteral("Spare Par"));
     QVERIFY(!back->isPatched());
     QVERIFY(StockQlcCheck::lossesInFile(qxw).join(QLatin1Char('|')).contains(QStringLiteral("Inventory")));
+    QVERIFY(StockQlcCheck::lossesInFile(qxw).join(QLatin1Char('|')).contains(QStringLiteral("Control Map")));
+    QCOMPARE(m_app->doc()->controlMap()->count(), 2);
     m_app->clearDocument();
 }
 
