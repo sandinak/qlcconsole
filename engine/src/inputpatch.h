@@ -195,6 +195,10 @@ public:
 
     QMutex m_inputBufferMutex;
     QHash<quint32, InputValue> m_inputBuffer;
+
+private:
+    /** Emit inputValueChanged() for each of @p values (GUI thread). */
+    void emitValues(const QHash<quint32, InputValue> &values);
 };
 
 /** @} */

@@ -34,6 +34,10 @@ private slots:
     void defaults();
     void patch();
     void parameters();
+    /** A frame of input flushed on a universe thread reaches the GUI
+     *  thread as ONE queued call, not one event per value per receiver,
+     *  every value in it, in the patch's universe (pb5). */
+    void flushFromAUniverseThreadIsOneEvent();
 
 private:
     Doc* m_doc;
