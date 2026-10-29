@@ -87,9 +87,11 @@ copies** shows them too, with the same choices, for when you know better.
   they were, and a list of what was done. **Undo Last Update** uses it, and
   puts back the files' dates too. A file changed since the update is left
   alone, and says so.
-- **Links into the old QLC+ folder.** Many definitions in your folder are
-  links into the QLC+ folder — which may be a synced folder (Synology,
-  Dropbox…), so a change there reaches every computer that syncs it. Choose
+- **Links into the old QLC+ folder.** On a Mac and Linux, many
+  definitions in your folder are links into the QLC+ folder (on Windows
+  they are copies, made once: Windows has no links a program can read) —
+  which may be a synced folder (Synology, Dropbox…), so a change there
+  reaches every computer that syncs it. Choose
   under **Linked files**:
   - **Update the original the link points to** (the default) — the synced
     file is fixed, for every computer. The report says which file, and that

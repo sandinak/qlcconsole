@@ -911,8 +911,27 @@ void InputOutputMap::loadPatch(quint32 universe, const Universe::OfflinePatch &p
 
     int line = int(patch.line);
     if (hasIdentity)
+    {
         line = resolveSavedLine(plugin, patch.tag != Universe::InputPatchTag, patch.uid,
                                 patch.network, NetworkRoute::targetFromParameters(patch.params));
+    }
+    else
+    {
+        /* Only a line number ("None" for its name, as stock QLC+ can write
+           it): on a plugin whose lines are this computer's addresses
+           (Art-Net, E1.31, OSC) that number is whatever interface comes N-th
+           here -- another network, sent to, and its network then saved as if
+           chosen (TEST_MATRIX C7). Follow the patch's own target or network
+           when it has one; otherwise keep it offline for the operator. */
+        const QStringList lines = patch.tag == Universe::InputPatchTag ? plugin->inputs()
+                                                                       : plugin->outputs();
+        if (line >= 0 && line < lines.count() && NetworkRoute::isAddressIdentity(lines.at(line)))
+        {
+            const QString target = NetworkRoute::targetFromParameters(patch.params);
+            line = (target.isEmpty() && patch.network.isEmpty())
+                 ? -1 : NetworkRoute::resolve(lines, QString(), patch.network, target).line;
+        }
+    }
     if (line < 0)
         qDebug() << "[IOMAP] universe" << universe + 1 << patch.plugin << patch.uid
                  << "network" << patch.network << "- nothing here reaches it: kept offline";

@@ -86,6 +86,8 @@ QString engineLabel(const QString &tag)
         return tr("parked and marked channels");
     if (tag == QLatin1String("FocusCalls"))
         return tr("the focus calls");
+    if (tag == QLatin1String("StagedFixtures"))
+        return tr("the Inventory's fixtures (not patched)");
     if (tag == QLatin1String("OutputRuleSettings"))
         return tr("when \"on when not in use\" lights come on");
     return tr("other qlcconsole settings");

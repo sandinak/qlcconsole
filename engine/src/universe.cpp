@@ -703,7 +703,12 @@ void Universe::reset()
     m_blackoutValues->fill(0);
 
     if (m_passthrough)
-        (*m_postGMValues) = (*m_passthroughValues);
+    {
+        /* Bytes, not the array: sharing it made the next write reallocate
+           the buffer postGMValues() hands out */
+        memcpy(m_postGMValues->data(), m_passthroughValues->constData(),
+               size_t(qMin(m_postGMValues->size(), m_passthroughValues->size())));
+    }
     else
         m_postGMValues->fill(0);
 
@@ -814,9 +819,13 @@ QString Universe::blendModeToString(Universe::BlendMode mode)
 const QByteArray Universe::preGMValues() const
 {
     /* A shallow copy shares the array: copied while a frame detaches it
-       (reset() on the universe thread), the two raced on its header. */
+       (reset() on the universe thread), the two raced on its header. And
+       while the copy lived, the universe thread's next write detached --
+       reallocated -- its own buffer, under a per-channel read from the GUI
+       (preGMValue()) that could then read the freed one (TSan L2). A copy
+       of the bytes leaves the universe's buffer its own, never moved. */
     QMutexLocker frameLocker(&m_frameMutex);
-    return *m_preGMValues;
+    return QByteArray(m_preGMValues->constData(), m_preGMValues->size());
 }
 
 uchar Universe::preGMValue(int address) const

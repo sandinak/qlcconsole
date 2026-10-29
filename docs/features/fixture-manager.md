@@ -912,12 +912,13 @@ uses that isn't part of the app, as plain files. The show's venues
 (*Show*.venues.xml: each room's focus corrections, house rig and patch)
 go in beside it, and every picture it uses goes in **images/**: truss
 socks, tower faces, pictures placed on the plot, RGB matrix images and
-the Virtual Console's backgrounds and button icons, from the show's own
-folder or anywhere else on this computer. The collected show names them
-there, so it finds them on another computer. (A gobo swapped for your
-own picture is in this computer's gobo library, not the show's folder:
-copy that picture to the other computer's gobo library.) The show you
-have open stays as it is, still using its own files.
+the Virtual Console's backgrounds and button icons, and the pictures of
+gobos you swapped for your own (from your gobo folder or a file
+elsewhere), from the show's own folder or anywhere else on this
+computer. The collected show names them there, so it finds them on
+another computer. (A gobo from the app's own library stays a name: every
+computer with qlcconsole has it.) The show you have open stays as it is,
+still using its own files.
 
 Opening a show also looks in its own folder's **Fixtures/**,
 **EffectScripts/** and **RGBScripts/** for anything neither the show nor

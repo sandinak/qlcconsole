@@ -37,6 +37,14 @@ private slots:
     void startStop();
     void startStopFunction();
     void registerUnregisterDMXSource();
+    /** An external beat that comes in while a tick runs is the next
+     *  tick's beat, not lost at the end of this one (TSan L4). */
+    void aBeatDuringATickIsTheNextTicksBeat();
+    /** A running function's elapsed time is read from the GUI thread (an
+     *  effect script's clock) while the timer thread advances it: atomic,
+     *  so it reads whole and rising (TSan L5; a TSan build shows the race
+     *  without the fix). */
+    void elapsedIsReadWhileTheTimerAdvancesIt();
     void interval();
     void functionInitiatedStop();
     void runMultipleFunctions();

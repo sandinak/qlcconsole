@@ -163,8 +163,12 @@ public:
     void setupArtNetPollReply(QByteArray &data, QHostAddress ipAddr,
                               QString MACaddr, quint32 universe, bool isInput);
 
-    /** Prepare an ArtNetDmx packet */
-    void setupArtNetDmx(QByteArray& data, const int& universe, const QByteArray &values);
+    /** Prepare an ArtNetDmx packet for @a universe (a Port-Address) sent to
+     *  @a node. The Sequence counts per node and Port-Address: what one
+     *  node receives runs 1, 2, 3..., however many other nodes this console
+     *  also sends the same Port-Address to. */
+    void setupArtNetDmx(QByteArray& data, const int& universe, const QByteArray &values,
+                        const QHostAddress &node = QHostAddress());
 
     /** Prepare an ArtTodRequest packet */
     void setupArtNetTodRequest(QByteArray& data, const int& universe);
@@ -199,7 +203,8 @@ public:
 
 private:
     QByteArray m_commonHeader;
-    QHash<int, uchar> m_sequence;
+    /** The next Sequence per (node IPv4 << 16 | Port-Address) */
+    QHash<quint64, uchar> m_sequence;
 };
 
 #endif

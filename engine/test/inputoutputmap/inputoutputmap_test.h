@@ -56,6 +56,10 @@ private slots:
 
     /* Patches follow the network, and are never lost offline */
     void offlineShowSavesPatchesByteIdentical();
+    /** A network patch with no identity ("None" and a line number) is not
+     *  bound to whichever interface has that number here: it follows its
+     *  target, or stays offline, and is saved as it came (TEST_MATRIX C7). */
+    void aNetworkPatchWithOnlyALineNumberIsNotGuessed();
     void offlinePatchIsInertAndListed();
     void wledBackupsKeptOfflineUnchanged();
     void followsNetworkToAnotherMachine();

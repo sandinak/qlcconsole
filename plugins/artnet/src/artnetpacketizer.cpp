@@ -39,10 +39,6 @@ ArtNetPacketizer::ArtNetPacketizer()
     m_commonHeader.append('\0');
     m_commonHeader.append((char)0x0e);
 
-    m_sequence[0] = 1;
-    m_sequence[1] = 1;
-    m_sequence[2] = 1;
-    m_sequence[3] = 1;
 }
 
 ArtNetPacketizer::~ArtNetPacketizer()
@@ -138,7 +134,8 @@ void ArtNetPacketizer::setupArtNetPollReply(QByteArray &data, QHostAddress ipAdd
         data.append((char)0x00); // bindIp[4], BindIndex, Status2 and filler
 }
 
-void ArtNetPacketizer::setupArtNetDmx(QByteArray& data, const int &universe, const QByteArray &values)
+void ArtNetPacketizer::setupArtNetDmx(QByteArray& data, const int &universe, const QByteArray &values,
+                                      const QHostAddress &node)
 {
     data.clear();
     data.append(m_commonHeader);
@@ -146,10 +143,14 @@ void ArtNetPacketizer::setupArtNetDmx(QByteArray& data, const int &universe, con
     data[9] = opCodeMSB;
     /* Sequence runs 1..255 per Port-Address; 0 means "not sequenced". Only
        Port-Addresses 0-3 were seeded with 1, so any other universe's first
-       packet went out as 0. */
-    if (m_sequence.contains(universe) == false)
-        m_sequence[universe] = 1;
-    data.append(m_sequence[universe]); // Sequence
+       packet went out as 0. And per node: one counter for every node sent
+       the same Port-Address made each of them see it jump by the number of
+       nodes (18 in a real show). */
+    const quint64 key = (quint64(node.toIPv4Address()) << 16) | quint16(universe);
+    uchar &sequence = m_sequence[key];
+    if (sequence == 0)
+        sequence = 1;
+    data.append(char(sequence)); // Sequence
     data.append('\0'); // Physical
     data.append((char)(universe & 0x00FF));
     data.append((char)(universe >> 8));
@@ -160,10 +161,7 @@ void ArtNetPacketizer::setupArtNetDmx(QByteArray& data, const int &universe, con
     data.append(values);
     data.append(QByteArray(padLength, 0));
 
-    if (m_sequence[universe] == 0xff)
-        m_sequence[universe] = 1;
-    else
-        m_sequence[universe]++;
+    sequence = (sequence == 0xff) ? 1 : uchar(sequence + 1);
 }
 
 void ArtNetPacketizer::setupArtNetTodRequest(QByteArray &data, const int &universe)

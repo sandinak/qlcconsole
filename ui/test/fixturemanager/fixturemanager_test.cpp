@@ -1687,6 +1687,28 @@ void FixtureManager_Test::outputRulesForFixturesAndGroups()
     QVERIFY2(texts.contains("Output Rules…"), qPrintable(texts.join(" | ")));
 }
 
+void FixtureManager_Test::theGroupMenuKeepsOneActionPerGroup()
+{
+    for (int i = 0; i < 3; i++)
+    {
+        FixtureGroup *grp = new FixtureGroup(m_doc);
+        grp->setName(QString("Group %1").arg(i));
+        QVERIFY(m_doc->addFixtureGroup(grp));
+    }
+    FixtureManager mgr(nullptr, m_doc);
+    mgr.updateGroupMenu();
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    QVERIFY(mgr.m_groupMenu != nullptr);
+    QCOMPARE(mgr.m_groupMenu->actions().size(), 3);
+    // the menu's own menuAction() is a child too: count what a refresh adds
+    const qsizetype once = mgr.m_groupMenu->findChildren<QAction *>(Qt::FindDirectChildrenOnly).size();
+    for (int i = 0; i < 5; i++)
+        mgr.updateGroupMenu();
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    QCOMPARE(mgr.m_groupMenu->actions().size(), 3);
+    QCOMPARE(mgr.m_groupMenu->findChildren<QAction *>(Qt::FindDirectChildrenOnly).size(), once);
+}
+
 QTEST_MAIN(FixtureManager_Test)
 
 namespace

@@ -30,6 +30,7 @@
 #include <QDebug>
 
 #include "vcshowcontrol.h"
+#include "qlcfile.h"
 #include "vcshowcontrolproperties.h"
 #include "mastertimer.h"
 #include "timecodesource.h"
@@ -242,7 +243,7 @@ static void scDbg(const QString &line)
 {
     if (qEnvironmentVariableIntValue("QLC_SHOW_DEBUG") == 0)
         return;
-    QFile f("/tmp/qlc_showdebug.log");
+    QFile f(QLCFile::showDebugLogPath());
     if (f.open(QIODevice::Append | QIODevice::Text))
         QTextStream(&f) << line << "\n";
 }
@@ -316,7 +317,7 @@ void VCShowControl::slotPoll()
     // auto-starts its own currently-selected show). Operate mode only.
     Show *show = showFunction();
 
-    // Env-gated diagnostics (QLC_SHOW_DEBUG=1 → /tmp/qlc_showdebug.log). qDebug is
+    // Env-gated diagnostics (QLC_SHOW_DEBUG=1 → showdebug.log in the user folder). qDebug is
     // swallowed by main.cpp, so log to a file. Remove once the runtime issues are
     // understood.
     static const bool dbg = qEnvironmentVariableIntValue("QLC_SHOW_DEBUG") != 0;
@@ -325,7 +326,7 @@ void VCShowControl::slotPoll()
         static int n = 0;
         if ((n++ % 5) == 0) // ~ every 2 s
         {
-            QFile f("/tmp/qlc_showdebug.log");
+            QFile f(QLCFile::showDebugLogPath());
             if (f.open(QIODevice::Append | QIODevice::Text))
             {
                 Chaser *dc = NULL;

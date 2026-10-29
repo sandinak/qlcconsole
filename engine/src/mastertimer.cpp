@@ -171,6 +171,7 @@ void MasterTimer::timerTick(bool wakeUniverses)
     qDebug() << "[MasterTimer] *********** tick:" << ticksCount++ << "**********";
 #endif
 
+    bool beatNow = false;
     switch (m_beatSourceType)
     {
         case Internal:
@@ -192,7 +193,7 @@ void MasterTimer::timerTick(bool wakeUniverses)
             }
             if (fire)
             {
-                m_beatRequested = true;
+                beatNow = true;
                 emit beat();
             }
         }
@@ -202,9 +203,15 @@ void MasterTimer::timerTick(bool wakeUniverses)
 
         case None:
         default:
-            m_beatRequested = false;
         break;
     }
+
+    /* A beat requested since the last tick (requestBeat(): the external
+       beat, from the input thread) is taken here, once. The flag used to be
+       cleared at the end of the tick, which lost a beat that came in
+       during one (TSan L4). */
+    const bool requested = m_beatRequested.exchange(false, std::memory_order_acq_rel);
+    m_tickBeat.store(m_beatSourceType != None && (beatNow || requested), std::memory_order_relaxed);
 
     QList<Universe *> universes = doc->inputOutputMap()->claimUniverses();
 
@@ -276,7 +283,7 @@ void MasterTimer::timerTick(bool wakeUniverses)
 
     doc->inputOutputMap()->releaseUniverses();
 
-    m_beatRequested = false;
+    m_tickBeat.store(false, std::memory_order_relaxed);
 
     //qDebug() << ">>>>>>>> MASTERTIMER TICK";
     emit tickReady();
@@ -620,14 +627,14 @@ int MasterTimer::nextBeatTimeOffset() const
 
 bool MasterTimer::isBeat() const
 {
-    return m_beatRequested;
+    return m_tickBeat.load(std::memory_order_relaxed);
 }
 
 void MasterTimer::requestBeat()
 {
     // forceful request of a beat, processed at
     // the next timerTick call
-    m_beatRequested = true;
+    m_beatRequested.store(true, std::memory_order_release);
     // An external source says the beat is now: pull the clock towards it.
     alignBeat(0.5);
 }

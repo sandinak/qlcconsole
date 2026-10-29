@@ -119,6 +119,10 @@ private slots:
     void transmissionModes();
     void standardModeRefreshes();
     void dmxSequenceRunsOneTo255PerUniverse();
+    /** Several QLC universes sending the same Art-Net universe to
+     *  different nodes: each node sees its own 1, 2, 3... (TEST_MATRIX N1:
+     *  a node saw the sequence jump by 18). */
+    void dmxSequenceCountsPerNode();
     void artDmxInputEmitsChangedChannels();
     void pollTimerFollowsOutputs();
     void pollBytes();

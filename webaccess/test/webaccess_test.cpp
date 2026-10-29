@@ -33,6 +33,9 @@
 #include "webaccess.h"
 #include "webaccessbase.h"
 #include "webaccessauth.h"
+#if defined(Q_OS_LINUX)
+#include "webaccessnetwork.h"
+#endif
 #include "qhttprequest.h"
 #include "qhttpresponse.h"
 #undef private
@@ -620,6 +623,40 @@ void WebAccess_Test::uploadNamesAreSanitised()
     QCOMPARE(WebAccessBase::sanitizedFixtureFileName(QStringLiteral(".qxf")), QString());
     QCOMPARE(WebAccessBase::sanitizedFixtureFileName(QStringLiteral("C:x.qxf")), QString());
     QCOMPARE(WebAccessBase::sanitizedFixtureFileName(QStringLiteral("evil.sh")), QString());
+}
+
+void WebAccess_Test::networkSettingsAreSingleArguments()
+{
+#if defined(Q_OS_LINUX)
+    InterfaceInfo wlan;
+    wlan.devName = QStringLiteral("wlan0");
+    wlan.isWireless = true;
+    const QString ssid = QStringLiteral("My Show Net");
+    const QString pass = QStringLiteral("x y ipv4.method manual");
+    const QList<QStringList> cmds = WebAccessNetwork::connectionCommands(
+        wlan, true, QStringLiteral("10.0.0.5"), 24, QStringLiteral("10.0.0.1"), ssid, pass);
+    QCOMPARE(cmds.count(), 3);
+    QCOMPARE(cmds.at(0), QStringList({ "con", "add", "con-name", "qlcpluswlan0", "ifname", "wlan0",
+                                        "type", "wifi", "ssid", ssid,
+                                        "ip4", "10.0.0.5/24", "gw4", "10.0.0.1" }));
+    QCOMPARE(cmds.at(1).last(), pass);
+    QCOMPARE(cmds.at(1).count(), 7);
+    QCOMPARE(cmds.at(2), QStringList({ "con", "up", "qlcpluswlan0" }));
+
+    const QList<QStringList> hot = WebAccessNetwork::hotspotCommands(ssid, pass);
+    for (const QStringList &args : hot)
+    {
+        QVERIFY2(!args.contains(QStringLiteral("manual")), qPrintable(args.join(' ')));
+        QVERIFY2(!args.contains(QStringLiteral("\"My")), qPrintable(args.join(' ')));
+    }
+    QVERIFY(hot.at(1).endsWith(ssid));
+    bool psk = false;
+    for (const QStringList &args : hot)
+        psk = psk || (args.contains(QStringLiteral("802-11-wireless-security.psk")) && args.last() == pass);
+    QVERIFY(psk);
+#else
+    QSKIP("the Pi's network page (nmcli) is Linux only");
+#endif
 }
 
 QTEST_MAIN(WebAccess_Test)

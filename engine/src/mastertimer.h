@@ -335,8 +335,10 @@ private:
     int m_currentBPM;
     /** The duration of a beat in milliseconds according to m_currentBPM */
     int m_beatTimeDuration;
-    /** Flag to request a beat generation at the next MasterTimer tick */
-    bool m_beatRequested;
+    /** A beat requested for the next tick (requestBeat(), any thread) */
+    std::atomic<bool> m_beatRequested;
+    /** This tick's beat, what isBeat() says while the tick runs */
+    std::atomic<bool> m_tickBeat{false};
 };
 
 /** @} */

@@ -1644,6 +1644,35 @@ void MonitorProperties_Test::aFixedLightIsAimedByPanAndTilt()
     QVERIFY(!back.fixtureRigProps(2).fixedAim);
 }
 
+void MonitorProperties_Test::anOldBackgroundStaysRelativeToTheShow()
+{
+    QTemporaryDir folder;
+    QVERIFY(folder.isValid());
+    {
+        QFile pic(folder.filePath("Stage Layout.jpg"));
+        QVERIFY(pic.open(QIODevice::WriteOnly));
+        pic.write("jpg");
+    }
+    Doc doc(nullptr);
+    doc.setWorkspacePath(folder.path());
+
+    const QByteArray old = "<Monitor DisplayMode=\"0\" ShowLabels=\"0\">"
+                           "<Background>Stage Layout.jpg</Background></Monitor>";
+    MonitorProperties mp;
+    QXmlStreamReader reader(old);
+    QVERIFY(reader.readNextStartElement());
+    QVERIFY(mp.loadXML(reader, &doc));
+    QCOMPARE(mp.images().count(), 1);
+    QCOMPARE(QFileInfo(mp.images().first().source).absoluteFilePath(),
+             QFileInfo(folder.filePath("Stage Layout.jpg")).absoluteFilePath());
+
+    QByteArray buf;
+    QXmlStreamWriter writer(&buf);
+    mp.saveXML(&writer, &doc);
+    QVERIFY2(buf.contains("Source=\"Stage Layout.jpg\""), buf.constData());
+    QVERIFY(!buf.contains(folder.path().toUtf8()));
+}
+
 QTEST_GUILESS_MAIN(MonitorProperties_Test)
 
 /* A hanger is rigging, like a bar: put on a tower truss part way up, its

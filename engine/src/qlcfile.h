@@ -164,6 +164,37 @@ public:
      */
     static void mergeLegacyUserData();
 
+    /** Which platform's folder layout legacyUserDataRoots() describes */
+    enum class LegacyPlatform { Windows, MacOS, Unix };
+
+    /** The old QLC+ and the new user data roots, the folders merged, and
+     *  whether files are copied (Windows) instead of symlinked */
+    struct LegacyRoots
+    {
+        QString oldRoot;
+        QString newRoot;
+        QStringList subdirs;
+        bool copy = false;
+    };
+
+    /** The roots for @a platform: under @a userProfile on Windows (HOME is
+     *  not set there in a desktop session), under @a home elsewhere. Empty
+     *  roots when that folder is unknown: nothing is merged then. */
+    static LegacyRoots legacyUserDataRoots(LegacyPlatform platform,
+                                           const QString &home,
+                                           const QString &userProfile);
+
+    /** The merge itself, between explicit roots (for tests) */
+    static void mergeLegacyUserData(const LegacyRoots &roots);
+
+    /** True when @a path holds a Windows shell link (.lnk) */
+    static bool isWindowsShortcut(const QString &path);
+
+    /** Where QLC_SHOW_DEBUG=1 writes its show-runner log: the user's own
+     *  data folder. It was a fixed name in the shared /tmp, where another
+     *  user could plant a link first. */
+    static QString showDebugLogPath();
+
     /** @brief Return a OS dependent prefix used for local file URLs.
       *        Linux and macOS needs "file://", while Windows needs "file:///" */
     static QString fileUrlPrefix();

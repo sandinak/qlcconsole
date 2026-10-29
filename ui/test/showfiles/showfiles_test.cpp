@@ -60,6 +60,7 @@
 #include "universe.h"
 #include "inputoutputmap.h"
 #include "monitorproperties.h"
+#include "gobolibrary.h"
 #include "truss.h"
 #include "tower.h"
 #include "showtreecontroller.h"
@@ -822,8 +823,14 @@ void ShowFiles_Test::collectForTransferTakesThePictures()
     const QString bricks = picture(QStringLiteral("Downloads/bricks.png"), "bricks");
     const QString plan = picture(QStringLiteral("Downloads/plan.png"), "plan");
 
-    // A show in "Show": a truss sock and tower faces, a picture on the plot.
-    // (A gobo swap is a name in this computer's gobo library: not a file of the show.)
+    // The operator's own gobo folder on this computer, with a logo in it
+    QVERIFY(root.mkpath(QStringLiteral("MyGobos")) && root.mkpath(QStringLiteral("OtherGobos")));
+    GoboLibrary::setUserDirectoryOverride(root.absoluteFilePath(QStringLiteral("MyGobos")));
+    picture(QStringLiteral("MyGobos/logo.svg"), "logo");
+    const QString breakup = picture(QStringLiteral("Downloads/breakup.png"), "breakup");
+
+    // A show in "Show": a truss sock and tower faces, a picture on the plot,
+    // and gobo swaps: one from the gobo folder (a name), one from a file.
     const QString demo = QDir(showFolder).absoluteFilePath(QStringLiteral("demo.qxw"));
     QVERIFY(QFile::copy(QStringLiteral(SHOWFILES_WORKSPACES) + QStringLiteral("help-demo.qxw"), demo));
     QCOMPARE(open(m_app, demo), QFile::NoError);
@@ -836,6 +843,11 @@ void ShowFiles_Test::collectForTransferTakesThePictures()
     tower->setFaces(true);
     tower->setFacesPattern(bricks);
     const quint32 imageId = mp->addImage(plan);
+    QVERIFY(!doc->fixtures().isEmpty());
+    const quint32 fid = doc->fixtures().first()->id();
+    mp->setGoboSwap(fid, 0, 10, QStringLiteral("logo.svg"));
+    mp->setGoboSwap(fid, 0, 20, breakup);
+    mp->setGoboSwap(fid, 0, 30, QStringLiteral("Nowhere/missing.svg"));   // nothing to carry
     const QString show = QDir(showFolder).absoluteFilePath(QStringLiteral("Tour.qlcc"));
     QCOMPARE(save(m_app, show), QFile::NoError);
     const QString sockBefore = mp->trusses().last()->sockPattern();
@@ -851,22 +863,30 @@ void ShowFiles_Test::collectForTransferTakesThePictures()
     QCOMPARE(fileBytes(images.absoluteFilePath(QStringLiteral("stones.jpg"))), QByteArray("stones"));
     QCOMPARE(fileBytes(images.absoluteFilePath(QStringLiteral("bricks.png"))), QByteArray("bricks"));
     QCOMPARE(fileBytes(images.absoluteFilePath(QStringLiteral("plan.png"))), QByteArray("plan"));
+    QCOMPARE(fileBytes(images.absoluteFilePath(QStringLiteral("logo.svg"))), QByteArray("logo"));
+    QCOMPARE(fileBytes(images.absoluteFilePath(QStringLiteral("breakup.png"))), QByteArray("breakup"));
 
     // The collected show names them there, relatively: nothing outside it.
     const QByteArray xml = fileBytes(moved);
     QVERIFY2(xml.contains("SockPattern=\"images/stones.jpg\""), xml.constData());
     QVERIFY(xml.contains("FacesPattern=\"images/bricks.png\""));
     QVERIFY(xml.contains("Source=\"images/plan.png\""));
+    QVERIFY2(xml.contains("Image=\"images/logo.svg\""), xml.constData());
+    QVERIFY(xml.contains("Image=\"images/breakup.png\""));
+    QVERIFY(xml.contains("Image=\"Nowhere/missing.svg\""));
     QVERIFY(!xml.contains(base.path().toUtf8()));
 
     // This window's show still names its own.
     QCOMPARE(m_app->fileName(), show);
+    QCOMPARE(mp->goboSwap(fid, 0, 10), QStringLiteral("logo.svg"));
+    QCOMPARE(mp->goboSwap(fid, 0, 20), breakup);
     QCOMPARE(mp->trusses().last()->sockPattern(), sockBefore);
     QCOMPARE(mp->image(imageId).source, imageBefore);
 
     // Another computer: only the folder. It finds every picture in it.
     QVERIFY(QDir(showFolder).removeRecursively());
     QVERIFY(QDir(root.absoluteFilePath(QStringLiteral("Downloads"))).removeRecursively());
+    GoboLibrary::setUserDirectoryOverride(root.absoluteFilePath(QStringLiteral("OtherGobos")));
     QCOMPARE(open(m_app, moved), QFile::NoError);
     mp = m_app->doc()->monitorProperties();
     auto inImages = [&images](const QString &path) {
@@ -878,6 +898,14 @@ void ShowFiles_Test::collectForTransferTakesThePictures()
     QVERIFY2(inImages(mp->trusses().last()->sockPattern()), qPrintable(mp->trusses().last()->sockPattern()));
     QVERIFY2(inImages(mp->towers().last()->facesPattern()), qPrintable(mp->towers().last()->facesPattern()));
     QVERIFY2(inImages(mp->images().last().source), qPrintable(mp->images().last().source));
+    const quint32 movedFid = m_app->doc()->fixtures().first()->id();
+    QCOMPARE(movedFid, fid);
+    for (int slot : { 10, 20 })
+    {
+        const QString file = GoboLibrary::resolve(mp->goboSwap(fid, 0, uchar(slot)));
+        QVERIFY2(inImages(file), qPrintable(mp->goboSwap(fid, 0, uchar(slot))));
+    }
+    GoboLibrary::setUserDirectoryOverride(QString());
 }
 
 QTEST_MAIN(ShowFiles_Test)

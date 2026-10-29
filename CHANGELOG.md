@@ -165,6 +165,72 @@ skipped). Upstream fixes taken:
 
 ### Fixed
 
+- **QLC+ 4 deleted fixtures from a .qxw saved here** (test matrix C2).
+  It has no unpatched fixtures, and read each of the Inventory's as
+  patched at universe 1, address 1: it kept the first and refused the
+  rest -- and any fixture really patched there, with what used it (a
+  scene's values, a channel group), lost for good once saved in QLC+.
+  A .qxw now keeps the Inventory in a `<StagedFixtures>` element QLC+ 4
+  reads past; qlcconsole reads it back, the .qxw notice names it, and
+  the stock QLC+ 4.14.4 gate test has an Inventory fixture at universe 1,
+  address 1. A .qlcc is unchanged.
+- **Windows: old QLC+ user data never came across** (test matrix M2).
+  The merge of `%USERPROFILE%\QLC+` into qlcconsole's folder used HOME,
+  which a Windows desktop session doesn't set, so it wrote
+  `\qlcconsole` at the root of the current drive (`C:\qlcconsole`, the
+  install folder); and its "links" were Windows shell shortcuts named
+  `*.qxf`, which no loader can read ("Resource error" at every start).
+  It now works under `%USERPROFILE%`, copies the files once (a copy
+  removed stays removed, a file of your own wins), and replaces a
+  shortcut an earlier build left. Tested with the Windows layout
+  simulated, so every platform's gate runs it.
+- **HID pad profiles**: your own went to
+  `Library/Application Support/QLC+/HIDProfiles` under the home folder
+  on every platform (stock QLC+'s folder on a Mac; a stray `Library`
+  folder on Windows and Linux); they are now in qlcconsole's user folder
+  (a Mac still reads the old one). And the installed Xbox profile is
+  found on Windows and Linux: the plugin looked for the macOS bundle's
+  `Resources/HIDProfiles` everywhere.
+- **Memory**: about 75 KB a show open no longer leaks (test matrix
+  L1-L4; m2leak under LSan on Linux, 10 open/edit/run/close cycles:
+  75,105 bytes a cycle before, 6 after; the menu's QActions after 10
+  cycles 6,876 before, 261 after): a generic dimmer's
+  definition outlived its fixture; building an RGB matrix started the
+  audio capture (an FFT plan and a beat tracker) through a temporary
+  RGB Audio's destructor; a fixture definition file that could not be
+  opened leaked its file object (once per definition a show names that
+  isn't in its folder); and the Fixture Manager's group menu kept every
+  old action (1,323 more QActions per show open). At quit, a Focus
+  session's light layer no longer calls into the destroyed show (test
+  matrix L7: 3 UBSan reports at quit before, 0 after), nor the update
+  footer into its half-destroyed label.
+- **Thread safety** (test matrix TSan L2, L4, L5): the universe's value
+  arrays are never shared, so a frame no longer reallocates one under a
+  per-channel read from the GUI (Build's power estimate, the plot); an
+  external beat that came in during a timer tick was lost at its end and
+  is now the next tick's beat; a running function's elapsed time, read
+  by effect scripts from the GUI thread, is atomic.
+- **Art-Net sequence per node** (test matrix N1): each node counts its own
+  ArtDmx Sequence 1, 2, 3..., however many nodes this console sends the
+  same Art-Net universe to (DanceHysteria 0.6: 18 nodes on universe 0,
+  each saw it jump by 18).
+- **A stock show's network patch with no interface named** (`UID="None"`,
+  a line number; test matrix C7) was bound to whichever interface this
+  computer lists at that number -- another network -- and saving wrote
+  that network into the show. It now follows the patch's target address,
+  or waits, kept as it was, for you to patch it.
+- **Collect for Transfer takes the gobo swaps' pictures**: your own gobo
+  pictures (from your gobo folder or a file anywhere) go into `images/`
+  with the rest and the collected show names them there; a gobo from the
+  app's library stays a name. A swap's picture beside the show is saved
+  relative to it.
+- **Web access on a Pi**: an SSID or password typed on the network page
+  is passed to nmcli whole; it was split on spaces ("My Show Net" became
+  three arguments, and a password could add nmcli options), and the
+  hotspot's name kept literal quote marks.
+- **`QLC_SHOW_DEBUG`'s log** is written to `showdebug.log` in the user's
+  qlcconsole folder instead of the fixed `/tmp/qlc_showdebug.log`, a name
+  another user of the machine could take first (red team L3).
 - **Heavy Art-Net input no longer starves the GUI and web access.**
   Every input value on channels 128-255, from any plugin, rebuilt the
   effect scripts' whole "midi" data (thousands of values per input

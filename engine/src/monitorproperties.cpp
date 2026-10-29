@@ -42,6 +42,7 @@
 #include "stagetarget.h"
 #include "qlcconfig.h"
 #include "qlcfile.h"
+#include "gobolibrary.h"
 #include "doc.h"
 
 #define KXMLQLCMonitorDisplay       QStringLiteral("DisplayMode")
@@ -200,8 +201,15 @@ QStringList MonitorProperties::picturePaths() const
     add(m_commonBackgroundImage);
     for (auto it = m_customBackgroundImages.constBegin(); it != m_customBackgroundImages.constEnd(); ++it)
         add(it.value());
-    // Not the gobo swaps: those are names in this computer's gobo library
-    // (GoboLibrary::resolve()), not files beside the show.
+    // The gobo swaps' pictures: the operator's own (their gobo folder, or a
+    // file elsewhere), not the app's library, which every computer has.
+    for (auto fit = m_goboSwaps.constBegin(); fit != m_goboSwaps.constEnd(); ++fit)
+        for (const QString &image : fit.value())
+        {
+            const QString file = GoboLibrary::resolve(image);
+            if (!file.isEmpty() && !GoboLibrary::isBundled(file))
+                add(file);
+        }
     return paths;
 }
 
@@ -3764,9 +3772,19 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
         {
             const QXmlStreamAttributes a = root.attributes();
             const int slot = a.value("Slot").toInt();
+            /* A name in the gobo library, or a picture of the show's own
+               saved relative to it (saveXML(), Collect for Transfer) */
+            QString image = a.value("Image").toString();
+            if (mainDocument != NULL && !image.isEmpty() && QFileInfo(image).isRelative()
+                && GoboLibrary::resolve(image).isEmpty())
+            {
+                const QString beside = mainDocument->denormalizeComponentPath(image);
+                if (QFileInfo(beside).isFile())
+                    image = beside;
+            }
             if (slot >= 0 && slot <= 255)
                 setGoboSwap(a.value("Fixture").toUInt(), a.value("Channel").toUInt(),
-                            uchar(slot), a.value("Image").toString());
+                            uchar(slot), image);
             root.skipCurrentElement();
         }
         else if (root.name() == QStringLiteral("FixtureRig"))
@@ -4592,7 +4610,18 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument, 
             doc->writeAttribute(QStringLiteral("Fixture"), QString::number(fit.key()));
             doc->writeAttribute(QStringLiteral("Channel"), QString::number(sit.key().first));
             doc->writeAttribute(QStringLiteral("Slot"),    QString::number(sit.key().second));
-            doc->writeAttribute(QStringLiteral("Image"),   sit.value());
+            /* A name in the gobo library stays a name. A file is written
+               relative to the show when it is beside it -- and, in Collect
+               for Transfer's copy, as the copy that goes with it. */
+            QString image = sit.value();
+            if (mainDocument != NULL && !image.isEmpty())
+            {
+                const QString file = GoboLibrary::resolve(image);
+                if (QFileInfo(image).isAbsolute()
+                    || (!file.isEmpty() && mainDocument->hasComponentPathOverride(file)))
+                    image = mainDocument->normalizeComponentPath(file.isEmpty() ? image : file);
+            }
+            doc->writeAttribute(QStringLiteral("Image"),   image);
             doc->writeEndElement();
         }
 

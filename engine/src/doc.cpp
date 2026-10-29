@@ -417,6 +417,11 @@ void Doc::setComponentPathOverrides(const QMap<QString, QString> &overrides)
     m_componentPathOverrides = overrides;
 }
 
+bool Doc::hasComponentPathOverride(const QString &absolutePath) const
+{
+    return m_componentPathOverrides.contains(QFileInfo(absolutePath).absoluteFilePath());
+}
+
 QString Doc::normalizeComponentPath(const QString& filePath) const
 {
     if (filePath.isEmpty())
@@ -921,6 +926,11 @@ QSharedPointer<AudioCapture> Doc::audioInputCapture() const
             new AudioCaptureQt6()
             );
     }
+    return m_inputCapture;
+}
+
+QSharedPointer<AudioCapture> Doc::existingAudioInputCapture() const
+{
     return m_inputCapture;
 }
 
@@ -2508,6 +2518,18 @@ bool Doc::loadXML(QXmlStreamReader &doc, bool loadIO)
             Fixture::loader(doc, this);
             reportProgress(tr("Loading fixtures"));
         }
+        else if (doc.name() == KXMLQLCStagedFixtures)
+        {
+            // The Inventory's fixtures, as a .qxw keeps them (saveXML())
+            while (doc.readNextStartElement())
+            {
+                if (doc.name() == KXMLFixture)
+                    Fixture::loader(doc, this);
+                else
+                    doc.skipCurrentElement();
+            }
+            reportProgress(tr("Loading fixtures"));
+        }
         else if (doc.name() == KXMLQLCFixtureGroup)
         {
             FixtureGroup::loader(doc, this);
@@ -2654,7 +2676,7 @@ QString Doc::damagedFileMessage(const QXmlStreamReader &doc)
             .arg(doc.lineNumber()).arg(doc.errorString().toHtmlEscaped());
 }
 
-bool Doc::saveXML(QXmlStreamWriter *doc)
+bool Doc::saveXML(QXmlStreamWriter *doc, bool forStockQlc)
 {
     Q_ASSERT(doc != NULL);
 
@@ -2667,6 +2689,7 @@ bool Doc::saveXML(QXmlStreamWriter *doc)
     m_ioMap->saveXML(doc);
 
     /* Write fixtures into an XML document */
+    QList<Fixture *> staged;
     QListIterator <Fixture*> fxit(fixtures());
     while (fxit.hasNext() == true)
     {
@@ -2675,7 +2698,21 @@ bool Doc::saveXML(QXmlStreamWriter *doc)
         // A venue's house fixture is in the venue's file (docs/design/VENUES.md).
         if (isVenueFixture(fxi->id()))
             continue;
+        if (forStockQlc && !fxi->isPatched() && !fxi->addressClash())
+        {
+            staged << fxi;
+            continue;
+        }
         fxi->saveXML(doc);
+    }
+    /* QLC+ 4 has no unpatched fixtures (see the header): they go where it
+       doesn't look, right after the others, so they load in the same order. */
+    if (!staged.isEmpty())
+    {
+        doc->writeStartElement(KXMLQLCStagedFixtures);
+        foreach (Fixture *fxi, staged)
+            fxi->saveXML(doc);
+        doc->writeEndElement();
     }
 
     /* Write fixture groups into an XML document */

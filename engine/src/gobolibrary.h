@@ -46,6 +46,10 @@ namespace GoboLibrary
      *  it is nowhere. */
     QString resolve(const QString &image);
 
+    /** True when @p file (a full path) is one of the app's own gobos: every
+     *  computer with the app has it, so a show need not carry it. */
+    bool isBundled(const QString &file);
+
     /** Bring @p path into the user folder (copying it unless it is already
      *  there, never overwriting a different file of the same name) and return
      *  the name to store. Empty on failure. */

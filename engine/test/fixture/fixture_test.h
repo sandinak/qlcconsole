@@ -70,6 +70,7 @@ private slots:
     void stageLookUnknownKey();
     void stageLookAuto();
     void stageLookIcon();
+    void aGenericDimmersDefinitionGoesWithIt();
     //void status();
 
 private:

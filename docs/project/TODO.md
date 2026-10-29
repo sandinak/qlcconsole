@@ -159,13 +159,8 @@ undo as one step, how it reads in Front/Side).
 ## Small fixes and leftovers
 
 - **Left from the RC8 security batch (red team, 2026-10-27):**
-  - L3: `QLC_SHOW_DEBUG` writes `/tmp/qlc_showdebug.log`, a predictable
-    world path (showrunner.cpp, showmanager.cpp, vcshowcontrol.cpp): use
-    a per-user temp file. Debug-only.
   - The QML UI's web access (`webaccess-qml.cpp`) still has the old
     `m_auth && level` checks; qmlui is off, harden it if it's ever built.
-  - The Pi's nmcli commands split admin-typed SSIDs and passwords on
-    spaces (`WebAccessNetwork`): pass them as single arguments.
   - Web access is plain http: TLS (or a note to put it behind one) if
     anyone asks for it off the show network.
 

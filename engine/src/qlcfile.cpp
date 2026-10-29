@@ -68,6 +68,9 @@ QXmlStreamReader *QLCFile::getXMLReader(const QString &path)
     else
     {
         qWarning() << Q_FUNC_INFO << "Unable to open file:" << path;
+        /* it leaked, once per definition a show names that isn't there
+           (Fixture::loadXML() tries the show's own folder for each one) */
+        delete file;
     }
 
     return reader;
@@ -256,37 +259,87 @@ QDir QLCFile::userDirectory(QString path, QString fallBackPath, QStringList exte
     return dir;
 }
 
+QLCFile::LegacyRoots QLCFile::legacyUserDataRoots(LegacyPlatform platform,
+                                                  const QString &home,
+                                                  const QString &userProfile)
+{
+    LegacyRoots roots;
+    /* Windows keeps user data under %USERPROFILE%, as userDirectory() does.
+       HOME is not set in a normal desktop session there (OpenSSH and MSYS set
+       it), and "/qlcconsole" with no HOME is the current drive's root: on a
+       default install, C:\qlcconsole. */
+    const QString base = (platform == LegacyPlatform::Windows) ? userProfile : home;
+    if (base.isEmpty())
+        return roots;
+
+    switch (platform)
+    {
+        case LegacyPlatform::Windows:
+            roots.oldRoot = QString("%1/QLC+").arg(base);
+            roots.newRoot = QString("%1/qlcconsole").arg(base);
+        break;
+        case LegacyPlatform::MacOS:
+            roots.oldRoot = QString("%1/Library/Application Support/QLC+").arg(base);
+            roots.newRoot = QString("%1/Library/Application Support/qlcconsole").arg(base);
+        break;
+        case LegacyPlatform::Unix:
+            roots.oldRoot = QString("%1/.qlcplus").arg(base);
+            roots.newRoot = QString("%1/.qlcconsole").arg(base);
+        break;
+    }
+    roots.subdirs = (platform == LegacyPlatform::Unix)
+        ? QStringList{ "fixtures", "rgbscripts", "miditemplates", "modifierstemplates",
+                       "inputprofiles", "colorfilters", "Bundles", "EffectScripts",
+                       "EffectPresets" }
+        : QStringList{ "Fixtures", "RGBScripts", "MidiTemplates", "ModifiersTemplates",
+                       "InputProfiles", "ColorFilters", "Bundles", "EffectScripts",
+                       "EffectPresets" };
+    /* A Windows "link" is a shell shortcut (.lnk) file under the target's
+       name, which no loader can read: copy there instead. */
+    roots.copy = (platform == LegacyPlatform::Windows);
+    return roots;
+}
+
+bool QLCFile::isWindowsShortcut(const QString &path)
+{
+    QFile f(path);
+    if (f.open(QIODevice::ReadOnly) == false)
+        return false;
+    /* ShellLinkHeader: HeaderSize 0x4C, then LinkCLSID 00021401-0000-0000-C000-000000000046 */
+    static const QByteArray magic("\x4c\x00\x00\x00\x01\x14\x02\x00", 8);
+    return f.read(8) == magic;
+}
+
 void QLCFile::mergeLegacyUserData()
 {
-    QString oldRoot;
 #if defined(WIN32) || defined(Q_OS_WIN)
-    LPTSTR home = (LPTSTR) malloc(256 * sizeof(TCHAR));
-    GetEnvironmentVariable(TEXT("UserProfile"), home, 256);
-    oldRoot = QString("%1/QLC+").arg(QString::fromUtf16(reinterpret_cast<char16_t*>(home)));
-    free(home);
+    const LegacyPlatform platform = LegacyPlatform::Windows;
 #elif defined(__APPLE__) || defined(Q_OS_MAC)
-    oldRoot = QString("%1/Library/Application Support/QLC+").arg(getenv("HOME"));
+    const LegacyPlatform platform = LegacyPlatform::MacOS;
 #else
-    oldRoot = QString("%1/.qlcplus").arg(getenv("HOME"));
+    const LegacyPlatform platform = LegacyPlatform::Unix;
 #endif
+    const QString home = QString::fromLocal8Bit(qgetenv("HOME"));
+    const QString userProfile = QString::fromLocal8Bit(qgetenv("USERPROFILE"));
+    LegacyRoots roots = legacyUserDataRoots(platform, home, userProfile);
+    if (roots.newRoot.isEmpty())
+        return;
+    /* the build's own folder name, as userDirectory() uses it */
+    roots.newRoot = QString("%1/%2").arg(platform == LegacyPlatform::Windows ? userProfile : home)
+                                    .arg(USERQLCPLUSDIR);
+    mergeLegacyUserData(roots);
+}
 
-    QString newRoot = QString("%1/%2").arg(getenv("HOME")).arg(USERQLCPLUSDIR);
-    if (oldRoot == newRoot)
+void QLCFile::mergeLegacyUserData(const LegacyRoots &roots)
+{
+    const QString &oldRoot = roots.oldRoot;
+    const QString &newRoot = roots.newRoot;
+    if (oldRoot.isEmpty() || newRoot.isEmpty() || oldRoot == newRoot)
         return;
 
     QDir oldDir(oldRoot);
     if (oldDir.exists() == false)
         return;
-
-#if defined(WIN32) || defined(Q_OS_WIN) || defined(__APPLE__) || defined(Q_OS_MAC)
-    static const QStringList subdirs = { "Fixtures", "RGBScripts", "MidiTemplates",
-        "ModifiersTemplates", "InputProfiles", "ColorFilters", "Bundles",
-        "EffectScripts", "EffectPresets" };
-#else
-    static const QStringList subdirs = { "fixtures", "rgbscripts", "miditemplates",
-        "modifierstemplates", "inputprofiles", "colorfilters", "Bundles",
-        "EffectScripts", "EffectPresets" };
-#endif
 
     /* What has been linked before, so a link removed on purpose stays
        removed: this runs at every start, and used to put back whatever was
@@ -300,9 +353,9 @@ void QLCFile::mergeLegacyUserData()
                 if (!line.trimmed().isEmpty())
                     linked.insert(QString::fromUtf8(line.trimmed()));
     }
-    const int before = linked.size();
+    const QSet<QString> before = linked;
 
-    foreach (const QString &sub, subdirs)
+    foreach (const QString &sub, roots.subdirs)
     {
         QDir oldSub(oldDir.filePath(sub));
         if (oldSub.exists() == false)
@@ -314,25 +367,37 @@ void QLCFile::mergeLegacyUserData()
         foreach (const QString &fileName, oldSub.entryList(QDir::Files))
         {
             const QString key = sub + QLatin1Char('/') + fileName;
+            const QString oldFile = oldSub.filePath(fileName);
             QString newFile = newSub.filePath(fileName);
             QFileInfo there(newFile);
+
+            /* An earlier build "linked" on Windows too: a shell shortcut
+               under the definition's name, which failed to load at every
+               start. Replace it with the file itself. */
+            if (roots.copy && there.exists() && isWindowsShortcut(newFile))
+            {
+                if (QFile::remove(newFile) && QFile::copy(oldFile, newFile))
+                    linked.insert(key);
+                continue;
+            }
+
             if (there.exists() || there.isSymLink())
             {
                 // a file already placed under the new root wins -- and a
                 // link this made earlier is now on the ledger
-                if (there.isSymLink() && there.symLinkTarget() == QFileInfo(oldSub.filePath(fileName)).absoluteFilePath())
+                if (there.isSymLink() && there.symLinkTarget() == QFileInfo(oldFile).absoluteFilePath())
                     linked.insert(key);
                 continue;
             }
             if (linked.contains(key))
                 continue; // linked once, removed since: leave it removed
 
-            if (QFile::link(oldSub.filePath(fileName), newFile))
+            if (roots.copy ? QFile::copy(oldFile, newFile) : QFile::link(oldFile, newFile))
                 linked.insert(key);
         }
     }
 
-    if (linked.size() != before)
+    if (linked != before)
     {
         QFile ledger(ledgerPath);
         if (ledger.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text))
@@ -342,6 +407,12 @@ void QLCFile::mergeLegacyUserData()
             ledger.write(keys.join(QLatin1Char('\n')).toUtf8() + '\n');
         }
     }
+}
+
+QString QLCFile::showDebugLogPath()
+{
+    const QDir dir = userDirectory(QString(USERQLCPLUSDIR), QString(USERQLCPLUSDIR), QStringList());
+    return dir.absoluteFilePath(QStringLiteral("showdebug.log"));
 }
 
 QString QLCFile::fileUrlPrefix()

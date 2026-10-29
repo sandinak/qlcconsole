@@ -111,6 +111,9 @@ private slots:
      *  Fixture Manager's and Build's menus, the row's tooltip. */
     void outputRulesForFixturesAndGroups();
     void editDefinitionForFixturesSharingOne();
+    /** The group menu's actions are replaced, not piled up, on each
+     *  refresh (TEST_MATRIX L4: 1,323 left per show open). */
+    void theGroupMenuKeepsOneActionPerGroup();
     void stageLookIsOfferedInOperate();
     /** Q51: Plot Symbol ▸ ends with a Scenery section holding Curtain */
     void stageLookMenuHasAScenerySectionWithCurtain();

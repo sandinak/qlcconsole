@@ -858,4 +858,21 @@ void Universe_Test::zeroIntensityChannelsEfficiency2()
     }
 }
 
+void Universe_Test::theValueArraysAreNeverShared()
+{
+    QVERIFY(m_uni->write(3, 100));
+    const QByteArray copy = m_uni->preGMValues();
+    QCOMPARE(uchar(copy.at(3)), uchar(100));
+    QVERIFY2(copy.isDetached(), "preGMValues() shares the universe's own array");
+
+    // Passthrough: reset() put the passthrough array itself in postGM's
+    // place, and the next write reallocated the array postGMValues() gives.
+    m_uni->setPassthrough(true);
+    const char *post = m_uni->postGMValues()->constData();
+    m_uni->reset();
+    QVERIFY(m_uni->write(5, 42));
+    QCOMPARE(m_uni->postGMValues()->constData(), post);
+    QVERIFY(m_uni->postGMValues()->isDetached());
+}
+
 QTEST_APPLESS_MAIN(Universe_Test)

@@ -43,6 +43,7 @@
 #include <QUrl>
 
 #include "mainbar.h"
+#include "qlcfile.h"
 #include "functionselection.h"
 #include "audioplugincache.h"
 #include "rgbmatrixeditor.h"
@@ -1753,7 +1754,7 @@ void ShowManager::slotStartPlayback()
 
     if (qEnvironmentVariableIntValue("QLC_SHOW_DEBUG") != 0)
     {
-        QFile f("/tmp/qlc_showdebug.log");
+        QFile f(QLCFile::showDebugLogPath());
         if (f.open(QIODevice::Append | QIODevice::Text))
             QTextStream(&f) << "[PLAY] show=" << m_show->id()
                 << " running=" << m_show->isRunning()

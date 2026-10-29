@@ -763,10 +763,12 @@ protected:
     void roundElapsed(quint32 roundTime);
 
 private:
-    /* The elapsed time in ms when tempoType is Time */
-    quint32 m_elapsed;
+    /* The elapsed time in ms when tempoType is Time. Written by the
+       MasterTimer thread only; read from the GUI too (an effect script's
+       clock, EffectInstance), hence atomic, relaxed (TSan L5). */
+    std::atomic<quint32> m_elapsed;
     /* The elapsed beats when tempoType is Beats */
-    quint32 m_elapsedBeats;
+    std::atomic<quint32> m_elapsedBeats;
 
     /*********************************************************************
      * Start & Stop

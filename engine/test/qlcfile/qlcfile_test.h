@@ -31,6 +31,11 @@ private slots:
      *  skipped by the loaders rather than waited on, and remembered. */
     void onlineOnlyFilesAreNotedNotWaitedOn();
     void aRemovedLegacyLinkStaysRemoved();
+    void windowsLegacyRootsComeFromTheUserProfile();
+    void windowsLegacyFilesAreCopiedNotShortcut();
+    void aFileThatCannotBeOpenedLeavesNothingBehind();
+    void hidProfilesLiveInQlcconsolesFolders();
+    void theShowDebugLogIsInTheUsersFolder();
     /** Effect scripts, presets, bundles, head layouts, gobos and network
      *  gear live in the per-platform user folder, like fixture definitions
      *  (they were the Mac's path everywhere). */

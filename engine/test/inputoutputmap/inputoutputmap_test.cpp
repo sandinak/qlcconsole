@@ -2166,4 +2166,48 @@ void InputOutputMap_Test::rigNetworkDecisionRefreshedOnChangeAndTick()
     QVERIFY(stub->m_gateAllowed.contains("10.4.12.7") == false);
 }
 
+void InputOutputMap_Test::aNetworkPatchWithOnlyALineNumberIsNotGuessed()
+{
+    mockMachine(QList<NetworkRoute::LocalAddress>()
+                    << localAddr("lo0", "127.0.0.1", 8)
+                    << localAddr("en0", "192.168.20.166", 23)
+                    << localAddr("en5", "172.18.2.157", 24),
+                QMap<QString, QString>{ { "127.", "127.0.0.1" }, { "172.18.2.", "172.18.2.157" },
+                                        { "*", "192.168.20.166" } });
+    IOPluginStub *stub = namedStub(m_doc, "ArtNet",
+                                   QStringList() << "127.0.0.1" << "192.168.20.166" << "172.18.2.157");
+
+    const QString bare =
+        "<InputOutputMap>\n"
+        " <Universe Name=\"Universe 9\" ID=\"0\">\n"
+        "  <Output Plugin=\"ArtNet\" UID=\"None\" Line=\"1\"/>\n"
+        " </Universe>\n"
+        "</InputOutputMap>\n";
+    {
+        InputOutputMap iom(m_doc, 4);
+        QVERIFY(loadIOMap(iom, bare));
+        QVERIFY2(stub->m_openOutputs.isEmpty(), "line 1 (the home Wi-Fi here) was opened on a guess");
+        QVERIFY(iom.hasOfflinePatches());
+        const QStringList saved = patchElements(saveIOMap(iom));
+        QCOMPARE(saved.count(), 1);
+        QVERIFY2(saved.first().contains("UID=\"None\"") && !saved.first().contains("Network="),
+                 qPrintable(saved.first()));
+    }
+
+    // With a target it can follow: the line that reaches it
+    const QString targeted =
+        "<InputOutputMap>\n"
+        " <Universe Name=\"Universe 9\" ID=\"0\">\n"
+        "  <Output Plugin=\"ArtNet\" UID=\"None\" Line=\"1\">\n"
+        "   <PluginParameters outputIP=\"172.18.2.60\" outputUni=\"0\"/>\n"
+        "  </Output>\n"
+        " </Universe>\n"
+        "</InputOutputMap>\n";
+    stub->m_openOutputs.clear();
+    InputOutputMap iom(m_doc, 4);
+    QVERIFY(loadIOMap(iom, targeted));
+    QVERIFY(iom.outputPatch(0, 0) != nullptr && iom.outputPatch(0, 0)->isPatched());
+    QCOMPARE(iom.outputPatch(0, 0)->output(), quint32(2));
+}
+
 QTEST_GUILESS_MAIN(InputOutputMap_Test)
