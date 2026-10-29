@@ -133,7 +133,7 @@ public:
      *  (presets) authored against an older Generator. */
     int         version()      const { return m_version; }
 
-    // --- Lifecycle (see EFFECT_LIFECYCLE_DESIGN.md) ---
+    // --- Lifecycle (see docs/design/EFFECT_LIFECYCLE_DESIGN.md) ---
     /** "loop" (default) | "reactive" | "oneshot". */
     QString     lifecycle()    const { return m_lifecycle; }
     bool        isOneShot()    const { return m_lifecycle == QLatin1String("oneshot"); }

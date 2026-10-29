@@ -4398,7 +4398,7 @@ TrussItem *MonitorGraphicsView::trussUnderFixture(MonitorFixtureItem *mfi,
     // The ICON's centre, not sceneBoundingRect()'s -- the label pulls that
     // one down and makes it depend on whether labels happen to be showing
     // on this layer, disagreeing with the deck-mount attach path's own
-    // (stable) reading of the same fixture. See WORKFLOW-SUBTLETIES.md #10.
+    // (stable) reading of the same fixture. See docs/dev/WORKFLOW-SUBTLETIES.md #10.
     if (forAttach && !attachHeld())
         return nullptr;     // a plain drop only moves; Shift attaches
     const QPointF centre = mfi->iconCentreScene();

@@ -25,7 +25,7 @@
 
 class Doc;
 
-/* The cue runner (SHOW_TREE_DESIGN.md §6B, P7): the Run tab's runner and
+/* The cue runner (docs/design/SHOW_TREE_DESIGN.md §6B, P7): the Run tab's runner and
    the Cue Runner VC widget. Offscreen; the timer is stepped by hand and the
    universes read, never sent. */
 class CueRunner_Test final : public QObject

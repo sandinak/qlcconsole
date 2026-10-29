@@ -37,7 +37,7 @@ class QXmlStreamWriter;
  */
 
 /**
- * The Show Tree (SHOW_TREE_DESIGN.md): Production -> Cue list -> Cue ->
+ * The Show Tree (docs/design/SHOW_TREE_DESIGN.md): Production -> Cue list -> Cue ->
  * Layer -> looks. Plain values with no Doc behind them, so the cascade can
  * be read and tested on its own; ShowTreeController bakes them into
  * functions.
@@ -261,7 +261,7 @@ namespace ShowTree
          *  follows too closely). This use's, like its number. Saved as
          *  NoMoveInBlack="1", which an older build ignores. */
         bool noMoveInBlack = false;
-        /** A focus-call cue (FOCUS_REFINE_DESIGN.md section 7): GO plays its
+        /** A focus-call cue (docs/design/FOCUS_REFINE_DESIGN.md section 7): GO plays its
          *  own looks as a preset and ARMS the show's focus calls; the
          *  controller's Start begins them, and leaving them goes on to the
          *  next cue. This use's, like its number. Saved as FocusCall="1",
@@ -283,7 +283,7 @@ namespace ShowTree
         QList<Cue> cues;
         /** Generated: the Chaser this list bakes to. */
         quint32 chaser = 0xFFFFFFFF;
-        /** A production's Looks section (PROGRAMMING_ROLE_DESIGN.md §4.1,
+        /** A production's Looks section (docs/design/PROGRAMMING_ROLE_DESIGN.md §4.1,
          *  P-D5): its "cues" are busking looks, fired from VC buttons, not
          *  cues of a list. Each always resolves as a Block cue would (no
          *  tracking, includes or base) and bakes to a Collection of its
@@ -310,7 +310,7 @@ namespace ShowTree
          *  parent (sub-cue changes are cue-only). Numbered <cue>.<n> unless
          *  a sub-cue has a number of its own. Bakes to a hidden Chaser of the
          *  sub-cues' Collections that is the parent's step, SubCues="SubGo"
-         *  (SUBCUES_DESIGN.md). Saved as <SubCues>. Invalid: a plain list. */
+         *  (docs/design/SUBCUES_DESIGN.md). Saved as <SubCues>. Invalid: a plain list. */
         quint32 subOf = 0xFFFFFFFF;
         bool isSubCues() const { return subOf != 0xFFFFFFFF; }
 

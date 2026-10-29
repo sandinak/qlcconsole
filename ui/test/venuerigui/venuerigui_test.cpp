@@ -210,7 +210,7 @@ void VenueRigUi_Test::theConnectionsSlotPicker()
     QCOMPARE(m_doc->inputOutputMap()->universeSlotOwner(1), RigOwner::Tour);
 }
 
-/* VENUES.md section 6 and the changelog: "A clash check ... runs before
+/* docs/design/VENUES.md section 6 and the changelog: "A clash check ... runs before
    Apply now". Switching to a venue whose house rig clashes with the show
    asks first; Cancel leaves the venue off and the patch as it was; Apply
    anyway goes live with the clashing house fixture unpatched. */

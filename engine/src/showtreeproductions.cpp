@@ -17,7 +17,7 @@
   limitations under the License.
 */
 
-/* Multiple productions (SHOW_TREE_DESIGN.md §8 P5): which production is
+/* Multiple productions (docs/design/SHOW_TREE_DESIGN.md §8 P5): which production is
    current -- what GO, the footer, VC and show control play -- its main list
    and its timecode source. The current production is the show's main cue
    list seen from the tree: making a production current makes its main

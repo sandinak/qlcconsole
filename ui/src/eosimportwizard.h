@@ -42,7 +42,7 @@ class Doc;
  */
 
 /**
- * File > Import for an ETC Eos show (EOS_IMPORT_DESIGN.md, "UI entry
+ * File > Import for an ETC Eos show (docs/design/EOS_IMPORT_DESIGN.md, "UI entry
  * point"). Two pages:
  *
  *   1. Files: the USITT ASCII export (required) and its companions --

@@ -473,7 +473,7 @@ bool Chaser::cuesMatch(const QString &a, const QString &b)
 }
 
 /*****************************************************************************
- * Sub-cues (SUBCUES_DESIGN.md)
+ * Sub-cues (docs/design/SUBCUES_DESIGN.md)
  *****************************************************************************/
 
 Chaser *Chaser::subCueChase(int index) const

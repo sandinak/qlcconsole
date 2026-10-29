@@ -225,7 +225,7 @@ public:
     /** Return all selected MonitorFixtureItems (may be empty). */
     QList<MonitorFixtureItem *> selectedFixtureItems() const;
 
-    /** Fixture Studio (FIXTURESTUDIO_DESIGN.md): promote the current fixture
+    /** Fixture Studio (docs/design/FIXTURESTUDIO_DESIGN.md): promote the current fixture
      *  multi-selection into a studio group — a MonitorGroup carrying a local
      *  frame whose members' world positions are derived. Returns the new group
      *  id, or 0 if fewer than two fixtures are selected. */
@@ -1037,7 +1037,7 @@ protected slots:
     /** Slot called when a TargetItem is dropped after a drag */
     void slotTargetMoved(TargetItem *item);
 
-    /** Line targets (LINE_TARGET_DESIGN.md): a handle dragged, let go, a
+    /** Line targets (docs/design/LINE_TARGET_DESIGN.md): a handle dragged, let go, a
      *  point added or taken out. Each edit is one undo step. */
     void slotLineHandleMoved(TargetItem *item, int index, QPointF scenePos,
                              Qt::KeyboardModifiers modifiers);

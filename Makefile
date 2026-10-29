@@ -1,5 +1,5 @@
 # qlcconsole -- shortcuts for the macOS build. The real work is in the
-# scripts each target calls; see RELEASE.md and CLAUDE.md ("Build & run").
+# scripts each target calls; see docs/dev/RELEASE.md and CLAUDE.md ("Build & run").
 #
 #   make test      build what's checked out -> ~/Applications/qlcconsole-dev.app
 #   make dmg       signed + notarized universal DMG in dist/ (local only)
@@ -46,7 +46,7 @@ help:
 	echo "                  notarization, Gatekeeper, SHA256SUMS, universal + relocatable Mach-O,"; \
 	echo "                  plugins, Info.plist and file types, resources, headless runs. Never"; \
 	echo "                  opens a window. HOST= runs it on another (clean) Mac; WAIVE=id,id"; \
-	echo "                  reports known failures as TODO. Windows/Linux: RELEASE.md."; \
+	echo "                  reports known failures as TODO. Windows/Linux: docs/dev/RELEASE.md."; \
 	echo ""; \
 	echo "PUBLIC -- push tag v$$v to origin and publish on GitHub Releases, where the in-app"; \
 	echo "updater offers it to users. Each shows its plan and asks you to type 'publish':"; \

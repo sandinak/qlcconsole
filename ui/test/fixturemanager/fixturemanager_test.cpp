@@ -84,7 +84,7 @@
  * entirely -- and nothing else will ever close that dialog under offscreen
  * QTest, so its nested event loop blocks forever: a wrong widget lookup
  * would hang the whole test binary instead of just failing the one test
- * that made it. See qlcconsole's WORKFLOW-SUBTLETIES.md #7 (this shape was
+ * that made it. See qlcconsole's docs/dev/WORKFLOW-SUBTLETIES.md #7 (this shape was
  * hand-rigged at each call site here before being pulled out once). */
 static void driveDialog(const std::function<bool(QWidget *)> &fill)
 {
@@ -273,7 +273,7 @@ void FixtureManager_Test::selectingAGroupOpensItsLayoutEditor()
  * block..." handler and its own picker dialog, then move that block as a
  * unit and check every head lands exactly where the geometry says.
  *
- * Two scope choices, both disclosed in WORKFLOW-SUBTLETIES.md: creating a
+ * Two scope choices, both disclosed in docs/dev/WORKFLOW-SUBTLETIES.md: creating a
  * group here uses the shared CreateFixtureGroup::createFromFixtures()
  * factory rather than simulating a right-click "New Group..." on the
  * tree's folder row (menu.exec() plus the QAction dispatch it would need
@@ -578,7 +578,7 @@ void FixtureManager_Test::pastingABlockOntoAnOccupiedCellOverwritesTheOccupant()
     // then writes `m_heads[pt] = head` unconditionally for an explicit
     // point, a plain QMap assignment that silently overwrites whatever was
     // there. So: pasting a block onto an occupied cell overwrites the
-    // occupant with no warning and no refusal (WORKFLOW-SUBTLETIES.md #13).
+    // occupant with no warning and no refusal (docs/dev/WORKFLOW-SUBTLETIES.md #13).
     // If a future change makes assignHead() refuse or relocate on collision
     // instead, this test -- and that entry -- should be updated to match.
     const QMap<QLCPoint, GroupHead> afterPaste = targetGrp->headsMap();

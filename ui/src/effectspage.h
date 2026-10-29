@@ -2,7 +2,7 @@
   Q Light Controller Plus
   effectspage.h
 
-  Every effect of the show in one place (WORKFLOW_DESIGN.md W4) -- effect
+  Every effect of the show in one place (docs/design/WORKFLOW_DESIGN.md W4) -- effect
   palettes in their folders, and the classic effects (EFX and RGB Matrix
   functions) marked as such -- beside the effect designer on the Try on
   bench. + New makes an effect palette, an EFX or an RGB Matrix. It was the

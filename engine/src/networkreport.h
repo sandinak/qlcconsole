@@ -34,7 +34,7 @@ class Doc;
  * The network summary for the data package: what gear there is, what each
  * port carries, how long the runs are, what is left over, and which fixtures
  * sit on the network in their own right. Derived on demand from the
- * NetworkTopology, the patch and the plot (see NETWORK_CABLING_DESIGN.md, N5);
+ * NetworkTopology, the patch and the plot (see docs/design/NETWORK_CABLING_DESIGN.md, N5);
  * nothing here is stored.
  */
 class NetworkReport

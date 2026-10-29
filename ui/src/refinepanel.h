@@ -34,7 +34,7 @@ class Doc;
  */
 
 /**
- * Refine's panel (FOCUS_REFINE_DESIGN.md section 6): the cue, the layer,
+ * Refine's panel (docs/design/FOCUS_REFINE_DESIGN.md section 6): the cue, the layer,
  * the scope and what is picked, what is pending, and the controller drawn
  * with Refine's words -- the same layout as Focus mode. Thin: everything it
  * does is RefineSession's.

@@ -637,7 +637,7 @@ void VCCueList_Test::saveXML()
     QCOMPARE(slidersMode, 1);
 }
 
-/* GO on the beat (PLAYBACK_TIMING_DESIGN.md, P1): a press that hasn't landed
+/* GO on the beat (docs/design/PLAYBACK_TIMING_DESIGN.md, P1): a press that hasn't landed
    yet shows on the Next button until it does. */
 void VCCueList_Test::aGoWaitingForItsBeatShowsOnNext()
 {
@@ -987,7 +987,7 @@ void VCCueList_Test::input()
     //QVERIFY(cl.m_runner == NULL);
 }
 
-/* Show control (SHOW_CONTROL_DESIGN.md): the cue list shows each step's
+/* Show control (docs/design/SHOW_CONTROL_DESIGN.md): the cue list shows each step's
    cue, a skipped step greyed and struck through, and what GO plays next. */
 void VCCueList_Test::cuesSkipsAndNextAreShown()
 {

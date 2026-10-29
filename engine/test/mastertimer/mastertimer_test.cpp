@@ -746,7 +746,7 @@ void MasterTimer_Test::framesRolesAndTeardownFromEveryThread()
     }
 }
 
-/* The beat clock (SPEED_SPREAD_DESIGN.md, S1): one running beat count every
+/* The beat clock (docs/design/SPEED_SPREAD_DESIGN.md, S1): one running beat count every
    effect reads. */
 static double frac(double v) { return v - std::floor(v); }
 

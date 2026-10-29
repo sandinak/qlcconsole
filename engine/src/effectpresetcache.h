@@ -4,7 +4,7 @@
 
   Scans the effect-PRESET directories for .json files. A preset pins an effect
   SCRIPT (engine) to a set of named parameter values, so the picker can list
-  many named "capabilities" backed by few scripts. See EFFECTPRESET_DESIGN.md.
+  many named "capabilities" backed by few scripts. See docs/design/EFFECTPRESET_DESIGN.md.
 
   Search order (first found wins on name collision):
     1. <app>/Resources/EffectPresets/         — bundled

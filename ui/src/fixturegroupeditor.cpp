@@ -182,7 +182,7 @@ FixtureGroupEditor::FixtureGroupEditor(FixtureGroup* grp, Doc* doc, QWidget* par
     horizontalLayout->addWidget(addGroupBtn);
     connect(addGroupBtn, SIGNAL(clicked()), this, SLOT(slotAddGroupBlock()));
 
-    /* Who the group's fixtures belong to (board Q137, VENUES.md): the tour
+    /* Who the group's fixtures belong to (board Q137, docs/design/VENUES.md): the tour
        package, or the house rig of the venue it is in. Each fixture follows
        unless Fixture Properties says otherwise. */
     QLabel *ownerLabel = new QLabel(tr("Owner:"), this);

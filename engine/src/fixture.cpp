@@ -1812,7 +1812,7 @@ bool Fixture::saveXML(QXmlStreamWriter *doc) const
        still opens there; Auto writes nothing, so a show without is unchanged. */
     if (stageLook() != AutoLook)
         doc->writeTextElement(KXMLFixtureStageLook, stageLookToString(stageLook()));
-    /* Who it belongs to (VENUES.md): only when set, so a show that never
+    /* Who it belongs to (docs/design/VENUES.md): only when set, so a show that never
        says is byte-identical. */
     if (owner() != RigOwner::Unset)
         doc->writeTextElement(KXMLFixtureOwner, RigOwner::xmlName(owner()));

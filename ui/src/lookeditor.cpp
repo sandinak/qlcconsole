@@ -3201,7 +3201,7 @@ void LookEditor::rebuildEffectDynWidget()
 
     // --- Spread (per look) ---
     // How the effect's cycle is spread across its heads, worked out by the host
-    // (SPEED_SPREAD_DESIGN.md, S3) for any effect that takes it.
+    // (docs/design/SPEED_SPREAD_DESIGN.md, S3) for any effect that takes it.
     if (tmpScript.takesHostSpread())
     {
         QLabel *hdr = new QLabel(tr("Spread"), m_effectDynWidget);
@@ -3296,7 +3296,7 @@ void LookEditor::rebuildEffectDynWidget()
     }
 
     // --- Speed master (per look) ---
-    // What the effect's time runs on (SPEED_SPREAD_DESIGN.md, S2): the look's
+    // What the effect's time runs on (docs/design/SPEED_SPREAD_DESIGN.md, S2): the look's
     // choice (which a chase step, chase or collection may hand down), its own
     // speed, the main beat clock, or a speed master.
     {

@@ -37,7 +37,7 @@ class NoteEdit;
  */
 
 /**
- * A chaser in the Workbench (WORKFLOW_DESIGN.md §3.4, W2): walk it the way
+ * A chaser in the Workbench (docs/design/WORKFLOW_DESIGN.md §3.4, W2): walk it the way
  * the Chaser editor lists it, each step opened up.
  *
  * - ◀ prev · step N · next ▶;

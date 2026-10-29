@@ -405,7 +405,7 @@ void SpeedMasters_Test::aBeatChaseStepsOnItsMastersBeats()
         timer->timerTick();
 }
 
-/* PLAYBACK_TIMING_DESIGN.md, P1. A chase of four manual steps (held until a
+/* docs/design/PLAYBACK_TIMING_DESIGN.md, P1. A chase of four manual steps (held until a
    GO), started; GOs asked for between beats. */
 static Chaser *manualChase(Doc *doc, QList<Scene *> *looks = nullptr)
 {

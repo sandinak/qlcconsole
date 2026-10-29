@@ -39,7 +39,7 @@ class Doc;
  */
 
 /**
- * Per-venue focus corrections (board Q105, FOCUS_REFINE_DESIGN.md section 5).
+ * Per-venue focus corrections (board Q105, docs/design/FOCUS_REFINE_DESIGN.md section 5).
  *
  * Focusing a show in a new room corrects its calibration -- a head's pan and
  * tilt offsets, a fixed light's aim, a hand-zoomed lens -- and those
@@ -75,7 +75,7 @@ public:
         bool dead = false;
     };
 
-    /** Scramble practice (FOCUS_REFINE_DESIGN.md section 13): a practice
+    /** Scramble practice (docs/design/FOCUS_REFINE_DESIGN.md section 13): a practice
      *  venue's lights were put off by a known amount; this is where they
      *  are really right, and how the student did. */
     struct Practice
@@ -111,14 +111,14 @@ public:
          *  and stage target id -> this venue's position (metres). */
         QMap<quint32, float> trims;
         QMap<quint32, QVector3D> targets;
-        /** Board Q137/Q138 (VENUES.md): the room's house rig, its patch,
+        /** Board Q137/Q138 (docs/design/VENUES.md): the room's house rig, its patch,
          *  what is not ours. Empty: the venue behaves as before. */
         VenueRig::Data rig;
         /** fixture id -> when it was checked here (Q134), dead or not. */
         QMap<quint32, Check> checks;
         Practice practice;
         /** Elements inside <Venue> this build doesn't know (a newer
-         *  build's), kept whole and written back (VENUES.md section 7). */
+         *  build's), kept whole and written back (docs/design/VENUES.md section 7). */
         QList<QByteArray> unknown;
     };
 
@@ -289,7 +289,7 @@ public:
     QList<quint32> deadLights() const;
 
     /*********************************************************************
-     * Scramble practice (FOCUS_REFINE_DESIGN.md section 13)
+     * Scramble practice (docs/design/FOCUS_REFINE_DESIGN.md section 13)
      *********************************************************************/
 public:
     /** Make and apply a practice venue: each of @p fids (the moving heads
@@ -330,7 +330,7 @@ public:
     bool endPractice();
 
     /*********************************************************************
-     * What the venue owns (board Q137/Q138, VENUES.md): its house rig, the
+     * What the venue owns (board Q137/Q138, docs/design/VENUES.md): its house rig, the
      * patch of every slot in this room, the channels that are not ours.
      *********************************************************************/
 public:
@@ -361,7 +361,7 @@ public:
     bool setNotOurs(const QString &name, const QList<VenueRig::NotOurs> &notOurs, QString *why = nullptr);
     QList<VenueRig::NotOurs> notOurs(const QString &name) const { return venue(name).rig.notOurs; }
 
-    /** What going live with @p name would clash on (VENUES.md section 6):
+    /** What going live with @p name would clash on (docs/design/VENUES.md section 6):
      *  a dry run unless it is the venue applied. */
     QList<VenueRig::Clash> clashes(const QString &name) const;
 

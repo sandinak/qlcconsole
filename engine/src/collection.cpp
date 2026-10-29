@@ -427,7 +427,7 @@ void Collection::postRun(MasterTimer* timer, QList<Universe *> universes)
             continue;
 
             /* A member another parent still runs (a Scene the next cue
-               shares, SHOW_TREE_DESIGN.md §4) keeps running: give back this
+               shares, docs/design/SHOW_TREE_DESIGN.md §4) keeps running: give back this
                collection's intensity override, or it would scale the
                member for as long as it runs on. */
             const int overrideId = m_overrideIdByMember.value(function->id(), Function::invalidAttributeId());

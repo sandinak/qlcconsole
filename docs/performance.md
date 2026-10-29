@@ -150,7 +150,7 @@ Also still present: the Fixture Manager's group menu keeps its old actions
 (L4, about 1,300 actions per open of a big show), and a UBSan report at
 teardown (L7). The Inputs/Outputs list growing with each show opened (M1)
 is fixed. The labels are those of the leak table in
-[TEST_MATRIX.md](TEST_MATRIX.md#matrix-2-scale-leaks-and-clean-installs-on-rc4-items-2-4).
+[TEST_MATRIX.md](dev/TEST_MATRIX.md#matrix-2-scale-leaks-and-clean-installs-on-rc4-items-2-4).
 
 On macOS, `ps` RSS grows by about 60 MB a minute once Art-Net input starts,
 while the footprint (what the system charges the app) stays at 145–265 MB.

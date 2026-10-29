@@ -18,7 +18,7 @@
 */
 
 /*
-  Refine on a Build scene (FOCUS_REFINE_DESIGN.md section 6B): the same
+  Refine on a Build scene (docs/design/FOCUS_REFINE_DESIGN.md section 6B): the same
   session, the same controller, on a scene of Build's Workbench instead of
   a Show Tree cue.
 

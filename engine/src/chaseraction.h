@@ -30,7 +30,7 @@ enum ChaserActionType
     ChaserPreviousStep,
     ChaserSetStepIndex,
     ChaserPauseRequest,
-    /* Sub-cues (SUBCUES_DESIGN.md): actions on the OUTER chase that its
+    /* Sub-cues (docs/design/SUBCUES_DESIGN.md): actions on the OUTER chase that its
        runner passes to the chase playing as the current step's sub-cues. */
     ChaserSubNextStep,      //! Sub GO: the next playable sub-cue
     ChaserSubPreviousStep,  //! Sub Back: the previous one

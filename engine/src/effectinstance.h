@@ -209,7 +209,7 @@ private:
                          const BeamOcclusion::Model &sight);
     QJSValue sceneTargetObject(quint32 fid, StageTarget *st, const BeamOcclusion::Model &sight);
     /** Line of sight onto a script's aim object: blocked, blockedBy,
-     *  blockedKind, blockedAt, clearance (see EFFECTSCRIPT_API.md). */
+     *  blockedKind, blockedAt, clearance (see docs/dev/EFFECTSCRIPT_API.md). */
     void setSight(QJSValue &obj, const BeamOcclusion::Hit &hit) const;
     QJSValue buildInputsObject() const;
     /** What it runs on (a SpeedMasters::Assignment): its own "__speedMaster"
@@ -325,7 +325,7 @@ private:
 
     /** Resolved run length (ms) for a oneshot effect: Look override → cue/chase
      *  timing (per syncTo) → the script's naturalDurationMs. See
-     *  EFFECT_LIFECYCLE_DESIGN.md. */
+     *  docs/design/EFFECT_LIFECYCLE_DESIGN.md. */
     int resolvedDurationMs() const;
 
     bool             m_fadingOut = false;   //!< in a release fade after the look stopped

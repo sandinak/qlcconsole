@@ -277,7 +277,7 @@ void HelpBrowser::load(const QString &file, const QString &wanted, bool record)
     m_forward->setEnabled(m_at + 1 < m_history.size());
 }
 
-/* The pictures are taken at twice their size (tools: help-shots.sh), as a
+/* The pictures are taken at twice their size (tools/help-shots.sh), as a
    Retina screen shows them: each is shown at half its pixels, or narrower to
    fit the page. Every one is a link to itself at full size -- a whole window
    fitted into a narrow page is a map, not something to read. */
@@ -420,7 +420,7 @@ void HelpBrowser::followLink(const QUrl &url)
         return;
     }
     // Another guide: by its name, wherever the link was written to find it
-    // ("other-improvements.md", "../../EFFECTSCRIPT_API.md").
+    // ("other-improvements.md", "../dev/EFFECTSCRIPT_API.md").
     const QString file = movedGuide(QUrl(QStringLiteral("qrc:/help/") + m_file).resolved(url).fileName());
     if (QFile::exists(resourcePath(file)))
         load(file, url.fragment(), true);

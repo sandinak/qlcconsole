@@ -7,7 +7,7 @@
   a scene recreates the palette stack, de-duping against existing palettes
   where possible.
 
-  See EFFECTPRESET_DESIGN.md §Part 2 for the full design rationale.
+  See docs/design/EFFECTPRESET_DESIGN.md §Part 2 for the full design rationale.
 
   Licensed under the Apache License, Version 2.0 (the "License");
 */

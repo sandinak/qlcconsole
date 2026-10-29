@@ -593,7 +593,7 @@ QList<quint32> EffectInstance::layoutFixtureIds() const
     if (!scene)
         return {};
     /* ONE effect across several scenes (a cue-level effect over layers,
-       SHOW_TREE_DESIGN.md D10): it lays out over all of them; this scene
+       docs/design/SHOW_TREE_DESIGN.md D10): it lays out over all of them; this scene
        writes only its own (runTick()). Otherwise the same as above. */
     return scene->layoutFixtures(m_effectPaletteId);
 }
@@ -1512,7 +1512,7 @@ QJSValue EffectInstance::buildInputsObject() const
     // Beat/tempo inputs from a beat clock so scripts can lock to music
     // tempo -- a SHARED clock, so every effect is on the same beat however far
     // apart they were started, and a tap or an external beat pulls them all
-    // onto it (SPEED_SPREAD_DESIGN.md, S1):
+    // onto it (docs/design/SPEED_SPREAD_DESIGN.md, S1):
     //   _beat      — 0.0→1.0 sawtooth phase within the current beat
     //   _bpm       — current tempo (0 when there is no clock, or it's paused)
     //   _beatCount — whole beats since this instance started

@@ -471,7 +471,7 @@ bool FixtureGroup::saveXML(QXmlStreamWriter *doc)
         QLCPoint pt = it.key();
         GroupHead head = it.value();
         /* A venue's house fixture fills the group only in that venue: its
-           head is in the venue's file, not the show's (VENUES.md section 4). */
+           head is in the venue's file, not the show's (docs/design/VENUES.md section 4). */
         if (this->doc() != NULL && this->doc()->isVenueFixture(head.fxi))
             continue;
         doc->writeStartElement(KXMLQLCFixtureGroupHead);

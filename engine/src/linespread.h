@@ -30,7 +30,7 @@
  */
 
 /**
- * Where each light lands on a line target (LINE_TARGET_DESIGN.md): N lights,
+ * Where each light lands on a line target (docs/design/LINE_TARGET_DESIGN.md): N lights,
  * in order, spread evenly along the line end to end; SPREAD (-5..+5) squeezes
  * them towards the centre (0 = all on it) and, below 0, across it so the
  * beams cross; GROUP and CROSS say what crosses -- whole groups swapping sides
@@ -38,7 +38,7 @@
  *
  * Pure arithmetic over an ordered list: it does not know what a fixture is, so
  * the same rule serves one look's lights or the union of several (a cue-level
- * aim, SHOW_TREE_DESIGN.md). Each setting is its own palette param
+ * aim, docs/design/SHOW_TREE_DESIGN.md). Each setting is its own palette param
  * ("__lineSpread", "__lineGroup", "__lineCross", "__lineShare",
  * "__lineOrder"), absent = the default, so each can be inherited on its own.
  */

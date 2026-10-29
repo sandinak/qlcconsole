@@ -681,7 +681,7 @@ public:
         QObject child of Doc (auto-deleted). */
     EffectScriptRunner *effectScriptRunner() const { return m_effectScriptRunner; }
 
-    /** The definitions and scripts the show carries (SHOW_EMBEDDING_DESIGN.md):
+    /** The definitions and scripts the show carries (docs/design/SHOW_EMBEDDING_DESIGN.md):
      *  its own copies in use while it is open; this computer's back when it
      *  is cleared. QObject child of Doc (auto-deleted). */
     ShowEmbedding *showEmbedding() const { return m_showEmbedding; }
@@ -783,7 +783,7 @@ public:
                           const QHash<quint32, quint32> &channels = QHash<quint32, quint32>()) const;
 
     /** Whether any of @p channels channels from @p address in @p universe is
-     *  one the venue applied keeps for itself (not ours, VENUES.md section
+     *  one the venue applied keeps for itself (not ours, docs/design/VENUES.md section
      *  5); @p first gets the first such address. The one check behind
      *  canPatchFixtures(), addFixture() and a patched fixture's move. */
     bool isOnNotOurs(quint32 universe, quint32 address, quint32 channels,
@@ -819,7 +819,7 @@ public:
 
     bool addFixture(Fixture* fixture, quint32 id = Fixture::invalidId(), bool crossUniverse = false);
 
-    /** VENUES.md: @p id is a house fixture of the venue applied -- the show
+    /** docs/design/VENUES.md: @p id is a house fixture of the venue applied -- the show
      *  file does not take it (nor its plot place, nor its group heads). A
      *  thin forwarder to ProgrammerController's VenueCorrections. */
     bool isVenueFixture(quint32 id) const;

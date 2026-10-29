@@ -17,7 +17,7 @@
   limitations under the License.
 */
 
-/* What the cue runner (SHOW_TREE_DESIGN.md §6B, P7) reads of the tree: which
+/* What the cue runner (docs/design/SHOW_TREE_DESIGN.md §6B, P7) reads of the tree: which
    cue a chaser step is, and the "what changes" line -- computed from the
    resolved tracking, not from DMX, so it reads as the operator thinks:
    "Towers → Red, spread +5; BackStage in → Green, Intensity 45%". */

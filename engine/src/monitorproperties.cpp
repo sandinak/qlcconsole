@@ -2088,7 +2088,7 @@ void MonitorProperties::recomputePipeAnchors()
          * parent's own point rather than exactly on top of it. Zero
          * standoff (the historical default) leaves p unchanged, which is
          * why a fresh crossbar used to be exactly coincident with its boom
-         * in Top view (WORKFLOW-SUBTLETIES.md #14) -- the same reason a
+         * in Top view (docs/dev/WORKFLOW-SUBTLETIES.md #14) -- the same reason a
          * Truss bar has barStandoff. */
         if (b->crossbarStandoff() != 0.0f)
         {

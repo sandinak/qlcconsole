@@ -401,7 +401,7 @@ void Workbench::buildHeader(QWidget *column)
             emit sendToShowTreeRequested(id);
     });
     titleRow->addWidget(m_sendToTreeBtn);
-    /* Focus ▾ (board Q149; FOCUS_REFINE_DESIGN.md 6B): what is loaded,
+    /* Focus ▾ (board Q149; docs/design/FOCUS_REFINE_DESIGN.md 6B): what is loaded,
        from the stage, on the controller -- Focus this cue (a Show Tree cue,
        as the tree does) or Focus this look (a scene, as its own looks and
        exceptions); a cue can be made the venue focus cue here too. */

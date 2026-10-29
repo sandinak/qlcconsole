@@ -169,7 +169,7 @@ private:
     int topLevelIndex(QTreeWidgetItem *item) const;
 
     /************************************************************************
-     * Sub-cues (SUBCUES_DESIGN.md)
+     * Sub-cues (docs/design/SUBCUES_DESIGN.md)
      ************************************************************************/
 private:
     /** List a chase step's steps under its row: read-only, numbered. */

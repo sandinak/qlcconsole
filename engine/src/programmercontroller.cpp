@@ -90,7 +90,7 @@ ProgrammerController::ProgrammerController(Doc *doc)
     connect(m_markEffect, &MarkEffect::fixtureRevealed,
             this, &ProgrammerController::markChanged);
     m_focusSession = new FocusSession(m_doc, this);
-    /* Focus calls and per-venue corrections (FOCUS_REFINE_DESIGN.md): the
+    /* Focus calls and per-venue corrections (docs/design/FOCUS_REFINE_DESIGN.md): the
        show's calls, the venue's corrections beside the show file, and
        Refine -- the same controller on a cue's own values. */
     m_venues = new VenueCorrections(m_doc, this);

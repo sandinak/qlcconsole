@@ -723,7 +723,7 @@ void ShowControl_Test::standbyIsWhatGoPlaysNext()
 }
 
 /*****************************************************************************
- * Sub-cues (SUBCUES_DESIGN.md P3): 4.2 by number, /subgo, /subback, LOAD
+ * Sub-cues (docs/design/SUBCUES_DESIGN.md P3): 4.2 by number, /subgo, /subback, LOAD
  *****************************************************************************/
 
 Chaser *ShowControl_Test::makeSubCueList(Chaser **inner)

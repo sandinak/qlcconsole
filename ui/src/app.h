@@ -419,7 +419,7 @@ private:
     Doc* m_doc;
 
     /** Device-agnostic control-surface engine + the PMJ Black 1 overlay
-     *  (CONTROL_SURFACE_DESIGN.md). Parented to `this`, no manual cleanup
+     *  (docs/design/CONTROL_SURFACE_DESIGN.md). Parented to `this`, no manual cleanup
      *  needed. Constructed at the end of initDoc(), once Doc's I/O map is
      *  fully ready. */
     class ControlSurfaceEngine* m_controlSurfaceEngine = nullptr;
@@ -458,7 +458,7 @@ private:
 
     /** File > Import of an ETC Eos show (@p asciiPath, its USITT ASCII
      *  export): the EosImportWizard, the usual picker and merge, then the
-     *  cue lists into the Show Tree (EOS_IMPORT_DESIGN.md). */
+     *  cue lists into the Show Tree (docs/design/EOS_IMPORT_DESIGN.md). */
     void importEosShow(const QString &asciiPath);
     /** File > Import's report: the merge, with @p before as its details
      *  (what an Eos file held) and @p after appended (the Show Tree). */
@@ -477,7 +477,7 @@ public:
      *  the open show. importSources() is the whole table -- the submenu,
      *  its sections, each entry's file dialog filters and "Any Supported
      *  File…"'s dispatch by extension all come from it, so a new source
-     *  (QLab is the next one expected, see EOS_IMPORT_DESIGN.md) is one
+     *  (QLab is the next one expected, see docs/design/EOS_IMPORT_DESIGN.md) is one
      *  more row there and one handler. List only importers that work. */
     struct ImportSource
     {
@@ -525,7 +525,7 @@ public slots:
     QFile::FileError slotFileSaveAs();
     /** File → Collect for Transfer…: the show as a .qlcc in a folder of its
      *  own, with Fixtures/, EffectScripts/, RGBScripts/ and HeadLayouts/
-     *  beside it (SHOW_EMBEDDING_DESIGN.md §6). */
+     *  beside it (docs/design/SHOW_EMBEDDING_DESIGN.md §6). */
     void slotFileCollectForTransfer();
 
     void slotControlMonitor();
@@ -697,7 +697,7 @@ private:
     QAction* m_controlPanicAction;
     QAction* m_cueGoAction = nullptr;       ///< the main cue list's GO
     QAction* m_cueBackAction = nullptr;
-    QAction* m_cueSubGoAction = nullptr;    ///< its Sub GO (SUBCUES_DESIGN.md)
+    QAction* m_cueSubGoAction = nullptr;    ///< its Sub GO (docs/design/SUBCUES_DESIGN.md)
     QAction* m_cueSubBackAction = nullptr;
     QAction* m_dumpDmxAction;
     QAction* m_liveEditAction;
@@ -928,7 +928,7 @@ private slots:
     void slotUpdateHealthFooter();
 
 public:
-    /** The footer's sub-cue part for @a list (SUBCUES_DESIGN.md): "Sub: 4.2"
+    /** The footer's sub-cue part for @a list (docs/design/SUBCUES_DESIGN.md): "Sub: 4.2"
      *  (what Sub GO plays), "Sub: (end of 4)", or empty when the cue playing
      *  has no sub-cues on Sub GO. */
     static QString standbySubCueText(const Chaser *list);

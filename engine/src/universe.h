@@ -884,7 +884,7 @@ public:
     void clearOfflinePatches(PatchTagType tag);
 
     /*********************************************************************
-     * Venues (VENUES.md section 5)
+     * Venues (docs/design/VENUES.md section 5)
      *********************************************************************/
     /** The slot this universe is in the show: Tour (default) or House --
      *  which kind of fixture the show means to put in it. Saved in the show. */

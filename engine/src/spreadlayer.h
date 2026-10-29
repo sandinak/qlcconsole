@@ -30,7 +30,7 @@
  */
 
 /**
- * The spread layer (SPEED_SPREAD_DESIGN.md, S3): how far along an effect's
+ * The spread layer (docs/design/SPEED_SPREAD_DESIGN.md, S3): how far along an effect's
  * cycle each head is, worked out by the host so every effect spreads the same
  * way -- the phasers' degrees, the orbits' fractions, the gobo chase's steps
  * all become one "fixture.phase" in cycles.

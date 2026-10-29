@@ -676,7 +676,7 @@ void ProgrammingManager_Test::editingALookColourNotifiesItsScene()
 
 /* The Programming tab's own construction gestures -- CLAUDE.md: "Drag
  * palettes→looks, groups→dynamic targets, fixtures→fixed targets" -- had no
- * test anywhere driving the real drop (WORKFLOW-SUBTLETIES.md #6, accepted
+ * test anywhere driving the real drop (docs/dev/WORKFLOW-SUBTLETIES.md #6, accepted
  * as a real but speculative gap; this closes it now that it's the thing
  * being worked on). Each step below builds real QMimeData the same way the
  * real source trees (FunctionsTreeWidget, FixtureGroupSource) build it and
@@ -884,7 +884,7 @@ void ProgrammingManager_Test::droppingOnTheWrongColumnIsRejected()
 /* scenegrouplooks.cpp's group-drop branch strips a fixed target's baked
  * values that the group's own looks now cover, and drops the fixed target
  * entirely once nothing uncovered is left on it
- * (WORKFLOW-SUBTLETIES.md-style finding from surveying this code: the check
+ * (docs/dev/WORKFLOW-SUBTLETIES.md-style finding from surveying this code: the check
  * is `keep.isEmpty()`, built ONLY from the fixture's existing baked
  * SceneValues -- a freshly-added fixed target with zero baked values has
  * nothing to iterate, so `keep` never gets anything added to it and stays

@@ -70,7 +70,7 @@
 
 using namespace ShowTree;
 
-/* The Show Tree (SHOW_TREE_DESIGN.md): the cascade from the §3 worked
+/* The Show Tree (docs/design/SHOW_TREE_DESIGN.md): the cascade from the §3 worked
    examples as tables, baking into Chaser / Collections / shared Scenes, undo,
    load/save, and importing a chaser so it plays as it did. */
 
@@ -7042,7 +7042,7 @@ void ShowTree_Test::reuseDetachAndConvertTyped()
  * R1/R2: palette housekeeping, Used by, one history
  ****************************************************************************/
 
-/* PaletteOps (PROGRAMMING_ROLE_DESIGN.md §5, P-D8): folders hold any type,
+/* PaletteOps (docs/design/PROGRAMMING_ROLE_DESIGN.md §5, P-D8): folders hold any type,
    a path stored the old way (type first) reads as its folder, folder
    rename/delete act on every type, each operation one undo step. */
 void ShowTree_Test::paletteOpsFoldersAnyType()

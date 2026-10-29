@@ -32,7 +32,7 @@ class Doc;
  */
 
 /**
- * "Used by" (PROGRAMMING_ROLE_DESIGN.md P-D13), one answer for every tab:
+ * "Used by" (docs/design/PROGRAMMING_ROLE_DESIGN.md P-D13), one answer for every tab:
  * PaletteOps::usage() (cues, busking looks, reusables, scenes, effect slots)
  * plus what only the UI knows -- the Virtual Console buttons that fire
  * those. The Show Tree's Library and Look Editor line, its look page, and

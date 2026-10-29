@@ -197,7 +197,7 @@ static QLineEdit *findRealLineEdit(QWidget *modal)
  * binary instead of just failing the one test that made it. Every
  * dialog-driving QTimer::singleShot() callback in this file used to hand-rig
  * this close-before-assert shape (or skip it and carry the risk); this is
- * that shape, written once. See WORKFLOW-SUBTLETIES.md #7. */
+ * that shape, written once. See docs/dev/WORKFLOW-SUBTLETIES.md #7. */
 static void driveDialog(const std::function<bool(QWidget *)> &fill, bool accept = true)
 {
     QTimer::singleShot(0, [fill, accept]() {
@@ -235,7 +235,7 @@ static void driveMessageBox(const std::function<bool(QWidget *)> &fill, const QS
     });
 }
 
-// Pilot for the Lighting Studio release-gate work (SHOW_LIFECYCLE_DESIGN.md):
+// Pilot for the Lighting Studio release-gate work (docs/design/SHOW_LIFECYCLE_DESIGN.md):
 // can a QTest UI test drive a real, blocking QDialog::exec() call (as
 // Monitor::slotAddTruss() uses) under QT_QPA_PLATFORM=offscreen? Standard
 // technique: schedule the dialog interaction via QTimer::singleShot(0, ...)
@@ -3213,7 +3213,7 @@ void Monitor_Test::nearTrussStaysFreeAndLockedTrussRefuses()
     /* Position by the item's actual ICON centre (iconCentreScene()), not
        sceneBoundingRect()'s -- that one also reserves space for the name
        label, so its centre drifts depending on whether labels happen to be
-       showing (WORKFLOW-SUBTLETIES.md #10). The product code judges by the
+       showing (docs/dev/WORKFLOW-SUBTLETIES.md #10). The product code judges by the
        icon centre, so the test must place by it too, or the two disagree
        about where the drop actually landed. */
     const QPointF nearPx = rig.gv->realPositionToPixels(12000.0, 12450.0);
@@ -3687,7 +3687,7 @@ void Monitor_Test::studioEditorDialogDragDoesNotCrash()
         // StructureStudioView turned up, some OTHER modal might still be
         // open (or this one, without having been found the expected way) --
         // and nothing else will ever close it under offscreen QTest. See
-        // WORKFLOW-SUBTLETIES.md #7.
+        // docs/dev/WORKFLOW-SUBTLETIES.md #7.
         if (found != nullptr)
             found->reject();
         else if (QWidget *modal = QApplication::activeModalWidget())
@@ -6966,7 +6966,7 @@ void Monitor_Test::buildingARigStepByStepThroughRealUiStaysConsistent()
                         .arg(double(posAfterBarDrop.z()))));
     // A plain drop now forms/joins a group too, exactly as the explicit
     // "Attach to Truss" context-menu action always has -- the fix for
-    // WORKFLOW-SUBTLETIES.md #2 (a plain drag-drop attach used to leave the
+    // docs/dev/WORKFLOW-SUBTLETIES.md #2 (a plain drag-drop attach used to leave the
     // fixture rigged but ungrouped until the next file load).
     QVERIFY2(bar->groupId() != 0, "attaching a fixture to the bar formed no group");
     const MonitorProperties::MonitorGroup barGrp = props->group(bar->groupId());
@@ -7415,7 +7415,7 @@ void Monitor_Test::buildingAPlatformStepByStepThroughRealUiStaysConsistent()
        showing. MonitorFixtureItem::iconCentreScene() is the same reading
        (mapToScene(iconRect().center())), added this session to give every
        call site ONE agreed-on answer instead of each re-deriving it --
-       see WORKFLOW-SUBTLETIES.md #10, whose original fix for THIS test used
+       see docs/dev/WORKFLOW-SUBTLETIES.md #10, whose original fix for THIS test used
        a manual cellSize()/2 computation because that canonical accessor
        didn't exist yet. */
     const QPointF onDeckPx = gv->realPositionToPixels(double(plat->originX()) * 1000.0 + 200.0,
@@ -7536,7 +7536,7 @@ void Monitor_Test::buildingAPlatformStepByStepThroughRealUiStaysConsistent()
  * mechanisms the truss/bar test uses: a plot drop attaches the fixture to
  * the boom (MonitorGraphicsView::pipeUnderFixture()), and a real mouse
  * drag moves the crossbar (StructureStudioView::hitTestPipeBar()/
- * dragPipeBarTo()) -- both built to fix WORKFLOW-SUBTLETIES.md #11 (there
+ * dragPipeBarTo()) -- both built to fix docs/dev/WORKFLOW-SUBTLETIES.md #11 (there
  * was no plot attach for a pipe at all, and a crossbar had none of a truss
  * bar's drag machinery; only its own "Edit Pipe" dialog could move it).
  */
@@ -7610,7 +7610,7 @@ void Monitor_Test::buildingAStandStepByStepThroughRealUiStaysConsistent()
     //    creates a horizontal crossbar hung on its top. In THIS order (both
     //    exist before anything attaches) on purpose: a crossbar used to be
     //    exactly coincident with its boom in Top view with no way to tell
-    //    them apart (WORKFLOW-SUBTLETIES.md #14), which made this ordering
+    //    them apart (docs/dev/WORKFLOW-SUBTLETIES.md #14), which made this ordering
     //    a real hazard rather than an arbitrary test choice. Now that a
     //    fresh crossbar defaults to a real crossbarStandoff(), step 5 below
     //    can attach to the boom with the crossbar already in place and
@@ -8142,7 +8142,7 @@ void Monitor_Test::aBarShowsInItsParentTrusssOwnEditor()
  * truss's own line in Top view: FaceBottom offsets purely along Z, which
  * Top view cannot show at all, so recomputeChildTrusses()'s `base = attach
  * + faceN * (half + barStandoff)` got zero X/Y contribution no matter how
- * large barStandoff was set (see WORKFLOW-SUBTLETIES.md #1). Fixed by
+ * large barStandoff was set (see docs/dev/WORKFLOW-SUBTLETIES.md #1). Fixed by
  * defaulting to FaceDownstage instead -- a real Y offset, the same face
  * the Vertical-parent case already relies on for its own separation --
  * plus a small explicit barStandoff on top of it, now that it actually
@@ -12651,7 +12651,7 @@ void Monitor_Test::everyColourModelTheEngineDefinesIsRead()
        UV/Lime/Indigo emitters contributed nothing.
      *
        Found by reading QLC+ 5's FixtureUtils::headColor(), which had all of
-       this right. See RIG3D_STRATEGY_REVIEW.md. */
+       this right. See docs/design/RIG3D_STRATEGY_REVIEW.md. */
     Doc *doc = new Doc(this);
 
     auto build = [&](const QVector<QLCChannel::PrimaryColour> &cols,

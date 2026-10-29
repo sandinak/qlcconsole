@@ -35,7 +35,7 @@ class QProcess;
 
 /**
  * The laptop speaking to the operator on stage (board Q107,
- * FOCUS_REFINE_DESIGN.md section 3): Focus calls and Refine say where the
+ * docs/design/FOCUS_REFINE_DESIGN.md section 3): Focus calls and Refine say where the
  * controller is -- "AT spots, layer", "fixture 3 of 8" -- so whoever holds it
  * need not look back at the screen.
  *
@@ -154,7 +154,7 @@ private:
 
 /** macOS's `say`, one process at a time. Linux (spd-say, espeak) and
  *  Windows (PowerShell's SpeechSynthesizer) would be the same with another
- *  command: see FOCUS_REFINE_DESIGN.md.
+ *  command: see docs/design/FOCUS_REFINE_DESIGN.md.
  *
  *  `say` speaks to the output chosen in "Voice to:" (`-a`). When that output
  *  is not there -- the pad unplugged, asleep, on Bluetooth -- `say -a` fails

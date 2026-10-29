@@ -44,7 +44,7 @@ class Doc;
  */
 
 /**
- * The cue runner (SHOW_TREE_DESIGN.md §6B, D26, D27; P7): one component
+ * The cue runner (docs/design/SHOW_TREE_DESIGN.md §6B, D26, D27; P7): one component
  * with two homes -- the full-screen Run tab and the Cue Runner Virtual
  * Console widget (compact or list size). It follows a cue list of the Show
  * Tree, or the current production (the show's main cue list), and shows the

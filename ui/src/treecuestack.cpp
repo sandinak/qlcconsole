@@ -612,7 +612,7 @@ bool TreeCueStack::showMenu(int layer, int attribute, const QPoint &globalPos)
 
     QMenu menu(m_view);
     menu.setToolTipsVisible(true);
-    // Focus this cue (FOCUS_REFINE_DESIGN.md): this layer from the stage.
+    // Focus this cue (docs/design/FOCUS_REFINE_DESIGN.md): this layer from the stage.
     {
         const quint32 cue = m_cue;
         QAction *refine = menu.addAction(tr("Focus this cue\342\200\246"), &menu,

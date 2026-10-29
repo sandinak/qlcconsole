@@ -142,7 +142,7 @@ void HelpBrowser_Test::aLinkToAHeadingScrollsToIt()
     QCOMPARE(help.currentFile(), QString("getting-started.md"));
     // A link written for the repository, from one folder to another.
     help.showTopic(QStringLiteral("effects.md"));
-    help.followLink(QUrl(QStringLiteral("../../EFFECTSCRIPT_API.md")));
+    help.followLink(QUrl(QStringLiteral("../dev/EFFECTSCRIPT_API.md")));
     QCOMPARE(help.currentFile(), QString("EFFECTSCRIPT_API.md"));
     // Unknown topics fall back to Getting Started.
     help.showTopic(QStringLiteral("nonsense.md"));

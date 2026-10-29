@@ -43,7 +43,7 @@ class Doc;
 
 /**
  * A show that carries its own definitions and scripts
- * (SHOW_EMBEDDING_DESIGN.md).
+ * (docs/design/SHOW_EMBEDDING_DESIGN.md).
  *
  * Saving a .qlcc embeds, byte for byte, every fixture definition, effect
  * script and RGB script the show uses that is not part of the app. Opening

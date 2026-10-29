@@ -37,7 +37,7 @@
 
 #include "cuehandover_test.h"
 
-/* The Show Tree's premise (SHOW_TREE_DESIGN.md §4): a cue is a Collection
+/* The Show Tree's premise (docs/design/SHOW_TREE_DESIGN.md §4): a cue is a Collection
    holding its complete output, and a layer that is the same in two cues is the
    SAME Scene in both Collections. On GO from one cue to the next that Scene
    must keep running -- no stop/start, no re-fade from zero, its elapsed time

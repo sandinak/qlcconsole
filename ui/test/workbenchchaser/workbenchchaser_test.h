@@ -31,7 +31,7 @@ class FixtureGroup;
 class QTemporaryDir;
 
 /* Chasers in the Workbench and Build ▸ Scenes
-   (WORKFLOW_DESIGN.md §3.3, §3.4, §3.7; W2). */
+   (docs/design/WORKFLOW_DESIGN.md §3.3, §3.4, §3.7; W2). */
 class WorkbenchChaser_Test final : public QObject
 {
     Q_OBJECT

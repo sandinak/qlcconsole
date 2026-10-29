@@ -239,7 +239,7 @@ bool EffectScript::parseMeta()
     if (m_version < 1)
         m_version = 1;   // default for Generators that don't declare one
 
-    // Lifecycle (see EFFECT_LIFECYCLE_DESIGN.md). Absent → loop (today's default).
+    // Lifecycle (see docs/design/EFFECT_LIFECYCLE_DESIGN.md). Absent → loop (today's default).
     m_lifecycle = jsText(m_script.property("lifecycle")).toLower();
     if (m_lifecycle.isEmpty())
         m_lifecycle = QStringLiteral("loop");

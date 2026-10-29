@@ -38,7 +38,7 @@ class Doc;
  */
 
 /**
- * A focus-call cue in a cue list (FOCUS_REFINE_DESIGN.md section 7), for
+ * A focus-call cue in a cue list (docs/design/FOCUS_REFINE_DESIGN.md section 7), for
  * pre-show: GO onto it plays the cue's own looks -- a preset, the work
  * light, the first call's lights parked -- and ARMS the show's focus calls.
  * Nothing steps yet: the voice says "Focus calls ready. Press Start to

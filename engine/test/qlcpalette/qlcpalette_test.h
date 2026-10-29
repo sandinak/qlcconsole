@@ -50,7 +50,7 @@ private slots:
     void aGoboLookReachesTheGoboChannel();
     void aColourLookOnAGroupOnlyLightsTheGroupsHeads();
 
-    /** Gobo by name (SHOW_TREE_DESIGN.md §10.7): exact, then singular /
+    /** Gobo by name (docs/design/SHOW_TREE_DESIGN.md §10.7): exact, then singular /
      *  plural, then a unique prefix/contains; several in a tier: none. */
     void goboNamesMatchInTiers_data();
     void goboNamesMatchInTiers();

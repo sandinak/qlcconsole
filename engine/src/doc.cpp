@@ -1190,7 +1190,7 @@ quint32 Doc::createFixtureId()
     /* This results in an endless loop if there are UINT_MAX-1 fixtures. That,
        however, seems a bit unlikely. Are there even 4294967295-1 fixtures in
        total in the whole world? */
-    /* An id a venue's house fixture uses (VENUES.md) is skipped too: a
+    /* An id a venue's house fixture uses (docs/design/VENUES.md) is skipped too: a
        house light of one venue never shares an id with a tour light. */
     VenueCorrections *venues = m_programmer != NULL ? m_programmer->venueCorrections() : NULL;
     while (m_fixtures.contains(m_latestFixtureId) == true ||
@@ -1251,7 +1251,7 @@ bool Doc::addFixture(Fixture* fixture, quint32 id, bool crossUniverse)
             }
         }
         /* Nor on channels the venue applied keeps for itself, as
-           canPatchFixtures() refuses (VENUES.md section 5). */
+           canPatchFixtures() refuses (docs/design/VENUES.md section 5). */
         if (isOnNotOurs(fixture->universe(), fixture->address(), fixture->channels()))
         {
             qWarning() << Q_FUNC_INFO << "fixture" << id << "is on channels the venue keeps (not ours)";
@@ -1420,7 +1420,7 @@ bool Doc::canPatchFixtures(const QList<FixturePatch> &patches, QString *why,
             return refuse(QStringLiteral("%1: universe %2 is past the limit of %3 universes")
                               .arg(fxi->name()).arg(p.universe + 1).arg(InputOutputMap::maxUniverses()));
         const quint32 base = (p.universe << 9) | p.address;
-        /* Channels the venue applied keeps for itself (VENUES.md section 5):
+        /* Channels the venue applied keeps for itself (docs/design/VENUES.md section 5):
            nothing of ours is sent there, so nothing is patched there. */
         quint32 at = 0;
         if (isOnNotOurs(p.universe, p.address, n, &at))
@@ -2672,7 +2672,7 @@ bool Doc::saveXML(QXmlStreamWriter *doc)
     {
         Fixture *fxi(fxit.next());
         Q_ASSERT(fxi != NULL);
-        // A venue's house fixture is in the venue's file (VENUES.md).
+        // A venue's house fixture is in the venue's file (docs/design/VENUES.md).
         if (isVenueFixture(fxi->id()))
             continue;
         fxi->saveXML(doc);

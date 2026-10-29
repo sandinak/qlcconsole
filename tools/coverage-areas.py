@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Per-directory and per-risk-area coverage from coverage.sh's per-file.tsv,
-as the Markdown tables in docs/TEST_MATRIX.md, "Coverage".
+as the Markdown tables in docs/dev/TEST_MATRIX.md, "Coverage".
 
   python3 -I tools/coverage-areas.py per-file.tsv               (one run)
   python3 -I tools/coverage-areas.py before.tsv after.tsv       (before -> after)

@@ -282,7 +282,7 @@ private:
     bool m_listIsUpdating;
 
     /*************************************************************************
-     * Sub-cues (SUBCUES_DESIGN.md)
+     * Sub-cues (docs/design/SUBCUES_DESIGN.md)
      *************************************************************************/
 public slots:
     /** Sub GO: the next sub-cue of the cue playing. */

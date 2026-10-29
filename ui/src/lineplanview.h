@@ -34,7 +34,7 @@ class QLCPalette;
  */
 
 /**
- * The plan view of a line aim (SHOW_TREE_DESIGN.md §3B, D19): the stage
+ * The plan view of a line aim (docs/design/SHOW_TREE_DESIGN.md §3B, D19): the stage
  * seen from above -- the line target, each light where it hangs, its beam
  * to the point it takes on the line (numbered as the order strip numbers
  * them), and, as rings, where the previous cue put the same lights, so a

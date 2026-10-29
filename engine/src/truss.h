@@ -577,7 +577,7 @@ struct FixtureRigProps
 
 /**
  * The part of a fixture's rig props that focusing a show in a venue changes
- * (FOCUS_REFINE_DESIGN.md section 5): a moving head's pan and tilt offsets,
+ * (docs/design/FOCUS_REFINE_DESIGN.md section 5): a moving head's pan and tilt offsets,
  * a fixed light's aim, a hand-zoomed lens. What a venue's corrections hold,
  * and what the show file keeps as its own while a venue is applied.
  */

@@ -284,7 +284,7 @@ SceneGroupLooks::SceneGroupLooks(Scene *scene, Doc *doc, QWidget *parent,
         helpRow->addWidget(group({ new QLabel(tr("out:"), this), outShape, outTime }));
         helpRow->addWidget(group({ new QLabel(tr("Edge:"), this), edge }));
 
-        /* What this look's effects run on (SPEED_SPREAD_DESIGN.md, S2): a
+        /* What this look's effects run on (docs/design/SPEED_SPREAD_DESIGN.md, S2): a
            speed master, the main clock, their own speed -- or whatever the
            chase step, chase or collection playing it says. */
         QComboBox *speed = new QComboBox(this);

@@ -26,7 +26,7 @@
 
 using namespace ShowTree;
 
-/* The Looks section (PROGRAMMING_ROLE_DESIGN.md §4.1, P-D5..P-D7, R3).
+/* The Looks section (docs/design/PROGRAMMING_ROLE_DESIGN.md §4.1, P-D5..P-D7, R3).
    A production's busking looks are the cues of one more list, flagged
    CueList::looks: so every operation on a cue -- layers, attribute rows,
    the cascade, group sets, child layers, effects, line aims, reusable

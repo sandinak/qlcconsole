@@ -207,7 +207,7 @@ public:
     static SpeedMode stringToSpeedMode(const QString& str);
 
     /*********************************************************************
-     * GO on the beat (PLAYBACK_TIMING_DESIGN.md, P1)
+     * GO on the beat (docs/design/PLAYBACK_TIMING_DESIGN.md, P1)
      *********************************************************************/
 public:
     /** When a step change asked for (a GO, Back, a jump to a step) lands:
@@ -223,7 +223,7 @@ private:
     GoQuantize m_goQuantize = GoNow;
 
     /*********************************************************************
-     * Cues for show control (SHOW_CONTROL_DESIGN.md)
+     * Cues for show control (docs/design/SHOW_CONTROL_DESIGN.md)
      *********************************************************************/
 public:
     /** The number a show controller picks this cue list by ("2"); empty
@@ -254,7 +254,7 @@ private:
     QString m_cueListNumber;
 
     /*********************************************************************
-     * Sub-cues (SUBCUES_DESIGN.md)
+     * Sub-cues (docs/design/SUBCUES_DESIGN.md)
      *********************************************************************/
 public:
     /** Step @a index's function as a chase -- its steps are the step's

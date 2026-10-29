@@ -11,7 +11,7 @@
 # tracefile to coverage/coverage.info, and a per-file line + branch table to
 # coverage/per-file.tsv. COVERAGE_MEASURE_FAILED=1 measures even when a test
 # failed (the failures are still listed and the exit status still says so).
-# The numbers and how they were taken: docs/TEST_MATRIX.md, "Coverage".
+# The numbers and how they were taken: docs/dev/TEST_MATRIX.md, "Coverage".
 #
 
 ARCH=$(uname)

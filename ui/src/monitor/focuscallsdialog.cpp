@@ -165,7 +165,7 @@ FocusCallsDialog::FocusCallsDialog(Doc *doc, QWidget *parent)
     venueButtons->addStretch(1);
     for (QPushButton *b : { m_applyVenue, m_renameVenue, m_deleteVenue, m_corrections })
         venueButtons->addWidget(b);
-    /* What the venue owns (board Q137/Q138, VENUES.md): its house rig, the
+    /* What the venue owns (board Q137/Q138, docs/design/VENUES.md): its house rig, the
        patch of every universe in this room, what is not ours. */
     QPushButton *venueRig = new QPushButton(tr("Rig and universes\342\200\246"), this);
     venueRig->setObjectName(QStringLiteral("fcVenueRig"));
@@ -274,7 +274,7 @@ FocusCallsDialog::FocusCallsDialog(Doc *doc, QWidget *parent)
 
     fillVenues(QString());
     connect(m_applyVenue, &QPushButton::clicked, this, [this]() {
-        // Its clashes with the show first, before it goes live (VENUES.md section 6).
+        // Its clashes with the show first, before it goes live (docs/design/VENUES.md section 6).
         if (!VenueRigDialog::confirmClashes(m_doc, this, venueChoice()))
             return;
         QString why;

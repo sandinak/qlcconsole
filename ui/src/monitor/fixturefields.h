@@ -98,7 +98,7 @@ private:
     bool m_loading = false;
 
     QComboBox *m_look;          ///< its stage look (Fixture::StageLook)
-    QComboBox *m_owner;         ///< who it belongs to (RigOwner, VENUES.md)
+    QComboBox *m_owner;         ///< who it belongs to (RigOwner, docs/design/VENUES.md)
     QLabel *m_mountOn;
     QComboBox *m_towerPos;
     ColourSwatchButton *m_colour;

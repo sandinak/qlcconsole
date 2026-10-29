@@ -755,7 +755,7 @@ void ProgrammingOutline::rebuildNavigator(QList<Scene *> &scenes)
     }
 
     /* Collections and chasers -- and the rest filed beside them -- are full
-       rows: click one and the Workbench loads it (WORKFLOW_DESIGN.md §3.3,
+       rows: click one and the Workbench loads it (docs/design/WORKFLOW_DESIGN.md §3.3,
        reversing P-D12). */
     std::sort(others.begin(), others.end(), [&coll](Function *a, Function *b) {
         return coll.compare(a->name(), b->name()) < 0;
@@ -2093,7 +2093,7 @@ void ProgrammingOutline::slotContextMenu(const QPoint &pos)
         }
         if (parts.size() == 1 && at.kind == GroupRow)
             menu.addAction(tr("Edit the group's layout"), this, [this, at]() { emit editGroupLayoutRequested(at.id); });
-        // Focus this look (FOCUS_REFINE_DESIGN.md 6B): this row from the stage.
+        // Focus this look (docs/design/FOCUS_REFINE_DESIGN.md 6B): this row from the stage.
         if (parts.size() == 1 && m_mode == Stack && (at.kind == GroupRow || at.kind == FixtureRow))
         {
             QAction *refine = menu.addAction(focusThisText(), this, [this, at]() {

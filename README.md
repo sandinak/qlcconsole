@@ -43,6 +43,13 @@ large community and forum, use [QLC+](https://www.qlcplus.org/) itself.
 QLC+ shows (.qxw) open in qlcconsole, and the **Classic QLC+** view keeps
 QLC+'s own tabs.
 
+If you use QLC+ 5 and it works for you, keep using it. QLC+ 4.x is in
+maintenance upstream; qlcconsole is for people who prefer the QLC+ 4
+desktop UI, and for crews who want a theatre cue list, venues and
+stage-side focus. What it promises QLC+ 4 users is in
+[SUPPORT.md](SUPPORT.md); where it's going, in
+[the strategy](docs/project/STRATEGY.md).
+
 **Contents:** [Major features](#major-features) ·
 [Download](#download-and-install) · [Getting started](#getting-started) ·
 [For teachers](#for-teachers) · [Documentation](#documentation) ·
@@ -308,12 +315,12 @@ build/main/qlcconsole -o your-show.qlcc  # always open a show with -o
 - **The help and the course are tested.** `helpbrowser_test` checks every
   link, heading and picture in the user guide; `courseshow_test` does the
   course's lessons with the mouse and takes their pictures;
-  `./help-shots.sh` retakes the guide's pictures from the real app,
+  `tools/help-shots.sh` retakes the guide's pictures from the real app,
   offscreen.
 - **Where to read next:** [CLAUDE.md](CLAUDE.md) (architecture, build and
   conventions), [CONTRIBUTING.md](CONTRIBUTING.md) (coding style, PNGs
-  without colour profiles), [docs/TEST_MAP.md](docs/TEST_MAP.md) (which
-  test covers what), [RELEASE.md](RELEASE.md) (version numbers, signed
+  without colour profiles), [docs/dev/TEST_MAP.md](docs/dev/TEST_MAP.md) (which
+  test covers what), [RELEASE.md](docs/dev/RELEASE.md) (version numbers, signed
   macOS releases, Windows and Linux builds).
 
 This is primarily a personal fork built around one show workflow, so the
@@ -323,10 +330,11 @@ itself belongs [upstream](https://github.com/mcallegari/qlcplus).
 
 ## Support
 
-See [SUPPORT.md](SUPPORT.md). Fork-specific bugs and questions go to
-[this repo's issues](https://github.com/sandinak/qlcconsole/issues); general
-QLC+ questions are better served by the
-[upstream QLC+ forum and docs](https://www.qlcplus.org/forum/).
+See [SUPPORT.md](SUPPORT.md), which also holds what qlcconsole promises
+QLC+ 4 users. Bugs and questions about qlcconsole, its QLC+ 4 parts
+included, go to
+[this repo's issues](https://github.com/sandinak/qlcconsole/issues), not to
+the upstream forum.
 When something isn't doing what you expect, try
 [Troubleshooting](docs/features/troubleshooting.md) first.
 

@@ -5,7 +5,7 @@
   Device-agnostic vocabulary for the control-surface engine. A physical board
   (PMJ, APC40 mk2, …) is described as a set of typed Controls; what each control
   MEANS is a logical Role; the LED shown on a control reflects the Role's
-  context-aware State. See CONTROL_SURFACE_DESIGN.md.
+  context-aware State. See docs/design/CONTROL_SURFACE_DESIGN.md.
 
   Pure types — no MIDI, no UI. A device overlay maps its real controls to these
   and knows how to push LEDs.

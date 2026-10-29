@@ -34,7 +34,7 @@
 
 #include "subcues_test.h"
 
-/* Sub-cues (SUBCUES_DESIGN.md, P1): a chase step's own steps as 4.1, 4.2,
+/* Sub-cues (docs/design/SUBCUES_DESIGN.md, P1): a chase step's own steps as 4.1, 4.2,
    stepped through on a Sub GO while GO goes on to cue 5. */
 
 void SubCues_Test::init()

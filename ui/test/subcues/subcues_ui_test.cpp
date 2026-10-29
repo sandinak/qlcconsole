@@ -43,7 +43,7 @@
 
 #include "subcues_ui_test.h"
 
-/* Sub-cues (SUBCUES_DESIGN.md, P2): what the chaser editor, the Virtual
+/* Sub-cues (docs/design/SUBCUES_DESIGN.md, P2): what the chaser editor, the Virtual
    Console cue list and the footer show of them. */
 
 // ChaserEditor's columns

@@ -81,7 +81,7 @@ public:
  *     ITEM KEY POSX POSY / ITEMDATA / RECT X Y W H,
  *       MAGICSHEET / TARGET TARGETTYPE TARGETID TARGETLISTID, TEXT STR
  *
- * See EOS_IMPORT_DESIGN.md § "Magic sheet XML — what it buys you" for how
+ * See docs/design/EOS_IMPORT_DESIGN.md § "Magic sheet XML — what it buys you" for how
  * the output feeds 2D-map placement (+ the per-sheet calibration step).
  */
 class EosMagicSheetParser final

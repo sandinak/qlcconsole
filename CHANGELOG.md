@@ -4,11 +4,11 @@ All notable user-facing changes to qlcconsole are documented here. Format
 loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 This is the fork's own changelog — for the detailed development log (with
-per-feature build notes and deferred follow-ups), see [DONE.md](DONE.md) and
-active work in [TODO.md](TODO.md).
+per-feature build notes and deferred follow-ups), see [DONE.md](docs/project/DONE.md) and
+active work in [TODO.md](docs/project/TODO.md).
 
 Versions here are independent of the QLC+ base version embedded in the
-in-app build string (see [RELEASE.md](RELEASE.md) for how the two relate).
+in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relate).
 
 ## [0.3.1] - Unreleased
 
@@ -21,7 +21,7 @@ qlcconsole's QLC+ base moves from 4.14.2 to **4.14.4**: the build string
 reads `4.14.4+qlcconsole.<N>` (N keeps counting, so it never goes back).
 4.14.3 was already in from February's upstream sync; 4.14.4's fixes are
 taken in, each recorded with its upstream commit
-([docs/UPSTREAM.md](docs/UPSTREAM.md) logs what was taken, adapted and
+([docs/dev/UPSTREAM.md](docs/dev/UPSTREAM.md) logs what was taken, adapted and
 skipped). Upstream fixes taken:
 
 - **New and Open forget the last show's startup function** (#1963).
@@ -121,6 +121,22 @@ skipped). Upstream fixes taken:
 
 ### Changed
 
+- **The project's direction is written down**:
+  [docs/project/STRATEGY.md](docs/project/STRATEGY.md) (what qlcconsole is
+  for, the roadmap to 0.5, the guardrails and what it won't build), and
+  [SUPPORT.md](SUPPORT.md) now says what qlcconsole promises QLC+ 4 users.
+  Questions about qlcconsole, its QLC+ 4 parts included, go to this repo's
+  issues rather than the upstream forum.
+- **The docs moved out of the repository root**: design notes and reviews
+  to `docs/design/`, developer docs (RELEASE, the test map and matrix,
+  upstream intake, the generator API, the rig test plan) to `docs/dev/`,
+  TODO, DONE and the strategy to `docs/project/`; [docs/README.md](docs/README.md)
+  lists the layout. Fork-only developer scripts (`artnet-config.py`,
+  `artnet-probe.py`, `rdm-sim.py`, `drift-test.sh`, `soak-mastertimer.sh`,
+  `help-shots.sh`) moved to `tools/`; stray backup files left the root.
+- Developer: `tools/check-doc-links.py` fails the gate and CI on a
+  relative link in any tracked Markdown file that points at a missing
+  file.
 - Classic QLC+'s main toolbar has the DMX Monitor where QLC+ had its
   Monitor, then the Rig Overview, the address tool and Full Screen.
 - **The course site has no teacher material**: the teacher guides, slides
@@ -208,7 +224,7 @@ skipped). Upstream fixes taken:
   and a per-file table; the gaps that matter (show files, output, the
   network plugins, the Show Tree, venues, focus and Refine, web access
   auth, scripts) have new tests, and the bugs above came out of them.
-  Numbers and how to reproduce them: docs/TEST_MATRIX.md, "Coverage".
+  Numbers and how to reproduce them: docs/dev/TEST_MATRIX.md, "Coverage".
 
 ## [0.3.0] - 2026-10-26
 
@@ -359,7 +375,7 @@ after a panel was moved to its own window.
   PrintSupport now linked); **Save PDF…** writes the same pages; the
   dialog previews the first label.
 
-- **House rig, tour package and universes per venue** (VENUES.md, board
+- **House rig, tour package and universes per venue** (docs/design/VENUES.md, board
   Q137-Q138). Fixtures and fixture groups have an owner (`RigOwner`: Tour,
   House, Rental; a fixture follows its group unless it says otherwise),
   saved only when set. With a venue applied, House fixtures live in that
@@ -404,7 +420,7 @@ after a panel was moved to its own window.
   (the default) or cancels, rather than dropping them silently.
 
 - **Venue focus, per-venue corrections and Focus this cue**
-  (FOCUS_REFINE_DESIGN.md, board Q105-Q136). One controller map
+  (docs/design/FOCUS_REFINE_DESIGN.md, board Q105-Q136). One controller map
   (`ControllerScheme`) shared by Quick focus, Venue focus and Focus this
   cue, with the on-screen map labelled per tool. *Venue focus*
   (`FocusCalls`, saved in the show; Lighting Studio ▸ Focus ▸ Venue focus)
@@ -433,7 +449,7 @@ after a panel was moved to its own window.
   `focus-calls.md` and `refine.md`.
 
 - **The focus report, practice, and the last pad moves** (board Q134,
-  Q139, Q140; FOCUS_REFINE_DESIGN.md section 13). `FocusReport`: a venue's
+  Q139, Q140; docs/design/FOCUS_REFINE_DESIGN.md section 13). `FocusReport`: a venue's
   focus per light and call -- target with its stage-marks position,
   correction, lens, checked by and when (`VenueCorrections::Check`, every
   save), notes, dead / swapped / needs-focus -- as HTML, PDF
@@ -536,7 +552,7 @@ after a panel was moved to its own window.
   the teacher guide. Checked step by step by `courseshow_test`
   (`lessonFocusAndCalibration`), which also takes its pictures. Help
   pictures of the venue page, the focus report and the practice score;
-  Quick focus's controller map and save lamp now taken by `help-shots.sh`.
+  Quick focus's controller map and save lamp now taken by `tools/help-shots.sh`.
 - **Target positions in crew terms**: a readout beside each stage target on
   the plot, each figure/area in the Rig Overview and Quick focus's fixed-light
   figure ("SL 2.4 · US 3.1 m", "SR 7' 11\" · US 10'", "↑ 0.9 m" on a deck),
@@ -582,7 +598,7 @@ after a panel was moved to its own window.
 - **One Overrides chip** (board Q80) in the footer: "Overrides: Park (3),
   Hold at end · Clear" whenever Park, Highlight, Hold at end, Quick focus or
   Blind holds the rig; one click lets go of all of them.
-- **Build tab and the Workbench** (WORKFLOW_DESIGN.md W1–W4). The
+- **Build tab and the Workbench** (docs/design/WORKFLOW_DESIGN.md W1–W4). The
   Programming tab is **Build**: **Palettes | Effects | Scenes** picks what
   the navigator lists, with Groups & fixtures under each, and the
   **Workbench** on the right loads a scene, collection, chaser or any other
@@ -739,7 +755,7 @@ after a panel was moved to its own window.
   MIDI modes, Art-Net input universe, Passthrough, Feedback to, Input
   profile, the MIDI feedback swap, Change feedback address); "Patch to…" on
   an unpatched universe is Edit connection… too. Classic QLC+'s Universes
-  page is unchanged. Devices vs Overview: docs/CONNECTIONS_CLEANUP.md.
+  page is unchanged. Devices vs Overview: docs/design/CONNECTIONS_CLEANUP.md.
 
 - **Plot layers follows the plot, and shows what hangs on what** (RC2,
   Branson's testing 2026-10-25). Picking on the plot picks one row per
@@ -927,7 +943,7 @@ after a panel was moved to its own window.
   structure's menu) still goes on the first unlocked layer without asking.
 
 - **Connections: Overview folded into Devices** (RC3, board Q153,
-  docs/CONNECTIONS_CLEANUP.md option A). Devices ▸ **By universe** carries
+  docs/design/CONNECTIONS_CLEANUP.md option A). Devices ▸ **By universe** carries
   the Overview grid's columns -- Output, IP, U, Mode, Input, Profile,
   Feedback, PT -- as read-only columns, each shown or hidden from the
   header's right-click or the **Columns** button and remembered
@@ -1101,7 +1117,7 @@ after a panel was moved to its own window.
   in a strip above the command line, inside the window, instead of a
   separate window that could fall behind the main one. Apply / Return sets
   the value, Cancel / Esc leaves it.
-- **Help pictures never show this machine's network**: help-shots.sh loads
+- **Help pictures never show this machine's network**: tools/help-shots.sh loads
   only the Loopback plugin (new QLC_IOPLUGIN_DIR override).
 
 - **"Classic" means stock QLC+ only.** Build ▸ Scenes has no Classic
@@ -1367,7 +1383,7 @@ after a panel was moved to its own window.
   the code: 79 outdated, partial or missing rows fixed across
   twelve guides; the three hand-taken pictures (show-tree-workbench,
   build-effects-menu, make-a-layer) showed removed buttons and are now
-  HelpShots entries, regenerated by help-shots.sh.
+  HelpShots entries, regenerated by tools/help-shots.sh.
 - **A fixture with more channels than a universe holds loads unpatched**
   (RC6, test matrix 2 fuzzing: N1). A damaged or hand-edited show with,
   say, `<Channels>926</Channels>` on a fixture kept all 926 channels with
@@ -1845,7 +1861,7 @@ after a panel was moved to its own window.
   (elements between and inside venues, inside the house rig and a
   practice) through the next save, instead of dropping it.
 - **A house light that clashes when a venue goes on goes in unpatched,
-  whatever the clash** (VENUES.md section 6): on channels the venue keeps,
+  whatever the clash** (docs/design/VENUES.md section 6): on channels the venue keeps,
   or in a Tour slot, as well as on a tour light's channels. It keeps the
   address it asked for and the clash list still names it. A tour light
   that clashes stays as the show has it.
@@ -1977,7 +1993,7 @@ chaser, confetti on two-arm beams and the update installer.
 ### Tooling
 - **`make dmg`, `make beta`, `make release` and `make attach`** build the
   signed universal DMG and publish to GitHub Releases through the REST API
-  only (`platforms/macos/publish.sh`; RELEASE.md). `make test` builds the
+  only (`platforms/macos/publish.sh`; docs/dev/RELEASE.md). `make test` builds the
   dev app.
 - **Show Tree course** (docs/course): Levels 0 and 1, lessons 0.1-1.5 with
   the Level 1 check, in the course voice, the teaching show-choir rig and
@@ -2238,10 +2254,10 @@ a shorter Windows re-soak is planned.
   hardware.
 - **Effect scripting system** — a scripted effect lifecycle (one-shot bursts,
   sweeps, reveals) with audio- and MIDI-reactive effects; see
-  [EFFECTSCRIPT_API.md](EFFECTSCRIPT_API.md) and
-  [EFFECT_LIFECYCLE_DESIGN.md](EFFECT_LIFECYCLE_DESIGN.md).
+  [EFFECTSCRIPT_API.md](docs/dev/EFFECTSCRIPT_API.md) and
+  [EFFECT_LIFECYCLE_DESIGN.md](docs/design/EFFECT_LIFECYCLE_DESIGN.md).
 - **Effect presets** — named, reusable configurations layered over effect
-  scripts; see [EFFECTPRESET_DESIGN.md](EFFECTPRESET_DESIGN.md).
+  scripts; see [EFFECTPRESET_DESIGN.md](docs/design/EFFECTPRESET_DESIGN.md).
 - **Lighting Studio** — a rigging tab for the physical rig: place and rig
   trusses, towers, platforms and steps, pipes, stands, hangers, a
   cyclorama and power sources; drag a fixture onto a structure to mount it,
@@ -2393,7 +2409,7 @@ a shorter Windows re-soak is planned.
 ### Changed
 - The version you see is the release: the About box, `--version` and
   Finder say **0.1.0**, with the build (`4.14.2+qlcconsole.<N>`, what a saved
-  show records) and the commit beside it (see [RELEASE.md](RELEASE.md)).
+  show records) and the commit beside it (see [RELEASE.md](docs/dev/RELEASE.md)).
 - **Qt 6.8 or later only**; Qt 5 is no longer supported (the last tree that
   built on it is tagged `qt5-last`).
 - Opening the app goes straight into qlcconsole — no window asking whether

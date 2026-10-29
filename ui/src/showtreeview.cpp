@@ -1623,7 +1623,7 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
                                   "closely to move them unseen. Right-click a cue, or nomib 0.0.3, does the "
                                   "same."));
         f->addRow(QString(), m_cueNoMib);
-        /* A focus-call cue (FOCUS_REFINE_DESIGN.md section 7): GO arms the
+        /* A focus-call cue (docs/design/FOCUS_REFINE_DESIGN.md section 7): GO arms the
            show's focus calls; the controller's Start begins them. */
         m_cueFocusCall = new QCheckBox(tr("Make this a venue focus cue"), inner);
         m_cueFocusCall->setObjectName("stCueFocusCall");
@@ -1641,7 +1641,7 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         f->addRow(QString(), m_cueFocusState);
         if (FocusCallCue *fcc = m_doc->programmer()->focusCallCue())
             connect(fcc, &FocusCallCue::stateChanged, this, &ShowTreeView::refreshFocusCallState);
-        /* Focus this cue (FOCUS_REFINE_DESIGN.md): this cue's own values
+        /* Focus this cue (docs/design/FOCUS_REFINE_DESIGN.md): this cue's own values
            from the stage, with the controller. */
         QPushButton *refine = new QPushButton(tr("Focus this cue\342\200\246"), inner);
         refine->setObjectName("stCueRefine");
@@ -2733,7 +2733,7 @@ void ShowTreeView::buildTree()
                                          "rule would change what it plays; untick Overlapping layers mix on "
                                          "the cue page to put it on the rule anyway."));
                 }
-                // A focus-call cue (FOCUS_REFINE_DESIGN.md section 7).
+                // A focus-call cue (docs/design/FOCUS_REFINE_DESIGN.md section 7).
                 if (!list.looks && cue.focusCall)
                 {
                     badges << tr("focus");
@@ -6983,7 +6983,7 @@ void ShowTreeView::slotTreeContextMenu(const QPoint &pos)
                 split->setEnabled(l != nullptr && l->pieces().count() > 1);
                 split->setToolTip(tr("One layer per group (and one on its fixtures), each with these looks; "
                                      "it keeps tracking as before"));
-                /* Focus this cue (FOCUS_REFINE_DESIGN.md): this cue's own values
+                /* Focus this cue (docs/design/FOCUS_REFINE_DESIGN.md): this cue's own values
                    from the stage, on the controller, starting on this layer. */
                 QAction *refine = menu.addAction(tr("Focus this cue\342\200\246"), this,
                                                  [this, cueId, layerId]() {
@@ -8486,7 +8486,7 @@ void ShowTreeView::slotLibraryContextMenu(const QPoint &pos)
 }
 
 /****************************************************************************
- * Palettes in the Library (R2, PROGRAMMING_ROLE_DESIGN.md §4.2, P-D8)
+ * Palettes in the Library (R2, docs/design/PROGRAMMING_ROLE_DESIGN.md §4.2, P-D8)
  ****************************************************************************/
 
 void ShowTreeView::buildLibraryPalettes(QTreeWidgetItem *all,
@@ -8875,7 +8875,7 @@ void ShowTreeView::usedByLinkActivated(const QString &link)
 }
 
 /****************************************************************************
- * The Looks section (R3, PROGRAMMING_ROLE_DESIGN.md §4.1)
+ * The Looks section (R3, docs/design/PROGRAMMING_ROLE_DESIGN.md §4.1)
  ****************************************************************************/
 
 bool ShowTreeView::selectionInLooks() const

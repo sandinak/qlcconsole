@@ -832,7 +832,7 @@ void PatchInventoryDialog::refreshConflicts()
         for (quint32 i = 0; i < fx->channels(); i++)
             taken.insert(fx->universeAddress() + i, 0);
     }
-    /* Channels the venue applied keeps for itself (VENUES.md section 5):
+    /* Channels the venue applied keeps for itself (docs/design/VENUES.md section 5):
        nothing of ours goes there, so a row there is a conflict. */
     VenueCorrections *venues = m_doc->programmer()->venueCorrections();
     if (venues->isActive())
@@ -910,7 +910,7 @@ void PatchInventoryDialog::refreshConflicts()
     }
     QString summary = tr("%1 fixture(s) to patch or move, %2 new universe(s), %3 conflict(s).")
                           .arg(changes).arg(newUnis).arg(bad.size());
-    // The venue's clashes with the show (VENUES.md section 6), as they are now.
+    // The venue's clashes with the show (docs/design/VENUES.md section 6), as they are now.
     if (venues->isActive())
     {
         const QList<VenueRig::Clash> clashes = venues->clashes(venues->activeVenue());

@@ -1305,7 +1305,7 @@ public:
 
     /** @p showFile: writing the show file itself (Doc::saveXML), which
      *  leaves out a venue's house fixtures -- they are in the venue's file
-     *  (VENUES.md). Undo snapshots keep everything. */
+     *  (docs/design/VENUES.md). Undo snapshots keep everything. */
     bool saveXML(QXmlStreamWriter *doc, const Doc * mainDocument, bool showFile = false) const;
 };
 

@@ -39,7 +39,7 @@ class App;
  * grabs it (offscreen too) and marks the controls the guide talks about with
  * numbered outlines, then writes "<name>.png" there. The app quits after the
  * last one. QLC_HELP_SHOTS_ONLY=<name substring> runs only those that match.
- * help-shots.sh runs it on the demo show into docs/images.
+ * tools/help-shots.sh runs it on the demo show into docs/images.
  */
 class HelpShots final : public QObject
 {

@@ -41,7 +41,7 @@ class Doc;
  *  group-local offset. Changes apply live to the document; the host connects
  *  changed() to refresh the 2D map. Cancel reverts to the on-open snapshot.
  *
- *  Phase 1 of FIXTURESTUDIO_DESIGN.md — form-based; the graphical 3-plane
+ *  Phase 1 of docs/design/FIXTURESTUDIO_DESIGN.md — form-based; the graphical 3-plane
  *  (Top/Front/Side) canvas layers on top of this in a later slice.
  */
 class StudioGroupEditor : public QDialog

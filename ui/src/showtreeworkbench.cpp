@@ -18,7 +18,7 @@
 */
 
 /*
- * W3: Show Tree <-> Workbench (WORKFLOW_DESIGN.md §3.4, §4 W3).
+ * W3: Show Tree <-> Workbench (docs/design/WORKFLOW_DESIGN.md §3.4, §4 W3).
  *
  * "Open in Workbench" on a cue, a look or a layer (✎, double-click, the
  * `wb` command) docks the Workbench -- Build's own, lent -- in place of

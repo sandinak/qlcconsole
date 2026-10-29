@@ -22,7 +22,7 @@
 
 #include <QObject>
 
-/** Line targets (LINE_TARGET_DESIGN.md): the curve, where lights land on it,
+/** Line targets (docs/design/LINE_TARGET_DESIGN.md): the curve, where lights land on it,
  *  the target's storage, and Aim looks pointing each head at its own point. */
 class LineTarget_Test final : public QObject
 {
@@ -75,7 +75,7 @@ private slots:
     /** At spread 0 every head aims at the centre; at -5 they swap ends. */
     void theSpreadMovesTheHeads();
 
-    /** Grouping, six lights, as LINE_TARGET_DESIGN.md draws it: halves
+    /** Grouping, six lights, as docs/design/LINE_TARGET_DESIGN.md draws it: halves
      *  swapping sides, halves flipping, pairs as blocks, pairs flipping. */
     void groupsCrossAsTheDesignDraws();
     /** Halves of an odd count leave the middle light on the centre; a short

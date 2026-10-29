@@ -72,7 +72,7 @@ public:
     void setTrialNote(const QString &text);
     QString trialNote() const;
 
-    /** The Used by line (PROGRAMMING_ROLE_DESIGN.md P-D13): where the
+    /** The Used by line (docs/design/PROGRAMMING_ROLE_DESIGN.md P-D13): where the
      *  edited palette is used, rich text whose links the host follows
      *  (usedByLinkActivated). Empty hides it. Either tab may set it. */
     void setUsedBy(const QString &html);
@@ -256,7 +256,7 @@ private:
     QLabel *m_dimmerCap;       //!< capability name at current intensity (strobe etc.)
     VCXYPadArea *m_xyPad;
     QComboBox   *m_aimTargetCombo;  //!< stage target for Aim palettes
-    /* A line target's controls (LINE_TARGET_DESIGN.md), shown only when
+    /* A line target's controls (docs/design/LINE_TARGET_DESIGN.md), shown only when
        the look aims at a line. */
     QWidget *m_lineBox = nullptr;
     QSlider *m_lineSpreadSlider = nullptr;       //!< -50..50 = -5..+5

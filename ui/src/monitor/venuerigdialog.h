@@ -33,7 +33,7 @@ class Doc;
  */
 
 /**
- * The venue page (board Q137/Q138, VENUES.md section 9), from the Focus
+ * The venue page (board Q137/Q138, docs/design/VENUES.md section 9), from the Focus
  * calls dialog's venue manager: what one venue owns -- its house rig and the
  * groups it fills, the show's universes (slots) with this room's patch and
  * what is not ours -- and the clash check against the show's tour package.
