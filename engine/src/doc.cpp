@@ -924,6 +924,11 @@ QSharedPointer<AudioCapture> Doc::audioInputCapture() const
     return m_inputCapture;
 }
 
+QSharedPointer<AudioCapture> Doc::existingAudioInputCapture() const
+{
+    return m_inputCapture;
+}
+
 void Doc::destroyAudioCapture()
 {
     if (m_inputCapture.isNull() == false)

@@ -19,6 +19,7 @@
 */
 
 #include <QtTest>
+#include <QPointer>
 #include <QRegularExpression>
 #include <QTemporaryDir>
 #include <QBuffer>
@@ -1518,6 +1519,51 @@ void Fixture_Test::stageLookIcon()
                                    + Fixture::stageLookIconResource(look, true).mid(5)),
                  qPrintable(base));
     }
+}
+
+/* A generic dimmer's definition is made for that fixture alone: every one it
+   is given, and the last one when the fixture goes, is deleted. The last one
+   leaked (TEST_MATRIX L1, about 50 KB a show open). */
+void Fixture_Test::aGenericDimmersDefinitionGoesWithIt()
+{
+    Fixture *fxi = new Fixture(m_doc);
+    fxi->setChannels(4);
+    QPointer<QLCChannel> first(fxi->fixtureMode()->channel(0));
+    QVERIFY(!first.isNull());
+
+    fxi->setChannels(6);    // another count: another definition, the first one deleted
+    QVERIFY(first.isNull());
+    QPointer<QLCChannel> second(fxi->fixtureMode()->channel(0));
+    QVERIFY(!second.isNull());
+
+    delete fxi;
+    QVERIFY2(second.isNull(), "the generic dimmer's definition outlived its fixture");
+
+    // a loaded one too
+    QBuffer buffer;
+    buffer.open(QIODevice::WriteOnly | QIODevice::Text);
+    QXmlStreamWriter xmlWriter(&buffer);
+    xmlWriter.writeStartElement("Fixture");
+    xmlWriter.writeTextElement("Manufacturer", "Generic");
+    xmlWriter.writeTextElement("Model", "Generic");
+    xmlWriter.writeTextElement("Mode", "2 Channel");
+    xmlWriter.writeTextElement("ID", "21");
+    xmlWriter.writeTextElement("Name", "Dimmer pack");
+    xmlWriter.writeTextElement("Universe", "0");
+    xmlWriter.writeTextElement("Address", "20");
+    xmlWriter.writeTextElement("Channels", "2");
+    xmlWriter.writeEndElement();
+    xmlWriter.setDevice(NULL);
+    buffer.close();
+    buffer.open(QIODevice::ReadOnly | QIODevice::Text);
+    QXmlStreamReader xmlReader(&buffer);
+    xmlReader.readNextStartElement();
+    fxi = new Fixture(m_doc);
+    QVERIFY(fxi->loadXML(xmlReader, m_doc, m_doc->fixtureDefCache()));
+    QPointer<QLCChannel> loaded(fxi->fixtureMode()->channel(0));
+    QVERIFY(!loaded.isNull());
+    delete fxi;
+    QVERIFY(loaded.isNull());
 }
 
 QTEST_APPLESS_MAIN(Fixture_Test)

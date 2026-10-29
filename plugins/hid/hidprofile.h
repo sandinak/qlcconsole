@@ -6,7 +6,7 @@
   device identified by vendor ID + one or more product IDs.
 
   Profile files use the .qxhid extension and live in Resources/HIDProfiles/
-  (or Library/Application Support/QLC+/HIDProfiles/ for user profiles).
+  (or HIDProfiles/ in the user's qlcconsole folder for their own profiles).
 
   Licensed under the Apache License, Version 2.0 (the "License");
 */

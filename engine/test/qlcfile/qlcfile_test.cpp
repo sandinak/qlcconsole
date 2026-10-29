@@ -18,6 +18,7 @@
 */
 
 #include <QtTest>
+#include <QXmlStreamReader>
 #include <QDir>
 #include <QFileInfo>
 #include <QTemporaryDir>
@@ -259,6 +260,170 @@ void QLCFile_Test::aRemovedLegacyLinkStaysRemoved()
     qputenv("HOME", realHome);
 #else
     QSKIP("the legacy folder layout this checks is the macOS one");
+#endif
+}
+
+/* Windows, simulated (CI's Windows job runs it for real): the user data
+   lives under %USERPROFILE%, never "HOME/qlcconsole" -- with HOME unset (a
+   desktop session) that was the current drive's root, C:\qlcconsole. */
+void QLCFile_Test::windowsLegacyRootsComeFromTheUserProfile()
+{
+    const QString profile = QStringLiteral("C:/Users/Stage Crew");
+    QLCFile::LegacyRoots r = QLCFile::legacyUserDataRoots(QLCFile::LegacyPlatform::Windows,
+                                                          QString(), profile);
+    QCOMPARE(r.oldRoot, profile + "/QLC+");
+    QCOMPARE(r.newRoot, profile + "/qlcconsole");
+    QVERIFY(r.copy);
+    QVERIFY(r.subdirs.contains("Fixtures"));
+
+    // HOME set too (OpenSSH, MSYS): still the profile
+    r = QLCFile::legacyUserDataRoots(QLCFile::LegacyPlatform::Windows,
+                                     QStringLiteral("/home/crew"), profile);
+    QCOMPARE(r.newRoot, profile + "/qlcconsole");
+
+    // no profile known: nothing at all, never a folder at a drive's root
+    r = QLCFile::legacyUserDataRoots(QLCFile::LegacyPlatform::Windows,
+                                     QStringLiteral("/home/crew"), QString());
+    QVERIFY(r.oldRoot.isEmpty() && r.newRoot.isEmpty());
+    r = QLCFile::legacyUserDataRoots(QLCFile::LegacyPlatform::MacOS, QString(), profile);
+    QVERIFY(r.newRoot.isEmpty());
+
+    r = QLCFile::legacyUserDataRoots(QLCFile::LegacyPlatform::MacOS,
+                                     QStringLiteral("/Users/crew"), QString());
+    QCOMPARE(r.oldRoot, QStringLiteral("/Users/crew/Library/Application Support/QLC+"));
+    QVERIFY(!r.copy);
+}
+
+/* A Windows "link" was a shell shortcut named like the definition, which the
+   loader can't read ("Resource error occurred" at every start): the files
+   are copied there, and a shortcut an earlier build left is replaced. */
+void QLCFile_Test::windowsLegacyFilesAreCopiedNotShortcut()
+{
+    QTemporaryDir profile;
+    QVERIFY(profile.isValid());
+    QLCFile::LegacyRoots roots = QLCFile::legacyUserDataRoots(QLCFile::LegacyPlatform::Windows,
+                                                              QString(), profile.path());
+    const QString oldFixtures = roots.oldRoot + "/Fixtures";
+    const QString newFixtures = roots.newRoot + "/Fixtures";
+    QVERIFY(QDir().mkpath(oldFixtures));
+    QVERIFY(QDir().mkpath(newFixtures));
+    auto write = [](const QString &path, const QByteArray &data) {
+        QFile f(path);
+        return f.open(QIODevice::WriteOnly) && f.write(data) == data.size();
+    };
+    auto read = [](const QString &path) {
+        QFile f(path);
+        return f.open(QIODevice::ReadOnly) ? f.readAll() : QByteArray();
+    };
+    const QByteArray def("<?xml version='1.0'?><FixtureDefinition/>\n");
+    QVERIFY(write(oldFixtures + "/Legacy-Test.qxf", def));
+    QVERIFY(write(oldFixtures + "/Old-Shortcut.qxf", def));
+    QVERIFY(write(oldFixtures + "/Broken.qxf", def));
+    // what an earlier build's QFile::link() wrote on Windows
+    QByteArray lnk("\x4c\x00\x00\x00\x01\x14\x02\x00\x00\x00\x00\x00\xc0\x00\x00\x00", 16);
+    lnk.append(QByteArray(60, '\0'));
+    QVERIFY(write(newFixtures + "/Old-Shortcut.qxf", lnk));
+    QVERIFY(QLCFile::isWindowsShortcut(newFixtures + "/Old-Shortcut.qxf"));
+    QVERIFY(!QLCFile::isWindowsShortcut(oldFixtures + "/Legacy-Test.qxf"));
+
+    QLCFile::mergeLegacyUserData(roots);
+    for (const QString name : { QStringLiteral("Legacy-Test.qxf"), QStringLiteral("Old-Shortcut.qxf"),
+                                QStringLiteral("Broken.qxf") })
+    {
+        const QFileInfo fi(newFixtures + "/" + name);
+        QVERIFY2(fi.exists() && !fi.isSymLink(), qPrintable(name));
+        QVERIFY2(!QLCFile::isWindowsShortcut(fi.filePath()), qPrintable(name));
+        QCOMPARE(read(fi.filePath()), def);
+    }
+
+    // removed here: not copied back next start
+    QVERIFY(QFile::remove(newFixtures + "/Broken.qxf"));
+    QLCFile::mergeLegacyUserData(roots);
+    QVERIFY2(!QFileInfo::exists(newFixtures + "/Broken.qxf"), "a removed copy came back");
+
+    // a file of the user's own under the same name always wins
+    const QByteArray mine("<?xml version='1.0'?><FixtureDefinition>mine</FixtureDefinition>\n");
+    QVERIFY(write(newFixtures + "/Legacy-Test.qxf", mine));
+    QLCFile::mergeLegacyUserData(roots);
+    QCOMPARE(read(newFixtures + "/Legacy-Test.qxf"), mine);
+
+    // nothing written anywhere but the profile
+    QVERIFY(QFileInfo(roots.newRoot + "/.legacy-linked").exists());
+}
+
+/* Qt's object hooks (qhooks_p.h, stable since Qt 5.4: index 3 is
+   AddQObject, 4 RemoveQObject) count the QObjects alive. */
+extern Q_CORE_EXPORT quintptr qtHookData[];
+static int s_liveObjects = 0;
+static void countAdd(QObject *) { ++s_liveObjects; }
+static void countRemove(QObject *) { --s_liveObjects; }
+
+/* A file that can't be opened: the reader is NULL and its QFile is gone.
+   The QFile leaked, once per fixture definition a show names that isn't
+   in the show's folder (TEST_MATRIX L3). */
+void QLCFile_Test::aFileThatCannotBeOpenedLeavesNothingBehind()
+{
+    const quintptr oldAdd = qtHookData[3];
+    const quintptr oldRemove = qtHookData[4];
+    qtHookData[3] = reinterpret_cast<quintptr>(&countAdd);
+    qtHookData[4] = reinterpret_cast<quintptr>(&countRemove);
+    s_liveObjects = 0;
+
+    QTemporaryDir dir;
+    const QString missing = dir.filePath("No-Such-Fixture.qxf");
+    for (int i = 0; i < 10; i++)
+        QVERIFY(QLCFile::getXMLReader(missing) == NULL);
+    const int leftAfterReader = s_liveObjects;
+
+    QXmlStreamReader *ok = QLCFile::getXMLReader(QFINDTESTDATA("readonly.xml.in"));
+    QVERIFY(ok != NULL);
+    QLCFile::releaseXMLReader(ok);
+    const int leftAfterRelease = s_liveObjects;
+
+    qtHookData[3] = oldAdd;
+    qtHookData[4] = oldRemove;
+    QCOMPARE(leftAfterReader, 0);
+    QCOMPARE(leftAfterRelease, 0);
+}
+
+/* The HID plugin's folders come from the build, as the installer lays them
+   out. The user's was "Library/Application Support/QLC+/HIDProfiles" under
+   the home folder on every platform, which made stock QLC+'s folder on a
+   clean Mac, and a "Library" folder in a Windows or Linux home; the
+   built-in one was the macOS bundle's, so Windows and Linux never found the
+   pad profiles they install (TEST_MATRIX L5). */
+void QLCFile_Test::hidProfilesLiveInQlcconsolesFolders()
+{
+    const QString user = QStringLiteral(USERHIDPROFILEDIR);
+    QCOMPARE(user, QString(USERQLCPLUSDIR) + QStringLiteral("/HIDProfiles"));
+    QVERIFY(!user.contains(QStringLiteral("QLC+")));
+    const QString system = QStringLiteral(HIDPROFILEDIR);
+    QVERIFY2(system.endsWith(QStringLiteral("HIDProfiles"), Qt::CaseInsensitive), qPrintable(system));
+#if defined(WIN32) || defined(Q_OS_WIN)
+    QCOMPARE(system, QStringLiteral("HIDProfiles"));            // beside qlcconsole.exe
+#elif defined(__APPLE__) || defined(Q_OS_MAC)
+    QCOMPARE(system, QStringLiteral("Resources/HIDProfiles"));  // in the bundle
+#else
+    QVERIFY2(system.contains(QStringLiteral("hidprofiles")), qPrintable(system));
+#endif
+}
+
+/* QLC_SHOW_DEBUG's log went to the fixed /tmp/qlc_showdebug.log, a name
+   another user on the machine could take first (a link, followed). It is
+   in the user's own folder (red team L3). */
+void QLCFile_Test::theShowDebugLogIsInTheUsersFolder()
+{
+#if defined(WIN32) || defined(Q_OS_WIN)
+    QVERIFY(QLCFile::showDebugLogPath().contains(QStringLiteral(USERQLCPLUSDIR)));
+#else
+    QTemporaryDir home;
+    const QByteArray realHome = qgetenv("HOME");
+    qputenv("HOME", home.path().toUtf8());
+    const QString path = QLCFile::showDebugLogPath();
+    qputenv("HOME", realHome);
+    QCOMPARE(QFileInfo(path).absolutePath(),
+             QDir(home.path()).absoluteFilePath(QStringLiteral(USERQLCPLUSDIR)));
+    QVERIFY(!path.startsWith(QStringLiteral("/tmp/")));
 #endif
 }
 

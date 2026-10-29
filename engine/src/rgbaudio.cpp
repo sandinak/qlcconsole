@@ -44,8 +44,14 @@ RGBAudio::RGBAudio(const RGBAudio& a, QObject *parent)
 
 RGBAudio::~RGBAudio()
 {
-    QSharedPointer<AudioCapture> capture(doc()->audioInputCapture());
-    if (capture.data() == m_audioInput && m_bandsNumber > 0)
+    /* Only the capture there is: asking for the Doc's capture made one
+       (buffers, an FFT plan, a beat tracker) for every RGB matrix built,
+       since RGBAlgorithm::algorithm() makes and destroys a temporary of
+       each kind. */
+    if (m_audioInput == NULL || m_bandsNumber <= 0)
+        return;
+    QSharedPointer<AudioCapture> capture(doc()->existingAudioInputCapture());
+    if (capture.data() == m_audioInput)
     {
         m_audioInput->unregisterBandsNumber(m_bandsNumber);
     }

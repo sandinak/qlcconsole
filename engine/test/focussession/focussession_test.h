@@ -104,6 +104,9 @@ private slots:
     /** The breath and flash timers have an interval: none spins the GUI
      *  thread. */
     void itsTimersNeverSpin();
+    /** A layer held by one of the Doc's children lets go after ~Doc has
+     *  run: it forgets the Doc rather than call it (TEST_MATRIX L7). */
+    void aLayerOutlivingItsDocNeverCallsIt();
 
 private:
     Doc *m_doc = nullptr;

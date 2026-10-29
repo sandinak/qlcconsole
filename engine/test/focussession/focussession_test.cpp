@@ -30,6 +30,7 @@
 #include "focussession_test.h"
 #include "qlccapability.h"
 #include "genericfader.h"
+#include "outputlayer.h"
 #include "fadechannel.h"
 #include "iopluginstub.h"
 #include "qlcioplugin.h"
@@ -1270,6 +1271,26 @@ void FocusSession_Test::aFixedLightsSaveIsUndone()
     QVERIFY(!s->undoSave());
     s->stop();
     QVERIFY(!props->fixtureRigProps(par->id()).fixedAim);
+}
+
+void FocusSession_Test::aLayerOutlivingItsDocNeverCallsIt()
+{
+    Doc *doc = new Doc(nullptr);
+    QVERIFY(doc->inputOutputMap()->addUniverse());
+    Fixture *fxi = new Fixture(doc);
+    fxi->setChannels(2);
+    QVERIFY(doc->addFixture(fxi));
+
+    OutputLayer layer(doc, Universe::Focus, 0, QStringLiteral("probe"));
+    QCOMPARE(layer.doc(), doc);
+    layer.set({ OutputLayer::Level{ fxi->id(), 0, 200 } });
+    QCOMPARE(layer.channelCounts().value(0), 1);
+
+    delete doc;
+    QVERIFY2(layer.doc() == nullptr, "the layer still points at a deleted Doc");
+    layer.set({ OutputLayer::Level{ 0, 0, 10 } });   // nothing to write through
+    layer.clear();
+    QVERIFY(layer.channelCounts().isEmpty());
 }
 
 QTEST_MAIN(FocusSession_Test)

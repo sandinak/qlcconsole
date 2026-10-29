@@ -23,6 +23,7 @@
 #include <QTextStream>
 
 #include "showrunner.h"
+#include "qlcfile.h"
 #include "function.h"
 #include "chaser.h"
 #include "chaserstep.h"
@@ -34,7 +35,7 @@
 
 #define TIMER_INTERVAL 50
 
-// Env-gated file log (QLC_SHOW_DEBUG=1 → /tmp/qlc_showdebug.log). qDebug is
+// Env-gated file log (QLC_SHOW_DEBUG=1 → showdebug.log in the user folder). qDebug is
 // swallowed by main.cpp's handler, so diagnostics go to a file. Remove once the
 // MTC show drive is verified.
 static void srDbg(const QString &line)
@@ -42,7 +43,7 @@ static void srDbg(const QString &line)
     static const bool on = qEnvironmentVariableIntValue("QLC_SHOW_DEBUG") != 0;
     if (on == false)
         return;
-    QFile f("/tmp/qlc_showdebug.log");
+    QFile f(QLCFile::showDebugLogPath());
     if (f.open(QIODevice::Append | QIODevice::Text))
         QTextStream(&f) << line << "\n";
 }
@@ -794,7 +795,7 @@ void ShowRunner::write(MasterTimer *timer, const QList<Universe*> &universes)
         }
     }
 
-    // Env-gated diagnostics (QLC_SHOW_DEBUG=1 → /tmp/qlc_showdebug.log). qDebug is
+    // Env-gated diagnostics (QLC_SHOW_DEBUG=1 → showdebug.log in the user folder). qDebug is
     // swallowed by main.cpp's handler, so log to a file. ~1s cadence. Shows the
     // clock and, per chaser child, whether it's show-clocked and which cue the
     // barrier drive holds/advances it to. Remove once MTC drive is verified.
@@ -804,7 +805,7 @@ void ShowRunner::write(MasterTimer *timer, const QList<Universe*> &universes)
         static int wn = 0;
         if ((wn++ % 50) == 0)
         {
-            QFile lf("/tmp/qlc_showdebug.log");
+            QFile lf(QLCFile::showDebugLogPath());
             if (lf.open(QIODevice::Append | QIODevice::Text))
             {
                 QTextStream ts(&lf);

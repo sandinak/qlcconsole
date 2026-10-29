@@ -217,6 +217,10 @@ public:
     /** Get the audio input capture object */
     QSharedPointer<AudioCapture> audioInputCapture() const;
 
+    /** The audio capture if there is one: never makes one, as
+     *  audioInputCapture() does */
+    QSharedPointer<AudioCapture> existingAudioInputCapture() const;
+
     /** Destroy a previously created audio capture instance */
     void destroyAudioCapture();
 

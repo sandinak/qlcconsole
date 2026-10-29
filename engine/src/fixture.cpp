@@ -57,6 +57,16 @@ Fixture::Fixture(QObject* parent)
 
 Fixture::~Fixture()
 {
+    /* A generic dimmer's definition is this fixture's own (genericDimmerDef()
+       makes one per fixture, setFixtureDefinition() deletes the one it
+       replaces): the last one goes with the fixture. It leaked, about 50 KB
+       per show open. */
+    if (m_fixtureDef != NULL &&
+        m_fixtureDef->manufacturer() == KXMLFixtureGeneric &&
+        m_fixtureDef->model() == KXMLFixtureGeneric)
+    {
+        delete m_fixtureDef;
+    }
 }
 
 bool Fixture::operator<(const Fixture& fxi)

@@ -123,7 +123,9 @@ void UpdateManager::updateFooter()
 
 bool UpdateManager::eventFilter(QObject *watched, QEvent *event)
 {
-    if (watched == m_footer && event->type() == QEvent::MouseButtonPress)
+    /* The event first: the footer's own teardown passes through here, and
+       comparing it with m_footer then downcast a half-destroyed label */
+    if (event->type() == QEvent::MouseButtonPress && watched == m_footer)
     {
         if (m_state == NoUpdate)
         {

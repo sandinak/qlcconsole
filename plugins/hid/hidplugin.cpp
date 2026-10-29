@@ -36,9 +36,10 @@
 #include "hidplugin.h"
 #include "qlcfile.h"
 
-// macOS bundle layout: mirrors RGBScripts / EffectScripts
-#define HIDPROFILEDIR     "Resources/HIDProfiles"
-#define USERHIDPROFILEDIR "Library/Application Support/QLC+/HIDProfiles"
+// HIDPROFILEDIR / USERHIDPROFILEDIR: variables.cmake, as the installer puts
+// them (the bundle's Resources/HIDProfiles on macOS, beside the program on
+// Windows, share/qlcconsole/hidprofiles on Linux)
+#include "qlcconfig.h"
 
 #if defined(Q_WS_X11) || defined(Q_OS_LINUX)
   #include "hidlinuxjoystick.h"
@@ -58,6 +59,10 @@ void HIDPlugin::init()
     loadProfiles(QLCFile::systemDirectory(QString(HIDPROFILEDIR), QString(".qxhid")));
     loadProfiles(QLCFile::userDirectory(QString(USERHIDPROFILEDIR), QString(HIDPROFILEDIR),
                                         QStringList() << "*.qxhid"));
+#if defined (__APPLE__) || defined(Q_OS_MACOS)
+    /* Where earlier builds looked: read if it is there, never made */
+    loadProfiles(QDir(QDir::homePath() + QStringLiteral("/Library/Application Support/QLC+/HIDProfiles")));
+#endif
 
     m_rescanTimer = new QTimer(this);
     m_rescanTimer->setSingleShot(true);

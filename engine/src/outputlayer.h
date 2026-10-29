@@ -29,6 +29,7 @@
 #include <QString>
 #include <QHash>
 #include <QList>
+#include <QPointer>
 
 #include "universe.h"
 
@@ -63,6 +64,9 @@ public:
     /** The channels the layer writes, per universe index (for tests) */
     QHash<int, int> channelCounts() const;
 
+    /** The Doc the layer writes through; null once it has gone (for tests) */
+    Doc *doc() const;
+
 private:
     struct Slot
     {
@@ -70,7 +74,10 @@ private:
         QSharedPointer<GenericFader> fader;
     };
 
-    Doc *m_doc;
+    /** Guarded: a layer held by one of the Doc's children (a FocusSession)
+     *  is destroyed, and lets go, after ~Doc has run. A plain pointer made
+     *  that a call on a destroyed Doc (UBSan at quit). */
+    QPointer<Doc> m_doc;
     const Universe::FaderPriority m_priority;
     const int m_flags;
     const QString m_name;

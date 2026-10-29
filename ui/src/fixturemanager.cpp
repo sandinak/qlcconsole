@@ -1593,8 +1593,16 @@ void FixtureManager::updateGroupMenu()
                 this, SLOT(slotGroupSelected(QAction*)));
     }
 
+    /* The menu's own actions go: removeAction() only took them off, so
+       each refresh left a set behind (1,323 per show open). Later, not
+       now: picking a group in this menu changes the group, which refreshes
+       the menu from inside the action's own trigger. */
     foreach (QAction* a, m_groupMenu->actions())
+    {
         m_groupMenu->removeAction(a);
+        if (a->parent() == m_groupMenu)
+            a->deleteLater();
+    }
 
     // Put all known fixture groups to the menu. Creating a new one no longer
     // lives here -- it's a right-click on the Fixture Groups root/a group

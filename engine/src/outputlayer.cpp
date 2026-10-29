@@ -30,11 +30,12 @@ void OutputLayer::set(const QList<Level> &levels)
     /* Built outside the lock: a FadeChannel looks its fixture up. A level
        that never fades: it is at its value from the first frame. */
     QHash<int, QList<FadeChannel>> next;
-    if (m_doc != nullptr)
+    Doc *doc = m_doc.data();
+    if (doc != nullptr)
     {
         for (const Level &l : levels)
         {
-            FadeChannel fc(m_doc, l.fixtureId, l.channel);
+            FadeChannel fc(doc, l.fixtureId, l.channel);
             if (fc.isInert() || fc.addressInUniverse() == QLCChannel::invalid())
                 continue;
             fc.removeFlag(FadeChannel::CanFade);
@@ -50,7 +51,7 @@ void OutputLayer::set(const QList<Level> &levels)
     /* The universes as they are: never claimed, the MasterTimer holds that
        lock for its whole tick and a show stopping inside it lands here.
        Universes are only added or removed outside a tick. */
-    InputOutputMap *ioMap = m_doc != nullptr ? m_doc->inputOutputMap() : nullptr;
+    InputOutputMap *ioMap = doc != nullptr ? doc->inputOutputMap() : nullptr;
     const QList<Universe *> universes = ioMap != nullptr ? ioMap->universes() : QList<Universe *>();
 
     QMutexLocker locker(&m_mutex);
@@ -83,7 +84,7 @@ void OutputLayer::set(const QList<Level> &levels)
             slot.universe = uni;
             slot.fader = uni->requestFader(m_priority);
             slot.fader->setName(m_name);
-            slot.fader->setDoc(m_doc);
+            slot.fader->setDoc(doc);
         }
         slot.fader->replaceAll(it.value());
     }
@@ -101,4 +102,9 @@ QHash<int, int> OutputLayer::channelCounts() const
     for (auto it = m_slots.constBegin(); it != m_slots.constEnd(); ++it)
         counts.insert(it.key(), it.value().fader.isNull() ? 0 : it.value().fader->channelsCount());
     return counts;
+}
+
+Doc *OutputLayer::doc() const
+{
+    return m_doc.data();
 }

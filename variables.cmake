@@ -225,6 +225,10 @@ elseif (APPLE)
 else ()
     set(HIDPROFILEDIR "${DATADIR}/hidprofiles")
 endif ()
+# The user's own HID profiles: in qlcconsole's user folder, as everything
+# else of the user's is (it was "Library/Application Support/QLC+" under the
+# home folder on every platform, which made stock QLC+'s folder).
+set(USERHIDPROFILEDIR "${USERDATADIR}/HIDProfiles")
 
 # User input profiles
 if (WIN32)

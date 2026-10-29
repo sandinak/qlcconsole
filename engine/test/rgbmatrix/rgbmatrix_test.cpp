@@ -31,6 +31,7 @@
 #include "fixturegroup.h"
 #include "mastertimer.h"
 #include "rgbmatrix.h"
+#include "rgbaudio.h"
 #include "fixture.h"
 #include "qlcfile.h"
 #include "doc.h"
@@ -560,6 +561,24 @@ void RGBMatrix_Test::aScriptedMatrixStepsOnItsDuration()
     for (int f = 0; f < 25; f++)
         next << level(m_doc, f * 5 + 1);
     QVERIFY(next != reds);                              // the stripe moved
+}
+
+/* Building an RGB matrix makes and destroys a temporary RGBAudio
+   (RGBAlgorithm::algorithm()); its destructor asked the Doc for the audio
+   capture, which made one -- an FFT plan and a beat tracker per show
+   loaded, never used (TEST_MATRIX L2). */
+void RGBMatrix_Test::aMatrixDoesNotStartTheAudioCapture()
+{
+    QVERIFY(m_doc->existingAudioInputCapture().isNull());
+    RGBMatrix *mtx = new RGBMatrix(m_doc);
+    mtx->setAlgorithm(RGBAlgorithm::algorithm(m_doc, "Stripes"));
+    delete RGBAlgorithm::algorithm(m_doc, "Audio Spectrum");
+    delete mtx;
+    {
+        RGBAudio audio(m_doc);
+    }
+    QVERIFY2(m_doc->existingAudioInputCapture().isNull(),
+             "an RGB matrix that never listened started the audio capture");
 }
 
 QTEST_MAIN(RGBMatrix_Test)
