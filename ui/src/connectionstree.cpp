@@ -4685,7 +4685,7 @@ void ConnectionsTree::addShowControlRows()
        input), but they are settings of this show, not a plugin's line. */
     QTreeWidgetItem *branch = new QTreeWidgetItem(m_tree);
     branch->setText(COL_NAME, tr("Show control & sync"));
-    branch->setText(COL_DETAIL, tr("cue commands and timecode from outside (QLab, a sound desk)"));
+    branch->setText(COL_DETAIL, tr("cue commands and timecode from outside (QLab, a sound desk), web access"));
     branch->setData(COL_NAME, ROLE_KIND, KIND_SHOWCONTROL_BRANCH);
     branch->setData(COL_NAME, ROLE_UNIVERSE, Universe::invalid());
     branch->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);

@@ -32,6 +32,7 @@
 #define protected public
 #include "webaccess.h"
 #include "webaccessbase.h"
+#include "webaccesscontroller.h"
 #include "webaccessauth.h"
 #if defined(Q_OS_LINUX)
 #include "webaccessnetwork.h"
@@ -47,6 +48,7 @@
 #include "simpledesk.h"
 #include "function.h"
 #include "doc.h"
+#include "showwebaccess.h"
 #include "qlcfixturedefcache.h"
 #include "inputoutputmap.h"
 #include "qlcconfig.h"
@@ -825,4 +827,228 @@ void WebAccess_Test::basicAuthChecksTheCredentials()
     u = ask(basic("guest:pw"));
     QCOMPARE(u.username, QString("guest"));
     QCOMPARE(int(u.level), int(VC_ONLY_LEVEL));
+}
+
+/*****************************************************************************
+ * The show's own web access
+ *****************************************************************************/
+
+static QByteArray saveEngine(Doc *doc)
+{
+    QByteArray xml;
+    QXmlStreamWriter w(&xml);
+    w.writeStartDocument();
+    doc->saveXML(&w);
+    w.writeEndDocument();
+    return xml;
+}
+
+static bool loadEngine(Doc *doc, const QByteArray &xml)
+{
+    doc->clearContents();
+    QXmlStreamReader r(xml);
+    r.readNextStartElement();
+    return doc->loadXML(r, false);
+}
+
+void WebAccess_Test::theShowSettingRoundTrips()
+{
+    ShowWebAccess *web = m_doc->webAccess();
+    QVERIFY(web != nullptr);
+    QVERIFY(!web->isEnabled());
+    QCOMPARE(web->port(), 9999);
+
+    m_doc->resetModified();
+    web->setEnabled(true);
+    QVERIFY(m_doc->isModified());
+    web->setPort(8123);
+    web->setNetwork(true);
+    web->setLogin(true);
+
+    const QByteArray xml = saveEngine(m_doc);
+    QVERIFY2(xml.contains("<WebAccess Enabled=\"1\" Port=\"8123\" Network=\"1\" Login=\"1\"/>"), xml.constData());
+
+    QVERIFY(loadEngine(m_doc, xml));
+    QVERIFY(web->isEnabled());
+    QCOMPARE(web->port(), 8123);
+    QVERIFY(web->network());
+    QVERIFY(web->login());
+
+    // Off but on another port: kept, so turning it back on finds the port.
+    web->setEnabled(false);
+    web->setNetwork(false);
+    web->setLogin(false);
+    const QByteArray off = saveEngine(m_doc);
+    QVERIFY2(off.contains("<WebAccess Enabled=\"0\" Port=\"8123\"/>"), off.constData());
+    QVERIFY(loadEngine(m_doc, off));
+    QVERIFY(!web->isEnabled());
+    QCOMPARE(web->port(), 8123);
+}
+
+void WebAccess_Test::anOldShowLoadsWithItOff()
+{
+    ShowWebAccess *web = m_doc->webAccess();
+
+    // A new show saves nothing: an old show's file is what it was.
+    const QByteArray fresh = saveEngine(m_doc);
+    QVERIFY2(!fresh.contains("<WebAccess"), fresh.constData());
+
+    // A show that had it on, then one (QLC+ 4, or older) without it.
+    web->setEnabled(true);
+    web->setPort(8124);
+    const QByteArray old("<?xml version=\"1.0\"?><Engine><InputOutputMap/></Engine>");
+    QVERIFY(loadEngine(m_doc, old));
+    QVERIFY(!web->isEnabled());
+    QCOMPARE(web->port(), 9999);
+    QVERIFY(!web->network());
+    QVERIFY(!web->login());
+
+    // Its element among others: the rest of the show still loads after it.
+    const QByteArray mixed("<?xml version=\"1.0\"?><Engine><WebAccess Enabled=\"1\" Port=\"8125\"/>"
+                           "<Bus ID=\"0\"><Name>X</Name></Bus><ShutterAutoOpen Enabled=\"0\"/></Engine>");
+    QVERIFY(loadEngine(m_doc, mixed));
+    QVERIFY(web->isEnabled());
+    QCOMPARE(web->port(), 8125);
+}
+
+void WebAccess_Test::aBadPortInTheFileFallsBack()
+{
+    ShowWebAccess *web = m_doc->webAccess();
+    for (const char *port : { "0", "70000", "-1", "abc", "" })
+    {
+        const QByteArray xml = QByteArray("<?xml version=\"1.0\"?><Engine><WebAccess Enabled=\"1\" Port=\"")
+                               + port + "\"/></Engine>";
+        QVERIFY(loadEngine(m_doc, xml));
+        QVERIFY(web->isEnabled());
+        QCOMPARE(web->port(), 9999);
+    }
+    web->setPort(0);
+    web->setPort(65536);
+    QCOMPARE(web->port(), 9999);
+}
+
+void WebAccess_Test::openingAShowStartsAndStopsIt()
+{
+    ShowWebAccess *web = m_doc->webAccess();
+    WebAccessController ctl(m_doc, m_vc, m_sd);
+    ctl.apply();
+    // Off: nothing built, nothing listening.
+    QVERIFY(ctl.server() == nullptr);
+    QCOMPARE(web->state(), ShowWebAccess::Off);
+
+    const int port = freePort();
+    web->setEnabled(true);
+    web->setPort(port);
+    // Applied a moment later, by itself.
+    QTRY_VERIFY(ctl.server() != nullptr);
+    QCOMPARE(int(ctl.server()->listenPort()), port);
+    QVERIFY(ctl.server()->listenAddress().isLoopback());
+    QCOMPARE(web->state(), ShowWebAccess::Running);
+    QCOMPARE(web->url(), QString("http://127.0.0.1:%1/").arg(port));
+    m_port = quint16(port);
+    QVERIFY(http("GET / HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n").startsWith("HTTP/1.1 200"));
+
+    // Another show, saved with it on the same port: the same server.
+    WebAccess *same = ctl.server();
+    const QByteArray xml = saveEngine(m_doc);
+    QVERIFY(loadEngine(m_doc, xml));
+    QTest::qWait(20);
+    QCOMPARE(ctl.server(), same);
+
+    // A new show (or one without it): stopped, the port free again.
+    m_doc->clearContents();
+    QTRY_VERIFY(ctl.server() == nullptr);
+    QCOMPARE(web->state(), ShowWebAccess::Off);
+    QTcpServer probe;
+    QVERIFY(probe.listen(QHostAddress::LocalHost, quint16(port)));
+}
+
+void WebAccess_Test::aNewPortRestartsIt()
+{
+    ShowWebAccess *web = m_doc->webAccess();
+    WebAccessController ctl(m_doc, m_vc, m_sd);
+    web->setEnabled(true);
+    web->setPort(freePort());
+    QTRY_VERIFY(ctl.server() != nullptr);
+
+    const int other = freePort();
+    web->setPort(other);
+    QTRY_COMPARE(ctl.server() ? int(ctl.server()->listenPort()) : 0, other);
+    QCOMPARE(web->url(), QString("http://127.0.0.1:%1/").arg(other));
+
+    // Logins on: restarted with them.
+    web->setLogin(true);
+    QTRY_VERIFY(ctl.server() != nullptr && ctl.server()->m_auth != nullptr);
+}
+
+void WebAccess_Test::aPortInUseIsAStatusNotACrash()
+{
+    QTcpServer holder;
+    QVERIFY(holder.listen(QHostAddress::LocalHost, 0));
+    const int port = holder.serverPort();
+
+    ShowWebAccess *web = m_doc->webAccess();
+    WebAccessController ctl(m_doc, m_vc, m_sd);
+    web->setEnabled(true);
+    web->setPort(port);
+    QTRY_COMPARE(web->state(), ShowWebAccess::Failed);
+    QVERIFY(ctl.server() == nullptr);
+    QVERIFY2(web->message().contains(QString::number(port)), qPrintable(web->message()));
+    QVERIFY(web->url().isEmpty());
+
+    // Freed and asked again: it runs.
+    holder.close();
+    const int free = freePort();
+    web->setPort(free);
+    QTRY_COMPARE(web->state(), ShowWebAccess::Running);
+    QCOMPARE(int(ctl.server()->listenPort()), free);
+}
+
+void WebAccess_Test::theCommandLineWins()
+{
+    ShowWebAccess *web = m_doc->webAccess();
+    WebAccessController ctl(m_doc, m_vc, m_sd);
+    const int port = freePort();
+    ctl.setCommandLine(port, false, QString(), QHostAddress());
+    QVERIFY(ctl.server() != nullptr);
+    QCOMPARE(int(ctl.server()->listenPort()), port);
+    QCOMPARE(web->state(), ShowWebAccess::CommandLine);
+
+    // The show says off, or another port: -w's server stays as it is.
+    WebAccess *server = ctl.server();
+    web->setEnabled(true);
+    web->setPort(freePort());
+    QTest::qWait(20);
+    web->setEnabled(false);
+    m_doc->clearContents();
+    QTest::qWait(20);
+    QCOMPARE(ctl.server(), server);
+    QCOMPARE(int(server->listenPort()), port);
+    QCOMPARE(web->state(), ShowWebAccess::CommandLine);
+}
+
+void WebAccess_Test::aShowLoadedFromTheWebKeepsItRunning()
+{
+    ShowWebAccess *web = m_doc->webAccess();
+    WebAccessController ctl(m_doc, m_vc, m_sd);
+    // By name: a signal of the webaccess DLL (engine/test/dllsignals).
+    QSignalSpy relayed(&ctl, SIGNAL(loadProject(QString)));
+    web->setEnabled(true);
+    web->setPort(freePort());
+    QTRY_VERIFY(ctl.server() != nullptr);
+    WebAccess *server = ctl.server();
+
+    // The web page loads a show that doesn't ask for web access (what the
+    // App does with loadProject: a new show's contents).
+    emit server->loadProject(QStringLiteral("<x/>"));
+    QCOMPARE(relayed.count(), 1);
+    m_doc->clearContents();
+    QTest::qWait(20);
+    QCOMPARE(ctl.server(), server);
+    QCOMPARE(web->state(), ShowWebAccess::Running);
+
+    // The next show opened here, without it: stopped.
+    web->setEnabled(true);
+    web->setEnabled(false);
+    QTRY_VERIFY(ctl.server() == nullptr);
 }

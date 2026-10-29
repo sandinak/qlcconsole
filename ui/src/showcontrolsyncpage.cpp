@@ -19,6 +19,8 @@
 
 #include <QTimer>
 #include <QNetworkInterface>
+#include <QHostAddress>
+#include <QRegularExpression>
 #include <QScrollArea>
 #include <QPushButton>
 #include <QVBoxLayout>
@@ -35,6 +37,7 @@
 #include "timecodesource.h"
 #include "inputoutputmap.h"
 #include "showcontrol.h"
+#include "showwebaccess.h"
 #include "inputpatch.h"
 #include "doc.h"
 
@@ -68,6 +71,21 @@ QLabel *noteLabel(const QString &text, QWidget *parent)
     return l;
 }
 
+/** The port at the end of a web access URL ("http://host:9999/"), or
+ *  @a fallback; the host may be a placeholder, so no QUrl. */
+int webUrlPort(const QString &url, int fallback)
+{
+    static const QRegularExpression re(QStringLiteral(":(\\d+)/?$"));
+    const QRegularExpressionMatch m = re.match(url);
+    return m.hasMatch() ? m.captured(1).toInt() : fallback;
+}
+
+/** True when a web access URL is this computer only (127.x, ::1). */
+bool webUrlIsLocal(const QString &url)
+{
+    return url.startsWith(QLatin1String("http://127.")) || url.startsWith(QLatin1String("http://[::1]"));
+}
+
 const char *kGreen = "color: #27ae60;";
 const char *kAmber = "color: #e67e22;";
 const char *kRed   = "color: #c0392b;";
@@ -94,12 +112,14 @@ ShowControlSyncPage::ShowControlSyncPage(Doc *doc, QWidget *parent)
     QVBoxLayout *lay = new QVBoxLayout(content);
     lay->addWidget(noteLabel(tr("Everything outside that controls or clocks the show: cue "
                                 "commands from QLab (or anything that sends OSC or MIDI Show "
-                                "Control) and MIDI timecode. Changes take effect at once."),
+                                "Control), MIDI timecode and web access. Changes take effect at once."),
                              content));
     m_groups.insert(QStringLiteral("osc"), buildOscGroup());
     m_groups.insert(QStringLiteral("msc"), buildMscGroup());
     m_groups.insert(QStringLiteral("mtc"), buildMtcGroup());
-    for (const QString &key : { QStringLiteral("osc"), QStringLiteral("msc"), QStringLiteral("mtc") })
+    m_groups.insert(QStringLiteral("web"), buildWebGroup());
+    for (const QString &key : { QStringLiteral("osc"), QStringLiteral("msc"), QStringLiteral("mtc"),
+                                QStringLiteral("web") })
         lay->addWidget(m_groups.value(key));
     lay->addStretch();
     scroll->setWidget(content);
@@ -119,8 +139,13 @@ ShowControlSyncPage::ShowControlSyncPage(Doc *doc, QWidget *parent)
     connect(tc, &TimecodeSource::sourceUniverseChanged,
             this, &ShowControlSyncPage::refreshMidiInputs);
 
+    ShowWebAccess *web = m_doc->webAccess();
+    connect(web, &ShowWebAccess::settingsChanged, this, &ShowControlSyncPage::refreshWeb);
+    connect(web, &ShowWebAccess::statusChanged, this, &ShowControlSyncPage::refreshWeb);
+
     setListener(nullptr);
     refreshMidiInputs();
+    refreshWeb();
 }
 
 QGroupBox *ShowControlSyncPage::buildOscGroup()
@@ -271,6 +296,131 @@ QGroupBox *ShowControlSyncPage::buildMtcGroup()
     form->addRow(noteLabel(tr("A show follows it when Follow MTC is on in Shows; its offset "
                               "is set there too."), box));
     return box;
+}
+
+QGroupBox *ShowControlSyncPage::buildWebGroup()
+{
+    QGroupBox *box = new QGroupBox(tr("Web access"), this);
+    box->setObjectName(QStringLiteral("scWebGroup"));
+    QFormLayout *form = new QFormLayout(box);
+
+    QHBoxLayout *row = new QHBoxLayout();
+    m_webCheck = new QCheckBox(tr("Start web access with this show, on port"), box);
+    m_webCheck->setObjectName(QStringLiteral("scWebEnabled"));
+    m_webCheck->setToolTip(tr("Opening this show starts the web server: the Virtual Console, "
+                              "Simple Desk and Configuration pages in a browser. Saved with "
+                              "the show. Starting qlcconsole with -w overrides it."));
+    m_webPortSpin = new QSpinBox(box);
+    m_webPortSpin->setObjectName(QStringLiteral("scWebPort"));
+    m_webPortSpin->setRange(1, 65535);
+    m_webPortSpin->setKeyboardTracking(false);
+    m_webPortSpin->setToolTip(tr("9999 unless something else on this computer uses it."));
+    row->addWidget(m_webCheck);
+    row->addWidget(m_webPortSpin);
+    row->addStretch();
+    form->addRow(row);
+
+    m_webNetworkCheck = new QCheckBox(tr("Reachable from other devices on the network"), box);
+    m_webNetworkCheck->setObjectName(QStringLiteral("scWebNetwork"));
+    m_webNetworkCheck->setToolTip(tr("Off: a browser on this computer only. On: tablets and phones "
+                                     "on any network this computer is on can open the page."));
+    form->addRow(m_webNetworkCheck);
+
+    m_webLoginCheck = new QCheckBox(tr("Users log in"), box);
+    m_webLoginCheck->setObjectName(QStringLiteral("scWebLogin"));
+    m_webLoginCheck->setToolTip(tr("As with -wa: everyone logs in with an account (Configuration ▸ "
+                                   "Users on the web page; the first admin is made from this "
+                                   "computer). Without it, other devices can look but change nothing."));
+    form->addRow(m_webLoginCheck);
+
+    m_webWhere = new QLabel(box);
+    m_webWhere->setObjectName(QStringLiteral("scWebWhere"));
+    m_webWhere->setWordWrap(true);
+    m_webWhere->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    form->addRow(tr("Open:"), m_webWhere);
+
+    m_webStatus = new QLabel(box);
+    m_webStatus->setObjectName(QStringLiteral("scWebStatus"));
+    m_webStatus->setWordWrap(true);
+    form->addRow(tr("Status:"), m_webStatus);
+
+    form->addRow(noteLabel(tr("Whoever can open the page can run the Virtual Console. Plain "
+                              "http, no encryption: keep it on the show network, with logins "
+                              "when it is reachable from the network."), box));
+
+    ShowWebAccess *web = m_doc->webAccess();
+    connect(m_webCheck, &QCheckBox::toggled, this, [this, web](bool on) {
+        if (!m_updating)
+            web->setEnabled(on);
+    });
+    connect(m_webPortSpin, &QSpinBox::valueChanged, this, [this, web](int port) {
+        if (!m_updating)
+            web->setPort(port);
+    });
+    connect(m_webNetworkCheck, &QCheckBox::toggled, this, [this, web](bool on) {
+        if (!m_updating)
+            web->setNetwork(on);
+    });
+    connect(m_webLoginCheck, &QCheckBox::toggled, this, [this, web](bool on) {
+        if (!m_updating)
+            web->setLogin(on);
+    });
+    return box;
+}
+
+void ShowControlSyncPage::refreshWeb()
+{
+    const ShowWebAccess *web = m_doc->webAccess();
+
+    const bool was = m_updating;
+    m_updating = true;
+    m_webCheck->setChecked(web->isEnabled());
+    m_webPortSpin->setValue(web->port());
+    m_webNetworkCheck->setChecked(web->network());
+    m_webLoginCheck->setChecked(web->login());
+    m_updating = was;
+
+    /* Where to point a browser: the addresses for the port it runs on, or
+       will run on once on (-w's port and audience, when it ran from there). */
+    const ShowWebAccess::State state = web->state();
+    const bool running = (state == ShowWebAccess::Running || state == ShowWebAccess::CommandLine)
+                         && !web->url().isEmpty();
+    const int port = running ? webUrlPort(web->url(), web->port()) : web->port();
+    const bool network = running ? !webUrlIsLocal(web->url()) : web->network();
+    QStringList urls { QStringLiteral("http://127.0.0.1:%1/").arg(port) };
+    if (network)
+        for (const QHostAddress &a : QNetworkInterface::allAddresses())
+            if (a.protocol() == QAbstractSocket::IPv4Protocol && !a.isLoopback())
+                urls << QStringLiteral("http://%1:%2/").arg(a.toString()).arg(port);
+    m_webWhere->setText(network ? urls.join(QStringLiteral("\n"))
+                                : tr("%1 (this computer only)").arg(urls.first()));
+
+    QString text;
+    if (running)
+    {
+        text = network ? tr("Running on port %1, reachable from the network.").arg(port)
+                       : tr("Running on port %1, this computer only.").arg(port);
+        if (!web->message().isEmpty())
+            text += QLatin1Char(' ') + web->message();
+    }
+    switch (running ? ShowWebAccess::Running : state)
+    {
+        case ShowWebAccess::Running:
+            m_webStatus->setText(text);
+            // Amber: reachable by others, worth knowing at a glance.
+            m_webStatus->setStyleSheet(network ? kAmber : kGreen);
+            break;
+        case ShowWebAccess::Failed:
+            m_webStatus->setText(web->message());
+            m_webStatus->setStyleSheet(kRed);
+            break;
+        default:
+            m_webStatus->setText(web->isEnabled() ? tr("Starting…") : tr("Off"));
+            m_webStatus->setStyleSheet(kGrey);
+            break;
+    }
+    m_webStatus->setProperty("webState", int(state));
+    checkSummary();
 }
 
 void ShowControlSyncPage::setListener(ShowControlListener *listener)
@@ -570,9 +720,30 @@ QList<QStringList> ShowControlSyncPage::summary() const
             msc += tr(" (not patched)");
     }
 
+    const ShowWebAccess *webAccess = m_doc->webAccess();
+    QString web = tr("Off");
+    switch (webAccess->state())
+    {
+        case ShowWebAccess::Running:
+        case ShowWebAccess::CommandLine:
+            web = tr("Port %1 · %2").arg(webUrlPort(webAccess->url(), webAccess->port()))
+                      .arg(webUrlIsLocal(webAccess->url()) ? tr("this computer only") : tr("network"));
+            if (webAccess->state() == ShowWebAccess::CommandLine)
+                web += tr(" · from -w");
+            break;
+        case ShowWebAccess::Failed:
+            web = tr("Port %1 · could not start").arg(webAccess->port());
+            break;
+        default:
+            if (webAccess->isEnabled())
+                web = tr("Port %1").arg(webAccess->port());
+            break;
+    }
+
     return { { QStringLiteral("osc"), tr("OSC in"), osc },
              { QStringLiteral("msc"), tr("MIDI Show Control in"), msc },
-             { QStringLiteral("mtc"), tr("MIDI timecode"), m_mtcStatus->text() } };
+             { QStringLiteral("mtc"), tr("MIDI timecode"), m_mtcStatus->text() },
+             { QStringLiteral("web"), tr("Web access"), web } };
 }
 
 void ShowControlSyncPage::checkSummary()

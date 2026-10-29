@@ -28,6 +28,7 @@ add_library(${module_name} SHARED
     fixturepower.cpp fixturepower.h
     powerlimiter.cpp powerlimiter.h
     shutterautoopen.cpp shutterautoopen.h
+    showwebaccess.cpp showwebaccess.h
     outputrulekeeper.cpp outputrulekeeper.h
     fixturegroup.cpp fixturegroup.h
     function.cpp function.h

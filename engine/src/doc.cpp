@@ -66,6 +66,7 @@
 #include "doc.h"
 #include "powerlimiter.h"
 #include "shutterautoopen.h"
+#include "showwebaccess.h"
 #include "outputrulekeeper.h"
 #include "bus.h"
 #include "qlcpalette.h"
@@ -152,6 +153,8 @@ Doc::Doc(QObject* parent, int universes)
     m_powerLimiter = new PowerLimiter(this);
     // Shutters opened for a lit head that nothing else opens.
     m_shutterAutoOpen = new ShutterAutoOpen(this);
+    // Web access started with the show (off unless the show says so).
+    m_webAccess = new ShowWebAccess(this);
     // Relays, house and work lights: Blackout / GM exempt, switch, on at open.
     m_outputRuleKeeper = new OutputRuleKeeper(this);
 
@@ -250,6 +253,8 @@ Doc::~Doc()
     m_powerLimiter = nullptr;
     delete m_shutterAutoOpen;
     m_shutterAutoOpen = nullptr;
+    delete m_webAccess;
+    m_webAccess = nullptr;
     delete m_outputRuleKeeper;
     m_outputRuleKeeper = nullptr;
 
@@ -305,6 +310,8 @@ void Doc::clearContents()
     m_speedMasters->reset();
     if (m_shutterAutoOpen != nullptr)
         m_shutterAutoOpen->reset();
+    if (m_webAccess != nullptr)
+        m_webAccess->reset();
     m_showControl->reset();
     m_showTree->reset();
     m_paletteOps->reset();
@@ -2616,6 +2623,10 @@ bool Doc::loadXML(QXmlStreamReader &doc, bool loadIO)
         {
             m_shutterAutoOpen->loadXML(doc);
         }
+        else if (doc.name() == KXMLQLCWebAccess)
+        {
+            m_webAccess->loadXML(doc);
+        }
         else if (doc.name() == KXMLQLCMoveInBlack)
         {
             if (m_programmer != NULL)
@@ -2756,6 +2767,7 @@ bool Doc::saveXML(QXmlStreamWriter *doc, bool forStockQlc)
 
     m_speedMasters->saveXML(doc);
     m_shutterAutoOpen->saveXML(doc);
+    m_webAccess->saveXML(doc);
     m_outputRuleKeeper->saveXML(doc);
     m_showControl->saveXML(doc);
     m_showTree->saveXML(doc);

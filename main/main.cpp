@@ -46,6 +46,7 @@
 #include <cstdio>
 
 #include "webaccess.h"
+#include "webaccesscontroller.h"
 #include "webaccessauth.h"
 #include "helpshots.h"
 #include "connectionstree.h"
@@ -462,35 +463,40 @@ int main(int argc, char** argv)
     if (QLCArgs::kioskMode == true && QLCArgs::closeButtonRect.isValid() == true)
         app.createKioskCloseButton(QLCArgs::closeButtonRect);
 
+    /* Web access: the show's own setting (Connections ▸ Show control &
+       sync ▸ Web access), or -w / -wa, which win for the whole session.
+       Nothing listens while neither asks for it. */
+    WebAccessController *webAccess = new WebAccessController(app.doc(), VirtualConsole::instance(),
+                                                             SimpleDesk::instance());
+    QObject::connect(webAccess, SIGNAL(toggleDocMode()),
+            &app, SLOT(slotModeToggle()));
+    QObject::connect(webAccess, SIGNAL(loadProject(QString)),
+            &app, SLOT(slotLoadDocFromMemory(QString)));
+    QObject::connect(webAccess, SIGNAL(storeAutostartProject(QString)),
+            &app, SLOT(slotSaveAutostart(QString)));
+
     if (QLCArgs::enableWebAccess == true)
     {
-        WebAccess *webAccess = new WebAccess(app.doc(), VirtualConsole::instance(), SimpleDesk::instance(),
-                                             QLCArgs::webAccessPort, QLCArgs::enableWebAuth, QLCArgs::webAccessPasswordFile,
-                                             QLCArgs::webAccessBindAddress);
-        if (webAccess->listenPort() == 0)
+        webAccess->setCommandLine(QLCArgs::webAccessPort, QLCArgs::enableWebAuth, QLCArgs::webAccessPasswordFile,
+                                  QLCArgs::webAccessBindAddress);
+        WebAccess *server = webAccess->server();
+        if (server == nullptr)
         {
             fprintf(stderr, "Web access could not start: the address or port is in use, "
                             "or not this computer's.\n");
         }
         else
         {
-            fprintf(stdout, "Web access: %s\n", qPrintable(webAccess->url()));
-            if (webAccess->listenAddress().isLoopback() == false)
+            fprintf(stdout, "Web access: %s\n", qPrintable(server->url()));
+            if (server->listenAddress().isLoopback() == false)
             {
                 fprintf(stderr, "WARNING: web access is reachable from the network (%s).\n",
-                        qPrintable(webAccess->listenAddress().toString()));
+                        qPrintable(server->listenAddress().toString()));
                 if (QLCArgs::enableWebAuth == false)
                     fprintf(stderr, "         Without -wa, other devices can look but not change the show.\n");
             }
             fflush(stdout);
         }
-
-        QObject::connect(webAccess, SIGNAL(toggleDocMode()),
-                &app, SLOT(slotModeToggle()));
-        QObject::connect(webAccess, SIGNAL(loadProject(QString)),
-                &app, SLOT(slotLoadDocFromMemory(QString)));
-        QObject::connect(webAccess, SIGNAL(storeAutostartProject(QString)),
-                &app, SLOT(slotSaveAutostart(QString)));
     }
 
     return qapp.exec();

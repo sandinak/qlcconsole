@@ -929,8 +929,8 @@ shutter".
 ## Web access
 
 qlcconsole can serve its Virtual Console, Simple Desk and Configuration
-pages to a web browser. It is **off** unless the app is started with
-**-w** (or **-wa**):
+pages to a web browser. It is **off** unless the show asks for it (below)
+or the app is started with **-w** (or **-wa**):
 
 ```
 qlcconsole -o show.qlcc -w                        # this computer only
@@ -970,6 +970,36 @@ qlcconsole -o show.qlcc -wa --web-bind 0.0.0.0    # tablets on the network, with
 
 Web access has no encryption (plain http): use it on the show network,
 not on a network shared with the public.
+
+### Web access saved with the show
+
+A show can start web access itself whenever it opens: **Connections ▸
+Devices ▸ Show control &amp; sync ▸ Web access**.
+
+- **Start web access with this show, on port** turns it on, on port
+  **9999** unless you pick another. It starts at once, and from then on
+  every time this show opens. Saved with the show.
+- **Reachable from other devices on the network**: off, a browser on this
+  computer only (as **-w**); on, tablets and phones on any network this
+  computer is on (as **--web-bind 0.0.0.0**).
+- **Users log in**: everyone logs in with an account, as with **-wa**
+  (see *Setting up users* above). Turn it on with the network: without it,
+  other devices can look but change nothing.
+- **Open:** lists the address to type in a browser, one per network when
+  it is reachable from the network. **Status:** says whether it runs —
+  or, in red, that the port is held by another program (another
+  qlcconsole or QLC+, often); pick another port. The show opens either
+  way, and the footer says web access could not start.
+- Opening a show **without** it stops web access; one on another port
+  restarts it there. **File ▸ New** stops it.
+- A show loaded **through the web page** leaves web access running as it
+  is, so whoever loaded it keeps their page.
+- **-w** / **-wa** on the command line win: web access runs as the command
+  line says for the whole session, and the show's setting is used the
+  next time qlcconsole starts without them.
+- Whoever can open the page can run the Virtual Console: with web access
+  reachable from the network, turn on logins. A show saved for QLC+ 4
+  keeps the setting; QLC+ 4 ignores it.
 
 ## Show timeline &amp; MTC follow
 
