@@ -20,7 +20,6 @@
 #ifndef REPORTBUG_TEST_H
 #define REPORTBUG_TEST_H
 
-#include <QTemporaryDir>
 #include <QObject>
 #include <QList>
 #include <QUrl>
@@ -62,7 +61,6 @@ private slots:
     void theMenuItemIsInEveryView();
 
 private:
-    QTemporaryDir m_home;
     Doc *m_doc = nullptr;
     QList<QUrl> m_opened;
 };
