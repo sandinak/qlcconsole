@@ -17,4 +17,4 @@ with GO.
 | 1.4 | [Timing: fades and holds](lesson-04/index.md) | written |
 | 1.5 | [Calling and running the show](lesson-05/index.md), then the [Level 1 check](lesson-05/level-check.md) | written |
 
-See the [course plan](../COURSE_PLAN.md#level-1--basics-5-lessons).
+See the [course plan](https://github.com/sandinak/qlcconsole/blob/main/docs/course/COURSE_PLAN.md#level-1--basics-5-lessons).

@@ -14,7 +14,7 @@ live.
 
 | For | File |
 |---|---|
-| Teacher | [Teacher guide](teacher-guide.md) · [Slides outline](slides.md) · [Level 1 check and rubric](level-check.md) |
+| Teacher | [Teacher guide](https://github.com/sandinak/qlcconsole/blob/main/docs/course/level-1/lesson-05/teacher-guide.md) · [Slides outline](https://github.com/sandinak/qlcconsole/blob/main/docs/course/level-1/lesson-05/slides.md) · [Level 1 check and rubric](level-check.md) |
 | Students | [Handout](handout.md) · [Exit ticket](exit-ticket.md) · [At home](at-home.md) |
 | Show files | [`lesson-1-5-start.qlcc`](../../shows/lesson-1-5-start.qlcc) (nothing to build today, so no finish file) |
 

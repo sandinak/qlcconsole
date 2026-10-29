@@ -13,7 +13,7 @@ light did: its four **qualities** and its four **jobs**.
 
 | For | File |
 |---|---|
-| Teacher | [Teacher guide](teacher-guide.md) · [Slides outline](slides.md) |
+| Teacher | [Teacher guide](https://github.com/sandinak/qlcconsole/blob/main/docs/course/level-0/lesson-01/teacher-guide.md) · [Slides outline](https://github.com/sandinak/qlcconsole/blob/main/docs/course/level-0/lesson-01/slides.md) |
 | Students | [Handout](handout.md) · [Exit ticket](exit-ticket.md) · [At home](at-home.md) |
 | Show files | none (no computers) |
 

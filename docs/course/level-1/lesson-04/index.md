@@ -14,7 +14,7 @@ by itself.
 
 | For | File |
 |---|---|
-| Teacher | [Teacher guide](teacher-guide.md) · [Slides outline](slides.md) |
+| Teacher | [Teacher guide](https://github.com/sandinak/qlcconsole/blob/main/docs/course/level-1/lesson-04/teacher-guide.md) · [Slides outline](https://github.com/sandinak/qlcconsole/blob/main/docs/course/level-1/lesson-04/slides.md) |
 | Students | [Handout](handout.md) · [Exit ticket](exit-ticket.md) · [At home](at-home.md) |
 | Show files | [`lesson-1-4-start.qlcc`](../../shows/lesson-1-4-start.qlcc) · [`lesson-1-4-finish.qlcc`](../../shows/lesson-1-4-finish.qlcc) |
 

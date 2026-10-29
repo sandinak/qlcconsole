@@ -15,7 +15,7 @@ relays, and map what they know from Eos onto the Show Tree. Any time after
 
 | For | File |
 |---|---|
-| Teacher | [Teacher guide](teacher-guide.md) · [Slides outline](slides.md) |
+| Teacher | [Teacher guide](https://github.com/sandinak/qlcconsole/blob/main/docs/course/level-3/lesson-10/teacher-guide.md) · [Slides outline](https://github.com/sandinak/qlcconsole/blob/main/docs/course/level-3/lesson-10/slides.md) |
 | Students | [Handout](handout.md) · [Exit ticket](exit-ticket.md) · [At home](at-home.md) |
 | Show files | [`classroom-eos.asc`](../../shows/classroom-eos.asc) (an Eos USITT ASCII export, made for this lesson) |
 

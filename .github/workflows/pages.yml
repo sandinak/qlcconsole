@@ -31,6 +31,8 @@ jobs:
         with:
           source: ./docs/course
           destination: ./_site
+      # No teacher material on the site, no link that goes nowhere.
+      - run: python3 docs/course/tools/student-pages.py --site _site
       - uses: actions/upload-pages-artifact@v3
 
   deploy:

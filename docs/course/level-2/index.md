@@ -8,5 +8,5 @@ has_children: false
 
 Tracking, palettes, child layers and group sets, effects, moving lights on lines, busking hits, sub-cues.
 
-Not written yet — see the [course plan](../COURSE_PLAN.md#2-levels-and-lessons)
+Not written yet — see the [course plan](https://github.com/sandinak/qlcconsole/blob/main/docs/course/COURSE_PLAN.md#2-levels-and-lessons)
 for its lessons and outcomes.

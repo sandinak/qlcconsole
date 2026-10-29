@@ -14,7 +14,7 @@ practicals.
 
 | For | File |
 |---|---|
-| Teacher | [Teacher guide](teacher-guide.md) · [Slides outline](slides.md) |
+| Teacher | [Teacher guide](https://github.com/sandinak/qlcconsole/blob/main/docs/course/level-3/lesson-03/teacher-guide.md) · [Slides outline](https://github.com/sandinak/qlcconsole/blob/main/docs/course/level-3/lesson-03/slides.md) |
 | Students | [Handout](handout.md) · [Exit ticket](exit-ticket.md) · [At home](at-home.md) |
 | Show files | [`ShowChoir-Classroom.qlcc`](../../shows/ShowChoir-Classroom.qlcc) (nothing to hand in: save your own copy) |
 
