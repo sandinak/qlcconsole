@@ -28457,7 +28457,9 @@ void Monitor_Test::aTurningGoboKeepsTheRigRedrawing()
         painted = v.paintCount();
         for (int i = 0; i < 20; ++i)
             QVERIFY(!v.liveTick());
-        QCoreApplication::processEvents();
+        // Nor from anywhere else: the turning frames left no frame of their
+        // own on the way (a Live-off optics tick fires within 250 ms).
+        QTest::qWait(300);
         QCOMPARE(v.paintCount(), painted);
     }
     delete def;

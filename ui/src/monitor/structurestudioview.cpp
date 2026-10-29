@@ -9741,10 +9741,11 @@ void StructureStudioView::paintEvent(QPaintEvent *)
             m_liveTimer->setInterval(want);
     }
 
-    /* A turning gobo or prism has to be seen turning. The live timer already
-       repaints when it runs; otherwise ask for the next frame here, no faster
-       than frames are being drawn. */
-    const bool liveTicking = m_liveValues && m_liveTimer != nullptr && m_liveTimer->isActive();
+    /* A turning gobo or prism has to be seen turning. With Live on the live
+       tick asks for its next frame (m_opticsAnimating, liveTick()); a second
+       request from here drew a frame of its own on top. Otherwise ask for
+       the next frame here, no faster than frames are being drawn. */
+    const bool liveTicking = m_liveValues && m_liveTimer != nullptr;
     if (m_opticsAnimating && !liveTicking)
         opticsTickLater(int(qBound(40.0, m_frameMs * 1.25, 250.0)));
 }
