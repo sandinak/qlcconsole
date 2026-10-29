@@ -154,7 +154,7 @@ public:
 
 
     /********************************************************************
-     * Line (Kind::Line) -- LINE_TARGET_DESIGN.md
+     * Line (Kind::Line) -- docs/design/LINE_TARGET_DESIGN.md
      ********************************************************************/
 public:
     bool isLine() const { return m_kind == Kind::Line; }

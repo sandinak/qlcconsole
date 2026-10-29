@@ -410,7 +410,7 @@ public:
 public:
     /** Fixtures look @a paletteId does NOT write in this scene: a lower
      *  layer sets that attribute there (a child layer, or two layers that
-     *  overlap -- SHOW_TREE_DESIGN.md §3.5), and this scene's value must
+     *  overlap -- docs/design/SHOW_TREE_DESIGN.md §3.5), and this scene's value must
      *  not show through it (a lower intensity would, by HTP). Honoured
      *  where the fader map is built (write(), under m_valueListMutex), by an
      *  effect (EffectInstance), by an Aim on a line (AimSolver::aimHeads)
@@ -425,7 +425,7 @@ public:
 
     /** What look @a paletteId lays out over when it is ONE formation or ONE
      *  effect with other scenes (a cue-level aim or effect across layers,
-     *  SHOW_TREE_DESIGN.md D10/D17): an Aim on a line numbers its heads
+     *  docs/design/SHOW_TREE_DESIGN.md D10/D17): an Aim on a line numbers its heads
      *  over all of these, an effect lays its cells over all of them; this
      *  scene still writes only its own targets. Empty: its own targets. */
     struct LayoutSpan
@@ -525,7 +525,7 @@ public:
      *  A cue list does this for its cue's members, in the cue's order, when
      *  the cue starts: a member that kept running from the cue before
      *  would otherwise stay under the ones the cue started (a cue that
-     *  mixes, SHOW_TREE_DESIGN.md). DMX thread. */
+     *  mixes, docs/design/SHOW_TREE_DESIGN.md). DMX thread. */
     void raiseFaders(QList<Universe *> ua);
 
 private:

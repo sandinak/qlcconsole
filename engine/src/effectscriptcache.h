@@ -50,7 +50,7 @@ public:
      *  for a folder of RGB Matrix scripts. */
     void addDirectory(const QDir &dir, bool rgb = false);
 
-    /** The open show's own copies of scripts (SHOW_EMBEDDING_DESIGN.md):
+    /** The open show's own copies of scripts (docs/design/SHOW_EMBEDDING_DESIGN.md):
      *  @p effects and @p rgb are searched BEFORE every other folder, so the
      *  show's version is the one used. @p fallbackEffects / @p fallbackRgb
      *  (the show's own folder) are searched after every other, for what this

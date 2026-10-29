@@ -61,7 +61,7 @@ class Doc;
  */
 
 /**
- * The Show Tree tab (SHOW_TREE_DESIGN.md §6): the tree of productions, cue
+ * The Show Tree tab (docs/design/SHOW_TREE_DESIGN.md §6): the tree of productions, cue
  * lists, cues and layers on the left; the selected cue or layer in the
  * middle (a layer as one row per attribute, inherited values greyed with
  * where they come from); the Library on the right (Recent, Pinned, All),
@@ -629,7 +629,7 @@ public:
     QString newHereLabel() const;
 
     /************************************************************************
-     * W3: Show Tree <-> Workbench (WORKFLOW_DESIGN.md §3.4). A cue, look or
+     * W3: Show Tree <-> Workbench (docs/design/WORKFLOW_DESIGN.md §3.4). A cue, look or
      * layer opens in the Workbench, docked in place of the page; ↩ puts
      * the page back with the cue (and layer) selected. (showtreeworkbench.cpp)
      ************************************************************************/

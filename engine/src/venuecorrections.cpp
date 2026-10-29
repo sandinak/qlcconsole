@@ -359,7 +359,7 @@ QByteArray VenueCorrections::toXml() const
     w.setAutoFormattingIndent(1);
     w.writeStartDocument();
     w.writeStartElement(kRoot);
-    /* Version 2 only when a venue owns more than corrections (VENUES.md
+    /* Version 2 only when a venue owns more than corrections (docs/design/VENUES.md
        section 7): a file without is written as it always was. */
     bool owns = false;
     for (const Venue &v : m_venues)
@@ -897,7 +897,7 @@ void VenueCorrections::apply()
 {
     if (!isActive() || m_doc == nullptr || m_doc->monitorProperties() == nullptr)
         return;
-    /* What the room owns first (VENUES.md): its house fixtures, their
+    /* What the room owns first (docs/design/VENUES.md): its house fixtures, their
        places and heads in the groups, its patch, what is not ours. */
     if (Venue *own = activeVenueData())
     {
@@ -1512,7 +1512,7 @@ QString VenueCorrections::startPractice(const QList<quint32> &fids, quint32 seed
         const Venue cur = venue(m_active);
         v.trims = cur.trims;
         v.targets = cur.targets;
-        // The room's own lights stay up for the practice (VENUES.md).
+        // The room's own lights stay up for the practice (docs/design/VENUES.md).
         v.rig = cur.rig;
     }
     m_venues << v;

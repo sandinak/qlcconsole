@@ -7,7 +7,7 @@
   state-provider (context-aware LED states) and connects roleActivated to actions.
   refresh() runs the single generic feedback loop that repaints every board's LEDs
   from the current app state — the "LEDs show what's valid right now" behaviour,
-  for every device at once. See CONTROL_SURFACE_DESIGN.md.
+  for every device at once. See docs/design/CONTROL_SURFACE_DESIGN.md.
 
   Licensed under the Apache License, Version 2.0 (the "License");
 */

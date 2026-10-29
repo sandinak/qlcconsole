@@ -28,7 +28,7 @@ class QLCPalette;
 class FixtureGroup;
 class Fixture;
 
-/* The Programming tab's outline (PROGRAMMING_REDESIGN.md P1). */
+/* The Programming tab's outline (docs/design/PROGRAMMING_REDESIGN.md P1). */
 class ProgrammingOutline_Test final : public QObject
 {
     Q_OBJECT

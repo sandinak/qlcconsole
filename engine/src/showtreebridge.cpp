@@ -40,7 +40,7 @@
 
 using namespace ShowTree;
 
-/* The bridge (WORKFLOW_DESIGN.md §3.5, phase W5): an old QLC+ show into the
+/* The bridge (docs/design/WORKFLOW_DESIGN.md §3.5, phase W5): an old QLC+ show into the
    tree, and back. Nothing here runs on load or on its own -- each piece is
    asked for:
 

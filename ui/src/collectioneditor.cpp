@@ -77,7 +77,7 @@ CollectionEditor::CollectionEditor(QWidget* parent, Collection* fc, Doc* doc)
 
     m_nameEdit->setText(m_collection->name());
 
-    /* What the members' effects keep time with (SPEED_SPREAD_DESIGN.md, S2):
+    /* What the members' effects keep time with (docs/design/SPEED_SPREAD_DESIGN.md, S2):
        handed to each member as it starts; a member's own choice wins. */
     QComboBox *speed = new QComboBox(this);
     speed->setObjectName(QStringLiteral("collectionSpeedMaster"));

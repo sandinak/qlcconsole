@@ -25,7 +25,7 @@
 
 class Doc;
 
-/* W3 (WORKFLOW_DESIGN.md §3.4): a Show Tree cue opened in the Workbench,
+/* W3 (docs/design/WORKFLOW_DESIGN.md §3.4): a Show Tree cue opened in the Workbench,
    docked in the tree -- the TreeCueStack back end, the dock and ↩. */
 class ShowTreeWorkbench_Test final : public QObject
 {

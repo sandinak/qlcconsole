@@ -40,7 +40,7 @@
  */
 
 /**
- * The Cue Runner on the Virtual Console (SHOW_TREE_DESIGN.md §6B, D26; P7):
+ * The Cue Runner on the Virtual Console (docs/design/SHOW_TREE_DESIGN.md §6B, D26; P7):
  * the Run tab's runner, in a widget beside faders, buttons and speed
  * masters -- compact (on now, next, big GO + Sub GO) or list (the whole
  * runner). Each follows a Show Tree cue list, or the current production;

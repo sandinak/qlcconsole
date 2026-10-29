@@ -125,7 +125,7 @@ public:
     bool isExternalClock() const { return m_externalClock; }
 
     /**
-     * Held as sub-cues (SUBCUES_DESIGN.md): this chase plays as a step's
+     * Held as sub-cues (docs/design/SUBCUES_DESIGN.md): this chase plays as a step's
      * sub-cues on a Sub GO. Its holds are not counted (a step changes only on
      * an action), a step change lands at once (the outer chase quantizes Sub
      * GO), and a step index is taken in list order, whatever the run order.
@@ -248,7 +248,7 @@ private:
      *
      * @a handOver: a step change. A step whose function is a Collection is
      * not stopped here but left for leaveSteps(), once the new step is
-     * known (SHOW_TREE_DESIGN.md §4: a Scene two consecutive cues share
+     * known (docs/design/SHOW_TREE_DESIGN.md §4: a Scene two consecutive cues share
      * keeps running across GO). Anything else -- the chaser stopping -- stops
      * everything at once, those left too.
      */

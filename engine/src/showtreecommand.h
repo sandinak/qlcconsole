@@ -36,7 +36,7 @@ class Doc;
  */
 
 /**
- * The Show Tree's optional command line (SHOW_TREE_DESIGN.md §6C, D24):
+ * The Show Tree's optional command line (docs/design/SHOW_TREE_DESIGN.md §6C, D24):
  * a few words for what the mouse does, calling the same
  * ShowTreeController operations. Each command is one undo step; a command
  * that fails part way leaves the tree as it was.

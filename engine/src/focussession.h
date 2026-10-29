@@ -57,7 +57,7 @@ struct FixtureRigProps;
  * back. Saving makes a head's offsets the saved ones; reverting puts them
  * back.
  *
- * It is a TOOL, not an effect (FOCUS_MODE_DESIGN.md): it runs on the main
+ * It is a TOOL, not an effect (docs/design/FOCUS_MODE_DESIGN.md): it runs on the main
  * thread and its writes to the rig are ordinary edits there. It takes its
  * stick from the same path the follow spot does -- ProgrammerController's
  * bound axes, the HID profile's deadzone and sensitivity, its 50 Hz joystick
@@ -90,7 +90,7 @@ public:
     enum Order { ByStagePosition, AsGiven };
 
     /** One focus call, as it is run (FocusCalls makes these from the
-     *  show's): these fixtures, to this target. FOCUS_REFINE_DESIGN.md. */
+     *  show's): these fixtures, to this target. docs/design/FOCUS_REFINE_DESIGN.md. */
     struct Call
     {
         QString name;              ///< "DH Tspots -> DSC", for the panel
@@ -284,7 +284,7 @@ public:
     QList<quint32> scopeFixtures() const;
 
     /*********************************************************************
-     * Telling the operator where they are (FOCUS_REFINE_DESIGN.md s.3)
+     * Telling the operator where they are (docs/design/FOCUS_REFINE_DESIGN.md s.3)
      *********************************************************************/
 public:
     /** What is said on stepping to a call, a fixture or a scope, and for

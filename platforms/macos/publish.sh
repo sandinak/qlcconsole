@@ -2,7 +2,7 @@
 # `make beta` / `make release` / `make attach`: publish qlcconsole to GitHub
 # Releases. Everything here is PUBLIC: a pushed tag and a release page that
 # the in-app updater (ui/src/updatechecker.cpp) offers to every user on that
-# channel. RELEASE.md has the whole process.
+# channel. docs/dev/RELEASE.md has the whole process.
 #
 #   publish.sh beta          GitHub pre-release "Show Tree <VERSION> (beta)"
 #                            (the updater's Pre-release channel)
@@ -269,7 +269,7 @@ else
   ' CHANGELOG.md > "$WORK/changelog.md"
   grep -q '[^[:space:]]' "$WORK/changelog.md" || problems+=("CHANGELOG.md has no (or an empty) '## [$VERSION]' section")
   grep -q "^## \[$VERSION\] - Unreleased" CHANGELOG.md &&
-    echo "  WARNING: CHANGELOG still says '## [$VERSION] - Unreleased' (RELEASE.md step 2: date it)"
+    echo "  WARNING: CHANGELOG still says '## [$VERSION] - Unreleased' (docs/dev/RELEASE.md step 2: date it)"
 fi
 
 if [ -n "${DMG:-}" ]; then
@@ -409,5 +409,5 @@ STAGE=""
 URL="$(gh api "repos/$GH_REPO/releases/$RELEASE_ID" --jq .html_url)"
 echo
 echo "Published $TITLE ($TAG): $URL"
-echo "Next: attach CI's Windows installer and AppImage (RELEASE.md step 5):"
+echo "Next: attach CI's Windows installer and AppImage (docs/dev/RELEASE.md step 5):"
 echo "  make attach FILES=\"dist/qlcconsole-$VERSION-win64-setup.exe dist/qlcconsole-$VERSION-x86_64.AppImage\""

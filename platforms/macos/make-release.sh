@@ -7,7 +7,7 @@
 #   sign-notarize.sh   Developer ID sign, notarize (qlc-notary), staple the
 #                      app; rebuild, sign, notarize and staple the DMG
 #   then               dist/SHA256SUMS for that DMG, and a Gatekeeper check
-#   release-check.sh   the pre-release check of that DMG (RELEASE.md): any
+#   release-check.sh   the pre-release check of that DMG (docs/dev/RELEASE.md): any
 #                      failure fails the build. RELEASE_CHECK=0 skips it;
 #                      RELEASE_CHECK_WAIVE=id,id lets known failures through
 #                      (reported as TODO), RELEASE_CHECK_HOST=<ssh-host> runs
@@ -19,7 +19,7 @@
 # ALLOW_DIRTY=1 builds anyway, for a DMG that is not for release.
 #
 # It tags and publishes nothing; publish.sh does that (make beta / make
-# release, RELEASE.md). PREFLIGHT_ONLY=1 runs only the checks below and
+# release, docs/dev/RELEASE.md). PREFLIGHT_ONLY=1 runs only the checks below and
 # stops: publish.sh uses it before the long test gate.
 set -euo pipefail
 
@@ -47,7 +47,7 @@ fi
 untracked="$(git ls-files --others --exclude-standard -- . ':(exclude)test-workspaces' | head -5)"
 [ -z "$untracked" ] || { echo "Note: untracked files (not in the build unless a glob picks them up):"; echo "$untracked"; }
 security find-identity -v -p codesigning | grep -qF "$SIGN_ID" ||
-  { echo "ERROR: no '$SIGN_ID' signing identity in the keychain (RELEASE.md, prerequisites)."; exit 1; }
+  { echo "ERROR: no '$SIGN_ID' signing identity in the keychain (docs/dev/RELEASE.md, prerequisites)."; exit 1; }
 xcrun notarytool history --keychain-profile "$NOTARY_PROFILE" >/dev/null 2>&1 ||
   { echo "ERROR: notarytool profile '$NOTARY_PROFILE' missing or not working:"
     echo "  xcrun notarytool store-credentials $NOTARY_PROFILE --apple-id <Apple ID> --team-id B4N7HJ7VZ6"; exit 1; }
@@ -100,4 +100,4 @@ echo "Installed:  $APP  (previous: $APP.prev)"
 echo "/Applications/qlcconsole.app is untouched. To update it: quit qlcconsole, then"
 echo "  open \"$DMG\"   and drag qlcconsole onto Applications (Replace), or"
 echo "  rm -rf /Applications/qlcconsole.app && ditto \"$APP\" /Applications/qlcconsole.app"
-echo "Nothing was published. To publish: make beta / make release (RELEASE.md)."
+echo "Nothing was published. To publish: make beta / make release (docs/dev/RELEASE.md)."

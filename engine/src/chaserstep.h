@@ -40,7 +40,7 @@ class ChaserStep final
 {
 public:
     /** How a chase step's own steps -- its sub-cues -- advance
-     *  (SUBCUES_DESIGN.md). Only meaningful when the step's function is a
+     *  (docs/design/SUBCUES_DESIGN.md). Only meaningful when the step's function is a
      *  chase (or a sequence); ignored otherwise. */
     enum SubCueMode
     {
@@ -112,7 +112,7 @@ public:
     /** What the step's function runs on (a SpeedMasters::Assignment):
      *  Inherit (-1, the default) takes the chaser's. */
     int speedMaster = -1;
-    /** The step's cue number for show control ("12.5"; SHOW_CONTROL_DESIGN.md).
+    /** The step's cue number for show control ("12.5"; docs/design/SHOW_CONTROL_DESIGN.md).
      *  Empty: it answers to its position (Chaser::stepCue()). */
     QString cueNumber;
     /** Skipped: GO, Next, Back and auto-follow pass over it; a jump straight

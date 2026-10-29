@@ -146,7 +146,7 @@ public:
      *  isBarOnPipe(). Zero (the historical default) leaves the crossbar's
      *  origin exactly coincident with its parent's own point in Top view --
      *  see MonitorProperties::recomputePipeAnchors() and
-     *  WORKFLOW-SUBTLETIES.md #14. */
+     *  docs/dev/WORKFLOW-SUBTLETIES.md #14. */
     float   crossbarStandoff() const { return m_crossbarStandoff; }
     void    setCrossbarStandoff(float m) { m_crossbarStandoff = m; }
 

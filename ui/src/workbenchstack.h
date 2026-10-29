@@ -39,7 +39,7 @@ class Doc;
 
 /**
  * What the Workbench has loaded: "a stack of things that play together"
- * (WORKFLOW_DESIGN.md §3.4). The Workbench shows every back end the same
+ * (docs/design/WORKFLOW_DESIGN.md §3.4). The Workbench shows every back end the same
  * way -- a header, one row per layer, an editor for the selected row, a
  * live preview -- and asks the back end what is there and to make each
  * edit, one step on the shared history.

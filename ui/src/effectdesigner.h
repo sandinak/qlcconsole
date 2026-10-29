@@ -2,7 +2,7 @@
   Q Light Controller Plus
   effectdesigner.h
 
-  The effect designer (WORKFLOW_DESIGN.md W4): one widget that designs an
+  The effect designer (docs/design/WORKFLOW_DESIGN.md W4): one widget that designs an
   effect for a set of heads -- a Show Tree layer's, or the Try on bench's
   -- at full height: the effect browser (presets, Recent, WLED) beside the
   effect's settings (the Look Editor's: parameters, Spread, speed master,

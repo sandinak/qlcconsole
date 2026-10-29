@@ -1,6 +1,6 @@
 #!/bin/bash
 # Kept so old habits still work: publishing is `make beta` / `make release`
-# (platforms/macos/publish.sh), the one way to publish -- see RELEASE.md.
+# (platforms/macos/publish.sh), the one way to publish -- see docs/dev/RELEASE.md.
 #
 #   ./release.sh                      = make release  (full GitHub release)
 #   PRERELEASE=1 ./release.sh         = make beta     (GitHub pre-release)

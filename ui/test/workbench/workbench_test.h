@@ -28,7 +28,7 @@ class QLCPalette;
 class FixtureGroup;
 class Collection;
 
-/* The Build tab's Workbench (WORKFLOW_DESIGN.md §3.4, W1) with its
+/* The Build tab's Workbench (docs/design/WORKFLOW_DESIGN.md §3.4, W1) with its
    FunctionStack back end. */
 class Workbench_Test final : public QObject
 {

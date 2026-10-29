@@ -46,7 +46,7 @@ class Doc;
 
 /**
  * What Focus mode starts on: which heads, in what order, aimed at what, and
- * what the others do. FOCUS_MODE_DESIGN.md.
+ * what the others do. docs/design/FOCUS_MODE_DESIGN.md.
  */
 class FocusModeSetupDialog final : public QDialog
 {

@@ -479,7 +479,7 @@ void Monitor::initGraphicsView()
     {
         connect(pc->venueCorrections(), &VenueCorrections::correctionsChanged, this, &Monitor::refreshNeedsFocus);
         connect(pc->venueCorrections(), &VenueCorrections::activeVenueChanged, this, &Monitor::refreshNeedsFocus);
-        /* Another venue's house rig came in (VENUES.md): its fixtures on the
+        /* Another venue's house rig came in (docs/design/VENUES.md): its fixtures on the
            plot where that venue has them, the overlay redone. */
         connect(pc->venueCorrections(), &VenueCorrections::activeVenueChanged, this, [this]() {
             if (m_graphicsView == NULL)
@@ -2142,8 +2142,8 @@ void Monitor::initGraphicsToolbar()
     // "More" popup — the secondary view/edit tools, folded off the toolbar to
     // keep it lean. (Most also have shortcuts and/or a right-click equivalent.)
     /* Focus ▾ (board Q148): every focus tool in one drop-down, like
-       Add -- Quick focus (FOCUS_MODE_DESIGN.md), Venue focus and its calls,
-       the venues, practice and the report (FOCUS_REFINE_DESIGN.md). Filled
+       Add -- Quick focus (docs/design/FOCUS_MODE_DESIGN.md), Venue focus and its calls,
+       the venues, practice and the report (docs/design/FOCUS_REFINE_DESIGN.md). Filled
        as it opens, so what cannot be used yet is greyed with the reason. */
     m_focusBtn = new QToolButton(this);
     m_focusBtn->setObjectName(QStringLiteral("focusMenuButton"));
@@ -2667,7 +2667,7 @@ void Monitor::applyMapView(int view)
     }
     else if (view == ViewOwner)
     {
-        /* Who each fixture belongs to (board Q137, VENUES.md): the tour
+        /* Who each fixture belongs to (board Q137, docs/design/VENUES.md): the tour
            package blue, the house rig amber, rentals violet. */
         const QHash<quint32, RigOwner::Owner> owners = RigOwner::effectiveAll(m_doc);
         foreach (Fixture *fx, m_doc->fixtures())
@@ -5479,7 +5479,7 @@ void Monitor::studioAddBar(int kind, quint32 id, StructureStudioView *view, floa
         bar->setRunAngle(0.0f);
         bar->setBaseRadius(0.0f);
         // Clear of the boom's own point in Top view -- see crossbarStandoff()'s
-        // own doc comment and WORKFLOW-SUBTLETIES.md #14.
+        // own doc comment and docs/dev/WORKFLOW-SUBTLETIES.md #14.
         bar->setCrossbarStandoff(0.15f);
         bar->setLayerId(pipe->layerId());
         m_props->recomputeChildTrusses();
@@ -5543,7 +5543,7 @@ void Monitor::studioAddBar(int kind, quint32 id, StructureStudioView *view, floa
         bar->setRunAngle(0.0f);
         bar->setBaseRadius(0.0f);
         // Clear of the boom's own point in Top view -- see crossbarStandoff()'s
-        // own doc comment and WORKFLOW-SUBTLETIES.md #14.
+        // own doc comment and docs/dev/WORKFLOW-SUBTLETIES.md #14.
         bar->setCrossbarStandoff(0.15f);
     }
     m_props->recomputeChildTrusses();
@@ -5675,7 +5675,7 @@ quint32 Monitor::createBarOnTruss(quint32 parentId, float offset)
          * (half + barStandoff)` gets zero X/Y contribution from a Z-only
          * faceN). The bar's line rendered EXACTLY on top of the truss's
          * own line, with no pixel a click could mean "the bar" rather
-         * than "the truss" (WORKFLOW-SUBTLETIES.md #1). FaceDownstage
+         * than "the truss" (docs/dev/WORKFLOW-SUBTLETIES.md #1). FaceDownstage
          * gives a real Y offset instead -- the same face the Vertical
          * case above already relies on for its own separation -- while
          * RunAlong keeps the bar parallel to/under the truss, same as
@@ -5721,7 +5721,7 @@ void Monitor::slotAddBarToPipe(quint32 parentPipeId)
     bar->setRunAngle(0.0f);                        // runs stage-right
     bar->setBaseRadius(0.0f);
     // Clear of the boom's own point in Top view -- see crossbarStandoff()'s
-    // own doc comment and WORKFLOW-SUBTLETIES.md #14.
+    // own doc comment and docs/dev/WORKFLOW-SUBTLETIES.md #14.
     bar->setCrossbarStandoff(0.15f);
     bar->setColor(parent->color());
     bar->setLayerId(parent->layerId());
@@ -7952,7 +7952,7 @@ void Monitor::slotEditPipe(quint32 bid)
         // Sideways clearance from the boom's own point in Top view (the
         // Pipe analogue of a Truss bar's "standoff" field) -- without it, a
         // crossbar renders exactly on top of its own boom with no way to
-        // tell them apart (WORKFLOW-SUBTLETIES.md #14).
+        // tell them apart (docs/dev/WORKFLOW-SUBTLETIES.md #14).
         crossbarStandoffSpin = mkSpin(b->crossbarStandoff(), 0.0, isFeet ? 6.6 : 2.0);
         crossbarStandoffSpin->setToolTip(tr("How far this crossbar sits clear of its own "
                                             "boom in the plan view. 0 puts it exactly on "

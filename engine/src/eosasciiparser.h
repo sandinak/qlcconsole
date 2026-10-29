@@ -222,7 +222,7 @@ public:
  * old and ETC keeps extending it. A cue's parts are flattened into the cue,
  * with a warning.
  *
- * See EOS_IMPORT_DESIGN.md § "USITT ASCII — what to parse".
+ * See docs/design/EOS_IMPORT_DESIGN.md § "USITT ASCII — what to parse".
  */
 class EosAsciiParser final
 {

@@ -40,7 +40,7 @@ class Doc;
 /**
  * A wireless DMX receiver: a physically separate box from its transmitting
  * NetworkNode, at its own rig position. Only meaningful on a port belonging
- * to a node with transport == WirelessDMX — see NETWORK_CABLING_DESIGN.md's
+ * to a node with transport == WirelessDMX — see docs/design/NETWORK_CABLING_DESIGN.md's
  * "Wireless DMX" section for why the receiver needs a position distinct from
  * the transmitter's (e.g. a transmitter at FOH relaying to a receiver
  * actually mounted in the rig).
@@ -144,7 +144,7 @@ struct NetworkRun
 /**
  * Per-document physical network/cabling model: a set of nodes, each with
  * ports, each port carrying a universe. Owned by Doc and serialized into the
- * workspace. Derivation-first (see NETWORK_CABLING_DESIGN.md): which
+ * workspace. Derivation-first (see docs/design/NETWORK_CABLING_DESIGN.md): which
  * fixtures are on a port, run polylines and port loading are computed from
  * this plus Doc::fixtures() wherever they're needed, never stored here.
  */

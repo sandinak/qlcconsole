@@ -396,7 +396,7 @@ void VenueRig::putFixture(HouseFixture &hf, QMap<quint32, quint32> &remap, const
         return;
     }
     /* Any clash the check lists for it -- channels the venue keeps, or a
-       Tour slot -- puts it in unpatched, as an overlap does (VENUES.md
+       Tour slot -- puts it in unpatched, as an overlap does (docs/design/VENUES.md
        section 6, board Q138): the clash check still lists it, at the
        address it asked for. */
     if (clashesOnPut(fx, d) || !m_doc->addFixture(fx, id, fx->crossUniverse()))
@@ -404,7 +404,7 @@ void VenueRig::putFixture(HouseFixture &hf, QMap<quint32, quint32> &remap, const
         /* It wants channels a show fixture holds (or the room's, or the
            tour's slot): in, unpatched, keeping the address it asked for --
            as a fixture clashing on load does -- so it never drives the
-           tour's channels (VENUES.md section 6). */
+           tour's channels (docs/design/VENUES.md section 6). */
         fx->setPatched(false);
         fx->setAddressClash(true);
         if (!m_doc->addFixture(fx, id, fx->crossUniverse()))

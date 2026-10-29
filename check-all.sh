@@ -237,6 +237,15 @@ if ! GUARD_OUT=$("$REPO/platforms/linux/check-test-guard.sh" --self-test 2>&1 \
     exit 1
 fi
 
+# No relative link in a Markdown file (docs, README, the help, the course)
+# may point at a file that isn't there.
+if ! LINKS_OUT=$(python3 "$REPO/tools/check-doc-links.py" "$REPO" 2>&1); then
+    echo >&2 "$LINKS_OUT"
+    { echo "gate=1 host=$GATE_HOST qt=$QT_VERSION rev=$GATE_REV"
+      echo "tools/check-doc-links.py failed: a dead link in the docs. Nothing built or tested."; } | tee "$LOGS/summary.txt"
+    exit 1
+fi
+
 echo "Gate in $REPO on $GATE_HOST: $JOBS cores, Qt $QT_VERSION at $QT6, $CCACHE_STATE; logs in $LOGS"
 
 #############################################################################

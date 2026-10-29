@@ -238,7 +238,7 @@ FixtureManager::FixtureManager(QWidget* parent, Doc* doc)
     connect(m_doc, SIGNAL(loaded()),
             this, SLOT(slotDocLoaded()));
 
-    // Another venue's house rig came in, or went (VENUES.md): the tree follows.
+    // Another venue's house rig came in, or went (docs/design/VENUES.md): the tree follows.
     if (m_doc->programmer() != NULL)
         connect(m_doc->programmer()->venueCorrections(), &VenueCorrections::activeVenueChanged, this,
                 [this]() { updateView(); });

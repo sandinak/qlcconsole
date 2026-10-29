@@ -136,7 +136,7 @@ ChaserEditor::ChaserEditor(QWidget* parent, Chaser* chaser, Doc* doc, bool liveM
     /* A note opens up while it's typed in; elided, all of it in the tooltip */
     m_tree->setItemDelegateForColumn(COL_NOTES, new NoteDelegate(this));
 
-    /* Speed masters (SPEED_SPREAD_DESIGN.md, S2): the chase's, for every
+    /* Speed masters (docs/design/SPEED_SPREAD_DESIGN.md, S2): the chase's, for every
        step, and a step's own where it differs. */
     m_tree->setColumnCount(COL_SPEED + 1);
     m_tree->headerItem()->setText(COL_SPEED, tr("Speed"));
@@ -154,7 +154,7 @@ ChaserEditor::ChaserEditor(QWidget* parent, Chaser* chaser, Doc* doc, bool liveM
     horizontalLayout->addWidget(new QLabel(tr("Speed:"), this));
     horizontalLayout->addWidget(chaseSpeed);
 
-    /* When a GO lands (PLAYBACK_TIMING_DESIGN.md, P1): at once, or on the
+    /* When a GO lands (docs/design/PLAYBACK_TIMING_DESIGN.md, P1): at once, or on the
        next beat or bar of the chase's clock -- its speed master, else the
        main beat. */
     QComboBox *goLands = new QComboBox(this);
@@ -172,7 +172,7 @@ ChaserEditor::ChaserEditor(QWidget* parent, Chaser* chaser, Doc* doc, bool liveM
     });
     horizontalLayout->addWidget(goLands);
 
-    /* Show control (SHOW_CONTROL_DESIGN.md): each step's cue number, this
+    /* Show control (docs/design/SHOW_CONTROL_DESIGN.md): each step's cue number, this
        chase's cue-list number, and whether it's the show's main cue list --
        what QLab's MSC or OSC GO finds. */
     m_tree->setColumnCount(COL_CUE + 1);
@@ -182,7 +182,7 @@ ChaserEditor::ChaserEditor(QWidget* parent, Chaser* chaser, Doc* doc, bool liveM
                                                  "step's position."));
     m_tree->header()->moveSection(m_tree->header()->visualIndex(COL_CUE), 1);
 
-    /* Sub-cues (SUBCUES_DESIGN.md): a chase step lists its chase's steps
+    /* Sub-cues (docs/design/SUBCUES_DESIGN.md): a chase step lists its chase's steps
        under it (4.1, 4.2...), read-only, and says how they advance. */
     m_tree->setColumnCount(COL_SUBCUES + 1);
     m_tree->headerItem()->setText(COL_SUBCUES, tr("Sub-cues"));

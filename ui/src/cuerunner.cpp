@@ -468,7 +468,7 @@ void CueRunner::buildFullLayout()
     m_timecode->setToolTip(tr("The timecode the current production follows (its source, else the show's)"));
     head->addWidget(m_timecode);
     /* Pre-show: Venue focus -- the show's focus calls on the controller,
-       corrections saved for this venue (FOCUS_REFINE_DESIGN.md). Greyed,
+       corrections saved for this venue (docs/design/FOCUS_REFINE_DESIGN.md). Greyed,
        with why, while there is nothing to focus (board Q146). */
     m_focusCallsBtn = new QToolButton(this);
     m_focusCallsBtn->setObjectName(QStringLiteral("crFocusCalls"));
@@ -526,7 +526,7 @@ void CueRunner::buildFullLayout()
     m_now->setFont(hf);
     m_now->setWordWrap(true);
     v->addWidget(m_now);
-    /* A focus-call cue armed (FOCUS_REFINE_DESIGN.md section 7): waiting for
+    /* A focus-call cue armed (docs/design/FOCUS_REFINE_DESIGN.md section 7): waiting for
        the controller's Start; this button, or Cmd+Return, does the same. */
     {
         m_focusArmed = new QWidget(this);

@@ -38,7 +38,7 @@ class Doc;
  */
 
 /**
- * The show's focus calls, and starting them (FOCUS_REFINE_DESIGN.md
+ * The show's focus calls, and starting them (docs/design/FOCUS_REFINE_DESIGN.md
  * section 4): the calls in the order they are run -- each some fixture
  * groups and the point they focus to, with a note for the crew -- and the
  * venue the corrections are saved for. Start runs them in Focus mode.
@@ -116,7 +116,7 @@ public:
     /** Ask where, then writeReport(). */
     static void exportReport(Doc *doc, QWidget *parent, const QString &venue);
 
-    /** Scramble practice (FOCUS_REFINE_DESIGN.md section 13): store the
+    /** Scramble practice (docs/design/FOCUS_REFINE_DESIGN.md section 13): store the
      *  calls, then make and apply a practice venue -- every moving head in
      *  them put off by @p minDeg..@p maxDeg each way -- leaving the real
      *  venues as they are. Start then runs the calls on it. False, with

@@ -222,7 +222,7 @@ namespace AppUtil
      *  updateFixtureReadiness(). */
     void updateLoadProblems(const QString &errorLog);
 
-    /** The footer's word on what the show carries (SHOW_EMBEDDING_DESIGN.md):
+    /** The footer's word on what the show carries (docs/design/SHOW_EMBEDDING_DESIGN.md):
      *  "embedded.showonly" -- definitions and scripts only the show has, in
      *  use from it (information, Install on this computer); "embedded.differ"
      *  -- ones that differ from this computer's, the show's in use (a

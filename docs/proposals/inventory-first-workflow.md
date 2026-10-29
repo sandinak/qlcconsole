@@ -247,7 +247,7 @@ make the outcome correct regardless.
 
 A second persisted attribute rides alongside `isPatched`: `Fixture::connection`
 (`Dmx` default / `Network`) plus an optional `ipAddress`, specified in
-[NETWORK_CABLING_DESIGN.md](../../NETWORK_CABLING_DESIGN.md#fixture-connection-dmx-vs-network-supersedes-direct).
+[NETWORK_CABLING_DESIGN.md](../design/NETWORK_CABLING_DESIGN.md#fixture-connection-dmx-vs-network-supersedes-direct).
 It matters here because the Inventory and the Patch step both branch on it:
 
 - **Add to Inventory** asks for the connection (and IP for network fixtures)

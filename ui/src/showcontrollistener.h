@@ -34,7 +34,7 @@ class Doc;
  * Show control's way in from the network and the settings: listens for OSC
  * on a UDP port of its own and hands each datagram to the show's
  * ShowControl; applies the MSC settings to it; keeps the last command that
- * arrived, so a QLab hookup can be checked (SHOW_CONTROL_DESIGN.md).
+ * arrived, so a QLab hookup can be checked (docs/design/SHOW_CONTROL_DESIGN.md).
  * The engine doesn't link Qt Network, so this lives in the UI.
  */
 class ShowControlListener final : public QObject

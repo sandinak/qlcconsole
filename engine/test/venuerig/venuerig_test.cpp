@@ -1065,7 +1065,7 @@ void VenueRig_Test::aPracticeKeepsTheHouseRig()
 }
 
 /****************************************************************************
- * Not ours on every output path (VENUES.md section 5)
+ * Not ours on every output path (docs/design/VENUES.md section 5)
  ****************************************************************************/
 
 /* Not ours is zero in every frame we send (CHANGELOG "House rig, tour
@@ -1247,7 +1247,7 @@ void VenueRig_Test::patchingOntoNotOursIsRefusedEveryWay()
    sidecar's venue applied again, says what clashes -- an overlap, a tour
    fixture on channels the venue keeps, a fixture in the other's slot -- and
    a house fixture that clashes goes in unpatched, whatever the clash
-   (VENUES.md section 6, Q138): overlapping a tour one, on channels the
+   (docs/design/VENUES.md section 6, Q138): overlapping a tour one, on channels the
    venue keeps, or in a Tour slot. A tour fixture that clashes stays as the
    show has it (nothing is sent on not-ours channels anyway). */
 void VenueRig_Test::theClashCheckRunsOnOpen()
@@ -1354,7 +1354,7 @@ void VenueRig_Test::theClashCheckRunsOnOpen()
     }
 }
 
-/* A sidecar from a newer build (VENUES.md section 7: the version goes up
+/* A sidecar from a newer build (docs/design/VENUES.md section 7: the version goes up
    only when a venue owns more) is read for what this build knows: version
    3, unknown elements between and inside the venues, inside <House> and
    <Practice>, unknown attributes -- every correction, trim, target, check,
@@ -1504,7 +1504,7 @@ void VenueRig_Test::aSidecarFromANewerBuildStillLoads()
     QCOMPARE(withoutKept(QString::fromUtf8(again.toXml())), QString::fromUtf8(reference.toXml()));
 }
 
-/* Scramble practice (FOCUS_REFINE_DESIGN.md section 13) moves the lights in
+/* Scramble practice (docs/design/FOCUS_REFINE_DESIGN.md section 13) moves the lights in
    a practice venue only: the show file keeps the real calibration -- while
    the scramble is on, after the student saves, after the show is saved --
    and the real venue's section of the sidecar is never touched. */

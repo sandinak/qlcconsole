@@ -48,7 +48,7 @@ class Doc;
  */
 
 /**
- * The Workbench (WORKFLOW_DESIGN.md §3.4): one editor for "a stack of
+ * The Workbench (docs/design/WORKFLOW_DESIGN.md §3.4): one editor for "a stack of
  * things that play together". It loads a scene, a collection, a chaser or
  * any other function -- W3 adds a Show Tree cue -- and shows it the same
  * way every time:
@@ -133,7 +133,7 @@ public:
 public:
     /** The scene the editor pane edits: the selected layer's (the loaded
      *  scene's), invalid if none. */
-    /** Refine on the controller what is loaded (FOCUS_REFINE_DESIGN.md 6B):
+    /** Refine on the controller what is loaded (docs/design/FOCUS_REFINE_DESIGN.md 6B):
      *  a Show Tree cue from its selected layer, else the stack's scenes from
      *  @p sceneId (invalid: the current one), on group @p groupId or fixture
      *  @p fixtureId when given. False when there is nothing to refine. */

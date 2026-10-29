@@ -2,7 +2,7 @@
   Q Light Controller Plus
   programmingmanager.h
 
-  Fork-owned top-level "Build" tab (WORKFLOW_DESIGN.md §3.3; it was
+  Fork-owned top-level "Build" tab (docs/design/WORKFLOW_DESIGN.md §3.3; it was
   "Programming"): it makes the show's vocabulary -- palettes, effects,
   scenes, collections.
     - left:   the navigator, by section (Palettes | Effects | Scenes): the

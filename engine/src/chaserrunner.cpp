@@ -1084,7 +1084,7 @@ void ChaserRunner::startNewStep(int index, MasterTimer *timer, qreal mIntensity,
     func->setInheritedSpeedMaster(step.speedMaster != SpeedMasters::Inherit
                                   ? step.speedMaster : m_chaser->effectiveSpeedMaster());
 
-    /* A chase step held as sub-cues (SUBCUES_DESIGN.md): the inner chase
+    /* A chase step held as sub-cues (docs/design/SUBCUES_DESIGN.md): the inner chase
        starts on its first playable step and holds there until a Sub GO.
        Its fades are its own steps', not this step's. */
     uint fadeIn = newStep->m_fadeIn, fadeOut = newStep->m_fadeOut;
@@ -1293,7 +1293,7 @@ bool ChaserRunner::write(MasterTimer *timer, QList<Universe *> universes)
     if (m_chaser->stepsCount() == 0)
         return false;
 
-    /* GO on the beat (PLAYBACK_TIMING_DESIGN.md, P1): a step change waits for
+    /* GO on the beat (docs/design/PLAYBACK_TIMING_DESIGN.md, P1): a step change waits for
        the next whole beat or bar of the chaser's clock. The chase carries on
        as it is meanwhile; a second GO in the same beat replaces the first
        rather than adding a step. Never for a show-driven chaser -- the
@@ -1371,7 +1371,7 @@ bool ChaserRunner::write(MasterTimer *timer, QList<Universe *> universes)
     quint32 prevStepRoundElapsed = 0;
 
     /* A beat: the main clock's -- or, for a chase on a speed master, that
-       master's (SPEED_SPREAD_DESIGN.md, S2), so the chase follows its tap
+       master's (docs/design/SPEED_SPREAD_DESIGN.md, S2), so the chase follows its tap
        and rate and holds while it is paused. */
     bool beat = false;
     if (m_chaser->tempoType() == Function::Beats)

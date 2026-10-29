@@ -40,7 +40,7 @@ class Doc;
  */
 
 /**
- * What a venue owns (board Q137/Q138, VENUES.md): its house rig -- the
+ * What a venue owns (board Q137/Q138, docs/design/VENUES.md): its house rig -- the
  * room's own fixtures, their place on the plot, and which of them fill the
  * show's groups -- the output patch of every slot in this room, and the
  * universes or address ranges the room keeps for itself ("not ours").
@@ -202,7 +202,7 @@ public:
     static bool parseRange(const QString &text, int &from, int &to);
 
     /*********************************************************************
-     * The clash check (VENUES.md section 6)
+     * The clash check (docs/design/VENUES.md section 6)
      *********************************************************************/
 public:
     struct Clash

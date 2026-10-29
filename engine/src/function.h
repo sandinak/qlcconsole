@@ -1045,7 +1045,7 @@ public:
      *  before starting the child and postRun() drops it. */
     void setInheritedSpeedMaster(int assignment) { m_inheritedSpeedMaster = assignment; }
     /** What it actually runs on: its own setting, else the inherited one --
-     *  the innermost explicit choice wins (SPEED_SPREAD_DESIGN.md, S2). */
+     *  the innermost explicit choice wins (docs/design/SPEED_SPREAD_DESIGN.md, S2). */
     int effectiveSpeedMaster() const;
 
 private:

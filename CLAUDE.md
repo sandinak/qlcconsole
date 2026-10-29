@@ -3,7 +3,7 @@
 Guidance for working in this repo. This is a **fork of QLC+** (Q Light
 Controller Plus), forked at 4.14.2 and **based on QLC+ 4.14.4** since 0.3.1
 (upstream fixes are taken in each release and logged in
-[docs/UPSTREAM.md](docs/UPSTREAM.md)) — the Qt6 **widgets** desktop UI, not the QML UI. The fork adds
+[docs/dev/UPSTREAM.md](docs/dev/UPSTREAM.md)) — the Qt6 **widgets** desktop UI, not the QML UI. The fork adds
 a *programmer-mode* workflow and a dedicated **Build** tab (was Programming) for building
 scenes/"looks".
 
@@ -76,8 +76,8 @@ Settings → Actions → General rather than assuming the workflow is wrong.
 
 There is a second machine, **`ender`** (SSH, 14-core Mac, Qt6 only, repo at
 `~/git/qlcconsole`), on the `172.18.2.0/24` show VLAN via `vlan0`. It's the
-only place DMX output can be verified on real network hardware — see DONE.md
-2026-08-25 for the soak/throughput harnesses. Note `cmake` isn't on the
+only place DMX output can be verified on real network hardware — see
+docs/project/DONE.md 2026-08-25 for the soak/throughput harnesses. Note `cmake` isn't on the
 non-interactive `PATH` there; prefix with `export PATH=/opt/homebrew/bin:$PATH`.
 
 ```sh
@@ -112,7 +112,7 @@ build/main/qlcconsole -o test-workspaces/surfacetesting.qxw
   a GitHub pre-release ("Show Tree X (beta)") or full release, DMG +
   SHA256SUMS verified by download; `attach` adds CI's files. Never run them
   unasked; `DRYRUN=1` is safe, `DRAFT=1` leaves a non-public draft. REST
-  only (`gh api`), not `gh release` (GraphQL limits). See RELEASE.md.
+  only (`gh api`), not `gh release` (GraphQL limits). See docs/dev/RELEASE.md.
 
 - App binary: `build/main/qlcconsole` (arm64 Mach-O; renamed from `qlcplus` in
   the qlcconsole rebrand — launcher/fixtureeditor binaries are
@@ -145,7 +145,7 @@ QLC+ splits into an **engine** (no UI) and a Qt widgets **ui** layer.
   was "Programming"; the class kept its name): the navigator by section
   (Palettes | Effects | Scenes, groups & fixtures under each) and the
   toolbar. Build ▸ Scenes is `ui/src/programmingoutline.{h,cpp}` in
-  Navigator mode (WORKFLOW_DESIGN.md §3.3).
+  Navigator mode (docs/design/WORKFLOW_DESIGN.md §3.3).
 - **`ui/src/workbench.{h,cpp}`, `ui/src/workbenchstack.{h,cpp}`** — the
   Workbench: a self-contained widget (header, layer rows = the outline in
   Stack mode, + Scene / + EFX / + RGB Matrix, editor pane with the Look
@@ -171,11 +171,32 @@ QLC+ splits into an **engine** (no UI) and a Qt widgets **ui** layer.
 - Engine code touched by live preview must be thread-safe: `Scene::write`
   fader-map build is guarded with `m_valueListMutex` (race vs `resetRuntime`).
 
+## Direction
+
+[docs/project/STRATEGY.md](docs/project/STRATEGY.md) (adopted 2026-10-28)
+says what qlcconsole is, the roadmap (0.3.1 polish and the classroom, 0.4
+run the show, 0.5 the show explains itself) and the guardrails every change
+follows:
+
+- A feature attaches to an existing model (Show Tree, Build/Workbench,
+  venues, focus calls, Show Status, controller schemes); a new top-level
+  model, tab or playback path needs an explicit yes.
+- It ships with help, a course note where it applies, tests in the gate and
+  a CHANGELOG line; a candidate gets an ROI line before it's built.
+- The menu-item count stays flat or falls; upstream intake is logged in
+  [docs/dev/UPSTREAM.md](docs/dev/UPSTREAM.md); the full gate holds to its
+  time budget (about 15 min; a new test over 10 s needs a reason).
+- **Not built:** Ableton Link, NDI/pixel mapping, an audio engine, OSCQuery,
+  multi-user editing, QLC+ 5 parity work, relative/multiply layers.
+- Never call QLC+ 4.x abandoned: it is in maintenance upstream.
+
 ## TODO / status
 
-`TODO.md` tracks programming-tab / programmer work — Done items at the bottom,
-active work at the top. Update it as features land (commits often say
-"TODO: … done").
+Project tracking lives in `docs/project/`: `TODO.md` (active work at the
+top, Done at the bottom), `DONE.md` (the detailed log), `STRATEGY.md`.
+Update TODO.md as features land (commits often say "TODO: … done"). Design
+notes are in `docs/design/`, developer docs (RELEASE, TEST_MAP,
+TEST_MATRIX, UPSTREAM) in `docs/dev/`, fork-only dev scripts in `tools/`.
 
 ## Memory
 

@@ -126,7 +126,7 @@ public:
  * into the live Doc. EosImporter DOES NOT touch the live Doc -- it only
  * produces the scratch Doc.
  *
- * What the scratch Doc holds (see EOS_IMPORT_DESIGN.md):
+ * What the scratch Doc holds (see docs/design/EOS_IMPORT_DESIGN.md):
  *   - a fixture per patched Eos channel (ID = the channel number), its
  *     definition from EosFixtureMapper; an unaddressed channel is staged
  *     in the inventory;

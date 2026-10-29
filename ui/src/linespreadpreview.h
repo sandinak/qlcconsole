@@ -32,7 +32,7 @@ class QLCPalette;
  */
 
 /**
- * Where an Aim look on a line target puts its lights (LINE_TARGET_DESIGN.md):
+ * Where an Aim look on a line target puts its lights (docs/design/LINE_TARGET_DESIGN.md):
  * the line end to end, and each light as a numbered dot -- 1 is the light
  * nearest the line's start -- at its place along it for the look's Spread,
  * Group and Cross. Lights sharing a point stack. With no scene to say which

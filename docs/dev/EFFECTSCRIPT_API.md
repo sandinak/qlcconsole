@@ -1,0 +1,474 @@
+# Generator API Reference
+
+A guide for writing **Generators** for this QLC+ fork — enough detail to
+author new ones (including for an AI). Generators are small JavaScript files
+that compute live DMX output for a scene, frame by frame. They are the
+**single effect engine** for the Effect/looks workflow (the native C++ effects
+were retired); a followspot, a colour chase, a position→intensity mapper are
+all just Generators.
+
+**Vocabulary:** a **Generator** is a `.js` file (the algorithm). An **Effect**
+is a named configuration (Generator + pinned params) stored as a `.json` preset.
+A **Look** is an assembled scene with colour/dimmer/Effect palettes stacked in
+precedence order.
+
+See `docs/design/POSITION_ARCH.md` for the position/followspot architecture that several of
+these concepts (targets, convergence, followMode) come from.
+
+---
+
+## 1. Where Generators live & how they run
+
+- **Location:** `resources/effectscripts/*.js`. On macOS the build copies them to
+  `<build>/Resources/EffectScripts/` (the app reads `applicationDirPath()/../Resources/EffectScripts`).
+  A user override dir also exists: `~/Library/Application Support/QLC+/EffectScripts`.
+- **Loaded by:** `EffectScript` (`engine/src/effectscript.{h,cpp}`) parses and
+  validates one file. `EffectScriptCache` scans the dirs. `EffectScriptRunner`
+  ticks every live instance; `EffectInstance` builds the per-tick arguments and
+  converts the returned intents to DMX.
+- **When:** an instance exists for each **Effect palette** attached to a
+  **running scene**. Scenes run in **both Edit (preview) and Operate** modes, so
+  Generators tick in both. Tick rate is ~**50 Hz**.
+- **Output priority:** Generator output is written through a GenericFader at
+  `Universe::Override`, so it **layers on top of** the scene's own palettes and
+  reliably wins LTP channels (pan/tilt). HTP channels (intensity) still max.
+- **Editing a Generator:** re-run `cmake --build build` to refresh the copied file,
+  then relaunch (Generators are loaded at startup).
+
+---
+
+## 2. Generator shape
+
+A Generator is a `.js` file returning one `effect` manifest object:
+
+```js
+(function() {
+    var effect = new Object;
+    effect.apiVersion  = 1;
+    effect.name        = "My Effect";        // shown in the effect picker
+    effect.description = "One-line tooltip";
+    effect.notes       = "Longer help text shown in the look editor panel";
+    effect.author      = "Your name";
+
+    // ... manifest (sections 3) ...
+
+    effect.tick = function(fixtures, inputs, palettes, params, state, data) {
+        return fixtures.map(function(f) {
+            return { /* intent — section 6 */ };
+        });
+    };
+
+    return effect;
+})()
+```
+
+The file must be a **pure expression** evaluating to the effect object (note the
+trailing `()` with no semicolon issues). Standard JS is available; there is **no**
+`require`, DOM, filesystem, or wall-clock — see Design Tenets (section 8).
+
+---
+
+## 3. Manifest fields
+
+All manifest fields are optional except `name` and `tick`. Declaring a field is
+how it shows up in the look editor and how the host knows what to inject.
+
+| Field | Type | Purpose |
+|---|---|---|
+| `apiVersion` | int | API version (current: `1`). |
+| `version` | int | Generator content version (default `1`). Bump when you change params/behaviour so Effects (presets) authored against an older version can be reasoned about. |
+| `name` | string | Display name in the effect picker. |
+| `hostSpread` | string | The script takes the **host's spread** (the look editor's Spread row): when `inputs._spread` is true it reads each fixture's `phase` instead of working out its own offset. The value names the script's own params the host spread stands in for, comma-separated (`"spread,reverse"`); the look editor hides them while it's on. `""` if it has none. |
+| `description` | string | One-line tooltip. |
+| `notes` | string | Long help shown in the editor panel. |
+| `author` | string | Credit. |
+| `fixtureTypes` | string[] | Capability tags the effect targets: `"moving"`/`"mover"`/`"pantilt"`, `"rgb"`/`"rgbw"`/`"color"`, `"dimmer"`, `"shutter"`, `"colorwheel"`. The host **filters** the scene's fixtures to those matching at least one tag. Empty/omitted = all fixtures. `"matrix"` matches no fixture by itself: it files the effect under the browser's **Matrix** tab (give it beside the real tags, `["matrix", "rgb", "dimmer"]`). |
+| `requires` | string[] | Helper libraries from `effectscripts/lib/` evaluated before the script: `"wled"` (the WLED ports' segment and maths) and `"matrix"` (`lib/matrix.js`: the canvas, each head's place on it or in its own box, the shared white-pixel setting, repeatable hash/noise and the beat clock — the matrix effects are built on it; `MATRIX.scoped(cv, fixtures, inputs, params, state, MATRIX.cycle(...), draw)` gives an effect the three scopes, Whole canvas / Each box / Each box staggered, from `MATRIX.SCOPES` and `MATRIX.staggerParams()`). |
+| `dataChannels` | string[] | Real-time host data channels to subscribe to (e.g. `["joystick"]`). Arrive as `data.<name>` each tick. |
+| `inputs` | InputDef[] | Named 0..1 control slots (joystick axis, MIDI CC, OSC…). |
+| `palettes` | PaletteDef[] | Named palette references the host resolves and injects as `palettes.<name>`. |
+| `targets` | TargetDef[] | Named stage-target references; host injects per-fixture aim as `fixture.aimAt[name]`. (Followspot no longer uses this — it reads the scene's look implicitly via `fixture.sceneTarget`.) |
+| `parameters` | ParamDef[] | User-editable params shown in the look editor. |
+
+```js
+effect.inputs = [
+    { name: "x", description: "Pan axis",  defaultValue: 0.5 },  // 0..1, default 0.5
+    { name: "y", description: "Tilt axis", defaultValue: 0.5 }
+];
+
+effect.palettes = [
+    { name: "color",  type: "Color",  optional: true },   // type = a QLCPalette type
+    { name: "dimmer", type: "Dimmer", optional: true }
+];
+
+effect.targets = [
+    { name: "center", description: "Aim point", optional: true }
+];
+
+effect.parameters = [
+    { name: "speed", description: "Scale", min: 0.1, max: 3.0, defaultValue: 1.0 },
+    // 'values' present → integer-index dropdown:
+    { name: "mode",  description: "Mode",  defaultValue: 0, values: ["A", "B", "C"] },
+    // type:"path" → XY drawn-path widget; value is a JSON array [[x,y],...] of 0..1 pairs:
+    { name: "path",  description: "Movement path", type: "path" },
+    // type:"direction" → compass widget; value is a screen bearing in DEGREES
+    // (0 = left→right, 90 = top→bottom, …) that previews the look's colours.
+    // Project floor positions with px = pos.x, py = -pos.y (stage +y is upstage
+    // = screen up) so it reads WYSIWYG against the 2D Monitor:
+    { name: "angle", description: "Gradient direction", type: "direction", min: 0, max: 360, defaultValue: 0 },
+    // type:"text" → a text box in the look editor; the value is a string, and
+    // a string defaultValue is what the box (and params.<name>) start with:
+    { name: "text", description: "The words to show", type: "text", defaultValue: "HELLO" },
+    // type:"image" → Choose…/Clear in the look editor; the picture (a still or an
+    // animated GIF, up to 2 MB) is kept IN the look as a data URI and arrives
+    // decoded (see params below):
+    { name: "image", description: "The picture or GIF", type: "image" },
+    // 'aliases' = former names for this param. A stored value under an old name
+    // maps to this one, so renaming a param doesn't break saved looks/Effects:
+    { name: "rate", description: "Cycles/sec", aliases: ["speed"], min: 0, max: 20, defaultValue: 1 }
+];
+
+effect.dataChannels = ["joystick"];
+```
+
+---
+
+## 4. The tick function
+
+```js
+effect.tick = function(fixtures, inputs, palettes, params, state, data) { ... }
+```
+
+Called every ~50 Hz tick while the scene runs. It is a **pure function** of its
+arguments (sections 5) and **returns an array of intents** (section 6), **one
+entry per fixture, in the same order as `fixtures[]`**.
+
+---
+
+## 5. Arguments
+
+### `fixtures` — array of fixture descriptors
+
+One object per (filtered) fixture in the scene. Fields:
+
+| Field | Type | Notes |
+|---|---|---|
+| `id` | int | Fixture id. |
+| `head` | int | Head index (0 = single-head). |
+| `name` | string | The fixture's name, for a script that works by how a rig is named ("DS1 #3", "CS2t1" — see `step-test-pattern.js`). |
+| `heads` | int | How many heads the fixture has (a 64-pixel strip: 64), so a pixel script knows a strip's length. |
+| `panRange` | number | Pan travel in **degrees** (from physical, default 360). |
+| `tiltRange` | number | Tilt travel in **degrees** (default 270). |
+| `hasPanTilt` | bool | Has pan and/or tilt channels. |
+| `hasRGB` | bool | Has additive R **and** G **and** B — the whole **fixture**'s (every head of a box with RGB and white pixel rows says yes). |
+| `headRGB` | bool | **This head** has additive R, G and B. |
+| `headWhite` | bool | **This head** has a white emitter. A box of RGB rows and white rows (the Warmdance XL-450's 165ch mode) has heads that are one or the other: send a white head only `w`, an RGB head no `w` (on a head with no white, `w` is made of its R, G and B, and a `w` of 0 there blacks out its colour). |
+| `hasColorWheel` | bool | Has a colour wheel channel. |
+| `hasDimmer` | bool | Has a master/intensity dimmer. |
+| `hasGobo` | bool | Has a gobo channel. |
+| `hasShutter` | bool | Has a shutter/strobe channel. |
+| `pos` | `{x,y,z}` | 3-D rig world position in **metres** (`{0,0,0}` if unplaced). |
+| `phase` | number | Where this head is in the effect's cycle, in **cycles**, from the host's spread (amount × its place along the chosen axis, direction, wings and blocks). 0 when the spread is off. Use it as the offset you'd otherwise compute from `i / n`: `t * rate + (inputs._spread ? f.phase : i * spread / n)`. |
+| `grid` | `{col,row,cols,rows}` | Cell coords for **pixel-style / matrix effects** (ripple, comet, plasma, RGBScript ports). `col,row` = this fixture's cell; `cols,rows` = grid size. Sourced from the fixture group's **head layout** (the same map RGB Matrix uses) when the scene targets a single laid-out group; with no laid-out group, a fixture that is a grid of its own (its head map, or its definition's layout: an XL-450 is 15 × 5) is laid out as that grid, fixtures side by side; otherwise the fixtures are a **1-D strip** in list order (`cols = N, rows = 1, row = 0`). Always present, so an effect can render on a grid unconditionally — a 1×N strip is just the degenerate case. |
+| `aimAt` | `{ <slot>: {pan,tilt,reachMargin, blocked,blockedBy,blockedKind,blockedAt,clearance} }` | Per-fixture aim **degrees** toward each bound `effect.targets` slot, with the same reach and [line-of-sight](#line-of-sight) fields as `sceneTarget`. Empty object per slot when unbound/unsolvable. |
+| `sceneTarget` | `{x,y,z, pan,tilt}` | The scene's **own Aim look** (implicit target). **Present only when the scene carries an Aim look.** `x,y,z` = the target's **world location** in metres (shared by all fixtures) — centre a shape/formation on it and return world-space aim intents (`aimX/aimY/aimZ`). `pan,tilt` = this fixture's pre-solved aim **degrees** at the target (subject-height biased; present only with usable rig geometry) — the followspot defers to the host's converged aim when these are present. With them: `reachMargin` (degrees to spare before a pan/tilt limit; negative = it cannot point there), `distance` (metres to the subject), and the [line-of-sight](#line-of-sight) fields `blocked`, `blockedBy`, `blockedKind`, `blockedAt`, `clearance`. |
+| `lastSpot` | `{pan,tilt}` | Pan/tilt **degrees** where this fixture's beam was left by the previous Operate tick (possibly a different scene). Absent if no prior position. Enables `followMode = lastPosition` handoffs. |
+
+#### Line of sight
+
+Whether anything solid on stage stands between this head's beam and the
+point it is aimed at — a closed drape, a wall, a riser, a tower; the kinds
+the stage counts (Lighting Studio → Show → Line of sight). The head's own
+mount never blocks it. Present on `sceneTarget` and on each `aimAt` slot
+whenever `pan`/`tilt` are.
+
+| Field | Type | Meaning |
+|---|---|---|
+| `blocked` | bool | Something is in the way. |
+| `blockedBy` | string | Its name (`"Main drape"`, `"Riser 2"`); `""` when clear. |
+| `blockedKind` | string | `"drape"`, `"wall"`, `"platform"`, `"tower"`, `"truss"`, `"pipe"`, `"stand"`; `""` when clear. |
+| `blockedAt` | number | Metres from the head to where the beam stops (to the aim point when clear). |
+| `clearance` | number | Metres the beam clears the nearest solid feature by — negative when blocked (how far in from the blocker's edge). Capped at 2. A soft margin: fade as it drops below, say, 0.3. |
+
+The host does no dimming for a script: fade on `blocked` yourself, writing
+`dimmer` only while fading so the look keeps its dimmer otherwise (as
+`followspot.js`'s **Fade When Blocked** does).
+
+### `inputs` — control values
+
+Each declared input slot as a **0.0–1.0** float (or its `defaultValue` when
+unbound). Plus host-injected timing, always present:
+
+| Key | Meaning |
+|---|---|
+| `inputs.<name>` | declared input slot value, 0..1 |
+| `inputs._time` | seconds since the scene started |
+| `inputs._beat` | 0.0–1.0 sawtooth phase within the current beat — of the app's one beat clock, so every effect is on the same beat |
+| `inputs._bpm` | current tempo, may be fractional (0 = no clock) |
+| `inputs._beatCount` | whole beats since this effect started |
+| `inputs._beatPos` | the beat clock's running count; its fraction is `_beat` |
+| `inputs._spread` | true when the look's host spread is on (see `hostSpread`, `fixture.phase`) |
+| `inputs._spreadAmount` | the host spread's amount in cycles, for an effect that lays heads out by it rather than offsetting time (`f.phase / _spreadAmount` is 0..1 along the spread) |
+
+When the effect runs on the main clock or a **speed master** (the look
+editor's Speed, or its look, chase step, chase or collection), the clock
+above is that master's and **`inputs._time` counts its beats instead of
+seconds**: a script computing `phase = _time * rate` then runs `rate`
+cycles per beat, locked to the master's beat, and stands still while the
+master is paused. Off a master `_time` is seconds since the effect started,
+as always.
+
+### `palettes` — resolved palette references
+
+For each declared `effect.palettes` slot, a flattened value object (or empty):
+
+| Palette type | Shape |
+|---|---|
+| `Color` | `{ r, g, b }` (0..255) |
+| `Dimmer` | `{ dimmer }` (0..1) |
+
+**The look is the data source (auto-bind).** A slot is filled in this priority:
+
+1. **Explicit binding** — if the user dragged a palette onto the slot, that wins.
+2. **The look, in precedence order** — otherwise an unbound `Color` slot is
+   auto-filled from the scene's own **Color** looks (the palettes the user
+   stacked in the Looks list), and an unbound `Dimmer` slot from the look's
+   master **Dimmer**. Colour slots claim look colours in declaration order:
+   declare `color1, color2` and a look of *Red, Blue* gives `color1 = Red`,
+   `color2 = Blue` with **no binding required**.
+3. **Empty** — if neither applies, the slot is an empty object and your script
+   falls back to its own default (`palettes.color1.r === undefined`).
+
+This means a creator assembles a look and effects consume it; binding slots are
+optional per-slot overrides, not a setup step. Prefer reading the look over
+hard-coding colours in the script.
+
+`palettes.look` exposes the whole ordered look for effects that want more
+colours than they declare slots for (e.g. an N-way spread):
+
+| Key | Shape |
+|---|---|
+| `palettes.look.colors` | `[{ r, g, b }, …]` — every Colour look, **precedence order** |
+| `palettes.look.dimmer` | `0..1` — the look's master dimmer (`1.0` if none) |
+
+### `params` — user parameter values
+
+`params.<name>` — scalar number for normal/dropdown params (dropdowns give the
+**integer index**). `type:"path"` params arrive as a JS array of `[x,y]` pairs
+(0..1). `type:"text"` params arrive as a **string** — what was typed in the
+look editor, else the parameter's string `defaultValue`. `type:"image"`
+params arrive as `null` (no picture yet) or an object decoded once by the
+host: `{ name, width, height, frames, delays, totalMs, key }` — `frames` an
+array of ArrayBuffers of `width × height × 4` RGBA bytes (premultiplied, so
+transparent is black; wrap one in `new Uint8Array(...)`), `delays` each
+frame's ms (0 for a still), `key` the same for the same picture (cache by
+it). The object is the same from tick to tick until the picture changes.
+
+### `state` — persistence
+
+A plain object that **persists across ticks** for this instance and is **reset
+on scene start**. Use it for accumulators (velocity setpoints, phase, strobe
+cycle). It is the only mutable carry-over; everything else is recomputed.
+
+### `data` — real-time channels
+
+For each subscribed `effect.dataChannels` name, `data.<name>` is an object. The
+host-provided **`joystick`** channel:
+
+| Key | Meaning |
+|---|---|
+| `data.joystick.pan` | pan axis 0..1 (0.5 = centre) |
+| `data.joystick.tilt` | tilt axis 0..1 |
+| `data.joystick.sensitivity` | global sensitivity (device/I-O Manager) |
+| `data.joystick.deadzone` | global deadzone (fraction; default 0.05) |
+
+The host-provided **`midi`** channel (live note state from any patched MIDI
+input; declare `dataChannels: ["midi"]`):
+
+| Key | Meaning |
+|---|---|
+| `data.midi.velocity` | `[128]` last-struck velocity per note (0–127) |
+| `data.midi.held` | `[128]` bool — is the key physically down |
+| `data.midi.sustain` | bool — sustain pedal (CC64) |
+| `data.midi.lastNote` | last note struck (−1 if none) |
+| `data.midi.lastVelocity` | velocity of the last note struck |
+| `data.midi.noteOnCount` | bumped on every fresh note-on (diff it to detect new strikes) |
+
+`velocity` is the value captured at the last strike (kept after release as the
+decay reference); `held` tells you if the key is still down. Do your own
+attack/decay in `state` (see the shipped `midi-keys`/`midi-flash`/`midi-puddles`/
+`midi-comet` effects). Note reactivity is opt-in and gated on `data.midi` being
+present, so an effect is safe when no MIDI is connected.
+
+The host-provided **`audio`** channel (live spectrum from the shared audio
+capture; declare `dataChannels: ["audio"]`). Subscribing turns the capture
+**on** (and unsubscribing off), so only pay for audio when an audio effect runs;
+it needs an audio input assigned in Inputs/Outputs:
+
+| Key | Meaning |
+|---|---|
+| `data.audio.bands` | `[16]` spectrum magnitudes 0..1, low→high frequency |
+| `data.audio.level` | overall volume 0..1 |
+| `data.audio.peak` | loudest band 0..1 |
+
+Present only while an audio input is delivering; guard on `data.audio` so the
+effect is dark-safe with no audio (see the shipped `audio-spectrum`/`audio-vu`).
+
+---
+
+## 6. Return value — intents
+
+Return **one object per fixture**, same order as `fixtures[]`. Each may contain
+any of the keys below. **An omitted key means "don't touch"** — the scene's own
+palette retains that channel. Return `{}` to drive nothing for a fixture.
+
+| Key | Units | Effect |
+|---|---|---|
+| `pan` | degrees (0..panRange) | Pan position. Converted via the fixture's pan range → DMX (16-bit aware). |
+| `tilt` | degrees (0..tiltRange) | Tilt position. |
+| `aimX`,`aimY`,`aimZ` | metres (absolute world) | **World-space aim.** Give `aimX`+`aimY` (and optional `aimZ`, default 0) and the host solves this fixture's pan/tilt with the shared **AimSolver** — the same rig geometry the Aim palette uses, so the beam points the same way in Edit and Run. Lets every head converge on its **own** stage point (e.g. a different point on a shape's outline). Needs the fixture placed in the 2D Monitor; unsolvable fixtures are skipped. Explicit `pan`/`tilt` override this if both are present. |
+| `dimmer` | 0.0–1.0 | Master intensity channel. |
+| `r`,`g`,`b`,`w`,`a`,`uv` | 0–255 | Additive colour channels (Red/Green/Blue/White/Amber/UV). If `r/g/b` are given but the fixture has **no** additive RGB, the host falls back to the **closest colour-wheel slot**. |
+
+> Units recap: **degrees** for angles, **0..1** for normalized levels, **0..255**
+> for colour components — symmetric with what you read (`f.sceneTarget.pan` is
+> degrees, `palettes.dimmer.dimmer` is 0..1, `palettes.color.r` is 0..255).
+
+> Note: `gobo`/`shutter` appear in the fixture `hasGobo`/`hasShutter` flags but
+> are **not yet wired** as intent keys in the host's intent parser. Adding a new
+> intent key is a small, backward-compatible host change (`EffectInstance::parseIntents`).
+
+---
+
+## 7. Execution & composition model
+
+- **Per tick:** `inputs`, `params`, `data`, and `state` carry the run-time
+  dynamics. (The position/look architecture caches *subscribed look data* where
+  possible; see `docs/design/POSITION_ARCH.md`.)
+- **Layering:** output is Override-priority, on top of the scene's palettes.
+  Omit a channel and the scene keeps it — this is how a position-only effect
+  leaves colour/dimmer alone.
+- **Both modes:** Generators tick in Edit (on the previewed scene) and Operate.
+- **The "defer" pattern:** when the host can drive something better than the
+  script (e.g. multi-head convergence on a moving target), the script returns an
+  **empty intent** for that fixture and lets the host/scene drive. The followspot
+  does this whenever `f.sceneTarget` is present.
+- **Position-only effects** must never emit colour/dimmer; **colour effects**
+  must never emit pan/tilt — so they compose.
+
+---
+
+## 8. Design tenets (binding on every script)
+
+- **Pure & testable:** `tick` is a pure function of `(fixtures, inputs,
+  palettes, params, state, data)`. No globals, no DMX, no filesystem, and **no
+  wall-clock** — `Date.now()`/`Math.random()` are unavailable/forbidden. Drive
+  time from `inputs._time`/`inputs._beat`; drive any "randomness" from a seed in
+  `state` or the fixture index. This keeps scripts runnable in a harness.
+- **High-level intent, not DMX:** emit degrees/levels/colours; the host converts
+  to channels (16-bit, colour-wheel fallback, ranges). Never compute DMX
+  addresses.
+- **Readable & single-purpose:** a small manifest + one `tick`. Prefer several
+  small effects over one do-everything effect.
+- **Backward-compatible:** adding a new input/param/data-channel/intent key must
+  not break existing scripts. Version via `apiVersion`.
+- **Consistent units** (section 6), symmetric between read and write.
+
+---
+
+## 9. Worked examples
+
+### A. Position → intensity (subscribe to look domains)
+
+Dim fixtures the further upstage they aim. Reads the scene's aim, writes dimmer
+only (leaves colour/pan/tilt to the scene).
+
+```js
+(function() {
+    var effect = new Object;
+    effect.apiVersion = 1;
+    effect.name = "Dim by depth";
+    effect.description = "Dim fixtures as their aim moves upstage";
+    effect.tick = function(fixtures, inputs, palettes, params, state) {
+        return fixtures.map(function(f) {
+            if (!f.sceneTarget || f.sceneTarget.tilt === undefined) return {};
+            // crude proxy: more tilt-from-centre => deeper => dimmer
+            var depth = Math.abs(f.sceneTarget.tilt - f.tiltRange / 2) / (f.tiltRange / 2);
+            return { dimmer: Math.max(0.1, 1.0 - depth) };  // 0..1, dimmer only
+        });
+    };
+    return effect;
+})()
+```
+
+### B. Colour strobe (time-driven, state cycle, no globals)
+
+```js
+(function() {
+    var effect = new Object;
+    effect.apiVersion = 1;
+    effect.name = "Colour strobe";
+    effect.description = "Alternate two colours each strobe cycle";
+    effect.parameters = [
+        { name: "rate", description: "Strobes/sec", min: 1, max: 20, defaultValue: 8 }
+    ];
+    effect.tick = function(fixtures, inputs, palettes, params, state) {
+        var rate = params.rate || 8;
+        var on = (Math.floor(inputs._time * rate) % 2) === 0;  // time from host
+        return fixtures.map(function(f) {
+            return on ? { r: 255, g: 0, b: 0 } : { r: 0, g: 0, b: 255 };
+        });
+    };
+    return effect;
+})()
+```
+
+### C. Joystick free-fly (data channel + state setpoint)
+
+```js
+effect.dataChannels = ["joystick"];
+effect.tick = function(fixtures, inputs, palettes, params, state, data) {
+    var js = data && data.joystick;
+    var x = js ? js.pan  : 0.5, y = js ? js.tilt : 0.5;
+    var dz = (js && js.deadzone) || 0.05, sen = (js && js.sensitivity) || 1.0;
+    function vel(v){ var d=v-0.5; return Math.abs(d)<dz?0:(d>0?1:-1)*((Math.abs(d)-dz)/(0.5-dz)); }
+    var xv = vel(x), yv = vel(y), dt = 0.02;
+    return fixtures.map(function(f) {
+        if (!f.hasPanTilt) return {};
+        var pk="p_"+f.id, tk="t_"+f.id;
+        if (state[pk]===undefined){ state[pk]=0.5*f.panRange; state[tk]=0.5*f.tiltRange; }
+        state[pk]=Math.min(f.panRange, Math.max(0, state[pk]+xv*f.panRange*sen*dt));
+        state[tk]=Math.min(f.tiltRange,Math.max(0, state[tk]+yv*f.tiltRange*sen*dt));
+        return { pan: state[pk], tilt: state[tk] };  // degrees
+    });
+};
+```
+
+See `resources/effectscripts/followspot.js` for the full reference effect
+(joystick subscription, implicit scene target, defer pattern) and the other
+shipped scripts for colour/position patterns.
+
+---
+
+## 10. Gotchas
+
+- **Order matters:** the returned array must match `fixtures[]` order and length.
+  Returning fewer entries silently drops the tail.
+- **The fixture objects are kept between ticks.** The host builds each
+  fixture's object once and updates only what changes (its `pos` when it
+  moves, `aimAt`/`sceneTarget`/`lastSpot` each tick when present), so a big
+  pixel rig costs little to hand over. Treat them as **read-only**: anything
+  you set on one would still be there next tick. Keep your own per-fixture
+  data in `state` (keyed by `id`/`head`). The *array* is new every tick, so
+  sorting or reversing `fixtures` in place is safe — but return the intents
+  in the original order.
+- **Answers: only the keys you mean.** The host reads each intent's own keys
+  (an intent is usually `{r,g,b}`); a key it doesn't know is ignored.
+- **`fixtureTypes` filters the array:** if you tag `["moving"]`, wash fixtures
+  won't appear in `fixtures[]` at all.
+- **Stage/azimuth convention** (for position effects): degrees are clockwise from
+  downstage — `pan/tilt` are fixture-local degrees the host maps to DMX; floor
+  positions in `pos`/aim are metres with `+x` = stage-right, `+y` = upstage.
+- **Don't fight the scene:** emit only the channels you own; omit the rest.
+- **No `Date`/`Math.random`:** use `inputs._time`, `inputs._beat`, `state`, or
+  the fixture index instead.

@@ -97,7 +97,7 @@ public:
     void setPath(const QString& path);
     QString path() const;
 
-    /** Who the group's fixtures belong to (board Q137, VENUES.md): set it
+    /** Who the group's fixtures belong to (board Q137, docs/design/VENUES.md): set it
      *  and every fixture in it that does not say otherwise follows. Unset by
      *  default (its fixtures are Tour). Emits changed() when it differs. */
     void setOwner(RigOwner::Owner owner);

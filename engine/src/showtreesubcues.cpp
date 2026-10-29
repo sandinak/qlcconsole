@@ -17,7 +17,7 @@
   limitations under the License.
 */
 
-/* Sub-cues in the tree (SHOW_TREE_DESIGN.md §3C, D9, D25; P6). A cue's
+/* Sub-cues in the tree (docs/design/SHOW_TREE_DESIGN.md §3C, D9, D25; P6). A cue's
    sub-cues 4.1, 4.2... are a list of their own (CueList::subOf), as the
    Looks section is a flagged list (R3): so layers, looks, the cascade,
    copy/paste, rename, delete, undo and the Design preview work on a sub-cue
@@ -27,7 +27,7 @@
      from the one before (always tracking), and nothing passes on to the cue
      after the parent -- sub-cue changes are cue-only (D9);
    - the bake makes the list a hidden Chaser of the sub-cues' Collections and
-     puts it as the parent's step, SubCues="SubGo" (SUBCUES_DESIGN.md), or
+     puts it as the parent's step, SubCues="SubGo" (docs/design/SUBCUES_DESIGN.md), or
      "SubGoFollow" when a sub-cue auto-follows (its wait is the hold of the
      sub-cue before it). */
 

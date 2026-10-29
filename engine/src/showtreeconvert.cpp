@@ -32,7 +32,7 @@
 
 using namespace ShowTree;
 
-/* Convert to tracking… (SHOW_TREE_DESIGN.md §7, P4). An imported list is
+/* Convert to tracking… (docs/design/SHOW_TREE_DESIGN.md §7, P4). An imported list is
    Non-tracking: every cue Block, carrying its looks forward by repeating
    them or by including the cue before. Converting makes the list Tracking
    one change at a time, each kept only if every cue still plays exactly

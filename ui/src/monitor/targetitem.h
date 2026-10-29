@@ -121,7 +121,7 @@ public:
     void setFootprintPx(const QSizeF &size);
     QRectF footprintRect() const;
 
-    /** A line target (LINE_TARGET_DESIGN.md), in item coordinates -- the
+    /** A line target (docs/design/LINE_TARGET_DESIGN.md), in item coordinates -- the
      *  item sits on the line's centre: the sampled curve, how far along
      *  (0..1) each sample is, and the handles (the ends first and last).
      *  Empty draws the plain mark. */

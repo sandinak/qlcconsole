@@ -27,7 +27,7 @@ class FixtureGroup;
 class Chaser;
 class Doc;
 
-/* The Show Tree playing a show (SHOW_TREE_DESIGN.md §8): P5 several
+/* The Show Tree playing a show (docs/design/SHOW_TREE_DESIGN.md §8): P5 several
    productions, P6 sub-cues in the tree, P7 the cue runner. Offscreen, no
    DMX out: the universes are read, never sent. */
 class ShowTreePlay_Test final : public QObject

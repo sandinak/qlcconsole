@@ -37,9 +37,9 @@ class Doc;
  */
 
 /**
- * The outline (PROGRAMMING_REDESIGN.md P1), in two modes:
+ * The outline (docs/design/PROGRAMMING_REDESIGN.md P1), in two modes:
  *
- * - **Navigator** (Build ▸ Scenes ▸ Folders, WORKFLOW_DESIGN.md §3.3): every
+ * - **Navigator** (Build ▸ Scenes ▸ Folders, docs/design/WORKFLOW_DESIGN.md §3.3): every
  *   scene folder -> its scenes, collections and chasers, each scene opening
  *   up into its targets (groups, fixed fixtures) and looks (palettes, an
  *   effect's own colour/dimmer nested under it). Click a row and the

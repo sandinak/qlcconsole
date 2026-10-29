@@ -400,7 +400,7 @@ private:
     bool m_dimWhenBlocked = false;
 
     /************************************************************************
-     * Gobo by name (type == Gobo only), SHOW_TREE_DESIGN.md §3A / §10.7
+     * Gobo by name (type == Gobo only), docs/design/SHOW_TREE_DESIGN.md §3A / §10.7
      ************************************************************************/
 public:
     /** The gobo this look means, by name ("Breakup"). Empty: the look is a

@@ -335,7 +335,7 @@ bool focusIntentDirection(Doc *doc, quint32 fid, QVector3D &dir);
  *  AimSolver::intendedAngles() gives them (FocusSession::intendedAngles()). */
 bool focusIntentAngles(Doc *doc, quint32 fid, double &panRelDeg, double &tiltRelDeg);
 
-/** Scramble practice (FOCUS_REFINE_DESIGN.md section 13): with a practice
+/** Scramble practice (docs/design/FOCUS_REFINE_DESIGN.md section 13): with a practice
  *  venue applied, @p fid's pan and tilt offsets in @p rp become its RIGHT
  *  ones, so a view turning its DMX back into a direction draws where the
  *  scrambled light really lands -- off its mark until it is focused back.

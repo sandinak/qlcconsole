@@ -123,7 +123,7 @@ private:
     int m_row;           //! Currently selected row
     int m_column;        //! Currently selected column
     QTimer* m_resizeTimer; //! Coalesces sectionResized bursts into one relayout
-    class QComboBox *m_ownerCombo = nullptr; //! the group's owner (VENUES.md)
+    class QComboBox *m_ownerCombo = nullptr; //! the group's owner (docs/design/VENUES.md)
 
     // Internal drag of selected cells (single or multi) within the grid.
     enum DragMode { NoDrag, Marquee, MoveBlock };

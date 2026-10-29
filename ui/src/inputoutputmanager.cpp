@@ -218,7 +218,7 @@ InputOutputManager::InputOutputManager(QWidget* parent, Doc* doc)
     m_uniPassthroughCheck->setFont(font);
     m_toolbar->addWidget(m_uniPassthroughCheck);
 
-    /* The universe's slot in the show (board Q138, VENUES.md): Tour, or
+    /* The universe's slot in the show (board Q138, docs/design/VENUES.md): Tour, or
        House -- a venue fills it with its house rig. */
     QLabel *slotLabel = new QLabel(tr("  Slot:"));
     slotLabel->setFont(font);

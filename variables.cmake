@@ -24,7 +24,7 @@ else()
 endif()
 
 # APPVERSION = <QLC+ base>+qlcconsole.<N>. The base is the upstream QLC+
-# release whose fixes the fork carries (4.14.4 since 0.3.1; docs/UPSTREAM.md).
+# release whose fixes the fork carries (4.14.4 since 0.3.1; docs/dev/UPSTREAM.md).
 # N is the number of commits on top of the original QLC+_4.14.2 fork point --
 # still counted from there when the base moves, so build numbers never go
 # backwards (4.14.4 came in as cherry-picks, not as an ancestor). SemVer
@@ -50,7 +50,7 @@ endif()
 set(APPVERSION "${QLC_BASE_VERSION}+qlcconsole.${QLCCONSOLE_REV}")
 
 # The qlcconsole RELEASE -- VERSION at the repo root, bumped once a release
-# (RELEASE.md) -- and the commit it was built from: what the About box,
+# (docs/dev/RELEASE.md) -- and the commit it was built from: what the About box,
 # --version and the bundle's Info.plist show. APPVERSION above stays the
 # build id: it is what a saved show records as its creator's version.
 file(STRINGS "${CMAKE_CURRENT_LIST_DIR}/VERSION" QLCCONSOLE_VERSION LIMIT_COUNT 1)

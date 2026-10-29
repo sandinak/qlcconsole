@@ -29,7 +29,7 @@
 
 using namespace ShowTree;
 
-/* Reusable layers and cues (SHOW_TREE_DESIGN.md §1, P4) and Detach of a
+/* Reusable layers and cues (docs/design/SHOW_TREE_DESIGN.md §1, P4) and Detach of a
    cue list to a plain chaser. A use of a reusable is an ordinary layer (or
    cue) in the tree with a link (Layer::reusable, Cue::reusable): the
    resolver, the bake and every edit see plain layers. After each edit

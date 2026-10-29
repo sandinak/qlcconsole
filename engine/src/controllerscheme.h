@@ -32,7 +32,7 @@
  */
 
 /**
- * The one controller layout every on-stage tool uses (FOCUS_REFINE_DESIGN.md
+ * The one controller layout every on-stage tool uses (docs/design/FOCUS_REFINE_DESIGN.md
  * section 2): Focus mode, Focus calls and Refine. A control does the same
  * KIND of thing in each -- the triggers step the big unit (a focus call, a
  * layer), the bumpers the small one (a fixture), Y changes the scope, A keeps,

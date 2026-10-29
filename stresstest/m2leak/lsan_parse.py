@@ -6,7 +6,7 @@
 Each RUN_DIR holds asan.* / ubsan.* log files (ASAN/UBSAN log_path) and
 session.log (m2leak's stderr). For every run: total leaked bytes and
 allocations (direct + indirect), a breakdown by known leak (L1-L3 of
-docs/TEST_MATRIX.md, matched on stack frames) and by top in-project frame
+docs/dev/TEST_MATRIX.md, matched on stack frames) and by top in-project frame
 for the rest; m2leak's per-cycle RSS and UI counters (menuChildActions: L4;
 iolist: M1). Bytes per cycle = the slope between runs of different lengths.
 """

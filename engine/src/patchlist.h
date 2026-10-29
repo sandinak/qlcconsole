@@ -67,7 +67,7 @@ public:
         QString output;                  //!< where its universe goes, in words
 
         QString mountedOn;               //!< MonitorProperties::mountDescription()
-        QString owner;                   //!< "House", "Rental"; empty for the tour's (VENUES.md)
+        QString owner;                   //!< "House", "Rental"; empty for the tour's (docs/design/VENUES.md)
         RigOwner::Owner ownerKind = RigOwner::Tour;
         QString location;                //!< where it hangs ("Truss FOH"), else its group; empty: neither
         QString group;                   //!< the first fixture group (lowest id) that holds it

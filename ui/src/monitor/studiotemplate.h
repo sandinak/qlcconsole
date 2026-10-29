@@ -26,7 +26,7 @@
 
 class Doc;
 
-/** Fixture Studio — component template (FIXTURESTUDIO_DESIGN.md Phase 4).
+/** Fixture Studio — component template (docs/design/FIXTURESTUDIO_DESIGN.md Phase 4).
  *
  *  QLC+ fixtures are unique instances, so a reusable "component" (a step, a
  *  pod, …) cannot reference specific fixtures. A template therefore captures the

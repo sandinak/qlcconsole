@@ -252,7 +252,7 @@ void FocusReport_Test::theReportListsEveryLight()
     QCOMPARE(rows.at(0).notes, QString("Cut off the pros"));
     QCOMPARE(rows.at(0).address, QString("1.1"));
     QCOMPARE(rows.at(0).type, QString("Test Report Spot Spot 1"));
-    // Whose light it is (VENUES.md): nobody said, so the tour's.
+    // Whose light it is (docs/design/VENUES.md): nobody said, so the tour's.
     QCOMPARE(rows.at(0).owner, RigOwner::displayName(RigOwner::Tour));
     // B: not looked at -- it needs focus.
     QCOMPARE(rows.at(1).fid, b->id());

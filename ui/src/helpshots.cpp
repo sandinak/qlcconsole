@@ -1208,7 +1208,7 @@ QList<HelpShots::Shot> HelpShots::shots()
         doc->resetModified();
     } };
 
-    /* Focus calls and Refine (FOCUS_REFINE_DESIGN.md): the demo's Movers and
+    /* Focus calls and Refine (docs/design/FOCUS_REFINE_DESIGN.md): the demo's Movers and
        Pars, to the Centre target, and a cue of Movers to refine. */
     auto demoCalls = [doc]() {
         QList<FocusCall> calls;
@@ -1323,7 +1323,7 @@ QList<HelpShots::Shot> HelpShots::shots()
         settle();
     } };
 
-    /* Venues (VENUES.md): the demo's Pars as Lincoln HS's house rig, the
+    /* Venues (docs/design/VENUES.md): the demo's Pars as Lincoln HS's house rig, the
        fourth universe a House slot, a range of the first one not ours. */
     auto groupNamed = [doc](const QString &name) -> FixtureGroup * {
         for (FixtureGroup *g : doc->fixtureGroups())

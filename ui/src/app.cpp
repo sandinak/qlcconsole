@@ -678,7 +678,7 @@ void App::init()
         connect(pc, &ProgrammerController::operatorFeedbackChanged, this, [](ControllerScheme::Feedback f) {
             OperatorFeedbackCombo::saveFeedback(int(f));
         });
-        /* A focus-call cue (FOCUS_REFINE_DESIGN.md section 7): the panel when
+        /* A focus-call cue (docs/design/FOCUS_REFINE_DESIGN.md section 7): the panel when
            its calls begin; Cmd+Return begins them, as Start does (GO's
            own key: see m_cueGoAction); the footer says it waits. */
         connect(pc->focusCallCue(), &FocusCallCue::stateChanged, this, [this](FocusCallCue::State s) {
@@ -718,10 +718,10 @@ void App::init()
             m_statusDangleLabel->show();
         });
     }
-    // Build (WORKFLOW_DESIGN.md §3.1; it was "Programming"): makes the
+    // Build (docs/design/WORKFLOW_DESIGN.md §3.1; it was "Programming"): makes the
     // show's palettes, effects, scenes and collections.
     addTab(w, ItemIcons::buildIcon(), tr("Build"));   // a hard hat
-    // The Show Tree beside Build (SHOW_TREE_DESIGN.md D2): writing a show as
+    // The Show Tree beside Build (docs/design/SHOW_TREE_DESIGN.md D2): writing a show as
     // one tree of cue lists, cues and layers -- what Build made, in order.
     {
         ShowTreeView *tree = new ShowTreeView(m_tab, m_doc);
@@ -741,7 +741,7 @@ void App::init()
     addTab(w, QIcon(":/virtualconsole.png"), tr("Virtual Console"));
     w = new SimpleDesk(m_tab, m_doc);
     addTab(w, QIcon(":/slidermatrix.png"), tr("Simple Desk"));
-    /* The cue runner's full-screen home (SHOW_TREE_DESIGN.md §6B, D26):
+    /* The cue runner's full-screen home (docs/design/SHOW_TREE_DESIGN.md §6B, D26):
        the operator's view -- big targets, keyboard GO, nothing to bump. It
        follows the current production; the Cue Runner VC widget is its
        other home. */
@@ -1142,7 +1142,7 @@ void App::initDoc()
     WledConfigCheck *wledCheck = new WledConfigCheck(m_doc, this);
 
     /* Cues fired from outside (QLab): OSC on a port of our own, MSC on a
-       patched MIDI input (SHOW_CONTROL_DESIGN.md). */
+       patched MIDI input (docs/design/SHOW_CONTROL_DESIGN.md). */
     m_showControlListener = new ShowControlListener(m_doc, this);
     if (InputOutputManager::instance() != NULL)
         InputOutputManager::instance()->setShowControlListener(m_showControlListener);
@@ -1267,7 +1267,7 @@ void App::initDoc()
        long that takes. Fixtures and effects then load at once; anything else
        loads next time qlcconsole starts. */
     /* What the show carries: keep the ones only it has; review the ones that
-       differ from this computer's (SHOW_EMBEDDING_DESIGN.md). */
+       differ from this computer's (docs/design/SHOW_EMBEDDING_DESIGN.md). */
     ShowStatus::instance()->setAction("embedded.showonly", tr("Install on This Computer"),
         [this](QWidget *parent, const QVariantList &items) {
             QStringList failed;
@@ -1408,7 +1408,7 @@ void App::initDoc()
             m_startupWindow->logDetail(name);
     });
     /* QLC_IOPLUGIN_DIR: load the I/O plugins from there instead. The help
-       pictures use it (help-shots.sh) so they show generic Loopback lines,
+       pictures use it (tools/help-shots.sh) so they show generic Loopback lines,
        never this machine's network, nodes or MIDI ports. */
     const QString ioPluginDir = QString::fromLocal8Bit(qgetenv("QLC_IOPLUGIN_DIR"));
     m_doc->ioPluginCache()->load(ioPluginDir.isEmpty() ? IOPluginCache::systemPluginDirectory()
@@ -1458,7 +1458,7 @@ void App::initDoc()
     m_doc->inputOutputMap()->startUniverses();
     m_doc->masterTimer()->start();
 
-    // Control-surface engine (CONTROL_SURFACE_DESIGN.md): device-agnostic
+    // Control-surface engine (docs/design/CONTROL_SURFACE_DESIGN.md): device-agnostic
     // core, plus the PMJ Black 1 overlay. Registering the PMJ here doesn't
     // require the board to actually be connected/patched — it just means
     // its role table + LED sink are ready the moment it is.
@@ -2069,7 +2069,7 @@ void App::initActions()
     m_helpContextAction->setToolTip(tr("Help on what you're looking at"));
     connect(m_helpContextAction, &QAction::triggered, this, &App::slotHelpContext);
 
-    /* The main cue list's GO and Back (SHOW_CONTROL_DESIGN.md), from any
+    /* The main cue list's GO and Back (docs/design/SHOW_CONTROL_DESIGN.md), from any
        window: what the footer's "Next:" says GO plays. */
     m_cueGoAction = new QAction(tr("GO (Main Cue List)"), this);
     m_cueGoAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Return));
@@ -2097,7 +2097,7 @@ void App::initActions()
     connect(m_cueBackAction, &QAction::triggered, this, [this]() {
         runCommand({ ShowControl::Back, QString(), QString() });
     });
-    /* ...and its Sub GO / Sub Back (SUBCUES_DESIGN.md): through the sub-cues
+    /* ...and its Sub GO / Sub Back (docs/design/SUBCUES_DESIGN.md): through the sub-cues
        of the cue playing, 4.1, 4.2..., while GO goes on to 5. ⌥⌘↩ / ⌥⌘⇧↩
        on macOS (Qt's CTRL is ⌘ there). */
     m_cueSubGoAction = new QAction(tr("Sub GO (Main Cue List)"), this);
@@ -2306,7 +2306,7 @@ void App::initMenuBar()
         });
         fileMenu->addAction(showDefs);
 
-        // Upgrade this show (WORKFLOW_DESIGN.md §3.7): the W5 converter
+        // Upgrade this show (docs/design/WORKFLOW_DESIGN.md §3.7): the W5 converter
         // over every chaser and collection, Capture into palettes, one undo
         // step. Opened from here, the Show Tree's banner and the Run tab's
         // empty state.
@@ -2549,7 +2549,7 @@ void App::initMenuBar()
     m_rigOverviewAction->setToolTip(tr("An angled, read-only view of the whole rig"));
     connect(m_rigOverviewAction, &QAction::triggered, this, &App::slotRigOverview);
 
-    /* Quick focus: aligning the rig before a show (FOCUS_MODE_DESIGN.md). The
+    /* Quick focus: aligning the rig before a show (docs/design/FOCUS_MODE_DESIGN.md). The
        Lighting Studio (Focus ▾) and the Rig Overview have it on their bars;
        this is the same thing from anywhere, and View + Menu on the controller
        asks too. */
@@ -3036,7 +3036,7 @@ Doc *App::loadScratchDoc(const QString &fileName, QString &error)
    the open show; the submenu, its sections, each entry's file dialog and
    "Any Supported File…" all read it. Next expected: QLab (a workspace's cue
    lists into the Show Tree), on the EosImportWizard pattern
-   (EOS_IMPORT_DESIGN.md) -- one row here and its handler. Only importers
+   (docs/design/EOS_IMPORT_DESIGN.md) -- one row here and its handler. Only importers
    that work go in: no disabled placeholders. */
 QList<App::ImportSource> App::importSources() const
 {
@@ -5080,7 +5080,7 @@ QFile::FileError App::loadXML(const QString& fileName)
 
     /* The definitions and scripts the show carries, put in use before any of
        it loads: where this computer has none, or a different one, the show's
-       own (SHOW_EMBEDDING_DESIGN.md). Its folder's Fixtures/, EffectScripts/
+       own (docs/design/SHOW_EMBEDDING_DESIGN.md). Its folder's Fixtures/, EffectScripts/
        and RGBScripts/ too, for what neither has. */
     if (m_doc->showEmbedding()->readWorkspace(fileName))
         m_doc->showEmbedding()->apply(QFileInfo(fileName).absolutePath());
@@ -6395,7 +6395,7 @@ void App::initStatusBar()
     chipFont.setStyleHint(QFont::Monospace);
     chipFont.setFamily(QFontDatabase::systemFont(QFontDatabase::FixedFont).family());
 
-    /* What the main cue list's GO plays next (SHOW_CONTROL_DESIGN.md);
+    /* What the main cue list's GO plays next (docs/design/SHOW_CONTROL_DESIGN.md);
        click for GO, Back, Stop and loading another cue. Hidden when the
        show has no cue list to follow. */
     m_statusStandby = new QToolButton(this);

@@ -19,7 +19,7 @@
     <file alias="help/troubleshooting.md">../../docs/features/troubleshooting.md</file>
     <file alias="help/updates.md">../../docs/features/updates.md</file>
     <file alias="help/whats-new.md">../../docs/features/whats-new.md</file>
-    <file alias="help/EFFECTSCRIPT_API.md">../../EFFECTSCRIPT_API.md</file>
+    <file alias="help/EFFECTSCRIPT_API.md">../../docs/dev/EFFECTSCRIPT_API.md</file>
     <file alias="images/connections-by-universe.png">../../docs/images/connections-by-universe.png</file>
     <file alias="images/connections-devices-tab.png">../../docs/images/connections-devices-tab.png</file>
     <file alias="images/effects-stack-checker.png">../../docs/images/effects-stack-checker.png</file>

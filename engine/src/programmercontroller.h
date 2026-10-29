@@ -168,7 +168,7 @@ public:
     void setHighlightActive(bool active);
 
     /*********************************************************************
-     * Focus mode (FOCUS_MODE_DESIGN.md)
+     * Focus mode (docs/design/FOCUS_MODE_DESIGN.md)
      *********************************************************************/
 public:
     /** The rig-alignment session. While it is active it owns the
@@ -479,7 +479,7 @@ public:
     void setPadMode(Doc::PadMode mode);
     quint32 activeProgrammerGroup() const;
 
-    /** Fixture Studio Phase 3 (FIXTURESTUDIO_DESIGN.md): rebuild a composite
+    /** Fixture Studio Phase 3 (docs/design/FIXTURESTUDIO_DESIGN.md): rebuild a composite
      *  FixtureGroup from the source groups recorded in its per-head sub-group
      *  provenance tags. Re-pulls each source group's CURRENT layout as a
      *  horizontal block; blocks are ordered by the X of the studio group bound
@@ -509,7 +509,7 @@ public:
      * No Virtual Console widget is involved. This is the deliberately-thin
      * slice that validates the hardware loop (button semantics, feedback
      * scaling, FunctionParent ownership) before the full Doc-owned
-     * ControlMap model lands — see CONTROLMAP.md.
+     * ControlMap model lands — see docs/dev/CONTROLMAP.md.
      *********************************************************************/
 public:
     /** Enter learn mode: the next input event (value > 0) binds that

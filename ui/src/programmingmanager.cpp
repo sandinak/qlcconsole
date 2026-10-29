@@ -577,7 +577,7 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
         }
     }
 
-    /* Two panes (WORKFLOW_DESIGN.md §3.3): the navigator by section, and the
+    /* Two panes (docs/design/WORKFLOW_DESIGN.md §3.3): the navigator by section, and the
        Workbench -- the same in every section. */
     QSplitter *splitter = new QSplitter(Qt::Horizontal, this);
     splitter->setObjectName(QStringLiteral("programmingSplitter"));

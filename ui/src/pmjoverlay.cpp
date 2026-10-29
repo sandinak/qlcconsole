@@ -380,7 +380,7 @@ void PMJOverlay::slotRoleActivated(const QString &fromDeviceId, ControlSurface::
         // Per-strip Level(1..10): context-aware on whatever palette is
         // focused in the Look Editor — a Color look maps them to R G B W A
         // U, a Dimmer look maps fader 1 to intensity ("Look-edit mode",
-        // CONTROL_SURFACE_DESIGN.md P2). Otherwise, "Selection mode": fader
+        // docs/design/CONTROL_SURFACE_DESIGN.md P2). Otherwise, "Selection mode": fader
         // N (1-6) is the intensity of the Nth fixture in the programmer
         // selection (Select/Load below) — a control that does nothing
         // observable stays inert either way, per the "only act on what's
@@ -475,7 +475,7 @@ void PMJOverlay::slotRoleActivated(const QString &fromDeviceId, ControlSurface::
         // Toggle strip N's target fixture into/out of the programmer
         // selection — builds a multi-select ("select 1 thru 5"), confirmed
         // with Branson. Not yet paged past 10 targets (see
-        // CONTROL_SURFACE_DESIGN.md P2) — a scene with more only exposes the
+        // docs/design/CONTROL_SURFACE_DESIGN.md P2) — a scene with more only exposes the
         // first 10 for now.
         if (value > 0 && role.index >= 1 && role.index <= 10 && m_doc->programmer())
         {

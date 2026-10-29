@@ -53,7 +53,7 @@ private slots:
     void autoFollowPassesOverSkippedSteps();
     void standbyIsWhatGoPlaysNext();
 
-    // Sub-cues (SUBCUES_DESIGN.md P3)
+    // Sub-cues (docs/design/SUBCUES_DESIGN.md P3)
     void aSubCueIsFoundByNumber();
     void goASubCueByNumberPlaysItsCueFirst();
     void oscSubGoAndSubBackAreDecoded();

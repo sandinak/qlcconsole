@@ -4,10 +4,16 @@
 > verbatim from upstream QLC+, since the underlying C++/Qt engineering
 > practices still apply — but "the maintainer" below means qlcconsole's, not
 > upstream's, and cross-platform testing only meaningfully means macOS today
-> (see [RELEASE.md](RELEASE.md)). If your change is really about QLC+ itself
+> (see [RELEASE.md](docs/dev/RELEASE.md)). If your change is really about QLC+ itself
 > rather than this fork's programmer-mode workflow, it likely belongs
 > [upstream](https://github.com/mcallegari/qlcplus/blob/master/CONTRIBUTING.md)
 > instead.
+>
+> qlcconsole is a theatre-style console for small crews, on the QLC+ 4
+> engine. Before proposing a feature, read
+> [the strategy](docs/project/STRATEGY.md): a feature attaches to an
+> existing model, ships with help and tests, and some asks (Ableton Link,
+> NDI, an audio engine, QLC+ 5 parity) are a recorded no.
 
 If you are a developer and you want to help to improve QLC+, then thanks for that!
 
@@ -47,5 +53,5 @@ or replacing a picture run
     tools/png-colour-chunks.py --strip path/to/new.png
 
 It drops only those chunks; the pixels are untouched, and the app never
-colour-managed them anyway. `make check` (check-all.sh, which runs unittest.sh in each leg) and `help-shots.sh` fail
+colour-managed them anyway. `make check` (check-all.sh, which runs unittest.sh in each leg) and `tools/help-shots.sh` fail
 if any PNG still carries one.

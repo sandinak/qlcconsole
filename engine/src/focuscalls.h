@@ -38,7 +38,7 @@ class Doc;
 #define KXMLQLCFocusCalls QStringLiteral("FocusCalls")
 
 /**
- * A show's focus calls (FOCUS_REFINE_DESIGN.md section 4): the order the rig
+ * A show's focus calls (docs/design/FOCUS_REFINE_DESIGN.md section 4): the order the rig
  * is focused in when the show moves into a new venue, saved with the show.
  * Each call is some fixture groups (and loose fixtures) and the point they
  * focus to -- "DH Tspots -> DSC", then "AT spots -> Soloist DS". Run, they

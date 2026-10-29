@@ -42,7 +42,7 @@ class Function;
 
 /**
  * The everyday palette operations, one source of truth for every place
- * that offers them (PROGRAMMING_ROLE_DESIGN.md §5, P-D8): the Show Tree's
+ * that offers them (docs/design/PROGRAMMING_ROLE_DESIGN.md §5, P-D8): the Show Tree's
  * Library and command line, and the Programming tab's palette tree. Create
  * by type, rename, duplicate, file in a folder, folders of their own,
  * delete -- each one undo step on ONE palette undo stack (P-D14), which
@@ -187,7 +187,7 @@ public:
     QSet<quint32> palettesInHistory() const;
 
     /************************************************************************
-     * Scene steps (PROGRAMMING_REDESIGN.md P1): the Programming tab's scene
+     * Scene steps (docs/design/PROGRAMMING_REDESIGN.md P1): the Programming tab's scene
      * edits -- targets and looks added, moved, removed, reordered, renamed,
      * timing, raw values -- on this same stack, so they undo AND redo with
      * everything else, from either tab.
@@ -228,7 +228,7 @@ public:
                    const QString &mergeKey = QString());
 
     /************************************************************************
-     * Function steps (WORKFLOW_DESIGN.md W1): the Workbench's edits to a
+     * Function steps (docs/design/WORKFLOW_DESIGN.md W1): the Workbench's edits to a
      * collection's members -- added, removed, reordered, a new EFX or RGB
      * Matrix made on a layer -- on this same stack.
      ************************************************************************/

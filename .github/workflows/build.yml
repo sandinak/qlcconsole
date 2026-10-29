@@ -65,6 +65,10 @@ jobs:
           # clone yields 0, so artifacts came out as "...+qlcconsole.0".
           fetch-depth: 0
 
+      - name: Doc links
+        # No relative link in a tracked .md may point at a missing file.
+        run: python3 tools/check-doc-links.py
+
       - name: Set General ENV variables
         run: |
           echo "PACKAGES_V4=$(echo ${PACKAGES_BASE})" >> $GITHUB_ENV
@@ -245,7 +249,7 @@ jobs:
           name: ${{ matrix.task }}-AppImage
           path: qlcconsole-${{env.TASK}}-${{env.APPVERSION}}-${{env.BUILD_DATE}}-${{env.GIT_REV}}.AppImage
 
-      # The pre-release check (RELEASE.md): extract the AppImage, its ELF
+      # The pre-release check (docs/dev/RELEASE.md): extract the AppImage, its ELF
       # dependencies, .desktop + MIME types, plugins, data, and --version and
       # a headless load of Sample.qxw (offscreen, with the AppImage's own
       # libqoffscreen.so). A failure fails the job when the repository
@@ -474,7 +478,7 @@ jobs:
           path: qlcconsole-${{env.QLCCONSOLE_VERSION}}-${{env.BUILD_DATE}}-${{env.GIT_REV}}-win64-setup.exe
           if-no-files-found: error
 
-      # The pre-release check (RELEASE.md): a silent NSIS install into a temp
+      # The pre-release check (docs/dev/RELEASE.md): a silent NSIS install into a temp
       # folder on the runner, files, DLL imports, registry, associations,
       # shortcuts, --version and a headless load (offscreen, with the
       # installer's own qoffscreen.dll), the FFmpeg licence, then uninstall
@@ -508,7 +512,7 @@ jobs:
       # After the artifact on purpose, so a failing test still leaves the
       # installer to look at -- but a failure fails the job: while this step
       # was informational, 16 of 190 programs failed unnoticed for days
-      # (docs/TEST_MATRIX.md W1-W3). Runs every test binary under its own
+      # (docs/dev/TEST_MATRIX.md W1-W3). Runs every test binary under its own
       # timeout and lists the failures. A program that cannot run on this
       # runner goes in SKIP below, with its reason, never silently.
       # (unittest.sh itself also works under MSYS2: ./unittest.sh ui build.)

@@ -40,7 +40,7 @@ class Doc;
 
 /**
  * Show control: cues fired by number from outside -- QLab, or anything that
- * speaks MIDI Show Control or OSC (SHOW_CONTROL_DESIGN.md).
+ * speaks MIDI Show Control or OSC (docs/design/SHOW_CONTROL_DESIGN.md).
  *
  * A cue list is a chaser; a cue is one of its steps, by its cue number
  * (Chaser::stepCue()). A command names a list by its number
@@ -58,7 +58,7 @@ public:
     explicit ShowControl(Doc *doc, QObject *parent = nullptr);
 
     /** SubGo / SubBack: through the sub-cues of the cue playing
-     *  (SUBCUES_DESIGN.md) -- OSC /subgo and /subback; MSC has none. */
+     *  (docs/design/SUBCUES_DESIGN.md) -- OSC /subgo and /subback; MSC has none. */
     enum Command { Go, Stop, Pause, Resume, Load, AllOff, Reset, Back, SubGo, SubBack };
 
     /** Where a command came from: OSC, MSC, or this console (a key, the

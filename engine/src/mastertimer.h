@@ -288,7 +288,7 @@ public:
      * same tempo are on the same beat whenever each was started. It runs at
      * bpm() whatever the beat source; a beat source (Internal fires beat()
      * on each whole beat, External re-aligns it on each beat it sends) and
-     * the tap only steer it. See SPEED_SPREAD_DESIGN.md, S1.
+     * the tap only steer it. See docs/design/SPEED_SPREAD_DESIGN.md, S1.
      *********************************************************************/
 public:
     /** Beats since the clock started: whole part counts beats, the fraction

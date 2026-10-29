@@ -168,7 +168,7 @@ VCCueList::VCCueList(QWidget *parent, Doc *doc) : VCWidget(parent, doc)
             this, SLOT(slotItemChanged(QTreeWidgetItem*,int)));
     vbox->addWidget(m_tree);
 
-    /* What GO plays next (SHOW_CONTROL_DESIGN.md): the standby cue, with
+    /* What GO plays next (docs/design/SHOW_CONTROL_DESIGN.md): the standby cue, with
        its name and note, so the operator never has to work it out. */
     m_standbyLabel = new QLabel(this);
     m_standbyLabel->setObjectName(QStringLiteral("cueListStandby"));
@@ -248,7 +248,7 @@ VCCueList::VCCueList(QWidget *parent, Doc *doc) : VCWidget(parent, doc)
     connect(m_nextButton, SIGNAL(clicked()), this, SLOT(slotNextCue()));
     hbox->addWidget(m_nextButton);
 
-    /* Sub-cues (SUBCUES_DESIGN.md): shown when a step is a chase held as
+    /* Sub-cues (docs/design/SUBCUES_DESIGN.md): shown when a step is a chase held as
        sub-cues -- Sub GO steps through 4.1, 4.2... while GO goes to 5. */
     m_subBackButton = new QToolButton(this);
     m_subBackButton->setObjectName(QStringLiteral("cueListSubBack"));

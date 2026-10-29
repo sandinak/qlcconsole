@@ -44,7 +44,7 @@ class Doc;
  */
 
 /**
- * Refine (board Q106-Q108, FOCUS_REFINE_DESIGN.md section 6): with a Show
+ * Refine (board Q106-Q108, docs/design/FOCUS_REFINE_DESIGN.md section 6): with a Show
  * Tree cue up, the controller edits that cue's OWN values -- position, zoom,
  * focus, colour, gobo -- from the stage, where the light can be seen. Not
  * calibration (that is Focus calls): what the cue does.

@@ -126,7 +126,7 @@
 
 using namespace ShowTree;
 
-/* The Show Tree tab (SHOW_TREE_DESIGN.md §6): the tree, the layer rows with
+/* The Show Tree tab (docs/design/SHOW_TREE_DESIGN.md §6): the tree, the layer rows with
    inherited values greyed and their source, drops and their hints, one-off
    values in Recent, undo, the Library filter, import. Offscreen. */
 
@@ -2894,7 +2894,7 @@ void ShowTreeView_Test::generatedFunctionsAreLockedElsewhere()
         pm.deleteFunctions({ chaserId });
         QVERIFY(m_doc->function(chaserId) != nullptr);
         // (Adding to a collection was the old function tree's; the outline
-        // holds scenes only, PROGRAMMING_REDESIGN.md P1.)
+        // holds scenes only, docs/design/PROGRAMMING_REDESIGN.md P1.)
         QCOMPARE(closer.seen.count(), 1);
         // A plain function is deleted as ever.
         pm.deleteFunctions({ plain->id() });
@@ -4263,7 +4263,7 @@ void ShowTreeView_Test::convertAndDetachFromTheListPage()
 }
 
 /****************************************************************************
- * R2: palettes in the Library (PROGRAMMING_ROLE_DESIGN.md §4.2, P-D8)
+ * R2: palettes in the Library (docs/design/PROGRAMMING_ROLE_DESIGN.md §4.2, P-D8)
  ****************************************************************************/
 
 namespace
@@ -4627,7 +4627,7 @@ void ShowTreeView_Test::makeVcPageUpdatesItsFrame()
 }
 
 /****************************************************************************
- * R3: the Looks section (PROGRAMMING_ROLE_DESIGN.md §4.1, P-D5..P-D7)
+ * R3: the Looks section (docs/design/PROGRAMMING_ROLE_DESIGN.md §4.1, P-D5..P-D7)
  ****************************************************************************/
 
 void ShowTreeView_Test::looksSectionInTheTree()

@@ -245,7 +245,7 @@ public:
     void setUniversePassthrough(int index, bool enable);
 
     /** The slot the universe at @p index is in the show: Tour or House
-     *  (VENUES.md section 5). */
+     *  (docs/design/VENUES.md section 5). */
     void setUniverseSlotOwner(int index, RigOwner::Owner owner);
     RigOwner::Owner universeSlotOwner(int index) const;
 

@@ -1073,7 +1073,7 @@ OutputPatch *Universe::feedbackPatch() const
 
 void Universe::dumpOutput(const QByteArray &data, bool dataChanged)
 {
-    /* A universe the venue's house desk keeps (VENUES.md section 5): nothing
+    /* A universe the venue's house desk keeps (docs/design/VENUES.md section 5): nothing
        of ours goes out on it at all -- not Blind's, not Blackout's. */
     if (m_notOursWhole.load(std::memory_order_relaxed))
         return;
@@ -1111,7 +1111,7 @@ void Universe::dumpOutput(const QByteArray &data, bool dataChanged)
     if (m_outputPatchList.count() == 0)
         return;
 
-    /* Not ours (VENUES.md section 5): a range is zero in every frame we
+    /* Not ours (docs/design/VENUES.md section 5): a range is zero in every frame we
        send, whatever asked for it. */
     QByteArray masked;
     {
@@ -1802,7 +1802,7 @@ bool Universe::saveXML(QXmlStreamWriter *doc) const
     {
         saveOffline(InputPatchTag, KXMLQLCUniverseInputPatch);
     }
-    /* A venue's patch is on: the show keeps its own (VENUES.md section 5). */
+    /* A venue's patch is on: the show keeps its own (docs/design/VENUES.md section 5). */
     const QList<OfflinePatch> outputs = m_hasShowOutputBase ? m_showOutputBase
                                                             : outputPatchDescriptions();
     foreach (const OfflinePatch &p, outputs)

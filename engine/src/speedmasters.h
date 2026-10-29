@@ -40,7 +40,7 @@ class Doc;
 #define KXMLQLCSpeedMasters QStringLiteral("SpeedMasters")
 
 /**
- * The show's speed masters (SPEED_SPREAD_DESIGN.md, S2): four tempo clocks
+ * The show's speed masters (docs/design/SPEED_SPREAD_DESIGN.md, S2): four tempo clocks
  * an effect, a look, a chase step, a chase or a collection can be put on, so
  * one tap or one fader moves everything on it.
  *

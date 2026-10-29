@@ -215,7 +215,7 @@ void MonitorInventoryPanel::reload()
                 QTreeWidgetItem *leaf = new QTreeWidgetItem(dNode);
                 QString label = fx->connection() == Fixture::Network
                                 ? tr("%1  [network]").arg(fx->name()) : fx->name();
-                // Its owner when it is not the tour's (VENUES.md): "[House]".
+                // Its owner when it is not the tour's (docs/design/VENUES.md): "[House]".
                 const RigOwner::Owner owner = RigOwner::effective(m_doc, fx->id());
                 if (owner != RigOwner::Tour)
                     label += QStringLiteral("  [%1]").arg(RigOwner::displayName(owner));

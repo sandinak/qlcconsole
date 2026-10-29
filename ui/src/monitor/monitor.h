@@ -590,7 +590,7 @@ protected slots:
     /** Add a new stage target and open its editor. */
     void slotAddTarget();
 
-    /** Add a line target (LINE_TARGET_DESIGN.md): straight across the stage,
+    /** Add a line target (docs/design/LINE_TARGET_DESIGN.md): straight across the stage,
      *  4 m long, centred where the click was; then its editor. */
     void slotAddTargetLine();
 

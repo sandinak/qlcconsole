@@ -5,7 +5,7 @@
   PMJ Black 1 (OpenDeck) device overlay for the control-surface engine. Binds
   the board's real MIDI channels (see resources/inputprofiles/PMJ-Black-1.qxi)
   to ControlSurface::Role, feeds raw input into the engine, and sends LED
-  feedback back out. See CONTROL_SURFACE_DESIGN.md, "P1 — PMJ overlay + LED".
+  feedback back out. See docs/design/CONTROL_SURFACE_DESIGN.md, "P1 — PMJ overlay + LED".
 
   P1 slice 1: full role table registered (so every control lights up
   sensibly and every press/turn is at least received by the engine), but only
@@ -100,7 +100,7 @@ private:
      *  (ProgrammingManager::currentSceneId())'s fixture-group members
      *  (expanded, group order) followed by its individually-fixed fixtures,
      *  deduped, in that combined order ("canvas order"). Index 0 = strip 1.
-     *  Not yet paged past 10 (see CONTROL_SURFACE_DESIGN.md P2) — a scene
+     *  Not yet paged past 10 (see docs/design/CONTROL_SURFACE_DESIGN.md P2) — a scene
      *  with more than 10 targets only exposes the first 10 for now. */
     QList<quint32> sceneTargetFixtures() const;
 

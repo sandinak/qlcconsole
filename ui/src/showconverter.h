@@ -40,7 +40,7 @@ class Doc;
  */
 
 /**
- * The show converter (WORKFLOW_DESIGN.md §3.5, W5): one row per chaser of
+ * The show converter (docs/design/WORKFLOW_DESIGN.md §3.5, W5): one row per chaser of
  * an old show, told apart by how it runs -- a cue list (waits for GO,
  * notes, cue numbers, show control, a VC Cue List) is offered as a Show
  * Tree cue list, ticked; an effect (strobes, chases, sweeps: it loops on

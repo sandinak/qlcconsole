@@ -635,7 +635,7 @@ protected:
     StageLook computeAutoStageLook() const;
 
     /*********************************************************************
-     * Owner (board Q137, VENUES.md)
+     * Owner (board Q137, docs/design/VENUES.md)
      *********************************************************************/
 public:
     /** Who it belongs to, as set on the fixture itself: Tour, House or

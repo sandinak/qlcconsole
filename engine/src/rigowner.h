@@ -33,7 +33,7 @@ class Doc;
  */
 
 /**
- * Who a fixture belongs to (board Q137, VENUES.md section 2): the tour
+ * Who a fixture belongs to (board Q137, docs/design/VENUES.md section 2): the tour
  * package (Tour, or Rental for the run) travels with the show; the House rig
  * is the room's and lives in that venue's file.
  *

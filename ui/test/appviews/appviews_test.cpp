@@ -1132,7 +1132,7 @@ void AppViews_Test::theGridFollowsTheUnitPreference()
     QCOMPARE(m_app->doc()->monitorProperties()->gridUnits(), MonitorProperties::Feet);
 
     // (No second New straight after: MasterTimer::stop() right behind a
-    // start() can wait forever -- see TODO.md.)
+    // start() can wait forever -- see docs/project/TODO.md.)
     forget();
 }
 

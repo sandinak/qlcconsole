@@ -48,7 +48,7 @@ class Doc;
 
 /**
  * The Show Tree's productions, and the functions they bake to
- * (SHOW_TREE_DESIGN.md §4): a cue list is a Chaser, a cue a Collection
+ * (docs/design/SHOW_TREE_DESIGN.md §4): a cue list is a Chaser, a cue a Collection
  * holding its complete output, a resolved layer a generated Scene --
  * one per distinct layer, shared by every cue where it is the same, so it
  * plays on across GO (ChaserRunner's hand-over).
@@ -373,7 +373,7 @@ public:
     ShowTree::MoveInBlack listMoveInBlack(quint32 listId) const;
     bool setCuesNoMoveInBlack(const QList<quint32> &cueIds, bool no);
     bool isCueNoMoveInBlack(quint32 cueId) const;
-    /** A focus-call cue (FOCUS_REFINE_DESIGN.md section 7): GO arms the
+    /** A focus-call cue (docs/design/FOCUS_REFINE_DESIGN.md section 7): GO arms the
      *  show's focus calls, the controller's Start begins them. One undo
      *  step; false when nothing changed (a Looks section has none). */
     bool setCuesFocusCall(const QList<quint32> &cueIds, bool on);
@@ -581,7 +581,7 @@ public:
     bool removeReusable(quint32 reusableId, bool unlinkUses = false, QString *why = nullptr);
 
     /************************************************************************
-     * The Looks section (PROGRAMMING_ROLE_DESIGN.md §4.1, P-D5..P-D7, R3):
+     * The Looks section (docs/design/PROGRAMMING_ROLE_DESIGN.md §4.1, P-D5..P-D7, R3):
      * busking looks beside a production's cue lists. A look is a cue of the
      * production's Looks list (CueList::looks) -- the same layers, rows and
      * cascade, never tracking -- baked to a Collection of its own that VC
@@ -1143,7 +1143,7 @@ private:
      * The bridge (W5): an old show into the tree -- and back
      ************************************************************************/
 public:
-    /** What a chaser is used as (WORKFLOW_DESIGN.md §3.2, §3.5). */
+    /** What a chaser is used as (docs/design/WORKFLOW_DESIGN.md §3.2, §3.5). */
     enum class ChaserKind
     {
         CueList,    //!< manual: waits for GO, notes, cue numbers, show control, a VC Cue List

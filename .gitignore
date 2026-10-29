@@ -66,3 +66,11 @@ engine/test/qlci18n/qlci18n_*.ts_
 
 # Local scratch area (logs, coverage scripts) -- not part of the project
 /scratchpad/
+
+# Stray workspace backups and temp copies (never part of the project)
+*.autosave
+*.temp
+*.before-*
+# Captured program output that once landed in the root as a file named "20"
+/[0-9]
+/[0-9][0-9]

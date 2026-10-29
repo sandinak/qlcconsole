@@ -3,7 +3,7 @@
   A bright head sweeps across the pixels ONCE, leaving a fading trail, then
   clears — a one-shot with a natural life cycle. It rides inputs.phase (0→1), so
   it fits whatever run length the cue/step (or a per-look override) gives it,
-  landing in time with the show. See EFFECT_LIFECYCLE_DESIGN.md.
+  landing in time with the show. See docs/design/EFFECT_LIFECYCLE_DESIGN.md.
 
   Pure & testable: position is inputs.phase, not wall-clock.
 */

@@ -33,7 +33,7 @@ class Doc;
  */
 
 /**
- * The network summary for the data package (NETWORK_CABLING_DESIGN.md, N5):
+ * The network summary for the data package (docs/design/NETWORK_CABLING_DESIGN.md, N5):
  * NetworkReport::toText() to read or copy, and its CSV to save for a
  * spreadsheet. Read-only; built once when the dialog opens.
  */

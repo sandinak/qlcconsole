@@ -28,7 +28,7 @@
  */
 
 /**
- * The curve of a line target (LINE_TARGET_DESIGN.md): a smooth 3-D curve
+ * The curve of a line target (docs/design/LINE_TARGET_DESIGN.md): a smooth 3-D curve
  * through every control point -- centripetal Catmull-Rom, which passes
  * through each handle and does not loop or overshoot when points are
  * bunched -- measured by arc length, so "a fifth of the way along" is a

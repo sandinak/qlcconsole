@@ -32,7 +32,7 @@ class Doc;
  */
 
 /**
- * The look editor's picture of a spread (SPEED_SPREAD_DESIGN.md, S3): the
+ * The look editor's picture of a spread (docs/design/SPEED_SPREAD_DESIGN.md, S3): the
  * look's heads on the floor plan (or their head-layout cells when nothing is
  * placed), each coloured by its phase -- the same hue at the same place in
  * the cycle -- and the target marked when the spread runs out from or round

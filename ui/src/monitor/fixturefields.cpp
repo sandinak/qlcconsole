@@ -166,7 +166,7 @@ FixtureFields::FixtureFields(Monitor *monitor, QFormLayout *form, QWidget *paren
         finishEdit();
     });
 
-    /* Who it belongs to (board Q137, VENUES.md): the tour package or the
+    /* Who it belongs to (board Q137, docs/design/VENUES.md): the tour package or the
        venue's house rig. Not set follows its group. */
     m_owner = new QComboBox(parent);
     m_owner->setObjectName(QStringLiteral("fixtureOwner"));

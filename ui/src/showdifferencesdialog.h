@@ -32,7 +32,7 @@ class Doc;
  * lists only what differs and is not dealt with.
  *
  * Review… for the footer's "N items in this show differ from this
- * computer's" (SHOW_EMBEDDING_DESIGN.md §4): one row per difference -- what
+ * computer's" (docs/design/SHOW_EMBEDDING_DESIGN.md §4): one row per difference -- what
  * it is, which side looks newer, and whether switching to this computer's
  * copy is safe for what the show uses -- with the three choices: Use this
  * computer's, Keep the show's, Install the show's.

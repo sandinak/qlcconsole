@@ -40,7 +40,7 @@ class QLCFixtureMode;
  * a universe that carries network fixtures, since a universe has one output
  * and so one destination.
  *
- * Proximity (N6, see NETWORK_CABLING_DESIGN.md): a DMX fixture that is on the
+ * Proximity (N6, see docs/design/NETWORK_CABLING_DESIGN.md): a DMX fixture that is on the
  * plot goes to the nearest node port with room -- nearest by where the port's
  * universe physically lands (the receiver for a wireless port, else the node),
  * least-loaded first among equally near ports. A universe already on the port

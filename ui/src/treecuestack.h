@@ -33,7 +33,7 @@ class ShowTreeView;
  */
 
 /**
- * The TreeCueStack back end (WORKFLOW_DESIGN.md §3.4, W3): a Show Tree cue (or
+ * The TreeCueStack back end (docs/design/WORKFLOW_DESIGN.md §3.4, W3): a Show Tree cue (or
  * a look of a Looks section, or a sub-cue) in the Workbench.
  *
  * - Its rows are what is on stage in the cue, in order: its own layers and,
