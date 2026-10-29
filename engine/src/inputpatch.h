@@ -25,6 +25,7 @@
 #include <QMutex>
 
 #include "qlcinputprofile.h"
+#include "qlcengine_export.h"
 
 class QLCIOPlugin;
 
@@ -50,7 +51,7 @@ class QLCIOPlugin;
  * numbers). Each universe can also be set to block all outgoing traffic
  * (=feedback) towards input plugins.
  */
-class InputPatch : public QObject
+class QLC_ENGINE_EXPORT InputPatch : public QObject
 {
     Q_OBJECT
     Q_DISABLE_COPY(InputPatch)
