@@ -17,4 +17,4 @@ app, find their way round the stage, and play a finished cue list.*
 | 0.1 | [What light does](lesson-01/index.md) (no computers) | written |
 | 0.2 | [The virtual stage](lesson-02/index.md) (level check: label the stage) | written |
 
-See the [course plan](../COURSE_PLAN.md#level-0--first-look-2-lessons).
+See the [course plan](https://github.com/sandinak/qlcconsole/blob/main/docs/course/COURSE_PLAN.md#level-0--first-look-2-lessons).

@@ -13,7 +13,14 @@ search_enabled: true
 color_scheme: dark
 aux_links:
   "qlcconsole on GitHub": "https://github.com/sandinak/qlcconsole"
+# Teacher material is read on GitHub, not on the site (Q187); the
+# check in tools/student-pages.py --site fails if any of it is built.
 exclude:
+  - COURSE_PLAN.md
+  - VOLUNTEER.md
+  - _template/
+  - level-*/lesson-*/teacher-guide.md
+  - level-*/lesson-*/slides.md
   - tools/
   - shows/README.md
   - Gemfile

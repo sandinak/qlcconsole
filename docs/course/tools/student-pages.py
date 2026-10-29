@@ -14,6 +14,12 @@ It also reports each page's word count against its handout.
 
     python3 docs/course/tools/student-pages.py          # check
     python3 docs/course/tools/student-pages.py --qr     # (re)make images/qr/*.svg
+    python3 docs/course/tools/student-pages.py --site _site   # also check a build
+
+--site checks a Jekyll build of the course (built with --baseurl /qlcconsole,
+as Pages does): no teacher material in it or in its search index (teacher
+guides, slides outlines, the course plan, volunteer pages and _template/ are
+read on GitHub only), and no internal link or picture that goes nowhere.
 
 --qr needs segno (pip install segno). Exits 1 on any problem.
 """
@@ -23,6 +29,9 @@ import re
 import sys
 
 SITE = "https://sandinak.github.io/qlcconsole"
+BASEURL = "/qlcconsole"
+# Source pages kept off the site (_config.yml exclude:), read on GitHub.
+TEACHER = re.compile(r"(^|/)(teacher-guide|slides|COURSE_PLAN|VOLUNTEER)\.(md|html)$|(^|/)_?template/")
 COURSE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
@@ -54,6 +63,62 @@ def student_pages():
 
 def slug(permalink):
     return permalink.strip("/").split("/")[-1]
+
+
+def check_site(site):
+    """Problems in a built site: teacher material, or links that go nowhere."""
+    import html.parser
+    import json
+    from urllib.parse import unquote, urlsplit
+
+    problems = []
+    for root, dirs, files in os.walk(COURSE):
+        dirs[:] = [d for d in dirs if d not in ("tools",)]
+        for f in files:
+            rel = os.path.relpath(os.path.join(root, f), COURSE)
+            built = os.path.join(site, rel[:-3] + ".html") if rel.endswith(".md") else None
+            if TEACHER.search(rel) and built and os.path.exists(built):
+                problems.append(f"site: teacher page {rel} is built ({os.path.relpath(built, site)})")
+    index = os.path.join(site, "assets", "js", "search-data.json")
+    for doc in json.load(open(index, encoding="utf-8")).values():
+        if TEACHER.search(doc["url"].split("#")[0]) or re.search(r"Teacher guide · Level|Give students:", doc["content"]):
+            problems.append(f"site: search index has teacher text ({doc['url']})")
+
+    class Links(html.parser.HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.targets = []
+
+        def handle_starttag(self, tag, attrs):
+            for k, v in attrs:
+                if k in ("href", "src") and v:
+                    self.targets.append(v)
+
+    for root, dirs, files in os.walk(site):
+        dirs[:] = [d for d in dirs if d != "assets"]
+        for f in files:
+            if not f.endswith(".html"):
+                continue
+            page = os.path.join(root, f)
+            parser = Links()
+            parser.feed(open(page, encoding="utf-8").read())
+            for target in parser.targets:
+                url = urlsplit(target)
+                if url.scheme or url.netloc or not url.path:
+                    continue
+                path = unquote(url.path)
+                if path.startswith(BASEURL + "/"):
+                    path = os.path.join(site, path[len(BASEURL) + 1:])
+                elif path.startswith("/"):
+                    path = os.path.join(site, path[1:])
+                else:
+                    path = os.path.join(root, path)
+                if path.endswith("/"):
+                    path += "index.html"
+                if not (os.path.isfile(path) or os.path.isfile(path + ".html")
+                        or os.path.isfile(os.path.join(path, "index.html"))):
+                    problems.append(f"site: {os.path.relpath(page, site)}: {target} goes nowhere")
+    return problems
 
 
 def main():
@@ -108,6 +173,9 @@ def main():
             guide = os.path.join(os.path.dirname(path), "teacher-guide.md")
             if os.path.isfile(guide) and f"{SITE}{link}" not in open(guide, encoding="utf-8").read():
                 problems.append(f"{os.path.relpath(guide, COURSE)}: no 'Give students' link to {link}")
+
+    if "--site" in sys.argv:
+        problems += check_site(sys.argv[sys.argv.index("--site") + 1])
 
     for p in problems:
         print("PROBLEM:", p)

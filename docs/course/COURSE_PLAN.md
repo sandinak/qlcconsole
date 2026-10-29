@@ -218,6 +218,9 @@ and its test change in the same commit, and the course test
   lessons, works on a phone) with no build step for the teacher: edit a
   `.md` file, push, the site updates. The same `.md` files also read fine
   on GitHub itself.
+- **Teacher material stays on GitHub** (Q187): teacher guides, slides
+  outlines, this plan and the volunteer pages are excluded from the site
+  (`_config.yml`), and the site links to them on GitHub.
 - **How:** `docs/course/_config.yml` is a Jekyll config with the
   just-the-docs remote theme. `.github/workflows/pages.yml` builds **only
   `docs/course`** and deploys it, on a push to `main` that touches

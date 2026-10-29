@@ -123,6 +123,10 @@ skipped). Upstream fixes taken:
 
 - Classic QLC+'s main toolbar has the DMX Monitor where QLC+ had its
   Monitor, then the Rig Overview, the address tool and Full Screen.
+- **The course site has no teacher material**: the teacher guides, slides
+  outlines, course plan and volunteer pages are read on GitHub, and the
+  site's links to them go there. The site's build fails if one comes back
+  (`student-pages.py --site`).
 
 ### Fixed
 

@@ -13,7 +13,7 @@ cue list with **GO**. Ends with the Level 0 check: label the stage.
 
 | For | File |
 |---|---|
-| Teacher | [Teacher guide](teacher-guide.md) · [Slides outline](slides.md) |
+| Teacher | [Teacher guide](https://github.com/sandinak/qlcconsole/blob/main/docs/course/level-0/lesson-02/teacher-guide.md) · [Slides outline](https://github.com/sandinak/qlcconsole/blob/main/docs/course/level-0/lesson-02/slides.md) |
 | Students | [Handout](handout.md) · [Exit ticket: label the stage](exit-ticket.md) · [At home](at-home.md) |
 | Show files | [`lesson-1-1-finish.qlcc`](../../shows/lesson-1-1-finish.qlcc) |
 

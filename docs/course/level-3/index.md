@@ -23,5 +23,5 @@ power, running and fixing a real show.
 | 3.9 | Troubleshooting, and the capstone | outline |
 | 3.10 | [Coming from Eos](lesson-10/index.md) (optional, for students who know an Eos desk) | written |
 
-See the [course plan](../COURSE_PLAN.md#level-3--advanced-10-lessons) for
+See the [course plan](https://github.com/sandinak/qlcconsole/blob/main/docs/course/COURSE_PLAN.md#level-3--advanced-10-lessons) for
 the outlines and outcomes.

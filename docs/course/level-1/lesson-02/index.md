@@ -13,7 +13,7 @@ palette, and give the scream its own cue with a **cue look**.
 
 | For | File |
 |---|---|
-| Teacher | [Teacher guide](teacher-guide.md) · [Slides outline](slides.md) |
+| Teacher | [Teacher guide](https://github.com/sandinak/qlcconsole/blob/main/docs/course/level-1/lesson-02/teacher-guide.md) · [Slides outline](https://github.com/sandinak/qlcconsole/blob/main/docs/course/level-1/lesson-02/slides.md) |
 | Students | [Handout](handout.md) · [Exit ticket](exit-ticket.md) · [At home](at-home.md) |
 | Show files | [`lesson-1-2-start.qlcc`](../../shows/lesson-1-2-start.qlcc) · [`lesson-1-2-finish.qlcc`](../../shows/lesson-1-2-finish.qlcc) |
 
