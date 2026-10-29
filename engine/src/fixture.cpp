@@ -60,13 +60,11 @@ Fixture::~Fixture()
     /* A generic dimmer's definition is this fixture's own (genericDimmerDef()
        makes one per fixture, setFixtureDefinition() deletes the one it
        replaces): the last one goes with the fixture. It leaked, about 50 KB
-       per show open. */
-    if (m_fixtureDef != NULL &&
-        m_fixtureDef->manufacturer() == KXMLFixtureGeneric &&
-        m_fixtureDef->model() == KXMLFixtureGeneric)
-    {
+       per show open. Known from the flag, never by asking the definition:
+       a cached one may be gone already (the Doc deletes its cache before
+       its child fixtures). */
+    if (m_ownsFixtureDef)
         delete m_fixtureDef;
-    }
 }
 
 bool Fixture::operator<(const Fixture& fxi)
@@ -752,15 +750,15 @@ void Fixture::setFixtureDefinition(QLCFixtureDef* fixtureDef,
     {
         int i, chNum;
 
-        if (m_fixtureDef != NULL && m_fixtureDef != fixtureDef &&
-            m_fixtureDef->manufacturer() == KXMLFixtureGeneric &&
-            m_fixtureDef->model() == KXMLFixtureGeneric)
-        {
+        if (m_ownsFixtureDef && m_fixtureDef != fixtureDef)
             delete m_fixtureDef;
-        }
 
         m_fixtureDef = fixtureDef;
         m_fixtureMode = fixtureMode;
+        // One made by genericDimmerDef(): never a definition from a file
+        m_ownsFixtureDef = fixtureDef->manufacturer() == KXMLFixtureGeneric &&
+                           fixtureDef->model() == KXMLFixtureGeneric &&
+                           fixtureDef->definitionSourceFile().isEmpty();
         chNum = fixtureMode->channels().size();
 
         // If there are no head entries in the mode, create one that contains
@@ -801,8 +799,11 @@ void Fixture::setFixtureDefinition(QLCFixtureDef* fixtureDef,
     }
     else
     {
+        // (an own generic definition is let go, not deleted, as before:
+        // a caller clearing it may still be reading it)
         m_fixtureDef = NULL;
         m_fixtureMode = NULL;
+        m_ownsFixtureDef = false;
     }
 
     m_autoStageLook.store(int(computeAutoStageLook()), std::memory_order_relaxed);

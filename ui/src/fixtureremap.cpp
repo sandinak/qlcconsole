@@ -417,10 +417,10 @@ void FixtureRemap::slotAddTargetFixture()
             fxi->setFixtureDefinition(fixtureDef, mode);
         else
         {
-            fixtureDef = fxi->genericDimmerDef(channels);
-            mode = fxi->genericDimmerMode(fixtureDef, channels);
-            fxi->setFixtureDefinition(fixtureDef, mode);
-            //fxi->setChannels(channels);
+            /* Each its own: a generic dimmer's definition belongs to its
+               fixture (it was kept here and handed to the next one too) */
+            QLCFixtureDef *genericDef = fxi->genericDimmerDef(channels);
+            fxi->setFixtureDefinition(genericDef, fxi->genericDimmerMode(genericDef, channels));
         }
 
         m_targetDoc->addFixture(fxi);

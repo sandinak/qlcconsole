@@ -71,6 +71,7 @@ private slots:
     void stageLookAuto();
     void stageLookIcon();
     void aGenericDimmersDefinitionGoesWithIt();
+    void aFixtureNeverDeletesADefinitionItDidNotMake();
     //void status();
 
 private:

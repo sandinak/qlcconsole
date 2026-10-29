@@ -46,6 +46,7 @@ private slots:
      *  list with them deleted plays; every way of arriving lands the same
      *  (the restack walks past them); a jump to one plays it. */
     void skippedCuesPlayAsIfDeleted();
+    void courseShows_data();
     void courseShows();
     void aRealShow();
 

@@ -1566,4 +1566,37 @@ void Fixture_Test::aGenericDimmersDefinitionGoesWithIt()
     QVERIFY(loaded.isNull());
 }
 
+/* Only its own generic definition goes with a fixture -- one a definition
+   file gave is the cache's, even when it reads "Generic Generic". And the
+   destructor never asks the definition: the Doc deletes its cache before its
+   child fixtures (Windows CI crashed in ~Fixture -> QLCFixtureDef::
+   manufacturer() when it did). */
+void Fixture_Test::aFixtureNeverDeletesADefinitionItDidNotMake()
+{
+    QLCFixtureDef *fileDef = new QLCFixtureDef();
+    fileDef->setManufacturer(KXMLFixtureGeneric);
+    fileDef->setModel(KXMLFixtureGeneric);
+    fileDef->setDefinitionSourceFile(QStringLiteral("/defs/Generic-Generic.qxf"));
+    QLCChannel *ch = new QLCChannel();
+    ch->setName(QStringLiteral("Dimmer"));
+    ch->setGroup(QLCChannel::Intensity);
+    fileDef->addChannel(ch);
+    QLCFixtureMode *mode = new QLCFixtureMode(fileDef);
+    mode->setName(QStringLiteral("1 Channel"));
+    mode->insertChannel(ch, 0);
+    fileDef->addMode(mode);
+    QPointer<QLCChannel> watch(ch);
+
+    Fixture *fxi = new Fixture(m_doc);
+    fxi->setFixtureDefinition(fileDef, mode);
+    delete fxi;
+    QVERIFY2(!watch.isNull(), "a fixture deleted a definition it was only given");
+
+    // The Doc's order: the cached definition goes first, then the fixture.
+    fxi = new Fixture(m_doc);
+    fxi->setFixtureDefinition(fileDef, mode);
+    delete fileDef;
+    delete fxi;
+}
+
 QTEST_APPLESS_MAIN(Fixture_Test)
