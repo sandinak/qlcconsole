@@ -57,6 +57,15 @@ skipped). Upstream fixes taken:
 
 ### Added
 
+- **Web access saved with the show**: **Connections ▸ Devices ▸ Show
+  control & sync ▸ Web access** turns on "Start web access with this show,
+  on port" (9999 by default), with **Reachable from other devices on the
+  network** and **Users log in** (as **-wa**). Opening the show starts the
+  server; opening one without it stops it, and another port restarts it.
+  The box shows the address to open and whether it runs; a port another
+  program holds is said there and in the footer, and the show opens anyway.
+  **-w** / **-wa** on the command line still win for the whole session. A
+  show without the setting saves and loads as before.
 - **Help ▸ Troubleshooting ▸ Report a Bug…**: a short form (title, what
   happened, what you expected, steps) that opens the project's GitHub bug
   form in the browser, filled in. **Details that will be included** shows,

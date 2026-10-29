@@ -41,6 +41,7 @@
 #include "timecodesource.h"
 #include "functionparent.h"
 #include "showcontrol.h"
+#include "showwebaccess.h"
 #include "chaserstep.h"
 #include "chaser.h"
 #include "scene.h"
@@ -277,12 +278,14 @@ void ShowControlUi_Test::thePageShowsTheCurrentSettings()
 
     // One line per link for Connections ▸ Devices; both off here.
     const QList<QStringList> rows = page.summary();
-    QCOMPARE(rows.count(), 3);
+    QCOMPARE(rows.count(), 4);
     QCOMPARE(rows.at(0).at(0), QString("osc"));
     QCOMPARE(rows.at(0).at(2), QString("Off"));
     QCOMPARE(rows.at(1).at(1), QString("MIDI Show Control in"));
     QCOMPARE(rows.at(1).at(2), QString("Off"));
     QCOMPARE(rows.at(2).at(0), QString("mtc"));
+    QCOMPARE(rows.at(3).at(0), QString("web"));
+    QCOMPARE(rows.at(3).at(2), QString("Off"));
     QVERIFY(page.findChild<QWidget *>("scQLabOutGroup") == nullptr);
 
     // With no listener yet (the page is built before it), nothing to edit.
@@ -529,10 +532,12 @@ void ShowControlUi_Test::theRowsInConnectionsDevices()
     QList<QTreeWidgetItem *> found = view->findItems("Show control & sync", Qt::MatchExactly, 0);
     QCOMPARE(found.count(), 1);
     QTreeWidgetItem *branch = found.first();
-    QCOMPARE(branch->childCount(), 3);
+    QCOMPARE(branch->childCount(), 4);
     QCOMPARE(branch->child(0)->text(0), QString("OSC in"));
     QCOMPARE(branch->child(0)->text(1), QString("Off"));
     QCOMPARE(branch->child(2)->text(0), QString("MIDI timecode"));
+    QCOMPARE(branch->child(3)->text(0), QString("Web access"));
+    QCOMPARE(branch->child(3)->text(1), QString("Off"));
 
     // Pick MSC: only its box on the right.
     tree.selectShowControlRow("msc");
@@ -547,6 +552,66 @@ void ShowControlUi_Test::theRowsInConnectionsDevices()
     page.findChild<QCheckBox *>("scOscEnabled")->setChecked(true);
     QTRY_VERIFY(branch->child(0)->text(1).startsWith(QString("Port %1").arg(port)));
     listener.setOscEnabled(false);
+
+    // Web access running: its row says where.
+    m_doc->webAccess()->setStatus(ShowWebAccess::Running, QStringLiteral("http://127.0.0.1:9999/"));
+    QTRY_COMPARE(branch->child(3)->text(1), QString("Port 9999 · this computer only"));
+    m_doc->webAccess()->setStatus(ShowWebAccess::Off, QString());
+}
+
+/* No server here (that's the webaccess library's, WebAccess_Test): the box
+   edits the show's setting, and shows the state the server reports. */
+void ShowControlUi_Test::theWebAccessBoxEditsTheShow()
+{
+    ShowWebAccess *web = m_doc->webAccess();
+    ShowControlSyncPage page(m_doc);
+    QCheckBox *on = page.findChild<QCheckBox *>("scWebEnabled");
+    QSpinBox *port = page.findChild<QSpinBox *>("scWebPort");
+    QCheckBox *network = page.findChild<QCheckBox *>("scWebNetwork");
+    QCheckBox *login = page.findChild<QCheckBox *>("scWebLogin");
+    QLabel *where = page.findChild<QLabel *>("scWebWhere");
+    QLabel *status = page.findChild<QLabel *>("scWebStatus");
+    QVERIFY(on && port && network && login && where && status);
+    QVERIFY(!on->isChecked());
+    QCOMPARE(port->value(), 9999);
+    QCOMPARE(status->text(), QString("Off"));
+    QVERIFY2(where->text().contains("http://127.0.0.1:9999/") && where->text().contains("this computer only"),
+             qPrintable(where->text()));
+
+    m_doc->resetModified();
+    on->setChecked(true);
+    port->setValue(8200);
+    network->setChecked(true);
+    login->setChecked(true);
+    QVERIFY(web->isEnabled());
+    QCOMPARE(web->port(), 8200);
+    QVERIFY(web->network());
+    QVERIFY(web->login());
+    QVERIFY(m_doc->isModified());
+    QVERIFY2(where->text().contains("http://127.0.0.1:8200/") && !where->text().contains("this computer only"),
+             qPrintable(where->text()));
+
+    // What the server reports.
+    web->setStatus(ShowWebAccess::Failed, QString(), QStringLiteral("Port 8200 is in use by another program."));
+    QCOMPARE(status->property("webState").toInt(), int(ShowWebAccess::Failed));
+    QVERIFY(status->text().contains("in use"));
+    QCOMPARE(page.summary().value(3).value(2), QString("Port 8200 · could not start"));
+    web->setStatus(ShowWebAccess::Running, QStringLiteral("http://<this computer's address>:8200/"));
+    QCOMPARE(status->text(), QString("Running on port 8200, reachable from the network."));
+    QCOMPARE(page.summary().value(3).value(2), QString("Port 8200 · network"));
+    // Started with -w on another port: the box says that one.
+    web->setStatus(ShowWebAccess::CommandLine, QStringLiteral("http://127.0.0.1:8300/"), QStringLiteral("(-w)"));
+    QCOMPARE(status->text(), QString("Running on port 8300, this computer only. (-w)"));
+    QVERIFY2(where->text().contains("http://127.0.0.1:8300/"), qPrintable(where->text()));
+    QCOMPARE(page.summary().value(3).value(2), QString("Port 8300 · this computer only · from -w"));
+
+    // Another show opened: the box follows it.
+    m_doc->clearContents();
+    QVERIFY(!on->isChecked());
+    QCOMPARE(port->value(), 9999);
+    QVERIFY(!network->isChecked());
+    QVERIFY(!login->isChecked());
+    web->setStatus(ShowWebAccess::Off, QString());
 }
 
 QTEST_MAIN(ShowControlUi_Test)

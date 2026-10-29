@@ -50,6 +50,8 @@ private slots:
     void manyUniversesRebuildTheListOnce();
     void mscOnOneChosenInput();
     void theRowsInConnectionsDevices();
+    /** Web access, the show's own setting: edited here, its state shown. */
+    void theWebAccessBoxEditsTheShow();
 
 private:
     Chaser *makeList(int steps);
