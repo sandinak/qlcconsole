@@ -36,13 +36,15 @@ Where will the audience look first?
 
 ## Steps
 
-1. **File → Open** → `lesson-2-3-start.qlcc`.
-2. Click the **Show Tree** tab (⇧⌘5); open **View → Rig Overview** (⇧⌘R)
+1. **File ▸ Open** → `lesson-2-3-start.qlcc`.
+2. Click the **Show Tree** tab (⇧⌘5); open **View ▸ Rig Overview** (⇧⌘R)
    beside it.
 3. Click **1.0.4 Solo**, **+ Cue**, type `Bridge`, **Return**. Set
    **Mode** to **Block**.
 4. Library → **All → Groups → Trusses**: click **Trusses SR**, ⌘-click
    **Trusses SL**, right-click → **Make set…**, type `Truss Sides`, **OK**.
+
+   {% include inapp.html do="Add to a selection" mac="⌘-click" win="Ctrl-click" see="Not Control-click on a Mac: that's a right-click." %}
 
    ![The group set](../../images/lesson-2-3/group-set.png)
 
@@ -61,7 +63,7 @@ Where will the audience look first?
 
     ![The bridge](../../images/lesson-2-3/rig-bridge.png)
 
-12. **File → Save As** → `Lesson2-3-yourname.qlcc`.
+12. **File ▸ Save As** → `Lesson2-3-yourname.qlcc`.
 
 **Stuck?** The set has one group: ⌘-click the second before you
 right-click. US isn't under Steps: undo, hold ⇧ all through the drop.

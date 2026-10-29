@@ -19,9 +19,13 @@ TODO: the handout's Part 1 cue sheet, if the lesson has one.
 
 ## Steps
 
-1. **File → Open** → `lesson-N-N-start.qlcc`.
+1. **File ▸ Open** → `lesson-N-N-start.qlcc`.
 2. TODO: one action per step, from the handout's steps. Use the handout's
    pictures: `![What it shows](../../images/lesson-N-N/picture.png)`.
+3. TODO: an app operation the course hasn't used before gets an "In the
+   app" box at its first step (VOLUNTEER.md); delete this one if none.
+
+   {% include inapp.html do="TODO what it's for" path="TODO Menu ▸ Item" mac="TODO ⌘key" win="TODO Ctrl+key" see="TODO one line of what you'll see." %}
 
 **Stuck?** TODO: the two or three most common fixes.
 

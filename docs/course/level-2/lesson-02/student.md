@@ -37,11 +37,13 @@ Which cues change when Chorus Colour changes?
 
 ## Steps
 
-1. **File → Open** → `lesson-2-2-start.qlcc`.
-2. Click the **Show Tree** tab (⇧⌘5); open **View → Rig Overview** (⇧⌘R)
+1. **File ▸ Open** → `lesson-2-2-start.qlcc`.
+2. Click the **Show Tree** tab (⇧⌘5); open **View ▸ Rig Overview** (⇧⌘R)
    beside it.
 3. Library → **All → Palettes → Colour**: right-click **Magenta** →
    **Used by**. One use: the chorus's Steps.
+
+   {% include inapp.html do="Right-click" mac="Control-click" win="right button" see="On a Mac trackpad, a two-finger click works too. A menu of what you can do with that item opens." %}
 4. Right-click **Magenta** → **Duplicate**. The copy opens in the Look
    Editor under the page.
 
@@ -67,7 +69,7 @@ Which cues change when Chorus Colour changes?
 
 11. Click **1.0.3 Scream**: its cyc is violet too.
 12. Click **↩ Back** to close the Look Editor.
-13. **File → Save As** → `Lesson2-2-yourname.qlcc`.
+13. **File ▸ Save As** → `Lesson2-2-yourname.qlcc`.
 
 **Stuck?** No Used by or Duplicate: right-click the palette under **All →
 Palettes**, not in Recent. Magenta changed: undo, and click **✎** on the

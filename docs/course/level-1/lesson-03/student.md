@@ -45,8 +45,8 @@ In the solo, where will the audience look, and why?
 
 ## Steps
 
-1. **File → Open** → `lesson-1-3-start.qlcc`.
-2. Click the **Show Tree** tab (⇧⌘5); open **View → Rig Overview** (⇧⌘R)
+1. **File ▸ Open** → `lesson-1-3-start.qlcc`.
+2. Click the **Show Tree** tab (⇧⌘5); open **View ▸ Rig Overview** (⇧⌘R)
    beside it.
 3. Click **1.0.1 Verse**. Drag **AT-W-ALL** (Groups → AT) onto the dashed
    box under **Layers**.
@@ -76,7 +76,7 @@ In the solo, where will the audience look, and why?
 
     ![What a spot needs](../../images/lesson-1-3/spot-layer.png)
 
-12. **File → Save As** → `Lesson1-3-yourname.qlcc`.
+12. **File ▸ Save As** → `Lesson1-3-yourname.qlcc`.
 
 **Stuck?** No targets: type `Center` in **Filter the Library**. The Solo
 is still red: set **Mode** to **Block**. Spots hard to see: in the Rig

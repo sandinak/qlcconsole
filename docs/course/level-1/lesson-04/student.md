@@ -41,8 +41,8 @@ To enter a time: click the box, **⌘A**, type the number, press
 
 ## Steps
 
-1. **File → Open** → `lesson-1-4-start.qlcc`.
-2. Click the **Show Tree** tab (⇧⌘5); open **View → Rig Overview** (⇧⌘R)
+1. **File ▸ Open** → `lesson-1-4-start.qlcc`.
+2. Click the **Show Tree** tab (⇧⌘5); open **View ▸ Rig Overview** (⇧⌘R)
    beside it.
 3. Click **1.0.0 Pose**; set **Fade in** to **3**.
 4. Click **1.0.1 Verse**; set **Fade in** to **2**.
@@ -66,7 +66,7 @@ To enter a time: click the box, **⌘A**, type the number, press
 11. **GO** for the Scream, then hands off. Two seconds later the Solo
     follows on its own.
 12. Press **Stop**.
-13. **File → Save As** → `Lesson1-4-yourname.qlcc`.
+13. **File ▸ Save As** → `Lesson1-4-yourname.qlcc`.
 
 **Stuck?** GO starts in the middle: **Stop**, then GO starts from 1.0.0.
 The Solo never follows: the Scream's **Hold** must be 2.00 s, not ∞.
