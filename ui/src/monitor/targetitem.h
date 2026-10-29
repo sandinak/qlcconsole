@@ -113,6 +113,14 @@ public:
     /** The figure's outline in item coordinates; empty when there is none. */
     QPainterPath figurePath() const;
     QPainterPath buildFigurePath() const;
+    /** A body's outline from @p feet to @p crown (from above: shoulders and
+     *  a head), as figurePath() draws one. */
+    static QPainterPath figureOutline(const QPointF &feet, const QPointF &crown,
+                                      double pxPerMetre, bool sideOn);
+    /** The people on a performer line: each one's feet and crown, in item
+     *  coordinates. */
+    void setPerformers(const QVector<QPair<QPointF, QPointF> > &feetCrowns,
+                       double pxPerMetre, bool sideOn);
 
     /** The ground this target covers, in scene pixels, centred on the mark:
      *  width x depth from above, or a strip of width (height 0) in an
@@ -201,6 +209,7 @@ private:
     bool               m_sideOn = false;
     /** figurePath(), kept until the figure changes: simplifying the body's
      *  outline on every paint was most of a choir's plot cost. */
+    QVector<QPair<QPointF, QPointF> > m_performers;
     mutable QPainterPath m_figureCache;
     mutable bool       m_figureCached = false;
     mutable bool       m_figureCachePerson = false;

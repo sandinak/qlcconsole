@@ -112,6 +112,11 @@ beams each go to their own point.
 The target's own point — what a follow spot, an effect pointed at the
 target, or an older qlcconsole build sees — is the line's **centre**.
 
+**People on a line:** give a line **People on it** in its dialog and it is
+a performer line — that many people spread evenly along it, standing on
+whatever is under them, drawn on the plot and lit in the rig view (see
+[People on the stage](lighting-studio.md#people-on-the-stage)).
+
 ### Spread
 
 An Aim look on a line has a **Spread** slider in the

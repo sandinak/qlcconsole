@@ -173,6 +173,17 @@ void TargetItem::setFigure(const QPointF &feet, const QPointF &crown,
     update();
 }
 
+void TargetItem::setPerformers(const QVector<QPair<QPointF, QPointF> > &feetCrowns,
+                               double pxPerMetre, bool sideOn)
+{
+    prepareGeometryChange();
+    m_performers = feetCrowns;
+    m_pxPerMetre = pxPerMetre;
+    m_sideOn = sideOn;
+    m_figureCached = false;
+    update();
+}
+
 QPainterPath TargetItem::figurePath() const
 {
     /* The kind is read too: a target edited into or out of a Person keeps
@@ -191,22 +202,34 @@ QPainterPath TargetItem::buildFigurePath() const
 {
     QPainterPath path;
     path.setFillRule(Qt::WindingFill);    // overlapping parts, not holes
-    if (m_target == nullptr || m_pxPerMetre <= 0.0
-        || m_target->kind() != StageTarget::Kind::Person)
+    if (m_target == nullptr || m_pxPerMetre <= 0.0)
         return path;
+    if (m_target->kind() == StageTarget::Kind::Person)
+        return figureOutline(m_feet, m_crown, m_pxPerMetre, m_sideOn);
+    // A performer line: everyone on it.
+    if (m_target->isPerformerLine())
+        for (const QPair<QPointF, QPointF> &fc : m_performers)
+            path.addPath(figureOutline(fc.first, fc.second, m_pxPerMetre, m_sideOn));
+    return path;
+}
 
-    const QPointF up = m_crown - m_feet;
+QPainterPath TargetItem::figureOutline(const QPointF &feet, const QPointF &crown,
+                                       double pxPerMetre, bool sideOn)
+{
+    QPainterPath path;
+    path.setFillRule(Qt::WindingFill);    // overlapping parts, not holes
+    const QPointF up = crown - feet;
     const double tall = std::hypot(up.x(), up.y());
     if (tall < 4.0)
     {
         /* From above: shoulders across the stage, the head in the middle. A
            floor of a few pixels keeps it a person rather than a dot when the
            whole stage is on screen. */
-        const double sw = qMax(12.0, 0.46 * m_pxPerMetre);
-        const double sd = qMax(7.0, 0.26 * m_pxPerMetre);
-        const double hd = qMax(6.0, 0.20 * m_pxPerMetre);
-        path.addEllipse(m_feet, sw * 0.5, sd * 0.5);
-        path.addEllipse(m_feet, hd * 0.5, hd * 0.5);
+        const double sw = qMax(12.0, 0.46 * pxPerMetre);
+        const double sd = qMax(7.0, 0.26 * pxPerMetre);
+        const double hd = qMax(6.0, 0.20 * pxPerMetre);
+        path.addEllipse(feet, sw * 0.5, sd * 0.5);
+        path.addEllipse(feet, hd * 0.5, hd * 0.5);
         return path;
     }
 
@@ -216,22 +239,22 @@ QPainterPath TargetItem::buildFigurePath() const
     const QPointF u = up / tall;                  // toward the crown
     const QPointF v(-u.y(), u.x());               // across the body
     auto at = [&](double x, double y) {
-        return m_feet + v * (x * tall) + u * (y * tall);
+        return feet + v * (x * tall) + u * (y * tall);
     };
     foreach (const FigureLoft &loft, humanFigureLofts())
     {
         QPolygonF outline;
         for (const FigureRing &r : loft)
         {
-            const double c = m_sideOn ? r.cy : r.cx;
-            const double w = m_sideOn ? r.ry : r.rx;
+            const double c = sideOn ? r.cy : r.cx;
+            const double w = sideOn ? r.ry : r.rx;
             outline << at(c - w, r.z);
         }
         for (int k = loft.size() - 1; k >= 0; --k)
         {
             const FigureRing &r = loft.at(k);
-            const double c = m_sideOn ? r.cy : r.cx;
-            const double w = m_sideOn ? r.ry : r.rx;
+            const double c = sideOn ? r.cy : r.cx;
+            const double w = sideOn ? r.ry : r.rx;
             outline << at(c + w, r.z);
         }
         outline << outline.first();
@@ -448,6 +471,16 @@ void TargetItem::paint(QPainter *painter,
        and locked are drawn along the curve. */
     if (isLine())
     {
+        /* The people on a performer line, under the line, in what they wear. */
+        const QPainterPath crowd = figurePath();
+        if (!crowd.isEmpty())
+        {
+            QColor fill = m_target->costumeColor().isValid() ? m_target->costumeColor() : col;
+            fill.setAlpha(selected ? 150 : 100);
+            painter->setPen(QPen(fill.darker(140), 1.0));
+            painter->setBrush(fill);
+            painter->drawPath(crowd);
+        }
         QPainterPath curvePath;
         curvePath.addPolygon(m_curve);
         if (selected)

@@ -6,37 +6,49 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
-### 2026-10-29 — People on the risers *(feat/031-performers)*
+### 2026-10-29 — People on the stage: performer lines *(feat/031-performers)*
 
-- **Engine:** `PerformerFill` (`engine/src/performerfill.*`): `spots()` (a
-  row along the middle of every tread of a flight; a deck a row per 0.9 m
-  of depth, front row first; staggered by spacing or N per row; turned
-  risers and rounded fronts honoured), `fill()` (Person targets in the
-  "Performers" layer, one named group per set; replace drops the layer's
-  people on those risers except ones an aim palette uses, and emptied
-  sets), `standingOn()` (the topmost deck under a Person's feet),
-  `isPerformer()`. `StageTarget::costumeColor()` saved as `Costume` only
-  when set, so older shows are written as before.
-- **UI:** `PerformersDialog` (set name, apart / to a row, stagger, height
-  Children 1.30 / Students 1.60 / Adults 1.75, costume, replace, a live
-  count); Monitor `slotFillWithPeople()` / `fillWithPeople()` (one undo
-  step). The toolbar's Add Person becomes the fill while risers are
-  selected (no new item); a platform's right-click Add gets **People on
-  the Risers…**. A riser's drag and turn carry the people on it (undo
-  carries them back). Costume in the target dialog, the plot fill and the
-  rig view's shading. Performers have no position readouts.
-- **Render cost:** the rig view's figure takes 6/8/12 facets by its size
-  on screen and every other section under 120 px. 70 people on five
-  risers, CPU per frame in a debug offscreen build: 72 ms empty ->
-  262 ms before, 149 ms after. The plot caches each figure's outline
-  (70 people: under 10 ms). The GPU path draws the same fewer polygons.
-- **Tests:** `ui/test/performers` (13): tiers and heights, decks and turned
-  risers, set/layer, replace, layer hide/lock, riser move + undo + turn,
-  set move, save/load, costume colour under light, dialog and Add menu,
-  render cost. Help: lighting-studio.md "People on the risers" with a
-  help-shot picture; course note in docs/course/rig.md.
-- **Decided (can change):** performers are ordinary Person targets, so
-  they also appear in aim-target lists; "Performers" is found by layer name.
+- **Model (the user's design):** a performer line is a Line target with
+  `People` (count), `HeightSpread` and `Seed` (StageTarget, written only
+  when it has people, so a plain line and older shows save as before) plus
+  `PersonHeight` (the mean) and `Costume`. People are computed, never
+  stored: `PerformerFill::people()` spreads them evenly along the curve
+  (ends included), feet at `platformHeightAt()` (the highest surface:
+  tread, riser, apron, deck), heights mean +/- spread from a splitmix hash
+  of (seed, index). The line runs at chest height, so aim spreads along
+  their chests.
+- **Fill** (`PerformerFill::rows()/fill()`): a line along the middle of
+  every tread (a deck: a row per 0.9 m), by spacing or N per row,
+  staggered, rounded fronts honoured; in the "Performers" layer, one group
+  per fill; refill replaces lines/people on those risers except ones an
+  aim palette uses, and removes emptied sets.
+- **UI:** toolbar Add ▸ **Add People…** (was Add Person; the single Person
+  stays in the right-click Add menus) makes one line, or with risers
+  selected reads **Fill N Selected Risers with People…**; right-click Add
+  Here ▸ **Performer Line…** and a riser's Add ▸ **People on the
+  Risers…** (+1 entry in each right-click Add submenu, toolbar flat).
+  `PerformersDialog` (count / spacing / per row, stagger, height preset +
+  value, give or take, costume, replace, live count). The Edit Target
+  dialog: People on it, Height give or take, Shuffle, Costume. A riser's
+  drag and turn carry the lines and people on it (undo too). Plot draws
+  each line's people (outline cached per item); no position readouts for
+  performers.
+- **Render cost:** rig-view figures take 6/8/12 facets by on-screen size,
+  every other section under 120 px, and performers draw no deck ring. 70
+  people on 15 lines, CPU per frame, debug offscreen: empty 47-72 ms;
+  70 single Person figures before LOD 262 ms; performer lines now ~91 ms.
+  Plot: 0.5 -> 2.7 ms. Not a make-perf hot path (no engine runtime code).
+- **Tests:** `ui/test/performers` (14): even spread, feet on the highest
+  surface (the four-line choir: three tiers on a deck plus the apron; a
+  line up the steps), heights in spread and stable across save/load and
+  reseed, fill per tier + replace, layer hide/lock + plot draws people,
+  riser move/undo/turn/out-from-under, set moves as one, save/load, costume
+  under light, dialog + Add menu, Edit Target people, render cost. Help:
+  lighting-studio.md "People on the stage" + help-shot picture,
+  stage-targets.md note; course note in rig.md.
+- **Decided (can change):** performer lines are aimable line targets (they
+  show in aim-target lists); "Performers" layer found by name; everyone
+  faces the house.
 
 ### 2026-10-29 — Web access saved with the show *(feat/031-show-webserver)*
 

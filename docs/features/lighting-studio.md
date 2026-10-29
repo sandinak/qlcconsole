@@ -355,39 +355,52 @@ structure, and a double-click edits it. When the show is saved, a picture
 from outside the show's folder is copied into its **images** folder, as
 truss and tower pictures are (see [Truss socks](#truss-socks)).
 
-### People on the risers
+### People on the stage
 
-A choir on its steps or a band on its decks shows what the light does to
-the people in it before anyone stands there. Select the risers (steps or
-decks) and pick **Add ▸ Fill Selected Riser(s) with People…** on the
-toolbar (the **Add Person** entry turns into this while risers are
-selected), or right-click a riser for **Add ▸ People on the Risers…**.
+A choir on its risers or a band across the apron shows what the light does
+to the people in it before anyone stands there. People go on a
+**performer line**: a [line target](stage-targets.md#line-targets) with a
+count of people spread evenly along it, one on each end, each with their
+feet on the highest stage surface under them — a step's tread, a riser,
+the apron, the deck. A line drawn up a flight of steps stands people at
+every height it crosses.
 
-- **Place** them by **Apart** (0.6 m is a choir; shoulder to shoulder is
-  about 0.5 m) or by **To a row**. Spaced rows can be **staggered**, so
-  each face shows between the two in front.
-- A flight of steps gets a row along the middle of every tread, at that
-  tread's height; a deck gets a row to every 0.9 m of its depth. The front
-  row is downstage, and everyone faces the house.
-- **Height**: Children (1.30 m), Students (1.60 m) or Adults (1.75 m).
+The usual setup is a line a row: three riser rows and the apron make four
+lines, each with its own count.
+
+- **Add ▸ Add People…** on the toolbar makes one line where you are
+  (right-click the plot for **Add Here ▸ Performer Line…**). Say how many
+  are on it; drag its ends to where the row stands, as with any line.
+- **Fill with people**: select the risers (steps or decks) and the same
+  entry reads **Fill Selected Risers with People…** (or right-click a
+  riser for **Add ▸ People on the Risers…**). It makes a line along the
+  middle of every tread — a deck gets one to every 0.9 m of its depth —
+  by **Apart** (0.6 m is a choir; shoulder to shoulder is about 0.5 m) or
+  **To a row**, and spaced rows can be **staggered**, so each face shows
+  between the two in front. The dialog counts the people first.
+- **Height**: Children (1.30 m), Students (1.60 m) or Adults (1.75 m), or
+  type one, and **Give or take** (±8 cm unless set): some are taller than
+  others. Each person keeps their height every time the show opens;
+  **Shuffle** in the line's own dialog picks again.
 - **Costume**: the colour they wear. The rig view lights the body in it,
   so a blue wash on a red robe goes dark, as it would on stage. None
   leaves the neutral body, which shows the light as it is.
-- The dialog counts the people before it makes them. One Undo takes them
-  all away.
 
-They go in a **Performers** layer of their own (made the first time), as
-one group named for the set. The layer's eye hides them on the plot and
-in the rig view, and its lock holds them still. Click one to select the
-whole set and drag it as one piece; click again to pick one person out and
-nudge them. Move or turn a riser and the people standing on it go with it.
-Filling the same risers again replaces their set (**Replace the people
-already on them**), except anyone an aim palette uses.
+Any line takes people in its dialog (double-click it): **People on it**,
+**Height**, **Height give or take** and **Costume**; 0 people is a plain
+line again.
 
-Each one is an ordinary person: double-click to change a name, height or
-costume, aim at them like any target, and they are saved with the show.
+Lines go in a **Performers** layer of their own (made the first time). Its
+eye hides them on the plot and in the rig view, and its lock holds them
+still. A fill's lines are one group named for the set: click one to select
+them all and drag the set as one piece; click again to pick one line out.
+Move or turn a riser and the lines standing on it go with it; move the
+riser out from under a line and its people step down to what is there.
+Filling the same risers again replaces their lines (**Replace the people
+already on them**), except one an aim palette uses. Light aimed at a
+performer line spreads along their chests. One Undo takes back a fill.
 
-![Two choir risers of students in navy under a white wash, in the rig view](../images/lighting-studio-performers-3d.png)
+![A three-row choir in navy and a line of soloists in red downstage of it, under a white wash, in the rig view](../images/lighting-studio-performers-3d.png)
 
 ### Truss socks
 

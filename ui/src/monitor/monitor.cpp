@@ -33,6 +33,7 @@
 #include <QFileInfo>
 #include <QCursor>
 #include <QDialog>
+#include <QRandomGenerator>
 #include <QDockWidget>
 #include <QLinearGradient>
 #include <QMouseEvent>
@@ -2138,18 +2139,19 @@ void Monitor::initGraphicsToolbar()
                            this, SLOT(slotAddTarget()));
         addMenu->addAction(tr("Add Target Line"),
                            this, SLOT(slotAddTargetLine()));
-        /* With risers selected it fills them with people instead of placing
-           one: the same entry, so the menu does not grow. */
-        QAction *person = addMenu->addAction(tr("Add Person"), this, [this]() {
+        /* People: with risers selected, a performer line on every row of
+           them; otherwise one performer line. (One Person on its own is in
+           the right-click Add menus.) One entry, so the menu does not grow. */
+        QAction *people = addMenu->addAction(tr("Add People…"), this, [this]() {
             if (selectedPlatformIds().isEmpty())
-                slotAddPerson();
+                slotAddPerformerLine();
             else
                 slotFillWithPeople();
         });
-        person->setObjectName(QStringLiteral("addPersonAction"));
-        connect(addMenu, &QMenu::aboutToShow, this, [this, person]() {
+        people->setObjectName(QStringLiteral("addPeopleAction"));
+        connect(addMenu, &QMenu::aboutToShow, this, [this, people]() {
             const int n = selectedPlatformIds().size();
-            person->setText(n == 0 ? tr("Add Person")
+            people->setText(n == 0 ? tr("Add People…")
                                    : tr("Fill %n Selected Riser(s) with People…", "", n));
         });
         addBtn->setMenu(addMenu);
@@ -6636,8 +6638,44 @@ PerformerFill::Result Monitor::fillWithPeople(const QList<quint32> &platformIds,
     m_graphicsView->updateTargets();
     if (m_layersPanel) m_layersPanel->reload();
     m_doc->setModified();
-    showNotice(tr("%n person(s) on the risers, in the Performers layer", "", res.targets.size()));
+    showNotice(tr("%n person(s) on the risers, in the Performers layer", "", res.people));
     return res;
+}
+
+void Monitor::slotAddPerformerLine()
+{
+    PerformersDialog dlg(m_props, QList<quint32>(), this);
+    if (dlg.exec() != QDialog::Accepted)
+        return;
+    QPointF mm = m_graphicsView->pixelsToRealPosition(m_pendingAddScenePos.x(), m_pendingAddScenePos.y());
+    addPerformerLine(QPointF(mm.x() / 1000.0, mm.y() / 1000.0), dlg.lineCount(), dlg.options());
+}
+
+StageTarget *Monitor::addPerformerLine(const QPointF &centre, int count,
+                                       const PerformerFill::Options &options)
+{
+    RigEditSession edit(this);
+    /* Like a target line: straight across the stage, here 0.6 m a person
+       (4 m at the least), centred where asked. Its ends drag like any
+       line's. */
+    const float half = qMax(2.0f, 0.6f * float(qMax(1, count - 1)) / 2.0f);
+    const QVector3D c(float(centre.x()), float(centre.y()), 0.0f);
+    const quint32 layer = PerformerFill::ensureLayer(m_props);
+    StageTarget *t = PerformerFill::addLine(m_props, c - QVector3D(half, 0.0f, 0.0f),
+                                            c + QVector3D(half, 0.0f, 0.0f), count, options, layer);
+    if (t == nullptr)
+        return nullptr;
+    int n = 0;
+    foreach (StageTarget *other, m_props->stageTargets())
+        if (other != nullptr && other->isPerformerLine())
+            n++;
+    const QString base = options.setName.trimmed().isEmpty() ? tr("Performers") : options.setName.trimmed();
+    t->setName(n > 1 ? tr("%1 %2").arg(base).arg(n) : base);
+    m_props->notifyStageTargetsChanged();
+    m_graphicsView->updateTargets();
+    if (m_layersPanel) m_layersPanel->reload();
+    m_doc->setModified();
+    return t;
 }
 
 void Monitor::slotEditTarget(quint32 tid)
@@ -6823,10 +6861,47 @@ void Monitor::slotEditTarget(quint32 tid)
     QColor chosenCostume = t->costumeColor();
     connect(costumeBtn, &ColourSwatchButton::colourChanged, &dlg, [&](const QColor &c) { chosenCostume = c; });
     form->addRow(tr("Costume:"), costumeBtn);
-    connect(kindCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), &dlg, [&](int) {
-        costumeBtn->setEnabled(StageTarget::Kind(kindCombo->currentData().toInt()) == StageTarget::Kind::Person);
+
+    /* A line with people on it (a performer line): how many, give or take
+       how much of the Height each, and Shuffle for other heights. */
+    QSpinBox *peopleSpin = new QSpinBox(&dlg);
+    peopleSpin->setObjectName(QStringLiteral("linePeople"));
+    peopleSpin->setRange(0, 100);
+    peopleSpin->setSpecialValueText(tr("None (a plain line)"));
+    peopleSpin->setValue(t->performerCount());
+    peopleSpin->setToolTip(tr("People spread evenly along the line, each standing on the "
+                              "highest stage surface under them"));
+    form->addRow(tr("People on it:"), peopleSpin);
+    QDoubleSpinBox *spreadSpin = new FeetInchesSpinBox(isFeet_t, &dlg);
+    spreadSpin->setObjectName(QStringLiteral("lineHeightSpread"));
+    spreadSpin->setRange(0.0, 0.3 * toDisp_t);
+    spreadSpin->setDecimals(2);
+    spreadSpin->setValue(double(t->heightSpread()) * toDisp_t);
+    quint32 chosenSeed = t->seed();
+    QPushButton *shuffleBtn = new QPushButton(tr("Shuffle"), &dlg);
+    shuffleBtn->setObjectName(QStringLiteral("lineShuffle"));
+    shuffleBtn->setToolTip(tr("Pick everyone's height again"));
+    connect(shuffleBtn, &QPushButton::clicked, &dlg, [&]() {
+        chosenSeed = QRandomGenerator::global()->generate();
     });
-    costumeBtn->setEnabled(t->kind() == StageTarget::Kind::Person);
+    QHBoxLayout *spreadRow = new QHBoxLayout;
+    spreadRow->addWidget(spreadSpin);
+    spreadRow->addWidget(shuffleBtn);
+    form->addRow(tr("Height give or take:"), spreadRow);
+
+    auto syncPeople = [&]() {
+        const StageTarget::Kind k = StageTarget::Kind(kindCombo->currentData().toInt());
+        const bool onLine = (k == StageTarget::Kind::Line);
+        const bool people = k == StageTarget::Kind::Person || (onLine && peopleSpin->value() > 0);
+        peopleSpin->setEnabled(onLine);
+        spreadSpin->setEnabled(onLine && peopleSpin->value() > 0);
+        shuffleBtn->setEnabled(onLine && peopleSpin->value() > 0);
+        costumeBtn->setEnabled(people);
+        personSpin->setEnabled(people);
+    };
+    connect(kindCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), &dlg, [&](int) { syncPeople(); });
+    connect(peopleSpin, QOverload<int>::of(&QSpinBox::valueChanged), &dlg, [&](int) { syncPeople(); });
+    syncPeople();
 
     vl->addLayout(form);
     QDialogButtonBox *bb = new QDialogButtonBox(
@@ -6850,7 +6925,15 @@ void Monitor::slotEditTarget(quint32 tid)
         t->setKind(StageTarget::Kind(kindCombo->currentData().toInt()));
         if (t->isLine())
             t->makeLine();          // a point turned into a line gets a 4 m one
-        if (t->kind() == StageTarget::Kind::Person)
+        if (t->isLine())
+        {
+            t->setPerformerCount(peopleSpin->value());
+            t->setHeightSpread(float(spreadSpin->value() * fromDisp_t));
+            if (t->performerCount() > 0 && chosenSeed == 0 && t->seed() == 0)
+                chosenSeed = QRandomGenerator::global()->generate();
+            t->setSeed(chosenSeed);
+        }
+        if (t->kind() == StageTarget::Kind::Person || t->isPerformerLine())
             t->setPersonHeight(float(personSpin->value() * fromDisp_t));
         const QString bound = boundCombo->currentData().toString();
         if (t->kind() == StageTarget::Kind::Structure && bound.isEmpty() == false)
@@ -8508,6 +8591,8 @@ void Monitor::slotCanvasContextMenu(QPointF scenePos)
                        this, SLOT(slotAddTargetLine()));
     addMenu->addAction(tr("Person"),
                        this, SLOT(slotAddPerson()));
+    addMenu->addAction(tr("Performer Line…"),
+                       this, SLOT(slotAddPerformerLine()));
     addMenu->addSeparator();
     addMenu->addAction(QIcon(":/image.png"), tr("Image"),
                        this, SLOT(slotAddImage()));

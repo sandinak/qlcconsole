@@ -2332,6 +2332,16 @@ int MonitorGraphicsView::rotateSelectedItems(double deg)
                 const QPointF o = turnPt(double(t->x()), double(t->y()));
                 t->setX(float(o.x()));
                 t->setY(float(o.y()));
+                if (t->isLine())
+                {
+                    QVector<QVector3D> pts = t->linePoints();
+                    for (QVector3D &q : pts)
+                    {
+                        const QPointF d = turnDir(QPointF(double(q.x()), double(q.y())));
+                        q = QVector3D(float(d.x()), float(d.y()), q.z());
+                    }
+                    t->setLinePoints(pts);
+                }
             }
             const QPointF nc = turnPt(pl->centre().x(), pl->centre().y());
             pl->setOriginX(float(nc.x() - double(pl->width()) / 2.0));
@@ -6033,6 +6043,19 @@ void MonitorGraphicsView::updateTargets()
                                             footMm + tallMm) - tp;
             ti->setFigure(feet, crown, 1000.0 * m_cellPixels / m_unitValue,
                           m_pov == PovSide);
+        }
+        /* A performer line: each person on the deck under them, their own
+           height tall. */
+        if (t->isPerformerLine())
+        {
+            QVector<QPair<QPointF, QPointF> > crowd;
+            foreach (const PerformerFill::Performer &pf, PerformerFill::people(props, t))
+            {
+                const QVector3D f = pf.feet * 1000.0f;
+                crowd << qMakePair(projectMm(f.x(), f.y(), f.z()) - tp,
+                                   projectMm(f.x(), f.y(), f.z() + pf.height * 1000.0f) - tp);
+            }
+            ti->setPerformers(crowd, 1000.0 * m_cellPixels / m_unitValue, m_pov == PovSide);
         }
         // Targets are a DESIGN-time aim point: draggable while editing (even when
         // the rig layout is locked), but frozen in Run/Operate — in a show the

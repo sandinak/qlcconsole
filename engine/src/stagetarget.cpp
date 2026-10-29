@@ -29,6 +29,9 @@
 #define KXMLStageTargetAimHeight QStringLiteral("AimHeight")
 #define KXMLStageTargetPersonHeight QStringLiteral("PersonHeight")
 #define KXMLStageTargetCostume   QStringLiteral("Costume")
+#define KXMLStageTargetPeople    QStringLiteral("People")
+#define KXMLStageTargetSpread    QStringLiteral("HeightSpread")
+#define KXMLStageTargetSeed      QStringLiteral("Seed")
 #define KXMLStageTargetBoundType QStringLiteral("BoundType")
 #define KXMLStageTargetBoundId   QStringLiteral("BoundId")
 #define KXMLStageTargetW         QStringLiteral("W")
@@ -71,6 +74,12 @@ bool StageTarget::loadXML(QXmlStreamReader &root)
         m_personHeight = a.value(KXMLStageTargetPersonHeight).toFloat();
     if (a.hasAttribute(KXMLStageTargetCostume))
         m_costume = QColor(a.value(KXMLStageTargetCostume).toString());
+    if (a.hasAttribute(KXMLStageTargetPeople))
+        setPerformerCount(a.value(KXMLStageTargetPeople).toInt());
+    if (a.hasAttribute(KXMLStageTargetSpread))
+        setHeightSpread(a.value(KXMLStageTargetSpread).toFloat());
+    if (a.hasAttribute(KXMLStageTargetSeed))
+        m_seed = a.value(KXMLStageTargetSeed).toUInt();
     if (a.hasAttribute(KXMLStageTargetBoundType))
         m_boundType = a.value(KXMLStageTargetBoundType).toString();
     if (a.hasAttribute(KXMLStageTargetBoundId))
@@ -173,6 +182,14 @@ bool StageTarget::saveXML(QXmlStreamWriter *doc) const
                             QString::number(double(m_personHeight), 'f', 3));
     if (m_costume.isValid())
         doc->writeAttribute(KXMLStageTargetCostume, m_costume.name());
+    /* People on a line: an older build reads it as the plain line it is. */
+    if (m_performerCount > 0)
+    {
+        doc->writeAttribute(KXMLStageTargetPeople, QString::number(m_performerCount));
+        if (m_heightSpread > 0.0f)
+            doc->writeAttribute(KXMLStageTargetSpread, QString::number(double(m_heightSpread), 'f', 3));
+        doc->writeAttribute(KXMLStageTargetSeed, QString::number(m_seed));
+    }
     if (isBound())
     {
         doc->writeAttribute(KXMLStageTargetBoundType, m_boundType);

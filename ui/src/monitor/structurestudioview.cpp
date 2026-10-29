@@ -1217,10 +1217,24 @@ void StructureStudioView::drawStageFigures(QPainter &p) const
         }
     }
 
+    /* Who is drawn: every Person, and everyone on a performer line. */
+    struct FigJob { QVector3D foot; float tall; QColor costume; QColor mark; bool ring; };
+    QList<FigJob> jobs;
+
     foreach (StageTarget *t, targets)
     {
         if (t == nullptr || (t != &focusFigure && !layerShown(t->layerId())))
             continue;
+
+        /* A performer line: its people, each on the deck under them -- not
+           the line, which runs through their chests. No mark each: the set
+           is one thing. */
+        if (t->isPerformerLine())
+        {
+            foreach (const PerformerFill::Performer &pf, PerformerFill::people(props, t))
+                jobs << FigJob{ pf.feet, pf.height, t->costumeColor(), QColor(), false };
+            continue;
+        }
 
         /* A line: the curve at its real heights, with a small cross at each
            handle -- the beams aimed at it land along it. */
@@ -1273,6 +1287,14 @@ void StructureStudioView::drawStageFigures(QPainter &p) const
         const QVector3D aim = props->targetAimPoint(t, true);
         const QVector3D foot(aim.x(), aim.y(), aim.z() - props->targetAimHeight(t, true));
         const QColor mark = t->color().isValid() ? t->color() : QColor(255, 180, 0);
+        jobs << FigJob{ foot, tall, t->costumeColor(), mark, true };
+    }
+
+    for (const FigJob &job : jobs)
+    {
+        const QVector3D foot = job.foot;
+        const float tall = job.tall;
+        const QColor mark = job.mark;
 
         /* Facets round the body by how big it is on screen: a choir of
            seventy across the overview is under a hundred pixels each, where
@@ -1286,6 +1308,7 @@ void StructureStudioView::drawStageFigures(QPainter &p) const
         /* The target's own mark on the deck, in the target's colour: which
            target this is. The body itself is neutral, so what colour it shows
            is the light on it. */
+        if (job.ring)
         {
             const int MARK_SEG = coarse ? SEG : 2 * SEG;
             const double r = 0.34 * double(tall) / 1.75;
@@ -1330,7 +1353,7 @@ void StructureStudioView::drawStageFigures(QPainter &p) const
         /* A costume reflects the light in its own colour: a red robe under
            a blue wash goes dark, as on stage. No costume: the neutral body,
            which shows the light as it is. */
-        const QColor costume = t->costumeColor();
+        const QColor costume = job.costume;
         const bool dressed = costume.isValid();
         const double cr = dressed ? costume.redF() : 1.0;
         const double cg = dressed ? costume.greenF() : 1.0;
@@ -1457,6 +1480,8 @@ void StructureStudioView::collectPoints(QList<QVector3D> &pts) const
     {
         if (t == nullptr || !layerShown(t->layerId()))
             continue;
+        foreach (const PerformerFill::Performer &pf, PerformerFill::people(props, t))
+            pts << pf.feet << pf.feet + QVector3D(0.0f, 0.0f, pf.height);
         const float tall = props->targetFigureHeight(t);
         if (tall <= 0.0f)
             continue;

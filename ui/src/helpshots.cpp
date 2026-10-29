@@ -1102,8 +1102,9 @@ QList<HelpShots::Shot> HelpShots::shots()
             mon->m_overviewDlg->close();
     } };
 
-    /* People on the risers: two choir risers upstage, filled with students
-       in navy, seen in the rig view. Taken out again afterwards. */
+    /* People on the stage: a three-row choir riser filled with students in
+       navy (a performer line a row), and a fourth line downstage of it, in
+       the rig view. Taken out again afterwards. */
     list << Shot{ QStringLiteral("lighting-studio-performers-3d"), [=]() {
         window();
         Frame f;
@@ -1111,13 +1112,12 @@ QList<HelpShots::Shot> HelpShots::shots()
         if (mon == NULL)
             return f;
         QList<quint32> risers;
-        for (int k = 0; k < 2; ++k)
         {
             StagePlatform *p = mon->m_props->addPlatform();
-            p->setName(QStringLiteral("HelpShot Riser %1").arg(k + 1));
-            p->setOriginX(3.6f + 3.6f * k);
+            p->setName(QStringLiteral("HelpShot Riser"));
+            p->setOriginX(4.0f);
             p->setOriginY(2.9f);
-            p->setSteps(3, 0.3f, 0.7f, 3.2f, StagePlatform::ClimbUpstage);
+            p->setSteps(3, 0.3f, 0.7f, 6.0f, StagePlatform::ClimbUpstage);
             p->setColor(QColor(70, 70, 76));
             risers << p->id();
         }
@@ -1125,8 +1125,12 @@ QList<HelpShots::Shot> HelpShots::shots()
         PerformerFill::Options o;
         o.setName = QStringLiteral("Choir");
         o.height = PerformerFill::presetHeight(PerformerFill::Students);
+        o.spread = 0.08f;
         o.costume = QColor(40, 50, 110);
         mon->fillWithPeople(risers, o);
+        o.setName = QStringLiteral("Soloists");
+        o.costume = QColor(150, 30, 40);
+        mon->addPerformerLine(QPointF(7.0, 5.9), 5, o);
         // A white wash on them, so the costume shows in the light.
         if (Function *wash = function(QStringLiteral("10.4 Chase step - White")))
             wash->start(doc->masterTimer(), FunctionParent::master());

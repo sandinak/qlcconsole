@@ -76,9 +76,10 @@ box, so a colour on TrussC-RGB doesn't also turn on the white pixels.
 Each has an Aim palette (**Aim Soloist DS**, **Aim Center**, **Aim Riser
 Line**) under Palettes → Position.
 
-To see the cast in the light before rehearsal, select the risers and use
-**Add ▸ Fill Selected Risers with People…** in the Lighting Studio: a row
-of students on every step, in a costume colour, in a **Performers** layer
+To see the cast in the light before rehearsal, put people on the stage in
+the Lighting Studio: select the risers and use **Add ▸ Fill Selected
+Risers with People…**, then **Add People…** for a line across the apron.
+Each row is a performer line in a costume colour, in a **Performers** layer
 you can hide. A wash that flatters the costume reads that way in the rig
 view; one that fights it goes dark.
 

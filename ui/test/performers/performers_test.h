@@ -30,33 +30,37 @@ class Performers_Test final : public QObject
     Q_OBJECT
 
 private slots:
-    /** A 3-tier flight: a row on every tread, each at its tread's height,
-     *  the bottom row downstage; by spacing (staggered) and per row. */
-    void fillStandsARowOnEveryTier();
-    /** A deck holds a row to every 0.9 m of depth; a turned riser turns
-     *  its rows; a rounded front cuts the corners. */
-    void deckRowsAndTurnedRisers();
-    /** They land in a "Performers" layer (made once) as one named group,
-     *  with the height and costume asked for. */
-    void theyAreOneSetInThePerformersLayer();
-    /** Filling again replaces the set, keeping one an aim palette uses. */
-    void fillingAgainReplaces();
+    /** A performer line's count stands evenly along it, one on each end. */
+    void countSpreadsEvenly();
+    /** Each person's feet on the highest surface under them: the usual
+     *  choir -- three riser tiers and the apron, four lines -- and a line
+     *  up the steps. */
+    void feetStandOnTheHighestSurface();
+    /** Heights a mean give or take the spread, the same every time and
+     *  after save and load; another seed, others. */
+    void heightsVaryAndStayPut();
+    /** Fill with people drops a line per tier (staggered, by spacing or per
+     *  row) in the Performers layer as one set; again replaces it. */
+    void fillDropsALinePerTier();
     /** The layer's eye hides them on the plot and in the rig view; its
-     *  lock holds them still. */
+     *  lock holds them still. The plot draws the people. */
     void theLayerHidesAndLocksThem();
-    /** Moving the riser carries its people; Undo carries them back. */
+    /** Moving or turning the riser carries its people; Undo carries them
+     *  back; moved out from under them, their feet come down. */
     void movingTheRiserMovesThem();
     /** The set moves as one piece. */
     void theSetMovesAsOnePiece();
-    /** Height and costume survive save and load; a show without them is
-     *  read and written as before. */
+    /** Count, seed, spread and costume survive save and load; a plain line
+     *  and a mark are written as before. */
     void saveAndLoadRoundTrip();
     /** Light on a costume reads in the costume's colour in the rig view. */
     void aCostumeTakesTheLightInItsColour();
-    /** The dialog counts what it will make; the Add menu's Person entry
-     *  becomes the fill with risers selected. */
+    /** The dialog counts what it will make; the Add menu's Add People
+     *  makes a line, or fills the selected risers. */
     void theDialogAndTheAddMenu();
-    /** 60 people do not slow the rig view or the plot noticeably. */
+    /** Any line becomes a performer line in its own dialog. */
+    void anyLineTakesPeopleInItsDialog();
+    /** 70 people do not slow the rig view or the plot noticeably. */
     void manyPeopleRenderCost();
 };
 

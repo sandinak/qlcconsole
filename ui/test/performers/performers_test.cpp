@@ -30,6 +30,7 @@
 #include <QLabel>
 #include <QMenu>
 #include <QTimer>
+#include <QSet>
 #include <QSpinBox>
 #include <QComboBox>
 #include <QLineEdit>
@@ -74,13 +75,64 @@ StagePlatform *threeTier(MonitorProperties *props, float x = 2.0f, float y = 1.0
     return p;
 }
 
-QList<StageTarget *> people(MonitorProperties *props)
+QList<StageTarget *> lines(MonitorProperties *props)
 {
     QList<StageTarget *> out;
     foreach (StageTarget *t, props->stageTargets())
-        if (t->kind() == StageTarget::Kind::Person)
+        if (t->isPerformerLine())
             out << t;
     return out;
+}
+
+int headCount(MonitorProperties *props)
+{
+    int n = 0;
+    foreach (StageTarget *t, lines(props))
+        n += t->performerCount();
+    return n;
+}
+
+/* The usual setup: a stage deck 1 m high with its apron shown, a 3-tier
+   choir riser on the deck, and four performer lines -- one on each tier
+   (9, 8 and 9 people) and one across the apron (6). */
+struct Choir
+{
+    StagePlatform *deck = nullptr;
+    StagePlatform *riser = nullptr;
+    QList<StageTarget *> lines;
+};
+
+Choir buildChoir(MonitorProperties *props)
+{
+    Choir c;
+    props->setGridUnits(MonitorProperties::Meters);
+    props->setGridSize(QVector3D(10, 6, 8));
+    c.deck = props->addPlatform();
+    c.deck->setName(QStringLiteral("Stage"));
+    c.deck->setOriginX(1.0f); c.deck->setOriginY(1.0f);
+    c.deck->setWidth(8.0f); c.deck->setDepth(3.8f); c.deck->setHeight(1.0f);
+    /* The apron: from the curtain line at the deck's front, 1.2 m further
+       downstage, lower than the deck. */
+    props->setCurtainLineY(4.8f);
+    props->setStagePieceVisible(MonitorProperties::ApronPiece, true);
+    props->setApronDepth(1.2f);
+    props->setApronHeight(0.6f);
+    c.riser = props->addPlatform();
+    c.riser->setName(QStringLiteral("Choir riser"));
+    c.riser->setOriginX(1.5f); c.riser->setOriginY(1.2f);
+    c.riser->setSteps(3, 0.3f, 0.8f, 3.0f, StagePlatform::ClimbUpstage);
+    c.riser->setStackable(true);
+
+    PerformerFill::Options o;
+    o.height = 1.6f;
+    o.spread = 0.08f;
+    const quint32 layer = PerformerFill::ensureLayer(props);
+    const int counts[3] = { 9, 8, 9 };
+    const QList<PerformerFill::Row> rows = PerformerFill::rows(props, c.riser, o);
+    for (int k = 0; k < 3 && k < rows.size(); ++k)
+        c.lines << PerformerFill::addLine(props, rows.at(k).a, rows.at(k).b, counts[k], o, layer);
+    c.lines << PerformerFill::addLine(props, QVector3D(3.0f, 5.4f, 0.0f), QVector3D(7.0f, 5.4f, 0.0f), 6, o, layer);
+    return c;
 }
 
 Fixture *makeWash(Doc *doc, quint32 addr, const QVector3D &at)
@@ -144,160 +196,186 @@ struct Plot
 
 } // namespace
 
-void Performers_Test::fillStandsARowOnEveryTier()
+void Performers_Test::countSpreadsEvenly()
+{
+    MonitorProperties props;
+    PerformerFill::Options o;
+    StageTarget *t = PerformerFill::addLine(&props, QVector3D(1.0f, 2.0f, 0.0f),
+                                            QVector3D(5.0f, 2.0f, 0.0f), 5, o, 0);
+    QVERIFY(t != nullptr && t->isPerformerLine() && t->isLine());
+    QList<PerformerFill::Performer> p = PerformerFill::people(&props, t);
+    QCOMPARE(p.size(), 5);
+    for (int i = 0; i < 5; ++i)
+    {
+        QVERIFY2(qAbs(p.at(i).feet.x() - (1.0f + i)) < 1e-3f, qPrintable(QString::number(p.at(i).feet.x())));
+        QVERIFY(qAbs(p.at(i).feet.y() - 2.0f) < 1e-3f);
+        QCOMPARE(p.at(i).feet.z(), 0.0f);           // the floor
+    }
+    // More people, the same ends: evenly closer.
+    t->setPerformerCount(9);
+    p = PerformerFill::people(&props, t);
+    QCOMPARE(p.size(), 9);
+    QVERIFY(qAbs(p.at(1).feet.x() - 1.5f) < 1e-3f);
+    // One alone stands in the middle; none is a plain line.
+    t->setPerformerCount(1);
+    p = PerformerFill::people(&props, t);
+    QCOMPARE(p.size(), 1);
+    QVERIFY(qAbs(p.first().feet.x() - 3.0f) < 1e-3f);
+    t->setPerformerCount(0);
+    QVERIFY(!t->isPerformerLine());
+    QVERIFY(PerformerFill::people(&props, t).isEmpty());
+}
+
+void Performers_Test::feetStandOnTheHighestSurface()
+{
+    MonitorProperties props;
+    const Choir c = buildChoir(&props);
+    QCOMPARE(c.lines.size(), 4);
+    QVERIFY(props.apronPlatform() != nullptr);
+
+    // The three tiers, on the deck (1 m): 1.3, 1.6 and 1.9 m; the apron 0.6 m.
+    const float want[4] = { 1.3f, 1.6f, 1.9f, 0.6f };
+    const int counts[4] = { 9, 8, 9, 6 };
+    for (int k = 0; k < 4; ++k)
+    {
+        const QList<PerformerFill::Performer> p = PerformerFill::people(&props, c.lines.at(k));
+        QCOMPARE(p.size(), counts[k]);
+        foreach (const PerformerFill::Performer &pf, p)
+            QVERIFY2(qAbs(pf.feet.z() - want[k]) < 1e-3f,
+                     qPrintable(QString("line %1: feet at %2, not %3").arg(k).arg(double(pf.feet.z())).arg(double(want[k]))));
+    }
+    const PerformerFill::Performer front = PerformerFill::people(&props, c.lines.at(3)).first();
+    QVERIFY(props.isApronPlatform(props.platformIdAt(front.feet.x(), front.feet.y())));
+    QCOMPARE(headCount(&props), 32);
+
+    // A line drawn up the steps stands people on every tread it crosses.
+    StageTarget *up = PerformerFill::addLine(&props, QVector3D(3.0f, 4.4f, 0.0f),
+                                             QVector3D(3.0f, 1.4f, 0.0f), 8, PerformerFill::Options(), 0);
+    QSet<int> heights;
+    foreach (const PerformerFill::Performer &pf, PerformerFill::people(&props, up))
+        heights.insert(qRound(pf.feet.z() * 10.0f));
+    QVERIFY2(heights.contains(10) && heights.contains(13) && heights.contains(16) && heights.contains(19),
+             "a line up the steps does not stand on deck and every tread");
+}
+
+void Performers_Test::heightsVaryAndStayPut()
+{
+    MonitorProperties props;
+    PerformerFill::Options o;
+    o.height = 1.6f;
+    o.spread = 0.08f;
+    StageTarget *t = PerformerFill::addLine(&props, QVector3D(0.0f, 2.0f, 0.0f),
+                                            QVector3D(10.0f, 2.0f, 0.0f), 40, o, 0);
+    QList<float> h;
+    foreach (const PerformerFill::Performer &pf, PerformerFill::people(&props, t))
+        h << pf.height;
+    float lo = 9.0f, hi = 0.0f;
+    foreach (float v, h)
+    {
+        QVERIFY2(v >= 1.52f - 1e-4f && v <= 1.68f + 1e-4f, qPrintable(QString::number(double(v))));
+        lo = qMin(lo, v);
+        hi = qMax(hi, v);
+    }
+    QVERIFY2(hi - lo > 0.08f, "everyone is the same height");
+
+    // The same every time it is asked, and after a save and load.
+    QList<float> again;
+    foreach (const PerformerFill::Performer &pf, PerformerFill::people(&props, t))
+        again << pf.height;
+    QCOMPARE(again, h);
+
+    QByteArray buf;
+    QXmlStreamWriter w(&buf);
+    w.writeStartDocument();
+    props.saveXML(&w, nullptr);
+    w.writeEndDocument();
+    MonitorProperties back;
+    QXmlStreamReader r(buf);
+    while (r.readNextStartElement())
+        if (r.name() == QStringLiteral("Monitor"))
+            QVERIFY(back.loadXML(r, nullptr));
+    QList<float> loaded;
+    foreach (const PerformerFill::Performer &pf, PerformerFill::people(&back, back.stageTarget(t->id())))
+        loaded << pf.height;
+    QCOMPARE(loaded, h);
+
+    // Shuffle: another seed, other heights; no spread, all the mean.
+    t->setSeed(t->seed() + 1);
+    QList<float> shuffled;
+    foreach (const PerformerFill::Performer &pf, PerformerFill::people(&props, t))
+        shuffled << pf.height;
+    QVERIFY(shuffled != h);
+    t->setHeightSpread(0.0f);
+    foreach (const PerformerFill::Performer &pf, PerformerFill::people(&props, t))
+        QCOMPARE(pf.height, 1.6f);
+}
+
+void Performers_Test::fillDropsALinePerTier()
 {
     MonitorProperties props;
     StagePlatform *p = threeTier(&props);
 
     PerformerFill::Options o;
     o.spacing = 0.6f;                       // 3 m: 5 a row, 4 between them
-    const QList<QVector3D> spots = PerformerFill::spots(&props, p, o);
-    QCOMPARE(spots.size(), 5 + 4 + 5);
-
-    // Bottom row first: downstage, on the first tread; the top row on the third.
-    QMap<int, int> perHeight;
-    foreach (const QVector3D &s, spots)
-    {
-        const int cm = qRound(s.z() * 100.0f);
-        perHeight[cm]++;
-        QVERIFY2(p->containsPoint(s.x(), s.y()), "a person stands off the riser");
-        QCOMPARE(props.platformHeightAt(s.x(), s.y()), s.z());
-    }
-    QCOMPARE(perHeight.value(40), 5);
-    QCOMPARE(perHeight.value(80), 4);
-    QCOMPARE(perHeight.value(120), 5);
-    QVERIFY2(spots.first().y() > spots.last().y(), "the bottom row is not downstage of the top");
-    // Each in the middle of its tread: the bottom tread is the downstage 0.8 m.
-    QVERIFY(qAbs(spots.first().y() - (1.0f + 2.4f - 0.4f)) < 1e-3f);
-    // The staggered row stands in the gaps of the row in front.
-    QVERIFY(qAbs((spots.at(5).x() - spots.at(0).x()) - 0.3f) < 1e-3f);
-
-    o.stagger = false;
-    QCOMPARE(PerformerFill::spots(&props, p, o).size(), 15);
-
-    o.perRow = 6;                           // spread evenly, any spacing
-    const QList<QVector3D> six = PerformerFill::spots(&props, p, o);
-    QCOMPARE(six.size(), 18);
-    QVERIFY(qAbs(six.at(0).x() - (2.0f + 0.25f)) < 1e-3f);
-    QVERIFY(qAbs(six.at(5).x() - (2.0f + 2.75f)) < 1e-3f);
-}
-
-void Performers_Test::deckRowsAndTurnedRisers()
-{
-    MonitorProperties props;
-    StagePlatform *deck = props.addPlatform();
-    deck->setOriginX(0.0f); deck->setOriginY(0.0f);
-    deck->setWidth(2.4f); deck->setDepth(2.0f); deck->setHeight(0.6f);
-
-    PerformerFill::Options o;
-    o.spacing = 0.6f;
-    o.stagger = false;
-    const QList<QVector3D> s = PerformerFill::spots(&props, deck, o);
-    QCOMPARE(s.size(), 2 * 4);              // 2 m deep: two rows of 4
-    foreach (const QVector3D &v, s)
-        QCOMPARE(v.z(), 0.6f);
-    QVERIFY(s.first().y() > 1.0f && s.last().y() < 1.0f);   // front row first
-
-    // Turned a quarter: the rows run up and down the stage now.
-    deck->setRotation(90.0f);
-    const QList<QVector3D> t = PerformerFill::spots(&props, deck, o);
-    QCOMPARE(t.size(), 8);
-    QVERIFY(qAbs(t.at(0).x() - t.at(1).x()) < 1e-3f);
-    foreach (const QVector3D &v, t)
-        QVERIFY(deck->containsPoint(v.x(), v.y()));
-
-    // A rounded front loses the corners of its row.
-    StagePlatform *apron = props.addPlatform();
-    apron->setOriginX(5.0f); apron->setOriginY(0.0f);
-    apron->setWidth(3.0f); apron->setDepth(0.9f); apron->setHeight(0.3f);
-    QCOMPARE(PerformerFill::spots(&props, apron, o).size(), 5);
-    apron->setFrontCurve(0.9f);
-    QCOMPARE(PerformerFill::spots(&props, apron, o).size(), 3);
-}
-
-void Performers_Test::theyAreOneSetInThePerformersLayer()
-{
-    MonitorProperties props;
-    StagePlatform *p = threeTier(&props);
-
-    PerformerFill::Options o;
     o.setName = QStringLiteral("Choir");
-    o.height = PerformerFill::presetHeight(PerformerFill::Students);
     o.costume = QColor(160, 20, 40);
+    const QList<PerformerFill::Row> rows = PerformerFill::rows(&props, p, o);
+    QCOMPARE(rows.size(), 3);
+    QCOMPARE(rows.at(0).count, 5);
+    QCOMPARE(rows.at(1).count, 4);
+    QCOMPARE(rows.at(2).count, 5);
+    QVERIFY(rows.first().a.y() > rows.last().a.y());   // bottom row downstage
+    QVERIFY(qAbs(rows.at(0).a.x() - 2.3f) < 1e-3f && qAbs(rows.at(0).b.x() - 4.7f) < 1e-3f);
+    QVERIFY(qAbs(rows.at(1).a.x() - 2.6f) < 1e-3f);    // staggered: in the gaps
+    o.perRow = 6;
+    QCOMPARE(PerformerFill::rows(&props, p, o).at(1).count, 6);
+    o.perRow = 0;
+
     const PerformerFill::Result r = PerformerFill::fill(&props, { p->id() }, o);
-    QCOMPARE(r.targets.size(), 14);
-    QVERIFY(r.groupId != 0);
-    QVERIFY(props.hasLayer(r.layerId));
+    QCOMPARE(r.targets.size(), 3);
+    QCOMPARE(r.people, 14);
     QCOMPARE(props.layer(r.layerId).name, QStringLiteral("Performers"));
     QCOMPARE(props.group(r.groupId).name, QStringLiteral("Choir"));
     QCOMPARE(props.group(r.groupId).layerId, r.layerId);
-
-    foreach (quint32 id, r.targets)
+    const float tread[3] = { 0.4f, 0.8f, 1.2f };
+    for (int k = 0; k < 3; ++k)
     {
-        StageTarget *t = props.stageTarget(id);
-        QCOMPARE(t->kind(), StageTarget::Kind::Person);
+        StageTarget *t = props.stageTarget(r.targets.at(k));
+        QVERIFY(t->isPerformerLine());
         QCOMPARE(t->layerId(), r.layerId);
         QCOMPARE(t->groupId(), r.groupId);
-        QCOMPARE(t->personHeight(), 1.60f);
         QCOMPARE(t->costumeColor(), QColor(160, 20, 40));
-        QVERIFY(t->name().startsWith(QStringLiteral("Choir ")));
-        // Drawn standing on its tread, at its own height.
-        QCOMPARE(props.targetFigureHeight(t), 1.60f);
-        const QVector3D aim = props.targetAimPoint(t, true);
-        QVERIFY(qAbs(aim.z() - props.targetAimHeight(t, true) - t->z()) < 1e-4f);
+        QVERIFY(PerformerFill::isPerformer(&props, t));
+        foreach (const PerformerFill::Performer &pf, PerformerFill::people(&props, t))
+            QVERIFY(qAbs(pf.feet.z() - tread[k]) < 1e-3f);
+        // Light aimed along it lands at their chests.
+        foreach (const QVector3D &q, props.targetLinePoints(t))
+            QVERIFY(qAbs(q.z() - (tread[k] + 1.6f * StageTarget::chestShare())) < 1e-3f);
     }
 
-    // One of a set: no position readout each (a hand-placed person keeps one).
-    QVERIFY(PerformerFill::isPerformer(&props, props.stageTarget(r.targets.first())));
-    StageTarget *solo = props.addStageTarget();
-    solo->setKind(StageTarget::Kind::Person);
-    QVERIFY(!PerformerFill::isPerformer(&props, solo));
-
-    // A second riser's set goes in the same layer, not a new one.
-    StagePlatform *q = threeTier(&props, 6.0f, 1.0f);
-    const PerformerFill::Result r2 = PerformerFill::fill(&props, { q->id() }, o);
-    QCOMPARE(r2.layerId, r.layerId);
-    QVERIFY(r2.groupId != r.groupId);
-    int named = 0;
-    foreach (const MonitorProperties::MonitorLayer &l, props.layers())
-        named += (l.name == QStringLiteral("Performers"));
-    QCOMPARE(named, 1);
-}
-
-void Performers_Test::fillingAgainReplaces()
-{
-    MonitorProperties props;
-    StagePlatform *p = threeTier(&props);
-    PerformerFill::Options o;
-    const PerformerFill::Result r = PerformerFill::fill(&props, { p->id() }, o);
-    QCOMPARE(people(&props).size(), 14);
-
-    // A soloist placed by hand on the same riser, outside the layer, stays.
-    StageTarget *solo = props.addStageTarget();
-    solo->setKind(StageTarget::Kind::Person);
-    solo->setPosition(QVector3D(3.0f, 3.0f, 0.4f));
-
-    const quint32 kept = r.targets.at(3);
-    o.perRow = 4;
+    // Again: the set is replaced, keeping a line an aim palette uses.
+    const quint32 kept = r.targets.at(1);
     const PerformerFill::Result r2 = PerformerFill::fill(&props, { p->id() }, o,
         [kept](quint32 id) { return id == kept; });
-    QCOMPARE(r2.replaced, 13);
-    QCOMPARE(r2.targets.size(), 12);
-    QCOMPARE(people(&props).size(), 12 + 1 + 1);
+    QCOMPARE(r2.replaced, 2);
+    QCOMPARE(lines(&props).size(), 4);
     QVERIFY(props.stageTarget(kept) != nullptr);
-    QVERIFY(props.stageTarget(solo->id()) != nullptr);
-    QVERIFY2(props.hasGroup(r.groupId), "the old set still holds the kept person");
-
-    // Without the kept one, the old set goes when it empties.
     const PerformerFill::Result r3 = PerformerFill::fill(&props, { p->id() }, o);
-    QCOMPARE(r3.replaced, 13);
-    QCOMPARE(props.groups().size(), 1);         // the emptied sets went (an id may be reused)
-    QVERIFY(props.hasGroup(r3.groupId));
-
-    // Replace off: the new set joins the old.
+    QCOMPARE(r3.replaced, 4);
+    QCOMPARE(lines(&props).size(), 3);
+    QCOMPARE(props.groups().size(), 1);         // the emptied sets went
     o.replace = false;
     PerformerFill::fill(&props, { p->id() }, o);
-    QCOMPARE(people(&props).size(), 12 + 12 + 1);
+    QCOMPARE(lines(&props).size(), 6);
+
+    // A deck: a row per 0.9 m; a rounded front pulls the row's ends in.
+    StagePlatform *apron = props.addPlatform();
+    apron->setOriginX(8.0f); apron->setOriginY(0.0f);
+    apron->setWidth(3.0f); apron->setDepth(0.9f); apron->setHeight(0.3f);
+    o.stagger = false;
+    QCOMPARE(PerformerFill::rows(&props, apron, o).first().count, 5);
+    apron->setFrontCurve(0.9f);
+    QCOMPARE(PerformerFill::rows(&props, apron, o).first().count, 3);
 }
 
 void Performers_Test::theLayerHidesAndLocksThem()
@@ -308,28 +386,36 @@ void Performers_Test::theLayerHidesAndLocksThem()
     Plot plot(&doc);
 
     const PerformerFill::Result r = plot.mon->fillWithPeople({ p->id() }, PerformerFill::Options());
-    QCOMPARE(r.targets.size(), 14);
+    QCOMPARE(r.targets.size(), 3);
     foreach (quint32 id, r.targets)
     {
         TargetItem *ti = plot.gv->m_targetItems.value(id, nullptr);
         QVERIFY(ti != nullptr);
         QVERIFY(ti->isVisible());
         QVERIFY(ti->flags() & QGraphicsItem::ItemIsMovable);
+        // The plot draws the people on it, not only the line.
+        QVERIFY2(!ti->figurePath().isEmpty(), "a performer line is drawn without its people");
+        QVERIFY(ti->figurePath().boundingRect().width() > 20.0);
     }
 
     StructureStudioView v(&doc, StructureStudioView::StageKind, 0);
     QVERIFY(v.layerShown(r.layerId));
+    QList<QVector3D> shown;
+    v.collectPoints(shown);
+    bool crown = false;
+    foreach (const QVector3D &q, shown)
+        crown = crown || q.z() > 2.0f;
+    QVERIFY2(crown, "the rig view's fit leaves the people out");
 
     props->setLayerVisible(r.layerId, false);
     plot.gv->refreshItemLayerState();
     foreach (quint32 id, r.targets)
-        QVERIFY2(!plot.gv->m_targetItems.value(id)->isVisible(), "a hidden performer is drawn on the plot");
+        QVERIFY2(!plot.gv->m_targetItems.value(id)->isVisible(), "a hidden performer line is drawn on the plot");
     QVERIFY(!v.layerShown(r.layerId));
-    // The rig view's fit leaves them out too: nothing at their crowns.
     QList<QVector3D> pts;
     v.collectPoints(pts);
     foreach (const QVector3D &q, pts)
-        QVERIFY2(q.z() < 1.2f + 1.0f, "a hidden performer is still framed in the rig view");
+        QVERIFY2(q.z() < 2.0f, "a hidden performer is still framed in the rig view");
 
     props->setLayerVisible(r.layerId, true);
     props->setLayerLocked(r.layerId, true);
@@ -338,7 +424,7 @@ void Performers_Test::theLayerHidesAndLocksThem()
     {
         TargetItem *ti = plot.gv->m_targetItems.value(id);
         QVERIFY(ti->isVisible());
-        QVERIFY2(!MonitorGraphicsView::itemDraggable(ti), "a locked layer's performer can be dragged");
+        QVERIFY2(!MonitorGraphicsView::itemDraggable(ti), "a locked layer's performer line can be dragged");
     }
 }
 
@@ -350,15 +436,14 @@ void Performers_Test::movingTheRiserMovesThem()
     Plot plot(&doc);
     const PerformerFill::Result r = plot.mon->fillWithPeople({ p->id() }, PerformerFill::Options());
 
-    // Someone standing on the floor beside it does not ride it.
-    StageTarget *beside = props->addStageTarget();
-    beside->setKind(StageTarget::Kind::Person);
-    beside->setPosition(QVector3D(1.0f, 1.0f, 0.0f));
+    // A line on the floor beside it does not ride it.
+    StageTarget *beside = PerformerFill::addLine(props, QVector3D(0.2f, 0.5f, 0.0f),
+                                                 QVector3D(1.5f, 0.5f, 0.0f), 3, PerformerFill::Options(), 0);
     plot.gv->updateTargets();
 
-    QHash<quint32, QVector3D> before;
+    QHash<quint32, QList<PerformerFill::Performer> > before;
     foreach (quint32 id, r.targets)
-        before.insert(id, props->stageTarget(id)->position());
+        before.insert(id, PerformerFill::people(props, props->stageTarget(id)));
 
     PlatformItem *pi = plot.gv->m_platformItems.value(p->id());
     QVERIFY(pi != nullptr);
@@ -369,37 +454,59 @@ void Performers_Test::movingTheRiserMovesThem()
 
     foreach (quint32 id, r.targets)
     {
-        StageTarget *t = props->stageTarget(id);
-        const QVector3D was = before.value(id);
-        QVERIFY2(qAbs(t->x() - (was.x() + 2.0f)) < 1e-3f && qAbs(t->y() - (was.y() + 1.0f)) < 1e-3f,
-                 qPrintable(QString("%1 stayed behind").arg(t->name())));
-        QCOMPARE(t->z(), was.z());          // still on its own tread
-        // Drawn where it is now.
-        TargetItem *ti = plot.gv->m_targetItems.value(id);
-        const QPointF want = plot.gv->realPositionToPixels(t->x() * 1000.0, t->y() * 1000.0);
-        QVERIFY(QLineF(ti->pos(), want).length() < 1.0);
+        const QList<PerformerFill::Performer> now = PerformerFill::people(props, props->stageTarget(id));
+        const QList<PerformerFill::Performer> was = before.value(id);
+        QCOMPARE(now.size(), was.size());
+        for (int i = 0; i < now.size(); ++i)
+        {
+            QVERIFY2((now.at(i).feet - (was.at(i).feet + QVector3D(2.0f, 1.0f, 0.0f))).length() < 1e-3f,
+                     qPrintable(QString("%1 stayed behind").arg(props->stageTarget(id)->name())));
+            QCOMPARE(now.at(i).height, was.at(i).height);
+        }
     }
-    QCOMPARE(beside->position(), QVector3D(1.0f, 1.0f, 0.0f));
+    QVERIFY(qAbs(beside->x() - 0.85f) < 1e-3f);
 
     // One Undo: the riser and its people back.
     plot.gv->undoLastMove();
     QVERIFY(qAbs(p->originX() - 2.0f) < 1e-3f);
     foreach (quint32 id, r.targets)
-        QVERIFY(qAbs(props->stageTarget(id)->x() - before.value(id).x()) < 1e-3f
-                && qAbs(props->stageTarget(id)->y() - before.value(id).y()) < 1e-3f);
+    {
+        const QList<PerformerFill::Performer> now = PerformerFill::people(props, props->stageTarget(id));
+        for (int i = 0; i < now.size(); ++i)
+            QVERIFY((now.at(i).feet - before.value(id).at(i).feet).length() < 1e-3f);
+    }
 
-    // Turned with it too.
+    // Moved out from under them (the line held still): their feet come
+    // down to the floor -- they stand on whatever is there now.
+    StageTarget *top = props->stageTarget(r.targets.last());
+    top->setLocked(true);
+    plot.gv->updateTargets();
+    p->setOriginX(20.0f);
+    foreach (const PerformerFill::Performer &pf, PerformerFill::people(props, top))
+        QCOMPARE(pf.feet.z(), 0.0f);
+    p->setOriginX(2.0f);
+
+    // Turned with it too: a half turn puts each person opposite.
+    top->setLocked(false);
+    plot.gv->updateTargets();
     plot.gv->scene()->clearSelection();
     plot.gv->m_platformItems.value(p->id())->setSelected(true);
     const QPointF c = p->centre();
     plot.gv->rotateSelectedItems(180.0);
     foreach (quint32 id, r.targets)
     {
-        StageTarget *t = props->stageTarget(id);
-        const QVector3D was = before.value(id);
-        QVERIFY2(qAbs(t->x() - float(2.0 * c.x() - was.x())) < 1e-3f
-                 && qAbs(t->y() - float(2.0 * c.y() - was.y())) < 1e-3f,
-                 qPrintable(QString("%1 did not turn with the riser").arg(t->name())));
+        const QList<PerformerFill::Performer> now = PerformerFill::people(props, props->stageTarget(id));
+        const QList<PerformerFill::Performer> was = before.value(id);
+        for (int i = 0; i < now.size(); ++i)
+        {
+            const QVector3D w = was.at(was.size() - 1 - i).feet;   // the line runs the other way now
+            Q_UNUSED(w);
+            bool found = false;
+            foreach (const PerformerFill::Performer &o, was)
+                found = found || (qAbs(now.at(i).feet.x() - float(2.0 * c.x() - o.feet.x())) < 1e-3f
+                                  && qAbs(now.at(i).feet.y() - float(2.0 * c.y() - o.feet.y())) < 1e-3f);
+            QVERIFY2(found, qPrintable(QString("%1 did not turn with the riser").arg(props->stageTarget(id)->name())));
+        }
     }
 }
 
@@ -407,61 +514,62 @@ void Performers_Test::theSetMovesAsOnePiece()
 {
     Doc doc(this);
     MonitorProperties *props = doc.monitorProperties();
-    StagePlatform *p = threeTier(props);
+    const Choir choir = buildChoir(props);
     Plot plot(&doc);
-    const PerformerFill::Result r = plot.mon->fillWithPeople({ p->id() }, PerformerFill::Options());
+    const quint32 gid = props->nextGroupId();
+    props->createGroup(gid, QStringLiteral("Choir"), choir.lines.first()->layerId(), 0);
+    foreach (StageTarget *t, choir.lines)
+        t->setGroupId(gid);
+    plot.gv->updateTargets();
 
     // Picking one picks the set.
     plot.gv->scene()->clearSelection();
-    plot.gv->m_targetItems.value(r.targets.first())->setSelected(true);
+    plot.gv->m_targetItems.value(choir.lines.first()->id())->setSelected(true);
     plot.gv->extendSelectionToGroups();
-    int selected = 0;
-    foreach (quint32 id, r.targets)
-        selected += plot.gv->m_targetItems.value(id)->isSelected() ? 1 : 0;
-    QCOMPARE(selected, r.targets.size());
+    foreach (StageTarget *t, choir.lines)
+        QVERIFY(plot.gv->m_targetItems.value(t->id())->isSelected());
 
-    // Dragged together: each moves by the same, and keeps its tread.
-    QHash<quint32, QVector3D> before;
-    foreach (quint32 id, r.targets)
-        before.insert(id, props->stageTarget(id)->position());
+    // Dragged together across the stage: each line moves by the same.
+    QHash<quint32, QPointF> before;
+    foreach (StageTarget *t, choir.lines)
+        before.insert(t->id(), QPointF(t->x(), t->y()));
     const QPointF d = plot.gv->realPositionToPixels(0.5 * 1000.0, 0.0)
                       - plot.gv->realPositionToPixels(0.0, 0.0);
-    foreach (quint32 id, r.targets)
+    foreach (StageTarget *t, choir.lines)
     {
-        TargetItem *ti = plot.gv->m_targetItems.value(id);
+        TargetItem *ti = plot.gv->m_targetItems.value(t->id());
         ti->setPos(ti->pos() + d);
     }
-    plot.gv->slotTargetMoved(plot.gv->m_targetItems.value(r.targets.first()));
-    foreach (quint32 id, r.targets)
+    plot.gv->slotTargetMoved(plot.gv->m_targetItems.value(choir.lines.first()->id()));
+    foreach (StageTarget *t, choir.lines)
     {
-        StageTarget *t = props->stageTarget(id);
-        QVERIFY(qAbs(t->x() - (before.value(id).x() + 0.5f)) < 1e-3f);
-        QVERIFY(qAbs(t->y() - before.value(id).y()) < 1e-3f);
-        QCOMPARE(t->z(), props->platformHeightAt(t->x(), t->y()));
+        QVERIFY(qAbs(t->x() - (before.value(t->id()).x() + 0.5f)) < 1e-3f);
+        QVERIFY(qAbs(t->y() - before.value(t->id()).y()) < 1e-3f);
     }
+    QCOMPARE(headCount(props), 32);
 }
 
 void Performers_Test::saveAndLoadRoundTrip()
 {
     MonitorProperties mp;
-    StagePlatform *p = threeTier(&mp);
-    PerformerFill::Options o;
-    o.setName = QStringLiteral("Choir");
-    o.height = PerformerFill::presetHeight(PerformerFill::Children);
-    o.costume = QColor(20, 60, 200);
-    const PerformerFill::Result r = PerformerFill::fill(&mp, { p->id() }, o);
+    const Choir c = buildChoir(&mp);
+    c.lines.at(3)->setCostumeColor(QColor(20, 60, 200));
 
-    // One with nothing of this set: written as before (no Costume).
+    // A plain line and a plain mark: written as before.
     StageTarget *plain = mp.addStageTarget();
-    plain->setName(QStringLiteral("DSC"));
+    plain->makeLine();
+    StageTarget *mark = mp.addStageTarget();
+    mark->setName(QStringLiteral("DSC"));
 
     QByteArray buf;
     QXmlStreamWriter writer(&buf);
     writer.writeStartDocument();
     mp.saveXML(&writer, nullptr);
     writer.writeEndDocument();
-    QCOMPARE(buf.count("Costume=\"#143cc8\""), r.targets.size());
-    QCOMPARE(buf.count("Costume="), r.targets.size());
+    QCOMPARE(buf.count("People="), 4);
+    QCOMPARE(buf.count("Seed="), 4);
+    QCOMPARE(buf.count("HeightSpread="), 4);
+    QCOMPARE(buf.count("Costume="), 1);
 
     MonitorProperties mp2;
     QXmlStreamReader reader(buf);
@@ -469,35 +577,42 @@ void Performers_Test::saveAndLoadRoundTrip()
         if (reader.name() == QStringLiteral("Monitor"))
             QVERIFY(mp2.loadXML(reader, nullptr));
 
-    QVERIFY(mp2.hasLayer(r.layerId));
-    QCOMPARE(mp2.layer(r.layerId).name, QStringLiteral("Performers"));
-    QCOMPARE(mp2.group(r.groupId).name, QStringLiteral("Choir"));
-    foreach (quint32 id, r.targets)
+    foreach (StageTarget *a, c.lines)
     {
-        const StageTarget *a = mp.stageTarget(id);
-        const StageTarget *b = mp2.stageTarget(id);
+        const StageTarget *b = mp2.stageTarget(a->id());
         QVERIFY(b != nullptr);
-        QCOMPARE(b->kind(), StageTarget::Kind::Person);
-        QCOMPARE(b->name(), a->name());
-        QCOMPARE(b->personHeight(), 1.30f);
-        QCOMPARE(b->costumeColor(), QColor(20, 60, 200));
-        QCOMPARE(b->layerId(), r.layerId);
-        QCOMPARE(b->groupId(), r.groupId);
-        QVERIFY((b->position() - a->position()).length() < 1e-3f);
+        QVERIFY(b->isPerformerLine());
+        QCOMPARE(b->performerCount(), a->performerCount());
+        QCOMPARE(b->seed(), a->seed());
+        QCOMPARE(b->personHeight(), a->personHeight());
+        QVERIFY(qAbs(b->heightSpread() - a->heightSpread()) < 1e-4f);
+        QCOMPARE(b->costumeColor(), a->costumeColor());
+        QCOMPARE(b->layerId(), a->layerId());
+        const QList<PerformerFill::Performer> pa = PerformerFill::people(&mp, a);
+        const QList<PerformerFill::Performer> pb = PerformerFill::people(&mp2, b);
+        QCOMPARE(pb.size(), pa.size());
+        for (int i = 0; i < pa.size(); ++i)
+        {
+            QVERIFY((pa.at(i).feet - pb.at(i).feet).length() < 2e-3f);
+            QVERIFY(qAbs(pa.at(i).height - pb.at(i).height) < 2e-3f);
+        }
     }
-    QVERIFY(!mp2.stageTarget(plain->id())->costumeColor().isValid());
+    QVERIFY(!mp2.stageTarget(plain->id())->isPerformerLine());
+    QVERIFY(mp2.stageTarget(plain->id())->isLine());
+    QVERIFY(!mp2.stageTarget(mark->id())->costumeColor().isValid());
 }
 
 void Performers_Test::aCostumeTakesTheLightInItsColour()
 {
-    /* A red robe and a white one side by side, one white wash on both: the
-       red reads red, the white neutral. */
+    /* A red robe on a performer line and a plain Person side by side, one
+       white wash on both: the red reads red, the plain one neutral. */
     Doc doc(this);
     MonitorProperties *props = doc.monitorProperties();
-    StageTarget *red = props->addStageTarget();
-    red->setKind(StageTarget::Kind::Person);
-    red->setPosition(QVector3D(2.5f, 3.0f, 0.0f));
-    red->setCostumeColor(QColor(200, 30, 30));
+    PerformerFill::Options o;
+    o.height = 1.75f;
+    o.costume = QColor(200, 30, 30);
+    StageTarget *robe = PerformerFill::addLine(props, QVector3D(2.5f, 3.0f, 0.0f),
+                                               QVector3D(2.5f, 3.0f, 0.0f), 1, o, 0);
     StageTarget *plain = props->addStageTarget();
     plain->setKind(StageTarget::Kind::Person);
     plain->setPosition(QVector3D(3.5f, 3.0f, 0.0f));
@@ -525,11 +640,10 @@ void Performers_Test::aCostumeTakesTheLightInItsColour()
     v.setLiveValues(true);
     v.setActiveScene(scene->id());
 
-    auto chest = [&](StageTarget *t) {
+    auto chest = [&](float x, float tall) {
         const QImage img = v.grab().toImage();
         const double dpr = img.devicePixelRatio();
-        const float tall = props->targetFigureHeight(t);
-        const QVector3D at(t->x(), t->y() + 0.13f * tall / 1.75f, 0.72f * tall);
+        const QVector3D at(x, 3.0f + 0.13f * tall / 1.75f, 0.72f * tall);
         const QPoint c = (v.w2s(at) * dpr).toPoint();
         int r = 0, g = 0, b = 0, n = 0;
         for (int dy = -2; dy <= 2; ++dy)
@@ -540,10 +654,11 @@ void Performers_Test::aCostumeTakesTheLightInItsColour()
             }
         return QColor(r / n, g / n, b / n);
     };
-    const QColor robe = chest(red);
-    const QColor body = chest(plain);
-    const QString report = QString("red robe %1, neutral %2").arg(robe.name(), body.name());
-    QVERIFY2(robe.red() > robe.green() + 50 && robe.red() > robe.blue() + 50,
+    const float robeTall = PerformerFill::people(props, robe).first().height;
+    const QColor red = chest(2.5f, robeTall);
+    const QColor body = chest(3.5f, props->targetFigureHeight(plain));
+    const QString report = QString("red robe %1, neutral %2").arg(red.name(), body.name());
+    QVERIFY2(red.red() > red.green() + 50 && red.red() > red.blue() + 50,
              qPrintable("a red costume does not read red: " + report));
     QVERIFY2(qAbs(body.red() - body.blue()) < 40, qPrintable("the neutral body took a colour: " + report));
 }
@@ -554,49 +669,96 @@ void Performers_Test::theDialogAndTheAddMenu()
     MonitorProperties *props = doc.monitorProperties();
     StagePlatform *p = threeTier(props);
 
-    PerformersDialog dlg(props, { p->id() });
-    QCOMPARE(dlg.count(), 14);
-    QVERIFY(dlg.findChild<QLabel *>(QStringLiteral("performersCount"))->text().startsWith(QStringLiteral("14 ")));
-    dlg.m_by->setCurrentIndex(1);
-    dlg.m_perRow->setValue(7);
-    QCOMPARE(dlg.count(), 21);
-    QCOMPARE(dlg.options().perRow, 7);
-    QVERIFY(dlg.m_name->text().contains(QStringLiteral("Choir riser")));
+    PerformersDialog fillDlg(props, { p->id() });
+    QVERIFY(fillDlg.fills());
+    QCOMPARE(fillDlg.count(), 14);
+    QVERIFY(fillDlg.findChild<QLabel *>(QStringLiteral("performersCount"))->text().startsWith(QStringLiteral("14 ")));
+    fillDlg.m_by->setCurrentIndex(1);
+    fillDlg.m_perRow->setValue(7);
+    QCOMPARE(fillDlg.count(), 21);
+    QCOMPARE(fillDlg.options().perRow, 7);
+    QVERIFY(fillDlg.m_name->text().contains(QStringLiteral("Choir riser")));
+    // The Adults preset sets the height; the spread is its own.
+    fillDlg.m_heightPreset->setCurrentIndex(2);
+    emit fillDlg.m_heightPreset->activated(2);
+    QVERIFY(qAbs(fillDlg.options().height - 1.75f) < 1e-3f);
+    QVERIFY(qAbs(fillDlg.options().spread - 0.08f) < 1e-3f);
+
+    PerformersDialog lineDlg(props, QList<quint32>());
+    QVERIFY(!lineDlg.fills());
+    lineDlg.m_lineCount->setValue(12);
+    QCOMPARE(lineDlg.count(), 12);
 
     Plot plot(&doc);
-    QAction *person = nullptr;
+    QAction *people = nullptr;
     foreach (QAction *a, plot.mon->findChildren<QAction *>())
-        if (a->objectName() == QStringLiteral("addPersonAction"))
-            person = a;
-    QVERIFY(person != nullptr);
+        if (a->objectName() == QStringLiteral("addPeopleAction"))
+            people = a;
+    QVERIFY(people != nullptr);
     QMenu *menu = nullptr;
-    foreach (QObject *o, person->associatedObjects())
+    foreach (QObject *o, people->associatedObjects())
         if ((menu = qobject_cast<QMenu *>(o)) != nullptr)
             break;
     QVERIFY(menu != nullptr);
     emit menu->aboutToShow();
-    QCOMPARE(person->text(), QStringLiteral("Add Person"));
+    QCOMPARE(people->text(), QStringLiteral("Add People…"));
 
-    plot.gv->m_platformItems.value(p->id())->setSelected(true);
-    emit menu->aboutToShow();
-    QVERIFY2(person->text().startsWith(QStringLiteral("Fill 1 Selected Riser")), qPrintable(person->text()));
-
-    // Triggered with the riser selected: the dialog, and OK fills it.
+    // Nothing selected: one performer line, as many as asked.
     QTimer::singleShot(0, [&]() {
         PerformersDialog *d = plot.mon->findChild<PerformersDialog *>();
-        QVERIFY(d != nullptr);
+        QVERIFY(d != nullptr && !d->fills());
+        d->m_lineCount->setValue(5);
         d->accept();
     });
-    person->trigger();
-    QCOMPARE(people(props).size(), 14);
+    plot.mon->m_pendingAddScenePos = plot.gv->realPositionToPixels(5000.0, 5000.0);
+    people->trigger();
+    QCOMPARE(lines(props).size(), 1);
+    QCOMPARE(lines(props).first()->performerCount(), 5);
+    QVERIFY(qAbs(lines(props).first()->x() - 5.0f) < 0.05f);
+
+    // A riser selected: the fill.
+    plot.gv->m_platformItems.value(p->id())->setSelected(true);
+    emit menu->aboutToShow();
+    QVERIFY2(people->text().startsWith(QStringLiteral("Fill 1 Selected Riser")), qPrintable(people->text()));
+    QTimer::singleShot(0, [&]() {
+        PerformersDialog *d = plot.mon->findChild<PerformersDialog *>();
+        QVERIFY(d != nullptr && d->fills());
+        d->accept();
+    });
+    people->trigger();
+    QCOMPARE(lines(props).size(), 1 + 3);
+    QCOMPARE(headCount(props), 5 + 14);
+}
+
+void Performers_Test::anyLineTakesPeopleInItsDialog()
+{
+    Doc doc(this);
+    MonitorProperties *props = doc.monitorProperties();
+    Plot plot(&doc);
+    StageTarget *t = props->addStageTarget();
+    t->makeLine();
+    plot.gv->updateTargets();
+    QTimer::singleShot(0, [&]() {
+        QDialog *d = qobject_cast<QDialog *>(QApplication::activeModalWidget());
+        QVERIFY(d != nullptr);
+        QSpinBox *n = d->findChild<QSpinBox *>(QStringLiteral("linePeople"));
+        QVERIFY(n != nullptr && n->isEnabled());
+        n->setValue(4);
+        d->accept();
+    });
+    plot.mon->slotEditTarget(t->id());
+    QVERIFY(t->isPerformerLine());
+    QCOMPARE(t->performerCount(), 4);
+    QVERIFY(t->seed() != 0);
+    QCOMPARE(PerformerFill::people(props, t).size(), 4);
 }
 
 void Performers_Test::manyPeopleRenderCost()
 {
-    /* Five 3-tier risers of students -- 70 people -- under a few washes.
-       The rig view's frame and the plot's are timed with nobody on the
-       risers and with them all: the quickest of several, so a busy machine
-       measures the drawing and not the wait for a core. */
+    /* Five 3-tier risers of students -- 70 people on 15 lines -- under a
+       few washes. The rig view's frame and the plot's are timed with nobody
+       on the risers and with them all: the quickest of several, in processor
+       time, so a busy machine measures the drawing and not the wait. */
     Doc doc(this);
     MonitorProperties *props = doc.monitorProperties();
     QList<quint32> risers;
@@ -625,8 +787,6 @@ void Performers_Test::manyPeopleRenderCost()
         double best = 1e9;
         for (int i = 0; i < 7; ++i)
         {
-            // Processor time, every thread's: a loaded machine's wait for
-            // a core is not the drawing's cost.
             const std::clock_t c0 = std::clock();
             draw();
             best = qMin(best, double(std::clock() - c0) * 1000.0 / CLOCKS_PER_SEC);
@@ -645,15 +805,16 @@ void Performers_Test::manyPeopleRenderCost()
 
     PerformerFill::Options o;
     o.height = PerformerFill::presetHeight(PerformerFill::Students);
+    o.spread = 0.08f;
     o.costume = QColor(30, 30, 120);
     const PerformerFill::Result r = plot.mon->fillWithPeople(risers, o);
-    QCOMPARE(r.targets.size(), 70);
+    QCOMPARE(r.people, 70);
     v.reload();
 
     const double rigFull = quickest(rigFrame);
     const double plotFull = quickest(plotFrame);
     qInfo("render cost (CPU), %d people: rig view %.1f -> %.1f ms/frame, plot %.1f -> %.1f ms/frame",
-          int(r.targets.size()), rigEmpty, rigFull, plotEmpty, plotFull);
+          r.people, rigEmpty, rigFull, plotEmpty, plotFull);
     /* Generous: a debug build on a loaded gate machine. What it catches is
        a figure costing milliseconds, not noise. */
     QVERIFY2(rigFull < rigEmpty * 1.6 + 80.0, "70 people make the rig view crawl");

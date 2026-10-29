@@ -57,16 +57,18 @@ skipped). Upstream fixes taken:
 
 ### Added
 
-- **People on the risers**: select risers (steps or decks) and **Add ▸
-  Fill Selected Risers with People…** (the Add Person entry, while risers
-  are selected; or right-click a riser, **Add ▸ People on the Risers…**)
-  stands a row on every tread, at its height and facing the house, by
-  spacing or so many to a row, staggered. Children, students or adults,
-  and a costume colour the rig view lights the body in. They are one set
-  in a **Performers** layer (its eye hides them, its lock holds them),
-  ride their riser when it moves or turns, and are saved with the show.
-  The rig view draws a small figure with fewer facets, so seventy cost
-  about a third of what they did.
+- **People on the stage**: a **performer line** is a line target with a
+  count of people spread evenly along it, each standing on the highest
+  stage surface under them (a step's tread, a riser, the apron), with a
+  mean height give or take a spread (each keeps theirs across reloads;
+  Shuffle picks again) and a costume colour the rig view lights the body
+  in. **Add ▸ Add People…** makes one; with risers selected it reads
+  **Fill Selected Risers with People…** and makes a line along every
+  tread (by spacing or so many to a row, staggered). Any line takes people
+  in its dialog. Lines go in a **Performers** layer (its eye hides them,
+  its lock holds them), a fill's lines are one set, and they ride their
+  riser when it moves or turns. The rig view draws a small figure with
+  fewer facets, so a crowd stays quick.
 - **Web access saved with the show**: **Connections ▸ Devices ▸ Show
   control & sync ▸ Web access** turns on "Start web access with this show,
   on port" (9999 by default), with **Reachable from other devices on the

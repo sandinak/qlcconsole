@@ -144,6 +144,20 @@ public:
     { return hasPersonHeight() ? m_personHeight : defaultPersonHeight(); }
     static constexpr float defaultPersonHeight() { return 1.75f; }
 
+    /** A performer line: a Line with people on it, @p n of them spread
+     *  evenly along it, each standing on the highest stage surface under
+     *  their feet (PerformerFill::people()). 0 = a plain line. Their height
+     *  is personHeight() (the mean) give or take heightSpread(), each
+     *  person's own drawn from seed() so it never reshuffles on reload. */
+    int   performerCount() const { return m_performerCount; }
+    void  setPerformerCount(int n) { m_performerCount = n > 0 ? n : 0; }
+    bool  isPerformerLine() const { return m_kind == Kind::Line && m_performerCount > 0; }
+    /** Metres either side of the mean height (0: all the same). */
+    float heightSpread() const { return m_heightSpread; }
+    void  setHeightSpread(float m) { m_heightSpread = m > 0.0f ? m : 0.0f; }
+    quint32 seed() const { return m_seed; }
+    void  setSeed(quint32 s) { m_seed = s; }
+
     /** What a Person wears: the colour the body takes light in, so a blue
      *  wash on a red robe reads dark in the rig view, as it would on stage.
      *  Invalid (the default) = the neutral body every person had before. */
@@ -258,6 +272,9 @@ private:
     float     m_aimHeightOverride = -1.0f;   ///< < 0 = use the kind's default
     float     m_personHeight = -1.0f;        ///< Person: how tall; < 0 = not given
     QColor    m_costume;                     ///< Person: costume; invalid = neutral
+    int       m_performerCount = 0;          ///< Line: people on it; 0 = none
+    float     m_heightSpread = 0.0f;         ///< performer line: +/- metres
+    quint32   m_seed = 0;                    ///< performer line: heights
     QString   m_boundType;                   ///< "platform" | "truss" | "tower"
     quint32   m_boundId = UINT_MAX;
     QSizeF    m_footprint;                   ///< metres; empty = a point
