@@ -2092,19 +2092,27 @@ void ProgrammingManager::recomputePower()
 
     // Take a consistent pre-Grand-Master snapshot of all universes (the
     // "designed peak", free of Grand Master/blackout). claimUniverses() shares
-    // the MasterTimer's write mutex; release with changed=false (read-only).
-    QList<Universe*> universes = m_doc->inputOutputMap()->claimUniverses();
+    // the MasterTimer's write mutex, so only the copy is made under it
+    // (release with changed=false: read-only): the estimate itself, a few ms
+    // on a big rig, used to hold the engine's next tick back twice a second.
+    QVector<QByteArray> values;
+    {
+        QList<Universe*> universes = m_doc->inputOutputMap()->claimUniverses();
+        values.reserve(universes.size());
+        for (Universe *u : std::as_const(universes))
+            values << (u != nullptr ? u->preGMValues() : QByteArray());
+        m_doc->inputOutputMap()->releaseUniverses(false);
+    }
     PowerEstimator::PreGMReader reader =
-        [&universes](quint32 uni, quint32 addr) -> uchar
+        [&values](quint32 uni, quint32 addr) -> uchar
         {
-            if (uni >= quint32(universes.size()))
+            if (uni >= quint32(values.size()) || addr >= quint32(values.at(int(uni)).size()))
                 return 0;
-            return universes[uni]->preGMValue(int(addr));
+            return uchar(values.at(int(uni)).at(int(addr)));
         };
 
     QHash<quint32, double> perFixture;
     PowerEstimator::estimateWatts(m_doc, reader, &perFixture);
-    m_doc->inputOutputMap()->releaseUniverses(false);
 
     // Total amps: sum each source's watts / its own voltage (handles mixed
     // voltages), plus any unassigned fixtures at the global default voltage.

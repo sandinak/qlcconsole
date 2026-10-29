@@ -18,6 +18,21 @@ build-perf/):
     after 10 s of warm-up: about 5 minutes.
   * engine/test/hotpath (HotPath_Test::cpuPerOperation): CPU ns per universe
     frame, fader write, scene frame, script map and input flush.
+  * The mixed rig (stresstest/engine/showbuilder.cpp, ShowSpec::MixedRig:
+    moving heads with 16-bit pan/tilt, LED pars, pixel bars and strips,
+    dimmers, laid out across a stage with groups over it): the realistic
+    load on 32 universes, pan/tilt EFX on the movers, matrices over the
+    stage groups (40 s each, as above); and HotPath_Test::cpuPerRigOperation
+    ("hotpath-rig"): a rig frame, pan/tilt EFX, a stage-wide matrix, the
+    power estimate and a capped universe, a Show Tree of 200 tracking cues
+    (GO under load, an edit, resolving what the last cue plays).
+  * ui/test/renderperf (RenderPerf_Test::cpuPerFrame, "gui"): drawing the
+    rig offscreen -- process CPU per frame of the 3D/rig view (angled with
+    beams, plan), the 2D plot, and an idle live tick. Its idle-repaint
+    counts (nothing drawn on an idle show) are gate tests.
+  * webaccess/test (WebAccess_Test::cpuPerBroadcast, "web"): one change
+    sent to 50 WebSocket clients on loopback (the gate checks every client
+    gets every change).
 
 What it records per point: tick p50/p99 (the timer's compute time), the
 timer thread's CPU per tick, the frame interval p99, process CPU and peak
@@ -71,6 +86,10 @@ DATA = os.path.join(REPO, "docs", "perf-data")
 # ---------------------------------------------------------------------------
 
 
+def all_point_names():
+    return [p[0] for p in points()] + [m[0] for m in MICROS]
+
+
 def points():
     """(name, config, start types) in run order: stable names, they key the
     baseline. The configurations are perf_sweep.py's own."""
@@ -83,7 +102,23 @@ def points():
     out.append(("cp-chasers-n0064", dict(base, chasers=64, scenes=256), "chaser"))
     out.append(("c-matrix-n0064", dict(base, matrices=64, perstep=False), "matrix"))
     out.append(("c-efx-n0256", dict(base, efx=256, perstep=False), "efx"))
+    # The mixed rig (added 2026-10-29: the points above are all Generic RGB)
+    out.append(("rig-mixed-u0032", perf_sweep.mixed_rig(32), None))
+    rbase = dict(universes=32, fpu=0, scenes=32, chasers=0, matrices=0, efx=0, cuelists=0,
+                 collections=0, scene_fix=0, rig="mixed", perstep=True)
+    out.append(("rig-efx-pantilt-n0256", dict(rbase, efx=256), "efx"))
+    out.append(("rig-matrix-stage-n0064", dict(rbase, matrices=64), "matrix"))
     return out
+
+
+# The report-only CPU-per-operation programs: (point, test dir in the build,
+# program, test function). Each point's metrics are "<name>_ns".
+MICROS = [
+    ("hotpath", os.path.join("engine", "test", "hotpath"), "hotpath_test", "cpuPerOperation"),
+    ("hotpath-rig", os.path.join("engine", "test", "hotpath"), "hotpath_test", "cpuPerRigOperation"),
+    ("gui", os.path.join("ui", "test", "renderperf"), "renderperf_test", "cpuPerFrame"),
+    ("web", os.path.join("webaccess", "test"), "webaccess_test", "cpuPerBroadcast"),
+]
 
 
 # metric -> (unit, relative floor, absolute floor). Every metric is "lower is
@@ -236,23 +271,50 @@ def tolerance(metric, values):
     return med, 100.0 * spread, 100.0 * max(rel_floor, NOISE_K * spread)
 
 
-def write_baseline(path, meta, runs):
-    """runs: a list of {(point, metric): value}, one per recorded run."""
-    keys = sorted(set().union(*[set(r) for r in runs]))
+def write_baseline(path, meta, runs, keep=None, notes=()):
+    """runs: a list of {(point, metric): value}, one per recorded run.
+    keep: rows to carry over unchanged ({(point, metric): csv row dict}, as
+    read_rows() gives them) -- adding points leaves the others as they were
+    recorded. notes: extra "# added: ..." lines."""
+    new = {}
+    for key in sorted(set().union(*[set(r) for r in runs])):
+        vals = [r[key] for r in runs if key in r]
+        med, spread, tol = tolerance(key[1], vals)
+        unit, _, floor = METRICS[metric_kind(key[1])]
+        new[key] = dict(point=key[0], metric=key[1], unit=unit, value=round(med, 4),
+                        runs=len(vals), spread_pct=round(spread, 1),
+                        tolerance_pct=round(tol, 1), floor=floor)
+    rows = dict(keep or {})
+    rows.update(new)
     with open(path, "w", newline="") as f:
         f.write("# qlcconsole performance baseline: tools/perf/guard.py (docs/performance.md,\n")
         f.write("# \"Keeping it fast\"). Rebase only on purpose, with the reason in the commit.\n")
         for k in ("host_class", "recorded", "rev", "qt", "cpu", "os", "runs", "seconds", "busy_pct"):
             f.write("# %s: %s\n" % (k, meta.get(k, "")))
+        for n in notes:
+            f.write("# added: %s\n" % n)
         w = csv.DictWriter(f, fieldnames=FIELDS, lineterminator="\n")
         w.writeheader()
-        for key in keys:
-            vals = [r[key] for r in runs if key in r]
-            med, spread, tol = tolerance(key[1], vals)
-            unit, _, floor = METRICS[metric_kind(key[1])]
-            w.writerow(dict(point=key[0], metric=key[1], unit=unit, value=round(med, 4),
-                            runs=len(vals), spread_pct=round(spread, 1),
-                            tolerance_pct=round(tol, 1), floor=floor))
+        for key in sorted(rows, key=row_order):
+            w.writerow(rows[key])
+
+
+def row_order(key):
+    """Baseline rows in run order (points(), then MICROS), metrics sorted."""
+    order = {name: i for i, (name, _, _) in enumerate(points())}
+    for j, m in enumerate(MICROS):
+        order[m[0]] = 1000 + j
+    return (order.get(key[0], 2000), key[0], key[1])
+
+
+def read_rows(path):
+    """(the header's raw lines, {(point, metric): raw csv row}), to rewrite
+    a baseline with points added and the rest exactly as they were."""
+    head, lines = [], []
+    with open(path) as f:
+        for line in f:
+            (head if line.startswith("#") else lines).append(line)
+    return head, {(r["point"], r["metric"]): r for r in csv.DictReader(lines)}
 
 
 def read_baseline(path):
@@ -350,7 +412,8 @@ def build(a, qt, logdir):
     if not btype or btype.group(1) != "Release":
         raise SystemExit("guard: %s is not a Release build (%s); remove it or pass --build-dir"
                          % (bdir, btype.group(1) if btype else "?"))
-    run(["cmake", "--build", bdir, "-j%d" % jobs(), "--target", "qlcplusengine", "hotpath_test"], logf)
+    run(["cmake", "--build", bdir, "-j%d" % jobs(), "--target", "qlcplusengine",
+         *sorted({m[2] for m in MICROS})], logf)
     sdir = os.path.join(bdir, "qlcstress")
     if not os.path.exists(os.path.join(sdir, "CMakeCache.txt")):
         run(["cmake", "-S", os.path.join(REPO, "stresstest", "engine"), "-B", sdir,
@@ -364,7 +427,7 @@ def build(a, qt, logdir):
 
 def child_env(bdir):
     env = dict(os.environ, QT_QPA_PLATFORM="offscreen")
-    lib = os.path.join(os.path.abspath(bdir), "engine", "src")
+    lib = os.pathsep.join(os.path.join(os.path.abspath(bdir), d, "src") for d in ("engine", "ui", "webaccess"))
     for k in ("LD_LIBRARY_PATH", "DYLD_FALLBACK_LIBRARY_PATH"):
         env[k] = lib + (os.pathsep + env[k] if env.get(k) else "")
     return env
@@ -384,24 +447,35 @@ def run_point(a, qlcstress, name, cfg, start, outdir):
     return metrics_of(res)
 
 
-def run_micro(a, outdir):
-    tdir = os.path.join(a.build_dir, "engine", "test", "hotpath")
-    exe = os.path.join(tdir, "hotpath_test")
-    report = os.path.join(outdir, "hotpath.csv")
+def micro_exe(tdir, prog):
+    """The test program in its build dir (a macOS GUI test is a bundle)."""
+    for p in (os.path.join(tdir, prog + ".app", "Contents", "MacOS", prog), os.path.join(tdir, prog),
+              os.path.join(tdir, prog + ".exe")):
+        if os.path.exists(p):
+            return p
+    return os.path.join(tdir, prog)
+
+
+def run_micro(a, outdir, point="hotpath"):
+    _, sub, prog, func = next(m for m in MICROS if m[0] == point)
+    tdir = os.path.join(a.build_dir, sub)
+    exe = micro_exe(tdir, prog)
+    report = os.path.join(outdir, point + ".csv")
     if os.path.exists(report):
         os.remove(report)
     env = child_env(a.build_dir)
     env.update(QLC_PERF_REPORT=report, QLC_PERF_REPS=str(a.micro_reps))
     os.makedirs(outdir, exist_ok=True)   # a rerun of the hot paths alone runs no point to make it
-    with open(os.path.join(outdir, "hotpath.log"), "w") as f:
-        rc = subprocess.run([exe, "cpuPerOperation"], cwd=tdir, env=env, stdout=f,
+    logf = os.path.join(outdir, point + ".log")
+    with open(logf, "w") as f:
+        rc = subprocess.run([exe, func], cwd=tdir, env=env, stdout=f,
                             stderr=subprocess.STDOUT).returncode
     if rc != 0 or not os.path.exists(report):
-        raise RuntimeError("hotpath_test failed (rc %s), see %s" % (rc, os.path.join(outdir, "hotpath.log")))
+        raise RuntimeError("%s %s failed (rc %s), see %s" % (prog, func, rc, logf))
     out = {}
     for line in open(report):
         name, v = line.strip().split(",")
-        out[("hotpath", name + "_ns")] = float(v)
+        out[(point, name + "_ns")] = float(v)
     return out
 
 
@@ -414,9 +488,10 @@ def run_all(a, qlcstress, outdir, only=None):
         log("point %-18s %d universes" % (name, cfg["universes"]))
         for m, v in run_point(a, qlcstress, name, cfg, start, outdir).items():
             rows[(name, m)] = v
-    if only is None or "hotpath" in only:
-        log("hot paths (engine/test/hotpath)")
-        rows.update(run_micro(a, outdir))
+    for point, sub, prog, func in MICROS:
+        if only is None or point in only:
+            log("%-24s (%s %s)" % (point, prog, func))
+            rows.update(run_micro(a, outdir, point))
     rows.update(derived(rows))
     return rows
 
@@ -514,9 +589,31 @@ def self_test():
     node = slug(platform.node().split(".")[0])
     check(bool(hc) and (not node or node not in hc), "host class %s names the host" % hc)
     check(host_class("My Box!") == "my-box", "named host class")
+    # Adding points keeps every other row exactly as it was recorded.
+    d = tempfile.mkdtemp()
+    try:
+        p = os.path.join(d, "baseline-x.csv")
+        write_baseline(p, dict(host_class="x", rev="old", runs=3),
+                       [{("a1p-u0008", "tick_p99_ms"): v, ("hotpath", "scene_frame_170_ns"): 10000 + v}
+                        for v in (1.0, 1.2, 1.1)])
+        before = open(p).read().splitlines()
+        head, kept = read_rows(p)
+        kept = {k: v for k, v in kept.items() if k[0] != "gui"}
+        meta, _ = read_baseline(p)
+        write_baseline(p, meta, [{("gui", "gui_x_ns"): v} for v in (5.0, 5.0, 5.0)], keep=kept,
+                       notes=["gui -- now"])
+        after = open(p).read().splitlines()
+        check(all(line in after for line in before), "kept rows changed: %s" % after)
+        check("# added: gui -- now" in after and any(line.startswith("gui,gui_x_ns,ns,5.0,") for line in after),
+              "added rows %s" % after)
+        meta2, rows2 = read_baseline(p)
+        check(meta2.get("rev") == "old" and len(rows2) == 3, "after adding %s %s" % (meta2, rows2))
+    finally:
+        shutil.rmtree(d)
     # Every point has a known metric set.
-    names = [p[0] for p in points()]
+    names = all_point_names()
     check(len(names) == len(set(names)) and all(re.match(r"^[a-z0-9-]+$", n) for n in names), names)
+    check({"rig-mixed-u0032", "hotpath-rig", "gui", "web"} <= set(names), "the mixed rig and gui points")
     print("guard self-test:", "ok" if ok else "FAILED")
     return 0 if ok else 1
 
@@ -536,7 +633,8 @@ def main():
     ap.add_argument("--seconds", type=int, default=40, help="measured seconds per point")
     ap.add_argument("--warmup", type=int, default=10, help="warm-up seconds per point")
     ap.add_argument("--points", default="", help="check only these points, comma-separated "
-                    "(a1p-u0128,hotpath,...): a quick before/after while working on a hot path")
+                    "(a1p-u0128,hotpath,...): a quick before/after while working on a hot path; "
+                    "with --record, add (or re-record) only these points in the baseline")
     ap.add_argument("--micro-reps", type=int, default=10, help="QLC_PERF_REPS for the hot-path test")
     ap.add_argument("--out", default="", help="results folder (default a temporary one)")
     ap.add_argument("--trend", default="", help="append the comparison to this trend CSV")
@@ -588,17 +686,36 @@ def main():
                 qt=qt_version(qt), cpu=cpu_model(), os="%s %s" % (platform.system(), platform.release()),
                 seconds="%d+%d" % (a.seconds, a.warmup), busy_pct=busy)
     try:
-        if record and a.points:
-            print("guard: --points is for checks; a baseline records every point", file=sys.stderr)
+        only = set(a.points.split(",")) if a.points else None
+        if only is not None:
+            unknown = only - set(all_point_names())
+            if unknown:
+                print("guard: no such point: %s (points: %s)" % (", ".join(sorted(unknown)),
+                      ", ".join(all_point_names())), file=sys.stderr)
+                return 2
+        if record and only is not None and not os.path.exists(bpath):
+            print("guard: --record --points adds points to a baseline, and there is none yet: "
+                  "record every point first (--record)", file=sys.stderr)
             return 2
         if record:
             runs = []
             for i in range(a.runs):
                 log("record run %d of %d" % (i + 1, a.runs))
-                runs.append(run_all(a, qlcstress, os.path.join(outdir, "run%d" % (i + 1))))
-            meta["runs"] = a.runs
+                runs.append(run_all(a, qlcstress, os.path.join(outdir, "run%d" % (i + 1)), only=only))
             os.makedirs(os.path.dirname(bpath), exist_ok=True)
-            write_baseline(bpath, meta, runs)
+            if only is not None:
+                # Add (or re-record) these points; every other row, and the
+                # header it was recorded with, stays as it was.
+                head, kept = read_rows(bpath)
+                kept = {k: v for k, v in kept.items() if k[0] not in only}
+                bmeta, _ = read_baseline(bpath)
+                notes = [m.group(1) for m in (re.match(r"#\s*added:\s*(.*)$", h.rstrip("\n")) for h in head) if m]
+                notes.append("%s -- %s, rev %s, Qt %s, %d runs" % (",".join(sorted(only)), meta["recorded"],
+                                                                     rev, meta["qt"], a.runs))
+                write_baseline(bpath, bmeta, runs, keep=kept, notes=notes)
+            else:
+                meta["runs"] = a.runs
+                write_baseline(bpath, meta, runs)
             _, rows = read_baseline(bpath)
             print("\nRecorded %s (%d runs, %.0f min). Spread and tolerance per metric:" % (
                 os.path.relpath(bpath, REPO), a.runs, (time.time() - t0) / 60))
@@ -610,7 +727,6 @@ def main():
         bmeta, baseline = read_baseline(bpath)
         if bmeta.get("qt") and bmeta.get("qt") != meta["qt"]:
             log("NOTE: the baseline was recorded with Qt %s, this is Qt %s" % (bmeta.get("qt"), meta["qt"]))
-        only = set(a.points.split(",")) if a.points else None
         if only is not None:
             baseline = {k: v for k, v in baseline.items() if k[0] in only}
             if not baseline:
@@ -633,6 +749,10 @@ def main():
         print("Performance guard: %s vs baseline %s (rev %s, %s)" % (rev, os.path.relpath(bpath, REPO),
               bmeta.get("rev", "?"), bmeta.get("recorded", "?")))
         print(table(results))
+        unbased = sorted({p for (p, m) in current if (p, m) not in baseline and p != "a1p"})
+        if unbased:
+            print("\nNot in this baseline (measured, not judged): %s.\nAdd them on purpose: "
+                  "make perf-record PERF_ARGS=--points=%s" % (", ".join(unbased), ",".join(unbased)))
         regressed = [r for r in results if r[4] in ("regressed", "missing")]
         improved = [r for r in results if r[4] == "improved"]
         mins = (time.time() - t0) / 60

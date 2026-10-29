@@ -599,7 +599,9 @@ static int runTimed(Doc *doc, const QList<Function*> &funcs, const ShowSpec &spe
     r["frequencyHz"] = MasterTimer::frequency(); r["periodMs"] = period;
     r["seconds"] = o.seconds; r["warmupSec"] = o.warmupSec;
     r["universes"] = doc->inputOutputMap()->universesCount();
-    r["fixturesPerUni"] = spec.fixturesPerUni; r["fixtures"] = int(doc->fixtures().size());
+    r["fixturesPerUni"] = spec.rig == ShowSpec::MixedRig ? ShowSpec::mixedFixturesPerUni : spec.fixturesPerUni;
+    r["fixtures"] = int(doc->fixtures().size());
+    r["rig"] = spec.rig == ShowSpec::MixedRig ? "mixed" : "rgb";
     int channels = 0; for (Fixture *fx : doc->fixtures()) channels += int(fx->channels());
     r["channels"] = channels;
     r["functionsTotal"] = int(doc->functions().size()); r["functionsStarted"] = int(funcs.size());
@@ -1202,6 +1204,7 @@ int main(int argc, char *argv[])
     QCommandLineOption oEfxPerUni("efx-per-universe", "one EFX per universe over all its fixtures: every channel changes every tick");
     QCommandLineOption oProbe("probe-universes", "diagnostics: report whether these universes' output changes (comma list of indexes)", "list", "");
     QCommandLineOption oChaserPerStep("chaser-perstep", "chasers use their steps' fade/hold times (default: Common duration 0 = a step every tick)");
+    QCommandLineOption oRig("rig", "synthetic show: rgb (every fixture a Generic RGB, the default) | mixed (movers, LED pars, pixel bars and strips, dimmers, laid out across a stage; see ShowSpec::MixedRig)", "rig", "rgb");
     QCommandLineOption oJson("json", "emit RESULT_JSON lines for the orchestrator");
     QCommandLineOption oScenario("scenario", "scenario name (for JSON)", "name", "adhoc");
     QCommandLineOption oLoad("load", "engine modes: load a real .qxw instead of building a synthetic show", "file", "");
@@ -1215,7 +1218,7 @@ int main(int argc, char *argv[])
                   oScripts, oSequences, oShows, oJson, oScenario,
                   oSampleSec, oGoldenFile, oGoldenVerify, oChaosAggr, oLoad, oStart, oInject, oEffDir,
                   oArtnet, oPluginDir, oChurn, oUserFix, oWarm, oOut, oTickCsv, oSampleMs,
-                  oStartTypes, oSceneFix, oCueLists, oCues, oLayers, oCueFade, oEfxPerUni, oChaserPerStep, oProbe});
+                  oStartTypes, oSceneFix, oCueLists, oCues, oLayers, oCueFade, oEfxPerUni, oChaserPerStep, oProbe, oRig});
     p.process(app);
 
     const QStringList args = p.positionalArguments();
@@ -1254,6 +1257,13 @@ int main(int argc, char *argv[])
     spec.cueFadeMs      = p.value(oCueFade).toInt();
     spec.efxPerUniverse = p.isSet(oEfxPerUni);
     spec.chaserPerStep  = p.isSet(oChaserPerStep);
+    if (p.value(oRig) == "mixed")
+        spec.rig = ShowSpec::MixedRig;
+    else if (p.value(oRig) != "rgb")
+    {
+        fprintf(stderr, "--rig: rgb or mixed\n");
+        return 2;
+    }
     g_json              = p.isSet(oJson);
     g_churnMs           = p.value(oChurn).toInt();
     g_scenario          = p.value(oScenario);

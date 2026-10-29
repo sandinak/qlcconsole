@@ -90,8 +90,15 @@ private slots:
     void theCommandLineWins();
     void aShowLoadedFromTheWebKeepsItRunning();
 
+    /* Many clients: a phone per crew member (make perf, "web") */
+    void fiftyClientsGetEveryChange();
+    void cpuPerBroadcast();
+
 private:
     void startWeb(bool auth, const QString &passwdFile = QString());
+    /** @a n WebSocket clients on loopback, connected; each counts the
+     *  FUNCTION messages it gets into @a got */
+    QList<class QWebSocket *> openClients(int n, QVector<int> *got);
     QByteArray http(const QByteArray &request, int timeoutMs = 5000);
     QString wsRoundTrip(const QStringList &commands, const QByteArray &origin = QByteArray());
 

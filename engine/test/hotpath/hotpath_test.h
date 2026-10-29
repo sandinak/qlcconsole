@@ -25,6 +25,7 @@
 
 class Doc;
 class Scene;
+class Function;
 
 /** The engine's hot paths, guarded two ways (docs/performance.md,
  *  "Keeping it fast").
@@ -56,17 +57,36 @@ private slots:
     void aChaserKeepsItsFadersBounded();
     void aMatrixComputesAMapPerStepNotPerTick();
 
+    /* The mixed rig (stresstest/engine/showbuilder.cpp, ShowSpec::MixedRig):
+       movers, LED pars, pixel bars and strips, dimmers on 32 universes */
+    void aPanTiltEfxWritesBothBytesOfEveryMover();
+    void thePowerEstimateOfABigRigAddsUp();
+    void theCapHoldsEveryParOfABigRig();
+    void aGoInABigShowTreeMakesAndDeletesNothing();
+
     /* CPU time per operation (report only) */
     void cpuPerOperation();
+    void cpuPerRigOperation();
 
 private:
     Scene *makeLook(int universe, int fixtures, uchar level);
     void frame(int frames = 1);
+    static void frame(Doc *doc, int frames = 1);
+    /** The mixed rig, built once: 32 universes, nothing running */
+    Doc *rig();
+    void stopRig();
+    /** A Show Tree of @a cues tracking cues over the rig's groups; its
+     *  list's chaser id */
+    quint32 bigShowTree(int cues);
 
 private:
     Doc *m_doc = nullptr;
     /** Generic RGB fixtures, 170 per universe on universes 0 and 1 */
     QList<quint32> m_fixtures[2];
+    Doc *m_rig = nullptr;
+    QList<Function *> m_rigFunctions;
+    quint32 m_rigTree = 0;      ///< bigShowTree()'s chaser, once made
+    quint32 m_rigTreeList = 0;  ///< ...and its cue list
 };
 
 #endif

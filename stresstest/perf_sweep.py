@@ -9,7 +9,7 @@ RSS. A dimension stops one step after its breaking point (compute p99 > the
 tick period, or the cadence lost: gap p99 > 1.5 x period), or at --max-sec of
 wall time for one configuration (show build + run).
 
-  python3 perf_sweep.py --qlcstress Q --resources R --out DIR [--sweeps a1,a2,b,c,real]
+  python3 perf_sweep.py --qlcstress Q --resources R --out DIR [--sweeps a1,a2,b,c,r,real]
                         [--seconds 40] [--warmup 10] [--only-first N]
 
 Writes DIR/<sweep>/<name>.{json,timeline.csv,log} and DIR/results.csv (one row
@@ -43,8 +43,26 @@ def mixed(u, fpu=170):
                 cuelists=max(1, math.ceil(u / 8)), collections=0, scene_fix=min(170, fpu))
 
 
+def mixed_rig(u):
+    """The 'mixed' load on the mixed rig (qlcstress --rig mixed: movers, LED
+    pars, pixel bars and strips, dimmers across a stage): a group look per
+    universe; per 4 universes a chaser, a matrix over a stage group and a
+    pan/tilt EFX on the movers; a cue list of group-look layers per 8."""
+    return dict(mixed(u), rig="mixed", perstep=True, scene_fix=0)
+
+
 def plan(sweeps):
     out = []
+    # The mixed rig (movers, pars, pixels, dimmers across a stage)
+    if "r" in sweeps:
+        for u in [8, 16, 32, 64, 128, 256, 512]:
+            out.append(("r-rig-mixed-universes", "u%04d" % u, mixed_rig(u), None))
+        rbase = dict(universes=32, fpu=0, scenes=32, chasers=0, matrices=0, efx=0, cuelists=0,
+                     collections=0, scene_fix=0, rig="mixed", perstep=True)
+        for n in [16, 64, 256, 1024, 4096]:
+            out.append(("r-efx-pantilt", "n%04d" % n, dict(rbase, efx=n), "efx"))
+        for n in [8, 16, 32, 64, 128, 256]:
+            out.append(("r-matrix-stage-groups", "n%04d" % n, dict(rbase, matrices=n), "matrix"))
     # Realistic chasers (per-step fade/hold): the same sweeps again, suffixed "p"
     if "a1p" in sweeps:
         for u in [1, 8, 16, 32, 64, 80, 128, 192, 256, 384, 512, 768, 1024, 1536, 2048]:
@@ -103,6 +121,8 @@ def run_one(a, sweep, name, cfg, types, outdir):
         cmd += ["--start-types", types]
     if cfg.get("perstep"):
         cmd += ["--chaser-perstep"]
+    if cfg.get("rig"):
+        cmd += ["--rig", cfg["rig"]]
     if a.tick_csv:
         cmd += ["--tick-csv"]
     t0 = time.time()

@@ -21,6 +21,7 @@
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
 #include <QDebug>
+#include <QSet>
 
 #include "fixturegroup.h"
 #include "qlcpoint.h"
@@ -312,11 +313,19 @@ QMap<QLCPoint, GroupHead> FixtureGroup::headsMap() const
 QList <quint32> FixtureGroup::fixtureList() const
 {
     QList <quint32> list;
+    /* Seen in a set, not by searching the list: a stage-wide pixel group
+       (hundreds of heads) made this quadratic, and the Show Tree asks for
+       it per target per cue on every bake. */
+    QSet <quint32> seen;
+    seen.reserve(m_heads.size());
 
-    foreach (GroupHead head, m_heads)
+    for (const GroupHead &head : m_heads)
     {
-        if (list.contains(head.fxi) == false)
+        if (seen.contains(head.fxi) == false)
+        {
+            seen.insert(head.fxi);
             list << head.fxi;
+        }
     }
     return list;
 }

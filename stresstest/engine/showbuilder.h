@@ -47,13 +47,35 @@ struct ShowSpec
     bool chaserPerStep   = false;
     unsigned int seed    = 1;     // RNG seed for reproducible shows
 
+    // The rig. RgbRig: every fixture a Generic RGB, fixturesPerUni of them
+    // (the historical harness; its numbers are the baselines). MixedRig: a
+    // real rig, the same on every universe (a truss position): 4 moving
+    // heads (16-bit pan/tilt + fine, speed, gobos, prism, zoom), 8 LED pars,
+    // 4 twelve-pixel LED bars, 2 thirty-pixel strips and 12 dimmers -- 30
+    // fixtures, 132 heads, 460 channels. The universes are laid out across a
+    // stage (8 positions deep, 12 m segments side by side) with venue plot
+    // positions, and fixture groups follow that layout: a pixel row per
+    // position, and per segment a pixel grid, a par grid and a mover group,
+    // with the gaps between fixtures in their head layouts. Scenes are group
+    // looks (colour, level, position, beam), EFX run in pan/tilt mode on the
+    // movers, matrices run over the stage groups. The pars carry a measured
+    // power profile with a cap (the power limiter works every frame) and
+    // every fixture is on a circuit.
+    enum Rig { RgbRig = 0, MixedRig = 1 };
+    Rig rig              = RgbRig;
+
     // Every fixture is a Generic RGB (3 channels) so RGBMatrix/EFX have real
     // RGB heads to drive. 170 RGB fixtures = 510ch, the per-universe ceiling.
     static const int channelsPerFix = 3;
 
+    // The mixed rig, per universe
+    static constexpr int mixedFixturesPerUni = 30;
+    static constexpr int mixedChannelsPerUni = 460;
+
     // derived/reporting
-    int totalFixtures() const { return universes * fixturesPerUni; }
-    int totalChannels() const { return totalFixtures() * channelsPerFix; }
+    int totalFixtures() const { return universes * (rig == MixedRig ? mixedFixturesPerUni : fixturesPerUni); }
+    int totalChannels() const { return rig == MixedRig ? universes * mixedChannelsPerUni
+                                                       : totalFixtures() * channelsPerFix; }
     int totalFunctions() const { return scenes + chasers + matrices + efx + collections + scripts + sequences + shows
                                        + cuelists * (1 + cuesPerList * (1 + layersPerCue)); }
 };
