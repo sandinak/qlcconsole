@@ -39,8 +39,8 @@ Should the scream still have the white flash? Why?
 
 ## Steps
 
-1. **File → Open** → `lesson-2-1-start.qlcc`.
-2. Click the **Show Tree** tab (⇧⌘5); open **View → Rig Overview** (⇧⌘R)
+1. **File ▸ Open** → `lesson-2-1-start.qlcc`.
+2. Click the **Show Tree** tab (⇧⌘5); open **View ▸ Rig Overview** (⇧⌘R)
    beside it.
 3. Click **1.0.2 Chorus**. Three grey ⤳ rows track in; its row reads
    **1** under **S**, **3** under **T**.
@@ -70,7 +70,7 @@ Should the scream still have the white flash? Why?
 
 12. Click **1.0.3 Scream**: no grey StepTops row, and the step tops are
     dark.
-13. **File → Save As** → `Lesson2-1-yourname.qlcc`.
+13. **File ▸ Save As** → `Lesson2-1-yourname.qlcc`.
 
 **Stuck?** No Release box: click the verse's own StepTops row, not a grey
 one. The new cue is 1.0.3.5: undo, select the chorus, **+ Cue** again.

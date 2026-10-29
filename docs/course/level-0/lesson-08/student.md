@@ -48,9 +48,14 @@ Roles: Driver, Navigator, Designer. Switch after each part.
 
 ## Steps
 
-1. **File → Open** → `lesson-1-1-finish.qlcc`. The footer reads *No
+1. **File ▸ Open** → `lesson-1-1-finish.qlcc`. The footer reads *No
    outputs: preview only*: expected in class.
-2. **View → Rig Overview** (⇧⌘R).
+
+   {% include inapp.html do="Open a show" path="File ▸ Open" mac="⌘O" win="Ctrl+O" see="Pick the file in **Documents → qlcconsole**. Its name shows in the window title." %}
+
+2. **View ▸ Rig Overview** (⇧⌘R).
+
+   {% include inapp.html do="See the stage" path="View ▸ Rig Overview" mac="⇧⌘R" win="Ctrl+Shift+R" see="The 3D stage opens in a window of its own, beside the main window." %}
 
    ![The Rig Overview's controls](../../images/lesson-0-8/rig-overview.png)
 
@@ -78,14 +83,21 @@ Roles: Driver, Navigator, Designer. Switch after each part.
 6. Set **View** to **Front**, then back to **45°**.
 7. Set **Room** back to **House**.
 8. In the main window, click the **Run** tab (⇧⌘8).
+
+   {% include inapp.html do="Go to a tab" path="Window ▸ Run" mac="⇧⌘8" win="Ctrl+Shift+8" see="Or click the tab: the tabs run along the bottom of the window." %}
+
 9. Press **GO** (or Space) three times: a blue cyc, then warm risers, then
    magenta on the risers. Close the **Switch to Operate** line with **×**.
 
    ![The third cue](../../images/lesson-0-8/stage-chorus.png)
 
 10. Press **Stop**.
+11. Quit qlcconsole. If it asks to save, click **No**: the show stays as
+    it came.
 
-**Stuck?** Rig Overview gone: **View → Rig Overview** (⇧⌘R). Everything
+    {% include inapp.html do="Quit" path="qlcconsole ▸ Quit qlcconsole" mac="⌘Q" winpath="File ▸ Quit qlcconsole" win="Alt+F4" see="It won't quit in Operate: **Stop**, then **Design** first." %}
+
+**Stuck?** Rig Overview gone: **View ▸ Rig Overview** (⇧⌘R). Everything
 dark: **Room → Work light**, and **Live** blue. Stage tiny or upside
 down: **Fit**.
 

@@ -46,9 +46,9 @@ Roles: Driver, Navigator, Designer. Switch after each part.
 
 ## Steps
 
-1. **File → Open** → `lesson-1-2-start.qlcc` (Pose, Verse and Chorus from
+1. **File ▸ Open** → `lesson-1-2-start.qlcc` (Pose, Verse and Chorus from
    Lesson 1.1).
-2. Click the **Show Tree** tab (⇧⌘5); open **View → Rig Overview** (⇧⌘R)
+2. Click the **Show Tree** tab (⇧⌘5); open **View ▸ Rig Overview** (⇧⌘R)
    beside it.
 3. In the tree, click **1.0.1 Verse**.
 4. On the page, click the **StepTops** row under **Layers**. Its own page
@@ -64,8 +64,8 @@ Roles: Driver, Navigator, Designer. Switch after each part.
 
    ![The level and Make reusable](../../images/lesson-1-2/make-reusable.png)
 
-8. Press **⌘Z** three times (warm again), then **⇧⌘Z** three times (cool
-   again).
+8. Press **⌘Z** (Edit ▸ Undo) three times (warm again), then **⇧⌘Z**
+   (Edit ▸ Redo) three times (cool again).
 
    ![The cool verse](../../images/lesson-1-2/rig-verse-lavender.png)
 
@@ -81,10 +81,13 @@ Roles: Driver, Navigator, Designer. Switch after each part.
 
 13. Click Pose, Verse, Chorus and Scream in turn. Is there real contrast
     between the verse and the chorus?
-14. **File → Save As** → `Lesson1-2-yourname.qlcc`.
+14. **File ▸ Save As** → `Lesson1-2-yourname.qlcc`.
 
 **Stuck?** No ⋯ buttons: click the StepTops row first. Red went onto one
-layer only: ⌘Z and drop it on the dashed box.
+layer only: ⌘Z and drop it on the dashed box. Anything else: the app's
+help covers the tab you're in.
+
+{% include inapp.html do="Help on what you're looking at" path="Help ▸ qlcconsole Help" mac="F1" win="F1" see="It opens on the page for what you're looking at. On a Mac laptop, hold **fn** and press F1." %}
 
 ## Exit ticket
 

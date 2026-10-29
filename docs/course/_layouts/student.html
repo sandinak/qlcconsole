@@ -58,6 +58,18 @@ pre { background: var(--panel); border: 1px solid var(--line);
       border-radius: 6px; padding: .6rem .8rem; overflow-x: auto; }
 pre code { background: none; padding: 0; }
 footer { margin-top: 3rem; color: var(--muted); font-size: .85rem; }
+footer p { margin: .3rem 0; }
+/* The "In the app" box: _includes/inapp.html, one app operation. */
+.inapp { background: var(--panel); border: 1px solid var(--line);
+         border-left: 4px solid var(--accent); border-radius: 6px;
+         padding: .5rem .8rem; margin: .8rem 0; font-size: .97rem; }
+.inapp-tag { color: var(--accent); font-weight: 700; font-size: .75rem;
+             text-transform: uppercase; letter-spacing: .05em;
+             margin-right: .3rem; }
+kbd { font: .86em ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      background: var(--bg); border: 1px solid var(--line);
+      border-bottom-width: 2px; border-radius: 4px; padding: 0 .3em;
+      white-space: nowrap; }
 </style>
 </head>
 <body>
@@ -75,7 +87,7 @@ footer { margin-top: 3rem; color: var(--muted); font-size: .85rem; }
 {% endfor %}{% if page.app %}<li>qlcconsole not on this computer? <a href="{{ '/class/install/' | relative_url }}">Install qlcconsole</a></li>
 {% endif %}{% if page.web %}<li>On a Chromebook or without the app: <a href="{{ '/web/' | relative_url }}">the practice version</a>, in the browser</li>
 {% endif %}</ul>
-{% if page.app %}<p>On Windows or Linux, ⌘ means <strong>Ctrl</strong>.</p>{% endif %}
+{% if page.app %}<p>On Windows or Linux, ⌘ means <strong>Ctrl</strong>.{% unless page.permalink == '/class/basics/' %} New to the app? <a href="{{ '/class/basics/' | relative_url }}">Using the app</a>: open, save, undo.{% endunless %}</p>{% endif %}
 </section>
 {% endif %}
 {% if page.words %}
@@ -87,7 +99,10 @@ footer { margin-top: 3rem; color: var(--muted); font-size: .85rem; }
 </details>
 {% endif %}
 {{ content }}
-<footer>Course text and pictures: CC BY 4.0.</footer>
+<footer>
+{% unless page.permalink == '/class/basics/' %}<p><a href="{{ '/class/basics/' | relative_url }}">Using the app</a>: opening, saving, undo, help and the keys on Mac and Windows.</p>
+{% endunless %}<p>Course text and pictures: CC BY 4.0.</p>
+</footer>
 </main>
 </body>
 </html>

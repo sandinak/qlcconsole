@@ -62,7 +62,7 @@ All of qlcconsole's documentation starts at the [docs hub](https://github.com/sa
 | `COURSE_PLAN.md` | The plan: audience, levels, design strand, lesson template, logistics, online plan, assessment, open questions |
 | `install.md`, `GLOSSARY.md`, `rig.md` | Student pages: install, words, the stage |
 | `level-N/` | A level; each lesson has its own folder (`level-1/lesson-01/` …): teacher guide, handout, slides outline, exit ticket, at home, and `student.md`, the student page |
-| `class/install.md`, `_layouts/student.html` | The student install page, and the plain layout every student page uses (`/class/…` on the site; kept out of the menu and search) |
+| `class/install.md`, `class/basics/student.md`, `_layouts/student.html`, `_includes/inapp.html` | The student install page, the *Using the app* page (open, save, undo, the keys on Mac and Windows), the plain layout every student page uses (`/class/…` on the site; kept out of the menu and search), and its "In the app" box |
 | `shows/` | The teaching show and each lesson's start / finish files (see [shows/README.md](https://github.com/sandinak/qlcconsole/blob/main/docs/course/shows/README.md)) |
 | `images/` | Lesson pictures, taken from the real app by the course test |
 | `web/` | The Show Tree practice version: a browser page for students who can't run the app (plain HTML/JS, no install) |

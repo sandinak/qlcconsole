@@ -53,10 +53,12 @@ Roles: **SM**, **Board op** (the only one on the laptop), **Spotter**
 
 ## Steps
 
-1. **File → Open** → `lesson-1-5-start.qlcc`.
-2. Click the **Run** tab (⇧⌘8); open **View → Rig Overview** (⇧⌘R)
+1. **File ▸ Open** → `lesson-1-5-start.qlcc`.
+2. Click the **Run** tab (⇧⌘8); open **View ▸ Rig Overview** (⇧⌘R)
    beside it.
 3. Click **Operate** at the top right. The Run tab shows **LIVE**.
+
+   {% include inapp.html do="Operate and Design" path="Control ▸ Operate" mac="⌘F12" win="Ctrl+F12" see="The same item reads **Design** to switch back. In Operate the app won't open a show or quit." %}
 
    ![The Run tab](../../images/lesson-1-5/run-standby.png)
 
@@ -75,7 +77,7 @@ Roles: **SM**, **Board op** (the only one on the laptop), **Spotter**
 12. Press **Stop**, then click **Design** at the top right.
 
 **Stuck?** The wrong cue played: read the **NEXT / STANDBY** line before
-every GO. **File → Open** greyed out: **Stop**, then **Design**.
+every GO. **File ▸ Open** greyed out: **Stop**, then **Design**.
 
 ## Exit ticket
 
