@@ -11,7 +11,7 @@ app: true
 ## Where the menus are
 
 - **Mac:** at the top of the screen, while qlcconsole's window is in
-  front. The first menu, **qlcconsole**, holds **Preferences…**, **About**
+  front. The first menu, **qlcconsole**, holds **Settings…**, **About**
   and **Quit**.
 - **Windows and Linux:** at the top of the qlcconsole window: **File,
   Edit, View, Fixtures, Control, Window, Help**. Settings and Quit are in
@@ -26,18 +26,18 @@ app: true
 | Open a show | File ▸ Open | ⌘O | Ctrl+O |
 | Open one you used lately | File ▸ Open Recent | | |
 | Save | File ▸ Save | ⌘S | Ctrl+S |
-| Save under a new name | File ▸ Save As… | | |
+| Save under a new name | File ▸ Save As… | ⇧⌘S | Ctrl+Shift+S |
 | Undo / redo | Edit ▸ Undo / Redo | ⌘Z / ⇧⌘Z | Ctrl+Z / Ctrl+Shift+Z |
 | Go to a tab | Window ▸ Show Tree, Run… | ⇧⌘5, ⇧⌘8… | Ctrl+Shift+5, Ctrl+Shift+8… |
 | See the stage | View ▸ Rig Overview | ⇧⌘R | Ctrl+Shift+R |
 | Help on what you're looking at | Help ▸ qlcconsole Help | F1 (laptop: fn F1) | F1 |
 | Full screen, and back | View ▸ Full Screen | ⌃⌘F | Ctrl+F11 |
-| Settings | qlcconsole ▸ Preferences… (Windows: File ▸ Settings) | ⌘, | Ctrl+, |
-| Quit | qlcconsole ▸ Quit qlcconsole (Windows: File ▸ Quit qlcconsole) | ⌘Q | Alt+F4 |
+| Settings | qlcconsole ▸ Settings… (Windows: File ▸ Settings…) | ⌘, | Ctrl+, |
+| Quit | qlcconsole ▸ Quit qlcconsole (Windows: File ▸ Quit qlcconsole) | ⌘Q | Ctrl+Q |
 | Right-click | | Control-click, or click with two fingers | Right button |
 | Add to a selection | | ⌘-click | Ctrl-click |
 
-⇧ is Shift, ⌃ is Control. **Linux** is as Windows, but Quit is Ctrl+Q.
+⇧ is Shift, ⌃ is Control. **Linux** is as Windows.
 
 ## The window
 
@@ -97,7 +97,7 @@ Started** is the overview. On a Mac laptop, F1 needs **fn**, or use the
 
 1. Press **Stop** and click **Design**: the app won't quit in Operate.
 2. Save (⌘S / Ctrl+S).
-3. Quit: **⌘Q** on Mac; **File ▸ Quit qlcconsole** or **Alt+F4** on
+3. Quit: **⌘Q** on Mac; **Ctrl+Q** (or **File ▸ Quit qlcconsole**) on
    Windows.
 
 Quit with unsaved changes and it asks *"Do you wish to save…?"*: **Yes**
