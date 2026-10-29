@@ -55,7 +55,7 @@ void StockQlcCheck_Test::eachForkBlockIsNamedOnce()
         "<Workspace><Engine>"
         "<ShowControl MainCueList='3'/><ShowTree><Production/></ShowTree>"
         "<SpeedMasters/><PowerDistribution/><NetworkTopology/><Timecode Source='0'/>"
-        "<Park/><Mark/><FocusCalls/><OutputRuleSettings/><Frobnicate/><Frobnicate/>"
+        "<Park/><Mark/><FocusCalls/><ControlMap><Trigger/></ControlMap><OutputRuleSettings/><Frobnicate/><Frobnicate/>"
         "<Monitor><Grid/><Truss/><Tower/><Scenery/></Monitor>"
         "</Engine>"
         "<VirtualConsole><Frame><Frame><CueRunner/></Frame><ShowControl/></Frame></VirtualConsole>"
@@ -69,6 +69,7 @@ void StockQlcCheck_Test::eachForkBlockIsNamedOnce()
         "the timecode source",
         "parked and marked channels",
         "the focus calls",
+        "the Control Map (MIDI and OSC triggers)",
         "when \"on when not in use\" lights come on",
         "other qlcconsole settings",
         "the Lighting Studio's rigging (trusses, towers, scenery)",

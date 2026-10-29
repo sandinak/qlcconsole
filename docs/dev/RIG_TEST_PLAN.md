@@ -201,6 +201,26 @@ running on it (`pgrep -f run_soak.py`): it drives the same rig.
 
 ---
 
+## L · Control Map (MIDI / OSC triggers)
+A MIDI controller with LEDs (an APC, a Launchpad, the PMJ) patched as an
+input, with its **feedback** line patched to the same device and its input
+profile chosen. Then an OSC sender (TouchOSC, QLab) on the OSC plugin.
+
+| # | Step | Expect | ✅/❌ |
+|---|------|--------|------|
+| L1 | Build: right-click a scene → **Learn trigger…**, press a pad | The dialog names the pad (the profile's name, or "Note 60 (C4), MIDI ch 1"); OK | |
+| L2 | Press the pad, then again | The scene starts, then stops; the pad's LED is lit while it runs, dark after | |
+| L3 | Set the mode to **Momentary** (Connections ▸ Devices ▸ Show control & sync ▸ Control Map) | On while held, off on release; LED follows | |
+| L4 | Show Tree: Learn trigger on a cue list, press its pad twice | GO, then the next cue; the LED is lit while the list runs | |
+| L5 | Learn trigger on a cue and on a hit | The cue is jumped to (its LED lit while it is on stage); the hit plays as its mode says | |
+| L6 | Start the scene from the Workbench or a VC button | The pad's LED lights anyway | |
+| L7 | Save, close, reopen the show | The triggers work and the LEDs show what runs, without learning again | |
+| L8 | Unplug and replug the controller | The LEDs come back as they were | |
+| L9 | An OSC message from TouchOSC / QLab (learn on a scene) | It fires; the Control Map row names it | |
+| L10 | Open the saved show in stock QLC+ 4.14.4 | It opens; nothing else is lost | |
+
+---
+
 ## Known rig-verify focus (tell the dev)
 1. **F5 — Auto-MIB dark-gap timing** is the #1 unknown: the "how soon does the
    next cue fire" figure was never tested against a running chaser/timeline.

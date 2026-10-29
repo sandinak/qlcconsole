@@ -36,6 +36,7 @@
 #include <algorithm>
 
 #include "programmingoutline.h"
+#include "controllearndialog.h"
 #include "focusmenu.h"
 #include "itemicons.h"
 #include "workbenchstack.h"
@@ -2031,6 +2032,9 @@ void ProgrammingOutline::slotContextMenu(const QPoint &pos)
                 layers << layerOf(it);
         menu.addAction(tr("Open"), this, [this, at]() { emit openRequested(at.id); })
             ->setToolTip(tr("Load it in the Workbench on its own (↩ comes back here)"));
+        // Fire it from a MIDI or OSC control (the Control Map).
+        if (layers.size() == 1 && m_doc != nullptr && m_doc->function(at.id) != nullptr)
+            ControlLearnDialog::addTo(&menu, m_doc, ControlMap::function(at.id), this);
         if (!readOnly && layers.size() == 1 && m_stack->canMakeOwnCopy(layer))
             menu.addAction(tr("Make own copy"), this, [this, layer]() {
                 if (m_stack->makeOwnCopy(layer) != kInvalid)
@@ -2123,6 +2127,8 @@ void ProgrammingOutline::slotContextMenu(const QPoint &pos)
                        this, [this, scenes]() { emit duplicateRequested(scenes); });
         menu.addAction(scenes.size() == 1 ? tr("Delete…") : tr("Delete %n…", "", scenes.size()),
                        this, [this, scenes]() { emit deleteScenesRequested(scenes); });
+        if (scenes.size() == 1)
+            ControlLearnDialog::addTo(&menu, m_doc, ControlMap::function(scenes.first()), this);
         const QList<quint32> ordered = selectedFunctionsInOrder();
         menu.addAction(QIcon(QStringLiteral(":/chaser.png")), tr("Chaser from selection"), this,
                        [this, ordered, folder]() { emit chaserRequested(ordered, folder); })

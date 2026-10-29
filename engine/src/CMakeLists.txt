@@ -29,6 +29,7 @@ add_library(${module_name} SHARED
     powerlimiter.cpp powerlimiter.h
     shutterautoopen.cpp shutterautoopen.h
     showwebaccess.cpp showwebaccess.h
+    controlmap.cpp controlmap.h
     outputrulekeeper.cpp outputrulekeeper.h
     fixturegroup.cpp fixturegroup.h
     function.cpp function.h

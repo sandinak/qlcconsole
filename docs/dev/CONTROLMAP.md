@@ -69,6 +69,22 @@ independence from the Virtual Console.
 Mode (momentary/toggle/fader) is inferred from the input channel's
 `QLCInputChannel` type where possible, same trick VC widgets use.
 
+## Status (2026-10-29)
+
+Phases 0-2 are built, with the 0.3.1 modes: `engine/src/controlmap.*`
+(`Doc::controlMap()`, saved as `<ControlMap>`), learned from **Learn
+trigger…** on Build rows and Show Tree cue lists, cues and hits
+(`ui/src/controllearndialog.*`), listed in Connections ▸ Devices ▸ Show
+control & sync ▸ Control Map (`ui/src/controlmappanel.*`). Targets:
+Function, CueList (GO), Cue (GO that cue), Hit; modes Toggle, Momentary,
+StartOnly, StopOnly. Feedback (phase 5's basics) follows the MasterTimer's
+started/stopped, resent on reconnect and load. The Phase-0 prototype in
+ProgrammerController is gone. Not built: fader targets (phase 3), palettes
+and global actions (phase 4), banking (phase 6); no `page` field was
+reserved -- a later one is a new attribute, which an older build ignores.
+User help: docs/features/other-improvements.md, "Control Map (MIDI and OSC
+triggers)".
+
 ## Phased plan
 
 Each phase ships and is testable on `test-workspaces/surfacetesting.qxw` independently. Nothing

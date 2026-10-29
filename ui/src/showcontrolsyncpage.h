@@ -63,7 +63,7 @@ public:
      *  there is one, OSC and MSC can't be edited. */
     void setListener(ShowControlListener *listener);
 
-    /** Show only one link's settings: "osc", "msc" or "mtc"; empty for all
+    /** Show only one link's settings: "osc", "msc", "mtc", "map" or "web"; empty for all
      *  of them. Connections ▸ Devices calls it for the row picked. */
     void showSection(const QString &key);
 
@@ -98,6 +98,7 @@ private:
     QGroupBox *buildMscGroup();
     QGroupBox *buildMtcGroup();
     QGroupBox *buildWebGroup();
+    QGroupBox *buildMapGroup();
 
     /** The web access box from the show's setting and the server's state. */
     void refreshWeb();
@@ -132,6 +133,9 @@ private:
     QCheckBox *m_webLoginCheck;
     QLabel *m_webWhere;
     QLabel *m_webStatus;
+
+    // The Control Map's bindings
+    class ControlMapPanel *m_controlMap = nullptr;
 
     // MIDI timecode
     QComboBox *m_mtcSourceCombo;

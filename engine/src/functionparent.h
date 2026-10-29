@@ -96,6 +96,15 @@ public:
         return FunctionParent(AutoVCWidget, 0xFFFFFF50 | (tag & 0xF));
     }
 
+    /** The parent of what the Control Map starts (a MIDI or OSC control
+     *  bound straight to it, ControlMap): a manual one, so a press stops
+     *  it whatever started it, as a VC button's does. The ManualVCWidget
+     *  id 0xFFFFFF60 is kept for it. */
+    static FunctionParent controlMap()
+    {
+        return FunctionParent(ManualVCWidget, 0xFFFFFF60);
+    }
+
     /** True for a parent made by preview() */
     bool isPreview() const
     {

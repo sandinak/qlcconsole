@@ -33,6 +33,7 @@
 #include <QLabel>
 
 #include "showcontrolsyncpage.h"
+#include "controlmappanel.h"
 #include "showcontrollistener.h"
 #include "timecodesource.h"
 #include "inputoutputmap.h"
@@ -112,14 +113,16 @@ ShowControlSyncPage::ShowControlSyncPage(Doc *doc, QWidget *parent)
     QVBoxLayout *lay = new QVBoxLayout(content);
     lay->addWidget(noteLabel(tr("Everything outside that controls or clocks the show: cue "
                                 "commands from QLab (or anything that sends OSC or MIDI Show "
-                                "Control), MIDI timecode and web access. Changes take effect at once."),
+                                "Control), MIDI timecode, web access and the controls that fire things (the Control "
+                                "Map). Changes take effect at once."),
                              content));
     m_groups.insert(QStringLiteral("osc"), buildOscGroup());
     m_groups.insert(QStringLiteral("msc"), buildMscGroup());
     m_groups.insert(QStringLiteral("mtc"), buildMtcGroup());
     m_groups.insert(QStringLiteral("web"), buildWebGroup());
+    m_groups.insert(QStringLiteral("map"), buildMapGroup());
     for (const QString &key : { QStringLiteral("osc"), QStringLiteral("msc"), QStringLiteral("mtc"),
-                                QStringLiteral("web") })
+                                QStringLiteral("web"), QStringLiteral("map") })
         lay->addWidget(m_groups.value(key));
     lay->addStretch();
     scroll->setWidget(content);
@@ -295,6 +298,18 @@ QGroupBox *ShowControlSyncPage::buildMtcGroup()
 
     form->addRow(noteLabel(tr("A show follows it when Follow MTC is on in Shows; its offset "
                               "is set there too."), box));
+    return box;
+}
+
+QGroupBox *ShowControlSyncPage::buildMapGroup()
+{
+    // MIDI and OSC controls bound straight to what they fire (no VC).
+    QGroupBox *box = new QGroupBox(tr("Control Map (MIDI and OSC triggers)"), this);
+    box->setObjectName(QStringLiteral("scMapGroup"));
+    QVBoxLayout *lay = new QVBoxLayout(box);
+    m_controlMap = new ControlMapPanel(m_doc, box);
+    lay->addWidget(m_controlMap);
+    connect(m_controlMap, &ControlMapPanel::summaryChanged, this, &ShowControlSyncPage::checkSummary);
     return box;
 }
 
@@ -743,7 +758,8 @@ QList<QStringList> ShowControlSyncPage::summary() const
     return { { QStringLiteral("osc"), tr("OSC in"), osc },
              { QStringLiteral("msc"), tr("MIDI Show Control in"), msc },
              { QStringLiteral("mtc"), tr("MIDI timecode"), m_mtcStatus->text() },
-             { QStringLiteral("web"), tr("Web access"), web } };
+             { QStringLiteral("web"), tr("Web access"), web },
+             { QStringLiteral("map"), tr("Control Map"), m_controlMap->summary() } };
 }
 
 void ShowControlSyncPage::checkSummary()

@@ -67,6 +67,7 @@
 #include "powerlimiter.h"
 #include "shutterautoopen.h"
 #include "showwebaccess.h"
+#include "controlmap.h"
 #include "outputrulekeeper.h"
 #include "bus.h"
 #include "qlcpalette.h"
@@ -155,6 +156,8 @@ Doc::Doc(QObject* parent, int universes)
     m_shutterAutoOpen = new ShutterAutoOpen(this);
     // Web access started with the show (off unless the show says so).
     m_webAccess = new ShowWebAccess(this);
+    // MIDI / OSC controls bound straight to what they fire (no VC widget).
+    m_controlMap = new ControlMap(this);
     // Relays, house and work lights: Blackout / GM exempt, switch, on at open.
     m_outputRuleKeeper = new OutputRuleKeeper(this);
 
@@ -255,6 +258,8 @@ Doc::~Doc()
     m_shutterAutoOpen = nullptr;
     delete m_webAccess;
     m_webAccess = nullptr;
+    delete m_controlMap;
+    m_controlMap = nullptr;
     delete m_outputRuleKeeper;
     m_outputRuleKeeper = nullptr;
 
@@ -312,6 +317,8 @@ void Doc::clearContents()
         m_shutterAutoOpen->reset();
     if (m_webAccess != nullptr)
         m_webAccess->reset();
+    if (m_controlMap != nullptr)
+        m_controlMap->reset();
     m_showControl->reset();
     m_showTree->reset();
     m_paletteOps->reset();
@@ -2582,6 +2589,10 @@ bool Doc::loadXML(QXmlStreamReader &doc, bool loadIO)
         {
             m_showTree->loadXML(doc);
         }
+        else if (doc.name() == KXMLQLCControlMap)
+        {
+            m_controlMap->loadXML(doc);
+        }
         else if (doc.name() == KXMLQLCTimecode)
         {
             timecodeSource()->loadXML(doc);
@@ -2771,6 +2782,7 @@ bool Doc::saveXML(QXmlStreamWriter *doc, bool forStockQlc)
     m_outputRuleKeeper->saveXML(doc);
     m_showControl->saveXML(doc);
     m_showTree->saveXML(doc);
+    m_controlMap->saveXML(doc);
     if (m_timecodeSource != NULL)
         m_timecodeSource->saveXML(doc);
 

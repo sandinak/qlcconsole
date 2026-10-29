@@ -23,6 +23,7 @@
 #include <QStringList>
 #include <QString>
 #include <QList>
+#include <QPair>
 #include <QMap>
 
 #include "qlcioplugin.h"
@@ -92,7 +93,7 @@ public:
      *  buzzes, board Q126), kept in m_feedbackParams */
     void sendFeedBack(quint32 universe, quint32 inputLine, quint32 channel, uchar value,
                       const QVariant &params) override
-    { Q_UNUSED(universe) Q_UNUSED(inputLine) Q_UNUSED(channel) Q_UNUSED(value) m_feedbackParams << params; }
+    { Q_UNUSED(universe) Q_UNUSED(inputLine) m_feedbackParams << params; m_feedback << qMakePair(channel, value); }
 
     /** @reimp m_channelRoles for @p channel, whatever the line */
     QString inputChannelRole(quint32 input, quint32 channel) const override
@@ -131,6 +132,8 @@ public:
     QMap<quint32, QString> m_channelRoles;
     /** What sendFeedBack() was given, in order */
     QList<QVariant> m_feedbackParams;
+    /** The channel and value of each sendFeedBack(), in order */
+    QList<QPair<quint32, uchar>> m_feedback;
     /** What inputChannelName() reports, by channel ("Cross", "L1"...) */
     QMap<quint32, QString> m_channelNames;
     /** What inputButtonAction() reports, by channel ("followspot_toggle"...) */

@@ -522,6 +522,12 @@ help (DONE.md 2026-10-16). Handoff: SHOW_TREE_OVERNIGHT.md.
 
 ## Needs the real rig / hardware
 
+- **Control Map with a real MIDI controller and OSC (built 2026-10-29,
+  feat/031-control-map)** -- tested through the stub plugin only (learn,
+  each mode, feedback values sent, save/load). On a controller with LEDs:
+  RIG_TEST_PLAN.md section L (Note On/Off per profile, LEDs after reload
+  and replug, OSC learn, the show in stock QLC+ 4.14.4).
+
 - **Rig network gate on real networks (built 2026-10-19, feat/rig-network-gate)**
   — tested with a modelled machine (NetworkRoute::setResolverForTest) and
   Art-Net's test sink only; no packet was sent. On ender: with the show's

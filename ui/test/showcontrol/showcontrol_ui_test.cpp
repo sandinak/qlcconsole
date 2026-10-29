@@ -278,7 +278,7 @@ void ShowControlUi_Test::thePageShowsTheCurrentSettings()
 
     // One line per link for Connections ▸ Devices; both off here.
     const QList<QStringList> rows = page.summary();
-    QCOMPARE(rows.count(), 4);
+    QCOMPARE(rows.count(), 5);
     QCOMPARE(rows.at(0).at(0), QString("osc"));
     QCOMPARE(rows.at(0).at(2), QString("Off"));
     QCOMPARE(rows.at(1).at(1), QString("MIDI Show Control in"));
@@ -286,6 +286,8 @@ void ShowControlUi_Test::thePageShowsTheCurrentSettings()
     QCOMPARE(rows.at(2).at(0), QString("mtc"));
     QCOMPARE(rows.at(3).at(0), QString("web"));
     QCOMPARE(rows.at(3).at(2), QString("Off"));
+    QCOMPARE(rows.at(4).at(0), QString("map"));
+    QCOMPARE(rows.at(4).at(2), QString("None"));
     QVERIFY(page.findChild<QWidget *>("scQLabOutGroup") == nullptr);
 
     // With no listener yet (the page is built before it), nothing to edit.
@@ -532,7 +534,7 @@ void ShowControlUi_Test::theRowsInConnectionsDevices()
     QList<QTreeWidgetItem *> found = view->findItems("Show control & sync", Qt::MatchExactly, 0);
     QCOMPARE(found.count(), 1);
     QTreeWidgetItem *branch = found.first();
-    QCOMPARE(branch->childCount(), 4);
+    QCOMPARE(branch->childCount(), 5);
     QCOMPARE(branch->child(0)->text(0), QString("OSC in"));
     QCOMPARE(branch->child(0)->text(1), QString("Off"));
     QCOMPARE(branch->child(2)->text(0), QString("MIDI timecode"));
