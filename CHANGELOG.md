@@ -120,7 +120,11 @@ skipped). Upstream fixes taken:
   effect scripts' whole "midi" data (thousands of values per input
   universe); 16 universes of changing Art-Net did that ~90,000 times a
   second on the main thread, and a web client waited seconds for an
-  answer. It is now rebuilt once per tick, when effects read it.
+  answer. It is now rebuilt once per tick, when effects read it. And each
+  frame of input now reaches the main thread as one hand-over per
+  universe instead of one per value. On the Linux test machine, with 16
+  universes of Art-Net coming in: web round trip 2 s -> 41 ms (as idle),
+  CPU 2.2 -> 1.2 cores, no late timer ticks (was ~23 per 2 minutes).
 - **Opening the app no longer sends Art-Net polls onto the network by
   itself.** A show saved with Connections in front polled every interface
   (ArtPoll, broadcast) as the window opened, patched or not, and so did a

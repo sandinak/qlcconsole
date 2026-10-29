@@ -173,10 +173,21 @@ Art-Net input and 8 of OSC input. Each phase ran 3 minutes.
 | all at once | 2.4 cores, 2,230, 6.5 s | 2.2 cores, 622, 3.1 s | 2.3 cores, 0, 207 ms |
 
 - **The output held 49–50 fps in every phase on every computer.**
-- **Heavy Art-Net input slows the GUI and the web interface**, which share
-  the main thread with the input's processing: with 16 fully changing
-  universes coming in, a web client waited seconds for an answer on the
-  Pi 5 and the i7. OSC and web load on their own cost little.
+- **Heavy Art-Net input slowed the GUI and the web interface** in 0.3.0,
+  which share the main thread with the input's processing: with 16 fully
+  changing universes coming in, a web client waited seconds for an answer
+  on the Pi 5 and the i7. OSC and web load on their own cost little.
+  **Fixed in 0.3.1:** the main thread rebuilt the effect scripts' MIDI
+  data on every input value, and every value crossed from its universe's
+  thread as a separate event. On the i7, 16 universes in, 120 s:
+
+  | 16 universes of Art-Net in | 0.3.0 base | 0.3.1 |
+  |---|---|---|
+  | CPU | 2.2 cores | 1.2 cores |
+  | Ticks over 20 ms | 22–25 | 0 |
+  | Web round trip p50 / p99 | 0.7 s / 1.8–2.1 s | 2 ms / 41 ms (as idle) |
+  | Web requests a second | 9 | 345 |
+
 - The Pi 5's first run of this test crashed as 16 universes of Art-Net
   input started; an identical rerun didn't. The cause is not known yet.
 
