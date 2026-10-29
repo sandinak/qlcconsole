@@ -100,7 +100,10 @@ brackets.
 | **Group** | A named set of lights that are always used together, like *Steps* or *TrussC-RGB*. [1.1] |
 | **Layer** | One part of a look doing one job [0.3]; in the Show Tree, one group (or several) doing one thing in a cue. [1.1] |
 | **Look** | Everything the lights are doing at one moment [0.1]; in the Show Tree, what a layer does, one value per attribute: colour, intensity, position… [1.1] |
-| **Palette** | A saved, named value — a colour, a level, a position — that you drag onto a layer. Change the palette and every cue using it changes. [1.1] |
+| **Palette** | A saved, named value — a colour, a level, a position — that you drag onto a layer. Change the palette and every cue using it changes. [1.1] Name it for its job (*Chorus Colour*), so it stays true after a note. [2.2] |
+| **Used by** | Right-click a palette in the Library: every cue and layer that uses it (and any VC button that fires it). Check it before changing a palette. [2.2] |
+| **Look Editor** | Opens under the Show Tree's page (**✎** on a layer's row, or **Edit** in the Library) to change a palette's value and name; it says *Used by* and that a shared palette changes everywhere. [2.2] |
+| **Palette folder** | A folder in the Library's Palettes; a folder per song (*01-Everybody Scream*) keeps the song's own palettes together. **Duplicate** copies a palette into one. [2.2] |
 | **⋯ (more)** | The button at the end of each row of a layer's page: **Set to**, **Level…**, **Colour…** and more. [1.2] |
 | **One-off value** | A level or colour you picked (Level…, Colour…) that isn't a palette: kept just for one layer. **Make reusable** turns it into a palette. [1.2] |
 | **Cue look** | A palette dropped on the cue itself (its dashed box): it reaches every layer of the cue that doesn't set that attribute itself. [1.2] |

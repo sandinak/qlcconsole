@@ -99,6 +99,7 @@
 #include "universe.h"
 #include "fixture.h"
 #include "qlcchannel.h"
+#include "paletteops.h"
 #include "doc.h"
 
 #include "courseshow_test.h"
@@ -124,7 +125,7 @@ const QString kL5Start = kShows + QStringLiteral("/lesson-1-5-start.qlcc");
 /* Level 2's show files: lesson-2-N-start / -finish, each lesson starting
    from the one before's finish (2.1 from Lesson 1.4's). */
 /* How many of Level 2's lessons are written (and have show files). */
-const int kLevelTwoLessons = 1;
+const int kLevelTwoLessons = 2;
 
 QString levelTwoStart(int n)
 {
@@ -269,14 +270,15 @@ QMimeData *idsMime(const QString &type, const QList<quint32> &ids)
 
 /* Drag over @a w at @a at and let go, as the mouse does: returns what the
    hint at the top right said while over it. */
-QString dragAndDrop(QWidget *w, const QPoint &at, QMimeData *mime, QLabel *hint)
+QString dragAndDrop(QWidget *w, const QPoint &at, QMimeData *mime, QLabel *hint,
+                    Qt::KeyboardModifiers keys = Qt::NoModifier)
 {
-    QDragEnterEvent enter(dragPos(at), Qt::CopyAction, mime, Qt::LeftButton, Qt::NoModifier);
+    QDragEnterEvent enter(dragPos(at), Qt::CopyAction, mime, Qt::LeftButton, keys);
     QCoreApplication::sendEvent(w, &enter);
-    QDragMoveEvent move(dragPos(at), Qt::CopyAction, mime, Qt::LeftButton, Qt::NoModifier);
+    QDragMoveEvent move(dragPos(at), Qt::CopyAction, mime, Qt::LeftButton, keys);
     QCoreApplication::sendEvent(w, &move);
     const QString said = hint != nullptr ? hint->text() : QString();
-    QDropEvent drop(at, Qt::CopyAction, mime, Qt::LeftButton, Qt::NoModifier);
+    QDropEvent drop(at, Qt::CopyAction, mime, Qt::LeftButton, keys);
     QCoreApplication::sendEvent(w, &drop);
     delete mime;
     settle();
@@ -348,6 +350,8 @@ QStringList describe(Doc *doc)
                     QStringList groups;
                     for (quint32 g : ly.target.groups)
                         groups << (doc->fixtureGroup(g) ? doc->fixtureGroup(g)->name() : QStringLiteral("?"));
+                    if (!ly.target.sets.isEmpty())     // a group set (Level 2)
+                        groups << st->targetLabel(ly.target);
                     QStringList looks;
                     for (const Look &lk : ly.looks)
                     {
@@ -455,6 +459,15 @@ QListWidgetItem *cueRow(ShowTreeView *view, const QString &start)
     for (int i = 0; i < rows->count(); ++i)
         if (rows->item(i)->text().startsWith(start))
             return rows->item(i);
+    // A child layer's row: "   ↳ US", indented under its parent.
+    for (int i = 0; i < rows->count(); ++i)
+    {
+        QString t = rows->item(i)->text().trimmed();
+        if (t.startsWith(QStringLiteral("↳ ")))
+            t = t.mid(2);
+        if (t.startsWith(start))
+            return rows->item(i);
+    }
     return nullptr;
 }
 
@@ -3164,6 +3177,135 @@ HelpShots::Callout countsOf(ShowTreeView *v, QTreeWidgetItem *row, QWidget *grab
     return c;
 }
 
+/* Right-click the Library row @a row and choose @a path (a menu, then its
+   submenus' entries). Returns whether every step was found. */
+bool libraryMenu(ShowTreeView *view, const QString &row, const QStringList &path)
+{
+    QTreeWidget *lib = view->library();
+    QTreeWidgetItem *it = showLibraryRow(lib, row);
+    if (it == nullptr)
+        return false;
+    bool chose = false;
+    QTimer::singleShot(100, [&chose, path]() {
+        for (QWidget *w : QApplication::topLevelWidgets())
+            if (QMenu *m = qobject_cast<QMenu *>(w))
+                if (m->isVisible())
+                {
+                    QMenu *at = m;
+                    for (int i = 0; i < path.count() && at != nullptr; ++i)
+                    {
+                        QAction *found = nullptr;
+                        for (QAction *a : at->actions())
+                            if (a->text() == path.at(i))
+                                found = a;
+                        if (found == nullptr)
+                            break;
+                        if (i == path.count() - 1)
+                        {
+                            chose = true;
+                            m->close();
+                            found->trigger();
+                            return;
+                        }
+                        at = found->menu();
+                    }
+                    m->close();
+                    return;
+                }
+    });
+    emit lib->customContextMenuRequested(lib->visualItemRect(it).center());
+    settle(100);
+    return chose;
+}
+
+/* On a layer's page: the ✎ of the @a key row (the Look Editor). */
+QToolButton *editButton(ShowTreeView *view, const QString &key)
+{
+    QLabel *row = stFind<QLabel>(view, QStringLiteral("stRow:%1").arg(key));
+    if (row == nullptr)
+        return nullptr;
+    const int y = row->mapToGlobal(row->rect().center()).y();
+    QWidget *host = row->parentWidget();
+    while (host != nullptr && host->findChildren<QToolButton *>().isEmpty())
+        host = host->parentWidget();
+    if (host == nullptr)
+        return nullptr;
+    for (QToolButton *b : host->findChildren<QToolButton *>())
+        if (b->text() == QStringLiteral("✎") && b->isVisible()
+            && qAbs(b->mapToGlobal(b->rect().center()).y() - y) < b->height())
+            return b;
+    return nullptr;
+}
+
+/* The tree's row of layer @a name under cue @a number (its own, not grey). */
+QTreeWidgetItem *treeLayer(ShowTreeView *view, const QString &number, const QString &name)
+{
+    QTreeWidgetItem *cue = treeCue(view, number);
+    if (cue == nullptr)
+        return nullptr;
+    QList<QTreeWidgetItem *> todo;
+    for (int i = 0; i < cue->childCount(); ++i)
+        todo << cue->child(i);
+    while (!todo.isEmpty())
+    {
+        QTreeWidgetItem *it = todo.takeFirst();
+        if (it->text(ShowTreeView::NameCol) == name)
+            return it;
+        for (int i = 0; i < it->childCount(); ++i)
+            todo << it->child(i);
+    }
+    return nullptr;
+}
+
+/* Right-click the tree's row @a item and choose @a path. */
+bool treeMenu(ShowTreeView *view, QTreeWidgetItem *item, const QStringList &path)
+{
+    if (item == nullptr)
+        return false;
+    QTreeWidget *t = view->tree();
+    t->scrollToItem(item);
+    t->setCurrentItem(item);
+    settle(50);
+    bool chose = false;
+    QStringList seen;
+    QTimer::singleShot(100, [&chose, &seen, path]() {
+        for (QWidget *w : QApplication::topLevelWidgets())
+            if (QMenu *m = qobject_cast<QMenu *>(w))
+                if (m->isVisible())
+                {
+                    QMenu *at = m;
+                    for (int i = 0; i < path.count() && at != nullptr; ++i)
+                    {
+                        QAction *found = nullptr;
+                        for (QAction *a : at->actions())
+                        {
+                            if (i == 0)
+                                seen << a->text();
+                            if (a->text() == path.at(i))
+                                found = a;
+                        }
+                        if (found == nullptr || !found->isEnabled())
+                            break;
+                        if (i == path.count() - 1)
+                        {
+                            chose = true;
+                            m->close();
+                            found->trigger();
+                            return;
+                        }
+                        at = found->menu();
+                    }
+                    m->close();
+                    return;
+                }
+    });
+    emit t->customContextMenuRequested(t->visualItemRect(item).center());
+    settle(100);
+    if (!chose)
+        qWarning().noquote() << "tree menu" << path << "not found in" << seen;
+    return chose;
+}
+
 QString nextReceives(ShowTreeView *view)
 {
     return view->m_cueNext != nullptr ? view->m_cueNext->text() : QString();
@@ -3261,6 +3403,380 @@ static bool lessonTwoOneByMouse(Doc *doc, ShowTreeView *view, const QString &sho
     return true;
 }
 
+/* Lesson 2.2, palettes: the song's own colour. Magenta duplicated and
+   named "Chorus Pink" in the Look Editor, filed in a folder for the song,
+   dropped on the chorus's steps and its cyc; then the director's "less
+   pink": the palette changed once, in the Look Editor, and every cue that
+   shows it follows. */
+static bool lessonTwoTwoByMouse(Doc *doc, ShowTreeView *view, const QString &shots = QString())
+{
+    for (QTreeWidgetItemIterator it(view->tree()); *it; ++it)
+        (*it)->setExpanded(true);
+    auto rig = [view, &shots](const QString &name) {
+        if (shots.isEmpty())
+            return;
+        const quint32 cue = view->currentCueId();
+        rigShot(view, cue, shots + QLatin1Char('/') + name + QStringLiteral(".png"));
+        closeRig();
+        view->selectNode(cue);
+        settle();
+    };
+    PaletteOps *ops = doc->paletteOps();
+    // The Show Tree as a student sees it, with numbered callouts.
+    App *app = qobject_cast<App *>(view->window());
+    auto ui = [view, app, &shots](const QString &name, const QList<HelpShots::Callout> &marks) {
+        if (shots.isEmpty() || app == nullptr)
+            return true;
+        HelpShots::Frame f = showTreeFrame(app, view);
+        f.callouts = marks;
+        return shoot(f, shots, name);
+    };
+
+    // Part A: who uses Magenta (Library → right-click → Used by).
+    QLCPalette *magenta = paletteNamed(doc, "Magenta");
+    LESSON_STEP(magenta != nullptr, "no Magenta");
+    {
+        QStringList uses;
+        for (const PaletteOps::Use &u : ops->usage(magenta->id()))
+            uses << u.label;
+        qInfo().noquote() << "[2.2] Magenta used by:" << uses.join(" | ");
+        LESSON_STEP(uses.count() == 1 && uses.first().contains(QStringLiteral("1.0.2")), uses.join(" | "));
+        // The menu has it (the click on a use goes there).
+        LESSON_STEP(libraryMenu(view, "Magenta", { QStringLiteral("Used by"), uses.first() }), "Used by menu");
+        qInfo().noquote() << "[2.2] after Used by click: kind" << int(view->currentKind()) << "cue"
+                          << (doc->showTree()->cue(view->currentCueId()) ? doc->showTree()->cue(view->currentCueId())->number : "-");
+    }
+
+    // Part B: the song's own colour. Duplicate Magenta: the copy opens in
+    // the Look Editor; its name typed there.
+    const QList<quint32> before = [doc]() { QList<quint32> l; for (QLCPalette *p : doc->palettes()) l << p->id(); return l; }();
+    LESSON_STEP(libraryMenu(view, "Magenta", { QStringLiteral("Duplicate") }), "Duplicate");
+    settle(100);
+    QLCPalette *copy = nullptr;
+    for (QLCPalette *p : doc->palettes())
+        if (!before.contains(p->id()))
+            copy = p;
+    LESSON_STEP(copy != nullptr, "no copy");
+    qInfo().noquote() << "[2.2] the copy:" << copy->name() << "| path" << copy->path();
+    QLineEdit *name = view->findChild<QLineEdit *>(QStringLiteral("lookName"));
+    LESSON_STEP(name != nullptr && name->isVisible(), "the Look Editor's Name");
+    qInfo().noquote() << "[2.2] Look Editor name:" << name->text()
+                      << "| used by:" << view->findChild<QLabel *>(QStringLiteral("lookEditorUsedBy"))->text();
+    LESSON_STEP(ui(QStringLiteral("duplicate"), { mark(name, 1),
+                   mark(view->findChild<QLabel *>(QStringLiteral("lookEditorUsedBy")), 2) }), "duplicate shot");
+    name->setFocus();
+    name->selectAll();
+    QTest::keyClicks(name, QStringLiteral("Chorus Colour"));
+    QTest::keyClick(name, Qt::Key_Return);
+    settle(100);
+    LESSON_STEP(copy->name() == QStringLiteral("Chorus Colour"), copy->name());
+    // Into a folder of the song's own: Move to folder → New folder….
+    answerNextInputDialog(QStringLiteral("01-Everybody Scream"));
+    LESSON_STEP(libraryMenu(view, "Chorus Colour", { QStringLiteral("Move to folder"), QStringLiteral("New folder…") }),
+                "Move to folder");
+    settle(100);
+    qInfo().noquote() << "[2.2] Chorus Colour path:" << copy->path();
+    LESSON_STEP(copy->path().contains(QStringLiteral("01-Everybody Scream")), copy->path());
+    {
+        QTreeWidgetItem *row = libraryRow(view->library(), "Chorus Colour");
+        QStringList where;
+        for (QTreeWidgetItem *p = row; p != nullptr; p = p->parent())
+            where.prepend(p->text(0));
+        qInfo().noquote() << "[2.2] in the Library:" << where.join(" → ");
+        LESSON_STEP(where.contains(QStringLiteral("01-Everybody Scream")), where.join(" → "));
+        if (!shots.isEmpty())
+        {
+            QTreeWidget *lib = view->library();
+            QTreeWidgetItem *shown = showLibraryRow(lib, "Chorus Colour");
+            LESSON_STEP(ui(QStringLiteral("song-folder"),
+                           { markRect(lib->viewport(), lib->visualItemRect(shown->parent()) | lib->visualItemRect(shown),
+                                      app, 1) }), "folder shot");
+        }
+    }
+
+    // Part C: on the chorus: the steps, and the cyc (a grey row: it
+    // becomes the chorus's own).
+    LESSON_STEP(view->selectNode(cueNumbered(doc, "1.0.2")), "select 1.0.2");
+    settle(100);
+    {
+        const QString said = dropPaletteOnRow(doc, view, "Steps", "Chorus Colour");
+        qInfo().noquote() << "[2.2] Chorus Colour on Steps:" << said;
+        LESSON_STEP(said.startsWith(QStringLiteral("Chorus Colour → layer Steps in 1.0.2 Chorus")), said);
+    }
+    {
+        const QString said = dropPaletteOnRow(doc, view, "⤳ TrussC-RGB", "Chorus Colour");
+        qInfo().noquote() << "[2.2] Chorus Colour on the grey cyc:" << said << "| rows" << view->cueLayerItems().join(" | ");
+        LESSON_STEP(said.startsWith(QStringLiteral("Chorus Colour → ")), said);
+    }
+    settle(200);
+    LESSON_STEP(cueRow(view, "TrussC-RGB") != nullptr, view->cueLayerItems().join(" | "));
+    LESSON_STEP(waitUntil([doc]() { return sends(doc, "SR Truss Cyc 1") == QByteArray("\xff\x00\xff", 3)
+                                           && sends(doc, "US Step 1") == QByteArray("\xff\x00\xff", 3); }),
+                QString::fromLatin1(sends(doc, "SR Truss Cyc 1").toHex(' ')));
+    {
+        QStringList uses;
+        for (const PaletteOps::Use &u : ops->usage(copy->id()))
+            uses << u.label;
+        qInfo().noquote() << "[2.2] Chorus Colour used by:" << uses.join(" | ");
+    }
+    if (!shots.isEmpty())
+    {
+        layOutForShot(view);
+        QListWidget *rows = view->cueLayerList();
+        LESSON_STEP(ui(QStringLiteral("chorus-colour"),
+                       { markRect(rows->viewport(), rows->visualItemRect(cueRow(view, "Steps"))
+                                                    | rows->visualItemRect(cueRow(view, "TrussC-RGB")), app, 1) }),
+                    "chorus shot");
+    }
+    rig(QStringLiteral("rig-chorus-pink"));
+
+    // Part D: "less pink". The Steps' ✎ opens Chorus Colour in the Look
+    // Editor; a colour picked there changes it everywhere.
+    LESSON_STEP(clickCueRow(view, "Steps"), "click Steps");
+    QToolButton *edit = editButton(view, KeyColour);
+    LESSON_STEP(edit != nullptr, "no ✎ on Colour");
+    edit->click();
+    settle(100);
+    QLabel *used = view->findChild<QLabel *>(QStringLiteral("lookEditorUsedBy"));
+    LESSON_STEP(used != nullptr && used->isVisible(), "no Used by line");
+    qInfo().noquote() << "[2.2] Look Editor:" << view->findChild<QLineEdit *>(QStringLiteral("lookName"))->text()
+                      << "| used by:" << used->text();
+    QColorDialog *colour = view->findChild<QColorDialog *>(QStringLiteral("lookColor"));
+    LESSON_STEP(colour != nullptr && colour->isVisible(), "no colour picker");
+    {
+        // Basic colors: the violet, third row, second column -- a click on
+        // the swatch grid (Qt's QColorWell, 8 columns of 6).
+        QWidget *well = nullptr;
+        for (QWidget *w : colour->findChildren<QWidget *>())
+            if (QLatin1String(w->metaObject()->className()) == QLatin1String("QColorWell") && well == nullptr)
+                well = w;
+        LESSON_STEP(well != nullptr, "no Basic colors grid");
+        const QPoint cell(well->width() * 3 / 16, well->height() * 5 / 12);     // column 2, row 3
+        QTest::mouseClick(well, Qt::LeftButton, Qt::NoModifier, cell);
+        settle(200);
+        qInfo().noquote() << "[2.2] swatch picked:" << colour->currentColor().name();
+        LESSON_STEP(colour->currentColor() == QColor(0xaa, 0x00, 0xff), colour->currentColor().name());
+    }
+    qInfo().noquote() << "[2.2] after the pick: name" << copy->name() << "| value" << copy->values()
+                      << "| Look Editor name" << view->findChild<QLineEdit *>(QStringLiteral("lookName"))->text()
+                      << "| hint" << hintOf(view)->text();
+    LESSON_STEP(waitUntil([doc]() { return sends(doc, "US Step 1") == QByteArray("\xaa\x00\xff", 3)
+                                           && sends(doc, "SR Truss Cyc 1") == QByteArray("\xaa\x00\xff", 3); }),
+                QString::fromLatin1(sends(doc, "US Step 1").toHex(' ')));
+    LESSON_STEP(hintOf(view)->text() == QStringLiteral("Changed: 1.0.2 Chorus, 1.0.2.5 Flash, 1.0.3 Scream"),
+                hintOf(view)->text());
+    LESSON_STEP(ui(QStringLiteral("look-editor"), { mark(used, 1), mark(colour, 2), mark(hintOf(view), 3) }),
+                "Look Editor shot");
+    // Magenta itself is as it was.
+    LESSON_STEP(magenta->name() == QStringLiteral("Magenta"), magenta->name());
+    rig(QStringLiteral("rig-chorus-violet"));
+    // The scream, tracking the cyc from the chorus, shows it too.
+    LESSON_STEP(view->selectNode(cueNumbered(doc, "1.0.3")), "select 1.0.3");
+    LESSON_STEP(waitUntil([doc]() { return sends(doc, "SR Truss Cyc 1") == QByteArray("\xaa\x00\xff", 3); }),
+                QString::fromLatin1(sends(doc, "SR Truss Cyc 1").toHex(' ')));
+    // ↩ Back closes the Look Editor.
+    if (QToolButton *back = view->findChild<QToolButton *>(QStringLiteral("lookBack")))
+        back->click();
+    else if (QPushButton *back = view->findChild<QPushButton *>(QStringLiteral("lookBack")))
+        back->click();
+    settle(100);
+    qInfo().noquote() << "[2.2] describe:" << describe(doc).join(" || ");
+    return true;
+}
+
+/* Lesson 2.3, parts of a group: the bridge, call and response. A Block
+   cue 1.0.5 Bridge; a group set "Truss Sides" (Trusses SR + Trusses SL),
+   one layer, Blue; split, SR in Amber; the Steps dim with a child layer
+   "US in Steps" picked out in White. */
+static bool lessonTwoThreeByMouse(Doc *doc, ShowTreeView *view, const QString &shots = QString())
+{
+    ShowTreeController *st = doc->showTree();
+    for (QTreeWidgetItemIterator it(view->tree()); *it; ++it)
+        (*it)->setExpanded(true);
+    App *app = qobject_cast<App *>(view->window());
+    auto ui = [view, app, &shots](const QString &name, const QList<HelpShots::Callout> &marks) {
+        if (shots.isEmpty() || app == nullptr)
+            return true;
+        HelpShots::Frame f = showTreeFrame(app, view);
+        f.callouts = marks;
+        return shoot(f, shots, name);
+    };
+    auto rig = [view, &shots](const QString &name) {
+        if (shots.isEmpty())
+            return;
+        const quint32 cue = view->currentCueId();
+        rigShot(view, cue, shots + QLatin1Char('/') + name + QStringLiteral(".png"));
+        closeRig();
+        view->selectNode(cue);
+        settle();
+    };
+
+    // The bridge: after the Solo, a Block cue.
+    LESSON_STEP(view->selectNode(cueNumbered(doc, "1.0.4")), "select 1.0.4");
+    settle(50);
+    LESSON_STEP(newCueNamed(view, "Bridge"), "new cue Bridge");
+    LESSON_STEP(st->cue(view->currentCueId())->number == "1.0.5", st->cue(view->currentCueId())->number);
+    LESSON_STEP(setCueMode(view, "Block"), "Mode Block");
+    const quint32 bridge = view->currentCueId();
+
+    // Part A: a group set, Truss Sides = Trusses SR + Trusses SL.
+    {
+        QTreeWidget *lib = view->library();
+        QTreeWidgetItem *sr = showLibraryRow(lib, "Trusses SR");
+        QTreeWidgetItem *sl = libraryRow(lib, "Trusses SL");
+        LESSON_STEP(sr != nullptr && sl != nullptr, "no Trusses SR / SL");
+        sr->setSelected(true);
+        sl->setSelected(true);
+        answerNextInputDialog(QStringLiteral("Truss Sides"));
+        // Right-click one of them (the selection stays).
+        bool chose = false;
+        QTimer::singleShot(100, [&chose]() {
+            for (QWidget *w : QApplication::topLevelWidgets())
+                if (QMenu *m = qobject_cast<QMenu *>(w))
+                    if (m->isVisible())
+                        for (QAction *a : m->actions())
+                            if (a->text() == QStringLiteral("Make set…"))
+                            {
+                                chose = true;
+                                m->close();
+                                a->trigger();
+                                return;
+                            }
+        });
+        emit lib->customContextMenuRequested(lib->visualItemRect(sl).center());
+        settle(200);
+        LESSON_STEP(chose, "Make set…");
+        QTreeWidgetItem *set = libraryRow(lib, "Truss Sides");
+        qInfo().noquote() << "[2.3] the set in the Library:" << (set ? set->text(0) : QString("none"));
+        LESSON_STEP(set != nullptr, "no Truss Sides in the Library");
+        if (!shots.isEmpty())
+        {
+            QTreeWidgetItem *shown = showLibraryRow(lib, "Truss Sides");
+            LESSON_STEP(ui(QStringLiteral("group-set"),
+                           { markRect(lib->viewport(), lib->visualItemRect(shown), app, 1) }), "set shot");
+        }
+    }
+    quint32 setId = ShowTree::invalidId();
+    for (const ShowTree::GroupSet &gs : st->groupSets())
+        if (gs.name == QStringLiteral("Truss Sides"))
+            setId = gs.id;
+    LESSON_STEP(setId != ShowTree::invalidId(), "no set");
+    LESSON_STEP(view->selectNode(bridge), "select the bridge");
+    settle(50);
+    {
+        const QString said = dropOnZone(view, idsMime(ShowTreeView::setMimeType(), { setId }));
+        qInfo().noquote() << "[2.3] drop the set:" << said << "| rows" << view->cueLayerItems().join(" | ");
+        LESSON_STEP(said.startsWith(QStringLiteral("one layer on Truss Sides in 1.0.5 Bridge")), said);
+    }
+    for (const QString &pal : { QStringLiteral("Blue"), QStringLiteral("Full") })
+    {
+        const QString said = dropPaletteOnRow(doc, view, "Truss Sides", pal);
+        LESSON_STEP(said.startsWith(QStringLiteral("%1 → layer Truss Sides in 1.0.5 Bridge").arg(pal)), said);
+    }
+    LESSON_STEP(waitUntil([doc]() { return sends(doc, "SR Truss Wash 1") == QByteArray("\x00\x00\xff", 3)
+                                           && sends(doc, "SL Truss Wash 1") == QByteArray("\x00\x00\xff", 3); }),
+                QString::fromLatin1(sends(doc, "SR Truss Wash 1").toHex(' ') + " / " + sends(doc, "SL Truss Wash 1").toHex(' ')));
+    rig(QStringLiteral("rig-bridge-sides"));
+
+    // Part B: call and response -- the SR side apart. A set stays one
+    // layer (it can't be split: the set is what the layer is), so SR gets
+    // a child layer of its own: right-click → Add child layer → Trusses SR.
+    for (QTreeWidgetItemIterator it(view->tree()); *it; ++it)
+        (*it)->setExpanded(true);
+    // Split is there, greyed: the set is one layer.
+    LESSON_STEP(!treeMenu(view, treeLayer(view, "1.0.5", "Truss Sides"), { QStringLiteral("Split layer (one per group)") }),
+                "Split isn't greyed on a set's layer");
+    LESSON_STEP(treeMenu(view, treeLayer(view, "1.0.5", "Truss Sides"),
+                         { QStringLiteral("Add child layer"), QStringLiteral("Trusses SR") }), "Add child layer → Trusses SR");
+    settle(100);
+    for (QTreeWidgetItemIterator it(view->tree()); *it; ++it)
+        (*it)->setExpanded(true);
+    LESSON_STEP(view->selectNode(bridge), "select the bridge");
+    settle(50);
+    qInfo().noquote() << "[2.3] after the SR child:" << view->cueLayerItems().join(" | ") << "| hint" << hintOf(view)->text();
+    {
+        QTreeWidgetItem *child = treeLayer(view, "1.0.5", "Trusses SR");
+        LESSON_STEP(child != nullptr && child->parent() == treeLayer(view, "1.0.5", "Truss Sides"),
+                    "Trusses SR isn't under Truss Sides");
+    }
+    {
+        const QString said = dropPaletteOnRow(doc, view, "Trusses SR", "Amber");
+        qInfo().noquote() << "[2.3] Amber on the child:" << said;
+        LESSON_STEP(said.startsWith(QStringLiteral("Amber → layer Trusses SR in 1.0.5 Bridge")), said);
+    }
+    LESSON_STEP(waitUntil([doc]() { return sends(doc, "SR Truss Wash 1") == QByteArray("\xff\xb0\x00", 3)
+                                           && sends(doc, "SL Truss Wash 1") == QByteArray("\x00\x00\xff", 3); }),
+                QString::fromLatin1(sends(doc, "SR Truss Wash 1").toHex(' ') + " / " + sends(doc, "SL Truss Wash 1").toHex(' ')));
+    rig(QStringLiteral("rig-bridge-split"));
+
+    // Part C: the steps dim, the top row picked out -- a child layer.
+    {
+        const QString said = dropGroupOnZone(doc, view, "Steps");
+        LESSON_STEP(said == QStringLiteral("a new layer on Steps in 1.0.5 Bridge"), said);
+    }
+    for (const QString &pal : { QStringLiteral("Blue"), QStringLiteral("25%") })
+    {
+        const QString said = dropPaletteOnRow(doc, view, "Steps", pal);
+        LESSON_STEP(said.startsWith(QStringLiteral("%1 → layer Steps in 1.0.5 Bridge").arg(pal)), said);
+    }
+    for (QTreeWidgetItemIterator it(view->tree()); *it; ++it)
+        (*it)->setExpanded(true);
+    {
+        // ⇧ held as US is dropped on the Steps row: a child layer.
+        QListWidgetItem *row = cueRow(view, "Steps");
+        LESSON_STEP(row != nullptr, view->cueLayerItems().join(" | "));
+        QListWidget *rows = view->cueLayerList();
+        const QString said = dragAndDrop(rows->viewport(), rows->visualItemRect(row).center(),
+                                         idsMime(FixtureGroupSource::fixtureGroupMimeType(), { groupNamed(doc, "US")->id() }),
+                                         hintOf(view), Qt::ShiftModifier);
+        qInfo().noquote() << "[2.3] ⇧-drop US on Steps:" << said;
+        LESSON_STEP(said == QStringLiteral("a child layer on US under Steps in 1.0.5 Bridge: it sets only what it sets"), said);
+    }
+    settle(100);
+    for (QTreeWidgetItemIterator it(view->tree()); *it; ++it)
+        (*it)->setExpanded(true);
+    LESSON_STEP(view->selectNode(bridge), "select the bridge");
+    settle(50);
+    qInfo().noquote() << "[2.3] after the child:" << view->cueLayerItems().join(" | ");
+    {
+        QTreeWidgetItem *child = treeLayer(view, "1.0.5", "US");
+        QTreeWidgetItem *parent = treeLayer(view, "1.0.5", "Steps");
+        qInfo().noquote() << "[2.3] child row:" << (child ? child->text(0) : QString("none"))
+                          << "| under" << (child && child->parent() ? child->parent()->text(0) : QString());
+        LESSON_STEP(child != nullptr && child->parent() == parent, "the child isn't under Steps");
+    }
+    for (const QString &pal : { QStringLiteral("White"), QStringLiteral("Full") })
+    {
+        const QString said = dropPaletteOnRow(doc, view, "US", pal);
+        qInfo().noquote() << "[2.3] on the child:" << said;
+        LESSON_STEP(said.startsWith(QStringLiteral("%1 → layer US in 1.0.5 Bridge").arg(pal)), said);
+    }
+    LESSON_STEP(waitUntil([doc]() { return sends(doc, "US Step 1") == QByteArray("\xff\xff\xff", 3)
+                                           && uchar(sends(doc, "CS Step 1").at(2)) > 40
+                                           && uchar(sends(doc, "CS Step 1").at(2)) < 90
+                                           && uchar(sends(doc, "CS Step 1").at(0)) == 0; }),
+                QString::fromLatin1(sends(doc, "US Step 1").toHex(' ') + " / " + sends(doc, "CS Step 1").toHex(' ')));
+    rig(QStringLiteral("rig-bridge"));
+    qInfo().noquote() << "[2.3] describe:" << describe(doc).join(" || ");
+    if (!shots.isEmpty())
+    {
+        for (QTreeWidgetItemIterator it(view->tree()); *it; ++it)
+            (*it)->setExpanded(true);
+        LESSON_STEP(view->selectNode(bridge), "select the bridge");
+        settle(100);
+        layOutForShot(view);
+        QTreeWidget *t = view->tree();
+        t->scrollToItem(treeLayer(view, "1.0.5", "US"));
+        settle(50);
+        LESSON_STEP(ui(QStringLiteral("bridge-layers"),
+                       { markRect(t->viewport(), t->visualItemRect(treeLayer(view, "1.0.5", "Truss Sides")), app, 1),
+                         markRect(t->viewport(), t->visualItemRect(treeLayer(view, "1.0.5", "Trusses SR")), app, 2),
+                         markRect(t->viewport(), t->visualItemRect(treeLayer(view, "1.0.5", "US")), app, 3) }),
+                    "bridge shot");
+    }
+    return true;
+}
+
 void CourseShow_Test::lessonTwoOneExtension()
 {
     // Lesson 2.1's extension: a base cue. The Pose gets the step tops at a
@@ -3300,17 +3816,149 @@ void CourseShow_Test::lessonTwoOneExtension()
     doc->resetModified();
 }
 
+void CourseShow_Test::lessonTwoTwoExtension()
+{
+    if (kLevelTwoLessons < 2)
+        QSKIP("not written yet");
+    // Lesson 2.2's extension: the Palettes heading's Group by type off --
+    // the song's folder first, with its palettes of every type in it --
+    // and on again.
+    QVERIFY(open(levelTwoFinish(2)));
+    ShowTreeView *view = showTree();
+    auto where = [view](const QString &name) {
+        QStringList w;
+        for (QTreeWidgetItem *p = libraryRow(view->library(), name); p != nullptr; p = p->parent())
+            w.prepend(p->text(0));
+        return w.join(QStringLiteral(" → "));
+    };
+    qInfo().noquote() << "[2.2x] by type:" << where("Chorus Colour");
+    QCOMPARE(where("Chorus Colour"), QStringLiteral("All → Palettes → Colour → 01-Everybody Scream → Chorus Colour"));
+    QVERIFY(libraryMenu(view, "Palettes", { QStringLiteral("Group by type") }));
+    settle(100);
+    qInfo().noquote() << "[2.2x] folders first:" << where("Chorus Colour") << "| Magenta:" << where("Magenta");
+    QCOMPARE(where("Chorus Colour"), QStringLiteral("All → Palettes → 01-Everybody Scream → Chorus Colour"));
+    QVERIFY(libraryMenu(view, "Palettes", { QStringLiteral("Group by type") }));
+    settle(100);
+    QCOMPARE(where("Chorus Colour"), QStringLiteral("All → Palettes → Colour → 01-Everybody Scream → Chorus Colour"));
+
+    // At home: Verse Colour, the same way, into the folder that's there.
+    Doc *doc = m_app->doc();
+    qInfo().noquote() << "[2.2x] folders:" << doc->paletteOps()->folders();
+    QVERIFY(libraryMenu(view, "Lavender", { QStringLiteral("Duplicate") }));
+    QLineEdit *name = view->findChild<QLineEdit *>(QStringLiteral("lookName"));
+    QVERIFY(name != nullptr && name->isVisible());
+    name->setFocus();
+    name->selectAll();
+    QTest::keyClicks(name, QStringLiteral("Verse Colour"));
+    QTest::keyClick(name, Qt::Key_Return);
+    settle(100);
+    QVERIFY(paletteNamed(doc, "Verse Colour") != nullptr);
+    QVERIFY(libraryMenu(view, "Verse Colour", { QStringLiteral("Move to folder"), QStringLiteral("01-Everybody Scream") }));
+    QCOMPARE(where("Verse Colour"), QStringLiteral("All → Palettes → Colour → 01-Everybody Scream → Verse Colour"));
+    QVERIFY(view->selectNode(cueNumbered(doc, "1.0.1")));
+    settle(50);
+    QVERIFY(dropPaletteOnRow(doc, view, "StepTops", "Verse Colour").startsWith("Verse Colour → layer StepTops in 1.0.1 Verse"));
+    doc->resetModified();
+}
+
+void CourseShow_Test::lessonTwoThreeExtension()
+{
+    if (kLevelTwoLessons < 3)
+        QSKIP("not written yet");
+    // Lesson 2.3's extension: two groups dropped together are one layer;
+    // Split makes a layer each (nothing on stage changes); More ▾ → Merge
+    // puts them back.
+    QVERIFY(open(levelTwoFinish(3)));
+    Doc *doc = m_app->doc();
+    ShowTreeView *view = showTree();
+    const quint32 bridge = cueNumbered(doc, "1.0.5");
+    QVERIFY(view->selectNode(bridge));
+    settle(50);
+    const QString said = dropOnZone(view, idsMime(FixtureGroupSource::fixtureGroupMimeType(),
+                                                  { groupNamed(doc, "CS")->id(), groupNamed(doc, "DS")->id() }));
+    qInfo().noquote() << "[2.3x] CS + DS:" << said << "|" << view->cueLayerItems().join(" | ");
+    QVERIFY2(said.startsWith(QStringLiteral("one layer on CS + DS in 1.0.5 Bridge")), qPrintable(said));
+    QVERIFY(dropPaletteOnRow(doc, view, "CS + DS", "Red").startsWith(QStringLiteral("Red → layer CS + DS in 1.0.5 Bridge")));
+    QTRY_VERIFY_WITH_TIMEOUT(uchar(sends(doc, "DS Step 1").at(0)) > 0 && uchar(sends(doc, "DS Step 1").at(2)) == 0, kRigWait);
+    for (QTreeWidgetItemIterator it(view->tree()); *it; ++it)
+        (*it)->setExpanded(true);
+    QVERIFY(treeMenu(view, treeLayer(view, "1.0.5", "CS + DS"), { QStringLiteral("Split layer (one per group)") }));
+    QVERIFY(view->selectNode(bridge));
+    settle(50);
+    qInfo().noquote() << "[2.3x] after Split:" << view->cueLayerItems().join(" | ");
+    QVERIFY(cueRow(view, "CS ") != nullptr && cueRow(view, "DS ") != nullptr);
+    QVERIFY(uchar(sends(doc, "DS Step 1").at(0)) > 0);
+    // Both selected in the tree (⌘-click), More ▾ → Merge.
+    for (QTreeWidgetItemIterator it(view->tree()); *it; ++it)
+        (*it)->setExpanded(true);
+    QTreeWidgetItem *cs = treeLayer(view, "1.0.5", "CS");
+    QTreeWidgetItem *ds = treeLayer(view, "1.0.5", "DS");
+    QVERIFY(cs != nullptr && ds != nullptr);
+    QTreeWidget *t = view->tree();
+    QTest::mouseClick(t->viewport(), Qt::LeftButton, Qt::NoModifier, t->visualItemRect(cs).center());
+    QTest::mouseClick(t->viewport(), Qt::LeftButton, Qt::ControlModifier, t->visualItemRect(ds).center());
+    settle(100);
+    QVERIFY(view->m_merge->isEnabled());
+    view->m_merge->click();
+    settle(100);
+    QVERIFY(view->selectNode(bridge));
+    settle(50);
+    qInfo().noquote() << "[2.3x] after Merge:" << view->cueLayerItems().join(" | ");
+    QVERIFY(cueRow(view, "CS + DS") != nullptr || cueRow(view, "DS + CS") != nullptr);
+
+    // At home: 1.0.6 Response, the mirror: Truss Sides with SL in Amber,
+    // the Steps dim with DS picked out.
+    QVERIFY(view->selectNode(bridge));
+    settle(50);
+    QVERIFY(newCueNamed(view, "Response"));
+    QCOMPARE(doc->showTree()->cue(view->currentCueId())->number, QStringLiteral("1.0.6"));
+    QVERIFY(setCueMode(view, "Block"));
+    quint32 setId = ShowTree::invalidId();
+    for (const ShowTree::GroupSet &gs : doc->showTree()->groupSets())
+        if (gs.name == QStringLiteral("Truss Sides"))
+            setId = gs.id;
+    QVERIFY(dropOnZone(view, idsMime(ShowTreeView::setMimeType(), { setId })).startsWith("one layer on Truss Sides in 1.0.6"));
+    for (const QString &pal : { QStringLiteral("Blue"), QStringLiteral("Full") })
+        QVERIFY(dropPaletteOnRow(doc, view, "Truss Sides", pal).startsWith(pal + " → layer Truss Sides in 1.0.6"));
+    for (QTreeWidgetItemIterator it(view->tree()); *it; ++it)
+        (*it)->setExpanded(true);
+    QVERIFY(treeMenu(view, treeLayer(view, "1.0.6", "Truss Sides"), { QStringLiteral("Add child layer"), QStringLiteral("Trusses SL") }));
+    QVERIFY(view->selectNode(cueNumbered(doc, "1.0.6")));
+    settle(50);
+    QVERIFY(dropPaletteOnRow(doc, view, "Trusses SL", "Amber").startsWith("Amber → layer Trusses SL in 1.0.6"));
+    QVERIFY(dropGroupOnZone(doc, view, "Steps") == QStringLiteral("a new layer on Steps in 1.0.6 Response"));
+    for (const QString &pal : { QStringLiteral("Blue"), QStringLiteral("25%") })
+        QVERIFY(dropPaletteOnRow(doc, view, "Steps", pal).startsWith(pal + " → layer Steps in 1.0.6"));
+    {
+        QListWidget *rows = view->cueLayerList();
+        const QString said = dragAndDrop(rows->viewport(), rows->visualItemRect(cueRow(view, "Steps")).center(),
+                                         idsMime(FixtureGroupSource::fixtureGroupMimeType(), { groupNamed(doc, "DS")->id() }),
+                                         hintOf(view), Qt::ShiftModifier);
+        QCOMPARE(said, QStringLiteral("a child layer on DS under Steps in 1.0.6 Response: it sets only what it sets"));
+    }
+    for (const QString &pal : { QStringLiteral("White"), QStringLiteral("Full") })
+        QVERIFY(dropPaletteOnRow(doc, view, "DS", pal).startsWith(pal + " → layer DS in 1.0.6"));
+    QTRY_VERIFY_WITH_TIMEOUT(sends(doc, "SL Truss Wash 1") == QByteArray("\xff\xb0\x00", 3)
+                             && sends(doc, "SR Truss Wash 1") == QByteArray("\x00\x00\xff", 3)
+                             && sends(doc, "DS Step 1") == QByteArray("\xff\xff\xff", 3), kRigWait);
+    doc->resetModified();
+}
+
 void CourseShow_Test::levelTwoWithTheMouse()
 {
     struct L { int n; bool (*byMouse)(Doc *, ShowTreeView *, const QString &); };
     const QList<L> lessons = {
         { 1, lessonTwoOneByMouse },
+        { 2, lessonTwoTwoByMouse },
+        { 3, lessonTwoThreeByMouse },
     };
     // Lesson 2.1 starts where Level 1 finished.
     QVERIFY(open(kL4Finish));
     QStringList before = describeAll(m_app->doc());
     for (const L &l : lessons)
     {
+        if (l.n > kLevelTwoLessons)
+            break;
         QVERIFY2(open(levelTwoStart(l.n)), qPrintable(levelTwoStart(l.n)));
         QCOMPARE(describeAll(m_app->doc()), before);
         QVERIFY2(l.byMouse(m_app->doc(), showTree(), QString()), qPrintable(levelTwoStart(l.n)));
@@ -3330,12 +3978,16 @@ void CourseShow_Test::buildLevelTwoShows()
     struct L { int n; bool (*byMouse)(Doc *, ShowTreeView *, const QString &); };
     const QList<L> lessons = {
         { 1, lessonTwoOneByMouse },
+        { 2, lessonTwoTwoByMouse },
+        { 3, lessonTwoThreeByMouse },
     };
     const QString only = qEnvironmentVariable("COURSE_LESSON");
     for (const L &l : lessons)
     {
         if (!only.isEmpty() && only != QStringLiteral("2.%1").arg(l.n))
             continue;
+        if (only.isEmpty() && l.n > kLevelTwoLessons)
+            break;
         const QString from = l.n == 1 ? kL4Finish : levelTwoFinish(l.n - 1);
         QVERIFY2(QFile::exists(from), qPrintable(from));
         QVERIFY(QFile::remove(levelTwoStart(l.n)) || !QFile::exists(levelTwoStart(l.n)));
@@ -3355,7 +4007,7 @@ void CourseShow_Test::levelTwoPictures()
     m_app->setTheme(App::ThemeBlue);
     m_app->resize(1280, 800);
     const QString only = qEnvironmentVariable("COURSE_LESSON");
-    auto wanted = [&only](int n) { return only.isEmpty() || only == QStringLiteral("2.%1").arg(n); };
+    auto wanted = [&only](int n) { return only.isEmpty() ? n <= kLevelTwoLessons : only == QStringLiteral("2.%1").arg(n); };
 
     // --- 2.1: done with the mouse (the Rig Overview at each step), then the
     //     chorus's tracking, the Release box and the flash's page.
@@ -3431,6 +4083,24 @@ void CourseShow_Test::levelTwoPictures()
             QVERIFY(shoot(f, d, "flash-cue"));
         }
         dc->resetModified();
+    }
+
+    // --- 2.2: done with the mouse, the pictures at its steps.
+    if (wanted(2))
+    {
+        const QString d = root + QStringLiteral("/lesson-2-2");
+        QVERIFY(open(levelTwoStart(2)));
+        QVERIFY(lessonTwoTwoByMouse(m_app->doc(), showTree(), d));
+        m_app->doc()->resetModified();
+    }
+
+    // --- 2.3
+    if (wanted(3))
+    {
+        const QString d = root + QStringLiteral("/lesson-2-3");
+        QVERIFY(open(levelTwoStart(3)));
+        QVERIFY(lessonTwoThreeByMouse(m_app->doc(), showTree(), d));
+        m_app->doc()->resetModified();
     }
 }
 

@@ -20,7 +20,7 @@ Each lesson starts from the one before's finish file (2.1 from Lesson
 | # | Lesson | Status |
 |---|---|---|
 | 2.1 | [Tracking and Block](lesson-01/index.md) | written |
-| 2.2 | Palettes: change once, change everywhere | planned |
+| 2.2 | [Palettes: change once, change everywhere](lesson-02/index.md) | written |
 | 2.3 | Parts of a group | planned |
 | 2.4 | Effects: sparkle, chase, matrix | planned |
 | 2.5 | Moving lights and lines | planned |
