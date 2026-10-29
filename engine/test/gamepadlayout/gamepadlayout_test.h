@@ -51,6 +51,11 @@ private slots:
     /** u8: neither shipped profile steps a cue list from a button: a pad
      *  picked up mid-show must never move the show. */
     void noShippedProfileStepsAList();
+    /** The kind of pad, from its IDs, for the names its controls get (Q170). */
+    void deviceKinds();
+    /** A touchpad finger as the framework reports it: a lift is exactly
+     *  (0, 0) and keeps its place; the middle's neighbours are touches. */
+    void touchpadFingers();
 };
 
 #endif

@@ -52,6 +52,9 @@ ControllerScheme::Verb ControllerScheme::verbFor(GamepadRole::Role role)
         case GamepadRole::DpadRight:    return FocusFarther;
         case GamepadRole::LS:           return Alternate;
         case GamepadRole::RS:           return WhereAmI;
+        // A PlayStation pad's touchpad click (Q170): harmless, so a firm
+        // drag that clicks it by accident only says the light.
+        case GamepadRole::TouchClick:   return WhereAmI;
         default:                        return NoVerb;
     }
 }
@@ -114,7 +117,7 @@ QString ControllerScheme::label(Tool tool, Verb verb)
         case Reset:
             return tool == RefineTool ? tr("Clear the exception") : tr("Zero");
         case Undo:
-            return tool == RefineTool ? tr("Undo (+A: keep at the source)") : tr("Undo save");
+            return tool == RefineTool ? tr("Undo (+{A}: keep at the source)") : tr("Undo save");
         case Exit:
             return tr("Exit");
         case ZoomWider:

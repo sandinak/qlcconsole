@@ -63,6 +63,13 @@ moves), **Scribe** (reads the steps). Switch at each part.
 | Sharper / softer | D-pad right / left | ' / ; |
 | Leave | Menu | Esc |
 
+**On a PlayStation pad** the screen and the voice use the names printed
+on it, so the electrician never has to translate: Cross is A, Circle B,
+Triangle Y, L1 / R1 the bumpers, L2 / R2 the triggers, Options Menu. Its
+touchpad is the fine tool: drag one finger for the last bit of aim, two
+fingers up or down to spot down / flood out, sideways for sharper /
+softer.
+
 ## Steps
 
 1. **File → Open** → `ShowChoir-Classroom.qlcc`.

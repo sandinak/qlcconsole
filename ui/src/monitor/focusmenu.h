@@ -61,6 +61,8 @@ public:
     static QString focusCueBlocked(Doc *doc);
     /** Make this a venue focus cue: no focus calls for it to run. */
     static QString venueFocusCueBlocked(Doc *doc);
+    /** What "Focus this cue" does, in the words of the pad in hand (Q170). */
+    static QString focusCueTip(Doc *doc);
 
     /** Enable @p action when @p blocked is empty; its tooltip the reason,
      *  else @p tip. */

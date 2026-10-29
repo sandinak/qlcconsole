@@ -106,12 +106,60 @@ Fixture *makeSpot(Doc *doc, const QString &name, float x, float y)
     return fxi;
 }
 
+/* A wash with a 10-40 degree zoom channel and a focus channel, at 200. */
+Fixture *makeZoomWash(Doc *doc)
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test"); def->setModel("Focus Map Zoom Wash");
+    def->setType(QLCFixtureDef::MovingHead);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("5ch");
+    const QLCChannel::Group groups[] = { QLCChannel::Pan, QLCChannel::Tilt, QLCChannel::Intensity,
+                                         QLCChannel::Beam, QLCChannel::Beam };
+    const QLCChannel::Preset presets[] = { QLCChannel::Custom, QLCChannel::Custom, QLCChannel::Custom,
+                                           QLCChannel::BeamZoomSmallBig, QLCChannel::BeamFocusNearFar };
+    const char *names[] = { "Pan", "Tilt", "Dimmer", "Zoom", "Focus" };
+    QLCFixtureHead head;
+    for (int k = 0; k < 5; ++k)
+    {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(names[k]);
+        ch->setGroup(groups[k]);
+        ch->setControlByte(QLCChannel::MSB);
+        if (presets[k] != QLCChannel::Custom)
+            ch->setPreset(presets[k]);
+        def->addChannel(ch);
+        mode->insertChannel(ch, k);
+        head.addChannel(k);
+    }
+    QLCPhysical ph;
+    ph.setFocusPanMax(540);
+    ph.setFocusTiltMax(270);
+    ph.setLensDegreesMin(10.0);
+    ph.setLensDegreesMax(40.0);
+    mode->setPhysical(ph);
+    mode->insertHead(-1, head);
+    def->addMode(mode);
+    Fixture *wash = new Fixture(doc);
+    wash->setName("Wash 1");
+    wash->setFixtureDefinition(def, mode);
+    wash->setUniverse(0);
+    wash->setAddress(200);
+    if (!doc->addFixture(wash))
+        return nullptr;
+    doc->monitorProperties()->setFixturePosition(wash->id(), 0, 0, QVector3D(3000.0f, 2000.0f, 5.0f));
+    return wash;
+}
+
 /* The gamepad's channels: the four stick axes, then the buttons. */
 enum Ch : quint32
 {
     LX = 0, LY = 1, RX = 2, RY = 3,
     BtnA = 10, BtnB = 11, BtnX = 12, BtnY = 13, BtnLB = 14, BtnRB = 15,
-    BtnView = 16, BtnMenu = 17, Up = 18, Down = 19, Left = 20, Right = 21
+    BtnView = 16, BtnMenu = 17, Up = 18, Down = 19, Left = 20, Right = 21,
+    // A PlayStation pad's touchpad (Q170).
+    TouchX = 22, TouchY = 23, TouchDown = 24, Touch2X = 25, Touch2Y = 26, Touch2Down = 27,
+    TouchClick = 28
 };
 }
 
@@ -258,6 +306,7 @@ void FocusMode_Test::aPadPressMovesNoRunningList()
 
 void FocusMode_Test::plugInPad()
 {
+    m_stub->m_deviceKind.clear();      // an Xbox-style pad, as the profile says
     m_stub->m_channelRoles = { { LX, "lx" }, { LY, "ly" }, { RX, "rx" }, { RY, "ry" },
                                { BtnA, "a" }, { BtnB, "b" }, { BtnX, "x" }, { BtnY, "y" },
                                { BtnLB, "lb" }, { BtnRB, "rb" }, { BtnView, "back" },
@@ -273,12 +322,38 @@ void FocusMode_Test::plugInPad()
     emit m_doc->inputOutputMap()->pluginConfigurationChanged(m_stub->name(), true);
 }
 
+void FocusMode_Test::plugInPlayStationPad(const QString &kind)
+{
+    plugInPad();
+    // The shipped profile's names and the touchpad's channels.
+    m_stub->m_channelNames = { { LX, "Left Stick X" }, { LY, "Left Stick Y" },
+                               { RX, "Right Stick X" }, { RY, "Right Stick Y" },
+                               { BtnA, "Cross" }, { BtnB, "Circle" }, { BtnX, "Square" },
+                               { BtnY, "Triangle" }, { BtnLB, "L1" }, { BtnRB, "R1" },
+                               { BtnView, "Create / Share" }, { BtnMenu, "Options" },
+                               { Up, "D-pad Up" }, { Down, "D-pad Down" }, { Left, "D-pad Left" },
+                               { Right, "D-pad Right" }, { TouchX, "Touch X" }, { TouchY, "Touch Y" },
+                               { TouchDown, "Touch" }, { Touch2X, "Second Touch X" },
+                               { Touch2Y, "Second Touch Y" }, { Touch2Down, "Second Touch" },
+                               { TouchClick, "Touchpad" } };
+    m_stub->m_channelRoles.insert(TouchX, "touch_x");
+    m_stub->m_channelRoles.insert(TouchY, "touch_y");
+    m_stub->m_channelRoles.insert(TouchDown, "touch_down");
+    m_stub->m_channelRoles.insert(Touch2X, "touch2_x");
+    m_stub->m_channelRoles.insert(Touch2Y, "touch2_y");
+    m_stub->m_channelRoles.insert(Touch2Down, "touch2_down");
+    m_stub->m_channelRoles.insert(TouchClick, "touchpad");
+    m_stub->m_deviceKind = kind;
+    emit m_doc->inputOutputMap()->pluginConfigurationChanged(m_stub->name(), true);
+}
+
 void FocusMode_Test::unplugPad()
 {
     if (m_stub == nullptr)
         return;
     m_stub->m_channelRoles.clear();
     m_stub->m_channelNames.clear();
+    m_stub->m_deviceKind.clear();
     emit m_doc->inputOutputMap()->pluginConfigurationChanged(m_stub->name(), true);
 }
 
@@ -349,6 +424,190 @@ void FocusMode_Test::theMapShowsTheProfilesBindings()
     QTest::keyClick(panel, Qt::Key_Plus);
     QVERIFY2(map->keyAction(Qt::Key_Up).contains("1\302\260"), qPrintable(map->keyAction(Qt::Key_Up)));
     QVERIFY(map->grab().width() > 0);   // and it paints
+}
+
+void FocusMode_Test::aPlayStationPadIsCalledByItsOwnNames()
+{
+    ProgrammerController *pc = m_doc->programmer();
+    // The plugin says what it is; without that, the profile does.
+    plugInPlayStationPad(QStringLiteral("dualshock4"));
+    QCOMPARE(pc->focusController().family, PadNames::DualShock4);
+    QCOMPARE(pc->padText(QStringLiteral("{A} saves")), QString("Cross saves"));
+    plugInPlayStationPad(QStringLiteral("dualsense"));
+    QCOMPARE(pc->focusController().family, PadNames::DualSense);
+    plugInPlayStationPad(QString());
+    QCOMPARE(pc->focusController().family, PadNames::DualShock4);
+    plugInPad();
+    QCOMPARE(pc->focusController().family, PadNames::Xbox);
+    QCOMPARE(pc->padText(QStringLiteral("{A} saves")), QString("A saves"));
+
+    plugInPlayStationPad(QStringLiteral("dualshock4"));
+    QString why;
+    QPointer<FocusModePanel> panel =
+        FocusModePanel::startWith(m_doc, nullptr, optionsFor(m_heads, m_target), &why);
+    QVERIFY2(panel != nullptr, qPrintable(why));
+    FocusSession *s = pc->focusSession();
+    QCOMPARE(s->padFamily(), PadNames::DualShock4);
+    FocusControlMap *map = panel->controlMap();
+    QCOMPARE(map->family(), PadNames::DualShock4);
+    QCOMPARE(map->controlName(R::A), QString("Cross"));
+    QCOMPARE(map->controlName(R::Y), QString("Triangle"));
+    QCOMPARE(map->controlName(R::Back), QString("Share"));     // not "Create / Share"
+    QCOMPARE(map->controlName(R::Start), QString("Options"));
+    QCOMPARE(map->controlName(R::LB), QString("L1"));
+    QCOMPARE(map->controlName(R::Guide), QString("PS button"));
+    // Its touchpad is on the map: a trackpad's fine aim; click says the light.
+    QVERIFY(map->isMapped(R::TouchX));
+    QVERIFY(map->isMapped(R::TouchClick));
+    QVERIFY(map->actionText(R::TouchClick).contains("Fine nudge"));
+    QCOMPARE(ControllerScheme::verbFor(R::TouchClick), ControllerScheme::WhereAmI);
+    QVERIFY(map->grab().width() > 0);
+
+    // The panel's words: Cross to save, Circle to revert.
+    const quint32 first = s->currentFixture();
+    s->nudge(1.0f, 0.0f);
+    QVERIFY(s->isDirty(first));
+    QLabel *saved = panel->findChild<QLabel *>("focusSaved");
+    QVERIFY(saved != nullptr);
+    QVERIFY2(saved->text().contains("(Cross to save, Circle to revert)"), qPrintable(saved->text()));
+    QLabel *scope = panel->findChild<QLabel *>("focusScope");
+    QVERIFY2(scope->text().contains("Triangle switches"), qPrintable(scope->text()));
+
+    // A DualSense calls Share "Create".
+    plugInPlayStationPad(QStringLiteral("dualsense"));
+    QCOMPARE(map->family(), PadNames::DualSense);
+    QCOMPARE(map->controlName(R::Back), QString("Create"));
+
+    // An Xbox pad: its own letters, no touchpad, and the words as before.
+    plugInPad();
+    QCOMPARE(map->family(), PadNames::Xbox);
+    QCOMPARE(map->controlName(R::A), QString("A"));
+    QCOMPARE(map->controlName(R::Back), QString("View"));
+    QVERIFY(!map->isMapped(R::TouchX));
+    s->nudge(0.5f, 0.0f);      // the panel says it again
+    QVERIFY2(saved->text().contains("(A to save, B to revert)"), qPrintable(saved->text()));
+    QVERIFY(map->grab().width() > 0);
+    s->discardAll();
+}
+
+void FocusMode_Test::theTouchpadAimsZoomsAndFocuses()
+{
+    Fixture *wash = makeZoomWash(m_doc);
+    QVERIFY(wash != nullptr);
+    const quint32 washId = wash->id();
+    auto drop = qScopeGuard([this, washId]() { m_doc->deleteFixture(washId); });
+    plugInPlayStationPad(QStringLiteral("dualshock4"));
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    ProgrammerController *pc = m_doc->programmer();
+    FocusSession *s = pc->focusSession();
+    QString why;
+    QPointer<FocusModePanel> panel =
+        FocusModePanel::startWith(m_doc, nullptr, optionsFor({ washId }, m_target), &why);
+    QVERIFY2(panel != nullptr, qPrintable(why));
+    QCOMPARE(s->inputDevice(), FocusSession::ControllerInput);
+    QCOMPARE(s->currentFixture(), washId);
+    auto send = [iom](quint32 ch, int v) { emit iom->inputValueChanged(0, ch, uchar(v), QString()); };
+    auto touch = [&](int finger, int x, int y, bool down) {
+        send(finger == 0 ? TouchX : Touch2X, x);
+        send(finger == 0 ? TouchY : Touch2Y, y);
+        send(finger == 0 ? TouchDown : Touch2Down, down ? 255 : 0);
+    };
+    QSignalSpy said(pc, &ProgrammerController::operatorAnnounce);
+
+    // One finger: lands (nothing), then 51 steps right and 51 up -- a fifth
+    // of the pad -- nudges pan and tilt by a fifth of touchDegrees().
+    touch(0, 100, 150, true);
+    pc->applyDesignJoystick();
+    QCOMPARE(s->liveOffset(washId), FocusSession::Offset());
+    QVERIFY(panel->controlMap()->isLit(R::TouchClick));     // a finger on it
+    touch(0, 151, 99, true);
+    pc->applyDesignJoystick();
+    const float fifth = ProgrammerController::touchDegrees() * pc->joystickSensitivity() / 5.0f;
+    QVERIFY2(qAbs(s->liveOffset(washId).pan - fifth) < 0.011f, qPrintable(QString::number(s->liveOffset(washId).pan)));
+    QVERIFY2(qAbs(s->liveOffset(washId).tilt - fifth) < 0.011f, qPrintable(QString::number(s->liveOffset(washId).tilt)));
+    // Lifted, and landing somewhere else: no jump.
+    const FocusSession::Offset aimed = s->liveOffset(washId);
+    touch(0, 151, 99, false);
+    pc->applyDesignJoystick();
+    QVERIFY(!panel->controlMap()->isLit(R::TouchClick));
+    touch(0, 10, 240, true);
+    pc->applyDesignJoystick();
+    pc->applyDesignJoystick();
+    QCOMPARE(s->liveOffset(washId), aimed);
+    touch(0, 10, 240, false);
+    pc->applyDesignJoystick();
+
+    // Two fingers up: spot down (narrower), said once in the crew's word.
+    double deg = 0.0, lo = 0.0, hi = 0.0;
+    QVERIFY(s->beamAngle(washId, deg, lo, hi));
+    const double startDeg = deg;
+    said.clear();
+    touch(0, 100, 200, true);
+    touch(1, 150, 200, true);
+    pc->applyDesignJoystick();
+    touch(0, 100, 175, true);
+    touch(1, 150, 175, true);
+    pc->applyDesignJoystick();
+    touch(0, 100, 150, true);
+    touch(1, 150, 150, true);
+    pc->applyDesignJoystick();
+    QVERIFY(s->beamAngle(washId, deg, lo, hi));
+    const double expect = startDeg - 50.0 / 255.0 * ProgrammerController::touchBeamDegrees();
+    QVERIFY2(qAbs(deg - qMax(lo, expect)) < 0.15, qPrintable(QString("%1 vs %2").arg(deg).arg(expect)));
+    int spotDown = 0;
+    for (const QList<QVariant> &line : said)
+        if (line.at(0).toString() == ControllerScheme::crewWord(ControllerScheme::ZoomNarrower))
+            ++spotDown;
+    QCOMPARE(spotDown, 1);
+    // Sideways in the same gesture does not focus: one thing a gesture.
+    double focus = 0.0;
+    QVERIFY(s->focusLevel(washId, focus));
+    const double startFocus = focus;
+    touch(0, 140, 150, true);
+    touch(1, 190, 150, true);
+    pc->applyDesignJoystick();
+    QVERIFY(s->focusLevel(washId, focus));
+    QCOMPARE(focus, startFocus);
+    touch(0, 140, 150, false);
+    touch(1, 190, 150, false);
+    pc->applyDesignJoystick();
+
+    // A new two-finger gesture to the right: sharper.
+    touch(0, 50, 100, true);
+    touch(1, 50, 160, true);
+    pc->applyDesignJoystick();
+    touch(0, 101, 100, true);
+    touch(1, 101, 160, true);
+    pc->applyDesignJoystick();
+    QVERIFY(s->focusLevel(washId, focus));
+    QVERIFY2(qAbs(focus - (startFocus + ProgrammerController::touchFocusSpan() / 5.0)) < 0.011,
+             qPrintable(QString::number(focus)));
+    touch(0, 101, 100, false);
+    touch(1, 101, 160, false);
+    pc->applyDesignJoystick();
+
+    // The click says the light (RS's verb), and moves nothing.
+    QSignalSpy light(s, &FocusSession::sayLight);
+    const FocusSession::Offset before = s->liveOffset(washId);
+    send(TouchClick, 255);
+    send(TouchClick, 0);
+    QCOMPARE(light.count(), 1);
+    QCOMPARE(s->liveOffset(washId), before);
+
+    // Holding (both stick clicks): the touchpad moves nothing either.
+    pc->setHolding(true);
+    touch(0, 100, 100, true);
+    pc->applyDesignJoystick();
+    touch(0, 200, 100, true);
+    pc->applyDesignJoystick();
+    QCOMPARE(s->liveOffset(washId), before);
+    pc->setHolding(false);
+    touch(0, 200, 100, false);
+    pc->applyDesignJoystick();
+
+    s->discardAll();
+    panel->requestExit();
+    QTRY_VERIFY(panel.isNull());
 }
 
 void FocusMode_Test::theDefaultFollowsTheDevice()
@@ -460,46 +719,9 @@ void FocusMode_Test::theKeyboardIgnoresTheController()
    focus softer / sharper -- keys on the Focus mode panel. */
 void FocusMode_Test::theKeysHoldZoomAndFocus()
 {
-    // A wash with a 10-40 degree zoom channel and a focus channel.
-    QLCFixtureDef *def = new QLCFixtureDef();
-    def->setManufacturer("Test"); def->setModel("Focus Map Zoom Wash");
-    def->setType(QLCFixtureDef::MovingHead);
-    QLCFixtureMode *mode = new QLCFixtureMode(def);
-    mode->setName("5ch");
-    const QLCChannel::Group groups[] = { QLCChannel::Pan, QLCChannel::Tilt, QLCChannel::Intensity,
-                                         QLCChannel::Beam, QLCChannel::Beam };
-    const QLCChannel::Preset presets[] = { QLCChannel::Custom, QLCChannel::Custom, QLCChannel::Custom,
-                                           QLCChannel::BeamZoomSmallBig, QLCChannel::BeamFocusNearFar };
-    const char *names[] = { "Pan", "Tilt", "Dimmer", "Zoom", "Focus" };
-    QLCFixtureHead head;
-    for (int k = 0; k < 5; ++k)
-    {
-        QLCChannel *ch = new QLCChannel();
-        ch->setName(names[k]);
-        ch->setGroup(groups[k]);
-        ch->setControlByte(QLCChannel::MSB);
-        if (presets[k] != QLCChannel::Custom)
-            ch->setPreset(presets[k]);
-        def->addChannel(ch);
-        mode->insertChannel(ch, k);
-        head.addChannel(k);
-    }
-    QLCPhysical ph;
-    ph.setFocusPanMax(540);
-    ph.setFocusTiltMax(270);
-    ph.setLensDegreesMin(10.0);
-    ph.setLensDegreesMax(40.0);
-    mode->setPhysical(ph);
-    mode->insertHead(-1, head);
-    def->addMode(mode);
-    Fixture *wash = new Fixture(m_doc);
-    wash->setName("Wash 1");
-    wash->setFixtureDefinition(def, mode);
-    wash->setUniverse(0);
-    wash->setAddress(200);
-    QVERIFY(m_doc->addFixture(wash));
+    Fixture *wash = makeZoomWash(m_doc);
+    QVERIFY(wash != nullptr);
     const quint32 washId = wash->id();
-    m_doc->monitorProperties()->setFixturePosition(washId, 0, 0, QVector3D(3000.0f, 2000.0f, 5.0f));
 
     ProgrammerController *pc = m_doc->programmer();
     FocusSession *s = pc->focusSession();
@@ -977,6 +1199,14 @@ void FocusMode_Test::theControllerTestListsEachInput()
              qPrintable(tree->topLevelItem(1)->text(7)));
     QVERIFY2(tree->topLevelItem(2)->text(7).startsWith("nothing"),
              qPrintable(tree->topLevelItem(2)->text(7)));
+    // Q170: a PlayStation pad's element also by its own name.
+    m_stub->m_deviceKind = QStringLiteral("dualshock4");
+    m_stub->emitDiagnostic(0, "DUALSHOCK 4 Wireless Controller", "Bluetooth", "buttonA", 1, BtnA, 255);
+    m_stub->emitDiagnostic(0, "DUALSHOCK 4 Wireless Controller", "Bluetooth", "buttonOptions", 1, BtnView, 255);
+    QCOMPARE(tree->topLevelItem(3)->text(2), QString("buttonA \u00B7 Cross"));
+    QCOMPARE(tree->topLevelItem(4)->text(2), QString("buttonOptions \u00B7 Share"));
+    m_stub->m_deviceKind.clear();
+    QCOMPARE(dlg->rowCount(), 5);
 
     // The log: the devices, a row per element, every event in order.
     const QString log = dlg->logText();
@@ -984,6 +1214,7 @@ void FocusMode_Test::theControllerTestListsEachInput()
     QVERIFY(log.contains("Button 1\t"));
     QVERIFY(log.contains("Consumer 0xb2 (Record)"));
     QCOMPARE(log.count("Xbox Wireless Controller  Button 1 = "), 2);
+    QVERIFY(log.contains("buttonA \u00B7 Cross"));
     QPushButton *copy = dlg->findChild<QPushButton *>("controllerTestCopy");
     QVERIFY(copy != nullptr);
     copy->click();

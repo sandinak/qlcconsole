@@ -1000,6 +1000,16 @@ void RefineSession_Test::aBuildSceneIsRefinedTheSameWay()
     r->revert();
     QVERIFY(r->sharedWarning().isEmpty());
     QCOMPARE(m_doc->palette(m_position)->values(), QVariantList({ 270, 135 }));
+    // Q170: on a PlayStation pad the warning says Cross, not A.
+    QVERIFY2(why.contains("Press A again"), qPrintable(why));
+    r->setPadFamily(PadNames::DualShock4);
+    QVERIFY(r->nudgePosition(1.0f, 0.0f));
+    why.clear();
+    QVERIFY(!r->keep(&why));
+    QVERIFY2(why.contains("Press Cross again"), qPrintable(why));
+    QCOMPARE(said.last().at(0).toString(), why);
+    r->revert();
+    r->setPadFamily(PadNames::Xbox);
 
     // Zoom, with no zoom palette: the scene's own values on all of it.
     QVERIFY(r->nudgeZoom(-5.0f));

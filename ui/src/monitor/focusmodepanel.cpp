@@ -334,7 +334,8 @@ FocusModeSetupDialog::FocusModeSetupDialog(Doc *doc, quint32 sceneId,
     m_secondCombo = new QComboBox(this);
     m_secondCombo->setObjectName(QStringLiteral("focusSecondReference"));
     fillReferences(m_secondCombo, true);
-    m_secondCombo->setToolTip(tr("A second place to check the same offsets against (Y or R)"));
+    m_secondCombo->setToolTip(m_doc->programmer()->padText(
+        tr("A second place to check the same offsets against ({LS} click, or R)")));
     form->addRow(tr("Then check at:"), m_secondCombo);
 
     m_othersCombo = new QComboBox(this);
@@ -908,6 +909,7 @@ FocusModePanel::FocusModePanel(Doc *doc, QWidget *parent)
     connect(pc, &ProgrammerController::focusControllerChanged,
             this, &FocusModePanel::refreshController);
     connect(pc, &ProgrammerController::holdingChanged, this, &FocusModePanel::refresh);
+    connect(pc, &ProgrammerController::padLightChanged, m_map, &FocusControlMap::setLightColour);
     connect(pc->controllerKeepAlive(), &ControllerKeepAlive::pausedChanged,
             this, &FocusModePanel::refreshPaused);
     connect(pc, &ProgrammerController::focusControllerInput, this, [this](int role, float value) {
@@ -953,6 +955,9 @@ void FocusModePanel::refresh()
         return;
     const quint32 fid = m_session->currentFixture();
     const Fixture *fx = m_doc->fixture(fid);
+    // The pad's own names for its controls (Q170): "Cross", "Share".
+    const PadNames::Family pad = m_doc->programmer()->padFamily();
+    auto padText = [pad](const QString &text) { return PadNames::expand(text, pad); };
     // The beam, where it can change (Q103).
     {
         double deg = 0.0, lo = 0.0, hi = 0.0;
@@ -1006,7 +1011,7 @@ void FocusModePanel::refresh()
         const QString where = m_session->savesToVenue()
             ? tr("Saves to venue \342\200\234%1\342\200\235 (not the show file)").arg(venues->activeVenue())
             : tr("Saves to the show's own calibration");
-        setTextAndTip(m_scopeLabel, tr("%1 \342\200\224 %2.  Y switches.  %3")
+        setTextAndTip(m_scopeLabel, padText(tr("%1 \342\200\224 %2.  {Y} switches.  %3"))
                               .arg(m_session->scope() == FocusSession::GroupScope
                                    ? tr("The whole %1 (%2)").arg(m_session->isRunningCalls()
                                                                  ? tr("call") : tr("list"))
@@ -1028,13 +1033,13 @@ void FocusModePanel::refresh()
                      .arg(venues->activeVenue(), venues->correctedAs(fid));
         // Q140: marked dead from the pad (View + X) or D.
         if (fx != nullptr && venues->isDead(fid))
-            notes << tr("\342\234\225 Marked dead in %1 (View + X or D again to clear)")
+            notes << padText(tr("\342\234\225 Marked dead in %1 ({View} + {X} or D again to clear)"))
                      .arg(venues->activeVenue());
         setTextAndTip(m_nameNoteLabel, notes.join(QLatin1Char('\n')));
     }
     m_referenceLabel->setText(tr("Aimed at: %1%2").arg(m_session->referenceName(),
         m_session->isTargetPage()
-            ? tr("  \u2014 target page: the stick moves it (A keeps, B puts it back)")
+            ? padText(tr("  \u2014 target page: the stick moves it ({A} keeps, {B} puts it back)"))
             : m_session->usingSecondReference() ? tr("  (second reference)") : QString()));
     m_referenceLabel->setToolTip(m_referenceLabel->text());
     const FocusSession::Offset live = m_session->liveOffset(fid);
@@ -1046,7 +1051,7 @@ void FocusModePanel::refresh()
         const FixtureRigProps rp = m_doc->monitorProperties()->fixtureRigProps(fid);
         m_offsetLabel->setText(tr("Pan %1\302\260 from downstage    Tilt %2\302\260 down")
                                .arg(double(rp.panZeroDir), 0, 'f', 1).arg(double(rp.aimDown), 0, 'f', 1));
-        setTextAndTip(m_savedLabel, m_session->isDirty(fid) ? tr("Unsaved (A or Return to save, B to revert)")
+        setTextAndTip(m_savedLabel, m_session->isDirty(fid) ? padText(tr("Unsaved ({A} or Return to save, {B} to revert)"))
                               : m_session->isChecked(fid) ? tr("Saved \342\234\223") : tr("As it was"));
         m_savedLabel->setStyleSheet(m_session->isDirty(fid) ? QStringLiteral("color: #d08a1c;")
                                                             : QStringLiteral("color: #3a9a4a;"));
@@ -1058,7 +1063,7 @@ void FocusModePanel::refresh()
     }
     if (m_session->isDirty(fid))
     {
-        setTextAndTip(m_savedLabel, tr("Unsaved \342\200\224 saved is pan %1, tilt %2 (A to save, B to revert)")
+        setTextAndTip(m_savedLabel, padText(tr("Unsaved \342\200\224 saved is pan %1, tilt %2 ({A} to save, {B} to revert)"))
                               .arg(signedDegrees(saved.pan), signedDegrees(saved.tilt)));
         m_savedLabel->setStyleSheet(QStringLiteral("color: #d08a1c;"));
     }
@@ -1190,6 +1195,8 @@ void FocusModePanel::refreshController()
 {
     const ProgrammerController::FocusController pad = m_doc->programmer()->focusController();
     m_map->setControls(pad.controls);
+    m_map->setFamily(pad.present ? pad.family : PadNames::Xbox);
+    m_map->setLightColour(m_doc->programmer()->padLight());
     m_useController->setEnabled(pad.present);
     m_useController->setToolTip(pad.present ? tr("Nudge from %1").arg(pad.name)
                                             : tr("No controller that can focus is connected"));
@@ -1242,13 +1249,13 @@ void FocusModePanel::refreshController()
 QString FocusModePanel::noControllerNote() const
 {
     return tr("No controller connected: using the keyboard. A controller takes over "
-              "as soon as it connects (switch it on, or press its Xbox / PS button).");
+              "as soon as it connects (switch it on, or press its Xbox or PS button).");
 }
 
 QString FocusModePanel::disconnectedNote() const
 {
     return tr("Controller paused: the controller disconnected. Switched to the keyboard; "
-              "it takes over again when it reconnects (press its Xbox / PS button).");
+              "it takes over again when it reconnects (press its Xbox or PS button).");
 }
 
 void FocusModePanel::takeOverIfFree()

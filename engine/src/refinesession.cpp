@@ -943,10 +943,10 @@ bool RefineSession::keep(QString *why)
         if (!users.isEmpty())
         {
             m_sharedWarning = users.size() == 1
-                ? tr("%1 is reusable: it is also used in %2. Press A again to change it there too.")
-                  .arg(names.join(QStringLiteral(", ")), users.first())
-                : tr("%1 is reusable: it is also used in %2 and %3 more. Press A again to change them all.")
-                  .arg(names.join(QStringLiteral(", ")), users.first()).arg(users.size() - 1);
+                ? PadNames::expand(tr("%1 is reusable: it is also used in %2. Press {A} again to change it there too."),
+                                   m_padFamily).arg(names.join(QStringLiteral(", ")), users.first())
+                : PadNames::expand(tr("%1 is reusable: it is also used in %2 and %3 more. Press {A} again to change them all."),
+                                   m_padFamily).arg(names.join(QStringLiteral(", ")), users.first()).arg(users.size() - 1);
             m_sharedUsers = users;
             m_sharedConfirmed = true;           // the next A goes on
             emit changed();

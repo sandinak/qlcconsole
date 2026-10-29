@@ -102,6 +102,30 @@ GCControllerButtonInput *shareButton(GCExtendedGamepad *g)
     return nil;
 }
 
+/** A DualShock 4's or DualSense's touchpad fingers; nil for any other pad. */
+void touchpads(GCExtendedGamepad *g, GCControllerDirectionPad **first,
+               GCControllerDirectionPad **second)
+{
+    *first = *second = nil;
+    if (@available(macOS 11.3, *))
+    {
+        if ([g isKindOfClass:[GCDualSenseGamepad class]])
+        {
+            *first = ((GCDualSenseGamepad *)g).touchpadPrimary;
+            *second = ((GCDualSenseGamepad *)g).touchpadSecondary;
+            return;
+        }
+    }
+    if (@available(macOS 11.0, *))
+    {
+        if ([g isKindOfClass:[GCDualShockGamepad class]])
+        {
+            *first = ((GCDualShockGamepad *)g).touchpadPrimary;
+            *second = ((GCDualShockGamepad *)g).touchpadSecondary;
+        }
+    }
+}
+
 void fill(GCExtendedGamepad *g, PadState *s)
 {
     s->axes[LeftX]  = stick(g.leftThumbstick.xAxis.value, false);
@@ -127,6 +151,14 @@ void fill(GCExtendedGamepad *g, PadState *s)
     s->buttons[DpadLeft]  = pressed(g.dpad.left);
     s->buttons[DpadRight] = pressed(g.dpad.right);
     s->buttons[Share] = pressed(shareButton(g));
+
+    // A PlayStation pad's touchpad (Q170): each finger's place and touch.
+    GCControllerDirectionPad *t1 = nil, *t2 = nil;
+    touchpads(g, &t1, &t2);
+    if (t1 != nil)
+        readTouch(t1.xAxis.value, t1.yAxis.value, 0, s);
+    if (t2 != nil)
+        readTouch(t2.xAxis.value, t2.yAxis.value, 1, s);
 }
 
 /** What element @p e of @p g is, as the Controller test window shows it. */
@@ -140,6 +172,8 @@ void describeElement(GCExtendedGamepad *g, GCControllerElement *e,
         add(x, p.xAxis.value, cx);
         add(y, p.yAxis.value, cy);
     };
+    GCControllerDirectionPad *touch1 = nil, *touch2 = nil;
+    touchpads(g, &touch1, &touch2);
 
     if (e == g.leftThumbstick)
         pad(g.leftThumbstick, "leftThumbstick x", "leftThumbstick y", LeftX, LeftY);
@@ -169,6 +203,14 @@ void describeElement(GCExtendedGamepad *g, GCControllerElement *e,
     else if (e == g.buttonHome)    add("buttonHome", g.buttonHome.value, kButtonChannel + Guide);
     else if (e != nil && e == shareButton(g))
         add("buttonShare", shareButton(g).value, kButtonChannel + Share);
+    else if (e != nil && (e == touch1 || e == touch2))
+    {
+        const bool first = e == touch1;
+        const int base = kButtonChannel + ButtonCount + (first ? Touch1X : Touch2X);
+        GCControllerDirectionPad *p = first ? touch1 : touch2;
+        add(first ? "touchpadPrimary x" : "touchpadSecondary x", p.xAxis.value, base);
+        add(first ? "touchpadPrimary y" : "touchpadSecondary y", p.yAxis.value, base + 1);
+    }
     else if (e != nil)
     {
         // Something the layout has no place for (an Elite's paddles...).

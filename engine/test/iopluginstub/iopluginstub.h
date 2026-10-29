@@ -115,6 +115,10 @@ public:
     QString inputProblem(quint32 input) const override
     { return m_inputProblems.value(input); }
 
+    /** @reimp m_deviceKind, whatever the line */
+    QString inputDeviceKind(quint32 input) const override
+    { Q_UNUSED(input) return m_deviceKind; }
+
     /** @reimp Counted, like a real plugin's. */
     bool setInputDiagnostics(bool enable) override
     { m_diagnostics += enable ? 1 : -1; return true; }
@@ -138,6 +142,8 @@ public:
     /** What inputConnectionInfo() / inputProblem() report, by input line */
     QMap<quint32, QString> m_connectionInfo;
     QMap<quint32, QString> m_inputProblems;
+    /** What inputDeviceKind() reports ("dualshock4"...) */
+    QString m_deviceKind;
     /** setInputDiagnostics() calls: +1 on, -1 off */
     int m_diagnostics = 0;
     QList<Device> m_devices;

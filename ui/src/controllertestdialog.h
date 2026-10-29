@@ -72,6 +72,7 @@ private:
     /** What @p channel of @p plugin's @p input is for: its name, gamepad
      *  role, action and what it does in Focus mode. */
     QString mapsTo(QLCIOPlugin *plugin, quint32 input, int channel) const;
+    QString elementText(QLCIOPlugin *plugin, quint32 input, const QString &element, int channel) const;
 
 private slots:
     /** A plugin's inputDiagnostic(): connected by name (see the constructor). */

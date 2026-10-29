@@ -75,10 +75,11 @@ FocusCallsDialog::FocusCallsDialog(Doc *doc, QWidget *parent)
     setProperty("helpTopic", QStringLiteral("focus-calls.md"));
 
     QVBoxLayout *vl = new QVBoxLayout(this);
-    QLabel *intro = new QLabel(tr("The order the rig is focused in when the show moves into a "
-                                  "new room. Each call is some groups and the point they focus "
-                                  "to. On the controller the triggers step calls, the bumpers "
-                                  "fixtures, A saves."), this);
+    QLabel *intro = new QLabel(doc->programmer()->padText(
+        tr("The order the rig is focused in when the show moves into a "
+           "new room. Each call is some groups and the point they focus "
+           "to. On the controller the triggers ({LT}/{RT}) step calls, the bumpers "
+           "({LB}/{RB}) fixtures, {A} saves.")), this);
     intro->setWordWrap(true);
     vl->addWidget(intro);
 

@@ -69,6 +69,12 @@ namespace GamepadLayout
         ButtonCount
     };
 
+    /** A PlayStation pad's touchpad (board Q170), on the channels after the
+     *  buttons -- ButtonCount + these -- so no profile index moves: each
+     *  finger's place (0..255, 0 = left / top) and its touch (255 down).
+     *  Only Apple's GameController framework reads them. */
+    enum Touch { Touch1X = 0, Touch1Y, Touch1Down, Touch2X, Touch2Y, Touch2Down, TouchCount };
+
     enum Transport { UnknownTransport, Usb, Bluetooth, BluetoothLE };
 
     /** How a pad's reports are read into the layout. */
@@ -92,6 +98,11 @@ namespace GamepadLayout
 
     /** A Sony pad this layout knows (DualShock 4, DualSense). */
     bool isPlayStation(quint16 vendorId, quint16 productId);
+
+    /** What kind of pad it is, for the names the tools give its controls
+     *  (QLCIOPlugin::inputDeviceKind()): "dualsense", "dualshock4", "xbox";
+     *  empty for anything else. */
+    QString deviceKind(quint16 vendorId, quint16 productId);
 
     /** The model's name ("Xbox Series X|S"), empty for one not in the table. */
     QString modelName(quint16 vendorId, quint16 productId);
@@ -136,9 +147,19 @@ namespace GamepadLayout
     {
         uchar axes[AxisCount];
         bool buttons[ButtonCount];
+        uchar touch[TouchCount];
     };
-    /** Sticks centred, triggers released, nothing pressed. */
+    /** Sticks centred, triggers released, nothing pressed, no finger on
+     *  the touchpad (its places in the middle). */
     void centre(PadState *state);
+
+    /** A touchpad finger as Apple's GameController framework reports it
+     *  (x, y -1..1, up positive), into @p state's finger @p finger (0 or
+     *  1). The framework has no "finger down": a lifted finger reads
+     *  exactly (0, 0) -- so that is a lift, and the place stays where the
+     *  finger left it (no jump to the middle); a touch anywhere else, the
+     *  middle's neighbours too, is down. */
+    void readTouch(float x, float y, int finger, PadState *state);
 
     /** Read a GIP report as Apple's driver passes it (the report ID at
      *  [0]) into @p state: 0x20 is the controller's state (everything but
@@ -156,6 +177,7 @@ namespace GamepadLayout
     QString axisName(int axis);
     QString buttonName(int button);
     QString axisRole(int axis);
+    /** A button's, and past ButtonCount the touchpad's (Touch). */
     QString buttonRole(int button);
 
     /** A HID element as a person can read it: "Button 4", "Rz", "Brake",

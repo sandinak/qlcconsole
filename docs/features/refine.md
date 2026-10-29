@@ -9,7 +9,10 @@ This is a cue's focus, not the rig's. [Quick
 focus](lighting-studio.md#quick-focus) and [Venue focus](focus-calls.md)
 correct the rig's calibration (for the show, or for a venue); Focus this
 cue changes what a **cue** does. The controller is laid out the same way
-in all of them, so it only has to be learnt once.
+in all of them, so it only has to be learnt once. This guide names the
+Xbox buttons; on a PlayStation pad see
+[On a PlayStation pad](focus-calls.md#on-a-playstation-pad) (its
+touchpad nudges, zooms and focuses here too).
 
 ## Starting
 

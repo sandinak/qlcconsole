@@ -1646,8 +1646,7 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         QPushButton *refine = new QPushButton(tr("Focus this cue\342\200\246"), inner);
         refine->setObjectName("stCueRefine");
         m_cueRefine = refine;
-        refine->setToolTip(tr("Move, zoom, focus and recolour this cue from the stage with the controller: "
-                              "triggers step layers, bumpers fixtures, Y the scope, A keeps"));
+        refine->setToolTip(FocusMenu::focusCueTip(m_doc));
         connect(refine, &QPushButton::clicked, this, [this]() {
             if (currentCueId() != invalidId())
                 RefinePanel::open(m_doc, window(), currentCueId());
@@ -3674,9 +3673,7 @@ void ShowTreeView::showCuePage(const CueList &list, int index)
         FocusMenu::setAvailable(m_cueFocusCall, cue.focusCall ? QString() : FocusMenu::venueFocusCueBlocked(m_doc),
                                 venueFocusCueTip());
     }
-    FocusMenu::setAvailable(m_cueRefine, FocusMenu::focusCueBlocked(m_doc),
-                            tr("Move, zoom, focus and recolour this cue from the stage with the controller: "
-                               "triggers step layers, bumpers fixtures, Y the scope, A keeps"));
+    FocusMenu::setAvailable(m_cueRefine, FocusMenu::focusCueBlocked(m_doc), FocusMenu::focusCueTip(m_doc));
     refreshFocusCallState();
     m_cueReuse->setText(reuseLine(cue.id, invalidId()));
 
@@ -5013,8 +5010,7 @@ void ShowTreeView::fillCueFocusMenu(QMenu *m)
     });
     self->setObjectName("stCueFocusThis");
     FocusMenu::setAvailable(self, cue == nullptr ? tr("Choose a cue first.") : FocusMenu::focusCueBlocked(m_doc),
-                            tr("Move, zoom, focus and recolour this cue from the stage with the controller: "
-                               "triggers step layers, bumpers fixtures, Y the scope, A keeps"));
+                            FocusMenu::focusCueTip(m_doc));
     // A look list's looks are fired from the VC, never GO'd onto: no venue focus cue.
     if (list != nullptr && !list->looks)
     {
@@ -5048,7 +5044,7 @@ void ShowTreeView::refreshFocusCallState()
     else if (mine && fcc->state() == FocusCallCue::NamingVenue)
         m_cueFocusState->setText(tr("Venue focus: name the venue on the laptop"));
     else if (mine && fcc->state() == FocusCallCue::Running)
-        m_cueFocusState->setText(tr("Venue focus running: Menu ends it and goes on"));
+        m_cueFocusState->setText(m_doc->programmer()->padText(tr("Venue focus running: {Menu} ends it and goes on")));
     m_cueFocusState->setVisible(mine && fcc->state() != FocusCallCue::Idle);
 }
 

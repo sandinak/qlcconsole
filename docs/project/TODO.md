@@ -522,6 +522,20 @@ help (DONE.md 2026-10-16). Handoff: SHOW_TREE_OVERNIGHT.md.
 
 ## Needs the real rig / hardware
 
+- **PlayStation pads: names and the touchpad (built 2026-10-29, board
+  Q170, feat/031-pads-voice)** -- tested offscreen with the stub plugin's
+  device kind and simulated touch channels only. On ender with the DS4
+  (Bluetooth): the map says Cross/Share/Options and draws the touchpad and
+  light bar; the Controller test window shows "buttonA · Cross" and the
+  touchpadPrimary x/y rows; `ds4probe 20` while dragging one then two
+  fingers confirms a lifted finger reads exactly (0, 0) (readTouch()
+  takes that as a lift); a one-finger drag across the pad nudges ~4°, two
+  fingers up spot the beam down; a firm drag that clicks only says the
+  light. Tune touchDegrees()/touchBeamDegrees()/touchFocusSpan() and
+  TouchpadGesture::slop()/jitter() on the hardware. A DualSense: "Create".
+  Not built (Q170): the headphone jack (part 3, USB-only audio), SF
+  Symbols on the map.
+
 - **Rig network gate on real networks (built 2026-10-19, feat/rig-network-gate)**
   — tested with a modelled machine (NetworkRoute::setResolverForTest) and
   Art-Net's test sink only; no packet was sent. On ender: with the show's

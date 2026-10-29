@@ -49,7 +49,13 @@ namespace GamepadRole
         DpadUp, DpadDown, DpadLeft, DpadRight,
         // Axes
         LeftX, LeftY, RightX, RightY,
-        LeftTrigger, RightTrigger
+        LeftTrigger, RightTrigger,
+        /* A PlayStation pad's touchpad (board Q170): each finger's place
+           (0..1 across, 0..1 down; 0 = left / top) and whether it is down,
+           and the whole pad's click. */
+        TouchX, TouchY, TouchDown,
+        Touch2X, Touch2Y, Touch2Down,
+        TouchClick
     };
 
     /** The role of a control, from what its input profile says: the
@@ -66,6 +72,9 @@ namespace GamepadRole
 
     /** True for the stick and trigger roles. */
     QLC_ENGINE_EXPORT bool isAxis(Role role);
+
+    /** True for a touchpad finger's place or touch (not its click). */
+    QLC_ENGINE_EXPORT bool isTouch(Role role);
 }
 
 /** @} */
