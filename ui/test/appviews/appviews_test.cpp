@@ -54,6 +54,8 @@
 #include <QtMath>
 #include "appviews_test.h"
 #include "venuemenu.h"
+#include "showsettingsdialog.h"
+#include "showoperate.h"
 #include "focusmenu.h"
 #include "venuecorrections.h"
 #include "programmercontroller.h"
@@ -3068,6 +3070,99 @@ void AppViews_Test::newFromTemplateOpensTheClassroomStageUntitled()
     QVERIFY(doc->isModified());
     QCOMPARE(doc->fixtures().count(), 68);
     m_app->clearDocument();
+}
+
+void AppViews_Test::aPinKeepsTheShowInOperate()
+{
+    m_app->clearDocument();
+    Doc *doc = m_app->doc();
+    ShowSettingsDialog::setTestMode(true);
+    auto cleanup = qScopeGuard([this]() {
+        ShowSettingsDialog::setTestMode(false);
+        if (m_app->doc()->mode() == Doc::Operate)
+        {
+            m_app->doc()->operateSettings()->setPin(QString());
+            m_app->slotModeDesign();
+        }
+        m_app->clearDocument();
+    });
+
+    QAction *settingsAction = m_app->findChild<QAction *>("fileShowSettings");
+    QVERIFY(settingsAction != nullptr && settingsAction->isEnabled());
+
+    // Show Settings: a PIN (a short one is asked again), and Open in Operate
+    {
+        ShowSettingsDialog dlg(doc, m_app);
+        QPushButton *set = dlg.findChild<QPushButton *>("showSettingsSetPin");
+        QPushButton *remove = dlg.findChild<QPushButton *>("showSettingsRemovePin");
+        QCheckBox *openIn = dlg.findChild<QCheckBox *>("showSettingsOpenInOperate");
+        QVERIFY(set && remove && openIn);
+        QVERIFY(!remove->isEnabled());
+        ShowSettingsDialog::testAnswers() = { "12", "2468", "1357" };   // too short; no match
+        set->click();
+        QVERIFY(!dlg.pinWillBeSet());
+        ShowSettingsDialog::testAnswers() = { "2468", "2468" };
+        set->click();
+        QVERIFY(dlg.pinWillBeSet());
+        QVERIFY(remove->isEnabled());
+        openIn->setChecked(true);
+        // Nothing changes until OK
+        QVERIFY(!doc->operateSettings()->hasPin());
+        dlg.accept();
+    }
+    QVERIFY(doc->operateSettings()->hasPin());
+    QVERIFY(doc->operateSettings()->checkPin("2468"));
+    QVERIFY(doc->operateSettings()->openInOperate());
+    QVERIFY(doc->isModified());
+
+    // Operate: locked. No settings, no Live Edit
+    m_app->slotModeOperate();
+    QCOMPARE(doc->mode(), Doc::Operate);
+    QVERIFY(!settingsAction->isEnabled());
+    QAction *liveEdit = nullptr;
+    for (QAction *a : m_app->findChildren<QAction *>())
+        if (a->text() == QObject::tr("Live edit a function"))
+            liveEdit = a;
+    QVERIFY(liveEdit != nullptr);
+    QVERIFY(!liveEdit->isEnabled());
+
+    // Wrong PIN, or Cancel: still in Operate. The PIN: Design
+    ShowSettingsDialog::testAnswers() = { "1111" };
+    m_app->slotModeDesign();
+    QCOMPARE(doc->mode(), Doc::Operate);
+    ShowSettingsDialog::testAnswers().clear();
+    m_app->slotModeToggle();
+    QCOMPARE(doc->mode(), Doc::Operate);
+    ShowSettingsDialog::testAnswers() = { "2468" };
+    m_app->slotModeToggle();
+    QCOMPARE(doc->mode(), Doc::Design);
+    QVERIFY(settingsAction->isEnabled());
+
+    // Changing the PIN asks for the current one first
+    {
+        ShowSettingsDialog dlg(doc, m_app);
+        ShowSettingsDialog::testAnswers() = { "0000" };
+        dlg.findChild<QPushButton *>("showSettingsRemovePin")->click();
+        QVERIFY(dlg.pinWillBeSet());
+        ShowSettingsDialog::testAnswers() = { "2468" };
+        dlg.findChild<QPushButton *>("showSettingsRemovePin")->click();
+        QVERIFY(!dlg.pinWillBeSet());
+        dlg.reject();       // Cancel: the show keeps its PIN
+    }
+    QVERIFY(doc->operateSettings()->hasPin());
+
+    // Saved with the show; it opens in Operate, still locked
+    QTemporaryDir dir;
+    const QString path = dir.filePath("locked.qlcc");
+    QCOMPARE(m_app->saveXML(path), QFile::NoError);
+    m_app->clearDocument();
+    QVERIFY(!doc->operateSettings()->hasPin());
+    QCOMPARE(m_app->loadXML(path), QFile::NoError);
+    QTRY_COMPARE(doc->mode(), Doc::Operate);
+    QVERIFY(!doc->isModified());
+    ShowSettingsDialog::testAnswers() = { "2468" };
+    m_app->slotModeDesign();
+    QCOMPARE(doc->mode(), Doc::Design);
 }
 
 void AppViews_Test::newShowsCanStartInClassic()

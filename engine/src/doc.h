@@ -247,6 +247,7 @@ private:
     class PowerLimiter *m_powerLimiter = nullptr;
     class ShutterAutoOpen *m_shutterAutoOpen = nullptr;
     class ShowWebAccess *m_webAccess = nullptr;
+    class ShowOperate *m_operate = nullptr;
     class OutputRuleKeeper *m_outputRuleKeeper = nullptr;
     NetworkTopology *m_networkTopology;
     TimecodeSource *m_timecodeSource;
@@ -1236,6 +1237,10 @@ public:
     /** Whether opening the show starts web access, and on which port (the
      *  show's setting; the server is the webaccess library's) */
     class ShowWebAccess *webAccess() const { return m_webAccess; }
+
+    /** Whether opening the show goes to Operate, and the PIN that leaving
+     *  Operate asks for (the show's settings; App acts on them) */
+    class ShowOperate *operateSettings() const { return m_operate; }
 
     /** Applies the fixtures' output rules (Blackout / Grand Master exempt,
      *  Switch, OnAtOpen) to the universes (OutputRuleKeeper) */

@@ -529,6 +529,8 @@ public:
      *  save the open one first (false on Cancel, or when it can't be read).
      *  Save asks for a name, so the template itself is never written. */
     bool newFromTemplate(const QString &resource);
+    /** File ▸ Show Settings (Design only). */
+    void openShowSettings();
 
 public slots:
     bool slotFileNew();
@@ -717,8 +719,9 @@ private:
     QAction* m_cueSubBackAction = nullptr;
     QAction* m_dumpDmxAction;
     QAction* m_liveEditAction;
-    /** File ▸ New from Template: Design only */
+    /** File ▸ New from Template and File ▸ Show Settings: Design only */
     QMenu *m_fileTemplatesMenu = nullptr;
+    QAction *m_fileShowSettingsAction = nullptr;
     QAction* m_liveEditVirtualConsoleAction;
     QAction* m_captureLiveEditsAction;
     QAction* m_captureStoreAction;

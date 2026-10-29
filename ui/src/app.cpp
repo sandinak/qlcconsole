@@ -132,6 +132,8 @@
 #include "showstatusdialog.h"
 #include "showembedding.h"
 #include "showdifferencesdialog.h"
+#include "showsettingsdialog.h"
+#include "showoperate.h"
 #include "qlcfixturedef.h"
 #include "definitionupdatesdialog.h"
 #include "qlcioplugin.h"
@@ -1759,8 +1761,24 @@ void App::slotModeOperate()
     m_doc->setMode(Doc::Operate);
 }
 
+void App::openShowSettings()
+{
+    if (m_doc->mode() != Doc::Design)
+        return;
+    ShowSettingsDialog dlg(m_doc, this);
+    dlg.exec();
+}
+
 void App::slotModeDesign()
 {
+    /* A show locked with a PIN (File ▸ Show Settings) stays in Operate
+       unless it is given. */
+    ShowOperate *lock = m_doc->operateSettings();
+    if (m_doc->mode() == Doc::Operate && lock != nullptr && lock->hasPin()
+        && !ShowSettingsDialog::askForPin(this, lock->pinHash(),
+                tr("This show is locked in Operate. Enter its PIN to go back to Design.")))
+        return;
+
     if (m_doc->masterTimer()->runningFunctions() > 0)
     {
         int result = QMessageBox::warning(
@@ -1804,9 +1822,14 @@ void App::slotModeChanged(Doc::Mode mode)
         m_fileOpenAction->setEnabled(false);
         if (m_fileTemplatesMenu != nullptr)
             m_fileTemplatesMenu->setEnabled(false);
-        m_liveEditAction->setEnabled(true);
-        m_liveEditVirtualConsoleAction->setEnabled(true);
-        m_captureLiveEditsAction->setEnabled(true);
+        if (m_fileShowSettingsAction != nullptr)
+            m_fileShowSettingsAction->setEnabled(false);
+        /* Live Edit edits the show in Operate: not in one locked with a PIN */
+        const bool locked = m_doc->operateSettings() != nullptr
+                            && m_doc->operateSettings()->hasPin();
+        m_liveEditAction->setEnabled(!locked);
+        m_liveEditVirtualConsoleAction->setEnabled(!locked);
+        m_captureLiveEditsAction->setEnabled(!locked);
 
         m_modeToggleAction->setIcon(QIcon(":/design.png"));
         m_modeToggleAction->setText(tr("Design"));
@@ -1836,6 +1859,8 @@ void App::slotModeChanged(Doc::Mode mode)
         m_fileOpenAction->setEnabled(true);
         if (m_fileTemplatesMenu != nullptr)
             m_fileTemplatesMenu->setEnabled(true);
+        if (m_fileShowSettingsAction != nullptr)
+            m_fileShowSettingsAction->setEnabled(true);
         if (m_controlBlindAction != NULL)
             m_controlBlindAction->setEnabled(true);
         m_liveEditAction->setEnabled(false);
@@ -2364,6 +2389,15 @@ void App::initMenuBar()
         fileMenu->addAction(upgrade);
         // The Run tab's empty state offers it too (Q62).
         CueRunner::setUpgradeAction(upgrade);
+
+        // Settings saved with the show (Q180): open in Operate, the PIN to
+        // leave it. Teaching mode's settings are to join them.
+        m_fileShowSettingsAction = new QAction(tr("Show Se&ttings…"), this);
+        m_fileShowSettingsAction->setObjectName(QStringLiteral("fileShowSettings"));
+        m_fileShowSettingsAction->setToolTip(tr("Settings saved with this show: open it in Operate, "
+                                                "and a PIN that going back to Design asks for"));
+        connect(m_fileShowSettingsAction, &QAction::triggered, this, &App::openShowSettings);
+        fileMenu->addAction(m_fileShowSettingsAction);
     }
     fileMenu->addSeparator();
     fileMenu->addAction(m_appSettingsAction);      // → app menu (Preferences) on macOS
@@ -5297,6 +5331,14 @@ QFile::FileError App::loadXML(const QString& fileName)
                them (Office.qlcc) asked "Save changes?" on close and wrote
                an autosave at open (F3). */
             m_doc->resetModified();
+
+            /* "Open this show in Operate" (File ▸ Show Settings): once
+               it's up, as -p does (after startup's own Design). */
+            if (m_doc->operateSettings()->openInOperate())
+                QTimer::singleShot(0, this, [this]() {
+                    if (m_doc->mode() == Doc::Design && m_doc->operateSettings()->openInOperate())
+                        slotModeOperate();
+                });
         }
     }
     else

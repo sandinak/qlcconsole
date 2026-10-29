@@ -213,6 +213,9 @@ private slots:
      *  unchanged, with nothing patched to an output; the open show is
      *  asked about first. */
     void newFromTemplateOpensTheClassroomStageUntitled();
+    /** File ▸ Show Settings: a PIN keeps the show in Operate (and Live Edit
+     *  off) until it's given; "Open in Operate" opens the saved show there. */
+    void aPinKeepsTheShowInOperate();
 
     /** Quitting with the window still up and the Show Tree in front: the
      *  tab goes before the Doc, so its hide event (which stops its preview)

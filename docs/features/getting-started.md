@@ -84,6 +84,23 @@ tablet and setting up users.
 - A show kept in a **cloud folder** (iCloud, Dropbox, Synology…) is saved
   safely; see [Cloud storage](other-improvements.md#cloud-storage).
 
+### Show settings
+
+**File ▸ Show Settings…** holds settings saved with the show that aren't
+about its patch or cues. It's only open in Design.
+
+- **Open this show in Operate**: opening the show goes straight to
+  Operate, ready to run, as the **-p** command-line option does.
+- **Set PIN…**: a PIN of 4 to 8 digits. In Operate, going back to Design
+  (the Design button, the footer switch, Control ▸ Design, ⌘F12) asks for
+  it, and Live Edit is off. Use it to keep a running show safe from a
+  curious click at the desk: a school concert, a lobby left running.
+  **Change PIN…** and **Remove PIN** ask for the current PIN first.
+
+The PIN is kept in the show file as a salted hash, not as the digits. It
+stops a click, not someone who edits the show file. Keep a copy of the show
+without the PIN, in case it's forgotten. Changes apply when you press OK.
+
 ### Choosing a computer
 
 How big a show one computer can run, measured on the 0.3.0 release

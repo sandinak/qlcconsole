@@ -193,6 +193,11 @@ skipped). Upstream fixes taken:
   first is the course's **Show-choir stage (classroom)** (the rig, groups,
   stage targets, colours and levels, nothing patched to an output). It
   opens untitled, so Save asks for a name.
+- **File ▸ Show Settings: open in Operate, and an Operate PIN.** "Open
+  this show in Operate" opens the show ready to run (as -p does). A PIN
+  of 4 to 8 digits keeps a running show in Operate: going back to Design
+  asks for it, and Live Edit is off. It's saved with the show as a salted
+  hash. Show Settings is the home Teaching mode's settings will share.
 
 ### Changed
 
