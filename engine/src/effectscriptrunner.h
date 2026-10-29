@@ -93,6 +93,8 @@ public slots:
     /** Update a named real-time data channel (e.g. "joystick") injected into
      *  every subscribing effect script before each tick.  Call from the main thread. */
     void setDataChannel(const QString &name, const QVariantMap &data);
+    /** The named data channel as effects get it next tick (empty if none). */
+    QVariantMap dataChannel(const QString &name) const { return m_dataChannels.value(name); }
 
 private slots:
     void slotTick();
@@ -196,6 +198,9 @@ private:
      *  band keyboard vs a Launchpad) it reacts to. data.midi exposes a merged
      *  "any" view plus data.midi.universes[<n>] per source. */
     QHash<quint32, MidiNoteState> m_midiByUniverse;
+    /** m_midiByUniverse changed since the "midi" data channel was last
+     *  published: slotTick() publishes it once (pb5). */
+    bool m_midiDirty = false;
     /** Rebuild the "midi" data channel from m_midiState and publish it. */
     void publishMidiData();
 

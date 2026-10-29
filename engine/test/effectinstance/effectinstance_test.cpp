@@ -3559,4 +3559,28 @@ void EffectInstance_Test::aLooseBoxIsItsOwnGrid()
     }
 }
 
+void EffectInstance_Test::midiDataIsPublishedOncePerTick()
+{
+    EffectScriptRunner *runner = m_doc->effectScriptRunner();
+    QVERIFY(runner != nullptr);
+    QVERIFY(runner->dataChannel(QStringLiteral("midi")).isEmpty());
+
+    // A burst of values on the note range (channels 128-255), as one frame
+    // of a busy input brings: note 2 struck, many others moving.
+    for (int round = 0; round < 20; round++)
+        for (quint32 ch = 128; ch < 256; ch++)
+            runner->slotInputValueChanged(0, ch, uchar((ch + round) % 200), QString());
+    runner->slotInputValueChanged(0, 130, 200, QString());
+
+    // Nothing is rebuilt until the tick that reads it.
+    QVERIFY(runner->dataChannel(QStringLiteral("midi")).isEmpty());
+
+    QVERIFY(QMetaObject::invokeMethod(runner, "slotTick", Qt::DirectConnection));
+    const QVariantMap midi = runner->dataChannel(QStringLiteral("midi"));
+    QVERIFY(!midi.isEmpty());
+    QCOMPARE(midi.value(QStringLiteral("held")).toList().at(2).toBool(), true);
+    QCOMPARE(midi.value(QStringLiteral("velocity")).toList().at(2).toInt(), 100);
+    QVERIFY(midi.value(QStringLiteral("universes")).toMap().contains(QStringLiteral("1")));
+}
+
 QTEST_GUILESS_MAIN(EffectInstance_Test)
