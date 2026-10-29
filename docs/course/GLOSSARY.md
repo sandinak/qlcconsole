@@ -131,6 +131,9 @@ brackets.
 | **Cue-only cue** | A cue that starts from the one before but whose changes don't pass on (Mode: Cue-only; **C** in the **M** column): a flash or sting that's there and gone. [2.1] |
 | **Hard start** | A cue that starts from a known state whatever came before: a Block cue, for a solo or a new section. [2.1] |
 | **Base cue** | The cue a list's released layers go back to (tick *The list's base cue* on its page; **base** in the **F** column). [2.1] |
+| **Line target** | A stage target that is a line, not a point: each light aimed at it gets its own point along it, in the order they hang (*Riser Line*). [2.5] |
+| **Spread** | How lights aimed at a line share it: +5 end to end (a fan), 0 all on the centre, below 0 crossed (−5 fully). Grouping moves them in pairs, threes…; the order strip and plan view under Position show where each lands. [2.5] |
+| **Colour wheel / colour ring** | A spot's colour from named slots (filters on a wheel, LEDs round the lens), not mixed: a colour picks the nearest slot. [2.5] |
 | **Effect** | A pattern that moves through the lights: a chase, a sparkle, a rainbow. [2.4] |
 | **Effect palette** | A palette that plays an effect: **+ Palette → Effect**, then the effect picked in the **effect picker** (search, click, **Done**). [2.4] |
 | **Sparkle / wave** | Pixels flash and fade at random, like glitter / brightness that travels across the lights. [2.4] |

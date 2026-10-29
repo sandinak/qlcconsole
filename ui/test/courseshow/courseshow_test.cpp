@@ -128,7 +128,7 @@ const QString kL5Start = kShows + QStringLiteral("/lesson-1-5-start.qlcc");
 /* Level 2's show files: lesson-2-N-start / -finish, each lesson starting
    from the one before's finish (2.1 from Lesson 1.4's). */
 /* How many of Level 2's lessons are written (and have show files). */
-const int kLevelTwoLessons = 4;
+const int kLevelTwoLessons = 5;
 
 QString levelTwoStart(int n)
 {
@@ -582,6 +582,11 @@ bool rowMenu(ShowTreeView *view, const QString &key, const QString &menu, const 
                                     return;
                                 }
                     }
+        // Not there: close it, or the menu waits for ever.
+        for (QWidget *w : QApplication::topLevelWidgets())
+            if (QMenu *m = qobject_cast<QMenu *>(w))
+                if (m->isVisible())
+                    m->close();
     });
     more->click();
     settle(100);
@@ -4037,6 +4042,146 @@ static bool lessonTwoFourByMouse(Doc *doc, ShowTreeView *view, const QString &sh
     return true;
 }
 
+/* Lesson 2.5, moving lights and lines: the button. 1.0.7 Fan (Block): the
+   truss spots and the upstage beams, one layer, White, Full, aimed at the
+   Riser Line -- a fan along it; 1.0.8 Button: the same beams crossed
+   (Spread -5) and Red, with a 1 s fade, so they sweep. */
+static bool lessonTwoFiveByMouse(Doc *doc, ShowTreeView *view, const QString &shots = QString())
+{
+    ShowTreeController *st = doc->showTree();
+    for (QTreeWidgetItemIterator it(view->tree()); *it; ++it)
+        (*it)->setExpanded(true);
+    App *app = qobject_cast<App *>(view->window());
+    auto ui = [view, app, &shots](const QString &name, const QList<HelpShots::Callout> &marks) {
+        if (shots.isEmpty() || app == nullptr)
+            return true;
+        HelpShots::Frame f = showTreeFrame(app, view);
+        f.callouts = marks;
+        return shoot(f, shots, name);
+    };
+    auto rig = [view, &shots](const QString &name) {
+        if (shots.isEmpty())
+            return;
+        const quint32 cue = view->currentCueId();
+        rigShot(view, cue, shots + QLatin1Char('/') + name + QStringLiteral(".png"));
+        closeRig();
+        view->selectNode(cue);
+        settle();
+    };
+    auto pans = [doc]() {
+        QStringList out;
+        for (const char *fx : { "SR Truss Spot 1", "SR Truss Spot 2", "SL Truss Spot 2", "SL Truss Spot 1" })
+        {
+            const QPair<int, int> pt = panTilt(doc, fx);
+            out << QStringLiteral("%1=%2/%3").arg(fx).arg(pt.first).arg(pt.second);
+        }
+        return out.join(" ");
+    };
+    for (Fixture *fx : doc->fixtures())
+        if (fx->name() == QLatin1String("SR Truss Spot 1") || fx->name() == QLatin1String("UST 1"))
+        {
+            QStringList n;
+            for (quint32 c = 0; c < fx->channels(); ++c)
+                n << fx->channel(c)->name();
+            qInfo().noquote() << "[2.5]" << fx->name() << "heads" << fx->heads() << "channels:" << n.join(", ");
+        }
+
+    LESSON_STEP(view->selectNode(cueNumbered(doc, "1.0.6")), "select 1.0.6");
+    settle(50);
+    LESSON_STEP(newCueNamed(view, "Fan"), "new cue Fan");
+    LESSON_STEP(st->cue(view->currentCueId())->number == "1.0.7", st->cue(view->currentCueId())->number);
+    LESSON_STEP(setCueMode(view, "Block"), "Mode Block");
+    const quint32 fan = view->currentCueId();
+    {
+        const QString said = dropGroupOnZone(doc, view, "Truss-Spots");
+        LESSON_STEP(said == QStringLiteral("a new layer on Truss-Spots in 1.0.7 Fan"), said);
+    }
+    for (const QString &pal : { QStringLiteral("White"), QStringLiteral("Full") })
+    {
+        const QString said = dropPaletteOnRow(doc, view, "Truss-Spots", pal);
+        LESSON_STEP(said.startsWith(QStringLiteral("%1 → layer Truss-Spots in 1.0.7 Fan").arg(pal)), said);
+    }
+    settle(300);
+    qInfo().noquote() << "[2.5] before the aim:" << pans();
+    rig(QStringLiteral("rig-fan-unaimed"));
+    {
+        const QString said = dropTargetOnRow(doc, view, "Truss-Spots", "Riser Line");
+        qInfo().noquote() << "[2.5] Riser Line:" << said;
+        LESSON_STEP(said.startsWith(QStringLiteral("Aim at Riser Line → layer Truss-Spots in 1.0.7 Fan")), said);
+    }
+    settle(400);
+    const QString fanPans = pans();
+    qInfo().noquote() << "[2.5] fanned:" << fanPans;
+    LESSON_STEP(clickCueRow(view, "Truss-Spots"), "click the layer");
+    qInfo().noquote() << "[2.5] rows: Position" << rowText(view, KeyPosition) << "| Spread" << rowText(view, KeySpread)
+                      << "| Grouping" << rowText(view, KeyGrouping) << "| Cross" << rowText(view, KeyCross)
+                      << "| strip" << (view->findChild<QWidget *>("stLineStrip") != nullptr)
+                      << "| plan" << (view->findChild<QWidget *>("stLinePlan") != nullptr);
+    if (!shots.isEmpty())
+    {
+        QWidget *strip = view->findChild<QWidget *>(QStringLiteral("stLineStrip"));
+        QWidget *plan = view->findChild<QWidget *>(QStringLiteral("stLinePlan"));
+        QLabel *spread = stFind<QLabel>(view, QStringLiteral("stRow:%1").arg(KeySpread));
+        for (QWidget *w = spread; w != nullptr; w = w->parentWidget())
+            if (QScrollArea *area = qobject_cast<QScrollArea *>(w))
+            {
+                area->ensureWidgetVisible(plan != nullptr ? plan : spread, 0, 10);
+                break;
+            }
+        settle(100);
+        QList<HelpShots::Callout> marks;
+        marks << mark(stFind<QLabel>(view, QStringLiteral("stRow:%1").arg(KeyPosition)), 1) << mark(spread, 2);
+        if (strip != nullptr && strip->isVisible())
+            marks << mark(strip, 3);
+        if (plan != nullptr && plan->isVisible())
+            marks << mark(plan, 4, HelpShots::Above);
+        LESSON_STEP(ui(QStringLiteral("line-layer"), marks), "line shot");
+    }
+    const int ringWhite = channelValue(doc, "SR Truss Spot 1", "Circle Color");
+    const int wheelWhite = channelValue(doc, "SR Truss Spot 1", "Color wheel");
+    LESSON_STEP(view->selectNode(fan), "select the fan");
+    rig(QStringLiteral("rig-fan"));
+
+    // 1.0.8 Button: crossed and red, a 1 s fade.
+    LESSON_STEP(newCueNamed(view, "Button"), "new cue Button");
+    LESSON_STEP(st->cue(view->currentCueId())->number == "1.0.8", st->cue(view->currentCueId())->number);
+    const quint32 button = view->currentCueId();
+    qInfo().noquote() << "[2.5] button rows:" << view->cueLayerItems().join(" | ");
+    LESSON_STEP(clickCueRow(view, "⤳ Truss-Spots"), "click the grey layer");
+    qInfo().noquote() << "[2.5] grey Spread:" << rowText(view, KeySpread);
+    LESSON_STEP(rowMenu(view, KeySpread, "-5"), "Spread -5");
+    settle(200);
+    qInfo().noquote() << "[2.5] after -5: kind" << int(view->currentKind()) << "| Spread" << rowText(view, KeySpread)
+                      << "| hint" << hintOf(view)->text();
+    LESSON_STEP(view->selectNode(button), "select the button");
+    settle(50);
+    {
+        const QString said = dropPaletteOnRow(doc, view, "Truss-Spots", "Red");
+        qInfo().noquote() << "[2.5] Red:" << said << "| rows" << view->cueLayerItems().join(" | ");
+        LESSON_STEP(said.startsWith(QStringLiteral("Red → layer Truss-Spots in 1.0.8 Button")), said);
+    }
+    typeSeconds(view->m_cueFadeIn, "1");
+    settle(400);
+    const QString crossPans = pans();
+    qInfo().noquote() << "[2.5] crossed:" << crossPans << "| fade" << st->cue(button)->fadeIn;
+    for (Fixture *fx : doc->fixtures())
+        if (fx->name() == QLatin1String("SR Truss Spot 1") || fx->name() == QLatin1String("UST 1"))
+            qInfo().noquote() << "[2.5]" << fx->name() << "sends" << sends(doc, fx->name(), int(fx->channels())).toHex(' ');
+    LESSON_STEP(crossPans != fanPans, "the beams didn't move");
+    // Red on the spots: their colour wheel and ring each take the slot
+    // nearest; the beams mix it.
+    LESSON_STEP(waitUntil([doc, ringWhite, wheelWhite]() {
+                    return channelValue(doc, "SR Truss Spot 1", "Circle Color") != ringWhite
+                           && channelValue(doc, "SR Truss Spot 1", "Color wheel") != wheelWhite; }),
+                QStringLiteral("ring %1 wheel %2").arg(channelValue(doc, "SR Truss Spot 1", "Circle Color"))
+                    .arg(channelValue(doc, "SR Truss Spot 1", "Color wheel")));
+    qInfo() << "[2.5] ring white" << ringWhite << "red" << channelValue(doc, "SR Truss Spot 1", "Circle Color")
+            << "| wheel white" << wheelWhite << "red" << channelValue(doc, "SR Truss Spot 1", "Color wheel");
+    rig(QStringLiteral("rig-button"));
+    qInfo().noquote() << "[2.5] describe:" << describe(doc).join(" || ");
+    return true;
+}
+
 void CourseShow_Test::lessonTwoOneExtension()
 {
     // Lesson 2.1's extension: a base cue. The Pose gets the step tops at a
@@ -4249,6 +4394,32 @@ void CourseShow_Test::lessonTwoFourExtension()
     doc->resetModified();
 }
 
+void CourseShow_Test::lessonTwoFiveExtension()
+{
+    if (kLevelTwoLessons < 5)
+        QSKIP("not written yet");
+    // Lesson 2.5's extension: the fan's Spread 0 (every beam on the line's
+    // centre), then Grouping: Pairs.
+    QVERIFY(open(levelTwoFinish(5)));
+    Doc *doc = m_app->doc();
+    ShowTreeView *view = showTree();
+    QVERIFY(view->selectNode(cueNumbered(doc, "1.0.7")));
+    settle(50);
+    QVERIFY(clickCueRow(view, "Truss-Spots"));
+    const QPair<int, int> sr = panTilt(doc, "SR Truss Spot 1");
+    QVERIFY(rowMenu(view, KeySpread, "0"));
+    settle(300);
+    qInfo().noquote() << "[2.5x] Spread" << rowText(view, KeySpread) << "| SR" << panTilt(doc, "SR Truss Spot 1")
+                      << "SL" << panTilt(doc, "SL Truss Spot 1");
+    QVERIFY2(rowText(view, KeySpread).startsWith(QStringLiteral("0")), qPrintable(rowText(view, KeySpread)));
+    QTRY_VERIFY_WITH_TIMEOUT(panTilt(doc, "SR Truss Spot 1") != sr, kRigWait);
+    QVERIFY(rowMenu(view, KeyGrouping, "Pairs"));
+    settle(200);
+    qInfo().noquote() << "[2.5x] Grouping" << rowText(view, KeyGrouping);
+    QVERIFY2(rowText(view, KeyGrouping).startsWith(QStringLiteral("Pairs")), qPrintable(rowText(view, KeyGrouping)));
+    doc->resetModified();
+}
+
 void CourseShow_Test::levelTwoWithTheMouse()
 {
     struct L { int n; bool (*byMouse)(Doc *, ShowTreeView *, const QString &); };
@@ -4257,6 +4428,7 @@ void CourseShow_Test::levelTwoWithTheMouse()
         { 2, lessonTwoTwoByMouse },
         { 3, lessonTwoThreeByMouse },
         { 4, lessonTwoFourByMouse },
+        { 5, lessonTwoFiveByMouse },
     };
     // Lesson 2.1 starts where Level 1 finished.
     QVERIFY(open(kL4Finish));
@@ -4287,6 +4459,7 @@ void CourseShow_Test::buildLevelTwoShows()
         { 2, lessonTwoTwoByMouse },
         { 3, lessonTwoThreeByMouse },
         { 4, lessonTwoFourByMouse },
+        { 5, lessonTwoFiveByMouse },
     };
     const QString only = qEnvironmentVariable("COURSE_LESSON");
     for (const L &l : lessons)
@@ -4416,6 +4589,15 @@ void CourseShow_Test::levelTwoPictures()
         const QString d = root + QStringLiteral("/lesson-2-4");
         QVERIFY(open(levelTwoStart(4)));
         QVERIFY(lessonTwoFourByMouse(m_app->doc(), showTree(), d));
+        m_app->doc()->resetModified();
+    }
+
+    // --- 2.5
+    if (wanted(5))
+    {
+        const QString d = root + QStringLiteral("/lesson-2-5");
+        QVERIFY(open(levelTwoStart(5)));
+        QVERIFY(lessonTwoFiveByMouse(m_app->doc(), showTree(), d));
         m_app->doc()->resetModified();
     }
 }
