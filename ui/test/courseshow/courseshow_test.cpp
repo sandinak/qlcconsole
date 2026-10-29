@@ -3454,7 +3454,7 @@ static bool lessonTwoOneByMouse(Doc *doc, ShowTreeView *view, const QString &sho
     qInfo().noquote() << "[2.1] chorus counts" << cueCounts(view, "1.0.2") << "| rows" << view->cueLayerItems().join(" | ");
     qInfo().noquote() << "[2.1] chorus tracked in:" << view->m_cueTracked->text();
     qInfo().noquote() << "[2.1] chorus next receives:" << nextReceives(view);
-    for (const QString &n : { "1.0.0", "1.0.1", "1.0.2", "1.0.3", "1.0.4" })
+    for (const char *n : { "1.0.0", "1.0.1", "1.0.2", "1.0.3", "1.0.4" })
         qInfo().noquote() << "[2.1] counts" << n << cueCounts(view, n);
     LESSON_STEP(cueCounts(view, "1.0.2") == QStringLiteral("S1 T3 R0 M-"), cueCounts(view, "1.0.2"));
     LESSON_STEP(cueRow(view, "⤳ StepTops") != nullptr && cueRow(view, "⤳ AT-W-ALL") != nullptr
