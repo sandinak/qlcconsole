@@ -115,6 +115,23 @@ skipped). Upstream fixes taken:
 
 ### Fixed
 
+- **Heavy Art-Net input no longer starves the GUI and web access.**
+  Every input value on channels 128-255, from any plugin, rebuilt the
+  effect scripts' whole "midi" data (thousands of values per input
+  universe); 16 universes of changing Art-Net did that ~90,000 times a
+  second on the main thread, and a web client waited seconds for an
+  answer. It is now rebuilt once per tick, when effects read it.
+- **Opening the app no longer sends Art-Net polls onto the network by
+  itself.** A show saved with Connections in front polled every interface
+  (ArtPoll, broadcast) as the window opened, patched or not, and so did a
+  headless (offscreen) run. Arriving at Connections yourself still polls
+  once; **Rescan** always does; open Art-Net outputs poll as before.
+- **Re-addressing a fixture on universe 129 or above moved it 128
+  universes down** (the address kept only 7 bits of the universe; QLC+
+  has the same mask). Loading a show was not affected.
+- **A fixture past the 1024-universe maximum is refused**, with a message,
+  instead of being added with no universe under it (an RGB matrix on it
+  crashed the app). Patching or moving one there is refused too.
 - **A fixture put on the back face of a platform's frame group jumped to
   the front face** the first time it was dragged in a structure editor.
 - **A Virtual Console Flash button on a Show Tree hit played nothing**:
