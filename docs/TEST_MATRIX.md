@@ -716,8 +716,10 @@ ui/src stayed at 62.4%, the next place to look.
 
 - **trackback.cpp under-reports.** `TrackBack_Test` hits its 300 s watchdog
   under gcov (signal 6 at 372 s, in both runs): the instrumented Debug build
-  is several times slower and the test does real-time work, so that program
-  writes no counters. It passes in every normal gate.
+  is several times slower and courseShows is heavy (~60 s in a Debug build
+  on an M4), so that program writes no counters. It passes in every normal
+  gate. Since then coverage.sh and CI's coverage job raise Qt's watchdog to
+  25 min (`QTEST_FUNCTION_TIMEOUT=1500000`, coverage builds only).
 - **Network plugins read 67.5% here, 69.0% in the batch 1-2 run**
   (`c76caa077`). Nothing lost a test: `a703121f1` ("a missing line is
   refused at once") sets `m_ifaceWaitTime = 0` in the Art-Net, E1.31 and OSC

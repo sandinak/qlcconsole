@@ -165,6 +165,11 @@ jobs:
 
       - name: Test with Coverage
         if: ${{ startsWith( matrix.task, 'coverage') }}
+        # gcov is several times slower: Qt's 300 s per-function watchdog
+        # killed TrackBack_Test::courseShows (357 s). 25 min here only;
+        # normal builds keep 300 s. coverage.sh sets the same default.
+        env:
+          QTEST_FUNCTION_TIMEOUT: 1500000
         run: cmake --build build --target lcov
 
       - name: Coveralls

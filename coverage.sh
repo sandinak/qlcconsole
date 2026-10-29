@@ -68,6 +68,13 @@ lcov_ -d $DEST_DIR -c -i -o coverage/base.info || exit $?
 # Run unit tests
 #############################################################################
 
+# Qt's per-function watchdog is 300 s. A gcov build runs several times
+# slower (TrackBack_Test::courseShows: ~60 s in a Debug build on an M4,
+# 357 s under gcov on the CI runner, killed by the watchdog with signal 6).
+# Scaled for coverage builds only, so a real hang in a normal build still
+# fails at 300 s; set QTEST_FUNCTION_TIMEOUT (ms) yourself to override.
+export QTEST_FUNCTION_TIMEOUT=${QTEST_FUNCTION_TIMEOUT:-1500000}
+
 # One program at a time: every test writes the shared libraries' .gcda
 # counters on exit, and coverage is not where the gate's speed matters.
 QLC_TEST_JOBS=${QLC_TEST_JOBS:-1} ./unittest.sh $TARGET
