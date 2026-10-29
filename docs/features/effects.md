@@ -42,17 +42,24 @@ Open it from any of three places:
   remembers them.
 
 The designer works on a copy, so nothing in the show changes until you
-pick one of these:
+pick one of these. **While the effect plays** — in a cue on stage, a
+scene in Build — your changes show on the rig at once (speed, size,
+colours, any setting, another effect picked); **Cancel** puts it back as
+it was, **Update** keeps them.
 
 - **Keep on this layer** (on a layer): a one-off for that layer, named
   after the effect and the cue ("Color Chase · 0.0.3 Announcer
   AT-W-ALL"). It works like a value picked in the tree. Its row offers
-  **Make reusable** later. If the layer already had an effect of another
-  kind, this one replaces it. Designing the layer's own one-off again
+  **Make reusable** later. An effect of another kind goes **beside** the
+  layer's effects (a movement and an intensity effect play together); one
+  of the same kind replaces it. Opened from one effect's own row, the
+  designer changes that effect. Designing the layer's own one-off again
   changes that one-off; it doesn't make a second.
-- **Save as palette…**: names the effect and files it where the show keeps
-  its effect palettes, so you can use it anywhere. On a layer it also goes
-  on the layer.
+- **Save as palette…**: files the effect where the show keeps its effect
+  palettes, named after the effect (no name box first), so you can use it
+  anywhere; in Build ▸ Effects its name is open to type over at once. On a
+  layer it also goes on the layer. The Show Tree's Library lists it at
+  once.
 - **Update "name"**: shown when the designer started from a named
   palette. It writes the design into that palette, which changes it
   everywhere it plays.
@@ -449,6 +456,28 @@ A **chase that counts in beats** (its tempo set to Beats) on a master
 steps on that master's beats — tap the master and the chase follows; pause
 it and the chase holds on its step. A chase counting in time keeps its
 times; only the effects in its looks follow the master.
+
+## Stack a movement and an intensity effect
+
+Several effects play together on the same lights when each does a
+different thing: a **Ballyhoo** (or Circle) on pan and tilt, and a
+**Breathe** (or any dimmer effect) on the level. Why it works: a movement
+effect leaves the dimmer alone and a dimmer effect only scales the level,
+so neither covers the other.
+
+- **In the Show Tree**: on the layer, use the **Effect** row's **⋯ ▸ Set
+  to** (every effect palette is listed) or **Design a new effect…**. A
+  layer holds one effect of each kind — Colour, Dimmer, Position, Beam,
+  Other — each on its own row; another of the same kind replaces it.
+- **In Build**: a scene's Looks list takes as many effects as you like:
+  drop them in, or **+ Effect ▾ ▸ Effect look…** in the Workbench. Drag a
+  look's row to change the order (lower wins where two set the same
+  channel; ⌥ copies).
+- **An effect's own colour or dimmer** sits under it in the list and stays
+  with it.
+- **Moving a look to another layer**: drag its row onto the layer in the
+  Workbench (⌥ copies), one undo step. Within one layer of a cue the
+  looks play in their kind's order.
 
 ## How a look stacks
 

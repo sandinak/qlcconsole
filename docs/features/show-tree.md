@@ -1297,6 +1297,22 @@ reach the stage on GO"*, in blue — blind is blue everywhere.
   lit in Design (see
   [Power distribution](other-improvements.md#power-distribution)).
 
+## Stack effects on a layer
+
+A layer plays one effect of each kind together — say a **Position** effect
+(a ballyhoo) and a **Dimmer** effect (a breathe) on the same movers:
+the movement keeps its pan and tilt, the breathe scales the level. On the
+layer's **Effect** row, **⋯ ▸ Set to** adds any effect palette beside the
+others, and **Design a new effect…** designs one there; each kind gets
+its own row (*Position effect*, *Dimmer effect*…). Another of the same
+kind replaces that row's. See [Stack a movement and an intensity
+effect](effects.md#stack-a-movement-and-an-intensity-effect).
+
+In the docked Workbench, **drag a look's row onto another layer** to move
+it there (⌥ copies), one undo step; press and drag moves, ⇧/⌘-click
+selects several. **Renaming** (Return, F2) selects the cue's words, not
+its number: type to rename, click into the number to change that too.
+
 ## The command line
 
 The line at the **bottom** of the tab is for typing what you would say. It

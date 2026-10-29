@@ -4394,6 +4394,74 @@ QString paletteState(Doc *doc)
 }
 }
 
+/* "creating an effect in Build doesn't update the list in the Show Tree":
+   an EFX or RGB Matrix made, renamed or deleted elsewhere is in the
+   Library at once; so is a named effect palette. */
+void ShowTreeView_Test::anEffectMadeInBuildIsInTheLibraryAtOnce()
+{
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1200, 800);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QVERIFY(libraryItem(view.library(), "Sweep") == nullptr);
+
+    EFX *efx = new EFX(m_doc);
+    QVERIFY(m_doc->addFunction(efx));
+    efx->setName("Sweep");                  // as Build's + New ▾ does: added, then named
+    QTRY_VERIFY(libraryItem(view.library(), "Sweep") != nullptr);
+    efx->setName("Big Sweep");
+    QTRY_VERIFY(libraryItem(view.library(), "Big Sweep") != nullptr);
+    QVERIFY(m_doc->deleteFunction(efx->id()));
+    QTRY_VERIFY(libraryItem(view.library(), "Big Sweep") == nullptr);
+
+    QLCPalette *ripple = new QLCPalette(QLCPalette::Effect, m_doc);
+    ripple->setName("Ripple");
+    m_doc->addPalette(ripple);
+    QTRY_VERIFY(libraryItem(view.library(), "Ripple") != nullptr);
+}
+
+/* "when editing the name in the Show Tree with Enter, it should
+   default-select the WORDS, not the CUE# and WORDS". */
+void ShowTreeView_Test::renameSelectsTheWords()
+{
+    QCOMPARE(ShowTreeView::wordsStart("1.2.0 Chorus"), 6);
+    QCOMPARE(ShowTreeView::wordsStart("01-02.03-Chorus"), 9);
+    QCOMPARE(ShowTreeView::wordsStart("Chorus"), 0);
+    QCOMPARE(ShowTreeView::wordsStart("2.5"), 0);
+
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "Songs");
+    const quint32 c1 = st->addCueNumbered(list, "1.2.0", "Chorus");
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1200, 800);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    view.activateWindow();
+    QVERIFY(QTest::qWaitForWindowActive(&view));
+    QVERIFY(view.selectNode(c1));
+    view.tree()->setFocus();
+    QTest::keyClick(view.tree(), Qt::Key_Return);
+    QLineEdit *ed = nullptr;
+    QTRY_VERIFY((ed = view.tree()->viewport()->findChild<QLineEdit *>()) != nullptr);
+    QCOMPARE(ed->text(), QString("1.2.0 Chorus"));
+    QTRY_COMPARE(ed->selectedText(), QString("Chorus"));
+    QTest::keyClick(ed, Qt::Key_Escape);
+
+    // No number: all of it (a list).
+    QVERIFY(view.selectNode(list));
+    view.tree()->setFocus();
+    QTest::keyClick(view.tree(), Qt::Key_Return);
+    auto songsEditor = [&view]() -> QLineEdit * {
+        for (QLineEdit *e : view.tree()->viewport()->findChildren<QLineEdit *>())
+            if (e->text() == QString("Songs"))
+                return e;
+        return nullptr;
+    };
+    QTRY_VERIFY((ed = songsEditor()) != nullptr);
+    QTRY_COMPARE(ed->selectedText(), QString("Songs"));
+    QTest::keyClick(ed, Qt::Key_Escape);
+}
+
 void ShowTreeView_Test::palettesInTheLibrary()
 {
     FixtureGroup *towers = group("Towers", 0, 2);

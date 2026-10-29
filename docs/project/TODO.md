@@ -16,6 +16,10 @@ Built (DONE.md 2026-10-29). Open, each "decided (can change)" in the note:
 - The Blind view draws levels, not effects' motion.
 - An offscreen test of the docked Workbench taking the stage back on a
   pick (`Workbench::playPicked`); the tree's own path is tested.
+- Reordering looks *within* one Show Tree layer (they play in kind order;
+  a layer holds one effect per kind, so order changes nothing on stage
+  today). Would need an order on Layer, saved, resolved and undone.
+- EFX: fixtures added while it runs keep stale offsets until restarted.
 
 ## Focus calls and refining a cue from the stage (design, 2026-10-23)
 

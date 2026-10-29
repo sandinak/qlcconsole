@@ -272,7 +272,8 @@ void Workbench_Test::aCollectionsMembersAreLayers()
         QVERIFY(effect != nullptr && effect->isEnabled());
         QCOMPARE(effect->text(), QString("+ Effect"));
         QVERIFY(effect->menu() != nullptr);
-        QCOMPARE(effect->menu()->actions(), QList<QAction *>({ wb.m_addEfxBtn, wb.m_addMatrixBtn }));
+        QCOMPARE(effect->menu()->actions().mid(0, 2), QList<QAction *>({ wb.m_addEfxBtn, wb.m_addMatrixBtn }));
+        QCOMPARE(effect->menu()->actions().last()->objectName(), QString("workbenchDesignEffect"));
         QCOMPARE(wb.m_addEfxBtn->text(), QString("EFX"));
         QCOMPARE(wb.m_addMatrixBtn->text(), QString("RGB Matrix"));
         for (QAbstractButton *b : wb.findChildren<QAbstractButton *>())
@@ -461,6 +462,10 @@ void Workbench_Test::newEffectsAreMadeOnTheSelectedLayer()
     ProgrammingOutline *rows = wb.rows();
     selectItem(rows, rows->layerItem(0));
     QVERIFY(wb.m_addEfxBtn->toolTip().contains("selected layer"));
+    // + Effect ▾ offers an effect look too, beside the effects there.
+    QAction *design = wb.findChild<QAction *>("workbenchDesignEffect");
+    QVERIFY(design != nullptr && design->isEnabled());
+    QVERIFY(design->toolTip().contains("beside"));
 
     // + EFX: on the layer's fixtures, after it, selected, its editor open.
     wb.addNew(Function::EFXType);

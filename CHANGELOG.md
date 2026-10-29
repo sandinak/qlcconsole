@@ -57,6 +57,14 @@ skipped). Upstream fixes taken:
 
 ### Added
 
+- **Stack a movement and an intensity effect**, as the help now shows: a
+  layer's Effect row (⋯ ▸ Set to, **Design a new effect…**) and the
+  Workbench's **+ Effect ▾ ▸ Effect look…** add an effect beside the
+  ones there; the designer's Keep on this layer no longer replaces an
+  effect of another kind.
+- **Drag a cue layer's look row onto another layer** in the docked
+  Workbench to move it (⌥ copies), one undo step; press and drag moved
+  nothing before, it selected rows.
 - **Own speed has a setting.** In the look editor, an effect on **Own
   speed** shows **Own speed ×1.00** beside the Speed list: ×2 twice as
   fast, ×0.5 half. Every effect has it, also those with no speed of their
@@ -180,6 +188,14 @@ skipped). Upstream fixes taken:
 
 ### Changed
 
+- **Effects take edits while they play.** Changing an effect in the
+  designer while a cue or scene plays it changes the rig at once (no
+  restart); Cancel puts it back, Update keeps it. A running RGB Matrix
+  turns round when its direction is changed.
+- **Save as palette asks no name first**: the effect's own name, typed
+  over in place in Build ▸ Effects.
+- **Renaming in the Show Tree selects the words**, not the cue number
+  ("Chorus" in "1.2.0 Chorus").
 - **Design: the latest action wins.** Selecting a cue in the Show Tree
   (or clicking the one selected) shows it on the stage, also after GO;
   GO shows the run; a cue clicked in the Run tab in Design shows that cue
@@ -234,6 +250,8 @@ skipped). Upstream fixes taken:
 
 ### Fixed
 
+- **An EFX or RGB Matrix made in Build is in the Show Tree's Library at
+  once** (also renamed or deleted), not on the next visit.
 - **A cue time typed and not yet left is what GO plays.** A fade or hold
   typed (or stepped) in the Show Tree's cue page or the Workbench's step
   header, with the field still open, only applied after moving away and

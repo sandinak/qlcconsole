@@ -51,9 +51,11 @@ private slots:
     void aLayersOneOffIsEditedInPlace();
     /** Starting from a named palette designs a copy: the palette changes
      *  only with Update, and then everywhere. */
+    void saveAsPaletteAsksNoName();
+    void anEffectPlayingTakesEditsLive();
     void aNamedEffectIsACopyUntilUpdated();
     /** An effect of another kind replaces the layer's old one. */
-    void anotherKindReplacesTheLayersEffect();
+    void anotherKindGoesBesideTheLayersEffect();
     /** The effect's own colour goes into the look, after the effect. */
     void theEffectsOwnColourIsKept();
     /** The Show Tree opens it: Design effect… in a layer's right-click

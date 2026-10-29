@@ -6,6 +6,29 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
+### 2026-10-29 — Effects stack, drag, take live edits; Library follows Build; rename selects the words *(fix/031-effects-stack, lb items 6-9)*
+
+- **Stacking (6):** the engine already played a movement and a dimmer
+  effect together (lookstack tests now prove it for a scene and a tree
+  layer); what broke it was the designer's layer apply removing an effect
+  of another kind. Now: from the layer / its Effect row a new kind goes
+  beside, the same kind replaces; from one effect's row that effect is
+  edited. "Design a new effect…" on the Effect row; Workbench + Effect ▾
+  ▸ Effect look…; how-tos in effects.md and show-tree.md.
+- **Drag (6f):** a cue layer's attribute rows in the outline are
+  drag-enabled (press-drag rubber-banded before); dropped on another
+  layer they move (⌥ copy) in one tree undo step
+  (`TreeCueStack::dropAttributes`, `WorkbenchStack::attributeMimeType`).
+  Within one tree layer looks stay in kind order (no model for it).
+- **Library (7):** functionAdded/Removed/NameChanged kick the Show Tree
+  Library; Save as palette has no name box (named after the effect,
+  renamed in place in Build ▸ Effects).
+- **Live edits (8):** the designer mirrors its draft onto the original
+  while any other scene plays it (`mirrorToOriginal`), restored on
+  Cancel/release, kept on Update; RGB Matrix takes a direction edited
+  while running (flag set on change, read in write()).
+- **Rename (9):** `ShowTreeView::wordsStart`; the editor selects the words.
+
 ### 2026-10-29 — Live and blind; own speed; effect picks and cue times apply at once *(fix/031-live-blind, lb)*
 
 - **Notes 1-3 (bugs):** Own speed ×rate in the look editor

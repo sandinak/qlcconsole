@@ -514,6 +514,15 @@ void Workbench::buildAddBar(QWidget *column)
     m_addMatrixBtn = effectMenu->addAction(QIcon(QStringLiteral(":/rgbmatrix.png")), tr("RGB Matrix"));
     m_addMatrixBtn->setObjectName(QStringLiteral("workbenchAddMatrix"));
     connect(m_addMatrixBtn, &QAction::triggered, this, [this]() { addNew(Function::RGBMatrixType); });
+    // An effect look (a sparkle, a wave, a ballyhoo...): the designer, made
+    // a layer here -- beside the effects there, a movement and an
+    // intensity effect together.
+    effectMenu->addSeparator();
+    QAction *designLook = effectMenu->addAction(tr("Effect look…"));
+    designLook->setObjectName(QStringLiteral("workbenchDesignEffect"));
+    designLook->setToolTip(tr("Design an effect look and make it a layer here, beside the effects "
+                              "already there (a movement and an intensity effect together)"));
+    connect(designLook, &QAction::triggered, this, [this]() { designEffect(EffectRequest()); });
     m_addEffectBtn->setMenu(effectMenu);
     hl->addWidget(m_addEffectBtn);
     hl->addStretch(1);
