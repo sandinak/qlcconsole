@@ -205,6 +205,10 @@ private slots:
     /** Q125: target positions are shown unless turned off, saved only when
      *  off, and back after a load. */
     void targetPositionsAreSavedOnlyWhenOff();
+    /** A QLC+ 4 show's <Background>, relative to the show, becomes a
+     *  floor picture saved relative to it again, so the plot keeps its
+     *  picture when the show's folder moves (TEST_MATRIX C4). */
+    void anOldBackgroundStaysRelativeToTheShow();
 };
 
 #endif

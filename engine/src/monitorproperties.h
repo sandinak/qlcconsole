@@ -1300,7 +1300,9 @@ public:
 
     /** Every picture file the plot uses, as it names them (absolute once
      *  loaded): truss socks, tower faces, plot images, the old background
-     *  pictures. Collect for Transfer copies them. */
+     *  pictures, and the gobo swaps' own pictures (not the app's gobo
+     *  library, which every computer has). Collect for Transfer copies
+     *  them. */
     QStringList picturePaths() const;
 
     /** @p showFile: writing the show file itself (Doc::saveXML), which

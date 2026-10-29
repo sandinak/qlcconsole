@@ -114,6 +114,18 @@ void StockRoundTrip_Test::aQxwSavedHereOpensInStockQlcPlus4()
     Doc *doc = m_app->doc();
     QLCFixtureDefCache *defs = doc->fixtureDefCache();
 
+    /* A fixture in the Inventory, not patched, first: QLC+ 4 has no such
+       thing, and read it as patched at universe 1 address 1 -- where it
+       then refused the dimmers below, deleting them (TEST_MATRIX C2). A
+       .qxw keeps it where QLC+ 4 doesn't look. */
+    Fixture *spare = new Fixture(doc);
+    spare->setName("Spare Par");
+    spare->setChannels(3);
+    spare->setPatched(false);
+    QVERIFY(doc->addFixture(spare));
+    QVERIFY(!spare->isPatched());
+    const quint32 spareId = spare->id();
+
     /* The rig: dimmers with no definition, and definitions stock QLC+ 4.14.4
        ships the same -- RGB pars, a multi-head bar and a mover. */
     Fixture *dimmers = new Fixture(doc);
@@ -236,14 +248,26 @@ void StockRoundTrip_Test::aQxwSavedHereOpensInStockQlcPlus4()
     QVERIFY(dir.isValid());
     const QString qxw = dir.filePath("roundtrip.qxw");
     QCOMPARE(m_app->saveXML(qxw), QFile::NoError);
-    const QStringList want = StockRoundTrip::fingerprint(doc);
+    QStringList want = StockRoundTrip::fingerprint(doc);
     QVERIFY(want.count() > 20);
+    // Not one QLC+ 4 can have: the rest whole, without it
+    const QString spareLine = QStringLiteral("fixture %1 ").arg(spareId);
+    QCOMPARE(want.removeIf([&](const QString &l) { return l.startsWith(spareLine); }), qsizetype(1));
 
     QString why;
     QVERIFY2(stockReads(qxw, dir.filePath("stock.txt"), &why), qPrintable(why));
     const QStringList got = readLines(dir.filePath("stock.txt"));
     QVERIFY2(got == want, qPrintable(QStringLiteral("stock QLC+ 4.14.4 read it differently:\n")
                                      + diff(want, got)));
+
+    // ... and it comes back here, still in the Inventory
+    m_app->clearDocument();
+    QCOMPARE(m_app->loadXML(qxw), QFile::NoError);
+    Fixture *back = m_app->doc()->fixture(spareId);
+    QVERIFY(back != nullptr);
+    QCOMPARE(back->name(), QStringLiteral("Spare Par"));
+    QVERIFY(!back->isPatched());
+    QVERIFY(StockQlcCheck::lossesInFile(qxw).join(QLatin1Char('|')).contains(QStringLiteral("Inventory")));
     m_app->clearDocument();
 }
 

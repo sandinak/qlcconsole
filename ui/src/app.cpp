@@ -5443,8 +5443,9 @@ QFile::FileError App::saveXML(const QString& fileName, bool autosave)
         m_doc->showEmbedding()->saveXML(&doc);
     }
 
-    /* Write engine components to the XML document */
-    m_doc->saveXML(&doc);
+    /* Write engine components to the XML document; a .qxw as QLC+ 4 can
+       read it (the Inventory's fixtures apart) */
+    m_doc->saveXML(&doc, !ShowEmbedding::embedsIn(fileName));
 
     /* Write virtual console to the XML document */
     VirtualConsole::instance()->saveXML(&doc);

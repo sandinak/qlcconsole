@@ -84,6 +84,13 @@ QString GoboLibrary::resolve(const QString &image)
     return QString();
 }
 
+bool GoboLibrary::isBundled(const QString &file)
+{
+    const QString lib = QFileInfo(QLCFile::systemDirectory(GOBODIR).absolutePath()).canonicalFilePath();
+    const QString at = QFileInfo(file).canonicalFilePath();
+    return !lib.isEmpty() && !at.isEmpty() && at.startsWith(lib + QLatin1Char('/'));
+}
+
 QString GoboLibrary::import(const QString &path)
 {
     const QFileInfo src(path);

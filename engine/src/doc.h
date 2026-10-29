@@ -66,6 +66,7 @@ class ShowEmbedding;
  */
 
 #define KXMLQLCEngine QStringLiteral("Engine")
+#define KXMLQLCStagedFixtures QStringLiteral("StagedFixtures")
 #define KXMLQLCStartupFunction QStringLiteral("Autostart")
 
 class QLC_ENGINE_EXPORT Doc final : public QObject
@@ -128,6 +129,9 @@ public:
      *  beside it, not the originals. keepWithShow() leaves them where they
      *  are. Cleared with an empty map. */
     void setComponentPathOverrides(const QMap<QString, QString> &overrides);
+
+    /** True when setComponentPathOverrides() names @p absolutePath */
+    bool hasComponentPathOverride(const QString &absolutePath) const;
 
     /** If filePath is relative path, it is resolved relative to the workspace
      *  directory (absolute path is returned).
@@ -1266,10 +1270,14 @@ public:
      * Save contents to the given XML file.
      *
      * @param doc The XML document to save to
-     * @param wksp_root The workspace root node to save under
+     * @param forStockQlc A .qxw, for QLC+ 4 too: the Inventory's (staged)
+     *        fixtures go in a <StagedFixtures> element of their own, which
+     *        QLC+ 4 reads past. As plain <Fixture>s it took each one as
+     *        patched at universe 1 address 1, kept the first and deleted
+     *        the rest -- and any patched fixture they overlapped there.
      * @return true if successful, otherwise false
      */
-    bool saveXML(QXmlStreamWriter *doc);
+    bool saveXML(QXmlStreamWriter *doc, bool forStockQlc = false);
 
     /**
      * What to say about a show file whose XML is cut short or not well

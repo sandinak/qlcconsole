@@ -236,7 +236,12 @@ Tree (cue lists, cues and hits), the speed masters, the power plan, the
 network map, the timecode source, parked and marked channels, focus
 calls, the Lighting Studio's rigging (trusses, towers, scenery), Cue
 Runner and Show Control widgets, and a venue's house fixtures (those are
-in the venue file beside the show, which QLC+ doesn't read).
+in the venue file beside the show, which QLC+ doesn't read). The
+Inventory's fixtures (staged, not patched) go in a part of the file of
+their own: QLC+ 4 has no unpatched fixtures, and used to take every one
+as patched at universe 1, address 1, keeping the first and deleting the
+rest — and any real fixture patched there. It now leaves them out, and
+qlcconsole reads them back.
 
 When a .qxw you save holds any of these, the line above the tabs says
 which, once for that file, after the save is done — it never stops the
