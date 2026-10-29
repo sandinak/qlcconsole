@@ -392,6 +392,7 @@ def run_micro(a, outdir):
         os.remove(report)
     env = child_env(a.build_dir)
     env.update(QLC_PERF_REPORT=report, QLC_PERF_REPS=str(a.micro_reps))
+    os.makedirs(outdir, exist_ok=True)   # a rerun of the hot paths alone runs no point to make it
     with open(os.path.join(outdir, "hotpath.log"), "w") as f:
         rc = subprocess.run([exe, "cpuPerOperation"], cwd=tdir, env=env, stdout=f,
                             stderr=subprocess.STDOUT).returncode

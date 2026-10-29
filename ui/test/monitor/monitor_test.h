@@ -941,6 +941,14 @@ private slots:
     void theBackViewDoesNotMirrorText();
     /** a1: every structure editor lists Back beside Front, with Ctrl+3 */
     void theEditorsOfferBackBesideFront();
+    /** (idle) Live on and nothing changing: the rig is not redrawn, tick
+     *  after tick; a DMX change is one frame; a running chase is a frame a
+     *  tick; an edit to the rig is a frame. */
+    void anIdleLiveRigIsNotRedrawn();
+    /** (idle) A turning gobo keeps the rig redrawing; stopped, it doesn't. */
+    void aTurningGoboKeepsTheRigRedrawing();
+    /** (idle) Hidden or minimised: no frames, whatever changes. */
+    void aRigOffScreenIsNotRedrawn();
 
 private:
     Doc* m_doc;

@@ -23,6 +23,7 @@
 #include <QSet>
 #include <QtMath>
 #include <QTimer>
+#include <QWindow>
 #include <QElapsedTimer>
 #include <functional>
 #include <QSettings>
@@ -129,6 +130,28 @@ StructureStudioView::StructureStudioView(Doc *doc, Kind kind, quint32 id, QWidge
             update();
         });
     });
+    /* With Live on, the timer repaints only when something moved (liveTick()).
+       Channel values it compares for itself; edits to the rig -- a fixture
+       dragged on the 2D plot, a truss moved in the Studio, a target placed, a
+       head changed in Focus mode -- arrive here and are drawn on the next
+       tick, coalesced, however many of them a drag sends. */
+    auto rigEdited = [this]() { m_liveDirty = true; };
+    connect(m_doc, &Doc::modified, this, rigEdited);
+    connect(m_doc, &Doc::modeChanged, this, rigEdited);
+    if (MonitorProperties *props = m_doc->monitorProperties())
+    {
+        connect(props, &MonitorProperties::rigPropsChanged, this, rigEdited);
+        connect(props, &MonitorProperties::stageTargetsChanged, this, rigEdited);
+    }
+    if (FocusSession *fs = (m_doc->programmer() != nullptr) ? m_doc->programmer()->focusSession() : nullptr)
+    {
+        connect(fs, &FocusSession::started, this, rigEdited);
+        connect(fs, &FocusSession::stopped, this, rigEdited);
+        connect(fs, &FocusSession::currentChanged, this, rigEdited);
+        connect(fs, &FocusSession::offsetChanged, this, rigEdited);
+        connect(fs, &FocusSession::referenceChanged, this, rigEdited);
+    }
+
     // Top plane reads best for a tower/platform footprint; a boom/truss reads
     // best in a vertical elevation. Default Front for the rest.
     m_plane = (kind == TowerKind) ? Top : Front;
@@ -394,18 +417,21 @@ void StructureStudioView::setLiveValues(bool on)
        paints the whole rig in one go, so a per-signal repaint would redraw
        every structure and fixture once per changed fixture per DMX frame --
        hundreds of full repaints a second for a running chase. 25 Hz is past
-       what anyone can see and costs one repaint per tick regardless of how
-       busy the show is. */
+       what anyone can see and costs at most one repaint per tick however
+       busy the show is.
+
+       And NO repaint when nothing moved: every tick used to repaint whether
+       or not a value had changed, so a show left open and idle drew the whole
+       rig 25 times a second for as long as the window was up -- 3.8 cores
+       for 19 hours on a real show. liveTick() decides. */
     if (on)
     {
         if (m_liveTimer == nullptr)
         {
             m_liveTimer = new QTimer(this);
-            connect(m_liveTimer, &QTimer::timeout, this, [this]() {
-                if (isVisible())        // hidden window: nothing to draw
-                    update();
-            });
+            connect(m_liveTimer, &QTimer::timeout, this, [this]() { liveTick(); });
         }
+        m_liveDirty = true;
         m_liveTimer->start(1000 / m_maxFps);
     }
     // (the interval re-tunes itself from the measured frame cost -- paintEvent)
@@ -9530,8 +9556,72 @@ void StructureStudioView::rebuildOverlapWarnings() const
     }
 }
 
+bool StructureStudioView::onScreen() const
+{
+    if (!isVisible())
+        return false;
+    const QWidget *top = window();
+    if (top == nullptr || top->isMinimized())
+        return false;
+    /* Behind another window, on another Space, under a full-screen app: the
+       platform says it is not exposed, and a frame drawn now is never seen. */
+    const QWindow *handle = top->windowHandle();
+    if (handle == nullptr || !handle->isExposed())
+        return false;
+    return !visibleRegion().isEmpty();
+}
+
+bool StructureStudioView::liveInputsChanged() const
+{
+    if (m_liveDirty || m_settleFrame || m_opticsAnimating)
+        return true;
+    if (activeSceneRunning() != m_paintedSceneRunning)
+        return true;
+    if (m_doc == nullptr)
+        return false;
+    /* Against the frame's own snapshot (takeLiveSnapshot()): a mutex and a
+       compare of a few bytes per fixture, where a frame is a whole render. */
+    const QList<Fixture *> fixtures = m_doc->fixtures();
+    if (fixtures.size() != m_liveSnapshot.size())
+        return true;
+    for (Fixture *fx : fixtures)
+    {
+        if (fx == nullptr)
+            continue;
+        const auto it = m_liveSnapshot.constFind(fx->id());
+        if (it == m_liveSnapshot.constEnd() || it.value() != fx->channelValues())
+            return true;
+    }
+    return false;
+}
+
+bool StructureStudioView::liveTick()
+{
+    if (!m_liveValues || !onScreen())
+        return false;            // not on screen: nothing anyone would see
+    if (!liveInputsChanged())
+        return false;            // the same picture as the last frame
+    /* The overlap warnings and the floor points are kept half a second
+       (rebuildOverlapWarnings(), floorPoints()): an edit drawn within that
+       gets one more frame once they have caught up -- one, not a stream. */
+    if (m_liveDirty && !m_settlePending)
+    {
+        m_settlePending = true;
+        QTimer::singleShot(600, this, [this]() {
+            m_settlePending = false;
+            m_settleFrame = true;
+        });
+    }
+    update();
+    return true;
+}
+
 void StructureStudioView::paintEvent(QPaintEvent *)
 {
+    ++m_paintCount;
+    m_liveDirty = false;                 // this frame shows the rig as it is now
+    m_settleFrame = false;
+    m_paintedSceneRunning = activeSceneRunning();
     // The decks every beam ray is thrown against, worked out once this frame.
     m_decksValid = false;
     m_decks = decks();
@@ -9651,19 +9741,30 @@ void StructureStudioView::paintEvent(QPaintEvent *)
             m_liveTimer->setInterval(want);
     }
 
-    /* A turning gobo or prism has to be seen turning. The live timer already
-       repaints when it runs; otherwise ask for the next frame here, no faster
-       than frames are being drawn. */
-    const bool liveTicking = m_liveValues && m_liveTimer != nullptr && m_liveTimer->isActive();
-    if (m_opticsAnimating && !liveTicking && !m_opticsTickPending)
-    {
-        m_opticsTickPending = true;
-        const int ms = int(qBound(40.0, m_frameMs * 1.25, 250.0));
-        QTimer::singleShot(ms, this, [this]() {
-            m_opticsTickPending = false;
+    /* A turning gobo or prism has to be seen turning. With Live on the live
+       tick asks for its next frame (m_opticsAnimating, liveTick()); a second
+       request from here drew a frame of its own on top. Otherwise ask for
+       the next frame here, no faster than frames are being drawn. */
+    const bool liveTicking = m_liveValues && m_liveTimer != nullptr;
+    if (m_opticsAnimating && !liveTicking)
+        opticsTickLater(int(qBound(40.0, m_frameMs * 1.25, 250.0)));
+}
+
+void StructureStudioView::opticsTickLater(int ms)
+{
+    if (m_opticsTickPending)
+        return;
+    m_opticsTickPending = true;
+    QTimer::singleShot(ms, this, [this]() {
+        m_opticsTickPending = false;
+        if (onScreen())
             update();
-        });
-    }
+        /* Covered or minimised: no frame, but look again a little later --
+           coming back on screen can show the frame the window already has
+           rather than paint a new one. A hidden view paints when shown. */
+        else if (isVisible())
+            opticsTickLater(250);
+    });
 }
 
 /*********************************************************************

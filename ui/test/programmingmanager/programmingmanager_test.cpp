@@ -1920,6 +1920,55 @@ void ProgrammingManager_Test::thePowerChipSaysWhatItsFigureIsMadeOf()
     QVERIFY(spy.last().at(3).toString().startsWith("Estimated load: "));
 }
 
+void ProgrammingManager_Test::anIdleShowIsNotReEstimated()
+{
+    m_doc->setMode(Doc::Design);
+    Fixture *fx = new Fixture(m_doc);
+    fx->setName("Power Par");
+    fx->setChannels(1);
+    fx->setAddress(400);
+    QVERIFY(m_doc->addFixture(fx));
+    ProgrammingManager pm(nullptr, m_doc);
+    pm.m_powerTimer->stop();             // ticked by hand: counts, not time
+    pm.recomputePower();
+    const int runs = pm.m_powerRuns;
+    QVERIFY(runs > 0);
+
+    // Nothing changes: no estimate, tick after tick.
+    for (int i = 0; i < 50; ++i)
+        pm.powerTick();
+    QCOMPARE(pm.m_powerRuns, runs);
+
+    // A level moves: one estimate, then quiet again.
+    QList<Universe *> us = m_doc->inputOutputMap()->claimUniverses();
+    us.at(0)->write(400, 200, true);
+    m_doc->inputOutputMap()->releaseUniverses(true);
+    pm.powerTick();
+    QCOMPARE(pm.m_powerRuns, runs + 1);
+    for (int i = 0; i < 10; ++i)
+        pm.powerTick();
+    QCOMPARE(pm.m_powerRuns, runs + 1);
+
+    // An edit to the show (a circuit, a definition): one estimate.
+    m_doc->setModified();
+    pm.powerTick();
+    QCOMPARE(pm.m_powerRuns, runs + 2);
+    pm.powerTick();
+    QCOMPARE(pm.m_powerRuns, runs + 2);
+
+    // Operate: none at all.
+    m_doc->setMode(Doc::Operate);
+    m_doc->setModified();
+    pm.powerTick();
+    QCOMPARE(pm.m_powerRuns, runs + 2);
+    m_doc->setMode(Doc::Design);
+
+    us = m_doc->inputOutputMap()->claimUniverses();
+    us.at(0)->write(400, 0, true);
+    m_doc->inputOutputMap()->releaseUniverses(true);
+    m_doc->deleteFixture(fx->id());
+}
+
 QTEST_MAIN(ProgrammingManager_Test)
 
 /* A drop on the outline at @a onto's row (null: empty space below the rows),
