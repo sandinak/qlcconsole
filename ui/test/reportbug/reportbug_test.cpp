@@ -44,9 +44,9 @@
 
 namespace
 {
-    QString showPath(const QTemporaryDir &home)
+    QString showPath()
     {
-        return home.path() + QStringLiteral("/Shows/Smith Wedding 2026.qxw");
+        return QDir::homePath() + QStringLiteral("/Shows/Smith Wedding 2026.qxw");
     }
 
     template <class T> T *child(QWidget *w, const char *name)
@@ -60,11 +60,10 @@ namespace
 
 void ReportBug_Test::initTestCase()
 {
-    QVERIFY(m_home.isValid());
-    // A home of the test's own, so "~" is checked against a known path.
-    qputenv("HOME", m_home.path().toLocal8Bit());
+    // The home folder is whatever QDir::homePath() says (on Unix the test
+    // runner's own HOME; on Windows the profile, which HOME doesn't move).
     qputenv("USER", "showowner");
-    QCOMPARE(QDir::homePath(), QDir(m_home.path()).absolutePath());
+    QVERIFY(QDir::homePath().size() > 1);
     // Never a real browser: every URL is only recorded.
     BugReportDialog::setUrlOpener([this](const QUrl &url) {
         m_opened << url;
@@ -130,7 +129,7 @@ void ReportBug_Test::theUrlCarriesTheFormAndEncodedFields()
 void ReportBug_Test::scrubbingTakesOutWhatIsPrivate()
 {
     const QString home = QDir::homePath();
-    const QString show = showPath(m_home);
+    const QString show = showPath();
     const QStringList secrets = { show, QStringLiteral("Smith Wedding 2026.qxw"),
                                   QStringLiteral("Smith Wedding 2026"),
                                   QStringLiteral("Stage Left Spot"), QStringLiteral("Ed"),
@@ -165,7 +164,7 @@ void ReportBug_Test::scrubbingTakesOutWhatIsPrivate()
 
 void ReportBug_Test::untickedPartsAreAbsent()
 {
-    const QString show = showPath(m_home);
+    const QString show = showPath();
     BugReportContext ctx;
     ctx.doc = m_doc;
     ctx.viewName = QStringLiteral("Everything");
@@ -203,7 +202,7 @@ void ReportBug_Test::untickedPartsAreAbsent()
     QVERIFY(details.contains(QStringLiteral("LAYOUT")));
     QVERIFY(details.contains(QStringLiteral("LOG Art-Net node [ip] answered")));
     for (const QString &gone : { QStringLiteral("Smith"), QStringLiteral("Stage Left"),
-                                 QStringLiteral("10.0.0.42"), QStringLiteral("hunter2"), m_home.path() })
+                                 QStringLiteral("10.0.0.42"), QStringLiteral("hunter2"), QDir::homePath() })
         QVERIFY2(!details.contains(gone), qPrintable(gone + QStringLiteral(" in:\n") + details));
 
     // Unticked again, gone again; the version leaves the details and the
