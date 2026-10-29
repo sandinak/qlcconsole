@@ -19,6 +19,8 @@
 
 #include <QDialogButtonBox>
 #include <QTreeWidget>
+#include <QPixmap>
+#include <QIcon>
 #include <QColor>
 #include <QFont>
 #include <QTreeWidgetItemIterator>
@@ -106,7 +108,8 @@ PatchListDialog::PatchListDialog(Doc *doc, QWidget *parent)
     root->addWidget(m_summary);
 
     const QStringList cols = { tr("Patch"), tr("Fixture"), tr("Make / model"), tr("Mode"),
-                               tr("Connection"), tr("Goes to"), tr("Mounted on"), tr("Owner") };
+                               tr("Connection"), tr("Goes to"), tr("Mounted on"), tr("Owner"),
+                               tr("Gel") };
     m_tree = new QTreeWidget(this);
     m_tree->setObjectName(QStringLiteral("patchListTree"));
     m_tree->setColumnCount(cols.size());
@@ -119,6 +122,8 @@ PatchListDialog::PatchListDialog(Doc *doc, QWidget *parent)
     m_tree->setContextMenuPolicy(Qt::CustomContextMenu);
     // The owner only when somebody else's fixtures are in the show.
     m_tree->setColumnHidden(OwnerColumn, !m_list.hasOwners());
+    // The gel only when some fixture has one (set on the plot).
+    m_tree->setColumnHidden(GelColumn, !m_list.hasGels());
     root->addWidget(m_tree, 1);
 
     QDialogButtonBox *btns = new QDialogButtonBox(QDialogButtonBox::Close, this);
@@ -262,7 +267,7 @@ void PatchListDialog::slotRefill()
                 : tr("DMX");
             const QStringList cells = { r.patchText(), r.name, r.makeModel(), r.modeText(),
                                         conn, r.output, r.mountedOn,
-                                        RigOwner::displayName(r.ownerKind) };
+                                        RigOwner::displayName(r.ownerKind), r.gelText() };
             QTreeWidgetItem *item = parent != nullptr ? new QTreeWidgetItem(parent)
                                                       : new QTreeWidgetItem(m_tree);
             for (int c = 0; c < cells.size(); ++c)
@@ -276,6 +281,12 @@ void PatchListDialog::slotRefill()
             }
             if (!r.output.isEmpty())
                 item->setToolTip(GoesToColumn, r.output);
+            if (r.gel.isValid())
+            {
+                QPixmap swatch(12, 12);
+                swatch.fill(r.gel);
+                item->setIcon(GelColumn, QIcon(swatch));
+            }
             if (!r.patched && !r.clash)
                 markUnpatched(item);
             m_shown << r;

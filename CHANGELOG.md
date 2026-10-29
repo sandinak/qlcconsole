@@ -181,6 +181,10 @@ skipped). Upstream fixes taken:
   as it follows MIDI timecode. Patch an Art-Net input and it is offered
   as a timecode source, in the footer's MTC chip and in Connections ▸
   Show control & sync. All four rates are read (24, 25, 29.97 DF, 30).
+- **The patch list shows each fixture's gel**: a Gel column (a swatch and
+  its value) in Fixtures ▸ Patch List, its CSV, XLSX and PDF, from the
+  Colour set in Fixture Properties. It shows only when some fixture has a
+  gel, so the crew knows what to cut for each fixed light.
 
 ### Changed
 

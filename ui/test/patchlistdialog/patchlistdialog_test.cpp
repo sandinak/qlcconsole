@@ -222,6 +222,22 @@ void PatchListDialog_Test::theColumnsHaveNoChannelCount()
     QVERIFY(!owners.tree()->isColumnHidden(PatchListDialog::OwnerColumn));
     QCOMPARE(owners.itemFor(m_doc->fixtures().first()->name())->text(PatchListDialog::OwnerColumn),
              QString("House"));
+
+    // No gel anywhere: no Gel column. One on the plot: the column, with a
+    // swatch and the value; nothing for a fixture without one.
+    QVERIFY(owners.tree()->isColumnHidden(PatchListDialog::GelColumn));
+    Fixture *gelled = m_doc->fixtures().first();
+    MonitorProperties *mp = m_doc->monitorProperties();
+    mp->setFixturePosition(gelled->id(), 0, 0, QVector3D(0, 0, 0));
+    mp->setFixtureGelColor(gelled->id(), 0, 0, QColor(255, 0, 0));
+    PatchListDialog gels(m_doc);
+    QVERIFY(!gels.tree()->isColumnHidden(PatchListDialog::GelColumn));
+    QTreeWidgetItem *it = gels.itemFor(gelled->name());
+    QCOMPARE(it->text(PatchListDialog::GelColumn), QString("#FF0000"));
+    QVERIFY(!it->icon(PatchListDialog::GelColumn).isNull());
+    QTreeWidgetItem *other = gels.itemFor(m_doc->fixtures().at(1)->name());
+    QCOMPARE(other->text(PatchListDialog::GelColumn), QString());
+    QVERIFY(other->icon(PatchListDialog::GelColumn).isNull());
 }
 
 void PatchListDialog_Test::groupedByLocationByDefault()
