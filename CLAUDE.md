@@ -62,7 +62,11 @@ idle: `./check-all.sh --remote auto [--rev SHA]` (= `make pool`;
 ender local, newaudio, dink, val). `auto` skips hosts that are unreachable,
 lack their Qt, or already run a gate, and weighs load over perf cores by the
 host's typical gate time; nothing free → this Mac. `--remote NAME` picks one;
-`make pool-status` shows what auto sees. It `git archive`s the SHA to
+`make pool-status` shows what auto sees. One gate per host: it takes the
+host's `~/gates/.gatelock` first (`platforms/macos/gate-lock.sh`) and
+*waits* ("waiting for val: gate <sha> running since 11:51") while another
+gate's lock, live `*.running` marker or an agent's `.vallock` holds it; a
+holder whose gate is dead or over 2 h old is cleared. It `git archive`s the SHA to
 `~/gates/<sha>-<time>` there (never the host's own checkout), runs detached
 (survives ssh drops), streams progress, removes the copy, and keeps
 `~/gates/<id>.log` + `.summary.txt` (+ `.logs/` on failure). Every gate's

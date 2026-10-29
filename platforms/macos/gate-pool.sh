@@ -13,11 +13,20 @@
 # Hosts: gate-hosts.conf beside this script. auto asks every host at once
 # (5 s to answer) for its load average over its performance cores and
 # whether a gate is already running there (a check-all.sh process, or
-# another pool gate's claim in ~/gates), skips busy and unreachable ones and
-# those without their Qt, and picks the smallest
+# another gate's lock or claim in ~/gates), skips busy and unreachable ones
+# and those without their Qt, and picks the smallest
 #     minutes * (1 + load / performance cores)
 # -- an idle fast Mac first, a loaded one only when it still beats an idle
 # slow one. Nothing free: this Mac ("local" in the file).
+#
+# One gate per host: before it copies anything there, the pool takes the
+# host's lock (~/gates/.gatelock; gate-lock.sh beside this script). While
+# another gate holds the host -- that lock, a gate's ~/gates/*.running, or
+# an agent's ~/gates/.vallock -- it WAITS, polling every GATE_POOL_POLL
+# seconds (default 30) and saying so: "waiting for val: gate 3c423d721a5f
+# running since 11:51". A holder whose gate is dead (or never started), or
+# that is over 2 h old, is stale and cleared. The gate drops the lock when
+# it ends, even with this end gone.
 #
 # The copy runs detached on the host (nohup), so an ssh drop -- dink's VPN
 # blips -- doesn't kill it; this script polls it every 20 s, prints its
@@ -37,6 +46,8 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$HERE/../.." && pwd)"
 CONF="${GATE_HOSTS:-$HERE/gate-hosts.conf}"
 PATIENCE="${GATE_POOL_PATIENCE:-1800}"
+POLL="${GATE_POOL_POLL:-30}"
+LOCKLIB="$HERE/gate-lock.sh"
 SSHOPT=(-o BatchMode=yes -o ConnectTimeout=5 -o ServerAliveInterval=15 -o ServerAliveCountMax=4)
 
 WANT=auto
@@ -48,7 +59,7 @@ while [ $# -gt 0 ]; do
         --rev)    shift; REV="${1:?--rev needs a commit}" ;;
         --status) STATUS=1 ;;
         --)       shift; break ;;
-        -h|--help) sed -n '2,36p' "$0"; exit 0 ;;
+        -h|--help) sed -n '2,45p' "$0"; exit 0 ;;
         *) echo >&2 "gate-pool.sh: unknown option '$1' (try --help)"; exit 2 ;;
     esac
     shift
@@ -79,12 +90,18 @@ PROBES="${TMPDIR:-/tmp}/gate-pool-$$"
 mkdir -p "$PROBES"
 trap 'rm -rf "${PROBES:?}"' EXIT
 
+# Host i runs the lock's functions (gate-lock.sh), then the script (stdin).
+onlock() { # <i> [ssh options...]
+    local i=$1; shift
+    { cat "$LOCKLIB"; cat; } | on "$i" "$@"
+}
+
 probe() { # <i>: "perfcores load1 gates claims qt-ok"
-    on "$1" <<EOF
+    onlock "$1" <<EOF
 p=\$(sysctl -n hw.perflevel0.logicalcpu 2>/dev/null || sysctl -n hw.ncpu)
 l=\$(sysctl -n vm.loadavg | awk '{ print \$2 }')
 g=\$(pgrep -f '[c]heck-all\.sh' | wc -l | tr -d ' ')
-c=\$(find "\$HOME/gates" -maxdepth 1 -name '*.running' -mmin -240 2>/dev/null | wc -l | tr -d ' ')
+c=\$(GL_CLEAN=0 gl_holder | grep -vc '^note:')
 q=no; [ -f "$(hostpath "${QTP[$1]}")/lib/cmake/Qt6/Qt6Config.cmake" ] && q=yes
 echo "\$p \$l \$g \$c \$q"
 EOF
@@ -108,7 +125,7 @@ if [ "$WANT" = auto ] || [ "$STATUS" = 1 ]; then
             score=$(awk -v m="${MINS[i]}" -v l="$l" -v p="$p" 'BEGIN { printf "%.1f", m * (1 + l / p) }')
             state="load $l on $p perf cores, score $score"
             if [ "$g" -gt 0 ] || [ "$c" -gt 0 ]; then
-                state="BUSY: a gate is running ($g check-all, $c pool claims); $state"
+                state="BUSY: a gate is running ($g check-all, $c gate locks/claims); $state"
             elif [ -z "$BESTSCORE" ] || awk -v a="$score" -v b="$BESTSCORE" 'BEGIN { exit !(a < b) }'; then
                 BEST=$i; BESTSCORE=$score
             fi
@@ -147,6 +164,36 @@ fail() { # <code> <why>
     exit "$1"
 }
 
+# The host's lock: taken, or waited for (gate-lock.sh).
+WAITED=0; DOWN=0; SAID=""
+trap 'echo; fail 130 "stopped while waiting for $NAME"' INT TERM
+while :; do
+    out=$(onlock $H <<<"gl_try '$ID' '$SHA'" 2>/dev/null)
+    last=$(printf '%s\n' "$out" | tail -n 1)
+    if [ "${last#@@}" != "$last" ]; then
+        DOWN=0
+        printf '%s\n' "$out" | sed -n "s/^note: /gate pool: $NAME: /p"
+        [ "$last" = "@@ok" ] && break
+        held=${last#@@busy }
+        # When the holder changes, and every 5 min while it doesn't.
+        if [ "$held" != "$SAID" ] || [ $((WAITED % 300)) -lt "$POLL" ]; then
+            echo "waiting for $NAME: $held (${WAITED}s so far)"
+            SAID=$held
+        fi
+    else
+        [ "$WAITED" -eq 0 ] && fail 99 "unreachable"
+        DOWN=$((DOWN + POLL))
+        [ "$DOWN" -ge "$PATIENCE" ] && fail 99 "unreachable for ${DOWN}s while waiting for its lock"
+    fi
+    sleep "$POLL"
+    WAITED=$((WAITED + POLL))
+done
+trap - INT TERM
+# Dropped on the way out, whatever happens here -- unless the gate is still
+# running there (lost touch): it keeps it, and drops it itself when done.
+trap 'onlock $H <<<"gl_release $ID" >/dev/null 2>&1; rm -rf "${PROBES:?}"' EXIT
+[ "$WAITED" -gt 0 ] && echo "gate pool: $NAME is free after ${WAITED}s"
+
 echo "gate pool: ${SHA:0:12} on $NAME (${DEST[H]}), ~/gates/$ID"
 on $H <<EOF || fail 99 "unreachable"
 mkdir -p "\$HOME/gates/$ID" && touch "\$HOME/gates/$ID.running"
@@ -172,6 +219,8 @@ RUN="$PROBES/run.sh"
     echo "[ \$rc -eq 0 ] || cp -R build-gate-logs \"\$G/$ID.logs\" 2>/dev/null"
     echo "cd \"\$G\" && rm -rf \"./$ID\" \"./$ID.sh\""
     echo "echo \$rc > \"$ID.rc\"; rm -f \"$ID.running\""
+    # The host's lock, dropped by the gate itself: this end may be gone.
+    echo "[ \"\$(sed -n 's/^id=//p' .gatelock/info 2>/dev/null)\" = \"$ID\" ] && rm -rf .gatelock"
 } > "$RUN"
 if [ "${DEST[H]}" = local ]; then
     cp "$RUN" "$HOME/gates/$ID.sh"
