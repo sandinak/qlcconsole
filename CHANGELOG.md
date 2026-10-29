@@ -165,6 +165,17 @@ skipped). Upstream fixes taken:
 
 ### Fixed
 
+- **An idle show no longer uses several cores redrawing the rig.** With
+  the Rig Overview open and Live on, its timer redrew the whole rig 25
+  or more times a second whether or not anything had changed: a show
+  left open overnight used about 3.8 cores for 19 hours. The view now
+  redraws only when a channel it draws has changed, the rig was edited,
+  or a gobo, prism or flame is turning, and not at all while its window
+  is hidden, minimised or covered. A running show looks the same at the
+  same frame-rate cap. The power estimate in the status bar likewise
+  re-estimates only when a level, a circuit or the show changes. Idle,
+  a 206-fixture show with the Lighting Studio and Rig Overview up went
+  from 4.6 cores to 0.04.
 - **QLC+ 4 deleted fixtures from a .qxw saved here** (test matrix C2).
   It has no unpatched fixtures, and read each of the Inventory's as
   patched at universe 1, address 1: it kept the first and refused the

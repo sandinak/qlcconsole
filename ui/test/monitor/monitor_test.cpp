@@ -28311,3 +28311,217 @@ void Monitor_Test::theEditorsOfferBackBesideFront()
     }
     delete doc;
 }
+
+/* (idle) A show left open with the Rig Overview up, nothing running, drew the
+   whole rig 25 times a second for as long as the window was open -- 3.8 cores
+   for 19 hours. The live timer is ticked by hand here: counts, not time. */
+void Monitor_Test::anIdleLiveRigIsNotRedrawn()
+{
+    Doc doc(this);
+    Fixture *fx = new Fixture(&doc);
+    fx->setName("Idle Par");
+    fx->setChannels(4);
+    fx->setAddress(0);
+    QVERIFY(doc.addFixture(fx));
+
+    StructureStudioView v(&doc, StructureStudioView::StageKind, 0);
+    v.resize(400, 360);
+    v.reload();
+    v.setPlane(StructureStudioView::Angled);
+    v.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&v));
+    v.setLiveValues(true);
+    QVERIFY(v.m_liveTimer != nullptr && v.m_liveTimer->isActive());
+    v.m_liveTimer->stop();               // ticked by hand below
+    v.repaint();                         // the frame everything is compared with
+    QCoreApplication::processEvents();
+    v.repaint();
+    const int painted = v.paintCount();
+    QVERIFY(painted > 0);
+
+    // Nothing moves: no repaint, tick after tick, and no frame drawn.
+    for (int i = 0; i < 100; ++i)
+        QVERIFY2(!v.liveTick(), qPrintable(QString("idle tick %1 asked for a frame").arg(i)));
+    QCoreApplication::processEvents();
+    QTest::qWait(20);                    // any requestUpdate() would land by now
+    QCOMPARE(v.paintCount(), painted);
+
+    // A DMX change: one frame, on the next tick -- and then quiet again.
+    QByteArray u(512, char(0));
+    u[0] = char(200);
+    fx->setChannelValues(u);
+    QVERIFY(v.liveTick());
+    QTRY_COMPARE(v.paintCount(), painted + 1);
+    for (int i = 0; i < 20; ++i)
+        QVERIFY(!v.liveTick());
+    QCoreApplication::processEvents();
+    QCOMPARE(v.paintCount(), painted + 1);
+
+    // A running chase: the values move every tick, and every tick is a frame.
+    for (int i = 0; i < 30; ++i)
+    {
+        u[1] = char(8 * (i + 1));
+        fx->setChannelValues(u);
+        QVERIFY2(v.liveTick(), qPrintable(QString("chase step %1 not drawn").arg(i)));
+        QTRY_COMPARE(v.paintCount(), painted + 2 + i);
+    }
+    const int chased = v.paintCount();
+
+    // An edit to the rig (a fixture moved on the plot sets the show modified):
+    // one frame, however many edits a drag sends before the tick.
+    for (int i = 0; i < 5; ++i)
+        doc.setModified();
+    QVERIFY(v.liveTick());
+    QTRY_COMPARE(v.paintCount(), chased + 1);
+    QVERIFY(!v.liveTick());
+    // ...and one more once the half-second caches (overlap warnings) have
+    // caught up with it -- one, not a stream.
+    QTRY_VERIFY(v.m_settleFrame);
+    QVERIFY(v.liveTick());
+    QTRY_COMPARE(v.paintCount(), chased + 2);
+    QVERIFY(!v.liveTick());
+    QVERIFY(!v.m_settlePending);
+    // A fixture added or removed is a different rig.
+    Fixture *more = new Fixture(&doc);
+    more->setChannels(1);
+    more->setAddress(10);
+    QVERIFY(doc.addFixture(more));
+    QVERIFY(v.liveTick());
+    QTRY_COMPARE(v.paintCount(), chased + 3);
+
+    // Live off: the timer is off, and a tick never draws.
+    v.setLiveValues(false);
+    QVERIFY(!v.m_liveTimer->isActive());
+    fx->setChannelValues(QByteArray(512, char(77)));
+    QVERIFY(!v.liveTick());
+}
+
+void Monitor_Test::aTurningGoboKeepsTheRigRedrawing()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    QImage half(80, 80, QImage::Format_ARGB32);
+    half.fill(Qt::transparent);
+    {
+        QPainter hp(&half);
+        hp.fillRect(0, 0, 40, 80, Qt::black);
+    }
+    const QString halfPath = dir.filePath("half.png");
+    QVERIFY(half.save(halfPath));
+    QImage open(80, 80, QImage::Format_ARGB32);
+    open.fill(Qt::transparent);
+    const QString openPath = dir.filePath("open.png");
+    QVERIFY(open.save(openPath));
+
+    QLCFixtureDef *def = opticsDef(halfPath, openPath);
+    {
+        Doc doc(this);
+        Fixture *fx = new Fixture(&doc);
+        fx->setName("Gobo Spot");
+        fx->setFixtureDefinition(def, def->modes().first());
+        fx->setAddress(0);
+        QVERIFY(doc.addFixture(fx));
+        doc.monitorProperties()->setFixturePosition(fx->id(), 0, 0, QVector3D(2000, 2000, 0));
+
+        StructureStudioView v(&doc, StructureStudioView::StageKind, 0);
+        v.resize(500, 400);
+        v.reload();
+        v.setPlane(StructureStudioView::Angled);
+        v.setBeams(true);
+        v.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&v));
+        v.setLiveValues(true);
+        v.m_liveTimer->stop();           // ticked by hand below
+
+        // The half gobo, turning, the lamp up.
+        QByteArray u(512, char(0));
+        u[0] = char(15); u[1] = char(200); u[4] = char(255);
+        fx->setChannelValues(u);
+        v.repaint();
+        QVERIFY2(v.m_opticsAnimating, "a turning gobo was not seen turning");
+        // No value changes, and still a frame every tick: it is turning.
+        int painted = v.paintCount();
+        for (int i = 0; i < 10; ++i)
+        {
+            QVERIFY2(v.liveTick(), qPrintable(QString("turning tick %1 not drawn").arg(i)));
+            QTRY_COMPARE(v.paintCount(), painted + 1 + i);
+        }
+
+        // Indexed (stopped): one frame for the change, then nothing.
+        u[1] = char(64);
+        fx->setChannelValues(u);
+        painted = v.paintCount();
+        QVERIFY(v.liveTick());
+        QTRY_COMPARE(v.paintCount(), painted + 1);
+        QVERIFY(!v.m_opticsAnimating);
+        painted = v.paintCount();
+        for (int i = 0; i < 20; ++i)
+            QVERIFY(!v.liveTick());
+        QCoreApplication::processEvents();
+        QCOMPARE(v.paintCount(), painted);
+    }
+    delete def;
+}
+
+void Monitor_Test::aRigOffScreenIsNotRedrawn()
+{
+    Doc doc(this);
+    Fixture *fx = new Fixture(&doc);
+    fx->setChannels(4);
+    fx->setAddress(0);
+    QVERIFY(doc.addFixture(fx));
+
+    StructureStudioView v(&doc, StructureStudioView::StageKind, 0);
+    v.resize(400, 360);
+    v.reload();
+    v.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&v));
+    v.setLiveValues(true);
+    v.m_liveTimer->stop();
+    v.repaint();
+    QVERIFY(v.onScreen());
+
+    // Hidden (its tab not current, its window closed): never a frame.
+    v.hide();
+    QVERIFY(!v.onScreen());
+    QByteArray u(512, char(0));
+    for (int i = 0; i < 10; ++i)
+    {
+        u[0] = char(10 * (i + 1));
+        fx->setChannelValues(u);
+        QVERIFY(!v.liveTick());
+    }
+    doc.setModified();
+    QVERIFY(!v.liveTick());
+
+    // Minimised: on no screen either.
+    v.showMinimized();
+    QCoreApplication::processEvents();
+    QVERIFY(!v.onScreen());
+    u[0] = char(250);
+    fx->setChannelValues(u);
+    QVERIFY(!v.liveTick());
+
+    // Back on screen: what changed while it was away is drawn.
+    v.showNormal();
+    QVERIFY(QTest::qWaitForWindowExposed(&v));
+    QVERIFY(v.onScreen());
+    QVERIFY(v.liveTick());
+
+    // Scrolled or clipped wholly out of its window: nothing of it to see.
+    QWidget host;
+    host.resize(300, 300);
+    StructureStudioView inner(&doc, StructureStudioView::StageKind, 0, &host);
+    inner.setGeometry(0, 0, 200, 200);
+    host.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&host));
+    inner.setLiveValues(true);
+    inner.m_liveTimer->stop();
+    QVERIFY(inner.onScreen());
+    inner.move(1000, 1000);
+    QVERIFY(inner.isVisible());
+    QVERIFY(!inner.onScreen());
+    u[0] = char(1);
+    fx->setChannelValues(u);
+    QVERIFY(!inner.liveTick());
+}

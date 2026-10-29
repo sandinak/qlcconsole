@@ -2015,7 +2015,46 @@ void ProgrammingManager::initPowerTimer()
     // reading without us hooking every DMX write. Design-mode-gated below.
     m_powerTimer = new QTimer(this);
     m_powerTimer->setInterval(500);
-    connect(m_powerTimer, &QTimer::timeout, this, &ProgrammingManager::recomputePower);
+    connect(m_powerTimer, &QTimer::timeout, this, &ProgrammingManager::powerTick);
+    // A fixture added, re-patched, its definition or circuit changed: the
+    // estimate reads more than the levels.
+    connect(m_doc, &Doc::modified, this, [this]() { m_powerDirty = true; });
+    connect(m_doc, &Doc::fixtureAdded, this, [this]() { m_powerDirty = true; });
+    connect(m_doc, &Doc::fixtureRemoved, this, [this]() { m_powerDirty = true; });
+    connect(m_doc, &Doc::fixtureChanged, this, [this]() { m_powerDirty = true; });
+}
+
+quint64 ProgrammingManager::powerInputsKey() const
+{
+    size_t h = 0x9e3779b9;
+    QList<Universe*> universes = m_doc->inputOutputMap()->claimUniverses();
+    for (Universe *u : std::as_const(universes))
+        h = qHashMulti(h, u != nullptr ? u->preGMValues() : QByteArray());
+    m_doc->inputOutputMap()->releaseUniverses(false);
+
+    foreach (const PowerSource &src, m_doc->powerDistribution()->sources())
+    {
+        h = qHashMulti(h, src.type, src.voltage, src.vaRating, src.circuits.size());
+        foreach (const PowerCircuit &cir, src.circuits)
+            h = qHashMulti(h, cir.voltage, cir.ratedAmps, cir.deratePercent,
+                           cir.demandPercent, cir.fixtures);
+    }
+    QSettings settings;
+    h = qHashMulti(h, settings.value(QStringLiteral("power/defaultVoltage"), 120.0).toDouble(),
+                   settings.value(QStringLiteral("power/powerFactor"), 0.9).toDouble(),
+                   m_doc->fixtures().size());
+    return quint64(h);
+}
+
+void ProgrammingManager::powerTick()
+{
+    if (m_doc->mode() != Doc::Design)
+        return;
+    /* It used to re-estimate every half second whatever happened: a show left
+       open and idle ran the whole rig's power model twice a second forever. */
+    if (!m_powerDirty && powerInputsKey() == m_powerKey)
+        return;
+    recomputePower();
 }
 
 void ProgrammingManager::updatePowerEstimateActive()
@@ -2046,6 +2085,10 @@ void ProgrammingManager::recomputePower()
     // that the readout is in the always-visible status bar.
     if (m_doc->mode() != Doc::Design)
         return;
+    // What this estimate is of (powerTick() skips the next if it is the same).
+    m_powerKey = powerInputsKey();
+    m_powerDirty = false;
+    ++m_powerRuns;
 
     // Take a consistent pre-Grand-Master snapshot of all universes (the
     // "designed peak", free of Grand Master/blackout). claimUniverses() shares

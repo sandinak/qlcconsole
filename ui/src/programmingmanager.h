@@ -411,6 +411,16 @@ private:
     // drives the periodic re-estimate, stopped whenever the show goes live,
     // so Run mode pays nothing.
     QTimer      *m_powerTimer = nullptr;
+    /** A tick of m_powerTimer: re-estimates only when what the estimate reads
+     *  changed -- the levels, the circuits, the show -- since the last time.
+     *  An idle show held still costs a hash of its universes, not an estimate. */
+    void powerTick();
+    /** What the estimate reads, hashed: every universe's pre-Grand-Master
+     *  levels, the circuits and the voltage settings. */
+    quint64 powerInputsKey() const;
+    quint64 m_powerKey = 0;
+    bool    m_powerDirty = true;    ///< the show was edited since the last estimate
+    int     m_powerRuns = 0;        ///< estimates made (recomputePower()), for tests
 
 public:
     /** The chip's tooltip: the biggest draws by fixture type, where each

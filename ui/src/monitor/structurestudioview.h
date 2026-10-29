@@ -123,6 +123,13 @@ public:
      *  fixtures would otherwise repaint far faster than anyone can see. */
     void setLiveValues(bool on);
     bool liveValues() const { return m_liveValues; }
+    /** One tick of the live timer: asks for a repaint only when the window
+     *  is on screen and something it draws has moved since the last frame
+     *  (a channel value, the rig, a turning gobo). An idle show costs a
+     *  comparison of each fixture's values, not a frame. True when it asked. */
+    bool liveTick();
+    /** Frames painted so far (paintEvent()), for the idle-repaint tests. */
+    int paintCount() const { return m_paintCount; }
 
     /** How much light there is in the room, independent of the rig. A stage at
      *  full work-light reads very differently from a blackout with three
@@ -937,6 +944,9 @@ private:
     double m_opticsTime = -1.0;
     mutable bool m_opticsAnimating = false;
     bool m_opticsTickPending = false;
+    /** The next frame of a turning gobo or prism with Live off, in @a ms --
+     *  painted only once the view is on screen (onScreen()). */
+    void opticsTickLater(int ms);
     /** The people targets stand for, as figures in the rig -- on the deck
      *  under them, chest at the aim height, facing downstage, and LIT: each
      *  face takes the colour of every beam passing through it that it faces,
@@ -1235,6 +1245,18 @@ private:
     double   m_ambient = 0.62;       ///< room light, 0 = blackout .. 1 = work light
     double   m_haze = 1.0;           ///< haze in the air (setHaze())
     class QTimer *m_liveTimer = nullptr;
+    /** Whether anything this view draws changed since the last frame: the
+     *  live channel values against the frame's snapshot, the active scene
+     *  starting or stopping, a gobo turning, or a model edit (m_liveDirty). */
+    bool liveInputsChanged() const;
+    /** Exposed on screen: visible, its window neither minimised nor covered
+     *  (QWindow::isExposed()), and some of it not clipped away. */
+    bool onScreen() const;
+    bool     m_liveDirty = true;      ///< the rig or focus changed since the last frame
+    bool     m_paintedSceneRunning = false;   ///< activeSceneRunning() at the last frame
+    bool     m_settleFrame = false;   ///< one more frame after an edit (liveTick())
+    bool     m_settlePending = false; ///< that frame is on its way
+    int      m_paintCount = 0;        ///< frames painted (paintCount())
     /** What each LED of a lantern shows (its device's live view, or its
      *  look's colour). */
     class LanternPixels *m_lanternPixels = nullptr;

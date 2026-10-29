@@ -286,8 +286,10 @@ each way (on the graphics card, as many samples a pixel as it offers) —
 on a 200-fixture show roughly 8 ms a frame at Fast against 14 ms at
 Smooth. The frame rate is only a ceiling: a frame that takes longer
 slows the view by itself, and the view never asks for frames faster than it
-can draw them. The floor grid is drawn once and reused until the view or
-the rig's extent changes.
+can draw them. Nothing changing means no frames at all: a show held
+still, or a window that is hidden, minimised or covered, costs next to
+nothing; a gobo or prism that is turning keeps it drawing. The floor grid
+is drawn once and reused until the view or the rig's extent changes.
 
 ## Stage structures
 

@@ -102,6 +102,9 @@ private slots:
      *  Targets list. */
     void aRenamedFixedTargetShowsItsNewName();
     void thePowerChipSaysWhatItsFigureIsMadeOf();
+    /** (idle) The power estimate is made again only when what it reads
+     *  changed: idle ticks cost no estimate; a level or an edit is one. */
+    void anIdleShowIsNotReEstimated();
 
     /** "I can't seem to drag a scene to a folder in the programming view":
      *  in the outline, scenes dropped on a folder row move into it, onto
