@@ -38,6 +38,7 @@ lists them all.
 |---|---|
 | [Getting started](features/getting-started.md) | Starting the app, show files, the tabs and the three views, importing, the ways a show comes together |
 | [What's new](features/whats-new.md) | The latest changes, release by release |
+| [Coming from QLC+ 4](features/coming-from-qlc4.md) | For QLC+ 4.x users: what stays, what's better, moving shows over and back, old workflows mapped to new |
 | [Show Tree](features/show-tree.md) | Cue lists, cues and layers, tracking, hits, productions, the Run tab and the Cue Runner |
 | [Build](features/build.md) | Palettes, effects, scenes and collections in the Workbench |
 | [Lighting Studio](features/lighting-studio.md) | The plot, structures, mounting, plot layers and locks, stage marks and the apron, Quick focus, the Rig Overview |

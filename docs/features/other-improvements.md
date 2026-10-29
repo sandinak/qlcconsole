@@ -982,8 +982,10 @@ override the timeline per-channel while it's live.
 
 ## Control Map (MIDI learn)
 
-A lightweight way to bind a MIDI trigger straight onto a function without
-building a Virtual Console widget for it first: pick a function, hit
-"learn," send the MIDI event you want to trigger it. (This is the first of
-several planned phases — a dedicated grid dialog, fader/submaster targets,
-and look-recall banking aren't built yet.)
+Not in the app at the moment. A first version bound a MIDI control
+straight to a function from the old Programming tab's function list; that
+list went when Programming became Build, and the binding was never saved
+with the show. To fire a function from a MIDI or OSC control, give a
+Virtual Console button, slider or cue list an external input, as in QLC+.
+Game pads have their own map in the focus tools
+([The controller map](lighting-studio.md#the-controller-map)).

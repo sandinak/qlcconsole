@@ -57,6 +57,12 @@ skipped). Upstream fixes taken:
 
 ### Added
 
+- **A "Coming from QLC+ 4" help page** (docs/features/coming-from-qlc4.md,
+  in the help and linked from the README and the docs index): what stays
+  the same, what a 4.x user gains, installing beside QLC+ 4 and what
+  comes across from its user folder, opening a .qxw and going back, a
+  table of QLC+ 4 workflows and where each lives now, and what's
+  different or not here.
 - **Save As offers QLC+ 4's .qxw** ("QLC+ 4 Workspaces"), starting on it
   for a show opened from a .qxw; the extension follows the type chosen. A
   .qxw save works as before.
@@ -140,6 +146,10 @@ skipped). Upstream fixes taken:
 
 ### Changed
 
+- **The help's Control Map section says it isn't in the app**: its "learn"
+  entry went with the old Programming tab's function list, and the README
+  no longer offers it. A MIDI or OSC control fires a function through a
+  Virtual Console widget's external input, as in QLC+.
 - **The project's direction is written down**:
   [docs/project/STRATEGY.md](docs/project/STRATEGY.md) (what qlcconsole is
   for, the roadmap to 0.5, the guardrails and what it won't build), and

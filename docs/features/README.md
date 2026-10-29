@@ -21,6 +21,7 @@ In the app, **F1** opens the guide for whatever you're looking at, and
 |---|---|
 | [Getting started](getting-started.md) | Starting the app, show files and autosave, finding your way around (the tabs and the Classic QLC+ / qlcconsole / Everything views), importing (another show, an ETC Eos show), and the ways a show comes together — designing first, patch first, at a venue, a row of like structures |
 | [What's new](whats-new.md) | The latest changes |
+| [Coming from QLC+ 4](coming-from-qlc4.md) | For QLC+ 4.x users: what stays the same, what's better, moving a show over and back, the old workflows and their new equivalents, what's different |
 | [Lighting Studio](lighting-studio.md) | Building the physical rig: trusses, towers, platforms, pipes, stands, hangers, fixture mounting, plot symbols, locks, the Stage layer (curtain line, number line, apron), the Focus menu and Quick focus; the Angled 3D view and Rig Overview, lit by the show (beams, haze, gobos, lanterns) |
 | [Build Tab](build.md) | Making the show's palettes, effects, scenes and collections: the navigator by section, the Workbench (a scene or a collection as layers, + Scene and + Effect ▾), looks out of reusable palettes instead of raw DMX, the inline look editor and effect browser, scene transitions, WLED effects |
 | [Show Tree](show-tree.md) | Writing the show as one tree of cue lists, cues and layers: tracking, cue numbers and reordering, move in black, hits for busking, the Run tab and the cue runner |

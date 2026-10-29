@@ -6,6 +6,10 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ### A home for QLC+ 4 users
 
+- **Coming from QLC+ 4**, a help page for QLC+ 4.x users: what stays the
+  same, what's better, moving a show over and going back, each old
+  workflow beside its new one, and what's different. See [Coming from
+  QLC+ 4](coming-from-qlc4.md).
 - **Save As offers .qxw.** **QLC+ 4 Workspaces** is a type in Save As,
   and it starts there for a show opened from a .qxw. See [Show
   files](getting-started.md#show-files).

@@ -3,7 +3,9 @@
 This guide walks through starting qlcconsole and the ways a show usually
 comes together — from an empty workspace, from a patch you already have, and
 from a show file you're bringing to a venue. Each step links to the guide
-with the detail.
+with the detail. Coming from QLC+ 4? [Coming from QLC+ 4](coming-from-qlc4.md)
+says what stays the same, how to move a show over and back, and where
+each old workflow lives now.
 
 Press **F1** anywhere for the help on what you're looking at; **Help ▸
 qlcconsole Help** opens this guide set. The **Help** menu also has
@@ -515,6 +517,7 @@ says, whatever this is set to.
 ## Where next
 
 - [What's new](whats-new.md) — the latest changes.
+- [Coming from QLC+ 4](coming-from-qlc4.md) — moving over from QLC+ 4.x.
 - [Keyboard and mouse](shortcuts.md) — every shortcut.
 - [Effects](effects.md) — what each built-in effect does.
 - [Troubleshooting](troubleshooting.md) — when something isn't right.

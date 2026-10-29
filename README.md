@@ -41,7 +41,9 @@ qlcconsole is a personal fork and **is not affiliated with the QLC+
 project**. If you want a general-purpose, cross-platform controller with a
 large community and forum, use [QLC+](https://www.qlcplus.org/) itself.
 QLC+ shows (.qxw) open in qlcconsole, and the **Classic QLC+** view keeps
-QLC+'s own tabs.
+QLC+'s own tabs. **Coming from QLC+ 4?** [This page](docs/features/coming-from-qlc4.md)
+says what stays the same, what's better, how to move a show over (and
+back), and where each old workflow lives now.
 
 If you use QLC+ 5 and it works for you, keep using it. QLC+ 4.x is in
 maintenance upstream; qlcconsole is for people who prefer the QLC+ 4
@@ -208,8 +210,7 @@ tools and a joystick **Followspot** effect that can fade a head out near
 its limits or when scenery blocks it. A pad that falls asleep or wakes
 up is picked up again by name, never silently lost; with two pads, the
 first to press Start owns the tools. MIDI devices are followed the same
-way, and the **Control Map** binds a MIDI trigger straight to a
-function.
+way.
 → [Controllers coming and going](docs/features/other-improvements.md#controllers-and-midi-devices-coming-and-going) ·
 [Effects: Followspot](docs/features/effects.md)
 
@@ -257,6 +258,9 @@ like structures). The
 [feature guide index](docs/features/README.md#the-rough-shape-of-a-show-end-to-end)
 walks a show end to end, from inventory to GO.
 
+Coming from QLC+ 4: start with
+[Coming from QLC+ 4](docs/features/coming-from-qlc4.md).
+
 To learn by doing, the course's [Lesson 1.1](docs/course/level-1/lesson-01/handout.md)
 writes the first cues of a song on the teaching show, with the mouse.
 
@@ -284,6 +288,8 @@ All of it is in [`docs/`](docs/README.md):
 
 - [User guide](docs/features/README.md): every feature, the same pages as
   the in-app help.
+- [Coming from QLC+ 4](docs/features/coming-from-qlc4.md): moving from
+  QLC+ 4.x, and the old workflows mapped to the new ones.
 - [Course](docs/course/README.md): lessons, handouts and teacher guides.
 - [Performance](docs/performance.md): how much one computer can drive,
   measured, with the method and the data.
