@@ -54,9 +54,12 @@
 <line x1="70" y1="388" x2="610" y2="388" stroke="#c3c2b7" stroke-width="1"/>
 <text x="340" y="432" font-size="12.5" fill="#52514e" text-anchor="middle">Hours since start</text>
 <text transform="translate(20 250) rotate(-90)" font-size="12.5" fill="#52514e" text-anchor="middle">Private memory (MB)</text>
-<path d="M73.8 225.6 L81.2 220.6 L88.8 218.5 L96.2 217.1 L103.8 211.1 L111.2 202.7 L118.8 202 L126.2 198.5 L133.8 197.4 L141.2 197.9 L148.8 197.9 L156.2 197.8 L163.8 199.9 L171.2 197.7" fill="none" stroke="#2a78d6" stroke-width="2" stroke-linejoin="round"/>
+<path d="M73.8 225.6 L81.2 220.6 L88.8 218.5 L96.2 217.1 L103.8 211.1 L111.2 202.7 L118.8 202 L126.2 198.5 L133.8 197.4 L141.2 197.9 L148.8 197.9 L156.2 197.8 L163.8 199.9 L171.2 198.4 L178.8 199.7 L186.2 197 L193.8 198.1 L201.2 196.1 L208.8 195.6 L216.2 194.2 L223.8 194.6 L231.2 195.8 L238.8 193.5 L246.2 195.1 L253.7 190 L261.2 192.2 L268.8 192.4 L276.2 188.6 L283.8 189.9 L291.2 190.3" fill="none" stroke="#2a78d6" stroke-width="2" stroke-linejoin="round"/>
 <circle cx="111.2" cy="202.7" r="4.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="1.5"><title>Raspberry Pi 5, 0.9 h: 167.8 MB private, 234.3 MB RSS, CPU 71.6%</title></circle>
 <circle cx="156.2" cy="197.8" r="4.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="1.5"><title>Raspberry Pi 5, 1.9 h: 172.2 MB private, 238.7 MB RSS, CPU 69.8%</title></circle>
+<circle cx="201.2" cy="196.1" r="4.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="1.5"><title>Raspberry Pi 5, 2.9 h: 173.8 MB private, 240.3 MB RSS, CPU 65.3%</title></circle>
+<circle cx="246.2" cy="195.1" r="4.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="1.5"><title>Raspberry Pi 5, 3.9 h: 174.8 MB private, 241.2 MB RSS, CPU 32.5%</title></circle>
+<circle cx="291.2" cy="190.3" r="4.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="1.5"><title>Raspberry Pi 5, 4.9 h: 179.1 MB private, 245.5 MB RSS, CPU 49.6%</title></circle>
 <path d="M73.8 176 L81.2 174 L88.8 173.3 L96.2 173.5 L103.8 173.3 L111.2 173.1 L118.8 173.5 L126.2 173.6 L133.8 173.1 L141.2 172.9 L148.8 172.9 L156.2 172.9 L163.8 172.9 L171.2 172.9 L178.8 172.9 L186.2 172.9 L193.8 172.4 L201.2 171.1 L208.8 171.1 L216.2 171 L223.8 170.9 L231.2 171 L238.8 171 L246.2 171" fill="none" stroke="#eb6834" stroke-width="2" stroke-linejoin="round"/>
 <rect x="107.2" y="169.1" width="8" height="8" fill="#eb6834" stroke="#fcfcfb" stroke-width="1.5"><title>Intel i7-9750H (Linux container), 0.9 h: 194.7 MB private, 208.4 MB RSS, CPU 15.6%</title></rect>
 <rect x="152.2" y="168.9" width="8" height="8" fill="#eb6834" stroke="#fcfcfb" stroke-width="1.5"><title>Intel i7-9750H (Linux container), 1.9 h: 194.8 MB private, 208.7 MB RSS, CPU 11.7%</title></rect>
@@ -78,9 +81,9 @@
 <line x1="253.2" y1="171" x2="621" y2="171" stroke="#c3c2b7" stroke-width="1"/>
 <rect x="624.5" y="167.5" width="7" height="7" fill="#eb6834" stroke="#fcfcfb" stroke-width="1.5"></rect>
 <text x="637" y="175" font-size="12" fill="#0b0b0b">i7: 197 MB</text>
-<line x1="178.2" y1="197.7" x2="621" y2="197.7" stroke="#c3c2b7" stroke-width="1"/>
-<circle cx="628" cy="197.7" r="4" fill="#2a78d6" stroke="#fcfcfb" stroke-width="1.5"></circle>
-<text x="637" y="201.7" font-size="12" fill="#0b0b0b">Pi 5: 172 MB</text>
+<line x1="298.2" y1="190.3" x2="621" y2="190.3" stroke="#c3c2b7" stroke-width="1"/>
+<circle cx="628" cy="190.3" r="4" fill="#2a78d6" stroke="#fcfcfb" stroke-width="1.5"></circle>
+<text x="637" y="194.3" font-size="12" fill="#0b0b0b">Pi 5: 179 MB</text>
 <line x1="613.2" y1="281.3" x2="621" y2="281.3" stroke="#c3c2b7" stroke-width="1"/>
 <polygon points="628,276.3 632.1,284.9 623.9,284.9" fill="#1baf7a" stroke="#fcfcfb" stroke-width="1.5"></polygon>
 <text x="637" y="285.3" font-size="12" fill="#0b0b0b">M4: 97 MB</text>

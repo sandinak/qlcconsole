@@ -234,7 +234,10 @@ The tools behind [docs/performance.md](../docs/performance.md):
   host, in order, under `~/perf`.
 
 `tools/perf/extract.py` and `tools/perf/plot.py` turn the results into the
-page's data and charts.
+page's data and charts. `tools/perf/guard.py` (`make perf`) is the short,
+repeatable slice of all this that guards against regressions: a few fixed
+`perf_sweep.py` points against a per-machine baseline; see
+[Keeping it fast](../docs/performance.md#keeping-it-fast).
 
 ## Sanitizers: known host limitation (macOS 26.2)
 

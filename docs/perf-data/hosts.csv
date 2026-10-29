@@ -1,4 +1,5 @@
-host,label,cpu,cores,ram_gb,os,qt,build
-pi,Raspberry Pi 5,"Cortex-A76, 4 cores at 2.4 GHz",4,8,Debian 13 (Raspberry Pi OS kernel 6.18),6.8.2 (Debian),"Release, GCC 14.2"
-linux,Intel i7-9750H (Linux container),"i7-9750H, 6 cores / 12 threads; LXC container with 8 vCPU",8,16,Debian 13 in LXC on Proxmox 6.8,6.8.2 (Debian),"Release, GCC 14.2"
-m4,Apple M4 Mac,"Apple M4, 4 performance + 6 efficiency cores",10,32,macOS 26.7,6.9.3 (bundled in the DMG),the 0.3.0 RC8 DMG's own engine and Qt
+host,label,cpu,cores,ram_gb,os,qt,build,host_class
+pi,Raspberry Pi 5,"Cortex-A76, 4 cores at 2.4 GHz",4,8,Debian 13 (Raspberry Pi OS kernel 6.18),6.8.2 (Debian),"Release, GCC 14.2",
+linux,Intel i7-9750H (Linux container),"i7-9750H, 6 cores / 12 threads; LXC container with 8 vCPU",8,16,Debian 13 in LXC on Proxmox 6.8,6.8.2 (Debian),"Release, GCC 14.2",linux-intel-core-i7-9750h-8t
+m4,Apple M4 Mac,"Apple M4, 4 performance + 6 efficiency cores",10,32,macOS 26.7,6.9.3 (bundled in the DMG),the 0.3.0 RC8 DMG's own engine and Qt,macos-apple-m4-4p6e
+m4max,Apple M4 Max Mac,"Apple M4 Max, 10 performance + 4 efficiency cores",14,36,macOS 27.0,6.11.1 (Homebrew),"Release, Apple clang, from the checkout (the performance guard)",macos-apple-m4-max-10p4e

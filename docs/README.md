@@ -57,7 +57,9 @@ lists them all.
 [**Performance**](performance.md) — how much one computer can drive: the
 safe operating envelope on a Raspberry Pi 5, a Linux i7 and an Apple M4,
 Art-Net output rates, long runs and memory, with charts, the method and
-the data ([`perf-data/`](perf-data/)) to reproduce them.
+the data ([`perf-data/`](perf-data/)) to reproduce them; and how it is
+kept that fast: the performance guard (`make perf`), each machine's
+baseline and the nightly trend ([Keeping it fast](performance.md#keeping-it-fast)).
 
 ## The course
 

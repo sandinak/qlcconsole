@@ -1,6 +1,7 @@
 host,phase,hours,ticks_over,ticks_over_per_h,worst_ms,cpu_pct,mem_kind,mem_first_mb,mem_last_mb,mem_slope_mb_per_h
-pi,real,2.28,6309,2772.5,76.43,54.8,private_mb,141.1,170.2,8.61
+pi,real,4.99,22943,4596,80.7,55.1,private_mb,141.1,177.6,3.55
+pi,scaled,4.98,275763,55426.7,152.94,307.4,private_mb,176.6,279.5,1.59
 linux,real,3.99,48,12,35.45,12.2,private_mb,187.3,196.6,0.83
 linux,scaled,3.98,50,12.6,43.83,339.4,private_mb,222.8,296.6,-0.08
 m4,real,11.99,5,0.4,21.68,24.1,footprint_mb,105.9,101,-0.06
-m4,scaled,0.74,14,18.9,75.11,188.4,footprint_mb,154.6,197.1,16.01
+m4,scaled,11.98,63,5.3,178.88,201.4,footprint_mb,154.6,163.6,-2.76

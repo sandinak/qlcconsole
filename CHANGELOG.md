@@ -107,6 +107,25 @@ skipped). Upstream fixes taken:
   computer** in the help sums it up. The charts are made by
   `tools/perf/plot.py` from `docs/perf-data/`; the measuring tools are in
   `stresstest/`.
+- **The performance page has the finished long runs**: the M4's 12-hour
+  run of the scaled show (5 late ticks an hour, no memory growth) and the
+  Pi 5's full five-hour runs, which show that the scaled show is more
+  than a Pi 5 can run (a third of its ticks late).
+- Developer: **a performance guard, `make perf`** (`tools/perf/guard.py`).
+  In about 5 minutes it runs a Release engine under the stress harness at
+  fixed loads, plus the hot paths' CPU cost per operation, and compares
+  the numbers with this machine's own committed baseline
+  (`docs/perf-data/baseline-<host class>.csv`, tolerances from measured
+  noise); a slowdown past tolerance exits nonzero. `make perf-record`
+  rebases a baseline on purpose. `make beta` / `make release` need a
+  passing guard on the release commit. `tools/perf/nightly.sh` runs it on
+  origin/main each night with a history (not installed anywhere yet; see
+  [Keeping it fast](docs/performance.md#keeping-it-fast)), and
+  `tools/perf/plot.py` draws its trend. New gate tests
+  (`engine/test/hotpath`) count the work on the hot paths: a static look
+  sends one frame and then none, a running scene is one fader of its own
+  channels, start/stop and chaser steps leave no faders behind, a matrix
+  computes one map per step, not per frame.
 - **Course: a student page per lesson**, a short link to give the class
   (`https://sandinak.github.io/qlcconsole/class/1-1/`, and 0.1, 0.2,
   1.1–1.5, the Level 1 check, 3.3, 3.6, 3.7, 3.10, plus a student install

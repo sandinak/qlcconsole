@@ -89,9 +89,12 @@ running at once):
 Size a rig by the smaller of the two columns: the Art-Net column is every
 channel of every universe changing every frame. A typical school or
 small-venue show, a few hundred fixtures on a handful of universes, uses
-well under one core on any of these. Heavy Art-Net *input* (a dozen or
-more universes coming in) slows the windows and the web interface, though
-the output keeps its rate. On Linux, the light timing is steadier when the
+well under one core on any of these; on a Raspberry Pi 5, keep the show
+near that size (a 240-fixture show ran for five hours at about half a
+core, but a show with dozens of RGB matrices and chasers added kept three
+of its four cores busy and fell behind). Heavy Art-Net *input* (a dozen
+or more universes coming in) slowed the windows and the web interface in
+0.3.0; 0.3.1 fixed it, and the output kept its rate in both. On Linux, the light timing is steadier when the
 app may use real-time priority (an rtprio limit for your user).
 
 The measurements, charts and method are on the

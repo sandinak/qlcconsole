@@ -12,7 +12,8 @@ Chart rules: one y axis per chart; a legend for two or more series plus a
 direct label at each line's end; hosts always in the order Pi, Linux, M4 with
 the same colour and marker shape (the colours are the first three slots of a
 colour-blind-safe categorical palette, validated all-pairs on the light
-surface; the marker shape is a second cue); 2 px lines, 8 px markers; a
+surface, plus slot 4 for the M4 Max of the guard's trend; the marker shape
+is a second cue); 2 px lines, 8 px markers; a
 light surface with a hairline border, so the charts read the same on a light
 or a dark page; text in neutral ink; log scales are labelled as such.
 """
@@ -22,8 +23,10 @@ import os
 import sys
 
 HOSTS = ["pi", "linux", "m4"]
-COLOR = {"pi": "#2a78d6", "linux": "#eb6834", "m4": "#1baf7a"}
-SHAPE = {"pi": "circle", "linux": "square", "m4": "triangle"}
+# The trend chart's hosts: the guard's (tools/perf/guard.py), slot 4 after the three
+TREND_HOSTS = ["pi", "linux", "m4", "m4max"]
+COLOR = {"pi": "#2a78d6", "linux": "#eb6834", "m4": "#1baf7a", "m4max": "#eda100"}
+SHAPE = {"pi": "circle", "linux": "square", "m4": "triangle", "m4max": "diamond"}
 
 SURFACE = "#fcfcfb"
 BORDER = "#d9d8d2"
@@ -106,6 +109,10 @@ class Chart:
         if SHAPE[host] == "square":
             return '<rect x="%s" y="%s" width="%s" height="%s" %s>%s</rect>' % (
                 f(cx - r), f(cy - r), f(size), f(size), common, t)
+        if SHAPE[host] == "diamond":
+            d = r + 1.2
+            pts = "%s,%s %s,%s %s,%s %s,%s" % (f(cx), f(cy - d), f(cx + d), f(cy), f(cx), f(cy + d), f(cx - d), f(cy))
+            return '<polygon points="%s" %s>%s</polygon>' % (pts, common, t)
         h = size * 1.15
         pts = "%s,%s %s,%s %s,%s" % (f(cx), f(cy - h * 0.62), f(cx + r + 0.6), f(cy + h * 0.45),
                                      f(cx - r - 0.6), f(cy + h * 0.45))
@@ -211,6 +218,26 @@ class Lin:
         return self._fmt(v)
 
 
+class Days:
+    """Dates (days since 2000-01-01) labelled as 'Oct 29'; about 6 ticks."""
+    MONTHS = "Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec".split()
+
+    def __init__(self, lo, hi):
+        self.lo, self.hi = lo, hi
+
+    def frac(self, v):
+        return (v - self.lo) / (self.hi - self.lo)
+
+    def ticks(self):
+        step = max(1, int(math.ceil((self.hi - self.lo) / 6.0)))
+        return list(range(int(self.lo), int(self.hi) + 1, step))
+
+    def fmt(self, v):
+        import datetime
+        d = datetime.date(2000, 1, 1) + datetime.timedelta(days=int(v))
+        return "%s %d" % (self.MONTHS[d.month - 1], d.day)
+
+
 class Log2:
     def __init__(self, lo, hi):
         self.lo, self.hi = lo, hi
@@ -259,7 +286,7 @@ def read(path):
 
 
 HOST_LABEL = {}
-SHORT = {"pi": "Pi 5", "linux": "i7", "m4": "M4"}
+SHORT = {"pi": "Pi 5", "linux": "i7", "m4": "M4", "m4max": "M4 Max"}
 
 
 def by_host(rows):
@@ -275,8 +302,11 @@ def main():
     data = sys.argv[1] if len(sys.argv) > 1 else os.path.join(here, "..", "..", "docs", "perf-data")
     out = sys.argv[2] if len(sys.argv) > 2 else os.path.join(here, "..", "..", "docs", "images", "perf")
     os.makedirs(out, exist_ok=True)
+    classes = {}
     for r in read(os.path.join(data, "hosts.csv")):
         HOST_LABEL[r["host"]] = r["label"]
+        if r.get("host_class"):
+            classes[r["host_class"]] = r["host"]
 
     scaling = by_host(read(os.path.join(data, "scaling.csv")))
     broken = lambda p: bool(p[2]["broken"])
@@ -363,6 +393,58 @@ def main():
                  lambda x, y, r, h=h: "%s, hour %s: %s ticks over (%s per hour), worst %s ms" % (
                      HOST_LABEL[h], r["hour"], r["ticks_over"], r["ticks_over_per_h"], r["worst_ms"] or "-"))
     c.render(os.path.join(out, "soak-ticks-over.svg"))
+
+    # f. the guard's trend: every run against its host's baseline
+    trend_path = os.path.join(data, "trend.csv")
+    if os.path.exists(trend_path):
+        trend_chart(read(trend_path), classes, os.path.join(out, "trend.svg"))
+
+
+def trend_chart(rows, classes, path):
+    """One point per guard run: the median, over every metric the guard
+    keeps, of now / baseline (100% = the baseline; under 100 is faster).
+    The median shrugs off one noisy metric; a real slowdown moves most of
+    them. Hollow: that run had a metric past its tolerance."""
+    import datetime
+    runs = {}
+    for r in rows:
+        host = classes.get(r["host_class"])
+        v, b = num(r["value"]), num(r["baseline"])
+        if host is None or v is None or not b:
+            continue
+        key = (host, r["date"], r["rev"])
+        runs.setdefault(key, []).append((v / b * 100.0, r["verdict"]))
+    if not runs:
+        return
+    per_host = {h: [] for h in TREND_HOSTS}
+    for (host, date, rev), vals in sorted(runs.items(), key=lambda kv: kv[0][1]):
+        d = datetime.datetime.strptime(date[:16], "%Y-%m-%dT%H:%M")
+        x = (d - datetime.datetime(2000, 1, 1)).total_seconds() / 86400.0
+        ratios = sorted(v for v, _ in vals)
+        med = ratios[len(ratios) // 2] if len(ratios) % 2 else (ratios[len(ratios) // 2 - 1] + ratios[len(ratios) // 2]) / 2
+        bad = sum(1 for _, verdict in vals if verdict == "regressed")
+        per_host[host].append((x, med, dict(date=date, rev=rev, n=len(vals), bad=bad)))
+    hosts = [h for h in TREND_HOSTS if per_host[h]]
+    xs = [p[0] for h in hosts for p in per_host[h]]
+    lo, hi = math.floor(min(xs)), math.ceil(max(xs))
+    if hi - lo < 2:
+        lo, hi = lo - 1, lo + 1 if hi - lo < 1 else hi
+    ys = [p[1] for h in hosts for p in per_host[h]]
+    ylo = min(80, 10 * math.floor(min(ys) / 10.0))
+    yhi = max(120, 10 * math.ceil(max(ys) / 10.0))
+    c = Chart("Engine cost over time (make perf)",
+              "Each point is one guard run: the median of its metrics as a % of the host's own baseline.",
+              "Date of the run", "Median metric, % of baseline",
+              Days(lo, hi), Lin(ylo, yhi, 10), hosts)
+    c.notes = ["Under 100% is faster. Hollow marker: a metric past its tolerance in that run"]
+    c.hline(100, "baseline")
+    for h in hosts:
+        pts = per_host[h]
+        c.series(h, pts, "%s: %s%%" % (SHORT[h], label_num(round(pts[-1][1]))),
+                 lambda x, y, r, h=h: "%s, %s (rev %s): %s%% of baseline over %d metrics, %d past tolerance" % (
+                     HOST_LABEL[h], r["date"], r["rev"], label_num(round(y, 1)), r["n"], r["bad"]),
+                 hollow=lambda p: p[2]["bad"] > 0)
+    c.render(path)
 
 
 if __name__ == "__main__":
