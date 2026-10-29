@@ -57,6 +57,17 @@ skipped). Upstream fixes taken:
 
 ### Added
 
+- **Help ▸ Troubleshooting ▸ Report a Bug…**: a short form (title, what
+  happened, what you expected, steps) that opens the project's GitHub bug
+  form in the browser, filled in. **Details that will be included** shows,
+  editable, each part ticked or not: version and build, OS and processor,
+  Qt, the view, the show's size in counts, the I/O plugin names; the
+  layout report and recent log lines start unticked. The show's name and
+  path, fixture and group names, the user name, the home folder (as `~`),
+  IP addresses and passwords are never included. A report too long for a
+  link is cut, with the whole on the clipboard; **Copy Report** works
+  without a GitHub account. The app sends nothing itself. The repo's bug
+  template is now an issue form (`.github/ISSUE_TEMPLATE/bug_report.yml`).
 - **Save As offers QLC+ 4's .qxw** ("QLC+ 4 Workspaces"), starting on it
   for a show opened from a .qxw; the extension follows the type chosen. A
   .qxw save works as before.
