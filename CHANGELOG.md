@@ -189,6 +189,10 @@ skipped). Upstream fixes taken:
   *Questions QLC+ users ask*: a fader that overrides and lets go (Monitor
   and reset), ⌘D Dump DMX values, Flash's Override priority and Force LTP,
   and sending MIDI CC out.
+- **File ▸ New from Template**: start a show from a ready-made one. The
+  first is the course's **Show-choir stage (classroom)** (the rig, groups,
+  stage targets, colours and levels, nothing patched to an output). It
+  opens untitled, so Save asks for a name.
 
 ### Changed
 

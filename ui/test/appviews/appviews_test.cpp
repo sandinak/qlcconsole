@@ -44,6 +44,7 @@
 #include <QTimer>
 #include <QMessageBox>
 #include <QSettings>
+#include <QApplication>
 #include <QFileDialog>
 
 #include "cuerunner.h"
@@ -3028,6 +3029,44 @@ void AppViews_Test::aShowOpensLockedWhenTheUserAsks()
     for (const MonitorProperties::MonitorLayer &l : mp->layers())
         if (l.name == QStringLiteral("Booms"))
             QVERIFY(!l.locked);
+    m_app->clearDocument();
+}
+
+void AppViews_Test::newFromTemplateOpensTheClassroomStageUntitled()
+{
+    // The menu: one entry per template, after New
+    QMenu *menu = m_app->menuBar()->findChild<QMenu *>("fileNewFromTemplate");
+    QVERIFY(menu != nullptr);
+    const QList<App::ShowTemplate> templates = App::showTemplates();
+    QVERIFY(!templates.isEmpty());
+    QCOMPARE(menu->actions().size(), templates.size());
+    QCOMPARE(menu->actions().first()->data().toString(), templates.first().resource);
+    QVERIFY(QFile::exists(templates.first().resource));
+
+    m_app->clearDocument();
+    QVERIFY(m_app->newFromTemplate(templates.first().resource));
+    Doc *doc = m_app->doc();
+    QCOMPARE(doc->fixtures().count(), 68);      // docs/course/rig.md
+    QVERIFY(!doc->fixtureGroups().isEmpty());
+    // Untitled and unchanged: Save asks where; nothing to save on close
+    QVERIFY(m_app->fileName().isEmpty());
+    QVERIFY(!doc->isModified());
+    QVERIFY(doc->programmer()->venueCorrections()->showFile().isEmpty());
+    // Never sends anything: no universe is patched to an output
+    InputOutputMap *iom = doc->inputOutputMap();
+    for (quint32 i = 0; i < iom->universesCount(); i++)
+        QCOMPARE(iom->outputPatchesCount(iom->getUniverseID(i)), 0);
+
+    // An edited show is asked about first: Cancel keeps it
+    doc->setModified();
+    QTimer::singleShot(0, this, []() {
+        QMessageBox *box = qobject_cast<QMessageBox *>(QApplication::activeModalWidget());
+        if (box != nullptr)
+            box->button(QMessageBox::Cancel)->click();
+    });
+    QVERIFY(!m_app->newFromTemplate(templates.first().resource));
+    QVERIFY(doc->isModified());
+    QCOMPARE(doc->fixtures().count(), 68);
     m_app->clearDocument();
 }
 

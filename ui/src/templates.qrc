@@ -1,0 +1,7 @@
+<!DOCTYPE RCC><RCC version="1.0">
+<qresource>
+    <!-- File > New from Template. The course's teaching show is the first
+         template: one file, kept by the course (docs/course/rig.md). -->
+    <file alias="templates/ShowChoir-Classroom.qlcc">../../docs/course/shows/ShowChoir-Classroom.qlcc</file>
+</qresource>
+</RCC>

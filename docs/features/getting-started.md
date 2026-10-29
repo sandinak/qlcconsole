@@ -46,6 +46,13 @@ tablet and setting up users.
 ### Show files
 
 - **.qlcc** is qlcconsole's own format, and what **Save As** starts on.
+- **File ▸ New from Template** starts a new show from a ready-made one
+  instead of an empty one. The first is the **Show-choir stage
+  (classroom)**: the course's teaching stage, with risers, trusses,
+  audience towers, 68 lights, groups, stage targets, colours and levels,
+  and no cues yet. It opens untitled, so **Save** asks for a name and the
+  template stays as it was. Nothing in it is patched to an output, so it
+  sends nothing until you patch it.
 - **.qxw** (stock QLC+) opens fine, and **Save** writes a show back in the
   format it was opened in. **Save As** offers it too (**QLC+ 4
   Workspaces**), and starts on it for a show opened from a .qxw. A .qxw

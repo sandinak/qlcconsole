@@ -1802,6 +1802,8 @@ void App::slotModeChanged(Doc::Mode mode)
         /* Disable editing features */
         m_fileNewAction->setEnabled(false);
         m_fileOpenAction->setEnabled(false);
+        if (m_fileTemplatesMenu != nullptr)
+            m_fileTemplatesMenu->setEnabled(false);
         m_liveEditAction->setEnabled(true);
         m_liveEditVirtualConsoleAction->setEnabled(true);
         m_captureLiveEditsAction->setEnabled(true);
@@ -1832,6 +1834,8 @@ void App::slotModeChanged(Doc::Mode mode)
         /* Enable editing features */
         m_fileNewAction->setEnabled(true);
         m_fileOpenAction->setEnabled(true);
+        if (m_fileTemplatesMenu != nullptr)
+            m_fileTemplatesMenu->setEnabled(true);
         if (m_controlBlindAction != NULL)
             m_controlBlindAction->setEnabled(true);
         m_liveEditAction->setEnabled(false);
@@ -2288,6 +2292,23 @@ void App::initMenuBar()
     /* ---- File ---- */
     QMenu* fileMenu = mb->addMenu(tr("&File"));
     fileMenu->addAction(m_fileNewAction);
+    {
+        // New from Template (forum survey Q180): a show to start from.
+        QMenu *templates = fileMenu->addMenu(tr("New from &Template"));
+        m_fileTemplatesMenu = templates;
+        templates->setObjectName(QStringLiteral("fileNewFromTemplate"));
+        templates->setToolTipsVisible(true);
+        foreach (const ShowTemplate &t, showTemplates())
+        {
+            QAction *a = templates->addAction(t.title);
+            a->setToolTip(t.toolTip);
+            a->setData(t.resource);
+            const QString resource = t.resource;
+            connect(a, &QAction::triggered, this, [this, resource]() {
+                newFromTemplate(resource);
+            });
+        }
+    }
     fileMenu->addAction(m_fileOpenAction);
     m_fileImportMenu = fileMenu->addMenu(QIcon(":/fileimport.png"), tr("&Import"));
     m_fileImportMenu->setObjectName(QStringLiteral("fileImportMenu"));
@@ -2907,6 +2928,61 @@ bool App::slotFileNew()
     }
 
     clearDocument();
+    return true;
+}
+
+QList<App::ShowTemplate> App::showTemplates()
+{
+    return {
+        { tr("Show-choir stage (classroom)"),
+          QStringLiteral(":/templates/ShowChoir-Classroom.qlcc"),
+          tr("The course's teaching stage: risers, trusses, audience towers and 68 lights, "
+             "with groups, stage targets, colours and levels, and no show yet. "
+             "Nothing is patched to an output.") },
+    };
+}
+
+bool App::newFromTemplate(const QString &resource)
+{
+    QString msg(tr("Do you wish to save the current workspace?\n" \
+                   "Changes will be lost if you don't save them."));
+    if (saveModifiedDoc(tr("New Workspace"), msg) == false)
+        return false;
+
+    /* Opened from a copy, as any show is opened from a file: the show's own
+       definitions come with it (a .qlcc), and the template in the app is
+       never the file Save writes. */
+    const QString dir = QDir(QDir::tempPath()).filePath(QStringLiteral("qlcconsole-templates"));
+    QDir().mkpath(dir);
+    const QString copy = QDir(dir).filePath(QFileInfo(resource).fileName());
+    QFile::remove(copy);
+    if (QFile::copy(resource, copy) == false)
+    {
+        qWarning() << "[App] Cannot copy the template" << resource << "to" << copy;
+        handleFileError(QFile::ReadError);
+        return false;
+    }
+    QFile::setPermissions(copy, QFile::permissions(copy) | QFileDevice::WriteOwner);
+
+    clearDocument();
+    const QFile::FileError error = loadXML(copy);
+    if (handleFileError(error) == false)
+    {
+        clearDocument();
+        return false;
+    }
+
+    /* Untitled: Save asks where, and no venue file goes beside the copy. */
+    setFileName(QString());
+    m_doc->programmer()->venueCorrections()->setShowFile(QString(), false);
+    if (m_workingDirectory.exists())
+        m_doc->setWorkspacePath(m_workingDirectory.absolutePath());
+    updateVenueFooter();
+    if (FixtureManager::instance() != NULL)
+        FixtureManager::instance()->updateView();
+    if (InputOutputManager::instance() != NULL)
+        InputOutputManager::instance()->updateList();
+    m_doc->resetModified();
     return true;
 }
 
