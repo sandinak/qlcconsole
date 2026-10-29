@@ -24,7 +24,7 @@ Each lesson starts from the one before's finish file (2.1 from Lesson
 | 2.3 | [Parts of a group](lesson-03/index.md) | written |
 | 2.4 | [Effects: sparkle and wave](lesson-04/index.md) | written |
 | 2.5 | [Moving lights and lines](lesson-05/index.md) | written |
-| 2.6 | Busking with Hits | planned |
+| 2.6 | [Busking with Hits](lesson-06/index.md) | written |
 | 2.7 | Sub-cues: stomps inside a cue, then the Level 2 check | planned |
 
 See the [course plan](https://github.com/sandinak/qlcconsole/blob/main/docs/course/COURSE_PLAN.md#level-2--intermediate-7-lessons).

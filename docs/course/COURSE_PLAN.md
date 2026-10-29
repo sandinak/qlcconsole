@@ -12,8 +12,9 @@ lighting-concepts lessons (no computers) before the virtual stage (0.8).
 Every app step is checked by the course test on 0.3.0 (release candidate
 4), the pictures retaken on it. Level 2 is being written a lesson at a
 time, each published when done: 2.1 (tracking and Block), 2.2
-(palettes), 2.3 (parts of a group), 2.4 (effects) and 2.5 (lines)
-are written and checked by the course test; 2.6–2.7 are an outline. Level 3 has
+(palettes), 2.3 (parts of a group), 2.4 (effects), 2.5 (lines) and
+2.6 (hits) are written and checked by the course test; 2.7 is an
+outline. Level 3 has
 four lessons written — 3.3 plot symbols, 3.6 focus and calibration (focus
 calls on the controller, venues, the scramble practice and its focus
 report, Focus this cue; with pictures), 3.7 house lights, work lights and power,
@@ -126,7 +127,7 @@ on lines, and busking hits for the unexpected.*
 | 2.3 | **Parts of a group** *(written)* | Highlight one row of singers; symmetry and breaking it (0.3, 0.4, 0.5): the bridge as a call and response. | 1.0.5 *Bridge* (Block): **Make set…** *Truss Sides* (Trusses SR + SL), one layer Blue, Full; **Add child layer → Trusses SR** in Amber (a set's layer can't be split: Split is greyed); Steps Blue, 25% with a ⇧-dropped child **US** in White, Full. Extension: CS + DS dropped together, **Split layer**, **More ▾ → Merge**. |
 | 2.4 | **Effects: sparkle and wave** *(written; planned as "sparkle, chase, matrix")* | Energy and rhythm (0.2, 0.4, 0.6). Eye candy vs. light on people. | 1.0.6 *Dance Break* (Block): Steps, StepTops, TrussW-RGB still; **+ Palette → Effect** in the song folder, the effect picker (*Sparkle · Dimmer*) → *Step Sparkle* on the Steps, **⋯ → Its own colour → White**; *Rainbow* → *Truss Wave* on TrussW-RGB (a wave of its blue). Extension: **Speed: Main Speed** (footer). The chase and an effect across the whole stage wait on the app (§8, 17). |
 | 2.5 | **Moving lights and lines** *(written)* | Beams as scenery; fans and crosses on the button of a song (0.2, 0.3, 0.6). | 1.0.7 *Fan* (Block): Truss-Spots White, Full, **Riser Line** dropped on the row (the order strip, the plan view, Spread +5); 1.0.8 *Button* (tracks): the grey row's **Spread ⋯ → −5**, Red (the colour wheel and ring take their nearest slots), fade in 1 s. Extension: Spread 0, Grouping Pairs. The USTs wait on the app (§8, 20). |
-| 2.6 | **Busking with Hits** | When the band vamps, or the soloist goes long (busking, Lesson 0.7). | The Hits section, **Make VC page**, firing hits from Virtual Console buttons over a running list. |
+| 2.6 | **Busking with Hits** *(written)* | When the band vamps, or the soloist goes long (busking, Lesson 0.7; a sting, 0.6). | Right-click Spring Show → **+ Hit**: *Red Stab* (TrussW-RGB Red, Full), *Glow* (Lanterns Amber, Full), *Faces* (AT-W-ALL White, Full, Aim Center); right-click Hits → **Make VC page**; Operate, GO to the Verse, **Red Stab** clicked on the Virtual Console over it and let go. At home: a fourth hit, Make VC page again. |
 | 2.7 | **Sub-cues: stomps inside a cue** | Stomps, stings and buttons in a chorus (Lesson 0.6). | Sub-cues 4.1, 4.2, Sub GO and auto-follow. **Level check:** design and program one full song from a cue sheet. |
 
 ### Level 3 — Advanced (10 lessons)
