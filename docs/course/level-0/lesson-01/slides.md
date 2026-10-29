@@ -1,74 +1,52 @@
 ---
 title: "0.1 Slides outline"
-parent: "Lesson 0.1 — What light does"
-grand_parent: "Level 0 — First look"
+parent: "Lesson 0.1 — Why we light a show"
+grand_parent: "Level 0 — Lighting concepts"
 nav_order: 3
 ---
 
-# Slides — Lesson 0.1: What light does
+# Slides — Lesson 0.1: Why we light a show
 
 *An outline: one heading per slide, with what's on it and what the
-teacher says. It can be turned into a deck as it is.*
+teacher says.*
 
 ---
 
-## 1. What light does
+## 1. Why we light a show
 
-- Title, Level 0 · Lesson 1
-- Picture: `images/lesson-0-1/colour-warm.png`
-- *Say:* "This year you're lighting our show. Today is about what light
-  is for."
+- Title, Level 0 · Lesson 1.
+- *Say:* "This year you light our show. Before any equipment: what is
+  light for?"
 
-## 2. Imagine it dark
+## 2. Work light
 
-- A black slide.
-- *Ask:* "What would our show be like with no stage lights? Only the
-  house lights?"
+- Picture: `images/lesson-0-8/stage-45.png`.
+- *Ask:* "What can you see? What is it telling you?"
 
-## 3. Watch 1
+## 3. Show light
 
-- The clip.
-- *Ask:* "What did you notice?" Then: "What did the lights do?"
+- Picture: `images/lesson-1-3/rig-solo.png`.
+- *Ask:* "Same stage. Where do you look? How does it feel?"
+- *Say:* "Work light shows everything. Show light chooses."
 
-## 4. Intensity
+## 4. The six jobs
 
-- Pictures: `intensity-full.png`, `intensity-low.png` side by side.
-- *Say:* "Same lights. Only the brightness changed. Which one is the big
-  moment?"
+- Visibility · Focus · Mood · Time and place · Story · Rhythm.
+- One show choir example each (handout).
 
-## 5. Colour
+## 5. Visibility first
 
-- Pictures: `colour-warm.png`, `colour-cool.png`.
-- Warm (amber, warm white) and cool (blue, lavender); deep and pale.
-- *Ask:* "Which one is a love song? Which one is night-time?"
+- *Say:* "If the audience can't see faces, the look has failed, however
+  good it is."
 
-## 6. Direction
+## 6. The clip
 
-- Pictures: `direction-front.png`, `direction-back.png`,
-  `direction-below.png`.
-- Front: faces. Back: outlines. Below: drama.
-- *Say:* "Every number needs faces lit, from the front."
+- The clip. Log each change and its job.
 
-## 7. Movement
+## 7. The crew
 
-- Fades, chases, moving beams.
-- *Say:* "You'll see these in the clip."
+- Designer decides → programmer builds → SM calls → board op takes it.
 
-## 8. The four jobs
+## 8. Exit ticket
 
-- **Visibility** · **Focus** · **Mood** · **Energy**.
-- *Say:* "Every light change should do one of these jobs."
-
-## 9. Watch 2: only the light
-
-- The light log on the handout.
-- *Say:* "Each time it changes, write when, what and why."
-
-## 10. Share
-
-- One change per group.
-- Picture sort: which picture for a ballad? For an opener?
-
-## 11. Exit ticket
-
-- Four questions on paper.
+- Three questions.

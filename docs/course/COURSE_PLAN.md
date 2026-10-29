@@ -5,10 +5,12 @@ nav_order: 2
 
 # Show Tree course — plan for review
 
-*Status (2026-10-26): Level 0 and Level 1 are written — 0.1, 0.2, 1.1–1.5
+*Status (2026-10-29): Level 0 and Level 1 are written — 0.1–0.8, 1.1–1.5
 and the Level 1 check — each with teacher guide, handout, slides outline,
-exit ticket and at-home page, every app step checked by the course test
-on 0.3.0 (release candidate 4), their pictures retaken on it. Level 2 is an outline. Level 3 has
+exit ticket, at-home page and student page. Level 0 is now seven short
+lighting-concepts lessons (no computers) before the virtual stage (0.8).
+Every app step is checked by the course test on 0.3.0 (release candidate
+4), the pictures retaken on it. Level 2 is an outline. Level 3 has
 four lessons written — 3.3 plot symbols, 3.6 focus and calibration (focus
 calls on the controller, venues, the scramble practice and its focus
 report, Focus this cue; with pictures), 3.7 house lights, work lights and power,
@@ -21,9 +23,11 @@ high-school show choir tech crew from "what does a lighting designer do?"
 to programming and running a real show in qlcconsole, using a stage that
 looks like ours: risers, trusses, a cyc, pixel boxes and lanterns.
 
-The course teaches **design first, then the tool**. Each lesson starts from
-something a designer decides ("the verse should feel close and warm") and
-ends with the Show Tree action that makes it happen.
+The course teaches **the why before the how**. Level 0 teaches lighting
+itself, with no computers: why a show is lit, what the audience reads,
+how a song and a show are lit and run. Every lesson after it opens with
+the reason for its step, linked back to the Level 0 lesson it applies,
+then ends with the Show Tree action that makes it happen.
 
 ---
 
@@ -33,7 +37,7 @@ ends with the Show Tree action that makes it happen.
 |---|---|
 | **Students** | Grades 9–12, on the show choir tech crew. Most have never run lights. Some have run a board once. |
 | **Class period** | **50 minutes** (confirmed). Each lesson fits one period: 10 min design idea, 10 min teacher demo, 20 min hands-on, 10 min check and exit ticket. A 45-minute period drops the extension. |
-| **Pace** | About one lesson a week (confirmed), between rehearsals. Level 0–1 before the fall show's tech week; Level 2 through the winter; Level 3 for the students who will run the spring show. |
+| **Pace** | About one lesson a week (confirmed), between rehearsals. Level 0–1 before the fall show's tech week; Level 2 through the winter; Level 3 for the students who will run the spring show. Level 0's concepts lessons (0.1–0.7) are 20–30 minutes each and pair up in one period (0.1 + 0.2, 0.3 + 0.4, 0.5 + 0.6, then 0.7 with time to finish the song map), so Level 0 takes five periods, 0.8 included. |
 | **Laptops in class** | **Few at first** — one per pair or three. The projector shows the teacher's screen. |
 | **Computers at home** | Mixed: Mac, Windows, and **Chromebooks**. A Chromebook runs qlcconsole only if its Linux environment (Crostini) is turned on **and** it has an Intel/AMD chip — the Linux build is x86_64 only. **The school's Chromebooks don't allow Linux** (Branson, 2026-10-21), so they can't run the app. Chromebook students use the browser [practice version](web/index.html) (§10) for hands-on work; each lesson keeps its paper version too. |
 | **The stage** | The **teaching show** (below): a virtual copy of a show choir stage. It is never connected to real lights. The **Rig Overview** is the stage. |
@@ -59,15 +63,38 @@ A pair skips the designer role; the navigator does both.
 Four levels. Each level ends with a short practical check. Lesson numbers
 are *level.lesson*.
 
-### Level 0 — First look (2 lessons)
+### Level 0 — Lighting concepts (8 lessons)
 
-*Outcome: students can say what light does for a show choir number, and
-can open the app, find the stage, and play a finished cue list.*
+*Outcome: students can say what light is for in a show choir number, mark
+a song's sections and what the audience should feel at each change, use
+the crew's words (look, cue, build, hit, button, standby, busking), and
+find their way round the virtual stage.*
 
-| # | Lesson | Design idea | In the tool |
+**Why Level 0 is concepts first.** The teacher (2026-10-29): most of the
+crew doesn't know what busking means, why the parts of a song are lit
+differently, what an audience reads from the light, or how a show builds
+anticipation and momentum; "take the time to be comprehensive and start
+from the beginning … they need to know the WHY of what they're doing
+before the HOW." So Level 0 assumes nothing: it starts with why a show
+is lit at all and builds up, one idea per lesson, before any app. It
+covers more ground than the five lessons first proposed: **0.1** (why we
+light, the crew) and **0.3** (the parts of a look) were added, because
+the jobs of light and a look's layers are what every later lesson,
+starting with 1.1's layers, rests on. Each lesson opens with its *why*;
+each app lesson from 1.1 on opens with one or two sentences of *why*
+linking back here. The writing stays concise: one idea per step, student
+pages under about 400 words.
+
+| # | Lesson | Design idea | Activity (no computer) |
 |---|---|---|---|
-| 0.1 | **What light does** *(written)* | The four qualities of light (intensity, colour, direction, movement). The jobs of light: let the audience see, tell them where to look, set the mood, match the energy of the song. | No computer. Watch a 2-minute clip of a show choir number twice: once for the singers, once only for the light. Name each change. |
-| 0.2 | **The virtual stage** *(written)* | The stage words: upstage / downstage, stage left / stage right (the singers' left and right), risers, trusses, cyc, audience towers (front of house). | Install and open qlcconsole. Open `lesson-1-1-finish.qlcc`. **View → Rig Overview** (⇧⌘R): its View (Top, Front, 45°) and Room (Work light…) to find each part of the stage. Run tab: press GO three times. Nothing you do can break real lights. **Level 0 check:** label the stage plan. |
+| 0.1 | **Why we light a show** *(written)* | Work light shows everything; show light chooses. The six jobs: visibility, focus, mood, time and place, story, rhythm. The crew: designer, programmer, SM, board op. | Work light vs the solo picture; a clip (teacher picks), naming the job of each change. |
+| 0.2 | **What light does** *(written)* | The four qualities a designer controls: intensity, colour, direction, movement. | The same clip again, a light log by quality and job; the picture sort. |
+| 0.3 | **Building a look** *(written)* | A look is layers, each with one job: front light and fill, back, side, uplight, background, wash, special. Faces first. | A torch on a volunteer; take `rig-verse-center` apart; design a ballad verse in layers. |
+| 0.4 | **What the audience reads** *(written)* | Where the eye goes (brightest, contrast, movement, colour, faces); a soloist is up **and** the rest down; what colour and direction say; silhouette, blackout; a cue is a change the audience feels. | "Where's your eye?" on three pictures; a colour-swatch sort. |
+| 0.5 | **Lighting a song** *(written)* | Song structure (intro, verse, pre-chorus, chorus, bridge, dance break, final chorus, button); how a designer works before equipment; lighting the staging and choreography; contrast, one look per idea. | Listen twice to the song ("Everybody Scream" if possible): a **song map**. |
+| 0.6 | **Anticipation and momentum** *(written)* | Builds, holding back, hits on the accents, timing on the beat, snap vs fade, the button, pacing a show, restraint. | The song again: builds, hits, S/F, peak and button on the map; pace a set list. **Level 0 check, part 1:** the song map. |
+| 0.7 | **Running a show: cues, calls and busking** *(written)* | The cue list; standby / GO; who does what before and during the show; busking: what, when (a vamp, a soloist goes long, an encore, a problem), how. | The SM calls the song map, the op flips cue cards; then busking three hit cards over a looped vamp. |
+| 0.8 | **The virtual stage** *(written)* | The stage words: upstage / downstage, stage left / stage right (the singers' left and right), risers, trusses, cyc, audience towers (front of house). | Install and open qlcconsole. Open `lesson-1-1-finish.qlcc`. **View → Rig Overview** (⇧⌘R): its View (Top, Front, 45°) and Room (Work light…) to find each part of the stage. Run tab: press GO three times. Nothing you do can break real lights. **Level 0 check, part 2:** label the stage plan. |
 
 ### Level 1 — Basics (5 lessons)
 
@@ -96,8 +123,8 @@ on lines, and busking hits for the unexpected.*
 | 2.3 | **Parts of a group** | Highlight one row of singers. Symmetry. | Child layers (`US in Steps`), group sets (a set of Trusses SR + Trusses SL), Split / Merge. |
 | 2.4 | **Effects: sparkle, chase, matrix** | Energy and rhythm. Eye candy vs. light on people. | Effects on the Steps and the truss pixel boxes (Sinelon, chase, sparkle); an effect on the cue across the whole stage; its own colour; speed masters. |
 | 2.5 | **Moving lights and lines** | Beams as scenery; fans and crosses on the button of a song. | The Riser Line target, Spread / Grouping / Cross, the plan view, with Truss-Spots and USTs. Colour rings on the Truss-Spots. |
-| 2.6 | **Busking with Hits** | When the band vamps, or the soloist goes long. | The Hits section, **Make VC page**, firing hits from Virtual Console buttons over a running list. |
-| 2.7 | **Sub-cues: stomps inside a cue** | Stomps, stings and buttons in a chorus. | Sub-cues 4.1, 4.2, Sub GO and auto-follow. **Level check:** design and program one full song from a cue sheet. |
+| 2.6 | **Busking with Hits** | When the band vamps, or the soloist goes long (busking, Lesson 0.7). | The Hits section, **Make VC page**, firing hits from Virtual Console buttons over a running list. |
+| 2.7 | **Sub-cues: stomps inside a cue** | Stomps, stings and buttons in a chorus (Lesson 0.6). | Sub-cues 4.1, 4.2, Sub GO and auto-follow. **Level check:** design and program one full song from a cue sheet. |
 
 ### Level 3 — Advanced (10 lessons)
 
@@ -122,19 +149,23 @@ here.*
 
 ## 3. The design-concepts strand
 
-Every lesson opens with a design idea before the tool. These ideas come
-back again and again; the table says where each one maps to the Show Tree.
+Level 0 teaches these ideas with no computers; every later lesson opens
+with the one it applies. The table says where each is taught and where it
+maps to the Show Tree.
 
 | Concept | What students learn | In the Show Tree |
 |---|---|---|
-| **Intensity** | How bright. The eye goes to the brightest thing. | The **Dimmer** row; palettes Full, 75%, Half, 25%, 10%, Out. |
-| **Colour** | Warm/cool, saturated/pale, what it says (blue = night, cool, calm; red/magenta = energy). | The **Colour** row; the colour palettes. |
-| **Direction (position)** | Front light shows faces, back light separates, side light sculpts, uplight is drama. | Which **group** you choose (AT-W-ALL from the front, StepTops from below, TrussC-RGB on the cyc), and **Position** / Aim for moving lights. |
-| **Movement** | Light that changes while you watch: fades, chases, moving beams. | Fade times, **effects**, moving lights on a **line**. |
-| **Focus the audience** | Light where you want them to look; dark where you don't. | Which layers are in a cue; a soloist special. |
-| **Mood and story** | What the song is about; what changes in it. | Colour choices per song; palettes per song. |
-| **Energy** | Match the music: verse low, chorus high, button big. | Levels and how much of the rig is on; effects; snaps vs fades. |
-| **Reading a song** | Intro, verse, pre-chorus, chorus, bridge, dance break, button (the final hit). | One **cue list** per song; a **cue** per section or moment. |
+| **Intensity** (0.2) | How bright. The eye goes to the brightest thing. | The **Dimmer** row; palettes Full, 75%, Half, 25%, 10%, Out. |
+| **Colour** (0.2, 0.4) | Warm/cool, saturated/pale, what it says (blue = night, cool, calm; red/magenta = energy). | The **Colour** row; the colour palettes. |
+| **Direction (position)** (0.2, 0.3) | Front light shows faces, back light separates, side light sculpts, uplight is drama. | Which **group** you choose (AT-W-ALL from the front, StepTops from below, TrussC-RGB on the cyc), and **Position** / Aim for moving lights. |
+| **Movement** (0.2) | Light that changes while you watch: fades, chases, moving beams. | Fade times, **effects**, moving lights on a **line**. |
+| **Focus the audience** (0.1, 0.4) | Light where you want them to look; dark where you don't. | Which layers are in a cue; a soloist special. |
+| **Mood and story** (0.1, 0.4) | What the song is about; what changes in it. | Colour choices per song; palettes per song. |
+| **Energy** (0.1, 0.6) | Match the music: verse low, chorus high, button big. | Levels and how much of the rig is on; effects; snaps vs fades. |
+| **Reading a song** (0.5) | Intro, verse, pre-chorus, chorus, bridge, dance break, button (the final hit). | One **cue list** per song; a **cue** per section or moment. |
+| **The parts of a look** (0.3) | Front light and fill, back, side, uplight, background, wash, special; faces first. | A cue's **layers**, one group doing one job. |
+| **Anticipation and momentum** (0.6) | Builds, holding back, hits, snap vs fade, the button, pacing a show. | Fade and hold times (1.4), sub-cues (2.7), hits (2.6). |
+| **Running and busking** (0.7) | Standby / GO; who does what; busking a vamp. | The **Run** tab and Operate (1.5); **Hits** over a running list (2.6). |
 
 ### The cue sheet
 
@@ -150,12 +181,17 @@ used from Lesson 1.1 to the capstone (it is in Lesson 1.1's handout).
 
 ## 4. Lesson template
 
-Every lesson has the same parts, so a substitute can teach it:
+Every lesson has the same parts, so a substitute can teach it. Level 0's
+concepts lessons (0.1–0.7) are the short form: 20–30 minutes, no
+computers, a *why*, the idea, an activity on paper or by ear, and the
+exit ticket.
 
 1. **Objectives** — 2–3 "I can…" statements.
 2. **Vocabulary** — the new words, each defined once (and in the
    [Glossary](GLOSSARY.md)).
-3. **Design idea (10 min)** — no computers. Picture, clip or discussion.
+3. **Design idea (10 min)** — no computers. It opens with the *why*: one
+   or two sentences on why the step matters, linked to the Level 0 lesson
+   it applies. Then a picture, clip or discussion.
 4. **Teacher demo (10 min)** — on the projector, the exact steps the
    handout will ask for, with the class calling out what to do next.
 5. **Hands-on (20 min)** — handout steps in pairs/triads, with roles. Each
@@ -265,7 +301,11 @@ and its test change in the same commit, and the course test
 
 - **Exit tickets** every lesson (quick, low stakes).
 - **Level checks:**
-  - Level 0: label the stage diagram (US/DS/SL/SR, risers, trusses, audience towers, cyc).
+  - Level 0, in two parts: (1) a **song map** (Lessons 0.5–0.6): every
+    section of a song marked, a light change at each with **what the
+    audience should feel**, builds and hits, snap or fade at each change,
+    the peak and the button; (2) label the stage diagram (0.8: US/DS/SL/SR,
+    risers, trusses, audience towers, cyc).
   - Level 1: *Light this 30-second clip* — a cue sheet with 3–5 cues, the
     cue list built, and run live with GO while the clip plays.
   - Level 2: *Design and program one song* — cue sheet, tracking used on
@@ -361,7 +401,7 @@ worked around in the course and checked by the course test.
    (Qualities)* while the header said *Spring Show*. The box refreshes when
    the current production changes, and both shows' productions had the
    same id. Every course file uses *Spring Show*, so students won't meet
-   it; the course test takes the 0.1 pictures (the *Qualities* production)
+   it; the course test takes the 0.2 pictures (the *Qualities* production)
    last. **Fixed in 0.3.0:** the box is refilled on every Show Tree change,
    opening a show included, and compares the names, not only the ids
    (`cuerunner_test` `theBoxNamesTheOpenedShowsProduction`).
@@ -423,7 +463,14 @@ Also: the classroom show was rebuilt from DanceHysteria-0.6 as it is now
 3. ~~**The AT-Spots' shutter**~~ **Answered (2026-10-21):** auto-open
    shutters in the app, on by default (§8, 7). Lesson 1.3 drops the
    **Open** step; the practice version opens them the same way.
-4. **Video clips** for Lesson 0.1 and the Level 1 check: pick them.
+4. **Video clips**: pick them, and check each plays in the room. Lessons
+   0.1 and 0.2 share one 2–3 minute show choir number with clear changes
+   (a chorus, a soloist picked out, a colour change, the ending); 0.4
+   (optional) a soloist picked out of the ensemble, or a silhouette
+   opening; 0.6 (optional) a number's **button**; 0.7 (optional) a stage
+   manager calling a show; and the Level 1 check's clip. Each teacher
+   guide says what to look for. None is linked until someone has checked
+   it and its rights.
 
 ---
 

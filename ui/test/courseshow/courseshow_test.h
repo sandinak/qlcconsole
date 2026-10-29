@@ -79,9 +79,9 @@ private slots:
      *  Position row (and Undo), and a blue back light in the Solo. */
     void lessonThreeExtension();
 
-    /** Lesson 0.2: the Rig Overview's views and room light, as the handout
+    /** Lesson 0.8: the Rig Overview's views and room light, as the handout
      *  names them, and GO three times on Lesson 1.1's finish. */
-    void lessonZeroTwoTheVirtualStage();
+    void lessonZeroEightTheVirtualStage();
 
     /** Lesson 1.4's fades and hold play in the Run tab: the Pose fades in
      *  over 3 s, the Scream holds 2 s and the Solo follows by itself. */

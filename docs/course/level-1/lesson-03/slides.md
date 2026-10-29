@@ -21,7 +21,7 @@ teacher says. It can be turned into a deck as it is.*
 ## 2. One face, four directions
 
 - The torch demo: front, back, side, below.
-- Pictures: `images/lesson-0-1/direction-front.png`, `direction-back.png`,
+- Pictures: `images/lesson-0-2/direction-front.png`, `direction-back.png`,
   `direction-below.png`.
 
 ## 3. Every number needs faces lit

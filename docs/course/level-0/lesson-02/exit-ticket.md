@@ -1,44 +1,26 @@
 ---
-title: "0.2 Exit ticket: label the stage"
-parent: "Lesson 0.2 — The virtual stage"
-grand_parent: "Level 0 — First look"
+title: "0.2 Exit ticket"
+parent: "Lesson 0.2 — What light does"
+grand_parent: "Level 0 — Lighting concepts"
 nav_order: 4
 ---
 
-# Level 0 check — label the stage
+# Exit ticket — Lesson 0.2
 
 Name: ______________________
 
-This is a plan of our stage, seen from above, with the audience at the
-bottom. Name each numbered part and fill in the four directions **A–D**.
-
-![Our stage from above, to label](../../images/lesson-0-2/stage-plan.svg)
-
-| # | Part | # | Part |
-|---|---|---|---|
-| 1 | | 7 | |
-| 2 | | 8 | |
-| 3 | | 9 | |
-| 4 | | 10 | |
-| 5 | | 11 | |
-| 6 | | | |
-
-| | Direction |
-|---|---|
-| A | |
-| B | |
-| C | |
-| D | |
-
-1. Stage left is *whose* left?
+1. Name the **four qualities** of light.
 
    ____________________________________________________________
 
-2. A singer walks from the DS row to the US row. Are they going upstage
-   or downstage?
+2. A singer's face is in shadow. Light from which **direction** would
+   fix it?
 
    ____________________________________________________________
 
-3. In qlcconsole, where can you see what the lights are doing?
+3. Describe **one** change from the clip: which quality changed, and
+   which job did it do?
+
+   ____________________________________________________________
 
    ____________________________________________________________

@@ -9,6 +9,14 @@ nav_order: 2
 
 **Student handout**
 
+## Why this matters
+
+Colour and level are how the audience reads a moment's mood
+([Lesson 0.4](../../level-0/lesson-04/handout.md)). The director's note
+is about how the verse feels; the fix is a change of colour and
+intensity, and the scream is a hit
+([Lesson 0.6](../../level-0/lesson-06/handout.md)).
+
 ## Today you will
 
 - choose colours and levels to create a **mood**;

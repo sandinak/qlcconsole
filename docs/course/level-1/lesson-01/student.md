@@ -30,6 +30,14 @@ words:
     means: "Plays the next cue."
 ---
 
+## Why
+
+A song has sections, and each should feel different
+([Lesson 0.5](../0-5/)). A cue is how that change reaches the stage, and
+each cue is built in layers, one group doing one job
+([Lesson 0.3](../0-3/)). Today's three cues are the first three rows of
+a song map.
+
 ## The plan
 
 Fill in **Why** on paper first: what should the audience feel?

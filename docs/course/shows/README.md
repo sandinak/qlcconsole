@@ -4,7 +4,7 @@
 |---|---|
 | `ShowChoir-Classroom.qlcc` | The teaching show: the rig, groups, targets and base palettes, no productions. See [the teaching show](../rig.md). |
 | `lesson-1-1-start.qlcc` | Lesson 1.1's start (the same as the classroom show). |
-| `lesson-1-1-finish.qlcc` | Lesson 1.1 done: *Spring Show / 01-Everybody Scream*, cues Pose, Verse, Chorus, made current. Lesson 0.2 opens it too. |
+| `lesson-1-1-finish.qlcc` | Lesson 1.1 done: *Spring Show / 01-Everybody Scream*, cues Pose, Verse, Chorus, made current. Lesson 0.8 opens it too. |
 | `lesson-1-2-start.qlcc` | Lesson 1.2's start (the same as 1.1's finish). |
 | `lesson-1-2-finish.qlcc` | 1.2 done: the verse Lavender at 40%, and 1.0.3 *Scream* with cue looks Red, Full. |
 | `lesson-1-3-start.qlcc` · `lesson-1-3-finish.qlcc` | 1.3: AT-W-ALL Warm White, Full, Aim Center in the verse; 1.0.4 *Solo* (Block) with the AT-Spots White, Full, Aim Soloist DS (their shutter opens by itself). |

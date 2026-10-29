@@ -14,6 +14,8 @@ better: see [Timing](#timing))
 
 <img src="../../images/qr/class-3-6.svg" width="120" alt="QR code for https://sandinak.github.io/qlcconsole/class/3-6/">
 
+**Builds on:** Lesson [0.4](../../level-0/lesson-04/teacher-guide.md). Open with the handout's *Why this matters* before any clicks.
+
 ## Objectives
 
 Students can:

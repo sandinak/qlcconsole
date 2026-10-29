@@ -19,6 +19,12 @@ words:
     means: "From Lesson 3.7: **Ignore Blackout**, **Ignore the Grand Master**, **Switch (relay)**, **On when not in use**."
 ---
 
+## Why
+
+The ideas you learnt in Level 0 (cues, looks, calls) don't belong to one
+console ([Lesson 0.7](../0-7/)). If you've run an Eos desk, your show
+and your habits can come with you.
+
 ## On paper
 
 Fill in the right-hand column as you go.

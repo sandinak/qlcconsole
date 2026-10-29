@@ -19,6 +19,12 @@ words:
     means: "A light that is part of the set and seen as a light: a hanging lantern, a table lamp."
 ---
 
+## Why
+
+A plot is how a crew agrees what hangs where. A symbol tells you what
+kind of light it is, and so which part of a look it can be: a wash, a
+spot, a special ([Lesson 0.3](../0-3/)).
+
 ## On paper
 
 On the printed plot, find one of each, sketch its symbol and count them:

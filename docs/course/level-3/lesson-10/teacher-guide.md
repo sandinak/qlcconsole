@@ -14,6 +14,8 @@ already know an Eos desk
 
 <img src="../../images/qr/class-3-10.svg" width="120" alt="QR code for https://sandinak.github.io/qlcconsole/class/3-10/">
 
+**Builds on:** Lesson [0.7](../../level-0/lesson-07/teacher-guide.md). Open with the handout's *Why this matters* before any clicks.
+
 ## Objectives
 
 Students can:

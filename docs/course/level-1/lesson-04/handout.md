@@ -9,6 +9,12 @@ nav_order: 2
 
 **Student handout**
 
+## Why this matters
+
+Timing is part of the look. A snap lands a hit, a slow fade is a breath,
+and a cue a beat late feels wrong
+([Lesson 0.6](../../level-0/lesson-06/handout.md)).
+
 ## Today you will
 
 - choose the timing of each cue from the music;

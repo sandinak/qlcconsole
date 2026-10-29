@@ -9,6 +9,15 @@ nav_order: 2
 
 **Student handout**
 
+## Why this matters
+
+Visibility comes first: an audience that can't see faces can't follow
+the song ([Lesson 0.1](../../level-0/lesson-01/handout.md)). Front light
+is the part of a look that shows them
+([Lesson 0.3](../../level-0/lesson-03/handout.md)), and a special picks
+one singer out of the choir
+([Lesson 0.4](../../level-0/lesson-04/handout.md)).
+
 ## Today you will
 
 - add front light so the audience can see the singers' faces;

@@ -1,84 +1,85 @@
 ---
 title: "0.1 Student handout"
-parent: "Lesson 0.1 — What light does"
-grand_parent: "Level 0 — First look"
+parent: "Lesson 0.1 — Why we light a show"
+grand_parent: "Level 0 — Lighting concepts"
 nav_order: 2
 ---
 
-# Lesson 0.1 — What light does
+# Lesson 0.1 — Why we light a show
 
 **Student handout**
 
+## Why this matters
+
+A choir could sing under the house lights and the audience would hear
+every note. What they'd lose is everything the light tells them: where to
+look, how to feel, when the song turns. Stage lighting is part of the
+performance, as much as the choreography. This course is about lighting
+that does a job, so it starts with what those jobs are.
+
 ## Today you will
 
-- watch a show choir number twice, once for the performers and once only
-  for the lighting;
-- learn the vocabulary lighting designers use to describe light;
-- log what the light did in the number, and work out why.
+- compare a stage under work light with the same stage under show light;
+- learn the six jobs of stage light;
+- learn who on a lighting crew does what.
 
 ## Words for today
 
 | Word | Means |
 |---|---|
-| **Intensity** | How bright a light is, from **Full** (100%) down to **Out** (off). |
-| **Colour** | The colour of the light. **Warm** colours (amber, warm white) read as friendly and close; **cool** colours (blue, lavender) read as calm, cold or night. **Saturated** colours are deep and strong; **pale** ones have white mixed in. |
-| **Direction** | Where the light comes from. **Front light** shows faces, **back light** outlines performers against the background, **side light** sculpts bodies, and light from **below** looks dramatic or unnatural. |
-| **Movement** | Light that changes while you watch: a slow fade, a chase, beams sweeping across the stage. |
-| **Cue** | A planned moment when the lighting changes. |
-| **Focus** | Where the audience is looking. The eye goes to the brightest part of the stage. |
-| **Mood** | The feeling of a moment. |
-| **Energy** | How big the music is, from a quiet verse to a full-out chorus. |
+| **Work light** | Plain, even light for working on stage. Everything is visible; nothing is chosen. |
+| **Look** | Everything the lights are doing at one moment: which lights are on, in what colour, how bright, from where. |
+| **Cue** | A planned change from one look to the next, at a set moment in the song. |
+| **Lighting designer (LD)** | Decides what every look is and why. |
+| **Programmer** | Builds the designer's looks and cues into the lighting console. |
+| **Board operator (board op)** | Runs the console during the show and takes each cue. |
+| **Stage manager (SM)** | Runs the show and **calls** every cue: tells the board op when to take it. |
 
-## The four qualities of light
+## The six jobs of stage light
 
-Every light has four qualities a designer can control, and every change
-on stage is a change to at least one of them.
+| Job | What it does | In a show choir number |
+|---|---|---|
+| **Visibility** | The audience can see the performers, above all their faces. | Every singer's face is lit, back row included. |
+| **Focus** | It tells the audience where to look. | The soloist steps down and the light goes with them. |
+| **Mood** | It sets how a moment feels. | A cold, eerie verse; a warm, close ballad. |
+| **Time and place** | It says when or where we are. | Deep blue for night; a sunrise wash for a new day. |
+| **Story** | It shows that something has changed. | The choir freezes in silhouette when the lyric turns. |
+| **Rhythm** | It moves with the music. | A snap on a stomp; the chorus bigger than the verse. |
 
-| | |
+One cue usually does more than one job. A good cue does at least one on
+purpose.
+
+## Work light and show light
+
+| Work light | Show light |
 |---|---|
-| **Intensity** — the same lights, bright and dim | ![Bright](../../images/lesson-0-1/intensity-full.png) ![Dim](../../images/lesson-0-1/intensity-low.png) |
-| **Colour** — the same lights, warm and cool | ![Warm](../../images/lesson-0-1/colour-warm.png) ![Cool](../../images/lesson-0-1/colour-cool.png) |
-| **Direction** — from the front, the back and below | ![Front](../../images/lesson-0-1/direction-front.png) ![Back](../../images/lesson-0-1/direction-back.png) ![Below](../../images/lesson-0-1/direction-below.png) |
-| **Movement** | Watch for it in the video: fades, chases and moving beams. |
+| ![The stage in work light](../../images/lesson-0-8/stage-45.png) | ![The solo](../../images/lesson-1-3/rig-solo.png) |
 
-## The four jobs of light
+1. What does the work light let the audience see?
 
-1. **Visibility** — the audience can see the performers, especially
-   their faces.
-2. **Focus** — the light tells the audience where to look.
-3. **Mood** — the light sets how a moment feels.
-4. **Energy** — the light follows the music, held back in a verse and
-   opened up in a chorus.
+   ____________________________________________________________
 
-## Watch 1: the performance
+2. What does the show light tell them? Which jobs is it doing?
 
-Watch it the way the audience would. Afterwards, write down one thing
-that stood out:
+   ____________________________________________________________
 
-____________________________________________________________
+## The clip: name the jobs
 
-## Watch 2: only the light — your light log
+Watch the clip. Each time the light changes, write which job it is
+doing.
 
-This time, watch **only the lighting**. Each time it changes, log it.
-
-| When (a lyric, or "the start", "first chorus") | What changed (which quality?) | Why? (which job?) |
+| When (a lyric, or "first chorus") | What the light did | Which job? |
 |---|---|---|
 | | | |
 | | | |
 | | | |
-| | | |
-| | | |
 
-*Example:* "First chorus — brighter and shifted to pink (intensity,
-colour) — matches the jump in energy."
+## The crew
 
-## Done early? (Extension)
+A design goes from an idea to the stage through four people. On a small
+crew one person can hold two of these jobs.
 
-Our song this year is **"Everybody Scream"**, and the design goes dark
-and dramatic. Pick **one moment** of the song (the opening, a verse, the
-biggest chorus, the ending). What would the light do there? Which quality
-would you change, and which job would that change do?
-
-____________________________________________________________
-
-____________________________________________________________
+1. The **designer** decides: "the verse is cold, two singers in blue".
+2. The **programmer** builds it into the console as a cue.
+3. The **stage manager** calls it: "Lights cue 5, GO".
+4. The **board op** takes it on the call.

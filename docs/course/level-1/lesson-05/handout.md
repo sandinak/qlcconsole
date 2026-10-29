@@ -9,6 +9,13 @@ nav_order: 2
 
 **Student handout**
 
+## Why this matters
+
+A cue only works if it happens on the moment. The stage manager calls it
+and the board op takes it on GO
+([Lesson 0.7](../../level-0/lesson-07/handout.md)); today you run that
+with the real tool.
+
 ## Today you will
 
 - call cues as a stage manager and take them as a board operator;

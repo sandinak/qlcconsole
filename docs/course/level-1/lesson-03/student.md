@@ -27,6 +27,13 @@ words:
     means: "A cue that starts from a dark stage: nothing tracks into it."
 ---
 
+## Why
+
+Visibility comes first: an audience that can't see faces can't follow
+the song ([Lesson 0.1](../0-1/)). Front light is the part of a look that
+shows them ([Lesson 0.3](../0-3/)), and a special picks one singer out
+of the choir ([Lesson 0.4](../0-4/)).
+
 ## The plan
 
 | Cue | When | Why | Lights |

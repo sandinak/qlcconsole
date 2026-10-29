@@ -1723,9 +1723,9 @@ void CourseShow_Test::lessonsOneTwoToOneFourWithTheMouse()
     QCOMPARE(describeAll(m_app->doc()), l1);
 }
 
-void CourseShow_Test::lessonZeroTwoTheVirtualStage()
+void CourseShow_Test::lessonZeroEightTheVirtualStage()
 {
-    // Lesson 0.2: the finished Lesson 1.1, the Rig Overview, its views and
+    // Lesson 0.8: the finished Lesson 1.1, the Rig Overview, its views and
     // room light, and GO three times.
     QVERIFY(open(kL1Finish));
     Monitor *mon = Monitor::instance();
@@ -2648,7 +2648,7 @@ void CourseShow_Test::lessonFocusAndCalibration()
 void CourseShow_Test::lessonPictures()
 {
     // COURSE_SHOTS is docs/course/images: each lesson's pictures go in a
-    // folder of its own there (lesson-1-1, lesson-0-2, ...).
+    // folder of its own there (lesson-1-1, lesson-0-8, ...).
     const QString root = qEnvironmentVariable("COURSE_SHOTS");
     if (root.isEmpty())
         QSKIP("set COURSE_SHOTS to the course's images folder");
@@ -2820,10 +2820,10 @@ void CourseShow_Test::lessonPictures()
     // ================= Level 0 and Lessons 1.2-1.5 =================
     closeRig();
 
-    // --- 0.2: the stage from the top, the front and at 45°, work light on;
+    // --- 0.8: the stage from the top, the front and at 45°, work light on;
     //     and the Rig Overview's own controls.
     {
-        const QString d = root + QStringLiteral("/lesson-0-2");
+        const QString d = root + QStringLiteral("/lesson-0-8");
         QVERIFY(open(kL1Finish));
         ShowTreeView *v = showTree();
         const quint32 prod = m_app->doc()->showTree()->productions().first().id;
@@ -3021,10 +3021,10 @@ void CourseShow_Test::lessonPictures()
 
     // Last: it types a production of its own, which nothing after it
     // should see.
-    // --- 0.1: the four qualities of light, typed on the classroom show
+    // --- 0.2: the four qualities of light, typed on the classroom show
     //     (not saved): each a Block cue, so it shows only itself.
     {
-        const QString d = root + QStringLiteral("/lesson-0-1");
+        const QString d = root + QStringLiteral("/lesson-0-2");
         QVERIFY(open(kClassroom));
         ShowTreeView *v = showTree();
         const QList<QPair<QString, QStringList>> looks = {
