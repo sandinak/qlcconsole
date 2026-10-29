@@ -110,7 +110,9 @@ from the Library lands in the tree right beside it.
     while you type in it: Return applies it, Shift+Return starts a new
     line, Esc puts it back. A **fade** or **hold** typed is kept when you
     leave the field (Return, Tab, or a click on another cue or anywhere
-    else); **Esc** in the field puts the old time back.
+    else) and when you press **GO** or **Play** with the field still open,
+    so the GO you test it with plays the new time; **Esc** in the field
+    puts the old time back.
   - **A layer** shows what it contains, then one row per attribute.
   - **A hit** shows its name, note, *Fired by* (the VC buttons, **Make VC
     page**, **Move to folder…**), its looks and layers; **Hits** or a
@@ -1259,14 +1261,17 @@ under you.
   the editors' Test plays hold the same way. Simple Desk, the Virtual
   Console, Focus and Refine and the programmer's flash are not previews:
   GO leaves them running.
-- **While a list runs, selecting a cue stays off stage.** The top right
-  says *"■ Held — Full Show running. Play to preview 1.0.1 Verse over
-  it."* **Play** (beside it, or the Workbench's) previews over the run
-  until the next GO: the cue you are on takes precedence on every channel
-  it sets, so a dimmer you edit down shows even over a running cue at
-  full (*"▶ On the rig: 1.0.1 Verse, over Full Show running"*). The
-  running list keeps going underneath. Once no list runs, selecting a cue
-  plays it again.
+- **The latest thing you do wins.** After GO the top right says
+  *"■ Held — Full Show running. Play to preview 1.0.1 Verse over it."*
+  Select a cue — another one, or click the one already selected — and it
+  is on the stage again, over the run: the cue you are on takes precedence
+  on every channel it sets, so a dimmer you edit down shows even over a
+  running cue at full (*"▶ On the rig: 1.0.1 Verse, over Full Show
+  running"*). **Play** (beside the line, or the Workbench's) does the same.
+  The next GO holds it again. The running list keeps going underneath.
+- **The Run tab, in Design**: clicking a cue there shows it on the stage
+  too, and puts it on standby, so GO plays the same look. Leaving the Run
+  tab lets go of it. In Operate a click there only loads.
 - **What you see is what GO plays.** The preview puts out what the cue puts
   out when it is played — the same values on every channel, also where
   layers overlap and in a cue that mixes (its own layers mix with each
@@ -1275,14 +1280,19 @@ under you.
 - When the preview stops, the stage is what really runs again. Nothing a
   chaser or the Virtual Console started is stopped.
 
-**Operate mode: the running cue list owns the stage.** Selecting a
-cue doesn't touch the rig. Your changes reach the stage when the cue next
-plays, on GO. The top right says *"Live: editing is blind, changes reach the
-stage on GO"*.
+**Operate mode: only the run is live.** Selecting and editing a cue in
+the tree is blind: it doesn't touch the rig, and reaches the stage when the
+cue next plays, on GO. The top right says *"Live: editing is blind, changes
+reach the stage on GO"*, in blue — blind is blue everywhere.
 
-- **Blind** (the app's Design-mode toggle) mutes the physical rig while the
-  2D views keep showing, and that includes the preview. A Show Tree "blind
-  edit" of its own is still to come.
+- **Blind**, in Operate, is the **Blind view**: the plot, the Lighting
+  Studio and every fixture picture show the cue you are editing here
+  instead of the stage, while the stage keeps playing the run. Turn it on
+  with the **Blind** button or **View ▸ Blind**; the footer turns blue and
+  names the cue. It shows the cue's levels; an effect shows its base, not
+  its motion. Off (and after every mode change) they show the stage.
+- **Blind** in Design mutes the physical rig while the 2D views keep
+  showing, and that includes the preview. The footer says so in blue.
 - The footer's live **power estimate** counts the preview as anything else
   lit in Design (see
   [Power distribution](other-improvements.md#power-distribution)).
@@ -2061,9 +2071,9 @@ and *MIB · n* counts the lights a list set **On** is moving.
   and a swapped glass aren't matched by name.
 - **An effect can have its own Colour and Dimmer, not its own Gobo.** Prism
   and gobo rotation have no rows yet.
-- **Blind editing in the Show Tree** (editing a cue without previewing it in
-  Design) is still to be decided. Today only the app's Blind, which mutes
-  the whole rig, does that.
+- **Blind editing in Design** (editing a cue without previewing it while
+  the rig shows something else) isn't there; Design's Blind mutes the whole
+  rig. In Operate the Blind view shows a cue's levels, not its effects.
 - **Edits in Operate are blind** and reach the stage on the cue's next GO.
 - **Import** doesn't carry a step's own speed master or Sub GO steps (a
   chaser step plays as a function layer).

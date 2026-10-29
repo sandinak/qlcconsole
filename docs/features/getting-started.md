@@ -112,7 +112,8 @@ The measurements, charts and method are on the
    **Stop all** (the panic button; hold it for **Fade and stop**),
    **Blackout**, **Blind**, and the **Design | Operate** switch, the mode
    you are in lit. **Blackout** lights red and **Blind** blue while they
-   are on.
+   are on (in Operate, Blind shows the cue you are editing on the screens
+   only: the Blind view).
 2. **The open tab** — here Build, with a scene open.
 3. **The tabs**, along the bottom.
 4. **The footer** — is the show ready to run, what GO plays next, Design

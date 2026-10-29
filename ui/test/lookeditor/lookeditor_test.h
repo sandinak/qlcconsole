@@ -62,6 +62,7 @@ private slots:
     void anEffectsPictureIsShownAndCleared();
     void previewsShowWhatEachEffectDoes();
     void anEffectIsPutOnASpeedMaster();
+    void ownSpeedHasASetting();
     void aLooksSpeedMasterAndSpreadSurviveADoubleClick();
     void theHostSpreadStandsInForTheEffectsOwn();
     void theSpreadIsPreviewed();

@@ -286,6 +286,11 @@ private:
     QVector3D        m_spreadCentre;        //!< ...and round which target
     bool             m_spreadHadCentre = false;
     mutable double   m_startBeat = 0;
+    /** Own speed: the effect's time, run at its "__ownRate" (×1 = as
+     *  made). Summed tick by tick so a rate change never jumps the
+     *  effect's phase; at ×1 it is m_elapsed exactly. */
+    mutable double   m_ownMs = 0;
+    mutable qint64   m_ownLastMs = 0;
 
     /** The stage-laid grid of a multi-group look (effectiveCells()): placing
      *  every head on the stage is milliseconds a tick, so it is kept for up to

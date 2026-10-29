@@ -27,6 +27,7 @@
 #include <QDialog>
 #include <QPushButton>
 #include <QCheckBox>
+#include <QDoubleSpinBox>
 #include <QCollator>
 #include <QSlider>
 #include <QLabel>
@@ -747,6 +748,61 @@ void LookEditor_Test::anEffectIsPutOnASpeedMaster()
     QCOMPARE(speed->currentData().toInt(), int(SpeedMasters::Master1 + 1));
     speed->setCurrentIndex(speed->findData(SpeedMasters::Free));
     QTRY_VERIFY(!perBeatLabel());
+}
+
+/* "when selecting own speed on an effect there should be a setting for it":
+   Confetti has no speed of its own; Own speed shows a rate (×) that is kept
+   in the look, goes on a master and comes back, and survives trying
+   another effect. */
+void LookEditor_Test::ownSpeedHasASetting()
+{
+    Doc doc(this);
+    doc.effectScriptRunner()->cache()->addDirectory(QDir(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts"));
+    QLCPalette *look = new QLCPalette(QLCPalette::Effect, &doc);
+    look->setName("Sparkle");
+    QVERIFY(doc.addPalette(look));
+    LookEditor ed(&doc);
+    ed.resize(1000, 640);
+    ed.show();
+    ed.setPalette(look->id());
+    EffectBrowser *browser = ed.m_effectBrowser;
+    auto itemNamed = [browser](const QString &name) -> QListWidgetItem * {
+        browser->search()->setText(name);
+        QApplication::processEvents();
+        for (int i = 0; i < browser->list()->count(); ++i)
+            if (browser->list()->item(i)->text() == name)
+                return browser->list()->item(i);
+        return nullptr;
+    };
+    QListWidgetItem *item = itemNamed("Confetti");
+    QVERIFY(item != nullptr);
+    browser->pick(item);
+    QApplication::processEvents();
+
+    QComboBox *speed = ed.m_effectDynWidget->findChild<QComboBox *>("effectSpeedMaster");
+    QVERIFY(speed != nullptr);
+    speed->setCurrentIndex(speed->findData(SpeedMasters::Free));
+    QDoubleSpinBox *own = nullptr;
+    QTRY_VERIFY((own = ed.m_effectDynWidget->findChild<QDoubleSpinBox *>("effectOwnRate")) != nullptr);
+    QVERIFY(own->isVisibleTo(&ed));
+    QCOMPARE(own->value(), 1.0);
+    own->setValue(2.5);
+    QCOMPARE(look->effectParamValues().value("__ownRate"), 2.5);
+
+    // On a master the master sets the pace: no own rate.
+    speed->setCurrentIndex(speed->findData(SpeedMasters::MainClock));
+    QTRY_VERIFY(ed.m_effectDynWidget->findChild<QDoubleSpinBox *>("effectOwnRate") == nullptr);
+    speed = ed.m_effectDynWidget->findChild<QComboBox *>("effectSpeedMaster");
+    speed->setCurrentIndex(speed->findData(SpeedMasters::Free));
+    QTRY_VERIFY((own = ed.m_effectDynWidget->findChild<QDoubleSpinBox *>("effectOwnRate")) != nullptr);
+    QCOMPARE(own->value(), 2.5);
+
+    // Trying another effect keeps the look's own speed.
+    item = itemNamed("Dimmer Phaser");
+    QVERIFY(item != nullptr);
+    browser->pick(item);
+    QApplication::processEvents();
+    QCOMPARE(look->effectParamValues().value("__ownRate"), 2.5);
 }
 
 /* "when I set something on the speed masters .. and then double click on

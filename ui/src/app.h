@@ -227,6 +227,8 @@ public:
     bool runCommand(const ShowControl::Request &request, bool fromConsole = true);
     /** The notice runCommand() shows when it held something. */
     static QString heldForRunText();
+    /** Blind's tooltip in Design (the mute). */
+    static QString blindDesignTip();
     /** RC8: as a show opens, when any fixture is drawn from the show's own
      *  copy of a definition that differs from this computer's (and was not
      *  dealt with), say so once in the notice bar, with Review… -- never
@@ -552,6 +554,24 @@ public slots:
     void slotBlackoutChanged(bool state);
     /** Show/hide the global Blind (output-inhibited) status-bar chip. */
     void slotOutputInhibitedChanged(bool state);
+public:
+    /** Live / blind (docs/design/LIVE_BLIND.md). In Operate, Blind is a
+     *  view: the rig views (the plot, the studio, every fixture picture)
+     *  show the look in edit -- the Show Tree's cue -- while the stage
+     *  plays the run. Nothing on the wire changes. Off: they show the
+     *  stage (Live). */
+    bool blindView() const { return m_blindView; }
+    void setBlindView(bool on);
+private:
+    /** Blind's colour on the footer and its caption: Design's mute or
+     *  Operate's view. */
+    void updateBlindLook();
+    /** Feed the fixtures the look in edit (Blind view on). */
+    void refreshBlindView();
+    bool m_blindView = false;
+    QTimer *m_blindViewTimer = nullptr;
+    QLabel *m_statusBlindLabel = nullptr;
+public slots:
     /** Footer Grand Master fader moved by the user. */
     void slotFooterGrandMasterMoved(int value);
     /** Engine-side Grand Master value changed (VC's own GM fader, MIDI/DMX

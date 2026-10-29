@@ -96,6 +96,8 @@ private slots:
     void aSceneTwoPreviewedCuesShareRunsOn();
     void noPreviewInLiveMode();
     void inDesignTheEditWinsOverARunningList();
+    void theLatestActionWins();
+    void aCuesLevelsAreWhatItPutsOnStage();
 
     // Import (§7)
     void importReadsScenesIncludesAndOpaqueFunctions();

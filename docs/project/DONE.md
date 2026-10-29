@@ -6,6 +6,25 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
+### 2026-10-29 — Live and blind; own speed; effect picks and cue times apply at once *(fix/031-live-blind, lb)*
+
+- **Notes 1-3 (bugs):** Own speed ×rate in the look editor
+  (`__ownRate`, EffectInstance's `_time` integrated at the rate); a time
+  typed and not yet left is committed on GO/Play (`stageTakenForRun`, the
+  Show Tree page and ChaserWalker); `EffectScriptRunner::syncScene` no
+  longer lets a releasing engine be taken back, the Show Tree re-makes a
+  running effect when another is picked, the look editor rebuilds on a
+  preset/WLED pick, the Workbench signature includes the WLED effect.
+- **Notes 4-5 (workflow):** docs/design/LIVE_BLIND.md. Design: the latest
+  action wins (`ShowTreeController::pickCue`, a click or another cue in
+  the tree, `Workbench::playPicked` docked, a Run click). Operate: the
+  Blind button is the Blind view (`App::setBlindView`, fixtures fed from
+  `ShowTreeController::cueLevels(editedCue())`); one blind blue
+  (`ui/src/blindstyle.h`); Blind moved to the View menu.
+- Tests: effectinstance (own speed, release), showtree (latest action,
+  cue levels), lookeditor, showtreeview (GO commits, latest action and
+  Operate blind), cuerunner (Run click in Design), mainbar (Blind view).
+
 ### 2026-10-22 — 0.2.2 release candidate: docs and course sweep *(docs/rc-022-sweep, from trial/batch7)*
 
 - **Help (docs/features):** one story across the guides — the three

@@ -44,6 +44,7 @@
 #include "collection.h"
 #include "chaser.h"
 #include "doc.h"
+#include "showtreecontroller.h"
 
 // The step table: the Chaser editor's columns.
 enum { ColNum = 0, ColName, ColFadeIn, ColHold, ColFadeOut, ColDuration, ColNotes, ColCue };
@@ -54,6 +55,12 @@ ChaserWalker::ChaserWalker(FunctionStack *stack, QWidget *parent)
     , m_stack(stack)
 {
     setObjectName(QStringLiteral("chaserWalker"));
+    // A time typed (or stepped) and not yet left is what GO plays: commit
+    // it before a run takes the stage ("when testing a cue timing it
+    // doesn't always apply until you move away and come back").
+    if (m_stack != nullptr && m_stack->doc() != nullptr && m_stack->doc()->showTree() != nullptr)
+        connect(m_stack->doc()->showTree(), &ShowTreeController::stageTakenForRun,
+                this, [this](QStringList *) { commitPending(); });
     QVBoxLayout *col = new QVBoxLayout(this);
     col->setContentsMargins(4, 0, 4, 0);
     col->setSpacing(3);

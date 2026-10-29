@@ -1015,9 +1015,29 @@ public:
     void resumePreview();
     bool previewHeld() const { return m_previewHeld; }
 
+    /** Live / blind (docs/design/LIVE_BLIND.md): the user picked cue
+     *  @a cueId -- a click in the tree, the Workbench following it, a cue
+     *  clicked in the Run in Design. The latest action wins: a hold by a
+     *  run lets go and, in Design, the cue plays (previewCue()). A refresh
+     *  of the same selection (a rebuild, the tab coming back) is not a
+     *  pick and calls previewCue(), which keeps the hold. */
+    void pickCue(quint32 cueId);
+    /** The cue last picked or previewed for editing -- what a Blind rig
+     *  view shows. Kept when the preview stops (leaving the tab); invalid
+     *  when none, or it was deleted. */
+    quint32 editedCue() const;
+    /** What cue @a cueId puts on stage, as levels: fixture id -> one byte
+     *  per channel (0 where it sets nothing). Its scenes' own values and
+     *  static looks, intensities HTP between scenes and the rest the later
+     *  scene's; effects and other functions are not drawn (their base
+     *  only). For a Blind rig view; UI thread. */
+    QHash<quint32, QByteArray> cueLevels(quint32 cueId) const;
+
 signals:
     /** The preview started, stopped or moved to another cue. */
     void previewChanged();
+    /** editedCue() changed. */
+    void editedCueChanged();
     /** A run took the stage (takeStageForRun()): whatever previews stops
      *  and holds; a listener that stopped something appends what to
      *  @a held (non-null; direct connections only). */
@@ -1034,6 +1054,9 @@ private:
     void syncPreview();
 
     quint32 m_previewCue = 0xFFFFFFFF;
+    /** editedCue(). */
+    quint32 m_editedCue = 0xFFFFFFFF;
+    void setEditedCue(quint32 cueId);
     /** A run took the stage: the preview stays off until Play. */
     bool m_previewHeld = false;
     PreviewState m_previewState = PreviewState::Off;

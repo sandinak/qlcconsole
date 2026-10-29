@@ -5666,11 +5666,102 @@ void ShowTreeController::previewCue(quint32 cueId)
     // Again for the same cue is fine: it brings back what something else
     // stopped (Stop all), and changes nothing otherwise.
     m_previewCue = cueId;
+    setEditedCue(cueId);
     // Held by a run: selecting stays off stage while a list runs; with
     // none running any more, a cue selected plays again.
     if (m_previewHeld && listsRunning().isEmpty())
         m_previewHeld = false;
     syncPreview();
+}
+
+void ShowTreeController::pickCue(quint32 cueId)
+{
+    // The latest action wins: a pick after GO takes the stage back (over
+    // the run, which keeps going underneath) until the next GO.
+    if (cue(cueId) != nullptr)
+        m_previewHeld = false;
+    previewCue(cueId);
+}
+
+void ShowTreeController::setEditedCue(quint32 cueId)
+{
+    if (m_editedCue == cueId)
+        return;
+    m_editedCue = cueId;
+    emit editedCueChanged();
+}
+
+quint32 ShowTreeController::editedCue() const
+{
+    return cue(m_editedCue) != nullptr ? m_editedCue : invalidId();
+}
+
+QHash<quint32, QByteArray> ShowTreeController::cueLevels(quint32 cueId) const
+{
+    QHash<quint32, QByteArray> levels;
+    const Cue *c = cue(cueId);
+    const Collection *coll = c == nullptr ? nullptr
+                           : qobject_cast<const Collection *>(m_doc->function(c->collection));
+    if (coll == nullptr)
+        return levels;
+    // One scene's levels, as Scene::write() lays them at its start: its own
+    // values, then its looks in order (effect looks and the colours that
+    // feed an effect left out, a look's left-out fixtures skipped), a
+    // fixture with no dimmer dimmed by the look's Dimmer.
+    auto put = [&](const SceneValue &scv, bool htp) {
+        Fixture *fx = m_doc->fixture(scv.fxi);
+        if (fx == nullptr || scv.channel >= fx->channels())
+            return;
+        QByteArray &bytes = levels[scv.fxi];
+        if (bytes.size() != int(fx->channels()))
+            bytes = QByteArray(int(fx->channels()), 0);
+        const uchar now = uchar(bytes.at(int(scv.channel)));
+        bytes[int(scv.channel)] = char(htp ? qMax(now, scv.value) : scv.value);
+    };
+    for (quint32 fid : coll->functions())
+    {
+        Scene *scene = qobject_cast<Scene *>(m_doc->function(fid));
+        if (scene == nullptr)
+            continue;
+        QHash<QPair<quint32, quint32>, uchar> mine;
+        QList<QPair<quint32, quint32> > order;
+        auto set = [&](const SceneValue &scv) {
+            const QPair<quint32, quint32> k(scv.fxi, scv.channel);
+            if (!mine.contains(k))
+                order << k;
+            mine.insert(k, scv.value);
+        };
+        for (const SceneValue &scv : scene->values())
+            set(scv);
+        const QList<quint32> pals = scene->palettes();
+        const QHash<quint32, QList<quint32> > excluded = scene->excludedFixtures();
+        for (quint32 pid : pals)
+        {
+            QLCPalette *palette = m_doc->palette(pid);
+            if (palette == nullptr || palette->type() == QLCPalette::Effect
+                || QLCPalette::isEffectScoped(m_doc, pals, pid))
+                continue;
+            const int cOff = QLCPalette::colorSetOffset(m_doc, pals, pid);
+            const QList<quint32> outList = excluded.value(pid);
+            QList<SceneValue> vals = palette->valuesFromFixtureGroups(m_doc, scene->fixtureGroups(), scene, cOff);
+            vals += palette->valuesFromFixtures(m_doc, scene->fixtures(), scene, cOff);
+            for (const SceneValue &scv : vals)
+                if (!outList.contains(scv.fxi))
+                    set(scv);
+        }
+        const int lookDim = QLCPalette::lookDimmerValue(m_doc, pals);
+        for (const QPair<quint32, quint32> &k : order)
+        {
+            Fixture *fx = m_doc->fixture(k.first);
+            if (fx == nullptr)
+                continue;
+            SceneValue scv(k.first, k.second, mine.value(k));
+            scv.value = QLCPalette::dimScaleWithoutDimmer(fx, scv.channel, scv.value, lookDim);
+            const QLCChannel *ch = fx->channel(scv.channel);
+            put(scv, ch != nullptr && ch->group() == QLCChannel::Intensity);
+        }
+    }
+    return levels;
 }
 
 QStringList ShowTreeController::takeStageForRun()

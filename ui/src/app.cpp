@@ -47,8 +47,10 @@
 #include "showtreecontroller.h"
 #include "cuerunner.h"
 #include "showtreeview.h"
+#include "blindstyle.h"
 #include "workbench.h"
 #include "inputoutputmap.h"
+#include "universe.h"
 #include "inputdevicenotices.h"
 #include "ioplugincache.h"
 #include "patchundo.h"
@@ -1667,6 +1669,9 @@ void App::slotDocAutosave()
 
 void App::slotUniverseWritten(quint32 idx, const QByteArray &ua)
 {
+    // Blind view: the rig views show the look in edit, not the stage.
+    if (m_blindView)
+        return;
     foreach (Fixture *fixture, m_doc->fixtures())
     {
         if (!fixture->isPatched() || fixture->universe() != idx)
@@ -1805,20 +1810,36 @@ void App::slotModeChanged(Doc::Mode mode)
             m_statusModeChipLabel->setStyleSheet("QLabel { font-weight: bold; color: #43a047; }");
         }
 
-        // Blind is a Design-only build aid — never let a muted rig survive into
-        // a live show. Force it off and disable the toggle in Operate.
+        // A muted rig never survives into a live show: Design's Blind goes
+        // off. In Operate the same button is the Blind VIEW -- the screens
+        // show the look in edit, the stage plays the run (LIVE_BLIND.md) --
+        // and it starts Live.
         if (m_doc != NULL)
             m_doc->inputOutputMap()->setOutputInhibited(false);
+        setBlindView(false);
         if (m_controlBlindAction != NULL)
-            m_controlBlindAction->setEnabled(false);
+        {
+            m_controlBlindAction->setEnabled(true);
+            m_controlBlindAction->setChecked(false);
+            m_controlBlindAction->setToolTip(tr(
+                "Blind view: the plot, the studio and every fixture picture show the cue "
+                "you are editing in the Show Tree, not the stage. The stage keeps playing "
+                "the run; nothing on the wire changes. Off: they show the stage (Live). "
+                "Lit blue while on."));
+        }
     }
     else if (mode == Doc::Design)
     {
         /* Enable editing features */
         m_fileNewAction->setEnabled(true);
         m_fileOpenAction->setEnabled(true);
+        setBlindView(false);
         if (m_controlBlindAction != NULL)
+        {
             m_controlBlindAction->setEnabled(true);
+            m_controlBlindAction->setChecked(m_doc != NULL && m_doc->inputOutputMap()->outputInhibited());
+            m_controlBlindAction->setToolTip(blindDesignTip());
+        }
         m_liveEditAction->setEnabled(false);
         m_liveEditVirtualConsoleAction->setEnabled(false);
         m_captureLiveEditsAction->setEnabled(false);
@@ -1935,14 +1956,10 @@ void App::initActions()
     // Blind — global output inhibit: mute the physical rig while the 2D preview
     // keeps updating, so looks can be built without hitting the stage. Design-mode
     // only (disabled in Operate; forced off on →Operate). Sibling of Blackout.
-    m_controlBlindAction = new QAction(QIcon(":/blind.png"), tr("Toggle Bl&ind"), this);
+    m_controlBlindAction = new QAction(QIcon(":/blind.png"), tr("Blind"), this);
     m_controlBlindAction->setCheckable(true);
     m_controlBlindAction->setIconText(tr("Blind"));
-    m_controlBlindAction->setToolTip(tr(
-        "Blind: mute the physical rig but keep the 2D preview live, so you can "
-        "build a look without hitting the stage. Turn off to take it live. "
-        "Fixtures set to ignore Blackout stay as they are. "
-        "Design mode only. Lit blue while on."));
+    m_controlBlindAction->setToolTip(blindDesignTip());
     connect(m_controlBlindAction, SIGNAL(triggered(bool)), this, SLOT(slotControlBlind(bool)));
     m_controlBlindAction->setChecked(m_doc->inputOutputMap()->outputInhibited());
 
@@ -2569,6 +2586,10 @@ void App::initMenuBar()
     connect(venueAct, &QAction::triggered, this, [this]() { openVenueMenu(); });
 
     viewMenu->addSeparator();
+    // Blind: what the screens show against the stage -- Design mutes the
+    // rig, Operate shows the look in edit (LIVE_BLIND.md). Moved here from
+    // Control, so the menus keep their count.
+    viewMenu->addAction(m_controlBlindAction);
     viewMenu->addAction(m_controlFullScreenAction);
 
     /* Appearance -- theme, toolbar style, which chips the footer shows and
@@ -2615,7 +2636,6 @@ void App::initMenuBar()
     ctrlMenu->addAction(m_modeToggleAction);
     ctrlMenu->addSeparator();
     ctrlMenu->addAction(m_controlBlackoutAction);
-    ctrlMenu->addAction(m_controlBlindAction);
     ctrlMenu->addSeparator();
     ctrlMenu->addAction(m_controlPanicAction);      // fade-and-stop options as submenu
     ctrlMenu->addAction(m_dumpDmxAction);
@@ -3687,36 +3707,130 @@ void App::slotBlackoutChanged(bool state)
     }
 }
 
+QString App::blindDesignTip()
+{
+    return tr("Blind: mute the physical rig but keep the 2D preview live, so you can "
+              "build a look without hitting the stage. Turn off to take it live. "
+              "Fixtures set to ignore Blackout stay as they are. In Operate it is the "
+              "Blind view instead. Lit blue while on.");
+}
+
 void App::slotControlBlind(bool checked)
 {
-    // Blind is a Design-mode build aid; refuse to arm it during a live show.
-    if (checked && m_doc != NULL && m_doc->mode() != Doc::Design)
+    // Operate: never a mute during a live show -- the Blind view, which
+    // changes what the screens show and nothing on the wire.
+    if (m_doc != NULL && m_doc->mode() != Doc::Design)
     {
-        if (m_controlBlindAction != NULL)
-            m_controlBlindAction->setChecked(false);
+        m_doc->inputOutputMap()->setOutputInhibited(false);
+        setBlindView(checked);
         return;
     }
     if (m_doc != NULL)
         m_doc->inputOutputMap()->setOutputInhibited(checked);
 }
 
+void App::setBlindView(bool on)
+{
+    if (m_doc == NULL)
+        return;
+    on = on && m_doc->mode() == Doc::Operate;
+    if (m_blindViewTimer == nullptr)
+    {
+        // What is in edit changes -- another cue, an edit, a look's value
+        // dragged (which says nothing to the Doc): the view follows a few
+        // times a second while it is on (one cue's levels, UI thread only),
+        // and at once when another cue is picked.
+        m_blindViewTimer = new QTimer(this);
+        m_blindViewTimer->setInterval(200);
+        connect(m_blindViewTimer, &QTimer::timeout, this, &App::refreshBlindView);
+        if (ShowTreeController *st = m_doc->showTree())
+            connect(st, &ShowTreeController::editedCueChanged, this, &App::refreshBlindView);
+    }
+    if (m_controlBlindAction != NULL && m_doc->mode() == Doc::Operate
+        && m_controlBlindAction->isChecked() != on)
+        m_controlBlindAction->setChecked(on);
+    if (on == m_blindView)
+    {
+        if (on)
+            refreshBlindView();
+        return;
+    }
+    m_blindView = on;
+    if (on)
+    {
+        refreshBlindView();
+        m_blindViewTimer->start();
+    }
+    else
+    {
+        // Live again: the fixtures take the stage's values as they are now
+        // (a universe only says when it changes).
+        m_blindViewTimer->stop();
+        for (Universe *uni : m_doc->inputOutputMap()->universes())
+            if (uni != nullptr && uni->postGMValues() != nullptr)
+                slotUniverseWritten(uni->id(), *uni->postGMValues());
+    }
+    updateBlindLook();
+}
+
+void App::refreshBlindView()
+{
+    if (!m_blindView || m_doc == NULL)
+        return;
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 cueId = st != nullptr ? st->editedCue() : ShowTree::invalidId();
+    const QHash<quint32, QByteArray> levels = st != nullptr ? st->cueLevels(cueId)
+                                                            : QHash<quint32, QByteArray>();
+    foreach (Fixture *fixture, m_doc->fixtures())
+    {
+        QByteArray v = levels.value(fixture->id());
+        if (v.size() != int(fixture->channels()))
+            v = QByteArray(int(fixture->channels()), 0);
+        fixture->setChannelValues(v);
+    }
+    updateBlindLook();
+}
+
+void App::updateBlindLook()
+{
+    const bool muted = m_doc != NULL && m_doc->inputOutputMap()->outputInhibited();
+    const bool on = muted || m_blindView;
+    // Turn the WHOLE footer blue while Blind is on so it's unmistakable at a
+    // glance. Force white text on the plain labels for contrast; labels that
+    // set their own colour (dirty/autosave) keep theirs (their inline
+    // stylesheet wins over this ancestor rule), which still reads fine on blue.
+    if (QStatusBar *sb = statusBar())
+        sb->setStyleSheet(on
+            ? QStringLiteral("QStatusBar { background: %1; } "
+                             "QStatusBar QLabel { color: white; }").arg(BlindStyle::colour())
+            : QString());
+    if (m_statusBlindLabel == nullptr)
+        return;
+    QString text;
+    if (m_blindView)
+    {
+        ShowTreeController *st = m_doc->showTree();
+        const quint32 cueId = st != nullptr ? st->editedCue() : ShowTree::invalidId();
+        const ShowTree::CueList *list = cueId == ShowTree::invalidId() ? nullptr : st->listOfCue(cueId);
+        text = list != nullptr
+             ? tr("BLIND view: the screens show %1, the stage plays the run")
+                   .arg(st->cueLabel(*list, list->indexOf(cueId)))
+             : tr("BLIND view: pick a cue in the Show Tree; the stage plays the run");
+    }
+    else if (muted)
+        text = tr("BLIND: the rig is muted, the screens show the edit");
+    m_statusBlindLabel->setText(text);
+    m_statusBlindLabel->setVisible(on);
+}
+
 void App::slotOutputInhibitedChanged(bool state)
 {
     // Engine is the source of truth: keep the toolbar action and the status chip
     // in step (Blind may be cleared elsewhere, e.g. forced off on →Operate).
-    if (m_controlBlindAction != NULL && m_controlBlindAction->isChecked() != state)
+    if (m_controlBlindAction != NULL && m_controlBlindAction->isChecked() != state
+        && (m_doc == NULL || m_doc->mode() == Doc::Design))
         m_controlBlindAction->setChecked(state);
-
-    // Turn the WHOLE footer blue while Blind is armed so it's unmistakable at a
-    // glance. Force white text on the plain labels for contrast; labels that set
-    // their own colour (dirty/autosave) keep theirs (their inline stylesheet wins
-    // over this ancestor rule), which still reads fine on blue.
-    QStatusBar *sb = statusBar();
-    if (sb != NULL)
-        sb->setStyleSheet(state
-            ? QStringLiteral("QStatusBar { background: #1565c0; } "
-                             "QStatusBar QLabel { color: white; }")
-            : QString());
+    updateBlindLook();
 }
 
 void App::slotFooterGrandMasterMoved(int value)
@@ -6618,6 +6732,15 @@ void App::initStatusBar()
     m_statusBlackoutLabel->setStyleSheet("QLabel { color: #e60000; font-weight: bold; }");
     m_statusBlackoutLabel->hide();
     sb->addPermanentWidget(m_statusBlackoutLabel);
+
+    // What Blind does now, in words, on the blue footer: the Design mute or
+    // the Operate view (which cue the screens show). Hidden while Live.
+    m_statusBlindLabel = new QLabel(this);
+    m_statusBlindLabel->setObjectName(QStringLiteral("statusBlind"));
+    m_statusBlindLabel->setAlignment(Qt::AlignRight);
+    m_statusBlindLabel->setStyleSheet(QStringLiteral("QLabel { color: white; font-weight: bold; }"));
+    m_statusBlindLabel->hide();
+    sb->addPermanentWidget(m_statusBlindLabel);
 
     // Programmer dirty indicator. Hidden when clean, red bullet + text
     // when dirty. Mirrors the in-frame SaveProgrammer button highlight.

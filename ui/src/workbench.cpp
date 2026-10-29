@@ -35,6 +35,7 @@
 #include <QDebug>
 
 #include "workbench.h"
+#include "blindstyle.h"
 #include "shrinkablebar.h"
 #include "workbenchstack.h"
 #include "chaserwalker.h"
@@ -1080,6 +1081,13 @@ void Workbench::updateOnRig()
         m_onRig->setStyleSheet(QString());
         if (!canPlay)
             m_onRig->setText(QString());
+        else if (m_doc->mode() != Doc::Design && m_stack->playsItself())
+        {
+            // Operate: only the run is live; a cue edited here is blind
+            // (docs/design/LIVE_BLIND.md) -- blue, as Blind is everywhere.
+            m_onRig->setText(tr("Blind: edits reach the stage on GO"));
+            m_onRig->setStyleSheet(BlindStyle::labelSheet());
+        }
         else if (m_doc->mode() != Doc::Design)
             m_onRig->setText(tr("Operate: nothing previews here"));
         else if (m_heldByRun)
@@ -2061,8 +2069,9 @@ QStringList Workbench::effectSignature(Scene *scene) const
         if (p == nullptr || p->type() != QLCPalette::Effect)
             continue;
         // id + script: a script swap must reload the instance; a param drag must not.
+        // The WLED name too: unported WLED effects share one stand-in script.
         sig << QString::number(pid) + QLatin1Char('|') + p->scriptPath()
-               + QLatin1Char('|') + p->effectPreset();
+               + QLatin1Char('|') + p->effectPreset() + QLatin1Char('|') + p->wledEffect();
     }
     return sig;
 }
@@ -2250,6 +2259,18 @@ void Workbench::holdForRun(QStringList *held)
     m_previewHeld = true;
     m_heldByRun = true;
     stopPreview();
+    updateOnRig();
+}
+
+void Workbench::playPicked()
+{
+    if (m_doc->mode() != Doc::Design || !m_heldByRun)
+        return;
+    m_previewHeld = false;
+    m_heldByRun = false;
+    if (m_stack != nullptr)
+        m_stack->releaseRunHold();
+    startPreview();
     updateOnRig();
 }
 
