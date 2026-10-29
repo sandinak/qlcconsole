@@ -198,6 +198,11 @@ skipped). Upstream fixes taken:
   of 4 to 8 digits keeps a running show in Operate: going back to Design
   asks for it, and Live Edit is off. It's saved with the show as a salted
   hash. Show Settings is the home Teaching mode's settings will share.
+- **Menu keys**: Save As is ⇧⌘S (Ctrl+Shift+S) and Quit ⌘Q / Ctrl+Q on
+  every platform, Windows included; Edit ▸ Undo and Redo show their keys
+  (⌘Z / ⇧⌘Z; Ctrl+Z, and Ctrl+Y / Ctrl+Shift+Z on Windows); Settings… is
+  called that on every platform, the Mac's application menu included. A
+  new Virtual Console slider moves from ⇧⌘S to ⇧⌘U.
 
 ### Changed
 

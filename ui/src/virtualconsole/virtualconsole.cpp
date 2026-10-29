@@ -1945,7 +1945,8 @@ void VirtualConsole::enableEdit()
     // and two shortcuts on one key fire neither.
     m_addButtonAction->setShortcut(QKeySequence("CTRL+SHIFT+B"));
     m_addButtonMatrixAction->setShortcut(QKeySequence("CTRL+SHIFT+G"));
-    m_addSliderAction->setShortcut(QKeySequence("CTRL+SHIFT+S"));
+    // Not ⇧⌘S: that is Save As, app-wide (two shortcuts on one key fire neither).
+    m_addSliderAction->setShortcut(QKeySequence("CTRL+SHIFT+U"));
     m_addSliderMatrixAction->setShortcut(QKeySequence("CTRL+SHIFT+I"));
     m_addKnobAction->setShortcut(QKeySequence("CTRL+SHIFT+K"));
     m_addSpeedDialAction->setShortcut(QKeySequence("CTRL+SHIFT+D"));

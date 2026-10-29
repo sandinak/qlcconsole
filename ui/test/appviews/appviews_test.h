@@ -216,6 +216,10 @@ private slots:
     /** File ▸ Show Settings: a PIN keeps the show in Operate (and Live Edit
      *  off) until it's given; "Open in Operate" opens the saved show there. */
     void aPinKeepsTheShowInOperate();
+    /** Save As ⇧⌘S and Quit ⌘Q on every platform, owned by nothing else;
+     *  Undo/Redo show the tabs' keys without binding them (so they never
+     *  fire twice); Settings… is called that everywhere. */
+    void theMenusShowTheirKeys();
 
     /** Quitting with the window still up and the Show Tree in front: the
      *  tab goes before the Doc, so its hide event (which stops its preview)

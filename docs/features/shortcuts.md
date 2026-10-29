@@ -8,7 +8,8 @@
 |---|---|
 | **F1** | Help on what you're looking at (the tab, window or editor in front); in the Show Tree's command line, its syntax lines |
 | ⌘N / ⌘O / ⌘S | New / Open / Save workspace |
-| ⌘, | Settings (autosave, appearance, …) |
+| ⇧⌘S | Save As (Ctrl+Shift+S on Windows and Linux too) |
+| ⌘, | **Settings…** (autosave, appearance, …): in the qlcconsole menu on a Mac, File elsewhere |
 | ⌘F12 | Switch between **Design** and **Operate** |
 | **Esc** | **Back out** of an editor to what was showing before: a palette opened from a list, a group's layout, the effect bench, a ▣ layer, the Workbench docked in the Show Tree, the Show Tree's Look Editor. What you changed stays changed. In a rename or another inline edit, Esc cancels just that edit; in a dialog it closes the dialog. Plain Esc stops nothing |
 | ⌘⇧Esc | **Stop ALL functions** (its arrow: fade 1/5/10/30 s and stop) |
@@ -22,7 +23,7 @@
 | ⌥⌘F | **Quick focus** (View ▸ Quick Focus…) |
 | ⇧⌘R | **Rig Overview** — and again to close it when it's in front |
 | ⌘W | Close the window in front: the Rig Overview, a structure's editor (as Cancel), a dialog. In the Classic Functions tab ⌘W is the Function Wizard |
-| ⌘Q | Quit |
+| ⌘Q | Quit (Ctrl+Q on Windows and Linux) |
 | ⌘M | Minimize |
 | ⌃⌘F (also ⌘F11; Ctrl+F11 on Windows and Linux) | **Full Screen** (View ▸ Full Screen), and back |
 | ⇧F1 | The stock QLC+ reference (online) |
@@ -210,7 +211,7 @@ folder is **+ Scene ▾ → New scene in a new folder…**.
 
 | Keys | Does |
 |---|---|
-| ⇧⌘B / G / S / I / K / D / X / C / F / O / L / A / T / N | Add a button, button matrix (grid), slider, slider matrix, knob, speed dial, XY pad, cue list, frame, solo frame, label, audio triggers, clock, animation |
+| ⇧⌘B / G / U / I / K / D / X / C / F / O / L / A / T / N | Add a button, button matrix (grid), slider (⇧⌘U: ⇧⌘S is Save As), slider matrix, knob, speed dial, XY pad, cue list, frame, solo frame, label, audio triggers, clock, animation |
 | ⌘X / ⌘C / ⌘V / Delete | Cut / copy / paste / delete widgets |
 | ⌘E | Widget properties |
 | ⇧B / ⇧I / ⇧F / ⇧O | Background colour / image, foreground colour, font (⇧⌥ resets) |

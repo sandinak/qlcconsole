@@ -525,6 +525,18 @@ public:
         QString toolTip;
     };
     static QList<ShowTemplate> showTemplates();
+    /** Save As: ⇧⌘S / Ctrl+Shift+S on every platform (Windows has no
+     *  standard one). */
+    static QKeySequence saveAsShortcut();
+    /** Quit: ⌘Q / Ctrl+Q on every platform (Windows has no standard one). */
+    static QKeySequence quitShortcut();
+    /** "Undo Cue Change (⌘Z)" (macOS) or "Undo Cue Change<tab>Ctrl+Z":
+     *  the keys a tab handles itself, shown in a menu item that doesn't bind
+     *  them (so they never fire twice). Every binding, " / " between. */
+    static QString menuTextWithKeys(const QString &text, QKeySequence::StandardKey key);
+    /** "Settings…" in the macOS application menu too (Qt titles that item
+     *  itself); once per run. */
+    static void installSettingsTitle();
     /** A new, untitled show that starts as @p resource holds it: asks to
      *  save the open one first (false on Cancel, or when it can't be read).
      *  Save asks for a name, so the template itself is never written. */

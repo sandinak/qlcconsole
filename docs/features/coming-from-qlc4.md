@@ -171,7 +171,8 @@ Every left-hand column still works, in the Classic QLC+ view.
   top bar (or the footer), and are in the **Control** menu too.
 - **Shortcuts.** GO is ⌘↩, Stop all ⌘⇧Esc, Design / Operate ⌘F12; plain
   Esc never stops playback. The VC button matrix and animation keys are
-  ⇧⌘G and ⇧⌘N. See [Keyboard and mouse](shortcuts.md).
+  ⇧⌘G and ⇧⌘N, and a new VC slider is ⇧⌘U (⇧⌘S is Save As). See
+  [Keyboard and mouse](shortcuts.md).
 - **Web access is safer by default.** **-w** answers on this computer
   only, where QLC+ 4 answered on every network. Add **--web-bind** to
   reach it from a tablet, and **-wa** with accounts to let that tablet

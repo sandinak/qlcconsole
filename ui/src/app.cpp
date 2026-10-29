@@ -21,6 +21,7 @@
 */
 
 #include <QScopeGuard>
+#include <QTranslator>
 #include <QContextMenuEvent>
 #include <QMenu>
 #include <QActionGroup>
@@ -265,6 +266,40 @@ App::App()
     QCoreApplication::setOrganizationName("qlcplus");
     QCoreApplication::setOrganizationDomain("qlcplus.org");
     QCoreApplication::setApplicationName(APPNAME);
+    installSettingsTitle();
+}
+
+namespace
+{
+/* macOS titles the application menu's PreferencesRole item itself, from
+   Qt's "MAC_APPLICATION_MENU" strings: "Preferences…" (or "Settings…" on
+   newer Qt), whatever the action says. Answer those with the name the help
+   and every other platform use. */
+class SettingsTitleTranslator final : public QTranslator
+{
+public:
+    using QTranslator::QTranslator;
+    bool isEmpty() const override { return false; }
+    QString translate(const char *context, const char *sourceText,
+                      const char *disambiguation, int n) const override
+    {
+        Q_UNUSED(disambiguation);
+        Q_UNUSED(n);
+        if (qstrcmp(context, "MAC_APPLICATION_MENU") == 0
+            && (qstrcmp(sourceText, "Preferences...") == 0 || qstrcmp(sourceText, "Settings...") == 0))
+            return App::tr("Settings…");
+        return QString();
+    }
+};
+}
+
+void App::installSettingsTitle()
+{
+    static SettingsTitleTranslator *translator = nullptr;
+    if (translator != nullptr)
+        return;
+    translator = new SettingsTitleTranslator(QCoreApplication::instance());
+    QCoreApplication::installTranslator(translator);
 }
 
 App::~App()
@@ -1927,6 +1962,9 @@ void App::initActions()
     connect(m_fileSaveAction, SIGNAL(triggered(bool)), this, SLOT(slotFileSave()));
 
     m_fileSaveAsAction = new QAction(QIcon(":/filesaveas.png"), tr("Save &As..."), this);
+    m_fileSaveAsAction->setObjectName(QStringLiteral("fileSaveAs"));
+    m_fileSaveAsAction->setShortcut(saveAsShortcut());
+    m_fileSaveAsAction->setShortcutContext(Qt::ApplicationShortcut);
     connect(m_fileSaveAsAction, SIGNAL(triggered(bool)), this, SLOT(slotFileSaveAs()));
 
     /* Control actions */
@@ -2181,9 +2219,11 @@ void App::initActions()
     });
 
     /* Settings action */
-    m_appSettingsAction = new QAction(QIcon(":/configure.png"), tr("&Settings"), this);
+    // "Settings…" on every platform, as the help calls it; macOS moves it to
+    // the application menu (PreferencesRole) and keeps the title.
+    m_appSettingsAction = new QAction(QIcon(":/configure.png"), tr("&Settings…"), this);
+    m_appSettingsAction->setObjectName(QStringLiteral("appSettings"));
     m_appSettingsAction->setShortcut(QKeySequence(tr("CTRL+,", "Settings")));
-    // macOS relocates this to the application menu ("Preferences…").
     m_appSettingsAction->setMenuRole(QAction::PreferencesRole);
     connect(m_appSettingsAction, SIGNAL(triggered(bool)), this, SLOT(slotAppSettings()));
 
@@ -2400,7 +2440,7 @@ void App::initMenuBar()
         fileMenu->addAction(m_fileShowSettingsAction);
     }
     fileMenu->addSeparator();
-    fileMenu->addAction(m_appSettingsAction);      // → app menu (Preferences) on macOS
+    fileMenu->addAction(m_appSettingsAction);      // → app menu on macOS
     // Quit: m_quitAction only exists when there's no window manager (kiosk/RPi).
     // On macOS it's NULL and, now that we own the menu bar, Qt no longer supplies
     // a working Quit — so provide one with QuitRole (→ app menu) + the standard
@@ -2412,8 +2452,9 @@ void App::initMenuBar()
             quitAction = new QAction(tr("Quit qlcconsole"), this);
             connect(quitAction, SIGNAL(triggered(bool)), this, SLOT(close()));
         }
+        quitAction->setObjectName(QStringLiteral("fileQuit"));
         quitAction->setMenuRole(QAction::QuitRole);
-        quitAction->setShortcut(QKeySequence::Quit);
+        quitAction->setShortcut(quitShortcut());
         // Same reasoning as Save: quitting is an application-level act.
         quitAction->setShortcutContext(Qt::ApplicationShortcut);
         fileMenu->addAction(quitAction);
@@ -2426,11 +2467,12 @@ void App::initMenuBar()
         // undo and Connections' patch undo (Q115). Other tabs have none yet, and the menu says so instead of
         // reaching into another tab's history. The menu names the step; ⌘Z /
         // ⇧⌘Z stay each tab's own shortcuts (a second binding here would
-        // make them ambiguous), shown beside the text.
+        // make them ambiguous, or fire twice), so the keys are in the text
+        // (menuTextWithKeys()), not the action's shortcut.
         QMenu *editMenu = mb->addMenu(tr("&Edit"));
-        QAction *undo = editMenu->addAction(tr("Undo"));
+        QAction *undo = editMenu->addAction(menuTextWithKeys(tr("Undo"), QKeySequence::Undo));
         undo->setObjectName(QStringLiteral("editUndo"));
-        QAction *redo = editMenu->addAction(tr("Redo"));
+        QAction *redo = editMenu->addAction(menuTextWithKeys(tr("Redo"), QKeySequence::Redo));
         redo->setObjectName(QStringLiteral("editRedo"));
         auto current = [this]() -> QWidget * {
             return m_tab != nullptr ? m_tab->currentWidget() : nullptr;
@@ -2488,18 +2530,20 @@ void App::initMenuBar()
                 known = false;
             if (!known)
             {
-                undo->setText(tr("Nothing to undo on this tab"));
+                undo->setText(menuTextWithKeys(tr("Nothing to undo on this tab"), QKeySequence::Undo));
                 undo->setToolTip(tr("Undo works in Build, the Show Tree, Fixtures, the Lighting Studio and "
                                     "Connections so far"));
                 undo->setEnabled(false);
-                redo->setText(tr("Redo"));
+                redo->setText(menuTextWithKeys(tr("Redo"), QKeySequence::Redo));
                 redo->setEnabled(false);
                 return;
             }
             undo->setToolTip(QString());
-            undo->setText(u.isEmpty() ? tr("Undo") : tr("Undo %1").arg(u));
+            undo->setText(menuTextWithKeys(u.isEmpty() ? tr("Undo") : tr("Undo %1").arg(u),
+                                           QKeySequence::Undo));
             undo->setEnabled(!u.isEmpty());
-            redo->setText(r.isEmpty() ? tr("Redo") : tr("Redo %1").arg(r));
+            redo->setText(menuTextWithKeys(r.isEmpty() ? tr("Redo") : tr("Redo %1").arg(r),
+                                           QKeySequence::Redo));
             redo->setEnabled(!r.isEmpty());
         });
         connect(undo, &QAction::triggered, this, [programming, treeView, studio, connections]() {
@@ -2963,6 +3007,38 @@ bool App::slotFileNew()
 
     clearDocument();
     return true;
+}
+
+QKeySequence App::saveAsShortcut()
+{
+    /* ⇧⌘S / Ctrl+Shift+S, spelled out: Windows has no standard Save As
+       key, and the platform's table isn't the same everywhere. */
+    return QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_S);
+}
+
+QKeySequence App::quitShortcut()
+{
+    /* ⌘Q / Ctrl+Q, spelled out: QKeySequence::Quit is empty on Windows,
+       and some platforms' tables answer with a key no keyboard has. */
+    return QKeySequence(Qt::CTRL | Qt::Key_Q);
+}
+
+QString App::menuTextWithKeys(const QString &text, QKeySequence::StandardKey key)
+{
+    QStringList keys;
+    // The first two: Windows adds Alt+Backspace forms nobody looks for.
+    for (const QKeySequence &k : QKeySequence::keyBindings(key))
+        if (keys.size() < 2)
+            keys << k.toString(QKeySequence::NativeText);
+    if (keys.isEmpty())
+        return text;
+#if defined(Q_OS_MACOS)
+    // The native menu has no column for text it doesn't bind: as New's.
+    return QStringLiteral("%1 (%2)").arg(text, keys.join(QStringLiteral(" / ")));
+#else
+    // Qt's menu draws what follows a tab in the shortcut column.
+    return QStringLiteral("%1\t%2").arg(text, keys.join(QStringLiteral(" / ")));
+#endif
 }
 
 QList<App::ShowTemplate> App::showTemplates()

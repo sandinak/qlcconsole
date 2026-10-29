@@ -626,7 +626,7 @@ void AppViews_Test::editUndoSaysWhereItWorks()
     // the Show Tree's.
     m_app->showContext("Virtual Console");
     emit edit->aboutToShow();
-    QCOMPARE(undo->text(), QString("Nothing to undo on this tab"));
+    QCOMPARE(undo->text(), App::menuTextWithKeys("Nothing to undo on this tab", QKeySequence::Undo));
     QVERIFY(!undo->isEnabled());
     undo->trigger();
     QVERIFY(st->production(prod) != nullptr);
@@ -827,13 +827,13 @@ void AppViews_Test::editUndoOnConnectionsIsUndoPatchChange()
     m_app->showContext("Connections");
     QVERIFY(qobject_cast<InputOutputManager *>(m_app->m_tab->currentWidget()) != nullptr);
     emit edit->aboutToShow();
-    QCOMPARE(undo->text(), QString("Undo"));
+    QCOMPARE(undo->text(), App::menuTextWithKeys("Undo", QKeySequence::Undo));
     QVERIFY(!undo->isEnabled());
 
     pu->captureUniverses(QStringLiteral("add a universe"));
     QVERIFY(pu->canUndo());
     emit edit->aboutToShow();
-    QCOMPARE(undo->text(), QString("Undo Patch Change"));
+    QCOMPARE(undo->text(), App::menuTextWithKeys("Undo Patch Change", QKeySequence::Undo));
     QVERIFY(undo->isEnabled());
     // Triggered: the tab's own confirmation; No keeps the step.
     QString asked;
@@ -1717,7 +1717,7 @@ void AppViews_Test::editUndoFollowsTheTabInFront()
     for (const QString &tab : { QStringLiteral("Simple Desk"), QStringLiteral("Run") })
     {
         const QString text = undoOn(tab);
-        QCOMPARE(text, QString("Nothing to undo on this tab"));
+        QCOMPARE(text, App::menuTextWithKeys("Nothing to undo on this tab", QKeySequence::Undo));
         QVERIFY(!undo->isEnabled());
         QVERIFY2(st->production(prod) != nullptr, qPrintable(tab));
     }
@@ -3163,6 +3163,62 @@ void AppViews_Test::aPinKeepsTheShowInOperate()
     ShowSettingsDialog::testAnswers() = { "2468" };
     m_app->slotModeDesign();
     QCOMPARE(doc->mode(), Doc::Design);
+}
+
+void AppViews_Test::theMenusShowTheirKeys()
+{
+    m_app->clearDocument();
+    QCOMPARE(m_app->doc()->mode(), Doc::Design);
+
+    QAction *saveAs = m_app->findChild<QAction *>("fileSaveAs");
+    QAction *quit = m_app->findChild<QAction *>("fileQuit");
+    QAction *settings = m_app->findChild<QAction *>("appSettings");
+    QVERIFY(saveAs && quit && settings);
+    QCOMPARE(saveAs->shortcut(), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_S));
+    QCOMPARE(saveAs->shortcutContext(), Qt::ApplicationShortcut);
+    QCOMPARE(quit->shortcut(), QKeySequence(Qt::CTRL | Qt::Key_Q));
+    QCOMPARE(settings->text(), QString("&Settings…"));
+    QCOMPARE(settings->shortcut(), QKeySequence(Qt::CTRL | Qt::Key_Comma));
+    // macOS's application-menu title for it, which Qt takes from its own
+    // strings, is Settings… too
+    QCOMPARE(QCoreApplication::translate("MAC_APPLICATION_MENU", "Preferences..."), QString("Settings…"));
+    QCOMPARE(QCoreApplication::translate("MAC_APPLICATION_MENU", "Quit %1"), QString("Quit %1"));
+
+    // Nothing else holds those keys, the Virtual Console's design keys
+    // included (two shortcuts on one key fire neither)
+    m_app->showContext("Virtual Console");
+    for (QAction *a : m_app->findChildren<QAction *>())
+    {
+        if (a == saveAs || a == quit)
+            continue;
+        for (const QKeySequence &k : a->shortcuts())
+        {
+            QVERIFY2(k != saveAs->shortcut(), qPrintable(a->text()));
+            QVERIFY2(k != quit->shortcut(), qPrintable(a->text()));
+        }
+    }
+
+    // Undo / Redo: the keys in the text, no binding of their own
+    QAction *undo = m_app->menuBar()->findChild<QAction *>("editUndo");
+    QAction *redo = m_app->menuBar()->findChild<QAction *>("editRedo");
+    QVERIFY(undo && redo);
+    QVERIFY(undo->shortcut().isEmpty());
+    QVERIFY(redo->shortcut().isEmpty());
+    const QString z = QKeySequence(QKeySequence::Undo).toString(QKeySequence::NativeText);
+    QVERIFY2(undo->text().contains(z), qPrintable(undo->text()));
+    // The platform's own Redo keys, the ones the tabs bind (⇧⌘Z on a Mac)
+    const QString redoKey = QKeySequence(QKeySequence::Redo).toString(QKeySequence::NativeText);
+    QVERIFY(!redoKey.isEmpty());
+    QVERIFY2(redo->text().contains(redoKey), qPrintable(redo->text()));
+#if defined(Q_OS_WIN)
+    QVERIFY2(redo->text().contains("Ctrl+Y"), qPrintable(redo->text()));
+#endif
+    // The menu, opened, keeps them as it names the step
+    QMenu *edit = qobject_cast<QMenu *>(undo->parent());
+    QVERIFY(edit != nullptr);
+    emit edit->aboutToShow();
+    QVERIFY2(undo->text().contains(z), qPrintable(undo->text()));
+    QVERIFY(undo->shortcut().isEmpty());
 }
 
 void AppViews_Test::newShowsCanStartInClassic()
