@@ -38,8 +38,14 @@ const QRectF kKeys(0, 0, 724, 290);
 const qreal kStickTravel = 11.0;
 
 /* The usual name of a control, when the profile gives none. */
-QString defaultName(int role)
+QString defaultName(int role, PadNames::Family family = PadNames::Xbox)
 {
+    if (PadNames::isPlayStation(family) || role == R::TouchClick)
+    {
+        const QString n = PadNames::name(GamepadRole::Role(role), family);
+        if (!n.isEmpty())
+            return n;
+    }
     switch (role)
     {
         case R::A: return QStringLiteral("A");
@@ -67,9 +73,16 @@ QString defaultName(int role)
 
 /* What fits on the control itself: the profile's name when it is short
    ("A", "L1"), a PlayStation shape by its name, else the place's usual
-   letters for a shoulder button or the name's initial for a face button. */
-QString glyphText(int role, const QString &name)
+   letters for a shoulder button or the name's initial for a face button.
+   A PlayStation pad: its own symbols, whatever the profile says. */
+QString glyphText(int role, const QString &name, PadNames::Family family = PadNames::Xbox)
 {
+    if (PadNames::isPlayStation(family))
+    {
+        const QString g = PadNames::name(GamepadRole::Role(role), family, PadNames::Glyph);
+        if (!g.isEmpty())
+            return g;
+    }
     if (!name.isEmpty() && name.size() <= 2)
         return name;
     QString squashed;
@@ -141,6 +154,22 @@ void FocusControlMap::setMode(Mode mode)
 void FocusControlMap::setControls(const QMap<int, QString> &controls)
 {
     m_controls = controls;
+    update();
+}
+
+void FocusControlMap::setFamily(PadNames::Family family)
+{
+    if (family == m_family)
+        return;
+    m_family = family;
+    update();
+}
+
+void FocusControlMap::setLightColour(const QColor &colour)
+{
+    if (colour == m_light)
+        return;
+    m_light = colour;
     update();
 }
 
@@ -236,17 +265,30 @@ QString FocusControlMap::actionText(int role) const
             return tr("Softer");
         case R::DpadRight:
             return tr("Sharper");
+        case R::TouchClick: case R::TouchX: case R::TouchY: case R::TouchDown:
+        case R::Touch2X: case R::Touch2Y: case R::Touch2Down:
+            // Board Q170: a trackpad's fine aim; two fingers zoom and focus.
+            return tr("Fine nudge \302\267 2 fingers: zoom, focus");
         default:
             break;
     }
     // Everything else: the one layout, in this tool's words.
-    return ControllerScheme::label(m_tool, ControllerScheme::verbFor(GamepadRole::Role(role)));
+    return PadNames::expand(ControllerScheme::label(m_tool, ControllerScheme::verbFor(GamepadRole::Role(role))),
+                            m_family);
 }
 
 QString FocusControlMap::controlName(int role) const
 {
+    // A PlayStation pad: its own names (Share on a DualShock 4, Create on a
+    // DualSense), whatever its profile calls them.
+    if (PadNames::isPlayStation(m_family))
+    {
+        const QString own = defaultName(role, m_family);
+        if (!own.isEmpty())
+            return own;
+    }
     const QString n = m_controls.value(role);
-    return n.isEmpty() ? defaultName(role) : n;
+    return n.isEmpty() ? defaultName(role, m_family) : n;
 }
 
 bool FocusControlMap::isMapped(int role) const
@@ -256,6 +298,9 @@ bool FocusControlMap::isMapped(int role) const
 
 bool FocusControlMap::isLit(int role) const
 {
+    // The touchpad lights while a finger is on it, as well as clicked.
+    if (role == R::TouchClick && (m_lit.contains(R::TouchDown) || m_lit.contains(R::Touch2Down)))
+        return true;
     return m_lit.contains(role);
 }
 
@@ -298,7 +343,7 @@ QString FocusControlMap::keyAction(int key) const
     key = canonicalKey(key);
     const ControllerScheme::Verb verb = keyVerb(key);
     if (verb != ControllerScheme::NoVerb)
-        return ControllerScheme::label(m_tool, verb);
+        return PadNames::expand(ControllerScheme::label(m_tool, verb), m_family);
     switch (key)
     {
         case Qt::Key_Minus:        return tr("Step \303\26710");
@@ -391,6 +436,7 @@ void FocusControlMap::paintController(QPainter &p)
         QList<int> roles;          ///< the control(s) it names
         QPointF anchor;            ///< on the control
         QPointF elbow;             ///< (0,0): straight across
+        QPointF elbow2;            ///< a second turn, (0,0): none
         qreal row;
         bool left;
         QString action;
@@ -428,8 +474,12 @@ void FocusControlMap::paintController(QPainter &p)
         n.remove(QRegularExpression(QStringLiteral("[\\s_-]*[Xx]$")));
         return n.isEmpty() ? fallback : n;
     };
+    const bool ps = PadNames::isPlayStation(m_family);
     const QPointF ls(305, 165), rs(428, 240), dpad(365, 240), abxy(495, 165);
-    const QPointF view(372, 150), menu(428, 150), guide(400, 122);
+    /* A PlayStation pad's touchpad sits where the guide button is on an
+       Xbox pad; its PS button goes below, between the sticks. */
+    const QPointF view(372, 150), menu(428, 150), guide = ps ? QPointF(400, 186) : QPointF(400, 122);
+    const QRectF touchpad(380, 100, 40, 38);
     const qreal fb = 28.0;   // face-button spacing
 
     QList<Callout> callouts;
@@ -451,6 +501,16 @@ void FocusControlMap::paintController(QPainter &p)
              << callout({ R::RightX, R::RightY }, rs + QPointF(24, 16), QPointF(), 270, false,
                         stickName(R::RightX, tr("Right stick")))
              << callout({ R::RS }, rs + QPointF(0, 22), QPointF(428, 302), 302, false);
+    /* A PlayStation pad's touchpad (Q170; an Xbox pad has none, so no row
+       for it): its line goes round the left stick and the D-pad, down to
+       the bottom of the left column. */
+    if (ps)
+    {
+        Callout c = callout({ R::TouchClick, R::TouchX }, QPointF(touchpad.left(), 132),
+                            QPointF(338, 132), 292, true);
+        c.elbow2 = QPointF(338, 292);
+        callouts << c;
+    }
 
     // Room for the label columns, then the pad as large as fits between.
     qreal leftW = 0, rightW = 0;
@@ -511,6 +571,8 @@ void FocusControlMap::paintController(QPainter &p)
         line << a;
         if (!c.elbow.isNull())
             line << t.map(c.elbow);
+        if (!c.elbow2.isNull())
+            line << t.map(c.elbow2);
         else
             line << QPointF(a.x() + (c.left ? -6.0 : 6.0) * s, end.y());
         line << end;
@@ -524,7 +586,7 @@ void FocusControlMap::paintController(QPainter &p)
     p.restore();
 
     auto stateColours = [&](int role, bool mapped, QColor &fill, QColor &pen, QColor &label) {
-        if (m_lit.contains(role))
+        if (isLit(role))
         {
             fill = hi;
             pen = hi.darker(130);
@@ -552,7 +614,7 @@ void FocusControlMap::paintController(QPainter &p)
         p.setPen(QPen(pen, 1.2));
         const QPainterPath mappedShape = t.map(shape);
         p.drawPath(mappedShape);
-        if (accent.isValid() && mapped && !m_lit.contains(role))
+        if (accent.isValid() && mapped && !isLit(role))
         {
             p.setPen(QPen(accent, 2.0));
             p.setBrush(Qt::NoBrush);
@@ -578,10 +640,10 @@ void FocusControlMap::paintController(QPainter &p)
         const int bump = side < 0 ? R::LB : R::RB;
         QPainterPath tp;
         tp.addRoundedRect(QRectF(400 + side * 107 - 30, 50, 60, 26), 9, 9);
-        drawControl(tp, trig, glyphText(trig, m_controls.value(trig)));
+        drawControl(tp, trig, glyphText(trig, m_controls.value(trig), m_family));
         QPainterPath bp;
         bp.addRoundedRect(QRectF(400 + side * 105 - 42, 83, 84, 18), 9, 9);
-        drawControl(bp, bump, glyphText(bump, m_controls.value(bump)));
+        drawControl(bp, bump, glyphText(bump, m_controls.value(bump), m_family));
     }
 
     // View, Guide, Menu.
@@ -594,24 +656,41 @@ void FocusControlMap::paintController(QPainter &p)
         drawControl(mp, R::Start, QString());
         QPainterPath gp;
         gp.addEllipse(guide, 12, 12);
-        drawControl(gp, R::Guide, QString());
+        drawControl(gp, R::Guide, ps ? QStringLiteral("PS") : QString());
     }
 
-    // Face buttons, in the Xbox colours when they carry the Xbox letters.
-    const struct { int role; QPointF at; QColor accent; } faces[] = {
-        { R::Y, abxy + QPointF(0, -fb), QColor(0xd0, 0xa0, 0x1c) },
-        { R::X, abxy + QPointF(-fb, 0), QColor(0x3d, 0x7f, 0xc1) },
-        { R::B, abxy + QPointF(fb, 0),  QColor(0xc8, 0x46, 0x3c) },
-        { R::A, abxy + QPointF(0, fb),  QColor(0x3a, 0x9a, 0x4a) },
+    /* A PlayStation pad's touchpad (the whole pad clicks), lit while a
+       finger is on it, and its light bar along the top in the status
+       lamp's colour (Q126). An Xbox pad has neither. */
+    if (ps)
+    {
+        QPainterPath tp;
+        tp.addRoundedRect(touchpad, 6, 6);
+        drawControl(tp, R::TouchClick, QString());
+        QPainterPath bar;
+        bar.addRoundedRect(QRectF(touchpad.left() - 4, 93, touchpad.width() + 8, 4), 2, 2);
+        p.setPen(Qt::NoPen);
+        p.setBrush(m_light.isValid() ? m_light : withAlpha(dim, 120));
+        p.drawPath(t.map(bar));
+    }
+
+    /* Face buttons in their own colours: the Xbox's when they carry the
+       Xbox letters, a PlayStation's always. */
+    const struct { int role; QPointF at; } faces[] = {
+        { R::Y, abxy + QPointF(0, -fb) },
+        { R::X, abxy + QPointF(-fb, 0) },
+        { R::B, abxy + QPointF(fb, 0) },
+        { R::A, abxy + QPointF(0, fb) },
     };
     for (const auto &f : faces)
     {
         QPainterPath fp;
         fp.addEllipse(f.at, 13, 13);
-        const QString glyph = glyphText(f.role, m_controls.value(f.role));
+        const QString glyph = glyphText(f.role, m_controls.value(f.role), m_family);
         const QString name = m_controls.value(f.role);
         const bool xbox = name.isEmpty() || name.compare(defaultName(f.role), Qt::CaseInsensitive) == 0;
-        drawControl(fp, f.role, glyph, xbox ? f.accent : QColor());
+        const QColor accent = PadNames::faceColour(GamepadRole::Role(f.role), m_family);
+        drawControl(fp, f.role, glyph, ps || xbox ? accent : QColor());
     }
 
     // The D-pad: four arms round a hub.
@@ -697,7 +776,7 @@ void FocusControlMap::paintController(QPainter &p)
         const Qt::Alignment al = (c.left ? Qt::AlignRight : Qt::AlignLeft) | Qt::AlignVCenter;
         bool lit = false;
         for (int r : c.roles)
-            lit = lit || m_lit.contains(r);
+            lit = lit || isLit(r);
         if (c.roles.contains(R::LeftX))
             lit = qAbs(stickDeflection(false).x()) > 0.1 || qAbs(stickDeflection(false).y()) > 0.1;
         if (c.roles.contains(R::RightX))

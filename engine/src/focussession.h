@@ -34,6 +34,7 @@
 #include "qlcengine_export.h"
 #include "controllerscheme.h"
 #include "gamepadrole.h"
+#include "padnames.h"
 #include "outputlayer.h"
 
 class VenueCorrections;
@@ -339,6 +340,9 @@ public:
     void setFlashEnabled(bool on) { m_flashEnabled = on; }
     /** How much the voice says (ProgrammerController sets it for every tool). */
     void setVoiceDetail(ControllerScheme::VoiceDetail detail) { m_voiceDetail = detail; }
+    /** What its lines call the controls (board Q170): "A" or "Cross". */
+    void setPadFamily(PadNames::Family family) { m_padFamily = family; }
+    PadNames::Family padFamily() const { return m_padFamily; }
     ControllerScheme::VoiceDetail voiceDetail() const { return m_voiceDetail; }
 
     /*********************************************************************
@@ -626,6 +630,7 @@ private:
     /** What B's press just put back (revert()): a hold that follows it
      *  takes these into its one undo step and its count. */
     ControllerScheme::VoiceDetail m_voiceDetail = ControllerScheme::StandardVoice;
+    PadNames::Family m_padFamily = PadNames::Xbox;
     QList<UndoEntry> m_pressReverted;
     /** A call as it runs: its heads in order and the point each focuses to. */
     struct CallState

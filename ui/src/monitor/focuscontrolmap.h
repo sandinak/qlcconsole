@@ -28,6 +28,7 @@
 
 #include "controllerscheme.h"
 #include "gamepadrole.h"
+#include "padnames.h"
 
 /** @addtogroup ui UI
  * @{
@@ -64,6 +65,15 @@ public:
     /** The controller's controls: GamepadRole::Role -> the profile's name
      *  for it (empty: named by role only). */
     void setControls(const QMap<int, QString> &controls);
+    /** Which pad it is (board Q170): a PlayStation pad's controls are
+     *  called by their own names (Cross, L1, Share, Options), drawn with
+     *  their symbols and colours, with its touchpad and light bar. */
+    PadNames::Family family() const { return m_family; }
+    void setFamily(PadNames::Family family);
+    /** The pad's light bar, as the status lamp sets it (invalid: off). */
+    void setLightColour(const QColor &colour);
+    QColor lightColour() const { return m_light; }
+
     /** The D-pad's and arrows' step, for their labels. */
     void setStepDegrees(float step);
 
@@ -125,6 +135,8 @@ private:
 private:
     Mode m_mode = ControllerMap;
     ControllerScheme::Tool m_tool = ControllerScheme::FocusTool;
+    PadNames::Family m_family = PadNames::Xbox;
+    QColor m_light;
     QMap<int, QString> m_controls;
     float m_step = 0.1f;
     QSet<int> m_lit;              ///< roles held

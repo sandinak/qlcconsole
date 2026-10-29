@@ -29,6 +29,7 @@
 
 #include "qlcengine_export.h"
 #include "controllerscheme.h"
+#include "padnames.h"
 #include "showtreemodel.h"
 #include "outputlayer.h"
 
@@ -261,6 +262,9 @@ public:
     void setFlashEnabled(bool on) { m_flashEnabled = on; }
     /** How much the voice says (ProgrammerController sets it for every tool). */
     void setVoiceDetail(ControllerScheme::VoiceDetail detail) { m_voiceDetail = detail; }
+    /** What its lines call the controls (board Q170): "A" or "Cross". */
+    void setPadFamily(PadNames::Family family) { m_padFamily = family; }
+    PadNames::Family padFamily() const { return m_padFamily; }
     bool isFlashing() const;
     /** Out-of-scope fixtures of the layer are dimmed to this, 0..1. */
     static constexpr float dimLevel() { return 0.15f; }
@@ -403,6 +407,7 @@ private:
     QTimer *m_flashTimer = nullptr;
     QElapsedTimer m_flashClock;
     ControllerScheme::VoiceDetail m_voiceDetail = ControllerScheme::StandardVoice;
+    PadNames::Family m_padFamily = PadNames::Xbox;
     bool m_flashEnabled = true;
     bool m_holding = false;
     bool m_warnFlash = false;

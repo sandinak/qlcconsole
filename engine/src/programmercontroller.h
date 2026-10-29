@@ -35,6 +35,8 @@
 #include <QVector3D>
 
 #include "controllerscheme.h"
+#include "padnames.h"
+#include "touchpadgesture.h"
 #include "scenevalue.h"
 #include "doc.h"
 
@@ -248,8 +250,26 @@ public:
         /** Each control found, GamepadRole::Role -> the profile's name for
          *  it (empty when the profile names it only by role). */
         QMap<int, QString> controls;
+        /** What its controls are called (board Q170): from the plugin
+         *  (QLCIOPlugin::inputDeviceKind()), else PadNames::guess(). */
+        PadNames::Family family = PadNames::Xbox;
     };
     FocusController focusController() const;
+    /** The family of the pad the tools use (Xbox with none): what every
+     *  line that names a control calls it (PadNames). */
+    PadNames::Family padFamily() const;
+    /** @p text with its control tokens ("{A} keeps it") in the words of
+     *  the pad the tools use. */
+    QString padText(const QString &text) const;
+
+    /** Board Q170, a PlayStation pad's touchpad as a trackpad: a finger
+     *  dragged right across the whole pad nudges pan this many degrees
+     *  (times the profile's sensitivity), like the sticks' Nudge; two
+     *  fingers up the whole pad narrow the beam touchBeamDegrees(), across
+     *  it focus touchFocusSpan() of the way. */
+    static constexpr float touchDegrees() { return 4.0f; }
+    static constexpr float touchBeamDegrees() { return 20.0f; }
+    static constexpr float touchFocusSpan() { return 0.5f; }
     /** Board Q135, two pads: the universe of the pad that owns the
      *  controller tools now -- the first to press Start (or, for a tool
      *  started on the laptop, any button); invalid while none does. Every
@@ -747,6 +767,17 @@ private:
     /** Controller buttons held, by gamepad role, for the View+Menu combo. */
     QSet<int> m_heldRoles;
     float m_fineNormX = 0.5f, m_fineNormY = 0.5f;
+    /** The touchpad (Q170), read on the controller tick. */
+    TouchpadGesture m_touch;
+    /** A two-finger drag does one thing, chosen by its first move: 0
+     *  nothing yet, 1 zoom, 2 focus. */
+    int m_touchAxis = 0;
+    /** What the touchpad moved that is too small to send yet: pan, tilt,
+     *  beam degrees, focus. */
+    float m_touchCarry[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+    void applyTouch();
+    /** The sessions' pad family, from focusController(). */
+    void refreshPadFamily();
     /** The gamepad role of an input channel, from its device profile. */
     int controllerRole(quint32 universe, quint32 channel) const;
     /** Focus mode's share of slotControllerInputChanged(). True if it took

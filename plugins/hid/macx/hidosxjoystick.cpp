@@ -268,7 +268,9 @@ void HIDOSXJoystick::init()
         /* The layout the Xbox profile names, whatever this one reports:
            axes LX LY LT RX RY RT, then the buttons. */
         m_axesNumber = AxisCount;
-        m_buttonsNumber = ButtonCount;
+        /* A PlayStation pad's touchpad follows the buttons (Q170): read
+           through the GameController framework only, idle otherwise. */
+        m_buttonsNumber = m_family == PlayStation ? ButtonCount + TouchCount : ButtonCount;
         QMutableHashIterator<quint32, Element> it(m_elements);
         while (it.hasNext())
         {
@@ -370,6 +372,8 @@ int HIDOSXJoystick::channelValue(int channel) const
         return m_state.axes[channel];
     if (channel >= AxisCount && channel < AxisCount + ButtonCount)
         return m_state.buttons[channel - AxisCount] ? 255 : 0;
+    if (channel >= AxisCount + ButtonCount && channel < AxisCount + ButtonCount + TouchCount)
+        return m_state.touch[channel - AxisCount - ButtonCount];
     return -1;
 }
 
@@ -392,6 +396,16 @@ void HIDOSXJoystick::emitChanges()
             continue;
         emit valueChanged(UINT_MAX, m_line, quint32(m_axesNumber + b),
                           m_state.buttons[b] ? UCHAR_MAX : 0);
+    }
+    if (m_buttonsNumber >= ButtonCount + TouchCount)
+    {
+        for (int t = 0; t < TouchCount; ++t)
+        {
+            if (m_sentValid && m_sent.touch[t] == m_state.touch[t])
+                continue;
+            emit valueChanged(UINT_MAX, m_line, quint32(m_axesNumber + ButtonCount + t),
+                              m_state.touch[t]);
+        }
     }
     m_sent = m_state;
     m_sentValid = true;

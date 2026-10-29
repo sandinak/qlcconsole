@@ -41,6 +41,14 @@ private slots:
     /** The controller map labels each control by what its role does here,
      *  with the profile's own name, and greys what the profile lacks. */
     void theMapShowsTheProfilesBindings();
+    /** Board Q170: a PlayStation pad's controls are called by its own names
+     *  -- on the map, in the panel's words and the voice -- from the
+     *  plugin's kind, else its profile; an Xbox pad's are as before. */
+    void aPlayStationPadIsCalledByItsOwnNames();
+    /** Board Q170: one finger drags a fine nudge by how far it moves; two
+     *  fingers zoom (up: spot down) or focus (right: sharper), one a
+     *  gesture; a lift or landing never jumps; the click says the light. */
+    void theTouchpadAimsZoomsAndFocuses();
     /** Controller when one is connected (and the keyboard was not the last
      *  choice), else the keyboard -- in the setup and the panel. */
     void theDefaultFollowsTheDevice();
@@ -87,6 +95,7 @@ private slots:
 
 private:
     void plugInPad();
+    void plugInPlayStationPad(const QString &kind);
     void unplugPad();
 
     Doc *m_doc = nullptr;

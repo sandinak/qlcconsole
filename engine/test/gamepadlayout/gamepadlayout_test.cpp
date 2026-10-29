@@ -355,10 +355,19 @@ void GamepadLayout_Test::matchesThePlayStationProfile()
         QCOMPARE(p->axisRole(a), axisRole(a));
     for (int b = 0; b < ButtonCount; ++b)
     {
-        QCOMPARE(p->buttonRole(b), buttonRole(b));
+        // The Xbox Share place is the touchpad's click here (Q170).
+        QCOMPARE(p->buttonRole(b), b == Share ? QString("touchpad") : buttonRole(b));
         QVERIFY(!p->buttonName(b).isEmpty());
     }
     QCOMPARE(p->buttonName(A), QString("Cross"));
+    // The touchpad's fingers follow the buttons, as the reader sends them.
+    for (int t = 0; t < TouchCount; ++t)
+    {
+        QCOMPARE(p->buttonRole(ButtonCount + t), buttonRole(ButtonCount + t));
+        QVERIFY(!p->buttonName(ButtonCount + t).isEmpty());
+    }
+    QCOMPARE(p->buttonRole(ButtonCount + Touch1X), QString("touch_x"));
+    QCOMPARE(p->buttonRole(ButtonCount + Touch2Down), QString("touch2_down"));
     for (quint16 pid : { 0x05C4, 0x09CC, 0x0BA0, 0x0CE6, 0x0DF2 })
     {
         QVERIFY(p->matchesDevice(kSonyVendorId, pid));
@@ -392,6 +401,58 @@ void GamepadLayout_Test::matchesTheXboxProfile()
         QVERIFY2(p->matchesDevice(kMicrosoftVendorId, pid),
                  qPrintable(QString("%1 is not in the profile").arg(pid, 4, 16, QChar('0'))));
     delete p;
+}
+
+void GamepadLayout_Test::deviceKinds()
+{
+    QCOMPARE(deviceKind(kSonyVendorId, 0x05C4), QString("dualshock4"));
+    QCOMPARE(deviceKind(kSonyVendorId, 0x09CC), QString("dualshock4"));
+    QCOMPARE(deviceKind(kSonyVendorId, 0x0BA0), QString("dualshock4"));
+    QCOMPARE(deviceKind(kSonyVendorId, 0x0CE6), QString("dualsense"));
+    QCOMPARE(deviceKind(kSonyVendorId, 0x0DF2), QString("dualsense"));
+    QCOMPARE(deviceKind(kMicrosoftVendorId, 0x0B13), QString("xbox"));
+    QVERIFY(deviceKind(kSonyVendorId, 0x0268).isEmpty());     // a PS3 pad: not ours
+    QVERIFY(deviceKind(0x1234, 0x5678).isEmpty());
+}
+
+void GamepadLayout_Test::touchpadFingers()
+{
+    PadState s;
+    centre(&s);
+    QCOMPARE(int(s.touch[Touch1Down]), 0);
+    QCOMPARE(int(s.touch[Touch2Down]), 0);
+    QCOMPARE(int(s.touch[Touch1X]), 128);
+
+    // A finger at the top left (the framework: x -1, y +1 is up).
+    readTouch(-1.0f, 1.0f, 0, &s);
+    QCOMPARE(int(s.touch[Touch1X]), 0);
+    QCOMPARE(int(s.touch[Touch1Y]), 0);
+    QCOMPARE(int(s.touch[Touch1Down]), 255);
+    readTouch(1.0f, -1.0f, 0, &s);
+    QCOMPARE(int(s.touch[Touch1X]), 255);
+    QCOMPARE(int(s.touch[Touch1Y]), 255);
+    // Lifted: exactly (0, 0). Not down, and the place stays.
+    readTouch(0.0f, 0.0f, 0, &s);
+    QCOMPARE(int(s.touch[Touch1Down]), 0);
+    QCOMPARE(int(s.touch[Touch1X]), 255);
+    QCOMPARE(int(s.touch[Touch1Y]), 255);
+    // Next to the middle is a touch.
+    readTouch(0.001f, 0.0f, 0, &s);
+    QCOMPARE(int(s.touch[Touch1Down]), 255);
+    QCOMPARE(int(s.touch[Touch1X]), 128);
+    readTouch(0.0f, -0.002f, 0, &s);
+    QCOMPARE(int(s.touch[Touch1Down]), 255);
+    // The second finger is its own.
+    readTouch(0.5f, 0.5f, 1, &s);
+    QCOMPARE(int(s.touch[Touch2Down]), 255);
+    QCOMPARE(int(s.touch[Touch2X]), 191);
+    QCOMPARE(int(s.touch[Touch2Y]), 64);
+    QCOMPARE(int(s.touch[Touch1Down]), 255);
+    readTouch(0.3f, 0.3f, 2, &s);           // no third finger
+    readTouch(0.3f, 0.3f, 0, nullptr);
+    // The roles the reader gives the touch channels.
+    QCOMPARE(buttonRole(ButtonCount + Touch1Down), QString("touch_down"));
+    QVERIFY(buttonRole(ButtonCount + TouchCount).isEmpty());
 }
 
 void GamepadLayout_Test::noShippedProfileStepsAList()

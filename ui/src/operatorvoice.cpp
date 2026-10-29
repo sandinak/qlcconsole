@@ -391,7 +391,8 @@ OperatorFeedbackCombo::OperatorFeedbackCombo(ProgrammerController *pc, QWidget *
     addItem(tr("Lights only"), int(ControllerScheme::LightsFeedback));
     addItem(tr("Voice only"), int(ControllerScheme::VoiceFeedback));
     setToolTip(tr("How you are told where you are: the rig blinks what is picked, the laptop says it, "
-                  "or both. Say the light (RS, or W) always speaks. Hold RS, or Shift+W, to switch."));
+                  "or both. Say the light (%1, or W) always speaks. Hold %1, or Shift+W, to switch.")
+               .arg(pc != nullptr ? pc->padText(QStringLiteral("{RS}")) : QStringLiteral("RS")));
     sync();
     connect(this, &QComboBox::currentIndexChanged, this, [this]() {
         m_pc->setOperatorFeedback(ControllerScheme::Feedback(currentData().toInt()));

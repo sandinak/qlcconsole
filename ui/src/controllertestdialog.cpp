@@ -226,8 +226,8 @@ void ControllerTestDialog::refreshStatus()
     if (m_plugins.isEmpty())
         m_devicesLabel->setText(tr("No input plugin here can report raw controller input."));
     else if (devices.isEmpty())
-        m_devicesLabel->setText(tr("No game controller is connected. Switch one on (hold the "
-                                   "Xbox button) or plug it in; it is listed here when it "
+        m_devicesLabel->setText(tr("No game controller is connected. Switch one on (hold its "
+                                   "Xbox or PS button) or plug it in; it is listed here when it "
                                    "arrives."));
     else
         m_devicesLabel->setText(devices.join(QStringLiteral("<br/>")));
@@ -274,6 +274,7 @@ QString ControllerTestDialog::mapsTo(QLCIOPlugin *plugin, quint32 input, int cha
         parts << tr("role %1").arg(GamepadRole::key(role));
     if (!action.isEmpty())
         parts << tr("action %1").arg(action);
+    m_actions->setFamily(PadNames::familyFrom(plugin->inputDeviceKind(input)));
     const QString focus = role != GamepadRole::None ? m_actions->actionText(int(role)) : QString();
     if (!focus.isEmpty())
         parts << tr("Focus: %1").arg(focus);
@@ -298,7 +299,7 @@ void ControllerTestDialog::addInput(QLCIOPlugin *plugin, quint32 input, const QS
         item->setText(ColDevice, device);
         item->setText(ColConnection, connection);
         item->setToolTip(ColConnection, connection);
-        item->setText(ColElement, element);
+        item->setText(ColElement, elementText(plugin, input, element, channel));
         item->setData(ColRange, Qt::UserRole, raw);       // min
         item->setData(ColRange, Qt::UserRole + 1, raw);   // max
         item->setData(ColSeen, Qt::UserRole, 0);
@@ -326,6 +327,24 @@ void ControllerTestDialog::addInput(QLCIOPlugin *plugin, quint32 input, const QS
                     .arg(raw)
                     .arg(channel >= 0 ? QString::number(channel) : QStringLiteral("-"))
                     .arg(value >= 0 ? QString::number(value) : QStringLiteral("-"));
+}
+
+QString ControllerTestDialog::elementText(QLCIOPlugin *plugin, quint32 input, const QString &element,
+                                          int channel) const
+{
+    /* The element as the system names it ("buttonA"), and as the pad in
+       hand does (Q170): "buttonA, Cross" on a PlayStation pad. */
+    if (channel < 0)
+        return element;
+    const QString kind = plugin->inputDeviceKind(input);
+    if (kind.isEmpty())
+        return element;
+    const GamepadRole::Role role = GamepadRole::fromProfile(plugin->inputChannelRole(input, quint32(channel)),
+                                                            plugin->inputChannelName(input, quint32(channel)));
+    const QString own = PadNames::name(role, PadNames::familyFrom(kind));
+    if (own.isEmpty() || own.compare(element, Qt::CaseInsensitive) == 0)
+        return element;
+    return QStringLiteral("%1 \u00B7 %2").arg(element, own);
 }
 
 int ControllerTestDialog::rowCount() const

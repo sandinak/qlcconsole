@@ -1630,6 +1630,37 @@ QList<HelpShots::Shot> HelpShots::shots()
         doc->programmer()->focusSession()->stop();
         settle();
     } };
+    // Q170: a DualShock 4 -- its own names and symbols, the touchpad (a
+    // finger on it), the light bar in the lamp's colour.
+    list << Shot{ QStringLiteral("focus-mode-playstation-map"), [=]() {
+        Frame f;
+        FocusModePanel *panel = nullptr;
+        startFocusMode(&panel);
+        if (panel == nullptr)
+            return f;
+        panel->resize(700, 720);
+        FocusControlMap *map = panel->controlMap();
+        map->setMode(FocusControlMap::ControllerMap);
+        QMap<int, QString> all;
+        for (int r = GamepadRole::A; r <= GamepadRole::TouchClick; ++r)
+            all.insert(r, QString());
+        map->setControls(all);
+        map->setFamily(PadNames::DualShock4);
+        map->setLightColour(ControllerScheme::savedColour());
+        map->setControlValue(GamepadRole::TouchDown, 1.0f);
+        map->setControlValue(GamepadRole::A, 1.0f);
+        settle();
+        f.grab = map;
+        return f;
+    }, [=]() {
+        if (FocusModePanel *p = FocusModePanel::instance())
+        {
+            p->controlMap()->clearInput();
+            p->controlMap()->setFamily(PadNames::Xbox);
+        }
+        doc->programmer()->focusSession()->stop();
+        settle();
+    } };
     list << Shot{ QStringLiteral("focus-mode-keyboard-map"), [=]() {
         Frame f;
         FocusModePanel *panel = nullptr;

@@ -180,9 +180,10 @@ RefinePanel::RefinePanel(Doc *doc, QWidget *parent)
     m_toSource = new QCheckBox(this);
     m_toSource->setObjectName(QStringLiteral("refineToSource"));
     m_toSource->setFocusPolicy(Qt::NoFocus);
-    m_toSource->setToolTip(tr("Off (the default): A keeps the change in this cue, and the layer becomes "
-                              "its own here. On: A keeps it in the cue its values track from, so it "
-                              "changes there and in every cue that tracks it. S switches."));
+    m_toSource->setToolTip(doc->programmer()->padText(
+        tr("Off (the default): {A} keeps the change in this cue, and the layer becomes "
+           "its own here. On: {A} keeps it in the cue its values track from, so it "
+           "changes there and in every cue that tracks it. S switches.")));
     retainWhenHidden(m_toSource);
     m_toSource->hide();
     connect(m_toSource, &QCheckBox::toggled, this, [this](bool on) {
@@ -227,9 +228,9 @@ RefinePanel::RefinePanel(Doc *doc, QWidget *parent)
     bottom->addWidget(new OperatorFeedbackCombo(doc->programmer(), this));
     bottom->addWidget(new QLabel(tr("Voice:"), this));
     bottom->addWidget(new VoiceDetailCombo(doc->programmer(), this));
-    QPushButton *keep = new QPushButton(tr("Keep (A)"), this);
+    QPushButton *keep = new QPushButton(this);
     keep->setObjectName(QStringLiteral("refineKeep"));
-    QPushButton *back = new QPushButton(tr("Back to the cue (B)"), this);
+    QPushButton *back = new QPushButton(this);
     back->setObjectName(QStringLiteral("refineRevert"));
     QPushButton *exitBtn = new QPushButton(tr("Exit"), this);
     exitBtn->setObjectName(QStringLiteral("refineExit"));
@@ -245,9 +246,14 @@ RefinePanel::RefinePanel(Doc *doc, QWidget *parent)
     connect(exitBtn, &QPushButton::clicked, this, [this]() { requestExit(); });
 
     ProgrammerController *pc = m_doc->programmer();
-    auto controls = [this, pc]() {
+    auto controls = [this, pc, keep, back]() {
         const ProgrammerController::FocusController pad = pc->focusController();
+        // The pad's own names (Q170): "Keep (Cross)" on a PlayStation pad.
+        const PadNames::Family family = pad.present ? pad.family : PadNames::Xbox;
+        keep->setText(PadNames::expand(tr("Keep ({A})"), family));
+        back->setText(PadNames::expand(tr("Back to the cue ({B})"), family));
         m_map->setControls(pad.controls);
+        m_map->setFamily(pad.present ? pad.family : PadNames::Xbox);
         m_device->setText(!pc->controllerOwnerName().isEmpty()
                           ? tr("Controller: %1 has it (any other is ignored).").arg(pc->controllerOwnerName())
                           : pad.present ? tr("Controller: %1").arg(pad.name)
@@ -258,6 +264,9 @@ RefinePanel::RefinePanel(Doc *doc, QWidget *parent)
     };
     controls();
     connect(pc, &ProgrammerController::focusControllerChanged, this, controls);
+    // The light bar on the map, as on the pad (Q170).
+    m_map->setLightColour(pc->padLight());
+    connect(pc, &ProgrammerController::padLightChanged, m_map, &FocusControlMap::setLightColour);
     connect(pc, &ProgrammerController::controllerLost, this, controls);
     connect(pc, &ProgrammerController::holdingChanged, this, &RefinePanel::refresh);
     connect(pc, &ProgrammerController::focusControllerInput, this, [this](int role, float value) {
@@ -361,7 +370,8 @@ void RefinePanel::refresh()
     const QString page = m_session->page() == RefineSession::BeamPage ? tr("beam (spot down / flood out, sharper / softer)")
                        : m_session->page() == RefineSession::ColourPage ? tr("colour palettes")
                                                                         : tr("gobo palettes");
-    m_scope->setText(tr("%1  Y changes the scope.  D-pad: %2 (LS click changes it).").arg(scope, page));
+    m_scope->setText(m_doc->programmer()->padText(tr("%1  {Y} changes the scope.  D-pad: %2 ({LS} click changes it)."))
+                     .arg(scope, page));
     m_scope->setToolTip(m_scope->text());
     if (m_session->isTrackedLayer())
     {
@@ -406,7 +416,7 @@ void RefinePanel::refresh()
         parts << tr("zoom %1\302\260").arg(double(zoom), 0, 'f', 1);
     if (m_session->pendingFocus(fid, focus))
         parts << tr("focus %1%").arg(qRound(focus * 100.0 / 255.0));
-    m_pending->setText(tr("Pending (A keeps it in the cue, B goes back): %1")
+    m_pending->setText(m_doc->programmer()->padText(tr("Pending ({A} keeps it in the cue, {B} goes back): %1"))
                        .arg(parts.isEmpty() ? tr("a palette") : parts.join(QStringLiteral(", "))));
     m_pending->setStyleSheet(QStringLiteral("color: #b08a10;"));
 }

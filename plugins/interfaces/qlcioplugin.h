@@ -630,6 +630,16 @@ public:
     { Q_UNUSED(input); return QString(); }
 
     /**
+     * What kind of game controller input line @p input is, so the tools
+     * call its controls by their own names (board Q170): "xbox",
+     * "dualshock4", "dualsense" -- from the vendor and product IDs the
+     * plugin knows. Empty when it can't tell, or it is not a game
+     * controller; the engine then guesses from the profile (PadNames).
+     */
+    virtual QString inputDeviceKind(quint32 input) const
+    { Q_UNUSED(input); return QString(); }
+
+    /**
      * Diagnostics, for the Controller test window: while on, report every
      * raw input every device reads -- patched or not -- through
      * inputDiagnostic(). Returns false when the plugin has none to give

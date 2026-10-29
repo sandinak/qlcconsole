@@ -37,6 +37,11 @@ const Entry kKeys[] = {
     { GamepadRole::LeftX, "lx" },      { GamepadRole::LeftY, "ly" },
     { GamepadRole::RightX, "rx" },     { GamepadRole::RightY, "ry" },
     { GamepadRole::LeftTrigger, "lt" }, { GamepadRole::RightTrigger, "rt" },
+    { GamepadRole::TouchX, "touch_x" },   { GamepadRole::TouchY, "touch_y" },
+    { GamepadRole::TouchDown, "touch_down" },
+    { GamepadRole::Touch2X, "touch2_x" }, { GamepadRole::Touch2Y, "touch2_y" },
+    { GamepadRole::Touch2Down, "touch2_down" },
+    { GamepadRole::TouchClick, "touchpad" },
 };
 
 /* Names, squashed to lower-case letters and digits only, that controllers'
@@ -71,6 +76,8 @@ const QHash<QString, GamepadRole::Role> &nameTable()
         { "l2", GamepadRole::LeftTrigger },
         { "righttrigger", GamepadRole::RightTrigger }, { "rt", GamepadRole::RightTrigger },
         { "r2", GamepadRole::RightTrigger },
+        { "touchpad", GamepadRole::TouchClick }, { "touchpadbutton", GamepadRole::TouchClick },
+        { "touchpadclick", GamepadRole::TouchClick },
     };
     return t;
 }
@@ -111,4 +118,9 @@ QString GamepadRole::key(Role role)
 bool GamepadRole::isAxis(Role role)
 {
     return role >= LeftX && role <= RightTrigger;
+}
+
+bool GamepadRole::isTouch(Role role)
+{
+    return role >= TouchX && role <= Touch2Down;
 }

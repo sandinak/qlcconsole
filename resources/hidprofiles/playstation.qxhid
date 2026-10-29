@@ -42,6 +42,15 @@
     <Button index="12" role="dpad_down">D-pad Down</Button>
     <Button index="13" role="dpad_left">D-pad Left</Button>
     <Button index="14" role="dpad_right">D-pad Right</Button>
-    <Button index="15">Touchpad</Button>
+    <Button index="15" role="touchpad">Touchpad</Button>
+    <!-- The touchpad (board Q170): each finger's place and touch, after
+         the buttons so nothing above moves. Read through Apple's
+         GameController framework only. -->
+    <Button index="16" role="touch_x">Touch X</Button>
+    <Button index="17" role="touch_y">Touch Y</Button>
+    <Button index="18" role="touch_down">Touch</Button>
+    <Button index="19" role="touch2_x">Second Touch X</Button>
+    <Button index="20" role="touch2_y">Second Touch Y</Button>
+    <Button index="21" role="touch2_down">Second Touch</Button>
   </Buttons>
 </HIDProfile>

@@ -1305,7 +1305,9 @@ practice applied already, no venue yet, or a show not saved yet.
 
 Aligning the rig before a show, one head at a time, with a game
 controller (an Xbox pad, or on a Mac a PlayStation DualShock 4 or
-DualSense) or the keyboard.
+DualSense) or the keyboard. This guide names the Xbox buttons; a
+PlayStation pad's own names, and its touchpad, are in
+[On a PlayStation pad](focus-calls.md#on-a-playstation-pad).
 
 **Start it** from **Focus ▸ Quick focus…** on the Lighting Studio toolbar,
 **Quick focus** on the Rig Overview's bar, **View → Quick Focus…** (⌘⌥F),
@@ -1524,7 +1526,10 @@ usual names. The Xbox profile has roles, and the D-pad as buttons 11–14.
 So does the PlayStation profile: on a Mac a DualShock 4 or DualSense is
 read into the same layout — Cross is A, Circle B, Square X, Triangle Y,
 L1 / R1 the bumpers, L2 / R2 the triggers, L3 / R3 the stick clicks,
-Create (Share) View and Options Menu.
+Create (Share) View and Options Menu, and its touchpad's fingers follow
+the buttons (channels 16–21, `role="touch_x"` and so on). The tools then
+call each control by the pad's own name: see
+[On a PlayStation pad](focus-calls.md#on-a-playstation-pad).
 While Quick focus is on it has the controller to itself: chaser stepping
 and the follow spot wait.
 

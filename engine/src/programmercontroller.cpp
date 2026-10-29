@@ -108,14 +108,14 @@ ProgrammerController::ProgrammerController(Doc *doc)
             const int n = m_focusSession->unsavedFixtures().size();
             const QString tool = m_focusSession->isRunningCalls() ? tr("Venue focus") : tr("Quick focus");
             reason = (n == 1 ? tr("%1 has 1 light not saved").arg(tool) : tr("%1 has %2 lights not saved").arg(tool).arg(n))
-                     + tr(": save it (A) or put it back (B) first.");
+                     + padText(tr(": save it ({A}) or put it back ({B}) first."));
         }
         else if (m_refineSession->isActive() && m_refineSession->hasPending())
         {
             const int n = m_refineSession->pendingCount();
             const QString tool = m_refineSession->isSceneMode() ? tr("Focus this look") : tr("Focus this cue");
             reason = (n == 1 ? tr("%1 has 1 change not kept").arg(tool) : tr("%1 has %2 changes not kept").arg(tool).arg(n))
-                     + tr(": keep it (A) or go back to the cue (B) first.");
+                     + padText(tr(": keep it ({A}) or go back to the cue ({B}) first."));
         }
         if (reason.isEmpty())
             return true;
@@ -193,6 +193,8 @@ ProgrammerController::ProgrammerController(Doc *doc)
             m_focusSession->stop();
         connectControllerInput();
         m_fineNormX = m_fineNormY = 0.5f;
+        m_touch.reset();
+        refreshPadFamily();
         m_refineSession->setStick(RefineSession::Coarse, 0.5f, 0.5f);
         m_joyTickClock.invalidate();
         refreshControllerKeepAlive();
@@ -222,6 +224,11 @@ ProgrammerController::ProgrammerController(Doc *doc)
     });
     /* Said before the first where line, so "fixture 1 of 8" (or the call)
        is the last thing heard. */
+    connect(m_focusSession, &FocusSession::starting, this, [this]() {
+        // Its lines name the controls as the pad in hand does (Q170).
+        refreshPadFamily();
+        m_touch.reset();
+    });
     connect(m_focusSession, &FocusSession::starting, this, &ProgrammerController::sayNoController);
     connect(m_focusSession, &FocusSession::stopped, this, [this]() {
         emit joystickUpdated(m_panNorm, m_tiltNorm);
@@ -239,6 +246,8 @@ ProgrammerController::ProgrammerController(Doc *doc)
             this, &ProgrammerController::refreshControllerKeepAlive);
     connect(this, &ProgrammerController::focusControllerChanged,
             this, &ProgrammerController::checkControllerPresence);
+    connect(this, &ProgrammerController::focusControllerChanged,
+            this, &ProgrammerController::refreshPadFamily);
     connect(this, &ProgrammerController::axisBindingChanged,
             this, &ProgrammerController::refreshControllerKeepAlive);
     m_markPlanner = new MarkPlanner(m_doc, m_markEffect, this);
@@ -1575,6 +1584,7 @@ void ProgrammerController::setHolding(bool on)
     m_fineNormX = m_fineNormY = 0.5f;
     m_holdA.reset();
     m_holdB.reset();
+    m_touch.reset();
     m_focusSession->releaseControls();
     m_refineSession->releaseControls();
     m_focusSession->setHolding(on);
@@ -1643,6 +1653,7 @@ void ProgrammerController::freezeController()
     m_rsChord = false;
     m_stickChord = false;
     m_bumperFrom = 0xFFFFFFFF;
+    m_touch.reset();
     m_focusSession->releaseControls();
     m_refineSession->releaseControls();
     emit joystickUpdated(m_panNorm, m_tiltNorm);
@@ -2442,6 +2453,9 @@ ProgrammerController::FocusController ProgrammerController::focusController() co
         }
         if (used == 0)
             continue;
+        const QString kind = plugin->inputDeviceKind(ip->input());
+        c.family = kind.isEmpty() ? PadNames::guess(c.profile, c.name, c.controls)
+                                  : PadNames::familyFrom(kind);
         // Most of what Focus mode uses wins; the follow spot's breaks a tie.
         // The pad that owns the tools (Q135) is the one, though.
         const int score = used * 2 + ((m_panBound && m_panUniverse == u) ? 1 : 0)
@@ -2455,6 +2469,100 @@ ProgrammerController::FocusController ProgrammerController::focusController() co
         }
     }
     return best;
+}
+
+PadNames::Family ProgrammerController::padFamily() const
+{
+    const FocusController fc = focusController();
+    return fc.present ? fc.family : PadNames::Xbox;
+}
+
+QString ProgrammerController::padText(const QString &text) const
+{
+    return PadNames::expand(text, padFamily());
+}
+
+void ProgrammerController::refreshPadFamily()
+{
+    const PadNames::Family family = padFamily();
+    m_focusSession->setPadFamily(family);
+    m_refineSession->setPadFamily(family);
+}
+
+void ProgrammerController::applyTouch()
+{
+    const TouchpadGesture::Motion m = m_touch.take();
+    if (m.kind == TouchpadGesture::NoMotion || m_holding)
+        return;
+    const bool refine = m_refineSession->isActive();
+    if (!refine && m_focusSession->inputDevice() == FocusSession::KeyboardInput)
+        return;
+    /* Carried until a step is big enough to send: the tools hold offsets
+       to hundredths of a degree, a beam to tenths, focus to hundredths
+       (Refine: whole DMX steps). */
+    auto carry = [this](int i, float d, float unit) {
+        m_touchCarry[i] += d;
+        const float step = float(qRound(double(m_touchCarry[i] / unit))) * unit;
+        m_touchCarry[i] -= step;
+        return step;
+    };
+    if (m.kind == TouchpadGesture::Drag)
+    {
+        m_touchAxis = 0;
+        // Right is more pan; up the pad (dy < 0) is more tilt, as a stick.
+        const float scale = touchDegrees() * m_joystickSensitivity;
+        const float dPan = carry(0, m.dx * scale, 0.01f);
+        const float dTilt = carry(1, -m.dy * scale, 0.01f);
+        if (dPan == 0.0f && dTilt == 0.0f)
+            return;
+        if (refine)
+            m_refineSession->nudgePosition(dPan, dTilt);
+        else
+            m_focusSession->nudge(dPan, dTilt);
+        return;
+    }
+    // Two fingers: up/down zooms, left/right focuses -- whichever moved first.
+    if (m.started || m_touchAxis == 0)
+    {
+        m_touchAxis = qAbs(m.dy) >= qAbs(m.dx) ? 1 : 2;
+        m_touchCarry[2] = m_touchCarry[3] = 0.0f;
+        /* The crew's word, once a gesture (Q140), where the light has it:
+           up is in ("Spot down."), right is sharper, as the D-pad. */
+        const ControllerScheme::Verb verb = m_touchAxis == 1
+            ? (m.dy < 0.0f ? ControllerScheme::ZoomNarrower : ControllerScheme::ZoomWider)
+            : (m.dx > 0.0f ? ControllerScheme::FocusFarther : ControllerScheme::FocusNearer);
+        bool has = true;
+        if (!refine)
+        {
+            const quint32 fid = m_focusSession->currentFixture();
+            double deg = 0.0, lo = 0.0, hi = 0.0, level = 0.0;
+            has = m_touchAxis == 1 ? m_focusSession->beamAngle(fid, deg, lo, hi)
+                                   : m_focusSession->focusLevel(fid, level);
+        }
+        if (has)
+            tellOperator(ControllerScheme::crewWord(verb), ControllerScheme::WherePriority);
+    }
+    if (m_touchAxis == 1)
+    {
+        const float d = carry(2, m.dy * touchBeamDegrees(), 0.1f);
+        if (d != 0.0f)
+            refine ? void(m_refineSession->nudgeZoom(d)) : m_focusSession->nudgeBeam(d);
+    }
+    else
+    {
+        if (refine)
+        {
+            const float d = carry(3, m.dx * touchFocusSpan() * 255.0f, 1.0f);
+            if (d != 0.0f)
+                m_refineSession->nudgeFocus(int(d));
+        }
+        else
+        {
+            const float d = carry(3, m.dx * touchFocusSpan(), 0.01f);
+            if (d != 0.0f)
+                m_focusSession->nudgeFocus(d);
+        }
+    }
 }
 
 bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uchar value)
@@ -2477,7 +2585,8 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
        laptop: any button) owns it; another is ignored, and told so. */
     if ((active || m_focusCallCue->isArmed()) && (role != GamepadRole::None || isPan || isTilt))
     {
-        const bool press = value > 0 && !GamepadRole::isAxis(role) && !isPan && !isTilt;
+        const bool press = value > 0 && !GamepadRole::isAxis(role) && !GamepadRole::isTouch(role)
+                           && !isPan && !isTilt;
         if (m_ownerUniverse == 0xFFFFFFFF)
         {
             if (press && (active || role == FocusCallCue::startRole()))
@@ -2494,7 +2603,7 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
         }
     }
 
-    if (!GamepadRole::isAxis(role) && role != GamepadRole::None)
+    if (!GamepadRole::isAxis(role) && !GamepadRole::isTouch(role) && role != GamepadRole::None)
     {
         if (value > 0)
         {
@@ -2531,7 +2640,8 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
     // What the panel lights: the stick by its role even when it is only bound.
     const GamepadRole::Role shown = isPan ? GamepadRole::LeftX
                                   : isTilt ? GamepadRole::LeftY : role;
-    if (shown != GamepadRole::None)
+    if (shown != GamepadRole::None && (!GamepadRole::isTouch(shown) || shown == GamepadRole::TouchDown
+                                       || shown == GamepadRole::Touch2Down))
         emit focusControllerInput(int(shown), GamepadRole::isAxis(shown) ? norm
                                                                         : (value > 0 ? 1.0f : 0.0f));
 
@@ -2557,6 +2667,15 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
     // Holding: nothing on the controller moves anything until released.
     if (m_holding)
         return true;
+    /* The touchpad (Q170): kept as it comes, read on the controller tick
+       (applyTouch()); its click says the light (verbFor(), below). */
+    if (GamepadRole::isTouch(role))
+    {
+        m_touch.setValue(role, norm);
+        return true;
+    }
+    if (role == GamepadRole::TouchClick)
+        m_touch.setClick(value > 0);
     /* LS acts on its release (so both clicks can make the freeze chord
        without LS's page turning first). */
     if (role == GamepadRole::LS)
@@ -2738,6 +2857,7 @@ void ProgrammerController::applyDesignJoystick()
         if (m_sayHold.due(dt))
             cycleOperatorFeedback();
         heldTick(dt);
+        applyTouch();
         m_focusSession->tick(dt);
         return;
     }
@@ -2754,6 +2874,7 @@ void ProgrammerController::applyDesignJoystick()
         if (m_sayHold.due(dt))
             cycleOperatorFeedback();
         heldTick(dt);
+        applyTouch();
         m_refineSession->tick(dt);
         return;
     }
