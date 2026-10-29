@@ -169,6 +169,7 @@ add_library(${module_name}
     effectscripteditor.cpp effectscripteditor.h
     pathdrawwidget.cpp pathdrawwidget.h
     networkreportdialog.cpp networkreportdialog.h
+    bugreportdialog.cpp bugreportdialog.h
     patchlabelsdialog.cpp patchlabelsdialog.h
     patchlistdialog.cpp patchlistdialog.h
     speedmastersfooter.cpp speedmastersfooter.h

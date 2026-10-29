@@ -26,6 +26,10 @@ The latest changes, newest first. Each links to the guide with the detail.
   profiles](other-improvements.md#editing-a-connection).
 - **Start new shows in Classic.** **Settings ▸ General ▸ Start new shows
   in the Classic view**. See [Views](getting-started.md#views).
+- **Report a Bug.** **Help ▸ Troubleshooting ▸ Report a Bug…** opens a
+  GitHub issue filled in with what happened and the app's details, minus
+  anything private; your browser files it. See [Reporting a
+  bug](troubleshooting.md#reporting-a-bug).
 
 ### Based on QLC+ 4.14.4
 

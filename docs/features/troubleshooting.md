@@ -290,6 +290,31 @@ Workbench was docked there. That saved split is no longer used: the
 default split comes back, and a split you change while the Workbench is
 docked isn't kept (closing the Workbench puts it back as it was).
 
+## Reporting a bug
+
+**Help ▸ Troubleshooting ▸ Report a Bug…** opens a short form: a title,
+**What happened?**, **What did you expect?** and, if you can, the steps
+that make it happen. Below them, **Details that will be included** shows
+exactly what goes with it, each part with its own box: the app's version
+and build (and the QLC+ version it is based on), the operating system and
+processor, the Qt version, the current view, the show's size as counts
+only (fixtures, groups, universes, functions), and the names of the I/O
+plugins in use. Two parts start unticked: the layout report (the same text
+as **Copy Layout Report**, for a window that misbehaves) and the last lines
+of the log (only there when qlcconsole was started with `--log`; read them
+before you tick it). You can edit the details before sending.
+
+Never included: the show's name or path, fixture and group names, your
+user name or home folder (written as `~`), IP addresses and passwords.
+Those are taken out of the details even if you type them there.
+
+**Open in GitHub** opens the project's bug form in your browser with all of
+it filled in; you check it and press **Submit** there. qlcconsole itself
+sends nothing. Filing needs a GitHub account. A report too long for a link
+opens cut short, with the whole of it on your clipboard: paste it into the
+issue. Without an account, or offline, **Copy Report** puts the whole
+report on the clipboard to send another way.
+
 ## Security
 
 **The web page doesn't open on a tablet.** Web access listens on this

@@ -1,0 +1,53 @@
+# Bug report form. qlcconsole's Help > Troubleshooting > Report a Bug opens
+# it prefilled: each field's id is a query parameter
+# (ui/src/bugreportdialog.cpp), so keep the ids in step with it.
+name: Bug report
+description: Something in qlcconsole doesn't work as it should.
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. In qlcconsole, **Help ▸ Troubleshooting ▸ Report a Bug…** fills this in for you, with the version and system details.
+        Please don't attach a show file you can't share publicly; describe the setup instead.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What you saw, and what you were doing when it happened.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+      description: What should have happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Optional, but it is the quickest way to a fix.
+      placeholder: |
+        1. Open a show with ...
+        2. Click ...
+        3. See ...
+    validations:
+      required: false
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Help ▸ About, e.g. "0.3.1 (build 4.14.4+qlcconsole.2461, 2adcf523d)".
+    validations:
+      required: false
+  - type: textarea
+    id: details
+    attributes:
+      label: Details
+      description: App, operating system, Qt, view, show size and I/O plugins (the Report a Bug dialog fills this in).
+      render: text
+    validations:
+      required: false

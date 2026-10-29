@@ -127,6 +127,8 @@ protected:
 public slots:
     /** Help > Troubleshooting > Copy Layout Report (LayoutDiagnostics). */
     void copyLayoutReport();
+    /** Help > Troubleshooting > Report a Bug: BugReportDialog. */
+    void reportBug();
 
 protected:
 

@@ -135,6 +135,7 @@
 #include "definitionupdatesdialog.h"
 #include "qlcioplugin.h"
 #include "startupwindow.h"
+#include "bugreportdialog.h"
 #include "mainbar.h"
 #include <QFrame>
 #include <QVBoxLayout>
@@ -2731,6 +2732,9 @@ void App::initMenuBar()
             trouble->addAction(tr("Troubleshooting Guide"), this, [topic]() { HelpBrowser::open(topic); });
             QAction *report = trouble->addAction(tr("Copy Layout Report"), this, &App::copyLayoutReport);
             report->setObjectName(QStringLiteral("copyLayoutReport"));
+            /* A GitHub issue, prefilled and scrubbed: the browser files it. */
+            QAction *bug = trouble->addAction(tr("Report a Bug…"), this, &App::reportBug);
+            bug->setObjectName(QStringLiteral("reportBug"));
             continue;
         }
         helpMenu->addAction(g.first, this, [topic]() { HelpBrowser::open(topic); });
@@ -4673,6 +4677,19 @@ void App::copyLayoutReport()
     QGuiApplication::clipboard()->setText(text);
     if (statusBar() != nullptr)
         statusBar()->showMessage(tr("Layout report copied to the clipboard: paste it into your report"), 6000);
+}
+
+void App::reportBug()
+{
+    BugReportContext context;
+    context.doc = m_doc;
+    context.viewName = workspaceViewName(m_workspaceView);
+    context.showPath = fileName();
+    context.layoutReport = [this]() { return LayoutDiagnostics::report(this); };
+    context.logLines = BugReportDialog::recentLogLines();
+    BugReportDialog *dialog = new BugReportDialog(context, this);
+    dialog->setAttribute(Qt::WA_DeleteOnClose);
+    dialog->show();
 }
 
 void App::openContextWindow(QWidget *context, const QString &tabLabel)
