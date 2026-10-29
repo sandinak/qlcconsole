@@ -24,7 +24,8 @@ app: true
 3. **Program it** from `lesson-1-1-start.qlcc` (the empty classroom show):
    **+ Production** named for your group, **+ Cue list**, then your cues
    with their layers, looks and times.
-4. **Save** as `Level1-check-group.qlcc`.
+4. **Save** as `Level1-check-group.qlcc`: **File ▸ Save As** first, then
+   **⌘S** (Ctrl+S) as you work.
 5. **Run it live** while the clip plays: one of you calls as SM, another
    is on the board.
 6. **Talk for one minute:** what you wanted the audience to feel, and how

@@ -1,0 +1,18 @@
+{%- capture keys -%}{%- if include.mac and include.mac == include.win -%}<kbd>{{ include.mac }}</kbd>{%- else -%}{%- if include.mac -%}<kbd>{{ include.mac }}</kbd> on Mac{%- endif -%}{%- if include.mac and include.win -%}, {% endif -%}{%- if include.win -%}<kbd>{{ include.win }}</kbd> on Windows{%- endif -%}{%- endif -%}{%- endcapture -%}
+{%- capture what -%}{%- if include.winpath -%}<strong>{{ include.path }}</strong>{% if include.mac %} (<kbd>{{ include.mac }}</kbd>){% endif %} on Mac; <strong>{{ include.winpath }}</strong>{% if include.win %} (<kbd>{{ include.win }}</kbd>){% endif %} on Windows{%- elsif include.path -%}<strong>{{ include.path }}</strong>{% if keys != "" %} ({{ keys }}){% endif %}{%- else -%}{{ keys }}{%- endif -%}{%- endcapture -%}
+<div class="inapp"><span class="inapp-tag">In the app</span> <strong>{{ include.do }}:</strong> {{ what }}.{% if include.see %} {{ include.see | markdownify | remove: '<p>' | remove: '</p>' | strip }}{% endif %}</div>
+{%- comment -%}
+The "In the app" box of a student page (docs/course/VOLUNTEER.md, "The In
+the app box"): one app operation, at the step that first needs it. In a
+page, in braces and percent signs:
+
+  include inapp.html do="Save your work" path="File ▸ Save" mac="⌘S"
+  win="Ctrl+S" see="The footer reads **✓ Saved**."
+
+do: what it's for. path: the menu path, ▸ between levels (leave it out
+for a mouse or key action). mac / win: the shortcuts (leave one out when
+there is none). winpath: the Windows path, only when it differs from the
+Mac's. see: one line of what you'll see (Markdown). The output is one
+line, so it can sit inside a numbered step: indent the include like the
+step's text, with a blank line before it.
+{%- endcomment -%}

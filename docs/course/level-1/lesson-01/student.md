@@ -53,44 +53,56 @@ Roles: **Driver** (mouse), **Navigator** (reads each step), **Designer**
 
 ## Steps
 
-1. Open qlcconsole: **File → Open** → `lesson-1-1-start.qlcc`.
-2. Click the **Show Tree** tab (⇧⌘5).
-3. **View → Rig Overview** (⇧⌘R), beside the Show Tree. The footer reads
+1. Open qlcconsole: **File ▸ Open** → `lesson-1-1-start.qlcc`.
+
+   {% include inapp.html do="Open a show" path="File ▸ Open" mac="⌘O" win="Ctrl+O" see="**File ▸ Open Recent** lists the shows you've opened lately." %}
+
+2. Save it under your name now, so your work goes in your own file:
+   **File ▸ Save As** → `Lesson01-yourname.qlcc`.
+
+   {% include inapp.html do="Save under a new name" path="File ▸ Save As…" see="Type the name, click **Save**. The window title shows the new name; the lesson file stays as it came." %}
+
+3. Click the **Show Tree** tab (⇧⌘5).
+4. **View ▸ Rig Overview** (⇧⌘R), beside the Show Tree. The footer reads
    *No outputs: preview only*: expected in class.
 
    ![The Show Tree tab](../../images/lesson-1-1/showtree-tab.png)
 
-4. **+ Production**, type `Spring Show`, **OK**.
-5. **+ Cue list**, type `01-Everybody Scream`, **OK**.
-6. **+ Cue**, type `Pose`, press **Return**: **1.0.0 Pose**.
-7. In the Library, open **All → Groups → Trusses** and drag
+5. **+ Production**, type `Spring Show`, **OK**.
+6. **+ Cue list**, type `01-Everybody Scream`, **OK**.
+7. **+ Cue**, type `Pose`, press **Return**: **1.0.0 Pose**.
+8. In the Library, open **All → Groups → Trusses** and drag
    **TrussC-RGB** onto the dashed box under **Layers**. The note in the
    top bar says where the drop lands: read it before you let go.
 
    ![Dragging a group onto the cue](../../images/lesson-1-1/drop-group.png)
 
-8. From **Palettes → Colour**, drag **Blue** onto the TrussC-RGB row;
+   {% include inapp.html do="Undo a mistake" path="Edit ▸ Undo" mac="⌘Z" win="Ctrl+Z" see="**⇧⌘Z** (Ctrl+Shift+Z) redoes. Edit ▸ Undo names the step it will undo." %}
+
+9. From **Palettes → Colour**, drag **Blue** onto the TrussC-RGB row;
    from **Dimmer**, drag **Full** onto it. The cyc turns blue. Always give
    a layer a colour *and* a level.
 
    ![Colour and level on the layer](../../images/lesson-1-1/drop-palettes.png)
 
-9. **+ Cue**, `Verse`, **Return**. The grey row is the cyc, tracked from
-   Pose.
-10. From **Groups → Steps**, drag **StepTops** onto the dashed box, then
+10. **+ Cue**, `Verse`, **Return**. The grey row is the cyc, tracked from
+    Pose.
+11. From **Groups → Steps**, drag **StepTops** onto the dashed box, then
     **Warm White** and **75%** onto its row.
 
     ![The verse: a tracked row and a new layer](../../images/lesson-1-1/tracked-row.png)
 
-11. **+ Cue**, `Chorus`, **Return**.
-12. Drag **Steps** onto the dashed box, then **Magenta** and **Full** onto
+12. **+ Cue**, `Chorus`, **Return**.
+13. Drag **Steps** onto the dashed box, then **Magenta** and **Full** onto
     its row.
-13. Click the **Run** tab (⇧⌘8) and press **GO** (or Space) three times.
+14. Click the **Run** tab (⇧⌘8) and press **GO** (or Space) three times.
     If a line offers **Switch to Operate**, close it with **×**.
 
     ![The Run tab](../../images/lesson-1-1/run-tab.png)
 
-14. **File → Save As** → `Lesson01-yourname.qlcc`.
+15. Save: **⌘S**.
+
+    {% include inapp.html do="Save your work" path="File ▸ Save" mac="⌘S" win="Ctrl+S" see="The footer, bottom right, goes from **● Unsaved changes** to **✓ Saved**." %}
 
 | Pose | Verse | Chorus |
 |---|---|---|

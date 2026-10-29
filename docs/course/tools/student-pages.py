@@ -8,7 +8,9 @@ This script checks that every one of them:
 - uses the student layout, has a /class/ permalink of its own and is kept
   out of the site's navigation and search;
 - points only at pictures and show files that exist;
-- is linked from its teacher guide ("Give students: ...") with a QR code.
+- is linked from its teacher guide ("Give students: ...") with a QR code;
+- gives every "In the app" box (_includes/inapp.html) what it needs: what
+  it's for, and a menu path or a shortcut.
 
 It also reports each page's word count against its handout.
 
@@ -33,6 +35,10 @@ BASEURL = "/qlcconsole"
 # Source pages kept off the site (_config.yml exclude:), read on GitHub.
 TEACHER = re.compile(r"(^|/)(teacher-guide|slides|COURSE_PLAN|VOLUNTEER)\.(md|html)$|(^|/)_?template/")
 COURSE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# Student pages that aren't lessons: no teacher guide, no QR code.
+NOT_LESSONS = ("install", "basics")
+INAPP = re.compile(r"\{%-?\s*include\s+inapp\.html\s+(.*?)-?%\}", re.S)
+INAPP_KEYS = {"do", "path", "winpath", "mac", "win", "see"}
 
 
 def front_matter(text):
@@ -150,6 +156,12 @@ def main():
                 continue
             if not os.path.isfile(os.path.normpath(os.path.join(os.path.dirname(path), target))):
                 problems.append(f"{rel}: {target} is missing")
+        for box in INAPP.findall(body):
+            args = dict(re.findall(r'(\w+)="([^"]*)"', box))
+            if set(args) - INAPP_KEYS:
+                problems.append(f"{rel}: inapp box: unknown {sorted(set(args) - INAPP_KEYS)}")
+            if not args.get("do") or not (args.get("path") or args.get("mac") or args.get("win")):
+                problems.append(f"{rel}: inapp box needs do= and a path= or a shortcut ({box.strip()[:40]}…)")
         if re.search(r"\]\([^)]*(teacher-guide|slides|COURSE_PLAN|VOLUNTEER)", body):
             problems.append(f"{rel}: links to teacher material")
 
@@ -163,11 +175,11 @@ def main():
             print(f"{link:16} {n:4} words")
 
         qr = os.path.join(COURSE, "images", "qr", f"class-{name}.svg")
-        if make_qr and name != "install":
+        if make_qr and name not in NOT_LESSONS:
             import segno
             os.makedirs(os.path.dirname(qr), exist_ok=True)
             segno.make(f"{SITE}{link}", error="m").save(qr, scale=4, border=2, light="white", xmldecl=False)
-        if name != "install":
+        if name not in NOT_LESSONS:
             if not os.path.isfile(qr):
                 problems.append(f"{rel}: images/qr/class-{name}.svg is missing (run with --qr)")
             guide = os.path.join(os.path.dirname(path), "teacher-guide.md")

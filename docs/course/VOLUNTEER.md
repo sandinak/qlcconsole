@@ -110,6 +110,36 @@ per lesson, with five pages and a small index:
 
 Copy the [`_template/`](https://github.com/sandinak/qlcconsole/tree/main/docs/course/_template) folder to start a new lesson.
 
+### The "In the app" box
+
+Student pages hand-hold the app's everyday operations (open, save, undo,
+help, a tab, right-click…) the first time the course uses each one, with
+one box at the step that needs it. It's a Jekyll include,
+`_includes/inapp.html`, styled by the student layout:
+
+```liquid
+{% include inapp.html do="Save your work" path="File ▸ Save" mac="⌘S" win="Ctrl+S" see="The footer reads **✓ Saved**." %}
+```
+
+It shows: **IN THE APP** **Save your work:** **File ▸ Save** (⌘S on Mac,
+Ctrl+S on Windows). The footer reads **✓ Saved**.
+
+- `do`: what it's for. `path`: the menu path, with ▸ (leave it out for a
+  mouse action, such as right-click). `mac`, `win`: both shortcuts; leave
+  one out only when there is none. `winpath`: the Windows path, only when
+  it differs (Quit, Settings). `see`: one line of what you'll see.
+- Inside a numbered step, indent it like the step's text, with a blank
+  line before and after.
+- **First use only.** A later lesson writes the path inline: **File ▸
+  Save As** → `Lesson2-5-yourname.qlcc`. Already boxed: open, Save As,
+  Save, undo/redo, a tab (Window ▸ …), Rig Overview, quit (0.8, 1.1),
+  help (1.2), Operate/Design (1.5), right-click (2.2), ⌘-click (2.3).
+- Every key in it is checked against the menus in `ui/src/app.cpp`;
+  the student page [Using the app](class/basics/student.md)
+  (`/class/basics/`, linked from every student page's footer) has them
+  all in one table. `tools/student-pages.py` checks each box has `do` and
+  a path or a shortcut.
+
 ### Style rules
 
 - **Voice: talk to students as crew.** Write the way an experienced
@@ -134,13 +164,16 @@ Copy the [`_template/`](https://github.com/sandinak/qlcconsole/tree/main/docs/co
   designer makes ("the verse should feel close and warm"), and every cue
   has a reason.
 - **Name things exactly as the app shows them**, in bold: **+ Cue**,
-  **Rig Overview**, **Warm White**. Menus with arrows: **View → Rig
-  Overview**.
+  **Rig Overview**, **Warm White**. Menu-bar paths with ▸: **View ▸ Rig
+  Overview**; paths inside the app (the Library, ⋯ menus) with →:
+  **All → Groups → Trusses**. Check each menu path in `ui/src/app.cpp`.
 - **A "You should see" line after each step** that changes something, so
   the navigator can check it. Write it as a normal sentence about the
   stage or the screen: *You should see: the cyc turns blue, brightest at
   the top.*
 - **Mac keys** (⌘), with one line saying "on Windows or Linux, Ctrl".
+- **An "In the app" box the first time the course uses an app
+  operation** (below); after that, just the path inline.
 - **Every step must really work in the app.** Branson's course test does
   each step on the real app (see §6). If a step doesn't work the way you'd
   like, write down what happened. It might be an app problem worth fixing.

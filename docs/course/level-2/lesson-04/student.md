@@ -36,8 +36,8 @@ Which lights move, and which stay still?
 
 ## Steps
 
-1. **File → Open** → `lesson-2-4-start.qlcc`.
-2. Click the **Show Tree** tab (⇧⌘5); open **View → Rig Overview** (⇧⌘R)
+1. **File ▸ Open** → `lesson-2-4-start.qlcc`.
+2. Click the **Show Tree** tab (⇧⌘5); open **View ▸ Rig Overview** (⇧⌘R)
    beside it.
 3. Click **1.0.5 Bridge**, **+ Cue**, type `Dance Break`, **Return**.
    **Mode**: **Block**.
@@ -65,7 +65,7 @@ Which lights move, and which stay still?
 
     ![The dance break](../../images/lesson-2-4/rig-dance-break.png)
 
-12. Click **↩ Back**. **File → Save As** → `Lesson2-4-yourname.qlcc`.
+12. Click **↩ Back**. **File ▸ Save As** → `Lesson2-4-yourname.qlcc`.
 
 **Stuck?** The search finds nothing: clear the box first. No *Its own
 colour*: use the ⋯ on the **Dimmer effect** row. Not twinkling: drop it
