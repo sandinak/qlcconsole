@@ -670,6 +670,12 @@ protected:
     /** The mode within the fixture definition that this instance uses */
     QLCFixtureMode* m_fixtureMode;
 
+    /** m_fixtureDef is this fixture's own generic dimmer definition
+     *  (genericDimmerDef()), deleted with it or when replaced. Noted when
+     *  it is given: the destructor must not ask a definition, which may be
+     *  a cached one already deleted with the Doc's cache. */
+    bool m_ownsFixtureDef = false;
+
     /*********************************************************************
      * Generic Dimmer
      *********************************************************************/

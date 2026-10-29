@@ -4616,10 +4616,13 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument, 
             QString image = sit.value();
             if (mainDocument != NULL && !image.isEmpty())
             {
+                /* Only a file that is there: a path that isn't stays exactly as
+                   it was given (normalizing "/abs/x.svg" made it "D:/abs/x.svg"
+                   on Windows). */
                 const QString file = GoboLibrary::resolve(image);
-                if (QFileInfo(image).isAbsolute()
-                    || (!file.isEmpty() && mainDocument->hasComponentPathOverride(file)))
-                    image = mainDocument->normalizeComponentPath(file.isEmpty() ? image : file);
+                if (!file.isEmpty()
+                    && (QFileInfo(image).isAbsolute() || mainDocument->hasComponentPathOverride(file)))
+                    image = mainDocument->normalizeComponentPath(file);
             }
             doc->writeAttribute(QStringLiteral("Image"),   image);
             doc->writeEndElement();
