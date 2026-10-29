@@ -30,3 +30,4 @@ This folder starts with `_`, so the website leaves it out.
 | `slides.md` | A slide outline: one heading per slide |
 | `exit-ticket.md` | 3–4 questions on paper |
 | `at-home.md` | A. on a computer, B. on paper |
+| `student.md` | Students' own page (`/class/N-N/`): the handout cut to its steps, the exit ticket, at home. Check it with `../tools/student-pages.py --qr`, which also makes the QR code for the teacher guide |

@@ -22,11 +22,20 @@ virtual copy of a show choir stage.
 
 | I am… | Go to |
 |---|---|
-| A student | [Install qlcconsole](install.md), then your lesson's **handout** |
+| A student | Your lesson's link, from your teacher: one page with the show file, the steps, the exit ticket and the at-home task |
 | A student on a Chromebook, or without the app | The [Show Tree practice version](web/index.html) in your browser (Lesson 1.1) |
 | The teacher | [Course plan](COURSE_PLAN.md) · start with [Lesson 0.1](level-0/lesson-01/teacher-guide.md) |
 | Anyone | [Glossary](GLOSSARY.md) · [The teaching show](rig.md) |
 | Helping write the course | [For volunteers](VOLUNTEER.md) — start here |
+
+## Student links
+
+Each written lesson has a student page of its own at
+`…/qlcconsole/class/N-N/` (Lesson 1.1:
+`https://sandinak.github.io/qlcconsole/class/1-1/`): the show file, the
+steps with their pictures, the exit ticket (no answers) and the at-home
+task, with no menu and no way into the teacher material. Each teacher
+guide starts with its link and a QR code to give students.
 
 ## The levels
 
@@ -50,11 +59,12 @@ All of qlcconsole's documentation starts at the [docs hub](https://github.com/sa
 |---|---|
 | `COURSE_PLAN.md` | The plan: audience, levels, design strand, lesson template, logistics, online plan, assessment, open questions |
 | `install.md`, `GLOSSARY.md`, `rig.md` | Student pages: install, words, the stage |
-| `level-N/` | A level; each lesson has its own folder (`level-1/lesson-01/` …): teacher guide, handout, slides outline, exit ticket, at home |
+| `level-N/` | A level; each lesson has its own folder (`level-1/lesson-01/` …): teacher guide, handout, slides outline, exit ticket, at home, and `student.md`, the student page |
+| `class/install.md`, `_layouts/student.html` | The student install page, and the plain layout every student page uses (`/class/…` on the site; kept out of the menu and search) |
 | `shows/` | The teaching show and each lesson's start / finish files (see [shows/README.md](shows/README.md)) |
 | `images/` | Lesson pictures, taken from the real app by the course test |
 | `web/` | The Show Tree practice version: a browser page for students who can't run the app (plain HTML/JS, no install) |
-| `tools/` | How the teaching show and the practice version's show data are made |
+| `tools/` | How the teaching show and the practice version's show data are made; `student-pages.py` checks the student pages and makes their QR codes |
 | `_config.yml` | The website's settings (GitHub Pages, just-the-docs theme); the site is built by `.github/workflows/pages.yml` from `main` |
 | `LICENSE.md` | The course's licences |
 | `VOLUNTEER.md` | Getting started for volunteers and co-authors |
@@ -85,6 +95,12 @@ the shows can't send DMX. It runs with
 the rest of the app's tests. If the app changes so a lesson step stops
 working, that test fails. The pictures are taken by the same test (see
 [shows/README.md](shows/README.md)).
+
+A student page is a short version of its handout: when a handout's steps
+change, change its `student.md` to match, then run
+`python3 docs/course/tools/student-pages.py` (it checks the pages' links,
+pictures and settings, and prints each page's length beside its
+handout's).
 
 ## Licence
 

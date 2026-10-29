@@ -9,6 +9,10 @@ nav_order: 1
 
 **Teacher guide** · Level 0, lesson 1 · 50 minutes · no computers
 
+**Give students:** <https://sandinak.github.io/qlcconsole/class/0-1/> (the show file, the steps, the exit ticket and the at-home task; nothing else)
+
+<img src="../../images/qr/class-0-1.svg" width="120" alt="QR code for https://sandinak.github.io/qlcconsole/class/0-1/">
+
 ## Objectives
 
 Students can:
