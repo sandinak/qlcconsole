@@ -43,7 +43,8 @@ class Doc;
 /**
  * Connections' "Show control & sync" page: every link that controls or
  * clocks the show from outside, in one place -- OSC in, MIDI Show Control
- * in and MIDI timecode. Shown beside Connections ▸ Devices when one of
+ * in, MIDI timecode, and web access (the show's own setting: whether
+ * opening it starts the web server, and on which port). Shown beside Connections ▸ Devices when one of
  * the show-control rows there is picked (no tab of its own).
  *
  * It edits the same settings the Settings dialog used to (QSettings
@@ -67,7 +68,7 @@ public:
     void showSection(const QString &key);
 
     /** One line per link for the Devices rows: {key, name, state}, e.g.
-     *  {"osc", "OSC in", "Port 8000 · listening"}. */
+     *  {"osc", "OSC in", "Port 8000 · listening"}; "web" for web access. */
     QList<QStringList> summary() const;
 
 signals:
@@ -96,6 +97,10 @@ private:
     QGroupBox *buildOscGroup();
     QGroupBox *buildMscGroup();
     QGroupBox *buildMtcGroup();
+    QGroupBox *buildWebGroup();
+
+    /** The web access box from the show's setting and the server's state. */
+    void refreshWeb();
 
     /** Emit summaryChanged() if the summary text is different. */
     void checkSummary();
@@ -119,6 +124,14 @@ private:
     QLabel *m_mscInputs;
     QPushButton *m_patchMidiButton;
     QLabel *m_mscLast;
+
+    // Web access (the show's own setting, Doc::webAccess())
+    QCheckBox *m_webCheck;
+    QSpinBox *m_webPortSpin;
+    QCheckBox *m_webNetworkCheck;
+    QCheckBox *m_webLoginCheck;
+    QLabel *m_webWhere;
+    QLabel *m_webStatus;
 
     // MIDI timecode
     QComboBox *m_mtcSourceCombo;

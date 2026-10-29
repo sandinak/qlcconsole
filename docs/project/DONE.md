@@ -47,6 +47,32 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 - Tests: effectinstance (own speed, release), showtree (latest action,
   cue levels), lookeditor, showtreeview (GO commits, latest action and
   Operate blind), cuerunner (Run click in Design), mainbar (Blind view).
+### 2026-10-29 — Web access saved with the show *(feat/031-show-webserver)*
+
+- **Engine:** `ShowWebAccess` (`engine/src/showwebaccess.*`, `Doc::webAccess()`):
+  enabled, port (9999), network, login; `<WebAccess>` under `<Engine>`,
+  written only when not a new show's, so older shows save byte-for-byte as
+  before (QLC+ 4 skips unknown engine tags). A bad port in the file falls
+  back to 9999. Runtime state (Off / Running / Failed / CommandLine, URL,
+  message) is set by the server side, never saved.
+- **Web access:** `WebAccessController` (`webaccess/src/webaccesscontroller.*`)
+  owns the server for the session: applied a moment after a show loads,
+  is cleared or its setting changes; restarts only when port, audience or
+  logins change; a port in use is `Failed` with a message. `-w`/`-wa` win
+  (`setCommandLine()`). A show loaded through the web page keeps the server
+  as it is. Nothing is built while off. main.cpp creates it in place of
+  the old -w block.
+- **UI:** Connections ▸ Devices ▸ Show control & sync gets a **Web access**
+  row and box (on + port, network, logins, the addresses to open, status,
+  a security note); the footer says when it could not start
+  (`webaccess.port`). No new menu item.
+- **Decisions:** per-show only (there was no app-wide preference; the
+  command line is the session-wide override); network off and logins off
+  by default, as -w.
+- **Tests:** webaccess_test +8 (round trip, old show, bad port, start/stop
+  with the show, new port, port in use, command line wins, loaded from the
+  web); showcontrol_ui_test +1 and the Devices rows. Loopback, free ports.
+- Not yet verified on the rig: a tablet on the show VLAN.
 
 ### 2026-10-22 — 0.2.2 release candidate: docs and course sweep *(docs/rc-022-sweep, from trial/batch7)*
 

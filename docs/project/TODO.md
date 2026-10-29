@@ -171,6 +171,11 @@ undo as one step, how it reads in Front/Side).
 
 ## Small fixes and leftovers
 
+- ~~**Web access saved with the show** (asked 2026-10-29: "enable
+  webserver for a showfile in config and port")~~ — done
+  (feat/031-show-webserver; DONE.md 2026-10-29). Open: a real-rig check
+  from a tablet on the show VLAN.
+
 - **Left from the RC8 security batch (red team, 2026-10-27):**
   - The QML UI's web access (`webaccess-qml.cpp`) still has the old
     `m_auth && level` checks; qmlui is off, harden it if it's ever built.

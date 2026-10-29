@@ -79,6 +79,17 @@ private slots:
     void passwordFileRoundTrip();
     void basicAuthChecksTheCredentials();
 
+    /* The show's own web access (ShowWebAccess, WebAccessController): saved
+       with the show, started and stopped as shows open. */
+    void theShowSettingRoundTrips();
+    void anOldShowLoadsWithItOff();
+    void aBadPortInTheFileFallsBack();
+    void openingAShowStartsAndStopsIt();
+    void aNewPortRestartsIt();
+    void aPortInUseIsAStatusNotACrash();
+    void theCommandLineWins();
+    void aShowLoadedFromTheWebKeepsItRunning();
+
 private:
     void startWeb(bool auth, const QString &passwdFile = QString());
     QByteArray http(const QByteArray &request, int timeoutMs = 5000);

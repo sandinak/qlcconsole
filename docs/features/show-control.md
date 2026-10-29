@@ -194,6 +194,10 @@ code as it arrives with its **sync health**: healthy, usable or
 unstable, from how fast it runs against real time, its jitter and how
 often it updates.
 
+The page's **Web access** section starts the web server (the Virtual
+Console in a browser) whenever this show opens, on the port you pick; see
+[Web access saved with the show](other-improvements.md#web-access-saved-with-the-show).
+
 ## See also
 
 - [Shows (the timeline)](shows.md) — following MIDI timecode instead.

@@ -121,6 +121,7 @@
 #include "qlcconfig.h"
 #include "helpbrowser.h"
 #include "showcontrollistener.h"
+#include "showwebaccess.h"
 #include "chaserstep.h"
 #include "showcontrol.h"
 #include "fixturegroup.h"
@@ -1149,6 +1150,20 @@ void App::initDoc()
     m_showControlListener = new ShowControlListener(m_doc, this);
     if (InputOutputManager::instance() != NULL)
         InputOutputManager::instance()->setShowControlListener(m_showControlListener);
+
+    /* Web access the show asked for and couldn't have (its port in use):
+       in the footer until it runs or is turned off. */
+    connect(m_doc->webAccess(), &ShowWebAccess::statusChanged, this, [this]() {
+        const ShowWebAccess *web = m_doc->webAccess();
+        if (web->state() == ShowWebAccess::Failed)
+            ShowStatus::instance()->setStatus("webaccess.port", ShowStatus::Warning,
+                tr("Web access could not start"),
+                tr("Connections ▸ Show control & sync ▸ Web access: pick another port, "
+                   "or close what holds it."),
+                QStringList() << web->message());
+        else
+            ShowStatus::instance()->clearStatus("webaccess.port");
+    });
     QTimer *wledRecheck = new QTimer(this);
     wledRecheck->setSingleShot(true);
     wledRecheck->setInterval(1500);

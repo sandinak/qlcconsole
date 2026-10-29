@@ -37,9 +37,11 @@ qlcconsole -h                       # every option
 Always pass the show with **-o**. A bare file name on the command line is
 not opened — and saving then can write an empty workspace over it.
 
-Web access is off unless started with **-w**, and then listens on this
-computer only; see [Web access](other-improvements.md#web-access) for
-reaching it from a tablet and setting up users.
+Web access is off unless started with **-w** or the show asks for it
+(**Connections ▸ Devices ▸ Show control &amp; sync ▸ Web access**), and
+listens on this computer only unless told otherwise; see
+[Web access](other-improvements.md#web-access) for reaching it from a
+tablet and setting up users.
 
 ### Show files
 
