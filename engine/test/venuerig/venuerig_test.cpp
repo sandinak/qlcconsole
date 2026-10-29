@@ -1172,9 +1172,12 @@ void VenueRig_Test::notOursOnTheRealTick()
     QTRY_VERIFY_WITH_TIMEOUT(unis.at(0)->m_frame.load() >= frames0 + 3, 5000);
     QTRY_VERIFY_WITH_TIMEOUT(unis.at(1)->m_frame.load() >= frames1 + 3, 5000);
 
-    // Read while it runs (stopping the timer stops every function).
-    QCOMPARE(int(unis.at(1)->preGMValue(0)), 255);  // the show plays there...
-    QCOMPARE(int(unis.at(0)->preGMValue(5)), 255);
+    // Read while it runs (stopping the timer stops every function), a
+    // whole frame at a time: each frame zeroes the intensity channels before
+    // writing them again, so a single-value read can land in between and
+    // see 0 for a dimmer at full (CI 40809651206, macOS).
+    QCOMPARE(int(uchar(unis.at(1)->preGMValues().at(0))), 255);  // the show plays there...
+    QCOMPARE(int(uchar(unis.at(0)->preGMValues().at(5))), 255);
     for (int c = 4; c <= 7; ++c)
         QCOMPARE(wire(c), 0);                       // ...a range is zero
     QCOMPARE(wire(3), 255);

@@ -162,7 +162,9 @@ skipped). Upstream fixes taken:
   frame before writing it again; on a loaded machine a read landed in
   between and saw 0 for a dimmer at full. They now read a whole frame
   (the copy taken under the frame lock), and wait for the run to stop and
-  the Show Tree's sweep to fire instead of a fixed 400 ms.
+  the Show Tree's sweep to fire instead of a fixed 400 ms. VenueRig_Test's
+  not-ours-on-the-real-tick test read one value the same way and now
+  reads a whole frame too.
 - **No test can put a window, or a crash dialog, on the screen** (for
   developers): every test.sh, unittest.sh and every test program itself
   (engine/test/common/testguard.cpp, linked into each) run Qt offscreen
