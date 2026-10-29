@@ -228,6 +228,8 @@ RefinePanel::RefinePanel(Doc *doc, QWidget *parent)
     bottom->addWidget(new OperatorFeedbackCombo(doc->programmer(), this));
     bottom->addWidget(new QLabel(tr("Voice:"), this));
     bottom->addWidget(new VoiceDetailCombo(doc->programmer(), this));
+    bottom->addWidget(new QLabel(tr("Waits:"), this));
+    bottom->addWidget(new VoiceSettleCombo(this));
     QPushButton *keep = new QPushButton(this);
     keep->setObjectName(QStringLiteral("refineKeep"));
     QPushButton *back = new QPushButton(this);
