@@ -152,6 +152,14 @@ private slots:
      *  tops: the chorus's released step tops go back to them. */
     void lessonTwoOneExtension();
 
+    /** Lesson 2.2's extension: the Library's palettes with Group by type
+     *  off (the song's folder first) and on again. */
+    void lessonTwoTwoExtension();
+
+    /** Lesson 2.3's extension: two groups dropped together are one layer;
+     *  Split makes a layer each, More ▾ → Merge puts them back. */
+    void lessonTwoThreeExtension();
+
     /** COURSE_BUILD=1: makes Level 2's start and finish files, each lesson
      *  done with the mouse from the one before's finish (COURSE_LESSON=2.N:
      *  that lesson only). Skipped otherwise. */
