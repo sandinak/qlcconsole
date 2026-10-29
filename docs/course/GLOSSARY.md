@@ -103,6 +103,10 @@ brackets.
 | **Palette** | A saved, named value — a colour, a level, a position — that you drag onto a layer. Change the palette and every cue using it changes. [1.1] Name it for its job (*Chorus Colour*), so it stays true after a note. [2.2] |
 | **Used by** | Right-click a palette in the Library: every cue and layer that uses it (and any VC button that fires it). Check it before changing a palette. [2.2] |
 | **Look Editor** | Opens under the Show Tree's page (**✎** on a layer's row, or **Edit** in the Library) to change a palette's value and name; it says *Used by* and that a shared palette changes everywhere. [2.2] |
+| **Group set** | One name for several groups, used as one layer: *Truss Sides* = Trusses SR + Trusses SL (Library: select the groups, right-click → **Make set…**; All → Group sets). A set's layer is one layer: it can't be split, but its parts can have child layers. [2.3] |
+| **Child layer** | A layer on part of its parent (one member of its set, or a group inside it), shown **↳** under it: it sets only what it sets, and the parent lights the rest. ⇧ as you drop, or right-click the layer → **Add child layer**. [2.3] |
+| **Split / Merge** | Split: a layer on several groups becomes a layer per group, same looks. Merge (**More ▾ → Merge**): several layers of one cue become one. [2.3] |
+| **Symmetry** | Both sides of the stage lit the same: balanced. Breaking it draws the eye. [2.3] |
 | **Palette folder** | A folder in the Library's Palettes; a folder per song (*01-Everybody Scream*) keeps the song's own palettes together. **Duplicate** copies a palette into one. [2.2] |
 | **⋯ (more)** | The button at the end of each row of a layer's page: **Set to**, **Level…**, **Colour…** and more. [1.2] |
 | **One-off value** | A level or colour you picked (Level…, Colour…) that isn't a palette: kept just for one layer. **Make reusable** turns it into a palette. [1.2] |
