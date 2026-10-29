@@ -164,6 +164,7 @@ add_library(${module_name}
     effectspage.cpp effectspage.h
     fadetimespin.cpp fadetimespin.h
     lookeditor.cpp lookeditor.h
+    blindstyle.h
     mainbar.cpp mainbar.h
     moveinblackbutton.cpp moveinblackbutton.h
     effectscripteditor.cpp effectscripteditor.h

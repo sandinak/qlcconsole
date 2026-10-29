@@ -114,6 +114,12 @@ the looks, so a look can be built without the stage seeing it. Fixtures
 that ignore Blackout stay as they are in Blind too. Ask: "Why does that
 matter for the work lights during a rehearsal?"
 
+During a show (Operate) the same button can't mute anything: the
+audience is watching. There it is a view: the stage keeps playing the
+run, and the plot shows the cue being fixed in the Show Tree, so the next
+cue can be checked before GO. Ask: "What does the blue footer tell the
+operator?"
+
 ## Part 3 — On the real rig (with Branson)
 
 With the theatre's house light and work light circuits on the console:

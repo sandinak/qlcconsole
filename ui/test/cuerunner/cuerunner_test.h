@@ -39,6 +39,7 @@ private slots:
     void theRunnerShowsTheListAndItsSubCues();
     void goSubGoBackAndWhatChanges();
     void clickLoadsDoubleClickJumps();
+    void aClickInDesignShowsTheCue();
     void runnersAndShowControlMirrorOneState();
     void aRunnerFollowsOneListOfAnyProduction();
     /** Q75: one list, no Current production drop-down */

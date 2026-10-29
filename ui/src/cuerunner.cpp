@@ -415,6 +415,7 @@ void CueRunner::makeTree()
                           "it now (a sub-cue: its cue first)."));
     connect(m_tree, &QTreeWidget::itemClicked, this, [this](QTreeWidgetItem *item) {
         load(rowCue(item));
+        pickRowCue(rowCue(item));
     });
     connect(m_tree, &QTreeWidget::itemDoubleClicked, this, [this](QTreeWidgetItem *item) {
         jump(rowCue(item));
@@ -1154,8 +1155,34 @@ void CueRunner::showEvent(QShowEvent *ev)
     refreshFocusCalls();    // lights placed on the plot since
 }
 
+void CueRunner::pickRowCue(const QString &cue)
+{
+    // The Run tab, in Design: what you click is what the stage shows; GO
+    // then plays it for real (it is on standby). In Operate a click only
+    // loads -- only the run is live.
+    if (m_size != Full || cue.isEmpty() || m_doc->mode() != Doc::Design)
+        return;
+    ShowTreeController *st = m_doc->showTree();
+    const CueList *list = st != nullptr ? st->cueList(listId()) : nullptr;
+    if (list == nullptr)
+        return;
+    for (int i = 0; i < list->cues.count(); ++i)
+        if (st->cueNumber(*list, i) == cue)
+        {
+            m_pickedCue = list->cues.at(i).id;
+            st->pickCue(m_pickedCue);
+            return;
+        }
+}
+
 void CueRunner::hideEvent(QHideEvent *ev)
 {
+    // Leaving the Run: its pick doesn't stay on the rig (as leaving the
+    // Show Tree stops its preview).
+    if (m_pickedCue != ShowTree::invalidId() && m_doc->showTree() != nullptr
+        && m_doc->showTree()->previewedCue() == m_pickedCue)
+        m_doc->showTree()->stopPreview();
+    m_pickedCue = ShowTree::invalidId();
     m_timer->stop();
     QWidget::hideEvent(ev);
 }
@@ -1297,8 +1324,13 @@ void CueRunner::updateStates()
         if (m_mode->text() != modeText)
         {
             m_mode->setText(modeText);
-            m_mode->setStyleSheet(chipStyle(live ? QStringLiteral("#c62828") : QStringLiteral("#1565c0"),
-                                            m_size != Full));
+            // DESIGN in the theme's own highlight, as the Design | Operate
+            // switch: blue is Blind's alone (docs/design/LIVE_BLIND.md).
+            QString style = chipStyle(live ? QStringLiteral("#c62828") : QStringLiteral("palette(highlight)"),
+                                      m_size != Full);
+            if (!live)
+                style.replace(QStringLiteral("color: white"), QStringLiteral("color: palette(highlighted-text)"));
+            m_mode->setStyleSheet(style);
         }
         const QString tc = timecodeText();
         m_timecode->setText(tc);

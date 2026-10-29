@@ -87,6 +87,7 @@
 #include "showtreeview.h"
 #include "itemicons.h"
 #include "workbench.h"
+#include "blindstyle.h"
 #include "noteedit.h"
 #include "importsheet.h"
 #include "showconverter.h"
@@ -993,7 +994,10 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
     m_previewPlay->setText(tr("Play"));
     m_previewPlay->setToolTip(tr("Preview the selected cue over the running show (the edit wins on the "
                                  "channels it plays), until the next GO"));
-    connect(m_previewPlay, &QToolButton::clicked, this, [this]() { m_st->resumePreview(); });
+    connect(m_previewPlay, &QToolButton::clicked, this, [this]() {
+        commitPendingCueEdits();   // a time typed and not yet left plays too
+        m_st->resumePreview();
+    });
     m_previewPlayAction = bar->addWidget(m_previewPlay);
     m_previewPlayAction->setVisible(false);
     headerRow->addWidget(bar, 1);
@@ -2102,6 +2106,15 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
             updateInspector();
         });
     connect(m_st, &ShowTreeController::previewChanged, this, &ShowTreeView::slotPreviewChanged);
+    if (m_doc->inputOutputMap() != nullptr)
+        connect(m_doc->inputOutputMap(), &InputOutputMap::outputInhibitedChanged,
+                this, &ShowTreeView::slotPreviewChanged);
+    // GO (from anywhere) plays what the page shows: a time typed or stepped
+    // in the cue's fields and not yet left is committed (and baked) before
+    // the run starts, not on the next visit to the cue.
+    connect(m_st, &ShowTreeController::stageTakenForRun, this, [this](QStringList *) {
+        commitPendingCueEdits();
+    });
     // The Library follows the show's groups and palettes -- once per burst
     // (a show loading adds them one by one).
     m_libraryTimer = new QTimer(this);
@@ -3072,10 +3085,33 @@ void ShowTreeView::slotTreeSelectionChanged()
     }
     updateInspector();
     updateButtons();
+    // Another cue selected is a pick: the latest action wins (a hold by a
+    // GO lets go). The same one again -- a rebuild, a page put back -- is
+    // not.
+    const quint32 picked = currentCueId();
+    const bool isPick = isVisible() && picked != invalidId() && picked != m_lastPickedCue;
+    m_lastPickedCue = picked;
+    if (isPick && !isWorkbenchDocked())
+        m_st->pickCue(picked);
     syncPreview();
     if (currentListId() != m_libraryList)
         m_libraryTimer->start();
     workbenchFollowTree();
+    if (isPick && isWorkbenchDocked())
+        if (Workbench *bench = dockedWorkbench())
+            bench->playPicked();
+}
+
+void ShowTreeView::pickCurrentCue()
+{
+    const quint32 cueId = currentCueId();
+    if (cueId == invalidId() || m_doc->mode() != Doc::Design)
+        return;
+    m_lastPickedCue = cueId;
+    if (Workbench *bench = isWorkbenchDocked() ? dockedWorkbench() : nullptr)
+        bench->playPicked();
+    else
+        m_st->pickCue(cueId);
 }
 
 quint32 ShowTreeView::currentListId() const
@@ -3211,6 +3247,13 @@ QString ShowTreeView::previewText() const
 void ShowTreeView::slotPreviewChanged()
 {
     m_previewLabel->setText(previewText());
+    // Blind is blue (docs/design/LIVE_BLIND.md): an edit that doesn't reach
+    // the stage -- Operate, or Design with the rig muted. Live: the theme.
+    const bool blind = m_st->previewState() == ShowTreeController::PreviewState::NotDesign
+                    || (m_doc->inputOutputMap() != nullptr && m_doc->inputOutputMap()->outputInhibited()
+                        && !m_previewLabel->text().isEmpty());
+    m_previewLabel->setProperty("blind", blind);
+    m_previewLabel->setStyleSheet(blind ? BlindStyle::labelSheet() : QString());
     // Play, beside the line, while a run holds the preview -- the docked
     // Workbench has its own.
     if (m_previewPlayAction != nullptr)
@@ -6178,11 +6221,27 @@ void ShowTreeView::paletteEdited(quint32 paletteId, bool full)
     // re-read it, and anything showing it is told.
     if (m_doc->effectScriptRunner() != nullptr)
         m_doc->effectScriptRunner()->updateEffectParams(paletteId);
+    /* Another effect picked (script, preset or WLED effect): the running
+       engine is made again -- new params alone left the old script running
+       until the cue was played again ("when selecting an effect .. sometimes
+       it doesn't apply on selection"). */
+    bool newEffect = false;
+    if (const QLCPalette *p = m_doc->palette(paletteId))
+        if (p->type() == QLCPalette::Effect)
+        {
+            const QString sig = p->scriptPath() + QLatin1Char('|') + p->effectPreset()
+                                + QLatin1Char('|') + p->wledEffect();
+            auto it = m_effectSignatures.find(paletteId);
+            newEffect = it == m_effectSignatures.end() ? full : it.value() != sig;
+            m_effectSignatures.insert(paletteId, sig);
+        }
     for (Function *f : m_doc->functions())
     {
         Scene *sc = qobject_cast<Scene *>(f);
         if (sc == nullptr || !sc->palettes().contains(paletteId))
             continue;
+        if (sc->isRunning() && newEffect && m_doc->effectScriptRunner() != nullptr)
+            m_doc->effectScriptRunner()->syncScene(sc->id());
         if (sc->isRunning())
             sc->requestPaletteRefresh();
         if (full)
@@ -9504,6 +9563,12 @@ bool ShowTreeView::eventFilter(QObject *obj, QEvent *ev)
     // to the cue it was typed for -- before the click selects another.
     if (m_tree != nullptr && obj == m_tree->viewport() && ev->type() == QEvent::MouseButtonPress)
         commitPendingCueEdits();
+    // A click on a cue (or a layer in it) is a pick, also on the one already
+    // selected: after GO it takes the stage back (LIVE_BLIND.md).
+    if (m_tree != nullptr && obj == m_tree->viewport() && ev->type() == QEvent::MouseButtonRelease
+        && static_cast<QMouseEvent *>(ev)->button() == Qt::LeftButton
+        && m_tree->itemAt(static_cast<QMouseEvent *>(ev)->position().toPoint()) != nullptr)
+        pickCurrentCue();
     // Esc in a time field: the cue's own value back, nothing applied.
     if (ev->type() == QEvent::KeyPress && static_cast<QKeyEvent *>(ev)->key() == Qt::Key_Escape
         && (obj == m_cueFadeIn || obj == m_cueFadeOut || obj == m_cueHold || obj == m_cueWait)

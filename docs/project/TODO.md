@@ -8,6 +8,15 @@ under `~/.claude/.../memory/`.
 
 ---
 
+## Live and blind — leftovers (docs/design/LIVE_BLIND.md, 2026-10-29)
+
+Built (DONE.md 2026-10-29). Open, each "decided (can change)" in the note:
+- Build's Workbench in Operate still plays what it loads live; make it
+  blind too if "only the run is live" should cover Build.
+- The Blind view draws levels, not effects' motion.
+- An offscreen test of the docked Workbench taking the stage back on a
+  pick (`Workbench::playPicked`); the tree's own path is tested.
+
 ## Focus calls and refining a cue from the stage (design, 2026-10-23)
 
 Two jobs, being designed on the board (Q105-Q108), built after the freeze:

@@ -1537,7 +1537,22 @@ QJSValue EffectInstance::buildInputsObject() const
         m_clockAssignment = assignment;
         m_startBeat = std::floor(pos);
     }
-    obj.setProperty("_time",      onMaster ? pos : double(m_elapsed.elapsed()) / 1000.0);
+    // Off a master, _time is the effect's own: seconds at its own rate
+    // (Look editor, Speed = Own speed → "Rate"), so an effect with no speed
+    // setting of its own can still run faster or slower.
+    double ownRate = 1.0;
+    if (!onMaster)
+        if (QLCPalette *pal = m_doc->palette(m_effectPaletteId))
+        {
+            const QMap<QString, double> &pp = pal->effectParamValues();
+            auto it = pp.constFind(QStringLiteral("__ownRate"));
+            if (it != pp.constEnd() && it.value() > 0)
+                ownRate = it.value();
+        }
+    const qint64 nowMs = m_elapsed.elapsed();
+    m_ownMs += double(nowMs - m_ownLastMs) * ownRate;
+    m_ownLastMs = nowMs;
+    obj.setProperty("_time",      onMaster ? pos : m_ownMs / 1000.0);
     obj.setProperty("_bpm",       bpm);
     obj.setProperty("_beat",      pos - std::floor(pos));
     obj.setProperty("_beatCount", int(std::floor(pos) - m_startBeat));

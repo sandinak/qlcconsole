@@ -57,6 +57,15 @@ skipped). Upstream fixes taken:
 
 ### Added
 
+- **Own speed has a setting.** In the look editor, an effect on **Own
+  speed** shows **Own speed ×1.00** beside the Speed list: ×2 twice as
+  fast, ×0.5 half. Every effect has it, also those with no speed of their
+  own (Confetti, Matrix Sparkle); a change never jumps the effect.
+- **Blind in Operate is the Blind view**: the plot, the studio and every
+  fixture picture show the cue you are editing in the Show Tree while the
+  stage plays the run; nothing on the wire changes. The footer turns blue
+  and names the cue (docs/design/LIVE_BLIND.md).
+
 - **Help ▸ Troubleshooting ▸ Report a Bug…**: a short form (title, what
   happened, what you expected, steps) that opens the project's GitHub bug
   form in the browser, filled in. **Details that will be included** shows,
@@ -171,6 +180,17 @@ skipped). Upstream fixes taken:
 
 ### Changed
 
+- **Design: the latest action wins.** Selecting a cue in the Show Tree
+  (or clicking the one selected) shows it on the stage, also after GO;
+  GO shows the run; a cue clicked in the Run tab in Design shows that cue
+  and puts it on standby. Before, selecting after GO stayed off stage
+  until Play.
+- **Blind is blue, one blue, and only Blind**: the button, the footer
+  (with its words back: what Blind is doing), the Show Tree's and the
+  docked Workbench's line while editing is blind. The Run tab's DESIGN
+  chip takes the theme's colour. **Blind moved to the View menu** (from
+  Control).
+
 - **The help's Control Map section says it isn't in the app**: its "learn"
   entry went with the old Programming tab's function list, and the README
   no longer offers it. A MIDI or OSC control fires a function through a
@@ -213,6 +233,16 @@ skipped). Upstream fixes taken:
   (`student-pages.py --site`).
 
 ### Fixed
+
+- **A cue time typed and not yet left is what GO plays.** A fade or hold
+  typed (or stepped) in the Show Tree's cue page or the Workbench's step
+  header, with the field still open, only applied after moving away and
+  back; GO, Play and every GO from elsewhere now commit it first.
+- **Picking another effect always plays it.** A look with a release time
+  (or a scene with an out-transition) kept its old effect running; in the
+  Show Tree a new pick only changed the settings, not the running effect;
+  picking one preset or WLED effect after another left the old one's
+  settings on screen.
 
 - **An idle show no longer uses several cores redrawing the rig.** With
   the Rig Overview open and Live on, its timer redrew the whole rig 25

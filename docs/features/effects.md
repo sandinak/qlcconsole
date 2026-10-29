@@ -427,6 +427,13 @@ the step's own) to the look it plays, a collection to its members — so the
 same look can run on Speed 1 in one chase and Speed 3 in another. With
 nothing set anywhere an effect keeps its own speed, as before.
 
+**Own speed** has a setting of its own beside the **Speed** list:
+**Own speed ×1.00**. ×2 runs the effect twice as fast, ×0.5 half — every
+effect has it, also those with no speed setting of their own (Confetti,
+Matrix Sparkle), and it multiplies the effect's own speed when it has one.
+A change never jumps the effect. On the main clock or a master the master
+sets the pace instead, and the setting is hidden.
+
 A look's **Speed** and its **Spread** belong to the look, not to the
 effect: trying other effects in the look editor's picker — a click or a
 double-click on a tile — keeps them, so you can audition effects without

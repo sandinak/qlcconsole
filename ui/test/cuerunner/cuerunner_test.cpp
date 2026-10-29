@@ -433,6 +433,57 @@ void CueRunner_Test::clickLoadsDoubleClickJumps()
     runner.hide();
 }
 
+/* LIVE_BLIND.md: in Design a cue clicked in the Run is what the stage
+   shows (and on standby: GO plays the same); in Operate a click only loads
+   -- only the run is live. Leaving the Run lets go of its pick. */
+void CueRunner_Test::aClickInDesignShowsTheCue()
+{
+    const QList<quint32> ids = show();
+    ShowTreeController *st = m_doc->showTree();
+    CueRunner runner(m_doc, CueRunner::Full);
+    runner.resize(800, 600);
+    runner.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&runner));
+    QTreeWidget *tree = runner.cueTree();
+    Chaser *ch = runner.chaser();
+
+    emit tree->itemClicked(rowFor(tree, "2"), 1);
+    QCOMPARE(st->previewedCue(), ids[2]);
+    QHash<quint32, uchar> v = settle();
+    QCOMPARE(int(v[0]), 255);
+    QCOMPARE(int(v[1]), 127);
+    QVERIFY(!ch->isRunning());
+    QCOMPARE(m_doc->showControl()->loadedStep(ch->id()), 1);
+    // GO: the cue, now the run's (its first sub-cue, Hit, plays with it).
+    runner.go();
+    settle(2);
+    QCoreApplication::processEvents();
+    v = settle();
+    QCOMPARE(ch->currentStepIndex(), 1);
+    QCOMPARE(int(v[0]), 255);
+    QCOMPARE(int(v[1]), 255);
+    // Another click: that cue, over the run.
+    emit tree->itemClicked(rowFor(tree, "1"), 1);
+    v = settle();
+    QCOMPARE(int(v[0]), 127);
+    QCOMPARE(int(v[1]), 255);           // the run's cue Two underneath
+    // Leaving the Run: the run alone.
+    runner.hide();
+    v = settle();
+    QCOMPARE(int(v[0]), 255);
+
+    // Operate: a click only loads.
+    runner.show();
+    m_doc->setMode(Doc::Operate);
+    emit tree->itemClicked(rowFor(tree, "3"), 1);
+    v = settle();
+    QCOMPARE(int(v[0]), 255);
+    QCOMPARE(int(v[1]), 255);
+    QCOMPARE(m_doc->showControl()->loadedStep(ch->id()), 2);
+    m_doc->setMode(Doc::Design);
+    runner.hide();
+}
+
 /* Two runners (the Run tab and a VC widget), the footer's ⌘↩ and QLab
    (ShowControl) are one runner: whatever drives it, all show it. */
 void CueRunner_Test::runnersAndShowControlMirrorOneState()

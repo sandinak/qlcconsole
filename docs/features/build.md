@@ -195,8 +195,9 @@ editor lists it, one step at a time, each step opened up. Under the header:
 
 - **◀ · Step 3 of 7 · 0.0.3-Announcer · ▶** — the step before and after.
 - **The step's header**: **Fade in**, **Hold**, **Fade out**, **Cue** and
-  **Note**, edited in place (Return, Tab or a click elsewhere applies, to
-  the step you typed it for, also when you walk on; Esc puts it back; times
+  **Note**, edited in place (Return, Tab, a click elsewhere or a GO
+  applies, to the step you typed it for, also when you walk on; Esc puts
+  it back; times
   as the Chaser editor
   writes them — `1s.50`, `2m`, `∞` to hold until GO — or in seconds with
   either decimal mark: `1.5`, `1,5` and `1,5s` are all one and a half

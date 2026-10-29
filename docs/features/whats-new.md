@@ -4,6 +4,20 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ## 0.3.1 (unreleased)
 
+### Live and blind
+
+- **Design: what you did last is on the stage.** Select a cue in the Show
+  Tree, or click the one selected, and it shows, also after GO; GO shows
+  the run; a cue clicked in the Run tab shows and goes on standby. See
+  [Seeing it on the rig](show-tree.md#seeing-it-on-the-rig).
+- **Operate: the Blind view.** Only the run is live. **Blind** (the
+  button, or **View ▸ Blind**) makes the plot and the studio show the cue
+  you are editing while the stage plays on. Blind is blue everywhere, and
+  the footer says what it is doing. See [Blind](other-improvements.md#blind--park--highlight--flash).
+- **Own speed ×** for every effect in the look editor; a time typed in a
+  cue is what GO plays; picking another effect always plays it. See
+  [Effects](effects.md).
+
 ### A home for QLC+ 4 users
 
 - **Coming from QLC+ 4**, a help page for QLC+ 4.x users: what stays the
