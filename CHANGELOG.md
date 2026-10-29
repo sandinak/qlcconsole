@@ -185,6 +185,10 @@ skipped). Upstream fixes taken:
   its value) in Fixtures ▸ Patch List, its CSV, XLSX and PDF, from the
   Colour set in Fixture Properties. It shows only when some fixture has a
   gel, so the crew knows what to cut for each fixed light.
+- **Help answers the QLC+ forum's common questions**: Coming from QLC+ 4 ▸
+  *Questions QLC+ users ask*: a fader that overrides and lets go (Monitor
+  and reset), ⌘D Dump DMX values, Flash's Override priority and Force LTP,
+  and sending MIDI CC out.
 
 ### Changed
 
