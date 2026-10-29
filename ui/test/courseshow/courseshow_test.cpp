@@ -121,6 +121,20 @@ const QString kL4Start = kShows + QStringLiteral("/lesson-1-4-start.qlcc");
 const QString kL4Finish = kShows + QStringLiteral("/lesson-1-4-finish.qlcc");
 const QString kL5Start = kShows + QStringLiteral("/lesson-1-5-start.qlcc");
 
+/* Level 2's show files: lesson-2-N-start / -finish, each lesson starting
+   from the one before's finish (2.1 from Lesson 1.4's). */
+/* How many of Level 2's lessons are written (and have show files). */
+const int kLevelTwoLessons = 1;
+
+QString levelTwoStart(int n)
+{
+    return kShows + QStringLiteral("/lesson-2-%1-start.qlcc").arg(n);
+}
+QString levelTwoFinish(int n)
+{
+    return kShows + QStringLiteral("/lesson-2-%1-finish.qlcc").arg(n);
+}
+
 /* The base palettes every lesson uses -- typed, as the course teaches. */
 const QStringList kPaletteCommands = {
     "palette colour \"White\" #ffffff",
@@ -847,8 +861,12 @@ void CourseShow_Test::buildTheShows()
 
 void CourseShow_Test::theTeachingShowIsSafeAndComplete()
 {
-    for (const QString &path : { kClassroom, kL1Start, kL1Finish, kL2Start, kL2Finish, kL3Start, kL3Finish,
-                                 kL4Start, kL4Finish, kL5Start })
+    QStringList shows = { kClassroom, kL1Start, kL1Finish, kL2Start, kL2Finish, kL3Start, kL3Finish,
+                          kL4Start, kL4Finish, kL5Start };
+    // Level 2's, as many as are written.
+    for (int n = 1; n <= kLevelTwoLessons; ++n)
+        shows << levelTwoStart(n) << levelTwoFinish(n);
+    for (const QString &path : shows)
     {
         QVERIFY2(QFile::exists(path), qPrintable(path));
         QVERIFY2(open(path), qPrintable(path));
@@ -1141,10 +1159,12 @@ static bool rigShot(ShowTreeView *view, quint32 cueId, const QString &path, int 
         return false;
     mon->m_overviewDlg->resize(1100, 700);
     QList<QComboBox *> combos = mon->m_overviewDlg->findChildren<QComboBox *>();
-    // View (Top, Front, Side, 45°) is the first; Room the second.
+    // View (Top, Front, Back, Side, 45°) is the first; Room the second.
+    // The default is 45° by its name: a view added to the list (Back) once
+    // moved it, and the pictures came out from the side.
     if (combos.count() >= 2)
     {
-        combos.at(0)->setCurrentIndex(plane >= 0 ? plane : 3);
+        combos.at(0)->setCurrentIndex(plane >= 0 ? plane : combos.at(0)->findText(QStringLiteral("45°")));
         combos.at(1)->setCurrentIndex(room >= 0 ? room : 1);
     }
     if (cueId != ShowTree::invalidId())
@@ -1165,7 +1185,7 @@ static void closeRig()
             QList<QComboBox *> combos = mon->m_overviewDlg->findChildren<QComboBox *>();
             if (combos.count() >= 2)
             {
-                combos.at(0)->setCurrentIndex(3);
+                combos.at(0)->setCurrentIndex(combos.at(0)->findText(QStringLiteral("45°")));
                 combos.at(1)->setCurrentIndex(1);
             }
             mon->m_overviewDlg->close();
@@ -1649,9 +1669,21 @@ static QStringList describeAll(Doc *doc)
     QStringList out = describe(doc) + cueLooks(doc);
     for (const Production &p : doc->showTree()->productions())
         for (const CueList &l : p.lists)
+        {
+            if (l.baseCue != ShowTree::invalidId())
+                out << QStringLiteral("%1 base %2").arg(l.name, doc->showTree()->cue(l.baseCue)
+                                                                 ? doc->showTree()->cue(l.baseCue)->number : "?");
             for (const Cue &c : l.cues)
+            {
                 out << QStringLiteral("%1 mode %2 in %3 out %4 hold %5").arg(c.number).arg(int(c.mode))
                        .arg(c.fadeIn).arg(c.fadeOut).arg(c.hold);
+                // Level 2: what a layer lets go of (Release).
+                for (const Layer &ly : c.layers)
+                    if (ly.release)
+                        out << QStringLiteral("%1 releases %2").arg(c.number, ly.name.isEmpty()
+                                                                    ? doc->showTree()->targetLabel(ly.target) : ly.name);
+            }
+        }
     return out;
 }
 
@@ -2829,8 +2861,8 @@ void CourseShow_Test::lessonPictures()
         const quint32 prod = m_app->doc()->showTree()->productions().first().id;
         QVERIFY(rigShot(v, prod, d + "/stage-top.png", 0, 0));
         QVERIFY(rigShot(v, prod, d + "/stage-front.png", 1, 0));
-        QVERIFY(rigShot(v, prod, d + "/stage-45.png", 3, 0));
-        QVERIFY(rigShot(v, cueNumbered(m_app->doc(), "1.0.2"), d + "/stage-chorus.png", 3, 1));
+        QVERIFY(rigShot(v, prod, d + "/stage-45.png", -1, 0));
+        QVERIFY(rigShot(v, cueNumbered(m_app->doc(), "1.0.2"), d + "/stage-chorus.png", -1, 1));
         Monitor *mon = Monitor::instance();
         QList<QComboBox *> combos = mon->m_overviewDlg->findChildren<QComboBox *>();
         QToolButton *live = nullptr;
@@ -3050,6 +3082,356 @@ void CourseShow_Test::lessonPictures()
         m_app->doc()->resetModified();
     }
 
+}
+
+
+/* ===================== Level 2 =====================
+   Each lesson with the mouse, from its start file; with @a shots (the
+   lesson's images folder) the pictures at its "you should see" lines. */
+
+namespace
+{
+/* The tree's row for the cue numbered @a number (its text starts so). */
+QTreeWidgetItem *treeCue(ShowTreeView *view, const QString &number)
+{
+    for (QTreeWidgetItemIterator it(view->tree()); *it; ++it)
+        if ((*it)->text(ShowTreeView::NameCol).startsWith(number + QLatin1Char(' ')))
+            return *it;
+    return nullptr;
+}
+
+/* A cue row's letter columns, as the tree shows them: "S1 T3 R0 M-". */
+QString cueCounts(ShowTreeView *view, const QString &number)
+{
+    QTreeWidgetItem *it = treeCue(view, number);
+    if (it == nullptr)
+        return QStringLiteral("no row ") + number;
+    auto col = [it](int c) { return it->text(c).isEmpty() ? QStringLiteral("0") : it->text(c); };
+    return QStringLiteral("S%1 T%2 R%3 M%4").arg(col(ShowTreeView::SetsCol), col(ShowTreeView::TracksCol),
+                                                 col(ShowTreeView::ReleasesCol),
+                                                 it->text(ShowTreeView::ModeCol).isEmpty()
+                                                     ? QStringLiteral("-") : it->text(ShowTreeView::ModeCol));
+}
+
+/* Whether every channel of @a fixture is at 0. */
+bool dark(Doc *doc, const QString &fixture)
+{
+    for (Fixture *fx : doc->fixtures())
+        if (fx->name() == fixture)
+        {
+            const QByteArray v = sends(doc, fixture, int(fx->channels()));
+            return v.count(char(0)) == v.size();
+        }
+    return false;
+}
+
+/* Picks @a mode ("Block", "Cue-only"…) in the cue page's Mode box. */
+bool setCueMode(ShowTreeView *view, const QString &mode)
+{
+    QComboBox *box = stFind<QComboBox>(view, "stCueMode");
+    if (box == nullptr)
+        return false;
+    const int i = box->findText(mode);
+    if (i < 0)
+        return false;
+    box->setCurrentIndex(i);
+    emit box->activated(i);
+    settle(50);
+    return true;
+}
+
+/* The Show Tree laid out as shoot() lays it out, so a callout's place
+   worked out before the shot is where it will be in it. */
+void layOutForShot(ShowTreeView *v)
+{
+    if (QSplitter *split = stFind<QSplitter>(v, "stSplitter"))
+        split->setSizes(QList<int>() << 260 << 520 << split->width() - 780);
+    v->tree()->setColumnWidth(0, 260);
+    v->tree()->setColumnWidth(ShowTreeView::InfoCol, 90);
+    settle();
+}
+
+/* The tree's S, T, R and M cells of a cue's row, as a callout. */
+HelpShots::Callout countsOf(ShowTreeView *v, QTreeWidgetItem *row, QWidget *grab, int n)
+{
+    QTreeWidget *t = v->tree();
+    const QRect r = t->visualItemRect(row);
+    const int x0 = t->columnViewportPosition(ShowTreeView::SetsCol);
+    const int x1 = t->columnViewportPosition(ShowTreeView::ModeCol) + t->columnWidth(ShowTreeView::ModeCol);
+    HelpShots::Callout c;
+    c.number = n;
+    c.rect = QRect(t->viewport()->mapTo(grab, QPoint(x0, r.top())), QSize(qMax(1, x1 - x0), r.height()));
+    return c;
+}
+
+QString nextReceives(ShowTreeView *view)
+{
+    return view->m_cueNext != nullptr ? view->m_cueNext->text() : QString();
+}
+}
+
+/* Lesson 2.1, tracking and Block: what tracks into the chorus (the grey
+   rows, S/T/R, Tracked in, Next cue receives); the verse's step tops
+   released; a cue-only flash before the scream. */
+static bool lessonTwoOneByMouse(Doc *doc, ShowTreeView *view, const QString &shots = QString())
+{
+    ShowTreeController *st = doc->showTree();
+    for (QTreeWidgetItemIterator it(view->tree()); *it; ++it)
+        (*it)->setExpanded(true);
+    auto rig = [view, &shots](const QString &name) {
+        if (shots.isEmpty())
+            return;
+        const quint32 cue = view->currentCueId();
+        rigShot(view, cue, shots + QLatin1Char('/') + name + QStringLiteral(".png"));
+        closeRig();
+        view->selectNode(cue);
+        settle();
+    };
+
+    // Part A: read the chorus.
+    LESSON_STEP(view->selectNode(cueNumbered(doc, "1.0.2")), "select 1.0.2");
+    settle(100);
+    qInfo().noquote() << "[2.1] chorus counts" << cueCounts(view, "1.0.2") << "| rows" << view->cueLayerItems().join(" | ");
+    qInfo().noquote() << "[2.1] chorus tracked in:" << view->m_cueTracked->text();
+    qInfo().noquote() << "[2.1] chorus next receives:" << nextReceives(view);
+    for (const QString &n : { "1.0.0", "1.0.1", "1.0.2", "1.0.3", "1.0.4" })
+        qInfo().noquote() << "[2.1] counts" << n << cueCounts(view, n);
+    LESSON_STEP(cueCounts(view, "1.0.2") == QStringLiteral("S1 T3 R0 M-"), cueCounts(view, "1.0.2"));
+    LESSON_STEP(cueRow(view, "⤳ StepTops") != nullptr && cueRow(view, "⤳ AT-W-ALL") != nullptr
+                && cueRow(view, "⤳ TrussC-RGB") != nullptr, view->cueLayerItems().join(" | "));
+    LESSON_STEP(waitUntil([doc]() { return !dark(doc, "US Step 1 Top SR"); }), "step tops dark in the chorus");
+    rig(QStringLiteral("rig-chorus-tracked"));
+    // The Solo: Block, nothing tracks in.
+    LESSON_STEP(cueCounts(view, "1.0.4") == QStringLiteral("S1 T0 R0 MB"), cueCounts(view, "1.0.4"));
+
+    // Part B: the verse's step tops, released.
+    LESSON_STEP(view->selectNode(cueNumbered(doc, "1.0.1")), "select 1.0.1");
+    settle(50);
+    LESSON_STEP(clickCueRow(view, "StepTops"), "click StepTops");
+    QCheckBox *release = stFind<QCheckBox>(view, "stLayerRelease");
+    LESSON_STEP(release != nullptr && release->isVisible() && !release->isChecked(), "the Release box");
+    qInfo().noquote() << "[2.1] release box:" << release->text();
+    release->click();
+    settle(100);
+    qInfo().noquote() << "[2.1] after Release:" << hintOf(view)->text() << "| verse" << cueCounts(view, "1.0.1")
+                      << "| chorus" << cueCounts(view, "1.0.2");
+    LESSON_STEP(cueCounts(view, "1.0.1") == QStringLiteral("S1 T1 R1 M-"), cueCounts(view, "1.0.1"));
+    LESSON_STEP(cueCounts(view, "1.0.2") == QStringLiteral("S1 T2 R0 M-"), cueCounts(view, "1.0.2"));
+    LESSON_STEP(view->selectNode(cueNumbered(doc, "1.0.1")), "select 1.0.1");
+    settle(50);
+    qInfo().noquote() << "[2.1] verse next receives:" << nextReceives(view);
+    LESSON_STEP(nextReceives(view).contains(QStringLiteral("StepTops — released, dark")), nextReceives(view));
+    LESSON_STEP(view->selectNode(cueNumbered(doc, "1.0.2")), "select 1.0.2");
+    settle(50);
+    LESSON_STEP(cueRow(view, "⤳ StepTops") == nullptr, view->cueLayerItems().join(" | "));
+    LESSON_STEP(waitUntil([doc]() { return dark(doc, "US Step 1 Top SR"); }), "step tops still lit in the chorus");
+    rig(QStringLiteral("rig-chorus-released"));
+
+    // Part C: a flash between the chorus and the scream, cue-only.
+    LESSON_STEP(newCueNamed(view, "Flash"), "new cue Flash");
+    LESSON_STEP(st->cue(view->currentCueId())->number == "1.0.2.5", st->cue(view->currentCueId())->number);
+    {
+        const QString said = dropGroupOnZone(doc, view, "StepTops");
+        LESSON_STEP(said == QStringLiteral("a new layer on StepTops in 1.0.2.5 Flash"), said);
+    }
+    for (const QString &pal : { QStringLiteral("White"), QStringLiteral("Full") })
+    {
+        const QString said = dropPaletteOnRow(doc, view, "StepTops", pal);
+        LESSON_STEP(said.startsWith(QStringLiteral("%1 → layer StepTops in 1.0.2.5 Flash").arg(pal)), said);
+    }
+    // The step tops lit (white: their white LEDs at full).
+    LESSON_STEP(waitUntil([doc]() { return !dark(doc, "US Step 1 Top SR"); }), "the step tops are dark");
+    qInfo().noquote() << "[2.1] flash step top" << sends(doc, "US Step 1 Top SR", 8).toHex(' ');
+    LESSON_STEP(setCueMode(view, "Cue-only"), "Mode Cue-only");
+    LESSON_STEP(st->cue(view->currentCueId())->mode == CueMode::CueOnly, "not cue-only");
+    LESSON_STEP(cueCounts(view, "1.0.2.5").endsWith(QStringLiteral("MC")), cueCounts(view, "1.0.2.5"));
+    qInfo().noquote() << "[2.1] flash next receives:" << nextReceives(view) << "| hint" << hintOf(view)->text();
+    LESSON_STEP(nextReceives(view).startsWith(QStringLiteral("what this cue started from (it is cue-only)")),
+                nextReceives(view));
+    rig(QStringLiteral("rig-flash"));
+    // The scream doesn't get the white: it starts from the chorus.
+    LESSON_STEP(view->selectNode(cueNumbered(doc, "1.0.3")), "select 1.0.3");
+    settle(100);
+    qInfo().noquote() << "[2.1] scream rows" << view->cueLayerItems().join(" | ") << "| counts" << cueCounts(view, "1.0.3");
+    LESSON_STEP(cueRow(view, "⤳ StepTops") == nullptr, view->cueLayerItems().join(" | "));
+    LESSON_STEP(cueCounts(view, "1.0.3") == QStringLiteral("S2 T3 R0 M-"), cueCounts(view, "1.0.3"));
+    LESSON_STEP(waitUntil([doc]() { return dark(doc, "US Step 1 Top SR")
+                                           && uchar(sends(doc, "SR Truss Wash 1").at(0)) == 255; }),
+                QString::fromLatin1(sends(doc, "US Step 1 Top SR", 6).toHex(' ')));
+    return true;
+}
+
+void CourseShow_Test::lessonTwoOneExtension()
+{
+    // Lesson 2.1's extension: a base cue. The Pose gets the step tops at a
+    // dim blue and is ticked as the list's base cue: in the chorus the
+    // released step tops go back to that blue, not dark.
+    QVERIFY(open(levelTwoFinish(1)));
+    Doc *doc = m_app->doc();
+    ShowTreeView *view = showTree();
+    QVERIFY(view->selectNode(cueNumbered(doc, "1.0.0")));
+    settle(50);
+    QCOMPARE(dropGroupOnZone(doc, view, "StepTops"), QStringLiteral("a new layer on StepTops in 1.0.0 Pose"));
+    for (const QString &pal : { QStringLiteral("Blue"), QStringLiteral("10%") })
+        QVERIFY(dropPaletteOnRow(doc, view, "StepTops", pal).startsWith(pal + " → layer StepTops in 1.0.0 Pose"));
+    QVERIFY(view->selectNode(cueNumbered(doc, "1.0.0")));
+    settle(50);
+    QCheckBox *base = stFind<QCheckBox>(view, "stCueBase");
+    QVERIFY(base != nullptr && base->isVisible() && !base->isChecked());
+    qInfo().noquote() << "[2.1x] base box:" << base->text();
+    base->click();
+    settle(100);
+    QVERIFY(doc->showTree()->productions().first().lists.first().baseCue == cueNumbered(doc, "1.0.0"));
+    QTreeWidgetItem *pose = treeCue(view, "1.0.0");
+    QVERIFY(pose != nullptr);
+    QVERIFY2(pose->text(ShowTreeView::FlagsCol).contains(QStringLiteral("base")), qPrintable(pose->text(ShowTreeView::FlagsCol)));
+    QVERIFY(view->selectNode(cueNumbered(doc, "1.0.1")));
+    settle(50);
+    qInfo().noquote() << "[2.1x] verse next receives:" << nextReceives(view);
+    QVERIFY2(nextReceives(view).contains(QStringLiteral("StepTops (Blue, 10%) — back to the base")), qPrintable(nextReceives(view)));
+    QVERIFY(view->selectNode(cueNumbered(doc, "1.0.2")));
+    settle(50);
+    qInfo().noquote() << "[2.1x] chorus rows:" << view->cueLayerItems().join(" | ");
+    const auto dimBlue = [doc]() {
+        const QByteArray v = sends(doc, "US Step 1 Top SR", 3);
+        return uchar(v.at(0)) == 0 && uchar(v.at(2)) > 10 && uchar(v.at(2)) < 40;
+    };
+    QVERIFY2(waitUntil(dimBlue), qPrintable(sends(doc, "US Step 1 Top SR", 4).toHex(' ')));
+    doc->resetModified();
+}
+
+void CourseShow_Test::levelTwoWithTheMouse()
+{
+    struct L { int n; bool (*byMouse)(Doc *, ShowTreeView *, const QString &); };
+    const QList<L> lessons = {
+        { 1, lessonTwoOneByMouse },
+    };
+    // Lesson 2.1 starts where Level 1 finished.
+    QVERIFY(open(kL4Finish));
+    QStringList before = describeAll(m_app->doc());
+    for (const L &l : lessons)
+    {
+        QVERIFY2(open(levelTwoStart(l.n)), qPrintable(levelTwoStart(l.n)));
+        QCOMPARE(describeAll(m_app->doc()), before);
+        QVERIFY2(l.byMouse(m_app->doc(), showTree(), QString()), qPrintable(levelTwoStart(l.n)));
+        const QStringList built = describeAll(m_app->doc());
+        qInfo().noquote() << "[2." + QString::number(l.n) + "] built:" << built.join(" || ");
+        m_app->doc()->resetModified();
+        QVERIFY(open(levelTwoFinish(l.n)));
+        QCOMPARE(describeAll(m_app->doc()), built);
+        before = built;
+    }
+}
+
+void CourseShow_Test::buildLevelTwoShows()
+{
+    if (qEnvironmentVariableIsEmpty("COURSE_BUILD"))
+        QSKIP("set COURSE_BUILD=1 (and COURSE_LESSON=2.N for one lesson) to make Level 2's show files");
+    struct L { int n; bool (*byMouse)(Doc *, ShowTreeView *, const QString &); };
+    const QList<L> lessons = {
+        { 1, lessonTwoOneByMouse },
+    };
+    const QString only = qEnvironmentVariable("COURSE_LESSON");
+    for (const L &l : lessons)
+    {
+        if (!only.isEmpty() && only != QStringLiteral("2.%1").arg(l.n))
+            continue;
+        const QString from = l.n == 1 ? kL4Finish : levelTwoFinish(l.n - 1);
+        QVERIFY2(QFile::exists(from), qPrintable(from));
+        QVERIFY(QFile::remove(levelTwoStart(l.n)) || !QFile::exists(levelTwoStart(l.n)));
+        QVERIFY(QFile::copy(from, levelTwoStart(l.n)));
+        QVERIFY(open(levelTwoStart(l.n)));
+        QVERIFY(l.byMouse(m_app->doc(), showTree(), QString()));
+        QCOMPARE(m_app->saveXML(levelTwoFinish(l.n)), QFile::NoError);
+        m_app->doc()->resetModified();
+    }
+}
+
+void CourseShow_Test::levelTwoPictures()
+{
+    const QString root = qEnvironmentVariable("COURSE_SHOTS");
+    if (root.isEmpty())
+        QSKIP("set COURSE_SHOTS to the course's images folder");
+    m_app->setTheme(App::ThemeBlue);
+    m_app->resize(1280, 800);
+    const QString only = qEnvironmentVariable("COURSE_LESSON");
+    auto wanted = [&only](int n) { return only.isEmpty() || only == QStringLiteral("2.%1").arg(n); };
+
+    // --- 2.1: done with the mouse (the Rig Overview at each step), then the
+    //     chorus's tracking, the Release box and the flash's page.
+    if (wanted(1))
+    {
+        const QString d = root + QStringLiteral("/lesson-2-1");
+        QVERIFY(open(levelTwoStart(1)));
+        ShowTreeView *v = showTree();
+        {
+            // Before: what tracks into the chorus.
+            Doc *dc = m_app->doc();
+            for (QTreeWidgetItemIterator it(v->tree()); *it; ++it)
+                (*it)->setExpanded(true);
+            QVERIFY(v->selectNode(cueNumbered(dc, "1.0.2")));
+            settle(200);
+            layOutForShot(v);
+            QListWidget *rows = v->cueLayerList();
+            QRect grey;
+            for (int i = 0; i < rows->count(); ++i)
+                if (rows->item(i)->text().startsWith(QStringLiteral("⤳")))
+                    grey |= rows->visualItemRect(rows->item(i));
+            QTreeWidgetItem *chorus = treeCue(v, "1.0.2");
+            QVERIFY(chorus != nullptr);
+            HelpShots::Frame f = showTreeFrame(m_app, v);
+            const HelpShots::Callout c = countsOf(v, chorus, m_app, 1);
+            f.callouts << c << markRect(rows->viewport(), grey, m_app, 2);
+            QVERIFY(shoot(f, d, "chorus-tracking"));
+            // Scrolled down: Tracked in and Next cue receives.
+            if (QScrollArea *page = qobject_cast<QScrollArea *>(v->m_cuePage))
+                page->ensureWidgetVisible(v->m_cueNext, 0, 8);
+            settle(100);
+            HelpShots::Frame g;
+            g.grab = m_app;
+            QRect r(v->mapTo(m_app, QPoint(0, 0)), v->size());
+            g.crop = r;
+            g.callouts << mark(v->m_cueTracked, 1) << mark(v->m_cueNext, 2);
+            QVERIFY(shoot(g, d, "chorus-receives"));
+            dc->resetModified();
+        }
+        QVERIFY(open(levelTwoStart(1)));
+        QVERIFY(lessonTwoOneByMouse(m_app->doc(), showTree(), d));
+        m_app->doc()->resetModified();
+
+        QVERIFY(open(levelTwoFinish(1)));
+        Doc *dc = m_app->doc();
+        v = showTree();
+        for (QTreeWidgetItemIterator it(v->tree()); *it; ++it)
+            (*it)->setExpanded(true);
+        QVERIFY(v->selectNode(cueNumbered(dc, "1.0.1")));
+        settle(100);
+        QVERIFY(clickCueRow(v, "StepTops"));
+        settle(100);
+        layOutForShot(v);
+        {
+            QTreeWidgetItem *verse = treeCue(v, "1.0.1");
+            QVERIFY(verse != nullptr);
+            HelpShots::Frame f = showTreeFrame(m_app, v);
+            f.callouts << mark(stFind<QCheckBox>(v, "stLayerRelease"), 1) << countsOf(v, verse, m_app, 2);
+            QVERIFY(shoot(f, d, "release"));
+        }
+        QVERIFY(v->selectNode(cueNumbered(dc, "1.0.2.5")));
+        settle(200);
+        layOutForShot(v);
+        {
+            QTreeWidgetItem *flash = treeCue(v, "1.0.2.5");
+            QVERIFY(flash != nullptr);
+            HelpShots::Frame f = showTreeFrame(m_app, v);
+            // The Mode box is near the top of the page: scrolled back to it.
+            if (QScrollArea *page = qobject_cast<QScrollArea *>(v->m_cuePage))
+                page->ensureWidgetVisible(stFind<QComboBox>(v, "stCueMode"), 0, 60);
+            settle(100);
+            f.callouts << mark(stFind<QComboBox>(v, "stCueMode"), 1) << countsOf(v, flash, m_app, 2);
+            QVERIFY(shoot(f, d, "flash-cue"));
+        }
+        dc->resetModified();
+    }
 }
 
 int main(int argc, char **argv)
