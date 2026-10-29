@@ -57,6 +57,9 @@ private slots:
     void shortCommandsDoNotCrash();
     void unknownWidgetIdsDoNotCrash();
     void aMalformedUrlDoesNotAbort();
+    /** The Pi's network page: an SSID or a password typed there is one
+     *  nmcli argument, never split into several (red team, RC8 leftover). */
+    void networkSettingsAreSingleArguments();
     void aHugeUploadIsRefusedEarly();
     void shutdownWithALiveClientIsClean();
 

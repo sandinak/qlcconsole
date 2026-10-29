@@ -57,6 +57,20 @@ public:
     bool createWiFiHotspot(QString SSID, QString password);
     bool deleteWiFiHotspot();
 
+    /** The nmcli argument lists for a connection profile on @p iface: the
+     *  add (static: @p address/@p prefixBits, @p gateway), the Wi-Fi
+     *  password when there is one, then up. Each value typed on the web
+     *  page (an SSID, a password, an address) is ONE argument: they were
+     *  split on spaces, so "My Show Net" was three, and a password could
+     *  carry nmcli options of its own. */
+    static QList<QStringList> connectionCommands(const InterfaceInfo &iface, bool isStatic,
+                                                 const QString &address, int prefixBits,
+                                                 const QString &gateway, const QString &ssid,
+                                                 const QString &password);
+
+    /** The nmcli argument lists that make the Wi-Fi hotspot (see above) */
+    static QList<QStringList> hotspotCommands(const QString &SSID, const QString &password);
+
 protected:
     QStringList getNmcliOutput(QStringList args, bool verbose = false);
     void refreshConnectionsList();

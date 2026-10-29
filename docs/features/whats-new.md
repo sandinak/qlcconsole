@@ -40,6 +40,27 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ### Fixed
 
+- **QLC+ 4 no longer deletes fixtures from a .qxw saved here.** The
+  Inventory's (unpatched) fixtures are kept where QLC+ 4 doesn't look;
+  it used to take each as patched at universe 1, address 1, and delete
+  the rest along with any fixture really patched there. See [Saving for
+  QLC+ 4](getting-started.md#saving-for-qlc-4).
+- **Collect for Transfer takes your own gobo pictures** too, so swapped
+  gobos look right on the other computer. See [Collect for
+  Transfer](fixture-manager.md#collect-for-transfer).
+- **Windows: your QLC+ fixtures, scripts and profiles come across.**
+  qlcconsole copies them from your QLC+ folder into its own (in your user
+  folder; it used to make links Windows can't read, and in the wrong
+  place). Your own pad profiles (HIDProfiles) live in qlcconsole's
+  folder on every system, and the installed Xbox profile is found on
+  Windows and Linux.
+- **An Art-Net node sees its own packet count**: each node a universe is
+  sent to counts 1, 2, 3…, however many other nodes share that Art-Net
+  universe.
+- **A stock QLC+ show's network patch with no interface named** (just a
+  line number) follows its target address, or waits for you to patch it,
+  instead of sending through whichever network this computer lists at
+  that number.
 - **A hit on a Flash button plays.** A Virtual Console button set to
   **Flash** on a Show Tree hit now plays the hit while it is held; it did
   nothing before (only scenes flashed). See [Hits](show-tree.md#hits-busking).

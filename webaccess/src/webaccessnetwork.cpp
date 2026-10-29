@@ -367,13 +367,12 @@ bool WebAccessNetwork::updateNetworkSettings(QStringList cmdList)
 
             m_interfaces[i].enabled = true;
             bool staticRequest = cmdList.at(3) == "static" ? true : false;
-            QString args = "con add con-name qlcplus" + m_interfaces[i].devName + " ifname " + m_interfaces[i].devName;
+            int bitCount = 0;
 
             if (staticRequest)
             {
                 // convert netmask to bitwise notation
                 uint32_t intNetMask;
-                uint32_t bitCount = 0;
 
                 if (inet_pton(AF_INET, cmdList.at(5).toUtf8().constData(), &intNetMask) == 0)
                 {
@@ -386,41 +385,13 @@ bool WebAccessNetwork::updateNetworkSettings(QStringList cmdList)
                     intNetMask = intNetMask >> 1;
                     bitCount++;
                 }
-
-                if (m_interfaces[i].isWireless)
-                    args = args + " type wifi ssid " + cmdList.at(7);
-                else
-                    args = args + " type ethernet";
-
-                args = args + " ip4 " + cmdList.at(4) + "/" + QString::number(bitCount) + " gw4 " + cmdList.at(6);
-            }
-            else // DHCP
-            {
-                if (m_interfaces[i].isWireless)
-                {
-                    //m_interfaces[i].ssid = cmdList.at(7);
-                    //m_interfaces[i].wpaPass = cmdList.at(8);
-                    args = args + " type wifi ssid " + cmdList.at(7);
-                }
-                else
-                {
-                    args += " type ethernet";
-                }
             }
 
-            // add the new/updated connection profile
-            getNmcliOutput(args.split(" "));
-
-            // if a password is set, modify the just created connection
-            if (m_interfaces[i].isWireless && !cmdList.at(8).isEmpty())
-            {
-                args = "con mod qlcplus" + m_interfaces[i].devName + " wifi-sec.key-mgmt wpa-psk wifi-sec.psk " + cmdList.at(8);
-                getNmcliOutput(args.split(" "));
-            }
-
-            // finally, activate the connection
-            args = "con up qlcplus" + m_interfaces[i].devName;
-            getNmcliOutput(args.split(" "));
+            // add the new/updated connection profile, its password, then up
+            foreach (const QStringList &args,
+                     connectionCommands(m_interfaces.at(i), staticRequest, cmdList.at(4), bitCount,
+                                        cmdList.at(6), cmdList.at(7), cmdList.at(8)))
+                getNmcliOutput(args);
 
             refreshConnectionsList();
 
@@ -432,36 +403,53 @@ bool WebAccessNetwork::updateNetworkSettings(QStringList cmdList)
 
 bool WebAccessNetwork::createWiFiHotspot(QString SSID, QString password)
 {
-    // first off, delete the current connection profile
-    getNmcliOutput(QStringList() << "con" << "del" << HOTSPOT_CON_NAME);
-
-    // create the connection
-    QString args = "con add type wifi ifname wlan0 mode ap con-name " + HOTSPOT_CON_NAME + " autoconnect yes ssid \"" + SSID + "\"";
-    getNmcliOutput(args.split(" "));
-
-    // modify with proper parameters
-    args = "con modify " + HOTSPOT_CON_NAME + " 802-11-wireless.ssid " + SSID;
-    getNmcliOutput(args.split(" "));
-    args = "con modify " + HOTSPOT_CON_NAME + " 802-11-wireless.band bg";
-    getNmcliOutput(args.split(" "));
-    args = "con modify " + HOTSPOT_CON_NAME + " 802-11-wireless-security.key-mgmt wpa-psk";
-    getNmcliOutput(args.split(" "));
-    args = "con modify " + HOTSPOT_CON_NAME + " 802-11-wireless-security.proto rsn";
-    getNmcliOutput(args.split(" "));
-    args = "con modify " + HOTSPOT_CON_NAME + " 802-11-wireless-security.group ccmp";
-    getNmcliOutput(args.split(" "));
-    args = "con modify " + HOTSPOT_CON_NAME + " 802-11-wireless-security.pairwise ccmp";
-    getNmcliOutput(args.split(" "));
-    args = "con modify " + HOTSPOT_CON_NAME + " 802-11-wireless-security.psk " + password;
-    getNmcliOutput(args.split(" "));
-    args = "con modify " + HOTSPOT_CON_NAME + " ipv4.method shared";
-    getNmcliOutput(args.split(" "));
-
-    // activate the connection
-    args = "con up " + HOTSPOT_CON_NAME;
-    getNmcliOutput(args.split(" "));
-
+    foreach (const QStringList &args, hotspotCommands(SSID, password))
+        getNmcliOutput(args);
     return true;
+}
+
+QList<QStringList> WebAccessNetwork::connectionCommands(const InterfaceInfo &iface, bool isStatic,
+                                                        const QString &address, int prefixBits,
+                                                        const QString &gateway, const QString &ssid,
+                                                        const QString &password)
+{
+    const QString conn = QStringLiteral("qlcplus") + iface.devName;
+    QStringList add = { "con", "add", "con-name", conn, "ifname", iface.devName };
+    if (iface.isWireless)
+        add << "type" << "wifi" << "ssid" << ssid;
+    else
+        add << "type" << "ethernet";
+    if (isStatic)
+        add << "ip4" << QString("%1/%2").arg(address).arg(prefixBits) << "gw4" << gateway;
+
+    QList<QStringList> cmds = { add };
+    if (iface.isWireless && !password.isEmpty())
+        cmds << QStringList{ "con", "mod", conn, "wifi-sec.key-mgmt", "wpa-psk", "wifi-sec.psk", password };
+    cmds << QStringList{ "con", "up", conn };
+    return cmds;
+}
+
+QList<QStringList> WebAccessNetwork::hotspotCommands(const QString &SSID, const QString &password)
+{
+    const QString conn = HOTSPOT_CON_NAME;
+    return {
+        // first off, delete the current connection profile
+        { "con", "del", conn },
+        // create the connection (no shell: the SSID needs no quotes)
+        { "con", "add", "type", "wifi", "ifname", "wlan0", "mode", "ap", "con-name", conn,
+          "autoconnect", "yes", "ssid", SSID },
+        // modify with proper parameters
+        { "con", "modify", conn, "802-11-wireless.ssid", SSID },
+        { "con", "modify", conn, "802-11-wireless.band", "bg" },
+        { "con", "modify", conn, "802-11-wireless-security.key-mgmt", "wpa-psk" },
+        { "con", "modify", conn, "802-11-wireless-security.proto", "rsn" },
+        { "con", "modify", conn, "802-11-wireless-security.group", "ccmp" },
+        { "con", "modify", conn, "802-11-wireless-security.pairwise", "ccmp" },
+        { "con", "modify", conn, "802-11-wireless-security.psk", password },
+        { "con", "modify", conn, "ipv4.method", "shared" },
+        // activate the connection
+        { "con", "up", conn },
+    };
 }
 
 bool WebAccessNetwork::deleteWiFiHotspot()
