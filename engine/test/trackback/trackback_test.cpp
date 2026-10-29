@@ -772,23 +772,32 @@ void TrackBack_Test::aLongList()
     qInfo().noquote() << QString("%1 cues: the jump's tick %2 ms, the Back's %3 ms").arg(count).arg(jumpMs).arg(backMs);
 }
 
-void TrackBack_Test::courseShows()
+/* One row per show: Qt's watchdog (300 s) counts each row on its own. All
+   the shows in one function took ~56 s in a Debug build on an M4, and past
+   300 s on an Intel Mac running three Debug legs at once (val gates). */
+void TrackBack_Test::courseShows_data()
 {
+    QTest::addColumn<QString>("path");
     QDir dir(QStringLiteral(TRACKBACK_SOURCE_DIR "/docs/course/shows"));
     const QStringList shows = dir.entryList({ QStringLiteral("lesson-1-*.qlcc") }, QDir::Files, QDir::Name);
     QVERIFY(!shows.isEmpty());
     for (const QString &name : shows)
+        QTest::newRow(qPrintable(name)) << dir.filePath(name);
+}
+
+void TrackBack_Test::courseShows()
+{
+    QFETCH(QString, path);
+    const QString name = QFileInfo(path).fileName();
+    QVERIFY2(loadShow(path), qPrintable(name));
+    for (Function *f : m_doc->functions())
     {
-        QVERIFY2(loadShow(dir.filePath(name)), qPrintable(name));
-        for (Function *f : m_doc->functions())
-        {
-            Chaser *c = qobject_cast<Chaser *>(f);
-            if (c == nullptr || !m_doc->showTree()->isGenerated(c->id()) || c->stepsCount() < 2)
-                continue;
-            QString why;
-            const int differ = everyWay(c, 3, &why);
-            QVERIFY2(differ == 0, qPrintable(QStringLiteral("%1, %2: %3").arg(name, c->name(), why)));
-        }
+        Chaser *c = qobject_cast<Chaser *>(f);
+        if (c == nullptr || !m_doc->showTree()->isGenerated(c->id()) || c->stepsCount() < 2)
+            continue;
+        QString why;
+        const int differ = everyWay(c, 3, &why);
+        QVERIFY2(differ == 0, qPrintable(QStringLiteral("%1, %2: %3").arg(name, c->name(), why)));
     }
 }
 
