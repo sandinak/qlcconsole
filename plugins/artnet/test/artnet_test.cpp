@@ -2406,6 +2406,42 @@ void ArtNet_Test::dmxSequenceRunsOneTo255PerUniverse()
     QCOMPARE(int(uchar(d.at(12))), 2);
 }
 
+void ArtNet_Test::dmxSequenceCountsPerNode()
+{
+    ArtNetPacketizer ap;
+    QByteArray d;
+    const QHostAddress a("172.18.2.10"), b("172.18.2.11");
+    for (int i = 1; i <= 3; i++)
+    {
+        ap.setupArtNetDmx(d, 0, QByteArray(2, char(0)), a);
+        QCOMPARE(int(uchar(d.at(12))), i);
+        ap.setupArtNetDmx(d, 0, QByteArray(2, char(0)), b);
+        QCOMPARE(int(uchar(d.at(12))), i);
+    }
+
+    // Through the controller: two universes, Art-Net universe 0, two nodes
+    QObject owner;
+    QList<QNetworkDatagram> sink;
+    ArtNetController *ctrl = sinkController(&owner, &sink);
+    ctrl->addUniverse(0, ArtNetController::Output);
+    ctrl->addUniverse(1, ArtNetController::Output);
+    QCOMPARE(ctrl->setOutputUniverse(1, 0), false);   // not the default: its own number
+    ctrl->setOutputIPAddress(0, "172.18.2.20");
+    ctrl->setOutputIPAddress(1, "172.18.2.21");
+    QCOMPARE(int(ctrl->getUniverseInfo(1)->outputUniverse), 0);
+    for (int i = 0; i < 3; i++)
+    {
+        ctrl->sendDmx(0, QByteArray(8, char(i)), true);
+        ctrl->sendDmx(1, QByteArray(8, char(i)), true);
+    }
+    QMap<QString, QList<int>> perNode;
+    for (const QNetworkDatagram &dg : sink)
+        if (artOpCode(dg.data()) == 0x5000)
+            perNode[dg.destinationAddress().toString()].append(uchar(dg.data().at(12)));
+    QCOMPARE(perNode.value("172.18.2.20"), QList<int>({ 1, 2, 3 }));
+    QCOMPARE(perNode.value("172.18.2.21"), QList<int>({ 1, 2, 3 }));
+}
+
 void ArtNet_Test::artDmxInputEmitsChangedChannels()
 {
     QObject owner;

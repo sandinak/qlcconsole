@@ -353,7 +353,7 @@ void ArtNetController::slotSendAllUniverses()
             if (info.outputData.size() == 0)
                 info.outputData.fill(0, 512);
 
-            m_packetizer->setupArtNetDmx(dmxPacket, info.outputUniverse, info.outputData);
+            m_packetizer->setupArtNetDmx(dmxPacket, info.outputUniverse, info.outputData, info.outputAddress);
 
             qint64 sent = writeDatagram(QNetworkDatagram(dmxPacket, info.outputAddress, ARTNET_PORT));
             if (reportSendResult(info, it.key(), info.outputAddress, sent >= 0))
@@ -398,11 +398,11 @@ void ArtNetController::sendDmx(const quint32 universe, const QByteArray &data, b
             info->outputData.fill(0, 512);
 
         info->outputData.replace(0, data.length(), data);
-        m_packetizer->setupArtNetDmx(dmxPacket, outUniverse, info->outputData);
+        m_packetizer->setupArtNetDmx(dmxPacket, outUniverse, info->outputData, outAddress);
     }
     else
     {
-        m_packetizer->setupArtNetDmx(dmxPacket, outUniverse, data);
+        m_packetizer->setupArtNetDmx(dmxPacket, outUniverse, data, outAddress);
     }
 
     qint64 sent = writeDatagram(QNetworkDatagram(dmxPacket, outAddress, ARTNET_PORT));
