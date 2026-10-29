@@ -176,12 +176,15 @@
 #include "qlcfile.h"
 #include "qlceventpos.h"
 #include "itemicons.h"
+#include "collection.h"
+#include "showtreecontroller.h"
 
 #define SETTINGS_VSPLITTER "monitor/vsplitter2"
 #define SETTINGS_LAYERS_PANEL "monitor/layerspanel3"
 #define SETTINGS_RULERS "monitor/rulers"
 #define SETTINGS_GRID   "monitor/grid"
 #define SETTINGS_CENTERLINES "monitor/centerlines"
+#define SETTINGS_ALLTARGETS "monitor/allTargets"
 #define SETTINGS_LINEOFSIGHT "monitor/lineOfSightBeams"
 #define SETTINGS_MOUNTEDFIXTURES "monitor/mountedfixtures"
 #define SETTINGS_STUDIOROTATION "monitor/studiorotation"
@@ -287,6 +290,98 @@ Monitor::Monitor(QWidget* parent, Doc* doc, Qt::WindowFlags f)
         if (m_graphicsView != NULL)
             m_graphicsView->updateTargets();
     });
+
+    /* Item 10: the targets in scope follow what plays (a list's GO, a
+       preview, Build's loaded scene), its looks being edited and the
+       Show Tree's cue in edit -- once per burst. */
+    m_allTargets = QSettings().value(SETTINGS_ALLTARGETS, false).toBool();
+    m_scopeTimer = new QTimer(this);
+    m_scopeTimer->setSingleShot(true);
+    m_scopeTimer->setInterval(0);
+    connect(m_scopeTimer, &QTimer::timeout, this, &Monitor::refreshTargetScope);
+    const auto kick = QOverload<>::of(&QTimer::start);
+    connect(m_doc->masterTimer(), &MasterTimer::functionListChanged, m_scopeTimer, kick);
+    connect(m_doc, &Doc::functionChanged, m_scopeTimer, kick);
+    connect(m_doc, &Doc::loaded, this, [this]() {
+        if (m_graphicsView != NULL)
+            m_graphicsView->forgetPlacedTargets();
+        m_blindCue = 0xFFFFFFFF;
+        m_scopeTimer->start();
+    });
+    if (ShowTreeController *st = m_doc->showTree())
+        connect(st, &ShowTreeController::changed, m_scopeTimer, kick);
+    m_scopeTimer->start();
+}
+
+QSet<quint32> Monitor::targetsUsedBy(Doc *doc, quint32 sceneId)
+{
+    QSet<quint32> out;
+    const Scene *scene = qobject_cast<const Scene *>(doc->function(sceneId));
+    if (scene == nullptr)
+        return out;
+    for (quint32 pid : scene->runtimePalettes())
+    {
+        const QLCPalette *p = doc->palette(pid);
+        if (p == nullptr)
+            continue;
+        if (p->type() == QLCPalette::Aim && p->stageTargetId() != UINT_MAX)
+            out.insert(p->stageTargetId());           // an aim, a line aim
+        else if (p->type() == QLCPalette::Effect)
+            for (quint32 tid : p->effectTargetBindings())
+                out.insert(tid);                    // an effect centred on one
+    }
+    return out;
+}
+
+void Monitor::setBlindCue(quint32 cueId)
+{
+    if (m_blindCue == cueId)
+        return;
+    m_blindCue = cueId;
+    refreshTargetScope();
+}
+
+void Monitor::setAllTargets(bool on)
+{
+    m_allTargets = on;
+    QSettings().setValue(SETTINGS_ALLTARGETS, on);
+    refreshTargetScope();
+}
+
+void Monitor::refreshTargetScope()
+{
+    // What is on show: the cue in edit (Blind), else what plays and what
+    // Build has loaded.
+    QList<quint32> scenes;
+    ShowTreeController *st = m_doc->showTree();
+    const ShowTree::Cue *blind = (st != nullptr && m_blindCue != 0xFFFFFFFF) ? st->cue(m_blindCue) : nullptr;
+    if (blind != nullptr)
+    {
+        if (const Collection *c = qobject_cast<const Collection *>(m_doc->function(blind->collection)))
+            scenes = c->functions();
+    }
+    else
+    {
+        if (m_activeSceneId != 0xFFFFFFFF)
+            scenes << m_activeSceneId;
+        for (Function *f : m_doc->functions())
+            if (f->type() == Function::SceneType && f->isRunning() && !scenes.contains(f->id()))
+                scenes << f->id();
+    }
+    QSet<quint32> ids;
+    bool any = false;
+    for (quint32 sid : scenes)
+        if (m_doc->function(sid) != nullptr && m_doc->function(sid)->type() == Function::SceneType)
+        {
+            any = true;
+            ids.unite(targetsUsedBy(m_doc, sid));
+        }
+    // Nothing on show (or asked for): every target.
+    const bool all = m_allTargets || !any;
+    if (m_graphicsView != NULL)
+        m_graphicsView->setTargetScope(all, ids);
+    if (m_overviewView != NULL)
+        m_overviewView->setTargetScope(all, ids);
 }
 
 void Monitor::refreshStageLooks()
@@ -1077,6 +1172,21 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
         }
     });
 
+    /* Item 10: the targets the cue on show uses, or All targets. */
+    {
+        QAction *allAct = showMenu->addAction(tr("All targets"));
+        allAct->setObjectName(QStringLiteral("showAllTargets"));
+        allAct->setCheckable(true);
+        allAct->setChecked(m_allTargets);
+        allAct->setToolTip(tr("Every stage target. Off: only the targets the cue on show aims at "
+                              "(all of them when nothing plays)"));
+        connect(allAct, &QAction::toggled, this, [this](bool on) { setAllTargets(on); });
+        connect(showMenu, &QMenu::aboutToShow, allAct, [this, allAct]() {
+            QSignalBlocker block(allAct);
+            allAct->setChecked(m_allTargets);
+        });
+    }
+
     QAction *centerBtn = showMenu->addAction(tr("Stage centre lines"));
     centerBtn->setCheckable(true);
     connect(centerBtn, &QAction::toggled, this, [this](bool on) {
@@ -1777,6 +1887,8 @@ void Monitor::openFocusMode()
 void Monitor::setActiveScene(quint32 sceneId)
 {
     m_activeSceneId = sceneId;
+    if (m_scopeTimer != nullptr)
+        m_scopeTimer->start();
     if (m_graphicsView != NULL)
         m_graphicsView->setActiveScene(sceneId);
     /* The overview shows the same aim, so it needs the same scene. Without
@@ -2874,6 +2986,7 @@ void Monitor::showStageOverview()
     view->setStandOnCentreStage(true);
     view->setLocked(true);
     m_overviewView = view;
+    refreshTargetScope();
     view->setActiveScene(m_activeSceneId);
     /* Opened in the middle of Focus mode: ring the head being focused, as the
        Studio already does -- it was only ever told when the head CHANGED. */
@@ -2983,6 +3096,19 @@ void Monitor::showStageOverview()
         positionsAct->setChecked(m_props->targetPositionsVisible());
     });
     positionsAct->setChecked(m_props->targetPositionsVisible());
+    {
+        QAction *allAct = showMenu->addAction(tr("All targets"));
+        allAct->setObjectName(QStringLiteral("rigShowAllTargets"));
+        allAct->setCheckable(true);
+        allAct->setChecked(m_allTargets);
+        allAct->setToolTip(tr("Every stage target. Off: only the targets the cue on show aims at "
+                              "(all of them when nothing plays)"));
+        connect(allAct, &QAction::toggled, &dlg, [this](bool on) { setAllTargets(on); });
+        connect(showMenu, &QMenu::aboutToShow, &dlg, [this, allAct]() {
+            QSignalBlocker block(allAct);
+            allAct->setChecked(m_allTargets);
+        });
+    }
     bar->addWidget(showBtn);
 
     /* Layers, from here: show or hide one without the Studio open. The same

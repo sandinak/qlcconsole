@@ -2968,7 +2968,7 @@ void MonitorGraphicsView::refreshItemLayerState()
         StageTarget *t = ti->target();
         const MonitorProperties::MonitorLayer lyr = props->layer(t ? t->layerId() : 0);
         const bool grpLock = props->groupChainLocked(t ? t->groupId() : 0);
-        ti->setVisible(lyr.visible && !m_stageOnly);
+        ti->setVisible(lyr.visible && !m_stageOnly && (ti->isSelected() || targetInScope(ti->targetId())));
         /* t->locked() belongs in here. It was left out, so the per-target
            "Lock Target" menu item set a flag that this function overwrote on
            the very next refresh -- locking a target did nothing at all, while
@@ -5916,6 +5916,8 @@ void MonitorGraphicsView::updateTargets()
        -- it is placed, moved and named like a truss -- so it is always drawn.
        Being aimed is a temporary property of the scene on screen, and it earns
        a glow and light-path lines instead. */
+    const bool firstBuild = !m_targetsSeen;
+    m_targetsSeen = true;
     QSet<quint32> aimedTargetIds;
     if (m_activeSceneId != Function::invalidId())
     {
@@ -5997,6 +5999,14 @@ void MonitorGraphicsView::updateTargets()
         ti->setAimed(aimedTargetIds.contains(t->id()));
         m_scene->addItem(ti);
         m_targetItems.insert(t->id(), ti);
+        // One placed since the show opened stays drawn, whatever the scope.
+        if (!firstBuild && !m_knownTargets.contains(t->id()))
+            m_placedTargets.insert(t->id());
+        m_knownTargets.insert(t->id());
+        {
+            const MonitorProperties::MonitorLayer lyr = props->layer(t->layerId());
+            ti->setVisible(lyr.visible && !m_stageOnly && targetInScope(t->id()));
+        }
 
         connect(ti, &TargetItem::itemDropped,
                 this, &MonitorGraphicsView::slotTargetMoved);
@@ -6663,6 +6673,33 @@ void MonitorGraphicsView::updateTrussAnchorLines()
         line->setZValue(1.5);   // above the truss (-0.5), below fixtures (2)
         line->setAcceptedMouseButtons(Qt::NoButton);   // a tether, not a target
         m_trussAnchorLines.append(line);
+    }
+}
+
+void MonitorGraphicsView::setTargetScope(bool all, const QSet<quint32> &ids)
+{
+    if (m_targetScopeAll == all && m_targetScope == ids)
+        return;
+    m_targetScopeAll = all;
+    m_targetScope = ids;
+    refreshTargetVisibility();
+}
+
+bool MonitorGraphicsView::targetInScope(quint32 targetId) const
+{
+    return m_targetScopeAll || m_targetScope.contains(targetId) || m_placedTargets.contains(targetId);
+}
+
+void MonitorGraphicsView::refreshTargetVisibility()
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    if (props == nullptr)
+        return;
+    foreach (TargetItem *ti, m_targetItems)
+    {
+        StageTarget *t = ti->target();
+        const MonitorProperties::MonitorLayer lyr = props->layer(t ? t->layerId() : 0);
+        ti->setVisible(lyr.visible && !m_stageOnly && (ti->isSelected() || targetInScope(ti->targetId())));
     }
 }
 

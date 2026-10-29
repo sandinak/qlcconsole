@@ -21,6 +21,7 @@
 #define MONITOR_H
 
 #include <QWidget>
+#include <QSet>
 #include <functional>
 #include <QHash>
 #include <QList>
@@ -66,6 +67,19 @@ class Monitor final : public QWidget
 public:
     /** Get the monitor singleton instance. Can be NULL. */
     static Monitor* instance();
+
+    /** Item 10: the rig views draw only the stage targets the cue on show
+     *  uses -- Aim looks (lines too) and effects centred on a target, in the
+     *  scenes playing and the scene loaded in Build; in Blind, the cue in
+     *  edit (@a cueId, invalid: Live). Nothing on show: all of them; Show ▸
+     *  All targets: all of them always. */
+    void setBlindCue(quint32 cueId);
+    void refreshTargetScope();
+    /** The stage targets a scene's looks use. */
+    static QSet<quint32> targetsUsedBy(Doc *doc, quint32 sceneId);
+    /** Show ▸ All targets (per user). */
+    bool allTargets() const { return m_allTargets; }
+    void setAllTargets(bool on);
 
     /** Fixture Properties for ONE fixture -- the one fixture dialog, opened by
      *  a double-click on a fixture wherever it is (plot, studio, Layers,
@@ -376,6 +390,9 @@ private:
     /** A stage piece's properties while they are open (editStagePiece()). */
     class StagePieceDialog *m_stagePieceDialog = NULL;
     quint32 m_activeSceneId = 0xFFFFFFFF;   ///< mirrors the graphics view's
+    quint32 m_blindCue = 0xFFFFFFFF;        ///< setBlindCue()
+    bool m_allTargets = false;
+    class QTimer *m_scopeTimer = nullptr;
 
 public:
 

@@ -196,6 +196,10 @@ skipped). Upstream fixes taken:
 
 ### Changed
 
+- **The rig shows the targets the cue uses**: the plot and the Rig
+  Overview draw the targets the cue on show aims at (Live: what plays and
+  Build's loaded scene; Blind: the cue in edit); all of them when nothing
+  is on show, or with **Show ▸ All targets**. A target just placed stays.
 - **Effects take edits while they play.** Changing an effect in the
   designer while a cue or scene plays it changes the rig at once (no
   restart); Cancel puts it back, Update keeps it. A running RGB Matrix

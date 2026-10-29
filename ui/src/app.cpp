@@ -3808,6 +3808,12 @@ void App::refreshBlindView()
 
 void App::updateBlindLook()
 {
+    // The rig views' targets: the cue in edit while the Blind view is on.
+    if (Monitor *mon = Monitor::instance())
+    {
+        ShowTreeController *st = m_doc != NULL ? m_doc->showTree() : nullptr;
+        mon->setBlindCue(m_blindView && st != nullptr ? st->editedCue() : ShowTree::invalidId());
+    }
     const bool muted = m_doc != NULL && m_doc->inputOutputMap()->outputInhibited();
     const bool on = muted || m_blindView;
     // Turn the WHOLE footer blue while Blind is on so it's unmistakable at a

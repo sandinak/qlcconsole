@@ -968,6 +968,15 @@ bool StructureStudioView::layerShown(quint32 layerId) const
     return m_kind != StageKind || m_doc->monitorProperties()->layer(layerId).visible;
 }
 
+void StructureStudioView::setTargetScope(bool all, const QSet<quint32> &ids)
+{
+    if (m_targetScopeAll == all && m_targetScope == ids)
+        return;
+    m_targetScopeAll = all;
+    m_targetScope = ids;
+    update();
+}
+
 bool StructureStudioView::fixtureShown(quint32 fid) const
 {
     // A curtain is drawn as its drape, not as a fixture.
@@ -1219,7 +1228,7 @@ void StructureStudioView::drawStageFigures(QPainter &p) const
 
     foreach (StageTarget *t, targets)
     {
-        if (t == nullptr || (t != &focusFigure && !layerShown(t->layerId())))
+        if (t == nullptr || (t != &focusFigure && (!layerShown(t->layerId()) || !targetInScope(t->id()))))
             continue;
 
         /* A line: the curve at its real heights, with a small cross at each
@@ -1431,7 +1440,7 @@ void StructureStudioView::collectPoints(QList<QVector3D> &pts) const
        fit that ignores it cuts off the head of anyone on a deck. */
     foreach (StageTarget *t, props->stageTargets())
     {
-        if (t == nullptr || !layerShown(t->layerId()))
+        if (t == nullptr || !layerShown(t->layerId()) || !targetInScope(t->id()))
             continue;
         const float tall = props->targetFigureHeight(t);
         if (tall <= 0.0f)
@@ -1980,7 +1989,7 @@ QList<QPair<QString, QRectF> > StructureStudioView::targetReadouts(const QFont &
     QList<QVector3D> spots;
     foreach (StageTarget *t, props->stageTargets())
     {
-        if (t == nullptr || !layerShown(t->layerId()))
+        if (t == nullptr || !layerShown(t->layerId()) || !targetInScope(t->id()))
             continue;
         const bool person = t->kind() == StageTarget::Kind::Person
                             && props->targetFigureHeight(t) > 0.0f;
