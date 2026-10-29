@@ -72,6 +72,11 @@ private:
     void tick(int n = 1);
     QByteArray settle(int ticks);
     QByteArray land(Chaser *c);
+    /** settle(m_settle), stopping sooner once nothing more can change. */
+    QByteArray settleCue(Chaser *c);
+    /** Every fade over and the cue held until a GO: the next tick changes
+     *  nothing but what an effect moves. */
+    bool still(Chaser *c) const;
     void act(Chaser *c, const Move &m);
     void stopAll();
     /** What each cue of @a c outputs played straight from the top. */

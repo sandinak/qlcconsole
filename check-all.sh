@@ -255,6 +255,15 @@ if ! PERF_OUT=$(python3 "$REPO/tools/perf/guard.py" --self-test 2>&1); then
     exit 1
 fi
 
+# The gate pool's per-host lock (platforms/macos/gate-lock.sh): its
+# self-test, on a scratch ~/gates -- under a second.
+if ! LOCK_OUT=$("$REPO/platforms/macos/gate-lock.sh" --self-test 2>&1); then
+    echo >&2 "$LOCK_OUT"
+    { echo "gate=1 host=$GATE_HOST qt=$QT_VERSION rev=$GATE_REV"
+      echo "platforms/macos/gate-lock.sh --self-test failed. Nothing built or tested."; } | tee "$LOGS/summary.txt"
+    exit 1
+fi
+
 echo "Gate in $REPO on $GATE_HOST: $JOBS cores, Qt $QT_VERSION at $QT6, $CCACHE_STATE; logs in $LOGS"
 
 #############################################################################

@@ -1081,18 +1081,7 @@ int QLCPalette::colorSetOffset(Doc *doc, const QList<quint32> &orderedPalettes, 
 
 bool QLCPalette::fixtureHasDimmer(const Fixture *fixture)
 {
-    if (fixture == NULL)
-        return false;
-    if (fixture->masterIntensityChannel() != QLCChannel::invalid())
-        return true;
-    for (int h = 0; h < fixture->heads(); h++)
-    {
-        const quint32 ch = fixture->channelNumber(QLCChannel::Intensity, QLCChannel::MSB, h);
-        const QLCChannel *c = ch != QLCChannel::invalid() ? fixture->channel(ch) : NULL;
-        if (c != NULL && c->colour() == QLCChannel::NoColour)
-            return true;
-    }
-    return false;
+    return fixture != NULL && fixture->hasDimmer();
 }
 
 int QLCPalette::lookDimmerValue(Doc *doc, const QList<quint32> &orderedPalettes)
@@ -1109,11 +1098,13 @@ int QLCPalette::lookDimmerValue(Doc *doc, const QList<quint32> &orderedPalettes)
 
 uchar QLCPalette::dimScaleWithoutDimmer(const Fixture *fixture, quint32 channel, uchar value, int lookDimmer)
 {
-    if (lookDimmer < 0 || fixture == NULL || fixtureHasDimmer(fixture))
+    if (lookDimmer < 0 || fixture == NULL)
         return value;
     const QLCChannel *c = fixture->channel(channel);
     if (c == NULL || c->group() != QLCChannel::Intensity || c->colour() == QLCChannel::NoColour)
         return value;                       // not a colour emitter
+    if (fixtureHasDimmer(fixture))
+        return value;
     return uchar(qRound(double(value) * lookDimmer / 255.0));
 }
 

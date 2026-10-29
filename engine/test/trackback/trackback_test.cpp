@@ -18,6 +18,7 @@
 */
 
 #include <QXmlStreamReader>
+#include <QCryptographicHash>
 #include <QRandomGenerator>
 #include <QTemporaryDir>
 #include <QtTest>
@@ -26,6 +27,7 @@
 #define protected public
 #include "mastertimer.h"
 #include "universe.h"
+#include "genericfader.h"
 #undef protected
 #undef private
 #include "trackback_test.h"
@@ -207,13 +209,74 @@ QByteArray TrackBack_Test::land(Chaser *c)
 {
     tick(2);                            // the GO, Back or jump taken
     int at = c->currentStepIndex();
-    QByteArray out = settle(m_settle);
+    QByteArray out = settleCue(c);
     for (int guard = 0; guard < 8 && c->isRunning() && c->currentStepIndex() != at; ++guard)
     {
         at = c->currentStepIndex();
-        out = settle(m_settle);
+        out = settleCue(c);
     }
     return out;
+}
+
+/* m_settle is the list's longest fade: most cues are still long before it
+   (a snap in a list with a 3 s fade somewhere), and ticking the whole rig
+   on to it every time was most of courseShows' minute. Stops once still()
+   has held for three ticks with the stage unchanged -- what the rest of
+   m_settle would end on (checked against the full settle on every landing
+   of this file's tests: no difference) -- and never on a cue that follows
+   on by itself. */
+QByteArray TrackBack_Test::settleCue(Chaser *c)
+{
+    const int least = 4, held = 3;
+    QByteArray last;
+    int same = 0;
+    for (int t = 1; t <= m_settle; ++t)
+    {
+        const QByteArray out = settle(1);
+        if (t >= least - held && out == last && still(c))
+        {
+            if (++same >= held && t >= least)
+                return out;
+        }
+        else
+        {
+            same = 0;
+        }
+        last = out;
+    }
+    return last;
+}
+
+bool TrackBack_Test::still(Chaser *c) const
+{
+    // The cue holds until a GO: a timed one follows on by itself later.
+    if (c->isRunning())
+    {
+        const int at = c->currentStepIndex();
+        uint hold = 0;
+        if (c->durationMode() == Chaser::PerStep && at >= 0 && at < c->stepsCount())
+            hold = c->steps().at(at).hold;
+        else if (c->durationMode() == Chaser::Common)
+            hold = c->duration();
+        if (hold != Function::infiniteSpeed())
+            return false;
+    }
+    // Every channel of every fader at its target: none is fading, or
+    // waiting out a delay to.
+    for (Universe *u : m_doc->inputOutputMap()->universes())
+    {
+        QMutexLocker locker(&u->m_fadersMutex);
+        for (const QSharedPointer<GenericFader> &fader : u->m_faders)
+        {
+            if (fader.isNull())
+                continue;
+            const QHash<quint32, FadeChannel> channels = fader->channels();
+            for (auto it = channels.cbegin(); it != channels.cend(); ++it)
+                if (it.value().current() != it.value().target())
+                    return false;
+        }
+    }
+    return true;
 }
 
 int TrackBack_Test::walk(Chaser *c, const QMap<int, QByteArray> &ref, const QList<Move> &moves, QString *why)
@@ -772,17 +835,26 @@ void TrackBack_Test::aLongList()
     qInfo().noquote() << QString("%1 cues: the jump's tick %2 ms, the Back's %3 ms").arg(count).arg(jumpMs).arg(backMs);
 }
 
-/* One row per show: Qt's watchdog (300 s) counts each row on its own. All
-   the shows in one function took ~56 s in a Debug build on an M4, and past
-   300 s on an Intel Mac running three Debug legs at once (val gates). */
+/* One row per show: Qt's watchdog (300 s) counts each row on its own. A
+   lesson's start is the lesson before's finish, byte for byte: the same
+   show is walked once, under its first name. */
 void TrackBack_Test::courseShows_data()
 {
     QTest::addColumn<QString>("path");
     QDir dir(QStringLiteral(TRACKBACK_SOURCE_DIR "/docs/course/shows"));
     const QStringList shows = dir.entryList({ QStringLiteral("lesson-1-*.qlcc") }, QDir::Files, QDir::Name);
     QVERIFY(!shows.isEmpty());
+    QSet<QByteArray> seen;
     for (const QString &name : shows)
+    {
+        QFile file(dir.filePath(name));
+        QVERIFY2(file.open(QIODevice::ReadOnly), qPrintable(name));
+        const QByteArray sum = QCryptographicHash::hash(file.readAll(), QCryptographicHash::Sha256);
+        if (seen.contains(sum))
+            continue;
+        seen.insert(sum);
         QTest::newRow(qPrintable(name)) << dir.filePath(name);
+    }
 }
 
 void TrackBack_Test::courseShows()

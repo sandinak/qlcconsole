@@ -368,6 +368,12 @@ public:
     /** @see QLCFixtureMode */
     quint32 masterIntensityChannel() const;
 
+    /** Whether it has a dimmer channel -- a master, or a plain (not colour)
+     *  intensity channel in a head -- for a Dimmer look to set
+     *  (QLCPalette::fixtureHasDimmer()). Cached by setFixtureDefinition():
+     *  asked for every channel of every scene start, from the DMX thread. */
+    bool hasDimmer() const { return m_hasDimmer.load(std::memory_order_relaxed); }
+
     /** @see QLCFixtureHead */
     QVector <quint32> rgbChannels(int head = 0) const;
 
@@ -633,6 +639,9 @@ protected:
      *  generic dimmer channel, an ellipsoidal. */
     std::atomic<int> m_autoStageLook { EllipsoidalLook };
     StageLook computeAutoStageLook() const;
+    /** hasDimmer(), cached by setFixtureDefinition(). */
+    std::atomic<bool> m_hasDimmer { false };
+    bool computeHasDimmer() const;
 
     /*********************************************************************
      * Owner (board Q137, docs/design/VENUES.md)
