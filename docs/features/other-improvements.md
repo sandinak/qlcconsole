@@ -174,7 +174,11 @@ connection…** on a patched one) and offer the same plural actions — see
 to one row over the list — **By universe**, **Show unused…**, a one-line
 "Right-click a row for what it can do" whose tooltip has the whole
 explanation, the search status, **Undo Patch Change** and **Rescan** — so
-the list and the output view get the window's height.) A full patch-change **undo**
+the list and the output view get the window's height.) Going to the
+Devices tab polls the network once (an Art-Net poll on every interface,
+patched or not), so an unpatched node has a chance to answer; the app
+opening on the tab doesn't, nor does a headless run: nothing leaves the
+computer that you didn't ask for. **Rescan** polls whenever you press it. A full patch-change **undo**
 (⌘Z, from either sub-tab) snapshots and restores the whole
 patch state, not just the last single edit.
 

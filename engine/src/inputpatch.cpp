@@ -24,6 +24,7 @@
 #endif
 
 #include <QDebug>
+#include <QThread>
 
 #include "qlcinputchannel.h"
 #include "qlcioplugin.h"
@@ -313,13 +314,35 @@ void InputPatch::setProfilePageControls()
 
 void InputPatch::flush(quint32 universe)
 {
-    if (universe == UINT_MAX || universe == m_universe)
+    if (universe != UINT_MAX && universe != m_universe)
+        return;
+
+    QHash<quint32, InputValue> batch;
     {
         QMutexLocker inputBufferLocker(&m_inputBufferMutex);
-        for (QHash<quint32, InputValue>::const_iterator it = m_inputBuffer.begin(); it != m_inputBuffer.end(); ++it)
-        {
-            emit inputValueChanged(m_universe, it.key(), it.value().value, it.value().key);
-        }
-        m_inputBuffer.clear();
+        batch.swap(m_inputBuffer);
     }
+    if (batch.isEmpty())
+        return;
+
+    /* Universe::processFaders() flushes on the universe's own thread, once a
+       frame, and every receiver lives on the GUI thread: emitting there made
+       one queued event per value per receiver (~720,000 a second for 16
+       universes of changing Art-Net input, with the event queue's lock fought
+       over by every universe thread). One queued call per universe per frame
+       instead; the values go out from the GUI thread, in the same order, to
+       the same receivers (pb5). */
+    if (QThread::currentThread() == thread())
+    {
+        emitValues(batch);
+        return;
+    }
+    QMetaObject::invokeMethod(this, [this, batch = std::move(batch)]() { emitValues(batch); },
+                              Qt::QueuedConnection);
+}
+
+void InputPatch::emitValues(const QHash<quint32, InputValue> &values)
+{
+    for (QHash<quint32, InputValue>::const_iterator it = values.constBegin(); it != values.constEnd(); ++it)
+        emit inputValueChanged(m_universe, it.key(), it.value().value, it.value().key);
 }

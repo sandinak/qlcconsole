@@ -158,4 +158,62 @@ void InputPatch_Test::parameters()
     delete ip;
 }
 
-QTEST_APPLESS_MAIN(InputPatch_Test)
+namespace
+{
+/** Counts the values it is given, and the queued calls that brought them. */
+class InputCounter : public QObject
+{
+public:
+    int values = 0;
+    int metaCalls = 0;
+    QSet<quint32> universes;
+    void onValue(quint32 universe, quint32, uchar, const QString &)
+    {
+        values++;
+        universes.insert(universe);
+    }
+protected:
+    bool event(QEvent *e) override
+    {
+        if (e->type() == QEvent::MetaCall)
+            metaCalls++;
+        return QObject::event(e);
+    }
+};
+}
+
+void InputPatch_Test::flushFromAUniverseThreadIsOneEvent()
+{
+    InputPatch ip(7, this);
+    InputCounter counter;
+    connect(&ip, &InputPatch::inputValueChanged, &counter, &InputCounter::onValue);
+
+    // One frame: every channel of the universe changed.
+    for (quint32 ch = 0; ch < 512; ch++)
+        ip.m_inputBuffer.insert(ch, InputPatch::InputValue(uchar(ch % 250 + 1), QString()));
+
+    // Flushed where Universe::processFaders() flushes: its own thread.
+    QThread *worker = QThread::create([&ip]() { ip.flush(7); });
+    worker->start();
+    QVERIFY(worker->wait(5000));
+    delete worker;
+    QVERIFY(ip.m_inputBuffer.isEmpty());
+
+    QTRY_COMPARE(counter.values, 512);
+    QCOMPARE(counter.universes, QSet<quint32>() << 7);
+    // Delivered from the GUI thread, directly: no queued event per value.
+    QCOMPARE(counter.metaCalls, 0);
+
+    // A flush on the patch's own thread still emits at once.
+    ip.m_inputBuffer.insert(3, InputPatch::InputValue(9, QString()));
+    ip.flush(7);
+    QCOMPARE(counter.values, 513);
+
+    // Another universe's flush leaves this patch's values alone.
+    ip.m_inputBuffer.insert(4, InputPatch::InputValue(9, QString()));
+    ip.flush(8);
+    QCOMPARE(counter.values, 513);
+    QCOMPARE(ip.m_inputBuffer.size(), 1);
+}
+
+QTEST_GUILESS_MAIN(InputPatch_Test)

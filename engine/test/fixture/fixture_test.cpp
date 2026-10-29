@@ -78,6 +78,27 @@ void Fixture_Test::name()
     QVERIFY(fxi.name() == "MyFixture");
 }
 
+void Fixture_Test::addressKeepsHighUniverses()
+{
+    Fixture fxi(this);
+    fxi.setChannels(5);
+
+    const quint32 universes[] = { 127, 128, 129, 200, 255, 256, 1023, 100000 };
+    for (quint32 uni : universes)
+    {
+        fxi.setUniverse(uni);
+        fxi.setAddress(42);
+        QCOMPARE(fxi.universe(), uni);
+        QCOMPARE(fxi.address(), quint32(42));
+        QCOMPARE(fxi.universeAddress(), (uni << 9) | 42);
+
+        // And a second re-address keeps it too.
+        fxi.setAddress(511);
+        QCOMPARE(fxi.universe(), uni);
+        QCOMPARE(fxi.address(), quint32(511));
+    }
+}
+
 void Fixture_Test::address()
 {
     Fixture fxi(this);

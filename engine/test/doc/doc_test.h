@@ -44,6 +44,14 @@ private slots:
 
     void createFixtureId();
     void addFixture();
+    /** A fixture past the most universes a show can have is refused, said,
+     *  not added with no universe under it (pb2: an RGB matrix on one
+     *  crashed). Its last channel counts, for one running over the end. */
+    void addFixturePastUniverseLimit();
+    /** A patched fixture moved past the limit goes back where it was. */
+    void moveFixturePastUniverseLimit();
+    /** Re-addressing a patched fixture on universe 128+ keeps it there (pb1). */
+    void readdressHighUniverseFixture();
     void deleteFixture();
     void replaceFixtures();
     void fixture();

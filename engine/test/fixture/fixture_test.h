@@ -40,6 +40,9 @@ private slots:
     void id();
     void name();
     void address();
+    /** setAddress() keeps every bit of the universe: re-addressing a
+     *  fixture on universe 128+ doesn't move it 128 down (pb1). */
+    void addressKeepsHighUniverses();
     void lessThan();
     void type();
     void dimmer();

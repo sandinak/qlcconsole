@@ -422,6 +422,17 @@ void EffectScriptRunner::slotTick()
     // NOTE: no lock is held across runTick(). m_instances is main-thread-only
     // (see the header) and writeDMX() no longer reads it, so the MasterTimer
     // thread cannot be blocked by script evaluation here.
+    /* The "midi" data channel is rebuilt here, once per tick, not on every
+       input value: it is a few thousand QVariants per input universe, and
+       a busy input (16 universes of Art-Net, every channel changing, lands
+       on the note range too) rebuilt it ~90,000 times a second on the GUI
+       thread (pb5). Effects only read it here anyway. */
+    if (m_midiDirty)
+    {
+        m_midiDirty = false;
+        publishMidiData();
+    }
+
     QMutexLocker locker(&m_instanceMutex);
     bool anyTicked = false;
     for (EffectInstance *inst : m_instances)
@@ -647,7 +658,7 @@ void EffectScriptRunner::slotInputValueChanged(quint32 universe, quint32 channel
         {
             st.held[note] = false;   // release; keep velocity as decay ref
         }
-        publishMidiData();
+        m_midiDirty = true;
     }
     else if (channel == 64)   // CC64 sustain pedal
     {
@@ -656,7 +667,7 @@ void EffectScriptRunner::slotInputValueChanged(quint32 universe, quint32 channel
         if (sus != st.sustain)
         {
             st.sustain = sus;
-            publishMidiData();
+            m_midiDirty = true;
         }
     }
 
