@@ -33,6 +33,10 @@
 # Env:
 #   DRYRUN=1     pre-flight, plan and notes only: nothing is built or published
 #   SKIP_GATE=1  no check-all.sh run
+#   PERF_WAIVE=  "reason": publish without a passing performance guard on
+#                HEAD (make perf writes build-perf/guard-result.txt; a
+#                release needs perf=0 on its own commit -- docs/dev/RELEASE.md)
+#   PERF_RESULT= another guard result file than build-perf/guard-result.txt
 #   REPLACE=1    the tag (and its release) already exist: delete both and
 #                publish again -- only after the new DMG is built and verified
 #   TITLE=...    the release name (defaults above)
@@ -287,6 +291,17 @@ else
     problems+=("make-release.sh pre-flight:")
     while read -r l; do problems+=("    $l"); done < <(echo "$out" | grep -A3 '^ERROR')
   fi
+fi
+
+# The performance guard (make perf) on this very commit, within tolerance
+# of this Mac's baseline: a slowdown is a bug (docs/performance.md).
+PERF_RESULT="${PERF_RESULT:-build-perf/guard-result.txt}"
+if [ -n "${PERF_WAIVE:-}" ]; then
+  echo "  performance guard WAIVED: $PERF_WAIVE"
+elif grep -q "^perf=0 .*sha=$SHA " "$PERF_RESULT" 2>/dev/null; then
+  echo "  performance guard: $(cut -d' ' -f1-3 "$PERF_RESULT") ($(sed -n 's/.*date=//p' "$PERF_RESULT"))"
+else
+  problems+=("no passing performance guard on $REV: run 'make perf' (docs/dev/RELEASE.md step 0)$([ -f "$PERF_RESULT" ] && echo "; $PERF_RESULT says: $(cut -d' ' -f1-3 "$PERF_RESULT")"), or PERF_WAIVE='reason'")
 fi
 
 if [ ${#problems[@]} -gt 0 ]; then

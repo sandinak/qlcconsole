@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="450" viewBox="0 0 760 450" font-family="system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" role="img" aria-labelledby="t d">
+<title id="t">Engine cost over time (make perf)</title>
+<desc id="d">Each point is one guard run: the median of its metrics as a % of the host's own baseline.</desc>
+<rect x="0.5" y="0.5" width="759" height="449" rx="8" fill="#fcfcfb" stroke="#d9d8d2"/>
+<text x="20" y="30" font-size="16" font-weight="600" fill="#0b0b0b">Engine cost over time (make perf)</text>
+<text x="20" y="50" font-size="12.5" fill="#52514e">Each point is one guard run: the median of its metrics as a % of the host's own baseline.</text>
+<line x1="20" y1="70" x2="42" y2="70" stroke="#eb6834" stroke-width="2"/>
+<rect x="27" y="66" width="8" height="8" fill="#eb6834" stroke="#fcfcfb" stroke-width="1.5"></rect>
+<text x="50" y="74.5" font-size="12.5" fill="#0b0b0b">Intel i7-9750H (Linux container)</text>
+<line x1="306" y1="70" x2="328" y2="70" stroke="#eda100" stroke-width="2"/>
+<polygon points="317.4,64.8 322.6,70 317.4,75.2 312.2,70" fill="#eda100" stroke="#fcfcfb" stroke-width="1.5"></polygon>
+<text x="336" y="74.5" font-size="12.5" fill="#0b0b0b">Apple M4 Max Mac</text>
+<text x="20" y="93" font-size="11.5" fill="#6f6d68">Under 100% is faster. Hollow marker: a metric past its tolerance in that run</text>
+<line x1="70" y1="388" x2="610" y2="388" stroke="#e9e8e2" stroke-width="1"/>
+<text x="62" y="392" font-size="12" fill="#52514e" text-anchor="end">80</text>
+<line x1="70" y1="319" x2="610" y2="319" stroke="#e9e8e2" stroke-width="1"/>
+<text x="62" y="323" font-size="12" fill="#52514e" text-anchor="end">90</text>
+<line x1="70" y1="250" x2="610" y2="250" stroke="#e9e8e2" stroke-width="1"/>
+<text x="62" y="254" font-size="12" fill="#52514e" text-anchor="end">100</text>
+<line x1="70" y1="181" x2="610" y2="181" stroke="#e9e8e2" stroke-width="1"/>
+<text x="62" y="185" font-size="12" fill="#52514e" text-anchor="end">110</text>
+<line x1="70" y1="112" x2="610" y2="112" stroke="#e9e8e2" stroke-width="1"/>
+<text x="62" y="116" font-size="12" fill="#52514e" text-anchor="end">120</text>
+<line x1="70" y1="388" x2="70" y2="393" stroke="#c3c2b7" stroke-width="1"/>
+<text x="70" y="408" font-size="12" fill="#52514e" text-anchor="middle">Oct 28</text>
+<line x1="340" y1="388" x2="340" y2="393" stroke="#c3c2b7" stroke-width="1"/>
+<text x="340" y="408" font-size="12" fill="#52514e" text-anchor="middle">Oct 29</text>
+<line x1="610" y1="388" x2="610" y2="393" stroke="#c3c2b7" stroke-width="1"/>
+<text x="610" y="408" font-size="12" fill="#52514e" text-anchor="middle">Oct 30</text>
+<line x1="70" y1="388" x2="610" y2="388" stroke="#c3c2b7" stroke-width="1"/>
+<text x="340" y="432" font-size="12.5" fill="#52514e" text-anchor="middle">Date of the run</text>
+<text transform="translate(20 250) rotate(-90)" font-size="12.5" fill="#52514e" text-anchor="middle">Median metric, % of baseline</text>
+<line x1="70" y1="250" x2="610" y2="250" stroke="#52514e" stroke-width="1.25" stroke-dasharray="6 4"/>
+<text x="76" y="244" font-size="12" fill="#52514e" text-anchor="start">baseline</text>
+<path d="M416.3 249.1" fill="none" stroke="#eb6834" stroke-width="2" stroke-linejoin="round"/>
+<rect x="412.3" y="245.1" width="8" height="8" fill="#eb6834" stroke="#fcfcfb" stroke-width="1.5"><title>Intel i7-9750H (Linux container), 2026-10-29T06:47Z (rev 0302ef2f7a93): 100.1% of baseline over 48 metrics, 0 past tolerance</title></rect>
+<path d="M414.4 250" fill="none" stroke="#eda100" stroke-width="2" stroke-linejoin="round"/>
+<polygon points="414.4,244.8 419.6,250 414.4,255.2 409.2,250" fill="#eda100" stroke="#fcfcfb" stroke-width="1.5"><title>Apple M4 Max Mac, 2026-10-29T06:37Z (rev 0302ef2f7a93): 100% of baseline over 48 metrics, 0 past tolerance</title></polygon>
+<line x1="423.3" y1="249.1" x2="621" y2="249.1" stroke="#c3c2b7" stroke-width="1"/>
+<rect x="624.5" y="245.6" width="7" height="7" fill="#eb6834" stroke="#fcfcfb" stroke-width="1.5"></rect>
+<text x="637" y="253.1" font-size="12" fill="#0b0b0b">i7: 100%</text>
+<line x1="421.4" y1="250" x2="621" y2="265.1" stroke="#c3c2b7" stroke-width="1"/>
+<polygon points="628,260.4 632.7,265.1 628,269.8 623.3,265.1" fill="#eda100" stroke="#fcfcfb" stroke-width="1.5"></polygon>
+<text x="637" y="269.1" font-size="12" fill="#0b0b0b">M4 Max: 100%</text>
+</svg>

@@ -1,0 +1,60 @@
+# qlcconsole performance baseline: tools/perf/guard.py (docs/performance.md,
+# "Keeping it fast"). Rebase only on purpose, with the reason in the commit.
+# host_class: macos-apple-m4-max-10p4e
+# recorded: 2026-10-29T06:22Z
+# rev: 0302ef2f7a93 (the engine measured; recorded from the guard's work in progress on it)
+# qt: 6.11.1
+# cpu: Apple M4 Max
+# os: Darwin 27.0.0
+# runs: 3
+# seconds: 40+10
+# busy_pct: 45.8
+point,metric,unit,value,runs,spread_pct,tolerance_pct,floor
+a1p,rss_mb_per_universe,MB,1.4158,3,0.1,10.0,0.15
+a1p-u0008,cpu_pct,%,5.0681,3,5.5,15.0,5.0
+a1p-u0008,frame_p99_ms,ms,21.01,3,0.1,8.0,2.0
+a1p-u0008,rss_mb,MB,17.7194,3,1.4,10.0,8.0
+a1p-u0008,tick_cpu_ms,ms,0.09,3,6.5,15.0,0.05
+a1p-u0008,tick_p50_ms,ms,0.05,3,0.0,15.0,0.05
+a1p-u0008,tick_p99_ms,ms,1.04,3,2.9,25.0,0.5
+a1p-u0032,cpu_pct,%,22.2521,3,3.8,15.0,5.0
+a1p-u0032,frame_p99_ms,ms,21.78,3,0.7,8.0,2.0
+a1p-u0032,rss_mb,MB,37.0007,3,0.7,10.0,8.0
+a1p-u0032,tick_cpu_ms,ms,0.336,3,2.6,15.0,0.05
+a1p-u0032,tick_p50_ms,ms,0.3,3,10.0,20.0,0.05
+a1p-u0032,tick_p99_ms,ms,1.99,3,2.5,25.0,0.5
+a1p-u0128,cpu_pct,%,97.1077,3,3.9,15.0,5.0
+a1p-u0128,frame_p99_ms,ms,24.09,3,1.7,8.0,2.0
+a1p-u0128,rss_mb,MB,164.7352,3,0.2,10.0,8.0
+a1p-u0128,tick_cpu_ms,ms,1.5165,3,10.7,21.4,0.05
+a1p-u0128,tick_p50_ms,ms,2.17,3,11.5,23.0,0.05
+a1p-u0128,tick_p99_ms,ms,5.42,3,4.8,25.0,0.5
+a1p-u0256,cpu_pct,%,178.2819,3,3.7,15.0,5.0
+a1p-u0256,frame_p99_ms,ms,24.13,3,3.3,8.0,2.0
+a1p-u0256,rss_mb,MB,368.8448,3,0.1,10.0,8.0
+a1p-u0256,tick_cpu_ms,ms,1.5793,3,5.8,15.0,0.05
+a1p-u0256,tick_p50_ms,ms,2.19,3,5.0,15.0,0.05
+a1p-u0256,tick_p99_ms,ms,5.89,3,6.8,25.0,0.5
+c-efx-n0256,cpu_pct,%,31.9483,3,9.2,18.3,5.0
+c-efx-n0256,frame_p99_ms,ms,22.82,3,0.4,8.0,2.0
+c-efx-n0256,rss_mb,MB,35.2819,3,0.8,10.0,8.0
+c-efx-n0256,tick_cpu_ms,ms,4.0315,3,11.9,23.8,0.05
+c-efx-n0256,tick_p50_ms,ms,3.84,3,7.0,15.0,0.05
+c-efx-n0256,tick_p99_ms,ms,5.74,3,4.5,25.0,0.5
+c-matrix-n0064,cpu_pct,%,30.4256,3,6.2,15.0,5.0
+c-matrix-n0064,frame_p99_ms,ms,24.89,3,0.7,8.0,2.0
+c-matrix-n0064,rss_mb,MB,37.407,3,0.2,10.0,8.0
+c-matrix-n0064,tick_cpu_ms,ms,1.1144,3,5.1,15.0,0.05
+c-matrix-n0064,tick_p50_ms,ms,2.18,3,5.5,15.0,0.05
+c-matrix-n0064,tick_p99_ms,ms,5.87,3,3.2,25.0,0.5
+cp-chasers-n0064,cpu_pct,%,31.418,3,2.3,15.0,5.0
+cp-chasers-n0064,frame_p99_ms,ms,21.7,3,0.3,8.0,2.0
+cp-chasers-n0064,rss_mb,MB,40.532,3,0.1,10.0,8.0
+cp-chasers-n0064,tick_cpu_ms,ms,0.6036,3,2.9,15.0,0.05
+cp-chasers-n0064,tick_p50_ms,ms,0.53,3,1.9,15.0,0.05
+cp-chasers-n0064,tick_p99_ms,ms,1.98,3,5.6,25.0,0.5
+hotpath,genericfader_write_510_ns,ns,10727.6,3,4.5,15.0,0.0
+hotpath,inputpatch_frame_512_ns,ns,14305.1,3,2.4,15.0,0.0
+hotpath,rgbscript_map_16x16_ns,ns,3765.6,3,10.7,21.5,0.0
+hotpath,scene_frame_170_ns,ns,11150.6,3,1.9,15.0,0.0
+hotpath,universe_frame_510_ns,ns,3014.7,3,5.2,15.0,0.0

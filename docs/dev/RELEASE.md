@@ -131,7 +131,15 @@ Manage Certificates, and `xcrun notarytool store-credentials qlc-notary
 Steps:
 
 0. Run `./check-all.sh` — the full test gate: Qt6 Debug, Release (one
-   shipped bug only showed at -O2) and warnings-as-errors.
+   shipped bug only showed at -O2) and warnings-as-errors. Then, on the
+   release commit itself (after step 3's commit), `make perf`: the
+   performance guard against this Mac's baseline, about 5 minutes on an
+   idle machine. `make beta` / `make release` refuse to publish without
+   `perf=0` for HEAD in `build-perf/guard-result.txt` (`PERF_WAIVE="reason"`
+   publishes anyway; say why in the notes). A regression is a release bug.
+   If the release moves the envelope (a faster engine, or a slowdown taken
+   on purpose), rerun the sweeps and update
+   [docs/performance.md](../performance.md#keeping-it-fast) as it says.
 1. Bump `VERSION` to the new release number.
 2. Add a `## [X.Y.Z] - YYYY-MM-DD` section to [CHANGELOG.md](../../CHANGELOG.md)
    summarizing what shipped since the last release (pull the user-facing

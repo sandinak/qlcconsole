@@ -12,7 +12,7 @@ SHELL := /bin/bash
 DEV_APP ?= $(HOME)/Applications/qlcconsole-dev.app
 export DEV_APP
 
-.PHONY: help test run check quick pool pool-status dmg release-check beta release attach publish
+.PHONY: help test run check quick pool pool-status perf perf-record dmg release-check beta release attach publish
 
 help:
 	@v=$$(cat VERSION); \
@@ -35,6 +35,12 @@ help:
 	echo "  make pool       The full gate of a committed REV (default HEAD) on whichever Mac"; \
 	echo "                  of platforms/macos/gate-hosts.conf is idle (HOST=name to pick);"; \
 	echo "                  ends with gate=N host=... qt=... rev=...  make pool-status: who's free."; \
+	echo "  make perf       The performance guard (tools/perf/guard.py, ~5 min): a Release engine"; \
+	echo "                  (build-perf/) under the stress harness at fixed loads + the hot-path"; \
+	echo "                  CPU costs, against this machine's baseline in docs/perf-data/;"; \
+	echo "                  ends with perf=0 (within tolerance) or perf=1 (a regression)."; \
+	echo "  make perf-record  Record or rebase this machine's baseline (3 runs, ~18 min);"; \
+	echo "                  commit it with the reason. HOST_CLASS=name names the machine."; \
 	echo "  make dmg        The signed release DMG of a committed HEAD: universal Release build"; \
 	echo "                  (build-universal/), Developer ID sign, notarize (qlc-notary), staple;"; \
 	echo "                  dist/qlcconsole-$$v-universal-<date>-<rev>.dmg + dist/SHA256SUMS."; \
@@ -82,6 +88,12 @@ pool:
 
 pool-status:
 	@platforms/macos/gate-pool.sh --status
+
+perf:
+	python3 tools/perf/guard.py $(if $(HOST_CLASS),--host-class $(HOST_CLASS)) $(PERF_ARGS)
+
+perf-record:
+	python3 tools/perf/guard.py --record $(if $(HOST_CLASS),--host-class $(HOST_CLASS)) $(PERF_ARGS)
 
 dmg:
 	@platforms/macos/make-release.sh
