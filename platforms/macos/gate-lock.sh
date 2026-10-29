@@ -29,7 +29,8 @@
 #
 #   gl_holder [OWN-ID]   print what holds the host, one line each ("note:"
 #                        lines: stale ones cleared); nothing = free
-#   gl_try ID SHA        take the lock: last line "@@ok", or "@@busy WHAT"
+#   gl_try ID SHA [FROM] take the lock (FROM: the Mac that asks): last line
+#                        "@@ok", or "@@busy WHAT"
 #   gl_release ID        drop the lock if ID holds it and its gate is not
 #                        running (a gate still running keeps it; it drops
 #                        it itself when done: gl_done)
@@ -123,7 +124,7 @@ gl_holder() {
 }
 
 gl_try() {
-    local id=$1 sha=$2 G held
+    local id=$1 sha=$2 from=${3:-} G held
     G=$(gl_g)
     mkdir -p "$G"
     held=$(gl_holder "$id")
@@ -138,7 +139,7 @@ gl_try() {
         return 0
     fi
     if mkdir "$G/.gatelock" 2>/dev/null; then
-        printf 'id=%s\nsha=%s\nsince=%s\nfrom=%s\n' "$id" "$sha" "$(gl_now)" "$(hostname -s 2>/dev/null)" \
+        printf 'id=%s\nsha=%s\nsince=%s\nfrom=%s\n' "$id" "$sha" "$(gl_now)" "${from:-$(hostname -s 2>/dev/null)}" \
             > "$G/.gatelock/info.$$" && mv "$G/.gatelock/info.$$" "$G/.gatelock/info"
         echo "@@ok"
         return 0

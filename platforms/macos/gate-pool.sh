@@ -168,7 +168,7 @@ fail() { # <code> <why>
 WAITED=0; DOWN=0; SAID=""
 trap 'echo; fail 130 "stopped while waiting for $NAME"' INT TERM
 while :; do
-    out=$(onlock $H <<<"gl_try '$ID' '$SHA'" 2>/dev/null)
+    out=$(onlock $H <<<"gl_try '$ID' '$SHA' '$(hostname -s)'" 2>/dev/null)
     last=$(printf '%s\n' "$out" | tail -n 1)
     if [ "${last#@@}" != "$last" ]; then
         DOWN=0
