@@ -192,6 +192,9 @@ Every left-hand column still works, in the Classic QLC+ view.
 
 ## Getting help
 
+- **Help ▸ Troubleshooting ▸ Report a Bug…** opens a GitHub issue with
+  the app's version and system details filled in (and nothing from your
+  show but counts); see [Reporting a bug](troubleshooting.md#reporting-a-bug).
 - **qlcconsole's issues** on
   [GitHub](https://github.com/sandinak/qlcconsole/issues), for anything
   in this app, its QLC+ 4 parts included. Not the upstream forum: its
