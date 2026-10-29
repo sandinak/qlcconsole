@@ -916,4 +916,66 @@ void MasterTimer_Test::fadeAndStopAllFadesTheOutputThenStops()
     delete doc;
 }
 
+namespace
+{
+/* Asks for a beat from inside a tick, once, and notes what each tick says */
+class BeatProbe final : public DMXSource
+{
+public:
+    void writeDMX(MasterTimer *timer, QList<Universe *>) override
+    {
+        seen.append(timer->isBeat());
+        if (seen.size() == 1)
+            timer->requestBeat();
+    }
+    QList<bool> seen;
+};
+}
+
+void MasterTimer_Test::aBeatDuringATickIsTheNextTicksBeat()
+{
+    MasterTimer *mt = m_doc->masterTimer();
+    mt->setBeatSourceType(MasterTimer::External);
+    BeatProbe probe;
+    mt->registerDMXSource(&probe);
+    mt->timerTick(false);   // asks during this one
+    mt->timerTick(false);   // ... so this one is on the beat
+    mt->timerTick(false);   // and only that one
+    mt->unregisterDMXSource(&probe);
+    mt->setBeatSourceType(MasterTimer::None);
+    QCOMPARE(probe.seen, QList<bool>({ false, true, false }));
+    QVERIFY(!mt->isBeat());
+}
+
+void MasterTimer_Test::elapsedIsReadWhileTheTimerAdvancesIt()
+{
+    MasterTimer *mt = m_doc->masterTimer();
+    Fixture *fxi = new Fixture(m_doc);
+    fxi->setChannels(1);
+    QVERIFY(m_doc->addFixture(fxi));
+    Scene *scene = new Scene(m_doc);
+    scene->addFixture(fxi->id());
+    scene->setValue(fxi->id(), 0, 200);
+    QVERIFY(m_doc->addFunction(scene));
+
+    mt->start();
+    scene->start(mt, FunctionParent::master());
+    QTRY_VERIFY_WITH_TIMEOUT(scene->isRunning(), 2000 * clockSlack());
+    quint32 last = 0;
+    bool rising = true;
+    QElapsedTimer t;
+    t.start();
+    while (t.elapsed() < 200)
+    {
+        const quint32 e = scene->elapsed();
+        rising = rising && e >= last;
+        last = e;
+    }
+    scene->stop(FunctionParent::master());
+    QTRY_VERIFY_WITH_TIMEOUT(!scene->isRunning(), 2000 * clockSlack());
+    mt->stop();
+    QVERIFY(rising);
+    QVERIFY(last > 0);
+}
+
 QTEST_MAIN(MasterTimer_Test)

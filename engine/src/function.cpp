@@ -1128,41 +1128,40 @@ bool Function::isPaused() const
 
 quint32 Function::elapsed() const
 {
-    return m_elapsed;
+    return m_elapsed.load(std::memory_order_relaxed);
 }
 
 quint32 Function::elapsedBeats() const
 {
-    return m_elapsedBeats;
+    return m_elapsedBeats.load(std::memory_order_relaxed);
 }
 
 void Function::resetElapsed()
 {
     qDebug() << Q_FUNC_INFO;
-    m_elapsed = 0;
-    m_elapsedBeats = 0;
+    m_elapsed.store(0, std::memory_order_relaxed);
+    m_elapsedBeats.store(0, std::memory_order_relaxed);
 }
 
 void Function::incrementElapsed()
 {
     // Don't wrap around. UINT_MAX is the maximum fade/hold time.
-    if (m_elapsed < UINT_MAX - MasterTimer::tick())
-        m_elapsed += MasterTimer::tick();
-    else
-        m_elapsed = UINT_MAX;
+    // One writer (the timer thread): a load and a store, no locked add.
+    const quint32 e = m_elapsed.load(std::memory_order_relaxed);
+    m_elapsed.store(e < UINT_MAX - MasterTimer::tick() ? e + MasterTimer::tick() : UINT_MAX,
+                    std::memory_order_relaxed);
 }
 
 void Function::incrementElapsedBeats()
 {
-    m_elapsedBeats += 1000;
+    m_elapsedBeats.store(m_elapsedBeats.load(std::memory_order_relaxed) + 1000,
+                         std::memory_order_relaxed);
 }
 
 void Function::roundElapsed(quint32 roundTime)
 {
-    if (roundTime == 0)
-        m_elapsed = 0;
-    else
-        m_elapsed %= roundTime;
+    const quint32 e = m_elapsed.load(std::memory_order_relaxed);
+    m_elapsed.store(roundTime == 0 ? 0 : e % roundTime, std::memory_order_relaxed);
 }
 
 /*****************************************************************************
@@ -1193,8 +1192,8 @@ void Function::start(MasterTimer* timer, FunctionParent source, quint32 startTim
         return;
     }
 
-    m_elapsed = startTime;
-    m_elapsedBeats = 0;
+    m_elapsed.store(startTime, std::memory_order_relaxed);
+    m_elapsedBeats.store(0, std::memory_order_relaxed);
     m_overrideFadeInSpeed = overrideFadeIn;
     m_overrideFadeOutSpeed = overrideFadeOut;
     m_overrideDuration = overrideDuration;

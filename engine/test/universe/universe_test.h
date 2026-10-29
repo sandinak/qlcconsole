@@ -52,6 +52,10 @@ private slots:
     void aWritePastTheEndKeepsToTheUniverse();
     void reset();
     void faderPriorityMovesBothWays();
+    /** The universe's value arrays are never shared, so a frame never
+     *  reallocates one under a per-channel read from another thread
+     *  (TSan L2). */
+    void theValueArraysAreNeverShared();
 
     void loadEmpty();
     void loadPassthroughTrue();
