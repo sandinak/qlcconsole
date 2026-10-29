@@ -327,7 +327,7 @@ void QLCFile_Test::windowsLegacyFilesAreCopiedNotShortcut()
     QVERIFY(!QLCFile::isWindowsShortcut(oldFixtures + "/Legacy-Test.qxf"));
 
     QLCFile::mergeLegacyUserData(roots);
-    for (const QString name : { QStringLiteral("Legacy-Test.qxf"), QStringLiteral("Old-Shortcut.qxf"),
+    for (const QString &name : { QStringLiteral("Legacy-Test.qxf"), QStringLiteral("Old-Shortcut.qxf"),
                                 QStringLiteral("Broken.qxf") })
     {
         const QFileInfo fi(newFixtures + "/" + name);
