@@ -106,6 +106,7 @@ per lesson, with five pages and a small index:
 | `slides.md` | the teacher | an outline, one heading per slide |
 | `exit-ticket.md` | students | 3–4 short questions on paper |
 | `at-home.md` | students | **A.** the same task on a home computer, **B.** a paper version (no computer, or a Chromebook) |
+| `student.md` | students | the student page, `/class/N-N/` on the site: today in one line, the show file, a short word list, the steps (one action each, the handout's pictures), the exit ticket without answers, the at-home task in two lines. Under ~500 words; no links to teacher material |
 
 Copy the [`_template/`](https://github.com/sandinak/qlcconsole/tree/main/docs/course/_template) folder to start a new lesson.
 

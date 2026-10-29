@@ -107,6 +107,17 @@ skipped). Upstream fixes taken:
   computer** in the help sums it up. The charts are made by
   `tools/perf/plot.py` from `docs/perf-data/`; the measuring tools are in
   `stresstest/`.
+- **Course: a student page per lesson**, a short link to give the class
+  (`https://sandinak.github.io/qlcconsole/class/1-1/`, and 0.1, 0.2,
+  1.1–1.5, the Level 1 check, 3.3, 3.6, 3.7, 3.10, plus a student install
+  page). Each is everything a student needs for that lesson and nothing
+  else: the show file to download, the steps with the lesson's pictures,
+  the words, the exit ticket without answers and the at-home task, at
+  about a third of the handout's length. They have their own plain layout
+  (no sidebar, search or links into the teacher material, phone-width,
+  light and dark, no JavaScript) and are left out of the course site's
+  menu and search. Each teacher guide starts with its link and a QR code;
+  `docs/course/tools/student-pages.py` checks the pages.
 
 ### Changed
 

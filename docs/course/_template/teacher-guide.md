@@ -9,6 +9,10 @@ nav_order: 1
 
 **Teacher guide** · Level N, lesson N · 50 minutes
 
+**Give students:** <https://sandinak.github.io/qlcconsole/class/N-N/> (the show file, the steps, the exit ticket and the at-home task; nothing else)
+
+<img src="../../images/qr/class-N-N.svg" width="120" alt="QR code for https://sandinak.github.io/qlcconsole/class/N-N/">
+
 ## Objectives
 
 Students can:

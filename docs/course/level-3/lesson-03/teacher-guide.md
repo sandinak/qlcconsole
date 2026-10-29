@@ -9,6 +9,10 @@ nav_order: 1
 
 **Teacher guide** · Level 3, lesson 3 · 50 minutes
 
+**Give students:** <https://sandinak.github.io/qlcconsole/class/3-3/> (the show file, the steps, the exit ticket and the at-home task; nothing else)
+
+<img src="../../images/qr/class-3-3.svg" width="120" alt="QR code for https://sandinak.github.io/qlcconsole/class/3-3/">
+
 ## Objectives
 
 Students can:

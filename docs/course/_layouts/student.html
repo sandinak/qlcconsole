@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<!-- The student page of a lesson (/class/N-N/): a page of its own, with no
+     sidebar, no search and no links into the teacher material. Its text is
+     the lesson's student.md; see docs/course/README.md. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>{% if page.lesson %}{{ page.lesson }}: {% endif %}{{ page.title }}</title>
+<style>
+:root {
+  --bg: #ffffff; --fg: #1d1f23; --muted: #5b616b; --line: #d9dce1;
+  --panel: #f3f5f8; --link: #0b5cad; --accent: #7a2e8c;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #15171b; --fg: #e7e9ed; --muted: #a3a9b3; --line: #353a42;
+    --panel: #1f2329; --link: #7db8ff; --accent: #d79be6;
+  }
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font: 17px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+main { max-width: 44rem; margin: 0 auto; padding: 1rem 16px 3rem; }
+a { color: var(--link); }
+h1 { font-size: 1.6rem; line-height: 1.25; margin: .2rem 0 .5rem; }
+h2 { font-size: 1.2rem; margin: 2rem 0 .6rem; padding-top: .8rem;
+     border-top: 1px solid var(--line); }
+.kicker { margin: 0; color: var(--accent); font-weight: 600;
+          text-transform: uppercase; letter-spacing: .05em; font-size: .85rem; }
+.today { font-size: 1.1rem; margin: 0 0 1rem; }
+.box { background: var(--panel); border: 1px solid var(--line);
+       border-radius: 8px; padding: .8rem 1rem; margin: 1rem 0; }
+.box h2 { border: 0; margin: 0 0 .4rem; padding: 0; font-size: 1rem; }
+.box ul { margin: 0; padding-left: 1.2rem; }
+.box p { margin: .5rem 0 0; color: var(--muted); font-size: .95rem; }
+details.words summary { cursor: pointer; font-weight: 600; }
+details.words dl { margin: .6rem 0 0; }
+details.words dt { font-weight: 600; margin-top: .5rem; }
+details.words dd { margin: 0; }
+details.words dd p { margin: 0; color: var(--fg); font-size: 1rem; }
+img { max-width: 100%; height: auto; border-radius: 6px;
+      border: 1px solid var(--line); display: block; margin: .6rem 0; }
+td img { margin: 0; }
+li { margin: .35rem 0; }
+table { border-collapse: collapse; display: block; overflow-x: auto;
+        margin: .8rem 0; font-size: .95rem; }
+th, td { border: 1px solid var(--line); padding: .35rem .55rem;
+         text-align: left; vertical-align: top; }
+th { background: var(--panel); }
+code { font-size: .92em; background: var(--panel); padding: .05em .3em;
+       border-radius: 4px; }
+pre { background: var(--panel); border: 1px solid var(--line);
+      border-radius: 6px; padding: .6rem .8rem; overflow-x: auto; }
+pre code { background: none; padding: 0; }
+footer { margin-top: 3rem; color: var(--muted); font-size: .85rem; }
+</style>
+</head>
+<body>
+<main>
+<header>
+{% if page.lesson %}<p class="kicker">{{ page.lesson }}</p>{% endif %}
+<h1>{{ page.title }}</h1>
+{% if page.today %}<p class="today">{{ page.today | markdownify | remove: '<p>' | remove: '</p>' | strip }}</p>{% endif %}
+</header>
+{% if page.files or page.app or page.web %}
+<section class="box">
+<h2>Open</h2>
+<ul>
+{% for f in page.files %}<li>Download <a href="{{ '/shows/' | append: f | relative_url }}" download><code>{{ f }}</code></a> into <strong>Documents → qlcconsole</strong></li>
+{% endfor %}{% if page.app %}<li>qlcconsole not on this computer? <a href="{{ '/class/install/' | relative_url }}">Install qlcconsole</a></li>
+{% endif %}{% if page.web %}<li>On a Chromebook or without the app: <a href="{{ '/web/' | relative_url }}">the practice version</a>, in the browser</li>
+{% endif %}</ul>
+{% if page.app %}<p>On Windows or Linux, ⌘ means <strong>Ctrl</strong>.</p>{% endif %}
+</section>
+{% endif %}
+{% if page.words %}
+<details class="box words">
+<summary>Words for today</summary>
+<dl>
+{% for w in page.words %}<dt>{{ w.term }}</dt><dd>{{ w.means | markdownify }}</dd>
+{% endfor %}</dl>
+</details>
+{% endif %}
+{{ content }}
+<footer>Course text and pictures: CC BY 4.0.</footer>
+</main>
+</body>
+</html>

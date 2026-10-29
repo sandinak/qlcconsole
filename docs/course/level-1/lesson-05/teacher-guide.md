@@ -10,6 +10,10 @@ nav_order: 1
 **Teacher guide** · Level 1, lesson 5 · 50 minutes · then the
 [Level 1 check](level-check.md)
 
+**Give students:** <https://sandinak.github.io/qlcconsole/class/1-5/> (the show file, the steps, the exit ticket and the at-home task; nothing else), and for the Level 1 check <https://sandinak.github.io/qlcconsole/class/1-check/>
+
+<img src="../../images/qr/class-1-5.svg" width="120" alt="QR code for https://sandinak.github.io/qlcconsole/class/1-5/"> <img src="../../images/qr/class-1-check.svg" width="120" alt="QR code for https://sandinak.github.io/qlcconsole/class/1-check/">
+
 ## Objectives
 
 Students can:
