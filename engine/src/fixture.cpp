@@ -807,6 +807,7 @@ void Fixture::setFixtureDefinition(QLCFixtureDef* fixtureDef,
     }
 
     m_autoStageLook.store(int(computeAutoStageLook()), std::memory_order_relaxed);
+    m_hasDimmer.store(computeHasDimmer(), std::memory_order_relaxed);
     emit changed(m_id);
 }
 
@@ -937,6 +938,22 @@ QString Fixture::stageLookSectionName(StageLookSection section)
         case PracticalSection:
         default:                  return tr("Practicals");
     }
+}
+
+bool Fixture::computeHasDimmer() const
+{
+    if (m_fixtureMode == NULL)
+        return false;
+    if (masterIntensityChannel() != QLCChannel::invalid())
+        return true;
+    for (int h = 0; h < heads(); h++)
+    {
+        const quint32 ch = channelNumber(QLCChannel::Intensity, QLCChannel::MSB, h);
+        const QLCChannel *c = ch != QLCChannel::invalid() ? channel(ch) : NULL;
+        if (c != NULL && c->colour() == QLCChannel::NoColour)
+            return true;
+    }
+    return false;
 }
 
 Fixture::StageLook Fixture::computeAutoStageLook() const
