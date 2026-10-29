@@ -3690,8 +3690,23 @@ static bool lessonTwoTwoByMouse(Doc *doc, ShowTreeView *view, const QString &sho
         // the swatch grid (Qt's QColorWell, 8 columns of 6).
         QWidget *well = nullptr;
         for (QWidget *w : colour->findChildren<QWidget *>())
-            if (QLatin1String(w->metaObject()->className()) == QLatin1String("QColorWell") && well == nullptr)
+        {
+            // Qt 6.12 names it QColorWell; Qt 6.9 shows only its base,
+            // QtPrivate::QWellArray. The basic colours are the tall one
+            // (6 rows; the custom colours are 2).
+            const QLatin1String kind(w->metaObject()->className());
+            if ((kind.endsWith(QLatin1String("QColorWell")) || kind.endsWith(QLatin1String("QWellArray")))
+                && (well == nullptr || w->height() > well->height()))
                 well = w;
+        }
+        if (well == nullptr)
+        {
+            QStringList kinds;
+            for (QWidget *w : colour->findChildren<QWidget *>())
+                kinds << QStringLiteral("%1/%2 %3x%4").arg(QLatin1String(w->metaObject()->className()), w->objectName())
+                             .arg(w->width()).arg(w->height());
+            qWarning().noquote() << "[2.2] colour dialog children:" << kinds.join(", ");
+        }
         LESSON_STEP(well != nullptr, "no Basic colors grid");
         const QPoint cell(well->width() * 3 / 16, well->height() * 5 / 12);     // column 2, row 3
         QTest::mouseClick(well, Qt::LeftButton, Qt::NoModifier, cell);
