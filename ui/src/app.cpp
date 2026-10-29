@@ -6851,10 +6851,12 @@ bool App::eventFilter(QObject *watched, QEvent *event)
             const quint32 uniID = m_doc->inputOutputMap()->getUniverseID(i);
             InputPatch *ip = m_doc->inputOutputMap()->inputPatch(uniID);
             const bool isMidi = (ip != NULL && ip->pluginName() == "MIDI");
+            // Art-Net carries ArtTimeCode, which follows the same path as MTC
+            const bool isArtNet = (ip != NULL && ip->pluginName() == "ArtNet");
             const bool selected = (qint32(uniID) == cur);
             const bool sawCode = (tc != NULL && tc->lastUniverse() == qint32(uniID));
 
-            if (isMidi)
+            if (isMidi || isArtNet)
                 midiInputs++;
             else if (selected == false && sawCode == false)
                 continue;
@@ -6864,6 +6866,8 @@ bool App::eventFilter(QObject *watched, QEvent *event)
                 nm = tr("Universe %1").arg(i + 1);
             if (isMidi)
                 nm += QString("  —  %1").arg(ip->inputName());
+            else if (isArtNet)
+                nm += tr("  —  Art-Net TimeCode (%1)").arg(ip->inputName());
             else if (ip != NULL && ip->pluginName().isEmpty() == false)
                 nm += tr("  —  %1 input: cannot carry MTC").arg(ip->pluginName());
             else
@@ -6885,7 +6889,7 @@ bool App::eventFilter(QObject *watched, QEvent *event)
         menu.addSeparator();
         if (midiInputs == 0)
         {
-            QAction *warn = menu.addAction(tr("⚠ No MIDI input patched — no MTC can arrive"));
+            QAction *warn = menu.addAction(tr("⚠ No MIDI or Art-Net input patched — no timecode can arrive"));
             warn->setEnabled(false);
         }
         else if (tc != NULL && tc->lastUniverse() >= 0)

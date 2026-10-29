@@ -276,8 +276,9 @@ QGroupBox *ShowControlSyncPage::buildMtcGroup()
     m_mtcSourceCombo = new QComboBox(box);
     m_mtcSourceCombo->setObjectName(QStringLiteral("scMtcSource"));
     m_mtcSourceCombo->setSizeAdjustPolicy(QComboBox::AdjustToContents);
-    m_mtcSourceCombo->setToolTip(tr("Which universe's MIDI input the timecode is taken from. "
-                                    "The same choice as the footer's MTC chip."));
+    m_mtcSourceCombo->setToolTip(tr("Which universe's input the timecode is taken from: MIDI "
+                                    "timecode on a MIDI input, Art-Net TimeCode on an Art-Net "
+                                    "input. The same choice as the footer's MTC chip."));
     connect(m_mtcSourceCombo, &QComboBox::activated,
             this, &ShowControlSyncPage::slotMtcSourceActivated);
     form->addRow(tr("Source:"), m_mtcSourceCombo);
@@ -535,6 +536,11 @@ void ShowControlSyncPage::refreshMidiInputs()
             name += QStringLiteral("  —  %1").arg(ip->inputName());
             midi << name;
             patchedMidiInputs << ip->inputName();
+        }
+        else if (ip != nullptr && ip->pluginName() == QLatin1String("ArtNet"))
+        {
+            // Art-Net TimeCode follows the same path as MTC
+            name += tr("  —  Art-Net TimeCode (%1)").arg(ip->inputName());
         }
         else if (!selected && !sawCode)
         {

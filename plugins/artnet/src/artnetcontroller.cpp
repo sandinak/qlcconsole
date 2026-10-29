@@ -618,6 +618,36 @@ bool ArtNetController::handleArtNetIpProgReply(const QByteArray &datagram,
     return true;
 }
 
+bool ArtNetController::handleArtNetTimeCode(const QByteArray &datagram,
+                                            const QHostAddress &senderAddress)
+{
+    Q_UNUSED(senderAddress);
+
+    quint32 msPosition;
+    uchar fps;
+    if (m_packetizer->fillTimeCode(datagram, msPosition, fps) == false)
+    {
+        qWarning() << "[ArtNet] Bad ArtTimeCode packet received";
+        return false;
+    }
+
+    /* Timecode is for the line, not for a DMX universe: hand it on once,
+       through the first universe this line is an input of (its InputPatch
+       forwards it to the show's timecode source). With no input patched
+       the console isn't listening to Art-Net, and it is ignored. */
+    for (QMap<quint32, UniverseInfo>::const_iterator it = m_universeMap.constBegin();
+         it != m_universeMap.constEnd(); ++it)
+    {
+        if (it.value().type & Input)
+        {
+            ++m_packetReceived;
+            emit timeCodeChanged(it.key(), m_line, msPosition, fps);
+            return true;
+        }
+    }
+    return false;
+}
+
 bool ArtNetController::handlePacket(QByteArray const& datagram, QHostAddress const& senderAddress)
 {
     //if (senderAddress.toIPv4Address() == m_ipAddr.toIPv4Address())
@@ -644,6 +674,8 @@ bool ArtNetController::handlePacket(QByteArray const& datagram, QHostAddress con
                 return handleArtNetRDM(datagram, senderAddress);
             case ARTNET_IPREPLY:
                 return handleArtNetIpProgReply(datagram, senderAddress);
+            case ARTNET_TIMECODE:
+                return handleArtNetTimeCode(datagram, senderAddress);
             default:
                 qDebug().nospace().noquote() << "[ArtNet] opCode not supported yet (0x" << QString::number(opCode, 16) << ")";
                 break;

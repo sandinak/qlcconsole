@@ -177,6 +177,10 @@ skipped). Upstream fixes taken:
   every step are made and checked by
   `courseshow_test` (`levelTwoWithTheMouse`, `buildLevelTwoShows`,
   `levelTwoPictures`).
+- **Art-Net TimeCode in**: a show follows Art-Net TimeCode (ArtTimeCode)
+  as it follows MIDI timecode. Patch an Art-Net input and it is offered
+  as a timecode source, in the footer's MTC chip and in Connections ▸
+  Show control & sync. All four rates are read (24, 25, 29.97 DF, 30).
 
 ### Changed
 

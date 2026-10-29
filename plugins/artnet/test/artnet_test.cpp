@@ -2494,6 +2494,85 @@ void ArtNet_Test::artDmxInputEmitsChangedChannels()
     QCOMPARE(ctrl->getPacketReceivedNumber(), before + 3);
 }
 
+void ArtNet_Test::artTimeCodeParsesEveryRate()
+{
+    ArtNetPacketizer ap;
+    QByteArray pkt;
+    quint32 ms = 0;
+    uchar fps = 0;
+
+    // 01:02:03:12 at 25 fps (EBU)
+    ap.setupArtNetTimeCode(pkt, 1, 2, 3, 12, 1);
+    QCOMPARE(pkt.size(), 19);
+    quint16 code = 0;
+    QVERIFY(ap.checkPacketAndCode(pkt, code));
+    QCOMPARE(code, quint16(ARTNET_TIMECODE));
+    QVERIFY(ap.fillTimeCode(pkt, ms, fps));
+    QCOMPARE(ms, quint32((3600 + 120 + 3) * 1000 + 480));
+    QCOMPARE(int(fps), 25);
+
+    // Film 24: frame 12 is half a second
+    ap.setupArtNetTimeCode(pkt, 0, 0, 10, 12, 0);
+    QVERIFY(ap.fillTimeCode(pkt, ms, fps));
+    QCOMPARE(ms, quint32(10500));
+    QCOMPARE(int(fps), 24);
+
+    // SMPTE 30: frame 15 is half a second
+    ap.setupArtNetTimeCode(pkt, 0, 0, 0, 15, 3);
+    QVERIFY(ap.fillTimeCode(pkt, ms, fps));
+    QCOMPARE(ms, quint32(500));
+    QCOMPARE(int(fps), 30);
+
+    // 29.97 DF: nominal 30
+    ap.setupArtNetTimeCode(pkt, 0, 1, 0, 0, 2);
+    QVERIFY(ap.fillTimeCode(pkt, ms, fps));
+    QCOMPARE(ms, quint32(60000));
+    QCOMPARE(int(fps), 30);
+
+    // Out of range or short: dropped
+    ap.setupArtNetTimeCode(pkt, 0, 0, 0, 25, 1);     // frame 25 at 25 fps
+    QVERIFY(!ap.fillTimeCode(pkt, ms, fps));
+    ap.setupArtNetTimeCode(pkt, 0, 60, 0, 0, 3);     // minute 60
+    QVERIFY(!ap.fillTimeCode(pkt, ms, fps));
+    ap.setupArtNetTimeCode(pkt, 0, 0, 0, 0, 4);      // no such type
+    QVERIFY(!ap.fillTimeCode(pkt, ms, fps));
+    ap.setupArtNetTimeCode(pkt, 0, 0, 0, 0, 3);
+    QVERIFY(!ap.fillTimeCode(pkt.left(18), ms, fps));
+}
+
+void ArtNet_Test::artTimeCodeReachesTheTimecodeFollow()
+{
+    QObject owner;
+    QList<QNetworkDatagram> sink;
+    ArtNetController *ctrl = sinkController(&owner, &sink);
+    QSignalSpy tc(ctrl, SIGNAL(timeCodeChanged(quint32,quint32,quint32,uchar)));
+
+    ArtNetPacketizer ap;
+    QByteArray pkt;
+    ap.setupArtNetTimeCode(pkt, 0, 0, 2, 0, 3);
+
+    // No input on the line: the console isn't listening to Art-Net
+    ctrl->addUniverse(4, ArtNetController::Output);
+    QCOMPARE(ctrl->handlePacket(pkt, QHostAddress("172.18.2.10")), false);
+    QCOMPARE(tc.count(), 0);
+
+    // Two inputs: one position, on the first of them (once, not twice)
+    ctrl->addUniverse(7, ArtNetController::Input);
+    ctrl->addUniverse(5, ArtNetController::Input);
+    const quint64 before = ctrl->getPacketReceivedNumber();
+    QVERIFY(ctrl->handlePacket(pkt, QHostAddress("172.18.2.10")));
+    QCOMPARE(tc.count(), 1);
+    QCOMPARE(tc.at(0).at(0).toUInt(), 5u);          // QLC+ universe
+    QCOMPARE(tc.at(0).at(1).toUInt(), 0u);          // line
+    QCOMPARE(tc.at(0).at(2).toUInt(), 2000u);       // ms
+    QCOMPARE(int(tc.at(0).at(3).value<uchar>()), 30);
+    QCOMPARE(ctrl->getPacketReceivedNumber(), before + 1);
+
+    // A bad one is dropped without a word to the show
+    QCOMPARE(ctrl->handlePacket(pkt.left(15), QHostAddress("172.18.2.10")), false);
+    QCOMPARE(tc.count(), 1);
+}
+
 void ArtNet_Test::pollTimerFollowsOutputs()
 {
     QObject owner;

@@ -124,6 +124,8 @@ private slots:
      *  a node saw the sequence jump by 18). */
     void dmxSequenceCountsPerNode();
     void artDmxInputEmitsChangedChannels();
+    void artTimeCodeParsesEveryRate();
+    void artTimeCodeReachesTheTimecodeFollow();
     void pollTimerFollowsOutputs();
     void pollBytes();
     void pollReplyLayout();

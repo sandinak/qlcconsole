@@ -180,6 +180,11 @@ public:
      *  request this is a query that changes nothing. */
     void setupArtNetIpProg(QByteArray& data, const ArtNetIpProgRequest &request);
 
+    /** Prepare an ArtTimeCode packet (OpCode 0x9700, 19 bytes). @a type is
+     *  Art-Net's: 0 Film (24), 1 EBU (25), 2 DF (29.97), 3 SMPTE (30). */
+    void setupArtNetTimeCode(QByteArray& data, uchar hours, uchar minutes,
+                             uchar seconds, uchar frames, uchar type);
+
     /*********************************************************************
      * Receiver functions
      *********************************************************************/
@@ -194,6 +199,11 @@ public:
 
     /** Process a ArtTodData packet and extract the relevant information */
     bool processTODdata(const QByteArray &data, quint32 &universe, QVariantMap &values);
+
+    /** Process an ArtTimeCode packet: the position in milliseconds, worked
+     *  out as the MIDI plugin does MTC (same rate codes), and the nominal
+     *  frame rate. False for a short packet or a field out of range. */
+    bool fillTimeCode(QByteArray const& data, quint32 &msPosition, uchar &fps);
 
     /** Process a ArtRdm packet and extract the relevant information */
     bool processRDMdata(const QByteArray &data, quint32 &universe, QVariantMap &values);

@@ -76,6 +76,13 @@ says how much of each DMX tick the show uses.
 with the other outside links, and can pick the source too. The source
 picked is saved with the show.
 
+**Art-Net TimeCode** works the same way. Many DAWs, QLab add-ons and media
+servers send timecode over the network as Art-Net rather than as MIDI.
+Patch an Art-Net **input** on any universe (the node's interface, in
+Connections), and its timecode is followed exactly as MTC is. It shows in
+the source list as *Art-Net TimeCode*. The four rates are all read: film
+(24), EBU (25), drop-frame (29.97) and SMPTE (30).
+
 While the show runs, Virtual Console faders and buttons can still take a
 channel over live.
 
