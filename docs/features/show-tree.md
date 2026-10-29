@@ -1732,14 +1732,17 @@ them looks; they open as they were.)
 - **Folders.** **New folder…** on Hits or a folder; drag hits onto a
   folder (or onto *Hits* for none), or **Move to folder**. **F2** renames
   a folder; **Delete** moves what is in it up.
-- **Fire it from VC.** Each hit plays as a **collection** of its own,
-  named after it and shown in the function pickers under
-  `Productions/<production>/Hits/<folder>` — assign it to any VC button as
-  you would any function: **Toggle** turns it on and off, **Flash** plays
-  it while the button is held and lets go on release (a hit already on
-  stays on; Flash's Override and Force LTP don't apply to hits). Its id
-  stays the same as you
-  edit the hit, so the button keeps firing it. **Make VC page** (on Hits,
+- **Fire it from VC.** In a VC button's properties, **Attach a function**
+  opens the picker with a **Hits** section: each production's hits, by
+  folder. Pick one: **Toggle** turns it on and off, **Flash** plays it
+  while the button is held and lets go on release (a hit already on stays
+  on; Flash's Override and Force LTP don't apply to hits). The button
+  fires **the hit itself**, not just what plays it: rename the hit, edit
+  it, delete it and undo, and the button still fires it (the function
+  line reads *Hit Stab (DanceHysteria)*). Each hit plays as a
+  **collection** of its own, named after it and filed under
+  `Productions/<production>/Hits/<folder>` in other function pickers; a
+  button given that collection in an older show fires it as before. **Make VC page** (on Hits,
   a folder, a hit's page, or `vcpage`) puts a frame on the Virtual Console
   with one Toggle button per hit there, captioned with its name and
   coloured by its first colour. **Again**, it updates that frame: a button

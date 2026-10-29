@@ -9039,7 +9039,7 @@ bool ShowTreeView::makeVcPage(quint32 listId, const QString &folder, QString *me
             return nullptr;
         VCButton *b = new VCButton(frame, m_doc);
         vc->placeWidget(b, frame);
-        b->setFunction(fid);
+        b->setHit(lookId);
         b->setCaption(m_st->cueLabel(*list, i));
         b->setAction(VCButton::Toggle);
         b->move(at);
@@ -9181,7 +9181,10 @@ quint32 ShowTreeView::adoptAsLook(quint32 functionId)
     {
         const quint32 fid = m_st->lookFunction(id);
         for (VCButton *b : buttons)
+        {
             b->setFunction(fid);
+            b->setHit(id);
+        }
         m_doc->setModified();
     }
     selectNode(id);

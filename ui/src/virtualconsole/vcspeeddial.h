@@ -57,6 +57,8 @@ class QLabel;
 #define KXMLQLCVCSpeedDialResetFactorOnDialChange QStringLiteral("ResetFactorOnDialChange")
 #define KXMLQLCVCSpeedDialVisibilityMask    QStringLiteral("Visibility")
 #define KXMLQLCVCSpeedDialTime              QStringLiteral("Time")
+#define KXMLQLCVCSpeedDialSpeedMaster       QStringLiteral("SpeedMaster")
+#define KXMLQLCVCSpeedDialSpeedMasterIndex  QStringLiteral("Index")
 
 // Legacy: infinite checkbox
 #define KXMLQLCVCSpeedDialInfinite      QStringLiteral("Infinite")
@@ -176,6 +178,21 @@ public:
     /** Simulate tap button press
      */
     void tap();
+
+    /**
+     * The speed master the dial sets (0-based; -1: none): its time is one
+     * beat (500 ms = 120 BPM), a tap taps the master too, and the dial
+     * follows the master's tempo set elsewhere. Only an Own master.
+     */
+    void setSpeedMaster(int index);
+    int speedMaster() const { return m_speedMaster; }
+
+private slots:
+    void slotSpeedMasterChanged(int index);
+
+private:
+    int m_speedMaster = -1;
+    bool m_settingSpeedMaster = false;
 
 private slots:
     /** Catch dial value changes and patch them to controlled functions */

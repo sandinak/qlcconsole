@@ -70,6 +70,7 @@
 #include "chaseraction.h"
 #include "mastertimer.h"
 #include "vcsoloframe.h"
+#include "showtreecontroller.h"
 #include "vcbutton.h"
 #include "function.h"
 #include "apputil.h"
@@ -98,6 +99,7 @@ VCButton::VCButton(QWidget* parent, Doc* doc) : VCWidget(parent, doc)
 
     /* No function is initially attached to the button */
     m_function = Function::invalidId();
+    m_hit = Function::invalidId();
 
     setType(VCWidget::ButtonWidget);
     setCaption(QString());
@@ -179,6 +181,7 @@ bool VCButton::copyFrom(const VCWidget* widget)
     setIconPath(button->iconPath());
     setKeySequence(button->keySequence());
     setFunction(button->function());
+    setHit(button->hit());
     enableStartupIntensity(button->isStartupIntensityEnabled());
     setStartupIntensity(button->startupIntensity());
     setStopAllFadeOutTime(button->stopAllFadeTime());
@@ -379,6 +382,14 @@ void VCButton::slotResetIcon()
 
 void VCButton::setFunction(quint32 fid)
 {
+    // Another function given: the button no longer fires its hit.
+    if (m_hit != Function::invalidId() && fid != m_doc->showTree()->lookFunction(m_hit))
+        setHit(Function::invalidId());
+    attachFunction(fid);
+}
+
+void VCButton::attachFunction(quint32 fid)
+{
     Function* old = m_doc->function(m_function);
     if (old != NULL)
     {
@@ -416,6 +427,30 @@ void VCButton::setFunction(quint32 fid)
 quint32 VCButton::function() const
 {
     return m_function;
+}
+
+void VCButton::setHit(quint32 hitId)
+{
+    ShowTreeController *st = m_doc->showTree();
+    if (m_hit == Function::invalidId() && hitId != Function::invalidId())
+        connect(st, &ShowTreeController::changed, this, &VCButton::slotShowTreeChanged);
+    else if (m_hit != Function::invalidId() && hitId == Function::invalidId())
+        disconnect(st, &ShowTreeController::changed, this, &VCButton::slotShowTreeChanged);
+    m_hit = hitId;
+    slotShowTreeChanged();
+}
+
+void VCButton::slotShowTreeChanged()
+{
+    if (m_hit == Function::invalidId())
+        return;
+    // The hit gone (deleted, maybe to come back on undo): the button keeps
+    // it and fires nothing meanwhile.
+    const quint32 fid = m_doc->showTree()->lookFunction(m_hit);
+    if (fid != m_function)
+        attachFunction(fid);
+    else if (const Function *f = m_doc->function(fid))
+        setToolTip(f->name());     // renamed
 }
 
 void VCButton::adjustFunctionIntensity(Function *f, qreal value)
@@ -459,8 +494,10 @@ void VCButton::slotFunctionRemoved(quint32 fid)
     /* Invalidate the button's function if it's the one that was removed */
     if (fid == m_function)
     {
-        setFunction(Function::invalidId());
+        attachFunction(Function::invalidId());
         resetIntensityOverrideAttribute();
+        // A hit's Collection rebuilt: the button takes the new one.
+        slotShowTreeChanged();
     }
 }
 
@@ -1801,6 +1838,14 @@ bool VCButton::loadXML(QXmlStreamReader &root)
         {
             QString str = root.attributes().value(KXMLQLCVCButtonFunctionID).toString();
             setFunction(str.toUInt());
+            // A hit: its Collection now, whatever id the file had.
+            if (root.attributes().hasAttribute(KXMLQLCVCButtonFunctionHit))
+            {
+                bool ok = false;
+                const quint32 hitId = root.attributes().value(KXMLQLCVCButtonFunctionHit).toUInt(&ok);
+                if (ok && m_doc->showTree()->isLook(hitId))
+                    setHit(hitId);
+            }
             root.skipCurrentElement();
         }
         else if (root.name() == KXMLQLCVCWidgetInput)
@@ -1916,6 +1961,8 @@ bool VCButton::saveXML(QXmlStreamWriter *doc)
     /* Function */
     doc->writeStartElement(KXMLQLCVCButtonFunction);
     doc->writeAttribute(KXMLQLCVCButtonFunctionID, QString::number(function()));
+    if (m_hit != Function::invalidId())
+        doc->writeAttribute(KXMLQLCVCButtonFunctionHit, QString::number(m_hit));
     doc->writeEndElement();
 
     /* Action */

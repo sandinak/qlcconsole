@@ -29,6 +29,7 @@
 #include "vcspeeddialfunction.h"
 #include "vcpropertieseditor.h"
 #include "vcspeeddialpreset.h"
+#include "speedmasters.h"
 #include "vcspeeddial.h"
 #include "flowlayout.h"
 #include "speeddial.h"
@@ -179,6 +180,7 @@ VCSpeedDial::VCSpeedDial(QWidget* parent, Doc* doc)
 
 VCSpeedDial::~VCSpeedDial()
 {
+    setSpeedMaster(-1);
     foreach (VCSpeedDialPreset* preset, m_presets)
     {
         delete preset;
@@ -231,6 +233,7 @@ bool VCSpeedDial::copyFrom(const VCWidget* widget)
         return false;
 
     setFunctions(dial->functions());
+    setSpeedMaster(dial->speedMaster());
     setAbsoluteValueRange(dial->absoluteValueMin(), dial->absoluteValueMax());
     setVisibilityMask(dial->visibilityMask());
     setResetFactorOnDialChange(dial->resetFactorOnDialChange());
@@ -359,8 +362,54 @@ void VCSpeedDial::slotDialValueChanged()
     m_updateTimer->start(UPDATE_TIMEOUT);
 }
 
+void VCSpeedDial::setSpeedMaster(int index)
+{
+    if (index < -1 || index >= SpeedMasters::MaxCount)
+        index = -1;
+    if (index == m_speedMaster)
+        return;
+    SpeedMasters *sm = m_doc->speedMasters();
+    if (m_speedMaster >= 0)
+    {
+        sm->hold(m_speedMaster, false);
+        disconnect(sm, &SpeedMasters::changed, this, &VCSpeedDial::slotSpeedMasterChanged);
+    }
+    m_speedMaster = index;
+    if (m_speedMaster >= 0)
+    {
+        sm->hold(m_speedMaster, true);
+        connect(sm, &SpeedMasters::changed, this, &VCSpeedDial::slotSpeedMasterChanged);
+        slotSpeedMasterChanged(m_speedMaster);
+    }
+}
+
+void VCSpeedDial::slotSpeedMasterChanged(int index)
+{
+    // The master's tempo set elsewhere (a tap, the Speed Masters window):
+    // the dial shows it, one beat, without sending it back.
+    if (index != m_speedMaster || m_settingSpeedMaster || m_currentFactor != 1)
+        return;
+    const SpeedMasters *sm = m_doc->speedMasters();
+    if (sm->mode(index) != SpeedMasters::Own)
+        return;
+    const int ms = qRound(60000.0 / sm->setBpm(index));
+    if (ms != m_dial->value())
+    {
+        m_dial->setValue(ms, false);
+        m_factoredValue = ms;
+        m_multDivResultLabel->setText("(" + Function::speedToString(m_factoredValue) + ")");
+    }
+}
+
 void VCSpeedDial::slotDialTapped()
 {
+    if (m_speedMaster >= 0 && mode() == Doc::Operate)
+    {
+        m_settingSpeedMaster = true;
+        m_doc->speedMasters()->tap(m_speedMaster);
+        m_settingSpeedMaster = false;
+    }
+
     foreach (const VCSpeedDialFunction &speeddialfunction, m_functions)
     {
         Function* function = m_doc->function(speeddialfunction.functionId);
@@ -553,6 +602,20 @@ void VCSpeedDial::slotFactoredValueChanged()
     const QVector<quint32> multipliers = VCSpeedDialFunction::speedMultiplierValuesTimes1000();
 
     int ms = m_factoredValue;
+
+    // The speed master: the time is one beat. Only played (Operate), so a
+    // show loading its dial doesn't reset the master's saved tempo.
+    if (m_speedMaster >= 0 && mode() == Doc::Operate && ms > 0 && uint(ms) != Function::infiniteSpeed())
+    {
+        SpeedMasters *sm = m_doc->speedMasters();
+        const double bpm = qBound(1.0, 60000.0 / ms, 999.0);
+        if (sm->mode(m_speedMaster) == SpeedMasters::Own && qAbs(sm->setBpm(m_speedMaster) - bpm) > 0.05)
+        {
+            m_settingSpeedMaster = true;
+            sm->setBpm(m_speedMaster, bpm);
+            m_settingSpeedMaster = false;
+        }
+    }
 
     foreach (const VCSpeedDialFunction &speeddialfunction, m_functions)
     {
@@ -986,6 +1049,11 @@ bool VCSpeedDial::loadXML(QXmlStreamReader &root)
 
             setVisibilityMask(mask);
         }
+        else if (root.name() == KXMLQLCVCSpeedDialSpeedMaster)
+        {
+            setSpeedMaster(root.attributes().value(KXMLQLCVCSpeedDialSpeedMasterIndex).toInt() - 1);
+            root.skipCurrentElement();
+        }
         else if (root.name() == KXMLQLCVCSpeedDialTime)
         {
             m_dial->setValue(root.readElementText().toUInt());
@@ -1137,6 +1205,14 @@ bool VCSpeedDial::saveXML(QXmlStreamWriter *doc)
     /* Functions */
     foreach (const VCSpeedDialFunction &speeddialfunction, m_functions)
         speeddialfunction.saveXML(doc);
+
+    /* Speed master */
+    if (m_speedMaster >= 0)
+    {
+        doc->writeStartElement(KXMLQLCVCSpeedDialSpeedMaster);
+        doc->writeAttribute(KXMLQLCVCSpeedDialSpeedMasterIndex, QString::number(m_speedMaster + 1));
+        doc->writeEndElement();
+    }
 
     // Presets
     foreach (VCSpeedDialPreset *preset, presets())

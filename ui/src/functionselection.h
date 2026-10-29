@@ -200,6 +200,24 @@ protected:
     /** Clear & (re)fill the tree */
     void refillTree();
 
+    /*********************************************************************
+     * Hits (Show Tree busking states)
+     *********************************************************************/
+public:
+    /** A "Hits" section at the top: each production's hits by folder, the
+     *  hit's own Collection picked from there (and not again under
+     *  Collection), whatever the type filter. For a VC button. */
+    void showHits(bool show = true) { m_hits = show; }
+    /** The hit (a Show Tree look id) picked in the Hits section; invalid
+     *  when what is picked isn't one. */
+    quint32 selectedHit() const { return m_selectedHit; }
+
+private:
+    void addHitsSection(const QList<quint32> &selection);
+
+    bool m_hits = false;
+    quint32 m_selectedHit = Function::invalidId();
+
 protected slots:
     void slotItemSelectionChanged();
     void slotItemDoubleClicked(QTreeWidgetItem* item);

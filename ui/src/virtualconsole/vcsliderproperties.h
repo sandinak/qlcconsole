@@ -56,6 +56,7 @@ protected slots:
     void slotModePlaybackClicked();
     void slotModeSubmasterClicked();
     void slotModeParameterClicked();
+    void slotModeSpeedMasterClicked();
     void slotTabChanged();
 
 protected:
@@ -63,10 +64,22 @@ protected:
     void setPlaybackPageVisibility(bool visible);
     void setSubmasterPageVisibility(bool visible);
     void setParameterPageVisibility(bool visible);
+    void setSpeedMasterPageVisibility(bool visible);
+    /** The Speed master tab (built here, not in the .ui). */
+    void buildSpeedMasterPage();
 
 protected:
     int m_sliderMode;
     InputSelectionWidget *m_inputSelWidget;
+
+    QWidget *m_speedMasterPage = nullptr;
+    QWidget *m_speedMasterBox = nullptr;
+    QComboBox *m_speedMasterCombo = nullptr;
+    QRadioButton *m_speedRateRadio = nullptr;
+    QRadioButton *m_speedTempoRadio = nullptr;
+    QSpinBox *m_tempoMinSpin = nullptr;
+    QSpinBox *m_tempoMaxSpin = nullptr;
+    QPushButton *m_switchToSpeedMasterModeButton = nullptr;
 
     /*********************************************************************
      * Level page

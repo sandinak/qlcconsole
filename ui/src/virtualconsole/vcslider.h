@@ -76,6 +76,12 @@ class VCSliderProperties;
 #define KXMLQLCVCSliderParameterRole    QStringLiteral("Role")
 #define KXMLQLCVCSliderParameterByte    QStringLiteral("ControlByte")
 
+#define KXMLQLCVCSliderSpeedMaster        QStringLiteral("SpeedMaster")
+#define KXMLQLCVCSliderSpeedMasterIndex   QStringLiteral("Index")
+#define KXMLQLCVCSliderSpeedMasterControl QStringLiteral("Control")
+#define KXMLQLCVCSliderSpeedMasterMin     QStringLiteral("MinBPM")
+#define KXMLQLCVCSliderSpeedMasterMax     QStringLiteral("MaxBPM")
+
 class VCSlider final : public VCWidget, public DMXSource
 {
     Q_OBJECT
@@ -154,7 +160,8 @@ public:
         Playback,
         Submaster,
         Parameter,
-        GrandMaster
+        GrandMaster,
+        SpeedMaster     //!< a speed master's rate or tempo (SpeedMasters)
     };
 
     /**
@@ -255,6 +262,46 @@ protected slots:
 protected:
     ParameterRole m_parameterRole;
     int m_parameterControlByte;
+
+    /*********************************************************************
+     * Speed master mode: the slider moves a speed master (SpeedMasters,
+     * docs/features/effects.md "Speed masters") -- its Rate (0..200 %, the
+     * middle as set, as a controller's Rate fader) or its Tempo (a BPM
+     * between a low and a high end). It follows the master moved elsewhere.
+     *********************************************************************/
+public:
+    enum SpeedControl { SpeedRate, SpeedTempo };
+
+    /** Speed master @p index (0-based: 0 is master 1). */
+    void setSpeedMaster(int index);
+    int speedMaster() const { return m_speedMaster; }
+    void setSpeedControl(SpeedControl control);
+    SpeedControl speedControl() const { return m_speedControl; }
+    /** The Tempo range, BPM (1..999, low < high). */
+    void setTempoRange(int minBpm, int maxBpm);
+    int tempoMin() const { return m_tempoMin; }
+    int tempoMax() const { return m_tempoMax; }
+
+    /** The slider position (0..255) for the master as it is now. */
+    uchar speedMasterSliderValue() const;
+    /** "Rate 100 %", "128 BPM", "follows Main clock". */
+    QString speedMasterValueText() const;
+
+protected slots:
+    void slotSpeedMasterChanged(int index);
+
+protected:
+    void applySpeedMaster(uchar value);
+    /** Hold (or let go of) the master as used (SpeedMasters::hold()). */
+    void holdSpeedMaster(bool on);
+    /** Put the slider and its labels where the master is. */
+    void showSpeedMaster();
+
+    int m_speedMaster = 0;
+    SpeedControl m_speedControl = SpeedRate;
+    int m_tempoMin = 60;
+    int m_tempoMax = 180;
+    bool m_speedMasterHeld = false;
 
     /*********************************************************************
      * Value display style

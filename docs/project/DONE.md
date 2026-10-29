@@ -6,6 +6,37 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
+### 2026-10-29 — VC buttons fire hits; VC sliders and dials move speed masters *(feat/031-vc-controls)*
+
+User feedback: "Buttons can't get to hits" and "VC sliders can't get to speed
+masters?".
+
+- **Why hits were hard to reach:** a hit's Collection *was* in the button's
+  picker, but only under Collection ▸ Productions ▸ <production> ▸ Hits ▸
+  <folder>, gone with a remembered type filter without Collections, and the
+  button held only the Collection's id -- a hit deleted and undone (or its
+  Collection otherwise made again) left the button firing nothing.
+- **Picker:** `FunctionSelection::showHits()` adds a **Hits** section
+  (production ▸ folder ▸ hit) whatever the filter; those Collections aren't
+  listed again under Collection; `selectedHit()`.
+- **Button:** `VCButton::setHit()` / `hit()`: the hit's Collection is
+  resolved by `ShowTreeController::lookFunction()` on every tree change and
+  when its Collection is removed; `<Function ID=".." Hit=".."/>` (ID kept for
+  older builds; on load the hit wins). `setFunction()` with another function
+  drops the hit. Make VC page and Adopt as hit bind by hit. Properties show
+  "Hit Stab (DanceHysteria)".
+- **Speed masters:** `VCSlider::SpeedMaster` mode (Rate 0..200 % with the
+  middle snap, or Tempo between MinBPM..MaxBPM); `<SpeedMaster Index Control
+  MinBPM MaxBPM/>` written only in that mode. Not a DMX source: no per-tick
+  cost. Follows `SpeedMasters::changed`. A Speed Dial's **Speed master**
+  makes its time one beat (setBpm in Operate only, so loading doesn't reset
+  the master) and taps it; `<SpeedMaster Index/>`. `SpeedMasters::hold()`
+  counts a VC widget as using the master (footer). The slider properties
+  keep a Grand Master slider one (they made it Level before).
+- **Tests:** vcbutton_test (firesAHitByIdentity, hitSavesAndLoads,
+  pickerHasAHitsSection), new vcslider_test (rate, tempo, follow, save/load,
+  properties, Speed Dial).
+
 ### 2026-10-29 — Web access saved with the show *(feat/031-show-webserver)*
 
 - **Engine:** `ShowWebAccess` (`engine/src/showwebaccess.*`, `Doc::webAccess()`):

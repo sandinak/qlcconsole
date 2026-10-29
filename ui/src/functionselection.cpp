@@ -28,6 +28,7 @@
 
 #include "functionselection.h"
 #include "functionstreewidget.h"
+#include "showtreecontroller.h"
 #include "doc.h"
 
 #define KColumnName 0
@@ -307,10 +308,17 @@ void FunctionSelection::refillTree()
         m_newTrackItem->setData(KColumnName, Qt::UserRole, Function::invalidId());
     }
 
+    if (m_hits)
+        addHitsSection(selection);
+
     /* Fill the tree */
     foreach (Function* function, m_doc->functions())
     {
         if (!function)
+            continue;
+
+        // A hit's Collection is picked from the Hits section.
+        if (m_hits && m_doc->showTree()->lookOfFunction(function->id()) != Function::invalidId())
             continue;
 
         if (m_runningOnlyFlag == true && !function->isRunning())
@@ -337,15 +345,93 @@ void FunctionSelection::refillTree()
     }
 }
 
+#define KHitRole (Qt::UserRole + 10)
+
+void FunctionSelection::addHitsSection(const QList<quint32> &selection)
+{
+    const ShowTreeController *st = m_doc->showTree();
+    QTreeWidgetItem *section = nullptr;
+    for (const ShowTree::Production &prod : st->productions())
+    {
+        QTreeWidgetItem *prodItem = nullptr;
+        QHash<QString, QTreeWidgetItem *> folders;
+        for (const ShowTree::CueList &list : prod.lists)
+        {
+            if (!list.looks)
+                continue;
+            for (const ShowTree::Cue &cue : list.cues)
+            {
+                const quint32 fid = st->lookFunction(cue.id);
+                Function *f = m_doc->function(fid);
+                if (f == nullptr)
+                    continue;
+                if (m_runningOnlyFlag && !f->isRunning())
+                    continue;
+                if (section == nullptr)
+                {
+                    section = new QTreeWidgetItem(m_funcTree);
+                    section->setText(KColumnName, tr("Hits"));
+                    section->setToolTip(KColumnName, tr("The Show Tree's hits: a button fires the hit itself, "
+                                                        "renamed or rebuilt."));
+                    section->setData(KColumnName, Qt::UserRole, Function::invalidId());
+                    section->setFlags(Qt::ItemIsEnabled);
+                    section->setIcon(KColumnName, QIcon(":/folder.png"));
+                }
+                if (prodItem == nullptr)
+                {
+                    prodItem = new QTreeWidgetItem(section);
+                    prodItem->setText(KColumnName, prod.name);
+                    prodItem->setData(KColumnName, Qt::UserRole, Function::invalidId());
+                    prodItem->setFlags(Qt::ItemIsEnabled);
+                    prodItem->setIcon(KColumnName, QIcon(":/folder.png"));
+                }
+                QTreeWidgetItem *parent = prodItem;
+                QString path;
+                for (const QString &part : cue.folder.split(QLatin1Char('/'), Qt::SkipEmptyParts))
+                {
+                    path += QLatin1Char('/') + part;
+                    QTreeWidgetItem *folder = folders.value(path);
+                    if (folder == nullptr)
+                    {
+                        folder = new QTreeWidgetItem(parent);
+                        folder->setText(KColumnName, part);
+                        folder->setData(KColumnName, Qt::UserRole, Function::invalidId());
+                        folder->setFlags(Qt::ItemIsEnabled);
+                        folder->setIcon(KColumnName, QIcon(":/folder.png"));
+                        folders.insert(path, folder);
+                    }
+                    parent = folder;
+                }
+                QTreeWidgetItem *item = new QTreeWidgetItem(parent);
+                item->setText(KColumnName, cue.name);
+                item->setIcon(KColumnName, f->getIcon());
+                item->setData(KColumnName, Qt::UserRole, fid);
+                item->setData(KColumnName, KHitRole, cue.id);
+                item->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
+                if (disabledFunctions().contains(fid))
+                    item->setFlags(Qt::NoItemFlags);
+                else
+                    item->setSelected(selection.contains(fid));
+            }
+        }
+    }
+    if (section != nullptr)
+        m_funcTree->expandItem(section);
+}
+
 void FunctionSelection::slotItemSelectionChanged()
 {
     m_selection.clear();
+    m_selectedHit = Function::invalidId();
 
     QListIterator <QTreeWidgetItem*> it(m_funcTree->selectedItems());
     while (it.hasNext() == true)
     {
         QTreeWidgetItem *item = it.next();
         quint32 id = item->data(KColumnName, Qt::UserRole).toUInt();
+        const QVariant hit = item->data(KColumnName, KHitRole);
+        if (hit.isValid() && m_selectedHit == Function::invalidId())
+            m_selectedHit = hit.toUInt();
         if ((id != Function::invalidId() || item == m_noneItem || item == m_newTrackItem)
              && m_selection.contains(id) == false)
                     m_selection.append(id);

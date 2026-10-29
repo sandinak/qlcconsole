@@ -28,6 +28,11 @@
 #include <QLineEdit>
 #include <QSpinBox>
 #include <QLabel>
+#include <QComboBox>
+#include <QFormLayout>
+#include <QPushButton>
+#include <QRadioButton>
+#include <QSpinBox>
 #include <QAction>
 
 #include "qlccapability.h"
@@ -38,6 +43,7 @@
 #include "functionselection.h"
 #include "vcslider.h"
 #include "fixture.h"
+#include "speedmasters.h"
 #include "doc.h"
 #include "itemicons.h"
 
@@ -233,9 +239,22 @@ VCSliderProperties::VCSliderProperties(VCSlider* slider, Doc* doc)
             this, SLOT(slotFlashCheckClicked(bool)));
     m_flashButtonCheck->setChecked(m_slider->playbackFlashEnable());
 
+    buildSpeedMasterPage();
+
     /* At last, sort out visibility */
     switch (m_sliderMode)
     {
+        case VCSlider::GrandMaster:
+            // Made by the programmer frame wizard: no page of its own, kept.
+            setLevelPageVisibility(false);
+            setPlaybackPageVisibility(false);
+            setSubmasterPageVisibility(false);
+            setParameterPageVisibility(false);
+            setSpeedMasterPageVisibility(false);
+        break;
+        case VCSlider::SpeedMaster:
+            slotModeSpeedMasterClicked();
+        break;
         default:
         case VCSlider::Level:
             slotModeLevelClicked();
@@ -272,6 +291,7 @@ void VCSliderProperties::slotModeLevelClicked()
     setPlaybackPageVisibility(false);
     setSubmasterPageVisibility(false);
     setParameterPageVisibility(false);
+    setSpeedMasterPageVisibility(false);
 
     int cngType = m_slider->clickAndGoType();
     switch(cngType)
@@ -316,6 +336,7 @@ void VCSliderProperties::slotModePlaybackClicked()
     setPlaybackPageVisibility(true);
     setSubmasterPageVisibility(false);
     setParameterPageVisibility(false);
+    setSpeedMasterPageVisibility(false);
 }
 
 void VCSliderProperties::slotModeSubmasterClicked()
@@ -326,6 +347,7 @@ void VCSliderProperties::slotModeSubmasterClicked()
     setPlaybackPageVisibility(false);
     setSubmasterPageVisibility(true);
     setParameterPageVisibility(false);
+    setSpeedMasterPageVisibility(false);
 }
 
 void VCSliderProperties::slotModeParameterClicked()
@@ -338,6 +360,100 @@ void VCSliderProperties::slotModeParameterClicked()
     setPlaybackPageVisibility(false);
     setSubmasterPageVisibility(false);
     setParameterPageVisibility(true);
+    setSpeedMasterPageVisibility(false);
+}
+
+void VCSliderProperties::slotModeSpeedMasterClicked()
+{
+    m_sliderMode = VCSlider::SpeedMaster;
+
+    m_nameEdit->setEnabled(true);
+
+    setLevelPageVisibility(false);
+    setPlaybackPageVisibility(false);
+    setSubmasterPageVisibility(false);
+    setParameterPageVisibility(false);
+    setSpeedMasterPageVisibility(true);
+}
+
+void VCSliderProperties::buildSpeedMasterPage()
+{
+    m_speedMasterPage = new QWidget(m_tab);
+    m_speedMasterPage->setObjectName(QStringLiteral("speedMasterTab"));
+    QVBoxLayout *vbox = new QVBoxLayout(m_speedMasterPage);
+    m_speedMasterBox = new QWidget(m_speedMasterPage);
+    QVBoxLayout *box = new QVBoxLayout(m_speedMasterBox);
+    box->setContentsMargins(0, 0, 0, 0);
+    QLabel *info = new QLabel(tr("Speed master mode moves a speed master: its rate (the middle is "
+                                 "the tempo as set, the top double, the bottom stopped) or its tempo "
+                                 "between two BPMs. The slider follows the master when it is tapped "
+                                 "or moved elsewhere. A master following another has neither: the "
+                                 "slider reads n/a."), m_speedMasterBox);
+    info->setWordWrap(true);
+    box->addWidget(info);
+
+    QFormLayout *form = new QFormLayout();
+    const SpeedMasters *sm = m_doc->speedMasters();
+    m_speedMasterCombo = new QComboBox(m_speedMasterBox);
+    m_speedMasterCombo->setObjectName(QStringLiteral("speedMasterCombo"));
+    for (int i = 0; i < qMax(sm->count(), m_slider->speedMaster() + 1); ++i)
+        m_speedMasterCombo->addItem(sm->assignmentName(SpeedMasters::Master1 + i), i);
+    m_speedMasterCombo->setCurrentIndex(m_speedMasterCombo->findData(m_slider->speedMaster()));
+    form->addRow(tr("Master"), m_speedMasterCombo);
+
+    QWidget *controls = new QWidget(m_speedMasterBox);
+    QHBoxLayout *ch = new QHBoxLayout(controls);
+    ch->setContentsMargins(0, 0, 0, 0);
+    m_speedRateRadio = new QRadioButton(tr("Rate (0–200 %)"), controls);
+    m_speedTempoRadio = new QRadioButton(tr("Tempo (BPM)"), controls);
+    m_speedRateRadio->setObjectName(QStringLiteral("speedRateRadio"));
+    m_speedTempoRadio->setObjectName(QStringLiteral("speedTempoRadio"));
+    ch->addWidget(m_speedRateRadio);
+    ch->addWidget(m_speedTempoRadio);
+    ch->addStretch();
+    form->addRow(tr("Controls"), controls);
+
+    QWidget *range = new QWidget(m_speedMasterBox);
+    QHBoxLayout *rh = new QHBoxLayout(range);
+    rh->setContentsMargins(0, 0, 0, 0);
+    m_tempoMinSpin = new QSpinBox(range);
+    m_tempoMaxSpin = new QSpinBox(range);
+    m_tempoMinSpin->setRange(1, 998);
+    m_tempoMaxSpin->setRange(2, 999);
+    m_tempoMinSpin->setSuffix(tr(" BPM"));
+    m_tempoMaxSpin->setSuffix(tr(" BPM"));
+    m_tempoMinSpin->setValue(m_slider->tempoMin());
+    m_tempoMaxSpin->setValue(m_slider->tempoMax());
+    rh->addWidget(m_tempoMinSpin);
+    rh->addWidget(new QLabel(tr("to"), range));
+    rh->addWidget(m_tempoMaxSpin);
+    rh->addStretch();
+    form->addRow(tr("Tempo range"), range);
+    box->addLayout(form);
+
+    connect(m_speedTempoRadio, &QRadioButton::toggled, range, &QWidget::setEnabled);
+    if (m_slider->speedControl() == VCSlider::SpeedTempo)
+        m_speedTempoRadio->setChecked(true);
+    else
+        m_speedRateRadio->setChecked(true);
+    range->setEnabled(m_speedTempoRadio->isChecked());
+
+    vbox->addWidget(m_speedMasterBox);
+    vbox->addStretch();
+    m_switchToSpeedMasterModeButton = new QPushButton(tr("Switch to Speed Master Mode"), m_speedMasterPage);
+    m_switchToSpeedMasterModeButton->setToolTip(tr("Make the slider move a speed master"));
+    connect(m_switchToSpeedMasterModeButton, &QPushButton::clicked,
+            this, &VCSliderProperties::slotModeSpeedMasterClicked);
+    vbox->addWidget(m_switchToSpeedMasterModeButton);
+    m_tab->addTab(m_speedMasterPage, tr("Speed master"));
+}
+
+void VCSliderProperties::setSpeedMasterPageVisibility(bool visible)
+{
+    if (m_speedMasterBox == nullptr)
+        return;
+    m_speedMasterBox->setVisible(visible);
+    m_switchToSpeedMasterModeButton->setVisible(!visible);
 }
 
 void VCSliderProperties::slotTabChanged()
@@ -960,6 +1076,12 @@ void VCSliderProperties::accept()
     m_slider->setParameterRole(static_cast<VCSlider::ParameterRole>(
         m_parameterRoleCombo->currentData().toInt()));
     m_slider->setParameterControlByte(m_parameterLSBRadio->isChecked() ? 1 : 0);
+
+    /* Speed master page */
+    m_slider->setSpeedMaster(m_speedMasterCombo->currentData().toInt());
+    m_slider->setSpeedControl(m_speedTempoRadio->isChecked() ? VCSlider::SpeedTempo : VCSlider::SpeedRate);
+    m_slider->setTempoRange(qMin(m_tempoMinSpin->value(), m_tempoMaxSpin->value() - 1),
+                            qMax(m_tempoMaxSpin->value(), m_tempoMinSpin->value() + 1));
 
     /* Slider mode */
     if (m_slider->sliderMode() != m_sliderMode)
