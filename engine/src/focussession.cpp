@@ -447,7 +447,8 @@ bool FocusSession::start(const Options &options, QString *why)
     emit started();
     emit currentChanged(currentFixture());
     flashSelection();
-    emit announce(wherePhrase());
+    // The first line is said at once (Q171): nothing to settle yet.
+    emit announce(wherePhrase(), ControllerScheme::WhereNowPriority);
     return true;
 }
 
@@ -479,7 +480,8 @@ void FocusSession::enterCall(int index)
     emit callChanged(m_callIndex);
     emit currentChanged(currentFixture());
     flashSelection();
-    emit announce(wherePhrase(true));
+    // Entering a call is said at once (Q171); its fixtures settle.
+    emit announce(wherePhrase(true), ControllerScheme::WhereNowPriority);
 }
 
 bool FocusSession::jumpTo(quint32 fid)

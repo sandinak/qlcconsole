@@ -158,7 +158,9 @@ bool RefineSession::start(quint32 cueId, quint32 layerId, QString *why)
     emit changed();
     flashSelection();
     const ShowTree::Cue *c = cue();
-    say(tr("Focusing cue %1. %2").arg(c->number.isEmpty() ? c->name : c->number, wherePhrase()));
+    // The first line is said at once (Q171): nothing to settle yet.
+    say(tr("Focusing cue %1. %2").arg(c->number.isEmpty() ? c->name : c->number, wherePhrase()),
+        ControllerScheme::WhereNowPriority);
     return true;
 }
 

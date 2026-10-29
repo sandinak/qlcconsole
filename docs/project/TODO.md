@@ -536,6 +536,15 @@ help (DONE.md 2026-10-16). Handoff: SHOW_TREE_OVERNIGHT.md.
   Not built (Q170): the headphone jack (part 3, USB-only audio), SF
   Symbols on the map.
 
+- **The voice waits for the selection (built 2026-10-29, board Q171)** --
+  tested offscreen with SilentVoice (settle, cut, preempt, the real timer)
+  only. On ender with the voice to the headphones: hold RB through 8
+  lights and hear only the one you stop on, ~0.4 s after; switch the pad
+  off mid-sentence and hear "Controller lost" at once. `say` is killed to
+  cut a line: check it stops cleanly, with no click or half-word left on
+  the headset feed. Not built (Q171 #12): a haptic tick per step while the
+  voice waits.
+
 - **Rig network gate on real networks (built 2026-10-19, feat/rig-network-gate)**
   — tested with a modelled machine (NetworkRoute::setResolverForTest) and
   Art-Net's test sink only; no packet was sent. On ender: with the show's

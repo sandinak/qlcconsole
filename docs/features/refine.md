@@ -186,7 +186,8 @@ The same as [Venue focus](focus-calls.md#telling-the-operator-where-they-are):
   "DS wash, group 2 of 3." "AT spots kept in cue 4." "Back to the cue."
   **Say the light** says the light, then the cue: "Spot 3. Cue 4, AT
   spots, fixture 3." The panel's **Voice** setting (terse, standard,
-  verbose) is shared with Venue focus: see [Voice
+  verbose) and **Waits** (the voice waits until you stop moving, then
+  says where you stopped) are shared with Venue focus: see [Voice
   detail](focus-calls.md#telling-the-operator-where-they-are). Terse
   says "F3 Spot 3." and "Kept."; verbose "AT spots, fixture 3 of 8, Spot
   3."

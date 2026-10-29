@@ -74,6 +74,16 @@ skipped). Upstream fixes taken:
   crew's word; a click says the light, as R3. A landing, lift or click
   never jumps the light, a resting finger doesn't creep, and nothing moves
   while every light is held.
+- **The voice waits until you stop moving** (board Q171): in Quick focus,
+  Venue focus and Focus this cue, a "where" line is held until no newer
+  step has come for **Waits** (Off / 250 / 400 / 700 ms, 400 by default,
+  beside Voice), so stepping through eight lights says only the one you
+  stopped on, instead of a stale "Fixture 2..." played to its end first.
+  A newer location line then cuts a stale one being said, and a warning
+  cuts one at once ("Controller lost" never waits behind "Fixture 3 of
+  8"). Saves, warnings and Say the light are never held or cut; a tool's
+  first line and entering a focus call are said at once. Off is the voice
+  as before.
 - **Web access saved with the show**: **Connections ▸ Devices ▸ Show
   control & sync ▸ Web access** turns on "Start web access with this show,
   on port" (9999 by default), with **Reachable from other devices on the

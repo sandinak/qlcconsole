@@ -146,7 +146,10 @@ namespace ControllerScheme
      *    venue asked. Queued, never dropped, and spoken in EVERY feedback
      *    setting; the rig gives a slow long blink and the pad one long
      *    buzz, unlike a save's double blink and short buzz. */
-    enum Priority { WherePriority = 0, ConfirmPriority = 1, ImportantPriority = 2 };
+    /*  - WhereNow (board Q171): a where line said at once, not held while
+     *    the selection settles -- a tool's first line, entering a focus
+     *    call. Otherwise a Where line. */
+    enum Priority { WhereNowPriority = -1, WherePriority = 0, ConfirmPriority = 1, ImportantPriority = 2 };
 
     /** The save lamp's colours (gap 10), the panels' and the pad's light
      *  bar alike: colour-blind safe -- blue, all saved; yellow, this light

@@ -839,6 +839,8 @@ FocusModePanel::FocusModePanel(Doc *doc, QWidget *parent)
     use->addWidget(new OperatorFeedbackCombo(doc->programmer(), this));
     use->addWidget(new QLabel(tr("Voice:"), this));
     use->addWidget(new VoiceDetailCombo(doc->programmer(), this));
+    use->addWidget(new QLabel(tr("Waits:"), this));
+    use->addWidget(new VoiceSettleCombo(this));
     m_deviceLabel->setStyleSheet(QStringLiteral("color: palette(mid);"));
     // A long device name is cut (its tooltip has it), not a wider window.
     m_deviceLabel->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);

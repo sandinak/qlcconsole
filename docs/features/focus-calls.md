@@ -401,10 +401,11 @@ screen. Two things tell them where they are:
   is picked blinks three times (120 ms on, 120 ms off) and then stays
   lit; the rest of the call stays dim.
 - **The laptop's voice.** It says where you are, briefly. Feed the
-  laptop's output to the crew's headsets and it is their cue: a line is
-  never cut off or spoken over, and when you step quickly only the latest
-  "where" line waits (the fixtures you passed are not read out).
-  Confirmations ("Saved fixture 3.") and warnings are queued and never
+  laptop's output to the crew's headsets and it is their cue. A line is
+  never spoken over. **The voice waits until you stop moving**: when you
+  step through lights it says only where you stopped, a moment after you
+  stop, not each light you passed (see **Waits** below). Confirmations
+  ("Saved fixture 3.") and warnings are never held back and never
   dropped. **Voice to:** in
   the Venue Focus dialog (on a Mac) sends it to a chosen output (an audio
   interface for the headsets, say); **The system's output** is the
@@ -439,6 +440,17 @@ Venue focus and Focus this cue, kept with Feedback on this computer):
 | A held | "Saved all." | "Saved all, 6 lights." (in a venue: "Saved all to Lincoln HS, 6 lights.") | as Standard |
 | B / B held | "Reverted." / "Reverted all." | "Fixture 1 reverted." / "Reverted all, 3 lights." | "Spot 3 back to its last save." / "3 lights back to their last save." |
 | Say the light | "Spot 3." | "Spot 3. Fixture 1." | "Spot 3. Call 2 of 5, AT spots to DSC, CL, US 3. Fixture 1 of 8." |
+
+**Waits: Off, 250, 400 or 700 ms.** Beside **Voice**, how long the voice
+waits after your last step before it says where you are (400 ms by
+default, this computer's). Hold a bumper through eight lights and you
+hear only the one you stopped on. If it was still saying an older
+"where" line, that line is cut off: it is out of date. Nothing else is
+held or cut. A save, a warning and **Say the light** are said at once.
+So are a tool's first line and stepping to a new call. A warning cuts
+off a "where" line being said, so "Controller lost" never waits behind
+"Fixture 3 of 8". **Off** speaks on every step, as before, and never
+cuts a line.
 
 Warnings and safety lines — the controller lost or back, holding, a
 light not saved, a refusal, nothing reaching the rig — are said in full
