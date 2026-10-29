@@ -134,6 +134,8 @@ brackets.
 | **Line target** | A stage target that is a line, not a point: each light aimed at it gets its own point along it, in the order they hang (*Riser Line*). [2.5] |
 | **Spread** | How lights aimed at a line share it: +5 end to end (a fan), 0 all on the centre, below 0 crossed (−5 fully). Grouping moves them in pairs, threes…; the order strip and plan view under Position show where each lands. [2.5] |
 | **Colour wheel / colour ring** | A spot's colour from named slots (filters on a wheel, LEDs round the lens), not mixed: a colour picks the nearest slot. [2.5] |
+| **Sub-cue** | A cue inside a cue (1.0.2.1, 1.0.2.2…) for stomps, claps and stings within a section. The first plays with GO; what they change doesn't pass on to the next cue. [2.7] |
+| **Sub GO / auto-follow** | Sub GO (⌥⌘↩, the Run tab's button) steps to the next sub-cue of the cue playing; GO still goes to the next main cue. A sub-cue set to **Auto-follow after** a wait goes on by itself (*auto 0.5s*). [2.7] |
 | **Effect** | A pattern that moves through the lights: a chase, a sparkle, a rainbow. [2.4] |
 | **Effect palette** | A palette that plays an effect: **+ Palette → Effect**, then the effect picked in the **effect picker** (search, click, **Done**). [2.4] |
 | **Sparkle / wave** | Pixels flash and fade at random, like glitter / brightness that travels across the lights. [2.4] |

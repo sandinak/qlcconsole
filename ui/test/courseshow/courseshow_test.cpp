@@ -129,7 +129,7 @@ const QString kL5Start = kShows + QStringLiteral("/lesson-1-5-start.qlcc");
 /* Level 2's show files: lesson-2-N-start / -finish, each lesson starting
    from the one before's finish (2.1 from Lesson 1.4's). */
 /* How many of Level 2's lessons are written (and have show files). */
-const int kLevelTwoLessons = 6;
+const int kLevelTwoLessons = 7;
 
 QString levelTwoStart(int n)
 {
@@ -1703,6 +1703,24 @@ static QStringList describeAll(Doc *doc)
             {
                 out << QStringLiteral("%1 mode %2 in %3 out %4 hold %5").arg(c.number).arg(int(c.mode))
                        .arg(c.fadeIn).arg(c.fadeOut).arg(c.hold);
+                // Level 2: a cue's sub-cues, each with its layers and how it advances.
+                for (const CueList &sl : p.lists)
+                    if (sl.isSubCues() && sl.subOf == c.id)
+                        for (const Cue &sc : sl.cues)
+                        {
+                            QStringList layers;
+                            for (const Layer &ly : sc.layers)
+                            {
+                                QStringList looks;
+                                for (const Look &lk : ly.looks)
+                                    for (quint32 pid : lk.palettes)
+                                        looks << (doc->palette(pid) ? doc->palette(pid)->name() : QStringLiteral("?"));
+                                layers << QStringLiteral("%1 [%2]").arg(doc->showTree()->targetLabel(ly.target), looks.join(", "));
+                            }
+                            out << QStringLiteral("%1 sub %2 %3: %4 %5").arg(c.number, sc.number, sc.name, layers.join("; "),
+                                                                         sc.follow ? QStringLiteral("auto %1").arg(sc.wait)
+                                                                                   : QStringLiteral("Sub GO"));
+                        }
                 // Level 2: what a layer lets go of (Release).
                 for (const Layer &ly : c.layers)
                     if (ly.release)
@@ -4307,6 +4325,117 @@ static bool lessonTwoSixByMouse(App *app, Doc *doc, ShowTreeView *view, const QS
     return true;
 }
 
+/* Lesson 2.7, sub-cues: stomps inside the chorus. 1.0.2 Chorus gets
+   sub-cues: 1.0.2.1 Chorus (as it is: it plays with GO), 1.0.2.2 Stomp
+   (Lanterns White, Full; Sub GO), 1.0.2.3 Stomp Out (Lanterns Out;
+   auto-follow after 0.5 s). */
+static bool lessonTwoSevenByMouse(Doc *doc, ShowTreeView *view, const QString &shots = QString())
+{
+    ShowTreeController *st = doc->showTree();
+    for (QTreeWidgetItemIterator it(view->tree()); *it; ++it)
+        (*it)->setExpanded(true);
+    App *app = qobject_cast<App *>(view->window());
+    auto ui = [view, app, &shots](const QString &name, const QList<HelpShots::Callout> &marks) {
+        if (shots.isEmpty() || app == nullptr)
+            return true;
+        HelpShots::Frame f = showTreeFrame(app, view);
+        f.callouts = marks;
+        return shoot(f, shots, name);
+    };
+    LESSON_STEP(view->selectNode(cueNumbered(doc, "1.0.2")), "select 1.0.2");
+    settle(50);
+    QLabel *subs = stFind<QLabel>(view, "stCueSubCues");
+    LESSON_STEP(subs != nullptr && subs->isVisible(), "no Sub-cues row");
+    qInfo().noquote() << "[2.7] Sub-cues row:" << subs->text();
+    emit subs->linkActivated(QStringLiteral("new"));
+    settle(100);
+    struct Sub { QString name; QString group, colour, level; bool follow; QString wait; };
+    const QList<Sub> plan = {
+        { "Chorus", QString(), QString(), QString(), false, QString() },
+        { "Stomp", "Lanterns", "White", "Full", false, QString() },
+        { "Stomp Out", "Lanterns", QString(), "Out", true, "0.5" },
+    };
+    for (int i = 0; i < plan.count(); ++i)
+    {
+        const Sub &sb = plan.at(i);
+        if (i > 0)
+        {
+            view->m_newSubCue->click();       // More ▾ → + Sub-cue
+            settle(100);
+        }
+        const quint32 id = view->currentCueId();
+        const CueList *sl = st->listOfCue(id);
+        const QString shown = sl == nullptr ? QString() : st->cueLabel(*sl, sl->indexOf(id));
+        qInfo().noquote() << "[2.7] new sub-cue" << shown << "| hint" << hintOf(view)->text();
+        LESSON_STEP(shown.startsWith(QStringLiteral("1.0.2.%1").arg(i + 1)), shown);
+        QLineEdit *box = stFind<QLineEdit>(view, "stCueName");
+        box->setText(sb.name);
+        QTest::keyClick(box, Qt::Key_Return);
+        settle(50);
+        const QString label = QStringLiteral("1.0.2.%1 %2").arg(i + 1).arg(sb.name);
+        if (!sb.group.isEmpty())
+        {
+            const QString said = dropGroupOnZone(doc, view, sb.group);
+            LESSON_STEP(said == QStringLiteral("a new layer on %1 in %2").arg(sb.group, label), said);
+            for (const QString &pal : { sb.colour, sb.level })
+                if (!pal.isEmpty())
+                {
+                    const QString s2 = dropPaletteOnRow(doc, view, sb.group, pal);
+                    LESSON_STEP(s2.startsWith(QStringLiteral("%1 → layer %2 in %3").arg(pal, sb.group, label)), s2);
+                }
+        }
+        QComboBox *adv = stFind<QComboBox>(view, "stSubCueAdvance");
+        LESSON_STEP(adv != nullptr && adv->isVisible(), "no Advance");
+        qInfo().noquote() << "[2.7]" << label << "advance" << adv->currentText();
+        if (sb.follow)
+        {
+            adv->setCurrentIndex(1);
+            emit adv->activated(1);
+            settle(50);
+            typeSeconds(view->m_cueWait, sb.wait);
+            LESSON_STEP(st->cue(view->currentCueId())->follow && st->cue(view->currentCueId())->wait == 500,
+                        "auto-follow 0.5");
+        }
+    }
+    for (QTreeWidgetItemIterator it(view->tree()); *it; ++it)
+        (*it)->setExpanded(true);
+    {
+        QStringList rows;
+        for (QTreeWidgetItemIterator it(view->tree()); *it; ++it)
+            if ((*it)->text(0).startsWith(QStringLiteral("1.0.2")))
+                rows << (*it)->text(0) + " / " + (*it)->text(ShowTreeView::InfoCol);
+        qInfo().noquote() << "[2.7] tree:" << rows.join(" | ");
+    }
+    if (!shots.isEmpty())
+    {
+        // Stomp Out's page: Advance, auto-follow after 0.5 s.
+        layOutForShot(view);
+        if (QScrollArea *page = qobject_cast<QScrollArea *>(view->m_cuePage))
+            page->ensureWidgetVisible(stFind<QComboBox>(view, "stSubCueAdvance"), 0, 80);
+        settle(50);
+        QTreeWidgetItem *row = nullptr;
+        for (QTreeWidgetItemIterator it(view->tree()); *it; ++it)
+            if ((*it)->text(0).contains(QStringLiteral("Stomp Out")))
+                row = *it;
+        QList<HelpShots::Callout> marks;
+        marks << mark(stFind<QComboBox>(view, "stSubCueAdvance"), 1) << mark(view->m_cueWait, 2);
+        if (row != nullptr)
+            marks << markRect(view->tree()->viewport(), view->tree()->visualItemRect(row), app, 3);
+        LESSON_STEP(ui(QStringLiteral("stomp-out"), marks), "stomp shot");
+    }
+    LESSON_STEP(view->selectNode(cueNumbered(doc, "1.0.2")), "select 1.0.2");
+    settle(50);
+    qInfo().noquote() << "[2.7] chorus Sub-cues:" << stFind<QLabel>(view, "stCueSubCues")->text();
+    if (!shots.isEmpty())
+    {
+        if (QScrollArea *page = qobject_cast<QScrollArea *>(view->m_cuePage))
+            page->ensureWidgetVisible(stFind<QLabel>(view, "stCueSubCues"), 0, 80);
+        settle(50);
+        LESSON_STEP(ui(QStringLiteral("chorus-subcues"), { mark(stFind<QLabel>(view, "stCueSubCues"), 1) }), "subs shot");
+    }
+    return true;
+}
+
 void CourseShow_Test::lessonTwoOneExtension()
 {
     // Lesson 2.1's extension: a base cue. The Pose gets the step tops at a
@@ -4640,6 +4769,95 @@ void CourseShow_Test::lessonTwoSixFiresAHit()
     doc->resetModified();
 }
 
+void CourseShow_Test::lessonTwoSevenPlaysTheStomps()
+{
+    if (kLevelTwoLessons < 7)
+        QSKIP("not written yet");
+    // Lesson 2.7, played: the chorus loaded and GO (1.0.2.1 plays with it);
+    // Sub GO: the stomp; half a second later Stomp Out by itself; GO: the
+    // flash, which doesn't get the lanterns (sub-cues are cue-only).
+    QVERIFY(open(levelTwoFinish(7)));
+    Doc *doc = m_app->doc();
+    const QString shots = qEnvironmentVariable("COURSE_SHOTS");
+    const QString dir = shots.isEmpty() ? QString() : shots + QStringLiteral("/lesson-2-7");
+    if (!dir.isEmpty())
+    {
+        m_app->setTheme(App::ThemeBlue);
+        m_app->resize(1280, 800);
+    }
+    CueRunner *run = runTab(m_app);
+    QVERIFY(run != nullptr);
+    QTreeWidgetItem *chorus = runRow(run, "1.0.2");
+    QVERIFY(chorus != nullptr);
+    QTest::mouseClick(run->cueTree()->viewport(), Qt::LeftButton, Qt::NoModifier,
+                      run->cueTree()->visualItemRect(chorus).center());
+    settle(100);
+    press(run, "crGo");
+    QTRY_VERIFY_WITH_TIMEOUT(run->nowText().contains("1.0.2"), kRigWait);
+    QTest::qWait(500);
+    qInfo().noquote() << "[2.7] after GO:" << run->nowText() << "| sub next" << run->findChild<QWidget *>("crSubNext")
+                      << "| lantern" << channelValue(doc, "Lantern 1", "Master Dimmer");
+    QCOMPARE(channelValue(doc, "Lantern 1", "Master Dimmer"), 0);
+    press(run, "crSubGo");
+    QTRY_COMPARE_WITH_TIMEOUT(channelValue(doc, "Lantern 1", "Master Dimmer"), 255, kRigWait);
+    waitUntil([run]() { return run->nowText().contains(QStringLiteral("Stomp")); }, 400);
+    qInfo().noquote() << "[2.7] after Sub GO:" << run->nowText();
+    if (!dir.isEmpty())
+    {
+        HelpShots::Frame f;
+        f.grab = m_app;
+        f.callouts << mark(run->findChild<QToolButton *>("crSubGo"), 1) << mark(run->findChild<QWidget *>("crNow"), 2)
+                   << mark(run->cueTree(), 3);
+        QVERIFY(save(HelpShots::annotate(m_app->grab().toImage(), f), dir, "run-subgo"));
+    }
+    // Stomp Out follows by itself.
+    QTRY_COMPARE_WITH_TIMEOUT(channelValue(doc, "Lantern 1", "Master Dimmer"), 0, kRigWait);
+    qInfo().noquote() << "[2.7] after the auto-follow:" << run->nowText();
+    press(run, "crGo");
+    QTRY_VERIFY_WITH_TIMEOUT(run->nowText().contains("1.0.2.5"), kRigWait);
+    QTest::qWait(300);
+    QCOMPARE(channelValue(doc, "Lantern 1", "Master Dimmer"), 0);
+    press(run, "crStop");
+    settle(300);
+    doc->resetModified();
+}
+
+void CourseShow_Test::lessonTwoSevenExtension()
+{
+    if (kLevelTwoLessons < 7)
+        QSKIP("not written yet");
+    // Lesson 2.7's extension: a fourth sub-cue after Stomp Out, Red, Full
+    // on Sub GO -- and the number it gets beside the main cue 1.0.2.5.
+    QVERIFY(open(levelTwoFinish(7)));
+    Doc *doc = m_app->doc();
+    ShowTreeController *st = doc->showTree();
+    ShowTreeView *view = showTree();
+    quint32 out = ShowTree::invalidId();
+    for (const Production &p : st->productions())
+        for (const CueList &l : p.lists)
+            for (const Cue &c : l.cues)
+                if (c.name == QStringLiteral("Stomp Out"))
+                    out = c.id;
+    QVERIFY(view->selectNode(out));
+    settle(50);
+    view->m_newSubCue->click();
+    settle(100);
+    const quint32 id = view->currentCueId();
+    const CueList *sl = st->listOfCue(id);
+    QVERIFY(sl != nullptr && sl->isSubCues());
+    const QString label = st->cueLabel(*sl, sl->indexOf(id));
+    qInfo().noquote() << "[2.7x] the fourth sub-cue:" << label;
+    QLineEdit *box = stFind<QLineEdit>(view, "stCueName");
+    box->setText(QStringLiteral("Stomp 2"));
+    QTest::keyClick(box, Qt::Key_Return);
+    settle(50);
+    QVERIFY(dropPaletteOnRow(doc, view, "⤳ Lanterns", "Red").startsWith(QStringLiteral("Red → layer Lanterns")));
+    QVERIFY(dropPaletteOnRow(doc, view, "Lanterns", "Full").startsWith(QStringLiteral("Full → layer Lanterns")));
+    QCOMPARE(stFind<QComboBox>(view, "stSubCueAdvance")->currentIndex(), 0);     // Sub GO
+    QVERIFY(label.startsWith(QStringLiteral("1.0.2.4")));
+    doc->resetModified();
+}
+
 void CourseShow_Test::levelTwoWithTheMouse()
 {
     struct L { int n; bool (*byMouse)(Doc *, ShowTreeView *, const QString &); };
@@ -4650,6 +4868,7 @@ void CourseShow_Test::levelTwoWithTheMouse()
         { 4, lessonTwoFourByMouse },
         { 5, lessonTwoFiveByMouse },
         { 6, [](Doc *d, ShowTreeView *v, const QString &sh) { return lessonTwoSixByMouse(qobject_cast<App *>(v->window()), d, v, sh); } },
+        { 7, lessonTwoSevenByMouse },
     };
     // Lesson 2.1 starts where Level 1 finished.
     QVERIFY(open(kL4Finish));
@@ -4682,6 +4901,7 @@ void CourseShow_Test::buildLevelTwoShows()
         { 4, lessonTwoFourByMouse },
         { 5, lessonTwoFiveByMouse },
         { 6, [](Doc *d, ShowTreeView *v, const QString &sh) { return lessonTwoSixByMouse(qobject_cast<App *>(v->window()), d, v, sh); } },
+        { 7, lessonTwoSevenByMouse },
     };
     const QString only = qEnvironmentVariable("COURSE_LESSON");
     for (const L &l : lessons)
@@ -4830,6 +5050,15 @@ void CourseShow_Test::levelTwoPictures()
         const QString d = root + QStringLiteral("/lesson-2-6");
         QVERIFY(open(levelTwoStart(6)));
         QVERIFY(lessonTwoSixByMouse(m_app, m_app->doc(), showTree(), d));
+        m_app->doc()->resetModified();
+    }
+
+    // --- 2.7 (the Run tab's Sub GO is taken by lessonTwoSevenPlaysTheStomps)
+    if (wanted(7))
+    {
+        const QString d = root + QStringLiteral("/lesson-2-7");
+        QVERIFY(open(levelTwoStart(7)));
+        QVERIFY(lessonTwoSevenByMouse(m_app->doc(), showTree(), d));
         m_app->doc()->resetModified();
     }
 }

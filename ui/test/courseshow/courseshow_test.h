@@ -171,6 +171,13 @@ private slots:
      *  its Virtual Console button over it, then let go. */
     void lessonTwoSixFiresAHit();
 
+    /** Lesson 2.7, played: GO into the chorus, Sub GO for the stomp, its
+     *  auto-follow, and GO on to a cue that doesn't receive it. */
+    void lessonTwoSevenPlaysTheStomps();
+
+    /** Lesson 2.7's extension: a fourth sub-cue, and its number. */
+    void lessonTwoSevenExtension();
+
     /** COURSE_BUILD=1: makes Level 2's start and finish files, each lesson
      *  done with the mouse from the one before's finish (COURSE_LESSON=2.N:
      *  that lesson only). Skipped otherwise. */
