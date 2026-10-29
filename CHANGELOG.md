@@ -154,6 +154,13 @@ skipped). Upstream fixes taken:
   light and dark, no JavaScript) and are left out of the course site's
   menu and search. Each teacher guide starts with its link and a QR code;
   `docs/course/tools/student-pages.py` checks the pages.
+- **Course: Level 2, a lesson at a time** (`/class/2-1/`): **2.1 Tracking
+  and Block**: what tracks into a cue (S / T / R / M, *Tracked in*, *Next
+  cue receives*), **Release** on the verse's step tops, a **Cue-only**
+  flash, the Solo as the **Block** hard start, the base cue. Its start and
+  finish shows, pictures and every step are made and checked by
+  `courseshow_test` (`levelTwoWithTheMouse`, `buildLevelTwoShows`,
+  `levelTwoPictures`).
 
 ### Changed
 

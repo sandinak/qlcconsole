@@ -10,6 +10,7 @@
 | `lesson-1-3-start.qlcc` · `lesson-1-3-finish.qlcc` | 1.3: AT-W-ALL Warm White, Full, Aim Center in the verse; 1.0.4 *Solo* (Block) with the AT-Spots White, Full, Aim Soloist DS (their shutter opens by itself). |
 | `lesson-1-4-start.qlcc` · `lesson-1-4-finish.qlcc` | 1.4: fades and a hold (Pose fade in 3 s, Verse 2 s, Scream hold 2 s and fade out 3 s, Solo fade in 3 s). |
 | `lesson-1-5-start.qlcc` | 1.5 runs the show: 1.4's finish. Nothing is built, so there is no finish file. |
+| `lesson-2-1-start.qlcc` · `lesson-2-1-finish.qlcc` | 2.1 (from 1.4's finish): the verse's StepTops released; 1.0.2.5 *Flash* (Cue-only) with StepTops White, Full. |
 | `classroom-eos.asc` | Lesson 3.10: a small Eos show in USITT ASCII, written by hand for the course (not a real production): ten dimmer channels — front, back, a cyc, specials, and house, work, relay and backstage circuits, one labelled so the import guesses it wrong — a cue list of four cues and one sub. |
 
 Each lesson starts from the one before's finish, so a student who missed
@@ -43,7 +44,9 @@ would save:
    `lesson-1-1-start.qlcc`, then does Lesson 1.1 **with the mouse, as the
    handout says**, and saves `lesson-1-1-finish.qlcc`. Then
    `buildLessonShows` does Lessons 1.2–1.4 the same way, each from the
-   one before's finish:
+   one before's finish, and `buildLevelTwoShows` Level 2's lessons
+   (`COURSE_LESSON=2.N` for one of them, so the others' files stay as
+   they are):
 
    ```sh
    cd build/ui/test/courseshow
@@ -53,6 +56,9 @@ would save:
    COURSE_BUILD=1 QT_QPA_PLATFORM=offscreen \
        DYLD_FALLBACK_LIBRARY_PATH=../../src:../../../engine/src \
        ./courseshow_test.app/Contents/MacOS/courseshow_test buildLessonShows
+   COURSE_BUILD=1 COURSE_LESSON=2.1 QT_QPA_PLATFORM=offscreen \
+       DYLD_FALLBACK_LIBRARY_PATH=../../src:../../../engine/src \
+       ./courseshow_test.app/Contents/MacOS/courseshow_test buildLevelTwoShows
    ```
 
 3. **Take the pictures** (every lesson's, into `docs/course/images/lesson-L-N/`),
@@ -68,7 +74,8 @@ would save:
    ```
 
    Lesson 3.6's pictures (`images/lesson-3-6/`) are taken by its own test,
-   `lessonFocusAndCalibration`, with the same `COURSE_SHOTS` set.
+   `lessonFocusAndCalibration`, with the same `COURSE_SHOTS` set; Level
+   2's by `levelTwoPictures` (`COURSE_LESSON=2.N` for one lesson's).
 
 Nothing here touches your settings or your fixture folder: the test runs
 with a home folder and settings of its own.

@@ -143,6 +143,24 @@ private slots:
      *  Rig Overview of each cue. Skipped otherwise. */
     void lessonPictures();
 
+    /** Level 2 with the mouse, lesson by lesson, each from its start file
+     *  (2.1's is Lesson 1.4's finish): each step checks the handout's "you
+     *  should see", and each ends as its finish file. */
+    void levelTwoWithTheMouse();
+
+    /** Lesson 2.1's extension: the Pose as the base cue, with dim blue step
+     *  tops: the chorus's released step tops go back to them. */
+    void lessonTwoOneExtension();
+
+    /** COURSE_BUILD=1: makes Level 2's start and finish files, each lesson
+     *  done with the mouse from the one before's finish (COURSE_LESSON=2.N:
+     *  that lesson only). Skipped otherwise. */
+    void buildLevelTwoShows();
+
+    /** COURSE_SHOTS=<folder>: Level 2's pictures (COURSE_LESSON=2.N: that
+     *  lesson's only). Skipped otherwise. */
+    void levelTwoPictures();
+
 private:
     bool open(const QString &path);
     ShowTreeView *showTree() const;

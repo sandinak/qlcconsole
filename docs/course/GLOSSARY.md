@@ -119,7 +119,11 @@ brackets.
 | **Block cue** | A cue that starts from a dark stage, with nothing tracking into it (Mode: Block; **B** in the tree's **M** column). [1.3] |
 | **Fade** | How long a change takes. **Fade in**: how long a cue takes to arrive; **fade out**: how long its lights take to go when the next cue takes over. [1.4] |
 | **Hold / follow** | How long a cue waits before the next one plays by itself (∞: waits for GO). A cue that plays by itself **follows**. [1.4] |
-| **Release** | A layer that leaves when its cue ends. [2.1] |
+| **Tracked in / Next cue receives** | On a cue's page: each layer tracking into the cue, where from and its values / what the cue after it starts from. [2.1] |
+| **Release** | Ticked on a layer: it leaves when its cue is left, back to what the base cue plays on it, else dark. The cue's **R** column counts them. [2.1] |
+| **Cue-only cue** | A cue that starts from the one before but whose changes don't pass on (Mode: Cue-only; **C** in the **M** column): a flash or sting that's there and gone. [2.1] |
+| **Hard start** | A cue that starts from a known state whatever came before: a Block cue, for a solo or a new section. [2.1] |
+| **Base cue** | The cue a list's released layers go back to (tick *The list's base cue* on its page; **base** in the **F** column). [2.1] |
 | **Effect** | A pattern that moves through the lights: a chase, a sparkle, a rainbow. [2.4] |
 | **Hit** | A short, sharp change on a musical accent [0.6]; a look kept ready to fire by hand over the running list, for busking [0.7]: the Show Tree's **Hits** section, built with **+ Hit**. A hit never tracks. [2.6] |
 

@@ -10,7 +10,9 @@ and the Level 1 check — each with teacher guide, handout, slides outline,
 exit ticket, at-home page and student page. Level 0 is now seven short
 lighting-concepts lessons (no computers) before the virtual stage (0.8).
 Every app step is checked by the course test on 0.3.0 (release candidate
-4), the pictures retaken on it. Level 2 is an outline. Level 3 has
+4), the pictures retaken on it. Level 2 is being written a lesson at a
+time, each published when done: 2.1 (tracking and Block) is written and
+checked by the course test; 2.2–2.7 are an outline. Level 3 has
 four lessons written — 3.3 plot symbols, 3.6 focus and calibration (focus
 calls on the controller, venues, the scramble practice and its focus
 report, Focus this cue; with pictures), 3.7 house lights, work lights and power,
@@ -118,7 +120,7 @@ on lines, and busking hits for the unexpected.*
 
 | # | Lesson | Design idea | In the tool |
 |---|---|---|---|
-| 2.1 | **Tracking and Block** | What stays on unless you change it. A "hard start" for each song. | Grey ⤳ rows ("tracked from"), the tree's **S / T / R** counts (Sets, Tracks in, Releases) and **M** / **F** columns, **Release**, cue modes Track / Block / Cue-only, the **base cue**, *Next cue receives*. |
+| 2.1 | **Tracking and Block** *(written)* | What stays on unless you change it; what should carry on and what shouldn't (one look per idea, 0.5; a sting is gone on the next beat, 0.6). A "hard start". | Read the chorus: grey ⤳ rows, the tree's **S / T / R / M** counts, **Tracked in**, *Next cue receives*. Director's notes: **Release** the verse's StepTops (dark in the chorus); a point cue 1.0.2.5 *Flash* (StepTops White, Full), **Cue-only**, so the Scream starts without it. The Solo (1.3) is the **Block** cue. Extension: the Pose as the **base cue** (StepTops Blue, 10%). |
 | 2.2 | **Palettes: change once, change everywhere** | A designer's colours for a song. The director says "less pink" an hour before the show. | Edit a palette in the Look Editor and watch every cue change. Make your own palette; a folder per song. *Used by*. |
 | 2.3 | **Parts of a group** | Highlight one row of singers. Symmetry. | Child layers (`US in Steps`), group sets (a set of Trusses SR + Trusses SL), Split / Merge. |
 | 2.4 | **Effects: sparkle, chase, matrix** | Energy and rhythm. Eye candy vs. light on people. | Effects on the Steps and the truss pixel boxes (Sinelon, chase, sparkle); an effect on the cue across the whole stage; its own colour; speed masters. |
