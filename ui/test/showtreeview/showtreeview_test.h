@@ -109,6 +109,8 @@ private slots:
     void convertAndDetachFromTheListPage();
 
     // R2: palettes in the Library; R3: the Looks section
+    void anEffectMadeInBuildIsInTheLibraryAtOnce();
+    void renameSelectsTheWords();
     void palettesInTheLibrary();
     void aPaletteDeletedFromTheLibraryComesBackWithUndo();
     void paletteStepsAreOneUndoStepAndSharedWithProgramming();

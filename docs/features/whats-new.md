@@ -14,6 +14,10 @@ The latest changes, newest first. Each links to the guide with the detail.
   button, or **View ▸ Blind**) makes the plot and the studio show the cue
   you are editing while the stage plays on. Blind is blue everywhere, and
   the footer says what it is doing. See [Blind](other-improvements.md#blind--park--highlight--flash).
+- **Stack effects**: a movement and an intensity effect on one layer,
+  each on its own row; drag a look row to another layer; effects take
+  edits while they play. See [Stack a movement and an intensity
+  effect](effects.md#stack-a-movement-and-an-intensity-effect).
 - **Own speed ×** for every effect in the look editor; a time typed in a
   cue is what GO plays; picking another effect always plays it. See
   [Effects](effects.md).

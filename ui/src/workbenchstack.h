@@ -142,6 +142,10 @@ public:
      ************************************************************************/
     /** Drops on the rows are the back end's (all of them, any MIME). */
     virtual bool takesDrops() const { return false; }
+    /** A look row of a Show Tree cue's layer, dragged in the outline:
+     *  pairs of (layer index, key). Dropped on another layer it moves
+     *  there (⌥: a copy). */
+    static const char *attributeMimeType() { return "application/x-qlcconsole-cue-attribute"; }
     /** What dropping @a mime on layer @a layer (-1: below the rows) would
      *  do; "!why" refused, "" nothing. */
     virtual QString dropPlanOn(int layer, const QMimeData *mime, bool separate) const;

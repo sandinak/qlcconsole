@@ -924,7 +924,10 @@ void ProgrammingOutline::addCueLayerRows(const WorkbenchStack::Layer &l, int ind
         row->setData(NameCol, SceneRole, index);
         row->setData(NameCol, KeyRole, QStringLiteral("a:%1:%2").arg(l.targetSignature, attr.key));
         row->setData(NameCol, PathRole, attr.key);
-        row->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsDropEnabled);
+        // Press and drag moves it to another layer (⌥ copies), as a scene's
+        // look rows; it doesn't rubber-band a selection. ⇧/⌘-click select.
+        row->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsDropEnabled
+                      | (attr.inherited && attr.value.isEmpty() ? Qt::NoItemFlags : Qt::ItemIsDragEnabled));
         if (QLCPalette *p = m_doc->palette(attr.palette))
             row->setIcon(NameCol, ItemIcons::paletteIcon(m_doc, p));
         const QString tip = attr.origin.isEmpty() ? tr("%1: %2, set here").arg(attr.label, attr.value)
@@ -1521,6 +1524,7 @@ bool ProgrammingOutline::removeLayers(const QList<int> &indexes)
 QStringList ProgrammingOutline::mimeTypes() const
 {
     return { QString::fromLatin1(rowMimeType()),
+             QString::fromLatin1(WorkbenchStack::attributeMimeType()),
              QString::fromLatin1(FunctionsTreeWidget::paletteDragMimeType()),
              QString::fromLatin1(FixtureGroupSource::fixtureGroupMimeType()),
              QString::fromLatin1(FixtureGroupSource::fixtureMimeType()),
@@ -1542,10 +1546,23 @@ QMimeData *ProgrammingOutline::mimeData(const QList<QTreeWidgetItem *> &items) c
             ++n;
         }
     }
-    if (n == 0)
+    // A Show Tree cue's look rows (W3): which layer, which look.
+    QByteArray attrs;
+    QDataStream aout(&attrs, QIODevice::WriteOnly);
+    int na = 0;
+    for (QTreeWidgetItem *it : items)
+        if (it->data(NameCol, KindRole).toInt() == AttributeRow)
+        {
+            aout << qint32(it->data(NameCol, SceneRole).toInt()) << it->data(NameCol, PathRole).toString();
+            ++na;
+        }
+    if (n == 0 && na == 0)
         return nullptr;
     QMimeData *mime = new QMimeData;
-    mime->setData(QString::fromLatin1(rowMimeType()), data);
+    if (n > 0)
+        mime->setData(QString::fromLatin1(rowMimeType()), data);
+    if (na > 0)
+        mime->setData(QString::fromLatin1(WorkbenchStack::attributeMimeType()), attrs);
     return mime;
 }
 
@@ -1737,6 +1754,7 @@ QString ProgrammingOutline::stackDropPlan(const QMimeData *mime, const QPoint &p
 void ProgrammingOutline::dragEnterEvent(QDragEnterEvent *event)
 {
     if (event->mimeData()->hasFormat(rowMimeType()) || fromSources(event->mimeData())
+        || event->mimeData()->hasFormat(QString::fromLatin1(WorkbenchStack::attributeMimeType()))
         || (m_mode == Stack && m_stack != nullptr && m_stack->takesDrops()))
         event->acceptProposedAction();
     else

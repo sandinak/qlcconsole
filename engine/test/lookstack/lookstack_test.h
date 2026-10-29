@@ -41,6 +41,8 @@ private slots:
     void aDimmerUnderAMovementEffectIsNotTheLooks();
     void anAimOrPanTiltAfterAnEffectIsStillTheLooks();
     void theLowerOfTwoMovementEffectsWins();
+    void aMovementAndADimmerEffectBothPlay();
+    void aTreeLayerPlaysAMovementAndADimmerEffect();
     void theLooksOwnColoursFeedEveryEffectWithoutItsOwn();
     void aDimmerLookDimsAFixtureWithNoDimmer();
     void colourOneAndTwoGoToAFixturesTwoColourSets();

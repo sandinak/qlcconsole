@@ -21,6 +21,7 @@
 #include <QXmlStreamReader>
 #include <QSharedPointer>
 #include <QMimeData>
+#include <QDataStream>
 #include <QBuffer>
 #include <QMenu>
 #include <QSet>
@@ -550,10 +551,94 @@ quint32 TreeCueStack::addNew(Function::Type type, int after, const QList<GroupHe
  * The tree's drops, menus and pages
  ****************************************************************************/
 
+static QList<QPair<int, QString>> decodeAttributes(const QMimeData *mime)
+{
+    QList<QPair<int, QString>> out;
+    if (mime == nullptr || !mime->hasFormat(QString::fromLatin1(WorkbenchStack::attributeMimeType())))
+        return out;
+    QByteArray data = mime->data(QString::fromLatin1(WorkbenchStack::attributeMimeType()));
+    QDataStream in(&data, QIODevice::ReadOnly);
+    while (!in.atEnd())
+    {
+        qint32 layer = -1;
+        QString key;
+        in >> layer >> key;
+        out << qMakePair(int(layer), key);
+    }
+    return out;
+}
+
+QString TreeCueStack::attributeDropPlan(int layer, const QMimeData *mime, bool copy) const
+{
+    const QList<QPair<int, QString>> items = decodeAttributes(mime);
+    const QList<Layer> ls = layers();
+    if (items.isEmpty() || layer < 0 || layer >= ls.size())
+        return QStringLiteral("!") + tr("Drop it on a layer");
+    bool other = false;
+    for (const QPair<int, QString> &it : items)
+        other = other || it.first != layer;
+    if (!other)
+        return QStringLiteral("!") + tr("Already on this layer: a layer's looks play in their kind's "
+                                        "order (colour, dimmer, position… then the effects)");
+    return copy ? tr("Copy to %1").arg(ls.at(layer).label) : tr("Move to %1 (⌥ copies)").arg(ls.at(layer).label);
+}
+
+bool TreeCueStack::dropAttributes(int layer, const QMimeData *mime, bool copy)
+{
+    if (attributeDropPlan(layer, mime, copy).startsWith(QLatin1Char('!')) || st() == nullptr)
+        return false;
+    ShowTreeController *c = st();
+    ResolvedCue rc;
+    const QList<Row> rs = rows(&rc);
+    if (layer < 0 || layer >= rs.size())
+        return false;
+    auto set = [this, c, rs](int index, const Look &look) {
+        const Row &r = rs.at(index);
+        return r.layerId != ShowTree::invalidId() ? c->setLayerLook(m_cue, r.layerId, look)
+                                                  : c->setTargetLook(m_cue, r.target, look);
+    };
+    // Worked out before anything moves: the rows change as it does.
+    struct Move { int from; Look look; bool own; };
+    QList<Move> moves;
+    for (const QPair<int, QString> &it : decodeAttributes(mime))
+    {
+        if (it.first == layer || it.first < 0 || it.first >= rs.size())
+            continue;
+        const ResolvedLayer *src = rc.layer(rs.at(it.first).target);
+        if (src == nullptr || !src->values.contains(it.second))
+            continue;
+        const ResolvedValue v = src->values.value(it.second);
+        if (v.look.none || v.look.palettes.isEmpty())
+            continue;
+        moves << Move{ it.first, v.look, v.origin == Origin::Own && rs.at(it.first).layerId != ShowTree::invalidId() };
+    }
+    if (moves.isEmpty())
+        return false;
+    c->beginBatch(copy ? tr("Copy to %1").arg(c->targetLabel(rs.at(layer).target))
+                       : tr("Move to %1").arg(c->targetLabel(rs.at(layer).target)));
+    bool any = false;
+    for (const Move &m : moves)
+    {
+        // An effect's own colour and dimmer go with it (Look::own).
+        Look look = m.look;
+        any |= set(layer, look);
+        if (copy)
+            continue;
+        Look gone;
+        gone.key = look.key;
+        gone.none = !m.own;             // carried in: off from here; its own: cleared
+        any |= set(m.from, gone);
+    }
+    c->endBatch(any);
+    return any;
+}
+
 QString TreeCueStack::dropPlanOn(int layer, const QMimeData *mime, bool separate) const
 {
     if (m_view.isNull() || mime == nullptr || cue() == nullptr)
         return QString();
+    if (mime->hasFormat(QString::fromLatin1(attributeMimeType())))
+        return attributeDropPlan(layer, mime, separate);
     const QList<Row> rs = rows();
     quint32 lid = ShowTree::invalidId();
     Target t;
@@ -571,6 +656,8 @@ QString TreeCueStack::dropPlanOn(int layer, const QMimeData *mime, bool separate
 
 bool TreeCueStack::dropOn(int layer, const QMimeData *mime, bool separate)
 {
+    if (mime != nullptr && mime->hasFormat(QString::fromLatin1(attributeMimeType())))
+        return dropAttributes(layer, mime, separate);
     if (dropPlanOn(layer, mime, separate).isEmpty() || dropPlanOn(layer, mime, separate).startsWith(QLatin1Char('!')))
         return false;
     const QList<Row> rs = rows();

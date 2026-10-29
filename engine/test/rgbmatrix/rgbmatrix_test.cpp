@@ -563,6 +563,45 @@ void RGBMatrix_Test::aScriptedMatrixStepsOnItsDuration()
     QVERIFY(next != reds);                              // the stripe moved
 }
 
+/* Item 8: "changing settings on an effect in Build while it's playing on
+   the rig doesn't alter the impact". A running matrix takes a new
+   direction and a new speed on the next steps, without a restart. */
+void RGBMatrix_Test::aRunningMatrixTakesEditsAtOnce()
+{
+    RGBMatrix *mtx = new RGBMatrix(m_doc);
+    mtx->setFixtureGroup(m_doc->fixtureGroups().first()->id());
+    mtx->setAlgorithm(RGBAlgorithm::algorithm(m_doc, "Stripes"));
+    mtx->setColor(0, QColor(255, 0, 0));
+    mtx->setDuration(MasterTimer::tick() * 2);
+    m_doc->addFunction(mtx);
+    auto tidy = qScopeGuard([this, mtx]() {
+        mtx->stop(FunctionParent::master());
+        tick(m_doc, 3);
+        m_doc->deleteFunction(mtx->id());
+    });
+    QVERIFY(mtx->stepsCount() > 3);
+    mtx->start(m_doc->masterTimer(), FunctionParent::master());
+    tick(m_doc, 2);
+    const int a = mtx->m_stepHandler->currentStepIndex();
+    tick(m_doc, 2);
+    const int b = mtx->m_stepHandler->currentStepIndex();
+    QCOMPARE(b, (a + 1) % mtx->stepsCount());          // forward, a step every 2 ticks
+
+    // Backward while it runs: it turns round from where it is.
+    mtx->setDirection(Function::Backward);
+    tick(m_doc, 2);
+    const int c = mtx->m_stepHandler->currentStepIndex();
+    QCOMPARE(c, (b - 1 + mtx->stepsCount()) % mtx->stepsCount());
+    QVERIFY(mtx->isRunning());
+
+    // Slower while it runs: a step every 6 ticks from now.
+    mtx->setDuration(MasterTimer::tick() * 6);
+    tick(m_doc, 2);
+    const int d = mtx->m_stepHandler->currentStepIndex();
+    tick(m_doc, 2);
+    QCOMPARE(mtx->m_stepHandler->currentStepIndex(), d);
+}
+
 /* Building an RGB matrix makes and destroys a temporary RGBAudio
    (RGBAlgorithm::algorithm()); its destructor asked the Doc for the audio
    capture, which made one -- an FFT plan and a beat tracker per show

@@ -47,6 +47,7 @@ private slots:
      *  stopped, it lets go; a scripted one steps on its duration */
     void aRunningMatrixWritesItsColour();
     void aScriptedMatrixStepsOnItsDuration();
+    void aRunningMatrixTakesEditsAtOnce();
 
 private:
     Doc* m_doc;

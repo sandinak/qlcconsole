@@ -80,6 +80,17 @@ RGBMatrix::RGBMatrix(Doc *doc)
     setColor(0, Qt::red);
 
     setAlgorithm(RGBAlgorithm::algorithm(doc, "Stripes"));
+
+    // A direction edited while it runs is taken on the next tick (only on a
+    // change: write() reads one flag).
+    m_directionSeen = direction();
+    connect(this, &Function::changed, this, [this]() {
+        if (direction() != m_directionSeen)
+        {
+            m_directionSeen = direction();
+            m_directionEdited = true;
+        }
+    });
 }
 
 RGBMatrix::~RGBMatrix()
@@ -698,6 +709,7 @@ void RGBMatrix::preRun(MasterTimer *timer)
             checkEngineCreation();
 
             // Copy direction from parent class direction
+            m_directionEdited = false;
             m_stepHandler->initializeDirection(direction(), m_rgbColors[0], m_rgbColors[1], m_stepsCount, m_runAlgorithm);
 
             // Persistent matrix: initializeDirection() has just reset the step
@@ -755,6 +767,10 @@ void RGBMatrix::write(MasterTimer *timer, QList<Universe *> universes)
 
         if (m_algorithm != NULL && m_requestEngineCreation)
             checkEngineCreation();
+
+        if (m_directionEdited.load(std::memory_order_relaxed) && m_directionEdited.exchange(false)
+            && runOrder() != PingPong)
+            m_stepHandler->setDirection(direction());
 
         // Invalid/nonexistent script
         if (m_runAlgorithm == NULL || m_runAlgorithm->apiVersion() == 0)

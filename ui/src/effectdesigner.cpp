@@ -608,6 +608,7 @@ void EffectDesigner::setEffect(quint32 paletteId, const QList<quint32> &own)
     const QLCPalette *orig = m_doc->palette(paletteId);
     if (orig != nullptr && orig->type() != QLCPalette::Effect)
         orig = nullptr;
+    restoreOriginal();          // another one opened: the last as it was
     m_originalId = orig == nullptr ? QLCPalette::invalidId() : paletteId;
     quietly([&]() {
         if (orig != nullptr)
@@ -780,7 +781,7 @@ bool EffectDesigner::isModified() const
     const QLCPalette *d = draft();
     if (d == nullptr)
         return false;
-    const QLCPalette *o = m_doc->palette(m_originalId);
+    const QLCPalette *o = m_originalAtOpen != nullptr ? m_originalAtOpen : m_doc->palette(m_originalId);
     if (o == nullptr)
         return !effectName().isEmpty();
     return !sameEffect(d, o);
@@ -827,6 +828,8 @@ quint32 EffectDesigner::keepOneOff()
     if (o != nullptr && m_doc->showTree()->isInlinePalette(o->id()))
     {
         // The layer's own one-off, edited: it takes the design, no new one.
+        delete m_originalAtOpen;
+        m_originalAtOpen = nullptr;
         copyEffect(d, o);
         o->setName(m_oneOffWhere.isEmpty() ? effectName()
                                            : QStringLiteral("%1 · %2").arg(effectName(), m_oneOffWhere));
@@ -863,11 +866,9 @@ quint32 EffectDesigner::saveAsPalette(const QString &name, const QString &folder
                 taken << p->name();
         for (int i = 2; taken.contains(suggested); ++i)
             suggested = QStringLiteral("%1 %2").arg(effectName()).arg(i);
-        bool ok = false;
-        n = QInputDialog::getText(this, tr("Save as palette"), tr("Palette name:"), QLineEdit::Normal,
-                                  suggested, &ok).trimmed();
-        if (!ok || n.isEmpty())
-            return QLCPalette::invalidId();
+        // No name box first: saved under that name, then named in place in
+        // the list (Build ▸ Effects starts the rename), as + Palette does.
+        n = suggested;
     }
     const QString path = folder.isEmpty() ? st->suggestPaletteFolder(QLCPalette::Effect) : folder;
     const quint32 pid = m_draftId;
@@ -889,6 +890,9 @@ bool EffectDesigner::updateOriginal()
         return false;
     copyEffect(d, o);
     m_doc->setModified();
+    // Kept: the live edits are the palette's now.
+    delete m_originalAtOpen;
+    m_originalAtOpen = nullptr;
     // Every scene playing it plays it as now designed.
     if (EffectScriptRunner *runner = m_doc->effectScriptRunner())
     {
@@ -919,6 +923,9 @@ void EffectDesigner::release(bool keepDraft)
 {
     if (m_doc == nullptr)
         return;
+    // Not kept into the original (Cancel, another effect opened, a one-off
+    // or a new palette made of it): the original plays as it was again.
+    restoreOriginal();
     stopPreview();
     m_look->setContextScene(nullptr);
     m_look->setPalette(QLCPalette::invalidId());
@@ -1350,8 +1357,85 @@ void EffectDesigner::stopPreview()
     updateHeader();
 }
 
+QList<quint32> EffectDesigner::scenesPlayingOriginal() const
+{
+    QList<quint32> out;
+    if (m_doc == nullptr || m_doc->palette(m_originalId) == nullptr)
+        return out;
+    for (Function *f : m_doc->functions())
+    {
+        const Scene *s = qobject_cast<const Scene *>(f);
+        if (s != nullptr && f->id() != m_sceneId && s->isRunning() && s->palettes().contains(m_originalId))
+            out << f->id();
+    }
+    return out;
+}
+
+static QString effectIdentity(const QLCPalette *p)
+{
+    return p == nullptr ? QString() : p->scriptPath() + QLatin1Char('|') + p->effectPreset()
+                                      + QLatin1Char('|') + p->wledEffect();
+}
+
+void EffectDesigner::mirrorToOriginal()
+{
+    QLCPalette *d = draft();
+    QLCPalette *o = m_doc == nullptr ? nullptr : m_doc->palette(m_originalId);
+    if (d == nullptr || o == nullptr || o == d)
+        return;
+    const QList<quint32> playing = scenesPlayingOriginal();
+    // Only once something plays it; from then on until let go.
+    if (m_originalAtOpen == nullptr && playing.isEmpty())
+        return;
+    if (sameEffect(d, o))
+        return;
+    if (m_originalAtOpen == nullptr)
+    {
+        m_originalAtOpen = new QLCPalette(QLCPalette::Effect, this);
+        copyEffect(o, m_originalAtOpen);
+    }
+    const QString before = effectIdentity(o);
+    copyEffect(d, o);
+    EffectScriptRunner *runner = m_doc->effectScriptRunner();
+    if (runner == nullptr)
+        return;
+    // Its values on the next tick; the engine made again only when the
+    // effect itself changed (no restart, no jump, for a value).
+    runner->updateEffectParams(o->id());
+    const bool another = before != effectIdentity(o);
+    for (quint32 sid : playing)
+        if (Scene *s = qobject_cast<Scene *>(m_doc->function(sid)))
+        {
+            s->requestPaletteRefresh();
+            if (another)
+                runner->syncScene(sid);
+        }
+}
+
+void EffectDesigner::restoreOriginal()
+{
+    if (m_originalAtOpen == nullptr)
+        return;
+    QLCPalette *o = m_doc == nullptr ? nullptr : m_doc->palette(m_originalId);
+    if (o != nullptr)
+    {
+        const QString before = effectIdentity(o);
+        copyEffect(m_originalAtOpen, o);
+        if (EffectScriptRunner *runner = m_doc->effectScriptRunner())
+        {
+            runner->updateEffectParams(o->id());
+            for (quint32 sid : scenesPlayingOriginal())
+                if (before != effectIdentity(o))
+                    runner->syncScene(sid);
+        }
+    }
+    delete m_originalAtOpen;
+    m_originalAtOpen = nullptr;
+}
+
 void EffectDesigner::refreshPreview(bool params)
 {
+    mirrorToOriginal();
     Scene *s = m_doc == nullptr ? nullptr : qobject_cast<Scene *>(m_doc->function(m_sceneId));
     if (s == nullptr)
         return;
@@ -1497,6 +1581,9 @@ EffectLayerDialog::EffectLayerDialog(Doc *doc, quint32 cueId, quint32 layerId, c
     setObjectName(QStringLiteral("effectLayerDialog"));
     ShowTreeController *st = doc->showTree();
     const CueList *list = st->listOfCue(cueId);
+    // Opened on one effect's row: a pick of another kind replaces it. From
+    // the layer, or its Effect row, another kind goes beside the others.
+    m_replacesOtherKind = isEffectKey(key) && key != QLatin1String("Effect.");
     const Cue *cue = st->cue(cueId);
     const Layer *own = cue == nullptr ? nullptr : cue->layer(layerId);
     if (own != nullptr && m_target.isEmpty())
@@ -1518,8 +1605,13 @@ EffectLayerDialog::EffectLayerDialog(Doc *doc, quint32 cueId, quint32 layerId, c
                     continue;
                 if (isEffectKey(it.key()))
                 {
-                    const bool wanted = isEffectKey(key) && key != QLatin1String("Effect.")
-                                        ? it.key() == key : m_previous.key.isEmpty();
+                    // The row's effect, to edit. From the layer ("Design
+                    // effect…") it starts fresh: a new effect goes beside
+                    // the ones there ("both a position and an intensity
+                    // effect"), one of the same kind is replaced.
+                    const bool row = isEffectKey(key) && key != QLatin1String("Effect.");
+                    const bool wanted = row ? it.key() == key
+                                            : key.isEmpty() && m_previous.key.isEmpty();
                     if (wanted)
                     {
                         m_previous = it.value().look;
@@ -1613,8 +1705,11 @@ bool EffectLayerDialog::apply(quint32 paletteId, const QList<quint32> &own)
     };
     st->beginBatch(tr("Design effect on %1").arg(st->targetLabel(m_target)));
     bool any = false;
-    // The effect it had, of another kind: replaced, not played beside it.
-    if (!m_previous.key.isEmpty() && m_previous.key != key)
+    // Opened on one effect's row and given another kind: that row's
+    // effect is replaced. Opened on the layer, a new kind goes beside the
+    // others (a movement and an intensity effect together); the same kind
+    // is replaced by setting its key.
+    if (m_replacesOtherKind && !m_previous.key.isEmpty() && m_previous.key != key)
     {
         Look gone;
         gone.key = m_previous.key;

@@ -35,6 +35,9 @@
 
 #define private public
 #include "showtreeview.h"
+#include "mastertimer.h"
+#include "effectinstance.h"
+#include "effectscriptrunner.h"
 #undef private
 #include "effectdesigner_test.h"
 #include "effectdesigner.h"
@@ -300,6 +303,81 @@ void EffectDesigner_Test::aLayersOneOffIsEditedInPlace()
     QCOMPARE(st->cue(c1)->layer(l1)->look(key)->palettes, QList<quint32>({ first }));
 }
 
+/* "changing settings on an effect in Build while it's playing on the rig
+   doesn't alter the impact; it stays the same as when it started": while
+   something plays the effect, the designer's edits reach it at once, no
+   restart; Cancel puts it back, Update keeps them. */
+/* Item 7: "creating an effect in Build (which requires a popup?)": Save
+   as palette asks for no name first -- the effect's own, made unique among
+   the show's; Build ▸ Effects then starts the rename in place. */
+void EffectDesigner_Test::saveAsPaletteAsksNoName()
+{
+    FixtureGroup *towers = group("Towers", 0, 3);
+    QLCPalette *old = effectPalette(m_doc, "Dimmer Phaser", "Dimmer Phaser");
+    Q_UNUSED(old)
+    EffectDesigner ed(m_doc);
+    ed.setTryOnGroups({ towers->id() });
+    ed.setEffect(QLCPalette::invalidId());
+    QVERIFY(ed.pickEffect("Dimmer Phaser"));
+    // A box would block here (and the test with it).
+    QTimer::singleShot(2000, []() {
+        if (QWidget *w = QApplication::activeModalWidget())
+            w->close();
+    });
+    const quint32 pid = ed.saveAsPalette();
+    QVERIFY(pid != QLCPalette::invalidId());
+    QCOMPARE(m_doc->palette(pid)->name(), QString("Dimmer Phaser 2"));
+    QVERIFY(!m_doc->showTree()->isInlinePalette(pid));
+}
+
+void EffectDesigner_Test::anEffectPlayingTakesEditsLive()
+{
+    FixtureGroup *towers = group("Towers", 0, 3);
+    QLCPalette *phaser = effectPalette(m_doc, "Phaser", "Dimmer Phaser");
+    phaser->setEffectParamValue("speed", 1);
+    Scene *scene = new Scene(m_doc);
+    scene->setName("Playing");
+    m_doc->addFunction(scene);
+    scene->addFixtureGroup(towers->id());
+    scene->addPalette(phaser->id());
+    scene->start(m_doc->masterTimer(), FunctionParent::master());
+    for (int i = 0; i < 3; ++i)
+        m_doc->masterTimer()->timerTick();
+    QTRY_VERIFY(scene->isRunning());
+    EffectScriptRunner *runner = m_doc->effectScriptRunner();
+    QTRY_VERIFY(runner->instanceForPalette(phaser->id()) != nullptr);
+    EffectInstance *inst = runner->instanceForPalette(phaser->id());
+
+    {
+        EffectDesigner ed(m_doc);
+        ed.setTryOnGroups({ towers->id() });
+        ed.setEffect(phaser->id());
+        ed.draft()->setEffectParamValue("speed", 3);
+        emit ed.lookEditor()->paletteValueChanged(ed.draftId());
+        // The playing effect has it now -- the same engine, not restarted.
+        QCOMPARE(phaser->effectParamValues().value("speed"), 3.0);
+        QCOMPARE(runner->instanceForPalette(phaser->id()), inst);
+        QCOMPARE(inst->m_paramValues.value("speed"), 3.0);
+        QVERIFY(ed.isModified());
+        ed.cancel();
+    }
+    // Cancelled: as it was.
+    QCOMPARE(phaser->effectParamValues().value("speed"), 1.0);
+    QCOMPARE(inst->m_paramValues.value("speed"), 1.0);
+
+    {
+        EffectDesigner ed(m_doc);
+        ed.setTryOnGroups({ towers->id() });
+        ed.setEffect(phaser->id());
+        ed.draft()->setEffectParamValue("speed", 5);
+        emit ed.lookEditor()->paletteValueChanged(ed.draftId());
+        QCOMPARE(inst->m_paramValues.value("speed"), 5.0);
+        QVERIFY(ed.updateOriginal());
+    }
+    QCOMPARE(phaser->effectParamValues().value("speed"), 5.0);
+    scene->stop(FunctionParent::master());
+}
+
 void EffectDesigner_Test::aNamedEffectIsACopyUntilUpdated()
 {
     FixtureGroup *towers = group("Towers", 0, 3);
@@ -339,7 +417,11 @@ void EffectDesigner_Test::aNamedEffectIsACopyUntilUpdated()
     QCOMPARE(st->cue(c1)->layer(l1)->look(key)->palettes, QList<quint32>({ phaser->id() }));
 }
 
-void EffectDesigner_Test::anotherKindReplacesTheLayersEffect()
+/* "How do we stack effects for different things, like both a position and
+   an intensity effect?": designed from the layer, another kind goes BESIDE
+   the effect there; the same kind replaces it; designed from one effect's
+   row, that row's effect is what changes. */
+void EffectDesigner_Test::anotherKindGoesBesideTheLayersEffect()
 {
     FixtureGroup *towers = group("Towers", 0, 3);
     QLCPalette *chase = effectPalette(m_doc, "Chase", "Color Chase");
@@ -352,13 +434,38 @@ void EffectDesigner_Test::anotherKindReplacesTheLayersEffect()
     st->setLayerLook(c1, l1, st->lookForPalette(chase->id()));
     const QString oldKey = effectKey(st->effectKind(chase));
 
-    EffectLayerDialog dlg(m_doc, c1, l1, t);
-    QVERIFY(dlg.designer()->pickEffect("Dimmer Phaser"));
-    const quint32 pid = dlg.designer()->keepOneOff();
-    const QString newKey = effectKey(st->effectKind(m_doc->palette(pid)));
+    quint32 dim = QLCPalette::invalidId();
+    {
+        EffectLayerDialog dlg(m_doc, c1, l1, t);
+        QVERIFY(dlg.designer()->pickEffect("Dimmer Phaser"));
+        dim = dlg.designer()->keepOneOff();
+    }
+    const QString newKey = effectKey(st->effectKind(m_doc->palette(dim)));
     QVERIFY2(oldKey != newKey, qPrintable(oldKey));
+    // Both on the layer, both in what it plays.
+    QVERIFY(st->cue(c1)->layer(l1)->look(oldKey) != nullptr);
+    QCOMPARE(st->cue(c1)->layer(l1)->look(oldKey)->palettes, QList<quint32>({ chase->id() }));
+    QCOMPARE(st->cue(c1)->layer(l1)->look(newKey)->palettes, QList<quint32>({ dim }));
+    QVERIFY(layerScene(m_doc, c1)->palettes().contains(chase->id()));
+    QVERIFY(layerScene(m_doc, c1)->palettes().contains(dim));
+
+    // The same kind again, from the layer: it replaces that one only.
+    quint32 dim2 = QLCPalette::invalidId();
+    {
+        EffectLayerDialog dlg(m_doc, c1, l1, t);
+        QVERIFY(dlg.designer()->pickEffect("Dimmer Phaser"));
+        dim2 = dlg.designer()->keepOneOff();
+    }
+    QCOMPARE(st->cue(c1)->layer(l1)->look(newKey)->palettes, QList<quint32>({ dim2 }));
+    QCOMPARE(st->cue(c1)->layer(l1)->look(oldKey)->palettes, QList<quint32>({ chase->id() }));
+
+    // From the colour effect's own row, another kind: that row's effect goes.
+    {
+        EffectLayerDialog dlg(m_doc, c1, l1, t, oldKey);
+        QVERIFY(dlg.designer()->pickEffect("Dimmer Phaser"));
+        dlg.designer()->keepOneOff();
+    }
     QCOMPARE(st->cue(c1)->layer(l1)->look(oldKey), nullptr);
-    QCOMPARE(st->cue(c1)->layer(l1)->look(newKey)->palettes, QList<quint32>({ pid }));
     QVERIFY(m_doc->palette(chase->id()) != nullptr);      // the palette itself stays
 }
 
