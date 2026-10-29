@@ -2165,11 +2165,19 @@ void CourseShow_Test::lessonHouseLights()
     doc->inputOutputMap()->setGrandMasterValue(255);
     QTRY_COMPARE_WITH_TIMEOUT(cycOut(), 255, kRigWait);
 
-    // House to half, then out: the cues still move them.
+    // House to half, then out: the cues still move them. The Show Tree
+    // brought forward again first (the preview runs only while it is the
+    // tab on show), and the value said if it doesn't come (CI Windows once
+    // read another value here after the Blackout and Grand Master moves).
+    view = showTree();
     QVERIFY(view->selectNode(cueNumbered(doc, "0.0.1")));
-    QTRY_VERIFY_WITH_TIMEOUT(qAbs(out("House Lights") - 127) <= 1, kRigWait);
+    QVERIFY2(waitUntil([&out]() { return qAbs(out("House Lights") - 127) <= 1; }, 2 * kRigWait),
+             qPrintable(QStringLiteral("House Lights %1 in 0.0.1, GM %2, blackout %3")
+                            .arg(out("House Lights")).arg(doc->inputOutputMap()->grandMasterValue())
+                            .arg(doc->inputOutputMap()->blackout())));
     QVERIFY(view->selectNode(cueNumbered(doc, "0.0.2")));
-    QTRY_COMPARE_WITH_TIMEOUT(out("House Lights"), 0, kRigWait);
+    QVERIFY2(waitUntil([&out]() { return out("House Lights") == 0; }, 2 * kRigWait),
+             qPrintable(QStringLiteral("House Lights %1 in 0.0.2").arg(out("House Lights"))));
     doc->resetModified();
 }
 
