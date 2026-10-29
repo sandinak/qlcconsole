@@ -100,6 +100,9 @@
 #include "fixture.h"
 #include "qlcchannel.h"
 #include "paletteops.h"
+#include "effectbrowser.h"
+#include "effectscriptcache.h"
+#include "speedmasters.h"
 #include "doc.h"
 
 #include "courseshow_test.h"
@@ -125,7 +128,7 @@ const QString kL5Start = kShows + QStringLiteral("/lesson-1-5-start.qlcc");
 /* Level 2's show files: lesson-2-N-start / -finish, each lesson starting
    from the one before's finish (2.1 from Lesson 1.4's). */
 /* How many of Level 2's lessons are written (and have show files). */
-const int kLevelTwoLessons = 3;
+const int kLevelTwoLessons = 4;
 
 QString levelTwoStart(int n)
 {
@@ -679,6 +682,10 @@ int outputValue(Doc *doc, const QString &fixture, const QString &name)
 
 void CourseShow_Test::initTestCase()
 {
+    // The effect scripts that ship with the app, as a student's install
+    // has them (Lesson 2.4 picks effects from them).
+    EffectScriptCache::setSystemDirectoriesOverride(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts",
+                                                    QString(QLC_TEST_RESOURCE_ROOT) + "rgbscripts");
     m_app = new App();
     m_app->init();
     // The definitions that ship with the app, as a student's install has
@@ -3306,6 +3313,117 @@ bool treeMenu(ShowTreeView *view, QTreeWidgetItem *item, const QStringList &path
     return chose;
 }
 
+/* + Palette → Effect, with the folder @a folder selected in the Library
+   (the new palette is filed there); in the picker that opens by itself,
+   @a effect searched for and clicked, then Done; then @a name typed in the
+   Look Editor's Name. Returns the new palette, or null. */
+QLCPalette *newEffectPalette(Doc *doc, ShowTreeView *view, const QString &folder, const QString &effect,
+                             const QString &name, const QString &shotDir = QString(), const QString &shotName = QString())
+{
+    QTreeWidget *lib = view->library();
+    QTreeWidgetItem *f = showLibraryRow(lib, folder);
+    if (f == nullptr)
+    {
+        qWarning() << "no Library row" << folder;
+        return nullptr;
+    }
+    lib->setCurrentItem(f);
+    QList<quint32> before;
+    for (QLCPalette *p : doc->palettes())
+        before << p->id();
+    QAction *make = view->findChild<QAction *>(QStringLiteral("stNewPaletteEffect"));
+    if (make == nullptr)
+    {
+        // + Palette's menu: made when it opens.
+        QToolButton *plus = view->findChild<QToolButton *>(QStringLiteral("stNewPalette"));
+        qWarning() << "no stNewPaletteEffect; + Palette" << (plus != nullptr) << (plus && plus->menu());
+        if (plus != nullptr && plus->menu() != nullptr)
+        {
+            emit plus->menu()->aboutToShow();
+            settle();
+            for (QAction *a : plus->menu()->actions())
+                if (a->objectName() == QLatin1String("stNewPaletteEffect"))
+                    make = a;
+        }
+        if (make == nullptr)
+            return nullptr;
+    }
+    make->trigger();
+    settle(200);
+    QLCPalette *made = nullptr;
+    for (QLCPalette *p : doc->palettes())
+        if (!before.contains(p->id()))
+            made = p;
+    if (made == nullptr)
+        return nullptr;
+    QDialog *picker = view->findChild<QDialog *>(QStringLiteral("effectPicker"));
+    const bool byItself = picker != nullptr && picker->isVisible();
+    if (!byItself)
+    {
+        // Not open by itself (the Look Editor was closed): Change effect….
+        QPushButton *change = view->findChild<QPushButton *>(QStringLiteral("effectChange"));
+        if (change == nullptr || !change->isVisible())
+        {
+            qWarning() << "no Change effect… button";
+            return nullptr;
+        }
+        change->click();
+        settle(200);
+    }
+    EffectBrowser *browser = nullptr;
+    for (EffectBrowser *b : view->findChildren<EffectBrowser *>())
+        if (b->isVisible())
+            browser = b;
+    qInfo().noquote() << "[L2] new effect palette" << made->name() << "| picker open by itself" << byItself
+                      << "| browser" << (browser != nullptr) << "| path" << made->path();
+    if (browser == nullptr || picker == nullptr)
+        return nullptr;
+    browser->search()->setFocus();
+    browser->search()->selectAll();         // what was searched for last time goes
+    QTest::keyClicks(browser->search(), effect);
+    settle(100);
+    QListWidgetItem *hit = nullptr;
+    QStringList shown;
+    for (int i = 0; i < browser->list()->count(); ++i)
+    {
+        shown << browser->list()->item(i)->text();
+        if (browser->list()->item(i)->text() == effect && hit == nullptr)
+            hit = browser->list()->item(i);
+    }
+    qInfo().noquote() << "[L2] picker shows for" << effect << ":" << shown.join(" | ");
+    if (hit == nullptr)
+        return nullptr;
+    QListWidget *list = browser->list();
+    list->scrollToItem(hit);
+    QTest::mouseClick(list->viewport(), Qt::LeftButton, Qt::NoModifier, list->visualItemRect(hit).center());
+    settle(100);
+    if (!shotDir.isEmpty())
+    {
+        // The picker as the student sees it: the search, the effect, Done.
+        picker->resize(860, 600);
+        settle(100);
+        HelpShots::Frame f;
+        f.grab = picker;
+        f.callouts << mark(browser->search(), 1)
+                   << markRect(list->viewport(), list->visualItemRect(hit), picker, 2)
+                   << mark(picker->findChild<QPushButton *>(QStringLiteral("effectPickerDone")), 3);
+        save(HelpShots::annotate(picker->grab().toImage(), f), shotDir, shotName);
+    }
+    if (QPushButton *done = picker->findChild<QPushButton *>(QStringLiteral("effectPickerDone")))
+        done->click();
+    settle(100);
+    qInfo().noquote() << "[L2] after Done:" << made->name() << "| script" << made->scriptPath();
+    QLineEdit *edit = view->findChild<QLineEdit *>(QStringLiteral("lookName"));
+    if (edit == nullptr || !edit->isVisible())
+        return nullptr;
+    edit->setFocus();
+    edit->selectAll();
+    QTest::keyClicks(edit, name);
+    QTest::keyClick(edit, Qt::Key_Return);
+    settle(100);
+    return made->name() == name ? made : nullptr;
+}
+
 QString nextReceives(ShowTreeView *view)
 {
     return view->m_cueNext != nullptr ? view->m_cueNext->text() : QString();
@@ -3777,6 +3895,148 @@ static bool lessonTwoThreeByMouse(Doc *doc, ShowTreeView *view, const QString &s
     return true;
 }
 
+/* Lesson 2.4, effects: the dance break. A Block cue 1.0.6 Dance Break:
+   the steps in Chorus Colour with a sparkle of their own in white; the
+   step tops dim blue and the truss washes blue; then one colour chase
+   dropped on the cue, across the stage. */
+static bool lessonTwoFourByMouse(Doc *doc, ShowTreeView *view, const QString &shots = QString())
+{
+    ShowTreeController *st = doc->showTree();
+    for (QTreeWidgetItemIterator it(view->tree()); *it; ++it)
+        (*it)->setExpanded(true);
+    App *app = qobject_cast<App *>(view->window());
+    auto ui = [view, app, &shots](const QString &name, const QList<HelpShots::Callout> &marks) {
+        if (shots.isEmpty() || app == nullptr)
+            return true;
+        HelpShots::Frame f = showTreeFrame(app, view);
+        f.callouts = marks;
+        return shoot(f, shots, name);
+    };
+    auto rig = [view, &shots](const QString &name) {
+        if (shots.isEmpty())
+            return;
+        const quint32 cue = view->currentCueId();
+        rigShot(view, cue, shots + QLatin1Char('/') + name + QStringLiteral(".png"));
+        closeRig();
+        view->selectNode(cue);
+        settle();
+    };
+    // How many different frames @a fx sends over 1.5 s (it moves: more than one).
+    auto frames = [doc](const QString &fx) {
+        QSet<QByteArray> seen;
+        for (int i = 0; i < 30; ++i)
+        {
+            seen.insert(sends(doc, fx, 48));
+            QTest::qWait(50);
+        }
+        return int(seen.count());
+    };
+    LESSON_STEP(view->selectNode(cueNumbered(doc, "1.0.5")), "select 1.0.5");
+    settle(50);
+    LESSON_STEP(newCueNamed(view, "Dance Break"), "new cue Dance Break");
+    LESSON_STEP(st->cue(view->currentCueId())->number == "1.0.6", st->cue(view->currentCueId())->number);
+    LESSON_STEP(setCueMode(view, "Block"), "Mode Block");
+    const quint32 cue = view->currentCueId();
+    for (const QStringList &l : { QStringList{ "Steps", "Chorus Colour", "Full" }, QStringList{ "StepTops", "Blue", "25%" },
+                                  QStringList{ "TrussW-RGB", "Blue", "Full" } })
+    {
+        const QString said = dropGroupOnZone(doc, view, l.at(0));
+        LESSON_STEP(said == QStringLiteral("a new layer on %1 in 1.0.6 Dance Break").arg(l.at(0)), said);
+        for (int i = 1; i < 3; ++i)
+        {
+            const QString s2 = dropPaletteOnRow(doc, view, l.at(0), l.at(i));
+            LESSON_STEP(s2.startsWith(QStringLiteral("%1 → layer %2 in 1.0.6 Dance Break").arg(l.at(i), l.at(0))), s2);
+        }
+    }
+    LESSON_STEP(frames("US Step 1") == 1, "the steps move before any effect");
+    rig(QStringLiteral("rig-dance-still"));
+
+    // Part A: the steps sparkle -- an effect palette of the song's own.
+    QLCPalette *sparkle = newEffectPalette(doc, view, "01-Everybody Scream", "Sparkle", "Step Sparkle",
+                                           shots, QStringLiteral("effect-picker"));
+    LESSON_STEP(sparkle != nullptr, "the sparkle palette");
+    LESSON_STEP(view->selectNode(cue), "select the dance break");
+    settle(50);
+    {
+        const QString said = dropPaletteOnRow(doc, view, "Steps", "Step Sparkle");
+        qInfo().noquote() << "[2.4] sparkle on the steps:" << said;
+        LESSON_STEP(said.startsWith(QStringLiteral("Step Sparkle → layer Steps in 1.0.6 Dance Break")), said);
+    }
+    {
+        const int n = frames("US Step 1");
+        qInfo() << "[2.4] steps frames with the sparkle" << n << sends(doc, "US Step 1", 12).toHex(' ');
+        LESSON_STEP(n > 2, "the sparkle doesn't move");
+    }
+    // Its own colour: white glints in the chorus colour. (↩ Back first: the
+    // Look Editor closes, and the layer's rows have the room.)
+    if (QToolButton *back = view->findChild<QToolButton *>(QStringLiteral("lookBack")))
+        back->click();
+    else if (QPushButton *back = view->findChild<QPushButton *>(QStringLiteral("lookBack")))
+        back->click();
+    settle(100);
+    LESSON_STEP(clickCueRow(view, "Steps"), "click Steps");
+    const QString key = st->keyForPalette(sparkle->id());
+    qInfo().noquote() << "[2.4] sparkle key" << key << "| row" << rowText(view, key);
+    LESSON_STEP(rowMenu(view, key, "Its own colour / dimmer", "White"), "Its own colour → White");
+    settle(100);
+    qInfo().noquote() << "[2.4] after own colour:" << rowText(view, key);
+    LESSON_STEP(rowText(view, key).startsWith(QStringLiteral("Step Sparkle in White")), rowText(view, key));
+    {
+        QLabel *row = stFind<QLabel>(view, QStringLiteral("stRow:%1").arg(key));
+        for (QWidget *w = row; w != nullptr; w = w->parentWidget())
+            if (QScrollArea *area = qobject_cast<QScrollArea *>(w))
+            {
+                area->ensureWidgetVisible(row, 0, 30);
+                break;
+            }
+        settle(50);
+    }
+    LESSON_STEP(ui(QStringLiteral("sparkle-row"), { mark(stFind<QLabel>(view, QStringLiteral("stRow:%1").arg(key)), 1),
+                                                   mark(moreButton(view, key), 2) }), "sparkle shot");
+    {
+        // Somewhere along the steps, a white pixel now and then.
+        bool white = false;
+        for (int i = 0; i < 40 && !white; ++i)
+        {
+            for (const char *fx : { "US Step 1", "CS Step 2", "DS Step 3" })
+            {
+                const QByteArray v = sends(doc, fx, 192);
+                for (int px = 0; px + 2 < v.size(); px += 3)
+                    if (uchar(v.at(px)) > 200 && uchar(v.at(px + 1)) > 200 && uchar(v.at(px + 2)) > 200)
+                        white = true;
+            }
+            QTest::qWait(50);
+        }
+        qInfo() << "[2.4] a white glint seen:" << white << sends(doc, "US Step 1", 12).toHex(' ');
+        LESSON_STEP(white, "no white glint on the steps");
+    }
+    LESSON_STEP(view->selectNode(cue), "select the dance break");
+    rig(QStringLiteral("rig-dance-sparkle"));
+
+    // Part B: the truss washes, a wave of their blue (Rainbow: with one
+    // colour in the look it sweeps that colour across the heads).
+    QLCPalette *wave = newEffectPalette(doc, view, "01-Everybody Scream", "Rainbow", "Truss Wave");
+    LESSON_STEP(wave != nullptr, "the wave palette");
+    LESSON_STEP(view->selectNode(cue), "select the dance break");
+    settle(50);
+    {
+        const QString said = dropPaletteOnRow(doc, view, "TrussW-RGB", "Truss Wave");
+        qInfo().noquote() << "[2.4] wave on the washes:" << said;
+        LESSON_STEP(said.startsWith(QStringLiteral("Truss Wave → layer TrussW-RGB in 1.0.6 Dance Break")), said);
+    }
+    {
+        const int w = frames("SR Truss Wash 1");
+        qInfo() << "[2.4] wash frames with the wave" << w << sends(doc, "SR Truss Wash 1", 9).toHex(' ');
+        LESSON_STEP(w > 2, "the wave doesn't move the washes");
+    }
+    // Eye candy, not faces: the step tops stay dim and still.
+    LESSON_STEP(frames("US Step 1 Top SR") == 1, "the step tops move");
+    LESSON_STEP(view->selectNode(cue), "select the dance break");
+    rig(QStringLiteral("rig-dance-break"));
+    qInfo().noquote() << "[2.4] describe:" << describe(doc).join(" || ") << "|| looks" << cueLooks(doc).join(" || ");
+    return true;
+}
+
 void CourseShow_Test::lessonTwoOneExtension()
 {
     // Lesson 2.1's extension: a base cue. The Pose gets the step tops at a
@@ -3944,6 +4204,51 @@ void CourseShow_Test::lessonTwoThreeExtension()
     doc->resetModified();
 }
 
+void CourseShow_Test::lessonTwoFourExtension()
+{
+    if (kLevelTwoLessons < 4)
+        QSKIP("not written yet");
+    // Lesson 2.4's extension: the truss wave on a speed master. In the
+    // Look Editor, Speed: Main Speed; the footer shows the master.
+    QVERIFY(open(levelTwoFinish(4)));
+    Doc *doc = m_app->doc();
+    ShowTreeView *view = showTree();
+    QVERIFY(libraryMenu(view, "Truss Wave", { QStringLiteral("Edit") }));
+    settle(200);
+    QComboBox *speed = view->findChild<QComboBox *>(QStringLiteral("effectSpeedMaster"));
+    QVERIFY(speed != nullptr && speed->isVisible());
+    const int main = speed->findText(QStringLiteral("Main Speed"));
+    QVERIFY(main >= 0);
+    speed->setCurrentIndex(main);
+    settle(200);
+    QCOMPARE(int(paletteNamed(doc, "Truss Wave")->effectParamValues().value(QStringLiteral("__speedMaster"))),
+             int(SpeedMasters::Master1));
+    QWidget *footer = m_app->findChild<QWidget *>(QStringLiteral("speedMastersFooter"));
+    QVERIFY(footer != nullptr);
+    QStringList shown;
+    waitUntil([footer, &shown]() {
+        shown.clear();
+        for (QToolButton *b : footer->findChildren<QToolButton *>())
+            if (b->isVisible())
+                shown << b->text();
+        return !shown.isEmpty();
+    }, 3000);
+    qInfo().noquote() << "[2.4x] footer:" << footer->isVisible() << shown.join(" | ")
+                      << "| used" << doc->speedMasters()->usedMask();
+    QVERIFY2(!shown.isEmpty() && shown.first().startsWith(QStringLiteral("Main Speed")), qPrintable(shown.join(" | ")));
+
+    // At home: the sparkle's own colour Amber, then none of its own.
+    QVERIFY(view->selectNode(cueNumbered(doc, "1.0.6")));
+    settle(50);
+    QVERIFY(clickCueRow(view, "Steps"));
+    const QString key = doc->showTree()->keyForPalette(paletteNamed(doc, "Step Sparkle")->id());
+    QVERIFY(rowMenu(view, key, "Its own colour / dimmer", "Amber"));
+    QVERIFY2(rowText(view, key).startsWith(QStringLiteral("Step Sparkle in Amber")), qPrintable(rowText(view, key)));
+    QVERIFY(rowMenu(view, key, "Its own colour / dimmer", "None of its own"));
+    QCOMPARE(rowText(view, key), QStringLiteral("Step Sparkle"));
+    doc->resetModified();
+}
+
 void CourseShow_Test::levelTwoWithTheMouse()
 {
     struct L { int n; bool (*byMouse)(Doc *, ShowTreeView *, const QString &); };
@@ -3951,6 +4256,7 @@ void CourseShow_Test::levelTwoWithTheMouse()
         { 1, lessonTwoOneByMouse },
         { 2, lessonTwoTwoByMouse },
         { 3, lessonTwoThreeByMouse },
+        { 4, lessonTwoFourByMouse },
     };
     // Lesson 2.1 starts where Level 1 finished.
     QVERIFY(open(kL4Finish));
@@ -3980,6 +4286,7 @@ void CourseShow_Test::buildLevelTwoShows()
         { 1, lessonTwoOneByMouse },
         { 2, lessonTwoTwoByMouse },
         { 3, lessonTwoThreeByMouse },
+        { 4, lessonTwoFourByMouse },
     };
     const QString only = qEnvironmentVariable("COURSE_LESSON");
     for (const L &l : lessons)
@@ -4100,6 +4407,15 @@ void CourseShow_Test::levelTwoPictures()
         const QString d = root + QStringLiteral("/lesson-2-3");
         QVERIFY(open(levelTwoStart(3)));
         QVERIFY(lessonTwoThreeByMouse(m_app->doc(), showTree(), d));
+        m_app->doc()->resetModified();
+    }
+
+    // --- 2.4
+    if (wanted(4))
+    {
+        const QString d = root + QStringLiteral("/lesson-2-4");
+        QVERIFY(open(levelTwoStart(4)));
+        QVERIFY(lessonTwoFourByMouse(m_app->doc(), showTree(), d));
         m_app->doc()->resetModified();
     }
 }

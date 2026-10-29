@@ -132,6 +132,11 @@ brackets.
 | **Hard start** | A cue that starts from a known state whatever came before: a Block cue, for a solo or a new section. [2.1] |
 | **Base cue** | The cue a list's released layers go back to (tick *The list's base cue* on its page; **base** in the **F** column). [2.1] |
 | **Effect** | A pattern that moves through the lights: a chase, a sparkle, a rainbow. [2.4] |
+| **Effect palette** | A palette that plays an effect: **+ Palette → Effect**, then the effect picked in the **effect picker** (search, click, **Done**). [2.4] |
+| **Sparkle / wave** | Pixels flash and fade at random, like glitter / brightness that travels across the lights. [2.4] |
+| **Its own colour** | A colour (or level) that belongs to an effect only, set with **⋯ → Its own colour / dimmer** on its row: *Step Sparkle in White*. [2.4] |
+| **Eye candy** | Light that looks good on its own (moving scenery, sparkle) but doesn't light the people. It goes on the scenery, never at the cost of light on the performers. [2.4] |
+| **Speed master** | A tempo effects can run on, so one tap or fader moves them together; an effect's **Speed** in the Look Editor. Used ones show in the footer (*Main Speed 120*). [2.4] |
 | **Hit** | A short, sharp change on a musical accent [0.6]; a look kept ready to fire by hand over the running list, for busking [0.7]: the Show Tree's **Hits** section, built with **+ Hit**. A hit never tracks. [2.6] |
 
 ## Hardware (Level 3)

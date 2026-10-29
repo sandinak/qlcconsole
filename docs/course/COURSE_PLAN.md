@@ -12,8 +12,8 @@ lighting-concepts lessons (no computers) before the virtual stage (0.8).
 Every app step is checked by the course test on 0.3.0 (release candidate
 4), the pictures retaken on it. Level 2 is being written a lesson at a
 time, each published when done: 2.1 (tracking and Block), 2.2
-(palettes) and 2.3 (parts of a group) are written and checked by the
-course test; 2.4–2.7 are an outline. Level 3 has
+(palettes), 2.3 (parts of a group) and 2.4 (effects) are written and
+checked by the course test; 2.5–2.7 are an outline. Level 3 has
 four lessons written — 3.3 plot symbols, 3.6 focus and calibration (focus
 calls on the controller, venues, the scramble practice and its focus
 report, Focus this cue; with pictures), 3.7 house lights, work lights and power,
@@ -124,7 +124,7 @@ on lines, and busking hits for the unexpected.*
 | 2.1 | **Tracking and Block** *(written)* | What stays on unless you change it; what should carry on and what shouldn't (one look per idea, 0.5; a sting is gone on the next beat, 0.6). A "hard start". | Read the chorus: grey ⤳ rows, the tree's **S / T / R / M** counts, **Tracked in**, *Next cue receives*. Director's notes: **Release** the verse's StepTops (dark in the chorus); a point cue 1.0.2.5 *Flash* (StepTops White, Full), **Cue-only**, so the Scream starts without it. The Solo (1.3) is the **Block** cue. Extension: the Pose as the **base cue** (StepTops Blue, 10%). |
 | 2.2 | **Palettes: change once, change everywhere** *(written)* | A designer's colours for a song (0.4, 0.5). The director says "less pink" an hour before the show. | **Used by** on Magenta; **Duplicate** it, name the copy for its job (*Chorus Colour*) in the Look Editor, **Move to folder → New folder…** *01-Everybody Scream*; drop it on the chorus's Steps and on the grey TrussC-RGB row; the note: **✎** → Basic colors violet, *Changed: 1.0.2, 1.0.2.5, 1.0.3*. Extension: **Group by type** off. |
 | 2.3 | **Parts of a group** *(written)* | Highlight one row of singers; symmetry and breaking it (0.3, 0.4, 0.5): the bridge as a call and response. | 1.0.5 *Bridge* (Block): **Make set…** *Truss Sides* (Trusses SR + SL), one layer Blue, Full; **Add child layer → Trusses SR** in Amber (a set's layer can't be split: Split is greyed); Steps Blue, 25% with a ⇧-dropped child **US** in White, Full. Extension: CS + DS dropped together, **Split layer**, **More ▾ → Merge**. |
-| 2.4 | **Effects: sparkle, chase, matrix** | Energy and rhythm. Eye candy vs. light on people. | Effects on the Steps and the truss pixel boxes (Sinelon, chase, sparkle); an effect on the cue across the whole stage; its own colour; speed masters. |
+| 2.4 | **Effects: sparkle and wave** *(written; planned as "sparkle, chase, matrix")* | Energy and rhythm (0.2, 0.4, 0.6). Eye candy vs. light on people. | 1.0.6 *Dance Break* (Block): Steps, StepTops, TrussW-RGB still; **+ Palette → Effect** in the song folder, the effect picker (*Sparkle · Dimmer*) → *Step Sparkle* on the Steps, **⋯ → Its own colour → White**; *Rainbow* → *Truss Wave* on TrussW-RGB (a wave of its blue). Extension: **Speed: Main Speed** (footer). The chase and an effect across the whole stage wait on the app (§8, 17). |
 | 2.5 | **Moving lights and lines** | Beams as scenery; fans and crosses on the button of a song. | The Riser Line target, Spread / Grouping / Cross, the plan view, with Truss-Spots and USTs. Colour rings on the Truss-Spots. |
 | 2.6 | **Busking with Hits** | When the band vamps, or the soloist goes long (busking, Lesson 0.7). | The Hits section, **Make VC page**, firing hits from Virtual Console buttons over a running list. |
 | 2.7 | **Sub-cues: stomps inside a cue** | Stomps, stings and buttons in a chorus (Lesson 0.6). | Sub-cues 4.1, 4.2, Sub GO and auto-follow. **Level check:** design and program one full song from a cue sheet. |
@@ -437,6 +437,37 @@ Also: the classroom show was rebuilt from DanceHysteria-0.6 as it is now
 14. **Auto guesses the AT-W-ALL washes as spots** (*Auto (Moving head
     spot)*) and the LED lanterns as LED PARs. Lesson 3.3 uses both as the
     corrections students make.
+
+### Found writing Level 2 (on 0.3.0)
+
+Not changed in the app (this branch doesn't change app code); each is
+worked around in the course and checked by the course test.
+
+15. **The truss boxes' white pixels never light from the Show Tree.**
+    TrussW-W and TrussC-W (the XL-450's 30 white heads) send 0 with any
+    look: White and Full, Full alone, even *Trusses colour White* (which
+    lights only the RGB pixels). Lesson 2.1's flash uses the StepTops.
+16. **A group set's layer can't be split** (Split is greyed: the set is
+    what the layer is). Not a bug; Lesson 2.3 lights one side with a
+    child layer and shows Split and Merge on a layer of two groups.
+17. **Effects on the truss pixel boxes.** Dimmer effects (Sparkle, Dimmer
+    Phaser) don't move TrussW-RGB at all; a colour effect (Rainbow) does,
+    on its own layer. One effect spanning several layers (dropped on the
+    cue, or one palette on two layers) didn't move the boxes, and with
+    the Steps in it the step tops didn't move either. A Color Chase across
+    the stage crawls: its speed is in fixtures per second, spread over
+    every pixel head. Lesson 2.4 keeps each effect on one layer and
+    leaves the chase and the cue-wide effect until this is fixed.
+18. **A new effect palette's first name, and the picker.** Made while the
+    Look Editor shows another effect, a new effect palette can start
+    with that effect's name (*Color Chase*, *Matrix Sparkle*) instead of
+    *New Effect*; and the effect picker opens by itself only when the
+    Look Editor was already open. The handout says to name it and to
+    click **Change effect…** if the picker isn't open.
+19. **The course test's rig pictures** picked the Rig Overview's 45° view
+    by its place in the list; since the Back view was added that was
+    Side. They now pick it by name (Level 1's pictures were taken
+    before, and are right).
 
 ## 9. Decisions (Branson, 2026-10-18) and what's still open
 

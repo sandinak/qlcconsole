@@ -13,6 +13,7 @@
 | `lesson-2-1-start.qlcc` · `lesson-2-1-finish.qlcc` | 2.1 (from 1.4's finish): the verse's StepTops released; 1.0.2.5 *Flash* (Cue-only) with StepTops White, Full. |
 | `lesson-2-2-start.qlcc` · `lesson-2-2-finish.qlcc` | 2.2: *Chorus Colour* (a copy of Magenta, violet after the note) in the palette folder *01-Everybody Scream*, on the chorus's Steps and TrussC-RGB. |
 | `lesson-2-3-start.qlcc` · `lesson-2-3-finish.qlcc` | 2.3: 1.0.5 *Bridge* (Block): the group set *Truss Sides* Blue, Full with a child Trusses SR in Amber; Steps Blue, 25% with a child US in White, Full. |
+| `lesson-2-4-start.qlcc` · `lesson-2-4-finish.qlcc` | 2.4: 1.0.6 *Dance Break* (Block): Steps in Chorus Colour with *Step Sparkle* in White; StepTops Blue, 25%; TrussW-RGB Blue with *Truss Wave* (effect palettes in *01-Everybody Scream*). |
 | `classroom-eos.asc` | Lesson 3.10: a small Eos show in USITT ASCII, written by hand for the course (not a real production): ten dimmer channels — front, back, a cyc, specials, and house, work, relay and backstage circuits, one labelled so the import guesses it wrong — a cue list of four cues and one sub. |
 
 Each lesson starts from the one before's finish, so a student who missed
