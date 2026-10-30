@@ -112,8 +112,8 @@ Two groups play it in the Run tab: click **1.0.7 Fan** to load it, **GO**,
 
 ## Extension (fast groups)
 
-From the handout: **Spread 0** (a single hot spot) and **Grouping:
-Pairs**.
+From the handout: **Spread 0** (a single hot spot), **Grouping:
+Pairs**, and the eight USTs fanned on the same line.
 
 ## At home
 
@@ -146,8 +146,7 @@ before the aim, on the fan and crossed; their colour wheel and colour
 ring moving from White's slots to Red's. The extension (Spread 0, Pairs)
 is checked the same way.
 
-**Not in this lesson, and why:** the plan also put the upstage beams
-(USTs) on the line. On qlcconsole 0.3.x, aimed at the Riser Line they
-send tilt 0 and their beams go out over the house, so the lesson uses
-the truss spots. See the
-[course plan](https://github.com/sandinak/qlcconsole/blob/main/docs/course/COURSE_PLAN.md#found-writing-level-2-on-030).
+**Not yet in the course test:** the handout's extension step 4 (the USTs
+on the Riser Line). With the 0.3.1 fix the eight upstage beams aim at the
+people on the line, as the truss spots do.
+.

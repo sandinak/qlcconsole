@@ -409,6 +409,10 @@ skipped). Upstream fixes taken:
 
 ### Changed
 
+- **Course Lessons 2.4 and 2.5 teach the fixed effects.** 2.4's extension
+  drops a Color Chase on the cue (every layer moves, each at its own
+  level, box by box); 2.5's fans the USTs on the Riser Line; the "Change
+  effect…" step is gone from the handouts.
 - **The save buttons say where an effect goes**: "Save as Effect…" is
   now **Save to My effects…** (on this computer, for any show) and "Save
   as palette…" **Save in this show…**.
