@@ -32,7 +32,7 @@ go on the scenery, never at the cost of light on the singers.
 | Word | Means |
 |---|---|
 | **Effect** | A pattern that moves through the lights: a sparkle, a wave, a chase. In the Show Tree, an effect palette dropped on a layer. |
-| **Effect palette** | A palette that plays an effect. Made with **+ Palette → Effect**; the effect is picked in the **effect picker**. |
+| **Effect palette** | A palette that plays an effect. Made with **+ Palette → Effect**; the effect is picked in the **effect browser**. |
 | **Sparkle** | Pixels flash and fade at random, like glitter. |
 | **Wave** | Brightness that travels across the lights (here, *Rainbow* with one colour: it sweeps that colour across them). |
 | **Its own colour** | A colour that belongs to the effect only: the sparkle glints white while the steps stay in the chorus colour. |
@@ -82,13 +82,19 @@ Switch roles after each part.
    Scream**, so the new palette goes in the song's folder. Then click
    **+ Palette → Effect**.
    - *You should see:* **New Effect** in the Look Editor under the page.
-8. If the effect picker isn't open, click **Change effect…**. In the
-   picker's search box type `Sparkle`, click **Sparkle · Dimmer**, then
+8. If the effect browser isn't open, click **Change effect…**. In the
+   browser's search box type `Sparkle`, click **Sparkle · Dimmer**, then
    **Done**.
 
-![The effect picker](../../images/lesson-2-4/effect-picker.png)
+![The effect browser](../../images/lesson-2-4/effect-picker.png)
 
    **(1)** search, **(2)** the effect, **(3)** Done.
+
+   The browser's **Built-in · Mine · This show** buttons narrow the list
+   by where an effect came from: shipped with qlcconsole, saved on this
+   computer, or one of this show's own effect palettes. Under the name in
+   the Look Editor, a grey **based on Sparkle** line says what yours was
+   made from.
 
 9. In the Look Editor's **Name** box, type `Step Sparkle` and press
    **Return**.
@@ -105,13 +111,16 @@ Switch roles after each part.
 
    **(1)** the effect row and **(2)** its ⋯.
 
+The sparkle plays for as long as the cue does (**Runs: Loop** in the Look
+Editor); **Once** or **N times** stop it after that many runs.
+
 ![The steps sparkle](../../images/lesson-2-4/rig-dance-sparkle.png)
 
 ### A wave on the trusses
 
 12. Click the **01-Everybody Scream** folder in the Library again, then
     **+ Palette → Effect**.
-13. If the picker isn't open, click **Change effect…**. Search `Rainbow`,
+13. If the browser isn't open, click **Change effect…**. Search `Rainbow`,
     click **Rainbow**, then **Done**.
     Name it `Truss Wave` and press **Return**.
 14. Click **1.0.6 Dance Break** and drag **Truss Wave** onto the
@@ -133,7 +142,7 @@ Switch roles after each part.
 
 | Problem | Try |
 |---|---|
-| The picker shows nothing for your search | Clear the search box first: it keeps what you typed last time. |
+| The browser shows nothing for your search | Clear the search box first: it keeps what you typed last time. |
 | The new palette isn't in the song's folder | Click the folder in the Library before **+ Palette**. Or right-click it → **Move to folder**. |
 | No **Its own colour / dimmer** in the menu | Use the ⋯ on the **Dimmer effect** row, not the Colour row. |
 | The steps don't twinkle | Drop Step Sparkle on the **Steps** row, not on the dashed box. |

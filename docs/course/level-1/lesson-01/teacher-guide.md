@@ -52,7 +52,7 @@ Say the word, point at it on the projector, use it in a sentence.
 |---|---|---|
 | 0–10 | **Design idea** (no computers) | Reading a song |
 | 10–20 | **Teacher demo** (projector) | Build cue 1.0.0 live; the class calls the steps |
-| 20–40 | **Hands-on** (pairs/triads, roles) | Handout Part 2, steps 1–14 |
+| 20–40 | **Hands-on** (pairs/triads, roles) | Handout Part 2, steps 1–15 |
 | 40–45 | **Check / share** | Two groups GO their cues for the class |
 | 45–50 | **Exit ticket** | On paper |
 
@@ -62,7 +62,9 @@ Say the word, point at it on the projector, use it in a sentence.
    feeling change?* Collect answers on the board: "before they sang",
    "when they started", "the chorus — it got big".
 2. Name them: those moments are **cues**. The whole song's cues in order is
-   a **cue list**. All our songs together are the **production**.
+   a **cue list**. GO plays one list, so a show has one, and each song is a
+   **section** of it, found by the first number (1.0.0 song 1, 2.0.0
+   song 2). The list and its settings sit in the **production**.
 3. For each moment ask *what should the audience feel?* and *which lights
    could say that?* Point at the Rig Overview: the cyc (the back wall), the
    risers, the step-top lights.

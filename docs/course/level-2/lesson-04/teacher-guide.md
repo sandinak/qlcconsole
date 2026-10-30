@@ -21,7 +21,7 @@ Students can:
 
 1. say when an effect serves a song (energy, rhythm, a peak) and when it
    pulls focus, and keep effects on the scenery, not on faces;
-2. make an **effect palette** (+ Palette → Effect, the picker, a name) in
+2. make an **effect palette** (+ Palette → Effect, the browser, a name) in
    the song's folder and put it on a layer;
 3. give an effect **its own colour**.
 
@@ -78,8 +78,11 @@ On the projector:
 1. Make **1.0.6 Dance Break** (Block) with the three still layers (steps
    1–6). Point out: nothing moves.
 2. Click the song's folder in the Library, **+ Palette → Effect**. If the
-   picker isn't open, **Change effect…**. Search `Sparkle`, pick
+   browser isn't open, **Change effect…**. Search `Sparkle`, pick
    **Sparkle · Dimmer**, **Done**. Name it `Step Sparkle`.
+   Point at the **Built-in · Mine · This show** buttons and the grey
+   **based on Sparkle** line: a show's own effects stay traceable to the
+   effect they came from. Runs defaults to Loop; leave it.
 3. Leave the drop, its own colour and the wave for the students.
 
 ## 3. Hands-on (20 min)
@@ -93,7 +96,7 @@ On the projector:
 
 | You see | Likely cause | Say |
 |---|---|---|
-| The picker finds nothing | The search box still holds the last search | "Clear the search box first." |
+| The browser finds nothing | The search box still holds the last search | "Clear the search box first." |
 | The palette is named *New Effect*, or after another effect | Return not pressed in Name (the name can start as the last effect's) | "Type the name you want and press Return." |
 | No *Its own colour* in the menu | They opened ⋯ on the Colour row | "Which row is the effect?" |
 | The whole stage is moving | Effects dropped on every layer | "Which lights are people, which are scenery?" |
@@ -158,7 +161,7 @@ Every step of the handout is run by the course test (`ui/test/courseshow`,
 `levelTwoWithTheMouse`, `lessonTwoFourExtension`) on the real app,
 offscreen, with the effect scripts the app ships with: the drops and
 their hints, **+ Palette → Effect** with the song folder selected (the
-palette is filed there), the effect picker (**Change effect…**, the
+palette is filed there), the effect browser (**Change effect…**, the
 search, the click on *Sparkle · Dimmer* and *Rainbow*, **Done**), the
 Look Editor's Name, **⋯ → Its own colour / dimmer**, and what the rig
 sends: the steps still, then twinkling, with white pixels among them;

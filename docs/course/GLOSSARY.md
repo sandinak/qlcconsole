@@ -138,7 +138,8 @@ brackets.
 | **Sub-cue** | A cue inside a cue (1.0.2.1, 1.0.2.2…) for stomps, claps and stings within a section. The first plays with GO; what they change doesn't pass on to the next cue. [2.7] |
 | **Sub GO / auto-follow** | Sub GO (⌥⌘↩, the Run tab's button) steps to the next sub-cue of the cue playing; GO still goes to the next main cue. A sub-cue set to **Auto-follow after** a wait goes on by itself (*auto 0.5s*). [2.7] |
 | **Effect** | A pattern that moves through the lights: a chase, a sparkle, a rainbow. [2.4] |
-| **Effect palette** | A palette that plays an effect: **+ Palette → Effect**, then the effect picked in the **effect picker** (search, click, **Done**). [2.4] |
+| **Effect palette** | A palette that plays an effect: **+ Palette → Effect**, then the effect picked in the **effect browser** (search, click, **Done**). [2.4] |
+| **Based on** | The grey line under an effect's name: the effect it was made from. The effect browser filters by origin: **Built-in** (with qlcconsole), **Mine** (saved on this computer), **This show** (its own effect palettes). [2.4] |
 | **Sparkle / wave** | Pixels flash and fade at random, like glitter / brightness that travels across the lights. [2.4] |
 | **Its own colour** | A colour (or level) that belongs to an effect only, set with **⋯ → Its own colour / dimmer** on its row: *Step Sparkle in White*. [2.4] |
 | **Eye candy** | Light that looks good on its own (moving scenery, sparkle) but doesn't light the people. It goes on the scenery, never at the cost of light on the performers. [2.4] |
