@@ -71,7 +71,7 @@ Which lights move, and which stay still?
 
 12. Click **↩ Back**. **File ▸ Save As** → `Lesson2-4-yourname.qlcc`.
 
-The sparkle runs as long as the cue plays (**Runs: Loop** in the Look Editor). Once and N times stop it after that many runs.
+The sparkle runs as long as the cue plays (**Runs: Loop** in the Look Editor). Once and N times stop it after that many runs. A wave such as Breathe runs whole breaths: on **Once** it rises, falls and stops on its floor, and its **Length** is that one breath.
 
 **Stuck?** The search finds nothing: clear the box first. No *Its own
 colour*: use the ⋯ on the **Dimmer effect** row. Not twinkling: drop it

@@ -33,6 +33,24 @@ hits between places and onto VC buttons. Open:
   its caption; drops onto a VC button work in Design and Operate and have
   no undo (the VC has none).
 - The command line's `hit` makes production hits only; no `hit … for cue`.
+## Breathe once — leftovers (brth, 2026-10-30)
+
+Built (build 2593 report: flash at start, end lands anywhere, no typed
+values, rate awkward for one shot). Open, each "decided (can change)":
+- A wave (script `cycleParam`) on Once / N times runs whole cycles; its
+  Length is one cycle, stored as the rate (1 / length). The run Length
+  (`__durationMs`, auto = the cue's time) no longer applies to a wave.
+  Alternatives to put to the user: Length as the whole run (N cycles
+  fitted into it); a breathe with in / hold / out times of its own.
+- A scene with an effect holds its output until the effect's first frame,
+  at most 250 ms (the Doc's own timer only).
+- Dimmer Phaser sends the dimmer alone; the host scales the look's colour
+  (white too) on a light with no dimmer.
+- A Once / N times run starts afresh on every new start of a scene
+  carrying it (a cue's GO, a hit fired again, a chaser step): the user's
+  rule. A cue that only tracks the effect through leaves it running or
+  done (decided, can change). A tracked effect on a layer whose scene
+  changes in that cue (something else on it set) does start again.
 
 ## Pixel boxes, effects and beams — leftovers (cbug, 2026-10-30)
 
@@ -144,6 +162,34 @@ Still open from it:
   H / V / Z readout counts from CL / ⌖ everywhere.
 - decided (can change): a lantern's glow at 45° doesn't pick it; its glass
   and cage do. A click on a ruler band picks nothing under it.
+
+## Walk the show from the stage with the controller (board Q192, answered 2026-10-30: build in 0.4)
+
+Design as asked (Q192): stand on stage and walk the cues, walk a cue's
+layers (solo or mixed), adjust what the pad can, tag cues that need more
+work. Built as an extension of Focus this cue (Q106/Q118), its own button
+map while walking: RT/LT next/previous cue; RB/LB next/previous layer
+(blinks, voice "Layer 2 of 4: Movers, Blue"); View toggles solo layer /
+whole cue; sticks, D-pad and A adjust and keep as Focus this cue does now,
+in its Layer/Group/Fixture scope; hold Y tags the cue "Needs work" (flag in
+the tree, a Needs work filter, an optional note typed or spoken on the
+laptop); Menu leaves. Plays live in Design; in Operate it follows the quiet
+Refine rules (Q130). Voice and light bar for feedback, no need to look at
+the laptop. Reuses Refine, the Layer/Group/Fixture scope cycle, the
+voice/light-bar feedback and the Show Tree's cue notes. Several days, opus.
+
+Follow-up notes (chat 2026-10-30, for the 0.4 design):
+- Targets for layers are set as for any light (drop a Library > Target on
+  the layer: Aim palette or line aim); only target-aimed layers can be
+  checked against a point.
+- Separate **the light itself** (venue calibration offset, used by every
+  cue, saved in Show.venues.xml as venue focus does) from **this cue's look**
+  (Refine) on A; default: the light itself when aiming at a target, a
+  modifier for this cue.
+- One button map for Xbox and PlayStation (consistency, the course,
+  controller slots move pads between rooms); the PS touchpad only adds
+  shortcuts (swipe = layer walk, tap = tag), never the only way. The button
+  budget is solved by the walking map + hold LB as a modifier.
 
 ## Focus calls and refining a cue from the stage (design, 2026-10-23)
 

@@ -1175,13 +1175,20 @@ void Function::start(MasterTimer* timer, FunctionParent source, quint32 startTim
 
     Q_ASSERT(timer != NULL);
 
+    bool again = false;
     {
         QMutexLocker sourcesLocker(&m_sourcesMutex);
         if (m_sources.contains(source))
             return;
         m_sources.append(source);
-        if (m_sources.size() > 1)
-            return;
+        again = m_sources.size() > 1;
+    }
+    if (again)
+    {
+        // Running already, now started by another: a new start for what
+        // restarts on one (a Once effect, EffectScriptRunner).
+        emit timer->functionStartedAgain(m_id, source.id());
+        return;
     }
 
     /** If we're in a paused state, then just return to the running state

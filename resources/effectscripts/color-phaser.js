@@ -12,6 +12,7 @@
     var effect = new Object;
     effect.apiVersion  = 1;
     effect.name        = "Color Phaser";
+    effect.cycleParam = "rate";   // a wave: Once plays whole cycles
     // Takes the host's spread (fixture.phase, inputs._spread) in place of its own.
     effect.hostSpread = "spread,reverse";
     effect.description = "Waveform crossfade between two colours with phase spread";

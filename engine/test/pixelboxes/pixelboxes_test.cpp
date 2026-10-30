@@ -34,9 +34,13 @@
 #include "showcontrol.h"
 #include "showtreemodel.h"
 #include "qlcpalette.h"
+#include "effectruns.h"
+#include "effectscriptrunner.h"
 #include "universe.h"
 #include "qlcfile.h"
 #include "fixture.h"
+#include "collection.h"
+#include "scene.h"
 #include "doc.h"
 
 #include "resource_paths.h"
@@ -159,7 +163,7 @@ quint32 PixelBoxes_Test::oneCue()
     const quint32 prod = st->addProduction(QStringLiteral("Course"));
     const quint32 list = st->addCueList(prod, QStringLiteral("Main"));
     st->setCurrentProduction(prod);
-    return st->addCue(list, -1, QStringLiteral("One"));
+    return m_cue = st->addCue(list, -1, QStringLiteral("One"));
 }
 
 void PixelBoxes_Test::go()
@@ -496,6 +500,207 @@ void PixelBoxes_Test::beamsAimedAtALineTiltUp()
         pans.insert(uchar(v.at(0)));
     }
     QVERIFY2(pans.size() >= 4, qPrintable(QString::number(pans.size())));
+}
+
+/****************************************************************************
+ * A Breathe on the step tops (build 2593): White, 20%, Breathe, Once
+ ****************************************************************************/
+
+/* The step tops' white pixels (channels 48-63) and the 20% they are at:
+   the breathe's floor is its minDim of that, 5% of 51. */
+static const int kTopWhite = 48;
+static const int kTwentyPercent = 51;
+
+bool PixelBoxes_Test::breatheOnTheStepTops(double rate, int runs)
+{
+    ShowTreeController *st = m_doc->showTree();
+    QLCPalette *twenty = new QLCPalette(QLCPalette::Dimmer, m_doc);
+    twenty->setName(QStringLiteral("20%"));
+    twenty->setValue(kTwentyPercent);
+    m_doc->addPalette(twenty);
+    const quint32 fx = effect(QStringLiteral("dimmer-phaser.js"), QStringLiteral("Breathe"));
+    QLCPalette *b = m_doc->palette(fx);
+    // resources/effectpresets/Breathe.json
+    b->setEffectParamValue(QStringLiteral("waveform"), 0);
+    b->setEffectParamValue(QStringLiteral("rate"), rate);
+    b->setEffectParamValue(QStringLiteral("minDim"), 0.05);
+    b->setEffectParamValue(QStringLiteral("maxDim"), 1.0);
+    b->setEffectParamValue(QStringLiteral("spread"), 0);
+    if (runs > 0)
+        b->setEffectParamValue(EffectRuns::runsKey(), runs);
+    const quint32 cue = oneCue();
+    const quint32 layer = st->addLayer(cue, groupTarget(group("StepTops")));
+    return st->setLayerLook(cue, layer, st->lookForPalette(palette("White")))
+        && st->setLayerLook(cue, layer, st->lookForPalette(twenty->id()))
+        && st->setLayerLook(cue, layer, st->lookForPalette(fx));
+}
+
+/* From the first frame it lights, the breathe is at its floor and rises:
+   the look's 20% never shows on its own first (it flashed bright, then
+   started the cycle). Sampled as fast as the event loop turns. */
+void PixelBoxes_Test::aBreatheStartsAtItsFloor()
+{
+    QVERIFY(breatheOnTheStepTops(0.2, 0));
+    go();
+    QElapsedTimer t;
+    t.start();
+    QList<int> seen;
+    // A breath of 5 s: in its first 400 ms it is under 10% of its swing.
+    while (t.elapsed() < 400)
+    {
+        QTest::qWait(2);
+        // its white pixel and its first RGB pixel's red: both breathe
+        seen << int(uchar(sends("US Step 1 Top SR", kTopWhite, 1).at(0)))
+             << int(uchar(sends("US Step 1 Top SR", 0, 1).at(0)));
+    }
+    int most = 0;
+    for (int v : seen)
+        most = qMax(most, v);
+    QString all;
+    for (int v : seen)
+        all += QString::number(v) + QLatin1Char(' ');
+    QVERIFY2(most <= kTwentyPercent / 4, qPrintable(all));
+    // Lit, white and red both: its floor is 5% of the 20%, not black
+    QVERIFY2(seen.at(seen.size() - 2) > 0 && seen.last() > 0, qPrintable(all));
+}
+
+void PixelBoxes_Test::aBreatheOnceEndsOnItsFloor_data()
+{
+    QTest::addColumn<double>("rate");
+    QTest::addColumn<int>("runs");
+    // 1.25 s a breath: the old run (the effect's own 2 s) ended mid-breath
+    QTest::newRow("Once, 1.25 s") << 0.8 << 1;
+    QTest::newRow("3 times, 0.6 s") << 1.0 / 0.6 << 3;
+}
+
+/* Once (or N times) is whole breaths: it ends where a breath ends, on
+   its floor, and holds there -- not wherever a set time cut it off. */
+void PixelBoxes_Test::aBreatheOnceEndsOnItsFloor()
+{
+    QFETCH(double, rate);
+    QFETCH(int, runs);
+    QVERIFY(breatheOnTheStepTops(rate, runs));
+    go();
+    const int ms = int(1000.0 * runs / rate);
+    QElapsedTimer t;
+    t.start();
+    int top = 0;
+    while (t.elapsed() < ms - 100)
+    {
+        QTest::qWait(10);
+        top = qMax(top, int(uchar(sends("US Step 1 Top SR", kTopWhite, 1).at(0))));
+    }
+    // It breathed: up to the look's 20%
+    QVERIFY2(top >= kTwentyPercent - 3, qPrintable(QString::number(top)));
+    run(ms / 2 + 300);
+    const int floor = qRound(kTwentyPercent * 0.05);
+    const int end = int(uchar(sends("US Step 1 Top SR", kTopWhite, 1).at(0)));
+    QVERIFY2(qAbs(end - floor) <= 1, qPrintable(QString("ended on %1, floor %2").arg(end).arg(floor)));
+    // ...and holds there
+    run(300);
+    QCOMPARE(int(uchar(sends("US Step 1 Top SR", kTopWhite, 1).at(0))), end);
+}
+
+/* Looping, then set to Once while it plays (the Look Editor's Runs): the
+   run starts again, one breath from its floor, and holds there. */
+void PixelBoxes_Test::aBreatheSetToOncePlaysItAgain()
+{
+    QVERIFY(breatheOnTheStepTops(1.0, 0));
+    go();
+    run(1700);                                      // well into its second breath
+    QLCPalette *b = nullptr;
+    for (QLCPalette *p : m_doc->palettes())
+        if (p->name() == QLatin1String("Breathe"))
+            b = p;
+    QVERIFY(b != nullptr);
+    b->setEffectParamValue(EffectRuns::runsKey(), 1);
+    m_doc->effectScriptRunner()->updateEffectParams(b->id());
+    run(450);                                       // not cut off: mid-breath
+    const int mid = int(uchar(sends("US Step 1 Top SR", kTopWhite, 1).at(0)));
+    QVERIFY2(mid > kTwentyPercent / 2, qPrintable(QString::number(mid)));
+    run(1000);
+    const int end = int(uchar(sends("US Step 1 Top SR", kTopWhite, 1).at(0)));
+    QVERIFY2(qAbs(end - qRound(kTwentyPercent * 0.05)) <= 1, qPrintable(QString::number(end)));
+}
+
+/* The same Once breathe in three cues in a row, the cue copied in place
+   (one effect palette, one engine): each GO breathes again -- not only the
+   first, the others left on the first's held floor. */
+void PixelBoxes_Test::aOnceBreatheInEachOfThreeCopiedCues()
+{
+    QVERIFY(breatheOnTheStepTops(1.0, 1));          // one 1 s breath
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 first = m_cue;
+    QVERIFY(st->duplicateCue(first) != 0);
+    QVERIFY(st->duplicateCue(first) != 0);
+    for (int cue = 1; cue <= 3; ++cue)
+    {
+        go();
+        run(500);                                   // mid-breath: near its top
+        const int mid = int(uchar(sends("US Step 1 Top SR", kTopWhite, 1).at(0)));
+        QVERIFY2(mid > kTwentyPercent / 2, qPrintable(QString("cue %1: %2").arg(cue).arg(mid)));
+        run(900);                                   // done: on its floor
+        const int end = int(uchar(sends("US Step 1 Top SR", kTopWhite, 1).at(0)));
+        QVERIFY2(qAbs(end - qRound(kTwentyPercent * 0.05)) <= 1,
+                 qPrintable(QString("cue %1 ended on %2").arg(cue).arg(end)));
+    }
+}
+
+/* A hit (a collection fired from a button) carrying the same Once breathe
+   as the running cue: started, stopped and started again, it breathes
+   each time -- though the cue's scene keeps the effect's engine going. */
+void PixelBoxes_Test::aOnceBreatheInAHitFiredAgain()
+{
+    ShowTreeController *st = m_doc->showTree();
+    QVERIFY(breatheOnTheStepTops(1.0, 1));
+    quint32 breathe = palette(QStringLiteral("Breathe"));
+    // The cue's layer: the truss boxes, with the breathe
+    const quint32 layer = st->addLayer(m_cue, groupTarget(group("TrussW-RGB")));
+    QVERIFY(st->setLayerLook(m_cue, layer, st->lookForPalette(palette("White"))));
+    QVERIFY(st->setLayerLook(m_cue, layer, st->lookForPalette(breathe)));
+    // The hit: the step tops, White, 20%, the same breathe
+    Scene *hitScene = new Scene(m_doc);
+    hitScene->setName(QStringLiteral("Hit"));
+    QVERIFY(m_doc->addFunction(hitScene));
+    hitScene->addFixtureGroup(group("StepTops"));
+    hitScene->addPalette(palette("White"));
+    hitScene->addPalette(palette("20%"));
+    hitScene->addPalette(breathe);
+    Collection *hit = new Collection(m_doc);
+    QVERIFY(m_doc->addFunction(hit));
+    QVERIFY(hit->addFunction(hitScene->id()));
+
+    go();
+    run(1400);                                      // the cue's breath is done
+    for (int fire = 1; fire <= 2; ++fire)
+    {
+        hit->start(m_doc->masterTimer(), FunctionParent::master());
+        run(500);
+        const int mid = int(uchar(sends("US Step 1 Top SR", kTopWhite, 1).at(0)));
+        QVERIFY2(mid > kTwentyPercent / 2, qPrintable(QString("fire %1: %2").arg(fire).arg(mid)));
+        run(900);
+        hit->stop(FunctionParent::master());
+        run(100);
+    }
+}
+
+/* decided: the next cue that only tracks the layer through (sets nothing
+   of its own on it) leaves a done Once done: it doesn't breathe again. */
+void PixelBoxes_Test::aOnceBreatheTrackedThroughStaysDone()
+{
+    QVERIFY(breatheOnTheStepTops(1.0, 1));
+    ShowTreeController *st = m_doc->showTree();
+    QVERIFY(st->addCue(st->listOfCue(m_cue)->id, 0, QStringLiteral("Tracked")) != 0);
+    go();
+    run(1400);                                      // breathed, on its floor
+    const int floor = qRound(kTwentyPercent * 0.05);
+    go();                                           // the tracking cue
+    for (int i = 0; i < 6; ++i)
+    {
+        run(100);
+        const int v = int(uchar(sends("US Step 1 Top SR", kTopWhite, 1).at(0)));
+        QVERIFY2(qAbs(v - floor) <= 1, qPrintable(QString::number(v)));
+    }
 }
 
 QTEST_MAIN(PixelBoxes_Test)

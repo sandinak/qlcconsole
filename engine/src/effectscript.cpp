@@ -119,6 +119,7 @@ bool EffectScript::load(const QString &path)
     m_syncTo    = QStringLiteral("span");
     m_onFinish  = QStringLiteral("hold");
     m_naturalDurationMs = 2000;
+    m_cycleParam.clear();
     m_takesHostSpread = false;
     m_hostSpreadParam.clear();
     m_inputs.clear();
@@ -257,6 +258,7 @@ bool EffectScript::parseMeta()
     m_naturalDurationMs = m_script.property("naturalDurationMs").toInt();
     if (m_naturalDurationMs <= 0)
         m_naturalDurationMs = 2000;
+    m_cycleParam = jsText(m_script.property("cycleParam"));
 
     if (m_name.isEmpty())
     {
