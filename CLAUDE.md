@@ -197,11 +197,15 @@ follows:
 ## Performance
 
 Keeping the engine as fast as it is, or faster, is part of every change
-([docs/performance.md](docs/performance.md#keeping-it-fast)). A change to a
-hot path (MasterTimer, Universe, faders, Scene/Chaser/EFX/RGBMatrix write,
-plugin input/output, the Show Tree runtime) carries before/after numbers in
-its commit: `make perf` (~9 min, Release engine in `build-perf/` vs this
-machine's baseline in `docs/perf-data/`; `perf=1` is a regression).
+([docs/performance.md](docs/performance.md#keeping-it-fast)). The full
+guard, `make perf` (~9 min, Release engine in `build-perf/` vs this
+machine's baseline in `docs/perf-data/`; `perf=1` is a regression), runs
+**once per release**, on a quiet machine, as a step of cutting it
+(docs/dev/RELEASE.md) — not per change (decided 2026-10-30: per-change runs
+on a busy machine were noise). A regression it finds is bisected across
+that release's merges and fixed before the release. Per change, the gate's
+`hotpath_test` still runs; a change that should make a hot path faster may
+show its own numbers, but none are required.
 A measurable slowdown is a bug. A baseline is rebased only on purpose
 (`make perf-record`), with the reason in the commit.
 

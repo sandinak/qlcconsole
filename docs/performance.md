@@ -235,6 +235,15 @@ hold the engine to it.
 
 ### The performance guard: `make perf`
 
+**When it runs:** nightly (`tools/perf/nightly.sh` at 03:15 on ender, only
+when `main` moved since the last measured night and no gate or benchmark
+is running), and once per release, on a quiet machine, as a step of
+cutting it ([RELEASE.md](dev/RELEASE.md)); not on every change. A
+regression it finds is bisected across the release's merges (each merge
+a gated commit on `main`) and fixed before the release ships. Between
+releases the gate's `hotpath_test` catches gross slowdowns on every
+change.
+
 `make perf` (`tools/perf/guard.py`) builds the engine Release in
 `build-perf/`, runs it under the same harness and loads as the sweeps
 above, and compares the numbers with this machine's own baseline. It takes
@@ -445,9 +454,9 @@ is not installed anywhere by default. To install it on a machine with a
 committed baseline:
 
 ```sh
-git clone https://github.com/sandinak/qlcconsole.git ~/perf-nightly/qlcconsole
+git clone https://github.com/sandinak/qlcconsole.git ~/git/perf-nightly/qlcconsole
 # Linux: crontab -e, then
-15 3 * * * $HOME/perf-nightly/qlcconsole/tools/perf/nightly.sh >/dev/null 2>&1
+15 3 * * * $HOME/git/perf-nightly/qlcconsole/tools/perf/nightly.sh >/dev/null 2>&1
 ```
 
 On a Mac, a LaunchAgent in `~/Library/LaunchAgents/org.qlcconsole.perf-nightly.plist`
@@ -456,10 +465,10 @@ with `ProgramArguments` `/bin/sh` and the script's path and
 `launchctl bootstrap gui/$(id -u) <the plist>`. It skips a night when a
 gate, a soak or a sweep is running, or the machine is busy.
 
-Each night leaves `~/perf-nightly/latest.txt`, whose first line is
+Each night leaves `~/git/perf-nightly/latest.txt`, whose first line is
 `perf=N host=<class> rev=<sha> date=<when>`, the run's folder under
 `runs/` (the last 30 are kept), and a row per metric in
-`~/perf-nightly/trend.csv`:
+`~/git/perf-nightly/trend.csv`:
 
 | Column | |
 |---|---|
