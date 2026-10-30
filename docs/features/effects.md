@@ -132,6 +132,14 @@ for a five-and-a-half-second breath. The Length sets the wave's rate
 rate changes the Length. N times plays that many cycles. Setting Runs
 while it plays starts the run again, so you see the change at once.
 
+A **Toggle** button on a hit that carries a Once or N times effect plays
+it again when you press after it has finished: the hit stays on, and it
+breathes again. A press while it is still playing turns the hit off, as
+for any Toggle. So to turn such a hit off after its breath has ended,
+press once to start the next breath and press again during it (or use a
+Stop all button). **Flash** breathes on every press as before, and a hit
+with no one-shot is on and off as ever.
+
 Each new start of what carries the effect plays a Once or N times effect
 again from its start. That includes a cue's **GO** (also the next cue
 copied from this one, sharing its effect), a hit fired again, and a

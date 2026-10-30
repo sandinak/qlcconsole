@@ -74,6 +74,7 @@
 #include "vcsoloframe.h"
 #include "showtreecontroller.h"
 #include "hitmap.h"
+#include "effectscriptrunner.h"
 #include "vcbutton.h"
 #include "function.h"
 #include "apputil.h"
@@ -1689,6 +1690,17 @@ void VCButton::pressFunction()
         // if the button is in a SoloFrame and the function is running but was
         // started by a different function (a chaser or collection), turn other
         // functions off and start this one.
+        // A hit whose one-shot effects (Once / N times) have all finished
+        // and is still on: the press plays them again instead of turning it
+        // off. While one still runs, the press turns it off as usual.
+        if (state() == Active && f->isRunning()
+            && m_doc->effectScriptRunner()->oneShotState(m_function) == 1
+            && m_doc->effectScriptRunner()->restartOneShots(m_function))
+        {
+            for (quint32 fid : m_together)
+                m_doc->effectScriptRunner()->restartOneShots(fid);
+            return;
+        }
         if (state() == Active && !(isChildOfSoloFrame() && f->startedAsChild()))
         {
             f->stop(functionParent());
