@@ -3430,7 +3430,7 @@ void AppViews_Test::teachingOperateWarnsQuietlyThenAsksWhenItLooksReal()
 
     doc->teachingSettings()->setAllowOutput(true);
     QVERIFY(iom->outputPatch(0, 0)->isPatched());
-    QVERIFY(rig->isHidden());
+    QVERIFY(!rig->text().contains("Teaching"));         // only the usual "rig network not set"
 
     // A start nobody is there to answer for (-p, Open in Operate) never
     // shows the dialog

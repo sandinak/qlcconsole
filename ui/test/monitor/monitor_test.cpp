@@ -26416,7 +26416,7 @@ void Monitor_Test::aPracticeDrawsTheScrambledHeadsPoolWhereItLands()
     QVERIFY2(before >= 0.0 && before < 0.5, qPrintable(QString("before: %1 m off").arg(before)));
 
     QString why;
-    m_doc->teachingSettings()->setEnabled(true);
+    doc->teachingSettings()->setEnabled(true);
     QVERIFY2(!venues->startPractice({ spot->id() }, 7, 8.0f, 12.0f, &why).isEmpty(), qPrintable(why));
     QVERIFY(venues->isPracticeActive());
     const FixtureRigProps scrambled = props->fixtureRigProps(spot->id());

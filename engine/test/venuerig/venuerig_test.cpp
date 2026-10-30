@@ -1537,6 +1537,7 @@ void VenueRig_Test::aPracticeNeverReachesTheShowFile()
     QVERIFY(v->record(a->id()));
     QVERIFY(v->hasCorrection(a->id()));
 
+    m_doc->teachingSettings()->setEnabled(true);        // a practice is a Teaching show's
     const QByteArray show = engineXml(m_doc);
     QVERIFY(show.contains("PanOfs=\"3.00\""));
     QVERIFY(show.contains("TiltOfs=\"-2.00\""));
@@ -1544,7 +1545,6 @@ void VenueRig_Test::aPracticeNeverReachesTheShowFile()
     QVERIFY(lincolnBefore.contains("PanOfs=\"1.00\""));
 
     QString why;
-    m_doc->teachingSettings()->setEnabled(true);
     const QString practice = v->startPractice({ a->id(), b->id() }, 42, 2.0f, 8.0f, &why);
     QVERIFY2(!practice.isEmpty(), qPrintable(why));
     for (Fixture *fx : { a, b })
