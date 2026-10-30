@@ -20,10 +20,8 @@ Operate PIN). **Still open:**
 - **Fade in/out on hits**: Show Tree (hit bake), same reason.
 - **Gel colour in the Rig Overview** (the 3D view): the rig view, same
   reason. The patch list half is built.
-- **Momentary / start-only / stop-only on Control Map bindings**: the
-  Control Map is a Phase 0 prototype with no UI and no saved bindings
-  (other-improvements.md), so modes would reach nobody. Build them with the
-  Control Map's UI.
+- **Momentary / start-only / stop-only on Control Map bindings**: built
+  with the Control Map's return (cm, feat/031-control-map), not here.
 - **Teaching mode** joins File ▸ Show Settings, and can share its PIN
   (ShowPin in engine/src/showoperate.h).
 
