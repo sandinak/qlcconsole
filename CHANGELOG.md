@@ -47,6 +47,12 @@ skipped). Upstream fixes taken:
   and input-level fixes. SPI: frequency label.
 - **Translations**: updated Catalan, Czech, Dutch, Finnish, French,
   German, Italian, Japanese, Portuguese (Brazil) and Spanish.
+- **Translation catalogues refreshed** from qlcconsole's own sources,
+  the first time since the rename: every string the app shows (7,400 more
+  in the app's catalogue, the engine's messages among them) is now there
+  for translators, and strings that changed keep their old translation as
+  a hint. Nothing new is translated yet: those strings show in English.
+  `make translations` refreshes them every release.
 - **Novation Launchpad MK2**: input profile with its colours and
   channels, and a welcome message template.
 - **31 fixture definitions from QLC+ upstream**: 28 new (Acme Deluge,
@@ -54,6 +60,15 @@ skipped). Upstream fixes taken:
   4, Chauvet FXpar3, Equinox Fusion 140 / 260ZR, Starway SupraKolor and
   more) and 3 updated (American DJ Jolt 300, Cameo ROOT PAR 6, beamZ
   LCB244).
+- **48 more fixture definitions from QLC+ upstream** (synced to upstream
+  master of 2026-10-29): 44 new (American DJ Focus Spot Two, Briteq
+  BT-Theatre 150EZ / 200TW / 261FC, Chauvet Ovation CYC 1 FC and Kinta
+  HP, ETC ColorSource Fresnel V-MAX, Martin MAC Aura XIP, Varytec LED
+  Theatre Spot 120 FC and more) and 4 updated (ETC ColorSource Fresnel V,
+  Pro-Lights CromoWash100, Rockville Motionstrip RGBW, Stairville
+  CLB2.4). The fixture library is now synced from upstream every release
+  (`tools/sync-fixtures.py`), keeping qlcconsole's own definitions and
+  edits. 1,791 definitions.
 
 ### Added
 
@@ -73,6 +88,17 @@ skipped). Upstream fixes taken:
   fixture picture show the cue you are editing in the Show Tree while the
   stage plays the run; nothing on the wire changes. The footer turns blue
   and names the cue (docs/design/LIVE_BLIND.md).
+- **Bring over QLC+ 4's settings, once** (asked): the first start that
+  finds QLC+ 4's settings on the computer lists them and asks once
+  whether to copy its recent shows (after qlcconsole's own), I/O and
+  plugin preferences (default patch, hotplug, MIDI, Art-Net, sACN, OSC,
+  DMX USB, uDMX) and the interface preferences that mean the same here
+  (Virtual Console widget sizes, Simple Desk pages, slider style...).
+  Never QLC+ 4's window layouts, never a setting qlcconsole already has,
+  and QLC+ 4 itself is not changed. **Settings ▸ General ▸ QLC+ 4 ▸ Bring
+  over…** does it later. Fixtures, profiles and scripts still come from
+  QLC+'s user folder by themselves. Help: Coming from QLC+ 4 ▸ Your QLC+
+  4 settings.
 - **PlayStation pads by their own names** (board Q170): with a DualShock 4
   or DualSense, Quick focus, Venue focus and Focus this cue call every
   control what the pad calls it -- on the controller map (Cross, Circle,
@@ -338,6 +364,15 @@ skipped). Upstream fixes taken:
   Show Tree a new pick only changed the settings, not the running effect;
   picking one preset or WLED effect after another left the old one's
   settings on screen.
+- **Shows tab, from a review against QLC+ 4.14.4**
+  ([SHOW_MANAGER_PARITY.md](docs/dev/SHOW_MANAGER_PARITY.md)): a click on
+  an empty part of a track moves the playhead again, as in QLC+ 4 (a drag
+  still selects); Undo no longer carries one show's history into another
+  show or document; deleting a function a show uses no longer leaves a
+  stale block that the next zoom or drop could crash on; a plain click on
+  a chase block no longer nudges it or marks the show changed; renaming a
+  track renames its intensity level too, so a Virtual Console slider
+  shows the new name.
 
 - **An idle show no longer uses several cores redrawing the rig.** With
   the Rig Overview open and Live on, its timer redrew the whole rig 25

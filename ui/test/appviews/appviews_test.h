@@ -204,6 +204,7 @@ private slots:
     void theDmxMonitorIsInClassic();
     /** Settings ▸ General ▸ Start new shows in the Classic view. */
     void newShowsCanStartInClassic();
+    void qlcPlus4SettingsAreBroughtOverFromSettings();
     /** A .qxw save holding what QLC+ 4 drops says so once, after saving. */
     void aQxwSaveSaysWhatQlcPlus4Leaves();
     /** a0: "Always start with the plot locked" on: a show saved unlocked

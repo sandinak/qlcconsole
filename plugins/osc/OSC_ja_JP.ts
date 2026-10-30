@@ -84,39 +84,39 @@ Please fix it before confirming.</source>
 <context>
     <name>OSCPlugin</name>
     <message>
-        <location filename="oscplugin.cpp" line="96"/>
+        <location filename="oscplugin.cpp" line="108"/>
         <source>This plugin provides input for devices supporting the OSC transmission protocol.</source>
         <translation type="unfinished">このプラグインはOSCを使ったMIDI信号の送受信を行います。(TouchOSCなど)</translation>
     </message>
     <message>
-        <location filename="oscplugin.cpp" line="147"/>
-        <location filename="oscplugin.cpp" line="280"/>
+        <location filename="oscplugin.cpp" line="160"/>
+        <location filename="oscplugin.cpp" line="293"/>
         <source>Status: Not open</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="oscplugin.cpp" line="150"/>
-        <location filename="oscplugin.cpp" line="283"/>
+        <location filename="oscplugin.cpp" line="163"/>
+        <location filename="oscplugin.cpp" line="296"/>
         <source>Status: Open</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="oscplugin.cpp" line="152"/>
+        <location filename="oscplugin.cpp" line="165"/>
         <source>Packets sent: </source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="oscplugin.cpp" line="285"/>
+        <location filename="oscplugin.cpp" line="298"/>
         <source>Packets received: </source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="oscplugin.cpp" line="143"/>
+        <location filename="oscplugin.cpp" line="156"/>
         <source>Output</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="oscplugin.cpp" line="276"/>
+        <location filename="oscplugin.cpp" line="289"/>
         <source>Input</source>
         <translation type="unfinished"></translation>
     </message>

@@ -126,6 +126,7 @@
 #include "showcontrol.h"
 #include "fixturegroup.h"
 #include "qlcfile.h"
+#include "legacysettings.h"
 #include "apputil.h"
 #include "wledconfigcheck.h"
 #include "controlsurfaceengine.h"
@@ -1388,6 +1389,8 @@ void App::initDoc()
     if (m_startupWindow != NULL)
         m_startupWindow->beginStep(tr("Merging legacy user data"));
     QLCFile::mergeLegacyUserData();
+    /* And, once, QLC+ 4's settings: recent shows and preferences (asked) */
+    offerQlcPlusSettings();
 
     /* Load user fixtures first so that they override system fixtures */
     if (m_startupWindow != NULL)
@@ -2915,6 +2918,52 @@ void App::updateFileOpenMenu(QString addRecent)
     // The recent files live in the File ▸ Open Recent submenu (added in
     // initMenuBar). Disable that submenu when there are no recent files.
     m_fileOpenMenu->setEnabled(menuRecentList.isEmpty() == false);
+}
+
+void App::reloadRecentFiles()
+{
+    if (m_fileOpenMenu != NULL)
+    {
+        foreach (QAction *a, m_fileOpenMenu->actions())
+        {
+            m_fileOpenMenu->removeAction(a);
+            delete a;
+        }
+    }
+    updateFileOpenMenu(QString());
+}
+
+void App::offerQlcPlusSettings()
+{
+    QSettings own;
+    if (LegacySettings::wasOffered(own))
+        return;
+    /* Nobody to answer on the offscreen/minimal platforms (the tests, CI,
+       headless runs): ask at a later start instead, as the recovery does */
+    const QString platform = QGuiApplication::platformName();
+    if (platform == QLatin1String("offscreen") || platform == QLatin1String("minimal")
+        || qEnvironmentVariableIsSet("QLC_NO_RECOVERY_PROMPT"))
+        return;
+
+    std::unique_ptr<QSettings> qlcplus = LegacySettings::openQlcPlus();
+    const LegacySettings::Plan plan = LegacySettings::plan(*qlcplus, own);
+    if (plan.isEmpty())
+        return;                 // no QLC+ 4 here (yet): nothing is recorded
+    LegacySettings::markOffered(own);
+
+    const QString question = tr("QLC+ 4's settings are on this computer:\n%1\n\n"
+        "Bring them over to qlcconsole? QLC+ itself is not changed, and a setting "
+        "qlcconsole already has is kept. You can do this later in Settings ▸ General.")
+        .arg(LegacySettings::describe(plan));
+    const bool yes = (m_startupWindow != NULL)
+            ? m_startupWindow->askYesNo(question)
+            : QMessageBox::question(this, tr("QLC+ 4 settings"), question,
+                                    QMessageBox::Yes | QMessageBox::No,
+                                    QMessageBox::Yes) == QMessageBox::Yes;
+    if (yes == false)
+        return;
+    LegacySettings::apply(*qlcplus, own, plan);
+    reloadRecentFiles();
 }
 
 bool App::slotFileNew()

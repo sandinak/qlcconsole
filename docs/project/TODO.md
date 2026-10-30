@@ -176,6 +176,22 @@ undo as one step, how it reads in Front/Side).
     with a note; Upgrade This Show… offers qlcconsole once.
 - Then W6 → W7.
 
+## Show Manager parity (review 2026-10-29, docs/dev/SHOW_MANAGER_PARITY.md)
+
+Five fixed; the rest, by the doc's numbers:
+- **G1 (decide):** chasers on a show run on the show clock -- loop,
+  ping-pong, random, backward, beat tempo and infinite holds play unlike
+  4.14.4. Trivial: show-clock only Time/SingleShot/Forward chasers (loses
+  scrub sync for the rest); medium: honour every mode. Hot path: perf.
+- **G2:** an Edit… action / double-click that opens the scene and chaser
+  editors (and after ⌘E New sequence); revives `showRightEditor`.
+- G3 undo of drag-move/resize (snapshot before the change); G4 fade-band
+  press rewrites hold/fade modes; G5 timings tool scales all cues; G6
+  master lock on every edit; G9 back-to-back clips of one function; G10
+  per-ShowFunction track settings; G11 Sequence on a wrong-scene track
+  deleted on reload; G12 missing Undo snapshots; G13 mute marks modified.
+- Keep unless asked: G7 Delete with nothing selected, G8 M/S order.
+
 ## Small fixes and leftovers
 
 - **VC effect controls** (feat/031-vc-controls, part 3): a VC slider/knob/

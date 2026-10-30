@@ -50,6 +50,9 @@ namespace
             qFatal("no temporary folder for the test's settings");
         QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, dir.path());
         qputenv("QLC_NO_RECOVERY_PROMPT", "1");
+        // QLC+ 4's settings (LegacySettings): an empty file of the test's.
+        qputenv("QLC_QLCPLUS_SETTINGS", QSettings(QSettings::IniFormat, QSettings::UserScope,
+                    QStringLiteral("qlcconsole-test"), QStringLiteral("qlcplus4")).fileName().toLocal8Bit());
         // And never GitHub: an App a test builds checks for updates on no
         // platform at all (ui/test/updates points its own checker at a
         // local server and lifts this for itself).

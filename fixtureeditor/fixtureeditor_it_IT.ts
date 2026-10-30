@@ -29,72 +29,76 @@
 <context>
     <name>App</name>
     <message>
-        <location filename="app.cpp" line="122"/>
+        <location filename="app.cpp" line="82"/>
+        <source>Fixture Library</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="app.cpp" line="145"/>
         <source>Unrecognized file extension: %1</source>
         <translation>Estensione non riconosciuta: %1</translation>
     </message>
     <message>
-        <location filename="app.cpp" line="150"/>
+        <location filename="app.cpp" line="212"/>
         <source>Fixture loading failed</source>
         <translation>Errore nel caricamento del Fixture</translation>
     </message>
     <message>
-        <location filename="app.cpp" line="151"/>
+        <location filename="app.cpp" line="213"/>
         <source>Unable to load fixture definition: </source>
         <translation>Impossibile caricare la definizione della fixture: </translation>
     </message>
     <message>
-        <location filename="app.cpp" line="245"/>
+        <location filename="app.cpp" line="321"/>
         <source>&amp;New</source>
         <translation>&amp;Nuovo</translation>
     </message>
     <message>
-        <location filename="app.cpp" line="251"/>
+        <location filename="app.cpp" line="327"/>
         <source>&amp;Open</source>
         <translation>&amp;Apri</translation>
     </message>
     <message>
-        <location filename="app.cpp" line="257"/>
+        <location filename="app.cpp" line="333"/>
         <source>&amp;Save</source>
         <translation>&amp;Salvare</translation>
     </message>
     <message>
-        <location filename="app.cpp" line="263"/>
+        <location filename="app.cpp" line="339"/>
         <source>Save &amp;As...</source>
         <translation>Salva &amp;Con Nome...</translation>
     </message>
     <message>
-        <location filename="app.cpp" line="269"/>
+        <location filename="app.cpp" line="345"/>
         <source>&amp;Quit</source>
         <translation>&amp;Quit</translation>
     </message>
     <message>
-        <location filename="app.cpp" line="276"/>
+        <location filename="app.cpp" line="352"/>
         <source>Index</source>
         <translation>Indice</translation>
     </message>
     <message>
-        <location filename="app.cpp" line="282"/>
         <source>About Fixture Definition Editor...</source>
-        <translation>Informazioni sull&apos;Editor di Fixture...</translation>
+        <translation type="vanished">Informazioni sull&apos;Editor di Fixture...</translation>
     </message>
     <message>
-        <location filename="app.cpp" line="287"/>
+        <location filename="app.cpp" line="358"/>
         <source>About Qt...</source>
         <translation>Informazioni su QT...</translation>
     </message>
     <message>
-        <location filename="app.cpp" line="314"/>
+        <location filename="app.cpp" line="408"/>
         <source>&amp;File</source>
         <translation>&amp;File</translation>
     </message>
     <message>
-        <location filename="app.cpp" line="324"/>
+        <location filename="app.cpp" line="418"/>
         <source>&amp;Help</source>
         <translation>&amp;Aiuto</translation>
     </message>
     <message>
-        <location filename="app.cpp" line="362"/>
+        <location filename="app.cpp" line="455"/>
         <source>Open a fixture definition</source>
         <translation>Apri un file-Fixture</translation>
     </message>
@@ -473,39 +477,45 @@
         <translation>Temperatura colore (K)</translation>
     </message>
     <message>
-        <location filename="editphysical.ui" line="708"/>
+        <location filename="editphysical.ui" line="705"/>
+        <source>Beams per head</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="editphysical.ui" line="712"/>
+        <source>How many separate beams each head throws, e.g. 3 for an arm carrying three emitters that share one colour. Only changes how the fixture is drawn.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="editphysical.ui" line="728"/>
         <source>Dimensions</source>
         <translation>Dimensioni</translation>
     </message>
     <message>
-        <location filename="editphysical.ui" line="784"/>
+        <location filename="editphysical.ui" line="767"/>
         <source>Weight</source>
         <translation>Peso</translation>
     </message>
     <message>
-        <location filename="editphysical.ui" line="714"/>
         <source>kg</source>
-        <translation>Kg</translation>
+        <translation type="vanished">Kg</translation>
     </message>
     <message>
-        <location filename="editphysical.ui" line="724"/>
+        <location filename="editphysical.ui" line="737"/>
         <source>Width</source>
         <translation>Larghezza</translation>
     </message>
     <message>
-        <location filename="editphysical.ui" line="734"/>
-        <location filename="editphysical.ui" line="754"/>
-        <location filename="editphysical.ui" line="774"/>
         <source>mm</source>
-        <translation>mm</translation>
+        <translation type="vanished">mm</translation>
     </message>
     <message>
-        <location filename="editphysical.ui" line="744"/>
+        <location filename="editphysical.ui" line="747"/>
         <source>Height</source>
         <translation>Altezza</translation>
     </message>
     <message>
-        <location filename="editphysical.ui" line="764"/>
+        <location filename="editphysical.ui" line="757"/>
         <source>Depth</source>
         <translation>Profondità</translation>
     </message>
@@ -579,6 +589,149 @@
         <location filename="editphysical.ui" line="258"/>
         <source>Paste physical information from clipboard</source>
         <translation>Incolla le informazioni fisiche dagli appunti</translation>
+    </message>
+    <message>
+        <location filename="editphysical.cpp" line="76"/>
+        <source>Look in the Lighting Studio</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="editphysical.cpp" line="79"/>
+        <source>Box</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="editphysical.cpp" line="80"/>
+        <source>Lantern</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="editphysical.cpp" line="82"/>
+        <source>Body</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="editphysical.cpp" line="84"/>
+        <source>Beam</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="editphysical.cpp" line="85"/>
+        <source>All round</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="editphysical.cpp" line="86"/>
+        <source>Laser beam</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="editphysical.cpp" line="87"/>
+        <source>Star field</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="editphysical.cpp" line="88"/>
+        <source>Silk flame</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="editphysical.cpp" line="89"/>
+        <source>None (not a light)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="editphysical.cpp" line="91"/>
+        <source>Beam: a cone at the lens&apos;s angle. All round: a bare source -- a lantern, a bulb -- lighting what is near it. Laser beam: pencil-thin beams (Beams per head of them, fanned across the lens angle), a sharp dot where each lands. Star field: points of light thrown over everything its spread reaches -- a sky laser. Silk flame: a fan blowing silk up over its own orange and yellow lights, on when its channel is past half (a relay).</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="editphysical.cpp" line="99"/>
+        <source>Light</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="editphysical.cpp" line="107"/>
+        <source>One point</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="editphysical.cpp" line="108"/>
+        <source> LEDs</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="editphysical.cpp" line="110"/>
+        <source>One point of light, or that many LEDs drawn one by one in the Lighting Studio -- an effect on a WLED shows along them. A fixture can say otherwise for its own build.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="editphysical.cpp" line="114"/>
+        <source>Hanging LED cluster</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="editphysical.cpp" line="115"/>
+        <source>LED tape</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="editphysical.cpp" line="116"/>
+        <source>On the lens face</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="editphysical.cpp" line="118"/>
+        <source>How the LEDs sit in the body: a wire string let fall through the cage, tape wound tight round a core, or an array on the lens face -- a wash&apos;s 36 x 18 W behind its lenses</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="editphysical.cpp" line="127"/>
+        <source>Source</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="editphysical.cpp" line="129"/>
+        <source>Diffuse</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="editphysical.cpp" line="130"/>
+        <source>Clear</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="editphysical.cpp" line="132"/>
+        <source>What the light is seen through: diffusing glass glows, the LEDs a blur behind it; clear glass shows every LED.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="editphysical.cpp" line="134"/>
+        <source>Glass</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="editphysical.cpp" line="187"/>
+        <source>Shown in %1 and %2; type any unit (7.5&quot;, 19 cm, 26 lb). Change it in qlcconsole: Settings, Units.</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
+    <name>FixtureBrowser</name>
+    <message>
+        <location filename="fixturebrowser.cpp" line="54"/>
+        <source>Search manufacturer or model...</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="fixturebrowser.cpp" line="62"/>
+        <source>Fixture</source>
+        <translation type="unfinished">Fixture</translation>
+    </message>
+    <message>
+        <location filename="fixturebrowser.cpp" line="62"/>
+        <source>Source</source>
+        <translation type="unfinished"></translation>
     </message>
 </context>
 <context>
@@ -774,14 +927,57 @@
     </message>
 </context>
 <context>
+    <name>ProblemsPanel</name>
+    <message>
+        <location filename="problemspanel.cpp" line="31"/>
+        <source>Where</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="problemspanel.cpp" line="31"/>
+        <source>Problem</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="problemspanel.cpp" line="61"/>
+        <source>&lt;span style=&apos;color:#3aa655;&apos;&gt;No problems found.&lt;/span&gt;</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="problemspanel.cpp" line="63"/>
+        <source>&lt;b&gt;Problems:&lt;/b&gt; &lt;span style=&apos;color:#e04030;&apos;&gt;%1 error(s)&lt;/span&gt;, &lt;span style=&apos;color:#d08a00;&apos;&gt;%2 warning(s)&lt;/span&gt; — double-click one to go to it</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="problemspanel.cpp" line="75"/>
+        <source>General</source>
+        <translation type="unfinished">Generale</translation>
+    </message>
+    <message>
+        <location filename="problemspanel.cpp" line="76"/>
+        <source>Physical</source>
+        <translation type="unfinished">Fisico</translation>
+    </message>
+    <message>
+        <location filename="problemspanel.cpp" line="77"/>
+        <source>Channels</source>
+        <translation type="unfinished">Canali</translation>
+    </message>
+    <message>
+        <location filename="problemspanel.cpp" line="78"/>
+        <source>Modes</source>
+        <translation type="unfinished">Modalità</translation>
+    </message>
+</context>
+<context>
     <name>QLCFixtureEditor</name>
     <message>
-        <location filename="fixtureeditor.cpp" line="206"/>
+        <location filename="fixtureeditor.cpp" line="280"/>
         <source>Close</source>
         <translation>Chiudi</translation>
     </message>
     <message>
-        <location filename="fixtureeditor.cpp" line="207"/>
+        <location filename="fixtureeditor.cpp" line="281"/>
         <source>Do you want to save changes to fixture
 &quot;%1&quot;
 before closing?</source>
@@ -790,34 +986,66 @@ before closing?</source>
 prima di chiudere?</translation>
     </message>
     <message>
-        <location filename="fixtureeditor.cpp" line="236"/>
-        <location filename="fixtureeditor.cpp" line="246"/>
+        <location filename="fixtureeditor.cpp" line="310"/>
+        <location filename="fixtureeditor.cpp" line="320"/>
         <source>Missing important information</source>
         <translation>Mancano informazioni importanti</translation>
     </message>
     <message>
-        <location filename="fixtureeditor.cpp" line="237"/>
+        <location filename="fixtureeditor.cpp" line="311"/>
         <source>Missing manufacturer name.
 Unable to save fixture.</source>
         <translation>Manca il nome del produttore.
 Impossibile Salvare.</translation>
     </message>
     <message>
-        <location filename="fixtureeditor.cpp" line="247"/>
+        <location filename="fixtureeditor.cpp" line="321"/>
         <source>Missing fixture model name.
 Unable to save fixture.</source>
         <translation>Manca il nome del modello.
 Impossibile Salvare.</translation>
     </message>
     <message>
-        <location filename="fixtureeditor.cpp" line="277"/>
-        <location filename="fixtureeditor.cpp" line="336"/>
+        <location filename="fixtureeditor.cpp" line="354"/>
+        <source>Errors in this definition</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message numerus="yes">
+        <location filename="fixtureeditor.cpp" line="355"/>
+        <source>This definition has %n error(s) -- things that are wrong, not just missing (see Problems).
+
+Save it anyway?</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message>
+        <location filename="fixtureeditor.cpp" line="376"/>
+        <location filename="fixtureeditor.cpp" line="454"/>
+        <source>System fixture definition</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="fixtureeditor.cpp" line="377"/>
+        <source>&quot;%1&quot; is a system fixture definition and can&apos;t be modified in place.
+
+Your changes will be saved as a local copy instead:
+
+%2
+
+which will override the system definition for this manufacturer and model from now on -- the original stays untouched.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="fixtureeditor.cpp" line="400"/>
+        <location filename="fixtureeditor.cpp" line="473"/>
         <source>Fixture saving failed</source>
         <translation>Salvataggio Fixture Fallito</translation>
     </message>
     <message>
-        <location filename="fixtureeditor.cpp" line="278"/>
-        <location filename="fixtureeditor.cpp" line="337"/>
+        <location filename="fixtureeditor.cpp" line="401"/>
+        <location filename="fixtureeditor.cpp" line="474"/>
         <source>Unable to save fixture definition:
 %1</source>
         <oldsource>Unable to save fixture definition: </oldsource>
@@ -825,135 +1053,271 @@ Impossibile Salvare.</translation>
 %1</translation>
     </message>
     <message>
-        <location filename="fixtureeditor.cpp" line="293"/>
+        <location filename="fixtureeditor.cpp" line="416"/>
         <source>Save fixture definition</source>
         <translation>Salva Fixture</translation>
     </message>
     <message>
-        <location filename="fixtureeditor.cpp" line="370"/>
+        <location filename="fixtureeditor.cpp" line="455"/>
+        <source>&quot;%1&quot; is under the system fixture directory, which can&apos;t be modified.
+
+Saving as a local copy instead:
+
+%2
+
+which will override the system definition for this manufacturer and model from now on.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="fixtureeditor.cpp" line="507"/>
         <source>New Fixture</source>
         <translation>Nuova Fixture</translation>
     </message>
     <message>
-        <location filename="fixtureeditor.cpp" line="447"/>
-        <location filename="fixtureeditor.cpp" line="545"/>
+        <location filename="fixtureeditor.cpp" line="517"/>
+        <source>  — Included (saves as a local copy)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="fixtureeditor.cpp" line="518"/>
+        <source>  — Local</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="fixtureeditor.cpp" line="591"/>
+        <location filename="fixtureeditor.cpp" line="689"/>
         <source>Channel already exists</source>
         <translation>Il canale già esiste</translation>
     </message>
     <message>
-        <location filename="fixtureeditor.cpp" line="448"/>
-        <location filename="fixtureeditor.cpp" line="546"/>
+        <location filename="fixtureeditor.cpp" line="592"/>
+        <location filename="fixtureeditor.cpp" line="690"/>
         <source>A channel by the name &quot;%1&quot; already exists!</source>
         <translation>il canale &quot;%1&quot; già esiste!</translation>
     </message>
     <message>
-        <location filename="fixtureeditor.cpp" line="455"/>
-        <location filename="fixtureeditor.cpp" line="552"/>
+        <location filename="fixtureeditor.cpp" line="599"/>
+        <location filename="fixtureeditor.cpp" line="696"/>
         <source>Channel has no name</source>
         <translation>Canale senza nome</translation>
     </message>
     <message>
-        <location filename="fixtureeditor.cpp" line="456"/>
-        <location filename="fixtureeditor.cpp" line="553"/>
+        <location filename="fixtureeditor.cpp" line="600"/>
+        <location filename="fixtureeditor.cpp" line="697"/>
         <source>You must give the channel a descriptive name!</source>
         <translation>Devi dare al canale un nome descrittivo!</translation>
     </message>
     <message>
-        <location filename="fixtureeditor.cpp" line="493"/>
+        <location filename="fixtureeditor.cpp" line="637"/>
         <source>Are you sure you wish to remove channel: %1?</source>
         <translation>Sei sicuro di vuoler rimuovere il canale: %1?</translation>
     </message>
     <message>
-        <location filename="fixtureeditor.cpp" line="824"/>
+        <location filename="fixtureeditor.cpp" line="968"/>
         <source>Are you sure you wish to remove mode: %1?</source>
         <translation>Sei sicuro di voler rimuovere la modalità: %1?</translation>
     </message>
     <message>
-        <location filename="fixtureeditor.cpp" line="665"/>
-        <location filename="fixtureeditor.cpp" line="700"/>
-        <location filename="fixtureeditor.cpp" line="937"/>
+        <location filename="fixtureeditor.cpp" line="809"/>
+        <location filename="fixtureeditor.cpp" line="844"/>
+        <location filename="fixtureeditor.cpp" line="1158"/>
         <source>Edit</source>
         <translation>Edita</translation>
     </message>
     <message>
-        <location filename="fixtureeditor.cpp" line="666"/>
-        <location filename="fixtureeditor.cpp" line="702"/>
+        <location filename="fixtureeditor.cpp" line="810"/>
+        <location filename="fixtureeditor.cpp" line="846"/>
         <source>Copy</source>
         <translation>Copia</translation>
     </message>
     <message>
-        <location filename="fixtureeditor.cpp" line="667"/>
-        <location filename="fixtureeditor.cpp" line="704"/>
+        <location filename="fixtureeditor.cpp" line="811"/>
+        <location filename="fixtureeditor.cpp" line="848"/>
         <source>Paste</source>
         <translation>Incolla</translation>
     </message>
     <message>
-        <location filename="fixtureeditor.cpp" line="668"/>
-        <location filename="fixtureeditor.cpp" line="706"/>
-        <location filename="fixtureeditor.cpp" line="943"/>
+        <location filename="fixtureeditor.cpp" line="812"/>
+        <location filename="fixtureeditor.cpp" line="850"/>
+        <location filename="fixtureeditor.cpp" line="1164"/>
         <source>Remove</source>
         <translation>Eliminare</translation>
     </message>
     <message>
-        <location filename="fixtureeditor.cpp" line="679"/>
+        <location filename="fixtureeditor.cpp" line="823"/>
         <source>Channels</source>
         <translation>Canali</translation>
     </message>
     <message>
-        <location filename="fixtureeditor.cpp" line="777"/>
-        <location filename="fixtureeditor.cpp" line="786"/>
+        <location filename="fixtureeditor.cpp" line="921"/>
+        <location filename="fixtureeditor.cpp" line="930"/>
         <source>Unable to add mode</source>
         <translation>Impossibile aggiungere modalità</translation>
     </message>
     <message>
-        <location filename="fixtureeditor.cpp" line="778"/>
+        <location filename="fixtureeditor.cpp" line="922"/>
         <source>Another mode by that name already exists</source>
         <translation>Esiste già una modalità con questo stesso nome</translation>
     </message>
     <message>
-        <location filename="fixtureeditor.cpp" line="787"/>
+        <location filename="fixtureeditor.cpp" line="931"/>
         <source>You must give a name to the mode</source>
         <translation>Devi dare un nome alla modalità</translation>
     </message>
     <message>
-        <location filename="fixtureeditor.cpp" line="823"/>
+        <location filename="fixtureeditor.cpp" line="967"/>
         <source>Remove Mode</source>
         <translation>Elimina Modalità</translation>
     </message>
     <message>
-        <location filename="fixtureeditor.cpp" line="883"/>
+        <location filename="fixtureeditor.cpp" line="1006"/>
+        <source>Mode layout changed</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="fixtureeditor.cpp" line="1007"/>
+        <source>This changes the channel layout of &quot;%1&quot; -- channel count, order, or head count differs from what&apos;s saved. Any fixture already patched to this mode may show incorrect behavior after saving, until it&apos;s re-patched, since shows store channel values by position, not by name.
+
+Keep &quot;%1&quot; as it is and save this edit as a new mode instead?</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="fixtureeditor.cpp" line="1014"/>
+        <source>Save as New Mode...</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="fixtureeditor.cpp" line="1015"/>
+        <source>Change &quot;%1&quot; Anyway</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="fixtureeditor.cpp" line="1038"/>
+        <source>Name the new mode</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="fixtureeditor.cpp" line="1041"/>
+        <source>%1 (edited)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="fixtureeditor.cpp" line="1104"/>
         <source>Rename new mode</source>
         <translation>Rinomina nuova Modalità</translation>
     </message>
     <message>
-        <location filename="fixtureeditor.cpp" line="884"/>
+        <location filename="fixtureeditor.cpp" line="1039"/>
+        <location filename="fixtureeditor.cpp" line="1105"/>
         <source>Give a unique name for the mode</source>
         <translation>Inserisci un nome unico per la modalità</translation>
     </message>
     <message>
-        <location filename="fixtureeditor.cpp" line="886"/>
+        <location filename="fixtureeditor.cpp" line="1107"/>
         <source>Copy of %1</source>
         <translation>Copia di %1</translation>
     </message>
     <message>
-        <location filename="fixtureeditor.cpp" line="896"/>
+        <location filename="fixtureeditor.cpp" line="1048"/>
+        <location filename="fixtureeditor.cpp" line="1117"/>
         <source>Invalid name</source>
         <translation>Nome Invalido</translation>
     </message>
     <message>
-        <location filename="fixtureeditor.cpp" line="897"/>
+        <location filename="fixtureeditor.cpp" line="1049"/>
+        <location filename="fixtureeditor.cpp" line="1118"/>
         <source>Another mode by that name already exists.</source>
         <translation>Esiste già una modalità con questo nome.</translation>
     </message>
     <message>
-        <location filename="fixtureeditor.cpp" line="940"/>
+        <location filename="fixtureeditor.cpp" line="1161"/>
         <source>Clone</source>
         <translation>Clona</translation>
     </message>
     <message>
-        <location filename="fixtureeditor.cpp" line="948"/>
+        <location filename="fixtureeditor.cpp" line="1169"/>
         <source>Modes</source>
         <translation>Modalità</translation>
+    </message>
+</context>
+<context>
+    <name>RepairDialog</name>
+    <message>
+        <location filename="repairdialog.cpp" line="31"/>
+        <source>Repair %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="repairdialog.cpp" line="34"/>
+        <source>This definition cannot be read whole as it is. Apply a repair below, or edit the file by hand -- it is checked again as you go.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="repairdialog.cpp" line="48"/>
+        <source>Undo</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="repairdialog.cpp" line="73"/>
+        <source>Proposed repairs (each one tried first):</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="repairdialog.cpp" line="81"/>
+        <source>Apply Repair</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="repairdialog.cpp" line="82"/>
+        <location filename="repairdialog.cpp" line="205"/>
+        <source>Open in Editor</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="repairdialog.cpp" line="116"/>
+        <source>&lt;span style=&apos;color:#3aa655;font-weight:bold;&apos;&gt;Fixed automatically:&lt;/span&gt; %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="repairdialog.cpp" line="155"/>
+        <source>&lt;span style=&apos;color:%1;font-weight:bold;&apos;&gt;Line %2%3:&lt;/span&gt; %4</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="repairdialog.cpp" line="157"/>
+        <source>, column %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="repairdialog.cpp" line="159"/>
+        <source>&lt;span style=&apos;color:%1;font-weight:bold;&apos;&gt;%2&lt;/span&gt;</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="repairdialog.cpp" line="177"/>
+        <source>&lt;span style=&apos;color:#3aa655;font-weight:bold;&apos;&gt;It reads now.&lt;/span&gt; Open it in the editor to look it over and save.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="repairdialog.cpp" line="187"/>
+        <source>%1%2
+    line %3:  %4   →   %5</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="repairdialog.cpp" line="188"/>
+        <source>  (it then reads)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="repairdialog.cpp" line="199"/>
+        <source>No repair to propose for this one -- edit the line by hand.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="repairdialog.cpp" line="205"/>
+        <source>Open Anyway</source>
+        <translation type="unfinished"></translation>
     </message>
 </context>
 </TS>

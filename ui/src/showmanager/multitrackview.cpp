@@ -319,6 +319,8 @@ void MultiTrackView::addTrack(Track *track)
             this, SLOT(slotTrackLockFlagChanged(TrackItem*,bool)));
     connect(trackItem, SIGNAL(itemRenamed(Track*)),
             this, SIGNAL(trackModified()));
+    connect(trackItem, SIGNAL(itemRenamed(Track*)),
+            this, SIGNAL(trackRenamed(Track*)));
     connect(trackItem, SIGNAL(itemColorChangeRequested(Track*)),
             this, SIGNAL(trackColorChangeRequested(Track*)));
     connect(trackItem, SIGNAL(itemPropertiesChanged(Track*)),
@@ -608,7 +610,11 @@ void MultiTrackView::deleteShowItem(Track *track, ShowFunction *sf)
     {
         if (m_items.at(i)->showFunction() == sf)
         {
-            m_scene->removeItem(m_items.at(i));
+            // Out of m_items too: the ShowFunction is deleted below, and a
+            // stale item was read again by zoom and by the push-aside.
+            ShowItem *item = m_items.takeAt(i);
+            m_scene->removeItem(item);
+            delete item;
             break;
         }
     }
@@ -1676,6 +1682,13 @@ void MultiTrackView::mouseReleaseEvent(QMouseEvent * e)
         {
             const QRect bandVp = m_rubberBand->geometry();
             m_rubberBand->hide();
+            // A click, not a marquee: move the playhead there, as QLC+ 4 does
+            if (bandVp.width() < 3 && bandVp.height() < 3)
+            {
+                m_cursor->setPos(mapToScene(e->pos()).x(), 0);
+                m_cursor->setTime(getTimeFromCursor());
+                emit timeChanged(m_cursor->getTime());
+            }
             // Select every ShowItem whose viewport rect intersects the marquee.
             foreach (ShowItem *item, m_items)
             {

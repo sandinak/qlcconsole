@@ -439,6 +439,22 @@ void Show::setTrackIntensity(quint32 trackId, qreal fraction)
         m_runner->adjustIntensity(level, track); // live scale while running
 }
 
+void Show::trackRenamed(Track *track)
+{
+    if (track == NULL)
+        return;
+    const QString suffix = QString("-%1").arg(track->id());
+    const QList<Attribute> attrs = attributes();
+    for (int i = 0; i < attrs.count(); i++)
+    {
+        if (attrs.at(i).m_name.endsWith(suffix))
+        {
+            renameAttribute(i, QString("%1%2").arg(track->name(), suffix));
+            return;
+        }
+    }
+}
+
 int Show::trackAttributeIndex(Track *track) const
 {
     // The index preRun() and adjustAttribute() use: the track's place in

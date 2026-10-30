@@ -549,6 +549,10 @@ void SequenceItem::hoverMoveEvent(QGraphicsSceneHoverEvent *event)
 
 void SequenceItem::mousePressEvent(QGraphicsSceneMouseEvent *event)
 {
+    // Where the press found the block: several paths below don't reach
+    // ShowItem::mousePressEvent, and the release compares against it (a
+    // stale m_pos made a plain click a move).
+    m_pos = pos();
     const bool alt = event->modifiers() & Qt::AltModifier;
     const qreal x = event->pos().x();
     const qreal y = event->pos().y();

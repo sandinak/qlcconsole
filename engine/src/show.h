@@ -160,6 +160,10 @@ public:
     /** Get the number of tracks in the Show */
     int getTracksCount();
 
+    /** Keep @a track's intensity attribute ("<name>-<id>") named after
+     *  the track, after its name changed */
+    void trackRenamed(Track *track);
+
     /** Move a track ID up or down */
     void moveTrack(Track *track, int direction);
 

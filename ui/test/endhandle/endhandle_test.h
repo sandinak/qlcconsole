@@ -22,6 +22,7 @@ private slots:
     void onscreenHandleStillDraggable();
     void onscreenHandleWinsOverMarkerBehind();
     void dragToRightEdgeAutoScrollsAndGrows();
+    void aClickOnEmptyTrackAreaMovesThePlayhead();
 };
 
 #endif

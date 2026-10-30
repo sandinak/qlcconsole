@@ -175,6 +175,104 @@ masters?".
   show in aim-target lists); "Performers" layer found by name; everyone
   faces the house.
 
+### 2026-10-29 — Show Manager parity review *(feat/031-home4, smp)*
+
+- [docs/dev/SHOW_MANAGER_PARITY.md](../dev/SHOW_MANAGER_PARITY.md):
+  feature-by-feature against QLC+_4.14.4. Every stock feature present
+  (most moved into Show ▾ / Edit ▾); XML additive; two real differences:
+  chasers on the timeline run on the show clock (loop/ping-pong/random/
+  beats/infinite holds play differently, G1) and no editors open on the
+  timeline (G2).
+- Fixed (each < 30 lines, each with a test that fails without it): click
+  on empty track moves the playhead (F1, endhandle test); undo stack per
+  show id (F2); `deleteShowItem` frees the item (F3, a use-after-free on
+  zoom/push-aside); `SequenceItem` press records `m_pos` (F4); track
+  rename renames its "<name>-<id>" attribute, `Show::trackRenamed()`
+  (F5, also the Show Tree's timeline editor).
+- Queued: G1-G14 in the doc (TODO.md "Show Manager parity").
+- **Decided:** G1's trivial fix is NOT applied: it trades scrub/cue-roll
+  sync for stock playback, and is a hot-path change (user's call).
+
+### 2026-10-29 — Bring over QLC+ 4's settings, once *(feat/031-home4, imp)*
+
+- **Engine:** `LegacySettings` (`engine/src/legacysettings.*`): QLC+ 4's
+  store is `QSettings(NativeFormat, UserScope, "qlcplus.org" on macOS /
+  "qlcplus" elsewhere, "Q Light Controller Plus")` -- stock 4.14.4 sets
+  org "qlcplus", domain "qlcplus.org", app APPNAME; macOS names the plist
+  by the domain (checked read-only on ender: 172 keys).
+  `QLC_QLCPLUS_SETTINGS` points it at an .ini instead (every UI test sets
+  it, `ui/test/common/testsettings.cpp`, so no test opens the real one).
+  `plan()` / `apply()` / `describe()` / `wasOffered()` / `markOffered()`
+  (`legacy/qlcplusSettingsOffered`).
+- **What comes over:** `workspace/recent0-9` merged after qlcconsole's
+  own, missing files dropped, cap 10, plus `workspace/workingpath`; I/O
+  and plugins (`inputmap/`, `outputmap/`, `inputmanager/hotplug`,
+  `midiplugin/`, `ArtNetPlugin/`, `E131Plugin/`, `OSCPlugin/`,
+  `SPIPlugin/`, `GPIOPlugin/`, `OlaIO/`, `udmx/`, `qlcftdi/`,
+  `dmxusbopenrx/`, `enttecdmxusbopen/`); UI (`workspace/sliderstyle`,
+  `simpledesk/*` pages and names, `virtualconsole/*` sizes,
+  `slidermatrix/defaultSize`, a few dialog choices). Never geometry,
+  splitters or states; never a key qlcconsole has; QLC+ never written.
+- **"Input profiles folder pointer":** QLC+ 4.14 has no such setting; the
+  user InputProfiles folder already comes in through
+  `QLCFile::mergeLegacyUserData()` (links; copies on Windows), which this
+  doesn't touch or repeat.
+- **UI:** `App::offerQlcPlusSettings()` right after the legacy data merge,
+  before plugins load (so MIDI prefs apply this start): asks in the
+  StartupWindow (`askYesNo`) the first time QLC+ settings exist with
+  something to bring; recorded as offered either way; skipped
+  offscreen/minimal and with `QLC_NO_RECOVERY_PROMPT`, unrecorded, as
+  the recovery offer is. Settings ▸ General ▸ **QLC+ 4** group (only
+  when QLC+ 4 has settings): what's left to bring, **Bring over…**
+  (asks, applies, rebuilds Open Recent via `App::reloadRecentFiles()`).
+  No menu item.
+- **Decided (can change):** qlcconsole's own value wins on a clash;
+  recent shows that no longer exist are dropped; an empty plan (no QLC+
+  4, or nothing new) is not recorded as offered, so a later QLC+ install
+  is still offered once; the Settings button acts at once, not on OK.
+- Tests: `LegacySettings_Test` (9, temp .ini stores), and
+  `AppViews_Test::qlcPlus4SettingsAreBroughtOverFromSettings`.
+
+### 2026-10-29 — lupdate every release *(feat/031-home4, lu)*
+
+- `make translations` = `./translate.sh update` (the repo's existing
+  script): lupdate over every folder that has `.ts` files. Changed: build
+  dirs are pruned (it walked them), qmlui is skipped (off; `QMLUI=1`
+  includes it), `engine/test/qlci18n` is skipped (its test makes its own),
+  and **decided:** the app's `ui/src/qlcconsole_*.ts` also take
+  `engine/src`'s `tr()` strings -- the engine has no catalogue and runs in
+  the app (can change). Bash 3.2-safe.
+- First run: the app's catalogue went from ~1,600 to 8,971 messages
+  (7,379 unfinished); 90 `.ts` files; obsolete ones kept as "vanished".
+  lupdate's warnings name engine files that call `tr()` outside a class
+  with `Q_DECLARE_TR_FUNCTIONS` (padnames.cpp, stockqlccheck.cpp,
+  rignetwork.cpp, showtreecommand.cpp): those strings are not extracted;
+  queued.
+- RELEASE.md step 1 runs it.
+
+### 2026-10-29 — Fixture library sync, every release *(feat/031-home4, fx)*
+
+- `tools/sync-fixtures.py`: reads `~/git/qlcplus` with `git show` (its
+  branch and tree are never touched; `git fetch` first unless
+  `--no-fetch`), merges each `.qxf` three ways against the last sync
+  (`tools/sync-fixtures.base`): new added, upstream updates of untouched
+  files taken, both-sides edits merged by `git merge-file` when clean,
+  else reported and the fork's file kept; fork-only and fork-edited kept;
+  an upstream deletion followed only when the fork's copy is untouched.
+  Rebuilds `FixturesMap.xml`, runs `scripts/check`, moves the base only
+  when the check passes; `--dry-run` reports only. Warns when upstream's
+  `fixture.xsd` moved.
+- First run: upstream master a089223b9 → 4cd37df23: 44 new, 4 updated,
+  1 rename followed (Stairville Stage TRI LED Bundle Complete), ETC
+  ColorSource Spot (fork edit) and 10 fork-only kept, no conflicts. 1,791.
+- **Decided:** upstream master, not a 4.x tag, is the source (4.x is in
+  maintenance; QLC+_4.14.4 has 1,710 definitions, older than ours; the
+  format and schema are the same) (can change: `--ref QLC+_4.14.4`).
+- Test: `QLCFixtureDefCache_Test::everyShippedDefinitionLoadsAndIsInTheMap`
+  -- every shipped .qxf loads in the engine (manufacturer, model, a mode)
+  and FixturesMap.xml lists exactly the files on disk (~3 s).
+- RELEASE.md step 1 and UPSTREAM.md step 5 run it; UPSTREAM.md logs it.
+
 ### 2026-10-29 — Web access saved with the show *(feat/031-show-webserver)*
 
 - **Engine:** `ShowWebAccess` (`engine/src/showwebaccess.*`, `Doc::webAccess()`):

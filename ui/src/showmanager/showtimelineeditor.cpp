@@ -121,6 +121,10 @@ ShowTimelineEditor::ShowTimelineEditor(QWidget *parent, Show *show, Doc *doc)
             this, SLOT(slotShowItemMoved(ShowItem*,quint32,bool)));
     connect(m_showview, &MultiTrackView::trackModified,
             m_doc, &Doc::setModified);
+    connect(m_showview, &MultiTrackView::trackRenamed, this, [this](Track *t) {
+        if (m_show != NULL)
+            m_show->trackRenamed(t);
+    });
     // Tracks
     connect(m_showview, SIGNAL(trackDelete(Track*)),
             this, SLOT(slotTrackDelete(Track*)));
@@ -511,9 +515,8 @@ void ShowTimelineEditor::slotTrackDoubleClicked(Track *track)
                        tr("Track name:"), QLineEdit::Normal, track->name(), &ok);
     if (ok == false || name.isEmpty())
         return;
-    const int idx = m_show->getAttributeIndex(track->name());
     track->setName(name);
-    m_show->renameAttribute(idx, name);
+    m_show->trackRenamed(track);
     m_doc->setModified();
 }
 

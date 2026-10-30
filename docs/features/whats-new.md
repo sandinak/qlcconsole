@@ -43,6 +43,13 @@ The latest changes, newest first. Each links to the guide with the detail.
 - **The DMX Monitor.** QLC+ 4's Monitor — each fixture's channels and
   values, live — from **View ▸ DMX Monitor** and Classic's toolbar. See
   [The DMX Monitor](getting-started.md#the-dmx-monitor).
+- **QLC+ 4's settings, if you want them.** The first start that finds
+  them asks once whether to bring over QLC+ 4's recent shows, I/O and
+  plugin preferences and interface preferences; **Settings ▸ General ▸
+  QLC+ 4** does it later. QLC+ 4 is never changed. See [Your QLC+ 4
+  settings](coming-from-qlc4.md#your-qlc-4-settings).
+- **48 more fixture definitions from QLC+**, and the library now follows
+  QLC+'s every release.
 - **New and Delete input profiles** beside Edit in the universe's patch
   editor, as QLC+ 4 had them. See [Input
   profiles](other-improvements.md#editing-a-connection).

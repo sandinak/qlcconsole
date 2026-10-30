@@ -37,6 +37,7 @@ private slots:
     void fixtureDef();
 	void load();
     void defDirectories();
+    void everyShippedDefinitionLoadsAndIsInTheMap();
     void storeDef();
     void reloadPhysicalKeepsTheModes();
     void aDefinitionThatFailsIsRemembered();
