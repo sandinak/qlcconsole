@@ -135,16 +135,17 @@ check on the show VLAN.
 house rigs kept in the venue sidecar and swapped with the venue, group
 fills, Tour/House slots, the venue's output patch, "not ours", the clash
 check, the venue page, the plot's Owner overlay. Open: Branson confirms
-docs/design/VENUES.md section 11; the Rig Overview (3D) owner filter; the focus
-report's owner column; a real-rig check that a not-ours universe stays
+docs/design/VENUES.md section 11; the Rig Overview (3D) owner filter; a real-rig check that a not-ours universe stays
 silent on Art-Net/sACN.
 
 ## People on the stage: follow-ons (performer lines shipped 2026-10-29, DONE.md)
 
-Open: a set's costume/height changed in one place (now each line's
-dialog); keep performers out of aim-target pickers if they crowd them;
-people facing along a turned riser (everyone faces the house); a line
-converted from a plain line keeps its own heights rather than chest height.
+Open: people facing along a turned riser (everyone faces the house).
+Done 0.3.1 (`feat/031-owner-performers`): a set's costume and heights in
+one place (a whole-set box in the line's dialog), a fill's lines out of the
+aim-target lists (kept when a palette or the list holds them), a converted
+plain line keeps its heights. Decided (can change): the whole-set box
+starts unticked; lines of a fill vanish from pickers, a lone line does not.
 
 ## Lasers: orientation, look, starfield coverage (board Q172, 2026-10-29)
 

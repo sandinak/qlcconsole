@@ -22,6 +22,8 @@
 
 #include "performerfill.h"
 #include "monitorproperties.h"
+#include "qlcpalette.h"
+#include "doc.h"
 #include "stageplatform.h"
 #include "stagetarget.h"
 #include "linecurve.h"
@@ -257,6 +259,50 @@ bool PerformerFill::isPerformer(const MonitorProperties *props, const StageTarge
         || t->layerId() == MonitorProperties::defaultLayerId || !props->hasLayer(t->layerId()))
         return false;
     return props->layer(t->layerId()).name == trp("Performers");
+}
+
+QList<StageTarget *> PerformerFill::setMates(const MonitorProperties *props, const StageTarget *t)
+{
+    QList<StageTarget *> out;
+    if (props == nullptr || t == nullptr || !t->isPerformerLine() || t->groupId() == 0)
+        return out;
+    foreach (StageTarget *o, props->stageTargets())
+        if (o != nullptr && o != t && o->isPerformerLine() && o->groupId() == t->groupId())
+            out << o;
+    return out;
+}
+
+int PerformerFill::copyLookToSet(const MonitorProperties *props, const StageTarget *from)
+{
+    const QList<StageTarget *> mates = setMates(props, from);
+    foreach (StageTarget *o, mates)
+    {
+        o->setCostumeColor(from->costumeColor());
+        o->setPersonHeight(from->effectivePersonHeight());
+        o->setHeightSpread(from->heightSpread());
+    }
+    return mates.size();
+}
+
+QList<StageTarget *> PerformerFill::pickable(Doc *doc, quint32 keepId)
+{
+    QList<StageTarget *> out;
+    const MonitorProperties *props = doc == nullptr ? nullptr : doc->monitorProperties();
+    if (props == nullptr)
+        return out;
+    QSet<quint32> used;
+    foreach (const QLCPalette *p, doc->palettes())
+        used.insert(p->stageTargetId());
+    foreach (StageTarget *t, props->stageTargets())
+    {
+        if (t == nullptr)
+            continue;
+        if (t->isPerformerLine() && t->id() != keepId && !used.contains(t->id())
+            && !setMates(props, t).isEmpty())
+            continue;
+        out << t;
+    }
+    return out;
 }
 
 QList<StageTarget *> PerformerFill::standingOn(const MonitorProperties *props, quint32 platformId)

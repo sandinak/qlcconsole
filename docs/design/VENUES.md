@@ -281,7 +281,6 @@ venue patch applied and restored, the show file clean) and
 ## 12. Not done
 
 - The Rig Overview (3D) has no owner filter yet; the plot overlay has it.
-- The focus report's owner column is the focus-report work's to add
-  (`RigOwner::name(RigOwner::effective(doc, fid))`).
+- (Done: the focus report has an Owner column, `FocusReport::Row::owner`.)
 - House structure (a room's own trusses) is still the show's structure with
   venue trims (Q128); a house fixture hangs on the show's structure.

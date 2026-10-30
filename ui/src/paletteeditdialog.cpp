@@ -19,6 +19,7 @@
 #include "paletteeditdialog.h"
 #include "qlcpalette.h"
 #include "monitorproperties.h"
+#include "performerfill.h"
 #include "stagetarget.h"
 #include "doc.h"
 
@@ -135,7 +136,7 @@ void PaletteEditDialog::buildUi()
     m_targetCombo->addItem(tr("(none)"), QVariant(StageTarget::invalidId()));
     if (m_doc && m_doc->monitorProperties())
     {
-        for (StageTarget *t : m_doc->monitorProperties()->stageTargets())
+        for (StageTarget *t : PerformerFill::pickable(m_doc, m_existing ? m_existing->stageTargetId() : StageTarget::invalidId()))
             m_targetCombo->addItem(t->name(), QVariant(t->id()));
     }
     m_targetCombo->setToolTip(tr("Associate this palette with a named stage target position"));

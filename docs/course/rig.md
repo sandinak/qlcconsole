@@ -84,7 +84,9 @@ the Lighting Studio: select the risers and use **Add ▸ Fill Selected
 Risers with People…**, then **Add People…** for a line across the apron.
 Each row is a performer line in a costume colour, in a **Performers** layer
 you can hide. A wash that flatters the costume reads that way in the rig
-view; one that fights it goes dark.
+view; one that fights it goes dark. The rows of a fill are one set: tick
+**Costume and height for the whole set** in one row's dialog to change
+them all at once.
 
 ## Palettes
 
