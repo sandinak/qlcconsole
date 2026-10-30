@@ -53,27 +53,32 @@ void StockQlcCheck_Test::eachForkBlockIsNamedOnce()
 {
     const QByteArray xml =
         "<Workspace><Engine>"
-        "<ShowControl MainCueList='3'/><ShowTree><Production/></ShowTree>"
-        "<SpeedMasters/><PowerDistribution/><NetworkTopology/><Timecode Source='0'/>"
-        "<Park/><Mark/><FocusCalls/><ControlMap><Trigger/></ControlMap><OutputRuleSettings/><Frobnicate/><Frobnicate/>"
+        "<ShowControl MainCueList='3'/><ShowTree><Production><CueList><Cue/><Cue/></CueList>"
+        "<Looks><Look/></Looks></Production></ShowTree>"
+        "<SpeedMasters><Master/><Master/></SpeedMasters><PowerDistribution/><NetworkTopology/><Timecode Source='0'/>"
+        "<Park/><Mark/><FocusCalls><Call/></FocusCalls><ControlMap><Trigger/></ControlMap>"
+        "<Teaching Enabled='1'/><Operate/><WebAccess/><OutputRuleSettings/><Frobnicate/><Frobnicate/>"
         "<Monitor><Grid/><Truss/><Tower/><Scenery/></Monitor>"
         "</Engine>"
-        "<VirtualConsole><Frame><Frame><CueRunner/></Frame><ShowControl/></Frame></VirtualConsole>"
+        "<VirtualConsole><Frame><Frame><CueRunner/></Frame><ShowControl/><EffectControl/></Frame></VirtualConsole>"
         "</Workspace>";
     const QStringList got = lossesOf(xml);
     const QStringList want = {
-        "the Show Tree (its cue lists, cues and hits)",
-        "the speed masters",
+        "the Show Tree (2 cue lists, 2 cues, 1 look)",
+        "the speed masters (2 masters)",
         "the power plan",
         "the network map",
         "the timecode source",
         "parked and marked channels",
-        "the focus calls",
-        "the Control Map (MIDI and OSC triggers)",
+        "the focus calls (1 call)",
+        "the Control Map (1 trigger)",
+        "the Teaching settings",
+        "the Operate settings",
+        "the web access settings",
         "when \"on when not in use\" lights come on",
         "other qlcconsole settings",
-        "the Lighting Studio's rigging (trusses, towers, scenery)",
-        "Cue Runner and Show Control widgets on the Virtual Console" };
+        "the Lighting Studio's rigging (3 pieces)",
+        "Cue Runner, Show Control and Effect Control widgets on the Virtual Console (3 widgets)" };
     QCOMPARE(got, want);
 }
 

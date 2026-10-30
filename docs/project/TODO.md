@@ -104,11 +104,14 @@ Operate PIN). **Still open:**
 - **Momentary / start-only / stop-only on Control Map bindings**: built
   with the Control Map's return (cm, feat/031-control-map), not here.
 - **Teaching mode**: DONE (t, feat/031-teaching): must-haves + lesson link;
-  see docs/features/teaching.md. Still later: reset to handout, confirm
-  before patch changes in a Teaching show, a per-GO "what just happened"
-  log, glossary popovers, a Show Review "Teaching mode is on" check (when
-  Show Review exists), the course shows rebuilt with Teaching on (they ship
-  off; Lesson 3.6 says to tick it), and holding non-network (USB) output.
+  see docs/features/teaching.md. Also DONE (tch2, feat/031-teaching2): reset
+  to handout (state embedded in the handout, Show Settings, behind the PIN),
+  confirm before patch changes (Fixture Manager, Patch dialog), USB/hardware
+  output held. Still later: a per-GO "what just happened" log, glossary
+  popovers, a Show Review "Teaching mode is on" check (when Show Review
+  exists), the course shows rebuilt with Teaching on (they ship off; Lesson
+  3.6 says to tick it), and the patch confirm in the Lighting Studio's
+  Fixture Properties (monitor files were another agent's).
 
 ## Lighting Studio alignment — leftovers (0.3.1 d2, 2026-10-29)
 
@@ -146,16 +149,17 @@ check on the show VLAN.
 house rigs kept in the venue sidecar and swapped with the venue, group
 fills, Tour/House slots, the venue's output patch, "not ours", the clash
 check, the venue page, the plot's Owner overlay. Open: Branson confirms
-docs/design/VENUES.md section 11; the Rig Overview (3D) owner filter; the focus
-report's owner column; a real-rig check that a not-ours universe stays
+docs/design/VENUES.md section 11; the Rig Overview (3D) owner filter; a real-rig check that a not-ours universe stays
 silent on Art-Net/sACN.
 
 ## People on the stage: follow-ons (performer lines shipped 2026-10-29, DONE.md)
 
-Open: a set's costume/height changed in one place (now each line's
-dialog); keep performers out of aim-target pickers if they crowd them;
-people facing along a turned riser (everyone faces the house); a line
-converted from a plain line keeps its own heights rather than chest height.
+Open: people facing along a turned riser (everyone faces the house).
+Done 0.3.1 (`feat/031-owner-performers`): a set's costume and heights in
+one place (a whole-set box in the line's dialog), a fill's lines out of the
+aim-target lists (kept when a palette or the list holds them), a converted
+plain line keeps its heights. Decided (can change): the whole-set box
+starts unticked; lines of a fill vanish from pickers, a lone line does not.
 
 ## Lasers: orientation, look, starfield coverage (board Q172, 2026-10-29)
 
@@ -182,6 +186,24 @@ with the throw). **Open:** part
 C (H×V window, density by throw, coverage outline, the audience-zone
 safety check for Show Review), the Type=Laser emission inference, and
 FixtureDefCheck's laser checks.
+
+## AI Assist (0.5, docs/design/AI_ASSIST.md, scheduled 2026-10-30)
+
+Branson's design: type a request in Design mode ("movers 1–6 deep blue at
+50%", "find address conflicts") and get proposed command-line text to
+review; the model never touches the show, every apply is one undo step,
+off by default, torn down in Operate, works offline. Phases, each with its
+acceptance test in the design:
+- **P0** one operation registry the command line runs through (no change
+  in behaviour).
+- **P1** settings, provider adapters, read-only ops, full Design/Operate
+  gating. Ollama runs locally on ender for the acceptance checks (no live
+  model in CI: mock HTTP + recorded responses).
+- **P2** write ops with preview, confirm, undo; golden prompt suite.
+- **P2b** configuration import (§5b), usable with AI off.
+- **P3** MCP server over the registry.
+Guardrails: separate `ai/` module behind `QLC_AI_ASSIST`; no AI code on
+MasterTimer/universe threads; an ROI line is in STRATEGY.md §3.3.
 
 ## Show Review: an auditor for the show's design (post-0.3, asked 2026-10-25)
 

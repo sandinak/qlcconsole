@@ -399,7 +399,12 @@ lines, each with its own count.
 
 Any line takes people in its dialog (double-click it): **People on it**,
 **Height**, **Height give or take** and **Costume**; 0 people is a plain
-line again.
+line again. A line in a set (a fill's rows) also shows **Costume and
+height for the whole set**: tick it and OK gives every other line in the
+set the same costume, height and give or take, so a choir changes in one
+place. Each line keeps its own count and its own shuffle. Turning a plain
+line into a performer line leaves its points at the heights they have;
+only a line made by **Add People…** or a fill runs at chest height.
 
 Lines go in a **Performers** layer of their own (made the first time). Its
 eye hides them on the plot and in the rig view, and its lock holds them
@@ -407,6 +412,10 @@ still. A fill's lines are one group named for the set: click one to select
 them all and drag the set as one piece; click again to pick one line out.
 Move or turn a riser and the lines standing on it go with it; move the
 riser out from under a line and its people step down to what is there.
+A fill's lines stay out of the aim-target lists (a Look's Aim target, an
+Aim palette, a focus call, Focus mode), so fifteen rows do not bury the
+targets you named; a performer line on its own is listed, and so is any
+line an aim palette already uses.
 Filling the same risers again replaces their lines (**Replace the people
 already on them**), except one an aim palette uses. Light aimed at a
 performer line spreads along their chests. One Undo takes back a fill.

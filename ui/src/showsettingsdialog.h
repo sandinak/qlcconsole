@@ -77,6 +77,19 @@ public:
      *  applied): the caller runs the handout dialog next. */
     bool handoutRequested() const { return m_handoutRequested; }
 
+    /** The user pressed Reset to Handout and gave the PIN (if any) and
+     *  confirmed: the dialog closed without applying its other changes, and
+     *  the caller puts the show back to its handout state. */
+    bool resetRequested() const { return m_resetRequested; }
+
+    /** A Teaching show asks before its patch changes (adding, removing or
+     *  re-addressing fixtures): true to go on. Always true for a show that
+     *  is not in Teaching mode. @p what is the change in a few words. In test
+     *  mode the answer is taken from testAnswers() ("yes" goes on, anything
+     *  else or nothing stops) and patchQuestions() counts the questions. */
+    static bool confirmPatchChange(Doc *doc, QWidget *parent, const QString &what);
+    static int &patchQuestions();
+
     /** Ask for the handout's options (the file, its PIN, what to leave out);
      *  false on Cancel. */
     static bool askHandoutOptions(Doc *doc, QWidget *parent, HandoutOptions *out);
@@ -96,6 +109,7 @@ private slots:
     void slotSetPin();
     void slotRemovePin();
     void slotHandout();
+    void slotReset();
     void updateEnabled();
 
 private:
@@ -111,6 +125,8 @@ private:
     QLineEdit *m_link;
     QPushButton *m_handout;
     bool m_handoutRequested = false;
+    bool m_resetRequested = false;
+    QPushButton *m_reset;
     QLabel *m_pinText;
     QPushButton *m_setPin;
     QPushButton *m_removePin;

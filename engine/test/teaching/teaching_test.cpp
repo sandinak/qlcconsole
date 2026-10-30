@@ -261,4 +261,47 @@ void Teaching_Test::thePinCanSkipTheDesignLock()
     QVERIFY(!nolock.operateSettings()->locksDesign());
 }
 
+void Teaching_Test::theHandoutStateIsKept()
+{
+    TeachingSettings *t = m_doc->teachingSettings();
+    t->setEnabled(true);
+    QVERIFY(!t->hasHandoutSnapshot());
+
+    const QByteArray file = "<?xml version='1.0'?>\n<Workspace>" + QByteArray(5000, 'x') + "</Workspace>\n";
+    const QByteArray packed = TeachingSettings::packSnapshot(file);
+    QVERIFY(packed.size() < file.size() / 4);
+    QCOMPARE(TeachingSettings::unpackSnapshot(packed), file);
+    QVERIFY(TeachingSettings::unpackSnapshot("not deflated").isEmpty());
+
+    m_doc->resetModified();
+    t->setHandoutSnapshot(packed);
+    QVERIFY(t->hasHandoutSnapshot());
+    QVERIFY(!m_doc->isModified());          // it travels with the file, it is not an edit
+    const QString xml = saved(m_doc);
+    QVERIFY2(xml.contains("<Teaching Enabled=\"1\">"), qPrintable(xml.left(200)));
+
+    Doc other(this);
+    loadTeaching(&other, xml);
+    QVERIFY(other.teachingSettings()->enabled());
+    QCOMPARE(TeachingSettings::unpackSnapshot(other.teachingSettings()->handoutSnapshot()), file);
+    QVERIFY(saved(&other) == xml);          // and it is written back as it was
+
+    // The copy's own write (the override) names its state, or none
+    TeachingSettings::SaveOverride ov;
+    QVERIFY(!saved(m_doc).isEmpty());
+    t->setSaveOverride(&ov);
+    QVERIFY(!saved(m_doc).contains("eJ"));  // none: the first pass of a handout
+    ov.snapshot = packed;
+    QVERIFY(saved(m_doc).contains(QString::fromLatin1(packed.toBase64())));
+    t->setSaveOverride(nullptr);
+
+    // A show with attributes after it, and text of another build, still loads
+    Doc plain(this);
+    loadTeaching(&plain, "<Teaching Enabled=\"1\" Lesson=\"2.1\"/>");
+    QVERIFY(!plain.teachingSettings()->hasHandoutSnapshot());
+
+    m_doc->clearContents();
+    QVERIFY(!t->hasHandoutSnapshot());
+}
+
 QTEST_MAIN(Teaching_Test)

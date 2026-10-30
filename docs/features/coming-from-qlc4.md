@@ -97,6 +97,7 @@ once whether to bring them over:
 
 Say no and it doesn't ask again; **Settings ▸ General ▸ QLC+ 4 ▸ Bring
 over…** does it whenever you like, and shows what's still to bring.
+After a yes, the status bar says once what was brought over.
 QLC+ 4 itself is never changed, and a setting qlcconsole already has is
 kept. Window sizes and layouts aren't copied: the windows differ. I/O
 and plugin preferences take effect at the next start.
@@ -114,7 +115,8 @@ was: nothing is converted, it plays as before, and **Save** writes the
   both (**QLC+ 4 Workspaces** is the .qxw).
 - **What QLC+ 4 can't read.** Once you use qlcconsole's own features, a
   .qxw holds parts QLC+ 4 doesn't know. Saving says which, once for that
-  file, after the save, with **Save as .qlcc…** to keep a full copy. See
+  file, after the save, with how many of each and **Save as .qlcc…** to
+  keep a full copy (or **Don't ask again for this show**). See
   [Saving for QLC+ 4](getting-started.md#saving-for-qlc-4).
 
 To start every new show in Classic too: **Settings ▸ General ▸ Start new

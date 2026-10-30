@@ -25,12 +25,22 @@ workspace view, and Teaching never changes which tabs you see.
 - **Real network output is held.** Art-Net, sACN, OSC and WLED outputs are
   kept as patched but not opened, like a patch off the rig network, and the
   footer says "Output held — Teaching mode holds real output". A student copy
-  cannot reach the school network. USB dongles on this computer are not held.
+  cannot reach the school network.
+- **USB and other hardware outputs are held too** (an Enttec or DMX USB
+  dongle, MIDI out), so a student copy sends nothing to a rig plugged into
+  the computer. They are kept as patched, like the network ones. Loopback,
+  Dummy and a network output aimed at this computer itself are not held.
+- **The patch asks first.** Adding fixtures to the patch, removing them,
+  releasing or changing their addresses (Patch dialog, Remap, Import, RGB
+  panel) shows "This is a Teaching show, and its patch is part of the
+  lesson" with **Change the Patch** / Cancel. Staging fixtures in the
+  Inventory does not ask, it changes nothing on the wire. Fixture
+  Properties in the Lighting Studio does not ask.
 - The **focus report** of a Teaching show says "Teaching show", the lesson, and
   whether a PIN was set, above the practice score.
 
 **Let real output through (instructor)** in the same dialog opens the held
-outputs again. Use it on the teacher's own show when a lesson does run lights.
+outputs again (network and hardware). Use it on the teacher's own show when a lesson does run lights.
 
 **Lesson** and **Handout link** are optional. A link adds "Lesson 3.6 handout"
 to the chip's menu.
@@ -90,6 +100,21 @@ The copy is always a `.qlcc`, so its fixture definitions travel with it, and:
 Put the copy in the same folder as the show if the show uses pictures kept
 beside it. [Collect for Transfer](shows.md) is the way to move a show with its
 files.
+
+## Reset to Handout
+
+A student copy keeps, inside the file, the show exactly as Make Student
+Handout wrote it (the whole show, deflated; the file grows by about a tenth).
+**File ▸ Show Settings… ▸ Teaching ▸ Reset to Handout…** puts the open show
+back to that: patch, looks, cues, Virtual Console, settings. It asks for the
+PIN when the show has one, then asks once more, because the students' work is
+replaced. The file on disk is not touched until you save; the show is marked
+changed. The handout state stays in the show, so it can be reset again.
+
+Only a show made by Make Student Handout has it. Your own master has none and
+the button is off. Practice venues and the venue file are not part of it (the
+handout leaves them out): a reset does not bring back a practice, or take away
+the student's venue file.
 
 ## Limits
 

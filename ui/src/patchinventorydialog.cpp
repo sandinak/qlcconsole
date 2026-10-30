@@ -35,6 +35,7 @@
 #include "programmercontroller.h"
 #include "venuecorrections.h"
 #include "fixture.h"
+#include "showsettingsdialog.h"
 #include "doc.h"
 
 #define COL_NAME    0
@@ -930,6 +931,9 @@ void PatchInventoryDialog::refreshConflicts()
 
 void PatchInventoryDialog::accept()
 {
+    // A Teaching show asks before its patch changes
+    if (!ShowSettingsDialog::confirmPatchChange(m_doc, this, tr("Patch or re-address these fixtures")))
+        return;
     /* Undoable (⌘Z on the plot or the Fixtures tab), wherever this was
        opened from: one rig undo step for the whole patch. */
     Monitor *mon = Monitor::instance();

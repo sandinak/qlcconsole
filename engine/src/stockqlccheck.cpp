@@ -19,6 +19,8 @@
 
 #include <QCoreApplication>
 #include <QXmlStreamReader>
+#include <QHash>
+#include <QMap>
 #include <QFile>
 #include <QSet>
 
@@ -65,54 +67,116 @@ const QSet<QString> &forkMonitor()
 /* Virtual Console widgets QLC+ 4.14's frames don't know. */
 const QSet<QString> &forkVcWidgets()
 {
-    static const QSet<QString> s = { QStringLiteral("CueRunner"), QStringLiteral("ShowControl") };
+    static const QSet<QString> s = { QStringLiteral("CueRunner"), QStringLiteral("ShowControl"),
+        QStringLiteral("EffectControl") };
     return s;
 }
 
-QString engineLabel(const QString &tag)
+/* What was met, in the order met: a kind of content and how many of it. */
+struct Found
+{
+    QStringList order;
+    QMap<QString, int> count;
+
+    void add(const QString &kind, int n)
+    {
+        if (!count.contains(kind))
+            order.append(kind);
+        count[kind] += n;
+    }
+};
+
+/* Every element under (and including) the current one, by name; the
+   current element is consumed. */
+void tally(QXmlStreamReader &xml, QHash<QString, int> *seen)
+{
+    (*seen)[xml.name().toString()] += 1;
+    while (xml.readNextStartElement())
+        tally(xml, seen);
+}
+
+QString plural(int n, const char *one, const char *many)
+{
+    return QCoreApplication::translate("StockQlcCheck", n == 1 ? one : many).arg(n);
+}
+
+/* How much of a kind, said after its name: "(3 cue lists, 12 cues)". */
+QString countsOf(const QString &kind, const QHash<QString, int> &seen, int n)
+{
+    QStringList parts;
+    if (kind == QLatin1String("ShowTree"))
+    {
+        const int lists = seen.value(QStringLiteral("CueList")) + seen.value(QStringLiteral("Looks"));
+        const int cues = seen.value(QStringLiteral("Cue"));
+        if (lists > 0)
+            parts << plural(lists, "%1 cue list", "%1 cue lists");
+        if (cues > 0)
+            parts << plural(cues, "%1 cue", "%1 cues");
+        if (seen.value(QStringLiteral("Look")) > 0)
+            parts << plural(seen.value(QStringLiteral("Look")), "%1 look", "%1 looks");
+    }
+    else if (kind == QLatin1String("SpeedMasters") && seen.value(QStringLiteral("Master")) > 0)
+        parts << plural(seen.value(QStringLiteral("Master")), "%1 master", "%1 masters");
+    else if (kind == QLatin1String("FocusCalls") && seen.value(QStringLiteral("Call")) > 0)
+        parts << plural(seen.value(QStringLiteral("Call")), "%1 call", "%1 calls");
+    else if (kind == QLatin1String("ControlMap") && seen.value(QStringLiteral("Trigger")) > 0)
+        parts << plural(seen.value(QStringLiteral("Trigger")), "%1 trigger", "%1 triggers");
+    else if (kind == QLatin1String("Rigging") || kind == QLatin1String("Widgets"))
+        parts << (kind == QLatin1String("Rigging") ? plural(n, "%1 piece", "%1 pieces")
+                                                   : plural(n, "%1 widget", "%1 widgets"));
+    else if (kind == QLatin1String("StagedFixtures") && seen.value(QStringLiteral("Fixture")) > 0)
+        parts << plural(seen.value(QStringLiteral("Fixture")), "%1 fixture", "%1 fixtures");
+    return parts.isEmpty() ? QString() : QStringLiteral(" (%1)").arg(parts.join(QStringLiteral(", ")));
+}
+
+QString engineLabel(const QString &kind)
 {
     // Which cue list GO runs is the Show Tree's too.
-    if (tag == QLatin1String("ShowTree") || tag == QLatin1String("ShowControl"))
-        return tr("the Show Tree (its cue lists, cues and hits)");
-    if (tag == QLatin1String("SpeedMasters"))
+    if (kind == QLatin1String("ShowTree"))
+        return tr("the Show Tree");
+    if (kind == QLatin1String("SpeedMasters"))
         return tr("the speed masters");
-    if (tag == QLatin1String("PowerDistribution"))
+    if (kind == QLatin1String("PowerDistribution"))
         return tr("the power plan");
-    if (tag == QLatin1String("NetworkTopology"))
+    if (kind == QLatin1String("NetworkTopology"))
         return tr("the network map");
-    if (tag == QLatin1String("Timecode"))
+    if (kind == QLatin1String("Timecode"))
         return tr("the timecode source");
-    if (tag == QLatin1String("Park") || tag == QLatin1String("Mark"))
+    if (kind == QLatin1String("Park") || kind == QLatin1String("Mark"))
         return tr("parked and marked channels");
-    if (tag == QLatin1String("FocusCalls"))
+    if (kind == QLatin1String("FocusCalls"))
         return tr("the focus calls");
-    if (tag == QLatin1String("ControlMap"))
-        return tr("the Control Map (MIDI and OSC triggers)");
-    if (tag == QLatin1String("StagedFixtures"))
+    if (kind == QLatin1String("ControlMap"))
+        return tr("the Control Map");
+    if (kind == QLatin1String("StagedFixtures"))
         return tr("the Inventory's fixtures (not patched)");
-    if (tag == QLatin1String("OutputRuleSettings"))
+    if (kind == QLatin1String("OutputRuleSettings"))
         return tr("when \"on when not in use\" lights come on");
+    if (kind == QLatin1String("Teaching"))
+        return tr("the Teaching settings");
+    if (kind == QLatin1String("Operate"))
+        return tr("the Operate settings");
+    if (kind == QLatin1String("WebAccess"))
+        return tr("the web access settings");
+    if (kind == QLatin1String("Rigging"))
+        return tr("the Lighting Studio's rigging");
+    if (kind == QLatin1String("Widgets"))
+        return tr("Cue Runner, Show Control and Effect Control widgets on the Virtual Console");
     return tr("other qlcconsole settings");
 }
 
-void add(QStringList *out, const QString &label)
-{
-    if (!out->contains(label))
-        out->append(label);
-}
-
 /* Down a VC frame, for the widgets QLC+ 4 skips. */
-void scanVc(QXmlStreamReader &xml, QStringList *out)
+void scanVc(QXmlStreamReader &xml, Found *out, QMap<QString, QHash<QString, int>> *seen)
 {
     while (xml.readNextStartElement())
     {
         if (forkVcWidgets().contains(xml.name().toString()))
         {
-            add(out, tr("Cue Runner and Show Control widgets on the Virtual Console"));
+            out->add(QStringLiteral("Widgets"), 1);
             xml.skipCurrentElement();
         }
         else
-            scanVc(xml, out);
+            scanVc(xml, out, seen);
     }
 }
 
@@ -120,12 +184,14 @@ void scanVc(QXmlStreamReader &xml, QStringList *out)
 
 QStringList StockQlcCheck::losses(QIODevice *device)
 {
-    QStringList out;
+    QStringList result;
     if (device == nullptr)
-        return out;
+        return result;
+    Found out;
+    QMap<QString, QHash<QString, int>> seen;
     QXmlStreamReader xml(device);
     if (!xml.readNextStartElement() || xml.name() != QLatin1String("Workspace"))
-        return out;
+        return result;
     while (xml.readNextStartElement())
     {
         const QString top = xml.name().toString();
@@ -133,28 +199,44 @@ QStringList StockQlcCheck::losses(QIODevice *device)
         {
             while (xml.readNextStartElement())
             {
-                const QString tag = xml.name().toString();
+                QString tag = xml.name().toString();
                 if (tag == QLatin1String("Monitor"))
                 {
                     while (xml.readNextStartElement())
                     {
                         if (forkMonitor().contains(xml.name().toString()))
-                            add(&out, tr("the Lighting Studio's rigging (trusses, towers, scenery)"));
+                            out.add(QStringLiteral("Rigging"), 1);
                         xml.skipCurrentElement();
                     }
                     continue;
                 }
-                if (!stockEngine().contains(tag) && !quietEngine().contains(tag))
-                    add(&out, engineLabel(tag));
-                xml.skipCurrentElement();
+                if (stockEngine().contains(tag) || quietEngine().contains(tag))
+                {
+                    xml.skipCurrentElement();
+                    continue;
+                }
+                // One kind under two tags
+                if (tag == QLatin1String("ShowControl"))
+                    tag = QStringLiteral("ShowTree");
+                else if (tag == QLatin1String("Mark"))
+                    tag = QStringLiteral("Park");
+                const QSet<QString> known = { "ShowTree", "SpeedMasters", "PowerDistribution", "NetworkTopology",
+                                              "Timecode", "Park", "FocusCalls", "ControlMap", "StagedFixtures",
+                                              "OutputRuleSettings", "Teaching", "Operate", "WebAccess" };
+                if (!known.contains(tag))
+                    tag = QStringLiteral("Other");
+                out.add(tag, 0);
+                tally(xml, &seen[tag]);
             }
         }
         else if (top == QLatin1String("VirtualConsole"))
-            scanVc(xml, &out);
+            scanVc(xml, &out, &seen);
         else
             xml.skipCurrentElement();
     }
-    return out;
+    foreach (const QString &kind, out.order)
+        result << engineLabel(kind) + countsOf(kind, seen.value(kind), out.count.value(kind));
+    return result;
 }
 
 QStringList StockQlcCheck::lossesInFile(const QString &path)
