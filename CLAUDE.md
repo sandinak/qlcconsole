@@ -200,7 +200,7 @@ Keeping the engine as fast as it is, or faster, is part of every change
 ([docs/performance.md](docs/performance.md#keeping-it-fast)). A change to a
 hot path (MasterTimer, Universe, faders, Scene/Chaser/EFX/RGBMatrix write,
 plugin input/output, the Show Tree runtime) carries before/after numbers in
-its commit: `make perf` (~5 min, Release engine in `build-perf/` vs this
+its commit: `make perf` (~9 min, Release engine in `build-perf/` vs this
 machine's baseline in `docs/perf-data/`; `perf=1` is a regression).
 A measurable slowdown is a bug. A baseline is rebased only on purpose
 (`make perf-record`), with the reason in the commit.
