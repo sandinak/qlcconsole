@@ -85,39 +85,39 @@ Pas het IP Adres aan voordat u doorgaat.</translation>
 <context>
     <name>OSCPlugin</name>
     <message>
-        <location filename="oscplugin.cpp" line="96"/>
+        <location filename="oscplugin.cpp" line="108"/>
         <source>This plugin provides input for devices supporting the OSC transmission protocol.</source>
         <translation>Deze plugin verzorgt DMX output voor apparaten die het OSC transmissie protocol ondersteunen.</translation>
     </message>
     <message>
-        <location filename="oscplugin.cpp" line="147"/>
-        <location filename="oscplugin.cpp" line="280"/>
+        <location filename="oscplugin.cpp" line="160"/>
+        <location filename="oscplugin.cpp" line="293"/>
         <source>Status: Not open</source>
         <translation>Status: Niet open</translation>
     </message>
     <message>
-        <location filename="oscplugin.cpp" line="150"/>
-        <location filename="oscplugin.cpp" line="283"/>
+        <location filename="oscplugin.cpp" line="163"/>
+        <location filename="oscplugin.cpp" line="296"/>
         <source>Status: Open</source>
         <translation>Status: Open</translation>
     </message>
     <message>
-        <location filename="oscplugin.cpp" line="152"/>
+        <location filename="oscplugin.cpp" line="165"/>
         <source>Packets sent: </source>
         <translation>Pakketten verzonden:</translation>
     </message>
     <message>
-        <location filename="oscplugin.cpp" line="285"/>
+        <location filename="oscplugin.cpp" line="298"/>
         <source>Packets received: </source>
         <translation>Pakketten ontvangen:</translation>
     </message>
     <message>
-        <location filename="oscplugin.cpp" line="143"/>
+        <location filename="oscplugin.cpp" line="156"/>
         <source>Output</source>
         <translation>Output</translation>
     </message>
     <message>
-        <location filename="oscplugin.cpp" line="276"/>
+        <location filename="oscplugin.cpp" line="289"/>
         <source>Input</source>
         <translation>Input</translation>
     </message>

@@ -85,39 +85,39 @@ Por favor arréglelo antes de confirmar.</translation>
 <context>
     <name>OSCPlugin</name>
     <message>
-        <location filename="oscplugin.cpp" line="96"/>
+        <location filename="oscplugin.cpp" line="108"/>
         <source>This plugin provides input for devices supporting the OSC transmission protocol.</source>
         <translation>Este plugin provee Entrada para dispositivos que soportan el protocolo de transmisión OSC.</translation>
     </message>
     <message>
-        <location filename="oscplugin.cpp" line="147"/>
-        <location filename="oscplugin.cpp" line="280"/>
+        <location filename="oscplugin.cpp" line="160"/>
+        <location filename="oscplugin.cpp" line="293"/>
         <source>Status: Not open</source>
         <translation>Estado: No abierto</translation>
     </message>
     <message>
-        <location filename="oscplugin.cpp" line="150"/>
-        <location filename="oscplugin.cpp" line="283"/>
+        <location filename="oscplugin.cpp" line="163"/>
+        <location filename="oscplugin.cpp" line="296"/>
         <source>Status: Open</source>
         <translation>Estado: Abierto</translation>
     </message>
     <message>
-        <location filename="oscplugin.cpp" line="152"/>
+        <location filename="oscplugin.cpp" line="165"/>
         <source>Packets sent: </source>
         <translation>Paquetes enviados: </translation>
     </message>
     <message>
-        <location filename="oscplugin.cpp" line="285"/>
+        <location filename="oscplugin.cpp" line="298"/>
         <source>Packets received: </source>
         <translation>Paquetes recibidos: </translation>
     </message>
     <message>
-        <location filename="oscplugin.cpp" line="143"/>
+        <location filename="oscplugin.cpp" line="156"/>
         <source>Output</source>
         <translation>Salida</translation>
     </message>
     <message>
-        <location filename="oscplugin.cpp" line="276"/>
+        <location filename="oscplugin.cpp" line="289"/>
         <source>Input</source>
         <translation>Entrada</translation>
     </message>

@@ -143,7 +143,12 @@ Steps:
 1. Bump `VERSION` to the new release number. Bring the fixture
    library up to date: `tools/sync-fixtures.py` (upstream definitions,
    see [UPSTREAM.md](UPSTREAM.md) step 5; log it there and credit "N
-   definitions from QLC+ upstream" in the CHANGELOG).
+   definitions from QLC+ upstream" in the CHANGELOG). Refresh the
+   translation catalogues: `make translations` (`./translate.sh update`:
+   lupdate over every `.ts`, the app's with the engine's strings too;
+   qmlui is skipped). It translates nothing: new strings arrive
+   unfinished and show in English until a translator fills them in.
+   Commit the `.ts` files on their own.
 2. Add a `## [X.Y.Z] - YYYY-MM-DD` section to [CHANGELOG.md](../../CHANGELOG.md)
    summarizing what shipped since the last release (pull the user-facing
    highlights from [DONE.md](../project/DONE.md)), with its Known issues. A section

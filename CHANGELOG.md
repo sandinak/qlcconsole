@@ -47,6 +47,12 @@ skipped). Upstream fixes taken:
   and input-level fixes. SPI: frequency label.
 - **Translations**: updated Catalan, Czech, Dutch, Finnish, French,
   German, Italian, Japanese, Portuguese (Brazil) and Spanish.
+- **Translation catalogues refreshed** from qlcconsole's own sources,
+  the first time since the rename: every string the app shows (7,400 more
+  in the app's catalogue, the engine's messages among them) is now there
+  for translators, and strings that changed keep their old translation as
+  a hint. Nothing new is translated yet: those strings show in English.
+  `make translations` refreshes them every release.
 - **Novation Launchpad MK2**: input profile with its colours and
   channels, and a welcome message template.
 - **31 fixture definitions from QLC+ upstream**: 28 new (Acme Deluge,

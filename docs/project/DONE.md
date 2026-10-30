@@ -6,6 +6,23 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
+### 2026-10-29 — lupdate every release *(feat/031-home4, lu)*
+
+- `make translations` = `./translate.sh update` (the repo's existing
+  script): lupdate over every folder that has `.ts` files. Changed: build
+  dirs are pruned (it walked them), qmlui is skipped (off; `QMLUI=1`
+  includes it), `engine/test/qlci18n` is skipped (its test makes its own),
+  and **decided:** the app's `ui/src/qlcconsole_*.ts` also take
+  `engine/src`'s `tr()` strings -- the engine has no catalogue and runs in
+  the app (can change). Bash 3.2-safe.
+- First run: the app's catalogue went from ~1,600 to 8,971 messages
+  (7,379 unfinished); 90 `.ts` files; obsolete ones kept as "vanished".
+  lupdate's warnings name engine files that call `tr()` outside a class
+  with `Q_DECLARE_TR_FUNCTIONS` (padnames.cpp, stockqlccheck.cpp,
+  rignetwork.cpp, showtreecommand.cpp): those strings are not extracted;
+  queued.
+- RELEASE.md step 1 runs it.
+
 ### 2026-10-29 — Fixture library sync, every release *(feat/031-home4, fx)*
 
 - `tools/sync-fixtures.py`: reads `~/git/qlcplus` with `git show` (its

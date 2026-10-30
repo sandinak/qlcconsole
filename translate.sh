@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Usage:
-#   ./translate.sh update
+#   ./translate.sh update      (= make translations; every release, docs/dev/RELEASE.md)
 #   ./translate.sh release [qmlui|ui]
 #   ./translate.sh create <ll_CC> [qmlui|ui]
 
@@ -66,7 +66,7 @@ case "$ACTION" in
   update)
     echo "Scanning for translation folders and updating .ts files..."
     # Build a unique list of dirs that contain *.ts
-    find . -type f -name "*.ts" -print0 \
+    find . \( -path './build*' -o -path './.git' \) -prune -o -type f -name "*.ts" -print0 \
     | while IFS= read -r -d '' f; do
         dirname "$f"
       done \
@@ -83,8 +83,18 @@ case "$ACTION" in
           if [[ -e "$tsf" ]]; then ts_found=1; break; fi
         done
         [[ $ts_found -eq 0 ]] && continue
-        echo "Updating: $d"
-        "$LUPDATE" "$d" -ts "$d"/*.ts
+        # qmlui is off in qlcconsole (QMLUI=1 to refresh it anyway);
+        # engine/test/qlci18n makes its own catalogue in its test.
+        case "$d" in
+          ./qmlui|./qmlui/*) [[ "${QMLUI:-0}" == 1 ]] || { echo "Skipping (qmlui is off): $d"; continue; } ;;
+          ./engine/test|./engine/test/*) echo "Skipping test catalogue: $d"; continue ;;
+        esac
+        # The app's catalogue also carries the engine's tr() strings: the
+        # engine has no catalogue of its own and runs inside the app.
+        extra=()
+        [[ "$d" == "./ui/src" ]] && extra=(./engine/src)
+        echo "Updating: $d ${extra[@]+"${extra[@]}"}"
+        "$LUPDATE" -silent "$d" ${extra[@]+"${extra[@]}"} -ts "$d"/*.ts
       done
     echo "Update complete."
     ;;

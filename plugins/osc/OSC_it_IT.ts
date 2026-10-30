@@ -85,39 +85,39 @@ E&apos; necessario sistemare prima di confermare.</translation>
 <context>
     <name>OSCPlugin</name>
     <message>
-        <location filename="oscplugin.cpp" line="96"/>
+        <location filename="oscplugin.cpp" line="108"/>
         <source>This plugin provides input for devices supporting the OSC transmission protocol.</source>
         <translation>Questa plugin permette la ricezione di segnale da dispositivi che supportano il protocollo OSC.</translation>
     </message>
     <message>
-        <location filename="oscplugin.cpp" line="147"/>
-        <location filename="oscplugin.cpp" line="280"/>
+        <location filename="oscplugin.cpp" line="160"/>
+        <location filename="oscplugin.cpp" line="293"/>
         <source>Status: Not open</source>
         <translation>Stato: Non aperto</translation>
     </message>
     <message>
-        <location filename="oscplugin.cpp" line="150"/>
-        <location filename="oscplugin.cpp" line="283"/>
+        <location filename="oscplugin.cpp" line="163"/>
+        <location filename="oscplugin.cpp" line="296"/>
         <source>Status: Open</source>
         <translation>Stato: Aperto</translation>
     </message>
     <message>
-        <location filename="oscplugin.cpp" line="152"/>
+        <location filename="oscplugin.cpp" line="165"/>
         <source>Packets sent: </source>
         <translation>Pacchetti inviati: </translation>
     </message>
     <message>
-        <location filename="oscplugin.cpp" line="285"/>
+        <location filename="oscplugin.cpp" line="298"/>
         <source>Packets received: </source>
         <translation>Pacchetti ricevuti: </translation>
     </message>
     <message>
-        <location filename="oscplugin.cpp" line="143"/>
+        <location filename="oscplugin.cpp" line="156"/>
         <source>Output</source>
         <translation>Uscita</translation>
     </message>
     <message>
-        <location filename="oscplugin.cpp" line="276"/>
+        <location filename="oscplugin.cpp" line="289"/>
         <source>Input</source>
         <translation>Ingresso</translation>
     </message>

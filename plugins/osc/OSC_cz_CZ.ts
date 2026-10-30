@@ -85,39 +85,39 @@ Prosím opravte zadání před potvrzením.</translation>
 <context>
     <name>OSCPlugin</name>
     <message>
-        <location filename="oscplugin.cpp" line="96"/>
+        <location filename="oscplugin.cpp" line="108"/>
         <source>This plugin provides input for devices supporting the OSC transmission protocol.</source>
         <translation>Tento plugin přidává vstupy pro zařízení podporující přenosový OSC protokol.</translation>
     </message>
     <message>
-        <location filename="oscplugin.cpp" line="147"/>
-        <location filename="oscplugin.cpp" line="280"/>
+        <location filename="oscplugin.cpp" line="160"/>
+        <location filename="oscplugin.cpp" line="293"/>
         <source>Status: Not open</source>
         <translation>Stav: Není otevřen</translation>
     </message>
     <message>
-        <location filename="oscplugin.cpp" line="150"/>
-        <location filename="oscplugin.cpp" line="283"/>
+        <location filename="oscplugin.cpp" line="163"/>
+        <location filename="oscplugin.cpp" line="296"/>
         <source>Status: Open</source>
         <translation>Stav: Otevřen</translation>
     </message>
     <message>
-        <location filename="oscplugin.cpp" line="152"/>
+        <location filename="oscplugin.cpp" line="165"/>
         <source>Packets sent: </source>
         <translation>Poslaných paketů:</translation>
     </message>
     <message>
-        <location filename="oscplugin.cpp" line="285"/>
+        <location filename="oscplugin.cpp" line="298"/>
         <source>Packets received: </source>
         <translation>Přijatých paketů:</translation>
     </message>
     <message>
-        <location filename="oscplugin.cpp" line="143"/>
+        <location filename="oscplugin.cpp" line="156"/>
         <source>Output</source>
         <translation>Výstup</translation>
     </message>
     <message>
-        <location filename="oscplugin.cpp" line="276"/>
+        <location filename="oscplugin.cpp" line="289"/>
         <source>Input</source>
         <translation>Vstup</translation>
     </message>
