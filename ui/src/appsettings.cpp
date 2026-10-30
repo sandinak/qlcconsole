@@ -49,6 +49,7 @@
 #include "doc.h"
 #include "app.h"
 #include "speedmastersfooter.h"
+#include "legacysettings.h"
 
 AppSettings::AppSettings(App *app, QWidget *parent)
     : QDialog(parent)
@@ -290,6 +291,32 @@ AppSettings::AppSettings(App *app, QWidget *parent)
                                               "the view it was saved in."));
         viewLayout->addWidget(m_newShowsClassicCheck);
         mainLayout->addWidget(viewGroup);
+    }
+
+    // QLC+ 4's settings on this computer (LegacySettings): the start-up
+    // offer, again, for whoever said no or installed QLC+ later. Shown only
+    // where QLC+ 4 has left settings.
+    {
+        std::unique_ptr<QSettings> qlcplus = LegacySettings::openQlcPlus();
+        if (qlcplus->allKeys().isEmpty() == false)
+        {
+            QGroupBox *legacyGroup = new QGroupBox(tr("QLC+ 4"), this);
+            legacyGroup->setObjectName(QStringLiteral("settingsQlcPlus4"));
+            legacyGroup->setProperty("helpTopic", QStringLiteral("coming-from-qlc4.md#your-qlc-4-settings"));
+            QHBoxLayout *legacyLayout = new QHBoxLayout(legacyGroup);
+            m_qlcPlusLabel = new QLabel(legacyGroup);
+            m_qlcPlusLabel->setWordWrap(true);
+            legacyLayout->addWidget(m_qlcPlusLabel, 1);
+            m_qlcPlusButton = new QPushButton(tr("Bring over\342\200\246"), legacyGroup);
+            m_qlcPlusButton->setObjectName(QStringLiteral("settingsBringOverQlcPlus"));
+            m_qlcPlusButton->setToolTip(tr("Copy QLC+ 4's recent shows, I/O and plugin preferences and "
+                                           "interface preferences into qlcconsole. QLC+ itself is not "
+                                           "changed, and a setting qlcconsole already has is kept."));
+            connect(m_qlcPlusButton, &QPushButton::clicked, this, &AppSettings::slotBringOverQlcPlus);
+            legacyLayout->addWidget(m_qlcPlusButton);
+            mainLayout->addWidget(legacyGroup);
+            updateQlcPlusGroup();
+        }
     }
 
     // --- Show controls: Stop all, Blackout, Blind, Design | Operate ---
@@ -684,3 +711,35 @@ void AppSettings::accept()
     QDialog::accept();
 }
 
+void AppSettings::updateQlcPlusGroup()
+{
+    if (m_qlcPlusLabel == nullptr)
+        return;
+    std::unique_ptr<QSettings> qlcplus = LegacySettings::openQlcPlus();
+    QSettings own;
+    const LegacySettings::Plan plan = LegacySettings::plan(*qlcplus, own);
+    m_qlcPlusLabel->setText(plan.isEmpty()
+        ? tr("QLC+ 4's recent shows and preferences are here already.")
+        : tr("QLC+ 4 has settings on this computer that qlcconsole doesn't:\n%1")
+              .arg(LegacySettings::describe(plan)));
+    m_qlcPlusButton->setEnabled(plan.isEmpty() == false);
+}
+
+void AppSettings::slotBringOverQlcPlus()
+{
+    std::unique_ptr<QSettings> qlcplus = LegacySettings::openQlcPlus();
+    QSettings own;
+    const LegacySettings::Plan plan = LegacySettings::plan(*qlcplus, own);
+    if (plan.isEmpty() == false
+        && QMessageBox::question(this, tr("QLC+ 4 settings"),
+               tr("Bring these over from QLC+ 4?\n%1\n\nQLC+ itself is not changed, and a "
+                  "setting qlcconsole already has is kept. I/O and plugin preferences take "
+                  "effect at the next start.").arg(LegacySettings::describe(plan)),
+               QMessageBox::Yes | QMessageBox::No, QMessageBox::Yes) == QMessageBox::Yes)
+    {
+        LegacySettings::apply(*qlcplus, own, plan);
+        LegacySettings::markOffered(own);
+        m_app->reloadRecentFiles();
+    }
+    updateQlcPlusGroup();
+}

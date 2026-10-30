@@ -95,6 +95,7 @@ add_library(${module_name} SHARED
     qlccapability.cpp qlccapability.h
     qlcchannel.cpp qlcchannel.h
     qlcclipboard.cpp qlcclipboard.h
+    legacysettings.cpp legacysettings.h
     qlcfile.cpp qlcfile.h
     qlcfixturedef.cpp qlcfixturedef.h
     qlcfixturedefcache.cpp qlcfixturedefcache.h

@@ -80,8 +80,26 @@ A file that is already in qlcconsole's folder wins. One you remove from
 qlcconsole's folder stays removed; the original in QLC+'s folder is left
 alone. Your own game pad profiles live in qlcconsole's folder.
 
-What doesn't come across: QLC+'s settings and recent files. Preferences,
-plugin and audio settings and the window layout start fresh.
+#### Your QLC+ 4 settings
+
+QLC+ 4's settings are a different matter: qlcconsole asks first. The
+first time it starts and finds them, it lists what it found and asks
+once whether to bring them over:
+
+- **recent shows**, added to **File ▸ Open Recent** after qlcconsole's
+  own (shows that no longer exist are left out);
+- **I/O and plugin preferences**: the default patch for a new show,
+  hotplug, and each plugin's own settings (MIDI channel and mode, the
+  Art-Net, sACN and OSC wait, DMX USB and uDMX settings);
+- **interface preferences** that work the same here: the Virtual
+  Console's default widget sizes, Simple Desk's pages, the slider style
+  and similar.
+
+Say no and it doesn't ask again; **Settings ▸ General ▸ QLC+ 4 ▸ Bring
+over…** does it whenever you like, and shows what's still to bring.
+QLC+ 4 itself is never changed, and a setting qlcconsole already has is
+kept. Window sizes and layouts aren't copied: the windows differ. I/O
+and plugin preferences take effect at the next start.
 
 ### 2. Open a show
 

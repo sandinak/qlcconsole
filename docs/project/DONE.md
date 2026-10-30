@@ -6,6 +6,46 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
+### 2026-10-29 — Bring over QLC+ 4's settings, once *(feat/031-home4, imp)*
+
+- **Engine:** `LegacySettings` (`engine/src/legacysettings.*`): QLC+ 4's
+  store is `QSettings(NativeFormat, UserScope, "qlcplus.org" on macOS /
+  "qlcplus" elsewhere, "Q Light Controller Plus")` -- stock 4.14.4 sets
+  org "qlcplus", domain "qlcplus.org", app APPNAME; macOS names the plist
+  by the domain (checked read-only on ender: 172 keys).
+  `QLC_QLCPLUS_SETTINGS` points it at an .ini instead (every UI test sets
+  it, `ui/test/common/testsettings.cpp`, so no test opens the real one).
+  `plan()` / `apply()` / `describe()` / `wasOffered()` / `markOffered()`
+  (`legacy/qlcplusSettingsOffered`).
+- **What comes over:** `workspace/recent0-9` merged after qlcconsole's
+  own, missing files dropped, cap 10, plus `workspace/workingpath`; I/O
+  and plugins (`inputmap/`, `outputmap/`, `inputmanager/hotplug`,
+  `midiplugin/`, `ArtNetPlugin/`, `E131Plugin/`, `OSCPlugin/`,
+  `SPIPlugin/`, `GPIOPlugin/`, `OlaIO/`, `udmx/`, `qlcftdi/`,
+  `dmxusbopenrx/`, `enttecdmxusbopen/`); UI (`workspace/sliderstyle`,
+  `simpledesk/*` pages and names, `virtualconsole/*` sizes,
+  `slidermatrix/defaultSize`, a few dialog choices). Never geometry,
+  splitters or states; never a key qlcconsole has; QLC+ never written.
+- **"Input profiles folder pointer":** QLC+ 4.14 has no such setting; the
+  user InputProfiles folder already comes in through
+  `QLCFile::mergeLegacyUserData()` (links; copies on Windows), which this
+  doesn't touch or repeat.
+- **UI:** `App::offerQlcPlusSettings()` right after the legacy data merge,
+  before plugins load (so MIDI prefs apply this start): asks in the
+  StartupWindow (`askYesNo`) the first time QLC+ settings exist with
+  something to bring; recorded as offered either way; skipped
+  offscreen/minimal and with `QLC_NO_RECOVERY_PROMPT`, unrecorded, as
+  the recovery offer is. Settings ▸ General ▸ **QLC+ 4** group (only
+  when QLC+ 4 has settings): what's left to bring, **Bring over…**
+  (asks, applies, rebuilds Open Recent via `App::reloadRecentFiles()`).
+  No menu item.
+- **Decided (can change):** qlcconsole's own value wins on a clash;
+  recent shows that no longer exist are dropped; an empty plan (no QLC+
+  4, or nothing new) is not recorded as offered, so a later QLC+ install
+  is still offered once; the Settings button acts at once, not on OK.
+- Tests: `LegacySettings_Test` (9, temp .ini stores), and
+  `AppViews_Test::qlcPlus4SettingsAreBroughtOverFromSettings`.
+
 ### 2026-10-29 — lupdate every release *(feat/031-home4, lu)*
 
 - `make translations` = `./translate.sh update` (the repo's existing

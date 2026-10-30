@@ -760,6 +760,13 @@ public:
      */
     void updateFileOpenMenu(QString addRecent);
 
+    /** Rebuild File ▸ Open Recent from the settings (after they changed) */
+    void reloadRecentFiles();
+
+    /** QLC+ 4's settings (LegacySettings): offered once, at the first start
+     *  that finds any; Settings ▸ General offers them again */
+    void offerQlcPlusSettings();
+
     /**
      * Load workspace contents from a file with the given name.
      *

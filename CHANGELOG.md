@@ -72,6 +72,17 @@ skipped). Upstream fixes taken:
 
 ### Added
 
+- **Bring over QLC+ 4's settings, once** (asked): the first start that
+  finds QLC+ 4's settings on the computer lists them and asks once
+  whether to copy its recent shows (after qlcconsole's own), I/O and
+  plugin preferences (default patch, hotplug, MIDI, Art-Net, sACN, OSC,
+  DMX USB, uDMX) and the interface preferences that mean the same here
+  (Virtual Console widget sizes, Simple Desk pages, slider style...).
+  Never QLC+ 4's window layouts, never a setting qlcconsole already has,
+  and QLC+ 4 itself is not changed. **Settings ▸ General ▸ QLC+ 4 ▸ Bring
+  over…** does it later. Fixtures, profiles and scripts still come from
+  QLC+'s user folder by themselves. Help: Coming from QLC+ 4 ▸ Your QLC+
+  4 settings.
 - **PlayStation pads by their own names** (board Q170): with a DualShock 4
   or DualSense, Quick focus, Venue focus and Focus this cue call every
   control what the pad calls it -- on the controller map (Cross, Circle,

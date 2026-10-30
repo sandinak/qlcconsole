@@ -60,6 +60,8 @@ private slots:
     /** "Transmit anyway, this session" -- confirmed, never saved -- or,
      *  while that is in force, turn the check back on */
     void slotTransmitAnyway();
+    /** Settings ▸ General ▸ QLC+ 4: bring QLC+ 4's settings over (asks) */
+    void slotBringOverQlcPlus();
 
 private:
     App *m_app;
@@ -107,6 +109,11 @@ private:
     QCheckBox *m_updateAuto = nullptr;
     QDialogButtonBox *m_buttonBox;
     void updateTransmitAnywayButton();
+
+    // General: QLC+ 4's settings (LegacySettings), shown when it has any
+    QLabel *m_qlcPlusLabel = nullptr;
+    QPushButton *m_qlcPlusButton = nullptr;
+    void updateQlcPlusGroup();
 };
 
 /** @} */

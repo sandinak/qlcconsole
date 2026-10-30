@@ -36,6 +36,7 @@
 #include <QLineEdit>
 #include <QCheckBox>
 #include <QPushButton>
+#include <QGroupBox>
 #include <QDialogButtonBox>
 #include <QXmlStreamReader>
 #include <QFile>
@@ -3029,6 +3030,67 @@ void AppViews_Test::aShowOpensLockedWhenTheUserAsks()
         if (l.name == QStringLiteral("Booms"))
             QVERIFY(!l.locked);
     m_app->clearDocument();
+}
+
+/* QLC+ 4's settings (LegacySettings): Settings ▸ General offers them when
+   QLC+ 4 left some (here the test's own file, QLC_QLCPLUS_SETTINGS, set by
+   ui/test/common/testsettings.cpp), asks, copies, and File ▸ Open Recent
+   shows the shows at once. The start-up offer itself is skipped offscreen. */
+void AppViews_Test::qlcPlus4SettingsAreBroughtOverFromSettings()
+{
+    const QString storePath = QString::fromLocal8Bit(qgetenv("QLC_QLCPLUS_SETTINGS"));
+    QVERIFY(!storePath.isEmpty());
+    QTemporaryDir dir;
+    const QString show = dir.filePath("Old Show.qxw");
+    {
+        QFile f(show);
+        QVERIFY(f.open(QIODevice::WriteOnly));
+    }
+    const auto restore = qScopeGuard([storePath, show]() {
+        QFile::remove(storePath);
+        QSettings own;
+        for (int i = 0; i < 10; i++)
+            if (own.value(QString("workspace/recent%1").arg(i)).toString() == show)
+                own.remove(QString("workspace/recent%1").arg(i));
+        own.remove("midiplugin");
+        own.remove("legacy");
+    });
+
+    {
+        AppSettings dlg(m_app);     // no QLC+ 4 here: no group
+        QVERIFY(dlg.findChild<QGroupBox *>("settingsQlcPlus4") == nullptr);
+    }
+    {
+        QSettings store(storePath, QSettings::IniFormat);
+        store.setValue("workspace/recent0", show);
+        store.setValue("midiplugin/Input/nanoKONTROL2/mode", 1);
+        store.setValue("workspace/geometry", QByteArray("left behind"));
+    }
+
+    AppSettings dlg(m_app);
+    QVERIFY(dlg.findChild<QGroupBox *>("settingsQlcPlus4") != nullptr);
+    QPushButton *bring = dlg.findChild<QPushButton *>("settingsBringOverQlcPlus");
+    QVERIFY(bring != nullptr);
+    QVERIFY(bring->isEnabled());
+
+    answerNextBox(QMessageBox::No, nullptr);
+    bring->click();
+    QVERIFY(!QSettings().contains("midiplugin/Input/nanoKONTROL2/mode"));
+
+    QString asked;
+    answerNextBox(QMessageBox::Yes, &asked);
+    bring->click();
+    QVERIFY2(asked.contains("1 recent show"), qPrintable(asked));
+    QVERIFY2(asked.contains("1 setting"), qPrintable(asked));
+    QCOMPARE(QSettings().value("midiplugin/Input/nanoKONTROL2/mode").toInt(), 1);
+    QVERIFY(!QSettings().contains("workspace/geometry")
+            || QSettings().value("workspace/geometry").toByteArray() != QByteArray("left behind"));
+    QStringList recent;
+    foreach (QAction *a, m_app->m_fileOpenMenu->actions())
+        recent << a->text();
+    QVERIFY2(recent.contains(show), qPrintable(recent.join(", ")));
+    QVERIFY(QSettings().contains("legacy/qlcplusSettingsOffered"));
+    QVERIFY(!bring->isEnabled());           // nothing left to bring
 }
 
 void AppViews_Test::newShowsCanStartInClassic()
