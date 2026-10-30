@@ -9374,10 +9374,17 @@ QVector3D StructureStudioView::worldAt(const QPointF &px, int *known, bool *onSu
 
     *known = 0;
     *onSurface = false;
-    const double depth = pickDepth(px.toPoint());
+    /* The depth buffer holds one depth per pixel, sampled at that pixel's
+       CENTRE (ZRaster). Solve at the same point: the pixel the pointer is in
+       (floor, not toPoint()'s rounding, which picked the neighbour half the
+       time) and its centre -- not the pointer's own x, y with a depth from
+       half a pixel away, which on a slope is a 0.5-1 px error in the answer. */
+    const QPoint pix(qFloor(px.x()), qFloor(px.y()));
+    const QPointF centre(pix.x() + 0.5, pix.y() + 0.5);
+    const double depth = pickDepth(pix);
     if (depth > -1e29)
     {
-        const double r[3] = { px.x() - s0[0], px.y() - s0[1], depth - s0[2] };
+        const double r[3] = { centre.x() - s0[0], centre.y() - s0[1], depth - s0[2] };
         auto det3 = [](const double a[3][3]) {
             return a[0][0] * (a[1][1] * a[2][2] - a[1][2] * a[2][1])
                  - a[0][1] * (a[1][0] * a[2][2] - a[1][2] * a[2][0])
@@ -10652,7 +10659,7 @@ quint32 StructureStudioView::hitTestFixture(const QPointF &px) const
     double bestDepth = -1e30;
     // At an angle the nearest to the eye wins, and nothing hidden behind
     // something solid is picked through it (the frame's depth buffer).
-    const double zAt = (m_plane == Angled) ? pickDepth(px.toPoint()) : -1e30;
+    const double zAt = (m_plane == Angled) ? pickDepth(QPoint(qFloor(px.x()), qFloor(px.y()))) : -1e30;
     foreach (quint32 fid, fixturesInDrawOrder())
     {
         double nearest = -1e30;

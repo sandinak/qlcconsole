@@ -64,6 +64,10 @@ private slots:
     /** Grid lines end at the grid's edge at every quarter turn, and the
      *  grid is centred on the canvas. */
     void gridLinesEndWhereTheGridDoes();
+    /** The grid is drawn to the real stage size (15.24 m, not 15). */
+    void theGridIsTheRealStageSize();
+    /** The cursor readout solves where the depth was sampled. */
+    void studioReadoutSolvesWhereDepthWasSampled();
     /** The Snap setting is the step a move snaps to. */
     void snapStepIsTheSnapSetting();
     /** A dropped free fixture snaps its centre to the grid. */

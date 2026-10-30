@@ -510,6 +510,7 @@ skipped). Upstream fixes taken:
   starts as *New Effect* and the effect picker opens by itself, also when
   the Look Editor was closed (it could start with the last effect's name).
 
+- **The Lighting Studio plot draws the stage's real size**: a 50 ft stage in metres is 15.24 m, not 15 -- the outline, centring, centre line and the off-grid count use it. The structure editor's cursor readout (H / V / Z) now solves at the pixel its depth came from, removing a 0.5-1 px error on a slope.
 - **The Lighting Studio lines up with itself.** The rest of the alignment
   audit: the grid ends at the stage's edge and sits in the middle of the
   canvas when the plot is turned 90°, and fixtures re-place with the turn;
