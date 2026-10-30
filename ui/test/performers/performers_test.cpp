@@ -24,6 +24,20 @@
 #include <QPainter>
 #include <functional>
 #include <ctime>
+
+/* A build that counts or checks every line (coverage, a sanitizer) runs the
+   drawing several times slower, and unevenly: a ratio of two timings there is
+   noise, not a guard. The timing assertions hold on every other build. */
+#if defined(QLC_INSTRUMENTED_BUILD) || defined(__SANITIZE_ADDRESS__) || defined(__SANITIZE_THREAD__)
+#  define QLC_TIMING_GUARDS 0
+#elif defined(__has_feature)
+#  if __has_feature(address_sanitizer) || __has_feature(thread_sanitizer)
+#    define QLC_TIMING_GUARDS 0
+#  endif
+#endif
+#ifndef QLC_TIMING_GUARDS
+#  define QLC_TIMING_GUARDS 1
+#endif
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
 #include <QToolButton>
@@ -816,7 +830,12 @@ void Performers_Test::manyPeopleRenderCost()
     qInfo("render cost (CPU), %d people: rig view %.1f -> %.1f ms/frame, plot %.1f -> %.1f ms/frame",
           r.people, rigEmpty, rigFull, plotEmpty, plotFull);
     /* Generous: a debug build on a loaded gate machine. What it catches is
-       a figure costing milliseconds, not noise. */
+       a figure costing milliseconds, not noise. Reported, not checked, on a
+       coverage or sanitizer build (CI's Linux coverage leg), where the
+       times are the instrumentation's -- and QLC_TEST_NO_TIMING=1 says the
+       same for any other run that knows its clock can't be trusted. */
+    if (!QLC_TIMING_GUARDS || qEnvironmentVariableIntValue("QLC_TEST_NO_TIMING") == 1)
+        QSKIP("an instrumented build: the render cost is reported above, not checked");
     QVERIFY2(rigFull < rigEmpty * 1.6 + 80.0, "70 people make the rig view crawl");
     QVERIFY2(plotFull < plotEmpty + 30.0, "70 people make the plot crawl");
 }
