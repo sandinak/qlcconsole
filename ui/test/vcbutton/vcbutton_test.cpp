@@ -1004,6 +1004,13 @@ void VCButton_Test::severalHitsFireTheArmedOne()
     QCOMPARE(btn.armedHit(), Function::invalidId());
 }
 
+// QDragEnterEvent takes a QPointF from Qt 6.12 (the QPoint one is deprecated).
+#if QT_VERSION >= QT_VERSION_CHECK(6, 12, 0)
+static const QPointF kDragAt(1, 1);
+#else
+static const QPoint kDragAt(1, 1);
+#endif
+
 void VCButton_Test::severalHitsSaveLoadAndDrop()
 {
     QWidget w;
@@ -1027,7 +1034,7 @@ void VCButton_Test::severalHitsSaveLoadAndDrop()
     }
     QMimeData mime;
     mime.setData(VCButton::hitMimeType(), data);
-    QDragEnterEvent enter(QPoint(1, 1), Qt::CopyAction, &mime, Qt::LeftButton, Qt::NoModifier);
+    QDragEnterEvent enter(kDragAt, Qt::CopyAction, &mime, Qt::LeftButton, Qt::NoModifier);
     btn.dragEnterEvent(&enter);
     QVERIFY(enter.isAccepted());
     QDropEvent drop(QPointF(1, 1), Qt::CopyAction, &mime, Qt::LeftButton, Qt::NoModifier);
@@ -1048,7 +1055,7 @@ void VCButton_Test::severalHitsSaveLoadAndDrop()
     }
     QMimeData cueMime;
     cueMime.setData(VCButton::hitMimeType(), notHit);
-    QDragEnterEvent enter2(QPoint(1, 1), Qt::CopyAction, &cueMime, Qt::LeftButton, Qt::NoModifier);
+    QDragEnterEvent enter2(kDragAt, Qt::CopyAction, &cueMime, Qt::LeftButton, Qt::NoModifier);
     btn.dragEnterEvent(&enter2);
     QVERIFY(!enter2.isAccepted());
 
