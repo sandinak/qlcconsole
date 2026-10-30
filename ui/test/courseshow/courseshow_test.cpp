@@ -2165,11 +2165,19 @@ void CourseShow_Test::lessonHouseLights()
     doc->inputOutputMap()->setGrandMasterValue(255);
     QTRY_COMPARE_WITH_TIMEOUT(cycOut(), 255, kRigWait);
 
-    // House to half, then out: the cues still move them.
+    // House to half, then out: the cues still move them. The Show Tree
+    // brought forward again first (the preview runs only while it is the
+    // tab on show), and the value said if it doesn't come (CI Windows once
+    // read another value here after the Blackout and Grand Master moves).
+    view = showTree();
     QVERIFY(view->selectNode(cueNumbered(doc, "0.0.1")));
-    QTRY_VERIFY_WITH_TIMEOUT(qAbs(out("House Lights") - 127) <= 1, kRigWait);
+    QVERIFY2(waitUntil([&out]() { return qAbs(out("House Lights") - 127) <= 1; }, 2 * kRigWait),
+             qPrintable(QStringLiteral("House Lights %1 in 0.0.1, GM %2, blackout %3")
+                            .arg(out("House Lights")).arg(doc->inputOutputMap()->grandMasterValue())
+                            .arg(doc->inputOutputMap()->blackout())));
     QVERIFY(view->selectNode(cueNumbered(doc, "0.0.2")));
-    QTRY_COMPARE_WITH_TIMEOUT(out("House Lights"), 0, kRigWait);
+    QVERIFY2(waitUntil([&out]() { return out("House Lights") == 0; }, 2 * kRigWait),
+             qPrintable(QStringLiteral("House Lights %1 in 0.0.2").arg(out("House Lights"))));
     doc->resetModified();
 }
 
@@ -3454,7 +3462,7 @@ static bool lessonTwoOneByMouse(Doc *doc, ShowTreeView *view, const QString &sho
     qInfo().noquote() << "[2.1] chorus counts" << cueCounts(view, "1.0.2") << "| rows" << view->cueLayerItems().join(" | ");
     qInfo().noquote() << "[2.1] chorus tracked in:" << view->m_cueTracked->text();
     qInfo().noquote() << "[2.1] chorus next receives:" << nextReceives(view);
-    for (const QString &n : { "1.0.0", "1.0.1", "1.0.2", "1.0.3", "1.0.4" })
+    for (const char *n : { "1.0.0", "1.0.1", "1.0.2", "1.0.3", "1.0.4" })
         qInfo().noquote() << "[2.1] counts" << n << cueCounts(view, n);
     LESSON_STEP(cueCounts(view, "1.0.2") == QStringLiteral("S1 T3 R0 M-"), cueCounts(view, "1.0.2"));
     LESSON_STEP(cueRow(view, "⤳ StepTops") != nullptr && cueRow(view, "⤳ AT-W-ALL") != nullptr
@@ -3666,8 +3674,23 @@ static bool lessonTwoTwoByMouse(Doc *doc, ShowTreeView *view, const QString &sho
         // the swatch grid (Qt's QColorWell, 8 columns of 6).
         QWidget *well = nullptr;
         for (QWidget *w : colour->findChildren<QWidget *>())
-            if (QLatin1String(w->metaObject()->className()) == QLatin1String("QColorWell") && well == nullptr)
+        {
+            // Qt 6.12 names it QColorWell; Qt 6.9 shows only its base,
+            // QtPrivate::QWellArray. The basic colours are the tall one
+            // (6 rows; the custom colours are 2).
+            const QLatin1String kind(w->metaObject()->className());
+            if ((kind.endsWith(QLatin1String("QColorWell")) || kind.endsWith(QLatin1String("QWellArray")))
+                && (well == nullptr || w->height() > well->height()))
                 well = w;
+        }
+        if (well == nullptr)
+        {
+            QStringList kinds;
+            for (QWidget *w : colour->findChildren<QWidget *>())
+                kinds << QStringLiteral("%1/%2 %3x%4").arg(QLatin1String(w->metaObject()->className()), w->objectName())
+                             .arg(w->width()).arg(w->height());
+            qWarning().noquote() << "[2.2] colour dialog children:" << kinds.join(", ");
+        }
         LESSON_STEP(well != nullptr, "no Basic colors grid");
         const QPoint cell(well->width() * 3 / 16, well->height() * 5 / 12);     // column 2, row 3
         QTest::mouseClick(well, Qt::LeftButton, Qt::NoModifier, cell);
