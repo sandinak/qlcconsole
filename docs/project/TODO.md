@@ -33,6 +33,7 @@ hits between places and onto VC buttons. Open:
   its caption; drops onto a VC button work in Design and Operate and have
   no undo (the VC has none).
 - The command line's `hit` makes production hits only; no `hit … for cue`.
+
 ## Breathe once — leftovers (brth, 2026-10-30)
 
 Built (build 2593 report: flash at start, end lands anywhere, no typed
