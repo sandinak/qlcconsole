@@ -422,6 +422,53 @@ void InputOutputMap_Test::offlineShowSavesPatchesByteIdentical()
     QCOMPARE(iom.danglingOutputPatches().count(), 6);   // the WLED ones
 }
 
+void InputOutputMap_Test::teachingHoldsNetworkOutput()
+{
+    mockMachine(QList<NetworkRoute::LocalAddress>() << localAddr("en0", "192.168.1.5", 24),
+                QMap<QString, QString>{ { "*", "192.168.1.5" } });
+    IOPluginStub *stub = namedStub(m_doc, "ArtNet", QStringList() << "192.168.1.5");
+    const char *xml =
+        "<InputOutputMap>\n"
+        " <Universe Name=\"Stage\" ID=\"0\">\n"
+        "  <Output Plugin=\"ArtNet\" UID=\"192.168.1.5\" Line=\"0\">\n"
+        "   <PluginParameters outputIP=\"192.168.1.60\" outputUni=\"0\"/>\n"
+        "  </Output>\n"
+        " </Universe>\n"
+        "</InputOutputMap>\n";
+
+    // A show that is not a teaching show: the patch opens as before.
+    InputOutputMap iom(m_doc, 1);
+    QVERIFY(loadIOMap(iom, xml));
+    QVERIFY(iom.outputPatch(0, 0)->isPatched());
+    QVERIFY(!iom.teachingHold());
+    QCOMPARE(iom.transmitGateStatus().held, 0);
+
+    // Teaching on: the open patch is held, nothing sent, and said so.
+    iom.setTeachingHold(true);
+    QVERIFY(iom.teachingHold());
+    QVERIFY(iom.outputPatch(0, 0)->isHeld());
+    QVERIFY(iom.outputPatch(0, 0)->heldReason().contains("Teaching"));
+    const InputOutputMap::TransmitGateStatus st = iom.transmitGateStatus();
+    QVERIFY(st.teaching);
+    QCOMPARE(st.held, 1);
+    QCOMPARE(st.state, InputOutputMap::TransmitGateStatus::Held);
+    // The patch is kept as saved
+    QCOMPARE(patchElements(saveIOMap(iom)).count(), 1);
+
+    // The teacher lets it through: it reopens by itself.
+    iom.setTeachingHold(false);
+    QVERIFY(!iom.outputPatch(0, 0)->isHeld());
+    QVERIFY(iom.outputPatch(0, 0)->isPatched());
+
+    // A teaching show opened: held from the start, never opened.
+    stub->m_openOutputs.clear();
+    InputOutputMap held(m_doc, 1);
+    held.setTeachingHold(true);
+    QVERIFY(loadIOMap(held, xml));
+    QVERIFY(held.outputPatch(0, 0)->isHeld());
+    QVERIFY(stub->m_openOutputs.isEmpty());
+}
+
 void InputOutputMap_Test::offlinePatchIsInertAndListed()
 {
     mockMachine(QList<NetworkRoute::LocalAddress>() << localAddr("en0", "192.168.1.5", 24),

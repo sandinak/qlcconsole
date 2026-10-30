@@ -55,7 +55,8 @@ namespace ShowPin
 /**
  * The show's Operate settings (File ▸ Show Settings): whether opening it
  * goes straight to Operate, and a PIN that going back to Design asks for.
- * Saved with the show as <Operate OpenIn="1" PinHash="..."/> under the
+ * Saved with the show as <Operate OpenIn="1" PinHash="..." LockDesign="0"/>
+ * (LockDesign only when off) under the
  * Engine, only when either is set, so a show without them saves as before.
  * QLC+ 4 skips the element.
  */
@@ -80,8 +81,24 @@ public:
     /** Set an already-hashed PIN (ShowPin::hash()), as Show Settings does
      *  on OK; empty removes it. */
     void setPinHash(const QString &hash);
+    /** Going back to Design asks for the PIN: a PIN is set and "lock Design"
+     *  is on (the default; a Teaching handout may use the PIN for Teaching
+     *  only, so a student can still leave Operate). */
+    bool locksDesign() const { return hasPin() && m_lockDesign; }
+    bool lockDesignSetting() const { return m_lockDesign; }
+    void setLockDesign(bool on);
     /** Does @p pin open the lock? True when there is no PIN. */
     bool checkPin(const QString &pin) const;
+
+    /** What a copy of the show is written with instead of the open show's
+     *  own Operate settings (Make Student Handout). */
+    struct SaveOverride
+    {
+        bool openInOperate = false;
+        QString pinHash;
+        bool lockDesign = false;
+    };
+    void setSaveOverride(const SaveOverride *saveOverride) { m_saveOverride = saveOverride; }
 
     /** Back to a new show's (nothing set). */
     void reset();
@@ -98,7 +115,9 @@ private:
 private:
     Doc *m_doc;
     bool m_openInOperate = false;
+    bool m_lockDesign = true;
     QString m_pinHash;
+    const SaveOverride *m_saveOverride = nullptr;
 };
 
 /** @} */

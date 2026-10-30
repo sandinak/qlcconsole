@@ -69,6 +69,7 @@
 #include "showwebaccess.h"
 #include "controlmap.h"
 #include "showoperate.h"
+#include "teachingsettings.h"
 #include "outputrulekeeper.h"
 #include "bus.h"
 #include "qlcpalette.h"
@@ -161,6 +162,7 @@ Doc::Doc(QObject* parent, int universes)
     m_controlMap = new ControlMap(this);
     // Open in Operate, and the PIN to leave it (unset unless the show says).
     m_operate = new ShowOperate(this);
+    m_teaching = new TeachingSettings(this);
     // Relays, house and work lights: Blackout / GM exempt, switch, on at open.
     m_outputRuleKeeper = new OutputRuleKeeper(this);
 
@@ -326,6 +328,8 @@ void Doc::clearContents()
         m_controlMap->reset();
     if (m_operate != nullptr)
         m_operate->reset();
+    if (m_teaching != nullptr)
+        m_teaching->reset();
     m_showControl->reset();
     m_showTree->reset();
     m_paletteOps->reset();
@@ -2645,6 +2649,10 @@ bool Doc::loadXML(QXmlStreamReader &doc, bool loadIO)
         {
             m_webAccess->loadXML(doc);
         }
+        else if (doc.name() == KXMLQLCTeaching)
+        {
+            m_teaching->loadXML(doc);
+        }
         else if (doc.name() == KXMLQLCOperate)
         {
             m_operate->loadXML(doc);
@@ -2718,6 +2726,9 @@ bool Doc::saveXML(QXmlStreamWriter *doc, bool forStockQlc)
 
     if (startupFunction() != Function::invalidId())
         doc->writeAttribute(KXMLQLCStartupFunction, QString::number(startupFunction()));
+
+    // First, so a loading show holds real output before its patch opens.
+    m_teaching->saveXML(doc);
 
     m_ioMap->saveXML(doc);
 

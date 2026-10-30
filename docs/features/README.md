@@ -28,6 +28,7 @@ In the app, **F1** opens the guide for whatever you're looking at, and
 | [Fixture Manager](fixture-manager.md) | Fixture-group folders, the head-layout grid editor, the inventory of unpatched fixtures and the Patch dialog, output rules (relays, house and work lights), plot symbols and icons |
 | [Definition updates](definition-updates.md) | Bringing old fixture definitions up to date, in your fixture folder and inside saved shows, with a way back |
 | [Venue focus](focus-calls.md) | Focusing the rig for a venue on the controller, call by call; the focus calls, venues and their corrections, the focus report, scramble practice, the venue focus cue, the laptop's voice |
+| [Teaching mode](teaching.md) | A classroom flag saved with the show: scramble practice, real output held, the Operate warning, the one PIN, Make Student Handout |
 | [House rig and tour package](venues.md) | Owners (Tour, House, Rental), each venue's house rig, universes and outputs per venue, channels not ours, the clash check |
 | [Focus this cue](refine.md) | Focus this cue / Focus this look: changing a cue or a Build scene from the stage with the controller: position, zoom, focus, colour and gobo |
 | [Stage Targets &amp; Aim Solving](stage-targets.md) | Marking points/areas/people in the room and having fixtures aim there automatically |

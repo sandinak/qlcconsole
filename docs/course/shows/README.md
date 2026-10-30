@@ -28,6 +28,18 @@ has a network address of its own. `ui/test/courseshow`
 that every fixture opens with its own definition on a computer that has
 only the app's.
 
+## Teaching mode
+
+The shows are safe on their own (see above), so they ship with **Teaching
+mode off**. It is a flag saved in the show (**File ▸ Show Settings…**), and
+Lesson 3.6's scramble needs it. To hand a class a copy that has it, use
+**File ▸ Show Settings… ▸ Make Student Handout…**: Teaching on, real network
+output held, an optional PIN (so a student cannot untick it by accident),
+and the practice answer key left out of the venue file. Keep your own master
+without it. The footer shows a **TEACHING** chip and Operate shows a quiet
+notice (Lesson 1.5 is unaffected: no dialog). See
+[Teaching mode](../../features/teaching.md).
+
 ## How they are made
 
 They are made by the app, not by hand, so they are exactly what the app

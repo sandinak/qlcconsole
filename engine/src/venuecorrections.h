@@ -149,6 +149,12 @@ public:
     /** Gap 8, the file travels: write these venues as the sidecar of
      *  @p showFile too (Collect for Transfer's copy of the show). */
     bool writeSidecarFor(const QString &showFile, QString *why = nullptr) const;
+    /** Make Student Handout: the sidecar for a handout copy of the show.
+     *  With @p dropPractice the practice venues (and their answer key, the
+     *  Truth) are left out; with @p dropNames the "checked by" names are
+     *  blanked. False when there is nothing to write. */
+    bool writeHandoutSidecarFor(const QString &showFile, bool dropPractice, bool dropNames,
+                                QString *why = nullptr) const;
     /** A show's name without a version or copy ending: "Dance-0.6",
      *  "Dance copy 2", "Dance (3)" -> "Dance". */
     static QString showStem(const QString &showFile);
@@ -162,6 +168,7 @@ public:
 
     /** The XML, without a file (tests, and save()). */
     QByteArray toXml() const;
+    QByteArray toXml(const QList<Venue> &venues, const QString &active) const;
     bool fromXml(const QByteArray &xml, QString *why = nullptr);
 
     /*********************************************************************

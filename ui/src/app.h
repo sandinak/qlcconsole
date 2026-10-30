@@ -436,6 +436,11 @@ public:
     void enableKioskMode();
     void createKioskCloseButton(const QRect& rect);
 
+public:
+    /** Operate without asking about Teaching mode: a start (-p, Open in
+     *  Operate) nobody is there to answer for. */
+    void startInOperate();
+
 public slots:
     void slotModeOperate();
     void slotModeDesign();
@@ -545,6 +550,17 @@ public:
     bool newFromTemplate(const QString &resource);
     /** File ▸ Show Settings (Design only). */
     void openShowSettings();
+public:
+    /** Make Student Handout: write a copy of the show for students (Teaching
+     *  on, the PIN, practice venues left out). The open show, its file name
+     *  and its settings are untouched. False, with @p why, on failure. */
+    bool writeStudentHandout(const struct HandoutOptions &options, QString *why = nullptr);
+    /** The Teaching chip, tool-tip and the title: what the show's Teaching
+     *  settings say (docs/features/teaching.md). */
+    void updateTeachingStatus();
+private:
+    /** The Teaching chip's menu */
+    void showTeachingMenu();
 
 public slots:
     bool slotFileNew();
@@ -1025,6 +1041,11 @@ private:
      *  menu. Always there in the qlcconsole and Everything views; in Classic
      *  only when the show has venues. */
     class VenueChip* m_venueChip = nullptr;
+    /** "TEACHING" while the show is in Teaching mode; a click opens a menu */
+    QLabel* m_statusTeachingLabel = nullptr;
+    bool m_teachingNoticeShown = false;     //!< the Operate notice, once per show
+    bool m_teachingOperateAnswered = false; //!< "Operate in Teaching Mode", once per show
+    bool m_unattendedOperate = false;       //!< slotModeOperate() from startInOperate()
 public:
     void updateVenueFooter();
     /** The chip's text while it is shown, else empty. */

@@ -50,7 +50,7 @@ namespace
 const char *const kTopics[] = {
     "getting-started.md", "whats-new.md", "coming-from-qlc4.md", "README.md", "lighting-studio.md",
     "build.md", "show-tree.md", "fixture-manager.md", "definition-updates.md",
-    "stage-targets.md", "focus-calls.md", "venues.md", "refine.md", "shows.md",
+    "stage-targets.md", "focus-calls.md", "venues.md", "refine.md", "shows.md", "teaching.md",
     "show-control.md",
     "other-improvements.md", "effects.md", "shortcuts.md", "troubleshooting.md", "updates.md",
     "EFFECTSCRIPT_API.md"

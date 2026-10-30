@@ -57,6 +57,7 @@
 #include "qlccapability.h"
 #include "fixture.h"
 #include "doc.h"
+#include "teachingsettings.h"
 
 namespace
 {
@@ -2700,6 +2701,7 @@ void FocusCalls_Test::renamingAVenueKeepsEverything()
     QVERIFY(v->recordTarget(dsc->id()));
     const VenueCorrections::Venue before = v->venue(dated);
     // A practice scrambled from it, too.
+    m_doc->teachingSettings()->setEnabled(true);
     const QString practice = v->startPractice({ a->id() }, 7, 2.0f, 4.0f);
     QVERIFY(!practice.isEmpty());
     QCOMPARE(v->venue(practice).practice.from, dated);

@@ -138,6 +138,7 @@
 #include "showdifferencesdialog.h"
 #include "showsettingsdialog.h"
 #include "showoperate.h"
+#include "teachingsettings.h"
 #include "qlcfixturedef.h"
 #include "definitionupdatesdialog.h"
 #include "qlcioplugin.h"
@@ -1696,6 +1697,9 @@ void App::updateWindowTitle()
     if (m_doc != NULL && m_doc->isModified())
         caption += QString(" *");
 
+    if (m_doc != NULL && m_doc->teachingSettings() != nullptr && m_doc->teachingSettings()->enabled())
+        caption += tr(" (Teaching)");
+
     // m_tab->tabText() is empty under Icons-Only tab-label mode; the tab's
     // own tabData (set once in addTab(), travels with the tab through
     // detach/reattach) keeps the real label regardless of display mode or
@@ -1777,6 +1781,13 @@ void App::createKioskCloseButton(const QRect& rect)
     btn->show();
 }
 
+void App::startInOperate()
+{
+    m_unattendedOperate = true;
+    slotModeOperate();
+    m_unattendedOperate = false;
+}
+
 void App::slotModeOperate()
 {
     // Mirror slotModeDesign()'s "there's something you might lose" checkpoint
@@ -1801,6 +1812,38 @@ void App::slotModeOperate()
         if (result == QMessageBox::No)
             return;
     }
+
+    /* A Teaching show that looks like a real one (real output let through
+       and patched): ask once whether this is meant. A start nobody is there
+       to answer (-p, Open in Operate, the web, kiosk) gets the quiet
+       notice instead (slotModeChanged()), never a dialog. */
+    TeachingSettings *teach = m_doc->teachingSettings();
+    if (teach->enabled() && teach->allowOutput() && !m_unattendedOperate && !m_teachingOperateAnswered
+        && m_doc->inputOutputMap()->transmitGateStatus().networkOutputs > 0)
+    {
+        QMessageBox box(QMessageBox::Question, tr("Run this show for real?"),
+                        tr("This show is in Teaching mode: the practice features are on, and it "
+                           "may be a student copy. Turn Teaching mode off for a real show."),
+                        QMessageBox::Yes | QMessageBox::No | QMessageBox::Cancel, this);
+        box.setObjectName(QStringLiteral("teachingOperateBox"));
+        box.button(QMessageBox::Yes)->setText(tr("Turn Off Teaching Mode…"));
+        box.button(QMessageBox::No)->setText(tr("Operate in Teaching Mode"));
+        box.setDefaultButton(QMessageBox::Cancel);
+        const int answer = box.exec();
+        if (answer == QMessageBox::Yes)
+        {
+            ShowOperate *lock = m_doc->operateSettings();
+            if (lock->hasPin()
+                && !ShowSettingsDialog::askForPin(this, lock->pinHash(),
+                                                  tr("Enter the PIN to turn Teaching mode off.")))
+                return;
+            teach->setEnabled(false);
+        }
+        else if (answer == QMessageBox::No)
+            m_teachingOperateAnswered = true;
+        else
+            return;
+    }
     m_doc->setMode(Doc::Operate);
 }
 
@@ -1810,6 +1853,64 @@ void App::openShowSettings()
         return;
     ShowSettingsDialog dlg(m_doc, this);
     dlg.exec();
+    if (dlg.handoutRequested())
+    {
+        HandoutOptions options;
+        QString why;
+        if (ShowSettingsDialog::askHandoutOptions(m_doc, this, &options)
+            && !writeStudentHandout(options, &why))
+            QMessageBox::warning(this, tr("Make Student Handout"), why);
+        else if (!options.path.isEmpty() && why.isEmpty())
+            QMessageBox::information(this, tr("Make Student Handout"),
+                                     tr("The handout is in %1. This show is as it was.")
+                                     .arg(QDir::toNativeSeparators(options.path)));
+    }
+}
+
+bool App::writeStudentHandout(const HandoutOptions &options, QString *why)
+{
+    QString path = options.path;
+    if (!path.endsWith(KExtWorkspaceConsole))
+        path += KExtWorkspaceConsole;
+
+    /* The copy is written with its own Teaching and PIN settings
+       (TeachingSettings::SaveOverride): the open show is not touched. */
+    TeachingSettings::SaveOverride teach;
+    teach.enabled = true;
+    teach.allowOutput = !options.holdOutput;
+    teach.lesson = options.lesson;
+    teach.link = options.link;
+    teach.handedOut = QDateTime::currentDateTime().toString(Qt::ISODate);
+    ShowOperate::SaveOverride lock;
+    lock.openInOperate = false;
+    lock.pinHash = options.pinHash;
+    lock.lockDesign = false;    // a student can still leave Operate
+    m_doc->teachingSettings()->setSaveOverride(&teach);
+    m_doc->operateSettings()->setSaveOverride(&lock);
+    const bool wasModified = m_doc->isModified();
+    const QFile::FileError error = saveXML(path, true);
+    m_doc->teachingSettings()->setSaveOverride(nullptr);
+    m_doc->operateSettings()->setSaveOverride(nullptr);
+    if (wasModified)
+        m_doc->setModified();
+    if (error != QFile::NoError)
+    {
+        if (why != nullptr)
+            *why = tr("Cannot write %1.").arg(QDir::toNativeSeparators(path));
+        return false;
+    }
+
+    VenueCorrections *venues = m_doc->programmer()->venueCorrections();
+    QString venueWhy;
+    if (!venues->venueNames().isEmpty()
+        && !venues->writeHandoutSidecarFor(path, options.dropPractice, options.dropNames, &venueWhy)
+        && !venueWhy.isEmpty())
+    {
+        if (why != nullptr)
+            *why = venueWhy;
+        return false;
+    }
+    return true;
 }
 
 void App::slotModeDesign()
@@ -1817,7 +1918,7 @@ void App::slotModeDesign()
     /* A show locked with a PIN (File ▸ Show Settings) stays in Operate
        unless it is given. */
     ShowOperate *lock = m_doc->operateSettings();
-    if (m_doc->mode() == Doc::Operate && lock != nullptr && lock->hasPin()
+    if (m_doc->mode() == Doc::Operate && lock != nullptr && lock->locksDesign()
         && !ShowSettingsDialog::askForPin(this, lock->pinHash(),
                 tr("This show is locked in Operate. Enter its PIN to go back to Design.")))
         return;
@@ -1858,6 +1959,23 @@ void App::slotModeChanged(Doc::Mode mode)
     // starts running cues.
     updateOutputReadiness();
 
+    if (mode == Doc::Operate && m_doc->teachingSettings()->enabled() && !m_teachingNoticeShown)
+    {
+        /* Every way into Operate reaches here, kiosk and the web included:
+           a quiet line, never a dialog. */
+        m_teachingNoticeShown = true;
+        showViewNotice(tr("This show is in Teaching mode. Practice features are on and real output "
+                          "is %1. For a real show, turn Teaching mode off in File ▸ Show Settings.")
+                       .arg(m_doc->teachingSettings()->allowOutput() ? tr("allowed") : tr("held")),
+                       tr("Show Settings…"), [this]() {
+                           if (m_doc->mode() == Doc::Design)
+                               openShowSettings();
+                           else
+                               hideViewNotice();
+                       });
+    }
+    updateTeachingStatus();
+
     if (mode == Doc::Operate)
     {
         /* Disable editing features */
@@ -1869,7 +1987,7 @@ void App::slotModeChanged(Doc::Mode mode)
             m_fileShowSettingsAction->setEnabled(false);
         /* Live Edit edits the show in Operate: not in one locked with a PIN */
         const bool locked = m_doc->operateSettings() != nullptr
-                            && m_doc->operateSettings()->hasPin();
+                            && m_doc->operateSettings()->locksDesign();
         m_liveEditAction->setEnabled(!locked);
         m_liveEditVirtualConsoleAction->setEnabled(!locked);
         m_captureLiveEditsAction->setEnabled(!locked);
@@ -5583,7 +5701,7 @@ QFile::FileError App::loadXML(const QString& fileName)
             if (m_doc->operateSettings()->openInOperate())
                 QTimer::singleShot(0, this, [this]() {
                     if (m_doc->mode() == Doc::Design && m_doc->operateSettings()->openInOperate())
-                        slotModeOperate();
+                        startInOperate();
                 });
         }
     }
@@ -6647,6 +6765,21 @@ void App::initStatusBar()
         updateVenueFooter();
     }
 
+    // Teaching mode (File > Show Settings): a chip while the show is a
+    // teaching show, in every view. A click opens its menu.
+    m_statusTeachingLabel = new QLabel(tr("TEACHING"), this);
+    m_statusTeachingLabel->setObjectName(QStringLiteral("footerTeaching"));
+    m_statusTeachingLabel->setCursor(Qt::PointingHandCursor);
+    m_statusTeachingLabel->setStyleSheet(QStringLiteral("QLabel { color: #1e73be; font-weight: bold; }"));
+    m_statusTeachingLabel->setProperty("helpTopic", QStringLiteral("teaching.md"));
+    m_statusTeachingLabel->installEventFilter(this);
+    m_statusTeachingLabel->hide();
+    sb->addWidget(m_statusTeachingLabel, 0);
+    if (m_doc != NULL)
+        connect(m_doc->teachingSettings(), &TeachingSettings::teachingChanged,
+                this, &App::updateTeachingStatus);
+    updateTeachingStatus();
+
     // Rig network gate (InputOutputMap::transmitGateStatus()), right beside
     // the readiness chip: "Output held — not on the rig network". Hidden
     // while there is nothing to say.
@@ -7305,9 +7438,18 @@ bool App::eventFilter(QObject *watched, QEvent *event)
         return true;
     }
 
+    if (watched == m_statusTeachingLabel && event->type() == QEvent::MouseButtonPress)
+    {
+        showTeachingMenu();
+        return true;
+    }
+
     if (watched == m_statusRigNetLabel && event->type() == QEvent::MouseButtonPress)
     {
-        showRigNetworkSettings();
+        if (m_doc != NULL && m_doc->inputOutputMap()->teachingHold())
+            openShowSettings();
+        else
+            showRigNetworkSettings();
         return true;
     }
 
@@ -8193,6 +8335,9 @@ QString App::rigNetworkFooterText(const InputOutputMap::TransmitGateStatus &st, 
     switch (st.state)
     {
         case S::Held:
+            if (st.teaching)
+                return tr("Output held — Teaching mode holds real output (File ▸ Show Settings). "
+                          "%1 of %2 network outputs.").arg(st.held).arg(st.networkOutputs);
             if (st.held >= st.networkOutputs)
                 return tr("Output held — not on the rig network (%1). Connected: %2")
                         .arg(nets, connected);
@@ -8233,6 +8378,58 @@ void App::updateRigNetworkFooter()
     tip << tr("Click to set the show's rig networks.");
     m_statusRigNetLabel->setToolTip(tip.join("\n"));
     m_statusRigNetLabel->show();
+}
+
+void App::updateTeachingStatus()
+{
+    if (m_doc == NULL || m_doc->teachingSettings() == nullptr)
+        return;
+    const TeachingSettings *teach = m_doc->teachingSettings();
+    if (m_statusTeachingLabel != nullptr)
+    {
+        m_statusTeachingLabel->setVisible(teach->enabled());
+        m_statusTeachingLabel->setToolTip(tr("Teaching mode: the practice features are on, and real "
+                                             "network output is %1. Click for the menu.")
+                                          .arg(teach->allowOutput() ? tr("let through") : tr("held")));
+    }
+    if (!teach->enabled())
+    {
+        m_teachingNoticeShown = false;
+        m_teachingOperateAnswered = false;
+    }
+    // Operate in a Teaching show: also in the "Not ready" list.
+    if (teach->enabled() && m_doc->mode() == Doc::Operate)
+        ShowStatus::instance()->setStatus("teaching.operate", ShowStatus::Warning,
+                                          tr("Teaching mode is on"),
+                                          tr("This show is in Teaching mode. For a real show, turn it off "
+                                             "in File \342\226\270 Show Settings."));
+    else
+        ShowStatus::instance()->clearStatus("teaching.operate");
+    updateWindowTitle();
+    updateRigNetworkFooter();
+}
+
+void App::showTeachingMenu()
+{
+    QMenu menu(this);
+    menu.setObjectName(QStringLiteral("teachingMenu"));
+    menu.setToolTipsVisible(true);
+    TeachingSettings *teach = m_doc->teachingSettings();
+    menu.addAction(tr("What Teaching mode does"), this, [this]() {
+        HelpBrowser::open(QStringLiteral("teaching.md"));
+    });
+    if (!teach->link().isEmpty())
+    {
+        const QString link = teach->link();
+        menu.addAction(teach->lesson().isEmpty() ? tr("Lesson handout")
+                                                 : tr("Lesson %1 handout").arg(teach->lesson()),
+                       this, [link]() { QDesktopServices::openUrl(QUrl::fromUserInput(link)); });
+    }
+    menu.addSeparator();
+    QAction *settings = menu.addAction(tr("Teaching settings…"), this, [this]() { openShowSettings(); });
+    settings->setEnabled(m_doc->mode() == Doc::Design);
+    settings->setToolTip(tr("File \342\226\270 Show Settings: turn Teaching mode off, let real output through"));
+    menu.exec(QCursor::pos());
 }
 
 void App::showRigNetworkSettings()

@@ -29,6 +29,7 @@
 
 #define KXMLOperateOpenIn  QStringLiteral("OpenIn")
 #define KXMLOperatePinHash QStringLiteral("PinHash")
+#define KXMLOperateLockDesign QStringLiteral("LockDesign")
 
 /*********************************************************************
  * ShowPin
@@ -151,6 +152,14 @@ void ShowOperate::setPinHash(const QString &hash)
     changed();
 }
 
+void ShowOperate::setLockDesign(bool on)
+{
+    if (on == m_lockDesign)
+        return;
+    m_lockDesign = on;
+    changed();
+}
+
 bool ShowOperate::checkPin(const QString &pin) const
 {
     if (m_pinHash.isEmpty())
@@ -160,9 +169,10 @@ bool ShowOperate::checkPin(const QString &pin) const
 
 void ShowOperate::reset()
 {
-    if (!m_openInOperate && m_pinHash.isEmpty())
+    if (!m_openInOperate && m_pinHash.isEmpty() && m_lockDesign)
         return;
     m_openInOperate = false;
+    m_lockDesign = true;
     m_pinHash.clear();
     emit settingsChanged();
 }
@@ -170,15 +180,20 @@ void ShowOperate::reset()
 void ShowOperate::saveXML(QXmlStreamWriter *doc) const
 {
     Q_ASSERT(doc != nullptr);
+    const bool openIn = m_saveOverride != nullptr ? m_saveOverride->openInOperate : m_openInOperate;
+    const QString pinHash = m_saveOverride != nullptr ? m_saveOverride->pinHash : m_pinHash;
+    const bool lockDesign = m_saveOverride != nullptr ? m_saveOverride->lockDesign : m_lockDesign;
     // Nothing set: nothing written, so the file is what it was before.
-    if (!m_openInOperate && m_pinHash.isEmpty())
+    if (!openIn && pinHash.isEmpty())
         return;
 
     doc->writeStartElement(KXMLQLCOperate);
-    if (m_openInOperate)
+    if (openIn)
         doc->writeAttribute(KXMLOperateOpenIn, QStringLiteral("1"));
-    if (!m_pinHash.isEmpty())
-        doc->writeAttribute(KXMLOperatePinHash, m_pinHash);
+    if (!pinHash.isEmpty())
+        doc->writeAttribute(KXMLOperatePinHash, pinHash);
+    if (!lockDesign && !pinHash.isEmpty())
+        doc->writeAttribute(KXMLOperateLockDesign, QStringLiteral("0"));
     doc->writeEndElement();
 }
 
@@ -187,6 +202,7 @@ void ShowOperate::loadXML(QXmlStreamReader &root)
     const QXmlStreamAttributes attrs = root.attributes();
     m_openInOperate = attrs.value(KXMLOperateOpenIn) == QLatin1String("1");
     m_pinHash = attrs.value(KXMLOperatePinHash).toString();
+    m_lockDesign = attrs.value(KXMLOperateLockDesign) != QLatin1String("0");
     root.skipCurrentElement();
 
     // Loading doesn't modify the show.

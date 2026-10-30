@@ -177,6 +177,10 @@ controller?** Every step gives the keys too.
 
 ### D. The scramble (scored)
 
+The scramble is a classroom feature. If **Focus ▾** has no **Practice
+(scramble)…**, open **File ▸ Show Settings…**, tick **Teaching mode**, and
+press **OK** (your teacher may have done it for you).
+
 17. Click **Focus ▾**, then **Practice (scramble)…**. The dialog says
     what a scramble does. Choose **Easy: 1–3° off** (not the default,
     Medium), **OK**.

@@ -72,6 +72,22 @@ skipped). Upstream fixes taken:
 
 ### Added
 
+- **Teaching mode** (File ▸ Show Settings…, [guide](docs/features/teaching.md)).
+  A flag saved with the show for a classroom show. While it is on: a
+  **TEACHING** chip in the footer (every view) and "(Teaching)" in the
+  title; **Practice (scramble)…** appears (it is hidden, and refused, in a
+  show that is not a Teaching show); real network output (Art-Net, sACN, OSC,
+  WLED) is **held** until the instructor lets it through; the focus report
+  names the lesson and whether a PIN was set. Going to Operate shows a quiet
+  line and a Not ready entry, never a dialog; only when real output has been
+  let through and a network output is patched, it asks "Run this show for
+  real?" (not for `-p`, Open in Operate, kiosk or web access). The show's one
+  **PIN** now guards turning Teaching off and letting output through, and
+  **Going back to Design asks for the PIN** can be unticked to use it for
+  Teaching alone. **Make Student Handout…** saves a `.qlcc` copy with Teaching
+  on, the PIN, and the practice venues and their answer key left out; the open
+  show is untouched. Optional lesson and handout link add a menu entry on the
+  chip.
 - **One cue list per show, with song sections** (Q190). A production's
   **Numbering** says how its cues are numbered — Show.Part.Iteration
   (0.0.1 setup, 1.0.1 the first song), hundreds per song (Eos, MA), free

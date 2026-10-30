@@ -67,6 +67,7 @@
 #include "fixture.h"
 #include "scene.h"
 #include "doc.h"
+#include "teachingsettings.h"
 
 #include <QMenu>
 #include <QMessageBox>
@@ -1383,6 +1384,7 @@ void FocusCallsUi_Test::practiceScramblesAndScores()
     QPushButton *practice = d.findChild<QPushButton *>("fcPractice");
     QVERIFY(practice != nullptr && practice->isEnabled());
     QString why;
+    m_doc->teachingSettings()->setEnabled(true);
     QVERIFY2(d.startPractice(2.0f, 6.0f, 7, &why), qPrintable(why));
     QVERIFY(d.isPractice());
     QVERIFY(venues->isPracticeActive());
@@ -1485,6 +1487,15 @@ void FocusCallsUi_Test::theFocusMenuGreysWhatCannotBeUsed()
     for (QAction *a : menu.actions())
         if (!a->isSeparator())
             texts << a->text();
+    // Not a Teaching show: no scramble in the menu
+    QCOMPARE(texts, QStringList({ "Quick focus\342\200\246", "Venue focus\342\200\246", "Edit focus calls\342\200\246",
+                                  "Venues", "Focus report\342\200\246" }));
+    empty.teachingSettings()->setEnabled(true);
+    FocusMenu::fill(&menu, &empty, &parent, [&quick]() { ++quick; });
+    texts.clear();
+    for (QAction *a : menu.actions())
+        if (!a->isSeparator())
+            texts << a->text();
     QCOMPARE(texts, QStringList({ "Quick focus\342\200\246", "Venue focus\342\200\246", "Edit focus calls\342\200\246",
                                   "Venues", "Practice (scramble)\342\200\246", "Focus report\342\200\246" }));
     QVERIFY(menu.toolTipsVisible());
@@ -1527,6 +1538,7 @@ void FocusCallsUi_Test::theFocusMenuGreysWhatCannotBeUsed()
     call.target.id = m_target;
     m_doc->programmer()->focusCalls()->setCalls({ call });
     QVERIFY(vc->setActiveVenue(vc->addVenue("Lincoln HS")));
+    m_doc->teachingSettings()->setEnabled(true);
     FocusMenu::fill(&menu, m_doc, &parent, [&quick]() { ++quick; });
     for (const char *name : { "focusQuick", "focusVenue", "focusEditCalls", "focusPractice", "focusReport" })
         QVERIFY2(menuAction(&menu, name)->isEnabled(), name);
@@ -1627,7 +1639,15 @@ void FocusCallsUi_Test::practiceExplainsTheScramble()
                               "focus them back", "degrees off", "how long it takes", "saves",
                               "real venues are never touched" })
         QVERIFY2(text.contains(QLatin1String(says)), says);
+    // Only a Teaching show lists the scramble (File > Show Settings)
+    {
+        m_doc->teachingSettings()->setEnabled(false);
+        FocusCallsDialog off(m_doc);
+        QVERIFY(off.findChild<QPushButton *>("fcPractice")->isHidden());
+    }
+    m_doc->teachingSettings()->setEnabled(true);
     FocusCallsDialog d(m_doc);
+    QVERIFY(!d.findChild<QPushButton *>("fcPractice")->isHidden());
     QCOMPARE(d.windowTitle(), QString("Venue Focus"));
     QCOMPARE(d.findChild<QPushButton *>("fcPractice")->toolTip(), text);
     QCOMPARE(d.findChild<QPushButton *>("fcStart")->text(), QString("Start venue focus"));

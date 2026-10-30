@@ -1067,7 +1067,7 @@ int InputOutputMap::retryOfflinePatches()
                 /* Nothing reaches its network. With the gate on and this
                    machine on no rig network at all, that IS being held. */
                 QString why;
-                if (transmitGateActive() && isNetworkOutput(op->outputName(), params)
+                if (rigGateActive() && isNetworkOutput(op->outputName(), params)
                     && onRigNetwork() == false)
                     why = tr("this machine is not on the rig network");
                 op->setHeldReason(why);
@@ -1258,9 +1258,23 @@ void InputOutputMap::setTransmitOverride(bool override)
     reapplyTransmitGate();
 }
 
-bool InputOutputMap::transmitGateActive() const
+bool InputOutputMap::rigGateActive() const
 {
     return m_transmitGateEnabled && m_transmitOverride == false && m_rigNetworks.isEmpty() == false;
+}
+
+bool InputOutputMap::transmitGateActive() const
+{
+    return rigGateActive() || m_teachingHold;
+}
+
+void InputOutputMap::setTeachingHold(bool hold)
+{
+    if (hold == m_teachingHold)
+        return;
+    m_teachingHold = hold;
+    qDebug() << "[IOMAP] Teaching mode" << (hold ? "holds network output" : "lets network output through");
+    reapplyTransmitGate();
 }
 
 bool InputOutputMap::isNetworkOutput(const QString &lineName,
@@ -1289,6 +1303,13 @@ QString InputOutputMap::transmitHoldReason(const QString &lineName,
                                            const QMap<QString, QVariant> &params) const
 {
     if (transmitGateActive() == false)
+        return QString();
+
+    /* Teaching mode: nothing real leaves the computer until the teacher
+       allows it (File ▸ Show Settings). */
+    if (m_teachingHold && isNetworkOutput(lineName, params))
+        return tr("Teaching mode holds real output (File \342\226\270 Show Settings allows it)");
+    if (rigGateActive() == false)
         return QString();
 
     /* A line named after a local address (Art-Net, E1.31, OSC): it sends
@@ -1344,7 +1365,7 @@ void InputOutputMap::pushTransmitNetworks()
        otherwise (the reconnect tick, a line reopened) they are asked to
        look again, which catches an address or route that moved (DHCP,
        VPN, Wi-Fi) without the networks changing. */
-    const QStringList effective = transmitGateActive() ? m_rigNetworks : QStringList();
+    const QStringList effective = rigGateActive() ? m_rigNetworks : QStringList();
     foreach (QLCIOPlugin *plugin, m_doc->ioPluginCache()->plugins())
         if (plugin != NULL && plugin->setTransmitNetworks(effective) == false)
             plugin->refreshTransmitGate();
@@ -1405,6 +1426,7 @@ void InputOutputMap::reapplyTransmitGate()
 InputOutputMap::TransmitGateStatus InputOutputMap::transmitGateStatus() const
 {
     TransmitGateStatus st;
+    st.teaching = m_teachingHold;
     st.networks = m_rigNetworks;
 
     foreach (const NetworkRoute::LocalAddress &la, NetworkRoute::localAddresses())
@@ -1439,6 +1461,8 @@ InputOutputMap::TransmitGateStatus InputOutputMap::transmitGateStatus() const
 
     if (st.networkOutputs == 0)
         st.state = TransmitGateStatus::Clear;
+    else if (m_teachingHold && st.held > 0)
+        st.state = TransmitGateStatus::Held;
     else if (m_transmitGateEnabled == false)
         st.state = TransmitGateStatus::Off;
     else if (m_transmitOverride)

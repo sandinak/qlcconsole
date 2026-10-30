@@ -36,6 +36,7 @@
 #include "qlcchannel.h"
 #include "fixture.h"
 #include "doc.h"
+#include "teachingsettings.h"
 
 namespace
 {
@@ -326,6 +327,53 @@ void FocusReport_Test::aNewVenueStartsFromTheLastOne()
     QCOMPARE(props->fixtureRigProps(a->id()).panOffsetDeg, 0.0f);
 }
 
+void FocusReport_Test::handoutLeavesOutThePractice()
+{
+    Fixture *a = makeSpot(m_doc, "A", 2.0f, 2.0f);
+    FixtureGroup *movers = makeGroup(m_doc, "Movers", { a });
+    StageTarget *dsc = makeTarget(m_doc, "DSC", QVector3D(5.0f, 6.0f, 0.0f));
+    FocusCall call;
+    call.groups << movers->id();
+    call.target = targetRef(dsc->id());
+    m_doc->programmer()->focusCalls()->setCalls({ call });
+    VenueCorrections *v = m_doc->programmer()->venueCorrections();
+    v->setShowFile(m_dir->filePath("Tour.qlcc"), false);
+    QVERIFY(v->setActiveVenue(v->addVenue("Lincoln HS")));
+    v->setCheckedBy("Sam");
+    QVERIFY(v->markChecked({ a->id() }));
+    QString why;
+    m_doc->teachingSettings()->setEnabled(true);
+    const QString practice = v->startPractice({ a->id() }, 5, 2.0f, 8.0f, &why);
+    QVERIFY2(!practice.isEmpty(), qPrintable(why));
+    QVERIFY(v->endPractice());
+
+    // The teacher's own sidecar has the practice, its answer key and the name
+    QVERIFY(v->toXml().contains("<Truth"));
+    QVERIFY(v->toXml().contains("By=\"Sam\""));
+
+    const QString copy = m_dir->filePath("Handout.qlcc");
+    QVERIFY2(v->writeHandoutSidecarFor(copy, true, true, &why), qPrintable(why));
+    QFile f(VenueCorrections::sidecarPath(copy));
+    QVERIFY(f.open(QIODevice::ReadOnly));
+    const QByteArray side = f.readAll();
+    QVERIFY(side.contains("Lincoln HS"));
+    QVERIFY(!side.contains("Practice"));
+    QVERIFY(!side.contains("Truth"));
+    QVERIFY(!side.contains("By=\"Sam\""));
+    QVERIFY(side.contains("Show=\"Handout.qlcc\""));
+    f.close();
+
+    // Kept when asked: the names, and (with the practice) the answer key
+    QVERIFY(v->writeHandoutSidecarFor(copy, false, false, &why));
+    QVERIFY(f.open(QIODevice::ReadOnly));
+    const QByteArray all = f.readAll();
+    QVERIFY(all.contains("Truth"));
+    QVERIFY(all.contains("By=\"Sam\""));
+
+    // The open show's venues are as they were
+    QVERIFY(v->toXml().contains("<Truth"));
+}
+
 void FocusReport_Test::practiceScramblesAndScores()
 {
     Fixture *a = makeSpot(m_doc, "A", 2.0f, 2.0f);
@@ -339,10 +387,17 @@ void FocusReport_Test::practiceScramblesAndScores()
     MonitorProperties *props = m_doc->monitorProperties();
     VenueCorrections *v = m_doc->programmer()->venueCorrections();
 
-    // No show file: nowhere to keep a practice.
+    // Not a Teaching show: the scramble is refused, whatever else is ready.
     QString why;
     QVERIFY(v->startPractice({ a->id() }, 1, 2.0f, 8.0f, &why).isEmpty());
+    QVERIFY2(why.contains("Teaching"), qPrintable(why));
+    why.clear();
+
+    // No show file: nowhere to keep a practice.
+    m_doc->teachingSettings()->setEnabled(true);
+    QVERIFY(v->startPractice({ a->id() }, 1, 2.0f, 8.0f, &why).isEmpty());
     QVERIFY(!why.isEmpty());
+    QVERIFY(!why.contains("Teaching"));
 
     v->setShowFile(m_dir->filePath("Tour.qlcc"), false);
     QVERIFY(v->setActiveVenue(v->addVenue("Lincoln HS")));
@@ -351,12 +406,14 @@ void FocusReport_Test::practiceScramblesAndScores()
     props->setFixtureRigProps(a->id(), rp);
     const QByteArray realBefore = v->toXml();
 
+    m_doc->teachingSettings()->setEnabled(true);
     const QString practice = v->startPractice({ a->id(), b->id() }, 42, 2.0f, 8.0f, &why);
     QVERIFY2(!practice.isEmpty(), qPrintable(why));
     QVERIFY(practice.startsWith("Practice "));
     QCOMPARE(v->activeVenue(), practice);
     QVERIFY(v->isPracticeActive());
     // A second practice on top of one is refused.
+    m_doc->teachingSettings()->setEnabled(true);
     QVERIFY(v->startPractice({ a->id() }, 1).isEmpty());
 
     // Each light off its right calibration by 2-8 degrees each way.
@@ -398,6 +455,8 @@ void FocusReport_Test::practiceScramblesAndScores()
 
     // In the report: the score, and how far each light is still off.
     const QString html = FocusReport::html(m_doc, practice, "Tour");
+    QVERIFY(html.contains("Teaching show"));        // the hand-in says what it is
+    QVERIFY(html.contains("PIN set: no"));
     QVERIFY(html.contains("Practice score"));
     QVERIFY(html.contains("1 of 2 lights within 1°"));
     QVERIFY(html.contains("Scrambled from Lincoln HS"));

@@ -23,6 +23,7 @@
 
 #include "programmercontroller.h"
 #include "venuecorrections.h"
+#include "teachingsettings.h"
 #include "focuscallsdialog.h"
 #include "focussession.h"
 #include "focuscalls.h"
@@ -183,15 +184,20 @@ void FocusMenu::fill(QMenu *menu, Doc *doc, QWidget *parent, const std::function
     venuesMenu->menuAction()->setObjectName(QStringLiteral("focusVenues"));
     VenueMenu::fill(venuesMenu, doc, parent);
 
-    menu->addSeparator();
-    QAction *practice = menu->addAction(tr("Practice (scramble)\342\200\246"), parent, [doc, parent]() {
-        FocusCallsDialog::practice(doc, parent);
-    });
-    practice->setObjectName(QStringLiteral("focusPractice"));
-    setAvailable(practice, practiceBlocked(doc),
-                 tr("Knocks the moving heads in the focus calls off their targets by a random amount; "
-                    "you focus them back, scored on degrees off, time and saves. Your real venues are "
-                    "never touched."));
+    /* Teaching mode (File, Show Settings) shows the scramble practice; a
+       show that is not a teaching show doesn't list it. */
+    if (doc->teachingSettings()->enabled())
+    {
+        menu->addSeparator();
+        QAction *practice = menu->addAction(tr("Practice (scramble)\342\200\246"), parent, [doc, parent]() {
+            FocusCallsDialog::practice(doc, parent);
+        });
+        practice->setObjectName(QStringLiteral("focusPractice"));
+        setAvailable(practice, practiceBlocked(doc),
+                     tr("Knocks the moving heads in the focus calls off their targets by a random amount; "
+                        "you focus them back, scored on degrees off, time and saves. Your real venues are "
+                        "never touched."));
+    }
 
     QAction *report = menu->addAction(tr("Focus report\342\200\246"), parent, [doc, parent]() {
         FocusCallsDialog::exportAppliedReport(doc, parent);

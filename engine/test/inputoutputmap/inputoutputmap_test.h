@@ -119,6 +119,8 @@ private slots:
     void aliasesAndTargetsSurviveSaveLoad();
     void networkServerSurvivesASave();
     void universeIdAlwaysEqualsItsArrayIndex();
+    /** Teaching mode holds network output until the teacher lets it through */
+    void teachingHoldsNetworkOutput();
 
 private:
     Doc* m_doc;

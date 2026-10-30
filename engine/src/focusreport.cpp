@@ -31,6 +31,8 @@
 #include "qlcfixturedef.h"
 #include "focussession.h"
 #include "focusreport.h"
+#include "teachingsettings.h"
+#include "showoperate.h"
 #include "rigowner.h"
 #include "stagetarget.h"
 #include "focuscalls.h"
@@ -241,6 +243,18 @@ QString FocusReport::html(Doc *doc, const QString &venueName, const QString &sho
     h += QStringLiteral("<p class=\"meta\">%1</p>\n")
          .arg(esc(tr("%1 lights: %2 checked, %3 dead, %4 need focus.")
                   .arg(seen.size()).arg(checked).arg(dead).arg(needs)));
+    // A hand-in from a Teaching show says so: which lesson, and whether the
+    // teacher's PIN was on it (so a grader knows how far to trust the score).
+    if (doc->teachingSettings()->enabled())
+    {
+        const TeachingSettings *t = doc->teachingSettings();
+        QStringList teach;
+        teach << (t->lesson().isEmpty() ? tr("Teaching show") : tr("Teaching show, lesson %1").arg(t->lesson()));
+        teach << (doc->operateSettings()->hasPin() ? tr("PIN set: yes") : tr("PIN set: no"));
+        if (!t->handedOut().isEmpty())
+            teach << tr("handed out %1").arg(when(QDateTime::fromString(t->handedOut(), Qt::ISODate)));
+        h += QStringLiteral("<p class=\"meta\">%1</p>\n").arg(esc(teach.join(QStringLiteral(" \u00b7 "))));
+    }
     if (!who.isEmpty())
         h += QStringLiteral("<p class=\"meta\">%1</p>\n").arg(esc(tr("Focused by: %1").arg(who.join(QStringLiteral(", ")))));
 

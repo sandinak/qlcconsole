@@ -49,6 +49,8 @@ private slots:
      *  venue; focusing it back scores near zero; ending puts the real
      *  venue back; the score is in the report. */
     void practiceScramblesAndScores();
+    /** Make Student Handout: the copy's venues leave out practice and its key */
+    void handoutLeavesOutThePractice();
 
     /** Q134: a swapped light is flagged (and needs focus); the lens set by
      *  hand is its column -- rows, CSV and HTML. */

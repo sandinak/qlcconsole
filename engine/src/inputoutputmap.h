@@ -568,6 +568,7 @@ public:
             Overridden      //!< "Transmit anyway, this session"
         };
         State state = Clear;
+        bool teaching = false;         //!< Teaching mode is holding real output
         int held = 0;                   //!< network output patches held
         int networkOutputs = 0;         //!< network output patches in all
         QStringList networks;           //!< the rig networks
@@ -577,6 +578,12 @@ public:
 
     /** What the footer (and anything else asking) should say */
     TransmitGateStatus transmitGateStatus() const;
+
+    /** Teaching mode (TeachingSettings) holds real network output: every
+     *  network output patch is held, like a patch off the rig network, until
+     *  the teacher allows it. Set by the show's Teaching settings. */
+    bool teachingHold() const { return m_teachingHold; }
+    void setTeachingHold(bool hold);
 
     /** Hold every open network output patch that may not transmit, push
      *  the gate to the plugins, and resume held ones that may again.
@@ -588,6 +595,8 @@ signals:
     void transmitGateChanged();
 
 private:
+    /** The rig network check alone is on (rig networks set, not lifted) */
+    bool rigGateActive() const;
     /** Hold output patch @p index of @p universe (open or not) */
     void holdOutputPatch(quint32 universe, int index, QLCIOPlugin *plugin,
                          const QString &uid, quint32 savedLine,
@@ -607,6 +616,7 @@ private:
 
     QStringList m_rigNetworks;
     bool m_transmitGateEnabled = true;
+    bool m_teachingHold = false;
     bool m_transmitOverride = false;
     QString m_lastGateSummary;
 

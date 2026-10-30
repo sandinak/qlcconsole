@@ -791,6 +791,11 @@ its developer entry. Numbers: TEST_MATRIX.md, "Coverage".
 | M626 | Lasers part A (Q172) | Strip Tilt + tips up on every upright face; old shows' ST read in the old sense, saved back in it | **MonitorProperties_Test::aTiltUpIsUpOnEitherFace** (new) | none | covered | high | — |
 | M627 | Lasers part B (Q172) | A laser in the rig view: a box in a U yoke, the window toward its throw, lit only in its apertures; tipping it turns the box, not the yoke; Laser/Strobe look decides | **Monitor_Test::aLaserLooksLikeALaser** (new) | none | covered | med | Pixels for the window; the yoke by geometry (projectorParts()). |
 | M628 | Lasers part B (Q172) | Laser look: a Laser's Auto look, "Auto (Laser / star projector)" under Effects in the picker, its plot symbol and aperture; key "Laser" | **Monitor_Test::laserLookIsTheAutoLookForLasers** (new); Fixture_Test::stageLookKeys, ::stageLookAuto | none | covered | low | — |
+| M629 | Teaching mode | Saved with the show (absent when off, unknown attributes kept, first in the Engine), reset by a new show, holds real network output until allowed | Teaching_Test (engine/test/teaching); InputOutputMap_Test::teachingHoldsNetworkOutput | covered | covered | med | — |
+| M630 | Teaching mode | Footer chip and title in every view; Practice hidden and refused unless Teaching; the report names the lesson and PIN | AppViews_Test::teachingModeShowsItselfAndThePractice; FocusReport_Test::practiceScramblesAndScores | covered | covered | med | — |
+| M631 | Teaching mode | One PIN guards turning Teaching off and letting output through; the PIN can skip the Design lock | AppViews_Test::teachingModeIsGuardedByThePin; Teaching_Test::thePinCanSkipTheDesignLock | covered | covered | med | — |
+| M632 | Teaching mode | Operate: quiet notice and Not ready entry; the question only when output is let through and patched; never for -p | AppViews_Test::teachingOperateWarnsQuietlyThenAsksWhenItLooksReal | covered | covered | med | — |
+| M633 | Make Student Handout | A copy with Teaching and the PIN, practice venues and answer key left out, the open show untouched | AppViews_Test::aStudentHandoutIsACopy; FocusReport_Test::handoutLeavesOutThePractice; Teaching_Test::saveOverrideLeavesTheShowAlone | covered | covered | med | — |
 
 ## Data safety across features (old shows, file formats)
 

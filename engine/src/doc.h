@@ -249,6 +249,7 @@ private:
     class ShowWebAccess *m_webAccess = nullptr;
     class ControlMap *m_controlMap = nullptr;
     class ShowOperate *m_operate = nullptr;
+    class TeachingSettings *m_teaching = nullptr;
     class OutputRuleKeeper *m_outputRuleKeeper = nullptr;
     NetworkTopology *m_networkTopology;
     TimecodeSource *m_timecodeSource;
@@ -1246,6 +1247,8 @@ public:
     /** Whether opening the show goes to Operate, and the PIN that leaving
      *  Operate asks for (the show's settings; App acts on them) */
     class ShowOperate *operateSettings() const { return m_operate; }
+    /** Teaching mode (a flag saved with the show; docs/features/teaching.md) */
+    class TeachingSettings *teachingSettings() const { return m_teaching; }
 
     /** Applies the fixtures' output rules (Blackout / Grand Master exempt,
      *  Switch, OnAtOpen) to the universes (OutputRuleKeeper) */
