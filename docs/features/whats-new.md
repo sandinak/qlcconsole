@@ -33,8 +33,9 @@ The latest changes, newest first. Each links to the guide with the detail.
   files](getting-started.md#show-files).
 - **What QLC+ 4 will leave out, said once.** Saving a .qxw that holds
   what only qlcconsole has (the Show Tree, the Lighting Studio's rigging,
-  a venue's house fixtures…) says which in the line above the tabs, after
-  the save, with **Save as .qlcc…**. Every build checks that QLC+ 4.14.4
+  a venue's house fixtures…) says which, with how many, in the line above
+  the tabs after the save, with **Save as .qlcc…** and **Don't ask again
+  for this show**. Every build checks that QLC+ 4.14.4
   itself opens a .qxw saved here with its fixtures, groups, palettes and
   functions whole. See [Saving for QLC+ 4](getting-started.md#saving-for-qlc-4).
 - **Full Screen is back**: **View ▸ Full Screen** (⌃⌘F on a Mac, Ctrl+F11

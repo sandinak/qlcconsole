@@ -72,6 +72,13 @@ skipped). Upstream fixes taken:
 
 ### Added
 
+- **The .qxw notice says how much, and can be turned off.** Saving a .qxw
+  that holds what QLC+ 4 leaves out now names each kind with a count
+  ("the Show Tree (3 cue lists, 24 cues)", "the focus calls (5 calls)"),
+  covers the Teaching, Operate and web access settings and Effect Control
+  widgets too, and has **Don't ask again for this show** beside **Save as
+  .qlcc…**. See [Saving for QLC+ 4](docs/features/getting-started.md#saving-for-qlc-4).
+
 - **Teaching mode** (File ▸ Show Settings…, [guide](docs/features/teaching.md)).
   A flag saved with the show for a classroom show. While it is on: a
   **TEACHING** chip in the footer (every view) and "(Teaching)" in the
