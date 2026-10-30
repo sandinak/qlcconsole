@@ -49,8 +49,10 @@ ratios between items hold, and ratios are what the ROI column uses.
   timecode (LTC and cues at a time), override hits, group masters, effect
   fade-out, and the printed cue and tracking sheet.
 - **0.5: The show explains itself.** Show Review v1, "Why is this on?" v1
-  to v3 with its student mode, the laser and audience safety checks, and
-  realistic move speed in the Rig Overview.
+  to v3 with its student mode, the laser and audience safety checks,
+  realistic move speed in the Rig Overview, and **AI Assist** (Design mode
+  only, off by default, a local model proposing command-line text the
+  operator reviews; docs/design/AI_ASSIST.md).
 - **The main risk is the one the usability review already found:**
   creeping featurism. Five design studies arrived in one day. The
   guardrails in section 5 are meant to stop the next 102-item menu.
@@ -418,6 +420,7 @@ Notes:
 
 | Item | Value | Fit | Reuses | Effort | Risk | Maint. | ROI | Call |
 |---|---|---|---|---|---|---|---|---|
+| AI Assist P0–P3 (docs/design/AI_ASSIST.md): one operation registry under the command line, a Design-only assistant on a local model (Ollama), configuration import, an MCP server | 4 | 4 | Show Tree command line, undo, Design/Operate | 15 | M | M | 1.1 | BUILD (0.5), user's call 2026-10-30 (P2b configuration import also stands alone) |
 | One GO path (`App::runCommand`) for keys, Run tab, footer, pad, web | 4 | 5 | ShowControl, RC8 preview hold | 0.5 | L | L | **40** | BUILD (0.4), first; prerequisite |
 | Tracking sheet + printable cue sheet (PDF/XLSX) | 5 | 5 | tracking resolve, patch-list exports | 4 | L | L | **6.3** | BUILD (0.4) |
 | Course Level 2 lessons (7), one per release cycle | 5 | 5 | course template, courseshow_test | 2 a lesson | L | M | **12.5** a lesson | BUILD (0.3.1 onward) |
