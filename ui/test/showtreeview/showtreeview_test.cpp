@@ -1153,6 +1153,60 @@ void ShowTreeView_Test::anEffectGetsLooksOfItsOwn()
     QVERIFY(!view.dropCue(c2, c2, false));
 }
 
+void ShowTreeView_Test::anEffectRowSaysOneOffAndHowItRuns()
+{
+    FixtureGroup *towers = group("Towers", 0, 2);
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L", ListMode::NonTracking);
+    const quint32 c1 = st->addCue(list, -1, "One");
+    Target t;
+    t.groups << towers->id();
+    const quint32 l1 = st->addLayer(c1, t);
+    const quint32 pid = st->createInlinePalette(QLCPalette::Effect, QVariantList(), "Confetti · One Towers");
+    QVERIFY(pid != QLCPalette::invalidId());
+
+    ShowTreeView view(nullptr, m_doc);
+    QVERIFY(view.dropPalettes(c1, l1, { pid }));
+    const QString key = st->keyForPalette(pid);
+    QVERIFY(isEffectKey(key));
+    QVERIFY(view.selectNode(l1, c1));
+    QLabel *row = view.findChild<QLabel *>(QStringLiteral("stRow:%1").arg(key));
+    QVERIFY(row != nullptr);
+    QVERIFY2(row->text().contains("<i>one-off</i>"), qPrintable(row->text()));
+    QVERIFY(view.findChild<QLabel *>(QStringLiteral("stReuse:%1").arg(key)) != nullptr);
+
+    // Its ⋯: Runs ▸ Once, then At the end ▸ Release.
+    auto choose = [&](const char *action) {
+        QTimer driver;
+        driver.setInterval(20);
+        bool done = false;
+        connect(&driver, &QTimer::timeout, this, [&]() {
+            QMenu *menu = qobject_cast<QMenu *>(QApplication::activePopupWidget());
+            if (menu == nullptr)
+                return;
+            driver.stop();
+            QMenu *runs = menu->findChild<QMenu *>("effectRunsMenu");
+            QAction *a = runs == nullptr ? nullptr : runs->findChild<QAction *>(action);
+            menu->close();
+            if (a != nullptr && a->isEnabled())
+                a->trigger();
+            done = true;
+        });
+        driver.start();
+        QVERIFY(view.selectNode(l1, c1));
+        QToolButton *more = view.findChild<QToolButton *>(QStringLiteral("stMore:%1").arg(key));
+        QVERIFY(more != nullptr);
+        more->click();
+        QTRY_VERIFY(done);
+    };
+    choose("effectRunsOnce");
+    QCOMPARE(m_doc->palette(pid)->effectParamValues().value("__runs"), 1.0);
+    choose("effectAtEndRelease");
+    QCOMPARE(m_doc->palette(pid)->effectParamValues().value("__atEnd"), 1.0);
+    choose("effectRunsLoop");
+    QCOMPARE(m_doc->palette(pid)->effectParamValues().value("__runs"), 0.0);
+}
+
 /* Reordering and numbering (docs/features/show-tree.md): a list's order is
    its numbers' order. */
 void ShowTreeView_Test::cuesReorderAndRenumber()

@@ -46,6 +46,8 @@
 #include "mainbar.h"
 #include "speedmasterspanel.h"
 #include "programmingmanager.h"
+#include "effectrunsmenu.h"
+#include "effectorigin.h"
 #include "controllearndialog.h"
 #include "workbenchstack.h"
 #include "paletteops.h"
@@ -787,6 +789,15 @@ QWidget *ProgrammingManager::buildNavigator()
     }
     col->addLayout(seg);
 
+    /* One search for all of Build: what it finds in Palettes, Effects and
+       Scenes together, under a header per section; a click goes there. */
+    m_buildSearch = new QLineEdit(nav);
+    m_buildSearch->setObjectName(QStringLiteral("buildSearch"));
+    m_buildSearch->setPlaceholderText(tr("Search palettes, effects and scenes…"));
+    m_buildSearch->setClearButtonEnabled(true);
+    col->addWidget(m_buildSearch);
+    connect(m_buildSearch, &QLineEdit::textChanged, this, &ProgrammingManager::search);
+
     m_navSplit = new QSplitter(Qt::Vertical, nav);
     m_navSplit->setObjectName(QStringLiteral("buildNavSplitter"));
     m_navSplit->setChildrenCollapsible(false);
@@ -795,9 +806,27 @@ QWidget *ProgrammingManager::buildNavigator()
     m_sectionStack->addWidget(buildPalettesSection());
     m_sectionStack->addWidget(buildEffectsSection());
     m_sectionStack->addWidget(buildScenesSection());
+    m_searchResults = new QTreeWidget(m_sectionStack);
+    m_searchResults->setObjectName(QStringLiteral("buildSearchResults"));
+    m_searchResults->setHeaderHidden(true);
+    m_searchResults->setColumnCount(2);
+    m_searchResults->setRootIsDecorated(false);
+    m_searchResults->header()->setStretchLastSection(false);
+    m_searchResults->header()->setSectionResizeMode(0, QHeaderView::Stretch);
+    m_searchResults->header()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
+    m_sectionStack->addWidget(m_searchResults);
+    connect(m_searchResults, &QTreeWidget::itemClicked, this,
+            [this](QTreeWidgetItem *it, int) { goToSearchResult(it); });
+    connect(m_searchResults, &QTreeWidget::itemActivated, this,
+            [this](QTreeWidgetItem *it, int) { goToSearchResult(it); });
     m_navSplit->addWidget(m_sectionStack);
     // The section picked by hand is the one the tab opens on next time.
     connect(m_sections, &QButtonGroup::idClicked, this, [this](int id) {
+        if (m_buildSearch != nullptr && !m_buildSearch->text().isEmpty())
+        {
+            QSignalBlocker quiet(m_buildSearch);
+            m_buildSearch->clear();
+        }
         setSection(Section(id));
         QSettings().setValue(QStringLiteral("programming/buildSection"), id);
     });
@@ -1229,13 +1258,25 @@ void ProgrammingManager::rebuildEffectsNow()
     const Qt::ItemFlags leaf = Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsDragEnabled | Qt::ItemIsEditable;
     for (QLCPalette *p : effects)
     {
-        QTreeWidgetItem *it = new QTreeWidgetItem(pals, { p->name(), PaletteOps::folderOf(p) });
+        /* What it was made from, grey beside it ("based on Fire"); on hover,
+           which of its settings differ from that one. */
+        const QString base = EffectOrigin::baseName(m_doc, p);
+        const QStringList diffs = base.isEmpty() ? QStringList() : EffectOrigin::differences(m_doc, p);
+        const QString folder = PaletteOps::folderOf(p);
+        const QString based = base.isEmpty() || (diffs.isEmpty() && p->name().compare(base, Qt::CaseInsensitive) == 0)
+                                  ? QString() : EffectOrigin::basedOnLine(base, diffs.size());
+        QTreeWidgetItem *it = new QTreeWidgetItem(pals, { p->name(), based.isEmpty() ? folder
+                                                          : folder.isEmpty() ? based
+                                                          : based + QStringLiteral(" · ") + folder });
         it->setIcon(0, QIcon(p->iconResource()));
         it->setData(0, EffectsList::KindRole, EffectsList::PaletteItem);
         it->setData(0, EffectsList::IdRole, p->id());
         it->setFlags(leaf);
+        it->setForeground(1, QBrush(Qt::gray));
         it->setToolTip(0, tr("Effect palette “%1”: click to design it in the Workbench, drag it onto a layer.")
                               .arg(p->name()));
+        if (!based.isEmpty())
+            it->setToolTip(1, EffectOrigin::differencesTip(base, diffs));
     }
     QList<Function *> fns;
     ShowTreeController *st = m_doc->showTree();
@@ -1431,6 +1472,11 @@ QMenu *ProgrammingManager::effectsContextMenu(QTreeWidgetItem *clicked, QWidget 
     // An effect function (EFX, RGB Matrix): fired from a MIDI or OSC control.
     if (kind == EffectsList::FunctionItem && fns.size() <= 1)
         ControlLearnDialog::addTo(menu, m_doc, ControlMap::function(id), this);
+    // How it runs: Loop | Once | N times (a classic effect: its Run order).
+    if (kind == EffectsList::PaletteItem)
+        EffectRunsMenu::add(menu, m_doc, pals.isEmpty() ? QList<quint32>{ id } : pals, this);
+    else if (kind == EffectsList::FunctionItem)
+        EffectRunsMenu::addForFunction(menu, m_doc, m_doc->function(id));
     if (kind != 0)
     {
         QAction *a = menu->addAction(tr("Duplicate"), this, [this, kind, id]() {
@@ -1536,7 +1582,149 @@ void ProgrammingManager::setSection(Section section)
 
 ProgrammingManager::Section ProgrammingManager::section() const
 {
+    // Searching shows the results over it: the section is the one picked.
+    if (m_sectionStack->currentIndex() > int(ScenesSection))
+        return Section(qMax(0, m_sections->checkedId()));
     return Section(m_sectionStack->currentIndex());
+}
+
+namespace
+{
+enum { SearchSectionRole = Qt::UserRole + 60, SearchKindRole, SearchIdRole };
+enum { SearchPalette = 1, SearchFunction };
+}
+
+void ProgrammingManager::search(const QString &text)
+{
+    if (m_searchResults == nullptr)
+        return;
+    const QString q = text.trimmed();
+    if (q.isEmpty())
+    {
+        // Back to the section it was on.
+        m_searchResults->clear();
+        m_sectionStack->setCurrentIndex(qMax(0, m_sections->checkedId()));
+        return;
+    }
+    QCollator coll;
+    coll.setNumericMode(true);
+    coll.setCaseSensitivity(Qt::CaseInsensitive);
+    struct Hit { QString name, where; int kind; quint32 id; QIcon icon; };
+    QList<Hit> hits[3];
+    ShowTreeController *st = m_doc->showTree();
+    for (QLCPalette *p : m_doc->palettes())
+    {
+        if (p == nullptr || !m_doc->paletteOps()->isManaged(p->id()) || !p->name().contains(q, Qt::CaseInsensitive))
+            continue;
+        const int sec = p->type() == QLCPalette::Effect ? EffectsSection : PalettesSection;
+        hits[sec] << Hit{ p->name(), PaletteOps::folderOf(p), SearchPalette, p->id(), QIcon(p->iconResource()) };
+    }
+    for (Function *f : m_doc->functions())
+    {
+        if (f == nullptr || !f->isVisible() || (st != nullptr && st->isGenerated(f->id()))
+            || !f->name().contains(q, Qt::CaseInsensitive))
+            continue;
+        int sec = -1;
+        if (f->type() == Function::EFXType || f->type() == Function::RGBMatrixType)
+            sec = EffectsSection;
+        else if (f->type() == Function::SceneType || f->type() == Function::CollectionType
+                 || f->type() == Function::ChaserType)
+            sec = ScenesSection;
+        if (sec < 0)
+            continue;
+        hits[sec] << Hit{ f->name(), f->path(true), SearchFunction, f->id(), f->getIcon() };
+    }
+
+    m_searchResults->clear();
+    const QStringList names = { tr("Palettes"), tr("Effects"), tr("Scenes") };
+    for (int sec = 0; sec < 3; ++sec)
+    {
+        if (hits[sec].isEmpty())
+            continue;
+        std::sort(hits[sec].begin(), hits[sec].end(), [&coll](const Hit &a, const Hit &b) {
+            return coll.compare(a.name, b.name) < 0;
+        });
+        QTreeWidgetItem *head = new QTreeWidgetItem(m_searchResults,
+            { tr("%1 (%2)").arg(names.at(sec)).arg(hits[sec].size()) });
+        head->setFlags(Qt::ItemIsEnabled);
+        head->setData(0, SearchSectionRole, sec);
+        QFont f = head->font(0);
+        f.setBold(true);
+        head->setFont(0, f);
+        for (const Hit &h : hits[sec])
+        {
+            QTreeWidgetItem *it = new QTreeWidgetItem(head, { h.name, h.where });
+            it->setIcon(0, h.icon);
+            it->setData(0, SearchSectionRole, sec);
+            it->setData(0, SearchKindRole, h.kind);
+            it->setData(0, SearchIdRole, h.id);
+            it->setForeground(1, QBrush(Qt::gray));
+            it->setToolTip(0, tr("Go to it in %1").arg(names.at(sec)));
+        }
+    }
+    if (m_searchResults->topLevelItemCount() == 0)
+    {
+        QTreeWidgetItem *none = new QTreeWidgetItem(m_searchResults, { tr("Nothing called “%1”").arg(q) });
+        none->setFlags(Qt::NoItemFlags);
+    }
+    m_searchResults->expandAll();
+    m_sectionStack->setCurrentWidget(m_searchResults);
+}
+
+void ProgrammingManager::goToSearchResult(QTreeWidgetItem *item)
+{
+    if (item == nullptr || !item->data(0, SearchKindRole).isValid())
+        return;
+    const Section sec = Section(item->data(0, SearchSectionRole).toInt());
+    const int kind = item->data(0, SearchKindRole).toInt();
+    const quint32 id = item->data(0, SearchIdRole).toUInt();
+    {
+        QSignalBlocker quiet(m_buildSearch);
+        m_buildSearch->clear();
+    }
+    m_searchResults->clear();
+    setSection(sec);
+    QSettings().setValue(QStringLiteral("programming/buildSection"), int(sec));
+    if (sec == PalettesSection)
+    {
+        if (QLCPalette *p = m_doc->palette(id))
+            if (QTreeWidgetItem *it = m_paletteTree->paletteItem(p))
+            {
+                m_paletteTree->clearSelection();
+                m_paletteTree->setCurrentItem(it);
+                m_paletteTree->scrollToItem(it);
+            }
+    }
+    else if (sec == EffectsSection)
+    {
+        rebuildEffectsNow();
+        const int want = kind == SearchPalette ? EffectsList::PaletteItem : EffectsList::FunctionItem;
+        for (QTreeWidgetItemIterator it(m_effectsList); *it; ++it)
+            if ((*it)->data(0, EffectsList::KindRole).toInt() == want
+                && (*it)->data(0, EffectsList::IdRole).toUInt() == id)
+            {
+                QSignalBlocker quiet(m_effectsList);
+                m_effectsList->clearSelection();
+                m_effectsList->setCurrentItem(*it);
+                m_effectsList->scrollToItem(*it);
+                break;
+            }
+    }
+    else
+    {
+        m_outline->rebuild();
+        for (QTreeWidgetItemIterator it(m_outline); *it; ++it)
+        {
+            const int k = (*it)->data(0, ProgrammingOutline::KindRole).toInt();
+            if ((k == ProgrammingOutline::SceneRow || k == ProgrammingOutline::FunctionRow)
+                && (*it)->data(0, ProgrammingOutline::IdRole).toUInt() == id)
+            {
+                m_outline->selectRow(ProgrammingOutline::rowOf(*it));
+                m_outline->scrollToItem(m_outline->currentItem());
+                break;
+            }
+        }
+    }
 }
 
 /* ⇧⌘N: in the Workbench (Build's own, not lent), what is loaded there. */

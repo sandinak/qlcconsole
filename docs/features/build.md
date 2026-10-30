@@ -47,7 +47,12 @@ QLC+ plays it.
 
 Two panes, left to right:
 
-- **Left — the navigator, by section.**
+- **Left — the navigator, by section.** Over it, **Search palettes,
+  effects and scenes…** searches all three at once: what it finds is
+  listed under **Palettes (n)**, **Effects (n)** and **Scenes (n)**.
+  Click one to go to it in its section. Clear the search to go back to
+  the section you were on. Each section's own **Filter…** still narrows
+  just that list.
   - **Palettes**: the palette list (filterable, foldered; right-click to add
     one, double-click to edit one) and a **Bundles** tab.
   - **Effects**: the effect palettes, and the QLC+ effects — every EFX and
@@ -283,7 +288,7 @@ the tab.
   [effect designer](effects.md#the-effect-designer) opens in the
   Workbench's editor pane, at full height, with the layers column put
   away to give it the width. It plays on the **Try on ▾** groups. Pick an
-  effect, shape it, then **Save as palette…**; the new palette appears in
+  effect, shape it, then **Save in this show…**; the new palette appears in
   the list, and is back on the bench to keep working on.
 - **+ New ▾** (the arrow) also makes a classic **EFX** (on the Try on
   groups' heads) or **RGB Matrix** (on the first Try on group). It loads
@@ -741,6 +746,11 @@ names the effect, with **Change effect…** to open the browser again:
 
 - A **Search effects…** box searches every category at once, whichever tab
   is open.
+- **Built-in · Mine · This show** filter by where an effect came from
+  ([Where an effect came from](effects.md#where-an-effect-came-from)).
+  With none on, everything is listed; turn some on to list only those,
+  from every tab. A **mine** mark shows an effect you saved on this
+  computer; the palette mark shows one of the show's effect palettes.
 - Tabs: **Recent**, **Color**, **Dimmer**, **Position**, **Beam**, **Other**
   and **WLED**. Recent is remembered between sessions.
 - Each row shows the effect's name, what it does, and a live preview of

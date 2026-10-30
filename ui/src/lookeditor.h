@@ -300,6 +300,7 @@ private:
      *  working WITH an effect"). Every pick applies at once; Cancel puts back
      *  what the look had when it opened. */
     QWidget     *m_effectPicker = nullptr;
+    QLabel      *m_effectBasedOnLabel = nullptr;  ///< "based on Fire", grey, under it
     QLabel      *m_effectPickedLabel = nullptr;   ///< what the look runs, over its settings
     QPushButton *m_effectChangeButton = nullptr;  ///< opens the picker
     class QToolButton *m_effectInfoButton = nullptr; ///< "?": what it is, on hover; every setting on a click
@@ -328,6 +329,13 @@ public:
     bool lookHasWledTarget() const;
 private:
     void updateEffectHeader();
+    /** The grey "based on Fire · 2 changes" under the effect's name, with
+     *  what differs on hover (EffectOrigin). */
+    void updateBasedOn();
+public:
+    /** For tests: the "based on" line under the effect's name. */
+    QLabel *basedOnLabel() const { return m_effectBasedOnLabel; }
+private:
 protected:
     bool eventFilter(QObject *obj, QEvent *ev) override;
 private:

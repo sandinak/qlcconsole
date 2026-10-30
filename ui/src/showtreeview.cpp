@@ -86,6 +86,7 @@
 #include "focuscallsdialog.h"
 #include "focusmenu.h"
 #include "showtreeview.h"
+#include "effectrunsmenu.h"
 #include "controllearndialog.h"
 #include "itemicons.h"
 #include "workbench.h"
@@ -4408,6 +4409,13 @@ void ShowTreeView::showLayerPage(const CueList &list, int index, const Layer *ow
                     oneOffs << pid;
             if (!oneOffs.isEmpty())
             {
+                // An effect made here, for here: said so, beside Make reusable.
+                if (isEffectKey(key))
+                {
+                    value->setTextFormat(Qt::RichText);
+                    value->setText(value->text().toHtmlEscaped()
+                                   + QStringLiteral(" · <i>%1</i>").arg(tr("one-off")));
+                }
                 valueCell = new QWidget(m_rowsHost);
                 QHBoxLayout *h = new QHBoxLayout(valueCell);
                 h->setContentsMargins(0, 0, 0, 0);
@@ -4484,6 +4492,7 @@ void ShowTreeView::showLayerPage(const CueList &list, int index, const Layer *ow
         connect(editBtn, &QToolButton::clicked, this, [this, editPid]() { editPalette(editPid); });
 
         QToolButton *more = new QToolButton(m_rowsHost);
+        more->setObjectName(QStringLiteral("stMore:%1").arg(key));
         more->setText(QStringLiteral("⋯"));
         more->setToolTip(tr("Set, clear or turn off %1 here").arg(label->text().trimmed()));
         const quint32 cueId = cue.id;
@@ -4705,6 +4714,16 @@ void ShowTreeView::attributeMenu(quint32 cueId, quint32 layerId, const Target &t
                        this, [this, cueId, layerId, rowTarget, key]() {
             EffectLayerDialog::design(m_doc, this, cueId, layerId, rowTarget, key);
         })->setObjectName("stDesignEffect");
+        // How that effect runs: Loop | Once | N times, Hold | Release.
+        if (key != QLatin1String("Effect."))
+            if (const CueList *list = m_st->listOfCue(cueId))
+            {
+                const QList<ResolvedCue> r = m_st->resolved(*list);
+                const int at = list->indexOf(cueId);
+                const ResolvedLayer *rl = at >= 0 && at < r.size() ? r.at(at).layer(rowTarget) : nullptr;
+                if (rl != nullptr && rl->values.contains(key))
+                    EffectRunsMenu::add(&menu, m_doc, rl->values.value(key).look.palettes, this);
+            }
         menu.addSeparator();
     }
     if (key == KeyDimmer)

@@ -69,6 +69,13 @@ private slots:
     void theEffectPickerIsAWindowOfItsOwn();
     void wledOnlyEffectsNeedAWledTarget();
     void theBrowsersListsAreAToZ();
+    /** Where an effect came from: Built-in · Mine · This show filters, a
+     *  "mine" mark and the palette mark, "based on Color Chase" with what
+     *  differs on hover; one of the show's is copied in when picked. */
+    void anEffectSaysWhereItCameFrom();
+    /** Runs: Loop | Once | N times, At the end: Hold | Release, Length --
+     *  on every effect, kept on the look. */
+    void anyEffectRunsOnceOrNTimes();
     /** "if we go from Red to Dark Red .. we should auto update the title ..
      *  only update the color part .. the folder should stay consistent."
      *  The name field follows live; the value and the name are one Undo. */

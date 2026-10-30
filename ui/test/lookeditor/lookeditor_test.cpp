@@ -49,6 +49,8 @@
 #include <QTabBar>
 #include "effectscriptrunner.h"
 #include "effectscriptcache.h"
+#include "effectpresetcache.h"
+#include "effectorigin.h"
 #include "qlcpalette.h"
 #include "qlcfixturedef.h"
 #include "qlcfixturemode.h"
@@ -1193,6 +1195,161 @@ void LookEditor_Test::wledOnlyEffectsNeedAWledTarget()
     QVERIFY2(with.size() > without.size() + 10,
              qPrintable(QString("%1 with a WLED target, %2 without").arg(with.size()).arg(without.size())));
     ed.closeEffectPicker(true);
+}
+
+void LookEditor_Test::anEffectSaysWhereItCameFrom()
+{
+    // My effects live in the user's folder: a fresh one for this test.
+    QTemporaryDir home;
+    const QByteArray wasHome = qgetenv("HOME");
+    qputenv("HOME", home.path().toUtf8());
+    struct Restore { QByteArray h; ~Restore() { qputenv("HOME", h); } } restore{ wasHome };
+
+    Doc doc(this);
+    EffectScriptCache *cache = doc.effectScriptRunner()->cache();
+    cache->addDirectory(QDir(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts"));
+    const QString chasePath = cache->scriptPath("Color Chase");
+    QVERIFY(!chasePath.isEmpty());
+
+    // Mine: saved on this computer, a faster Color Chase.
+    EffectPresetCache::Preset mine;
+    mine.name = "Quick Chase";
+    mine.script = EffectScriptCache::portableName(chasePath);
+    mine.category = "Color";
+    mine.params.insert("speed", 9.0);
+    QVERIFY(doc.effectScriptRunner()->presetCache()->savePreset(mine));
+    QVERIFY(EffectOrigin::isMinePath(doc.effectScriptRunner()->presetCache()->preset("Quick Chase").path));
+
+    // This show: an effect palette with a wider band.
+    QLCPalette *verse = new QLCPalette(QLCPalette::Effect, &doc);
+    verse->setName("Verse chase");
+    verse->setScriptPath(chasePath);
+    verse->setEffectParamValue("width", 0.6);
+    QVERIFY(doc.addPalette(verse));
+
+    QLCPalette *look = new QLCPalette(QLCPalette::Effect, &doc);
+    look->setName("New Effect");
+    QVERIFY(doc.addPalette(look));
+    LookEditor ed(&doc);
+    ed.setPalette(look->id());
+    EffectBrowser *browser = ed.m_effectBrowser;
+    QVERIFY(browser != nullptr);
+    auto entryOf = [browser](const QString &label) -> const EffectBrowser::Entry * {
+        for (int i = 0; i < browser->list()->count(); ++i)
+        {
+            const int e = browser->list()->item(i)->data(Qt::UserRole + 10).toInt();
+            if (browser->m_entries.at(e).label == label)
+                return &browser->m_entries.at(e);
+        }
+        return nullptr;
+    };
+    auto itemOf = [browser](const QString &label) -> QListWidgetItem * {
+        for (int i = 0; i < browser->list()->count(); ++i)
+            if (browser->list()->item(i)->text() == label)
+                return browser->list()->item(i);
+        return nullptr;
+    };
+
+    browser->search()->setText("chase");
+    const EffectBrowser::Entry *builtIn = entryOf("Color Chase");
+    const EffectBrowser::Entry *quick = entryOf("Quick Chase");
+    const EffectBrowser::Entry *show = entryOf("Verse chase");
+    QVERIFY(builtIn != nullptr && quick != nullptr && show != nullptr);
+    QCOMPARE(builtIn->origin, int(EffectOrigin::BuiltIn));
+    QVERIFY(builtIn->basedOn.isEmpty());                         // no mark, no line
+    QCOMPARE(quick->origin, int(EffectOrigin::Mine));
+    QVERIFY2(quick->basedOn.startsWith("based on Color Chase"), qPrintable(quick->basedOn));
+    QVERIFY2(quick->diffTip.contains("speed", Qt::CaseInsensitive), qPrintable(quick->diffTip));
+    QCOMPARE(show->origin, int(EffectOrigin::ThisShow));
+    QVERIFY2(show->basedOn.startsWith("based on Color Chase"), qPrintable(show->basedOn));
+    QVERIFY2(show->diffTip.contains("width", Qt::CaseInsensitive), qPrintable(show->diffTip));
+    QVERIFY(itemOf("Verse chase")->toolTip().contains("width", Qt::CaseInsensitive));
+
+    // The filters: none is everything; each one lists only its own, from every tab.
+    browser->search()->clear();
+    QToolButton *fMine = browser->originFilter(EffectOrigin::Mine);
+    QToolButton *fShow = browser->originFilter(EffectOrigin::ThisShow);
+    QToolButton *fBuiltIn = browser->originFilter(EffectOrigin::BuiltIn);
+    QCOMPARE(fBuiltIn->text(), QString("Built-in"));
+    QCOMPARE(fMine->text(), QString("Mine"));
+    QCOMPARE(fShow->text(), QString("This show"));
+    fMine->setChecked(true);
+    QCOMPARE(browser->list()->count(), 1);
+    QCOMPARE(browser->list()->item(0)->text(), QString("Quick Chase"));
+    fMine->setChecked(false);
+    fShow->setChecked(true);
+    QCOMPARE(browser->list()->count(), 1);
+    QCOMPARE(browser->list()->item(0)->text(), QString("Verse chase"));
+    fShow->setChecked(false);
+    fBuiltIn->setChecked(true);
+    QVERIFY(browser->list()->count() > 10);
+    QVERIFY(itemOf("Quick Chase") == nullptr && itemOf("Verse chase") == nullptr);
+    fBuiltIn->setChecked(false);
+
+    // Picking the show's one copies it in: its effect, its settings.
+    browser->search()->setText("verse");
+    QListWidgetItem *pick = itemOf("Verse chase");
+    QVERIFY(pick != nullptr);
+    browser->list()->setCurrentItem(pick);
+    emit browser->list()->itemClicked(pick);
+    QCOMPARE(look->scriptPath(), chasePath);
+    QCOMPARE(look->effectParamValues().value("width"), 0.6);
+    // ...and says what it is based on, and how it differs.
+    QVERIFY(!ed.basedOnLabel()->isHidden());
+    QVERIFY2(ed.basedOnLabel()->text().startsWith("based on Color Chase"), qPrintable(ed.basedOnLabel()->text()));
+    QVERIFY(ed.basedOnLabel()->toolTip().contains("width", Qt::CaseInsensitive));
+
+    // The save buttons say where it goes.
+    QPushButton *saveMine = ed.findChild<QPushButton *>("effectSaveAs");
+    QVERIFY(saveMine != nullptr);
+    QCOMPARE(saveMine->text(), QString("Save to My effects…"));
+}
+
+void LookEditor_Test::anyEffectRunsOnceOrNTimes()
+{
+    Doc doc(this);
+    EffectScriptCache *cache = doc.effectScriptRunner()->cache();
+    cache->addDirectory(QDir(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts"));
+    QLCPalette *look = new QLCPalette(QLCPalette::Effect, &doc);
+    look->setName("Chase");
+    look->setScriptPath(cache->scriptPath("Color Chase"));      // a loop effect
+    QVERIFY(doc.addPalette(look));
+    LookEditor ed(&doc);
+    ed.setPalette(look->id());
+
+    QComboBox *runs = ed.findChild<QComboBox *>("effectRuns");
+    QSpinBox *count = ed.findChild<QSpinBox *>("effectRunsCount");
+    QComboBox *atEnd = ed.findChild<QComboBox *>("effectAtEnd");
+    QDoubleSpinBox *len = ed.findChild<QDoubleSpinBox *>("effectRunLength");
+    QVERIFY(runs != nullptr && count != nullptr && atEnd != nullptr && len != nullptr);
+    QCOMPARE(runs->currentText(), QString("Loop"));               // a loop effect loops
+    QVERIFY(atEnd->isHidden() && count->isHidden());
+
+    runs->setCurrentIndex(1);                                      // Once
+    QCOMPARE(look->effectParamValues().value("__runs"), 1.0);
+    QVERIFY(!atEnd->isHidden() && !len->isHidden() && count->isHidden());
+    atEnd->setCurrentIndex(1);                                     // Release
+    QCOMPARE(look->effectParamValues().value("__atEnd"), 1.0);
+    len->setValue(1.5);
+    QCOMPARE(look->effectParamValues().value("__durationMs"), 1500.0);
+    runs->setCurrentIndex(2);                                      // N times
+    QVERIFY(!count->isHidden());
+    count->setValue(4);
+    QCOMPARE(look->effectParamValues().value("__runs"), 4.0);
+    runs->setCurrentIndex(0);                                      // Loop again
+    QCOMPARE(look->effectParamValues().value("__runs"), 0.0);
+    QVERIFY(atEnd->isHidden());
+
+    // A one-shot script starts on Once, with its own end (the wand lets go).
+    QLCPalette *wand = new QLCPalette(QLCPalette::Effect, &doc);
+    wand->setName("Wand");
+    wand->setScriptPath(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts/wand.js");
+    QVERIFY(doc.addPalette(wand));
+    ed.setPalette(wand->id());
+    runs = ed.findChild<QComboBox *>("effectRuns");
+    atEnd = ed.findChild<QComboBox *>("effectAtEnd");
+    QCOMPARE(runs->currentText(), QString("Once"));
+    QCOMPARE(atEnd->currentText(), QString("Release"));
 }
 
 void LookEditor_Test::theBrowsersListsAreAToZ()

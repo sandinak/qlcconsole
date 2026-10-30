@@ -16,6 +16,7 @@
 #include <QScrollArea>
 #include <QSplitter>
 #include <QComboBox>
+#include <QSpinBox>
 #include <QDoubleSpinBox>
 #include <QSlider>
 #include <QLabel>
@@ -51,6 +52,8 @@
 #include "programmercontroller.h"
 #include "palettenaming.h"
 #include "paletteops.h"
+#include "effectorigin.h"
+#include "effectruns.h"
 #include "fadetimespin.h"
 #include "effectbrowser.h"
 #include "qlcfixturedefcache.h"
@@ -114,7 +117,8 @@ static const char *PALETTE_DROP_MIME = "application/x-qlcplus-palettes";
 // a preset. The kind is stored at EffectKindRole, the name at Qt::UserRole.
 // A WLED item is one of WLED's own effects, run ON WLED fixtures by the device
 // (QLCPalette::wledEffect()) and by its port, where there is one, elsewhere.
-enum { EffectKindHeader = 0, EffectKindScript = 1, EffectKindPreset = 2, EffectKindWled = 3 };
+enum { EffectKindHeader = 0, EffectKindScript = 1, EffectKindPreset = 2, EffectKindWled = 3,
+       EffectKindShow = 4 };    ///< one of the show's effect palettes ("show:<id>"): copied in
 static const int EffectKindRole = Qt::UserRole + 1;
 
 // Display order for the category groups in the effect picker.
@@ -871,6 +875,12 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     connect(m_effectChangeButton, &QPushButton::clicked, this, &LookEditor::openEffectPicker);
     pickedRow->addWidget(m_effectChangeButton);
     efv->addLayout(pickedRow);
+    m_effectBasedOnLabel = new QLabel(effectPage);
+    m_effectBasedOnLabel->setObjectName(QStringLiteral("effectBasedOn"));
+    m_effectBasedOnLabel->setStyleSheet(QStringLiteral("color: gray;"));
+    m_effectBasedOnLabel->hide();
+    efv->addWidget(m_effectBasedOnLabel);
+    connect(this, &LookEditor::paletteValueChanged, this, [this](quint32) { updateBasedOn(); });
 
     QScrollArea *detailScroll = new QScrollArea(effectPage);
     detailScroll->setObjectName(QStringLiteral("effectDetails"));
@@ -1001,10 +1011,10 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     efSaveRow->addWidget(m_exportEffectButton);
     connect(m_exportEffectButton, &QPushButton::clicked, this, &LookEditor::slotExportEffect);
 
-    m_saveAsEffectButton = new QPushButton(tr("Save as Effect…"), effectPage);
+    m_saveAsEffectButton = new QPushButton(tr("Save to My effects…"), effectPage);
     m_saveAsEffectButton->setObjectName(QStringLiteral("effectSaveAs"));
     m_saveAsEffectButton->setToolTip(
-        tr("Save this Generator + its current settings as a named Effect you can reuse"));
+        tr("Keep this effect and its settings in My effects on this computer, for any show"));
     // On a row of its own: the column beside the list is narrow.
     QHBoxLayout *efSaveAsRow = new QHBoxLayout();
     efSaveAsRow->addStretch(1);
@@ -1240,6 +1250,7 @@ void LookEditor::updateEffectHeader()
     m_effectPickedLabel->setText(none ? tr("No effect yet")
                                       : m_effectScriptCombo->currentText().trimmed());
     m_effectChangeButton->setText(none ? tr("Pick an effect…") : tr("Change effect…"));
+    updateBasedOn();
     if (none)
     {
         m_effectInfoButton->setVisible(false);
@@ -1247,6 +1258,21 @@ void LookEditor::updateEffectHeader()
         if (m_effectPickerInfo != nullptr)
             m_effectPickerInfo->clear();
     }
+}
+
+void LookEditor::updateBasedOn()
+{
+    if (m_effectBasedOnLabel == nullptr)
+        return;
+    QLCPalette *p = m_doc->palette(m_paletteId);
+    const QString base = EffectOrigin::baseName(m_doc, p);
+    const QStringList diffs = base.isEmpty() ? QStringList() : EffectOrigin::differences(m_doc, p);
+    /* Said only when it is something of its own: a changed copy, or one
+       with a name of its own. A plain pick of Fire is just Fire. */
+    const bool show = !base.isEmpty() && (!diffs.isEmpty() || p->name().compare(base, Qt::CaseInsensitive) != 0);
+    m_effectBasedOnLabel->setText(show ? EffectOrigin::basedOnLine(base, diffs.size()) : QString());
+    m_effectBasedOnLabel->setToolTip(show ? EffectOrigin::differencesTip(base, diffs) : QString());
+    m_effectBasedOnLabel->setVisible(show);
 }
 
 void LookEditor::setPalette(quint32 paletteId)
@@ -3369,36 +3395,92 @@ void LookEditor::rebuildEffectDynWidget()
         dv->addWidget(row);
     }
 
-    // --- One-shot length override (per look) ---
-    // A oneshot effect runs once over a resolved duration; this pins an explicit
-    // length for THIS look (independent per effect). auto (0) = follow the cue /
-    // chase step, then the effect's own default.
-    if (tmpScript.isOneShot())
+    // --- How it runs: Loop | Once | N times, and what it leaves at the end ---
+    // Any effect, not only a script that declares itself a one-shot (that one
+    // just starts on Once). One run lasts the cue / chase step (auto) or a set
+    // time. Kept on the look (EffectRuns), so it is per effect, per look.
     {
+        const QMap<QString, double> pv = p->effectParamValues();
+        const EffectRuns::Settings rs = EffectRuns::resolve(pv, tmpScript.isOneShot(),
+                                                            tmpScript.onFinish() == QLatin1String("release"));
         QWidget *row = new QWidget(m_effectDynWidget);
-        QHBoxLayout *rl = new QHBoxLayout(row);
+        row->setObjectName(QStringLiteral("effectRunsRow"));
+        QGridLayout *rl = new QGridLayout(row);
         rl->setContentsMargins(0, 6, 0, 0);
-        rl->addWidget(new QLabel(tr("One-shot length:"), row));
-        QDoubleSpinBox *sp = new SecondsSpinBox(row);
-        sp->setRange(0.0, 120.0);
-        sp->setSingleStep(0.1);
-        sp->setDecimals(1);
-        sp->setSuffix(tr(" s"));
-        sp->setSpecialValueText(tr("auto"));   // 0 → follow the cue / default
-        sp->setToolTip(tr("How long this one-shot runs, for this look. auto = follow the "
-                          "cue / chase step (or the effect's default); set a time to override."));
-        sp->setValue(p->effectParamValues().value(QStringLiteral("__durationMs"), 0.0) / 1000.0);
-        connect(sp, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
-                this, [this](double s) {
-            if (m_loading) return;
+        rl->addWidget(new QLabel(tr("Runs:"), row), 0, 0);
+        QComboBox *runs = new QComboBox(row);
+        runs->setObjectName(QStringLiteral("effectRuns"));
+        runs->addItem(tr("Loop"));
+        runs->addItem(tr("Once"));
+        runs->addItem(tr("N times"));
+        runs->setToolTip(tr("Loop: it plays for as long as the look does. Once, or a number of times: "
+                            "it plays that many runs, then holds its last frame or lets go."));
+        QSpinBox *count = new QSpinBox(row);
+        count->setObjectName(QStringLiteral("effectRunsCount"));
+        count->setRange(2, EffectRuns::kMaxRuns);
+        count->setSuffix(tr(" times"));
+        count->setValue(qMax(2, rs.runs));
+        runs->setCurrentIndex(rs.loops() ? 0 : rs.runs == 1 ? 1 : 2);
+        count->setVisible(rs.runs >= 2);
+        QHBoxLayout *runsBox = new QHBoxLayout;
+        runsBox->addWidget(runs);
+        runsBox->addWidget(count);
+        runsBox->addStretch(1);
+        rl->addLayout(runsBox, 0, 1);
+
+        QLabel *endLabel = new QLabel(tr("At the end:"), row);
+        QComboBox *atEnd = new QComboBox(row);
+        atEnd->setObjectName(QStringLiteral("effectAtEnd"));
+        atEnd->addItem(tr("Hold"));
+        atEnd->addItem(tr("Release"));
+        atEnd->setToolTip(tr("Hold keeps its last frame on the rig; Release lets go, and the look's own "
+                             "values (or what is under it) come back."));
+        atEnd->setCurrentIndex(rs.release ? 1 : 0);
+        QLabel *lenLabel = new QLabel(tr("Length:"), row);
+        QDoubleSpinBox *len = new SecondsSpinBox(row);
+        len->setObjectName(QStringLiteral("effectRunLength"));
+        len->setRange(0.0, 600.0);
+        len->setSingleStep(0.1);
+        len->setDecimals(1);
+        len->setSuffix(tr(" s"));
+        len->setSpecialValueText(tr("auto"));   // 0 → follow the cue / chase step
+        len->setToolTip(tr("How long one run lasts. auto = the cue or chase step's time (else the "
+                           "effect's own); set a time to fix it."));
+        len->setValue(rs.lengthMs / 1000.0);
+        QHBoxLayout *endBox = new QHBoxLayout;
+        endBox->addWidget(atEnd);
+        endBox->addSpacing(8);
+        endBox->addWidget(lenLabel);
+        endBox->addWidget(len);
+        endBox->addStretch(1);
+        rl->addWidget(endLabel, 1, 0);
+        rl->addLayout(endBox, 1, 1);
+        rl->setColumnStretch(1, 1);
+        auto showEnd = [endLabel, atEnd, lenLabel, len, count, runs]() {
+            const bool once = runs->currentIndex() != 0;
+            for (QWidget *w : std::initializer_list<QWidget *>{ endLabel, atEnd, lenLabel, len })
+                w->setVisible(once);
+            count->setVisible(runs->currentIndex() == 2);
+        };
+        showEnd();
+        auto write = [this, runs, count, atEnd, len, showEnd]() {
+            showEnd();
+            if (m_loading)
+                return;
             QLCPalette *pp = m_doc->palette(m_paletteId);
-            if (!pp || pp->type() != QLCPalette::Effect) return;
-            pp->setEffectParamValue(QStringLiteral("__durationMs"), s * 1000.0);  // 0 = auto
+            if (!pp || pp->type() != QLCPalette::Effect)
+                return;
+            const int n = runs->currentIndex() == 0 ? 0 : runs->currentIndex() == 1 ? 1 : count->value();
+            pp->setEffectParamValue(EffectRuns::runsKey(), n);
+            pp->setEffectParamValue(EffectRuns::atEndKey(), atEnd->currentIndex() == 1 ? 1.0 : 0.0);
+            pp->setEffectParamValue(EffectRuns::lengthKey(), len->value() * 1000.0);  // 0 = auto
             m_doc->setModified();
             emit paletteValueChanged(m_paletteId);
-        });
-        rl->addWidget(sp);
-        rl->addStretch(1);
+        };
+        connect(runs, QOverload<int>::of(&QComboBox::currentIndexChanged), this, write);
+        connect(count, QOverload<int>::of(&QSpinBox::valueChanged), this, write);
+        connect(atEnd, QOverload<int>::of(&QComboBox::currentIndexChanged), this, write);
+        connect(len, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, write);
         dv->addWidget(row);
     }
 
@@ -3523,6 +3605,15 @@ void LookEditor::populateEffectPicker(QLCPalette *p)
     for (const EffectPresetCache::Preset &pr : pcache->presets())
         if (byBasename.contains(pr.script))
             nodes[byBasename.value(pr.script)].presets.append(pr);
+    /* The show's own effect palettes, under the script they run: picking one
+       copies it into this look ("This show" in the browser). Not the look
+       itself, nor a WLED device effect (it has no script of its own here). */
+    QMap<QString, QList<QLCPalette *>> showByScript;
+    for (QLCPalette *sp : m_doc->palettes())
+        if (sp != nullptr && sp->type() == QLCPalette::Effect && sp->id() != m_paletteId
+            && !sp->scriptPath().isEmpty() && sp->wledEffect().isEmpty()
+            && m_doc->paletteOps()->isManaged(sp->id()))
+            showByScript[EffectScriptCache::portableName(sp->scriptPath())] << sp;
 
     // Group script-nodes by category.
     QMap<QString, QList<int>> byCat;
@@ -3585,8 +3676,40 @@ void LookEditor::populateEffectPicker(QLCPalette *p)
                 m_effectScriptCombo->setItemData(pidx, EffectKindPreset, EffectKindRole);
                 if (!pr.description.isEmpty())
                     m_effectScriptCombo->setItemData(pidx, pr.description, Qt::ToolTipRole);
+                const bool mine = EffectOrigin::isMinePath(pr.path);
+                m_effectScriptCombo->setItemData(pidx, mine ? EffectOrigin::Mine : EffectOrigin::BuiltIn,
+                                                 EffectOrigin::OriginRole);
+                if (mine)
+                {
+                    const QStringList diffs = EffectOrigin::presetDifferences(m_doc, pr.name);
+                    m_effectScriptCombo->setItemData(pidx, EffectOrigin::basedOnLine(node.display, diffs.size()),
+                                                     EffectOrigin::BasedOnRole);
+                    m_effectScriptCombo->setItemData(pidx, EffectOrigin::differencesTip(node.display, diffs),
+                                                     EffectOrigin::DiffTipRole);
+                }
                 if (!curPreset.isEmpty() && pr.name == curPreset)
                     selectIdx = pidx;
+            }
+
+            // The show's effect palettes made from it. Indent 2, as presets.
+            QList<QLCPalette *> shows = showByScript.value(node.basename);
+            std::sort(shows.begin(), shows.end(), [](QLCPalette *a, QLCPalette *b) {
+                return a->name().compare(b->name(), Qt::CaseInsensitive) < 0; });
+            for (QLCPalette *sp : shows)
+            {
+                m_effectScriptCombo->addItem(QStringLiteral("      ◆ ") + sp->name(),
+                                             QStringLiteral("show:%1").arg(sp->id()));
+                const int vidx = m_effectScriptCombo->count() - 1;
+                m_effectScriptCombo->setItemData(vidx, EffectKindShow, EffectKindRole);
+                m_effectScriptCombo->setItemData(vidx, EffectOrigin::ThisShow, EffectOrigin::OriginRole);
+                const QString base = EffectOrigin::baseName(m_doc, sp);
+                const QStringList diffs = EffectOrigin::differences(m_doc, sp);
+                m_effectScriptCombo->setItemData(vidx, EffectOrigin::basedOnLine(base, diffs.size()),
+                                                 EffectOrigin::BasedOnRole);
+                m_effectScriptCombo->setItemData(vidx, EffectOrigin::differencesTip(base, diffs),
+                                                 EffectOrigin::DiffTipRole);
+                m_effectScriptCombo->setItemData(vidx, tr("“%1”, this show's effect palette: picking it copies "
+                                                          "it into this look").arg(sp->name()), Qt::ToolTipRole);
             }
         }
     }
@@ -3710,6 +3833,21 @@ void LookEditor::slotEffectScriptChanged(int /*index*/)
         p->clearEffectParamValues();
         carryOverParams(p, path);
     }
+    else if (kind == EffectKindShow)
+    {
+        /* One of the show's effect palettes: this look gets a copy of it --
+           its effect and every setting -- based on what that one was. */
+        const QLCPalette *src = m_doc->palette(name.mid(5).toUInt());
+        if (src == nullptr || src->type() != QLCPalette::Effect)
+            return;
+        p->setScriptPath(src->scriptPath());
+        p->setEffectPreset(src->effectPreset());
+        p->setWledEffect(src->wledEffect());
+        p->setEffectParamValues(src->effectParamValues());
+        const QMap<QString, QString> strs = src->effectStringParams();
+        for (auto it = strs.constBegin(); it != strs.constEnd(); ++it)
+            p->setEffectStringParam(it.key(), it.value());
+    }
     else if (kind == EffectKindPreset)
     {
         // Stamp the preset: engine script + pinned param values + identity. The
@@ -3741,8 +3879,8 @@ void LookEditor::slotEffectScriptChanged(int /*index*/)
        does, and trying another effect in the picker put the look back on
        "As the look" with no spread ("when I set something on the speed
        masters .. and then double click on the icon it resets those"). A
-       preset that pins one of them still wins. The one-shot length stays
-       with the effect it was set for. */
+       preset that pins one of them still wins. How it runs (Runs, At the
+       end, Length) stays with the effect it was set for. */
     for (auto it = prevParams.constBegin(); it != prevParams.constEnd(); ++it)
     {
         const bool lookLevel = it.key() == QLatin1String("__speedMaster")
@@ -3769,7 +3907,7 @@ void LookEditor::slotSaveAsEffect()
         return;
     if (p->scriptPath().isEmpty())
     {
-        QMessageBox::information(this, tr("Save as Effect"),
+        QMessageBox::information(this, tr("Save to My effects"),
             tr("Pick a Generator first, then save it as an Effect."));
         return;
     }
@@ -3781,14 +3919,14 @@ void LookEditor::slotSaveAsEffect()
     const QString suggested = !p->effectPreset().isEmpty() ? p->effectPreset()
                             : (p->name().isEmpty() ? tr("My Effect") : p->name());
     bool ok = false;
-    const QString name = QInputDialog::getText(this, tr("Save as Effect"),
+    const QString name = QInputDialog::getText(this, tr("Save to My effects"),
         tr("Effect name:"), QLineEdit::Normal, suggested, &ok).trimmed();
     if (!ok || name.isEmpty())
         return;
 
     if (pcache->contains(name))
     {
-        if (QMessageBox::question(this, tr("Save as Effect"),
+        if (QMessageBox::question(this, tr("Save to My effects"),
                 tr("An Effect named \"%1\" already exists. Replace it?").arg(name),
                 QMessageBox::Yes | QMessageBox::No, QMessageBox::No) != QMessageBox::Yes)
             return;
@@ -3806,7 +3944,7 @@ void LookEditor::slotSaveAsEffect()
 
     if (!pcache->savePreset(preset))
     {
-        QMessageBox::warning(this, tr("Save as Effect"),
+        QMessageBox::warning(this, tr("Save to My effects"),
             tr("Could not write the Effect file. Check folder permissions."));
         return;
     }
@@ -4043,6 +4181,7 @@ void LookEditor::slotBrowseEffects()
         // tree provides real nesting, so strip that decoration back off.
         QString text = m_effectScriptCombo->itemText(i);
         text.remove(QStringLiteral("•"));
+        text.remove(QStringLiteral("◆"));
         text = text.trimmed();
 
         QTreeWidgetItem *item = nullptr;
@@ -4055,7 +4194,7 @@ void LookEditor::slotBrowseEffects()
             script = nullptr;
             continue;
         }
-        if (kind == EffectKindPreset && script != nullptr)
+        if ((kind == EffectKindPreset || kind == EffectKindShow) && script != nullptr)
             item = new QTreeWidgetItem(script);
         else if (category != nullptr)
             { item = new QTreeWidgetItem(category); script = item; }

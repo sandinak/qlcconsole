@@ -170,6 +170,13 @@ private slots:
     void duplicateAndCopyPasteFileACopyBesideIt();
     /** Beat ▸ Tap: four taps 500 ms apart -- 120 BPM, on the Beat button. */
     void fourTapsHalfASecondApartShow120Bpm();
+    /** Build's search spans the sections: matches from Palettes, Effects
+     *  and Scenes together, under headers with counts; a click goes there,
+     *  and clearing it goes back to the section it was on. */
+    void buildsSearchFindsEverySection();
+    /** Build ▸ Effects: "based on" beside an effect palette; Runs on the
+     *  right-click, a classic effect's Once its Run order Single shot. */
+    void effectsSayWhereTheyCameFromAndHowTheyRun();
 
 private:
     Doc* m_doc;

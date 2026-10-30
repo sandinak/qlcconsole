@@ -58,6 +58,9 @@ private slots:
     void inlinePalettesStayOutOfThePaletteTree();
     void dropsOnTheTreeWidget();
     void anEffectGetsLooksOfItsOwn();
+    /** An effect row: a one-off says so in italics, beside Make reusable;
+     *  its ⋯ sets how it runs (Runs: Once, At the end: Release). */
+    void anEffectRowSaysOneOffAndHowItRuns();
     void theLookEditorEditsARowsPalette();
     void cuesReorderAndRenumber();
     void selectingACuePreviewsItOnTheRig();

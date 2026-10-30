@@ -42,6 +42,9 @@ private slots:
     /** Leaving without an answer leaves the show as it was: no palette, no
      *  scene, not even "modified". */
     void cancelLeavesNoTrace();
+    /** The designer says where a save goes ("Save in this show…") and has
+     *  Runs: Loop | Once | N times for whatever effect is picked. */
+    void theDesignerSetsHowAnEffectRuns();
     /** The preview plays in Design mode and on screen only. */
     void thePreviewPlaysOnlyInDesignOnScreen();
     /** Design effect on a Show Tree layer, Keep on this layer: a one-off

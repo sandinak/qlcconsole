@@ -64,6 +64,13 @@ private slots:
     void effectsStartedApartAreOnTheSameBeat();
     void anEffectOnASpeedMasterCountsItsBeats();
     void ownSpeedScalesTheEffectsTime();
+    /** Runs: Loop | Once | N times and At the end: Hold | Release, on any
+     *  effect (EffectRuns): a looping script made to run once, or three
+     *  times, then hold its last frame or let go. */
+    void anyEffectRunsOnceOrNTimesThenHoldsOrReleases();
+    /** A one-shot script told to loop (or repeat) starts each run afresh;
+     *  left as it is, it runs once. */
+    void aOneShotScriptCanLoop();
     void anotherEffectPickedPlaysAtOnceDespiteARelease();
 
     /** Assigning a single fixture targets only that fixture. */
