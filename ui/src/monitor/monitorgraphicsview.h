@@ -152,7 +152,7 @@ public:
     bool stageFeaturesOnly() const { return m_stageOnly; }
 
     /** Set the graphics view size in monitor units */
-    void setGridSize(QSize size);
+    void setGridSize(QSizeF size);
 
     /** Get the grid size in monitor units */
     QSize gridSize() const { return m_gridSize; }
@@ -940,7 +940,7 @@ private:
      *  default 5x5 grid, then handed the real 40x24 while the widget was still
      *  a few pixels tall, and never corrected because the size never changed
      *  again. */
-    QSize m_fittedGrid;
+    QSizeF m_fittedGrid;
     float m_fittedUnit = -1.0f;
     /** True once setGridSize() has supplied the document's own grid. Until
      *  then the view still holds its default, and painting it shows the stage
@@ -1262,6 +1262,9 @@ private:
 
     /** Size of the grid. How many horizontal and vertical cells */
     QSize m_gridSize;
+    /** The real grid size in cells (15.24 for a 50 ft stage in metres);
+     *  m_gridSize is its whole cells. */
+    QSizeF m_gridExtent;
 
     /** Size of a grid cell in pixels */
     int m_cellPixels;

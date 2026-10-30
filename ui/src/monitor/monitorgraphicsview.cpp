@@ -289,6 +289,7 @@ MonitorGraphicsView::MonitorGraphicsView(Doc *doc, QWidget *parent)
         });
 
     m_gridSize = QSize(5, 5);
+    m_gridExtent = QSizeF(5, 5);
 
     updateGrid();
 }
@@ -793,12 +794,12 @@ void MonitorGraphicsView::paintEvent(QPaintEvent *event)
         return;
     }
 
-    if ((size() != m_fittedSize || m_gridSize != m_fittedGrid
+    if ((size() != m_fittedSize || m_gridExtent != m_fittedGrid
             || !qFuzzyCompare(m_unitValue, m_fittedUnit))
             && width() > 0 && height() > 0)
     {
         m_fittedSize = size();
-        m_fittedGrid = m_gridSize;
+        m_fittedGrid = m_gridExtent;
         m_fittedUnit = m_unitValue;
         updateGrid();
         refreshAllItems();
@@ -956,10 +957,14 @@ void MonitorGraphicsView::resetViewZoom()
     }
 }
 
-void MonitorGraphicsView::setGridSize(QSize size)
+void MonitorGraphicsView::setGridSize(QSizeF size)
 {
     m_gridAuthoritative = true;
-    m_gridSize = size;
+    /* The REAL size, in cells: a 50 ft stage in metres is 15.24 of them, and
+       the outline, the centring and the off-grid count use that. m_gridSize is
+       the whole cells (what the lines are counted by, and the spin boxes). */
+    m_gridExtent = size;
+    m_gridSize = QSize(qMax(1, int(size.width())), qMax(1, int(size.height())));
     updateGrid();
     refreshAllItems();
 }
@@ -3672,8 +3677,8 @@ void MonitorGraphicsView::growSceneRectToItems()
     r |= m_scene->itemsBoundingRect();
     if (m_gridEnabled && m_cellPixels > 0)
     {
-        const QPointF gc(m_xOffset + m_cellPixels * m_gridSize.width() / 2.0,
-                         m_yOffset + m_cellPixels * m_gridSize.height() / 2.0);
+        const QPointF gc(m_xOffset + m_cellPixels * m_gridExtent.width() / 2.0,
+                         m_yOffset + m_cellPixels * m_gridExtent.height() / 2.0);
         const qreal hx = qMax(gc.x() - r.left(), r.right() - gc.x());
         const qreal hy = qMax(gc.y() - r.top(), r.bottom() - gc.y());
         r = QRectF(gc.x() - hx, gc.y() - hy, 2 * hx, 2 * hy);
@@ -3702,8 +3707,8 @@ QList<quint32> MonitorGraphicsView::fixturesOffGrid() const
 
     // The grid runs from the origin: gridSize is in CELLS, m_unitValue the mm
     // each cell spans.
-    const double w = double(m_gridSize.width())  * double(m_unitValue);
-    const double d = double(m_gridSize.height()) * double(m_unitValue);
+    const double w = double(m_gridExtent.width())  * double(m_unitValue);
+    const double d = double(m_gridExtent.height()) * double(m_unitValue);
 
     foreach (quint32 fid, props->fixtureItemsID())
     {
@@ -3771,7 +3776,7 @@ QPointF MonitorGraphicsView::realPositionToPixels(qreal xpos, qreal ypos) const
 qreal MonitorGraphicsView::floorPixelY() const
 {
     // Bottom of the grid = the Z=0 floor line for elevation views.
-    return m_yOffset + qreal(m_gridSize.height()) * m_cellPixels;
+    return m_yOffset + m_gridExtent.height() * m_cellPixels;
 }
 
 float MonitorGraphicsView::floorHeightAt(float xMetres, float yMetres) const
@@ -7295,7 +7300,7 @@ void MonitorGraphicsView::updateStageMarks()
         return;
 
     const qreal ppm = 1000.0 * m_cellPixels / m_unitValue;     // scene px a metre
-    const qreal x0 = m_xOffset, x1 = m_xOffset + m_gridSize.width() * m_cellPixels;
+    const qreal x0 = m_xOffset, x1 = m_xOffset + m_gridExtent.width() * m_cellPixels;
     const qreal y0 = m_yOffset;
     auto sx = [this, ppm](double m) { return m_xOffset + m * ppm; };
     auto sy = [this, ppm](double m) { return m_yOffset + m * ppm; };
@@ -7459,7 +7464,7 @@ void MonitorGraphicsView::updateStagePieceItems()
     auto sy = [this, ppm](double m) { return m_yOffset + m * ppm; };
     const qreal onePx = 1.0 / qMax(0.01, viewScale());
     const qreal band = 5.0 * onePx;
-    const qreal x0 = m_xOffset, x1 = m_xOffset + m_gridSize.width() * m_cellPixels;
+    const qreal x0 = m_xOffset, x1 = m_xOffset + m_gridExtent.width() * m_cellPixels;
     const bool design = (m_doc->mode() == Doc::Design);
 
     foreach (MonitorProperties::StagePiece piece, MonitorProperties::stagePieces())
@@ -7654,8 +7659,8 @@ void MonitorGraphicsView::updateGrid()
            grid will actually be laid out along, not the raw widget ones. */
         const int fitW = (m_viewRotation & 1) ? this->height() : this->width();
         const int fitH = (m_viewRotation & 1) ? this->width()  : this->height();
-        const int xInc = fitW / m_gridSize.width();
-        const int yInc = fitH / m_gridSize.height();
+        const int xInc = int(fitW / m_gridExtent.width());
+        const int yInc = int(fitH / m_gridExtent.height());
 
         /* Fit to whichever axis runs out first -- and note the <=.
          *
@@ -7673,12 +7678,12 @@ void MonitorGraphicsView::updateGrid()
         if (yInc <= xInc)
         {
             m_cellPixels = yInc;
-            m_xOffset = (fitW - (m_cellPixels * m_gridSize.width())) / 2;
+            m_xOffset = int((fitW - (m_cellPixels * m_gridExtent.width())) / 2);
         }
         else
         {
             m_cellPixels = xInc;
-            m_yOffset = (fitH - (m_cellPixels * m_gridSize.height())) / 2;
+            m_yOffset = int((fitH - (m_cellPixels * m_gridExtent.height())) / 2);
         }
         int xPos = m_xOffset;
         int yPos = m_yOffset;
@@ -7688,8 +7693,8 @@ void MonitorGraphicsView::updateGrid()
            turn it never does (the grid is laid out against the swapped
            extents above), so the lines overran the stage by most of a
            window and the grid read as off centre. */
-        const qreal gridRight  = m_xOffset + qreal(m_gridSize.width())  * m_cellPixels;
-        const qreal gridBottom = m_yOffset + qreal(m_gridSize.height()) * m_cellPixels;
+        const qreal gridRight  = m_xOffset + m_gridExtent.width()  * m_cellPixels;
+        const qreal gridBottom = m_yOffset + m_gridExtent.height() * m_cellPixels;
 
         QPen mainPen(QColor(40, 40, 40, 255));
         QPen subPen(QColor(30, 30, 30, 255));
@@ -7701,22 +7706,26 @@ void MonitorGraphicsView::updateGrid()
             qreal subInc = (qreal)m_cellPixels / m_gridSubdivisions;
             const qreal bottom = gridBottom, right = gridRight;
 
-            for (int i = 0; i < m_gridSize.width(); i++)
+            for (int i = 0; i < qCeil(m_gridExtent.width()); i++)
             {
                 for (int s = 1; s < m_gridSubdivisions; s++)
                 {
                     qreal sx = m_xOffset + i * m_cellPixels + s * subInc;
+                    if (sx >= right - 0.01)
+                        break;                                // past the real edge
                     QGraphicsLineItem *item = m_scene->addLine(sx, m_yOffset, sx, bottom, subPen);
                     item->setZValue(1);
                     m_gridItems.append(item);
                 }
             }
 
-            for (int i = 0; i < m_gridSize.height(); i++)
+            for (int i = 0; i < qCeil(m_gridExtent.height()); i++)
             {
                 for (int s = 1; s < m_gridSubdivisions; s++)
                 {
                     qreal sy = m_yOffset + i * m_cellPixels + s * subInc;
+                    if (sy >= bottom - 0.01)
+                        break;
                     QGraphicsLineItem *item = m_scene->addLine(m_xOffset, sy, right, sy, subPen);
                     item->setZValue(1);
                     m_gridItems.append(item);
@@ -7724,19 +7733,34 @@ void MonitorGraphicsView::updateGrid()
             }
         }
 
-        for (int i = 0; i < m_gridSize.width() + 1; i++)
+        /* A line every whole cell, and one at the real edge when the size is
+           not a whole number of cells (the outline of a 15.24 m stage ends at
+           15.24, not 15). */
+        for (int i = 0; i <= int(m_gridExtent.width()); i++)
         {
             QGraphicsLineItem *item = m_scene->addLine(xPos, m_yOffset, xPos, gridBottom, mainPen);
             item->setZValue(1);
             xPos += m_cellPixels;
             m_gridItems.append(item);
         }
+        if (gridRight - (xPos - m_cellPixels) > 0.5)
+        {
+            QGraphicsLineItem *item = m_scene->addLine(gridRight, m_yOffset, gridRight, gridBottom, mainPen);
+            item->setZValue(1);
+            m_gridItems.append(item);
+        }
 
-        for (int i = 0; i < m_gridSize.height() + 1; i++)
+        for (int i = 0; i <= int(m_gridExtent.height()); i++)
         {
             QGraphicsLineItem *item = m_scene->addLine(m_xOffset, yPos, gridRight, yPos, mainPen);
             item->setZValue(1);
             yPos += m_cellPixels;
+            m_gridItems.append(item);
+        }
+        if (gridBottom - (yPos - m_cellPixels) > 0.5)
+        {
+            QGraphicsLineItem *item = m_scene->addLine(m_xOffset, gridBottom, gridRight, gridBottom, mainPen);
+            item->setZValue(1);
             m_gridItems.append(item);
         }
 
@@ -7751,8 +7775,8 @@ void MonitorGraphicsView::updateGrid()
         // so their visibility toggles independently of the grid lines.
         QPen centerPen(QColor(0, 150, 140, 220)); // teal accent
         centerPen.setWidth(1);
-        const qreal gridW = m_gridSize.width()  * m_cellPixels;
-        const qreal gridH = m_gridSize.height() * m_cellPixels;
+        const qreal gridW = m_gridExtent.width()  * m_cellPixels;
+        const qreal gridH = m_gridExtent.height() * m_cellPixels;
         /* Centre stage is MonitorProperties::stageCentre() -- what the stage
            marks are drawn from and the target readout counts SL/SR from --
            not the middle of the whole cells drawn: the grid size is cut to
@@ -7818,7 +7842,7 @@ void MonitorGraphicsView::resizeEvent(QResizeEvent *event)
 {
     QGraphicsView::resizeEvent(event);
     m_fittedSize = size();
-    m_fittedGrid = m_gridSize;
+    m_fittedGrid = m_gridExtent;
     m_fittedUnit = m_unitValue;
     updateGrid();
     refreshAllItems();
@@ -7834,8 +7858,8 @@ void MonitorGraphicsView::centerOnGrid()
        ("why is the grid not centered?"). Centre on the stage. */
     if (m_cellPixels <= 0 || !m_gridEnabled)
         return;
-    centerOn(QPointF(m_xOffset + m_cellPixels * m_gridSize.width() / 2.0,
-                     m_yOffset + m_cellPixels * m_gridSize.height() / 2.0));
+    centerOn(QPointF(m_xOffset + m_cellPixels * m_gridExtent.width() / 2.0,
+                     m_yOffset + m_cellPixels * m_gridExtent.height() / 2.0));
 }
 
 void MonitorGraphicsView::scrollContentsBy(int dx, int dy)
@@ -10189,8 +10213,8 @@ QImage MonitorGraphicsView::fixtureCoverage(quint32 fid, double *cellMetres) con
        shape this has to get right -- and capped so a big grid stays cheap.
        Solving is arithmetic against one Frame, so this is thousands of
        multiply-adds, not thousands of Doc lookups. */
-    const double stageW = double(m_gridSize.width())  * m_unitValue / 1000.0;
-    const double stageD = double(m_gridSize.height()) * m_unitValue / 1000.0;
+    const double stageW = double(m_gridExtent.width())  * m_unitValue / 1000.0;
+    const double stageD = double(m_gridExtent.height()) * m_unitValue / 1000.0;
     if (stageW <= 0.0 || stageD <= 0.0)
         return QImage();
     const double cell = qMax(0.05, qSqrt(stageW * stageD / 160000.0));
@@ -10782,8 +10806,8 @@ void MonitorGraphicsView::rebuildReachOverlay()
 
     /* The stage the grid covers, sampled finely enough to show a blind circle a
        metre across but capped, so a big grid does not cost a big image. */
-    const double stageW = double(m_gridSize.width())  * m_unitValue / 1000.0;
-    const double stageD = double(m_gridSize.height()) * m_unitValue / 1000.0;
+    const double stageW = double(m_gridExtent.width())  * m_unitValue / 1000.0;
+    const double stageD = double(m_gridExtent.height()) * m_unitValue / 1000.0;
     const double cell = qMax(0.05, qSqrt(stageW * stageD / 160000.0));
     const int cols = qMax(1, int(qCeil(stageW / cell)));
     const int rows = qMax(1, int(qCeil(stageD / cell)));

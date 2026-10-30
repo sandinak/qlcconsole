@@ -1543,7 +1543,7 @@ void Monitor::fillGraphicsView(bool keepView)
 
     m_graphicsView->setGridSubdivisions(m_props->gridSubdivisions());
     m_graphicsView->setSnapDivisions(m_props->snapDivisions());
-    m_graphicsView->setGridSize(QSize(m_props->gridSize().x(), m_props->gridSize().z()));
+    m_graphicsView->setGridSize(QSizeF(m_props->gridSize().x(), m_props->gridSize().z()));
     /* This runs when a workspace's monitor settings are applied, which is
        exactly the point a leftover zoom from the previous document stops
        making sense. */
@@ -2552,16 +2552,21 @@ void Monitor::slotGridWidthChanged(int value)
 {
     Q_ASSERT(m_graphicsView != NULL);
 
-    m_graphicsView->setGridSize(QSize(value, m_gridHSpin->value()));
-    m_props->setGridSize(QVector3D(value, m_props->gridSize().y(), m_gridHSpin->value()));
+    /* The other side keeps its real size (15.24 shows as 15) unless its box was edited. */
+    const float d = (qRound(m_props->gridSize().z()) == m_gridHSpin->value())
+                        ? m_props->gridSize().z() : float(m_gridHSpin->value());
+    m_graphicsView->setGridSize(QSizeF(value, d));
+    m_props->setGridSize(QVector3D(value, m_props->gridSize().y(), d));
 }
 
 void Monitor::slotGridHeightChanged(int value)
 {
     Q_ASSERT(m_graphicsView != NULL);
 
-    m_graphicsView->setGridSize(QSize(m_gridWSpin->value(), value));
-    m_props->setGridSize(QVector3D(m_gridWSpin->value(), m_props->gridSize().y(), value));
+    const float w = (qRound(m_props->gridSize().x()) == m_gridWSpin->value())
+                        ? m_props->gridSize().x() : float(m_gridWSpin->value());
+    m_graphicsView->setGridSize(QSizeF(w, value));
+    m_props->setGridSize(QVector3D(w, m_props->gridSize().y(), value));
 }
 
 void Monitor::updateUnitsLabel()

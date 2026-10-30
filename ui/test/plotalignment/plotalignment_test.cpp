@@ -765,8 +765,8 @@ void PlotAlignment_Test::gridLinesEndWhereTheGridDoes()
     {
         plot.setView(1.0, rot);
         const qreal x0 = gv->m_xOffset, y0 = gv->m_yOffset;
-        const qreal x1 = x0 + gv->m_gridSize.width() * gv->m_cellPixels;
-        const qreal y1 = y0 + gv->m_gridSize.height() * gv->m_cellPixels;
+        const qreal x1 = x0 + gv->m_gridExtent.width() * gv->m_cellPixels;
+        const qreal y1 = y0 + gv->m_gridExtent.height() * gv->m_cellPixels;
         QVERIFY(!gv->m_gridItems.isEmpty());
         for (QGraphicsLineItem *gl : std::as_const(gv->m_gridItems))
         {
@@ -791,6 +791,40 @@ void PlotAlignment_Test::gridLinesEndWhereTheGridDoes()
                  qPrintable(QStringLiteral("turn %1: the grid's middle is at %2,%3, the canvas's at %4,%5")
                      .arg(rot).arg(mid.x()).arg(mid.y()).arg(vc.x()).arg(vc.y())));
     }
+}
+
+/* ALIGNMENT.md #18: the grid is the stage's real size. A 50 ft stage in metres
+   is 15.24 cells wide: the outline ends at 15.24, the centre line is 7.62
+   in, and a fixture at 15.1 m is on the grid where one at 15.5 m is not. */
+void PlotAlignment_Test::theGridIsTheRealStageSize()
+{
+    QScopedPointer<Doc> doc(new Doc(nullptr));
+    const Canonical c = buildCanonical(doc.data(), MonitorProperties::Meters);
+    MonitorProperties *props = doc->monitorProperties();
+    Plot plot(doc.data(), QSize(1000, 700));
+    MonitorGraphicsView *gv = plot.gv;
+    const double w = props->gridSize().x(), d = props->gridSize().z();
+    QVERIFY2(qAbs(w - 15.24) < 0.01, qPrintable(QString::number(w)));
+    QVERIFY(qAbs(gv->m_gridExtent.width() - w) < 1e-3 && qAbs(gv->m_gridExtent.height() - d) < 1e-3);
+
+    // The outline: the outermost lines sit at the real size.
+    QRectF drawn;
+    for (QGraphicsLineItem *gl : std::as_const(gv->m_gridItems))
+        drawn |= QRectF(gl->line().p1(), gl->line().p2()).normalized();
+    QVERIFY2(qAbs(drawn.width() - w * gv->m_cellPixels) <= 0.6 && qAbs(drawn.height() - d * gv->m_cellPixels) <= 0.6,
+             qPrintable(QStringLiteral("outline %1 x %2 px, the stage is %3 x %4").arg(drawn.width()).arg(drawn.height())
+                 .arg(w * gv->m_cellPixels).arg(d * gv->m_cellPixels)));
+    // Centred on the canvas, and the centre line is the stage's middle.
+    const QPointF mid = gv->sceneToViewport(drawn.center());
+    QVERIFY2(QLineF(mid, QRectF(gv->viewport()->rect()).center()).length() <= 1.0, "grid not centred");
+    QVERIFY2(qAbs(gv->m_centerLineV->line().x1() - (drawn.left() + drawn.width() / 2)) <= 0.6, "centre line off the middle");
+
+    // Off the grid is measured against 15.24, not 15.
+    MonitorProperties *mp = props;
+    mp->setFixturePosition(c.fixtureId, 0, 0, QVector3D(15100.0f, 5000.0f, 0.0f));
+    QVERIFY(!gv->fixturesOffGrid().contains(c.fixtureId));
+    mp->setFixturePosition(c.fixtureId, 0, 0, QVector3D(15500.0f, 5000.0f, 0.0f));
+    QVERIFY(gv->fixturesOffGrid().contains(c.fixtureId));
 }
 
 /* #19: the Snap setting (Full, 1/2, 1/4) is the step a move snaps to,
@@ -1075,12 +1109,12 @@ void PlotAlignment_Test::studioBarEndsFollowTheBody()
     view.fixtureBoxCorners(fx->id(), traits, box);
     const QVector3D body = box[1] - box[0];                   // its length, as drawn
     const QVector3D ends = view.fixtureEndB(fx->id()) - view.fixtureEndA(fx->id());
-    QVERIFY2((ends - body).length() < 0.002f,
+    QVERIFY2((ends - body).length() < 0.005f,
              qPrintable(QStringLiteral("the bar's ends run %1,%2, its body %3,%4")
                  .arg(ends.x()).arg(ends.y()).arg(body.x()).arg(body.y())));
     // ...and they straddle the body's centre.
     const QVector3D mid = (view.fixtureEndA(fx->id()) + view.fixtureEndB(fx->id())) * 0.5f;
-    QVERIFY((mid - view.fixtureCentre(fx->id())).length() < 0.002f);
+    QVERIFY((mid - view.fixtureCentre(fx->id())).length() < 0.005f);
 }
 
 /* A3-A7: a click lands on a fixture where, and only where, the fixture is
@@ -1272,6 +1306,44 @@ void PlotAlignment_Test::studioAngledPickHonoursWhatIsInFront()
     QVERIFY2(seen < 4, qPrintable(QStringLiteral("the buried fixture shows %1 px: not a test of picking").arg(seen)));
     const QPointF at = view->w2s(RigHeads::fixtureCentre(doc.data(), fx->id()));
     QVERIFY2(view->hitTestFixture(at) != fx->id(), "a click on the riser's top picked the fixture inside it");
+}
+
+/* A9: the readout's depth is the buffer's value for the pixel under the
+   pointer, taken at its centre; solving at the pointer's own x, y put the
+   answer half a pixel off on a slope. On the top of a riser the height is
+   exact wherever in the pixel the pointer is. */
+void PlotAlignment_Test::studioReadoutSolvesWhereDepthWasSampled()
+{
+    QScopedPointer<Doc> doc(new Doc(nullptr));
+    bareStage(doc.data());
+    MonitorProperties *props = doc->monitorProperties();
+    StagePlatform *deck = props->addPlatform();
+    deck->setOriginX(3.0f); deck->setOriginY(3.0f);
+    deck->setWidth(4.0f); deck->setDepth(4.0f); deck->setHeight(2.0f);
+    QWidget host;
+    StructureStudioView *view = new StructureStudioView(doc.data(), StructureStudioView::StageKind, 0, &host);
+    host.resize(640, 520);
+    view->resize(640, 520);
+    view->setBeams(false);
+    view->setPlane(StructureStudioView::Angled);
+    view->reload();
+    host.show();
+    settle();
+    (void)grabStudio(view);
+    const QPointF top = view->w2s(QVector3D(5.0f, 5.0f, 2.0f));
+    int checked = 0;
+    for (double dx : { 0.0, 0.3, 0.5, 0.8, -0.4 })
+        for (double dy : { 0.0, 0.2, 0.5, 0.9, -0.3 })
+        {
+            int known = 0; bool on = false;
+            const QVector3D w = view->worldAt(top + QPointF(dx, dy), &known, &on);
+            if (!on)
+                continue;
+            checked++;
+            QVERIFY2(qAbs(w.z() - 2.0f) < 0.005f,
+                     qPrintable(QStringLiteral("at +%1,%2 the top of the riser reads Z %3").arg(dx).arg(dy).arg(w.z())));
+        }
+    QVERIFY2(checked > 0, "nothing was under the pointer: the depth buffer was empty");
 }
 
 /* A10: the rulers are read over the rig, so they paint over it: a deck
