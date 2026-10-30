@@ -104,6 +104,14 @@ skipped). Upstream fixes taken:
 
 ### Added
 
+- **Venue focus builds its own calls.** A show with no focus calls used to
+  come up empty ("no fixtures to focus"). Now Venue focus, and a venue
+  focus cue, build one call per stage target the show aims at, with the
+  groups whose layers aim there, every owner, when it starts. They show in
+  **Edit focus calls...** ("From the show: DH Tspots → DSC") and are saved
+  with the show only if you save the calls. When there is truly nothing to
+  focus, the cue and the buttons now say why.
+
 - **The .qxw notice says how much, and can be turned off.** Saving a .qxw
   that holds what QLC+ 4 leaves out now names each kind with a count
   ("the Show Tree (3 cue lists, 24 cues)", "the focus calls (5 calls)"),

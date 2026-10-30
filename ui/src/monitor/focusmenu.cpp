@@ -45,7 +45,10 @@ QList<quint32> allFixtures(Doc *doc)
 QList<quint32> callFixtures(Doc *doc)
 {
     QList<quint32> fids;
-    for (const FocusCall &c : doc->programmer()->focusCalls()->calls())
+    const FocusCalls *fc = doc->programmer()->focusCalls();
+    // None of the show's own: the calls its targets would make.
+    const QList<FocusCall> calls = fc->count() > 0 ? fc->calls() : fc->callsFromShow();
+    for (const FocusCall &c : calls)
         for (quint32 fid : FocusCalls::fixturesOf(doc, c))
             if (!fids.contains(fid))
                 fids << fid;
@@ -62,8 +65,8 @@ QString FocusMenu::quickFocusBlocked(Doc *doc)
 
 QString FocusMenu::venueFocusBlocked(Doc *doc)
 {
-    if (doc->programmer()->focusCalls()->count() == 0)
-        return tr("No focus calls yet. Add them with Focus \342\226\270 Edit focus calls\342\200\246");
+    if (!doc->programmer()->focusCalls()->hasOrCanBuild())
+        return doc->programmer()->focusCalls()->whyNone();
     if (FocusSession::focusable(doc, callFixtures(doc)).isEmpty())
         return tr("None of the focus calls has a light placed on the plot. Place them in the "
                   "Lighting Studio, or change the calls.");
@@ -72,8 +75,8 @@ QString FocusMenu::venueFocusBlocked(Doc *doc)
 
 QString FocusMenu::practiceBlocked(Doc *doc)
 {
-    if (doc->programmer()->focusCalls()->count() == 0)
-        return tr("No focus calls yet to practise on. Add them with Focus \342\226\270 Edit focus calls\342\200\246");
+    if (!doc->programmer()->focusCalls()->hasOrCanBuild())
+        return doc->programmer()->focusCalls()->whyNone();
     if (FocusSession::movingHeads(doc, callFixtures(doc)).isEmpty())
         return tr("No moving head in the focus calls is placed on the plot: a scramble moves "
                   "moving heads.");
@@ -121,9 +124,8 @@ QString FocusMenu::focusCueBlocked(Doc *doc)
 
 QString FocusMenu::venueFocusCueBlocked(Doc *doc)
 {
-    if (doc->programmer()->focusCalls()->count() == 0)
-        return tr("No focus calls yet for this cue to run. Add them in the Lighting Studio with "
-                  "Focus \342\226\270 Edit focus calls\342\200\246");
+    if (!doc->programmer()->focusCalls()->hasOrCanBuild())
+        return doc->programmer()->focusCalls()->whyNone();
     return QString();
 }
 

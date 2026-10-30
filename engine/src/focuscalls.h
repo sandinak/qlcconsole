@@ -79,6 +79,26 @@ public:
     bool move(int from, int to);
     void clear();
 
+    /** The show's own targets as calls: one per stage target the show's
+     *  layers aim at (Aim palettes and line aims, in every cue list and
+     *  hit), with the groups -- and loose fixtures -- whose layers aim
+     *  there, every owner. In the order the show first aims at them. Lights
+     *  no layer aims are in no call. */
+    QList<FocusCall> callsFromShow() const;
+    /** Venue focus starting: with no calls of the show's own, calls built
+     *  from its targets (callsFromShow). They are not the show's: saveXML
+     *  leaves them out until the calls are edited or saved (setCalls,
+     *  append, ...). Rebuilt each time while they are still the built ones.
+     *  Returns whether there are calls to run. */
+    bool ensureCalls();
+    /** The calls are the built ones (ensureCalls), not saved with the show. */
+    bool isFromShow() const { return m_fromShow; }
+    /** Whether ensureCalls() would have something to run: the show's own
+     *  calls, or targets the show aims at. */
+    bool hasOrCanBuild() const;
+    /** Why there is nothing to run, in words; empty when there is. */
+    QString whyNone() const;
+
     /** The fixtures @p call focuses: its groups' members in group order,
      *  then its loose fixtures, each once, those still in the show. */
     static QList<quint32> fixturesOf(const Doc *doc, const FocusCall &call);
@@ -104,6 +124,7 @@ private:
 private:
     Doc *m_doc;
     QList<FocusCall> m_calls;
+    bool m_fromShow = false;
 };
 
 /** @} */

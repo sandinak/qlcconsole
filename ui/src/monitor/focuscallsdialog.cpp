@@ -335,6 +335,8 @@ FocusCallsDialog::FocusCallsDialog(Doc *doc, QWidget *parent)
     });
     connect(bb, &QDialogButtonBox::rejected, this, &QDialog::reject);
 
+    // No calls of the show's own: the ones built from its targets.
+    m_doc->programmer()->focusCalls()->ensureCalls();
     setCalls(m_doc->programmer()->focusCalls()->calls());
     refreshVenue();
     resize(760, 480);
@@ -348,8 +350,19 @@ void FocusCallsDialog::run(Doc *doc, QWidget *parent)
     beginCalls(doc, parent, d.isPractice());
 }
 
+void FocusCallsDialog::keepCalls()
+{
+    /* Starting is not saving: calls built from the show's targets stay
+       unsaved unless they were changed here or Save calls was pressed. */
+    FocusCalls *fc = m_doc->programmer()->focusCalls();
+    if (fc->isFromShow() && m_calls == fc->calls())
+        return;
+    fc->setCalls(m_calls);
+}
+
 bool FocusCallsDialog::beginCalls(Doc *doc, QWidget *parent, bool practice)
 {
+    doc->programmer()->focusCalls()->ensureCalls();
     FocusSession::Options o;
     o.calls = doc->programmer()->focusCalls()->sessionCalls();
     o.order = FocusSession::ByStagePosition;
@@ -419,6 +432,7 @@ QString FocusCallsDialog::practiceExplanation()
 void FocusCallsDialog::practice(Doc *doc, QWidget *parent)
 {
     float lo = 0.0f, hi = 0.0f;
+    doc->programmer()->focusCalls()->ensureCalls();
     if (!askPracticeLevel(parent, lo, hi))
         return;
     QString why;
@@ -453,7 +467,7 @@ void FocusCallsDialog::exportAppliedReport(Doc *doc, QWidget *parent)
 bool FocusCallsDialog::startPractice(float minDeg, float maxDeg, quint32 seed, QString *why)
 {
     storeCall();
-    m_doc->programmer()->focusCalls()->setCalls(m_calls);
+    keepCalls();
     const QString name = startPracticeFor(m_doc, m_calls, minDeg, maxDeg, seed, why);
     if (name.isEmpty())
         return false;
@@ -1035,7 +1049,7 @@ void FocusCallsDialog::refreshVenue()
 bool FocusCallsDialog::apply(QString *why)
 {
     storeCall();
-    m_doc->programmer()->focusCalls()->setCalls(m_calls);
+    keepCalls();
     VenueCorrections *venues = m_doc->programmer()->venueCorrections();
     const QString venue = venueChoice();
     if (venue.isEmpty())
