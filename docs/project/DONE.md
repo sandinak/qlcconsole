@@ -6,6 +6,36 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
+### 2026-10-29 — Lighting Studio alignment, the rest of the audit *(fix/031-alignment, 0.3.1 d2)*
+
+The rows of the RC8 alignment audit (scratchpad ALIGNMENT.md) RC8 left
+open, each with a failing test first in `ui/test/plotalignment`, which
+now covers the structure editor too:
+- **Plot.** Grid lines end at the grid (#17), the scene rect is the
+  canvas turned with the plot and grown evenly about the grid (so the
+  grid is centred, turned or not), and `setViewRotation()` re-places the
+  items (it relied on scroll bars appearing). Snap steps by the Snap
+  setting (#19), a fixture by its centre. Free and decked fixtures are
+  drawn centred on `RigHeads::fixtureCentre()` in every view
+  (`MonitorGraphicsView::freeCentreOffsetMm()`; drops, elevation drops,
+  Align/Distribute read it back) (#20). `MonitorFixtureItem::setViewHint()`
+  gives the item the view's zoom and turn: the label's hit and repaint
+  areas are the upright label as painted (#22), the halo margin is
+  3 + 3/zoom (#23).
+- **Structure editor / Rig Overview.** One silhouette for picking and
+  drawing (`fixtureDrawnShape()`): the flat views' shapes per kind, at 45°
+  the solid's hull (a mover's own parts) and the depth buffer decides
+  what is in front (A3-A7). Frame members' bar ends no longer turn by the
+  frame a second time (A2). Rulers paint after the rig, and a click on
+  one picks nothing (A10). The Rig Overview's ruler and the H / V / Z
+  readout count from CL / ⌖ (`stageZero()`, `cursorReadoutText()`).
+  StudioPlaneView keeps the grab offset (A8) and steps its grid 1-2-5 in
+  the show's units (`gridStepM()`).
+- Test time: the hit-area probe renders 36 cases once (skipped at the
+  second, scale-2 pass); the directory takes ~16 s, was ~7.5.
+
+---
+
 ### 2026-10-29 — Control Map: MIDI and OSC triggers, saved with the show *(feat/031-control-map, board Q189 B)*
 
 - **Engine:** `ControlMap` (`engine/src/controlmap.*`, `Doc::controlMap()`),

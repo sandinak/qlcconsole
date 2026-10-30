@@ -1229,7 +1229,8 @@ void Monitor_Test::theApronIsDeckInTheRigOverview()
                                                          props->apronPlatform()->id())));
         const QImage with = shot();
         // On the apron, out past the deck: deck there now, in the deck's colour.
-        const QPoint at = view.w2s(QVector3D(3.0f, 6.0f, 1.0f)).toPoint();
+        // Clear of the ruler along the bottom, which is drawn over the rig.
+        const QPoint at = view.w2s(QVector3D(3.0f, 5.6f, 1.0f)).toPoint();
         QVERIFY2(QRect(QPoint(0, 0), view.size()).contains(at), qPrintable(where));
         const QColor was(without.pixel(at)), is(with.pixel(at));
         QVERIFY2(was != is, qPrintable(QString("%1: %2").arg(where, is.name())));
@@ -27652,12 +27653,13 @@ void Monitor_Test::alignAndDistributeUseCentresAndKeepHeight()
              && qAbs(icon(1).center().x() - icon(2).center().x()) <= tol,
              qPrintable(QString("centres %1 %2 %3").arg(icon(0).center().x()).arg(icon(1).center().x()).arg(icon(2).center().x())));
     heightsKept("Align same X");
-    // The model is what the plot shows: the stored XY is the icon's corner.
+    // The model is what the plot shows: the icon is centred on the body's
+    // centre (the stored corner plus half the body), where its light is.
     for (int i = 0; i < fx.size(); i++)
     {
-        const QVector3D p = props->fixturePosition(fx[i]->id(), 0, 0);
-        const QPointF corner = gv->realPositionToPixels(p.x(), p.y());
-        QVERIFY(qAbs(corner.x() - icon(i).left()) <= tol && qAbs(corner.y() - icon(i).top()) <= tol);
+        const QVector3D c = RigHeads::fixtureCentre(doc, fx[i]->id());
+        const QPointF centre = gv->realPositionToPixels(c.x() * 1000.0, c.y() * 1000.0);
+        QVERIFY(qAbs(centre.x() - icon(i).center().x()) <= tol && qAbs(centre.y() - icon(i).center().y()) <= tol);
     }
 
     // Left / right / upstage / downstage: the EDGES line up.

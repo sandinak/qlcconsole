@@ -218,6 +218,14 @@ public:
      *  pos() + cellSize()/2 offset. */
     QPointF iconCentreScene() const { return mapToScene(iconRect().center()); }
 
+    /** The view's zoom and quarter turn (degrees), for the two things this
+     *  item paints in SCREEN terms: the name label kept upright, and the
+     *  selection halo's screen-wide pen. Its hit and repaint areas follow
+     *  them; the plot calls this whenever it zooms or turns. */
+    void setViewHint(qreal scale, qreal turnDeg);
+    /** The name label as painted, upright on screen, in item coordinates. */
+    QPolygonF labelPolygon() const;
+
     /** "Isolated" = drilled into its group to select this ONE fixture (double-
      *  click). Draws a distinct bright dashed border so it's obvious the sub-
      *  unit is selected, not the whole group. Cleared when deselected. */
@@ -373,6 +381,10 @@ private:
     QFont m_font;
 
     QRect m_labelRect;
+
+    /** setViewHint(): the view's scale and turn. */
+    qreal m_viewScale = 1.0;
+    qreal m_viewTurn = 0.0;
 
     bool m_boundToTruss  = false;
     bool m_trussGroupSelected = false;

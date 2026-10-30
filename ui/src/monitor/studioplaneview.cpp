@@ -239,6 +239,32 @@ quint32 StudioPlaneView::hitTest(const QPointF &px) const
     return best;
 }
 
+double StudioPlaneView::gridStepM(double pxPerM, bool feet)
+{
+    /* A round step in the show's own units, lines at least 24 px apart: 1,
+       2, 5 of a power of ten in metres; 1", 3", 6", then 1, 2, 5, 10 ft.
+       It was "double, or 2.5x when the step was not a tenth" -- which every
+       doubled step still was, so it went 0.1, 0.2, 0.4, 0.8 m, in metres
+       whatever the show was measured in. */
+    static const double kMetres[] = { 0.1, 0.2, 0.5 };
+    static const double kInches[] = { 1.0 / 12.0, 0.25, 0.5 };
+    const double ft = 0.3048;
+    if (pxPerM <= 0.0)
+        return 1.0;
+    if (feet)
+        for (double s : kInches)
+            if (s * ft * pxPerM >= 24.0)
+                return s * ft;
+    for (double decade = 1.0; decade < 1e6; decade *= 10.0)
+        for (double s : kMetres)
+        {
+            const double m = s * 10.0 * decade * (feet ? ft : 0.1);
+            if (m * pxPerM >= 24.0)
+                return m;
+        }
+    return 1000.0;
+}
+
 void StudioPlaneView::paintEvent(QPaintEvent *)
 {
     QPainter p(this);
@@ -246,9 +272,8 @@ void StudioPlaneView::paintEvent(QPaintEvent *)
     p.fillRect(rect(), QColor(30, 32, 36));
 
     // --- grid ---------------------------------------------------------------
-    // Choose a "nice" grid step (metres) so lines are ~>= 24 px apart.
-    double step = 0.1;
-    while (step * m_scale < 24.0) step *= (qFuzzyCompare(step * 10, qRound(step * 10)) ? 2.0 : 2.5);
+    const double step = gridStepM(m_scale,
+                                  m_doc->monitorProperties()->gridUnits() == MonitorProperties::Feet);
     QPen grid(QColor(52, 55, 60)); grid.setWidth(1);
     p.setPen(grid);
     // vertical grid lines
@@ -582,6 +607,12 @@ void StudioPlaneView::mousePressEvent(QMouseEvent *e)
     m_dragFid = hitTest(e->pos());
     if (m_dragFid != Fixture::invalidId())
     {
+        /* Keep the spot you grabbed under the pointer: the drag moves the
+           fixture by the pointer's travel, it doesn't jump its centre onto
+           the pointer. */
+        const QPointF centre = worldToScreen(project(m_doc->monitorProperties()
+                                                         ->fixtureRigProps(m_dragFid).groupLocal));
+        m_grabOffset = centre - QPointF(e->pos());
         update();
     }
     else
@@ -599,7 +630,7 @@ void StudioPlaneView::mouseMoveEvent(QMouseEvent *e)
     {
         MonitorProperties *props = m_doc->monitorProperties();
         FixtureRigProps rp = props->fixtureRigProps(m_dragFid);
-        const QPointF ab = screenToWorld(e->pos());
+        const QPointF ab = screenToWorld(QPointF(e->pos()) + m_grabOffset);
         QVector3D local = unproject(ab, rp.groupLocal);
 
         // Keep fixtures within the feature bounds. For a platform-slaved frame

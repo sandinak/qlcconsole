@@ -61,6 +61,39 @@ private slots:
     void theRenderedBandCoversTheRenderedItem_data();
     void theRenderedBandCoversTheRenderedItem();
 
+    /** Grid lines end at the grid's edge at every quarter turn, and the
+     *  grid is centred on the canvas. */
+    void gridLinesEndWhereTheGridDoes();
+    /** The Snap setting is the step a move snaps to. */
+    void snapStepIsTheSnapSetting();
+    /** A dropped free fixture snaps its centre to the grid. */
+    void aDroppedFixtureSnapsItsCentre();
+    /** A free fixture's icon is centred on its light, in every view, and a
+     *  drop in place does not move it. */
+    void aFreeFixtureIsDrawnWhereItsLightIs();
+    /** The name label's hit and repaint areas turn with the view. */
+    void theLabelHitAreaTurnsWithIt();
+    /** The selection halo stays inside the repaint area when zoomed out. */
+    void theHaloStaysInsideTheRepaintArea();
+
+    /** Structure editor: a frame member's bar ends follow its drawn body. */
+    void studioBarEndsFollowTheBody();
+    /** Structure editor: a fixture is picked where it is drawn, and only
+     *  there, for every shape in every plane. */
+    void studioHitAreaIsWhatIsDrawn_data();
+    void studioHitAreaIsWhatIsDrawn();
+    /** Structure editor: at 45 degrees what is in front is picked. */
+    void studioAngledPickHonoursWhatIsInFront();
+    /** Structure editor: the rulers paint over the rig. */
+    void studioRulersPaintOverTheRig();
+    /** Rig Overview: the ruler counts from the plot's zero. */
+    void studioRulerCountsFromThePlotsZero();
+    /** Studio group editor: a drag keeps the grab offset. */
+    void studioDragKeepsTheGrabOffset();
+    /** Studio group editor: grid steps are round in the show's units. */
+    void studioPlaneGridStepsAreRound_data();
+    void studioPlaneGridStepsAreRound();
+
     /** Not a gate test: ALIGN_SHOWS=a.qxw;b.qlcc ALIGN_OUT=dir measures
      *  real shows and writes a CSV and the worst cases as PNGs. */
     void measureShows();
