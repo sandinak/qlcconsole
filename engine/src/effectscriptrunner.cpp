@@ -12,6 +12,7 @@
 
 #include "doc.h"
 #include "scene.h"
+#include "collection.h"
 #include "qlcpalette.h"
 #include "mastertimer.h"
 #include "inputoutputmap.h"
@@ -134,6 +135,59 @@ void EffectScriptRunner::slotFunctionStartedAgain(quint32 fid, quint32 sourceId)
             continue;
         inst->sceneStarted();
     }
+}
+
+static void sceneIdsOf(const Doc *doc, quint32 fid, QList<quint32> *out, int depth = 0)
+{
+    const Function *f = doc->function(fid);
+    if (f == nullptr || depth > 8)
+        return;
+    if (f->type() == Function::SceneType)
+        *out << fid;
+    else if (const Collection *c = qobject_cast<const Collection *>(f))
+        for (quint32 child : c->functions())
+            sceneIdsOf(doc, child, out, depth + 1);
+}
+
+int EffectScriptRunner::oneShotState(quint32 fid) const
+{
+    QList<quint32> scenes;
+    sceneIdsOf(m_doc, fid, &scenes);
+    int state = -1;
+    for (const EffectInstance *inst : m_instances)
+    {
+        if (inst->isFadingOut() || !inst->endsByRuns())
+            continue;
+        for (quint32 s : scenes)
+            if (inst->sceneIds().contains(s))
+            {
+                if (!inst->runDone())
+                    return 0;
+                state = 1;
+                break;
+            }
+    }
+    return state;
+}
+
+bool EffectScriptRunner::restartOneShots(quint32 fid)
+{
+    QList<quint32> scenes;
+    sceneIdsOf(m_doc, fid, &scenes);
+    bool any = false;
+    for (EffectInstance *inst : m_instances)
+    {
+        if (inst->isFadingOut() || !inst->endsByRuns() || !inst->runDone())
+            continue;
+        for (quint32 s : scenes)
+            if (inst->sceneIds().contains(s))
+            {
+                inst->sceneStarted();
+                any = true;
+                break;
+            }
+    }
+    return any;
 }
 
 void EffectScriptRunner::slotFunctionRemoved(quint32 fid)

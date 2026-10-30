@@ -56,6 +56,13 @@ back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
   Runs menu): Runs, At the end and Length.
 - The command line's **release** takes a ▣ function layer (by the function's
   name) as well as groups.
+### Toggle and one-shots
+
+- **A Toggle hit with a Once / N-times effect breathes again.** When the
+  hit is on and its one-shot effects have all finished, the next press of
+  its VC Toggle button restarts them instead of turning the hit off; a
+  press while one is still playing turns it off. Flash and hits without
+  a one-shot are unchanged. A Breathe's Length is one breath (final).
 
 ### Tonight's running order
 

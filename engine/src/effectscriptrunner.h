@@ -70,6 +70,14 @@ public slots:
      *  cue only tracks the effect through (ShowTreeController::
      *  effectOnlyTracked()). */
     void slotFunctionStartedAgain(quint32 fid, quint32 sourceId);
+
+    /** Where the Once / N-times effects of function @p fid stand: -1 it has
+     *  none (a collection's scenes are looked through), 0 at least one is
+     *  still running, 1 every one has finished. Main thread. */
+    int oneShotState(quint32 fid) const;
+    /** Start the finished Once / N-times effects of @p fid again -- a toggle
+     *  button pressed after its breath ended. Returns true when any restarted. */
+    bool restartOneShots(quint32 fid);
     /** A Function was deleted from the Doc. Doc::deleteFunction() does not
         emit functionStopped, so without this a deleted-while-running scene
         would strand its effect instances (leak + stuck Override DMX). */

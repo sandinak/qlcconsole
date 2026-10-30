@@ -1909,6 +1909,12 @@ called them looks; they open as they were.)
   with the show, undo like any edit, and come along when a cue is pasted
   into Hits. A hit played as a step of something else (a chaser, a
   timeline) takes that step's fades instead.
+- **A one-shot in a Toggle hit.** A Toggle button on a hit with a Once or
+  N times effect (a 5.5 s Breathe): when every such effect has finished,
+  the next press plays them again and the hit stays on; a press while one
+  is still playing turns the hit off. To end the hit after its breath has
+  finished, press again during the next breath. Flash and hits without a
+  one-shot are unchanged (see [Effects](effects.md)).
 - **Folders.** **New folder…** on Hits or a folder; drag hits onto a
   folder (or onto *Hits* for none), or **Move to folder**. **F2** renames
   a folder; **Delete** moves what is in it up.

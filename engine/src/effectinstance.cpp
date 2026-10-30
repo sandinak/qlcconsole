@@ -189,6 +189,11 @@ void EffectInstance::sceneStarted()
         restartRun();
 }
 
+bool EffectInstance::endsByRuns() const
+{
+    return !EffectRuns::resolve(m_paramValues, m_script.isOneShot(), m_scriptRelease).loops();
+}
+
 void EffectInstance::restartRun()
 {
     if (m_fadingOut)

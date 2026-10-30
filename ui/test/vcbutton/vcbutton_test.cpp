@@ -48,6 +48,10 @@
 #include "hitmap.h"
 #include "showstatus.h"
 #include "doc.h"
+#include "fixturegroup.h"
+#include "qlcpalette.h"
+#include "inputoutputmap.h"
+#include "universe.h"
 #undef private
 #undef protected
 
@@ -755,6 +759,122 @@ void VCButton_Test::flashPlaysAHit()
     m_doc->masterTimer()->timerTick();
     QVERIFY(!m_doc->masterTimer()->m_functionList.contains(hit));
     m_doc->setMode(Doc::Design);
+}
+
+/* A one-shot (Breathe, Once) in a Toggle hit: once its breath has ended the
+   hit is still on, and the next press plays it again; a press while it still
+   breathes turns the hit off. */
+namespace
+{
+quint32 hitWith(Doc *doc, bool oneShot)
+{
+    FixtureGroup *grp = new FixtureGroup(doc);
+    grp->setName("G");
+    grp->setSize(QSize(1, 1));
+    grp->assignFixture(doc->fixtures().first()->id());
+    doc->addFixtureGroup(grp);
+    Scene *sc = new Scene(doc);
+    sc->setName("Hit scene");
+    doc->addFunction(sc);
+    sc->addFixtureGroup(grp->id());
+    QLCPalette *level = new QLCPalette(QLCPalette::Dimmer, doc);
+    level->setName("20%");
+    level->setValue(51);
+    doc->addPalette(level);
+    sc->addPalette(level->id());
+    if (oneShot)
+    {
+        QLCPalette *fx = new QLCPalette(QLCPalette::Effect, doc);
+        fx->setName("Breathe");
+        fx->setScriptPath(QStringLiteral(QLC_TEST_RESOURCE_ROOT) + "effectscripts/dimmer-phaser.js");
+        doc->addPalette(fx);
+        fx->setEffectParamValue("waveform", 0);
+        fx->setEffectParamValue("rate", 2.0);               // a 0.5 s breath
+        fx->setEffectParamValue("minDim", 0.05);
+        fx->setEffectParamValue("maxDim", 1.0);
+        fx->setEffectParamValue("spread", 0);
+        fx->setEffectParamValue("__runs", 1);               // Once
+        sc->addPalette(fx->id());
+    }
+    Collection *hit = new Collection(doc);
+    doc->addFunction(hit);
+    hit->addFunction(sc->id());
+    return hit->id();
+}
+
+int level0(Doc *doc)
+{
+    QList<Universe *> us = doc->inputOutputMap()->claimUniverses();
+    const int v = int(uchar(us.at(0)->preGMValues().at(0)));
+    doc->inputOutputMap()->releaseUniverses(false);
+    return v;
+}
+}
+
+void VCButton_Test::toggleRestartsAFinishedOneShot()
+{
+    QWidget w;
+    const quint32 hit = hitWith(m_doc, true);
+    VCButton btn(&w, m_doc);
+    btn.setFunction(hit);
+    btn.setAction(VCButton::Toggle);
+    btn.setKeySequence(QKeySequence(keySequenceB));
+    m_doc->inputOutputMap()->startUniverses();
+    m_doc->masterTimer()->start();
+    m_doc->setMode(Doc::Operate);
+    Function *coll = m_doc->function(hit);
+
+    auto press = [&]() {
+        btn.slotKeyPressed(QKeySequence(keySequenceB));
+        btn.slotKeyReleased(QKeySequence(keySequenceB));
+    };
+    press();
+    QCOMPARE(btn.state(), VCButton::Active);
+    QTest::qWait(250);
+    const int first = level0(m_doc);
+    QVERIFY2(first > 20, qPrintable(QString::number(first)));       // mid-breath
+    QTest::qWait(1200);                                             // the breath is over
+    QVERIFY(coll->isRunning());
+    QVERIFY2(level0(m_doc) < 15, qPrintable(QString::number(level0(m_doc))));
+
+    press();                                                        // finished: again
+    QCOMPARE(btn.state(), VCButton::Active);
+    QVERIFY(coll->isRunning());
+    QTest::qWait(250);
+    const int second = level0(m_doc);
+    QVERIFY2(second > 20, qPrintable(QString::number(second)));
+
+    press();                                                        // breathing: off
+    QTest::qWait(250);
+    QVERIFY(!coll->isRunning());
+    QCOMPARE(btn.state(), VCButton::Inactive);
+    m_doc->setMode(Doc::Design);
+    m_doc->masterTimer()->stop();
+}
+
+/* No one-shot in the hit: a press turns it on and the next one off. */
+void VCButton_Test::toggleWithoutAOneShotTurnsOff()
+{
+    QWidget w;
+    const quint32 hit = hitWith(m_doc, false);
+    VCButton btn(&w, m_doc);
+    btn.setFunction(hit);
+    btn.setAction(VCButton::Toggle);
+    btn.setKeySequence(QKeySequence(keySequenceB));
+    m_doc->inputOutputMap()->startUniverses();
+    m_doc->masterTimer()->start();
+    m_doc->setMode(Doc::Operate);
+    Function *coll = m_doc->function(hit);
+    btn.slotKeyPressed(QKeySequence(keySequenceB));
+    QCOMPARE(btn.state(), VCButton::Active);
+    QTest::qWait(400);
+    QVERIFY(coll->isRunning());
+    btn.slotKeyPressed(QKeySequence(keySequenceB));
+    QTest::qWait(250);
+    QVERIFY(!coll->isRunning());
+    QCOMPARE(btn.state(), VCButton::Inactive);
+    m_doc->setMode(Doc::Design);
+    m_doc->masterTimer()->stop();
 }
 
 /* A button fires a Show Tree hit itself: renamed, the hit's Collection

@@ -95,6 +95,10 @@ public:
      *  one-shot) starts afresh, though another scene shares this engine;
      *  a loop runs on. Main thread. */
     void sceneStarted();
+    /** It ends by itself (Once, N times, a one-shot) rather than looping. */
+    bool endsByRuns() const;
+    /** ...and has: it holds its last frame. Main thread. */
+    bool runDone() const { return m_oneShotDone; }
     /** Every scene it plays: the one it is bound to first. */
     QList<quint32> sceneIds() const { return QList<quint32>() << m_sceneId << m_alsoScenes; }
     /** The scenes the last tick played: their fixtures have had a frame of

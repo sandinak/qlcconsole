@@ -8,6 +8,30 @@ under `~/.claude/.../memory/`.
 
 ---
 
+## Breathe once — leftovers (brth, 2026-10-30)
+
+Built (build 2593 report: flash at start, end lands anywhere, no typed
+values, rate awkward for one shot). Open, each "decided (can change)":
+- A wave (script `cycleParam`) on Once / N times runs whole cycles; its
+  Length is one cycle, stored as the rate (1 / length). The run Length
+  (`__durationMs`, auto = the cue's time) no longer applies to a wave.
+  FINAL (Branson, 2026-10-30): Length = one breath.
+- Toggle button on a hit with a Once / N-times effect (tgl): once every
+  one-shot has finished, a press restarts them (the hit stays on) instead
+  of turning it off; while one still runs, a press turns the hit off.
+  Decided (can change): a hit whose breath has ended is turned off by
+  pressing during the next breath, or with Stop all / the hit's own fade
+  out; there is no hold or double-press gesture. Flash is unchanged.
+- A scene with an effect holds its output until the effect's first frame,
+  at most 250 ms (the Doc's own timer only).
+- Dimmer Phaser sends the dimmer alone; the host scales the look's colour
+  (white too) on a light with no dimmer.
+- A Once / N times run starts afresh on every new start of a scene
+  carrying it (a cue's GO, a hit fired again, a chaser step): the user's
+  rule. A cue that only tracks the effect through leaves it running or
+  done (decided, can change). A tracked effect on a layer whose scene
+  changes in that cue (something else on it set) does start again.
+
 ## Scoped hits (Q154 / Q157, sch, 2026-10-30)
 
 Built (docs/features/show-tree.md "Hits"): a hit lives under a
