@@ -3818,6 +3818,7 @@ void AppViews_Test::aQxwSaveSaysWhatQlcPlus4Leaves()
     const QStringList losses = m_app->lastStockLosses();
     QVERIFY2(losses.count() == 2, qPrintable(losses.join(" | ")));
     QVERIFY(losses.at(0).contains("Show Tree"));
+    QVERIFY2(losses.at(0).contains("1 cue list") && losses.at(0).contains("1 cue"), qPrintable(losses.at(0)));
     QVERIFY(losses.at(1).contains("house fixture"));
     QVERIFY(!m_app->m_viewNotice->isHidden());
     const QString said = m_app->m_viewNoticeText->text();
@@ -3846,6 +3847,25 @@ void AppViews_Test::aQxwSaveSaysWhatQlcPlus4Leaves()
     });
     m_app->m_viewNoticeButton->click();
     QCOMPARE(startedOn, App::saveAsFilters().at(0));
+    m_app->hideViewNotice();
+
+    // "Don't ask again for this show": that file stays quiet, others don't.
+    const QString quiet = dir.filePath("Quiet.qxw");
+    QCOMPARE(m_app->saveXML(quiet), QFile::NoError);
+    QVERIFY(!m_app->m_viewNotice->isHidden());
+    QVERIFY(!m_app->m_viewNoticeButton2->isHidden());
+    QCOMPARE(m_app->m_viewNoticeButton2->text(), QString("Don't ask again for this show"));
+    QVERIFY(!App::stockNoticeOff(quiet));
+    m_app->m_viewNoticeButton2->click();
+    QVERIFY(m_app->m_viewNotice->isHidden());
+    QVERIFY(App::stockNoticeOff(quiet));
+    m_app->m_stockNoticeShown.clear();      // a new session
+    QCOMPARE(m_app->saveXML(quiet), QFile::NoError);
+    QVERIFY(m_app->m_viewNotice->isHidden());
+    QCOMPARE(m_app->saveXML(dir.filePath("Loud.qxw")), QFile::NoError);
+    QVERIFY(!m_app->m_viewNotice->isHidden());
+    App::setStockNoticeOff(quiet, false);
+    QVERIFY(!App::stockNoticeOff(quiet));
     m_app->hideViewNotice();
     m_app->clearDocument();
 }

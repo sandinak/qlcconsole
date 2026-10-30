@@ -500,6 +500,10 @@ void App::init()
         m_viewNoticeButton = new QPushButton(notice);
         m_viewNoticeButton->setObjectName(QStringLiteral("viewNoticeButton"));
         row->addWidget(m_viewNoticeButton);
+        m_viewNoticeButton2 = new QPushButton(notice);
+        m_viewNoticeButton2->setObjectName(QStringLiteral("viewNoticeButton2"));
+        m_viewNoticeButton2->hide();
+        row->addWidget(m_viewNoticeButton2);
         QToolButton *close = new QToolButton(notice);
         close->setObjectName(QStringLiteral("viewNoticeClose"));
         close->setText(QStringLiteral("×"));
@@ -508,6 +512,12 @@ void App::init()
         row->addWidget(close);
         connect(m_viewNoticeButton, &QPushButton::clicked, this, [this]() {
             std::function<void()> act = m_viewNoticeAction;
+            hideViewNotice();
+            if (act)
+                act();
+        });
+        connect(m_viewNoticeButton2, &QPushButton::clicked, this, [this]() {
+            std::function<void()> act = m_viewNoticeAction2;
             hideViewNotice();
             if (act)
                 act();
@@ -3903,7 +3913,7 @@ bool App::noticeStockLosses(const QString &fileName)
     if (!fileName.endsWith(KExtWorkspace, Qt::CaseInsensitive))
         return false;
     const QString key = QFileInfo(fileName).absoluteFilePath();
-    if (m_stockNoticeShown.contains(key))
+    if (m_stockNoticeShown.contains(key) || stockNoticeOff(fileName))
         return false;
 
     QStringList losses = StockQlcCheck::lossesInFile(fileName);
@@ -3928,8 +3938,28 @@ bool App::noticeStockLosses(const QString &fileName)
                    tr("Save as .qlcc…"), [this]() {
         m_saveAsQlccOnce = true;
         slotFileSaveAs();
+    }, tr("Don't ask again for this show"), [fileName]() {
+        setStockNoticeOff(fileName, true);
     });
     return true;
+}
+
+bool App::stockNoticeOff(const QString &fileName)
+{
+    QSettings settings;
+    return settings.value(QStringLiteral("stockNoticeOff")).toStringList()
+            .contains(QFileInfo(fileName).absoluteFilePath());
+}
+
+void App::setStockNoticeOff(const QString &fileName, bool off)
+{
+    QSettings settings;
+    QStringList list = settings.value(QStringLiteral("stockNoticeOff")).toStringList();
+    const QString key = QFileInfo(fileName).absoluteFilePath();
+    list.removeAll(key);
+    if (off)
+        list << key;
+    settings.setValue(QStringLiteral("stockNoticeOff"), list);
 }
 
 QStringList App::saveAsFilters()
@@ -4875,7 +4905,8 @@ void App::updateWorkspaceViewActions()
 }
 
 void App::showViewNotice(const QString &text, const QString &buttonText,
-                         const std::function<void()> &action)
+                         const std::function<void()> &action,
+                         const QString &button2Text, const std::function<void()> &action2)
 {
     if (m_viewNotice == nullptr)
         return;
@@ -4884,6 +4915,9 @@ void App::showViewNotice(const QString &text, const QString &buttonText,
     m_viewNoticeAction = action;
     m_viewNoticeButton->setText(buttonText);
     m_viewNoticeButton->setVisible(!buttonText.isEmpty() && action != nullptr);
+    m_viewNoticeAction2 = action2;
+    m_viewNoticeButton2->setText(button2Text);
+    m_viewNoticeButton2->setVisible(!button2Text.isEmpty() && action2 != nullptr);
     m_viewNotice->show();
 }
 
@@ -4893,6 +4927,7 @@ void App::hideViewNotice()
         return;
     m_viewNotice->hide();
     m_viewNoticeAction = nullptr;
+    m_viewNoticeAction2 = nullptr;
 }
 
 void App::showInputDeviceNotice(const QString &text, bool warning)

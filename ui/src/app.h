@@ -197,7 +197,9 @@ public:
     /** A quiet line above the tabs: @p text, with a button @p buttonText
      *  running @p action when given; × puts it away. */
     void showViewNotice(const QString &text, const QString &buttonText = QString(),
-                        const std::function<void()> &action = nullptr);
+                        const std::function<void()> &action = nullptr,
+                        const QString &button2Text = QString(),
+                        const std::function<void()> &action2 = nullptr);
     void hideViewNotice();
     /** A device input came or went (InputDeviceNotices): the notice line,
      *  amber while @p warning; a plain one puts itself away after a while. */
@@ -263,6 +265,8 @@ private:
     class QLabel *m_viewNoticeText = nullptr;
     class QPushButton *m_viewNoticeButton = nullptr;
     std::function<void()> m_viewNoticeAction;
+    class QPushButton *m_viewNoticeButton2 = nullptr;
+    std::function<void()> m_viewNoticeAction2;
     class InputDeviceNotices *m_inputNotices = nullptr;
 
     /*********************************************************************
@@ -886,6 +890,10 @@ public:
 private:
     QSet<QString> m_stockNoticeShown;
     QStringList m_lastStockLosses;
+    /** "Don't ask again for this show": the .qxw paths whose notice is off
+     *  (this computer's settings, never the show). */
+    static bool stockNoticeOff(const QString &fileName);
+    static void setStockNoticeOff(const QString &fileName, bool off);
     bool m_saveAsQlccOnce = false;      ///< the notice's Save as .qlcc…
 public:
 
