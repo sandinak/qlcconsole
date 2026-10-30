@@ -50,10 +50,14 @@ private slots:
 
     void anIdleRigViewDrawsNothing();
     void anIdlePlotDrawsNothing();
+    void aRunningShowStaysUnderOneCore();
+    void aGelFiltersTheLight();
 
     void cpuPerFrame();
 
 private:
+    /** CPU ns per second of a running show, set by aRunningShowStaysUnderOneCore() */
+    double m_runningNsPerSec = 0;
     /** Every fixture a step further on: new values to draw */
     void changeValues(int step);
 

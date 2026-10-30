@@ -81,6 +81,8 @@ Operate PIN), fade in / out on hits (bake, 2026-10-30). **Still open:**
   code, left while another agent is in it.
 - **Gel colour in the Rig Overview** (the 3D view): the rig view, same
   reason. The patch list half is built.
+- **Fade in/out on hits**: Show Tree (hit bake), same reason.
+- ~~**Gel colour in the Rig Overview** (the 3D view)~~ — done (feat/rig-cost).
 - **Momentary / start-only / stop-only on Control Map bindings**: built
   with the Control Map's return (cm, feat/031-control-map), not here.
 - **Teaching mode**: DONE (t, feat/031-teaching): must-haves + lesson link;
@@ -313,6 +315,11 @@ Five fixed; the rest, by the doc's numbers:
     fixtures (plan 2.2 ms); with Live on in a running show up to 25 frames
     a second, ~1.5 cores. A frame budget (rate or supersample down while
     values change fast).
+  - **Show Tree edit at scale:** 155 ms CPU per edit on 200 tracking cues
+    over stage groups, nearly all `planCue()` re-planning every cue on
+    every bake. Incremental bake (only cues whose resolved state changed).
+  - ~~**Rig view frame cost**~~ — done (feat/rig-cost: a CPU frame budget,
+    light frames while values move fast, the people's faces kept).
   - The Workbench preview is not drawn by itself (it runs functions); no
     point for it.
 

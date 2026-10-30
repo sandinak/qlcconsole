@@ -767,6 +767,35 @@ void Performers_Test::anyLineTakesPeopleInItsDialog()
     QCOMPARE(PerformerFill::people(props, t).size(), 4);
 }
 
+/* The people's faces are kept between frames; the picture must not change by
+   it, and must follow the view when it moves. */
+void Performers_Test::keptFacesDrawTheSamePicture()
+{
+    Doc doc(this);
+    MonitorProperties *props = doc.monitorProperties();
+    QList<quint32> risers;
+    risers << threeTier(props, 0.3f, 1.0f)->id();
+    Fixture *wash = makeWash(&doc, 0, QVector3D(1.5f, 8.0f, 5.0f));
+    QVERIFY(wash != nullptr);
+    StructureStudioView v(&doc, StructureStudioView::StageKind, 0);
+    v.resize(600, 420);
+    v.reload();
+    v.setPlane(StructureStudioView::Angled);
+    v.setAngledView(15.0, 15.0);
+    Plot plot(&doc);
+    PerformerFill::Options o;
+    o.height = PerformerFill::presetHeight(PerformerFill::Students);
+    QVERIFY(plot.mon->fillWithPeople(risers, o).people > 0);
+    v.reload();
+    const QImage first = v.grab().toImage();       // builds the faces
+    const QImage again = v.grab().toImage();       // draws from the kept ones
+    QCOMPARE(again, first);
+    v.setAngledView(60.0, 25.0);
+    QVERIFY(v.grab().toImage() != first);
+    v.setAngledView(15.0, 15.0);
+    QCOMPARE(v.grab().toImage(), first);
+}
+
 void Performers_Test::manyPeopleRenderCost()
 {
     /* Five 3-tier risers of students -- 70 people on 15 lines -- under a
