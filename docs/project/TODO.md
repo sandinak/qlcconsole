@@ -171,6 +171,13 @@ undo as one step, how it reads in Front/Side).
 
 ## Small fixes and leftovers
 
+- **VC effect controls** (feat/031-vc-controls, part 3): a VC slider/knob/
+  Speed Dial bound to an effect's parameter by role (Speed, Size, Rate,
+  Offset, Direction, Intensity, Colour 1 hue) on a palette, the effect on a
+  group, or "the current effect". Design: docs/design/VC_EFFECT_CONTROLS.md.
+  Hits on VC buttons and VC speed-master sliders/dials shipped (DONE.md
+  2026-10-29).
+
 - ~~**Web access saved with the show** (asked 2026-10-29: "enable
   webserver for a showfile in config and port")~~ — done
   (feat/031-show-webserver; DONE.md 2026-10-29). Open: a real-rig check

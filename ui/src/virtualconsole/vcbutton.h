@@ -46,6 +46,7 @@ class QEvent;
 
 #define KXMLQLCVCButtonFunction     QStringLiteral("Function")
 #define KXMLQLCVCButtonFunctionID   QStringLiteral("ID")
+#define KXMLQLCVCButtonFunctionHit  QStringLiteral("Hit")
 
 #define KXMLQLCVCButtonAction           QStringLiteral("Action")
 #define KXMLQLCVCButtonActionFlash      QStringLiteral("Flash")
@@ -195,7 +196,8 @@ protected:
 public:
     /**
      * Attach a function to a VCButton. This function is started when the
-     * button is pressed down.
+     * button is pressed down. A function other than its hit's: the button
+     * no longer fires the hit (setHit()).
      *
      * @param function An ID of a function to attach
      */
@@ -215,13 +217,30 @@ public:
     /** @reimp */
     virtual void notifyFunctionStarting(quint32 fid, qreal intensity, bool excludeMonitored) override;
 
+    /**
+     * Fire a Show Tree hit (a look of a production's Hits section): the
+     * button plays the hit's own Collection, found again by the hit when
+     * the tree rebuilds or renames it. Invalid: no hit (setFunction() as
+     * in QLC+). Saved as the Function element's "Hit" attribute.
+     */
+    void setHit(quint32 hitId);
+    quint32 hit() const { return m_hit; }
+
+protected:
+    /** setFunction() without touching the hit. */
+    void attachFunction(quint32 fid);
+
 protected slots:
     /** Invalidates the button's function if the function is destroyed */
     void slotFunctionRemoved(quint32 fid);
+    /** The Show Tree changed: a hit's button follows its Collection. */
+    void slotShowTreeChanged();
 
 protected:
     /** ID of the Function that this button is controlling */
     quint32 m_function;
+    /** The Show Tree hit it fires (invalid: none) */
+    quint32 m_hit;
 
     /*********************************************************************
      * Button state

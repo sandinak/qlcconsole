@@ -58,11 +58,17 @@ protected slots:
 
     void accept() override;
 
+private:
+    /** The function line for a hit: "Hit Stab (DanceHysteria)". */
+    void showFunctionName();
+
 protected:
     VCButton* m_button;
     Doc* m_doc;
     InputSelectionWidget *m_inputSelWidget;
     quint32 m_function;
+    /** The Show Tree hit picked (invalid: a plain function or none) */
+    quint32 m_hit = Function::invalidId();
 
     /************************************************************************
      * Speed dial

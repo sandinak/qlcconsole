@@ -36,6 +36,10 @@
 #include "vcframe.h"
 #include "scene.h"
 #include "collection.h"
+#include "showtreecontroller.h"
+#include "functionselection.h"
+#include "functionstreewidget.h"
+#include "vcbuttonproperties.h"
 #include "doc.h"
 #undef private
 #undef protected
@@ -744,6 +748,167 @@ void VCButton_Test::flashPlaysAHit()
     m_doc->masterTimer()->timerTick();
     QVERIFY(!m_doc->masterTimer()->m_functionList.contains(hit));
     m_doc->setMode(Doc::Design);
+}
+
+/* A button fires a Show Tree hit itself: renamed, the hit's Collection
+   deleted and made again, the button follows the hit. */
+void VCButton_Test::firesAHitByIdentity()
+{
+    QWidget w;
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("P");
+    const quint32 hit = st->addLook(prod, "Stab", "Hits");
+    const quint32 fid = st->lookFunction(hit);
+    QVERIFY(fid != Function::invalidId());
+
+    VCButton btn(&w, m_doc);
+    btn.setHit(hit);
+    QCOMPARE(btn.hit(), hit);
+    QCOMPARE(btn.function(), fid);
+
+    // Renamed: the same hit, the same Collection.
+    ShowTree::Cue cue = *st->listOfCue(hit)->cue(hit);
+    cue.name = "Big Stab";
+    QVERIFY(st->setCue(cue));
+    QCOMPARE(btn.function(), fid);
+    QCOMPARE(btn.toolTip(), QString("Big Stab"));
+
+    // Its Collection gone and made again (a new id): the button takes it.
+    m_doc->deleteFunction(fid);
+    QCOMPARE(btn.hit(), hit);
+    Scene *taken = new Scene(m_doc);             // so the new one has a new id
+    QVERIFY(m_doc->addFunction(taken, fid));
+    st->bake();
+    QCOMPARE(btn.function(), Function::invalidId());   // bake() alone says nothing
+    QVERIFY(st->addLook(prod, "Other", "Hits") != Function::invalidId());
+    const quint32 again = st->lookFunction(hit);
+    QVERIFY(again != Function::invalidId());
+    QVERIFY(again != fid);
+    QCOMPARE(btn.function(), again);
+
+    // Toggle fires it.
+    btn.setAction(VCButton::Toggle);
+    btn.setKeySequence(QKeySequence(keySequenceA));
+    m_doc->setMode(Doc::Operate);
+    btn.slotKeyPressed(QKeySequence(keySequenceA));
+    m_doc->masterTimer()->timerTick();
+    QVERIFY(m_doc->masterTimer()->m_functionList.contains(m_doc->function(again)));
+    btn.slotKeyPressed(QKeySequence(keySequenceA));
+    m_doc->masterTimer()->timerTick();
+    m_doc->masterTimer()->timerTick();
+    m_doc->setMode(Doc::Design);
+
+    // Deleted: it fires nothing, and the hit back (undo) it fires it again.
+    QVERIFY(st->removeCue(hit));
+    QCOMPARE(btn.function(), Function::invalidId());
+    QVERIFY(st->undo());
+    QCOMPARE(btn.function(), st->lookFunction(hit));
+    QVERIFY(btn.function() != Function::invalidId());
+
+    // A plain function: no hit any more.
+    btn.setHit(Function::invalidId());
+    btn.setFunction(again);
+    QCOMPARE(btn.hit(), Function::invalidId());
+}
+
+void VCButton_Test::hitSavesAndLoads()
+{
+    QWidget w;
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("P");
+    const quint32 hit = st->addLook(prod, "Stab");
+    VCButton btn(&w, m_doc);
+    btn.setHit(hit);
+
+    QBuffer buffer;
+    buffer.open(QIODevice::WriteOnly | QIODevice::Text);
+    QXmlStreamWriter xmlWriter(&buffer);
+    xmlWriter.writeStartDocument();
+    QVERIFY(btn.saveXML(&xmlWriter));
+    xmlWriter.writeEndDocument();
+    xmlWriter.setDevice(NULL);
+    buffer.close();
+    QVERIFY(buffer.buffer().contains(QStringLiteral("Hit=\"%1\"").arg(hit).toUtf8()));
+
+    // The file's function id is stale (the tree made the Collection again
+    // since): the hit wins.
+    QByteArray xml = buffer.buffer();
+    xml.replace(QStringLiteral("ID=\"%1\"").arg(st->lookFunction(hit)).toUtf8(), "ID=\"4242\"");
+    QBuffer in(&xml);
+    in.open(QIODevice::ReadOnly | QIODevice::Text);
+    QXmlStreamReader xmlReader(&in);
+    xmlReader.readNextStartElement();
+    VCButton loaded(&w, m_doc);
+    QVERIFY(loaded.loadXML(xmlReader));
+    QCOMPARE(loaded.hit(), hit);
+    QCOMPARE(loaded.function(), st->lookFunction(hit));
+
+    // An old show (no Hit): as it was.
+    Scene *sc = new Scene(m_doc);
+    m_doc->addFunction(sc);
+    VCButton plain(&w, m_doc);
+    plain.setFunction(sc->id());
+    QBuffer b2;
+    b2.open(QIODevice::WriteOnly | QIODevice::Text);
+    QXmlStreamWriter w2(&b2);
+    QVERIFY(plain.saveXML(&w2));
+    w2.setDevice(NULL);
+    QVERIFY(!b2.buffer().contains("Hit="));
+}
+
+/* The button's function picker: a Hits section with each hit, by
+   production and folder; picked there, the button fires the hit. */
+void VCButton_Test::pickerHasAHitsSection()
+{
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("DanceHysteria");
+    const quint32 hit = st->addLook(prod, "Stab", "Big");
+    const quint32 fid = st->lookFunction(hit);
+
+    QWidget w;
+    FunctionSelection fs(&w, m_doc);
+    fs.setFilter(Function::SceneType, true);     // no Collections: hits still there
+    fs.showHits(true);
+    fs.m_isInitializing = false;
+    fs.refillTree();
+    QTreeWidgetItem *section = nullptr;
+    for (int i = 0; i < fs.m_funcTree->topLevelItemCount(); ++i)
+        if (fs.m_funcTree->topLevelItem(i)->text(0) == "Hits")
+            section = fs.m_funcTree->topLevelItem(i);
+    QVERIFY(section != nullptr);
+    QCOMPARE(section->child(0)->text(0), QString("DanceHysteria"));
+    QCOMPARE(section->child(0)->child(0)->text(0), QString("Big"));
+    QTreeWidgetItem *item = section->child(0)->child(0)->child(0);
+    QCOMPARE(item->text(0), QString("Stab"));
+    item->setSelected(true);
+    fs.slotItemSelectionChanged();
+    QCOMPARE(fs.selection(), QList<quint32>() << fid);
+    QCOMPARE(fs.selectedHit(), hit);
+
+    // Only once: not again under Collection.
+    FunctionSelection all(&w, m_doc);
+    all.showHits(true);
+    all.m_isInitializing = false;
+    all.refillTree();
+    int found = 0;
+    std::function<void(QTreeWidgetItem *)> count = [&](QTreeWidgetItem *it) {
+        if (it->data(0, Qt::UserRole).toUInt() == fid)
+            ++found;
+        for (int i = 0; i < it->childCount(); ++i)
+            count(it->child(i));
+    };
+    for (int i = 0; i < all.m_funcTree->topLevelItemCount(); ++i)
+        count(all.m_funcTree->topLevelItem(i));
+    QCOMPARE(found, 1);
+
+    // The properties dialog binds the button to the hit.
+    VCButton btn(&w, m_doc);
+    VCButtonProperties props(&btn, m_doc);
+    props.slotSetFunction(fid);
+    props.m_hit = hit;
+    props.accept();
+    QCOMPARE(btn.hit(), hit);
+    QCOMPARE(btn.function(), fid);
 }
 
 void VCButton_Test::toggleAndFlash()

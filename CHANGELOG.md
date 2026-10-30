@@ -113,6 +113,19 @@ skipped). Upstream fixes taken:
   `<ControlMap>` only when there is one; QLC+ 4 skips it (the save check
   names it). Replaces the unsaved toggle-only prototype that went with the
   old Programming tab. With no trigger, input costs nothing more.
+- **VC buttons fire Show Tree hits**: a button's function picker
+  has a **Hits** section (each production's hits, by folder), whatever
+  the type filter. The button keeps the hit itself, not just the
+  collection that plays it: renamed, rebuilt, deleted and undone, it still
+  fires it. Toggle and Flash as before; **Make VC page** buttons do the
+  same. Older shows' buttons fire what they fired.
+- **VC sliders and Speed Dials move speed masters**: a slider (or knob) in
+  the new **Speed master** mode drives a master's **Rate** (middle = as
+  set) or its **Tempo** between two BPMs, shows "100 %" / "128 BPM" (n/a
+  on a following master) and follows the master moved elsewhere; a Speed
+  Dial set to a master makes its time one beat and taps it. External
+  input feeds both. A slider's properties no longer turn a Grand Master
+  slider into a Level one.
 - **Web access saved with the show**: **Connections ▸ Devices ▸ Show
   control & sync ▸ Web access** turns on "Start web access with this show,
   on port" (9999 by default), with **Reachable from other devices on the

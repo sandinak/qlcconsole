@@ -397,11 +397,23 @@ Each row has:
   the bottom stopped. Move the control with **Auto Detect** on, or choose
   it; the button then reads how many are mapped. Saved with the show.
 
+- **From the Virtual Console** — a **slider** (or knob) in **Speed
+  master** mode (its properties → **Speed master** tab → **Switch to Speed
+  Master Mode**) moves one master's **Rate** (the middle is the tempo as
+  set, the top double, the bottom stopped) or its **Tempo** between two
+  BPMs you choose; it reads "100 %" or "128 BPM" and follows the master
+  tapped or moved anywhere else. A master following another has no rate
+  or tempo of its own: the slider reads *n/a*. A **Speed Dial** set to a
+  master (its properties → **Speed master**) makes its time one beat —
+  500 ms is 120 BPM — and its **Tap** taps the master. A controller mapped
+  to the slider's or dial's external input drives the master the same
+  way. Saved with the show.
+
 A master **nothing uses** stays out of the way: its row is here to set up,
 but its light is an empty ring ("Nothing is on this master yet") and doesn't
 flash. A master is used when an effect, a look, a chase, a chase step or a
-collection is on it, when a controller input drives it, or when a used
-master follows it.
+collection is on it, when a controller input or a VC slider or dial
+drives it, or when a used master follows it.
 
 The used masters also sit in the **footer**, beside the Grand Master: a
 button for each, reading its tempo ("Pars 120", or "paused") and lit

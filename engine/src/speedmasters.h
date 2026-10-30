@@ -138,6 +138,10 @@ public:
      *  next time it's asked (any thread). */
     void markUsageDirty() { m_usageDirty.storeRelaxed(1); }
     bool isUsed(int index) const { return (usedMask() >> index) & 1u; }
+    /** A control outside the engine (a VC slider or speed dial on master
+     *  @p index) counts as using it while held: hold(index, true) once,
+     *  hold(index, false) when it lets go. */
+    void hold(int index, bool on);
     /** Which masters something PLAYING now is on: a running function (its
      *  own choice or one handed down), an effect in a running look, and what
      *  those masters follow. Walks the running functions: ask it a few
@@ -184,6 +188,7 @@ private:
         quint32 inUniverse[ControlCount] = { UINT_MAX, UINT_MAX, UINT_MAX };
         quint32 inChannel[ControlCount] = { UINT_MAX, UINT_MAX, UINT_MAX };
         uchar inLast[ControlCount] = { 0, 0, 0 };   //!< for a button's press
+        int held = 0;               //!< hold(): VC widgets driving it
     };
 
     bool valid(int index) const { return index >= 0 && index < MaxCount; }

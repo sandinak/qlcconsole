@@ -18,6 +18,8 @@
 */
 
 #include <QDebug>
+#include <QComboBox>
+#include <QLabel>
 
 #include "vcspeeddialproperties.h"
 #include "inputselectionwidget.h"
@@ -28,6 +30,7 @@
 #include "vcspeeddialpreset.h"
 #include "speeddial.h"
 #include "apputil.h"
+#include "speedmasters.h"
 #include "doc.h"
 
 #define PROP_ID  Qt::UserRole
@@ -57,6 +60,23 @@ VCSpeedDialProperties::VCSpeedDialProperties(VCSpeedDial* dial, Doc* doc)
     /* Functions */
     foreach (const VCSpeedDialFunction &speeddialfunction, m_dial->functions())
         createFunctionItem(speeddialfunction);
+
+    /* Speed master: under the functions */
+    {
+        const SpeedMasters *sm = m_doc->speedMasters();
+        m_speedMasterCombo = new QComboBox(this);
+        m_speedMasterCombo->setObjectName(QStringLiteral("speedDialSpeedMaster"));
+        m_speedMasterCombo->addItem(tr("None"), -1);
+        for (int i = 0; i < qMax(sm->count(), m_dial->speedMaster() + 1); ++i)
+            m_speedMasterCombo->addItem(sm->assignmentName(SpeedMasters::Master1 + i), i);
+        m_speedMasterCombo->setCurrentIndex(m_speedMasterCombo->findData(m_dial->speedMaster()));
+        m_speedMasterCombo->setToolTip(tr("The dial's time is one beat of this speed master "
+                                          "(500 ms = 120 BPM); Tap taps it too"));
+        QLabel *label = new QLabel(tr("Speed master"), this);
+        const int row = gridLayout->rowCount();
+        gridLayout->addWidget(label, row, 0);
+        gridLayout->addWidget(m_speedMasterCombo, row, 1);
+    }
 
     /* Forbid editing the function name */
     m_tree->setItemDelegateForColumn(COL_NAME, new NoEditDelegate(this));
@@ -206,6 +226,7 @@ void VCSpeedDialProperties::accept()
 
     /* Functions */
     m_dial->setFunctions(functions());
+    m_dial->setSpeedMaster(m_speedMasterCombo->currentData().toInt());
 
     /* Input sources */
     if (m_absolutePrecisionCb->isChecked())

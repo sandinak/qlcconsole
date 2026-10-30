@@ -34,6 +34,7 @@
 #include <QTreeWidgetItem>
 
 #include "inputselectionwidget.h"
+#include "showtreecontroller.h"
 #include "vcbuttonproperties.h"
 #include "functionselection.h"
 #include "speeddialwidget.h"
@@ -71,6 +72,9 @@ VCButtonProperties::VCButtonProperties(VCButton* button, Doc* doc)
     /* Button text and function */
     m_nameEdit->setText(m_button->caption());
     slotSetFunction(button->function());
+    m_hit = button->hit();
+    if (m_hit != Function::invalidId())
+        showFunctionName();
 
     /* Press action */
     if (button->action() == VCButton::Flash)
@@ -146,13 +150,25 @@ void VCButtonProperties::slotAttachFunction()
 {
     FunctionSelection fs(this, m_doc);
     fs.setMultiSelection(false);
+    fs.showHits(true);
+    if (m_function != Function::invalidId())
+        fs.setSelection(QList<quint32>() << m_function);
     if (fs.exec() == QDialog::Accepted && fs.selection().size() > 0)
+    {
+        const quint32 hit = fs.selectedHit();
         slotSetFunction(fs.selection().first());
+        if (hit != Function::invalidId())
+        {
+            m_hit = hit;
+            showFunctionName();
+        }
+    }
 }
 
 void VCButtonProperties::slotSetFunction(quint32 fid)
 {
     m_function = fid;
+    m_hit = Function::invalidId();
     Function* func = m_doc->function(m_function);
 
     if (func == NULL)
@@ -165,6 +181,28 @@ void VCButtonProperties::slotSetFunction(quint32 fid)
         if (m_nameEdit->text().simplified().contains(QString::number(m_button->id())))
             m_nameEdit->setText(func->name());
     }
+}
+
+void VCButtonProperties::showFunctionName()
+{
+    if (m_hit == Function::invalidId())
+        return;
+    const ShowTreeController *st = m_doc->showTree();
+    quint32 prodId = Function::invalidId();
+    const ShowTree::CueList *list = st->listOfCue(m_hit);
+    const ShowTree::Cue *cue = list != nullptr ? list->cue(m_hit) : nullptr;
+    if (cue == nullptr)
+    {
+        m_functionEdit->setText(tr("Hit (deleted)"));
+        return;
+    }
+    st->cueList(list->id, &prodId);
+    QString prodName;
+    for (const ShowTree::Production &p : st->productions())
+        if (p.id == prodId)
+            prodName = p.name;
+    m_functionEdit->setText(prodName.isEmpty() ? tr("Hit %1").arg(cue->name)
+                                               : tr("Hit %1 (%2)").arg(cue->name, prodName));
 }
 
 void VCButtonProperties::slotActionToggled()
@@ -293,7 +331,13 @@ void VCButtonProperties::slotFadeOutTextEdited()
 
 void VCButtonProperties::accept()
 {
-    m_button->setFunction(m_function);
+    if (m_hit != Function::invalidId())
+        m_button->setHit(m_hit);
+    else
+    {
+        m_button->setHit(Function::invalidId());
+        m_button->setFunction(m_function);
+    }
     m_button->setKeySequence(m_inputSelWidget->keySequence());
     m_button->setInputSource(m_inputSelWidget->inputSource());
     m_button->enableStartupIntensity(m_intensityGroup->isChecked());

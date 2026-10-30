@@ -77,8 +77,10 @@ void SpeedMasters::reset()
         const qint64 now = m_clock.nsecsElapsed();
         for (int i = 0; i < MaxCount; ++i)
         {
+            const int held = m_masters[i].held;  // the widgets holding it are still there
             m_masters[i] = Master();
             m_masters[i].anchorNs = now;
+            m_masters[i].held = held;
         }
     }
     for (int i = 0; i < MaxCount; ++i)
@@ -476,9 +478,13 @@ quint32 SpeedMasters::usedMask() const
 
     QMutexLocker locker(&m_mutex);
     for (int i = 0; i < m_count; ++i)
+    {
         for (int c = 0; c < ControlCount; ++c)
             if (m_masters[i].inUniverse[c] != UINT_MAX)
                 mask |= 1u << i;
+        if (m_masters[i].held > 0)
+            mask |= 1u << i;
+    }
     // What a used master follows is used too: its tempo drives it.
     for (bool grew = true; grew; )
     {
@@ -498,6 +504,17 @@ quint32 SpeedMasters::usedMask() const
     m_usedCount = m_count;
     m_usedCache = m_count >= 32 ? mask : mask & ((1u << m_count) - 1);
     return m_usedCache;
+}
+
+void SpeedMasters::hold(int index, bool on)
+{
+    if (!valid(index))
+        return;
+    {
+        QMutexLocker locker(&m_mutex);
+        m_masters[index].held = qMax(0, m_masters[index].held + (on ? 1 : -1));
+    }
+    markUsageDirty();
 }
 
 quint32 SpeedMasters::playingMask() const

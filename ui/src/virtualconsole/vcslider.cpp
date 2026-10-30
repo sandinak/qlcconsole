@@ -49,6 +49,7 @@
 #include "qlcfixturemode.h"
 #include "qlcmacros.h"
 #include "universe.h"
+#include "speedmasters.h"
 #include "vcslider.h"
 #include "apputil.h"
 #include "doc.h"
@@ -219,6 +220,8 @@ VCSlider::VCSlider(QWidget *parent, Doc *doc)
 
 VCSlider::~VCSlider()
 {
+    holdSpeedMaster(false);
+
     /* When application exits these are already NULL and unregistration
        is no longer necessary. But a normal deletion of a VCSlider in
        design mode must unregister the slider. */
@@ -284,6 +287,11 @@ bool VCSlider::copyFrom(const VCWidget* widget)
 
     /* Copy Click & Go feature */
     setClickAndGoType(slider->clickAndGoType());
+
+    /* Copy speed master stuff */
+    setSpeedMaster(slider->speedMaster());
+    setSpeedControl(slider->speedControl());
+    setTempoRange(slider->tempoMin(), slider->tempoMax());
 
     /* Copy mode & current value */
     setSliderMode(slider->sliderMode());
@@ -479,6 +487,7 @@ QString VCSlider::sliderModeToString(SliderMode mode)
         case Submaster: return QString("Submaster"); break;
         case Parameter: return QString("Parameter"); break;
         case GrandMaster: return QString("GrandMaster"); break;
+        case SpeedMaster: return QString("SpeedMaster"); break;
         default: return QString("Unknown"); break;
     }
 }
@@ -493,6 +502,8 @@ VCSlider::SliderMode VCSlider::stringToSliderMode(const QString& mode)
         return Parameter;
     else if (mode == QString("GrandMaster"))
         return GrandMaster;
+    else if (mode == QString("SpeedMaster"))
+        return SpeedMaster;
     else //if (mode == QString("Submaster"))
         return Submaster;
 }
@@ -665,7 +676,7 @@ VCSlider::SliderMode VCSlider::sliderMode() const
 
 void VCSlider::setSliderMode(SliderMode mode)
 {
-    Q_ASSERT(mode >= Level && mode <= GrandMaster);
+    Q_ASSERT(mode >= Level && mode <= SpeedMaster);
 
     // Manage Doc::programmerSelectionChanged subscription on transitions
     // into and out of Parameter mode.
@@ -684,6 +695,16 @@ void VCSlider::setSliderMode(SliderMode mode)
     else if (m_sliderMode != GrandMaster && mode == GrandMaster && iom != NULL)
         connect(iom, SIGNAL(grandMasterValueChanged(uchar)),
                 this, SLOT(slotGrandMasterValueChanged(uchar)));
+
+    // A speed master slider follows its master moved elsewhere.
+    SpeedMasters *sm = m_doc->speedMasters();
+    if (m_sliderMode == SpeedMaster && mode != SpeedMaster)
+    {
+        disconnect(sm, &SpeedMasters::changed, this, &VCSlider::slotSpeedMasterChanged);
+        holdSpeedMaster(false);
+    }
+    else if (m_sliderMode != SpeedMaster && mode == SpeedMaster)
+        connect(sm, &SpeedMasters::changed, this, &VCSlider::slotSpeedMasterChanged);
 
     m_sliderMode = mode;
 
@@ -783,6 +804,133 @@ void VCSlider::setSliderMode(SliderMode mode)
         // GrandMaster writes go through InputOutputMap directly, so no
         // DMXSource registration needed.
     }
+    else if (mode == SpeedMaster)
+    {
+        m_monitorEnabled = false;
+        m_cngType = ClickAndGoWidget::None;
+        if (m_cngButton)
+            m_cngButton->hide();
+        if (m_slider)
+        {
+            m_slider->setRange(0, UCHAR_MAX);
+            if (m_widgetMode == WSlider)
+                m_slider->setStyleSheet(CNG_DEFAULT_STYLE);
+        }
+        m_bottomLabel->show();
+        holdSpeedMaster(true);
+        showSpeedMaster();
+        // Not a DMX source: it sets the master when moved, nothing per tick.
+    }
+}
+
+/*****************************************************************************
+ * Speed master
+ *****************************************************************************/
+
+void VCSlider::setSpeedMaster(int index)
+{
+    index = qBound(0, index, SpeedMasters::MaxCount - 1);
+    if (index == m_speedMaster)
+        return;
+    const bool held = m_speedMasterHeld;
+    holdSpeedMaster(false);
+    m_speedMaster = index;
+    if (held)
+        holdSpeedMaster(true);
+    if (m_sliderMode == SpeedMaster)
+        showSpeedMaster();
+}
+
+void VCSlider::setSpeedControl(SpeedControl control)
+{
+    m_speedControl = control;
+    if (m_sliderMode == SpeedMaster)
+        showSpeedMaster();
+}
+
+void VCSlider::setTempoRange(int minBpm, int maxBpm)
+{
+    minBpm = qBound(1, minBpm, 998);
+    maxBpm = qBound(minBpm + 1, maxBpm, 999);
+    m_tempoMin = minBpm;
+    m_tempoMax = maxBpm;
+    if (m_sliderMode == SpeedMaster)
+        showSpeedMaster();
+}
+
+void VCSlider::holdSpeedMaster(bool on)
+{
+    if (on == m_speedMasterHeld)
+        return;
+    m_speedMasterHeld = on;
+    m_doc->speedMasters()->hold(m_speedMaster, on);
+}
+
+uchar VCSlider::speedMasterSliderValue() const
+{
+    const SpeedMasters *sm = m_doc->speedMasters();
+    if (m_speedControl == SpeedRate)
+        return uchar(qBound(0.0, qRound(sm->rate(m_speedMaster) * 127.5) * 1.0, 255.0));
+    const double bpm = sm->setBpm(m_speedMaster);
+    return uchar(qBound(0.0, qRound(SCALE(bpm, double(m_tempoMin), double(m_tempoMax), 0.0, 255.0)) * 1.0, 255.0));
+}
+
+QString VCSlider::speedMasterValueText() const
+{
+    const SpeedMasters *sm = m_doc->speedMasters();
+    if (sm->mode(m_speedMaster) == SpeedMasters::Follow)
+        return tr("n/a");
+    if (sm->isPaused(m_speedMaster))
+        return tr("paused");
+    if (m_speedControl == SpeedRate)
+        return tr("%1 %").arg(qRound(sm->rate(m_speedMaster) * 100));
+    return tr("%1 BPM").arg(sm->setBpm(m_speedMaster), 0, 'f', sm->setBpm(m_speedMaster) < 100 ? 1 : 0);
+}
+
+void VCSlider::applySpeedMaster(uchar value)
+{
+    SpeedMasters *sm = m_doc->speedMasters();
+    // A following master runs on what it follows: nothing to set.
+    if (sm->mode(m_speedMaster) == SpeedMasters::Follow)
+        return;
+    if (m_speedControl == SpeedRate)
+    {
+        // The middle is 100 %: snap there, as a controller's Rate fader.
+        double rate = value / 127.5;
+        if (qAbs(rate - 1.0) < 0.02)
+            rate = 1.0;
+        if (!qFuzzyCompare(rate, sm->rate(m_speedMaster)))
+            sm->setRate(m_speedMaster, rate);
+    }
+    else
+    {
+        const double bpm = qRound((SCALE(double(value), 0.0, 255.0, double(m_tempoMin), double(m_tempoMax))) * 10) / 10.0;
+        if (!qFuzzyCompare(bpm, sm->setBpm(m_speedMaster)))
+            sm->setBpm(m_speedMaster, bpm);
+    }
+}
+
+void VCSlider::showSpeedMaster()
+{
+    if (m_slider == NULL)
+        return;
+    const SpeedMasters *sm = m_doc->speedMasters();
+    if (m_slider->isSliderDown() == false)
+    {
+        m_slider->blockSignals(true);
+        m_slider->setValue(speedMasterSliderValue());
+        m_slider->blockSignals(false);
+    }
+    m_topLabel->setText(speedMasterValueText());
+    emit valueChanged(m_topLabel->text());
+    setToolTip(tr("%1 — %2").arg(sm->assignmentName(SpeedMasters::Master1 + m_speedMaster),
+                                 m_speedControl == SpeedRate ? tr("rate") : tr("tempo")));
+}
+
+void VCSlider::slotSpeedMasterChanged(int index)
+{
+    if (m_sliderMode == SpeedMaster && index == m_speedMaster)
+        showSpeedMaster();
 }
 
 /*****************************************************************************
@@ -1787,6 +1935,13 @@ void VCSlider::setTopLabelText(int value)
 {
     QString text;
 
+    if (m_sliderMode == SpeedMaster)
+    {
+        m_topLabel->setText(speedMasterValueText());
+        emit valueChanged(m_topLabel->text());
+        return;
+    }
+
     if (valueDisplayStyle() == ExactValue)
     {
         text = text.asprintf("%.3d", value);
@@ -1887,6 +2042,10 @@ void VCSlider::setSliderValue(uchar value, bool scale, bool external)
             if (iom != NULL && iom->grandMasterValue() != uchar(val))
                 iom->setGrandMasterValue(uchar(val));
         }
+        break;
+
+        case SpeedMaster:
+            applySpeedMaster(uchar(val));
         break;
     }
 }
@@ -2236,6 +2395,17 @@ bool VCSlider::loadXML(QXmlStreamReader &root)
                     pAttrs.value(KXMLQLCVCSliderParameterByte).toInt());
             root.skipCurrentElement();
         }
+        else if (root.name() == KXMLQLCVCSliderSpeedMaster)
+        {
+            QXmlStreamAttributes sAttrs = root.attributes();
+            setSpeedMaster(sAttrs.value(KXMLQLCVCSliderSpeedMasterIndex).toInt() - 1);
+            setSpeedControl(sAttrs.value(KXMLQLCVCSliderSpeedMasterControl) == QLatin1String("Tempo")
+                            ? SpeedTempo : SpeedRate);
+            if (sAttrs.hasAttribute(KXMLQLCVCSliderSpeedMasterMin))
+                setTempoRange(sAttrs.value(KXMLQLCVCSliderSpeedMasterMin).toInt(),
+                              sAttrs.value(KXMLQLCVCSliderSpeedMasterMax).toInt());
+            root.skipCurrentElement();
+        }
         else
         {
             qWarning() << Q_FUNC_INFO << "Unknown slider tag:" << root.name().toString();
@@ -2453,6 +2623,21 @@ bool VCSlider::saveXML(QXmlStreamWriter *doc)
     doc->writeAttribute(KXMLQLCVCSliderParameterByte,
                         QString::number(m_parameterControlByte));
     doc->writeEndElement();
+
+    /* Speed master mode (only when in it: older shows stay as they were) */
+    if (m_sliderMode == SpeedMaster)
+    {
+        doc->writeStartElement(KXMLQLCVCSliderSpeedMaster);
+        doc->writeAttribute(KXMLQLCVCSliderSpeedMasterIndex, QString::number(m_speedMaster + 1));
+        doc->writeAttribute(KXMLQLCVCSliderSpeedMasterControl,
+                            m_speedControl == SpeedTempo ? QStringLiteral("Tempo") : QStringLiteral("Rate"));
+        if (m_speedControl == SpeedTempo)
+        {
+            doc->writeAttribute(KXMLQLCVCSliderSpeedMasterMin, QString::number(m_tempoMin));
+            doc->writeAttribute(KXMLQLCVCSliderSpeedMasterMax, QString::number(m_tempoMax));
+        }
+        doc->writeEndElement();
+    }
 
     /* End the <Slider> tag */
     doc->writeEndElement();

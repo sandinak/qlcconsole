@@ -36,6 +36,8 @@ class Doc;
  * @{
  */
 
+class QComboBox;
+
 class VCSpeedDialProperties final : public QDialog, public Ui_VCSpeedDialProperties
 {
     Q_OBJECT
@@ -109,6 +111,9 @@ protected slots:
 
 protected:
     quint8 m_lastAssignedID;
+
+    /** The speed master the dial sets (VCSpeedDial::setSpeedMaster()). */
+    QComboBox *m_speedMasterCombo = nullptr;
     QList<VCSpeedDialPreset*> m_presets;
     InputSelectionWidget *m_presetInputWidget;
 };

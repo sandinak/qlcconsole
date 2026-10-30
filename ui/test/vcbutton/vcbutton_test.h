@@ -50,6 +50,9 @@ private slots:
     void toggle();
     void flash();
     void flashPlaysAHit();
+    void firesAHitByIdentity();
+    void hitSavesAndLoads();
+    void pickerHasAHitsSection();
     void input();
     void paint();
 
