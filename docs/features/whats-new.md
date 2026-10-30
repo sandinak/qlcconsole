@@ -71,6 +71,12 @@ The latest changes, newest first. Each links to the guide with the detail.
 - **Tilt in yoke** reads "45° down", "level" or "10° up", and its up
   arrow tips the light up. A strip's **Tilt** tips it up on every upright
   face. Shows saved before keep every bar where it was.
+- **A laser looks like a laser.** In the Rig Overview it is a box in a U
+  yoke with its window and apertures toward where it throws, lit in its
+  colour; Tilt in yoke tips the box in the yoke. On the plot, the new
+  **Laser / star projector** symbol (under **Effects**) is a Laser's
+  *Auto* symbol. See [Lasers and star
+  projectors](lighting-studio.md#lasers-and-star-projectors).
 
 ### Based on QLC+ 4.14.4
 

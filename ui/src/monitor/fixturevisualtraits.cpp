@@ -65,8 +65,99 @@ FixtureVisualTraits classifyFixture(Fixture *fx)
             t.omni = true;
             t.laser = t.stars = false;
         }
+        /* A laser looks like one: by its look, or on Auto by its definition.
+           Another look the LD picked (a strobe, say) wins. */
+        const bool laserType = fx->fixtureDef() != nullptr && !fx->definitionUnavailable()
+                               && fx->fixtureDef()->type() == QLCFixtureDef::Laser;
+        t.projector = (t.look == Fixture::LaserLook)
+                      || (t.look == Fixture::AutoLook && (laserType || t.laser || t.stars));
     }
     return t;
+}
+
+QVector3D projectorDefaultSize()
+{
+    return QVector3D(0.20f, 0.11f, 0.19f);
+}
+
+ProjectorParts projectorParts(const QVector3D &pivot, const QVector3D &throwDir,
+                              const QVector3D &clampDir, const QVector3D &spareAxis,
+                              float w, float h, float d, int apertures)
+{
+    ProjectorParts out;
+    const QVector3D U = clampDir.lengthSquared() > 1e-8f ? clampDir.normalized()
+                                                         : QVector3D(0, 0, 1);
+    const QVector3D F = throwDir.lengthSquared() > 1e-8f ? throwDir.normalized() : -U;
+
+    /* The tilt axis: level across the throw, square to the clamp. Throwing
+       straight along the clamp (hung, pointing down) leaves no such axis:
+       take its own length, then anything square to the clamp. */
+    QVector3D A = QVector3D::crossProduct(U, F);
+    if (A.length() < 1e-3f)
+    {
+        A = spareAxis - U * QVector3D::dotProduct(spareAxis, U);
+        if (A.length() < 1e-3f)
+            A = QVector3D::crossProduct(U, qAbs(U.z()) < 0.9f ? QVector3D(0, 0, 1)
+                                                               : QVector3D(1, 0, 0));
+    }
+    A.normalize();
+    // The box's own up: square to its throw and the axis, on the clamp's side.
+    QVector3D B = QVector3D::crossProduct(F, A).normalized();
+    if (QVector3D::dotProduct(B, U) < 0.0f)
+        B = -B;
+    out.front = F;
+    out.side = A;
+    out.up = B;
+
+    auto box = [](const QVector3D &mid, float hw, float hh, float hd, const QVector3D &ax,
+                  const QVector3D &up, const QVector3D &no) {
+        const QVector3D l = ax * hw, u = up * hh, n = no * hd;
+        SolidBoxCorners b;
+        b.k[0] = mid - l - u - n; b.k[1] = mid + l - u - n;
+        b.k[2] = mid + l - u + n; b.k[3] = mid - l - u + n;
+        b.k[4] = mid - l + u - n; b.k[5] = mid + l + u - n;
+        b.k[6] = mid + l + u + n; b.k[7] = mid - l + u + n;
+        return b;
+    };
+
+    const float hw = w * 0.5f, hh = h * 0.5f, hd = d * 0.5f;
+    out.body = box(pivot, hw, hh, hd, A, B, F);
+
+    /* The yoke, in the clamp's frame (U, A, and P across both): it stays
+       square to what it is clamped to however the box is tipped. Its plates
+       reach past the box's corners as they swing, so it clears at any tilt. */
+    QVector3D P = QVector3D::crossProduct(A, U);
+    P = P.length() > 1e-3f ? P.normalized() : F;
+    const float swing = 0.5f * float(qSqrt(double(h * h + d * d)));
+    const float t = qMax(0.006f, w * 0.04f);           // plate thickness
+    const float gap = qMax(0.004f, w * 0.03f);         // box to plate
+    const float plateD = qMin(d, h) * 0.45f;           // plate width
+    const float below = h * 0.22f;                     // past the pivot's boss
+    const float top = swing + gap;
+    const float plateOff = hw + gap + t * 0.5f;
+    for (const float sgn : { -1.0f, 1.0f })
+        out.yoke << box(pivot + A * (sgn * plateOff) + U * ((top - below) * 0.5f),
+                        t * 0.5f, (top + below) * 0.5f, plateD * 0.5f, A, U, P);
+    const QVector3D barMid = pivot + U * (top + t * 0.5f);
+    out.yoke << box(barMid, plateOff + t * 0.5f, t * 0.5f, plateD * 0.5f, A, U, P);
+    const float clampLen = qMax(0.02f, h * 0.3f);
+    const float clampW = qMax(0.01f, plateD * 0.5f);
+    out.yoke << box(barMid + U * (t * 0.5f + clampLen * 0.5f), clampW * 0.5f, clampLen * 0.5f,
+                    clampW * 0.5f, A, U, P);
+    out.reach = top + t + clampLen;
+
+    // The glass on its front, and a round aperture per beam across it.
+    const QVector3D face = pivot + F * (hd * 1.002f);
+    const float gw = hw * 0.7f, gh = hh * 0.6f;
+    out.window[0] = face - A * gw - B * gh;
+    out.window[1] = face + A * gw - B * gh;
+    out.window[2] = face + A * gw + B * gh;
+    out.window[3] = face - A * gw + B * gh;
+    const int n = qBound(1, apertures, 3);
+    out.apertureRadius = qMin(gh, gw / n) * 0.55f;
+    for (int i = 0; i < n; ++i)
+        out.apertures << face + F * (hd * 0.002f) + A * (gw * 2.0f * ((i + 0.5f) / n - 0.5f));
+    return out;
 }
 
 static FixtureVisualTraits classifyByDefinition(Fixture *fx)
@@ -355,6 +446,7 @@ FixtureSilhouette stageLookSilhouette(Fixture::StageLook look, FixtureSilhouette
         case Fixture::FresnelLook:
         case Fixture::LedParLook:
         case Fixture::StrobeLook:
+        case Fixture::LaserLook:
             return FixtureSilhouette::Par;
         case Fixture::AutoLook:
         default:
@@ -621,6 +713,47 @@ QPainterPath stageLookBodyPath(Fixture::StageLook look, const QRectF &r, bool el
             path.addRoundedRect(face, s * 0.06, s * 0.06);
             return path;
         }
+        case Fixture::LaserLook:
+        {
+            /* A laser in its U yoke. From above: the box, the yoke's plates
+               along its sides joined behind it, opening toward the aperture
+               at the front (the throw's end, as a PAR's lens is). Seen from
+               the front or side: the box slung under the yoke's cross bar
+               and clamp (over it when it stands). */
+            if (!elevation)
+            {
+                const AxisFrame f = axisFrame(r, false);
+                path.addRoundedRect(f.band(0.1, 0.94, 0.7), s * 0.06, s * 0.06);
+                path.addRect(f.band(0.0, 0.1, 1.0));                // the yoke's back
+                QRectF a = f.band(0.0, 0.62, 1.0), b = a;           // its plates
+                if (f.across)
+                {
+                    a.setBottom(a.top() + a.height() * 0.1);
+                    b.setTop(b.bottom() - b.height() * 0.1);
+                }
+                else
+                {
+                    a.setRight(a.left() + a.width() * 0.1);
+                    b.setLeft(b.right() - b.width() * 0.1);
+                }
+                path.addRect(a);
+                path.addRect(b);
+                return path;
+            }
+            const qreal w = r.width(), h = r.height(), cx = r.center().x();
+            const qreal barY = hung ? r.top() + h * 0.08 : r.bottom() - h * 0.16;
+            path.addRect(QRectF(cx - w * 0.08, hung ? r.top() : r.bottom() - h * 0.08,
+                                w * 0.16, h * 0.08));               // the clamp
+            path.addRect(QRectF(r.left(), barY, w, h * 0.08));      // the cross bar
+            const qreal plateTop = hung ? barY : r.top() + h * 0.3;
+            const qreal plateBot = hung ? r.top() + h * 0.7 : barY + h * 0.08;
+            path.addRect(QRectF(r.left(), plateTop, w * 0.08, plateBot - plateTop));
+            path.addRect(QRectF(r.right() - w * 0.08, plateTop, w * 0.08, plateBot - plateTop));
+            const qreal boxTop = hung ? r.top() + h * 0.3 : r.top() + h * 0.12;
+            path.addRoundedRect(QRectF(r.left() + w * 0.12, boxTop, w * 0.76, h * 0.58),
+                                s * 0.06, s * 0.06);
+            return path;
+        }
         case Fixture::CurtainLook:
         {
             /* A drape: its track along the top and the cloth's folds hanging
@@ -693,6 +826,20 @@ QRectF stageLookLensRect(Fixture::StageLook look, const QRectF &r, bool elevatio
         case Fixture::StrobeLook:
             return QRectF(r.left() + r.width() * 0.08, r.center().y() - r.height() * 0.32,
                           r.width() * 0.84, r.height() * 0.64);
+        case Fixture::LaserLook:
+        {
+            // Its aperture: a small round window at the front (from above),
+            // in the middle of the glass (from the front).
+            if (elevation)
+            {
+                // In the box, which stands up in its yoke (as drawn, not hung).
+                const QRectF q = centredSquare(r, 0.34);
+                return q.translated(0.0, -r.height() * 0.09);
+            }
+            const AxisFrame f = axisFrame(r, false);
+            const QRectF front = f.band(0.7, 0.94, 0.7);
+            return centredSquare(front, 0.8);
+        }
         case Fixture::MovingSpotLook:
         case Fixture::MovingRoundWashLook:
         case Fixture::MovingSquareWashLook:
@@ -823,6 +970,7 @@ QSizeF stageLookDefaultSize(Fixture::StageLook look, double base, bool elevation
         case Fixture::LedParLook:      return QSizeF(base * 1.1, base * 1.1);
         case Fixture::CycStripLook:    return QSizeF(base * 2.4, base * 1.1);
         case Fixture::StrobeLook:      return QSizeF(base * 1.6, base * 1.0);
+        case Fixture::LaserLook:       return QSizeF(base * 1.3, base * 1.0);
         default:                       return QSizeF(base, base);
     }
 }

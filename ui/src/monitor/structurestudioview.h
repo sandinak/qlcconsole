@@ -1088,6 +1088,20 @@ private:
                         const QColor &col, const QVector<MoverHeadLook> &heads,
                         bool ambientLit = true, double beamAngle = 0.0) const;
 
+    /** A laser (FixtureVisualTraits::projector) as solid parts: its box in
+     *  a U yoke, the aperture window facing where it throws, its apertures
+     *  lit in @p live at @p level (0: dark glass). Returns the parts, whose
+     *  apertures its beams leave from. */
+    struct ProjectorParts drawProjectorSolid(QPainter &p, quint32 fid, Fixture *fx,
+                                             const struct FixtureRigProps &rp,
+                                             const struct FixtureVisualTraits &traits,
+                                             const QColor &housing, const QColor &live,
+                                             double level, bool ambientLit,
+                                             double depthBias) const;
+    /** Where a laser's box and yoke go (projectorParts()), without drawing. */
+    struct ProjectorParts projectorFor(quint32 fid, Fixture *fx, const struct FixtureRigProps &rp,
+                                       const struct FixtureVisualTraits &traits) const;
+
     double fixtureLenM(quint32 fid) const;             ///< physical length (metres)
     /** A fixture's world CENTRE, correcting the plot's top-left anchor for
      *  positions that come straight from the stored XY. See the definition. */

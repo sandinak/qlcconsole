@@ -71,9 +71,9 @@ our rig). Switch roles after each correction.
 5. Click the **Fixtures** tab (⇧⌘2). Find the group **AT-W-ALL** (in the
    folder **AT**), right-click it and open **Plot Symbol ▸**.
    - *You should see:* the first item reads **Auto (Moving head spot)**:
-     that's the app's guess. The rest of the menu is in five sections:
-     **Moving**, **Fixed conventional**, **Fixed LED**, **Practicals** and
-     **Scenery**.
+     that's the app's guess. The rest of the menu is in six sections:
+     **Moving**, **Fixed conventional**, **Fixed LED**, **Effects**,
+     **Practicals** and **Scenery**.
 6. Choose **Moving head round wash**, then go back to the **Lighting
    Studio** tab.
    - *You should see:* the four audience-tower washes drawn with a round

@@ -1263,7 +1263,7 @@ void Fixture_Test::stageLookDefaultAndSet()
 
     // Out of range is Auto, not a garbage look.
     // One past the last look: a value a StageLook can still hold (999 isn't).
-    fxi.setStageLook(Fixture::StageLook(int(Fixture::CurtainLook) + 1));
+    fxi.setStageLook(Fixture::StageLook(int(Fixture::LaserLook) + 1));
     QCOMPARE(fxi.stageLook(), Fixture::AutoLook);
     QCOMPARE(spy.count(), 2);
 }
@@ -1273,7 +1273,7 @@ void Fixture_Test::stageLookKeys()
     const QList<Fixture::StageLook> looks = Fixture::stageLooks();
     // Every value of the enum, once, Auto first.
     QCOMPARE(looks.first(), Fixture::AutoLook);
-    QCOMPARE(looks.size(), int(Fixture::CurtainLook) + 1);
+    QCOMPARE(looks.size(), int(Fixture::LaserLook) + 1);
     QSet<int> seen;
     QSet<QString> keys;
     int section = -1;
@@ -1323,6 +1323,14 @@ void Fixture_Test::stageLookKeys()
     // The key a saved show holds did not change with what a lantern is.
     QCOMPARE(Fixture::stageLookToString(Fixture::LanternLook), QString("Lantern"));
     QCOMPARE(Fixture::stageLookSectionName(Fixture::PracticalSection), QString("Practicals"));
+    // A laser (Q172 part B): appended, its own Effects section after Fixed LED.
+    QCOMPARE(int(Fixture::LaserLook), 17);
+    QCOMPARE(Fixture::stageLookToString(Fixture::LaserLook), QString("Laser"));
+    QCOMPARE(Fixture::stringToStageLook("laser"), Fixture::LaserLook);
+    QCOMPARE(Fixture::stageLookSection(Fixture::LaserLook), int(Fixture::EffectsSection));
+    QCOMPARE(Fixture::stageLookSectionName(Fixture::EffectsSection), QString("Effects"));
+    QCOMPARE(looks.at(looks.indexOf(Fixture::StrobeLook) + 1), Fixture::LaserLook);
+    QCOMPARE(Fixture::stageLookIconResource(Fixture::LaserLook), QString(":/look_laser.png"));
 }
 
 static QByteArray stageLookSaved(Fixture &fxi)
@@ -1467,6 +1475,10 @@ void Fixture_Test::stageLookAuto()
                 break;
             case QLCFixtureDef::Strobe:
                 QCOMPARE(fx.autoStageLook(), Fixture::StrobeLook);
+                break;
+            case QLCFixtureDef::Laser:
+                // "Auto (Laser)" is a look now, not the type's name (Q172 B).
+                QCOMPARE(fx.autoStageLook(), Fixture::LaserLook);
                 break;
             case QLCFixtureDef::Dimmer:
                 QCOMPARE(fx.autoStageLook(), Fixture::EllipsoidalLook);

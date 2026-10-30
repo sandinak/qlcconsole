@@ -85,8 +85,17 @@ the file keeping the old sense. Decided at night (can change): the Face
 row reads the side the light throws nearest, blank in between; a yoke
 tilt set by hand survives a Face change between upright sides; only a
 fixed light with no face of its own takes a chord's face on a drop; a
-bare typed number in Tilt in yoke means up. **Open:** part B (a laser
-that looks like one: aperture face, U yoke, LaserLook plot symbol), part
+bare typed number in Tilt in yoke means up. **Part B done** (0.3.1): a
+laser in the Rig Overview is a box in a U yoke with its aperture window
+toward its throw (`projectorParts()`, `FixtureVisualTraits::projector`),
+its beams leave the window; `Fixture::LaserLook`, a Laser's Auto plot
+symbol, under a new Effects section. Decided (can change): the yoke turns
+to the bearing and stays square to its clamp, the box tilts in it; the
+housing stays dark and only the apertures light; on a truss the box is
+centred on its rig point (as a mover is, and the elevations), seated only
+on a deck, riser or tower shelf; a Laser given another symbol draws as
+that; the plot symbol turns with the icon rotation like every symbol (not
+with the throw). **Open:** part
 C (H×V window, density by throw, coverage outline, the audience-zone
 safety check for Show Review), the Type=Laser emission inference, and
 FixtureDefCheck's laser checks.

@@ -262,6 +262,16 @@ private slots:
      *  or Show ▸ Laser & star output off, none. A laser draws pencil lines
      *  out to its landings. */
     void starFieldShowsOnTheTopPlot();
+    /** Q172 part B: a laser looks like one in the rig view -- a box in a U
+     *  yoke (projectorParts()), the aperture window on the side it throws,
+     *  lit in its colour while the housing stays a housing; tipping it in
+     *  the yoke turns the box and not the yoke. */
+    void aLaserLooksLikeALaser();
+    /** Q172 part B: the Laser look (Fixture::LaserLook) is a Laser's Auto
+     *  look -- "Auto (Laser / star projector)" in the picker, under Effects
+     *  -- and its plot symbol is a box in a yoke with its aperture at the
+     *  front. */
+    void laserLookIsTheAutoLookForLasers();
     /** RC8 u1: one throw rule for a fixed light in 2D and 3D
      *  (RigHeads::fixedThrow): faced Back on a truss it throws upstage in
      *  both -- the 2D footprint no longer drops it straight down. */

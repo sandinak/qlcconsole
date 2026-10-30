@@ -102,6 +102,8 @@
         <file alias="look_cycstrip@2x.png">../../resources/icons/png/look_cycstrip@2x.png</file>
         <file alias="look_strobe.png">../../resources/icons/png/look_strobe.png</file>
         <file alias="look_strobe@2x.png">../../resources/icons/png/look_strobe@2x.png</file>
+        <file alias="look_laser.png">../../resources/icons/png/look_laser.png</file>
+        <file alias="look_laser@2x.png">../../resources/icons/png/look_laser@2x.png</file>
         <file alias="look_followspot.png">../../resources/icons/png/look_followspot.png</file>
         <file alias="look_followspot@2x.png">../../resources/icons/png/look_followspot@2x.png</file>
         <file alias="look_movingspot.png">../../resources/icons/png/look_movingspot.png</file>

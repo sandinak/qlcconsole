@@ -688,7 +688,8 @@ patched ones is Design mode's — the same rule everywhere.
 **Plot Symbol ▸** sets what the fixtures selected — and every fixture of a
 group selected — look like: **Auto** (named for what their type is closest
 to, as *Auto (Moving head spot)*), then the symbols under **Moving**, **Fixed
-conventional**, **Fixed LED**, **Practicals** (Lantern, Staff) and
+conventional**, **Fixed LED**, **Effects** (Laser / star projector),
+**Practicals** (Lantern, Staff) and
 **Scenery** (Curtain: the fixture drives a curtain and is drawn as its drape
 — see [Plot symbols](lighting-studio.md#plot-symbols)), with icons. The one they all share is
 ticked. A fixture with a symbol shows its icon in this list and the other

@@ -789,6 +789,8 @@ its developer entry. Numbers: TEST_MATRIX.md, "Coverage".
 | M624 | Lasers part A (Q172) | A fixed light dropped on a truss chord faces that side; centreline stays hung | **Monitor_Test::aFixedLightDroppedOnAChordFacesThatSide** (new) | none | covered | high | — |
 | M625 | Lasers part A (Q172) | One throw (RigHeads::fixedThrow) for Quick focus too: a laser faced Back lands upstage | **FocusSession_Test::aFixedLightFacedBackLandsUpstage** (new) | none | covered | high | — |
 | M626 | Lasers part A (Q172) | Strip Tilt + tips up on every upright face; old shows' ST read in the old sense, saved back in it | **MonitorProperties_Test::aTiltUpIsUpOnEitherFace** (new) | none | covered | high | — |
+| M627 | Lasers part B (Q172) | A laser in the rig view: a box in a U yoke, the window toward its throw, lit only in its apertures; tipping it turns the box, not the yoke; Laser/Strobe look decides | **Monitor_Test::aLaserLooksLikeALaser** (new) | none | covered | med | Pixels for the window; the yoke by geometry (projectorParts()). |
+| M628 | Lasers part B (Q172) | Laser look: a Laser's Auto look, "Auto (Laser / star projector)" under Effects in the picker, its plot symbol and aperture; key "Laser" | **Monitor_Test::laserLookIsTheAutoLookForLasers** (new); Fixture_Test::stageLookKeys, ::stageLookAuto | none | covered | low | — |
 
 ## Data safety across features (old shows, file formats)
 

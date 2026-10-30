@@ -112,6 +112,7 @@
     <file alias="look_ledpar.svg">look_ledpar.svg</file>
     <file alias="look_cycstrip.svg">look_cycstrip.svg</file>
     <file alias="look_strobe.svg">look_strobe.svg</file>
+    <file alias="look_laser.svg">look_laser.svg</file>
     <file alias="look_followspot.svg">look_followspot.svg</file>
     <file alias="look_movingspot.svg">look_movingspot.svg</file>
     <file alias="look_movingroundwash.svg">look_movingroundwash.svg</file>

@@ -77,6 +77,11 @@ struct FixtureVisualTraits
     bool  laser = false;            ///< pencil-thin beams (QLCPhysical::LaserEmission)
     bool  stars = false;            ///< a star field (QLCPhysical::StarEmission)
     bool  flame = false;            ///< a silk flame (QLCPhysical::FlameEmission)
+    /** Drawn as a laser in the rig view: a box hung in a U yoke, the
+     *  aperture window on the side it throws from (projectorParts()). Its
+     *  look is LaserLook, or on Auto its definition is a Laser or throws
+     *  pencil beams or stars (Q172 part B). */
+    bool  projector = false;
     /** How its pool lands: 0 a profile's crisp edge ... 1 a wash fading out
      *  past its beam angle; a PC or Fresnel lens a little softer still
      *  (poolEdgeSoftness()). */
@@ -94,6 +99,44 @@ struct FixtureVisualTraits
 };
 
 FixtureVisualTraits classifyFixture(Fixture *fx);
+
+/** One solid box, its corners in fixtureBoxCorners() order: 0-3 the -up
+ *  face, 4-7 the +up face; 0,1,4,5 the -front side. */
+struct SolidBoxCorners
+{
+    QVector3D k[8];
+};
+
+/** A laser (FixtureVisualTraits::projector) as solid parts, world metres:
+ *  a box in a U yoke, the way a sky laser hangs from its bracket.
+ *
+ *  The box is centred on @p pivot, the yoke's tilt axis, with its front --
+ *  the aperture window -- facing @p throwDir. The yoke's two side plates
+ *  hold it on that axis, and their cross bar and clamp run out toward
+ *  @p clampDir (where it is fastened: up when hung, down when it stands),
+ *  so tipping it in the yoke turns only the box and the yoke stays square
+ *  to its clamp, turned to the bearing it points. @p spareAxis (its own
+ *  length axis) is the tilt axis when it throws straight along the clamp.
+ *  @p w x @p h x @p d is the box (across, up, front to back); @p apertures
+ *  round windows (one per beam, 1 to 3) sit side by side in the glass. */
+struct ProjectorParts
+{
+    SolidBoxCorners body;
+    QVector<SolidBoxCorners> yoke;  ///< two side plates, the cross bar, the clamp
+    QVector3D window[4];            ///< the dark glass on its front, 60-70% of it
+    QVector<QVector3D> apertures;   ///< where each beam leaves, on the glass
+    float apertureRadius = 0.0f;    ///< metres
+    QVector3D front, side, up;      ///< the box's axes: front is its throw
+    float reach = 0.0f;             ///< pivot to the clamp's far end, along clampDir
+};
+ProjectorParts projectorParts(const QVector3D &pivot, const QVector3D &throwDir,
+                              const QVector3D &clampDir, const QVector3D &spareAxis,
+                              float w, float h, float d, int apertures);
+
+/** A laser's box when its definition gives no size: about a real sky
+ *  laser's 200 W x 110 H x 190 D mm, not the 0.30 m stick a sizeless box
+ *  gets. Metres. */
+QVector3D projectorDefaultSize();
 
 // ---------------------------------------------------------------------------
 // Stage looks (Fixture::StageLook): the LD's word for what a fixture looks

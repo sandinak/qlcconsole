@@ -5643,6 +5643,101 @@ QVector<QVector3D> StructureStudioView::beamFootprint(const QVector3D &apex, con
     return out;
 }
 
+ProjectorParts StructureStudioView::projectorFor(quint32 fid, Fixture *fx,
+                                                const FixtureRigProps &rp,
+                                                const FixtureVisualTraits &traits) const
+{
+    const QVector3D def = projectorDefaultSize();
+    const float w = traits.physW > 0.0f ? traits.physW : def.x();
+    const float h = traits.physH > 0.0f ? traits.physH : def.y();
+    const float d = traits.physD > 0.0f ? traits.physD : def.z();
+    QVector3D L, N, H;
+    fixtureFrame(rp, L, N, H);
+    // The yoke clamps where a mover's base would be: above it when hung.
+    const QVector3D clamp = -fixtureBodyUp(rp);
+    QVector3D dir;
+    if (!emitDirection(fx, rp, traits, dir))
+        dir = -clamp;                      // inside something: away from its clamp
+    const QVector3D c = fixtureCentre(fid);
+    /* Centred on its rig point on a truss or pipe, as the elevations and a
+       mover have it; standing on (or hung under) a surface, the clamp is
+       what touches it. */
+    const bool seats = (rp.onTower() || rp.onDeck() || rp.onRiser())
+                       && rp.placement != FixtureRigProps::Inside;
+    ProjectorParts parts = projectorParts(c, dir, clamp, L, w, h, d, traits.beamsPerHead);
+    if (seats)
+    {
+        const QVector3D shift = -clamp.normalized() * parts.reach;
+        parts = projectorParts(c + shift, dir, clamp, L, w, h, d, traits.beamsPerHead);
+    }
+    return parts;
+}
+
+ProjectorParts StructureStudioView::drawProjectorSolid(QPainter &p, quint32 fid, Fixture *fx,
+                                                      const FixtureRigProps &rp,
+                                                      const FixtureVisualTraits &traits,
+                                                      const QColor &housing, const QColor &live,
+                                                      double level, bool ambientLit,
+                                                      double depthBias) const
+{
+    const ProjectorParts parts = projectorFor(fid, fx, rp, traits);
+    const QColor edge = overlapAwareEdgeColor(fid, housing);
+    const QColor yoke = housing.darker(130);
+    for (const SolidBoxCorners &b : parts.yoke)
+        drawSolidBox(p, b.k, yoke, edge, 255, ambientLit, depthBias);
+    drawSolidBox(p, parts.body.k, housing, edge, 255, ambientLit, depthBias);
+
+    /* The window and its apertures, painted on the front: only when the
+       front is toward us (behind the box they would sort through it). */
+    if (viewDepth(parts.front) <= 0.0)
+        return parts;
+    /* Each with its depth at every corner, a hair in front of the face it
+       is painted on: the depth buffer then hides exactly what the box's
+       front hides, and nothing it does not. */
+    auto onFace = [&](const QVector<QVector3D> &pts, double lift, const QColor &fill) {
+        QPolygonF poly;
+        QVector<double> vz;
+        double depth = 0.0;
+        for (const QVector3D &q : pts)
+        {
+            poly << w2s(q);
+            vz << viewDepth(q) + depthBias + lift;
+            depth += vz.last();
+        }
+        emitPoly(poly, depth / pts.size(), fill, QColor(), 0.0, p, vz);
+    };
+    const double k = qBound(0.0, level, 1.0);
+    const double af = ambientLit ? 0.4 + 0.6 * m_ambient : 1.0;
+    const QColor dark(qRound(20 * af), qRound(22 * af), qRound(28 * af));
+    const QColor lc = live.isValid() ? live : QColor(Qt::white);
+    // Lit, the glass takes a little of its light; the apertures all of it.
+    const QColor tint = QColor::fromRgbF(float(dark.redF() + (lc.redF() - dark.redF()) * k * 0.25),
+                                         float(dark.greenF() + (lc.greenF() - dark.greenF()) * k * 0.25),
+                                         float(dark.blueF() + (lc.blueF() - dark.blueF()) * k * 0.25));
+    onFace({ parts.window[0], parts.window[1], parts.window[2], parts.window[3] }, 0.002, tint);
+    const QColor hole = (k > 0.01)
+        ? QColor::fromRgbF(float(0.16 + (lc.redF() - 0.16) * k), float(0.16 + (lc.greenF() - 0.16) * k),
+                           float(0.18 + (lc.blueF() - 0.18) * k))
+        : QColor(46, 46, 52);
+    const double rPx = double(parts.apertureRadius) * m_scale;
+    for (const QVector3D &a : parts.apertures)
+    {
+        if (rPx < 2.0)          // a pixel or two: a dot says as much
+        {
+            emitDot(w2s(a), viewDepth(a) + depthBias + 0.004, qMax(0.8, rPx), hole, p);
+            continue;
+        }
+        QVector<QVector3D> disc;
+        for (int i = 0; i < 12; ++i)
+        {
+            const float t = float(i * M_PI / 6.0);
+            disc << a + (parts.side * std::cos(t) + parts.up * std::sin(t)) * parts.apertureRadius;
+        }
+        onFace(disc, 0.004, hole);
+    }
+    return parts;
+}
+
 void StructureStudioView::drawMoverSolid(QPainter &p, quint32 fid,
                                          const FixtureVisualTraits &traits,
                                          const QColor &col,
@@ -7317,6 +7412,9 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
            me" was. */
         QVector3D corner[8];
         fixtureBoxCorners(fid, traits, corner);
+        // A laser's parts, once drawn: its beams leave from its apertures.
+        ProjectorParts projector;
+        bool haveProjector = false;
 
         /* A fixture rigged INSIDE a step is inside a solid box whose faces
            each sort as a single depth, so the near face covers it unless it
@@ -7463,6 +7561,20 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
             if (aimed && (!m_beams || beamLevel <= 0.01))
                 drawAimTrace(p, fixtureCentre(fid), aimPt,
                              m_aimTarget.value(fid).colour);
+        }
+        else if (traits.projector)
+        {
+            /* A laser looks like one (Q172 part B): its box in a U yoke, the
+               aperture window toward where it throws, lit in what it is
+               sending. The housing is a neutral object in the room; the
+               light is in the apertures and the beams. */
+            QColor live = unlit;
+            uchar dim = 0;
+            const bool lit = showingOutput && fixtureLiveState(fx, vals, live, dim, valsComplete);
+            const QColor housing = (drag || hi) ? col : QColor(BODY_GREY, BODY_GREY, BODY_GREY);
+            projector = drawProjectorSolid(p, fid, fx, rp, traits, housing, live,
+                                           lit ? dim / 255.0 : 0.0, !(drag || hi), depthBias);
+            haveProjector = true;
         }
         else if (traits.headCount > 1)
         {
@@ -7612,7 +7724,11 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
                    is not a cone that can be drawn; a very wide one is. */
                 const double deg = (declared >= 170.0) ? 150.0
                                  : (declared > 0.0) ? declared : 40.0;
-                const QVector3D apex = fixtureCentre(fid);
+                /* A laser's light leaves its window, not the middle of its
+                   box -- which, standing on a deck, is up in its yoke. */
+                const QVector3D apex = (haveProjector && !projector.apertures.isEmpty())
+                    ? projector.apertures.at(projector.apertures.size() / 2)
+                    : fixtureCentre(fid);
                 const double half = qDegreesToRadians(deg / 2.0);
                 BeamOptics::Optics optics = BeamOptics::opticsFor(fx, vals, opticsTime(), m_doc->monitorProperties());
                 optics.softness = optics.mask.isNull() ? traits.edgeSoftness : 0.0;
@@ -7649,7 +7765,8 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
                                       live, fixedLevel);
                     }
                 }
-                const QVector<BarLight> sources = (traits.headCount > 1 && !special)
+                // A laser is one source, its window, however its heads split.
+                const QVector<BarLight> sources = (traits.headCount > 1 && !special && !haveProjector)
                     ? barLights(fx, rp, traits, vals, apex) : QVector<BarLight>();
                 if (sources.isEmpty() && !special)
                 {
@@ -7689,7 +7806,8 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
         const double pxPerPixel = QLineF(w2s(corner[0]), w2s(corner[1])).length()
                                   / qMax(1, cols);
         const QVector<int> cellHead = headsByCell(fx, cols, rows, traits.headCount);
-        if (traits.headCount > 1)
+        // A laser's heads are its colours, not cells on a face (Q172).
+        if (traits.headCount > 1 && !traits.projector)
         {
             /* Which of the two long faces points AT us -- a question about the
                fixture's NORMAL and nothing else.
