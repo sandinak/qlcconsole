@@ -639,6 +639,7 @@ void FocusCallsUi_Test::theVoiceHearsTheAnnouncements()
     QCOMPARE(voice->backend(), QString("none"));   // never heard from a test
     SilentVoice *silent = qobject_cast<SilentVoice *>(voice);
     QVERIFY(silent != nullptr);
+    voice->setSettleMs(0);      // as before Q171: theVoiceWaitsForTheSelectionToSettle
 
     const bool was = OperatorVoice::isEnabled();
     OperatorVoice::setEnabled(true);
@@ -683,6 +684,7 @@ void FocusCallsUi_Test::theVoiceHearsTheAnnouncements()
 void FocusCallsUi_Test::theVoiceNeverDropsAConfirmation()
 {
     SilentVoice voice;
+    voice.setSettleMs(0);       // as before Q171 (no settle, nothing cut)
     voice.setSlow(true);
     voice.say("Fixture 1 of 4.");                                        // being said
     voice.say("Fixture 2 of 4.");                                        // where: stale soon
@@ -702,6 +704,7 @@ void FocusCallsUi_Test::theVoiceNeverDropsAConfirmation()
     const bool was = OperatorVoice::isEnabled();
     OperatorVoice::setEnabled(true);
     SilentVoice heard;
+    heard.setSettleMs(0);
     heard.setSlow(true);
     OperatorAnnouncer announcer(m_doc->programmer(), &heard);
     emit m_doc->programmer()->operatorAnnounce("Call 1 of 2.", ControllerScheme::WherePriority);
@@ -711,6 +714,180 @@ void FocusCallsUi_Test::theVoiceNeverDropsAConfirmation()
     heard.finishLine();
     heard.finishLine();
     heard.finishLine();
+    OperatorVoice::setEnabled(was);
+}
+
+void FocusCallsUi_Test::theVoiceWaitsForTheSelectionToSettle()
+{
+    namespace CS = ControllerScheme;
+    // 1. Ten steps in a row: nothing until it settles, then only the last.
+    {
+        SilentVoice v;
+        v.setSettleMs(400);
+        for (int i = 1; i <= 10; ++i)
+            v.say(QString("Fixture %1 of 10.").arg(i));
+        QVERIFY(v.said().isEmpty());
+        QVERIFY(!v.isSpeaking());
+        QCOMPARE(v.settling(), QString("Fixture 10 of 10."));
+        v.settleNow();
+        QCOMPARE(v.said(), QStringList({ "Fixture 10 of 10." }));
+        QVERIFY(v.settling().isEmpty());
+        QCOMPARE(v.cuts(), 0);
+    }
+    // 2. A step while a where line is being said: nothing cut until it
+    //    settles, then the stale one is cut once and the newest said.
+    {
+        SilentVoice v;
+        v.setSettleMs(400);
+        v.setSlow(true);
+        v.say("Fixture 2 of 8.");
+        v.settleNow();
+        QCOMPARE(v.said(), QStringList({ "Fixture 2 of 8." }));
+        v.say("Fixture 3 of 8.");
+        v.say("Fixture 6 of 8.");
+        QCOMPARE(v.cuts(), 0);
+        QVERIFY(v.cutLines().isEmpty());
+        v.settleNow();
+        QCOMPARE(v.cuts(), 1);
+        QCOMPARE(v.cutLines(), QStringList({ "Fixture 2 of 8." }));
+        QCOMPARE(v.said(), QStringList({ "Fixture 2 of 8.", "Fixture 6 of 8." }));
+        v.finishLine();
+        QVERIFY(!v.isSpeaking());
+    }
+    // 3. A save while a step is settling: the save at once, the step after
+    //    it -- neither dropped, nothing cut.
+    {
+        SilentVoice v;
+        v.setSettleMs(400);
+        v.setSlow(true);
+        v.say("Fixture 7 of 8.");
+        v.say("Saved fixture 7.", CS::ConfirmPriority);
+        QCOMPARE(v.said(), QStringList({ "Saved fixture 7." }));
+        v.settleNow();
+        QCOMPARE(v.cuts(), 0);                      // a save is never cut
+        QCOMPARE(v.queued(), QStringList({ "Fixture 7 of 8." }));
+        v.finishLine();
+        QCOMPARE(v.said(), QStringList({ "Saved fixture 7.", "Fixture 7 of 8." }));
+        v.finishLine();
+    }
+    // 4. Important over a where line being said: cut at once. Over a
+    //    confirmation: it waits, nothing cut.
+    {
+        SilentVoice v;
+        v.setSettleMs(400);
+        v.setSlow(true);
+        v.say("Fixture 3 of 8, Spot 3, needs focus.");
+        v.settleNow();
+        v.say("Controller lost. Lights held.", CS::ImportantPriority);
+        QCOMPARE(v.cuts(), 1);
+        QCOMPARE(v.said().last(), QString("Controller lost. Lights held."));
+        v.finishLine();
+        QVERIFY(!v.isSpeaking());
+        v.say("Saved fixture 3.", CS::ConfirmPriority);
+        v.say("Holding.", CS::ImportantPriority);
+        QCOMPARE(v.cuts(), 1);
+        QCOMPARE(v.queued(), QStringList({ "Holding." }));
+        // 5. A where line never stops a confirmation or an important line.
+        v.say("Fixture 4 of 8.");
+        v.settleNow();
+        QCOMPARE(v.cuts(), 1);
+        QCOMPARE(v.queued(), QStringList({ "Holding.", "Fixture 4 of 8." }));
+        v.finishLine();
+        QCOMPARE(v.said().last(), QString("Holding."));
+        v.say("Fixture 5 of 8.");
+        v.settleNow();
+        QCOMPARE(v.cuts(), 1);                      // not over "Holding." either
+        QCOMPARE(v.queued(), QStringList({ "Fixture 5 of 8." }));
+        v.finishLine();
+        v.finishLine();
+        QCOMPARE(v.said().last(), QString("Fixture 5 of 8."));
+    }
+    // 7. Say the light (a confirmation) while a step settles: at once.
+    //    A where-now line (a tool's first, entering a call): at once, and
+    //    the older step waiting is gone.
+    {
+        SilentVoice v;
+        v.setSettleMs(400);
+        v.say("Fixture 2 of 8.");
+        v.say("Spot 2, fixture 2.", CS::ConfirmPriority);
+        QCOMPARE(v.said(), QStringList({ "Spot 2, fixture 2." }));
+        v.say("Call 2 of 5, AT spots to Soloist DS.", CS::WhereNowPriority);
+        QCOMPARE(v.said().last(), QString("Call 2 of 5, AT spots to Soloist DS."));
+        QVERIFY(v.settling().isEmpty());
+        v.settleNow();
+        QCOMPARE(v.said().size(), 2);
+    }
+    // Off (0): every line at once, nothing cut -- as before.
+    {
+        SilentVoice v;
+        v.setSettleMs(0);
+        v.setSlow(true);
+        v.say("Fixture 1 of 4.");
+        v.say("Fixture 2 of 4.");
+        v.say("Controller lost.", CS::ImportantPriority);
+        QCOMPARE(v.said(), QStringList({ "Fixture 1 of 4." }));
+        QCOMPARE(v.cuts(), 0);
+        QCOMPARE(v.queued(), QStringList({ "Fixture 2 of 4.", "Controller lost." }));
+    }
+    // The real timer.
+    {
+        SilentVoice v;
+        v.setSettleMs(30);
+        v.say("Fixture 1 of 2.");
+        v.say("Fixture 2 of 2.");
+        QVERIFY(v.said().isEmpty());
+        QTRY_COMPARE(v.said(), QStringList({ "Fixture 2 of 2." }));
+    }
+    // The setting: Off / 250 / 400 / 700, 400 by default, beside Voice detail.
+    {
+        QSettings().remove("voice/settleMs");
+        QCOMPARE(OperatorVoice::savedSettleMs(), 400);
+        SilentVoice v;
+        QCOMPARE(v.settleMs(), 400);
+        VoiceSettleCombo combo;
+        QCOMPARE(combo.count(), 4);
+        QCOMPARE(combo.currentData().toInt(), 400);
+        combo.setCurrentIndex(combo.findData(250));
+        QCOMPARE(OperatorVoice::savedSettleMs(), 250);
+        QCOMPARE(v.settleMs(), 250);                // a voice follows the setting
+        combo.setCurrentIndex(combo.findData(0));
+        QCOMPARE(v.settleMs(), 0);
+        QSettings().remove("voice/settleMs");
+    }
+
+    // 8. End to end: the first line at once, five fast steps, then only
+    //    where it stopped.
+    const bool was = OperatorVoice::isEnabled();
+    OperatorVoice::setEnabled(true);
+    SilentVoice heard;
+    heard.setSettleMs(400);
+    OperatorAnnouncer announcer(m_doc->programmer(), &heard);
+    FocusSession *s = m_doc->programmer()->focusSession();
+    QSignalSpy lines(s, &FocusSession::announce);
+    FocusSession::Options o;
+    o.fixtures = m_spots;
+    o.first.kind = FocusSession::Reference::Target;
+    o.first.id = m_target;
+    QVERIFY(s->start(o));
+    QCOMPARE(lines.last().at(1).toInt(), int(CS::WhereNowPriority));
+    QCOMPARE(heard.said().last(), QString("Fixture 1, T1."));   // at once
+    const int first = heard.said().size();
+    for (int i = 0; i < 5; ++i)
+        s->next();
+    QCOMPARE(lines.last().at(1).toInt(), int(CS::WherePriority));
+    QCOMPARE(heard.said().size(), first);
+    heard.settleNow();
+    QCOMPARE(heard.said().size(), first + 1);
+    QCOMPARE(heard.said().last(), QString("Fixture 3, T3."));      // 1 -> 2, 3, 1, 2, 3
+    QVERIFY(!heard.said().contains("Fixture 2, T2."));
+    // 9. Lights only: a step never reaches the voice.
+    m_doc->programmer()->setOperatorFeedback(CS::LightsFeedback);
+    s->next();
+    QVERIFY(heard.settling().isEmpty());
+    heard.settleNow();
+    QCOMPARE(heard.said().size(), first + 1);
+    m_doc->programmer()->setOperatorFeedback(CS::BothFeedback);
+    s->stop();
     OperatorVoice::setEnabled(was);
 }
 
@@ -1012,6 +1189,7 @@ void FocusCallsUi_Test::aMissingVoiceOutputFallsBackToTheSystem()
     OperatorVoice::setOutputDevice("Wireless Controller", "92");
     QCOMPARE(OperatorVoice::outputDeviceId(), QString("92"));
     CommandVoice voice(say, { "-r", "210" });
+    voice.setSettleMs(0);       // each line at once (the settle has its own test)
     voice.setDeviceCheckInterval(0);
     auto sayAndWait = [&voice](const QString &line, int priority) {
         voice.say(line, priority);

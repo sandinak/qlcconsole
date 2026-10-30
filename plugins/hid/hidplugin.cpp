@@ -29,6 +29,7 @@
 #include "hiddmxdevice.h"
 #include "hidjsdevice.h"
 #include "hidprofile.h"
+#include "gamepadlayout.h"
 #include "hidprofileeditor.h"
 #include "hidapi.h"
 #include <QColor>
@@ -258,6 +259,14 @@ QString HIDPlugin::inputProblem(quint32 input) const
 {
     HIDDevice *dev = device(input);
     return dev != nullptr ? dev->inputProblem() : QString();
+}
+
+QString HIDPlugin::inputDeviceKind(quint32 input) const
+{
+    HIDDevice *dev = device(input);
+    if (dev == nullptr || dev->axisCount() < 0)    // joysticks only
+        return QString();
+    return GamepadLayout::deviceKind(dev->vendorId(), dev->productId());
 }
 
 bool HIDPlugin::isPatchedInput(quint32 line) const

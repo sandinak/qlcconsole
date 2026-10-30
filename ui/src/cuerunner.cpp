@@ -1048,11 +1048,13 @@ void CueRunner::refreshFocusArmed()
     switch (fcc->state())
     {
         case FocusCallCue::Armed:
-            m_focusArmedLabel->setText(tr("Venue focus: waiting for the controller \u2014 press Start"));
+            m_focusArmedLabel->setText((PadNames::isPlayStation(m_doc->programmer()->padFamily())
+                                       ? m_doc->programmer()->padText(tr("Venue focus: waiting for the controller \u2014 press {Menu}"))
+                                       : tr("Venue focus: waiting for the controller \u2014 press Start")));
             m_focusStart->show();
             break;
         case FocusCallCue::Running:
-            m_focusArmedLabel->setText(tr("Venue focus running \u2014 Menu ends it and goes on"));
+            m_focusArmedLabel->setText(m_doc->programmer()->padText(tr("Venue focus running \u2014 {Menu} ends it and goes on")));
             m_focusStart->hide();
             break;
         case FocusCallCue::NamingVenue:

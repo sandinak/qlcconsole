@@ -214,7 +214,7 @@ void ControllerKeepAlive::updatePaused()
         else if (!m_problem.isEmpty())
             reason = m_problem;
         else if (!m_present)
-            reason = tr("no controller is connected. Switch it on (hold the Xbox button) "
+            reason = tr("no controller is connected. Switch it on (hold its Xbox or PS button) "
                         "or plug it in.");
         else if (m_system == Waking)
             reason = tr("finding the controller again after the Mac slept. "

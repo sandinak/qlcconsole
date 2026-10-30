@@ -184,6 +184,11 @@ void HIDGameController_Test::aPlayStationPadIsFollowedTheSameWay()
     QVERIFY(handle > 0);
     GamepadLayout::PadState state;
     QVERIFY(HIDGameController::read(handle, &state, nullptr));
+    /* Q170: no touchpad on this stand-in (a real GCDualShockGamepad has no
+       public initialiser), so its fingers read as none; the touch itself
+       is tested through GamepadLayout::readTouch() and TouchpadGesture. */
+    QCOMPARE(int(state.touch[GamepadLayout::Touch1Down]), 0);
+    QCOMPARE(int(state.touch[GamepadLayout::Touch2Down]), 0);
     post(GCControllerDidDisconnectNotification, pad);
     QTRY_VERIFY(!HIDGameController::read(handle, &state, nullptr));
     HIDGameController::release(handle);

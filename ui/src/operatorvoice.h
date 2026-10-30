@@ -28,6 +28,7 @@
 #include <QString>
 
 class QProcess;
+class QTimer;
 
 /** @addtogroup ui UI
  * @{
@@ -43,8 +44,8 @@ class QProcess;
  * TextToSpeech where this Qt has it, else macOS's `say`, else nothing.
  *
  * The laptop feeds the crew's headsets, so the voice is their cue and must
- * land with the blink: a line is never cut off mid-word, and never spoken
- * over. A line that comes while one is being said waits its turn.
+ * land with the blink. A line is never spoken over: one that comes while
+ * another is being said waits its turn.
  *
  * Two kinds of waiting (gap 9, ControllerScheme::Priority):
  * - a "where am I" line goes stale: only the newest waits, so stepping
@@ -52,13 +53,25 @@ class QProcess;
  *   the way;
  * - a confirmation ("Spot 3 kept.") or anything important (a warning, the
  *   controller lost) is queued and never dropped.
+ *
+ * The voice waits for the selection to settle (board Q171, settleMs(),
+ * 400 ms by default): a where line is held until no newer one has come for
+ * that long, so stepping through eight lights says only where you
+ * stopped -- not a stale "Fixture 2..." played to its end first. Then:
+ * - a settled where line cuts a where line still being said (it is stale
+ *   by definition), and an important line cuts one too -- the only lines
+ *   ever cut off mid-word;
+ * - a confirmation or important line is never held and never cut;
+ * - a WhereNow line (a tool's first line, entering a focus call) and "Say
+ *   the light" (a confirmation) are said at once.
+ * Off (0) is the voice as it was before: nothing waits, nothing is cut.
  */
 class OperatorVoice : public QObject
 {
     Q_OBJECT
 
 public:
-    explicit OperatorVoice(QObject *parent = nullptr) : QObject(parent) {}
+    explicit OperatorVoice(QObject *parent = nullptr);
     ~OperatorVoice() override {}
 
     /** What speaks: "Qt TextToSpeech", "macOS say", "none". */
@@ -77,6 +90,25 @@ public:
     QString waiting() const { return m_queue.isEmpty() ? QString() : m_queue.last().first; }
     /** Every line waiting, in the order they will be said. */
     QStringList queued() const;
+
+    /** How long a where line waits for the selection to settle, in ms (0:
+     *  it does not, as before). This voice's own when set (setSettleMs(),
+     *  tests), else the setting: savedSettleMs(). */
+    int settleMs() const;
+    void setSettleMs(int ms) { m_settleMs = ms; }
+    /** The setting: Off (0), Short (250), Normal (400, the default), Long
+     *  (700); this computer's, beside Voice detail. */
+    static constexpr int defaultSettleMs() { return 400; }
+    static int savedSettleMs();
+    static void saveSettleMs(int ms);
+    /** The where line waiting for the selection to settle; empty for none. */
+    QString settling() const { return m_settling; }
+    /** How many lines were cut off (a stale where line, or one an
+     *  important line came over). */
+    int cuts() const { return m_cuts; }
+    /** The selection has settled (the settle timer, or a test now): the
+     *  waiting where line is said. */
+    void settleNow();
 
     /** An audio output the voice can be sent to: its ID (CoreAudio's, as
      *  `say -a ?` lists it) and its name. Two pads are both "Wireless
@@ -122,7 +154,19 @@ protected:
     void finished();
 
 private:
+    void start(const QString &text, int priority);
+    /** Stop the line being said, mid-word: only a stale where line. */
+    void cut();
+    void dropWaitingWhere();
+    void speakNext();
+
     bool m_speaking = false;
+    int m_speakingPriority = 0;
+    bool m_cutting = false;
+    int m_cuts = 0;
+    int m_settleMs = -1;
+    QString m_settling;
+    QTimer *m_settleTimer;
     QList<QPair<QString, int>> m_queue;
 };
 
@@ -135,6 +179,8 @@ public:
     QString backend() const override { return QStringLiteral("none"); }
     bool isAvailable() const override { return false; }
     QStringList said() const { return m_said; }
+    /** Each line that was cut off, as it was (OperatorVoice::cuts()). */
+    QStringList cutLines() const { return m_cut; }
     /** Hold each line "being said" until finishLine() (a test of the
      *  queue); off, a line is done at once. */
     void setSlow(bool slow) { m_slow = slow; }
@@ -146,9 +192,14 @@ protected:
         if (!m_slow)
             finished();
     }
-    void stopNow() override {}
+    void stopNow() override
+    {
+        if (!m_said.isEmpty())
+            m_cut << m_said.last();
+    }
 private:
     QStringList m_said;
+    QStringList m_cut;
     bool m_slow = false;
 };
 
@@ -232,6 +283,16 @@ public:
 private:
     void sync();
     class ProgrammerController *m_pc;
+};
+
+/** How long the voice waits for the selection to settle (board Q171): Off,
+ *  250, 400 (the default) or 700 ms -- beside Voice detail, this
+ *  computer's (OperatorVoice::savedSettleMs()). */
+class VoiceSettleCombo final : public QComboBox
+{
+    Q_OBJECT
+public:
+    explicit VoiceSettleCombo(QWidget *parent = nullptr);
 };
 
 /** Voice detail: Terse, Standard, Verbose -- beside Feedback on every

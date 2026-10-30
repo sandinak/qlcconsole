@@ -7331,10 +7331,12 @@ void App::slotUpdateStandby()
     if (const FocusCallCue *fcc = m_doc->programmer() != NULL ? m_doc->programmer()->focusCallCue() : NULL)
         if (fcc->state() != FocusCallCue::Idle)
         {
-            m_statusStandby->setText(fcc->isArmed() ? tr("Venue focus: waiting for the controller (Start)")
+            m_statusStandby->setText(fcc->isArmed() ? (PadNames::isPlayStation(m_doc->programmer()->padFamily())
+                                     ? m_doc->programmer()->padText(tr("Venue focus: waiting for the controller ({Menu})"))
+                                     : tr("Venue focus: waiting for the controller (Start)"))
                                      : fcc->state() == FocusCallCue::NamingVenue
                                        ? tr("Venue focus: name the venue on the laptop")
-                                       : tr("Venue focus running (Menu ends it)"));
+                                       : m_doc->programmer()->padText(tr("Venue focus running ({Menu} ends it)")));
             m_statusStandby->show();
             return;
         }

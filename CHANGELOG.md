@@ -73,6 +73,33 @@ skipped). Upstream fixes taken:
   fixture picture show the cue you are editing in the Show Tree while the
   stage plays the run; nothing on the wire changes. The footer turns blue
   and names the cue (docs/design/LIVE_BLIND.md).
+- **PlayStation pads by their own names** (board Q170): with a DualShock 4
+  or DualSense, Quick focus, Venue focus and Focus this cue call every
+  control what the pad calls it -- on the controller map (Cross, Circle,
+  Square and Triangle in their own symbols and colours, L1, R1, Share on
+  a DualShock 4, Create on a DualSense, Options, the PS button), in the
+  panels ("Cross or Return to save, Circle to revert"), in the warnings
+  and in the voice. The map draws the touchpad and the light bar in the
+  status lamp's colour; the Controller test window shows "buttonA · Cross".
+  The pad is told by its make and model, else by its profile. An Xbox pad
+  reads as before. Help: Venue focus ▸ On a PlayStation pad.
+- **The PlayStation touchpad as a trackpad** (on a Mac, board Q170): one
+  finger dragged nudges the light by how far it moves (the whole pad is
+  about 4° of pan; on the target page it moves the target); two fingers
+  up or down zoom, sideways focus, one of the two a drag, said once in the
+  crew's word; a click says the light, as R3. A landing, lift or click
+  never jumps the light, a resting finger doesn't creep, and nothing moves
+  while every light is held.
+- **The voice waits until you stop moving** (board Q171): in Quick focus,
+  Venue focus and Focus this cue, a "where" line is held until no newer
+  step has come for **Waits** (Off / 250 / 400 / 700 ms, 400 by default,
+  beside Voice), so stepping through eight lights says only the one you
+  stopped on, instead of a stale "Fixture 2..." played to its end first.
+  A newer location line then cuts a stale one being said, and a warning
+  cuts one at once ("Controller lost" never waits behind "Fixture 3 of
+  8"). Saves, warnings and Say the light are never held or cut; a tool's
+  first line and entering a focus call are said at once. Off is the voice
+  as before.
 - **Web access saved with the show**: **Connections ▸ Devices ▸ Show
   control & sync ▸ Web access** turns on "Start web access with this show,
   on port" (9999 by default), with **Reachable from other devices on the

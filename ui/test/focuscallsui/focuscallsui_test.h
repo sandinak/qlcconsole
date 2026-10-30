@@ -69,6 +69,12 @@ private slots:
     /** Gap 9: confirmations, warnings and safety lines are queued and never
      *  dropped; only "where am I" lines go stale. */
     void theVoiceNeverDropsAConfirmation();
+    /** Board Q171: a where line waits for the selection to settle (only
+     *  the newest is said), then cuts a stale where line being said; an
+     *  important line cuts a where line at once; a confirmation is never
+     *  held or cut; a where-now line (a tool's first, entering a call) and
+     *  Say the light speak at once; Off is the voice as before. */
+    void theVoiceWaitsForTheSelectionToSettle();
     /** Q129: an applied venue last changed over a day ago -- "Still at
      *  ...?" on open (New venue the default), and the dialog defaults to
      *  New venue until it is confirmed. */

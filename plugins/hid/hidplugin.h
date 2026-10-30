@@ -110,6 +110,8 @@ public:
 
     /** @reimp */
     QString inputProblem(quint32 input) const override;
+    /** @reimp */
+    QString inputDeviceKind(quint32 input) const override;
 
     /** @reimp — starts every joystick (patched or not) reporting raw input. */
     bool setInputDiagnostics(bool enable) override;

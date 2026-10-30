@@ -334,8 +334,9 @@ void Workbench::fillFocusMenu(QMenu *m)
                                  this, [this]() { openRefine(); });
     self->setObjectName(QStringLiteral("workbenchRefine"));
     FocusMenu::setAvailable(self, FocusMenu::focusCueBlocked(m_doc),
-                            tr("Move, zoom, focus and recolour this from the stage with the controller -- "
-                               "triggers step layers, bumpers fixtures, Y the scope, A keeps"));
+                            m_doc->programmer()->padText(
+                                tr("Move, zoom, focus and recolour this from the stage with the controller -- "
+                                   "{LT}/{RT} step layers, {LB}/{RB} fixtures, {Y} the scope, {A} keeps")));
     if (tree == nullptr)
         return;
     const quint32 cueId = tree->cueId();

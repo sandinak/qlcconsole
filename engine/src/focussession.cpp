@@ -447,7 +447,8 @@ bool FocusSession::start(const Options &options, QString *why)
     emit started();
     emit currentChanged(currentFixture());
     flashSelection();
-    emit announce(wherePhrase());
+    // The first line is said at once (Q171): nothing to settle yet.
+    emit announce(wherePhrase(), ControllerScheme::WhereNowPriority);
     return true;
 }
 
@@ -479,7 +480,8 @@ void FocusSession::enterCall(int index)
     emit callChanged(m_callIndex);
     emit currentChanged(currentFixture());
     flashSelection();
-    emit announce(wherePhrase(true));
+    // Entering a call is said at once (Q171); its fixtures settle.
+    emit announce(wherePhrase(true), ControllerScheme::WhereNowPriority);
 }
 
 bool FocusSession::jumpTo(quint32 fid)
@@ -1690,7 +1692,7 @@ bool FocusSession::targetBlocks()
     if (!targetMoved())
         return false;
     const StageTarget *t = m_doc->monitorProperties()->stageTarget(m_targetId);
-    emit announce(tr("%1 moved: A keeps it, B puts it back.").arg(t->name()),
+    emit announce(PadNames::expand(tr("%1 moved: {A} keeps it, {B} puts it back."), m_padFamily).arg(t->name()),
                   ControllerScheme::ImportantPriority);
     return true;
 }
@@ -1720,7 +1722,8 @@ bool FocusSession::toggleTargetPage()
     m_targetId = t->id();
     m_targetKept = t->position();
     emit referenceChanged();
-    emit announce(tr("Target page: the stick moves %1. A keeps it, B puts it back.").arg(t->name()),
+    emit announce(PadNames::expand(tr("Target page: the stick moves %1. {A} keeps it, {B} puts it back."),
+                                   m_padFamily).arg(t->name()),
                   ControllerScheme::ConfirmPriority);
     return true;
 }

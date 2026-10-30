@@ -23,6 +23,7 @@
 #include <QProcess>
 #include <QDateTime>
 #include <QFileInfo>
+#include <QTimer>
 
 #ifdef QLC_HAVE_TEXTTOSPEECH
 #include <QTextToSpeech>
@@ -39,6 +40,7 @@ const QString kDeviceSetting = QStringLiteral("operatorVoice/device");
 const QString kDeviceIdSetting = QStringLiteral("operatorVoice/deviceId");
 const QString kFeedbackSetting = QStringLiteral("controllerTools/feedback");
 const QString kVoiceDetailSetting = QStringLiteral("controllerTools/voiceDetail");
+const QString kSettleSetting = QStringLiteral("voice/settleMs");
 
 #ifdef QLC_HAVE_TEXTTOSPEECH
 /** Qt's own: whatever engine this platform's Qt TextToSpeech has. */
@@ -97,23 +99,132 @@ OperatorVoice *OperatorVoice::create(QObject *parent)
     return new SilentVoice(parent);
 }
 
+OperatorVoice::OperatorVoice(QObject *parent)
+    : QObject(parent)
+    , m_settleTimer(new QTimer(this))
+{
+    m_settleTimer->setSingleShot(true);
+    connect(m_settleTimer, &QTimer::timeout, this, &OperatorVoice::settleNow);
+}
+
+int OperatorVoice::settleMs() const
+{
+    return m_settleMs >= 0 ? m_settleMs : savedSettleMs();
+}
+
+int OperatorVoice::savedSettleMs()
+{
+    return qBound(0, QSettings().value(kSettleSetting, defaultSettleMs()).toInt(), 5000);
+}
+
+void OperatorVoice::saveSettleMs(int ms)
+{
+    QSettings().setValue(kSettleSetting, qMax(0, ms));
+}
+
 void OperatorVoice::say(const QString &text, int priority)
 {
     if (text.trimmed().isEmpty())
         return;
+    const bool where = priority <= ControllerScheme::WherePriority;
+    const int settle = settleMs();
+    /* Board Q171: a where line waits until the selection has settled --
+       a newer one takes its place and the wait starts again. */
+    if (priority == ControllerScheme::WherePriority && settle > 0)
+    {
+        m_settling = text;
+        m_settleTimer->start(settle);
+        return;
+    }
+    // Said at once: what was settling is older than this.
+    if (priority == ControllerScheme::WhereNowPriority)
+    {
+        m_settling.clear();
+        m_settleTimer->stop();
+    }
+    if (m_speaking && settle > 0 && m_speakingPriority <= ControllerScheme::WherePriority
+        && (where || priority == ControllerScheme::ImportantPriority))
+    {
+        /* A where line being said is stale once a newer one is due, and
+           waits for nothing important: cut it. A confirmation still waits
+           its turn (it is never over, nor cut). */
+        cut();
+        if (where)
+        {
+            dropWaitingWhere();
+            m_queue.append(qMakePair(text, priority));
+            speakNext();
+        }
+        else
+            start(text, priority);
+        return;
+    }
     if (m_speaking)
     {
         /* Never over the line being said. A where line still waiting is
            stale once a newer one comes; nothing else is ever dropped. */
-        if (priority == ControllerScheme::WherePriority)
-            for (int i = m_queue.size() - 1; i >= 0; --i)
-                if (m_queue.at(i).second == ControllerScheme::WherePriority)
-                    m_queue.removeAt(i);
+        if (where)
+            dropWaitingWhere();
         m_queue.append(qMakePair(text, priority));
         return;
     }
+    start(text, priority);
+}
+
+void OperatorVoice::settleNow()
+{
+    m_settleTimer->stop();
+    if (m_settling.isEmpty())
+        return;
+    const QString text = m_settling;
+    m_settling.clear();
+    dropWaitingWhere();
+    if (!m_speaking)
+    {
+        start(text, ControllerScheme::WherePriority);
+        return;
+    }
+    m_queue.append(qMakePair(text, ControllerScheme::WherePriority));
+    // A stale where line being said: cut, and what waits goes on (in order).
+    if (m_speakingPriority <= ControllerScheme::WherePriority)
+    {
+        cut();
+        speakNext();
+    }
+}
+
+void OperatorVoice::start(const QString &text, int priority)
+{
     m_speaking = true;
+    m_speakingPriority = priority;
     speakNow(text);
+}
+
+void OperatorVoice::cut()
+{
+    if (!m_speaking)
+        return;
+    // Its end is not "finished": what waits goes on from here, not twice.
+    m_cutting = true;
+    stopNow();
+    m_cutting = false;
+    m_speaking = false;
+    ++m_cuts;
+}
+
+void OperatorVoice::dropWaitingWhere()
+{
+    for (int i = m_queue.size() - 1; i >= 0; --i)
+        if (m_queue.at(i).second <= ControllerScheme::WherePriority)
+            m_queue.removeAt(i);
+}
+
+void OperatorVoice::speakNext()
+{
+    if (m_speaking || m_queue.isEmpty())
+        return;
+    const QPair<QString, int> next = m_queue.takeFirst();
+    start(next.first, next.second);
 }
 
 QStringList OperatorVoice::queued() const
@@ -126,6 +237,8 @@ QStringList OperatorVoice::queued() const
 
 void OperatorVoice::stop()
 {
+    m_settleTimer->stop();
+    m_settling.clear();
     m_queue.clear();
     if (m_speaking)
         stopNow();
@@ -134,12 +247,10 @@ void OperatorVoice::stop()
 
 void OperatorVoice::finished()
 {
-    m_speaking = false;
-    if (m_queue.isEmpty())
+    if (m_cutting)
         return;
-    const QString next = m_queue.takeFirst().first;
-    m_speaking = true;
-    speakNow(next);
+    m_speaking = false;
+    speakNext();
 }
 
 QList<OperatorVoice::OutputDevice> OperatorVoice::parseOutputDevices(const QString &listing)
@@ -391,7 +502,8 @@ OperatorFeedbackCombo::OperatorFeedbackCombo(ProgrammerController *pc, QWidget *
     addItem(tr("Lights only"), int(ControllerScheme::LightsFeedback));
     addItem(tr("Voice only"), int(ControllerScheme::VoiceFeedback));
     setToolTip(tr("How you are told where you are: the rig blinks what is picked, the laptop says it, "
-                  "or both. Say the light (RS, or W) always speaks. Hold RS, or Shift+W, to switch."));
+                  "or both. Say the light (%1, or W) always speaks. Hold %1, or Shift+W, to switch.")
+               .arg(pc != nullptr ? pc->padText(QStringLiteral("{RS}")) : QStringLiteral("RS")));
     sync();
     connect(this, &QComboBox::currentIndexChanged, this, [this]() {
         m_pc->setOperatorFeedback(ControllerScheme::Feedback(currentData().toInt()));
@@ -419,6 +531,28 @@ void OperatorFeedbackCombo::saveFeedback(int feedback)
 /*****************************************************************************
  * VoiceDetailCombo
  *****************************************************************************/
+
+VoiceSettleCombo::VoiceSettleCombo(QWidget *parent)
+    : QComboBox(parent)
+{
+    setObjectName(QStringLiteral("voiceSettle"));
+    setFocusPolicy(Qt::NoFocus);
+    addItem(tr("Off"), 0);
+    addItem(tr("250 ms"), 250);
+    addItem(tr("400 ms"), 400);
+    addItem(tr("700 ms"), 700);
+    setToolTip(tr("How long the voice waits after you stop moving before it says where you are, "
+                  "so stepping through lights says only where you stopped. Off: it speaks on "
+                  "every step. Saves, warnings and Say the light are never held."));
+    const int ms = OperatorVoice::savedSettleMs();
+    int at = findData(ms);
+    if (at < 0)
+        at = findData(OperatorVoice::defaultSettleMs());
+    setCurrentIndex(at);
+    connect(this, &QComboBox::currentIndexChanged, this, [this]() {
+        OperatorVoice::saveSettleMs(currentData().toInt());
+    });
+}
 
 VoiceDetailCombo::VoiceDetailCombo(ProgrammerController *pc, QWidget *parent)
     : QComboBox(parent)

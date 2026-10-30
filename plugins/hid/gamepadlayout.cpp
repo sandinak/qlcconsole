@@ -155,6 +155,19 @@ Transport transportOfProduct(quint16 vendorId, quint16 productId)
     return m != nullptr ? m->transport : UnknownTransport;
 }
 
+QString deviceKind(quint16 vendorId, quint16 productId)
+{
+    if (isPlayStation(vendorId, productId))
+    {
+        const QString model = modelName(vendorId, productId);
+        return model.startsWith(QLatin1String("DualSense")) ? QStringLiteral("dualsense")
+                                                             : QStringLiteral("dualshock4");
+    }
+    if (vendorId == kMicrosoftVendorId)
+        return QStringLiteral("xbox");
+    return QString();
+}
+
 bool isPlayStation(quint16 vendorId, quint16 productId)
 {
     const ModelEntry *m = vendorId == kSonyVendorId ? findModel(vendorId, productId) : nullptr;
@@ -314,6 +327,24 @@ void centre(PadState *state)
         state->axes[a] = (a == LeftTrigger || a == RightTrigger) ? 0 : stickToByte(0);
     for (int b = 0; b < ButtonCount; ++b)
         state->buttons[b] = false;
+    for (int t = 0; t < TouchCount; ++t)
+        state->touch[t] = (t == Touch1Down || t == Touch2Down) ? 0 : 128;
+}
+
+void readTouch(float x, float y, int finger, PadState *state)
+{
+    if (state == nullptr || finger < 0 || finger > 1)
+        return;
+    uchar *t = state->touch + (finger == 0 ? Touch1X : Touch2X);
+    // Exactly (0, 0) is the framework's "no finger".
+    if (x == 0.0f && y == 0.0f)
+    {
+        t[2] = 0;
+        return;
+    }
+    t[0] = uchar(qRound((qBound(-1.0f, x, 1.0f) + 1.0f) * 127.5f));
+    t[1] = uchar(qRound((1.0f - qBound(-1.0f, y, 1.0f)) * 127.5f));
+    t[2] = 255;
 }
 
 uchar stickToByte(int raw)
@@ -411,6 +442,10 @@ QString buttonRole(int button)
     static const char *roles[ButtonCount] = { "a", "b", "x", "y", "lb", "rb", "back", "start",
                                               "ls", "rs", "guide", "dpad_up", "dpad_down",
                                               "dpad_left", "dpad_right", "" };
+    static const char *touch[TouchCount] = { "touch_x", "touch_y", "touch_down",
+                                             "touch2_x", "touch2_y", "touch2_down" };
+    if (button >= ButtonCount && button < ButtonCount + TouchCount)
+        return QString::fromLatin1(touch[button - ButtonCount]);
     return button >= 0 && button < ButtonCount ? QString::fromLatin1(roles[button]) : QString();
 }
 

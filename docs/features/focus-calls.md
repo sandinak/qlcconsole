@@ -242,14 +242,57 @@ saved is on its rim. While the light you are on is not saved, it
 pads read through Apple's GameController framework: a PlayStation pad
 (DualShock 4 or DualSense) shows the lamp's colour on its light bar and
 buzzes on a save. An Xbox pad has no coloured light, so you see the lamp
-only on the panel. On a PlayStation pad, Cross is A, Circle B, Square X,
-Triangle Y, L1/R1 the bumpers, L2/R2 the triggers, **L3/R3 the stick
-clicks** (so L3 + R3 holds every light, and R3 says the light), Create
-View and Options Menu. The PS button and the touchpad aren't used.
+only on the panel. A PlayStation pad's controls are called by their own
+names everywhere: see [On a PlayStation pad](#on-a-playstation-pad).
 
 **The whole call** (Y): a nudge moves every fixture of the call by the
 same amount — the truss came in a little low — and **A** saves them all,
 one undo step. A bumper picks one fixture again.
+
+## On a PlayStation pad
+
+A DualShock 4 or DualSense works the same as an Xbox pad: each button
+does the same job in the same place. The panels, the map, the warnings
+and the voice use the pad's own names ("Cross to save, Circle to
+revert"). This guide uses the Xbox names, so here is the same pad in
+PlayStation words:
+
+| Xbox | DualShock 4 | DualSense | What it does in the focus tools |
+|---|---|---|---|
+| A | Cross ✕ | Cross ✕ | Save (keep) |
+| B | Circle ○ | Circle ○ | Revert; held, every light back |
+| X | Square □ | Square □ | Zero |
+| Y | Triangle △ | Triangle △ | The scope: one fixture or the whole call |
+| LB / RB | L1 / R1 | L1 / R1 | Previous / next fixture |
+| LT / RT | L2 / R2 | L2 / R2 | Previous / next call (Focus this cue: layer) |
+| LS / RS (stick clicks) | L3 / R3 | L3 / R3 | Second reference / say the light; both at once hold every light |
+| View | Share | Create | Undo the last save |
+| Menu | Options | Options | Leave (and start a venue focus cue) |
+| Xbox button | PS button | PS button | Switch the pad on |
+| (none) | Touchpad | Touchpad | Fine aim, zoom and focus (below) |
+
+The pad is recognised from its make and model, so a DualSense says
+**Create** and a DualShock 4 says **Share**.
+
+![A DualShock 4 on the Focus mode map: its own names and symbols, the touchpad and the light bar](../images/focus-mode-playstation-map.png)
+
+**The touchpad** (on a Mac) works like a laptop's trackpad:
+
+- **One finger** dragged nudges the light by how far you drag, not how
+  long you hold. A drag across the whole pad is about 4° of pan. Use it
+  for the last fraction of a degree, after the sticks. On the target
+  page it moves the target instead.
+- **Two fingers** dragged up or down zoom (up is spot down, as D-pad up).
+  Dragged left or right they focus (right is sharper, as D-pad right).
+  Each drag does one thing, chosen by which way it moves first, and the
+  voice says it once ("Spot down.").
+- **A click** says the light, as R3 does. It never saves or reverts: a
+  firm drag can click the pad by accident.
+
+Nothing moves until a finger has travelled a little, a resting finger
+doesn't creep, and the pad is ignored while every light is held. An Xbox
+pad has no touchpad: its right stick (fine nudge) and the D-pad do the
+same jobs.
 
 ## The focus report
 
@@ -358,10 +401,11 @@ screen. Two things tell them where they are:
   is picked blinks three times (120 ms on, 120 ms off) and then stays
   lit; the rest of the call stays dim.
 - **The laptop's voice.** It says where you are, briefly. Feed the
-  laptop's output to the crew's headsets and it is their cue: a line is
-  never cut off or spoken over, and when you step quickly only the latest
-  "where" line waits (the fixtures you passed are not read out).
-  Confirmations ("Saved fixture 3.") and warnings are queued and never
+  laptop's output to the crew's headsets and it is their cue. A line is
+  never spoken over. **The voice waits until you stop moving**: when you
+  step through lights it says only where you stopped, a moment after you
+  stop, not each light you passed (see **Waits** below). Confirmations
+  ("Saved fixture 3.") and warnings are never held back and never
   dropped. **Voice to:** in
   the Venue Focus dialog (on a Mac) sends it to a chosen output (an audio
   interface for the headsets, say); **The system's output** is the
@@ -396,6 +440,17 @@ Venue focus and Focus this cue, kept with Feedback on this computer):
 | A held | "Saved all." | "Saved all, 6 lights." (in a venue: "Saved all to Lincoln HS, 6 lights.") | as Standard |
 | B / B held | "Reverted." / "Reverted all." | "Fixture 1 reverted." / "Reverted all, 3 lights." | "Spot 3 back to its last save." / "3 lights back to their last save." |
 | Say the light | "Spot 3." | "Spot 3. Fixture 1." | "Spot 3. Call 2 of 5, AT spots to DSC, CL, US 3. Fixture 1 of 8." |
+
+**Waits: Off, 250, 400 or 700 ms.** Beside **Voice**, how long the voice
+waits after your last step before it says where you are (400 ms by
+default, this computer's). Hold a bumper through eight lights and you
+hear only the one you stopped on. If it was still saying an older
+"where" line, that line is cut off: it is out of date. Nothing else is
+held or cut. A save, a warning and **Say the light** are said at once.
+So are a tool's first line and stepping to a new call. A warning cuts
+off a "where" line being said, so "Controller lost" never waits behind
+"Fixture 3 of 8". **Off** speaks on every step, as before, and never
+cuts a line.
 
 Warnings and safety lines — the controller lost or back, holding, a
 light not saved, a refusal, nothing reaching the rig — are said in full

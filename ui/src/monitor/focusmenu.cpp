@@ -104,6 +104,13 @@ QString FocusMenu::venueRigBlocked(Doc *doc)
     return QString();
 }
 
+QString FocusMenu::focusCueTip(Doc *doc)
+{
+    return doc->programmer()->padText(
+        tr("Move, zoom, focus and recolour this cue from the stage with the controller: "
+           "{LT}/{RT} step layers, {LB}/{RB} fixtures, {Y} the scope, {A} keeps"));
+}
+
 QString FocusMenu::focusCueBlocked(Doc *doc)
 {
     if (doc->fixtures().isEmpty())
@@ -147,7 +154,8 @@ void FocusMenu::fill(QMenu *menu, Doc *doc, QWidget *parent, const std::function
     quick->setObjectName(QStringLiteral("focusQuick"));
     setAvailable(quick, quickFocusBlocked(doc),
                  tr("Aim each light at its reference in turn and nudge its calibration until it lands "
-                    "there; saves into the show (controller: View + Menu)"));
+                    "there; saves into the show (controller: %1)")
+                 .arg(doc->programmer()->padText(QStringLiteral("{View} + {Menu}"))));
 
     QAction *venue = menu->addAction(tr("Venue focus\342\200\246"), parent, [doc, parent]() {
         FocusCallsDialog::startVenueFocus(doc, parent);
