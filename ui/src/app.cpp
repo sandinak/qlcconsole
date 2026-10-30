@@ -854,6 +854,16 @@ void App::init()
     m_inputNotices = new InputDeviceNotices(m_doc, this);
     connect(m_inputNotices, &InputDeviceNotices::notice,
             this, &App::showInputDeviceNotice);
+    /* Another pad where the show's is missing: one click uses it here and
+       remembers it with the show (controller slots). */
+    connect(m_inputNotices, &InputDeviceNotices::offer, this,
+            [this](const QString &text, const QString &button, quint32 universe,
+                   const QString &plugin, const QString &device) {
+        showViewNotice(text, button, [this, universe, plugin, device]() {
+            hideViewNotice();
+            m_inputNotices->adopt(universe, plugin, device);
+        });
+    });
 
     // Listen to DMX value changes and update each Fixture values array
     connect(m_doc->inputOutputMap(), SIGNAL(universeWritten(quint32, const QByteArray&)),

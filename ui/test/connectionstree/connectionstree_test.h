@@ -63,6 +63,7 @@ private slots:
     /* Labels */
     void lineAliasIsShownOnTheRow();
     void anAbsentInputDeviceIsShownNotConnected();
+    void aControllerSlotListsItsDevices();
     void targetAliasIsShownOnTheRow();
 
     /* Default expansion and its memory */

@@ -496,6 +496,74 @@ public:
      *  it (pending outputs included). */
     void forgetOfflinePatches(quint32 universe);
 
+    /*********************************************************************
+     * Controller slots: one input, whichever of several devices is here
+     *********************************************************************/
+    /**
+     * Bind @p universe's input to an ordered list of devices ("any of"):
+     * the first one connected drives it, the others wait. A show that
+     * travels finds an Xbox pad at one place and a DualShock 4 at the next;
+     * each keeps its own input and controller profile. While the live one
+     * is not the device the slot was made from, its controls are put onto
+     * the show's channels by gamepad role (@p roles, see
+     * Universe::inputSlotRoles(); empty: taken from the live device now if
+     * the first entry is connected, else the standard gamepad order), so a
+     * Control Map binding or VC input made on one pad fires from another's
+     * same button. An empty @p devices removes the slot (the live patch,
+     * if any, stays).
+     */
+    void setInputSlot(quint32 universe, const QList<Universe::InputSlotDevice> &devices,
+                      const QStringList &roles = QStringList());
+    QList<Universe::InputSlotDevice> inputSlot(quint32 universe) const;
+    /** The slot entry driving @p universe now, -1 when none is connected
+     *  (or there is no slot). */
+    int inputSlotLive(quint32 universe) const;
+
+    /** Add device @p device (a line of @p pluginName) to @p universe's slot
+     *  -- made from its present patch, live or kept, if it has none yet --
+     *  at the end, with the stock input profile for its kind of pad. Empty
+     *  @p device: "Any game controller". False if it is already there or
+     *  @p universe has no input to add to. */
+    bool addInputSlotDevice(quint32 universe, const QString &pluginName, const QString &device);
+    /** Take entry @p index out; a slot left with one device becomes an
+     *  ordinary patch on it again. */
+    bool removeInputSlotDevice(quint32 universe, int index);
+    /** Move entry @p from to @p to (the order is the preference). */
+    bool moveInputSlotDevice(quint32 universe, int from, int to);
+
+    /** A game controller that could stand in for a missing one. */
+    struct InputSlotOffer
+    {
+        quint32 universe = 0;
+        QString plugin;
+        QString device;     //!< the controller's line name
+    };
+    /** Connected game controllers nothing has, each with the first universe
+     *  whose input waits for a device that is not here (an input kept
+     *  offline, or a slot none of whose devices is connected). */
+    QList<InputSlotOffer> inputSlotOffers() const;
+
+    /** The stock input profile (.qxi) for a pad of @p kind ("xbox",
+     *  "dualshock4", "dualsense"), empty when there is none here. */
+    QString stockInputProfile(const QString &kind) const;
+
+    /** The gamepad role of each of @p plugin's line @p line channels, as
+     *  its controller profile says ("lx", "a"...), trailing blanks off. */
+    static QStringList channelRoles(QLCIOPlugin *plugin, quint32 line);
+    /** The standard order (what the stock Xbox and PlayStation controller
+     *  profiles give every pad they read): axes, then buttons. */
+    static QStringList standardChannelRoles();
+    /** Device channel -> show channel for a device with @p deviceRoles in a
+     *  slot whose channels have @p showRoles: each control to the show's
+     *  channel with its role; a channel with no role, or a role the show
+     *  has not, stays where it is. Empty when nothing moves. */
+    static QVector<quint32> slotChannelMap(const QStringList &showRoles,
+                                           const QStringList &deviceRoles);
+
+    /** Re-pick every slot's live device now (done by itself on each device
+     *  change and retry tick). */
+    void applyInputSlots();
+
     /** How a patch with saved identity @p uid would resolve here: a line
      *  index, or -1 when nothing on this machine reaches it. */
     int resolveSavedLine(QLCIOPlugin *plugin, bool output, const QString &uid,
@@ -765,6 +833,21 @@ private:
      */
     void followInputDevices(QLCIOPlugin *plugin);
 
+    /** A hand patch of @p universe (setInputPatch()) with a slot on it:
+     *  kept when the device is one of the slot's, else the slot goes. */
+    void keepOrDropInputSlot(quint32 universe, const QString &pluginName,
+                             const QString &inputUID, quint32 input);
+    /** Pick @p universe's slot device (highest connected), patch it, say
+     *  so; true when the live device changed. */
+    bool applyInputSlot(quint32 universe);
+    /** The line slot entry @p dev is on here, -1 when it is not connected
+     *  (or, for "Any game controller", none is free). */
+    int slotDeviceLine(quint32 universe, const Universe::InputSlotDevice &dev,
+                       QLCIOPlugin **plugin) const;
+    /** A game controller line (its plugin says what kind, or its profile
+     *  gives it gamepad roles). */
+    static bool isGamepadLine(QLCIOPlugin *plugin, quint32 line);
+
 private slots:
    /** Slot that catches plugin configuration change notifications from UIPluginCache */
     void slotPluginConfigurationChanged(QLCIOPlugin* plugin);
@@ -772,6 +855,8 @@ private slots:
 
 private:
     QTimer *m_offlineRetry;
+    /** applyInputSlot() is patching: not the user choosing one device */
+    bool m_applyingSlot = false;
 
 signals:
     /** Signal emitted when a profile is changed */
@@ -790,6 +875,9 @@ signals:
     /** A kept input patch's device came back and the patch reopened on it. */
     void inputDeviceConnected(quint32 universe, const QString &pluginName,
                               const QString &device);
+    /** @p universe's controller slot changed: its list, or which device is
+     *  live. */
+    void inputSlotChanged(quint32 universe);
 
     /** Everyone interested in input data should connect to this signal */
     void inputValueChanged(quint32 universe, quint32 channel, uchar value, const QString& key = 0);

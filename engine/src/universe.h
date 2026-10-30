@@ -75,6 +75,10 @@ class Doc;
 #define KXMLQLCUniverseHIDProfileName   QStringLiteral("HIDProfile")
 #define KXMLQLCUniversePluginParameters QStringLiteral("PluginParameters")
 #define KXMLQLCUniverseNetwork          QStringLiteral("Network")
+#define KXMLQLCUniverseInputSlot        QStringLiteral("InputSlot")
+#define KXMLQLCUniverseInputSlotDevice  QStringLiteral("Device")
+#define KXMLQLCUniverseInputSlotAny     QStringLiteral("Any")
+#define KXMLQLCUniverseInputSlotRoles   QStringLiteral("Roles")
 
 /** Universe class contains input/output data for one DMX universe
  */
@@ -879,6 +883,42 @@ public:
 
     QList<OfflinePatch> offlinePatches() const;
     void addOfflinePatch(const OfflinePatch &patch);
+
+    /*********************************************************************
+     * Controller slot: one input, any of several devices
+     *********************************************************************/
+    /**
+     * One device a universe's input may come from (a controller slot): the
+     * show travels, and the pad at one place is an Xbox, at the next a
+     * DualShock 4. Each keeps its own input profile, controller profile and
+     * parameters. With @c anyGamepad the entry is "Any game controller": the
+     * first game controller that no other universe has.
+     */
+    struct InputSlotDevice
+    {
+        QString plugin;
+        QString uid;            //!< the device's line name; empty for anyGamepad
+        bool anyGamepad = false;
+        quint32 line = 0;       //!< the line it was last seen on (for older builds)
+        QString profile;        //!< input profile (.qxi) name, empty for none
+        QString hidProfile;     //!< controller profile name
+        QMap<QString, QVariant> params;
+    };
+
+    /** The devices in order: the first connected one drives the input.
+     *  Empty: an ordinary single-device input patch. */
+    QList<InputSlotDevice> inputSlot() const { return m_inputSlot; }
+    void setInputSlot(const QList<InputSlotDevice> &devices) { m_inputSlot = devices; }
+    bool hasInputSlot() const { return m_inputSlot.isEmpty() == false; }
+    /** Which entry is live (-1: none is connected). */
+    int inputSlotLive() const { return m_inputSlotLive; }
+    void setInputSlotLive(int index) { m_inputSlotLive = index; }
+    /** The show's channel layout for the slot: the gamepad role of each
+     *  channel ("lx", "a"...) as the device the slot was made from has
+     *  them. Another device's controls are put onto these channels by
+     *  role. Empty: none known, nothing is moved. */
+    QStringList inputSlotRoles() const { return m_inputSlotRoles; }
+    void setInputSlotRoles(const QStringList &roles) { m_inputSlotRoles = roles; }
     void removeOfflinePatch(int index);
     /** Drop every kept patch of @p tag (the user re-patched/unpatched it). */
     void clearOfflinePatches(PatchTagType tag);
@@ -913,6 +953,9 @@ public:
 
 private:
     QList<OfflinePatch> m_offlinePatches;
+    QList<InputSlotDevice> m_inputSlot;
+    int m_inputSlotLive = -1;
+    QStringList m_inputSlotRoles;
     RigOwner::Owner m_slotOwner = RigOwner::Tour;
     bool m_hasShowOutputBase = false;
     QList<OfflinePatch> m_showOutputBase;

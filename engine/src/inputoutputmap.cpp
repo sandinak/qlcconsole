@@ -554,6 +554,11 @@ bool InputOutputMap::setInputPatch(quint32 universe, const QString &pluginName,
         return false;
     }
 
+    /* Patched by hand to one device (or unpatched): a controller slot gives
+       way, unless that device is one of its own. */
+    if (m_applyingSlot == false && m_universeArray.at(universe)->hasInputSlot())
+        keepOrDropInputSlot(universe, pluginName, inputUID, input);
+
     QMutexLocker locker(&m_universeMutex);
     // An explicit (re)patch or unpatch replaces any input kept offline.
     m_universeArray.at(universe)->clearOfflinePatches(Universe::InputPatchTag);
@@ -596,6 +601,8 @@ bool InputOutputMap::setInputPatch(quint32 universe, const QString &pluginName,
         ip = m_universeArray.at(universe)->inputPatch();
         if (ip != NULL)
         {
+            ip->setChannelMap(QVector<quint32>());  // a slot sets its own after
+
             connect(ip, SIGNAL(inputValueChanged(quint32,quint32,uchar,const QString&)),
                     this, SIGNAL(inputValueChanged(quint32,quint32,uchar,const QString&)));
             connect(ip, SIGNAL(inputTimeCodeChanged(quint32,quint32,uchar)),
@@ -1098,6 +1105,8 @@ int InputOutputMap::retryOfflinePatches()
             for (int k = 0; k < kept.count(); k++)
             {
                 const Universe::OfflinePatch &rec = kept.at(k);
+                if (rec.tag == Universe::InputPatchTag && uni->hasInputSlot())
+                    continue;   // a controller slot's: applyInputSlots() picks
                 QLCIOPlugin *plugin = m_doc->ioPluginCache()->plugin(rec.plugin);
                 if (plugin == NULL)
                     continue;
@@ -1128,6 +1137,7 @@ int InputOutputMap::retryOfflinePatches()
 
 void InputOutputMap::slotRetryOfflinePatches()
 {
+    applyInputSlots();
     applyTransmitGate();
     if (hasOfflinePatches())
         retryOfflinePatches();
@@ -1140,6 +1150,8 @@ void InputOutputMap::forgetOfflinePatches(quint32 universe)
         return;
 
     Universe *uni = m_universeArray.at(universe);
+    if (uni->hasInputSlot())
+        setInputSlot(universe, QList<Universe::InputSlotDevice>());
     uni->clearOfflinePatches(Universe::InputPatchTag);
     uni->clearOfflinePatches(Universe::OutputPatchTag);
     uni->clearOfflinePatches(Universe::FeedbackPatchTag);
@@ -1744,6 +1756,8 @@ void InputOutputMap::followInputDevices(QLCIOPlugin *plugin)
         InputPatch *ip = uni->inputPatch();
         if (ip == NULL || ip->plugin() != plugin || ip->inputUID().isEmpty())
             continue;
+        if (uni->hasInputSlot())
+            continue;   // a controller slot: applyInputSlots() follows it
 
         const QString device = ip->inputUID();
         const int line = lines.indexOf(device);
@@ -1788,7 +1802,10 @@ void InputOutputMap::slotPluginConfigurationChanged(QLCIOPlugin* plugin)
     /* A device input (game controller, MIDI surface) is a line that comes
        and goes: follow it by name before reopening anything by number. */
     if (plugin->linesAreHardware())
+    {
         followInputDevices(plugin);
+        applyInputSlots();
+    }
 
     QMutexLocker locker(&m_universeMutex);
     bool success = true;

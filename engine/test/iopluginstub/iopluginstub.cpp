@@ -43,6 +43,8 @@ void IOPluginStub::init()
     m_lineNames.clear();
     m_nameOverride.clear();
     m_outputProblems.clear();
+    m_lineChannelRoles.clear();
+    m_lineDeviceKind.clear();
 }
 
 QString IOPluginStub::name() const

@@ -34,7 +34,10 @@ Students can:
 - [ ] qlcconsole on the projector computer and the class laptops.
 - [ ] `ShowChoir-Classroom.qlcc` on each laptop (from `docs/course/shows/`).
 - [ ] An Xbox or PlayStation controller per station if you have them
-  (USB or Bluetooth). Without one, every step has keys.
+  (USB or Bluetooth). Without one, every step has keys. Mixed pads are
+  fine: the show waits for the pad it was saved with, so on a station
+  with a different one click **Use '…' for universe N (and remember it)**
+  in the notice line once; the buttons do the same jobs on any of them.
 - [ ] Sound on the projector computer: the laptop's voice is part of the
   lesson. For Part 3, the voice into the headset system (**Voice to:** in
   the focus calls list, **Focus ▸ Edit focus calls…**, picks the output).

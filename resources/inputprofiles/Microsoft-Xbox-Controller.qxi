@@ -1,0 +1,103 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE InputProfile>
+<InputProfile xmlns="http://www.qlcplus.org/InputProfile">
+ <Creator>
+  <Name>qlcconsole</Name>
+  <Version>0.3.1</Version>
+  <Author>Branson Matheson</Author>
+ </Creator>
+ <!-- The channels the HID plugin reads this pad into (on a Mac, and on
+      Linux for the pads it knows): the controller profile's layout,
+      axes first, then the buttons. -->
+ <Manufacturer>Microsoft</Manufacturer>
+ <Model>Xbox Controller</Model>
+ <Type>HID</Type>
+ <Channel Number="0">
+  <Name>Left Stick X</Name>
+  <Type>Slider</Type>
+ </Channel>
+ <Channel Number="1">
+  <Name>Left Stick Y</Name>
+  <Type>Slider</Type>
+ </Channel>
+ <Channel Number="2">
+  <Name>Left Trigger</Name>
+  <Type>Slider</Type>
+ </Channel>
+ <Channel Number="3">
+  <Name>Right Stick X</Name>
+  <Type>Slider</Type>
+ </Channel>
+ <Channel Number="4">
+  <Name>Right Stick Y</Name>
+  <Type>Slider</Type>
+ </Channel>
+ <Channel Number="5">
+  <Name>Right Trigger</Name>
+  <Type>Slider</Type>
+ </Channel>
+ <Channel Number="6">
+  <Name>A</Name>
+  <Type>Button</Type>
+ </Channel>
+ <Channel Number="7">
+  <Name>B</Name>
+  <Type>Button</Type>
+ </Channel>
+ <Channel Number="8">
+  <Name>X</Name>
+  <Type>Button</Type>
+ </Channel>
+ <Channel Number="9">
+  <Name>Y</Name>
+  <Type>Button</Type>
+ </Channel>
+ <Channel Number="10">
+  <Name>LB</Name>
+  <Type>Button</Type>
+ </Channel>
+ <Channel Number="11">
+  <Name>RB</Name>
+  <Type>Button</Type>
+ </Channel>
+ <Channel Number="12">
+  <Name>View</Name>
+  <Type>Button</Type>
+ </Channel>
+ <Channel Number="13">
+  <Name>Menu</Name>
+  <Type>Button</Type>
+ </Channel>
+ <Channel Number="14">
+  <Name>Left Stick</Name>
+  <Type>Button</Type>
+ </Channel>
+ <Channel Number="15">
+  <Name>Right Stick</Name>
+  <Type>Button</Type>
+ </Channel>
+ <Channel Number="16">
+  <Name>Xbox</Name>
+  <Type>Button</Type>
+ </Channel>
+ <Channel Number="17">
+  <Name>D-pad Up</Name>
+  <Type>Button</Type>
+ </Channel>
+ <Channel Number="18">
+  <Name>D-pad Down</Name>
+  <Type>Button</Type>
+ </Channel>
+ <Channel Number="19">
+  <Name>D-pad Left</Name>
+  <Type>Button</Type>
+ </Channel>
+ <Channel Number="20">
+  <Name>D-pad Right</Name>
+  <Type>Button</Type>
+ </Channel>
+ <Channel Number="21">
+  <Name>Share</Name>
+  <Type>Button</Type>
+ </Channel>
+</InputProfile>

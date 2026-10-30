@@ -27,6 +27,9 @@ class FocusSession_Test final : public QObject
     Q_OBJECT
 
 private slots:
+    /** A controller slot: the tools follow whichever pad is live --
+     *  its names, and its controls on the show's channels. */
+    void theToolsFollowTheLivePadOfASlot();
     void init();
     void cleanup();
 

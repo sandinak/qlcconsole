@@ -1587,10 +1587,52 @@ bool Universe::loadXML(QXmlStreamReader &root, int index, InputOutputMap *ioMap)
         setPassthrough(false);
     }
 
+    QList<InputSlotDevice> slotDevices;
+    QStringList slotRoles;
+
     while (root.readNextStartElement())
     {
         QXmlStreamAttributes pAttrs = root.attributes();
         OfflinePatch patch;
+
+        if (root.name() == KXMLQLCUniverseInputSlot)
+        {
+            /* A controller slot (older builds skip it and open the first
+               device, written as the <Input> above it). */
+            slotRoles = pAttrs.value(KXMLQLCUniverseInputSlotRoles).toString()
+                            .split(QLatin1Char(','));
+            while (slotRoles.isEmpty() == false && slotRoles.last().isEmpty())
+                slotRoles.removeLast();
+            while (root.readNextStartElement())
+            {
+                if (root.name() != KXMLQLCUniverseInputSlotDevice)
+                {
+                    root.skipCurrentElement();
+                    continue;
+                }
+                const QXmlStreamAttributes dAttrs = root.attributes();
+                InputSlotDevice dev;
+                dev.plugin = dAttrs.value(KXMLQLCUniversePlugin).toString();
+                dev.uid = dAttrs.value(KXMLQLCUniverseLineUID).toString();
+                dev.anyGamepad = dAttrs.value(KXMLQLCUniverseInputSlotAny).toString() == KXMLQLCTrue;
+                dev.line = dAttrs.value(KXMLQLCUniverseLine).toString().toUInt();
+                dev.profile = dAttrs.value(KXMLQLCUniverseProfileName).toString();
+                dev.hidProfile = dAttrs.value(KXMLQLCUniverseHIDProfileName).toString();
+                while (root.readNextStartElement())
+                {
+                    if (root.name() == KXMLQLCUniversePluginParameters)
+                    {
+                        const QXmlStreamAttributes pa = root.attributes();
+                        for (int i = 0; i < pa.count(); i++)
+                            dev.params[pa.at(i).name().toString()] = pa.at(i).value().toString();
+                    }
+                    root.skipCurrentElement();
+                }
+                if (dev.plugin.isEmpty() == false && (dev.anyGamepad || dev.uid.isEmpty() == false))
+                    slotDevices << dev;
+            }
+            continue;
+        }
 
         if (root.name() == KXMLQLCUniverseInputPatch)
             patch.tag = InputPatchTag;
@@ -1637,6 +1679,9 @@ bool Universe::loadXML(QXmlStreamReader &root, int index, InputOutputMap *ioMap)
 
         ioMap->loadPatch(index, patch);
     }
+
+    if (slotDevices.isEmpty() == false)
+        ioMap->setInputSlot(index, slotDevices, slotRoles);
 
     return true;
 }
@@ -1801,7 +1846,31 @@ bool Universe::saveXML(QXmlStreamWriter *doc) const
         }
     };
 
-    if (inputPatch() != NULL)
+    /* A controller slot: <Input> is its first device, as older builds
+       open it, whichever is live here; then the whole list. */
+    QList<InputSlotDevice> slotDevices = m_inputSlot;
+    if (m_inputSlotLive >= 0 && m_inputSlotLive < slotDevices.count()
+        && inputPatch() != NULL && inputPatch()->isPatched())
+    {
+        InputSlotDevice &live = slotDevices[m_inputSlotLive];
+        live.profile = inputPatch()->profileName() == KInputNone ? QString()
+                                                                 : inputPatch()->profileName();
+        live.hidProfile = inputPatch()->hidProfileName();
+        live.params = inputPatch()->getPluginParameters();
+        live.line = inputPatch()->input();
+    }
+    int slotFirst = -1;
+    for (int i = 0; i < slotDevices.count() && slotFirst < 0; i++)
+        if (slotDevices.at(i).anyGamepad == false)
+            slotFirst = i;
+
+    if (slotFirst >= 0 && slotFirst != m_inputSlotLive)
+    {
+        const InputSlotDevice &d = slotDevices.at(slotFirst);
+        savePatchXML(doc, KXMLQLCUniverseInputPatch, d.plugin, d.uid, d.line, d.profile,
+                     d.params, d.hidProfile, QString());
+    }
+    else if (inputPatch() != NULL)
     {
         savePatchXML(doc, KXMLQLCUniverseInputPatch, inputPatch()->pluginName(), inputPatch()->inputName(),
             inputPatch()->input(), inputPatch()->profileName(), inputPatch()->getPluginParameters(),
@@ -1810,6 +1879,31 @@ bool Universe::saveXML(QXmlStreamWriter *doc) const
     else
     {
         saveOffline(InputPatchTag, KXMLQLCUniverseInputPatch);
+    }
+    if (slotDevices.isEmpty() == false)
+    {
+        doc->writeStartElement(KXMLQLCUniverseInputSlot);
+        if (m_inputSlotRoles.isEmpty() == false)
+            doc->writeAttribute(KXMLQLCUniverseInputSlotRoles, m_inputSlotRoles.join(QLatin1Char(',')));
+        foreach (const InputSlotDevice &d, slotDevices)
+        {
+            doc->writeStartElement(KXMLQLCUniverseInputSlotDevice);
+            doc->writeAttribute(KXMLQLCUniversePlugin, d.plugin);
+            if (d.anyGamepad)
+                doc->writeAttribute(KXMLQLCUniverseInputSlotAny, KXMLQLCTrue);
+            else
+            {
+                doc->writeAttribute(KXMLQLCUniverseLineUID, d.uid);
+                doc->writeAttribute(KXMLQLCUniverseLine, QString::number(d.line));
+            }
+            if (d.profile.isEmpty() == false && d.profile != KInputNone)
+                doc->writeAttribute(KXMLQLCUniverseProfileName, d.profile);
+            if (d.hidProfile.isEmpty() == false)
+                doc->writeAttribute(KXMLQLCUniverseHIDProfileName, d.hidProfile);
+            savePluginParametersXML(doc, d.params);
+            doc->writeEndElement();
+        }
+        doc->writeEndElement();
     }
     /* A venue's patch is on: the show keeps its own (docs/design/VENUES.md section 5). */
     const QList<OfflinePatch> outputs = m_hasShowOutputBase ? m_showOutputBase

@@ -103,6 +103,9 @@
    its settings on the right (ShowControlSyncPage). */
 #define KIND_SHOWCONTROL_BRANCH 9
 #define KIND_SHOWCONTROL 10
+/* One device of a universe's controller slot (InputOutputMap::setInputSlot()),
+   under that universe's input row: its place in the list in ROLE_LINE. */
+#define KIND_SLOTDEVICE 11
 
 #define COL_NAME    0
 #define COL_DETAIL  1
@@ -465,6 +468,8 @@ ConnectionsTree::ConnectionsTree(Doc *doc, QWidget *parent)
         connect(m_doc->inputOutputMap(), SIGNAL(offlinePatchesChanged()),
                 this, SLOT(slotTargetProblemsChanged()));
         connect(m_doc->inputOutputMap(), SIGNAL(pluginConfigurationChanged(QString,bool)),
+                this, SLOT(slotTargetProblemsChanged()));
+        connect(m_doc->inputOutputMap(), SIGNAL(inputSlotChanged(quint32)),
                 this, SLOT(slotTargetProblemsChanged()));
     }
     m_activityTimer = new QTimer(this);
@@ -1761,6 +1766,7 @@ void ConnectionsTree::refresh()
                     uitem->setForeground(COL_DETAIL, absentBrush);
                     uitem->setData(COL_NAME, ROLE_KIND, KIND_PENDING_UNIVERSE);
                     uitem->setData(COL_NAME, ROLE_UNIVERSE, u->id());
+                    uitem->setData(COL_NAME, ROLE_OUTPUT, false);
                     setCarriesFixtures(uitem, u->id());
                 }
                 ghostLine->setText(COL_CARRIES, tr("%1 universe%2")
@@ -1906,6 +1912,69 @@ void ConnectionsTree::refresh()
             }
             for (int c = 0; c < it->childCount(); c++)
                 stack << it->child(c);
+        }
+    }
+
+    /* A controller slot: under its universe's input row, every device it
+       may use, in order -- the one in use, those standing by, those not
+       here. Right-click one to move it up or down or take it out. */
+    if (InputOutputMap *iom = m_doc->inputOutputMap())
+    {
+        QSet<quint32> listed;
+        QList<QTreeWidgetItem *> stack;
+        for (int i = 0; i < m_tree->topLevelItemCount(); i++)
+            stack << m_tree->topLevelItem(i);
+        while (stack.isEmpty() == false)
+        {
+            QTreeWidgetItem *it = stack.takeFirst();
+            for (int c = 0; c < it->childCount(); c++)
+                stack << it->child(c);
+            const int k = it->data(COL_NAME, ROLE_KIND).toInt();
+            const QVariant out = it->data(COL_NAME, ROLE_OUTPUT);
+            if ((k != KIND_UNIVERSE && k != KIND_PENDING_UNIVERSE)
+                    || out.isValid() == false || out.toBool())
+                continue;
+            const quint32 u = it->data(COL_NAME, ROLE_UNIVERSE).toUInt();
+            const QList<Universe::InputSlotDevice> devs = iom->inputSlot(u);
+            if (devs.isEmpty() || listed.contains(u))
+                continue;
+            listed.insert(u);
+            const int live = iom->inputSlotLive(u);
+            const QBrush idleBrush(QColor(138, 142, 153));
+            for (int d = 0; d < devs.count(); d++)
+            {
+                const Universe::InputSlotDevice &dev = devs.at(d);
+                QLCIOPlugin *dp = m_doc->ioPluginCache()->plugin(dev.plugin);
+                const bool here = d == live
+                        || (dev.anyGamepad == false && dp != NULL && dp->inputs().contains(dev.uid));
+                QTreeWidgetItem *row = new QTreeWidgetItem(it);
+                row->setText(COL_NAME, tr("%1. %2").arg(d + 1)
+                             .arg(dev.anyGamepad ? tr("Any game controller") : dev.uid));
+                QStringList detail;
+                detail << (d == live ? tr("in use")
+                           : here ? tr("connected — standing by")
+                           : tr("not connected"));
+                if (dev.profile.isEmpty() == false)
+                    detail << tr("profile: %1").arg(dev.profile);
+                row->setText(COL_DETAIL, detail.join(QStringLiteral(" \u00b7 ")));
+                if (d != live)
+                {
+                    row->setForeground(COL_NAME, idleBrush);
+                    row->setForeground(COL_DETAIL, idleBrush);
+                }
+                row->setData(COL_NAME, ROLE_KIND, KIND_SLOTDEVICE);
+                row->setData(COL_NAME, ROLE_UNIVERSE, u);
+                row->setData(COL_NAME, ROLE_LINE, d);
+                row->setData(COL_NAME, ROLE_PLUGIN, dev.plugin);
+                setRowTooltip(row, tr(
+                    "<b>%1</b><br>One of the controllers universe %2's input may come "
+                    "from. The first one in this list that is connected drives it; "
+                    "each keeps its own input and controller profile, and the show's "
+                    "controls work from whichever it is. Right-click to change the "
+                    "order or take it out.")
+                    .arg((dev.anyGamepad ? tr("Any game controller") : dev.uid).toHtmlEscaped())
+                    .arg(u + 1));
+            }
         }
     }
 
@@ -2760,6 +2829,46 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
             renameUniverse(uni);
         else if (chosen == del)
             deleteUniverse(uni);
+        return;
+    }
+
+    if (kind == KIND_SLOTDEVICE)
+    {
+        InputOutputMap *iom = m_doc->inputOutputMap();
+        const quint32 uni = item->data(COL_NAME, ROLE_UNIVERSE).toUInt();
+        const int index = item->data(COL_NAME, ROLE_LINE).toInt();
+        const QList<Universe::InputSlotDevice> devs = iom->inputSlot(uni);
+        QAction *up = menu.addAction(tr("Move up (preferred)"));
+        up->setEnabled(index > 0);
+        QAction *down = menu.addAction(tr("Move down"));
+        down->setEnabled(index + 1 < devs.count());
+        bool hasAny = false;
+        foreach (const Universe::InputSlotDevice &d, devs)
+            hasAny = hasAny || d.anyGamepad;
+        QAction *any = NULL;
+        if (hasAny == false)
+            any = menu.addAction(tr("Also take any game controller (last)"));
+        menu.addSeparator();
+        QAction *remove = menu.addAction(tr("Remove from universe %1").arg(uni + 1));
+        appendUniversalMenuActions(menu, item, collapseAll, expandAll, addUniv, delUniv);
+        QAction *chosen = menu.exec(m_tree->viewport()->mapToGlobal(pos));
+        if (handleUniversalMenuAction(chosen, item, collapseAll, expandAll, addUniv, delUniv))
+            return;
+        bool changed = false;
+        if (chosen == up)
+            changed = iom->moveInputSlotDevice(uni, index, index - 1);
+        else if (chosen == down)
+            changed = iom->moveInputSlotDevice(uni, index, index + 1);
+        else if (chosen != NULL && chosen == any)
+            changed = iom->addInputSlotDevice(uni, item->data(COL_NAME, ROLE_PLUGIN).toString(),
+                                              QString());
+        else if (chosen == remove)
+            changed = iom->removeInputSlotDevice(uni, index);
+        if (changed)
+        {
+            m_doc->setModified();
+            refresh();
+        }
         return;
     }
 

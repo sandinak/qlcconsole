@@ -97,7 +97,11 @@ public:
 
     /** @reimp m_channelRoles for @p channel, whatever the line */
     QString inputChannelRole(quint32 input, quint32 channel) const override
-    { Q_UNUSED(input) return m_channelRoles.value(channel); }
+    {
+        if (m_lineChannelRoles.contains(input))
+            return m_lineChannelRoles.value(input).value(channel);
+        return m_channelRoles.value(channel);
+    }
 
     /** @reimp m_channelNames for @p channel, whatever the line */
     QString inputChannelName(quint32 input, quint32 channel) const override
@@ -118,7 +122,7 @@ public:
 
     /** @reimp m_deviceKind, whatever the line */
     QString inputDeviceKind(quint32 input) const override
-    { Q_UNUSED(input) return m_deviceKind; }
+    { return m_lineDeviceKind.contains(input) ? m_lineDeviceKind.value(input) : m_deviceKind; }
 
     /** @reimp Counted, like a real plugin's. */
     bool setInputDiagnostics(bool enable) override
@@ -134,6 +138,9 @@ public:
     QMap<quint32, QStringList> m_outputProblems;
     /** What inputChannelRole() reports, by channel ("a", "lb", "rx"...) */
     QMap<quint32, QString> m_channelRoles;
+    /** Per line, overriding m_channelRoles / m_deviceKind for that line */
+    QMap<quint32, QMap<quint32, QString>> m_lineChannelRoles;
+    QMap<quint32, QString> m_lineDeviceKind;
     /** What sendFeedBack() was given, in order */
     QList<QVariant> m_feedbackParams;
     /** The channel and value of each sendFeedBack(), in order */

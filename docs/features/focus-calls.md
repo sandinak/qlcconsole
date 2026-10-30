@@ -276,7 +276,8 @@ The pad is recognised from its make and model, so a DualSense says
 
 ![A DualShock 4 on the Focus mode map: its own names and symbols, the touchpad and the light bar](../images/focus-mode-playstation-map.png)
 
-**The touchpad** (on a Mac) works like a laptop's trackpad:
+**The touchpad** (on a Mac; on Linux it is a separate device and is not
+read) works like a laptop's trackpad:
 
 - **One finger** dragged nudges the light by how far you drag, not how
   long you hold. A drag across the whole pad is about 4° of pan. Use it

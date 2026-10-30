@@ -24,7 +24,10 @@
 #include <linux/input.h>
 #include <linux/types.h>
 
+#include <QVector>
+
 #include "hidjsdevice.h"
+#include "gamepadlayout.h"
 
 class HIDLinuxJoystick final : public HIDJsDevice
 {
@@ -47,6 +50,19 @@ protected:
 private:
     /** @reimp */
     void run() override;
+
+    /** A pad the layout knows: its joystick controls by evdev code into
+     *  the stock profiles' layout (GamepadLayout::mapLinuxButton()), so a
+     *  DualSense, a DualShock 4 and an Xbox pad all read the same here as
+     *  on a Mac. Empty tables: its own order, as before. */
+    void readControlMap();
+    void emitButton(int index, bool down);
+
+    QVector<GamepadLayout::Mapping> m_buttonMap;    // by joystick button number
+    QVector<GamepadLayout::Mapping> m_axisMap;      // by joystick axis number
+    QVector<quint16> m_axisCodes;                   // evdev code by axis number
+    bool m_dpad[4] = { false, false, false, false };
+    bool m_inLayout = false;
 };
 
 #endif // HIDLINUXJOYSTICK_H

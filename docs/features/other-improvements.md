@@ -277,12 +277,60 @@ show was opened without it:
 
 The device is found by its name — maker, model and serial, as listed in
 Connections — so another device that turns up on the same line is never
-taken for it. **Forget this patch** (right-click the greyed universe)
-stops waiting for it.
+taken for it without asking. **Forget this patch** (right-click the greyed
+universe) stops waiting for it.
+
+#### One input, whichever controller is here
+
+A show that travels meets a different pad at each place: an Xbox pad in
+one room, a DualShock 4 in the next, a DualSense at home. A universe's
+input can be bound to a **list of controllers** — any of them will do —
+and whichever is switched on drives it.
+
+- **Adding one.** When a game controller turns up that nothing uses, while
+  a universe waits for one that isn't here, the notice line says so and
+  offers **Use 'DUALSHOCK 4 Wireless Controller' for universe 2 (and
+  remember it)**. One click: it drives universe 2 from then on, and is
+  added to that universe's list, saved with the show. It gets the stock
+  input profile for its kind of pad (Microsoft Xbox Controller, Sony
+  DualShock 4, Sony DualSense). Nothing is ever taken without that click.
+- **Which one is used.** The first controller in the list that is
+  connected. With several switched on, the one higher in the list wins,
+  and the notice says which: **Controller '…' in use — universe 2 (2 of 3
+  in its list)**. When none is here the universe waits greyed, as above,
+  and the notice says **none of its 3 controllers is connected**; any of
+  them coming back is picked up by itself.
+- **The list.** In **Connections ▸ Devices** each controller in the list
+  is a row under its universe's input: "1. Xbox Wireless Controller · in
+  use", "2. DUALSHOCK 4 … · connected — standing by", "3. DualSense … · not
+  connected". Right-click one to **Move up (preferred)**, **Move down** or
+  **Remove from universe 2**, or **Also take any game controller (last)**:
+  the first pad of any make that no other universe has. Take the list down
+  to one and the universe is an ordinary patch on that pad again. Patching
+  the universe by hand to a device that isn't in its list replaces the list.
+- **Each keeps its own settings.** Every controller in the list keeps its
+  own input profile, controller profile and settings, and gets them back
+  whenever it is the one in use.
+- **The show works from any of them.** Quick focus, the follow spot, focus
+  calls, Control Map bindings and Virtual Console inputs work whichever pad
+  is live, and the panels, map and voice use its own names: "Cross" on the
+  PlayStation pad, "A" on the Xbox one (see
+  [On a PlayStation pad](focus-calls.md#on-a-playstation-pad)). Xbox,
+  DualShock 4 and DualSense pads are all read into the same layout, so a
+  binding made on one is the same button on the others. A pad whose
+  controller profile lists its controls in another order is matched by
+  each control's gamepad role (A, LB, the left stick…) onto the channels of
+  the pad the list was made from; a control with no role stays on its own
+  channel number, in the standard gamepad order. Nothing is added per
+  control: the input path is as quick as before.
+- **Older builds** open the first controller in the list, as an ordinary
+  patch; a show with a single controller loads and saves exactly as before.
 
 On a Mac, controllers are noticed coming and going over USB, Bluetooth and
 Bluetooth LE, and after the Mac wakes. On Linux, a controller's joystick
-device appearing or going is noticed, Bluetooth included. MIDI devices
+device appearing or going is noticed, Bluetooth included, and an Xbox pad,
+DualShock 4 or DualSense is read into the same layout as on a Mac (its
+touchpad is a separate device there and is not read). MIDI devices
 follow the same rules wherever the system reports them coming and going.
 
 ### Only transmit on the rig network
