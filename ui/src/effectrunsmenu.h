@@ -16,6 +16,7 @@
 #include <QList>
 
 #include "effectruns.h"
+#include "effectscript.h"
 
 class QWidget;
 class QMenu;
@@ -50,6 +51,12 @@ public:
      *  Marks the show changed and updates the playing effects. */
     static void apply(Doc *doc, const QList<quint32> &palettes, int runs,
                       int release = -1, int lengthMs = -1);
+
+    /** A wave's Length (EffectOrigin::scriptCycleParam() @p param, its
+     *  definition @p def): one cycle of @p seconds, kept as its rate on
+     *  each of @p palettes that has it, at its own speed. */
+    static void setCycleLength(Doc *doc, const QList<quint32> &palettes, const QString &param,
+                               const EffectScript::ParamDef &def, double seconds);
 
     /** A "Runs" submenu on @p menu for @p palettes; @p dialogParent for the
      *  N times / Length boxes. Null when none of them is an effect. */

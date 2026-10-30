@@ -92,6 +92,9 @@ public:
     bool hasOtherScenes() const { return !m_alsoScenes.isEmpty(); }
     /** Every scene it plays: the one it is bound to first. */
     QList<quint32> sceneIds() const { return QList<quint32>() << m_sceneId << m_alsoScenes; }
+    /** The scenes the last tick played: their fixtures have had a frame of
+     *  this effect (a scene just added has not, until the next tick). */
+    const QList<quint32> &tickedScenes() const { return m_tickedScenes; }
 
     // --- Release fade-out (main thread) ---------------------------------------
     // When a look stops, instead of snapping off the effect can keep rendering
@@ -369,6 +372,18 @@ private:
     bool             m_scriptRelease = false;   //!< the script's own onFinish is "release"
     int              m_runIndex = 0;            //!< which run a repeating one-shot script is on
     int              m_runLenMs = 0;            //!< this tick's run length (resolvedDurationMs())
+    /** Whole cycles (a script's cycleParam, run Once or N times): where the
+     *  run ends in _time's units, counted from m_cycleStart -- its runs over
+     *  its rate; < 0 when it doesn't end by cycles. The tick that reaches
+     *  it plays the wave exactly there (m_cycleDone) and is the last. */
+    mutable double   m_cycleEnd = -1.0;
+    mutable double   m_cycleStart = -1.0;       //!< < 0: not yet (the first tick sets it)
+    mutable bool     m_cycleDone = false;
+    /** Start the run again from its beginning (a changed Runs setting). */
+    void restartRun();
+    /** The scenes the last tick played (scene ids): what the runner tells
+     *  a starting scene its effect has drawn for (EffectScriptRunner). */
+    QList<quint32>   m_tickedScenes;
     /** The cue / chase step's length, once found (it does not change while
      *  this plays), and when it was last looked for: the look-up walks every
      *  function, so not on every tick. */

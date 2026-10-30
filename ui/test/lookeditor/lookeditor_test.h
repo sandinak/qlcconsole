@@ -78,6 +78,8 @@ private slots:
     /** Runs: Loop | Once | N times, At the end: Hold | Release, Length --
      *  on every effect, kept on the look. */
     void anyEffectRunsOnceOrNTimes();
+    void anEffectSettingTakesATypedValue();
+    void aWavesLengthIsOneCycle();
     /** "if we go from Red to Dark Red .. we should auto update the title ..
      *  only update the color part .. the folder should stay consistent."
      *  The name field follows live; the value and the name are one Undo. */

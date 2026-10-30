@@ -48,6 +48,12 @@ private slots:
     void aColourChaseRunsAtItsSpeedOverPixelBoxes();
     void beamsAimedAtALineTiltUp();
 
+    // A Breathe on the step tops at 20% (the user's report, build 2593)
+    void aBreatheStartsAtItsFloor();
+    void aBreatheOnceEndsOnItsFloor_data();
+    void aBreatheOnceEndsOnItsFloor();
+    void aBreatheSetToOncePlaysItAgain();
+
 private:
     quint32 group(const QString &name) const;
     Fixture *fixture(const QString &name) const;
@@ -58,6 +64,9 @@ private:
     void go();
     void run(int ms);
     QByteArray sends(const QString &fixture, int from, int n) const;
+    /** A Breathe (dimmer-phaser at its preset) on the step tops in White at
+     *  20%: the cue's one layer. */
+    bool breatheOnTheStepTops(double rate, int runs);
 
     Doc *m_doc = nullptr;
 };

@@ -25,6 +25,10 @@ effect's **own** colour and dimmer, which apply inside that effect only.
 Whatever you pick plays at once on the rig, in Design mode, on just those
 heads.
 
+Each setting has a slider and, beside it, its number. Click the number
+and type an exact value, in the setting's own units (a rate in cycles a
+second, a level from 0 to 1); **Return** sets it and the slider follows.
+
 Open it from any of three places:
 
 - **On a Show Tree layer.** Right-click a layer and choose **Design
@@ -118,6 +122,22 @@ Build ▸ Effects (**Runs ▸**):
   chase step it plays in, or the Show Tree cue (its fade in when the cue
   waits for Go). With neither, the effect's own length applies. Set a
   time to fix it.
+
+A **wave** (Breathe, Dimmer Phaser, Colour Phaser, the pulses) runs in
+whole cycles instead. Once is one cycle: a Breathe rises from its floor,
+peaks and comes back down, and it ends on its floor rather than wherever
+a time cut it off. Its **Length** is one cycle, in seconds. Type **5.5**
+for a five-and-a-half-second breath. The Length sets the wave's rate
+(1 ÷ length), so the rate setting above moves with it, and moving the
+rate changes the Length. N times plays that many cycles. Setting Runs
+while it plays starts the run again, so you see the change at once.
+
+A dimmer effect starts with the look. On the first frame the look is
+already at the effect's level (a Breathe at its floor), so the look's
+own level never flashes up before the effect begins. It scales the
+look's level: a Breathe (5% to 100%) on a look at 20% breathes between
+1% and 20%. On a light without a dimmer it scales the look's colour,
+white included.
 
 An effect written to run once (a wand sweep) starts on **Once**, with its
 own end. It can loop too: each run starts again from the beginning.

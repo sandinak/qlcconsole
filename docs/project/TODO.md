@@ -8,6 +8,20 @@ under `~/.claude/.../memory/`.
 
 ---
 
+## Breathe once — leftovers (brth, 2026-10-30)
+
+Built (build 2593 report: flash at start, end lands anywhere, no typed
+values, rate awkward for one shot). Open, each "decided (can change)":
+- A wave (script `cycleParam`) on Once / N times runs whole cycles; its
+  Length is one cycle, stored as the rate (1 / length). The run Length
+  (`__durationMs`, auto = the cue's time) no longer applies to a wave.
+  Alternatives to put to the user: Length as the whole run (N cycles
+  fitted into it); a breathe with in / hold / out times of its own.
+- A scene with an effect holds its output until the effect's first frame,
+  at most 250 ms (the Doc's own timer only).
+- Dimmer Phaser sends the dimmer alone; the host scales the look's colour
+  (white too) on a light with no dimmer.
+
 ## Pixel boxes, effects and beams — leftovers (cbug, 2026-10-30)
 
 Built (DONE.md 2026-10-30). Open, each "decided (can change)":

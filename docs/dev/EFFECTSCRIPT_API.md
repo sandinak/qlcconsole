@@ -79,6 +79,7 @@ how it shows up in the look editor and how the host knows what to inject.
 | `version` | int | Generator content version (default `1`). Bump when you change params/behaviour so Effects (presets) authored against an older version can be reasoned about. |
 | `name` | string | Display name in the effect picker. |
 | `hostSpread` | string | The script takes the **host's spread** (the look editor's Spread row): when `inputs._spread` is true it reads each fixture's `phase` instead of working out its own offset. The value names the script's own params the host spread stands in for, comma-separated (`"spread,reverse"`); the look editor hides them while it's on. `""` if it has none. |
+| `cycleParam` | string | The script is a **wave**: names the param that sets its cycles per second (per beat on a speed master), e.g. `"rate"`. Run Once or N times, the host plays whole cycles at that rate -- `inputs._time` stops exactly on the end of the last one, so the wave ends where it began (a sine Breathe on its floor) -- and the look editor's Length is one cycle (it sets the param to 1 / length). Omitted: a run lasts the cue's time or the set Length. |
 | `description` | string | One-line tooltip. |
 | `notes` | string | Long help shown in the editor panel. |
 | `author` | string | Credit. |

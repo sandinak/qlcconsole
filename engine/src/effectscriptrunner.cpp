@@ -158,6 +158,7 @@ void EffectScriptRunner::createInstancesForScene(quint32 sceneId)
     if (!scene)
         return;
 
+    QList<EffectInstance *> fresh;   // to draw at once, below
     for (quint32 pid : scene->palettes())
     {
         QLCPalette *pal = m_doc->palette(pid);
@@ -183,6 +184,7 @@ void EffectScriptRunner::createInstancesForScene(quint32 sceneId)
                 // two layers, a cue-wide effect): each with its own base.
                 existing->addScene(sceneId);
             }
+            fresh << existing;
             continue;
         }
 
@@ -220,6 +222,7 @@ void EffectScriptRunner::createInstancesForScene(quint32 sceneId)
             QMutexLocker locker(&m_instanceMutex);
             m_instances.append(inst);
         }
+        fresh << inst;
         emit effectStarted(pid);
 
         // Register DMXSource on first instance
@@ -231,6 +234,17 @@ void EffectScriptRunner::createInstancesForScene(quint32 sceneId)
 
     }
 
+    /* Its first frame now, not on the next tick: the scene holds its
+       output until its effects have drawn (Scene::holdForEffects()), so
+       the sooner the better. One that failed has nothing to draw. */
+    for (EffectInstance *inst : fresh)
+    {
+        inst->setLastSpotPositions(m_lastSpotDeg);
+        inst->setDataChannels(m_dataChannels);
+        inst->runTick();
+    }
+    if (!fresh.isEmpty() || !m_failures.isEmpty())
+        publishWrites();
     updateAudioSubscription();
 }
 
@@ -619,17 +633,34 @@ void EffectScriptRunner::discardParked(quint32 paletteId)
     delete m_parked.take(paletteId);
 }
 
+static const quint64 kAnyScene = quint64(0xFFFFFFFFu) << 32;
+
 void EffectScriptRunner::publishWrites()
 {
     QList<EffectInstance::DmxWrite> combined;
+    QSet<quint64> drawn;
     {
         QMutexLocker locker(&m_instanceMutex);
         for (const EffectInstance *inst : m_instances)
+        {
             combined += inst->dmxWrites();
+            for (quint32 sid : inst->tickedScenes())
+                drawn.insert((quint64(sid) << 32) | inst->effectPaletteId());
+        }
     }
+    for (auto it = m_failures.constBegin(); it != m_failures.constEnd(); ++it)
+        drawn.insert(kAnyScene | it.key());
 
     QMutexLocker locker(&m_writesMutex);
     m_publishedWrites = combined;
+    m_drawn = drawn;
+}
+
+bool EffectScriptRunner::hasDrawn(quint32 sceneId, quint32 paletteId) const
+{
+    QMutexLocker locker(&m_writesMutex);
+    return m_drawn.contains((quint64(sceneId) << 32) | paletteId)
+        || m_drawn.contains(kAnyScene | paletteId);
 }
 
 void EffectScriptRunner::setDataChannel(const QString &name, const QVariantMap &data)

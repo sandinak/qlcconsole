@@ -3182,18 +3182,42 @@ void LookEditor::rebuildEffectDynWidget()
                 sl->setToolTip(pd.description);
                 rl->addWidget(sl, 1);
 
-                QLabel *val = new QLabel(QString::number(cur, 'f', 2), row);
-                // FIXED width (not minimum): the displayed number changes width as
-                // it's dragged (e.g. "6.90" -> "11.30"); with only a minimum width
-                // that resizes the label, which relayouts the row's QFormLayout
-                // every tick and repaints the sibling sliders — on macOS those
-                // native sliders then render a stale handle (appears to "move",
-                // snapping back only on a full repaint). A fixed width removes the
-                // per-tick relayout entirely.
-                val->setFixedWidth(56);
+                /* The number beside it is a field: click it and type an exact
+                   value, in the param's own units and range (the slider only
+                   gets as close as its thousand steps). FIXED width (not
+                   minimum): the number changes width as it's dragged ("6.90"
+                   -> "11.30"); with only a minimum width that relayouts the
+                   row's QFormLayout every tick and repaints the sibling
+                   sliders -- on macOS those then render a stale handle. */
+                QDoubleSpinBox *val = new QDoubleSpinBox(row);
+                val->setObjectName(QStringLiteral("effectParam_") + pd.name);
+                val->setButtonSymbols(QAbstractSpinBox::NoButtons);
+                val->setKeyboardTracking(false);     // on Enter / leaving it, not per key
+                val->setDecimals(pd.max - pd.min <= 2.0 ? 3 : 2);
+                if (pd.max > pd.min)
+                    val->setRange(pd.min, pd.max);
+                else
+                    val->setRange(-1.0e6, 1.0e6);
+                val->setValue(cur);
+                val->setFixedWidth(64);
                 val->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+                val->setToolTip(pd.max > pd.min
+                                ? tr("%1 -- type a value from %2 to %3")
+                                      .arg(pd.description, QString::number(pd.min), QString::number(pd.max))
+                                : pd.description);
                 sl->setProperty("valueLabel", QVariant::fromValue((QObject*)val));
                 rl->addWidget(val);
+                const QString valName = pd.name;
+                connect(val, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+                        this, [this, valName](double v) {
+                    if (m_loading) return;
+                    QLCPalette *pp = m_doc->palette(m_paletteId);
+                    if (!pp || pp->type() != QLCPalette::Effect) return;
+                    pp->setEffectParamValue(valName, v);
+                    syncEffectParamWidgets(valName, v);
+                    m_doc->setModified();
+                    emit paletteValueChanged(m_paletteId);
+                });
 
                 connect(sl, SIGNAL(valueChanged(int)), this, SLOT(slotEffectParamChanged(int)));
                 const bool perBeat = onMaster && (pd.name == QLatin1String("speed")
@@ -3403,6 +3427,7 @@ void LookEditor::rebuildEffectDynWidget()
                 QLCPalette *pp = m_doc->palette(m_paletteId);
                 if (!pp || pp->type() != QLCPalette::Effect) return;
                 pp->setEffectParamValue(QStringLiteral("__ownRate"), v);
+                syncEffectCycleLength();
                 m_doc->setModified();
                 emit paletteValueChanged(m_paletteId);
             });
@@ -3466,6 +3491,39 @@ void LookEditor::rebuildEffectDynWidget()
         len->setToolTip(tr("How long one run lasts. auto = the cue or chase step's time (else the "
                            "effect's own); set a time to fix it."));
         len->setValue(rs.lengthMs / 1000.0);
+        /* A wave (its script names a cycleParam): Once is one whole cycle,
+           so its Length is the cycle's -- one breath of a Breathe. Typed or
+           dragged here, it is kept as the wave's rate (1 / length), which
+           the rate slider above shows too. */
+        const QString cyc = tmpScript.isOneShot() ? QString() : tmpScript.cycleParam();
+        EffectScript::ParamDef cycDef;
+        bool hasCycle = false;
+        for (const EffectScript::ParamDef &pd : tmpScript.paramDefs())
+            if (!cyc.isEmpty() && pd.name == cyc && pd.enumValues.isEmpty())
+            {
+                cycDef = pd;
+                hasCycle = true;
+            }
+        if (hasCycle)
+        {
+            const double own = onMaster ? 1.0 : pv.value(QStringLiteral("__ownRate"), 1.0);
+            len->setProperty("cycleParam", cyc);
+            len->setProperty("cycleDefault", cycDef.defaultValue);
+            len->setProperty("perBeat", onMaster);
+            len->setSpecialValueText(QString());
+            const double fastest = cycDef.max > 0.0 ? 1.0 / (cycDef.max * own) : 0.05;
+            const double slowest = cycDef.min > 0.0 ? 1.0 / (cycDef.min * own) : 600.0;
+            len->setDecimals(2);
+            len->setRange(qMax(0.01, fastest), qMin(600.0, slowest));
+            len->setSuffix(onMaster ? tr(" beats") : tr(" s"));
+            lenLabel->setText(tr("Length:"));
+            len->setToolTip(onMaster
+                ? tr("One cycle of the wave, in beats of its speed master: Once plays one and "
+                     "ends where it began (a Breathe on its floor). It sets the %1 (1 / length).").arg(cyc)
+                : tr("One cycle of the wave -- one breath of a Breathe: Once plays one and ends "
+                     "where it began, on its floor. It sets the %1 (1 / length).").arg(cyc));
+            syncEffectCycleLength();
+        }
         QHBoxLayout *endBox = new QHBoxLayout;
         endBox->addWidget(atEnd);
         endBox->addSpacing(8);
@@ -3492,14 +3550,45 @@ void LookEditor::rebuildEffectDynWidget()
             const int n = runs->currentIndex() == 0 ? 0 : runs->currentIndex() == 1 ? 1 : count->value();
             pp->setEffectParamValue(EffectRuns::runsKey(), n);
             pp->setEffectParamValue(EffectRuns::atEndKey(), atEnd->currentIndex() == 1 ? 1.0 : 0.0);
-            pp->setEffectParamValue(EffectRuns::lengthKey(), len->value() * 1000.0);  // 0 = auto
+            if (len->property("cycleParam").toString().isEmpty())   // a wave's is its rate
+                pp->setEffectParamValue(EffectRuns::lengthKey(), len->value() * 1000.0);  // 0 = auto
             m_doc->setModified();
             emit paletteValueChanged(m_paletteId);
         };
         connect(runs, QOverload<int>::of(&QComboBox::currentIndexChanged), this, write);
         connect(count, QOverload<int>::of(&QSpinBox::valueChanged), this, write);
         connect(atEnd, QOverload<int>::of(&QComboBox::currentIndexChanged), this, write);
-        connect(len, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, write);
+        if (!hasCycle)
+            connect(len, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, write);
+        else
+            connect(len, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
+                    [this, len, cyc, cycDef](double v) {
+                if (m_loading || v <= 0.0) return;
+                QLCPalette *pp = m_doc->palette(m_paletteId);
+                if (!pp || pp->type() != QLCPalette::Effect) return;
+                const double own = len->property("perBeat").toBool()
+                                   ? 1.0 : pp->effectParamValues().value(QStringLiteral("__ownRate"), 1.0);
+                double rate = 1.0 / (v * qMax(0.0001, own));
+                if (cycDef.max > cycDef.min)
+                    rate = qBound(cycDef.min, rate, cycDef.max);
+                pp->setEffectParamValue(cyc, rate);
+                // the rate's slider and number follow, not this box
+                if (m_effectDynWidget != nullptr)
+                    for (QSlider *sl : m_effectDynWidget->findChildren<QSlider *>())
+                        if (sl->property("paramName").toString() == cyc)
+                        {
+                            const QSignalBlocker b1(sl);
+                            if (cycDef.max > cycDef.min)
+                                sl->setValue(qBound(0, int(qRound((rate - cycDef.min) / (cycDef.max - cycDef.min) * 1000.0)), 1000));
+                            if (QDoubleSpinBox *num = qobject_cast<QDoubleSpinBox*>(sl->property("valueLabel").value<QObject*>()))
+                            {
+                                const QSignalBlocker b2(num);
+                                num->setValue(rate);
+                            }
+                        }
+                m_doc->setModified();
+                emit paletteValueChanged(m_paletteId);
+            });
         dv->addWidget(row);
     }
 
@@ -4391,14 +4480,60 @@ void LookEditor::slotEffectParamChanged(int value)
 
     p->setEffectParamValue(name, actual);
 
-    // Update the value label
-    QLabel *lbl = qobject_cast<QLabel*>(
-        sl->property("valueLabel").value<QObject*>());
-    if (lbl)
-        lbl->setText(QString::number(actual, 'f', 2));
+    // The number beside it (and a wave's Length) follow
+    if (QDoubleSpinBox *num = qobject_cast<QDoubleSpinBox*>(sl->property("valueLabel").value<QObject*>()))
+    {
+        const QSignalBlocker block(num);
+        num->setValue(actual);
+    }
+    syncEffectCycleLength();
 
     m_doc->setModified();
     emit paletteValueChanged(m_paletteId);
+}
+
+void LookEditor::syncEffectParamWidgets(const QString &name, double value)
+{
+    if (m_effectDynWidget == nullptr)
+        return;
+    for (QSlider *sl : m_effectDynWidget->findChildren<QSlider *>())
+    {
+        if (sl->property("paramName").toString() != name)
+            continue;
+        const double pmin = sl->property("paramMin").toDouble();
+        const double pmax = sl->property("paramMax").toDouble();
+        if (pmax > pmin)
+        {
+            const QSignalBlocker block(sl);
+            sl->setValue(qBound(0, int(qRound((value - pmin) / (pmax - pmin) * 1000.0)), 1000));
+        }
+        if (QDoubleSpinBox *num = qobject_cast<QDoubleSpinBox*>(sl->property("valueLabel").value<QObject*>()))
+        {
+            const QSignalBlocker block(num);
+            num->setValue(value);
+        }
+    }
+    syncEffectCycleLength();
+}
+
+void LookEditor::syncEffectCycleLength()
+{
+    if (m_effectDynWidget == nullptr)
+        return;
+    QDoubleSpinBox *len = m_effectDynWidget->findChild<QDoubleSpinBox *>(QStringLiteral("effectRunLength"));
+    QLCPalette *p = m_doc->palette(m_paletteId);
+    if (len == nullptr || p == nullptr)
+        return;
+    const QString cyc = len->property("cycleParam").toString();
+    if (cyc.isEmpty())
+        return;
+    const QMap<QString, double> pv = p->effectParamValues();
+    const double rate = pv.value(cyc, len->property("cycleDefault").toDouble());
+    const double own = len->property("perBeat").toBool() ? 1.0 : pv.value(QStringLiteral("__ownRate"), 1.0);
+    if (rate <= 0.0 || own <= 0.0)
+        return;
+    const QSignalBlocker block(len);
+    len->setValue(1.0 / (rate * own));
 }
 
 void LookEditor::slotEffectEnumParamChanged(int index)

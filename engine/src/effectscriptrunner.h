@@ -21,6 +21,7 @@
 #include <QHash>
 #include <QList>
 #include <QMutex>
+#include <QSet>
 #include <QPointF>
 #include <QTimer>
 #include <QSharedPointer>
@@ -106,6 +107,13 @@ public:
     QList<EffectScript::ParamDef> paramDefs(quint32 paletteId) const;
     /** The scene a playing effect plays in (invalid: not playing). */
     quint32 sceneOf(quint32 paletteId) const;
+
+    /** Whether effect @p paletteId has drawn a frame for scene @p sceneId
+     *  yet, or won't (it failed to start): until then the scene holds its
+     *  own output, so the look never shows bare under its effect for a
+     *  frame or two (a Breathe at 20% flashed the 20% first). Any thread:
+     *  the scene asks from the MasterTimer's. */
+    bool hasDrawn(quint32 sceneId, quint32 paletteId) const;
 
 public slots:
     void slotInputValueChanged(quint32 universe, quint32 channel,
@@ -193,6 +201,10 @@ private:
      *  only ever held for a flat list copy — never across script evaluation. */
     mutable QMutex m_writesMutex;
     QList<EffectInstance::DmxWrite> m_publishedWrites;
+    /** What has drawn (hasDrawn()), published with the writes, under the
+     *  same mutex: (scene id << 32) | effect palette id; a failed effect's
+     *  palette id alone, with every bit of the scene half set. */
+    QSet<quint64> m_drawn;
 
     /**
      * Parked engines for palettes flagged QLCPalette::persistent(), keyed by
