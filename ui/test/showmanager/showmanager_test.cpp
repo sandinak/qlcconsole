@@ -14,6 +14,8 @@
 #define private public
 #define protected public
 #include "showmanager.h"
+#include "multitrackview.h"
+#include "sequenceitem.h"
 #undef protected
 #undef private
 
@@ -21,6 +23,9 @@
 #include "showfunction.h"
 #include "track.h"
 #include "scene.h"
+#include "sequence.h"
+#include <QComboBox>
+#include <QGraphicsSceneMouseEvent>
 #include "show.h"
 #include "doc.h"
 
@@ -150,6 +155,96 @@ void ShowManager_Test::undoKeepsATracksSolo()
     QCOMPARE(t->showFunctions().count(), 1);
     QVERIFY(t->isSolo());
     QVERIFY(!m_show->tracks().last()->isSolo());
+}
+
+void ShowManager_Test::undoStartsFreshForAnotherShowOrDocument()
+{
+    Track *t = m_show->tracks().first();
+    m_manager->slotFunctionDropped(m_sceneB, 5000, t);
+    QVERIFY(m_manager->m_undoAction->isEnabled());
+
+    Show *other = new Show(m_doc);
+    other->setName("Zed");               // after "Timeline" in the combo
+    m_doc->addFunction(other);
+    other->addTrack(new Track());
+    // As New Show does: pick its place in the combo, then refill it
+    m_manager->m_selectedShowIndex = 1;
+    m_manager->updateShowsCombo();
+    QCOMPARE(m_manager->m_show, other);
+    QVERIFY(m_manager->m_undoStack.isEmpty());
+    QVERIFY(!m_manager->m_undoAction->isEnabled());
+
+    m_manager->slotFunctionDropped(m_sceneA, 0, other->tracks().first());
+    QVERIFY(m_manager->m_undoAction->isEnabled());
+    m_manager->slotDocClearing();
+    QVERIFY(m_manager->m_undoStack.isEmpty());
+    QVERIFY(!m_manager->m_undoAction->isEnabled());
+}
+
+void ShowManager_Test::aDeletedFunctionLeavesNoItemBehind()
+{
+    QCOMPARE(m_manager->m_showview->m_items.count(), 1);
+    QVERIFY(m_doc->deleteFunction(m_sceneA));
+    QVERIFY(m_manager->m_showview->m_items.isEmpty());
+    QCOMPARE(m_show->tracks().first()->showFunctions().count(), 0);
+
+    // The next drop on that track (it pushes neighbours aside) is safe
+    m_manager->slotFunctionDropped(m_sceneB, 0, m_show->tracks().first());
+    QCOMPARE(m_show->tracks().first()->showFunctions().count(), 1);
+}
+
+void ShowManager_Test::renamingATrackRenamesItsAttribute()
+{
+    Track *t = m_show->tracks().first();
+    const QString was = QString("Lights-%1").arg(t->id());
+    QVERIFY(m_show->getAttributeIndex(was) >= 0);
+    const int attrs = m_show->attributes().count();
+
+    t->setName("Front");                         // as the in-place edit does
+    emit m_manager->m_showview->trackRenamed(t);
+    QCOMPARE(m_show->getAttributeIndex(was), -1);
+    QVERIFY(m_show->getAttributeIndex(QString("Front-%1").arg(t->id())) >= 0);
+
+    QVERIFY(m_show->removeTrack(t->id()));       // unregisters it by name
+    QCOMPARE(m_show->attributes().count(), attrs - 1);
+}
+
+void ShowManager_Test::aClickOnAChaseBlockDoesntMoveIt()
+{
+    Sequence *seq = new Sequence(m_doc);
+    seq->setBoundSceneID(m_sceneB);
+    m_doc->addFunction(seq);
+    seq->addStep(ChaserStep(m_sceneB, 0, 2000, 0));
+    Track *t = new Track(m_sceneB);
+    t->setName("Chase");
+    m_show->addTrack(t);
+    ShowFunction *sf = t->createShowFunction(seq->id());
+    sf->setStartTime(1000);
+    sf->setDuration(2000);
+    m_manager->updateMultiTrackView();
+
+    SequenceItem *item = nullptr;
+    foreach (ShowItem *i, m_manager->m_showview->m_items)
+        if (SequenceItem *s = qobject_cast<SequenceItem *>(i))
+            item = s;
+    QVERIFY(item != nullptr);
+    m_doc->resetModified();
+
+    const QPointF body(item->boundingRect().width() / 2, 30);   // the cue, below the title strip
+    QGraphicsSceneMouseEvent press(QEvent::GraphicsSceneMousePress);
+    press.setButton(Qt::LeftButton);
+    press.setButtons(Qt::LeftButton);
+    press.setPos(body);
+    press.setScenePos(item->mapToScene(body));
+    item->mousePressEvent(&press);
+    QGraphicsSceneMouseEvent release(QEvent::GraphicsSceneMouseRelease);
+    release.setButton(Qt::LeftButton);
+    release.setPos(body);
+    release.setScenePos(item->mapToScene(body));
+    item->mouseReleaseEvent(&release);
+
+    QCOMPARE(sf->startTime(), quint32(1000));
+    QVERIFY(!m_doc->isModified());
 }
 
 QTEST_MAIN(ShowManager_Test)

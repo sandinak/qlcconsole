@@ -6,6 +6,24 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
+### 2026-10-29 — Show Manager parity review *(feat/031-home4, smp)*
+
+- [docs/dev/SHOW_MANAGER_PARITY.md](../dev/SHOW_MANAGER_PARITY.md):
+  feature-by-feature against QLC+_4.14.4. Every stock feature present
+  (most moved into Show ▾ / Edit ▾); XML additive; two real differences:
+  chasers on the timeline run on the show clock (loop/ping-pong/random/
+  beats/infinite holds play differently, G1) and no editors open on the
+  timeline (G2).
+- Fixed (each < 30 lines, each with a test that fails without it): click
+  on empty track moves the playhead (F1, endhandle test); undo stack per
+  show id (F2); `deleteShowItem` frees the item (F3, a use-after-free on
+  zoom/push-aside); `SequenceItem` press records `m_pos` (F4); track
+  rename renames its "<name>-<id>" attribute, `Show::trackRenamed()`
+  (F5, also the Show Tree's timeline editor).
+- Queued: G1-G14 in the doc (TODO.md "Show Manager parity").
+- **Decided:** G1's trivial fix is NOT applied: it trades scrub/cue-roll
+  sync for stock playback, and is a hot-path change (user's call).
+
 ### 2026-10-29 — Bring over QLC+ 4's settings, once *(feat/031-home4, imp)*
 
 - **Engine:** `LegacySettings` (`engine/src/legacysettings.*`): QLC+ 4's

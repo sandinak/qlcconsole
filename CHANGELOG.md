@@ -276,6 +276,16 @@ skipped). Upstream fixes taken:
 
 ### Fixed
 
+- **Shows tab, from a review against QLC+ 4.14.4**
+  ([SHOW_MANAGER_PARITY.md](docs/dev/SHOW_MANAGER_PARITY.md)): a click on
+  an empty part of a track moves the playhead again, as in QLC+ 4 (a drag
+  still selects); Undo no longer carries one show's history into another
+  show or document; deleting a function a show uses no longer leaves a
+  stale block that the next zoom or drop could crash on; a plain click on
+  a chase block no longer nudges it or marks the show changed; renaming a
+  track renames its intensity level too, so a Virtual Console slider
+  shows the new name.
+
 - **An idle show no longer uses several cores redrawing the rig.** With
   the Rig Overview open and Live on, its timer redrew the whole rig 25
   or more times a second whether or not anything had changed: a show

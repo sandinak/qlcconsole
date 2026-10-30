@@ -374,6 +374,10 @@ private:
 
     QList<TimelineSnapshot> m_undoStack;
     QAction *m_undoAction;
+    /** The show m_undoStack belongs to: another show, or another document,
+     *  starts it fresh (it restored one show's tracks into another) */
+    quint32 m_undoShowId = UINT_MAX;
+    void clearUndo();
 };
 
 /** @} */

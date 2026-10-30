@@ -199,4 +199,32 @@ void EndHandle_Test::dragToRightEdgeAutoScrollsAndGrows()
     QVERIFY2(spy.takeFirst().at(0).toUInt() > 20000, "auto-scroll should have extended the show");
 }
 
+/* As in QLC+ 4: a plain click on empty track area moves the playhead
+   there (the marquee selection took the click over); a drag still selects. */
+void EndHandle_Test::aClickOnEmptyTrackAreaMovesThePlayhead()
+{
+    MultiTrackView v;
+    v.setEditable(true);
+    v.resize(1000, 400);
+    v.show();
+    QApplication::processEvents();
+    v.horizontalScrollBar()->setValue(0);
+    v.verticalScrollBar()->setValue(0);
+    QApplication::processEvents();
+
+    QSignalSpy spy(&v, SIGNAL(timeChanged(quint32)));
+    QWidget *vp = v.viewport();
+    const QPoint p(TRACK_WIDTH + 300, TRACKS_TOP + 40);
+    sendMouse(vp, QEvent::MouseButtonPress, p, Qt::LeftButton);
+    sendMouse(vp, QEvent::MouseButtonRelease, p, Qt::LeftButton);
+    QCOMPARE(spy.count(), 1);
+    QVERIFY(v.getTimeFromCursor() > 0);
+
+    // A marquee drag doesn't move it
+    sendMouse(vp, QEvent::MouseButtonPress, p, Qt::LeftButton);
+    sendMouse(vp, QEvent::MouseMove, p + QPoint(80, 30), Qt::LeftButton);
+    sendMouse(vp, QEvent::MouseButtonRelease, p + QPoint(80, 30), Qt::LeftButton);
+    QCOMPARE(spy.count(), 1);
+}
+
 QTEST_MAIN(EndHandle_Test)

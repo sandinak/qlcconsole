@@ -17,7 +17,7 @@ can show the same timeline for the scene you're building.
 | **Sequence** | Steps of **one** scene's values, in order — the usual timeline item. A new step starts as a copy of the one before, so you change only what differs. It always plays forward, start to end. |
 | **Chaser** | Steps that are each **any** function, in any order (forward, backward, ping-pong, random). Put one on the timeline when the steps aren't all one scene. |
 | **Cue** | One step of a sequence on the timeline: when it starts, its fade in, its hold, its fade out ("fade in 2 s · hold 4 s · fade out 1 s · starts 1:12.5"). Select several to move or **Scale cue timing** together. |
-| **Cursor / playhead** | The vertical line: where playback starts and where it is. The time field shows it. |
+| **Cursor / playhead** | The vertical line: where playback starts and where it is. The time field shows it. Click the time ruler or an empty part of a track to move it; drag across empty track space to select items. |
 | **Show end** | The handle at the end of the timeline: the show's length. Drag it, or right-click it — **Fit end to content**, **End at current playhead**, **End at SMPTE…**, **Set length…**. When the show reaches its end it stops there and **parks** — the last look stays up, as a base under whatever you play next — instead of running on into nothing. |
 | **Time markers** | The ruler's units: time, or BPM in 4/4, 3/4 or 2/2 (with the tempo beside it). **Snap to grid** (⌘G) puts items on the marks. |
 

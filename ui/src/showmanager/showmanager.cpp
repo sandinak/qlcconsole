@@ -160,6 +160,10 @@ ShowManager::ShowManager(QWidget* parent, Doc* doc)
             this, SLOT(slotTrackDelete(Track*)));
     connect(m_showview, &MultiTrackView::trackModified,
             m_doc, &Doc::setModified);
+    connect(m_showview, &MultiTrackView::trackRenamed, this, [this](Track *t) {
+        if (m_show != NULL)
+            m_show->trackRenamed(t);
+    });
     connect(m_showview, SIGNAL(trackColorChangeRequested(Track*)),
             this, SLOT(slotTrackColorChangeRequested(Track*)));
     connect(m_showview, &MultiTrackView::trackIntensityChanged,
@@ -2528,8 +2532,8 @@ void ShowManager::slotTrackDoubleClicked(Track *track)
     if (ok == true && newTrackName.isEmpty() == false)
     {
         track->setName(newTrackName);
-        int idx = m_show->getAttributeIndex(track->name());
-        m_show->renameAttribute(idx, track->name());
+        m_show->trackRenamed(track);
+        m_doc->setModified();
     }
 }
 
@@ -2678,9 +2682,18 @@ void ShowManager::slotStepSelectionChanged(int index)
         seqItem->setSelectedStep(index);
 }
 
+void ShowManager::clearUndo()
+{
+    m_undoStack.clear();
+    if (m_undoAction != NULL)
+        m_undoAction->setEnabled(false);
+}
+
 void ShowManager::slotDocClearing()
 {
     m_showsCombo->clear();
+    clearUndo();
+    m_undoShowId = UINT_MAX;
 
     if (m_showview != NULL)
         m_showview->resetView();
@@ -2787,6 +2800,11 @@ void ShowManager::updateMultiTrackView()
     {
         qDebug() << Q_FUNC_INFO << "Invalid show!";
         return;
+    }
+    if (m_show->id() != m_undoShowId)
+    {
+        clearUndo();
+        m_undoShowId = m_show->id();
     }
 
     // Reflect this show's timecode-follow state in the (now internal) action and

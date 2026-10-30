@@ -40,6 +40,18 @@ private slots:
     void undoKeepsEveryTracksSettings();
     /** Undo keeps which track is soloed (and which isn't) */
     void undoKeepsATracksSolo();
+    /** Undo history is the show's: another show or a new document starts
+     *  it fresh (it used to restore one show's tracks into another) */
+    void undoStartsFreshForAnotherShowOrDocument();
+    /** A function deleted elsewhere leaves no item behind on the timeline
+     *  (a stale one was read again on zoom and on the next drop) */
+    void aDeletedFunctionLeavesNoItemBehind();
+    /** Renaming a track renames its intensity attribute, which a VC slider
+     *  names and removing the track unregisters */
+    void renamingATrackRenamesItsAttribute();
+    /** A plain click on a one-cue chase block selects it; it doesn't move
+     *  it or touch the show (a stale press position made it a move) */
+    void aClickOnAChaseBlockDoesntMoveIt();
 
 private:
     Doc *m_doc = nullptr;

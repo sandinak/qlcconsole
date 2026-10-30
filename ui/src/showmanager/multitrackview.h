@@ -382,6 +382,8 @@ signals:
     void trackMoved(Track *, int);
     void trackDelete(Track *);
     void trackModified();
+    /** A track's name was edited in place */
+    void trackRenamed(Track *track);
     void trackColorChangeRequested(Track *);
     void trackIntensityChanged(Track *, qreal);
 };
