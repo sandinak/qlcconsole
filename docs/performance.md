@@ -383,7 +383,34 @@ lists layer group looks. `perf_sweep.py --sweeps r` sweeps it.
 First numbers, M4 Max (Release, 29 October 2026; the guard's baseline has
 the medians of three runs):
 
-RIG_TABLE_PLACEHOLDER
+| Point | Tick p50 / p99 | CPU | Compare (Generic RGB, same baseline) |
+|---|---|---|---|
+| `rig-mixed-u0032`: the mixed load on the rig, 32 universes | 0.10 / 1.7 ms | 10% of a core | `a1p-u0032`: 0.30 / 2.0 ms, 22% (the rig has fewer channels per universe, 460 against 510, and its looks are group looks) |
+| `rig-efx-pantilt-n0256`: 256 pan/tilt EFX on 128 movers | 0.93 / 4.7 ms | 12% | `c-efx-n0256` (RGB mode, 256 EFX): 3.8 / 5.7 ms, 32% |
+| `rig-matrix-stage-n0064`: 64 matrices over the stage groups | 1.0 / 8.8 ms (frame interval p99 27 ms) | 15% | `c-matrix-n0064` (dense grids): 2.2 / 5.9 ms |
+
+| Operation (`hotpath-rig`, `gui`, `web`) | CPU |
+|---|---|
+| An engine frame of the rig, 32 group looks, 256 pars capped | 0.36 ms |
+| Pan/tilt EFX on 64 movers, a frame | 35 µs |
+| A matrix over a 120 × 8 stage grid, a step every frame (with its script thread) | 1.7 ms |
+| The power estimate of 960 fixtures, with the rows by type | 0.64 ms |
+| A universe frame with 8 pars held to their cap | 0.5 µs |
+| Show Tree, 200 tracking cues: GO under load, a frame | 0.36 ms |
+| Show Tree: what the last cue plays (tracking resolved) | 0.45 ms |
+| Show Tree: an edit (one look on one cue: re-bake and undo step) | 109 ms |
+| The 3D rig view, angled with beams, 240 fixtures, a frame | 62 ms |
+| The 3D rig view in plan, a frame | 2.4 ms |
+| The Lighting Studio 2D plot, every fixture changed, a frame | 15 ms |
+| The rig view's idle live tick (nothing changed: nothing drawn) | 1.6 µs |
+| One change sent to 50 web clients | 23 µs |
+
+The new points were recorded with other work on the machine (gates of
+other branches; 21% of the CPU busy at the start, more later), so their
+tolerances are wide (the realtime rig points' tick p99 up to 6×); record
+them again on a quiet night (`make perf-record
+PERF_ARGS=--points=rig-mixed-u0032,rig-efx-pantilt-n0256,rig-matrix-stage-n0064,hotpath-rig,gui,web`).
+The Linux i7 has no rows for them yet.
 
 Found and fixed on the way:
 
@@ -395,12 +422,12 @@ Found and fixed on the way:
   now holds them only to copy the values.
 - **`FixtureGroup::fixtureList()`** was quadratic in the heads (a list
   search per head); a stage-wide pixel group has 864. A Show Tree edit on
-  200 cues went from 184 to 155 ms.
+  200 cues went from 184 to 155 ms (same run, back to back).
 
 Found, not fixed (queued, too big for this pass):
 
 - **A Show Tree edit re-plans every cue.** On 200 tracking cues over the
-  stage groups an edit (a look on one cue) costs 155 ms of CPU, nearly all
+  stage groups an edit (a look on one cue) costs 110 to 155 ms of CPU, nearly all
   in `ShowTreeController::planCue()` over all 200 cues on every bake. An
   incremental bake (only the cues whose resolved state changed) is the fix.
 - **The 3D rig view with beams costs 62 ms of CPU a frame** for 240
