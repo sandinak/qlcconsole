@@ -287,6 +287,11 @@ int QLCPhysical::powerConsumption() const
         /* If power consumption value is missing, return bulb watts
          * plus a guesstimate 100W, since there's usually other
           * electronics consuming power as well. */
+        // No bulb named (an LED fixture, most modes): nothing to read, and
+        // no regular expression run -- QLCFixtureMode::physical() asks this
+        // for every fixture of a power estimate, twice a second.
+        if (m_bulbType.isEmpty())
+            return 0;
         static const QRegularExpression letters("[A-Z]*");
         int bulbWatts = bulbType().remove(letters).toInt();
         if (bulbWatts > 0)

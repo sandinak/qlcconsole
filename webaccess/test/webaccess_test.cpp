@@ -24,6 +24,10 @@
 #include <QSignalSpy>
 #include <QFile>
 #include <QDir>
+#include <functional>
+#if defined(Q_OS_UNIX)
+#include <time.h>
+#endif
 
 #include "hostilecase.h"
 #include "webaccess_test.h"
@@ -659,6 +663,119 @@ void WebAccess_Test::networkSettingsAreSingleArguments()
 #else
     QSKIP("the Pi's network page (nmcli) is Linux only");
 #endif
+}
+
+
+/*****************************************************************************
+ * Many clients (docs/performance.md, "Keeping it fast": the "web" point)
+ *****************************************************************************/
+
+QList<QWebSocket *> WebAccess_Test::openClients(int n, QVector<int> *got)
+{
+    QList<QWebSocket *> clients;
+    got->fill(0, n);
+    for (int i = 0; i < n; ++i)
+    {
+        QWebSocket *ws = new QWebSocket(QString(), QWebSocketProtocol::VersionLatest, this);
+        connect(ws, &QWebSocket::textMessageReceived, this, [got, i](const QString &m) {
+            if (m.startsWith(QLatin1String("FUNCTION|")))
+                ++(*got)[i];
+        });
+        ws->open(QUrl(QStringLiteral("ws://127.0.0.1:%1/qlcplusWS").arg(m_port)));
+        clients << ws;
+    }
+    QElapsedTimer t;
+    t.start();
+    auto allOpen = [&clients]() {
+        for (QWebSocket *ws : clients)
+            if (ws->state() != QAbstractSocket::ConnectedState)
+                return false;
+        return true;
+    };
+    while (!allOpen() && t.elapsed() < 10000)
+        QTest::qWait(10);
+    // ...and the server has every one of them (its side of the upgrade)
+    while (m_web->m_webSocketsList.size() < n && t.elapsed() < 10000)
+        QTest::qWait(10);
+    return clients;
+}
+
+/* Fifty phones on the show's page: a cue that starts and stops functions
+   reaches every one of them, every change, in order. */
+void WebAccess_Test::fiftyClientsGetEveryChange()
+{
+    startWeb(false);
+    const int n = 50, changes = 40;
+    QVector<int> got;
+    QList<QWebSocket *> clients = openClients(n, &got);
+    QCOMPARE(int(m_web->m_webSocketsList.size()), n);
+    for (int i = 0; i < changes; ++i)
+    {
+        if (i % 2)
+            m_web->slotFunctionStopped(quint32(i / 2));
+        else
+            m_web->slotFunctionStarted(quint32(i / 2));
+    }
+    QTRY_VERIFY_WITH_TIMEOUT(std::all_of(got.cbegin(), got.cend(), [changes](int g) { return g >= changes; }), 10000);
+    for (int g : got)
+        QCOMPARE(g, changes);
+    for (QWebSocket *ws : clients)
+    {
+        ws->close();
+        ws->deleteLater();
+    }
+}
+
+/* Report only (QLC_PERF_REPORT, as engine/test/hotpath): this thread's CPU
+   for one change sent to 50 clients -- what a function starting costs the
+   show's own thread with a crew's phones watching. */
+void WebAccess_Test::cpuPerBroadcast()
+{
+    startWeb(false);
+    const int n = 50;
+    QVector<int> got;
+    QList<QWebSocket *> clients = openClients(n, &got);
+    QCOMPARE(int(m_web->m_webSocketsList.size()), n);
+    const bool reporting = !qEnvironmentVariableIsEmpty("QLC_PERF_REPORT");
+    const int scale = qMax(1, qEnvironmentVariableIntValue("QLC_PERF_REPS"));
+    const int reps = reporting ? 200 * scale : 1;
+    auto cpu = []() -> qint64 {
+#if defined(Q_OS_UNIX) && defined(CLOCK_THREAD_CPUTIME_ID)
+        struct timespec ts;
+        if (clock_gettime(CLOCK_THREAD_CPUTIME_ID, &ts) == 0)
+            return qint64(ts.tv_sec) * 1000000000LL + qint64(ts.tv_nsec);
+#endif
+        static QElapsedTimer wall;
+        if (!wall.isValid())
+            wall.start();
+        return wall.nsecsElapsed();
+    };
+    double best = -1;
+    quint32 fid = 0;
+    for (int b = 0; b < (reporting ? 5 : 1); ++b)
+    {
+        const qint64 from = cpu();
+        for (int i = 0; i < reps; ++i)
+            m_web->slotFunctionStarted(fid++ % 64);
+        const double per = double(cpu() - from) / reps;
+        if (best < 0 || per < best)
+            best = per;
+        QTest::qWait(50);                   // let the clients read it
+    }
+    qInfo().noquote() << QString("web_broadcast_50clients %1 ns").arg(best, 0, 'f', 0);
+    const QString report = qEnvironmentVariable("QLC_PERF_REPORT");
+    if (!report.isEmpty())
+    {
+        QFile f(report);
+        QVERIFY2(f.open(QIODevice::Append | QIODevice::Text), qPrintable(report));
+        QTextStream out(&f);
+        out << "web_broadcast_50clients," << QString::number(best, 'f', 1) << "\n";
+    }
+    for (QWebSocket *ws : clients)
+    {
+        ws->close();
+        ws->deleteLater();
+    }
 }
 
 QTEST_MAIN(WebAccess_Test)
