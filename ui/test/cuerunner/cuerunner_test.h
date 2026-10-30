@@ -37,6 +37,7 @@ private slots:
     void cleanup();
 
     void theRunnerShowsTheListAndItsSubCues();
+    void theRunTabShowsHitsThatOverride();
     void goSubGoBackAndWhatChanges();
     void clickLoadsDoubleClickJumps();
     void aClickInDesignShowsTheCue();

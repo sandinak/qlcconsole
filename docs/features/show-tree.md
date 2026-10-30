@@ -93,8 +93,10 @@ from the Library lands in the tree right beside it.
   that plays a function as it is shows **▣**. A use
   of a [reusable](#reusable-layers-and-cues) layer or cue shows **⟲** and
   how many uses there are. Under the cue lists, **Hits** holds the
-  production's busking hits, in their folders; a hit a VC button fires
-  shows **VC ×1**.
+  production's busking hits, in their folders; a hit that lives under a
+  cue or a cue list is in a **Hits** row under it, and one for everywhere
+  in a **Hits** row at the bottom of the tree ([Hits](#hits-busking)). A hit a
+  VC button fires shows **VC ×1**.
 - **Right: the page** for what is selected:
   - **A production** shows whether it is **current**, its **main list**
     and its **timecode** source ([Productions](#productions)).
@@ -117,8 +119,9 @@ from the Library lands in the tree right beside it.
     puts the old time back.
   - **A layer** shows what it contains, then one row per attribute.
   - **A hit** shows its name, note, fade in / out, *Fired by* (the VC
-    buttons, **Make VC page**, **Move to folder…**), its looks and layers; **Hits** or a
-    hit folder lists its hits and has **Make VC page**.
+    buttons, **Make VC page**, **Move to folder…**), **When** (where it
+    lives, so when it fires, and whether it is armed now), its looks and
+    layers; **Hits** or a hit folder lists its hits and has **Make VC page**.
 - **Under the page: the Look Editor**, when **✎** opens a value or a
   palette is edited from the Library. Its **Used by** line says where the
   palette is used (*"Used by: 6 cue(s), 2 hit(s) · 1 VC button"*); click
@@ -1694,8 +1697,10 @@ layers](#editing-several-layers)), and Merge and Delete take them all.
 
 Right-click in the tree for:
 
-- **+ Cue list…**, **+ Hit**, **+ Cue** (and **+ Production…** on a
-  production or on empty space);
+- **+ Cue list…**, **+ Hit** (**+ Hit for this cue** on a cue, **for this
+  list** on a list: [where it fires](#hits-busking)), **+ Cue** (and
+  **+ Production…** on a production or on empty space, with **+ Hit for
+  everywhere**);
 - on a cue: **Copy to a hit** (what it puts on stage, as a new hit);
 - on Hits or a hit folder: **New folder…**, **Rename folder**, **Delete
   folder**, **Make VC page**; on a hit: **Move to folder**, **Make VC
@@ -1857,13 +1862,40 @@ chaser and collections.
 ## Hits (busking)
 
 A **hit** is a state you fire by hand from a Virtual Console button — a
-stab, a blackout, a crowd wash — rather than a cue in a list. Each
-production has a **Hits** section beside its cue lists. (Older shows called
-them looks; they open as they were.)
+stab, a blackout, a crowd wash — rather than a cue in a list. (Older shows
+called them looks; they open as they were.)
 
-- **Make one.** **+ Hit** (the header in a Hits section, or right-click
-  anywhere → **+ Hit**), or type `hit "Stab"`. The first hit makes the
-  section. Name it on its page.
+- **Where it lives is when it fires.** A hit lives somewhere in the tree,
+  and is **armed** — its buttons fire it — while that place is live:
+
+  | It lives | Shown | Armed |
+  |---|---|---|
+  | under a **cue** (or sub-cue) | a **Hits** row under the cue | while that cue is live |
+  | under a **cue list** | a **Hits** row under the list | while the list runs; with nothing of its production running, while it is the current production's main list |
+  | in a **production** | the production's **Hits** section, in its folders | while the production is current (or none is) |
+  | at the **top** | **Hits** marked *everywhere*, at the bottom of the tree | always |
+
+  In a show with several productions, a production's hits now fire only
+  while it is current: drag one to the top to fire it any time.
+  Outside its place a hit is disarmed: a button with only that hit is
+  dimmed, crossed out, and does nothing. A hit a button is holding when
+  its place ends — GO moves on, the list stops, another production is
+  made current — lets go over its **Fade out**.
+- **Make one.** **+ Hit** makes it where you are: right-click a cue →
+  **+ Hit for this cue**, a cue list → **+ Hit for this list**, a
+  production or its Hits section → **+ Hit**, a **Hits** row → **+ Hit**
+  (another for that place), empty space under the tree → **+ Hit for
+  everywhere**. The header's **+ Hit** (with a hit or a Hits row
+  selected), ⇧⌘N and `hit "Stab"` (the production's Hits) work too. The
+  first hit of a production makes its Hits section. Name it on its page.
+- **Move it** to change when it fires: drag it onto a cue, a cue list, a
+  production, a **Hits** row or another place's hit; **⌥** copies it
+  there instead. Dragged onto a folder of the production's Hits section,
+  it is filed there and is the production's again (only those hits have
+  folders). One undo step each. A hit can move to another production's
+  cue or list; it goes into that production's Hits section. Delete a cue
+  or a list and its hits move up to the production's **Hits** (undo puts
+  them back).
 - **Build it as a cue.** A hit has the same layers, attribute rows,
   child layers, group sets, effects, line aims and reusable layers as a cue,
   and the same drops, pickers and commands (`Towers colour Red dimmer
@@ -1882,7 +1914,9 @@ them looks; they open as they were.)
   a folder; **Delete** moves what is in it up.
 - **Fire it from VC.** In a VC button's properties, **Attach a function**
   opens the picker with a **Hits** section: each production's hits, by
-  folder. Pick one: **Toggle** turns it on and off, **Flash** plays it
+  folder. Or drag a hit from the tree onto a VC button (hover the
+  **Virtual Console** tab to open it): the button fires it, a Toggle if it
+  was neither a Toggle nor a Flash. Pick one: **Toggle** turns it on and off, **Flash** plays it
   while the button is held and lets go on release (a hit already on stays
   on; Flash's Override and Force LTP don't apply to hits). The button
   fires **the hit itself**, not just what plays it: rename the hit, edit
@@ -1899,6 +1933,38 @@ them looks; they open as they were.)
   your own in the frame stay as they are. Delete the frame on the console
   and the next Make VC page makes a new one. The hit's page lists the buttons that fire
   it (*Fired by*); the tree marks them **VC ×N**.
+- **One button, several hits.** Drag more hits onto a button (or **Add
+  hit…** in its properties): it fires the **armed hit with the narrowest
+  place** — the live cue's before the running list's, before the current
+  production's, before one for everywhere; among equals, the first added.
+  So one **HIT 1** button can be the stab of every song: a hit for
+  everywhere, and one under each song's cue or list that does something
+  else there. Its face shows the armed hit's name and a dot (it holds
+  several), and **↳ overrides** while that hit fires instead of a wider
+  one; with none armed it is dimmed. Its properties' **Hits** table lists
+  each hit with **When** (where it lives, read-only: move the hit in the
+  tree to change it) and what it overrides or shares, under the button's
+  map in words: *HIT 1 fires Blackout everywhere, except Strobe in cue
+  2.3 (overrides Blackout); 2 hits live in cue 4 (Pop, Flash): step
+  through.* **Add hit…** and **Remove** change it. A VC button's hits
+  have no undo of their own (the Virtual Console has none).
+- **Adding a hit asks** (by drag or Add hit…), never guessing:
+  - a second hit at the **same place** as one the button has: **Step
+    through** (each press fires the next), **Together** (a press fires
+    them all), **Replace** (the one there goes) or **Cancel**;
+  - a hit **narrower** than one it has (or wider): *“Blackout” fires
+    everywhere; “Strobe” fires instead in cue 2.3. Override there?*
+- **Seeing it.** A hit that overrides another on a button is marked
+  **↳ overrides** in the tree (its **VC ×N** names the buttons on hover).
+  While the show runs, the **Run** tab lists the buttons whose hit for
+  this moment overrides a wider one (*HIT 1: Strobe ↳ overrides
+  Blackout*). **Show checks** (the footer's status) list every override,
+  every pair sharing a place, and every deleted hit a button still holds
+  (a deleted hit, or a pair the button was never told how to fire, is a
+  warning).
+- **Older builds.** A show saved here opens in an older qlcconsole with
+  every hit in its production's Hits section, firing at any time, and a
+  button with several hits firing its first.
 - **Over a running cue list** a hit mixes as any function does: the
   highest intensity wins, and for colour, position and the rest the last
   started wins. Stop it, and what the list plays is back.

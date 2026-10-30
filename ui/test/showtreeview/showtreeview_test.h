@@ -118,6 +118,7 @@ private slots:
     void aPaletteDeletedFromTheLibraryComesBackWithUndo();
     void paletteStepsAreOneUndoStepAndSharedWithProgramming();
     void looksSectionInTheTree();
+    void hitsLiveUnderTheirPlace();
     void makeVcPageAndAdoptAsLook();
     void makeVcPageUpdatesItsFrame();
     void looksAreOneUndoStepAndTyped();

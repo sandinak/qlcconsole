@@ -32,11 +32,17 @@
 
 #include <QTreeWidget>
 #include <QTreeWidgetItem>
+#include <QHeaderView>
+#include <QGroupBox>
+#include <QHBoxLayout>
+#include <QVBoxLayout>
 
 #include "inputselectionwidget.h"
 #include "showtreecontroller.h"
 #include "vcbuttonproperties.h"
 #include "functionselection.h"
+#include "hitmap.h"
+#include "vcbutton.h"
 #include "speeddialwidget.h"
 #include "fixturegroup.h"
 #include "fixture.h"
@@ -72,8 +78,10 @@ VCButtonProperties::VCButtonProperties(VCButton* button, Doc* doc)
     /* Button text and function */
     m_nameEdit->setText(m_button->caption());
     slotSetFunction(button->function());
-    m_hit = button->hit();
-    if (m_hit != Function::invalidId())
+    m_hits = button->hits();
+    m_samePlace = button->samePlace();
+    buildHitsBox();
+    if (!m_hits.isEmpty())
         showFunctionName();
 
     /* Press action */
@@ -159,16 +167,18 @@ void VCButtonProperties::slotAttachFunction()
         slotSetFunction(fs.selection().first());
         if (hit != Function::invalidId())
         {
-            m_hit = hit;
+            m_hits = { hit };
             showFunctionName();
         }
+        refreshHits();
     }
 }
 
 void VCButtonProperties::slotSetFunction(quint32 fid)
 {
     m_function = fid;
-    m_hit = Function::invalidId();
+    m_hits.clear();
+    refreshHits();
     Function* func = m_doc->function(m_function);
 
     if (func == NULL)
@@ -185,12 +195,22 @@ void VCButtonProperties::slotSetFunction(quint32 fid)
 
 void VCButtonProperties::showFunctionName()
 {
-    if (m_hit == Function::invalidId())
+    if (m_hits.isEmpty())
         return;
     const ShowTreeController *st = m_doc->showTree();
+    if (m_hits.count() > 1)
+    {
+        // Several (Q154): the one armed now fires; the list is below.
+        QStringList names;
+        for (quint32 h : m_hits)
+            names << (st->cue(h) == nullptr ? tr("(deleted)") : st->cue(h)->name);
+        m_functionEdit->setText(tr("%n hits: %1", "", int(m_hits.count())).arg(names.join(QStringLiteral(", "))));
+        return;
+    }
+    const quint32 hit = m_hits.first();
     quint32 prodId = Function::invalidId();
-    const ShowTree::CueList *list = st->listOfCue(m_hit);
-    const ShowTree::Cue *cue = list != nullptr ? list->cue(m_hit) : nullptr;
+    const ShowTree::CueList *list = st->listOfCue(hit);
+    const ShowTree::Cue *cue = list != nullptr ? list->cue(hit) : nullptr;
     if (cue == nullptr)
     {
         m_functionEdit->setText(tr("Hit (deleted)"));
@@ -203,6 +223,80 @@ void VCButtonProperties::showFunctionName()
             prodName = p.name;
     m_functionEdit->setText(prodName.isEmpty() ? tr("Hit %1").arg(cue->name)
                                                : tr("Hit %1 (%2)").arg(cue->name, prodName));
+}
+
+void VCButtonProperties::buildHitsBox()
+{
+    m_hitsBox = new QGroupBox(tr("Hits"), this);
+    m_hitsBox->setObjectName("vcbHitsBox");
+    m_hitsBox->setToolTip(tr("A button can hold several hits: it fires the one armed now -- the hit of the "
+                             "live cue before one of the running list, before one of the current "
+                             "production, before one for everywhere. None armed: it does nothing. Where a "
+                             "hit lives is changed by moving it in the Show Tree."));
+    QVBoxLayout *v = new QVBoxLayout(m_hitsBox);
+    m_hitsTree = new QTreeWidget(m_hitsBox);
+    m_hitsTree->setObjectName("vcbHitsTree");
+    m_hitsTree->setRootIsDecorated(false);
+    m_hitsTree->setHeaderLabels({ tr("Hit"), tr("When"), tr("Note") });
+    m_hitsTree->header()->setStretchLastSection(true);
+    m_hitsTree->setMaximumHeight(110);
+    v->addWidget(m_hitsTree);
+    m_hitsMap = new QLabel(m_hitsBox);
+    m_hitsMap->setObjectName("vcbHitsMap");
+    m_hitsMap->setWordWrap(true);
+    v->addWidget(m_hitsMap);
+    QHBoxLayout *h = new QHBoxLayout();
+    QPushButton *add = new QPushButton(tr("Add hit…"), m_hitsBox);
+    add->setObjectName("vcbAddHit");
+    QPushButton *remove = new QPushButton(tr("Remove"), m_hitsBox);
+    remove->setObjectName("vcbRemoveHit");
+    h->addWidget(add);
+    h->addWidget(remove);
+    h->addStretch(1);
+    v->addLayout(h);
+    gridLayout->addWidget(m_hitsBox, 2, 0, 1, 2);
+    connect(add, &QPushButton::clicked, this, [this]() {
+        FunctionSelection fs(this, m_doc);
+        fs.setMultiSelection(false);
+        fs.showHits(true);
+        if (fs.exec() != QDialog::Accepted || fs.selectedHit() == Function::invalidId())
+            return;
+        HitMap::askToAdd(m_doc, m_hits, m_samePlace, { fs.selectedHit() }, this);
+        showFunctionName();
+        refreshHits();
+    });
+    connect(remove, &QPushButton::clicked, this, [this]() {
+        QTreeWidgetItem *item = m_hitsTree->currentItem();
+        if (item == nullptr)
+            return;
+        m_hits.removeAll(item->data(0, Qt::UserRole).toUInt());
+        if (m_hits.isEmpty())
+            slotSetFunction();
+        else
+            showFunctionName();
+        refreshHits();
+    });
+    refreshHits();
+}
+
+void VCButtonProperties::refreshHits()
+{
+    if (m_hitsTree == nullptr)
+        return;
+    m_hitsTree->clear();
+    const ShowTreeController *st = m_doc->showTree();
+    const quint32 armed = st->armedHit(m_hits);
+    for (const HitMap::Row &r : HitMap::rows(m_doc, m_hits, m_samePlace))
+    {
+        QTreeWidgetItem *item = new QTreeWidgetItem(m_hitsTree);
+        item->setText(0, r.hit == armed ? tr("%1  (armed now)").arg(r.name) : r.name);
+        // Read-only: its place in the tree is when it fires.
+        item->setText(1, r.when);
+        item->setText(2, r.note);
+        item->setData(0, Qt::UserRole, r.hit);
+    }
+    m_hitsMap->setText(HitMap::sentence(m_doc, m_nameEdit->text(), m_hits, m_samePlace));
+    m_hitsBox->setVisible(!m_hits.isEmpty());
 }
 
 void VCButtonProperties::slotActionToggled()
@@ -331,8 +425,11 @@ void VCButtonProperties::slotFadeOutTextEdited()
 
 void VCButtonProperties::accept()
 {
-    if (m_hit != Function::invalidId())
-        m_button->setHit(m_hit);
+    if (!m_hits.isEmpty())
+    {
+        m_button->setSamePlace(VCButton::SamePlace(m_samePlace));
+        m_button->setHits(m_hits);
+    }
     else
     {
         m_button->setHit(Function::invalidId());

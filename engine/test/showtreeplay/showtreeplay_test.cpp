@@ -1387,4 +1387,88 @@ void ShowTreePlay_Test::hitsFadeInAndOut()
     delete other;
 }
 
+/* Scoped hits (Q154): a hit is armed while its place is live -- its cue
+   live, its list running (or the current production's main list with
+   nothing running), its production current, always at the top. Of a
+   button's hits the narrowest armed one fires. Worked out per GO, never
+   per frame: hitArmingChanged() comes on a list's start, stop and cue. */
+void ShowTreePlay_Test::hitsAreArmedWhileTheirPlaceIsLive()
+{
+    FixtureGroup *a = group("A", { m_fixtures[0] });
+    FixtureGroup *b = group("B", { m_fixtures[1] });
+    const quint32 full = dimmer(255, "Full");
+    ShowTreeController *st = m_doc->showTree();
+    quint32 pa = 0, pb = 0;
+    const quint32 la = oneListProduction("Dance", a->id(), 2, full, &pa);
+    const quint32 lb = oneListProduction("Corporate", b->id(), 1, full, &pb);
+    const quint32 c1 = st->cueList(la)->cues.at(0).id;
+    const quint32 c2 = st->cueList(la)->cues.at(1).id;
+    const quint32 onCue2 = st->addHit(HitScope::Cue, c2, "Strobe");
+    const quint32 onList = st->addHit(HitScope::List, la, "Red");
+    const quint32 onProd = st->addHit(HitScope::Production, pa, "Wash");
+    const quint32 everywhere = st->addHit(HitScope::Global, pa, "Blackout");
+    const quint32 otherProd = st->addHit(HitScope::Production, pb, "Corp");
+    const QList<quint32> button = { everywhere, onProd, onList, onCue2 };
+    QCOMPARE(st->currentProduction(), pa);
+
+    // Nothing running: Dance current, its main list "the list we're in".
+    QVERIFY(st->isHitArmed(everywhere));
+    QVERIFY(st->isHitArmed(onProd));
+    QVERIFY(st->isHitArmed(onList));
+    QVERIFY(!st->isHitArmed(onCue2));
+    QVERIFY(!st->isHitArmed(otherProd));
+    QCOMPARE(st->armedHit(button), onList);
+
+    // GO: cue 1 live; GO again: cue 2 live, its hit wins.
+    QSignalSpy arming(st, &ShowTreeController::hitArmingChanged);
+    Chaser *chaser = qobject_cast<Chaser *>(m_doc->function(st->cueList(la)->chaser));
+    QVERIFY(chaser != nullptr);
+    go(chaser);
+    settle(3);
+    QCoreApplication::processEvents();
+    QVERIFY(arming.count() > 0);
+    QCOMPARE(st->runningCue(la), c1);
+    QVERIFY(!st->isHitArmed(onCue2));
+    QCOMPARE(st->armedHit(button), onList);
+    arming.clear();
+    go(chaser);
+    settle(3);
+    QCoreApplication::processEvents();
+    QVERIFY(arming.count() > 0);
+    QCOMPARE(st->runningCue(la), c2);
+    QVERIFY(st->isHitArmed(onCue2));
+    QCOMPARE(st->armedHit(button), onCue2);
+    // Ties: the first given.
+    QCOMPARE(st->armedHit({ onProd, everywhere }), onProd);
+
+    // Another list of Dance running: Main isn't, nor its hits.
+    chaser->stop(FunctionParent::master());
+    settle(3);
+    QCoreApplication::processEvents();
+    QVERIFY(!st->isHitArmed(onCue2));
+    QVERIFY(st->isHitArmed(onList));        // stopped: the main list again
+    const quint32 encore = st->addCueList(pa, "Encore");
+    const quint32 e1 = st->addCue(encore, -1, "E");
+    st->setLayerLook(e1, st->addLayer(e1, groupTarget(a->id())), st->lookForPalette(full));
+    Chaser *enc = qobject_cast<Chaser *>(m_doc->function(st->cueList(encore)->chaser));
+    go(enc);
+    settle(3);
+    QCoreApplication::processEvents();
+    QVERIFY(!st->isHitArmed(onList));
+    QCOMPARE(st->armedHit(button), onProd);
+    enc->stop(FunctionParent::master());
+    settle(3);
+
+    // Corporate current: Dance's production hits disarm; global stays.
+    arming.clear();
+    QVERIFY(m_doc->setCurrentProduction(pb));
+    QVERIFY(arming.count() > 0);
+    QVERIFY(!st->isHitArmed(onProd));
+    QVERIFY(!st->isHitArmed(onList));
+    QVERIFY(st->isHitArmed(otherProd));
+    QCOMPARE(st->armedHit(button), everywhere);
+    QCOMPARE(st->armedHit({ onProd, onList, onCue2 }), ShowTree::invalidId());
+    Q_UNUSED(lb);
+}
+
 QTEST_MAIN(ShowTreePlay_Test)

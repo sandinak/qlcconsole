@@ -42,6 +42,11 @@ namespace UsedBy
 {
     /** The VC buttons whose function is one of @a functionIds. */
     QList<VCButton *> vcButtons(const QSet<quint32> &functionIds);
+    /** Every VC button on the console. */
+    QList<VCButton *> allVcButtons();
+    /** The VC buttons holding Show Tree hit @a hitId (Q154: one of
+     *  several, or the one), and those given its Collection directly. */
+    QList<VCButton *> hitButtons(quint32 hitId, quint32 functionId);
     /** The same, as a person reads them: "VC button “Hit 1”". */
     QStringList vcLines(const QSet<quint32> &functionIds);
 
