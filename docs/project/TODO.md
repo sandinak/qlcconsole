@@ -194,12 +194,9 @@ Five fixed; the rest, by the doc's numbers:
 
 ## Small fixes and leftovers
 
-- **VC effect controls** (feat/031-vc-controls, part 3): a VC slider/knob/
-  Speed Dial bound to an effect's parameter by role (Speed, Size, Rate,
-  Offset, Direction, Intensity, Colour 1 hue) on a palette, the effect on a
-  group, or "the current effect". Design: docs/design/VC_EFFECT_CONTROLS.md.
-  Hits on VC buttons and VC speed-master sliders/dials shipped (DONE.md
-  2026-10-29).
+- ~~**VC effect controls**~~ — done (feat/031-vc-controls; DONE.md
+  2026-10-29). Open: a Speed Dial on an effect parameter; overrides that
+  survive a stop; Store as an undo step (palette param edits have none yet).
 
 - ~~**Web access saved with the show** (asked 2026-10-29: "enable
   webserver for a showfile in config and port")~~ — done

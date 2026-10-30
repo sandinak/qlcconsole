@@ -19,6 +19,7 @@
 #define VCSLIDER_TEST_H
 
 #include <QObject>
+#include <QTemporaryDir>
 
 class Doc;
 class VCSlider_Test final : public QObject
@@ -37,8 +38,23 @@ private slots:
     void speedMasterProperties();
     void speedDialSetsAMaster();
 
+    /* Effect mode */
+    void effectControlFollowsTheCurrentEffect();
+    void effectControlTargets();
+    void effectControlSavesAndLoads();
+    void effectControlProperties();
+    void effectControlOnAnEfx();
+
 private:
+    /** An effect palette playing @p script (in m_scripts). */
+    quint32 effectPalette(const QString &script, const QString &name);
+    /** A scene of fixture @p fixture playing palette @p palette, started. */
+    quint32 play(quint32 palette, quint32 fixture);
+    void tick(int times = 4);
+    int dimmerAt(int address);
+
     Doc *m_doc = nullptr;
+    QTemporaryDir m_scripts;
 };
 
 #endif

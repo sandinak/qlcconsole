@@ -175,6 +175,7 @@ void EffectScriptRunner::createInstancesForScene(quint32 sceneId)
             {
                 existing->cancelFadeOut();
                 existing->rebindToScene(sceneId);
+                emit effectStarted(pid);
             }
             continue;
         }
@@ -213,6 +214,7 @@ void EffectScriptRunner::createInstancesForScene(quint32 sceneId)
             QMutexLocker locker(&m_instanceMutex);
             m_instances.append(inst);
         }
+        emit effectStarted(pid);
 
         // Register DMXSource on first instance
         if (!m_registered && m_doc->masterTimer())
@@ -259,6 +261,7 @@ void EffectScriptRunner::destroyInstancesForScene(quint32 sceneId, bool release)
     // Collect cleanup work under the lock, then release before touching
     // MasterTimer or universes.
     bool shouldUnregister = false;
+    QList<quint32> stopped;
 
     {
         QMutexLocker locker(&m_instanceMutex);
@@ -289,10 +292,15 @@ void EffectScriptRunner::destroyInstancesForScene(quint32 sceneId, bool release)
             if (!persistent && fadeOutMs > 0 && !inst->isFadingOut())
             {
                 inst->startFadeOut(uint(fadeOutMs));
+                stopped << inst->effectPaletteId();
                 continue;   // leave it in m_instances, ticking + fading
             }
 
             it.remove();
+            if (!inst->isFadingOut())
+                stopped << inst->effectPaletteId();
+            // A live override is for this run only: parked, it plays as stored.
+            inst->clearOverrides();
 
             // A persistent look is PARKED rather than destroyed: hold the engine
             // (and the script state inside it) so the next scene using this same
@@ -317,6 +325,9 @@ void EffectScriptRunner::destroyInstancesForScene(quint32 sceneId, bool release)
             m_registered = false;
         }
     } // release m_instanceMutex before touching MasterTimer
+
+    for (quint32 pid : stopped)
+        emit effectStopped(pid);
 
     // Republish immediately: the destroyed instances' writes are still sitting in
     // m_publishedWrites, and writeDMX() would keep asserting that dead frame until
@@ -535,6 +546,61 @@ void EffectScriptRunner::updateEffectParams(quint32 paletteId)
     // instance recreation, so the effect keeps its JS state.
     if (EffectInstance *inst = instanceForPalette(paletteId))
         inst->reloadParamsFromPalette();
+}
+
+bool EffectScriptRunner::isPlaying(quint32 paletteId) const
+{
+    const EffectInstance *inst = instanceForPalette(paletteId);
+    return inst != nullptr && !inst->isFadingOut();
+}
+
+bool EffectScriptRunner::setParamOverride(quint32 paletteId, const QString &param, double value)
+{
+    EffectInstance *inst = instanceForPalette(paletteId);
+    if (inst == nullptr || inst->isFadingOut())
+        return false;
+    inst->setOverride(param, value);
+    emit overridesChanged(paletteId);
+    return true;
+}
+
+void EffectScriptRunner::clearParamOverride(quint32 paletteId, const QString &param)
+{
+    EffectInstance *inst = instanceForPalette(paletteId);
+    if (inst == nullptr || !inst->overrides().contains(param))
+        return;
+    inst->clearOverride(param);
+    emit overridesChanged(paletteId);
+}
+
+QHash<QString, double> EffectScriptRunner::paramOverrides(quint32 paletteId) const
+{
+    const EffectInstance *inst = instanceForPalette(paletteId);
+    return inst != nullptr ? inst->overrides() : QHash<QString, double>();
+}
+
+double EffectScriptRunner::paramValue(quint32 paletteId, const QString &param, bool *ok) const
+{
+    const EffectInstance *inst = instanceForPalette(paletteId);
+    if (inst == nullptr)
+    {
+        if (ok != nullptr)
+            *ok = false;
+        return 0.0;
+    }
+    return inst->paramValue(param, ok);
+}
+
+QList<EffectScript::ParamDef> EffectScriptRunner::paramDefs(quint32 paletteId) const
+{
+    const EffectInstance *inst = instanceForPalette(paletteId);
+    return inst != nullptr ? inst->paramDefs() : QList<EffectScript::ParamDef>();
+}
+
+quint32 EffectScriptRunner::sceneOf(quint32 paletteId) const
+{
+    const EffectInstance *inst = instanceForPalette(paletteId);
+    return inst != nullptr && !inst->isFadingOut() ? inst->sceneId() : Function::invalidId();
 }
 
 void EffectScriptRunner::discardParked(quint32 paletteId)

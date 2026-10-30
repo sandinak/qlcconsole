@@ -145,6 +145,16 @@ skipped). Upstream fixes taken:
   collection that plays it: renamed, rebuilt, deleted and undone, it still
   fires it. Toggle and Flash as before; **Make VC page** buttons do the
   same. Older shows' buttons fire what they fired.
+- **VC effect controls**: a VC slider or knob in the new **Effect** mode
+  moves one setting of an effect while it plays — **Speed**, **Size /
+  Width**, **Rate**, **Offset / Spread**, **Direction**, **Intensity** or
+  **Colour 1 hue**, found under each effect's own names (n/a where it has
+  none) — on one effect palette, the effect playing on a group, or **the
+  current effect** (started or selected last), so one fader serves every
+  song. EFX and RGB Matrix functions count too. The value is a live
+  override, gone when the effect stops; **Store** keeps it in the
+  palette. External input feeds it; saved with the show
+  ([design](docs/design/VC_EFFECT_CONTROLS.md)).
 - **VC sliders and Speed Dials move speed masters**: a slider (or knob) in
   the new **Speed master** mode drives a master's **Rate** (middle = as
   set) or its **Tempo** between two BPMs, shows "100 %" / "128 BPM" (n/a

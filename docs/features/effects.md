@@ -469,6 +469,39 @@ steps on that master's beats — tap the master and the chase follows; pause
 it and the chase holds on its step. A chase counting in time keeps its
 times; only the effects in its looks follow the master.
 
+### Effect controls on the Virtual Console
+
+A **slider or knob** on the Virtual Console can move one setting of an
+effect while it plays, so a busking op rides an effect's speed or spread
+on a fader instead of opening the look editor. In the slider's properties,
+**Effect** tab → **Switch to Effect Mode**, then choose:
+
+- **Controls** — **The current effect** (the effect started last, or
+  selected last in Build's look editor, that still plays: one fader for
+  every song), **The effect playing on a group** (the newest one on that
+  group's fixtures), or **This effect** (one effect palette). The current
+  effect can be limited to a **Group**.
+- **Setting** — **Speed**, **Size / Width**, **Rate**, **Offset /
+  Spread**, **Direction**, **Intensity** or **Colour 1 hue**. Each effect
+  calls these its own way; the slider finds them (an effect's `speed` or
+  `rate`, `size` or `width`, `spread`, `phaseSpread` or `offset` — else the
+  look's **Spread** amount —, `direction` or `reverse`, `intensity` or
+  `level`). The slider covers the setting's own range; a list (a
+  direction's choices) steps through them. An EFX or RGB Matrix that
+  starts is an effect too: **Speed** (×¼ to ×4, the middle as it was),
+  **Direction**, **Intensity**, an EFX's **Size**, an RGB Matrix's
+  **Colour 1 hue**.
+
+The slider reads the value ("1.50", "Clockwise", "×2.00") and, under it,
+the effect and setting ("Truss Wave · Speed"); **n/a** when the effect has
+no such setting, *not playing* when this effect doesn't play, *no effect*
+when none does. The value is **live**: the palette (or the EFX) keeps what
+it had, and the value goes when the effect stops — start it again and it
+plays as stored. **Store**, under the slider, keeps it: into the effect
+palette (Colour 1 hue stays live: the colour belongs to the look), or in
+the EFX / RGB Matrix. A controller mapped to the slider's external input
+moves it as any slider. Saved with the show.
+
 ## Stack a movement and an intensity effect
 
 Several effects play together on the same lights when each does a

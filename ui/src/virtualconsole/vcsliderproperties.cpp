@@ -44,6 +44,9 @@
 #include "vcslider.h"
 #include "fixture.h"
 #include "speedmasters.h"
+#include "showtreecontroller.h"
+#include "fixturegroup.h"
+#include "qlcpalette.h"
 #include "doc.h"
 #include "itemicons.h"
 
@@ -240,6 +243,7 @@ VCSliderProperties::VCSliderProperties(VCSlider* slider, Doc* doc)
     m_flashButtonCheck->setChecked(m_slider->playbackFlashEnable());
 
     buildSpeedMasterPage();
+    buildEffectPage();
 
     /* At last, sort out visibility */
     switch (m_sliderMode)
@@ -251,9 +255,13 @@ VCSliderProperties::VCSliderProperties(VCSlider* slider, Doc* doc)
             setSubmasterPageVisibility(false);
             setParameterPageVisibility(false);
             setSpeedMasterPageVisibility(false);
+            setEffectPageVisibility(false);
         break;
         case VCSlider::SpeedMaster:
             slotModeSpeedMasterClicked();
+        break;
+        case VCSlider::EffectControl:
+            slotModeEffectClicked();
         break;
         default:
         case VCSlider::Level:
@@ -292,6 +300,7 @@ void VCSliderProperties::slotModeLevelClicked()
     setSubmasterPageVisibility(false);
     setParameterPageVisibility(false);
     setSpeedMasterPageVisibility(false);
+    setEffectPageVisibility(false);
 
     int cngType = m_slider->clickAndGoType();
     switch(cngType)
@@ -337,6 +346,7 @@ void VCSliderProperties::slotModePlaybackClicked()
     setSubmasterPageVisibility(false);
     setParameterPageVisibility(false);
     setSpeedMasterPageVisibility(false);
+    setEffectPageVisibility(false);
 }
 
 void VCSliderProperties::slotModeSubmasterClicked()
@@ -348,6 +358,7 @@ void VCSliderProperties::slotModeSubmasterClicked()
     setSubmasterPageVisibility(true);
     setParameterPageVisibility(false);
     setSpeedMasterPageVisibility(false);
+    setEffectPageVisibility(false);
 }
 
 void VCSliderProperties::slotModeParameterClicked()
@@ -361,6 +372,7 @@ void VCSliderProperties::slotModeParameterClicked()
     setSubmasterPageVisibility(false);
     setParameterPageVisibility(true);
     setSpeedMasterPageVisibility(false);
+    setEffectPageVisibility(false);
 }
 
 void VCSliderProperties::slotModeSpeedMasterClicked()
@@ -374,6 +386,126 @@ void VCSliderProperties::slotModeSpeedMasterClicked()
     setSubmasterPageVisibility(false);
     setParameterPageVisibility(false);
     setSpeedMasterPageVisibility(true);
+    setEffectPageVisibility(false);
+}
+
+void VCSliderProperties::slotModeEffectClicked()
+{
+    m_sliderMode = VCSlider::EffectControl;
+
+    m_nameEdit->setEnabled(true);
+
+    setLevelPageVisibility(false);
+    setPlaybackPageVisibility(false);
+    setSubmasterPageVisibility(false);
+    setParameterPageVisibility(false);
+    setSpeedMasterPageVisibility(false);
+    setEffectPageVisibility(true);
+}
+
+void VCSliderProperties::buildEffectPage()
+{
+    const VCEffectControl ec = m_slider->effectControl();
+    QWidget *page = new QWidget(m_tab);
+    page->setObjectName(QStringLiteral("effectTab"));
+    QVBoxLayout *vbox = new QVBoxLayout(page);
+    m_effectBox = new QWidget(page);
+    QVBoxLayout *box = new QVBoxLayout(m_effectBox);
+    box->setContentsMargins(0, 0, 0, 0);
+    QLabel *info = new QLabel(tr("Effect mode moves one setting of an effect while it plays: a live "
+                                 "value over its palette's, gone when the effect stops (the Store button "
+                                 "on the slider keeps it). \"The current effect\" is the one started or "
+                                 "selected in Build last, so one fader serves every song. An effect "
+                                 "without the setting reads n/a."), m_effectBox);
+    info->setWordWrap(true);
+    box->addWidget(info);
+
+    QFormLayout *form = new QFormLayout();
+    m_effectCurrentRadio = new QRadioButton(tr("The current effect"), m_effectBox);
+    m_effectGroupRadio = new QRadioButton(tr("The effect playing on a group"), m_effectBox);
+    m_effectPaletteRadio = new QRadioButton(tr("This effect:"), m_effectBox);
+    m_effectCurrentRadio->setObjectName(QStringLiteral("effectCurrentRadio"));
+    m_effectGroupRadio->setObjectName(QStringLiteral("effectGroupRadio"));
+    m_effectPaletteRadio->setObjectName(QStringLiteral("effectPaletteRadio"));
+
+    m_effectPaletteCombo = new QComboBox(m_effectBox);
+    m_effectPaletteCombo->setObjectName(QStringLiteral("effectPaletteCombo"));
+    const ShowTreeController *st = m_doc->showTree();
+    QList<QLCPalette *> effects;
+    for (QLCPalette *p : m_doc->palettes())
+        if (p != nullptr && p->type() == QLCPalette::Effect && !st->isInlinePalette(p->id()))
+            effects << p;
+    std::sort(effects.begin(), effects.end(), [](const QLCPalette *a, const QLCPalette *b) {
+        return a->name().localeAwareCompare(b->name()) < 0;
+    });
+    for (const QLCPalette *p : effects)
+        m_effectPaletteCombo->addItem(p->name(), p->id());
+    m_effectPaletteCombo->setCurrentIndex(qMax(0, m_effectPaletteCombo->findData(ec.palette)));
+
+    m_effectGroupCombo = new QComboBox(m_effectBox);
+    m_effectGroupCombo->setObjectName(QStringLiteral("effectGroupCombo"));
+    m_effectGroupCombo->addItem(tr("Any group"), QVariant::fromValue(quint32(FixtureGroup::invalidId())));
+    QList<FixtureGroup *> groups = m_doc->fixtureGroups();
+    std::sort(groups.begin(), groups.end(), [](const FixtureGroup *a, const FixtureGroup *b) {
+        return a->name().localeAwareCompare(b->name()) < 0;
+    });
+    for (const FixtureGroup *g : groups)
+        m_effectGroupCombo->addItem(g->name(), QVariant::fromValue(g->id()));
+    m_effectGroupCombo->setCurrentIndex(qMax(0, m_effectGroupCombo->findData(QVariant::fromValue(ec.group))));
+
+    QWidget *targets = new QWidget(m_effectBox);
+    QVBoxLayout *tv = new QVBoxLayout(targets);
+    tv->setContentsMargins(0, 0, 0, 0);
+    tv->addWidget(m_effectCurrentRadio);
+    tv->addWidget(m_effectGroupRadio);
+    QHBoxLayout *ph = new QHBoxLayout();
+    ph->addWidget(m_effectPaletteRadio);
+    ph->addWidget(m_effectPaletteCombo, 1);
+    tv->addLayout(ph);
+    form->addRow(tr("Controls"), targets);
+    form->addRow(tr("Group"), m_effectGroupCombo);
+
+    m_effectRoleCombo = new QComboBox(m_effectBox);
+    m_effectRoleCombo->setObjectName(QStringLiteral("effectRoleCombo"));
+    for (int r = 0; r < VCEffectControl::RoleCount; ++r)
+        m_effectRoleCombo->addItem(VCEffectControl::roleName(VCEffectControl::Role(r)), r);
+    m_effectRoleCombo->setCurrentIndex(m_effectRoleCombo->findData(int(ec.role)));
+    form->addRow(tr("Setting"), m_effectRoleCombo);
+    box->addLayout(form);
+
+    auto sync = [this]() {
+        m_effectPaletteCombo->setEnabled(m_effectPaletteRadio->isChecked());
+        m_effectGroupCombo->setEnabled(!m_effectPaletteRadio->isChecked());
+        m_effectGroupCombo->setItemText(0, m_effectGroupRadio->isChecked() ? tr("(choose a group)")
+                                                                           : tr("Any group"));
+    };
+    connect(m_effectPaletteRadio, &QRadioButton::toggled, this, sync);
+    connect(m_effectGroupRadio, &QRadioButton::toggled, this, sync);
+    switch (ec.target)
+    {
+        case VCEffectControl::TargetPalette: m_effectPaletteRadio->setChecked(true); break;
+        case VCEffectControl::TargetGroup: m_effectGroupRadio->setChecked(true); break;
+        default: m_effectCurrentRadio->setChecked(true); break;
+    }
+    if (effects.isEmpty())
+        m_effectPaletteRadio->setEnabled(false);
+    sync();
+
+    vbox->addWidget(m_effectBox);
+    vbox->addStretch();
+    m_switchToEffectModeButton = new QPushButton(tr("Switch to Effect Mode"), page);
+    m_switchToEffectModeButton->setToolTip(tr("Make the slider move a setting of an effect"));
+    connect(m_switchToEffectModeButton, &QPushButton::clicked, this, &VCSliderProperties::slotModeEffectClicked);
+    vbox->addWidget(m_switchToEffectModeButton);
+    m_tab->addTab(page, tr("Effect"));
+}
+
+void VCSliderProperties::setEffectPageVisibility(bool visible)
+{
+    if (m_effectBox == nullptr)
+        return;
+    m_effectBox->setVisible(visible);
+    m_switchToEffectModeButton->setVisible(!visible);
 }
 
 void VCSliderProperties::buildSpeedMasterPage()
@@ -1076,6 +1208,19 @@ void VCSliderProperties::accept()
     m_slider->setParameterRole(static_cast<VCSlider::ParameterRole>(
         m_parameterRoleCombo->currentData().toInt()));
     m_slider->setParameterControlByte(m_parameterLSBRadio->isChecked() ? 1 : 0);
+
+    /* Effect page */
+    {
+        VCEffectControl ec;
+        ec.target = m_effectPaletteRadio->isChecked() ? VCEffectControl::TargetPalette
+                    : m_effectGroupRadio->isChecked() ? VCEffectControl::TargetGroup
+                                                      : VCEffectControl::TargetCurrent;
+        ec.palette = m_effectPaletteCombo->count() > 0 ? m_effectPaletteCombo->currentData().toUInt()
+                                                       : QLCPalette::invalidId();
+        ec.group = m_effectGroupCombo->currentData().toUInt();
+        ec.role = VCEffectControl::Role(m_effectRoleCombo->currentData().toInt());
+        m_slider->setEffectControl(ec);
+    }
 
     /* Speed master page */
     m_slider->setSpeedMaster(m_speedMasterCombo->currentData().toInt());

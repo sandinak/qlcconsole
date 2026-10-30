@@ -119,6 +119,15 @@ the dance break feel like a peak after the bridge?
 From the handout: the Truss Wave on a **speed master** (the Look
 Editor's **Speed: Main Speed**); the footer shows **Main Speed 120**.
 
+Going further, for an op who busks: the dance break's speed belongs on a
+fader, not in a menu. On the **Virtual Console**, a slider in **Speed
+master** mode moves Main Speed's rate; a knob in **Effect** mode on **The
+current effect · Speed** moves whichever effect started last, so the
+same knob serves every song. Its value is live and goes when the effect
+stops; **Store** keeps it. See
+[Speed masters](https://github.com/sandinak/qlcconsole/blob/main/docs/features/effects.md#speed-masters) and
+[Effect controls](https://github.com/sandinak/qlcconsole/blob/main/docs/features/effects.md#effect-controls-on-the-virtual-console).
+
 ## At home
 
 [At home](at-home.md): the sparkle's own colour in amber, then none of

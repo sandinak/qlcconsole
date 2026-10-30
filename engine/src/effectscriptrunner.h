@@ -83,6 +83,31 @@ public slots:
      *  palette has no running instance. */
     void updateEffectParams(quint32 paletteId);
 
+public:
+    /*********************************************************************
+     * Live overrides (a VC control, docs/design/VC_EFFECT_CONTROLS.md):
+     * a value over the palette's on the effect's RUNNING instance, gone
+     * when it stops. Main thread.
+     *********************************************************************/
+    /** Whether effect @p paletteId plays now (an instance, not releasing). */
+    bool isPlaying(quint32 paletteId) const;
+    /** Play @p param of effect @p paletteId at @p value (a script param, or
+     *  EffectInstance::spreadOverrideKey() / hueOverrideKey()); false when
+     *  it doesn't play. */
+    bool setParamOverride(quint32 paletteId, const QString &param, double value);
+    /** Back to the palette's value. */
+    void clearParamOverride(quint32 paletteId, const QString &param);
+    /** The overrides on effect @p paletteId now (empty: none, or not playing). */
+    QHash<QString, double> paramOverrides(quint32 paletteId) const;
+    /** What @p param plays at now; @p ok false when it doesn't play or has
+     *  no such param. */
+    double paramValue(quint32 paletteId, const QString &param, bool *ok = nullptr) const;
+    /** The script's params of a playing effect (empty: not playing). */
+    QList<EffectScript::ParamDef> paramDefs(quint32 paletteId) const;
+    /** The scene a playing effect plays in (invalid: not playing). */
+    quint32 sceneOf(quint32 paletteId) const;
+
+public slots:
     void slotInputValueChanged(quint32 universe, quint32 channel,
                                uchar value, const QString &key);
 
@@ -107,6 +132,12 @@ private slots:
 signals:
     /** failures() changed. */
     void failuresChanged();
+    /** Effect @p paletteId's engine started (or came back from releasing). */
+    void effectStarted(quint32 paletteId);
+    /** It stopped (or began releasing): its overrides are gone. */
+    void effectStopped(quint32 paletteId);
+    /** An override was set or cleared on it. */
+    void overridesChanged(quint32 paletteId);
 
 private:
     void createInstancesForScene(quint32 sceneId);
