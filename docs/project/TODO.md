@@ -25,6 +25,21 @@ change)":
   and the VC Cue Runner's list size do.
 - Course: only the glossary and Lesson 1.1's word say "one list, songs as
   sections"; a lesson that builds a second song would teach + Section.
+## Effect origins, Build search, runs for any effect — leftovers (efn, 2026-10-29)
+
+Built (DONE.md 2026-10-29). Open, each "decided (can change)":
+- The browser's origin filters: none on lists everything; some on lists
+  only those, from every tab (as a search does).
+- Picking one of the show's effects in the browser copies it; the copy is
+  "based on" what that one was based on (no new link to the palette).
+- Build's search keeps each section's own Filter…; a click on a result
+  selects it in its section (doesn't open it) and clears the search.
+- "N times" for a looping script ends after N lengths; only a one-shot
+  script restarts its state each run. EFX / RGB Matrix get Loop / Once
+  only (their Run order); no Hold, no N times.
+- The *one-off* mark is on effect rows only, not on every one-off value.
+- Runs on a Show Tree effect row changes the palette (everywhere it plays
+  when it is the show's); it is not an undo step yet.
 
 ## Live and blind — leftovers (docs/design/LIVE_BLIND.md, 2026-10-29)
 

@@ -256,6 +256,137 @@ void EffectInstance_Test::ownSpeedScalesTheEffectsTime()
     m_palette->setEffectParamValue("__ownRate", 1.0);
 }
 
+/* "One-shot for ANY effect": a loop effect told to run once, or a number of
+   times, stops ticking at the end and holds its last frame or lets go. The
+   script alternates its dimmer every tick, so a frozen frame shows. */
+void EffectInstance_Test::anyEffectRunsOnceOrNTimesThenHoldsOrReleases()
+{
+    Scene *scene = new Scene(m_doc);
+    m_doc->addFunction(scene);
+    scene->addFixtureGroup(m_group->id());
+    QTemporaryDir dir;
+    QFile js(dir.filePath("blink.js"));
+    QVERIFY(js.open(QIODevice::WriteOnly));
+    js.write("(function() { var e = {}; e.apiVersion = 1; e.name = 'Blink';"
+             " e.tick = function(fixtures, inputs, palettes, params, state) {"
+             "   state.n = (state.n || 0) + 1;"
+             "   return fixtures.map(function() { return { dimmer: state.n % 2 ? 1.0 : 0.2 }; }); };"
+             " return e; })()");
+    js.close();
+    m_palette->setScriptPath(js.fileName());
+    m_palette->setEffectParamValue("__durationMs", 300);   // one run
+    MasterTimer timer(m_doc);                              // playing: at full
+    scene->start(&timer, FunctionParent::master());
+    timer.timerTick();
+
+    auto frame = [](EffectInstance &inst) {
+        QList<int> v;
+        for (const EffectInstance::DmxWrite &w : inst.dmxWrites())
+            v << int(w.value);
+        return v;
+    };
+    auto running = [&](EffectInstance &inst) {
+        inst.runTick();
+        const QList<int> a = frame(inst);
+        inst.runTick();
+        return !a.isEmpty() && a != frame(inst);
+    };
+
+    // Nothing said: it loops, past any length.
+    {
+        EffectInstance inst(m_doc, scene->id(), m_palette->id());
+        QVERIFY(inst.isValid());
+        QVERIFY(running(inst));
+        QTest::qWait(400);
+        QVERIFY(running(inst));
+    }
+    // Once, then Release: it lets go.
+    m_palette->setEffectParamValue("__runs", 1);
+    m_palette->setEffectParamValue("__atEnd", 1);
+    {
+        EffectInstance inst(m_doc, scene->id(), m_palette->id());
+        QVERIFY(running(inst));
+        QTest::qWait(400);
+        inst.runTick();
+        QVERIFY2(inst.dmxWrites().isEmpty(), "a released run still drove the rig");
+    }
+    // Once, then Hold: the last frame stays, and nothing ticks any more.
+    m_palette->setEffectParamValue("__atEnd", 0);
+    {
+        EffectInstance inst(m_doc, scene->id(), m_palette->id());
+        QVERIFY(running(inst));
+        QTest::qWait(400);
+        inst.runTick();
+        const QList<int> held = frame(inst);
+        QVERIFY(!held.isEmpty());
+        inst.runTick();
+        QCOMPARE(frame(inst), held);
+    }
+    // Three times: still going after one run, done after three.
+    m_palette->setEffectParamValue("__runs", 3);
+    m_palette->setEffectParamValue("__atEnd", 1);
+    {
+        EffectInstance inst(m_doc, scene->id(), m_palette->id());
+        QTest::qWait(350);
+        QVERIFY2(running(inst), "three runs stopped after the first");
+        QTest::qWait(700);
+        inst.runTick();
+        QVERIFY(inst.dmxWrites().isEmpty());
+    }
+    scene->stop(FunctionParent::master());
+    timer.timerTick();
+    for (const char *k : { "__runs", "__atEnd", "__durationMs" })
+        m_palette->removeEffectParamValue(k);
+}
+
+/* A one-shot script (a wand sweep) is given its run as phase 0..1. Left as
+   it is it runs once; told to loop, each run goes 0..1 again. */
+void EffectInstance_Test::aOneShotScriptCanLoop()
+{
+    Scene *scene = new Scene(m_doc);
+    m_doc->addFunction(scene);
+    scene->addFixtureGroup(m_group->id());
+    QTemporaryDir dir;
+    QFile js(dir.filePath("sweep.js"));
+    QVERIFY(js.open(QIODevice::WriteOnly));
+    js.write("(function() { var e = {}; e.apiVersion = 1; e.name = 'Sweep';"
+             " e.lifecycle = 'oneshot'; e.onFinish = 'hold';"
+             " e.tick = function(fixtures, inputs) {"
+             "   return fixtures.map(function() { return { dimmer: inputs.phase }; }); };"
+             " return e; })()");
+    js.close();
+    m_palette->setScriptPath(js.fileName());
+    m_palette->setEffectParamValue("__durationMs", 300);
+    MasterTimer timer(m_doc);
+    scene->start(&timer, FunctionParent::master());
+    timer.timerTick();
+
+    {
+        EffectInstance inst(m_doc, scene->id(), m_palette->id());
+        inst.runTick();
+        QVERIFY(!inst.dmxWrites().isEmpty());
+        QTest::qWait(450);
+        inst.runTick();
+        QCOMPARE(inst.buildInputsObject().property("phase").toNumber(), 1.0);   // once: over
+    }
+    m_palette->setEffectParamValue("__runs", 0);                                // Loop
+    {
+        EffectInstance inst(m_doc, scene->id(), m_palette->id());
+        QTest::qWait(450);
+        inst.runTick();
+        const double phase = inst.buildInputsObject().property("phase").toNumber();
+        QVERIFY2(phase < 0.99, qPrintable(QString::number(phase)));             // a second run
+        QVERIFY(!inst.dmxWrites().isEmpty());
+        QTest::qWait(50);
+        inst.runTick();
+        QVERIFY(!inst.dmxWrites().isEmpty());                                     // still going
+    }
+    scene->stop(FunctionParent::master());
+    timer.timerTick();
+    m_palette->removeEffectParamValue("__runs");
+    m_palette->removeEffectParamValue("__durationMs");
+}
+
 /* "when selecting an effect .. sometimes it doesn't apply on selection": a
    look with a Fade Out kept its old engine releasing through syncScene, and
    the create after took it back -- the old script played on. */

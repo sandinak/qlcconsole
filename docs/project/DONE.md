@@ -35,6 +35,51 @@ now covers the structure editor too:
   second, scale-2 pass); the directory takes ~16 s, was ~7.5.
 
 ---
+### 2026-10-29 — Effect origins, Build search across sections, runs for any effect *(feat/031-effect-origins, efn)*
+
+- **Origins:** `EffectOrigin` (`ui/src/effectorigin.*`) names where an
+  effect came from (Built-in / Mine = a preset in the user's folder / This
+  show = a managed effect palette), what it is based on (preset, WLED
+  effect, else script) and which settings differ (script defaults
+  overlaid with the preset's; run settings too), with a per-file cache of
+  script param defs. The look editor's combo carries origin, based-on and
+  the diff tip as roles; the show's effect palettes are listed under their
+  script (kind 4, "show:<id>", copied in on pick). `EffectBrowser`:
+  Built-in · Mine · This show toggles (none = all; any = across tabs), a
+  "mine" pill and the palette mark (`:/script.png`), the grey based-on
+  line in place of the description, the diff in the tooltip. The look
+  editor's `effectBasedOn` label; Build ▸ Effects' column 1. Show Tree:
+  *one-off* on an effect row with an inline palette; the ⋯ buttons are
+  named `stMore:<key>`.
+- **Renames:** Save as Effect… → Save to My effects…, Save as palette… →
+  Save in this show… (strings only).
+- **Build search:** `ProgrammingManager::search()` — `buildSearch` over
+  the sections, results (`buildSearchResults`) as a fourth page of the
+  section stack, a header per section with its count;
+  `goToSearchResult()` clears the search, picks the section and selects
+  the row (palette tree, Build ▸ Effects, outline). `section()` reports the
+  picked section while the results show.
+- **Runs:** `engine/src/effectruns.h` (`__runs` 0 loop / 1 once / N,
+  `__atEnd`, `__durationMs`, script defaults for anything not set).
+  `EffectInstance::runTick()` ends any effect after its runs (hold or
+  release, then no more ticks); a one-shot script that loops or repeats
+  gets a fresh state and phase each run. The cue length (span) is looked
+  up at most every 250 ms and kept once found -- before, a one-shot
+  walked every function twice a tick -- and also matches a step playing a
+  collection that holds the scene (a Show Tree cue), a held step falling
+  back to its fade in. UI: the look editor's Runs / At the end / Length
+  row (designer included), `EffectRunsMenu` for a Show Tree effect row's ⋯
+  and Build ▸ Effects' right-click (EFX / RGB Matrix: Loop / Single shot,
+  a function step).
+- **Tests:** EffectInstance_Test::anyEffectRunsOnceOrNTimesThenHoldsOrReleases,
+  ::aOneShotScriptCanLoop; LookEditor_Test::anEffectSaysWhereItCameFrom,
+  ::anyEffectRunsOnceOrNTimes; ProgrammingManager_Test::buildsSearchFindsEverySection,
+  ::effectsSayWhereTheyCameFromAndHowTheyRun;
+  ShowTreeView_Test::anEffectRowSaysOneOffAndHowItRuns;
+  EffectDesigner_Test::theDesignerSetsHowAnEffectRuns.
+- **Help:** effects.md "Where an effect came from" (the four kinds) and
+  "How many times it runs"; build.md the search and the browser filters.
+  Leftovers in TODO.md.
 
 ### 2026-10-29 — Control Map: MIDI and OSC triggers, saved with the show *(feat/031-control-map, board Q189 B)*
 

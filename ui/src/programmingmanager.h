@@ -158,6 +158,15 @@ public:
     void setSection(Section section);
     Section section() const;
 
+    /** Build's search: what @a text finds in every section (palettes,
+     *  effects, scenes), grouped under a header per section with its count,
+     *  shown in place of the section. Empty: back to the section. */
+    void search(const QString &text);
+    /** The results, for tests: a top-level item per section with matches. */
+    QTreeWidget *searchResults() const { return m_searchResults; }
+    /** Go to result @a item in its section (clears the search). */
+    void goToSearchResult(QTreeWidgetItem *item);
+
     /** Open the power-distribution (circuits) editor dialog. Public entry so
      *  the app status-bar Power chip can reach it — the readout moved there,
      *  taking the old in-canvas "Circuits…" button with it. */
@@ -356,6 +365,8 @@ private:
     // The navigator
     QButtonGroup *m_sections = nullptr;
     QStackedWidget *m_sectionStack = nullptr;
+    class QLineEdit *m_buildSearch = nullptr;   //!< searches every section
+    QTreeWidget *m_searchResults = nullptr;     //!< its results, a page of m_sectionStack
     ProgrammingOutline *m_outline = nullptr;
     QLabel *m_outlineHint = nullptr;  //!< what a drag would do / what the outline is
     QToolButton *m_addFuncBtn; //!< "+ New" dropdown

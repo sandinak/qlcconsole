@@ -28,6 +28,7 @@ class QComboBox;
 class QLineEdit;
 class QTabBar;
 class QTimer;
+class QToolButton;
 class Doc;
 
 /** @addtogroup ui UI
@@ -64,6 +65,10 @@ public:
     QListWidget *list() const { return m_list; }
     QLineEdit *search() const { return m_search; }
     QTabBar *tabs() const { return m_tabs; }
+    /** Where effects came from: Built-in, Mine, This show (EffectOrigin::Kind
+     *  order). None checked lists them all; checking some lists only those,
+     *  from every tab, as a search does. */
+    QToolButton *originFilter(int kind) const { return m_origin[qBound(0, kind, 2)]; }
 
     /** Most recently picked first; remembered between sessions. */
     static QStringList recent();
@@ -100,6 +105,9 @@ private:
         QString description;
         QString scriptPath;     ///< for the preview: the engine script, or a WLED port
         bool isPreset = false;
+        int origin = 0;         ///< EffectOrigin::Kind
+        QString basedOn;        ///< "based on Fire" (mine, this show)
+        QString diffTip;        ///< what differs from that, for the hover
         /** What it is listed by: its own label -- a preset, its generator's
          *  then its own, so it stays under the effect it came from. */
         QString sortName;
@@ -141,6 +149,7 @@ private:
     QComboBox *m_source;
     QLineEdit *m_search = nullptr;
     QTabBar *m_tabs = nullptr;
+    QToolButton *m_origin[3] = { nullptr, nullptr, nullptr };
     QListWidget *m_list = nullptr;
     QTimer *m_previewTimer = nullptr;
     QElapsedTimer m_clock;

@@ -16,6 +16,9 @@
 */
 
 #include <QtTest>
+#include <QStackedWidget>
+#include <QMenu>
+#include <QLineEdit>
 #include <algorithm>
 #include <QXmlStreamReader>
 #include "qlcfile.h"
@@ -42,6 +45,8 @@
 #define private public
 #include "fadetimespin.h"
 #include "programmingmanager.h"
+#include "rgbmatrix.h"
+#include "efx.h"
 #include "programmingoutline.h"
 #include "workbench.h"
 #include "workbenchstack.h"
@@ -3236,4 +3241,121 @@ void ProgrammingManager_Test::fourTapsHalfASecondApartShow120Bpm()
     QCOMPARE(mgr.m_bpmSpin->value(), 120);
     QCOMPARE(m_doc->inputOutputMap()->bpmNumber(), 120);
     QCOMPARE(beat->text(), QString("Beat 120"));
+}
+
+void ProgrammingManager_Test::buildsSearchFindsEverySection()
+{
+    QLCPalette *red = new QLCPalette(QLCPalette::Color, m_doc);
+    red->setName("Storm red");
+    red->setValue(QColor(255, 0, 0));
+    QVERIFY(m_doc->addPalette(red));
+    QLCPalette *fx = new QLCPalette(QLCPalette::Effect, m_doc);
+    fx->setName("Storm flicker");
+    QVERIFY(m_doc->addPalette(fx));
+    EFX *efx = new EFX(m_doc);
+    efx->setName("Storm sweep");
+    QVERIFY(m_doc->addFunction(efx));
+    Scene *scene = new Scene(m_doc);
+    scene->setName("01-01.01-Storm");
+    QVERIFY(m_doc->addFunction(scene));
+    Scene *other = new Scene(m_doc);
+    other->setName("01-02.01-Calm");
+    QVERIFY(m_doc->addFunction(other));
+
+    ProgrammingManager mgr(nullptr, m_doc);
+    mgr.setSection(ProgrammingManager::PalettesSection);
+    QLineEdit *search = mgr.findChild<QLineEdit *>("buildSearch");
+    QVERIFY(search != nullptr);
+    search->setText("storm");
+    QTreeWidget *results = mgr.searchResults();
+    QCOMPARE(mgr.m_sectionStack->currentWidget(), static_cast<QWidget *>(results));
+    QCOMPARE(results->topLevelItemCount(), 3);
+    QCOMPARE(results->topLevelItem(0)->text(0), QString("Palettes (1)"));
+    QCOMPARE(results->topLevelItem(1)->text(0), QString("Effects (2)"));
+    QCOMPARE(results->topLevelItem(2)->text(0), QString("Scenes (1)"));
+    QCOMPARE(results->topLevelItem(2)->child(0)->text(0), QString("01-01.01-Storm"));
+    QCOMPARE(mgr.section(), ProgrammingManager::PalettesSection);   // still the tab it was on
+
+    // Cleared: back to the section it was on.
+    search->clear();
+    QCOMPARE(mgr.m_sectionStack->currentIndex(), int(ProgrammingManager::PalettesSection));
+
+    // A click goes to it in its section.
+    search->setText("storm");
+    QTreeWidgetItem *hit = results->topLevelItem(2)->child(0);
+    emit results->itemClicked(hit, 0);
+    QCOMPARE(mgr.section(), ProgrammingManager::ScenesSection);
+    QVERIFY(search->text().isEmpty());
+    QVERIFY(mgr.m_outline->currentItem() != nullptr);
+    QCOMPARE(mgr.m_outline->currentItem()->data(0, ProgrammingOutline::IdRole).toUInt(), scene->id());
+
+    search->setText("sweep");
+    QCOMPARE(results->topLevelItemCount(), 1);
+    emit results->itemClicked(results->topLevelItem(0)->child(0), 0);
+    QCOMPARE(mgr.section(), ProgrammingManager::EffectsSection);
+    QVERIFY(mgr.m_effectsList->currentItem() != nullptr);
+    QCOMPARE(mgr.m_effectsList->currentItem()->text(0), QString("Storm sweep"));
+
+    search->setText("nothing like it");
+    QCOMPARE(results->topLevelItemCount(), 1);
+    QVERIFY(results->topLevelItem(0)->text(0).startsWith("Nothing called"));
+}
+
+void ProgrammingManager_Test::effectsSayWhereTheyCameFromAndHowTheyRun()
+{
+    EffectScriptCache *cache = m_doc->effectScriptRunner()->cache();
+    cache->addDirectory(QDir(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts"));
+    QLCPalette *fx = new QLCPalette(QLCPalette::Effect, m_doc);
+    fx->setName("Verse chase");
+    fx->setScriptPath(cache->scriptPath("Color Chase"));
+    fx->setEffectParamValue("width", 0.6);
+    QVERIFY(m_doc->addPalette(fx));
+    EFX *efx = new EFX(m_doc);
+    efx->setName("Circle");
+    QVERIFY(m_doc->addFunction(efx));
+
+    ProgrammingManager mgr(nullptr, m_doc);
+    mgr.rebuildEffectsNow();
+    QTreeWidgetItem *row = nullptr, *classic = nullptr;
+    for (QTreeWidgetItemIterator it(mgr.m_effectsList); *it; ++it)
+    {
+        if ((*it)->text(0) == "Verse chase")
+            row = *it;
+        if ((*it)->text(0) == "Circle")
+            classic = *it;
+    }
+    QVERIFY(row != nullptr && classic != nullptr);
+    QVERIFY2(row->text(1).startsWith("based on Color Chase"), qPrintable(row->text(1)));
+    QVERIFY(row->toolTip(1).contains("width", Qt::CaseInsensitive));
+
+    // Runs on the right-click: Once, then three times.
+    QMenu *menu = mgr.effectsContextMenu(row, &mgr);
+    QMenu *runs = menu->findChild<QMenu *>("effectRunsMenu");
+    QVERIFY(runs != nullptr);
+    QAction *once = runs->findChild<QAction *>("effectRunsOnce");
+    QVERIFY(once != nullptr);
+    once->trigger();
+    QCOMPARE(fx->effectParamValues().value("__runs"), 1.0);
+    delete menu;
+    menu = mgr.effectsContextMenu(row, &mgr);
+    runs = menu->findChild<QMenu *>("effectRunsMenu");
+    QCOMPARE(runs->title(), QString("Runs: Once"));
+    QAction *release = runs->findChild<QAction *>("effectAtEndRelease");
+    QVERIFY(release->isEnabled());
+    release->trigger();
+    QCOMPARE(fx->effectParamValues().value("__atEnd"), 1.0);
+    delete menu;
+
+    // A classic effect: Once is its Run order Single shot.
+    QCOMPARE(efx->runOrder(), Function::Loop);
+    menu = mgr.effectsContextMenu(classic, &mgr);
+    runs = menu->findChild<QMenu *>("effectRunsMenu");
+    QVERIFY(runs != nullptr);
+    runs->findChild<QAction *>("effectRunsOnce")->trigger();
+    QCOMPARE(efx->runOrder(), Function::SingleShot);
+    delete menu;
+    menu = mgr.effectsContextMenu(classic, &mgr);
+    menu->findChild<QMenu *>("effectRunsMenu")->findChild<QAction *>("effectRunsLoop")->trigger();
+    QCOMPARE(efx->runOrder(), Function::Loop);
+    delete menu;
 }

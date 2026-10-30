@@ -84,6 +84,23 @@ skipped). Upstream fixes taken:
   one list: cues in order, numbers kept unless two clash (and said), each
   list's start Block so every cue plays as it did. Old shows load
   unchanged.
+- **Where an effect came from, always visible**: the effect browser
+  filters **Built-in · Mine · This show**; an effect you saved shows a
+  small **mine** mark, the show's effect palettes the palette mark; one
+  made from another has a grey **based on Fire** line, and hovering it
+  lists the settings that differ. A one-off on a Show Tree layer says
+  *one-off*, beside **Make reusable**. Picking one of the show's effects
+  in the browser copies it into the look.
+- **Build's search spans every section**: **Search palettes, effects and
+  scenes…** over the navigator lists matches from Palettes, Effects and
+  Scenes together, under headers with counts; a click goes to it in its
+  section, and clearing the search goes back to where you were.
+- **Any effect runs once, or N times**: **Runs: Loop | Once | N times**,
+  **At the end: Hold | Release** and a **Length** (auto: the cue or chase
+  step's time) on every effect, in the look editor, the effect designer,
+  a Show Tree effect row's ⋯ and Build ▸ Effects' right-click (an EFX or
+  RGB Matrix: Once is its Single shot run order). Before, only effects
+  written as one-shots could stop.
 - **Stack a movement and an intensity effect**, as the help now shows: a
   layer's Effect row (⋯ ▸ Set to, **Design a new effect…**) and the
   Workbench's **+ Effect ▾ ▸ Effect look…** add an effect beside the
@@ -366,6 +383,9 @@ skipped). Upstream fixes taken:
 
 ### Changed
 
+- **The save buttons say where an effect goes**: "Save as Effect…" is
+  now **Save to My effects…** (on this computer, for any show) and "Save
+  as palette…" **Save in this show…**.
 - **The rig shows the targets the cue uses**: the plot and the Rig
   Overview draw the targets the cue on show aims at (Live: what plays and
   Build's loaded scene; Blind: the cue in edit); all of them when nothing

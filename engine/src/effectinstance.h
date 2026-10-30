@@ -347,9 +347,19 @@ private:
     mutable QMutex   m_mutex;
     QList<DmxWrite>  m_lastResults;
     bool             m_lastFrameEmpty = false; //!< last tick drove nothing (idle hint)
-    bool             m_oneShotDone = false;     //!< a oneshot effect has finished its run
+    bool             m_oneShotDone = false;     //!< it has run as many times as it runs (EffectRuns)
+    bool             m_scriptRelease = false;   //!< the script's own onFinish is "release"
+    int              m_runIndex = 0;            //!< which run a repeating one-shot script is on
+    int              m_runLenMs = 0;            //!< this tick's run length (resolvedDurationMs())
+    /** The cue / chase step's length, once found (it does not change while
+     *  this plays), and when it was last looked for: the look-up walks every
+     *  function, so not on every tick. */
+    mutable int      m_cueLenMs = 0;
+    mutable qint64   m_cueLookedMs = -1;
+    /** Where @p el ms is in a run of @p len ms, 0..1, the last run ending on 1. */
+    static double runPhase(qint64 el, int len, int runs);
 
-    /** Resolved run length (ms) for a oneshot effect: Look override → cue/chase
+    /** Resolved run length (ms) of one run: Look override → cue/chase
      *  timing (per syncTo) → the script's naturalDurationMs. See
      *  docs/design/EFFECT_LIFECYCLE_DESIGN.md. */
     int resolvedDurationMs() const;

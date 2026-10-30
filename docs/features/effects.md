@@ -55,7 +55,7 @@ it was, **Update** keeps them.
   of the same kind replaces it. Opened from one effect's own row, the
   designer changes that effect. Designing the layer's own one-off again
   changes that one-off; it doesn't make a second.
-- **Save as palette…**: files the effect where the show keeps its effect
+- **Save in this show…**: files the effect where the show keeps its effect
   palettes, named after the effect (no name box first), so you can use it
   anywhere; in Build ▸ Effects its name is open to type over at once. On a
   layer it also goes on the layer. The Show Tree's Library lists it at
@@ -67,17 +67,68 @@ it was, **Update** keeps them.
   (a portable .qxfx file) and **Import…** it there. The browser's presets —
   the ones that come with qlcconsole and any you saved before — are still
   starting points.
-- **Save as Effect…** is in the Look Editor with an effect palette open,
-  under **Import…** and **Export…** (not in the designer). It keeps the generator and its
-  current settings as a named effect among the browser's presets on this
-  computer, and the palette then plays that effect. An effect of the same
-  name is replaced only if you say so. To take it to another computer,
-  use **Export…**.
+- **Save to My effects…** is in the Look Editor with an effect palette
+  open, under **Import…** and **Export…** (not in the designer). It keeps
+  the effect and its current settings as a named effect among the
+  browser's presets on this computer (**Mine**), and the palette then
+  plays that effect. An effect of the same name is replaced only if you
+  say so. To take it to another computer, use **Export…**.
 - **Cancel** (or closing the window) throws the copy away. The show is
   left as it was, and a show that was saved stays saved. On the bench in
   Build, **Esc** goes back to the scene you came from and asks first if
   the effect hasn't been kept
   ([Backing out](build.md#backing-out-esc)).
+
+### Where an effect came from
+
+An effect is one of four kinds. Each one says which it is, wherever it
+shows:
+
+| Kind | How you make one | Where it lives | How it is marked |
+|---|---|---|---|
+| **Built-in** | Comes with qlcconsole | Every show, every computer | No mark |
+| **Mine** | **Save to My effects…** | Every show on this computer | A small **mine** mark |
+| **This show** | **Save in this show…** | This show's effect palettes | The palette mark |
+| **One-off** | **Keep on this layer** | That one layer of that cue | *one-off* in italics, with **Make reusable** |
+
+In the effect browser, **Built-in · Mine · This show** filter the list by
+where an effect came from. Picking one of the show's effect palettes there
+copies it into the look you are editing, with every setting.
+
+Anything made from another effect has a grey **based on Fire** line under
+its name: in the browser, under the effect's name in the look editor and
+designer, and beside it in Build ▸ Effects. When some of its settings
+differ from that effect, the line counts them (**based on Fire · 2
+changes**). Hover over the line to see which settings changed, and from
+what.
+
+### How many times it runs
+
+Any effect can run in a loop, once, or a set number of times. Set it under
+the effect's settings, in the look editor or the designer. It is also in
+the ⋯ menu of an effect's row in the Show Tree, and on the right-click in
+Build ▸ Effects (**Runs ▸**):
+
+- **Runs: Loop | Once | N times.** Loop plays for as long as the look
+  does. Once and N times play that many runs, then stop.
+- **At the end: Hold | Release.** Hold keeps the effect's last frame on
+  the rig. Release lets go, so the look's own values come back, or
+  whatever is under it.
+- **Length.** How long one run lasts. **auto** takes the cue's time: the
+  chase step it plays in, or the Show Tree cue (its fade in when the cue
+  waits for Go). With neither, the effect's own length applies. Set a
+  time to fix it.
+
+An effect written to run once (a wand sweep) starts on **Once**, with its
+own end. It can loop too: each run starts again from the beginning.
+
+A classic **EFX** or **RGB Matrix** has its own **Run order**. Its
+**Runs ▸** in Build ▸ Effects sets that: **Loop** is Loop and **Once** is
+Single shot, which plays once and stops. N times and Hold don't apply to
+them.
+
+A run that has ended stops working: a held or released effect costs
+nothing while the cue goes on.
 
 ### Make a layer
 
@@ -99,7 +150,7 @@ one undo step: one in the Show Tree's history for a cue, one in Build's
 for a scene.
 
 The layer plays the **palette** when the bench has a saved effect palette
-on it, unchanged: **Save as palette…** first, or start from one in the
+on it, unchanged: **Save in this show…** first, or start from one in the
 list. Otherwise it plays a **one-off** copy of the design, made the same way
 **Keep on this layer** makes one ("Matrix Fire · 1 Chorus Towers"). The
 bench keeps your design either way, so you can make another layer from
@@ -457,7 +508,8 @@ A look's **Speed** and its **Spread** belong to the look, not to the
 effect: trying other effects in the look editor's picker — a click or a
 double-click on a tile — keeps them, so you can audition effects without
 setting the master again. An effect preset that sets one of them still
-wins. The **One-shot length** stays with the effect it was set for.
+wins. How it runs (**Runs**, **At the end**, **Length**) stays with the
+effect it was set for.
 
 On the main clock or a master, an effect's **rate** (or **speed**) counts
 **cycles per beat** — 1 is once a beat, 0.25 once a bar — and the look

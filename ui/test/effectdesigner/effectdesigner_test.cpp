@@ -175,6 +175,21 @@ void EffectDesigner_Test::aNewEffectOnTheBenchSavesAsAPalette()
     QCOMPARE(m_doc->palettes().count(), palettes + 1);
 }
 
+void EffectDesigner_Test::theDesignerSetsHowAnEffectRuns()
+{
+    FixtureGroup *towers = group("Towers", 0, 3);
+    EffectDesigner ed(m_doc);
+    ed.setTryOnGroups({ towers->id() });
+    ed.setEffect(QLCPalette::invalidId());
+    QCOMPARE(ed.findChild<QPushButton *>("edSavePalette")->text(), QString("Save in this show…"));
+    QVERIFY(ed.pickEffect("Dimmer Phaser"));
+    QComboBox *runs = ed.findChild<QComboBox *>("effectRuns");
+    QVERIFY(runs != nullptr);
+    QCOMPARE(runs->currentText(), QString("Loop"));
+    runs->setCurrentIndex(1);                       // Once
+    QCOMPARE(ed.draft()->effectParamValues().value("__runs"), 1.0);
+}
+
 void EffectDesigner_Test::cancelLeavesNoTrace()
 {
     group("Towers", 0, 3);

@@ -6,6 +6,7 @@
 */
 
 #include "effectinstance.h"
+#include "effectruns.h"
 #include "speedmasters.h"
 #include "spreadlayer.h"
 #include "wledfixture.h"
@@ -16,6 +17,7 @@
 #include "scene.h"
 #include "function.h"
 #include "chaser.h"
+#include "collection.h"
 #include "chaserstep.h"
 #include "fixture.h"
 #include "fixturegroup.h"
@@ -112,8 +114,18 @@ EffectInstance::EffectInstance(Doc *doc, quint32 sceneId, quint32 effectPaletteI
     for (auto it = strParams.constBegin(); it != strParams.constEnd(); ++it)
         m_stringParamValues[it.key()] = it.value();
 
+    m_scriptRelease = m_script.onFinish() == QLatin1String("release");
     m_state = m_script.newState();
     m_elapsed.start();
+}
+
+double EffectInstance::runPhase(qint64 el, int len, int runs)
+{
+    if (len <= 0)
+        return 1.0;
+    if (runs > 0 && el >= qint64(len) * runs)
+        return 1.0;
+    return double(el % len) / double(len);
 }
 
 void EffectInstance::setInputValue(const QString &slotName, float norm01)
@@ -313,6 +325,23 @@ void EffectInstance::runTick()
     // modulate *around* the Dimmer/Colour looks instead of overriding them.
     buildSceneBaseValues();
 
+    /* How it runs (EffectRuns): a one-shot script that loops or repeats
+       starts each run afresh, as it did the first. Only a run that ends
+       needs its length (a plain loop never looks it up). */
+    const EffectRuns::Settings runs = EffectRuns::resolve(m_paramValues, m_script.isOneShot(), m_scriptRelease);
+    m_runLenMs = (!runs.loops() || m_script.isOneShot()) ? resolvedDurationMs() : 0;
+    if (m_script.isOneShot() && runs.runs != 1 && m_runLenMs > 0)
+    {
+        qint64 run = m_elapsed.elapsed() / m_runLenMs;
+        if (runs.runs > 0)
+            run = qMin<qint64>(run, runs.runs - 1);
+        if (run != m_runIndex)
+        {
+            m_runIndex = int(run);
+            m_state = m_script.newState();
+        }
+    }
+
     QJSValue fixtures = buildFixturesArray(cells, gridCols, gridRows);
     QJSValue inputs   = buildInputsObject();
     QJSValue palettes = buildPalettesObject();
@@ -379,18 +408,19 @@ void EffectInstance::runTick()
             w.layer = layer;
     }
 
-    // One-shot lifecycle: finished when phase reaches 1 or the script sets
-    // state.done (it can finish early). On finish, "release" stops driving now
-    // (fixtures fall back to the base); "hold" keeps this final frame. Either way
-    // the frozen flag makes the next tick a no-op (see the top of runTick).
-    if (m_script.isOneShot() && !m_oneShotDone)
+    // Runs that end (Once, N times; a one-shot script's own default): done
+    // when the last run's time is up, or a single-run one-shot script sets
+    // state.done (it can finish early). Then "release" stops driving now
+    // (fixtures fall back to the base); "hold" keeps this final frame. Either
+    // way the frozen flag makes the next tick a no-op (see the top of runTick).
+    if (!runs.loops() && !m_oneShotDone)
     {
-        const int dur = resolvedDurationMs();
-        const double phase = dur > 0 ? qMin(1.0, double(m_elapsed.elapsed()) / dur) : 1.0;
-        if (phase >= 1.0 || m_state.property("done").toBool())
+        const qint64 el = m_elapsed.elapsed();
+        if (m_runLenMs <= 0 || el >= qint64(m_runLenMs) * runs.runs
+            || (runs.runs == 1 && m_script.isOneShot() && m_state.property("done").toBool()))
         {
             m_oneShotDone = true;
-            if (m_script.onFinish() == QLatin1String("release"))
+            if (runs.release)
                 writes.clear();
         }
     }
@@ -605,26 +635,38 @@ int EffectInstance::resolvedDurationMs() const
             return ov;
     }
 
-    // 2. Cue / chase timing, per the script's syncTo.
+    // 2. Cue / chase timing, per the script's syncTo. A step's length, once
+    //    found, is kept; not found, it is looked for again at most four
+    //    times a second (it walks every function).
+    if (m_cueLenMs > 0)
+        return m_cueLenMs;
+    const qint64 now = m_elapsed.elapsed();
+    if (m_cueLookedMs >= 0 && now - m_cueLookedMs < 250)
+        return m_script.naturalDurationMs();
+    m_cueLookedMs = now;
     Scene *scene = qobject_cast<Scene*>(m_doc->function(m_sceneId));
     if (scene != nullptr)
     {
         auto finite = [](uint s) {
             return s != 0 && s != Function::defaultSpeed() && s != Function::infiniteSpeed();
         };
+        int found = 0;
         const QString sync = m_script.syncTo();
         if (sync == QLatin1String("entrance"))
         {
             const uint fi = scene->fadeInSpeed();
-            if (finite(fi)) return int(fi);
+            if (finite(fi)) found = int(fi);
         }
         else if (sync == QLatin1String("exit"))
         {
             const uint fo = scene->fadeOutSpeed();
-            if (finite(fo)) return int(fo);
+            if (finite(fo)) found = int(fo);
         }
         else // "span" → the driving chase step's duration
         {
+            /* The step plays this scene, or a collection with it in (a Show
+               Tree cue is a step playing its layers' collection). A step held
+               until Go has no length: its fade in is the cue's time then. */
             for (Function *f : m_doc->functions())
             {
                 if (f == nullptr || f->type() != Function::ChaserType || !f->isRunning())
@@ -634,15 +676,25 @@ int EffectInstance::resolvedDurationMs() const
                     continue;
                 const int cur = ch->currentStepIndex();
                 ChaserStep *cs = (cur >= 0) ? ch->stepAt(cur) : nullptr;
-                if (cs != nullptr && cs->fid == m_sceneId)
+                if (cs == nullptr)
+                    continue;
+                bool plays = cs->fid == m_sceneId;
+                if (!plays)
+                    if (Collection *coll = qobject_cast<Collection *>(m_doc->function(cs->fid)))
+                        plays = coll->functions().contains(m_sceneId);
+                if (plays)
                 {
                     const uint d = ch->currentStepDuration();
-                    if (d > 0)
-                        return int(d);
+                    if (finite(d))
+                        found = int(d);
+                    else if (finite(cs->fadeIn))
+                        found = int(cs->fadeIn);
                     break;
                 }
             }
         }
+        if (found > 0)
+            return m_cueLenMs = found;
     }
 
     // 3. Script default.
@@ -1637,11 +1689,13 @@ QJSValue EffectInstance::buildInputsObject() const
     // One-shot lifecycle: hand the effect its window so it fits any duration.
     //   phase    — 0→1 progress through the resolved run length
     //   duration — that length in ms
+    //   (each run of one that loops or repeats goes 0→1 again)
     if (m_script.isOneShot())
     {
-        const int dur = resolvedDurationMs();
-        obj.setProperty("phase", dur > 0 ? qMin(1.0, double(m_elapsed.elapsed()) / double(dur)) : 1.0);
-        obj.setProperty("duration", double(dur));
+        const EffectRuns::Settings runs = EffectRuns::resolve(m_paramValues, true, m_scriptRelease);
+        const int len = m_runLenMs > 0 ? m_runLenMs : resolvedDurationMs();   // outside a tick too
+        obj.setProperty("phase", runPhase(m_elapsed.elapsed(), len, runs.runs));
+        obj.setProperty("duration", double(len));
     }
 
     return obj;

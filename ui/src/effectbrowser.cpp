@@ -22,6 +22,8 @@
 #include <QPolygonF>
 #include <QRadialGradient>
 #include <QTabBar>
+#include <QToolButton>
+#include <QHBoxLayout>
 #include <QTimer>
 #include <QtMath>
 #include <cmath>
@@ -30,6 +32,7 @@
 #include "effectscriptrunner.h"
 #include "effectscriptcache.h"
 #include "effectbrowser.h"
+#include "effectorigin.h"
 #include "effectscript.h"
 #include "doc.h"
 
@@ -38,7 +41,7 @@
 namespace
 {
 // The look editor's effect kinds (lookeditor.cpp): header, script, preset, WLED.
-enum { KindHeader = 0, KindScript = 1, KindPreset = 2, KindWled = 3 };
+enum { KindHeader = 0, KindScript = 1, KindPreset = 2, KindWled = 3, KindShow = 4 };
 const int KindRole = Qt::UserRole + 1;
 
 // List item data.
@@ -134,8 +137,40 @@ public:
         QString name = e.label;
         if (m_browser->m_search->text().trimmed().length() > 0 && !e.category.isEmpty())
             name += QStringLiteral("   ·  ") + e.category;
-        p->drawText(nameRect, Qt::AlignLeft | Qt::AlignVCenter,
-                    QFontMetrics(bold).elidedText(name, Qt::ElideRight, nameRect.width()));
+        /* Where it came from: nothing for a built-in, "mine" for one saved
+           on this computer, the palette mark for the show's own. */
+        int badgeW = 0;
+        if (e.origin == EffectOrigin::Mine)
+            badgeW = QFontMetrics(opt.font).horizontalAdvance(EffectOrigin::tr("mine")) + 10;
+        else if (e.origin == EffectOrigin::ThisShow)
+            badgeW = 16;
+        const QFontMetrics bfm(bold);
+        const QString shown = bfm.elidedText(name, Qt::ElideRight, qMax(20, nameRect.width() - badgeW - 6));
+        p->drawText(nameRect, Qt::AlignLeft | Qt::AlignVCenter, shown);
+        if (badgeW > 0)
+        {
+            const int bx = nameRect.left() + bfm.horizontalAdvance(shown) + 6;
+            if (e.origin == EffectOrigin::Mine)
+            {
+                QFont tiny = opt.font;
+                tiny.setPointSizeF(qMax(7.0, tiny.pointSizeF() - 2.0));
+                p->setFont(tiny);
+                const QRect pill(bx, nameRect.center().y() - QFontMetrics(tiny).height() / 2 - 1,
+                                 badgeW - 2, QFontMetrics(tiny).height() + 2);
+                QColor fill = opt.palette.highlight().color();
+                fill.setAlpha(selected ? 90 : 60);
+                p->setPen(Qt::NoPen);
+                p->setBrush(fill);
+                p->drawRoundedRect(pill, 4, 4);
+                p->setPen(text);
+                p->drawText(pill, Qt::AlignCenter, EffectOrigin::tr("mine"));
+            }
+            else
+            {
+                const QRect mark(bx, nameRect.center().y() - 6, 13, 13);
+                QIcon(EffectOrigin::paletteMark()).paint(p, mark);
+            }
+        }
         QFont small = opt.font;
         small.setPointSizeF(qMax(8.0, small.pointSizeF() - 1.0));
         p->setFont(small);
@@ -143,8 +178,10 @@ public:
         dim.setAlpha(150);
         p->setPen(dim);
         const QRect descRect(tx, r.top() + r.height() / 2, r.right() - tx, r.height() / 2);
+        // Made from another effect: the grey line says which (hover: how).
+        const QString line = e.basedOn.isEmpty() ? e.description : e.basedOn;
         p->drawText(descRect, Qt::AlignLeft | Qt::AlignVCenter,
-                    QFontMetrics(small).elidedText(e.description, Qt::ElideRight, descRect.width()));
+                    QFontMetrics(small).elidedText(line, Qt::ElideRight, descRect.width()));
         p->restore();
     }
 
@@ -305,6 +342,32 @@ EffectBrowser::EffectBrowser(Doc *doc, QComboBox *source, QWidget *parent)
     m_search->setClearButtonEnabled(true);
     v->addWidget(m_search);
 
+    /* Where effects came from: the ones that come with qlcconsole, the ones
+       saved on this computer, the show's own. */
+    QHBoxLayout *origins = new QHBoxLayout;
+    origins->setContentsMargins(0, 0, 0, 0);
+    origins->setSpacing(2);
+    const QStringList names = { tr("Built-in"), tr("Mine"), tr("This show") };
+    const QStringList tips = {
+        tr("The effects that come with qlcconsole"),
+        tr("Effects saved on this computer with Save to My effects…: in any show"),
+        tr("This show's effect palettes (Save in this show…): picking one copies it into the look") };
+    const char *objs[] = { "effectOriginBuiltIn", "effectOriginMine", "effectOriginShow" };
+    for (int i = 0; i < 3; ++i)
+    {
+        QToolButton *b = new QToolButton(this);
+        b->setObjectName(QLatin1String(objs[i]));
+        b->setText(names.at(i));
+        b->setToolTip(tips.at(i));
+        b->setCheckable(true);
+        b->setAutoRaise(true);
+        connect(b, &QToolButton::toggled, this, [this]() { refill(); });
+        m_origin[i] = b;
+        origins->addWidget(b);
+    }
+    origins->addStretch(1);
+    v->addLayout(origins);
+
     m_tabs = new QTabBar(this);
     m_tabs->setExpanding(false);
     m_tabs->setDrawBase(false);
@@ -411,12 +474,17 @@ void EffectBrowser::reload()
         e.label = name;
         e.category = category;
         e.description = m_source->itemData(i, Qt::ToolTipRole).toString();
-        e.isPreset = (kind == KindPreset);
+        e.isPreset = (kind == KindPreset || kind == KindShow);
+        e.origin = m_source->itemData(i, EffectOrigin::OriginRole).toInt();
+        e.basedOn = m_source->itemData(i, EffectOrigin::BasedOnRole).toString();
+        e.diffTip = m_source->itemData(i, EffectOrigin::DiffTipRole).toString();
+        if (kind == KindShow)
+            e.label = m_source->itemText(i).remove(QStringLiteral("◆")).trimmed();
         if (cache != nullptr)
         {
             if (kind == KindScript)
                 e.scriptPath = lastScriptPath = cache->scriptPath(name);
-            else if (kind == KindPreset)
+            else if (kind == KindPreset || kind == KindShow)
                 e.scriptPath = lastScriptPath;      // its generator, the row above
             else if (kind == KindWled)
             {
@@ -438,7 +506,7 @@ void EffectBrowser::reload()
             e.description = cache->scriptMeta(name).description;
         if (kind == KindScript)
             lastScriptLabel = e.label;
-        e.sortName = (kind == KindPreset) ? lastScriptLabel + QChar(1) + e.label : e.label;
+        e.sortName = e.isPreset ? lastScriptLabel + QChar(1) + e.label : e.label;
         m_entries << e;
     }
 
@@ -480,15 +548,28 @@ void EffectBrowser::refill()
     const QString tab = m_tabs->currentIndex() >= 0 ? m_tabs->tabText(m_tabs->currentIndex()) : QString();
     const bool recentTab = (m_tabs->currentIndex() == 0);
 
-    QList<int> shown;
-    if (!q.isEmpty())
+    // Where it came from: none checked is all of them.
+    bool originOn[3] = { false, false, false };
+    bool byOrigin = false;
+    for (int k = 0; k < 3; ++k)
     {
-        // Searching looks everywhere, whatever tab is open.
+        originOn[k] = m_origin[k] != nullptr && m_origin[k]->isChecked();
+        byOrigin = byOrigin || originOn[k];
+    }
+    auto originOk = [&](const Entry &e) { return !byOrigin || originOn[qBound(0, e.origin, 2)]; };
+
+    QList<int> shown;
+    if (!q.isEmpty() || byOrigin)
+    {
+        // Searching (or a where-from filter) looks everywhere, whatever tab is open.
         for (int i = 0; i < m_entries.size(); ++i)
         {
             const Entry &e = m_entries.at(i);
-            if (e.label.contains(q, Qt::CaseInsensitive) || e.description.contains(q, Qt::CaseInsensitive)
-                || e.category.contains(q, Qt::CaseInsensitive))
+            if (!originOk(e))
+                continue;
+            if (q.isEmpty() || e.label.contains(q, Qt::CaseInsensitive)
+                || e.description.contains(q, Qt::CaseInsensitive)
+                || e.category.contains(q, Qt::CaseInsensitive) || e.basedOn.contains(q, Qt::CaseInsensitive))
                 shown << i;
         }
     }
@@ -512,7 +593,7 @@ void EffectBrowser::refill()
     /* A to Z ("can we put the sets in alpha order?"), numbers as numbers --
        Pulse 2 before Pulse 10 -- and a preset right under its effect. Recent
        stays in the order it was used. */
-    if (!recentTab || !q.isEmpty())
+    if (!recentTab || !q.isEmpty() || byOrigin)
     {
         std::stable_sort(shown.begin(), shown.end(), [this](int a, int b) {
             return naturalCompare(m_entries.at(a).sortName, m_entries.at(b).sortName) < 0;
@@ -525,7 +606,9 @@ void EffectBrowser::refill()
         QListWidgetItem *item = new QListWidgetItem(e.label, m_list);
         item->setData(EntryRole, i);
         item->setData(PathRole, e.scriptPath);
-        item->setToolTip(e.description);
+        item->setToolTip(e.diffTip.isEmpty() ? e.description
+                                             : e.description.isEmpty() ? e.diffTip
+                                                                       : e.description + QStringLiteral("\n\n") + e.diffTip);
         if (e.comboIndex == m_source->currentIndex())
             m_list->setCurrentItem(item);
     }

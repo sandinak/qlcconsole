@@ -258,9 +258,9 @@ EffectDesigner::EffectDesigner(Doc *doc, QWidget *parent)
     m_updateBtn = new QPushButton(this);
     m_updateBtn->setObjectName(QStringLiteral("edUpdate"));
     btns->addWidget(m_updateBtn);
-    m_savePalBtn = new QPushButton(tr("Save as palette…"), this);
+    m_savePalBtn = new QPushButton(tr("Save in this show…"), this);
     m_savePalBtn->setObjectName(QStringLiteral("edSavePalette"));
-    m_savePalBtn->setToolTip(tr("Name it and file it with the show's palettes, to use anywhere"));
+    m_savePalBtn->setToolTip(tr("Keep it in this show, with its effect palettes, to use anywhere in it"));
     btns->addWidget(m_savePalBtn);
     m_keepBtn = new QPushButton(tr("Keep on this layer"), this);
     m_keepBtn->setObjectName(QStringLiteral("edKeep"));
@@ -1156,7 +1156,7 @@ void EffectDesigner::fillMakeLayerMenu()
     const quint32 saved = savedPaletteForLayer();
     const QString plays = saved != QLCPalette::invalidId()
                               ? tr("It plays “%1”, the palette.").arg(m_doc->palette(saved)->name())
-                              : tr("It plays a one-off of this design (Save as palette first to use it "
+                              : tr("It plays a one-off of this design (Save in this show first to use it "
                                    "by name).");
     auto cueText = [st](quint32 cueId) {
         const CueList *list = st->listOfCue(cueId);
@@ -1543,13 +1543,13 @@ void EffectDesigner::updateButtons()
         m_updateBtn->setToolTip(tr("Change the palette itself: everywhere it plays plays this"));
     }
     if (m_oneOffAllowed)
-        m_hint->setText(tr("Keep on this layer makes a one-off, as a picked value is. Save as palette names it "
+        m_hint->setText(tr("Keep on this layer makes a one-off, as a picked value is. Save in this show names it "
                            "and files it for the whole show. Nothing changes until you choose."));
     else if (named)
         m_hint->setText(tr("A copy is being designed: Update changes “%1” everywhere it plays; "
-                           "Save as palette makes a new one beside it.").arg(o->name()));
+                           "Save in this show makes a new one beside it.").arg(o->name()));
     else
-        m_hint->setText(tr("Pick an effect and shape it on the bench. Save as palette keeps it for the show; "
+        m_hint->setText(tr("Pick an effect and shape it on the bench. Save in this show keeps it for the show; "
                            "Make a layer puts it on the Try on groups in a cue or a scene; "
                            "Export… takes it to another show."));
 }
