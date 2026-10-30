@@ -133,7 +133,7 @@ Steps:
 0. Run `./check-all.sh` — the full test gate: Qt6 Debug, Release (one
    shipped bug only showed at -O2) and warnings-as-errors. Then, on the
    release commit itself (after step 3's commit), `make perf`: the
-   performance guard against this Mac's baseline, about 5 minutes on an
+   performance guard against this Mac's baseline, about 9 minutes on an
    idle machine. `make beta` / `make release` refuse to publish without
    `perf=0` for HEAD in `build-perf/guard-result.txt` (`PERF_WAIVE="reason"`
    publishes anyway; say why in the notes). A regression is a release bug.

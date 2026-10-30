@@ -215,6 +215,21 @@ Five fixed; the rest, by the doc's numbers:
   2026-10-29). Open: a Speed Dial on an effect parameter; overrides that
   survive a stop; Store as an undo step (palette param edits have none yet).
 
+- ~~**Perf coverage gaps** (asked 2026-10-29: "did you do moving heads ..
+  rgb matrixes .. fixture groups across the stage .. power management?")~~
+  — done (perf/031-coverage, (pg2); DONE.md 2026-10-29): the mixed rig,
+  Show Tree, power, drawing and web clients in `make perf` and the gate.
+  Open, found by it:
+  - **Show Tree edit at scale:** 155 ms CPU per edit on 200 tracking cues
+    over stage groups, nearly all `planCue()` re-planning every cue on
+    every bake. Incremental bake (only cues whose resolved state changed).
+  - **Rig view frame cost:** angled with beams, 62 ms CPU a frame for 240
+    fixtures (plan 2.2 ms); with Live on in a running show up to 25 frames
+    a second, ~1.5 cores. A frame budget (rate or supersample down while
+    values change fast).
+  - The Workbench preview is not drawn by itself (it runs functions); no
+    point for it.
+
 - ~~**Web access saved with the show** (asked 2026-10-29: "enable
   webserver for a showfile in config and port")~~ — done
   (feat/031-show-webserver; DONE.md 2026-10-29). Open: a real-rig check

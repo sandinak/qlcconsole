@@ -35,12 +35,13 @@ help:
 	echo "  make pool       The full gate of a committed REV (default HEAD) on whichever Mac"; \
 	echo "                  of platforms/macos/gate-hosts.conf is idle (HOST=name to pick);"; \
 	echo "                  ends with gate=N host=... qt=... rev=...  make pool-status: who's free."; \
-	echo "  make perf       The performance guard (tools/perf/guard.py, ~5 min): a Release engine"; \
+	echo "  make perf       The performance guard (tools/perf/guard.py, ~9 min): a Release engine"; \
 	echo "                  (build-perf/) under the stress harness at fixed loads + the hot-path"; \
 	echo "                  CPU costs, against this machine's baseline in docs/perf-data/;"; \
 	echo "                  ends with perf=0 (within tolerance) or perf=1 (a regression)."; \
-	echo "  make perf-record  Record or rebase this machine's baseline (3 runs, ~18 min);"; \
+	echo "  make perf-record  Record or rebase this machine's baseline (3 runs, ~27 min);"; \
 	echo "                  commit it with the reason. HOST_CLASS=name names the machine."; \
+	echo "                  PERF_ARGS=--points=gui,web adds only those points."; \
 	echo "  make translations  Refresh every .ts catalogue from the sources (lupdate,"; \
 	echo "                  ./translate.sh update). Translates nothing; run it every release."; \
 	echo "  make dmg        The signed release DMG of a committed HEAD: universal Release build"; \
