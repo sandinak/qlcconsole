@@ -392,6 +392,14 @@ skipped). Upstream fixes taken:
 
 ### Changed
 
+- The Rig Overview (3D view) keeps to a frame budget: with Live on in a
+  running show it asks for no more than about 40% of one core (the rate follows
+  the CPU a frame costs), draws light frames (no supersampling) while values
+  move fast and one full-quality frame when they stop; a still show draws as
+  before. A fixture with a gel (patch list, Gel column) throws its beam and
+  lens in that gel's colour. A stage full of performers draws about 45% cheaper
+  (their faces are kept between frames, small ones drawn with fewer sections).
+
 - **The save buttons say where an effect goes**: "Save as Effect…" is
   now **Save to My effects…** (on this computer, for any show) and "Save
   as palette…" **Save in this show…**.

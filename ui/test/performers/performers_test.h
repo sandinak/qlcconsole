@@ -62,6 +62,7 @@ private slots:
     void anyLineTakesPeopleInItsDialog();
     /** 70 people do not slow the rig view or the plot noticeably. */
     void manyPeopleRenderCost();
+    void keptFacesDrawTheSamePicture();
 };
 
 #endif

@@ -18,6 +18,7 @@
 */
 
 #include <QtTest>
+#include <QTimer>
 #include <QFile>
 #include <QTextStream>
 #include <functional>
@@ -213,6 +214,69 @@ void RenderPerf_Test::anIdlePlotDrawsNothing()
     QTRY_VERIFY(paints.count > painted);
 }
 
+/* A running show (values changing the whole time) with Live on: the frame
+   budget holds the view well under one core, and when the values stop, a
+   full-quality frame follows and then nothing is drawn. */
+void RenderPerf_Test::aRunningShowStaysUnderOneCore()
+{
+    StructureStudioView v(m_doc, StructureStudioView::StageKind, 0);
+    v.resize(960, 600);
+    v.reload();
+    v.setPlane(StructureStudioView::Angled);
+    v.setBeams(true);
+    v.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&v));
+    v.setLiveValues(true);
+    QTRY_VERIFY_WITH_TIMEOUT(!v.m_settlePending && v.paintCount() > 0, 5000);
+    QTest::qWait(700);
+
+    QElapsedTimer wall;
+    wall.start();
+    const qint64 cpu0 = cpuNs(wall);
+    const int painted0 = v.paintCount();
+    int step = 100;
+    QTimer show;                            // the engine: new values every 40 ms
+    connect(&show, &QTimer::timeout, this, [this, &step]() { changeValues(++step); });
+    show.start(40);
+    while (wall.elapsed() < 3000)
+        QTest::qWait(20);
+    show.stop();
+    const double secs = wall.elapsed() / 1000.0;
+    const double cores = double(cpuNs(wall) - cpu0) / 1e9 / secs;
+    m_runningNsPerSec = double(cpuNs(wall) - cpu0) / secs;
+    const int frames = v.paintCount() - painted0;
+    qInfo("a running show: %d frames in %.1f s, %.2f cores", frames, secs, cores);
+    QVERIFY(frames > 0);
+    QVERIFY2(cores < 0.75, qPrintable(QString("a running show took %1 cores").arg(cores)));
+
+    // A value-driven frame close on the last is drawn light, then a full one settles.
+    v.m_lastFrameAt.start();
+    v.m_valueFrame = true;
+    v.repaint();
+    QVERIFY(v.m_degraded);
+    QVERIFY(v.m_degradeSettle != nullptr && v.m_degradeSettle->isActive());
+    QTRY_VERIFY_WITH_TIMEOUT(v.m_settleFrame || !v.m_degraded, 3000);
+
+    // The values stop: one full-quality frame, then still.
+    QTRY_VERIFY_WITH_TIMEOUT(!v.m_degraded && (v.m_degradeSettle == nullptr || !v.m_degradeSettle->isActive()), 5000);
+    QTest::qWait(1500);
+    const int settled = v.paintCount();
+    QVERIFY(!v.m_degraded);
+    QTest::qWait(500);
+    QCOMPARE(v.paintCount(), settled);
+    v.setLiveValues(false);
+}
+
+/* A gel filters the lamp: white through blue is blue, red through blue is black. */
+void RenderPerf_Test::aGelFiltersTheLight()
+{
+    const QColor blue(0, 0, 255);
+    QCOMPARE(StructureStudioView::gelled(QColor(255, 255, 255), blue), blue);
+    QCOMPARE(StructureStudioView::gelled(QColor(255, 0, 0), blue), QColor(0, 0, 0));
+    QCOMPARE(StructureStudioView::gelled(QColor(200, 100, 50), QColor()), QColor(200, 100, 50));
+    QCOMPARE(StructureStudioView::gelled(QColor(255, 255, 255), QColor(255, 128, 0)), QColor(255, 128, 0));
+}
+
 /* Nothing asserted (see the class comment). QLC_PERF_REPS scales the
    frames (default 1: a quick pass for the gate). */
 void RenderPerf_Test::cpuPerFrame()
@@ -274,6 +338,9 @@ void RenderPerf_Test::cpuPerFrame()
             gv->viewport()->repaint();
         }, 5 * scale));
     }
+
+    if (m_runningNsPerSec > 0)
+        results << qMakePair(QStringLiteral("gui_studio_running_show_cpu_per_s_240fx"), m_runningNsPerSec);
 
     QStringList table;
     for (const auto &r : results)

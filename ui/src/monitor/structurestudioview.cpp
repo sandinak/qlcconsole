@@ -23,6 +23,7 @@
 #include <QSet>
 #include <QtMath>
 #include <QTimer>
+#include <QDateTime>
 #include <QWindow>
 #include <QElapsedTimer>
 #include <functional>
@@ -34,6 +35,9 @@
 #include <cmath>
 
 #include "structurestudioview.h"
+#if defined(Q_OS_UNIX)
+#include <time.h>
+#endif
 #include "focussession.h"
 #include "programmercontroller.h"
 #include "righeads.h"
@@ -406,6 +410,26 @@ double StructureStudioView::fixtureOutput(Fixture *fx, bool *known) const
     if (phys.powerConsumption() > 0)
         return phys.powerConsumption() * lumensPerWatt / referenceLumens;
     return 1.0;
+}
+
+QColor StructureStudioView::gelled(const QColor &light, const QColor &gel)
+{
+    if (!gel.isValid() || !light.isValid())
+        return light;
+    return QColor(light.red() * gel.red() / 255, light.green() * gel.green() / 255,
+                  light.blue() * gel.blue() / 255);
+}
+
+/** The process's CPU time in ns (every thread: the render fans out); wall
+ *  clock where there is no process clock. */
+qint64 StructureStudioView::processCpuNs()
+{
+#if defined(Q_OS_UNIX) && defined(CLOCK_PROCESS_CPUTIME_ID)
+    struct timespec ts;
+    if (clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &ts) == 0)
+        return qint64(ts.tv_sec) * 1000000000LL + qint64(ts.tv_nsec);
+#endif
+    return QDateTime::currentMSecsSinceEpoch() * 1000000LL;
 }
 
 void StructureStudioView::setLiveValues(bool on)
@@ -1197,6 +1221,23 @@ void StructureStudioView::drawFixturesInParallel(QPainter &p, const QVector<quin
     }
 }
 
+StructureStudioView::FigureFaces &StructureStudioView::figureFaces(int index, const QVector3D &foot, float tall,
+                                                                   int seg, bool coarse, const QVector<double> &) const
+{
+    if (index >= m_figureFaces.size())
+        m_figureFaces.resize(index + 1);
+    FigureFaces &f = m_figureFaces[index];
+    if (f.foot != foot || f.tall != tall || f.seg != seg || f.coarse != coarse)
+    {
+        f = FigureFaces();
+        f.foot = foot;
+        f.tall = tall;
+        f.seg = seg;
+        f.coarse = coarse;
+    }
+    return f;
+}
+
 void StructureStudioView::drawStageFigures(QPainter &p) const
 {
     MonitorProperties *props = m_doc->monitorProperties();
@@ -1299,8 +1340,30 @@ void StructureStudioView::drawStageFigures(QPainter &p) const
         jobs << FigJob{ foot, tall, t->costumeColor(), mark, true };
     }
 
+    /* What the view is, to tell when the kept faces stand: where the axes
+       and the origin land on screen and how deep, and the eye. */
+    QVector<double> viewKey;
+    {
+        const QVector3D probe[4] = { QVector3D(0, 0, 0), QVector3D(1, 0, 0), QVector3D(0, 1, 0), QVector3D(0, 0, 1) };
+        for (const QVector3D &q : probe)
+            viewKey << w2s(q).x() << w2s(q).y() << viewDepth(q);
+        viewKey << eye.x() << eye.y() << eye.z();
+    }
+    if (viewKey != m_figureViewKey)
+    {
+        m_figureFaces.clear();
+        m_figureViewKey = viewKey;
+    }
+    /* The beams this frame, as one number (see the light kept per figure) */
+    quint64 beamsKey = 0;
+    for (const FrameBeam &fb : std::as_const(m_frameBeams))
+        beamsKey = qHashMulti(beamsKey, fb.apex.x(), fb.apex.y(), fb.apex.z(), fb.dir.x(), fb.dir.y(),
+                              fb.dir.z(), fb.halfAngle, fb.length, fb.colour.rgb(), fb.level,
+                              fb.apertured, fb.omni, fb.ax0, fb.ay0, fb.ax1, fb.ay1, fb.az);
+    int jobIndex = -1;
     for (const FigJob &job : jobs)
     {
+        ++jobIndex;
         const QVector3D foot = job.foot;
         const float tall = job.tall;
         const QColor mark = job.mark;
@@ -1311,7 +1374,7 @@ void StructureStudioView::drawStageFigures(QPainter &p) const
            (Performers_Test::manyPeopleRenderCost: 70 people added 190 ms of
            CPU a frame in a debug build, 77 ms with this). */
         const double tallPx = QLineF(w2s(foot), w2s(foot + QVector3D(0.0f, 0.0f, tall))).length();
-        const int SEG = tallPx < 100.0 ? 6 : (tallPx < 180.0 ? 8 : 12);
+        const int SEG = tallPx < 100.0 ? 5 : (tallPx < 180.0 ? 8 : 12);
         const bool coarse = tallPx < 120.0;
 
         /* The target's own mark on the deck, in the target's colour: which
@@ -1343,14 +1406,17 @@ void StructureStudioView::drawStageFigures(QPainter &p) const
            Past about a white beam and a third of brightness it scales back, so
            white stays bright but keeps its shading. */
         const QVector3D chest = foot + QVector3D(0.0f, 0.0f, 0.72f * tall);
-        double arrivingLuma = 0.0;
-        for (const FrameBeam &fb : m_frameBeams)
-        {
-            const double luma = 0.30 * fb.colour.redF() + 0.59 * fb.colour.greenF()
-                              + 0.11 * fb.colour.blueF();
-            arrivingLuma += fb.level * beamCoverage(fb, chest) * luma * lightFactor(fb);
-        }
-        const double exposure = 1.1 / qMax(1.1, arrivingLuma);
+        double exposure = 1.0;     // worked out only when the light is shaded again
+        auto exposeFor = [&]() {
+            double arrivingLuma = 0.0;
+            for (const FrameBeam &fb : m_frameBeams)
+            {
+                const double luma = 0.30 * fb.colour.redF() + 0.59 * fb.colour.greenF()
+                                  + 0.11 * fb.colour.blueF();
+                arrivingLuma += fb.level * beamCoverage(fb, chest) * luma * lightFactor(fb);
+            }
+            exposure = 1.1 / qMax(1.1, arrivingLuma);
+        };
 
         /* Past a knee, approach full brightness instead of hitting it: what
            is lit hard stays bright without flattening into one value. */
@@ -1383,69 +1449,96 @@ void StructureStudioView::drawStageFigures(QPainter &p) const
                           qBound(0, qRound(knee(b)), 255));
         };
 
-        auto face = [&](const QVector<QVector3D> &pts, const QVector3D &normal) {
-            QVector3D n = normal;
-            if (n.lengthSquared() < 1e-12f)
-                return;
-            n.normalize();
-            if (QVector3D::dotProduct(n, eye) <= 0.0f)
-                return;                          // facing away: hidden anyway
-            QPolygonF poly;
-            QVector<double> vz;
-            QVector3D centre;
-            double depth = 0.0;
-            for (const QVector3D &q : pts)
-            {
-                poly << w2s(q);
-                const double d = viewDepth(q);
-                vz << d;
-                depth += d;
-                centre += q;
-            }
-            centre /= float(pts.size());
-            emitPoly(poly, depth / pts.size(), shade(centre, n), QColor(), 0.0, p, vz);
-        };
-
-        foreach (const FigureLoft &loft, humanFigureLofts())
+        /* The body's faces -- where they fall on screen and how deep -- only
+           change when the person or the view does; the light on them changes
+           with the show. So the faces are kept from frame to frame and only
+           shaded and queued here (seventy people at 70 ms a frame, mostly
+           rebuilding rings that had not moved). */
+        FigureFaces &cached = figureFaces(jobIndex, foot, tall, SEG, coarse, viewKey);
+        if (!cached.built)
         {
-            QVector<QVector<QVector3D> > rings;
-            for (int ri = 0; ri < loft.size(); ++ri)
-            {
-                /* Small on screen, every other section (the ends kept): the
-                   outline reads the same at a few dozen pixels. */
-                if (coarse && ri % 2 == 1 && ri + 1 < loft.size())
-                    continue;
-                const FigureRing &fr = loft.at(ri);
-                QVector<QVector3D> ring;
-                for (int s = 0; s < SEG; ++s)
+            auto face = [&](const QVector<QVector3D> &pts, const QVector3D &normal) {
+                QVector3D n = normal;
+                if (n.lengthSquared() < 1e-12f)
+                    return;
+                n.normalize();
+                if (QVector3D::dotProduct(n, eye) <= 0.0f)
+                    return;                          // facing away: hidden anyway
+                FigureFace f;
+                QVector3D centre;
+                for (const QVector3D &q : pts)
                 {
-                    const double a = 2.0 * M_PI * s / SEG;
-                    ring << foot + QVector3D((fr.cx + fr.rx * float(qCos(a))) * tall,
-                                             (fr.cy + fr.ry * float(qSin(a))) * tall,
-                                             fr.z * tall);
+                    f.poly << w2s(q);
+                    const double d = viewDepth(q);
+                    f.vz << d;
+                    f.depth += d;
+                    centre += q;
                 }
-                rings << ring;
-            }
-            for (int i = 0; i + 1 < rings.size(); ++i)
-                for (int s = 0; s < SEG; ++s)
-                {
-                    const QVector3D &a = rings[i][s];
-                    const QVector3D &b = rings[i][(s + 1) % SEG];
-                    const QVector3D &c2 = rings[i + 1][(s + 1) % SEG];
-                    const QVector3D &d = rings[i + 1][s];
-                    // Counter-clockwise from above, so this points outward.
-                    QVector3D n = QVector3D::crossProduct(b - a, d - a)
-                                + QVector3D::crossProduct(c2 - d, c2 - b);
-                    face({ a, b, c2, d }, n);
-                }
-            // Close the ends.
-            if (rings.isEmpty() == false)
+                f.depth /= pts.size();
+                f.centre = centre / float(pts.size());
+                f.normal = n;
+                cached.faces << f;
+            };
+
+            foreach (const FigureLoft &loft, humanFigureLofts())
             {
-                QVector<QVector3D> bottom = rings.first();
-                std::reverse(bottom.begin(), bottom.end());
-                face(bottom, QVector3D(0.0f, 0.0f, -1.0f));
-                face(rings.last(), QVector3D(0.0f, 0.0f, 1.0f));
+                QVector<QVector<QVector3D> > rings;
+                for (int ri = 0; ri < loft.size(); ++ri)
+                {
+                    /* Small on screen, every other section (the ends kept): the
+                       outline reads the same at a few dozen pixels. */
+                    if (coarse && ri + 1 < loft.size() && ri % (tallPx < 100.0 ? 3 : 2) != 0)
+                        continue;
+                    const FigureRing &fr = loft.at(ri);
+                    QVector<QVector3D> ring;
+                    for (int s = 0; s < SEG; ++s)
+                    {
+                        const double a = 2.0 * M_PI * s / SEG;
+                        ring << foot + QVector3D((fr.cx + fr.rx * float(qCos(a))) * tall,
+                                                 (fr.cy + fr.ry * float(qSin(a))) * tall,
+                                                 fr.z * tall);
+                    }
+                    rings << ring;
+                }
+                for (int i = 0; i + 1 < rings.size(); ++i)
+                    for (int s = 0; s < SEG; ++s)
+                    {
+                        const QVector3D &a = rings[i][s];
+                        const QVector3D &b = rings[i][(s + 1) % SEG];
+                        const QVector3D &c2 = rings[i + 1][(s + 1) % SEG];
+                        const QVector3D &d = rings[i + 1][s];
+                        // Counter-clockwise from above, so this points outward.
+                        QVector3D n = QVector3D::crossProduct(b - a, d - a)
+                                    + QVector3D::crossProduct(c2 - d, c2 - b);
+                        face({ a, b, c2, d }, n);
+                    }
+                // Close the ends.
+                if (rings.isEmpty() == false)
+                {
+                    QVector<QVector3D> bottom = rings.first();
+                    std::reverse(bottom.begin(), bottom.end());
+                    face(bottom, QVector3D(0.0f, 0.0f, -1.0f));
+                    face(rings.last(), QVector3D(0.0f, 0.0f, 1.0f));
+                }
             }
+            cached.built = true;
+        }
+        /* The light on them, kept while the beams, the room and the costume
+           are as they were (a still look, an edit elsewhere, the view moved
+           by a pixel). */
+        const quint64 lightKey = qHashMulti(0, beamsKey, roomLevel, cr, cg, cb);
+        if (cached.lightKey != lightKey || cached.colours.size() != cached.faces.size())
+        {
+            exposeFor();
+            cached.colours.resize(cached.faces.size());
+            for (int i = 0; i < cached.faces.size(); ++i)
+                cached.colours[i] = shade(cached.faces.at(i).centre, cached.faces.at(i).normal);
+            cached.lightKey = lightKey;
+        }
+        for (int i = 0; i < cached.faces.size(); ++i)
+        {
+            const FigureFace &f = cached.faces.at(i);
+            emitPoly(f.poly, f.depth, cached.colours.at(i), QColor(), 0.0, p, f.vz);
         }
     }
 }
@@ -2443,7 +2536,7 @@ void StructureStudioView::flushOps(QPainter &p) const
 
     /* Transparent, so the floor grid already painted underneath shows through
        wherever the rig does not cover it. */
-    m_z->begin(size(), m_supersample, Qt::transparent);
+    m_z->begin(size(), m_degraded ? 1 : m_supersample, Qt::transparent);
 
 
     /* One band of the frame: solids, then light -- after every solid is in, so
@@ -2702,7 +2795,7 @@ bool StructureStudioView::gpuRender(QPainter &p, const OpRefs &opaque,
                (o.alphas.size() == n) ? o.alphas.constData() : nullptr);
     }
 
-    if (!m_gpu->render(size(), m_supersample, solids, see, light))
+    if (!m_gpu->render(size(), m_degraded ? 1 : m_supersample, solids, see, light))
         return false;
     // Light over the frame as the CPU adds it (ZRaster::composeLight()).
     QImage frame = m_gpu->scene();
@@ -7515,6 +7608,11 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
                         : fixtureLiveState(fx, vals, live, dim, valsComplete);
                     if (got)
                     {
+                        /* A gel (patch list, Gel column) filters the light:
+                           the beam and lens take its colour, as a gelled
+                           lamp does -- white through blue is blue. */
+                        const QColor gel = m_doc->monitorProperties()->fixtureGelColor(fid, 0, 0);
+                        live = gelled(live, gel);
                         looks[u].beamLevel = dim / 255.0;
                         looks[u].beamColour = live;
                         beamLevel = qMax(beamLevel, looks[u].beamLevel);
@@ -9824,6 +9922,9 @@ bool StructureStudioView::liveTick()
             m_settleFrame = true;
         });
     }
+    /* A frame because the VALUES moved (a running show), not an edit or the
+       settle: the frame budget may draw it lighter (paintEvent). */
+    m_valueFrame = !m_liveDirty && !m_settleFrame && !m_opticsAnimating;
     update();
     return true;
 }
@@ -9831,6 +9932,26 @@ bool StructureStudioView::liveTick()
 void StructureStudioView::paintEvent(QPaintEvent *)
 {
     ++m_paintCount;
+    /* The frame budget. While values change fast (a value-driven frame close
+       on the last one) the rig is drawn without supersampling -- a third of
+       the work -- and one full-quality frame follows when they stop. Still
+       values, edits and the settle frame draw at full quality as before. */
+    const bool fast = m_valueFrame && m_supersample > 1 && m_lastFrameAt.isValid()
+                      && m_lastFrameAt.elapsed() < 400;
+    m_valueFrame = false;
+    m_degraded = fast;
+    if (fast)
+    {
+        if (m_degradeSettle == nullptr)
+        {
+            m_degradeSettle = new QTimer(this);
+            m_degradeSettle->setSingleShot(true);
+            connect(m_degradeSettle, &QTimer::timeout, this, [this]() { m_settleFrame = true; });
+        }
+        m_degradeSettle->start(350);     // restarts while values keep moving
+    }
+    m_lastFrameAt.start();
+    const qint64 cpuFrom = processCpuNs();
     m_liveDirty = false;                 // this frame shows the rig as it is now
     m_settleFrame = false;
     m_paintedSceneRunning = activeSceneRunning();
@@ -9945,12 +10066,16 @@ void StructureStudioView::paintEvent(QPaintEvent *)
      * frame does not lurch the rate), leaving roughly half the budget spare. */
     if (m_liveValues && m_liveTimer != nullptr && frameTimer.isValid())
     {
-        const double ms = frameTimer.nsecsElapsed() / 1000000.0;
+        /* The budget is CPU, not wall time: the render fans out over a thread
+           pool, so a 60 ms frame can cost 90 ms of processor. Asked for no
+           more than about 40% of one core on a running show. */
+        const double cpuMs = (processCpuNs() - cpuFrom) / 1000000.0;
+        const double ms = qMax(frameTimer.nsecsElapsed() / 1000000.0, cpuMs * 2.0);
         m_frameMs = (m_frameMs <= 0.0) ? ms : (m_frameMs * 0.8 + ms * 0.2);
         /* At the chosen rate when frames are cheap enough to allow it, slower
            when they are not -- a quarter of the interval spare, so the event
            loop still breathes between repaints. */
-        const int want = int(qBound(1000.0 / m_maxFps, m_frameMs * 1.25, 250.0));
+        const int want = int(qBound(1000.0 / m_maxFps, m_frameMs * 1.25, 1000.0));
         if (qAbs(m_liveTimer->interval() - want) > 8)
             m_liveTimer->setInterval(want);
     }

@@ -1293,6 +1293,27 @@ private:
      *  look's colour). */
     class LanternPixels *m_lanternPixels = nullptr;
     mutable QHash<QString, QImage> m_patterns;   ///< patternImage() cache
+    /** One face of a person, as the view lays it out (drawStageFigures()) */
+    struct FigureFace { QPolygonF poly; QVector<double> vz; double depth = 0.0; QVector3D centre, normal; };
+    struct FigureFaces
+    {
+        QVector3D foot; float tall = 0.0f; int seg = 0; bool coarse = false; bool built = false;
+        quint64 lightKey = 0; QVector<QColor> colours;  ///< the shading, and what it was for
+        QVector<FigureFace> faces;
+    };
+    FigureFaces &figureFaces(int index, const QVector3D &foot, float tall, int seg, bool coarse,
+                             const QVector<double> &viewKey) const;
+    mutable QVector<FigureFaces> m_figureFaces;   ///< by position in the drawn list
+    mutable QVector<double> m_figureViewKey;
+    bool     m_valueFrame = false;   ///< the next frame is value-driven (frame budget)
+    bool     m_degraded = false;     ///< this frame is drawn without supersampling
+    QElapsedTimer m_lastFrameAt;     ///< when the last frame started
+    class QTimer *m_degradeSettle = nullptr;  ///< the full-quality frame after values stop
+    static qint64 processCpuNs();
+public:
+    /** @a light seen through a @a gel (a filter: each channel scaled by the gel's) */
+    static QColor gelled(const QColor &light, const QColor &gel);
+private:
     double   m_frameMs = 0.0;        ///< smoothed repaint cost, for the live rate
     mutable int m_lastOpCount = 0;   ///< primitives in the last angled frame
     bool     m_zoomed = false;       ///< zoomed or panned by hand: refit() must not stomp it
