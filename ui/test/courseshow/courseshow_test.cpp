@@ -2052,8 +2052,8 @@ void CourseShow_Test::lessonStageLooks()
     QStringList sections, items;
     for (QAction *a : menu.actions())
         (a->isSeparator() ? sections : items) << a->text();
-    QCOMPARE(sections, QStringList({ "Moving", "Fixed conventional", "Fixed LED", "Practicals",
-                                     "Scenery" }));
+    QCOMPARE(sections, QStringList({ "Moving", "Fixed conventional", "Fixed LED", "Effects",
+                                     "Practicals", "Scenery" }));
     qInfo().noquote() << "[3.3] Lanterns' Plot Symbol menu:" << items.join(" | ");
     QVERIFY(items.first().startsWith("Auto"));
     QAction *lantern = menu.findChild<QAction *>(
