@@ -1489,6 +1489,13 @@ void saveXML(QXmlStreamWriter *doc, const Production &production)
             writeId(doc, QStringLiteral("Collection"), cue.collection);
             if (list.looks && !cue.folder.isEmpty())
                 doc->writeAttribute(QStringLiteral("Folder"), cue.folder);
+            if (list.looks && cue.scope != HitScope::Production)
+            {
+                doc->writeAttribute(QStringLiteral("Scope"), cue.scope == HitScope::Global ? QStringLiteral("Global")
+                                                             : cue.scope == HitScope::List ? QStringLiteral("List")
+                                                                                           : QStringLiteral("Cue"));
+                writeId(doc, QStringLiteral("ScopeOf"), cue.scopeOf);
+            }
             if (cue.skip && !list.looks)
                 doc->writeAttribute(QStringLiteral("Skip"), QStringLiteral("1"));
             if (!cue.colour.isEmpty())
@@ -1724,6 +1731,11 @@ bool loadXML(QXmlStreamReader &root, Production &production)
             if (looks)
             {
                 cue.folder = a.value(QStringLiteral("Folder")).toString();
+                const QString scope = a.value(QStringLiteral("Scope")).toString();
+                cue.scope = scope == QLatin1String("Global") ? HitScope::Global
+                            : scope == QLatin1String("List") ? HitScope::List
+                            : scope == QLatin1String("Cue") ? HitScope::Cue : HitScope::Production;
+                cue.scopeOf = readId(a, QStringLiteral("ScopeOf"));
                 cue.mode = CueMode::ListDefault;
                 cue.includes.clear();
             }

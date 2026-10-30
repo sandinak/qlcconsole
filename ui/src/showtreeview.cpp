@@ -268,6 +268,17 @@ protected:
         {
             const QList<quint32> cues = idsFromMime(e->mimeData(), ShowTreeView::cueMimeType());
             const bool include = e->modifiers() & Qt::AltModifier;
+            // Hits onto a cue, a list, a production or a Hits row: they
+            // live there now (Q154; ⌥ copies).
+            QString hitHint;
+            if (m_view->dropHitsAt(cues, itemAt(e->position().toPoint()), include, false, &hitHint))
+            {
+                e->setDropAction(include ? Qt::CopyAction : Qt::MoveAction);
+                e->accept();
+                if (m_hint != nullptr)
+                    m_hint->setText(hitHint);
+                return;
+            }
             // Looks onto a folder of their section (or the section): filed there.
             quint32 folderList = ShowTree::invalidId();
             QString folder;
@@ -345,6 +356,28 @@ protected:
         target(e->position().toPoint(), &cue, &layer, &carried);
         if (m_hint != nullptr)
             m_hint->setText(QString());
+        if (e->mimeData()->hasFormat(QLatin1String(ShowTreeView::cueMimeType())))
+        {
+            // Hits to a place (Q154; ⌥ copies).
+            const QList<quint32> cues = idsFromMime(e->mimeData(), ShowTreeView::cueMimeType());
+            const bool copy = e->modifiers() & Qt::AltModifier;
+            QString hint;
+            if (m_view->dropHitsAt(cues, itemAt(e->position().toPoint()), copy, false, &hint))
+            {
+                if (m_view->dropHitsAt(cues, itemAt(e->position().toPoint()), copy, true, &hint))
+                {
+                    e->setDropAction(Qt::CopyAction);
+                    e->accept();
+                }
+                else
+                {
+                    e->ignore();
+                    if (m_hint != nullptr)
+                        m_hint->setText(hint);
+                }
+                return;
+            }
+        }
         quint32 fl = ShowTree::invalidId();
         QString fp;
         if (cue == ShowTree::invalidId()
@@ -1582,6 +1615,16 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         m_lookFiredBy->setTextFormat(Qt::RichText);
         connect(m_lookFiredBy, &QLabel::linkActivated, this, &ShowTreeView::lookLinkActivated);
         f->addRow(tr("Fired by"), m_lookFiredBy);
+        // Q154: where it lives in the tree is when it fires.
+        m_hitWhen = new QLabel(inner);
+        m_hitWhen->setObjectName("stHitWhen");
+        m_hitWhen->setWordWrap(true);
+        m_hitWhen->setToolTip(tr("A hit is armed while the place it lives in is live: under a cue, while "
+                                 "that cue is; under a cue list, while it runs; in a production's Hits, "
+                                 "while it is current; at the top, always. Drag it to another place to "
+                                 "change when (⌥ copies). Outside, its VC buttons do nothing (or fire "
+                                 "another of their hits)."));
+        f->addRow(tr("When"), m_hitWhen);
         // P4: a use of a reusable cue (Unlink here, Used by), or Make reusable.
         m_cueReuse = new QLabel(inner);
         m_cueReuse->setObjectName("stCueReuse");
@@ -2665,6 +2708,55 @@ void ShowTreeView::buildTree()
     const QBrush grey = palette().brush(QPalette::Disabled, QPalette::Text);
     const QBrush skipGrey(readableGrey(m_tree->palette()));
 
+    /* Scoped hits (Q154): a hit lives under a cue, a list, its production
+       (the Hits section, with folders) or at the top (everywhere). Each
+       place that has hits gets a "Hits" row holding them. The Hits
+       sections come after their lists, so every place's row is made. */
+    QHash<quint32, QTreeWidgetItem *> placeItems;
+    QHash<quint32, QTreeWidgetItem *> hitGroups;
+    QTreeWidgetItem *globalHits = nullptr;
+    auto hitGroupFor = [&](const Cue &hit, quint32 sectionId) -> QTreeWidgetItem * {
+        if (hit.scope == HitScope::Production)
+            return nullptr;
+        if (hit.scope == HitScope::Global)
+        {
+            if (globalHits == nullptr)
+            {
+                globalHits = new QTreeWidgetItem(m_tree);
+                globalHits->setText(0, tr("Hits"));
+                globalHits->setText(1, tr("everywhere"));
+                globalHits->setFont(0, boldFont);
+                globalHits->setIcon(0, QIcon(":/collection.png"));
+                globalHits->setData(0, KindRole, HitsNode);
+                globalHits->setData(0, IdRole, sectionId);
+                globalHits->setData(0, ScopeRole, int(HitScope::Global));
+                globalHits->setData(0, PlaceRole, invalidId());
+                globalHits->setToolTip(0, tr("Hits for everywhere: armed whatever runs. Drag one under a cue, "
+                                             "a cue list or a production to fire it only there."));
+            }
+            return globalHits;
+        }
+        if (QTreeWidgetItem *have = hitGroups.value(hit.scopeOf))
+            return have;
+        QTreeWidgetItem *place = placeItems.value(hit.scopeOf);
+        if (place == nullptr)
+            return nullptr;
+        QTreeWidgetItem *g = new QTreeWidgetItem(place);
+        g->setText(0, tr("Hits"));
+        g->setIcon(0, QIcon(":/collection.png"));
+        g->setData(0, KindRole, HitsNode);
+        g->setData(0, IdRole, sectionId);
+        g->setData(0, ScopeRole, int(hit.scope));
+        g->setData(0, PlaceRole, hit.scopeOf);
+        g->setToolTip(0, hit.scope == HitScope::Cue
+                         ? tr("Hits for this cue: armed only while it is live. A VC button holding one of "
+                              "them fires it here instead of a wider one.")
+                         : tr("Hits for this cue list: armed while it runs (or is the main list, nothing "
+                              "else running)."));
+        hitGroups.insert(hit.scopeOf, g);
+        return g;
+    };
+
     for (const Production &prod : m_st->productions())
     {
         QTreeWidgetItem *pi = new QTreeWidgetItem(m_tree);
@@ -2709,6 +2801,8 @@ void ShowTreeView::buildTree()
             }
             li->setData(0, KindRole, ListNode);
             li->setData(0, IdRole, list.id);
+            if (!list.looks)
+                placeItems.insert(list.id, li);
             if (!list.colour.isEmpty())
                 li->setForeground(0, treeTextColour(list.colour));
             // One production (Q75): "main" only says something with two lists.
@@ -2764,11 +2858,19 @@ void ShowTreeView::buildTree()
                                      "VC button (Make VC page), over whatever runs."));
                 for (const QString &path : m_st->lookFolders(list.id))
                     folderItem(path);
-                QSet<quint32> fids;
+                // By hit (a button can hold several, Q154); an older
+                // button given the hit's collection, by that.
+                QHash<quint32, quint32> hitOfFunction;
                 for (const Cue &c : list.cues)
-                    fids.insert(c.collection);
-                for (const VCButton *b : UsedBy::vcButtons(fids))
-                    firedBy[b->function()]++;
+                    hitOfFunction.insert(c.collection, c.id);
+                for (const VCButton *b : UsedBy::allVcButtons())
+                {
+                    if (b->hits().isEmpty() && hitOfFunction.contains(b->function()))
+                        firedBy[hitOfFunction.value(b->function())]++;
+                    for (quint32 h : b->hits())
+                        if (list.indexOf(h) >= 0)
+                            firedBy[h]++;
+                }
             }
 
             // One cue's row, its layers, what else is on stage in it -- and
@@ -2803,8 +2905,8 @@ void ShowTreeView::buildTree()
                     ci->setText(0, QStringLiteral("⟲ ") + ci->text(0));
                     badges << tr("reusable ×%1").arg(m_st->reusableUses(cue.reusable).count());
                 }
-                if (list.looks && firedBy.value(cue.collection) > 0)
-                    badges << tr("VC ×%1").arg(firedBy.value(cue.collection));
+                if (list.looks && firedBy.value(cue.id) > 0)
+                    badges << tr("VC ×%1").arg(firedBy.value(cue.id));
                 // A cue that still mixes (open 13): the one exception to
                 // the one rule, kept only where the rule would change it.
                 QString badgeTip;
@@ -2875,6 +2977,8 @@ void ShowTreeView::buildTree()
                 ci->setToolTip(0, QStringList({ nameTip, trackingTip }).join(QStringLiteral("\n\n")).trimmed());
                 ci->setData(0, KindRole, CueNode);
                 ci->setData(0, IdRole, cue.id);
+                if (!list.looks)
+                    placeItems.insert(cue.id, ci);
                 // Its text colour: its own, else its list's (skipped: grey wins).
                 {
                     const QString colour = m_st->cueColour(cue.id);
@@ -3060,16 +3164,21 @@ void ShowTreeView::buildTree()
                 }
                 else if (si < 0)
                     sectionItem = nullptr;
-                addCue(list, i, resolved, sectionItem);
+                addCue(list, i, resolved, list.looks ? hitGroupFor(list.cues.at(i), list.id) : sectionItem);
             }
         }
     }
+    // The hits for everywhere: last, after the productions.
+    if (globalHits != nullptr)
+        m_tree->addTopLevelItem(m_tree->takeTopLevelItem(m_tree->indexOfTopLevelItem(globalHits)));
 
     for (QTreeWidgetItemIterator it(m_tree); *it; ++it)
     {
         QTreeWidgetItem *item = *it;
         const int kind = item->data(0, KindRole).toInt();
-        if (kind == LookFolderNode || kind == SectionNode)
+        if (kind == HitsNode)
+            item->setExpanded(true);
+        else if (kind == LookFolderNode || kind == SectionNode)
             item->setExpanded(!m_collapsedFolders.contains(QStringLiteral("%1:%2")
                                                            .arg(item->data(0, IdRole).toUInt())
                                                            .arg(item->data(0, kind == SectionNode ? SectionRole
@@ -3224,7 +3333,8 @@ void ShowTreeView::pickCurrentCue()
 
 quint32 ShowTreeView::currentListId() const
 {
-    if (currentKind() == ListNode || currentKind() == LookFolderNode || currentKind() == SectionNode)
+    if (currentKind() == ListNode || currentKind() == LookFolderNode || currentKind() == SectionNode
+        || currentKind() == HitsNode)
         return currentId();
     const quint32 cueId = currentCueId();
     const CueList *list = cueId == invalidId() ? nullptr : m_st->listOfCue(cueId);
@@ -3385,7 +3495,7 @@ void ShowTreeView::updateButtons()
     m_newCue->setToolTip(looks ? tr("A new hit after the selected one, in its folder")
                                : tr("A new cue after the selected one, numbered for you (never renumbers)"));
     m_newCue->setEnabled(kind == ListNode || kind == CueNode || kind == LayerNode
-                         || kind == TrackedLayerNode || kind == LookFolderNode);
+                         || kind == TrackedLayerNode || kind == LookFolderNode || kind == HitsNode);
     m_addLayer->setEnabled(currentCueId() != invalidId());
     m_newSubCue->setEnabled(currentCueId() != invalidId() && !looks);
     m_newProductionAction->setVisible(m_st->productions().isEmpty());
@@ -3537,7 +3647,7 @@ void ShowTreeView::updateInspector()
     const NodeKind kind = currentKind();
     const quint32 id = currentId();
 
-    if (kind == LookFolderNode || (kind == ListNode && m_st->isLooks(id)))
+    if (kind == LookFolderNode || kind == HitsNode || (kind == ListNode && m_st->isLooks(id)))
     {
         showLooksPage(id, currentLookFolder());
         m_inspectorUpdating = false;
@@ -3764,6 +3874,16 @@ void ShowTreeView::showCuePage(const CueList &list, int index)
                             static_cast<QWidget *>(m_cueNoMib), static_cast<QWidget *>(m_cueFocusCall) })
             m_cueForm->setRowVisible(w, cueRows);
         m_cueForm->setRowVisible(m_lookFiredBy, list.looks);
+        m_cueForm->setRowVisible(m_hitWhen, list.looks);
+        if (list.looks)
+        {
+            const HitScope scope = m_st->hitScope(cue.id);
+            m_hitWhen->setText((scope == HitScope::Global ? tr("Always (it lives at the top of the tree)")
+                                : scope == HitScope::Cue ? tr("While it is live: it lives %1").arg(m_st->hitPlace(cue.id))
+                                : scope == HitScope::List ? tr("While it runs: it lives %1").arg(m_st->hitPlace(cue.id))
+                                : tr("While the production is current: it lives %1").arg(m_st->hitPlace(cue.id)))
+                               + (m_st->isHitArmed(cue.id) ? tr(" · armed now") : tr(" · not armed now")));
+        }
         // A sub-cue (P6): its advance, not a mode, base, includes or hold
         // (it holds until Sub GO or auto-follows); a cue: its sub-cues.
         const bool sub = list.isSubCues();
@@ -5524,6 +5644,11 @@ void ShowTreeView::slotNewCueList()
 
 void ShowTreeView::slotNewCue()
 {
+    if (currentKind() == HitsNode)
+    {
+        newHit();
+        return;
+    }
     if (selectionInLooks())
     {
         newLook();
@@ -6956,6 +7081,10 @@ void ShowTreeView::slotTreeContextMenu(const QPoint &pos)
     // + Production where it applies: on a production, or on empty space (Q93).
     if (item == nullptr || item->data(0, KindRole).toInt() == ProductionNode)
         menu.addAction(tr("+ Production…"), this, &ShowTreeView::slotNewProduction);
+    // Q154: a hit for everywhere lives at the top of the tree.
+    if (item == nullptr && !m_st->productions().isEmpty())
+        menu.addAction(tr("+ Hit for everywhere"), this, [this]() { newHit(true); })
+            ->setObjectName("stNewGlobalHit");
     if (item != nullptr)
     {
         // A right-click in a selection keeps it (Merge works on it).
@@ -6966,8 +7095,14 @@ void ShowTreeView::slotTreeContextMenu(const QPoint &pos)
         const int kind = item->data(0, KindRole).toInt();
         const bool inLooks = selectionInLooks();
         menu.addAction(tr("+ Cue list…"), this, &ShowTreeView::slotNewCueList);
-        // R3: busking looks, beside the cue lists.
-        menu.addAction(tr("+ Hit"), this, [this]() { newLook(); })->setObjectName("stNewLook");
+        // R3: busking looks, beside the cue lists; Q154: made where it is
+        // to fire -- for this cue, this list, the production.
+        {
+            const bool onCue = (kind == CueNode || kind == LayerNode || kind == TrackedLayerNode) && !inLooks;
+            const bool onList = (kind == ListNode || kind == SectionNode) && !inLooks;
+            menu.addAction(onCue ? tr("+ Hit for this cue") : onList ? tr("+ Hit for this list") : tr("+ Hit"),
+                           this, [this]() { newHit(); })->setObjectName("stNewLook");
+        }
         if (kind != ProductionNode && !inLooks)
             menu.addAction(tr("+ Cue"), this, &ShowTreeView::slotNewCue);
         if ((kind == CueNode || kind == LayerNode || kind == TrackedLayerNode) && !inLooks)
@@ -9217,7 +9352,8 @@ bool ShowTreeView::selectionInLooks() const
         return false;
     switch (item->data(0, KindRole).toInt())
     {
-        case LookFolderNode: return true;
+        case LookFolderNode:
+        case HitsNode: return true;
         case ListNode: return m_st->isLooks(item->data(0, IdRole).toUInt());
         case CueNode: return m_st->isLook(item->data(0, IdRole).toUInt());
         case LayerNode:
@@ -9264,6 +9400,171 @@ quint32 ShowTreeView::newSubCue()
     if (QTreeWidgetItem *item = m_tree->currentItem())
         m_tree->scrollToItem(item);
     return id;
+}
+
+bool ShowTreeView::hitPlaceOf(QTreeWidgetItem *item, HitScope *scope, quint32 *place) const
+{
+    if (item == nullptr)
+        return false;
+    const int kind = item->data(0, KindRole).toInt();
+    const quint32 id = item->data(0, IdRole).toUInt();
+    quint32 cueId = invalidId();
+    switch (kind)
+    {
+    case HitsNode:
+        *scope = HitScope(item->data(0, ScopeRole).toInt());
+        *place = item->data(0, PlaceRole).toUInt();
+        if (*scope == HitScope::Production || *scope == HitScope::Global)
+        {
+            // Global: kept in the production of its Hits section.
+            quint32 prod = invalidId();
+            m_st->cueList(id, &prod);
+            *place = prod;
+        }
+        return true;
+    case ProductionNode:
+        *scope = HitScope::Production;
+        *place = id;
+        return true;
+    case LookFolderNode:
+    {
+        quint32 prod = invalidId();
+        m_st->cueList(id, &prod);
+        *scope = HitScope::Production;
+        *place = prod;
+        return prod != invalidId();
+    }
+    case ListNode:
+    case SectionNode:
+        if (m_st->isLooks(id))
+        {
+            quint32 prod = invalidId();
+            m_st->cueList(id, &prod);
+            *scope = HitScope::Production;
+            *place = prod;
+            return prod != invalidId();
+        }
+        *scope = HitScope::List;
+        *place = id;
+        return true;
+    case CueNode:
+        cueId = id;
+        break;
+    case LayerNode:
+    case TrackedLayerNode:
+        cueId = item->data(0, CueRole).toUInt();
+        break;
+    default:
+        return false;
+    }
+    if (m_st->isLook(cueId))
+    {
+        // Beside a hit: where it lives.
+        *scope = m_st->hitScope(cueId, place);
+        if (*scope == HitScope::Production || *scope == HitScope::Global)
+            m_st->cueList(m_st->listOfCue(cueId)->id, place);
+        return true;
+    }
+    if (m_st->cue(cueId) == nullptr)
+        return false;
+    *scope = HitScope::Cue;
+    *place = cueId;
+    return true;
+}
+
+quint32 ShowTreeView::newHit(bool global)
+{
+    HitScope scope = HitScope::Global;
+    quint32 place = invalidId();
+    if (!global && !hitPlaceOf(m_tree->currentItem(), &scope, &place))
+        return newLook();
+    // Beside a production's own hit, or in a folder: as + Hit there did.
+    const quint32 cur = currentCueId();
+    if (!global && scope == HitScope::Production
+        && (currentKind() == LookFolderNode || (cur != invalidId() && m_st->isLook(cur))))
+        return newLook();
+    if (global)
+        place = currentProductionId();
+    if (m_st->productions().isEmpty())
+    {
+        m_hint->setText(tr("Select a production first (+ Production)"));
+        return invalidId();
+    }
+    const quint32 id = m_st->addHit(scope, place);
+    if (id != invalidId())
+    {
+        selectNode(id);
+        m_cueName->setFocus();
+        m_hint->setText(tr("A new hit, armed %1").arg(scope == HitScope::Global ? tr("everywhere")
+                                                      : tr("while it is %1").arg(m_st->hitPlace(id))));
+    }
+    return id;
+}
+
+bool ShowTreeView::dropHitsAt(const QList<quint32> &cueIds, QTreeWidgetItem *item, bool copy, bool apply,
+                              QString *hint)
+{
+    QList<quint32> hits;
+    for (quint32 c : cueIds)
+        if (m_st->isLook(c))
+            hits << c;
+    if (hits.isEmpty() || hits.count() != cueIds.count() || item == nullptr)
+        return false;
+    // A production's Hits section or folder: filing there (dropLooksOnFolder).
+    const int kind = item->data(0, KindRole).toInt();
+    if (kind == LookFolderNode || (kind == ListNode && m_st->isLooks(item->data(0, IdRole).toUInt())))
+        return false;
+    HitScope scope;
+    quint32 place;
+    if (!hitPlaceOf(item, &scope, &place))
+        return false;
+    if (kind == CueNode && m_st->isLook(item->data(0, IdRole).toUInt()))
+    {
+        // Onto a hit: where it lives, unless that is where they are (a reorder).
+        bool same = true;
+        for (quint32 h : hits)
+        {
+            quint32 hp = invalidId();
+            const HitScope hs = m_st->hitScope(h, &hp);
+            if (hs == HitScope::Production || hs == HitScope::Global)
+                m_st->cueList(m_st->listOfCue(h)->id, &hp);
+            same = same && hs == scope && (hp == place || scope == HitScope::Global);
+        }
+        if (same && !copy)
+            return false;
+    }
+    QString where;
+    switch (scope)
+    {
+    case HitScope::Global: where = tr("everywhere"); break;
+    case HitScope::Production: where = m_st->production(place) == nullptr ? QString()
+                                       : tr("while %1 is current").arg(m_st->production(place)->name); break;
+    case HitScope::List: where = m_st->cueList(place) == nullptr ? QString()
+                                 : tr("while cue list %1 runs").arg(m_st->cueList(place)->name); break;
+    case HitScope::Cue:
+        if (const CueList *l = m_st->listOfCue(place))
+            where = tr("while cue %1 is live").arg(m_st->cueLabel(*l, l->indexOf(place)));
+        break;
+    }
+    if (hint != nullptr)
+        *hint = copy ? tr("Copy %n hit(s) here: armed %1", "", int(hits.count())).arg(where)
+                     : tr("Move %n hit(s) here: armed %1 (⌥ copies)", "", int(hits.count())).arg(where);
+    if (!apply)
+        return true;
+    if (copy)
+    {
+        const QList<quint32> made = m_st->copyHitsTo(hits, scope, scope == HitScope::Global ? invalidId() : place);
+        if (!made.isEmpty())
+            selectNode(made.first());
+        return !made.isEmpty();
+    }
+    QString why;
+    const bool ok = m_st->setHitScope(hits, scope, place, &why);
+    if (ok)
+        selectNode(hits.first());
+    else if (hint != nullptr)
+        *hint = why;
+    return ok;
 }
 
 quint32 ShowTreeView::newLook()
@@ -9321,8 +9622,11 @@ bool ShowTreeView::dropLooksOnFolder(const QList<quint32> &lookIds, quint32 list
 
 QStringList ShowTreeView::lookFiredBy(quint32 lookId) const
 {
-    const quint32 fid = m_st->lookFunction(lookId);
-    return fid == invalidId() ? QStringList() : UsedBy::vcLines({ fid });
+    QStringList out;
+    for (const VCButton *b : UsedBy::hitButtons(lookId, m_st->lookFunction(lookId)))
+        out << (b->hits().count() > 1 ? tr("VC button “%1” (one of its %2 hits)").arg(b->caption()).arg(b->hits().count())
+                                      : tr("VC button “%1”").arg(b->caption()));
+    return out;
 }
 
 bool ShowTreeView::makeVcPage(quint32 listId, const QString &folder, QString *message)

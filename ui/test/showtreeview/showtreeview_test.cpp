@@ -4866,6 +4866,104 @@ void ShowTreeView_Test::makeVcPageUpdatesItsFrame()
  * R3: the Looks section (docs/design/PROGRAMMING_ROLE_DESIGN.md §4.1, P-D5..P-D7)
  ****************************************************************************/
 
+/* Scoped hits (Q154): + Hit makes a hit where it is to fire -- for the
+   selected cue, list or production, or (on empty space) for everywhere;
+   each place lists its hits under a "Hits" row; a hit dragged to another
+   place lives there (⌥ copies); its page says when it fires. */
+static QTreeWidgetItem *rowOf(QTreeWidget *tree, quint32 id)
+{
+    for (QTreeWidgetItemIterator it(tree); *it; ++it)
+        if ((*it)->data(0, ShowTreeView::IdRole).toUInt() == id
+            && (*it)->data(0, ShowTreeView::KindRole).toInt() != ShowTreeView::HitsNode
+            && (*it)->data(0, ShowTreeView::KindRole).toInt() != ShowTreeView::LayerNode
+            && (*it)->data(0, ShowTreeView::KindRole).toInt() != ShowTreeView::TrackedLayerNode)
+            return *it;
+    return nullptr;
+}
+
+void ShowTreeView_Test::hitsLiveUnderTheirPlace()
+{
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("DanceHysteria");
+    const quint32 list = st->addCueList(prod, "Full Show");
+    const quint32 one = st->addCue(list, -1, "One");
+    const quint32 two = st->addCue(list, 0, "Two");
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1200, 800);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+
+    // + Hit for this cue: under the cue, in a Hits row.
+    QVERIFY(view.selectNode(one));
+    const quint32 strobe = view.newHit();
+    QVERIFY(strobe != invalidId());
+    quint32 at = invalidId();
+    QCOMPARE(st->hitScope(strobe, &at), HitScope::Cue);
+    QCOMPARE(at, one);
+    QTreeWidgetItem *row = rowOf(view.tree(), strobe);
+    QVERIFY(row != nullptr);
+    QCOMPARE(row->parent()->data(0, ShowTreeView::KindRole).toInt(), int(ShowTreeView::HitsNode));
+    QCOMPARE(row->parent()->text(0), QString("Hits"));
+    QCOMPARE(row->parent()->parent(), rowOf(view.tree(), one));
+    // Its page says when.
+    QVERIFY(view.selectNode(strobe));
+    QLabel *when = view.findChild<QLabel *>("stHitWhen");
+    QVERIFY(when->isVisibleTo(&view));
+    QVERIFY2(when->text().startsWith("While it is live"), qPrintable(when->text()));
+    QVERIFY(when->text().contains("not armed now"));
+    // + Hit on the Hits row: another for the same cue.
+    view.tree()->setCurrentItem(rowOf(view.tree(), strobe)->parent());
+    QCOMPARE(view.currentKind(), ShowTreeView::HitsNode);
+    QCOMPARE(view.findChild<QToolButton *>("stNewCue")->text(), QString("+ Hit"));
+    const quint32 second = view.newHit();
+    QCOMPARE(st->hitScope(second, &at), HitScope::Cue);
+    QCOMPARE(at, one);
+
+    // For the list, for the production, for everywhere.
+    QVERIFY(view.selectNode(list));
+    const quint32 red = view.newHit();
+    QCOMPARE(st->hitScope(red, &at), HitScope::List);
+    QCOMPARE(rowOf(view.tree(), red)->parent()->parent(), rowOf(view.tree(), list));
+    QVERIFY(view.selectNode(prod));
+    const quint32 wash = view.newHit();
+    QCOMPARE(st->hitScope(wash), HitScope::Production);
+    QCOMPARE(rowOf(view.tree(), wash)->parent(), rowOf(view.tree(), st->looksSection(prod)));
+    view.tree()->setCurrentItem(nullptr);
+    const quint32 black = view.newHit(true);
+    QCOMPARE(st->hitScope(black), HitScope::Global);
+    QTreeWidgetItem *top = view.tree()->topLevelItem(view.tree()->topLevelItemCount() - 1);
+    QCOMPARE(top->data(0, ShowTreeView::KindRole).toInt(), int(ShowTreeView::HitsNode));
+    QCOMPARE(rowOf(view.tree(), black)->parent(), top);
+
+    // Dragged onto cue Two: it lives there now; one undo step.
+    QString hint;
+    QVERIFY(view.dropHitsAt({ wash }, rowOf(view.tree(), two), false, false, &hint));
+    QVERIFY2(hint.contains("while cue"), qPrintable(hint));
+    QVERIFY(view.dropHitsAt({ wash }, rowOf(view.tree(), two), false, true, &hint));
+    QCOMPARE(st->hitScope(wash, &at), HitScope::Cue);
+    QCOMPARE(at, two);
+    QCOMPARE(rowOf(view.tree(), wash)->parent()->parent(), rowOf(view.tree(), two));
+    QVERIFY(st->undo());
+    QCOMPARE(st->hitScope(wash), HitScope::Production);
+    // ⌥: a copy for the list; the hit stays.
+    QVERIFY(view.dropHitsAt({ wash }, rowOf(view.tree(), list), true, true, &hint));
+    QCOMPARE(st->hitScope(wash), HitScope::Production);
+    QCOMPARE(st->hitsAt(HitScope::List, list).count(), 2);
+    // Onto a hit of another place: that place. Onto its own: a reorder.
+    QVERIFY(view.dropHitsAt({ black }, rowOf(view.tree(), strobe), false, true, &hint));
+    QCOMPARE(st->hitScope(black, &at), HitScope::Cue);
+    QCOMPARE(at, one);
+    QVERIFY(!view.dropHitsAt({ second }, rowOf(view.tree(), strobe), false, false, &hint));
+    // Cues are not hits: not this drop.
+    QVERIFY(!view.dropHitsAt({ two }, rowOf(view.tree(), list), false, false, &hint));
+
+    // The cue deleted: its hits move up to the production's Hits.
+    QVERIFY(st->removeCue(one));
+    QCOMPARE(st->hitScope(strobe), HitScope::Production);
+    QCOMPARE(rowOf(view.tree(), strobe)->parent(), rowOf(view.tree(), st->looksSection(prod)));
+}
+
 void ShowTreeView_Test::looksSectionInTheTree()
 {
     FixtureGroup *towers = group("Towers", 0, 2);

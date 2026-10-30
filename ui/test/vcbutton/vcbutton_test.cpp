@@ -23,6 +23,8 @@
 #include <QObject>
 #include <QtTest>
 #include <QMenu>
+#include <QPushButton>
+#include <QMimeData>
 
 #define protected public
 #define private public
@@ -36,6 +38,9 @@
 #include "vcframe.h"
 #include "scene.h"
 #include "collection.h"
+#include "chaser.h"
+#include "chaseraction.h"
+#include "functionparent.h"
 #include "showtreecontroller.h"
 #include "functionselection.h"
 #include "functionstreewidget.h"
@@ -905,10 +910,175 @@ void VCButton_Test::pickerHasAHitsSection()
     VCButton btn(&w, m_doc);
     VCButtonProperties props(&btn, m_doc);
     props.slotSetFunction(fid);
-    props.m_hit = hit;
+    props.m_hits = { hit };
     props.accept();
     QCOMPARE(btn.hit(), hit);
     QCOMPARE(btn.function(), fid);
+}
+
+/* Scoped hits (Q154): a button holds several hits and fires the armed one
+   with the narrowest place; none armed, it does nothing; what it held
+   when its place ended is let go. */
+void VCButton_Test::severalHitsFireTheArmedOne()
+{
+    QWidget w;
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("P");
+    const quint32 list = st->addCueList(prod, "Main");
+    const quint32 c1 = st->addCue(list, -1, "One");
+    const quint32 c2 = st->addCue(list, 0, "Two");
+    const quint32 onCue2 = st->addHit(ShowTree::HitScope::Cue, c2, "Strobe");
+    const quint32 everywhere = st->addHit(ShowTree::HitScope::Global, prod, "Blackout");
+    Q_UNUSED(c1);
+
+    VCButton btn(&w, m_doc);
+    btn.setAction(VCButton::Toggle);
+    btn.setKeySequence(QKeySequence(keySequenceA));
+    btn.setHits({ everywhere, onCue2 });
+    QCOMPARE(btn.hit(), everywhere);
+    QCOMPARE(btn.hits(), QList<quint32>({ everywhere, onCue2 }));
+    QCOMPARE(btn.armedHit(), everywhere);
+    QCOMPARE(btn.function(), st->lookFunction(everywhere));
+
+    // Only the cue's hit: nothing armed, nothing fires.
+    VCButton only(&w, m_doc);
+    only.setAction(VCButton::Toggle);
+    only.setKeySequence(QKeySequence(keySequenceB));
+    only.setHit(onCue2);
+    QCOMPARE(only.armedHit(), Function::invalidId());
+    QCOMPARE(only.function(), Function::invalidId());
+    m_doc->setMode(Doc::Operate);
+    only.slotKeyPressed(QKeySequence(keySequenceB));
+    QCOMPARE(only.state(), VCButton::Inactive);
+
+    // GO to cue 2: its hit wins on both buttons.
+    Chaser *chaser = qobject_cast<Chaser *>(m_doc->function(st->cueList(list)->chaser));
+    QVERIFY(chaser != nullptr);
+    auto go = [&]() {
+        ChaserAction action;
+        action.m_action = ChaserNextStep;
+        action.m_stepIndex = -1;
+        action.m_masterIntensity = 1.0;
+        action.m_stepIntensity = 1.0;
+        action.m_fadeMode = Chaser::FromFunction;
+        chaser->setAction(action);
+        if (!chaser->isRunning())
+            chaser->start(m_doc->masterTimer(), FunctionParent::master());
+        for (int i = 0; i < 3; ++i)
+            m_doc->masterTimer()->timerTick();
+        QCoreApplication::processEvents();
+    };
+    go();
+    QCOMPARE(btn.armedHit(), everywhere);
+    go();
+    QCOMPARE(st->runningCue(list), c2);
+    QCOMPARE(btn.armedHit(), onCue2);
+    QCOMPARE(btn.function(), st->lookFunction(onCue2));
+    QCOMPARE(only.function(), st->lookFunction(onCue2));
+
+    // Fired, then the list stops: the hit is let go, the button falls back.
+    Function *strobe = m_doc->function(st->lookFunction(onCue2));
+    btn.slotKeyPressed(QKeySequence(keySequenceA));
+    m_doc->masterTimer()->timerTick();
+    QCOMPARE(btn.state(), VCButton::Active);
+    QVERIFY(strobe->isRunning());
+    chaser->stop(FunctionParent::master());
+    m_doc->masterTimer()->timerTick();
+    QCoreApplication::processEvents();
+    QCOMPARE(btn.state(), VCButton::Inactive);
+    QVERIFY(strobe->stopped() || strobe->m_stop);
+    QCOMPARE(btn.armedHit(), everywhere);
+    QCOMPARE(btn.function(), st->lookFunction(everywhere));
+    QCOMPARE(only.armedHit(), Function::invalidId());
+    m_doc->masterTimer()->timerTick();
+    m_doc->masterTimer()->timerTick();
+    m_doc->setMode(Doc::Design);
+
+    // A plain function given: no hits any more.
+    Scene *sc = new Scene(m_doc);
+    m_doc->addFunction(sc);
+    btn.setFunction(sc->id());
+    QVERIFY(btn.hits().isEmpty());
+    QCOMPARE(btn.armedHit(), Function::invalidId());
+}
+
+void VCButton_Test::severalHitsSaveLoadAndDrop()
+{
+    QWidget w;
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("P");
+    const quint32 list = st->addCueList(prod, "Main");
+    const quint32 c1 = st->addCue(list, -1, "One");
+    const quint32 a = st->addLook(prod, "Wash");
+    const quint32 b = st->addHit(ShowTree::HitScope::Cue, c1, "Strobe");
+
+    // A hit dragged from the Show Tree onto a plain button: it fires it.
+    Scene *sc = new Scene(m_doc);
+    m_doc->addFunction(sc);
+    VCButton btn(&w, m_doc);
+    btn.setFunction(sc->id());
+    btn.setAction(VCButton::Blackout);
+    QByteArray data;
+    {
+        QDataStream out(&data, QIODevice::WriteOnly);
+        out << a;
+    }
+    QMimeData mime;
+    mime.setData(VCButton::hitMimeType(), data);
+    QDragEnterEvent enter(QPoint(1, 1), Qt::CopyAction, &mime, Qt::LeftButton, Qt::NoModifier);
+    btn.dragEnterEvent(&enter);
+    QVERIFY(enter.isAccepted());
+    QDropEvent drop(QPointF(1, 1), Qt::CopyAction, &mime, Qt::LeftButton, Qt::NoModifier);
+    btn.dropEvent(&drop);
+    QVERIFY(drop.isAccepted());
+    QCOMPARE(btn.hits(), QList<quint32>({ a }));
+    QCOMPARE(btn.action(), VCButton::Toggle);
+    QCOMPARE(btn.function(), st->lookFunction(a));
+    // A second: added; again: nothing.
+    QVERIFY(btn.addHits({ b }));
+    QVERIFY(!btn.addHits({ b, a }));
+    QCOMPARE(btn.hits(), QList<quint32>({ a, b }));
+    // Not a hit: refused.
+    QByteArray notHit;
+    {
+        QDataStream out(&notHit, QIODevice::WriteOnly);
+        out << c1;
+    }
+    QMimeData cueMime;
+    cueMime.setData(VCButton::hitMimeType(), notHit);
+    QDragEnterEvent enter2(QPoint(1, 1), Qt::CopyAction, &cueMime, Qt::LeftButton, Qt::NoModifier);
+    btn.dragEnterEvent(&enter2);
+    QVERIFY(!enter2.isAccepted());
+
+    // Saved: the first as Hit=, the others as <Hit>; read back the same.
+    QBuffer buffer;
+    buffer.open(QIODevice::WriteOnly | QIODevice::Text);
+    QXmlStreamWriter xmlWriter(&buffer);
+    QVERIFY(btn.saveXML(&xmlWriter));
+    xmlWriter.setDevice(NULL);
+    buffer.close();
+    QByteArray xml = buffer.buffer();
+    QVERIFY(xml.contains(QStringLiteral("Hit=\"%1\"").arg(a).toUtf8()));
+    QVERIFY(xml.contains(QStringLiteral("<Hit ID=\"%1\"/>").arg(b).toUtf8()));
+    {
+        QBuffer in(&xml);
+        in.open(QIODevice::ReadOnly | QIODevice::Text);
+        QXmlStreamReader r(&in);
+        r.readNextStartElement();
+        VCButton loaded(&w, m_doc);
+        QVERIFY(loaded.loadXML(r));
+        QCOMPARE(loaded.hits(), QList<quint32>({ a, b }));
+        QCOMPARE(loaded.function(), st->lookFunction(a));
+    }
+    // The properties dialog keeps them, and Remove takes one off.
+    VCButtonProperties props(&btn, m_doc);
+    QCOMPARE(props.m_hits, QList<quint32>({ a, b }));
+    QCOMPARE(props.m_hitsTree->topLevelItemCount(), 2);
+    QVERIFY(props.m_hitsTree->topLevelItem(1)->text(1).contains("cue"));
+    props.m_hitsTree->setCurrentItem(props.m_hitsTree->topLevelItem(1));
+    props.findChild<QPushButton *>("vcbRemoveHit")->click();
+    props.accept();
+    QCOMPARE(btn.hits(), QList<quint32>({ a }));
 }
 
 void VCButton_Test::toggleAndFlash()

@@ -53,6 +53,8 @@ private slots:
     void firesAHitByIdentity();
     void hitSavesAndLoads();
     void pickerHasAHitsSection();
+    void severalHitsFireTheArmedOne();
+    void severalHitsSaveLoadAndDrop();
     void input();
     void paint();
 

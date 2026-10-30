@@ -8,6 +8,31 @@ under `~/.claude/.../memory/`.
 
 ---
 
+## Scoped hits (Q154 / Q157, sch, 2026-10-30)
+
+Phase 1 built (docs/features/show-tree.md "Hits"): a hit lives under a
+cue, a cue list, its production or at the top; armed while its place is
+live; a VC button holds several and fires the narrowest armed one; drag
+hits between places and onto VC buttons. Open:
+- Phase 2 (Q157): the plain-language button map on save and as a table in
+  the button's Hits tab; Step through / Together / Replace / Cancel for a
+  second hit at the same place; the override confirm, arrow and tree
+  badge; Show checks for overrides, same-scope pairs and dead hits; the
+  Cue Runner and button face "↳ overrides" mark; button badges on hits in
+  the tree.
+- Decided (can change): a production's hits are armed while it is current
+  or none is (a show with several productions: another production's hits
+  are disarmed, a change from before); a list's hits while it runs, or —
+  nothing of its production running — while it is the current
+  production's main list; a hit for everywhere is kept in a production's
+  Hits section (the one it was made or moved from); only a production's
+  own hits have folders; a deleted cue or list moves its hits up to the
+  production; among equally narrow armed hits a button fires the first
+  added; a button with several hits shows the armed one's name instead of
+  its caption; drops onto a VC button work in Design and Operate and have
+  no undo (the VC has none).
+- The command line's `hit` makes production hits only; no `hit … for cue`.
+
 ## Pixel boxes, effects and beams — leftovers (cbug, 2026-10-30)
 
 Built (DONE.md 2026-10-30). Open, each "decided (can change)":

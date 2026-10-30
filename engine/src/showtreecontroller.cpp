@@ -168,6 +168,8 @@ ShowTreeController::ShowTreeController(Doc *doc)
     if (m_doc->showControl() != nullptr)
         connect(m_doc->showControl(), &ShowControl::mainCueListChanged,
                 this, &ShowTreeController::slotMainCueListChanged);
+    // A production made current arms its hits (Q154).
+    connect(this, &ShowTreeController::currentProductionChanged, this, &ShowTreeController::hitArmingChanged);
 }
 
 ShowTreeController::~ShowTreeController()
@@ -350,7 +352,11 @@ static void normalizeLooks(QList<Production> &ps)
             if (!l.looks)
             {
                 for (Cue &c : l.cues)
+                {
                     c.folder.clear();
+                    c.scope = HitScope::Production;     // a hit pasted into a list is a cue
+                    c.scopeOf = invalidId();
+                }
                 continue;
             }
             l.mode = ListMode::NonTracking;
@@ -365,6 +371,34 @@ static void normalizeLooks(QList<Production> &ps)
             }
             l.moveInBlack = MoveInBlack::Show;
         }
+    // Scoped hits (Q154): a hit whose cue or list is gone (deleted, or in
+    // another production now) moves up to its production's Hits section;
+    // only there does it keep a folder.
+    for (Production &p : ps)
+    {
+        QSet<quint32> lists, cues;
+        for (const CueList &l : p.lists)
+        {
+            if (l.looks)
+                continue;
+            if (!l.isSubCues())
+                lists.insert(l.id);
+            for (const Cue &c : l.cues)
+                cues.insert(c.id);
+        }
+        for (CueList &l : p.lists)
+            if (l.looks)
+                for (Cue &c : l.cues)
+                {
+                    if ((c.scope == HitScope::List && !lists.contains(c.scopeOf))
+                        || (c.scope == HitScope::Cue && !cues.contains(c.scopeOf)))
+                        c.scope = HitScope::Production;
+                    if (c.scope == HitScope::Production || c.scope == HitScope::Global)
+                        c.scopeOf = invalidId();
+                    if (c.scope != HitScope::Production)
+                        c.folder.clear();
+                }
+    }
 }
 
 bool ShowTreeController::edit(const QString &label,
@@ -6104,6 +6138,7 @@ void ShowTreeController::slotModeChanged()
 
 void ShowTreeController::slotTimerFunctionStarted(quint32 fid)
 {
+    noteListRuntime(fid);       // scoped hits (Q154): what is armed
     // A cue list started for real -- from anywhere, a VC cue list too --
     // takes the stage: the preview holds (RC8). Not one a preview itself
     // plays (the Workbench on a list's chaser).
@@ -6123,6 +6158,7 @@ void ShowTreeController::slotTimerFunctionStarted(quint32 fid)
 
 void ShowTreeController::slotTimerFunctionStopped(quint32 fid)
 {
+    noteListRuntime(fid);
     // A list stopping changes what the header says; the hold stays until
     // the next cue selected or Play (a Stop all never brings a preview
     // back on stage by itself).

@@ -32,6 +32,9 @@ class QXmlStreamReader;
 class QXmlStreamWriter;
 class QMouseEvent;
 class QPaintEvent;
+class QDragEnterEvent;
+class QDragMoveEvent;
+class QDropEvent;
 class VCButton;
 class QAction;
 class QPoint;
@@ -224,7 +227,28 @@ public:
      * in QLC+). Saved as the Function element's "Hit" attribute.
      */
     void setHit(quint32 hitId);
-    quint32 hit() const { return m_hit; }
+    /** Its first hit (invalid: none). */
+    quint32 hit() const { return m_hits.isEmpty() ? Function::invalidId() : m_hits.first(); }
+
+    /**
+     * Scoped hits (Q154): a button can hold several hits and fires the one
+     * armed now with the narrowest place (cue > cue list > production >
+     * global; ShowTreeController::armedHit()). None armed: it is dimmed and
+     * does nothing. A hit it is holding when its place ends (the cue goes
+     * on, the list stops) is let go over its fade out. Saved as the
+     * Function element's "Hit" (the first) and a <Hit> child for each of
+     * the others, which an older build skips (it fires the first).
+     */
+    void setHits(const QList<quint32> &hitIds);
+    QList<quint32> hits() const { return m_hits; }
+    /** Add hits (a drag from the Show Tree): those it hasn't yet, at the
+     *  end. A button firing a plain function fires the hits instead; one
+     *  not a Toggle or Flash becomes a Toggle. False: nothing added. */
+    bool addHits(const QList<quint32> &hitIds);
+    /** The hit it fires now (invalid: none armed, or no hits). */
+    quint32 armedHit() const { return m_armedHit; }
+    /** MIME type of hits dragged from the Show Tree (ShowTreeView). */
+    static const char *hitMimeType();
 
 protected:
     /** setFunction() without touching the hit. */
@@ -233,14 +257,16 @@ protected:
 protected slots:
     /** Invalidates the button's function if the function is destroyed */
     void slotFunctionRemoved(quint32 fid);
-    /** The Show Tree changed: a hit's button follows its Collection. */
+    /** The Show Tree changed, or what is armed: a hit's button follows its
+     *  armed hit's Collection. */
     void slotShowTreeChanged();
 
 protected:
     /** ID of the Function that this button is controlling */
     quint32 m_function;
-    /** The Show Tree hit it fires (invalid: none) */
-    quint32 m_hit;
+    /** The Show Tree hits it fires, and the one armed now */
+    QList<quint32> m_hits;
+    quint32 m_armedHit;
 
     /*********************************************************************
      * Button state
@@ -547,6 +573,10 @@ public:
      *********************************************************************/
 protected:
     void paintEvent(QPaintEvent* e) override;
+    /** Hits dragged from the Show Tree (Q154) */
+    void dragEnterEvent(QDragEnterEvent *e) override;
+    void dragMoveEvent(QDragMoveEvent *e) override;
+    void dropEvent(QDropEvent *e) override;
 
     void mousePressEvent(QMouseEvent* e) override;
     void mouseReleaseEvent(QMouseEvent* e) override;
