@@ -649,8 +649,22 @@ def main():
 
     hour = datetime.datetime.now().hour
     if not a.no_nice and 8 <= hour < 22 and hasattr(os, "nice"):
-        os.nice(19)
-        log("working hours: nice 19")
+        # Already niced (the daytime rule: `nice -n 20 make perf`): os.nice()
+        # adds to the current value, and can fail or be refused, so only
+        # raise it when it is below 19 and carry on if it can't be.
+        try:
+            cur = os.getpriority(os.PRIO_PROCESS, 0)
+        except (AttributeError, OSError):
+            cur = 0
+        if cur < 19:
+            try:
+                os.nice(19 - cur)
+            except OSError:
+                pass
+        try:
+            log("working hours: nice %d" % os.getpriority(os.PRIO_PROCESS, 0))
+        except (AttributeError, OSError):
+            log("working hours: nice 19")
 
     hc = host_class(a.host_class)
     bpath = a.baseline or os.path.join(DATA, "baseline-%s.csv" % hc)

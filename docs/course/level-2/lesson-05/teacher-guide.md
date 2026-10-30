@@ -146,7 +146,8 @@ before the aim, on the fan and crossed; their colour wheel and colour
 ring moving from White's slots to Red's. The extension (Spread 0, Pairs)
 is checked the same way.
 
-**Not yet in the course test:** the handout's extension step 4 (the USTs
-on the Riser Line). With the 0.3.1 fix the eight upstage beams aim at the
-people on the line, as the truss spots do.
+The extension's step 4 is run too: **USTs** (Groups) on the dashed box,
+**White** and **Full**, **Riser Line** on the row: all eight beams light
+white and aim at places along the line (several different aims, a pan
+spread across them), as the truss spots do.
 .
