@@ -65,6 +65,11 @@ public:
 public slots:
     void slotFunctionStarted(quint32 fid);
     void slotFunctionStopped(quint32 fid);
+    /** A running scene started again by @p sourceId (the next cue, a hit
+     *  fired again): its runs that end start afresh -- unless a Show Tree
+     *  cue only tracks the effect through (ShowTreeController::
+     *  effectOnlyTracked()). */
+    void slotFunctionStartedAgain(quint32 fid, quint32 sourceId);
     /** A Function was deleted from the Doc. Doc::deleteFunction() does not
         emit functionStopped, so without this a deleted-while-running scene
         would strand its effect instances (leak + stuck Override DMX). */

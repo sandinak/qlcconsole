@@ -183,6 +183,12 @@ void EffectInstance::reloadParamsFromPalette()
         restartRun();
 }
 
+void EffectInstance::sceneStarted()
+{
+    if (!EffectRuns::resolve(m_paramValues, m_script.isOneShot(), m_scriptRelease).loops())
+        restartRun();
+}
+
 void EffectInstance::restartRun()
 {
     if (m_fadingOut)

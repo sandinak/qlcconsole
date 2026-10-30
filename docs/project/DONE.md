@@ -28,6 +28,16 @@ aBreathe*: the step tops' white and red per frame):
   whole cycles on Once / N times: `_time` stops exactly on the last
   cycle's end and that frame holds (or releases). A Runs change while it
   plays restarts the run (and a new rate on a finished one).
+- **A Once in each of three copied cues** (second report): the copies bake
+  to the same layer scene, which keeps running and gains the next cue's
+  collection as a source -- no functionStarted, so the shared instance
+  stayed done. `Function::start` now emits MasterTimer::
+  functionStartedAgain(id, source) for a running function started by
+  another source; the runner restarts that scene's ending runs
+  (`EffectInstance::sceneStarted()`), as it does when a new scene joins an
+  instance, unless `ShowTreeController::effectOnlyTracked()` says the cue
+  only tracks the effect through. Tests: three copied cues, a hit fired
+  twice beside a cue sharing the palette, a tracking cue.
 - **Typed values**: the number beside each effect setting's slider is a
   QDoubleSpinBox (no buttons, the param's range).
 - **Length for a one shot**: for a wave the Runs row's Length is one cycle

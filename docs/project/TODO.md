@@ -21,6 +21,11 @@ values, rate awkward for one shot). Open, each "decided (can change)":
   at most 250 ms (the Doc's own timer only).
 - Dimmer Phaser sends the dimmer alone; the host scales the look's colour
   (white too) on a light with no dimmer.
+- A Once / N times run starts afresh on every new start of a scene
+  carrying it (a cue's GO, a hit fired again, a chaser step): the user's
+  rule. A cue that only tracks the effect through leaves it running or
+  done (decided, can change). A tracked effect on a layer whose scene
+  changes in that cue (something else on it set) does start again.
 
 ## Pixel boxes, effects and beams — leftovers (cbug, 2026-10-30)
 

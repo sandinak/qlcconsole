@@ -132,6 +132,13 @@ for a five-and-a-half-second breath. The Length sets the wave's rate
 rate changes the Length. N times plays that many cycles. Setting Runs
 while it plays starts the run again, so you see the change at once.
 
+Each new start of what carries the effect plays a Once or N times effect
+again from its start. That includes a cue's **GO** (also the next cue
+copied from this one, sharing its effect), a hit fired again, and a
+chaser step. A cue that only **tracks** the layer through, setting
+nothing of its own on it, leaves the effect as it is: a breath that has
+finished stays on its floor.
+
 A dimmer effect starts with the look. On the first frame the look is
 already at the effect's level (a Breathe at its floor), so the look's
 own level never flashes up before the effect begins. It scales the

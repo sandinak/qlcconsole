@@ -53,6 +53,9 @@ private slots:
     void aBreatheOnceEndsOnItsFloor_data();
     void aBreatheOnceEndsOnItsFloor();
     void aBreatheSetToOncePlaysItAgain();
+    void aOnceBreatheInEachOfThreeCopiedCues();
+    void aOnceBreatheInAHitFiredAgain();
+    void aOnceBreatheTrackedThroughStaysDone();
 
 private:
     quint32 group(const QString &name) const;
@@ -69,6 +72,7 @@ private:
     bool breatheOnTheStepTops(double rate, int runs);
 
     Doc *m_doc = nullptr;
+    quint32 m_cue = 0;      //!< oneCue()'s
 };
 
 #endif

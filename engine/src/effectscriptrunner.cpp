@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include "effectscriptrunner.h"
+#include "showtreecontroller.h"
 #include "effectinstance.h"
 
 #include "doc.h"
@@ -117,6 +118,24 @@ void EffectScriptRunner::slotFunctionStopped(quint32 fid)
     destroyInstancesForScene(fid);
 }
 
+void EffectScriptRunner::slotFunctionStartedAgain(quint32 fid, quint32 sourceId)
+{
+    if (m_instances.isEmpty())
+        return;
+    Function *f = m_doc->function(fid);
+    if (f == nullptr || f->type() != Function::SceneType || !f->isRunning())
+        return;
+    for (EffectInstance *inst : m_instances)
+    {
+        if (!inst->sceneIds().contains(fid) || inst->isFadingOut())
+            continue;
+        if (m_doc->showTree() != nullptr
+            && m_doc->showTree()->effectOnlyTracked(fid, inst->effectPaletteId(), sourceId))
+            continue;
+        inst->sceneStarted();
+    }
+}
+
 void EffectScriptRunner::slotFunctionRemoved(quint32 fid)
 {
     // Doc::deleteFunction() removes the function from the MasterTimer's list
@@ -184,6 +203,13 @@ void EffectScriptRunner::createInstancesForScene(quint32 sceneId)
                 // two layers, a cue-wide effect): each with its own base.
                 existing->addScene(sceneId);
             }
+            /* A new start of a scene carrying it (the next cue's copy of
+               it, a hit fired again): a run that ends plays again from its
+               start; a loop runs on. A scene that keeps running (a layer
+               tracking through) starts nothing, so a done run stays done. */
+            if (m_doc->showTree() == nullptr
+                || !m_doc->showTree()->effectOnlyTracked(sceneId, pid, Function::invalidId()))
+                existing->sceneStarted();
             fresh << existing;
             continue;
         }

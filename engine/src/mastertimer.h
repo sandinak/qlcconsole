@@ -170,6 +170,12 @@ signals:
     /** Emitted when a Function is started */
     void functionStarted(quint32 id);
 
+    /** Function @a id, already running, was started again by another
+     *  source (@a sourceId: a cue's collection, a hit's): the next cue
+     *  playing the same scene, a hit fired again. Emitted from the thread
+     *  that started it. */
+    void functionStartedAgain(quint32 id, quint32 sourceId);
+
     /** Emitted when a Function has just been stopped */
     void functionStopped(quint32 id);
 

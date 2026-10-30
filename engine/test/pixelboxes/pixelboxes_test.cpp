@@ -39,6 +39,8 @@
 #include "universe.h"
 #include "qlcfile.h"
 #include "fixture.h"
+#include "collection.h"
+#include "scene.h"
 #include "doc.h"
 
 #include "resource_paths.h"
@@ -161,7 +163,7 @@ quint32 PixelBoxes_Test::oneCue()
     const quint32 prod = st->addProduction(QStringLiteral("Course"));
     const quint32 list = st->addCueList(prod, QStringLiteral("Main"));
     st->setCurrentProduction(prod);
-    return st->addCue(list, -1, QStringLiteral("One"));
+    return m_cue = st->addCue(list, -1, QStringLiteral("One"));
 }
 
 void PixelBoxes_Test::go()
@@ -537,6 +539,86 @@ void PixelBoxes_Test::aBreatheSetToOncePlaysItAgain()
     run(1000);
     const int end = int(uchar(sends("US Step 1 Top SR", kTopWhite, 1).at(0)));
     QVERIFY2(qAbs(end - qRound(kTwentyPercent * 0.05)) <= 1, qPrintable(QString::number(end)));
+}
+
+/* The same Once breathe in three cues in a row, the cue copied in place
+   (one effect palette, one engine): each GO breathes again -- not only the
+   first, the others left on the first's held floor. */
+void PixelBoxes_Test::aOnceBreatheInEachOfThreeCopiedCues()
+{
+    QVERIFY(breatheOnTheStepTops(1.0, 1));          // one 1 s breath
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 first = m_cue;
+    QVERIFY(st->duplicateCue(first) != 0);
+    QVERIFY(st->duplicateCue(first) != 0);
+    for (int cue = 1; cue <= 3; ++cue)
+    {
+        go();
+        run(500);                                   // mid-breath: near its top
+        const int mid = int(uchar(sends("US Step 1 Top SR", kTopWhite, 1).at(0)));
+        QVERIFY2(mid > kTwentyPercent / 2, qPrintable(QString("cue %1: %2").arg(cue).arg(mid)));
+        run(900);                                   // done: on its floor
+        const int end = int(uchar(sends("US Step 1 Top SR", kTopWhite, 1).at(0)));
+        QVERIFY2(qAbs(end - qRound(kTwentyPercent * 0.05)) <= 1,
+                 qPrintable(QString("cue %1 ended on %2").arg(cue).arg(end)));
+    }
+}
+
+/* A hit (a collection fired from a button) carrying the same Once breathe
+   as the running cue: started, stopped and started again, it breathes
+   each time -- though the cue's scene keeps the effect's engine going. */
+void PixelBoxes_Test::aOnceBreatheInAHitFiredAgain()
+{
+    ShowTreeController *st = m_doc->showTree();
+    QVERIFY(breatheOnTheStepTops(1.0, 1));
+    quint32 breathe = palette(QStringLiteral("Breathe"));
+    // The cue's layer: the truss boxes, with the breathe
+    const quint32 layer = st->addLayer(m_cue, groupTarget(group("TrussW-RGB")));
+    QVERIFY(st->setLayerLook(m_cue, layer, st->lookForPalette(palette("White"))));
+    QVERIFY(st->setLayerLook(m_cue, layer, st->lookForPalette(breathe)));
+    // The hit: the step tops, White, 20%, the same breathe
+    Scene *hitScene = new Scene(m_doc);
+    hitScene->setName(QStringLiteral("Hit"));
+    QVERIFY(m_doc->addFunction(hitScene));
+    hitScene->addFixtureGroup(group("StepTops"));
+    hitScene->addPalette(palette("White"));
+    hitScene->addPalette(palette("20%"));
+    hitScene->addPalette(breathe);
+    Collection *hit = new Collection(m_doc);
+    QVERIFY(m_doc->addFunction(hit));
+    QVERIFY(hit->addFunction(hitScene->id()));
+
+    go();
+    run(1400);                                      // the cue's breath is done
+    for (int fire = 1; fire <= 2; ++fire)
+    {
+        hit->start(m_doc->masterTimer(), FunctionParent::master());
+        run(500);
+        const int mid = int(uchar(sends("US Step 1 Top SR", kTopWhite, 1).at(0)));
+        QVERIFY2(mid > kTwentyPercent / 2, qPrintable(QString("fire %1: %2").arg(fire).arg(mid)));
+        run(900);
+        hit->stop(FunctionParent::master());
+        run(100);
+    }
+}
+
+/* decided: the next cue that only tracks the layer through (sets nothing
+   of its own on it) leaves a done Once done: it doesn't breathe again. */
+void PixelBoxes_Test::aOnceBreatheTrackedThroughStaysDone()
+{
+    QVERIFY(breatheOnTheStepTops(1.0, 1));
+    ShowTreeController *st = m_doc->showTree();
+    QVERIFY(st->addCue(st->listOfCue(m_cue)->id, 0, QStringLiteral("Tracked")) != 0);
+    go();
+    run(1400);                                      // breathed, on its floor
+    const int floor = qRound(kTwentyPercent * 0.05);
+    go();                                           // the tracking cue
+    for (int i = 0; i < 6; ++i)
+    {
+        run(100);
+        const int v = int(uchar(sends("US Step 1 Top SR", kTopWhite, 1).at(0)));
+        QVERIFY2(qAbs(v - floor) <= 1, qPrintable(QString::number(v)));
+    }
 }
 
 QTEST_MAIN(PixelBoxes_Test)

@@ -564,6 +564,12 @@ skipped). Upstream fixes taken:
   scene with an effect holds its output until the effect's first frame
   (a frame or two; at most a quarter second), so a Breathe on a look at
   20% starts on its floor instead of flashing the 20% first.
+- **A Once effect plays again in each cue that sets it.** The same Once
+  Breathe in three cues in a row (a cue copied in place) breathed in the
+  first only: the copies share one engine, which stayed done. Each new
+  start of a scene carrying it now starts it afresh: a cue's GO, a hit
+  fired again, a chaser step. A cue that only tracks it through, and sets
+  nothing of its own on that layer, leaves it as it is.
 - **Breathe and the Dimmer Phaser breathe white pixels and dim once.** On
   a light without a dimmer (the step tops) the effect scaled the look's
   colour twice, so it sat near black for much of the breath, and it turned

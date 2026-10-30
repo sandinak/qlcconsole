@@ -90,6 +90,11 @@ public:
      *  hasOtherScenes()). */
     bool removeScene(quint32 sceneId);
     bool hasOtherScenes() const { return !m_alsoScenes.isEmpty(); }
+    /** A scene carrying it (re)started -- a cue's GO, a hit's collection
+     *  fired again, a chaser step: a run that ends (Once, N times, a
+     *  one-shot) starts afresh, though another scene shares this engine;
+     *  a loop runs on. Main thread. */
+    void sceneStarted();
     /** Every scene it plays: the one it is bound to first. */
     QList<quint32> sceneIds() const { return QList<quint32>() << m_sceneId << m_alsoScenes; }
     /** The scenes the last tick played: their fixtures have had a frame of
