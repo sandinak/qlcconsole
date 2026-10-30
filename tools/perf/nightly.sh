@@ -4,7 +4,7 @@
 #
 #   tools/perf/nightly.sh            # what cron / launchd runs
 #
-# Everything lives under $PERF_NIGHTLY (default ~/perf-nightly):
+# Everything lives under $PERF_NIGHTLY (default ~/git/perf-nightly):
 #   qlcconsole/      a clone of the repository, moved to origin/main each night
 #   build-perf/      its Release build (incremental: a few minutes a night)
 #   runs/<date>/     each night's results (the last 30 kept)
@@ -17,16 +17,16 @@
 #                    because the machine was busy)
 #
 # Install (nothing installs it for you; see docs/performance.md):
-#   Linux, crontab -e:   15 3 * * * $HOME/perf-nightly/qlcconsole/tools/perf/nightly.sh >/dev/null 2>&1
+#   Linux, crontab -e:   15 3 * * * $HOME/git/perf-nightly/qlcconsole/tools/perf/nightly.sh >/dev/null 2>&1
 #   macOS: a LaunchAgent with StartCalendarInterval 03:15 running this script.
 # The first run needs the clone:
-#   git clone https://github.com/sandinak/qlcconsole.git ~/perf-nightly/qlcconsole
+#   git clone https://github.com/sandinak/qlcconsole.git ~/git/perf-nightly/qlcconsole
 #
 # The machine needs a committed baseline for its host class
 # (docs/perf-data/baseline-<class>.csv); without one the first night
 # records it into the clone and says so in latest.txt -- commit it from there.
 set -u
-PERF_NIGHTLY=${PERF_NIGHTLY:-$HOME/perf-nightly}
+PERF_NIGHTLY=${PERF_NIGHTLY:-$HOME/git/perf-nightly}
 SRC=$PERF_NIGHTLY/qlcconsole
 BRANCH=${PERF_BRANCH:-main}
 export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
@@ -56,6 +56,14 @@ if [ -z "${NIGHTLY_UPDATED:-}" ]; then
 fi
 
 REV=$(git -C "$SRC" rev-parse --short=12 HEAD)
+
+# Nothing landed since the last measured night: nothing to measure.
+LAST=$(sed -n '1s/.* rev=\([0-9a-f]*\).*/\1/p' "$PERF_NIGHTLY/latest.txt" 2>/dev/null)
+LASTRC=$(sed -n '1s/^perf=\([0-9]\).*/\1/p' "$PERF_NIGHTLY/latest.txt" 2>/dev/null)
+if [ -n "$LAST" ] && [ "$LAST" = "$REV" ] && { [ "$LASTRC" = 0 ] || [ "$LASTRC" = 1 ]; }; then
+    exit 0
+fi
+
 OUT=$PERF_NIGHTLY/runs/$STAMP
 mkdir -p "$OUT"
 
