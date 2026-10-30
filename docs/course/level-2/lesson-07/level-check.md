@@ -30,7 +30,8 @@ first note to the button.
 4. **Program it** in qlcconsole from
    [`lesson-1-1-start.qlcc`](../../shows/lesson-1-1-start.qlcc) (the
    empty classroom show): **+ Production** (in the header, or under **More ▾**) named for your
-   group, **+ Cue list** named for the song, then the cues. It must use:
+   group, **+ Cue list** named for the song, then the cues (a second song is a **+ Section**
+   of that list, not another list). It must use:
    - **tracking on purpose**: at least one **Block** cue (a hard start),
      and **Release** or **Cue-only** where something must not carry on
      (Lesson 2.1);

@@ -26,7 +26,7 @@ teacher says. It can be turned into a deck as it is.*
 ## 3. A cue is a moment
 
 - **Cue** = a moment where the light changes.
-- **Cue list** = all of a song's cues, in order.
+- **Cue list** = the show's cues, in order. Each song is a section of it.
 - **Production** = the whole show.
 
 ## 4. Every cue has a reason
@@ -80,7 +80,7 @@ teacher says. It can be turned into a deck as it is.*
 ## 12. Your turn
 
 - Roles: Driver · Navigator · Designer — switch every cue.
-- Handout Part 2, steps 1–14.
+- Handout Part 2, steps 1–15.
 
 ## 13. Exit ticket
 

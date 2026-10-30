@@ -37,8 +37,9 @@ teacher says. It can be turned into a deck as it is.*
 ## 5. An effect palette
 
 - + Palette → Effect, in the song's folder.
-- The picker: search, click, **Done**.
+- The browser: search, click, **Done**.
 - Picture: `effect-picker.png`.
+- Origins: Built-in · Mine · This show; "based on"; Runs: Loop.
 
 ## 6. Sparkle on the steps
 

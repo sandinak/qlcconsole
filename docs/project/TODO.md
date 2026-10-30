@@ -23,8 +23,9 @@ change)":
   merge says so instead.
 - The VC Cue List widget doesn't show section rows; the tree, the Run tab
   and the VC Cue Runner's list size do.
-- Course: only the glossary and Lesson 1.1's word say "one list, songs as
-  sections"; a lesson that builds a second song would teach + Section.
+- Course: done (crs): Lesson 0.7, 1.1 (words, "In the app" box), the Level
+  1/2 checks and the 3.8 outline say a show is one list, a song a section
+  (+ Section). No lesson builds a second song yet.
 ## Effect origins, Build search, runs for any effect — leftovers (efn, 2026-10-29)
 
 Built (DONE.md 2026-10-29). Open, each "decided (can change)":

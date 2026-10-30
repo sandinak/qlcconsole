@@ -8,7 +8,7 @@ search_exclude: true
 today: "Learn how a show is called and who does what, then run a song from cue cards on the calls and busk a vamp."
 words:
   - term: Cue list
-    means: "All of a song's cues, numbered, in order, run the same way every performance."
+    means: "The show's cues, numbered, in order, run the same way every performance. GO plays one list, so each song is a section of it."
   - term: Standby / GO
     means: "The warning before a call (the op answers \"Standing by\") / the word that makes the cue happen."
   - term: Busking

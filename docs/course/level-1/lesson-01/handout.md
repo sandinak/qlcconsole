@@ -30,7 +30,7 @@ Today's three cues are the first three rows of a song map.
 | Word | Means |
 |---|---|
 | **Cue** | A planned lighting change, tied to a moment in the song. Each cue has a number (1.0.0, 1.0.1…) and a name. |
-| **Cue list** | All of one song's cues, in order. |
+| **Cue list** | The show's cues, in order. GO plays one list, so each song is a **section** of it: 1.0.0 is song 1, 2.0.0 song 2. |
 | **Production** | The whole show: every cue list in it. |
 | **Group** | A named set of lights that are always used together, like *Steps* or *TrussC-RGB*. |
 | **Our group names** | **Trusses** are the four upright trusses across the back. **TrussC-RGB** is the colour (RGB) pixels of the truss boxes that light the **C**yc; **TrussW-RGB** is the ones that **W**ash out over the stage. **Steps** is the LED strips on the front of each riser step (rows **US**, **CS** and **DS**), and **StepTops** is the bars on top of the steps. |
@@ -68,8 +68,11 @@ Switch roles after each cue.
 
 1. Open qlcconsole, choose **File → Open** and open
    `lesson-1-1-start.qlcc`.
-2. Click the **Show Tree** tab at the bottom (or press ⇧⌘5).
-3. Open the stage with **View → Rig Overview** (⇧⌘R), and arrange it so
+2. Save it under your name now, so your work goes in your own file:
+   **File → Save As** → `Lesson01-yourname.qlcc`. The lesson file stays
+   as it came.
+3. Click the **Show Tree** tab at the bottom (or press ⇧⌘5).
+4. Open the stage with **View → Rig Overview** (⇧⌘R), and arrange it so
    you can see it and the Show Tree together.
    - *You should see:* a dark stage with three rows of risers, a white cyc
      at the back and trusses across the back on both sides.
@@ -87,15 +90,15 @@ later), and **(6)** the tabs.
 
 ### Make the song
 
-4. Click **+ Production**, type `Spring Show` and click **OK**.
+5. Click **+ Production**, type `Spring Show` and click **OK**.
    - *You should see:* **Spring Show** in the tree, selected.
-5. Click **+ Cue list**, type `01-Everybody Scream` and click **OK**.
+6. Click **+ Cue list**, type `01-Everybody Scream` and click **OK**.
    - *You should see:* **01-Everybody Scream** under Spring Show, marked
      *Tracking*. The `01` sets its cue numbers to start at **1.0.0**.
 
 ### Cue 1.0.0 — Pose
 
-6. Click **+ Cue**. The **Name** box on the page is ready for typing, so
+7. Click **+ Cue**. The **Name** box on the page is ready for typing, so
    type `Pose` and press **Return**.
    - *You should see:* **1.0.0 Pose** in the tree.
 
@@ -105,7 +108,7 @@ later), and **(6)** the tabs.
    box under **Layers** that reads *"Drag groups or fixtures here to add
    a layer"*, and **(4)** your cue in the tree.
 
-7. In the Library, open **All → Groups → Trusses** and drag **TrussC-RGB**
+8. In the Library, open **All → Groups → Trusses** and drag **TrussC-RGB**
    onto the dashed box under **Layers** (3).
    - While you drag, the note in the top bar, just left of **Stop all**,
      reads *"a new layer on TrussC-RGB in 1.0.0 Pose"*. It tells you
@@ -114,7 +117,7 @@ later), and **(6)** the tabs.
 
 ![Dragging a group onto the cue](../../images/lesson-1-1/drop-group.png)
 
-8. Open **All → Palettes → Colour** and drag **Blue** onto the
+9. Open **All → Palettes → Colour** and drag **Blue** onto the
    **TrussC-RGB** row. Then open **Dimmer** and drag **Full** onto the
    same row.
    - *You should see:* the row reads **TrussC-RGB   Blue, Full**, and in
@@ -134,11 +137,11 @@ later), and **(6)** the tabs.
 
 ### Cue 1.0.1 — Verse
 
-9. Click **+ Cue**, type `Verse` and press **Return**.
+10. Click **+ Cue**, type `Verse` and press **Return**.
    - *You should see:* **1.0.1 Verse**, and on its page a grey row,
      **⤳ TrussC-RGB … tracked from 1.0.0 Pose**. The cyc stays blue
      because it tracks: lights hold their state until a cue changes them.
-10. From **Groups → Steps**, drag **StepTops** onto the drop area, then
+11. From **Groups → Steps**, drag **StepTops** onto the drop area, then
     drag **Warm White** and **75%** onto the **StepTops** row.
     - *You should see:* the risers lit warm from the step tops, with the
       cyc still blue.
@@ -154,8 +157,8 @@ later), and **(6)** the tabs.
 
 ### Cue 1.0.2 — Chorus
 
-11. Click **+ Cue**, type `Chorus` and press **Return**.
-12. From **Groups → Steps**, drag **Steps** onto the drop area, then drag
+12. Click **+ Cue**, type `Chorus` and press **Return**.
+13. From **Groups → Steps**, drag **Steps** onto the drop area, then drag
     **Magenta** and **Full** onto the **Steps** row.
     - *You should see:* bright magenta lines across the front of every
       riser, warm riser tops and a blue cyc.
@@ -165,7 +168,7 @@ later), and **(6)** the tabs.
 Your production is the one GO plays. It's the only production in the
 show, so there's nothing to choose.
 
-13. Click the **Run** tab (⇧⌘8) and press **GO** (or **Space**) three
+14. Click the **Run** tab (⇧⌘8) and press **GO** (or **Space**) three
     times.
     - *You should see:* NEXT steps down the list as the stage goes from
       Pose to Verse to Chorus.
@@ -178,8 +181,8 @@ show, so there's nothing to choose.
    **(1)** GO, **(2)** your cues, and **(3)** what the next GO will
    change.
 
-14. **Save** under your own name with **File → Save As** →
-    `Lesson01-yourname.qlcc`.
+15. **Save** with **⌘S**. The footer, bottom right, goes from
+    **● Unsaved changes** to **✓ Saved**.
 
 ## What it should look like
 

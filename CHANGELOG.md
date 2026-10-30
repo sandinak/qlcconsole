@@ -72,6 +72,7 @@ skipped). Upstream fixes taken:
 
 ### Added
 
+- **Course: songs and effects match the app.** Lesson 1.1's handout steps match the student page (Save As first, 15 steps); one cue list per show, a song a section (+ Section), is taught in Lessons 0.7, 1.1 and the Level 1/2 checks; Lesson 2.4 uses the effect browser's words (Built-in · Mine · This show, "based on", Runs: Loop).
 - **One cue list per show, with song sections** (Q190). A production's
   **Numbering** says how its cues are numbered — Show.Part.Iteration
   (0.0.1 setup, 1.0.1 the first song), hundreds per song (Eos, MA), free

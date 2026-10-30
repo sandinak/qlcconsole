@@ -10,9 +10,11 @@ files: [lesson-2-4-start.qlcc]
 app: true
 words:
   - term: Effect palette
-    means: "A palette that plays a moving pattern: **+ Palette → Effect**, then pick it in the effect picker."
+    means: "A palette that plays a moving pattern: **+ Palette → Effect**, then pick it in the effect browser."
   - term: Sparkle / wave
     means: "Pixels flash at random like glitter / brightness travels across the lights."
+  - term: Based on
+    means: "The grey line under an effect's name: the effect it was made from. Built-in effects come with qlcconsole, **Mine** are saved on this computer, **This show** are the show's own palettes."
   - term: Its own colour
     means: "A colour inside the effect only: white glints over violet steps."
   - term: Eye candy
@@ -45,10 +47,12 @@ Which lights move, and which stay still?
    **TrussW-RGB** (Blue, Full) as layers.
 5. In the Library click **Palettes → Colour → 01-Everybody Scream**, then
    **+ Palette → Effect**.
-6. If the picker isn't open, click **Change effect…**. Search `Sparkle`,
+6. If the browser isn't open, click **Change effect…**. Search `Sparkle`,
    click **Sparkle · Dimmer**, **Done**.
 
-   ![The effect picker](../../images/lesson-2-4/effect-picker.png)
+   ![The effect browser](../../images/lesson-2-4/effect-picker.png)
+
+   The browser lists every effect. **Built-in · Mine · This show** narrow it by where an effect came from.
 
 7. In the Look Editor's **Name**, type `Step Sparkle`, **Return**.
 8. Click **1.0.6 Dance Break**; drag **Step Sparkle** onto the **Steps**
@@ -66,6 +70,8 @@ Which lights move, and which stay still?
     ![The dance break](../../images/lesson-2-4/rig-dance-break.png)
 
 12. Click **↩ Back**. **File ▸ Save As** → `Lesson2-4-yourname.qlcc`.
+
+The sparkle runs as long as the cue plays (**Runs: Loop** in the Look Editor). Once and N times stop it after that many runs.
 
 **Stuck?** The search finds nothing: clear the box first. No *Its own
 colour*: use the ⋯ on the **Dimmer effect** row. Not twinkling: drop it

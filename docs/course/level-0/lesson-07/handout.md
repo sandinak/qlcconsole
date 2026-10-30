@@ -29,7 +29,7 @@ back on the list.
 
 | Word | Means |
 |---|---|
-| **Cue list** | All of a song's cues, numbered, in order. Run the same way every performance. |
+| **Cue list** | The show's cues, numbered, in order. Run the same way every performance. GO plays one list, so each song is a section of it. |
 | **Call** | The stage manager's spoken instruction that makes a cue happen. |
 | **Standby** | The warning before a call. The op answers "Standing by" and gets ready. |
 | **GO** | The word that makes the cue happen, said on the exact moment. |
