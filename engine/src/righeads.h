@@ -46,6 +46,44 @@ namespace RigHeads
      *  which only the last two apply to. False when there is no answer. */
     bool fixedThrow(Doc *doc, quint32 fid, int headCount, bool mover, QVector3D &dir);
 
+    /** The same, for @p fx as the engine sees it: its head count, and a mover
+     *  when it has a pan or tilt channel. What Focus and the orientation
+     *  diagram use, so they agree with the views (Q172 part A). */
+    bool fixedThrow(Doc *doc, quint32 fid, QVector3D &dir);
+
+    /** A strip or bar rather than one light: several heads, or one head on a
+     *  body much wider than it is deep. Such a fixture is oriented by Face,
+     *  Angle and Tilt; anything else is aimed. */
+    bool isLinear(const Fixture *fx);
+
+    /** A FIXED light: no pan or tilt channel, and not a strip or bar -- a par,
+     *  a profile, a laser. It is aimed as it sits in its yoke (Q100). */
+    bool isFixedUnit(const Fixture *fx);
+
+    /** Which way a positive studioTilt rolls the face: +1 or -1, chosen so it
+     *  tips the light UP on an upright face (Front, Back, Stage left, Stage
+     *  right, whatever its angle along the face), and as it always did on a
+     *  Top or Bottom face. A show saved before 0.3.1 stored the roll in the
+     *  old sense, which this sign converts (MonitorProperties load/save). */
+    float tiltSign(const FixtureRigProps &rp);
+
+    /** Aims a fixed light (fixedAim) the way its face looks: Front downstage,
+     *  Back upstage, Stage left/right across, all level; Bottom straight down,
+     *  Top straight up (bearing kept). An elevation already set by hand (the
+     *  yoke tilt, not straight up or down) is kept when only the bearing
+     *  changes. */
+    void aimAtFace(FixtureRigProps &rp);
+
+    /** Turns on fixedAim for a fixed light that is not aimed yet, pointing it
+     *  where it throws now (fixedThrow(): its face, else its mount), so
+     *  setting only its bearing or only its tilt leaves the other as it was.
+     *  Nothing when it is already aimed. */
+    void startFixedAim(Doc *doc, quint32 fid, FixtureRigProps &rp);
+
+    /** The face (FixtureRigProps::Face) whose outward direction is nearest
+     *  @p dir, or -1 when none is within about 30 degrees. */
+    int nearestFace(const QVector3D &dir);
+
     /** A fixture's world CENTRE. A derived position (truss, pipe, tower,
      *  riser, studio frame) already is one; a free or deck-mounted fixture's
      *  stored XY is the TOP-LEFT of its plot icon, so it is moved by half its

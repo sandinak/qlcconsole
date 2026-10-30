@@ -35,6 +35,7 @@
 #include <QLocale>
 #include <QScopedValueRollback>
 #include "monitorproperties.h"
+#include "righeads.h"
 #include "powerdistribution.h"
 #include "networktopology.h"
 #include "truss.h"
@@ -3862,6 +3863,14 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
             if (a.hasAttribute("ST")) rp.studioTilt = a.value("ST").toFloat();
             if (a.hasAttribute("SY")) rp.studioYaw = a.value("SY").toFloat();
             if (a.hasAttribute("SF")) rp.studioFlip = (a.value("SF").toInt() != 0);
+            /* ST is the roll in the file's sense, as every show has always
+               saved it: toward -H, which on the Back or Stage left face
+               tipped the light DOWN. In memory a positive roll tips it up on
+               any upright face (RigHeads::tiltSign()); converted here and
+               back on save, so a show keeps every bar where it was, and an
+               older qlcconsole still reads what this one writes. */
+            if (!qFuzzyIsNull(rp.studioTilt))
+                rp.studioTilt *= RigHeads::tiltSign(rp);
             if (a.hasAttribute("Boom"))
             {
                 rp.pipeId     = a.value("Boom").toUInt();
@@ -4174,6 +4183,27 @@ void MonitorProperties::setFixtureFace(FixtureRigProps &rp, FixtureRigProps::Fac
         return;
     rp.trussCross = (along > 0.0) ? half : -half;
     rp.trussMountSide = FixtureRigProps::Centered;
+}
+
+bool MonitorProperties::trussSideFace(const FixtureRigProps &rp, FixtureRigProps::Face &face) const
+{
+    const Truss *t = (rp.trussId != Truss::invalidId()) ? m_trusses.value(rp.trussId, nullptr) : nullptr;
+    if (t == nullptr || t->type() == Truss::Vertical || rp.placement == FixtureRigProps::Inside)
+        return false;
+    if (qAbs(rp.trussCross) < qMax(0.02f, t->width() * 0.25f))
+        return false;                       // on the centreline: hung under it
+    const QPointF d = t->direction();
+    const double dl = std::hypot(d.x(), d.y());
+    if (dl <= 0.0)
+        return false;
+    // The way trussCross runs (as setFixtureFace() puts it): +X stage left, +Y downstage.
+    const double s = (rp.trussCross > 0.0f) ? 1.0 : -1.0;
+    const double ox = -d.y() / dl * s, oy = d.x() / dl * s;
+    if (qAbs(oy) >= qAbs(ox))
+        face = (oy > 0.0) ? FixtureRigProps::FaceFront : FixtureRigProps::FaceBack;
+    else
+        face = (ox > 0.0) ? FixtureRigProps::FaceStageLeft : FixtureRigProps::FaceStageRight;
+    return true;
 }
 
 void MonitorProperties::repairMountPlane(FixtureRigProps &rp) const
@@ -4750,7 +4780,7 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument, 
         if (!qFuzzyIsNull(rp.studioAngle))
             doc->writeAttribute(QStringLiteral("SA"), QString::number(double(rp.studioAngle), 'f', 1));
         if (!qFuzzyIsNull(rp.studioTilt))
-            doc->writeAttribute(QStringLiteral("ST"), QString::number(double(rp.studioTilt), 'f', 1));
+            doc->writeAttribute(QStringLiteral("ST"), QString::number(double(rp.studioTilt * RigHeads::tiltSign(rp)), 'f', 1));
         if (!qFuzzyIsNull(rp.studioYaw))
             doc->writeAttribute(QStringLiteral("SY"), QString::number(double(rp.studioYaw), 'f', 2));
         if (rp.studioFlip)

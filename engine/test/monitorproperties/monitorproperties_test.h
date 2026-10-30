@@ -209,6 +209,12 @@ private slots:
      *  floor picture saved relative to it again, so the plot keeps its
      *  picture when the show's folder moves (TEST_MATRIX C4). */
     void anOldBackgroundStaysRelativeToTheShow();
+    /** A positive Tilt (roll) tips the light up on every upright face; a
+     *  show saved before keeps its bars where they were (Q172 A). */
+    void aTiltUpIsUpOnEitherFace();
+    /** Face aims a fixed light; the truss chord it sits on names its face;
+     *  the nearest face of a throw (Q172 A). */
+    void aFaceAimsAFixedLight();
 };
 
 #endif

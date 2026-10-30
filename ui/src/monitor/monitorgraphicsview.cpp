@@ -4537,6 +4537,18 @@ void MonitorGraphicsView::attachFixtureToTrussAt(quint32 fid, TrussItem *trussIt
     else
         rp.trussCross = 0.0f;
 
+    /* A FIXED light dropped on a chord faces out of that side (Q172 A): a
+       laser on the upstage chord throws upstage, at the cyc, not down onto
+       the deck under the truss. Only one with no face of its own yet; on the
+       centreline it hangs and points down, as before. */
+    FixtureRigProps::Face side;
+    if (!rp.studioFaceChosen && !rp.fixedAim && RigHeads::isFixedUnit(m_doc->fixture(fid))
+        && props->trussSideFace(rp, side))
+    {
+        props->setFixtureFace(rp, side);
+        RigHeads::aimAtFace(rp);
+    }
+
     props->setFixtureRigProps(fid, rp);
 
     /* The top view places a BOUND fixture from the item's cached realPosition,

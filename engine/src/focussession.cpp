@@ -209,12 +209,18 @@ QVector3D FocusSession::fixedLanding(quint32 fid) const
     MonitorProperties *props = m_doc->monitorProperties();
     const FixtureRigProps rp = props->fixtureRigProps(fid);
     const QVector3D pos = props->fixtureRigPosition(fid);
+    /* The throw every view draws (RigHeads::fixedThrow): its Pan/Tilt aim,
+       else its face (a laser faced Back lands upstage, not under the truss),
+       else its mount. */
     QVector3D dir;
-    if (!rp.fixedAimDirection(dir))
+    if (!RigHeads::fixedThrow(m_doc, fid, dir))
         dir = (rp.mountingType == Truss::TopHung) ? QVector3D(0, 0, -1) : QVector3D(0, 0, 1);
-    // Where the beam crosses head height -- or, if it never does, in front.
+    // Where the beam crosses head height -- or, if it never does, 2 m out
+    // the way it throws (a laser faced Back: upstage), else in front.
     const float headZ = props->platformHeightAt(pos.x(), pos.y()) + subjectHeight();
-    QVector3D at = pos + QVector3D(0.0f, 2.0f, 0.0f);
+    const QVector3D plan(dir.x(), dir.y(), 0.0f);
+    QVector3D at = pos + (plan.length() > 1e-3f ? plan.normalized() * 2.0f
+                                                : QVector3D(0.0f, 2.0f, 0.0f));
     if (qAbs(dir.z()) > 1e-3f)
     {
         const float t = (headZ - pos.z()) / dir.z();

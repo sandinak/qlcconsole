@@ -885,6 +885,13 @@ public:
      *  a truss. Inside one, or not on a truss, only the facing changes. */
     void setFixtureFace(FixtureRigProps &rp, FixtureRigProps::Face face) const;
 
+    /** The side of its horizontal truss a fixture sits on, as a face: on the
+     *  upstage chord Back, downstage Front, the stage-left/right chord of a
+     *  run up and down stage Stage left/right. False on the centreline (within
+     *  a quarter of the truss's width of it), inside the truss, or on no
+     *  horizontal truss. What a fixed light dropped there faces (Q172 A). */
+    bool trussSideFace(const FixtureRigProps &rp, FixtureRigProps::Face &face) const;
+
 private:
     QMap<quint32, Truss*> m_trusses;
 
