@@ -56,6 +56,7 @@
 #include "appviews_test.h"
 #include "venuemenu.h"
 #include "showsettingsdialog.h"
+#include "patchinventorydialog.h"
 #include "showoperate.h"
 #include "teachingsettings.h"
 #include "focusmenu.h"
@@ -3535,6 +3536,133 @@ void AppViews_Test::aStudentHandoutIsACopy()
         QVERIFY(file.open(QIODevice::ReadOnly));
         QVERIFY2(file.readAll().contains("<Teaching Enabled=\"1\""), qPrintable(f));
     }
+}
+
+void AppViews_Test::aHandoutResetsToItself()
+{
+    m_app->clearDocument();
+    Doc *doc = m_app->doc();
+    QTemporaryDir dir;
+    auto back = qScopeGuard([this]() {
+        ShowSettingsDialog::setTestMode(false);
+        m_app->doc()->teachingSettings()->setEnabled(false);
+        m_app->clearDocument();
+    });
+
+    // The teacher's show has two fixtures' worth of work in it: a named group
+    QVERIFY(doc->addFixtureGroup(new FixtureGroup(doc)));
+    doc->fixtureGroups().first()->setName("Front wash");
+    const QString master = dir.filePath("Master.qlcc");
+    QCOMPARE(m_app->saveXML(master), QFile::NoError);
+
+    HandoutOptions options;
+    options.path = dir.filePath("Handout.qlcc");
+    options.pinHash = ShowPin::hash("9753");
+    QString why;
+    QVERIFY2(m_app->writeStudentHandout(options, &why), qPrintable(why));
+    QVERIFY(!doc->teachingSettings()->hasHandoutSnapshot());     // the master has none
+
+    // The student's copy carries its handout state
+    QCOMPARE(m_app->loadXML(options.path), QFile::NoError);
+    doc = m_app->doc();
+    QVERIFY(doc->teachingSettings()->enabled());
+    QVERIFY(doc->teachingSettings()->hasHandoutSnapshot());
+    QCOMPARE(doc->fixtureGroups().size(), 1);
+
+    // The student works on it, and saves
+    doc->fixtureGroups().first()->setName("My changes");
+    QVERIFY(doc->addFixtureGroup(new FixtureGroup(doc)));
+    const QString work = dir.filePath("Student.qlcc");
+    QCOMPARE(m_app->saveXML(work), QFile::NoError);
+    m_app->setFileName(work);
+    QCOMPARE(doc->fixtureGroups().size(), 2);
+
+    // Reset puts it back: the handout's groups, still a handout, file name kept,
+    // and marked changed so a save writes it
+    m_app->resetToHandout();
+    doc = m_app->doc();
+    QCOMPARE(doc->fixtureGroups().size(), 1);
+    QCOMPARE(doc->fixtureGroups().first()->name(), QString("Front wash"));
+    QVERIFY(doc->teachingSettings()->enabled());
+    QVERIFY(doc->operateSettings()->checkPin("9753"));
+    QCOMPARE(m_app->fileName(), work);
+    QVERIFY(doc->isModified());
+    QVERIFY(doc->teachingSettings()->hasHandoutSnapshot());     // and can be reset again
+
+    // The saved file still carries it
+    QCOMPARE(m_app->saveXML(work), QFile::NoError);
+    QCOMPARE(m_app->loadXML(work), QFile::NoError);
+    QVERIFY(m_app->doc()->teachingSettings()->hasHandoutSnapshot());
+
+    // The dialog: the button is there and on for a handout; the PIN is asked
+    ShowSettingsDialog::setTestMode(true);
+    {
+        ShowSettingsDialog dlg(m_app->doc());
+        QPushButton *reset = dlg.findChild<QPushButton *>("showSettingsReset");
+        QVERIFY(reset != nullptr);
+        QVERIFY(reset->isEnabled());
+        ShowSettingsDialog::testAnswers() = { "0000" };         // wrong PIN: nothing
+        reset->click();
+        QVERIFY(!dlg.resetRequested());
+        ShowSettingsDialog::testAnswers() = { "9753" };
+        reset->click();
+        QVERIFY(dlg.resetRequested());
+    }
+
+    // A show that is not a handout has nothing to go back to
+    m_app->clearDocument();
+    {
+        ShowSettingsDialog dlg(m_app->doc());
+        QPushButton *reset = dlg.findChild<QPushButton *>("showSettingsReset");
+        QVERIFY(reset != nullptr);
+        QVERIFY(!reset->isEnabled());
+    }
+}
+
+void AppViews_Test::teachingAsksBeforePatchChanges()
+{
+    m_app->clearDocument();
+    Doc *doc = m_app->doc();
+    ShowSettingsDialog::setTestMode(true);
+    auto back = qScopeGuard([this]() {
+        ShowSettingsDialog::setTestMode(false);
+        m_app->doc()->teachingSettings()->setEnabled(false);
+    });
+    int &asked = ShowSettingsDialog::patchQuestions();
+    asked = 0;
+
+    // Not a Teaching show: no question
+    QVERIFY(ShowSettingsDialog::confirmPatchChange(doc, nullptr, "Add fixtures"));
+    QCOMPARE(asked, 0);
+
+    // Teaching: asked; "no" or no answer stops it, "yes" goes on
+    doc->teachingSettings()->setEnabled(true);
+    ShowSettingsDialog::testAnswers() = { "no" };
+    QVERIFY(!ShowSettingsDialog::confirmPatchChange(doc, nullptr, "Add fixtures"));
+    ShowSettingsDialog::testAnswers().clear();
+    QVERIFY(!ShowSettingsDialog::confirmPatchChange(doc, nullptr, "Add fixtures"));
+    ShowSettingsDialog::testAnswers() = { "yes" };
+    QVERIFY(ShowSettingsDialog::confirmPatchChange(doc, nullptr, "Add fixtures"));
+    QCOMPARE(asked, 3);
+
+    // The Patch dialog asks on Apply, and a "no" leaves the patch alone
+    QTemporaryDir dir;
+    QVERIFY(doc->addFixtureGroup(new FixtureGroup(doc)));
+    PatchInventoryDialog dlg(doc, QList<quint32>());
+    ShowSettingsDialog::testAnswers() = { "no" };
+    asked = 0;
+    dlg.accept();
+    QCOMPARE(asked, 1);
+    QVERIFY(dlg.result() != QDialog::Accepted);
+    ShowSettingsDialog::testAnswers() = { "yes" };
+    dlg.accept();
+    QCOMPARE(asked, 2);
+
+    doc->teachingSettings()->setEnabled(false);
+    asked = 0;
+    PatchInventoryDialog plain(doc, QList<quint32>());
+    plain.accept();
+    QCOMPARE(asked, 0);
 }
 
 void AppViews_Test::theMenusShowTheirKeys()

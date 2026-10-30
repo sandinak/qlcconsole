@@ -83,16 +83,35 @@ void TeachingSettings::setHandedOut(const QString &when)
     changed();
 }
 
+void TeachingSettings::setHandoutSnapshot(const QByteArray &snapshot)
+{
+    if (snapshot == m_snapshot)
+        return;
+    m_snapshot = snapshot;
+    emit teachingChanged();
+}
+
+QByteArray TeachingSettings::packSnapshot(const QByteArray &file)
+{
+    return qCompress(file, 9);
+}
+
+QByteArray TeachingSettings::unpackSnapshot(const QByteArray &snapshot)
+{
+    return snapshot.isEmpty() ? QByteArray() : qUncompress(snapshot);
+}
+
 void TeachingSettings::reset()
 {
     if (!m_enabled && !m_allowOutput && m_lesson.isEmpty() && m_link.isEmpty()
-        && m_handedOut.isEmpty() && m_unknown.isEmpty())
+        && m_handedOut.isEmpty() && m_snapshot.isEmpty() && m_unknown.isEmpty())
         return;
     m_enabled = false;
     m_allowOutput = false;
     m_lesson.clear();
     m_link.clear();
     m_handedOut.clear();
+    m_snapshot.clear();
     m_unknown.clear();
     applyOutputHold();
     emit teachingChanged();
@@ -106,6 +125,7 @@ void TeachingSettings::saveXML(QXmlStreamWriter *doc) const
     const QString lesson = m_saveOverride != nullptr ? m_saveOverride->lesson : m_lesson;
     const QString link = m_saveOverride != nullptr ? m_saveOverride->link : m_link;
     const QString handedOut = m_saveOverride != nullptr ? m_saveOverride->handedOut : m_handedOut;
+    const QByteArray snapshot = m_saveOverride != nullptr ? m_saveOverride->snapshot : m_snapshot;
 
     // Off: nothing written, so a non-Teaching show's file is what it was.
     if (!enabled)
@@ -123,6 +143,8 @@ void TeachingSettings::saveXML(QXmlStreamWriter *doc) const
         doc->writeAttribute(KXMLTeachingHandedOut, handedOut);
     for (const QXmlStreamAttribute &a : m_unknown)
         doc->writeAttribute(a.qualifiedName().toString(), a.value().toString());
+    if (!snapshot.isEmpty())
+        doc->writeCharacters(QString::fromLatin1(snapshot.toBase64()));
     doc->writeEndElement();
 }
 
@@ -142,7 +164,19 @@ void TeachingSettings::loadXML(QXmlStreamReader &root)
             && n != KXMLTeachingLink && n != KXMLTeachingHandedOut)
             m_unknown.append(a);
     }
-    root.skipCurrentElement();
+    // The handout state, if this show came from one (text of the element)
+    m_snapshot.clear();
+    while (!root.atEnd())
+    {
+        const QXmlStreamReader::TokenType t = root.readNext();
+        if (t == QXmlStreamReader::Characters && !root.isWhitespace())
+            m_snapshot += root.text().toLatin1();
+        else if (t == QXmlStreamReader::StartElement)
+            root.skipCurrentElement();
+        else if (t == QXmlStreamReader::EndElement)
+            break;
+    }
+    m_snapshot = QByteArray::fromBase64(m_snapshot);
 
     // Loading doesn't modify the show.
     applyOutputHold();

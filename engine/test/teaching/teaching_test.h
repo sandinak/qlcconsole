@@ -47,6 +47,9 @@ private slots:
     /** The Operate lock can be for Teaching only (LockDesign) */
     void thePinCanSkipTheDesignLock();
 
+    /** The handout state travels in the Teaching element, deflated, and is not part of itself */
+    void theHandoutStateIsKept();
+
 private:
     Doc *m_doc = nullptr;
 };

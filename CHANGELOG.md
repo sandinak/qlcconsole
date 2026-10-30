@@ -102,7 +102,11 @@ skipped). Upstream fixes taken:
   Teaching alone. **Make Student Handout…** saves a `.qlcc` copy with Teaching
   on, the PIN, and the practice venues and their answer key left out; the open
   show is untouched. Optional lesson and handout link add a menu entry on the
-  chip.
+  chip. A Teaching show also **holds USB and other hardware output** (not
+  only network), **asks before its patch changes** (add, remove, re-address
+  fixtures), and **Reset to Handout…** (Show Settings ▸ Teaching, behind the
+  PIN) puts a student copy back to the way the handout was made: the handout
+  carries its own state inside the file.
 - **Course: songs and effects match the app.** Lesson 1.1's handout steps match the student page (Save As first, 15 steps); one cue list per show, a song a section (+ Section), is taught in Lessons 0.7, 1.1 and the Level 1/2 checks; Lesson 2.4 uses the effect browser's words (Built-in · Mine · This show, "based on", Runs: Loop).
 - **One cue list per show, with song sections** (Q190). A production's
   **Numbering** says how its cues are numbered — Show.Part.Iteration

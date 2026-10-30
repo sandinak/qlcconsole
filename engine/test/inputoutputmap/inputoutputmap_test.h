@@ -121,6 +121,7 @@ private slots:
     void universeIdAlwaysEqualsItsArrayIndex();
     /** Teaching mode holds network output until the teacher lets it through */
     void teachingHoldsNetworkOutput();
+    void teachingHoldsUsbOutput();
 
 private:
     Doc* m_doc;
