@@ -6,6 +6,33 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
+### 2026-10-29 — Perf coverage: a real rig, Show Tree, power, drawing, web clients *(perf/031-coverage, (pg2))*
+
+- **Harness:** `ShowSpec::MixedRig` / `qlcstress --rig mixed` (ERA 300
+  movers, measured SlimPAR pars with a 0.6 A cap, ColorBand Pix bars,
+  30-pixel strips, dimmers; 30 fixtures / 460 channels a universe) laid out
+  across a stage with plot positions, circuits and stage groups (pixel
+  rows, 120 × 8 pixel grids, par grids with gaps, movers); group looks,
+  pan/tilt EFX, matrices over the stage groups, cue lists of group looks.
+  `perf_sweep.py --sweeps r`.
+- **Guard points:** `rig-mixed-u0032`, `rig-efx-pantilt-n0256`,
+  `rig-matrix-stage-n0064` (realtime), `hotpath-rig`
+  (`HotPath_Test::cpuPerRigOperation`), `gui` (`ui/test/renderperf`),
+  `web` (`WebAccess_Test::cpuPerBroadcast`). `--record --points` adds
+  points to a baseline, keeping the other rows byte for byte; unbaselined
+  points are measured and listed, not judged. Baselines for the new
+  points only (M4 Max); the Linux i7's are still to record.
+- **Gate:** hotpath +4 counts on the rig, renderperf (idle rig view and 2D
+  plot draw nothing on 240 fixtures), webaccess +1 (50 clients get every
+  change). Perf slots run each operation once in the gate.
+- **Fixed:** `QLCPhysical::powerConsumption()` regex on an empty bulb name
+  (power estimate 3.03 → 0.93 ms on 960 fixtures);
+  `ProgrammingManager::recomputePower()` no longer holds the universes
+  through the estimate; `FixtureGroup::fixtureList()` linear (Show Tree
+  edit at 200 cues 184 → 155 ms).
+- **Open (TODO):** Show Tree incremental bake; a frame budget for the rig
+  view with beams.
+
 ### 2026-10-29 — Web access saved with the show *(feat/031-show-webserver)*
 
 - **Engine:** `ShowWebAccess` (`engine/src/showwebaccess.*`, `Doc::webAccess()`):

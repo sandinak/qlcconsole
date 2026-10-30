@@ -152,6 +152,22 @@ skipped). Upstream fixes taken:
   sends one frame and then none, a running scene is one fader of its own
   channels, start/stop and chaser steps leave no faders behind, a matrix
   computes one map per step, not per frame.
+- Developer: **`make perf` measures a real rig, the Show Tree, power,
+  drawing and web clients**, not only Generic RGB fixtures. A mixed rig
+  (`qlcstress --rig mixed`: moving heads with 16-bit pan/tilt, gobos,
+  prism and zoom, measured LED pars under a power cap, pixel bars and
+  strips, dimmers, laid out across a stage with groups over it) runs as
+  three new points (the mixed load, pan/tilt EFX, matrices over stage
+  groups); new CPU-per-operation points time the rig's frame, the power
+  estimate, a 200-cue tracking Show Tree (GO under load, an edit), a frame
+  of the 3D rig view and the 2D plot (`ui/test/renderperf`) and one change
+  sent to 50 web clients. New gate tests: an idle rig view and an idle 2D
+  plot draw nothing on a 240-fixture rig; pan/tilt EFX moves the fine
+  bytes; the power estimate of 960 fixtures adds up; the cap holds every
+  par; a GO builds nothing; 50 web clients get every change.
+  `make perf-record PERF_ARGS=--points=...` adds points to a baseline
+  without rebasing the rest ([The mixed
+  rig](docs/performance.md#the-mixed-rig)).
 - **Course: a student page per lesson**, a short link to give the class
   (`https://sandinak.github.io/qlcconsole/class/1-1/`, and 0.1–0.8,
   1.1–1.5, the Level 1 check, 3.3, 3.6, 3.7, 3.10, plus a student install
@@ -223,6 +239,14 @@ skipped). Upstream fixes taken:
 
 ### Fixed
 
+- **The power estimate is three times cheaper and no longer holds the
+  engine back.** In Design mode the status bar re-estimates twice a second
+  while levels change; on a 960-fixture rig that took 3 ms, almost all of
+  it a text search run on every fixture's (empty) lamp name, and the
+  engine's next frame waited for it. Now 0.9 ms, and the engine waits only
+  for the values to be copied. Fixture groups with hundreds of pixels
+  list their fixtures in linear time (a Show Tree edit on a big show,
+  15% faster).
 - **An idle show no longer uses several cores redrawing the rig.** With
   the Rig Overview open and Live on, its timer redrew the whole rig 25
   or more times a second whether or not anything had changed: a show

@@ -238,9 +238,9 @@ hold the engine to it.
 `make perf` (`tools/perf/guard.py`) builds the engine Release in
 `build-perf/`, runs it under the same harness and loads as the sweeps
 above, and compares the numbers with this machine's own baseline. It takes
-about 5 minutes on an idle machine (the first build a few more), runs
-offscreen with no I/O plugins, and between 08:00 and 22:00 runs at the
-lowest priority (nice 19).
+about 9 minutes on an idle machine (the first build longer: it builds the
+UI library for the drawing point), runs offscreen with no I/O plugins, and
+between 08:00 and 22:00 runs at the lowest priority (nice 19).
 
 | Point | Load | Why |
 |---|---|---|
@@ -249,6 +249,12 @@ lowest priority (nice 19).
 | `c-matrix-n0064` | 64 scripted RGB matrices, 32 universes | the most expensive function per instance |
 | `c-efx-n0256` | 256 EFX, 32 universes | EFX maths |
 | `hotpath` | `HotPath_Test::cpuPerOperation`: one universe frame, a fader writing 510 channels, an engine frame with a 170-fixture look, a script's map for 16 × 16 heads, a frame of 512 input values | CPU nanoseconds per operation, this thread only |
+| `rig-mixed-u0032` | the realistic mixed load on [the mixed rig](#the-mixed-rig), 32 universes: a group look per position, per 4 universes a chaser, a matrix over a stage group and a pan/tilt EFX, a cue list of group looks per 8 | a real rig: movers, LED pars, pixels, dimmers, the power cap |
+| `rig-efx-pantilt-n0256` | 256 pan/tilt EFX on the rig's 128 moving heads, 32 universes | 16-bit position maths, fine channels written |
+| `rig-matrix-stage-n0064` | 64 scripted matrices over the stage groups (pixel rows, 120 × 8 pixel grids and par grids with the gaps between fixtures) | matrices on groups laid out across a stage, not dense grids |
+| `hotpath-rig` | `HotPath_Test::cpuPerRigOperation`, on the 32-universe rig: an engine frame with 32 group looks (256 pars held to their cap), pan/tilt EFX on 64 movers, a matrix over a 120 × 8 stage grid, the power estimate of 960 fixtures, a capped universe frame, and a 200-cue tracking Show Tree: GO under load, working out what the last cue plays, an edit | CPU nanoseconds per operation (the matrix: the process's, its script runs on its own thread) |
+| `gui` | `RenderPerf_Test::cpuPerFrame` (`ui/test/renderperf`), 240 fixtures of the rig, offscreen: a frame of the 3D/rig view angled with beams and in plan, a frame of the Lighting Studio's 2D plot, every fixture changed; an idle live tick | what drawing the rig costs (the process's CPU: the 3D view renders on a thread pool) |
+| `web` | `WebAccess_Test::cpuPerBroadcast`: one change sent to 50 WebSocket clients on loopback | a crew's phones on the web page |
 
 Each point runs 40 s after 10 s of warm-up and records the tick p50 and
 p99, the timer thread's CPU per tick, the frame interval p99, the
@@ -304,6 +310,14 @@ error, exit 3 the machine was too busy to measure (others using more than
 machine's baseline again, and the commit that changes a baseline says why
 (a slowdown taken for a feature worth it, a faster engine, new hardware).
 
+**Adding points** leaves the rest alone: `make perf-record
+PERF_ARGS=--points=gui,web` records only those points (three runs) into
+the existing baseline and keeps every other row as it was recorded, with an
+`# added:` line in its header. A check measures points that are not in the
+baseline yet (another machine's, say) and lists them without judging them.
+`QLC_PERF_ONLY=<prefix>` runs only the matching operations of
+`cpuPerRigOperation`, to profile one.
+
 ### Work counts in the gate
 
 Timing can't fail the gate without flaking it, but how much work the
@@ -315,13 +329,86 @@ under a second) asserts that:
   channels, and it stays that size;
 - 200 start/stop cycles of a look leave no fader behind;
 - a looping chaser of looks never holds more than three faders at once;
-- an RGB matrix computes its map once a step, not once a frame.
+- an RGB matrix computes its map once a step, not once a frame;
+- on the mixed rig: a pan/tilt EFX on moving heads moves the fine bytes
+  of pan and tilt, not only the coarse ones;
+- the power estimate of the 960-fixture rig adds up: dark, every fixture
+  its standby; at full, the rated draws (the pars at their cap, the
+  unrated ones at their guess); grouped by type, every fixture counted;
+- the power cap holds every par of all 32 universes, on what goes out,
+  while the stored values stay at full;
+- a GO in a 200-cue tracking Show Tree builds and deletes no function.
+
+`ui/test/renderperf` (in the gate) counts paints: with the rig view open
+(angled, beams, Live on, its own timer running) or the Lighting Studio's 2D
+plot open, an idle 240-fixture show draws **no frame** in a second; a
+change is drawn. That is the bug the engine benchmark could never see: an
+idle show that redrew the rig 25 times a second used 3.8 cores for 19 hours.
+`WebAccess_Test::fiftyClientsGetEveryChange` checks that 50 clients each
+get every one of 40 changes, in order.
 
 With `InputPatch_Test::flushFromAUniverseThreadIsOneEvent` (a frame of
 input reaches the GUI thread as one call per universe, not one event per
 value), these are the counts behind the fixes of the October campaign.
-The same program's CPU-per-operation numbers are reported in the gate and
-asserted only by the guard.
+The CPU-per-operation slots run each operation once in the gate (no
+`QLC_PERF_REPORT`), just to keep them working; only the guard measures and
+judges them.
+
+### The mixed rig
+
+Until October 29 every point above was Generic RGB fixtures: EFX in RGB
+mode, matrices on dense random grids, nothing that moves, no power model,
+no drawing. `qlcstress --rig mixed` (`ShowSpec::MixedRig` in
+`stresstest/engine/showbuilder.cpp`) builds a rig instead, the same on
+every universe (a truss position):
+
+| Per universe | Fixture | Channels |
+|---|---|---|
+| 4 moving heads | Martin ERA 300 Profile, 21-channel mode: 16-bit pan and tilt, 16-bit dimmer, CMY, pan/tilt speed, gobos, prism, zoom, focus | 84 |
+| 8 LED pars | Chauvet SlimPAR Pro Q USB, 5 channels; measured (0.8 A at full) and held to a 0.6 A cap | 40 |
+| 4 pixel bars | Chauvet ColorBand Pix IP, 36 channels, 12 pixels | 144 |
+| 2 pixel strips | a generic 30-pixel RGB strip | 180 |
+| 12 dimmers | one channel each | 12 |
+
+30 fixtures, 132 heads, 460 channels a universe. Universe *u* hangs at
+position *u* mod 8 (1.5 m apart, upstage) in the 12 m stage segment *u* ÷ 8,
+with plot positions in the venue, every fixture on its universe's 20 A
+circuit. The groups follow the stage: a 120-column pixel row per position
+(the dark columns between bars kept), and per segment a 120 × 8 pixel grid,
+a 16 × 8 par grid with the gaps between pars, and a mover group. Scenes are
+group looks (levels, colours, positions, gobo, prism, zoom, shutters open),
+EFX run in pan/tilt mode on the movers, matrices over the stage groups, cue
+lists layer group looks. `perf_sweep.py --sweeps r` sweeps it.
+
+First numbers, M4 Max (Release, 29 October 2026; the guard's baseline has
+the medians of three runs):
+
+RIG_TABLE_PLACEHOLDER
+
+Found and fixed on the way:
+
+- **The power estimate** (the status bar's, every half second in Design
+  mode while levels change) took 3.0 ms for the 960-fixture rig, almost
+  all of it a regular expression run on every fixture's empty bulb name
+  (`QLCPhysical::powerConsumption()`): now 0.93 ms. And it held the
+  universes -- the engine timer's write lock -- for the whole estimate; it
+  now holds them only to copy the values.
+- **`FixtureGroup::fixtureList()`** was quadratic in the heads (a list
+  search per head); a stage-wide pixel group has 864. A Show Tree edit on
+  200 cues went from 184 to 155 ms.
+
+Found, not fixed (queued, too big for this pass):
+
+- **A Show Tree edit re-plans every cue.** On 200 tracking cues over the
+  stage groups an edit (a look on one cue) costs 155 ms of CPU, nearly all
+  in `ShowTreeController::planCue()` over all 200 cues on every bake. An
+  incremental bake (only the cues whose resolved state changed) is the fix.
+- **The 3D rig view with beams costs 62 ms of CPU a frame** for 240
+  fixtures (the process's, over its render threads; in plan 2.2 ms). Idle
+  it draws nothing now, but with Live on during a running show it draws up
+  to 25 times a second: about 1.5 cores for this rig, more for a bigger
+  one. A frame budget (fewer frames or a lower supersample while values
+  change fast) would bound it.
 
 ### The nightly run and the trend
 
@@ -433,6 +520,11 @@ cmake --build stress-build
 QT_QPA_PLATFORM=offscreen python3 stresstest/perf_sweep.py \
     --qlcstress stress-build/qlcstress --resources resources \
     --out perf/sweep --sweeps a1p,bp,cp,c,a2
+
+# The mixed rig: universes, pan/tilt EFX, matrices over stage groups
+QT_QPA_PLATFORM=offscreen python3 stresstest/perf_sweep.py \
+    --qlcstress stress-build/qlcstress --resources resources \
+    --out perf/rig --sweeps r
 
 # Art-Net on the wire (Linux: inside a loopback-only namespace)
 sh stresstest/wire/run_netns.sh $HOME python3 stresstest/wire/wire_sweep.py \
