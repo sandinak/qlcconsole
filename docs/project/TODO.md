@@ -54,11 +54,20 @@ Built (DONE.md 2026-10-29). Open, each "decided (can change)":
   only (their Run order); no Hold, no N times.
 - The *one-off* mark is on effect rows only, not on every one-off value.
 - Runs on a Show Tree effect row changes the palette (everywhere it plays
-  when it is the show's); it is not an undo step yet.
+  when it is the show's). ~~It is not an undo step yet.~~ Done (lyr): it is
+  one step (Runs, At the end, Length).
 ## Show Tree tidy — leftovers (2026-10-29, DONE.md)
 
-- The command line's `release` takes groups only; a ▣ (function) layer
-  is released from its page or the right-click menus.
+- ~~The command line's `release` takes groups only; a ▣ (function) layer
+  is released from its page or the right-click menus.~~ Done (lyr):
+  `release <function name>` toggles it.
+- Layers move (lyr, 2026-10-30): ⌘X / ⌘C / ⌘V and drag, ⌥ copies. Open,
+  each "decided (can change)": cutting cues isn't built (drag them, or
+  copy); a layer dropped on a row lands before it in its upper half, after
+  it in its lower; a child layer moves only with its parent (moving it
+  alone to another cue reparents it when that cue has the parent's target);
+  in the docked Workbench a layer row drags to reorder only (to another cue:
+  the tree's drag, or Cut and Paste).
 
 ## Live and blind — leftovers (docs/design/LIVE_BLIND.md, 2026-10-29)
 

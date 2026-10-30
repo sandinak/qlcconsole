@@ -35,22 +35,39 @@ void EffectRunsMenu::apply(Doc *doc, const QList<quint32> &palettes, int runs, i
 {
     if (doc == nullptr)
         return;
-    bool any = false;
+    auto change = [&]() {
+        for (quint32 pid : palettes)
+        {
+            QLCPalette *p = doc->palette(pid);
+            if (p == nullptr || p->type() != QLCPalette::Effect)
+                continue;
+            const EffectRuns::Settings now = settings(p);
+            p->setEffectParamValue(EffectRuns::runsKey(), qBound(0, runs, EffectRuns::kMaxRuns));
+            p->setEffectParamValue(EffectRuns::atEndKey(), (release < 0 ? now.release : release > 0) ? 1.0 : 0.0);
+            p->setEffectParamValue(EffectRuns::lengthKey(), lengthMs < 0 ? now.lengthMs : lengthMs);
+            if (doc->effectScriptRunner() != nullptr)
+                doc->effectScriptRunner()->updateEffectParams(pid);
+        }
+    };
+    // One undo step for the whole choice (every palette it reaches).
+    QList<quint32> effects;
     for (quint32 pid : palettes)
+        if (const QLCPalette *p = doc->palette(pid))
+            if (p->type() == QLCPalette::Effect)
+                effects << pid;
+    if (effects.isEmpty())
+        return;
+    const QString label = runs == 0 ? tr("Effect runs: Loop")
+                          : runs == 1 ? tr("Effect runs: Once") : tr("Effect runs: %1 times").arg(runs);
+    if (doc->paletteOps() == nullptr)
     {
-        QLCPalette *p = doc->palette(pid);
-        if (p == nullptr || p->type() != QLCPalette::Effect)
-            continue;
-        const EffectRuns::Settings now = settings(p);
-        p->setEffectParamValue(EffectRuns::runsKey(), qBound(0, runs, EffectRuns::kMaxRuns));
-        p->setEffectParamValue(EffectRuns::atEndKey(), (release < 0 ? now.release : release > 0) ? 1.0 : 0.0);
-        p->setEffectParamValue(EffectRuns::lengthKey(), lengthMs < 0 ? now.lengthMs : lengthMs);
-        if (doc->effectScriptRunner() != nullptr)
-            doc->effectScriptRunner()->updateEffectParams(pid);
-        any = true;
-    }
-    if (any)
+        change();
         doc->setModified();
+        return;
+    }
+    doc->paletteOps()->effectParamStep(release >= 0 ? tr("Effect at the end") : lengthMs >= 0
+                                                          ? tr("Effect run length") : label,
+                                       effects, change);
 }
 
 QMenu *EffectRunsMenu::add(QMenu *menu, Doc *doc, const QList<quint32> &palettes, QWidget *dialogParent)

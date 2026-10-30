@@ -201,9 +201,9 @@ const QList<ShowTreeCommand::Word> &ShowTreeCommand::words()
             { "block", "cueonly", "cue-only", "default" });
         add("base", "tracking", "base", "Makes the selected cue the list's base cue: released layers go "
             "back to it.", { "base" }, { "release" });
-        add("release", "tracking", "release <groups> [, <groups>…]",
+        add("release", "tracking", "release <groups or function> [, <groups>…]",
             "Turns Release on the cue's layer on, or off again: leaving the cue it goes back to the "
-            "base cue, else dark.", { "release Towers" }, { "base" });
+            "base cue, else dark. A ▣ layer is named by its function.", { "release Towers" }, { "base" });
         add("skip", "tracking", "skip [<cue> [thru <cue>]] [, <cue>…]",
             "Skips cues (the selected one when none is named): GO, auto-follow and Back pass over them, and "
             "they track as if they weren't in the list. A jump straight to one still plays it. Greyed and "
@@ -2081,11 +2081,18 @@ ShowTreeCommand::Result ShowTreeCommand::run(const QString &line, const Context 
         }
         else
         {
-            const QList<quint32> made = m_st->pasteLayers(clipboard.layers, ctx.cue);
+            QString why;
+            const bool move = clipboard.cut;
+            const QList<quint32> made = move ? m_st->moveLayers(clipboard.layers, ctx.cue, invalidId(), &why)
+                                             : m_st->pasteLayers(clipboard.layers, ctx.cue);
             if (made.isEmpty())
-                error = tr("Couldn't paste here.");
+                error = why.isEmpty() ? tr("Couldn't paste here.") : why;
             else
+            {
                 res.layer = made.last();
+                if (move)
+                    clipboard = Clipboard();    // moved: nothing left to paste
+            }
         }
     }
     else if (w0 == QLatin1String("include"))
@@ -2180,9 +2187,51 @@ ShowTreeCommand::Result ShowTreeCommand::run(const QString &line, const Context 
     else if (w0 == QLatin1String("release"))
     {
         r.word();
-        const QList<Target> ts = targets();
+        // A ▣ function layer of the cue, by its function's name (or the
+        // layer's own): Release on / off on it, as on a group's.
+        const int afterWord = r.i;
+        QList<Target> fts;
+        {
+            const QStringList fnames = functionNames();
+            for (;;)
+            {
+                const int save = r.i;
+                if (!fts.isEmpty() && !r.comma())
+                    r.plus();
+                const QString nm = r.name(fnames);
+                if (nm.isEmpty())
+                {
+                    r.i = save;
+                    break;
+                }
+                bool found = false;
+                if (const Cue *c = m_st->cue(ctx.cue))
+                    for (const Layer &l : c->layers)
+                    {
+                        const Function *f = l.target.isOpaque() ? m_doc->function(l.target.function) : nullptr;
+                        if (f != nullptr && (f->name().compare(nm, Qt::CaseInsensitive) == 0
+                                             || l.name.compare(nm, Qt::CaseInsensitive) == 0))
+                        {
+                            fts << l.target;
+                            found = true;
+                            break;
+                        }
+                    }
+                if (!found)
+                {
+                    fts.clear();
+                    break;
+                }
+            }
+        }
+        if (fts.isEmpty() || !r.atEnd())
+        {
+            fts.clear();
+            r.i = afterWord;
+        }
+        const QList<Target> ts = fts.isEmpty() ? targets() : fts;
         if (ts.isEmpty())
-            error = tr("release <group>");
+            error = tr("release <group or function>");
         for (const Target &t : ts)
         {
             bool now = false;

@@ -571,8 +571,38 @@ public:
      *  the selected cues (in list order) or own layers; paste puts cues as
      *  a run after the selected cue, layers into it. One undo step. */
     bool copySelection();
+    /** ⌘X: copy, but the paste moves the layers (one undo step) and
+     *  empties the clipboard. Layers only; cues move by dragging. */
+    bool cutSelection();
     bool pasteClipboard();
     bool duplicateSelection();
+
+    typedef QPair<quint32, quint32> LayerRef;       //!< cue, layer
+    /** MIME type of layers dragged within the tree (cue, layer id pairs). */
+    static const char *layerMimeType();
+    static QList<LayerRef> layersFromMime(const QMimeData *mime);
+    /** Where a layer dropped on row (@a cueId, @a layerId; invalid: the cue
+     *  itself) goes: @a after for ShowTreeController::moveLayers (the
+     *  upper half of a row: before it). False: nowhere. */
+    bool layerDropPlace(const QList<LayerRef> &refs, quint32 cueId, quint32 layerId, bool lowerHalf,
+                        quint32 *after) const;
+    /** What dropping @a refs in cue @a cueId after @a after would do, in
+     *  words (empty, @a refused: it can't). @a copy: ⌥ held. */
+    QString layerDropHint(const QList<LayerRef> &refs, quint32 cueId, quint32 after, bool copy,
+                          bool *refused = nullptr) const;
+    /** Move (or, @a copy, copy) @a refs into the cue, one undo step; the
+     *  layers now there are selected. */
+    bool dropLayers(const QList<LayerRef> &refs, quint32 cueId, quint32 after, bool copy);
+    /** What dragging the selected rows would carry (the caller owns it;
+     *  null: nothing draggable) -- for tests. */
+    QMimeData *selectionDragMime() const;
+    /** The drop indicator a layer drag is showing in the tree's viewport
+     *  (a line between rows, or a frame round a cue); null: none. */
+    QRect dropIndicator() const;
+private:
+    void selectLayers(quint32 cueId, const QList<quint32> &layers);
+    QString layerNote(int count, quint32 cueId, bool copied) const;
+public:
 
     /** Open @a paletteId in the Look Editor under the tree. */
     void editPalette(quint32 paletteId);

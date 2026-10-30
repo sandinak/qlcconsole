@@ -486,7 +486,21 @@ public:
      *  there instead (one layer per target). A child keeps its parent when
      *  the parent comes too, or the cue has a layer on the parent's target.
      *  The layers pasted (or set). */
-    QList<quint32> pasteLayers(const QList<QPair<quint32, quint32>> &layers, quint32 toCueId);
+    QList<quint32> pasteLayers(const QList<QPair<quint32, quint32>> &layers, quint32 toCueId,
+                               quint32 afterLayerId = 0xFFFFFFFF);
+    /** @a afterLayerId of pasteLayers / moveLayers: before the cue's first
+     *  layer (an invalid id: at the end). */
+    static const quint32 layerFirst = 0xFFFFFFFE;
+    /** Move layers (cue, layer pairs) to cue @a toCueId -- after layer
+     *  @a afterLayerId (and its children), else at the end -- or reorder
+     *  them within their cue: one undo step. Children go with their
+     *  parent. They keep their ids, looks, name and reusable link; a layer
+     *  on a target the cue already has joins that layer; a hit takes no
+     *  Release; what a layer carried on from is not carried to another cue.
+     *  The layers now there (empty: nothing moved; @a why says when it
+     *  was refused). */
+    QList<quint32> moveLayers(const QList<QPair<quint32, quint32>> &layers, quint32 toCueId,
+                              quint32 afterLayerId = 0xFFFFFFFF, QString *why = nullptr);
     /** Record as new cue (D22): what cue @a cueId puts on stage -- tracked,
      *  included and its own, resolved -- frozen into a new Block cue after
      *  it, numbered per D23. Every layer becomes the new cue's own with the

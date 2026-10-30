@@ -226,6 +226,12 @@ public:
      *  Nothing changed: no step (false). */
     bool valueStep(const QString &label, quint32 paletteId, const std::function<void()> &change,
                    const QString &mergeKey = QString());
+    /** Run @a change over the effect parameters of @a paletteIds (Runs,
+     *  Length, At the end… from the Show Tree effect row's ⋯ or Build) as
+     *  one step, shared palettes and the tree's own one-offs alike. Undo and
+     *  Redo put the parameters back and tell the playing effect. Nothing
+     *  changed: no step (false). */
+    bool effectParamStep(const QString &label, const QList<quint32> &paletteIds, const std::function<void()> &change);
 
     /************************************************************************
      * Function steps (docs/design/WORKFLOW_DESIGN.md W1): the Workbench's edits to a
@@ -266,6 +272,11 @@ private:
          *  value as it is, edited since or not). */
         bool value = false;
         QVariantList values;
+        /** An effect parameter step (effectParamStep): apply() puts the
+         *  effect's parameters back (Runs, Length, At the end…). */
+        bool params = false;
+        QMap<QString, double> paramValues;
+        QMap<QString, QString> paramStrings;
         QString colourMacro;
         QString goboName;
         QMap<QString, int> goboValues;

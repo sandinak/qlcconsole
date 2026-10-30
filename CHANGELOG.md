@@ -15,6 +15,23 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 A home for QLC+ 4 users: QLC+ 4's habits that qlcconsole had dropped are
 back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
 
+### Moving layers in the Show Tree
+
+- **Cut, copy, paste and drag a layer.** ⌘X cuts the selected layers (Cut is
+  in the right-click menu too); ⌘V on a cue moves them to its end, on a layer
+  row puts them after it; several selected layers move together, and within
+  one cue it reorders. The Cut and the paste are one undo step. Copy and Paste
+  work as before, and also paste after a layer. Dragging a layer row now
+  moves it (a layer row used to carry nothing, so a drag only selected it);
+  ⌥-drag copies; a line between rows (or a frame round a cue) shows where it
+  lands, and the hint says what will happen. A hit takes no Release, a
+  reusable layer stays the same reusable. In the docked Workbench a drag of
+  a layer row reorders the cue's own layers.
+- **Runs on a Show Tree effect row is an undo step** (also Build ▸ Effects'
+  Runs menu): Runs, At the end and Length.
+- The command line's **release** takes a ▣ function layer (by the function's
+  name) as well as groups.
+
 ### Tonight's running order
 
 - **Running order…** on the production's page: change the song order for

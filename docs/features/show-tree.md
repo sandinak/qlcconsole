@@ -1140,16 +1140,38 @@ running) asks instead. Typing `record selected`, `record running` or
 **Duplicate** (right-click a cue, ⌘D, or `dup`) copies the cue's own
 content, not what tracks into it. It is never the base cue.
 
-**Copy and paste.** In the tree, **⌘C** copies the selected cues (several:
-⌘-click them), **⌘V** pastes them right after the selected cue, in their
-order, each numbered in turn. This works into another cue list too. Copied
-**layers** paste into the selected cue (a layer on a group the cue already
-has sets its looks there). Also in the tree's right-click menu, and typed:
-`copy`, `copy cue 1.0.2 1.0.3`, `copy layer Towers`, then `paste`. The
-copies are the cue's own layers on the same groups, so they track as any
-cue's own do; includes come only within the same list. One undo step per
-paste. In the command line and the page's fields, ⌘C and ⌘V copy text as
-usual.
+**Copy, cut and paste.** In the tree, **⌘C** copies the selected cues
+(several: ⌘-click them), **⌘V** pastes them right after the selected cue, in
+their order, each numbered in turn. This works into another cue list too.
+Copied **layers** paste into the selected cue (at its end), or **after the
+layer** when a layer row is selected; a layer on a group the cue already has
+sets its looks there. **⌘X** cuts the selected **layers** (cues move by
+dragging): nothing is taken away until you paste, and **⌘V** then **moves**
+them, into another cue, a sub-cue, a hit or a cue of another list, or, in the
+same cue, to a new place in its order. The paste is one undo step and empties
+the clipboard. Several selected layers go together, with their child layers.
+A moved or pasted layer keeps its looks and, when it is a use of a reusable
+layer, stays that same reusable (the hint says so). A hit's layers have no
+Release, so a layer coming into a hit has it turned off. A layer that
+carried on from an earlier cue starts fresh in another cue. Also in the
+tree's right-click menu (**Cut**, **Copy**, **Paste after this layer** /
+**Move into this cue**) and typed: `copy`, `copy cue 1.0.2 1.0.3`,
+`copy layer Towers`, then `paste`. The copies are the cue's own layers on the
+same groups, so they track as any cue's own do; includes come only within the
+same list. One undo step per paste. In the command line and the page's
+fields, ⌘C and ⌘V copy text as usual.
+
+**Dragging a layer.** Press on a layer row and drag it: onto a **cue**, a
+sub-cue or a **hit** row it joins that cue, at the end; onto another **layer
+row** it lands before that row (the row's upper half) or after it (its lower
+half); a line between the rows, or a frame round the cue, shows where, and
+the line under the tree says what will happen. Hold **⌥** to copy instead of
+move. Select several layers (⌘-click) to drag them together. Dropping a layer
+on a list or production does nothing. A click without moving only selects the
+row; the drag starts when you move past the system's drag distance. A move is
+one undo step. A layer that is only carried into a cue (grey) isn't dragged:
+set a value on it first to make it the cue's own. A child layer moves with its
+parent; dragging it alone out to another cue puts it there as its own layer.
 
 Record and Duplicate number the new cue as + Cue does. + Cue goes after the
 selected cue and counts up its last number when that is free (1.0.0 →
@@ -1400,7 +1422,9 @@ effect](effects.md#stack-a-movement-and-an-intensity-effect).
 
 In the docked Workbench, **drag a look's row onto another layer** to move
 it there (⌥ copies), one undo step; press and drag moves, ⇧/⌘-click
-selects several. **Renaming** (Return, F2) selects the cue's words, not
+selects several. **Drag a layer row** onto another of the cue's own layers
+to put it above that one (below the last: it plays last); moving a layer to
+another cue is the tree's drag, or Cut and Paste. **Renaming** (Return, F2) selects the cue's words, not
 its number: type to rename, click into the number to change that too.
 
 ## The command line
@@ -1447,7 +1471,7 @@ is always there and calls the same operations as the mouse.
 | `Steps colour #33aa55` | Reuses the palette that plays exactly that, else makes one ([how](#values-you-pick-or-type)) |
 | `Steps dimmer 45` (or `45%`) | The same for a level, 0–100 |
 | `function Haze look, House lights` | Functions played as they are, a layer each |
-| `release Towers` | Turns Release on, or off again |
+| `release Towers` · `release Haze look` | Turns Release on, or off again, on the layer of those groups, or on the ▣ layer playing that function |
 | `include 0.0.3` | Includes that cue; again, takes it out |
 | `skip 0.0.3` · `skip 0.0.3 thru 0.0.5` · `skip 0.0.3, 0.0.7` · `skip` | **Skips** those cues (none named: the selected one); [Skipping cues](#skipping-cues) |
 | `unskip 0.0.3` · `unskip 0.0.3 thru 0.0.5` · `unskip` | Puts them back: GO plays them again |
@@ -1521,7 +1545,7 @@ command line reads, so it is always right. The table above is a summary.
 | `production` | `current`, `none` and the productions; after a name, `current` |
 | `sub` (and a name) | `follow`, `subgo` |
 | `function` | the functions |
-| `release` | groups and fixtures |
+| `release` | groups and fixtures, and the functions of ▣ layers |
 | `record` | `selected`, `running`, `lit` |
 | `set "name"` | groups |
 | `aim` | stage targets and Aim palettes |
@@ -1684,8 +1708,9 @@ Right-click in the tree for:
   **Unlink here**), **Add child layer**, **Split layer**, **Merge layers**,
   **Remove &lt;group&gt; from layer**;
 - on a cue list: **Convert to tracking…**, **Detach to plain chaser…**;
-- on a cue or layer: **Copy**, **Paste after this cue** / **Paste into this
-  cue**, **Duplicate**;
+- on a cue or layer: **Copy**, **Cut** (a layer), **Paste after this cue** /
+  **Paste into this cue** / **Paste after this layer** (a cut: **Move into
+  this cue** / **Move here, after this layer**), **Duplicate**;
 - **Rename…** on a production or cue list, and **Delete** on anything but a
   grey row.
 
@@ -1882,8 +1907,9 @@ them looks; they open as they were.)
   stage. **Record as new cue → everything lit** records a hit a button
   fired as its layers.
 - **Copy to a hit** (right-click a cue) freezes what the cue puts on stage —
-  tracked, included and its own — into a new hit. **Copy / Paste** move
-  layers and cues between lists and hits too.
+  tracked, included and its own — into a new hit. **Copy / Paste** copy
+  layers and cues between lists and hits too; **Cut** and **Paste**, or a
+  drag, move a layer there (a hit's layers have no Release).
 - **Adopt as a hit** (Library → Functions, right-click a scene, or `adopt`)
   makes a hit from an existing scene: its groups and palettes become a
   layer when they play exactly the same, else the scene plays as it is
@@ -2147,7 +2173,8 @@ and *MIB · n* counts the lights a list set **On** is moving.
 | Double-click a cue, look or layer · **✎ Workbench** · `wb` | Open it in the Workbench, in place of the page ([Working on a cue in the Workbench](#working-on-a-cue-in-the-workbench)); **↩ Show Tree** comes back |
 | **Return** / **F2** (in the tree) | Rename the row in place; Return keeps, Esc leaves it |
 | **⇧⌘N** | New here: a production, cue list, the next cue, a layer or a hit, by what is selected ([New here](#new-here)) |
-| **⌘C** / **⌘V** / **⌘D** (in the tree) | Copy cues or layers / paste after (into) the selected cue / duplicate |
+| **⌘C** / **⌘X** / **⌘V** / **⌘D** (in the tree) | Copy cues or layers / cut layers / paste after (into) the selected cue, or after the selected layer (a cut moves) / duplicate |
+| Drag a layer row onto a cue, a hit or another layer row | Move it there (before a row in its upper half, after it in its lower); **⌥** copies |
 | **⌘/** (in the tree), or the tick on a cue row | Skip the selected cues, or put them back ([Skipping cues](#skipping-cues)) |
 | ⌥-click **+ Layer** | A layer for each group selected in the Library |
 | Drag cues up or down (before / after a row) | Move them there, renumbered for their place ([Reordering and numbering](#reordering-and-numbering)); with **⌥**, include it |
