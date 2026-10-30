@@ -308,6 +308,76 @@ Mapping mapElement(Family family, quint32 usagePage, quint32 usage)
     return Mapping();
 }
 
+namespace
+{
+/* evdev codes (linux/input-event-codes.h), here so the tables build and are
+   tested on any system. */
+const quint16 kBtnSouth = 0x130, kBtnEast = 0x131, kBtnNorth = 0x133, kBtnWest = 0x134;
+const quint16 kBtnTL = 0x136, kBtnTR = 0x137, kBtnSelect = 0x13a, kBtnStart = 0x13b;
+const quint16 kBtnMode = 0x13c, kBtnThumbL = 0x13d, kBtnThumbR = 0x13e;
+const quint16 kBtnTriggerHappy1 = 0x2c0;    // xpad's D-pad: left, right, up, down
+const quint16 kAbsX = 0x00, kAbsY = 0x01, kAbsZ = 0x02, kAbsRx = 0x03, kAbsRy = 0x04;
+const quint16 kAbsRz = 0x05, kAbsGas = 0x09, kAbsBrake = 0x0a;
+const quint16 kAbsHat0X = 0x10, kAbsHat0Y = 0x11;
+}
+
+Mapping mapLinuxButton(bool playStation, quint16 code)
+{
+    switch (code)
+    {
+        case kBtnSouth: return button(A);
+        case kBtnEast: return button(B);
+        case kBtnNorth: return button(playStation ? Y : X);
+        case kBtnWest: return button(playStation ? X : Y);
+        case kBtnTL: return button(LB);
+        case kBtnTR: return button(RB);
+        case kBtnSelect: return button(View);
+        case kBtnStart: return button(Menu);
+        case kBtnMode: return button(Guide);
+        case kBtnThumbL: return button(LS);
+        case kBtnThumbR: return button(RS);
+        case kBtnTriggerHappy1: return button(DpadLeft);
+        case kBtnTriggerHappy1 + 1: return button(DpadRight);
+        case kBtnTriggerHappy1 + 2: return button(DpadUp);
+        case kBtnTriggerHappy1 + 3: return button(DpadDown);
+        default: return Mapping();
+    }
+}
+
+Mapping mapLinuxAxis(quint16 code, bool hasGasBrake)
+{
+    switch (code)
+    {
+        case kAbsX: return axis(LeftX);
+        case kAbsY: return axis(LeftY);
+        case kAbsRx: return axis(RightX);
+        case kAbsRy: return axis(RightY);
+        case kAbsZ: return axis(hasGasBrake ? RightX : LeftTrigger);
+        case kAbsRz: return axis(hasGasBrake ? RightY : RightTrigger);
+        case kAbsBrake: return axis(LeftTrigger);
+        case kAbsGas: return axis(RightTrigger);
+        case kAbsHat0X: case kAbsHat0Y: return hat();
+        default: return Mapping();
+    }
+}
+
+bool linuxHatToDpad(quint16 code, int value, bool dpad[4])
+{
+    if (code == kAbsHat0X)
+    {
+        dpad[2] = value < -16384;
+        dpad[3] = value > 16384;
+        return true;
+    }
+    if (code == kAbsHat0Y)
+    {
+        dpad[0] = value < -16384;
+        dpad[1] = value > 16384;
+        return true;
+    }
+    return false;
+}
+
 void hatToDpad(int value, int logicalMin, int logicalMax, bool dpad[4])
 {
     dpad[0] = dpad[1] = dpad[2] = dpad[3] = false;

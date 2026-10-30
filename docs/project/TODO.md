@@ -76,6 +76,22 @@ values, rate awkward for one shot). Open, each "decided (can change)":
   rule. A cue that only tracks the effect through leaves it running or
   done (decided, can change). A tracked effect on a layer whose scene
   changes in that cue (something else on it set) does start again.
+## Controller slots — leftovers (ctl, 2026-10-30)
+
+Built (CHANGELOG 0.3.1 "One input, whichever controller is here";
+docs/features/other-improvements.md). Open, each "decided (can change)":
+- The show's channels are the first device's (read off it when the slot is
+  made with it connected, else the standard gamepad order) and saved with
+  the slot; reordering does not change them.
+- "Any game controller" takes the first free pad by the plugin's kind or a
+  profile with gamepad roles; it keeps the one it has while it stays.
+- Patching the universe by hand to a device not in its list replaces the
+  list; undo of a patch does not restore a slot.
+- The offer names one pad at a time (the notice line holds one); a pad is
+  offered once per universe while it stays.
+- Not verified on hardware yet: the Linux joystick layout for xpad and
+  hid-playstation (codes from the drivers; SDL's mappings agree) and the
+  real DualSense checklist (report of ctl).
 
 ## Pixel boxes, effects and beams — leftovers (cbug, 2026-10-30)
 

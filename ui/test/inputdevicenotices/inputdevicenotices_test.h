@@ -39,6 +39,8 @@ private slots:
     void absentWhenTheShowOpensIsSaid();
     void onlyDeviceInputsCount();
     void theDefaultSettleIsTwoAndAHalfSeconds();
+    void aControllerSlotSaysWhichIsInUse();
+    void anotherPadIsOfferedAndAdopted();
 
 private:
     Doc *m_doc = nullptr;

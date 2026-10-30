@@ -135,6 +135,37 @@ namespace GamepadLayout
      *  the triggers here); the right stick is Z/Rz. */
     Mapping mapElement(Family family, quint32 usagePage, quint32 usage);
 
+    /**
+     * A known pad (deviceKind() not empty) read through Linux's joystick
+     * device (/dev/input/jsN), into this layout. The kernel's drivers --
+     * xpad and hid-microsoft for Xbox pads, hid-playstation and hid-sony
+     * for the DualShock 4 and DualSense -- give each control an evdev code,
+     * which JSIOCGBTNMAP / JSIOCGAXMAP list in the joystick's own order;
+     * that order differs between the drivers (a DualSense has L2/R2 as
+     * buttons too, and its Triangle where an Xbox pad's X is), so the
+     * codes are what is mapped:
+     *  - buttons: South = A (Cross), East = B (Circle); North and West are
+     *    X and Y on an Xbox pad (xpad reports X as BTN_X, which is
+     *    BTN_NORTH) but Triangle (Y) and Square (X) on a PlayStation pad;
+     *    TL/TR the bumpers, Select View (Create / Share), Start Menu
+     *    (Options), Mode the guide (PS) button, ThumbL/R the stick clicks,
+     *    TriggerHappy1-4 the D-pad (xpad's dpad_to_buttons). L2/R2 as
+     *    buttons (TL2/TR2) are left out: they are the trigger axes.
+     *  - axes: X/Y the left stick, Rx/Ry the right one, Z/Rz the triggers
+     *    -- unless the pad has Gas/Brake (an Xbox pad over Bluetooth, read
+     *    by hid-generic): then Z/Rz are the right stick and Brake/Gas the
+     *    triggers. Hat0X/Hat0Y are the D-pad (a HatElement: see
+     *    linuxHatToDpad()).
+     * The touchpad is a separate input device on Linux and is not read.
+     */
+    Mapping mapLinuxButton(bool playStation, quint16 code);
+    Mapping mapLinuxAxis(quint16 code, bool hasGasBrake);
+    /** Linux hat axis code @p code (Hat0X / Hat0Y) at joystick value
+     *  @p value (-32767..32767) as the D-pad's buttons: @p dpad[4] is up,
+     *  down, left, right; only the pair this axis drives is written. False
+     *  for any other axis. */
+    bool linuxHatToDpad(quint16 code, int value, bool dpad[4]);
+
     /** The D-pad a hat switch's @p value says, as up/down/left/right. Eight
      *  directions from @p logicalMin, clockwise from up; anything else
      *  (the null state) is centred. */

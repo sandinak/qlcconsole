@@ -19,6 +19,7 @@
 
 #include "gamepadlayout_test.h"
 #include "gamepadlayout.h"
+#include "inputoutputmap.h"
 #include "hidprofile.h"
 
 using namespace GamepadLayout;
@@ -469,6 +470,75 @@ void GamepadLayout_Test::noShippedProfileStepsAList()
         QVERIFY(p->buttonAction(B).isEmpty());
         delete p;
     }
+}
+
+void GamepadLayout_Test::linuxJoystickControls()
+{
+    /* The joystick buttons each driver declares, in joydev's order (by
+       evdev code): what JSIOCGBTNMAP lists. */
+    const QList<quint16> xpad = { 0x130, 0x131, 0x133, 0x134, 0x136, 0x137,
+                                  0x13a, 0x13b, 0x13c, 0x13d, 0x13e };
+    const QList<int> xpadWants = { A, B, X, Y, LB, RB, View, Menu, Guide, LS, RS };
+    for (int i = 0; i < xpad.count(); ++i)
+    {
+        const Mapping m = mapLinuxButton(false, xpad.at(i));
+        QCOMPARE(int(m.kind), int(ButtonElement));
+        QCOMPARE(m.index, xpadWants.at(i));
+    }
+    // hid-playstation (DualSense) and hid-sony (DualShock 4): Triangle is North.
+    const QList<quint16> sony = { 0x130, 0x131, 0x133, 0x134, 0x136, 0x137, 0x138, 0x139,
+                                  0x13a, 0x13b, 0x13c, 0x13d, 0x13e };
+    const QList<int> sonyWants = { A, B, Y, X, LB, RB, -1, -1, View, Menu, Guide, LS, RS };
+    for (int i = 0; i < sony.count(); ++i)
+    {
+        const Mapping m = mapLinuxButton(true, sony.at(i));
+        if (sonyWants.at(i) < 0)
+        {
+            QCOMPARE(int(m.kind), int(Unmapped));     // L2/R2 as buttons: the axes have them
+            continue;
+        }
+        QCOMPARE(int(m.kind), int(ButtonElement));
+        QCOMPARE(m.index, sonyWants.at(i));
+        QCOMPARE(buttonRole(m.index), QString::fromLatin1(
+            QList<const char *>({ "a", "b", "y", "x", "lb", "rb", "", "", "back", "start",
+                                  "guide", "ls", "rs" }).at(i)));
+    }
+    // xpad's D-pad as buttons (dpad_to_buttons): left, right, up, down.
+    QCOMPARE(mapLinuxButton(false, 0x2c0).index, int(DpadLeft));
+    QCOMPARE(mapLinuxButton(false, 0x2c3).index, int(DpadDown));
+    QCOMPARE(int(mapLinuxButton(false, 0x120).kind), int(Unmapped));
+
+    // Axes: X Y Z Rx Ry Rz Hat0X Hat0Y on both drivers.
+    QCOMPARE(mapLinuxAxis(0x00, false).index, int(LeftX));
+    QCOMPARE(mapLinuxAxis(0x01, false).index, int(LeftY));
+    QCOMPARE(mapLinuxAxis(0x02, false).index, int(LeftTrigger));
+    QCOMPARE(mapLinuxAxis(0x03, false).index, int(RightX));
+    QCOMPARE(mapLinuxAxis(0x04, false).index, int(RightY));
+    QCOMPARE(mapLinuxAxis(0x05, false).index, int(RightTrigger));
+    QCOMPARE(int(mapLinuxAxis(0x10, false).kind), int(HatElement));
+    // An Xbox pad over Bluetooth (hid-generic): Z/Rz the right stick.
+    QCOMPARE(mapLinuxAxis(0x02, true).index, int(RightX));
+    QCOMPARE(mapLinuxAxis(0x05, true).index, int(RightY));
+    QCOMPARE(mapLinuxAxis(0x0a, true).index, int(LeftTrigger));
+    QCOMPARE(mapLinuxAxis(0x09, true).index, int(RightTrigger));
+
+    bool dpad[4] = { false, false, false, false };
+    QVERIFY(linuxHatToDpad(0x10, -32767, dpad));
+    QVERIFY(dpad[2] && !dpad[3]);
+    QVERIFY(linuxHatToDpad(0x11, 32767, dpad));
+    QVERIFY(dpad[1] && !dpad[0] && dpad[2]);     // the X pair untouched
+    QVERIFY(linuxHatToDpad(0x10, 0, dpad));
+    QVERIFY(!dpad[2] && !dpad[3]);
+    QVERIFY(!linuxHatToDpad(0x00, 100, dpad));
+}
+
+void GamepadLayout_Test::standardRolesMatchTheLayout()
+{
+    const QStringList roles = InputOutputMap::standardChannelRoles();
+    for (int a = 0; a < AxisCount; ++a)
+        QCOMPARE(roles.value(a), axisRole(a));
+    for (int b = 0; b < ButtonCount + TouchCount; ++b)
+        QCOMPARE(roles.value(AxisCount + b), buttonRole(b));
 }
 
 QTEST_GUILESS_MAIN(GamepadLayout_Test)

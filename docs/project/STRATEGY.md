@@ -397,6 +397,7 @@ order the note says why.
 | Remaining plot alignment faults + structure-editor coverage | 3 | 4 | plotalignment test | 3 | L | L | 4 | BUILD (0.3.1) |
 | Lasers: one shared fixedThrow, Face for fixed units, yoke tilt with migration | 3 | 4 | RigHeads, studio placement | 3 | M | M | 3.2 | BUILD (0.3.1) |
 | PlayStation names and glyphs (PadNames table, tokens, map drawing) | 3 | 4 | controller schemes | 3 | L | L | 4 | BUILD (0.3.1); pad Run needs it |
+| Controller slots: one input from any of several pads (Xbox here, DualShock 4 there), offer-to-adopt, mapping by gamepad role; DualSense audit (Linux layout, stock input profiles) | 4 | 5 | device-following inputs, controller profiles, PadNames | 2 | M | M | **8** | DONE (0.3.1, user's ask 2026-10-30: a travelling show meets a different pad at each place; a DualSense arrived the same day) |
 | Teaching mode, must-haves (Show Settings, chip, Operate warning, safe output, PIN, Make Student Handout) | 5 | 5 | scramble practice, Design/Operate, .qlcc | 7 | M | M | 2.9 | BUILD (0.3.1); see note 1 |
 | Touchpad option A | 2 | 3 | HID plugin, focus tools | 3.5 | M | M | 1.4 | LATER (0.4 if pad Run users ask) |
 | Laser aperture face, U yoke, LaserLook symbol | 2 | 3 | Rig Overview | 4 | L | M | 1.5 | LATER |

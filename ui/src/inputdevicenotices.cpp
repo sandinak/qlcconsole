@@ -44,6 +44,7 @@ InputDeviceNotices::InputDeviceNotices(Doc *doc, QObject *parent)
         connect(iom, &InputOutputMap::inputDeviceConnected, this, &InputDeviceNotices::schedule);
         connect(iom, &InputOutputMap::offlinePatchesChanged, this, &InputDeviceNotices::schedule);
         connect(iom, &InputOutputMap::pluginConfigurationChanged, this, &InputDeviceNotices::schedule);
+        connect(iom, &InputOutputMap::inputSlotChanged, this, &InputDeviceNotices::schedule);
     }
     schedule();
 }
@@ -59,6 +60,10 @@ QList<InputDeviceNotices::Device> InputDeviceNotices::devices() const
     {
         if (uni == nullptr)
             continue;
+        QStringList slotNames;
+        foreach (const Universe::InputSlotDevice &sd, uni->inputSlot())
+            slotNames << (sd.anyGamepad ? tr("any game controller") : sd.uid);
+
         if (InputPatch *ip = uni->inputPatch())
         {
             if (ip->plugin() == nullptr || ip->plugin()->linesAreHardware() == false)
@@ -68,6 +73,9 @@ QList<InputDeviceNotices::Device> InputDeviceNotices::devices() const
             d.plugin = ip->pluginName();
             d.name = ip->inputUID().isEmpty() ? ip->inputName() : ip->inputUID();
             d.connected = true;
+            d.slotCount = slotNames.count();
+            d.slotPosition = uni->inputSlotLive() + 1;
+            d.slotDevices = slotNames;
             list << d;
             continue;
         }
@@ -85,6 +93,8 @@ QList<InputDeviceNotices::Device> InputDeviceNotices::devices() const
             d.plugin = rec.plugin;
             d.name = rec.uid;
             d.connected = false;
+            d.slotCount = slotNames.count();
+            d.slotDevices = slotNames;
             list << d;
         }
     }
@@ -94,6 +104,7 @@ QList<InputDeviceNotices::Device> InputDeviceNotices::devices() const
 void InputDeviceNotices::reset()
 {
     m_said.clear();
+    m_offered.clear();
     schedule();
 }
 
@@ -135,8 +146,21 @@ void InputDeviceNotices::settleNow()
     {
         next.insert(d.universe, d);
         const QMap<quint32, Device>::const_iterator was = m_said.constFind(d.universe);
-        const bool known = was != m_said.constEnd() && was->name == d.name;
-        if (d.connected == false && known == false)
+        const bool seen = was != m_said.constEnd();
+        const bool known = seen && was->name == d.name;
+        if (d.connected == false && d.slotCount > 1)
+        {
+            // A controller slot with none of its devices here.
+            if (seen && was->connected == false)
+                continue;
+            said << (seen ? tr("%1 '%2' disconnected — universe %3: none of its %4 controllers is connected")
+                                .arg(kindName(d.plugin), was->name).arg(d.universe + 1).arg(d.slotCount)
+                          : tr("Universe %1: none of its %2 controllers is connected (%3)")
+                                .arg(d.universe + 1).arg(d.slotCount)
+                                .arg(d.slotDevices.join(QStringLiteral(", "))));
+            warning = true;
+        }
+        else if (d.connected == false && known == false)
         {
             // A show opened with it switched off, or asleep.
             said << tr("%1 '%2' not connected — universe %3")
@@ -149,6 +173,13 @@ void InputDeviceNotices::settleNow()
                         .arg(kindName(d.plugin), d.name).arg(d.universe + 1);
             warning = true;
         }
+        else if (d.connected && d.slotCount > 1 && seen && (known == false || was->connected == false))
+        {
+            // A controller slot: which of its devices drives it now.
+            said << tr("%1 '%2' in use — universe %3 (%4 of %5 in its list)")
+                        .arg(kindName(d.plugin), d.name).arg(d.universe + 1)
+                        .arg(d.slotPosition).arg(d.slotCount);
+        }
         else if (d.connected && known && was->connected == false)
         {
             said << tr("%1 '%2' connected — universe %3")
@@ -160,6 +191,43 @@ void InputDeviceNotices::settleNow()
     updateStatus(now);
     if (said.isEmpty() == false)
         emit notice(said.join(QStringLiteral(" · ")), warning);
+
+    /* A pad here that nothing has, while a universe waits for one that is
+       not: offer it (one click, and remembered with the show). */
+    InputOutputMap *iom = m_doc != nullptr ? m_doc->inputOutputMap() : nullptr;
+    if (iom == nullptr)
+        return;
+    QSet<QString> standing;
+    QString made;
+    foreach (const InputOutputMap::InputSlotOffer &o, iom->inputSlotOffers())
+    {
+        const QString key = QStringLiteral("%1\n%2\n%3").arg(o.universe).arg(o.plugin, o.device);
+        standing.insert(key);
+        if (m_offered.contains(key) || made.isEmpty() == false)
+            continue;
+        made = key;
+        QString waitingFor;
+        foreach (const Device &d, now)
+            if (d.universe == o.universe)
+                waitingFor = d.slotCount > 1 ? d.slotDevices.join(QStringLiteral(", ")) : d.name;
+        emit offer(tr("%1 '%2' is here; universe %3 waits for '%4', which is not.")
+                       .arg(kindName(o.plugin), o.device).arg(o.universe + 1).arg(waitingFor),
+                   tr("Use '%1' for universe %2 (and remember it)").arg(o.device).arg(o.universe + 1),
+                   o.universe, o.plugin, o.device);
+        // One at a time (the notice line holds one); the next on a later change.
+    }
+    m_offered.intersect(standing);
+    if (made.isEmpty() == false)
+        m_offered.insert(made);
+}
+
+bool InputDeviceNotices::adopt(quint32 universe, const QString &plugin, const QString &device)
+{
+    InputOutputMap *iom = m_doc != nullptr ? m_doc->inputOutputMap() : nullptr;
+    if (iom == nullptr || iom->addInputSlotDevice(universe, plugin, device) == false)
+        return false;
+    m_doc->setModified();
+    return true;
 }
 
 void InputDeviceNotices::updateStatus(const QList<Device> &now) const

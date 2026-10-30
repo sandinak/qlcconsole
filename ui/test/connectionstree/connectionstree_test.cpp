@@ -540,6 +540,57 @@ void ConnectionsTree_Test::anAbsentInputDeviceIsShownNotConnected()
         QVERIFY(it->text(COL_DETAIL).contains("not connected") == false);
 }
 
+void ConnectionsTree_Test::aControllerSlotListsItsDevices()
+{
+    /* A universe whose input may come from any of several pads: each is
+       listed under the universe's input row, in order, saying which is in
+       use -- whichever pad that is, here or away. */
+    const QString pad = QStringLiteral("DualSense Wireless Controller (aa-bb)");
+    const QString xbox = QStringLiteral("Xbox Wireless Controller (0b13)");
+    IOPluginStub *stub = stubOf(m_doc);
+    stub->m_linesAreHardware = true;
+    stub->m_lineNames = QStringList() << pad;
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QVERIFY(iom->setInputPatch(0, stub->name(), QString(), 0));
+    QVERIFY(iom->addInputSlotDevice(0, stub->name(), xbox));
+
+    ConnectionsTree tree(m_doc);
+    tree.refresh();
+    auto slotRows = [&tree]() {
+        QList<QTreeWidgetItem *> rows;
+        foreach (QTreeWidgetItem *it, allItems(tree.m_tree))
+            if (it->data(COL_NAME, ROLE_KIND).toInt() == 11)   // KIND_SLOTDEVICE
+                rows << it;
+        return rows;
+    };
+    QList<QTreeWidgetItem *> rows = slotRows();
+    QCOMPARE(rows.count(), 2);
+    QCOMPARE(rows.at(0)->text(COL_NAME), QString("1. %1").arg(pad));
+    QVERIFY2(rows.at(0)->text(COL_DETAIL).startsWith("in use"), qPrintable(rows.at(0)->text(COL_DETAIL)));
+    QCOMPARE(rows.at(1)->text(COL_NAME), QString("2. %1").arg(xbox));
+    QVERIFY(rows.at(1)->text(COL_DETAIL).startsWith("not connected"));
+    QCOMPARE(rows.at(1)->data(COL_NAME, ROLE_LINE).toInt(), 1);
+    QCOMPARE(rows.at(0)->parent()->data(COL_NAME, ROLE_UNIVERSE).toUInt(), quint32(0));
+
+    // The DualSense away, the Xbox pad here: it is in use, still second.
+    stub->m_lineNames = QStringList() << xbox;
+    stub->configure();
+    tree.refresh();
+    rows = slotRows();
+    QCOMPARE(rows.count(), 2);
+    QVERIFY(rows.at(0)->text(COL_DETAIL).startsWith("not connected"));
+    QVERIFY(rows.at(1)->text(COL_DETAIL).startsWith("in use"));
+
+    // Both away: listed under the greyed universe all the same.
+    stub->m_lineNames = QStringList() << "Keyboard";
+    stub->configure();
+    tree.refresh();
+    rows = slotRows();
+    QCOMPARE(rows.count(), 2);
+    QVERIFY(rows.at(0)->text(COL_DETAIL).startsWith("not connected"));
+    QVERIFY(rows.at(1)->text(COL_DETAIL).startsWith("not connected"));
+}
+
 void ConnectionsTree_Test::targetAliasIsShownOnTheRow()
 {
     IOPluginStub *stub = stubOf(m_doc);

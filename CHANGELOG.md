@@ -63,6 +63,23 @@ back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
   its VC Toggle button restarts them instead of turning the hit off; a
   press while one is still playing turns it off. Flash and hits without
   a one-shot are unchanged. A Breathe's Length is one breath (final).
+### One input, whichever controller is here
+
+- **A universe's input can take any of a list of game controllers** — the
+  Xbox pad at one place, a DualShock 4 at the next, a DualSense at home.
+  The first one switched on drives it (higher in the list wins, and the
+  notice says which is in use); each keeps its own input and controller
+  profile, and Quick focus, the follow spot, focus calls, Control Map
+  bindings and VC inputs work from whichever it is, in its own button
+  names. A pad that turns up while a universe waits for a missing one is
+  offered — **Use '…' for universe 2 (and remember it)** — and never taken
+  without that click. The list is under the universe in Connections ▸
+  Devices (move up, move down, remove, "any game controller"); saved with
+  the show, and older builds open its first controller.
+- **DualSense and DualShock 4 on Linux** are read into the same layout as
+  on a Mac, so the stock PlayStation profile is right there too (Xbox pads
+  as well); **stock input profiles** for the Xbox pad, the DualShock 4 and
+  the DualSense ("Create", not "Share").
 
 ### Tonight's running order
 
