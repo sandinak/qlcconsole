@@ -48,7 +48,8 @@ skipped or deferred below.
   long as its longest member (83b673453); RGBMatrix::setTotalDuration
   divide by zero (70bd2e970); paused faders resume when they fade out
   (e683c05b5); a fixture's channels kept when another moves over them
-  (78906fddb, e72f6283c); Script duration cached (8bc125f7a); RGBMatrix
+  (78906fddb: the source change only -- its and e72f6283c's tests need
+  ae1047152's universe setup, which the fork's `patchFixtures` replaced); Script duration cached (8bc125f7a); RGBMatrix
   dimmer mode on generic dimmers (6be96e80c); RGB to grey precision
   (b2d87e5fd); v5 scripts terminate (65ac80c9c, 94648f4ae); fixture
   definition live update (c3d96465f).
