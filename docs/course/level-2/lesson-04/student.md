@@ -47,7 +47,7 @@ Which lights move, and which stay still?
    **TrussW-RGB** (Blue, Full) as layers.
 5. In the Library click **Palettes → Colour → 01-Everybody Scream**, then
    **+ Palette → Effect**.
-6. If the browser isn't open, click **Change effect…**. Search `Sparkle`,
+6. In the browser, search `Sparkle`,
    click **Sparkle · Dimmer**, **Done**.
 
    ![The effect browser](../../images/lesson-2-4/effect-picker.png)
@@ -62,8 +62,8 @@ Which lights move, and which stay still?
 
    ![Its own colour](../../images/lesson-2-4/sparkle-row.png)
 
-10. Click the song folder again, **+ Palette → Effect**; pick **Rainbow**
-    (Change effect… if needed), **Done**; name it `Truss Wave`.
+10. Click the song folder again, **+ Palette → Effect**; pick **Rainbow**,
+    **Done**; name it `Truss Wave`.
 11. Click **1.0.6 Dance Break**; drag **Truss Wave** onto the
     **TrussW-RGB** row: a wave of blue across the boxes.
 
