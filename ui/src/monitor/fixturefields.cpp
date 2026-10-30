@@ -40,6 +40,7 @@
 #include "qlcfixturedef.h"
 #include "qlcfixturemode.h"
 #include "tower.h"
+#include "righeads.h"
 #include "doc.h"
 #include "itemicons.h"
 #include "scenery.h"
@@ -226,7 +227,9 @@ FixtureFields::FixtureFields(Monitor *monitor, QFormLayout *form, QWidget *paren
     for (int i = 0; i < m_face->count(); ++i)
         m_face->setItemData(i, i, Qt::UserRole);
     m_face->setToolTip(tr("The face it is on, and so which way it faces out. On the "
-                          "outside of a truss it also moves to that side of the truss."));
+                          "outside of a truss it also moves to that side of the truss. "
+                          "A fixed light (a par, a laser) is aimed that way too: Back "
+                          "points it upstage, Bottom straight down."));
     form->addRow(tr("Face:"), m_face);
 
     /* WHERE it sits relative to what carries it: "Inside" is a unit between a
@@ -260,8 +263,9 @@ FixtureFields::FixtureFields(Monitor *monitor, QFormLayout *form, QWidget *paren
     m_tilt->setDecimals(0);
     m_tilt->setSuffix(QStringLiteral("°"));
     m_tilt->setToolTip(tr("Tip the fixture about its own length — a bar lying in a step "
-                          "angled up toward the cast. Positive tips it upstage. Angle "
-                          "above turns it flat within its face instead."));
+                          "angled up toward the cast. Positive tips its light up on an "
+                          "upright face (Front, Back, Stage left or right), upstage on a "
+                          "Top face. Angle above turns it flat within its face instead."));
     form->addRow(tr("Tilt:"), m_tilt);
 
     /* What makes its light and what it is seen through, where that is a
@@ -593,6 +597,15 @@ void FixtureFields::applyFace(int face)
             props->setFixtureFace(rp, FixtureRigProps::Face(face));
             props->setFixtureRigProps(fid, rp);
         }
+        /* A fixed light throws out of its face: the face aims it, and Points
+           and Tilt in yoke read that aim (a yoke tilt already set stays). */
+        if (props->fixtureFrameGroup(fid) == 0
+            && RigHeads::isFixedUnit(m_monitor->m_doc->fixture(fid)))
+        {
+            FixtureRigProps rp = props->fixtureRigProps(fid);
+            RigHeads::aimAtFace(rp);
+            props->setFixtureRigProps(fid, rp);
+        }
         if (m_monitor->m_graphicsView != nullptr)
             m_monitor->m_graphicsView->updateFixture(fid);
     }
@@ -724,11 +737,25 @@ void FixtureFields::setFixtures(const QList<quint32> &fids, quint32 shown)
     row(m_orientation, !linear || onTower || pansOrTilts);
 
     // Face, Angle
+    /* A FIXED light (a par, a laser: no pan or tilt, not a strip) has a Face
+       too -- the side it throws out of (Q172 A). It reads the side its light
+       goes nearest (RigHeads::fixedThrow, as every view draws it), blank
+       while it points in between; picking one aims it (applyFace()). */
+    const bool fixedUnit = !frame && RigHeads::isFixedUnit(fx);
+    auto shownFace = [doc, props, fixedUnit](quint32 f) {
+        if (!fixedUnit)
+            return int(props->fixtureRigProps(f).face());
+        QVector3D d;
+        return RigHeads::fixedThrow(doc, f, d) ? RigHeads::nearestFace(d) : -1;
+    };
+    const int face0 = shownFace(m_shown);
     m_face->blockSignals(true);
-    m_face->setCurrentIndex(int(rp.face()));
-    comboMixed(m_face, differs([props, rp](quint32 f) { return props->fixtureRigProps(f).face() == rp.face(); }));
+    comboMixed(m_face, false);
+    m_face->setCurrentIndex(face0);
+    if (differs([shownFace, face0](quint32 f) { return shownFace(f) == face0; }))
+        comboMixed(m_face, true);
     m_face->blockSignals(false);
-    row(m_face, (linear || frame) && !onTower);
+    row(m_face, (linear || frame || fixedUnit) && !onTower);
 
     m_angle->blockSignals(true);
     spinMixed(m_angle, differs([props, rp](quint32 f) {
@@ -752,7 +779,9 @@ void FixtureFields::setFixtures(const QList<quint32> &fids, quint32 shown)
     if (!spinIsMixed(m_tilt))
         m_tilt->setValue(double(rp.studioTilt));
     m_tilt->blockSignals(false);
-    row(m_tilt, true);
+    /* A fixed light tips in its yoke (Tilt in yoke, in Aim & Mount), not by
+       rolling its body; the row stays only to clear a roll it already has. */
+    row(m_tilt, !fixedUnit || !qFuzzyIsNull(rp.studioTilt));
 
     // Its place on a tower: the one shown (a place is one fixture's).
     if (Tower *tw = (onTower && !many) ? props->tower(rp.towerId) : nullptr)

@@ -2631,17 +2631,173 @@ void Monitor_Test::aFixedLightsEditorAimsItByPanAndTilt()
             return false;
         tiltShown = down->isVisibleTo(dlg);
         for (QLabel *l : dlg->findChildren<QLabel *>())
-            if (l->text().startsWith("Pan ("))
+            if (l->text().startsWith("Points ("))
                 panLabel = l->text();
         down->setValue(40.0);
         return true;
     });
     rig.mon->showFixtureItemEditor(rig.fxi->id());
     QVERIFY(tiltShown);
-    QCOMPARE(panLabel, QString::fromUtf8("Pan (° from downstage):"));
+    QCOMPARE(panLabel, QString::fromUtf8("Points (° from DS):"));
     const FixtureRigProps rp = props->fixtureRigProps(rig.fxi->id());
     QVERIFY(rp.fixedAim);
     QCOMPARE(rp.aimDown, 40.0f);
+}
+
+void Monitor_Test::aFixedLightsFaceAimsItAndItsYokeTiltsUp()
+{
+    DropRig rig;
+    QVERIFY(rig.build(m_doc, QVector3D(8000, 8000, 0)));
+    MonitorProperties *props = m_doc->monitorProperties();
+    Truss *truss = props->addTruss();
+    truss->setOrigin(QVector3D(2.0f, 6.0f, 5.0f));
+    truss->setDirection(QPointF(1.0, 0.0));
+    truss->setLength(8.0f);
+    truss->setWidth(0.3f);
+    const quint32 trussId = truss->id();
+    const auto removeTruss = qScopeGuard([props, trussId]() { props->removeTruss(trussId); });
+    const quint32 fid = rig.fxi->id();
+    FixtureRigProps rp = props->fixtureRigProps(fid);
+    rp.trussId = trussId;
+    rp.trussOffset = 3.0f;
+    rp.mountingType = Truss::TopHung;
+    props->setFixtureRigProps(fid, rp);
+
+    bool faceShown = false, rollShown = true;
+    int faceBefore = -2;
+    double bearing = -1;
+    QString levelText, upText;
+    driveDialog([&](QWidget *dlg) {
+        QComboBox *face = dlg->findChild<QComboBox *>("fixtureFace");
+        QDoubleSpinBox *aim = dlg->findChild<QDoubleSpinBox *>("fixtureAim");
+        QDoubleSpinBox *down = dlg->findChild<QDoubleSpinBox *>("fixtureAimDown");
+        QDoubleSpinBox *roll = dlg->findChild<QDoubleSpinBox *>("fixtureTilt");
+        if (face == nullptr || aim == nullptr || down == nullptr || roll == nullptr)
+            return false;
+        faceShown = face->isVisibleTo(dlg);
+        rollShown = roll->isVisibleTo(dlg);
+        faceBefore = face->currentData(Qt::UserRole).toInt();
+        // Back: aimed upstage, level -- and the rows read it.
+        face->setCurrentIndex(face->findData(int(FixtureRigProps::FaceBack), Qt::UserRole));
+        bearing = aim->value();
+        levelText = down->text();
+        // The up arrow tips it UP.
+        down->stepBy(10);
+        upText = down->text();
+        return true;
+    });
+    rig.mon->showFixtureItemEditor(fid);
+    QVERIFY(faceShown);
+    QVERIFY(!rollShown);                        // tipped in its yoke, not rolled
+    // Hung on the centreline, it throws straight down: Bottom.
+    QCOMPARE(faceBefore, int(FixtureRigProps::FaceBottom));
+    QCOMPARE(bearing, 180.0);
+    QCOMPARE(levelText, QString("level"));
+    QCOMPARE(upText, QString::fromUtf8("10° up"));
+    rp = props->fixtureRigProps(fid);
+    QVERIFY(rp.fixedAim);
+    QCOMPARE(rp.panZeroDir, 180.0f);
+    QCOMPARE(rp.aimDown, -10.0f);
+    QCOMPARE(rp.face(), FixtureRigProps::FaceBack);
+    // Every consumer takes that throw: upstage and a little up.
+    QVector3D d;
+    QVERIFY(RigHeads::fixedThrow(m_doc, fid, d));
+    QVERIFY2(d.y() < -0.95f && d.z() > 0.1f, qPrintable(QString("%1 %2 %3").arg(d.x()).arg(d.y()).arg(d.z())));
+
+    // Typed the crew's way.
+    double typed = 0;
+    driveDialog([&](QWidget *dlg) {
+        QDoubleSpinBox *down = dlg->findChild<QDoubleSpinBox *>("fixtureAimDown");
+        if (down == nullptr)
+            return false;
+        QLineEdit *edit = down->findChild<QLineEdit *>();
+        if (edit == nullptr)
+            return false;
+        edit->selectAll();
+        QTest::keyClicks(edit, "30 down");
+        down->interpretText();
+        typed = down->value();
+        return true;
+    });
+    rig.mon->showFixtureItemEditor(fid);
+    QCOMPARE(typed, 30.0);
+    QCOMPARE(props->fixtureRigProps(fid).aimDown, 30.0f);
+    QCOMPARE(props->fixtureRigProps(fid).panZeroDir, 180.0f);   // the bearing kept
+}
+
+void Monitor_Test::aFixedLightDroppedOnAChordFacesThatSide()
+{
+    DropRig rig;
+    QVERIFY(rig.build(m_doc, QVector3D(5000, 5000, 0)));
+    rig.gv->setViewPOV(MonitorGraphicsView::PovTop);
+    MonitorProperties *props = m_doc->monitorProperties();
+    Truss *t = props->addTruss();
+    t->setName("LaserBar");
+    const quint32 barId = t->id();
+    auto dropTruss = qScopeGuard([props, barId]() { props->removeTruss(barId); });
+    t->setOrigin(QVector3D(10.0f, 12.0f, 4.0f));
+    t->setDirection(QPointF(1.0, 0.0));
+    t->setLength(6.0f);
+    t->setWidth(0.3f);
+    rig.gv->updateTrusses();
+
+    auto dropAt = [&](MonitorFixtureItem *item, double xMm, double yMm) {
+        rig.gv->scene()->clearSelection();
+        item->setSelected(true);
+        const QPointF px = rig.gv->realPositionToPixels(xMm, yMm);
+        item->setPos(item->pos() + (px - item->iconCentreScene()));
+        rig.gv->setAttachOnDrop(true);
+        rig.gv->slotFixtureMoved(item);
+        rig.gv->setAttachOnDrop(false);
+    };
+    const quint32 fid = rig.fxi->id();
+
+    // On the upstage chord (12 cm upstage of the line): Back, and it throws upstage.
+    dropAt(rig.item, 12000.0, 11880.0);
+    FixtureRigProps rp = props->fixtureRigProps(fid);
+    QCOMPARE(rp.trussId, barId);
+    QCOMPARE(rp.face(), FixtureRigProps::FaceBack);
+    QVERIFY(rp.fixedAim);
+    QCOMPARE(rp.panZeroDir, 180.0f);
+    QCOMPARE(rp.aimDown, 0.0f);
+    QVERIFY(props->fixtureRigPosition(fid).y() < 12.0f);    // on the upstage side
+    QVector3D d;
+    QVERIFY(RigHeads::fixedThrow(m_doc, fid, d));
+    QVERIFY2(d.y() < -0.99f, qPrintable(QString::number(d.y())));
+
+    // A second, on the downstage chord: Front.
+    Fixture *other = new Fixture(m_doc);
+    other->setName("DropProbe2");
+    other->setChannels(1);
+    other->setAddress(10);
+    QVERIFY(m_doc->addFixture(other));
+    auto cleanup = qScopeGuard([&]() { m_doc->deleteFixture(other->id()); });
+    props->setFixturePosition(other->id(), 0, 0, QVector3D(6500, 2000, 0));
+    rig.gv->addFixture(other->id(), QPointF(6500, 2000));
+    MonitorFixtureItem *second = rig.gv->m_fixtures.value(other->id(), nullptr);
+    QVERIFY(second != nullptr);
+    dropAt(second, 13000.0, 12120.0);
+    rp = props->fixtureRigProps(other->id());
+    QCOMPARE(rp.trussId, barId);
+    QCOMPARE(rp.face(), FixtureRigProps::FaceFront);
+    QCOMPARE(rp.panZeroDir, 0.0f);
+
+    // A third on the centreline: hung, no face chosen, straight down as ever.
+    Fixture *third = new Fixture(m_doc);
+    third->setName("DropProbe3");
+    third->setChannels(1);
+    third->setAddress(20);
+    QVERIFY(m_doc->addFixture(third));
+    auto cleanup3 = qScopeGuard([&]() { m_doc->deleteFixture(third->id()); });
+    props->setFixturePosition(third->id(), 0, 0, QVector3D(7500, 2000, 0));
+    rig.gv->addFixture(third->id(), QPointF(7500, 2000));
+    MonitorFixtureItem *mid = rig.gv->m_fixtures.value(third->id(), nullptr);
+    QVERIFY(mid != nullptr);
+    dropAt(mid, 14000.0, 12000.0);
+    rp = props->fixtureRigProps(third->id());
+    QCOMPARE(rp.trussId, barId);
+    QVERIFY(!rp.studioFaceChosen);
+    QVERIFY(!rp.fixedAim);
 }
 
 void Monitor_Test::theOrientationDiagramFollowsTheFace()

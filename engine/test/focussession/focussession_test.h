@@ -39,6 +39,9 @@ private slots:
     /** Q102: a fixed light is focused by where it lands at head height;
      *  that sets its Pan and Tilt, and revert puts it back as it was. */
     void aFixedLightIsFocusedByWhereItLands();
+    /** A fixed light faced Back (a laser on the upstage chord) is focused
+     *  where it throws -- upstage -- as the views draw it (Q172 A). */
+    void aFixedLightFacedBackLandsUpstage();
     /** Q103: a lens zoomed by hand is set within its range and saved; a
      *  zoom channel is driven while focusing and not saved. */
     void theBeamIsSetWithinTheLensRange();

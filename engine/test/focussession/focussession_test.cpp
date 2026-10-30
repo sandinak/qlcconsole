@@ -1003,6 +1003,56 @@ void FocusSession_Test::aFixedLightIsFocusedByWhereItLands()
     QVERIFY2(qAbs(rp.panZeroDir - 270.0f) < 0.05f, qPrintable(QString::number(rp.panZeroDir)));   // stage left
 }
 
+void FocusSession_Test::aFixedLightFacedBackLandsUpstage()
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test"); def->setModel("Sky Laser");
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    QLCChannel *dim = new QLCChannel();
+    dim->setName("Dimmer"); dim->setGroup(QLCChannel::Intensity);
+    def->addChannel(dim); mode->insertChannel(dim, 0);
+    def->addMode(mode);
+    Fixture *laser = new Fixture(m_doc);
+    laser->setName("SR-LASER");
+    laser->setFixtureDefinition(def, mode);
+    laser->setAddress(40);
+    QVERIFY(m_doc->addFixture(laser));
+    MonitorProperties *props = m_doc->monitorProperties();
+    props->setFixturePosition(laser->id(), 0, 0, QVector3D(4000, 0, 5));
+    FixtureRigProps rp = props->fixtureRigProps(laser->id());
+    props->setFixtureFace(rp, FixtureRigProps::FaceBack);
+    props->setFixtureRigProps(laser->id(), rp);
+
+    // The same throw the views draw: upstage, level.
+    QVector3D dir;
+    QVERIFY(RigHeads::fixedThrow(m_doc, laser->id(), dir));
+    QVERIFY2(dir.y() < -0.99f, qPrintable(QString("%1 %2 %3").arg(dir.x()).arg(dir.y()).arg(dir.z())));
+
+    FocusSession::Options o;
+    o.fixtures = { laser->id() };
+    FocusSession *s = m_doc->programmer()->focusSession();
+    QString why;
+    QVERIFY2(s->start(o, &why), qPrintable(why));
+    QVector3D at;
+    QVERIFY(s->referencePoint(laser->id(), at));
+    // Level, so it never comes down to head height: 2 m out the way it
+    // throws -- upstage (-Y) -- not under the truss or downstage.
+    QVERIFY2(at.y() < -1.9f && qAbs(at.x() - 4.0f) < 1e-3f,
+             qPrintable(QString("%1, %2").arg(at.x()).arg(at.y())));
+    s->stop();
+
+    // Tipped down in its yoke (aimed from the face): it lands upstage, at head height.
+    rp = props->fixtureRigProps(laser->id());
+    RigHeads::aimAtFace(rp);
+    rp.aimDown = 45.0f;
+    props->setFixtureRigProps(laser->id(), rp);
+    QVERIFY2(s->start(o, &why), qPrintable(why));
+    QVERIFY(s->referencePoint(laser->id(), at));
+    const float drop = 5.0f - float(FocusSession::subjectHeight());
+    QVERIFY2(qAbs(at.y() + drop) < 0.01f, qPrintable(QString::number(at.y())));
+    s->stop();
+}
+
 void FocusSession_Test::theBeamIsSetWithinTheLensRange()
 {
     // A fixed spot with a 15-35° lens zoomed by hand, and a wash with a zoom

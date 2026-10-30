@@ -10,6 +10,7 @@
 */
 
 #include <QtMath>
+#include <cmath>
 
 #include "monitorproperties.h"
 #include "qlcfixturemode.h"
@@ -105,6 +106,125 @@ bool RigHeads::fixedThrow(Doc *doc, quint32 fid, int headCount, bool mover, QVec
     return false;
 }
 
+bool RigHeads::fixedThrow(Doc *doc, quint32 fid, QVector3D &dir)
+{
+    const Fixture *fx = doc != nullptr ? doc->fixture(fid) : nullptr;
+    if (fx == nullptr)
+        return false;
+    const bool mover = fx->channelNumber(QLCChannel::Pan, QLCChannel::MSB, 0) != QLCChannel::invalid()
+                    || fx->channelNumber(QLCChannel::Tilt, QLCChannel::MSB, 0) != QLCChannel::invalid();
+    return fixedThrow(doc, fid, qMax(1, fx->heads()), mover, dir);
+}
+
+bool RigHeads::isLinear(const Fixture *fx)
+{
+    if (fx == nullptr)
+        return false;
+    if (fx->heads() > 1)
+        return true;                                  // LED tape / multi-cell bar
+    if (const QLCFixtureMode *m = fx->fixtureMode())  // a wide single-head bar/wash
+    {
+        const qreal w = m->physical().width();
+        const qreal d = qMax(m->physical().height(), m->physical().depth());
+        if (w > 0 && d > 0 && w > 1.8 * d)
+            return true;
+    }
+    return false;
+}
+
+bool RigHeads::isFixedUnit(const Fixture *fx)
+{
+    return fx != nullptr
+        && fx->channelNumber(QLCChannel::Pan, QLCChannel::MSB, 0) == QLCChannel::invalid()
+        && fx->channelNumber(QLCChannel::Tilt, QLCChannel::MSB, 0) == QLCChannel::invalid()
+        && !isLinear(fx);
+}
+
+/* The face's outward normal before any roll, flip or turn. */
+static QVector3D planeNormal(int mount)
+{
+    switch (mount)
+    {
+    case 0:  return QVector3D(0, 0, 1);
+    case 2:  return QVector3D(1, 0, 0);
+    case 1:
+    default: return QVector3D(0, 1, 0);
+    }
+}
+
+float RigHeads::tiltSign(const FixtureRigProps &rp)
+{
+    /* frame() rolls N toward -H. On an upright face N is level, so the roll
+       lifts it when H points down -- true of a Front bar running stage left
+       to right, not of one on the Back (flipped) or the Stage left face, where
+       "+20" used to tip the light at the floor. Turn those round. A Top or
+       Bottom face has a level H: nothing to lift, and it keeps its old sense
+       ("positive tips it upstage"). Yaw is about the vertical: no matter. */
+    QVector3D h = QVector3D::crossProduct(planeNormal(rp.studioMount), faceAxis(rp));
+    if (rp.studioFlip)
+        h = -h;
+    return (h.z() > 1e-3f) ? -1.0f : 1.0f;
+}
+
+void RigHeads::aimAtFace(FixtureRigProps &rp)
+{
+    QVector3D L, N, H;
+    frame(rp, L, N, H);
+    const bool hadElevation = rp.fixedAim && qAbs(rp.aimDown) < 89.0f;
+    const float plan = std::hypot(N.x(), N.y());
+    if (plan < 0.26f)               // Top or Bottom: straight up or down
+        rp.aimDown = (N.z() < 0.0f) ? 90.0f : -90.0f;
+    else
+    {
+        // The bearing convention of fixedAimDirection(): dir = (-sin b, cos b).
+        double b = qRadiansToDegrees(qAtan2(-double(N.x()), double(N.y())));
+        b = std::fmod(qRound(b * 10.0) / 10.0 + 360.0, 360.0);
+        rp.panZeroDir = float(b);
+        if (!hadElevation)
+            rp.aimDown = float(qRound(qRadiansToDegrees(qAsin(qBound(-1.0, -double(N.z()), 1.0))) * 10.0) / 10.0);
+    }
+    rp.fixedAim = true;
+}
+
+void RigHeads::startFixedAim(Doc *doc, quint32 fid, FixtureRigProps &rp)
+{
+    if (rp.fixedAim)
+        return;
+    QVector3D d;
+    if (!fixedThrow(doc, fid, d))
+        d = (rp.mountingType == Truss::TopHung) ? QVector3D(0, 0, -1) : QVector3D(0, 0, 1);
+    rp.aimDown = float(qRound(qRadiansToDegrees(qAsin(qBound(-1.0, -double(d.z()), 1.0))) * 10.0) / 10.0);
+    if (std::hypot(d.x(), d.y()) > 0.26f)
+    {
+        const double b = qRadiansToDegrees(qAtan2(-double(d.x()), double(d.y())));
+        rp.panZeroDir = float(std::fmod(qRound(b * 10.0) / 10.0 + 360.0, 360.0));
+    }
+    rp.fixedAim = true;
+}
+
+int RigHeads::nearestFace(const QVector3D &dir)
+{
+    if (dir.lengthSquared() < 1e-8f)
+        return -1;
+    const QVector3D d = dir.normalized();
+    // In FixtureRigProps::Face order.
+    static const QVector3D out[] = { QVector3D(0, 0, 1), QVector3D(0, 0, -1),
+                                     QVector3D(0, 1, 0), QVector3D(0, -1, 0),
+                                     QVector3D(1, 0, 0), QVector3D(-1, 0, 0) };
+    int best = -1;
+    float bestDot = 0.86f;          // within about 30 degrees
+    for (int i = 0; i < 6; ++i)
+    {
+        const float dot = QVector3D::dotProduct(d, out[i]);
+        if (dot > bestDot)
+        {
+            bestDot = dot;
+            best = i;
+        }
+    }
+    return best;
+}
+
 void RigHeads::frame(const FixtureRigProps &rp, QVector3D &L, QVector3D &N, QVector3D &H)
 {
     L = faceAxis(rp);
@@ -128,7 +248,8 @@ void RigHeads::frame(const FixtureRigProps &rp, QVector3D &L, QVector3D &N, QVec
        pixels, beam direction) follows without knowing this exists. */
     if (!qFuzzyIsNull(rp.studioTilt))
     {
-        const double t = qDegreesToRadians(double(rp.studioTilt));
+        // Signed so that + tips it UP on an upright face (tiltSign()).
+        const double t = qDegreesToRadians(double(rp.studioTilt * tiltSign(rp)));
         const double c = qCos(t), sn = qSin(t);
         const QVector3D n0 = N, h0 = H;
         // Positive tips the face AWAY from H. For a bar lying on a top face

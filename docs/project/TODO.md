@@ -57,6 +57,23 @@ dialog); keep performers out of aim-target pickers if they crowd them;
 people facing along a turned riser (everyone faces the house); a line
 converted from a plain line keeps its own heights rather than chest height.
 
+## Lasers: orientation, look, starfield coverage (board Q172, 2026-10-29)
+
+Design study of 2026-10-26 (parts A, B, C). **Part A
+done** (0.3.1): one `RigHeads::fixedThrow` for the 3D view, the plot's
+footprint, Quick focus and the orientation diagram; Face for fixed lights
+(it aims them), a fixed light dropped on a truss chord faces that side;
+Tilt in yoke worded up/down; a strip's Tilt tips up on any upright face,
+the file keeping the old sense. Decided at night (can change): the Face
+row reads the side the light throws nearest, blank in between; a yoke
+tilt set by hand survives a Face change between upright sides; only a
+fixed light with no face of its own takes a chord's face on a drop; a
+bare typed number in Tilt in yoke means up. **Open:** part B (a laser
+that looks like one: aperture face, U yoke, LaserLook plot symbol), part
+C (H×V window, density by throw, coverage outline, the audience-zone
+safety check for Show Review), the Type=Laser emission inference, and
+FixtureDefCheck's laser checks.
+
 ## Show Review: an auditor for the show's design (post-0.3, asked 2026-10-25)
 
 Design in [docs/design/SHOW_REVIEW.md](../design/SHOW_REVIEW.md); nothing built, after

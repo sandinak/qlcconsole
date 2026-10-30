@@ -637,7 +637,9 @@ Click a fixture in that list (or in the preview) to see its own mount panel:
   shaped like a bar (a two-arm beam bar standing on a step is upright like
   any mover). Hung vs Upright inverts pan/tilt.
 - **Face** — which way the fixture faces: **Top, Bottom, Front
-  (downstage), Back (upstage), Stage left, or Stage right**. On the outside
+  (downstage), Back (upstage), Stage left, or Stage right**. For a fixed
+  light (no pan or tilt) it also aims it that way (see Aiming a fixed
+  light, below). On the outside
   of a truss, choosing a face also moves the fixture to that side (on top,
   underneath, the downstage or upstage chord). This has to agree with *how*
   it's actually mounted, or the fixture looks right from one angle and
@@ -646,7 +648,8 @@ Click a fixture in that list (or in the preview) to see its own mount panel:
   **Inside** (centred in its volume — for something rigged between truss
   chords, or under a Clear/Open platform top, so it reads correctly without
   needing to be visually "seated" on anything).
-- **Angle / Tilt** — fine orientation.
+- **Angle / Tilt** — fine orientation of a strip or bar (a positive Tilt
+  tips it up). A fixed light is tipped by **Tilt in yoke** instead.
 - **Light / Glass** — for lanterns and other LED-source fixtures; see
   [Lanterns](#lanterns).
 - **DMX** — its universe and start address, moved at once if the channels
@@ -681,7 +684,7 @@ not, in three boxes:
   **WLED** (**Fix on Device…**) and **Max draw**.
 - **Aim &amp; Mount**: **Height offset** (raised or lowered from its mount,
   a followspot on a riser above the truss, say); **Aim** — a mover's front
-  of device, or a fixed light's **Pan** and **Tilt**; **Beam (lens set
+  of device, or a fixed light's **Points** and **Tilt in yoke**; **Beam (lens set
   to)**, the angle a lens zoomed by hand is set to (see
   [The beam](#the-beam)); the [calibration offsets](#calibration-offsets);
   **Invert pan** / **Invert tilt**; **Test orientation**; and **Identify**.
@@ -716,15 +719,38 @@ worth too; click one first to edit it alone). Dragging
 any selected fixture moves them all, as one undo. **Distribute** spaces a
 few selected fixtures between the outermost two and lines them up.
 
-**Aiming a fixed light.** A par, a profile or anything else with no pan or
-tilt channel is aimed as it is on its yoke, in **Aim & Mount**: **Pan** is
-which way it points seen from above (0 downstage, 90 stage right, 180
-upstage, 270 stage left) and **Tilt** how far down from level (90 straight
-down, 45 a typical front light, 0 level, below 0 up). The beam in the 3D
-view, where its light lands on the plot and what blocks it all follow. Until
-you set either, it points as its mount says (straight down when hung). With
-several selected, the same two rows act on the fixed lights among them. A
-moving head's **Aim — front of device** is its pan home instead.
+**Aiming a fixed light.** A par, a profile, a laser or anything else with no
+pan or tilt channel is aimed as it is on its yoke, in **Aim & Mount**:
+**Points** is which way it points seen from above (0 downstage, 90 stage
+right, 180 upstage, 270 stage left) and **Tilt in yoke** how far it is
+tipped up or down from level, written that way: "45° down" (a typical front
+light), "level", "10° up". The arrows go the way they say (up tips it up);
+type "10 up" or "10 down" (a plain number is up, minus is down). The beam
+in the 3D view, where its light lands on the plot, Quick focus and the
+orientation diagram all take the same aim. Until you set either, it points
+as its mount says (straight down when hung). With several selected, the
+same two rows act on the fixed lights among them. A moving head's **Aim —
+front of device** is its pan home instead.
+
+**Face sets a fixed light's aim too.** A fixed light has the **Face** row
+as a strip does: **Back** points it upstage, level; **Front** downstage;
+**Stage left** / **Stage right** across; **Bottom** straight down; **Top**
+straight up. It is a quick preset for Points and Tilt in yoke, which then
+read the real aim (a tilt you had set is kept when you only turn it to
+another side). **Dropped on a truss's chord** on the plot, a fixed light
+that has no face yet takes that side's: on the upstage chord it faces
+Back and throws upstage (a laser at the cyc), on the downstage chord
+Front. Dropped on the centreline it hangs and points down, as before. The
+Face row reads the side it throws nearest, and is blank while it points
+somewhere in between.
+
+**Tilt on a strip goes up.** A strip's or bar's **Tilt** (a roll about its
+length) tips its light **up** for a positive value on any upright face —
+Front, Back, Stage left or Stage right — where before it depended on the
+side (on Back, positive went down). A show saved before keeps every bar
+where it was: its tilt is read in the old sense and shown in the new one.
+On a Top or Bottom face it is as before (positive tips it upstage when it
+runs across the stage).
 
 **Undo in an editor.** Ctrl/⌘+Z in a structure's editor undoes its last
 change — a drag, a layout action, or a panel field (a run of steps on one
@@ -1671,7 +1697,8 @@ Each in turn is lit, and a **person** stands where it lands, at head height
 where it lands until it matches the real one: **right** is toward stage
 left, **up** is upstage — the left stick (fast), the right stick (fine) or
 the arrow keys (⇧ for bigger steps; **+** / **−** change the step). The panel shows the light's **Pan** (° from downstage) and **Tilt**
-(° down from level) as you go: they are set from where it lands (see
+(° down from level) as you go (Fixture Properties calls them **Points**
+and **Tilt in yoke**): they are set from where it lands (see
 Aiming a fixed light, under [Mounting a fixture](#mounting-a-fixture)).
 
 **A** (or Return) saves it, **B** (or ⌫) puts it back as it was, and **View**

@@ -99,6 +99,16 @@ skipped). Upstream fixes taken:
   over…** does it later. Fixtures, profiles and scripts still come from
   QLC+'s user folder by themselves. Help: Coming from QLC+ 4 ▸ Your QLC+
   4 settings.
+- **Fixed lights and lasers point where they face** (board Q172, part A):
+  a fixed light (no pan or tilt: a par, a laser) has the **Face** row,
+  which aims it (Back upstage and level, Bottom straight down; a yoke tilt
+  already set is kept). Dropped on a truss's upstage or downstage chord on
+  the plot, a fixed light with no face yet faces that side, so a laser on
+  the back of a truss throws at the cyc. One rule (`RigHeads::fixedThrow`)
+  now gives the 3D view, the plot's footprint, Quick focus and the
+  orientation diagram the same throw; Quick focus used "straight down".
+  In **Aim & Mount**, **Points (° from DS)** and **Tilt in yoke** ("45°
+  down", "level", "10° up"; the up arrow tips it up; type "10 up").
 - **PlayStation pads by their own names** (board Q170): with a DualShock 4
   or DualSense, Quick focus, Venue focus and Focus this cue call every
   control what the pad calls it -- on the controller map (Cross, Circle,
@@ -325,6 +335,11 @@ skipped). Upstream fixes taken:
   chip takes the theme's colour. **Blind moved to the View menu** (from
   Control).
 
+- **A strip's Tilt tips its light up** on every upright face (Front, Back,
+  Stage left, Stage right); on Back or Stage left a positive tilt used to
+  point it down. The file keeps the old sense, so a show saved before
+  opens with every bar where it was, and an older qlcconsole still reads
+  a show saved here.
 - **The help's Control Map section says it isn't in the app**: its "learn"
   entry went with the old Programming tab's function list, and the README
   no longer offers it. A MIDI or OSC control fires a function through a
@@ -389,6 +404,8 @@ skipped). Upstream fixes taken:
   track renames its intensity level too, so a Virtual Console slider
   shows the new name.
 
+- **Several fixed lights can be tilted up together**: Fixture Properties
+  for more than one fixture held their tilt at level or below.
 - **An idle show no longer uses several cores redrawing the rig.** With
   the Rig Overview open and Live on, its timer redrew the whole rig 25
   or more times a second whether or not anything had changed: a show
