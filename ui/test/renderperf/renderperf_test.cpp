@@ -247,7 +247,9 @@ void RenderPerf_Test::aRunningShowStaysUnderOneCore()
     const int frames = v.paintCount() - painted0;
     qInfo("a running show: %d frames in %.1f s, %.2f cores", frames, secs, cores);
     QVERIFY(frames > 0);
+#ifdef QT_NO_DEBUG                          // a debug build's frames and the test's own value writes swamp the budget
     QVERIFY2(cores < 0.75, qPrintable(QString("a running show took %1 cores").arg(cores)));
+#endif
 
     // A value-driven frame close on the last is drawn light, then a full one settles.
     v.m_lastFrameAt.start();
