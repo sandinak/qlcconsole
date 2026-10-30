@@ -237,6 +237,54 @@ void ShowTreeSectionsUi_Test::theProductionPageSuggestsAScheme()
 /* The user's case: a list per song, and GO / Run played only the first.
    Merge from the production page; Run then shows every section, its cues
    under it, and GO goes through the whole show. */
+void ShowTreeSectionsUi_Test::runningOrderReordersTheRun()
+{
+    const QList<quint32> ids = twoSongs();
+    ShowTreeController *st = m_doc->showTree();
+    QVERIFY(st->mergeLists(m_production, { ids[0], ids[1] }));
+    ShowTreeView view(nullptr, m_doc);
+    view.reload();
+    QVERIFY(view.selectNode(m_production));
+    QPushButton *order = view.findChild<QPushButton *>("stProdOrder");
+    QVERIFY(order != nullptr);
+    QVERIFY(order->isEnabled());
+    // Song 1 first, the preshow after it, tonight.
+    view.setOrderPicker([](const QList<RunningSong> &have) {
+        QList<RunningSong> out = have;
+        std::swap(out[0], out[1]);
+        return out;
+    });
+    order->click();
+    QVERIFY(st->hasRunningOrder(m_production));
+
+    CueRunner runner(m_doc, CueRunner::Full);
+    runner.refresh();
+    QTreeWidget *tree = runner.cueTree();
+    QCOMPARE(tree->topLevelItem(0)->text(0), QString("1 — 01-Everybody Scream"));
+    QCOMPARE(tree->topLevelItem(1)->text(0), QString("0 — 00-Preshow"));
+    QCOMPARE(childTexts(tree->topLevelItem(0), 1), QStringList({ "1.0.0", "1.0.1" }));
+    // The first cue to go is the song's.
+    QCOMPARE(tree->topLevelItem(0)->child(0)->text(0), QString("NEXT"));
+    // The cues are still where the numbers put them.
+    QCOMPARE(st->cueList(ids[0])->cues.first().id, ids[2]);
+
+    // Leave the song out: GO passes over it.
+    view.setOrderPicker([](const QList<RunningSong> &have) {
+        QList<RunningSong> out = have;
+        out[0].skip = true;
+        return out;
+    });
+    order->click();
+    Chaser *ch = qobject_cast<Chaser *>(m_doc->function(st->cueList(ids[0])->chaser));
+    QVERIFY(ch->isStepSkipped(0));
+    QVERIFY(!ch->isStepSkipped(2));
+
+    QVERIFY(view.editRunningOrder(m_production, {}, true));
+    QVERIFY(!st->hasRunningOrder(m_production));
+    runner.refresh();
+    QCOMPARE(tree->topLevelItem(0)->text(0), QString("0 — 00-Preshow"));
+}
+
 void ShowTreeSectionsUi_Test::mergeThenRunShowsEverySection()
 {
     const QList<quint32> ids = twoSongs();

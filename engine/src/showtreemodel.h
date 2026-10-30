@@ -361,6 +361,15 @@ namespace ShowTree
         const Cue *cue(quint32 id) const;
     };
 
+    /** One song of tonight's running order: a section's id (sectionId())
+     *  and whether it is left out tonight. */
+    struct QLC_ENGINE_EXPORT RunningSong
+    {
+        QString id;
+        bool skip = false;
+        bool operator==(const RunningSong &o) const { return id == o.id && skip == o.skip; }
+    };
+
     struct QLC_ENGINE_EXPORT Production
     {
         quint32 id = 0xFFFFFFFF;
@@ -376,6 +385,11 @@ namespace ShowTree
          *  Saved as Numbering=, which an older build ignores; None: no
          *  sections (every older show). */
         Numbering numbering = Numbering::None;
+        /** Tonight's running order (0.3.1 ro): the song sections in the
+         *  order the Run plays them, and the ones left out tonight. Empty:
+         *  number order. Saved as a RunningOrder element, which an older
+         *  build skips. See ShowTree::playOrder(). */
+        QList<RunningSong> runningOrder;
 
         CueList *list(quint32 id);
         const CueList *list(quint32 id) const;
@@ -621,6 +635,23 @@ namespace ShowTree
     /** What a section header row says: "1 — Everybody Scream", "200", or
      *  (Manual, no name) "Section". */
     QLC_ENGINE_EXPORT QString sectionTitle(const Section &section);
+
+    /** A section's identity in a running order: its key, or (free numbers)
+     *  "#" and its head cue's id. Empty for cues in no section. */
+    QLC_ENGINE_EXPORT QString sectionId(const Section &section);
+    /** Tonight's running order resolved against @a sections (a list's, in
+     *  number order): @a order's songs that still exist, in its order, then
+     *  every other section (a new song) after the section before it in
+     *  number order. With @a order empty, number order. Each id once. */
+    QLC_ENGINE_EXPORT QList<RunningSong> resolveRunningOrder(const QList<Section> &sections,
+                                                             const QList<RunningSong> &order);
+    /** The cues of @a list in the order the Run plays them: their indexes,
+     *  section by section as resolveRunningOrder() says, each song's cues
+     *  in list order. The identity for an empty @a order or no scheme.
+     *  @a skipped (optional) gets, per list index, whether its song is left
+     *  out tonight. */
+    QLC_ENGINE_EXPORT QList<int> playOrder(const CueList &list, Numbering numbering,
+                                           const QList<RunningSong> &order, QList<bool> *skipped = nullptr);
 
     /** The scheme the cue numbers of @a production look like they follow
      *  (a new show's suggestion, confirmed in the setting): most numbers

@@ -37,6 +37,7 @@ private slots:
     void theSectionPageNamesAndBlocks();
     void theProductionPageSuggestsAScheme();
     void mergeThenRunShowsEverySection();
+    void runningOrderReordersTheRun();
 
 private:
     /** A production of two lists, a song each: {pre, song, cue ids...}. */

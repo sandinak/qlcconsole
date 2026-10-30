@@ -101,6 +101,20 @@ void ShowTreeView::buildSectionPages()
             if (currentKind() == ProductionNode)
                 mergeListsIntoOne(currentId());
         });
+        m_prodOrder = new QPushButton(tr("Running order…"), m_prodPage);
+        m_prodOrder->setObjectName("stProdOrder");
+        m_prodOrder->setToolTip(tr("Tonight's song order for the Run and GO: drag the songs, untick one to leave "
+                                   "it out. No cue is renumbered or moved; Reset goes back to number order. "
+                                   "Saved with the show. One undo step."));
+        f->insertRow(f->rowCount() - 1, QString(), m_prodOrder);
+        connect(m_prodOrder, &QPushButton::clicked, this, [this]() {
+            if (currentKind() == ProductionNode)
+                editRunningOrder(currentId());
+        });
+        m_prodOrderInfo = new QLabel(m_prodPage);
+        m_prodOrderInfo->setObjectName("stProdOrderInfo");
+        m_prodOrderInfo->setWordWrap(true);
+        f->insertRow(f->rowCount() - 1, QString(), m_prodOrderInfo);
     }
 
     // The list page: + Section.
@@ -190,6 +204,20 @@ void ShowTreeView::updateNumberingRows(quint32 productionId)
         m_prodNumberingHint->clear();
     m_prodNumberingHint->setVisible(!m_prodNumberingHint->text().isEmpty());
     m_prodMerge->setEnabled(m_st->playableLists(productionId).count() > 1);
+    QList<Section> songs;
+    const QList<RunningSong> order = m_st->runningOrder(productionId, &songs);
+    m_prodOrder->setEnabled(order.count() > 1);
+    if (m_st->hasRunningOrder(productionId))
+    {
+        int left = 0;
+        for (const RunningSong &r : order)
+            left += r.skip ? 1 : 0;
+        m_prodOrderInfo->setText(tr("Tonight's order differs from number order%1.")
+                                 .arg(left > 0 ? tr(" (%n song(s) left out)", "", left) : QString()));
+    }
+    else
+        m_prodOrderInfo->clear();
+    m_prodOrderInfo->setVisible(!m_prodOrderInfo->text().isEmpty());
 }
 
 bool ShowTreeView::currentSection(Section *out) const
@@ -272,6 +300,61 @@ quint32 ShowTreeView::newSection(const QString &name, bool ask)
     if (cueId != invalidId())
         selectNode(cueId);
     return cueId;
+}
+
+bool ShowTreeView::editRunningOrder(quint32 productionId, const QList<RunningSong> &order, bool reset)
+{
+    if (m_st->production(productionId) == nullptr)
+        return false;
+    if (reset)
+        return m_st->resetRunningOrder(productionId);
+    QList<Section> songs;
+    const QList<RunningSong> have = m_st->runningOrder(productionId, &songs);
+    if (!order.isEmpty())
+        return m_st->setRunningOrder(productionId, order);
+    if (m_orderPicker)
+        return m_st->setRunningOrder(productionId, m_orderPicker(have));
+
+    QDialog dialog(this);
+    dialog.setWindowTitle(tr("Running order"));
+    QVBoxLayout *v = new QVBoxLayout(&dialog);
+    QLabel *text = new QLabel(tr("The songs in the order the Run and GO play them tonight (drag to change it). "
+                                 "Untick a song to leave it out: GO passes over it. No cue is renumbered or "
+                                 "moved. A song that doesn't start Block still looks as it does in number "
+                                 "order; set Block at section start on the songs you move."), &dialog);
+    text->setWordWrap(true);
+    v->addWidget(text);
+    QListWidget *lw = new QListWidget(&dialog);
+    lw->setObjectName("stOrderSongs");
+    lw->setDragDropMode(QAbstractItemView::InternalMove);
+    for (int i = 0; i < have.count(); ++i)
+    {
+        QListWidgetItem *it = new QListWidgetItem(sectionTitle(songs.at(i)), lw);
+        it->setData(Qt::UserRole, have.at(i).id);
+        it->setFlags(it->flags() | Qt::ItemIsUserCheckable | Qt::ItemIsDragEnabled);
+        it->setCheckState(have.at(i).skip ? Qt::Unchecked : Qt::Checked);
+    }
+    v->addWidget(lw);
+    QDialogButtonBox *bb = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    QPushButton *resetButton = bb->addButton(tr("Reset to number order"), QDialogButtonBox::ResetRole);
+    bool resetNow = false;
+    connect(resetButton, &QPushButton::clicked, &dialog, [&]() { resetNow = true; dialog.accept(); });
+    connect(bb, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(bb, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    v->addWidget(bb);
+    if (dialog.exec() != QDialog::Accepted)
+        return false;
+    if (resetNow)
+        return m_st->resetRunningOrder(productionId);
+    QList<RunningSong> out;
+    for (int i = 0; i < lw->count(); ++i)
+    {
+        RunningSong r;
+        r.id = lw->item(i)->data(Qt::UserRole).toString();
+        r.skip = lw->item(i)->checkState() != Qt::Checked;
+        out << r;
+    }
+    return m_st->setRunningOrder(productionId, out);
 }
 
 bool ShowTreeView::mergeListsIntoOne(quint32 productionId, const QList<quint32> &listIds)

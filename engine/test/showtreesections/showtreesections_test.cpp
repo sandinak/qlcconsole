@@ -538,4 +538,124 @@ void ShowTreeSections_Test::sectionsSaveAndLoad()
     QVERIFY(back.lists.first().sections.isEmpty());
 }
 
+/* Pure: songs 0,1,2 (cues 0.0.1 | 1.0.1 1.0.2 | 2.0.1), played 2,0,1 with 1
+   left out; a new song 3 follows the song before it in number order. */
+void ShowTreeSections_Test::runningOrderPureRules()
+{
+    CueList l = listOf(2, "Show", { "0.0.1", "1.0.1", "1.0.2", "2.0.1" }, 10);
+    const Numbering n = Numbering::ShowPartIteration;
+    QCOMPARE(playOrder(l, n, {}), QList<int>({ 0, 1, 2, 3 }));
+
+    auto song = [](const char *id, bool skip = false) {
+        RunningSong r;
+        r.id = QString::fromLatin1(id);
+        r.skip = skip;
+        return r;
+    };
+    QList<bool> skipped;
+    QCOMPARE(playOrder(l, n, { song("2"), song("0"), song("1", true) }, &skipped), QList<int>({ 3, 0, 1, 2 }));
+    QCOMPARE(skipped, QList<bool>({ false, true, true, false }));
+
+    // A song the order doesn't know goes after the one before it.
+    const QList<Section> secs = sectionsOf(l, n);
+    QStringList ids;
+    for (const RunningSong &r : resolveRunningOrder(secs, { song("2"), song("0") }))
+        ids << r.id;
+    QCOMPARE(ids, QStringList({ "2", "0", "1" }));
+    // A song that is gone is dropped; no scheme: number order.
+    QCOMPARE(resolveRunningOrder(secs, { song("9"), song("1") }).count(), 3);
+    QCOMPARE(playOrder(l, Numbering::None, { song("2"), song("0") }), QList<int>({ 0, 1, 2, 3 }));
+}
+
+/* The chaser's steps come in the running order, a song left out is skipped,
+   no cue moves or is renumbered, and cueOfStep follows. */
+void ShowTreeSections_Test::runningOrderPlaysInTheChaser()
+{
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("Show");
+    const quint32 list = st->addCueList(prod, "Show");
+    const quint32 a = st->addCue(list, -1, "Opener");
+    QVERIFY(st->setNumbering(prod, Numbering::Hundreds));
+    QString why;
+    Cue c = *st->cue(a);
+    c.number = "100";
+    QVERIFY2(st->setCue(c, &why), qPrintable(why));
+    const quint32 b = st->addCue(list, 0, "Song A");
+    c = *st->cue(b);
+    c.number = "200";
+    QVERIFY(st->setCue(c, &why));
+    const quint32 d = st->addCue(list, 1, "Song B");
+    c = *st->cue(d);
+    c.number = "300";
+    QVERIFY(st->setCue(c, &why));
+
+    Chaser *ch = qobject_cast<Chaser *>(m_doc->function(st->cueList(list)->chaser));
+    QVERIFY(ch != nullptr);
+    QCOMPARE(ch->stepsCount(), 3);
+    QVERIFY(!st->hasRunningOrder(prod));
+
+    QList<RunningSong> order = st->runningOrder(prod);
+    QCOMPARE(order.count(), 3);
+    QCOMPARE(order.at(0).id, QString("100"));
+    std::swap(order[1], order[2]);                  // 100, 300, 200
+    order[2].skip = true;                           // 200 not tonight
+    QVERIFY(st->setRunningOrder(prod, order));
+    QCOMPARE(st->undoText(), QString("Running order"));
+    QVERIFY(st->hasRunningOrder(prod));
+
+    QCOMPARE(st->cueOfStep(list, 0), a);
+    QCOMPARE(st->cueOfStep(list, 1), d);
+    QCOMPARE(st->cueOfStep(list, 2), b);
+    QCOMPARE(ch->stepCue(1), QString("300"));
+    QVERIFY(!ch->isStepSkipped(1));
+    QVERIFY(ch->isStepSkipped(2));
+    QCOMPARE(ch->nextPlayableStep(0, 1), 1);
+    QCOMPARE(ch->nextPlayableStep(1, 1), -1);
+    // The cues themselves stay in number order, numbers untouched.
+    QCOMPARE(st->cueList(list)->cues.at(1).number, QString("200"));
+    QVERIFY(!st->cueList(list)->cues.at(1).skip);
+    QCOMPARE(st->runningCue(list), ShowTree::invalidId());
+
+    // Back to number order.
+    QVERIFY(st->resetRunningOrder(prod));
+    QVERIFY(!st->hasRunningOrder(prod));
+    QCOMPARE(st->cueOfStep(list, 1), b);
+    QVERIFY(!ch->isStepSkipped(2));
+    QCOMPARE(ch->stepCue(1), QString("200"));
+    // The same order as number order with every song in is none.
+    QVERIFY(!st->setRunningOrder(prod, st->runningOrder(prod)));
+    QVERIFY(!st->hasRunningOrder(prod));
+    // Undo: the order again.
+    QVERIFY(st->undo());
+    QVERIFY(st->hasRunningOrder(prod));
+    QVERIFY(ch->isStepSkipped(2));
+}
+
+void ShowTreeSections_Test::runningOrderSavesLoadsAndResets()
+{
+    Production p;
+    p.id = 1;
+    p.name = "Show";
+    p.numbering = Numbering::Hundreds;
+    p.lists << listOf(2, "Show", { "100", "200" }, 10);
+    QVERIFY(!productionXml(p).contains("RunningOrder"));
+    RunningSong a, b;
+    a.id = "200";
+    b.id = "100";
+    b.skip = true;
+    p.runningOrder << a << b;
+    const QByteArray xml = productionXml(p);
+    QVERIFY(xml.contains("<RunningOrder>"));
+    QXmlStreamReader r(xml);
+    r.readNextStartElement();
+    Production back;
+    QVERIFY(ShowTree::loadXML(r, back));
+    QCOMPARE(back.runningOrder.count(), 2);
+    QCOMPARE(back.runningOrder.at(0).id, QString("200"));
+    QVERIFY(!back.runningOrder.at(0).skip);
+    QVERIFY(back.runningOrder.at(1).skip);
+    QCOMPARE(back.lists.count(), 1);
+    QCOMPARE(productionXml(back), xml);
+}
+
 QTEST_GUILESS_MAIN(ShowTreeSections_Test)

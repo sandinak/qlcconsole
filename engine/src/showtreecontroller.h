@@ -350,6 +350,23 @@ public:
      *  starts from nothing), or back to the list's default. */
     bool setSectionBlock(quint32 listId, const ShowTree::Section &section, bool block);
     bool sectionBlocks(quint32 listId, const ShowTree::Section &section) const;
+    /** Tonight's running order (0.3.1 ro): production @a productionId's
+     *  songs in the order the Run and GO play them, and the ones left out
+     *  tonight -- no cue is renumbered or moved. The sections of its main
+     *  list, resolved (ShowTree::resolveRunningOrder); @a sectionsOut (if
+     *  given) gets each song's section, number order. Empty with no scheme. */
+    QList<ShowTree::RunningSong> runningOrder(quint32 productionId, QList<ShowTree::Section> *sectionsOut = nullptr) const;
+    /** Whether the order differs from number order (a song moved or left out). */
+    bool hasRunningOrder(quint32 productionId) const;
+    /** Play the songs in @a order (one undo step, "Running order"); one equal
+     *  to number order with nothing left out is stored as none. The chaser's
+     *  steps follow it. */
+    bool setRunningOrder(quint32 productionId, const QList<ShowTree::RunningSong> &order);
+    /** Back to number order, every song in. */
+    bool resetRunningOrder(quint32 productionId);
+    /** The cues of list @a listId in the order it plays: list indexes, one
+     *  per chaser step (the identity without a running order). */
+    QList<int> playOrderOf(quint32 listId, QList<bool> *skipped = nullptr) const;
     /** Merge lists into one… (ShowTree::mergeLists): one undo step. False
      *  (@a why): nothing merged. */
     bool mergeLists(quint32 productionId, const QList<quint32> &listIds, ShowTree::MergeReport *report = nullptr,

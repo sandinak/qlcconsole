@@ -50,6 +50,11 @@ private slots:
     void mergeInTheShowPlaysEveryList();
     void sectionsSaveAndLoad();
 
+    // Tonight's running order (ro)
+    void runningOrderPureRules();
+    void runningOrderPlaysInTheChaser();
+    void runningOrderSavesLoadsAndResets();
+
 private:
     Doc *m_doc = nullptr;
     QList<quint32> m_fixtures;

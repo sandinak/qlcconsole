@@ -1314,9 +1314,22 @@ a list that went now fire the one list, from its top. With no scheme, the
 merge sets the one the numbers show, else free numbers with a section at
 each list's start. One undo step.
 
-Sections are only how the list reads and numbers. Nothing plays differently
-because of them, and the show saves its scheme and section names
-(`Numbering=`, `Section` entries), which an older build ignores.
+**Running order…** (the production's page) changes tonight's song order for
+the Run and GO without renumbering or rebuilding a cue. Drag the songs into
+the order you will play them; untick a song to leave it out tonight (GO
+passes over it; a jump to it still plays it). The Run tab, GO, the footer, a
+VC Cue List and show control then play in that order, and the Run's section
+headers follow it. **Reset to number order** puts it back. The order is saved
+with the show and is one undo step; a song added later goes after the song
+before it in number order. The cues stay where their numbers put them. A
+song that doesn't start **Block** still looks as it does in number order (it
+tracks from the song before it by number), so set **Block at section start**
+on the songs you move.
+
+Apart from the running order, sections are only how the list reads and
+numbers. The show saves its scheme and section names (`Numbering=`,
+`Section` entries) and the running order (a `RunningOrder` element), which
+an older build ignores.
 
 ## Seeing it on the rig
 

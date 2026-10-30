@@ -65,8 +65,8 @@ TimeCode in (the MTC follow path), the patch list's Gel column, help
 answers to common forum questions (Coming from QLC+ 4), File ▸ New from
 Template (the classroom stage), File ▸ Show Settings (open in Operate, an
 Operate PIN). **Still open:**
-- **Tonight's running order** (reorder productions for Run): Show Tree
-  code, left while another agent is in it.
+- **Tonight's running order**: built (Running order… on the production's
+  page; `Production::runningOrder`, chaser steps in that order).
 - **Fade in/out on hits**: Show Tree (hit bake), same reason.
 - **Gel colour in the Rig Overview** (the 3D view): the rig view, same
   reason. The patch list half is built.

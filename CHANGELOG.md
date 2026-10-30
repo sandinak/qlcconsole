@@ -15,6 +15,13 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 A home for QLC+ 4 users: QLC+ 4's habits that qlcconsole had dropped are
 back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
 
+### Tonight's running order
+
+- **Running order…** on the production's page: change the song order for
+  the Run and GO tonight, or leave a song out, by dragging the sections.
+  No cue is renumbered or rebuilt; **Reset to number order** undoes it, and
+  it is saved with the show.
+
 ### Based on QLC+ 4.14.4
 
 qlcconsole's QLC+ base moves from 4.14.2 to **4.14.4**: the build string

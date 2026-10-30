@@ -1206,8 +1206,14 @@ void CueRunner::rebuildTree()
     QStringList sectionSig;
     for (const Section &sec : sections)
         sectionSig << QStringLiteral("%1:%2").arg(sec.first).arg(sectionTitle(sec));
-    const QString key = QStringLiteral("%1|%2|%3|%4").arg(ch == nullptr ? 0u : ch->id()).arg(lid)
-                        .arg(ch == nullptr ? 0 : ch->stepsCount()).arg(sectionSig.join(QLatin1Char(';')));
+    // Tonight's running order: rows come in the order the list plays.
+    const QList<int> playOrder = st->playOrderOf(lid);
+    QStringList orderSig;
+    for (int at : playOrder)
+        orderSig << QString::number(at);
+    const QString key = QStringLiteral("%1|%2|%3|%4|%5").arg(ch == nullptr ? 0u : ch->id()).arg(lid)
+                        .arg(ch == nullptr ? 0 : ch->stepsCount()).arg(sectionSig.join(QLatin1Char(';')),
+                                                                       orderSig.join(QLatin1Char(',')));
     if (!m_treeDirty && key == m_builtFor)
         return;
     m_treeDirty = false;
@@ -1239,10 +1245,12 @@ void CueRunner::rebuildTree()
     {
         QTreeWidgetItem *sectionItem = nullptr;
         QList<QTreeWidgetItem *> sectionItems;
-        for (int i = 0; i < list->cues.count(); ++i)
+        int lastSection = -2;
+        for (int p = 0; p < playOrder.count(); ++p)
         {
+            const int i = playOrder.at(p);
             const int si = sectionOfIndex(sections, i);
-            if (si >= 0 && sections.at(si).first == i)
+            if (si >= 0 && si != lastSection)
             {
                 sectionItem = new QTreeWidgetItem(m_tree);
                 sectionItem->setData(ColCue, RoleStep, -1);
@@ -1262,6 +1270,7 @@ void CueRunner::rebuildTree()
             }
             else if (si < 0)
                 sectionItem = nullptr;
+            lastSection = si;
             const Cue &c = list->cues.at(i);
             QStringList timing;
             if (c.fadeIn > 0)
@@ -1270,7 +1279,7 @@ void CueRunner::rebuildTree()
                 timing << tr("follow %1").arg(seconds(c.hold));
             QTreeWidgetItem *item = sectionItem != nullptr ? new QTreeWidgetItem(sectionItem)
                                                            : new QTreeWidgetItem(m_tree);
-            row(item, i, -1, st->cueNumber(*list, i), c.name, timing.join(QStringLiteral(" · ")), c.note);
+            row(item, p, -1, st->cueNumber(*list, i), c.name, timing.join(QStringLiteral(" · ")), c.note);
             item->setData(ColCue, RoleColour, st->cueColour(c.id));
             if (const CueList *subs = st->cueList(st->subCueList(c.id)))
             {
@@ -1282,7 +1291,7 @@ void CueRunner::rebuildTree()
                     if (s.fadeIn > 0)
                         t << tr("fade %1").arg(seconds(s.fadeIn));
                     QTreeWidgetItem *si = new QTreeWidgetItem(item);
-                    row(si, i, k, st->cueNumber(*subs, k), s.name, t.join(QStringLiteral(" · ")), s.note);
+                    row(si, p, k, st->cueNumber(*subs, k), s.name, t.join(QStringLiteral(" · ")), s.note);
                     si->setData(ColCue, RoleColour, st->cueColour(s.id));
                 }
                 item->setExpanded(true);
