@@ -32,6 +32,7 @@ class SpeedDialWidget;
 class KeyBind;
 class QGroupBox;
 class QTreeWidget;
+class QLabel;
 
 /** @addtogroup ui_vc_props
  * @{
@@ -78,6 +79,8 @@ protected:
     void refreshHits();
     QGroupBox *m_hitsBox = nullptr;
     QTreeWidget *m_hitsTree = nullptr;
+    QLabel *m_hitsMap = nullptr;        //!< what it does across the show (Q157)
+    int m_samePlace = 0;                //!< VCButton::SamePlace
 
     /************************************************************************
      * Speed dial

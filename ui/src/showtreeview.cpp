@@ -99,6 +99,7 @@
 #include "inputoutputmap.h"
 #include "paletteops.h"
 #include "usedby.h"
+#include "hitmap.h"
 #include "effectscriptrunner.h"
 #include "lookeditor.h"
 #include "scene.h"
@@ -2905,11 +2906,25 @@ void ShowTreeView::buildTree()
                     ci->setText(0, QStringLiteral("⟲ ") + ci->text(0));
                     badges << tr("reusable ×%1").arg(m_st->reusableUses(cue.reusable).count());
                 }
+                QString vcTip;
                 if (list.looks && firedBy.value(cue.id) > 0)
+                {
                     badges << tr("VC ×%1").arg(firedBy.value(cue.id));
+                    const QStringList buttons = HitMap::buttonNames(cue.id);
+                    if (!buttons.isEmpty())
+                        vcTip = tr("Fired by %1").arg(buttons.join(QStringLiteral(", ")));
+                }
+                // Q157: it fires instead of a wider hit on a button.
+                if (list.looks && HitMap::overridesOnAButton(m_doc, cue.id))
+                {
+                    badges << tr("↳ overrides");
+                    vcTip = QStringList({ vcTip, tr("On a VC button it fires here instead of a wider hit "
+                                                   "(the button's Hits say which).") })
+                            .join(QStringLiteral("\n")).trimmed();
+                }
                 // A cue that still mixes (open 13): the one exception to
                 // the one rule, kept only where the rule would change it.
-                QString badgeTip;
+                QString badgeTip = vcTip;
                 if (cue.mixOverlap)
                 {
                     badges << tr("mix");

@@ -737,6 +737,17 @@ public:
      *  with the narrowest place (cue > list > production > global); the
      *  first given among equals. Invalid: none is armed. */
     quint32 armedHit(const QList<quint32> &hitIds) const;
+    /** Of @a hitIds, every armed one with the narrowest place (more than
+     *  one: they share a place -- a button steps through them or fires
+     *  them together, Q157), in the order given. */
+    QList<quint32> armedTier(const QList<quint32> &hitIds) const;
+    /** Whether hits @a a and @a b live at the same place. */
+    bool sameHitPlace(quint32 a, quint32 b) const;
+    /** Whether hit @a narrow overrides hit @a wide on a button holding
+     *  both (Q157): its place is narrower and inside @a wide's -- a cue of
+     *  @a wide's list, a cue or list of its production, anything for a
+     *  global hit -- so where @a narrow is armed it fires instead. */
+    bool hitOverrides(quint32 narrow, quint32 wide) const;
 
 signals:
     /** What is armed may have changed: a cue list started, stopped or went

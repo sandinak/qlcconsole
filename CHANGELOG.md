@@ -33,6 +33,12 @@ back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
   production's hits now fire only while it is current. An older build
   sees every hit in its production's Hits section and fires a button's
   first hit.
+- **A hit button explains itself** (Q157): its properties show what it
+  does across the show in a sentence and a Hits table (When, overrides,
+  shared places); adding a hit at a place it already has asks Step
+  through / Together / Replace / Cancel, and a narrower one asks to
+  override; the tree, the button face and the Run tab mark **↳
+  overrides**; Show checks list overrides, shared places and dead hits.
 
 ### Tonight's running order
 

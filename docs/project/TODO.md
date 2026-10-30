@@ -10,16 +10,17 @@ under `~/.claude/.../memory/`.
 
 ## Scoped hits (Q154 / Q157, sch, 2026-10-30)
 
-Phase 1 built (docs/features/show-tree.md "Hits"): a hit lives under a
+Built (docs/features/show-tree.md "Hits"): a hit lives under a
 cue, a cue list, its production or at the top; armed while its place is
 live; a VC button holds several and fires the narrowest armed one; drag
 hits between places and onto VC buttons. Open:
-- Phase 2 (Q157): the plain-language button map on save and as a table in
-  the button's Hits tab; Step through / Together / Replace / Cancel for a
-  second hit at the same place; the override confirm, arrow and tree
-  badge; Show checks for overrides, same-scope pairs and dead hits; the
-  Cue Runner and button face "↳ overrides" mark; button badges on hits in
-  the tree.
+- Phase 2 (Q157) built: the map and Hits table, the same-place and
+  override questions, ↳ overrides in the tree, on the face and in the Run
+  tab, Show checks. Decided (can change): the map shows in the button's
+  properties (no pop-up on OK); Step through / Together is one setting per
+  button; the tree keeps "VC ×N" with the button names on hover; the Run
+  tab's line is in the Run tab only (not the VC Cue Runner sizes); Show
+  checks warn only for deleted hits and unanswered shared places.
 - Decided (can change): a production's hits are armed while it is current
   or none is (a show with several productions: another production's hits
   are disarmed, a change from before); a list's hits while it runs, or —

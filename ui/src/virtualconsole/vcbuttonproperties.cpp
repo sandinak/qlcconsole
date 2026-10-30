@@ -41,6 +41,8 @@
 #include "showtreecontroller.h"
 #include "vcbuttonproperties.h"
 #include "functionselection.h"
+#include "hitmap.h"
+#include "vcbutton.h"
 #include "speeddialwidget.h"
 #include "fixturegroup.h"
 #include "fixture.h"
@@ -77,6 +79,7 @@ VCButtonProperties::VCButtonProperties(VCButton* button, Doc* doc)
     m_nameEdit->setText(m_button->caption());
     slotSetFunction(button->function());
     m_hits = button->hits();
+    m_samePlace = button->samePlace();
     buildHitsBox();
     if (!m_hits.isEmpty())
         showFunctionName();
@@ -234,10 +237,14 @@ void VCButtonProperties::buildHitsBox()
     m_hitsTree = new QTreeWidget(m_hitsBox);
     m_hitsTree->setObjectName("vcbHitsTree");
     m_hitsTree->setRootIsDecorated(false);
-    m_hitsTree->setHeaderLabels({ tr("Hit"), tr("When") });
+    m_hitsTree->setHeaderLabels({ tr("Hit"), tr("When"), tr("Note") });
     m_hitsTree->header()->setStretchLastSection(true);
     m_hitsTree->setMaximumHeight(110);
     v->addWidget(m_hitsTree);
+    m_hitsMap = new QLabel(m_hitsBox);
+    m_hitsMap->setObjectName("vcbHitsMap");
+    m_hitsMap->setWordWrap(true);
+    v->addWidget(m_hitsMap);
     QHBoxLayout *h = new QHBoxLayout();
     QPushButton *add = new QPushButton(tr("Add hit…"), m_hitsBox);
     add->setObjectName("vcbAddHit");
@@ -254,8 +261,7 @@ void VCButtonProperties::buildHitsBox()
         fs.showHits(true);
         if (fs.exec() != QDialog::Accepted || fs.selectedHit() == Function::invalidId())
             return;
-        if (!m_hits.contains(fs.selectedHit()))
-            m_hits << fs.selectedHit();
+        HitMap::askToAdd(m_doc, m_hits, m_samePlace, { fs.selectedHit() }, this);
         showFunctionName();
         refreshHits();
     });
@@ -279,18 +285,17 @@ void VCButtonProperties::refreshHits()
         return;
     m_hitsTree->clear();
     const ShowTreeController *st = m_doc->showTree();
-    for (quint32 h : m_hits)
+    const quint32 armed = st->armedHit(m_hits);
+    for (const HitMap::Row &r : HitMap::rows(m_doc, m_hits, m_samePlace))
     {
-        const ShowTree::Cue *c = st->cue(h);
         QTreeWidgetItem *item = new QTreeWidgetItem(m_hitsTree);
-        item->setText(0, c == nullptr ? tr("(deleted)") : c->name);
+        item->setText(0, r.hit == armed ? tr("%1  (armed now)").arg(r.name) : r.name);
         // Read-only: its place in the tree is when it fires.
-        const QString place = st->hitPlace(h);
-        item->setText(1, st->hitScope(h) == ShowTree::HitScope::Global ? tr("Always") : tr("While %1").arg(place));
-        item->setData(0, Qt::UserRole, h);
-        if (st->armedHit(m_hits) == h)
-            item->setText(0, item->text(0) + tr("  (armed now)"));
+        item->setText(1, r.when);
+        item->setText(2, r.note);
+        item->setData(0, Qt::UserRole, r.hit);
     }
+    m_hitsMap->setText(HitMap::sentence(m_doc, m_nameEdit->text(), m_hits, m_samePlace));
     m_hitsBox->setVisible(!m_hits.isEmpty());
 }
 
@@ -421,7 +426,10 @@ void VCButtonProperties::slotFadeOutTextEdited()
 void VCButtonProperties::accept()
 {
     if (!m_hits.isEmpty())
+    {
+        m_button->setSamePlace(VCButton::SamePlace(m_samePlace));
         m_button->setHits(m_hits);
+    }
     else
     {
         m_button->setHit(Function::invalidId());

@@ -73,6 +73,7 @@
 #include "mastertimer.h"
 #include "vcsoloframe.h"
 #include "showtreecontroller.h"
+#include "hitmap.h"
 #include "vcbutton.h"
 #include "function.h"
 #include "apputil.h"
@@ -186,6 +187,7 @@ bool VCButton::copyFrom(const VCWidget* widget)
     setKeySequence(button->keySequence());
     setFunction(button->function());
     setHits(button->hits());
+    setSamePlace(button->samePlace());
     enableStartupIntensity(button->isStartupIntensityEnabled());
     setStartupIntensity(button->startupIntensity());
     setStopAllFadeOutTime(button->stopAllFadeTime());
@@ -463,8 +465,15 @@ void VCButton::setHits(const QList<quint32> &hitIds)
         m_armedHit = Function::invalidId();
         update();
     }
+    const bool changed = m_hits != hits;
     m_hits = hits;
     slotShowTreeChanged();
+    // Show checks (Q157): overrides, shared places, dead hits.
+    if (changed)
+    {
+        HitMap::watch(m_doc);
+        HitMap::refreshChecks(m_doc);
+    }
 }
 
 bool VCButton::addHits(const QList<quint32> &hitIds)
@@ -478,6 +487,81 @@ bool VCButton::addHits(const QList<quint32> &hitIds)
     if (m_action != Toggle && m_action != Flash)
         setAction(Toggle);
     setHits(hits);
+    return true;
+}
+
+void VCButton::prepareHitPress()
+{
+    m_together.clear();
+    const ShowTreeController *st = m_doc->showTree();
+    const QList<quint32> tier = st->armedTier(m_hits);
+    if (tier.count() < 2 || m_samePlace == SamePlaceUnset)
+        return;
+    if (m_samePlace == StepThrough)
+    {
+        const quint32 pick = tier.at(m_hitStep % tier.count());
+        ++m_hitStep;
+        const quint32 fid = st->lookFunction(pick);
+        if (fid != m_function)
+            attachFunction(fid);
+        m_armedHit = pick;
+        update();
+        return;
+    }
+    for (quint32 h : tier)
+    {
+        const quint32 fid = st->lookFunction(h);
+        if (fid != m_function && fid != Function::invalidId())
+            m_together << fid;
+    }
+}
+
+void VCButton::together(int op)
+{
+    for (quint32 fid : m_together)
+        if (Function *f = m_doc->function(fid))
+        {
+            if (op == 1)
+            {
+                adjustFunctionIntensity(f, intensity());
+                f->start(m_doc->masterTimer(), functionParent());
+            }
+            else if (op == 2)
+            {
+                adjustFunctionIntensity(f, intensity());
+                f->flash(m_doc->masterTimer(), flashOverrides(), flashForceLTP());
+            }
+            else if (op == 3)
+                f->unFlash(m_doc->masterTimer());
+            else
+                f->stop(functionParent());
+        }
+    if (op == 0 || op == 3)
+        m_together.clear();
+}
+
+bool VCButton::armedOverrides() const
+{
+    if (m_armedHit == Function::invalidId() || m_hits.count() < 2)
+        return false;
+    const ShowTreeController *st = m_doc->showTree();
+    for (quint32 h : m_hits)
+        if (h != m_armedHit && st->isHitArmed(h) && st->hitOverrides(m_armedHit, h))
+            return true;
+    return false;
+}
+
+bool VCButton::addHitsAsking(const QList<quint32> &hitIds, QWidget *parent)
+{
+    QList<quint32> hits = m_hits;
+    int same = m_samePlace;
+    if (!HitMap::askToAdd(m_doc, hits, same, hitIds, parent) && same == m_samePlace)
+        return false;
+    m_samePlace = SamePlace(same);
+    if (m_action != Toggle && m_action != Flash)
+        setAction(Toggle);
+    setHits(hits);
+    m_doc->setModified();
     return true;
 }
 
@@ -507,6 +591,7 @@ void VCButton::slotShowTreeChanged()
                     held->unFlash(m_doc->masterTimer());
                 else if (m_action == Toggle)
                     held->stop(functionParent());
+                together(m_action == Flash ? 3 : 0);
                 resetIntensityOverrideAttribute();
             }
             setState(Inactive);
@@ -1591,6 +1676,10 @@ void VCButton::pressFunction()
         return;
 
     Function* f = NULL;
+    // A same-place tier of hits: the next one, or all of them (Q157).
+    if (!m_hits.isEmpty() && ((m_action == Toggle && state() != Active)
+                              || (m_action == Flash && state() == Inactive)))
+        prepareHitPress();
     if (m_action == Toggle)
     {
         f = m_doc->function(m_function);
@@ -1603,6 +1692,7 @@ void VCButton::pressFunction()
         if (state() == Active && !(isChildOfSoloFrame() && f->startedAsChild()))
         {
             f->stop(functionParent());
+            together(0);
             resetIntensityOverrideAttribute();
         }
         else
@@ -1626,6 +1716,7 @@ void VCButton::pressFunction()
             }
 
             f->start(m_doc->masterTimer(), functionParent());
+            together(1);
             setState(Active);
             emit functionStarting(m_function);
         }
@@ -1637,6 +1728,7 @@ void VCButton::pressFunction()
         {
             adjustFunctionIntensity(f, intensity());
             f->flash(m_doc->masterTimer(), flashOverrides(), flashForceLTP());
+            together(2);
             setState(Active);
         }
     }
@@ -1767,6 +1859,7 @@ void VCButton::releaseFunction()
         if (f != NULL)
         {
             f->unFlash(m_doc->masterTimer());
+            together(3);
             resetIntensityOverrideAttribute();
             setState(Inactive);
         }
@@ -1921,6 +2014,9 @@ bool VCButton::loadXML(QXmlStreamReader &root)
                 QList<quint32> hits;
                 if (ok && m_doc->showTree()->isLook(hitId))
                     hits << hitId;
+                const QString same = root.attributes().value(QStringLiteral("SamePlace")).toString();
+                m_samePlace = same == QLatin1String("Step") ? StepThrough
+                              : same == QLatin1String("Together") ? Together : SamePlaceUnset;
                 // The others of a button with several (Q154).
                 while (root.readNextStartElement())
                 {
@@ -2053,6 +2149,9 @@ bool VCButton::saveXML(QXmlStreamWriter *doc)
     doc->writeAttribute(KXMLQLCVCButtonFunctionID, QString::number(function()));
     if (!m_hits.isEmpty())
         doc->writeAttribute(KXMLQLCVCButtonFunctionHit, QString::number(m_hits.first()));
+    if (m_samePlace != SamePlaceUnset)
+        doc->writeAttribute(QStringLiteral("SamePlace"), m_samePlace == StepThrough ? QStringLiteral("Step")
+                                                                                   : QStringLiteral("Together"));
     for (int i = 1; i < m_hits.count(); ++i)
     {
         doc->writeStartElement(KXMLQLCVCButtonFunctionHit);
@@ -2210,6 +2309,15 @@ void VCButton::paintEvent(QPaintEvent* e)
         painter.setPen(QPen(QColor(200, 200, 200, 160), 2));
         painter.drawLine(rect().topLeft() + QPoint(4, 4), rect().bottomRight() - QPoint(4, 4));
     }
+    if (armedOverrides())
+    {
+        // Q157 (4): the armed hit overrides a wider one here.
+        QFont small = painter.font();
+        small.setPointSizeF(qMax(7.0, small.pointSizeF() * 0.8));
+        painter.setFont(small);
+        painter.setPen(palette().color(QPalette::ButtonText));
+        painter.drawText(rect().adjusted(4, 2, -4, -2), Qt::AlignLeft | Qt::AlignBottom, tr("↳ overrides"));
+    }
     if (m_hits.count() > 1)
     {
         painter.setPen(Qt::NoPen);
@@ -2341,9 +2449,8 @@ void VCButton::dropEvent(QDropEvent *e)
             break;
         ids << id;
     }
-    if (addHits(ids))
+    if (addHitsAsking(ids, this))
     {
-        m_doc->setModified();
         e->setDropAction(Qt::CopyAction);
         e->accept();
     }

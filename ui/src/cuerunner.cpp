@@ -50,6 +50,8 @@
 #include "programmercontroller.h"
 #include "focuscallcue.h"
 #include "cuerunner.h"
+#include "vcbutton.h"
+#include "usedby.h"
 #include "chaser.h"
 #include "doc.h"
 
@@ -553,6 +555,14 @@ void CueRunner::buildFullLayout()
                 this, &CueRunner::refreshFocusArmed);
         refreshFocusArmed();
     }
+    m_hitsNow = new QLabel(this);
+    m_hitsNow->setObjectName(QStringLiteral("crHitsNow"));
+    m_hitsNow->setWordWrap(true);
+    m_hitsNow->setToolTip(tr("VC buttons whose hit for this moment fires instead of a wider one"));
+    m_hitsNow->hide();
+    v->addWidget(m_hitsNow);
+    connect(m_doc->showTree(), &ShowTreeController::hitArmingChanged, this, &CueRunner::refreshHitsNow);
+    connect(m_doc->showTree(), &ShowTreeController::changed, this, &CueRunner::refreshHitsNow);
     m_next = new QLabel(this);
     m_next->setObjectName(QStringLiteral("crNext"));
     m_next->setFont(big);
@@ -1620,6 +1630,32 @@ QColor CueRunner::textColour(const QString &part) const
                       : part.startsWith(QLatin1String("upcoming")) ? m_upcoming.value(part.mid(8).toInt())
                       : nullptr;
     return l == nullptr ? QColor() : l->palette().color(QPalette::Active, QPalette::WindowText);
+}
+
+void CueRunner::refreshHitsNow()
+{
+    if (m_hitsNow == nullptr)
+        return;
+    const ShowTreeController *st = m_doc->showTree();
+    QStringList lines;
+    for (const VCButton *b : UsedBy::allVcButtons())
+    {
+        const QList<quint32> hits = b->hits();
+        if (hits.count() < 2)
+            continue;
+        const quint32 armed = st->armedHit(hits);
+        if (armed == ShowTree::invalidId())
+            continue;
+        QStringList over;
+        for (quint32 h : hits)
+            if (h != armed && st->isHitArmed(h) && st->hitOverrides(armed, h) && st->cue(h) != nullptr)
+                over << st->cue(h)->name;
+        if (!over.isEmpty() && st->cue(armed) != nullptr)
+            lines << tr("%1: %2 \u21b3 overrides %3").arg(b->caption().isEmpty() ? tr("button") : b->caption(),
+                                                         st->cue(armed)->name, over.join(QStringLiteral(", ")));
+    }
+    m_hitsNow->setText(lines.join(QStringLiteral("\n")));
+    m_hitsNow->setVisible(!lines.isEmpty());
 }
 
 void CueRunner::refresh()

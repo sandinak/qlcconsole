@@ -250,6 +250,21 @@ public:
     /** MIME type of hits dragged from the Show Tree (ShowTreeView). */
     static const char *hitMimeType();
 
+    /** Several of its hits at the same place (Q157): how a press fires
+     *  them there -- each press the next (StepThrough), or all at once
+     *  (Together). Asked when the second is added; Unset: not asked yet
+     *  (it fires the first). Saved as the Function element's SamePlace. */
+    enum SamePlace { SamePlaceUnset, StepThrough, Together };
+    void setSamePlace(SamePlace mode) { m_samePlace = mode; }
+    SamePlace samePlace() const { return m_samePlace; }
+    /** addHits() asking first, as the drop and Add hit… do (Q157): a hit
+     *  at the place of one it has -- Step through, Together, Replace or
+     *  Cancel; a hit narrower than one it has (or wider) -- override there?
+     *  The answers come from HitMap::ask(). False: nothing added. */
+    bool addHitsAsking(const QList<quint32> &hitIds, QWidget *parent);
+    /** The armed hit fires instead of a wider armed one (the face's ↳). */
+    bool armedOverrides() const;
+
 protected:
     /** setFunction() without touching the hit. */
     void attachFunction(quint32 fid);
@@ -267,6 +282,14 @@ protected:
     /** The Show Tree hits it fires, and the one armed now */
     QList<quint32> m_hits;
     quint32 m_armedHit;
+    SamePlace m_samePlace = SamePlaceUnset;
+    /** Step through: presses so far. Together: the others it started. */
+    int m_hitStep = 0;
+    QList<quint32> m_together;
+    /** Before a press fires: which of a same-place tier (Q157). */
+    void prepareHitPress();
+    /** The Together others: 0 stop, 1 start, 2 flash, 3 unflash. */
+    void together(int op);
 
     /*********************************************************************
      * Button state

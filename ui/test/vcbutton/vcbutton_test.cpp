@@ -45,6 +45,8 @@
 #include "functionselection.h"
 #include "functionstreewidget.h"
 #include "vcbuttonproperties.h"
+#include "hitmap.h"
+#include "showstatus.h"
 #include "doc.h"
 #undef private
 #undef protected
@@ -1079,6 +1081,157 @@ void VCButton_Test::severalHitsSaveLoadAndDrop()
     props.findChild<QPushButton *>("vcbRemoveHit")->click();
     props.accept();
     QCOMPARE(btn.hits(), QList<quint32>({ a }));
+}
+
+/* Q157: what a hit button does across the show, in words and as a table;
+   a second hit at one place asks Step through / Together / Replace /
+   Cancel; a narrower one asks to override; Show checks list it all; the
+   face marks an override. */
+void VCButton_Test::hitButtonMapAsksAndChecks()
+{
+    QWidget w;
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("P");
+    const quint32 list = st->addCueList(prod, "Main");
+    const quint32 c1 = st->addCue(list, -1, "One");
+    const quint32 blackout = st->addHit(ShowTree::HitScope::Global, prod, "Blackout");
+    const quint32 strobe = st->addHit(ShowTree::HitScope::Cue, c1, "Strobe");
+    const quint32 pop = st->addHit(ShowTree::HitScope::Cue, c1, "Pop");
+    const quint32 red = st->addHit(ShowTree::HitScope::List, list, "Red");
+
+    QStringList asked;
+    QList<int> answers;
+    HitMap::setAsker([&](const QString &title, const QString &, const QStringList &choices) {
+        asked << title;
+        return answers.isEmpty() ? int(choices.count()) - 1 : answers.takeFirst();
+    });
+
+    VCButton btn(&w, m_doc);
+    btn.setCaption("HIT 1");
+    QVERIFY(btn.addHitsAsking({ blackout }, nullptr));
+    QVERIFY(asked.isEmpty());                       // the first: nothing to ask
+    // Narrower: override there? Cancel -- not added; Override -- added.
+    QVERIFY(!btn.addHitsAsking({ strobe }, nullptr));
+    QCOMPARE(asked, QStringList({ "Override there?" }));
+    answers << 0;
+    QVERIFY(btn.addHitsAsking({ strobe }, nullptr));
+    QCOMPARE(btn.hits(), QList<quint32>({ blackout, strobe }));
+    // Same place: Step through.
+    asked.clear();
+    answers << 0;
+    QVERIFY(btn.addHitsAsking({ pop }, nullptr));
+    QCOMPARE(asked, QStringList({ "Two hits in one place" }));
+    QCOMPARE(btn.samePlace(), VCButton::StepThrough);
+    // Replace: the one there goes.
+    VCButton other(&w, m_doc);
+    other.setHits({ strobe });
+    answers << 2;
+    QVERIFY(other.addHitsAsking({ pop }, nullptr));
+    QCOMPARE(other.hits(), QList<quint32>({ pop }));
+
+    // The map, in words and as rows.
+    answers << 0;
+    QVERIFY(btn.addHitsAsking({ red }, nullptr));
+    const QString map = HitMap::sentence(m_doc, "HIT 1", btn.hits(), btn.samePlace());
+    QVERIFY2(map.startsWith("HIT 1 fires Blackout everywhere, except Strobe in cue"), qPrintable(map));
+    QVERIFY2(map.contains("(overrides Blackout)"), qPrintable(map));
+    QVERIFY2(map.contains("Red in cue list Main (overrides Blackout)"), qPrintable(map));
+    QVERIFY2(map.contains("2 hits live in cue"), qPrintable(map));
+    QVERIFY2(map.contains("step through"), qPrintable(map));
+    const QList<HitMap::Row> rows = HitMap::rows(m_doc, btn.hits(), btn.samePlace());
+    QCOMPARE(rows.count(), 4);
+    QCOMPARE(rows.at(0).when, QString("Always"));
+    QVERIFY(rows.at(1).note.contains("overrides Blackout, Red"));
+    QVERIFY(rows.at(1).note.contains("shares its place with Pop"));
+    QVERIFY(st->hitOverrides(strobe, red));
+    QVERIFY(!st->hitOverrides(red, strobe));
+    QVERIFY(st->sameHitPlace(strobe, pop));
+
+    // Saved: the same-place choice comes back.
+    QBuffer buffer;
+    buffer.open(QIODevice::WriteOnly | QIODevice::Text);
+    QXmlStreamWriter xw(&buffer);
+    QVERIFY(btn.saveXML(&xw));
+    xw.setDevice(NULL);
+    buffer.close();
+    QVERIFY(buffer.buffer().contains("SamePlace=\"Step\""));
+    {
+        QByteArray xml = buffer.buffer();
+        QBuffer in(&xml);
+        in.open(QIODevice::ReadOnly | QIODevice::Text);
+        QXmlStreamReader r(&in);
+        r.readNextStartElement();
+        VCButton loaded(&w, m_doc);
+        QVERIFY(loaded.loadXML(r));
+        QCOMPARE(loaded.samePlace(), VCButton::StepThrough);
+        QCOMPARE(loaded.hits().count(), 4);
+    }
+
+    // Show checks: the overrides and the pair (Ok: told how to fire them).
+    VCButton *onVc = new VCButton(VirtualConsole::instance()->contents(), m_doc);
+    onVc->setCaption("HIT 1");
+    onVc->setSamePlace(VCButton::StepThrough);
+    onVc->setHits(btn.hits());
+    ShowStatus::Entry e;
+    for (const ShowStatus::Entry &x : ShowStatus::instance()->allEntries())
+        if (x.key == "hits.places")
+            e = x;
+    QCOMPARE(e.key, QString("hits.places"));
+    QCOMPARE(e.severity, ShowStatus::Ok);
+    QVERIFY(e.items.join("\n").contains("HIT 1: Strobe (in cue"));
+    QVERIFY(e.items.join("\n").contains("share a place"));
+    QCOMPARE(HitMap::buttonNames(strobe), QStringList({ "HIT 1" }));
+    QVERIFY(HitMap::overridesOnAButton(m_doc, strobe));
+    QVERIFY(!HitMap::overridesOnAButton(m_doc, blackout));
+    // A deleted hit: a warning.
+    QVERIFY(st->removeCue(red));
+    for (const ShowStatus::Entry &x : ShowStatus::instance()->allEntries())
+        if (x.key == "hits.places")
+            e = x;
+    QCOMPARE(e.severity, ShowStatus::Warning);
+    QVERIFY(e.items.join("\n").contains("deleted"));
+    QVERIFY(st->undo());
+
+    // Running: list on cue 1 -- Step through fires Strobe, then Pop; the
+    // face marks the override.
+    Chaser *chaser = qobject_cast<Chaser *>(m_doc->function(st->cueList(list)->chaser));
+    ChaserAction action;
+    action.m_action = ChaserNextStep;
+    action.m_stepIndex = -1;
+    action.m_masterIntensity = 1.0;
+    action.m_stepIntensity = 1.0;
+    action.m_fadeMode = Chaser::FromFunction;
+    chaser->setAction(action);
+    chaser->start(m_doc->masterTimer(), FunctionParent::master());
+    for (int i = 0; i < 3; ++i)
+        m_doc->masterTimer()->timerTick();
+    QCoreApplication::processEvents();
+    QCOMPARE(st->armedTier(btn.hits()), QList<quint32>({ strobe, pop }));
+    QVERIFY(btn.armedOverrides());
+    btn.setAction(VCButton::Flash);
+    btn.setKeySequence(QKeySequence(keySequenceA));
+    m_doc->setMode(Doc::Operate);
+    btn.slotKeyPressed(QKeySequence(keySequenceA));
+    QCOMPARE(btn.armedHit(), strobe);
+    btn.slotKeyReleased(QKeySequence(keySequenceA));
+    btn.slotKeyPressed(QKeySequence(keySequenceA));
+    QCOMPARE(btn.armedHit(), pop);
+    QCOMPARE(btn.function(), st->lookFunction(pop));
+    btn.slotKeyReleased(QKeySequence(keySequenceA));
+    // Together: both at once.
+    btn.setSamePlace(VCButton::Together);
+    btn.slotKeyPressed(QKeySequence(keySequenceA));
+    QCOMPARE(btn.m_together.count(), 1);
+    QVERIFY(m_doc->function(btn.m_together.first())->flashing()
+            || m_doc->function(st->lookFunction(strobe))->flashing()
+            || m_doc->function(st->lookFunction(pop))->flashing());
+    btn.slotKeyReleased(QKeySequence(keySequenceA));
+    QVERIFY(btn.m_together.isEmpty());
+    chaser->stop(FunctionParent::master());
+    m_doc->masterTimer()->timerTick();
+    m_doc->setMode(Doc::Design);
+    HitMap::setAsker(HitMap::Asker());
+    delete onVc;
 }
 
 void VCButton_Test::toggleAndFlash()

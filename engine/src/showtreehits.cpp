@@ -368,6 +368,80 @@ quint32 ShowTreeController::armedHit(const QList<quint32> &hitIds) const
     return best;
 }
 
+QList<quint32> ShowTreeController::armedTier(const QList<quint32> &hitIds) const
+{
+    QList<quint32> out;
+    int bestRank = -1;
+    for (quint32 h : hitIds)
+    {
+        if (!isHitArmed(h))
+            continue;
+        const int rank = int(hitScope(h));
+        if (rank > bestRank)
+        {
+            out.clear();
+            bestRank = rank;
+        }
+        if (rank == bestRank && !out.contains(h))
+            out << h;
+    }
+    return out;
+}
+
+/** A hit's place as (scope, id): the production for a production hit. */
+static QPair<int, quint32> placeKey(const ShowTreeController *st, quint32 hitId)
+{
+    quint32 of = invalidId();
+    const HitScope scope = st->hitScope(hitId, &of);
+    if (scope == HitScope::Global)
+        return qMakePair(int(scope), invalidId());
+    if (scope == HitScope::Production)
+    {
+        const CueList *l = st->listOfCue(hitId);
+        if (l != nullptr)
+            st->cueList(l->id, &of);
+    }
+    return qMakePair(int(scope), of);
+}
+
+bool ShowTreeController::sameHitPlace(quint32 a, quint32 b) const
+{
+    return isLook(a) && isLook(b) && placeKey(this, a) == placeKey(this, b);
+}
+
+bool ShowTreeController::hitOverrides(quint32 narrow, quint32 wide) const
+{
+    if (!isLook(narrow) || !isLook(wide))
+        return false;
+    const QPair<int, quint32> n = placeKey(this, narrow);
+    const QPair<int, quint32> w = placeKey(this, wide);
+    if (n.first <= w.first)
+        return false;
+    if (HitScope(w.first) == HitScope::Global)
+        return true;
+    // The production, list and cue list narrow's place is in.
+    quint32 prod = invalidId(), list = invalidId();
+    if (HitScope(n.first) == HitScope::Cue)
+    {
+        const CueList *l = listOfCue(n.second);
+        if (l != nullptr && l->isSubCues())
+            l = listOfCue(l->subOf);            // a sub-cue: its cue's list
+        if (l != nullptr)
+        {
+            list = l->id;
+            cueList(l->id, &prod);
+        }
+    }
+    else if (HitScope(n.first) == HitScope::List)
+    {
+        list = n.second;
+        cueList(list, &prod);
+    }
+    if (HitScope(w.first) == HitScope::Production)
+        return prod == w.second;
+    return HitScope(w.first) == HitScope::List && list == w.second;
+}
+
 void ShowTreeController::noteListRuntime(quint32 chaserId)
 {
     for (const Production &p : m_productions)

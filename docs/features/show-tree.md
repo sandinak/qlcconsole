@@ -1915,10 +1915,28 @@ called them looks; they open as they were.)
   So one **HIT 1** button can be the stab of every song: a hit for
   everywhere, and one under each song's cue or list that does something
   else there. Its face shows the armed hit's name and a dot (it holds
-  several); with none armed it is dimmed. Its properties list each hit
-  with **When** (where it lives, read-only: move the hit in the tree to
-  change it) and **Remove**. A VC button's hits have no undo of their own
-  (the Virtual Console has none).
+  several), and **↳ overrides** while that hit fires instead of a wider
+  one; with none armed it is dimmed. Its properties' **Hits** table lists
+  each hit with **When** (where it lives, read-only: move the hit in the
+  tree to change it) and what it overrides or shares, under the button's
+  map in words: *HIT 1 fires Blackout everywhere, except Strobe in cue
+  2.3 (overrides Blackout); 2 hits live in cue 4 (Pop, Flash): step
+  through.* **Add hit…** and **Remove** change it. A VC button's hits
+  have no undo of their own (the Virtual Console has none).
+- **Adding a hit asks** (by drag or Add hit…), never guessing:
+  - a second hit at the **same place** as one the button has: **Step
+    through** (each press fires the next), **Together** (a press fires
+    them all), **Replace** (the one there goes) or **Cancel**;
+  - a hit **narrower** than one it has (or wider): *“Blackout” fires
+    everywhere; “Strobe” fires instead in cue 2.3. Override there?*
+- **Seeing it.** A hit that overrides another on a button is marked
+  **↳ overrides** in the tree (its **VC ×N** names the buttons on hover).
+  While the show runs, the **Run** tab lists the buttons whose hit for
+  this moment overrides a wider one (*HIT 1: Strobe ↳ overrides
+  Blackout*). **Show checks** (the footer's status) list every override,
+  every pair sharing a place, and every deleted hit a button still holds
+  (a deleted hit, or a pair the button was never told how to fire, is a
+  warning).
 - **Older builds.** A show saved here opens in an older qlcconsole with
   every hit in its production's Hits section, firing at any time, and a
   button with several hits firing its first.
