@@ -1394,6 +1394,21 @@ void saveXML(QXmlStreamWriter *doc, const Production &production)
     if (production.numbering != Numbering::None)
         doc->writeAttribute(QStringLiteral("Numbering"), numberingToString(production.numbering));
 
+    // Tonight's running order (0.3.1 ro): an older build skips the element.
+    if (!production.runningOrder.isEmpty())
+    {
+        doc->writeStartElement(QStringLiteral("RunningOrder"));
+        for (const RunningSong &r : production.runningOrder)
+        {
+            doc->writeStartElement(QStringLiteral("Song"));
+            doc->writeAttribute(QStringLiteral("Section"), r.id);
+            if (r.skip)
+                doc->writeAttribute(QStringLiteral("Skip"), QStringLiteral("1"));
+            doc->writeEndElement();
+        }
+        doc->writeEndElement();
+    }
+
     for (const CueList &list : production.lists)
     {
         // The Looks section is an element of its own: an older build skips
@@ -1594,6 +1609,22 @@ bool loadXML(QXmlStreamReader &root, Production &production)
 
     while (root.readNextStartElement())
     {
+        if (root.name() == QLatin1String("RunningOrder"))
+        {
+            while (root.readNextStartElement())
+            {
+                if (root.name() == QLatin1String("Song"))
+                {
+                    RunningSong r;
+                    r.id = root.attributes().value(QStringLiteral("Section")).toString();
+                    r.skip = root.attributes().value(QStringLiteral("Skip")).toString() == QLatin1String("1");
+                    if (!r.id.isEmpty())
+                        production.runningOrder << r;
+                }
+                root.skipCurrentElement();
+            }
+            continue;
+        }
         const bool looks = root.name() == KXMLShowTreeLooks;
         const bool subs = root.name() == KXMLShowTreeSubCues;
         if (root.name() != KXMLShowTreeCueList && !subs && (!looks || production.looks() != nullptr))

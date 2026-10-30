@@ -24,8 +24,10 @@
    hand. Merge lists into one… turns a show built as a list per song into
    that one list, every cue playing as it did.
 
-   Sections are only how the list reads and numbers: nothing here plays
-   differently, and the Show Tree runtime never looks at them. "Block at
+   Sections are how the list reads and numbers. The one thing they do
+   play is tonight's running order (playOrder()): the chaser's steps come
+   in that order, a song left out tonight is skipped, and no cue is moved
+   or renumbered. "Block at
    section start" is the first cue's own mode. */
 
 #include <QCoreApplication>
@@ -157,6 +159,87 @@ QString ShowTree::sectionTitle(const Section &section)
         return section.name.isEmpty() ? QCoreApplication::translate("ShowTree", "Section") : section.name;
     return section.name.isEmpty() ? section.key
                                   : QStringLiteral("%1 — %2").arg(section.key, section.name);
+}
+
+QString ShowTree::sectionId(const Section &section)
+{
+    if (!section.key.isEmpty())
+        return section.key;
+    return section.headCue == invalidId() ? QString() : QStringLiteral("#%1").arg(section.headCue);
+}
+
+QList<RunningSong> ShowTree::resolveRunningOrder(const QList<Section> &sections, const QList<RunningSong> &order)
+{
+    QStringList natural;                // each id once, in number order
+    for (const Section &s : sections)
+        if (!natural.contains(sectionId(s)))
+            natural << sectionId(s);
+
+    QList<RunningSong> out;
+    QSet<QString> seen;
+    for (const RunningSong &r : order)
+        if (natural.contains(r.id) && !seen.contains(r.id))
+        {
+            out << r;
+            seen.insert(r.id);
+        }
+    // A section the order doesn't know (a new song): after the one before it.
+    for (int i = 0; i < natural.count(); ++i)
+    {
+        if (seen.contains(natural.at(i)))
+            continue;
+        int at = 0;
+        for (int k = i - 1; k >= 0; --k)
+            if (seen.contains(natural.at(k)))
+            {
+                for (int j = 0; j < out.count(); ++j)
+                    if (out.at(j).id == natural.at(k))
+                        at = j + 1;
+                break;
+            }
+        RunningSong r;
+        r.id = natural.at(i);
+        out.insert(at, r);
+        seen.insert(r.id);
+    }
+    return out;
+}
+
+QList<int> ShowTree::playOrder(const CueList &list, Numbering numbering, const QList<RunningSong> &order,
+                               QList<bool> *skipped)
+{
+    QList<int> out;
+    for (int i = 0; i < list.cues.count(); ++i)
+        out << i;
+    if (skipped != nullptr)
+        *skipped = QList<bool>(list.cues.count(), false);
+    if (order.isEmpty())
+        return out;
+    const QList<Section> sections = sectionsOf(list, numbering);
+    if (sections.isEmpty())
+        return out;
+
+    // Cues of no section stay in front, then each song's cues.
+    QHash<QString, QList<int>> byId;
+    for (int i = 0; i < list.cues.count(); ++i)
+    {
+        const int si = sectionOfIndex(sections, i);
+        byId[si < 0 ? QString() : sectionId(sections.at(si))] << i;
+    }
+    // Manual: sectionOfIndex covers a range, so a run of one id may be several.
+    const QList<RunningSong> resolved = resolveRunningOrder(sections, order);
+    QList<int> result = byId.value(QString());
+    for (const RunningSong &r : resolved)
+    {
+        const QList<int> cues = byId.value(r.id);
+        result << cues;
+        if (skipped != nullptr && r.skip)
+            for (int i : cues)
+                (*skipped)[i] = true;
+    }
+    if (result.count() != out.count())
+        return out;                     // never lose a cue
+    return result;
 }
 
 Numbering ShowTree::suggestNumbering(const Production &production)
@@ -530,6 +613,95 @@ bool ShowTreeController::setNumbering(quint32 productionId, Numbering numbering)
             }
         return false;
     });
+}
+
+QList<RunningSong> ShowTreeController::runningOrder(quint32 productionId, QList<Section> *sectionsOut) const
+{
+    const Production *p = production(productionId);
+    const quint32 lid = mainList(productionId);
+    const CueList *l = p == nullptr ? nullptr : cueList(lid);
+    if (l == nullptr)
+        return QList<RunningSong>();
+    const QList<Section> secs = sectionsOf(*l, p->numbering);
+    QList<Section> unique;
+    QStringList ids;
+    for (const Section &s : secs)
+        if (!ids.contains(sectionId(s)))
+        {
+            ids << sectionId(s);
+            unique << s;
+        }
+    const QList<RunningSong> out = resolveRunningOrder(secs, p->runningOrder);
+    if (sectionsOut != nullptr)
+    {
+        sectionsOut->clear();
+        for (const RunningSong &r : out)
+            *sectionsOut << unique.at(ids.indexOf(r.id));
+    }
+    return out;
+}
+
+bool ShowTreeController::hasRunningOrder(quint32 productionId) const
+{
+    const Production *p = production(productionId);
+    return p != nullptr && !p->runningOrder.isEmpty();
+}
+
+bool ShowTreeController::setRunningOrder(quint32 productionId, const QList<RunningSong> &order)
+{
+    const Production *have = production(productionId);
+    if (have == nullptr)
+        return false;
+    // Number order with every song in is no order at all.
+    const CueList *main = cueList(mainList(productionId));
+    if (main == nullptr)
+        return false;
+    const QList<Section> secs = sectionsOf(*main, have->numbering);
+    QList<RunningSong> natural;
+    for (const Section &s : secs)
+    {
+        RunningSong r;
+        r.id = sectionId(s);
+        if (!natural.contains(r))
+            natural << r;
+    }
+    QList<RunningSong> value = order;
+    if (value == natural)
+        value.clear();
+    if (value == have->runningOrder)
+        return false;
+    return edit(tr("Running order"), [&](QList<Production> &ps) {
+        for (Production &p : ps)
+            if (p.id == productionId)
+            {
+                p.runningOrder = value;
+                return true;
+            }
+        return false;
+    });
+}
+
+bool ShowTreeController::resetRunningOrder(quint32 productionId)
+{
+    return setRunningOrder(productionId, QList<RunningSong>());
+}
+
+QList<int> ShowTreeController::playOrderOf(quint32 listId, QList<bool> *skipped) const
+{
+    quint32 pid = invalidId();
+    const CueList *l = cueList(listId, &pid);
+    const Production *p = l == nullptr ? nullptr : production(pid);
+    if (l == nullptr || p == nullptr || p->runningOrder.isEmpty())
+    {
+        QList<int> out;
+        const int n = l == nullptr ? 0 : l->cues.count();
+        for (int i = 0; i < n; ++i)
+            out << i;
+        if (skipped != nullptr)
+            *skipped = QList<bool>(n, false);
+        return out;
+    }
+    return playOrder(*l, listNumbering(listId), p->runningOrder, skipped);
 }
 
 Numbering ShowTreeController::listNumbering(quint32 listId) const

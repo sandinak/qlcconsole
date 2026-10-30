@@ -1050,6 +1050,16 @@ public:
      *  empty cancels. */
     typedef std::function<QList<quint32>(quint32 productionId)> MergePicker;
     void setMergePicker(const MergePicker &picker) { m_mergePicker = picker; }
+    /** Running order… for production @a productionId (0.3.1 ro): the songs
+     *  in the order the Run and GO play them tonight, dragged, and the ones
+     *  left out; no cue is renumbered. Asks (a dialog) unless @a order is
+     *  given (tests); @a reset goes back to number order. */
+    bool editRunningOrder(quint32 productionId, const QList<ShowTree::RunningSong> &order = QList<ShowTree::RunningSong>(),
+                          bool reset = false);
+    /** The dialog's rows as they stand when it is accepted (tests): in place
+     *  of the dialog, edits the resolved order; null shows the dialog. */
+    typedef std::function<QList<ShowTree::RunningSong>(const QList<ShowTree::RunningSong> &)> OrderPicker;
+    void setOrderPicker(const OrderPicker &picker) { m_orderPicker = picker; }
     /** The section the selected row is (SectionNode), or the selected cue
      *  is in. False: none. */
     bool currentSection(ShowTree::Section *out) const;
@@ -1063,6 +1073,9 @@ private:
     /** The rows' key for section @a s of list @a listId (expansion, SectionRole). */
     static QString sectionRole(const ShowTree::Section &s);
     MergePicker m_mergePicker;
+    OrderPicker m_orderPicker;
+    QPushButton *m_prodOrder = nullptr;
+    QLabel *m_prodOrderInfo = nullptr;
     QComboBox *m_prodNumbering = nullptr;
     QLabel *m_prodNumberingHint = nullptr;
     QPushButton *m_prodMerge = nullptr;

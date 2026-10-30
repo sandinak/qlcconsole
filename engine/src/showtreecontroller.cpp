@@ -4605,6 +4605,24 @@ void ShowTreeController::bake()
 
             if (chaser == nullptr)
                 continue;
+            // Tonight's running order: the songs in that order, a song left
+            // out skipped; the cues themselves stay as they are.
+            if (!list.looks && !list.isSubCues() && !prod.runningOrder.isEmpty())
+            {
+                QList<bool> out;
+                const QList<int> order = playOrder(list, prod.numbering, prod.runningOrder, &out);
+                if (order.count() == steps.count())
+                {
+                    QList<ChaserStep> played;
+                    for (int at : order)
+                    {
+                        ChaserStep s = steps.at(at);
+                        s.skip = s.skip || out.at(at);
+                        played << s;
+                    }
+                    steps = played;
+                }
+            }
             const QList<ChaserStep> have = chaser->steps();
             if (!sameSteps(have, steps))
             {

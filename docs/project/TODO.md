@@ -79,6 +79,10 @@ Template (the classroom stage), File ▸ Show Settings (open in Operate, an
 Operate PIN), fade in / out on hits (bake, 2026-10-30). **Still open:**
 - **Tonight's running order** (reorder productions for Run): Show Tree
   code, left while another agent is in it.
+Operate PIN). **Still open:**
+- **Tonight's running order**: built (Running order… on the production's
+  page; `Production::runningOrder`, chaser steps in that order).
+- **Fade in/out on hits**: Show Tree (hit bake), same reason.
 - **Gel colour in the Rig Overview** (the 3D view): the rig view, same
   reason. The patch list half is built.
 - **Fade in/out on hits**: Show Tree (hit bake), same reason.

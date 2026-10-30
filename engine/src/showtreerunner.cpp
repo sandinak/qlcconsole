@@ -33,7 +33,8 @@ quint32 ShowTreeController::cueOfStep(quint32 listId, int step, int subStep) con
     const CueList *list = cueList(listId);
     if (list == nullptr || step < 0 || step >= list->cues.count())
         return invalidId();
-    const quint32 cueId = list->cues.at(step).id;
+    // A step is the cue at that place in tonight's running order.
+    const quint32 cueId = list->cues.at(playOrderOf(listId).at(step)).id;
     if (subStep < 0)
         return cueId;
     const CueList *subs = cueList(subCueList(cueId));
