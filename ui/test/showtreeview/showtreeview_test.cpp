@@ -8445,7 +8445,7 @@ void ShowTreeView_Test::cutAndPasteMovesLayersInOneUndoStep()
     tf.groups << floor->id();
     const quint32 lt = st->addLayer(c1, tt);
     const quint32 lu = st->addLayer(c1, tu);
-    const quint32 lf = st->addLayer(c2, tf);
+    st->addLayer(c2, tf);
     st->setLayerLook(c1, lt, st->lookForPalette(blue));
 
     ShowTreeView view(nullptr, m_doc);
