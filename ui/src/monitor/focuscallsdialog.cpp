@@ -120,7 +120,7 @@ FocusCallsDialog::FocusCallsDialog(Doc *doc, QWidget *parent)
     m_target = new QComboBox(this);
     m_target->setObjectName(QStringLiteral("fcTarget"));
     m_target->addItem(tr("Where they land (fixed lights)"), QVariant(0xFFFFFFFFu));
-    if (MonitorProperties *props = m_doc->monitorProperties())
+    if (m_doc->monitorProperties() != nullptr)
         for (const StageTarget *t : PerformerFill::pickable(m_doc))
             m_target->addItem(t->name(), QVariant(t->id()));
     form->addRow(tr("Focus to"), m_target);
