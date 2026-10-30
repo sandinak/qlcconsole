@@ -347,6 +347,14 @@ private:
         read per channel, a millisecond tick between two channels gave them
         different fades (168 169 169 a frame later). INT_MIN: not in a pass. */
     int m_passBeatOffset = INT_MIN;
+    /** The effects it starts with that have not drawn yet (MasterTimer
+        thread): its faders hold off until each has (EffectScriptRunner::
+        hasDrawn()), at most kEffectHoldMs, so the look never shows bare for
+        the frame or two before its effect's first -- a Breathe at 20%
+        flashed the 20% before it started at its floor. */
+    QList<quint32> m_effectsToDraw;
+    void holdForEffects();
+    quint32 m_effectHoldFrom = 0;           ///< elapsed() when the hold began
 
     /*********************************************************************
      * Palettes

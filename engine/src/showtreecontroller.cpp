@@ -4976,6 +4976,46 @@ QString ShowTreeController::lockedText()
     return tr("Made by the Show Tree — edit it there.");
 }
 
+bool ShowTreeController::effectOnlyTracked(quint32 sceneId, quint32 paletteId, quint32 viaFunction) const
+{
+    QList<quint32> cues;
+    for (const Production &p : m_productions)
+        for (const CueList &l : p.lists)
+            for (const Cue &c : l.cues)
+            {
+                if (c.collection == invalidId())
+                    continue;
+                if (viaFunction != invalidId() ? c.collection == viaFunction : true)
+                {
+                    const Collection *coll = qobject_cast<const Collection *>(m_doc->function(c.collection));
+                    if (coll != nullptr && (viaFunction != invalidId()
+                                            || (coll->isRunning() && coll->functions().contains(sceneId))))
+                        cues << c.id;
+                }
+            }
+    bool tracked = false;
+    for (quint32 cueId : cues)
+    {
+        ResolvedCue rc;
+        if (!resolvedCue(cueId, &rc))
+            continue;
+        for (const ResolvedLayer &layer : rc.layers)
+        {
+            if (layerScene(cueId, layer.target) != sceneId)
+                continue;
+            for (const ResolvedValue &v : layer.values)
+            {
+                if (!v.look.palettes.contains(paletteId))
+                    continue;
+                if (v.origin != Origin::Tracked)
+                    return false;       // set in this cue: a new start
+                tracked = true;
+            }
+        }
+    }
+    return tracked;
+}
+
 bool ShowTreeController::generatedNode(quint32 functionId, quint32 *listId, quint32 *cueId,
                                        quint32 *layerId) const
 {

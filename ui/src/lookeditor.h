@@ -403,6 +403,11 @@ private slots:
 
 private:
     void rebuildEffectDynWidget();
+    /** Param @p name now @p value: its slider and number follow (no edit
+     *  signals), and a wave's Length when it is the cycle param. */
+    void syncEffectParamWidgets(const QString &name, double value);
+    /** A wave's Length (one cycle, Runs Once / N times) from its rate. */
+    void syncEffectCycleLength();
 
     /** Fill the effect picker combo with presets + raw scripts grouped by
      *  category, and select the entry matching palette @p p. */

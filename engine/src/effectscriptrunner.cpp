@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include "effectscriptrunner.h"
+#include "showtreecontroller.h"
 #include "effectinstance.h"
 
 #include "doc.h"
@@ -117,6 +118,24 @@ void EffectScriptRunner::slotFunctionStopped(quint32 fid)
     destroyInstancesForScene(fid);
 }
 
+void EffectScriptRunner::slotFunctionStartedAgain(quint32 fid, quint32 sourceId)
+{
+    if (m_instances.isEmpty())
+        return;
+    Function *f = m_doc->function(fid);
+    if (f == nullptr || f->type() != Function::SceneType || !f->isRunning())
+        return;
+    for (EffectInstance *inst : m_instances)
+    {
+        if (!inst->sceneIds().contains(fid) || inst->isFadingOut())
+            continue;
+        if (m_doc->showTree() != nullptr
+            && m_doc->showTree()->effectOnlyTracked(fid, inst->effectPaletteId(), sourceId))
+            continue;
+        inst->sceneStarted();
+    }
+}
+
 void EffectScriptRunner::slotFunctionRemoved(quint32 fid)
 {
     // Doc::deleteFunction() removes the function from the MasterTimer's list
@@ -158,6 +177,7 @@ void EffectScriptRunner::createInstancesForScene(quint32 sceneId)
     if (!scene)
         return;
 
+    QList<EffectInstance *> fresh;   // to draw at once, below
     for (quint32 pid : scene->palettes())
     {
         QLCPalette *pal = m_doc->palette(pid);
@@ -183,6 +203,14 @@ void EffectScriptRunner::createInstancesForScene(quint32 sceneId)
                 // two layers, a cue-wide effect): each with its own base.
                 existing->addScene(sceneId);
             }
+            /* A new start of a scene carrying it (the next cue's copy of
+               it, a hit fired again): a run that ends plays again from its
+               start; a loop runs on. A scene that keeps running (a layer
+               tracking through) starts nothing, so a done run stays done. */
+            if (m_doc->showTree() == nullptr
+                || !m_doc->showTree()->effectOnlyTracked(sceneId, pid, Function::invalidId()))
+                existing->sceneStarted();
+            fresh << existing;
             continue;
         }
 
@@ -220,6 +248,7 @@ void EffectScriptRunner::createInstancesForScene(quint32 sceneId)
             QMutexLocker locker(&m_instanceMutex);
             m_instances.append(inst);
         }
+        fresh << inst;
         emit effectStarted(pid);
 
         // Register DMXSource on first instance
@@ -231,6 +260,17 @@ void EffectScriptRunner::createInstancesForScene(quint32 sceneId)
 
     }
 
+    /* Its first frame now, not on the next tick: the scene holds its
+       output until its effects have drawn (Scene::holdForEffects()), so
+       the sooner the better. One that failed has nothing to draw. */
+    for (EffectInstance *inst : fresh)
+    {
+        inst->setLastSpotPositions(m_lastSpotDeg);
+        inst->setDataChannels(m_dataChannels);
+        inst->runTick();
+    }
+    if (!fresh.isEmpty() || !m_failures.isEmpty())
+        publishWrites();
     updateAudioSubscription();
 }
 
@@ -619,17 +659,34 @@ void EffectScriptRunner::discardParked(quint32 paletteId)
     delete m_parked.take(paletteId);
 }
 
+static const quint64 kAnyScene = quint64(0xFFFFFFFFu) << 32;
+
 void EffectScriptRunner::publishWrites()
 {
     QList<EffectInstance::DmxWrite> combined;
+    QSet<quint64> drawn;
     {
         QMutexLocker locker(&m_instanceMutex);
         for (const EffectInstance *inst : m_instances)
+        {
             combined += inst->dmxWrites();
+            for (quint32 sid : inst->tickedScenes())
+                drawn.insert((quint64(sid) << 32) | inst->effectPaletteId());
+        }
     }
+    for (auto it = m_failures.constBegin(); it != m_failures.constEnd(); ++it)
+        drawn.insert(kAnyScene | it.key());
 
     QMutexLocker locker(&m_writesMutex);
     m_publishedWrites = combined;
+    m_drawn = drawn;
+}
+
+bool EffectScriptRunner::hasDrawn(quint32 sceneId, quint32 paletteId) const
+{
+    QMutexLocker locker(&m_writesMutex);
+    return m_drawn.contains((quint64(sceneId) << 32) | paletteId)
+        || m_drawn.contains(kAnyScene | paletteId);
 }
 
 void EffectScriptRunner::setDataChannel(const QString &name, const QVariantMap &data)

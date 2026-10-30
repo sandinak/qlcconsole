@@ -6,6 +6,44 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
+### 2026-10-30 — Breathe once: no flash, whole cycles, typed values, Length *(fix/031-breathe-once, 0.3.1 brth)*
+
+The user's build-2593 report (step tops, White, 20%, Breathe, Once, on
+Solo), each reproduced first on the classroom rig (`engine/test/pixelboxes`
+aBreathe*: the step tops' white and red per frame):
+- **Flash at start**: the scene wrote its 20% for ~40 ms before the effect
+  instance (made on the queued functionStarted, drawn on the runner's next
+  tick) wrote its first frame. `Scene::holdForEffects()` keeps the scene's
+  faders disabled until `EffectScriptRunner::hasDrawn(scene, palette)`
+  (published with the writes; a failed effect counts as drawn), at most
+  250 ms, on the Doc's own timer only; the runner draws a new instance's
+  first frame at once in createInstancesForScene.
+- **Dimmed twice, white black** (found reproducing): Dimmer Phaser sent the
+  look's colour scaled by the wave as well as the dimmer, so a dimmerless
+  head got dimmer² and its white pixels 0. It sends the dimmer alone; the
+  host scales the look's base (colour and white) once.
+- **Once ends anywhere**: a non-one-shot run lasted resolvedDurationMs()
+  (the cue's time, else 2 s), not the wave's period. A script naming
+  `effect.cycleParam` (dimmer/colour phaser, the pulses, warm-cool) plays
+  whole cycles on Once / N times: `_time` stops exactly on the last
+  cycle's end and that frame holds (or releases). A Runs change while it
+  plays restarts the run (and a new rate on a finished one).
+- **A Once in each of three copied cues** (second report): the copies bake
+  to the same layer scene, which keeps running and gains the next cue's
+  collection as a source -- no functionStarted, so the shared instance
+  stayed done. `Function::start` now emits MasterTimer::
+  functionStartedAgain(id, source) for a running function started by
+  another source; the runner restarts that scene's ending runs
+  (`EffectInstance::sceneStarted()`), as it does when a new scene joins an
+  instance, unless `ShowTreeController::effectOnlyTracked()` says the cue
+  only tracks the effect through. Tests: three copied cues, a hit fired
+  twice beside a cue sharing the palette, a tracking cue.
+- **Typed values**: the number beside each effect setting's slider is a
+  QDoubleSpinBox (no buttons, the param's range).
+- **Length for a one shot**: for a wave the Runs row's Length is one cycle
+  (1 / rate, ×own speed; beats on a master), stored as the rate; the rate
+  and Length follow each other; EffectRunsMenu's Length… sets it too.
+
 ### 2026-10-30 — Pixel boxes, effects and beams the course found *(fix/031-course-bugs, 0.3.1 cbug)*
 
 COURSE_PLAN §8 #15, #17, #18, #20, each reproduced first in an offscreen

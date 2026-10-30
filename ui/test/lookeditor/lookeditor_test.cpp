@@ -51,6 +51,7 @@
 #include "effectscriptcache.h"
 #include "effectpresetcache.h"
 #include "effectorigin.h"
+#include "effectrunsmenu.h"
 #include "qlcpalette.h"
 #include "qlcfixturedef.h"
 #include "qlcfixturemode.h"
@@ -1434,6 +1435,96 @@ void LookEditor_Test::anyEffectRunsOnceOrNTimes()
     atEnd = ed.findChild<QComboBox *>("effectAtEnd");
     QCOMPARE(runs->currentText(), QString("Once"));
     QCOMPARE(atEnd->currentText(), QString("Release"));
+}
+
+/* A Breathe on the Dimmer Phaser, as resources/effectpresets/Breathe.json
+   has it. */
+static QLCPalette *aBreathe(Doc &doc)
+{
+    QLCPalette *look = new QLCPalette(QLCPalette::Effect, &doc);
+    look->setName("Breathe");
+    look->setScriptPath(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts/dimmer-phaser.js");
+    look->setEffectParamValue("rate", 0.2);
+    look->setEffectParamValue("minDim", 0.05);
+    look->setEffectParamValue("maxDim", 1.0);
+    return doc.addPalette(look) ? look : nullptr;
+}
+
+/* The number beside a setting's slider is a field: typed, the setting
+   takes that exact value (in its own units and range) and the slider
+   follows; dragged, the number follows the slider. */
+void LookEditor_Test::anEffectSettingTakesATypedValue()
+{
+    Doc doc(this);
+    QLCPalette *look = aBreathe(doc);
+    QVERIFY(look != nullptr);
+    LookEditor ed(&doc);
+    ed.setPalette(look->id());
+
+    QDoubleSpinBox *minDim = ed.findChild<QDoubleSpinBox *>("effectParam_minDim");
+    QVERIFY(minDim != nullptr);
+    QCOMPARE(minDim->value(), 0.05);
+    QCOMPARE(minDim->minimum(), 0.0);
+    QCOMPARE(minDim->maximum(), 1.0);
+    QSlider *slider = nullptr;
+    for (QSlider *sl : ed.findChildren<QSlider *>())
+        if (sl->property("paramName").toString() == "minDim")
+            slider = sl;
+    QVERIFY(slider != nullptr);
+
+    minDim->setValue(0.123);
+    QCOMPARE(look->effectParamValues().value("minDim"), 0.123);   // exact, not a slider step
+    QCOMPARE(slider->value(), 123);
+    minDim->setValue(5.0);                                          // out of range: its top
+    QCOMPARE(look->effectParamValues().value("minDim"), 1.0);
+
+    slider->setValue(250);
+    QCOMPARE(look->effectParamValues().value("minDim"), 0.25);
+    QCOMPARE(minDim->value(), 0.25);
+}
+
+/* Run Once, a wave's Length is one cycle: a Breathe at 0.2 a second is a
+   5 s breath. Typed, it sets the rate (no run length of its own); the
+   rate's slider and number follow, and the rate moves the Length. */
+void LookEditor_Test::aWavesLengthIsOneCycle()
+{
+    Doc doc(this);
+    QLCPalette *look = aBreathe(doc);
+    QVERIFY(look != nullptr);
+    LookEditor ed(&doc);
+    ed.setPalette(look->id());
+
+    QComboBox *runs = ed.findChild<QComboBox *>("effectRuns");
+    QDoubleSpinBox *len = ed.findChild<QDoubleSpinBox *>("effectRunLength");
+    QDoubleSpinBox *rate = ed.findChild<QDoubleSpinBox *>("effectParam_rate");
+    QVERIFY(runs != nullptr && len != nullptr && rate != nullptr);
+    QVERIFY(len->isHidden());                                       // Loop: no Length
+    runs->setCurrentIndex(1);                                       // Once
+    QVERIFY(!len->isHidden());
+    QCOMPARE(len->value(), 5.0);
+    QCOMPARE(len->specialValueText(), QString());                   // no "auto": it is the cycle's
+    QVERIFY(len->toolTip().contains("rate"));
+
+    len->setValue(5.5);
+    QVERIFY(qAbs(look->effectParamValues().value("rate") - 1.0 / 5.5) < 1e-9);
+    QVERIFY(!look->effectParamValues().contains("__durationMs"));
+    QCOMPARE(rate->value(), 0.18);
+
+    rate->setValue(0.25);
+    QCOMPARE(len->value(), 4.0);
+    QVERIFY(!look->effectParamValues().contains("__durationMs"));
+
+    // The context menu's Length says and sets the same
+    EffectScript::ParamDef def;
+    QCOMPARE(EffectOrigin::scriptCycleParam(look->scriptPath(), &def), QString("rate"));
+    EffectRunsMenu::setCycleLength(&doc, { look->id() }, "rate", def, 6.0);
+    QVERIFY(qAbs(look->effectParamValues().value("rate") - 1.0 / 6.0) < 1e-9);
+
+    // A loop effect with no wave keeps its run Length (auto = the cue's)
+    QLCPalette *chase = new QLCPalette(QLCPalette::Effect, &doc);
+    chase->setScriptPath(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts/color-chase.js");
+    QVERIFY(doc.addPalette(chase));
+    QVERIFY(EffectOrigin::scriptCycleParam(chase->scriptPath()).isEmpty());
 }
 
 void LookEditor_Test::theBrowsersListsAreAToZ()

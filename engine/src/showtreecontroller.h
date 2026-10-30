@@ -974,6 +974,14 @@ public:
     bool generatedNode(quint32 functionId, quint32 *listId, quint32 *cueId = nullptr,
                        quint32 *layerId = nullptr) const;
 
+    /** Whether effect palette @a paletteId on layer scene @a sceneId is
+     *  only TRACKED through in the cue playing it -- carried in, not set
+     *  there -- so its run carries on (a Once that is done stays done).
+     *  @a viaFunction: the cue collection that started the scene; invalid:
+     *  any running cue collection that plays it. False when no cue plays
+     *  it, or a cue sets it (its own, a cue look): that starts it afresh. */
+    bool effectOnlyTracked(quint32 sceneId, quint32 paletteId, quint32 viaFunction) const;
+
 private:
     /** One generated scene a cue plays: what a resolved layer bakes to,
      *  with what it leaves out for a lower layer (§3.5) and what it lays out

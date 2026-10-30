@@ -70,6 +70,31 @@ void EffectRunsMenu::apply(Doc *doc, const QList<quint32> &palettes, int runs, i
                                        effects, change);
 }
 
+void EffectRunsMenu::setCycleLength(Doc *doc, const QList<quint32> &palettes, const QString &param,
+                                    const EffectScript::ParamDef &def, double seconds)
+{
+    if (doc == nullptr || seconds <= 0.0)
+        return;
+    bool any = false;
+    for (quint32 pid : palettes)
+    {
+        QLCPalette *p = doc->palette(pid);
+        if (p == nullptr || p->type() != QLCPalette::Effect
+            || EffectOrigin::scriptCycleParam(p->scriptPath()) != param)
+            continue;
+        const double own = p->effectParamValues().value(QStringLiteral("__ownRate"), 1.0);
+        double rate = 1.0 / (seconds * qMax(0.0001, own));
+        if (def.max > def.min)
+            rate = qBound(def.min, rate, def.max);
+        p->setEffectParamValue(param, rate);
+        if (doc->effectScriptRunner() != nullptr)
+            doc->effectScriptRunner()->updateEffectParams(pid);
+        any = true;
+    }
+    if (any)
+        doc->setModified();
+}
+
 QMenu *EffectRunsMenu::add(QMenu *menu, Doc *doc, const QList<quint32> &palettes, QWidget *dialogParent)
 {
     QList<quint32> effects;
@@ -126,6 +151,30 @@ QMenu *EffectRunsMenu::add(QMenu *menu, Doc *doc, const QList<quint32> &palettes
     };
     addEnd(tr("Hold"), "effectAtEndHold", false);
     addEnd(tr("Release"), "effectAtEndRelease", true);
+    /* A wave (EffectOrigin::scriptCycleParam()): one run is one cycle, and
+       its Length is the cycle's, kept as its rate (the Look Editor's too). */
+    const QLCPalette *first = doc->palette(effects.first());
+    EffectScript::ParamDef cycDef;
+    const QString cyc = EffectOrigin::scriptCycleParam(first->scriptPath(), &cycDef);
+    if (!cyc.isEmpty())
+    {
+        const double rate = first->effectParamValues().value(cyc, cycDef.defaultValue);
+        const double own = first->effectParamValues().value(QStringLiteral("__ownRate"), 1.0);
+        const double cycle = rate > 0.0 && own > 0.0 ? 1.0 / (rate * own) : 0.0;
+        QAction *len = sub->addAction(tr("Length: %1 s…").arg(QString::number(cycle, 'f', 2)));
+        len->setObjectName(QStringLiteral("effectRunLengthAction"));
+        len->setToolTip(tr("One cycle of the wave (one breath): Once plays one, ending where it began"));
+        len->setEnabled(!now.loops());
+        QObject::connect(len, &QAction::triggered, sub, [doc, effects, cyc, cycDef, cycle, dialogParent]() {
+            bool ok = false;
+            const double s = QInputDialog::getDouble(dialogParent, tr("Length"),
+                                                     tr("One cycle, in seconds:"),
+                                                     cycle > 0.0 ? cycle : 5.0, 0.05, 600.0, 2, &ok);
+            if (ok)
+                setCycleLength(doc, effects, cyc, cycDef, s);
+        });
+        return sub;
+    }
     QAction *len = sub->addAction(now.lengthMs > 0 ? tr("Length: %1 s…").arg(now.lengthMs / 1000.0)
                                                    : tr("Length: auto…"));
     len->setObjectName(QStringLiteral("effectRunLengthAction"));
