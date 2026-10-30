@@ -116,8 +116,8 @@ from the Library lands in the tree right beside it.
     so the GO you test it with plays the new time; **Esc** in the field
     puts the old time back.
   - **A layer** shows what it contains, then one row per attribute.
-  - **A hit** shows its name, note, *Fired by* (the VC buttons, **Make VC
-    page**, **Move to folder…**), its looks and layers; **Hits** or a
+  - **A hit** shows its name, note, fade in / out, *Fired by* (the VC
+    buttons, **Make VC page**, **Move to folder…**), its looks and layers; **Hits** or a
     hit folder lists its hits and has **Make VC page**.
 - **Under the page: the Look Editor**, when **✎** opens a value or a
   palette is edited from the Library. Its **Used by** line says where the
@@ -1829,9 +1829,16 @@ them looks; they open as they were.)
 - **Build it as a cue.** A hit has the same layers, attribute rows,
   child layers, group sets, effects, line aims and reusable layers as a cue,
   and the same drops, pickers and commands (`Towers colour Red dimmer
-  Full`). Its page has no number, mode, includes, fades or *Next cue
+  Full`). Its page has no number, mode, includes, hold or *Next cue
   receives*, and its layers no Release: **a hit never tracks** — it plays
   only what it has.
+- **Fade in / Fade out.** A hit's page has its own **Fade in** and **Fade
+  out** (seconds): the hit comes up over its fade in when a button fires
+  it, and goes away over its fade out when the button lets go (Flash) or
+  turns it off (Toggle). 0, the default, snaps on and off. Both are saved
+  with the show, undo like any edit, and come along when a cue is pasted
+  into Hits. A hit played as a step of something else (a chaser, a
+  timeline) takes that step's fades instead.
 - **Folders.** **New folder…** on Hits or a folder; drag hits onto a
   folder (or onto *Hits* for none), or **Move to folder**. **F2** renames
   a folder; **Delete** moves what is in it up.

@@ -66,6 +66,10 @@ private slots:
     void whatChangesComesFromTheResolvedTracking();
     void cueOfStepMapsTheChaserBack();
 
+    // The bake re-plans only what changed; hits fade (Q180)
+    void incrementalBakeMatchesAFullBake();
+    void hitsFadeInAndOut();
+
 private:
     quint32 dimmer(int level, const QString &name);
     FixtureGroup *group(const QString &name, const QList<quint32> &fixtures);

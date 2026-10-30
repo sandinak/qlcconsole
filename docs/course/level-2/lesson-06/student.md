@@ -80,9 +80,10 @@ Do one:
 
 - **App:** download [`lesson-2-6-finish.qlcc`](../../shows/lesson-2-6-finish.qlcc).
   Right-click **Hits** → **+ Hit** for an encore look, then **Make VC
-  page** again: a new button, the others stay. Fire your hits over the
-  song in Operate. Bring in `Lesson2-6-Home-yourname.qlcc` (save in
-  Design).
+  page** again: a new button, the others stay. A glow eases in where a
+  stab snaps: on Glow's page set **Fade in** and **Fade out** to `2`.
+  Fire your hits over the song in Operate. Bring in
+  `Lesson2-6-Home-yourname.qlcc` (save in Design).
 - **Paper:** four hit cards for a vamp (a name for what it does, the
   lights, the moment). A partner sings a vamp; you hold them up on the
   beat. Swap.

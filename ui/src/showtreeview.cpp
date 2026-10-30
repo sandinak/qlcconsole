@@ -3746,13 +3746,19 @@ void ShowTreeView::showCuePage(const CueList &list, int index)
 {
     const Cue &cue = list.cues.at(index);
     m_pageCue = cue.id;
-    // A look (R3): no number, mode, base, includes, timing or next cue --
-    // what it has is all it plays, from a VC button.
+    // A look (R3): no number, mode, base, includes, hold or next cue --
+    // what it has is all it plays, from a VC button. Its fade in / out
+    // (Q180) are how the button brings it up and takes it away.
     {
         const bool cueRows = !list.looks;
+        m_cueForm->setRowVisible(m_cueFadeIn, true);
+        m_cueForm->setRowVisible(m_cueFadeOut, true);
+        m_cueFadeIn->setToolTip(list.looks ? tr("How long the hit takes to come up when a button fires it.")
+                                           : QString());
+        m_cueFadeOut->setToolTip(list.looks ? tr("How long the hit takes to go when the button lets it go.")
+                                            : QString());
         for (QWidget *w : { static_cast<QWidget *>(m_cueNumber), static_cast<QWidget *>(m_cueMode),
                             static_cast<QWidget *>(m_cueBase), m_cueIncludes->parentWidget(),
-                            static_cast<QWidget *>(m_cueFadeIn), static_cast<QWidget *>(m_cueFadeOut),
                             static_cast<QWidget *>(m_cueHold), static_cast<QWidget *>(m_cueNext),
                             static_cast<QWidget *>(m_cueTracked), static_cast<QWidget *>(m_cueSkip),
                             static_cast<QWidget *>(m_cueNoMib), static_cast<QWidget *>(m_cueFocusCall) })

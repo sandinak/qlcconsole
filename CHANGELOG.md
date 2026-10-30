@@ -218,6 +218,11 @@ skipped). Upstream fixes taken:
   collection that plays it: renamed, rebuilt, deleted and undone, it still
   fires it. Toggle and Flash as before; **Make VC page** buttons do the
   same. Older shows' buttons fire what they fired.
+- **Show Tree hits fade in and out**: a hit's page has **Fade in** and
+  **Fade out** (seconds). A VC button (Toggle or Flash) brings the hit up
+  over its fade in and takes it away over its fade out; 0, the default,
+  snaps on and off as before. Saved with the show; a cue pasted into Hits
+  brings its fades with it.
 - **VC effect controls**: a VC slider or knob in the new **Effect** mode
   moves one setting of an effect while it plays — **Speed**, **Size /
   Width**, **Rate**, **Offset / Spread**, **Direction**, **Intensity** or
@@ -416,6 +421,12 @@ skipped). Upstream fixes taken:
   new Virtual Console slider moves from ⇧⌘S to ⇧⌘U.
 
 ### Changed
+
+- **Show Tree edits on a long list are quicker**: an edit works out again
+  only the cues it changes (the edited cue and those tracking from it, up
+  to a block or a value of their own), not every cue in the show. One
+  look changed on a 200-cue tracking list over stage groups went from
+  about 110 ms to about 40-60 ms of CPU (`make perf`, showtree_edit_200cues).
 
 - **The save buttons say where an effect goes**: "Save as Effect…" is
   now **Save to My effects…** (on this computer, for any show) and "Save

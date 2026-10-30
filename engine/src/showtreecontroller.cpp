@@ -138,6 +138,17 @@ ShowTreeController::ShowTreeController(Doc *doc)
     connect(m_doc, &Doc::functionRemoved, this, stale);
     connect(m_doc, &Doc::functionChanged, this, stale);
     connect(this, &ShowTreeController::changed, this, stale);
+    // What bake() planned for each cue stands on the rig: a change to it
+    // plans every cue again.
+    auto rigChanged = [this]() { ++m_planWorld; };
+    connect(m_doc, &Doc::fixtureAdded, this, rigChanged);
+    connect(m_doc, &Doc::fixtureRemoved, this, rigChanged);
+    connect(m_doc, &Doc::fixtureChanged, this, rigChanged);
+    connect(m_doc, &Doc::fixtureGroupAdded, this, rigChanged);
+    connect(m_doc, &Doc::fixtureGroupRemoved, this, rigChanged);
+    connect(m_doc, &Doc::fixtureGroupChanged, this, rigChanged);
+    connect(m_doc, &Doc::paletteAdded, this, rigChanged);
+    connect(m_doc, &Doc::paletteRemoved, this, rigChanged);
     m_sweepTimer = new QTimer(this);
     m_sweepTimer->setSingleShot(true);
     m_sweepTimer->setInterval(250);
@@ -2756,8 +2767,9 @@ QList<ShowTreeController::ScenePlan> ShowTreeController::planCue(const CueList &
         if (rl.target.isOpaque())
             continue;
         targets[i] = expandTarget(rl.target);
-        fixtures[i] = fixturesOfTarget(m_doc, targets.at(i));
-        units[i] = unitsOfTarget(m_doc, targets.at(i));
+        const TargetUnits &tu = targetUnits(targets.at(i));
+        fixtures[i] = tu.fixtures;
+        units[i] = tu.units;
     }
 
     /* Who sets each attribute on each fixture (§2, "Overlap"; §3.5): this
@@ -2776,11 +2788,22 @@ QList<ShowTreeController::ScenePlan> ShowTreeController::planCue(const CueList &
             recency = list.indexOf(v.fromCue);
         return std::make_tuple(cls, recency, rc.layers.at(i).depth, i);
     };
-    QHash<QString, QHash<quint32, int>> winner;
-    QHash<QString, QHash<quint32, std::tuple<int, int, int, int>>> best;
+    // The layer that wins, and by what rank (-1: none).
+    struct Win
+    {
+        int layer = -1;
+        std::tuple<int, int, int, int> rank;
+    };
+    QHash<QString, QHash<quint32, Win>> winner;
     // The same per head ("fixture|head"): what leaves a layer out.
-    QHash<QString, QHash<qint64, int>> unitWinner;
-    QHash<QString, QHash<qint64, std::tuple<int, int, int, int>>> unitBest;
+    QHash<QString, QHash<qint64, Win>> unitWinner;
+    auto contest = [](auto &w, auto key, int i, const std::tuple<int, int, int, int> &r) {
+        auto at = w.find(key);
+        if (at == w.end())
+            w.insert(key, Win{ i, r });
+        else if (at->rank < r)
+            *at = Win{ i, r };
+    };
     for (int i = 0; i < n; ++i)
     {
         const ResolvedLayer &rl = rc.layers.at(i);
@@ -2791,23 +2814,17 @@ QList<ShowTreeController::ScenePlan> ShowTreeController::planCue(const CueList &
             if (isLineParamKey(it.key()))
                 continue;                       // they go with Position
             const auto r = rank(i, it.value());
-            QHash<quint32, int> &w = winner[it.key()];
-            QHash<quint32, std::tuple<int, int, int, int>> &b = best[it.key()];
+            QHash<quint32, Win> &w = winner[it.key()];
+            QHash<qint64, Win> &wu = unitWinner[it.key()];
+            const QHash<quint32, QList<qint64>> &us = units.at(i);
             for (quint32 f : fixtures.at(i))
-                if (!w.contains(f) || b.value(f) < r)
-                {
-                    w.insert(f, i);
-                    b.insert(f, r);
-                }
-            QHash<qint64, int> &wu = unitWinner[it.key()];
-            QHash<qint64, std::tuple<int, int, int, int>> &bu = unitBest[it.key()];
-            for (quint32 f : fixtures.at(i))
-                for (qint64 u : units.at(i).value(f))
-                    if (!wu.contains(u) || bu.value(u) < r)
-                    {
-                        wu.insert(u, i);
-                        bu.insert(u, r);
-                    }
+            {
+                contest(w, f, i, r);
+                const auto uf = us.constFind(f);
+                if (uf != us.constEnd())
+                    for (qint64 u : uf.value())
+                        contest(wu, u, i, r);
+            }
         }
     }
 
@@ -2877,7 +2894,7 @@ QList<ShowTreeController::ScenePlan> ShowTreeController::planCue(const CueList &
 
             // Left out: what it would light where it doesn't win -- a lower
             // layer (or a child) sets that attribute there.
-            const QHash<qint64, int> wu = unitWinner.value(look.key);
+            const QHash<qint64, Win> wu = unitWinner.value(look.key);
             /* Left out of fixture f when layer m wins none of the heads it
                lights there: @p lost says whether a winner beats it. */
             auto losesAll = [&](int m, quint32 f, const std::function<bool(int)> &lost) {
@@ -2885,7 +2902,7 @@ QList<ShowTreeController::ScenePlan> ShowTreeController::planCue(const CueList &
                 if (us.isEmpty())
                     return false;
                 for (qint64 u : us)
-                    if (!lost(wu.value(u, -1)))
+                    if (!lost(wu.value(u).layer))
                         return false;
                 return true;
             };
@@ -2956,8 +2973,8 @@ QList<ShowTreeController::ScenePlan> ShowTreeController::planCue(const CueList &
        with no Colour of its own (its own colours' set offsets stay put),
        one colour look per layer. */
     {
-        const QHash<quint32, int> dimW = winner.value(KeyDimmer);
-        const QHash<quint32, int> colW = winner.value(KeyColour);
+        const QHash<quint32, Win> dimW = winner.value(KeyDimmer);
+        const QHash<quint32, Win> colW = winner.value(KeyColour);
         QHash<int, QList<quint32>> fillAt;              // dimmer layer -> fixtures
         QHash<int, int> fillFrom;                       // dimmer layer -> colour layer
         QHash<int, QList<quint32>> fillOut;             // colour layer -> fixtures left out
@@ -2965,8 +2982,8 @@ QList<ShowTreeController::ScenePlan> ShowTreeController::planCue(const CueList &
         std::sort(fs.begin(), fs.end());
         for (quint32 f : fs)
         {
-            const int di = dimW.value(f);
-            const int cj = colW.value(f, -1);
+            const int di = dimW.value(f).layer;
+            const int cj = colW.value(f).layer;
             if (cj < 0 || cj == di)
                 continue;
             if (mix && rc.layers.at(di).depth <= rc.layers.at(cj).depth)
@@ -3001,7 +3018,7 @@ QList<ShowTreeController::ScenePlan> ShowTreeController::planCue(const CueList &
                 p.target.sets.clear();
                 QList<quint32> ex;
                 for (quint32 f : fixtures.at(it.key()))
-                    if (dimW.value(f, -1) != it.key())
+                    if (dimW.value(f).layer != it.key())
                         ex << f;
                 std::sort(ex.begin(), ex.end());
                 for (quint32 pid : rc.layers.at(it.key()).values.value(KeyDimmer).look.palettes)
@@ -4168,11 +4185,145 @@ static bool sameSteps(const QList<ChaserStep> &a, const QList<ChaserStep> &b)
     return true;
 }
 
+static bool sameTarget(const Target &a, const Target &b)
+{
+    return a.function == b.function && a.groups == b.groups && a.fixtures == b.fixtures && a.sets == b.sets;
+}
+
+/* What planCue() reads of a resolved layer: its target, depth and values. */
+static bool samePlannedLayers(const QList<ResolvedLayer> &a, const QList<ResolvedLayer> &b)
+{
+    if (a.count() != b.count())
+        return false;
+    for (int i = 0; i < a.count(); ++i)
+    {
+        const ResolvedLayer &x = a.at(i), &y = b.at(i);
+        if (x.depth != y.depth || !sameTarget(x.target, y.target) || x.values.count() != y.values.count())
+            return false;
+        for (auto it = x.values.constBegin(), jt = y.values.constBegin(); it != x.values.constEnd(); ++it, ++jt)
+        {
+            const ResolvedValue &v = it.value(), &w = jt.value();
+            if (it.key() != jt.key() || v.origin != w.origin || v.fromCue != w.fromCue || v.span != w.span
+                || v.look != w.look)
+                return false;
+        }
+    }
+    return true;
+}
+
+void ShowTreeController::forgetPlans()
+{
+    m_planCache.clear();
+    m_targetUnits.clear();
+}
+
+const ShowTreeController::TargetUnits &ShowTreeController::targetUnits(const Target &expanded)
+{
+    if (m_targetUnitsWorld != m_planWorld)
+    {
+        m_targetUnits.clear();
+        m_targetUnitsWorld = m_planWorld;
+    }
+    QByteArray key;
+    key.reserve(int(sizeof(quint32)) * int(expanded.groups.count() + expanded.fixtures.count() + 1));
+    auto put = [&key](quint32 v) { key.append(reinterpret_cast<const char *>(&v), sizeof(v)); };
+    for (quint32 g : expanded.groups)
+        put(g);
+    put(0xFFFFFFFF);
+    for (quint32 f : expanded.fixtures)
+        put(f);
+    auto it = m_targetUnits.find(key);
+    if (it == m_targetUnits.end())
+    {
+        TargetUnits tu;
+        tu.fixtures = fixturesOfTarget(m_doc, expanded);
+        tu.units = unitsOfTarget(m_doc, expanded);
+        it = m_targetUnits.insert(key, tu);
+    }
+    return it.value();
+}
+
+QList<ShowTreeController::ScenePlan> ShowTreeController::bakePlan(const CueList &list,
+                                                                  const QList<ResolvedCue> &resolved,
+                                                                  int index, const QHash<quint32, int> &order)
+{
+    const ResolvedCue &rc = resolved.at(index);
+    const bool mix = index < list.cues.count() && list.cues.at(index).mixOverlap;
+    // The order of the cues its values come from (planCue ranks a later
+    // cue's tracked value over an earlier one's): as ranks, so a cue added
+    // or taken away elsewhere in the list changes nothing here.
+    QVector<int> recency;
+    bool aim = false;
+    for (const ResolvedLayer &rl : rc.layers)
+        for (auto it = rl.values.constBegin(); it != rl.values.constEnd(); ++it)
+        {
+            recency << order.value(it.value().fromCue, -1);
+            // A line aim plays a palette made for its settings, found by
+            // the palettes' values: always planned afresh.
+            if (it.key() == KeyPosition)
+                for (quint32 pid : it.value().look.palettes)
+                    if (const QLCPalette *p = m_doc->palette(pid))
+                        aim = aim || p->type() == QLCPalette::Aim;
+        }
+    QVector<int> ranks = recency;
+    std::sort(ranks.begin(), ranks.end());
+    ranks.erase(std::unique(ranks.begin(), ranks.end()), ranks.end());
+    for (int &r : recency)
+        r = int(std::lower_bound(ranks.begin(), ranks.end(), r) - ranks.begin());
+
+    auto it = m_planCache.find(rc.cueId);
+    if (!aim && it != m_planCache.end() && it->world == m_planWorld && it->mix == mix
+        && it->recency == recency && samePlannedLayers(it->layers, rc.layers))
+    {
+        bool there = true;
+        for (const ScenePlan &p : it->plans)
+            for (quint32 pid : p.palettes)
+                there = there && m_doc->palette(pid) != nullptr;
+        if (there)
+            return it->plans;
+    }
+
+    const quint64 world = m_planWorld;
+    const QList<ScenePlan> plans = planCue(list, resolved, index, true);
+    ++m_lastBakePlanned;
+    if (aim)
+    {
+        m_planCache.remove(rc.cueId);
+        return plans;
+    }
+    PlanCacheEntry e;
+    e.layers = rc.layers;
+    e.recency = recency;
+    e.mix = mix;
+    // A palette planning made (a line aim's) changes the world after this
+    // plan was made from it: kept as of before, so planned again next time.
+    e.world = world;
+    e.plans = plans;
+    m_planCache.insert(rc.cueId, e);
+    return plans;
+}
+
 void ShowTreeController::bake()
 {
     if (m_baking)
         return;
     m_baking = true;
+    m_lastBakePlanned = 0;
+    // Group sets live here, not in Doc: a change to them is a new world.
+    {
+        bool same = m_groupSets.count() == m_planGroupSets.count();
+        for (int i = 0; same && i < m_groupSets.count(); ++i)
+        {
+            const GroupSet &a = m_groupSets.at(i), &b = m_planGroupSets.at(i);
+            same = a.id == b.id && a.groups == b.groups && a.fixtures == b.fixtures;
+        }
+        if (!same)
+        {
+            ++m_planWorld;
+            m_planGroupSets = m_groupSets;
+        }
+    }
+    QSet<quint32> plannedCues;
 
     QSet<quint32> keepScenes, keepCollections, keepChasers;
     m_generatedLabels.clear();
@@ -4219,6 +4370,10 @@ void ShowTreeController::bake()
             const QString folder = QStringLiteral("%1/%2/%3").arg(kProductionsFolder, prod.name,
                                                                   parentList != nullptr ? parentList->name : list.name);
             const QList<ResolvedCue> resolved = this->resolved(list);
+            QHash<quint32, int> order;
+            order.reserve(list.cues.count());
+            for (int i = 0; i < list.cues.count(); ++i)
+                order.insert(list.cues.at(i).id, i);
 
             // A Looks section (R3) has no chaser: each look is a Collection
             // of its own, fired from VC like any function.
@@ -4288,7 +4443,8 @@ void ShowTreeController::bake()
                     if (m_doc->function(fid) != nullptr && (chaser == nullptr || fid != chaser->id()))
                         opaqueAt.insert(k, fid);
                 }
-                const QList<ScenePlan> plans = planCue(list, resolved, i, true);
+                const QList<ScenePlan> plans = bakePlan(list, resolved, i, order);
+                plannedCues.insert(cue.id);
                 QHash<int, quint32> sceneAt;
                 for (const ScenePlan &plan : plans)
                 {
@@ -4388,8 +4544,13 @@ void ShowTreeController::bake()
                     coll->setPath(collPath);
                 if (coll->isVisible() != list.looks)
                     coll->setVisible(list.looks);
-                // A hit on a VC Flash button plays while the button is held.
+                // A hit on a VC Flash button plays while the button is held,
+                // and comes and goes over its own fades (Q180).
                 coll->setFlashPlays(list.looks);
+                if (list.looks)
+                    coll->setHitFades(cue.fadeIn, cue.fadeOut);
+                else
+                    coll->setHitFades(0, 0);
                 if (coll->functions() != members)
                 {
                     m_lastChanged << cue.id;
@@ -4465,6 +4626,10 @@ void ShowTreeController::bake()
     deleteUnused(keepCollections, m_generatedCollections);
     deleteUnused(keepScenes, m_generatedScenes);
     dropUnusedInlinePalettes();
+    // Plans of cues that are gone: forgotten (an undo bringing one back
+    // plans it again).
+    for (auto it = m_planCache.begin(); it != m_planCache.end();)
+        it = plannedCues.contains(it.key()) ? std::next(it) : m_planCache.erase(it);
 
     m_baking = false;
 
@@ -5540,10 +5705,14 @@ void ShowTreeController::loadState(QXmlStreamReader &root, bool snapshot)
                 m_nextId = qMax(m_nextId, c.id + 1);
                 for (const Layer &layer : c.layers)
                     m_nextId = qMax(m_nextId, layer.id + 1);
-                // A hit's Collection, as the file left it: flashes as a hit.
+                // A hit's Collection, as the file left it: flashes as a hit,
+                // with its fades.
                 if (l.looks)
                     if (Collection *coll = qobject_cast<Collection *>(m_doc->function(c.collection)))
+                    {
                         coll->setFlashPlays(true);
+                        coll->setHitFades(c.fadeIn, c.fadeOut);
+                    }
             }
         }
     }
@@ -5623,6 +5792,9 @@ void ShowTreeController::reset()
     m_madeReusable.clear();
     m_detached.clear();
     m_generatedLabels.clear();
+    m_planCache.clear();
+    m_planGroupSets.clear();
+    m_targetUnits.clear();
     m_undo.clear();
     m_redo.clear();
     m_snapshotRemap.clear();

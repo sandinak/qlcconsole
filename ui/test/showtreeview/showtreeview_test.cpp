@@ -4904,6 +4904,20 @@ void ShowTreeView_Test::looksSectionInTheTree()
     QLabel *fired = view.findChild<QLabel *>("stLookFiredBy");
     QVERIFY(fired->isVisibleTo(&view));
     QVERIFY(fired->text().contains("no VC button yet"));
+    // Its fade in / out (Q180), not a hold: typed, then the page moves on.
+    QDoubleSpinBox *hitIn = view.findChild<QDoubleSpinBox *>("stCueFadeIn");
+    QDoubleSpinBox *hitOut = view.findChild<QDoubleSpinBox *>("stCueFadeOut");
+    QVERIFY(hitIn->isVisibleTo(&view));
+    QVERIFY(hitOut->isVisibleTo(&view));
+    QVERIFY(!view.findChild<QDoubleSpinBox *>("stCueHold")->isVisibleTo(&view));
+    hitIn->setValue(1.5);
+    hitOut->setValue(3);
+    QVERIFY(view.selectNode(st->cueList(list)->cues.first().id));
+    QCOMPARE(st->cue(hit)->fadeIn, 1500u);
+    QCOMPARE(st->cue(hit)->fadeOut, 3000u);
+    QCOMPARE(qobject_cast<Collection *>(m_doc->function(st->cue(hit)->collection))->hitFadeIn(), 1500u);
+    QVERIFY(view.selectNode(hit));
+    QCOMPARE(hitIn->value(), 1.5);
     QVERIFY(fired->text().contains("Make VC page"));
     // Its layer page has no Release (a look never passes anything on).
     QVERIFY(view.selectNode(layer, hit));
