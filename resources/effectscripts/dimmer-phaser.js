@@ -15,6 +15,9 @@
     effect.name        = "Dimmer Phaser";
     // Takes the host's spread (fixture.phase, inputs._spread) in place of its own.
     effect.hostSpread = "spread,reverse";
+    // A wave: rate is its cycles. Run Once (or N times) it plays whole
+    // cycles and ends where its wave does -- a sine Breathe on its floor.
+    effect.cycleParam = "rate";
     effect.description = "Waveform intensity FX with phase-spread chase";
     effect.author      = "QLC+";
     effect.fixtureTypes = ["dimmer", "rgb", "moving"];
@@ -30,7 +33,6 @@
         { name: "level", description: "Master level scaler (0..1)", defaultValue: 1.0 }
     ];
 
-    // Colour (for RGB-only fixtures) comes from the LOOK's first Colour palette.
     effect.parameters = [
         { name: "waveform", description: "Waveform", defaultValue: 0,
           values: ["Sine", "Saw Up", "Saw Down", "Triangle", "Square", "Random"] },
@@ -81,20 +83,13 @@
             var w = shape(type, phaseFull, i, width);
             var dimmer = (mn + w * (mx - mn)) * level;
 
-            var intent = {};
-            if (f.hasDimmer) intent.dimmer = dimmer;
-
-            // Scale the look's colour by the wave so RGB-only fixtures (no
-            // dimmer channel) still pulse.
-            var lc = (palettes.look && palettes.look.colors) ? palettes.look.colors[0] : null;
-            if (lc && lc.r !== undefined) {
-                var scale = (mx > 0) ? dimmer / mx : dimmer;
-                intent.r = Math.round(lc.r * scale);
-                intent.g = Math.round(lc.g * scale);
-                intent.b = Math.round(lc.b * scale);
-            }
-
-            return intent;
+            // The dimmer alone: the host scales the look under it by it --
+            // its dimmer, or on a head with none its colour, white and all.
+            // Sending the look's colour too dimmed a head twice and blacked
+            // its white. (It still names palettes.look, here: that keeps the
+            // look's Colour and Dimmer the base it breathes --
+            // QLCPalette::effectUsesLookColours.)
+            return { dimmer: dimmer };
         });
     };
 

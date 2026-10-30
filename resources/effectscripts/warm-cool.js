@@ -7,6 +7,7 @@
 (function() {
     var effect = new Object;
     effect.name        = "Warm Cool";
+    effect.cycleParam = "rate";   // a wave: Once plays whole cycles
     // Takes the host's spread (fixture.phase, inputs._spread) in place of its own.
     effect.hostSpread = "spread";
     effect.description = "Colour-temperature oscillator — alternates W (warm) and B (cool) across fixtures";

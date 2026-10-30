@@ -111,7 +111,9 @@ Switch roles after each part.
    **(1)** the effect row and **(2)** its ⋯.
 
 The sparkle plays for as long as the cue does (**Runs: Loop** in the Look
-Editor); **Once** or **N times** stop it after that many runs.
+Editor); **Once** or **N times** stop it after that many runs. A wave such
+as Breathe runs whole breaths: on **Once** it rises, falls and stops on its
+floor, and its **Length** is that one breath.
 
 ![The steps sparkle](../../images/lesson-2-4/rig-dance-sparkle.png)
 

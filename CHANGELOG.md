@@ -448,6 +448,16 @@ skipped). Upstream fixes taken:
 
 ### Changed
 
+- **A wave's Once is one whole cycle, and its Length is that cycle.** A
+  Breathe, Dimmer Phaser, Colour Phaser or pulse set to **Once** (or N
+  times) plays whole cycles at its rate and ends where its wave does: a
+  Breathe on its floor, not wherever a time cut it off. Its **Length** in
+  the Look Editor (and **Runs ▸ Length…**) is one cycle in seconds; type
+  5.5 for a 5.5 s breath and the rate follows (1 ÷ length). Changing Runs
+  while it plays starts the run again.
+- **An effect setting's number takes a typed value**: click the number
+  beside a setting's slider in the Look Editor or the effect designer and
+  type an exact value in the setting's units and range.
 - **Show Tree edits on a long list are quicker**: an edit works out again
   only the cues it changes (the edited cue and those tracking from it, up
   to a block or a value of their own), not every cue in the show. One
@@ -550,6 +560,21 @@ skipped). Upstream fixes taken:
 
 ### Fixed
 
+- **A Breathe no longer flashes the look's level before it starts.** A
+  scene with an effect holds its output until the effect's first frame
+  (a frame or two; at most a quarter second), so a Breathe on a look at
+  20% starts on its floor instead of flashing the 20% first.
+- **A Once effect plays again in each cue that sets it.** The same Once
+  Breathe in three cues in a row (a cue copied in place) breathed in the
+  first only: the copies share one engine, which stayed done. Each new
+  start of a scene carrying it now starts it afresh: a cue's GO, a hit
+  fired again, a chaser step. A cue that only tracks it through, and sets
+  nothing of its own on that layer, leaves it as it is.
+- **Breathe and the Dimmer Phaser breathe white pixels and dim once.** On
+  a light without a dimmer (the step tops) the effect scaled the look's
+  colour twice, so it sat near black for much of the breath, and it turned
+  the white pixels off. It now scales the look's colour and white once,
+  from the look's own level.
 - **An EFX keeps its spacing when fixtures change while it runs.** Adding,
   removing or moving a fixture in a running Serial or Asymmetric EFX
   re-spaces them at once, not at the next restart.

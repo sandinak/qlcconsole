@@ -33,6 +33,7 @@ struct Defs
     QList<EffectScript::ParamDef> params;
     bool oneShot = false;
     bool release = false;
+    QString cycleParam;
 };
 
 const Defs &defsFor(const QString &path)
@@ -50,6 +51,8 @@ const Defs &defsFor(const QString &path)
         d.params = s.paramDefs();
         d.oneShot = s.isOneShot();
         d.release = s.onFinish() == QLatin1String("release");
+        if (!s.isOneShot())
+            d.cycleParam = s.cycleParam();
     }
     return *cache.insert(path, d);
 }
@@ -78,6 +81,21 @@ void EffectOrigin::scriptRunDefaults(const QString &path, bool *oneShot, bool *r
         *oneShot = d.oneShot;
     if (release != nullptr)
         *release = d.release;
+}
+
+QString EffectOrigin::scriptCycleParam(const QString &path, EffectScript::ParamDef *def)
+{
+    const Defs &d = defsFor(path);
+    if (d.cycleParam.isEmpty())
+        return QString();
+    for (const EffectScript::ParamDef &pd : d.params)
+        if (pd.name == d.cycleParam && pd.enumValues.isEmpty())
+        {
+            if (def != nullptr)
+                *def = pd;
+            return d.cycleParam;
+        }
+    return QString();
 }
 
 bool EffectOrigin::isMinePath(const QString &path)
