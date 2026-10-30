@@ -68,6 +68,7 @@
 #include "shutterautoopen.h"
 #include "showwebaccess.h"
 #include "controlmap.h"
+#include "showoperate.h"
 #include "outputrulekeeper.h"
 #include "bus.h"
 #include "qlcpalette.h"
@@ -158,6 +159,8 @@ Doc::Doc(QObject* parent, int universes)
     m_webAccess = new ShowWebAccess(this);
     // MIDI / OSC controls bound straight to what they fire (no VC widget).
     m_controlMap = new ControlMap(this);
+    // Open in Operate, and the PIN to leave it (unset unless the show says).
+    m_operate = new ShowOperate(this);
     // Relays, house and work lights: Blackout / GM exempt, switch, on at open.
     m_outputRuleKeeper = new OutputRuleKeeper(this);
 
@@ -260,6 +263,8 @@ Doc::~Doc()
     m_webAccess = nullptr;
     delete m_controlMap;
     m_controlMap = nullptr;
+    delete m_operate;
+    m_operate = nullptr;
     delete m_outputRuleKeeper;
     m_outputRuleKeeper = nullptr;
 
@@ -319,6 +324,8 @@ void Doc::clearContents()
         m_webAccess->reset();
     if (m_controlMap != nullptr)
         m_controlMap->reset();
+    if (m_operate != nullptr)
+        m_operate->reset();
     m_showControl->reset();
     m_showTree->reset();
     m_paletteOps->reset();
@@ -2638,6 +2645,10 @@ bool Doc::loadXML(QXmlStreamReader &doc, bool loadIO)
         {
             m_webAccess->loadXML(doc);
         }
+        else if (doc.name() == KXMLQLCOperate)
+        {
+            m_operate->loadXML(doc);
+        }
         else if (doc.name() == KXMLQLCMoveInBlack)
         {
             if (m_programmer != NULL)
@@ -2779,6 +2790,7 @@ bool Doc::saveXML(QXmlStreamWriter *doc, bool forStockQlc)
     m_speedMasters->saveXML(doc);
     m_shutterAutoOpen->saveXML(doc);
     m_webAccess->saveXML(doc);
+    m_operate->saveXML(doc);
     m_outputRuleKeeper->saveXML(doc);
     m_showControl->saveXML(doc);
     m_showTree->saveXML(doc);

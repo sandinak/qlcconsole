@@ -542,6 +542,8 @@ ArtNetController *ArtNetPlugin::ensureController(int line)
                 this, SIGNAL(valueChanged(quint32,quint32,quint32,uchar)));
         connect(controller, SIGNAL(rdmValueChanged(quint32, quint32, QVariantMap)),
                 this , SIGNAL(rdmValueChanged(quint32, quint32, QVariantMap)));
+        connect(controller, &ArtNetController::timeCodeChanged,
+                this, &QLCIOPlugin::timeCodeChanged);
         connect(controller, &ArtNetController::problemsChanged,
                 this, &QLCIOPlugin::targetProblemsChanged);
         connect(controller, &ArtNetController::ipProgReplied,

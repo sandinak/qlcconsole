@@ -233,6 +233,7 @@ add_library(${module_name}
     showstatus.cpp showstatus.h
     showstatusdialog.cpp showstatusdialog.h
     showdifferencesdialog.cpp showdifferencesdialog.h
+    showsettingsdialog.cpp showsettingsdialog.h
     definitionupdatesdialog.cpp definitionupdatesdialog.h
     simpledesk.cpp simpledesk.h
     simpledeskengine.cpp simpledeskengine.h
@@ -324,7 +325,7 @@ endif()
 
 # Add resources and RGB Script deps
 target_link_libraries(${module_name} PUBLIC Qt6::Qml)
-qt_add_resources(qlcplusui_resource_files "qlcui.qrc" "help.qrc" "update.qrc"
+qt_add_resources(qlcplusui_resource_files "qlcui.qrc" "help.qrc" "update.qrc" "templates.qrc"
     "../../resources/icons/hicolor/appicons.qrc")
 
 target_sources(${module_name} PRIVATE ${qlcplusui_resource_files})

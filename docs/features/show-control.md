@@ -186,8 +186,9 @@ its address ("/qlab/hello — not a cue command"), so a typo in QLab shows
 up too; an MSC command says which universe's input it came in on. Fire a
 cue from QLab and look there first.
 
-The same page's **MIDI timecode** section picks which universe's MIDI input
-timecode is taken from (the same choice as the footer's **MTC** chip) and
+The same page's **MIDI timecode** section picks which universe's input
+timecode is taken from: MTC on a MIDI input, or Art-Net TimeCode on an
+Art-Net input (see [Following timecode](shows.md#following-timecode)) (the same choice as the footer's **MTC** chip) and
 saves that choice with the show (it's a universe of the show's patch; a
 show that names a universe it doesn't have follows any), and shows the
 code as it arrives with its **sync health**: healthy, usable or

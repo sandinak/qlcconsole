@@ -21,6 +21,7 @@
 */
 
 #include <QScopeGuard>
+#include <QTranslator>
 #include <QContextMenuEvent>
 #include <QMenu>
 #include <QActionGroup>
@@ -135,6 +136,8 @@
 #include "showstatusdialog.h"
 #include "showembedding.h"
 #include "showdifferencesdialog.h"
+#include "showsettingsdialog.h"
+#include "showoperate.h"
 #include "qlcfixturedef.h"
 #include "definitionupdatesdialog.h"
 #include "qlcioplugin.h"
@@ -266,6 +269,40 @@ App::App()
     QCoreApplication::setOrganizationName("qlcplus");
     QCoreApplication::setOrganizationDomain("qlcplus.org");
     QCoreApplication::setApplicationName(APPNAME);
+    installSettingsTitle();
+}
+
+namespace
+{
+/* macOS titles the application menu's PreferencesRole item itself, from
+   Qt's "MAC_APPLICATION_MENU" strings: "Preferences…" (or "Settings…" on
+   newer Qt), whatever the action says. Answer those with the name the help
+   and every other platform use. */
+class SettingsTitleTranslator final : public QTranslator
+{
+public:
+    using QTranslator::QTranslator;
+    bool isEmpty() const override { return false; }
+    QString translate(const char *context, const char *sourceText,
+                      const char *disambiguation, int n) const override
+    {
+        Q_UNUSED(disambiguation);
+        Q_UNUSED(n);
+        if (qstrcmp(context, "MAC_APPLICATION_MENU") == 0
+            && (qstrcmp(sourceText, "Preferences...") == 0 || qstrcmp(sourceText, "Settings...") == 0))
+            return App::tr("Settings…");
+        return QString();
+    }
+};
+}
+
+void App::installSettingsTitle()
+{
+    static SettingsTitleTranslator *translator = nullptr;
+    if (translator != nullptr)
+        return;
+    translator = new SettingsTitleTranslator(QCoreApplication::instance());
+    QCoreApplication::installTranslator(translator);
 }
 
 App::~App()
@@ -1767,8 +1804,24 @@ void App::slotModeOperate()
     m_doc->setMode(Doc::Operate);
 }
 
+void App::openShowSettings()
+{
+    if (m_doc->mode() != Doc::Design)
+        return;
+    ShowSettingsDialog dlg(m_doc, this);
+    dlg.exec();
+}
+
 void App::slotModeDesign()
 {
+    /* A show locked with a PIN (File ▸ Show Settings) stays in Operate
+       unless it is given. */
+    ShowOperate *lock = m_doc->operateSettings();
+    if (m_doc->mode() == Doc::Operate && lock != nullptr && lock->hasPin()
+        && !ShowSettingsDialog::askForPin(this, lock->pinHash(),
+                tr("This show is locked in Operate. Enter its PIN to go back to Design.")))
+        return;
+
     if (m_doc->masterTimer()->runningFunctions() > 0)
     {
         int result = QMessageBox::warning(
@@ -1810,9 +1863,16 @@ void App::slotModeChanged(Doc::Mode mode)
         /* Disable editing features */
         m_fileNewAction->setEnabled(false);
         m_fileOpenAction->setEnabled(false);
-        m_liveEditAction->setEnabled(true);
-        m_liveEditVirtualConsoleAction->setEnabled(true);
-        m_captureLiveEditsAction->setEnabled(true);
+        if (m_fileTemplatesMenu != nullptr)
+            m_fileTemplatesMenu->setEnabled(false);
+        if (m_fileShowSettingsAction != nullptr)
+            m_fileShowSettingsAction->setEnabled(false);
+        /* Live Edit edits the show in Operate: not in one locked with a PIN */
+        const bool locked = m_doc->operateSettings() != nullptr
+                            && m_doc->operateSettings()->hasPin();
+        m_liveEditAction->setEnabled(!locked);
+        m_liveEditVirtualConsoleAction->setEnabled(!locked);
+        m_captureLiveEditsAction->setEnabled(!locked);
 
         m_modeToggleAction->setIcon(QIcon(":/design.png"));
         m_modeToggleAction->setText(tr("Design"));
@@ -1852,6 +1912,10 @@ void App::slotModeChanged(Doc::Mode mode)
         m_fileNewAction->setEnabled(true);
         m_fileOpenAction->setEnabled(true);
         setBlindView(false);
+        if (m_fileTemplatesMenu != nullptr)
+            m_fileTemplatesMenu->setEnabled(true);
+        if (m_fileShowSettingsAction != nullptr)
+            m_fileShowSettingsAction->setEnabled(true);
         if (m_controlBlindAction != NULL)
         {
             m_controlBlindAction->setEnabled(true);
@@ -1922,6 +1986,9 @@ void App::initActions()
     connect(m_fileSaveAction, SIGNAL(triggered(bool)), this, SLOT(slotFileSave()));
 
     m_fileSaveAsAction = new QAction(QIcon(":/filesaveas.png"), tr("Save &As..."), this);
+    m_fileSaveAsAction->setObjectName(QStringLiteral("fileSaveAs"));
+    m_fileSaveAsAction->setShortcut(saveAsShortcut());
+    m_fileSaveAsAction->setShortcutContext(Qt::ApplicationShortcut);
     connect(m_fileSaveAsAction, SIGNAL(triggered(bool)), this, SLOT(slotFileSaveAs()));
 
     /* Control actions */
@@ -2172,9 +2239,11 @@ void App::initActions()
     });
 
     /* Settings action */
-    m_appSettingsAction = new QAction(QIcon(":/configure.png"), tr("&Settings"), this);
+    // "Settings…" on every platform, as the help calls it; macOS moves it to
+    // the application menu (PreferencesRole) and keeps the title.
+    m_appSettingsAction = new QAction(QIcon(":/configure.png"), tr("&Settings…"), this);
+    m_appSettingsAction->setObjectName(QStringLiteral("appSettings"));
     m_appSettingsAction->setShortcut(QKeySequence(tr("CTRL+,", "Settings")));
-    // macOS relocates this to the application menu ("Preferences…").
     m_appSettingsAction->setMenuRole(QAction::PreferencesRole);
     connect(m_appSettingsAction, SIGNAL(triggered(bool)), this, SLOT(slotAppSettings()));
 
@@ -2308,6 +2377,23 @@ void App::initMenuBar()
     /* ---- File ---- */
     QMenu* fileMenu = mb->addMenu(tr("&File"));
     fileMenu->addAction(m_fileNewAction);
+    {
+        // New from Template (forum survey Q180): a show to start from.
+        QMenu *templates = fileMenu->addMenu(tr("New from &Template"));
+        m_fileTemplatesMenu = templates;
+        templates->setObjectName(QStringLiteral("fileNewFromTemplate"));
+        templates->setToolTipsVisible(true);
+        foreach (const ShowTemplate &t, showTemplates())
+        {
+            QAction *a = templates->addAction(t.title);
+            a->setToolTip(t.toolTip);
+            a->setData(t.resource);
+            const QString resource = t.resource;
+            connect(a, &QAction::triggered, this, [this, resource]() {
+                newFromTemplate(resource);
+            });
+        }
+    }
     fileMenu->addAction(m_fileOpenAction);
     m_fileImportMenu = fileMenu->addMenu(QIcon(":/fileimport.png"), tr("&Import"));
     m_fileImportMenu->setObjectName(QStringLiteral("fileImportMenu"));
@@ -2363,9 +2449,18 @@ void App::initMenuBar()
         fileMenu->addAction(upgrade);
         // The Run tab's empty state offers it too (Q62).
         CueRunner::setUpgradeAction(upgrade);
+
+        // Settings saved with the show (Q180): open in Operate, the PIN to
+        // leave it. Teaching mode's settings are to join them.
+        m_fileShowSettingsAction = new QAction(tr("Show Se&ttings…"), this);
+        m_fileShowSettingsAction->setObjectName(QStringLiteral("fileShowSettings"));
+        m_fileShowSettingsAction->setToolTip(tr("Settings saved with this show: open it in Operate, "
+                                                "and a PIN that going back to Design asks for"));
+        connect(m_fileShowSettingsAction, &QAction::triggered, this, &App::openShowSettings);
+        fileMenu->addAction(m_fileShowSettingsAction);
     }
     fileMenu->addSeparator();
-    fileMenu->addAction(m_appSettingsAction);      // → app menu (Preferences) on macOS
+    fileMenu->addAction(m_appSettingsAction);      // → app menu on macOS
     // Quit: m_quitAction only exists when there's no window manager (kiosk/RPi).
     // On macOS it's NULL and, now that we own the menu bar, Qt no longer supplies
     // a working Quit — so provide one with QuitRole (→ app menu) + the standard
@@ -2377,8 +2472,9 @@ void App::initMenuBar()
             quitAction = new QAction(tr("Quit qlcconsole"), this);
             connect(quitAction, SIGNAL(triggered(bool)), this, SLOT(close()));
         }
+        quitAction->setObjectName(QStringLiteral("fileQuit"));
         quitAction->setMenuRole(QAction::QuitRole);
-        quitAction->setShortcut(QKeySequence::Quit);
+        quitAction->setShortcut(quitShortcut());
         // Same reasoning as Save: quitting is an application-level act.
         quitAction->setShortcutContext(Qt::ApplicationShortcut);
         fileMenu->addAction(quitAction);
@@ -2391,11 +2487,12 @@ void App::initMenuBar()
         // undo and Connections' patch undo (Q115). Other tabs have none yet, and the menu says so instead of
         // reaching into another tab's history. The menu names the step; ⌘Z /
         // ⇧⌘Z stay each tab's own shortcuts (a second binding here would
-        // make them ambiguous), shown beside the text.
+        // make them ambiguous, or fire twice), so the keys are in the text
+        // (menuTextWithKeys()), not the action's shortcut.
         QMenu *editMenu = mb->addMenu(tr("&Edit"));
-        QAction *undo = editMenu->addAction(tr("Undo"));
+        QAction *undo = editMenu->addAction(menuTextWithKeys(tr("Undo"), QKeySequence::Undo));
         undo->setObjectName(QStringLiteral("editUndo"));
-        QAction *redo = editMenu->addAction(tr("Redo"));
+        QAction *redo = editMenu->addAction(menuTextWithKeys(tr("Redo"), QKeySequence::Redo));
         redo->setObjectName(QStringLiteral("editRedo"));
         auto current = [this]() -> QWidget * {
             return m_tab != nullptr ? m_tab->currentWidget() : nullptr;
@@ -2453,18 +2550,20 @@ void App::initMenuBar()
                 known = false;
             if (!known)
             {
-                undo->setText(tr("Nothing to undo on this tab"));
+                undo->setText(menuTextWithKeys(tr("Nothing to undo on this tab"), QKeySequence::Undo));
                 undo->setToolTip(tr("Undo works in Build, the Show Tree, Fixtures, the Lighting Studio and "
                                     "Connections so far"));
                 undo->setEnabled(false);
-                redo->setText(tr("Redo"));
+                redo->setText(menuTextWithKeys(tr("Redo"), QKeySequence::Redo));
                 redo->setEnabled(false);
                 return;
             }
             undo->setToolTip(QString());
-            undo->setText(u.isEmpty() ? tr("Undo") : tr("Undo %1").arg(u));
+            undo->setText(menuTextWithKeys(u.isEmpty() ? tr("Undo") : tr("Undo %1").arg(u),
+                                           QKeySequence::Undo));
             undo->setEnabled(!u.isEmpty());
-            redo->setText(r.isEmpty() ? tr("Redo") : tr("Redo %1").arg(r));
+            redo->setText(menuTextWithKeys(r.isEmpty() ? tr("Redo") : tr("Redo %1").arg(r),
+                                           QKeySequence::Redo));
             redo->setEnabled(!r.isEmpty());
         });
         connect(undo, &QAction::triggered, this, [programming, treeView, studio, connections]() {
@@ -2976,6 +3075,93 @@ bool App::slotFileNew()
     }
 
     clearDocument();
+    return true;
+}
+
+QKeySequence App::saveAsShortcut()
+{
+    /* ⇧⌘S / Ctrl+Shift+S, spelled out: Windows has no standard Save As
+       key, and the platform's table isn't the same everywhere. */
+    return QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_S);
+}
+
+QKeySequence App::quitShortcut()
+{
+    /* ⌘Q / Ctrl+Q, spelled out: QKeySequence::Quit is empty on Windows,
+       and some platforms' tables answer with a key no keyboard has. */
+    return QKeySequence(Qt::CTRL | Qt::Key_Q);
+}
+
+QString App::menuTextWithKeys(const QString &text, QKeySequence::StandardKey key)
+{
+    QStringList keys;
+    // The first two: Windows adds Alt+Backspace forms nobody looks for.
+    for (const QKeySequence &k : QKeySequence::keyBindings(key))
+        if (keys.size() < 2)
+            keys << k.toString(QKeySequence::NativeText);
+    if (keys.isEmpty())
+        return text;
+#if defined(Q_OS_MACOS)
+    // The native menu has no column for text it doesn't bind: as New's.
+    return QStringLiteral("%1 (%2)").arg(text, keys.join(QStringLiteral(" / ")));
+#else
+    // Qt's menu draws what follows a tab in the shortcut column.
+    return QStringLiteral("%1\t%2").arg(text, keys.join(QStringLiteral(" / ")));
+#endif
+}
+
+QList<App::ShowTemplate> App::showTemplates()
+{
+    return {
+        { tr("Show-choir stage (classroom)"),
+          QStringLiteral(":/templates/ShowChoir-Classroom.qlcc"),
+          tr("The course's teaching stage: risers, trusses, audience towers and 68 lights, "
+             "with groups, stage targets, colours and levels, and no show yet. "
+             "Nothing is patched to an output.") },
+    };
+}
+
+bool App::newFromTemplate(const QString &resource)
+{
+    QString msg(tr("Do you wish to save the current workspace?\n" \
+                   "Changes will be lost if you don't save them."));
+    if (saveModifiedDoc(tr("New Workspace"), msg) == false)
+        return false;
+
+    /* Opened from a copy, as any show is opened from a file: the show's own
+       definitions come with it (a .qlcc), and the template in the app is
+       never the file Save writes. */
+    const QString dir = QDir(QDir::tempPath()).filePath(QStringLiteral("qlcconsole-templates"));
+    QDir().mkpath(dir);
+    const QString copy = QDir(dir).filePath(QFileInfo(resource).fileName());
+    QFile::remove(copy);
+    if (QFile::copy(resource, copy) == false)
+    {
+        qWarning() << "[App] Cannot copy the template" << resource << "to" << copy;
+        handleFileError(QFile::ReadError);
+        return false;
+    }
+    QFile::setPermissions(copy, QFile::permissions(copy) | QFileDevice::WriteOwner);
+
+    clearDocument();
+    const QFile::FileError error = loadXML(copy);
+    if (handleFileError(error) == false)
+    {
+        clearDocument();
+        return false;
+    }
+
+    /* Untitled: Save asks where, and no venue file goes beside the copy. */
+    setFileName(QString());
+    m_doc->programmer()->venueCorrections()->setShowFile(QString(), false);
+    if (m_workingDirectory.exists())
+        m_doc->setWorkspacePath(m_workingDirectory.absolutePath());
+    updateVenueFooter();
+    if (FixtureManager::instance() != NULL)
+        FixtureManager::instance()->updateView();
+    if (InputOutputManager::instance() != NULL)
+        InputOutputManager::instance()->updateList();
+    m_doc->resetModified();
     return true;
 }
 
@@ -5391,6 +5577,14 @@ QFile::FileError App::loadXML(const QString& fileName)
                them (Office.qlcc) asked "Save changes?" on close and wrote
                an autosave at open (F3). */
             m_doc->resetModified();
+
+            /* "Open this show in Operate" (File ▸ Show Settings): once
+               it's up, as -p does (after startup's own Design). */
+            if (m_doc->operateSettings()->openInOperate())
+                QTimer::singleShot(0, this, [this]() {
+                    if (m_doc->mode() == Doc::Design && m_doc->operateSettings()->openInOperate())
+                        slotModeOperate();
+                });
         }
     }
     else
@@ -7030,10 +7224,12 @@ bool App::eventFilter(QObject *watched, QEvent *event)
             const quint32 uniID = m_doc->inputOutputMap()->getUniverseID(i);
             InputPatch *ip = m_doc->inputOutputMap()->inputPatch(uniID);
             const bool isMidi = (ip != NULL && ip->pluginName() == "MIDI");
+            // Art-Net carries ArtTimeCode, which follows the same path as MTC
+            const bool isArtNet = (ip != NULL && ip->pluginName() == "ArtNet");
             const bool selected = (qint32(uniID) == cur);
             const bool sawCode = (tc != NULL && tc->lastUniverse() == qint32(uniID));
 
-            if (isMidi)
+            if (isMidi || isArtNet)
                 midiInputs++;
             else if (selected == false && sawCode == false)
                 continue;
@@ -7043,6 +7239,8 @@ bool App::eventFilter(QObject *watched, QEvent *event)
                 nm = tr("Universe %1").arg(i + 1);
             if (isMidi)
                 nm += QString("  —  %1").arg(ip->inputName());
+            else if (isArtNet)
+                nm += tr("  —  Art-Net TimeCode (%1)").arg(ip->inputName());
             else if (ip != NULL && ip->pluginName().isEmpty() == false)
                 nm += tr("  —  %1 input: cannot carry MTC").arg(ip->pluginName());
             else
@@ -7064,7 +7262,7 @@ bool App::eventFilter(QObject *watched, QEvent *event)
         menu.addSeparator();
         if (midiInputs == 0)
         {
-            QAction *warn = menu.addAction(tr("⚠ No MIDI input patched — no MTC can arrive"));
+            QAction *warn = menu.addAction(tr("⚠ No MIDI or Art-Net input patched — no timecode can arrive"));
             warn->setEnabled(false);
         }
         else if (tc != NULL && tc->lastUniverse() >= 0)

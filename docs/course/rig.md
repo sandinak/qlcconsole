@@ -12,6 +12,9 @@ show yet: students build that.
 
 ![The stage, dark](images/lesson-1-1/rig-dark.png)
 
+To start one of your own from it, use **File → New from Template →
+Show-choir stage (classroom)**: the same stage, as a new untitled show.
+
 **It is never connected to real lights.** No universe has an output and
 no light talks to the network, so it can't send anything on the school
 network. The **Rig Overview** (View → Rig Overview, ⇧⌘R) is the stage.

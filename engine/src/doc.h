@@ -248,6 +248,7 @@ private:
     class ShutterAutoOpen *m_shutterAutoOpen = nullptr;
     class ShowWebAccess *m_webAccess = nullptr;
     class ControlMap *m_controlMap = nullptr;
+    class ShowOperate *m_operate = nullptr;
     class OutputRuleKeeper *m_outputRuleKeeper = nullptr;
     NetworkTopology *m_networkTopology;
     TimecodeSource *m_timecodeSource;
@@ -1241,6 +1242,10 @@ public:
     /** MIDI and OSC controls bound straight to functions, cue lists, cues
      *  and hits (the Control Map; saved with the show). Never null. */
     class ControlMap *controlMap() const { return m_controlMap; }
+
+    /** Whether opening the show goes to Operate, and the PIN that leaving
+     *  Operate asks for (the show's settings; App acts on them) */
+    class ShowOperate *operateSettings() const { return m_operate; }
 
     /** Applies the fixtures' output rules (Blackout / Grand Master exempt,
      *  Switch, OnAtOpen) to the universes (OutputRuleKeeper) */

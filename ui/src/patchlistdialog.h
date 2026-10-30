@@ -54,7 +54,7 @@ public:
     /** The columns. A fixture's mode carries its channel count when the
      *  mode's name doesn't say it ("Open + Fly (2 ch)"). */
     enum { PatchColumn = 0, FixtureColumn, MakeColumn, ModeColumn, ConnectionColumn,
-           GoesToColumn, MountedColumn, OwnerColumn, ColumnCount };
+           GoesToColumn, MountedColumn, OwnerColumn, GelColumn, ColumnCount };
     /** On the Patch cell: true for a fixture that is not patched (and is
      *  highlighted, "— not patched"). */
     enum { UnpatchedRole = Qt::UserRole + 1 };

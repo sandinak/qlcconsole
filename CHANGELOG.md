@@ -325,6 +325,32 @@ skipped). Upstream fixes taken:
   every step are made and checked by
   `courseshow_test` (`levelTwoWithTheMouse`, `buildLevelTwoShows`,
   `levelTwoPictures`).
+- **Art-Net TimeCode in**: a show follows Art-Net TimeCode (ArtTimeCode)
+  as it follows MIDI timecode. Patch an Art-Net input and it is offered
+  as a timecode source, in the footer's MTC chip and in Connections ▸
+  Show control & sync. All four rates are read (24, 25, 29.97 DF, 30).
+- **The patch list shows each fixture's gel**: a Gel column (a swatch and
+  its value) in Fixtures ▸ Patch List, its CSV, XLSX and PDF, from the
+  Colour set in Fixture Properties. It shows only when some fixture has a
+  gel, so the crew knows what to cut for each fixed light.
+- **Help answers the QLC+ forum's common questions**: Coming from QLC+ 4 ▸
+  *Questions QLC+ users ask*: a fader that overrides and lets go (Monitor
+  and reset), ⌘D Dump DMX values, Flash's Override priority and Force LTP,
+  and sending MIDI CC out.
+- **File ▸ New from Template**: start a show from a ready-made one. The
+  first is the course's **Show-choir stage (classroom)** (the rig, groups,
+  stage targets, colours and levels, nothing patched to an output). It
+  opens untitled, so Save asks for a name.
+- **File ▸ Show Settings: open in Operate, and an Operate PIN.** "Open
+  this show in Operate" opens the show ready to run (as -p does). A PIN
+  of 4 to 8 digits keeps a running show in Operate: going back to Design
+  asks for it, and Live Edit is off. It's saved with the show as a salted
+  hash. Show Settings is the home Teaching mode's settings will share.
+- **Menu keys**: Save As is ⇧⌘S (Ctrl+Shift+S) and Quit ⌘Q / Ctrl+Q on
+  every platform, Windows included; Edit ▸ Undo and Redo show their keys
+  (⌘Z / ⇧⌘Z; Ctrl+Z, and Ctrl+Y / Ctrl+Shift+Z on Windows); Settings… is
+  called that on every platform, the Mac's application menu included. A
+  new Virtual Console slider moves from ⇧⌘S to ⇧⌘U.
 
 ### Changed
 

@@ -21,6 +21,23 @@ Built (DONE.md 2026-10-29). Open, each "decided (can change)" in the note:
   today). Would need an order on Layer, saved, resolved and undone.
 - EFX: fixtures added while it runs keep stale offsets until restarted.
 
+## Forum quick wins (Q180, 0.3.1)
+
+From the forum survey's quick wins (STRATEGY.md 3.2). **Built:** Art-Net
+TimeCode in (the MTC follow path), the patch list's Gel column, help
+answers to common forum questions (Coming from QLC+ 4), File ▸ New from
+Template (the classroom stage), File ▸ Show Settings (open in Operate, an
+Operate PIN). **Still open:**
+- **Tonight's running order** (reorder productions for Run): Show Tree
+  code, left while another agent is in it.
+- **Fade in/out on hits**: Show Tree (hit bake), same reason.
+- **Gel colour in the Rig Overview** (the 3D view): the rig view, same
+  reason. The patch list half is built.
+- **Momentary / start-only / stop-only on Control Map bindings**: built
+  with the Control Map's return (cm, feat/031-control-map), not here.
+- **Teaching mode** joins File ▸ Show Settings, and can share its PIN
+  (ShowPin in engine/src/showoperate.h).
+
 ## Focus calls and refining a cue from the stage (design, 2026-10-23)
 
 Two jobs, being designed on the board (Q105-Q108), built after the freeze:

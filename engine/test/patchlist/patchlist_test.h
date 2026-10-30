@@ -41,6 +41,7 @@ private slots:
     void onlyTheIdsAskedFor();
     void theCsvIsSpreadsheetSafe();
     void theCsvFollowsThePlotUnits();
+    void aGelIsListedOnlyWhenSomeFixtureHasOne();
     void theHtmlHasATablePerUniverse();
     void thePdfIsWritten();
     void anUnwritablePdfSaysWhy();

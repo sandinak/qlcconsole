@@ -103,6 +103,11 @@ A cue that goes early or late is as wrong as the wrong colour.
 | File → Open is greyed | They're in Operate | "Click **Design** at the top right first (Stop first)." |
 | A box asks "Really stop them…" | Going to Design while cues still run | "Yes is fine in class; Stop first next time." |
 
+**For the real show:** a show with a PIN (**File → Show Settings**) stays
+in Operate until someone types the PIN, and can open straight into
+Operate. That keeps a running performance safe from a curious click at the
+desk. Leave it off in class, so groups can go back to Design.
+
 ## 4. Check for understanding (while circulating)
 
 - "What do you say when the SM says *standby*?" (*Standing by.*)

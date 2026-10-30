@@ -22,6 +22,7 @@
 
 #include <QStringList>
 #include <QVector3D>
+#include <QColor>
 #include <QString>
 #include <QList>
 
@@ -75,6 +76,10 @@ public:
         bool    pixel = false;           //!< a pixel / matrix fixture (isPixelFixture())
         bool    onPlot = false;
         QVector3D position;              //!< metres, when onPlot (fixtureRigPosition())
+        QColor  gel;                     //!< its gel (the plot's fixture colour); invalid: none
+
+        /** "#1E50FF", or empty when it has no gel. */
+        QString gelText() const { return gel.isValid() ? gel.name().toUpper() : QString(); }
 
         /** "12" .. "23" as the crew reads it: one-based. */
         quint32 firstChannel() const { return address + 1; }
@@ -140,6 +145,8 @@ public:
     bool multiUniverse() const { return m_multiUniverse; }
     /** Some fixture is not the tour's. */
     bool hasOwners() const { return m_owners; }
+    /** Some fixture has a gel: the list gets a Gel column. */
+    bool hasGels() const { return m_gels; }
 
     /** A pixel / matrix fixture: an "LED Bar (Pixels)" definition, or one
      *  whose mode has two or more heads with colour (RGB) channels of their
@@ -175,6 +182,8 @@ private:
     bool m_feet = false;
     /** Some fixture is not the tour's: the list says whose each one is. */
     bool m_owners = false;
+    /** Some fixture has a gel colour: the list shows each one's. */
+    bool m_gels = false;
     bool m_multiUniverse = false;
 };
 

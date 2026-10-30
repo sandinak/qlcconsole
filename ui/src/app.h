@@ -518,6 +518,34 @@ private:
     ImportFilePicker m_importFilePicker;
     ImportRunHook m_importRunHook;
 
+public:
+    /** A show to start from (File ▸ New from Template). */
+    struct ShowTemplate
+    {
+        QString title;      //!< "Show-choir stage (classroom)"
+        QString resource;   //!< ":/templates/ShowChoir-Classroom.qlcc"
+        QString toolTip;
+    };
+    static QList<ShowTemplate> showTemplates();
+    /** Save As: ⇧⌘S / Ctrl+Shift+S on every platform (Windows has no
+     *  standard one). */
+    static QKeySequence saveAsShortcut();
+    /** Quit: ⌘Q / Ctrl+Q on every platform (Windows has no standard one). */
+    static QKeySequence quitShortcut();
+    /** "Undo Cue Change (⌘Z)" (macOS) or "Undo Cue Change<tab>Ctrl+Z":
+     *  the keys a tab handles itself, shown in a menu item that doesn't bind
+     *  them (so they never fire twice). Every binding, " / " between. */
+    static QString menuTextWithKeys(const QString &text, QKeySequence::StandardKey key);
+    /** "Settings…" in the macOS application menu too (Qt titles that item
+     *  itself); once per run. */
+    static void installSettingsTitle();
+    /** A new, untitled show that starts as @p resource holds it: asks to
+     *  save the open one first (false on Cancel, or when it can't be read).
+     *  Save asks for a name, so the template itself is never written. */
+    bool newFromTemplate(const QString &resource);
+    /** File ▸ Show Settings (Design only). */
+    void openShowSettings();
+
 public slots:
     bool slotFileNew();
     QFile::FileError slotFileOpen();
@@ -723,6 +751,9 @@ private:
     QAction* m_cueSubBackAction = nullptr;
     QAction* m_dumpDmxAction;
     QAction* m_liveEditAction;
+    /** File ▸ New from Template and File ▸ Show Settings: Design only */
+    QMenu *m_fileTemplatesMenu = nullptr;
+    QAction *m_fileShowSettingsAction = nullptr;
     QAction* m_liveEditVirtualConsoleAction;
     QAction* m_captureLiveEditsAction;
     QAction* m_captureStoreAction;

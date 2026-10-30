@@ -302,6 +302,12 @@ PatchList PatchList::build(Doc *doc, const QList<quint32> &ids)
         r.onPlot = plotted.contains(r.id) || mp->hasFixtureRigProps(r.id);
         if (r.onPlot)
             r.position = mp->fixtureRigPosition(r.id);
+        if (plotted.contains(r.id))
+        {
+            r.gel = mp->fixtureGelColor(r.id, 0, 0);
+            if (r.gel.isValid())
+                list.m_gels = true;
+        }
         list.m_rows << r;
     }
 
@@ -486,6 +492,9 @@ QList<QStringList> PatchList::table(GroupBy by) const
     // An Owner column only when some fixture is not the tour's.
     if (m_owners)
         header << QStringLiteral("Owner");
+    // A Gel column only when some fixture has one.
+    if (m_gels)
+        header << QStringLiteral("Gel");
     out << header;
 
     foreach (const Section &s, sections(by))
@@ -513,6 +522,8 @@ QList<QStringList> PatchList::table(GroupBy by) const
                  << (r.pixel ? QStringLiteral("Pixel / matrix") : QStringLiteral("Discrete"));
             if (m_owners)
                 line << RigOwner::displayName(r.ownerKind);
+            if (m_gels)
+                line << r.gelText();
             out << line;
         }
     }
@@ -598,7 +609,8 @@ QString PatchList::toHtml(const QString &title, GroupBy by) const
     const QString header = QStringLiteral(
         "<table cellspacing=\"0\" width=\"100%\"><thead><tr>"
         "<th>Address</th><th>Fixture</th><th>Make / model</th><th>Mode</th>"
-        "<th>Connection</th><th>Mounted on</th><th>Position</th></tr></thead>");
+        "<th>Connection</th><th>Mounted on</th><th>Position</th>%1</tr></thead>")
+        .arg(m_gels ? QStringLiteral("<th>Gel</th>") : QString());
 
     foreach (const Section &s, sections(by))
     {
@@ -635,13 +647,21 @@ QString PatchList::toHtml(const QString &title, GroupBy by) const
                 pos = QStringLiteral("%1, %2, %3%4").arg(coord(r.position.x(), m_feet),
                                                         coord(r.position.y(), m_feet),
                                                         coord(r.position.z(), m_feet), unit);
+            /* The gel as a swatch the printout shows in colour, and its
+               value beside it for a black-and-white copy. */
+            QString gel;
+            if (m_gels)
+                gel = r.gel.isValid()
+                    ? QStringLiteral("<td><span style=\"background-color: %1;\">"
+                                     "&nbsp;&nbsp;&nbsp;&nbsp;</span> %1</td>").arg(r.gelText())
+                    : QStringLiteral("<td></td>");
             h += QStringLiteral("<tr><td>%1</td><td>%2</td><td>%3</td><td>%4</td>"
-                                "<td>%5</td><td>%6</td><td>%7</td></tr>")
+                                "<td>%5</td><td>%6</td><td>%7</td>%8</tr>")
                      .arg(addr, r.owner.isEmpty() ? r.name.toHtmlEscaped()
                                                   : QStringLiteral("%1 <i>(%2)</i>").arg(r.name.toHtmlEscaped(),
                                                                                          r.owner.toHtmlEscaped()),
                           make.toHtmlEscaped(), r.modeText().toHtmlEscaped(), conn.toHtmlEscaped(),
-                          r.mountedOn.toHtmlEscaped(), pos);
+                          r.mountedOn.toHtmlEscaped(), pos, gel);
         }
         h += QStringLiteral("</table>");
     }

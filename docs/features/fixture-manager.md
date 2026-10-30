@@ -264,13 +264,15 @@ and the labels too, and they follow the grouping.
 | **Goes to** | Where its universe goes: the output and device ("Art-Net → CS1 (172.18.2.211) · port 1 · universe 0:0:0" — port is the socket on the node, universe its Art-Net address), or nothing; point at it for all of it when the column is narrow. |
 | **Mounted on** | The same words as Fixture Properties: "Truss FOH · 2.5 m along", "Tower T2 · shelf 3", "free / on the floor". |
 | **Owner** | Tour, House or Rental — only when some fixture in the show is not the tour's. |
+| **Gel** | The fixture's gel, as a swatch and its colour value ("#1E50FF") — the **Colour** set in the Lighting Studio's [Fixture Properties](lighting-studio.md#fixture-properties). Only when some fixture in the show has one, so a rig of LED fixtures gets no empty column. For a fixed light (a par, a profile) it tells the crew what to cut and drop in. |
 
 - **Save CSV…** / **Save XLSX…** — the list shown, in the order shown: the
   heading in a first column of its own (Location, Universe or Type; none
   when not grouped), then every column plus the fixture ID, the channel
   count, the first and last channel, X/Y/Z on the plot (in the plot's
   units), a note, the location, fixture group, type and kind (Discrete or
-  Pixel / matrix), and the owner when there is one. The XLSX is an Excel
+  Pixel / matrix), the owner when there is one, and the gel when some
+  fixture has one. The PDF has a Gel column too, with the swatch. The XLSX is an Excel
   workbook (Numbers and Google Sheets open it), the header bold and frozen,
   numbers as numbers.
 - **Save PDF…** — a landscape Letter page, a table per heading (per

@@ -30,6 +30,7 @@ add_library(${module_name} SHARED
     shutterautoopen.cpp shutterautoopen.h
     showwebaccess.cpp showwebaccess.h
     controlmap.cpp controlmap.h
+    showoperate.cpp showoperate.h
     outputrulekeeper.cpp outputrulekeeper.h
     fixturegroup.cpp fixturegroup.h
     function.cpp function.h

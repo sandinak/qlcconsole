@@ -18,6 +18,7 @@
 */
 
 #include "artnetpacketizer.h"
+#include <QtMath>
 #include "rdmprotocol.h"
 
 #include <QStringList>
@@ -437,6 +438,58 @@ bool ArtNetPacketizer::fillDMXdata(QByteArray const& data, QByteArray &dmx, quin
 
     //qDebug() << "length: " << length;
     dmx.append(data.mid(kArtDmxHeaderSize, length));
+    return true;
+}
+
+/** ArtTimeCode: header (0-11), Filler1, StreamId, Frames, Seconds, Minutes,
+ *  Hours, Type. */
+static const int kArtTimeCodeSize = 19;
+
+void ArtNetPacketizer::setupArtNetTimeCode(QByteArray &data, uchar hours, uchar minutes,
+                                           uchar seconds, uchar frames, uchar type)
+{
+    data.clear();
+    data.append(m_commonHeader);
+    data[8] = char(ARTNET_TIMECODE & 0xff);
+    data[9] = char(ARTNET_TIMECODE >> 8);
+    data.append('\0');           // Filler1
+    data.append('\0');           // StreamId: the master stream
+    data.append(char(frames));
+    data.append(char(seconds));
+    data.append(char(minutes));
+    data.append(char(hours));
+    data.append(char(type));
+}
+
+bool ArtNetPacketizer::fillTimeCode(QByteArray const& data, quint32 &msPosition, uchar &fps)
+{
+    if (data.size() < kArtTimeCodeSize)
+        return false;
+
+    const int frames = quint8(data.at(14));
+    const int seconds = quint8(data.at(15));
+    const int minutes = quint8(data.at(16));
+    const int hours = quint8(data.at(17));
+    const int type = quint8(data.at(18));
+
+    double rate;
+    switch (type)
+    {
+        case 0: rate = 24.0; break;
+        case 1: rate = 25.0; break;
+        case 2: rate = 30000.0 / 1001.0; break; // 29.97 drop-frame
+        case 3: rate = 30.0; break;
+        default: return false;
+    }
+    if (hours > 23 || minutes > 59 || seconds > 59 || frames >= qCeil(rate))
+        return false;
+
+    /* The same arithmetic as MidiMtcDecoder::milliseconds(), so a show that
+       follows QLab's MTC lands on the same position from its Art-Net
+       TimeCode. An ArtTimeCode is a full frame: no quarter-frame offset. */
+    const double totalFrames = ((hours * 3600.0) + (minutes * 60.0) + seconds) * rate + frames;
+    msPosition = quint32(qRound((totalFrames / rate) * 1000.0));
+    fps = uchar(qRound(rate));
     return true;
 }
 

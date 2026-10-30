@@ -680,7 +680,8 @@ not, in three boxes:
 
 - **Fixture**: the panel's rows, plus **Owner** (Tour, House or Rental;
   see [Owner](venues.md#owner-tour-house-or-rental)), **Position** on a
-  tower (top, a shelf or the base), **Colour**, and where they apply
+  tower (top, a shelf or the base), **Colour** (a fixed light's gel; the
+  [patch list](fixture-manager.md#the-patch-list) lists it), and where they apply
   **WLED** (**Fix on Device…**) and **Max draw**.
 - **Aim &amp; Mount**: **Height offset** (raised or lowered from its mount,
   a followspot on a riser above the truss, say); **Aim** — a mover's front

@@ -325,6 +325,7 @@ private:
     bool handleArtNetTodData(QByteArray const& datagram, QHostAddress const& senderAddress);
     bool handleArtNetRDM(QByteArray const& datagram, QHostAddress const& senderAddress);
     bool handleArtNetIpProgReply(QByteArray const& datagram, QHostAddress const& senderAddress);
+    bool handleArtNetTimeCode(QByteArray const& datagram, QHostAddress const& senderAddress);
 
 public:
     // Handle a packet received to the ArtNet port.
@@ -365,6 +366,11 @@ signals:
     void valueChanged(quint32 universe, quint32 input, quint32 channel, uchar value);
 
     void rdmValueChanged(quint32 universe, quint32 line, QVariantMap data);
+
+    /** An ArtTimeCode arrived on a line with an input patched: the position
+     *  for the show's timecode follow, the same path MTC takes. Emitted
+     *  once, on the line's first input universe, however many it has. */
+    void timeCodeChanged(quint32 universe, quint32 input, quint32 msPosition, uchar fps);
 
     /** outputProblems() has changed. May be emitted from the thread that
      *  sends DMX; never with the data mutex held. */

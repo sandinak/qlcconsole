@@ -45,6 +45,7 @@
 #include <QTimer>
 #include <QMessageBox>
 #include <QSettings>
+#include <QApplication>
 #include <QFileDialog>
 
 #include "cuerunner.h"
@@ -54,6 +55,8 @@
 #include <QtMath>
 #include "appviews_test.h"
 #include "venuemenu.h"
+#include "showsettingsdialog.h"
+#include "showoperate.h"
 #include "focusmenu.h"
 #include "venuecorrections.h"
 #include "programmercontroller.h"
@@ -624,7 +627,7 @@ void AppViews_Test::editUndoSaysWhereItWorks()
     // the Show Tree's.
     m_app->showContext("Virtual Console");
     emit edit->aboutToShow();
-    QCOMPARE(undo->text(), QString("Nothing to undo on this tab"));
+    QCOMPARE(undo->text(), App::menuTextWithKeys("Nothing to undo on this tab", QKeySequence::Undo));
     QVERIFY(!undo->isEnabled());
     undo->trigger();
     QVERIFY(st->production(prod) != nullptr);
@@ -825,13 +828,13 @@ void AppViews_Test::editUndoOnConnectionsIsUndoPatchChange()
     m_app->showContext("Connections");
     QVERIFY(qobject_cast<InputOutputManager *>(m_app->m_tab->currentWidget()) != nullptr);
     emit edit->aboutToShow();
-    QCOMPARE(undo->text(), QString("Undo"));
+    QCOMPARE(undo->text(), App::menuTextWithKeys("Undo", QKeySequence::Undo));
     QVERIFY(!undo->isEnabled());
 
     pu->captureUniverses(QStringLiteral("add a universe"));
     QVERIFY(pu->canUndo());
     emit edit->aboutToShow();
-    QCOMPARE(undo->text(), QString("Undo Patch Change"));
+    QCOMPARE(undo->text(), App::menuTextWithKeys("Undo Patch Change", QKeySequence::Undo));
     QVERIFY(undo->isEnabled());
     // Triggered: the tab's own confirmation; No keeps the step.
     QString asked;
@@ -1715,7 +1718,7 @@ void AppViews_Test::editUndoFollowsTheTabInFront()
     for (const QString &tab : { QStringLiteral("Simple Desk"), QStringLiteral("Run") })
     {
         const QString text = undoOn(tab);
-        QCOMPARE(text, QString("Nothing to undo on this tab"));
+        QCOMPARE(text, App::menuTextWithKeys("Nothing to undo on this tab", QKeySequence::Undo));
         QVERIFY(!undo->isEnabled());
         QVERIFY2(st->production(prod) != nullptr, qPrintable(tab));
     }
@@ -3091,6 +3094,193 @@ void AppViews_Test::qlcPlus4SettingsAreBroughtOverFromSettings()
     QVERIFY2(recent.contains(show), qPrintable(recent.join(", ")));
     QVERIFY(QSettings().contains("legacy/qlcplusSettingsOffered"));
     QVERIFY(!bring->isEnabled());           // nothing left to bring
+}
+
+void AppViews_Test::newFromTemplateOpensTheClassroomStageUntitled()
+{
+    // The menu: one entry per template, after New
+    QMenu *menu = m_app->menuBar()->findChild<QMenu *>("fileNewFromTemplate");
+    QVERIFY(menu != nullptr);
+    const QList<App::ShowTemplate> templates = App::showTemplates();
+    QVERIFY(!templates.isEmpty());
+    QCOMPARE(menu->actions().size(), templates.size());
+    QCOMPARE(menu->actions().first()->data().toString(), templates.first().resource);
+    QVERIFY(QFile::exists(templates.first().resource));
+
+    m_app->clearDocument();
+    QVERIFY(m_app->newFromTemplate(templates.first().resource));
+    Doc *doc = m_app->doc();
+    QCOMPARE(doc->fixtures().count(), 68);      // docs/course/rig.md
+    QVERIFY(!doc->fixtureGroups().isEmpty());
+    // Untitled and unchanged: Save asks where; nothing to save on close
+    QVERIFY(m_app->fileName().isEmpty());
+    QVERIFY(!doc->isModified());
+    QVERIFY(doc->programmer()->venueCorrections()->showFile().isEmpty());
+    // Never sends anything: no universe is patched to an output
+    InputOutputMap *iom = doc->inputOutputMap();
+    for (quint32 i = 0; i < iom->universesCount(); i++)
+        QCOMPARE(iom->outputPatchesCount(iom->getUniverseID(i)), 0);
+
+    // An edited show is asked about first: Cancel keeps it
+    doc->setModified();
+    QTimer::singleShot(0, this, []() {
+        QMessageBox *box = qobject_cast<QMessageBox *>(QApplication::activeModalWidget());
+        if (box != nullptr)
+            box->button(QMessageBox::Cancel)->click();
+    });
+    QVERIFY(!m_app->newFromTemplate(templates.first().resource));
+    QVERIFY(doc->isModified());
+    QCOMPARE(doc->fixtures().count(), 68);
+    m_app->clearDocument();
+}
+
+void AppViews_Test::aPinKeepsTheShowInOperate()
+{
+    m_app->clearDocument();
+    Doc *doc = m_app->doc();
+    ShowSettingsDialog::setTestMode(true);
+    auto cleanup = qScopeGuard([this]() {
+        ShowSettingsDialog::setTestMode(false);
+        if (m_app->doc()->mode() == Doc::Operate)
+        {
+            m_app->doc()->operateSettings()->setPin(QString());
+            m_app->slotModeDesign();
+        }
+        m_app->clearDocument();
+    });
+
+    QAction *settingsAction = m_app->findChild<QAction *>("fileShowSettings");
+    QVERIFY(settingsAction != nullptr && settingsAction->isEnabled());
+
+    // Show Settings: a PIN (a short one is asked again), and Open in Operate
+    {
+        ShowSettingsDialog dlg(doc, m_app);
+        QPushButton *set = dlg.findChild<QPushButton *>("showSettingsSetPin");
+        QPushButton *remove = dlg.findChild<QPushButton *>("showSettingsRemovePin");
+        QCheckBox *openIn = dlg.findChild<QCheckBox *>("showSettingsOpenInOperate");
+        QVERIFY(set && remove && openIn);
+        QVERIFY(!remove->isEnabled());
+        ShowSettingsDialog::testAnswers() = { "12", "2468", "1357" };   // too short; no match
+        set->click();
+        QVERIFY(!dlg.pinWillBeSet());
+        ShowSettingsDialog::testAnswers() = { "2468", "2468" };
+        set->click();
+        QVERIFY(dlg.pinWillBeSet());
+        QVERIFY(remove->isEnabled());
+        openIn->setChecked(true);
+        // Nothing changes until OK
+        QVERIFY(!doc->operateSettings()->hasPin());
+        dlg.accept();
+    }
+    QVERIFY(doc->operateSettings()->hasPin());
+    QVERIFY(doc->operateSettings()->checkPin("2468"));
+    QVERIFY(doc->operateSettings()->openInOperate());
+    QVERIFY(doc->isModified());
+
+    // Operate: locked. No settings, no Live Edit
+    m_app->slotModeOperate();
+    QCOMPARE(doc->mode(), Doc::Operate);
+    QVERIFY(!settingsAction->isEnabled());
+    QAction *liveEdit = nullptr;
+    for (QAction *a : m_app->findChildren<QAction *>())
+        if (a->text() == QObject::tr("Live edit a function"))
+            liveEdit = a;
+    QVERIFY(liveEdit != nullptr);
+    QVERIFY(!liveEdit->isEnabled());
+
+    // Wrong PIN, or Cancel: still in Operate. The PIN: Design
+    ShowSettingsDialog::testAnswers() = { "1111" };
+    m_app->slotModeDesign();
+    QCOMPARE(doc->mode(), Doc::Operate);
+    ShowSettingsDialog::testAnswers().clear();
+    m_app->slotModeToggle();
+    QCOMPARE(doc->mode(), Doc::Operate);
+    ShowSettingsDialog::testAnswers() = { "2468" };
+    m_app->slotModeToggle();
+    QCOMPARE(doc->mode(), Doc::Design);
+    QVERIFY(settingsAction->isEnabled());
+
+    // Changing the PIN asks for the current one first
+    {
+        ShowSettingsDialog dlg(doc, m_app);
+        ShowSettingsDialog::testAnswers() = { "0000" };
+        dlg.findChild<QPushButton *>("showSettingsRemovePin")->click();
+        QVERIFY(dlg.pinWillBeSet());
+        ShowSettingsDialog::testAnswers() = { "2468" };
+        dlg.findChild<QPushButton *>("showSettingsRemovePin")->click();
+        QVERIFY(!dlg.pinWillBeSet());
+        dlg.reject();       // Cancel: the show keeps its PIN
+    }
+    QVERIFY(doc->operateSettings()->hasPin());
+
+    // Saved with the show; it opens in Operate, still locked
+    QTemporaryDir dir;
+    const QString path = dir.filePath("locked.qlcc");
+    QCOMPARE(m_app->saveXML(path), QFile::NoError);
+    m_app->clearDocument();
+    QVERIFY(!doc->operateSettings()->hasPin());
+    QCOMPARE(m_app->loadXML(path), QFile::NoError);
+    QTRY_COMPARE(doc->mode(), Doc::Operate);
+    QVERIFY(!doc->isModified());
+    ShowSettingsDialog::testAnswers() = { "2468" };
+    m_app->slotModeDesign();
+    QCOMPARE(doc->mode(), Doc::Design);
+}
+
+void AppViews_Test::theMenusShowTheirKeys()
+{
+    m_app->clearDocument();
+    QCOMPARE(m_app->doc()->mode(), Doc::Design);
+
+    QAction *saveAs = m_app->findChild<QAction *>("fileSaveAs");
+    QAction *quit = m_app->findChild<QAction *>("fileQuit");
+    QAction *settings = m_app->findChild<QAction *>("appSettings");
+    QVERIFY(saveAs && quit && settings);
+    QCOMPARE(saveAs->shortcut(), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_S));
+    QCOMPARE(saveAs->shortcutContext(), Qt::ApplicationShortcut);
+    QCOMPARE(quit->shortcut(), QKeySequence(Qt::CTRL | Qt::Key_Q));
+    QCOMPARE(settings->text(), QString("&Settings…"));
+    QCOMPARE(settings->shortcut(), QKeySequence(Qt::CTRL | Qt::Key_Comma));
+    // macOS's application-menu title for it, which Qt takes from its own
+    // strings, is Settings… too
+    QCOMPARE(QCoreApplication::translate("MAC_APPLICATION_MENU", "Preferences..."), QString("Settings…"));
+    QCOMPARE(QCoreApplication::translate("MAC_APPLICATION_MENU", "Quit %1"), QString("Quit %1"));
+
+    // Nothing else holds those keys, the Virtual Console's design keys
+    // included (two shortcuts on one key fire neither)
+    m_app->showContext("Virtual Console");
+    for (QAction *a : m_app->findChildren<QAction *>())
+    {
+        if (a == saveAs || a == quit)
+            continue;
+        for (const QKeySequence &k : a->shortcuts())
+        {
+            QVERIFY2(k != saveAs->shortcut(), qPrintable(a->text()));
+            QVERIFY2(k != quit->shortcut(), qPrintable(a->text()));
+        }
+    }
+
+    // Undo / Redo: the keys in the text, no binding of their own
+    QAction *undo = m_app->menuBar()->findChild<QAction *>("editUndo");
+    QAction *redo = m_app->menuBar()->findChild<QAction *>("editRedo");
+    QVERIFY(undo && redo);
+    QVERIFY(undo->shortcut().isEmpty());
+    QVERIFY(redo->shortcut().isEmpty());
+    const QString z = QKeySequence(QKeySequence::Undo).toString(QKeySequence::NativeText);
+    QVERIFY2(undo->text().contains(z), qPrintable(undo->text()));
+    // The platform's own Redo keys, the ones the tabs bind (⇧⌘Z on a Mac)
+    const QString redoKey = QKeySequence(QKeySequence::Redo).toString(QKeySequence::NativeText);
+    QVERIFY(!redoKey.isEmpty());
+    QVERIFY2(redo->text().contains(redoKey), qPrintable(redo->text()));
+#if defined(Q_OS_WIN)
+    QVERIFY2(redo->text().contains("Ctrl+Y"), qPrintable(redo->text()));
+#endif
+    // The menu, opened, keeps them as it names the step
+    QMenu *edit = qobject_cast<QMenu *>(undo->parent());
+    QVERIFY(edit != nullptr);
+    emit edit->aboutToShow();
+    QVERIFY2(undo->text().contains(z), qPrintable(undo->text()));
+    QVERIFY(undo->shortcut().isEmpty());
 }
 
 void AppViews_Test::newShowsCanStartInClassic()

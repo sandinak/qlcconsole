@@ -191,6 +191,39 @@ void PatchList_Test::theCsvFollowsThePlotUnits()
              qPrintable(csv));
 }
 
+void PatchList_Test::aGelIsListedOnlyWhenSomeFixtureHasOne()
+{
+    MonitorProperties *mp = m_doc->monitorProperties();
+    Fixture *blue = dimmer(m_doc, QStringLiteral("Blue par"), 0, 0);
+    Fixture *open = dimmer(m_doc, QStringLiteral("Open par"), 0, 10);
+    mp->setFixturePosition(blue->id(), 0, 0, QVector3D(0, 0, 0));
+    mp->setFixturePosition(open->id(), 0, 0, QVector3D(1000, 0, 0));
+
+    // No gels: no column, in the list, the spreadsheet or the printout
+    PatchList list = PatchList::build(m_doc);
+    QVERIFY(!list.hasGels());
+    QVERIFY(!list.table().first().contains(QStringLiteral("Gel")));
+    QVERIFY(!list.toHtml(QStringLiteral("T")).contains(QStringLiteral("<th>Gel</th>")));
+
+    // An R80-ish blue on one: the column, its value, and none for the other
+    mp->setFixtureGelColor(blue->id(), 0, 0, QColor(0x1e, 0x50, 0xff));
+    list = PatchList::build(m_doc);
+    QVERIFY(list.hasGels());
+    const QList<QStringList> table = list.table();
+    const int col = table.first().indexOf(QStringLiteral("Gel"));
+    QCOMPARE(col, table.first().size() - 1);
+    QCOMPARE(table.at(1).at(0), QStringLiteral("Blue par"));
+    QCOMPARE(table.at(1).at(col), QStringLiteral("#1E50FF"));
+    QCOMPARE(table.at(2).at(col), QString());
+    QVERIFY(list.toCsv().contains(QStringLiteral(",#1E50FF\n")));
+    const QString html = list.toHtml(QStringLiteral("T"));
+    QVERIFY(html.contains(QStringLiteral("<th>Gel</th>")));
+    QVERIFY(html.contains(QStringLiteral("background-color: #1E50FF;")));
+
+    // Saved and loaded with the plot, as before
+    QCOMPARE(list.rows().first().gel, QColor(0x1e, 0x50, 0xff));
+}
+
 void PatchList_Test::theHtmlHasATablePerUniverse()
 {
     dimmer(m_doc, QStringLiteral("One"), 0, 0);

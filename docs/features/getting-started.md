@@ -46,6 +46,13 @@ tablet and setting up users.
 ### Show files
 
 - **.qlcc** is qlcconsole's own format, and what **Save As** starts on.
+- **File ▸ New from Template** starts a new show from a ready-made one
+  instead of an empty one. The first is the **Show-choir stage
+  (classroom)**: the course's teaching stage, with risers, trusses,
+  audience towers, 68 lights, groups, stage targets, colours and levels,
+  and no cues yet. It opens untitled, so **Save** asks for a name and the
+  template stays as it was. Nothing in it is patched to an output, so it
+  sends nothing until you patch it.
 - **.qxw** (stock QLC+) opens fine, and **Save** writes a show back in the
   format it was opened in. **Save As** offers it too (**QLC+ 4
   Workspaces**), and starts on it for a show opened from a .qxw. A .qxw
@@ -76,6 +83,23 @@ tablet and setting up users.
   [Missing definitions and the show cache](fixture-manager.md#missing-definitions-and-the-show-cache).
 - A show kept in a **cloud folder** (iCloud, Dropbox, Synology…) is saved
   safely; see [Cloud storage](other-improvements.md#cloud-storage).
+
+### Show settings
+
+**File ▸ Show Settings…** holds settings saved with the show that aren't
+about its patch or cues. It's only open in Design.
+
+- **Open this show in Operate**: opening the show goes straight to
+  Operate, ready to run, as the **-p** command-line option does.
+- **Set PIN…**: a PIN of 4 to 8 digits. In Operate, going back to Design
+  (the Design button, the footer switch, Control ▸ Design, ⌘F12) asks for
+  it, and Live Edit is off. Use it to keep a running show safe from a
+  curious click at the desk: a school concert, a lobby left running.
+  **Change PIN…** and **Remove PIN** ask for the current PIN first.
+
+The PIN is kept in the show file as a salted hash, not as the digits. It
+stops a click, not someone who edits the show file. Keep a copy of the show
+without the PIN, in case it's forgotten. Changes apply when you press OK.
 
 ### Choosing a computer
 

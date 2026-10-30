@@ -189,7 +189,8 @@ Every left-hand column still works, in the Classic QLC+ view.
   top bar (or the footer), and are in the **Control** menu too.
 - **Shortcuts.** GO is ⌘↩, Stop all ⌘⇧Esc, Design / Operate ⌘F12; plain
   Esc never stops playback. The VC button matrix and animation keys are
-  ⇧⌘G and ⇧⌘N. See [Keyboard and mouse](shortcuts.md).
+  ⇧⌘G and ⇧⌘N, and a new VC slider is ⇧⌘U (⇧⌘S is Save As). See
+  [Keyboard and mouse](shortcuts.md).
 - **Web access is safer by default.** **-w** answers on this computer
   only, where QLC+ 4 answered on every network. Add **--web-bind** to
   reach it from a tablet, and **-wa** with accounts to let that tablet
@@ -207,6 +208,78 @@ Every left-hand column still works, in the Classic QLC+ view.
   parts.
 - **Always open a show with -o** on the command line. A bare file name
   isn't opened, and saving then can write an empty show over it.
+
+## Questions QLC+ users ask
+
+Answers to questions that come up again and again on the QLC+ forum. The
+features are QLC+ 4's own, and they work the same here.
+
+### A fader that takes over channels, then lets go
+
+A Virtual Console slider in **Level** mode sets channels directly. To have
+it take over from whatever else is playing them, and then hand them back:
+
+1. In the slider's properties, on **Level**, pick the channels and tick
+   **Monitor the selected channels and update the slider level**.
+2. The slider now follows what those channels are doing. Move it and it
+   **overrides** them: its level wins over the cue list, chasers and other
+   faders on those channels.
+3. The **reset** button under the slider releases the override, and
+   the channels go back to what the show is playing. The reset can have
+   its own key or controller input.
+
+Without Monitor, a slider in Level mode joins the mix: the highest level
+wins for intensity, and the last one moved wins for everything else.
+
+### ⌘D: save what's on stage as a scene
+
+**Control ▸ Dump DMX values to a function** (⌘D; Ctrl+D on Windows and
+Linux) records the DMX values going out now as a scene. It doesn't matter
+what made them: the Simple Desk, a fader or a cue. In the dialog:
+
+- **Dump all channels**, or only the channels you pick in the tree.
+- **Dump only non-zero values** leaves out channels at 0.
+- Give it a **name**, or pick an existing scene to **overwrite**.
+- **Add to**: also put the new scene on a chaser, or on a new VC button
+  or slider.
+
+In the Show Tree, **Record as new cue** does the same into a cue list,
+as palettes and layers rather than raw values. Dump is for when you've
+set the stage by hand and want to keep it as it is.
+
+### Flash that wins: Override priority and Force LTP
+
+A VC button set to **Flash** plays its scene while it's held. Two options
+in the button's properties (under Flash) decide how hard it plays:
+
+- **Override priority**: the flash wins over sliders and running chasers
+  on the same channels, rather than mixing with them. Use it for a
+  blinder or a strobe hit that must show whatever else is running.
+- **Force LTP**: the scene's intensity channels act as LTP. The flash sets
+  its levels even when they're *lower* than what's playing, so a flash to
+  50% really is 50%. Without it, the highest level wins and a lower flash
+  disappears under a brighter cue.
+
+When you let go, the channels go back to what the show is playing. These
+options work on scenes. A Show Tree hit has its own Toggle and Flash, and
+these two options don't apply to it (see
+[Hits](show-tree.md#hits-busking)).
+
+### Sending MIDI CC out
+
+Two ways, depending on what you want to drive:
+
+- **Values as CC** (a DAW's mixer, a video app): in **Connections**,
+  patch a universe's **output** to the MIDI port. DMX channel 1 is CC 0,
+  channel 2 is CC 1, and so on up to channel 128, with the value halved
+  (0–255 becomes 0–127). The MIDI plugin's configuration sets the MIDI
+  channel, and can send **Note** or **Program Change** instead of CC. Put
+  the channels in a scene, or on a fader, and they go out as MIDI
+  whenever they change.
+- **Feedback to a controller's lights and motor faders**: give a VC
+  widget an external input from the controller, and patch the same MIDI
+  port as that universe's **feedback** output. The widget sends its state
+  back on the same CC or note.
 
 ## Getting help
 
