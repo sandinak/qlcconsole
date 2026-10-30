@@ -35,6 +35,18 @@ The latest changes, newest first. Each links to the guide with the detail.
   anything private; your browser files it. See [Reporting a
   bug](troubleshooting.md#reporting-a-bug).
 
+### Fixed lights and lasers point where they face
+
+- **Face aims a fixed light.** A par or a laser has the **Face** row:
+  **Back** points it upstage, **Bottom** down. Dropped on a truss's
+  upstage chord, a fixed light faces Back and throws upstage. The 3D
+  view, the plot's footprint, Quick focus and the orientation diagram
+  all use the same aim. See [Aiming a fixed
+  light](lighting-studio.md#mounting-a-fixture).
+- **Tilt in yoke** reads "45° down", "level" or "10° up", and its up
+  arrow tips the light up. A strip's **Tilt** tips it up on every upright
+  face. Shows saved before keep every bar where it was.
+
 ### Based on QLC+ 4.14.4
 
 - qlcconsole now carries **QLC+ 4.14.4**'s fixes (it was based on

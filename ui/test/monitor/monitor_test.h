@@ -129,6 +129,12 @@ private slots:
      *  throws: each of the six faces (Back upstage, Bottom down, Stage left
      *  SL), and a Pan/Tilt aim, following the aim as it is edited (RC5). */
     void theOrientationDiagramFollowsTheFace();
+    /** A fixed light has a Face row that aims it, and a Tilt in yoke said
+     *  "level" / "10° up" whose up arrow tips it up (Q172 A). */
+    void aFixedLightsFaceAimsItAndItsYokeTiltsUp();
+    /** A fixed light dropped on a truss chord faces that side: upstage chord,
+     *  Back -- its throw upstage; the centreline leaves it hung (Q172 A). */
+    void aFixedLightDroppedOnAChordFacesThatSide();
     /** Q103: a light whose lens is zoomed by hand (a lens range, no zoom
      *  channel) has "Beam (lens set to)" in Fixture Properties; setting it
      *  sets the light's lens, which is what its beam is drawn at. */

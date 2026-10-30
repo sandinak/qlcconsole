@@ -8642,9 +8642,11 @@ StructureStudioView::RotateHandle StructureStudioView::rotateHandle() const
             cand.studioTilt = 0.0f;
             QVector3D L0, N0, H0;
             fixtureFrame(cand, L0, N0, H0);
+            // The roll that rotates N0 onto N, in studioTilt's sense
+            // (signed by RigHeads::tiltSign(): + tips it up on an upright face).
             cand.studioTilt = float(qRadiansToDegrees(
                 qAtan2(-double(QVector3D::dotProduct(N, H0)),
-                        double(QVector3D::dotProduct(N, N0)))));
+                        double(QVector3D::dotProduct(N, N0))))) * RigHeads::tiltSign(cand);
             /* Only where the face would STAY: a load repairs a deck or a
                horizontal-truss fixture left on the Front face back to Top,
                and a riser fixture to its riser's face -- which would turn it
@@ -8685,7 +8687,7 @@ StructureStudioView::RotateHandle StructureStudioView::rotateHandle() const
         const QPointF n0 = project(c + N0) - project(c);
         const QPointF h0 = project(c + H0) - project(c);
         const double cross = n0.x() * h0.y() - n0.y() * h0.x();
-        h.sign = (cross > 0.0) ? -1.0 : 1.0;
+        h.sign = ((cross > 0.0) ? -1.0 : 1.0) * double(RigHeads::tiltSign(rp));
     }
     else
         return h;

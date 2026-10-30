@@ -18,6 +18,9 @@
   limitations under the License.
 */
 
+#include <QRegularExpression>
+#include <QCoreApplication>
+#include <QLocale>
 #include <QGraphicsScene>
 #include <QDateTime>
 #include <QApplication>
@@ -4111,15 +4114,8 @@ bool Monitor::fixtureIsMounted(quint32 fid) const
 
 bool Monitor::isLinearFixture(Fixture *fx) const
 {
-    if (fx == nullptr) return false;
-    if (fx->heads() > 1) return true;                 // LED tape / multi-cell bar
-    if (const QLCFixtureMode *m = fx->fixtureMode())  // a wide single-head bar/wash
-    {
-        const qreal w = m->physical().width();
-        const qreal d = qMax(m->physical().height(), m->physical().depth());
-        if (w > 0 && d > 0 && w > 1.8 * d) return true;
-    }
-    return false;
+    // One rule, shared with the engine (Focus, the 2D drop onto a chord).
+    return RigHeads::isLinear(fx);
 }
 
 /* A studio tree row's fixture id. Folder rows never set Qt::UserRole, so a
@@ -10429,21 +10425,76 @@ private:
     float m_panMax   = 360.0f;
 };
 
-/* Where a fixed light throws, as StructureStudioView::emitDirection() has it
-   (without the riser/deck "out of its host" case, which needs the view). */
-static QVector3D fixedPreviewThrow(const Fixture *fx, const FixtureRigProps &rp)
+/* A fixed light's tilt in its yoke, said the way a crew says it: "45° down",
+   "level", "10° up". The value is FixtureRigProps::aimDown (degrees down from
+   level, as stored and as Focus and the solver read it), so nothing saved
+   changes meaning; only the words and the arrows do -- the up arrow tips it
+   up. Typed: "10 up", "10 down", or a number (up; minus is down). */
+class YokeTiltSpinBox : public QDoubleSpinBox
+{
+public:
+    explicit YokeTiltSpinBox(QWidget *parent = nullptr) : QDoubleSpinBox(parent)
+    {
+        setRange(-90, 90);
+        setDecimals(1);
+        setToolTip(QCoreApplication::translate("Monitor",
+            "How far it is tipped in its yoke from level: \"45° down\" a typical front "
+            "light, \"10° up\" a laser over the audience. Type 10 up or 10 down."));
+    }
+
+    QString textFromValue(double v) const override
+    {
+        const QString n = QLocale().toString(qAbs(v), 'f', qAbs(v - qRound(v)) < 0.05 ? 0 : 1);
+        if (qAbs(v) < 0.05)
+            return QCoreApplication::translate("Monitor", "level");
+        return v > 0.0 ? QCoreApplication::translate("Monitor", "%1° down").arg(n)
+                       : QCoreApplication::translate("Monitor", "%1° up").arg(n);
+    }
+
+    double valueFromText(const QString &text) const override
+    {
+        const QString t = text.trimmed().toLower();
+        if (t.startsWith(QCoreApplication::translate("Monitor", "level").toLower()))
+            return 0.0;
+        static const QRegularExpression num(QStringLiteral("[-+−]?\\d+(?:[.,]\\d+)?"));
+        const QRegularExpressionMatch m = num.match(t);
+        if (!m.hasMatch())
+            return value();
+        QString digits = m.captured(0);
+        digits.replace(QChar(0x2212), QLatin1Char('-')).replace(QLatin1Char(','), QLatin1Char('.'));
+        const double n = digits.toDouble();
+        if (t.contains(QCoreApplication::translate("Monitor", "down").toLower()))
+            return qAbs(n);
+        if (t.contains(QCoreApplication::translate("Monitor", "up").toLower()))
+            return -qAbs(n);
+        return -n;                      // a bare number: up (minus: down)
+    }
+
+    // Words as well as digits; anything it cannot read leaves the value as it was.
+    QValidator::State validate(QString &, int &) const override { return QValidator::Acceptable; }
+
+    // Up tips it up: the stored value (down from level) falls.
+    void stepBy(int steps) override { QDoubleSpinBox::stepBy(-steps); }
+
+protected:
+    StepEnabled stepEnabled() const override
+    {
+        StepEnabled e = StepNone;
+        if (value() > minimum()) e |= StepUpEnabled;
+        if (value() < maximum()) e |= StepDownEnabled;
+        return e;
+    }
+};
+
+/* Where a fixed light throws: the one rule the 3D view, the 2D footprint and
+   Focus use (RigHeads::fixedThrow) -- its Pan/Tilt aim, else its face, else
+   out of its riser or deck, else down when hung. */
+static QVector3D fixedPreviewThrow(Doc *doc, quint32 fid)
 {
     QVector3D dir;
-    if (rp.fixedAimDirection(dir))
+    if (RigHeads::fixedThrow(doc, fid, dir))
         return dir;
-    if ((fx != nullptr && fx->heads() > 1) || rp.studioFaceChosen
-        || rp.trussId == Truss::invalidId())
-    {
-        QVector3D L, N, H;
-        RigHeads::frame(rp, L, N, H);
-        if (N.lengthSquared() > 1e-6f)
-            return N.normalized();
-    }
+    const FixtureRigProps rp = doc->monitorProperties()->fixtureRigProps(fid);
     return rp.mountingType == Truss::TopHung ? QVector3D(0, 0, -1) : QVector3D(0, 0, 1);
 }
 
@@ -10518,19 +10569,13 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
         /* Fixed lights (no pan or tilt channel) are aimed by Pan (the Aim
            row) and this elevation (Q100); a moving head ignores it. */
         auto isFixedLight = [this](quint32 fid) {
-            Fixture *f = m_doc->fixture(fid);
-            return f != nullptr && f->channelNumber(QLCChannel::Pan, QLCChannel::MSB, 0) == QLCChannel::invalid()
-                && f->channelNumber(QLCChannel::Tilt, QLCChannel::MSB, 0) == QLCChannel::invalid()
-                && !isLinearFixture(f);
+            return RigHeads::isFixedUnit(m_doc->fixture(fid));
         };
-        QDoubleSpinBox *aimDownSpin = new QDoubleSpinBox(box);
+        QDoubleSpinBox *aimDownSpin = new YokeTiltSpinBox(box);
         aimDownSpin->setObjectName(QStringLiteral("fixtureAimDown"));
-        aimDownSpin->setRange(-90, 90);
-        aimDownSpin->setDecimals(1);
-        aimDownSpin->setSuffix(QString::fromUtf8("°"));
-        aimDownSpin->setToolTip(tr("For the fixed lights among them: how far down they point from "
-                                   "level (90 straight down, 0 level)"));
-        form->addRow(tr("Tilt (° down from level):"), aimDownSpin);
+        aimDownSpin->setToolTip(tr("For the fixed lights among them: how far they are tipped in "
+                                   "their yokes, \"45° down\" to \"10° up\""));
+        form->addRow(tr("Tilt in yoke:"), aimDownSpin);
         bool anyFixed = false;
         float down0 = 0.0f;
         bool downDiffers = false, haveDown = false;
@@ -10539,11 +10584,13 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
             {
                 anyFixed = true;
                 const FixtureRigProps r = m_props->fixtureRigProps(fid);
-                const float d = r.fixedAim ? r.aimDown : (r.mountingType == Truss::TopHung ? 90.0f : -90.0f);
+                FixtureRigProps seeded = r;
+                RigHeads::startFixedAim(m_doc, fid, seeded);   // as it throws now
+                const float d = seeded.aimDown;
                 if (!haveDown) { down0 = d; haveDown = true; }
                 else if (!qFuzzyCompare(1.0f + d, 1.0f + down0)) downDiffers = true;
             }
-        FixtureFields::spinMixed(aimDownSpin, downDiffers, 0.0);
+        FixtureFields::spinMixed(aimDownSpin, downDiffers, -90.0);   // up too, not just down
         if (!downDiffers)
             aimDownSpin->setValue(double(down0));
         aimDownSpin->setVisible(anyFixed);
@@ -10557,7 +10604,7 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
                 if (isFixedLight(fid))
                 {
                     FixtureRigProps rp = m_props->fixtureRigProps(fid);
-                    rp.fixedAim = true;
+                    RigHeads::startFixedAim(m_doc, fid, rp);   // its bearing as it throws now
                     rp.aimDown = float(v);
                     m_props->setFixtureRigProps(fid, rp);
                     m_graphicsView->updateFixture(fid);
@@ -10593,13 +10640,10 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
             foreach (quint32 fid, fids)
             {
                 FixtureRigProps rp = m_props->fixtureRigProps(fid);
+                // Aimed from now on: pointing as it did, turned to this bearing.
+                if (isFixedLight(fid))
+                    RigHeads::startFixedAim(m_doc, fid, rp);
                 rp.panZeroDir = float(v);
-                if (isFixedLight(fid) && !rp.fixedAim)
-                {
-                    // Aimed from now on: pointing as it did, turned to this bearing.
-                    rp.fixedAim = true;
-                    rp.aimDown = (rp.mountingType == Truss::TopHung) ? 90.0f : -90.0f;
-                }
                 m_props->setFixtureRigProps(fid, rp);
                 if (MonitorFixtureItem *fi = m_graphicsView->fixtureItemForId(fid))
                     fi->setFacing(rp.panZeroDir);
@@ -10801,19 +10845,15 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
 
 
     QDoubleSpinBox *panZeroSpin = new QDoubleSpinBox;
+    panZeroSpin->setObjectName(QStringLiteral("fixtureAim"));
     panZeroSpin->setRange(0, 359);
     panZeroSpin->setSuffix(QString::fromUtf8("°"));
     panZeroSpin->setDecimals(1);
     rigForm->addRow(tr("Aim — front of device (° from DS):"), panZeroSpin);
     // A fixed light's elevation (Q100): shown with Pan for one, below.
-    QDoubleSpinBox *aimDownSpin = new QDoubleSpinBox;
+    QDoubleSpinBox *aimDownSpin = new YokeTiltSpinBox;
     aimDownSpin->setObjectName(QStringLiteral("fixtureAimDown"));
-    aimDownSpin->setRange(-90, 90);
-    aimDownSpin->setSuffix(QString::fromUtf8("°"));
-    aimDownSpin->setDecimals(1);
-    aimDownSpin->setToolTip(tr("How far down it points from level: 90 straight down, 45 a typical "
-                               "front light, 0 level, below 0 up"));
-    rigForm->addRow(tr("Tilt (° down from level):"), aimDownSpin);
+    rigForm->addRow(tr("Tilt in yoke:"), aimDownSpin);
     // A lens zoomed by hand (Q103): what it is set to, within its range.
     QDoubleSpinBox *lensSpin = new QDoubleSpinBox;
     lensSpin->setObjectName(QStringLiteral("fixtureLensSetTo"));
@@ -10928,9 +10968,22 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
         lensSpin->setRange(lensLo, lensHi);
         lensSpin->setValue(rp.lensDeg > 0.0f ? qBound(lensLo, double(rp.lensDeg), lensHi) : lensHi);
     }
-    // Not aimed yet: it points as its mount says, straight down when hung.
-    aimDownSpin->setValue(rp.fixedAim ? double(rp.aimDown)
-                                      : (rp.mountingType == Truss::TopHung ? 90.0 : -90.0));
+    /* Not aimed yet: it points as its face or mount says (RigHeads::fixedThrow
+       -- a laser faced Back reads 180, level; a hung par straight down), so
+       touching only one row keeps the other where the light really points. */
+    const bool fixedUnit = RigHeads::isFixedUnit(fxi);
+    auto loadFixedAim = [this, fxId, fixedUnit, panZeroSpin, aimDownSpin]() {
+        FixtureRigProps now = m_props->fixtureRigProps(fxId);
+        if (fixedUnit)
+            RigHeads::startFixedAim(m_doc, fxId, now);     // a copy: read, not stored
+        else if (!now.fixedAim)
+            now.aimDown = (now.mountingType == Truss::TopHung) ? 90.0f : -90.0f;
+        const QSignalBlocker b1(panZeroSpin), b2(aimDownSpin);
+        aimDownSpin->setValue(double(now.aimDown));
+        if (fixedUnit)
+            panZeroSpin->setValue(double(now.panZeroDir));
+    };
+    loadFixedAim();
     panOffsetSpin->setValue(double(rp.panOffsetDeg));
     tiltOffsetSpin->setValue(double(rp.tiltOffsetDeg));
     panInvertCb->setChecked(rp.panInvert);
@@ -10966,9 +11019,9 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
     if (fixedLight)
     {
         if (QLabel *l = qobject_cast<QLabel *>(rigForm->labelForField(panZeroSpin)))
-            l->setText(tr("Pan (° from downstage):"));
+            l->setText(tr("Points (° from DS):"));
         panZeroSpin->setToolTip(tr("Which way it points, seen from above: 0 downstage, 90 stage right, "
-                                   "180 upstage, 270 stage left"));
+                                   "180 upstage, 270 stage left. Face sets it too."));
     }
     else
         hideRow(aimDownSpin);
@@ -11256,19 +11309,19 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
         preview->setHasPan(hasPanFx);
         preview->setPanMax(panMaxFx);
         // A fixed light: where it throws -- its face's side, tilt, or its Pan/Tilt aim.
-        preview->setThrow(fixedPreviewThrow(fxi, rp));
+        preview->setThrow(fixedPreviewThrow(m_doc, fxId_dlg));
         preview->setFacing(panZeroSpin->value());
         preview->setIconRotation(rotSpin->value());
         /* Following every change to it while the dialog is open: a Fixture
            row (face, side, angle, tilt) and the Pan/Tilt aim, which both
            reach the rig through setFixtureRigProps -> rigPropsChanged. */
         connect(m_props, &MonitorProperties::rigPropsChanged, preview,
-                [this, preview, fxi, fxId_dlg](quint32 f) {
+                [this, preview, fxId_dlg](quint32 f) {
             if (f == fxId_dlg)
-                preview->setThrow(fixedPreviewThrow(fxi, m_props->fixtureRigProps(fxId_dlg)));
+                preview->setThrow(fixedPreviewThrow(m_doc, fxId_dlg));
         });
-        connect(fields, &FixtureFields::edited, preview, [this, preview, fxi, fxId_dlg]() {
-            preview->setThrow(fixedPreviewThrow(fxi, m_props->fixtureRigProps(fxId_dlg)));
+        connect(fields, &FixtureFields::edited, preview, [this, preview, fxId_dlg]() {
+            preview->setThrow(fixedPreviewThrow(m_doc, fxId_dlg));
         });
         posRow->addWidget(preview, 0, Qt::AlignTop);
 
@@ -11287,6 +11340,14 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
     // A Fixture-row edit: running scenes recompute, the stage position and a
     // running test follow.
     connect(fields, &FixtureFields::edited, &dlg, [&]() {
+        /* A Face picked for a fixed light aims it (RigHeads::aimAtFace): the
+           Points and Tilt rows read that aim, or the next edit here would
+           write the old one back. */
+        if (fixedLight)
+        {
+            loadFixedAim();
+            aimTouched = m_props->fixtureRigProps(fxId_dlg).fixedAim;
+        }
         flushSceneCaches();
         refreshTest();
         refreshStagePos();

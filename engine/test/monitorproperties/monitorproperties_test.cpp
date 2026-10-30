@@ -1644,6 +1644,148 @@ void MonitorProperties_Test::aFixedLightIsAimedByPanAndTilt()
     QVERIFY(!back.fixtureRigProps(2).fixedAim);
 }
 
+void MonitorProperties_Test::aTiltUpIsUpOnEitherFace()
+{
+    MonitorProperties mp;
+    // A bar running stage left-right on each upright face, then along the
+    // stage on a side face, tipped +10: its light goes UP on all of them.
+    const FixtureRigProps::Face upright[] = { FixtureRigProps::FaceFront, FixtureRigProps::FaceBack,
+                                              FixtureRigProps::FaceStageLeft, FixtureRigProps::FaceStageRight };
+    for (FixtureRigProps::Face f : upright)
+        for (float angle : { 0.0f, 30.0f, 180.0f })
+        {
+            FixtureRigProps rp;
+            mp.setFixtureFace(rp, f);
+            rp.studioAngle = angle;
+            rp.studioTilt = 10.0f;
+            QVector3D L, N, H;
+            RigHeads::frame(rp, L, N, H);
+            QVERIFY2(N.z() > 0.1f, qPrintable(QString("face %1 angle %2: N.z %3")
+                                               .arg(int(f)).arg(angle).arg(N.z())));
+        }
+    // A Top face keeps its sense: a bar across the stage tips upstage.
+    FixtureRigProps top;
+    mp.setFixtureFace(top, FixtureRigProps::FaceTop);
+    top.studioTilt = 20.0f;
+    QVector3D L, N, H;
+    RigHeads::frame(top, L, N, H);
+    QVERIFY2(N.y() < -0.3f, qPrintable(QString::number(N.y())));
+    QCOMPARE(RigHeads::tiltSign(top), 1.0f);
+
+    // Saved in the file's (old) sense, read back in the new: a Back bar
+    // tipped up 10 saves ST="-10.0" and comes back up 10.
+    mp.setFixturePosition(10, 0, 0, QVector3D(1, 2, 3));
+    FixtureRigProps back;
+    mp.setFixtureFace(back, FixtureRigProps::FaceBack);
+    back.studioTilt = 10.0f;
+    mp.setFixtureRigProps(10, back);
+    QByteArray buf;
+    {
+        QXmlStreamWriter writer(&buf);
+        writer.writeStartDocument();
+        mp.saveXML(&writer, nullptr);
+        writer.writeEndDocument();
+    }
+    QVERIFY2(buf.contains("ST=\"-10.0\""), buf.constData());
+    auto load = [](const QByteArray &xml, MonitorProperties &into) {
+        QXmlStreamReader reader(xml);
+        while (reader.readNextStartElement())
+            if (reader.name() == QStringLiteral("Monitor"))
+                return into.loadXML(reader, nullptr);
+        return false;
+    };
+    {
+        MonitorProperties mp2;
+        QVERIFY(load(buf, mp2));
+        QCOMPARE(mp2.fixtureRigProps(10).studioTilt, 10.0f);
+    }
+    // A show saved before 0.3.1 with ST="10" on the Back: its bar pointed
+    // down, and still does -- read as "10 down", not flipped up.
+    QByteArray old = buf;
+    old.replace("ST=\"-10.0\"", "ST=\"10\"");
+    MonitorProperties mp3;
+    QVERIFY(load(old, mp3));
+    const FixtureRigProps was = mp3.fixtureRigProps(10);
+    QCOMPARE(was.studioTilt, -10.0f);
+    RigHeads::frame(was, L, N, H);
+    QVERIFY2(N.z() < -0.1f, qPrintable(QString::number(N.z())));
+}
+
+void MonitorProperties_Test::aFaceAimsAFixedLight()
+{
+    MonitorProperties mp;
+    // Each face aims it out of that side, level; Bottom straight down.
+    const struct { FixtureRigProps::Face face; float bearing; float down; } faces[] = {
+        { FixtureRigProps::FaceFront, 0.0f, 0.0f },
+        { FixtureRigProps::FaceBack, 180.0f, 0.0f },
+        { FixtureRigProps::FaceStageLeft, 270.0f, 0.0f },
+        { FixtureRigProps::FaceStageRight, 90.0f, 0.0f },
+    };
+    for (const auto &c : faces)
+    {
+        FixtureRigProps rp;
+        mp.setFixtureFace(rp, c.face);
+        RigHeads::aimAtFace(rp);
+        QVERIFY(rp.fixedAim);
+        QVERIFY2(qAbs(rp.panZeroDir - c.bearing) < 0.05f, qPrintable(QString::number(rp.panZeroDir)));
+        QVERIFY2(qAbs(rp.aimDown - c.down) < 0.05f, qPrintable(QString::number(rp.aimDown)));
+        QVector3D d;
+        QVERIFY(rp.fixedAimDirection(d));
+        QCOMPARE(RigHeads::nearestFace(d), int(c.face));
+    }
+    // A yoke tilt set by hand stays when it is turned to another side.
+    FixtureRigProps rp;
+    mp.setFixtureFace(rp, FixtureRigProps::FaceBack);
+    RigHeads::aimAtFace(rp);
+    rp.aimDown = -12.0f;                                  // 12 up
+    mp.setFixtureFace(rp, FixtureRigProps::FaceFront);
+    RigHeads::aimAtFace(rp);
+    QCOMPARE(rp.panZeroDir, 0.0f);
+    QCOMPARE(rp.aimDown, -12.0f);
+    QVector3D d;
+    QVERIFY(rp.fixedAimDirection(d));
+    QCOMPARE(RigHeads::nearestFace(d), int(FixtureRigProps::FaceFront));   // 12 up is still Front
+    mp.setFixtureFace(rp, FixtureRigProps::FaceBottom);
+    RigHeads::aimAtFace(rp);
+    QCOMPARE(rp.aimDown, 90.0f);
+    rp.aimDown = 45.0f;                                   // in between: no face
+    QVERIFY(rp.fixedAimDirection(d));
+    QCOMPARE(RigHeads::nearestFace(d), -1);
+
+    // The chord of a stage left-right truss it sits on names its side.
+    Truss *t = mp.addTruss();
+    t->setOrigin(QVector3D(2.0f, 6.0f, 5.0f));
+    t->setDirection(QPointF(1.0, 0.0));
+    t->setLength(6.0f);
+    t->setWidth(0.3f);
+    FixtureRigProps on;
+    on.trussId = t->id();
+    FixtureRigProps::Face side;
+    on.trussCross = 0.0f;
+    QVERIFY(!mp.trussSideFace(on, side));                 // the centreline: hung under it
+    on.trussCross = -0.15f;
+    QVERIFY(mp.trussSideFace(on, side));
+    QCOMPARE(side, FixtureRigProps::FaceBack);
+    on.trussCross = 0.15f;
+    QVERIFY(mp.trussSideFace(on, side));
+    QCOMPARE(side, FixtureRigProps::FaceFront);
+    // And it agrees with where setFixtureFace() puts it.
+    FixtureRigProps put;
+    put.trussId = t->id();
+    mp.setFixtureFace(put, FixtureRigProps::FaceBack);
+    QVERIFY(mp.trussSideFace(put, side));
+    QCOMPARE(side, FixtureRigProps::FaceBack);
+    on.placement = FixtureRigProps::Inside;
+    QVERIFY(!mp.trussSideFace(on, side));
+    // A run up and down stage: its chords face stage left and right.
+    t->setDirection(QPointF(0.0, 1.0));
+    put = FixtureRigProps();
+    put.trussId = t->id();
+    mp.setFixtureFace(put, FixtureRigProps::FaceStageRight);
+    QVERIFY(mp.trussSideFace(put, side));
+    QCOMPARE(side, FixtureRigProps::FaceStageRight);
+}
+
 void MonitorProperties_Test::anOldBackgroundStaysRelativeToTheShow()
 {
     QTemporaryDir folder;
