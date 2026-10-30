@@ -164,6 +164,20 @@ private slots:
      *  Editor's Speed), shown in the footer. */
     void lessonTwoFourExtension();
 
+    /** Lesson 2.5's extension: the fan's Spread 0, and Grouping: Pairs. */
+    void lessonTwoFiveExtension();
+
+    /** Lesson 2.6, live: Operate, GO to the verse, and a hit fired from
+     *  its Virtual Console button over it, then let go. */
+    void lessonTwoSixFiresAHit();
+
+    /** Lesson 2.7, played: GO into the chorus, Sub GO for the stomp, its
+     *  auto-follow, and GO on to a cue that doesn't receive it. */
+    void lessonTwoSevenPlaysTheStomps();
+
+    /** Lesson 2.7's extension: a fourth sub-cue, and its number. */
+    void lessonTwoSevenExtension();
+
     /** COURSE_BUILD=1: makes Level 2's start and finish files, each lesson
      *  done with the mouse from the one before's finish (COURSE_LESSON=2.N:
      *  that lesson only). Skipped otherwise. */

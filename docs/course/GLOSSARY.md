@@ -131,13 +131,19 @@ brackets.
 | **Cue-only cue** | A cue that starts from the one before but whose changes don't pass on (Mode: Cue-only; **C** in the **M** column): a flash or sting that's there and gone. [2.1] |
 | **Hard start** | A cue that starts from a known state whatever came before: a Block cue, for a solo or a new section. [2.1] |
 | **Base cue** | The cue a list's released layers go back to (tick *The list's base cue* on its page; **base** in the **F** column). [2.1] |
+| **Line target** | A stage target that is a line, not a point: each light aimed at it gets its own point along it, in the order they hang (*Riser Line*). [2.5] |
+| **Spread** | How lights aimed at a line share it: +5 end to end (a fan), 0 all on the centre, below 0 crossed (−5 fully). Grouping moves them in pairs, threes…; the order strip and plan view under Position show where each lands. [2.5] |
+| **Colour wheel / colour ring** | A spot's colour from named slots (filters on a wheel, LEDs round the lens), not mixed: a colour picks the nearest slot. [2.5] |
+| **Sub-cue** | A cue inside a cue (1.0.2.1, 1.0.2.2…) for stomps, claps and stings within a section. The first plays with GO; what they change doesn't pass on to the next cue. [2.7] |
+| **Sub GO / auto-follow** | Sub GO (⌥⌘↩, the Run tab's button) steps to the next sub-cue of the cue playing; GO still goes to the next main cue. A sub-cue set to **Auto-follow after** a wait goes on by itself (*auto 0.5s*). [2.7] |
 | **Effect** | A pattern that moves through the lights: a chase, a sparkle, a rainbow. [2.4] |
 | **Effect palette** | A palette that plays an effect: **+ Palette → Effect**, then the effect picked in the **effect picker** (search, click, **Done**). [2.4] |
 | **Sparkle / wave** | Pixels flash and fade at random, like glitter / brightness that travels across the lights. [2.4] |
 | **Its own colour** | A colour (or level) that belongs to an effect only, set with **⋯ → Its own colour / dimmer** on its row: *Step Sparkle in White*. [2.4] |
 | **Eye candy** | Light that looks good on its own (moving scenery, sparkle) but doesn't light the people. It goes on the scenery, never at the cost of light on the performers. [2.4] |
 | **Speed master** | A tempo effects can run on, so one tap or fader moves them together; an effect's **Speed** in the Look Editor. Used ones show in the footer (*Main Speed 120*). [2.4] |
-| **Hit** | A short, sharp change on a musical accent [0.6]; a look kept ready to fire by hand over the running list, for busking [0.7]: the Show Tree's **Hits** section, built with **+ Hit**. A hit never tracks. [2.6] |
+| **Hit** | A short, sharp change on a musical accent [0.6]; a look kept ready to fire by hand over the running list, for busking [0.7]: the Show Tree's **Hits** section (right-click the production → **+ Hit**). It plays on top of whatever runs, and never tracks. [2.6] |
+| **Virtual Console (VC)** | qlcconsole's on-screen control desk of buttons, faders and frames (⇧⌘6). **Make VC page** (right-click Hits) puts a frame on it with a Toggle button per hit; buttons fire only in Operate. [2.6] |
 
 ## Hardware (Level 3)
 

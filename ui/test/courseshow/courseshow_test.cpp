@@ -94,6 +94,7 @@
 #include "virtualconsole.h"
 #include "vcframe.h"
 #include "vcslider.h"
+#include "vcbutton.h"
 #include "helpshots.h"
 #include "showstatus.h"
 #include "universe.h"
@@ -128,7 +129,7 @@ const QString kL5Start = kShows + QStringLiteral("/lesson-1-5-start.qlcc");
 /* Level 2's show files: lesson-2-N-start / -finish, each lesson starting
    from the one before's finish (2.1 from Lesson 1.4's). */
 /* How many of Level 2's lessons are written (and have show files). */
-const int kLevelTwoLessons = 4;
+const int kLevelTwoLessons = 7;
 
 QString levelTwoStart(int n)
 {
@@ -582,6 +583,11 @@ bool rowMenu(ShowTreeView *view, const QString &key, const QString &menu, const 
                                     return;
                                 }
                     }
+        // Not there: close it, or the menu waits for ever.
+        for (QWidget *w : QApplication::topLevelWidgets())
+            if (QMenu *m = qobject_cast<QMenu *>(w))
+                if (m->isVisible())
+                    m->close();
     });
     more->click();
     settle(100);
@@ -1697,6 +1703,24 @@ static QStringList describeAll(Doc *doc)
             {
                 out << QStringLiteral("%1 mode %2 in %3 out %4 hold %5").arg(c.number).arg(int(c.mode))
                        .arg(c.fadeIn).arg(c.fadeOut).arg(c.hold);
+                // Level 2: a cue's sub-cues, each with its layers and how it advances.
+                for (const CueList &sl : p.lists)
+                    if (sl.isSubCues() && sl.subOf == c.id)
+                        for (const Cue &sc : sl.cues)
+                        {
+                            QStringList layers;
+                            for (const Layer &ly : sc.layers)
+                            {
+                                QStringList looks;
+                                for (const Look &lk : ly.looks)
+                                    for (quint32 pid : lk.palettes)
+                                        looks << (doc->palette(pid) ? doc->palette(pid)->name() : QStringLiteral("?"));
+                                layers << QStringLiteral("%1 [%2]").arg(doc->showTree()->targetLabel(ly.target), looks.join(", "));
+                            }
+                            out << QStringLiteral("%1 sub %2 %3: %4 %5").arg(c.number, sc.number, sc.name, layers.join("; "),
+                                                                         sc.follow ? QStringLiteral("auto %1").arg(sc.wait)
+                                                                                   : QStringLiteral("Sub GO"));
+                        }
                 // Level 2: what a layer lets go of (Release).
                 for (const Layer &ly : c.layers)
                     if (ly.release)
@@ -4060,6 +4084,381 @@ static bool lessonTwoFourByMouse(Doc *doc, ShowTreeView *view, const QString &sh
     return true;
 }
 
+/* Lesson 2.5, moving lights and lines: the button. 1.0.7 Fan (Block): the
+   truss spots and the upstage beams, one layer, White, Full, aimed at the
+   Riser Line -- a fan along it; 1.0.8 Button: the same beams crossed
+   (Spread -5) and Red, with a 1 s fade, so they sweep. */
+static bool lessonTwoFiveByMouse(Doc *doc, ShowTreeView *view, const QString &shots = QString())
+{
+    ShowTreeController *st = doc->showTree();
+    for (QTreeWidgetItemIterator it(view->tree()); *it; ++it)
+        (*it)->setExpanded(true);
+    App *app = qobject_cast<App *>(view->window());
+    auto ui = [view, app, &shots](const QString &name, const QList<HelpShots::Callout> &marks) {
+        if (shots.isEmpty() || app == nullptr)
+            return true;
+        HelpShots::Frame f = showTreeFrame(app, view);
+        f.callouts = marks;
+        return shoot(f, shots, name);
+    };
+    auto rig = [view, &shots](const QString &name) {
+        if (shots.isEmpty())
+            return;
+        const quint32 cue = view->currentCueId();
+        rigShot(view, cue, shots + QLatin1Char('/') + name + QStringLiteral(".png"));
+        closeRig();
+        view->selectNode(cue);
+        settle();
+    };
+    auto pans = [doc]() {
+        QStringList out;
+        for (const char *fx : { "SR Truss Spot 1", "SR Truss Spot 2", "SL Truss Spot 2", "SL Truss Spot 1" })
+        {
+            const QPair<int, int> pt = panTilt(doc, fx);
+            out << QStringLiteral("%1=%2/%3").arg(fx).arg(pt.first).arg(pt.second);
+        }
+        return out.join(" ");
+    };
+    for (Fixture *fx : doc->fixtures())
+        if (fx->name() == QLatin1String("SR Truss Spot 1") || fx->name() == QLatin1String("UST 1"))
+        {
+            QStringList n;
+            for (quint32 c = 0; c < fx->channels(); ++c)
+                n << fx->channel(c)->name();
+            qInfo().noquote() << "[2.5]" << fx->name() << "heads" << fx->heads() << "channels:" << n.join(", ");
+        }
+
+    LESSON_STEP(view->selectNode(cueNumbered(doc, "1.0.6")), "select 1.0.6");
+    settle(50);
+    LESSON_STEP(newCueNamed(view, "Fan"), "new cue Fan");
+    LESSON_STEP(st->cue(view->currentCueId())->number == "1.0.7", st->cue(view->currentCueId())->number);
+    LESSON_STEP(setCueMode(view, "Block"), "Mode Block");
+    const quint32 fan = view->currentCueId();
+    {
+        const QString said = dropGroupOnZone(doc, view, "Truss-Spots");
+        LESSON_STEP(said == QStringLiteral("a new layer on Truss-Spots in 1.0.7 Fan"), said);
+    }
+    for (const QString &pal : { QStringLiteral("White"), QStringLiteral("Full") })
+    {
+        const QString said = dropPaletteOnRow(doc, view, "Truss-Spots", pal);
+        LESSON_STEP(said.startsWith(QStringLiteral("%1 → layer Truss-Spots in 1.0.7 Fan").arg(pal)), said);
+    }
+    settle(300);
+    qInfo().noquote() << "[2.5] before the aim:" << pans();
+    rig(QStringLiteral("rig-fan-unaimed"));
+    {
+        const QString said = dropTargetOnRow(doc, view, "Truss-Spots", "Riser Line");
+        qInfo().noquote() << "[2.5] Riser Line:" << said;
+        LESSON_STEP(said.startsWith(QStringLiteral("Aim at Riser Line → layer Truss-Spots in 1.0.7 Fan")), said);
+    }
+    settle(400);
+    const QString fanPans = pans();
+    qInfo().noquote() << "[2.5] fanned:" << fanPans;
+    LESSON_STEP(clickCueRow(view, "Truss-Spots"), "click the layer");
+    qInfo().noquote() << "[2.5] rows: Position" << rowText(view, KeyPosition) << "| Spread" << rowText(view, KeySpread)
+                      << "| Grouping" << rowText(view, KeyGrouping) << "| Cross" << rowText(view, KeyCross)
+                      << "| strip" << (view->findChild<QWidget *>("stLineStrip") != nullptr)
+                      << "| plan" << (view->findChild<QWidget *>("stLinePlan") != nullptr);
+    if (!shots.isEmpty())
+    {
+        QWidget *strip = view->findChild<QWidget *>(QStringLiteral("stLineStrip"));
+        QWidget *plan = view->findChild<QWidget *>(QStringLiteral("stLinePlan"));
+        QLabel *spread = stFind<QLabel>(view, QStringLiteral("stRow:%1").arg(KeySpread));
+        for (QWidget *w = spread; w != nullptr; w = w->parentWidget())
+            if (QScrollArea *area = qobject_cast<QScrollArea *>(w))
+            {
+                area->ensureWidgetVisible(plan != nullptr ? plan : spread, 0, 10);
+                break;
+            }
+        settle(100);
+        QList<HelpShots::Callout> marks;
+        marks << mark(stFind<QLabel>(view, QStringLiteral("stRow:%1").arg(KeyPosition)), 1) << mark(spread, 2);
+        if (strip != nullptr && strip->isVisible())
+            marks << mark(strip, 3);
+        if (plan != nullptr && plan->isVisible())
+            marks << mark(plan, 4, HelpShots::Above);
+        LESSON_STEP(ui(QStringLiteral("line-layer"), marks), "line shot");
+    }
+    const int ringWhite = channelValue(doc, "SR Truss Spot 1", "Circle Color");
+    const int wheelWhite = channelValue(doc, "SR Truss Spot 1", "Color wheel");
+    LESSON_STEP(view->selectNode(fan), "select the fan");
+    rig(QStringLiteral("rig-fan"));
+
+    // 1.0.8 Button: crossed and red, a 1 s fade.
+    LESSON_STEP(newCueNamed(view, "Button"), "new cue Button");
+    LESSON_STEP(st->cue(view->currentCueId())->number == "1.0.8", st->cue(view->currentCueId())->number);
+    const quint32 button = view->currentCueId();
+    qInfo().noquote() << "[2.5] button rows:" << view->cueLayerItems().join(" | ");
+    LESSON_STEP(clickCueRow(view, "⤳ Truss-Spots"), "click the grey layer");
+    qInfo().noquote() << "[2.5] grey Spread:" << rowText(view, KeySpread);
+    LESSON_STEP(rowMenu(view, KeySpread, "-5"), "Spread -5");
+    settle(200);
+    qInfo().noquote() << "[2.5] after -5: kind" << int(view->currentKind()) << "| Spread" << rowText(view, KeySpread)
+                      << "| hint" << hintOf(view)->text();
+    LESSON_STEP(view->selectNode(button), "select the button");
+    settle(50);
+    {
+        const QString said = dropPaletteOnRow(doc, view, "Truss-Spots", "Red");
+        qInfo().noquote() << "[2.5] Red:" << said << "| rows" << view->cueLayerItems().join(" | ");
+        LESSON_STEP(said.startsWith(QStringLiteral("Red → layer Truss-Spots in 1.0.8 Button")), said);
+    }
+    typeSeconds(view->m_cueFadeIn, "1");
+    settle(400);
+    const QString crossPans = pans();
+    qInfo().noquote() << "[2.5] crossed:" << crossPans << "| fade" << st->cue(button)->fadeIn;
+    for (Fixture *fx : doc->fixtures())
+        if (fx->name() == QLatin1String("SR Truss Spot 1") || fx->name() == QLatin1String("UST 1"))
+            qInfo().noquote() << "[2.5]" << fx->name() << "sends" << sends(doc, fx->name(), int(fx->channels())).toHex(' ');
+    LESSON_STEP(crossPans != fanPans, "the beams didn't move");
+    // Red on the spots: their colour wheel and ring each take the slot
+    // nearest; the beams mix it.
+    LESSON_STEP(waitUntil([doc, ringWhite, wheelWhite]() {
+                    return channelValue(doc, "SR Truss Spot 1", "Circle Color") != ringWhite
+                           && channelValue(doc, "SR Truss Spot 1", "Color wheel") != wheelWhite; }),
+                QStringLiteral("ring %1 wheel %2").arg(channelValue(doc, "SR Truss Spot 1", "Circle Color"))
+                    .arg(channelValue(doc, "SR Truss Spot 1", "Color wheel")));
+    qInfo() << "[2.5] ring white" << ringWhite << "red" << channelValue(doc, "SR Truss Spot 1", "Circle Color")
+            << "| wheel white" << wheelWhite << "red" << channelValue(doc, "SR Truss Spot 1", "Color wheel");
+    rig(QStringLiteral("rig-button"));
+    qInfo().noquote() << "[2.5] describe:" << describe(doc).join(" || ");
+    return true;
+}
+
+/* Lesson 2.6, busking with Hits: three hits ready for a vamp -- Red Stab
+   (TrussW-RGB Red, Full), Glow (Lanterns Amber, Full), Faces (AT-W-ALL
+   White, Full, aimed at Center); Make VC page; then, live, one fired from
+   its button over the running verse and let go again. */
+static bool lessonTwoSixByMouse(App *app, Doc *doc, ShowTreeView *view, const QString &shots = QString())
+{
+    ShowTreeController *st = doc->showTree();
+    for (QTreeWidgetItemIterator it(view->tree()); *it; ++it)
+        (*it)->setExpanded(true);
+    auto ui = [view, app, &shots](const QString &name, const QList<HelpShots::Callout> &marks) {
+        if (shots.isEmpty() || app == nullptr)
+            return true;
+        HelpShots::Frame f = showTreeFrame(app, view);
+        f.callouts = marks;
+        return shoot(f, shots, name);
+    };
+
+    struct Hit { QString name; QStringList layer; };
+    const QList<Hit> hits = {
+        { "Red Stab", { "TrussW-RGB", "Red", "Full" } },
+        { "Glow", { "Lanterns", "Amber", "Full" } },
+        { "Faces", { "AT-W-ALL", "White", "Full" } },
+    };
+    for (const Hit &h : hits)
+    {
+        // Right-click the production (or a hit) → + Hit.
+        QTreeWidgetItem *at = treeCue(view, "1.0.0");
+        for (QTreeWidgetItemIterator it(view->tree()); *it; ++it)
+            if ((*it)->text(0) == QStringLiteral("Spring Show"))
+                at = *it;
+        LESSON_STEP(treeMenu(view, at, { QStringLiteral("+ Hit") }), "+ Hit");
+        settle(100);
+        const Cue *c = st->cue(view->currentCueId());
+        qInfo().noquote() << "[2.6] new hit:" << (c ? c->name : QString("none")) << "| kind" << int(view->currentKind())
+                          << "| hint" << hintOf(view)->text();
+        QLineEdit *box = stFind<QLineEdit>(view, "stCueName");
+        LESSON_STEP(box != nullptr && box->isVisible(), "no Name box on the hit");
+        box->setText(h.name);
+        QTest::keyClick(box, Qt::Key_Return);
+        settle(100);
+        LESSON_STEP(st->cue(view->currentCueId())->name == h.name, st->cue(view->currentCueId())->name);
+        const QString said = dropGroupOnZone(doc, view, h.layer.at(0));
+        qInfo().noquote() << "[2.6]" << h.name << said;
+        LESSON_STEP(said == QStringLiteral("a new layer on %1 in %2").arg(h.layer.at(0), h.name), said);
+        for (int i = 1; i < 3; ++i)
+        {
+            const QString s2 = dropPaletteOnRow(doc, view, h.layer.at(0), h.layer.at(i));
+            LESSON_STEP(s2.startsWith(QStringLiteral("%1 → layer %2 in %3").arg(h.layer.at(i), h.layer.at(0), h.name)), s2);
+        }
+        if (h.name == QStringLiteral("Faces"))
+        {
+            const QString s3 = dropTargetOnRow(doc, view, "AT-W-ALL", "Center");
+            LESSON_STEP(s3.startsWith(QStringLiteral("Aim at Center → layer AT-W-ALL in Faces")), s3);
+        }
+    }
+    for (QTreeWidgetItemIterator it(view->tree()); *it; ++it)
+        (*it)->setExpanded(true);
+    {
+        QStringList rows;
+        for (QTreeWidgetItemIterator it(view->tree()); *it; ++it)
+            rows << (*it)->text(0);
+        qInfo().noquote() << "[2.6] tree:" << rows.join(" | ");
+    }
+    // Make VC page: right-click Hits.
+    QTreeWidgetItem *hitsRow = nullptr;
+    for (QTreeWidgetItemIterator it(view->tree()); *it; ++it)
+        if ((*it)->text(0).startsWith(QStringLiteral("Hits")))
+            hitsRow = *it;
+    LESSON_STEP(hitsRow != nullptr, "no Hits row");
+    LESSON_STEP(treeMenu(view, hitsRow, { QStringLiteral("Make VC page") }), "Make VC page");
+    settle(200);
+    qInfo().noquote() << "[2.6] after Make VC page:" << hintOf(view)->text();
+    VCFrame *frame = nullptr;
+    for (VCFrame *f : VirtualConsole::instance()->contents()->findChildren<VCFrame *>())
+        frame = f->caption().startsWith(QStringLiteral("Hits")) ? f : frame;
+    LESSON_STEP(frame != nullptr, "no Hits frame");
+    QMap<QString, VCButton *> buttons;
+    for (VCButton *b : frame->findChildren<VCButton *>())
+        buttons.insert(b->caption(), b);
+    qInfo().noquote() << "[2.6] frame" << frame->caption() << "buttons" << buttons.keys();
+    LESSON_STEP(buttons.keys() == QStringList({ "Faces", "Glow", "Red Stab" }), buttons.keys().join(", "));
+    // The hit's page says who fires it.
+    quint32 stab = ShowTree::invalidId();
+    for (const Production &p : st->productions())
+        for (const CueList &l : p.lists)
+            for (const Cue &c : l.cues)
+                if (c.name == QStringLiteral("Red Stab"))
+                    stab = c.id;
+    LESSON_STEP(view->selectNode(stab), "select Red Stab");
+    settle(100);
+    QLabel *fired = stFind<QLabel>(view, "stLookFiredBy");
+    qInfo().noquote() << "[2.6] Fired by:" << (fired ? fired->text() : QString("none"));
+    LESSON_STEP(fired != nullptr && fired->text().contains(QStringLiteral("Red Stab")), fired ? fired->text() : QString("none"));
+    if (!shots.isEmpty())
+    {
+        for (QTreeWidgetItemIterator it(view->tree()); *it; ++it)
+            (*it)->setExpanded(true);
+        layOutForShot(view);
+        QTreeWidget *t = view->tree();
+        // The song's list folded away, so the Hits section is on show.
+        for (QTreeWidgetItemIterator it(t); *it; ++it)
+            if ((*it)->text(0) == QStringLiteral("01-Everybody Scream"))
+                (*it)->setExpanded(false);
+        settle(50);
+        if (QScrollArea *page = qobject_cast<QScrollArea *>(view->m_cuePage))
+            page->ensureWidgetVisible(fired, 0, 40);
+        settle(50);
+        QTreeWidgetItem *stabRow = nullptr;
+        hitsRow = nullptr;      // the tree was made again since
+        for (QTreeWidgetItemIterator it(t); *it; ++it)
+        {
+            if ((*it)->text(0).startsWith(QStringLiteral("Red Stab")))
+                stabRow = *it;
+            if ((*it)->text(0).startsWith(QStringLiteral("Hits")))
+                hitsRow = *it;
+        }
+        LESSON_STEP(stabRow != nullptr && hitsRow != nullptr, "no Hits rows");
+        LESSON_STEP(ui(QStringLiteral("hits"), { markRect(t->viewport(), t->visualItemRect(hitsRow), app, 1),
+                                                 markRect(t->viewport(), t->visualItemRect(stabRow), app, 2),
+                                                 mark(fired, 3) }), "hits shot");
+    }
+    return true;
+}
+
+/* Lesson 2.7, sub-cues: stomps inside the chorus. 1.0.2 Chorus gets
+   sub-cues: 1.0.2.1 Chorus (as it is: it plays with GO), 1.0.2.2 Stomp
+   (Lanterns White, Full; Sub GO), 1.0.2.3 Stomp Out (Lanterns Out;
+   auto-follow after 0.5 s). */
+static bool lessonTwoSevenByMouse(Doc *doc, ShowTreeView *view, const QString &shots = QString())
+{
+    ShowTreeController *st = doc->showTree();
+    for (QTreeWidgetItemIterator it(view->tree()); *it; ++it)
+        (*it)->setExpanded(true);
+    App *app = qobject_cast<App *>(view->window());
+    auto ui = [view, app, &shots](const QString &name, const QList<HelpShots::Callout> &marks) {
+        if (shots.isEmpty() || app == nullptr)
+            return true;
+        HelpShots::Frame f = showTreeFrame(app, view);
+        f.callouts = marks;
+        return shoot(f, shots, name);
+    };
+    LESSON_STEP(view->selectNode(cueNumbered(doc, "1.0.2")), "select 1.0.2");
+    settle(50);
+    QLabel *subs = stFind<QLabel>(view, "stCueSubCues");
+    LESSON_STEP(subs != nullptr && subs->isVisible(), "no Sub-cues row");
+    qInfo().noquote() << "[2.7] Sub-cues row:" << subs->text();
+    emit subs->linkActivated(QStringLiteral("new"));
+    settle(100);
+    struct Sub { QString name; QString group, colour, level; bool follow; QString wait; };
+    const QList<Sub> plan = {
+        { "Chorus", QString(), QString(), QString(), false, QString() },
+        { "Stomp", "Lanterns", "White", "Full", false, QString() },
+        { "Stomp Out", "Lanterns", QString(), "Out", true, "0.5" },
+    };
+    for (int i = 0; i < plan.count(); ++i)
+    {
+        const Sub &sb = plan.at(i);
+        if (i > 0)
+        {
+            view->m_newSubCue->click();       // More ▾ → + Sub-cue
+            settle(100);
+        }
+        const quint32 id = view->currentCueId();
+        const CueList *sl = st->listOfCue(id);
+        const QString shown = sl == nullptr ? QString() : st->cueLabel(*sl, sl->indexOf(id));
+        qInfo().noquote() << "[2.7] new sub-cue" << shown << "| hint" << hintOf(view)->text();
+        LESSON_STEP(shown.startsWith(QStringLiteral("1.0.2.%1").arg(i + 1)), shown);
+        QLineEdit *box = stFind<QLineEdit>(view, "stCueName");
+        box->setText(sb.name);
+        QTest::keyClick(box, Qt::Key_Return);
+        settle(50);
+        const QString label = QStringLiteral("1.0.2.%1 %2").arg(i + 1).arg(sb.name);
+        if (!sb.group.isEmpty())
+        {
+            const QString said = dropGroupOnZone(doc, view, sb.group);
+            LESSON_STEP(said == QStringLiteral("a new layer on %1 in %2").arg(sb.group, label), said);
+            for (const QString &pal : { sb.colour, sb.level })
+                if (!pal.isEmpty())
+                {
+                    const QString s2 = dropPaletteOnRow(doc, view, sb.group, pal);
+                    LESSON_STEP(s2.startsWith(QStringLiteral("%1 → layer %2 in %3").arg(pal, sb.group, label)), s2);
+                }
+        }
+        QComboBox *adv = stFind<QComboBox>(view, "stSubCueAdvance");
+        LESSON_STEP(adv != nullptr && adv->isVisible(), "no Advance");
+        qInfo().noquote() << "[2.7]" << label << "advance" << adv->currentText();
+        if (sb.follow)
+        {
+            adv->setCurrentIndex(1);
+            emit adv->activated(1);
+            settle(50);
+            typeSeconds(view->m_cueWait, sb.wait);
+            LESSON_STEP(st->cue(view->currentCueId())->follow && st->cue(view->currentCueId())->wait == 500,
+                        "auto-follow 0.5");
+        }
+    }
+    for (QTreeWidgetItemIterator it(view->tree()); *it; ++it)
+        (*it)->setExpanded(true);
+    {
+        QStringList rows;
+        for (QTreeWidgetItemIterator it(view->tree()); *it; ++it)
+            if ((*it)->text(0).startsWith(QStringLiteral("1.0.2")))
+                rows << (*it)->text(0) + " / " + (*it)->text(ShowTreeView::InfoCol);
+        qInfo().noquote() << "[2.7] tree:" << rows.join(" | ");
+    }
+    if (!shots.isEmpty())
+    {
+        // Stomp Out's page: Advance, auto-follow after 0.5 s.
+        layOutForShot(view);
+        if (QScrollArea *page = qobject_cast<QScrollArea *>(view->m_cuePage))
+            page->ensureWidgetVisible(stFind<QComboBox>(view, "stSubCueAdvance"), 0, 80);
+        settle(50);
+        QTreeWidgetItem *row = nullptr;
+        for (QTreeWidgetItemIterator it(view->tree()); *it; ++it)
+            if ((*it)->text(0).contains(QStringLiteral("Stomp Out")))
+                row = *it;
+        QList<HelpShots::Callout> marks;
+        marks << mark(stFind<QComboBox>(view, "stSubCueAdvance"), 1) << mark(view->m_cueWait, 2);
+        if (row != nullptr)
+            marks << markRect(view->tree()->viewport(), view->tree()->visualItemRect(row), app, 3);
+        LESSON_STEP(ui(QStringLiteral("stomp-out"), marks), "stomp shot");
+    }
+    LESSON_STEP(view->selectNode(cueNumbered(doc, "1.0.2")), "select 1.0.2");
+    settle(50);
+    qInfo().noquote() << "[2.7] chorus Sub-cues:" << stFind<QLabel>(view, "stCueSubCues")->text();
+    if (!shots.isEmpty())
+    {
+        if (QScrollArea *page = qobject_cast<QScrollArea *>(view->m_cuePage))
+            page->ensureWidgetVisible(stFind<QLabel>(view, "stCueSubCues"), 0, 80);
+        settle(50);
+        LESSON_STEP(ui(QStringLiteral("chorus-subcues"), { mark(stFind<QLabel>(view, "stCueSubCues"), 1) }), "subs shot");
+    }
+    return true;
+}
+
 void CourseShow_Test::lessonTwoOneExtension()
 {
     // Lesson 2.1's extension: a base cue. The Pose gets the step tops at a
@@ -4272,6 +4671,216 @@ void CourseShow_Test::lessonTwoFourExtension()
     doc->resetModified();
 }
 
+void CourseShow_Test::lessonTwoFiveExtension()
+{
+    if (kLevelTwoLessons < 5)
+        QSKIP("not written yet");
+    // Lesson 2.5's extension: the fan's Spread 0 (every beam on the line's
+    // centre), then Grouping: Pairs.
+    QVERIFY(open(levelTwoFinish(5)));
+    Doc *doc = m_app->doc();
+    ShowTreeView *view = showTree();
+    QVERIFY(view->selectNode(cueNumbered(doc, "1.0.7")));
+    settle(50);
+    QVERIFY(clickCueRow(view, "Truss-Spots"));
+    const QPair<int, int> sr = panTilt(doc, "SR Truss Spot 1");
+    QVERIFY(rowMenu(view, KeySpread, "0"));
+    settle(300);
+    qInfo().noquote() << "[2.5x] Spread" << rowText(view, KeySpread) << "| SR" << panTilt(doc, "SR Truss Spot 1")
+                      << "SL" << panTilt(doc, "SL Truss Spot 1");
+    QVERIFY2(rowText(view, KeySpread).startsWith(QStringLiteral("0")), qPrintable(rowText(view, KeySpread)));
+    QTRY_VERIFY_WITH_TIMEOUT(panTilt(doc, "SR Truss Spot 1") != sr, kRigWait);
+    QVERIFY(rowMenu(view, KeyGrouping, "Pairs"));
+    settle(200);
+    qInfo().noquote() << "[2.5x] Grouping" << rowText(view, KeyGrouping);
+    QVERIFY2(rowText(view, KeyGrouping).startsWith(QStringLiteral("Pairs")), qPrintable(rowText(view, KeyGrouping)));
+    doc->resetModified();
+}
+
+void CourseShow_Test::lessonTwoSixFiresAHit()
+{
+    if (kLevelTwoLessons < 6)
+        QSKIP("not written yet");
+    // Lesson 2.6, live: Operate, GO to the verse in the Run tab, then the
+    // Virtual Console: Red Stab on over the running verse, and off again.
+    QVERIFY(open(levelTwoFinish(6)));
+    Doc *doc = m_app->doc();
+    const QString shots = qEnvironmentVariable("COURSE_SHOTS");
+    const QString dir = shots.isEmpty() ? QString() : shots + QStringLiteral("/lesson-2-6");
+    if (!dir.isEmpty())
+    {
+        m_app->setTheme(App::ThemeBlue);
+        m_app->resize(1280, 800);
+    }
+    CueRunner *run = runTab(m_app);
+    QVERIFY(run != nullptr);
+    m_app->m_modeToggleAction->trigger();
+    settle(100);
+    QCOMPARE(doc->mode(), Doc::Operate);
+    press(run, "crGo");
+    QTRY_VERIFY_WITH_TIMEOUT(run->nowText().contains("1.0.0"), kRigWait);
+    QTest::qWait(3300);
+    press(run, "crGo");
+    QTRY_VERIFY_WITH_TIMEOUT(run->nowText().contains("1.0.1"), kRigWait);
+    QTest::qWait(2300);
+    QCOMPARE(sends(doc, "SR Truss Wash 1"), QByteArray("\x00\x00\x00", 3));     // the verse has no washes
+    // The Virtual Console: the Hits frame.
+    VirtualConsole *vc = VirtualConsole::instance();
+    QWidget *w = vc;
+    while (w != nullptr && m_app->m_tab->indexOf(w) < 0)
+        w = w->parentWidget();
+    QVERIFY(w != nullptr);
+    m_app->m_tab->setCurrentWidget(w);
+    settle(200);
+    VCButton *stab = nullptr;
+    for (VCButton *b : vc->contents()->findChildren<VCButton *>())
+        if (b->caption() == QStringLiteral("Red Stab"))
+            stab = b;
+    QVERIFY(stab != nullptr);
+    QTest::mouseClick(stab, Qt::LeftButton);
+    QTRY_COMPARE_WITH_TIMEOUT(sends(doc, "SR Truss Wash 1"), QByteArray("\xff\x00\x00", 3), kRigWait);
+    qInfo().noquote() << "[2.6] Red Stab on; the run says" << run->nowText() << "| step tops"
+                      << sends(doc, "US Step 1 Top SR").toHex(' ');
+    // The verse goes on under it: its step tops still lit.
+    QVERIFY(sends(doc, "US Step 1 Top SR").count(char(0)) < 3);
+    if (!dir.isEmpty())
+    {
+        HelpShots::Frame f;
+        f.grab = m_app;
+        f.callouts << mark(stab, 1);
+        QVERIFY(save(HelpShots::annotate(m_app->grab().toImage(), f), dir, "vc-hits"));
+        rigShot(showTree(), ShowTree::invalidId(), dir + QStringLiteral("/rig-verse-stab.png"));
+        closeRig();
+        m_app->m_tab->setCurrentWidget(w);
+        settle(100);
+    }
+    QTest::mouseClick(stab, Qt::LeftButton);
+    QTRY_COMPARE_WITH_TIMEOUT(sends(doc, "SR Truss Wash 1"), QByteArray("\x00\x00\x00", 3), kRigWait);
+    run = runTab(m_app);
+    press(run, "crStop");
+    QTest::qWait(500);
+    m_app->m_modeToggleAction->trigger();
+    settle(100);
+    QCOMPARE(doc->mode(), Doc::Design);
+
+    // At home: a fourth hit from the Hits row's menu, and Make VC page
+    // again: a button for it, the three still there.
+    ShowTreeView *view = showTree();
+    for (QTreeWidgetItemIterator it(view->tree()); *it; ++it)
+        (*it)->setExpanded(true);
+    QTreeWidgetItem *hits = nullptr;
+    for (QTreeWidgetItemIterator it(view->tree()); *it; ++it)
+        if ((*it)->text(0).startsWith(QStringLiteral("Hits")))
+            hits = *it;
+    QVERIFY(treeMenu(view, hits, { QStringLiteral("+ Hit") }));
+    QLineEdit *box = stFind<QLineEdit>(view, "stCueName");
+    QVERIFY(box != nullptr && box->isVisible());
+    box->setText(QStringLiteral("Encore"));
+    QTest::keyClick(box, Qt::Key_Return);
+    settle(100);
+    QCOMPARE(dropGroupOnZone(doc, view, "Steps"), QStringLiteral("a new layer on Steps in Encore"));
+    hits = nullptr;
+    for (QTreeWidgetItemIterator it(view->tree()); *it; ++it)
+        if ((*it)->text(0).startsWith(QStringLiteral("Hits")))
+            hits = *it;
+    QVERIFY(treeMenu(view, hits, { QStringLiteral("Make VC page") }));
+    QStringList captions;
+    for (VCButton *b : vc->contents()->findChildren<VCButton *>())
+        captions << b->caption();
+    captions.sort();
+    QCOMPARE(captions, QStringList({ "Encore", "Faces", "Glow", "Red Stab" }));
+    doc->resetModified();
+}
+
+void CourseShow_Test::lessonTwoSevenPlaysTheStomps()
+{
+    if (kLevelTwoLessons < 7)
+        QSKIP("not written yet");
+    // Lesson 2.7, played: the chorus loaded and GO (1.0.2.1 plays with it);
+    // Sub GO: the stomp; half a second later Stomp Out by itself; GO: the
+    // flash, which doesn't get the lanterns (sub-cues are cue-only).
+    QVERIFY(open(levelTwoFinish(7)));
+    Doc *doc = m_app->doc();
+    const QString shots = qEnvironmentVariable("COURSE_SHOTS");
+    const QString dir = shots.isEmpty() ? QString() : shots + QStringLiteral("/lesson-2-7");
+    if (!dir.isEmpty())
+    {
+        m_app->setTheme(App::ThemeBlue);
+        m_app->resize(1280, 800);
+    }
+    CueRunner *run = runTab(m_app);
+    QVERIFY(run != nullptr);
+    QTreeWidgetItem *chorus = runRow(run, "1.0.2");
+    QVERIFY(chorus != nullptr);
+    QTest::mouseClick(run->cueTree()->viewport(), Qt::LeftButton, Qt::NoModifier,
+                      run->cueTree()->visualItemRect(chorus).center());
+    settle(100);
+    press(run, "crGo");
+    QTRY_VERIFY_WITH_TIMEOUT(run->nowText().contains("1.0.2"), kRigWait);
+    QTest::qWait(500);
+    qInfo().noquote() << "[2.7] after GO:" << run->nowText() << "| sub next" << run->findChild<QWidget *>("crSubNext")
+                      << "| lantern" << channelValue(doc, "Lantern 1", "Master Dimmer");
+    QCOMPARE(channelValue(doc, "Lantern 1", "Master Dimmer"), 0);
+    press(run, "crSubGo");
+    QTRY_COMPARE_WITH_TIMEOUT(channelValue(doc, "Lantern 1", "Master Dimmer"), 255, kRigWait);
+    waitUntil([run]() { return run->nowText().contains(QStringLiteral("Stomp")); }, 400);
+    qInfo().noquote() << "[2.7] after Sub GO:" << run->nowText();
+    if (!dir.isEmpty())
+    {
+        HelpShots::Frame f;
+        f.grab = m_app;
+        f.callouts << mark(run->findChild<QToolButton *>("crSubGo"), 1) << mark(run->findChild<QWidget *>("crNow"), 2)
+                   << mark(run->cueTree(), 3);
+        QVERIFY(save(HelpShots::annotate(m_app->grab().toImage(), f), dir, "run-subgo"));
+    }
+    // Stomp Out follows by itself.
+    QTRY_COMPARE_WITH_TIMEOUT(channelValue(doc, "Lantern 1", "Master Dimmer"), 0, kRigWait);
+    qInfo().noquote() << "[2.7] after the auto-follow:" << run->nowText();
+    press(run, "crGo");
+    QTRY_VERIFY_WITH_TIMEOUT(run->nowText().contains("1.0.2.5"), kRigWait);
+    QTest::qWait(300);
+    QCOMPARE(channelValue(doc, "Lantern 1", "Master Dimmer"), 0);
+    press(run, "crStop");
+    settle(300);
+    doc->resetModified();
+}
+
+void CourseShow_Test::lessonTwoSevenExtension()
+{
+    if (kLevelTwoLessons < 7)
+        QSKIP("not written yet");
+    // Lesson 2.7's extension: a fourth sub-cue after Stomp Out, Red, Full
+    // on Sub GO -- and the number it gets beside the main cue 1.0.2.5.
+    QVERIFY(open(levelTwoFinish(7)));
+    Doc *doc = m_app->doc();
+    ShowTreeController *st = doc->showTree();
+    ShowTreeView *view = showTree();
+    quint32 out = ShowTree::invalidId();
+    for (const Production &p : st->productions())
+        for (const CueList &l : p.lists)
+            for (const Cue &c : l.cues)
+                if (c.name == QStringLiteral("Stomp Out"))
+                    out = c.id;
+    QVERIFY(view->selectNode(out));
+    settle(50);
+    view->m_newSubCue->click();
+    settle(100);
+    const quint32 id = view->currentCueId();
+    const CueList *sl = st->listOfCue(id);
+    QVERIFY(sl != nullptr && sl->isSubCues());
+    const QString label = st->cueLabel(*sl, sl->indexOf(id));
+    qInfo().noquote() << "[2.7x] the fourth sub-cue:" << label;
+    QLineEdit *box = stFind<QLineEdit>(view, "stCueName");
+    box->setText(QStringLiteral("Stomp 2"));
+    QTest::keyClick(box, Qt::Key_Return);
+    settle(50);
+    QVERIFY(dropPaletteOnRow(doc, view, "⤳ Lanterns", "Red").startsWith(QStringLiteral("Red → layer Lanterns")));
+    QVERIFY(dropPaletteOnRow(doc, view, "Lanterns", "Full").startsWith(QStringLiteral("Full → layer Lanterns")));
+    QCOMPARE(stFind<QComboBox>(view, "stSubCueAdvance")->currentIndex(), 0);     // Sub GO
+    QVERIFY(label.startsWith(QStringLiteral("1.0.2.4")));
+    doc->resetModified();
+}
+
 void CourseShow_Test::levelTwoWithTheMouse()
 {
     struct L { int n; bool (*byMouse)(Doc *, ShowTreeView *, const QString &); };
@@ -4280,6 +4889,9 @@ void CourseShow_Test::levelTwoWithTheMouse()
         { 2, lessonTwoTwoByMouse },
         { 3, lessonTwoThreeByMouse },
         { 4, lessonTwoFourByMouse },
+        { 5, lessonTwoFiveByMouse },
+        { 6, [](Doc *d, ShowTreeView *v, const QString &sh) { return lessonTwoSixByMouse(qobject_cast<App *>(v->window()), d, v, sh); } },
+        { 7, lessonTwoSevenByMouse },
     };
     // Lesson 2.1 starts where Level 1 finished.
     QVERIFY(open(kL4Finish));
@@ -4310,6 +4922,9 @@ void CourseShow_Test::buildLevelTwoShows()
         { 2, lessonTwoTwoByMouse },
         { 3, lessonTwoThreeByMouse },
         { 4, lessonTwoFourByMouse },
+        { 5, lessonTwoFiveByMouse },
+        { 6, [](Doc *d, ShowTreeView *v, const QString &sh) { return lessonTwoSixByMouse(qobject_cast<App *>(v->window()), d, v, sh); } },
+        { 7, lessonTwoSevenByMouse },
     };
     const QString only = qEnvironmentVariable("COURSE_LESSON");
     for (const L &l : lessons)
@@ -4439,6 +5054,34 @@ void CourseShow_Test::levelTwoPictures()
         const QString d = root + QStringLiteral("/lesson-2-4");
         QVERIFY(open(levelTwoStart(4)));
         QVERIFY(lessonTwoFourByMouse(m_app->doc(), showTree(), d));
+        m_app->doc()->resetModified();
+    }
+
+    // --- 2.5
+    if (wanted(5))
+    {
+        const QString d = root + QStringLiteral("/lesson-2-5");
+        QVERIFY(open(levelTwoStart(5)));
+        QVERIFY(lessonTwoFiveByMouse(m_app->doc(), showTree(), d));
+        m_app->doc()->resetModified();
+    }
+
+    // --- 2.6 (the live part, the VC page and the stab on stage, is taken
+    //     by lessonTwoSixFiresAHit with the same COURSE_SHOTS)
+    if (wanted(6))
+    {
+        const QString d = root + QStringLiteral("/lesson-2-6");
+        QVERIFY(open(levelTwoStart(6)));
+        QVERIFY(lessonTwoSixByMouse(m_app, m_app->doc(), showTree(), d));
+        m_app->doc()->resetModified();
+    }
+
+    // --- 2.7 (the Run tab's Sub GO is taken by lessonTwoSevenPlaysTheStomps)
+    if (wanted(7))
+    {
+        const QString d = root + QStringLiteral("/lesson-2-7");
+        QVERIFY(open(levelTwoStart(7)));
+        QVERIFY(lessonTwoSevenByMouse(m_app->doc(), showTree(), d));
         m_app->doc()->resetModified();
     }
 }

@@ -270,7 +270,7 @@ skipped). Upstream fixes taken:
   light and dark, no JavaScript) and are left out of the course site's
   menu and search. Each teacher guide starts with its link and a QR code;
   `docs/course/tools/student-pages.py` checks the pages.
-- **Course: Level 2, a lesson at a time** (`/class/2-1/` to `/class/2-4/`):
+- **Course: Level 2, a lesson at a time** (`/class/2-1/` to `/class/2-7/`, `/class/2-check/`):
   **2.1 Tracking and Block**: what tracks into a cue (S / T / R / M,
   *Tracked in*, *Next cue receives*), **Release** on the verse's step
   tops, a **Cue-only** flash, the Solo as the **Block** hard start, the
@@ -279,7 +279,12 @@ skipped). Upstream fixes taken:
   with one change. **2.3 Parts of a group**: the bridge as a call and
   response: a group set, child layers (right-click and ⇧-drop), Split and
   Merge. **2.4 Effects**: effect palettes of the song's own (the effect
-  picker), a sparkle with its own colour, a wave, a speed master. Each
+  picker), a sparkle with its own colour, a wave, a speed master. **2.5
+  Moving lights and lines**: a fan on a line target, crossed (Spread −5)
+  for the button, colour wheels and rings. **2.6 Busking with Hits**:
+  three hits, Make VC page, one fired live over the running verse. **2.7
+  Sub-cues**: stomps inside the chorus on Sub GO and auto-follow; then
+  the Level 2 check, one full song from a cue sheet. Each
   lesson's start and finish shows, pictures and
   every step are made and checked by
   `courseshow_test` (`levelTwoWithTheMouse`, `buildLevelTwoShows`,
