@@ -8,6 +8,11 @@ under `~/.claude/.../memory/`.
 
 ---
 
+## Show Tree tidy — leftovers (2026-10-29, DONE.md)
+
+- The command line's `release` takes groups only; a ▣ (function) layer
+  is released from its page or the right-click menus.
+
 ## Live and blind — leftovers (docs/design/LIVE_BLIND.md, 2026-10-29)
 
 Built (DONE.md 2026-10-29). Open, each "decided (can change)" in the note:

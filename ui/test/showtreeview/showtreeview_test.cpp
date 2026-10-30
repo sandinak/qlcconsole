@@ -230,7 +230,7 @@ void ShowTreeView_Test::theTreeShowsProductionsListsCuesAndLayers()
     // list, and neither "current" nor "main" is shown -- nothing to choose.
     QCOMPARE(st->currentProduction(), prod);
     QCOMPARE(text, QStringList({ QString::fromUtf8("DanceHysteria"),
-                                 QString::fromUtf8("  01-Everybody Scream [Non-tracking]"),
+                                 QString::fromUtf8("  01-Everybody Scream [M B]"),
                                  "    1.0.0 PreCurtain", "      Towers" }));
     auto switcherShown = [&view]() {
         QComboBox *combo = view.findChild<QComboBox *>("stProduction");
@@ -244,7 +244,7 @@ void ShowTreeView_Test::theTreeShowsProductionsListsCuesAndLayers()
     const quint32 prod2 = st->addProduction("Spring");
     st->addCueList(prod2, "Opener", ListMode::Tracking);
     QVERIFY(treeText(view.tree()).contains(QString::fromUtf8("DanceHysteria [\u25B6 current]")));
-    QVERIFY(treeText(view.tree()).contains(QString::fromUtf8("  01-Everybody Scream [Non-tracking \u00B7 main]")));
+    QVERIFY(treeText(view.tree()).contains(QString::fromUtf8("  01-Everybody Scream [main, M B]")));
     QVERIFY(switcherShown());
     QVERIFY(st->removeProduction(prod2));
     QVERIFY(!switcherShown());
@@ -1608,7 +1608,7 @@ void ShowTreeView_Test::trackingControlsOnTheListAndCuePages()
     emit mode->activated(1);
     QCOMPARE(st->cueList(list)->mode, ListMode::Tracking);
     QVERIFY(trackedRow(view.tree(), c2, "Towers") != nullptr);
-    QVERIFY(treeText(view.tree()).contains(QString::fromUtf8("  L [Tracking]")));   // one production (Q75)
+    QVERIFY(treeText(view.tree()).contains(QString::fromUtf8("  L [M \u21e2]")));   // one production (Q75)
 
     // The base from the list page...
     base->setCurrentIndex(1);
@@ -2370,7 +2370,7 @@ void ShowTreeView_Test::pictureOfTrackingInTheTree()
             QVERIFY(st->setLayerRelease(r.first, r.second, false));
     }
     QSettings().remove(QStringLiteral("showtree/splitter2"));
-    QSettings().remove(QStringLiteral("showtree/badgeColumn"));
+    QSettings().remove(QStringLiteral("showtree/badgeColumn2"));
     ShowTreeView view(nullptr, m_doc);
     view.resize(1280, 760);
     view.show();
@@ -5331,7 +5331,7 @@ void ShowTreeView_Test::trackingIsABadgeWithDetailsOnHover()
     QVERIFY(st->setCueMode(c3, CueMode::Block));
 
     QSettings().remove("showtree/splitter2");
-    QSettings().remove("showtree/badgeColumn");
+    QSettings().remove("showtree/badgeColumn2");
     ShowTreeView view(nullptr, m_doc);
     view.resize(1280, 500);
     view.show();
@@ -5417,7 +5417,7 @@ void ShowTreeView_Test::trackingIsABadgeWithDetailsOnHover()
 void ShowTreeView_Test::theTreeColumnsResizeAndAreRemembered()
 {
     QSettings settings;
-    settings.remove("showtree/badgeColumn");
+    settings.remove("showtree/badgeColumn2");
     ShowTreeController *st = m_doc->showTree();
     st->addCue(st->addCueList(st->addProduction("P"), "L", ListMode::Tracking), -1, "One");
     {
@@ -5440,7 +5440,7 @@ void ShowTreeView_Test::theTreeColumnsResizeAndAreRemembered()
         const int room = view.tree()->viewport()->width();
         header->resizeSection(0, room - flags - 70);
         QCOMPARE(view.badgeColumnWidth(), 70);
-        QCOMPARE(settings.value("showtree/badgeColumn").toInt(), 70);
+        QCOMPARE(settings.value("showtree/badgeColumn2").toInt(), 70);
         QCOMPARE(header->sectionSize(1), 70);
 
         // A wider pane: the names take it, the badges keep their width.
@@ -5464,18 +5464,52 @@ void ShowTreeView_Test::theTreeColumnsResizeAndAreRemembered()
     QCOMPARE(again.badgeColumnWidth(), 70);
     QCOMPARE(again.tree()->header()->sectionSize(1), 70);
     again.hide();
-    settings.remove("showtree/badgeColumn");
+    settings.remove("showtree/badgeColumn2");
 }
 
 /****************************************************************************
  * Skipped cues (2026-10-21)
  ****************************************************************************/
 
+/* Right-click @a row (selected as a click would leave it) and trigger the
+   action named @a name, in a submenu too. Its text then ("" not offered);
+   @a enabled / @a checked as it was offered. */
+static QString contextAction(ShowTreeView &view, QTreeWidgetItem *row, const QString &name,
+                             bool *checked = nullptr, bool *enabled = nullptr)
+{
+    QString seen;
+    ModalCloser closer([&](QWidget *w) {
+        QMenu *m = qobject_cast<QMenu *>(w);
+        if (m == nullptr)
+            return false;
+        for (QAction *act : m->findChildren<QAction *>())
+            if (act->objectName() == name)
+            {
+                seen = act->text();
+                if (checked != nullptr)
+                    *checked = act->isChecked();
+                if (enabled != nullptr)
+                    *enabled = act->isEnabled();
+                m->close();
+                if (act->isEnabled())
+                    act->trigger();
+                return true;
+            }
+        m->close();
+        return true;
+    });
+    QTreeWidget *tree = view.tree();
+    QMetaObject::invokeMethod(&view, "slotTreeContextMenu", Q_ARG(QPoint, tree->visualItemRect(row).center()));
+    return seen;
+}
+
 /* Branson: "in the show-tree we need a way to disable cues inline and skip
-   them". The tick on a cue row, the menu's Skip cue / Unskip cue, ⌘/, the
-   cue page's Skip and the command line -- each one undo step, on every
-   selected cue; a skipped cue greyed and struck through, its layers greyed,
-   ⦸ in the badges, and what the next cue receives said past it. */
+   them" -- then (2026-10-29) "skipping cues should be a right click menu off
+   of a selected cue or set of cues ... the checkbox is overmuch". The menu's
+   Skip cue / Unskip cue, ⌘/, the cue page's Skip and the command line --
+   each one undo step, on every selected cue; a skipped cue greyed, struck
+   through and marked, its layers greyed, and what the next cue receives
+   said past it. No tick on the rows. */
 void ShowTreeView_Test::skipCuesInTheTree()
 {
     FixtureGroup *towers = group("Towers", 0, 2);
@@ -5498,25 +5532,28 @@ void ShowTreeView_Test::skipCuesInTheTree()
     QVERIFY(QTest::qWaitForWindowExposed(&view));
     QTreeWidget *tree = view.tree();
     tree->expandAll();
-    // Every cue row has the tick, ticked: it plays.
+    // No cue row has a tick, and none is marked.
     for (quint32 id : c)
     {
         QTreeWidgetItem *row = cueRow(tree, id);
         QVERIFY(row != nullptr);
-        QVERIFY(row->flags() & Qt::ItemIsUserCheckable);
-        QVERIFY(row->data(0, Qt::CheckStateRole).isValid());
-        QCOMPARE(row->checkState(0), Qt::Checked);
+        QVERIFY(!row->data(0, Qt::CheckStateRole).isValid());
+        QVERIFY(row->icon(0).isNull());
     }
 
-    // Unticked inline: skipped, one undo step.
-    cueRow(tree, c[1])->setCheckState(0, Qt::Unchecked);
-    QTRY_VERIFY(st->isCueSkipped(c[1]));
+    // Right-click ▸ Skip cue: skipped, one undo step.
+    QVERIFY(view.selectNode(c[1]));
+    QCOMPARE(contextAction(view, cueRow(tree, c[1]), "stSkipCue"), QString("Skip cue"));
+    QVERIFY(st->isCueSkipped(c[1]));
     QCOMPARE(st->undoText(), QString("Skip cue"));
     tree->expandAll();
     QTreeWidgetItem *row = cueRow(tree, c[1]);
-    QCOMPARE(row->checkState(0), Qt::Unchecked);
+    QVERIFY(!row->data(0, Qt::CheckStateRole).isValid());
+    QVERIFY(!row->icon(0).isNull());                    // the skip mark
+    QVERIFY(cueRow(tree, c[0])->icon(0).isNull());
     QVERIFY(row->text(ShowTreeView::FlagsCol).startsWith("skip"));
     QVERIFY(row->font(0).strikeOut());
+    QVERIFY(row->toolTip(0).contains("Right-click"));
     const QColor skipGrey = row->foreground(0).color();
     QVERIFY(skipGrey != tree->palette().color(QPalette::Text));
     QVERIFY(row->toolTip(0).startsWith("Skipped: GO passes over it"));
@@ -5537,13 +5574,27 @@ void ShowTreeView_Test::skipCuesInTheTree()
     tree->expandAll();
     QVERIFY(trackedRow(tree, c[2], "USTs") != nullptr);
 
-    // Several selected, one unticked: all of them, one step.
+    // Several selected, the menu on one of them: all of them, one step.
     tree->clearSelection();
     cueRow(tree, c[1])->setSelected(true);
     cueRow(tree, c[2])->setSelected(true);
-    cueRow(tree, c[2])->setCheckState(0, Qt::Unchecked);
-    QTRY_VERIFY(st->isCueSkipped(c[1]) && st->isCueSkipped(c[2]));
+    QCOMPARE(contextAction(view, cueRow(tree, c[2]), "stSkipCue"), QString("Skip cue (2 cues)"));
+    QVERIFY(st->isCueSkipped(c[1]) && st->isCueSkipped(c[2]));
     QCOMPARE(st->undoText(), QString("Skip 2 cues"));
+    // Every one skipped: the menu puts them back, one step.
+    tree->clearSelection();
+    cueRow(tree, c[1])->setSelected(true);
+    cueRow(tree, c[2])->setSelected(true);
+    QCOMPARE(contextAction(view, cueRow(tree, c[1]), "stSkipCue"), QString("Unskip cue (2 cues)"));
+    QVERIFY(!st->isCueSkipped(c[1]) && !st->isCueSkipped(c[2]));
+    QCOMPARE(st->undoText(), QString("Unskip 2 cues"));
+    // One of them skipped: Skip (as ⌘/ does).
+    QVERIFY(st->setCuesSkipped({ c[1] }, true));
+    tree->clearSelection();
+    cueRow(tree, c[1])->setSelected(true);
+    cueRow(tree, c[2])->setSelected(true);
+    QCOMPARE(contextAction(view, cueRow(tree, c[1]), "stSkipCue"), QString("Skip cue (2 cues)"));
+    QVERIFY(st->isCueSkipped(c[1]) && st->isCueSkipped(c[2]));
 
     // ⌘/ on the selection: every one skipped already -- put back.
     tree->setFocus();
@@ -5572,23 +5623,9 @@ void ShowTreeView_Test::skipCuesInTheTree()
     // Right-click: Skip cue, then Unskip cue.
     for (const bool skipped : { false, true })
     {
-        QString seen;
-        ModalCloser closer([&](QWidget *w) {
-            if (QMenu *m = qobject_cast<QMenu *>(w))
-                for (QAction *act : m->actions())
-                    if (act->objectName() == QLatin1String("stSkipCue"))
-                    {
-                        seen = act->text();
-                        m->close();
-                        act->trigger();
-                        return true;
-                    }
-            return false;
-        });
         QVERIFY(view.selectNode(c[2]));
-        QTreeWidgetItem *r = cueRow(tree, c[2]);
-        QMetaObject::invokeMethod(&view, "slotTreeContextMenu", Q_ARG(QPoint, tree->visualItemRect(r).center()));
-        QCOMPARE(seen, skipped ? QString("Unskip cue") : QString("Skip cue"));
+        QCOMPARE(contextAction(view, cueRow(tree, c[2]), "stSkipCue"),
+                 skipped ? QString("Unskip cue") : QString("Skip cue"));
         QCOMPARE(st->isCueSkipped(c[2]), !skipped);
     }
 
@@ -5623,6 +5660,236 @@ void ShowTreeView_Test::skipCuesInTheTree()
     QTreeWidgetItem *lookRow = cueRow(tree, look);
     QVERIFY(lookRow != nullptr);
     QVERIFY(!lookRow->data(0, Qt::CheckStateRole).isValid());
+    view.hide();
+}
+
+/* Branson, 2026-10-29: "the second column in show tree says Tracking; it
+   could be a flagged column to save space". A list's mode is a flag in M
+   (⇢ tracking, B non-tracking) with its words on hover; the info column
+   keeps only what it has to say (main, MIB). */
+void ShowTreeView_Test::listModeIsAFlag()
+{
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("P");
+    const quint32 tracking = st->addCueList(prod, "T", ListMode::Tracking);
+    const quint32 plain = st->addCueList(prod, "N", ListMode::NonTracking);
+    st->addCue(tracking, -1, "One");
+    st->addCue(plain, -1, "One");
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1000, 500);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QTreeWidget *tree = view.tree();
+    QTreeWidgetItem *t = rowOf(tree, ShowTreeView::ListNode, tracking);
+    QTreeWidgetItem *n = rowOf(tree, ShowTreeView::ListNode, plain);
+    QVERIFY(t != nullptr && n != nullptr);
+    QCOMPARE(t->text(ShowTreeView::ModeCol), QString::fromUtf8("⇢"));
+    QCOMPARE(n->text(ShowTreeView::ModeCol), QString("B"));
+    for (QTreeWidgetItem *row : { t, n })
+        QVERIFY2(!row->text(ShowTreeView::InfoCol).contains("racking"), qPrintable(row->text(ShowTreeView::InfoCol)));
+    QVERIFY(t->toolTip(ShowTreeView::ModeCol).startsWith("Tracking list"));
+    QVERIFY(n->toolTip(ShowTreeView::ModeCol).startsWith("Non-tracking list"));
+    // Said on the name too: the M column can be hidden.
+    QVERIFY(t->toolTip(0).startsWith("Tracking list"));
+    QVERIFY(tree->headerItem()->toolTip(ShowTreeView::ModeCol).contains("A list:"));
+    // Two lists: "main" says which one GO plays, short.
+    QCOMPARE(t->text(ShowTreeView::InfoCol), QString("main"));
+    QVERIFY(n->text(ShowTreeView::InfoCol).isEmpty());
+    // Its mode changed: the flag with it.
+    QVERIFY(st->setListMode(plain, ListMode::Tracking));
+    QCOMPARE(rowOf(tree, ShowTreeView::ListNode, plain)->text(ShowTreeView::ModeCol), QString::fromUtf8("⇢"));
+    // The info column starts narrower than "Tracking · main" was.
+    QVERIFY(tree->columnWidth(ShowTreeView::InfoCol)
+            < tree->fontMetrics().horizontalAdvance(QString::fromUtf8("Tracking · main  ▸ MIB")));
+    view.hide();
+}
+
+/* Branson, 2026-10-29: "how do I release a scene on a cue, I don't seem to
+   be able to make it non tracking". A layer that plays a scene as it is (▣,
+   + Scene) releases as any other: the page's Release, the tree's and the
+   Workbench's layer menus, on its own layer or the one carried in -- and
+   the cue after plays without it. */
+void ShowTreeView_Test::releaseAFunctionLayer()
+{
+    Scene *fn = new Scene(m_doc);
+    fn->setName("Haze look");
+    m_doc->addFunction(fn);
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L", ListMode::Tracking);
+    const quint32 c1 = st->addCue(list, -1, "One");
+    const quint32 c2 = st->addCue(list, 0, "Two");
+    const quint32 c3 = st->addCue(list, 1, "Three");
+    Target ft;
+    ft.function = fn->id();
+    const quint32 l1 = st->addLayer(c1, ft);
+    QVERIFY(l1 != invalidId());
+    st->clearUndo();
+    auto plays = [&](quint32 cue) {
+        const Collection *coll = qobject_cast<const Collection *>(m_doc->function(st->cue(cue)->collection));
+        return coll != nullptr && coll->functions().contains(fn->id());
+    };
+    auto onStage = [&](int at) {
+        return resolve(*st->cueList(list)).at(at).layer(ft) != nullptr;
+    };
+    QVERIFY(onStage(0) && onStage(1) && onStage(2));
+    QVERIFY(plays(c1) && plays(c2) && plays(c3));
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1280, 700);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QTreeWidget *tree = view.tree();
+    tree->expandAll();
+
+    // Its own layer: the page's Release is there, and works.
+    QVERIFY(view.selectNode(l1, c1));
+    QCheckBox *release = view.findChild<QCheckBox *>("stLayerRelease");
+    QVERIFY(release != nullptr);
+    QVERIFY(release->isVisibleTo(&view));
+    release->setChecked(true);
+    QVERIFY(st->cue(c1)->layer(l1)->release);
+    QCOMPARE(st->undoText(), QString("Release layer"));
+    QVERIFY(onStage(0) && !onStage(1) && !onStage(2));
+    QVERIFY(plays(c1) && !plays(c2) && !plays(c3));
+    QVERIFY(st->undo());
+    QVERIFY(onStage(2));
+
+    // The tree's menu on the carried-in row in 2: 2 is the last cue it plays.
+    tree->expandAll();
+    QTreeWidgetItem *carried = rowOf(tree, ShowTreeView::TrackedLayerNode, l1, c2);
+    QVERIFY(carried != nullptr);
+    bool checked = true;
+    QCOMPARE(contextAction(view, carried, "stLayerReleaseMenu", &checked), QString("Release (leaving this cue)"));
+    QVERIFY(!checked);
+    QCOMPARE(st->cue(c2)->layers.count(), 1);
+    QVERIFY(st->cue(c2)->layers.first().release);
+    QVERIFY(st->cue(c2)->layers.first().target.isOpaque());
+    QVERIFY(onStage(1) && !onStage(2));
+    QVERIFY(plays(c2) && !plays(c3));
+    QCOMPARE(view.currentKind(), ShowTreeView::LayerNode);   // the new own layer, selected
+    // ... and off again, from its own row's menu.
+    tree->expandAll();
+    const quint32 l2 = st->cue(c2)->layers.first().id;
+    QCOMPARE(contextAction(view, rowOf(tree, ShowTreeView::LayerNode, l2, c2), "stLayerReleaseMenu", &checked),
+             QString("Release (leaving this cue)"));
+    QVERIFY(checked);
+    QVERIFY(!st->cue(c2)->layer(l2)->release);
+    QVERIFY(onStage(2));
+    // Both undone: 2 holds nothing of its own again.
+    QVERIFY(st->undo());
+    QVERIFY(st->undo());
+    QVERIFY(st->cue(c2)->layers.isEmpty());
+
+    // The Workbench's layer menu (the cue's stack): Release on the ▣ row.
+    {
+        TreeCueStack stack(m_doc, &view, c1);
+        int at = -1;
+        const QList<WorkbenchStack::Layer> ls = stack.layers();
+        for (int i = 0; i < ls.size(); ++i)
+            if (ls.at(i).layerId == l1)
+                at = i;
+        QVERIFY(at >= 0);
+        QString seen;
+        ModalCloser closer([&](QWidget *w) {
+            QMenu *m = qobject_cast<QMenu *>(w);
+            if (m == nullptr)
+                return false;
+            QAction *a = m->findChild<QAction *>("cueStackRelease");
+            seen = a != nullptr ? a->text() : QString("(none)");
+            m->close();
+            if (a != nullptr)
+                a->trigger();
+            return true;
+        });
+        QVERIFY(stack.showMenu(at, -1, QPoint(10, 10)));
+        QCOMPARE(seen, QString("Release (leaving this cue)"));
+        QVERIFY(st->cue(c1)->layer(l1)->release);
+        QVERIFY(!onStage(1));
+    }
+    view.hide();
+}
+
+/* The same ask: a cue's Mode (Track / Block / Cue-only) from the tree's cue
+   menu, on the selected cues in one step, and from the Workbench's layer
+   menu -- on a cue whose layer plays a scene as it is. */
+void ShowTreeView_Test::cueModeFromTheMenus()
+{
+    Scene *fn = new Scene(m_doc);
+    fn->setName("Haze look");
+    m_doc->addFunction(fn);
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L", ListMode::Tracking);
+    const quint32 c1 = st->addCue(list, -1, "One");
+    const quint32 c2 = st->addCue(list, 0, "Two");
+    const quint32 c3 = st->addCue(list, 1, "Three");
+    Target ft;
+    ft.function = fn->id();
+    const quint32 l1 = st->addLayer(c1, ft);
+    st->clearUndo();
+    auto onStage = [&](int at) {
+        return resolve(*st->cueList(list)).at(at).layer(ft) != nullptr;
+    };
+    QVERIFY(onStage(1) && onStage(2));
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1280, 700);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QTreeWidget *tree = view.tree();
+    tree->expandAll();
+
+    // Cue-only on 1: the scene plays in 1 and goes with it.
+    QVERIFY(view.selectNode(c1));
+    QCOMPARE(contextAction(view, rowOf(tree, ShowTreeView::CueNode, c1), "stCueMode3"), QString("Cue-only"));
+    QCOMPARE(st->cue(c1)->mode, CueMode::CueOnly);
+    QVERIFY(onStage(0) && !onStage(1) && !onStage(2));
+    QCOMPARE(rowOf(tree, ShowTreeView::CueNode, c1)->text(ShowTreeView::ModeCol), QString("C"));
+    bool checked = false;
+    QCOMPARE(contextAction(view, rowOf(tree, ShowTreeView::CueNode, c1), "stCueMode3", &checked), QString("Cue-only"));
+    QVERIFY(checked);
+    QVERIFY(st->undo());
+    QVERIFY(onStage(2));
+
+    // Block on 2 and 3 together: one step; neither starts from 1.
+    tree->clearSelection();
+    rowOf(tree, ShowTreeView::CueNode, c2)->setSelected(true);
+    rowOf(tree, ShowTreeView::CueNode, c3)->setSelected(true);
+    QCOMPARE(contextAction(view, rowOf(tree, ShowTreeView::CueNode, c3), "stCueMode2"), QString("Block"));
+    QCOMPARE(st->cue(c2)->mode, CueMode::Block);
+    QCOMPARE(st->cue(c3)->mode, CueMode::Block);
+    QCOMPARE(st->undoText(), QString("Cue mode (2 cues)"));
+    QVERIFY(onStage(0) && !onStage(1) && !onStage(2));
+    QVERIFY(st->undo());
+    QCOMPARE(st->cue(c2)->mode, CueMode::ListDefault);
+    QCOMPARE(st->cue(c3)->mode, CueMode::ListDefault);
+
+    // The Workbench's layer menu: Cue mode ▸ Cue-only, for its cue.
+    {
+        TreeCueStack stack(m_doc, &view, c1);
+        int at = -1;
+        const QList<WorkbenchStack::Layer> ls = stack.layers();
+        for (int i = 0; i < ls.size(); ++i)
+            if (ls.at(i).layerId == l1)
+                at = i;
+        QVERIFY(at >= 0);
+        bool offered = false;
+        ModalCloser closer([&](QWidget *w) {
+            QMenu *m = qobject_cast<QMenu *>(w);
+            if (m == nullptr)
+                return false;
+            offered = m->findChild<QMenu *>("cueStackMode") != nullptr;
+            QAction *a = m->findChild<QAction *>("stCueMode3");
+            m->close();
+            if (a != nullptr)
+                a->trigger();
+            return true;
+        });
+        QVERIFY(stack.showMenu(at, -1, QPoint(10, 10)));
+        QVERIFY(offered);
+        QCOMPARE(st->cue(c1)->mode, CueMode::CueOnly);
+        QVERIFY(!onStage(1));
+    }
     view.hide();
 }
 
@@ -5680,7 +5947,7 @@ void ShowTreeView_Test::pictureOfSkippedCues()
     list = st->cueList(listId);
 
     QSettings().remove(QStringLiteral("showtree/splitter2"));
-    QSettings().remove(QStringLiteral("showtree/badgeColumn"));
+    QSettings().remove(QStringLiteral("showtree/badgeColumn2"));
     ShowTreeView view(nullptr, m_doc);
     view.resize(1280, 760);
     view.show();
@@ -7535,9 +7802,10 @@ void ShowTreeView_Test::theHeaderFoldsUnderMore()
 }
 
 /* Q93: a cue's right-click keeps what acts on a selection. Duplicate (⌘D)
-   is there once, not also "Duplicate cue"; the base cue, Mode and Include
-   cue are on the cue's page; + Production only on a production or empty
-   space. */
+   is there once, not also "Duplicate cue"; the base cue and Include cue
+   are on the cue's page; Mode is one submenu (Branson, 2026-10-29: "I
+   don't seem to be able to make it non tracking"); + Production only on
+   a production or empty space. */
 void ShowTreeView_Test::aCuesRightClickIsShort()
 {
     ShowTreeController *st = m_doc->showTree();
@@ -7573,8 +7841,9 @@ void ShowTreeView_Test::aCuesRightClickIsShort()
     const QStringList cue = menuOn(tree->visualItemRect(cueRow(tree, c1)).center());
     QVERIFY2(!cue.isEmpty(), "no menu on a cue");
     QVERIFY2(cue.contains("Duplicate"), qPrintable(cue.join(" | ")));
-    for (const char *gone : { "Duplicate cue", "Make the base cue", "Not the base cue", "Mode",
-                              "Include cue", "+ Production…" })
+    QVERIFY2(cue.contains("Mode"), qPrintable(cue.join(" | ")));
+    for (const char *gone : { "Duplicate cue", "Make the base cue", "Not the base cue",
+                              "Include cue", "Track", "Block", "Cue-only", "+ Production…" })
         QVERIFY2(!cue.contains(QString::fromUtf8(gone)), gone);
 
     // Empty space: + Production.

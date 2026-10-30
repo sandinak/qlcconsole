@@ -62,6 +62,7 @@
 #include <QCursor>
 #include <QDrag>
 #include <QPainter>
+#include <QStyle>
 #include <algorithm>
 
 #include "mainbar.h"
@@ -133,7 +134,8 @@ static bool splitterStateUsable(const QByteArray &state, int panes, int mustShow
         return false;
     return mustShow < 0 || mustShow >= sizes.size() || sizes.at(mustShow) > 0;
 }
-#define SETTINGS_BADGE_COLUMN QStringLiteral("showtree/badgeColumn")
+// "2": the list's mode left this column for M (2026-10-29), so it starts narrower.
+#define SETTINGS_BADGE_COLUMN QStringLiteral("showtree/badgeColumn2")
 #define SETTINGS_EDITOR_SPLITTER QStringLiteral("showtree/editorSplitter")
 
 static const int kRecentMax = 10;
@@ -1229,22 +1231,6 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
     }
     // In-place rename (Return / F2): committed, or Esc and back as it was.
     connect(m_tree, &QTreeWidget::itemChanged, this, &ShowTreeView::slotTreeItemRenamed);
-    // A cue row's tick: unticked, the cue is skipped (GO passes over it).
-    // On a selected row it acts on every selected cue. After the click is
-    // done with the row: the edit rebuilds the tree.
-    connect(m_tree, &QTreeWidget::itemChanged, this, [this](QTreeWidgetItem *item, int column) {
-        if (m_reloading || m_renaming || column != 0 || item == nullptr
-            || item->data(0, KindRole).toInt() != CueNode || !item->data(0, Qt::CheckStateRole).isValid())
-            return;
-        const quint32 cueId = item->data(0, IdRole).toUInt();
-        const bool skip = item->checkState(0) == Qt::Unchecked;
-        if (skip == m_st->isCueSkipped(cueId))
-            return;
-        QList<quint32> cues = item->isSelected() ? selectedCues() : QList<quint32>();
-        if (!cues.contains(cueId))
-            cues = { cueId };
-        QTimer::singleShot(0, this, [this, cues, skip]() { setCuesSkipped(cues, skip); });
-    });
     connect(m_tree->itemDelegate(), &QAbstractItemDelegate::closeEditor, this, [this]() {
         if (!m_renaming)
             return;
@@ -1265,8 +1251,8 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
             tr("T \u2014 Tracks in. A cue: how many layers track into it from earlier cues. A carried "
                "layer: \u25cf."),
             tr("R \u2014 Releases. A cue: how many layers it lets go. A layer: \u25cf it is released here."),
-            tr("M \u2014 Mode. B: Block (starts from nothing). C: Cue-only (its changes don't pass on). "
-               "Blank: it tracks."),
+            tr("M \u2014 Mode. A cue: B Block (starts from nothing), C Cue-only (its changes don't pass "
+               "on), blank: it tracks. A list: \u21e2 tracking, B non-tracking. Right-click a cue: Mode."),
             tr("F \u2014 Flags. base: the list's base cue. skip: GO passes over it. no MIB: no move in "
                "black into it. focus: a venue focus cue (GO arms Venue focus). \u2295 includes, "
                "\u00d7 reusable uses, mix, VC buttons that fire it.") };
@@ -1312,7 +1298,7 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
     m_tree->header()->setSectionResizeMode(QHeaderView::Interactive);
     m_tree->header()->setMinimumSectionSize(24);
     m_badgeWidth = QSettings().value(SETTINGS_BADGE_COLUMN,
-                                     m_tree->fontMetrics().horizontalAdvance(QStringLiteral("Tracking · main"))
+                                     m_tree->fontMetrics().horizontalAdvance(QStringLiteral("main  ▸ MIB"))
                                      + 12).toInt();
     m_tree->viewport()->installEventFilter(this);
     connect(m_tree->header(), &QHeaderView::sectionResized, this, [this](int section, int, int size) {
@@ -1618,8 +1604,8 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         m_cueSkip->setObjectName("stCueSkip");
         m_cueSkip->setToolTip(tr("Skipped: GO, auto-follow and Back pass over it, and it tracks as if it "
                                  "weren't in the list (the next cue starts from the cue before it). A jump "
-                                 "straight to it still plays it. The tick on its row in the tree, or ⌘/, "
-                                 "does the same."));
+                                 "straight to it still plays it. Right-click its row \u25b8 Skip cue, or "
+                                 "\u2318/, does the same."));
         f->addRow(QString(), m_cueSkip);
         connect(m_cueSkip, &QCheckBox::toggled, this, &ShowTreeView::slotCueSkipToggled);
         m_cueNoMib = new QCheckBox(tr("Don't move in black into this cue"), inner);
@@ -2676,7 +2662,21 @@ void ShowTreeView::buildTree()
             const CueList &list = *lp;
             QTreeWidgetItem *li = new QTreeWidgetItem(pi);
             li->setText(0, list.name);
-            li->setText(1, list.mode == ListMode::Tracking ? tr("Tracking") : tr("Non-tracking"));
+            /* Its mode, a flag in the M column (Branson, 2026-10-29: "it could
+               be a flagged column to save space"): ⇢ tracking, B non-tracking
+               (every cue starts from nothing, as a Block). In words on hover,
+               on the name too (the M column can be hidden), and on its page. */
+            if (!list.looks)
+            {
+                const QString modeTip = list.mode == ListMode::Tracking
+                    ? tr("Tracking list: what a cue sets stays on in the cues after it until a cue changes "
+                         "or releases it.")
+                    : tr("Non-tracking list: each cue plays only its own layers and includes, as a Block.");
+                li->setText(ModeCol, list.mode == ListMode::Tracking ? tr("⇢") : tr("B"));
+                li->setTextAlignment(ModeCol, Qt::AlignCenter);
+                li->setToolTip(ModeCol, modeTip);
+                li->setToolTip(0, modeTip);
+            }
             li->setData(0, KindRole, ListNode);
             li->setData(0, IdRole, list.id);
             if (!list.colour.isEmpty())
@@ -2686,7 +2686,7 @@ void ShowTreeView::buildTree()
                 && (singleProduction() ? m_st->playableLists(prod.id).count() > 1
                                        : (currentProd || m_st->playableLists(prod.id).count() > 1)))
             {
-                li->setText(1, li->text(1) + tr(" · main"));
+                li->setText(1, tr("main"));
                 li->setToolTip(1, currentProd ? tr("GO plays this list (the current production's main list)")
                                               : tr("GO plays this list when the production is current"));
             }
@@ -2695,7 +2695,7 @@ void ShowTreeView::buildTree()
                 && m_st->listMovesInBlack(list.id, m_st->showMoveInBlack()) != m_st->showMoveInBlack())
             {
                 const bool on = list.moveInBlack == MoveInBlack::On;
-                li->setText(1, li->text(1) + (on ? tr("  ▸ MIB") : tr("  ⊘ MIB")));
+                li->setText(1, (li->text(1) + (on ? tr("  ▸ MIB") : tr("  ⊘ MIB"))).trimmed());
                 const QString tip = on ? tr("Move in black On for this list, although the show's is off: dark "
                                             "heads are pre-positioned for its next cue.")
                                        : tr("Move in black Off for this list, although the show's is on: no head "
@@ -2972,19 +2972,18 @@ void ShowTreeView::buildTree()
                                                           m_st->listOfCue(list.subOf)->indexOf(list.subOf)),
                                            cue.note).trimmed());
                 }
-                // Skip (a cue of a list, or a sub-cue): the tick, unticked
-                // when skipped -- then greyed and struck through, "skip" in
-                // the F column, and everything under it greyed (its layers, what
-                // tracks in, its sub-cues: none of it plays from GO).
-                if (!list.looks)
-                {
-                    ci->setFlags(ci->flags() | Qt::ItemIsUserCheckable);
-                    ci->setCheckState(0, cue.skip ? Qt::Unchecked : Qt::Checked);
-                }
+                // Skipped (a cue of a list, or a sub-cue; right-click ▸ Skip
+                // cue, or ⌘/): still there, greyed and struck through, a
+                // skip mark before it, "skip" in the F column, and everything
+                // under it greyed (its layers, what tracks in, its sub-cues:
+                // none of it plays from GO). No tick on every row (Branson,
+                // 2026-10-29: "the checkbox is overmuch").
                 if (!list.looks && cue.skip)
                 {
+                    ci->setIcon(0, style()->standardIcon(QStyle::SP_MediaSkipForward));
                     const QString why = tr("Skipped: GO passes over it. It tracks as if it weren't in the list; "
-                                           "a jump straight to it still plays it. Tick it (or ⌘/) to put it back.");
+                                           "a jump straight to it still plays it. Right-click \u25b8 Unskip cue "
+                                           "(or \u2318/) puts it back.");
                     for (int c = 0; c < TreeColumnCount; ++c)
                     {
                         ci->setToolTip(c, (why + QStringLiteral("\n\n") + ci->toolTip(c)).trimmed());
@@ -4235,7 +4234,10 @@ void ShowTreeView::showLayerPage(const CueList &list, int index, const Layer *ow
     }
     // Release: on the cue's own layer, or on a carried-in one (which then
     // becomes the cue's own, in the same undo step).
-    m_layerRelease->setVisible(!rl->target.isOpaque() && !list.looks);
+    // A layer that plays a function as it is releases as any other (the
+    // function stops leaving the cue): Branson, 2026-10-29, "how do I
+    // release a scene on a cue".
+    m_layerRelease->setVisible(!list.looks);
     m_layerReleaseTarget = own == nullptr ? rl->target : Target();
     {
         QSignalBlocker block(m_layerRelease);
@@ -4944,13 +4946,7 @@ void ShowTreeView::slotLayerReleaseToggled(bool on)
     }
     if (currentKind() != TrackedLayerNode || m_layerReleaseTarget.isEmpty())
         return;
-    // A carried-in layer becomes the cue's own: select it there.
-    const Target t = m_layerReleaseTarget;
-    if (m_st->setTargetRelease(cueId, t, on))
-        if (const Cue *c = m_st->cue(cueId))
-            for (const Layer &l : c->layers)
-                if (l.target == t)
-                    selectNode(l.id, cueId);
+    setLayerReleaseIn(cueId, invalidId(), m_layerReleaseTarget, on);
 }
 
 void ShowTreeView::slotListBaseChanged(int index)
@@ -5192,10 +5188,75 @@ bool ShowTreeView::setCuesSkipped(const QList<quint32> &cueIds, bool skip)
 {
     if (cueIds.isEmpty() || !m_st->setCuesSkipped(cueIds, skip))
         return false;
-    m_hint->setText(skip ? tr("Skipped %1: GO passes over it (⌘/ or the tick puts it back; a jump still plays it)")
+    m_hint->setText(skip ? tr("Skipped %1: GO passes over it (⌘/ or right-click \u25b8 Unskip puts it back; a jump "
+                              "still plays it)")
                            .arg(cueIds.count() == 1 ? tr("1 cue") : tr("%1 cues").arg(cueIds.count()))
                          : tr("Unskipped %1: GO plays it again")
                            .arg(cueIds.count() == 1 ? tr("1 cue") : tr("%1 cues").arg(cueIds.count())));
+    return true;
+}
+
+void ShowTreeView::cueModeMenu(QMenu *menu, const QList<quint32> &cueIds)
+{
+    QList<quint32> cues;
+    for (quint32 id : cueIds)
+    {
+        const CueList *l = m_st->listOfCue(id);
+        if (l != nullptr && !l->looks && !l->isSubCues())
+            cues << id;
+    }
+    menu->setEnabled(!cues.isEmpty());
+    if (cues.isEmpty())
+        return;
+    const CueList *first = m_st->listOfCue(cues.first());
+    QActionGroup *group = new QActionGroup(menu);
+    for (CueMode m : { CueMode::ListDefault, CueMode::Track, CueMode::Block, CueMode::CueOnly })
+    {
+        bool all = true;
+        for (quint32 id : cues)
+            all = all && m_st->cue(id) != nullptr && m_st->cue(id)->mode == m;
+        const QString label = m == CueMode::ListDefault && first != nullptr
+            ? tr("List default (%1)").arg(first->mode == ListMode::Tracking ? tr("Track") : tr("Block"))
+            : cueModeLabel(m);
+        QAction *a = menu->addAction(label, this, [this, cues, m]() { setCuesMode(cues, m); });
+        a->setCheckable(true);
+        a->setChecked(all);
+        a->setActionGroup(group);
+        a->setObjectName(QStringLiteral("stCueMode%1").arg(int(m)));
+        a->setToolTip(m == CueMode::Track ? tr("Starts from the cue before: what it doesn't change stays on")
+                      : m == CueMode::Block ? tr("Starts from nothing: only what it sets plays")
+                      : m == CueMode::CueOnly ? tr("Its changes don't pass on: the next cue starts from the "
+                                                   "cue before this one")
+                      : tr("As its list: Track in a tracking list, Block in a non-tracking one"));
+    }
+    menu->setToolTipsVisible(true);
+}
+
+bool ShowTreeView::setCuesMode(const QList<quint32> &cueIds, CueMode mode)
+{
+    if (cueIds.isEmpty())
+        return false;
+    if (cueIds.count() == 1)
+        return m_st->setCueMode(cueIds.first(), mode);
+    m_st->beginBatch(tr("Cue mode (%1 cues)").arg(cueIds.count()));
+    bool any = false;
+    for (quint32 id : cueIds)
+        any |= m_st->setCueMode(id, mode);
+    m_st->endBatch(any);
+    return any;
+}
+
+bool ShowTreeView::setLayerReleaseIn(quint32 cueId, quint32 layerId, const Target &target, bool release)
+{
+    if (layerId != invalidId())
+        return m_st->setLayerRelease(cueId, layerId, release);
+    if (target.isEmpty() || !m_st->setTargetRelease(cueId, target, release))
+        return false;
+    // A carried-in layer became the cue's own: select it there.
+    if (const Cue *c = m_st->cue(cueId))
+        for (const Layer &l : c->layers)
+            if (l.target == target)
+                selectNode(l.id, cueId);
     return true;
 }
 
@@ -6878,14 +6939,19 @@ void ShowTreeView::slotTreeContextMenu(const QPoint &pos)
             const CueList *list = m_st->listOfCue(cueId);
             if (list != nullptr)
             {
-                /* Base cue, Mode and Includes are set on the cue's page, not
-                   here (Q93): the menu keeps what acts on a selection. */
+                /* Base cue and Includes are set on the cue's page, not here
+                   (Q93): the menu keeps what acts on a selection -- Mode ▸
+                   too (2026-10-29: "I don't seem to be able to make it non
+                   tracking"). */
                 // Skip cue / Unskip cue: the selected cues, when this is one.
                 {
                     QList<quint32> cues = item->isSelected() ? selectedCues() : QList<quint32>();
                     if (!cues.contains(cueId))
                         cues = { cueId };
-                    const bool skipped = list->cue(cueId)->skip;
+                    // All of them skipped: Unskip; else Skip (as ⌘/ does).
+                    bool skipped = true;
+                    for (quint32 id : cues)
+                        skipped = skipped && m_st->isCueSkipped(id);
                     const QString what = cues.count() == 1 ? QString() : tr(" (%1 cues)").arg(cues.count());
                     QAction *sk = menu.addAction((skipped ? tr("Unskip cue") : tr("Skip cue")) + what, this,
                                                  [this, cues, skipped]() { setCuesSkipped(cues, !skipped); });
@@ -6906,6 +6972,16 @@ void ShowTreeView::slotTreeContextMenu(const QPoint &pos)
                     nm->setObjectName("stCueNoMib");
                     nm->setCheckable(true);
                     nm->setChecked(no);
+                }
+                // Mode ▸ Track / Block / Cue-only (the selected cues).
+                if (!list->isSubCues())
+                {
+                    QList<quint32> cues = item->isSelected() ? selectedCues() : QList<quint32>();
+                    if (!cues.contains(cueId))
+                        cues = { cueId };
+                    QMenu *mode = menu.addMenu(cues.count() == 1 ? tr("Mode") : tr("Mode (%1 cues)").arg(cues.count()));
+                    mode->setObjectName("stCueModeMenu");
+                    cueModeMenu(mode, cues);
                 }
                 menu.addSeparator();
                 menu.addAction(tr("Record as new cue"), this, [this, cueId]() {
@@ -6997,6 +7073,40 @@ void ShowTreeView::slotTreeContextMenu(const QPoint &pos)
                 m_st->endBatch(any);
             });
             menu.addSeparator();
+        }
+        // Release (leaving this cue): one layer, its own or carried in --
+        // a function played as it is too (several: the submenu above).
+        if ((kind == LayerNode && !(sel.count() > 1 && item->isSelected())) || kind == TrackedLayerNode)
+        {
+            const quint32 cueId = item->data(0, CueRole).toUInt();
+            const CueList *rlist = m_st->listOfCue(cueId);
+            const Cue *rcue = m_st->cue(cueId);
+            const Layer *own = (kind == LayerNode && rcue != nullptr) ? rcue->layer(item->data(0, IdRole).toUInt())
+                                                                      : nullptr;
+            Target t;
+            if (kind == TrackedLayerNode && rlist != nullptr)
+            {
+                const QList<ResolvedCue> rcs = m_st->resolved(*rlist);
+                const int at = rlist->indexOf(cueId);
+                if (at >= 0 && at < rcs.count())
+                    for (const ResolvedLayer &rl : rcs.at(at).layers)
+                        if (rl.target.signature() == item->data(0, TargetRole).toString())
+                            t = rl.target;
+            }
+            if (rlist != nullptr && !rlist->looks && (own != nullptr || !t.isEmpty()))
+            {
+                const quint32 lid = own != nullptr ? own->id : invalidId();
+                QAction *rel = menu.addAction(tr("Release (leaving this cue)"));
+                rel->setObjectName("stLayerReleaseMenu");
+                rel->setCheckable(true);
+                rel->setChecked(own != nullptr && own->release);
+                rel->setToolTip(tr("Leaving this cue, the layer goes back to the base cue (else dark): set it "
+                                   "on the last cue it should play in"));
+                connect(rel, &QAction::toggled, this, [this, cueId, lid, t](bool on) {
+                    setLayerReleaseIn(cueId, lid, t, on);
+                });
+                menu.setToolTipsVisible(true);
+            }
         }
         if (kind == LayerNode)
         {

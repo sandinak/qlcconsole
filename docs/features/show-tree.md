@@ -71,7 +71,9 @@ from the Library lands in the tree right beside it.
   - **S** (Sets), **T** (Tracks in), **R** (Releases) — on a cue, how many
     layers it sets here, how many track into it, how many it lets go; on a
     layer, a **●** in the one that applies (a carried row's is under T).
-  - **M** (Mode) — **B** for Block, **C** for Cue-only; blank when it tracks.
+  - **M** (Mode) — on a cue, **B** for Block, **C** for Cue-only; blank
+    when it tracks. On a cue list, **⇢** for Tracking, **B** for
+    Non-tracking (hover it, or the list's name, for the words).
   - **F** (Flags) — the rest, in words: **base**, **skip**, **no MIB**, **focus** (a [venue focus cue](focus-calls.md#a-venue-focus-cue-pre-show)),
     **⊕ N** (includes N), **×N** (reusable, N uses), **mix**, **VC ×N**.
 
@@ -85,7 +87,7 @@ from the Library lands in the tree right beside it.
   cue page has the same list in full under **Tracked in**.
 - **Sizing the tree.** Drag the lines between the Library, the tree and
   the page to share the room; drag the line after the names to make the
-  column beside them (a list's mode, where a grey row came from) wider or
+  column beside them (a list's **main** mark, where a grey row came from) wider or
   narrower; the letter columns keep their width. The names get the rest, and
   text too long for its column ends in "…". Both are remembered. A layer
   that plays a function as it is shows **▣**. A use
@@ -965,9 +967,21 @@ Each cue has a **mode** too, set on its page or by typing it:
 | **Block** (⊘) | nothing: only its own layers and includes | everything on stage |
 | **Cue-only** (◐) | the cue before | what it started from: its changes don't pass on |
 
-- **Release.** A layer with **Release** ticked (on its page) leaves when its
-  cue is left. It goes back to what the **base cue** plays on that layer,
-  else dark. Ticking it on a grey layer makes the layer this cue's own first.
+- **Mode from the menu.** Right-click a cue → **Mode ▸** List default /
+  Track / Block / Cue-only; with several cues selected it sets them all,
+  one undo step. In the Workbench, a layer's right-click menu has the
+  cue's **Cue mode ▸** too.
+- **Release.** A layer with **Release** ticked leaves when its cue is left:
+  tick it on the layer's page, or right-click the layer (in the tree or
+  the Workbench) → **Release (leaving this cue)**. It goes back to what
+  the **base cue** plays on that layer, else dark. Ticking it on a grey
+  layer makes the layer this cue's own first.
+- **Stopping a scene played as it is.** A **▣** layer (+ Scene, or a
+  function dropped on a cue) tracks like any other layer. To stop it, find
+  the **last cue it should play in**, right-click its row there (grey if it
+  tracked in) → **Release (leaving this cue)**: the cue after plays without
+  it. To keep it in its own cue only, make that cue **Cue-only**; to start
+  a cue without it, make that cue **Block**.
 - **Base cue.** Pick it on the list's page, or tick *"The list's base cue"*
   on a cue. It is marked ■ base.
 - **Includes.** A cue plays the output of the cues it includes, as if you
@@ -1011,19 +1025,18 @@ A cue can be **skipped** without deleting it: a song cut from tonight's
 set, a cue you are not ready for in rehearsal. Put it back the same way.
 
 - **To skip a cue:**
-  - untick the box at the start of its row in the tree (every cue row has
-    one; ticked means it plays);
   - right-click it → **Skip cue** (on a skipped cue: **Unskip cue**);
   - select it and press **⌘/**;
   - tick **Skip: GO passes over it** on its page;
   - type `skip 0.0.3`, `skip 0.0.3 thru 0.0.5` or `skip 0.0.3, 0.0.7`
     (`unskip` puts them back; with no number, the selected cue).
-- **Several at once.** With several cues selected, unticking one of them,
-  the menu and ⌘/ act on them all. ⌘/ skips them, or puts them back when
-  every one is skipped already. Each change is **one undo step**, and it is
+- **Several at once.** With several cues selected, the menu and ⌘/ act on
+  them all. They skip them, or put them back when every one is skipped
+  already. Each change is **one undo step**, and it is
   saved with the show.
-- **How it looks.** A skipped cue is grey and struck through, with **skip**
-  in the **F** column, and everything under it (its layers, what
+- **How it looks.** A skipped cue stays in the list, grey and struck
+  through, with a small skip mark before its name and **skip** in the **F**
+  column, and everything under it (its layers, what
   tracks in, its sub-cues) is grey too. Its tooltip says *Skipped: GO
   passes over it*.
 - **Playing.** **GO**, **auto-follow** and **Back** pass over a skipped

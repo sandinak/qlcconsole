@@ -81,7 +81,7 @@ On the projector, with the class telling you what to click next (have the
 handout up so they can read ahead):
 
 1. **+ Production** → `Spring Show`; **+ Cue list** → `01-Everybody Scream`. Point
-   out "Tracking" beside it and that the `01` numbers the cues 1.0.0, 1.0.1…
+   out the **⇢** under **M** beside it (hover: a tracking list) and that the `01` numbers the cues 1.0.0, 1.0.1…
 2. **+ Cue** → type `Pose`, Return.
 3. Library → **All → Groups → Trusses → TrussC-RGB**: drag it onto the
    dashed box under **Layers**. Read the note in the top bar (just left of **Stop all**) aloud while dragging

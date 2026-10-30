@@ -75,6 +75,8 @@ Should the scream still have the white flash? Why?
 **Stuck?** No Release box: click the verse's own StepTops row, not a grey
 one. The new cue is 1.0.3.5: undo, select the chorus, **+ Cue** again.
 White step tops in the scream: set the Flash to **Cue-only**.
+Both are on the right-click menu too: a layer's **Release (leaving this
+cue)**, a cue's **Mode ▸**. They work on a ▣ scene layer the same way.
 
 ## Exit ticket
 

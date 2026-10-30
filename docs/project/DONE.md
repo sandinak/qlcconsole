@@ -6,6 +6,37 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
+### 2026-10-29 — Show Tree tidy: list mode flag, skip by menu, Release on ▣ layers *(feat/031-showtree-tidy, stc)*
+
+Branson's three asks, all in the Show Tree:
+- **"The second column says Tracking; it could be a flagged column."** A
+  list's mode moved to the **M** column: ⇢ Tracking, B Non-tracking, the
+  words on hover (M cell and name). The info column keeps "main" (was
+  "· main") and the MIB marks; its default width is now "main ▸ MIB", under
+  a new settings key (`showtree/badgeColumn2`) so the old wide default
+  doesn't stick. *decided: ⇢ / B (B = every cue a Block, as the M legend
+  already says) (can change).*
+- **"Skipping cues should be a right click menu ... the checkbox is
+  overmuch."** The per-row tick is gone; the menu's Skip cue / Unskip cue
+  (already there) now reads all the selected cues (Unskip only when every
+  one is skipped, as ⌘/), one undo step. A skipped row keeps its grey and
+  strike-through and gains a skip mark (the style's SP_MediaSkipForward
+  icon) and a tooltip naming the menu. *decided: the cue page's Skip box
+  stays (it is the page's, not a row's) (can change).*
+- **"How do I release a scene on a cue?"** The engine always resolved and
+  baked a released ▣ layer correctly; the UI hid Release for opaque
+  layers (the layer page and the Workbench's layer menu). Shown now, and
+  added to the tree's layer menu (own or carried-in row, which becomes
+  the cue's own); a cue's **Mode ▸** (List default / Track / Block /
+  Cue-only, the selected cues in one step) on the tree's cue menu and as
+  **Cue mode ▸** on the Workbench's layer menu.
+- Tests (showtreeview_test): `listModeIsAFlag`, `skipCuesInTheTree`
+  (rewritten for the menu), `releaseAFunctionLayer` (page, tree menu on
+  own + carried rows, Workbench menu; resolved and the cue collections),
+  `cueModeFromTheMenus` (Cue-only, Block on two cues in one step,
+  Workbench). Help: show-tree.md (columns, Tracking, Skipping cues);
+  course: L2-1 Stuck? line, L1-1 teacher guide.
+
 ### 2026-10-29 — Control Map: MIDI and OSC triggers, saved with the show *(feat/031-control-map, board Q189 B)*
 
 - **Engine:** `ControlMap` (`engine/src/controlmap.*`, `Doc::controlMap()`),
