@@ -1241,6 +1241,70 @@ it. A cue with no number answers to its position. The first move or
 renumber in its list gives it that number to keep, so it doesn't change
 under you.
 
+## Songs and sections
+
+A show is **one cue list**. Its songs are **sections** of that list, not lists
+of their own: GO, the Run tab and show control play one list, so a show
+built as a list per song plays only its first song. Sections follow the cue
+numbers, so you don't keep them by hand.
+
+**Numbering** (the production's page) says how the show numbers its cues,
+and so what a section is:
+
+| Numbering | Cues | A section is |
+| --- | --- | --- |
+| **Show.Part.Iteration** | 0.0.1 setup, 0.0.2 preshow, 1.0.1 music starts, 1.2.1 | the first number: 0 the preshow, 1 the first song… |
+| **Hundreds per song** (Eos, MA) | 100, 101, 101.5, 200 | each hundred: 100s, 200s |
+| **Free numbers** (QLab) | anything | a cue you start a section at (**+ Section** with it selected) |
+| **None** | anything | no sections (every older show) |
+
+Every level is its own number, separated by dots, so a part or a song past 9
+is fine (1.10.2, 12.0.1). With no scheme yet, the production page says what
+the numbers look like (*Its cue numbers look like Show.Part.Iteration. Use
+it*); nothing changes until you click it or pick one.
+
+**In the tree and the Run tab** each section is a header row its cues fold
+under: *1 — Everybody Scream*. Click ▸ to fold it; it stays folded while you
+work. Select a header for its page:
+
+- **Name**: the song, shown in the header here and in the Run tab.
+- **Block at section start**: the section's first cue starts from nothing,
+  so what the song before left on stage doesn't carry in. It is that cue's
+  own mode (**B**), in a Tracking list.
+- **+ Section**: a new section after the last, its first cue numbered to the
+  scheme (**2.0.1**, **300**). Also on the list's page.
+- **Remove section** (free numbers only): its cues join the section before.
+
+**+ Cue** numbers to the scheme: with a header selected the new cue goes at
+the section's end (after 1.0.3 → **1.0.4**, never 2.0.1); after a cue it
+stays in that cue's section (between 1 and 3 in section 1 → **1.5**, not 2).
+
+**Merge lists into one…** (the production's page) turns a show built as a
+list per song into one list. Tick the lists and drag them into order; each
+becomes a section named after it. Cue numbers stay, unless two clash (two
+songs both numbered from 1): then the later cue gets a number between its
+neighbours, and the message lists every one renumbered. Every cue plays as
+it did:
+
+- each list's first cue becomes **Block**, as it started from nothing on its
+  own (a list starting with Cue-only cues: up to its first other cue);
+- a cue that played its list's default (a Non-tracking list's cue merged
+  into a Tracking one) gets that mode for itself;
+- a list's text colour and **Move in black Off** go onto its cues.
+
+The merge checks what every cue puts on stage before and after and names any
+cue that would play differently (a list whose base cue isn't the first
+list's: its released layers now go back to the merged list's base). The
+merged list keeps the first list's place, settings and chaser and takes the
+production's name; it is the main list. VC buttons and Cue Lists that fired
+a list that went now fire the one list, from its top. With no scheme, the
+merge sets the one the numbers show, else free numbers with a section at
+each list's start. One undo step.
+
+Sections are only how the list reads and numbers. Nothing plays differently
+because of them, and the show saves its scheme and section names
+(`Numbering=`, `Section` entries), which an older build ignores.
+
 ## Seeing it on the rig
 
 **Design mode: the cue you are editing is on the rig.**

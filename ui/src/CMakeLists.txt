@@ -201,7 +201,7 @@ add_library(${module_name}
     showtreeview.cpp showtreeview.h
     refinepanel.cpp refinepanel.h
     operatorvoice.cpp operatorvoice.h
-    showtreeworkbench.cpp showtreenewhere.cpp treecuestack.cpp treecuestack.h
+    showtreeworkbench.cpp showtreenewhere.cpp showtreesections.cpp treecuestack.cpp treecuestack.h
     importsheet.cpp importsheet.h
     showconverter.cpp showconverter.h
     cuerunner.cpp cuerunner.h

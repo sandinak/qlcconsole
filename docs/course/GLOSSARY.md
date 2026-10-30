@@ -93,7 +93,8 @@ brackets.
 | Word | Means |
 |---|---|
 | **Production** | The whole show: every cue list in it. With one production, GO plays it; with more than one, the **current** production is the one GO plays. [1.1] |
-| **Cue list** | One song's cues, numbered and in order, run the same way every performance. [0.7, 1.1] |
+| **Cue list** | The show's cues, numbered and in order, run the same way every performance. GO plays one list, so a show is one list and each song is a section of it. [0.7, 1.1] |
+| **Section** | One song (or the preshow) inside the show's cue list, found by the cue numbers' first number: 0 the preshow, 1.0.0… song 1, 2.0.0… song 2. A header row folds its cues; **Block at section start** stops the song before carrying in. Shows built as a list per song: **Merge lists into one…** on the production's page. [1.1] |
 | **Cue** | A planned lighting change, tied to a moment in the song: a change the audience feels. [0.1] Numbered 1.0.0, 1.0.1…; a list plays its cues in number order. [1.1] |
 | **Point cue** | A cue numbered between two others, such as 1.0.2.5 between 1.0.2 and 1.0.3. It is how a cue is added late without changing any other cue's number. [1.5] |
 | **Renumber** | Give cues new numbers. Dragging a cue renumbers it for its new place; **Renumber this level…** numbers a whole level 1, 2, 3… Do it before anyone has written the numbers down. [1.5] |

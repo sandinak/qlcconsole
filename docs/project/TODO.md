@@ -8,6 +8,24 @@ under `~/.claude/.../memory/`.
 
 ---
 
+## Song sections — leftovers (Q190, 2026-10-29)
+
+Built: numbering scheme per production, section rows in the Show Tree and
+Run, Block at section start, + Section, Merge lists into one…
+(docs/features/show-tree.md "Songs and sections"). Open, each "decided (can
+change)":
+- The scheme lives on the production (the show); folds are per session,
+  not saved.
+- The merged list takes the production's name and keeps the first list's
+  id, settings and chaser; VC widgets that fired a merged-away list fire
+  the one list from its top (not from that song).
+- A later list's base cue or move-in-black On can't be kept per cue; the
+  merge says so instead.
+- The VC Cue List widget doesn't show section rows; the tree, the Run tab
+  and the VC Cue Runner's list size do.
+- Course: only the glossary and Lesson 1.1's word say "one list, songs as
+  sections"; a lesson that builds a second song would teach + Section.
+
 ## Live and blind — leftovers (docs/design/LIVE_BLIND.md, 2026-10-29)
 
 Built (DONE.md 2026-10-29). Open, each "decided (can change)" in the note:

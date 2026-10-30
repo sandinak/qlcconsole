@@ -89,7 +89,8 @@ public:
         CueNode,
         LayerNode,          //!< a cue's own layer
         TrackedLayerNode,   //!< carried into the cue (tracked, included, base)
-        LookFolderNode      //!< a folder of a Looks section (R3): IdRole its list, FolderRole its path
+        LookFolderNode,     //!< a folder of a Looks section (R3): IdRole its list, FolderRole its path
+        SectionNode         //!< a song section of a list (Q190): IdRole its list, SectionRole which
     };
 
     /** Item roles in the tree and the Library. */
@@ -100,7 +101,8 @@ public:
         CueRole = Qt::UserRole + 2,     //!< a layer row's cue
         TargetRole = Qt::UserRole + 3,  //!< a tracked layer's target signature
         PathRole = Qt::UserRole + 4,    //!< a Library folder's path ("Groups/Movers/Front")
-        FolderRole = Qt::UserRole + 5   //!< a look folder's / palette folder's own path ("Hits")
+        FolderRole = Qt::UserRole + 5,  //!< a look folder's / palette folder's own path ("Hits")
+        SectionRole = Qt::UserRole + 6  //!< a section row's key ("1"), or "#<cue>" for a hand-made one
     };
 
     /** The tree's columns (Q104): the name; what a list, a production or a
@@ -1025,6 +1027,42 @@ private:
     void lookLinkActivated(const QString &link);
     /** "Move to folder" for looks @a lookIds of Looks section @a listId. */
     void lookFolderMenu(QMenu *menu, quint32 listId, const QList<quint32> &lookIds);
+
+    /************************************************************************
+     * Song sections and the numbering scheme (Q190, showtreesections.cpp)
+     ************************************************************************/
+public:
+    /** Merge lists into one… for production @a productionId: @a listIds in
+     *  that order (empty: asks which, every cue list ticked), then says what
+     *  was renumbered or couldn't be kept. One undo step. */
+    bool mergeListsIntoOne(quint32 productionId, const QList<quint32> &listIds = QList<quint32>());
+    /** In place of the Merge dialog (tests): the lists, in order, to merge;
+     *  empty cancels. */
+    typedef std::function<QList<quint32>(quint32 productionId)> MergePicker;
+    void setMergePicker(const MergePicker &picker) { m_mergePicker = picker; }
+    /** The section the selected row is (SectionNode), or the selected cue
+     *  is in. False: none. */
+    bool currentSection(ShowTree::Section *out) const;
+    /** + Section for the list the selection is in (asks for a name unless
+     *  @a name is given). The section's first cue. */
+    quint32 newSection(const QString &name = QString(), bool ask = true);
+private:
+    void buildSectionPages();
+    void updateNumberingRows(quint32 productionId);
+    void showSectionPage(quint32 listId, const ShowTree::Section &section);
+    /** The rows' key for section @a s of list @a listId (expansion, SectionRole). */
+    static QString sectionRole(const ShowTree::Section &s);
+    MergePicker m_mergePicker;
+    QComboBox *m_prodNumbering = nullptr;
+    QLabel *m_prodNumberingHint = nullptr;
+    QPushButton *m_prodMerge = nullptr;
+    QPushButton *m_listAddSection = nullptr;
+    QWidget *m_sectionPage = nullptr;
+    QLabel *m_sectionTitle = nullptr;
+    QLineEdit *m_sectionName = nullptr;
+    QCheckBox *m_sectionBlock = nullptr;
+    QLabel *m_sectionInfo = nullptr;
+    QPushButton *m_sectionRemove = nullptr;
 };
 
 /** @} */

@@ -513,7 +513,12 @@ quint32 ShowTreeController::addCue(quint32 listId, int afterIndex, const QString
         Cue c;
         c.id = id;
         c.name = name;
-        c.number = numberForInsert(*l, afterIndex, takenNumbers(ps, *l));
+        // Q190: numbered to the show's scheme, in the section it is added in.
+        Numbering scheme = Numbering::None;
+        for (const Production &p : ps)
+            if (p.list(listId) != nullptr)
+                scheme = p.numbering;
+        c.number = numberForInsertIn(*l, scheme, afterIndex, takenNumbers(ps, *l));
         const int at = qBound(0, afterIndex + 1, int(l->cues.count()));
         l->cues.insert(at, c);
         return true;

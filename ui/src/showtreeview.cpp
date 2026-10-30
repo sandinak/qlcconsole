@@ -1504,6 +1504,8 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         f->addRow(m_prodInfo);
     }
     m_pages->addWidget(m_prodPage);
+    // Q190: the numbering scheme, Merge lists into one…, a song section's page.
+    buildSectionPages();
 
     // A cue (scrolls: its layers and what passes on can be long)
     QScrollArea *cueScroll = new QScrollArea(m_pages);
@@ -2380,6 +2382,14 @@ bool ShowTreeView::startRename()
     {
         text = item->text(0);
     }
+    else if (kind == SectionNode)
+    {
+        // A song section (Q190): its name, not the key it shows.
+        Section section;
+        if (!currentSection(&section))
+            return false;
+        text = section.name;
+    }
     else if (kind == CueNode)
     {
         // Its number and name, as the row reads ("2.5 Fog"): a new number
@@ -2466,6 +2476,20 @@ void ShowTreeView::slotTreeItemRenamed(QTreeWidgetItem *item, int column)
         const QString path = item->data(0, FolderRole).toString();
         QTimer::singleShot(0, this, [this, id, name, path]() {
             if (!m_st->renameLookFolder(id, path, name))
+                buildTree();
+            m_tree->setFocus(Qt::OtherFocusReason);
+        });
+        return;
+    }
+    if (kind == SectionNode)
+    {
+        const QString role = item->data(0, SectionRole).toString();
+        QTimer::singleShot(0, this, [this, id, name, role]() {
+            bool done = false;
+            for (const Section &sec : m_st->sections(id))
+                if (sectionRole(sec) == role)
+                    done = m_st->setSectionName(id, sec, name);
+            if (!done)
                 buildTree();
             m_tree->setFocus(Qt::OtherFocusReason);
         });
@@ -2564,11 +2588,14 @@ void ShowTreeView::saveExpanded()
     m_expanded.clear();
     for (QTreeWidgetItemIterator it(m_tree); *it; ++it)
     {
-        if ((*it)->data(0, KindRole).toInt() == LookFolderNode)
+        const int savedKind = (*it)->data(0, KindRole).toInt();
+        if (savedKind == LookFolderNode || savedKind == SectionNode)
         {
-            // A look folder by its path: open unless closed by hand.
+            // A look folder by its path, a song section by its key: open
+            // unless closed by hand.
             const QString key = QStringLiteral("%1:%2").arg((*it)->data(0, IdRole).toUInt())
-                                .arg((*it)->data(0, FolderRole).toString());
+                                .arg((*it)->data(0, savedKind == SectionNode ? SectionRole : FolderRole)
+                                     .toString());
             if ((*it)->isExpanded())
                 m_collapsedFolders.remove(key);
             else
@@ -2590,7 +2617,7 @@ QTreeWidgetItem *ShowTreeView::findItem(quint32 id, quint32 cueId) const
         const int kind = item->data(0, KindRole).toInt();
         if (kind == LayerNode && cueId != invalidId() && item->data(0, CueRole).toUInt() != cueId)
             continue;
-        if (kind == TrackedLayerNode || kind == LookFolderNode)
+        if (kind == TrackedLayerNode || kind == LookFolderNode || kind == SectionNode)
             continue;
         return item;
     }
@@ -2634,6 +2661,8 @@ void ShowTreeView::buildTree()
     const QString selTarget = selTracked ? m_tree->currentItem()->data(0, TargetRole).toString() : QString();
     const bool selFolder = currentKind() == LookFolderNode;
     const QString selFolderPath = selFolder ? m_tree->currentItem()->data(0, FolderRole).toString() : QString();
+    const bool selSection = currentKind() == SectionNode;
+    const QString selSectionKey = selSection ? m_tree->currentItem()->data(0, SectionRole).toString() : QString();
     // The rest of a multi-selection (own rows: a carried-in row has no id).
     QList<QPair<quint32, quint32>> alsoSelected;
     for (QTreeWidgetItem *item : m_tree->selectedItems())
@@ -3010,8 +3039,29 @@ void ShowTreeView::buildTree()
                     }
                 }
             };
+            // Q190: a list's song sections, each a row its cues fold under.
+            const QList<Section> sections = list.looks ? QList<Section>() : m_st->sections(list.id);
+            QTreeWidgetItem *sectionItem = nullptr;
             for (int i = 0; i < list.cues.count(); ++i)
-                addCue(list, i, resolved, nullptr);
+            {
+                const int si = sectionOfIndex(sections, i);
+                if (si >= 0 && sections.at(si).first == i)
+                {
+                    const Section &sec = sections.at(si);
+                    sectionItem = new QTreeWidgetItem(li);
+                    sectionItem->setText(0, sectionTitle(sec));
+                    sectionItem->setFont(0, boldFont);
+                    sectionItem->setFirstColumnSpanned(true);
+                    sectionItem->setData(0, KindRole, SectionNode);
+                    sectionItem->setData(0, IdRole, list.id);
+                    sectionItem->setData(0, SectionRole, sectionRole(sec));
+                    sectionItem->setToolTip(0, tr("A song section: its cues fold under it. Select it to name it "
+                                                  "or start it with Block; + Cue adds a cue at its end."));
+                }
+                else if (si < 0)
+                    sectionItem = nullptr;
+                addCue(list, i, resolved, sectionItem);
+            }
         }
     }
 
@@ -3019,10 +3069,12 @@ void ShowTreeView::buildTree()
     {
         QTreeWidgetItem *item = *it;
         const int kind = item->data(0, KindRole).toInt();
-        if (kind == LookFolderNode)
+        if (kind == LookFolderNode || kind == SectionNode)
             item->setExpanded(!m_collapsedFolders.contains(QStringLiteral("%1:%2")
                                                            .arg(item->data(0, IdRole).toUInt())
-                                                           .arg(item->data(0, FolderRole).toString())));
+                                                           .arg(item->data(0, kind == SectionNode ? SectionRole
+                                                                                                  : FolderRole)
+                                                                .toString())));
         else if (first)
             item->setExpanded(kind == ProductionNode || kind == ListNode);
         else
@@ -3030,7 +3082,21 @@ void ShowTreeView::buildTree()
                               && kind != TrackedLayerNode);
     }
 
-    if (selFolder)
+    if (selSection)
+    {
+        // A song section by its key (Q190); gone (renumbered away): its list.
+        QTreeWidgetItem *found = findItem(selId, invalidId());
+        for (QTreeWidgetItemIterator it(m_tree); *it; ++it)
+            if ((*it)->data(0, KindRole).toInt() == SectionNode && (*it)->data(0, IdRole).toUInt() == selId
+                && (*it)->data(0, SectionRole).toString() == selSectionKey)
+            {
+                found = *it;
+                break;
+            }
+        if (found != nullptr)
+            m_tree->setCurrentItem(found, 0, kSelectOnly);
+    }
+    else if (selFolder)
     {
         for (QTreeWidgetItemIterator it(m_tree); *it; ++it)
             if ((*it)->data(0, KindRole).toInt() == LookFolderNode && (*it)->data(0, IdRole).toUInt() == selId
@@ -3158,7 +3224,7 @@ void ShowTreeView::pickCurrentCue()
 
 quint32 ShowTreeView::currentListId() const
 {
-    if (currentKind() == ListNode || currentKind() == LookFolderNode)
+    if (currentKind() == ListNode || currentKind() == LookFolderNode || currentKind() == SectionNode)
         return currentId();
     const quint32 cueId = currentCueId();
     const CueList *list = cueId == invalidId() ? nullptr : m_st->listOfCue(cueId);
@@ -3483,6 +3549,13 @@ void ShowTreeView::updateInspector()
         m_inspectorUpdating = false;
         return;
     }
+    Section section;
+    if (kind == SectionNode && currentSection(&section))
+    {
+        showSectionPage(id, section);
+        m_inspectorUpdating = false;
+        return;
+    }
     if (kind == ListNode)
     {
         const CueList *list = m_st->cueList(id);
@@ -3497,6 +3570,8 @@ void ShowTreeView::updateInspector()
             m_listForm->setRowVisible(m_listColour, true);
             showColourButton(m_listColour, list->colour, QString());
             m_listForm->setRowVisible(m_listMib, true);
+            if (m_listAddSection != nullptr)
+                m_listForm->setRowVisible(m_listAddSection, true);
             m_listMib->setItemText(0, showMibLabel());
             m_listMib->setCurrentIndex(qMax(0, m_listMib->findData(int(list->moveInBlack))));
             m_listMode->setCurrentIndex(list->mode == ListMode::Tracking ? 1 : 0);
@@ -3630,6 +3705,7 @@ void ShowTreeView::showProductionPage(quint32 productionId)
         }
         m_prodTimecode->setCurrentIndex(at);
     }
+    updateNumberingRows(productionId);
     const quint32 looks = m_st->looksSection(productionId);
     m_prodInfo->setText(tr("%n cue list(s)", "", int(m_st->playableLists(productionId).count()))
                         + (looks == invalidId() ? QString()
@@ -5369,11 +5445,18 @@ void ShowTreeView::slotNewCue()
     }
     quint32 listId = invalidId();
     int after = -1;
+    Section section;
     if (currentKind() == ListNode)
     {
         listId = currentId();
         if (const CueList *l = m_st->cueList(listId))
             after = int(l->cues.count()) - 1;
+    }
+    else if (currentKind() == SectionNode && currentSection(&section))
+    {
+        // Q190: at the section's end, numbered to the scheme.
+        listId = currentId();
+        after = section.last;
     }
     else if (currentCueId() != invalidId())
     {
@@ -9316,6 +9399,8 @@ void ShowTreeView::showLooksPage(quint32 listId, const QString &folder)
         m_listForm->setRowVisible(w, false);
     m_listForm->setRowVisible(m_listColour, false);
     m_listForm->setRowVisible(m_listMib, false);
+    if (m_listAddSection != nullptr)
+        m_listForm->setRowVisible(m_listAddSection, false);
     m_listConvert->hide();
     m_listDetach->hide();
     m_listVcPage->show();

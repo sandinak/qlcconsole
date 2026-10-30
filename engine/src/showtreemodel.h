@@ -155,6 +155,27 @@ namespace ShowTree
      *  the list's setting when it has one, else the show's. */
     QLC_ENGINE_EXPORT bool effectiveMoveInBlack(bool showDefault, MoveInBlack list, bool cueOff);
 
+    /** How a production's cues are numbered (Q190), and so what its song
+     *  sections are: None (no sections); ShowPartIteration, {S}.{P}.{II}
+     *  -- show position, part, iteration, each level period-separated
+     *  (0.0.1 setup, 1.0.1 the first song starts) -- a section per first
+     *  level; Hundreds (Eos / MA style: 100, 101, 101.5 for song 1, 200..
+     *  for song 2) a section per hundred; Manual (QLab style: numbers say
+     *  nothing) sections begin at the cues marked by hand. */
+    enum class Numbering { None, ShowPartIteration, Hundreds, Manual };
+    QLC_ENGINE_EXPORT QString numberingToString(Numbering numbering);
+    QLC_ENGINE_EXPORT Numbering stringToNumbering(const QString &str);
+
+    /** A song section's own settings in a cue list (Q190): its name ("Everybody
+     *  Scream"). Sections are found by @a key -- the first level, or the
+     *  hundred, of the scheme -- or, for Manual, begin at cue @a cue. */
+    struct QLC_ENGINE_EXPORT SectionHead
+    {
+        QString key;                    //!< "1", "200"; empty for Manual
+        quint32 cue = 0xFFFFFFFF;       //!< Manual: the cue it begins at
+        QString name;
+    };
+
     QLC_ENGINE_EXPORT QString cueModeToString(CueMode mode);
     QLC_ENGINE_EXPORT CueMode stringToCueMode(const QString &str);
 
@@ -330,6 +351,11 @@ namespace ShowTree
         };
         QList<Original> originals;
 
+        /** Its song sections' names, and (Manual numbering) where each
+         *  begins (Q190). Saved as <Section> children, which an older build
+         *  skips. */
+        QList<SectionHead> sections;
+
         int indexOf(quint32 cueId) const;
         Cue *cue(quint32 id);
         const Cue *cue(quint32 id) const;
@@ -346,6 +372,10 @@ namespace ShowTree
         /** Where its timecode comes from while it is current (P5): a
          *  universe, -1 any source, -2 (default) the show's own setting. */
         qint32 timecode = -2;
+        /** How its cues are numbered, and so its song sections (Q190).
+         *  Saved as Numbering=, which an older build ignores; None: no
+         *  sections (every older show). */
+        Numbering numbering = Numbering::None;
 
         CueList *list(quint32 id);
         const CueList *list(quint32 id) const;
@@ -561,6 +591,81 @@ namespace ShowTree
     /** Split "0.0.4-SHOUT" into "0.0.4" and "SHOUT"; false when @a text
      *  doesn't start with a number. */
     QLC_ENGINE_EXPORT bool splitNumberedName(const QString &text, QString *number, QString *name);
+
+    /************************************************************************
+     * Song sections (Q190)
+     ************************************************************************/
+
+    /** The section a cue numbered @a number is in under @a numbering: the
+     *  first level ("1.2.3" -> "1"), the hundred ("215.5" -> "200"); empty
+     *  for None and Manual (sections by hand) or a number that isn't one. */
+    QLC_ENGINE_EXPORT QString sectionKey(Numbering numbering, const QString &number);
+
+    /** A run of cues of a list that is one song section. */
+    struct QLC_ENGINE_EXPORT Section
+    {
+        QString key;                    //!< sectionKey(); empty for Manual
+        quint32 headCue = 0xFFFFFFFF;   //!< its first cue
+        QString name;                   //!< its SectionHead's (empty: none)
+        int first = -1;                 //!< index of its first cue
+        int last = -1;                  //!< index of its last cue
+    };
+
+    /** The song sections of @a list, in list order (none for None, a Looks
+     *  section or sub-cues). A scheme's sections follow the cue numbers: a
+     *  new one wherever the key changes. Manual sections begin at their
+     *  heads' cues; cues before the first head are in none. */
+    QLC_ENGINE_EXPORT QList<Section> sectionsOf(const CueList &list, Numbering numbering);
+    /** The index in @a sections of the one cue @a index is in (-1: none). */
+    QLC_ENGINE_EXPORT int sectionOfIndex(const QList<Section> &sections, int index);
+    /** What a section header row says: "1 — Everybody Scream", "200", or
+     *  (Manual, no name) "Section". */
+    QLC_ENGINE_EXPORT QString sectionTitle(const Section &section);
+
+    /** The scheme the cue numbers of @a production look like they follow
+     *  (a new show's suggestion, confirmed in the setting): most numbers
+     *  with three levels or more -> ShowPartIteration; most whole numbers
+     *  of 100 or more in two hundreds or more -> Hundreds; else None. */
+    QLC_ENGINE_EXPORT Numbering suggestNumbering(const Production &production);
+
+    /** The number for a cue inserted after @a afterIndex (-1: at the top)
+     *  that stays in section @a key under @a numbering: between its
+     *  neighbours, none of @a taken, its key @a key ("1.0.3" .. "2.0.1" in
+     *  section 1 -> "1.0.4"; at the top of section 2 -> "2"; into an empty
+     *  section 3 -> "3.0.1"). Empty: none fits (or no scheme). */
+    QLC_ENGINE_EXPORT QString numberInSection(const CueList &list, Numbering numbering, int afterIndex,
+                                              const QString &key, const QStringList &taken = QStringList());
+    /** numberForInsert() that keeps the new cue in the section of the cue
+     *  it follows (at the top: of the first cue) under @a numbering, when
+     *  the plain rule would leave it ("1" .. "3" in section 1 -> "1.5", not
+     *  "2"). */
+    QLC_ENGINE_EXPORT QString numberForInsertIn(const CueList &list, Numbering numbering, int afterIndex,
+                                                const QStringList &taken = QStringList());
+    /** A new section after the last (Q190): its key and its first cue's
+     *  number ("4", "4.0.1"; "400", "400"). False for None and Manual. */
+    QLC_ENGINE_EXPORT bool nextSection(const CueList &list, Numbering numbering, QString *key, QString *number);
+
+    /** What Merge lists into one did (Q190). */
+    struct QLC_ENGINE_EXPORT MergeReport
+    {
+        /** "Opener 1.0.1 → 1.0.1.5": the cues renumbered (only on a clash). */
+        QStringList renumbered;
+        /** The cues set to Block so they still start from nothing, by id. */
+        QList<quint32> blocked;
+        /** What couldn't be kept as it was, a line each. */
+        QStringList notes;
+    };
+
+    /** Merge lists @a listIds of @a production (in that order, two or more,
+     *  none a Looks section or sub-cues) into the first: their cues in
+     *  order, keeping their numbers but where one clashes; each later
+     *  list's start Block (and a cue that plays its list's default mode set
+     *  to it), so every cue plays as it did; each list a section named
+     *  after it. The others are removed; the merged list is the main list
+     *  if one of them was. Numbering None becomes the suggested scheme,
+     *  else Manual. Pure: no Doc. False (@a why): nothing merged. */
+    QLC_ENGINE_EXPORT bool mergeLists(Production &production, const QList<quint32> &listIds,
+                                      MergeReport *report = nullptr, QString *why = nullptr);
 
     /************************************************************************
      * Text colours (Cue::colour, CueList::colour)

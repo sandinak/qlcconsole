@@ -13,7 +13,7 @@ words:
   - term: Cue
     means: "A planned lighting change, tied to a moment in the song. It has a number (1.0.0) and a name."
   - term: Cue list
-    means: "All of one song's cues, in order."
+    means: "The show's cues, in order. GO plays one list, so a show is one list and each song is a section of it: 1.0.0 is song 1, 2.0.0 song 2."
   - term: Production
     means: "The whole show: every cue list in it."
   - term: Group

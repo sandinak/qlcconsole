@@ -162,6 +162,19 @@ ShowTreeView::NewHerePlan ShowTreeView::planNewHere() const
         plan.label = tr("New Cue After %1").arg(m_st->cueNumber(*l, plan.after));
         return plan;
     }
+    case SectionNode:
+    {
+        // A song section (Q190): a cue at its end, numbered in it.
+        Section section;
+        const CueList *l = m_st->cueList(currentId());
+        if (l == nullptr || !currentSection(&section))
+            return plan;
+        plan.what = NewHerePlan::Cue;
+        plan.list = l->id;
+        plan.after = section.last;
+        plan.label = tr("New Cue After %1").arg(m_st->cueNumber(*l, plan.after));
+        return plan;
+    }
     case ListNode:
         if (const CueList *l = m_st->cueList(currentId()))
         {
