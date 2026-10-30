@@ -1506,7 +1506,7 @@ void FocusCallsUi_Test::theFocusMenuGreysWhatCannotBeUsed()
     QCOMPARE(q->toolTip(), QString("No lights are placed on the plot. Place them in the Lighting Studio first."));
     QAction *v = menuAction(&menu, "focusVenue");
     QVERIFY(!v->isEnabled());
-    QCOMPARE(v->toolTip(), QString("No focus calls yet. Add them with Focus \342\226\270 Edit focus calls\342\200\246"));
+    QVERIFY(v->toolTip().startsWith("No focus calls yet, and no layer of the show aims"));
     QVERIFY(menuAction(&menu, "focusEditCalls")->isEnabled());   // always: that is where calls are made
     QVERIFY(!menuAction(&menu, "focusPractice")->isEnabled());
     QVERIFY(menuAction(&menu, "focusPractice")->toolTip().startsWith("No focus calls yet"));
