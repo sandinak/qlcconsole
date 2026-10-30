@@ -11,6 +11,7 @@
 #include <QDir>
 #include <QtGlobal>
 #include <QDebug>
+#include <cstdio>
 
 #include "doc.h"
 #include "fixture.h"
