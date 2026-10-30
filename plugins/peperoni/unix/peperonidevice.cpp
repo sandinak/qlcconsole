@@ -25,6 +25,21 @@
 #include "peperonidefs.h"
 #include "peperoni.h"
 
+namespace
+{
+constexpr unsigned char makeVendorInterfaceRequestType(unsigned char endpointDirection)
+{
+    return static_cast<unsigned char>(static_cast<unsigned char>(LIBUSB_REQUEST_TYPE_VENDOR) |
+                                      static_cast<unsigned char>(LIBUSB_RECIPIENT_INTERFACE) |
+                                      endpointDirection);
+}
+
+constexpr unsigned char kVendorInterfaceOutRequestType =
+    makeVendorInterfaceRequestType(static_cast<unsigned char>(LIBUSB_ENDPOINT_OUT));
+constexpr unsigned char kVendorInterfaceInRequestType =
+    makeVendorInterfaceRequestType(static_cast<unsigned char>(LIBUSB_ENDPOINT_IN));
+}
+
 /****************************************************************************
  * Initialization
  ****************************************************************************/
@@ -36,7 +51,8 @@ PeperoniDevice::PeperoniDevice(Peperoni* parent, struct libusb_device* device,
     , m_baseLine(line)
     , m_device(device)
     , m_handle(NULL)
-    , m_descriptor(desc)
+    , m_descriptor(*desc)
+    , m_running(false)
 {
     Q_ASSERT(device != NULL);
 
@@ -129,7 +145,7 @@ void PeperoniDevice::extractName()
         int len = 0;
 
         /* Extract the name */
-        len = libusb_get_string_descriptor_ascii(handle, m_descriptor->iProduct,
+        len = libusb_get_string_descriptor_ascii(handle, m_descriptor.iProduct,
                                                (uchar*) &buf, sizeof(buf));
         if (len > 0)
         {
@@ -142,7 +158,7 @@ void PeperoniDevice::extractName()
         }
 /*
         // UID
-        len = libusb_get_string_descriptor_ascii(handle, m_descriptor->iSerialNumber,
+        len = libusb_get_string_descriptor_ascii(handle, m_descriptor.iSerialNumber,
                                                (uchar*) &buf, sizeof(buf));
         if (len > 0)
             m_serial = QString(QByteArray(buf, len));
@@ -155,7 +171,7 @@ void PeperoniDevice::extractName()
 
 QString PeperoniDevice::name(quint32 line) const
 {
-    if (m_descriptor->idProduct == PEPERONI_PID_USBDMX21)
+    if (m_descriptor.idProduct == PEPERONI_PID_USBDMX21)
         return QString("%1 - %2 %3").arg(m_name).arg(tr("Universe")).arg((line - m_baseLine) + 1);
 
     return m_name;
@@ -236,13 +252,13 @@ bool PeperoniDevice::open(quint32 line, OperatingMode mode)
         r = libusb_open(m_device, &m_handle);
         if (r < 0)
         {
-            qWarning() << "Unable to open PeperoniDevice with idProduct:" << m_descriptor->idProduct;
+            qWarning() << "Unable to open PeperoniDevice with idProduct:" << m_descriptor.idProduct;
             m_handle = NULL;
             return false;
         }
 
         /* Use configuration #2 on X-Switch */
-        if (m_descriptor->idProduct == PEPERONI_PID_XSWITCH)
+        if (m_descriptor.idProduct == PEPERONI_PID_XSWITCH)
             configuration = PEPERONI_CONF_TXRX;
         else
             configuration = PEPERONI_CONF_TXONLY;
@@ -259,9 +275,7 @@ bool PeperoniDevice::open(quint32 line, OperatingMode mode)
 
         /* Set TX DMX startcode */
         r = libusb_control_transfer(m_handle,
-                            LIBUSB_REQUEST_TYPE_VENDOR |
-                            LIBUSB_RECIPIENT_INTERFACE |
-                            LIBUSB_ENDPOINT_OUT,
+                            kVendorInterfaceOutRequestType,
                             PEPERONI_TX_STARTCODE,   // Set DMX startcode
                             0,                       // Standard startcode is 0
                             0,                       // No index
@@ -273,9 +287,7 @@ bool PeperoniDevice::open(quint32 line, OperatingMode mode)
 
         /* Set RX DMX startcode */
         r = libusb_control_transfer(m_handle,
-                            LIBUSB_REQUEST_TYPE_VENDOR |
-                            LIBUSB_RECIPIENT_INTERFACE |
-                            LIBUSB_ENDPOINT_IN,
+                            kVendorInterfaceInRequestType,
                             PEPERONI_RX_STARTCODE,   // Set DMX startcode
                             0,                       // Standard startcode is 0
                             0,                       // No index
@@ -396,9 +408,7 @@ void PeperoniDevice::run()
             QMutexLocker lock(&m_ioMutex);
 
             r = libusb_control_transfer(m_handle,
-                                LIBUSB_REQUEST_TYPE_VENDOR |
-                                LIBUSB_RECIPIENT_INTERFACE |
-                                LIBUSB_ENDPOINT_IN,
+                                kVendorInterfaceInRequestType,
                                 PEPERONI_RX_MEM_REQUEST,   // We are READING DMX data
                                 block,                     // Blocking does not work on all firmware versions -> don't block
                                 0,                         // Start at DMX address 0
@@ -417,9 +427,7 @@ void PeperoniDevice::run()
             {
                 /* read received startcode */
                 r = libusb_control_transfer(m_handle,
-                                    LIBUSB_REQUEST_TYPE_VENDOR |
-                                    LIBUSB_RECIPIENT_INTERFACE |
-                                    LIBUSB_ENDPOINT_IN,
+                                    kVendorInterfaceInRequestType,
                                     PEPERONI_RX_STARTCODE,
                                     0,
                                     0,
@@ -432,9 +440,7 @@ void PeperoniDevice::run()
                 {
                     /* read number of received slots */
                     r = libusb_control_transfer(m_handle,
-                                        LIBUSB_REQUEST_TYPE_VENDOR |
-                                        LIBUSB_RECIPIENT_INTERFACE |
-                                        LIBUSB_ENDPOINT_IN,
+                                        kVendorInterfaceInRequestType,
                                         PEPERONI_RX_SLOTS,
                                         0,
                                         0,
@@ -502,9 +508,7 @@ void PeperoniDevice::outputDMX(quint32 line, const QByteArray& universe)
 #endif
         //qDebug() << "[Peperoni] control pipe write. size:" << universe.size();
         r = libusb_control_transfer(m_handle,
-                            LIBUSB_REQUEST_TYPE_VENDOR |
-                            LIBUSB_RECIPIENT_INTERFACE |
-                            LIBUSB_ENDPOINT_OUT,
+                            kVendorInterfaceOutRequestType,
                             PEPERONI_TX_MEM_REQUEST,  // We are WRITING DMX data
                             0,                        // Blocking does not work on all firmware versions -> don't block
                             0,                        // Start at DMX address 0

@@ -117,8 +117,10 @@ void RGBMatrix::setTotalDuration(quint32 msec)
     if (grp == NULL)
         return;
 
+    // an algorithm might have no steps (e.g. an image not loaded yet)
+    // or fail to report them (-1)
     int steps = m_algorithm->rgbMapStepCount(grp->size());
-    setDuration(msec / steps);
+    setDuration(msec / uint(qMax(1, steps)));
 }
 
 quint32 RGBMatrix::totalDuration()
@@ -133,7 +135,7 @@ quint32 RGBMatrix::totalDuration()
         return 0;
 
     //qDebug () << "Algorithm steps:" << m_algorithm->rgbMapStepCount(grp->size());
-    return m_algorithm->rgbMapStepCount(grp->size()) * duration();
+    return qMax(0, m_algorithm->rgbMapStepCount(grp->size())) * duration();
 }
 
 void RGBMatrix::setDimmerControl(bool dimmerControl)
@@ -1017,7 +1019,14 @@ void RGBMatrix::updateMapChannels(const RGBMap& map, const FixtureGroup *grp, QL
             if (headDim != QLCChannel::invalid() && headDim != masterDim)
             {
                 channelList.append(headDim);
-                valueList.append(rgbToGrey(col) == 0 ? 0 : 255);
+                // If a master dimmer is present, it carries the greyscale fade and the
+                // per-head dimmer is just opened fully (on/off). With no master dimmer
+                // (e.g. generic single-channel dimmers), the head dimmer must carry the
+                // greyscale value itself, otherwise it would only ever output 0 or 255.
+                if (masterDim != QLCChannel::invalid())
+                    valueList.append(rgbToGrey(col) == 0 ? 0 : 255);
+                else
+                    valueList.append(rgbToGrey(col));
             }
         }
         else
@@ -1053,9 +1062,18 @@ void RGBMatrix::updateMapChannels(const RGBMap& map, const FixtureGroup *grp, QL
 
 uchar RGBMatrix::rgbToGrey(uint col)
 {
+    uchar r = qRed(col);
+    uchar g = qGreen(col);
+    uchar b = qBlue(col);
+
+    // Special case: if R=G=B (grayscale), return the value directly.
+    // This avoids floating-point precision issues.
+    if (r == g && g == b)
+        return r;
+
     // the weights are taken from
     // https://en.wikipedia.org/wiki/YUV#SDTV_with_BT.601
-    return (0.299 * qRed(col) + 0.587 * qGreen(col) + 0.114 * qBlue(col));
+    return uchar(round(0.299 * r + 0.587 * g + 0.114 * b));
 }
 
 /*********************************************************************

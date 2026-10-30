@@ -217,7 +217,8 @@ public:
     bool isFadingOut() const;
 
     /** Set this fader to fade out. If $fadeTime is non-zero,
-      * all the intensity channels will be updated */
+      * all the intensity channels will be updated.
+      * Enabling fade out also resumes a paused fader */
     void setFadeOut(bool enable, uint fadeTime);
 
     /** As setFadeOut(enable, fadeTime), but honouring a per-channel fade-time

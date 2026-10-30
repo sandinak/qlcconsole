@@ -1373,6 +1373,10 @@ void Doc::applyFixtureToUniverses(Fixture *fixture, bool crossUniverse)
             addr = (fixture->universeAddress() + i) - (uni * 512);
         }
 
+        // the fixture may not fit in the universe (e.g. address too high)
+        if (uni >= quint32(universes.count()) || addr >= 512)
+            continue;
+
         // Inform Universe of any HTP/LTP forcing
         if (forcedHTP.contains(int(i)))
             universes.at(uni)->setChannelCapability(addr, channel->group(), Universe::HTP);
@@ -1922,7 +1926,9 @@ void Doc::slotFixtureChanged(quint32 id)
          * with an tmp wrong address after the first call (old address() + new universe()).
          * we only add if the channel is free, to prevent messing up things
          */
-        Q_ASSERT(!m_addresses.contains(i));
+        if (m_addresses.contains(i))
+            continue;
+
         m_addresses[i] = id;
     }
 

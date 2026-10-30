@@ -69,6 +69,14 @@ skipped). Upstream fixes taken:
   CLB2.4). The fixture library is now synced from upstream every release
   (`tools/sync-fixtures.py`), keeping qlcconsole's own definitions and
   edits. 1,791 definitions.
+- **Engine and plugin fixes from QLC+ upstream master** (second intake,
+  after 4.14.4): 35 taken, among them a Collection lasting as long as its
+  longest member, an EFX that froze with a long fade in, paused faders
+  resuming when they fade out, audio fade-out and end-of-stream fixes,
+  a DMX dump past four universes, Peperoni USBDMX21 detection, an OSC
+  feedback fix and new input profiles (Behringer X-Touch Compact, M-VAVE
+  SMC-PAD). What was skipped or deferred, and why, is in
+  [docs/dev/UPSTREAM.md](docs/dev/UPSTREAM.md).
 
 ### Added
 

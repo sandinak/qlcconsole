@@ -60,9 +60,9 @@ AudioEditor::AudioEditor(QWidget* parent, Audio *audio, Doc* doc)
     connect(m_speedDialButton, SIGNAL(toggled(bool)),
             this, SLOT(slotSpeedDialToggle(bool)));
 
-    connect(m_fadeInEdit, SIGNAL(returnPressed()),
+    connect(m_fadeInEdit, SIGNAL(editingFinished()),
             this, SLOT(slotFadeInEdited()));
-    connect(m_fadeOutEdit, SIGNAL(returnPressed()),
+    connect(m_fadeOutEdit, SIGNAL(editingFinished()),
             this, SLOT(slotFadeOutEdited()));
 
     connect(m_previewButton, SIGNAL(toggled(bool)),
@@ -209,6 +209,9 @@ void AudioEditor::slotFadeInEdited()
     newValue = Function::stringToSpeed(text);
     m_fadeInEdit->setText(Function::speedToString(newValue));
 
+    if (m_audio->fadeInSpeed() == newValue)
+        return;
+
     m_audio->setFadeInSpeed(newValue);
     m_doc->setModified();
 }
@@ -220,6 +223,9 @@ void AudioEditor::slotFadeOutEdited()
 
     newValue = Function::stringToSpeed(text);
     m_fadeOutEdit->setText(Function::speedToString(newValue));
+
+    if (m_audio->fadeOutSpeed() == newValue)
+        return;
 
     m_audio->setFadeOutSpeed(newValue);
     m_doc->setModified();

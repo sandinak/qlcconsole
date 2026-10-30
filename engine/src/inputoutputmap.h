@@ -29,6 +29,7 @@
 #include "qlcinputprofile.h"
 #include "universe.h"
 #include "grandmaster.h"
+#include "../../plugins/interfaces/qlcioplugin.h"
 
 class QXmlStreamReader;
 class QXmlStreamWriter;
@@ -36,7 +37,6 @@ class QElapsedTimer;
 class QTimer;
 class QLCInputSource;
 class AudioCapture;
-class QLCIOPlugin;
 class OutputPatch;
 class InputPatch;
 class Universe;

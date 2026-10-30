@@ -145,6 +145,12 @@ uint EFX::loopDuration() const
 {
     uint fadeIn = overrideFadeInSpeed() == defaultSpeed() ? fadeInSpeed() : overrideFadeInSpeed();
 
+    // With a fade in not shorter than the duration, the subtraction would
+    // wrap around to a huge loop and the EFX would look frozen: use the
+    // whole duration for the loop instead
+    if (fadeIn >= duration())
+        return duration();
+
     return duration() - fadeIn;
 }
 
@@ -1143,6 +1149,11 @@ void EFX::write(MasterTimer *timer, QList<Universe*> universes)
         EFXFixture *ef = it.next();
         if (ef->isDone() == false)
         {
+            // an entry whose fixture doesn't exist (e.g. it couldn't be
+            // loaded) has no universe
+            if (ef->universe() >= quint32(universes.count()))
+                continue;
+
             QSharedPointer<GenericFader> fader = getFader(universes, ef->universe());
             ef->nextStep(universes, fader);
         }

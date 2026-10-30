@@ -41,6 +41,7 @@ private slots:
     void aChannelBeingSetUpStaysPutWhileTheUniverseWrites();
     void aFaderLeavesNothingBehind();
     void writeLoop();
+    void fadeOutWhilePaused();
     void adjustIntensity();
 
 private:

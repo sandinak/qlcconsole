@@ -120,6 +120,10 @@ public:
 private:
     QString m_data;
 
+    /** Cached result of totalDuration(), valid until the data changes */
+    quint32 m_cachedDuration;
+    bool m_durationValid;
+
     /************************************************************************
      * Load & Save
      ************************************************************************/
@@ -169,7 +173,6 @@ private:
 
 private:
     ScriptRunner *m_runner;
-    QList <int> m_syntaxErrorLines;
 };
 
 /** @} */
