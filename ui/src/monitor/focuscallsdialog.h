@@ -96,6 +96,7 @@ public:
     /** The calls as edited (they are the show's once Start or Save). */
     QList<FocusCall> calls() const { return m_calls; }
     void setCalls(const QList<FocusCall> &calls);
+    void keepCalls();
 
     /** The venue chosen: a name (new or existing), or empty for the show's
      *  own calibration. */

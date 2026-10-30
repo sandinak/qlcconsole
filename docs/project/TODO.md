@@ -110,6 +110,34 @@ Still open from it:
 - decided (can change): a lantern's glow at 45° doesn't pick it; its glass
   and cage do. A click on a ruler band picks nothing under it.
 
+## Walk the show from the stage with the controller (board Q192, answered 2026-10-30: build in 0.4)
+
+Design as asked (Q192): stand on stage and walk the cues, walk a cue's
+layers (solo or mixed), adjust what the pad can, tag cues that need more
+work. Built as an extension of Focus this cue (Q106/Q118), its own button
+map while walking: RT/LT next/previous cue; RB/LB next/previous layer
+(blinks, voice "Layer 2 of 4: Movers, Blue"); View toggles solo layer /
+whole cue; sticks, D-pad and A adjust and keep as Focus this cue does now,
+in its Layer/Group/Fixture scope; hold Y tags the cue "Needs work" (flag in
+the tree, a Needs work filter, an optional note typed or spoken on the
+laptop); Menu leaves. Plays live in Design; in Operate it follows the quiet
+Refine rules (Q130). Voice and light bar for feedback, no need to look at
+the laptop. Reuses Refine, the Layer/Group/Fixture scope cycle, the
+voice/light-bar feedback and the Show Tree's cue notes. Several days, opus.
+
+Follow-up notes (chat 2026-10-30, for the 0.4 design):
+- Targets for layers are set as for any light (drop a Library > Target on
+  the layer: Aim palette or line aim); only target-aimed layers can be
+  checked against a point.
+- Separate **the light itself** (venue calibration offset, used by every
+  cue, saved in Show.venues.xml as venue focus does) from **this cue's look**
+  (Refine) on A; default: the light itself when aiming at a target, a
+  modifier for this cue.
+- One button map for Xbox and PlayStation (consistency, the course,
+  controller slots move pads between rooms); the PS touchpad only adds
+  shortcuts (swipe = layer walk, tap = tag), never the only way. The button
+  budget is solved by the walking map + hold LB as a modifier.
+
 ## Focus calls and refining a cue from the stage (design, 2026-10-23)
 
 Two jobs, being designed on the board (Q105-Q108), built after the freeze:

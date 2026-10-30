@@ -944,7 +944,9 @@ void FocusCalls_Test::aFocusCallCueArmsThenStartsOnTheController()
     fcc->cueCurrent(list, focus);
     QString why;
     QVERIFY(!fcc->start(&why));
-    QCOMPARE(said.last().at(0).toString(), QString("This show has no focus calls yet."));
+    QVERIFY2(said.last().at(0).toString().startsWith("No focus calls yet, and no layer"),
+             qPrintable(said.last().at(0).toString()));
+    QCOMPARE(why, said.last().at(0).toString());
     QCOMPARE(fcc->state(), FocusCallCue::Armed);
     fcc->setRunningCueProbe({});
     m_doc->setMode(Doc::Design);
@@ -1257,7 +1259,7 @@ void FocusCalls_Test::importantLinesAlwaysSpeak()
     fcc->cueCurrent(list, focus);
     QCOMPARE(said.count(), 0);                 // "ready" is not a warning: quiet
     QVERIFY(!fcc->start());
-    QCOMPARE(said.last().at(0).toString(), QString("This show has no focus calls yet."));
+    QVERIFY(said.last().at(0).toString().startsWith("No focus calls yet, and no layer"));
     QCOMPARE(said.last().at(1).toInt(), int(ControllerScheme::ImportantPriority));
     pc->setOperatorFeedback(ControllerScheme::BothFeedback);
     m_doc->setMode(Doc::Design);
@@ -2858,4 +2860,152 @@ void FocusCalls_Test::callsStartingAreToldFirst()
     s->setScope(FocusSession::GroupScope);
     QVERIFY2(s->lightPhrase().startsWith("All 2"), qPrintable(s->lightPhrase()));
     s->stop();
+}
+
+namespace
+{
+/* Two targets (DSC, USC) and three groups on a small show: Spots aim DSC in
+   one cue, Washes aim USC in another and DSC in a third; Plain never aim. */
+struct SmallShow
+{
+    StageTarget *dsc = nullptr;
+    StageTarget *usc = nullptr;
+    FixtureGroup *spots = nullptr, *washes = nullptr, *plain = nullptr;
+    quint32 list = 0;
+};
+
+SmallShow buildSmallShow(Doc *doc)
+{
+    SmallShow s;
+    Fixture *a = makeSpot(doc, "S1", -2.0f, 1.0f);
+    Fixture *b = makeSpot(doc, "S2", 2.0f, 1.0f);
+    Fixture *c = makeSpot(doc, "W1", -2.0f, 3.0f);
+    Fixture *d = makeSpot(doc, "P1", 0.0f, 3.0f);
+    s.dsc = makeTarget(doc, "DSC", QVector3D(0, 1000, 0));
+    s.usc = makeTarget(doc, "USC", QVector3D(0, 6000, 0));
+    s.spots = makeGroup(doc, "Spots", { a, b });
+    s.washes = makeGroup(doc, "Washes", { c });
+    s.plain = makeGroup(doc, "Plain", { d });
+    ShowTreeController *st = doc->showTree();
+    s.list = st->addCueList(st->addProduction("Spring"), "Main");
+    int at = -1;
+    auto aim = [&](const QString &cueName, FixtureGroup *g, StageTarget *t) {
+        const quint32 cue = st->addCue(s.list, at++, cueName);
+        ShowTree::Target tg;
+        tg.groups << g->id();
+        const quint32 layer = st->addLayer(cue, tg);
+        ShowTree::Look look;
+        look.key = ShowTree::KeyPosition;
+        look.palettes << st->aimPaletteFor(t->id());
+        st->setLayerLook(cue, layer, look);
+    };
+    aim("One", s.spots, s.dsc);
+    aim("Two", s.washes, s.usc);
+    aim("Three", s.washes, s.dsc);
+    return s;
+}
+}
+
+void FocusCalls_Test::callsComeFromTheShowsTargets()
+{
+    const SmallShow show = buildSmallShow(m_doc);
+    FocusCalls *fc = m_doc->programmer()->focusCalls();
+    QCOMPARE(fc->count(), 0);
+    QVERIFY(fc->hasOrCanBuild());
+
+    const QList<FocusCall> built = fc->callsFromShow();
+    QCOMPARE(built.size(), 2);
+    // In the order the show first aims at them: DSC, then USC.
+    QCOMPARE(built.at(0).target.id, show.dsc->id());
+    QCOMPARE(built.at(0).groups, QList<quint32>({ show.spots->id(), show.washes->id() }));
+    QCOMPARE(built.at(0).name, QString::fromUtf8("From the show: Spots, Washes \u2192 DSC"));
+    QCOMPARE(built.at(1).target.id, show.usc->id());
+    QCOMPARE(built.at(1).groups, QList<quint32>({ show.washes->id() }));
+    // The group nothing aims is in no call.
+    for (const FocusCall &c : built)
+        QVERIFY(!c.groups.contains(show.plain->id()));
+
+    QVERIFY(fc->ensureCalls());
+    QCOMPARE(fc->count(), 2);
+    QVERIFY(fc->isFromShow());
+    QCOMPARE(fc->sessionCalls().size(), 2);
+}
+
+void FocusCalls_Test::builtCallsRunForEveryOwnerAndAreNotSaved()
+{
+    const SmallShow show = buildSmallShow(m_doc);
+    show.spots->setOwner(RigOwner::House);
+    show.washes->setOwner(RigOwner::Rental);
+    FocusCalls *fc = m_doc->programmer()->focusCalls();
+    QVERIFY(fc->ensureCalls());
+    QCOMPARE(fc->count(), 2);
+    QVERIFY(fc->call(0).groups.contains(show.spots->id()));
+
+    FocusSession *s = m_doc->programmer()->focusSession();
+    FocusSession::Options o;
+    o.calls = fc->sessionCalls();
+    QVERIFY(s->start(o));
+    QCOMPARE(s->callCount(), 2);
+    s->stop();
+
+    auto xml = [fc]() {
+        QByteArray out;
+        QXmlStreamWriter w(&out);
+        w.writeStartDocument();
+        w.writeStartElement("Root");
+        fc->saveXML(&w);
+        w.writeEndElement();
+        w.writeEndDocument();
+        return QString::fromUtf8(out);
+    };
+    QVERIFY(!xml().contains("FocusCalls"));     // built, not saved
+    // Saved like any edit: now they are the show's.
+    fc->setCalls(fc->calls());
+    QVERIFY(!fc->isFromShow());
+    QVERIFY(xml().contains("FocusCalls"));
+    QVERIFY(fc->ensureCalls());                 // the show's own are kept as they are
+    QCOMPARE(fc->count(), 2);
+}
+
+void FocusCalls_Test::withNothingToBuildFromItSaysWhy()
+{
+    FocusCalls *fc = m_doc->programmer()->focusCalls();
+    FocusCallCue *fcc = m_doc->programmer()->focusCallCue();
+    ShowTreeController *st = m_doc->showTree();
+    // A show with a venue focus cue and nothing aimed at a target.
+    const quint32 list = st->addCueList(st->addProduction("Spring"), "Main");
+    const quint32 focus = st->addCue(list, -1, "Focus");
+    QVERIFY(st->setCuesFocusCall({ focus }, true));
+    QVERIFY(!fc->hasOrCanBuild());
+    QVERIFY(fc->whyNone().startsWith("No focus calls yet, and no layer"));
+    QVERIFY(!fc->ensureCalls());
+    fcc->cueCurrent(list, focus);
+    QCOMPARE(fcc->state(), FocusCallCue::Armed);
+    QString why;
+    QVERIFY(!fcc->start(&why));
+    QCOMPARE(why, fc->whyNone());
+
+    // Calls whose groups are empty: said so, not "nothing came up".
+    FixtureGroup *empty = new FixtureGroup(m_doc);
+    empty->setName("Empty");
+    empty->setSize(QSize(1, 1));
+    m_doc->addFixtureGroup(empty);
+    FocusCall c;
+    c.groups << empty->id();
+    c.target = targetRef(makeTarget(m_doc, "DSC", QVector3D(0, 1000, 0))->id());
+    fc->setCalls({ c });
+    QVERIFY(!fcc->start(&why));
+    QVERIFY2(why.contains("groups are empty"), qPrintable(why));
+
+    // Aimed groups with nothing in them build no call either.
+    fc->clear();
+    const quint32 cue = st->addCue(list, -1, "Aim");
+    ShowTree::Target tg;
+    tg.groups << empty->id();
+    const quint32 layer = st->addLayer(cue, tg);
+    ShowTree::Look look;
+    look.key = ShowTree::KeyPosition;
+    look.palettes << st->aimPaletteFor(m_doc->monitorProperties()->stageTargets().first()->id());
+    QVERIFY(st->setLayerLook(cue, layer, look));
+    QVERIFY(!fc->hasOrCanBuild());
 }

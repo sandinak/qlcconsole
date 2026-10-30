@@ -145,8 +145,15 @@ bool FocusCallCue::start(QString *why)
     };
     if (m_state != Armed)
         return false;
-    if (m_calls == nullptr || m_calls->count() == 0)
-        return refuse(tr("This show has no focus calls yet."));
+    // No calls of the show's own: the ones its targets make.
+    if (m_calls == nullptr || !m_calls->ensureCalls())
+        return refuse(m_calls != nullptr && !m_calls->hasOrCanBuild() ? m_calls->whyNone()
+                                                                      : tr("This show has no focus calls yet."));
+    bool anyLight = false;
+    for (const FocusCall &c : m_calls->calls())
+        anyLight = anyLight || !FocusCalls::fixturesOf(m_doc, c).isEmpty();
+    if (!anyLight)
+        return refuse(tr("The focus calls have no lights: their groups are empty."));
     /* Saves go to a venue, and a show moves between rooms: ALWAYS confirm
        it on the laptop (Q120, Q129) -- the one applied, or a name -- and if
        nobody answers in a few seconds, a new venue for today, so last
@@ -209,6 +216,7 @@ bool FocusCallCue::beginCalls(QString *why)
         emit announce(reason, ControllerScheme::ImportantPriority);
         return false;
     };
+    m_calls->ensureCalls();
     FocusSession::Options o;
     o.calls = m_calls->sessionCalls();
     o.order = FocusSession::ByStagePosition;
