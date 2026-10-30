@@ -34,6 +34,7 @@
 #include "qlcfixturemode.h"
 #include "qlcfixturedef.h"
 #include "stagetarget.h"
+#include "teachingsettings.h"
 #include "inputoutputmap.h"
 #include "fixture.h"
 #include "doc.h"
@@ -272,6 +273,51 @@ bool VenueCorrections::writeSidecarFor(const QString &showFile, QString *why) co
     return true;
 }
 
+bool VenueCorrections::writeHandoutSidecarFor(const QString &showFile, bool dropPractice,
+                                              bool dropNames, QString *why) const
+{
+    const QString path = sidecarPath(showFile);
+    QList<Venue> venues;
+    QString active = m_active;
+    for (const Venue &src : m_venues)
+    {
+        if (dropPractice && src.practice.on)
+        {
+            // A practice applied now: the handout opens on the venue it came from.
+            if (active == src.name)
+                active = src.practice.from;
+            continue;
+        }
+        Venue v = src;
+        if (dropNames)
+            for (auto it = v.checks.begin(); it != v.checks.end(); ++it)
+                it.value().by.clear();
+        venues << v;
+    }
+    if (active != m_active && !active.isEmpty())
+    {
+        bool known = false;
+        for (const Venue &v : venues)
+            known = known || v.name == active;
+        if (!known)
+            active.clear();
+    }
+    if (path.isEmpty() || venues.isEmpty())
+        return false;
+    QByteArray xml = toXml(venues, active);
+    if (!m_showFile.isEmpty())
+        xml.replace(QStringLiteral("Show=\"%1\"").arg(QFileInfo(m_showFile).fileName().toHtmlEscaped()).toUtf8(),
+                    QStringLiteral("Show=\"%1\"").arg(QFileInfo(showFile).fileName().toHtmlEscaped()).toUtf8());
+    QSaveFile f(path);
+    if (!f.open(QIODevice::WriteOnly) || f.write(xml) < 0 || !f.commit())
+    {
+        if (why != nullptr)
+            *why = tr("Cannot write %1: %2").arg(QDir::toNativeSeparators(path), f.errorString());
+        return false;
+    }
+    return true;
+}
+
 QString VenueCorrections::showStem(const QString &showFile)
 {
     QString stem = QFileInfo(showFile).completeBaseName();
@@ -353,6 +399,11 @@ bool VenueCorrections::importFrom(const QString &sidecar, QString *why)
 
 QByteArray VenueCorrections::toXml() const
 {
+    return toXml(m_venues, m_active);
+}
+
+QByteArray VenueCorrections::toXml(const QList<Venue> &venues, const QString &active) const
+{
     QByteArray out;
     QXmlStreamWriter w(&out);
     w.setAutoFormatting(true);
@@ -362,14 +413,14 @@ QByteArray VenueCorrections::toXml() const
     /* Version 2 only when a venue owns more than corrections (docs/design/VENUES.md
        section 7): a file without is written as it always was. */
     bool owns = false;
-    for (const Venue &v : m_venues)
+    for (const Venue &v : venues)
         owns = owns || !v.rig.isEmpty();
     w.writeAttribute(QStringLiteral("Version"), QString::number(owns ? 2 : kVersion));
     if (!m_showFile.isEmpty())
         w.writeAttribute(QStringLiteral("Show"), QFileInfo(m_showFile).fileName());
-    if (!m_active.isEmpty())
-        w.writeAttribute(QStringLiteral("Active"), m_active);
-    for (const Venue &v : m_venues)
+    if (!active.isEmpty())
+        w.writeAttribute(QStringLiteral("Active"), active);
+    for (const Venue &v : venues)
     {
         w.writeStartElement(kVenue);
         w.writeAttribute(QStringLiteral("Name"), v.name);
@@ -1445,6 +1496,12 @@ QList<quint32> VenueCorrections::deadLights() const
 QString VenueCorrections::startPractice(const QList<quint32> &fids, quint32 seed, float minDeg,
                                         float maxDeg, QString *why)
 {
+    if (!m_doc->teachingSettings()->enabled())
+    {
+        if (why != nullptr)
+            *why = tr("This isn't a Teaching show: turn Teaching mode on in File \342\226\270 Show Settings.");
+        return QString();
+    }
     if (filePath().isEmpty())
     {
         if (why != nullptr)

@@ -96,6 +96,10 @@ about its patch or cues. It's only open in Design.
   it, and Live Edit is off. Use it to keep a running show safe from a
   curious click at the desk: a school concert, a lobby left running.
   **Change PIN…** and **Remove PIN** ask for the current PIN first.
+  Untick **Going back to Design asks for the PIN** to keep the PIN for
+  Teaching mode only.
+- **Teaching mode**: marks the show as a classroom show, for students. The
+  same PIN guards turning it off. See [Teaching mode](teaching.md).
 
 The PIN is kept in the show file as a salted hash, not as the digits. It
 stops a click, not someone who edits the show file. Keep a copy of the show

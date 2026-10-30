@@ -105,6 +105,7 @@
 #include "effectscriptcache.h"
 #include "speedmasters.h"
 #include "doc.h"
+#include "teachingsettings.h"
 
 #include "courseshow_test.h"
 #include "../common/dragpos.h"
@@ -2640,6 +2641,7 @@ void CourseShow_Test::lessonFocusAndCalibration()
     {
         FocusCallsDialog d(doc, m_app);
         QString why;
+        doc->teachingSettings()->setEnabled(true);
         QVERIFY2(d.startPractice(1.0f, 3.0f, 36, &why), qPrintable(why));
         QVERIFY(venues->isPracticeActive());
         const VenueCorrections::Venue pv = venues->venue(venues->activeVenue());

@@ -25,8 +25,26 @@
 
 class QCheckBox;
 class QLabel;
+class QLineEdit;
 class QPushButton;
 class Doc;
+
+/** What Make Student Handout writes: a copy of the show for students. */
+struct HandoutOptions
+{
+    /** The copy; a .qlcc (its definitions travel with it) */
+    QString path;
+    /** The copy's PIN (ShowPin::hash()), or empty for none */
+    QString pinHash;
+    /** Leave out practice venues and their answer key */
+    bool dropPractice = true;
+    /** Blank the "checked by" names in the sidecar */
+    bool dropNames = true;
+    /** Real network output stays held in the copy */
+    bool holdOutput = true;
+    QString lesson;
+    QString link;
+};
 
 /** @addtogroup ui UI
  * @{
@@ -55,9 +73,19 @@ public:
      *  Cancel, or (said) when wrong. */
     static bool askForPin(QWidget *parent, const QString &hash, const QString &why);
 
+    /** The user pressed Make Student Handout (after the settings were
+     *  applied): the caller runs the handout dialog next. */
+    bool handoutRequested() const { return m_handoutRequested; }
+
+    /** Ask for the handout's options (the file, its PIN, what to leave out);
+     *  false on Cancel. */
+    static bool askHandoutOptions(Doc *doc, QWidget *parent, HandoutOptions *out);
+
     /** Test seam: with test mode on, nothing is shown. The answers are
      *  given in turn instead of asking (none left, or an empty one, is
-     *  Cancel), and a wrong PIN isn't a message box. */
+     *  Cancel), and a wrong PIN isn't a message box. Make Student Handout
+     *  then takes testHandout() as its options. */
+    static HandoutOptions &testHandout();
     static void setTestMode(bool on);
     static QStringList &testAnswers();
 
@@ -67,6 +95,8 @@ public slots:
 private slots:
     void slotSetPin();
     void slotRemovePin();
+    void slotHandout();
+    void updateEnabled();
 
 private:
     void updatePinText();
@@ -74,6 +104,13 @@ private:
 private:
     Doc *m_doc;
     QCheckBox *m_openInOperate;
+    QCheckBox *m_lockDesign;
+    QCheckBox *m_teaching;
+    QCheckBox *m_allowOutput;
+    QLineEdit *m_lesson;
+    QLineEdit *m_link;
+    QPushButton *m_handout;
+    bool m_handoutRequested = false;
     QLabel *m_pinText;
     QPushButton *m_setPin;
     QPushButton *m_removePin;

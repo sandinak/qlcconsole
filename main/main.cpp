@@ -450,7 +450,7 @@ int main(int argc, char** argv)
     }
 
     if (QLCArgs::operate == true)
-        app.slotModeOperate();
+        app.startInOperate();
 
     // Automated UI-screenshot hook (offscreen grabs); no-op unless QLC_SHOT_DIR set.
     app.captureScenarioIfRequested();

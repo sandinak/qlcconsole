@@ -62,6 +62,7 @@
 #include "fixture.h"
 #include "chaser.h"
 #include "doc.h"
+#include "teachingsettings.h"
 
 #define TESTPLUGINDIR "../iopluginstub"
 
@@ -1053,6 +1054,7 @@ void VenueRig_Test::aPracticeKeepsTheHouseRig()
     QVERIFY(v->isVenueFixture(par));
 
     // The room's own lights stay up while the student practises.
+    m_doc->teachingSettings()->setEnabled(true);
     const QString practice = v->startPractice({ spot->id() }, 7);
     QVERIFY(!practice.isEmpty());
     QCOMPARE(v->activeVenue(), practice);
@@ -1404,6 +1406,7 @@ void VenueRig_Test::aSidecarFromANewerBuildStillLoads()
     QVERIFY(v->markChecked({ spot->id() }));
     // Another venue, and a practice kept for its report.
     v->addVenue(QStringLiteral("Grand Hall"));
+    m_doc->teachingSettings()->setEnabled(true);
     const QString practice = v->startPractice({ spot->id() }, 7);
     QVERIFY(!practice.isEmpty());
     QVERIFY(v->endPractice());
@@ -1541,6 +1544,7 @@ void VenueRig_Test::aPracticeNeverReachesTheShowFile()
     QVERIFY(lincolnBefore.contains("PanOfs=\"1.00\""));
 
     QString why;
+    m_doc->teachingSettings()->setEnabled(true);
     const QString practice = v->startPractice({ a->id(), b->id() }, 42, 2.0f, 8.0f, &why);
     QVERIFY2(!practice.isEmpty(), qPrintable(why));
     for (Fixture *fx : { a, b })

@@ -67,6 +67,7 @@
 #include "fixture.h"
 #include "scene.h"
 #include "doc.h"
+#include "teachingsettings.h"
 
 #include <QMenu>
 #include <QMessageBox>
@@ -1383,6 +1384,7 @@ void FocusCallsUi_Test::practiceScramblesAndScores()
     QPushButton *practice = d.findChild<QPushButton *>("fcPractice");
     QVERIFY(practice != nullptr && practice->isEnabled());
     QString why;
+    m_doc->teachingSettings()->setEnabled(true);
     QVERIFY2(d.startPractice(2.0f, 6.0f, 7, &why), qPrintable(why));
     QVERIFY(d.isPractice());
     QVERIFY(venues->isPracticeActive());

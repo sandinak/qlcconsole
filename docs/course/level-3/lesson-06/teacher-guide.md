@@ -40,6 +40,12 @@ Students can:
   the focus calls list, **Focus ▸ Edit focus calls…**, picks the output).
 - [ ] On the projector: the show saved as `Lesson3-6-demo.qlcc`, the
   **Lighting Studio** tab, **View → Rig Overview** beside it.
+- [ ] **Teaching mode** on in the show the students use: the scramble is
+  only offered in a Teaching show. Either they tick it (**File ▸ Show
+  Settings… ▸ Teaching mode**, the handout says where), or you hand out a
+  copy made with **Make Student Handout…** (same dialog): Teaching on, real
+  output held, an optional PIN so it stays on, and no practice answer key
+  in the venue file. Keep your own copy without Teaching mode.
 - [ ] Print the [handout](handout.md) and the [exit ticket](exit-ticket.md).
 
 ## Vocabulary (introduce in this order)

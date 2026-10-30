@@ -44,6 +44,7 @@
 #include "programmercontroller.h"
 #include "monitorproperties.h"
 #include "venuecorrections.h"
+#include "teachingsettings.h"
 #include <QGuiApplication>
 #include <QElapsedTimer>
 #include <QTimer>
@@ -213,6 +214,8 @@ FocusCallsDialog::FocusCallsDialog(Doc *doc, QWidget *parent)
         }
         accept();
     });
+    // Only in a Teaching show (File, Show Settings).
+    m_practice->setVisible(m_doc->teachingSettings()->enabled());
     reportRow->addWidget(m_practice);
     vl->addLayout(reportRow);
     // The voice is the crew's cue: send it to the output that feeds the headsets.

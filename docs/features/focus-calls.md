@@ -325,7 +325,8 @@ room's trims and targets.
 
 ## Practice: scramble and focus back
 
-For the classroom. A **scramble** knocks every moving head in the focus
+For the classroom, and only in a [Teaching mode](teaching.md) show (File ▸
+Show Settings…): without it the scramble is not offered. A **scramble** knocks every moving head in the focus
 calls off its target by a random amount of pan and tilt. You focus them
 back, call by call, as you would in a new room, and you are scored on how
 many degrees off each light ends up, how long it takes and how many saves

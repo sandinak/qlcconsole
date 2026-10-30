@@ -47,6 +47,7 @@
 #include "venuecorrections.h"
 #include "truss.h"
 #include "doc.h"
+#include "teachingsettings.h"
 
 #include "../../../engine/test/common/resource_paths.h"
 
@@ -388,6 +389,7 @@ void MonitorFixtureItem_Test::aPracticeDrawsTheGaugesWhereTheLightPoints()
     const QImage before = render();
 
     QString why;
+    m_doc->teachingSettings()->setEnabled(true);
     QVERIFY2(!venues->startPractice({ fid }, 7, 8.0f, 12.0f, &why).isEmpty(), qPrintable(why));
     QVERIFY(venues->isPracticeActive());
     const FixtureRigProps scrambled = props->fixtureRigProps(fid);

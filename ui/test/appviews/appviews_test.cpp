@@ -57,6 +57,7 @@
 #include "venuemenu.h"
 #include "showsettingsdialog.h"
 #include "showoperate.h"
+#include "teachingsettings.h"
 #include "focusmenu.h"
 #include "venuecorrections.h"
 #include "programmercontroller.h"
@@ -3225,6 +3226,315 @@ void AppViews_Test::aPinKeepsTheShowInOperate()
     ShowSettingsDialog::testAnswers() = { "2468" };
     m_app->slotModeDesign();
     QCOMPARE(doc->mode(), Doc::Design);
+}
+
+void AppViews_Test::teachingModeShowsItselfAndThePractice()
+{
+    m_app->clearDocument();
+    Doc *doc = m_app->doc();
+    auto back = qScopeGuard([this]() {
+        m_app->doc()->teachingSettings()->setEnabled(false);
+        m_app->setWorkspaceView(App::ConsoleView);
+        m_app->clearDocument();
+    });
+    QLabel *chip = m_app->findChild<QLabel *>("footerTeaching");
+    QVERIFY(chip != nullptr);
+
+    auto practiceItems = [doc, this]() {
+        QMenu menu;
+        FocusMenu::fill(&menu, doc, m_app, nullptr);
+        int n = 0;
+        for (QAction *a : menu.actions())
+            if (a->objectName() == QLatin1String("focusPractice"))
+                n++;
+        return n;
+    };
+
+    // Not a teaching show: nothing about it anywhere
+    QVERIFY(chip->isHidden());
+    QVERIFY(!m_app->windowTitle().contains("Teaching"));
+    QCOMPARE(practiceItems(), 0);
+
+    doc->teachingSettings()->setEnabled(true);
+    QVERIFY(doc->isModified());
+    for (App::WorkspaceView v : { App::ConsoleView, App::EverythingView, App::ClassicView })
+    {
+        m_app->setWorkspaceView(v);
+        QVERIFY2(!chip->isHidden(), qPrintable(QString("view %1").arg(int(v))));
+        QCOMPARE(chip->text(), QString("TEACHING"));
+    }
+    QVERIFY(m_app->windowTitle().contains("(Teaching)"));
+    QCOMPARE(practiceItems(), 1);
+
+    // Off again: gone
+    doc->teachingSettings()->setEnabled(false);
+    QVERIFY(chip->isHidden());
+    QVERIFY(!m_app->windowTitle().contains("Teaching"));
+    QCOMPARE(practiceItems(), 0);
+}
+
+void AppViews_Test::teachingModeIsGuardedByThePin()
+{
+    m_app->clearDocument();
+    Doc *doc = m_app->doc();
+    ShowSettingsDialog::setTestMode(true);
+    auto back = qScopeGuard([this]() {
+        ShowSettingsDialog::setTestMode(false);
+        m_app->doc()->teachingSettings()->setEnabled(false);
+        m_app->clearDocument();
+    });
+
+    // No PIN: ticking and unticking just works
+    {
+        ShowSettingsDialog dlg(doc, m_app);
+        QCheckBox *teaching = dlg.findChild<QCheckBox *>("showSettingsTeaching");
+        QCheckBox *allow = dlg.findChild<QCheckBox *>("showSettingsAllowOutput");
+        QVERIFY(teaching && allow);
+        QVERIFY(!allow->isEnabled());           // only in a teaching show
+        teaching->setChecked(true);
+        QVERIFY(allow->isEnabled());
+        QVERIFY(!doc->teachingSettings()->enabled());       // nothing until OK
+        dlg.accept();
+    }
+    QVERIFY(doc->teachingSettings()->enabled());
+    QVERIFY(doc->teachingSettings()->holdsOutput());
+    QVERIFY(doc->operateSettings()->setPin("2468"));
+    doc->operateSettings()->setLockDesign(false);       // the PIN is for Teaching
+    doc->resetModified();
+
+    // Off needs the PIN: wrong, or none, leaves it on and the dialog open
+    {
+        ShowSettingsDialog dlg(doc, m_app);
+        QCheckBox *teaching = dlg.findChild<QCheckBox *>("showSettingsTeaching");
+        teaching->setChecked(false);
+        ShowSettingsDialog::testAnswers() = { "1111" };
+        dlg.accept();
+        QVERIFY(dlg.result() != QDialog::Accepted);
+        QVERIFY(doc->teachingSettings()->enabled());
+        ShowSettingsDialog::testAnswers().clear();
+        dlg.accept();
+        QVERIFY(doc->teachingSettings()->enabled());
+        QVERIFY(!doc->isModified());
+        ShowSettingsDialog::testAnswers() = { "2468" };
+        dlg.accept();
+        QCOMPARE(dlg.result(), int(QDialog::Accepted));
+    }
+    QVERIFY(!doc->teachingSettings()->enabled());
+    QVERIFY(doc->isModified());
+    // A show setting, not an edit: Undo has no step for it
+    QVERIFY(!doc->inputOutputMap()->teachingHold());
+
+    // Letting real output through also asks
+    doc->teachingSettings()->setEnabled(true);
+    {
+        ShowSettingsDialog dlg(doc, m_app);
+        dlg.findChild<QCheckBox *>("showSettingsAllowOutput")->setChecked(true);
+        ShowSettingsDialog::testAnswers() = { "9999" };
+        dlg.accept();
+        QVERIFY(!doc->teachingSettings()->allowOutput());
+        ShowSettingsDialog::testAnswers() = { "2468" };
+        dlg.accept();
+    }
+    QVERIFY(doc->teachingSettings()->allowOutput());
+    QVERIFY(!doc->inputOutputMap()->teachingHold());
+
+    // The lock-Design box is only for a show with a PIN, and off keeps the
+    // PIN for Teaching alone: a student can still leave Operate
+    QVERIFY(doc->operateSettings()->hasPin());
+    QVERIFY(!doc->operateSettings()->locksDesign());
+}
+
+void AppViews_Test::teachingOperateWarnsQuietlyThenAsksWhenItLooksReal()
+{
+    m_app->clearDocument();
+    Doc *doc = m_app->doc();
+    auto back = qScopeGuard([this]() {
+        if (m_app->doc()->mode() == Doc::Operate)
+            m_app->slotModeDesign();
+        m_app->doc()->teachingSettings()->setEnabled(false);
+        m_app->clearDocument();
+        ShowSettingsDialog::setTestMode(false);
+        NetworkRoute::setResolverForTest(nullptr, nullptr);
+    });
+
+    // A classroom show: nothing patched. Operate is a lesson (1.5): a quiet
+    // line, the Not ready entry, no dialog.
+    doc->teachingSettings()->setEnabled(true);
+    doc->resetModified();
+    bool boxed = false;
+    QTimer probe;
+    probe.setInterval(10);
+    connect(&probe, &QTimer::timeout, this, [&boxed]() {
+        if (qobject_cast<QMessageBox *>(QApplication::activeModalWidget()) != nullptr)
+            boxed = true;
+    });
+    probe.start();
+    m_app->slotModeOperate();
+    QTest::qWait(60);
+    QCOMPARE(doc->mode(), Doc::Operate);
+    QVERIFY(!boxed);
+    auto statusKeys = []() {
+        QStringList keys;
+        for (const ShowStatus::Entry &e : ShowStatus::instance()->allEntries())
+            keys << e.key;
+        return keys;
+    };
+    QVERIFY(statusKeys().contains("teaching.operate"));
+    QLabel *noticeText = m_app->findChild<QLabel *>("viewNoticeText");
+    QVERIFY(noticeText != nullptr);
+    QVERIFY(noticeText->text().contains("Teaching mode"));
+    QVERIFY(noticeText->text().contains("held"));
+    m_app->slotModeDesign();
+    QCOMPARE(doc->mode(), Doc::Design);
+    QVERIFY(!statusKeys().contains("teaching.operate"));
+
+    // Real output let through and patched: it looks like a real show
+    QDir stubDir(QStringLiteral("../../../engine/test/iopluginstub"));
+    stubDir.setFilter(QDir::Files);
+    stubDir.setNameFilters(QStringList() << QString("*%1").arg(KExtPlugin));
+    IOPluginCache *cache = doc->ioPluginCache();
+    if (cache->plugin(QStringLiteral("I/O Plugin Stub")) == nullptr)
+        cache->load(stubDir);
+    IOPluginStub *stub = static_cast<IOPluginStub *>(cache->plugin(QStringLiteral("I/O Plugin Stub")));
+    QVERIFY2(stub != nullptr, "the I/O plugin stub did not load");
+    stub->m_nameOverride = QStringLiteral("ArtNet");
+    stub->m_lineNames = QStringList() << QStringLiteral("10.4.12.7");
+    NetworkRoute::LocalAddress school;
+    school.iface = "en0";
+    school.ip = QHostAddress("10.4.12.7");
+    school.prefix = 16;
+    NetworkRoute::setResolverForTest(
+        [school]() { return QList<NetworkRoute::LocalAddress>() << school; },
+        [](const QHostAddress &) { return QHostAddress("10.4.12.7"); });
+    QXmlStreamReader xml(QStringLiteral(
+        "<InputOutputMap>\n"
+        " <Universe Name=\"U01\" ID=\"0\">\n"
+        "  <Output Plugin=\"ArtNet\" UID=\"10.4.12.7\" Line=\"0\"/>\n"
+        " </Universe>\n"
+        "</InputOutputMap>\n"));
+    xml.readNextStartElement();
+    InputOutputMap *iom = doc->inputOutputMap();
+    QVERIFY(iom->loadXML(xml));
+
+    // Held while Teaching holds it: the footer says why, and no dialog
+    QVERIFY(iom->outputPatch(0, 0)->isHeld());
+    QLabel *rig = m_app->findChild<QLabel *>("footerRigNetwork");
+    QVERIFY(rig != nullptr && !rig->isHidden());
+    QVERIFY(rig->text().contains("Teaching mode holds real output"));
+    boxed = false;
+    m_app->slotModeOperate();
+    QTest::qWait(60);
+    QCOMPARE(doc->mode(), Doc::Operate);
+    QVERIFY(!boxed);
+    m_app->slotModeDesign();
+
+    doc->teachingSettings()->setAllowOutput(true);
+    QVERIFY(iom->outputPatch(0, 0)->isPatched());
+    QVERIFY(rig->isHidden());
+
+    // A start nobody is there to answer for (-p, Open in Operate) never
+    // shows the dialog
+    boxed = false;
+    m_app->startInOperate();
+    QTest::qWait(60);
+    QCOMPARE(doc->mode(), Doc::Operate);
+    QVERIFY(!boxed);
+    m_app->slotModeDesign();
+
+    // Cancel: stays in Design. Operate in Teaching Mode: goes, and asks once.
+    probe.stop();
+    QString asked;
+    answerNextBox(QMessageBox::Cancel, &asked);
+    m_app->slotModeOperate();
+    QVERIFY(asked.contains("Teaching mode"));
+    QCOMPARE(doc->mode(), Doc::Design);
+    answerNextBox(QMessageBox::No, nullptr);
+    m_app->slotModeOperate();
+    QCOMPARE(doc->mode(), Doc::Operate);
+    m_app->slotModeDesign();
+    m_app->slotModeOperate();           // not asked again (nobody answers: it would hang)
+    QCOMPARE(doc->mode(), Doc::Operate);
+    m_app->slotModeDesign();
+
+    // "Turn Off Teaching Mode…" asks for the PIN: wrong stays in Design with
+    // Teaching on; right turns it off and goes to Operate
+    doc->teachingSettings()->setEnabled(false);
+    doc->teachingSettings()->setEnabled(true);          // asked afresh
+    QVERIFY(doc->teachingSettings()->allowOutput());
+    ShowSettingsDialog::setTestMode(true);
+    QVERIFY(doc->operateSettings()->setPin("2468"));
+    doc->operateSettings()->setLockDesign(false);
+    ShowSettingsDialog::testAnswers() = { "0000" };
+    answerNextBox(QMessageBox::Yes, nullptr);
+    m_app->slotModeOperate();
+    QCOMPARE(doc->mode(), Doc::Design);
+    QVERIFY(doc->teachingSettings()->enabled());
+    ShowSettingsDialog::testAnswers() = { "2468" };
+    answerNextBox(QMessageBox::Yes, nullptr);
+    m_app->slotModeOperate();
+    QCOMPARE(doc->mode(), Doc::Operate);
+    QVERIFY(!doc->teachingSettings()->enabled());
+}
+
+void AppViews_Test::aStudentHandoutIsACopy()
+{
+    m_app->clearDocument();
+    Doc *doc = m_app->doc();
+    QTemporaryDir dir;
+    auto back = qScopeGuard([this]() {
+        m_app->doc()->teachingSettings()->setEnabled(false);
+        m_app->clearDocument();
+    });
+
+    // The teacher's own show: a PIN that locks Design, opens in Operate, no Teaching
+    doc->operateSettings()->setPin("1111");
+    doc->operateSettings()->setOpenInOperate(true);
+    const QString master = dir.filePath("Master.qlcc");
+    QCOMPARE(m_app->saveXML(master), QFile::NoError);
+    doc->resetModified();
+
+    HandoutOptions options;
+    options.path = dir.filePath("Handout.qlcc");
+    options.pinHash = ShowPin::hash("9753");
+    options.lesson = "3.6";
+    options.link = "https://example.org/lesson-06/";
+    QString why;
+    QVERIFY2(m_app->writeStudentHandout(options, &why), qPrintable(why));
+    QVERIFY(QFileInfo(options.path).exists());
+
+    // The open show is as it was: its file, its settings, not modified
+    QCOMPARE(m_app->fileName(), master);
+    QVERIFY(!doc->isModified());
+    QVERIFY(!doc->teachingSettings()->enabled());
+    QVERIFY(!doc->inputOutputMap()->teachingHold());
+    QVERIFY(doc->operateSettings()->checkPin("1111"));
+    QVERIFY(doc->operateSettings()->openInOperate());
+    QVERIFY(doc->operateSettings()->locksDesign());
+
+    // The copy: Teaching on, output held, the new PIN for Teaching only
+    QCOMPARE(m_app->loadXML(options.path), QFile::NoError);
+    doc = m_app->doc();
+    QVERIFY(doc->teachingSettings()->enabled());
+    QVERIFY(doc->teachingSettings()->holdsOutput());
+    QCOMPARE(doc->teachingSettings()->lesson(), QString("3.6"));
+    QVERIFY(!doc->teachingSettings()->handedOut().isEmpty());
+    QVERIFY(doc->operateSettings()->checkPin("9753"));
+    QVERIFY(!doc->operateSettings()->checkPin("1111"));
+    QVERIFY(!doc->operateSettings()->openInOperate());
+    QVERIFY(!doc->operateSettings()->locksDesign());
+    QCOMPARE(doc->mode(), Doc::Design);
+
+    // Save and autosave carry the flag
+    const QString again = dir.filePath("Again.qlcc");
+    QCOMPARE(m_app->saveXML(again), QFile::NoError);
+    const QString auto1 = dir.filePath("auto.qlcc");
+    QCOMPARE(m_app->saveXML(auto1, true), QFile::NoError);
+    for (const QString &f : { again, auto1 })
+    {
+        QFile file(f);
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        QVERIFY2(file.readAll().contains("<Teaching Enabled=\"1\""), qPrintable(f));
+    }
 }
 
 void AppViews_Test::theMenusShowTheirKeys()

@@ -217,6 +217,18 @@ private slots:
     /** File ▸ Show Settings: a PIN keeps the show in Operate (and Live Edit
      *  off) until it's given; "Open in Operate" opens the saved show there. */
     void aPinKeepsTheShowInOperate();
+    /** Teaching mode (docs/features/teaching.md): the chip and the title in
+     *  every view, the scramble only in a teaching show */
+    void teachingModeShowsItselfAndThePractice();
+    /** Turning it off, or letting real output through, asks for the show's
+     *  PIN; a wrong one leaves it on; no undo step */
+    void teachingModeIsGuardedByThePin();
+    /** Operate in a teaching show: a quiet notice and a Show Status entry,
+     *  no dialog; the dialog only when real output is let through and patched */
+    void teachingOperateWarnsQuietlyThenAsksWhenItLooksReal();
+    /** Make Student Handout: the copy has Teaching and the PIN, and the
+     *  open show is untouched; autosave and the show file keep the flag */
+    void aStudentHandoutIsACopy();
     /** Save As ⇧⌘S and Quit ⌘Q on every platform, owned by nothing else;
      *  Undo/Redo show the tabs' keys without binding them (so they never
      *  fire twice); Settings… is called that everywhere. */
