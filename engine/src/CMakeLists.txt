@@ -61,6 +61,7 @@ add_library(${module_name} SHARED
     showtreebridge.cpp
     showtreeconvert.cpp
     showtreelooks.cpp
+    showtreehits.cpp
     showtreeproductions.cpp
     showtreesubcues.cpp
     showtreesections.cpp

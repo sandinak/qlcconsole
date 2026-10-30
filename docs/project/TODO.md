@@ -27,6 +27,32 @@ values, rate awkward for one shot). Open, each "decided (can change)":
   done (decided, can change). A tracked effect on a layer whose scene
   changes in that cue (something else on it set) does start again.
 
+## Scoped hits (Q154 / Q157, sch, 2026-10-30)
+
+Built (docs/features/show-tree.md "Hits"): a hit lives under a
+cue, a cue list, its production or at the top; armed while its place is
+live; a VC button holds several and fires the narrowest armed one; drag
+hits between places and onto VC buttons. Open:
+- Phase 2 (Q157) built: the map and Hits table, the same-place and
+  override questions, ↳ overrides in the tree, on the face and in the Run
+  tab, Show checks. Decided (can change): the map shows in the button's
+  properties (no pop-up on OK); Step through / Together is one setting per
+  button; the tree keeps "VC ×N" with the button names on hover; the Run
+  tab's line is in the Run tab only (not the VC Cue Runner sizes); Show
+  checks warn only for deleted hits and unanswered shared places.
+- Decided (can change): a production's hits are armed while it is current
+  or none is (a show with several productions: another production's hits
+  are disarmed, a change from before); a list's hits while it runs, or —
+  nothing of its production running — while it is the current
+  production's main list; a hit for everywhere is kept in a production's
+  Hits section (the one it was made or moved from); only a production's
+  own hits have folders; a deleted cue or list moves its hits up to the
+  production; among equally narrow armed hits a button fires the first
+  added; a button with several hits shows the armed one's name instead of
+  its caption; drops onto a VC button work in Design and Operate and have
+  no undo (the VC has none).
+- The command line's `hit` makes production hits only; no `hit … for cue`.
+
 ## Pixel boxes, effects and beams — leftovers (cbug, 2026-10-30)
 
 Built (DONE.md 2026-10-30). Open, each "decided (can change)":

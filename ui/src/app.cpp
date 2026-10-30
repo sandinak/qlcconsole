@@ -529,6 +529,10 @@ void App::init()
     }
     centralLayout->addWidget(m_tab, 1);
     setCentralWidget(central);
+    // A hit dragged from the Show Tree onto a VC button (Q154): hovering a
+    // tab opens it.
+    m_tab->tabBar()->setChangeCurrentOnDrag(true);
+    m_tab->tabBar()->setAcceptDrops(true);
 
 #if defined(__APPLE__) || defined(Q_OS_MAC)
     m_tab->setElideMode(Qt::TextElideMode::ElideNone);

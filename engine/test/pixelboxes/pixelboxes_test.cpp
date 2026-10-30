@@ -190,6 +190,88 @@ QByteArray PixelBoxes_Test::sends(const QString &name, int from, int n) const
 }
 
 /****************************************************************************
+ * Scoped hits (sch, Q154): a one-shot in a hit under a cue
+ ****************************************************************************/
+
+/* Branson's use: a Breathe, Runs: Once, in a hit that lives under a cue,
+   fired from a VC button while that cue is live. Each fire breathes from
+   its floor afresh -- Toggle on again after it finished, and after the
+   cue was left (the hit let go as its place ended) and come back to. The
+   button starts and stops the hit's Collection; that is done here. */
+void PixelBoxes_Test::aOnceBreatheInACuesHitBreathesEachFire()
+{
+    const int topRed = 0;               // the step tops' first pixel (White lights its RGB)
+    const int twenty = 51;              // 20%: the breathe's floor is 5% of it
+    ShowTreeController *st = m_doc->showTree();
+    QLCPalette *p20 = new QLCPalette(QLCPalette::Dimmer, m_doc);
+    p20->setName(QStringLiteral("Sch 20%"));
+    p20->setValue(twenty);
+    m_doc->addPalette(p20);
+    const quint32 fx = effect(QStringLiteral("dimmer-phaser.js"), QStringLiteral("Sch Breathe"));
+    QLCPalette *b = m_doc->palette(fx);
+    b->setEffectParamValue(QStringLiteral("waveform"), 0);
+    b->setEffectParamValue(QStringLiteral("rate"), 1.0);            // one 1 s breath
+    b->setEffectParamValue(QStringLiteral("minDim"), 0.05);
+    b->setEffectParamValue(QStringLiteral("maxDim"), 1.0);
+    b->setEffectParamValue(QStringLiteral("spread"), 0);
+    b->setEffectParamValue(QStringLiteral("__runs"), 1);            // Runs: Once
+    const quint32 cue = oneCue();
+    const quint32 list = st->listOfCue(cue)->id;
+    st->addCue(list, 0, QStringLiteral("Two"));
+    const quint32 hit = st->addHit(HitScope::Cue, cue, QStringLiteral("Breathe hit"));
+    QVERIFY(hit != invalidId());
+    const quint32 layer = st->addLayer(hit, groupTarget(group("StepTops")));
+    QVERIFY(st->setLayerLook(hit, layer, st->lookForPalette(palette("White"))));
+    QVERIFY(st->setLayerLook(hit, layer, st->lookForPalette(p20->id())));
+    QVERIFY(st->setLayerLook(hit, layer, st->lookForPalette(fx)));
+    Function *coll = m_doc->function(st->lookFunction(hit));
+    QVERIFY(coll != nullptr);
+    auto top = [&]() { return int(uchar(sends("US Step 1 Top SR", topRed, 1).at(0))); };
+    // One fire: where it is early, mid-breath and after its breath.
+    auto fire = [&]() {
+        QList<int> v;
+        coll->start(m_doc->masterTimer(), FunctionParent::master());
+        run(100);
+        v << top();
+        run(400);
+        v << top();
+        run(900);
+        v << top();
+        coll->stop(FunctionParent::master());
+        run(150);
+        return v;
+    };
+    // Each fire breathes as the first did: none starts "done". Mid-breath
+    // and after it, give or take the timer's jitter under load.
+    auto same = [twenty](const QList<int> &a, const QList<int> &b) {
+        return b.at(1) > twenty / 2 && qAbs(a.at(1) - b.at(1)) <= 16 && qAbs(a.at(2) - b.at(2)) <= 16;
+    };
+    go();                                           // cue One live: armed
+    run(200);
+    QVERIFY(st->isHitArmed(hit));
+    const QList<int> first = fire();
+    auto text = [](const QList<int> &v) {
+        QStringList t;
+        for (int x : v)
+            t << QString::number(x);
+        return t.join(QLatin1Char(' '));
+    };
+    // It breathes: up mid-breath from where it started.
+    QVERIFY2(first.at(1) > twenty / 2 && first.at(1) > first.at(0), qPrintable(text(first)));
+    const QList<int> again = fire();
+    QVERIFY2(same(first, again), qPrintable(text(first) + " / again " + text(again)));
+    // The cue left (disarmed: the button lets it go) and come back to.
+    go();
+    run(200);
+    QVERIFY(!st->isHitArmed(hit));
+    QVERIFY(m_doc->showControl()->execute({ ShowControl::Back, QString(), QString() }));
+    run(200);
+    QVERIFY(st->isHitArmed(hit));
+    const QList<int> rearmed = fire();
+    QVERIFY2(same(first, rearmed), qPrintable(text(first) + " / re-armed " + text(rearmed)));
+}
+
+/****************************************************************************
  * #15: the truss boxes' white pixels
  ****************************************************************************/
 

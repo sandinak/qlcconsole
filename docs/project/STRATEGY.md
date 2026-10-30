@@ -389,6 +389,7 @@ order the note says why.
 | Gel colour on fixed lights (Rig Overview, patch list) | 3 | 4 | Rig Overview, patch list | 1 | L | L | **12** | BUILD (0.3.1) |
 | Tonight's running order (reorder productions for Run) | 4 | 5 | productions, Run | 2 | L | L | **10** | BUILD (0.3.1) |
 | Fade in/out times on hits | 4 | 5 | Hits | 2 | M | M | 8 | BUILD (0.3.1); the override layer is 0.4 |
+| Scoped hits: a hit lives under a cue, list or production, or everywhere; a VC button holds several and fires the armed one (Q154); then the button map, same-scope prompt and override marks (Q157) | 4 | 5 | Hits, Show Tree runtime, VC buttons | 4 | M | M | **4** | BUILD (0.3.1): phase 1 places + arming, phase 2 Q157 |
 | Momentary / start-only / stop-only on Control Map bindings | 2 | 3 | Control Map | 1 | L | L | 6 | DONE (0.3.1, with the Control Map back: learn in Build and the Show Tree, saved with the show) |
 | Back view in the structure editors | 3 | 4 | StructureStudioView planes | 2 | L | M | 6 | BUILD (0.3.1) |
 | Fix batch: leaks, TSan, compat C2/C4-C7, Art-Net sequence per node, Windows relink, red-team items | 4 | 5 | the gate | 5 | L | L | 4 | BUILD (0.3.1), first |

@@ -30,6 +30,9 @@ class InputSelectionWidget;
 class FunctionManager;
 class SpeedDialWidget;
 class KeyBind;
+class QGroupBox;
+class QTreeWidget;
+class QLabel;
 
 /** @addtogroup ui_vc_props
  * @{
@@ -67,8 +70,17 @@ protected:
     Doc* m_doc;
     InputSelectionWidget *m_inputSelWidget;
     quint32 m_function;
-    /** The Show Tree hit picked (invalid: a plain function or none) */
-    quint32 m_hit = Function::invalidId();
+    /** The Show Tree hits picked (none: a plain function or none) */
+    QList<quint32> m_hits;
+
+    /** The button's hits (Q154): each with where it lives -- when it
+     *  fires -- and Add hit… / Remove. Shown when it has a hit. */
+    void buildHitsBox();
+    void refreshHits();
+    QGroupBox *m_hitsBox = nullptr;
+    QTreeWidget *m_hitsTree = nullptr;
+    QLabel *m_hitsMap = nullptr;        //!< what it does across the show (Q157)
+    int m_samePlace = 0;                //!< VCButton::SamePlace
 
     /************************************************************************
      * Speed dial

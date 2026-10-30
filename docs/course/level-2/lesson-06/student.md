@@ -66,6 +66,15 @@ When would you fire each one?
 **Stuck?** The button does nothing: click **Operate** first. Can't save:
 go back to **Design**. No **+ Hit**: right-click a row in the tree.
 
+## A hit for one moment
+
+A sting that only makes sense in the chorus shouldn't fire in the
+ballad. A hit lives where it belongs in the tree, and fires only there:
+right-click the Verse cue → **+ Hit for this cue**, or drag **Red Stab**
+onto the cue. Outside that cue its button dims and does nothing. Drag
+a second hit onto the same button and it fires whichever belongs to the
+cue that's live: one **HIT 1** button, a different stab in each song.
+
 ## Exit ticket
 
 1. Name two moments when you'd busk instead of pressing GO.

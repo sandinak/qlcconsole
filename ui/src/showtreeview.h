@@ -90,7 +90,9 @@ public:
         LayerNode,          //!< a cue's own layer
         TrackedLayerNode,   //!< carried into the cue (tracked, included, base)
         LookFolderNode,     //!< a folder of a Looks section (R3): IdRole its list, FolderRole its path
-        SectionNode         //!< a song section of a list (Q190): IdRole its list, SectionRole which
+        SectionNode,        //!< a song section of a list (Q190): IdRole its list, SectionRole which
+        HitsNode            //!< the hits living at a place (Q154): IdRole its production's Hits section,
+                            //!< ScopeRole the HitScope, PlaceRole the cue / list / production
     };
 
     /** Item roles in the tree and the Library. */
@@ -102,7 +104,9 @@ public:
         TargetRole = Qt::UserRole + 3,  //!< a tracked layer's target signature
         PathRole = Qt::UserRole + 4,    //!< a Library folder's path ("Groups/Movers/Front")
         FolderRole = Qt::UserRole + 5,  //!< a look folder's / palette folder's own path ("Hits")
-        SectionRole = Qt::UserRole + 6  //!< a section row's key ("1"), or "#<cue>" for a hand-made one
+        SectionRole = Qt::UserRole + 6, //!< a section row's key ("1"), or "#<cue>" for a hand-made one
+        ScopeRole = Qt::UserRole + 7,   //!< a Hits row's HitScope (int)
+        PlaceRole = Qt::UserRole + 8    //!< a Hits row's cue, list or production
     };
 
     /** The tree's columns (Q104): the name; what a list, a production or a
@@ -454,6 +458,17 @@ public:
      *  selected Looks section / folder; the section is made the first time.
      *  Selected, its name field focused. */
     quint32 newLook();
+    /** + Hit at a place (Q154): under the selected cue or list, in the
+     *  selected production, beside the selected hit; @a global: at the top
+     *  of the tree, armed everywhere. */
+    quint32 newHit(bool global = false);
+    /** Where a hit made or dropped on @a item would live (false: nowhere --
+     *  an empty spot is global only for + Hit). */
+    bool hitPlaceOf(QTreeWidgetItem *item, ShowTree::HitScope *scope, quint32 *place) const;
+    /** Hits @a cueIds dropped on @a item (⌥: @a copy): moved (copied) to
+     *  live there. @a apply false: only whether it would, and @a hint.
+     *  False: not a hit drop (a reorder, a folder, a cue drop). */
+    bool dropHitsAt(const QList<quint32> &cueIds, QTreeWidgetItem *item, bool copy, bool apply, QString *hint);
     /** Looks dropped on a folder of their Looks section ("": the section
      *  itself, no folder). One undo step. */
     bool dropLooksOnFolder(const QList<quint32> &lookIds, quint32 listId, const QString &folder);
@@ -1026,6 +1041,7 @@ private:
     QFormLayout *m_cueForm = nullptr;
     QFormLayout *m_listForm = nullptr;
     QLabel *m_lookFiredBy = nullptr;
+    QLabel *m_hitWhen = nullptr;        //!< a hit's place: when it fires (Q154)
     QPushButton *m_listVcPage = nullptr;
     QSet<QString> m_collapsedFolders;      //!< "listId:path" of look folders closed by hand
     /** Whether the selection is in a Looks section (its node, a folder, a

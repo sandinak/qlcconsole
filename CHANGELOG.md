@@ -15,6 +15,31 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 A home for QLC+ 4 users: QLC+ 4's habits that qlcconsole had dropped are
 back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
 
+### Scoped hits
+
+- **A hit lives where it fires** (Q154): under a cue, a cue list, its
+  production (the Hits section, as before) or at the top of the tree for
+  everywhere, each place listing its hits under a **Hits** row. It is
+  armed only while that place is live — the cue live, the list running,
+  the production current — and a hit held when its place ends lets go
+  over its fade out. **+ Hit for this cue** / **for this list** /
+  **for everywhere** make one there; drag a hit to another place to move
+  it (**⌥** copies); its page says **When**.
+- **One VC button, several hits:** drag hits from the Show Tree onto a
+  button (or **Add hit…** in its properties). It fires the armed hit with
+  the narrowest place — cue, then list, then production, then everywhere —
+  shows its name, and is dimmed when none is armed. Existing buttons and
+  shows play as before; in a show with several productions, a
+  production's hits now fire only while it is current. An older build
+  sees every hit in its production's Hits section and fires a button's
+  first hit.
+- **A hit button explains itself** (Q157): its properties show what it
+  does across the show in a sentence and a Hits table (When, overrides,
+  shared places); adding a hit at a place it already has asks Step
+  through / Together / Replace / Cancel, and a narrower one asks to
+  override; the tree, the button face and the Run tab mark **↳
+  overrides**; Show checks list overrides, shared places and dead hits.
+
 ### Tonight's running order
 
 - **Running order…** on the production's page: change the song order for

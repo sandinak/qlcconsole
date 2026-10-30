@@ -150,6 +150,16 @@ namespace ShowTree
      *  this list. */
     enum class MoveInBlack { Show, On, Off };
 
+    /** Where a hit lives in the tree, and so when it can fire (Q154, 0.3.1
+     *  scoped hits): Production -- its production's Hits section, armed
+     *  while that production is current (or none is); Global -- the top
+     *  of the tree, armed always; List -- under a cue list, armed while it
+     *  runs (or, nothing of its production running, while it is the
+     *  current production's main list); Cue -- under a cue or sub-cue,
+     *  armed while that cue is live. In this order, from the widest: the
+     *  most specific armed hit of a VC button is the one it fires. */
+    enum class HitScope { Global, Production, List, Cue };
+
     /** Whether the planner moves dark heads in black into a cue: never when
      *  the cue says "Don't move in black into this cue" (@a cueOff), else
      *  the list's setting when it has one, else the show's. */
@@ -258,6 +268,13 @@ namespace ShowTree
         /** A look of a production's Looks section (CueList::looks): the
          *  folder it is filed in there ("Hits", "Hits/Big"; empty: none). */
         QString folder;
+        /** A hit's place (HitScope): it stays a cue of its production's
+         *  Hits section, so everything a hit does is unchanged; @a scopeOf
+         *  is the cue list or cue it lives under (same production). Saved
+         *  as Scope= and ScopeOf=, which an older build ignores: there it
+         *  is in its production's Hits section, firing at any time. */
+        HitScope scope = HitScope::Production;
+        quint32 scopeOf = 0xFFFFFFFF;
         /** A sub-cue (P6, §3C): it goes on by itself @a wait ms after the
          *  sub-cue before it has faded in (Auto-follow, "auto 0.5s"); false:
          *  it waits for Sub GO. The first sub-cue plays with GO. */

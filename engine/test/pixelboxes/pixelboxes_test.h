@@ -39,6 +39,10 @@ private slots:
     void init();
     void cleanup();
 
+    /** Scoped hits (sch): a Once breathe in a hit under a cue, fired,
+     *  let go, the cue left and come back to, fired again: it breathes
+     *  every time. */
+    void aOnceBreatheInACuesHitBreathesEachFire();
     void whitePixelsLightFromALook_data();
     void whitePixelsLightFromALook();
     void dimmerEffectsMoveThePixelBoxes_data();
