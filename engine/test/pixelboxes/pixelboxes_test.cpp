@@ -58,13 +58,6 @@ Target groupTarget(quint32 g)
     return t;
 }
 
-Look look(const QString &key, const QList<quint32> &palettes)
-{
-    Look l;
-    l.key = key;
-    l.palettes = palettes;
-    return l;
-}
 } // namespace
 
 void PixelBoxes_Test::init()
