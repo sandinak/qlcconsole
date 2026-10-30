@@ -364,6 +364,8 @@ order the note says why.
 | "Start new shows in Classic" preference | 3 | 5 | views | 0.5 | L | L | **30** | BUILD (0.3.1) |
 | Notice when a .qxw save holds content stock QLC+ will drop | 4 | 5 | Show Review FILE-05 idea | 1.5 | L | L | **13** | DONE (0.3.1: counts by kind, Teaching/Operate/web settings and Effect Control widgets named, "Don't ask again for this show") |
 | Import QLC+ settings and recent files once | 2 | 4 | mergeLegacyUserData | 1 | L | L | 8 | BUILD (0.3.1) |
+| Notice when a .qxw save holds content stock QLC+ will drop | 4 | 5 | Show Review FILE-05 idea | 1.5 | L | L | **13** | BUILD (0.3.1) |
+| Import QLC+ settings and recent files once | 2 | 4 | mergeLegacyUserData | 1 | L | L | 8 | DONE (0.3.1, LegacySettings: asked once, Settings ▸ General ▸ QLC+ 4 later) |
 | Run `lupdate` every release | 2 | 3 | Qt .ts | 0.5 | L | L | 12 | BUILD (0.3.1), then every release |
 | Show Manager parity review | 3 | 5 | Shows tab | 2 | L | L | 7.5 | BUILD (0.3.1) |
 | Send the fork's definitions upstream | 2 | 4 | fork/fixture-* branches | 1 | L | L | 8 | BUILD (0.3.1), user's call |

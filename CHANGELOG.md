@@ -167,7 +167,8 @@ skipped). Upstream fixes taken:
   DMX USB, uDMX) and the interface preferences that mean the same here
   (Virtual Console widget sizes, Simple Desk pages, slider style...).
   Never QLC+ 4's window layouts, never a setting qlcconsole already has,
-  and QLC+ 4 itself is not changed. **Settings ▸ General ▸ QLC+ 4 ▸ Bring
+  and QLC+ 4 itself is not changed; the status bar says what came over.
+  **Settings ▸ General ▸ QLC+ 4 ▸ Bring
   over…** does it later. Fixtures, profiles and scripts still come from
   QLC+'s user folder by themselves. Help: Coming from QLC+ 4 ▸ Your QLC+
   4 settings.

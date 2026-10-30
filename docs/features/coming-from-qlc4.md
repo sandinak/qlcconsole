@@ -97,6 +97,7 @@ once whether to bring them over:
 
 Say no and it doesn't ask again; **Settings ▸ General ▸ QLC+ 4 ▸ Bring
 over…** does it whenever you like, and shows what's still to bring.
+After a yes, the status bar says once what was brought over.
 QLC+ 4 itself is never changed, and a setting qlcconsole already has is
 kept. Window sizes and layouts aren't copied: the windows differ. I/O
 and plugin preferences take effect at the next start.
