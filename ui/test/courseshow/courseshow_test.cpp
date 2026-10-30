@@ -2184,9 +2184,9 @@ void CourseShow_Test::lessonHouseLights()
     doc->inputOutputMap()->setGrandMasterValue(0);
     QTRY_COMPARE_WITH_TIMEOUT(cycOut(), 0, kRigWait);
     QCOMPARE(out("House Lights"), 255);
-    // The relay ("On when not in use", set by nothing) is put back at the
-    // next frame: a Grand Master move rewrites it from its unset 0 first.
-    QTRY_COMPARE_WITH_TIMEOUT(out("Stage Power"), 255, kRigWait);
+    // The relay ("On when not in use", set by nothing) never drops: a Grand
+    // Master move keeps it up straight away, with no frame in between.
+    QCOMPARE(out("Stage Power"), 255);
     doc->inputOutputMap()->setGrandMasterValue(255);
     QTRY_COMPARE_WITH_TIMEOUT(cycOut(), 255, kRigWait);
 

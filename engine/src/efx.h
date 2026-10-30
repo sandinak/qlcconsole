@@ -514,6 +514,8 @@ public slots:
 
 private:
     QList <EFXFixture *> m_fixtures;
+    /** Give every fixture its serial number (its place in the list) */
+    void renumberFixtures();
 
     /*********************************************************************
      * Fixture propagation mode

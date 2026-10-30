@@ -68,6 +68,7 @@ private slots:
      *  header says Held, a load keeps it off while the show runs -- and
      *  Play previews over the show. */
     void goHoldsTheBuildPreview();
+    void aPickTakesTheStageBackFromAGo();
     /** Operate mode: what is loaded runs as the show's output; to Design,
      *  a function started elsewhere keeps running; hidden, the Workbench
      *  stops only what it started. */

@@ -494,6 +494,10 @@ skipped). Upstream fixes taken:
 
 ### Fixed
 
+- **An EFX keeps its spacing when fixtures change while it runs.** Adding,
+  removing or moving a fixture in a running Serial or Asymmetric EFX
+  re-spaces them at once, not at the next restart.
+
 - **The Lighting Studio lines up with itself.** The rest of the alignment
   audit: the grid ends at the stage's edge and sits in the middle of the
   canvas when the plot is turned 90°, and fixtures re-place with the turn;

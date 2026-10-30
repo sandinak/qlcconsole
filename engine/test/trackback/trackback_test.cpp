@@ -838,9 +838,12 @@ void TrackBack_Test::aLongList()
 /* One row per show: Qt's watchdog (300 s) counts each row on its own. A
    lesson's start is the lesson before's finish, byte for byte: the same
    show is walked once, under its first name. */
+static const int kShards = 4;
+
 void TrackBack_Test::courseShows_data()
 {
     QTest::addColumn<QString>("path");
+    QTest::addColumn<int>("shard");
     QDir dir(QStringLiteral(TRACKBACK_SOURCE_DIR "/docs/course/shows"));
     const QStringList shows = dir.entryList({ QStringLiteral("lesson-1-*.qlcc") }, QDir::Files, QDir::Name);
     QVERIFY(!shows.isEmpty());
@@ -853,19 +856,27 @@ void TrackBack_Test::courseShows_data()
         if (seen.contains(sum))
             continue;
         seen.insert(sum);
-        QTest::newRow(qPrintable(name)) << dir.filePath(name);
+        // Shards: each row walks every kShards-th list, so a show's walk
+        // is several short rows (Qt's 300 s watchdog counts each on its own)
+        // and a gate that overlaps another still finishes every row.
+        for (int shard = 0; shard < kShards; ++shard)
+            QTest::newRow(qPrintable(QStringLiteral("%1 #%2").arg(name).arg(shard))) << dir.filePath(name) << shard;
     }
 }
 
 void TrackBack_Test::courseShows()
 {
     QFETCH(QString, path);
+    QFETCH(int, shard);
     const QString name = QFileInfo(path).fileName();
     QVERIFY2(loadShow(path), qPrintable(name));
+    int index = 0;
     for (Function *f : m_doc->functions())
     {
         Chaser *c = qobject_cast<Chaser *>(f);
         if (c == nullptr || !m_doc->showTree()->isGenerated(c->id()) || c->stepsCount() < 2)
+            continue;
+        if (index++ % kShards != shard)
             continue;
         QString why;
         const int differ = everyWay(c, 3, &why);

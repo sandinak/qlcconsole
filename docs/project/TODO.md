@@ -52,12 +52,9 @@ Built (DONE.md 2026-10-29). Open, each "decided (can change)" in the note:
 - Build's Workbench in Operate still plays what it loads live; make it
   blind too if "only the run is live" should cover Build.
 - The Blind view draws levels, not effects' motion.
-- An offscreen test of the docked Workbench taking the stage back on a
-  pick (`Workbench::playPicked`); the tree's own path is tested.
 - Reordering looks *within* one Show Tree layer (they play in kind order;
   a layer holds one effect per kind, so order changes nothing on stage
   today). Would need an order on Layer, saved, resolved and undone.
-- EFX: fixtures added while it runs keep stale offsets until restarted.
 
 ## Forum quick wins (Q180, 0.3.1)
 
@@ -324,15 +321,6 @@ Five fixed; the rest, by the doc's numbers:
     anyone asks for it off the show network.
 
 - **Found in the 0.2.2 docs sweep (2026-10-22, docs/rc-022-sweep):**
-  - A Grand Master move rewrites an "On when not in use" channel that
-    nothing sets from its unset 0 (`Universe::slotGMValueChanged()` →
-    `updatePostGMValue()`), and `applyOnAtOpen()` puts it back only on the
-    next frame. A relay can drop for one frame; the course test
-    (`lessonHouseLights`) waits for the next frame and says so.
-  - helpbrowser_test's `noGuideSendsYouToTheFunctionsTab` still says
-    "Functions is a window now"; Classic QLC+ and Everything show a
-    Functions tab, so the guides avoid the words "Functions tab". Relax
-    the check or its comment.
   - The help shots show Build ▸ Scenes as **Classic**: help-demo.qxw has
     no Show Tree, so it opens on Classic. Give the demo a Show Tree, or
     switch the outline to Folders in `HelpShots`. The Workbench bar's

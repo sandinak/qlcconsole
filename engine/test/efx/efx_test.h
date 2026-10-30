@@ -87,6 +87,7 @@ private slots:
     void save();
 
     void preRunPostRun();
+    void fixturesChangedWhileRunning();
     void adjustIntensity();
 
 private:
