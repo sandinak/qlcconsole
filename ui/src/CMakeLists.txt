@@ -98,6 +98,7 @@ add_library(${module_name}
     virtualconsole/programmermap.cpp virtualconsole/programmermap.h
     virtualconsole/programmerframewizard.cpp virtualconsole/programmerframewizard.h
     monitor/monitor.cpp monitor/monitor.h
+    monitor/performersdialog.cpp monitor/performersdialog.h
     monitor/focuscontrolmap.cpp monitor/focuscontrolmap.h
     monitor/focusmodepanel.cpp monitor/focusmodepanel.h
     monitor/focuscallsdialog.cpp monitor/focuscallsdialog.h

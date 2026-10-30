@@ -33,6 +33,7 @@
 #include <QFileInfo>
 #include <QCursor>
 #include <QDialog>
+#include <QRandomGenerator>
 #include <QDockWidget>
 #include <QLinearGradient>
 #include <QMouseEvent>
@@ -131,6 +132,7 @@
 #include "monitorimageitem.h"
 #include "feetinchesspinbox.h"
 #include "rigeditsession.h"
+#include "performersdialog.h"
 #include "stagepiecedialog.h"
 #include "colourswatchbutton.h"
 #include "targetitem.h"
@@ -754,6 +756,16 @@ void Monitor::initGraphicsView()
         else if (what == QLatin1String("target")) slotAddTarget();
         else if (what == QLatin1String("targetline")) slotAddTargetLine();
         else if (what == QLatin1String("person")) slotAddPerson();
+        else if (what == QLatin1String("people"))
+        {
+            /* On a riser: that riser, with any others selected. */
+            QList<quint32> ids = selectedPlatformIds();
+            const QPointF mm = m_graphicsView->pixelsToRealPosition(scenePos.x(), scenePos.y());
+            const quint32 at = m_props->platformIdAt(float(mm.x() / 1000.0), float(mm.y() / 1000.0));
+            if (m_props->platform(at) != nullptr && !ids.contains(at))
+                ids.prepend(at);
+            slotFillWithPeople(ids);
+        }
     });
     connect(m_graphicsView, &MonitorGraphicsView::contextMenuRequested,
             this, &Monitor::slotCanvasContextMenu);
@@ -2239,8 +2251,21 @@ void Monitor::initGraphicsToolbar()
                            this, SLOT(slotAddTarget()));
         addMenu->addAction(tr("Add Target Line"),
                            this, SLOT(slotAddTargetLine()));
-        addMenu->addAction(tr("Add Person"),
-                           this, SLOT(slotAddPerson()));
+        /* People: with risers selected, a performer line on every row of
+           them; otherwise one performer line. (One Person on its own is in
+           the right-click Add menus.) One entry, so the menu does not grow. */
+        QAction *people = addMenu->addAction(tr("Add People…"), this, [this]() {
+            if (selectedPlatformIds().isEmpty())
+                slotAddPerformerLine();
+            else
+                slotFillWithPeople();
+        });
+        people->setObjectName(QStringLiteral("addPeopleAction"));
+        connect(addMenu, &QMenu::aboutToShow, this, [this, people]() {
+            const int n = selectedPlatformIds().size();
+            people->setText(n == 0 ? tr("Add People…")
+                                   : tr("Fill %n Selected Riser(s) with People…", "", n));
+        });
         addBtn->setMenu(addMenu);
     }
     m_graphicsToolBar->addWidget(addBtn);
@@ -6697,6 +6722,88 @@ void Monitor::slotAddPerson()
     m_doc->setModified();
 }
 
+QList<quint32> Monitor::selectedPlatformIds() const
+{
+    QList<quint32> ids;
+    if (m_graphicsView == nullptr || m_graphicsView->scene() == nullptr)
+        return ids;
+    foreach (QGraphicsItem *gi, m_graphicsView->scene()->selectedItems())
+        if (auto *pi = dynamic_cast<PlatformItem *>(gi))
+            if (!ids.contains(pi->platformId()) && m_props->platform(pi->platformId()) != nullptr)
+                ids << pi->platformId();
+    return ids;
+}
+
+void Monitor::slotFillWithPeople(const QList<quint32> &platformIds)
+{
+    const QList<quint32> ids = platformIds.isEmpty() ? selectedPlatformIds() : platformIds;
+    if (ids.isEmpty())
+    {
+        showNotice(tr("Select the risers to fill with people first"));
+        return;
+    }
+    PerformersDialog dlg(m_props, ids, this);
+    if (dlg.exec() != QDialog::Accepted)
+        return;
+    fillWithPeople(ids, dlg.options());
+}
+
+PerformerFill::Result Monitor::fillWithPeople(const QList<quint32> &platformIds,
+                                              const PerformerFill::Options &options)
+{
+    RigEditSession edit(this);
+    /* One an aim palette points at stays: a refill must not quietly take
+       the soloist out from under a scene. */
+    auto inUse = [this](quint32 tid) {
+        foreach (QLCPalette *pal, m_doc->palettes())
+            if (pal != nullptr && pal->stageTargetId() == tid)
+                return true;
+        return false;
+    };
+    const PerformerFill::Result res = PerformerFill::fill(m_props, platformIds, options, inUse);
+    m_graphicsView->updateTargets();
+    if (m_layersPanel) m_layersPanel->reload();
+    m_doc->setModified();
+    showNotice(tr("%n person(s) on the risers, in the Performers layer", "", res.people));
+    return res;
+}
+
+void Monitor::slotAddPerformerLine()
+{
+    PerformersDialog dlg(m_props, QList<quint32>(), this);
+    if (dlg.exec() != QDialog::Accepted)
+        return;
+    QPointF mm = m_graphicsView->pixelsToRealPosition(m_pendingAddScenePos.x(), m_pendingAddScenePos.y());
+    addPerformerLine(QPointF(mm.x() / 1000.0, mm.y() / 1000.0), dlg.lineCount(), dlg.options());
+}
+
+StageTarget *Monitor::addPerformerLine(const QPointF &centre, int count,
+                                       const PerformerFill::Options &options)
+{
+    RigEditSession edit(this);
+    /* Like a target line: straight across the stage, here 0.6 m a person
+       (4 m at the least), centred where asked. Its ends drag like any
+       line's. */
+    const float half = qMax(2.0f, 0.6f * float(qMax(1, count - 1)) / 2.0f);
+    const QVector3D c(float(centre.x()), float(centre.y()), 0.0f);
+    const quint32 layer = PerformerFill::ensureLayer(m_props);
+    StageTarget *t = PerformerFill::addLine(m_props, c - QVector3D(half, 0.0f, 0.0f),
+                                            c + QVector3D(half, 0.0f, 0.0f), count, options, layer);
+    if (t == nullptr)
+        return nullptr;
+    int n = 0;
+    foreach (StageTarget *other, m_props->stageTargets())
+        if (other != nullptr && other->isPerformerLine())
+            n++;
+    const QString base = options.setName.trimmed().isEmpty() ? tr("Performers") : options.setName.trimmed();
+    t->setName(n > 1 ? tr("%1 %2").arg(base).arg(n) : base);
+    m_props->notifyStageTargetsChanged();
+    m_graphicsView->updateTargets();
+    if (m_layersPanel) m_layersPanel->reload();
+    m_doc->setModified();
+    return t;
+}
+
 void Monitor::slotEditTarget(quint32 tid)
 {
     StageTarget *t = m_props->stageTarget(tid);
@@ -6873,6 +6980,55 @@ void Monitor::slotEditTarget(quint32 tid)
     connect(colorBtn, &ColourSwatchButton::colourChanged, &dlg, [&](const QColor &c) { chosenColor = c; });
     form->addRow(tr("Colour:"), colorBtn);
 
+    // What a Person wears: the rig view lights the body in it. None = neutral.
+    ColourSwatchButton *costumeBtn = new ColourSwatchButton(t->costumeColor(), tr("Costume colour"), &dlg);
+    costumeBtn->setObjectName(QStringLiteral("personCostume"));
+    costumeBtn->setResetColour(QColor());
+    QColor chosenCostume = t->costumeColor();
+    connect(costumeBtn, &ColourSwatchButton::colourChanged, &dlg, [&](const QColor &c) { chosenCostume = c; });
+    form->addRow(tr("Costume:"), costumeBtn);
+
+    /* A line with people on it (a performer line): how many, give or take
+       how much of the Height each, and Shuffle for other heights. */
+    QSpinBox *peopleSpin = new QSpinBox(&dlg);
+    peopleSpin->setObjectName(QStringLiteral("linePeople"));
+    peopleSpin->setRange(0, 100);
+    peopleSpin->setSpecialValueText(tr("None (a plain line)"));
+    peopleSpin->setValue(t->performerCount());
+    peopleSpin->setToolTip(tr("People spread evenly along the line, each standing on the "
+                              "highest stage surface under them"));
+    form->addRow(tr("People on it:"), peopleSpin);
+    QDoubleSpinBox *spreadSpin = new FeetInchesSpinBox(isFeet_t, &dlg);
+    spreadSpin->setObjectName(QStringLiteral("lineHeightSpread"));
+    spreadSpin->setRange(0.0, 0.3 * toDisp_t);
+    spreadSpin->setDecimals(2);
+    spreadSpin->setValue(double(t->heightSpread()) * toDisp_t);
+    quint32 chosenSeed = t->seed();
+    QPushButton *shuffleBtn = new QPushButton(tr("Shuffle"), &dlg);
+    shuffleBtn->setObjectName(QStringLiteral("lineShuffle"));
+    shuffleBtn->setToolTip(tr("Pick everyone's height again"));
+    connect(shuffleBtn, &QPushButton::clicked, &dlg, [&]() {
+        chosenSeed = QRandomGenerator::global()->generate();
+    });
+    QHBoxLayout *spreadRow = new QHBoxLayout;
+    spreadRow->addWidget(spreadSpin);
+    spreadRow->addWidget(shuffleBtn);
+    form->addRow(tr("Height give or take:"), spreadRow);
+
+    auto syncPeople = [&]() {
+        const StageTarget::Kind k = StageTarget::Kind(kindCombo->currentData().toInt());
+        const bool onLine = (k == StageTarget::Kind::Line);
+        const bool people = k == StageTarget::Kind::Person || (onLine && peopleSpin->value() > 0);
+        peopleSpin->setEnabled(onLine);
+        spreadSpin->setEnabled(onLine && peopleSpin->value() > 0);
+        shuffleBtn->setEnabled(onLine && peopleSpin->value() > 0);
+        costumeBtn->setEnabled(people);
+        personSpin->setEnabled(people);
+    };
+    connect(kindCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), &dlg, [&](int) { syncPeople(); });
+    connect(peopleSpin, QOverload<int>::of(&QSpinBox::valueChanged), &dlg, [&](int) { syncPeople(); });
+    syncPeople();
+
     vl->addLayout(form);
     QDialogButtonBox *bb = new QDialogButtonBox(
         QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);
@@ -6887,6 +7043,7 @@ void Monitor::slotEditTarget(quint32 tid)
         t->setY(float(ySpin->value() * fromDisp_t));
         t->setZ(float(zSpin->value() * fromDisp_t));
         t->setColor(chosenColor);
+        t->setCostumeColor(chosenCostume);
         m_props->setAimSubjectHeight(float(subjSpin->value() * fromDisp_t));
         // Position and subject height both change what a head can reach.
         m_props->notifyStageTargetsChanged();
@@ -6894,7 +7051,15 @@ void Monitor::slotEditTarget(quint32 tid)
         t->setKind(StageTarget::Kind(kindCombo->currentData().toInt()));
         if (t->isLine())
             t->makeLine();          // a point turned into a line gets a 4 m one
-        if (t->kind() == StageTarget::Kind::Person)
+        if (t->isLine())
+        {
+            t->setPerformerCount(peopleSpin->value());
+            t->setHeightSpread(float(spreadSpin->value() * fromDisp_t));
+            if (t->performerCount() > 0 && chosenSeed == 0 && t->seed() == 0)
+                chosenSeed = QRandomGenerator::global()->generate();
+            t->setSeed(chosenSeed);
+        }
+        if (t->kind() == StageTarget::Kind::Person || t->isPerformerLine())
             t->setPersonHeight(float(personSpin->value() * fromDisp_t));
         const QString bound = boundCombo->currentData().toString();
         if (t->kind() == StageTarget::Kind::Structure && bound.isEmpty() == false)
@@ -8552,6 +8717,8 @@ void Monitor::slotCanvasContextMenu(QPointF scenePos)
                        this, SLOT(slotAddTargetLine()));
     addMenu->addAction(tr("Person"),
                        this, SLOT(slotAddPerson()));
+    addMenu->addAction(tr("Performer Line…"),
+                       this, SLOT(slotAddPerformerLine()));
     addMenu->addSeparator();
     addMenu->addAction(QIcon(":/image.png"), tr("Image"),
                        this, SLOT(slotAddImage()));

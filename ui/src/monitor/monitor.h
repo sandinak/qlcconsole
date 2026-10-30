@@ -22,6 +22,7 @@
 
 #include <QWidget>
 #include <QSet>
+#include "performerfill.h"
 #include <functional>
 #include <QHash>
 #include <QList>
@@ -33,6 +34,7 @@
 #include "monitorproperties.h"
 
 class MonitorGraphicsView;
+class StageTarget;
 class MonitorLayersPanel;
 class MonitorInventoryPanel;
 class MonitorFixture;
@@ -616,6 +618,23 @@ protected slots:
      *  from the follow-spot subject height, so the views draw it at the size
      *  the lighting is aimed for. */
     void slotAddPerson();
+    /** Stand rows of people on risers (PerformerFill): @p platformIds, or
+     *  the selected platforms when it is empty. Asks how many, how tall and
+     *  in what costume; one undo step. */
+    void slotFillWithPeople(const QList<quint32> &platformIds = QList<quint32>());
+    /** A performer line where the click was (asks how many, how tall). */
+    void slotAddPerformerLine();
+public:
+    /** One performer line across the stage, centred at @p centre (metres),
+     *  in the Performers layer; one undo step. */
+    StageTarget *addPerformerLine(const QPointF &centre, int count,
+                                  const PerformerFill::Options &options);
+    /** The fill itself, without asking (the dialog's OK, and tests). */
+    PerformerFill::Result fillWithPeople(const QList<quint32> &platformIds,
+                                         const PerformerFill::Options &options);
+    /** The platforms selected on the plot. */
+    QList<quint32> selectedPlatformIds() const;
+protected slots:
 
     /** Open the target edit dialog for the given target ID. */
     void slotEditTarget(quint32 tid);

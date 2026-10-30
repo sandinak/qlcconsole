@@ -126,6 +126,18 @@ skipped). Upstream fixes taken:
   Dial set to a master makes its time one beat and taps it. External
   input feeds both. A slider's properties no longer turn a Grand Master
   slider into a Level one.
+- **People on the stage**: a **performer line** is a line target with a
+  count of people spread evenly along it, each standing on the highest
+  stage surface under them (a step's tread, a riser, the apron), with a
+  mean height give or take a spread (each keeps theirs across reloads;
+  Shuffle picks again) and a costume colour the rig view lights the body
+  in. **Add ▸ Add People…** makes one; with risers selected it reads
+  **Fill Selected Risers with People…** and makes a line along every
+  tread (by spacing or so many to a row, staggered). Any line takes people
+  in its dialog. Lines go in a **Performers** layer (its eye hides them,
+  its lock holds them), a fill's lines are one set, and they ride their
+  riser when it moves or turns. The rig view draws a small figure with
+  fewer facets, so a crowd stays quick.
 - **Web access saved with the show**: **Connections ▸ Devices ▸ Show
   control & sync ▸ Web access** turns on "Start web access with this show,
   on port" (9999 by default), with **Reachable from other devices on the
