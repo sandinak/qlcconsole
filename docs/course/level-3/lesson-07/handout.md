@@ -32,7 +32,7 @@ must never vanish on a Blackout while the crew is on stage.
 | **Relay** | A switch the console controls, for power: on or off, never dimmed. A relay often powers a whole truss of LED fixtures. |
 | **Blackout** | A switch that takes every light to zero at once, whatever is running. Press it again to bring them back. |
 | **Grand Master (GM)** | The one fader over everything: at 50 % every light is at half its level. It's the **GM** slider in the footer. |
-| **Blind** | In Design: the real lights are muted while the screen keeps showing the looks, so you can build without the stage seeing it. |
+| **Blind** | The screens aren't the stage. In Design: the real lights are muted while the screen keeps showing the looks. In Operate: the stage plays the show while the plot shows the cue you are fixing. Blue whenever it's on. |
 | **Output rules** | Rules for one fixture: **Ignore Blackout**, **Ignore the Grand Master**, **Switch (relay)**, **On when not in use**. |
 
 ## Part 1 — Plan it (on paper, everyone)

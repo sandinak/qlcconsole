@@ -838,6 +838,15 @@ public:
      *  Pass Function::invalidId() to hide all aim lines. */
     void setActiveScene(quint32 sceneId);
 
+    /** Item 10, "only show targets if they're in scope for the cue": draw
+     *  @a all targets, or those in @a ids. A target placed here since the
+     *  show opened, or selected, stays drawn either way (one you just put
+     *  down never vanishes). */
+    void setTargetScope(bool all, const QSet<quint32> &ids);
+    bool targetInScope(quint32 targetId) const;
+    /** Another show: none of its targets is newly placed. */
+    void forgetPlacedTargets() { m_knownTargets.clear(); m_placedTargets.clear(); m_targetsSeen = false; }
+
     /* -------------------------------------------------------------------- *
      *  Rulers / coordinate readout / settable 0,0 origin
      * -------------------------------------------------------------------- */
@@ -1340,6 +1349,15 @@ private:
 
     /** Interactive target marker items keyed by target ID. */
     QHash <quint32, TargetItem*> m_targetItems;
+    bool m_targetScopeAll = true;
+    QSet<quint32> m_targetScope;
+    /** Targets this view has seen (to tell a new one) and the ones placed
+     *  since the show opened: drawn whatever the scope. */
+    QSet<quint32> m_knownTargets;
+    QSet<quint32> m_placedTargets;
+    bool m_targetsSeen = false;
+    /** Show or hide each target item: its layer, Stage only, the scope. */
+    void refreshTargetVisibility();
 
     /** Placeable image items keyed by image ID. */
     QHash <quint32, MonitorImageItem*> m_imageItems;

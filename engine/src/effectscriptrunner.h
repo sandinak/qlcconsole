@@ -110,7 +110,9 @@ signals:
 
 private:
     void createInstancesForScene(quint32 sceneId);
-    void destroyInstancesForScene(quint32 sceneId);
+    /** @a release false: an edit, not a scene leaving -- no release fade,
+     *  so the old script is never picked up again by the create after. */
+    void destroyInstancesForScene(quint32 sceneId, bool release = true);
 
     /** Collect every live instance's DMX writes into m_publishedWrites, which is
      *  the ONLY thing writeDMX() (MasterTimer thread) reads. Main thread only. */

@@ -63,6 +63,22 @@ it. The Rig Overview writes it too, and focus calls say it ("SL 2, US
 1"). **Show ▸ Target positions** hides it. See
 [Stage marks](lighting-studio.md#stage-marks-centre-line-curtain-line-number-line).
 
+## Which targets the rig shows
+
+The plot and the Rig Overview draw only the targets **the cue on show
+uses**, so a busy stage reads at a glance: its Aim looks (line aims too)
+and effects centred on a target. On show means:
+
+- **Live**: what plays now (a list's cue, a preview) and the scene loaded
+  in Build;
+- **Blind** (Operate's Blind view): the cue you are editing in the Show
+  Tree;
+- **Nothing on show**: every target.
+
+A target you place stays drawn (you can't lose one you just put down), and
+so does a selected one. **Show ▸ All targets**, on the plot's or the Rig
+Overview's footer, draws them all, always; it is remembered.
+
 ## Line targets
 
 A **Line** spreads lights out instead of converging them: every head an Aim

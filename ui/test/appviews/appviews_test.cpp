@@ -1063,7 +1063,7 @@ void AppViews_Test::theViewMenuIsOnlyViews()
             items << a->text();
     // 0.3.1 (k): QLC+ 4's Monitor and Full Screen are ways of looking too.
     QCOMPARE(items, QStringList() << "Workspace" << "Address Tool" << "DMX Monitor" << "Rig Overview…"
-                                  << "Quick Focus…" << "Venue…" << "Full Screen");
+                                  << "Quick Focus…" << "Venue…" << "Blind" << "Full Screen");
 }
 
 void AppViews_Test::theGridFollowsTheUnitPreference()

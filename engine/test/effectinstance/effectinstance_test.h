@@ -63,6 +63,8 @@ private slots:
     void groupTargetDrivesItsFixtures();
     void effectsStartedApartAreOnTheSameBeat();
     void anEffectOnASpeedMasterCountsItsBeats();
+    void ownSpeedScalesTheEffectsTime();
+    void anotherEffectPickedPlaysAtOnceDespiteARelease();
 
     /** Assigning a single fixture targets only that fixture. */
     void singleFixtureTargetOnly();

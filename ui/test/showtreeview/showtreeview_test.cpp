@@ -78,6 +78,7 @@
 #include "fixturemanager.h"
 #include "showtreecontroller.h"
 #include "showcontrol.h"
+#include "blindstyle.h"
 #include "timecodesource.h"
 #include "paletteops.h"
 #include "virtualconsole.h"
@@ -1379,14 +1380,18 @@ void ShowTreeView_Test::inDesignTheEditShowsOverItsRunningList()
     view.show();
     QVERIFY(QTest::qWaitForWindowExposed(&view));
 
+    // The cue picked plays (LIVE_BLIND.md: the latest action wins).
+    QVERIFY(view.selectNode(l1, c1));
+    QCOMPARE(int(st->previewState()), int(ShowTreeController::PreviewState::Playing));
+
     // The list runs cue One at full, for real.
     goList(m_doc, chaser);
     QCOMPARE(int(settleDmx(m_doc)[0]), 255);
     QCoreApplication::processEvents();     // its start reaches the Show Tree
 
-    // RC8: the list started, so selecting a cue stays off stage -- Held,
-    // with Play beside the line.
-    QVERIFY(view.selectNode(l1, c1));
+    // RC8: the list started, so the preview is off stage -- Held, with
+    // Play beside the line; the same selection refreshed keeps it so.
+    st->previewCue(c1);                 // what the view does on a refresh
     QCOMPARE(st->previewedCue(), c1);
     QCOMPARE(int(st->previewState()), int(ShowTreeController::PreviewState::Held));
     QCOMPARE(view.previewText(), QString("■ Held — Full Show running. Play to preview 1 One over it."));
@@ -1472,6 +1477,112 @@ QTreeWidgetItem *trackedRow(QTreeWidget *tree, quint32 cueId, const QString &tex
             return *it;
     return nullptr;
 }
+}
+
+
+/* LIVE_BLIND.md, Design: "if I select something in the tree editor it
+   should be that look .. if I hit go .. it should be that look ..
+   consistently" -- the latest action wins, a click on the cue already
+   selected included. Operate: only the run is live; a tree edit is blind
+   (and its line blue). */
+void ShowTreeView_Test::theLatestActionWinsAndOperateIsBlind()
+{
+    FixtureGroup *a = group("A", 0, 1);
+    FixtureGroup *b = group("B", 1, 1);
+    FixtureGroup *c = group("C", 2, 1);
+    const quint32 d100 = dimmer(255, "Full");
+    const quint32 d50 = dimmer(127, "Half");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "Run", ListMode::NonTracking);
+    const quint32 c1 = st->addCue(list, -1, "One");
+    const quint32 c2 = st->addCue(list, 0, "Two");
+    const quint32 c3 = st->addCue(list, 1, "Three");
+    QList<quint32> layers;
+    for (const QPair<quint32, FixtureGroup *> &cg : QList<QPair<quint32, FixtureGroup *> >
+             { { c1, a }, { c2, b }, { c3, c } })
+    {
+        Target t;
+        t.groups << cg.second->id();
+        const quint32 l = st->addLayer(cg.first, t);
+        layers << l;
+        st->setLayerLook(cg.first, l, st->lookForPalette(d100));
+    }
+    Chaser *chaser = qobject_cast<Chaser *>(m_doc->function(st->cueList(list)->chaser));
+    QVERIFY(chaser != nullptr);
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1200, 800);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QTreeWidget *tree = view.tree();
+    auto lit = [this]() {
+        const QHash<quint32, uchar> v = settleDmx(m_doc);
+        return QList<int>{ int(v[0]), int(v[1]), int(v[2]) };
+    };
+    auto goCue = [&](int index) {
+        ShowControl::Request r;
+        r.command = ShowControl::Go;
+        r.chaser = chaser->id();
+        r.cue = st->cueNumber(*st->cueList(list), index);
+        QVERIFY(m_doc->showControl()->execute(r));
+        settleDmx(m_doc, 2);                 // the run starts on a tick...
+        QCoreApplication::processEvents();   // ...and the Show Tree hears of it
+    };
+    auto clickCue = [&](quint32 cue) {
+        QTreeWidgetItem *it = nullptr;
+        for (QTreeWidgetItemIterator i(tree); *i && it == nullptr; ++i)
+            if ((*i)->data(0, ShowTreeView::KindRole).toInt() == ShowTreeView::CueNode
+                && (*i)->data(0, ShowTreeView::IdRole).toUInt() == cue)
+                it = *i;
+        QVERIFY(it != nullptr);
+        tree->scrollToItem(it);
+        QTest::mouseClick(tree->viewport(), Qt::LeftButton, Qt::NoModifier, tree->visualItemRect(it).center());
+        QCoreApplication::processEvents();
+    };
+
+    // Select: that look.
+    QVERIFY(view.selectNode(c1));
+    QCOMPARE(lit(), (QList<int>{ 255, 0, 0 }));
+    // GO (cue Two): that look -- the run's, the selection held.
+    goCue(1);
+    QCOMPARE(lit(), (QList<int>{ 0, 255, 0 }));
+    QCOMPARE(int(st->previewState()), int(ShowTreeController::PreviewState::Held));
+    // A click on the cue still selected: that look again, over the run.
+    clickCue(c1);
+    QCOMPARE(int(st->previewState()), int(ShowTreeController::PreviewState::Playing));
+    QCOMPARE(lit(), (QList<int>{ 255, 255, 0 }));
+    // GO again: the run's only.
+    goCue(1);
+    QCOMPARE(lit(), (QList<int>{ 0, 255, 0 }));
+    // Another cue selected: that one.
+    QVERIFY(view.selectNode(c3));
+    QCOMPARE(lit(), (QList<int>{ 0, 255, 255 }));
+    // GO: the run's.
+    goCue(0);
+    QCOMPARE(lit(), (QList<int>{ 255, 0, 0 }));
+    QLabel *line = view.findChild<QLabel *>("stPreview");
+    QVERIFY(line != nullptr);
+    QVERIFY(!line->property("blind").toBool());
+
+    // Operate: only the run is live. Selecting and editing a cue in the
+    // tree changes nothing on stage, and the line says so in blue.
+    m_doc->setMode(Doc::Operate);
+    goCue(1);
+    QCOMPARE(lit(), (QList<int>{ 0, 255, 0 }));
+    QVERIFY(view.selectNode(c3));
+    QVERIFY(st->setLayerLook(c3, layers.at(2), st->lookForPalette(d50)));
+    clickCue(c3);
+    QCOMPARE(lit(), (QList<int>{ 0, 255, 0 }));
+    QVERIFY(line->property("blind").toBool());
+    QVERIFY(line->styleSheet().contains(BlindStyle::colour()));
+    QCOMPARE(st->editedCue(), c3);
+    // ...until GO plays it, as edited.
+    goCue(2);
+    QCOMPARE(lit(), (QList<int>{ 0, 0, 127 }));
+
+    chaser->stop(FunctionParent::master());
+    m_doc->setMode(Doc::Design);
+    view.hide();
 }
 
 void ShowTreeView_Test::trackingControlsOnTheListAndCuePages()
@@ -4281,6 +4392,74 @@ QString paletteState(Doc *doc)
 {
     return treeState(doc) + QStringLiteral("\nfolders ") + doc->paletteOps()->folders().join(QLatin1Char('|'));
 }
+}
+
+/* "creating an effect in Build doesn't update the list in the Show Tree":
+   an EFX or RGB Matrix made, renamed or deleted elsewhere is in the
+   Library at once; so is a named effect palette. */
+void ShowTreeView_Test::anEffectMadeInBuildIsInTheLibraryAtOnce()
+{
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1200, 800);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QVERIFY(libraryItem(view.library(), "Sweep") == nullptr);
+
+    EFX *efx = new EFX(m_doc);
+    QVERIFY(m_doc->addFunction(efx));
+    efx->setName("Sweep");                  // as Build's + New ▾ does: added, then named
+    QTRY_VERIFY(libraryItem(view.library(), "Sweep") != nullptr);
+    efx->setName("Big Sweep");
+    QTRY_VERIFY(libraryItem(view.library(), "Big Sweep") != nullptr);
+    QVERIFY(m_doc->deleteFunction(efx->id()));
+    QTRY_VERIFY(libraryItem(view.library(), "Big Sweep") == nullptr);
+
+    QLCPalette *ripple = new QLCPalette(QLCPalette::Effect, m_doc);
+    ripple->setName("Ripple");
+    m_doc->addPalette(ripple);
+    QTRY_VERIFY(libraryItem(view.library(), "Ripple") != nullptr);
+}
+
+/* "when editing the name in the Show Tree with Enter, it should
+   default-select the WORDS, not the CUE# and WORDS". */
+void ShowTreeView_Test::renameSelectsTheWords()
+{
+    QCOMPARE(ShowTreeView::wordsStart("1.2.0 Chorus"), 6);
+    QCOMPARE(ShowTreeView::wordsStart("01-02.03-Chorus"), 9);
+    QCOMPARE(ShowTreeView::wordsStart("Chorus"), 0);
+    QCOMPARE(ShowTreeView::wordsStart("2.5"), 0);
+
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "Songs");
+    const quint32 c1 = st->addCueNumbered(list, "1.2.0", "Chorus");
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1200, 800);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    view.activateWindow();
+    QVERIFY(QTest::qWaitForWindowActive(&view));
+    QVERIFY(view.selectNode(c1));
+    view.tree()->setFocus();
+    QTest::keyClick(view.tree(), Qt::Key_Return);
+    QLineEdit *ed = nullptr;
+    QTRY_VERIFY((ed = view.tree()->viewport()->findChild<QLineEdit *>()) != nullptr);
+    QCOMPARE(ed->text(), QString("1.2.0 Chorus"));
+    QTRY_COMPARE(ed->selectedText(), QString("Chorus"));
+    QTest::keyClick(ed, Qt::Key_Escape);
+
+    // No number: all of it (a list).
+    QVERIFY(view.selectNode(list));
+    view.tree()->setFocus();
+    QTest::keyClick(view.tree(), Qt::Key_Return);
+    auto songsEditor = [&view]() -> QLineEdit * {
+        for (QLineEdit *e : view.tree()->viewport()->findChildren<QLineEdit *>())
+            if (e->text() == QString("Songs"))
+                return e;
+        return nullptr;
+    };
+    QTRY_VERIFY((ed = songsEditor()) != nullptr);
+    QTRY_COMPARE(ed->selectedText(), QString("Songs"));
+    QTest::keyClick(ed, Qt::Key_Escape);
 }
 
 void ShowTreeView_Test::palettesInTheLibrary()
@@ -7198,6 +7377,57 @@ void ShowTreeView_Test::typedTimesAreKeptWhenFocusLeaves()
     hold->setFocus();
     QTest::keyClick(hold, Qt::Key_Escape);
     QCOMPARE(st->cue(c3)->hold, Function::infiniteSpeed());
+}
+
+/* "when testing a cue timing it doesn't always apply until you move away
+   and come back": a time typed or stepped, with the focus still in the
+   field, is what GO plays -- committed before the run takes the stage. */
+void ShowTreeView_Test::aTimeNotYetLeftIsWhatGoPlays()
+{
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L");
+    const quint32 c1 = st->addCueNumbered(list, "1", "One");
+    st->addCueNumbered(list, "2", "Two");
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1200, 800);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    view.activateWindow();
+    QVERIFY(QTest::qWaitForWindowActive(&view));
+    QDoubleSpinBox *fadeIn = view.findChild<QDoubleSpinBox *>("stCueFadeIn");
+    QDoubleSpinBox *hold = view.findChild<QDoubleSpinBox *>("stCueHold");
+    QVERIFY(fadeIn != nullptr && hold != nullptr);
+    QVERIFY(view.selectNode(c1));
+
+    // Typed, no Return, the focus still there: GO.
+    fadeIn->setFocus();
+    QTRY_VERIFY(fadeIn->hasFocus());
+    fadeIn->selectAll();
+    QTest::keyClicks(fadeIn, "2.5");
+    QVERIFY(fadeIn->hasFocus());
+    QCOMPARE(st->cue(c1)->fadeIn, 0u);
+    const quint32 chaserId = st->cueList(list)->chaser;
+    ShowControl::Request go;
+    go.command = ShowControl::Go;
+    go.chaser = chaserId;
+    go.cue = QStringLiteral("1");
+    QVERIFY(m_doc->showControl()->execute(go));
+    QCOMPARE(st->cue(c1)->fadeIn, 2500u);
+    const Chaser *chaser = qobject_cast<Chaser *>(m_doc->function(chaserId));
+    QVERIFY(chaser != nullptr);
+    QCOMPARE(chaser->steps().first().fadeIn, 2500u);
+
+    // Stepped with the arrow keys, then Play: applied too.
+    m_doc->function(chaserId)->stop(FunctionParent::master());
+    hold->setFocus();
+    QTRY_VERIFY(hold->hasFocus());
+    hold->selectAll();
+    QTest::keyClicks(hold, "3");
+    QToolButton *play = view.findChild<QToolButton *>("stPreviewPlay");
+    QVERIFY(play != nullptr);
+    play->click();
+    QCOMPARE(st->cue(c1)->hold, 3000u);
 }
 
 void ShowTreeView_Test::aTimeTakesEitherDecimalMark()

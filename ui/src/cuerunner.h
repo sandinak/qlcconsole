@@ -255,6 +255,10 @@ private:
 
     Doc *m_doc;
     Size m_size;
+    /** Design: the cue clicked in the list plays (the latest action wins,
+     *  docs/design/LIVE_BLIND.md) until GO, another pick or leaving. */
+    void pickRowCue(const QString &cue);
+    quint32 m_pickedCue = 0xFFFFFFFF;
     quint32 m_follow;
     QTimer *m_timer;
     /** What the tree was built from (list content and chaser), to rebuild

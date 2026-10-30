@@ -11,6 +11,7 @@
 */
 
 #include <QtTest>
+#include <QElapsedTimer>
 #include <QTemporaryDir>
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
@@ -206,6 +207,96 @@ void EffectInstance_Test::anEffectOnASpeedMasterCountsItsBeats()
     QCOMPARE(time(), frozen);
     QCOMPARE(inst.buildInputsObject().property("_bpm").toNumber(), 0.0);
     m_palette->setEffectParamValue("__speedMaster", SpeedMasters::Inherit);
+}
+
+/* Own speed (Look editor, "Own speed: ×"): off a master, the effect's
+   _time runs at its "__ownRate"; changing it never jumps the time. */
+void EffectInstance_Test::ownSpeedScalesTheEffectsTime()
+{
+    Scene *scene = new Scene(m_doc);
+    m_doc->addFunction(scene);
+    scene->addFixtureGroup(m_group->id());
+    QTemporaryDir dir;
+    QFile js(dir.filePath("idle.js"));
+    QVERIFY(js.open(QIODevice::WriteOnly));
+    js.write("(function() { var e = {}; e.apiVersion = 1; e.name = 'Idle';"
+             " e.tick = function(fixtures) { return []; }; return e; })()");
+    js.close();
+    m_palette->setScriptPath(js.fileName());
+    m_palette->setEffectParamValue("__speedMaster", SpeedMasters::Free);
+
+    EffectInstance inst(m_doc, scene->id(), m_palette->id());
+    QVERIFY(inst.isValid());
+    auto time = [&]() { return inst.buildInputsObject().property("_time").toNumber(); };
+
+    // ×4: four seconds of effect a second, bracketed by a wall clock.
+    m_palette->setEffectParamValue("__ownRate", 4.0);
+    const double t0 = time();
+    QElapsedTimer wall;
+    wall.start();
+    QTest::qWait(120);
+    const qint64 waited = wall.elapsed();
+    const double t1 = time();
+    QVERIFY2(t1 - t0 >= 4.0 * waited / 1000.0 * 0.99, qPrintable(QString::number(t1 - t0)));
+    QVERIFY2(t1 - t0 <= 4.0 * (waited + 2000) / 1000.0, qPrintable(QString::number(t1 - t0)));
+
+    // Back to ×1: no jump, it carries on from where it was.
+    m_palette->setEffectParamValue("__ownRate", 1.0);
+    const double t2 = time();
+    QVERIFY(t2 >= t1);
+    QVERIFY2(t2 - t1 < 0.5, qPrintable(QString::number(t2 - t1)));
+
+    // On a master the master sets the pace: the rate is ignored.
+    m_palette->setEffectParamValue("__ownRate", 8.0);
+    m_palette->setEffectParamValue("__speedMaster", SpeedMasters::Master1);
+    const double before = m_doc->speedMasters()->beatPosition(0);
+    const double onMaster = time();
+    QVERIFY(onMaster >= before - 1e-6 && onMaster <= m_doc->speedMasters()->beatPosition(0) + 1e-6);
+    m_palette->setEffectParamValue("__speedMaster", SpeedMasters::Inherit);
+    m_palette->setEffectParamValue("__ownRate", 1.0);
+}
+
+/* "when selecting an effect .. sometimes it doesn't apply on selection": a
+   look with a Fade Out kept its old engine releasing through syncScene, and
+   the create after took it back -- the old script played on. */
+void EffectInstance_Test::anotherEffectPickedPlaysAtOnceDespiteARelease()
+{
+    Scene *scene = new Scene(m_doc);
+    m_doc->addFunction(scene);
+    scene->addFixtureGroup(m_group->id());
+    QTemporaryDir dir;
+    auto script = [&](const QString &name) {
+        QFile js(dir.filePath(name + ".js"));
+        if (!js.open(QIODevice::WriteOnly))
+            return QString();
+        js.write(QString("(function() { var e = {}; e.apiVersion = 1; e.name = '%1';"
+                         " e.tick = function(fixtures) { return []; }; return e; })()").arg(name).toUtf8());
+        js.close();
+        return js.fileName();
+    };
+    m_palette->setScriptPath(script("First"));
+    scene->addPalette(m_palette->id());
+    scene->setPaletteFade(m_palette->id(), -1, 2000);   // a release
+
+    EffectScriptRunner *runner = m_doc->effectScriptRunner();
+    QVERIFY(runner != nullptr);
+    runner->createInstancesForScene(scene->id());
+    EffectInstance *first = runner->instanceForPalette(m_palette->id());
+    QVERIFY(first != nullptr);
+    QCOMPARE(first->m_script.name(), QString("First"));
+
+    m_palette->setScriptPath(script("Second"));
+    runner->syncScene(scene->id());
+    EffectInstance *now = runner->instanceForPalette(m_palette->id());
+    QVERIFY(now != nullptr);
+    QCOMPARE(now->m_script.name(), QString("Second"));
+    QVERIFY(!now->isFadingOut());
+    int forPalette = 0;
+    for (EffectInstance *i : runner->m_instances)
+        if (i->effectPaletteId() == m_palette->id())
+            ++forPalette;
+    QCOMPARE(forPalette, 1);
+    runner->destroyInstancesForScene(scene->id(), false);
 }
 
 void EffectInstance_Test::singleFixtureTargetOnly()

@@ -757,6 +757,7 @@ private slots:
     void manyWhiteBeamsDoNotBlowOut();
     void aFrameFilledAcrossCoresIsTheSameFrame();
     void aFaceFixtureDrawsOverWhatIsInside();
+    void onlyTheTargetsTheCueUsesAreDrawn();
     void aTargetSaysWhichHeadsCannotReachIt();
     void aBlockedBeamIsTracedToWhatBlocksIt();
     void theLineOfSightMenuSetsWhatBlocks();

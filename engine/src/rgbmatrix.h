@@ -24,6 +24,7 @@
 #include <QElapsedTimer>
 #include <QVector>
 #include <QColor>
+#include <atomic>
 #include <QList>
 #include <QSize>
 #include <QPair>
@@ -72,6 +73,10 @@ public:
      *  This method returns true if the RGBMatrix can continue to run, otherwise
      *  false is returned and the caller should stop the RGBMatrix */
     bool checkNextStep(Function::RunOrder order, QColor startColor, QColor endColor, int stepsNumber);
+
+    /** Turn round where it is (a direction edited while it runs). */
+    void setDirection(Function::Direction direction) { m_direction = direction; }
+    Function::Direction direction() const { return m_direction; }
 
 public:
     /** Matrix RGB data of the current step */
@@ -212,6 +217,11 @@ private:
 
 private:
     bool m_requestEngineCreation;
+    /** Its direction was edited while it runs: the steps turn round on the
+     *  next tick, from where they are (item 8: an edit applies at once).
+     *  Set on the UI thread, read by write(). */
+    std::atomic<bool> m_directionEdited { false };
+    Function::Direction m_directionSeen = Function::Forward;
     RGBAlgorithm *m_runAlgorithm;
     RGBAlgorithm *m_algorithm;
     QRecursiveMutex m_algorithmMutex;

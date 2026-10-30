@@ -44,6 +44,7 @@
 #include <QPushButton>
 #include <QComboBox>
 #include <QLineEdit>
+#include <QRegularExpression>
 #include <QCheckBox>
 #include <QSplitter>
 #include <QShortcut>
@@ -88,6 +89,7 @@
 #include "controllearndialog.h"
 #include "itemicons.h"
 #include "workbench.h"
+#include "blindstyle.h"
 #include "noteedit.h"
 #include "importsheet.h"
 #include "showconverter.h"
@@ -994,7 +996,10 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
     m_previewPlay->setText(tr("Play"));
     m_previewPlay->setToolTip(tr("Preview the selected cue over the running show (the edit wins on the "
                                  "channels it plays), until the next GO"));
-    connect(m_previewPlay, &QToolButton::clicked, this, [this]() { m_st->resumePreview(); });
+    connect(m_previewPlay, &QToolButton::clicked, this, [this]() {
+        commitPendingCueEdits();   // a time typed and not yet left plays too
+        m_st->resumePreview();
+    });
     m_previewPlayAction = bar->addWidget(m_previewPlay);
     m_previewPlayAction->setVisible(false);
     headerRow->addWidget(bar, 1);
@@ -2102,6 +2107,15 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
             updateInspector();
         });
     connect(m_st, &ShowTreeController::previewChanged, this, &ShowTreeView::slotPreviewChanged);
+    if (m_doc->inputOutputMap() != nullptr)
+        connect(m_doc->inputOutputMap(), &InputOutputMap::outputInhibitedChanged,
+                this, &ShowTreeView::slotPreviewChanged);
+    // GO (from anywhere) plays what the page shows: a time typed or stepped
+    // in the cue's fields and not yet left is committed (and baked) before
+    // the run starts, not on the next visit to the cue.
+    connect(m_st, &ShowTreeController::stageTakenForRun, this, [this](QStringList *) {
+        commitPendingCueEdits();
+    });
     // The Library follows the show's groups and palettes -- once per burst
     // (a show loading adds them one by one).
     m_libraryTimer = new QTimer(this);
@@ -2146,6 +2160,18 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
     };
     connect(m_doc, &Doc::functionAdded, this, chasersChanged);
     connect(m_doc, &Doc::functionRemoved, this, chasersChanged);
+    /* An EFX or RGB Matrix made in Build (+ New ▾, the Workbench's
+       + Effect ▾), deleted or renamed: the Library's "Functions" at once,
+       not on the next visit ("creating an effect in Build doesn't update
+       the list in the Show Tree"). Once per burst; a load does it at the
+       end. */
+    auto functionsChanged = [this]() {
+        if (m_doc->loadStatus() != Doc::Loading)
+            m_libraryTimer->start();
+    };
+    connect(m_doc, &Doc::functionAdded, this, functionsChanged);
+    connect(m_doc, &Doc::functionRemoved, this, functionsChanged);
+    connect(m_doc, &Doc::functionNameChanged, this, functionsChanged);
     // Palettes made, renamed, filed, deleted (here, typed or in the
     // Programming tab) and the shared undo: the Library and the buttons.
     connect(m_doc->paletteOps(), &PaletteOps::changed, this, [this]() {
@@ -2387,7 +2413,36 @@ bool ShowTreeView::startRename()
     m_reloading = false;
     m_renaming = true;
     m_tree->editItem(item, 0);
+    // The words selected, not the number: "Chorus" in "1.2.0 Chorus" (or a
+    // "01-02.03-Chorus" style name). Clicking into the number edits it too.
+    // No number: all of it.
+    const QString numbered = text;
+    auto selectWords = [this, numbered]() {
+        const QList<QLineEdit *> eds = m_tree->viewport()->findChildren<QLineEdit *>();
+        QLineEdit *ed = nullptr;
+        for (QLineEdit *e : eds)
+            if (e->isVisible() || ed == nullptr)
+                ed = e;
+        if (ed == nullptr || ed->text() != numbered)
+            return;
+        const int start = wordsStart(numbered);
+        if (start > 0 && start < numbered.length())
+            ed->setSelection(start, int(numbered.length()) - start);
+        else
+            ed->selectAll();
+    };
+    selectWords();
+    QTimer::singleShot(0, this, selectWords);
     return true;
+}
+
+int ShowTreeView::wordsStart(const QString &name)
+{
+    // A leading number ("1.2.0 ", "2.5 ", "01-02.03-"): digits and the
+    // dots, dashes and spaces between them, then the words.
+    static const QRegularExpression re(QStringLiteral("^((?>\\d+(?:[.\\-]\\d+)*)[ .\\-]+)(?=\\S)"));
+    const QRegularExpressionMatch m = re.match(name);
+    return m.hasMatch() ? int(m.capturedLength(1)) : 0;
 }
 
 void ShowTreeView::slotTreeItemRenamed(QTreeWidgetItem *item, int column)
@@ -3072,10 +3127,33 @@ void ShowTreeView::slotTreeSelectionChanged()
     }
     updateInspector();
     updateButtons();
+    // Another cue selected is a pick: the latest action wins (a hold by a
+    // GO lets go). The same one again -- a rebuild, a page put back -- is
+    // not.
+    const quint32 picked = currentCueId();
+    const bool isPick = isVisible() && picked != invalidId() && picked != m_lastPickedCue;
+    m_lastPickedCue = picked;
+    if (isPick && !isWorkbenchDocked())
+        m_st->pickCue(picked);
     syncPreview();
     if (currentListId() != m_libraryList)
         m_libraryTimer->start();
     workbenchFollowTree();
+    if (isPick && isWorkbenchDocked())
+        if (Workbench *bench = dockedWorkbench())
+            bench->playPicked();
+}
+
+void ShowTreeView::pickCurrentCue()
+{
+    const quint32 cueId = currentCueId();
+    if (cueId == invalidId() || m_doc->mode() != Doc::Design)
+        return;
+    m_lastPickedCue = cueId;
+    if (Workbench *bench = isWorkbenchDocked() ? dockedWorkbench() : nullptr)
+        bench->playPicked();
+    else
+        m_st->pickCue(cueId);
 }
 
 quint32 ShowTreeView::currentListId() const
@@ -3211,6 +3289,13 @@ QString ShowTreeView::previewText() const
 void ShowTreeView::slotPreviewChanged()
 {
     m_previewLabel->setText(previewText());
+    // Blind is blue (docs/design/LIVE_BLIND.md): an edit that doesn't reach
+    // the stage -- Operate, or Design with the rig muted. Live: the theme.
+    const bool blind = m_st->previewState() == ShowTreeController::PreviewState::NotDesign
+                    || (m_doc->inputOutputMap() != nullptr && m_doc->inputOutputMap()->outputInhibited()
+                        && !m_previewLabel->text().isEmpty());
+    m_previewLabel->setProperty("blind", blind);
+    m_previewLabel->setStyleSheet(blind ? BlindStyle::labelSheet() : QString());
     // Play, beside the line, while a run holds the preview -- the docked
     // Workbench has its own.
     if (m_previewPlayAction != nullptr)
@@ -4614,7 +4699,10 @@ void ShowTreeView::attributeMenu(quint32 cueId, quint32 layerId, const Target &t
     if (isEffectKey(key) && !rowTarget.isEmpty())
     {
         // In detail, on just this layer's heads (W4).
-        menu.addAction(tr("Design effect…"), this, [this, cueId, layerId, rowTarget, key]() {
+        // On the Effect row: a new one, beside the effects there (a movement
+        // and an intensity effect together); on an effect's row: that one.
+        menu.addAction(key == QLatin1String("Effect.") ? tr("Design a new effect…") : tr("Design effect…"),
+                       this, [this, cueId, layerId, rowTarget, key]() {
             EffectLayerDialog::design(m_doc, this, cueId, layerId, rowTarget, key);
         })->setObjectName("stDesignEffect");
         menu.addSeparator();
@@ -6175,11 +6263,27 @@ void ShowTreeView::paletteEdited(quint32 paletteId, bool full)
     // re-read it, and anything showing it is told.
     if (m_doc->effectScriptRunner() != nullptr)
         m_doc->effectScriptRunner()->updateEffectParams(paletteId);
+    /* Another effect picked (script, preset or WLED effect): the running
+       engine is made again -- new params alone left the old script running
+       until the cue was played again ("when selecting an effect .. sometimes
+       it doesn't apply on selection"). */
+    bool newEffect = false;
+    if (const QLCPalette *p = m_doc->palette(paletteId))
+        if (p->type() == QLCPalette::Effect)
+        {
+            const QString sig = p->scriptPath() + QLatin1Char('|') + p->effectPreset()
+                                + QLatin1Char('|') + p->wledEffect();
+            auto it = m_effectSignatures.find(paletteId);
+            newEffect = it == m_effectSignatures.end() ? full : it.value() != sig;
+            m_effectSignatures.insert(paletteId, sig);
+        }
     for (Function *f : m_doc->functions())
     {
         Scene *sc = qobject_cast<Scene *>(f);
         if (sc == nullptr || !sc->palettes().contains(paletteId))
             continue;
+        if (sc->isRunning() && newEffect && m_doc->effectScriptRunner() != nullptr)
+            m_doc->effectScriptRunner()->syncScene(sc->id());
         if (sc->isRunning())
             sc->requestPaletteRefresh();
         if (full)
@@ -9514,6 +9618,12 @@ bool ShowTreeView::eventFilter(QObject *obj, QEvent *ev)
     // to the cue it was typed for -- before the click selects another.
     if (m_tree != nullptr && obj == m_tree->viewport() && ev->type() == QEvent::MouseButtonPress)
         commitPendingCueEdits();
+    // A click on a cue (or a layer in it) is a pick, also on the one already
+    // selected: after GO it takes the stage back (LIVE_BLIND.md).
+    if (m_tree != nullptr && obj == m_tree->viewport() && ev->type() == QEvent::MouseButtonRelease
+        && static_cast<QMouseEvent *>(ev)->button() == Qt::LeftButton
+        && m_tree->itemAt(static_cast<QMouseEvent *>(ev)->position().toPoint()) != nullptr)
+        pickCurrentCue();
     // Esc in a time field: the cue's own value back, nothing applied.
     if (ev->type() == QEvent::KeyPress && static_cast<QKeyEvent *>(ev)->key() == Qt::Key_Escape
         && (obj == m_cueFadeIn || obj == m_cueFadeOut || obj == m_cueHold || obj == m_cueWait)

@@ -683,6 +683,14 @@ protected:
 
 private slots:
     void slotTreeSelectionChanged();
+public:
+    /** Where the words start in a numbered name ("1.2.0 Chorus" -> 6,
+     *  "01-02.03-Chorus" -> 9); 0 when it has no leading number. */
+    static int wordsStart(const QString &name);
+private slots:
+    /** A cue the user picked (docs/design/LIVE_BLIND.md): the latest
+     *  action wins over a run's hold. */
+    void pickCurrentCue();
     void slotPreviewChanged();
     void slotTreeContextMenu(const QPoint &pos);
     void slotLibraryContextMenu(const QPoint &pos);
@@ -953,6 +961,11 @@ private:
     // W3 (showtreeworkbench.cpp)
     struct WorkbenchDock;
     WorkbenchDock *m_wb = nullptr;
+    /** Each effect look's script|preset|WLED effect when last edited: a
+     *  change is another effect picked, and its engine is made again. */
+    QHash<quint32, QString> m_effectSignatures;
+    /** The last cue picked: a selection restored to it is no new pick. */
+    quint32 m_lastPickedCue = 0xFFFFFFFF;
     /** The tree's selection moved while docked: the Workbench follows. */
     void workbenchFollowTree();
     /** The page (the inspector) lent to the docked Workbench's editor pane,

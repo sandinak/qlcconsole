@@ -60,7 +60,7 @@ private slots:
     void operateModeStillHidesTheConsolesTools();
     /** Blind never survives into a show: Operate turns it off and greys it;
      *  Design gives the button back. */
-    void operateClearsBlindAndGreysIt();
+    void operateClearsBlindAndMakesItAView();
     /** Stop all's menu, Fade 1 second and stop: the scene stops and its
      *  light fades out over the second rather than snapping off */
     void fadeOneSecondAndStopFadesTheLightOut();

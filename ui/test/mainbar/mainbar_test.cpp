@@ -47,6 +47,8 @@
 #include "chaserstep.h"
 #include "universe.h"
 #include "fixture.h"
+#include "fixturegroup.h"
+#include "qlcpalette.h"
 #include "chaser.h"
 #include "scene.h"
 #include "qlcfixturedef.h"
@@ -66,6 +68,7 @@
 #include "app.h"
 #include "appsettings.h"
 #include "mainbar.h"
+#include "blindstyle.h"
 #include "doc.h"
 #include "inputoutputmap.h"
 #include "fixturemanager.h"
@@ -353,28 +356,107 @@ void MainBar_Test::theShowControlsWorkInBothPlacements()
     }
 }
 
-void MainBar_Test::operateClearsBlindAndGreysIt()
+/* docs/design/LIVE_BLIND.md. Design: Blind mutes the rig. Into Operate
+   the mute goes (a muted rig never survives into a show) and the same
+   button is the Blind VIEW: the fixtures the rig views draw show the cue in
+   edit while the stage plays on; off, they show the stage again. Blue on
+   the button and the footer either way, with words saying which. */
+void MainBar_Test::operateClearsBlindAndMakesItAView()
 {
-    InputOutputMap *io = m_app->doc()->inputOutputMap();
+    Doc *doc = m_app->doc();
+    InputOutputMap *io = doc->inputOutputMap();
     ShowControls *sc = m_app->m_showControls;
     QVERIFY(sc != nullptr);
-    QCOMPARE(m_app->doc()->mode(), Doc::Design);
+    QCOMPARE(doc->mode(), Doc::Design);
+    QLabel *caption = m_app->statusBar()->findChild<QLabel *>("statusBlind");
+    QVERIFY(caption != nullptr);
+    auto footerBlue = [this]() {
+        return m_app->statusBar()->styleSheet().contains(BlindStyle::colour());
+    };
 
     sc->blindButton()->click();
     QVERIFY(io->outputInhibited());
-    QVERIFY(m_app->m_controlBlindAction->isEnabled());
+    QVERIFY(footerBlue());
+    QVERIFY(caption->isVisibleTo(m_app));
+    QVERIFY(caption->text().contains("muted"));
+
+    // A cue in edit: a dimmer at 200 on a fixture of its own.
+    quint32 fid = Fixture::invalidId();
+    addDimmerScene(&fid);
+    Fixture *fx = doc->fixture(fid);
+    QVERIFY(fx != nullptr && fx->isPatched());
+    FixtureGroup *grp = new FixtureGroup(doc);
+    grp->setName("Blind test");
+    doc->addFixtureGroup(grp);
+    grp->assignFixture(fid);
+    QLCPalette *dim = new QLCPalette(QLCPalette::Dimmer, doc);
+    dim->setName("Blind 200");
+    dim->setValue(200);
+    doc->addPalette(dim);
+    ShowTreeController *st = doc->showTree();
+    const quint32 prod = st->addProduction("Blind P");
+    const quint32 list = st->addCueList(prod, "Blind L");
+    const quint32 cue = st->addCue(list, -1, "Blind cue");
+    ShowTree::Target t;
+    t.groups << grp->id();
+    st->setLayerLook(cue, st->addLayer(cue, t), st->lookForPalette(dim->id()));
 
     sc->operateButton()->click();
-    QCOMPARE(m_app->doc()->mode(), Doc::Operate);
+    QCOMPARE(doc->mode(), Doc::Operate);
     QVERIFY(!io->outputInhibited());                    // the rig speaks again
-    QVERIFY(!m_app->m_controlBlindAction->isEnabled()); // and can't be muted mid-show
-    QVERIFY(!sc->blindButton()->isEnabled());
-    QVERIFY(!sc->blindButton()->isChecked());
+    QVERIFY(m_app->m_controlBlindAction->isEnabled());  // now the Blind view
+    QVERIFY(!sc->blindButton()->isChecked());           // starting Live
+    QVERIFY(!m_app->blindView());
+    QVERIFY(!footerBlue());
+    QVERIFY(!caption->isVisibleTo(m_app));
 
+    // Live: the fixture shows the stage.
+    st->previewCue(cue);                                // the tree's selection, in Operate
+    QCOMPARE(int(st->previewState()), int(ShowTreeController::PreviewState::NotDesign));
+    const quint32 uniIdx = fx->universe();
+    m_app->slotUniverseWritten(uniIdx, QByteArray(512, char(0)));
+    QCOMPARE(uchar(fx->channelValues().at(0)), uchar(0));
+
+    // Blind: the fixture shows the cue in edit; the wire doesn't change.
+    sc->blindButton()->click();
+    QVERIFY(m_app->blindView());
+    QVERIFY(sc->blindButton()->isChecked());
+    QVERIFY(!io->outputInhibited());
+    QCOMPARE(uchar(fx->channelValues().at(0)), uchar(200));
+    QVERIFY(footerBlue());
+    QVERIFY(caption->isVisibleTo(m_app));
+    QVERIFY2(caption->text().contains("Blind cue"), qPrintable(caption->text()));
+    // The stage changing meanwhile doesn't reach the picture...
+    m_app->slotUniverseWritten(uniIdx, QByteArray(512, char(255)));
+    QCOMPARE(uchar(fx->channelValues().at(0)), uchar(200));
+    // ...and nothing played: the universe is untouched.
+    Universe *uni = io->universes().at(int(uniIdx));
+    QCOMPARE(uchar(uni->postGMValues()->at(int(fx->address()))), uchar(0));
+    // An edit to the cue in edit shows (blind).
+    dim->setValue(90);
+    m_app->refreshBlindView();
+    QCOMPARE(uchar(fx->channelValues().at(0)), uchar(90));
+
+    // Live again: the stage as it is.
+    sc->blindButton()->click();
+    QVERIFY(!m_app->blindView());
+    QCOMPARE(uchar(fx->channelValues().at(0)), uchar(0));
+    QVERIFY(!footerBlue());
+
+    // Into Design with the view on: it goes, and nothing is muted.
+    sc->blindButton()->click();
+    QVERIFY(m_app->blindView());
     sc->designButton()->click();
-    QCOMPARE(m_app->doc()->mode(), Doc::Design);
-    QVERIFY(m_app->m_controlBlindAction->isEnabled());
-    QVERIFY(!io->outputInhibited());                    // not switched back on by itself
+    QCOMPARE(doc->mode(), Doc::Design);
+    QVERIFY(!m_app->blindView());
+    QVERIFY(!io->outputInhibited());
+    QVERIFY(!sc->blindButton()->isChecked());
+    QVERIFY(!footerBlue());
+
+    st->removeProduction(prod);
+    doc->deleteFixtureGroup(grp->id());
+    doc->deletePalette(dim->id());
+    removeAddedFunctionsAndFixtures();
 }
 
 /* A one-channel dimmer on universe 3 (the demo show uses only universe 1)

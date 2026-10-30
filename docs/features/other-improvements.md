@@ -732,12 +732,17 @@ beam/footprint overlays). Two of them in detail:
 ## Blind / Park / Highlight / Flash
 
 A classroom-safety and rigging-focus trio: Blind from the show controls
-(top bar, or status bar) and the Control menu, the rest from the
+(top bar, or status bar) and **View ▸ Blind**, the rest from the
 Build tab's tools:
 
-- **Blind** mutes physical DMX output while the 2D preview keeps updating —
-  build and check a look with the room dark. Design-mode only; force-cleared
-  the moment you switch to Operate. Fixtures set to **Ignore Blackout**
+- **Blind** means the screens are not the stage, and it is blue wherever
+  it shows (the button, the footer, the Show Tree's and the Workbench's
+  line). In **Design** it mutes physical DMX output while the 2D preview
+  keeps updating — build and check a look with the room dark. In
+  **Operate** it is the **Blind view**: nothing on the wire changes; the
+  plot, the studio and the fixture pictures show the cue you are editing in
+  the [Show Tree](show-tree.md#seeing-it-on-the-rig) while the stage plays
+  the run. Every mode change turns it off. Fixtures set to **Ignore Blackout**
   (house and work lights, power relays —
   [Output rules](fixture-manager.md#output-rules)) stay as they are through
   Blind, as through Blackout: a universe with any sends them live and

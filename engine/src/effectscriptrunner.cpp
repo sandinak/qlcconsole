@@ -240,7 +240,11 @@ void EffectScriptRunner::syncScene(quint32 sceneId)
     if (Scene *scene = qobject_cast<Scene*>(m_doc->function(sceneId)))
         paletteIds = scene->palettes();
 
-    destroyInstancesForScene(sceneId);
+    // No release fade either: a look with a Fade Out (or a scene with an
+    // out-transition) kept its old engine fading, and the create below
+    // took it back -- the new pick never played ("when selecting an effect
+    // .. sometimes it doesn't apply on selection").
+    destroyInstancesForScene(sceneId, false);
 
     for (quint32 pid : paletteIds)
         discardParked(pid);
@@ -248,7 +252,7 @@ void EffectScriptRunner::syncScene(quint32 sceneId)
     createInstancesForScene(sceneId);
 }
 
-void EffectScriptRunner::destroyInstancesForScene(quint32 sceneId)
+void EffectScriptRunner::destroyInstancesForScene(quint32 sceneId, bool release)
 {
     // Deadlock prevention: unregisterDMXSource acquires m_dmxSourceListMutex,
     // but the timer thread holds m_dmxSourceListMutex while calling writeDMX.
@@ -272,7 +276,8 @@ void EffectScriptRunner::destroyInstancesForScene(quint32 sceneId)
             // (see runTick) instead of snapping off. slotTick reaps it when the
             // fade completes. Persistence takes precedence (parked mid-flight).
             int fadeOutMs = -1;
-            if (Scene *sc = qobject_cast<Scene*>(m_doc->function(sceneId)))
+            Scene *sc = release ? qobject_cast<Scene*>(m_doc->function(sceneId)) : nullptr;
+            if (sc != nullptr)
             {
                 fadeOutMs = sc->paletteFadeOut(inst->effectPaletteId());
                 // Leaving by a transition: the effect leaves by it too, cell

@@ -335,6 +335,49 @@ void ShowTreeWorkbench_Test::editUndoRedo()
     QCOMPARE(settle(m_doc).at(0), 128);
 }
 
+/* "click and drag is doing multi-select vs relocate on palettes under a
+   layer": a cue layer's look rows drag (they don't rubber-band a
+   selection); dropped on another layer they move there in one undo step,
+   ⌥ copies; on their own layer the hint says why nothing moves. */
+void ShowTreeWorkbench_Test::lookRowsDragToAnotherLayer()
+{
+    const Show s = SHOW();
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1400, 800);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QVERIFY(view.openInWorkbench(s.c1));
+    Workbench *bench = view.dockedWorkbench();
+    WorkbenchStack *stack = bench->stack();
+    ShowTreeController *st = m_doc->showTree();
+    const int towers = layerNamed(stack, "Towers");
+    const int usts = layerNamed(stack, "USTs");
+    QVERIFY(towers >= 0 && usts >= 0);
+    QTreeWidgetItem *dimRow = bench->rows()->layerItem(towers)->child(attributeKeyed(stack, towers, KeyDimmer));
+    QVERIFY(dimRow != nullptr);
+    QVERIFY(dimRow->flags() & Qt::ItemIsDragEnabled);
+    QVERIFY(bench->rows()->dragEnabled());
+
+    QScopedPointer<QMimeData> mime(bench->rows()->mimeData({ dimRow }));
+    QVERIFY(mime != nullptr && mime->hasFormat(QString::fromLatin1(WorkbenchStack::attributeMimeType())));
+    QVERIFY(stack->dropPlanOn(towers, mime.data(), false).startsWith("!"));
+    QVERIFY2(stack->dropPlanOn(usts, mime.data(), false).startsWith("Move"),
+             qPrintable(stack->dropPlanOn(usts, mime.data(), false)));
+
+    // Moved: USTs plays Full, Towers' own Full is gone; one undo puts both back.
+    QVERIFY(stack->dropOn(usts, mime.data(), false));
+    QCOMPARE(st->cue(s.c1)->layer(s.ustsLayer1)->look(KeyDimmer)->palettes, QList<quint32>({ s.full }));
+    QVERIFY(st->cue(s.c1)->layer(s.towersLayer1)->look(KeyDimmer) == nullptr);
+    QVERIFY(st->undo());
+    QCOMPARE(st->cue(s.c1)->layer(s.ustsLayer1)->look(KeyDimmer)->palettes, QList<quint32>({ s.half }));
+    QCOMPARE(st->cue(s.c1)->layer(s.towersLayer1)->look(KeyDimmer)->palettes, QList<quint32>({ s.full }));
+
+    // ⌥: a copy.
+    QVERIFY(stack->dropOn(usts, mime.data(), true));
+    QCOMPARE(st->cue(s.c1)->layer(s.ustsLayer1)->look(KeyDimmer)->palettes, QList<quint32>({ s.full }));
+    QCOMPARE(st->cue(s.c1)->layer(s.towersLayer1)->look(KeyDimmer)->palettes, QList<quint32>({ s.full }));
+}
+
 void ShowTreeWorkbench_Test::trackedRowsReadOnly()
 {
     const Show s = SHOW();

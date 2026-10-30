@@ -1338,15 +1338,19 @@ bool ProgrammingManager::designEffect(quint32 paletteId)
     // Saved as a palette, or the palette updated: listed, selected, and on
     // the bench again (a fresh copy of it).
     connect(ed, &EffectDesigner::effectChosen, this,
-            [this](quint32 pid, const QList<quint32> &, EffectDesigner::Outcome) {
+            [this](quint32 pid, const QList<quint32> &, EffectDesigner::Outcome outcome) {
         m_paletteTree->updateTree();
         rebuildEffects();
-        QTimer::singleShot(0, this, [this, pid]() {
+        QTimer::singleShot(0, this, [this, pid, outcome]() {
             if (m_doc->palette(pid) == nullptr)
                 return;
             selectEffectRow(true, pid);
             if (effectDesigner() != nullptr)
                 designEffect(pid);
+            // Saved as a palette: named in place, the name typed over the
+            // one it was given (no name box first).
+            if (outcome == EffectDesigner::NewPalette && m_effectsList->currentItem() != nullptr)
+                m_effectsList->editItem(m_effectsList->currentItem(), 0);
         });
     });
     if (p != nullptr)

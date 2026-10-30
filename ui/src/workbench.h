@@ -243,6 +243,10 @@ public:
      *  what previews here stops and holds until Play; says so in
      *  @a held. Public for the tests. */
     void holdForRun(QStringList *held);
+    /** The user picked what is loaded (the Show Tree's selection): the
+     *  latest action wins, so a hold by a run lets go and it plays, in
+     *  Design (docs/design/LIVE_BLIND.md). */
+    void playPicked();
 protected:
     /** Esc: backOut(). */
     void keyPressEvent(QKeyEvent *ev) override;

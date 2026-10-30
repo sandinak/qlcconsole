@@ -152,7 +152,7 @@ brackets.
 | **Relay** | A switch the console controls, for power: it is either on or off, never dimmed. Used for a circuit that powers LED fixtures, or for house lights on a relay panel. [3.7] |
 | **Grand Master (GM)** | The one fader over everything: at 50 % every light is at half its level. [3.7] |
 | **Blackout** | A switch that takes every light to zero at once, whatever is running; press it again to bring them back. [3.7] |
-| **Blind** | Building without the real lights showing it: the rig is muted while the screen preview stays live. Design mode only. [3.7] |
+| **Blind** | The screens show something the stage doesn't. In Design the real lights are muted while the screen preview stays live; in Operate the stage keeps playing the run while the plot shows the cue you are editing. Always shown in blue. [3.7] |
 | **Output rules** | Per-fixture rules for circuits that aren't show lights: ignore Blackout, ignore the Grand Master, switch like a relay, on when not in use. [3.7] |
 | **Focus** (the rig) | Pointing, sizing and sharpening each light so it lands where the design says, once per room, before the cues run. [3.6] |
 | **Focus call** | A step of the focus: some lights and the point they focus to ("Truss-Spots → Center"). The show keeps its calls in order; run them from the controller. [3.6] |

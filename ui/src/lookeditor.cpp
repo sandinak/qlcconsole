@@ -2613,13 +2613,14 @@ void LookEditor::rebuildEffectDynWidget()
     // different path, so it still rebuilds.
     {
         QLCPalette *gp = m_doc->palette(m_paletteId);
+        // What the look plays, from the look itself: a preset or a WLED
+        // effect has no script name in the picker, so keying on the picker
+        // kept one preset's (or the placeholder's) settings up after picking
+        // another ("sometimes it doesn't apply on selection").
         QString gScriptPath;
         if (gp && gp->type() == QLCPalette::Effect)
-        {
-            const QString gName = m_effectScriptCombo->currentData().toString();
-            if (!gName.isEmpty() && m_doc->effectScriptRunner())
-                gScriptPath = m_doc->effectScriptRunner()->cache()->scriptPath(gName);
-        }
+            gScriptPath = gp->scriptPath() + QLatin1Char('|') + gp->effectPreset()
+                          + QLatin1Char('|') + gp->wledEffect();
         // The speed choice too: on a master the rate reads "per beat".
         const int speedKey = gp ? int(gp->effectParamValues().value(QStringLiteral("__speedMaster"),
                                                                     SpeedMasters::Inherit))
@@ -3332,6 +3333,38 @@ void LookEditor::rebuildEffectDynWidget()
             QTimer::singleShot(0, this, &LookEditor::rebuildEffectDynWidget);
         });
         rl->addWidget(cb);
+        // Own speed (off a master): how fast the effect runs, ×1 as made.
+        // Every effect has one, also those with no speed setting of their
+        // own ("when selecting own speed on an effect there should be a
+        // setting for it").
+        if (!onMaster)
+        {
+            QLabel *ownLabel = new QLabel(tr("Own speed:"), row);
+            QDoubleSpinBox *own = new QDoubleSpinBox(row);
+            own->setObjectName(QStringLiteral("effectOwnRate"));
+            own->setRange(0.05, 20.0);
+            own->setDecimals(2);
+            own->setSingleStep(0.1);
+            own->setPrefix(QStringLiteral("×"));
+            own->setValue(p->effectParamValues().value(QStringLiteral("__ownRate"), 1.0));
+            own->setToolTip(tr("How fast this effect runs on its own speed: ×1 as made, ×2 twice "
+                               "as fast, ×0.5 half. It multiplies the effect's own speed setting, "
+                               "if it has one. On the main clock or a speed master, the master "
+                               "sets the pace instead."));
+            ownLabel->setBuddy(own);
+            connect(own, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+                    this, [this](double v) {
+                if (m_loading) return;
+                QLCPalette *pp = m_doc->palette(m_paletteId);
+                if (!pp || pp->type() != QLCPalette::Effect) return;
+                pp->setEffectParamValue(QStringLiteral("__ownRate"), v);
+                m_doc->setModified();
+                emit paletteValueChanged(m_paletteId);
+            });
+            rl->addSpacing(8);
+            rl->addWidget(ownLabel);
+            rl->addWidget(own);
+        }
         rl->addStretch(1);
         dv->addWidget(row);
     }
@@ -3713,6 +3746,7 @@ void LookEditor::slotEffectScriptChanged(int /*index*/)
     for (auto it = prevParams.constBegin(); it != prevParams.constEnd(); ++it)
     {
         const bool lookLevel = it.key() == QLatin1String("__speedMaster")
+                               || it.key() == QLatin1String("__ownRate")
                                || it.key().startsWith(SpreadLayer::paramName(""));
         if (lookLevel && !p->effectParamValues().contains(it.key()))
             p->setEffectParamValue(it.key(), it.value());

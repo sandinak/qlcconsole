@@ -23,6 +23,7 @@
 #include <QLayout>
 
 #include "mainbar.h"
+#include "blindstyle.h"
 #include "doc.h"
 
 #define KTabToolsProperty "mainBarTabTools"
@@ -85,14 +86,14 @@ ShowControls::ShowControls(Doc *doc, QAction *stopAll, QAction *blackout, QActio
        footer and the Blind/Park docs already use. Colours of their own with
        white words, so they read the same on all six themes; the switch's
        Design half uses the theme's own highlight pair. */
-    setStyleSheet(QStringLiteral(
+    setStyleSheet(QString(
         // Its own background, so it reads the same in the status bar when
         // Blind turns that blue.
         "QToolBar#ShowControls { background: palette(window); border: none; }"
         "QToolButton#showBlackout:checked { background-color: #c62828; color: #ffffff;"
         "  border: 1px solid #8e1b1b; border-radius: 4px; }"
-        "QToolButton#showBlind:checked { background-color: #1f5fd1; color: #ffffff;"
-        "  border: 1px solid #17469b; border-radius: 4px; }"));
+        "QToolButton#showBlind:checked { background-color: " + BlindStyle::colour() + "; color: #ffffff;"
+        "  border: 1px solid " + BlindStyle::edge() + "; border-radius: 4px; }"));
     modeSwitch->setStyleSheet(QStringLiteral(
         "QWidget#modeSwitch { background: palette(window); }"
         "QToolButton#modeDesign, QToolButton#modeOperate { padding: 2px 9px;"

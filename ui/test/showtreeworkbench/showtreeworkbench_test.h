@@ -44,6 +44,7 @@ private slots:
     void editUndoRedo();
     /** Carried-in rows: not removed, cleared or moved; a value set on one
      *  makes it the cue's own (the tree's rule). */
+    void lookRowsDragToAnotherLayer();
     void trackedRowsReadOnly();
     /** The tree's own pages are lent to the editor pane; a value with a
      *  palette edits in the Look Editor. */

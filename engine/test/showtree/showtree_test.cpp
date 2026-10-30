@@ -2084,6 +2084,91 @@ void ShowTree_Test::inDesignTheEditWinsOverARunningList()
     st->stopPreview();
 }
 
+/* docs/design/LIVE_BLIND.md, Design: "if I select something in the tree
+   editor it should be that look .. if I hit go or select something in the
+   run it should be that look .. consistently" -- the latest action wins. */
+void ShowTree_Test::theLatestActionWins()
+{
+    FixtureGroup *a = group("Towers", { m_fixtures[0] });
+    FixtureGroup *b = group("USTs", { m_fixtures[2] });
+    const quint32 d100 = dimmer(255, "Full");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 listId = st->addCueList(st->addProduction("P"), "L", ListMode::NonTracking);
+    const quint32 c1 = st->addCue(listId, -1, "One");
+    const quint32 c2 = st->addCue(listId, 0, "Two");
+    st->setLayerLook(c1, st->addLayer(c1, groupTarget(a->id())), st->lookForPalette(d100));
+    st->setLayerLook(c2, st->addLayer(c2, groupTarget(b->id())), st->lookForPalette(d100));
+    Chaser *chaser = qobject_cast<Chaser *>(m_doc->function(st->cueList(listId)->chaser));
+
+    // A pick plays the cue.
+    st->pickCue(c2);
+    QHash<quint32, uchar> v = settle();
+    QCOMPARE(int(v[2]), 255);
+    QCOMPARE(st->editedCue(), c2);
+
+    // GO: the run's cue (One) only.
+    ShowControl::Request r;
+    r.command = ShowControl::Go;
+    r.chaser = chaser->id();
+    QCOMPARE(st->cueList(listId)->cues.first().id, c1);
+    r.cue = st->cueNumber(*st->cueList(listId), 0);
+    QVERIFY(m_doc->showControl()->execute(r));
+    tick(2);
+    QCoreApplication::processEvents();
+    v = settle();
+    QCOMPARE(int(v[0]), 255);
+    QCOMPARE(int(v[2]), 0);
+
+    // The same selection refreshed (a rebuild, the tab back) is no pick.
+    st->previewCue(c2);
+    QCOMPARE(int(st->previewState()), int(ShowTreeController::PreviewState::Held));
+    QCOMPARE(int(settle()[2]), 0);
+
+    // A pick after GO: that look, over the run going on underneath.
+    st->pickCue(c2);
+    QCOMPARE(int(st->previewState()), int(ShowTreeController::PreviewState::Playing));
+    v = settle();
+    QCOMPARE(int(v[2]), 255);
+    QVERIFY(chaser->isRunning());
+
+    // GO again: the run again.
+    QVERIFY(m_doc->showControl()->execute(r));
+    tick(2);
+    QCoreApplication::processEvents();
+    v = settle();
+    QCOMPARE(int(v[2]), 0);
+    QCOMPARE(int(v[0]), 255);
+
+    // Stopping the preview keeps what is in edit (a Blind rig view's cue).
+    st->stopPreview();
+    QCOMPARE(st->editedCue(), c2);
+    chaser->stop(FunctionParent::master());
+    tick(5);
+}
+
+void ShowTree_Test::aCuesLevelsAreWhatItPutsOnStage()
+{
+    FixtureGroup *a = group("Towers", { m_fixtures[0] });
+    const quint32 d50 = dimmer(127, "Half");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 listId = st->addCueList(st->addProduction("P"), "L", ListMode::Tracking);
+    const quint32 c1 = st->addCue(listId, -1, "One");
+    const quint32 c2 = st->addCue(listId, 0, "Two");
+    st->setLayerLook(c1, st->addLayer(c1, groupTarget(a->id())), st->lookForPalette(d50));
+
+    // Its own layer, and tracked into the next cue.
+    for (quint32 cueId : { c1, c2 })
+    {
+        const QHash<quint32, QByteArray> levels = st->cueLevels(cueId);
+        QVERIFY(levels.contains(m_fixtures[0]));
+        QCOMPARE(uchar(levels.value(m_fixtures[0]).at(0)), uchar(127));
+        QVERIFY(!levels.contains(m_fixtures[2]));
+    }
+    // Reading them plays nothing.
+    QCOMPARE(int(settle()[0]), 0);
+    QVERIFY(st->cueLevels(ShowTree::invalidId()).isEmpty());
+}
+
 /****************************************************************************
  * Import
  ****************************************************************************/

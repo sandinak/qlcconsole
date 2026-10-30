@@ -278,6 +278,20 @@ private:
     QList<quint32> m_tryOn;
     QList<quint32> m_base;
     quint32 m_originalId;
+    /** Live while it plays (item 8): the original as opened, while the
+     *  draft's edits are mirrored onto it because something plays it --
+     *  "changing settings on an effect in Build while it's playing on the
+     *  rig doesn't alter the impact". Update keeps them; anything else
+     *  puts this back. Null: nothing mirrored. */
+    QLCPalette *m_originalAtOpen = nullptr;
+    /** Mirror the draft onto the original when a scene other than the
+     *  bench's plays it. */
+    void mirrorToOriginal();
+    /** Put the original back as opened (Cancel, a one-off or a new palette
+     *  kept instead). */
+    void restoreOriginal();
+    /** Scenes other than the bench's that play the original now. */
+    QList<quint32> scenesPlayingOriginal() const;
     quint32 m_draftId;
     quint32 m_sceneId;
     quint32 m_ownColour;
@@ -352,6 +366,7 @@ private:
     ShowTree::Target m_target;
     ShowTree::Look m_previous;
     bool m_previousOwn = false;
+    bool m_replacesOtherKind = false;
     quint32 m_previewedBefore;
     EffectDesigner *m_designer;
     bool m_applied = false;

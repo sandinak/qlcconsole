@@ -23,6 +23,7 @@
 #include "mastertimer.h"
 #undef private
 #include "effectscriptrunner.h"
+#include "effectscriptcache.h"
 #include "inputoutputmap.h"
 #include "qlcfixturemode.h"
 #include "qlcfixturehead.h"
@@ -35,6 +36,8 @@
 #include "lookstackcheck.h"
 #include "fixturegroup.h"
 #include "scene.h"
+#include "showtreecontroller.h"
+#include "collection.h"
 #include "doc.h"
 
 #include "lookstack_test.h"
@@ -477,6 +480,82 @@ void LookStack_Test::theLowerOfTwoMovementEffectsWins()
     d = play({ dimmer(255), effect("pan180.js"), effect("pan90.js") });
     IS(panOf(d, m_mover), panValue(m_mover, 90));
     IS(panOf(d, m_wheel), panValue(m_wheel, 90));
+}
+
+/* "How do we stack effects for different things, like both a position and
+   an intensity effect?" Both play: the movement on pan/tilt, the dimmer
+   effect on the level, in either order. */
+void LookStack_Test::aMovementAndADimmerEffectBothPlay()
+{
+    QByteArray d = play({ colour(kBlue), dimmer(255), effect("pan90.js"), effect("half.js") });
+    IS(panOf(d, m_mover), panValue(m_mover, 90));
+    IS(dimmerOf(d, m_mover), 128);
+    RGB_IS(rgbOf(d, m_mover), kBlue);
+    IS(dimmerOf(d, m_par), 128);                // the dimmer effect on every head
+
+    init();
+    d = play({ colour(kBlue), dimmer(255), effect("half.js"), effect("pan90.js") });
+    IS(panOf(d, m_mover), panValue(m_mover, 90));
+    IS(dimmerOf(d, m_mover), 128);
+}
+
+/* The same on a Show Tree layer: a Position effect and a Dimmer effect
+   side by side (one row each), both on stage. */
+void LookStack_Test::aTreeLayerPlaysAMovementAndADimmerEffect()
+{
+    FixtureGroup *grp = new FixtureGroup(m_doc);
+    m_doc->addFixtureGroup(grp);
+    for (Fixture *fx : { m_par, m_wheel, m_mover })
+        grp->assignFixture(fx->id());
+    // The kinds come from the scripts the runner knows, as a real
+    // script declares them (effect.fixtureTypes).
+    const char *kinds[][2] = {
+        { "kindpan.js",
+          "(function() { var effect = {}; effect.apiVersion = 1; effect.name = 'T Kind Pan';\n"
+          " effect.fixtureTypes = [\"moving\"];\n"
+          " effect.tick = function(fx) { return fx.map(function() { return { pan: 90, tilt: 45 }; }); };"
+          " return effect; })()" },
+        { "kinddim.js",
+          "(function() { var effect = {}; effect.apiVersion = 1; effect.name = 'T Kind Half';\n"
+          " effect.fixtureTypes = [\"dimmer\"];\n"
+          " effect.tick = function(fx) { return fx.map(function() { return { dimmer: 0.5 }; }); };"
+          " return effect; })()" } };
+    for (const auto &k : kinds)
+    {
+        QFile f(m_scripts.filePath(QString::fromLatin1(k[0])));
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write(k[1]);
+    }
+    m_doc->effectScriptRunner()->cache()->addDirectory(QDir(m_scripts.path()));
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L", ShowTree::ListMode::NonTracking);
+    const quint32 cue = st->addCue(list, -1, "One");
+    ShowTree::Target t;
+    t.groups << grp->id();
+    const quint32 layer = st->addLayer(cue, t);
+    QVERIFY(st->setLayerLook(cue, layer, st->lookForPalette(colour(kBlue)->id())));
+    QVERIFY(st->setLayerLook(cue, layer, st->lookForPalette(dimmer(255)->id())));
+    const ShowTree::Look pan = st->lookForPalette(effect("kindpan.js")->id());
+    const ShowTree::Look half = st->lookForPalette(effect("kinddim.js")->id());
+    QVERIFY2(pan.key != half.key, qPrintable(pan.key));
+    QVERIFY(st->setLayerLook(cue, layer, pan));
+    QVERIFY(st->setLayerLook(cue, layer, half));
+    QVERIFY(st->cue(cue)->layer(layer)->look(pan.key) != nullptr);
+    QVERIFY(st->cue(cue)->layer(layer)->look(half.key) != nullptr);
+
+    // What the cue plays: its layer's generated scene, both effects in it.
+    const Collection *coll = qobject_cast<const Collection *>(m_doc->function(st->cue(cue)->collection));
+    QVERIFY(coll != nullptr && !coll->functions().isEmpty());
+    Scene *scene = qobject_cast<Scene *>(m_doc->function(coll->functions().first()));
+    QVERIFY(scene != nullptr);
+    QVERIFY(scene->palettes().contains(pan.palettes.first()));
+    QVERIFY(scene->palettes().contains(half.palettes.first()));
+    m_playing = scene;
+    scene->start(m_doc->masterTimer(), FunctionParent::master());
+    const QByteArray d = tickAndRead();
+    IS(panOf(d, m_mover), panValue(m_mover, 90));
+    IS(dimmerOf(d, m_mover), 128);
+    IS(dimmerOf(d, m_par), 128);
 }
 
 /* "colors, dimmers, etc. that are above have precedence across all the
