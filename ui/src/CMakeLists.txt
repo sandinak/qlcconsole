@@ -270,6 +270,7 @@ add_library(${module_name}
     virtualconsole/vcspeeddial.cpp virtualconsole/vcspeeddial.h
     virtualconsole/vcspeeddialfunction.cpp virtualconsole/vcspeeddialfunction.h
     virtualconsole/vcspeeddialpreset.cpp virtualconsole/vcspeeddialpreset.h
+    virtualconsole/vceffectcontrol.cpp virtualconsole/vceffectcontrol.h
     virtualconsole/vcspeeddialproperties.cpp virtualconsole/vcspeeddialproperties.h virtualconsole/vcspeeddialproperties.ui
     virtualconsole/vcwidget.cpp virtualconsole/vcwidget.h
     virtualconsole/vcwidgetproperties.cpp virtualconsole/vcwidgetproperties.h

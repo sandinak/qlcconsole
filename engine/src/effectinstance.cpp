@@ -155,6 +155,78 @@ void EffectInstance::reloadParamsFromPalette()
     const QMap<QString, QString> &sp = pal->effectStringParams();
     for (auto it = sp.constBegin(); it != sp.constEnd(); ++it)
         m_stringParamValues[it.key()] = it.value();
+    // A live override (a VC control) stays over the palette's edit.
+    for (auto it = m_overrides.constBegin(); it != m_overrides.constEnd(); ++it)
+        if (it.key() != spreadOverrideKey() && it.key() != hueOverrideKey())
+            m_paramValues[it.key()] = it.value();
+}
+
+void EffectInstance::setOverride(const QString &name, double value)
+{
+    m_overrides.insert(name, value);
+    if (name != spreadOverrideKey() && name != hueOverrideKey())
+        m_paramValues[name] = value;
+}
+
+void EffectInstance::clearOverride(const QString &name)
+{
+    if (m_overrides.remove(name) == 0)
+        return;
+    if (name == spreadOverrideKey() || name == hueOverrideKey())
+        return;
+    const QLCPalette *pal = m_doc->palette(m_effectPaletteId);
+    if (pal != nullptr && pal->effectParamValues().contains(name))
+    {
+        m_paramValues[name] = pal->effectParamValues().value(name);
+        return;
+    }
+    for (const EffectScript::ParamDef &d : m_script.paramDefs())
+        if (d.name == name)
+            m_paramValues[name] = d.defaultValue;
+}
+
+void EffectInstance::clearOverrides()
+{
+    const QStringList names = m_overrides.keys();
+    for (const QString &n : names)
+        clearOverride(n);
+}
+
+double EffectInstance::paramValue(const QString &name, bool *ok) const
+{
+    if (ok != nullptr)
+        *ok = true;
+    auto over = m_overrides.constFind(name);
+    if (over != m_overrides.constEnd())
+        return over.value();
+    if (name == spreadOverrideKey())
+        return spreadSettings(m_doc->palette(m_effectPaletteId)).amount;
+    if (name == hueOverrideKey())
+    {
+        QList<QColor> colours;
+        double dimmer = 1.0;
+        lookColours(colours, dimmer);
+        return colours.isEmpty() ? 0.0 : qMax(0.0, colours.first().hsvHueF());
+    }
+    auto it = m_paramValues.constFind(name);
+    if (it != m_paramValues.constEnd())
+        return it.value();
+    if (ok != nullptr)
+        *ok = false;
+    return 0.0;
+}
+
+SpreadLayer::Settings EffectInstance::spreadSettings(const QLCPalette *pal) const
+{
+    SpreadLayer::Settings s = pal != nullptr ? SpreadLayer::fromParams(pal->effectParamValues())
+                                             : SpreadLayer::Settings();
+    if (!m_overrides.isEmpty())
+    {
+        auto it = m_overrides.constFind(spreadOverrideKey());
+        if (it != m_overrides.constEnd())
+            s.amount = it.value();
+    }
+    return s;
 }
 
 void EffectInstance::setDataChannels(const QHash<QString, QVariantMap> &channels)
@@ -983,8 +1055,7 @@ QList<EffectInstance::SpreadDot> EffectInstance::spreadPreview(QPointF *centre, 
     QList<SpreadDot> dots;
     QLCPalette *pal = m_doc->palette(m_effectPaletteId);
     const MonitorProperties *mp = m_doc->monitorProperties();
-    const SpreadLayer::Settings spread = pal != nullptr ? SpreadLayer::fromParams(pal->effectParamValues())
-                                                        : SpreadLayer::Settings();
+    const SpreadLayer::Settings spread = spreadSettings(pal);
     int cols = 0, rows = 0;
     const QList<EffectCell> cells = effectiveCells(cols, rows);
     QVector<SpreadLayer::Point> pts;
@@ -1165,8 +1236,7 @@ QJSValue EffectInstance::buildFixturesArray(const QList<EffectInstance::EffectCe
        cycles. Worked out again only when the cells, the settings or -- for a
        stage axis -- where things stand have changed. */
     {
-        const SpreadLayer::Settings spread = effectPal != nullptr
-            ? SpreadLayer::fromParams(effectPal->effectParamValues()) : SpreadLayer::Settings();
+        const SpreadLayer::Settings spread = spreadSettings(effectPal);
         const bool onStage = spread.axis >= SpreadLayer::StageX;
         /* Out from / around a target: the look's Aim target (the one Stage
            Shape centres on); without one, the middle of the heads. */
@@ -1545,8 +1615,7 @@ QJSValue EffectInstance::buildInputsObject() const
 
     // The host's spread is on: read fixture.phase, not the script's own.
     QLCPalette *spreadPal = m_doc->palette(m_effectPaletteId);
-    const SpreadLayer::Settings spreadNow = spreadPal != nullptr
-        ? SpreadLayer::fromParams(spreadPal->effectParamValues()) : SpreadLayer::Settings();
+    const SpreadLayer::Settings spreadNow = spreadSettings(spreadPal);
     obj.setProperty("_spread", spreadNow.isActive());
     obj.setProperty("_spreadAmount", spreadNow.amount);     // cycles, for effects that lay heads out by it
 
@@ -1707,6 +1776,23 @@ void EffectInstance::lookColours(QList<QColor> &colours, double &dimmer, bool *h
         }
     }
     colours = ownColors.isEmpty() ? baseColors : ownColors;
+    // Colour 1's hue turned by a live override (a VC control).
+    if (!m_overrides.isEmpty())
+    {
+        auto hue = m_overrides.constFind(hueOverrideKey());
+        if (hue != m_overrides.constEnd())
+        {
+            const double h = qBound(0.0, hue.value(), 1.0);
+            if (colours.isEmpty())
+                colours << QColor::fromHsvF(h, 1.0, 1.0);
+            else
+            {
+                const QColor c = colours.first();
+                colours[0] = QColor::fromHsvF(h, c.hsvSaturationF() > 0 ? c.hsvSaturationF() : 1.0,
+                                              c.valueF() > 0 ? c.valueF() : 1.0);
+            }
+        }
+    }
     if (ownDimmer >= 0.0 || baseDimmer >= 0.0)
     {
         lookDimmer = ownDimmer >= 0.0 ? ownDimmer : baseDimmer;

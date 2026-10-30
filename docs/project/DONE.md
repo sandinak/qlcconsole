@@ -6,6 +6,36 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
+### 2026-10-29 — VC effect controls *(feat/031-vc-controls, part 3)*
+
+Asked: "map effect options to VC widgets (knobs, sliders) ... reusable so
+that the current effect can use the slider for its setting". Design:
+docs/design/VC_EFFECT_CONTROLS.md.
+
+- **Engine:** `EffectInstance::setOverride()/clearOverride()/paramValue()`:
+  a live value over the palette's (script params in its param values, kept
+  across `reloadParamsFromPalette()` -- lb's live-edit path, 2355e32ab; the
+  host Spread amount and colour 1's hue as overrides read where the spread
+  and look colours are, behind an empty-hash check). `EffectScriptRunner::
+  setParamOverride()/clearParamOverride()/paramOverrides()/paramValue()/
+  paramDefs()/isPlaying()/sceneOf()`, signals `effectStarted/Stopped/
+  overridesChanged`; overrides go when the instance stops (parked too).
+- **VC:** `VCEffectControl` (target Palette / Group / Current, role, XML
+  `<EffectControl Target Palette Group Role/>`), `VCEffectTracker` (per
+  Doc: started and selected effects, newest first; Build's
+  `currentPaletteIdChanged` is "selected"; EFX / RGB Matrix starts; puts a
+  function's values back when it stops). `VCSlider::EffectControl` mode
+  ("Effect"), a Store button, top label the value, bottom label "Effect ·
+  Setting"; not a DMX source. Slider properties: an Effect tab.
+- **Decided (can change):** a live override that resets when the effect
+  stops, plus Store; Colour 1 hue is never stored (the colour is the
+  look's); Speed on EFX/RGB Matrix is ×¼..×4 of the duration; a group
+  target goes by start order, the current effect also by selection; no
+  Speed Dial for effect params (its time is a duration).
+- **Tests:** vcslider_test: the current effect followed from A to B, live
+  on the output, Store, override gone on stop; targets, n/a, a list param,
+  hue; EFX speed/direction put back on stop; save/load; properties.
+
 ### 2026-10-29 — VC buttons fire hits; VC sliders and dials move speed masters *(feat/031-vc-controls)*
 
 User feedback: "Buttons can't get to hits" and "VC sliders can't get to speed

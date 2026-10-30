@@ -31,22 +31,117 @@
 #include "speeddial.h"
 #include "vcslider.h"
 #include "doc.h"
+#include "mastertimer.h"
 #undef private
+
+#include "effectscriptrunner.h"
+#include "inputoutputmap.h"
+#include "vceffectcontrol.h"
+#include "fixturegroup.h"
+#include "qlcpalette.h"
+#include "universe.h"
+#include "fixture.h"
+#include "scene.h"
+#include "efx.h"
+#include "efxfixture.h"
 #undef protected
 
 #include "vcslider_test.h"
+
+namespace
+{
+/* Its speed shows on the dimmer: speed / 4, so a live value is seen on
+   the output. One with a list param, one with neither. */
+const char *kScripts[][2] = {
+    { "speedA.js",
+      "(function() { var e = {}; e.apiVersion = 1; e.name = 'T Speed A';"
+      " e.fixtureTypes = ['dimmer'];"
+      " e.parameters = [ { name: 'speed', min: 0, max: 4, defaultValue: 1 },"
+      "                  { name: 'direction', defaultValue: 0, values: ['Left', 'Right', 'Out'] } ];"
+      " e.tick = function(fx, inp, pal, par) { return fx.map(function() { return { dimmer: par.speed / 4 }; }); };"
+      " return e; })()" },
+    { "speedB.js",
+      "(function() { var e = {}; e.apiVersion = 1; e.name = 'T Speed B';"
+      " e.fixtureTypes = ['dimmer'];"
+      " e.parameters = [ { name: 'speed', min: 0, max: 2, defaultValue: 1 } ];"
+      " e.tick = function(fx, inp, pal, par) { return fx.map(function() { return { dimmer: par.speed / 2 }; }); };"
+      " return e; })()" },
+};
+}
 
 void VCSlider_Test::init()
 {
     m_doc = new Doc(this);
     new VirtualConsole(NULL, m_doc);
+    // Queued, as across the app's MasterTimer thread: a direct stop here
+    // would ask for the universes the tick that stops it holds.
+    MasterTimer *mt = m_doc->masterTimer();
+    EffectScriptRunner *runner = m_doc->effectScriptRunner();
+    QObject::disconnect(mt, SIGNAL(functionStarted(quint32)), runner, SLOT(slotFunctionStarted(quint32)));
+    QObject::disconnect(mt, SIGNAL(functionStopped(quint32)), runner, SLOT(slotFunctionStopped(quint32)));
+    QObject::connect(mt, SIGNAL(functionStarted(quint32)), runner, SLOT(slotFunctionStarted(quint32)),
+                     Qt::QueuedConnection);
+    QObject::connect(mt, SIGNAL(functionStopped(quint32)), runner, SLOT(slotFunctionStopped(quint32)),
+                     Qt::QueuedConnection);
+    if (!QFile::exists(m_scripts.filePath("speedA.js")))
+        for (const auto &sc : kScripts)
+        {
+            QFile f(m_scripts.filePath(QString::fromLatin1(sc[0])));
+            QVERIFY(f.open(QIODevice::WriteOnly));
+            f.write(sc[1]);
+        }
 }
 
 void VCSlider_Test::cleanup()
 {
+    // What plays stops first, so the runner lets go of the universes.
+    for (Function *f : m_doc->functions())
+        if (f->isRunning())
+            f->stop(FunctionParent::master());
+    tick(3);
     delete VirtualConsole::instance();
     delete m_doc;
     m_doc = nullptr;
+}
+
+quint32 VCSlider_Test::effectPalette(const QString &script, const QString &name)
+{
+    QLCPalette *p = new QLCPalette(QLCPalette::Effect, m_doc);
+    p->setScriptPath(m_scripts.filePath(script));
+    p->setName(name);
+    m_doc->addPalette(p);
+    return p->id();
+}
+
+quint32 VCSlider_Test::play(quint32 palette, quint32 fixture)
+{
+    Scene *scene = new Scene(m_doc);
+    m_doc->addFunction(scene);
+    scene->addFixture(fixture);
+    scene->addPalette(palette);
+    scene->start(m_doc->masterTimer(), FunctionParent::master());
+    tick();
+    return scene->id();
+}
+
+void VCSlider_Test::tick(int times)
+{
+    for (int i = 0; i < times; ++i)
+    {
+        m_doc->masterTimer()->timerTick();
+        QTest::qWait(25);                   // the effect runner ticks on its own timer
+    }
+}
+
+int VCSlider_Test::dimmerAt(int address)
+{
+    tick();
+    QList<Universe *> unis = m_doc->inputOutputMap()->claimUniverses();
+    for (Universe *u : unis)
+        u->processFaders();
+    const int v = uchar(unis.first()->preGMValues().at(address));
+    m_doc->inputOutputMap()->releaseUniverses(false);
+    return v;
 }
 
 /* Rate: the middle is 100 %, the top double, the bottom stopped -- as a
@@ -243,6 +338,299 @@ void VCSlider_Test::speedDialSetsAMaster()
     dial.setSpeedMaster(-1);
     loaded.setSpeedMaster(-1);
     QVERIFY(!sm->isUsed(1));
+}
+
+/* "The current effect": a fader on Speed moves effect A's, live, and when
+   B starts it moves B's. The palette is left alone (a live override, gone
+   when the effect stops) until Store. */
+void VCSlider_Test::effectControlFollowsTheCurrentEffect()
+{
+    QWidget w;
+    Fixture *fa = new Fixture(m_doc);
+    fa->setChannels(1);
+    fa->setAddress(0);
+    m_doc->addFixture(fa);
+    Fixture *fb = new Fixture(m_doc);
+    fb->setChannels(1);
+    fb->setAddress(1);
+    m_doc->addFixture(fb);
+    const quint32 a = effectPalette("speedA.js", "Wave A");
+    const quint32 b = effectPalette("speedB.js", "Wave B");
+    EffectScriptRunner *runner = m_doc->effectScriptRunner();
+
+    m_doc->setMode(Doc::Operate);
+    VCSlider slider(&w, m_doc);
+    VCEffectControl ec;
+    ec.target = VCEffectControl::TargetCurrent;
+    ec.role = VCEffectControl::Speed;
+    slider.setEffectControl(ec);
+    slider.setSliderMode(VCSlider::EffectControl);
+    QCOMPARE(slider.topLabelText(), QString("no effect"));
+    QVERIFY(slider.m_storeButton != nullptr);
+
+    // Not a DMX source: nothing per tick.
+    QVERIFY(!m_doc->masterTimer()->m_dmxSourceList.contains(&slider));
+
+    const quint32 sa = play(a, fa->id());
+    QVERIFY(runner->isPlaying(a));
+    QCOMPARE(slider.effectTarget().id, a);
+    QCOMPARE(slider.bottomLabelText(), QString("Wave A · Speed"));
+    QCOMPARE(slider.topLabelText(), QString("1.00"));
+    QCOMPARE(slider.sliderValue(), 64);              // 1 of 0..4
+    QCOMPARE(dimmerAt(0), 64);
+
+    slider.setSliderValue(255, false);
+    QCOMPARE(runner->paramValue(a, "speed"), 4.0);
+    QCOMPARE(slider.topLabelText(), QString("4.00"));
+    QVERIFY(!m_doc->palette(a)->effectParamValues().contains("speed"));   // the palette as it was
+    QCOMPARE(dimmerAt(0), 255);
+
+    // B starts: the same fader now moves B.
+    play(b, fb->id());
+    QCOMPARE(slider.effectTarget().id, b);
+    QCOMPARE(slider.bottomLabelText(), QString("Wave B · Speed"));
+    QCOMPARE(slider.sliderValue(), 128);             // 1 of 0..2
+    slider.setSliderValue(0, true, true);            // external input, the same way
+    QCOMPARE(runner->paramValue(b, "speed"), 0.0);
+    QCOMPARE(runner->paramValue(a, "speed"), 4.0);   // A keeps its live value while it plays
+    QCOMPARE(dimmerAt(1), 0);
+
+    // Store keeps B's value in its palette.
+    QVERIFY(slider.storeEffectControl());
+    QCOMPARE(m_doc->palette(b)->effectParamValues().value("speed"), 0.0);
+    QVERIFY(runner->paramOverrides(b).isEmpty());
+
+    // A stops: its live value is gone; started again, it plays as stored.
+    m_doc->function(sa)->stop(FunctionParent::master());
+    tick();
+    QVERIFY(!runner->isPlaying(a));
+    QVERIFY(runner->paramOverrides(a).isEmpty());
+    m_doc->function(sa)->start(m_doc->masterTimer(), FunctionParent::master());
+    tick();
+    QCOMPARE(runner->paramValue(a, "speed"), 1.0);
+    QCOMPARE(slider.effectTarget().id, a);           // started last: current again
+
+    m_doc->setMode(Doc::Design);
+}
+
+/* A palette, the effect on a group, the current one on a group; a role the
+   effect hasn't reads n/a; a list param steps through its choices. */
+void VCSlider_Test::effectControlTargets()
+{
+    QWidget w;
+    Fixture *fa = new Fixture(m_doc);
+    fa->setChannels(1);
+    m_doc->addFixture(fa);
+    Fixture *fb = new Fixture(m_doc);
+    fb->setChannels(1);
+    fb->setAddress(1);
+    m_doc->addFixture(fb);
+    FixtureGroup *ga = new FixtureGroup(m_doc);
+    ga->setName("Towers");
+    m_doc->addFixtureGroup(ga);
+    ga->assignFixture(fa->id());
+    const quint32 a = effectPalette("speedA.js", "Wave A");
+    const quint32 b = effectPalette("speedB.js", "Wave B");
+    EffectScriptRunner *runner = m_doc->effectScriptRunner();
+    m_doc->setMode(Doc::Operate);
+
+    VCSlider onGroup(&w, m_doc);
+    VCEffectControl ec;
+    ec.target = VCEffectControl::TargetGroup;
+    ec.group = ga->id();
+    onGroup.setEffectControl(ec);
+    onGroup.setSliderMode(VCSlider::EffectControl);
+
+    VCSlider onPalette(&w, m_doc);
+    ec = VCEffectControl();
+    ec.target = VCEffectControl::TargetPalette;
+    ec.palette = b;
+    onPalette.setEffectControl(ec);
+    onPalette.setSliderMode(VCSlider::EffectControl);
+    QCOMPARE(onPalette.topLabelText(), QString("not playing"));
+
+    VCSlider direction(&w, m_doc);
+    ec = VCEffectControl();
+    ec.role = VCEffectControl::Direction;
+    direction.setEffectControl(ec);
+    direction.setSliderMode(VCSlider::EffectControl);
+
+    VCSlider size(&w, m_doc);
+    ec = VCEffectControl();
+    ec.role = VCEffectControl::Size;
+    size.setEffectControl(ec);
+    size.setSliderMode(VCSlider::EffectControl);
+
+    play(a, fa->id());
+    play(b, fb->id());
+    QCOMPARE(onGroup.effectTarget().id, a);          // B is newer, but not on Towers
+    QCOMPARE(onPalette.effectTarget().id, b);
+    QCOMPARE(onPalette.topLabelText(), QString("1.00"));
+    QCOMPARE(size.effectTarget().id, b);
+    QCOMPARE(size.topLabelText(), QString("n/a"));
+    QVERIFY(!VCEffectControl::apply(m_doc, size.effectTarget(), VCEffectControl::Size, 200));
+
+    // Selected in Build: current, though it started first.
+    VCEffectTracker::instance(m_doc)->slotPaletteSelected(a);
+    QCOMPARE(direction.effectTarget().id, a);
+    QCOMPARE(direction.topLabelText(), QString("Left"));
+    direction.setSliderValue(130, false);
+    QCOMPARE(runner->paramValue(a, "direction"), 1.0);
+    QCOMPARE(direction.topLabelText(), QString("Right"));
+    direction.setSliderValue(255, false);
+    QCOMPARE(direction.topLabelText(), QString("Out"));
+    QCOMPARE(onGroup.effectTarget().id, a);
+    // A group target goes by what started, not what was selected.
+    QCOMPARE(size.effectTarget().id, a);
+
+    // Colour 1 hue: a live value on any effect.
+    VCEffectControl hue;
+    hue.target = VCEffectControl::TargetPalette;
+    hue.palette = b;
+    hue.role = VCEffectControl::Hue;
+    const VCEffectControl::Resolved r = hue.resolve(m_doc);
+    QVERIFY(r.available);
+    QVERIFY(VCEffectControl::apply(m_doc, r, VCEffectControl::Hue, 85));
+    QCOMPARE(VCEffectControl::valueText(m_doc, r, VCEffectControl::Hue), QString("120°"));
+    m_doc->setMode(Doc::Design);
+}
+
+void VCSlider_Test::effectControlSavesAndLoads()
+{
+    QWidget w;
+    VCSlider slider(&w, m_doc);
+    VCEffectControl ec;
+    ec.target = VCEffectControl::TargetGroup;
+    ec.group = 7;
+    ec.role = VCEffectControl::Spread;
+    slider.setEffectControl(ec);
+    slider.setWidgetStyle(VCSlider::WKnob);
+    slider.setSliderMode(VCSlider::EffectControl);
+
+    QBuffer buffer;
+    buffer.open(QIODevice::WriteOnly | QIODevice::Text);
+    QXmlStreamWriter xmlWriter(&buffer);
+    xmlWriter.setAutoFormatting(true);
+    xmlWriter.writeStartDocument();
+    QVERIFY(slider.saveXML(&xmlWriter));
+    xmlWriter.writeEndDocument();
+    xmlWriter.setDevice(NULL);
+    buffer.close();
+    QVERIFY(buffer.buffer().contains(">Effect</SliderMode>"));
+    QVERIFY(buffer.buffer().contains("<EffectControl Target=\"Group\" Group=\"7\" Role=\"Spread\"/>"));
+
+    buffer.open(QIODevice::ReadOnly | QIODevice::Text);
+    QXmlStreamReader xmlReader(&buffer);
+    xmlReader.readNextStartElement();
+    VCSlider loaded(&w, m_doc);
+    QVERIFY(loaded.loadXML(xmlReader));
+    QCOMPARE(loaded.sliderMode(), VCSlider::EffectControl);
+    QVERIFY(loaded.effectControl() == ec);
+    QCOMPARE(loaded.widgetStyle(), VCSlider::WKnob);
+
+    // Another mode writes none: older shows as they were.
+    VCSlider level(&w, m_doc);
+    QBuffer b2;
+    b2.open(QIODevice::WriteOnly | QIODevice::Text);
+    QXmlStreamWriter w2(&b2);
+    QVERIFY(level.saveXML(&w2));
+    w2.setDevice(NULL);
+    QVERIFY(!b2.buffer().contains("<EffectControl"));
+}
+
+void VCSlider_Test::effectControlProperties()
+{
+    QWidget w;
+    FixtureGroup *g = new FixtureGroup(m_doc);
+    g->setName("Towers");
+    m_doc->addFixtureGroup(g);
+    const quint32 a = effectPalette("speedA.js", "Wave A");
+    VCSlider slider(&w, m_doc);
+    {
+        VCSliderProperties props(&slider, m_doc);
+        props.slotModeEffectClicked();
+        props.m_effectPaletteRadio->setChecked(true);
+        props.m_effectPaletteCombo->setCurrentIndex(props.m_effectPaletteCombo->findData(a));
+        props.m_effectRoleCombo->setCurrentIndex(props.m_effectRoleCombo->findData(int(VCEffectControl::Intensity)));
+        props.accept();
+    }
+    QCOMPARE(slider.sliderMode(), VCSlider::EffectControl);
+    QCOMPARE(slider.effectControl().target, VCEffectControl::TargetPalette);
+    QCOMPARE(slider.effectControl().palette, a);
+    QCOMPARE(slider.effectControl().role, VCEffectControl::Intensity);
+    {
+        VCSliderProperties props(&slider, m_doc);
+        QVERIFY(props.m_effectPaletteRadio->isChecked());
+        props.m_effectCurrentRadio->setChecked(true);
+        props.m_effectGroupCombo->setCurrentIndex(props.m_effectGroupCombo->findData(QVariant::fromValue(g->id())));
+        props.accept();
+    }
+    QCOMPARE(slider.effectControl().target, VCEffectControl::TargetCurrent);
+    QCOMPARE(slider.effectControl().group, g->id());
+}
+
+/* An EFX started is the current effect too: Speed scales its duration
+   (the middle as it was), Direction turns it; both put back when it stops,
+   unless stored. */
+void VCSlider_Test::effectControlOnAnEfx()
+{
+    QWidget w;
+    EFX *efx = new EFX(m_doc);
+    efx->setName("Circle");
+    efx->setDuration(2000);
+    m_doc->addFunction(efx);
+    Fixture *fx = new Fixture(m_doc);
+    fx->setChannels(2);
+    m_doc->addFixture(fx);
+    EFXFixture *ef = new EFXFixture(efx);
+    ef->setHead(GroupHead(fx->id(), 0));
+    efx->addFixture(ef);
+    m_doc->setMode(Doc::Operate);
+
+    VCSlider speed(&w, m_doc);
+    speed.setEffectControl(VCEffectControl());
+    speed.setSliderMode(VCSlider::EffectControl);
+    VCSlider direction(&w, m_doc);
+    VCEffectControl dc;
+    dc.role = VCEffectControl::Direction;
+    direction.setEffectControl(dc);
+    direction.setSliderMode(VCSlider::EffectControl);
+    VCSlider rate(&w, m_doc);
+    VCEffectControl rc;
+    rc.role = VCEffectControl::Rate;
+    rate.setEffectControl(rc);
+    rate.setSliderMode(VCSlider::EffectControl);
+
+    efx->start(m_doc->masterTimer(), FunctionParent::master());
+    tick(2);
+    QCOMPARE(speed.effectTarget().kind, VCEffectControl::Resolved::EFX);
+    QCOMPARE(speed.bottomLabelText(), QString("Circle · Speed"));
+    QCOMPARE(speed.sliderValue(), 128);
+    QCOMPARE(speed.topLabelText(), QString("×1.00"));
+    QCOMPARE(rate.topLabelText(), QString("n/a"));
+
+    speed.setSliderValue(255, false);                // ×4 faster
+    QCOMPARE(efx->duration(), 500u);
+    direction.setSliderValue(255, false);
+    QCOMPARE(efx->direction(), Function::Backward);
+    QCOMPARE(direction.topLabelText(), QString("Backward"));
+
+    efx->stop(FunctionParent::master());
+    tick(2);
+    QCOMPARE(efx->duration(), 2000u);                // put back
+    QCOMPARE(efx->direction(), Function::Forward);
+    QCOMPARE(speed.topLabelText(), QString("no effect"));
+
+    // Stored: kept after it stops.
+    efx->start(m_doc->masterTimer(), FunctionParent::master());
+    tick(2);
+    speed.setSliderValue(0, false);                  // ×¼
+    QCOMPARE(efx->duration(), 8000u);
+    QVERIFY(speed.storeEffectControl());
+    efx->stop(FunctionParent::master());
+    tick(2);
+    QCOMPARE(efx->duration(), 8000u);
+    m_doc->setMode(Doc::Design);
 }
 
 QTEST_MAIN(VCSlider_Test)

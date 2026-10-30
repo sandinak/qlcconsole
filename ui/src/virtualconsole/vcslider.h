@@ -30,6 +30,7 @@
 #include "knobwidget.h"
 #include "dmxsource.h"
 #include "vcwidget.h"
+#include "vceffectcontrol.h"
 
 class QXmlStreamReader;
 class QXmlStreamWriter;
@@ -161,7 +162,8 @@ public:
         Submaster,
         Parameter,
         GrandMaster,
-        SpeedMaster     //!< a speed master's rate or tempo (SpeedMasters)
+        SpeedMaster,    //!< a speed master's rate or tempo (SpeedMasters)
+        EffectControl   //!< an effect's parameter (VCEffectControl)
     };
 
     /**
@@ -299,6 +301,31 @@ protected:
 
     int m_speedMaster = 0;
     SpeedControl m_speedControl = SpeedRate;
+
+    /*********************************************************************
+     * Effect mode: the slider (or knob) controls one parameter of an effect
+     * (docs/design/VC_EFFECT_CONTROLS.md) -- a palette, the effect on a
+     * group, or the current one -- as a live override, with a Store button.
+     *********************************************************************/
+public:
+    void setEffectControl(const VCEffectControl &control);
+    VCEffectControl effectControl() const { return m_effectControl; }
+    /** What it reaches now. */
+    VCEffectControl::Resolved effectTarget() const { return m_effectTarget; }
+    /** Keep the live values in the effect (the Store button). */
+    bool storeEffectControl();
+
+protected slots:
+    /** What plays changed: find the target again, show it. */
+    void slotEffectTrackerChanged();
+
+protected:
+    void showEffectControl();
+    void applyEffectControl(int value);
+
+    VCEffectControl m_effectControl;
+    VCEffectControl::Resolved m_effectTarget;
+    QToolButton *m_storeButton = nullptr;
     int m_tempoMin = 60;
     int m_tempoMax = 180;
     bool m_speedMasterHeld = false;

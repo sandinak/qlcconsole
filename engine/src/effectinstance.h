@@ -117,6 +117,24 @@ public:
      *  param so the change reaches the running effect on the next tick. */
     void reloadParamsFromPalette();
 
+    // --- Live overrides (a VC control; docs/design/VC_EFFECT_CONTROLS.md) ---
+    /** The host Spread amount (cycles) and colour 1's hue (0..1), as
+     *  override names beside the script's own params. */
+    static QString spreadOverrideKey() { return QStringLiteral("__spreadAmount"); }
+    static QString hueOverrideKey() { return QStringLiteral("__hue1"); }
+    /** Play @p name at @p value while this instance runs, over its palette's:
+     *  a script param, spreadOverrideKey() or hueOverrideKey(). Kept across
+     *  reloadParamsFromPalette(). Main thread. */
+    void setOverride(const QString &name, double value);
+    /** Back to the palette's value (the script's default when it pins none). */
+    void clearOverride(const QString &name);
+    void clearOverrides();
+    const QHash<QString, double> &overrides() const { return m_overrides; }
+    /** What @p name plays at now (override, palette or default); @p ok false
+     *  when the script has no such param. Host keys: their current value. */
+    double paramValue(const QString &name, bool *ok = nullptr) const;
+    QList<EffectScript::ParamDef> paramDefs() const { return m_script.paramDefs(); }
+
     // --- Run one tick (MAIN THREAD ONLY) ---
     void runTick();
 
@@ -297,6 +315,9 @@ private:
 
     QHash<QString, float>      m_inputValues;
     QHash<QString, double>     m_paramValues;
+    QHash<QString, double>     m_overrides;     //!< setOverride(): over the palette's
+    /** The palette's spread with the override's amount over it. */
+    SpreadLayer::Settings spreadSettings(const QLCPalette *pal) const;
     QHash<QString, QString>    m_stringParamValues;
     QHash<QString, QVariantMap> m_dataChannels;
 

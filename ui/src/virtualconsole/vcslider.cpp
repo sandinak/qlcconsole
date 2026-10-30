@@ -288,6 +288,9 @@ bool VCSlider::copyFrom(const VCWidget* widget)
     /* Copy Click & Go feature */
     setClickAndGoType(slider->clickAndGoType());
 
+    /* Copy effect control */
+    m_effectControl = slider->effectControl();
+
     /* Copy speed master stuff */
     setSpeedMaster(slider->speedMaster());
     setSpeedControl(slider->speedControl());
@@ -316,7 +319,12 @@ void VCSlider::setCaption(const QString& text)
     VCWidget::setCaption(text);
 
     if (m_bottomLabel != NULL)
-        setBottomLabelText(text);
+    {
+        if (m_sliderMode == EffectControl)
+            showEffectControl();
+        else
+            setBottomLabelText(text);
+    }
 }
 
 void VCSlider::enableWidgetUI(bool enable)
@@ -330,6 +338,8 @@ void VCSlider::enableWidgetUI(bool enable)
         m_resetButton->setEnabled(enable);
     if (m_flashButton)
         m_flashButton->setEnabled(enable);
+    if (m_storeButton)
+        m_storeButton->setEnabled(enable);
     if (enable == false)
         m_lastInputValue = -1;
 }
@@ -488,6 +498,7 @@ QString VCSlider::sliderModeToString(SliderMode mode)
         case Parameter: return QString("Parameter"); break;
         case GrandMaster: return QString("GrandMaster"); break;
         case SpeedMaster: return QString("SpeedMaster"); break;
+        case EffectControl: return QString("Effect"); break;
         default: return QString("Unknown"); break;
     }
 }
@@ -504,6 +515,8 @@ VCSlider::SliderMode VCSlider::stringToSliderMode(const QString& mode)
         return GrandMaster;
     else if (mode == QString("SpeedMaster"))
         return SpeedMaster;
+    else if (mode == QString("Effect"))
+        return EffectControl;
     else //if (mode == QString("Submaster"))
         return Submaster;
 }
@@ -676,7 +689,7 @@ VCSlider::SliderMode VCSlider::sliderMode() const
 
 void VCSlider::setSliderMode(SliderMode mode)
 {
-    Q_ASSERT(mode >= Level && mode <= SpeedMaster);
+    Q_ASSERT(mode >= Level && mode <= EffectControl);
 
     // Manage Doc::programmerSelectionChanged subscription on transitions
     // into and out of Parameter mode.
@@ -705,6 +718,21 @@ void VCSlider::setSliderMode(SliderMode mode)
     }
     else if (m_sliderMode != SpeedMaster && mode == SpeedMaster)
         connect(sm, &SpeedMasters::changed, this, &VCSlider::slotSpeedMasterChanged);
+
+    // An effect slider follows what plays (start, stop, selection).
+    if (m_sliderMode == EffectControl && mode != EffectControl)
+    {
+        disconnect(VCEffectTracker::instance(m_doc), &VCEffectTracker::changed,
+                   this, &VCSlider::slotEffectTrackerChanged);
+        delete m_storeButton;
+        m_storeButton = nullptr;
+        m_effectTarget = VCEffectControl::Resolved();
+        setToolTip(QString());
+        setBottomLabelText(caption());
+    }
+    else if (m_sliderMode != EffectControl && mode == EffectControl)
+        connect(VCEffectTracker::instance(m_doc), &VCEffectTracker::changed,
+                this, &VCSlider::slotEffectTrackerChanged);
 
     m_sliderMode = mode;
 
@@ -820,7 +848,91 @@ void VCSlider::setSliderMode(SliderMode mode)
         holdSpeedMaster(true);
         showSpeedMaster();
         // Not a DMX source: it sets the master when moved, nothing per tick.
+        m_doc->masterTimer()->unregisterDMXSource(this);
     }
+    else if (mode == EffectControl)
+    {
+        m_monitorEnabled = false;
+        m_cngType = ClickAndGoWidget::None;
+        if (m_cngButton)
+            m_cngButton->hide();
+        if (m_slider)
+        {
+            m_slider->setRange(0, UCHAR_MAX);
+            if (m_widgetMode == WSlider)
+                m_slider->setStyleSheet(CNG_DEFAULT_STYLE);
+        }
+        m_bottomLabel->show();
+        if (m_storeButton == nullptr)
+        {
+            m_storeButton = new QToolButton(this);
+            m_storeButton->setObjectName(QStringLiteral("vcSliderStore"));
+            m_storeButton->setText(tr("Store"));
+            m_storeButton->setToolTip(tr("Keep the value in the effect (its palette): otherwise it "
+                                         "goes when the effect stops"));
+            m_storeButton->setStyle(AppUtil::saneStyle());
+            layout()->addWidget(m_storeButton);
+            layout()->setAlignment(m_storeButton, Qt::AlignHCenter);
+            connect(m_storeButton, &QToolButton::clicked, this, [this]() { storeEffectControl(); });
+            m_storeButton->setEnabled(m_doc->mode() == Doc::Operate);
+            m_storeButton->show();
+        }
+        showEffectControl();
+        // Not a DMX source: it sets the effect when moved, nothing per tick.
+        m_doc->masterTimer()->unregisterDMXSource(this);
+    }
+}
+
+/*****************************************************************************
+ * Effect control
+ *****************************************************************************/
+
+void VCSlider::setEffectControl(const VCEffectControl &control)
+{
+    m_effectControl = control;
+    if (m_sliderMode == EffectControl)
+        showEffectControl();
+}
+
+void VCSlider::slotEffectTrackerChanged()
+{
+    if (m_sliderMode == EffectControl)
+        showEffectControl();
+}
+
+void VCSlider::showEffectControl()
+{
+    m_effectTarget = m_effectControl.resolve(m_doc);
+    const VCEffectControl::Role role = m_effectControl.role;
+    if (m_slider != NULL && m_slider->isSliderDown() == false)
+    {
+        m_slider->blockSignals(true);
+        m_slider->setValue(VCEffectControl::sliderValue(m_doc, m_effectTarget, role));
+        m_slider->blockSignals(false);
+    }
+    m_topLabel->setText(VCEffectControl::valueText(m_doc, m_effectTarget, role));
+    emit valueChanged(m_topLabel->text());
+
+    const QString target = m_effectTarget.kind == VCEffectControl::Resolved::None
+                           ? tr("no effect") : m_effectTarget.name;
+    const QString what = tr("%1 · %2").arg(target, VCEffectControl::roleName(role));
+    setBottomLabelText(caption().isEmpty() ? what : tr("%1\n%2").arg(caption(), what));
+    setToolTip(what);
+    if (m_storeButton != nullptr)
+        m_storeButton->setVisible(m_effectTarget.kind != VCEffectControl::Resolved::None);
+}
+
+void VCSlider::applyEffectControl(int value)
+{
+    if (VCEffectControl::apply(m_doc, m_effectTarget, m_effectControl.role, value))
+        m_topLabel->setText(VCEffectControl::valueText(m_doc, m_effectTarget, m_effectControl.role));
+}
+
+bool VCSlider::storeEffectControl()
+{
+    if (m_sliderMode != EffectControl)
+        return false;
+    return VCEffectControl::store(m_doc, m_effectTarget);
 }
 
 /*****************************************************************************
@@ -1941,6 +2053,12 @@ void VCSlider::setTopLabelText(int value)
         emit valueChanged(m_topLabel->text());
         return;
     }
+    if (m_sliderMode == EffectControl)
+    {
+        m_topLabel->setText(VCEffectControl::valueText(m_doc, m_effectTarget, m_effectControl.role));
+        emit valueChanged(m_topLabel->text());
+        return;
+    }
 
     if (valueDisplayStyle() == ExactValue)
     {
@@ -2046,6 +2164,10 @@ void VCSlider::setSliderValue(uchar value, bool scale, bool external)
 
         case SpeedMaster:
             applySpeedMaster(uchar(val));
+        break;
+
+        case EffectControl:
+            applyEffectControl(int(val));
         break;
     }
 }
@@ -2395,6 +2517,10 @@ bool VCSlider::loadXML(QXmlStreamReader &root)
                     pAttrs.value(KXMLQLCVCSliderParameterByte).toInt());
             root.skipCurrentElement();
         }
+        else if (root.name() == KXMLQLCVCEffectControl)
+        {
+            m_effectControl.loadXML(root);
+        }
         else if (root.name() == KXMLQLCVCSliderSpeedMaster)
         {
             QXmlStreamAttributes sAttrs = root.attributes();
@@ -2623,6 +2749,10 @@ bool VCSlider::saveXML(QXmlStreamWriter *doc)
     doc->writeAttribute(KXMLQLCVCSliderParameterByte,
                         QString::number(m_parameterControlByte));
     doc->writeEndElement();
+
+    /* Effect mode (only when in it) */
+    if (m_sliderMode == EffectControl)
+        m_effectControl.saveXML(doc);
 
     /* Speed master mode (only when in it: older shows stay as they were) */
     if (m_sliderMode == SpeedMaster)

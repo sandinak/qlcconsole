@@ -57,6 +57,7 @@ protected slots:
     void slotModeSubmasterClicked();
     void slotModeParameterClicked();
     void slotModeSpeedMasterClicked();
+    void slotModeEffectClicked();
     void slotTabChanged();
 
 protected:
@@ -65,6 +66,9 @@ protected:
     void setSubmasterPageVisibility(bool visible);
     void setParameterPageVisibility(bool visible);
     void setSpeedMasterPageVisibility(bool visible);
+    void setEffectPageVisibility(bool visible);
+    /** The Effect tab (docs/design/VC_EFFECT_CONTROLS.md), built here. */
+    void buildEffectPage();
     /** The Speed master tab (built here, not in the .ui). */
     void buildSpeedMasterPage();
 
@@ -80,6 +84,15 @@ protected:
     QSpinBox *m_tempoMinSpin = nullptr;
     QSpinBox *m_tempoMaxSpin = nullptr;
     QPushButton *m_switchToSpeedMasterModeButton = nullptr;
+
+    QWidget *m_effectBox = nullptr;
+    QRadioButton *m_effectPaletteRadio = nullptr;
+    QRadioButton *m_effectGroupRadio = nullptr;
+    QRadioButton *m_effectCurrentRadio = nullptr;
+    QComboBox *m_effectPaletteCombo = nullptr;
+    QComboBox *m_effectGroupCombo = nullptr;
+    QComboBox *m_effectRoleCombo = nullptr;
+    QPushButton *m_switchToEffectModeButton = nullptr;
 
     /*********************************************************************
      * Level page
