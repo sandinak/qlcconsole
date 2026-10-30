@@ -138,6 +138,15 @@ skipped). Upstream fixes taken:
   orientation diagram the same throw; Quick focus used "straight down".
   In **Aim & Mount**, **Points (° from DS)** and **Tilt in yoke** ("45°
   down", "level", "10° up"; the up arrow tips it up; type "10 up").
+- **A laser looks like a laser** (board Q172, part B): in the Rig
+  Overview a laser is a box hung in a U yoke (clamp, side plates, cross
+  bar), its dark window and round apertures (one per beam) toward where
+  it throws, lit in its live colour while the housing stays dark; Tilt in
+  yoke tips the box between the plates and the yoke turns to its bearing.
+  Its beams leave the window. A definition with no size gets a sky
+  laser's 200 × 110 × 190 mm, not a 0.30 m stick. On the plot, the new
+  **Laser / star projector** symbol (its own **Effects** section) is a
+  Laser's Auto symbol: "Auto (Laser)" named only the type before.
 - **PlayStation pads by their own names** (board Q170): with a DualShock 4
   or DualSense, Quick focus, Venue focus and Focus this cue call every
   control what the pad calls it -- on the controller map (Cross, Circle,

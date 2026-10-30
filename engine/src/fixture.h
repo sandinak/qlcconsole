@@ -589,13 +589,14 @@ public:
         LedParLook,             ///< a round multi-LED wash
         CycStripLook,           ///< a cyc / strip light: a wide flood of cells
         StrobeLook,             ///< a strobe or blinder
-        CurtainLook             ///< scenery: drives a curtain (Scenery::isCurtainFixture())
+        CurtainLook,            ///< scenery: drives a curtain (Scenery::isCurtainFixture())
+        LaserLook               ///< a laser or a star projector: a box in a U yoke, an aperture window
         /* New looks go at the END: the int is runtime only (the file holds
            stageLookToString()'s key), but tests and pickers walk the enum. */
     };
     /** The picker's sections. */
-    enum StageLookSection { MovingSection, ConventionalSection, LedSection, PracticalSection,
-                            ScenerySection };
+    enum StageLookSection { MovingSection, ConventionalSection, LedSection, EffectsSection,
+                            PracticalSection, ScenerySection };
     Q_ENUM(StageLook)
 
     /** Read without a lock: the rig views classify fixtures on worker
@@ -605,7 +606,7 @@ public:
     void setStageLook(StageLook look);
 
     /** Every look, Auto first, then section by section (Moving, Fixed
-     *  conventional, Fixed LED, Practicals, Scenery) in the order a picker
+     *  conventional, Fixed LED, Effects, Practicals, Scenery) in the order a picker
      *  lists them. */
     static QList<StageLook> stageLooks();
     /** The picker section @p look is listed under (Auto: none, -1). */
@@ -613,7 +614,7 @@ public:
     /** A section's name for people ("Fixed LED"), translated. */
     static QString stageLookSectionName(StageLookSection section);
     /** The look closest to what the definition says this is: a Color
-     *  Changer is an LED PAR, an LED bar a bar wash, a Strobe a strobe, a
+     *  Changer is an LED PAR, an LED bar a bar wash, a Strobe a strobe, a Laser a laser, a
      *  moving head a spot or a wash by its gobo / zoom channels or its name,
      *  a dimmer (or a generic dimmer channel) an ellipsoidal. AutoLook when nothing is close (a hazer, a fan).
      *  What "Auto (...)" names in a picker, and what an Auto fixture is

@@ -874,7 +874,7 @@ QString Fixture::typeIconResource(bool svg) const
 
 void Fixture::setStageLook(StageLook look)
 {
-    if (int(look) < int(AutoLook) || int(look) > int(CurtainLook))
+    if (int(look) < int(AutoLook) || int(look) > int(LaserLook))
         look = AutoLook;
     if (m_stageLook.exchange(int(look), std::memory_order_relaxed) == int(look))
         return;
@@ -900,6 +900,8 @@ QList<Fixture::StageLook> Fixture::stageLooks()
              // Fixed LED
              LedParLook, SquareWashLook, BarWashLook, UplightWashLook, CycStripLook,
              StrobeLook,
+             // Effects: lasers and star projectors
+             LaserLook,
              // Practicals: lights that are part of the set
              LanternLook, StaffLook,
              // Scenery: not a light, something on stage a channel moves
@@ -921,6 +923,8 @@ int Fixture::stageLookSection(StageLook look)
             return PracticalSection;
         case CurtainLook:
             return ScenerySection;
+        case LaserLook:
+            return EffectsSection;
         case AutoLook:
         default:
             return -1;
@@ -935,6 +939,7 @@ QString Fixture::stageLookSectionName(StageLookSection section)
         case ConventionalSection: return tr("Fixed conventional");
         case LedSection:          return tr("Fixed LED");
         case ScenerySection:      return tr("Scenery");
+        case EffectsSection:      return tr("Effects");
         case PracticalSection:
         default:                  return tr("Practicals");
     }
@@ -966,6 +971,7 @@ Fixture::StageLook Fixture::computeAutoStageLook() const
         case QLCFixtureDef::LEDBarBeams:
         case QLCFixtureDef::LEDBarPixels: return BarWashLook;
         case QLCFixtureDef::Strobe:       return StrobeLook;
+        case QLCFixtureDef::Laser:        return LaserLook;
         /* A dimmer channel: a conventional, and the one on most rigs is
            an ellipsoidal (a lantern is a practical now, not a theatre
            lantern). */
@@ -1023,6 +1029,7 @@ QString Fixture::stageLookToString(StageLook look)
         case CycStripLook:         return QStringLiteral("CycStrip");
         case StrobeLook:           return QStringLiteral("Strobe");
         case CurtainLook:          return QStringLiteral("Curtain");
+        case LaserLook:            return QStringLiteral("Laser");
         case AutoLook:
         default:                   return QStringLiteral("Auto");
     }
@@ -1056,6 +1063,7 @@ QString Fixture::stageLookName(StageLook look)
         case CycStripLook:         return tr("Cyc / strip light");
         case StrobeLook:           return tr("Strobe / blinder");
         case CurtainLook:          return tr("Curtain");
+        case LaserLook:            return tr("Laser / star projector");
         case AutoLook:
         default:                   return tr("Auto");
     }

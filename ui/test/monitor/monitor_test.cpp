@@ -23869,9 +23869,12 @@ void Monitor_Test::lasersThrowStarsAndPencilBeams()
     QVERIFY2(stars.blobs > 60,
              qPrintable(QString("a star field should be many points, got %1 blobs (%2 px); "
                                 "the wash was %3 blobs").arg(stars.blobs).arg(stars.px).arg(wash.blobs)));
-    // A laser is a pencil from the head to the floor: as long as the drop,
-    // no wider than the head it leaves.
-    QVERIFY2(pencil.box.height() > 2 * wash.box.height() && pencil.box.width() <= wash.box.width() + 2,
+    /* A laser is a pencil from the head to the floor: as long as the drop,
+       no wider than the head it leaves. (Its housing no longer lights up --
+       the light is in its window (Q172 B) -- so the faint wash may add no
+       counted green at all: "no wider than the head" is a few pixels.) */
+    QVERIFY2(pencil.box.height() > qMax(60, 2 * wash.box.height())
+             && pencil.box.width() <= qMax(wash.box.width() + 2, 10),
              qPrintable(QString("a laser beam should be a thin line: %1 x %2 px, the wash's light %3 x %4")
                             .arg(pencil.box.width()).arg(pencil.box.height())
                             .arg(wash.box.width()).arg(wash.box.height())));
@@ -23934,6 +23937,174 @@ Fixture *rigFacedLaser(Doc *doc, QLCPhysical::Emission e, Truss **trussOut = nul
         *trussOut = t;
     return laser;
 }
+}
+
+void Monitor_Test::aLaserLooksLikeALaser()
+{
+    auto near = [](const QVector3D &a, const QVector3D &b) { return (a - b).length() < 1e-4f; };
+    auto mid = [](const SolidBoxCorners &b) {
+        QVector3D c;
+        for (const QVector3D &k : b.k)
+            c += k;
+        return c / 8.0f;
+    };
+    const QVector3D pivot(2.0f, 4.0f, 3.0f), up(0, 0, 1), along(1, 0, 0);
+
+    // Hung, throwing upstage and level: the window faces upstage.
+    const ProjectorParts level = projectorParts(pivot, QVector3D(0, -1, 0), up, along,
+                                                0.2f, 0.11f, 0.19f, 1);
+    QVERIFY(near(level.front, QVector3D(0, -1, 0)));
+    QVERIFY(near(mid(level.body), pivot));
+    QVERIFY(near(level.up, up));
+    QCOMPARE(level.yoke.size(), 4);                       // two plates, the bar, the clamp
+    QVector3D glass;
+    for (const QVector3D &k : level.window)
+        glass += k / 4.0f;
+    QVERIFY(QVector3D::dotProduct(glass - pivot, level.front) > 0.09f);
+    QCOMPARE(level.apertures.size(), 1);
+    QVERIFY(QVector3D::dotProduct(level.apertures.first() - pivot, level.front) > 0.09f);
+    QVERIFY(level.apertureRadius > 0.005f && level.apertureRadius < 0.05f);
+    // The yoke is above the box's pivot (hung), its clamp at the top.
+    float top = -1e9f;
+    for (const SolidBoxCorners &b : level.yoke)
+        for (const QVector3D &k : b.k)
+        {
+            QVERIFY(k.z() > pivot.z() - 0.11f * 0.3f);
+            top = qMax(top, k.z());
+        }
+    QVERIFY(qAbs(top - (pivot.z() + level.reach)) < 1e-4f);
+    // Its plates clear the box at any tilt: outside it, either side.
+    for (int i = 0; i < 2; ++i)
+        QVERIFY(qAbs(mid(level.yoke.at(i)).x() - pivot.x()) > 0.1f);
+
+    // Tipped up 30 degrees in the yoke: the box turns, the yoke does not.
+    const QVector3D up30(0.0f, -float(qCos(M_PI / 6)), float(qSin(M_PI / 6)));
+    const ProjectorParts tipped = projectorParts(pivot, up30, up, along, 0.2f, 0.11f, 0.19f, 1);
+    QVERIFY(near(tipped.front, up30));
+    for (int i = 0; i < 4; ++i)
+        for (int k = 0; k < 8; ++k)
+            QVERIFY(near(tipped.yoke.at(i).k[k], level.yoke.at(i).k[k]));
+    QVERIFY(!near(tipped.body.k[0], level.body.k[0]));
+    QVERIFY(tipped.apertures.first().z() > level.apertures.first().z());
+
+    // Straight down along its clamp: its own length is the tilt axis.
+    const ProjectorParts down = projectorParts(pivot, QVector3D(0, 0, -1), up, along,
+                                               0.2f, 0.11f, 0.19f, 1);
+    QVERIFY(near(down.front, QVector3D(0, 0, -1)));
+    QVERIFY(qAbs(down.side.x()) > 0.99f);
+    QVERIFY(!qIsNaN(down.body.k[0].x()));
+
+    // One aperture per beam, one to three.
+    QCOMPARE(projectorParts(pivot, QVector3D(0, -1, 0), up, along, 0.2f, 0.11f, 0.19f, 3).apertures.size(), 3);
+    QCOMPARE(projectorParts(pivot, QVector3D(0, -1, 0), up, along, 0.2f, 0.11f, 0.19f, 8).apertures.size(), 3);
+    QCOMPARE(projectorParts(pivot, QVector3D(0, -1, 0), up, along, 0.2f, 0.11f, 0.19f, 0).apertures.size(), 1);
+
+    // Which fixtures draw so: a Laser, unless the LD gave it another look.
+    QScopedPointer<Doc> docOwner(new Doc(this));
+    Doc *doc = docOwner.data();
+    Fixture *laser = rigFacedLaser(doc, QLCPhysical::BeamEmission);
+    QVERIFY(laser != nullptr);
+    QVERIFY(classifyFixture(laser).projector);
+    laser->setStageLook(Fixture::StrobeLook);
+    QVERIFY(!classifyFixture(laser).projector);
+    laser->setStageLook(Fixture::AutoLook);
+    Fixture *dimmer = new Fixture(doc);
+    QLCFixtureDef *ddef = dimmer->genericDimmerDef(1);
+    dimmer->setFixtureDefinition(ddef, dimmer->genericDimmerMode(ddef, 1));
+    dimmer->setAddress(100);
+    QVERIFY(doc->addFixture(dimmer));
+    QVERIFY(!classifyFixture(dimmer).projector);
+    dimmer->setStageLook(Fixture::LaserLook);
+    QVERIFY(classifyFixture(dimmer).projector);
+    QCOMPARE(int(classifyFixture(dimmer).kind), int(FixtureSilhouette::Par));
+    doc->deleteFixture(dimmer->id());
+
+    /* In the rig view, lit green with its beams off: the light is in its
+       window, which shows from where it throws (upstage) and not from
+       behind it; its housing stays a housing, not a green box. */
+    QByteArray on(512, char(0));
+    on[0] = char(255); on[2] = char(255);                  // full, green
+    QByteArray off(512, char(0));
+    StructureStudioView v(doc, StructureStudioView::StageKind, 0);
+    v.resize(800, 620);
+    v.reload();
+    v.setPlane(StructureStudioView::Angled);
+    v.setLiveValues(true);
+    v.setBeams(false);
+    v.setHaze(0.0);
+    auto greenAdded = [&](double azimuth) {
+        v.setAngledView(azimuth, 20.0);
+        laser->setChannelValues(off);
+        v.reload();
+        const QImage dark = v.grab().toImage();
+        laser->setChannelValues(on);
+        v.reload();
+        const QImage lit = v.grab().toImage();
+        int n = 0;
+        for (int y = 0; y < lit.height(); ++y)
+            for (int x = 0; x < lit.width(); ++x)
+            {
+                const QColor q = lit.pixelColor(x, y), d = dark.pixelColor(x, y);
+                if (q.green() - d.green() >= 30 && q.green() - d.green() > 2 * (q.red() - d.red()))
+                    ++n;
+            }
+        return n;
+    };
+    const int fromA = greenAdded(0.0), fromB = greenAdded(180.0);
+    QVERIFY2(qMax(fromA, fromB) > 0 && qMin(fromA, fromB) == 0,
+             qPrintable(QString("the lit window should show from in front of the laser only: "
+                                "%1 and %2 green px").arg(fromA).arg(fromB)));
+    // The window, not the whole box: a strobe look's lit body is all green.
+    const int window = qMax(fromA, fromB);
+    laser->setStageLook(Fixture::StrobeLook);
+    const int body = qMax(greenAdded(0.0), greenAdded(180.0));
+    laser->setStageLook(Fixture::AutoLook);
+    QVERIFY2(window * 2 < body,
+             qPrintable(QString("only its apertures light: %1 px lit, a lit box is %2").arg(window).arg(body)));
+}
+
+void Monitor_Test::laserLookIsTheAutoLookForLasers()
+{
+    QScopedPointer<Doc> docOwner(new Doc(this));
+    Doc *doc = docOwner.data();
+    Fixture *laser = rigFacedLaser(doc, QLCPhysical::StarEmission);
+    QVERIFY(laser != nullptr);
+    QCOMPARE(laser->autoStageLook(), Fixture::LaserLook);
+    // Drawn as a laser on the plot when the show draws Auto fixtures by look.
+    doc->monitorProperties()->setAutoStageLooks(true);
+    QCOMPARE(int(classifyFixture(laser).look), int(Fixture::LaserLook));
+    QCOMPARE(int(classifyFixture(laser).kind), int(FixtureSilhouette::Par));
+    QVERIFY(classifyFixture(laser).projector);
+    QVERIFY(classifyFixture(laser).stars);                 // its light is unchanged
+    doc->monitorProperties()->setAutoStageLooks(false);
+
+    // The picker names it, under its own heading.
+    QComboBox cb;
+    FixtureFields::fillStageLookCombo(&cb, laser);
+    QCOMPARE(cb.itemText(0), QString("Auto (Laser / star projector)"));
+    const int at = cb.findData(int(Fixture::LaserLook), Qt::UserRole);
+    QVERIFY(at > 0);
+    QCOMPARE(cb.itemText(at - 1), QString("Effects"));
+    QVERIFY(!cb.itemIcon(at).isNull());
+    QVERIFY(cb.itemText(at).contains("Laser"));
+
+    // Its symbol: a box in a yoke, the aperture at the front (the throw's end).
+    const QRectF r(0, 0, 26, 20);
+    const QPainterPath plan = stageLookBodyPath(Fixture::LaserLook, r, false);
+    const QPainterPath side = stageLookBodyPath(Fixture::LaserLook, r, true);
+    QVERIFY(!plan.isEmpty());
+    QVERIFY(!side.isEmpty());
+    QVERIFY(r.adjusted(-0.01, -0.01, 0.01, 0.01).contains(plan.boundingRect()));
+    QVERIFY(plan != side);
+    const QRectF lens = stageLookLensRect(Fixture::LaserLook, r, false);
+    QVERIFY(lens.isValid());
+    QVERIFY(r.contains(lens));
+    QVERIFY(lens.center().x() > r.center().x() + r.width() * 0.2);
+    QVERIFY(plan.contains(lens.center()));
+    QVERIFY(!stageLookSquareLens(Fixture::LaserLook));     // round apertures
+    const QRectF front = stageLookLensRect(Fixture::LaserLook, r, true);
+    QVERIFY(side.contains(front.center()));
+    QCOMPARE(stageLookDefaultSize(Fixture::LaserLook, 10.0), QSizeF(13.0, 10.0));
 }
 
 void Monitor_Test::starFieldShowsOnTheTopPlot()
@@ -25198,7 +25369,7 @@ void Monitor_Test::fixturePropertiesSetsTheStageLook()
     for (int i = 0; i < look->count(); ++i)
         if (!look->itemData(i, Qt::UserRole).isValid() && !look->itemText(i).isEmpty())
             ++headings;
-    QCOMPARE(headings, 5);          // Moving, Fixed conventional, Fixed LED, Practicals, Scenery
+    QCOMPARE(headings, 6);          // Moving, Fixed conventional, Fixed LED, Effects, Practicals, Scenery
     // Scenery, last: Curtain under it (Q51).
     const int curtainAt = look->findData(int(Fixture::CurtainLook), Qt::UserRole);
     QVERIFY(curtainAt > 0);

@@ -860,7 +860,7 @@ picture). The fixture's icon follows its symbol in every fixture list
 **Auto**, the default, draws the fixture as its definition's type always
 has; the picker names the symbol that type is closest to, as *Auto (LED PAR /
 round multi-LED wash)*; a dimmer channel's is *Ellipsoidal / profile spot*.
-The other symbols, in five sections:
+The other symbols, in six sections:
 
 - **Moving** — Moving head spot, Moving head round wash, Moving head square
   wash.
@@ -868,6 +868,9 @@ The other symbols, in five sections:
   Followspot.
 - **Fixed LED** — LED PAR / round multi-LED wash, Square wash, Bar wash,
   Uplight wash, Cyc / strip light, Strobe / blinder.
+- **Effects** — **Laser / star projector**: a box in its U yoke, its
+  round aperture at the front. It is the *Auto* symbol of a definition
+  whose type is Laser.
 - **Practicals** — lights that are part of the set: **Lantern** (a
   hurricane lantern, or the one by a door) and **Staff** (a pole with LED
   strip wound round it from top to bottom).
@@ -887,7 +890,8 @@ with its lens at the front, a bar wash a wide strip, a
 square wash a square with a square lens, a round wash a round base, a spot
 a chamfered one — and its heads sit where its light comes out, square or
 round to match. Marks over the lens say the rest: a spot's gobo, an LED
-PAR's ring of LEDs, a Fresnel's rings, a strobe's two cells. The lens still
+PAR's ring of LEDs, a Fresnel's rings, a strobe's two cells; a laser is a
+box in its yoke, the yoke's back behind it, its aperture at the front. The lens still
 shows the fixture's live colour and level. A definition with no dimensions
 gets the symbol's proportions (a followspot long, a staff tall).
 
@@ -1303,6 +1307,19 @@ lasers:
   scattered across its spread (the declared angle, else 100°), each landing
   where its ray meets the floor or a structure, with faint rays in haze. A
   prism-rotation channel (or a Prism capability with a speed) turns the field.
+
+- **What a laser looks like.** In the Rig Overview a laser is a box in a
+  **U yoke**, the way a sky laser hangs from its bracket: the yoke's clamp
+  at the truss (or on the deck it stands on), its two side plates, and the
+  box between them. The box's front is a dark **window** with a round
+  **aperture** for each beam (one to three), toward where it throws, and
+  the apertures light in its live colour; the box itself stays dark, as the
+  real one does. **Tilt in yoke** tips the box between the plates; the yoke
+  turns to the way it **Points** and stays square to its clamp. A
+  definition with no size gets a sky laser's (200 × 110 × 190 mm). Drawn so
+  are definitions of type **Laser**, those whose light is a laser beam or a
+  star field, and any fixture given the **Laser / star projector** symbol;
+  another symbol (a strobe, say) draws it as that.
 
 Both take their colour and level from the fixture's live output, like any
 other light, and follow a mover's pan and tilt. A laser shows only when it
