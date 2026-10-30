@@ -970,7 +970,7 @@ void VCCueList_Test::submasterWorksAfterSliderModeRoundTrip()
     submasterSpy.clear();
 
     universes = m_doc->inputOutputMap()->claimUniverses();
-    universes[0]->processFaders(MasterTimer::tick());
+    universes[0]->processFaders();
     QCOMPARE(universes[0]->postGMValue(0), uchar(127));
     m_doc->inputOutputMap()->releaseUniverses(false);
 
@@ -1005,7 +1005,7 @@ void VCCueList_Test::submasterWorksAfterSliderModeRoundTrip()
     QVERIFY(submasterSpy.count() > 0);
 
     universes = m_doc->inputOutputMap()->claimUniverses();
-    universes[0]->processFaders(MasterTimer::tick());
+    universes[0]->processFaders();
     QCOMPARE(universes[0]->postGMValue(0), uchar(127));
     m_doc->inputOutputMap()->releaseUniverses(false);
 }

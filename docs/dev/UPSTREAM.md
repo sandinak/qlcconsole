@@ -16,7 +16,7 @@ user, as ordinary upstream contributions.
 | QLC+ base | **4.14.4** (`QLC+_4.14.4` = 027e6d4fd, 2026-03-15), since qlcconsole 0.3.1 |
 | Forked from | `QLC+_4.14.2` (2026, the original fork point) |
 | Upstream master merged | 9a0deb5cf (2026-02-01), in 1f8d28a5f / d875a4313 |
-| Code reviewed up to | `QLC+_4.14.4` (027e6d4fd) |
+| Code reviewed up to | upstream master 4cd37df23 (2026-10-29), 2026-10-30 |
 | Fixture definitions synced to | upstream master 4cd37df23 (2026-10-29), by `tools/sync-fixtures.py` |
 
 The build string is `<QLC_BASE_VERSION>+qlcconsole.<N>`
@@ -28,6 +28,88 @@ as cherry-picks, so `git rev-list QLC+_4.14.4..HEAD` would count the
 February sync's upstream commits out and drop `N` by about 550.
 
 ## Intake log
+
+### 2026-10-30: upstream master after 4.14.4 (qlcconsole 0.3.1)
+
+`QLC+_4.14.4..4cd37df23` is 411 non-merge commits; 247 touch only qmlui,
+fixtures, CI, packaging or translations. The other 164 were triaged by
+area. Master is QLC+ 5.x with 4.x fixes mixed in, so what shares code
+with the fork's rewritten engine (Doc patching, ChaserRunner, ShowRunner,
+EFX, RGBMatrix, MasterTimer, Universe) mostly doesn't cherry-pick.
+**35 taken** with `git cherry-pick -x`, **2 hand-ported**, the rest
+skipped or deferred below.
+
+**Taken** (upstream sha in each commit message):
+
+- Engine: SceneValues of deleted fixtures leave a ChaserStep (0f693838b);
+  macro divide by zero (3de28fd48); audio fade-out start level
+  (0cd8d2685) and end of stream (fdb9f1636); EFX that froze when fade in
+  was not shorter than its duration (521fb3b6d); a Collection lasts as
+  long as its longest member (83b673453); RGBMatrix::setTotalDuration
+  divide by zero (70bd2e970); paused faders resume when they fade out
+  (e683c05b5); a fixture's channels kept when another moves over them
+  (78906fddb, e72f6283c); Script duration cached (8bc125f7a); RGBMatrix
+  dimmer mode on generic dimmers (6be96e80c); RGB to grey precision
+  (b2d87e5fd); v5 scripts terminate (65ac80c9c, 94648f4ae); fixture
+  definition live update (c3d96465f).
+- Widget UI: DMX dump past four universes (63096cb44); test unit rounding
+  (f0463d793, 95b340a7a); audio editor saves fade edits on focus loss
+  (4a9481440); Click & Go scaling (aa4b53ffb); VC cue list resets the
+  cached submaster on stop (7090cf32a).
+- Plugins: OSC feedback path (b40b7e917); Peperoni USBDMX21 detection and
+  GCC 16 builds (05f7c4c18, 4214bac7f, 79f91001d, 4a4c05113).
+- Web access: keypad parsing (30581dd38).
+- Resources: Behringer X-Touch Compact, M-VAVE SMC-PAD / SMC-Mixer
+  profiles, prev/next page assignments and the swapped-icon fix
+  (1330b6079, 5cedb03f1, 528387870, c21248510, a5fd62ec8); TwinkleFox
+  script test fix (1ccdab841).
+- Tests: Qt 6.11 font string in RGBText_Test (6ebc60d20). Test hunks of the
+  picks above were adapted to the fork's one-argument `Universe::processFaders()`
+  and `GenericFader::write()`.
+
+**Hand-ported**: 107e773ae (fixture channels beyond the universe are
+skipped when patching) and 2f0c123fb (an EFX entry whose fixture is
+missing has no universe) as one-guard changes.
+
+**Skipped, the fork already covers it or the code is gone:**
+
+- Web access hardening 33d41a4e8, 823ff74bb, 724fc4ae8, 448935e15,
+  26af840b4: RC8's origin check, `permits()`, `htmlEscaped()`, argument
+  counts and `sanitizedFixtureFileName()` already do this.
+- 6bf05505b hotspot on Trixie: the fork's `hotspotCommands()` replaced that
+  code.
+- 4c13ab364 (iOS translate env), 707970034 (Qt5 builds), 9859f9d4b (iOS):
+  not our platforms; Qt5 is dropped.
+- a124abebe, 4db9faa57: definitions without modes; the fork's cache reloads
+  in place and the fixture editor has a Problems check.
+- 0169f6bcd encoder input: the fork rewrote relative-encoder decoding.
+- rgbscripts 23979ee02, 5c697b330, e5c4a59db: the fork already has these
+  scripts (7d724bd29), in its own versions.
+
+**Deferred** (fork code diverged; each needs a hand port with its own test,
+none is a known crash on the fork's code):
+
+- ChaserRunner: 26757151d (step advanced in the write that starts it),
+  1734a65c9 (submaster on every crossfade step), 3bd4c6c9b (beat rework).
+- 43828817d (functions using deleted groups/fixtures; EFX and RGBMatrix),
+  8e383d52d (Show items sharing a Function), f57bf8b90 (Doc::saveXML NULL
+  checks), 7e2f4ae84 (threading races on reload: MasterTimer/Universe),
+  ae1047152 (universe channel setup follows patching: the fork's
+  `patchFixtures` replaced the code), bb2746a75 / 0508555b9 (RGBMatrix
+  update and phase), b3e82d587 (audio band levels on top of the log bands),
+  eb14a184b (scriptrunner), 82d358517 (universe composition; a hot-path
+  rewrite touching ten files: a `make perf` job of its own).
+
+**Skipped as QLC+ 5 / new features, not fixes:** qmlui (all), plugin UIDs
+(cbad3b03d, 695413170, f6e60c3be, 3785e78bc), Peperoni libusb rework
+(2b447118e), beat tracker (c9b014248, fa000cf74, 61d192923,
+50c10ae2d), EFX dimmer control (2ad86c3de, 57f6fe851, 6e918aa5c),
+RGBMatrix attributes and pattern override (e671868c6, 4ebdfbb7a),
+universe split for RGB panels (98c3cb6c4, 6f7f290da), ServiceLoader
+(d470ee28a), LightEmitter rename (ff8f746ba), Cue List play on
+double-click (afe2c68a9, a behaviour change), `Rename qlcplus-qml` and
+packaging, upstream CI, version bumps and translations (the catalogues are
+taken with the next 4.x release's).
 
 ### 2026-10-29: fixture definitions (qlcconsole 0.3.1)
 

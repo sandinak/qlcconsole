@@ -1142,7 +1142,7 @@ void Scene_Test::writeHTPStopWhilePaused()
     {
         timer.timerTick();
         QList<Universe*> ua = doc->inputOutputMap()->claimUniverses();
-        ua[0]->processFaders(MasterTimer::tick());
+        ua[0]->processFaders();
         char value = ua[0]->preGMValues()[5];
         fadersCount = ua[0]->faders().count();
         doc->inputOutputMap()->releaseUniverses(false);
