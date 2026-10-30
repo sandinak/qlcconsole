@@ -454,7 +454,11 @@ void StructureStudioView::setLiveValues(bool on)
         if (m_liveTimer == nullptr)
         {
             m_liveTimer = new QTimer(this);
-            connect(m_liveTimer, &QTimer::timeout, this, [this]() { liveTick(); });
+            connect(m_liveTimer, &QTimer::timeout, this, [this]() {
+                m_timerTick = true;
+                liveTick();
+                m_timerTick = false;
+            });
         }
         m_liveDirty = true;
         m_liveTimer->start(1000 / m_maxFps);
@@ -9883,7 +9887,7 @@ bool StructureStudioView::onScreen() const
 
 bool StructureStudioView::liveInputsChanged() const
 {
-    if (m_liveDirty || m_settleFrame || m_opticsAnimating)
+    if (m_liveDirty || m_settleFrame || m_qualityFrame || m_opticsAnimating)
         return true;
     if (activeSceneRunning() != m_paintedSceneRunning)
         return true;
@@ -9924,7 +9928,7 @@ bool StructureStudioView::liveTick()
     }
     /* A frame because the VALUES moved (a running show), not an edit or the
        settle: the frame budget may draw it lighter (paintEvent). */
-    m_valueFrame = !m_liveDirty && !m_settleFrame && !m_opticsAnimating;
+    m_valueFrame = m_timerTick && !m_liveDirty && !m_settleFrame && !m_qualityFrame && !m_opticsAnimating;
     update();
     return true;
 }
@@ -9940,13 +9944,14 @@ void StructureStudioView::paintEvent(QPaintEvent *)
                       && m_lastFrameAt.elapsed() < 400;
     m_valueFrame = false;
     m_degraded = fast;
+    m_qualityFrame = false;
     if (fast)
     {
         if (m_degradeSettle == nullptr)
         {
             m_degradeSettle = new QTimer(this);
             m_degradeSettle->setSingleShot(true);
-            connect(m_degradeSettle, &QTimer::timeout, this, [this]() { m_settleFrame = true; });
+            connect(m_degradeSettle, &QTimer::timeout, this, [this]() { m_qualityFrame = true; });
         }
         m_degradeSettle->start(350);     // restarts while values keep moving
     }

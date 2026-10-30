@@ -1305,6 +1305,8 @@ private:
                              const QVector<double> &viewKey) const;
     mutable QVector<FigureFaces> m_figureFaces;   ///< by position in the drawn list
     mutable QVector<double> m_figureViewKey;
+    bool     m_timerTick = false;    ///< liveTick() is running from the live timer
+    bool     m_qualityFrame = false; ///< one full-quality frame after a light run
     bool     m_valueFrame = false;   ///< the next frame is value-driven (frame budget)
     bool     m_degraded = false;     ///< this frame is drawn without supersampling
     QElapsedTimer m_lastFrameAt;     ///< when the last frame started

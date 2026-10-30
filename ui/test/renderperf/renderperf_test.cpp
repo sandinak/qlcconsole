@@ -255,7 +255,7 @@ void RenderPerf_Test::aRunningShowStaysUnderOneCore()
     v.repaint();
     QVERIFY(v.m_degraded);
     QVERIFY(v.m_degradeSettle != nullptr && v.m_degradeSettle->isActive());
-    QTRY_VERIFY_WITH_TIMEOUT(v.m_settleFrame || !v.m_degraded, 3000);
+    QTRY_VERIFY_WITH_TIMEOUT(v.m_qualityFrame || !v.m_degraded, 3000);
 
     // The values stop: one full-quality frame, then still.
     QTRY_VERIFY_WITH_TIMEOUT(!v.m_degraded && (v.m_degradeSettle == nullptr || !v.m_degradeSettle->isActive()), 5000);
