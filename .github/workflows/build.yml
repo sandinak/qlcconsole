@@ -189,6 +189,7 @@ jobs:
         run: |
           cmake --build build --target install
           cp -v resources/icons/svg/qlcconsole.svg ${INSTALL_ROOT}
+          cp -v resources/icons/png/qlcconsole.png ${INSTALL_ROOT}
           cp -v platforms/linux/qlcconsole.desktop ${INSTALL_ROOT}
 
       - name: Set APPVERSION
