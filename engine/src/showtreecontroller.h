@@ -72,7 +72,8 @@ public:
 public:
     const QList<ShowTree::Production> &productions() const { return m_productions; }
     const ShowTree::Production *production(quint32 id) const;
-    /** The production and list a list id belongs to (null: none). */
+    /** The production and list a list id belongs to (null: none). Valid
+        until the next edit: an edit replaces the tree's lists. */
     const ShowTree::CueList *cueList(quint32 listId, quint32 *productionId = nullptr) const;
     /** The list a cue belongs to. */
     const ShowTree::CueList *listOfCue(quint32 cueId) const;

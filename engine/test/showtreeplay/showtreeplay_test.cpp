@@ -1215,8 +1215,13 @@ void ShowTreePlay_Test::incrementalBakeMatchesAFullBake()
         switch (op)
         {
             case 0: case 1: case 2: case 3:
-                st->setTargetLook(c, groupTarget(anyGroup()),
-                                  st->lookForPalette(levels.at(rng.bounded(int(levels.count())))));
+            {
+                // One draw per statement: the order a compiler evaluates
+                // call arguments in must not change the sequence.
+                const quint32 g = anyGroup();
+                const quint32 level = levels.at(rng.bounded(int(levels.count())));
+                st->setTargetLook(c, groupTarget(g), st->lookForPalette(level));
+            }
             break;
             case 4:
             {
@@ -1243,7 +1248,9 @@ void ShowTreePlay_Test::incrementalBakeMatchesAFullBake()
                 const ShowTree::CueList *l = st->cueList(listId);
                 if (rng.bounded(2) == 0 || l->cues.count() < 8)
                 {
-                    const quint32 added = st->addCue(listId, rng.bounded(int(l->cues.count())), "New");
+                    const int at = rng.bounded(int(l->cues.count()));
+                    l = nullptr;    // the edits below replace the tree's lists
+                    const quint32 added = st->addCue(listId, at, "New");
                     st->setTargetLook(added, groupTarget(anyGroup()), st->lookForPalette(levels.first()));
                 }
                 else
@@ -1305,15 +1312,21 @@ void ShowTreePlay_Test::incrementalBakeMatchesAFullBake()
 
     // One look changed in the middle of a long tracking run: that cue and
     // the ones it tracks into, not the cues before it.
+    // Every edit replaces the tree's lists: work from the ids, never a
+    // CueList pointer kept across an edit (it dangles).
     st->forgetPlans();
     st->bake();
-    const ShowTree::CueList *l = st->cueList(listId);
-    for (const ShowTree::Cue &cue : l->cues)
-        st->setCueMode(cue.id, ShowTree::CueMode::Track);
-    const quint32 mid = l->cues.at(l->cues.count() / 2).id;
+    QList<quint32> ids;
+    for (const ShowTree::Cue &cue : st->cueList(listId)->cues)
+        ids << cue.id;
+    QVERIFY(ids.count() >= 8);
+    for (quint32 id : ids)
+        st->setCueMode(id, ShowTree::CueMode::Track);
+    QCOMPARE(st->cueList(listId)->cues.count(), ids.count());
+    const quint32 mid = ids.at(ids.count() / 2);
     QVERIFY(st->setTargetLook(mid, groupTarget(groups.first()->id()), st->lookForPalette(levels.last())));
     QVERIFY(st->lastBakePlanned() > 0);
-    QVERIFY(st->lastBakePlanned() <= int(l->cues.count()) - int(l->cues.count()) / 2);
+    QVERIFY(st->lastBakePlanned() <= int(ids.count()) - int(ids.count()) / 2);
 }
 
 /* A hit fades in and out by its own times (Q180): the collection a VC
