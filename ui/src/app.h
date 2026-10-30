@@ -554,6 +554,7 @@ public:
     /** Make Student Handout: write a copy of the show for students (Teaching
      *  on, the PIN, practice venues left out). The open show, its file name
      *  and its settings are untouched. False, with @p why, on failure. */
+    void resetToHandout();
     bool writeStudentHandout(const struct HandoutOptions &options, QString *why = nullptr);
     /** The Teaching chip, tool-tip and the title: what the show's Teaching
      *  settings say (docs/features/teaching.md). */

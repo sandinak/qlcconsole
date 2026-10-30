@@ -1853,6 +1853,11 @@ void App::openShowSettings()
         return;
     ShowSettingsDialog dlg(m_doc, this);
     dlg.exec();
+    if (dlg.resetRequested())
+    {
+        resetToHandout();
+        return;
+    }
     if (dlg.handoutRequested())
     {
         HandoutOptions options;
@@ -1865,6 +1870,48 @@ void App::openShowSettings()
                                      tr("The handout is in %1. This show is as it was.")
                                      .arg(QDir::toNativeSeparators(options.path)));
     }
+}
+
+void App::resetToHandout()
+{
+    TeachingSettings *teach = m_doc->teachingSettings();
+    const QByteArray snapshot = teach->handoutSnapshot();
+    const QByteArray xml = TeachingSettings::unpackSnapshot(snapshot);
+    if (xml.isEmpty())
+    {
+        QMessageBox::warning(this, tr("Reset to Handout"),
+                             tr("This show has no handout state to go back to."));
+        return;
+    }
+
+    /* The handout is a show file: written out, then opened the way any show
+       is (its definitions, venue and views included). */
+    const QString tmp = QDir(QDir::tempPath()).filePath(
+            QStringLiteral("qlcconsole-handout-%1").arg(QCoreApplication::applicationPid())
+            + KExtWorkspaceConsole);
+    QFile f(tmp);
+    if (!f.open(QIODevice::WriteOnly) || f.write(xml) != xml.size())
+    {
+        QMessageBox::warning(this, tr("Reset to Handout"),
+                             tr("Cannot write %1.").arg(QDir::toNativeSeparators(tmp)));
+        return;
+    }
+    f.close();
+
+    const QString file = fileName();
+    const QString workspace = m_doc->workspacePath();
+    clearDocument();
+    const QFile::FileError error = loadXML(tmp);
+    QFile::remove(tmp);
+    if (workspace.isEmpty() == false)
+        m_doc->setWorkspacePath(workspace);
+    setFileName(file);
+    if (m_doc->programmer() != nullptr && m_doc->programmer()->venueCorrections() != nullptr && !file.isEmpty())
+        m_doc->programmer()->venueCorrections()->setShowFile(file, true);
+    /* The state is kept inside the show, so it can be reset again */
+    m_doc->teachingSettings()->setHandoutSnapshot(snapshot);
+    if (handleFileError(error) == true)
+        m_doc->setModified();
 }
 
 bool App::writeStudentHandout(const HandoutOptions &options, QString *why)
@@ -1888,7 +1935,19 @@ bool App::writeStudentHandout(const HandoutOptions &options, QString *why)
     m_doc->teachingSettings()->setSaveOverride(&teach);
     m_doc->operateSettings()->setSaveOverride(&lock);
     const bool wasModified = m_doc->isModified();
-    const QFile::FileError error = saveXML(path, true);
+    QFile::FileError error = saveXML(path, true);
+    /* The file as just written goes into itself, deflated, as the state
+       Reset to Handout returns to (a second write, the same show). */
+    if (error == QFile::NoError)
+    {
+        QFile written(path);
+        if (written.open(QIODevice::ReadOnly))
+        {
+            teach.snapshot = TeachingSettings::packSnapshot(written.readAll());
+            written.close();
+            error = saveXML(path, true);
+        }
+    }
     m_doc->teachingSettings()->setSaveOverride(nullptr);
     m_doc->operateSettings()->setSaveOverride(nullptr);
     if (wasModified)

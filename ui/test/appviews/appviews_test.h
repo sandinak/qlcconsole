@@ -229,6 +229,10 @@ private slots:
     /** Make Student Handout: the copy has Teaching and the PIN, and the
      *  open show is untouched; autosave and the show file keep the flag */
     void aStudentHandoutIsACopy();
+    /** Reset to Handout puts a student copy back to the handout, behind the PIN */
+    void aHandoutResetsToItself();
+    /** A Teaching show asks before its patch changes; others do not */
+    void teachingAsksBeforePatchChanges();
     /** Save As ⇧⌘S and Quit ⌘Q on every platform, owned by nothing else;
      *  Undo/Redo show the tabs' keys without binding them (so they never
      *  fire twice); Settings… is called that everywhere. */

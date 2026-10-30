@@ -45,7 +45,10 @@ Students can:
   Settings… ▸ Teaching mode**, the handout says where), or you hand out a
   copy made with **Make Student Handout…** (same dialog): Teaching on, real
   output held, an optional PIN so it stays on, and no practice answer key
-  in the venue file. Keep your own copy without Teaching mode.
+  in the venue file. Keep your own copy without Teaching mode. A student
+  copy that has wandered can be put back with **Reset to Handout…** (same
+  dialog, asks for the PIN); a Teaching show also asks before its patch
+  changes, and holds USB dongles as well as network output.
 - [ ] Print the [handout](handout.md) and the [exit ticket](exit-ticket.md).
 
 ## Vocabulary (introduce in this order)

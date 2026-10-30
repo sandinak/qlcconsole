@@ -71,11 +71,14 @@ Operate PIN). **Still open:**
 - **Momentary / start-only / stop-only on Control Map bindings**: built
   with the Control Map's return (cm, feat/031-control-map), not here.
 - **Teaching mode**: DONE (t, feat/031-teaching): must-haves + lesson link;
-  see docs/features/teaching.md. Still later: reset to handout, confirm
-  before patch changes in a Teaching show, a per-GO "what just happened"
-  log, glossary popovers, a Show Review "Teaching mode is on" check (when
-  Show Review exists), the course shows rebuilt with Teaching on (they ship
-  off; Lesson 3.6 says to tick it), and holding non-network (USB) output.
+  see docs/features/teaching.md. Also DONE (tch2, feat/031-teaching2): reset
+  to handout (state embedded in the handout, Show Settings, behind the PIN),
+  confirm before patch changes (Fixture Manager, Patch dialog), USB/hardware
+  output held. Still later: a per-GO "what just happened" log, glossary
+  popovers, a Show Review "Teaching mode is on" check (when Show Review
+  exists), the course shows rebuilt with Teaching on (they ship off; Lesson
+  3.6 says to tick it), and the patch confirm in the Lighting Studio's
+  Fixture Properties (monitor files were another agent's).
 
 ## Lighting Studio alignment — leftovers (0.3.1 d2, 2026-10-29)
 

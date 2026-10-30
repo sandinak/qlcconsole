@@ -555,7 +555,8 @@ public:
     /** Why a patch on @p lineName with @p params may not transmit right now,
      *  or empty when it may (or is not network output at all). */
     QString transmitHoldReason(const QString &lineName,
-                               const QMap<QString, QVariant> &params) const;
+                               const QMap<QString, QVariant> &params,
+                               const QLCIOPlugin *plugin = NULL) const;
 
     struct TransmitGateStatus
     {
@@ -607,6 +608,10 @@ private:
     /** Is a patch on @p lineName with @p params network output (a line named
      *  after a non-loopback local address, or aimed at IPv4 targets)? */
     bool isNetworkOutput(const QString &lineName, const QMap<QString, QVariant> &params) const;
+    /** A USB / MIDI / other hardware output of @p plugin (Teaching mode holds
+     *  these too); false for the network ones and Loopback / Dummy. */
+    bool isLocalHardwareOutput(const QString &lineName, const QMap<QString, QVariant> &params,
+                               const QLCIOPlugin *plugin) const;
     /** Has this machine an address on one of the rig networks? */
     bool onRigNetwork() const;
     /** Re-apply the gate after a setting changed, and announce it */
