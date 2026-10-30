@@ -22,6 +22,7 @@
 #include <QSignalSpy>
 #include <QBuffer>
 #include <QtTest>
+#include <QRandomGenerator>
 
 #define private public
 #define protected public
@@ -1098,6 +1099,292 @@ void ShowTreePlay_Test::aNewProductionIsCurrentWhenNothingElseHasGo()
     QCOMPARE(st->currentProduction(), invalidId());
     Q_UNUSED(pb)
     Q_UNUSED(pc)
+}
+
+/****************************************************************************
+ * The bake re-plans only what changed; hits fade
+ ****************************************************************************/
+
+/* What the tree baked, as the rig would play it: per cue, its chaser step
+   and its collection's members, each scene by what it lights and plays
+   (groups, fixtures, palettes, what each leaves out, its layout spans),
+   and the scene each of its layers plays. Ids of generated scenes are left
+   out: two bakes that make the same scenes are the same. */
+static QString describeScene(const Doc *doc, quint32 fid)
+{
+    const Function *f = doc->function(fid);
+    const Scene *s = qobject_cast<const Scene *>(f);
+    if (s == nullptr)
+        return f == nullptr ? QString("-") : QString("f%1").arg(fid);
+    auto ids = [](QList<quint32> l, bool sort) {
+        if (sort)
+            std::sort(l.begin(), l.end());
+        QStringList out;
+        for (quint32 i : l)
+            out << QString::number(i);
+        return out.join(',');
+    };
+    QString d = QString("g[%1] f[%2] p[%3]").arg(ids(s->fixtureGroups(), true), ids(s->fixtures(), true),
+                                                 ids(s->palettes(), false));
+    for (quint32 pid : s->palettes())
+    {
+        if (!s->excludedFixtures(pid).isEmpty())
+            d += QString(" x%1[%2]").arg(pid).arg(ids(s->excludedFixtures(pid), true));
+        const Scene::LayoutSpan span = s->layoutSpan(pid);
+        if (!span.groups.isEmpty() || !span.fixtures.isEmpty())
+            d += QString(" w%1[%2/%3]").arg(pid).arg(ids(span.groups, true), ids(span.fixtures, true));
+    }
+    return d;
+}
+
+static QStringList bakedState(const Doc *doc, ShowTreeController *st)
+{
+    QStringList out;
+    for (const ShowTree::Production &p : st->productions())
+        for (const ShowTree::CueList &l : p.lists)
+        {
+            const Chaser *ch = qobject_cast<const Chaser *>(doc->function(l.chaser));
+            QList<ShowTree::ResolvedCue> rcs = st->resolved(l);
+            for (int i = 0; i < l.cues.count(); ++i)
+            {
+                const ShowTree::Cue &c = l.cues.at(i);
+                QString line = QString("%1/%2:").arg(l.name).arg(c.id);
+                if (ch != nullptr && i < ch->stepsCount())
+                {
+                    const ChaserStep step = ch->steps().at(i);
+                    line += QString(" step(%1 %2/%3/%4)").arg(step.fid == c.collection ? "own" : "other")
+                                .arg(step.fadeIn).arg(step.hold).arg(step.fadeOut);
+                }
+                const Collection *coll = qobject_cast<const Collection *>(doc->function(c.collection));
+                if (coll != nullptr)
+                    for (quint32 fid : coll->functions())
+                        line += " {" + describeScene(doc, fid) + "}";
+                if (i < rcs.count())
+                    for (const ShowTree::ResolvedLayer &rl : rcs.at(i).layers)
+                        line += QString(" L%1=").arg(rl.target.signature())
+                                + describeScene(doc, st->layerScene(c.id, rl.target));
+                out << line;
+            }
+        }
+    return out;
+}
+
+/* An edit re-plans only the cues whose resolved state it changes (the
+   edited cue, and those tracking from it until a block or a hard value),
+   and the show bakes exactly as a full bake would -- over a seeded run of
+   random edits: looks, offs, modes, releases, includes, mixing, inserts,
+   deletes, moves, skips, undo and redo, and a group's members changing
+   under the tree. */
+void ShowTreePlay_Test::incrementalBakeMatchesAFullBake()
+{
+    QList<FixtureGroup *> groups;
+    groups << group("A", { m_fixtures[0], m_fixtures[1], m_fixtures[2], m_fixtures[3] })
+           << group("B", { m_fixtures[2], m_fixtures[3], m_fixtures[4], m_fixtures[5] })
+           << group("C", { m_fixtures[4], m_fixtures[5], m_fixtures[6], m_fixtures[7] })
+           << group("All", m_fixtures);
+    QList<quint32> levels;
+    for (int i = 0; i < 4; ++i)
+        levels << dimmer(40 + 60 * i, QString("L%1").arg(i));
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("Random");
+    const quint32 listId = st->addCueList(prod, "Song");
+    st->beginBatch("Build");
+    for (int i = 0; i < 24; ++i)
+    {
+        const quint32 c = st->addCue(listId, i - 1, QString("Cue %1").arg(i + 1));
+        st->setTargetLook(c, groupTarget(groups.at(i % groups.count())->id()),
+                          st->lookForPalette(levels.at(i % levels.count())));
+    }
+    st->endBatch(true);
+    QCOMPARE(st->cueList(listId)->cues.count(), 24);
+
+    QRandomGenerator rng(20261030);
+    auto anyCue = [&]() -> quint32 {
+        const ShowTree::CueList *l = st->cueList(listId);
+        return l->cues.isEmpty() ? ShowTree::invalidId()
+                                 : l->cues.at(rng.bounded(int(l->cues.count()))).id;
+    };
+    auto anyGroup = [&]() { return groups.at(rng.bounded(int(groups.count())))->id(); };
+    int planned = 0, cues = 0, edits = 0;
+    for (int n = 0; n < 400; ++n)
+    {
+        const quint32 c = anyCue();
+        if (c == ShowTree::invalidId())
+            break;
+        const int op = rng.bounded(14);
+        switch (op)
+        {
+            case 0: case 1: case 2: case 3:
+                st->setTargetLook(c, groupTarget(anyGroup()),
+                                  st->lookForPalette(levels.at(rng.bounded(int(levels.count())))));
+            break;
+            case 4:
+            {
+                ShowTree::Look off;
+                off.key = ShowTree::KeyDimmer;
+                off.none = true;
+                st->setTargetLook(c, groupTarget(anyGroup()), off);
+            }
+            break;
+            case 5:
+                st->setCueMode(c, ShowTree::CueMode(rng.bounded(4)));
+            break;
+            case 6:
+                st->setTargetRelease(c, groupTarget(anyGroup()), rng.bounded(2) == 1);
+            break;
+            case 7:
+                st->addInclude(c, anyCue());
+            break;
+            case 8:
+                st->setCueMixOverlap(c, rng.bounded(2) == 1);
+            break;
+            case 9:
+            {
+                const ShowTree::CueList *l = st->cueList(listId);
+                if (rng.bounded(2) == 0 || l->cues.count() < 8)
+                {
+                    const quint32 added = st->addCue(listId, rng.bounded(int(l->cues.count())), "New");
+                    st->setTargetLook(added, groupTarget(anyGroup()), st->lookForPalette(levels.first()));
+                }
+                else
+                    st->removeCue(c);
+            }
+            break;
+            case 10:
+                st->moveCue(c, rng.bounded(int(st->cueList(listId)->cues.count())));
+            break;
+            case 11:
+                st->setCuesSkipped({ c }, rng.bounded(3) == 0);
+            break;
+            case 12:
+                if (rng.bounded(2) == 0)
+                    st->undo();
+                else
+                    st->redo();
+            break;
+            case 13:
+            {
+                // Under the tree: a group's members change.
+                FixtureGroup *g = groups.at(rng.bounded(3));
+                const quint32 f = m_fixtures.at(rng.bounded(int(m_fixtures.count())));
+                if (g->fixtureList().contains(f) && g->fixtureList().count() > 1)
+                    g->resignFixture(f);
+                else if (!g->fixtureList().contains(f))
+                    g->assignFixture(f);
+                st->bake();
+            }
+            break;
+        }
+        ++edits;
+        if (op != 13)       // the rig changed: every cue is planned again
+        {
+            planned += st->lastBakePlanned();
+            cues += int(st->cueList(listId)->cues.count());
+        }
+        else
+            QCOMPARE(st->lastBakePlanned(), int(st->cueList(listId)->cues.count()));
+
+        const QStringList incremental = bakedState(m_doc, st);
+        st->forgetPlans();
+        st->bake();
+        QCOMPARE(st->lastBakePlanned(), int(st->cueList(listId)->cues.count()));
+        const QStringList full = bakedState(m_doc, st);
+        if (incremental != full)
+        {
+            for (int i = 0; i < qMax(incremental.count(), full.count()); ++i)
+                if (incremental.value(i) != full.value(i))
+                    qWarning().noquote() << "edit" << n << "\n incremental:" << incremental.value(i)
+                                         << "\n full:       " << full.value(i);
+        }
+        QCOMPARE(incremental, full);
+    }
+    QCOMPARE(edits, 400);
+    // An edit re-plans what it reaches, not the list (on 20 cues tracking
+    // over 4 overlapping groups, a third of it on average).
+    QVERIFY2(planned * 2 < cues, qPrintable(QString("%1 of %2 cues re-planned").arg(planned).arg(cues)));
+
+    // One look changed in the middle of a long tracking run: that cue and
+    // the ones it tracks into, not the cues before it.
+    st->forgetPlans();
+    st->bake();
+    const ShowTree::CueList *l = st->cueList(listId);
+    for (const ShowTree::Cue &cue : l->cues)
+        st->setCueMode(cue.id, ShowTree::CueMode::Track);
+    const quint32 mid = l->cues.at(l->cues.count() / 2).id;
+    QVERIFY(st->setTargetLook(mid, groupTarget(groups.first()->id()), st->lookForPalette(levels.last())));
+    QVERIFY(st->lastBakePlanned() > 0);
+    QVERIFY(st->lastBakePlanned() <= int(l->cues.count()) - int(l->cues.count()) / 2);
+}
+
+/* A hit fades in and out by its own times (Q180): the collection a VC
+   button fires starts its scenes with the hit's fade in, and stops them
+   with its fade out. No fade: it snaps, as before. Saved with the show. */
+void ShowTreePlay_Test::hitsFadeInAndOut()
+{
+    FixtureGroup *a = group("A", { m_fixtures[0] });
+    const quint32 full = dimmer(255, "Full");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("Dance");
+    const quint32 hit = st->addLook(prod, "Stab");
+    st->setLayerLook(hit, st->addLayer(hit, groupTarget(a->id())), st->lookForPalette(full));
+    Collection *coll = qobject_cast<Collection *>(m_doc->function(st->cue(hit)->collection));
+    QVERIFY(coll != nullptr);
+
+    // No fades: on at once, off at once.
+    coll->start(m_doc->masterTimer(), FunctionParent::master());
+    QHash<quint32, uchar> v = settle(3);
+    QCOMPARE(int(v[0]), 255);
+    coll->stop(FunctionParent::master());
+    v = settle(3);
+    QCOMPARE(int(v[0]), 0);
+
+    // 1 s in, 2 s out.
+    ShowTree::Cue c = *st->cue(hit);
+    c.fadeIn = 1000;
+    c.fadeOut = 2000;
+    QVERIFY(st->setCue(c));
+    QCOMPARE(coll->hitFadeIn(), 1000u);
+    QCOMPARE(coll->hitFadeOut(), 2000u);
+    coll->start(m_doc->masterTimer(), FunctionParent::master());
+    v = settle(int(MasterTimer::frequency() / 2));          // half a second
+    QVERIFY2(v[0] > 60 && v[0] < 200, qPrintable(QString::number(v[0])));
+    v = settle(int(MasterTimer::frequency()));
+    QCOMPARE(int(v[0]), 255);
+    coll->stop(FunctionParent::master());
+    v = settle(int(MasterTimer::frequency()));                // one of two seconds
+    QVERIFY2(v[0] > 60 && v[0] < 200, qPrintable(QString::number(v[0])));
+    v = settle(int(MasterTimer::frequency()) + 10);
+    QCOMPARE(int(v[0]), 0);
+
+    // A started-with override (a chaser step, a timeline) still wins.
+    coll->start(m_doc->masterTimer(), FunctionParent::master(), 0, 0, 0);
+    v = settle(3);
+    QCOMPARE(int(v[0]), 255);
+    coll->stop(FunctionParent::master());
+    settle(3);
+
+    // Undo takes the fades back off the collection.
+    QVERIFY(st->undo());
+    QCOMPARE(coll->hitFadeIn(), 0u);
+    QVERIFY(st->redo());
+
+    // Saved and loaded: the hit keeps them, its collection plays them.
+    const QByteArray xml = engineXml(m_doc);
+    QVERIFY(xml.contains("FadeIn=\"1000\""));
+    Doc *other = new Doc(this);
+    QXmlStreamReader r(xml);
+    r.readNextStartElement();
+    QVERIFY(other->loadXML(r, false));
+    ShowTreeController *st2 = other->showTree();
+    const ShowTree::Cue *loaded = st2->cue(hit);
+    QVERIFY(loaded != nullptr);
+    QCOMPARE(loaded->fadeIn, 1000u);
+    QCOMPARE(loaded->fadeOut, 2000u);
+    const Collection *lc = qobject_cast<const Collection *>(other->function(loaded->collection));
+    QVERIFY(lc != nullptr);
+    QCOMPARE(lc->hitFadeIn(), 1000u);
+    QCOMPARE(lc->hitFadeOut(), 2000u);
+    delete other;
 }
 
 QTEST_MAIN(ShowTreePlay_Test)

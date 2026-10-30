@@ -337,7 +337,13 @@ void Collection::preRun(MasterTimer *timer)
             // timeline lowers a collection to Background so the VC overrides it).
             function->setFadePriority(fadePriority());
             function->setInheritedSpeedMaster(effectiveSpeedMaster());
-            function->start(timer, functionParent(), 0, overrideFadeInSpeed(), overrideFadeOutSpeed(), overrideDuration());
+            // A Show Tree hit's own fades, unless what started it gave some.
+            uint fadeIn = overrideFadeInSpeed(), fadeOut = overrideFadeOutSpeed();
+            if (fadeIn == defaultSpeed() && m_hitFadeIn != 0)
+                fadeIn = m_hitFadeIn;
+            if (fadeOut == defaultSpeed() && m_hitFadeOut != 0)
+                fadeOut = m_hitFadeOut;
+            function->start(timer, functionParent(), 0, fadeIn, fadeOut, overrideDuration());
         }
         m_tick = 1;
     }

@@ -193,6 +193,14 @@ public:
     void setFlashPlays(bool on) { m_flashPlays = on; }
     bool flashPlays() const { return m_flashPlays; }
 
+    /** A Show Tree hit's own fade in / out (ms, Q180): its members start
+     *  with them when nothing that starts the Collection says otherwise
+     *  (a chaser step's or a timeline's fade wins). 0: their own, as in
+     *  QLC+. Set by ShowTreeController as it bakes the hit; not saved. */
+    void setHitFades(uint fadeIn, uint fadeOut) { m_hitFadeIn = fadeIn; m_hitFadeOut = fadeOut; }
+    uint hitFadeIn() const { return m_hitFadeIn; }
+    uint hitFadeOut() const { return m_hitFadeOut; }
+
     /** @reimp */
     void flash(MasterTimer *timer, bool shouldOverride, bool forceLTP) override;
     /** @reimp */
@@ -200,6 +208,8 @@ public:
 
 private:
     bool m_flashPlays = false;
+    uint m_hitFadeIn = 0;
+    uint m_hitFadeOut = 0;
     bool m_flashStarted = false;    ///< flash() started the run unFlash() stops
 };
 

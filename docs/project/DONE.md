@@ -6,6 +6,37 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
+### 2026-10-30 — Incremental Show Tree bake; fades on hits *(feat/031-bake, 0.3.1 bake)*
+
+- **Incremental bake.** `bake()` keeps each cue's plan (`bakePlan()`,
+  `m_planCache`) with what it was made from: the resolved layers planCue
+  reads (target, depth, values), the ranks of the cues its values come
+  from, its mixing. An edit plans again only the cues whose resolved
+  state changed (the edited cue and those tracking from it until a block
+  or a value of their own). The rig under the plans (fixtures, groups,
+  palettes added or removed, group sets) is a generation (`m_planWorld`)
+  bumped by Doc's signals: a change plans every cue again. A line aim
+  (an Aim palette on a line) is always planned afresh (its inline
+  palette is found by palette values, which have no signal). planCue
+  also got cheaper: one hash per winner (layer and rank together, not
+  two maps) and each expanded target's fixtures / heads kept per world
+  (`targetUnits()`). `ShowTreePlay_Test::incrementalBakeMatchesAFullBake`:
+  400 seeded random edits (looks, offs, modes, releases, includes,
+  mixing, inserts, deletes, moves, skips, undo/redo, group members
+  changing) each compared with a full bake (`forgetPlans()`); a mutation
+  (no layer check) fails it. `make perf` showtree_edit_200cues: baseline
+  109 ms, before 150 ms on a loaded machine, after 39-64 ms. What is left
+  of an edit is resolving the list (about a third) and planning the ~120
+  cues the bench's edit really reaches (its Dimmer tracks to the end).
+- **Fades on hits (Q180).** A hit's page shows Fade in / Fade out (not
+  Hold). `Collection::setHitFades()` (set by the bake and on load, not
+  saved): the members start with the hit's fades unless the starter gave
+  its own (a chaser step, a timeline). The cue XML already kept
+  FadeIn/FadeOut. Tests: `ShowTreePlay_Test::hitsFadeInAndOut` (up over
+  1 s, down over 2 s, an override wins, undo, save/load) and the hit page
+  in `ShowTreeView_Test`. Help (show-tree.md Hits), CHANGELOG, a line in
+  Lesson 2.6's At home.
+
 ### 2026-10-29 — Lighting Studio alignment, the rest of the audit *(fix/031-alignment, 0.3.1 d2)*
 
 The rows of the RC8 alignment audit (scratchpad ALIGNMENT.md) RC8 left

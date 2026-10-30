@@ -64,10 +64,9 @@ From the forum survey's quick wins (STRATEGY.md 3.2). **Built:** Art-Net
 TimeCode in (the MTC follow path), the patch list's Gel column, help
 answers to common forum questions (Coming from QLC+ 4), File ▸ New from
 Template (the classroom stage), File ▸ Show Settings (open in Operate, an
-Operate PIN). **Still open:**
+Operate PIN), fade in / out on hits (bake, 2026-10-30). **Still open:**
 - **Tonight's running order** (reorder productions for Run): Show Tree
   code, left while another agent is in it.
-- **Fade in/out on hits**: Show Tree (hit bake), same reason.
 - **Gel colour in the Rig Overview** (the 3D view): the rig view, same
   reason. The patch list half is built.
 - **Momentary / start-only / stop-only on Control Map bindings**: built
@@ -297,9 +296,6 @@ Five fixed; the rest, by the doc's numbers:
   — done (perf/031-coverage, (pg2); DONE.md 2026-10-29): the mixed rig,
   Show Tree, power, drawing and web clients in `make perf` and the gate.
   Open, found by it:
-  - **Show Tree edit at scale:** 155 ms CPU per edit on 200 tracking cues
-    over stage groups, nearly all `planCue()` re-planning every cue on
-    every bake. Incremental bake (only cues whose resolved state changed).
   - **Rig view frame cost:** angled with beams, 62 ms CPU a frame for 240
     fixtures (plan 2.2 ms); with Live on in a running show up to 25 frames
     a second, ~1.5 cores. A frame budget (rate or supersample down while
