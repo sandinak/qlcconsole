@@ -81,9 +81,8 @@ Switch roles after each part.
 7. In the Library, click the folder **Palettes → Colour → 01-Everybody
    Scream**, so the new palette goes in the song's folder. Then click
    **+ Palette → Effect**.
-   - *You should see:* **New Effect** in the Look Editor under the page.
-8. If the effect browser isn't open, click **Change effect…**. In the
-   browser's search box type `Sparkle`, click **Sparkle · Dimmer**, then
+   - *You should see:* the effect browser open, over **New Effect** in the Look Editor.
+8. In the effect browser, in the search box type `Sparkle`, click **Sparkle · Dimmer**, then
    **Done**.
 
 ![The effect browser](../../images/lesson-2-4/effect-picker.png)
@@ -120,7 +119,7 @@ Editor); **Once** or **N times** stop it after that many runs.
 
 12. Click the **01-Everybody Scream** folder in the Library again, then
     **+ Palette → Effect**.
-13. If the browser isn't open, click **Change effect…**. Search `Rainbow`,
+13. In the browser, search `Rainbow`,
     click **Rainbow**, then **Done**.
     Name it `Truss Wave` and press **Return**.
 14. Click **1.0.6 Dance Break** and drag **Truss Wave** onto the
@@ -149,6 +148,23 @@ Editor); **Once** or **N times** stop it after that many runs.
 | Something else went wrong | Undo (⌘Z) one step at a time. |
 
 ## Done early? (Extension)
+
+**One effect over the whole stage.** An effect dropped on the cue, not
+a layer, plays on every layer in it, and each layer keeps its own level:
+the steps stay violet, the step tops dim. A chase across the stage then
+reads as a chase.
+
+1. In the song's folder, **+ Palette → Effect**; search `Color Chase`,
+   click it, **Done**; name it `Stage Chase`.
+2. Click **1.0.6 Dance Break** and drag **Stage Chase** onto the cue
+   itself (its row in the tree), not a layer.
+   - *You should see:* the colour runs box by box across the trusses, and
+     the steps and step tops move with it at their own levels.
+3. Why would you keep this for the last chorus, not the verse?
+
+The truss boxes' white pixels now light from a colour's white, so a white
+or warm look fills the whole box, not only its RGB pixels.
+
 
 **On the beat: a speed master.** An effect can run on a **speed
 master**, so one tap moves everything on it together.

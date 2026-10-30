@@ -77,8 +77,8 @@ On the projector:
 
 1. Make **1.0.6 Dance Break** (Block) with the three still layers (steps
    1–6). Point out: nothing moves.
-2. Click the song's folder in the Library, **+ Palette → Effect**. If the
-   browser isn't open, **Change effect…**. Search `Sparkle`, pick
+2. Click the song's folder in the Library, **+ Palette → Effect**. The
+   browser opens by itself. Search `Sparkle`, pick
    **Sparkle · Dimmer**, **Done**. Name it `Step Sparkle`.
    Point at the **Built-in · Mine · This show** buttons and the grey
    **based on Sparkle** line: a show's own effects stay traceable to the
@@ -97,7 +97,7 @@ On the projector:
 | You see | Likely cause | Say |
 |---|---|---|
 | The browser finds nothing | The search box still holds the last search | "Clear the search box first." |
-| The palette is named *New Effect*, or after another effect | Return not pressed in Name (the name can start as the last effect's) | "Type the name you want and press Return." |
+| The palette is still named *New Effect* | Return not pressed in Name | "Type the name you want and press Return." |
 | No *Its own colour* in the menu | They opened ⋯ on the Colour row | "Which row is the effect?" |
 | The whole stage is moving | Effects dropped on every layer | "Which lights are people, which are scenery?" |
 
@@ -118,6 +118,12 @@ the dance break feel like a peak after the bridge?
 [Exit ticket](exit-ticket.md) — answers below.
 
 ## Extension (fast groups)
+
+The effect over the whole stage (handout): a Color Chase dropped on the
+cue moves every layer, each at its own level, and goes box by box. Ask
+what it costs the faces: nothing is aimed at them, but it takes the eye
+from the story. White pixels in the truss boxes light from a colour's
+white.
 
 From the handout: the Truss Wave on a **speed master** (the Look
 Editor's **Speed: Main Speed**); the footer shows **Main Speed 120**.
@@ -161,7 +167,7 @@ Every step of the handout is run by the course test (`ui/test/courseshow`,
 `levelTwoWithTheMouse`, `lessonTwoFourExtension`) on the real app,
 offscreen, with the effect scripts the app ships with: the drops and
 their hints, **+ Palette → Effect** with the song folder selected (the
-palette is filed there), the effect browser (**Change effect…**, the
+palette is filed there), the effect browser (it opens on its own; the
 search, the click on *Sparkle · Dimmer* and *Rainbow*, **Done**), the
 Look Editor's Name, **⋯ → Its own colour / dimmer**, and what the rig
 sends: the steps still, then twinkling, with white pixels among them;
@@ -169,11 +175,8 @@ the truss boxes still, then a moving wave; the step tops still
 throughout. The extension's Speed and the footer's **Main Speed 120**,
 and the at-home Amber and *None of its own*, are checked the same way.
 
-**Not in this lesson, and why:** the course plan also named a chase and
-an effect dropped on the cue, across the whole stage. On qlcconsole
-0.3.x, an effect that spans several layers (dropped on the cue, or one
-palette on two layers) didn't move the truss boxes, and dimmer effects
-(Sparkle, Dimmer Phaser) don't move them at all; a Color Chase across
-the stage's hundreds of pixels crawls. Until that's fixed, the lesson
-keeps each effect on one layer. See the
-[course plan](https://github.com/sandinak/qlcconsole/blob/main/docs/course/COURSE_PLAN.md#found-writing-level-2-on-030).
+**Not yet in the course test:** the extension's Color Chase on the cue.
+It relies on the 0.3.1 fix (one effect over several layers moves them
+all; the chase goes box by box). Dimmer effects (Sparkle) still don't
+move the truss pixel boxes; colour effects do.
+.

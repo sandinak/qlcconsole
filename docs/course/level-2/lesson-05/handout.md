@@ -133,3 +133,8 @@ Switch roles after each part.
    in pairs.
 3. Undo (⌘Z) back to your fan. Which looks best on the last line, and
    why?
+4. Fan the upstage beams too. In **1.0.7 Fan**, drag **USTs**
+   (Groups) onto the dashed box, **White** and **Full** onto its row, and
+   **Riser Line** onto the row. The eight beams aim at the singers on the
+   line, one each, evenly spaced. Why would the USTs and the truss spots
+   make a stronger fan together than either alone?

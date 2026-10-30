@@ -125,8 +125,8 @@ on lines, and busking hits for the unexpected.*
 | 2.1 | **Tracking and Block** *(written)* | What stays on unless you change it; what should carry on and what shouldn't (one look per idea, 0.5; a sting is gone on the next beat, 0.6). A "hard start". | Read the chorus: grey ⤳ rows, the tree's **S / T / R / M** counts, **Tracked in**, *Next cue receives*. Director's notes: **Release** the verse's StepTops (dark in the chorus); a point cue 1.0.2.5 *Flash* (StepTops White, Full), **Cue-only**, so the Scream starts without it. The Solo (1.3) is the **Block** cue. Extension: the Pose as the **base cue** (StepTops Blue, 10%). |
 | 2.2 | **Palettes: change once, change everywhere** *(written)* | A designer's colours for a song (0.4, 0.5). The director says "less pink" an hour before the show. | **Used by** on Magenta; **Duplicate** it, name the copy for its job (*Chorus Colour*) in the Look Editor, **Move to folder → New folder…** *01-Everybody Scream*; drop it on the chorus's Steps and on the grey TrussC-RGB row; the note: **✎** → Basic colors violet, *Changed: 1.0.2, 1.0.2.5, 1.0.3*. Extension: **Group by type** off. |
 | 2.3 | **Parts of a group** *(written)* | Highlight one row of singers; symmetry and breaking it (0.3, 0.4, 0.5): the bridge as a call and response. | 1.0.5 *Bridge* (Block): **Make set…** *Truss Sides* (Trusses SR + SL), one layer Blue, Full; **Add child layer → Trusses SR** in Amber (a set's layer can't be split: Split is greyed); Steps Blue, 25% with a ⇧-dropped child **US** in White, Full. Extension: CS + DS dropped together, **Split layer**, **More ▾ → Merge**. |
-| 2.4 | **Effects: sparkle and wave** *(written; planned as "sparkle, chase, matrix")* | Energy and rhythm (0.2, 0.4, 0.6). Eye candy vs. light on people. | 1.0.6 *Dance Break* (Block): Steps, StepTops, TrussW-RGB still; **+ Palette → Effect** in the song folder, the effect browser (*Sparkle · Dimmer*) → *Step Sparkle* on the Steps, **⋯ → Its own colour → White**; *Rainbow* → *Truss Wave* on TrussW-RGB (a wave of its blue). Extension: **Speed: Main Speed** (footer). The chase and an effect across the whole stage wait on the app (§8, 17). |
-| 2.5 | **Moving lights and lines** *(written)* | Beams as scenery; fans and crosses on the button of a song (0.2, 0.3, 0.6). | 1.0.7 *Fan* (Block): Truss-Spots White, Full, **Riser Line** dropped on the row (the order strip, the plan view, Spread +5); 1.0.8 *Button* (tracks): the grey row's **Spread ⋯ → −5**, Red (the colour wheel and ring take their nearest slots), fade in 1 s. Extension: Spread 0, Grouping Pairs. The USTs wait on the app (§8, 20). |
+| 2.4 | **Effects: sparkle and wave** *(written; planned as "sparkle, chase, matrix")* | Energy and rhythm (0.2, 0.4, 0.6). Eye candy vs. light on people. | 1.0.6 *Dance Break* (Block): Steps, StepTops, TrussW-RGB still; **+ Palette → Effect** in the song folder, the effect browser (*Sparkle · Dimmer*) → *Step Sparkle* on the Steps, **⋯ → Its own colour → White**; *Rainbow* → *Truss Wave* on TrussW-RGB (a wave of its blue). Extension: **Speed: Main Speed** (footer); a Color Chase on the cue, across the whole stage (§8, 17). |
+| 2.5 | **Moving lights and lines** *(written)* | Beams as scenery; fans and crosses on the button of a song (0.2, 0.3, 0.6). | 1.0.7 *Fan* (Block): Truss-Spots White, Full, **Riser Line** dropped on the row (the order strip, the plan view, Spread +5); 1.0.8 *Button* (tracks): the grey row's **Spread ⋯ → −5**, Red (the colour wheel and ring take their nearest slots), fade in 1 s. Extension: Spread 0, Grouping Pairs, the USTs on the line too (§8, 20). |
 | 2.6 | **Busking with Hits** *(written)* | When the band vamps, or the soloist goes long (busking, Lesson 0.7; a sting, 0.6). | Right-click Spring Show → **+ Hit**: *Red Stab* (TrussW-RGB Red, Full), *Glow* (Lanterns Amber, Full), *Faces* (AT-W-ALL White, Full, Aim Center); right-click Hits → **Make VC page**; Operate, GO to the Verse, **Red Stab** clicked on the Virtual Console over it and let go. At home: a fourth hit, Make VC page again. |
 | 2.7 | **Sub-cues: stomps inside a cue** *(written)* | Stomps, stings and buttons in a chorus (Lesson 0.6); cue-only (2.1). | 1.0.2 Chorus: **+ Sub-cue** (the page's Sub-cues row), **More ▾ → + Sub-cue**: 1.0.2.1 *Chorus* (plays with GO), 1.0.2.2 *Stomp* (Lanterns White, Full; Sub GO), 1.0.2.3 *Stomp Out* (Out; **Auto-follow after 0.5 s**); Run tab: GO, **Sub GO**, GO to the Flash (no lanterns). **Level check** (its own page, with the rubric, `/class/2-check/`): one full song from a cue sheet, with Block and Release or Cue-only, a palette of its own, an effect and a hit. |
 
@@ -441,45 +441,42 @@ Also: the classroom show was rebuilt from DanceHysteria-0.6 as it is now
 
 ### Found writing Level 2 (on 0.3.0)
 
-Not changed in the app (this branch doesn't change app code); each is
-worked around in the course and checked by the course test.
+Found in the app and since fixed in 0.3.1 (cbug), except 16 (not a bug);
+the course now teaches the fixed behaviour (Lessons 2.4, 2.5).
 
 15. **The truss boxes' white pixels never light from the Show Tree.**
     TrussW-W and TrussC-W (the XL-450's 30 white heads) send 0 with any
     look: White and Full, Full alone, even *Trusses colour White* (which
     lights only the RGB pixels). Lesson 2.1's flash uses the StepTops.
-    *Fixed in the app (cbug):* a colour's white lights them (Full alone
-    still doesn't: the box has no dimmer, the colour is the light).
+    *Resolved (cbug):* a colour's white lights them (Full alone still
+    doesn't: the box has no dimmer, the colour is the light).
 16. **A group set's layer can't be split** (Split is greyed: the set is
     what the layer is). Not a bug; Lesson 2.3 lights one side with a
     child layer and shows Split and Merge on a layer of two groups.
 17. **Effects on the truss pixel boxes.** Dimmer effects (Sparkle, Dimmer
-    Phaser) don't move TrussW-RGB at all; a colour effect (Rainbow) does,
-    on its own layer. One effect spanning several layers (dropped on the
-    cue, or one palette on two layers) didn't move the boxes, and with
-    the Steps in it the step tops didn't move either. A Color Chase across
-    the stage crawls: its speed is in fixtures per second, spread over
-    every pixel head. Lesson 2.4 keeps each effect on one layer and
-    leaves the chase and the cue-wide effect until this is fixed.
-18. **A new effect palette's first name, and the browser.** Made while the
-    *Fixed in the app (cbug):* one effect over several layers or the cue
-    moves every layer; the chase goes box by box.
-18. **A new effect palette's first name, and the picker.** Made while the
-    Look Editor shows another effect, a new effect palette can start
-    with that effect's name (*Color Chase*, *Matrix Sparkle*) instead of
-    *New Effect*; and the effect browser opens by itself only when the
-    Look Editor was already open. The handout says to name it and to
-    click **Change effect…** if the browser isn't open.
-    click **Change effect…** if the picker isn't open.
-    *Fixed in the app (cbug):* it starts as *New Effect*, the picker open.
+    Phaser) don't move TrussW-RGB at all; a colour effect (Rainbow) does.
+    One effect spanning several layers (dropped on the cue, or one
+    palette on two layers) didn't move the boxes or the step tops, and a
+    Color Chase across the stage crawled (fixtures per second, spread
+    over every pixel head).
+    *Resolved (cbug):* one effect over several layers or the cue moves
+    every layer, each at its own level; the chase goes box by box.
+    Lesson 2.4's extension teaches it.
+18. **A new effect palette's first name, and the picker.** A new effect
+    palette could start with the previous effect's name instead of *New
+    Effect*, and the picker opened only if the Look Editor was already
+    open (the handout said to click **Change effect…**).
+    *Resolved (cbug):* it starts as *New Effect*, the picker open; the
+    step is gone from the handouts.
 19. **The course test's rig pictures** picked the Rig Overview's 45° view
     by its place in the list; since the Back view was added that was
     Side. They now pick it by name (Level 1's pictures were taken
     before, and are right).
 20. **The upstage beams (USTs) on a line.** Aimed at the Riser Line, the
-    eight two-arm beams send tilt 0 and their beams go out over the
-    house. Lesson 2.5 fans the four truss spots only.
-    *Fixed in the app (cbug):* they light the people on the line.
+    eight two-arm beams sent tilt 0 and their beams went out over the
+    house.
+    *Resolved (cbug):* they light the people on the line. Lesson 2.5's
+    extension fans them with the truss spots.
 
 ## 9. Decisions (Branson, 2026-10-18) and what's still open
 

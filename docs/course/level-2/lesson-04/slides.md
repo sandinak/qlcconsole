@@ -52,10 +52,15 @@ teacher says. It can be turned into a deck as it is.*
 - Rainbow with one colour: a wave of that colour across the boxes.
 - Picture: `rig-dance-break.png`.
 
-## 8. Your turn
+## 8. One effect, whole stage
+
+- Drop on the cue: every layer moves, each at its own level.
+- Color Chase goes box by box.
+
+## 9. Your turn
 
 - Handout Part 2, steps 1–16.
 
-## 9. Exit ticket
+## 10. Exit ticket
 
 - Four questions on paper.
