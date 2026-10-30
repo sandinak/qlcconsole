@@ -49,8 +49,10 @@ ratios between items hold, and ratios are what the ROI column uses.
   timecode (LTC and cues at a time), override hits, group masters, effect
   fade-out, and the printed cue and tracking sheet.
 - **0.5: The show explains itself.** Show Review v1, "Why is this on?" v1
-  to v3 with its student mode, the laser and audience safety checks, and
-  realistic move speed in the Rig Overview.
+  to v3 with its student mode, the laser and audience safety checks,
+  realistic move speed in the Rig Overview, and **AI Assist** (Design mode
+  only, off by default, a local model proposing command-line text the
+  operator reviews; docs/design/AI_ASSIST.md).
 - **The main risk is the one the usability review already found:**
   creeping featurism. Five design studies arrived in one day. The
   guardrails in section 5 are meant to stop the next 102-item menu.
@@ -362,8 +364,10 @@ order the note says why.
 | Restore creating and deleting input profiles | 4 | 5 | stock patch editor | 1 | L | L | **20** | BUILD (0.3.1) |
 | A DMX Monitor reachable in Classic | 3 | 5 | Studio's DMX view | 1 | L | L | **15** | BUILD (0.3.1) |
 | "Start new shows in Classic" preference | 3 | 5 | views | 0.5 | L | L | **30** | BUILD (0.3.1) |
-| Notice when a .qxw save holds content stock QLC+ will drop | 4 | 5 | Show Review FILE-05 idea | 1.5 | L | L | **13** | BUILD (0.3.1) |
+| Notice when a .qxw save holds content stock QLC+ will drop | 4 | 5 | Show Review FILE-05 idea | 1.5 | L | L | **13** | DONE (0.3.1: counts by kind, Teaching/Operate/web settings and Effect Control widgets named, "Don't ask again for this show") |
 | Import QLC+ settings and recent files once | 2 | 4 | mergeLegacyUserData | 1 | L | L | 8 | BUILD (0.3.1) |
+| Notice when a .qxw save holds content stock QLC+ will drop | 4 | 5 | Show Review FILE-05 idea | 1.5 | L | L | **13** | BUILD (0.3.1) |
+| Import QLC+ settings and recent files once | 2 | 4 | mergeLegacyUserData | 1 | L | L | 8 | DONE (0.3.1, LegacySettings: asked once, Settings ▸ General ▸ QLC+ 4 later) |
 | Run `lupdate` every release | 2 | 3 | Qt .ts | 0.5 | L | L | 12 | BUILD (0.3.1), then every release |
 | Show Manager parity review | 3 | 5 | Shows tab | 2 | L | L | 7.5 | BUILD (0.3.1) |
 | Send the fork's definitions upstream | 2 | 4 | fork/fixture-* branches | 1 | L | L | 8 | BUILD (0.3.1), user's call |
@@ -417,6 +421,7 @@ Notes:
 
 | Item | Value | Fit | Reuses | Effort | Risk | Maint. | ROI | Call |
 |---|---|---|---|---|---|---|---|---|
+| AI Assist P0–P3 (docs/design/AI_ASSIST.md): one operation registry under the command line, a Design-only assistant on a local model (Ollama), configuration import, an MCP server | 4 | 4 | Show Tree command line, undo, Design/Operate | 15 | M | M | 1.1 | BUILD (0.5), user's call 2026-10-30 (P2b configuration import also stands alone) |
 | One GO path (`App::runCommand`) for keys, Run tab, footer, pad, web | 4 | 5 | ShowControl, RC8 preview hold | 0.5 | L | L | **40** | BUILD (0.4), first; prerequisite |
 | Tracking sheet + printable cue sheet (PDF/XLSX) | 5 | 5 | tracking resolve, patch-list exports | 4 | L | L | **6.3** | BUILD (0.4) |
 | Course Level 2 lessons (7), one per release cycle | 5 | 5 | course template, courseshow_test | 2 a lesson | L | M | **12.5** a lesson | BUILD (0.3.1 onward) |

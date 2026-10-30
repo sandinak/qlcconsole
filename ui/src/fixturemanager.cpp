@@ -81,6 +81,7 @@
 #include "patchundo.h"
 #include "fixture.h"
 #include "apputil.h"
+#include "showsettingsdialog.h"
 #include "doc.h"
 #include "programmercontroller.h"
 #include "monitor/monitor.h"
@@ -1780,6 +1781,8 @@ void FixtureManager::addToInventory()
 
 void FixtureManager::returnToInventory(const QList<quint32> &fixtureIds)
 {
+    if (!ShowSettingsDialog::confirmPatchChange(m_doc, this, tr("Release the address of %n fixture(s)", "", fixtureIds.size())))
+        return;
     if (QMessageBox::question(this, tr("Return to inventory"),
             tr("Release the universe and address of %n fixture(s)?\n\n"
                "They stay in the show -- placement, groups and looks are kept -- but stop "
@@ -1840,6 +1843,8 @@ void FixtureManager::addFixtureImpl(bool inventory, quint32 likeFixture, const Q
         }
     }
 
+    if (!inventory && !ShowSettingsDialog::confirmPatchChange(m_doc, this, tr("Add fixtures to the patch")))
+        return;
     const QList<quint32> created =
         FixtureCreator::addFromDialog(this, m_doc, inventory, m_ctxUniverse, addToGroup,
                                       m_doc->fixture(likeFixture), manufacturer);
@@ -1869,6 +1874,8 @@ void FixtureManager::addChannelsGroup()
 
 void FixtureManager::slotAddRGBPanel()
 {
+    if (!ShowSettingsDialog::confirmPatchChange(m_doc, this, tr("Add an RGB panel to the patch")))
+        return;
     AddRGBPanel rgb(this, m_doc);
     if (rgb.exec() == QDialog::Accepted)
     {
@@ -2040,6 +2047,8 @@ void FixtureManager::slotAddRGBPanel()
 
 void FixtureManager::removeFixture()
 {
+    if (!ShowSettingsDialog::confirmPatchChange(m_doc, this, tr("Remove the selected fixtures from the patch")))
+        return;
     // Ask before deletion
     if (QMessageBox::question(this, tr("Delete Fixtures"),
                               tr("Do you want to delete the selected items?"),
@@ -2570,6 +2579,8 @@ void FixtureManager::slotFadeConfig()
 
 void FixtureManager::slotRemap()
 {
+    if (!ShowSettingsDialog::confirmPatchChange(m_doc, this, tr("Remap fixtures")))
+        return;
     FixtureRemap fxr(m_doc);
     if (fxr.exec() == QDialog::Rejected)
         return; // User pressed cancel
@@ -2731,6 +2742,8 @@ QString FixtureManager::createDialog(bool import)
 
 void FixtureManager::slotImport()
 {
+    if (!ShowSettingsDialog::confirmPatchChange(m_doc, this, tr("Import fixtures into the patch")))
+        return;
     QString fileName = createDialog(true);
     if (fileName.isEmpty())
         return;

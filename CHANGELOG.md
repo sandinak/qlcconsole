@@ -40,6 +40,23 @@ back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
   override; the tree, the button face and the Run tab mark **↳
   overrides**; Show checks list overrides, shared places and dead hits.
 
+### Moving layers in the Show Tree
+
+- **Cut, copy, paste and drag a layer.** ⌘X cuts the selected layers (Cut is
+  in the right-click menu too); ⌘V on a cue moves them to its end, on a layer
+  row puts them after it; several selected layers move together, and within
+  one cue it reorders. The Cut and the paste are one undo step. Copy and Paste
+  work as before, and also paste after a layer. Dragging a layer row now
+  moves it (a layer row used to carry nothing, so a drag only selected it);
+  ⌥-drag copies; a line between rows (or a frame round a cue) shows where it
+  lands, and the hint says what will happen. A hit takes no Release, a
+  reusable layer stays the same reusable. In the docked Workbench a drag of
+  a layer row reorders the cue's own layers.
+- **Runs on a Show Tree effect row is an undo step** (also Build ▸ Effects'
+  Runs menu): Runs, At the end and Length.
+- The command line's **release** takes a ▣ function layer (by the function's
+  name) as well as groups.
+
 ### Tonight's running order
 
 - **Running order…** on the production's page: change the song order for
@@ -112,6 +129,13 @@ skipped). Upstream fixes taken:
 
 ### Added
 
+- **The .qxw notice says how much, and can be turned off.** Saving a .qxw
+  that holds what QLC+ 4 leaves out now names each kind with a count
+  ("the Show Tree (3 cue lists, 24 cues)", "the focus calls (5 calls)"),
+  covers the Teaching, Operate and web access settings and Effect Control
+  widgets too, and has **Don't ask again for this show** beside **Save as
+  .qlcc…**. See [Saving for QLC+ 4](docs/features/getting-started.md#saving-for-qlc-4).
+
 - **Teaching mode** (File ▸ Show Settings…, [guide](docs/features/teaching.md)).
   A flag saved with the show for a classroom show. While it is on: a
   **TEACHING** chip in the footer (every view) and "(Teaching)" in the
@@ -127,7 +151,11 @@ skipped). Upstream fixes taken:
   Teaching alone. **Make Student Handout…** saves a `.qlcc` copy with Teaching
   on, the PIN, and the practice venues and their answer key left out; the open
   show is untouched. Optional lesson and handout link add a menu entry on the
-  chip.
+  chip. A Teaching show also **holds USB and other hardware output** (not
+  only network), **asks before its patch changes** (add, remove, re-address
+  fixtures), and **Reset to Handout…** (Show Settings ▸ Teaching, behind the
+  PIN) puts a student copy back to the way the handout was made: the handout
+  carries its own state inside the file.
 - **Course: songs and effects match the app.** Lesson 1.1's handout steps match the student page (Save As first, 15 steps); one cue list per show, a song a section (+ Section), is taught in Lessons 0.7, 1.1 and the Level 1/2 checks; Lesson 2.4 uses the effect browser's words (Built-in · Mine · This show, "based on", Runs: Loop).
 - **One cue list per show, with song sections** (Q190). A production's
   **Numbering** says how its cues are numbered — Show.Part.Iteration
@@ -181,7 +209,8 @@ skipped). Upstream fixes taken:
   DMX USB, uDMX) and the interface preferences that mean the same here
   (Virtual Console widget sizes, Simple Desk pages, slider style...).
   Never QLC+ 4's window layouts, never a setting qlcconsole already has,
-  and QLC+ 4 itself is not changed. **Settings ▸ General ▸ QLC+ 4 ▸ Bring
+  and QLC+ 4 itself is not changed; the status bar says what came over.
+  **Settings ▸ General ▸ QLC+ 4 ▸ Bring
   over…** does it later. Fixtures, profiles and scripts still come from
   QLC+'s user folder by themselves. Help: Coming from QLC+ 4 ▸ Your QLC+
   4 settings.
@@ -284,6 +313,13 @@ skipped). Upstream fixes taken:
   its lock holds them), a fill's lines are one set, and they ride their
   riser when it moves or turns. The rig view draws a small figure with
   fewer facets, so a crowd stays quick.
+- **People on the stage, tidied**: a performer line in a set has **Costume
+  and height for the whole set** in its dialog, so a choir's costume or
+  height changes in one place; a fill's rows stay out of the aim-target
+  lists (Look Editor, Aim palettes, focus calls, Focus mode) unless an aim
+  palette uses them; a plain line made a performer line keeps its own
+  heights. The focus report's Owner column (Tour, House or Rental) was
+  already in the PDF, web page and Lightwright CSV.
 - **Web access saved with the show**: **Connections ▸ Devices ▸ Show
   control & sync ▸ Web access** turns on "Start web access with this show,
   on port" (9999 by default), with **Reachable from other devices on the

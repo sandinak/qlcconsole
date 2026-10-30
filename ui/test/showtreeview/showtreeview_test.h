@@ -198,6 +198,17 @@ private slots:
      *  New Effect with the picker open, whatever the editor showed. */
     void aSecondNewEffectPaletteStartsAfresh();
 
+    /** 0.3.1 (lyr): cut / copy / paste and drag move layers between cues,
+     *  hits and within a cue; Runs on an effect and `release` on a function
+     *  layer. */
+    void cutAndPasteMovesLayersInOneUndoStep();
+    void pasteOnALayerGoesAfterIt();
+    void aDragMovesLayersAndAltCopiesThem();
+    void aLayerRowIsDraggableAndAClickOnlySelects();
+    void layersIntoAHitLoseTheirRelease();
+    void effectRunsIsAnUndoStep();
+    void releaseTakesAFunctionLayer();
+
 private:
     quint32 dimmer(int level, const QString &name);
     quint32 colour(const QColor &c, const QString &name);

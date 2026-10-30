@@ -30,6 +30,7 @@
 #include "show.h"
 #include "function.h"
 #include "scene.h"
+#include "effectscriptrunner.h"
 #include "doc.h"
 
 using namespace ShowTree;
@@ -548,6 +549,8 @@ PaletteOps::State PaletteOps::capture(quint32 id) const
     s.colourMacro = p->colourMacro();
     s.goboName = p->goboName();
     s.goboValues = p->goboValues();
+    s.paramValues = p->effectParamValues();
+    s.paramStrings = p->effectStringParams();
     QBuffer buffer(&s.xml);
     buffer.open(QIODevice::WriteOnly);
     QXmlStreamWriter w(&buffer);
@@ -615,6 +618,14 @@ void PaletteOps::apply(const QList<State> &states, const QStringList &folders)
             have->setName(s.name);
         if (have->path() != s.path)
             have->setPath(s.path);
+        if (s.params)
+        {
+            have->setEffectParamValues(s.paramValues);
+            for (auto it = s.paramStrings.constBegin(); it != s.paramStrings.constEnd(); ++it)
+                have->setEffectStringParam(it.key(), it.value());
+            if (m_doc->effectScriptRunner() != nullptr)
+                m_doc->effectScriptRunner()->updateEffectParams(s.id);
+        }
         if (s.value)
         {
             have->setValues(s.values);
@@ -782,6 +793,44 @@ bool PaletteOps::valueStep(const QString &label, quint32 paletteId, const std::f
     st.foldersBefore = st.foldersAfter = m_emptyFolders;
     st.mergeKey = mergeKey;
     st.mergeAt = at;
+    st.stamp = nextUndoStamp();
+    m_undo << st;
+    while (m_undo.count() > kUndoLimit)
+        m_undo.removeFirst();
+    m_redo.clear();
+    if (ShowTreeController *tree = m_doc->showTree())
+        tree->clearRedo();
+    m_doc->setModified();
+    emit changed();
+    return true;
+}
+
+bool PaletteOps::effectParamStep(const QString &label, const QList<quint32> &paletteIds,
+                                 const std::function<void()> &change)
+{
+    Step st;
+    st.label = label;
+    for (quint32 id : paletteIds)
+        if (m_doc->palette(id) != nullptr)
+        {
+            State before = capture(id);
+            before.params = true;
+            st.before << before;
+        }
+    if (st.before.isEmpty())
+        return false;
+    change();
+    bool differs = false;
+    for (const State &b : st.before)
+    {
+        State after = capture(b.id);
+        after.params = true;
+        differs = differs || after.paramValues != b.paramValues || after.paramStrings != b.paramStrings;
+        st.after << after;
+    }
+    if (!differs)
+        return false;
+    st.foldersBefore = st.foldersAfter = m_emptyFolders;
     st.stamp = nextUndoStamp();
     m_undo << st;
     while (m_undo.count() > kUndoLimit)

@@ -197,6 +197,13 @@ public:
         setSelectionMode(QAbstractItemView::ExtendedSelection);
     }
 
+    QMimeData *dragMime(const QList<QTreeWidgetItem *> &items) const { return mimeData(items); }
+
+    /** The drop indicator of a layer drag: a line between rows (before /
+     *  after a layer) or a frame round the cue it would join. Empty: none. */
+    QRect dropMark() const { return m_mark; }
+    bool dropMarkIsLine() const { return m_markLine; }
+
     void setHint(QLabel *hint) { m_hint = hint; }
 
 protected:
@@ -245,7 +252,25 @@ protected:
             ++n;
         }
         if (n == 0)
-            return nullptr;
+        {
+            // Layers (the cue's own): carried as (cue, layer) pairs, so a
+            // press and drag moves them -- before 0.3.1 this was null and
+            // a drag from a layer row only selected it.
+            QByteArray layers;
+            QDataStream ls(&layers, QIODevice::WriteOnly);
+            for (QTreeWidgetItem *item : items)
+            {
+                if (item->data(0, ShowTreeView::KindRole).toInt() != ShowTreeView::LayerNode)
+                    continue;
+                ls << item->data(0, ShowTreeView::CueRole).toUInt() << item->data(0, ShowTreeView::IdRole).toUInt();
+                ++n;
+            }
+            if (n == 0)
+                return nullptr;
+            QMimeData *mime = new QMimeData();
+            mime->setData(QLatin1String(ShowTreeView::layerMimeType()), layers);
+            return mime;
+        }
         QMimeData *mime = new QMimeData();
         mime->setData(QLatin1String(ShowTreeView::cueMimeType()), data);
         return mime;
@@ -265,6 +290,29 @@ protected:
     {
         quint32 cue, layer;
         target(e->position().toPoint(), &cue, &layer);
+        if (e->mimeData()->hasFormat(QLatin1String(ShowTreeView::layerMimeType())))
+        {
+            const bool copy = e->modifiers() & Qt::AltModifier;
+            quint32 after = ShowTree::invalidId();
+            bool refused = false;
+            QString hint;
+            const QList<ShowTreeView::LayerRef> refs = ShowTreeView::layersFromMime(e->mimeData());
+            if (layerPlaceAt(e->position().toPoint(), refs, &cue, &after))
+                hint = m_view->layerDropHint(refs, cue, after, copy, &refused);
+            if (!hint.isEmpty() && !refused)
+            {
+                e->setDropAction(copy ? Qt::CopyAction : Qt::MoveAction);
+                e->accept();
+            }
+            else
+            {
+                e->ignore();
+                clearMark();
+            }
+            if (m_hint != nullptr)
+                m_hint->setText(hint);
+            return;
+        }
         if (e->mimeData()->hasFormat(QLatin1String(ShowTreeView::cueMimeType())))
         {
             const QList<quint32> cues = idsFromMime(e->mimeData(), ShowTreeView::cueMimeType());
@@ -347,7 +395,30 @@ protected:
     {
         if (m_hint != nullptr)
             m_hint->setText(QString());
+        clearMark();
         QTreeWidget::dragLeaveEvent(e);
+    }
+
+    void paintEvent(QPaintEvent *e) override
+    {
+        QTreeWidget::paintEvent(e);
+        if (m_mark.isNull())
+            return;
+        QPainter p(viewport());
+        const QColor hl = palette().color(QPalette::Highlight);
+        if (m_markLine)
+        {
+            p.setPen(QPen(hl, 2));
+            p.drawLine(m_mark.left(), m_mark.top(), m_mark.right(), m_mark.top());
+            p.setBrush(hl);
+            p.drawEllipse(QPoint(m_mark.left() + 3, m_mark.top()), 3, 3);
+        }
+        else
+        {
+            p.setPen(QPen(hl, 2));
+            p.setBrush(Qt::NoBrush);
+            p.drawRect(m_mark.adjusted(1, 1, -1, -1));
+        }
     }
 
     void dropEvent(QDropEvent *e) override
@@ -357,6 +428,23 @@ protected:
         target(e->position().toPoint(), &cue, &layer, &carried);
         if (m_hint != nullptr)
             m_hint->setText(QString());
+        clearMark();
+        if (e->mimeData()->hasFormat(QLatin1String(ShowTreeView::layerMimeType())))
+        {
+            // Handled here: never let the base class move the rows itself.
+            const bool copy = e->modifiers() & Qt::AltModifier;
+            quint32 after = ShowTree::invalidId();
+            const QList<ShowTreeView::LayerRef> refs = ShowTreeView::layersFromMime(e->mimeData());
+            if (layerPlaceAt(e->position().toPoint(), refs, &cue, &after, false)
+                && m_view->dropLayers(refs, cue, after, copy))
+            {
+                e->setDropAction(Qt::CopyAction);
+                e->accept();
+            }
+            else
+                e->ignore();
+            return;
+        }
         if (e->mimeData()->hasFormat(QLatin1String(ShowTreeView::cueMimeType())))
         {
             // Hits to a place (Q154; ⌥ copies).
@@ -429,6 +517,71 @@ protected:
     }
 
 private:
+    void clearMark()
+    {
+        if (m_mark.isNull())
+            return;
+        m_mark = QRect();
+        viewport()->update();
+    }
+
+    /** Where layers dropped at @a pos go: the cue and the layer they follow
+     *  (a row's upper half: before it; a cue row: the end of that cue).
+     *  @a mark: the indicator is set too. */
+    bool layerPlaceAt(const QPoint &pos, const QList<ShowTreeView::LayerRef> &refs, quint32 *cue, quint32 *after,
+                      bool mark = true)
+    {
+        QRect rect;
+        bool line = false;
+        bool ok = false;
+        *cue = ShowTree::invalidId();
+        *after = ShowTree::invalidId();
+        QTreeWidgetItem *item = itemAt(pos);
+        if (item != nullptr && !refs.isEmpty())
+        {
+            const int kind = item->data(0, ShowTreeView::KindRole).toInt();
+            const QRect r = visualItemRect(item);
+            const QRect row(0, r.top(), viewport()->width(), r.height());
+            if (kind == ShowTreeView::CueNode)
+            {
+                *cue = item->data(0, ShowTreeView::IdRole).toUInt();
+                ok = true;
+                rect = row;
+            }
+            else if (kind == ShowTreeView::TrackedLayerNode)
+            {
+                *cue = item->data(0, ShowTreeView::CueRole).toUInt();
+                ok = true;
+                rect = row;
+            }
+            else if (kind == ShowTreeView::LayerNode)
+            {
+                const bool lower = pos.y() >= r.center().y();
+                *cue = item->data(0, ShowTreeView::CueRole).toUInt();
+                ok = m_view->layerDropPlace(refs, *cue, item->data(0, ShowTreeView::IdRole).toUInt(), lower, after);
+                // The line sits where the layers will land: the row's top
+                // or bottom (a parent's block ends under its children).
+                rect = QRect(0, lower ? r.bottom() + 1 : r.top(), viewport()->width(), 1);
+                line = true;
+            }
+        }
+        if (mark)
+        {
+            if (!ok)
+                rect = QRect();
+            if (rect != m_mark || line != m_markLine)
+            {
+                m_mark = rect;
+                m_markLine = line;
+                viewport()->update();
+            }
+        }
+        return ok;
+    }
+
+    QRect m_mark;
+    bool m_markLine = false;
+
     /** A cue dropped at @a pos goes after the row there (its lower half). */
     bool dropsAfter(const QPoint &pos) const
     {
@@ -1251,6 +1404,9 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         QShortcut *copySc = new QShortcut(QKeySequence::Copy, m_tree);
         copySc->setContext(Qt::WidgetShortcut);
         connect(copySc, &QShortcut::activated, this, [this]() { copySelection(); });
+        QShortcut *cutSc = new QShortcut(QKeySequence::Cut, m_tree);
+        cutSc->setContext(Qt::WidgetShortcut);
+        connect(cutSc, &QShortcut::activated, this, [this]() { cutSelection(); });
         QShortcut *pasteSc = new QShortcut(QKeySequence::Paste, m_tree);
         pasteSc->setContext(Qt::WidgetShortcut);
         connect(pasteSc, &QShortcut::activated, this, [this]() { pasteClipboard(); });
@@ -7570,9 +7726,20 @@ void ShowTreeView::slotTreeContextMenu(const QPoint &pos)
             menu.addSeparator();
             QAction *copy = menu.addAction(tr("Copy"), this, [this]() { copySelection(); });
             copy->setShortcut(QKeySequence::Copy);
-            QAction *paste = menu.addAction(m_commander->clipboard.cues.isEmpty() ? tr("Paste into this cue")
-                                                                                 : tr("Paste after this cue"),
-                                            this, [this]() { pasteClipboard(); });
+            if (kind == LayerNode)
+            {
+                QAction *cut = menu.addAction(tr("Cut"), this, [this]() { cutSelection(); });
+                cut->setShortcut(QKeySequence::Cut);
+                cut->setObjectName("stCutLayer");
+            }
+            const bool onLayer = kind == LayerNode && m_commander->clipboard.cues.isEmpty();
+            const QString pasteText = !m_commander->clipboard.cues.isEmpty() ? tr("Paste after this cue")
+                                      : onLayer ? (m_commander->clipboard.cut ? tr("Move here, after this layer")
+                                                                              : tr("Paste after this layer"))
+                                                : (m_commander->clipboard.cut ? tr("Move into this cue")
+                                                                              : tr("Paste into this cue"));
+            QAction *paste = menu.addAction(pasteText, this, [this]() { pasteClipboard(); });
+            paste->setObjectName("stPasteHere");
             paste->setShortcut(QKeySequence::Paste);
             paste->setEnabled(!m_commander->clipboard.isEmpty());
             QAction *dup = menu.addAction(tr("Duplicate"), this, [this]() { duplicateSelection(); });
@@ -10049,13 +10216,35 @@ bool ShowTreeView::copySelection()
         clip.layers = layers;
     m_commander->clipboard = clip;
     m_hint->setText(!cues.isEmpty() ? tr("Copied %1 cue(s): ⌘V pastes after the selected cue").arg(cues.count())
-                                    : tr("Copied %1 layer(s): ⌘V pastes into the selected cue").arg(layers.count()));
+                                    : tr("Copied %1 layer(s): ⌘V pastes into the selected cue, or after the selected layer")
+                                          .arg(layers.count()));
+    return true;
+}
+
+bool ShowTreeView::cutSelection()
+{
+    const QList<LayerRef> layers = selectedLayerRefs();
+    bool cues = false;
+    for (QTreeWidgetItemIterator it(m_tree); *it; ++it)
+        if ((*it)->isSelected() && (*it)->data(0, KindRole).toInt() == CueNode)
+            cues = true;
+    if (layers.isEmpty() || cues)
+    {
+        m_hint->setText(tr("Cut takes layers; drag cues to move them, or Copy and Paste them"));
+        return false;
+    }
+    ShowTreeCommand::Clipboard clip;
+    clip.layers = layers;
+    clip.cut = true;
+    m_commander->clipboard = clip;
+    m_hint->setText(tr("Cut %1 layer(s): ⌘V moves them into the selected cue, or after the selected layer")
+                        .arg(layers.count()));
     return true;
 }
 
 bool ShowTreeView::pasteClipboard()
 {
-    const ShowTreeCommand::Clipboard &clip = m_commander->clipboard;
+    const ShowTreeCommand::Clipboard clip = m_commander->clipboard;
     const quint32 cueId = currentCueId();
     if (clip.isEmpty() || cueId == invalidId())
         return false;
@@ -10067,10 +10256,196 @@ bool ShowTreeView::pasteClipboard()
         selectNode(made.last());
         return true;
     }
-    const QList<quint32> made = m_st->pasteLayers(clip.layers, cueId);
+    // On a layer's row: after it (and its children); on a cue: its end.
+    quint32 after = invalidId();
+    if (currentKind() == LayerNode)
+    {
+        quint32 at = currentId();
+        if (const Cue *c = m_st->cue(cueId))
+            if (const Layer *l = c->layer(at))
+                if (l->parent != invalidId())
+                    at = l->parent;
+        after = at;
+    }
+    if (clip.cut)
+    {
+        // Moved: the clipboard is spent, and the move is one undo step.
+        QString why;
+        const QList<quint32> made = m_st->moveLayers(clip.layers, cueId, after, &why);
+        if (made.isEmpty())
+        {
+            if (!why.isEmpty())
+                m_hint->setText(why);
+            return false;
+        }
+        m_commander->clipboard = ShowTreeCommand::Clipboard();
+        selectLayers(cueId, made);
+        m_hint->setText(layerNote(made.count(), cueId, false));
+        return true;
+    }
+    const QList<quint32> made = m_st->pasteLayers(clip.layers, cueId, after);
     if (made.isEmpty())
         return false;
-    selectNode(made.last(), cueId);
+    selectLayers(cueId, made);
+    m_hint->setText(layerNote(made.count(), cueId, true));
+    return true;
+}
+
+void ShowTreeView::selectLayers(quint32 cueId, const QList<quint32> &layers)
+{
+    if (layers.isEmpty())
+        return;
+    selectNode(layers.last(), cueId);
+    for (quint32 id : layers)
+        if (QTreeWidgetItem *item = findItem(id, cueId))
+            item->setSelected(true);
+}
+
+QString ShowTreeView::layerNote(int count, quint32 cueId, bool copied) const
+{
+    const CueList *list = m_st->listOfCue(cueId);
+    const QString where = list == nullptr ? QString() : m_st->cueLabel(*list, list->indexOf(cueId));
+    return copied ? tr("Pasted %n layer(s) into %1", nullptr, count).arg(where)
+                  : tr("Moved %n layer(s) into %1", nullptr, count).arg(where);
+}
+
+QMimeData *ShowTreeView::selectionDragMime() const
+{
+    return static_cast<ShowTreeWidget *>(m_tree)->dragMime(m_tree->selectedItems());
+}
+
+QRect ShowTreeView::dropIndicator() const
+{
+    return static_cast<ShowTreeWidget *>(m_tree)->dropMark();
+}
+
+const char *ShowTreeView::layerMimeType()
+{
+    return "application/x-qlcplus-showtree-layers";
+}
+
+QList<ShowTreeView::LayerRef> ShowTreeView::layersFromMime(const QMimeData *mime)
+{
+    QList<LayerRef> out;
+    if (mime == nullptr || !mime->hasFormat(QLatin1String(layerMimeType())))
+        return out;
+    QByteArray data = mime->data(QLatin1String(layerMimeType()));
+    QDataStream stream(&data, QIODevice::ReadOnly);
+    while (!stream.atEnd())
+    {
+        quint32 cue, layer;
+        stream >> cue >> layer;
+        if (stream.status() != QDataStream::Ok)
+            break;
+        out << qMakePair(cue, layer);
+    }
+    return out;
+}
+
+bool ShowTreeView::layerDropPlace(const QList<LayerRef> &refs, quint32 cueId, quint32 layerId, bool lowerHalf,
+                                  quint32 *after) const
+{
+    *after = invalidId();
+    const Cue *c = m_st->cue(cueId);
+    const Layer *l = c == nullptr ? nullptr : c->layer(layerId);
+    if (l == nullptr)
+        return false;
+    // Layers of this cue on their way (with their children) don't count as
+    // places; a child row stands for its parent's block.
+    QList<quint32> moving;
+    for (const LayerRef &ref : refs)
+        if (ref.first == cueId)
+            moving << ref.second;
+    for (const Layer &have : c->layers)
+        if (have.parent != invalidId() && moving.contains(have.parent))
+            moving << have.id;
+    const quint32 topId = l->parent != invalidId() ? l->parent : l->id;
+    int cut = 0;
+    for (int k = 0; k < c->layers.count(); ++k)
+    {
+        const Layer &have = c->layers.at(k);
+        if (have.id == topId && !lowerHalf)
+            cut = k;
+        if ((have.id == topId || have.parent == topId) && lowerHalf)
+            cut = k + 1;
+    }
+    quint32 pred = ShowTreeController::layerFirst;
+    for (int k = 0; k < cut; ++k)
+    {
+        const Layer &have = c->layers.at(k);
+        if (have.parent == invalidId() && !moving.contains(have.id))
+            pred = have.id;
+    }
+    *after = pred;
+    return true;
+}
+
+QString ShowTreeView::layerDropHint(const QList<LayerRef> &refs, quint32 cueId, quint32 after, bool copy,
+                                    bool *refused) const
+{
+    if (refused != nullptr)
+        *refused = false;
+    const CueList *list = m_st->listOfCue(cueId);
+    const Cue *dest = m_st->cue(cueId);
+    if (list == nullptr || dest == nullptr || refs.isEmpty())
+        return QString();
+    QString first;
+    bool reusable = false, release = false, childOnly = false;
+    int n = 0;
+    for (const LayerRef &ref : refs)
+    {
+        const Cue *src = m_st->cue(ref.first);
+        const Layer *l = src == nullptr ? nullptr : src->layer(ref.second);
+        if (l == nullptr)
+            continue;
+        if (n++ == 0)
+            first = !l->name.isEmpty() ? l->name : m_st->targetLabel(l->target);
+        reusable |= l->reusable != invalidId();
+        release |= l->release;
+        if (!copy && ref.first == cueId && l->parent != invalidId())
+        {
+            bool parentComes = false;
+            for (const LayerRef &other : refs)
+                parentComes |= other.second == l->parent;
+            childOnly |= !parentComes;
+        }
+    }
+    if (n == 0)
+        return QString();
+    if (!copy && childOnly)
+    {
+        if (refused != nullptr)
+            *refused = true;
+        return tr("A child layer stays under its parent: move the parent instead");
+    }
+    const QString what = n == 1 ? tr("“%1”").arg(first) : tr("%1 layers").arg(n);
+    const QString onto = m_st->cueLabel(*list, list->indexOf(cueId));
+    QString text = copy ? tr("Copy %1 into %2").arg(what, onto) : tr("Move %1 into %2").arg(what, onto);
+    if (after == ShowTreeController::layerFirst)
+        text += tr(", first");
+    if (reusable)
+        text += tr(" (a reusable layer stays the same reusable)");
+    if (release && list->looks)
+        text += tr(" (a hit has no Release: it is turned off)");
+    return text;
+}
+
+bool ShowTreeView::dropLayers(const QList<LayerRef> &refs, quint32 cueId, quint32 after, bool copy)
+{
+    bool refused = false;
+    if (layerDropHint(refs, cueId, after, copy, &refused).isEmpty() || refused)
+        return false;
+    QString why;
+    const QList<quint32> made = copy ? m_st->pasteLayers(refs, cueId, after)
+                                     : m_st->moveLayers(refs, cueId, after, &why);
+    if (made.isEmpty())
+    {
+        if (!why.isEmpty())
+            m_hint->setText(why);
+        return false;
+    }
+    selectLayers(cueId, made);
+    m_hint->setText(layerNote(made.count(), cueId, copy));
     return true;
 }
 

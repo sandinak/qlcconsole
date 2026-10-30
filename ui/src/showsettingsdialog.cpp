@@ -95,6 +95,13 @@ ShowSettingsDialog::ShowSettingsDialog(Doc *doc, QWidget *parent)
                              "This show is left as it is."));
     connect(m_handout, &QPushButton::clicked, this, &ShowSettingsDialog::slotHandout);
     tl->addWidget(m_handout);
+    m_reset = new QPushButton(tr("Reset to Handout…"), tbox);
+    m_reset->setObjectName(QStringLiteral("showSettingsReset"));
+    m_reset->setToolTip(tr("Put this show back to the way Make Student Handout wrote it: the "
+                           "students' changes go. Asks for the PIN when there is one. Only a show "
+                           "made as a handout carries that state."));
+    connect(m_reset, &QPushButton::clicked, this, &ShowSettingsDialog::slotReset);
+    tl->addWidget(m_reset);
     root->addWidget(tbox);
 
     QGroupBox *pbox = new QGroupBox(tr("PIN"), this);
@@ -166,6 +173,8 @@ void ShowSettingsDialog::updateEnabled()
     m_allowOutput->setEnabled(m_teaching->isChecked());
     m_lesson->setEnabled(m_teaching->isChecked());
     m_link->setEnabled(m_teaching->isChecked());
+    m_reset->setEnabled(m_doc->teachingSettings()->enabled()
+                        && m_doc->teachingSettings()->hasHandoutSnapshot());
 }
 
 void ShowSettingsDialog::slotSetPin()
@@ -237,6 +246,49 @@ void ShowSettingsDialog::slotHandout()
     accept();
     if (result() == QDialog::Accepted)
         m_handoutRequested = true;
+}
+
+void ShowSettingsDialog::slotReset()
+{
+    ShowOperate *op = m_doc->operateSettings();
+    if (op->hasPin()
+        && !askForPin(this, op->pinHash(), tr("Enter the PIN to put the show back to its handout.")))
+        return;
+    if (!s_testMode
+        && QMessageBox::question(this, tr("Reset to Handout"),
+                tr("Put this show back to the way the handout was made? Everything changed since "
+                   "then is replaced: the patch, looks, cues and the Virtual Console. The file on "
+                   "disk is not touched until you save."),
+                QMessageBox::Yes | QMessageBox::Cancel, QMessageBox::Cancel) != QMessageBox::Yes)
+        return;
+    m_resetRequested = true;
+    reject();
+}
+
+int &ShowSettingsDialog::patchQuestions()
+{
+    static int count = 0;
+    return count;
+}
+
+bool ShowSettingsDialog::confirmPatchChange(Doc *doc, QWidget *parent, const QString &what)
+{
+    if (doc == nullptr || doc->teachingSettings() == nullptr || !doc->teachingSettings()->enabled())
+        return true;
+    if (s_testMode)
+    {
+        patchQuestions()++;
+        QStringList &answers = testAnswers();
+        return !answers.isEmpty() && answers.takeFirst() == QLatin1String("yes");
+    }
+    QMessageBox box(QMessageBox::Question, tr("Teaching show"),
+                    tr("This is a Teaching show, and its patch is part of the lesson.\n\n"
+                       "%1?").arg(what),
+                    QMessageBox::Yes | QMessageBox::Cancel, parent);
+    box.setObjectName(QStringLiteral("teachingPatchBox"));
+    box.setDefaultButton(QMessageBox::Cancel);
+    box.button(QMessageBox::Yes)->setText(tr("Change the Patch"));
+    return box.exec() == QMessageBox::Yes;
 }
 
 /* One modal question with a hidden line edit: the text, or empty on Cancel. */

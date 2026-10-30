@@ -378,6 +378,41 @@ void ShowTreeWorkbench_Test::lookRowsDragToAnotherLayer()
     QCOMPARE(st->cue(s.c1)->layer(s.towersLayer1)->look(KeyDimmer)->palettes, QList<quint32>({ s.full }));
 }
 
+void ShowTreeWorkbench_Test::layerRowsDragToReorder()
+{
+    const Show s = SHOW();
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1400, 800);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QVERIFY(view.openInWorkbench(s.c1));
+    Workbench *bench = view.dockedWorkbench();
+    WorkbenchStack *stack = bench->stack();
+    ShowTreeController *st = m_doc->showTree();
+    const int towers = layerNamed(stack, "Towers");
+    const int usts = layerNamed(stack, "USTs");
+    QVERIFY(towers >= 0 && usts >= 0 && towers < usts);
+    QTreeWidgetItem *ustsRow = bench->rows()->layerItem(usts);
+    QVERIFY(ustsRow->flags() & Qt::ItemIsDragEnabled);
+    QScopedPointer<QMimeData> mime(bench->rows()->mimeData({ ustsRow }));
+    QVERIFY(mime != nullptr && mime->hasFormat(QString::fromLatin1(WorkbenchStack::layerMimeType())));
+    // Onto itself: nothing to do. Above Towers: it moves, one undo step.
+    QVERIFY(stack->dropPlanOn(usts, mime.data(), false).startsWith("!"));
+    QVERIFY2(stack->dropPlanOn(towers, mime.data(), false).startsWith("Move above"),
+             qPrintable(stack->dropPlanOn(towers, mime.data(), false)));
+    const quint32 first = st->cue(s.c1)->layers.first().id;
+    QVERIFY(stack->dropOn(towers, mime.data(), false));
+    QVERIFY(st->cue(s.c1)->layers.first().id != first);
+    QVERIFY(st->cue(s.c1)->layers.last().id == first);
+    QVERIFY(st->undo());
+    QCOMPARE(st->cue(s.c1)->layers.first().id, first);
+    // Dragged to the bottom (no row under the pointer): Towers goes last.
+    QScopedPointer<QMimeData> down(bench->rows()->mimeData({ bench->rows()->layerItem(towers) }));
+    QVERIFY(stack->dropOn(-1, down.data(), false));
+    QVERIFY(st->cue(s.c1)->layers.last().id == first);
+    QVERIFY(st->undo());
+}
+
 void ShowTreeWorkbench_Test::trackedRowsReadOnly()
 {
     const Show s = SHOW();

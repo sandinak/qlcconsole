@@ -469,6 +469,64 @@ void InputOutputMap_Test::teachingHoldsNetworkOutput()
     QVERIFY(stub->m_openOutputs.isEmpty());
 }
 
+void InputOutputMap_Test::teachingHoldsUsbOutput()
+{
+    mockMachine(QList<NetworkRoute::LocalAddress>() << localAddr("en0", "192.168.1.5", 24),
+                QMap<QString, QString>{ { "*", "192.168.1.5" } });
+    IOPluginStub *stub = namedStub(m_doc, "DMX USB", QStringList() << "FT232R USB UART");
+    const char *xml =
+        "<InputOutputMap>\n"
+        " <Universe Name=\"Stage\" ID=\"0\">\n"
+        "  <Output Plugin=\"DMX USB\" UID=\"FT232R USB UART\" Line=\"0\"/>\n"
+        " </Universe>\n"
+        "</InputOutputMap>\n";
+
+    // Not a teaching show: the dongle opens as before.
+    InputOutputMap iom(m_doc, 1);
+    QVERIFY(loadIOMap(iom, xml));
+    QVERIFY(iom.outputPatch(0, 0)->isPatched());
+    QCOMPARE(iom.transmitGateStatus().held, 0);
+
+    // Teaching: held, kept as saved, counted as held but not as network output
+    iom.setTeachingHold(true);
+    QVERIFY(iom.outputPatch(0, 0)->isHeld());
+    QVERIFY(iom.outputPatch(0, 0)->heldReason().contains("Teaching"));
+    InputOutputMap::TransmitGateStatus st = iom.transmitGateStatus();
+    QCOMPARE(st.held, 1);
+    QCOMPARE(st.networkOutputs, 0);
+    QCOMPARE(st.state, InputOutputMap::TransmitGateStatus::Held);
+    QCOMPARE(patchElements(saveIOMap(iom)).count(), 1);
+
+    // The teacher lets it through: it reopens
+    iom.setTeachingHold(false);
+    QVERIFY(!iom.outputPatch(0, 0)->isHeld());
+    QVERIFY(iom.outputPatch(0, 0)->isPatched());
+    st = iom.transmitGateStatus();
+    QCOMPARE(st.held, 0);
+
+    // A teaching show opened: never opens the dongle
+    stub->m_openOutputs.clear();
+    InputOutputMap held(m_doc, 1);
+    held.setTeachingHold(true);
+    QVERIFY(loadIOMap(held, xml));
+    QVERIFY(held.outputPatch(0, 0)->isHeld());
+    QVERIFY(stub->m_openOutputs.isEmpty());
+
+    // Loopback and Dummy never leave the computer: not held
+    namedStub(m_doc, "Loopback", QStringList() << "Loopback 1");
+    const char *loop =
+        "<InputOutputMap>\n"
+        " <Universe Name=\"Stage\" ID=\"0\">\n"
+        "  <Output Plugin=\"Loopback\" UID=\"Loopback 1\" Line=\"0\"/>\n"
+        " </Universe>\n"
+        "</InputOutputMap>\n";
+    InputOutputMap local(m_doc, 1);
+    local.setTeachingHold(true);
+    QVERIFY(loadIOMap(local, loop));
+    QVERIFY(local.outputPatch(0, 0)->isPatched());
+    QCOMPARE(local.transmitGateStatus().held, 0);
+}
+
 void InputOutputMap_Test::offlinePatchIsInertAndListed()
 {
     mockMachine(QList<NetworkRoute::LocalAddress>() << localAddr("en0", "192.168.1.5", 24),
