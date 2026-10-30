@@ -2171,6 +2171,10 @@ void CourseShow_Test::lessonHouseLights()
             }
         return -1;
     };
+    // The reads above are of the pre-GM values (sends); cycOut and out read
+    // the post-GM ones, which the engine fills a frame later -- wait for
+    // them before Blackout, or a loaded machine reads the cyc still at 0.
+    QTRY_COMPARE_WITH_TIMEOUT(cycOut(), 255, kRigWait);
     m_app->m_controlBlackoutAction->trigger();
     QVERIFY(doc->inputOutputMap()->blackout());
     QCOMPARE(cycOut(), 255);
