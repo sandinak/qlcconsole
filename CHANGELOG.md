@@ -84,6 +84,19 @@ skipped). Upstream fixes taken:
   8"). Saves, warnings and Say the light are never held or cut; a tool's
   first line and entering a focus call are said at once. Off is the voice
   as before.
+- **Control Map: MIDI and OSC triggers, saved with the show.** Right-click
+  a scene or effect in Build, or a cue list, cue or hit in the Show Tree →
+  **Learn trigger…**, then press a key, pad or button (a MIDI note or CC,
+  or an OSC message, on any input universe): it fires that thing with no
+  Virtual Console widget. A cue list GOes, a cue is jumped to, a hit or
+  function plays as the binding's mode says: **Toggle**, **Momentary** (on
+  while held), **Start only** or **Stop only**. The control's light
+  follows what it fires where the universe has a feedback line, as a VC
+  button's does. **Connections ▸ Devices ▸ Show control & sync ▸ Control
+  Map** lists every trigger, changes its mode and removes it. Saved as
+  `<ControlMap>` only when there is one; QLC+ 4 skips it (the save check
+  names it). Replaces the unsaved toggle-only prototype that went with the
+  old Programming tab. With no trigger, input costs nothing more.
 - **Web access saved with the show**: **Connections ▸ Devices ▸ Show
   control & sync ▸ Web access** turns on "Start web access with this show,
   on port" (9999 by default), with **Reachable from other devices on the

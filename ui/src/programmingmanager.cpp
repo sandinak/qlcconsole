@@ -46,6 +46,7 @@
 #include "mainbar.h"
 #include "speedmasterspanel.h"
 #include "programmingmanager.h"
+#include "controllearndialog.h"
 #include "workbenchstack.h"
 #include "paletteops.h"
 #include "usedby.h"
@@ -1423,6 +1424,9 @@ QMenu *ProgrammingManager::effectsContextMenu(QTreeWidgetItem *clicked, QWidget 
         a->setToolTip(tr("Load it in the Workbench, with its own (QLC+) editor"));
         menu->setDefaultAction(a);
     }
+    // An effect function (EFX, RGB Matrix): fired from a MIDI or OSC control.
+    if (kind == EffectsList::FunctionItem && fns.size() <= 1)
+        ControlLearnDialog::addTo(menu, m_doc, ControlMap::function(id), this);
     if (kind != 0)
     {
         QAction *a = menu->addAction(tr("Duplicate"), this, [this, kind, id]() {

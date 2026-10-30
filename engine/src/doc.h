@@ -247,6 +247,7 @@ private:
     class PowerLimiter *m_powerLimiter = nullptr;
     class ShutterAutoOpen *m_shutterAutoOpen = nullptr;
     class ShowWebAccess *m_webAccess = nullptr;
+    class ControlMap *m_controlMap = nullptr;
     class OutputRuleKeeper *m_outputRuleKeeper = nullptr;
     NetworkTopology *m_networkTopology;
     TimecodeSource *m_timecodeSource;
@@ -1236,6 +1237,10 @@ public:
     /** Whether opening the show starts web access, and on which port (the
      *  show's setting; the server is the webaccess library's) */
     class ShowWebAccess *webAccess() const { return m_webAccess; }
+
+    /** MIDI and OSC controls bound straight to functions, cue lists, cues
+     *  and hits (the Control Map; saved with the show). Never null. */
+    class ControlMap *controlMap() const { return m_controlMap; }
 
     /** Applies the fixtures' output rules (Blackout / Grand Master exempt,
      *  Switch, OnAtOpen) to the universes (OutputRuleKeeper) */

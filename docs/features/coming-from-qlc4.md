@@ -159,7 +159,7 @@ Every left-hand column still works, in the Classic QLC+ view.
 | patch universes in **Inputs/Outputs** | The same page (Connections ▸ Universes) | Connections ▸ Devices: what is wired to what ([Connections and patch](other-improvements.md#connections--patch)) |
 | watch output in the **Monitor** | **View ▸ DMX Monitor**, or the toolbar | The Lighting Studio and the 3D Rig Overview ([Lighting Studio](lighting-studio.md)) |
 | check channels on the **Simple Desk** | Same | Same |
-| map MIDI or OSC controls to VC widgets | Same | Same, plus game pads for focus ([The controller map](lighting-studio.md#the-controller-map)) |
+| map MIDI or OSC controls to VC widgets | Same | Same; or learn a control straight onto a scene, effect, cue list, cue or hit with no VC widget ([Control Map](other-improvements.md#control-map-midi-and-osc-triggers)); game pads for focus ([The controller map](lighting-studio.md#the-controller-map)) |
 | aim movers with pan and tilt | Same | Aim at [stage targets](stage-targets.md), or focus from the stage with a controller ([Quick focus](lighting-studio.md#quick-focus)) |
 | copy the .qxw and your fixtures to another computer | Same | Save a **.qlcc**, or **Collect for Transfer** ([Opening a show on another computer](fixture-manager.md#opening-a-show-on-another-computer)) |
 

@@ -985,7 +985,7 @@ to B9, are all fixed. Their tests no longer use QEXPECT_FAIL.
 | Shows timeline: Undo of an edit (keeps track settings and marker links) | ShowManager_Test::undoTakesBackADrop, ::undoPutsAMarkerBack, ::undoKeepsEveryTracksSettings (new suite; bug B4 fixed) | none | covered | high |
 | Shows timeline: ⌘T exact timing, scale cue timing, copy/paste, transport | EndHandle_Test (end handle only); ShowRunner_Test::stopRunner | none | none | med |
 | Shows timeline: end handle, markers, time division | EndHandle_Test (5); Show_Test::timeDivision, ::markers | partial | partial | low |
-| Control Map: learn a controller button to toggle a function | ProgrammerController_Test::aLearnedControlTogglesItsFunction (new; feedback not asserted) | none | covered | high |
+| Control Map: learn, modes, feedback, cue list / cue / hit, save and load | ControlMap_Test (13, engine/test/controlmap); ControlMapUi_Test (7, ui/test/controlmapui) | none | covered | high |
 | Command-line -o / -p / -k / -w; a bare file name is not opened | untestable without moving parseArgs() out of main.cpp | none | none (untestable) | high |
 
 ## Studio/Monitor

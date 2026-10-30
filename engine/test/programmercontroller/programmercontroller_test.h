@@ -92,7 +92,6 @@ private slots:
     /** Control Map learn: the next press (not a release) binds a control to
      *  a function; each press then toggles it; a second learn on the same
      *  control replaces the binding; clear removes it. */
-    void aLearnedControlTogglesItsFunction();
 
 private:
     Doc *m_doc;

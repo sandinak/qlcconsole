@@ -6,6 +6,47 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
+### 2026-10-29 — Control Map: MIDI and OSC triggers, saved with the show *(feat/031-control-map, board Q189 B)*
+
+- **Engine:** `ControlMap` (`engine/src/controlmap.*`, `Doc::controlMap()`),
+  CONTROLMAP.md phase 1 with the 0.3.1 modes: bindings {universe, channel,
+  target (Function / CueList / Cue / Hit by Show Tree id), mode (Toggle /
+  Momentary / StartOnly / StopOnly)}; one control one target and one target
+  one control; `learn()` / `listen()` take the next press on any input
+  universe; a press is the edge from 0 (a CC going on sending values is one
+  press). Functions and hits (their collection) start/stop with
+  `FunctionParent::controlMap()` (ManualVCWidget, id 0xFFFFFF60, so a press
+  stops it whatever started it); cue lists and cues go through
+  `ShowControl::execute()` (GO, GO cue N, Stop). Feedback: MasterTimer
+  functionStarted/Stopped (queued) → `sendFeedBack(255|0)` with the input
+  profile's channel extra params; resent on device reconnect, profile
+  change and load. `<ControlMap><Trigger .../></ControlMap>` under
+  `<Engine>`, written only with a binding; unknown targets skipped on load;
+  StockQlcCheck names it. Nothing is connected with no binding (zero cost
+  on the input path). The ProgrammerController Phase-0 prototype
+  (unsaved, toggle only, no UI since b1454ebf4) is removed; a bound
+  control is no longer also a profile's button action.
+- **UI:** `ControlLearnDialog` ("Learn trigger…", or "Trigger: …" once bound)
+  on Build navigator rows, Workbench layer rows, Build ▸ Effects functions,
+  and Show Tree cue lists, cues and hits (not sub-cues, not a Looks
+  section); `ControlMapPanel` as a **Control Map** row and box in
+  Connections ▸ Devices ▸ Show control & sync (table, mode per row, Remove,
+  Remove all, last fired). No menu-bar item, no new tab.
+- **Tests:** `engine/test/controlmap` (13: learn, each mode, feedback
+  values, cue list / cue / hit, save/load, unknown targets, deleted
+  function, no connection without bindings) through the stub plugin and
+  a real input patch; `ui/test/controlmapui` (7: dialog, menus in Build and
+  the Show Tree, panel, page row); showcontrol_ui and stockqlccheck
+  updated; stockroundtrip saves two triggers and stock QLC+ 4.14.4's own
+  engine reads the show whole past `<ControlMap>`.
+- **Decisions (can change):** the list lives in Show control & sync (the
+  page for "outside that controls the show") rather than a dialog; one
+  control per target; on lists and cues Start only = GO, so the dialog
+  offers GO / GO while held / Stop the list; fader/intensity targets stay
+  for 0.4 (VC sliders cover them).
+- **Not yet:** a real controller and OSC sender (TODO "Needs the real
+  rig", RIG_TEST_PLAN L).
+
 ### 2026-10-29 — Web access saved with the show *(feat/031-show-webserver)*
 
 - **Engine:** `ShowWebAccess` (`engine/src/showwebaccess.*`, `Doc::webAccess()`):

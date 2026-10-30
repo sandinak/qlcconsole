@@ -1010,12 +1010,44 @@ override) with freeze-on-stop and locate/seek, a draggable show-length end
 handle, and footer sync-health/load indicators. Virtual Console widgets can
 override the timeline per-channel while it's live.
 
-## Control Map (MIDI learn)
+## Control Map (MIDI and OSC triggers)
 
-Not in the app at the moment. A first version bound a MIDI control
-straight to a function from the old Programming tab's function list; that
-list went when Programming became Build, and the binding was never saved
-with the show. To fire a function from a MIDI or OSC control, give a
-Virtual Console button, slider or cue list an external input, as in QLC+.
-Game pads have their own map in the focus tools
-([The controller map](lighting-studio.md#the-controller-map)).
+A key, pad or button on a MIDI controller (a note or a CC), or an OSC
+message, can fire something straight away, with no Virtual Console
+button in between: a scene, an effect or any function, a Show Tree cue
+list (GO), one cue of a list (a jump to it) or a hit.
+
+- **Learn it where the thing is.** Right-click a scene in Build (the
+  navigator, or a layer in the Workbench), an effect in Build ▸ Effects,
+  or a cue list, cue or hit in the Show Tree → **Learn trigger…**. Press
+  the control; the dialog names it (*"MIDI · Note 60 (C4), MIDI ch 1"*).
+  Press another to change your mind, pick how a press acts, then **OK**.
+  Any patched input universe is heard. A sub-cue has no trigger of its
+  own: its cue's GO plays it.
+- **How a press acts.** **Toggle** (the default): a press starts it, the
+  next press stops it. **Momentary**: on while held. **Start only** and
+  **Stop only**: a press only starts, or only stops, it. On a cue list or
+  a cue: **GO**, **GO while held** (the list stops on the release) or
+  **Stop the list**. A fader or a CC that goes on sending values counts as
+  one press until it goes back to 0.
+- **One control, one thing.** Learning a control that already fires
+  something moves it (the dialog says what it fires now), and a thing has
+  one control: learning again replaces it. Once bound, the menu reads
+  **Trigger:** and the control's name; the dialog's **Remove trigger**
+  takes it off.
+- **The light follows.** The control's LED is on while what it fires
+  runs (a cue's while that cue is on stage), however it was started, as a
+  VC button's is. It needs the universe's **feedback** line patched, as
+  for VC; the input profile's channel settings are used. Plugged back in,
+  every light is sent again.
+- **See them all.** **Connections ▸ Devices ▸ Show control & sync ▸
+  Control Map** lists every trigger: the control, what it fires and how
+  (changed from the table), **Remove** and **Remove all…**, and the last
+  one fired, which is a quick way to check a controller.
+- **Saved with the show.** A show without triggers saves as before; QLC+
+  4 opens a show with them and skips the Control Map (the save check says
+  so). Deleting a function takes its trigger with it.
+- **Or the QLC+ way.** A Virtual Console button, slider or cue list with
+  an external input works as in QLC+, and is what you want for a fader
+  that sets a level. Game pads have their own map in the focus tools
+  ([The controller map](lighting-studio.md#the-controller-map)).

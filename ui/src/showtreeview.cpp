@@ -85,6 +85,7 @@
 #include "focuscallsdialog.h"
 #include "focusmenu.h"
 #include "showtreeview.h"
+#include "controllearndialog.h"
 #include "itemicons.h"
 #include "workbench.h"
 #include "noteedit.h"
@@ -6744,6 +6745,19 @@ void ShowTreeView::slotTreeContextMenu(const QPoint &pos)
                     makeVcPage(list->id, folder, &msg);
                 m_hint->setText(msg);
             });
+        }
+        // Fire it from a MIDI or OSC control (the Control Map): GO on a
+        // list, a jump to a cue, a hit. Not on a sub-cue: its cue's GO plays it.
+        if (kind == ListNode || kind == CueNode)
+        {
+            const quint32 id = item->data(0, IdRole).toUInt();
+            const CueList *l = kind == ListNode ? m_st->cueList(id) : m_st->listOfCue(id);
+            ControlMap::Target target;
+            if (l != nullptr && !l->isSubCues() && kind == ListNode && !l->looks)
+                target = ControlMap::cueList(id);
+            else if (l != nullptr && !l->isSubCues() && kind == CueNode)
+                target = l->looks ? ControlMap::hit(id) : ControlMap::cue(id);
+            ControlLearnDialog::addTo(&menu, m_doc, target, this);
         }
         if (kind == CueNode && !inLooks)
         {
