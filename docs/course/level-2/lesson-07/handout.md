@@ -57,9 +57,9 @@ Switch roles after each part.
 
 ### Get ready
 
-1. Open qlcconsole, choose **File → Open** and open
+1. Open qlcconsole, choose **File ▸ Open** and open
    `lesson-2-7-start.qlcc` (where Lesson 2.6 finished).
-2. Click the **Show Tree** tab (⇧⌘5) and open **View → Rig Overview**
+2. Click the **Show Tree** tab (⇧⌘5) and open **View ▸ Rig Overview**
    (⇧⌘R) beside it.
 
 ### The sub-cues
@@ -85,7 +85,7 @@ Switch roles after each part.
 
 ![The chorus's sub-cues](../../images/lesson-2-7/chorus-subcues.png)
 
-9. Save with **File → Save As** → `Lesson2-7-yourname.qlcc` in
+9. Save with **File ▸ Save As** → `Lesson2-7-yourname.qlcc` in
    **Documents → qlcconsole**.
 
 ### Play it

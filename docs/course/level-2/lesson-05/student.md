@@ -37,8 +37,8 @@ A snap or a quick sweep for the button? Why?
 
 ## Steps
 
-1. **File → Open** → `lesson-2-5-start.qlcc`.
-2. Click the **Show Tree** tab (⇧⌘5); open **View → Rig Overview** (⇧⌘R)
+1. **File ▸ Open** → `lesson-2-5-start.qlcc`.
+2. Click the **Show Tree** tab (⇧⌘5); open **View ▸ Rig Overview** (⇧⌘R)
    beside it.
 3. Click **1.0.6 Dance Break**, **+ Cue**, type `Fan`, **Return**.
    **Mode**: **Block**.
@@ -61,7 +61,7 @@ A snap or a quick sweep for the button? Why?
 
     ![The button](../../images/lesson-2-5/rig-button.png)
 
-11. **File → Save As** → `Lesson2-5-yourname.qlcc`.
+11. **File ▸ Save As** → `Lesson2-5-yourname.qlcc`.
 
 **Stuck?** The beams didn't move: drop Riser Line on the **row**, not the
 dashed box. The fan crossed: undo, set −5 in the **Button**. No Spread

@@ -58,9 +58,9 @@ Switch roles after each part.
 
 ### Get ready
 
-1. Open qlcconsole, choose **File → Open** and open
+1. Open qlcconsole, choose **File ▸ Open** and open
    `lesson-2-6-start.qlcc` (where Lesson 2.5 finished).
-2. Click the **Show Tree** tab (⇧⌘5) and open **View → Rig Overview**
+2. Click the **Show Tree** tab (⇧⌘5) and open **View ▸ Rig Overview**
    (⇧⌘R) beside it.
 
 ### Three hits
@@ -88,7 +88,7 @@ Switch roles after each part.
    **(1)** the Hits section, **(2)** a hit, **(3)** the button that
    fires it.
 
-9. Save with **File → Save As** → `Lesson2-6-yourname.qlcc` in
+9. Save with **File ▸ Save As** → `Lesson2-6-yourname.qlcc` in
    **Documents → qlcconsole**.
 
 ### Busk it

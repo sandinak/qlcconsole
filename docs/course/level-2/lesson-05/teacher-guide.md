@@ -29,7 +29,7 @@ Students can:
 
 - [ ] [`lesson-2-5-start.qlcc`](../../shows/lesson-2-5-start.qlcc) on each
   laptop (Lesson 2.4's finish).
-- [ ] On the projector: the start file open, Show Tree tab, **View → Rig
+- [ ] On the projector: the start file open, Show Tree tab, **View ▸ Rig
   Overview** beside it, **Room: Dim**.
 - [ ] Print the [handout](handout.md) and the [exit ticket](exit-ticket.md).
 - [ ] Optional: four torches, for the design idea.

@@ -38,8 +38,8 @@ When would you fire each one?
 
 ## Steps
 
-1. **File → Open** → `lesson-2-6-start.qlcc`.
-2. Click the **Show Tree** tab (⇧⌘5); open **View → Rig Overview** (⇧⌘R)
+1. **File ▸ Open** → `lesson-2-6-start.qlcc`.
+2. Click the **Show Tree** tab (⇧⌘5); open **View ▸ Rig Overview** (⇧⌘R)
    beside it.
 3. Right-click **Spring Show** → **+ Hit**. Name it `Red Stab`,
    **Return**.
@@ -52,11 +52,11 @@ When would you fire each one?
 
    ![The Hits section](../../images/lesson-2-6/hits.png)
 
-8. **File → Save As** → `Lesson2-6-yourname.qlcc`.
+8. **File ▸ Save As** → `Lesson2-6-yourname.qlcc`.
 9. Click **Operate**. In the **Run** tab (⇧⌘8): **GO**, then **GO** for
    the Verse.
-10. **Virtual Console** tab (⇧⌘6): click **Red Stab**. The truss boxes go
-    red over the verse.
+10. **Window ▸ Virtual Console** (⇧⌘6): click **Red Stab**. The truss
+    boxes go red over the verse.
 
     ![The hits on the Virtual Console](../../images/lesson-2-6/vc-hits.png)
 

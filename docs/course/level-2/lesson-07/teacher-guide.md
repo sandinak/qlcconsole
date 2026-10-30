@@ -30,7 +30,7 @@ Students can:
 
 - [ ] [`lesson-2-7-start.qlcc`](../../shows/lesson-2-7-start.qlcc) on each
   laptop (Lesson 2.6's finish).
-- [ ] On the projector: the start file open, Show Tree tab, **View → Rig
+- [ ] On the projector: the start file open, Show Tree tab, **View ▸ Rig
   Overview** beside it.
 - [ ] Print the [handout](handout.md), the [exit ticket](exit-ticket.md)
   and the [Level 2 check](level-check.md).

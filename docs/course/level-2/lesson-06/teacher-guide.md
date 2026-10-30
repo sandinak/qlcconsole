@@ -28,7 +28,7 @@ Students can:
 
 - [ ] [`lesson-2-6-start.qlcc`](../../shows/lesson-2-6-start.qlcc) on each
   laptop (Lesson 2.5's finish).
-- [ ] On the projector: the start file open, Show Tree tab, **View → Rig
+- [ ] On the projector: the start file open, Show Tree tab, **View ▸ Rig
   Overview** beside it.
 - [ ] Print the [handout](handout.md) and the [exit ticket](exit-ticket.md).
 - [ ] A vamp to loop: a few bars of a song's intro (the same one as

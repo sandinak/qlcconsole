@@ -57,9 +57,9 @@ Switch roles after each part.
 
 ### Get ready
 
-1. Open qlcconsole, choose **File → Open** and open
+1. Open qlcconsole, choose **File ▸ Open** and open
    `lesson-2-5-start.qlcc` (where Lesson 2.4 finished).
-2. Click the **Show Tree** tab (⇧⌘5) and open **View → Rig Overview**
+2. Click the **Show Tree** tab (⇧⌘5) and open **View ▸ Rig Overview**
    (⇧⌘R) beside it.
 
 ### The fan
@@ -110,7 +110,7 @@ Switch roles after each part.
 
 ### Save
 
-11. Save with **File → Save As** → `Lesson2-5-yourname.qlcc` in
+11. Save with **File ▸ Save As** → `Lesson2-5-yourname.qlcc` in
     **Documents → qlcconsole**.
 12. Optional: play it. In the **Run** tab, click **1.0.7 Fan** to load it,
     press **GO**, then **GO** again for the button.

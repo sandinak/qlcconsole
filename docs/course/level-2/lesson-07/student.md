@@ -36,8 +36,8 @@ Why is the stomp a Sub GO, and its end automatic?
 
 ## Steps
 
-1. **File → Open** → `lesson-2-7-start.qlcc`.
-2. Click the **Show Tree** tab (⇧⌘5); open **View → Rig Overview** (⇧⌘R)
+1. **File ▸ Open** → `lesson-2-7-start.qlcc`.
+2. Click the **Show Tree** tab (⇧⌘5); open **View ▸ Rig Overview** (⇧⌘R)
    beside it.
 3. Click **1.0.2 Chorus**; in its **Sub-cues** row click **+ Sub-cue**.
    Name it `Chorus`, **Return**.
@@ -49,10 +49,12 @@ Why is the stomp a Sub GO, and its end automatic?
 
    ![Stomp Out](../../images/lesson-2-7/stomp-out.png)
 
-7. **File → Save As** → `Lesson2-7-yourname.qlcc`.
+7. **File ▸ Save As** → `Lesson2-7-yourname.qlcc`.
 8. **Run** tab (⇧⌘8): click **1.0.2 Chorus**, press **GO**.
 9. Press **Sub GO** on the stomp: the lanterns flash, then go out by
    themselves.
+
+   {% include inapp.html do="Sub GO" path="Control ▸ Sub GO (Main Cue List)" mac="⌥⌘↩" win="Ctrl+Alt+Enter" see="Or the Run tab's **Sub GO** button. **GO** still goes on to the next main cue." %}
 
    ![Sub GO](../../images/lesson-2-7/run-subgo.png)
 
