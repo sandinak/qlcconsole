@@ -239,6 +239,13 @@ skipped). Upstream fixes taken:
   its lock holds them), a fill's lines are one set, and they ride their
   riser when it moves or turns. The rig view draws a small figure with
   fewer facets, so a crowd stays quick.
+- **People on the stage, tidied**: a performer line in a set has **Costume
+  and height for the whole set** in its dialog, so a choir's costume or
+  height changes in one place; a fill's rows stay out of the aim-target
+  lists (Look Editor, Aim palettes, focus calls, Focus mode) unless an aim
+  palette uses them; a plain line made a performer line keeps its own
+  heights. The focus report's Owner column (Tour, House or Rental) was
+  already in the PDF, web page and Lightwright CSV.
 - **Web access saved with the show**: **Connections ▸ Devices ▸ Show
   control & sync ▸ Web access** turns on "Start web access with this show,
   on port" (9999 by default), with **Reachable from other devices on the

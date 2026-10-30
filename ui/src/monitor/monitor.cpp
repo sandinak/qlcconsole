@@ -7011,6 +7011,16 @@ void Monitor::slotEditTarget(quint32 tid)
     spreadRow->addWidget(shuffleBtn);
     form->addRow(tr("Height give or take:"), spreadRow);
 
+    /* A line in a set (a fill's rows): change its costume and heights for
+       all of them in one place. */
+    const int setMates = PerformerFill::setMates(m_props, t).size();
+    QCheckBox *wholeSetChk = new QCheckBox(tr("Costume and height for the whole set (%n other line(s))", "", setMates), &dlg);
+    wholeSetChk->setObjectName(QStringLiteral("lineWholeSet"));
+    wholeSetChk->setToolTip(tr("Give every other line in this set the same costume, "
+                               "height and give or take. Each keeps its own people and shuffle."));
+    wholeSetChk->setVisible(setMates > 0);
+    form->addRow(QString(), wholeSetChk);
+
     auto syncPeople = [&]() {
         const StageTarget::Kind k = StageTarget::Kind(kindCombo->currentData().toInt());
         const bool onLine = (k == StageTarget::Kind::Line);
@@ -7089,6 +7099,12 @@ void Monitor::slotEditTarget(quint32 tid)
         return;
     }
     apply();
+    if (wholeSetChk->isChecked() && t->isPerformerLine())
+    {
+        PerformerFill::copyLookToSet(m_props, t);
+        m_props->notifyStageTargetsChanged();
+        m_graphicsView->updateTargets();
+    }
     m_doc->setModified();
     edit.accept();
 }

@@ -65,6 +65,7 @@
 #include "capabilitybar.h"
 #include "qlcpalette.h"
 #include "monitorproperties.h"
+#include "performerfill.h"
 #include "gobolibrary.h"
 #include "stagetarget.h"
 #include "linespread.h"
@@ -1394,7 +1395,7 @@ void LookEditor::setPalette(quint32 paletteId)
         m_aimTargetCombo->addItem(tr("(none)"), QVariant(StageTarget::invalidId()));
         if (m_doc->monitorProperties())
         {
-            for (StageTarget *t : m_doc->monitorProperties()->stageTargets())
+            for (StageTarget *t : PerformerFill::pickable(m_doc, p->stageTargetId()))
                 m_aimTargetCombo->addItem(t->isLine() ? tr("Line: %1").arg(t->name()) : t->name(),
                                           QVariant(t->id()));
         }
@@ -2891,7 +2892,7 @@ void LookEditor::rebuildEffectDynWidget()
             quint32 bound = tgtBinds.value(td.name, StageTarget::invalidId());
             if (mp)
             {
-                for (StageTarget *tgt : mp->stageTargets())
+                for (StageTarget *tgt : PerformerFill::pickable(m_doc, bound))
                 {
                     cb->addItem(tgt->name(), tgt->id());
                     if (tgt->id() == bound) selIdx = cb->count() - 1;

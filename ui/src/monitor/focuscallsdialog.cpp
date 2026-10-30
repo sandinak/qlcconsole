@@ -43,6 +43,7 @@
 
 #include "programmercontroller.h"
 #include "monitorproperties.h"
+#include "performerfill.h"
 #include "venuecorrections.h"
 #include "teachingsettings.h"
 #include <QGuiApplication>
@@ -120,7 +121,7 @@ FocusCallsDialog::FocusCallsDialog(Doc *doc, QWidget *parent)
     m_target->setObjectName(QStringLiteral("fcTarget"));
     m_target->addItem(tr("Where they land (fixed lights)"), QVariant(0xFFFFFFFFu));
     if (MonitorProperties *props = m_doc->monitorProperties())
-        for (const StageTarget *t : props->stageTargets())
+        for (const StageTarget *t : PerformerFill::pickable(m_doc))
             m_target->addItem(t->name(), QVariant(t->id()));
     form->addRow(tr("Focus to"), m_target);
     m_note = new QLineEdit(this);
