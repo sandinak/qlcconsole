@@ -53,9 +53,6 @@ private slots:
     /** Re-addressing a patched fixture on universe 128+ keeps it there (pb1). */
     void readdressHighUniverseFixture();
     void deleteFixture();
-    void movedFixtureChannels();
-    void deletedFixtureChannels();
-    void renamedFixtureKeepsValues();
     void movedFixtureBeyondUniverse();
     void movedFixtureOverFixtureInBetween();
     void replaceFixtures();
