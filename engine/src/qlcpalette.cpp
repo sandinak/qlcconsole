@@ -701,8 +701,16 @@ QList<SceneValue> QLCPalette::valuesFromFixtures(Doc *doc, QList<quint32> fixtur
                     // Extra emitter channels. White carries the value extracted
                     // from RGB above (so R'+W reconstructs the picked colour);
                     // Amber/UV are additive and default to 0.
+                    /* A head whose only light is a white emitter (a pixel
+                       box's white pixels, no RGB or CMY to mix with) shows the
+                       white in the colour: White lights it, Red doesn't. A
+                       colour that says "no extra white" (#ffffff000000) meant
+                       the RGB heads' white LED, and left these dark. */
+                    const bool whiteOnly = rgbSets.isEmpty() && cmyCh.size() != 3;
                     if (primary && whiteCh != QLCChannel::invalid())
-                        list << SceneValue(id, whiteCh, uchar(emitters.red()));
+                        list << SceneValue(id, whiteCh, uchar(whiteOnly
+                            ? qMax(emitters.red(), qMin(col.red(), qMin(col.green(), col.blue())))
+                            : emitters.red()));
                     if (primary)
                     {
                         quint32 channel = fixture->channelNumber(QLCChannel::Amber, QLCChannel::MSB, i);

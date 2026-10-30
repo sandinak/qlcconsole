@@ -18,7 +18,7 @@
     // the second (optional) is the background.
 
     effect.parameters = [
-        { name: "speed",   description: "Chase speed (fixtures/sec)", min: 0.1, max: 20.0, defaultValue: 3.0  },
+        { name: "speed",   description: "Chase speed (fixtures/sec, along the line)", min: 0.1, max: 20.0, defaultValue: 3.0  },
         { name: "width",   description: "Band width (0-1 of array)",  min: 0.0, max: 1.0,  defaultValue: 0.25 },
         { name: "dimmer",  description: "Peak dimmer",                min: 0.0, max: 1.0,  defaultValue: 1.0  },
         { name: "reverse", description: "Reverse direction (0=fwd, 1=rev)", min: 0.0, max: 1.0, defaultValue: 0.0 }
@@ -34,8 +34,18 @@
         var n = fixtures.length;
         if (n === 0) return [];
 
+        // Speed is in FIXTURES a second, along the line they stand in: a
+        // row of pixel boxes or bars chases box by box, not pixel by pixel
+        // (its pixels used to count as fixtures, and a chase over 180 of
+        // them crawled). One pixel fixture alone chases pixel by pixel.
+        var ids = {}, units = 0;
+        for (var k = 0; k < n; k++) {
+            if (!ids[fixtures[k].id]) { ids[fixtures[k].id] = true; units++; }
+        }
+        if (units < 2) units = n;
+
         // Head position: 0..1, wraps
-        var head = (t * speed / n) % 1.0;
+        var head = (t * speed / units) % 1.0;
         if (rev > 0.5) head = 1.0 - head;
 
         var L  = (palettes.look && palettes.look.colors) ? palettes.look.colors : [];
@@ -43,7 +53,10 @@
         var bg = (L[1] && L[1].r !== undefined) ? L[1] : null;
 
         return fixtures.map(function(f, i) {
-            var pos = i / n;  // fixture's normalised position
+            // Its place along the line: its column across the layout (heads
+            // one above another chase together), else its order.
+            var g = f.grid;
+            var pos = (g && g.cols > 1) ? g.col / g.cols : i / n;
 
             // Toroidal distance to head
             var d = Math.abs(pos - head);

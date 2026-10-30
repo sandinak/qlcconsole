@@ -34,6 +34,7 @@
 #include "scenetransition.h"
 
 class Doc;
+class Scene;
 class Fixture;
 class QLCPalette;
 class StageTarget;
@@ -75,7 +76,22 @@ public:
      *  reached — is deliberately left untouched: that continuity is the whole
      *  point of a persistent effect. Only the scene it draws its fixtures and
      *  base values from changes. */
-    void rebindToScene(quint32 sceneId) { m_sceneId = sceneId; }
+    void rebindToScene(quint32 sceneId) { m_sceneId = sceneId; m_alsoScenes.removeAll(sceneId); }
+
+    /** One look, one effect: another running scene that carries this effect
+     *  palette (the same palette on two layers of a cue, or a cue-wide effect
+     *  over several layers) is played by THIS instance too -- laid out with
+     *  the first, each scene's fixtures written with its own base. Main
+     *  thread. */
+    void addScene(quint32 sceneId)
+    { if (sceneId != m_sceneId && !m_alsoScenes.contains(sceneId)) m_alsoScenes.append(sceneId); }
+    /** @p sceneId stopped: false when this instance doesn't play it. When it
+     *  was the one it is bound to, the next scene it plays takes over (see
+     *  hasOtherScenes()). */
+    bool removeScene(quint32 sceneId);
+    bool hasOtherScenes() const { return !m_alsoScenes.isEmpty(); }
+    /** Every scene it plays: the one it is bound to first. */
+    QList<quint32> sceneIds() const { return QList<quint32>() << m_sceneId << m_alsoScenes; }
 
     // --- Release fade-out (main thread) ---------------------------------------
     // When a look stops, instead of snapping off the effect can keep rendering
@@ -214,6 +230,7 @@ public:
      *  Lets an intensity effect flicker *around* the scene's base rather than
      *  replacing it with an absolute value. Built once per runTick(). */
     void buildSceneBaseValues();
+    void addSceneBaseValues(Scene *scene);
 
     /** Scene base DMX value for (fixtureId, channel), or @p dflt if the scene's
      *  looks don't drive that channel. */
@@ -292,6 +309,7 @@ private:
 
     Doc    *m_doc;
     quint32 m_sceneId;
+    QList<quint32> m_alsoScenes;    //!< addScene(): the other scenes it plays
     quint32 m_effectPaletteId;
 
     EffectScript     m_script;
@@ -386,6 +404,9 @@ private:
     //!< that HAVE a master dimmer already carry it on that channel (via the scene
     //!< base), so their colour is not additionally scaled (would double-dim).
     float m_lookDimmer = 1.0f;
+    //!< The same, per fixture, while it plays more than one scene: each
+    //!< fixture dimmed by its own scene's Dimmer (empty with one scene).
+    QHash<quint32, float> m_lookDimmerOf;
 
     //!< scene base DMX per (fixtureId<<32|channel), rebuilt each runTick()
     QHash<quint64, uchar> m_sceneBaseValues;

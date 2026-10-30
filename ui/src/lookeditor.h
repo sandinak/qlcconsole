@@ -338,7 +338,11 @@ public:
 private:
 protected:
     bool eventFilter(QObject *obj, QEvent *ev) override;
+    void showEvent(QShowEvent *ev) override;
 private:
+    /** A new effect look shown while the editor was hidden: the picker
+     *  opens when it appears (the Show Tree sets the look, then shows). */
+    void openPickerForNewEffect();
     QToolButton *m_backButton = nullptr;
     QComboBox   *m_effectScriptCombo;
     QLabel      *m_effectDescLabel;   //!< one-line description below combo

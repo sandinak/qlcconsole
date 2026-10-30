@@ -171,7 +171,7 @@ previews.
 | Effect | What it does |
 |---|---|
 | **Color Alternate** | Cycles up to four colours across the group |
-| **Color Chase** | A band of colour chases through the fixtures; a second colour fills behind it |
+| **Color Chase** | A band of colour chases through the fixtures; a second colour fills behind it. Its speed is in fixtures a second along the line they stand in: pixel boxes and bars go box by box (one pixel fixture on its own, pixel by pixel) |
 | **Color Gradient** | A smooth gradient between two colours, optionally moving |
 | **Color Phaser** | A waveform crossfade between two colours, phase-spread across the fixtures |
 | **Color Spread** | Two colours distributed across the group |
@@ -358,6 +358,11 @@ It degrades gracefully: on a canvas with no white pixels (the XL-450 in its
 and **White only** draws the picture in white on them; on one with no RGB
 pixels (its 30ch white mode) the picture is drawn in white whatever the
 setting, and two-colour effects (the checker) go on and off instead.
+
+A plain look does the same for the white pixels: a **Colour** lights them
+with the white in it (White and Warm White do, Red and Blue don't), dimmed
+by the look's **Dimmer** — the box has no dimmer of its own, so the colour
+is the light and a Dimmer alone leaves the box dark.
 
 **Set the box up first.** The XL-450's 165ch mode numbers its 45 RGB heads
 before its 30 white ones, so its LED layout must say which row is which:
@@ -566,6 +571,9 @@ so neither covers the other.
   to** (every effect palette is listed) or **Design a new effect…**. A
   layer holds one effect of each kind — Colour, Dimmer, Position, Beam,
   Other — each on its own row; another of the same kind replaces it.
+  One effect palette on several layers, or an effect on the whole cue,
+  is **one** effect over all of them: every layer's lights move, each
+  from its own layer's colour and level.
 - **In Build**: a scene's Looks list takes as many effects as you like:
   drop them in, or **+ Effect ▾ ▸ Effect look…** in the Workbench. Drag a
   look's row to change the order (lower wins where two set the same

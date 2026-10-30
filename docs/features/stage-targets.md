@@ -128,6 +128,12 @@ beams each go to their own point.
 The target's own point — what a follow spot, an effect pointed at the
 target, or an older qlcconsole build sees — is the line's **centre**.
 
+**A light standing on the deck** can't tilt below its own level. When its
+point on the line is lower than it and out of its reach (a riser line, from
+a beam on the floor beside the riser), it aims at the people standing on the
+line instead — the aim's subject height above the point — rather than
+sitting level and shining out over the house.
+
 **People on a line:** give a line **People on it** in its dialog and it is
 a performer line — that many people spread evenly along it, standing on
 whatever is under them, drawn on the plot and lit in the rig view (see

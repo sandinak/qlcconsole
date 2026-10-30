@@ -399,8 +399,12 @@ EffectBrowser::EffectBrowser(Doc *doc, QComboBox *source, QWidget *parent)
     // Moving the current row picks it (arrow keys). A refill moves it too,
     // but pick() ignores those (m_filling); re-picking what is already
     // picked changes nothing.
-    connect(m_list, &QListWidget::currentItemChanged, this, [this](QListWidgetItem *now, QListWidgetItem *) {
-        if (m_pickWhileBrowsing)
+    // Not a row made current from none: the list does that by itself when
+    // it takes the focus, and picked its first row -- whatever the search
+    // still showed from last time ("a new effect palette starts with that
+    // effect's name"). A click or Return picks it all the same.
+    connect(m_list, &QListWidget::currentItemChanged, this, [this](QListWidgetItem *now, QListWidgetItem *before) {
+        if (m_pickWhileBrowsing && before != nullptr)
             pick(now);
     });
     // The combo changed by other means (the Browse dialog, a look loading).

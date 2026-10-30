@@ -193,6 +193,9 @@ private slots:
     /** Q104: each flag column names itself on hover; right-click the
      *  header hides one; in a narrow pane they fold before the names. */
     void theFlagColumnsNameThemselvesHideAndFold();
+    /** COURSE_PLAN §8 #18: + Palette → Effect, twice: the second starts as
+     *  New Effect with the picker open, whatever the editor showed. */
+    void aSecondNewEffectPaletteStartsAfresh();
 
 private:
     quint32 dimmer(int level, const QString &name);

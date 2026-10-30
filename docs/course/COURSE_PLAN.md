@@ -448,6 +448,8 @@ worked around in the course and checked by the course test.
     TrussW-W and TrussC-W (the XL-450's 30 white heads) send 0 with any
     look: White and Full, Full alone, even *Trusses colour White* (which
     lights only the RGB pixels). Lesson 2.1's flash uses the StepTops.
+    *Fixed in the app (cbug):* a colour's white lights them (Full alone
+    still doesn't: the box has no dimmer, the colour is the light).
 16. **A group set's layer can't be split** (Split is greyed: the set is
     what the layer is). Not a bug; Lesson 2.3 lights one side with a
     child layer and shows Split and Merge on a layer of two groups.
@@ -459,12 +461,15 @@ worked around in the course and checked by the course test.
     the stage crawls: its speed is in fixtures per second, spread over
     every pixel head. Lesson 2.4 keeps each effect on one layer and
     leaves the chase and the cue-wide effect until this is fixed.
+    *Fixed in the app (cbug):* one effect over several layers or the cue
+    moves every layer; the chase goes box by box.
 18. **A new effect palette's first name, and the picker.** Made while the
     Look Editor shows another effect, a new effect palette can start
     with that effect's name (*Color Chase*, *Matrix Sparkle*) instead of
     *New Effect*; and the effect picker opens by itself only when the
     Look Editor was already open. The handout says to name it and to
     click **Change effect…** if the picker isn't open.
+    *Fixed in the app (cbug):* it starts as *New Effect*, the picker open.
 19. **The course test's rig pictures** picked the Rig Overview's 45° view
     by its place in the list; since the Back view was added that was
     Side. They now pick it by name (Level 1's pictures were taken
@@ -472,6 +477,7 @@ worked around in the course and checked by the course test.
 20. **The upstage beams (USTs) on a line.** Aimed at the Riser Line, the
     eight two-arm beams send tilt 0 and their beams go out over the
     house. Lesson 2.5 fans the four truss spots only.
+    *Fixed in the app (cbug):* they light the people on the line.
 
 ## 9. Decisions (Branson, 2026-10-18) and what's still open
 
