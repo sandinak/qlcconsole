@@ -664,6 +664,8 @@ bool EFX::addFixture(EFXFixture* ef)
     if (i >= m_fixtures.size())
         m_fixtures.append(ef);
 
+    renumberFixtures();
+
     emit changed(this->id());
 
     return true;
@@ -684,6 +686,7 @@ bool EFX::removeFixture(EFXFixture* ef)
 
     if (m_fixtures.removeAll(ef) > 0)
     {
+        renumberFixtures();
         emit changed(this->id());
         return true;
     }
@@ -701,6 +704,7 @@ bool EFX::removeFixture(quint32 fxi, int head)
         if (ef->head().fxi == fxi && ef->head().head == head)
         {
             m_fixtures.removeAt(i);
+            renumberFixtures();
             return true;
         }
     }
@@ -722,6 +726,7 @@ bool EFX::raiseFixture(EFXFixture* ef)
     if (index > 0)
     {
         m_fixtures.move(index, index - 1);
+        renumberFixtures();
         emit changed(this->id());
         return true;
     }
@@ -737,6 +742,7 @@ bool EFX::lowerFixture(EFXFixture* ef)
     if (index < (m_fixtures.count() - 1))
     {
         m_fixtures.move(index, index + 1);
+        renumberFixtures();
         emit changed(this->id());
         return true;
     }
@@ -1102,17 +1108,22 @@ QSharedPointer<GenericFader> EFX::getFader(QList<Universe *> universes, quint32 
     return fader;
 }
 
-void EFX::preRun(MasterTimer* timer)
+void EFX::renumberFixtures()
 {
+    /* The serial numbers give each fixture its time offset; they follow
+       the list, so a fixture added, removed or moved while the EFX runs
+       takes its place at once instead of waiting for a restart. */
     int serialNumber = 0;
-
-    QListIterator <EFXFixture*> it(m_fixtures);
-    while (it.hasNext() == true)
+    for (EFXFixture *ef : std::as_const(m_fixtures))
     {
-        EFXFixture *ef = it.next();
         Q_ASSERT(ef != NULL);
         ef->setSerialNumber(serialNumber++);
     }
+}
+
+void EFX::preRun(MasterTimer* timer)
+{
+    renumberFixtures();
 
     Function::preRun(timer);
 }

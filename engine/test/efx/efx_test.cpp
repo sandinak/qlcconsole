@@ -3333,6 +3333,33 @@ void EFX_Test::preRunPostRun()
     QVERIFY(e->m_fadersMap.count() == 0);
 }
 
+void EFX_Test::fixturesChangedWhileRunning()
+{
+    EFX *e = new EFX(m_doc);
+    e->setPropagationMode(EFX::Serial);
+    e->addFixture(1, 0);
+    e->addFixture(2, 0);
+    QList<Universe*> ua;
+    ua.append(new Universe(0, new GrandMaster()));
+    MasterTimerStub timer(m_doc, ua);
+    e->preRun(&timer);
+    QCOMPARE(e->fixtures().at(1)->serialNumber(), 1);
+
+    // Added, moved and removed while it runs: the offsets follow at once.
+    e->addFixture(3, 0);
+    for (int i = 0; i < e->fixtures().size(); ++i)
+        QCOMPARE(e->fixtures().at(i)->serialNumber(), i);
+    EFXFixture *last = e->fixtures().last();
+    QVERIFY(e->raiseFixture(last));
+    for (int i = 0; i < e->fixtures().size(); ++i)
+        QCOMPARE(e->fixtures().at(i)->serialNumber(), i);
+    QVERIFY(e->removeFixture(e->fixtures().first()));
+    QCOMPARE(e->fixtures().size(), 2);
+    for (int i = 0; i < e->fixtures().size(); ++i)
+        QCOMPARE(e->fixtures().at(i)->serialNumber(), i);
+    e->postRun(&timer, ua);
+}
+
 void EFX_Test::adjustIntensity()
 {
     /* Basically any fixture with 16bit pan & tilt channels will do, but

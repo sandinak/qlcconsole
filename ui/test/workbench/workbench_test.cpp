@@ -699,6 +699,52 @@ void Workbench_Test::goHoldsTheBuildPreview()
     QTRY_VERIFY(!list->isRunning() && !b->isRunning());
 }
 
+/* A pick in the docked Workbench's Show Tree (Workbench::playPicked) takes
+   the stage back from a GO's hold: the latest action wins. With nothing
+   held, it changes nothing. */
+void Workbench_Test::aPickTakesTheStageBackFromAGo()
+{
+    Scene *b = scene("B", QString());
+    FixtureGroup *g = group("Washes", 2);
+    b->setValue(g->fixtureList().first(), 1, 200);
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 listId = st->addCueList(st->addProduction("P"), "Full Show", ShowTree::ListMode::NonTracking);
+    st->addCue(listId, -1, "One");
+    Chaser *list = qobject_cast<Chaser *>(m_doc->function(st->cueList(listId)->chaser));
+    QVERIFY(list != nullptr);
+
+    Workbench wb(m_doc);
+    wb.resize(1000, 700);
+    wb.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&wb));
+    m_doc->masterTimer()->start();
+    auto stopTimer = qScopeGuard([this]() { m_doc->masterTimer()->stop(); });
+    wb.load(b->id());
+    QTRY_VERIFY(b->isRunning());
+
+    // Nothing held: a pick leaves the preview as it is.
+    wb.playPicked();
+    QVERIFY(b->isRunning());
+
+    ShowControl::Request go;
+    go.command = ShowControl::Go;
+    go.chaser = list->id();
+    QVERIFY(m_doc->showControl()->execute(go));
+    QTRY_VERIFY(!b->isRunning());
+    QTRY_VERIFY(list->isRunning());
+    QVERIFY(wb.m_onRig->text().startsWith("■ Held"));
+
+    // The pick: the bench plays again, over the show.
+    wb.playPicked();
+    QTRY_VERIFY(b->isRunning());
+    QVERIFY(list->isRunning());
+    QVERIFY(!wb.m_onRig->text().startsWith("■ Held"));
+    QCOMPARE(wb.m_playBtn->text(), QString("Stop"));
+    wb.hide();
+    list->stop(FunctionParent::master());
+    QTRY_VERIFY(!list->isRunning() && !b->isRunning());
+}
+
 void Workbench_Test::theNavigatorDrivesTheWorkbench()
 {
     FixtureGroup *g = group("Steps", 2);
