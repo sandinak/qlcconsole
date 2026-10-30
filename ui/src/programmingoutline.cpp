@@ -902,7 +902,9 @@ void ProgrammingOutline::addCueLayerRows(const WorkbenchStack::Layer &l, int ind
     it->setData(NameCol, SceneRole, kInvalid);
     it->setData(NameCol, LayerRole, index);
     it->setData(NameCol, KeyRole, QStringLiteral("c:") + l.targetSignature);
-    it->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsDropEnabled);
+    // The cue's own layer drags (to reorder); one carried in is not its to move.
+    it->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsDropEnabled
+                 | (l.tracked || !m_stack->readOnlyReason().isEmpty() ? Qt::NoItemFlags : Qt::ItemIsDragEnabled));
     it->setText(BadgeCol, l.badge);
     it->setToolTip(NameCol, l.tip);
     it->setToolTip(BadgeCol, l.tip);
@@ -1557,9 +1559,24 @@ QMimeData *ProgrammingOutline::mimeData(const QList<QTreeWidgetItem *> &items) c
             aout << qint32(it->data(NameCol, SceneRole).toInt()) << it->data(NameCol, PathRole).toString();
             ++na;
         }
-    if (n == 0 && na == 0)
+    // A Show Tree cue's layer rows (the layers themselves): dropped on
+    // another layer row they move there. (Before 0.3.1 these carried
+    // nothing, so a drag from a layer row only selected it.)
+    QByteArray layerData;
+    QDataStream lout(&layerData, QIODevice::WriteOnly);
+    int nl = 0;
+    if (m_mode == Stack)
+        for (QTreeWidgetItem *it : items)
+            if (it->data(NameCol, KindRole).toInt() == CueLayerRow && layerOf(it) >= 0)
+            {
+                lout << qint32(layerOf(it));
+                ++nl;
+            }
+    if (n == 0 && na == 0 && nl == 0)
         return nullptr;
     QMimeData *mime = new QMimeData;
+    if (nl > 0)
+        mime->setData(QString::fromLatin1(WorkbenchStack::layerMimeType()), layerData);
     if (n > 0)
         mime->setData(QString::fromLatin1(rowMimeType()), data);
     if (na > 0)

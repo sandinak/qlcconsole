@@ -146,6 +146,9 @@ public:
      *  pairs of (layer index, key). Dropped on another layer it moves
      *  there (⌥: a copy). */
     static const char *attributeMimeType() { return "application/x-qlcconsole-cue-attribute"; }
+    /** A Show Tree cue's layer rows dragged (their indexes, qint32 each):
+     *  dropped on another layer row, they move above it. */
+    static const char *layerMimeType() { return "application/x-qlcconsole-cue-layer"; }
     /** What dropping @a mime on layer @a layer (-1: below the rows) would
      *  do; "!why" refused, "" nothing. */
     virtual QString dropPlanOn(int layer, const QMimeData *mime, bool separate) const;

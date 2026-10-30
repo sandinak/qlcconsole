@@ -639,6 +639,8 @@ QString TreeCueStack::dropPlanOn(int layer, const QMimeData *mime, bool separate
         return QString();
     if (mime->hasFormat(QString::fromLatin1(attributeMimeType())))
         return attributeDropPlan(layer, mime, separate);
+    if (mime->hasFormat(QString::fromLatin1(layerMimeType())))
+        return layerDropPlan(layer, mime);
     const QList<Row> rs = rows();
     quint32 lid = ShowTree::invalidId();
     Target t;
@@ -654,8 +656,83 @@ QString TreeCueStack::dropPlanOn(int layer, const QMimeData *mime, bool separate
     return hint.isEmpty() ? tr("Drop it on %1").arg(title()) : hint;
 }
 
+static QList<int> layerIndexes(const QMimeData *mime)
+{
+    QList<int> out;
+    QByteArray data = mime->data(QString::fromLatin1(WorkbenchStack::layerMimeType()));
+    QDataStream in(&data, QIODevice::ReadOnly);
+    while (!in.atEnd())
+    {
+        qint32 i = -1;
+        in >> i;
+        if (in.status() != QDataStream::Ok)
+            break;
+        if (!out.contains(i))
+            out << i;
+    }
+    return out;
+}
+
+/* Layer rows dragged on layer rows: the cue's own layers reorder, above the
+   row dropped on (below the last, with none under the pointer). Moving a
+   layer to another cue is the tree's drag (or Cut and Paste). */
+QString TreeCueStack::layerDropPlan(int layer, const QMimeData *mime) const
+{
+    const QList<Row> rs = rows();
+    const QList<int> from = layerIndexes(mime);
+    if (from.isEmpty())
+        return QString();
+    for (int i : from)
+        if (i < 0 || i >= rs.size() || rs.at(i).layerId == ShowTree::invalidId())
+            return QStringLiteral("!") + tr("A layer carried in isn't moved: it isn't this cue's own.");
+    if (layer >= 0 && layer < rs.size() && rs.at(layer).layerId == ShowTree::invalidId())
+        return QStringLiteral("!") + tr("Drop above one of this cue's own layers.");
+    if (from.size() == 1 && (from.first() == layer || (layer < 0 && from.first() == rs.size() - 1)))
+        return QStringLiteral("!") + tr("Already there.");
+    if (layer >= 0 && from.contains(layer))
+        return QStringLiteral("!") + tr("Already there.");
+    return layer >= 0 ? tr("Move above “%1”").arg(layers().at(layer).label) : tr("Move to the bottom (it plays last)");
+}
+
+bool TreeCueStack::dropLayerRows(int layer, const QMimeData *mime)
+{
+    const QList<Row> rs = rows();
+    QList<quint32> ids;
+    for (int i : layerIndexes(mime))
+        if (i >= 0 && i < rs.size())
+            ids << rs.at(i).layerId;
+    if (ids.isEmpty())
+        return false;
+    // In order, each above the row dropped on (or at the bottom); the ones
+    // already moved are found again by id.
+    bool changed = false;
+    for (quint32 id : ids)
+    {
+        const QList<Row> now = rows();
+        int a = -1, at = -1;
+        for (int i = 0; i < now.size(); ++i)
+        {
+            if (now.at(i).layerId == id)
+                a = i;
+            if (layer >= 0 && layer < rs.size() && now.at(i).layerId == rs.at(layer).layerId)
+                at = i;
+        }
+        if (a < 0)
+            continue;
+        int to = layer < 0 ? int(now.size()) - 1 : at;
+        if (to < 0)
+            continue;
+        if (layer >= 0 && a < to)
+            --to;
+        changed = moveLayer(a, to) || changed;
+    }
+    return changed;
+}
+
 bool TreeCueStack::dropOn(int layer, const QMimeData *mime, bool separate)
 {
+    if (mime != nullptr && mime->hasFormat(QString::fromLatin1(layerMimeType())))
+        return !layerDropPlan(layer, mime).startsWith(QLatin1Char('!')) && dropLayerRows(layer, mime);
     if (mime != nullptr && mime->hasFormat(QString::fromLatin1(attributeMimeType())))
         return dropAttributes(layer, mime, separate);
     if (dropPlanOn(layer, mime, separate).isEmpty() || dropPlanOn(layer, mime, separate).startsWith(QLatin1Char('!')))

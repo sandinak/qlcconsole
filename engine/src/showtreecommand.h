@@ -186,6 +186,8 @@ public:
     {
         QList<quint32> cues;
         QList<QPair<quint32, quint32>> layers;
+        /** ⌘X: the layers are moved by the paste, not copied. */
+        bool cut = false;
         bool isEmpty() const { return cues.isEmpty() && layers.isEmpty(); }
     };
     Clipboard clipboard;

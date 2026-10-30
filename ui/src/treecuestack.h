@@ -95,6 +95,10 @@ public:
     QString attributeDropPlan(int layer, const QMimeData *mime, bool copy) const;
     /** Move (copy) them there: one undo step. */
     bool dropAttributes(int layer, const QMimeData *mime, bool copy);
+    /** Layer rows dragged onto layer row @a layer (layerMimeType()): they
+     *  move above it (reorder), "!why" when they can't. */
+    QString layerDropPlan(int layer, const QMimeData *mime) const;
+    bool dropLayerRows(int layer, const QMimeData *mime);
     bool showMenu(int layer, int attribute, const QPoint &globalPos) override;
     bool clearAttribute(int layer, int attribute) override;
     QWidget *lendPane(int layer, int attribute) override;
