@@ -9,10 +9,6 @@ nav_order: 6
 
 *Two or three class periods after Lesson 2.7. Groups of 2–3.*
 
-**Give students:** <https://sandinak.github.io/qlcconsole/class/2-check/>
-
-<img src="../../images/qr/class-2-check.svg" width="120" alt="QR code for https://sandinak.github.io/qlcconsole/class/2-check/">
-
 ## The task
 
 Design, program and run the lighting for **one whole song**, from the
