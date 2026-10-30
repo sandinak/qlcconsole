@@ -3181,6 +3181,8 @@ void App::offerQlcPlusSettings()
         return;
     LegacySettings::apply(*qlcplus, own, plan);
     reloadRecentFiles();
+    statusBar()->showMessage(tr("Brought over from QLC+ 4: %1")
+                             .arg(LegacySettings::describe(plan).simplified()), 15000);
 }
 
 bool App::slotFileNew()
