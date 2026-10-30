@@ -169,6 +169,24 @@ C (H×V window, density by throw, coverage outline, the audience-zone
 safety check for Show Review), the Type=Laser emission inference, and
 FixtureDefCheck's laser checks.
 
+## AI Assist (0.5, docs/design/AI_ASSIST.md, scheduled 2026-10-30)
+
+Branson's design: type a request in Design mode ("movers 1–6 deep blue at
+50%", "find address conflicts") and get proposed command-line text to
+review; the model never touches the show, every apply is one undo step,
+off by default, torn down in Operate, works offline. Phases, each with its
+acceptance test in the design:
+- **P0** one operation registry the command line runs through (no change
+  in behaviour).
+- **P1** settings, provider adapters, read-only ops, full Design/Operate
+  gating. Ollama runs locally on ender for the acceptance checks (no live
+  model in CI: mock HTTP + recorded responses).
+- **P2** write ops with preview, confirm, undo; golden prompt suite.
+- **P2b** configuration import (§5b), usable with AI off.
+- **P3** MCP server over the registry.
+Guardrails: separate `ai/` module behind `QLC_AI_ASSIST`; no AI code on
+MasterTimer/universe threads; an ROI line is in STRATEGY.md §3.3.
+
 ## Show Review: an auditor for the show's design (post-0.3, asked 2026-10-25)
 
 Design in [docs/design/SHOW_REVIEW.md](../design/SHOW_REVIEW.md); nothing built, after
