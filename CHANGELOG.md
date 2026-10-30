@@ -497,6 +497,18 @@ skipped). Upstream fixes taken:
 - **An EFX keeps its spacing when fixtures change while it runs.** Adding,
   removing or moving a fixture in a running Serial or Asymmetric EFX
   re-spaces them at once, not at the next restart.
+- **Pixel boxes, effects and beams the course found (Level 2).** A pixel
+  box's white-only pixels (the XL-450's 30) light from a look: a colour's
+  white lights them (White does, Red doesn't), dimmed by the look's Dimmer.
+  One effect on several layers -- the same effect palette on two layers, or
+  an effect on the whole cue -- now moves every layer's lights, each from
+  its own layer's level (only the first layer moved). **Color Chase**'s
+  speed is in fixtures a second along the line, so over four pixel boxes it
+  goes box by box instead of crawling pixel by pixel. A beam standing on
+  the deck aimed at a **Line** lower than itself lights the people on the
+  line (it was sent tilt 0, level, out over the house). A new effect palette
+  starts as *New Effect* and the effect picker opens by itself, also when
+  the Look Editor was closed (it could start with the last effect's name).
 
 - **The Lighting Studio lines up with itself.** The rest of the alignment
   audit: the grid ends at the stage's edge and sits in the middle of the

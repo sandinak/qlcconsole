@@ -387,12 +387,15 @@ void EffectInstance::runTick()
 
     QList<DmxWrite> writes = parseIntents(result, cells);
     // Laid out over other scenes' fixtures too (one effect across layers):
-    // this scene writes its own only.
-    if (Scene *sc = qobject_cast<Scene *>(m_doc->function(m_sceneId)))
+    // it writes those of the scenes it plays only.
+    bool spans = false;
+    for (quint32 sid : sceneIds())
+        if (Scene *sc = qobject_cast<Scene *>(m_doc->function(sid)))
+            spans = spans || !sc->layoutSpan(m_effectPaletteId).isEmpty();
     {
-        if (!sc->layoutSpan(m_effectPaletteId).isEmpty())
+        if (spans)
         {
-            const QList<quint32> own = sc->writtenFixtures(m_effectPaletteId);
+            const QList<quint32> own = lookFixtureIds();
             const QSet<quint32> mine(own.constBegin(), own.constEnd());
             writes.erase(std::remove_if(writes.begin(), writes.end(), [&mine](const DmxWrite &w) {
                 return !mine.contains(w.fixtureId);
@@ -554,17 +557,38 @@ void EffectInstance::buildSceneBaseValues()
 {
     m_sceneBaseValues.clear();
     m_lookDimmer = 1.0f;
+    m_lookDimmerOf.clear();
+    /* Every scene it plays, the one it is bound to last: each fixture with
+       its own scene's base and Dimmer. */
+    for (int i = m_alsoScenes.size() - 1; i >= 0; --i)
+    {
+        Scene *scene = qobject_cast<Scene*>(m_doc->function(m_alsoScenes.at(i)));
+        if (scene == nullptr)
+            continue;
+        addSceneBaseValues(scene);
+        for (quint32 fid : scene->writtenFixtures(m_effectPaletteId))
+            m_lookDimmerOf.insert(fid, m_lookDimmer);
+        m_lookDimmer = 1.0f;
+    }
     Scene *scene = qobject_cast<Scene*>(m_doc->function(m_sceneId));
     if (scene == nullptr)
         return;
+    addSceneBaseValues(scene);
+    if (!m_lookDimmerOf.isEmpty())
+        for (quint32 fid : scene->writtenFixtures(m_effectPaletteId))
+            m_lookDimmerOf.insert(fid, m_lookDimmer);
+}
 
+void EffectInstance::addSceneBaseValues(Scene *scene)
+{
+    QHash<quint64, uchar> mine;
     auto key = [](quint32 fid, quint32 ch) -> quint64 {
         return (quint64(fid) << 32) | ch;
     };
 
     // Baked scene values first.
     for (const SceneValue &sv : scene->values())
-        m_sceneBaseValues[key(sv.fxi, sv.channel)] = sv.value;
+        mine[key(sv.fxi, sv.channel)] = sv.value;
 
     // Non-effect looks (Colour/Dimmer/…) override baked values (palette-paramount,
     // matching Scene::write). Effect palettes are skipped — that's us.
@@ -586,17 +610,22 @@ void EffectInstance::buildSceneBaseValues()
             m_lookDimmer = qBound(0.0f, float(p->value().toDouble() / 255.0), 1.0f);
         const int cOff = QLCPalette::colorSetOffset(m_doc, orderedPalettes, pid);
         for (const SceneValue &sv : p->valuesFromFixtureGroups(m_doc, groups, scene, cOff))
-            m_sceneBaseValues[key(sv.fxi, sv.channel)] = sv.value;
+            mine[key(sv.fxi, sv.channel)] = sv.value;
         for (const SceneValue &sv : p->valuesFromFixtures(m_doc, fixtures, scene, cOff))
-            m_sceneBaseValues[key(sv.fxi, sv.channel)] = sv.value;
+            mine[key(sv.fxi, sv.channel)] = sv.value;
     }
     // As the scene paints them: a fixture with no dimmer has the look's
     // Dimmer in its colour.
     const int lookDim = QLCPalette::lookDimmerValue(m_doc, orderedPalettes);
     if (lookDim >= 0)
-        for (auto it = m_sceneBaseValues.begin(); it != m_sceneBaseValues.end(); ++it)
+        for (auto it = mine.begin(); it != mine.end(); ++it)
             it.value() = QLCPalette::dimScaleWithoutDimmer(m_doc->fixture(quint32(it.key() >> 32)),
                                                            quint32(it.key() & 0xFFFFFFFF), it.value(), lookDim);
+    if (m_sceneBaseValues.isEmpty())
+        m_sceneBaseValues.swap(mine);
+    else
+        for (auto it = mine.constBegin(); it != mine.constEnd(); ++it)
+            m_sceneBaseValues.insert(it.key(), it.value());
 }
 
 uchar EffectInstance::sceneBaseValue(quint32 fid, quint32 channel, uchar dflt) const
@@ -701,25 +730,59 @@ int EffectInstance::resolvedDurationMs() const
     return m_script.naturalDurationMs();
 }
 
+bool EffectInstance::removeScene(quint32 sceneId)
+{
+    if (m_alsoScenes.removeAll(sceneId) > 0)
+        return true;
+    if (sceneId != m_sceneId)
+        return false;
+    if (!m_alsoScenes.isEmpty())
+        m_sceneId = m_alsoScenes.takeFirst();
+    return true;
+}
+
+/* Each scene's list, in scene order, without repeats. */
+static void appendNew(QList<quint32> &out, QSet<quint32> &seen, const QList<quint32> &more)
+{
+    for (quint32 id : more)
+        if (!seen.contains(id))
+        {
+            seen.insert(id);
+            out << id;
+        }
+}
+
 QList<quint32> EffectInstance::lookFixtureIds() const
 {
-    Scene *scene = qobject_cast<Scene*>(m_doc->function(m_sceneId));
-    if (!scene)
-        return {};
     /* The scene's groups' members and its fixtures, less any a lower layer
-       sets this effect's kind on itself (Scene::excludedFixtures). */
-    return scene->writtenFixtures(m_effectPaletteId);
+       sets this effect's kind on itself (Scene::excludedFixtures) -- of
+       every scene it plays (addScene()). */
+    Scene *scene = qobject_cast<Scene*>(m_doc->function(m_sceneId));
+    QList<quint32> out = scene != nullptr ? scene->writtenFixtures(m_effectPaletteId) : QList<quint32>();
+    if (m_alsoScenes.isEmpty())
+        return out;
+    QSet<quint32> seen(out.constBegin(), out.constEnd());
+    for (quint32 sid : m_alsoScenes)
+        if (Scene *sc = qobject_cast<Scene*>(m_doc->function(sid)))
+            appendNew(out, seen, sc->writtenFixtures(m_effectPaletteId));
+    return out;
 }
 
 QList<quint32> EffectInstance::layoutFixtureIds() const
 {
-    Scene *scene = qobject_cast<Scene*>(m_doc->function(m_sceneId));
-    if (!scene)
-        return {};
     /* ONE effect across several scenes (a cue-level effect over layers,
-       docs/design/SHOW_TREE_DESIGN.md D10): it lays out over all of them; this scene
-       writes only its own (runTick()). Otherwise the same as above. */
-    return scene->layoutFixtures(m_effectPaletteId);
+       docs/design/SHOW_TREE_DESIGN.md D10): it lays out over all of them,
+       and writes those of the scenes it plays (runTick()). Otherwise the
+       same as above. */
+    Scene *scene = qobject_cast<Scene*>(m_doc->function(m_sceneId));
+    QList<quint32> out = scene != nullptr ? scene->layoutFixtures(m_effectPaletteId) : QList<quint32>();
+    if (m_alsoScenes.isEmpty())
+        return out;
+    QSet<quint32> seen(out.constBegin(), out.constEnd());
+    for (quint32 sid : m_alsoScenes)
+        if (Scene *sc = qobject_cast<Scene*>(m_doc->function(sid)))
+            appendNew(out, seen, sc->layoutFixtures(m_effectPaletteId));
+    return out;
 }
 
 QList<quint32> EffectInstance::effectiveFixtureIds() const
@@ -839,7 +902,14 @@ EffectInstance::effectiveCells(int &gridCols, int &gridRows) const
     const QSet<quint32> allowed(fxIds.constBegin(), fxIds.constEnd());
 
     Scene *scene = qobject_cast<Scene*>(m_doc->function(m_sceneId));
-    const QList<quint32> grpIds = scene ? scene->layoutGroups(m_effectPaletteId) : QList<quint32>();
+    QList<quint32> grpIds = scene ? scene->layoutGroups(m_effectPaletteId) : QList<quint32>();
+    if (!m_alsoScenes.isEmpty())
+    {
+        QSet<quint32> seen(grpIds.constBegin(), grpIds.constEnd());
+        for (quint32 sid : m_alsoScenes)
+            if (Scene *sc = qobject_cast<Scene*>(m_doc->function(sid)))
+                appendNew(grpIds, seen, sc->layoutGroups(m_effectPaletteId));
+    }
 
     // A multi-group look's stage grid, while it is fresh (see below).
     QList<quint32> stageKey;
@@ -2236,7 +2306,8 @@ EffectInstance::parseIntents(const QJSValue &intents,
         // look Dimmer on that channel (via the scene base), so scaling colour too
         // would double-dim them.
         const float lookColorMul =
-            (fxi->masterIntensityChannel() == QLCChannel::invalid()) ? m_lookDimmer : 1.0f;
+            (fxi->masterIntensityChannel() == QLCChannel::invalid())
+                ? (m_lookDimmerOf.isEmpty() ? m_lookDimmer : m_lookDimmerOf.value(fid, m_lookDimmer)) : 1.0f;
         // Write DMX @value onto every channel carrying primary @colour.
         // Returns true if the fixture actually has such an emitter.
         // An intent with a colour in it OWNS its head's colour: written over

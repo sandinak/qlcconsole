@@ -8,6 +8,20 @@ under `~/.claude/.../memory/`.
 
 ---
 
+## Pixel boxes, effects and beams — leftovers (cbug, 2026-10-30)
+
+Built (DONE.md 2026-10-30). Open, each "decided (can change)":
+- A Dimmer alone leaves a box with no dimmer dark (white pixels too): the
+  colour is the light, as on its RGB pixels.
+- One effect over several layers takes its look colours (palettes.look)
+  and its timing from the first layer's scene; each layer keeps its own
+  base level.
+- A standing head that can't reach a line point below it aims at the
+  subject height above the point; a hung head aims at the point as before.
+- Course: Lessons 2.4/2.5 can now teach the cue-wide effect, the chase
+  across the stage and the USTs on the Riser Line (their workarounds are
+  the course agent's to lift).
+
 ## Song sections — leftovers (Q190, 2026-10-29)
 
 Built: numbering scheme per production, section rows in the Show Tree and

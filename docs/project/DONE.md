@@ -6,6 +6,35 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
+### 2026-10-30 — Pixel boxes, effects and beams the course found *(fix/031-course-bugs, 0.3.1 cbug)*
+
+COURSE_PLAN §8 #15, #17, #18, #20, each reproduced first in an offscreen
+test (`engine/test/pixelboxes` plays the classroom show's own rig from the
+Show Tree; `ui/test/showtreeview` aSecondNewEffectPaletteStartsAfresh,
+`ui/test/lookeditor`):
+- **White-only heads** (`QLCPalette` Colour): a head with a white emitter
+  and no RGB/CMY gets the colour's white (max of the look's explicit W and
+  min(R,G,B)); the course's palettes say W=0 (`#ffffff000000`), which meant
+  the RGB heads' white LED and left the XL-450's 30 white pixels at 0.
+- **One effect, several scenes** (`EffectInstance`, `EffectScriptRunner`):
+  the runner keeps one instance per effect palette (one look, one effect);
+  a second running scene carrying it is now added to that instance
+  (`addScene()`), which lays out over and writes every scene's fixtures,
+  each with its own scene's base and Dimmer (`m_lookDimmerOf`, only while
+  it plays more than one). Stopping the scene it is bound to hands it to
+  the next. Before, the other layers' scenes got no instance at all.
+- **Color Chase** counts fixtures (distinct ids; one fixture alone, its
+  heads) and places each head by its grid column.
+- **Line aim, a standing head** (`AimSolver::linePoints`): a floor-mounted
+  head whose line point is below it and out of reach aims at the subject
+  height above the point.
+- **Effect picker**: `EffectBrowser` no longer picks a row made current
+  from none (QAbstractItemView's focus-in made the first row current, and
+  pick-while-browsing applied it -- the last search's effect -- to the new
+  palette, which then kept that name); `LookEditor` opens the picker for a
+  new effect look on showEvent too (the Show Tree sets the look, then
+  shows the editor).
+
 ### 2026-10-29 — Lighting Studio alignment, the rest of the audit *(fix/031-alignment, 0.3.1 d2)*
 
 The rows of the RC8 alignment audit (scratchpad ALIGNMENT.md) RC8 left

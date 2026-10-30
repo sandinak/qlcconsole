@@ -373,7 +373,19 @@ QHash<quint32, QVector3D> AimSolver::linePoints(Doc *doc, const QLCPalette *look
     const QHash<quint32, double> fr = lineFractions(doc, target, heads, settings);
     const LineCurve curve(mProps->targetLinePoints(target));
     for (auto it = fr.constBegin(); it != fr.constEnd(); ++it)
-        out.insert(it.key(), curve.pointAt(it.value()));
+    {
+        QVector3D at = curve.pointAt(it.value());
+        /* A head standing on the deck can't tilt below its own horizon: a
+           point on the line lower than it (the riser's top, from a beam on
+           the floor beside it) was out of reach, and the nearest it got was
+           level, out over the house. It lights the people standing on the
+           line instead -- the subject height above it. */
+        Frame frame;
+        if (frameFor(doc, it.key(), frame) && frame.floorMounted && at.z() < frame.position.z()
+            && !solve(frame, at).reachable())
+            at.setZ(at.z() + mProps->aimSubjectHeight());
+        out.insert(it.key(), at);
+    }
     return out;
 }
 

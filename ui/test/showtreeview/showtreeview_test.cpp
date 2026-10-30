@@ -113,6 +113,9 @@
 #include "stagetarget.h"
 #include "qlcphysical.h"
 #include "lookeditor.h"
+#include "effectbrowser.h"
+#include "effectscriptrunner.h"
+#include "effectscriptcache.h"
 #include "fixturegroup.h"
 #include "qlcpalette.h"
 #include "collection.h"
@@ -8332,4 +8335,65 @@ void ShowTreeView_Test::pickersDockInTheWindow()
     view.openDockedPicker(QStringLiteral("Three"), third, third, [&applied]() { applied += 1000; });
     view.findChild<QPushButton *>("stPickerApply")->click();
     QCOMPARE(applied, 1001);
+}
+
+void ShowTreeView_Test::aSecondNewEffectPaletteStartsAfresh()
+{
+    m_doc->effectScriptRunner()->cache()->addDirectory(QDir(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts"));
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1200, 800);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    LookEditor *ed = view.lookEditor();
+    auto browser = [&view]() -> EffectBrowser * {
+        for (EffectBrowser *b : view.findChildren<EffectBrowser *>())
+            if (b->isVisible())
+                return b;
+        return nullptr;
+    };
+    // As a person does: type the name, click the row, Done.
+    auto pick = [&](const QString &name) {
+        EffectBrowser *b = browser();
+        if (b == nullptr)
+            return false;
+        b->search()->setFocus();
+        b->search()->selectAll();
+        QTest::keyClicks(b->search(), name);
+        QApplication::processEvents();
+        for (int i = 0; i < b->list()->count(); ++i)
+            if (b->list()->item(i)->text() == name)
+            {
+                const QRect r = b->list()->visualItemRect(b->list()->item(i));
+                QTest::mouseClick(b->list()->viewport(), Qt::LeftButton, Qt::NoModifier, r.center());
+                QApplication::processEvents();
+                view.findChild<QPushButton *>("effectPickerDone")->click();
+                return true;
+            }
+        return false;
+    };
+
+    const quint32 first = view.newPaletteFromLibrary(QLCPalette::Effect);
+    QTRY_VERIFY(ed->effectPickerOpen());
+    QVERIFY(pick("Color Chase"));
+    QCOMPARE(m_doc->palette(first)->name(), QString("Color Chase"));
+
+    // The second, made while the editor shows the first.
+    const quint32 second = view.newPaletteFromLibrary(QLCPalette::Effect);
+    QLCPalette *p = m_doc->palette(second);
+    QTRY_VERIFY(ed->effectPickerOpen());
+    QCOMPARE(p->name(), QString("New Effect"));
+    QVERIFY(p->scriptPath().isEmpty());
+    QVERIFY(pick("Sparkle"));
+    QCOMPARE(p->name(), QString("Sparkle"));
+    QCOMPARE(m_doc->palette(first)->name(), QString("Color Chase"));
+
+    // A third with the editor closed first (↩ Back, Esc): the picker opens
+    // by itself all the same.
+    QTest::keyClick(&view, Qt::Key_Escape);
+    QTRY_VERIFY(!ed->isVisible());
+    const quint32 third = view.newPaletteFromLibrary(QLCPalette::Effect);
+    QTRY_VERIFY(ed->effectPickerOpen());
+    QCOMPARE(m_doc->palette(third)->name(), QString("New Effect"));
+    QVERIFY(pick("Rainbow"));
+    QCOMPARE(m_doc->palette(third)->name(), QString("Rainbow"));
 }

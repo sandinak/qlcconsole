@@ -177,6 +177,12 @@ void EffectScriptRunner::createInstancesForScene(quint32 sceneId)
                 existing->rebindToScene(sceneId);
                 emit effectStarted(pid);
             }
+            else
+            {
+                // It plays this scene's fixtures too (the same palette on
+                // two layers, a cue-wide effect): each with its own base.
+                existing->addScene(sceneId);
+            }
             continue;
         }
 
@@ -269,8 +275,13 @@ void EffectScriptRunner::destroyInstancesForScene(quint32 sceneId, bool release)
         while (it.hasNext())
         {
             EffectInstance *inst = it.next();
-            if (inst->sceneId() != sceneId)
+            /* Another scene it plays stopped, or the one it is bound to
+               while others still play it: the effect runs on there. */
+            if (inst->sceneId() != sceneId || inst->hasOtherScenes())
+            {
+                inst->removeScene(sceneId);
                 continue;
+            }
 
             const QLCPalette *pal = m_doc->palette(inst->effectPaletteId());
 

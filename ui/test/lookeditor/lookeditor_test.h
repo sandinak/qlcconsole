@@ -67,6 +67,8 @@ private slots:
     void theHostSpreadStandsInForTheEffectsOwn();
     void theSpreadIsPreviewed();
     void theEffectPickerIsAWindowOfItsOwn();
+    void aNewEffectLookStartsAsANewEffect();
+    void thePickerOpensWhenTheEditorIsShown();
     void wledOnlyEffectsNeedAWledTarget();
     void theBrowsersListsAreAToZ();
     /** Where an effect came from: Built-in · Mine · This show filters, a

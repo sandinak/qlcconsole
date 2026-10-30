@@ -1017,6 +1017,90 @@ void LookEditor_Test::theSpreadIsPreviewed()
    working WITH an effect .. we still need to be able to access it .. a
    selection should apply immediately": the browser is a window of its own,
    the settings have the width, and every pick plays at once. */
+/* A new effect palette made while the editor shows another effect starts
+   as "New Effect" with no effect, and is named after the one picked
+   (COURSE_PLAN §8 #18: it took the effect shown before's name). */
+void LookEditor_Test::aNewEffectLookStartsAsANewEffect()
+{
+    Doc doc(this);
+    doc.effectScriptRunner()->cache()->addDirectory(QDir(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts"));
+    LookEditor ed(&doc);
+    ed.resize(1000, 640);
+    ed.show();
+    auto pickNamed = [&](const QString &name) {
+        EffectBrowser *browser = ed.m_effectBrowser;
+        browser->search()->setText(name);
+        QApplication::processEvents();
+        for (int i = 0; i < browser->list()->count(); ++i)
+            if (browser->list()->item(i)->text() == name)
+            {
+                browser->pick(browser->list()->item(i));
+                QApplication::processEvents();
+                return true;
+            }
+        return false;
+    };
+
+    // The first: picked, named after it, picker closed.
+    const quint32 first = doc.paletteOps()->create(QLCPalette::Effect, QString());
+    ed.setPalette(first);
+    QTRY_VERIFY(ed.effectPickerOpen());
+    QVERIFY(pickNamed("Color Chase"));
+    ed.m_effectPicker->findChild<QPushButton *>("effectPickerDone")->click();
+    QCOMPARE(doc.palette(first)->name(), QString("Color Chase"));
+
+    // A second, made while the first is shown.
+    const quint32 second = doc.paletteOps()->create(QLCPalette::Effect, QString());
+    QLCPalette *p = doc.palette(second);
+    const QString factory = p->name();
+    ed.setPalette(second);
+    QTRY_VERIFY(ed.effectPickerOpen());
+    QApplication::processEvents();
+    QCOMPARE(p->name(), factory);
+    QVERIFY2(p->scriptPath().isEmpty(), qPrintable(p->scriptPath()));
+    QCOMPARE(doc.palette(first)->name(), QString("Color Chase"));
+    QVERIFY(doc.palette(first)->scriptPath().endsWith("color-chase.js"));
+    // Typed into the search, as a person does: what the list shows on the
+    // way is not picked.
+    EffectBrowser *browser = ed.m_effectBrowser;
+    browser->search()->setFocus();
+    browser->search()->selectAll();
+    QTest::keyClicks(browser->search(), "Sparkle");
+    QApplication::processEvents();
+    QCOMPARE(p->name(), factory);
+    QVERIFY2(p->scriptPath().isEmpty(), qPrintable(p->scriptPath()));
+    QVERIFY(pickNamed("Sparkle"));
+    ed.m_effectPicker->findChild<QPushButton *>("effectPickerDone")->click();
+    QCOMPARE(p->name(), QString("Sparkle"));
+    QVERIFY(p->scriptPath().endsWith("sparkle.js"));
+}
+
+/* Made with the editor closed (the Show Tree opens it after): the picker
+   opens by itself as the editor appears, as it does with it open. */
+void LookEditor_Test::thePickerOpensWhenTheEditorIsShown()
+{
+    Doc doc(this);
+    doc.effectScriptRunner()->cache()->addDirectory(QDir(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts"));
+    LookEditor ed(&doc);
+    ed.resize(1000, 640);
+    const quint32 id = doc.paletteOps()->create(QLCPalette::Effect, QString());
+    ed.setPalette(id);
+    QApplication::processEvents();
+    QVERIFY(!ed.effectPickerOpen());
+    ed.show();
+    QTRY_VERIFY(ed.effectPickerOpen());
+    ed.closeEffectPicker(false);
+
+    // An effect already picked: no picker on show.
+    QLCPalette *p = doc.palette(id);
+    p->setScriptPath(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts/sparkle.js");
+    ed.hide();
+    ed.setPalette(id);
+    ed.show();
+    QTest::qWait(50);
+    QVERIFY(!ed.effectPickerOpen());
+}
+
 void LookEditor_Test::theEffectPickerIsAWindowOfItsOwn()
 {
     Doc doc(this);

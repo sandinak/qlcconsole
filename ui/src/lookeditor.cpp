@@ -5,6 +5,7 @@
   Licensed under the Apache License, Version 2.0 (the "License");
 */
 
+#include <QShowEvent>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QFormLayout>
@@ -1560,17 +1561,35 @@ void LookEditor::setPalette(quint32 paletteId)
     emit lookFocusChanged(paletteId);
 
     /* A new effect look, nothing picked yet: picking is the first thing to
-       do, so the picker opens itself (queued: after the editor is shown). */
-    if (p != nullptr && p->type() == QLCPalette::Effect && p->scriptPath().isEmpty()
-        && p->wledEffect().isEmpty() && isVisible())
-    {
-        QPointer<LookEditor> me(this);
-        const quint32 id = paletteId;
-        QTimer::singleShot(0, this, [me, id]() {
-            if (me && me->paletteId() == id && !me->effectPickerOpen())
+       do, so the picker opens itself (queued: after the editor is shown) --
+       or, the editor hidden, as it is shown (showEvent()). */
+    if (isVisible())
+        openPickerForNewEffect();
+}
+
+void LookEditor::openPickerForNewEffect()
+{
+    QLCPalette *p = m_doc->palette(m_paletteId);
+    if (p == nullptr || p->type() != QLCPalette::Effect || !p->scriptPath().isEmpty()
+        || !p->wledEffect().isEmpty())
+        return;
+    QPointer<LookEditor> me(this);
+    const quint32 id = m_paletteId;
+    QTimer::singleShot(0, this, [me, id]() {
+        if (me && me->isVisible() && me->paletteId() == id && !me->effectPickerOpen())
+        {
+            QLCPalette *pal = me->m_doc->palette(id);
+            if (pal != nullptr && pal->scriptPath().isEmpty() && pal->wledEffect().isEmpty())
                 me->openEffectPicker();
-        });
-    }
+        }
+    });
+}
+
+void LookEditor::showEvent(QShowEvent *ev)
+{
+    QWidget::showEvent(ev);
+    if (!ev->spontaneous())
+        openPickerForNewEffect();
 }
 
 void LookEditor::setContextScene(Scene *scene)
