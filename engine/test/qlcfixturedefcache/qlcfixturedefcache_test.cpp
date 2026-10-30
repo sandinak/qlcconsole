@@ -21,6 +21,8 @@
 #include <QTemporaryDir>
 #include <QDateTime>
 #include <QRegularExpression>
+#include <QDirIterator>
+#include <QXmlStreamReader>
 #include "qlcfixturemode.h"
 #include "qlcphysical.h"
 
@@ -247,6 +249,56 @@ void QLCFixtureDefCache_Test::defDirectories()
     QVERIFY(dir.nameFilters().contains(QString("*%1").arg(KExtFixture)));
     QVERIFY(dir.absolutePath().contains(USERFIXTUREDIR));
 
+}
+
+/* Every .qxf the app ships loads in the engine (not only against the
+ * schema, which scripts/check does), and FixturesMap.xml lists exactly
+ * the files on disk -- what tools/sync-fixtures.py must leave behind. */
+void QLCFixtureDefCache_Test::everyShippedDefinitionLoadsAndIsInTheMap()
+{
+    const QDir root(QDir(INTERNAL_FIXTUREDIR).absolutePath());
+    QSet<QString> onDisk;
+    QStringList broken;
+    QDirIterator it(root.path(), QStringList() << QString("*%1").arg(KExtFixture),
+                    QDir::Files, QDirIterator::Subdirectories);
+    while (it.hasNext())
+    {
+        const QString path = it.next();
+        const QString rel = root.relativeFilePath(path);
+        if (rel.startsWith("scripts/"))
+            continue;
+        onDisk.insert(rel);
+
+        QLCFixtureDef def;
+        if (def.loadXML(path) != QFile::NoError || def.manufacturer().isEmpty()
+            || def.model().isEmpty() || def.modes().isEmpty())
+            broken << rel;
+    }
+    QVERIFY2(onDisk.size() > 1500, qPrintable(QString::number(onDisk.size())));
+    QVERIFY2(broken.isEmpty(), qPrintable(broken.join(", ")));
+
+    QFile mapFile(root.filePath("FixturesMap.xml"));
+    QVERIFY(mapFile.open(QIODevice::ReadOnly));
+    QXmlStreamReader xml(&mapFile);
+    QSet<QString> inMap;
+    QString maker;
+    while (!xml.atEnd())
+    {
+        if (xml.readNext() != QXmlStreamReader::StartElement)
+            continue;
+        if (xml.name() == QLatin1String("M"))
+            maker = xml.attributes().value("n").toString();
+        else if (xml.name() == QLatin1String("F"))
+            inMap.insert(QString("%1/%2%3").arg(maker, xml.attributes().value("n").toString(), KExtFixture));
+    }
+    QVERIFY(!xml.hasError());
+
+    QStringList notInMap = QSet<QString>(onDisk).subtract(inMap).values();
+    QStringList noFile = QSet<QString>(inMap).subtract(onDisk).values();
+    notInMap.sort();
+    noFile.sort();
+    QVERIFY2(notInMap.isEmpty(), qPrintable("not in FixturesMap.xml: " + notInMap.join(", ")));
+    QVERIFY2(noFile.isEmpty(), qPrintable("in FixturesMap.xml with no file: " + noFile.join(", ")));
 }
 
 void QLCFixtureDefCache_Test::storeDef()

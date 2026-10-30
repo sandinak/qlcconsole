@@ -17,7 +17,7 @@ user, as ordinary upstream contributions.
 | Forked from | `QLC+_4.14.2` (2026, the original fork point) |
 | Upstream master merged | 9a0deb5cf (2026-02-01), in 1f8d28a5f / d875a4313 |
 | Code reviewed up to | `QLC+_4.14.4` (027e6d4fd) |
-| Fixture definitions synced to | upstream master a089223b9 (2026-09-10) |
+| Fixture definitions synced to | upstream master 4cd37df23 (2026-10-29), by `tools/sync-fixtures.py` |
 
 The build string is `<QLC_BASE_VERSION>+qlcconsole.<N>`
 ([variables.cmake](../../variables.cmake)): the base is 4.14.4, and `N` is
@@ -28,6 +28,20 @@ as cherry-picks, so `git rev-list QLC+_4.14.4..HEAD` would count the
 February sync's upstream commits out and drop `N` by about 550.
 
 ## Intake log
+
+### 2026-10-29: fixture definitions (qlcconsole 0.3.1)
+
+The first run of `tools/sync-fixtures.py`, from upstream master
+a089223b9 to 4cd37df23 (2026-10-29). Master, not a 4.x tag: QLC+ 4 is
+in maintenance and new definitions land on master only (`QLC+_4.14.4`
+has 1,710; master 1,781); the `.qxf` format and `fixture.xsd` are
+unchanged between them. **44 new**, **4 upstream updates** taken (ETC
+ColorSource Fresnel V, Pro-Lights CromoWash100, Rockville Motionstrip
+RGBW, Stairville CLB2.4), 1 upstream rename followed
+(`Stairville-TRI-LED-Bundle-Complete.qxf` →
+`Stairville-Stage-TRI-LED-Bundle-Complete.qxf`, same model), the fork's
+edited ETC ColorSource Spot and its 10 fork-only files kept, no
+conflicts. 1,791 definitions, `scripts/check` clean.
 
 ### 2026-10-28: QLC+ 4.14.3 and 4.14.4 (qlcconsole 0.3.1)
 
@@ -244,11 +258,14 @@ are kept. 1748 definitions, `resources/fixtures/scripts/check` clean.
    `ui/src/qlcplus_*.ts` apply to our `qlcconsole_*.ts` by rename
    detection. Build and run the affected tests offscreen after each
    group.
-5. **Fixture definitions**: copy upstream's new `.qxf` files (and
-   upstream updates of files the fork hasn't changed), keep fork-only and
-   fork-edited files, regenerate the map with
-   `cd resources/fixtures && ./scripts/fixtures-tool.py --map`, and run
-   `./scripts/check`.
+5. **Fixture definitions**: `tools/sync-fixtures.py` (`--dry-run`
+   first). It fetches `~/git/qlcplus`, merges each upstream `.qxf` three
+   ways against the last sync (`tools/sync-fixtures.base`): new files
+   are added, upstream updates of files the fork hasn't changed are
+   taken, fork-only and fork-edited files are kept, a clash is reported
+   and the fork's file kept. It rebuilds `FixturesMap.xml`, runs
+   `resources/fixtures/scripts/check`, and moves the base only when the
+   check passes.
 6. **Base bump** (only when moving to a new upstream release):
    `QLC_BASE_VERSION` in variables.cmake and `project(... VERSION)` in
    CMakeLists.txt; keep the build count anchored at `QLC+_4.14.2`.

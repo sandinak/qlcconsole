@@ -54,6 +54,15 @@ skipped). Upstream fixes taken:
   4, Chauvet FXpar3, Equinox Fusion 140 / 260ZR, Starway SupraKolor and
   more) and 3 updated (American DJ Jolt 300, Cameo ROOT PAR 6, beamZ
   LCB244).
+- **48 more fixture definitions from QLC+ upstream** (synced to upstream
+  master of 2026-10-29): 44 new (American DJ Focus Spot Two, Briteq
+  BT-Theatre 150EZ / 200TW / 261FC, Chauvet Ovation CYC 1 FC and Kinta
+  HP, ETC ColorSource Fresnel V-MAX, Martin MAC Aura XIP, Varytec LED
+  Theatre Spot 120 FC and more) and 4 updated (ETC ColorSource Fresnel V,
+  Pro-Lights CromoWash100, Rockville Motionstrip RGBW, Stairville
+  CLB2.4). The fixture library is now synced from upstream every release
+  (`tools/sync-fixtures.py`), keeping qlcconsole's own definitions and
+  edits. 1,791 definitions.
 
 ### Added
 

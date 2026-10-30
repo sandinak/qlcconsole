@@ -140,7 +140,10 @@ Steps:
    If the release moves the envelope (a faster engine, or a slowdown taken
    on purpose), rerun the sweeps and update
    [docs/performance.md](../performance.md#keeping-it-fast) as it says.
-1. Bump `VERSION` to the new release number.
+1. Bump `VERSION` to the new release number. Bring the fixture
+   library up to date: `tools/sync-fixtures.py` (upstream definitions,
+   see [UPSTREAM.md](UPSTREAM.md) step 5; log it there and credit "N
+   definitions from QLC+ upstream" in the CHANGELOG).
 2. Add a `## [X.Y.Z] - YYYY-MM-DD` section to [CHANGELOG.md](../../CHANGELOG.md)
    summarizing what shipped since the last release (pull the user-facing
    highlights from [DONE.md](../project/DONE.md)), with its Known issues. A section

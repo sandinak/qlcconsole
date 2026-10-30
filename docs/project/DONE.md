@@ -6,6 +6,29 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
+### 2026-10-29 — Fixture library sync, every release *(feat/031-home4, fx)*
+
+- `tools/sync-fixtures.py`: reads `~/git/qlcplus` with `git show` (its
+  branch and tree are never touched; `git fetch` first unless
+  `--no-fetch`), merges each `.qxf` three ways against the last sync
+  (`tools/sync-fixtures.base`): new added, upstream updates of untouched
+  files taken, both-sides edits merged by `git merge-file` when clean,
+  else reported and the fork's file kept; fork-only and fork-edited kept;
+  an upstream deletion followed only when the fork's copy is untouched.
+  Rebuilds `FixturesMap.xml`, runs `scripts/check`, moves the base only
+  when the check passes; `--dry-run` reports only. Warns when upstream's
+  `fixture.xsd` moved.
+- First run: upstream master a089223b9 → 4cd37df23: 44 new, 4 updated,
+  1 rename followed (Stairville Stage TRI LED Bundle Complete), ETC
+  ColorSource Spot (fork edit) and 10 fork-only kept, no conflicts. 1,791.
+- **Decided:** upstream master, not a 4.x tag, is the source (4.x is in
+  maintenance; QLC+_4.14.4 has 1,710 definitions, older than ours; the
+  format and schema are the same) (can change: `--ref QLC+_4.14.4`).
+- Test: `QLCFixtureDefCache_Test::everyShippedDefinitionLoadsAndIsInTheMap`
+  -- every shipped .qxf loads in the engine (manufacturer, model, a mode)
+  and FixturesMap.xml lists exactly the files on disk (~3 s).
+- RELEASE.md step 1 and UPSTREAM.md step 5 run it; UPSTREAM.md logs it.
+
 ### 2026-10-29 — Web access saved with the show *(feat/031-show-webserver)*
 
 - **Engine:** `ShowWebAccess` (`engine/src/showwebaccess.*`, `Doc::webAccess()`):
