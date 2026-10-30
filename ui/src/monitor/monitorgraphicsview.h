@@ -1241,10 +1241,19 @@ private:
 
     /** Push the captureMoveUndo() snapshot as one undo step, if anything moved. */
     void commitMoveUndo();
-    /** A free fixture's icon size in mm (its stored XY is the icon's corner). */
+    /** A free fixture's icon size in mm. */
     QSizeF fixtureIconSizeMm(const MonitorFixtureItem *item) const;
     /** Store an aligned free fixture's new corner, keeping its height. */
-    void storeAlignedFixture(quint32 fid, MonitorFixtureItem *item, const QPointF &cornerMm);
+    void storeAlignedFixture(quint32 fid, MonitorFixtureItem *item, const QRectF &iconMm);
+    /** A fixture's icon as the plot draws it, in mm. */
+    QRectF fixtureIconRectMm(quint32 fid, const MonitorFixtureItem *item) const;
+public:
+    /** mm from a free (or decked) fixture's stored corner to its centre, the
+     *  point the plot centres its icon on and its light comes from
+     *  (RigHeads::fixtureCentre()). Zero for a mount whose position is
+     *  already its centre. */
+    QPointF freeCentreOffsetMm(quint32 fid) const;
+private:
 
     Doc *m_doc;
     QGraphicsScene *m_scene;
@@ -1637,6 +1646,8 @@ private:
 
     /** Counter-rotate every text item so labels stay upright while turned. */
     void refreshLabelRotations();
+    /** Tell every fixture item the view's zoom and turn (setViewHint()). */
+    void refreshFixtureViewHints();
 
     /** True while an update*() method is deleting+recreating items. Guards
      *  extendSelectionToGroups from dynamic_cast-ing half-deleted items when

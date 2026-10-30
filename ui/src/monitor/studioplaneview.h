@@ -109,6 +109,11 @@ private:
     quint32  m_dragFid = Fixture::invalidId();   ///< 0 is a real fixture id
     bool     m_panning = false;
     QPointF  m_panLast;
+    QPointF  m_grabOffset;     ///< fixture centre minus the pointer, at the press
+public:
+    /** The grid's step in metres at @p pxPerM: round in the show's units. */
+    static double gridStepM(double pxPerM, bool feet);
+private:
     QSet<quint32> m_highlight;
 };
 

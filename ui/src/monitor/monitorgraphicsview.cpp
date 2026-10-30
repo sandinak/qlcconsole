@@ -144,6 +144,8 @@ MonitorGraphicsView::MonitorGraphicsView(Doc *doc, QWidget *parent)
     });
     connect(this, &MonitorGraphicsView::mapStructureChanged,
             this, &MonitorGraphicsView::updateStageMarks);
+    // A fixture's label and halo are screen-sized: their areas follow a zoom.
+    connect(this, &MonitorGraphicsView::rulersChanged, this, &MonitorGraphicsView::refreshFixtureViewHints);
 
     /* A new or opened show deletes every stage structure (MonitorProperties::
        reset()) before the view is rebuilt, and each structure's item only
@@ -352,7 +354,11 @@ void MonitorGraphicsView::setViewRotation(int quarterTurns)
     setTransform(t);
 
     updateGrid();               // the fit depends on which way the grid is laid out
-    refreshLabelRotations();
+    /* ...and so does every item's place: re-placed here, not by luck. It
+       used to happen only when the turn made the scroll bars come or go and
+       the viewport resize ran a full refresh; with the scene centred on the
+       grid that no longer happens, and fixtures stayed at the old scale. */
+    refreshAllItems();          // re-pins the labels too
     emit rulersChanged();
     viewport()->update();
 }
@@ -361,8 +367,17 @@ void MonitorGraphicsView::setViewRotation(int quarterTurns)
  * their names as CHILD text items (truss/platform/tower/pipe/stand/target), so
  * one pass over the scene covers them; the two that paint text inline
  * (MonitorFixtureItem, PowerSourceItem) counter-rotate in their own paint(). */
+void MonitorGraphicsView::refreshFixtureViewHints()
+{
+    const qreal scale = viewScale();
+    foreach (MonitorFixtureItem *mfi, m_fixtures)
+        if (mfi != nullptr)
+            mfi->setViewHint(scale, 90.0 * m_viewRotation);
+}
+
 void MonitorGraphicsView::refreshLabelRotations()
 {
+    refreshFixtureViewHints();
     const qreal counter = -90.0 * m_viewRotation;
     foreach (QGraphicsItem *it, m_scene->items())
     {
@@ -1113,11 +1128,11 @@ static QList<QPair<quint32, MonitorFixtureItem *> >
     return out;
 }
 
-/* A free fixture's stored XY is the top-left corner of its icon (updateFixture()
-   pins the item's corner there), so lining up stored points lined up CORNERS:
-   a wide and a narrow light "aligned" left their centres apart. Align and
-   Distribute work on what the plot draws -- the icon's centre and edges --
-   and convert back to the corner only to store it. */
+/* A free fixture's stored XY is a corner, so lining up stored points lined
+   up CORNERS: a wide and a narrow light "aligned" left their centres apart.
+   Align and Distribute work on what the plot draws -- the icon's centre and
+   edges (fixtureIconRectMm()) -- and convert back to the corner only to
+   store it. */
 QSizeF MonitorGraphicsView::fixtureIconSizeMm(const MonitorFixtureItem *item) const
 {
     if (item == nullptr || m_cellPixels <= 0)
@@ -1127,17 +1142,43 @@ QSizeF MonitorGraphicsView::fixtureIconSizeMm(const MonitorFixtureItem *item) co
     return QSizeF(r.width() * k, r.height() * k);
 }
 
-void MonitorGraphicsView::storeAlignedFixture(quint32 fid, MonitorFixtureItem *item,
-                                              const QPointF &cornerMm)
+QPointF MonitorGraphicsView::freeCentreOffsetMm(quint32 fid) const
 {
+    /* A free or decked fixture's stored X/Y is the CORNER of its body;
+       RigHeads::fixtureCentre() -- where the rig view and the beams put it --
+       adds half its size. Every other mount's position is already its
+       centre. Measured from that one rule rather than repeated. */
+    MonitorProperties *props = m_doc->monitorProperties();
+    if (props == nullptr)
+        return QPointF();
+    const FixtureRigProps rp = props->fixtureRigProps(fid);
+    if (rp.trussId != Truss::invalidId() || rp.onPipe() || rp.onTower() || rp.onRiser()
+        || rp.onHanger() || props->fixtureFrameGroup(fid) != 0)
+        return QPointF();
+    const QVector3D c = RigHeads::fixtureCentre(m_doc, fid);
+    const QVector3D w = props->fixtureRigPosition(fid);
+    return QPointF(double(c.x() - w.x()) * 1000.0, double(c.y() - w.y()) * 1000.0);
+}
+
+QRectF MonitorGraphicsView::fixtureIconRectMm(quint32 fid, const MonitorFixtureItem *item) const
+{
+    const QSizeF sz = fixtureIconSizeMm(item);
+    const QPointF c = item->realPosition() + freeCentreOffsetMm(fid);
+    return QRectF(c.x() - sz.width() / 2.0, c.y() - sz.height() / 2.0, sz.width(), sz.height());
+}
+
+void MonitorGraphicsView::storeAlignedFixture(quint32 fid, MonitorFixtureItem *item,
+                                              const QRectF &iconMm)
+{
+    const QPointF cornerMm = iconMm.center() - freeCentreOffsetMm(fid);
     MonitorProperties *props = m_doc->monitorProperties();
     /* Keep the hanging height: an XY tidy-up must never drop a light to the
        floor (it wrote Z = 0, and Monitor::slotFixtureMoved then "preserved"
        that 0). */
     const float z = props->fixturePosition(fid, 0, 0).z();
     item->setRealPosition(cornerMm);
-    item->setPos(realPositionToPixels(cornerMm.x(), cornerMm.y()));
     props->setFixturePosition(fid, 0, 0, QVector3D(cornerMm.x(), cornerMm.y(), z));
+    updateFixture(fid);
     emit fixtureMoved(fid, cornerMm);
 }
 
@@ -1155,7 +1196,7 @@ int MonitorGraphicsView::alignSelectedFixtures(int mode)
     double sumX = 0, sumY = 0, minX = 1e18, maxX = -1e18, minY = 1e18, maxY = -1e18;
     for (const auto &it : items)
     {
-        const QRectF b(it.second->realPosition(), fixtureIconSizeMm(it.second));
+        const QRectF b = fixtureIconRectMm(it.first, it.second);
         boxes << b;
         sumX += b.center().x(); sumY += b.center().y();
         minX = qMin(minX, b.left()); maxX = qMax(maxX, b.right());
@@ -1177,7 +1218,7 @@ int MonitorGraphicsView::alignSelectedFixtures(int mode)
             case 5: b.moveBottom(maxY); break;                           // downstage edges
             default: break;
         }
-        storeAlignedFixture(items.at(i).first, items.at(i).second, b.topLeft());
+        storeAlignedFixture(items.at(i).first, items.at(i).second, b);
     }
     commitMoveUndo();       // one Ctrl+Z puts them back (it was captured, never kept)
     m_doc->setModified();
@@ -1195,15 +1236,15 @@ int MonitorGraphicsView::distributeSelectedFixtures(bool horizontal)
         return 0;
 
     // Evenly space the CENTRES between the two outermost centres.
-    auto centreOf = [this](const MonitorFixtureItem *mfi) {
-        return QRectF(mfi->realPosition(), fixtureIconSizeMm(mfi)).center();
+    auto centreOf = [this](quint32 fid, const MonitorFixtureItem *mfi) {
+        return fixtureIconRectMm(fid, mfi).center();
     };
     std::sort(items.begin(), items.end(), [&](const auto &a, const auto &b) {
-        const QPointF ca = centreOf(a.second), cb = centreOf(b.second);
+        const QPointF ca = centreOf(a.first, a.second), cb = centreOf(b.first, b.second);
         return horizontal ? ca.x() < cb.x() : ca.y() < cb.y();
     });
-    const QPointF first = centreOf(items.first().second);
-    const QPointF last = centreOf(items.last().second);
+    const QPointF first = centreOf(items.first().first, items.first().second);
+    const QPointF last = centreOf(items.last().first, items.last().second);
     const double lo = horizontal ? first.x() : first.y();
     const double hi = horizontal ? last.x() : last.y();
     const double step = (hi - lo) / double(items.size() - 1);
@@ -1211,11 +1252,11 @@ int MonitorGraphicsView::distributeSelectedFixtures(bool horizontal)
     captureMoveUndo();
     for (int i = 0; i < items.size(); i++)
     {
-        QRectF b(items[i].second->realPosition(), fixtureIconSizeMm(items[i].second));
+        QRectF b = fixtureIconRectMm(items[i].first, items[i].second);
         QPointF c = b.center();
         if (horizontal) c.setX(lo + step * i); else c.setY(lo + step * i);
         b.moveCenter(c);
-        storeAlignedFixture(items[i].first, items[i].second, b.topLeft());
+        storeAlignedFixture(items[i].first, items[i].second, b);
     }
     commitMoveUndo();       // one Ctrl+Z puts them back (it was captured, never kept)
     m_doc->setModified();
@@ -3621,8 +3662,22 @@ void MonitorGraphicsView::growSceneRectToItems()
     if (m_scene == NULL || width() <= 0 || height() <= 0)
         return;
 
-    QRectF r(0, 0, this->width(), this->height());
+    /* The canvas in scene terms -- turned a quarter, its width is the scene's
+       height -- with what the items cover, grown evenly about the grid's
+       middle: a view that can't scroll centres the scene rect, so anything
+       off one side of the stage (a house light, a label) pushed the grid
+       off centre, and a turned view showed it in one corner. */
+    const bool turned = (m_viewRotation & 1);
+    QRectF r(0, 0, turned ? this->height() : this->width(), turned ? this->width() : this->height());
     r |= m_scene->itemsBoundingRect();
+    if (m_gridEnabled && m_cellPixels > 0)
+    {
+        const QPointF gc(m_xOffset + m_cellPixels * m_gridSize.width() / 2.0,
+                         m_yOffset + m_cellPixels * m_gridSize.height() / 2.0);
+        const qreal hx = qMax(gc.x() - r.left(), r.right() - gc.x());
+        const qreal hy = qMax(gc.y() - r.top(), r.bottom() - gc.y());
+        r = QRectF(gc.x() - hx, gc.y() - hy, 2 * hx, 2 * hy);
+    }
     if (r != m_scene->sceneRect())
         m_scene->setSceneRect(r);
 
@@ -3929,20 +3984,28 @@ void MonitorGraphicsView::updateFixture(quint32 id)
         }
         else
         {
-            const QPointF p = realPositionToPixels(item->realPosition().x(), item->realPosition().y());
-            item->setPos(p);
+            /* Centred on the point its light comes from (freeCentreOffsetMm()):
+               the store keeps the corner, the icon is not always the size
+               of the body, and the aim lines and the rig view start at the
+               body's centre. */
+            const QPointF off = freeCentreOffsetMm(id);
+            const QPointF c = realPositionToPixels(item->realPosition().x() + off.x(),
+                                                   item->realPosition().y() + off.y());
+            item->setPos(c - halfIcon(item));
         }
     }
     else
     {
         const QVector3D w = m_doc->monitorProperties()->fixtureRigPosition(id);
-        const QPointF p = projectMm(w.x() * 1000.0, w.y() * 1000.0, w.z() * 1000.0);
+        // A free or decked fixture by its centre, as in the top view.
+        const QPointF off = freeCentreOffsetMm(id);
+        const QPointF p = projectMm(w.x() * 1000.0 + off.x(), w.y() * 1000.0 + off.y(), w.z() * 1000.0);
         if (frp.onDeck())
             // Stand on the deck: the fixture's BASE sits at Z, so lift the icon
             // up by its full height and centre it horizontally over its X.
             item->setPos(p.x() - pw / 2.0, p.y() - ph);
         else
-            item->setPos(onTruss ? (p - halfIcon(item)) : p);
+            item->setPos(p - halfIcon(item));
     }
 
     /* The grid layout unions this too, but it runs before any item exists (and
@@ -4041,6 +4104,7 @@ void MonitorGraphicsView::addFixture(quint32 id, QPointF pos)
 
     MonitorFixtureItem *item = new MonitorFixtureItem(m_doc, id);
     item->setZValue(2);
+    item->setViewHint(viewScale(), 90.0 * m_viewRotation);
     item->setRealPosition(pos);
     // Apply the fixture's layer state (visibility + lock) up front so a
     // per-fixture add during fillGraphicsView doesn't need a full O(n) refresh.
@@ -7606,6 +7670,14 @@ void MonitorGraphicsView::updateGrid()
         }
         int xPos = m_xOffset;
         int yPos = m_yOffset;
+        /* Every line ends where the grid does. They ran to the WIDGET's
+           height and width less the offset, which is the grid's extent only
+           when the grid fills the widget along that axis -- under a quarter
+           turn it never does (the grid is laid out against the swapped
+           extents above), so the lines overran the stage by most of a
+           window and the grid read as off centre. */
+        const qreal gridRight  = m_xOffset + qreal(m_gridSize.width())  * m_cellPixels;
+        const qreal gridBottom = m_yOffset + qreal(m_gridSize.height()) * m_cellPixels;
 
         QPen mainPen(QColor(40, 40, 40, 255));
         QPen subPen(QColor(30, 30, 30, 255));
@@ -7615,8 +7687,7 @@ void MonitorGraphicsView::updateGrid()
         if (m_gridSubdivisions > 1)
         {
             qreal subInc = (qreal)m_cellPixels / m_gridSubdivisions;
-            int bottom = this->height() - m_yOffset;
-            int right = this->width() - m_xOffset;
+            const qreal bottom = gridBottom, right = gridRight;
 
             for (int i = 0; i < m_gridSize.width(); i++)
             {
@@ -7643,8 +7714,7 @@ void MonitorGraphicsView::updateGrid()
 
         for (int i = 0; i < m_gridSize.width() + 1; i++)
         {
-            QGraphicsLineItem *item = m_scene->addLine(xPos, m_yOffset, xPos, this->height() - m_yOffset,
-                                                       mainPen);
+            QGraphicsLineItem *item = m_scene->addLine(xPos, m_yOffset, xPos, gridBottom, mainPen);
             item->setZValue(1);
             xPos += m_cellPixels;
             m_gridItems.append(item);
@@ -7652,8 +7722,7 @@ void MonitorGraphicsView::updateGrid()
 
         for (int i = 0; i < m_gridSize.height() + 1; i++)
         {
-            QGraphicsLineItem *item = m_scene->addLine(m_xOffset, yPos, this->width() - m_xOffset, yPos,
-                                                       mainPen);
+            QGraphicsLineItem *item = m_scene->addLine(m_xOffset, yPos, gridRight, yPos, mainPen);
             item->setZValue(1);
             yPos += m_cellPixels;
             m_gridItems.append(item);
@@ -10761,17 +10830,20 @@ void MonitorGraphicsView::persistElevationDrop(quint32 fid, MonitorFixtureItem *
     const QVector3D stored = props->fixturePosition(fid, 0, 0);
     const QVector3D curMm(stored.x(), stored.y(), stored.z() * 1000.0f);
 
-    /* Read the drop with the SAME anchor updateFixture places with.
-       An unbound elevation fixture is anchored top-left (setPos(p)),
-       a decked one bottom-centre. Reading the centre here while the
-       redraw placed the top-left shifted the item by half an icon on
-       every single drop -- the reported "jumps somewhere else". */
+    /* Read the drop with the SAME anchor updateFixture places with: a free
+       fixture by its centre, a decked one by the middle of its base. The
+       store keeps the corner, so the centre's offset comes off again.
+       Reading one anchor while the redraw placed another shifted the item
+       by half an icon on every single drop -- the reported "jumps
+       somewhere else". */
     const FixtureRigProps arp = props->fixtureRigProps(fid);
-    QPointF dropPx = item->pos();
+    const QPointF off = freeCentreOffsetMm(fid);
+    QPointF dropPx = item->pos() + halfIcon(item);
     if (arp.onDeck())
-        dropPx += halfIcon(item) + QPointF(0.0, halfIcon(item).y());
+        dropPx += QPointF(0.0, halfIcon(item).y());
 
-    const QVector3D newMm = unprojectMm(dropPx, curMm);
+    const QVector3D newMm = unprojectMm(dropPx, curMm + QVector3D(float(off.x()), float(off.y()), 0.0f))
+                            - QVector3D(float(off.x()), float(off.y()), 0.0f);
 
     if (!qFuzzyCompare(newMm, curMm))
     {
@@ -10855,7 +10927,8 @@ void MonitorGraphicsView::slotFixtureMoved(MonitorFixtureItem *item)
                    anchor, mixed units -- see the free branch above). */
                 const QVector3D stored = props->fixturePosition(fid, 0, 0);
                 const QVector3D curMm(stored.x(), stored.y(), stored.z() * 1000.0f);
-                const QVector3D newMm = unprojectMm(item->pos(), curMm);
+                const QVector3D off(float(freeCentreOffsetMm(fid).x()), float(freeCentreOffsetMm(fid).y()), 0.0f);
+                const QVector3D newMm = unprojectMm(item->pos() + halfIcon(item), curMm + off) - off;
                 props->setFixturePosition(fid, 0, 0,
                     QVector3D(newMm.x(), newMm.y(), newMm.z() / 1000.0f));
                 item->setRealPosition(QPointF(double(newMm.x()), double(newMm.y())));
@@ -10932,8 +11005,9 @@ void MonitorGraphicsView::slotFixtureMoved(MonitorFixtureItem *item)
     // layout intact (snapping each item independently would scramble it).
     if (m_snapDivisions > 0 && m_cellPixels > 0 && item != NULL)
     {
-        const QPointF snapped = snapScenePos(item->pos());
-        const QPointF delta = snapped - item->pos();
+        // By its centre, where its light is -- not its icon's corner.
+        const QPointF centre = item->pos() + halfIcon(item);
+        const QPointF delta = snapScenePos(centre) - centre;
         if (delta.isNull() == false)
         {
             foreach (MonitorFixtureItem *mfi, movedItems)
@@ -10959,14 +11033,12 @@ void MonitorGraphicsView::slotFixtureMoved(MonitorFixtureItem *item)
         MonitorProperties *props = m_doc->monitorProperties();
         FixtureRigProps rp = props->fixtureRigProps(fid);
 
-        // Convert the fixture's pixel position into millimetres. A truss-bound
-        // fixture is drawn CENTRED on its position, so read its centre (not its
-        // top-left) to project onto the truss.
-        const bool boundNow = (rp.trussId != Truss::invalidId());
-        const QPointF refPx = boundNow ? (mfi->pos() + halfIcon(mfi)) : mfi->pos();
-        QPointF mmPos;
-        mmPos.setX(((refPx.x() - m_xOffset) * m_unitValue) / m_cellPixels);
-        mmPos.setY(((refPx.y() - m_yOffset) * m_unitValue) / m_cellPixels);
+        // Convert the fixture's pixel position into millimetres. Every
+        // fixture is drawn CENTRED on its position, so read its centre (not
+        // its top-left); a free one's store keeps the corner (freeCentreOffsetMm()).
+        const QPointF mmCentre = pixelsToRealPosition(mfi->pos().x() + halfIcon(mfi).x(),
+                                                      mfi->pos().y() + halfIcon(mfi).y());
+        QPointF mmPos = mmCentre - freeCentreOffsetMm(fid);
 
         auto snapToTruss = [&](Truss *t)
         {
@@ -10996,9 +11068,9 @@ void MonitorGraphicsView::slotFixtureMoved(MonitorFixtureItem *item)
             along = qBound(0.0, along, t->length() * 1000.0);
 
             // Snap along the truss to the same grid subdivision intervals.
-            if (m_snapDivisions > 0 && m_gridSubdivisions > 0 && m_unitValue > 0)
+            if (m_snapDivisions > 0 && m_unitValue > 0)
             {
-                double snapMm = m_unitValue / m_gridSubdivisions;
+                double snapMm = m_unitValue / m_snapDivisions;   // the Snap setting's step
                 along = qRound(along / snapMm) * snapMm;
                 along = qBound(0.0, along, t->length() * 1000.0);
             }
@@ -11033,14 +11105,12 @@ void MonitorGraphicsView::slotFixtureMoved(MonitorFixtureItem *item)
                 // together with a truss this fixture just got pulled off of.
                 leaveDedicatedTrussGroup(fid, wasTrussId);
 
-                /* mmPos was computed with the BOUND anchor (icon centre); the
-                   fixture ends this drop UNBOUND, and the unbound top view
-                   stores and places by the TOP-LEFT corner. Recompute with the
-                   anchor of the state it will be redrawn in, or the store is
-                   half an icon off and the re-place shifts it -- "snaps to a
-                   different spot when I let go". */
-                mmPos.setX(((mfi->pos().x() - m_xOffset) * m_unitValue) / m_cellPixels);
-                mmPos.setY(((mfi->pos().y() - m_yOffset) * m_unitValue) / m_cellPixels);
+                /* mmPos was computed BOUND (the centre is the store); the
+                   fixture ends this drop UNBOUND, whose store is the corner.
+                   Recompute for the state it will be redrawn in, or the store
+                   is half a body off and the re-place shifts it -- "snaps to
+                   a different spot when I let go". */
+                mmPos = mmCentre - freeCentreOffsetMm(fid);
             }
             else
             {
@@ -11078,8 +11148,7 @@ void MonitorGraphicsView::slotFixtureMoved(MonitorFixtureItem *item)
                     leaveDedicatedTrussGroup(fid, wasTrussId);
 
                     // Same anchor correction as the escape branch above.
-                    mmPos.setX(((mfi->pos().x() - m_xOffset) * m_unitValue) / m_cellPixels);
-                    mmPos.setY(((mfi->pos().y() - m_yOffset) * m_unitValue) / m_cellPixels);
+                    mmPos = mmCentre - freeCentreOffsetMm(fid);
                 }
                 else if (t != nullptr)
                     snapToTruss(t);
@@ -11224,10 +11293,12 @@ void MonitorGraphicsView::commitMoveUndo()
 
 QPointF MonitorGraphicsView::snapScenePos(const QPointF &p) const
 {
-    if (m_snapDivisions <= 0 || m_cellPixels <= 0 || m_gridSubdivisions <= 0)
+    if (m_snapDivisions <= 0 || m_cellPixels <= 0)
         return p;
-    // Snap to the visual grid subdivision lines so snap points align with what the user sees.
-    const qreal inc = qreal(m_cellPixels) / m_gridSubdivisions;
+    /* The step is the Snap setting (Full, 1/2, 1/4 of a cell). It was the
+       grid's drawn subdivisions, so the setting only switched snapping on
+       and off: with a plain grid, "1/4" still snapped to whole cells. */
+    const qreal inc = qreal(m_cellPixels) / m_snapDivisions;
     const qreal sx = m_xOffset + qRound((p.x() - m_xOffset) / inc) * inc;
     const qreal sy = m_yOffset + qRound((p.y() - m_yOffset) / inc) * inc;
     return QPointF(sx, sy);

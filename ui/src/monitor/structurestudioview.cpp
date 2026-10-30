@@ -3762,27 +3762,23 @@ bool StructureStudioView::hasStructuralMount(const FixtureRigProps &rp)
         || rp.onRiser() || rp.onDeck();
 }
 
+/* The bar's two ends: its centre, half its length either way along the axis
+ * its body is drawn along (fixtureFrame(), fixtureBoxCorners()). That axis
+ * is already in the world -- a studio frame's turn is in the fixture's own
+ * yaw (turnPlatform() turns both) -- so a frame member's ends are NOT turned
+ * by the frame again: that put the hit line, the plain bar drawing and the
+ * rotate knob off the body by 2·l·sin(θ/2). */
 QVector3D StructureStudioView::fixtureEndA(quint32 fid) const
 {
-    MonitorProperties *props = m_doc->monitorProperties();
-    const FixtureRigProps rp = props->fixtureRigProps(fid);
+    const FixtureRigProps rp = m_doc->monitorProperties()->fixtureRigProps(fid);
     const double half = qMax(0.05, fixtureLenM(fid) / 2.0);
-    const quint32 fg = hasStructuralMount(rp) ? 0 : props->fixtureFrameGroup(fid);
-    if (fg != 0)
-        return props->groupLocalToWorld(fg, rp.groupLocal - fixtureAxisLocal(rp) * float(half));
-    // Non-frame fixture: orient the bar by its studioMount/angle in world too, so
-    // Face + Angle work for a truss/riser strip ("which way it runs").
     return fixtureCentre(fid) - fixtureAxisLocal(rp) * float(half);
 }
 
 QVector3D StructureStudioView::fixtureEndB(quint32 fid) const
 {
-    MonitorProperties *props = m_doc->monitorProperties();
-    const FixtureRigProps rp = props->fixtureRigProps(fid);
+    const FixtureRigProps rp = m_doc->monitorProperties()->fixtureRigProps(fid);
     const double half = qMax(0.05, fixtureLenM(fid) / 2.0);
-    const quint32 fg = hasStructuralMount(rp) ? 0 : props->fixtureFrameGroup(fid);
-    if (fg != 0)
-        return props->groupLocalToWorld(fg, rp.groupLocal + fixtureAxisLocal(rp) * float(half));
     return fixtureCentre(fid) + fixtureAxisLocal(rp) * float(half);
 }
 
@@ -9021,9 +9017,35 @@ double StructureStudioView::shelfLabelsWidth() const
     return w + 8.0;
 }
 
+QVector3D StructureStudioView::stageZero() const
+{
+    /* The plot's zero (MonitorGraphicsView::rulerZeroUnits()): across the
+       stage from the centre line, the target readouts' CL; a ⌖ origin the
+       user set wins on both axes. Depth and height from the corner and the
+       floor. */
+    MonitorProperties *props = m_doc->monitorProperties();
+    const QPointF o = props->stageOrigin();
+    if (!o.isNull())
+        return QVector3D(float(o.x()), float(o.y()), 0.0f);
+    return QVector3D(props->stageCentre().x(), 0.0f, 0.0f);
+}
+
+bool StructureStudioView::rulerCountsFromCentreLine() const
+{
+    return m_kind == StageKind && m_doc->monitorProperties()->stageOrigin().isNull()
+        && !(m_rotation & 1) && (m_plane == Top || m_plane == Front);
+}
+
 double StructureStudioView::structureCentreA() const
 {
     MonitorProperties *props = m_doc->monitorProperties();
+    /* The whole rig: one zero with the plot and the readouts beside it,
+       not the stage's corner -- three zeros in one view. */
+    if (m_kind == StageKind)
+    {
+        const QPointF ab = project(stageZero());
+        return (m_rotation & 1) ? ab.y() : ab.x();
+    }
     QList<QVector3D> c;
     if (m_kind == PlatformKind)
     { if (StagePlatform *pl = props->platform(m_id)) { c << QVector3D(pl->originX(), pl->originY(), 0)
@@ -9161,8 +9183,9 @@ void StructureStudioView::drawRulers(QPainter &p) const
         }
     }
 
-    // Width ruler (0 = structure centre) — bottom band.
+    // Width ruler (0 = structure centre; the plot's zero for the whole rig) — bottom band.
     const double centreA = structureCentreA();
+    const bool fromCl = rulerCountsFromCentreLine();
     const double by = height() - GH;
     p.fillRect(QRectF(0, by, width(), GH), band);
     p.setPen(edge); p.drawLine(QPointF(0, by), QPointF(width(), by));
@@ -9176,7 +9199,8 @@ void StructureStudioView::drawRulers(QPainter &p) const
         if (k % lblEvery == 0)
         {
             p.setPen((k == 0) ? QColor(0, 190, 255) : textCol);
-            p.drawText(QRectF(sx - 16, by + 6, 32, 14), Qt::AlignHCenter | Qt::AlignVCenter, QString::number(qAbs(k)));
+            p.drawText(QRectF(sx - 16, by + 6, 32, 14), Qt::AlignHCenter | Qt::AlignVCenter,
+                       (k == 0 && fromCl) ? QStringLiteral("CL") : QString::number(qAbs(k)));
         }
     }
     /* From behind, the numbers still count out from the structure's centre
@@ -9284,31 +9308,39 @@ QVector3D StructureStudioView::worldAt(const QPointF &px, int *known, bool *onSu
     }
 }
 
-void StructureStudioView::drawCursorReadout(QPainter &p) const
+QString StructureStudioView::cursorReadoutText(const QPointF &px) const
 {
-    if (!m_hasCursor) return;
-    MonitorProperties *props = m_doc->monitorProperties();
-    const bool feet = props->gridUnits() == MonitorProperties::Feet;
+    const bool feet = m_doc->monitorProperties()->gridUnits() == MonitorProperties::Feet;
     const double conv = feet ? 3.28084 : 1.0;
     const QString sfx = feet ? QStringLiteral("ft") : QStringLiteral("m");
-
-    p.setPen(QPen(QColor(0, 190, 255, 110), 0.8, Qt::DashLine));
-    p.drawLine(QPointF(0, m_cursorPx.y()), QPointF(width(), m_cursorPx.y()));
-    p.drawLine(QPointF(m_cursorPx.x(), 0), QPointF(m_cursorPx.x(), height()));
-
     /* H across the stage (stage left +), V up/downstage (downstage +), Z the
-       height above the floor -- the plot's own X / Y and a real height, of
-       whatever is under the pointer ("can we have the crosshairs hover give
-       H, V, and Z"). Over nothing at an angle it is the floor there. */
+       height above the floor -- of whatever is under the pointer ("can we
+       have the crosshairs hover give H, V, and Z"). Over nothing at an angle
+       it is the floor there. H and V count from the plot's zero (CL, or the
+       ⌖ origin), as the Rig Overview's ruler and the target readouts do. */
     int known = 0;
     bool onSurface = false;
-    const QVector3D w = worldAt(m_cursorPx, &known, &onSurface);
+    const QVector3D w = worldAt(px, &known, &onSurface) - stageZero();
     auto num = [&](int bit, float v) {
-        return (known & bit) ? QString::number(double(v) * conv, 'f', 2) : QStringLiteral("—");
+        if (!(known & bit))
+            return QStringLiteral("—");
+        const double d = double(v) * conv;
+        return QString::number(qAbs(d) < 0.005 ? 0.0 : d, 'f', 2);
     };
     QString t = QString("H %1  V %2  Z %3 %4").arg(num(1, w.x()), num(2, w.y()), num(4, w.z()), sfx);
     if (!onSurface && m_plane == Angled && known)
         t += tr("  (floor)");
+    return t;
+}
+
+void StructureStudioView::drawCursorReadout(QPainter &p) const
+{
+    if (!m_hasCursor) return;
+    p.setPen(QPen(QColor(0, 190, 255, 110), 0.8, Qt::DashLine));
+    p.drawLine(QPointF(0, m_cursorPx.y()), QPointF(width(), m_cursorPx.y()));
+    p.drawLine(QPointF(m_cursorPx.x(), 0), QPointF(m_cursorPx.x(), height()));
+
+    const QString t = cursorReadoutText(m_cursorPx);
     QFont f("Arial", 8);
     p.setFont(f);
     const double tw = QFontMetricsF(f).horizontalAdvance(t) + 14.0;
@@ -9738,7 +9770,6 @@ void StructureStudioView::paintEvent(QPaintEvent *)
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing, true);
     drawGrid(p);
-    drawRulers(p);
     if (m_plane == Angled)
     {
         /* Every angled view, not just the whole-rig one. The editors used to
@@ -9765,6 +9796,9 @@ void StructureStudioView::paintEvent(QPaintEvent *)
     drawStageMarks(p);   // on top: a reference is read through the rig
     drawTargetPositions(p);
     drawUnsavedMarks(p);
+    /* The rulers are read over the rig, so they go over it: painted before
+       the geometry, a deck or truss reaching the edge covered them. */
+    drawRulers(p);
     drawCursorReadout(p);
     drawDimensions(p);   // selected fixture's own W/H, or the structure's
 
@@ -10283,124 +10317,265 @@ void StructureStudioView::mouseReleaseEvent(QMouseEvent *)
     }
 }
 
-quint32 StructureStudioView::hitTestFixture(const QPointF &px) const
+bool StructureStudioView::onRuler(const QPointF &px) const
 {
-    // Hit anywhere along the LED bar (nearest within a threshold), not just its
-    // centre dot — so clicking the bar selects the fixture. A tower-shelf mount
-    // in an elevation draws as a body (towerFixtureBodyRect(), see
-    // drawFixtures()), not a bar, so it's hit-tested against that same rect
-    // instead — previously this always used the bar-line test, which for a
-    // tower fixture didn't correspond to anything actually drawn on screen,
-    // making it hard to reliably click/grab (the visible body and the
-    // clickable area disagreed).
+    // drawRulers()'s bands: the width ruler along the bottom, the height
+    // ruler down the left in the elevations. None at an angle.
+    if (m_plane == Angled)
+        return false;
+    return px.y() >= height() - 22.0 || (m_plane != Top && px.x() < 34.0);
+}
+
+QPainterPath StructureStudioView::fixtureDrawnShape(quint32 fid, double *nearestDepth) const
+{
+    /* The silhouette drawOneFixture() fills for this fixture, in screen
+       pixels: the same rectangles, paths and hulls, worked out the same way.
+       Every pick tests this, so what you click is what you see -- the old
+       per-kind guesses each disagreed with the drawing somewhere (a lantern
+       picked along a 0.3 m line round a 10 px icon, a mover by one box
+       round a row of units, a thick bar only near its centre line). */
     MonitorProperties *props = m_doc->monitorProperties();
-    // NOT 0: QLC+ hands the FIRST fixture in a workspace id 0 (Doc's
-    // m_latestFixtureId starts there), so a 0 sentinel made fixture 0
-    // indistinguishable from empty space -- it could never be selected,
-    // dragged, double-clicked or right-clicked in this editor. The real
-    // "no fixture" marker is Fixture::invalidId().
-    quint32 best = Fixture::invalidId(); double bestD = 9.0;
-    foreach (quint32 fid, fixturesInDrawOrder())
-    {
-        double d;
-        const FixtureRigProps rp = props->fixtureRigProps(fid);
-        if (rp.towerId != Tower::invalidId() && (m_plane == Front || m_plane == Side))
+    const FixtureRigProps rp = props->fixtureRigProps(fid);
+    Fixture *fx = m_doc->fixture(fid);
+    const FixtureVisualTraits traits = classifyFixture(fx);
+    QPainterPath path;
+    path.setFillRule(Qt::WindingFill);
+
+    if (nearestDepth != nullptr)
+        *nearestDepth = -1e30;
+    auto hullOfBox = [&]() {
+        QVector3D corner[8];
+        fixtureBoxCorners(fid, traits, corner);
+        QVector<HullPt> pts;
+        for (int k = 0; k < 8; ++k)
         {
-            QRectF r = towerFixtureBodyRect(fid);
-            r.adjust(-3, -3, 3, 3);   // small grab margin, matching the bar test's threshold
-            if (r.contains(px))
+            pts << HullPt{ w2s(corner[k]), 0.0 };
+            if (nearestDepth != nullptr)
+                *nearestDepth = qMax(*nearestDepth, viewDepth(corner[k]));
+        }
+        QPolygonF hull;
+        foreach (const HullPt &hp, convexHullWith(pts))
+            hull << hp.p;
+        return hull;
+    };
+
+    if (m_plane == Angled && traits.kind == FixtureSilhouette::Mover)
+    {
+        /* drawMoverSolid()'s own parts, each a box: base, two arms, and the
+           head turned to where it aims -- the same sizes and frame. */
+        QVector3D L, N, H;
+        fixtureFrame(rp, L, N, H);
+        H = fixtureBodyUp(rp);
+        const QVector3D depth = QVector3D::crossProduct(L, H);
+        if (depth.length() > 1e-4f)
+            N = depth.normalized();
+        const int units = qMax(1, traits.headCount);
+        const double wTot = (traits.physW > 0.0f) ? double(traits.physW) : 0.3;
+        const double h = (traits.physH > 0.0f) ? double(traits.physH) : wTot * 0.6;
+        const double d = (traits.physD > 0.0f) ? double(traits.physD) : h;
+        const double slice = wTot / units;
+        const bool seats = (rp.onTower() || rp.onDeck() || rp.onRiser())
+                           && rp.placement != FixtureRigProps::Inside;
+        const QVector3D seated = fixtureCentre(fid) + H * float(seats ? h * 0.5 : 0.0);
+        auto addBox = [&](const QVector3D &mid, double hw, double hh, double hd,
+                          const QVector3D &ax, const QVector3D &up, const QVector3D &no) {
+            QVector<HullPt> pts;
+            for (int k = 0; k < 8; ++k)
             {
-                d = 0.0;
+                const QVector3D q = mid + ax * float((k & 1) ? hw : -hw) + up * float((k & 2) ? hh : -hh)
+                                    + no * float((k & 4) ? hd : -hd);
+                pts << HullPt{ w2s(q), 0.0 };
+                if (nearestDepth != nullptr)
+                    *nearestDepth = qMax(*nearestDepth, viewDepth(q));
+            }
+            QPolygonF hull;
+            foreach (const HullPt &hp, convexHullWith(pts))
+                hull << hp.p;
+            if (hull.size() >= 3)
+                path.addPolygon(hull);
+        };
+        for (int u = 0; u < units; ++u)
+        {
+            const QVector3D uc = seated + L * float((u - (units - 1) * 0.5) * slice);
+            addBox(uc - H * float(h * 0.34), slice * 0.46, h * 0.16, d * 0.5, L, H, N);
+            const QVector3D armMid = uc - H * float(h * 0.02);
+            addBox(armMid + L * float(slice * 0.36), slice * 0.10, h * 0.30, d * 0.22, L, H, N);
+            addBox(armMid - L * float(slice * 0.36), slice * 0.10, h * 0.30, d * 0.22, L, H, N);
+            QVector3D headMid = uc + H * float(h * 0.10);
+            const QVector3D aim = moverAim(fid, u);
+            if (!aim.isNull())
+            {
+                const QVector3D beam = aim.normalized();
+                QVector3D side = QVector3D::crossProduct(QVector3D(0, 0, 1), beam);
+                if (side.length() < 1e-3f)
+                    side = L;
+                side.normalize();
+                const QVector3D up = QVector3D::crossProduct(beam, side).normalized();
+                headMid += beam * float(h * 0.12);
+                addBox(headMid, slice * 0.26, h * 0.26, d * 0.26, side, beam, up);
             }
             else
+                addBox(headMid, slice * 0.26, h * 0.22, d * 0.30, L, H, N);
+        }
+        return path;
+    }
+    if (m_plane == Angled)
+    {
+        // Every other kind is a solid in its own box there (drawOneFixture()).
+        const QPolygonF hull = hullOfBox();
+        if (hull.size() >= 3)
+            path.addPolygon(hull);
+        return path;
+    }
+
+    if (rp.towerId != Tower::invalidId() && (m_plane == Front || m_plane == Side))
+    {
+        path.addRect(towerFixtureBodyRect(fid));
+        return path;
+    }
+
+    const QPointF c = w2s(fixtureCentre(fid));
+    const QPointF a = w2s(fixtureEndA(fid));
+    const QPointF b = w2s(fixtureEndB(fid));
+    if (traits.kind == FixtureSilhouette::Mover)
+    {
+        const double baseR = moverBaseRadius(traits);
+        const int units = qMax(1, traits.headCount);
+        if (m_plane == Top)
+        {
+            const QPointF dir = b - a;
+            const double dlen = qSqrt(dir.x() * dir.x() + dir.y() * dir.y());
+            const QPointF unit = (dlen > 1e-6) ? dir / dlen : QPointF(1, 0);
+            for (int u = 0; u < units; ++u)
             {
-                const double dx = qMax(qMax(r.left() - px.x(), px.x() - r.right()), 0.0);
-                const double dy = qMax(qMax(r.top() - px.y(), px.y() - r.bottom()), 0.0);
-                d = qSqrt(dx * dx + dy * dy);
+                const QPointF hc = c + unit * ((u - (units - 1) * 0.5) * baseR * 2.0);
+                path.addRect(QRectF(hc.x() - baseR, hc.y() - baseR, baseR * 2, baseR * 2));
             }
         }
         else
         {
-            // Match whichever shape drawFixtures() actually drew for this
-            // fixture -- same reasoning as the tower-shelf case above: a
-            // Mover/Par draws as a compact unit centred on its position, not
-            // a bar spanning fixtureEndA()..fixtureEndB(), so hit-testing
-            // against that line (the old, only, test) could miss the shape
-            // entirely or hit empty space well past it.
+            const double halfW = moverWidthPx(traits) * 0.5;
+            const double totalH = baseR * 3.2;
+            path.addPath(moverElevationPath(QRectF(c.x() - halfW, c.y() - totalH * 0.5, halfW * 2, totalH),
+                                            rp.mountingType == Truss::TopHung, units));
+        }
+    }
+    else if (traits.kind == FixtureSilhouette::Lantern)
+    {
+        const bool practical = traits.look == Fixture::LanternLook;
+        const double wPx = (traits.physW > 0.0f) ? qMax(8.0, double(traits.physW) * m_scale) : 10.0;
+        const double hPx = (traits.physH > 0.0f) ? qMax(10.0, double(traits.physH) * m_scale)
+                         : (practical && m_plane == Top) ? wPx : wPx * 1.5;
+        const QRectF r(c.x() - wPx * 0.5, c.y() - hPx * 0.5, wPx, hPx);
+        path.addRect(r);
+        if (practical)
+        {
+            const bool side = m_plane != Top;
+            const QRectF lensIn = stageLookLensRect(Fixture::LanternLook, QRectF(0, 0, 1, 1), side);
+            const double ow = wPx / lensIn.width(), oh = hPx / lensIn.height();
+            path.addPath(stageLookBodyPath(Fixture::LanternLook,
+                                           QRectF(r.left() - lensIn.left() * ow, r.top() - lensIn.top() * oh, ow, oh),
+                                           side));
+        }
+    }
+    else if (traits.kind == FixtureSilhouette::Par)
+    {
+        const QRectF r = parBodyRect(traits, c);
+        if (traits.look != Fixture::AutoLook)
+            path.addPath(stageLookBodyPath(traits.look, r, m_plane != Top));
+        else
+            path.addRect(r);
+    }
+    else if (traits.kind == FixtureSilhouette::Bar)
+    {
+        const QPolygonF hull = hullOfBox();
+        if (hull.size() >= 3)
+            path.addPolygon(hull);
+        else
+        {
+            QPointF wPx, hPx; QRectF boxPx;
+            fixtureBoxPx(fid, traits, wPx, hPx, boxPx);
+            path.addRect(boxPx);
+        }
+    }
+    else
+    {
+        // The generic bar: a 3-4 px round-capped line with its head dots.
+        QPainterPath line;
+        line.moveTo(a);
+        line.lineTo(b);
+        QPainterPathStroker stroke;
+        stroke.setWidth(6.0);
+        stroke.setCapStyle(Qt::RoundCap);
+        path.addPath(stroke.createStroke(line));
+    }
+    return path;
+}
+
+quint32 StructureStudioView::hitTestFixture(const QPointF &px) const
+{
+    /* On what is drawn (fixtureDrawnShape()), or within a few pixels of it:
+       the nearest wins, and of two equally near the one drawn on top.
+     *
+       NOT 0 for nothing: QLC+ hands the FIRST fixture in a workspace id 0
+       (Doc's m_latestFixtureId starts there), so a 0 sentinel made fixture 0
+       indistinguishable from empty space -- it could never be selected,
+       dragged, double-clicked or right-clicked in this editor. The real
+       "no fixture" marker is Fixture::invalidId(). */
+    static const double kGrab = 5.0;    // px of slack round a shape
+    quint32 best = Fixture::invalidId();
+    // The rulers paint over the rig (paintEvent()): a click on one is not on
+    // what is under it.
+    if (onRuler(px))
+        return best;
+    double bestD = kGrab + 1.0;
+    double bestDepth = -1e30;
+    // At an angle the nearest to the eye wins, and nothing hidden behind
+    // something solid is picked through it (the frame's depth buffer).
+    const double zAt = (m_plane == Angled) ? pickDepth(px.toPoint()) : -1e30;
+    foreach (quint32 fid, fixturesInDrawOrder())
+    {
+        double nearest = -1e30;
+        const QPainterPath shape = fixtureDrawnShape(fid, &nearest);
+        if (shape.isEmpty())
+            continue;
+        double d = -1.0;
+        if (shape.contains(px))
+            d = 0.0;
+        else
+        {
+            for (double m = 1.0; m <= kGrab; m += 1.0)
+                if (shape.intersects(QRectF(px.x() - m, px.y() - m, 2 * m, 2 * m)))
+                {
+                    d = m;
+                    break;
+                }
+        }
+        if (d < 0.0)
+            continue;
+        double depth = 0.0;
+        if (m_plane == Angled)
+        {
             const FixtureVisualTraits traits = classifyFixture(m_doc->fixture(fid));
-            const QPointF a = w2s(fixtureEndA(fid));
-            const QPointF b = w2s(fixtureEndB(fid));
-            if (traits.kind == FixtureSilhouette::Mover)
-            {
-                // Bounding-box test matching whichever silhouette
-                // drawFixtures() drew for this plane (square-ish for Top,
-                // taller for the Front/Side base+arms+head body) -- a plain
-                // circle test undershot the square/base corners.
-                const QPointF c = w2s(fixtureCentre(fid));
-                const double baseR = moverBaseRadius(traits);
-                QRectF r;
-                if (m_plane == Top)
-                {
-                    const double half = moverWidthPx(traits) * 0.5;
-                    r = QRectF(c.x() - half, c.y() - half, half * 2, half * 2);
-                }
-                else
-                {
-                    const double halfW = moverWidthPx(traits) * 0.5;
-                    const double totalH = baseR * 3.2;
-                    r = QRectF(c.x() - halfW, c.y() - totalH * 0.5, halfW * 2, totalH);
-                }
-                r.adjust(-3, -3, 3, 3);
-                if (r.contains(px))
-                {
-                    d = 0.0;
-                }
-                else
-                {
-                    const double dx = qMax(qMax(r.left() - px.x(), px.x() - r.right()), 0.0);
-                    const double dy = qMax(qMax(r.top() - px.y(), px.y() - r.bottom()), 0.0);
-                    d = qSqrt(dx * dx + dy * dy);
-                }
-            }
-            else if (traits.kind == FixtureSilhouette::Par)
-            {
-                const QPointF c = w2s(fixtureCentre(fid));
-                QRectF r = parBodyRect(traits, c);      // as drawFixtures() drew it
-                r.adjust(-3, -3, 3, 3);
-                if (r.contains(px))
-                {
-                    d = 0.0;
-                }
-                else
-                {
-                    const double dx = qMax(qMax(r.left() - px.x(), px.x() - r.right()), 0.0);
-                    const double dy = qMax(qMax(r.top() - px.y(), px.y() - r.bottom()), 0.0);
-                    d = qSqrt(dx * dx + dy * dy);
-                }
-            }
-            else
-            {
-                // Bar (matrix or single-row) and Generic: the drawn shape is
-                // still centred on the a-b line, just wider for a matrix --
-                // widen the threshold by half its declared physical height
-                // so a click on an off-centre row still finds it.
-                const QPointF ab = b - a;
-                const double len2 = ab.x() * ab.x() + ab.y() * ab.y();
-                double t = (len2 > 1e-6) ? ((px.x() - a.x()) * ab.x() + (px.y() - a.y()) * ab.y()) / len2 : 0.0;
-                t = qBound(0.0, t, 1.0);
-                d = QLineF(a + ab * t, px).length();
-                const bool isMatrix = traits.kind == FixtureSilhouette::Bar
-                                     && traits.physW > 0.0f && traits.physH > traits.physW * 0.15f
-                                     && traits.headCount >= 4;
-                if (isMatrix)
-                {
-                    const double halfHeightPx = qMax(8.0, double(traits.physH) * m_scale) * 0.5;
-                    d = qMax(0.0, d - halfHeightPx);
-                }
-            }
+            QVector3D corner[8];
+            fixtureBoxCorners(fid, traits, corner);
+            const double size = (corner[6] - corner[0]).length();
+            /* A unit rigged in or on a step is drawn lifted past the step's
+               near face (drawOneFixture()'s depthBias), so it is seen, and
+               picked, through it. */
+            const FixtureRigProps rp = m_doc->monitorProperties()->fixtureRigProps(fid);
+            const bool liftedOut = rp.onRiser() || (rp.onDeck() && rp.placement == FixtureRigProps::Inside);
+            if (!liftedOut && zAt > -1e29 && zAt > nearest + 0.02 + 0.05 * size)
+                continue;                 // something solid is nearer, here
+            depth = nearest;
         }
         // <=, walking back to front: of two equally close, the one on top wins.
-        if (d <= bestD) { bestD = d; best = fid; }
+        if (d < bestD || (d == bestD && depth >= bestDepth))
+        {
+            bestD = d;
+            bestDepth = depth;
+            best = fid;
+        }
     }
     return best;
 }

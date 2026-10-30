@@ -994,18 +994,48 @@ qreal MonitorFixtureItem::facingReach() const
     return qMax(m_width, m_height) / 2.0 + 10.0;
 }
 
+void MonitorFixtureItem::setViewHint(qreal scale, qreal turnDeg)
+{
+    if (scale <= 0.0)
+        scale = 1.0;
+    if (qFuzzyCompare(scale, m_viewScale) && qFuzzyCompare(turnDeg + 1000.0, m_viewTurn + 1000.0))
+        return;
+    prepareGeometryChange();
+    m_viewScale = scale;
+    m_viewTurn = turnDeg;
+}
+
+QPolygonF MonitorFixtureItem::labelPolygon() const
+{
+    /* paint() turns the label back by the whole turn it is drawn under --
+       the view's and the item's own -- about its centre, so it reads
+       upright. At a quarter turn that is a tall rectangle in item terms,
+       not the wide one m_labelRect is. */
+    const QRectF r(m_labelRect);
+    const qreal turn = std::fmod(m_viewTurn + rotation(), 360.0);
+    if (qAbs(turn) < 0.5 || qAbs(qAbs(turn) - 360.0) < 0.5)
+        return QPolygonF(r);
+    QTransform t;
+    t.translate(r.center().x(), r.center().y());
+    t.rotate(-turn);
+    t.translate(-r.center().x(), -r.center().y());
+    return t.map(QPolygonF(r));
+}
+
 QRectF MonitorFixtureItem::boundingRect() const
 {
     // Arc strokes reach MOVEMENT_THICKNESS px outside the cell rectangle and
-    // the selection halo reaches 6 px (3 px offset + half its 6 px pen); the
-    // margin covers the larger, or Qt's dirty-region clipping leaves stale
-    // halo fragments on the canvas when the selection changes.
-    const qreal m = qMax(qreal(MOVEMENT_THICKNESS), qreal(6.0)) + 1;
-    QRectF rect;
+    // the selection halo reaches 3 px plus half its 6 px pen -- a SCREEN-wide
+    // pen, so 3 / zoom scene px: zoomed out, more than the 3 it is at 1:1.
+    // The margin covers the larger, or Qt's dirty-region clipping leaves
+    // stale halo fragments on the canvas when the selection changes.
+    const qreal m = qMax(qreal(MOVEMENT_THICKNESS), 3.0 + 3.0 / m_viewScale) + 1;
+    QRectF rect(-m, -m, m_width + 2 * m, m_height + 2 * m);
     if (m_labelVisibility)
-        rect = QRectF(-10 - m, -m, m_width + 20 + 2 * m, m_height + m_labelRect.height() + 2 + m);
-    else
-        rect = QRectF(-m, -m, m_width + 2 * m, m_height + 2 * m);
+    {
+        rect |= QRectF(-10, m_height, m_width + 20, m_labelRect.height() + 2);
+        rect |= labelPolygon().boundingRect().adjusted(-1, -1, 1, 1);
+    }
 
     // The facing arrow sweeps a circle of facingReach() around the centre at any
     // facing angle; union that in so rotating it never clips.
@@ -1026,9 +1056,10 @@ QPainterPath MonitorFixtureItem::shape() const
     // clicks from fixtures it overlaps.
     const qreal m = MOVEMENT_THICKNESS + 1;
     QPainterPath path;
+    path.setFillRule(Qt::WindingFill);     // a turned label may overlap the body
     path.addRect(QRectF(-m, -m, m_width + 2 * m, m_height + 2 * m));
     if (m_labelVisibility)
-        path.addRect(m_labelRect);
+        path.addPolygon(labelPolygon());      // as painted: upright at any turn
     return path;
 }
 

@@ -327,6 +327,22 @@ skipped). Upstream fixes taken:
 
 ### Fixed
 
+- **The Lighting Studio lines up with itself.** The rest of the alignment
+  audit: the grid ends at the stage's edge and sits in the middle of the
+  canvas when the plot is turned 90°, and fixtures re-place with the turn;
+  **Snap to** 1/2 and 1/4 are the step a move snaps to (they only switched
+  snapping on) and a fixture snaps by its centre; a free fixture's icon is
+  centred on the point its light and aim lines start from, in Top, Front
+  and Side, and Align lines those centres up; a fixture's name label
+  clicks and repaints upright at 90°; the selection halo no longer leaves
+  traces zoomed out. In the structure editors and the Rig Overview a click
+  picks a fixture on the shape that is drawn (a lantern, a mover's yoke, a
+  twin's every head, a thick bar's full width), at 45° what is in front of
+  it; a turned frame's bar ends lie on its body; the rulers are drawn over
+  the rig; the Rig Overview's ruler and the H / V / Z readout count from
+  the centre line (or ⌖ 0,0), like the plot and the target readouts; the
+  studio group editor keeps the spot you grabbed under the pointer and
+  rules its grid in round steps of the show's units.
 - **An EFX or RGB Matrix made in Build is in the Show Tree's Library at
   once** (also renamed or deleted), not on the next visit.
 - **A cue time typed and not yet left is what GO plays.** A fade or hold

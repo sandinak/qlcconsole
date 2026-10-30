@@ -46,6 +46,8 @@
 #include "standitem.h"
 #include "sceneryitem.h"
 #include "stagepieceitem.h"
+#include "structurestudioview.h"
+#include "studioplaneview.h"
 #undef private
 #undef protected
 
@@ -59,6 +61,11 @@
 #include "fixture.h"
 #include "truss.h"
 #include "stageplatform.h"
+#include "righeads.h"
+#include "fixturevisualtraits.h"
+#include "qlcfixturedef.h"
+#include "qlcfixturemode.h"
+#include <QMetaEnum>
 
 namespace
 {
@@ -738,6 +745,724 @@ void PlotAlignment_Test::theRenderedBandCoversTheRenderedItem()
              qPrintable(QStringLiteral("band middle %1 px, person drawn about %2 px").arg(bandMid).arg(itemMid)));
     QVERIFY2(qAbs(bandW - 2 * r) <= 2.0,
              qPrintable(QStringLiteral("band %1 px wide, the ring is %2 px").arg(bandW).arg(2 * r)));
+}
+
+/* ---------------------------------------------------------------------- *
+ *  The plot's remaining alignment rows (ALIGNMENT.md #17, #19, #20, #22, #23)
+ * ---------------------------------------------------------------------- */
+
+/* #17: every grid line ends where the grid does, at every quarter turn, and
+   the grid sits in the middle of the canvas. They ran to the widget's size
+   less the offset, which under a turn is most of a window past the stage. */
+void PlotAlignment_Test::gridLinesEndWhereTheGridDoes()
+{
+    QScopedPointer<Doc> doc(new Doc(nullptr));
+    buildCanonical(doc.data(), MonitorProperties::Feet);
+    Plot plot(doc.data(), QSize(1000, 700));                  // not square
+    MonitorGraphicsView *gv = plot.gv;
+    gv->setGridSubdivisions(2);                                // sub-lines too
+    for (int rot : { 0, 1, 2, 3 })
+    {
+        plot.setView(1.0, rot);
+        const qreal x0 = gv->m_xOffset, y0 = gv->m_yOffset;
+        const qreal x1 = x0 + gv->m_gridSize.width() * gv->m_cellPixels;
+        const qreal y1 = y0 + gv->m_gridSize.height() * gv->m_cellPixels;
+        QVERIFY(!gv->m_gridItems.isEmpty());
+        for (QGraphicsLineItem *gl : std::as_const(gv->m_gridItems))
+        {
+            const QLineF l = gl->line();
+            for (const QPointF &e : { l.p1(), l.p2() })
+                if (e.x() < x0 - 0.5 || e.x() > x1 + 0.5 || e.y() < y0 - 0.5 || e.y() > y1 + 0.5)
+                    QFAIL(qPrintable(QStringLiteral("turn %1: a grid line ends at %2,%3, the grid is %4..%5 x %6..%7")
+                        .arg(rot).arg(e.x()).arg(e.y()).arg(x0).arg(x1).arg(y0).arg(y1)));
+            // ...and reaches across all of it.
+            const bool vertical = qAbs(l.p1().x() - l.p2().x()) < 0.01;
+            const qreal len = l.length(), want = vertical ? (y1 - y0) : (x1 - x0);
+            QVERIFY2(qAbs(len - want) <= 0.5,
+                     qPrintable(QStringLiteral("turn %1: a grid line is %2 px long, the grid %3 px").arg(rot).arg(len).arg(want)));
+        }
+        // The grid drawn is the grid centred: its middle is the canvas's.
+        QRectF drawn;
+        for (QGraphicsLineItem *gl : std::as_const(gv->m_gridItems))
+            drawn |= QRectF(gl->line().p1(), gl->line().p2()).normalized().adjusted(-0.01, -0.01, 0.01, 0.01);
+        const QPointF mid = gv->sceneToViewport(drawn.center());
+        const QPointF vc = QRectF(gv->viewport()->rect()).center();
+        QVERIFY2(QLineF(mid, vc).length() <= 1.0,
+                 qPrintable(QStringLiteral("turn %1: the grid's middle is at %2,%3, the canvas's at %4,%5")
+                     .arg(rot).arg(mid.x()).arg(mid.y()).arg(vc.x()).arg(vc.y())));
+    }
+}
+
+/* #19: the Snap setting (Full, 1/2, 1/4) is the step a move snaps to,
+   whatever the grid draws; it only switched snapping on. */
+void PlotAlignment_Test::snapStepIsTheSnapSetting()
+{
+    QScopedPointer<Doc> doc(new Doc(nullptr));
+    buildCanonical(doc.data(), MonitorProperties::Feet);
+    Plot plot(doc.data(), QSize(1000, 700));
+    MonitorGraphicsView *gv = plot.gv;
+    gv->setGridSubdivisions(1);                                // the grid draws whole cells
+    for (int div : { 1, 2, 4 })
+    {
+        gv->setSnapDivisions(div);
+        const qreal inc = qreal(gv->m_cellPixels) / div;
+        const QPointF want(gv->m_xOffset + 3 * gv->m_cellPixels + inc, gv->m_yOffset + 2 * gv->m_cellPixels + inc);
+        const QPointF got = gv->snapScenePos(want + QPointF(0.3 * inc, -0.3 * inc));
+        QVERIFY2(QLineF(got, want).length() <= 0.01,
+                 qPrintable(QStringLiteral("snap 1/%1: landed at %2,%3, the step is at %4,%5")
+                     .arg(div).arg(got.x()).arg(got.y()).arg(want.x()).arg(want.y())));
+    }
+}
+
+/* #19 and #20: a free fixture snaps by its CENTRE -- the point its light
+   comes from -- not the corner of its icon. */
+void PlotAlignment_Test::aDroppedFixtureSnapsItsCentre()
+{
+    QScopedPointer<Doc> doc(new Doc(nullptr));
+    const Canonical c = buildCanonical(doc.data(), MonitorProperties::Feet);
+    Plot plot(doc.data(), QSize(1000, 700));
+    MonitorGraphicsView *gv = plot.gv;
+    gv->setSnapDivisions(2);
+    MonitorFixtureItem *fi = gv->m_fixtures.value(c.fixtureId);
+    QVERIFY(fi != nullptr);
+    const qreal inc = qreal(gv->m_cellPixels) / 2;
+    // Off the grid by a third of a step, centre-wise.
+    const QPointF centreTo(gv->m_xOffset + 30 * inc + inc / 3, gv->m_yOffset + 20 * inc + inc / 3);
+    fi->setPos(centreTo - fi->iconRect().center());
+    gv->slotFixtureMoved(fi);
+    fi = gv->m_fixtures.value(c.fixtureId);
+    const QPointF centre = fi->iconCentreScene();
+    auto offStep = [&](qreal v, qreal o) { const qreal k = (v - o) / inc; return qAbs(k - qRound(k)) * inc; };
+    QVERIFY2(offStep(centre.x(), gv->m_xOffset) <= 0.5 && offStep(centre.y(), gv->m_yOffset) <= 0.5,
+             qPrintable(QStringLiteral("the fixture's centre is at %1,%2: not on a half-cell line")
+                 .arg(centre.x()).arg(centre.y())));
+}
+
+/* #20: a free fixture's icon is centred on the point its beam and aim line
+   start from (RigHeads::fixtureCentre), in every view, and a drop that
+   doesn't move it leaves its stored position alone. */
+void PlotAlignment_Test::aFreeFixtureIsDrawnWhereItsLightIs()
+{
+    for (int pov : { int(MonitorGraphicsView::PovTop), int(MonitorGraphicsView::PovFront), int(MonitorGraphicsView::PovSide) })
+    {
+        QScopedPointer<Doc> doc(new Doc(nullptr));
+        const Canonical c = buildCanonical(doc.data(), MonitorProperties::Feet);
+        MonitorProperties *props = doc->monitorProperties();
+        props->setFixturePosition(c.fixtureId, 0, 0, QVector3D(11500.0f, 7200.0f, 3.5f));
+        Plot plot(doc.data(), QSize(1000, 700));
+        MonitorGraphicsView *gv = plot.gv;
+        gv->setViewPOV(MonitorGraphicsView::ViewPOV(pov));
+        settle();
+        MonitorFixtureItem *fi = gv->m_fixtures.value(c.fixtureId);
+        QVERIFY(fi != nullptr);
+        const QVector3D lc = RigHeads::fixtureCentre(doc.data(), c.fixtureId);
+        const QPointF want = gv->projectMm(lc.x() * 1000.0, lc.y() * 1000.0, lc.z() * 1000.0);
+        const QPointF got = fi->iconCentreScene();
+        QVERIFY2(QLineF(got, want).length() <= tolerancePx(),
+                 qPrintable(QStringLiteral("view %1: the icon's centre is at %2,%3, its light at %4,%5")
+                     .arg(pov).arg(got.x()).arg(got.y()).arg(want.x()).arg(want.y())));
+        // Three drops in place: no creep.
+        const QVector3D before = props->fixturePosition(c.fixtureId, 0, 0);
+        for (int i = 0; i < 3; i++)
+        {
+            gv->slotFixtureMoved(gv->m_fixtures.value(c.fixtureId));
+            settle();
+        }
+        const QVector3D after = props->fixturePosition(c.fixtureId, 0, 0);
+        QVERIFY2(qAbs(after.x() - before.x()) < 1.0f && qAbs(after.y() - before.y()) < 1.0f
+                     && qAbs(after.z() - before.z()) < 0.001f,
+                 qPrintable(QStringLiteral("view %1: dropped in place, it moved from %2,%3,%4 to %5,%6,%7")
+                     .arg(pov).arg(before.x()).arg(before.y()).arg(before.z())
+                     .arg(after.x()).arg(after.y()).arg(after.z())));
+    }
+}
+
+/* #22: at a quarter turn the name label is painted upright, so its hit and
+   repaint areas have to turn with it, not stay in the unturned rect. */
+void PlotAlignment_Test::theLabelHitAreaTurnsWithIt()
+{
+    QScopedPointer<Doc> doc(new Doc(nullptr));
+    const Canonical c = buildCanonical(doc.data(), MonitorProperties::Feet);
+    doc->fixture(c.fixtureId)->setName("Par 12");
+    Plot plot(doc.data(), QSize(1000, 700));
+    MonitorGraphicsView *gv = plot.gv;
+    gv->showFixturesLabels(true);
+    for (int rot : { 0, 1, 3 })
+    {
+        plot.setView(4.0, rot);
+        MonitorFixtureItem *fi = gv->m_fixtures.value(c.fixtureId);
+        QVERIFY(fi != nullptr && fi->m_labelVisibility);
+        const QRectF L = fi->m_labelRect;
+        QVERIFY2(L.width() > 1.3 * L.height(), "the label must be wider than tall for this test");
+        // Upright on screen: as wide as it is in the item, across the screen.
+        const QPointF cV = gv->sceneToViewport(fi->mapToScene(L.center()));
+        const qreal z = gv->viewScale();
+        const QTransform toScene = gv->viewportTransform().inverted();
+        for (const QPointF &d : { QPointF(0.45 * L.width() * z, 0), QPointF(-0.45 * L.width() * z, 0),
+                                  QPointF(0, 0.4 * L.height() * z), QPointF(0, -0.4 * L.height() * z) })
+        {
+            const QPointF q = fi->mapFromScene(toScene.map(cV + d));
+            QVERIFY2(fi->shape().contains(q),
+                     qPrintable(QStringLiteral("turn %1: a click on the label at %2,%3 px from its middle misses it")
+                         .arg(rot).arg(d.x()).arg(d.y())));
+            QVERIFY2(fi->boundingRect().contains(q),
+                     qPrintable(QStringLiteral("turn %1: the label at %2,%3 px from its middle is outside the repaint area")
+                         .arg(rot).arg(d.x()).arg(d.y())));
+        }
+    }
+}
+
+/* #23: the selection halo is a 6 px screen-wide pen 3 scene px out from the
+   body. Zoomed out, 3 screen px are more than 3 scene px: the repaint area
+   has to cover it, or deselecting leaves halo behind on the canvas. */
+void PlotAlignment_Test::theHaloStaysInsideTheRepaintArea()
+{
+    QScopedPointer<Doc> doc(new Doc(nullptr));
+    const Canonical c = buildCanonical(doc.data(), MonitorProperties::Feet);
+    Plot plot(doc.data(), QSize(1000, 700));
+    MonitorGraphicsView *gv = plot.gv;
+    for (double zoom : { 1.0, 0.5, 0.25 })
+    {
+        plot.setView(zoom, 0);
+        MonitorFixtureItem *fi = gv->m_fixtures.value(c.fixtureId);
+        QVERIFY(fi != nullptr);
+        fi->setSelected(true);
+        settle();
+        const qreal out = 3.0 + 3.0 / zoom;      // offset + half the screen-wide pen
+        const QRectF halo = fi->iconRect().adjusted(-out, -out, out, out);
+        QVERIFY2(fi->boundingRect().contains(halo),
+                 qPrintable(QStringLiteral("x%1: the halo reaches %2 scene px out, the repaint area %3")
+                     .arg(zoom).arg(out).arg(-fi->boundingRect().left())));
+    }
+}
+
+/* ---------------------------------------------------------------------- *
+ *  The structure editor / Rig Overview (StructureStudioView) and the studio
+ *  group editor (StudioPlaneView): ALIGNMENT.md A2-A10, the zeros, the grid
+ * ---------------------------------------------------------------------- */
+
+namespace
+{
+
+/* A 10 x 10 m stage in metres with nothing on it. */
+void bareStage(Doc *doc)
+{
+    MonitorProperties *props = doc->monitorProperties();
+    props->setGridUnits(MonitorProperties::Meters);
+    props->setGridSize(QVector3D(10.0f, 6.0f, 10.0f));
+}
+
+/* One fixture of each shape the studio draws: every stage look, a moving
+   head and a generic unit by definition, and two LED bars (thin and thick). */
+struct Sample { QString name; quint32 fid; };
+
+QList<Sample> addSampleFixture(Doc *doc, int which, int *count)
+{
+    if (doc->fixtureDefCache()->fixtureDef("Branson", "LED Movinghead+Circle") == nullptr)
+    {
+        QDir dir(TEST_FIXTURE_DIR);
+        dir.setFilter(QDir::Files);
+        dir.setNameFilters(QStringList() << QStringLiteral("*.qxf"));
+        doc->fixtureDefCache()->load(dir);
+    }
+    // One look per shape the studio draws (the rest share these).
+    const QList<Fixture::StageLook> looks = { Fixture::MovingSpotLook, Fixture::ParCanLook,
+                                              Fixture::FollowspotLook, Fixture::StaffLook,
+                                              Fixture::LanternLook };
+    *count = looks.size() + 4;
+    Fixture *fx = new Fixture(doc);
+    QString name;
+    if (which < looks.size())
+    {
+        fx->setChannels(1);
+        fx->setStageLook(looks.at(which));
+        name = QString::fromLatin1(QMetaEnum::fromType<Fixture::StageLook>().valueToKey(looks.at(which)));
+    }
+    else if (which == looks.size())
+    {
+        fx->setChannels(3);
+        name = QStringLiteral("generic");
+    }
+    else if (which == looks.size() + 1)
+    {
+        if (QLCFixtureDef *def = doc->fixtureDefCache()->fixtureDef("Branson", "LED Movinghead+Circle"))
+            fx->setFixtureDefinition(def, def->modes().first());
+        else
+            fx->setChannels(3);
+        name = QStringLiteral("moving head");
+    }
+    else
+    {
+        const bool thick = which == looks.size() + 3;
+        QLCFixtureDef *def = fx->genericRGBPanelDef(8, Fixture::RGB, false);
+        QLCFixtureMode *mode = fx->genericRGBPanelMode(def, Fixture::RGB, false, 1000, thick ? 400 : 60);
+        fx->setFixtureDefinition(def, mode);
+        name = thick ? QStringLiteral("thick LED bar") : QStringLiteral("LED bar");
+    }
+    fx->setName(name);
+    doc->addFixture(fx);
+    return { Sample{ name, fx->id() } };
+}
+
+/* The rig view's frame as pixels, at its own device pixel ratio. */
+QImage grabStudio(QWidget *w)
+{
+    return w->grab().toImage().convertToFormat(QImage::Format_RGB32);
+}
+
+int colourDiff(QRgb a, QRgb b)
+{
+    return qAbs(qRed(a) - qRed(b)) + qAbs(qGreen(a) - qGreen(b)) + qAbs(qBlue(a) - qBlue(b));
+}
+
+/* Square dilation of a mask by @p r pixels. */
+QVector<bool> dilate(const QVector<bool> &m, int w, int h, int r)
+{
+    QVector<bool> a(m.size(), false), out(m.size(), false);
+    for (int y = 0; y < h; y++)
+        for (int x = 0; x < w; x++)
+            if (m[y * w + x])
+                for (int k = qMax(0, x - r); k <= qMin(w - 1, x + r); k++)
+                    a[y * w + k] = true;
+    for (int y = 0; y < h; y++)
+        for (int x = 0; x < w; x++)
+            if (a[y * w + x])
+                for (int k = qMax(0, y - r); k <= qMin(h - 1, y + r); k++)
+                    out[k * w + x] = true;
+    return out;
+}
+
+const char *planeName(int p)
+{
+    static const char *n[] = { "Top", "Front", "Side", "Angled" };
+    return (p >= 0 && p < 4) ? n[p] : "?";
+}
+
+} // namespace
+
+/* A2: a member of a turned studio frame. Turning the frame turns the
+   fixture's own yaw with it (turnPlatform), so its body is drawn along its
+   own axis; the bar's ends turned it AGAIN by the frame, so the hit line,
+   the plain bar drawing and the rotate knob were off the body by
+   2·ℓ·sin(θ/2). */
+void PlotAlignment_Test::studioBarEndsFollowTheBody()
+{
+    QScopedPointer<Doc> doc(new Doc(nullptr));
+    bareStage(doc.data());
+    MonitorProperties *props = doc->monitorProperties();
+    Fixture *fx = new Fixture(doc.data());
+    fx->setName("Strip");
+    fx->setChannels(3);
+    doc->addFixture(fx);
+    props->setFixturePosition(fx->id(), 0, 0, QVector3D(5000, 5000, 1.0f));
+    const quint32 gid = 7;
+    props->createGroup(gid, "Frame", 0);
+    props->setGroupHasFrame(gid, true);
+    props->setGroupFrame(gid, QVector3D(3.0f, 4.0f, 0.5f), 30.0f);
+    props->setFixtureGroup(fx->id(), gid);
+    FixtureRigProps rp = props->fixtureRigProps(fx->id());
+    rp.groupLocal = QVector3D(1.0f, 0.5f, 0.0f);
+    rp.studioYaw = 30.0f;                    // as turnPlatform() leaves it
+    props->setFixtureRigProps(fx->id(), rp);
+    QCOMPARE(props->fixtureFrameGroup(fx->id()), gid);
+
+    StructureStudioView view(doc.data(), StructureStudioView::StageKind, 0);
+    view.resize(700, 500);
+    view.setPlane(StructureStudioView::Top);
+    view.reload();
+    const FixtureVisualTraits traits = classifyFixture(fx);
+    QVector3D box[8];
+    view.fixtureBoxCorners(fx->id(), traits, box);
+    const QVector3D body = box[1] - box[0];                   // its length, as drawn
+    const QVector3D ends = view.fixtureEndB(fx->id()) - view.fixtureEndA(fx->id());
+    QVERIFY2((ends - body).length() < 0.002f,
+             qPrintable(QStringLiteral("the bar's ends run %1,%2, its body %3,%4")
+                 .arg(ends.x()).arg(ends.y()).arg(body.x()).arg(body.y())));
+    // ...and they straddle the body's centre.
+    const QVector3D mid = (view.fixtureEndA(fx->id()) + view.fixtureEndB(fx->id())) * 0.5f;
+    QVERIFY((mid - view.fixtureCentre(fx->id())).length() < 0.002f);
+}
+
+/* A3-A7: a click lands on a fixture where, and only where, the fixture is
+   drawn. Every shape the studio draws, alone in the Rig Overview, in each
+   plane: render it with and without the fixture; every pixel it drew (well
+   inside its edge) must pick it, and nothing more than 12 px from anything
+   it drew may. */
+void PlotAlignment_Test::studioHitAreaIsWhatIsDrawn_data()
+{
+    QTest::addColumn<int>("plane");
+    QTest::addColumn<int>("which");
+    QScopedPointer<Doc> probe(new Doc(nullptr));
+    int count = 0;
+    addSampleFixture(probe.data(), 0, &count);
+    for (int plane : { int(StructureStudioView::Top), int(StructureStudioView::Front),
+                       int(StructureStudioView::Side), int(StructureStudioView::Angled) })
+        for (int which = 0; which < count; which++)
+        {
+            QScopedPointer<Doc> d(new Doc(nullptr));
+            int n = 0;
+            const QString name = addSampleFixture(d.data(), which, &n).first().name;
+            QTest::newRow(qPrintable(QStringLiteral("%1 %2").arg(planeName(plane), name))) << plane << which;
+        }
+}
+
+void PlotAlignment_Test::studioHitAreaIsWhatIsDrawn()
+{
+    QFETCH(int, plane);
+    QFETCH(int, which);
+    /* Picking is in logical pixels; one pass covers it. test.sh runs the
+       program again at a scale of 2 for the overlays, which this needn't. */
+    if (qApp->devicePixelRatio() > 1.0)
+        QSKIP("the pick is checked once, at a scale of 1");
+    QScopedPointer<Doc> doc(new Doc(nullptr));
+    bareStage(doc.data());
+    MonitorProperties *props = doc->monitorProperties();
+    int n = 0;
+    const Sample smp = addSampleFixture(doc.data(), which, &n).first();
+    props->setFixturePosition(smp.fid, 0, 0, QVector3D(5000, 5000, 3.0f));
+    // A second, far away, so the fit is the stage's and not one fixture's.
+    Fixture *anchor = new Fixture(doc.data());
+    anchor->setChannels(1);
+    doc->addFixture(anchor);
+    props->setFixturePosition(anchor->id(), 0, 0, QVector3D(500, 500, 0.0f));
+    const quint32 hidden = props->addLayer("hidden");
+    props->setLayerVisible(hidden, false);
+    props->setFixtureLayer(anchor->id(), hidden);
+
+    QWidget host;
+    StructureStudioView *view = new StructureStudioView(doc.data(), StructureStudioView::StageKind, 0, &host);
+    host.resize(640, 520);
+    view->resize(640, 520);
+    view->setBeams(false);
+    view->setHaze(0.0);                  // the body, not the light round it
+    view->setAmbient(1.0);               // lit, so a dark body shows against the floor
+    view->setPlane(StructureStudioView::Plane(plane));
+    // Fitted to both, then the far one hidden: the near one fills a good part of the view.
+    props->setFixtureLayer(anchor->id(), 0);
+    view->reload();
+    props->setFixtureLayer(anchor->id(), hidden);
+    view->zoomAt(view->w2s(RigHeads::fixtureCentre(doc.data(), smp.fid)), view->m_scale * 1.6);
+    host.show();
+    settle();
+
+    const QImage with = grabStudio(view);
+    props->setFixtureLayer(smp.fid, hidden);
+    view->rigMayHaveMoved();
+    const QImage without = grabStudio(view);
+    props->setFixtureLayer(smp.fid, 0);
+    view->rigMayHaveMoved();
+    (void)grabStudio(view);                          // the frame the picks are made against
+    QCOMPARE(with.size(), without.size());
+    if (qEnvironmentVariableIsSet("ALIGN_DEBUG"))
+    {
+        const QString base = qEnvironmentVariable("ALIGN_DEBUG") + QStringLiteral("/%1-%2").arg(planeName(plane), smp.name);
+        with.save(base + "-with.png");
+        without.save(base + "-without.png");
+        QImage hitMap(with.size(), QImage::Format_RGB32);
+        const qreal r = with.devicePixelRatio() > 0 ? with.devicePixelRatio() : 1.0;
+        for (int y = 0; y < with.height(); y++)
+            for (int x = 0; x < with.width(); x++)
+                hitMap.setPixel(x, y, view->hitTestFixture(QPointF(x / r, y / r)) == smp.fid
+                                      ? qRgb(255, 0, 255) : with.pixel(x, y));
+        hitMap.save(base + "-hits.png");
+    }
+
+    const int W = with.width(), H = with.height();
+    const qreal dpr = with.devicePixelRatio() > 0 ? with.devicePixelRatio() : 1.0;
+    QVector<bool> drawn(W * H, false), body(W * H, false);
+    int drawnCount = 0;
+    for (int y = 0; y < H; y++)
+        for (int x = 0; x < W; x++)
+        {
+            const int d = colourDiff(with.pixel(x, y), without.pixel(x, y));
+            drawn[y * W + x] = d > 12;
+            body[y * W + x] = d > 60;
+            drawnCount += d > 12;
+        }
+    QVERIFY2(drawnCount > 20, qPrintable(QStringLiteral("%1 drew %2 px").arg(smp.name).arg(drawnCount)));
+
+    // Inside: the body, eroded by a device pixel or two of anti-aliasing.
+    const int er = qCeil(1.5 * dpr);
+    int inside = 0, missed = 0;
+    QPointF firstMiss;
+    const int inStep = qRound(3 * dpr), outStep = qRound(8 * dpr);   // logical px
+    for (int y = er; y < H - er; y += inStep)
+        for (int x = er; x < W - er; x += inStep)
+        {
+            bool core = true;
+            for (int dy = -er; dy <= er && core; dy++)
+                for (int dx = -er; dx <= er && core; dx++)
+                    core = body[(y + dy) * W + (x + dx)];
+            if (!core)
+                continue;
+            inside++;
+            const QPointF at(x / dpr, y / dpr);
+            if (view->hitTestFixture(at) != smp.fid)
+            {
+                if (missed++ == 0)
+                    firstMiss = at;
+            }
+        }
+    /* A lantern at an angle draws its glow round its glass: light, not
+       body, and not what a click is for. */
+    const bool glows = plane == int(StructureStudioView::Angled)
+                       && classifyFixture(doc->fixture(smp.fid)).kind == FixtureSilhouette::Lantern;
+    QVERIFY2(missed == 0 || (glows && missed * 10 < inside),
+             qPrintable(QStringLiteral("%1 in %2: %3 of %4 drawn points miss it (first at %5,%6)")
+                 .arg(smp.name, planeName(plane)).arg(missed).arg(inside).arg(firstMiss.x()).arg(firstMiss.y())));
+
+    // Outside: well clear of everything it drew.
+    const QVector<bool> near = dilate(drawn, W, H, qCeil(12 * dpr));
+    int hits = 0;
+    QPointF firstHit;
+    for (int y = 0; y < H; y += outStep)
+        for (int x = 0; x < W; x += outStep)
+        {
+            if (near[y * W + x])
+                continue;
+            const QPointF at(x / dpr, y / dpr);
+            if (view->hitTestFixture(at) == smp.fid)
+            {
+                if (hits++ == 0)
+                    firstHit = at;
+            }
+        }
+    QVERIFY2(hits == 0,
+             qPrintable(QStringLiteral("%1 in %2: %3 points more than 12 px from anything drawn pick it (first at %4,%5)")
+                 .arg(smp.name, planeName(plane)).arg(hits).arg(firstHit.x()).arg(firstHit.y())));
+}
+
+/* A3: in the 45° view a click picks what is in FRONT: a fixture hidden
+   inside a solid riser is not picked through it. */
+void PlotAlignment_Test::studioAngledPickHonoursWhatIsInFront()
+{
+    QScopedPointer<Doc> doc(new Doc(nullptr));
+    bareStage(doc.data());
+    MonitorProperties *props = doc->monitorProperties();
+    StagePlatform *deck = props->addPlatform();
+    deck->setOriginX(3.0f); deck->setOriginY(3.0f);
+    deck->setWidth(4.0f); deck->setDepth(4.0f); deck->setHeight(2.0f);
+    Fixture *fx = new Fixture(doc.data());
+    fx->setName("Buried");
+    fx->setChannels(1);
+    fx->setStageLook(Fixture::ParCanLook);
+    doc->addFixture(fx);
+    props->setFixturePosition(fx->id(), 0, 0, QVector3D(5000, 5000, 1.0f));   // inside the riser
+    const quint32 hidden = props->addLayer("hidden");
+    props->setLayerVisible(hidden, false);
+
+    QWidget host;
+    StructureStudioView *view = new StructureStudioView(doc.data(), StructureStudioView::StageKind, 0, &host);
+    host.resize(640, 520);
+    view->resize(640, 520);
+    view->setBeams(false);
+    view->setPlane(StructureStudioView::Angled);
+    view->reload();
+    host.show();
+    settle();
+    const QImage with = grabStudio(view);
+    props->setFixtureLayer(fx->id(), hidden);
+    const QImage without = grabStudio(view);
+    props->setFixtureLayer(fx->id(), 0);
+    (void)grabStudio(view);
+    int seen = 0;
+    for (int y = 0; y < with.height(); y++)
+        for (int x = 0; x < with.width(); x++)
+            seen += colourDiff(with.pixel(x, y), without.pixel(x, y)) > 30;
+    QVERIFY2(seen < 4, qPrintable(QStringLiteral("the buried fixture shows %1 px: not a test of picking").arg(seen)));
+    const QPointF at = view->w2s(RigHeads::fixtureCentre(doc.data(), fx->id()));
+    QVERIFY2(view->hitTestFixture(at) != fx->id(), "a click on the riser's top picked the fixture inside it");
+}
+
+/* A10: the rulers are read over the rig, so they paint over it: a deck
+   reaching under them leaves them as they were. */
+void PlotAlignment_Test::studioRulersPaintOverTheRig()
+{
+    QScopedPointer<Doc> doc(new Doc(nullptr));
+    bareStage(doc.data());
+    MonitorProperties *props = doc->monitorProperties();
+    StagePlatform *deck = props->addPlatform();
+    deck->setOriginX(0.0f); deck->setOriginY(0.0f);
+    deck->setWidth(10.0f); deck->setDepth(10.0f); deck->setHeight(3.0f);
+    const quint32 hidden = props->addLayer("hidden");
+    props->setLayerVisible(hidden, false);
+
+    QWidget host;
+    StructureStudioView *view = new StructureStudioView(doc.data(), StructureStudioView::StageKind, 0, &host);
+    host.resize(640, 520);
+    view->resize(640, 520);
+    view->setPlane(StructureStudioView::Front);
+    view->reload();
+    view->zoomAt(QPointF(320, 260), view->m_scale * 3.0);     // the deck fills the view, rulers too
+    host.show();
+    settle();
+    const QImage with = grabStudio(view);
+    deck->setLayerId(hidden);
+    const QImage without = grabStudio(view);
+    const qreal dpr = with.devicePixelRatio() > 0 ? with.devicePixelRatio() : 1.0;
+    const int band = qFloor(22 * dpr) - 1, strip = qFloor(34 * dpr) - 1;
+    int differ = 0, deckSeen = 0;
+    for (int y = 0; y < with.height(); y++)
+        for (int x = 0; x < with.width(); x++)
+        {
+            const bool inRuler = y >= with.height() - band || x < strip;
+            const bool d = colourDiff(with.pixel(x, y), without.pixel(x, y)) > 30;
+            if (inRuler)
+                differ += d;
+            else
+                deckSeen += d;
+        }
+    QVERIFY2(deckSeen > 1000, "the deck isn't drawn: not a test of the rulers");
+    QVERIFY2(differ == 0, qPrintable(QStringLiteral("the deck paints over %1 ruler px").arg(differ)));
+}
+
+/* The three zeros: in the Rig Overview the ruler counts across the stage
+   from the centre line, as the plot's ruler and the target readouts do --
+   or from the ⌖ origin when one is set. It counted from the stage's corner. */
+void PlotAlignment_Test::studioRulerCountsFromThePlotsZero()
+{
+    QScopedPointer<Doc> doc(new Doc(nullptr));
+    bareStage(doc.data());
+    MonitorProperties *props = doc->monitorProperties();
+    Fixture *fx = new Fixture(doc.data());
+    fx->setChannels(1);
+    doc->addFixture(fx);
+    props->setFixturePosition(fx->id(), 0, 0, QVector3D(2000, 3000, 3.0f));
+    StructureStudioView view(doc.data(), StructureStudioView::StageKind, 0);
+    view.resize(700, 500);
+    for (int plane : { int(StructureStudioView::Top), int(StructureStudioView::Front) })
+    {
+        view.setPlane(StructureStudioView::Plane(plane));
+        view.reload();
+        const double cl = view.project(props->stageCentre()).x();
+        QVERIFY2(qAbs(view.structureCentreA() - cl) < 1e-6,
+                 qPrintable(QStringLiteral("%1: the ruler's 0 is at %2 m, the centre line at %3 m")
+                     .arg(planeName(plane)).arg(view.structureCentreA()).arg(cl)));
+    }
+    // The cursor readout counts from the same zero: H 0 on the centre line.
+    view.setPlane(StructureStudioView::Top);
+    view.reload();
+    const QPointF onCl = view.w2s(QVector3D(props->stageCentre().x(), 4.0f, 0.0f));
+    QVERIFY2(view.cursorReadoutText(onCl).startsWith(QStringLiteral("H 0.00 ")),
+             qPrintable(QStringLiteral("on the centre line the readout says %1").arg(view.cursorReadoutText(onCl))));
+    props->setStageOrigin(QPointF(2.5, 1.0));
+    view.reload();
+    QVERIFY2(qAbs(view.structureCentreA() - 2.5) < 1e-6, "with a ⌖ origin set, the ruler counts from it");
+    const QPointF onOrigin = view.w2s(QVector3D(2.5f, 1.0f, 0.0f));
+    QVERIFY2(view.cursorReadoutText(onOrigin).startsWith(QStringLiteral("H 0.00  V 0.00 ")),
+             qPrintable(QStringLiteral("on the origin the readout says %1").arg(view.cursorReadoutText(onOrigin))));
+}
+
+/* A8 in the studio group editor: a drag keeps the spot you grabbed under the
+   pointer. It put the fixture's centre on the pointer, so it jumped by
+   wherever on the bar you clicked. */
+void PlotAlignment_Test::studioDragKeepsTheGrabOffset()
+{
+    QScopedPointer<Doc> doc(new Doc(nullptr));
+    bareStage(doc.data());
+    MonitorProperties *props = doc->monitorProperties();
+    Fixture *fx = new Fixture(doc.data());
+    fx->setName("Strip");
+    fx->setChannels(3);
+    doc->addFixture(fx);
+    props->setFixturePosition(fx->id(), 0, 0, QVector3D(5000, 5000, 1.0f));
+    const quint32 gid = 9;
+    props->createGroup(gid, "Frame", 0);
+    props->setGroupHasFrame(gid, true);
+    props->setGroupFrame(gid, QVector3D(2.0f, 2.0f, 0.0f), 0.0f);
+    props->setFixtureGroup(fx->id(), gid);
+    FixtureRigProps rp = props->fixtureRigProps(fx->id());
+    rp.groupLocal = QVector3D(1.0f, 1.0f, 0.0f);
+    props->setFixtureRigProps(fx->id(), rp);
+
+    StudioPlaneView pv(doc.data(), gid);
+    pv.resize(600, 400);
+    pv.reload();
+    auto centrePx = [&]() { return pv.worldToScreen(pv.project(props->fixtureRigProps(fx->id()).groupLocal)); };
+    const QPointF c0 = centrePx();
+    const QPointF grab = c0 + QPointF(6, 0);                 // on the bar, off its centre
+    QCOMPARE(pv.hitTest(grab), fx->id());
+    const QPointF to = grab + QPointF(40, 25);
+    QMouseEvent press(QEvent::MouseButtonPress, grab, grab, Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+    pv.mousePressEvent(&press);
+    QMouseEvent move(QEvent::MouseMove, to, to, Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
+    pv.mouseMoveEvent(&move);
+    QMouseEvent rel(QEvent::MouseButtonRelease, to, to, Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+    pv.mouseReleaseEvent(&rel);
+    const QPointF c1 = centrePx();
+    QVERIFY2(QLineF(c1 - c0, QPointF(40, 25)).length() < 0.5,
+             qPrintable(QStringLiteral("dragged 40,25 px, the fixture moved %1,%2 px").arg((c1 - c0).x()).arg((c1 - c0).y())));
+}
+
+/* The studio group editor's grid steps 1-2-5 in the show's own units: it
+   doubled forever (0.1, 0.2, 0.4, 0.8 m), whatever the units. */
+void PlotAlignment_Test::studioPlaneGridStepsAreRound_data()
+{
+    QTest::addColumn<int>("units");
+    QTest::addColumn<double>("scale");
+    for (int u : { int(MonitorProperties::Meters), int(MonitorProperties::Feet) })
+        for (double sc : { 40.0, 70.0, 130.0, 260.0 })
+            QTest::newRow(qPrintable(QStringLiteral("%1 %2 px/m").arg(u == int(MonitorProperties::Feet) ? "ft" : "m").arg(sc)))
+                << u << sc;
+}
+
+void PlotAlignment_Test::studioPlaneGridStepsAreRound()
+{
+    QFETCH(int, units);
+    QFETCH(double, scale);
+    QScopedPointer<Doc> doc(new Doc(nullptr));
+    bareStage(doc.data());
+    MonitorProperties *props = doc->monitorProperties();
+    props->setGridUnits(MonitorProperties::GridUnits(units));
+    const quint32 gid = 11;
+    props->createGroup(gid, "Frame", 0);
+    props->setGroupHasFrame(gid, true);
+    StudioPlaneView pv(doc.data(), gid);
+    pv.resize(800, 300);
+    pv.reload();
+    pv.show();
+    settle();                                 // shown and fitted; then set its zoom
+    pv.m_scale = scale;
+    pv.m_originPx = QPointF(13.0, 150.0);
+    const QImage img = grabStudio(&pv);
+    const qreal dpr = img.devicePixelRatio() > 0 ? img.devicePixelRatio() : 1.0;
+    // Along a row below the legend: the grid's columns (and the origin axis).
+    const int y = qRound(260 * dpr);
+    const QRgb bg = qRgb(30, 32, 36);
+    QVector<double> lines;
+    for (int x = 0; x < img.width(); )
+    {
+        if (colourDiff(img.pixel(x, y), bg) > 6)
+        {
+            double sum = 0, wsum = 0;
+            int x2 = x;
+            while (x2 < img.width() && colourDiff(img.pixel(x2, y), bg) > 6)
+            {
+                const double w = colourDiff(img.pixel(x2, y), bg);
+                sum += x2 * w; wsum += w; x2++;
+            }
+            lines << (sum / wsum + 0.5) / dpr;
+            x = x2;
+        }
+        else
+            x++;
+    }
+    QVERIFY2(lines.size() >= 3, "no grid on the canvas");
+    double stepPx = 1e9;
+    for (int i = 1; i < lines.size(); i++)
+        stepPx = qMin(stepPx, lines.at(i) - lines.at(i - 1));
+    const bool feet = units == int(MonitorProperties::Feet);
+    const double stepUnits = stepPx / scale / (feet ? 0.3048 : 1.0);
+    QList<double> round;
+    if (feet)
+        round << 1.0 / 12 << 0.25 << 0.5 << 1 << 2 << 5 << 10 << 20 << 50;
+    else
+        round << 0.1 << 0.2 << 0.5 << 1 << 2 << 5 << 10 << 20 << 50;
+    bool ok = false;
+    for (double r : round)
+        ok = ok || qAbs(stepUnits - r) / r < 0.03;
+    QVERIFY2(ok, qPrintable(QStringLiteral("the grid steps %1 %2 (%3 px)").arg(stepUnits).arg(feet ? "ft" : "m").arg(stepPx)));
+    QVERIFY2(stepPx >= 20.0 && stepPx <= 60.0, qPrintable(QStringLiteral("grid lines %1 px apart").arg(stepPx)));
 }
 
 /* ---------------------------------------------------------------------- *

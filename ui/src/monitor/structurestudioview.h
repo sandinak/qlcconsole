@@ -28,6 +28,7 @@
 #ifndef STRUCTURESTUDIOVIEW_H
 #define STRUCTURESTUDIOVIEW_H
 
+#include <QPainterPath>
 #include <QWidget>
 #include "../qlcui_export.h"
 #include <cmath>
@@ -685,9 +686,20 @@ public:
      *  flat view keeps (the third left out of @p known: bit 0 X, 1 Y, 2 Z). */
     QVector3D worldAt(const QPointF &px, int *known, bool *onSurface) const;
 private:
-    double structureCentreA() const;           ///< plane-horizontal centre of the structure (metres)
+    double structureCentreA() const;
+    /** The plot's zero in the world (CL across, or the ⌖ origin), metres. */
+    QVector3D stageZero() const;
+    /** The Rig Overview's width ruler counts from the centre line ("CL"). */
+    bool rulerCountsFromCentreLine() const;
+    /** What the cursor readout says at @p px. */
+    QString cursorReadoutText(const QPointF &px) const;           ///< plane-horizontal centre of the structure (metres)
     double structureTopZ() const;              ///< highest point of the structure (metres, for the max marker)
     quint32 hitTestFixture(const QPointF &px) const;
+    /** A fixture's silhouette as drawn in this view, screen pixels; at an
+     *  angle @p nearestDepth gets the depth of its nearest point. */
+    QPainterPath fixtureDrawnShape(quint32 fid, double *nearestDepth = nullptr) const;
+    /** @p px is on a ruler band (which paints over the rig). */
+    bool onRuler(const QPointF &px) const;
     /** Nearest bar hung on THIS truss (Truss::invalidId() if none/not close
      *  enough), same "distance to the drawn shape" reasoning as hitTestFixture(). */
     quint32 hitTestBar(const QPointF &px) const;

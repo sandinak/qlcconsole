@@ -21,6 +21,20 @@ Built (DONE.md 2026-10-29). Open, each "decided (can change)" in the note:
   today). Would need an order on Layer, saved, resolved and undone.
 - EFX: fixtures added while it runs keep stale offsets until restarted.
 
+## Lighting Studio alignment — leftovers (0.3.1 d2, 2026-10-29)
+
+The audit's rows are fixed (DONE.md 2026-10-29, ui/test/plotalignment).
+Still open from it:
+- The grid is drawn in whole cells (a 15.24 m stage as 15): the outline,
+  centring and the off-grid count use whole units (ALIGNMENT.md #18).
+- The cursor readout samples depth half a pixel off where it solves
+  (A9); a 0.5–1 px bias on a slope.
+- decided (can change): a structure editor's ruler still counts from the
+  structure's middle; only the Rig Overview's counts from CL / ⌖, and the
+  H / V / Z readout counts from CL / ⌖ everywhere.
+- decided (can change): a lantern's glow at 45° doesn't pick it; its glass
+  and cage do. A click on a ruler band picks nothing under it.
+
 ## Focus calls and refining a cue from the stage (design, 2026-10-23)
 
 Two jobs, being designed on the board (Q105-Q108), built after the freeze:

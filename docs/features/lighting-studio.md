@@ -230,7 +230,18 @@ positive), **V** (up/downstage, downstage positive) and **Z** (height above
 the floor) of whatever is under the pointer — a person's head, a riser's top,
 a truss — exactly, in every view including the angled one. Over empty floor
 at an angle it reads the floor there "(floor)"; in a flat view over nothing,
-the two coordinates that view has, the third shown as "—".
+the two coordinates that view has, the third shown as "—". **H** and **V**
+count from the same zero as the plot: **H 0** is the centre line (or your
+**⌖ 0,0** when you set one). The Rig Overview's ruler counts from there too,
+with its **CL** tick on the centre line; a structure editor's ruler counts
+out from the structure's own middle.
+
+**What you click is what you see.** A click picks a fixture on the shape
+the view draws for it, or within a few pixels of it: a lantern's cage, a
+mover's base and yoke, every head of a twin, the whole width of a thick
+bar. At 45° it picks what is in front: a light hidden inside a solid riser
+is not picked through the riser's top. The rulers are drawn over the rig,
+and a click on a ruler doesn't pick what is under it.
 
 ### Angled — the free 3D view
 
@@ -996,8 +1007,10 @@ of, and doesn't override, the real locks above.
 - **Snap**, on the plot's footer bar, puts what you drag on the grid:
   fixtures, trusses, towers, stands, pipes, scenery, platforms, power
   sources and network nodes. Its arrow picks the step (**Snap to:**
-  Full, 1/2 or 1/4 of a grid square). A grouped selection moves by the
-  same amount as the piece you drag, so it keeps its shape.
+  Full, 1/2 or 1/4 of a grid square), whatever the grid draws. A fixture
+  snaps by its **centre**, the point its light comes from. A grouped
+  selection moves by the same amount as the piece you drag, so it keeps
+  its shape.
 - **Group** (Ctrl/⌘+G) makes the selection one piece that selects and
   moves together; **Ungroup** (Ctrl/⌘+Shift+G) splits it again.
 - **Align fixtures ▸** (two or more selected) and **Distribute fixtures
