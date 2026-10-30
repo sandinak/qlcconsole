@@ -40,6 +40,10 @@ Built (DONE.md 2026-10-29). Open, each "decided (can change)":
 - The *one-off* mark is on effect rows only, not on every one-off value.
 - Runs on a Show Tree effect row changes the palette (everywhere it plays
   when it is the show's); it is not an undo step yet.
+## Show Tree tidy — leftovers (2026-10-29, DONE.md)
+
+- The command line's `release` takes groups only; a ▣ (function) layer
+  is released from its page or the right-click menus.
 
 ## Live and blind — leftovers (docs/design/LIVE_BLIND.md, 2026-10-29)
 

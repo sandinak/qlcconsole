@@ -386,6 +386,17 @@ skipped). Upstream fixes taken:
 - **The save buttons say where an effect goes**: "Save as Effect…" is
   now **Save to My effects…** (on this computer, for any show) and "Save
   as palette…" **Save in this show…**.
+- **Show Tree: a cue list's mode is a flag**, not words in the second
+  column: **⇢** (Tracking) or **B** (Non-tracking) under **M**, the words
+  on hover. The column beside the names starts narrower.
+- **Show Tree: skip a cue from its right-click menu.** **Skip cue** /
+  **Unskip cue** acts on every selected cue in one undo step; a skipped
+  cue stays in the list, grey, struck through and marked. The tick box on
+  every cue row is gone (⌘/, the cue page and `skip` still work).
+- **Show Tree: Mode and Release on the right-click menus.** A cue's
+  **Mode ▸** (Track / Block / Cue-only, the selected cues in one step);
+  a layer's **Release (leaving this cue)**, in the tree and the
+  Workbench, which also has the cue's **Cue mode ▸**.
 - **The rig shows the targets the cue uses**: the plot and the Rig
   Overview draw the targets the cue on show aims at (Live: what plays and
   Build's loaded scene; Blind: the cue in edit); all of them when nothing
@@ -473,6 +484,10 @@ skipped). Upstream fixes taken:
   the centre line (or ⌖ 0,0), like the plot and the target readouts; the
   studio group editor keeps the spot you grabbed under the pointer and
   rules its grid in round steps of the show's units.
+- **A scene played as it is (▣) in the Show Tree can be released.** Its
+  layer had no Release, on its page or in the Workbench, so a scene added
+  with + Scene tracked on to the end of the list; now it leaves when the
+  cue it is released in is left, as any layer does.
 - **An EFX or RGB Matrix made in Build is in the Show Tree's Library at
   once** (also renamed or deleted), not on the next visit.
 - **A cue time typed and not yet left is what GO plays.** A fade or hold

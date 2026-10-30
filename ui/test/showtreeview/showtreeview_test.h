@@ -134,6 +134,9 @@ private slots:
 
     // Skipped cues (2026-10-21)
     void skipCuesInTheTree();
+    void listModeIsAFlag();
+    void releaseAFunctionLayer();
+    void cueModeFromTheMenus();
     void textColoursInTheTreePagesAndWorkbench();
     /** Q38: Move in black per list (page, right-click, command) and per cue
      *  (page, right-click, nomib), the badges and the MIB button's tooltip. */

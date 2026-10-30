@@ -721,9 +721,11 @@ bool TreeCueStack::showMenu(int layer, int attribute, const QPoint &globalPos)
         setSolo(on);
         emit changed();
     });
-    if (!t.isOpaque())
+    // Release: a layer that plays a function as it is, too (2026-10-29).
+    if (const CueList *l = list(); l != nullptr && !l->looks)
     {
         QAction *release = menu.addAction(tr("Release (leaving this cue)"));
+        release->setObjectName(QStringLiteral("cueStackRelease"));
         release->setCheckable(true);
         bool on = false;
         if (const Cue *c = cue())
@@ -737,6 +739,13 @@ bool TreeCueStack::showMenu(int layer, int attribute, const QPoint &globalPos)
             else
                 st()->setTargetRelease(m_cue, t, r);
         });
+    }
+    // The cue's Mode ▸, as the tree's cue menu has it.
+    if (const CueList *l = list(); l != nullptr && !l->looks && !l->isSubCues())
+    {
+        QMenu *mode = menu.addMenu(tr("Cue mode"));
+        mode->setObjectName(QStringLiteral("cueStackMode"));
+        m_view->cueModeMenu(mode, { m_cue });
     }
     if (lid != ShowTree::invalidId())
     {

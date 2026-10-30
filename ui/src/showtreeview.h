@@ -383,12 +383,22 @@ public:
      *  in tree order. */
     QList<quint32> selectedCues() const;
     /** Skip (or, @a skip false, put back) cues @a cueIds: one undo step.
-     *  The tree's tick, the menu's Skip cue / Unskip cue, ⌘/ and the cue
+     *  The tree's menu Skip cue / Unskip cue, ⌘/, the command line and the cue
      *  page's Skip all come here. */
     bool setCuesSkipped(const QList<quint32> &cueIds, bool skip);
     /** ⌘/ in the tree: the selected cues skipped -- or, when every one of
      *  them is skipped already, put back. False: no cue selected. */
     bool toggleSkipSelected();
+    /** Mode ▸ (the tree's cue menu, the Workbench's layer menu): List
+     *  default / Track / Block / Cue-only for cues @a cueIds, the one they
+     *  all have ticked. One undo step. */
+    void cueModeMenu(QMenu *menu, const QList<quint32> &cueIds);
+    /** Cues @a cueIds to mode @a mode: one undo step. */
+    bool setCuesMode(const QList<quint32> &cueIds, ShowTree::CueMode mode);
+    /** Release (leaving cue @a cueId) on its layer @a layerId -- or, that
+     *  invalid, on the layer carried in on @a target, which then becomes the
+     *  cue's own. A layer that plays a function as it is, too. */
+    bool setLayerReleaseIn(quint32 cueId, quint32 layerId, const ShowTree::Target &target, bool release);
     /** Colour ▸ (the menus and the pages' Text colour button): the text
      *  colours (ShowTree::textColours()), Custom… and None, for cues
      *  @a cueIds or -- @a listId valid -- the cue list. Each one undo step. */
