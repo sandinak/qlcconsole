@@ -317,6 +317,43 @@ private:
     /** Run @a op (a move or renumber in cue @a cueId's list) keeping what
      *  show control has LOADed on the list's chaser on the same cue. */
     bool keepingStandby(quint32 cueId, const std::function<bool()> &op);
+
+    /************************************************************************
+     * Song sections and the numbering scheme (Q190)
+     ************************************************************************/
+public:
+    /** How production @a productionId numbers its cues, and so its song
+     *  sections (ShowTree::Numbering). */
+    ShowTree::Numbering numbering(quint32 productionId) const;
+    bool setNumbering(quint32 productionId, ShowTree::Numbering numbering);
+    /** The numbering list @a listId's sections follow (None for a Looks
+     *  section or sub-cues). */
+    ShowTree::Numbering listNumbering(quint32 listId) const;
+    /** The song sections of list @a listId, in order (ShowTree::sectionsOf). */
+    QList<ShowTree::Section> sections(quint32 listId) const;
+    /** The section cue @a cueId is in (false: none). */
+    bool sectionOfCue(quint32 cueId, ShowTree::Section *out) const;
+    /** Name @a section of list @a listId ("Everybody Scream"; empty: no
+     *  name). One undo step. */
+    bool setSectionName(quint32 listId, const ShowTree::Section &section, const QString &name);
+    /** + Section: under a scheme, a new cue at the end numbered to the next
+     *  section ("4.0.1"), the section named @a name; under Manual, a
+     *  section begins at cue @a atCue (invalid: at a new cue at the end).
+     *  The section's first cue (invalid: none made). One undo step. */
+    quint32 addSection(quint32 listId, const QString &name, quint32 atCue = 0xFFFFFFFF);
+    /** Manual: the section that begins at @a headCue is no longer one (its
+     *  cues join the section before). */
+    bool removeSection(quint32 listId, quint32 headCue);
+    /** A new cue at the top of @a section, numbered to the scheme. */
+    quint32 addCueInSection(quint32 listId, const ShowTree::Section &section, const QString &name);
+    /** "Block at section start": the section's first cue is Block (it
+     *  starts from nothing), or back to the list's default. */
+    bool setSectionBlock(quint32 listId, const ShowTree::Section &section, bool block);
+    bool sectionBlocks(quint32 listId, const ShowTree::Section &section) const;
+    /** Merge lists into one… (ShowTree::mergeLists): one undo step. False
+     *  (@a why): nothing merged. */
+    bool mergeLists(quint32 productionId, const QList<quint32> &listIds, ShowTree::MergeReport *report = nullptr,
+                    QString *why = nullptr);
 public:
     quint32 addLayer(quint32 cueId, const ShowTree::Target &target, const QString &name = QString());
     bool removeLayer(quint32 cueId, quint32 layerId);

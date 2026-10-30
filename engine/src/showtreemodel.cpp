@@ -1390,6 +1390,9 @@ void saveXML(QXmlStreamWriter *doc, const Production &production)
     writeId(doc, QStringLiteral("MainList"), production.mainList);
     if (production.timecode >= -1)
         doc->writeAttribute(QStringLiteral("Timecode"), QString::number(production.timecode));
+    // Q190: only when it has one (an older build ignores it).
+    if (production.numbering != Numbering::None)
+        doc->writeAttribute(QStringLiteral("Numbering"), numberingToString(production.numbering));
 
     for (const CueList &list : production.lists)
     {
@@ -1429,6 +1432,16 @@ void saveXML(QXmlStreamWriter *doc, const Production &production)
                 doc->writeAttribute(QStringLiteral("Path"), o.path);
                 doc->writeEndElement();
             }
+        }
+        // Q190: its song sections' names (an older build skips them).
+        for (const SectionHead &h : list.sections)
+        {
+            doc->writeStartElement(QStringLiteral("Section"));
+            if (!h.key.isEmpty())
+                doc->writeAttribute(QStringLiteral("Key"), h.key);
+            writeId(doc, QStringLiteral("Cue"), h.cue);
+            doc->writeAttribute(QStringLiteral("Name"), h.name);
+            doc->writeEndElement();
         }
         for (const QString &f : list.folders)
         {
@@ -1577,6 +1590,7 @@ bool loadXML(QXmlStreamReader &root, Production &production)
         const int tc = a.value(QStringLiteral("Timecode")).toString().toInt(&ok);
         production.timecode = ok && tc >= -1 ? tc : -2;
     }
+    production.numbering = stringToNumbering(a.value(QStringLiteral("Numbering")).toString());
 
     while (root.readNextStartElement())
     {
@@ -1625,6 +1639,18 @@ bool loadXML(QXmlStreamReader &root, Production &production)
                 const QString f = root.attributes().value(QStringLiteral("Path")).toString();
                 if (!f.isEmpty() && !list.folders.contains(f))
                     list.folders << f;
+                root.skipCurrentElement();
+                continue;
+            }
+            if (!looks && !subs && root.name() == QLatin1String("Section"))
+            {
+                const QXmlStreamAttributes sa = root.attributes();
+                SectionHead h;
+                h.key = sa.value(QStringLiteral("Key")).toString();
+                h.cue = readId(sa, QStringLiteral("Cue"));
+                h.name = sa.value(QStringLiteral("Name")).toString();
+                if (!h.key.isEmpty() || h.cue != invalidId())
+                    list.sections << h;
                 root.skipCurrentElement();
                 continue;
             }

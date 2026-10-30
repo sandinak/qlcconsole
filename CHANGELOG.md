@@ -57,6 +57,18 @@ skipped). Upstream fixes taken:
 
 ### Added
 
+- **One cue list per show, with song sections** (Q190). A production's
+  **Numbering** says how its cues are numbered — Show.Part.Iteration
+  (0.0.1 setup, 1.0.1 the first song), hundreds per song (Eos, MA), free
+  numbers with sections by hand (QLab), or none — and the Show Tree and the
+  Run tab show each song as a header row its cues fold under (*1 —
+  Everybody Scream*), named on its page, with **Block at section start**.
+  **+ Cue** and **+ Section** number to the scheme; a new show is offered
+  the scheme its numbers already follow. **Merge lists into one…** turns a
+  show built as a list per song (GO and Run played only the first) into
+  one list: cues in order, numbers kept unless two clash (and said), each
+  list's start Block so every cue plays as it did. Old shows load
+  unchanged.
 - **Stack a movement and an intensity effect**, as the help now shows: a
   layer's Effect row (⋯ ▸ Set to, **Design a new effect…**) and the
   Workbench's **+ Effect ▾ ▸ Effect look…** add an effect beside the

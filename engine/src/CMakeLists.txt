@@ -61,6 +61,7 @@ add_library(${module_name} SHARED
     showtreelooks.cpp
     showtreeproductions.cpp
     showtreesubcues.cpp
+    showtreesections.cpp
     showtreenumbering.cpp
     showtreerunner.cpp
     showtreereusable.cpp

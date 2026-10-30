@@ -36,6 +36,7 @@
 #include <QLabel>
 #include <QStyle>
 #include <QTimer>
+#include <QSet>
 
 #include <functional>
 
@@ -57,7 +58,7 @@ using namespace ShowTree;
 namespace
 {
 enum { RoleStep = Qt::UserRole, RoleSub = Qt::UserRole + 1, RoleCue = Qt::UserRole + 2,
-       RoleColour = Qt::UserRole + 3 };
+       RoleColour = Qt::UserRole + 3, RoleSection = Qt::UserRole + 4, RoleSectionKey = Qt::UserRole + 5 };
 enum { ColState = 0, ColCue, ColName, ColTiming, ColNote };
 
 QString seconds(uint ms)
@@ -1200,12 +1201,23 @@ void CueRunner::rebuildTree()
     ShowTreeController *st = m_doc->showTree();
     Chaser *ch = chaser();
     const quint32 lid = listId();
-    const QString key = QStringLiteral("%1|%2|%3").arg(ch == nullptr ? 0u : ch->id()).arg(lid)
-                        .arg(ch == nullptr ? 0 : ch->stepsCount());
+    // Q190: the song sections, as header rows the cues fold under.
+    const QList<Section> sections = st->sections(lid);
+    QStringList sectionSig;
+    for (const Section &sec : sections)
+        sectionSig << QStringLiteral("%1:%2").arg(sec.first).arg(sectionTitle(sec));
+    const QString key = QStringLiteral("%1|%2|%3|%4").arg(ch == nullptr ? 0u : ch->id()).arg(lid)
+                        .arg(ch == nullptr ? 0 : ch->stepsCount()).arg(sectionSig.join(QLatin1Char(';')));
     if (!m_treeDirty && key == m_builtFor)
         return;
     m_treeDirty = false;
     m_builtFor = key;
+    // Folded sections stay folded across a rebuild.
+    QSet<QString> folded;
+    for (int t = 0; t < m_tree->topLevelItemCount(); ++t)
+        if (QTreeWidgetItem *h = m_tree->topLevelItem(t))
+            if (h->data(ColCue, RoleSection).toBool() && !h->isExpanded())
+                folded.insert(h->data(ColCue, RoleSectionKey).toString());
     m_tree->clear();
     fitStateColumn();
     if (ch == nullptr)
@@ -1225,15 +1237,39 @@ void CueRunner::rebuildTree()
     const CueList *list = st->cueList(lid);
     if (list != nullptr)
     {
+        QTreeWidgetItem *sectionItem = nullptr;
+        QList<QTreeWidgetItem *> sectionItems;
         for (int i = 0; i < list->cues.count(); ++i)
         {
+            const int si = sectionOfIndex(sections, i);
+            if (si >= 0 && sections.at(si).first == i)
+            {
+                sectionItem = new QTreeWidgetItem(m_tree);
+                sectionItem->setData(ColCue, RoleStep, -1);
+                sectionItem->setData(ColCue, RoleSub, -1);
+                sectionItem->setData(ColCue, RoleSection, true);
+                // Its identity, so a fold outlives a rename: the key, or its first cue.
+                sectionItem->setData(ColCue, RoleSectionKey, sections.at(si).key.isEmpty()
+                                     ? QStringLiteral("#%1").arg(sections.at(si).headCue) : sections.at(si).key);
+                sectionItem->setFirstColumnSpanned(true);
+                sectionItem->setText(ColState, sectionTitle(sections.at(si)));
+                QFont f = m_tree->font();
+                f.setBold(true);
+                sectionItem->setFont(ColState, f);
+                sectionItem->setFlags(Qt::ItemIsEnabled);
+                sectionItem->setToolTip(ColState, tr("A song section: click ▸ to fold it"));
+                sectionItems << sectionItem;
+            }
+            else if (si < 0)
+                sectionItem = nullptr;
             const Cue &c = list->cues.at(i);
             QStringList timing;
             if (c.fadeIn > 0)
                 timing << tr("fade %1").arg(seconds(c.fadeIn));
             if (int(c.hold) >= 0)
                 timing << tr("follow %1").arg(seconds(c.hold));
-            QTreeWidgetItem *item = new QTreeWidgetItem(m_tree);
+            QTreeWidgetItem *item = sectionItem != nullptr ? new QTreeWidgetItem(sectionItem)
+                                                           : new QTreeWidgetItem(m_tree);
             row(item, i, -1, st->cueNumber(*list, i), c.name, timing.join(QStringLiteral(" · ")), c.note);
             item->setData(ColCue, RoleColour, st->cueColour(c.id));
             if (const CueList *subs = st->cueList(st->subCueList(c.id)))
@@ -1252,6 +1288,8 @@ void CueRunner::rebuildTree()
                 item->setExpanded(true);
             }
         }
+        for (QTreeWidgetItem *h : sectionItems)
+            h->setExpanded(!folded.contains(h->data(ColCue, RoleSectionKey).toString()));
         return;
     }
 
@@ -1374,6 +1412,8 @@ void CueRunner::updateStates()
         for (QTreeWidgetItemIterator it(m_tree); *it; ++it)
         {
             QTreeWidgetItem *item = *it;
+            if (item->data(ColCue, RoleSection).toBool())
+                continue;
             const int step = item->data(ColCue, RoleStep).toInt();
             const int sub = item->data(ColCue, RoleSub).toInt();
             QString state;
