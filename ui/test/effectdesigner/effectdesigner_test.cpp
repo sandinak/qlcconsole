@@ -334,12 +334,21 @@ void EffectDesigner_Test::saveAsPaletteAsksNoName()
     ed.setTryOnGroups({ towers->id() });
     ed.setEffect(QLCPalette::invalidId());
     QVERIFY(ed.pickEffect("Dimmer Phaser"));
-    // A box would block here (and the test with it).
-    QTimer::singleShot(2000, []() {
+    // A box would block here: noted and closed. Its timer lives only in
+    // this test (a stray one closed a later test's question on CI).
+    QStringList boxes;
+    QTimer watch;
+    connect(&watch, &QTimer::timeout, &watch, [&boxes]() {
         if (QWidget *w = QApplication::activeModalWidget())
+        {
+            boxes << QString::fromLatin1(w->metaObject()->className());
             w->close();
+        }
     });
+    watch.start(50);
     const quint32 pid = ed.saveAsPalette();
+    watch.stop();
+    QVERIFY2(boxes.isEmpty(), qPrintable(boxes.join(", ")));
     QVERIFY(pid != QLCPalette::invalidId());
     QCOMPARE(m_doc->palette(pid)->name(), QString("Dimmer Phaser 2"));
     QVERIFY(!m_doc->showTree()->isInlinePalette(pid));
