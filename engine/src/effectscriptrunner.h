@@ -107,6 +107,7 @@ public:
     /** The scene a playing effect plays in (invalid: not playing). */
     quint32 sceneOf(quint32 paletteId) const;
 
+public slots:
     void slotInputValueChanged(quint32 universe, quint32 channel,
                                uchar value, const QString &key);
 
