@@ -545,7 +545,8 @@ docs/features/ai-assist.md.
   checklist UI (§7).
 - **P2b** configuration import (§5b), usable with AI off.
 - **P3** MCP server over the registry.
-- Small: VC widgets in `unused`; Linux/Windows keychain (QtKeychain);
+- Small: drop the `__has_include("whyon.h")` guard in operationregistry.cpp
+  once Why is this on? is on main (it lands in the same train); VC widgets in `unused`; Linux/Windows keychain (QtKeychain);
   Tab completion of the registry's words.
 
 Guardrails: separate `ai/` module behind `QLC_AI_ASSIST`; no AI code on

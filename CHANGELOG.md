@@ -186,8 +186,8 @@ back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
   `? <question>` in the Show Tree's command line asks the model, which
   answers by calling the console's read-only questions (shown as links to
   the commands, which are new command-line words: `fixtures`, `groups`,
-  `functions`, `describe`, `cues`, `conflicts`, `unused`, `review`,
-  `summary`). It changes nothing. Operate tears it down without delaying
+  `functions`, `describe`, `cues`, `why`, `conflicts`, `unused`,
+  `review`, `summary`). It changes nothing. Operate tears it down without delaying
   the switch (aborts, closes its connections, unloads a local Ollama
   model, then checks; anything left shows in the footer). Every command
   line now runs through one Operation Registry, with the grammar

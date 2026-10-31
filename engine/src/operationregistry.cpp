@@ -38,6 +38,8 @@
 #include "fixture.h"
 #include "chaser.h"
 #include "scene.h"
+/* why_on: Why is this on? (engine/src/whyon.*), landing beside this in the
+   same train; the guard can go once both are on main. */
 #if __has_include("whyon.h")
 #include "whyon.h"
 #define QLC_HAVE_WHYON 1
