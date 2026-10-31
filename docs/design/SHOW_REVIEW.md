@@ -1,8 +1,10 @@
 # Show Review — design (post-0.3, not built)
 
-**Status:** design only, 2026-10-25. Nothing here is built; the app is
-feature-frozen for 0.3 (memory: feature freeze). Tracked in
-[TODO.md](../project/TODO.md) under *Show Review*.
+**Status:** design 2026-10-25. **v1's frame is built** (2026-10-31): the
+registry, acceptance, the CLI, the chip and panel and 31 checks; what is
+built, what was decided on section 8 and the leftovers are in
+[TODO.md](../project/TODO.md) under *Show Review*, the user's guide in
+docs/features/show-review.md.
 
 Branson, 2026-10-25: *"show review. When designing perhaps it's worth having
 an auditor that looks for problems like this that haven't been explicitly

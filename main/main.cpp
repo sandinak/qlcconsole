@@ -49,6 +49,7 @@
 #include "webaccesscontroller.h"
 #include "webaccessauth.h"
 #include "helpshots.h"
+#include "showreviewcli.h"
 #include "connectionstree.h"
 #include "apputil.h"
 #include "app.h"
@@ -182,6 +183,8 @@ void printUsage()
     cout << "  -n or --nogui\t\t\tStart the application with the GUI hidden (requires --nowm)" << endl;
     cout << "  -o or --open <file>\t\tOpen the specified workspace file" << endl;
     cout << "  -p or --operate\t\tStart in operate mode" << endl;
+    cout << "  --review <file>\t\tShow Review with no window: list the show's design problems and exit" << endl;
+    cout << "\t\t\t\t(0 clean, 1 warnings, 2 blockers, 3 unreadable; --review <file> --help for more)" << endl;
     cout << "  -v or --version\t\tPrint version information" << endl;
     cout << "  -w or --web\t\t\tEnable remote web access" << endl;
     cout << "  -wp or --web-port <port>\t\tSet the port to use for web access" << endl;
@@ -361,6 +364,11 @@ int main(int argc, char** argv)
     // Before anything reads a setting: the help's pictures start from the
     // default layout and leave the user's own settings alone.
     HelpShots::isolateSettings();
+
+    /* --review show.qlcc: Show Review with no window (CI, a teacher's folder
+       of hand-ins); before the QApplication, so no window ever opens. */
+    if (ShowReviewCli::wanted(argc, argv))
+        return ShowReviewCli::main(argc, argv);
 
 #if !defined(Q_OS_MACOS)
     /* Asked for a style by name (-style / QT_STYLE_OVERRIDE)? Looked for

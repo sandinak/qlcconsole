@@ -51,6 +51,8 @@
 #include "cuerunner.h"
 #include "showtreemodel.h"
 #include "showtreeview.h"
+#include "showreviewpanel.h"
+#include "showreview.h"
 #include "showtreecontroller.h"
 #include <QtMath>
 #include "appviews_test.h"
@@ -3422,6 +3424,52 @@ void AppViews_Test::aPinKeepsTheShowInOperate()
     ShowSettingsDialog::testAnswers() = { "2468" };
     m_app->slotModeDesign();
     QCOMPARE(doc->mode(), Doc::Design);
+}
+
+void AppViews_Test::reviewChipCountsAndOpensThePanel()
+{
+    m_app->clearDocument();
+    Doc *doc = m_app->doc();
+    auto back = qScopeGuard([this]() {
+        if (ShowReviewPanel::shared() != nullptr)
+            ShowReviewPanel::shared()->close();
+        m_app->clearDocument();
+    });
+    QLabel *chip = m_app->findChild<QLabel *>("footerReview");
+    QVERIFY(chip != nullptr);
+    QVERIFY(chip->isHidden());                      // not checked yet
+    doc->showReview()->run();
+    QVERIFY(!chip->isHidden());
+    QCOMPARE(chip->text(), QStringLiteral("Reviewed"));
+
+    // Two fixtures on the same channels: a blocker, counted a moment after the edit.
+    Fixture *a = new Fixture(doc);
+    a->setName("Lamp 1");
+    a->setChannels(1);
+    a->setAddress(0);
+    QVERIFY(doc->addFixture(a));
+    Fixture *b = new Fixture(doc);
+    b->setName("Lamp 2");
+    b->setChannels(1);
+    b->setAddress(4);
+    QVERIFY(doc->addFixture(b));
+    b->setAddress(0);
+    QTRY_VERIFY_WITH_TIMEOUT(chip->text().contains(QStringLiteral("1 ⛔")), 5000);
+
+    QTest::mouseClick(chip, Qt::LeftButton);
+    QVERIFY(ShowReviewPanel::shared() != nullptr);
+    QVERIFY(ShowReviewPanel::shared()->isVisible());
+    QVERIFY(ShowReviewPanel::shared()->selectCheck("PAT-01"));
+    QVERIFY(ShowReviewPanel::shared()->acceptSelected("Doubled on purpose", "Ava"));
+    QCOMPARE(chip->text(), QStringLiteral("Reviewed"));
+
+    // Fix on a cue's finding goes to the cue in the Show Tree.
+    ShowTreeController *st = doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("Show"), "Act 1");
+    const quint32 cue = st->addCue(list, -1, "Empty");
+    QVERIFY(m_app->reviewJump(nullptr, QStringLiteral("cue"), QVariantList() << cue));
+    QVERIFY(ShowTreeView::instance() != nullptr);
+    QCOMPARE(ShowTreeView::instance()->currentId(), cue);
 }
 
 void AppViews_Test::teachingModeShowsItselfAndThePractice()

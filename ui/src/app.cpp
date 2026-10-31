@@ -142,6 +142,8 @@
 #include "showsettingsdialog.h"
 #include "showoperate.h"
 #include "teachingsettings.h"
+#include "showreviewpanel.h"
+#include "showreview.h"
 #include "qlcfixturedef.h"
 #include "definitionupdatesdialog.h"
 #include "qlcioplugin.h"
@@ -6987,6 +6989,54 @@ void App::initStatusBar()
                 this, &App::updateTeachingStatus);
     updateTeachingStatus();
 
+    // Show Review (docs/features/show-review.md): what's open in the show's
+    // design, beside readiness. A click opens the Review panel. It re-checks
+    // itself a moment after the show changes, in Design only (decided, can
+    // change: the design's "live review" on by default, as every v1 check
+    // is cheap); a run that took long stops that until the next Re-check.
+    m_statusReviewLabel = new QLabel(this);
+    m_statusReviewLabel->setObjectName(QStringLiteral("footerReview"));
+    m_statusReviewLabel->setCursor(Qt::PointingHandCursor);
+    m_statusReviewLabel->setProperty("helpTopic", QStringLiteral("show-review.md"));
+    m_statusReviewLabel->installEventFilter(this);
+    m_statusReviewLabel->hide();
+    sb->addWidget(m_statusReviewLabel, 0);
+    if (m_doc != NULL)
+    {
+        ShowReviewPanel::setShared(m_doc, this);
+        ShowReviewPanel::setJumper([this](QWidget *parent, const QString &jump, const QVariantList &data) {
+            return reviewJump(parent, jump, data);
+        });
+        connect(m_doc->showReview(), &ShowReview::reviewed, this, &App::updateReviewStatus);
+        connect(m_doc->showReview(), &ShowReview::acceptancesChanged, this, &App::updateReviewStatus);
+        m_reviewTimer = new QTimer(this);
+        m_reviewTimer->setSingleShot(true);
+        m_reviewTimer->setInterval(2000);
+        connect(m_reviewTimer, &QTimer::timeout, this, [this]() {
+            if (m_doc == NULL || m_doc->mode() != Doc::Design)
+                return;
+            const ShowReview::Result &last = m_doc->showReview()->lastResult();
+            if (last.ran && last.ms > 500)
+                return;                 // too slow to run unasked: Re-check does
+            m_doc->showReview()->run();
+        });
+        auto later = [this]() { m_reviewTimer->start(); };
+        connect(m_doc, &Doc::loaded, this, later);
+        connect(m_doc, &Doc::fixtureAdded, this, later);
+        connect(m_doc, &Doc::fixtureRemoved, this, later);
+        connect(m_doc, &Doc::fixtureChanged, this, later);
+        connect(m_doc, &Doc::fixtureGroupAdded, this, later);
+        connect(m_doc, &Doc::fixtureGroupRemoved, this, later);
+        connect(m_doc, &Doc::fixtureGroupChanged, this, later);
+        connect(m_doc, &Doc::paletteAdded, this, later);
+        connect(m_doc, &Doc::paletteRemoved, this, later);
+        connect(m_doc, &Doc::functionAdded, this, later);
+        connect(m_doc, &Doc::functionRemoved, this, later);
+        connect(m_doc, &Doc::functionChanged, this, later);
+        connect(m_doc->showTree(), &ShowTreeController::changed, this, later);
+    }
+    updateReviewStatus();
+
     // Rig network gate (InputOutputMap::transmitGateStatus()), right beside
     // the readiness chip: "Output held — not on the rig network". Hidden
     // while there is nothing to say.
@@ -7664,6 +7714,12 @@ bool App::eventFilter(QObject *watched, QEvent *event)
     if (watched == m_statusTeachingLabel && event->type() == QEvent::MouseButtonPress)
     {
         showTeachingMenu();
+        return true;
+    }
+
+    if (watched == m_statusReviewLabel && event->type() == QEvent::MouseButtonPress)
+    {
+        ShowReviewPanel::openShared();
         return true;
     }
 
@@ -8609,6 +8665,81 @@ void App::updateRigNetworkFooter()
     tip << tr("Click to set the show's rig networks.");
     m_statusRigNetLabel->setToolTip(tip.join("\n"));
     m_statusRigNetLabel->show();
+}
+
+void App::updateReviewStatus()
+{
+    if (m_statusReviewLabel == nullptr || m_doc == NULL)
+        return;
+    const ShowReview::Result &r = m_doc->showReview()->lastResult();
+    if (!r.ran)
+    {
+        m_statusReviewLabel->hide();
+        return;
+    }
+    const int blockers = r.open[ReviewFinding::Blocker];
+    const int warnings = r.open[ReviewFinding::Warning];
+    const int accepted = r.accepted[0] + r.accepted[1] + r.accepted[2];
+    if (blockers + warnings == 0)
+    {
+        m_statusReviewLabel->setText(tr("Reviewed"));
+        m_statusReviewLabel->setStyleSheet(QStringLiteral("QLabel { color: #909090; }"));
+    }
+    else
+    {
+        QStringList parts;
+        if (blockers > 0)
+            parts << tr("%1 ⛔").arg(blockers);
+        if (warnings > 0)
+            parts << tr("%1 ⚠").arg(warnings);
+        m_statusReviewLabel->setText(tr("Review · %1").arg(parts.join(QLatin1Char(' '))));
+        m_statusReviewLabel->setStyleSheet(blockers > 0 ? QStringLiteral("QLabel { color: #c0392b; font-weight: bold; }")
+                                                        : QStringLiteral("QLabel { color: #b9770e; }"));
+    }
+    m_statusReviewLabel->setToolTip(tr("Show Review: %1 blockers, %2 warnings, %3 notes open; %4 accepted. "
+                                       "Click for the Review panel.")
+                                    .arg(blockers).arg(warnings).arg(r.open[ReviewFinding::Note]).arg(accepted));
+    m_statusReviewLabel->show();
+}
+
+bool App::reviewJump(QWidget *parent, const QString &jump, const QVariantList &data)
+{
+    Q_UNUSED(parent)
+    const quint32 id = data.isEmpty() ? quint32(ShowTree::invalidId()) : data.first().toUInt();
+    if (jump == QLatin1String("cue") || jump == QLatin1String("list"))
+    {
+        ShowTreeView *view = ShowTreeView::instance();
+        if (view == nullptr)
+            return false;
+        const bool ok = view->selectNode(id);
+        view->bringForward();
+        return ok;
+    }
+    if (jump == QLatin1String("function"))
+    {
+        if (m_doc->showTree()->isGenerated(id) && ShowTreeView::instance() != nullptr)
+            return ShowTreeView::instance()->reveal(id);
+        showFunctions();
+        if (FunctionManager::instance() != nullptr)
+            FunctionManager::instance()->selectFunction(id);
+        return true;
+    }
+    if (jump == QLatin1String("plot"))
+    {
+        showContext(tr("Lighting Studio"));
+        return true;
+    }
+    if (jump == QLatin1String("palette"))
+    {
+        showContext(tr("Build"));
+        return true;
+    }
+    if (jump == QLatin1String("fixtures") || jump == QLatin1String("power"))
+    {
+        showContext(tr("Fixtures"));
+        return true;
+    }
+    return false;
 }
 
 void App::updateTeachingStatus()
