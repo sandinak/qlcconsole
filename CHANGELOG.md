@@ -84,6 +84,13 @@ back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
   show plays then, not to a snapshot. The last override fired is on top;
   Stop all and ALL OFF let go of them. The tree marks it **override**, and
   it is saved with the show (an older build plays it as a plain hit).
+- **Group masters** (0.4): tick **Group master** in a fixture group's
+  editor and the group gets an intensity fader, on the Run tab beside the
+  cue list and as a VC slider mode (**Group master**). It scales the
+  group's dimmers as the Grand Master does everything (the two multiply),
+  override hits included; positions and colours are left alone. A fixture
+  in two mastered groups gets both. Saved with the show; a show without
+  them, and QLC+ 4, play as before.
 
 ### Moving layers in the Show Tree
 
@@ -153,6 +160,23 @@ back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
   to. Saved with the show. Shows saved earlier open with their effects
   **At once**, so they play as before.
 
+### Show Review
+
+- **Show Review** (0.5, v1): the show's design checked for what is likely
+  wrong, each finding with the place to fix it. A **Review · 2 ⛔ 5 ⚠** chip
+  in the footer opens the panel (also **Show Review…** in the Show
+  readiness dialog); it re-checks a moment after an edit, in Design. 31
+  checks so far: overlapping and not-ours addresses, missing definitions,
+  not on the plot, conflicting layers, palettes the lights can't play,
+  tracking across songs, skipped and duplicate cues, hits fighting in one
+  place, circuits over their breaker, strobe over 3 Hz, media outside the
+  show folder or missing, default names. **Accept…** saves a note with the
+  show (who, when, why); it reopens when what it was about changes. The
+  footer's design problems show their id in the readiness dialog.
+  `qlcconsole --review show.qlcc` does the same with no window, for CI
+  and a teacher's folder of hand-ins (exit 0 / 1 warnings / 2 blockers /
+  3 unreadable; `--format json`). See docs/features/show-review.md.
+
 ### Why is this on?
 
 - **"Why is this on?"** (0.5): right-click a fixture in the Lighting
@@ -160,7 +184,7 @@ back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
   channel, and a small window names what sets it now, top-down: the cue
   and layer (and the cue it tracked in from), an override hit, an effect
   and its depth, Park, Highlight, Flash, the Simple Desk, a VC slider, a
-  preview; then the Grand Master, Blind and Blackout. Click a line to go
+  preview; then group masters, the Grand Master, Blind and Blackout. Click a line to go
   there. Worked out from the last frame when asked; closed, it costs the
   show nothing.
 

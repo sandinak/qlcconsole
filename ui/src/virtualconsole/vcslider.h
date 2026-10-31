@@ -24,6 +24,7 @@
 #include <QToolButton>
 #include <QMutex>
 #include <QList>
+#include <climits>
 
 #include "clickandgoslider.h"
 #include "clickandgowidget.h"
@@ -82,6 +83,8 @@ class VCSliderProperties;
 #define KXMLQLCVCSliderSpeedMasterControl QStringLiteral("Control")
 #define KXMLQLCVCSliderSpeedMasterMin     QStringLiteral("MinBPM")
 #define KXMLQLCVCSliderSpeedMasterMax     QStringLiteral("MaxBPM")
+#define KXMLQLCVCSliderGroupMaster        QStringLiteral("GroupMaster")
+#define KXMLQLCVCSliderGroupMasterGroup   QStringLiteral("Group")
 
 class VCSlider final : public VCWidget, public DMXSource
 {
@@ -163,7 +166,8 @@ public:
         Parameter,
         GrandMaster,
         SpeedMaster,    //!< a speed master's rate or tempo (SpeedMasters)
-        EffectControl   //!< an effect's parameter (VCEffectControl)
+        EffectControl,  //!< an effect's parameter (VCEffectControl)
+        GroupMaster     //!< a fixture group's intensity master (GroupMasters)
     };
 
     /**
@@ -301,6 +305,24 @@ protected:
 
     int m_speedMaster = 0;
     SpeedControl m_speedControl = SpeedRate;
+
+    /*********************************************************************
+     * Group master mode (0.4): the slider is a fixture group's intensity
+     * master (FixtureGroup::setMasterLevel(), GroupMasters) and follows it
+     * moved elsewhere (the Run tab's strip, another slider).
+     *********************************************************************/
+public:
+    void setGroupMaster(quint32 groupId);
+    quint32 groupMasterGroup() const { return m_groupMasterId; }
+
+protected slots:
+    void slotGroupMasterLevel(quint32 groupId, uchar level);
+
+protected:
+    /** Put the slider and its label where the group's master is. */
+    void showGroupMaster();
+
+    quint32 m_groupMasterId = UINT_MAX;
 
     /*********************************************************************
      * Effect mode: the slider (or knob) controls one parameter of an effect

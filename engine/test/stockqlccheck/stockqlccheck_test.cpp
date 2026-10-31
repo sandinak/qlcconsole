@@ -89,6 +89,26 @@ void StockQlcCheck_Test::settingsQlcPlusDoesNotNeedAreQuiet()
                      "<MoveInBlack Auto='1' DarkGapMs='800'/></Engine></Workspace>").isEmpty());
 }
 
+/* A fixture group QLC+ 4 reads; its master (0.4) it skips: said, with how
+   many groups had one. */
+void StockQlcCheck_Test::groupMastersAreNamed()
+{
+    const QStringList got = lossesOf("<Workspace><Engine>"
+                                     "<FixtureGroup ID='0'><Name>A</Name><Master Level='128'/></FixtureGroup>"
+                                     "<FixtureGroup ID='1'><Name>B</Name></FixtureGroup>"
+                                     "<FixtureGroup ID='2'><Name>C</Name><Master Level='255'/></FixtureGroup>"
+                                     "</Engine></Workspace>");
+    QCOMPARE(got, QStringList() << "the group masters (2 groups)");
+
+    // A VC slider in Group master mode: QLC+ 4 reads it as a submaster.
+    const QStringList vc = lossesOf("<Workspace><VirtualConsole><Frame>"
+                                    "<Slider><SliderMode>GroupMaster</SliderMode><GroupMaster Group='0'/></Slider>"
+                                    "<Slider><SliderMode>Level</SliderMode></Slider>"
+                                    "</Frame></VirtualConsole></Workspace>");
+    QCOMPARE(vc, QStringList() << "Group master sliders on the Virtual Console (QLC+ 4 plays them as "
+                                  "submasters) (1 slider)");
+}
+
 void StockQlcCheck_Test::notAWorkspaceIsNothing()
 {
     QVERIFY(lossesOf("<FixtureList><ShowTree/></FixtureList>").isEmpty());

@@ -4,6 +4,16 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ## 0.3.1 (unreleased)
 
+### Show Review
+
+- **Show Review** checks the show's design and lists what is likely wrong,
+  with the place to fix each: overlapping addresses, missing definitions,
+  a colour tracking into the next song, two hits fighting over the same
+  lights, a circuit over its breaker, a strobe over 3 Hz, media outside
+  the show's folder. The footer's **Review** chip opens it; **Accept…**
+  saves a note with the show. `qlcconsole --review show.qlcc` does it with
+  no window. See [Show Review](show-review.md).
+
 ### Live and blind
 
 - **Design: what you did last is on the stage.** Select a cue in the Show

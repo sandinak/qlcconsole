@@ -230,6 +230,10 @@ private slots:
     /** Teaching mode (docs/features/teaching.md): the chip and the title in
      *  every view, the scramble only in a teaching show */
     void teachingModeShowsItselfAndThePractice();
+    /** Show Review's footer chip: hidden until a run, counts what's open,
+     *  re-checks itself after an edit, a click opens the panel; Fix goes to
+     *  the Show Tree cue */
+    void reviewChipCountsAndOpensThePanel();
     /** Turning it off, or letting real output through, asks for the show's
      *  PIN; a wrong one leaves it on; no undo step */
     void teachingModeIsGuardedByThePin();

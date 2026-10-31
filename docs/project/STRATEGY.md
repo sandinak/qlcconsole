@@ -439,7 +439,7 @@ Notes:
 | Encoder banks: MIDI controller drives the selection in Build | 3 | 4 | Focus-this-look mapping | 4 | L | M | 3 | LATER |
 | Duplicate a structure's setup (T1 → T2, T3) | 3 | 4 | Patch Others Like This | 4 | L | M | 3 | LATER |
 | W6 shared Library + command bar in Build | 3 | 4 | Show Tree Library, ShowTreeCommand | 4 | M | M | 2.4 | LATER |
-| Show Review v1 (52 checks, CLI, panel) | 4 | 5 | ShowStatus, LookStackCheck, tracking | 8 | L | M | 2.5 | BUILD (0.5) |
+| Show Review v1 (52 checks, CLI, panel) | 4 | 5 | ShowStatus, LookStackCheck, tracking | 8 | L | M | 2.5 | BUILD (0.5): **frame built** (rev, 2026-10-31): registry, accept with a note, `--review` CLI, chip and panel, 31 checks; rest in TODO |
 | Plot handles (drag ends, ⌥-rotate) | 3 | 4 | Lighting Studio | 5 | M | M | 1.9 | LATER |
 | Stage and inventory across show files | 3 | 4 | inventory, structures | 5 | M | M | 1.9 | LATER |
 | RDM find-and-address in the Patch dialog | 4 | 5 | RDM manager, Patch dialog | 6 | H | H | 2 | LATER (needs the rig) |
@@ -552,8 +552,9 @@ Order and dependencies:
 5. **Override hits** (priority layer, restore on release), building on
    0.3.1's hit fade times. **Built 2026-10-31:** a hit's Override wins
    over the show, intensity too, and fades back to what plays then
-   (`Universe::HitOverride`). Then **group intensity masters**, which share
-   the same engine stage.
+   (`Universe::HitOverride`). Then **group intensity masters**: **built
+   2026-10-31**, a fixture group's intensity fader on the Run tab and as a
+   VC slider mode, multiplied with the Grand Master.
 6. **Effect fade in/out.** Built 2026-10-31: an effect's depth follows
    its cue's fades, or its own times, or none.
 7. **Tracking sheet and printable cue sheet**, the stage manager's paper.
@@ -576,7 +577,8 @@ light is doing what it's doing, in words a student can learn from.*
 
 Order and dependencies:
 1. **Show Review v1** (52 checks, CLI, panel), with Teaching's checks and
-   the course shows reviewed in the gate.
+   the course shows reviewed in the gate. The frame and 31 checks are
+   built (2026-10-31); the VC checks wait on the VcIndex.
 2. **"Why is this on?" v1** (built 2026-10-31: replayed on demand, no
    per-frame cost; its Plain words box is the hook v3 builds on), then v2
    (per-writer provenance, after the 80-universe stress run), then
@@ -606,7 +608,7 @@ Teaching ─────┬─> phone Run rules (0.4)
               └─> Show Review teaching checks (0.5)
 one GO path (0.4, built) ─> pad Run (MVP built), phone Run, override hits
 Art-Net TC (0.3.1) ─> LTC + cues at timecode (0.4)
-hit fade times (0.3.1) ─> override hits (built) ─> group masters (0.4)
+hit fade times (0.3.1) ─> override hits (built) ─> group masters (built)
 Show Review v1 ─> laser C, no-light zones, move speed checks (0.5)
 ```
 

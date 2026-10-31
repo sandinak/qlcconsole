@@ -209,6 +209,7 @@ add_library(${module_name}
     importsheet.cpp importsheet.h
     showconverter.cpp showconverter.h
     cuerunner.cpp cuerunner.h
+    groupmasterstrip.cpp groupmasterstrip.h
     updatechecker.cpp updatechecker.h
     updatedialog.cpp updatedialog.h
     updatedownloader.cpp updatedownloader.h
@@ -237,6 +238,7 @@ add_library(${module_name}
     showmanager/videoitem.cpp showmanager/videoitem.h
     showstatus.cpp showstatus.h
     showstatusdialog.cpp showstatusdialog.h
+    showreviewpanel.cpp showreviewpanel.h
     showdifferencesdialog.cpp showdifferencesdialog.h
     showsettingsdialog.cpp showsettingsdialog.h
     definitionupdatesdialog.cpp definitionupdatesdialog.h

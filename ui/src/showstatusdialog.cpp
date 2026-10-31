@@ -25,6 +25,8 @@
 
 #include "showstatusdialog.h"
 #include "showstatus.h"
+#include "showreview.h"
+#include "showreviewpanel.h"
 
 namespace
 {
@@ -60,6 +62,19 @@ ShowStatusDialog::ShowStatusDialog(QWidget *parent)
 
     m_box = new QDialogButtonBox(QDialogButtonBox::Close, this);
     connect(m_box, &QDialogButtonBox::rejected, this, &QDialog::reject);
+    // The design problems are Show Review's too (folded in by catalog id):
+    // the whole review, with acceptance, is one click away.
+    if (ShowReviewPanel::canOpenShared())
+    {
+        QPushButton *review = m_box->addButton(tr("Show Review…"), QDialogButtonBox::ActionRole);
+        review->setObjectName(QStringLiteral("showStatusReview"));
+        review->setToolTip(tr("Everything Show Review finds in the show's design, with the place to "
+                              "fix each and a way to accept what's on purpose"));
+        connect(review, &QPushButton::clicked, this, [this]() {
+            ShowReviewPanel::openShared();
+            accept();
+        });
+    }
     lay->addWidget(m_box);
 
     connect(m_tree, &QTreeWidget::itemSelectionChanged, this, &ShowStatusDialog::updateActionButton);
@@ -100,6 +115,13 @@ void ShowStatusDialog::rebuild()
         const bool actionable = !ShowStatus::instance()->actionLabel(e.key).isEmpty();
         QTreeWidgetItem *top = new QTreeWidgetItem(m_tree);
         top->setText(0, e.summary.isEmpty() ? e.key : e.summary);
+        // A design problem shows its Show Review id (SHOW_REVIEW.md 2.1).
+        const QString checkId = ShowReview::footerCheckId(e.key);
+        if (!checkId.isEmpty())
+        {
+            top->setText(0, QStringLiteral("%1 · %2").arg(checkId, top->text(0)));
+            top->setToolTip(0, tr("A design problem: Show Review lists it as %1.").arg(checkId));
+        }
         top->setData(0, KeyRole, e.key);
         QFont boldFont = top->font(0);
         boldFont.setBold(true);

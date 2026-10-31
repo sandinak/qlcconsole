@@ -52,6 +52,7 @@
 #include "focuscallcue.h"
 #include "padrun.h"
 #include "cuerunner.h"
+#include "groupmasterstrip.h"
 #include "vcbutton.h"
 #include "usedby.h"
 #include "chaser.h"
@@ -504,7 +505,11 @@ void CueRunner::buildFullLayout()
 
     makeTree();
     m_tree->setFont(big);
-    v->addWidget(m_tree, 1);
+    /* The list, or why there is none, with the group masters (0.4) beside
+       it: a fader a group, hidden while the show has none. */
+    QHBoxLayout *mid = new QHBoxLayout();
+    mid->addWidget(m_tree, 1);
+    v->addLayout(mid, 1);
 
     // Q62: no main cue list (a 4.x show): what that means, and the way on.
     m_empty = new QWidget(this);
@@ -532,7 +537,8 @@ void CueRunner::buildFullLayout()
         ev->addStretch(2);
     }
     m_empty->hide();
-    v->addWidget(m_empty, 1);
+    mid->addWidget(m_empty, 1);
+    mid->addWidget(new GroupMasterStrip(m_doc, this));
 
     m_now = new QLabel(this);
     m_now->setObjectName(QStringLiteral("crNow"));

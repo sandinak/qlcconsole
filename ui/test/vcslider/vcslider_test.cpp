@@ -38,6 +38,7 @@
 #include "inputoutputmap.h"
 #include "vceffectcontrol.h"
 #include "fixturegroup.h"
+#include "groupmasters.h"
 #include "qlcpalette.h"
 #include "universe.h"
 #include "fixture.h"
@@ -265,6 +266,105 @@ void VCSlider_Test::speedMasterSavesAndLoads()
     QVERIFY(level.saveXML(&w2));
     w2.setDevice(NULL);
     QVERIFY(!b2.buffer().contains("<SpeedMaster"));
+}
+
+/* Group master mode (0.4): Properties choose a group (and give it a
+   master); the slider sets the group's level, and follows it moved
+   elsewhere (the Run tab's strip). */
+void VCSlider_Test::groupMasterMovesTheGroup()
+{
+    FixtureGroup *grp = new FixtureGroup(m_doc);
+    grp->setName("Front");
+    QVERIFY(m_doc->addFixtureGroup(grp));
+    FixtureGroup *other = new FixtureGroup(m_doc);
+    other->setName("Back");
+    QVERIFY(m_doc->addFixtureGroup(other));
+
+    QWidget w;
+    VCSlider slider(&w, m_doc);
+    {
+        VCSliderProperties props(&slider, m_doc);
+        QVERIFY(props.m_switchToGroupMasterModeButton->isEnabled());
+        props.slotModeGroupMasterClicked();
+        QVERIFY(!props.m_switchToGroupMasterModeButton->isVisibleTo(&props));
+        props.m_groupMasterCombo->setCurrentIndex(
+            props.m_groupMasterCombo->findData(QVariant::fromValue(grp->id())));
+        props.accept();
+    }
+    QCOMPARE(slider.sliderMode(), VCSlider::GroupMaster);
+    QCOMPARE(slider.groupMasterGroup(), grp->id());
+    QVERIFY(grp->hasMaster());
+    QVERIFY(!other->hasMaster());
+    QCOMPARE(m_doc->groupMasters()->groups(), QList<FixtureGroup *>() << grp);
+    QCOMPARE(slider.sliderValue(), 255);
+
+    slider.setSliderValue(128, false);
+    QCOMPARE(int(grp->masterLevel()), 128);
+    QCOMPARE(int(other->masterLevel()), 255);
+
+    grp->setMasterLevel(60);
+    QCOMPARE(slider.sliderValue(), 60);
+    QVERIFY(slider.toolTip().contains("Front"));
+
+    // A group whose master is turned off is not moved by the slider.
+    grp->setMaster(false);
+    slider.setSliderValue(200, false);
+    QCOMPARE(int(grp->masterLevel()), 60);
+
+    // Back to Level: the group is left where it was.
+    slider.setSliderMode(VCSlider::Level);
+    grp->setMasterLevel(10);
+    QVERIFY(slider.sliderValue() != 10);
+}
+
+void VCSlider_Test::groupMasterSavesAndLoads()
+{
+    FixtureGroup *grp = new FixtureGroup(m_doc);
+    grp->setName("Front");
+    QVERIFY(m_doc->addFixtureGroup(grp));
+    grp->setMaster(true);
+    grp->setMasterLevel(77);
+
+    QWidget w;
+    VCSlider slider(&w, m_doc);
+    slider.setGroupMaster(grp->id());
+    slider.setSliderMode(VCSlider::GroupMaster);
+
+    QBuffer buffer;
+    buffer.open(QIODevice::WriteOnly | QIODevice::Text);
+    QXmlStreamWriter xmlWriter(&buffer);
+    xmlWriter.setAutoFormatting(true);              // as a show file is written
+    xmlWriter.writeStartDocument();
+    QVERIFY(slider.saveXML(&xmlWriter));
+    xmlWriter.writeEndDocument();
+    xmlWriter.setDevice(NULL);
+    buffer.close();
+    QVERIFY(buffer.buffer().contains(">GroupMaster</SliderMode>"));
+    QVERIFY(buffer.buffer().contains(QString("<GroupMaster Group=\"%1\"/>").arg(grp->id()).toUtf8()));
+
+    buffer.open(QIODevice::ReadOnly | QIODevice::Text);
+    QXmlStreamReader xmlReader(&buffer);
+    xmlReader.readNextStartElement();
+    VCSlider loaded(&w, m_doc);
+    QVERIFY(loaded.loadXML(xmlReader));
+    QCOMPARE(loaded.sliderMode(), VCSlider::GroupMaster);
+    QCOMPARE(loaded.groupMasterGroup(), grp->id());
+    QCOMPARE(loaded.sliderValue(), 77);         // shows the level; loading sets nothing
+    QCOMPARE(int(grp->masterLevel()), 77);
+
+    // A copy keeps the group.
+    VCSlider copy(&w, m_doc);
+    copy.copyFrom(&slider);
+    QCOMPARE(copy.groupMasterGroup(), grp->id());
+
+    // A Level slider writes no GroupMaster element.
+    VCSlider level(&w, m_doc);
+    QBuffer b2;
+    b2.open(QIODevice::WriteOnly | QIODevice::Text);
+    QXmlStreamWriter w2(&b2);
+    QVERIFY(level.saveXML(&w2));
+    w2.setDevice(NULL);
+    QVERIFY(!b2.buffer().contains("<GroupMaster"));
 }
 
 void VCSlider_Test::speedMasterProperties()

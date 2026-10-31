@@ -67,11 +67,13 @@
 #include "paletteops.h"
 #include "doc.h"
 #include "powerlimiter.h"
+#include "groupmasters.h"
 #include "shutterautoopen.h"
 #include "showwebaccess.h"
 #include "controlmap.h"
 #include "showoperate.h"
 #include "teachingsettings.h"
+#include "showreview.h"
 #include "outputrulekeeper.h"
 #include "bus.h"
 #include "qlcpalette.h"
@@ -156,6 +158,8 @@ Doc::Doc(QObject* parent, int universes)
 
     // Fixtures held to a maximum draw: kept in step with the show.
     m_powerLimiter = new PowerLimiter(this);
+    // Fixture groups' intensity masters, handed to the universes.
+    m_groupMasters = new GroupMasters(this);
     // Shutters opened for a lit head that nothing else opens.
     m_shutterAutoOpen = new ShutterAutoOpen(this);
     // Web access started with the show (off unless the show says so).
@@ -165,6 +169,7 @@ Doc::Doc(QObject* parent, int universes)
     // Open in Operate, and the PIN to leave it (unset unless the show says).
     m_operate = new ShowOperate(this);
     m_teaching = new TeachingSettings(this);
+    m_showReview = new ShowReview(this);
     // Relays, house and work lights: Blackout / GM exempt, switch, on at open.
     m_outputRuleKeeper = new OutputRuleKeeper(this);
 
@@ -334,6 +339,8 @@ void Doc::clearContents()
         m_operate->reset();
     if (m_teaching != nullptr)
         m_teaching->reset();
+    if (m_showReview != nullptr)
+        m_showReview->reset();
     m_showControl->reset();
     m_showTree->reset();
     m_paletteOps->reset();
@@ -2668,6 +2675,10 @@ bool Doc::loadXML(QXmlStreamReader &doc, bool loadIO)
         {
             m_teaching->loadXML(doc);
         }
+        else if (doc.name() == KXMLQLCShowReview)
+        {
+            m_showReview->loadXML(doc);
+        }
         else if (doc.name() == KXMLQLCOperate)
         {
             m_operate->loadXML(doc);
@@ -2819,6 +2830,7 @@ bool Doc::saveXML(QXmlStreamWriter *doc, bool forStockQlc)
     m_webAccess->saveXML(doc);
     m_operate->saveXML(doc);
     m_outputRuleKeeper->saveXML(doc);
+    m_showReview->saveXML(doc);
     m_showControl->saveXML(doc);
     m_showTree->saveXML(doc);
     m_controlMap->saveXML(doc);

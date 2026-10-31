@@ -191,6 +191,20 @@ public:
 
     uchar applyPassthrough(int channel, uchar value);
 
+    /**
+     * Group masters (GroupMasters, 0.4): a scale for each channel, 0..255
+     * (255: none), applied to an intensity channel's value in the post-fader
+     * stage just before the Grand Master -- so to everything the Grand
+     * Master scales (cues, effects, override hits, Highlight, Flash, Focus),
+     * never to a parked, Ignore-GM or relay channel. @a scales holds one
+     * byte per channel from 0; channels past its end are 255. The channels
+     * whose scale changed are worked out again at once. Any thread.
+     */
+    void setGroupMasters(const QByteArray &scales);
+
+    /** The group master scale of @a channel (255: none) */
+    uchar groupMaster(int channel) const;
+
 protected slots:
     /**
      * Called every time the Grand Master changed value
@@ -634,6 +648,9 @@ private:
      *  (writePastGM()). Only the frame being built counts: a park let go
      *  of is under the Grand Master again on the very next frame. */
     std::unique_ptr<std::atomic<quint32>[]> m_pastGMFrame;
+    /** Each channel's group master scale (setGroupMasters()), 255 = none:
+     *  read once per written channel, so a byte and no lock */
+    std::unique_ptr<std::atomic<quint8>[]> m_groupMaster;
     bool pastGM(int address) const
     {
         return m_pastGMFrame[address].load(std::memory_order_relaxed)

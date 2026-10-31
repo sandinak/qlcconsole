@@ -71,8 +71,10 @@ Universe::Universe(quint32 id, GrandMaster *gm, QObject *parent)
     m_writtenFrame.reset(new std::atomic<quint32>[UNIVERSE_SIZE]);
     m_held.reset(new std::atomic<quint8>[UNIVERSE_SIZE]);
     m_pastGMFrame.reset(new std::atomic<quint32>[UNIVERSE_SIZE]);
+    m_groupMaster.reset(new std::atomic<quint8>[UNIVERSE_SIZE]);
     for (int i = 0; i < UNIVERSE_SIZE; i++)
     {
+        m_groupMaster[i].store(UCHAR_MAX, std::memory_order_relaxed);
         m_writtenFrame[i].store(0, std::memory_order_relaxed);
         m_held[i].store(0, std::memory_order_relaxed);
         m_pastGMFrame[i].store(0, std::memory_order_relaxed);
@@ -228,6 +230,26 @@ void Universe::slotGMValueChanged()
             updatePostGMValue(channel);
         }
     }
+}
+
+void Universe::setGroupMasters(const QByteArray &scales)
+{
+    QMutexLocker frameLocker(&m_frameMutex);
+    for (int c = 0; c < UNIVERSE_SIZE; ++c)
+    {
+        const quint8 want = c < scales.size() ? quint8(scales.at(c)) : quint8(UCHAR_MAX);
+        if (m_groupMaster[c].load(std::memory_order_relaxed) == want)
+            continue;
+        m_groupMaster[c].store(want, std::memory_order_relaxed);
+        updatePostGMValue(c);
+    }
+}
+
+uchar Universe::groupMaster(int channel) const
+{
+    if (channel < 0 || channel >= UNIVERSE_SIZE)
+        return UCHAR_MAX;
+    return m_groupMaster[channel].load(std::memory_order_relaxed);
 }
 
 /************************************************************************
@@ -918,7 +940,15 @@ void Universe::updatePostGMValue(int channel)
        The relay's snap comes last, so nothing after it (a modifier, the
        input passthrough) can hand it a level between off and on. */
     if (value != 0 && (mask & (GMExempt | SwitchOutput)) == 0 && pastGM(channel) == false)
+    {
+        /* A group master scales intensity proportionally, before the Grand
+           Master (the two multiply). 255 -- no master -- is the one test
+           every other channel pays. */
+        const uint group = m_groupMaster[channel].load(std::memory_order_relaxed);
+        if (group != UCHAR_MAX && (mask & Intensity))
+            value = uchar((uint(value) * group + 127) / 255);
         value = applyGM(channel, value);
+    }
 
     value = applyModifiers(channel, value);
     value = applyPassthrough(channel, value);

@@ -2247,6 +2247,49 @@ Cue Runner back into a Cue List).
   Stop while the list runs, Load next / previous while there is a cue to
   load, and Pause while paused.
 
+## Group masters
+
+A **group master** is a fader for one fixture group's intensity: at full
+the group plays as the cues say, at half its dimmers give half, at 0 it
+is dark (still aimed and coloured). It scales the way the Grand Master
+does, but for one group: "the side washes are too hot tonight" is one
+fader, not an edit to every cue.
+
+- **Give a group one.** Fixture Manager ▸ the group ▸ tick **Group
+  master** in its editor. Untick it and the group plays as programmed
+  again.
+- **The Run tab** shows a fader for each group with a master, beside the
+  cue list, its level over it (orange below full) and its name under it.
+  **Double-click the name** for full. A show without group masters has no
+  strip.
+- **A Virtual Console slider** can be one too: its properties' **Group
+  master** tab ▸ choose the group ▸ **Switch to Group Master Mode**
+  (choosing a group gives it a master). It moves with the Run tab's
+  fader and the other way round. Map a MIDI or OSC fader to that slider
+  (its **External Input**) to have the master on a controller.
+- **What it scales:** intensity only: dimmers and the colour mix of an
+  LED fixture (red, green, blue...), as the Grand Master does. Pan, tilt,
+  gobos, colour wheels and the rest are left alone. A fixture that is only
+  partly in the group (some heads of a bar) is scaled on those heads; its
+  master dimmer only when the whole fixture is in the group.
+- **Where it sits:** after everything the show plays (cues, effects, VC
+  sliders and buttons, the Simple Desk, override hits, Highlight, a flash
+  and Focus) and just before the Grand Master, with which it multiplies:
+  a group master at 50% and the Grand Master at 50% give 25%. An override
+  hit's *House lights to full* under a group master at half is half.
+  Parked channels and channels set to ignore the Grand Master are not
+  scaled. *Decided (can change).*
+- **A fixture in two mastered groups** is scaled by both, multiplied:
+  *All washes* at 50% and *Stage left* at 50% leave stage left at 25%.
+  *Decided (can change).*
+- **Saved with the show:** which groups have a master and where each
+  was left. A show from before has none. QLC+ 4 opens the show without
+  them (the save check says so) and plays the groups at full.
+- **Not on the game controller or the Control Map.** The Control Map
+  fires things (a press), and the pad's Run role is GO, Back and Stop; a
+  level is a fader's job, so a group master on a controller goes through
+  a VC slider. *Decided (can change).*
+
 ## Playing it
 
 - Each cue list plays as a chaser of the same name, at
