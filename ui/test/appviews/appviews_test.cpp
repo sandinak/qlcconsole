@@ -1731,6 +1731,7 @@ void AppViews_Test::aWebGoIsRefusedUntilTheShowAllowsIt()
         st->removeProduction(prod);
         m_app->hideViewNotice();
         QTRY_COMPARE_WITH_TIMEOUT(doc->masterTimer()->runningFunctions(), 0, 5000);
+        doc->setMode(Doc::Design);
     });
     const quint32 listId = st->addCueList(prod, "Main", ShowTree::ListMode::NonTracking);
     st->addCue(listId, -1, QStringLiteral("Cue 1"));
