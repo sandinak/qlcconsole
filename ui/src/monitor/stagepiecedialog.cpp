@@ -224,9 +224,9 @@ FeetInchesSpinBox *StagePieceDialog::addDistance(QFormLayout *form, const QStrin
     spin->setToolTip(tip);
     QLabel *said = new QLabel(row);
     said->setObjectName(name + QStringLiteral("Words"));
-    QFont small = said->font();
-    small.setPointSizeF(small.pointSizeF() * 0.9);
-    said->setFont(small);
+    QFont tiny = said->font();
+    tiny.setPointSizeF(tiny.pointSizeF() * 0.9);
+    said->setFont(tiny);
     gl->addWidget(a, 0, 0);
     gl->addWidget(spin, 0, 1);
     gl->addWidget(said, 1, 1);

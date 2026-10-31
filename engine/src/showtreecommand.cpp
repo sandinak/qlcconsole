@@ -385,10 +385,10 @@ QString ShowTreeCommand::helpText(const QString &w)
         const Word *e = word(w);
         if (e == nullptr)
         {
-            const QString near = nearestWord(w);
-            return near.isEmpty() ? tr("No word “%1”. Type <code>help</code> for them all.").arg(esc(w.trimmed()))
+            const QString closest = nearestWord(w);
+            return closest.isEmpty() ? tr("No word “%1”. Type <code>help</code> for them all.").arg(esc(w.trimmed()))
                                   : tr("No word “%1”. Did you mean <b>%2</b>? %3")
-                                    .arg(esc(w.trimmed()), near, example(QStringLiteral("help ") + near));
+                                    .arg(esc(w.trimmed()), closest, example(QStringLiteral("help ") + closest));
         }
         QString out = QStringLiteral("<b>%1</b>").arg(esc(e->word));
         if (!e->aliases.isEmpty())
@@ -1232,10 +1232,10 @@ ShowTreeCommand::Result ShowTreeCommand::run(const QString &line, const Context 
             const QString key = attributeKey(kw);
             if (key.isEmpty())
             {
-                const QString near = nearestWord(kw, true);
+                const QString closest = nearestWord(kw, true);
                 return tr("Expected an attribute (colour, dimmer, position, aim, spread, group, cross, gobo, "
                           "zoom, beam, shutter, effect), got “%1”.%2").arg(kw)
-                       .arg(near.isEmpty() ? QString() : tr(" Did you mean “%1”? Type help %1.").arg(near));
+                       .arg(closest.isEmpty() ? QString() : tr(" Did you mean “%1”? Type help %1.").arg(closest));
             }
             const QString next = r.peek().toLower();
 
@@ -2249,11 +2249,11 @@ ShowTreeCommand::Result ShowTreeCommand::run(const QString &line, const Context 
         const QList<Target> ts = targets();
         if (ts.isEmpty())
         {
-            const QString near = nearestWord(r.peek());
+            const QString closest = nearestWord(r.peek());
             error = tr("Don't know “%1”.%2 Start with cue, a group or fixture, a mode, base, release, include, skip, mib, "
                        "function, record, list, set, name, copy, paste, dup, reusable, use, unlink, detach, "
                        "convert, undo — type help.")
-                    .arg(r.peek(), near.isEmpty() ? QString() : tr(" Did you mean “%1”? (help %1)").arg(near));
+                    .arg(r.peek(), closest.isEmpty() ? QString() : tr(" Did you mean “%1”? (help %1)").arg(closest));
         }
         else
         {

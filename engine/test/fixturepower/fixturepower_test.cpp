@@ -40,7 +40,7 @@
 #include "fixture.h"
 #include "doc.h"
 
-static bool near(double a, double b, double eps = 0.01) { return qAbs(a - b) < eps; }
+static bool nearPt(double a, double b, double eps = 0.01) { return qAbs(a - b) < eps; }
 
 /* Like the DS1t wall-washer bars in their 64-channel mode: sixteen RGB
    pixels, then sixteen white ones. */
@@ -110,16 +110,16 @@ void FixturePower_Test::aBarsDrawIsModelledFromItsReadings()
     QVERIFY(m.isValid());
     QCOMPARE(m.emitters.size(), 64);
     // 1.6 of 5.9 at half: the curve bends at about 1.88.
-    QVERIFY2(near(m.gamma, 1.883, 0.005), qPrintable(QString::number(m.gamma)));
+    QVERIFY2(nearPt(m.gamma, 1.883, 0.005), qPrintable(QString::number(m.gamma)));
 
     auto at = [&](std::function<uchar(int)> f) { return m.amps(f); };
-    QVERIFY(near(at([](int) { return uchar(0); }), 0.1));
-    QVERIFY(near(at([](int) { return uchar(255); }), 6.0));
-    QVERIFY(near(at([](int) { return uchar(128); }), 1.7, 0.02));
+    QVERIFY(nearPt(at([](int) { return uchar(0); }), 0.1));
+    QVERIFY(nearPt(at([](int) { return uchar(255); }), 6.0));
+    QVERIFY(nearPt(at([](int) { return uchar(128); }), 1.7, 0.02));
     // Red alone at full: its reading.
-    QVERIFY(near(at([&](int o) { return colourOf(mode, o) == QLCChannel::Red ? uchar(255) : uchar(0); }), 2.0));
+    QVERIFY(nearPt(at([&](int o) { return colourOf(mode, o) == QLCChannel::Red ? uchar(255) : uchar(0); }), 2.0));
     // Half its pixels red: half red's share.
-    QVERIFY(near(at([&](int o) { return (o < 24 && colourOf(mode, o) == QLCChannel::Red) ? uchar(255) : uchar(0); }),
+    QVERIFY(nearPt(at([&](int o) { return (o < 24 && colourOf(mode, o) == QLCChannel::Red) ? uchar(255) : uchar(0); }),
                  0.1 + 0.95));
     bar->setFixtureDefinition(nullptr, nullptr);
 }
@@ -138,8 +138,8 @@ void FixturePower_Test::theCapScalesTheColoursTogether()
     // Full white on all of it: 6 A against 3 -- every emitter to about 69%,
     // and that is exactly 3 A.
     const double k = m.limitFactor(6.0);
-    QVERIFY2(near(k, 0.686, 0.005), qPrintable(QString::number(k)));
-    QVERIFY(near(m.amps([k](int) { return uchar(qRound(255 * k)); }), 3.0, 0.03));
+    QVERIFY2(nearPt(k, 0.686, 0.005), qPrintable(QString::number(k)));
+    QVERIFY(nearPt(m.amps([k](int) { return uchar(qRound(255 * k)); }), 3.0, 0.03));
     // Red alone at 2 A is already within it: untouched.
     QCOMPARE(m.limitFactor(2.0), 1.0);
     // A cap under standby can only be met dark.
@@ -163,14 +163,14 @@ void FixturePower_Test::withoutEveryColourItFallsBackSafely()
     full.fullAmps = 6.0;
     const PowerModel m = PowerModel::build(bar, full);
     QVERIFY(m.isValid());
-    QVERIFY(near(m.amps([](int) { return uchar(255); }), 6.0));
-    QVERIFY(near(m.amps([&](int o) { return colourOf(mode, o) == QLCChannel::Red ? uchar(255) : uchar(0); }), 1.5));
+    QVERIFY(nearPt(m.amps([](int) { return uchar(255); }), 6.0));
+    QVERIFY(nearPt(m.amps([&](int o) { return colourOf(mode, o) == QLCChannel::Red ? uchar(255) : uchar(0); }), 1.5));
     // Red measured and the rest not: the rest of the full reading shared by them.
     PowerProfile some;
     some.fullAmps = 6.0;
     some.colourAmps.insert(int(QLCChannel::Red), 3.0);
     const PowerModel m2 = PowerModel::build(bar, some);
-    QVERIFY(near(m2.amps([&](int o) { return colourOf(mode, o) == QLCChannel::Green ? uchar(255) : uchar(0); }), 1.0));
+    QVERIFY(nearPt(m2.amps([&](int o) { return colourOf(mode, o) == QLCChannel::Green ? uchar(255) : uchar(0); }), 1.0));
     bar->setFixtureDefinition(nullptr, nullptr);
 }
 
@@ -186,8 +186,8 @@ void FixturePower_Test::aPlainDimmerIsItsLamp()
     const PowerModel m = PowerModel::build(dimmer, pp);
     QVERIFY(m.isValid());
     QCOMPARE(m.emitters.size(), 1);
-    QVERIFY(near(m.amps([](int) { return uchar(255); }), 4.0));
-    QVERIFY(near(m.limitFactor(4.0), 0.5));          // linear without a half reading
+    QVERIFY(nearPt(m.amps([](int) { return uchar(255); }), 4.0));
+    QVERIFY(nearPt(m.limitFactor(4.0), 0.5));          // linear without a half reading
 }
 
 void FixturePower_Test::theProfileIsSavedWithTheFixture()
@@ -274,7 +274,7 @@ void FixturePower_Test::aUniverseHoldsAFixtureToItsMaximum()
     QVERIFY(uchar(u->postGMValues()->at(10)) == 255);   // what was asked is kept
     QHash<quint32, QPair<double, double> > held = u->powerHeldBack();
     QVERIFY(held.contains(bar->id()));
-    QVERIFY(near(held.value(bar->id()).first, 6.0) && near(held.value(bar->id()).second, 3.0, 0.03));
+    QVERIFY(nearPt(held.value(bar->id()).first, 6.0) && nearPt(held.value(bar->id()).second, 3.0, 0.03));
 
     // Red alone: within it, sent as asked.
     setAll([&](int o) { return colourOf(mode, o) == QLCChannel::Red ? uchar(255) : uchar(0); });

@@ -3932,8 +3932,10 @@ void EffectInstance_Test::matrixEffectsKeepTimeOnEightBoxes()
 #else
     const double defaultBudget = 24.0;
 #endif
+    // QLC_SLOW_BUILD (CI's gcov leg) triples the default; real limits stay elsewhere.
     const double budget = qEnvironmentVariableIsSet("QLC_MATRIX_BUDGET_MS")
-        ? qEnvironmentVariable("QLC_MATRIX_BUDGET_MS").toDouble() : defaultBudget;
+        ? qEnvironmentVariable("QLC_MATRIX_BUDGET_MS").toDouble()
+        : defaultBudget * (qEnvironmentVariableIsSet("QLC_SLOW_BUILD") ? 3.0 : 1.0);
     QStringList slow, table;
     double worst = 0;
     for (const QString &file : kMatrixScripts)

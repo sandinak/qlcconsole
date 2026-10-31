@@ -830,9 +830,9 @@ void VCButton_Test::toggleRestartsAFinishedOneShot()
     };
     press();
     QCOMPARE(btn.state(), VCButton::Active);
-    QTest::qWait(250);
-    const int first = level0(m_doc);
-    QVERIFY2(first > 20, qPrintable(QString::number(first)));       // mid-breath
+    // Mid-breath: poll for the rise instead of sampling one wall-clock instant,
+    // so a slow runner that overshoots 250 ms still sees the breath.
+    QTRY_VERIFY2_WITH_TIMEOUT(level0(m_doc) > 20, qPrintable(QString::number(level0(m_doc))), 600);
     QTest::qWait(1200);                                             // the breath is over
     QVERIFY(coll->isRunning());
     QVERIFY2(level0(m_doc) < 15, qPrintable(QString::number(level0(m_doc))));
@@ -840,9 +840,7 @@ void VCButton_Test::toggleRestartsAFinishedOneShot()
     press();                                                        // finished: again
     QCOMPARE(btn.state(), VCButton::Active);
     QVERIFY(coll->isRunning());
-    QTest::qWait(250);
-    const int second = level0(m_doc);
-    QVERIFY2(second > 20, qPrintable(QString::number(second)));
+    QTRY_VERIFY2_WITH_TIMEOUT(level0(m_doc) > 20, qPrintable(QString::number(level0(m_doc))), 600);
 
     press();                                                        // breathing: off
     QTest::qWait(250);

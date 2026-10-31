@@ -2324,9 +2324,9 @@ void VCButton::paintEvent(QPaintEvent* e)
     if (armedOverrides())
     {
         // Q157 (4): the armed hit overrides a wider one here.
-        QFont small = painter.font();
-        small.setPointSizeF(qMax(7.0, small.pointSizeF() * 0.8));
-        painter.setFont(small);
+        QFont tiny = painter.font();
+        tiny.setPointSizeF(qMax(7.0, tiny.pointSizeF() * 0.8));
+        painter.setFont(tiny);
         painter.setPen(palette().color(QPalette::ButtonText));
         painter.drawText(rect().adjusted(4, 2, -4, -2), Qt::AlignLeft | Qt::AlignBottom, tr("↳ overrides"));
     }

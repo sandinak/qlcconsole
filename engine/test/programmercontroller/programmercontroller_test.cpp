@@ -209,10 +209,10 @@ void ProgrammerController_Test::proposedSaveBucketsPickTheLargestCoveringGroup()
 
     // A smaller group covering only f1 -- does NOT cover every edited
     // fixture in the category, so it's not even a candidate.
-    FixtureGroup *small = new FixtureGroup(m_doc);
-    small->setName("Just F1");
-    QVERIFY(m_doc->addFixtureGroup(small));
-    small->assignFixture(f1->id());
+    FixtureGroup *tiny = new FixtureGroup(m_doc);
+    tiny->setName("Just F1");
+    QVERIFY(m_doc->addFixtureGroup(tiny));
+    tiny->assignFixture(f1->id());
 
     // A larger group covering both -- the only real candidate, so it wins
     // regardless of how many OTHER groups might also (partially) apply.

@@ -129,9 +129,9 @@ TransitionMap::TransitionMap(Doc *doc, const QList<quint32> &fixtures, SceneTran
         centre += h.at;
     }
     centre /= float(heads.size());
-    double far = 0.0;
+    double reach = 0.0;
     for (const Head &h : heads)
-        far = qMax(far, double((h.at - centre).length()));
+        reach = qMax(reach, double((h.at - centre).length()));
 
     auto along = [](float v, float a, float b) {
         return (b - a) > 1e-3f ? double((v - a) / (b - a)) : 0.0;
@@ -149,8 +149,8 @@ TransitionMap::TransitionMap(Doc *doc, const QList<quint32> &fixtures, SceneTran
         // +Y is downstage: the front first, then back.
         case SceneTransition::WipeUpstage:      u = 1.0 - along(h.at.y(), lo.y(), hi.y()); break;
         case SceneTransition::WipeDownstage:    u = along(h.at.y(), lo.y(), hi.y()); break;
-        case SceneTransition::FromCentre:       u = far > 1e-3 ? double((h.at - centre).length()) / far : 0.0; break;
-        case SceneTransition::ToCentre:         u = far > 1e-3 ? 1.0 - double((h.at - centre).length()) / far : 0.0; break;
+        case SceneTransition::FromCentre:       u = reach > 1e-3 ? double((h.at - centre).length()) / reach : 0.0; break;
+        case SceneTransition::ToCentre:         u = reach > 1e-3 ? 1.0 - double((h.at - centre).length()) / reach : 0.0; break;
         case SceneTransition::Dissolve:
         {
             // The same order every time it runs (a hash, not a dice roll).

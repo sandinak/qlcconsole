@@ -166,17 +166,17 @@ void ChannelsGroup_Test::saveLoad()
     QXmlStreamReader xmlReader(&buffer);
     xmlReader.readNextStartElement();
 
-    ChannelsGroup grp2(m_doc);
-    QVERIFY(grp2.loadXML(xmlReader) == true);
-    QCOMPARE(grp2.id(), quint32(7));
-    QCOMPARE(grp2.name(), QString("SaveGroup"));
-    QCOMPARE(grp2.getChannels().size(), 1);
-    SceneValue scv = grp2.getChannels().first();
+    ChannelsGroup groupB(m_doc);
+    QVERIFY(groupB.loadXML(xmlReader) == true);
+    QCOMPARE(groupB.id(), quint32(7));
+    QCOMPARE(groupB.name(), QString("SaveGroup"));
+    QCOMPARE(groupB.getChannels().size(), 1);
+    SceneValue scv = groupB.getChannels().first();
     QCOMPARE(scv.fxi, fxi->id());
     QCOMPARE(scv.channel, quint32(0));
-    QVERIFY(!grp2.inputSource().isNull());
-    QCOMPARE(grp2.inputSource()->universe(), quint32(2));
-    QCOMPARE(grp2.inputSource()->channel(), quint32(3));
+    QVERIFY(!groupB.inputSource().isNull());
+    QCOMPARE(groupB.inputSource()->universe(), quint32(2));
+    QCOMPARE(groupB.inputSource()->channel(), quint32(3));
 }
 
 void ChannelsGroup_Test::loader()

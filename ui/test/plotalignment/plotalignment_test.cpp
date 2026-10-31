@@ -1246,13 +1246,13 @@ void PlotAlignment_Test::studioHitAreaIsWhatIsDrawn()
                  .arg(smp.name, planeName(plane)).arg(missed).arg(inside).arg(firstMiss.x()).arg(firstMiss.y())));
 
     // Outside: well clear of everything it drew.
-    const QVector<bool> near = dilate(drawn, W, H, qCeil(12 * dpr));
+    const QVector<bool> nearPt = dilate(drawn, W, H, qCeil(12 * dpr));
     int hits = 0;
     QPointF firstHit;
     for (int y = 0; y < H; y += outStep)
         for (int x = 0; x < W; x += outStep)
         {
-            if (near[y * W + x])
+            if (nearPt[y * W + x])
                 continue;
             const QPointF at(x / dpr, y / dpr);
             if (view->hitTestFixture(at) == smp.fid)

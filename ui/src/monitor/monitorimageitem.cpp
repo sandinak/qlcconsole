@@ -20,7 +20,7 @@
 #include "doc.h"
 #include "apputil.h"
 
-static const qreal HANDLE = 9.0;   // corner handle size in scene px
+static const qreal HANDLE_SIZE = 9.0;   // corner handle size in scene px
 
 MonitorImageItem::MonitorImageItem(Doc *doc, quint32 imageId, QGraphicsItem *parent)
     : QObject(nullptr)
@@ -74,10 +74,10 @@ QRectF MonitorImageItem::boundingRect() const
 int MonitorImageItem::cornerAt(const QPointF &pt) const
 {
     const QRectF r = boundingRect();
-    if (QRectF(r.left(),           r.top(),            HANDLE, HANDLE).contains(pt)) return 1; // TL
-    if (QRectF(r.right() - HANDLE, r.top(),            HANDLE, HANDLE).contains(pt)) return 2; // TR
-    if (QRectF(r.left(),           r.bottom() - HANDLE, HANDLE, HANDLE).contains(pt)) return 3; // BL
-    if (QRectF(r.right() - HANDLE, r.bottom() - HANDLE, HANDLE, HANDLE).contains(pt)) return 4; // BR
+    if (QRectF(r.left(),           r.top(),            HANDLE_SIZE, HANDLE_SIZE).contains(pt)) return 1; // TL
+    if (QRectF(r.right() - HANDLE_SIZE, r.top(),            HANDLE_SIZE, HANDLE_SIZE).contains(pt)) return 2; // TR
+    if (QRectF(r.left(),           r.bottom() - HANDLE_SIZE, HANDLE_SIZE, HANDLE_SIZE).contains(pt)) return 3; // BL
+    if (QRectF(r.right() - HANDLE_SIZE, r.bottom() - HANDLE_SIZE, HANDLE_SIZE, HANDLE_SIZE).contains(pt)) return 4; // BR
     return 0;
 }
 
@@ -114,9 +114,9 @@ void MonitorImageItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *
         painter->setBrush(QColor(20, 30, 45));
         const QPointF corners[4] = { r.topLeft(), r.topRight(), r.bottomLeft(), r.bottomRight() };
         for (const QPointF &c : corners)
-            painter->drawRect(QRectF(c.x() - (c.x() > r.center().x() ? HANDLE : 0),
-                                     c.y() - (c.y() > r.center().y() ? HANDLE : 0),
-                                     HANDLE, HANDLE));
+            painter->drawRect(QRectF(c.x() - (c.x() > r.center().x() ? HANDLE_SIZE : 0),
+                                     c.y() - (c.y() > r.center().y() ? HANDLE_SIZE : 0),
+                                     HANDLE_SIZE, HANDLE_SIZE));
     }
 }
 
@@ -156,8 +156,8 @@ void MonitorImageItem::mouseMoveEvent(QGraphicsSceneMouseEvent *event)
         const QPointF d = event->scenePos() - m_resizeCenterScene;
         const qreal lx =  d.x() * qCos(rad) + d.y() * qSin(rad);
         const qreal ly = -d.x() * qSin(rad) + d.y() * qCos(rad);
-        const qreal newW = qMax(qreal(2 * HANDLE), 2.0 * qAbs(lx));
-        const qreal newH = qMax(qreal(2 * HANDLE), 2.0 * qAbs(ly));
+        const qreal newW = qMax(qreal(2 * HANDLE_SIZE), 2.0 * qAbs(lx));
+        const qreal newH = qMax(qreal(2 * HANDLE_SIZE), 2.0 * qAbs(ly));
 
         prepareGeometryChange();
         m_pxW = float(newW);

@@ -143,7 +143,7 @@ const DllSignals_Test::ClassInfo *DllSignals_Test::signalOwner(const QString &cl
                                                                 const QString &fromModule) const
 {
     QString name = cls;
-    QString near = fromModule;
+    QString nearPt = fromModule;
     for (int hops = 0; hops < 16 && !name.isEmpty(); hops++)
     {
         const auto found = m_classes.constFind(name);
@@ -154,7 +154,7 @@ const DllSignals_Test::ClassInfo *DllSignals_Test::signalOwner(const QString &cl
         const ClassInfo *ci = &cands.first();
         for (const ClassInfo &c : cands)
         {
-            if (c.module == near)
+            if (c.module == nearPt)
             {
                 ci = &c;
                 break;
@@ -163,7 +163,7 @@ const DllSignals_Test::ClassInfo *DllSignals_Test::signalOwner(const QString &cl
         if (ci->signalNames.contains(member))
             return ci;
         name = ci->base.section(QStringLiteral("::"), -1);
-        near = ci->module;
+        nearPt = ci->module;
     }
     return nullptr;
 }

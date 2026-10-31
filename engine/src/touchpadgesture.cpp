@@ -86,8 +86,8 @@ TouchpadGesture::Motion TouchpadGesture::take()
 
     m_heldX += dx;
     m_heldY += dy;
-    const float far = qMax(qAbs(m_heldX), qAbs(m_heldY));
-    if (far < (m_moving ? jitter() : slop()) - 1e-6f)
+    const float reach = qMax(qAbs(m_heldX), qAbs(m_heldY));
+    if (reach < (m_moving ? jitter() : slop()) - 1e-6f)
         return m;
     m.started = !m_moving;
     m_moving = true;

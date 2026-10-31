@@ -1875,7 +1875,7 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
             h->addWidget(m_cueIncludes, 1);
             QVBoxLayout *b = new QVBoxLayout();
             b->setSpacing(0);
-            auto small = [inc, b](const QString &text, const QString &tip, const char *name) {
+            auto tiny = [inc, b](const QString &text, const QString &tip, const char *name) {
                 QToolButton *t = new QToolButton(inc);
                 t->setText(text);
                 t->setToolTip(tip);
@@ -1883,7 +1883,7 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
                 b->addWidget(t);
                 return t;
             };
-            m_includeAdd = small(tr("+"), tr("Include another cue of this list"), "stIncludeAdd");
+            m_includeAdd = tiny(tr("+"), tr("Include another cue of this list"), "stIncludeAdd");
             m_includeAdd->setPopupMode(QToolButton::InstantPopup);
             QMenu *addMenu = new QMenu(m_includeAdd);
             m_includeAdd->setMenu(addMenu);
@@ -1891,9 +1891,9 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
                 addMenu->clear();
                 includesMenu(addMenu, m_pageCue);
             });
-            m_includeRemove = small(tr("−"), tr("Stop including the selected cue"), "stIncludeRemove");
-            m_includeUp = small(tr("↑"), tr("Earlier: the cues after it win over it"), "stIncludeUp");
-            m_includeDown = small(tr("↓"), tr("Later: it wins over the cues before it"), "stIncludeDown");
+            m_includeRemove = tiny(tr("−"), tr("Stop including the selected cue"), "stIncludeRemove");
+            m_includeUp = tiny(tr("↑"), tr("Earlier: the cues after it win over it"), "stIncludeUp");
+            m_includeDown = tiny(tr("↓"), tr("Later: it wins over the cues before it"), "stIncludeDown");
             b->addStretch(1);
             h->addLayout(b);
             inc->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Maximum);

@@ -120,9 +120,9 @@ void AimSolver_Test::uprightOnATowerCannotLookStraightDown()
     QVERIFY(qAbs(close.marginDeg - (45.0f - 68.03f)) < 0.2f);
 
     // Downstage, 22 deg down: well inside.
-    const AimSolver::Solution far = AimSolver::solve(f, QVector3D(1.67f, 4.372f, 2.01f));
-    QVERIFY(far.reachable());
-    QVERIFY(qAbs(far.marginDeg - (45.0f - 22.46f)) < 0.2f);
+    const AimSolver::Solution farPt = AimSolver::solve(f, QVector3D(1.67f, 4.372f, 2.01f));
+    QVERIFY(farPt.reachable());
+    QVERIFY(qAbs(farPt.marginDeg - (45.0f - 22.46f)) < 0.2f);
 
     // The edge of the cone is where drop equals distance.
     const AimSolver::Solution edge = AimSolver::solve(f, QVector3D(1.67f, 1.372f + 1.24f, 2.01f));
@@ -237,23 +237,23 @@ void AimSolver_Test::reachReadsTheRig()
     rp.mountZOffset = 0.2f;              // the tilt axis, a little above the plate
     props->setFixtureRigProps(fxi->id(), rp);
 
-    AimSolver::Solution near, away;
-    QVERIFY(AimSolver::reach(doc, fxi->id(), QVector3D(1.67f, 1.872f, 2.01f), near));
+    AimSolver::Solution nearPt, away;
+    QVERIFY(AimSolver::reach(doc, fxi->id(), QVector3D(1.67f, 1.872f, 2.01f), nearPt));
     QVERIFY(AimSolver::reach(doc, fxi->id(), QVector3D(1.67f, 4.372f, 2.01f), away));
-    QVERIFY2(!near.reachable() && away.reachable(),
+    QVERIFY2(!nearPt.reachable() && away.reachable(),
              qPrintable(QString("upright on the tower: margin %1 half a metre out, "
-                                "%2 three metres out").arg(near.marginDeg).arg(away.marginDeg)));
+                                "%2 three metres out").arg(nearPt.marginDeg).arg(away.marginDeg)));
 
     // Hang it and the same close target is fine.
     rp.mountingType = Truss::TopHung;
     props->setFixtureRigProps(fxi->id(), rp);
-    QVERIFY(AimSolver::reach(doc, fxi->id(), QVector3D(1.67f, 1.872f, 2.01f), near));
-    QVERIFY(near.reachable());
+    QVERIFY(AimSolver::reach(doc, fxi->id(), QVector3D(1.67f, 1.872f, 2.01f), nearPt));
+    QVERIFY(nearPt.reachable());
 
     float pan = 0.0f, tilt = 0.0f;
     QVERIFY(AimSolver::aimDegrees(doc, fxi->id(), QVector3D(1.67f, 1.872f, 2.01f), pan, tilt));
-    QCOMPARE(pan, near.panDeg);
-    QCOMPARE(tilt, near.tiltDeg);
+    QCOMPARE(pan, nearPt.panDeg);
+    QCOMPARE(tilt, nearPt.tiltDeg);
 
     delete doc;
 }
