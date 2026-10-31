@@ -21543,7 +21543,7 @@ void Monitor_Test::aBigPixelRigPaintsInGoodTime()
             qInfo().noquote() << QString("plane %1 (%2/%3), quality %4: slowest paint %5 ms")
                                  .arg(int(plane)).arg(cam.az).arg(cam.el).arg(quality).arg(slowest)
                               + QString(" (first %1 ms)").arg(first);
-            QVERIFY2(slowest < (qEnvironmentVariableIsSet("QLC_SLOW_BUILD") ? 6000 : 1500),   // gcov leg: 4x qPrintable(QString("plane %1, quality %2: a paint took %3 ms")
+            QVERIFY2(slowest < (qEnvironmentVariableIsSet("QLC_SLOW_BUILD") ? 6000 : 1500), qPrintable(QString("plane %1, quality %2: a paint took %3 ms")
                                                 .arg(int(plane)).arg(quality).arg(slowest)));
         }
 }
