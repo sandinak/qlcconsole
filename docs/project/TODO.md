@@ -67,6 +67,13 @@ hits, built, are fired by a VC button's start, not a run command; ALL OFF,
 which lets go of them, is one). Open:
 - Phone Run page: add `RouteWeb`, and refuse it in step 2 of
   `App::runCommand()` unless Teaching's "allow remote GO" (PIN) says yes.
+Pad Run, the phone Run page and override hits call `run()` with their
+route. Open:
+- Phone Run page: built 2026-10-31 (feat/04-phone-run): `RouteWeb`, `/run`
+  on web access, "Allow GO from the phone Run page" in Show Settings (off by
+  default, the show's PIN once per session). Open: a QR code for the
+  address (decided: type it, can change); Hold (Pause/Resume) buttons;
+  following a list other than the main one.
 - Two stock paths still step a chaser directly: the VC Cue List (and the
   web page that drives it) and a VC button's next/previous step
   (`Doc::stepCurrentChaser`). Move them onto `run()` if they ever play a

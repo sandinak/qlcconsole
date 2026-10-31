@@ -41,6 +41,7 @@ private slots:
     void setAndRemoveThePin();
     /** Saved only when set, read back, and reset with the show */
     void savedWithTheShowOnlyWhenSet();
+    void remoteGoIsOffAndSavedOnlyWhenOn();
 
 private:
     Doc *m_doc = nullptr;

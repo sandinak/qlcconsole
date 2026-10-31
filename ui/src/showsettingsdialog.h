@@ -118,6 +118,7 @@ private:
 private:
     Doc *m_doc;
     QCheckBox *m_openInOperate;
+    QCheckBox *m_remoteGo;
     QCheckBox *m_lockDesign;
     QCheckBox *m_teaching;
     QCheckBox *m_allowOutput;

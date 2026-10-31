@@ -20,7 +20,11 @@
 #ifndef WEBACCESS_H
 #define WEBACCESS_H
 
+#include <QSet>
+
 #include "webaccessbase.h"
+
+class WebAccessRun;
 
 class VCAudioTriggers;
 class VirtualConsole;
@@ -104,7 +108,18 @@ protected slots:
 
     void slotGrandMasterValueChanged(uchar value);
 
+    /** The Run page's state changed: to every Run page open. */
+    void slotRunState(const QByteArray &json);
+
 protected:
+    /** QLC+RUN|hello, pin|<PIN>, go, back, stop, subgo, subback from the
+     *  phone Run page (/run); answered RUN|state|{json}, RUN|pin|ok|bad|locked
+     *  and RUN|ack|<command>|ok|refused|needpin|nothing */
+    void handleRunCommand(QHttpConnection *conn, WebAccessUser *user, const QStringList &cmdList);
+
+    WebAccessRun *m_run = nullptr;
+    QSet<QHttpConnection *> m_runClients;    ///< connections that said hello
+    QSet<QHttpConnection *> m_runUnlocked;   ///< ... and gave the show's PIN
     QString m_JScode;
     QString m_CSScode;
 

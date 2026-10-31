@@ -73,6 +73,23 @@ universe `writeMix`, hotpath `overrideHitCyclesLeaveNoFadersBehind`,
 showtreeview (the checkbox and the row mark).
 
 ---
+### 2026-10-31 — Phone / tablet Run page *(feat/04-phone-run, 0.4, web)*
+
+Web access serves **/run**: production and list, song section, cue on now and
+next (number, name), big GO / Back / Stop (+ Sub GO / Sub Back when the list
+has sub-cues), dark and thumb-reach, live over the existing websocket
+(`QLC+RUN|…` in, `RUN|state|{json}` out; `webaccess/src/webaccessrun.*`,
+`webaccessrunpage.cpp`). Commands go through `ShowControl::run()` with the new
+`RouteWeb`, on the main cue list. Safety: "Allow GO from the phone Run page"
+(`ShowOperate::remoteGo()`, saved as `RemoteGo="1"`, off by default, never in
+a handout) in Show Settings, refused in `App::runCommand()` step 2 and again
+in `WebAccessRun` (so it is safe without the App); the show's PIN once per
+websocket session, 5 wrong tries lock it 30 s; with -wa an account of at
+least VC-only level; Stop takes two taps. Decided (can change): no QR code
+(the Open: address list + /run); Pause/Resume ("Hold") not on the page yet; the
+VC Cue List page of stock web access still steps its chaser directly.
+Tests: webaccess_test (7 new), showoperate_test, appviews_test
+(`aWebGoIsRefusedUntilTheShowAllowsIt`, Show Settings tick).
 
 ### 2026-10-31 — One GO path: `ShowControl::run()` + `App::runCommand()` *(feat/04-one-go-path, 0.4 item 1, go1)*
 

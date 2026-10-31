@@ -1719,6 +1719,53 @@ void AppViews_Test::everyRouteTakesTheOneGoPath()
     doc->setMode(Doc::Design);
 }
 
+void AppViews_Test::aWebGoIsRefusedUntilTheShowAllowsIt()
+{
+    Doc *doc = m_app->m_doc;
+    ShowControl *sc = doc->showControl();
+    ShowTreeController *st = doc->showTree();
+    quint32 prod = st->addProduction("Remote GO");
+    auto tidy = qScopeGuard([&]() {
+        doc->operateSettings()->setRemoteGo(false);
+        doc->masterTimer()->stopAllFunctions();
+        st->removeProduction(prod);
+        m_app->hideViewNotice();
+        QTRY_COMPARE_WITH_TIMEOUT(doc->masterTimer()->runningFunctions(), 0, 5000);
+        doc->setMode(Doc::Design);
+    });
+    const quint32 listId = st->addCueList(prod, "Main", ShowTree::ListMode::NonTracking);
+    st->addCue(listId, -1, QStringLiteral("Cue 1"));
+    st->addCue(listId, 0, QStringLiteral("Cue 2"));
+    Chaser *list = qobject_cast<Chaser *>(doc->function(st->cueList(listId)->chaser));
+    QVERIFY(list != nullptr);
+    sc->setMainCueList(list->id());
+    doc->setMode(Doc::Operate);
+    m_app->hideViewNotice();
+
+    QSignalSpy handled(sc, &ShowControl::commandHandled);
+    ShowControl::Request r;
+    r.command = ShowControl::Go;
+
+    // Off, the default: refused, and nothing plays
+    QVERIFY(!doc->operateSettings()->remoteGo());
+    QVERIFY(!sc->run(r, ShowControl::RouteWeb));
+    QVERIFY(!list->isRunning());
+    QVERIFY(!handled.isEmpty());
+    QVERIFY(!handled.last().at(1).toBool());
+    QVERIFY(handled.last().at(0).toString().contains(QStringLiteral("remote GO is off")));
+    // ...while the console's own routes are not asked
+    QVERIFY(sc->run(r, ShowControl::RouteKey));
+    QTRY_VERIFY_WITH_TIMEOUT(list->isRunning(), 5000);
+    doc->masterTimer()->stopAllFunctions();
+    QTRY_VERIFY_WITH_TIMEOUT(!list->isRunning(), 5000);
+
+    // On in Show Settings: the same GO plays
+    doc->operateSettings()->setRemoteGo(true);
+    QVERIFY(sc->run(r, ShowControl::RouteWeb));
+    QCOMPARE(m_app->m_lastRunRoute, ShowControl::RouteWeb);
+    QTRY_VERIFY_WITH_TIMEOUT(list->isRunning(), 5000);
+}
+
 void AppViews_Test::aGoThatFindsNothingHoldsNoPreview()
 {
     Doc *doc = m_app->m_doc;
@@ -3283,6 +3330,7 @@ void AppViews_Test::aPinKeepsTheShowInOperate()
         if (m_app->doc()->mode() == Doc::Operate)
         {
             m_app->doc()->operateSettings()->setPin(QString());
+            m_app->doc()->operateSettings()->setRemoteGo(false);
             m_app->slotModeDesign();
         }
         m_app->clearDocument();
@@ -3307,10 +3355,15 @@ void AppViews_Test::aPinKeepsTheShowInOperate()
         QVERIFY(dlg.pinWillBeSet());
         QVERIFY(remove->isEnabled());
         openIn->setChecked(true);
+        QCheckBox *remote = dlg.findChild<QCheckBox *>("showSettingsRemoteGo");
+        QVERIFY(remote != nullptr && !remote->isChecked());
+        remote->setChecked(true);
         // Nothing changes until OK
         QVERIFY(!doc->operateSettings()->hasPin());
+        QVERIFY(!doc->operateSettings()->remoteGo());
         dlg.accept();
     }
+    QVERIFY(doc->operateSettings()->remoteGo());
     QVERIFY(doc->operateSettings()->hasPin());
     QVERIFY(doc->operateSettings()->checkPin("2468"));
     QVERIFY(doc->operateSettings()->openInOperate());

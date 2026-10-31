@@ -37,6 +37,8 @@
 #include "webaccess.h"
 #include "webaccessbase.h"
 #include "webaccesscontroller.h"
+#include "webaccessrun.h"
+#include "mastertimer.h"
 #include "webaccessauth.h"
 #if defined(Q_OS_LINUX)
 #include "webaccessnetwork.h"
@@ -52,6 +54,10 @@
 #include "simpledesk.h"
 #include "function.h"
 #include "doc.h"
+#include "chaser.h"
+#include "showcontrol.h"
+#include "showoperate.h"
+#include "showtreecontroller.h"
 #include "showwebaccess.h"
 #include "qlcfixturedefcache.h"
 #include "inputoutputmap.h"
@@ -1168,4 +1174,254 @@ void WebAccess_Test::aShowLoadedFromTheWebKeepsItRunning()
     web->setEnabled(true);
     web->setEnabled(false);
     QTRY_VERIFY(ctl.server() == nullptr);
+}
+
+/*****************************************************************************
+ * The phone Run page
+ *****************************************************************************/
+
+Chaser *WebAccess_Test::runShow(const char *)
+{
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction(QStringLiteral("Tonight"));
+    const quint32 listId = st->addCueList(prod, QStringLiteral("Act One"), ShowTree::ListMode::NonTracking);
+    st->addCue(listId, -1, QStringLiteral("Open"));
+    st->addCue(listId, 0, QStringLiteral("Verse"));
+    st->addCue(listId, 1, QStringLiteral("Chorus"));
+    Chaser *list = qobject_cast<Chaser *>(m_doc->function(st->cueList(listId)->chaser));
+    m_doc->showControl()->setMainCueList(list->id());
+    return list;
+}
+
+QWebSocket *WebAccess_Test::runPage(QStringList *heard)
+{
+    QWebSocket *ws = new QWebSocket(QString(), QWebSocketProtocol::VersionLatest, this);
+    connect(ws, &QWebSocket::textMessageReceived, this, [heard](const QString &m) { heard->append(m); });
+    ws->open(QUrl(QStringLiteral("ws://127.0.0.1:%1/qlcplusWS").arg(m_port)));
+    QElapsedTimer t;
+    t.start();
+    while (ws->state() != QAbstractSocket::ConnectedState && t.elapsed() < 5000)
+        QTest::qWait(10);
+    while (m_web->m_webSocketsList.isEmpty() && t.elapsed() < 5000)
+        QTest::qWait(10);
+    return ws;
+}
+
+void WebAccess_Test::dropPage(QWebSocket *ws)
+{
+    // what it still hears goes nowhere: the lists it fills are the test's locals
+    ws->disconnect(this);
+    ws->close();
+    ws->deleteLater();
+}
+
+bool WebAccess_Test::heardAn(const QStringList &heard, const QString &prefix)
+{
+    for (const QString &m : heard)
+        if (m.startsWith(prefix))
+            return true;
+    return false;
+}
+
+void WebAccess_Test::theRunPageIsServed()
+{
+    startWeb(false);
+    const QByteArray reply = http("GET /run HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n");
+    QVERIFY2(reply.startsWith("HTTP/1.1 200"), reply.left(40).constData());
+    QVERIFY(reply.contains("QLC+RUN|hello"));
+    QVERIFY(reply.contains("width=device-width"));
+    QVERIFY(reply.contains(">GO</button>"));
+    // names go in as text, never as markup
+    QVERIFY(!reply.contains("innerHTML"));
+}
+
+void WebAccess_Test::goFromThePageIsTheWebRoute()
+{
+    runShow();
+    m_doc->operateSettings()->setRemoteGo(true);
+    ShowControl *sc = m_doc->showControl();
+    QList<ShowControl::Route> routes;
+    QList<ShowControl::Command> commands;
+    sc->setRunHandler([&](const ShowControl::Request &r, ShowControl::Route route) {
+        routes << route;
+        commands << r.command;
+        return true;
+    });
+    startWeb(false);
+    QStringList heard;
+    QWebSocket *ws = runPage(&heard);
+    ws->sendTextMessage(QStringLiteral("QLC+RUN|hello"));
+    QTRY_VERIFY(heardAn(heard, QStringLiteral("RUN|state|")));
+
+    const QStringList all = { QStringLiteral("go"), QStringLiteral("back"), QStringLiteral("stop"),
+                              QStringLiteral("subgo"), QStringLiteral("subback") };
+    for (const QString &c : all)
+        ws->sendTextMessage(QStringLiteral("QLC+RUN|") + c);
+    QTRY_COMPARE(routes.count(), 5);
+    for (ShowControl::Route r : routes)
+        QCOMPARE(r, ShowControl::RouteWeb);
+    QCOMPARE(commands, (QList<ShowControl::Command>{ ShowControl::Go, ShowControl::Back, ShowControl::Stop,
+                                                    ShowControl::SubGo, ShowControl::SubBack }));
+    QTRY_VERIFY(heardAn(heard, QStringLiteral("RUN|ack|go|ok")));
+    // not a command of the page's: nothing
+    ws->sendTextMessage(QStringLiteral("QLC+RUN|allOff"));
+    ws->sendTextMessage(QStringLiteral("QLC+RUN|load"));
+    QTest::qWait(200);
+    QCOMPARE(routes.count(), 5);
+    dropPage(ws);
+    sc->setRunHandler(nullptr);
+}
+
+void WebAccess_Test::remoteGoIsOffByDefault()
+{
+    runShow();
+    ShowControl *sc = m_doc->showControl();
+    QVERIFY(!m_doc->operateSettings()->remoteGo());
+    int calls = 0;
+    sc->setRunHandler([&](const ShowControl::Request &, ShowControl::Route) { ++calls; return true; });
+    startWeb(false);
+    QStringList heard;
+    QWebSocket *ws = runPage(&heard);
+    ws->sendTextMessage(QStringLiteral("QLC+RUN|hello"));
+    QTRY_VERIFY(heardAn(heard, QStringLiteral("RUN|state|")));
+    QVERIFY(heard.first().contains(QStringLiteral("\"remote\":false")));
+    ws->sendTextMessage(QStringLiteral("QLC+RUN|go"));
+    QTRY_VERIFY(heardAn(heard, QStringLiteral("RUN|ack|go|refused")));
+    QCOMPARE(calls, 0);
+
+    // On in Show Settings: the next GO goes; off again: refused again, and
+    // the page is told, so it greys its buttons
+    m_doc->operateSettings()->setRemoteGo(true);
+    QTRY_VERIFY(heardAn(heard, QStringLiteral("RUN|state|{\"")) && heard.last().contains(QStringLiteral("\"remote\":true")));
+    ws->sendTextMessage(QStringLiteral("QLC+RUN|go"));
+    QTRY_COMPARE(calls, 1);
+    m_doc->operateSettings()->setRemoteGo(false);
+    QTRY_VERIFY(heard.last().contains(QStringLiteral("\"remote\":false")));
+    ws->sendTextMessage(QStringLiteral("QLC+RUN|go"));
+    QTRY_COMPARE(heard.last(), QStringLiteral("RUN|ack|go|refused"));
+    QCOMPARE(calls, 1);
+
+    dropPage(ws);
+    sc->setRunHandler(nullptr);
+}
+
+void WebAccess_Test::thePinIsAskedOncePerSession()
+{
+    runShow();
+    m_doc->operateSettings()->setRemoteGo(true);
+    QVERIFY(m_doc->operateSettings()->setPin(QStringLiteral("4321")));
+    ShowControl *sc = m_doc->showControl();
+    int calls = 0;
+    sc->setRunHandler([&](const ShowControl::Request &, ShowControl::Route route) {
+        if (route == ShowControl::RouteWeb)
+            ++calls;
+        return true;
+    });
+    startWeb(false);
+    QStringList heard, heard2;
+    QWebSocket *ws = runPage(&heard);
+    ws->sendTextMessage(QStringLiteral("QLC+RUN|hello"));
+    QTRY_VERIFY(heardAn(heard, QStringLiteral("RUN|state|")));
+    QVERIFY(heard.first().contains(QStringLiteral("\"pin\":true")));
+
+    // before the PIN: nothing goes
+    ws->sendTextMessage(QStringLiteral("QLC+RUN|go"));
+    QTRY_VERIFY(heardAn(heard, QStringLiteral("RUN|ack|go|needpin")));
+    QCOMPARE(calls, 0);
+    // a wrong PIN does not open it
+    ws->sendTextMessage(QStringLiteral("QLC+RUN|pin|1111"));
+    QTRY_VERIFY(heardAn(heard, QStringLiteral("RUN|pin|bad")));
+    ws->sendTextMessage(QStringLiteral("QLC+RUN|go"));
+    QTRY_COMPARE(heard.last(), QStringLiteral("RUN|ack|go|needpin"));
+    QCOMPARE(calls, 0);
+    // the right one opens the session: every GO after it goes, no more asking
+    ws->sendTextMessage(QStringLiteral("QLC+RUN|pin|4321"));
+    QTRY_VERIFY(heardAn(heard, QStringLiteral("RUN|pin|ok")));
+    ws->sendTextMessage(QStringLiteral("QLC+RUN|go"));
+    ws->sendTextMessage(QStringLiteral("QLC+RUN|back"));
+    QTRY_COMPARE(calls, 2);
+
+    // another phone is its own session
+    QWebSocket *other = runPage(&heard2);
+    other->sendTextMessage(QStringLiteral("QLC+RUN|go"));
+    QTRY_VERIFY(heardAn(heard2, QStringLiteral("RUN|ack|go|needpin")));
+    QCOMPARE(calls, 2);
+    dropPage(ws);
+    dropPage(other);
+    sc->setRunHandler(nullptr);
+}
+
+void WebAccess_Test::tooManyWrongPinsLockTheGate()
+{
+    runShow();
+    m_doc->operateSettings()->setRemoteGo(true);
+    QVERIFY(m_doc->operateSettings()->setPin(QStringLiteral("4321")));
+    startWeb(false);
+    QStringList heard;
+    QWebSocket *ws = runPage(&heard);
+    for (int i = 0; i < 6; ++i)
+        ws->sendTextMessage(QStringLiteral("QLC+RUN|pin|000%1").arg(i));
+    QTRY_VERIFY(heardAn(heard, QStringLiteral("RUN|pin|locked")));
+    // even the right PIN waits out the lockout
+    ws->sendTextMessage(QStringLiteral("QLC+RUN|pin|4321"));
+    QTRY_COMPARE(heard.last(), QStringLiteral("RUN|pin|locked"));
+    dropPage(ws);
+}
+
+void WebAccess_Test::stateReachesThePage()
+{
+    Chaser *list = runShow();
+    m_doc->operateSettings()->setRemoteGo(true);
+    startWeb(false);
+    QStringList heard;
+    QWebSocket *ws = runPage(&heard);
+    ws->sendTextMessage(QStringLiteral("QLC+RUN|hello"));
+    QTRY_VERIFY(heardAn(heard, QStringLiteral("RUN|state|")));
+    // stopped: the production and list, and the cue on standby as next
+    const QString first = heard.first();
+    QVERIFY2(first.contains(QStringLiteral("\"production\":\"Tonight\"")), qPrintable(first));
+    QVERIFY(first.contains(QStringLiteral("\"list\":\"Act One\"")));
+    QVERIFY(first.contains(QStringLiteral("\"running\":false")));
+    QVERIFY(first.contains(QStringLiteral("\"name\":\"Open\"")));
+    QVERIFY(!first.contains(QStringLiteral("\"now\"")));
+
+    // a GO from the page (no App here: ShowControl plays it) comes back
+    // as the cue on now and the one after it
+    ws->sendTextMessage(QStringLiteral("QLC+RUN|go"));
+    QTRY_VERIFY(heardAn(heard, QStringLiteral("RUN|ack|go|ok")));
+    for (int i = 0; i < 3; ++i)
+        m_doc->masterTimer()->timerTick();
+    QTRY_VERIFY_WITH_TIMEOUT(heard.last().contains(QStringLiteral("\"running\":true"))
+                             && heard.last().contains(QStringLiteral("\"now\":{\"name\":\"Open\"")), 5000);
+    QVERIFY(heard.last().contains(QStringLiteral("\"name\":\"Verse\"")));
+
+    // ...and so does a GO from anywhere else (a key, the pad, OSC)
+    QVERIFY(m_doc->showControl()->run({ ShowControl::Go, QString(), QString() }, ShowControl::RouteKey));
+    for (int i = 0; i < 3; ++i)
+        m_doc->masterTimer()->timerTick();
+    QTRY_VERIFY_WITH_TIMEOUT(heard.last().contains(QStringLiteral("\"now\":{\"name\":\"Verse\"")), 5000);
+
+    // a page that has gone stops the polling
+    dropPage(ws);
+    QTRY_COMPARE(m_web->m_runClients.count(), 0);
+    QVERIFY(!m_web->m_run->m_timer.isActive());
+    list->stop(FunctionParent::master());
+    for (int i = 0; i < 3; ++i)
+        m_doc->masterTimer()->timerTick();
+}
+
+void WebAccess_Test::aPageNeedsAnAccountWithAccounts()
+{
+    runShow();
+    m_doc->operateSettings()->setRemoteGo(true);
+    int calls = 0;
+    m_doc->showControl()->setRunHandler([&](const ShowControl::Request &, ShowControl::Route) { ++calls; return true; });
+    // -wa, no accounts yet, and a visitor from the "network": no page, no GO
+    const QString passwd = m_home.filePath(QStringLiteral("run_passwd"));
+    startWeb(true, passwd);
+    m_web->m_trustLoopback = false;
+    const QByteArray reply = http("GET /run HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n");
+    QVERIFY2(!reply.startsWith("HTTP/1.1 200"), reply.left(40).constData());
+    QCOMPARE(calls, 0);
+    m_doc->showControl()->setRunHandler(nullptr);
 }

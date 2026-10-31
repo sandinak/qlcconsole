@@ -21,6 +21,15 @@ back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
   listener) as `/cue/{cue}/start` or `/go`, and/or as an MSC GO with the
   cue number on a MIDI output; every cue or only cues with a number of their own.
   Per show, on the Show control page; not for blind or previews.
+### Run the show
+
+- **Phone and tablet Run page.** Web access serves **/run**: the
+  production and list, the song section, the cue on now and the next (number
+  and name), and big GO, Back and Stop (Sub GO and Sub Back when the list has
+  sub-cues), live over the web socket. It sends the same GO as the console
+  (a new `web` route). **File ▸ Show Settings… ▸ Allow GO from the phone Run
+  page** turns it on, off in every show by default; with a PIN, the page
+  asks for it once per session. See *The Run page* in Other improvements.
 
 ### Teaching
 

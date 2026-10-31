@@ -39,6 +39,7 @@ if(qmlui)
 else()
     list(APPEND WEBACCESS_SOURCES
         webaccess.cpp webaccess.h
+        webaccessrun.cpp webaccessrun.h webaccessrunpage.cpp
         webaccesscontroller.cpp webaccesscontroller.h
     )
 endif()

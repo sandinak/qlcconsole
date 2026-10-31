@@ -90,6 +90,16 @@ private slots:
     void theCommandLineWins();
     void aShowLoadedFromTheWebKeepsItRunning();
 
+    /* The phone Run page (/run): GO, Back, Stop over the websocket, by
+       ShowControl::run() with RouteWeb */
+    void theRunPageIsServed();
+    void goFromThePageIsTheWebRoute();
+    void remoteGoIsOffByDefault();
+    void thePinIsAskedOncePerSession();
+    void tooManyWrongPinsLockTheGate();
+    void stateReachesThePage();
+    void aPageNeedsAnAccountWithAccounts();
+
     /* Many clients: a phone per crew member (make perf, "web") */
     void fiftyClientsGetEveryChange();
     void cpuPerBroadcast();
@@ -100,6 +110,13 @@ private:
      *  FUNCTION messages it gets into @a got */
     QList<class QWebSocket *> openClients(int n, QVector<int> *got);
     QByteArray http(const QByteArray &request, int timeoutMs = 5000);
+    /** A show with a main cue list of three cues ("Open", "Verse", "Chorus");
+     *  returns its chaser */
+    class Chaser *runShow(const char *section = nullptr);
+    /** A Run page's websocket: connected, with everything it hears in @a heard */
+    class QWebSocket *runPage(QStringList *heard);
+    void dropPage(class QWebSocket *ws);
+    static bool heardAn(const QStringList &heard, const QString &prefix);
     QString wsRoundTrip(const QStringList &commands, const QByteArray &origin = QByteArray());
 
 private:

@@ -426,8 +426,6 @@ Notes:
 |---|---|---|---|---|---|---|---|---|
 | AI Assist P0–P3 (docs/design/AI_ASSIST.md): one operation registry under the command line, a Design-only assistant on a local model (Ollama), configuration import, an MCP server | 4 | 4 | Show Tree command line, undo, Design/Operate | 15 | M | M | 1.1 | BUILD (0.5), user's call 2026-10-30 (P2b configuration import also stands alone) |
 | One GO path (`App::runCommand`) for keys, Run tab, footer, pad, web | 4 | 5 | ShowControl, RC8 preview hold | 0.5 | L | L | **40** | BUILT 2026-10-31 (0.4, first; docs/design/RUN_COMMANDS.md) |
-| Tracking sheet + printable cue sheet (PDF/XLSX) | 5 | 5 | tracking resolve, patch-list exports | 4 | L | L | **6.3** | BUILD (0.4) |
-| One GO path (`App::runCommand`) for keys, Run tab, footer, pad, web | 4 | 5 | ShowControl, RC8 preview hold | 0.5 | L | L | **40** | BUILD (0.4), first; prerequisite |
 | Tracking sheet + printable cue sheet (PDF/XLSX) | 5 | 5 | tracking resolve, patch-list exports | 4 | L | L | **6.3** | BUILT (0.4, sheet, 2026-10-31): More ▾ → Cue Sheet… |
 | Course Level 2 lessons (7), one per release cycle | 5 | 5 | course template, courseshow_test | 2 a lesson | L | M | **12.5** a lesson | BUILD (0.3.1 onward) |
 | Realistic move speed in the Rig Overview | 3 | 5 | Rig Overview, definitions' speeds | 3 | L | L | 5 | BUILD (0.5) |
@@ -436,7 +434,7 @@ Notes:
 | Group / intensity masters on faders | 4 | 5 | groups, speed masters, Control Map | 4 | M | M | 4 | BUILD (0.4) |
 | QLab out (OSC / MSC out) | 3 | 4 | Show control page | 3 | L | M | 4 | BUILT (0.4) |
 | Override / priority hits (Normal / Override / Inhibit, restore on release) | 5 | 4 | Hits, OutputLayer | 5 | M | M | 3.2 | BUILD (0.4) |
-| Phone/tablet Run page (current, next, GO, Back, Hold) | 4 | 5 | secured web access, CueRunner | 5 | M | H | 3.2 | BUILD (0.4) |
+| Phone/tablet Run page (current, next, GO, Back, Hold) | 4 | 5 | secured web access, CueRunner | 5 | M | H | 3.2 | BUILT (0.4, GO/Back/Stop; Hold later) |
 | Calling script view (cues on lyric or script lines) | 3 | 4 | cue notes | 4 | L | M | 3 | BUILD (0.5) |
 | Encoder banks: MIDI controller drives the selection in Build | 3 | 4 | Focus-this-look mapping | 4 | L | M | 3 | LATER |
 | Duplicate a structure's setup (T1 → T2, T3) | 3 | 4 | Patch Others Like This | 4 | L | M | 3 | LATER |
@@ -544,10 +542,12 @@ Order and dependencies:
    RoutePad)`, list cycling on the triggers, the light bar and rumble.
    Open: the Hits page, the focus confirm, then Q192's layer walk.
 3. **Phone/tablet Run page** on the secured web access, using the same GO
-   path and Teaching's rules (a PIN-guarded "allow remote GO").
+   path and Teaching's rules (a PIN-guarded "allow remote GO"). **Built
+   2026-10-31:** `/run`, `RouteWeb`, Show Settings ▸ Allow GO from the
+   phone Run page (off by default).
 4. **Timecode**: LTC in (built: a third source into the same follow path),
    then "cue N at 00:01:23:10" on cue lists, building on 0.3.1's Art-Net
-   TimeCode and waiting for the One GO path.
+   TimeCode.
 5. **Override hits** (priority layer, restore on release), building on
    0.3.1's hit fade times. **Built 2026-10-31:** a hit's Override wins
    over the show, intensity too, and fades back to what plays then

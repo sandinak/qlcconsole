@@ -96,6 +96,7 @@ public:
         RouteFocusCall,     //!< a focus-call cue going on with its list when done
         RouteOsc,           //!< OSC (QLab and others)
         RouteMsc,           //!< MIDI Show Control
+        RouteWeb,           //!< the phone / tablet Run page (web access; "allow remote GO")
         RouteOther          //!< anything else (a test, a script)
     };
     Q_ENUM(Route)
