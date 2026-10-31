@@ -24,6 +24,7 @@
 #include <qmath.h>
 
 #include "audiocapture.h"
+#include "ltcreceiver.h"
 #include "beattracker.h"
 
 #define USE_HANNING
@@ -140,12 +141,26 @@ void AudioCapture::unregisterBandsNumber(int number)
         if (m_fftMagnitudeMap[number].m_registerCounter == 0)
             m_fftMagnitudeMap.remove(number);
 
-        if (m_fftMagnitudeMap.isEmpty())
+        if (m_fftMagnitudeMap.isEmpty() && m_ltcSink == nullptr)
         {
             locker.unlock();
             stop();
         }
     }
+}
+
+void AudioCapture::setLtcSink(LtcReceiver *sink)
+{
+    QMutexLocker locker(&m_mutex);
+    m_ltcSink = sink;
+    const bool running = isRunning();
+    const bool bands = !m_fftMagnitudeMap.isEmpty();
+    locker.unlock();
+
+    if (sink != nullptr && !running)
+        start();
+    else if (sink == nullptr && running && !bands)
+        stop();
 }
 
 void AudioCapture::stop()
@@ -350,6 +365,11 @@ void AudioCapture::run()
             {
                 QMutexLocker locker(&m_mutex);
                 processData();
+
+                // LTC: the first channel of this block, on this thread
+                if (m_ltcSink != nullptr)
+                    m_ltcSink->processBlock(m_audioBuffer, int(m_bufferSize),
+                                            int(m_channels), int(m_sampleRate));
 
                 if (m_beatTracker->processAudio(m_audioBuffer, m_captureSize))
                     emit beatDetected();

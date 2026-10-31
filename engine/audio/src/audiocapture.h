@@ -45,6 +45,7 @@
 #define SPECTRUM_MAX_FREQUENCY          5000
 
 class BeatTracker;
+class LtcReceiver;
 
 /** @addtogroup engine_audio Audio
  * @{
@@ -80,6 +81,11 @@ public:
      * Cancel a previous request of bars
      */
     void unregisterBandsNumber(int number);
+
+    /** Hand every captured block to an LTC receiver as well (or, with
+     *  nullptr, stop). Starts the capture if nothing else has, and keeps
+     *  it running while a sink is set. */
+    void setLtcSink(LtcReceiver *sink);
 
     static int minFrequency() { return SPECTRUM_MIN_FREQUENCY; }
     static int maxFrequency() { return SPECTRUM_MAX_FREQUENCY; }
@@ -161,6 +167,9 @@ signals:
 
 protected:
     QMutex m_mutex;
+
+    /** LTC decoding of each block; read and changed under m_mutex */
+    LtcReceiver *m_ltcSink = nullptr;
 
     bool m_userStop, m_pause;
     unsigned int m_bufferSize, m_captureSize, m_sampleRate, m_channels;

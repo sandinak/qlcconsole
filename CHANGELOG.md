@@ -513,6 +513,11 @@ skipped). Upstream fixes taken:
   as it follows MIDI timecode. Patch an Art-Net input and it is offered
   as a timecode source, in the footer's MTC chip and in Connections ▸
   Show control & sync. All four rates are read (24, 25, 29.97 DF, 30).
+- **LTC (audio timecode) in**: pick **Audio input (LTC)** as the timecode
+  source and a show follows SMPTE timecode played into the audio input
+  (its first channel), at 24, 25, 29.97 DF and 30 fps, either polarity,
+  the way it follows MTC and Art-Net TimeCode: the footer chip reads LTC,
+  and Show control & sync shows the code and its sync health.
 - **The patch list shows each fixture's gel**: a Gel column (a swatch and
   its value) in Fixtures ▸ Patch List, its CSV, XLSX and PDF, from the
   Colour set in Fixture Properties. It shows only when some fixture has a

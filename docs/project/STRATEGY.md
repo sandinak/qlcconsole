@@ -429,7 +429,7 @@ Notes:
 | Tracking sheet + printable cue sheet (PDF/XLSX) | 5 | 5 | tracking resolve, patch-list exports | 4 | L | L | **6.3** | BUILD (0.4) |
 | Course Level 2 lessons (7), one per release cycle | 5 | 5 | course template, courseshow_test | 2 a lesson | L | M | **12.5** a lesson | BUILD (0.3.1 onward) |
 | Realistic move speed in the Rig Overview | 3 | 5 | Rig Overview, definitions' speeds | 3 | L | L | 5 | BUILD (0.5) |
-| LTC (audio) timecode in, plus cues at a timecode | 4 | 5 | MTC follow, audio capture | 4 | M | M | 4 | BUILD (0.4) |
+| LTC (audio) timecode in, plus cues at a timecode | 4 | 5 | MTC follow, audio capture | 4 | M | M | 4 | BUILD (0.4): **LTC in built** (feat/04-ltc); cues at a timecode next, after the One GO path |
 | Effect fade in / fade out (depth to 0 on release) | 4 | 5 | layered looks | 4 | M | M | 4 | BUILD (0.4) |
 | Group / intensity masters on faders | 4 | 5 | groups, speed masters, Control Map | 4 | M | M | 4 | BUILD (0.4) |
 | QLab out (OSC / MSC out) | 3 | 4 | Show control page | 3 | L | M | 4 | BUILD (0.4) |
@@ -539,8 +539,9 @@ Order and dependencies:
    Hits page, list cycling and the focus confirm.
 3. **Phone/tablet Run page** on the secured web access, using the same GO
    path and Teaching's rules (a PIN-guarded "allow remote GO").
-4. **Timecode**: LTC in, then "cue N at 00:01:23:10" on cue lists, building
-   on 0.3.1's Art-Net TimeCode.
+4. **Timecode**: LTC in (built: a third source into the same follow path),
+   then "cue N at 00:01:23:10" on cue lists, building on 0.3.1's Art-Net
+   TimeCode and waiting for the One GO path.
 5. **Override hits** (priority layer, restore on release), building on
    0.3.1's hit fade times. Then **group intensity masters**, which share
    the same engine stage.
