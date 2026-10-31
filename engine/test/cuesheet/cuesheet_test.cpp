@@ -191,6 +191,24 @@ void CueSheet_Test::cueSheetRowsFollowTheRunningOrder()
     QCOMPARE(column(t, 1).at(3), QString("1 — Everybody Scream"));
 }
 
+void CueSheet_Test::needsWorkIsAColumn()
+{
+    buildShow();
+    QCOMPARE(CueSheet::header().last(), QString("Needs work"));
+    const CueSheet before = CueSheet::build(m_doc, m_prod);
+    for (const QStringList &line : before.cueTable().mid(1))
+        QCOMPARE(line.last(), QString());
+
+    // Tagged from the stage (the pad) or the cue page: that cue's line says so.
+    QVERIFY(m_doc->showTree()->setCuesNeedsWork({ m_cues[3] }, true));
+    const CueSheet sheet = CueSheet::build(m_doc, m_prod);
+    const QList<QStringList> t = sheet.cueTable();
+    QCOMPARE(column(t, 2), QStringList({ "Cue", "0.0.1", "0.0.2", "1.0.1", "1.0.2" }));
+    QCOMPARE(column(t, t.first().count() - 1), QStringList({ "Needs work", "", "", "", "yes" }));
+    QVERIFY(sheet.cueHtml("T").contains("<td>yes</td>"));
+    QVERIFY(sheet.cueCsv().contains("Needs work"));
+}
+
 void CueSheet_Test::subCuesHitsAndTimes()
 {
     buildShow();

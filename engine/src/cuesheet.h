@@ -68,6 +68,7 @@ public:
         QString note;
         QString hits;                   //!< the hits under this cue, ", "-separated
         bool    skipped = false;        //!< left out of GO (Cue::skip), or its song is tonight
+        bool    needsWork = false;      //!< tagged Needs work (Cue::needsWork), from the stage or the cue page
     };
 
     /** A cue list of the production, in running order. */

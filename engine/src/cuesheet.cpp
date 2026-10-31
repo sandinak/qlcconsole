@@ -206,6 +206,7 @@ CueSheet CueSheet::build(Doc *doc, quint32 productionId)
             r.note = cue.note;
             r.hits = joinNames(st, st->hitsAt(HitScope::Cue, cue.id));
             r.skipped = cue.skip || (i < songSkipped.count() && songSkipped.at(i));
+            r.needsWork = cue.needsWork;
             block.rows << r;
 
             const CueList *subs = st->cueList(st->subCueList(cue.id));
@@ -311,7 +312,7 @@ QStringList CueSheet::header()
 {
     return { QObject::tr("Cue list"), QObject::tr("Song"), QObject::tr("Cue"), QObject::tr("Name"),
              QObject::tr("Fade in"), QObject::tr("Fade out"), QObject::tr("Follow / wait"),
-             QObject::tr("Notes"), QObject::tr("Hits armed here") };
+             QObject::tr("Notes"), QObject::tr("Hits armed here"), QObject::tr("Needs work") };
 }
 
 QList<QStringList> CueSheet::cueTable() const
@@ -327,7 +328,7 @@ QList<QStringList> CueSheet::cueTable() const
             if (r.skipped)
                 note = note.isEmpty() ? QObject::tr("SKIPPED") : QObject::tr("SKIPPED. %1").arg(note);
             t << QStringList{ b.name, r.section, r.number, r.name, r.fadeIn, r.fadeOut, r.follow, note,
-                              r.hits };
+                              r.hits, r.needsWork ? QObject::tr("yes") : QString() };
         }
     return t;
 }
@@ -433,9 +434,10 @@ QString CueSheet::cueHtml(const QString &title) const
                 note = QStringLiteral("<b>%1</b> %2").arg(QObject::tr("SKIPPED").toHtmlEscaped(), note);
             const QString indent = r.kind == Row::SubCue ? QStringLiteral("&nbsp;&nbsp;") : QString();
             h += QStringLiteral("<tr><td>%1%2</td><td>%1%3</td><td>%4</td><td>%5</td><td>%6</td><td>%7</td>"
-                                "<td>%8</td></tr>")
+                                "<td>%8</td><td>%9</td></tr>")
                      .arg(indent, r.number.toHtmlEscaped(), r.name.toHtmlEscaped(), r.fadeIn.toHtmlEscaped(),
-                          r.fadeOut.toHtmlEscaped(), r.follow.toHtmlEscaped(), note, r.hits.toHtmlEscaped());
+                          r.fadeOut.toHtmlEscaped(), r.follow.toHtmlEscaped(), note, r.hits.toHtmlEscaped(),
+                          r.needsWork ? QObject::tr("yes").toHtmlEscaped() : QString());
         }
         h += QStringLiteral("</table>");
     }

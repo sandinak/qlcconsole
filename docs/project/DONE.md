@@ -50,6 +50,12 @@ a D-pad adjust undone by View + B, hold-Y tag + undo, the tag through
 save/load), ui/test/showtreeview `needsWorkInTheTree`. Not on a hot path
 (the solo filter runs in `syncPreview()` only while a solo is set).
 
+### 2026-10-31 — Cue sheet: a Needs work column *(train, after walk)*
+
+The cue sheet (table, CSV, XLSX, PDF) ends with a **Needs work** column
+("yes") for cues tagged from the stage or the cue page (`Cue::needsWork`).
+Test: `CueSheet_Test::needsWorkIsAColumn`.
+
 ### 2026-10-31 — Pad Run MVP: run the show from a game controller *(feat/04-pad-run, 0.4 item 2, pad)*
 
 The controller has two roles: **Tools** (Focus mode, Venue focus,
