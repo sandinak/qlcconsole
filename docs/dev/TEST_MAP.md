@@ -804,6 +804,18 @@ its developer entry. Numbers: TEST_MATRIX.md, "Coverage".
 | M637 | Show Review | Panel lists by severity, filters, Accept/Reopen, Fix runs the footer's fix or the app's jump; footer design entries fold in by id; the readiness dialog shows ids and opens it; the chip counts and re-checks after an edit | ShowReviewPanel_Test (ui/test/showreviewpanel); AppViews_Test::reviewChipCountsAndOpensThePanel | — | covered | med | — |
 | M638 | Group masters (0.4, gm) | A cue at full under a 50 % master is half, LTP untouched; the GM multiplies; an override hit is scaled; overlapping groups multiply; part of a fixture; park / Ignore-GM not scaled; saved and loaded; a deleted group lets go; the Run tab strip and the VC Group master slider; the stock check names them; no allocation added per frame | **GroupMasters_Test** (engine/test/groupmasters, new), **HotPath_Test::aGroupMasterAddsNoAllocationPerFrame**, **CueRunner_Test::theRunTabHasTheGroupMasters**, **VCSlider_Test::groupMasterMovesTheGroup**, ::groupMasterSavesAndLoads, **StockQlcCheck_Test::groupMastersAreNamed** (new) | none | covered | high | — |
 
+## 0.5: Why is this on? (v1)
+
+CHANGELOG **[0.3.1] - Unreleased**, "Why is this on?".
+
+| ID | Feature | Behaviour | Test(s) | Before | After | Risk | Gap / note |
+|---|---|---|---|---|---|---|---|
+| M640 | Tracked from a cue | Cue 1 sets a dimmer, cue 2 doesn't: under cue 2 the answer names cue 2 and layer, "tracked from cue 1"; cue 2's own layer is not tracked; the headline repeats the winner | **WhyOn_Test::aTrackedCueSaysWhereItCameFrom** (new) | none | covered | med | Included and base origins are worded but not driven |
+| M641 | An effect and its depth | An effect fader's Mix at 0.5 over a scene: out half way; the effect wins "at 50 % depth", the scene is replaced | **WhyOn_Test::anEffectAtHalfDepth** (new) | none | covered | med | The fader is made by hand as the effect runner makes it, not by a running effect palette |
+| M642 | Override hit, group master, Park, Grand Master, Blind | An override hit at 0 holds the dimmer over a running cue; a group master at 50 % scales it, then the Grand Master (in that order); Park wins and goes past the Grand Master; the Grand Master scales it; Blind says not sent; nothing set says so | **WhyOn_Test::anOverrideHitPullsItDown**, **::aGroupMasterAtHalf**, **::parkHoldsItPastTheGrandMaster**, **::theGrandMasterScalesIt**, **::blindAndNothingSetsIt** (new) | none | covered | med | — |
+| M643 | HTP fight and the source's starter | Two scenes on an HTP dimmer: the higher wins, the other "lower", top-down order; a VC-started scene names its widget; the real Simple Desk overrides a higher scene | **WhyOn_Test::anHtpFightNamesTheWinner** (new), **WhyOnPanel_Test::theSimpleDeskBeatsAScene** (new) | none | covered | med | — |
+| M644 | The window | Lists the lines (winner bold), the headline; a click goes to what a line names; the same window moves to another light; the channel box; a bare address; Plain words on in a Teaching show; its timer runs only while shown | **WhyOnPanel_Test::listsTheChainAndAClickGoesThere**, **::aBareAddressAndTheChannelPicker**, **::plainWordsInATeachingShow**, **::asksNothingWhileHidden** (new), **WhyOn_Test::aChannelAndABareAddress**, **::simpleWordingDropsTheMergeWords** | none | covered | low | The four right-click menus are not opened offscreen |
+
 ## Data safety across features (old shows, file formats)
 
 | ID | Feature | Behaviour | Test(s) | Before | After | Risk | Gap / note |

@@ -8,6 +8,38 @@ listed there with a fix.
 
 ## Lights
 
+### Why is this light on?
+
+Right-click a fixture in the Lighting Studio plot, the Rig Overview or the
+Fixture Manager, or a channel on the Simple Desk ▸ **Why is this on?** A
+small window names what sets it now, from what the console sent on the
+last frame:
+
+- the **top line wins**; the rest are listed top-down, the highest layer
+  first, each with why it doesn't show (*lower*: on a dimmer the highest
+  level wins; *under*: a later source sets it; *replaced*: an override
+  above writes over it);
+- a Show Tree cue and layer, and where the value came from (*tracked from
+  cue 1.0.1 Verse*, *from included cue*, *back to the base cue*);
+- an **override hit**, an **effect** and its depth while it fades in or
+  out, **Park**, **Highlight**, **Flash**, **Quick focus** and **Refine**,
+  the **Simple Desk**, a **VC slider** or the widget that started a
+  function, the programmer, a Design-mode **preview**;
+- then what changes it on the way out: a **group master** and the
+  **Grand Master** (or that Park or an output rule goes past them), a
+  channel modifier, the input passthrough, and **Blind**, **Blackout** or
+  Teaching's output hold.
+
+Click a line to go to the cue and layer in the Show Tree, the function,
+the Simple Desk, the Virtual Console or the group in the Fixture Manager.
+**Copy** puts the answer on the clipboard as text. **Plain words** leaves
+out HTP and LTP; it's on by default in a Teaching show. The channel box
+picks another channel of the fixture. A **≈** line means the answer is an estimate: it was read
+between frames, or a blend mode can only be approximated.
+
+The window asks again four times a second while it's open; closed, it
+costs the show nothing.
+
 **Nothing comes out of a universe, or only part of a rig lights.**
 Connections → tick **By universe**: every universe with where it goes.
 One reading "not patched" has no output — double-click it (or

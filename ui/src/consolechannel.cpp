@@ -28,6 +28,7 @@
 #include <QMenu>
 #include <QList>
 
+#include "whyonpanel.h"
 #include "qlcchannel.h"
 #include "qlccapability.h"
 
@@ -628,14 +629,36 @@ QIcon ConsoleChannel::colorIcon(const QString& name)
 
 void ConsoleChannel::contextMenuEvent(QContextMenuEvent* e)
 {
-    // Show the preset menu only of it has been created.
-    // Generic dimmer fixtures don't have capabilities and so
-    // they will not have these menus either.
+    /* "Why is this on?" first, then the presets -- only if the preset menu
+       has been created: generic dimmer fixtures don't have capabilities and
+       so they will not have these menus either. A channel with no fixture
+       (the Simple Desk's universe mode) is asked about by its address. */
+    QMenu menu(this);
+    QAction *why = menu.addAction(WhyOnPanel::actionText());
+    why->setObjectName(QStringLiteral("whyOnAction"));
+    const bool bare = m_doc->fixture(m_fixture) == NULL;
+    const QVariant uni = property("whyUniverse");
+    why->setEnabled(!bare || uni.isValid());
     if (m_menu != NULL)
     {
-        m_menu->exec(e->globalPos());
-        e->accept();
+        menu.addSeparator();
+        menu.addActions(m_menu->actions());
     }
+    QAction *picked = menu.exec(e->globalPos());
+    e->accept();
+    if (picked == NULL)
+        return;
+    if (picked == why)
+    {
+        if (bare)
+            WhyOnPanel::showForAddress(m_doc, uni.toUInt(), int(m_chIndex), this, e->globalPos());
+        else
+            WhyOnPanel::showFor(m_doc, m_fixture, m_chIndex, this, e->globalPos());
+        return;
+    }
+    // A preset: its data is the DMX value (slotContextMenuTriggered()).
+    if (picked->data().isValid())
+        slotContextMenuTriggered(picked);
 }
 
 void ConsoleChannel::slotContextMenuTriggered(QAction* action)

@@ -18,6 +18,7 @@
 */
 
 #include <QContextMenuEvent>
+#include <QCursor>
 #include <QApplication>
 #include <QTimer>
 #include <QSettings>
@@ -50,6 +51,7 @@
 #include <QLabel>
 #include <QDialogButtonBox>
 #include <QFormLayout>
+#include "whyonpanel.h"
 #include "monitorproperties.h"
 #include <cmath>
 #include "monitorgraphicsview.h"
@@ -9192,6 +9194,9 @@ void MonitorGraphicsView::populateItemMenu(QMenu *menu, const QString &kind, qui
         if (Monitor::instance() != nullptr)
             Monitor::instance()->locateFixtures(ids);
     });
+    menu->addAction(WhyOnPanel::actionText(), this, [this, fid]() {
+        WhyOnPanel::showFor(m_doc, fid, 0xFFFFFFFF, this, QCursor::pos());
+    })->setObjectName(QStringLiteral("whyOnAction"));
     /* Its universe and address, with the rest of the selection: patched or
        not, they are placed as a block in the Patch dialog and applied at
        once. Moving a patched one is a Design-mode edit. */

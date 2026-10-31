@@ -3137,6 +3137,7 @@ void ProgrammerController::writeChannelLive(quint32 fixtureId, quint32 channel, 
         if (fader.isNull())
         {
             fader = universe->requestFader();
+            fader->setName(QStringLiteral("Programmer"));  // WhyOn names it
             m_liveFadersMap[fxi->universe()] = fader;
         }
     }
