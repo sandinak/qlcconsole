@@ -49,6 +49,8 @@ private slots:
     void customMenu();
     void toggle();
     void flash();
+    void stepButtonsOnATreeListGoThroughTheOneGoPath();
+    void stepButtonsOnAPlainChaserStepDirectly();
     void flashPlaysAHit();
     void toggleRestartsAFinishedOneShot();
     void toggleWithoutAOneShotTurnsOff();

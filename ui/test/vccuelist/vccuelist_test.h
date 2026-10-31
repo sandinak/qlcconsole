@@ -46,6 +46,8 @@ private slots:
     void aGoWaitingForItsBeatShowsOnNext();
     void cuesSkipsAndNextAreShown();
     void showTreeTextColoursAreShown();
+    void showTreeListGoesThroughTheOneGoPath();
+    void plainChaserStillStepsDirectly();
     void manualActivation();
     void keyboardNextPrevious();
     void submasterWorksAfterSliderModeRoundTrip();

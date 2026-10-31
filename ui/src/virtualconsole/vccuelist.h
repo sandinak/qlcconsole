@@ -232,6 +232,15 @@ private:
     /** Stop associated */
     void stopChaser();
 
+    /** A Stop the operator asked for (the button, the web page, a key). */
+    void userStop();
+
+    /** If the chaser is a Show Tree cue list, send @a command (a
+     *  ShowControl::Command; with @a startIndex >= 0, the cue of that row)
+     *  through ShowControl::run(RouteVcCueList) and return true. False for
+     *  any other chaser: the caller steps it directly, as in QLC+ 4. */
+    bool runShowTree(int command, int startIndex = -1);
+
     int getFadeMode() const;
 
 public:
