@@ -127,9 +127,9 @@ ShowSettingsDialog::ShowSettingsDialog(Doc *doc, QWidget *parent)
                                  "against someone who can edit the show file. Keep a copy without "
                                  "the PIN."), pbox);
     note->setWordWrap(true);
-    QFont small = note->font();
-    small.setPointSizeF(small.pointSizeF() * 0.9);
-    note->setFont(small);
+    QFont tiny = note->font();
+    tiny.setPointSizeF(tiny.pointSizeF() * 0.9);
+    note->setFont(tiny);
     pl->addWidget(note);
     root->addWidget(pbox);
 

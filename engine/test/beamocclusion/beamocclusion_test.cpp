@@ -818,7 +818,8 @@ void BeamOcclusion_Test::aHundredHeadsAndFiftyFeaturesFitATick()
     QVERIFY(blocked > 0);
     // A tick is 20 ms; line of sight must be a small part of it, even in a
     // debug build.
-    QVERIFY2(perTickMs < 4.0, qPrintable(QString("%1 ms a tick").arg(perTickMs)));
+    // QLC_SLOW_BUILD: CI's instrumented (gcov) leg, 3x slower; normal builds keep 4 ms.
+    QVERIFY2(perTickMs < (qEnvironmentVariableIsSet("QLC_SLOW_BUILD") ? 12.0 : 4.0), qPrintable(QString("%1 ms a tick").arg(perTickMs)));
 }
 
 QTEST_GUILESS_MAIN(BeamOcclusion_Test)

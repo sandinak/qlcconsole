@@ -353,7 +353,7 @@ static void drawLabel(QPainter &p, const QRectF &mm, qreal dpm, const PatchList:
        a network fixture's own line takes some from the large one. */
     const bool net = !l.network.isEmpty();
     const qreal big = net ? 0.40 : 0.46;
-    const qreal small = (1.0 - big) / (net ? 3 : 2);
+    const qreal tiny = (1.0 - big) / (net ? 3 : 2);
     qreal y = inner.top();
     auto box = [&](qreal share) {
         const QRectF r(inner.left(), y, inner.width(), inner.height() * share);
@@ -362,16 +362,16 @@ static void drawLabel(QPainter &p, const QRectF &mm, qreal dpm, const PatchList:
     };
     QRectF r = box(big);
     drawLine(p, r, text, true, r.height() * 0.82, r.height() * 0.4);
-    r = box(small);
+    r = box(tiny);
     const QString detail = l.universe.isEmpty() ? l.detail
                                                 : QStringLiteral("%1 · %2").arg(l.detail, l.universe);
     drawLine(p, r, detail, false, r.height() * 0.82, r.height() * 0.5);
     if (net)
     {
-        r = box(small);
+        r = box(tiny);
         drawLine(p, r, l.network, false, r.height() * 0.82, r.height() * 0.5);
     }
-    r = box(small);
+    r = box(tiny);
     drawLine(p, r, l.mount, false, r.height() * 0.82, r.height() * 0.5);
 }
 

@@ -32,7 +32,7 @@
 
 #include "scenery_test.h"
 
-static bool near(double a, double b, double eps = 1e-3) { return qAbs(a - b) < eps; }
+static bool nearPt(double a, double b, double eps = 1e-3) { return qAbs(a - b) < eps; }
 
 /* A 10 m cyc, 6 m tall, its bottom edge centred at (6, 0.5). */
 static void cyc(Scenery &s)
@@ -49,15 +49,15 @@ void Scenery_Test::aFlatCycRunsAcrossTheStageFacingDownstage()
     cyc(s);
     QCOMPARE(s.kind(), int(Scenery::Cyclorama));
     QCOMPARE(Scenery::kindName(s.kind()), QString("Cyclorama"));
-    QVERIFY(near(s.facing().x(), 0.0) && near(s.facing().y(), 1.0));   // toward the audience
+    QVERIFY(nearPt(s.facing().x(), 0.0) && nearPt(s.facing().y(), 1.0));   // toward the audience
     const QVector3D left = s.pointAt(-1.0, 0.0), right = s.pointAt(1.0, 6.0);
-    QVERIFY(near(left.x(), 1.0) && near(left.y(), 0.5));
-    QVERIFY(near(right.x(), 11.0) && near(right.y(), 0.5) && near(right.z(), 6.0));
+    QVERIFY(nearPt(left.x(), 1.0) && nearPt(left.y(), 0.5));
+    QVERIFY(nearPt(right.x(), 11.0) && nearPt(right.y(), 0.5) && nearPt(right.z(), 6.0));
     const QList<QPointF> line = s.baseLine(4);
     QCOMPARE(line.size(), 5);
-    QVERIFY(near(line.at(2).x(), 6.0) && near(line.at(2).y(), 0.5));
+    QVERIFY(nearPt(line.at(2).x(), 6.0) && nearPt(line.at(2).y(), 0.5));
     // Clamped past its ends.
-    QVERIFY(near(s.pointAt(3.0, 0.0).x(), 11.0));
+    QVERIFY(nearPt(s.pointAt(3.0, 0.0).x(), 11.0));
 }
 
 void Scenery_Test::theBowPullsTheMiddleUpstage()
@@ -65,12 +65,12 @@ void Scenery_Test::theBowPullsTheMiddleUpstage()
     Scenery s(0);
     cyc(s);
     s.setBow(1.5f);
-    QVERIFY(near(s.pointAt(0.0, 0.0).y(), -1.0));       // 1.5 m further upstage
-    QVERIFY(near(s.pointAt(1.0, 0.0).y(), 0.5));        // the ends stay put
-    QVERIFY(near(s.pointAt(0.5, 0.0).y(), 0.5 - 1.5 * 0.75));
+    QVERIFY(nearPt(s.pointAt(0.0, 0.0).y(), -1.0));       // 1.5 m further upstage
+    QVERIFY(nearPt(s.pointAt(1.0, 0.0).y(), 0.5));        // the ends stay put
+    QVERIFY(nearPt(s.pointAt(0.5, 0.0).y(), 0.5 - 1.5 * 0.75));
     s.setBow(-2.0f);                                    // and toward the house
-    QVERIFY(near(s.pointAt(0.0, 0.0).y(), 2.5));
-    QVERIFY(near(s.normalAt(0.0).y(), 1.0));            // still facing it
+    QVERIFY(nearPt(s.pointAt(0.0, 0.0).y(), 2.5));
+    QVERIFY(nearPt(s.normalAt(0.0).y(), 1.0));            // still facing it
 }
 
 void Scenery_Test::rotationTurnsTheSheet()
@@ -78,8 +78,8 @@ void Scenery_Test::rotationTurnsTheSheet()
     Scenery s(0);
     cyc(s);
     s.setRotation(90.0f);                               // a sheet running up/down stage
-    QVERIFY(near(s.pointAt(1.0, 0.0).x(), 6.0) && near(s.pointAt(1.0, 0.0).y(), 5.5));
-    QVERIFY(near(s.facing().x(), -1.0) && near(s.facing().y(), 0.0));
+    QVERIFY(nearPt(s.pointAt(1.0, 0.0).x(), 6.0) && nearPt(s.pointAt(1.0, 0.0).y(), 5.5));
+    QVERIFY(nearPt(s.facing().x(), -1.0) && nearPt(s.facing().y(), 0.0));
 }
 
 void Scenery_Test::aBeamStopsWhereItMeetsTheSheet()
@@ -89,12 +89,12 @@ void Scenery_Test::aBeamStopsWhereItMeetsTheSheet()
     // From a head 5 m downstage at 3 m, straight upstage.
     double t = 0.0;
     QVERIFY(s.rayHit(QVector3D(6.0f, 5.5f, 3.0f), QVector3D(0.0f, -1.0f, 0.0f), t));
-    QVERIFY(near(t, 5.0));
+    QVERIFY(nearPt(t, 5.0));
     // Tilted down a little, still on the cloth.
     const QVector3D d = QVector3D(0.2f, -1.0f, -0.3f).normalized();
     QVERIFY(s.rayHit(QVector3D(6.0f, 5.5f, 3.0f), d, t));
     const QVector3D at = QVector3D(6.0f, 5.5f, 3.0f) + d * float(t);
-    QVERIFY(near(at.y(), 0.5) && at.z() > 1.0f && at.z() < 3.0f);
+    QVERIFY(nearPt(at.y(), 0.5) && at.z() > 1.0f && at.z() < 3.0f);
 }
 
 void Scenery_Test::aBeamThatPassesAboveBesideOrAwayMisses()
@@ -120,7 +120,7 @@ void Scenery_Test::aBowedCycIsHitFurtherBackInTheMiddle()
     double mid = 0.0, end = 0.0;
     QVERIFY(s.rayHit(QVector3D(6.0f, 5.5f, 3.0f), QVector3D(0.0f, -1.0f, 0.0f), mid));
     QVERIFY(s.rayHit(QVector3D(10.9f, 5.5f, 3.0f), QVector3D(0.0f, -1.0f, 0.0f), end));
-    QVERIFY2(near(mid, 6.5, 0.05), qPrintable(QString::number(mid)));   // the bow, 1.5 m back
+    QVERIFY2(nearPt(mid, 6.5, 0.05), qPrintable(QString::number(mid)));   // the bow, 1.5 m back
     QVERIFY2(end < 5.2, qPrintable(QString::number(end)));
 }
 
@@ -135,17 +135,17 @@ void Scenery_Test::aUWallRunsRoundItsFront()
     s.setWidth(0.9144f);
     s.setDepth(1.2192f);
     const double r = 0.4572, side = 1.2192 - r;
-    QVERIFY(near(s.pointAt(-1.0, 0.0).x(), 5.0 - r) && near(s.pointAt(-1.0, 0.0).y(), 5.0));
-    QVERIFY(near(s.pointAt(1.0, 0.0).x(), 5.0 + r) && near(s.pointAt(1.0, 0.0).y(), 5.0));
+    QVERIFY(nearPt(s.pointAt(-1.0, 0.0).x(), 5.0 - r) && nearPt(s.pointAt(-1.0, 0.0).y(), 5.0));
+    QVERIFY(nearPt(s.pointAt(1.0, 0.0).x(), 5.0 + r) && nearPt(s.pointAt(1.0, 0.0).y(), 5.0));
     // The front of the curve is the middle, toward the audience.
-    QVERIFY(near(s.pointAt(0.0, 0.0).x(), 5.0) && near(s.pointAt(0.0, 0.0).y(), 5.0 + side + r));
-    QVERIFY(near(s.normalAt(0.0).y(), 1.0));
+    QVERIFY(nearPt(s.pointAt(0.0, 0.0).x(), 5.0) && nearPt(s.pointAt(0.0, 0.0).y(), 5.0 + side + r));
+    QVERIFY(nearPt(s.normalAt(0.0).y(), 1.0));
     // Outward all the way round: off the stage-right side, stage right.
-    QVERIFY(near(s.normalAt(-0.95).x(), -1.0));
-    QVERIFY(near(s.normalAt(0.95).x(), 1.0));
+    QVERIFY(nearPt(s.normalAt(-0.95).x(), -1.0));
+    QVERIFY(nearPt(s.normalAt(0.95).x(), 1.0));
     // A face is half the thickness off the line.
     s.setThickness(0.1016f);
-    QVERIFY(near(s.pointAt(0.0, 0.0, 0.0508).y(), 5.0 + side + r + 0.0508));
+    QVERIFY(nearPt(s.pointAt(0.0, 0.0, 0.0508).y(), 5.0 + side + r + 0.0508));
     QVERIFY(s.segments() > 16);
 }
 
@@ -162,12 +162,12 @@ void Scenery_Test::aWallIsMetOnItsFaceAndOnItsTop()
     QVector3D n;
     // Level, from downstage: its front face, 5 cm in front of the line.
     QVERIFY(s.rayHit(QVector3D(0.0f, 2.0f, 0.25f), QVector3D(0.0f, -1.0f, 0.0f), t, 1e9, 16, &n));
-    QVERIFY2(near(t, 1.95), qPrintable(QString::number(t)));
-    QVERIFY(near(n.y(), 1.0));
+    QVERIFY2(nearPt(t, 1.95), qPrintable(QString::number(t)));
+    QVERIFY(nearPt(n.y(), 1.0));
     // Straight down on it: its top.
     QVERIFY(s.rayHit(QVector3D(0.3f, 0.02f, 3.0f), QVector3D(0.0f, 0.0f, -1.0f), t, 1e9, 16, &n));
-    QVERIFY(near(t, 2.5));
-    QVERIFY(near(n.z(), 1.0));
+    QVERIFY(nearPt(t, 2.5));
+    QVERIFY(nearPt(n.z(), 1.0));
     // Down just past its face: misses.
     QVERIFY(!s.rayHit(QVector3D(0.3f, 0.08f, 3.0f), QVector3D(0.0f, 0.0f, -1.0f), t));
 }
@@ -219,12 +219,12 @@ void Scenery_Test::aProsceniumIsTwoPiersAndAHeader()
     QVERIFY(!s.rayHit(QVector3D(7.0f, 15.0f, 2.0f), QVector3D(0.0f, -1.0f, 0.0f), t));
     // On a pier: its front face, 20 cm in front of the line.
     QVERIFY(s.rayHit(QVector3D(1.0f, 15.0f, 2.0f), QVector3D(0.0f, -1.0f, 0.0f), t, 1e9, 16, &n));
-    QVERIFY2(near(t, 6.8), qPrintable(QString::number(t)));
+    QVERIFY2(nearPt(t, 6.8), qPrintable(QString::number(t)));
     // On the header, above the opening.
     QVERIFY(s.rayHit(QVector3D(7.0f, 15.0f, 6.0f), QVector3D(0.0f, -1.0f, 0.0f), t));
     // Up under the header, from the stage: its underside, at 5 m.
     QVERIFY(s.rayHit(QVector3D(7.0f, 8.0f, 1.0f), QVector3D(0.0f, 0.0f, 1.0f), t, 1e9, 16, &n));
-    QVERIFY(near(t, 4.0) && near(n.z(), -1.0));
+    QVERIFY(nearPt(t, 4.0) && nearPt(n.z(), -1.0));
 
     QByteArray buf;
     QXmlStreamWriter w(&buf);
@@ -233,7 +233,7 @@ void Scenery_Test::aProsceniumIsTwoPiersAndAHeader()
     r.readNextStartElement();
     Scenery back(0);
     QVERIFY(back.loadXML(r));
-    QVERIFY(near(back.openingWidth(), 10.0) && near(back.openingHeight(), 5.0));
+    QVERIFY(nearPt(back.openingWidth(), 10.0) && nearPt(back.openingHeight(), 5.0));
 }
 
 /* Q99: a door in a wall -- light through it, the wall beside and above it. */
@@ -271,8 +271,8 @@ void Scenery_Test::aDoorIsAnOpeningInAWall()
     r.readNextStartElement();
     Scenery back(0);
     QVERIFY(back.loadXML(r));
-    QVERIFY(back.hasDoor() && near(back.doorWidth(), 1.0) && near(back.doorHeight(), 2.1)
-            && near(back.doorAt(), 2.0));
+    QVERIFY(back.hasDoor() && nearPt(back.doorWidth(), 1.0) && nearPt(back.doorHeight(), 2.1)
+            && nearPt(back.doorAt(), 2.0));
 
     // No door: nothing saved for it. A proscenium never has one.
     s.setDoorWidth(0.0f);
@@ -312,16 +312,16 @@ void Scenery_Test::xmlRoundTripAndStorage()
     QVERIFY(back.loadXML(r));
     QCOMPARE(back.id(), quint32(7));
     QCOMPARE(back.name(), QString("Upstage Cyc"));
-    QVERIFY(near(back.originX(), 6.0) && near(back.originY(), 0.5));
-    QVERIFY(near(back.width(), 10.0) && near(back.height(), 6.0) && near(back.bottom(), 0.3));
-    QVERIFY(near(back.rotation(), 5.0) && near(back.bow(), 1.2));
+    QVERIFY(nearPt(back.originX(), 6.0) && nearPt(back.originY(), 0.5));
+    QVERIFY(nearPt(back.width(), 10.0) && nearPt(back.height(), 6.0) && nearPt(back.bottom(), 0.3));
+    QVERIFY(nearPt(back.rotation(), 5.0) && nearPt(back.bow(), 1.2));
     QCOMPARE(back.color(), QColor("#ddeeff"));
     QVERIFY(back.locked());
     QCOMPARE(back.layerId(), quint32(3));
     QCOMPARE(back.groupId(), quint32(4));
     QCOMPARE(back.kind(), int(Scenery::Wall));
     QCOMPARE(back.outline(), int(Scenery::RoundedU));
-    QVERIFY(near(back.depth(), 1.25) && near(back.thickness(), 0.1));
+    QVERIFY(nearPt(back.depth(), 1.25) && nearPt(back.thickness(), 0.1));
     QCOMPARE(back.state(), int(Scenery::Open));
 
     QXmlStreamReader wrong(QByteArray("<Stand ID=\"1\"/>"));
@@ -378,7 +378,7 @@ void Scenery_Test::aDrivenCurtainOpensAsItsChannelMoves()
     s.setState(Scenery::Open);
     QCOMPARE(s.spans(pose), s.spans());
     QCOMPARE(s.spans(pose).size(), 2);
-    QVERIFY(near(s.spans(pose).at(1).first, 0.8));          // 8 m of 10 m: the halves at +-0.8
+    QVERIFY(nearPt(s.spans(pose).at(1).first, 0.8));          // 8 m of 10 m: the halves at +-0.8
     s.setState(Scenery::Closed);
     // On the way: the halves part from the middle, as far as the channel says.
     double last = -1.0;
@@ -387,8 +387,8 @@ void Scenery_Test::aDrivenCurtainOpensAsItsChannelMoves()
         pose.open = v / 255.0;
         const QList<QPair<double, double> > sp = s.spans(pose);
         QCOMPARE(sp.size(), 2);
-        QVERIFY(near(sp.at(0).second, -sp.at(1).first));     // centred
-        QVERIFY(near(sp.at(1).first, 0.8 * pose.open));
+        QVERIFY(nearPt(sp.at(0).second, -sp.at(1).first));     // centred
+        QVERIFY(nearPt(sp.at(1).first, 0.8 * pose.open));
         QVERIFY(sp.at(1).first > last);                       // opening as it rises
         last = sp.at(1).first;
     }
@@ -412,7 +412,7 @@ void Scenery_Test::flyingTakesItUpAndOut()
     pose.fly = 0.5;
     QList<Scenery::Piece> pc = s.pieces(pose);
     QCOMPARE(pc.size(), 1);
-    QVERIFY(near(pc.first().z0, 3.0) && near(pc.first().z1, 9.0));   // half its 6 m up
+    QVERIFY(nearPt(pc.first().z0, 3.0) && nearPt(pc.first().z1, 9.0));   // half its 6 m up
     double t = 0.0;
     // Under it now: a level beam at 2 m goes through where it hung.
     QVERIFY(!s.rayHit(QVector3D(6.0f, 5.5f, 2.0f), QVector3D(0.0f, -1.0f, 0.0f), t, 1e9, 16, nullptr, &pose));
@@ -455,11 +455,11 @@ void Scenery_Test::theChannelsAreFoundByName()
     v[0] = char(255);
     QCOMPARE(Scenery::poseFromValues(open, v).open, 1.0);
     v[0] = char(51);
-    QVERIFY(near(Scenery::poseFromValues(open, v).open, 0.2));
+    QVERIFY(nearPt(Scenery::poseFromValues(open, v).open, 0.2));
     QByteArray w(3, char(0));
     w[0] = char(128); w[1] = char(0); w[2] = char(255);
     const Scenery::Pose p = Scenery::poseFromValues(fine, w);
-    QVERIFY(near(p.open, 32768.0 / 65535.0, 1e-6));
+    QVERIFY(nearPt(p.open, 32768.0 / 65535.0, 1e-6));
     QCOMPARE(p.fly, 1.0);
     // Values that are not there (a fixture not yet written) are closed and in.
     QCOMPARE(Scenery::poseFromValues(fine, QByteArray()).open, 0.0);

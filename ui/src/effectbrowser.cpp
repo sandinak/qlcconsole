@@ -171,9 +171,9 @@ public:
                 QIcon(EffectOrigin::paletteMark()).paint(p, mark);
             }
         }
-        QFont small = opt.font;
-        small.setPointSizeF(qMax(8.0, small.pointSizeF() - 1.0));
-        p->setFont(small);
+        QFont tiny = opt.font;
+        tiny.setPointSizeF(qMax(8.0, tiny.pointSizeF() - 1.0));
+        p->setFont(tiny);
         QColor dim = text;
         dim.setAlpha(150);
         p->setPen(dim);
@@ -181,7 +181,7 @@ public:
         // Made from another effect: the grey line says which (hover: how).
         const QString line = e.basedOn.isEmpty() ? e.description : e.basedOn;
         p->drawText(descRect, Qt::AlignLeft | Qt::AlignVCenter,
-                    QFontMetrics(small).elidedText(line, Qt::ElideRight, descRect.width()));
+                    QFontMetrics(tiny).elidedText(line, Qt::ElideRight, descRect.width()));
         p->restore();
     }
 

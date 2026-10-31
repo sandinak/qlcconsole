@@ -334,9 +334,9 @@ private:
 
 namespace
 {
-QString chipStyle(const QString &background, bool small)
+QString chipStyle(const QString &background, bool tiny)
 {
-    return small ? QStringLiteral("QLabel { color: white; background: %1; padding: 0px 4px; border-radius: 3px; }")
+    return tiny ? QStringLiteral("QLabel { color: white; background: %1; padding: 0px 4px; border-radius: 3px; }")
                    .arg(background)
                  : QStringLiteral("QLabel { color: white; background: %1; padding: 1px 6px; }").arg(background);
 }
@@ -732,15 +732,15 @@ void CueRunner::buildPanelLayout()
     QHBoxLayout *sec = new QHBoxLayout(m_secondary);
     sec->setContentsMargins(0, 0, 0, 0);
     sec->setSpacing(3);
-    QList<QToolButton *> small { m_back, m_stop };
+    QList<QToolButton *> tiny { m_back, m_stop };
     if (!compact)
-        small = { m_back, m_subBack, m_pause, m_stop };
+        tiny = { m_back, m_subBack, m_pause, m_stop };
     for (QToolButton *b : { m_subBack, m_back, m_pause, m_stop })
     {
         b->setParent(m_secondary);
         b->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-        b->setVisible(small.contains(b));
-        if (small.contains(b))
+        b->setVisible(tiny.contains(b));
+        if (tiny.contains(b))
             sec->addWidget(b);
     }
     bv->addWidget(m_secondary);

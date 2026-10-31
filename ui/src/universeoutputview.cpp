@@ -210,14 +210,14 @@ void UniverseOutputView::paintEvent(QPaintEvent *)
         ++nth;
     }
 
-    QFont small = font();
-    small.setPointSizeF(qMax(6.5, small.pointSizeF() - 3.0));
+    QFont tiny = font();
+    tiny.setPointSizeF(qMax(6.5, tiny.pointSizeF() - 3.0));
     QFont val = font();
     val.setPointSizeF(qMax(7.5, val.pointSizeF() - 1.5));
     val.setBold(true);
 
     // Row numbers down the side.
-    p.setFont(small);
+    p.setFont(tiny);
     p.setPen(QColor(120, 124, 134));
     for (int r = 0; r < 512 / COLS; ++r)
         p.drawText(QRect(0, TOP + r * CELL_H, LEFT - 4, CELL_H), Qt::AlignRight | Qt::AlignVCenter,
@@ -241,7 +241,7 @@ void UniverseOutputView::paintEvent(QPaintEvent *)
         {
             p.fillRect(QRect(cell.left(), cell.top(), 2, cell.height()), QColor(255, 190, 60));
         }
-        p.setFont(small);
+        p.setFont(tiny);
         p.setPen(QColor(130, 134, 146));
         p.drawText(cell.adjusted(2, 0, 0, 0), Qt::AlignLeft | Qt::AlignTop, QString::number(ch + 1));
         p.setFont(val);
@@ -249,7 +249,7 @@ void UniverseOutputView::paintEvent(QPaintEvent *)
         p.drawText(cell.adjusted(0, 0, -2, 0), Qt::AlignRight | Qt::AlignBottom, QString::number(v));
     }
     // Names last, on top, where each fixture starts.
-    p.setFont(small);
+    p.setFont(tiny);
     for (int ch = 0; ch < 512; ++ch)
     {
         if (startName.at(ch).isEmpty())

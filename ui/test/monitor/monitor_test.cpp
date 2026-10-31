@@ -10266,7 +10266,7 @@ void Monitor_Test::aLineTargetIsEditedInTheStudio()
     line->makeLine();                              // (3,3) .. (7,3)
 
     auto world = [&]() { return props->targetLinePoints(line); };
-    auto near = [](const QVector3D &a, const QVector3D &b) { return (a - b).length() < 0.03f; };
+    auto nearPt = [](const QVector3D &a, const QVector3D &b) { return (a - b).length() < 0.03f; };
     auto str = [](const QVector3D &v) {
         return QString("(%1, %2, %3)").arg(double(v.x()), 0, 'f', 2)
                                       .arg(double(v.y()), 0, 'f', 2).arg(double(v.z()), 0, 'f', 2);
@@ -10308,40 +10308,40 @@ void Monitor_Test::aLineTargetIsEditedInTheStudio()
 
     // 1. Drag the right-hand end up and right.
     drag(vpOf(7.0f, 3.0f), vpOf(8.0f, 4.0f));
-    QVERIFY2(near(world().last(), QVector3D(8, 4, 0)), qPrintable(str(world().last())));
-    QVERIFY2(near(world().first(), QVector3D(3, 3, 0)), qPrintable(str(world().first())));
+    QVERIFY2(nearPt(world().last(), QVector3D(8, 4, 0)), qPrintable(str(world().last())));
+    QVERIFY2(nearPt(world().first(), QVector3D(3, 3, 0)), qPrintable(str(world().first())));
     // Re-centred: the target's own point is half-way along again.
-    QVERIFY(near(line->position(), QVector3D(5.5f, 3.5f, 0)));
+    QVERIFY(nearPt(line->position(), QVector3D(5.5f, 3.5f, 0)));
 
     // ... and undone.
     view.undoLastMove();
-    QVERIFY2(near(world().last(), QVector3D(7, 3, 0)), qPrintable(str(world().last())));
-    QVERIFY(near(line->position(), QVector3D(5, 3, 0)));
+    QVERIFY2(nearPt(world().last(), QVector3D(7, 3, 0)), qPrintable(str(world().last())));
+    QVERIFY(nearPt(line->position(), QVector3D(5, 3, 0)));
 
     // 2. Alt on an end stretches it along the line, whatever way the mouse goes.
     ti = view.m_targetItems.value(line->id(), nullptr);
     drag(vpOf(7.0f, 3.0f), vpOf(8.0f, 4.0f), Qt::AltModifier);
-    QVERIFY2(near(world().last(), QVector3D(8, 3, 0)), qPrintable(str(world().last())));
+    QVERIFY2(nearPt(world().last(), QVector3D(8, 3, 0)), qPrintable(str(world().last())));
     view.undoLastMove();
 
     // 3. Double-click the curve off the centre: a point there.
     ti = view.m_targetItems.value(line->id(), nullptr);
     QTest::mouseDClick(view.viewport(), Qt::LeftButton, Qt::NoModifier, vpOf(6.0f, 3.0f));
     QCOMPARE(line->linePoints().size(), 3);
-    QVERIFY2(near(world().at(1), QVector3D(6, 3, 0)), qPrintable(str(world().at(1))));
+    QVERIFY2(nearPt(world().at(1), QVector3D(6, 3, 0)), qPrintable(str(world().at(1))));
     // Bend it by that point: a drag of the mid handle.
     drag(vpOf(6.0f, 3.0f), vpOf(6.0f, 2.0f));
-    QVERIFY2(near(world().at(1), QVector3D(6, 2, 0)), qPrintable(str(world().at(1))));
-    QVERIFY(near(world().first(), QVector3D(3, 3, 0)) && near(world().last(), QVector3D(7, 3, 0)));
+    QVERIFY2(nearPt(world().at(1), QVector3D(6, 2, 0)), qPrintable(str(world().at(1))));
+    QVERIFY(nearPt(world().first(), QVector3D(3, 3, 0)) && nearPt(world().last(), QVector3D(7, 3, 0)));
     // Double-click the mid point: gone.
     QTest::mouseDClick(view.viewport(), Qt::LeftButton, Qt::NoModifier, vpOf(6.0f, 2.0f));
     QCOMPARE(line->linePoints().size(), 2);
     // Undo puts it back where it was bent to; undo again unbends; again un-adds.
     view.undoLastMove();
     QCOMPARE(line->linePoints().size(), 3);
-    QVERIFY(near(world().at(1), QVector3D(6, 2, 0)));
+    QVERIFY(nearPt(world().at(1), QVector3D(6, 2, 0)));
     view.undoLastMove();
-    QVERIFY(near(world().at(1), QVector3D(6, 3, 0)));
+    QVERIFY(nearPt(world().at(1), QVector3D(6, 3, 0)));
     view.undoLastMove();
     QCOMPARE(line->linePoints().size(), 2);
 
@@ -10352,10 +10352,10 @@ void Monitor_Test::aLineTargetIsEditedInTheStudio()
     // 5. Drag the body: the whole line goes, its shape with it.
     view.m_scene->clearSelection();
     drag(vpOf(4.0f, 3.0f), vpOf(4.0f, 5.0f));
-    QVERIFY2(near(line->position(), QVector3D(5, 5, 0)), qPrintable(str(line->position())));
-    QVERIFY(near(world().first(), QVector3D(3, 5, 0)) && near(world().last(), QVector3D(7, 5, 0)));
+    QVERIFY2(nearPt(line->position(), QVector3D(5, 5, 0)), qPrintable(str(line->position())));
+    QVERIFY(nearPt(world().first(), QVector3D(3, 5, 0)) && nearPt(world().last(), QVector3D(7, 5, 0)));
     view.undoLastMove();
-    QVERIFY2(near(line->position(), QVector3D(5, 3, 0)), qPrintable(str(line->position())));
+    QVERIFY2(nearPt(line->position(), QVector3D(5, 3, 0)), qPrintable(str(line->position())));
 
     // 6. From the front, an end drags in height.
     view.setViewPOV(MonitorGraphicsView::PovFront);
@@ -10365,8 +10365,8 @@ void Monitor_Test::aLineTargetIsEditedInTheStudio()
         return view.mapFromScene(view.projectMm(double(x) * 1000.0, 3000.0, double(z) * 1000.0));
     };
     drag(vpFront(7.0f, 0.0f), vpFront(7.0f, 2.0f));
-    QVERIFY2(near(world().last(), QVector3D(7, 3, 2)), qPrintable(str(world().last())));
-    QVERIFY(near(world().first(), QVector3D(3, 3, 0)));
+    QVERIFY2(nearPt(world().last(), QVector3D(7, 3, 2)), qPrintable(str(world().last())));
+    QVERIFY(nearPt(world().first(), QVector3D(3, 3, 0)));
 
     // Outside Design mode a line does not edit: a double-click on it adds
     // nothing, and its handles do not drag.
@@ -16365,7 +16365,7 @@ void Monitor_Test::theGpuDrawsWhatTheCpuDraws()
 
         // Per pixel: how far apart, as the brightest channel's difference.
         qint64 total = 0;
-        int far = 0, lit = 0;
+        int farPt = 0, lit = 0;
         for (int y = 0; y < cpu.height(); ++y)
         {
             const QRgb *a = reinterpret_cast<const QRgb *>(cpu.constScanLine(y));
@@ -16376,13 +16376,13 @@ void Monitor_Test::theGpuDrawsWhatTheCpuDraws()
                               qMax(qAbs(qGreen(a[x]) - qGreen(b[x])), qAbs(qBlue(a[x]) - qBlue(b[x]))));
                 total += d;
                 if (d > 24)
-                    ++far;
+                    ++farPt;
                 if (qBlue(a[x]) > 90)
                     ++lit;
             }
         }
         const double mean = double(total) / (cpu.width() * cpu.height());
-        const double farShare = double(far) / (cpu.width() * cpu.height());
+        const double farShare = double(farPt) / (cpu.width() * cpu.height());
         qInfo() << "quality" << quality << "mean difference" << mean
                 << "pixels far apart" << farShare << "lit pixels" << lit;
         QVERIFY2(lit > 2000, "the scene isn't lit: nothing to compare");
@@ -21543,7 +21543,7 @@ void Monitor_Test::aBigPixelRigPaintsInGoodTime()
             qInfo().noquote() << QString("plane %1 (%2/%3), quality %4: slowest paint %5 ms")
                                  .arg(int(plane)).arg(cam.az).arg(cam.el).arg(quality).arg(slowest)
                               + QString(" (first %1 ms)").arg(first);
-            QVERIFY2(slowest < 1500, qPrintable(QString("plane %1, quality %2: a paint took %3 ms")
+            QVERIFY2(slowest < (qEnvironmentVariableIsSet("QLC_SLOW_BUILD") ? 6000 : 1500),   // gcov leg: 4x qPrintable(QString("plane %1, quality %2: a paint took %3 ms")
                                                 .arg(int(plane)).arg(quality).arg(slowest)));
         }
 }
@@ -22003,13 +22003,13 @@ void Monitor_Test::aLanternHangsOffATowerAndGlowsAllRound()
     QCOMPARE(omni, 1);
 
     // Red on what is near; next to nothing six metres away.
-    const QVector3D near = at + QVector3D(0.5f, 0.0f, 0.0f), far = at + QVector3D(6.0f, 0.0f, 0.0f);
+    const QVector3D nearPt = at + QVector3D(0.5f, 0.0f, 0.0f), farPt = at + QVector3D(6.0f, 0.0f, 0.0f);
     const QVector3D facingBack(-1, 0, 0);
-    const QVector3D litNear = view.beamLightAt(near, facingBack), litFar = view.beamLightAt(far, facingBack);
+    const QVector3D litNear = view.beamLightAt(nearPt, facingBack), litFar = view.beamLightAt(farPt, facingBack);
     QVERIFY2(litNear.x() > 0.0f && litNear.y() == 0.0f, qPrintable(QString("%1 %2").arg(litNear.x()).arg(litNear.y())));
     QVERIFY2(litFar.x() < litNear.x() / 50.0f, qPrintable(QString("%1 vs %2").arg(litFar.x()).arg(litNear.x())));
     // Turned away from it, nothing.
-    QCOMPARE(view.beamLightAt(near, QVector3D(1, 0, 0)).x(), 0.0f);
+    QCOMPARE(view.beamLightAt(nearPt, QVector3D(1, 0, 0)).x(), 0.0f);
 }
 
 /* Hangers are rigging: put one on a tower, copy it to every other tower
@@ -22533,17 +22533,17 @@ void Monitor_Test::layersListsEveryGroupAFixtureIsIn()
     t2->setOrigin(QVector3D(6.0f, 3.0f, 2.0f));
     t2->setDirection(QPointF(1.0, 0.0));
     t2->setLength(2.4f);
-    Fixture *far = new Fixture(doc);
-    far->setName("FART-SL-1");
-    far->setFixtureDefinition(def, def->modes().first());
-    far->setUniverse(1);                // 3 x 165 fill most of universe 1
-    far->setAddress(0);
-    QVERIFY(doc->addFixture(far));
-    props->setFixturePosition(far->id(), 0, 0, QVector3D(0, 0, 0));
+    Fixture *farPt = new Fixture(doc);
+    farPt->setName("FART-SL-1");
+    farPt->setFixtureDefinition(def, def->modes().first());
+    farPt->setUniverse(1);                // 3 x 165 fill most of universe 1
+    farPt->setAddress(0);
+    QVERIFY(doc->addFixture(farPt));
+    props->setFixturePosition(farPt->id(), 0, 0, QVector3D(0, 0, 0));
     FixtureRigProps rp;
     rp.trussId = t2->id();
     rp.trussOffset = 0.5f;
-    props->setFixtureRigProps(far->id(), rp);
+    props->setFixtureRigProps(farPt->id(), rp);
     {
         QWidget parent;
         Monitor mon(&parent, doc);
@@ -22556,7 +22556,7 @@ void Monitor_Test::layersListsEveryGroupAFixtureIsIn()
                                                  { { "RGB", "T1-CW RGB" }, { "W", "T1-CW W" } });
         // Across the two trusses: local to neither.
         const QList<FixtureGroup *> wide =
-            CreateFixtureGroup::createByHeadKind(doc, { bars[1]->id(), far->id() },
+            CreateFixtureGroup::createByHeadKind(doc, { bars[1]->id(), farPt->id() },
                                                  { { "RGB", "Wide RGB" } });
         QCOMPARE(mine.size(), 2);
         QCOMPARE(wide.size(), 1);
@@ -23464,7 +23464,7 @@ void Monitor_Test::theCrosshairsSayWhereThePointerIs()
         StructureStudioView view(doc, StructureStudioView::StageKind, 0);
         view.resize(900, 640);
         view.reload();
-        auto near = [](const QVector3D &a, const QVector3D &b, float tol) {
+        auto nearPt = [](const QVector3D &a, const QVector3D &b, float tol) {
             return (a - b).length() < tol;
         };
 
@@ -23478,14 +23478,14 @@ void Monitor_Test::theCrosshairsSayWhereThePointerIs()
         QVector3D w = view.worldAt(view.w2s(top), &known, &onSurface);
         QVERIFY(onSurface);
         QCOMPARE(known, 7);
-        QVERIFY2(near(w, top, 0.06f), qPrintable(QString("read %1,%2,%3")
+        QVERIFY2(nearPt(w, top, 0.06f), qPrintable(QString("read %1,%2,%3")
                  .arg(double(w.x())).arg(double(w.y())).arg(double(w.z()))));
 
         // Over nothing at an angle: the floor under the pointer.
         const QVector3D floor(6.0f, 4.0f, 0.0f);
         w = view.worldAt(view.w2s(floor), &known, &onSurface);
         QVERIFY(!onSurface);
-        QVERIFY(near(w, floor, 0.06f));
+        QVERIFY(nearPt(w, floor, 0.06f));
 
         // From the front, on the person's chest: 2' of riser and 80% of 5'4".
         view.setPlane(StructureStudioView::Front);
@@ -23942,7 +23942,7 @@ Fixture *rigFacedLaser(Doc *doc, QLCPhysical::Emission e, Truss **trussOut = nul
 
 void Monitor_Test::aLaserLooksLikeALaser()
 {
-    auto near = [](const QVector3D &a, const QVector3D &b) { return (a - b).length() < 1e-4f; };
+    auto nearPt = [](const QVector3D &a, const QVector3D &b) { return (a - b).length() < 1e-4f; };
     auto mid = [](const SolidBoxCorners &b) {
         QVector3D c;
         for (const QVector3D &k : b.k)
@@ -23954,9 +23954,9 @@ void Monitor_Test::aLaserLooksLikeALaser()
     // Hung, throwing upstage and level: the window faces upstage.
     const ProjectorParts level = projectorParts(pivot, QVector3D(0, -1, 0), up, along,
                                                 0.2f, 0.11f, 0.19f, 1);
-    QVERIFY(near(level.front, QVector3D(0, -1, 0)));
-    QVERIFY(near(mid(level.body), pivot));
-    QVERIFY(near(level.up, up));
+    QVERIFY(nearPt(level.front, QVector3D(0, -1, 0)));
+    QVERIFY(nearPt(mid(level.body), pivot));
+    QVERIFY(nearPt(level.up, up));
     QCOMPARE(level.yoke.size(), 4);                       // two plates, the bar, the clamp
     QVector3D glass;
     for (const QVector3D &k : level.window)
@@ -23981,17 +23981,17 @@ void Monitor_Test::aLaserLooksLikeALaser()
     // Tipped up 30 degrees in the yoke: the box turns, the yoke does not.
     const QVector3D up30(0.0f, -float(qCos(M_PI / 6)), float(qSin(M_PI / 6)));
     const ProjectorParts tipped = projectorParts(pivot, up30, up, along, 0.2f, 0.11f, 0.19f, 1);
-    QVERIFY(near(tipped.front, up30));
+    QVERIFY(nearPt(tipped.front, up30));
     for (int i = 0; i < 4; ++i)
         for (int k = 0; k < 8; ++k)
-            QVERIFY(near(tipped.yoke.at(i).k[k], level.yoke.at(i).k[k]));
-    QVERIFY(!near(tipped.body.k[0], level.body.k[0]));
+            QVERIFY(nearPt(tipped.yoke.at(i).k[k], level.yoke.at(i).k[k]));
+    QVERIFY(!nearPt(tipped.body.k[0], level.body.k[0]));
     QVERIFY(tipped.apertures.first().z() > level.apertures.first().z());
 
     // Straight down along its clamp: its own length is the tilt axis.
     const ProjectorParts down = projectorParts(pivot, QVector3D(0, 0, -1), up, along,
                                                0.2f, 0.11f, 0.19f, 1);
-    QVERIFY(near(down.front, QVector3D(0, 0, -1)));
+    QVERIFY(nearPt(down.front, QVector3D(0, 0, -1)));
     QVERIFY(qAbs(down.side.x()) > 0.99f);
     QVERIFY(!qIsNaN(down.body.k[0].x()));
 
@@ -24515,8 +24515,8 @@ void Monitor_Test::aModeChangedByThePatchIsUndone()
     def->setModel("TwoMode");
     QLCFixtureMode *big = new QLCFixtureMode(def);
     big->setName("Big");
-    QLCFixtureMode *small = new QLCFixtureMode(def);
-    small->setName("Small");
+    QLCFixtureMode *tiny = new QLCFixtureMode(def);
+    tiny->setName("Small");
     for (int k = 0; k < 20; k++)
     {
         QLCChannel *ch = new QLCChannel();
@@ -24524,10 +24524,10 @@ void Monitor_Test::aModeChangedByThePatchIsUndone()
         def->addChannel(ch);
         big->insertChannel(ch, k);
         if (k < 5)
-            small->insertChannel(ch, k);
+            tiny->insertChannel(ch, k);
     }
     def->addMode(big);
-    def->addMode(small);
+    def->addMode(tiny);
     Fixture *f = new Fixture(doc);
     f->setFixtureDefinition(def, big);
     QVERIFY(doc->addFixture(f));
@@ -24540,10 +24540,10 @@ void Monitor_Test::aModeChangedByThePatchIsUndone()
         a.fixtureId = f->id();
         a.universe = 0;
         a.address = 100;
-        a.mode = small;
+        a.mode = tiny;
         PatchPlanner pp(doc);
         QCOMPARE(pp.apply({ a }), 1);
-        QCOMPARE(f->fixtureMode(), small);
+        QCOMPARE(f->fixtureMode(), tiny);
         mon.restoreRig(before);
         QCOMPARE(f->fixtureMode(), big);
         QCOMPARE(f->channels(), quint32(20));
@@ -27071,7 +27071,7 @@ void Monitor_Test::aLineTargetKeepsItsColourLocksAndSnaps()
     line->setColor(QColor("#FFB400"));
     line->setLayerId(marks);
     auto world = [&]() { return props->targetLinePoints(line); };
-    auto near = [](const QVector3D &a, const QVector3D &b) { return (a - b).length() < 0.03f; };
+    auto nearPt = [](const QVector3D &a, const QVector3D &b) { return (a - b).length() < 0.03f; };
     auto str = [](const QVector3D &v) {
         return QString("(%1, %2, %3)").arg(double(v.x()), 0, 'f', 2)
                                       .arg(double(v.y()), 0, 'f', 2).arg(double(v.z()), 0, 'f', 2);
@@ -27144,12 +27144,12 @@ void Monitor_Test::aLineTargetKeepsItsColourLocksAndSnaps()
     const QPointF endPx = view.projectMm(double(end.x()) * 1000.0, double(end.y()) * 1000.0, 0.0);
     QVERIFY2(QLineF(view.snapScenePos(endPx), endPx).length() < 0.5,
              qPrintable("the end is off the grid: " + str(end)));
-    QVERIFY2(!near(end, QVector3D(8.3f, 4.2f, 0)) && (end - QVector3D(8.3f, 4.2f, 0)).length() < 1.0f,
+    QVERIFY2(!nearPt(end, QVector3D(8.3f, 4.2f, 0)) && (end - QVector3D(8.3f, 4.2f, 0)).length() < 1.0f,
              qPrintable(str(end)));
-    QVERIFY2(near(world().first(), QVector3D(3, 3, 0)), qPrintable(str(world().first())));
+    QVERIFY2(nearPt(world().first(), QVector3D(3, 3, 0)), qPrintable(str(world().first())));
     QCOMPARE(view.m_moveUndo.size(), undoBefore + 1);
     view.undoLastMove();
-    QVERIFY2(near(world().last(), QVector3D(7, 3, 0)), qPrintable(str(world().last())));
+    QVERIFY2(nearPt(world().last(), QVector3D(7, 3, 0)), qPrintable(str(world().last())));
     QCOMPARE(view.m_moveUndo.size(), undoBefore);
 
     // The body moves the whole line, on the grid too.
@@ -27159,9 +27159,9 @@ void Monitor_Test::aLineTargetKeepsItsColourLocksAndSnaps()
     const QPointF cPx = view.projectMm(double(c.x()) * 1000.0, double(c.y()) * 1000.0, 0.0);
     QVERIFY2(QLineF(view.snapScenePos(cPx), cPx).length() < 0.5, qPrintable("off the grid: " + str(c)));
     QVERIFY2(qAbs(c.y() - 5.2f) < 0.6f && qAbs(c.x() - 5.0f) < 0.6f, qPrintable(str(c)));
-    QVERIFY(near(world().first() - c, QVector3D(-2, 0, 0)) && near(world().last() - c, QVector3D(2, 0, 0)));
+    QVERIFY(nearPt(world().first() - c, QVector3D(-2, 0, 0)) && nearPt(world().last() - c, QVector3D(2, 0, 0)));
     view.undoLastMove();
-    QVERIFY(near(line->position(), QVector3D(5, 3, 0)));
+    QVERIFY(nearPt(line->position(), QVector3D(5, 3, 0)));
 }
 
 void Monitor_Test::aStructureMovedToALayerTakesItsMountsWithIt()

@@ -54,7 +54,7 @@ static QImage paintItem(QGraphicsItem *item, bool selected = false, qreal turnDe
 }
 
 /* True when two colours match to within anti-aliasing noise. */
-static bool near(QColor a, QColor b)
+static bool nearPt(QColor a, QColor b)
 {
     return qAbs(a.red() - b.red()) < 12 && qAbs(a.green() - b.green()) < 12
            && qAbs(a.blue() - b.blue()) < 12;
@@ -74,7 +74,7 @@ void NetworkNodeItem_Test::eachTransportPaintsItsOwnColour()
         const QImage img = paintItem(&item);
         // Inside the marker, clear of the glyph and the name text.
         const QColor fill = img.pixelColor(10 + 4, 10 + 21);
-        QVERIFY2(near(fill, e.second),
+        QVERIFY2(nearPt(fill, e.second),
                  qPrintable(QString("transport %1 painted %2, want %3")
                             .arg(e.first).arg(fill.name(), e.second.name())));
     }
@@ -125,7 +125,7 @@ void NetworkNodeItem_Test::aReceiverPaintsAnAmberDisc()
 
     const QImage img = paintItem(&rx, true, 0, QPointF(30, 30));
     // Below the "RX" text, inside the disc; outside the disc stays black.
-    QVERIFY2(near(img.pixelColor(30, 30 + 7), QColor(235, 140, 40)),
+    QVERIFY2(nearPt(img.pixelColor(30, 30 + 7), QColor(235, 140, 40)),
              qPrintable(img.pixelColor(30, 37).name()));
     QCOMPARE(img.pixelColor(30 + 15, 30 + 15), QColor(Qt::black));
 }
