@@ -668,8 +668,8 @@ void Scene::setPaletteFade(quint32 paletteId, int fadeInMs, int fadeOutMs)
     {
         QMutexLocker locker(&m_bindingsMutex);
         PaletteFade pf;
-        pf.fadeInMs = fadeInMs < 0 ? -1 : fadeInMs;
-        pf.fadeOutMs = fadeOutMs < 0 ? -1 : fadeOutMs;
+        pf.fadeInMs = fadeInMs < 0 && fadeInMs != FadeFollow ? -1 : fadeInMs;
+        pf.fadeOutMs = fadeOutMs < 0 && fadeOutMs != FadeFollow ? -1 : fadeOutMs;
 
         if (pf.isEmpty())
         {
@@ -940,9 +940,10 @@ bool Scene::saveXML(QXmlStreamWriter *doc) const
         doc->writeStartElement(KXMLQLCPalette);
         doc->writeAttribute(KXMLQLCPaletteID, QString::number(pId));
         const PaletteFade pf = savedFades.value(pId);
-        if (pf.fadeInMs >= 0)
+        // FadeFollow is written as it is: an older build reads it as none.
+        if (pf.fadeInMs >= 0 || pf.fadeInMs == FadeFollow)
             doc->writeAttribute(KXMLQLCScenePaletteFadeIn, QString::number(pf.fadeInMs));
-        if (pf.fadeOutMs >= 0)
+        if (pf.fadeOutMs >= 0 || pf.fadeOutMs == FadeFollow)
             doc->writeAttribute(KXMLQLCScenePaletteFadeOut, QString::number(pf.fadeOutMs));
         doc->writeEndElement();
     }
@@ -1113,7 +1114,7 @@ bool Scene::loadXML(QXmlStreamReader &root)
                 fadeIn = attrs.value(KXMLQLCScenePaletteFadeTime).toString().toInt();
             if (attrs.hasAttribute(KXMLQLCScenePaletteFadeOut))
                 fadeOut = attrs.value(KXMLQLCScenePaletteFadeOut).toString().toInt();
-            if (fadeIn >= 0 || fadeOut >= 0)
+            if (fadeIn >= 0 || fadeOut >= 0 || fadeIn == FadeFollow || fadeOut == FadeFollow)
                 setPaletteFade(id, fadeIn, fadeOut);
             root.skipCurrentElement();
         }

@@ -1144,6 +1144,26 @@ void ShowTreeView_Test::anEffectGetsLooksOfItsOwn()
     QVERIFY(view.selectNode(l1, c1));
     QVERIFY(rowFor(view.attributeRows(), keyLabel(key)).contains("Confetti in Red"));
 
+    // Its fades, from its row: the cue's by default, its own, or at once.
+    QCOMPARE(st->cue(c1)->layer(l1)->look(key)->fadeIn, int(Look::FadeFollowCue));
+    QCOMPARE(scene->paletteFadeIn(fx->id()), Scene::FadeFollow);
+    QVERIFY(view.setEffectFades(c1, l1, key, 800, 2500));
+    QCOMPARE(st->cue(c1)->layer(l1)->look(key)->fadeIn, 800);
+    QCOMPARE(st->cue(c1)->layer(l1)->look(key)->fadeOut, 2500);
+    QCOMPARE(st->cue(c1)->layer(l1)->look(key)->own, QList<quint32>({ red }));   // kept
+    const Scene *timed = qobject_cast<Scene *>(m_doc->function(
+        qobject_cast<Collection *>(m_doc->function(st->cue(c1)->collection))->functions().first()));
+    QCOMPARE(timed->paletteFadeIn(fx->id()), 800);
+    QCOMPARE(timed->paletteFadeOut(fx->id()), 2500);
+    QVERIFY(!view.setEffectFades(c1, l1, key, 800, 2500));          // no change: no edit
+    QVERIFY(view.setEffectFades(c1, l1, key, Look::FadeSnap, Look::FadeSnap));
+    QCOMPARE(st->cue(c1)->layer(l1)->look(key)->fadeOut, int(Look::FadeSnap));
+    QVERIFY(st->undo());
+    QCOMPARE(st->cue(c1)->layer(l1)->look(key)->fadeOut, 2500);
+    QVERIFY(!view.setEffectFades(c1, l1, KeyColour, 0, 0));           // not an effect
+    scene = qobject_cast<Scene *>(m_doc->function(
+        qobject_cast<Collection *>(m_doc->function(st->cue(c1)->collection))->functions().first()));
+
     // Move a cue (dragged onto another): the list's order and its chaser follow.
     const quint32 c2 = st->addCue(list, 0, "Two");
     QCOMPARE(view.cueDropHint(c2, c1, false), QString("Move 2 Two before 1 One, as 0.5"));

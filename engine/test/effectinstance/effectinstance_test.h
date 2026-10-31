@@ -73,6 +73,20 @@ private slots:
     void aOneShotScriptCanLoop();
     void anotherEffectPickedPlaysAtOnceDespiteARelease();
 
+    /** Effect fades (0.4): the depth ramps 0 -> 1 over the fade in and
+     *  1 -> 0 over the fade out; a release part way in goes from there. */
+    void anEffectsDepthRampsInAndOut();
+    void aReleaseMidFadeInFadesOutFromWhereItWas();
+    /** A dimmer effect read off the universe frame by frame, fading in
+     *  over what is under it and out to it. */
+    void aDimmerEffectFadesInAndOutFrameByFrame();
+    /** FadeFollow: the fades the scene starts and stops with (a cue's);
+     *  none (0) plays as before, at full at once. */
+    void anEffectFollowsItsScenesFades();
+    void anEffectWithNoFadeTimesPlaysAsBefore();
+    /** Two effects on one channel, one going and one coming. */
+    void effectsPartWayInOrOutCompose();
+
     /** Assigning a single fixture targets only that fixture. */
     void singleFixtureTargetOnly();
 

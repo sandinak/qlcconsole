@@ -6029,6 +6029,111 @@ const Scene *sceneOf(ShowTreeController *st, Doc *doc, quint32 cueId, const Targ
 }
 }
 
+void ShowTree_Test::anEffectFadesWithItsCue()
+{
+    FixtureGroup *a = group("A", { m_fixtures[0], m_fixtures[1] });
+    QLCPalette *pulse = new QLCPalette(QLCPalette::Effect, m_doc);
+    pulse->setName("Pulse");
+    m_doc->addPalette(pulse);
+    const quint32 full = dimmer(255, "Full");
+    const quint32 half = dimmer(128, "Half");
+
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 listId = st->addCueList(st->addProduction("P"), "L");      // Tracking
+    const quint32 c1 = st->addCue(listId, -1, "One");
+    const quint32 c2 = st->addCue(listId, 0, "Two");
+    const quint32 layerId = st->addLayer(c1, groupTarget(a->id()));
+    QVERIFY(st->setLayerLook(c1, layerId, st->lookForPalette(full)));
+    Look fx = st->lookForPalette(pulse->id());
+    // A new effect follows its cue's fades.
+    QCOMPARE(fx.fadeIn, int(Look::FadeFollowCue));
+    QCOMPARE(fx.fadeOut, int(Look::FadeFollowCue));
+    QVERIFY(st->setLayerLook(c1, layerId, fx));
+    Cue timed = *st->cue(c1);
+    timed.fadeIn = 3000;
+    timed.fadeOut = 2000;
+    QVERIFY(st->setCue(timed));
+
+    const Scene *s1 = sceneOf(st, m_doc, c1, groupTarget(a->id()));
+    QVERIFY(s1 != nullptr);
+    QCOMPARE(s1->paletteFadeIn(pulse->id()), Scene::FadeFollow);
+    QCOMPARE(s1->paletteFadeOut(pulse->id()), Scene::FadeFollow);
+    QCOMPARE(s1->paletteFadeIn(full), -1);         // the base look: the cue's fade, as ever
+    // Tracked on into cue 2: the same scene, so it plays on (no fade).
+    QCOMPARE(sceneOf(st, m_doc, c2, groupTarget(a->id())), s1);
+    // The base changes in cue 2: a new scene with the same effect, fades and all.
+    QVERIFY(st->setTargetLook(c2, groupTarget(a->id()), st->lookForPalette(half)));
+    const Scene *s2 = sceneOf(st, m_doc, c2, groupTarget(a->id()));
+    QVERIFY(s2 != nullptr && s2 != s1);
+    QCOMPARE(s2->paletteFadeIn(pulse->id()), Scene::FadeFollow);
+
+    // Its own times on its row.
+    fx.fadeIn = 500;
+    fx.fadeOut = 1500;
+    QVERIFY(st->setLayerLook(c1, layerId, fx));
+    s1 = sceneOf(st, m_doc, c1, groupTarget(a->id()));
+    QCOMPARE(s1->paletteFadeIn(pulse->id()), 500);
+    QCOMPARE(s1->paletteFadeOut(pulse->id()), 1500);
+    // In at once, out slowly: a fade in of 0 (still a depth fade).
+    fx.fadeIn = Look::FadeSnap;
+    QVERIFY(st->setLayerLook(c1, layerId, fx));
+    s1 = sceneOf(st, m_doc, c1, groupTarget(a->id()));
+    QCOMPARE(s1->paletteFadeIn(pulse->id()), 0);
+    QCOMPARE(s1->paletteFadeOut(pulse->id()), 1500);
+    // At once both ways: no fades on the scene at all -- as before.
+    fx.fadeOut = Look::FadeSnap;
+    QVERIFY(st->setLayerLook(c1, layerId, fx));
+    s1 = sceneOf(st, m_doc, c1, groupTarget(a->id()));
+    QVERIFY(s1->paletteFades().isEmpty());
+
+    // Saved: "cue" for the cue's, the time for its own, nothing for at once.
+    Production p;
+    p.id = 1;
+    CueList list;
+    list.id = 2;
+    Cue c = cue(3, "1", CueMode::ListDefault,
+                { layer(4, ATSpots, { look(effectKey("Dimmer"), { Confetti }),
+                                      look(effectKey("Color"), { Confetti }),
+                                      look(effectKey("Position"), { Confetti }) }) }, {}, {});
+    c.layers[0].looks[1].fadeIn = 750;
+    c.layers[0].looks[1].fadeOut = Look::FadeFollowCue;
+    c.layers[0].looks[2].fadeIn = Look::FadeSnap;
+    c.layers[0].looks[2].fadeOut = Look::FadeSnap;
+    list.cues << c;
+    p.lists << list;
+    const QByteArray xml = productionXml(p);
+    QVERIFY(xml.contains("FadeIn=\"cue\" FadeOut=\"cue\""));
+    QVERIFY(xml.contains("FadeIn=\"750\" FadeOut=\"cue\""));
+    QXmlStreamReader r(xml);
+    r.readNextStartElement();
+    Production back;
+    QVERIFY(ShowTree::loadXML(r, back));
+    QCOMPARE(productionXml(back), xml);
+    const QList<Look> &bl = back.lists.first().cues.first().layers.first().looks;
+    QCOMPARE(bl.at(0).fadeIn, int(Look::FadeFollowCue));
+    QCOMPARE(bl.at(1).fadeIn, 750);
+    QCOMPARE(bl.at(1).fadeOut, int(Look::FadeFollowCue));
+    QCOMPARE(bl.at(2).fadeIn, int(Look::FadeSnap));
+    QCOMPARE(bl.at(2).fadeOut, int(Look::FadeSnap));
+    QVERIFY(bl.at(0) != bl.at(1));
+
+    // A show saved before effect fades: no FadeIn / FadeOut -- at once,
+    // as it always played.
+    QByteArray old = xml;
+    old.replace(" FadeIn=\"cue\" FadeOut=\"cue\"", "");
+    old.replace(" FadeIn=\"750\" FadeOut=\"cue\"", "");
+    QVERIFY(!old.contains("FadeIn=\"cue\"") && !old.contains("FadeIn=\"750\""));
+    QXmlStreamReader ro(old);
+    ro.readNextStartElement();
+    Production older;
+    QVERIFY(ShowTree::loadXML(ro, older));
+    for (const Look &l : older.lists.first().cues.first().layers.first().looks)
+    {
+        QCOMPARE(l.fadeIn, int(Look::FadeSnap));
+        QCOMPARE(l.fadeOut, int(Look::FadeSnap));
+    }
+}
+
 /* D10: an effect set on the cue is ONE effect across the cue's own layers
    that don't set that effect kind (or None) themselves: each of their
    scenes plays it with a layout over all of them and writes its own; it

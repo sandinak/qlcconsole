@@ -2916,6 +2916,10 @@ QString ShowTreeController::ScenePlan::signature() const
     for (quint32 pid : keys)
         sig += QStringLiteral("|w%1:%2/%3").arg(pid).arg(idsToString(spanGroups.value(pid)),
                                                          idsToString(spanFixtures.value(pid)));
+    keys = fades.keys();
+    std::sort(keys.begin(), keys.end());
+    for (quint32 pid : keys)
+        sig += QStringLiteral("|f%1:%2/%3").arg(pid).arg(fades.value(pid).first).arg(fades.value(pid).second);
     return sig;
 }
 
@@ -3124,6 +3128,19 @@ QList<ShowTreeController::ScenePlan> ShowTreeController::planCue(const CueList &
             for (quint32 f : fixtures.at(i))
                 if (!excluded.contains(f))
                     writes = true;
+            // An effect's fades (ms, or the cue's): its depth comes up
+            // and goes on them. FadeSnap both ways: none, as before.
+            if (isEffectKey(look.key) && (look.fadeIn != Look::FadeSnap || look.fadeOut != Look::FadeSnap))
+            {
+                // One way snapping, the other not: 0 (at once), so the
+                // scene carries a fade in and the effect a depth fade.
+                auto fade = [](int ms) {
+                    return ms == Look::FadeFollowCue ? Scene::FadeFollow : qMax(0, ms);
+                };
+                for (quint32 pid : look.palettes)
+                    if (pals.contains(pid))
+                        plan.fades.insert(pid, qMakePair(fade(look.fadeIn), fade(look.fadeOut)));
+            }
             for (quint32 pid : pals)
             {
                 plan.palettes << pid;
@@ -4338,6 +4355,9 @@ QString ShowTreeController::sceneSignature(const Scene *scene) const
         plan.spanGroups.insert(it.key(), it.value().groups);
         plan.spanFixtures.insert(it.key(), it.value().fixtures);
     }
+    const QHash<quint32, Scene::PaletteFade> fades = scene->paletteFades();
+    for (auto it = fades.constBegin(); it != fades.constEnd(); ++it)
+        plan.fades.insert(it.key(), qMakePair(it.value().fadeInMs, it.value().fadeOutMs));
     return plan.signature();
 }
 
@@ -4657,6 +4677,8 @@ void ShowTreeController::bake()
                                 span.fixtures = plan.spanFixtures.value(p);
                                 scene->setLayoutSpan(p, span);
                             }
+                        for (auto it = plan.fades.constBegin(); it != plan.fades.constEnd(); ++it)
+                            scene->setPaletteFade(it.key(), it.value().first, it.value().second);
                         scene->setVisible(false);
                         if (!m_doc->addFunction(scene))
                         {
@@ -4961,6 +4983,8 @@ quint32 ShowTreeController::detachLayer(quint32 cueId, quint32 layerId)
             scene->addPalette(p);
         for (auto it = plan.excluded.constBegin(); it != plan.excluded.constEnd(); ++it)
             scene->setExcludedFixtures(it.key(), it.value());
+        for (auto it = plan.fades.constBegin(); it != plan.fades.constEnd(); ++it)
+            scene->setPaletteFade(it.key(), it.value().first, it.value().second);
         planned = true;
         break;
     }
@@ -5201,6 +5225,8 @@ bool ShowTreeController::sceneToLayer(const Scene *scene, Layer *layer, QString 
             Look l;
             l.key = key;
             l.palettes << pid;
+            // It snapped on and off in the scene: so it does in the tree.
+            l.fadeIn = l.fadeOut = Look::FadeSnap;
             looks << l;
             currentEffect = int(looks.count()) - 1;
             continue;

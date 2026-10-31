@@ -430,7 +430,7 @@ Notes:
 | Course Level 2 lessons (7), one per release cycle | 5 | 5 | course template, courseshow_test | 2 a lesson | L | M | **12.5** a lesson | BUILD (0.3.1 onward) |
 | Realistic move speed in the Rig Overview | 3 | 5 | Rig Overview, definitions' speeds | 3 | L | L | 5 | BUILD (0.5) |
 | LTC (audio) timecode in, plus cues at a timecode | 4 | 5 | MTC follow, audio capture | 4 | M | M | 4 | BUILD (0.4) |
-| Effect fade in / fade out (depth to 0 on release) | 4 | 5 | layered looks | 4 | M | M | 4 | BUILD (0.4) |
+| Effect fade in / fade out (depth to 0 on release) | 4 | 5 | layered looks | 4 | M | M | 4 | BUILT (0.4, 2026-10-31) |
 | Group / intensity masters on faders | 4 | 5 | groups, speed masters, Control Map | 4 | M | M | 4 | BUILD (0.4) |
 | QLab out (OSC / MSC out) | 3 | 4 | Show control page | 3 | L | M | 4 | BUILD (0.4) |
 | Override / priority hits (Normal / Override / Inhibit, restore on release) | 5 | 4 | Hits, OutputLayer | 5 | M | M | 3.2 | BUILD (0.4) |
@@ -541,7 +541,8 @@ Order and dependencies:
 5. **Override hits** (priority layer, restore on release), building on
    0.3.1's hit fade times. Then **group intensity masters**, which share
    the same engine stage.
-6. **Effect fade in/out.**
+6. **Effect fade in/out.** Built 2026-10-31: an effect's depth follows
+   its cue's fades, or its own times, or none.
 7. **Tracking sheet and printable cue sheet**, the stage manager's paper.
 8. **QLab out** (OSC/MSC), if the show-control users ask.
 9. **Walk the show from the stage** (Q192, extends Focus this cue and

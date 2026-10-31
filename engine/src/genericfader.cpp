@@ -358,7 +358,17 @@ void GenericFader::write(Universe *universe)
             const bool pastGM = flags & FadeChannel::PastGM;
             for (int i = 0; i < channelCount; i++)
             {
-                const uchar b = channelCount == 1 ? uchar(value) : ((uchar *)&value)[channelCount - 1 - i];
+                uchar b = channelCount == 1 ? uchar(value) : ((uchar *)&value)[channelCount - 1 - i];
+                if (flags & FadeChannel::Mix)
+                {
+                    // An effect part way in or out: from what is under it
+                    // (written by the faders before this one) to its own.
+                    const float under = float(universe->preGMValue(int(address) + i)) * fc.mixScale();
+                    float own = float(b);
+                    if ((flags & FadeChannel::MixHTP) && under > own)
+                        own = under;
+                    b = uchar(qBound(0, qRound(under + (own - under) * fc.mixDepth()), 255));
+                }
                 if (edit)
                     universe->writeOverride(address + i, b);
                 else if (pastGM)

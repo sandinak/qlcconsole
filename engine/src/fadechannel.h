@@ -58,8 +58,13 @@ public:
                                         such channels in a frame (Universe::writeOverride) */
         Release     = (1 << 13),    /** Let go of by a fader that plays on (GenericFader::
                                         release): fades out like a stop, then goes */
-        PastGM      = (1 << 14)     /** With Override: a parked channel, sent past the
+        PastGM      = (1 << 14),    /** With Override: a parked channel, sent past the
                                         Grand Master (Universe::writePastGM) */
+        Mix         = (1 << 15),    /** With Override: an effect fading in or out
+                                        (setMix()) -- part way from what is under
+                                        it this frame to its own value */
+        MixHTP      = (1 << 16)     /** With Mix: its own value only adds (the
+                                        higher of it and what is under it) */
     };
 
     /** Create a new FadeChannel with empty/invalid values */
@@ -119,6 +124,14 @@ public:
     /** Get the absolute address in its universe for this channel. */
     quint32 addressInUniverse() const;
 
+    /** With the Mix flag: what is written is @p depth (0..1) of the way
+     *  from what is under it (the universe's value so far this frame,
+     *  times @p scale) to its own value -- an effect's depth fading in or
+     *  out over the look it plays on (EffectScriptRunner). */
+    void setMix(float depth, float scale) { m_mixDepth = depth; m_mixScale = scale; }
+    float mixDepth() const { return m_mixDepth; }
+    float mixScale() const { return m_mixScale; }
+
 protected:
     void autoDetect(const Doc *doc);
 
@@ -132,6 +145,8 @@ private:
     quint32 m_primaryChannel;
     QVector<quint32> m_channels;
     quint32 m_address;
+    float m_mixDepth = 1.0f;    //!< setMix()
+    float m_mixScale = 1.0f;
 
     /** Cache channel reference for faster lookup */
     const QLCChannel *m_channelRef;

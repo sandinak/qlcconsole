@@ -177,6 +177,10 @@ private slots:
 
     // P3: cue-level effects (D10), line aims (D16-D19)
     void aCueEffectIsOneAcrossItsLayers();
+    /** Effect fades (0.4): a new effect follows its cue's fades, an own
+     *  time or "at once" on its row; baked onto the generated scene;
+     *  saved, with an older show's (none) playing as it did. */
+    void anEffectFadesWithItsCue();
     void cueSpreadReachesOnlyLineAims();
     void aCueAimIsOneFormationByPosition();
     void aSpreadChangeFadesOverTheCueFade();

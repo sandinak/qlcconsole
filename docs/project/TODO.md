@@ -8,6 +8,31 @@ under `~/.claude/.../memory/`.
 
 ---
 
+## Effect fades — leftovers (efo, 2026-10-31)
+
+Built (STRATEGY §4 0.4 item 6; docs/features/show-tree.md "Effects"): a
+Show Tree effect's depth comes up over its cue's fade in and goes over
+the releasing cue's fade out (`Look::fadeIn/fadeOut`, baked onto the
+generated scene as `Scene::setPaletteFade`, `FadeFollow` for the cue's;
+`EffectInstance::fadeDepthIn`, `FadeChannel::Mix`). Open, each "decided
+(can change)":
+- Default: a new effect follows the cue's fades; an effect saved before
+  (no FadeIn/FadeOut) or converted from a scene is **At once**, as it
+  played.
+- Depth is how far its writes go from what is under them (this frame's
+  universe value) to its own; a dimmer's swing also scales with depth.
+  A release part way in fades out from there over the whole fade out.
+- The fade out followed is the one the stopping scene was started with
+  (the base look's, the same number), not the next cue's own time.
+- EFX and RGB Matrix layers are not changed: QLC+'s own handling (an EFX
+  grows over the fade in and stops at once; a matrix fades in and out).
+  Making an EFX shrink out on its cue's fade out would change QLC+ 4
+  shows; left until asked.
+- Classic scenes: an effect look's per-look fade in (Look Editor) now
+  starts its depth fade too (it was ignored for effects); a per-look fade
+  out alone plays as before.
+- No command-line words for effect fades yet (`effect … fade 2`).
+
 ## Breathe once — leftovers (brth, 2026-10-30)
 
 Built (build 2593 report: flash at start, end lands anywhere, no typed

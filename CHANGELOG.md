@@ -94,6 +94,17 @@ back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
   No cue is renumbered or rebuilt; **Reset to number order** undoes it, and
   it is saved with the show.
 
+### Effect fades
+
+- **Effects fade in and out with their cue** (0.4): a Show Tree effect
+  comes up over its cue's fade in and goes over the fade out of the cue
+  that releases or replaces it, while the layer's own look fades as
+  usual. **⋯ → Fade in / out** on the effect's row sets **With the cue's
+  fades** (the default for a new effect), **At once** or **Own times…**.
+  An effect let go while it is fading in fades out from where it got
+  to. Saved with the show. Shows saved earlier open with their effects
+  **At once**, so they play as before.
+
 ### Based on QLC+ 4.14.4
 
 qlcconsole's QLC+ base moves from 4.14.2 to **4.14.4**: the build string

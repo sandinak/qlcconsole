@@ -47,6 +47,8 @@
 #include "matriximage.h"
 #include "universe.h"
 #include "inputoutputmap.h"
+#include "genericfader.h"
+#include "fadechannel.h"
 #undef protected
 #undef private
 #include "monitorproperties.h"
@@ -2257,6 +2259,351 @@ void EffectInstance_Test::aSharedDimmerTakesItsBrightestHead()
         QVERIFY2(qAbs(dimOut - 200) <= 1,
                  qPrintable(QString("arm %1 lit: the shared dimmer got %2").arg(lit).arg(dimOut)));
     }
+}
+
+void EffectInstance_Test::anEffectsDepthRampsInAndOut()
+{
+    Scene *scene = new Scene(m_doc);
+    m_doc->addFunction(scene);
+    scene->addFixtureGroup(m_group->id());
+    scene->addPalette(m_palette->id());
+    EffectInstance inst(m_doc, scene->id(), m_palette->id());
+    QVERIFY(!inst.hasDepthFade());
+    QCOMPARE(inst.depth(), 1.0f);                   // no depth fade: full, as before
+
+    inst.setDepthClock(0);
+    inst.fadeDepthIn(1000, 0, true);
+    QVERIFY(inst.hasDepthFade());
+    const struct { qint64 at; float depth; } in[] = {
+        { 0, 0.0f }, { 100, 0.1f }, { 250, 0.25f }, { 500, 0.5f }, { 900, 0.9f }, { 1000, 1.0f }, { 3000, 1.0f } };
+    for (const auto &f : in)
+    {
+        inst.setDepthClock(f.at);
+        QVERIFY2(qAbs(inst.depth() - f.depth) < 0.001f,
+                 qPrintable(QString("at %1 ms: %2").arg(f.at).arg(inst.depth())));
+    }
+    QVERIFY(!inst.depthMoving());
+
+    inst.setDepthClock(3000);
+    inst.startFadeOut(2000);
+    QVERIFY(inst.isFadingOut());
+    const struct { qint64 at; float depth; } out[] = {
+        { 3000, 1.0f }, { 3500, 0.75f }, { 4000, 0.5f }, { 4600, 0.2f }, { 5000, 0.0f } };
+    for (const auto &f : out)
+    {
+        inst.setDepthClock(f.at);
+        QVERIFY2(qAbs(inst.depth() - f.depth) < 0.001f,
+                 qPrintable(QString("at %1 ms: %2").arg(f.at).arg(inst.depth())));
+        QCOMPARE(inst.fadeOutDone(), f.at >= 5000);
+    }
+
+    // The envelope stays full: the depth carries it.
+    inst.setDepthClock(3500);
+    inst.runTick();
+    QCOMPARE(inst.m_envelope, 1.0f);
+
+    // Started when its scene had been up a while: that much of the fade
+    // has gone already.
+    EffectInstance late(m_doc, scene->id(), m_palette->id());
+    late.setDepthClock(10000);
+    late.fadeDepthIn(1000, 400, true);
+    QVERIFY(qAbs(late.depth() - 0.4f) < 0.001f);
+    // No fade in: at full at once.
+    EffectInstance snap(m_doc, scene->id(), m_palette->id());
+    snap.fadeDepthIn(0, 0, true);
+    QCOMPARE(snap.depth(), 1.0f);
+}
+
+void EffectInstance_Test::aReleaseMidFadeInFadesOutFromWhereItWas()
+{
+    Scene *scene = new Scene(m_doc);
+    m_doc->addFunction(scene);
+    scene->addFixtureGroup(m_group->id());
+    scene->addPalette(m_palette->id());
+    EffectInstance inst(m_doc, scene->id(), m_palette->id());
+    inst.setDepthClock(0);
+    inst.fadeDepthIn(1000, 0, true);
+    inst.setDepthClock(400);
+    QVERIFY(qAbs(inst.depth() - 0.4f) < 0.001f);
+    inst.startFadeOut(1000);                        // let go 40% of the way in
+    for (const auto &f : { qMakePair(400, 0.4f), qMakePair(650, 0.3f), qMakePair(900, 0.2f),
+                           qMakePair(1150, 0.1f), qMakePair(1400, 0.0f) })
+    {
+        inst.setDepthClock(f.first);
+        QVERIFY2(qAbs(inst.depth() - f.second) < 0.001f,
+                 qPrintable(QString("at %1 ms: %2, never back up to full").arg(f.first).arg(inst.depth())));
+    }
+    QVERIFY(inst.fadeOutDone());
+
+    // Brought back while going: up again from where it had got to.
+    EffectInstance back(m_doc, scene->id(), m_palette->id());
+    back.setDepthClock(0);
+    back.fadeDepthIn(0, 0, true);
+    back.startFadeOut(1000);
+    back.setDepthClock(700);
+    QVERIFY(qAbs(back.depth() - 0.3f) < 0.001f);
+    back.cancelFadeOut();
+    back.fadeDepthIn(700, 0, false);
+    QVERIFY(qAbs(back.depth() - 0.3f) < 0.001f);   // no dip to 0
+    back.setDepthClock(1400);
+    QCOMPARE(back.depth(), 1.0f);
+}
+
+/* A fixture with one Dimmer channel, a script that holds every fixture
+   at half, and the runner that plays it: what the universe gets. */
+static Fixture *oneDimmerFixture(Doc *doc, quint32 address)
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test"); def->setModel("Dimmer");
+    def->setType(QLCFixtureDef::Dimmer);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    QLCChannel *dim = new QLCChannel(); dim->setName("Dimmer"); dim->setPreset(QLCChannel::IntensityDimmer);
+    def->addChannel(dim);
+    mode->insertChannel(dim, 0);
+    QLCFixtureHead head;
+    head.addChannel(0);
+    mode->insertHead(-1, head);
+    mode->cacheHeads();
+    def->addMode(mode);
+    Fixture *fx = new Fixture(doc);
+    fx->setFixtureDefinition(def, mode);
+    fx->setUniverse(0);
+    fx->setAddress(address);
+    doc->addFixture(fx);
+    return fx;
+}
+
+static QString halfDimmerScript(const QTemporaryDir &dir)
+{
+    QFile js(dir.filePath("half.js"));
+    if (!js.open(QIODevice::WriteOnly))
+        return QString();
+    js.write("(function() { var e = {}; e.apiVersion = 1; e.name = 'Half';"
+             " e.tick = function(fixtures) { var out = [];"
+             " for (var i = 0; i < fixtures.length; i++) out.push({ dimmer: 0.5 });"
+             " return out; }; return e; })()");
+    js.close();
+    return js.fileName();
+}
+
+void EffectInstance_Test::aDimmerEffectFadesInAndOutFrameByFrame()
+{
+    Fixture *fx = oneDimmerFixture(m_doc, 100);
+    QTemporaryDir dir;
+    m_palette->setScriptPath(halfDimmerScript(dir));
+    Scene *scene = new Scene(m_doc);
+    m_doc->addFunction(scene);
+    scene->addFixture(fx->id());
+    scene->addPalette(m_palette->id());
+    scene->setPaletteFade(m_palette->id(), 1000, 1000);
+
+    EffectScriptRunner *runner = m_doc->effectScriptRunner();
+    runner->createInstancesForScene(scene->id());
+    EffectInstance *inst = runner->instanceForPalette(m_palette->id());
+    QVERIFY(inst != nullptr);
+    QVERIFY(inst->hasDepthFade());
+    QCOMPARE(inst->m_depthMs, 1000u);
+    // Its clock pinned: the fade began at 0.
+    inst->setDepthClock(0);
+    inst->m_depthStartMs = 0;
+
+    /* What is under it: the look's own level, as the scene's fader would
+       put it there (an Auto fader, before the effect's Override one). */
+    MasterTimer timer(m_doc);
+    QList<Universe *> ua = m_doc->inputOutputMap()->claimUniverses();
+    QSharedPointer<GenericFader> look = ua.first()->requestFader(Universe::Auto);
+    m_doc->inputOutputMap()->releaseUniverses(false);
+    auto setUnder = [&](int v) {
+        FadeChannel fc(m_doc, fx->id(), 0);
+        fc.setTarget(uint(v));
+        fc.setCurrent(uint(v));
+        fc.setFadeTime(0);
+        look->replaceAll({ fc });
+    };
+    auto frame = [&](qint64 ms) {
+        inst->setDepthClock(ms);
+        inst->runTick();
+        runner->publishWrites();
+        QList<Universe *> u = m_doc->inputOutputMap()->claimUniverses();
+        runner->writeDMX(&timer, u);
+        u.first()->processFaders();
+        const int v = uchar(u.first()->preGMValues().at(100));
+        m_doc->inputOutputMap()->releaseUniverses(false);
+        return v;
+    };
+    /* The look gives no level of its own (full, 255, the effect's base);
+       at half the effect is 128. Part way in at depth d it is d of the
+       way from what is under it to the look's level, times its dimmer at
+       d of its depth: (u + d * (255 - u)) * (1 - d / 2). */
+    auto expect = [](int under, float d) {
+        return qRound((under + d * (255 - under)) * (1.0f - 0.5f * d));
+    };
+    setUnder(100);
+    int last = -1;
+    for (int ms = 0; ms <= 1000; ms += 100)
+    {
+        const float d = ms / 1000.0f;
+        const int v = frame(ms);
+        QVERIFY2(qAbs(v - expect(100, d)) <= 1,
+                 qPrintable(QString("in, %1 ms: %2, wanted %3").arg(ms).arg(v).arg(expect(100, d))));
+        last = v;
+    }
+    QCOMPARE(last, 128);                            // in: the effect alone, as without a fade
+    QCOMPARE(frame(1500), 128);
+    QCOMPARE(frame(0), 100);                        // depth 0: what is under it, untouched
+
+    // Released: the look under it goes (its scene faded out), the effect
+    // goes over the same time, down to nothing.
+    frame(2000);
+    runner->destroyInstancesForScene(scene->id(), true);
+    QVERIFY(inst->isFadingOut());
+    inst->m_depthStartMs = 2000;
+    setUnder(0);
+    for (int ms = 2000; ms <= 3000; ms += 100)
+    {
+        const float d = 1.0f - (ms - 2000) / 1000.0f;
+        const int v = frame(ms);
+        QVERIFY2(qAbs(v - expect(0, d)) <= 1,
+                 qPrintable(QString("out, %1 ms: %2, wanted %3").arg(ms).arg(v).arg(expect(0, d))));
+    }
+    QVERIFY(inst->fadeOutDone());
+    runner->slotTick();                             // reaped
+    QVERIFY(runner->instanceForPalette(m_palette->id()) == nullptr);
+    ua = m_doc->inputOutputMap()->claimUniverses();
+    ua.first()->dismissFader(look);
+    m_doc->inputOutputMap()->releaseUniverses(false);
+}
+
+void EffectInstance_Test::anEffectFollowsItsScenesFades()
+{
+    QTemporaryDir dir;
+    m_palette->setScriptPath(halfDimmerScript(dir));
+    Scene *scene = new Scene(m_doc);
+    m_doc->addFunction(scene);
+    scene->addFixtureGroup(m_group->id());
+    scene->addPalette(m_palette->id());
+    scene->setPaletteFade(m_palette->id(), Scene::FadeFollow, Scene::FadeFollow);
+    QCOMPARE(scene->paletteFadeIn(m_palette->id()), Scene::FadeFollow);
+    QVERIFY(!scene->paletteFades().isEmpty());
+    // As a cue starts it: its fade in and out.
+    scene->m_overrideFadeInSpeed = 1500;
+    scene->m_overrideFadeOutSpeed = 600;
+
+    EffectScriptRunner *runner = m_doc->effectScriptRunner();
+    runner->createInstancesForScene(scene->id());
+    EffectInstance *inst = runner->instanceForPalette(m_palette->id());
+    QVERIFY(inst != nullptr);
+    QVERIFY(inst->hasDepthFade());
+    QCOMPARE(inst->m_depthMs, 1500u);
+    QCOMPARE(inst->m_depthFrom, 0.0f);
+    inst->setDepthClock(5000);                      // all the way in
+    runner->destroyInstancesForScene(scene->id(), true);
+    QVERIFY(inst->isFadingOut());
+    QCOMPARE(inst->m_depthMs, 600u);
+    QCOMPARE(inst->m_depthTo, 0.0f);
+
+    // Back before it has gone: it comes up again from where it was.
+    inst->setDepthClock(5150);
+    runner->createInstancesForScene(scene->id());
+    QCOMPARE(runner->instanceForPalette(m_palette->id()), inst);
+    QVERIFY(!inst->isFadingOut());
+    QCOMPARE(inst->m_depthTo, 1.0f);
+    QVERIFY(qAbs(inst->m_depthFrom - 0.75f) < 0.001f);
+    runner->destroyInstancesForScene(scene->id(), false);
+
+    // Saved and loaded with the scene.
+    QBuffer buffer;
+    buffer.open(QIODevice::WriteOnly);
+    QXmlStreamWriter w(&buffer);
+    scene->saveXML(&w);
+    buffer.close();
+    QXmlStreamReader r(buffer.data());
+    r.readNextStartElement();
+    Scene back(m_doc);
+    QVERIFY(back.loadXML(r));
+    QCOMPARE(back.paletteFadeIn(m_palette->id()), Scene::FadeFollow);
+    QCOMPARE(back.paletteFadeOut(m_palette->id()), Scene::FadeFollow);
+}
+
+void EffectInstance_Test::anEffectWithNoFadeTimesPlaysAsBefore()
+{
+    Fixture *fx = oneDimmerFixture(m_doc, 200);
+    QTemporaryDir dir;
+    m_palette->setScriptPath(halfDimmerScript(dir));
+    EffectScriptRunner *runner = m_doc->effectScriptRunner();
+    MasterTimer timer(m_doc);
+    auto play = [&](Scene *scene) {
+        scene->m_running = true;                    // as if a cue had started it
+        runner->createInstancesForScene(scene->id());
+        EffectInstance *inst = runner->instanceForPalette(m_palette->id());
+        if (inst == nullptr)
+            return -1;
+        inst->runTick();
+        runner->publishWrites();
+        for (const EffectInstance::DmxWrite &w : runner->m_publishedWrites)
+            if (w.depth != 1.0f)
+                return -2;
+        QList<Universe *> u = m_doc->inputOutputMap()->claimUniverses();
+        runner->writeDMX(&timer, u);
+        u.first()->processFaders();
+        const int v = uchar(u.first()->preGMValues().at(200));
+        m_doc->inputOutputMap()->releaseUniverses(false);
+        return v;
+    };
+    // A cue with no fade times: its effect follows them -- at once.
+    Scene *follow = new Scene(m_doc);
+    m_doc->addFunction(follow);
+    follow->addFixture(fx->id());
+    follow->addPalette(m_palette->id());
+    follow->setPaletteFade(m_palette->id(), Scene::FadeFollow, Scene::FadeFollow);
+    QCOMPARE(play(follow), 128);
+    QCOMPARE(runner->instanceForPalette(m_palette->id())->depth(), 1.0f);
+    runner->destroyInstancesForScene(follow->id(), true);
+    follow->m_running = false;
+    QVERIFY(runner->instanceForPalette(m_palette->id()) == nullptr);   // gone at once
+
+    // An effect from before effect fades (none on its scene): the same.
+    Scene *old = new Scene(m_doc);
+    m_doc->addFunction(old);
+    old->addFixture(fx->id());
+    old->addPalette(m_palette->id());
+    QVERIFY(old->paletteFades().isEmpty());
+    QCOMPARE(play(old), 128);
+    QVERIFY(!runner->instanceForPalette(m_palette->id())->hasDepthFade());
+    runner->destroyInstancesForScene(old->id(), true);
+    old->m_running = false;
+    QVERIFY(runner->instanceForPalette(m_palette->id()) == nullptr);
+}
+
+void EffectInstance_Test::effectsPartWayInOrOutCompose()
+{
+    auto w = [](int value, bool replace, float depth, float scale = -1.0f, int base = 0) {
+        EffectInstance::DmxWrite d;
+        d.universeId = 0; d.addr = 1; d.value = uchar(value); d.fixtureId = 0;
+        d.channel = 1; d.replace = replace; d.scale = scale; d.base = uchar(base); d.depth = depth;
+        return d;
+    };
+    // At full depth: as before (depth 1, no mix).
+    QList<EffectInstance::DmxWrite> out = EffectScriptRunner::composeWrites({ w(110, true, 1.0f, 0.5f, 220) });
+    QCOMPARE(out.size(), 1);
+    QCOMPARE(int(out.first().value), 110);
+    QCOMPARE(out.first().depth, 1.0f);
+    // A dimmer half in: half of its own depth, the channel half over what
+    // is under it (the fader scales that by the same).
+    out = EffectScriptRunner::composeWrites({ w(110, true, 0.5f, 0.5f, 220) });
+    QCOMPARE(out.first().depth, 0.5f);
+    QCOMPARE(out.first().scale, 0.75f);
+    QCOMPARE(int(out.first().value), 165);
+    // One dimmer going, another coming: each by as much of itself as is
+    // in; the channel as far over what is under it as the most of them.
+    out = EffectScriptRunner::composeWrites({ w(110, true, 0.25f, 0.5f, 220), w(55, true, 0.75f, 0.25f, 220) });
+    QCOMPARE(out.size(), 1);
+    QCOMPARE(out.first().depth, 0.75f);
+    QVERIFY(qAbs(out.first().scale - 0.875f * 0.4375f) < 0.0001f);
+    // One colour going, another coming: the later that far over the first.
+    out = EffectScriptRunner::composeWrites({ w(200, true, 0.5f), w(40, true, 0.5f) });
+    QCOMPARE(out.first().depth, 0.75f);
+    QCOMPARE(int(out.first().value), qRound((200 * 0.5f * 0.5f + 40 * 0.5f) / 0.75f));
 }
 
 void EffectInstance_Test::effectsOnOneChannelLayerAsADeskDoes()
