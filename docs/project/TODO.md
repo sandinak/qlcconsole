@@ -8,6 +8,13 @@ under `~/.claude/.../memory/`.
 
 ---
 
+## Raspberry Pi package — leftovers (pi, 2026-10-31)
+
+Built: `platforms/linux/make-pi-deb.sh` (a .deb; decided, can change),
+docs/dev/RASPI.md. Open: build it in CI (an arm64 runner) and attach it to
+a release; a Pi 4 build host; a Pi image with the package preinstalled;
+`debian/` and the `.spec` are still upstream's stale copies (unused).
+
 ## Effect fades — leftovers (efo, 2026-10-31)
 
 Built (STRATEGY §4 0.4 item 6; docs/features/show-tree.md "Effects"): a
