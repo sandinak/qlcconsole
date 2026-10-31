@@ -27,6 +27,7 @@
 #include <QList>
 #include <QHash>
 #include <functional>
+#include <QMetaType>
 
 class QXmlStreamReader;
 class QXmlStreamWriter;
@@ -203,6 +204,82 @@ signals:
      *  acts, on the thread the command arrived on. The Show Tree holds its
      *  Design previews on it (RC8, "GO holds previews"). */
     void aboutToTakeStage(ShowControl::Source source);
+
+    /*********************************************************************
+     * Show control out (QLab out)
+     *********************************************************************/
+public:
+    /** Which GOs are sent on: every cue, or only those with a cue number
+     *  of their own (decided: the "external cue" is the cue number a cue
+     *  has been given -- no second number to keep (can change)). */
+    enum OutCues { OutAllCues, OutNumberedCues };
+
+    /** The per-show settings of what a GO sends on, saved with the show. */
+    struct OutSettings
+    {
+        bool oscEnabled = false;
+        QString oscHost;                          //!< where QLab (or anything) listens
+        int oscPort = 53000;                      //!< QLab's own OSC port
+        /** The OSC plugin line (an interface address) it leaves from;
+         *  empty: the one on the host's subnet. */
+        QString oscLine;
+        /** The address, "{cue}" being the cue number: "/cue/{cue}/start",
+         *  or "/go" to GO whatever QLab has next. */
+        QString oscPath = QStringLiteral("/cue/{cue}/start");
+
+        bool mscEnabled = false;
+        QString mscOutput;                        //!< the MIDI plugin's name for the output
+        int mscDevice = 1;                        //!< the MSC device ID sent to (0..111, 127)
+        OutCues cues = OutAllCues;
+
+        bool operator==(const OutSettings &o) const
+        {
+            return oscEnabled == o.oscEnabled && oscHost == o.oscHost && oscPort == o.oscPort
+                   && oscLine == o.oscLine && oscPath == o.oscPath && mscEnabled == o.mscEnabled
+                   && mscOutput == o.mscOutput && mscDevice == o.mscDevice && cues == o.cues;
+        }
+    };
+
+    /** One message on its way out, ready to send. */
+    struct OutMessage
+    {
+        enum Kind { Osc, Msc } kind = Osc;
+        QString line;                             //!< OSC: the interface line; MSC: the MIDI output
+        QString host;                             //!< OSC only
+        int port = 0;                             //!< OSC only
+        QByteArray data;                          //!< the OSC packet, or the SysEx F0 ... F7
+    };
+
+    const OutSettings &outSettings() const { return m_out; }
+    void setOutSettings(const OutSettings &settings);
+
+    /** The OSC packet for @a path with no arguments ("/cue/4/start"):
+     *  the path and ",", each NUL-padded to a multiple of 4. */
+    static QByteArray oscMessage(const QString &path);
+    /** The MSC GO to @a deviceId for @a cue (lighting, all-call format
+     *  01): F0 7F dev 02 01 01 cue F7. */
+    static QByteArray mscGo(int deviceId, const QString &cue);
+
+    /** Where an outgoing message goes; the default hands it to the OSC or
+     *  MIDI plugin's output (no sockets of its own). A test swaps it. */
+    using OutSender = std::function<bool(const OutMessage &message)>;
+    void setOutSender(const OutSender &sender) { m_outSender = sender; }
+
+    /** What a GO of @a cue (step @a step of @a chaser) sends, per the
+     *  settings -- nothing for a cue left out by OutNumberedCues. */
+    QList<OutMessage> outMessagesFor(const Chaser *chaser, int step, const QString &cue) const;
+
+signals:
+    /** A GO sent @a count messages on (for the page's "last sent" line). */
+    void sentOut(const QString &what, bool ok);
+
+private:
+    void sendOut(const Chaser *chaser, int step, const QString &cue);
+    bool sendViaPlugin(const OutMessage &message);
+
+private:
+    OutSettings m_out;
+    OutSender m_outSender;
 
     /*********************************************************************
      * MIDI Show Control

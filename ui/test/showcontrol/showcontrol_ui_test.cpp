@@ -288,7 +288,7 @@ void ShowControlUi_Test::thePageShowsTheCurrentSettings()
     QCOMPARE(rows.at(3).at(2), QString("Off"));
     QCOMPARE(rows.at(4).at(0), QString("map"));
     QCOMPARE(rows.at(4).at(2), QString("None"));
-    QVERIFY(page.findChild<QWidget *>("scQLabOutGroup") == nullptr);
+    QVERIFY(page.findChild<QWidget *>("scQLabOutGroup") != nullptr);       // QLab out, in the show
 
     // With no listener yet (the page is built before it), nothing to edit.
     ShowControlSyncPage early(m_doc);
@@ -627,3 +627,56 @@ void ShowControlUi_Test::theWebAccessBoxEditsTheShow()
 }
 
 QTEST_MAIN(ShowControlUi_Test)
+
+/* QLab out is the show's own setting: the boxes edit it, it marks the show
+   changed, and a page opened on a show that has it shows it. */
+void ShowControlUi_Test::theQLabOutBoxEditsTheShow()
+{
+    ShowControl *sc = m_doc->showControl();
+    ShowControlSyncPage page(m_doc);
+    QVERIFY(!sc->outSettings().oscEnabled);
+    QVERIFY(!sc->outSettings().mscEnabled);
+    m_doc->resetModified();
+
+    page.findChild<QLineEdit *>("scOutHost")->setText("10.0.0.7");
+    emit page.findChild<QLineEdit *>("scOutHost")->editingFinished();
+    page.findChild<QSpinBox *>("scOutPort")->setValue(53001);
+    page.findChild<QCheckBox *>("scOutOsc")->setChecked(true);
+    page.findChild<QComboBox *>("scOutPath")->setCurrentText("/go");
+    page.findChild<QSpinBox *>("scOutDevice")->setValue(4);
+    QComboBox *cues = page.findChild<QComboBox *>("scOutCues");
+    cues->setCurrentIndex(1);
+    emit cues->activated(1);
+    const ShowControl::OutSettings o = sc->outSettings();
+    QVERIFY(o.oscEnabled);
+    QCOMPARE(o.oscHost, QString("10.0.0.7"));
+    QCOMPARE(o.oscPort, 53001);
+    QCOMPARE(o.oscPath, QString("/go"));
+    QCOMPARE(o.mscDevice, 4);
+    QCOMPARE(o.cues, ShowControl::OutNumberedCues);
+    QVERIFY(m_doc->isModified());
+
+    // Another page on the same show shows what it has.
+    ShowControlSyncPage again(m_doc);
+    QVERIFY(again.findChild<QCheckBox *>("scOutOsc")->isChecked());
+    QCOMPARE(again.findChild<QLineEdit *>("scOutHost")->text(), QString("10.0.0.7"));
+    QCOMPARE(again.findChild<QSpinBox *>("scOutPort")->value(), 53001);
+    QCOMPARE(again.findChild<QComboBox *>("scOutCues")->currentIndex(), 1);
+
+    // A GO sent says so.
+    sc->setOutSender([](const ShowControl::OutMessage &) { return true; });
+    Chaser *c = new Chaser(m_doc);
+    m_doc->addFunction(c);
+    Scene *scene = new Scene(m_doc);
+    m_doc->addFunction(scene);
+    ChaserStep step(scene->id());
+    step.cueNumber = "5";
+    c->addStep(step);
+    sc->setMainCueList(c->id());
+    ShowControl::Request r;
+    r.cue = "5";
+    QVERIFY(sc->execute(r));
+    QVERIFY2(page.findChild<QLabel *>("scOutLast")->text().contains("/go"),
+             qPrintable(page.findChild<QLabel *>("scOutLast")->text()));
+    c->stop(FunctionParent::master());
+}

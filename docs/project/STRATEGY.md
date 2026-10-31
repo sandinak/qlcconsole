@@ -434,7 +434,7 @@ Notes:
 | LTC (audio) timecode in, plus cues at a timecode | 4 | 5 | MTC follow, audio capture | 4 | M | M | 4 | BUILD (0.4): **LTC in built** (feat/04-ltc); cues at a timecode next, after the One GO path |
 | Effect fade in / fade out (depth to 0 on release) | 4 | 5 | layered looks | 4 | M | M | 4 | BUILD (0.4) |
 | Group / intensity masters on faders | 4 | 5 | groups, speed masters, Control Map | 4 | M | M | 4 | BUILD (0.4) |
-| QLab out (OSC / MSC out) | 3 | 4 | Show control page | 3 | L | M | 4 | BUILD (0.4) |
+| QLab out (OSC / MSC out) | 3 | 4 | Show control page | 3 | L | M | 4 | BUILT (0.4) |
 | Override / priority hits (Normal / Override / Inhibit, restore on release) | 5 | 4 | Hits, OutputLayer | 5 | M | M | 3.2 | BUILD (0.4) |
 | Phone/tablet Run page (current, next, GO, Back, Hold) | 4 | 5 | secured web access, CueRunner | 5 | M | H | 3.2 | BUILD (0.4) |
 | Calling script view (cues on lyric or script lines) | 3 | 4 | cue notes | 4 | L | M | 3 | BUILD (0.5) |
@@ -551,6 +551,7 @@ Order and dependencies:
 7. **Tracking sheet and printable cue sheet**, the stage manager's paper.
    **Built** (2026-10-31): More ▾ → Cue Sheet… on the Show Tree tab.
 8. **QLab out** (OSC/MSC), if the show-control users ask.
+8. **QLab out** (OSC/MSC) -- built: a GO sent on, per show, from the Show control page.
 9. **Walk the show from the stage** (Q192, extends Focus this cue and
    Refine): cues, layers and "Needs work" tags from the controller.
 10. **Course**: Lessons 2.2-2.4, and a Level 3 lesson on running from the

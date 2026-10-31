@@ -31,6 +31,7 @@
 #include <QGroupBox>
 #include <QSpinBox>
 #include <QLabel>
+#include <QLineEdit>
 
 #include "showcontrolsyncpage.h"
 #include "controlmappanel.h"
@@ -118,10 +119,11 @@ ShowControlSyncPage::ShowControlSyncPage(Doc *doc, QWidget *parent)
                              content));
     m_groups.insert(QStringLiteral("osc"), buildOscGroup());
     m_groups.insert(QStringLiteral("msc"), buildMscGroup());
+    m_groups.insert(QStringLiteral("out"), buildOutGroup());
     m_groups.insert(QStringLiteral("mtc"), buildMtcGroup());
     m_groups.insert(QStringLiteral("web"), buildWebGroup());
     m_groups.insert(QStringLiteral("map"), buildMapGroup());
-    for (const QString &key : { QStringLiteral("osc"), QStringLiteral("msc"), QStringLiteral("mtc"),
+    for (const QString &key : { QStringLiteral("osc"), QStringLiteral("msc"), QStringLiteral("out"), QStringLiteral("mtc"),
                                 QStringLiteral("web"), QStringLiteral("map") })
         lay->addWidget(m_groups.value(key));
     lay->addStretch();
@@ -149,6 +151,7 @@ ShowControlSyncPage::ShowControlSyncPage(Doc *doc, QWidget *parent)
     setListener(nullptr);
     refreshMidiInputs();
     refreshWeb();
+    refreshOut();
 }
 
 QGroupBox *ShowControlSyncPage::buildOscGroup()
@@ -268,6 +271,154 @@ QGroupBox *ShowControlSyncPage::buildMscGroup()
             m_listener->setMscDeviceId(id);
     });
     return box;
+}
+
+QGroupBox *ShowControlSyncPage::buildOutGroup()
+{
+    // The outgoing half: a GO sends its cue on to QLab and the like. Per
+    // show (saved with it), through the OSC and MIDI plugins' outputs.
+    QGroupBox *box = new QGroupBox(tr("QLab out (this show)"), this);
+    box->setObjectName(QStringLiteral("scQLabOutGroup"));
+    QFormLayout *form = new QFormLayout(box);
+
+    form->addRow(noteLabel(tr("When a cue goes on stage from this console, send it on. Off until "
+                              "you turn it on; a cue that came in by OSC or MSC is not sent back."),
+                           box));
+
+    QHBoxLayout *osc = new QHBoxLayout();
+    m_outOscCheck = new QCheckBox(tr("Send OSC to"), box);
+    m_outOscCheck->setObjectName(QStringLiteral("scOutOsc"));
+    m_outHost = new QLineEdit(box);
+    m_outHost->setObjectName(QStringLiteral("scOutHost"));
+    m_outHost->setPlaceholderText(tr("host or IP"));
+    m_outHost->setToolTip(tr("The computer QLab runs on: its address on the network, or 127.0.0.1 "
+                             "on this computer."));
+    m_outPort = new QSpinBox(box);
+    m_outPort->setObjectName(QStringLiteral("scOutPort"));
+    m_outPort->setRange(1, 65535);
+    m_outPort->setKeyboardTracking(false);
+    m_outPort->setValue(ShowControl::OutSettings().oscPort);
+    m_outPort->setToolTip(tr("QLab listens on 53000."));
+    osc->addWidget(m_outOscCheck);
+    osc->addWidget(m_outHost, 1);
+    osc->addWidget(m_outPort);
+    form->addRow(osc);
+
+    m_outPath = new QComboBox(box);
+    m_outPath->setObjectName(QStringLiteral("scOutPath"));
+    m_outPath->setEditable(true);
+    m_outPath->addItem(ShowControl::OutSettings().oscPath);
+    m_outPath->addItem(QStringLiteral("/go"));
+    m_outPath->setToolTip(tr("The OSC address. {cue} is the cue number: /cue/{cue}/start starts "
+                             "that cue in QLab; /go sends QLab's own GO."));
+    form->addRow(tr("Address:"), m_outPath);
+
+    m_outLine = new QComboBox(box);
+    m_outLine->setObjectName(QStringLiteral("scOutLine"));
+    m_outLine->setToolTip(tr("The network interface it leaves from (the OSC plugin's output)."));
+    form->addRow(tr("From:"), m_outLine);
+
+    QHBoxLayout *msc = new QHBoxLayout();
+    m_outMscCheck = new QCheckBox(tr("Send MIDI Show Control GO to device"), box);
+    m_outMscCheck->setObjectName(QStringLiteral("scOutMsc"));
+    m_outDevice = new QSpinBox(box);
+    m_outDevice->setObjectName(QStringLiteral("scOutDevice"));
+    m_outDevice->setRange(0, 0x6F);
+    m_outDevice->setKeyboardTracking(false);
+    m_outDevice->setValue(ShowControl::OutSettings().mscDevice);
+    m_outDevice->setToolTip(tr("The device number QLab's MIDI input answers to."));
+    msc->addWidget(m_outMscCheck);
+    msc->addWidget(m_outDevice);
+    msc->addStretch();
+    form->addRow(msc);
+
+    m_outMidi = new QComboBox(box);
+    m_outMidi->setObjectName(QStringLiteral("scOutMidi"));
+    m_outMidi->setSizeAdjustPolicy(QComboBox::AdjustToContents);
+    m_outMidi->setToolTip(tr("The MIDI output the GO leaves on."));
+    form->addRow(tr("On:"), m_outMidi);
+
+    m_outCues = new QComboBox(box);
+    m_outCues->setObjectName(QStringLiteral("scOutCues"));
+    m_outCues->addItem(tr("Every cue"), int(ShowControl::OutAllCues));
+    m_outCues->addItem(tr("Only cues with a cue number of their own"), int(ShowControl::OutNumberedCues));
+    m_outCues->setToolTip(tr("A cue's number is the one set in its cue list (or by Renumber). "
+                             "Cues left without one are not sent."));
+    form->addRow(tr("Send:"), m_outCues);
+
+    m_outLast = new QLabel(tr("Nothing sent yet."), box);
+    m_outLast->setObjectName(QStringLiteral("scOutLast"));
+    m_outLast->setWordWrap(true);
+    form->addRow(tr("Last sent:"), m_outLast);
+
+    connect(m_doc->showControl(), &ShowControl::sentOut, this, [this](const QString &what, bool ok) {
+        m_outLast->setText(ok ? what : tr("%1 -- failed (output not available)").arg(what));
+    });
+    auto changed = [this]() { applyOut(); };
+    connect(m_outOscCheck, &QCheckBox::toggled, this, changed);
+    connect(m_outHost, &QLineEdit::editingFinished, this, changed);
+    connect(m_outPort, &QSpinBox::valueChanged, this, changed);
+    connect(m_outPath, &QComboBox::currentTextChanged, this, changed);
+    connect(m_outLine, &QComboBox::activated, this, changed);
+    connect(m_outMscCheck, &QCheckBox::toggled, this, changed);
+    connect(m_outDevice, &QSpinBox::valueChanged, this, changed);
+    connect(m_outMidi, &QComboBox::activated, this, changed);
+    connect(m_outCues, &QComboBox::activated, this, changed);
+    return box;
+}
+
+void ShowControlSyncPage::refreshOut()
+{
+    if (m_outOscCheck == nullptr)
+        return;
+    const ShowControl::OutSettings o = m_doc->showControl()->outSettings();
+    const bool was = m_updating;
+    m_updating = true;
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    m_outLine->clear();
+    m_outLine->addItem(tr("The interface on that network"), QString());
+    for (const QString &n : iom->pluginOutputs(QStringLiteral("OSC")))
+        m_outLine->addItem(n, n);
+    if (!o.oscLine.isEmpty() && m_outLine->findData(o.oscLine) < 0)
+        m_outLine->addItem(tr("%1 (not on this computer now)").arg(o.oscLine), o.oscLine);
+    m_outLine->setCurrentIndex(qMax(0, m_outLine->findData(o.oscLine)));
+
+    m_outMidi->clear();
+    m_outMidi->addItem(tr("(none)"), QString());
+    for (const QString &n : iom->pluginOutputs(QStringLiteral("MIDI")))
+        m_outMidi->addItem(n, n);
+    if (!o.mscOutput.isEmpty() && m_outMidi->findData(o.mscOutput) < 0)
+        m_outMidi->addItem(tr("%1 (not on this computer now)").arg(o.mscOutput), o.mscOutput);
+    m_outMidi->setCurrentIndex(qMax(0, m_outMidi->findData(o.mscOutput)));
+
+    m_outOscCheck->setChecked(o.oscEnabled);
+    m_outHost->setText(o.oscHost);
+    m_outPort->setValue(o.oscPort);
+    m_outPath->setCurrentText(o.oscPath);
+    m_outMscCheck->setChecked(o.mscEnabled);
+    m_outDevice->setValue(o.mscDevice);
+    m_outCues->setCurrentIndex(qMax(0, m_outCues->findData(int(o.cues))));
+    m_updating = was;
+}
+
+void ShowControlSyncPage::applyOut()
+{
+    if (m_updating)
+        return;
+    ShowControl::OutSettings o;
+    o.oscEnabled = m_outOscCheck->isChecked();
+    o.oscHost = m_outHost->text().trimmed();
+    o.oscPort = m_outPort->value();
+    o.oscPath = m_outPath->currentText().trimmed();
+    o.oscLine = m_outLine->currentData().toString();
+    o.mscEnabled = m_outMscCheck->isChecked();
+    o.mscOutput = m_outMidi->currentData().toString();
+    o.mscDevice = m_outDevice->value();
+    o.cues = ShowControl::OutCues(m_outCues->currentData().toInt());
+    if (o == m_doc->showControl()->outSettings())
+        return;
+    m_doc->showControl()->setOutSettings(o);
+    m_doc->setModified();       // saved with the show
 }
 
 QGroupBox *ShowControlSyncPage::buildMtcGroup()
@@ -527,6 +678,7 @@ void ShowControlSyncPage::scheduleMidiInputsRefresh()
 
 void ShowControlSyncPage::refreshMidiInputs()
 {
+    refreshOut();
     InputOutputMap *iom = m_doc->inputOutputMap();
     TimecodeSource *tc = m_doc->timecodeSource();
     const qint32 cur = tc->sourceUniverse();
@@ -727,7 +879,9 @@ void ShowControlSyncPage::refreshTimecode()
 void ShowControlSyncPage::showSection(const QString &key)
 {
     for (auto it = m_groups.cbegin(); it != m_groups.cend(); ++it)
-        it.value()->setVisible(key.isEmpty() || it.key() == key);
+        it.value()->setVisible(key.isEmpty() || it.key() == key
+                               || (it.key() == QLatin1String("out")
+                                   && (key == QLatin1String("osc") || key == QLatin1String("msc"))));
 }
 
 QList<QStringList> ShowControlSyncPage::summary() const

@@ -1169,3 +1169,216 @@ void ShowControl_Test::wouldTakeStageMatchesExecute()
 }
 
 QTEST_MAIN(ShowControl_Test)
+
+/*****************************************************************************
+ * QLab out
+ *****************************************************************************/
+
+void ShowControl_Test::aGoSendsOscAndMscWithTheCueNumber()
+{
+    Chaser *c = makeList(3, "Main");
+    ChaserStep step = c->steps().at(1);
+    step.cueNumber = "12.5";
+    c->replaceStep(step, 1);
+    ShowControl *sc = m_doc->showControl();
+    sc->setMainCueList(c->id());
+
+    QList<ShowControl::OutMessage> got;
+    sc->setOutSender([&got](const ShowControl::OutMessage &m) { got << m; return true; });
+    ShowControl::OutSettings o;
+    o.oscEnabled = true;
+    o.oscHost = "127.0.0.1";
+    o.oscPort = 53000;
+    o.mscEnabled = true;
+    o.mscOutput = "IAC Driver Bus 1";
+    o.mscDevice = 3;
+    sc->setOutSettings(o);
+
+    ShowControl::Request r;
+    r.cue = "12.5";
+    QVERIFY(sc->execute(r));
+    QCOMPARE(got.count(), 2);
+    QCOMPARE(got.at(0).kind, ShowControl::OutMessage::Osc);
+    QCOMPARE(got.at(0).host, QString("127.0.0.1"));
+    QCOMPARE(got.at(0).port, 53000);
+    // "/cue/12.5/start" is 15 bytes: a NUL and padding to 16, then ",\0\0\0"
+    QCOMPARE(got.at(0).data, QByteArray("/cue/12.5/start\0,\0\0\0", 20));
+    QCOMPARE(got.at(1).kind, ShowControl::OutMessage::Msc);
+    QCOMPARE(got.at(1).line, QString("IAC Driver Bus 1"));
+    QCOMPARE(got.at(1).data, QByteArray::fromHex("f07f0302010131322e35f7"));
+
+    // And the encoders agree with the decoder.
+    ShowControl::Request back;
+    QVERIFY(ShowControl::parseMsc(got.at(1).data, 3, &back));
+    QCOMPARE(back.command, ShowControl::Go);
+    QCOMPARE(back.cue, QString("12.5"));
+
+    // GO with no cue plays the next one: it is sent too (the cue it played).
+    got.clear();
+    stopAll();
+    for (int i = 0; i < 3; ++i)
+        m_doc->masterTimer()->timerTick();
+    o.oscPath = "/go";
+    sc->setOutSettings(o);
+    QVERIFY(sc->execute(ShowControl::Request()));       // from stopped: cue 1
+    QCOMPARE(got.at(0).data, QByteArray("/go\0,\0\0\0", 8));
+    QCOMPARE(got.at(1).data, QByteArray::fromHex("f07f03020101" "31" "f7"));
+    got.clear();
+    for (int i = 0; i < 3; ++i)
+        m_doc->masterTimer()->timerTick();
+    QVERIFY(sc->execute(ShowControl::Request()));       // the next: 12.5
+    QCOMPARE(got.at(1).data, QByteArray::fromHex("f07f03020101" "31322e35" "f7"));
+    stopAll();
+}
+
+void ShowControl_Test::aCueWithoutANumberIsLeftOutWhenOnlyNumberedAreSent()
+{
+    Chaser *c = makeList(3, "Main");
+    ChaserStep step = c->steps().at(1);
+    step.cueNumber = "20";
+    c->replaceStep(step, 1);
+    QVERIFY(!c->stepHasCueNumber(0));
+    QVERIFY(c->stepHasCueNumber(1));
+    ShowControl *sc = m_doc->showControl();
+    sc->setMainCueList(c->id());
+    QList<ShowControl::OutMessage> got;
+    sc->setOutSender([&got](const ShowControl::OutMessage &m) { got << m; return true; });
+    ShowControl::OutSettings o;
+    o.mscEnabled = true;
+    o.mscOutput = "Out";
+    o.cues = ShowControl::OutNumberedCues;
+    sc->setOutSettings(o);
+
+    ShowControl::Request r;
+    r.cue = "1";                                  // no number of its own: its position
+    QVERIFY(sc->execute(r));
+    QVERIFY(got.isEmpty());
+    r.cue = "20";
+    QVERIFY(sc->execute(r));
+    QCOMPARE(got.count(), 1);
+    QCOMPARE(got.at(0).data, QByteArray::fromHex("f07f01020101" "3230" "f7"));
+
+    // Every cue: the unnumbered one goes too, by its position.
+    got.clear();
+    o.cues = ShowControl::OutAllCues;
+    sc->setOutSettings(o);
+    r.cue = "1";
+    QVERIFY(sc->execute(r));
+    QCOMPARE(got.count(), 1);
+    QCOMPARE(got.at(0).data, QByteArray::fromHex("f07f01020101" "31" "f7"));
+    stopAll();
+}
+
+void ShowControl_Test::aDisabledSendSendsNothing()
+{
+    Chaser *c = makeList(2, "Main");
+    ShowControl *sc = m_doc->showControl();
+    sc->setMainCueList(c->id());
+    QList<ShowControl::OutMessage> got;
+    sc->setOutSender([&got](const ShowControl::OutMessage &m) { got << m; return true; });
+    ShowControl::OutSettings o;        // everything set, nothing switched on
+    o.oscHost = "127.0.0.1";
+    o.mscOutput = "Out";
+    sc->setOutSettings(o);
+    ShowControl::Request r;
+    r.cue = "1";
+    QVERIFY(sc->execute(r));
+    QVERIFY(got.isEmpty());
+
+    // On, but with nowhere to send: nothing either.
+    o.oscEnabled = true;
+    o.oscHost.clear();
+    o.mscEnabled = true;
+    o.mscOutput.clear();
+    sc->setOutSettings(o);
+    r.cue = "2";
+    QVERIFY(sc->execute(r));
+    QVERIFY(got.isEmpty());
+    stopAll();
+}
+
+void ShowControl_Test::aGoThatFindsNothingSendsNothing()
+{
+    Chaser *c = makeList(2, "Main");
+    ShowControl *sc = m_doc->showControl();
+    sc->setMainCueList(c->id());
+    QList<ShowControl::OutMessage> got;
+    sc->setOutSender([&got](const ShowControl::OutMessage &m) { got << m; return true; });
+    ShowControl::OutSettings o;
+    o.oscEnabled = true;
+    o.oscHost = "127.0.0.1";
+    sc->setOutSettings(o);
+
+    ShowControl::Request r;
+    r.cue = "99";
+    QVERIFY(!sc->execute(r));                     // no such cue
+    r.cue.clear();
+    r.list = "7";
+    QVERIFY(!sc->execute(r));                     // no such list
+    ShowControl::Request stop;
+    stop.command = ShowControl::Stop;
+    sc->execute(stop);                            // not a GO
+    QVERIFY(got.isEmpty());
+}
+
+void ShowControl_Test::aCommandFromOscOrMscIsNotEchoed()
+{
+    Chaser *c = makeList(2, "Main");
+    ShowControl *sc = m_doc->showControl();
+    sc->setMainCueList(c->id());
+    QList<ShowControl::OutMessage> got;
+    sc->setOutSender([&got](const ShowControl::OutMessage &m) { got << m; return true; });
+    ShowControl::OutSettings o;
+    o.oscEnabled = true;
+    o.oscHost = "127.0.0.1";
+    sc->setOutSettings(o);
+
+    QCOMPARE(sc->handleOsc(osc("/cue/2/start")), 1);
+    sc->handleSysEx(0, msc(1, 1, 1, "1"));
+    QVERIFY(got.isEmpty());
+    QVERIFY(sc->execute(ShowControl::Request()));  // this console's GO: sent
+    QCOMPARE(got.count(), 1);
+    stopAll();
+}
+
+void ShowControl_Test::theOutSettingsAreSavedWithTheShow()
+{
+    ShowControl *sc = m_doc->showControl();
+    ShowControl::OutSettings o;
+    o.oscEnabled = true;
+    o.oscHost = "192.168.1.20";
+    o.oscPort = 53001;
+    o.oscLine = "192.168.1.5";
+    o.oscPath = "/go";
+    o.mscEnabled = true;
+    o.mscOutput = "IAC Driver Bus 1";
+    o.mscDevice = 7;
+    o.cues = ShowControl::OutNumberedCues;
+    sc->setOutSettings(o);
+
+    QByteArray xml;
+    {
+        QXmlStreamWriter w(&xml);
+        w.writeStartDocument();
+        w.writeStartElement("Test");
+        QVERIFY(sc->saveXML(&w));
+        w.writeEndElement();
+        w.writeEndDocument();
+    }
+    sc->reset();
+    QVERIFY(!(sc->outSettings() == o));
+    QXmlStreamReader r(xml);
+    r.readNextStartElement();                       // Test
+    r.readNextStartElement();                       // ShowControl
+    QVERIFY(sc->loadXML(r));
+    QVERIFY(sc->outSettings() == o);
+
+    // The defaults are not written: a show without it is as it was.
+    sc->reset();
+    QByteArray plain;
+    {
+        QXmlStreamWriter w(&plain);
+        QVERIFY(sc->saveXML(&w));
+    }
+    QVERIFY(plain.isEmpty());
+}

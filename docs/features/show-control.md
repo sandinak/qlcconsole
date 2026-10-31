@@ -5,7 +5,7 @@ QLab — or anything else that speaks **MIDI Show Control** (MSC) or **OSC**
 its cues GO the lights.
 
 Everything that controls or clocks the show from outside is set up in one
-place: the **Show control &amp; sync** rows at the bottom of **Connections →
+place: the **Show control & sync** rows at the bottom of **Connections →
 Devices** — **OSC in**, **MIDI Show Control in** and **MIDI timecode**, each
 with its state beside it ("Port 8000 · listening", "Off"). Click a row to
 set it up on the right, with what it last heard. (It used to be in the
@@ -105,7 +105,7 @@ One level only: a sub-cue's own chase steps run on their own timing.
   **Next:** in the footer and in the cue list shows it — "Next: 4.2 —
   Wash" — and the next GO plays it. The Run tab loads a sub-cue too.
 - **STOP 4.2** stops the list only when 4.2 is the sub-cue playing.
-- When Sub GO can't, **Connections → Devices → Show control &amp; sync** says why:
+- When Sub GO can't, **Connections → Devices → Show control & sync** says why:
   "cue 1 has no sub-cues on Sub GO", "end of 4", "4 is at its first
   sub-cue".
 
@@ -174,9 +174,37 @@ MSC's **STOP** holds the cue in progress and **RESUME** carries it on, so in
 qlcconsole they are PAUSE and RESUME; **GO_OFF** stops the list. GO, LOAD,
 ALL_OFF, RESET and TIMED_GO (as GO) are answered too.
 
+## QLab out — sending a GO on
+
+The other direction: when a cue goes on stage from this console (⌘↩, the
+Run tab, the footer, the Virtual Console, a controller), qlcconsole can
+send it on to QLab, a sound desk or anything else that listens. It is off
+until you turn it on, and it is **this show's** setting, saved with the
+show: **Connections → Devices → Show control & sync**, **QLab out**.
+
+- **Send OSC to** a host and port (QLab listens on 53000). The address is
+  `/cue/{cue}/start` by default, `{cue}` being the cue number that went, so
+  QLab starts the cue with the same number; `/go` sends QLab's own GO
+  instead. It leaves from the OSC plugin's output on the network the host
+  is on (or the interface you pick under **From**). No new socket and no
+  patching needed.
+- **Send MIDI Show Control GO to device** *n* on a MIDI output: MSC GO,
+  lighting format, with the cue number (`4`, `12.5`, `4.2`), through the
+  MIDI plugin's output you pick under **On**.
+- **Send** every cue, or only cues with a cue number of their own (set in
+  the cue list, or by Renumber). A cue without one is then left out; with
+  every cue, its position is its number.
+
+Only a GO that actually puts a cue on stage sends: a GO that finds no such
+cue or list sends nothing, and neither does a preview or anything in blind.
+A command that came in by OSC or MSC is not sent back out, so QLab and
+qlcconsole can't GO each other in a loop. **Last sent** on the page shows
+what went. Back, Stop and the like are not sent (decided: GO only, can
+change).
+
 ## Checking the hookup
 
-**Connections → Devices → Show control &amp; sync** says whether OSC is listening —
+**Connections → Devices → Show control & sync** says whether OSC is listening —
 green, or in red why it can't, such as "Can't listen for OSC on port 53100"
 when another program has the port (pick another) — and, for OSC and MSC
 each, the **last command** that arrived, when, and what came of it: "GO

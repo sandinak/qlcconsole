@@ -123,6 +123,11 @@ public:
 
     void sendSysEx(quint32 output, const QByteArray &data);
 
+    /** @reimp: the SysEx (F0 ... F7) on the output, opened for the purpose
+     *  when no universe has it open. */
+    bool sendShowControl(quint32 output, const QByteArray &message,
+                         const QString &address, quint16 port) override;
+
 private:
     /** Get an output device by its output index */
     MidiInputDevice* inputDevice(quint32 input) const;

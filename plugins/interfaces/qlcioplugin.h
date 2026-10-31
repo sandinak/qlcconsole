@@ -478,6 +478,19 @@ public:
     { Q_UNUSED(identity) return -1; }
 
     /**
+     * Sends one show-control message out of @p output, outside any universe
+     * (a GO to QLab): the OSC plugin sends the ready OSC packet in @p message
+     * to @p address:@p port from that line's socket; the MIDI plugin sends
+     * @p message (F0 ... F7) as System Exclusive on that output. The
+     * default sends nothing.
+     *
+     * @return true when the message was handed to the line.
+     */
+    virtual bool sendShowControl(quint32 output, const QByteArray &message,
+                                 const QString &address = QString(), quint16 port = 0)
+    { Q_UNUSED(output) Q_UNUSED(message) Q_UNUSED(address) Q_UNUSED(port) return false; }
+
+    /**
      * Can configureDevice() change the device at @p address (one of
      * discoveredDevices()) -- its network address, for an Art-Net node?
      */

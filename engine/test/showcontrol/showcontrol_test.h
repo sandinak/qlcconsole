@@ -69,6 +69,14 @@ private slots:
     void runOffTheThreadExecutesDirectly();
     void wouldTakeStageMatchesExecute();
 
+    // QLab out: what a GO sends on (exact bytes).
+    void aGoSendsOscAndMscWithTheCueNumber();
+    void aCueWithoutANumberIsLeftOutWhenOnlyNumberedAreSent();
+    void aDisabledSendSendsNothing();
+    void aGoThatFindsNothingSendsNothing();
+    void aCommandFromOscOrMscIsNotEchoed();
+    void theOutSettingsAreSavedWithTheShow();
+
 private:
     Chaser *makeList(int steps, const QString &name);
     /** "Main": cues 1, 2, 3, cue 2 a chase of three steps on Sub GO. */
