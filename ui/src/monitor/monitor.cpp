@@ -3267,6 +3267,24 @@ void Monitor::showStageOverview()
         view->setHaze(hazeCombo->currentData().toDouble());
     });
     view->setHaze(hazeCombo->currentData().toDouble());
+
+    /* Whose lights are drawn: the room's own rig against ours (the tour
+       package), to see what the venue gives against what travels. */
+    bar->addWidget(new QLabel(tr("Owner:"), footer));
+    QComboBox *ownerCombo = new QComboBox(footer);
+    ownerCombo->setObjectName(QStringLiteral("rigOwner"));
+    ownerCombo->addItem(tr("All"),        int(StructureStudioView::OwnerAll));
+    ownerCombo->addItem(tr("House only"), int(StructureStudioView::OwnerHouse));
+    ownerCombo->addItem(tr("Ours only"),  int(StructureStudioView::OwnerOurs));
+    ownerCombo->setProperty("cycleOnClick", true);
+    ownerCombo->installEventFilter(this);
+    ownerCombo->setToolTip(tr("Whose fixtures are drawn: all, only the house rig, or only ours "
+                              "(tour and rental) — click to cycle"));
+    bar->addWidget(ownerCombo);
+    connect(ownerCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), &dlg,
+            [view, ownerCombo](int) {
+        view->setOwnerFilter(StructureStudioView::OwnerFilter(ownerCombo->currentData().toInt()));
+    });
     addSep();
 
     /* Fidelity against speed, for the machine this is running on: sharper

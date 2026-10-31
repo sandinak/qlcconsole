@@ -153,6 +153,11 @@ skipped). Upstream fixes taken:
 
 ### Added
 
+- **Rig Overview owner filter**: an **Owner** box in the footer shows All
+  fixtures, **House only** or **Ours only** (tour and rental), to see what
+  the room gives against what travels. It hides drawing only.
+- **People face the front of a turned riser** in the Rig Overview, not
+  always the house.
 - **Venue focus builds its own calls.** A show with no focus calls used to
   come up empty ("no fixtures to focus"). Now Venue focus, and a venue
   focus cue, build one call per stage target the show aims at, with the
@@ -634,6 +639,10 @@ skipped). Upstream fixes taken:
 
 ### Fixed
 
+- **Performers no longer come and go in the Rig Overview** (and the plot):
+  the cue scope (Show ▸ All targets off) was hiding the people along with
+  the targets the cue does not aim at, so they vanished and returned as
+  cues changed while their layer stayed visible.
 - **A Breathe no longer flashes the look's level before it starts.** A
   scene with an effect holds its output until the effect's first frame
   (a frame or two; at most a quarter second), so a Breathe on a look at

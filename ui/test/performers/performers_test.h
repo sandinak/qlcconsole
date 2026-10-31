@@ -63,6 +63,12 @@ private slots:
     /** 70 people do not slow the rig view or the plot noticeably. */
     void manyPeopleRenderCost();
     void keptFacesDrawTheSamePicture();
+    /** The cue scope never hides the people: they draw on every frame. */
+    void performersDrawOnEveryFrame();
+    /** People on a turned riser face its front. */
+    void peopleFaceATurnedRiser();
+    /** The Rig Overview's owner filter. */
+    void ownerFilterShowsHouseOrOurs();
 };
 
 #endif

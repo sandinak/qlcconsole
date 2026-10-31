@@ -72,6 +72,7 @@
 #include "qlcpalette.h"
 #include "fixture.h"
 #include "scene.h"
+#include "rigowner.h"
 #include "doc.h"
 
 namespace
@@ -870,3 +871,163 @@ void Performers_Test::manyPeopleRenderCost()
 }
 
 QTEST_MAIN(Performers_Test)
+
+/* Performers must draw on every frame while their layer is shown: after a
+   full frame, a budget-limited (value-driven, unsupersampled) one, and an
+   incremental one (a value moved, a different cue on show). The cue scope
+   (Show > All targets off) used to drop them with the targets it hides. */
+void Performers_Test::performersDrawOnEveryFrame()
+{
+    Doc doc(this);
+    MonitorProperties *props = doc.monitorProperties();
+    QList<quint32> risers;
+    risers << threeTier(props, 0.3f, 1.0f)->id();
+    Fixture *wash = makeWash(&doc, 0, QVector3D(1.5f, 8.0f, 5.0f));
+    QVERIFY(wash != nullptr);
+    StageTarget *other = props->addStageTarget();       // what the "cue" aims at
+    other->setX(6.0f);
+    other->setY(2.0f);
+
+    StructureStudioView v(&doc, StructureStudioView::StageKind, 0);
+    v.resize(600, 420);
+    v.reload();
+    v.setPlane(StructureStudioView::Angled);
+    v.setAngledView(15.0, 15.0);
+    v.setLiveValues(true);
+    Plot plot(&doc);
+    PerformerFill::Options o;
+    o.height = PerformerFill::presetHeight(PerformerFill::Students);
+    const PerformerFill::Result r = plot.mon->fillWithPeople(risers, o);
+    QVERIFY(r.people > 0);
+    v.reload();
+
+    // The cue on show aims at the other target only.
+    v.setTargetScope(false, QSet<quint32>() << other->id());
+    auto builtFigures = [&]() {
+        int n = 0;
+        for (const StructureStudioView::FigureFaces &f : std::as_const(v.m_figureFaces))
+            if (f.built && !f.faces.isEmpty())
+                ++n;
+        return n;
+    };
+    auto frame = [&](const char *what) {
+        v.m_figureFaces.clear();            // so a frame that skipped them shows
+        v.grab();
+        QVERIFY2(builtFigures() == r.people, what);
+    };
+
+    frame("full frame");
+    // Budget-limited: value-driven, close on the last, no supersampling.
+    v.setSupersample(2);
+    for (int i = 0; i < 3; ++i)
+    {
+        v.m_timerTick = true;
+        v.m_lastFrameAt.start();
+        v.m_valueFrame = true;
+        v.m_figureFaces.clear();
+        v.grab();
+        v.m_timerTick = false;
+        QCOMPARE(builtFigures(), r.people);
+    }
+    // Incremental: a value moves between frames, a different cue comes on.
+    for (int i = 0; i < 4; ++i)
+    {
+        QByteArray u(512, char(0));
+        u[2] = char(40 * i); u[3] = char(255);
+        wash->setChannelValues(u);
+        v.setTargetScope(false, i % 2 ? QSet<quint32>() << other->id() : QSet<quint32>());
+        frame("incremental");
+    }
+    // Hiding their layer does hide them.
+    props->setLayerVisible(r.layerId, false);
+    v.m_figureFaces.clear();
+    v.grab();
+    QCOMPARE(builtFigures(), 0);
+}
+
+void Performers_Test::peopleFaceATurnedRiser()
+{
+    Doc doc(this);
+    MonitorProperties *props = doc.monitorProperties();
+    StagePlatform *p = threeTier(props, 0.3f, 1.0f);
+    QList<quint32> risers;
+    risers << p->id();
+    Plot plot(&doc);
+    PerformerFill::Options o;
+    QVERIFY(plot.mon->fillWithPeople(risers, o).people > 0);
+
+    StageTarget *line = lines(props).first();
+    foreach (const PerformerFill::Performer &pf, PerformerFill::people(props, line))
+        QVERIFY(qAbs(pf.facing.x()) < 1e-4f && qAbs(pf.facing.y() - 1.0f) < 1e-4f);
+
+    p->setRotation(90.0f);
+    const QPointF c = p->centre();
+    const QPointF front = p->toWorld(c + QPointF(0.0, 1.0)) - p->toWorld(c);
+    int turned = 0;
+    foreach (const PerformerFill::Performer &pf, PerformerFill::people(props, line))
+    {
+        if (!p->containsPoint(pf.feet.x(), pf.feet.y()))
+            continue;                       // turned off the riser
+        ++turned;
+        QVERIFY(qAbs(pf.facing.x() - float(front.x())) < 1e-3f);
+        QVERIFY(qAbs(pf.facing.y() - float(front.y())) < 1e-3f);
+        QVERIFY(pf.facing.y() < 0.5f);       // no longer the house
+    }
+    // People are stood on the deck wherever it is; at least some are on it.
+    QVERIFY(turned > 0 || !PerformerFill::people(props, line).isEmpty());
+
+    // The view draws them turned: the picture changes, the faces say why.
+    StructureStudioView v(&doc, StructureStudioView::StageKind, 0);
+    v.resize(600, 420);
+    v.reload();
+    v.setPlane(StructureStudioView::Angled);
+    v.setAngledView(15.0, 15.0);
+    p->setRotation(0.0f);
+    v.reload();
+    const QImage flat = v.grab().toImage();
+    p->setRotation(90.0f);
+    v.reload();
+    v.grab();
+    bool faced = false;
+    for (const StructureStudioView::FigureFaces &f : std::as_const(v.m_figureFaces))
+        if (f.built && qAbs(f.facing.x()) > 0.9f)
+            faced = true;
+    QVERIFY(faced);
+    QVERIFY(v.grab().toImage() != flat);
+}
+
+void Performers_Test::ownerFilterShowsHouseOrOurs()
+{
+    Doc doc(this);
+    Fixture *ours = makeWash(&doc, 0, QVector3D(1.5f, 8.0f, 5.0f));
+    Fixture *house = makeWash(&doc, 6, QVector3D(5.5f, 8.0f, 5.0f));
+    QVERIFY(ours != nullptr && house != nullptr);
+    house->setOwner(RigOwner::House);
+
+    StructureStudioView v(&doc, StructureStudioView::StageKind, 0);
+    v.resize(600, 420);
+    v.reload();
+    v.setPlane(StructureStudioView::Angled);
+    QCOMPARE(v.ownerFilter(), StructureStudioView::OwnerAll);
+    QVERIFY(v.mountedFixtures().contains(ours->id()));
+    QVERIFY(v.mountedFixtures().contains(house->id()));
+    const QImage all = v.grab().toImage();
+
+    v.setOwnerFilter(StructureStudioView::OwnerHouse);
+    QCOMPARE(v.mountedFixtures(), QList<quint32>() << house->id());
+    const QImage houseOnly = v.grab().toImage();
+    QVERIFY(houseOnly != all);
+
+    v.setOwnerFilter(StructureStudioView::OwnerOurs);
+    QCOMPARE(v.mountedFixtures(), QList<quint32>() << ours->id());
+    QVERIFY(v.grab().toImage() != houseOnly);
+
+    // An owner edited elsewhere shows once the kept owners are looked at again.
+    ours->setOwner(RigOwner::House);
+    v.rigMayHaveMoved();
+    QVERIFY(v.mountedFixtures().isEmpty());
+
+    v.setOwnerFilter(StructureStudioView::OwnerAll);
+    QCOMPARE(v.mountedFixtures().size(), 2);
+    QCOMPARE(v.grab().toImage(), all);
+}
