@@ -54,6 +54,7 @@ private slots:
     void aStaticLookSendsOneFrameThenNone();
     void aRunningSceneHoldsOneFaderOfItsChannels();
     void startStopCyclesLeaveNoFadersBehind();
+    void overrideHitCyclesLeaveNoFadersBehind();
     void aChaserKeepsItsFadersBounded();
     void aMatrixComputesAMapPerStepNotPerTick();
 

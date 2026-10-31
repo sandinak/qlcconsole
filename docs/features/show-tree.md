@@ -1977,7 +1977,37 @@ called them looks; they open as they were.)
   button with several hits firing its first.
 - **Over a running cue list** a hit mixes as any function does: the
   highest intensity wins, and for colour, position and the rest the last
-  started wins. Stop it, and what the list plays is back.
+  started wins. Stop it, and what the list plays is back. An **override
+  hit** wins instead (below).
+- **Override hits.** Tick **Override: wins over everything the show
+  plays** on a hit's page. On the channels the hit sets it now wins over
+  every cue and effect the Show Tree is playing, **intensity too**: a
+  *Blackout* hit pulls a cue at full down to 0, a *House lights to full*
+  hit pulls them up. It comes in over its **Fade in** from what is playing,
+  not from dark. Let go (the button released or turned off, its place
+  ended), those channels fade over its **Fade out** back to what the show
+  plays **then** — if GO moved on while the hit was held, they come back
+  to the new cue, not to what was there when it fired. The tree marks it
+  **override** (hover for what it does).
+  - **Two overrides on one channel:** the last fired wins; let it go and
+    the earlier override is back. Firing one again puts it on top.
+  - **Stop all** (⌘⇧Esc) and **ALL OFF** (OSC or MSC show control) let go of
+    overrides with everything else.
+  - **The Blind view** draws an override hit over the cue in edit only
+    while the hit is live on stage, since it would win over that cue too;
+    a hit not fired isn't drawn. *Decided (can change).*
+  - What wins over an override: Highlight, a fixture flash, Focus mode,
+    parked channels, a VC Flash button with its Override, the Simple
+    Desk, the Grand Master and Blackout. An effect in the override hit
+    plays as effects do; the override is its layers' values. A function
+    the hit plays as it is (an adopted chaser, an EFX) plays above the
+    show but mixes as before. A live override also wins over the Design
+    preview of a cue. *Decided (can change).*
+  - Firing a hit stays a VC button's (or a step's) start, not a run
+    command; ALL OFF, which lets go of it, comes through the one GO path.
+    *Decided (can change).*
+  - Saved with the show as `Override="1"`; an older build opens it as a
+    plain hit.
 - **Seeing it.** Selected in Design, a hit plays on the rig, as a cue does
   (it wins over what runs); in Operate nothing previews — what runs owns the
   stage. **Record as new cue → everything lit** records a hit a button

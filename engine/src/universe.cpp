@@ -1425,6 +1425,19 @@ bool Universe::writeOverride(int address, uchar value)
     return write(address, value, true);
 }
 
+bool Universe::writeMix(int address, uchar value, qreal mix)
+{
+    if (address < 0 || address >= UNIVERSE_SIZE)
+        return false;
+    if (mix < 1.0)
+    {
+        const int under = uchar(m_preGMValues->at(address));
+        const int v = under + qRound((int(value) - under) * qMax(qreal(0), mix));
+        value = uchar(qBound(0, v, 255));
+    }
+    return write(address, value, true);
+}
+
 bool Universe::writePastGM(int address, uchar value)
 {
     if (address < 0 || address >= UNIVERSE_SIZE)

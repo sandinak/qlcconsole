@@ -5049,6 +5049,24 @@ void ShowTreeView_Test::looksSectionInTheTree()
     QVERIFY(view.selectNode(hit));
     QCOMPARE(hitIn->value(), 1.5);
     QVERIFY(fired->text().contains("Make VC page"));
+    // 0.4: Override on its page, "override" on its row; one undo step.
+    QCheckBox *over = view.findChild<QCheckBox *>("stHitOverride");
+    QVERIFY(over != nullptr);
+    QVERIFY(over->isVisibleTo(&view));
+    QVERIFY(!over->isChecked());
+    over->setChecked(true);
+    QVERIFY(st->isOverrideHit(hit));
+    QVERIFY(qobject_cast<Collection *>(m_doc->function(st->cue(hit)->collection))->hitOverride());
+    QVERIFY(rowOf(view.tree(), hit)->text(ShowTreeView::FlagsCol).contains("override"));
+    QVERIFY(st->undo());
+    QVERIFY(!st->isOverrideHit(hit));
+    QVERIFY(!rowOf(view.tree(), hit)->text(ShowTreeView::FlagsCol).contains("override"));
+    QVERIFY(view.selectNode(hit));
+    QVERIFY(!over->isChecked());
+    QVERIFY(st->redo());
+    QVERIFY(view.selectNode(hit));
+    QVERIFY(over->isChecked());
+    QVERIFY(st->setHitsOverride({ hit }, false));
     // Its layer page has no Release (a look never passes anything on).
     QVERIFY(view.selectNode(layer, hit));
     QVERIFY(!view.findChild<QCheckBox *>("stLayerRelease")->isVisibleTo(&view));
@@ -5059,6 +5077,7 @@ void ShowTreeView_Test::looksSectionInTheTree()
     QVERIFY(view.selectNode(st->cueList(list)->cues.first().id));
     QVERIFY(view.findChild<QLineEdit *>("stCueNumber")->isVisibleTo(&view));
     QVERIFY(!fired->isVisibleTo(&view));
+    QVERIFY(!view.findChild<QCheckBox *>("stHitOverride")->isVisibleTo(&view));
 
     // Folders: new one on the section, a look dragged (dropped) onto it,
     // renamed in place, deleted (its hits move up).

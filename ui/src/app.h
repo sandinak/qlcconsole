@@ -639,7 +639,7 @@ private:
     BlindEffects *m_blindEffects = nullptr;
     QTimer *m_blindMotionTimer = nullptr;
     QElapsedTimer m_blindMotionClock;
-    /** The cue in edit's levels, without its effects (cueLevels()). */
+    /** The cue in edit's levels, without its effects, and any override hit live over them (blindLevels()). */
     QHash<quint32, QByteArray> m_blindLevels;
     QLabel *m_statusBlindLabel = nullptr;
 public slots:

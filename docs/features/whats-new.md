@@ -116,6 +116,10 @@ The latest changes, newest first. Each links to the guide with the detail.
 - **A hit on a Flash button plays.** A Virtual Console button set to
   **Flash** on a Show Tree hit now plays the hit while it is held; it did
   nothing before (only scenes flashed). See [Hits](show-tree.md#hits-busking).
+- **Override hits.** Tick **Override** on a hit's page and it wins over
+  everything the show plays on its channels, intensity too: a blackout
+  pulls lights down. Let go, they fade back to what the show plays then.
+  See [Hits](show-tree.md#hits-busking).
 
 ## 0.3.0 (October 2026)
 

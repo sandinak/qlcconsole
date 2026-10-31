@@ -71,6 +71,12 @@ private slots:
     void hitsFadeInAndOut();
     void hitsAreArmedWhileTheirPlaceIsLive();
 
+    /* 0.4: override hits */
+    void anOverrideHitPullsIntensityDownAndFadesBackToTheShow();
+    void stackedOverridesLastFiredWins();
+    void stopAllAndAllOffReleaseOverrides();
+    void overrideHitsSaveLoadUndoAndBlind();
+
 private:
     quint32 dimmer(int level, const QString &name);
     FixtureGroup *group(const QString &name, const QList<quint32> &fixtures);

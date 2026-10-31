@@ -1484,4 +1484,246 @@ void ShowTreePlay_Test::hitsAreArmedWhileTheirPlaceIsLive()
     Q_UNUSED(lb);
 }
 
+/****************************************************************************
+ * 0.4: override hits
+ ****************************************************************************/
+
+/* An override hit wins over the show on its channels, intensity too: a
+   blackout hit pulls a cue at full down (a plain hit can't, HTP). Let go,
+   the channel fades over the hit's fade out to what the show plays NOW --
+   here a cue that GO changed while the hit was held -- not to a snapshot. */
+void ShowTreePlay_Test::anOverrideHitPullsIntensityDownAndFadesBackToTheShow()
+{
+    FixtureGroup *a = group("A", { m_fixtures[0] });
+    const quint32 full = dimmer(255, "Full");
+    const quint32 half = dimmer(128, "Half");
+    const quint32 out = dimmer(0, "Out");
+    ShowTreeController *st = m_doc->showTree();
+    quint32 prod = 0;
+    const quint32 listId = oneListProduction("Dance", a->id(), 2, full, &prod);
+    const quint32 c2 = st->cueList(listId)->cues.at(1).id;
+    QVERIFY(st->setTargetLook(c2, groupTarget(a->id()), st->lookForPalette(half)));
+    const quint32 hit = st->addHit(HitScope::Production, prod, "Blackout");
+    st->setLayerLook(hit, st->addLayer(hit, groupTarget(a->id())), st->lookForPalette(out));
+    Collection *coll = qobject_cast<Collection *>(m_doc->function(st->cue(hit)->collection));
+    QVERIFY(coll != nullptr);
+    Chaser *chaser = qobject_cast<Chaser *>(m_doc->function(st->cueList(listId)->chaser));
+    QVERIFY(chaser != nullptr);
+    MasterTimer *timer = m_doc->masterTimer();
+
+    go(chaser);
+    QCOMPARE(int(settle(5)[0]), 255);
+
+    // A plain hit at 0 mixes: the cue's full wins.
+    QVERIFY(!coll->hitOverride());
+    coll->start(timer, FunctionParent::master());
+    QCOMPARE(int(settle(5)[0]), 255);
+    coll->stop(FunctionParent::master());
+    settle(5);
+
+    // Override, 2 s out: fired, the dimmer goes to 0 under the running cue.
+    QVERIFY(st->setHitsOverride({ hit }, true));
+    QVERIFY(st->isOverrideHit(hit));
+    QVERIFY(coll->hitOverride());
+    ShowTree::Cue c = *st->cue(hit);
+    c.fadeOut = 2000;
+    QVERIFY(st->setCue(c));
+    coll->start(timer, FunctionParent::master());
+    QCOMPARE(int(settle(5)[0]), 0);
+
+    // GO while it is held: cue 2 plays half -- under the hit, still dark.
+    go(chaser);
+    QCOMPARE(int(settle(5)[0]), 0);
+    QCOMPARE(st->runningCue(listId), c2);
+
+    // Let go: back to cue 2's 128 (not the 255 the hit came in over), over
+    // the hit's 2 s fade out.
+    coll->stop(FunctionParent::master());
+    QHash<quint32, uchar> v = settle(int(MasterTimer::frequency()));      // 1 of 2 s
+    QVERIFY2(v[0] > 40 && v[0] < 90, qPrintable(QString::number(v[0])));
+    v = settle(int(MasterTimer::frequency()) + 10);
+    QCOMPARE(int(v[0]), 128);
+
+    // Fade in too: from what plays (128) down to 0 over 1 s, not from 0.
+    c = *st->cue(hit);
+    c.fadeIn = 1000;
+    c.fadeOut = 0;
+    QVERIFY(st->setCue(c));
+    coll->start(timer, FunctionParent::master());
+    v = settle(int(MasterTimer::frequency() / 2));
+    QVERIFY2(v[0] > 40 && v[0] < 90, qPrintable(QString::number(v[0])));
+    v = settle(int(MasterTimer::frequency()));
+    QCOMPARE(int(v[0]), 0);
+    coll->stop(FunctionParent::master());
+    QCOMPARE(int(settle(5)[0]), 128);
+
+    // "House lights to full" pulls up as well: an override at full over 128.
+    c = *st->cue(hit);
+    c.fadeIn = 0;
+    QVERIFY(st->setCue(c));
+    QVERIFY(st->setLayerLook(hit, st->cue(hit)->layers.first().id, st->lookForPalette(full)));
+    coll->start(timer, FunctionParent::master());
+    QCOMPARE(int(settle(5)[0]), 255);
+    coll->stop(FunctionParent::master());
+    QCOMPARE(int(settle(5)[0]), 128);
+
+    // Gone once let go: no override fader is left in the universe.
+    QList<Universe *> ua = m_doc->inputOutputMap()->claimUniverses();
+    int left = 0;
+    for (const QSharedPointer<GenericFader> &f : ua.first()->faders())
+        if (!f.isNull() && f->priority() == Universe::HitOverride)
+            ++left;
+    m_doc->inputOutputMap()->releaseUniverses(false);
+    QCOMPARE(left, 0);
+}
+
+/* Two overrides on one channel: the last fired wins; let it go and the one
+   under it is back; let both go and the show is. */
+void ShowTreePlay_Test::stackedOverridesLastFiredWins()
+{
+    FixtureGroup *a = group("A", { m_fixtures[0] });
+    const quint32 full = dimmer(255, "Full");
+    const quint32 half = dimmer(128, "Half");
+    const quint32 low = dimmer(60, "Low");
+    ShowTreeController *st = m_doc->showTree();
+    quint32 prod = 0;
+    const quint32 listId = oneListProduction("Dance", a->id(), 1, full, &prod);
+    const quint32 h1 = st->addHit(HitScope::Production, prod, "Half");
+    st->setLayerLook(h1, st->addLayer(h1, groupTarget(a->id())), st->lookForPalette(half));
+    const quint32 h2 = st->addHit(HitScope::Global, prod, "Low");
+    st->setLayerLook(h2, st->addLayer(h2, groupTarget(a->id())), st->lookForPalette(low));
+    QVERIFY(st->setHitsOverride({ h1, h2 }, true));
+    Collection *one = qobject_cast<Collection *>(m_doc->function(st->cue(h1)->collection));
+    Collection *two = qobject_cast<Collection *>(m_doc->function(st->cue(h2)->collection));
+    QVERIFY(one != nullptr && two != nullptr);
+    QVERIFY(one->hitOverride() && two->hitOverride());
+    // Each override hit has scenes of its own, shared with nothing else.
+    QVERIFY(!one->functions().isEmpty());
+    for (quint32 fid : one->functions())
+        QVERIFY(!two->functions().contains(fid));
+    MasterTimer *timer = m_doc->masterTimer();
+    go(qobject_cast<Chaser *>(m_doc->function(st->cueList(listId)->chaser)));
+    QCOMPARE(int(settle(5)[0]), 255);
+
+    one->start(timer, FunctionParent::master());
+    QCOMPARE(int(settle(5)[0]), 128);
+    two->start(timer, FunctionParent::master());
+    QCOMPARE(int(settle(5)[0]), 60);           // the last fired, though lower
+    two->stop(FunctionParent::master());
+    QCOMPARE(int(settle(5)[0]), 128);          // back to the earlier override
+    two->start(timer, FunctionParent::master());
+    QCOMPARE(int(settle(5)[0]), 60);
+    one->stop(FunctionParent::master());
+    QCOMPARE(int(settle(5)[0]), 60);           // the one on top stays
+    one->start(timer, FunctionParent::master());
+    QCOMPARE(int(settle(5)[0]), 128);          // fired again: on top again
+    one->stop(FunctionParent::master());
+    two->stop(FunctionParent::master());
+    QCOMPARE(int(settle(5)[0]), 255);          // the show
+}
+
+/* Stop all (the master timer's) and ALL OFF (a run command, through the One
+   GO path) let go of overrides with everything else. */
+void ShowTreePlay_Test::stopAllAndAllOffReleaseOverrides()
+{
+    FixtureGroup *a = group("A", { m_fixtures[0] });
+    FixtureGroup *b = group("B", { m_fixtures[1] });
+    const quint32 full = dimmer(255, "Full");
+    const quint32 half = dimmer(128, "Half");
+    ShowTreeController *st = m_doc->showTree();
+    quint32 prod = 0;
+    const quint32 listId = oneListProduction("Dance", a->id(), 1, half, &prod);
+    const quint32 hit = st->addHit(HitScope::Production, prod, "House");
+    st->setLayerLook(hit, st->addLayer(hit, groupTarget(b->id())), st->lookForPalette(full));
+    QVERIFY(st->setHitsOverride({ hit }, true));
+    Collection *coll = qobject_cast<Collection *>(m_doc->function(st->cue(hit)->collection));
+    Chaser *chaser = qobject_cast<Chaser *>(m_doc->function(st->cueList(listId)->chaser));
+    MasterTimer *timer = m_doc->masterTimer();
+
+    // Stop all: the timer stops every function on its next tick.
+    go(chaser);
+    coll->start(timer, FunctionParent::master());
+    QHash<quint32, uchar> v = settle(5);
+    QCOMPARE(int(v[0]), 128);
+    QCOMPARE(int(v[1]), 255);
+    timer->m_stopAllFunctions = true;
+    tick(1);
+    timer->m_stopAllFunctions = false;
+    v = settle(5);
+    QVERIFY(!coll->isRunning());
+    QCOMPARE(int(v[0]), 0);
+    QCOMPARE(int(v[1]), 0);
+
+    // ALL OFF through ShowControl::run(), as the routes send it.
+    go(chaser);
+    coll->start(timer, FunctionParent::master());
+    QCOMPARE(int(settle(5)[1]), 255);
+    ShowControl::Request r;
+    r.command = ShowControl::AllOff;
+    QVERIFY(m_doc->showControl()->run(r, ShowControl::RouteOther));
+    v = settle(5);
+    QVERIFY(!coll->isRunning());
+    QCOMPARE(int(v[1]), 0);
+    QCOMPARE(int(v[0]), 0);
+}
+
+/* Saved as Override="1" (absent: a plain hit, as before); undo takes it
+   back; the Blind view draws an override only while it is live. */
+void ShowTreePlay_Test::overrideHitsSaveLoadUndoAndBlind()
+{
+    FixtureGroup *a = group("A", { m_fixtures[0] });
+    const quint32 full = dimmer(255, "Full");
+    const quint32 out = dimmer(0, "Out");
+    ShowTreeController *st = m_doc->showTree();
+    quint32 prod = 0;
+    const quint32 listId = oneListProduction("Dance", a->id(), 1, full, &prod);
+    const quint32 cueId = st->cueList(listId)->cues.at(0).id;
+    const quint32 plain = st->addHit(HitScope::Production, prod, "Plain");
+    st->setLayerLook(plain, st->addLayer(plain, groupTarget(a->id())), st->lookForPalette(out));
+    const quint32 hit = st->addHit(HitScope::Production, prod, "Blackout");
+    st->setLayerLook(hit, st->addLayer(hit, groupTarget(a->id())), st->lookForPalette(out));
+
+    QVERIFY(!engineXml(m_doc).contains("Override=\"1\""));
+    QVERIFY(st->setHitsOverride({ hit }, true));
+    QVERIFY(!st->setHitsOverride({ hit }, true));          // nothing to change
+    QVERIFY(!st->setHitsOverride({ cueId }, true));        // a cue is no hit
+    QVERIFY(!st->isOverrideHit(cueId));
+    QVERIFY(st->undo());
+    QVERIFY(!st->isOverrideHit(hit));
+    Collection *coll = qobject_cast<Collection *>(m_doc->function(st->cue(hit)->collection));
+    QVERIFY(!coll->hitOverride());
+    QVERIFY(st->redo());
+    QVERIFY(st->isOverrideHit(hit));
+    QVERIFY(coll->hitOverride());
+
+    // Blind: the cue in edit as levels, the override over it only while live.
+    QCOMPARE(int(uchar(st->blindLevels(cueId).value(m_fixtures[0]).at(0))), 255);
+    coll->start(m_doc->masterTimer(), FunctionParent::master());
+    settle(3);
+    QCOMPARE(int(uchar(st->blindLevels(cueId).value(m_fixtures[0]).at(0))), 0);
+    QCOMPARE(int(uchar(st->cueLevels(cueId).value(m_fixtures[0]).at(0))), 255);
+    coll->stop(FunctionParent::master());
+    settle(3);
+    QCOMPARE(int(uchar(st->blindLevels(cueId).value(m_fixtures[0]).at(0))), 255);
+
+    // Saved and loaded.
+    const QByteArray xml = engineXml(m_doc);
+    QCOMPARE(xml.count("Override=\"1\""), 1);
+    Doc *other = new Doc(this);
+    QXmlStreamReader r(xml);
+    r.readNextStartElement();
+    QVERIFY(other->loadXML(r, false));
+    ShowTreeController *st2 = other->showTree();
+    QVERIFY(st2->isOverrideHit(hit));
+    QVERIFY(!st2->isOverrideHit(plain));
+    const Collection *lc = qobject_cast<const Collection *>(other->function(st2->cue(hit)->collection));
+    QVERIFY(lc != nullptr && lc->hitOverride());
+    const Collection *pc = qobject_cast<const Collection *>(other->function(st2->cue(plain)->collection));
+    QVERIFY(pc != nullptr && !pc->hitOverride());
+    // Its scenes are still its own after the load's bake.
+    for (quint32 fid : lc->functions())
+        QVERIFY(!pc->functions().contains(fid));
+    delete other;
+}
+
 QTEST_MAIN(ShowTreePlay_Test)

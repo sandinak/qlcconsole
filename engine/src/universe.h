@@ -395,6 +395,14 @@ public:
                      faders below, HTP among themselves; let go of when
                      the scene stops, so its fade-out ends in what plays
                      underneath.
+         HitOverride a Show Tree override hit (Collection::setHitOverride):
+                     over everything the show plays, effects too. Its
+                     faders mix (GenericFader::startOverrideMix,
+                     writeMix): each channel goes from what the faders
+                     below wrote this frame to the hit's value over its
+                     fade in, and back to what they write then over its
+                     fade out -- intensity pulled down as well as up, the
+                     last fired on top.
          Highlight   the highlighted fixtures (HighlightEffect), Override:
                      their highlight look over anything running. The Grand
                      Master and Blackout still apply.
@@ -430,6 +438,7 @@ public:
                             Virtual Console action at Auto overrides it per-channel */
         Auto = 0,
         Override,
+        HitOverride, /** Over Override: a Show Tree override hit (its faders mix, writeMix) */
         Flashing, /** Priority to override slider values and running chasers by flash scene */
         SimpleDesk,
         Highlight,  /** Over everything that runs: the highlighted fixtures */
@@ -795,6 +804,15 @@ public:
      * preview of a cue that mixes plays what GO plays).
      */
     bool writeOverride(int address, uchar value);
+
+    /**
+     * Write a channel from an override hit's fader: @a value over what the
+     * faders below wrote this frame, by @a mix (1: @a value; 0: what is
+     * under it; between, the line from one to the other), on any channel,
+     * LTP. So an override pulls an HTP intensity down, and fades back to
+     * what the show plays now rather than to a snapshot.
+     */
+    bool writeMix(int address, uchar value, qreal mix);
 
     /**
      * Write a channel from a Park fader: replaces what every fader below

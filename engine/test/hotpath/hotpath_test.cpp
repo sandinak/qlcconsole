@@ -419,6 +419,31 @@ void HotPath_Test::startStopCyclesLeaveNoFadersBehind()
     QCOMPARE(uni->m_faders.size(), before);
 }
 
+/* An override hit (0.4) fired and let go of, with a fade out: its faders
+   mix over the show and go once they are out -- none left behind, and no
+   more than the one coming in and the one going at once. */
+void HotPath_Test::overrideHitCyclesLeaveNoFadersBehind()
+{
+    Universe *uni = m_doc->inputOutputMap()->universes().at(0);
+    const int before = uni->m_faders.size();
+    Scene *look = makeLook(0, kFixturesPerUniverse, 0);
+    Collection *hit = new Collection(m_doc);
+    hit->addFunction(look->id());
+    hit->setHitOverride(true);
+    hit->setHitFades(0, 40);
+    m_doc->addFunction(hit);
+    for (int i = 0; i < 100; ++i)
+    {
+        hit->start(m_doc->masterTimer(), FunctionParent::master());
+        frame(3);
+        QVERIFY(uni->m_faders.size() <= before + 2);
+        hit->stop(FunctionParent::master());
+        frame(i % 2 == 0 ? 1 : 6);      // fired again mid fade out, or after
+    }
+    frame(6);
+    QCOMPARE(uni->m_faders.size(), before);
+}
+
 /* A looping chaser of looks: every step is a scene starting and the last
    one stopping. Over a hundred steps the universe never holds more than
    the steps in play (the old, fading out, and the new one). */

@@ -201,6 +201,16 @@ public:
     uint hitFadeIn() const { return m_hitFadeIn; }
     uint hitFadeOut() const { return m_hitFadeOut; }
 
+    /** A Show Tree override hit: its members play over everything the show
+     *  plays on the channels they set, intensity too (a blackout pulls
+     *  levels down), the last fired on top; let go, those channels fade
+     *  back over the hit's fade out to what plays then
+     *  (Universe::HitOverride). Unless what starts it gives a priority (a
+     *  Show track). Set by ShowTreeController as it bakes the hit; not
+     *  saved here (the tree saves it). */
+    void setHitOverride(bool on) { m_hitOverride = on; }
+    bool hitOverride() const { return m_hitOverride; }
+
     /** @reimp */
     void flash(MasterTimer *timer, bool shouldOverride, bool forceLTP) override;
     /** @reimp */
@@ -210,6 +220,7 @@ private:
     bool m_flashPlays = false;
     uint m_hitFadeIn = 0;
     uint m_hitFadeOut = 0;
+    bool m_hitOverride = false;
     bool m_flashStarted = false;    ///< flash() started the run unFlash() stops
 };
 

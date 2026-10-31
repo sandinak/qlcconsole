@@ -6,6 +6,33 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
+### 2026-10-31 — Override hits *(feat/04-override-hits, 0.4 item 5, ovr)*
+
+A hit's **Override** (its page; the tree marks it **override**; saved as
+`Override="1"` on the hit, absent = a plain hit) makes it win over
+everything the Show Tree plays on the channels it sets, intensity too, and
+on release fade back over its fade out to what the show plays *then*. The
+bake sets `Collection::setHitOverride`; the collection raises its members
+to `Universe::HitOverride` (a new fader priority between Override and
+Flashing, so cue effects at Override lose too); a Scene built at that
+priority starts its faders in an override mix
+(`GenericFader::startOverrideMix`): every channel is written by
+`Universe::writeMix`, the line from what the faders below wrote this frame
+to the hit's value, by a mix that runs 0→1 over the fade in and back to 0
+over the fade out (`releaseOverrideMix`), after which the fader deletes
+itself. Its channels don't fade themselves. Faders at one priority keep
+start order, so the last fired override is on top and releasing it shows
+the one under it. Override hits get scenes of their own (the bake keys
+them with an override mark). The Blind view (`ShowTreeController::
+blindLevels`) draws live override hits over the cue in edit. Frame cost:
+one branch and a multiply per channel of an override fader, no allocation.
+Tests: showtreeplay (pull-down and restore to the changed cue with fades,
+stacked, Stop all and ALL OFF through `run()`, save/load/undo/blind),
+universe `writeMix`, hotpath `overrideHitCyclesLeaveNoFadersBehind`,
+showtreeview (the checkbox and the row mark).
+
+---
+
 ### 2026-10-31 — One GO path: `ShowControl::run()` + `App::runCommand()` *(feat/04-one-go-path, 0.4 item 1, go1)*
 
 Every route that runs the show (⌘↩ and its family, the Run tab and Space,

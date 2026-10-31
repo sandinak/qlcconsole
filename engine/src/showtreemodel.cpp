@@ -1489,6 +1489,8 @@ void saveXML(QXmlStreamWriter *doc, const Production &production)
             writeId(doc, QStringLiteral("Collection"), cue.collection);
             if (list.looks && !cue.folder.isEmpty())
                 doc->writeAttribute(QStringLiteral("Folder"), cue.folder);
+            if (list.looks && cue.override)
+                doc->writeAttribute(QStringLiteral("Override"), QStringLiteral("1"));
             if (list.looks && cue.scope != HitScope::Production)
             {
                 doc->writeAttribute(QStringLiteral("Scope"), cue.scope == HitScope::Global ? QStringLiteral("Global")
@@ -1731,6 +1733,7 @@ bool loadXML(QXmlStreamReader &root, Production &production)
             if (looks)
             {
                 cue.folder = a.value(QStringLiteral("Folder")).toString();
+                cue.override = a.value(QStringLiteral("Override")).toString() == QLatin1String("1");
                 const QString scope = a.value(QStringLiteral("Scope")).toString();
                 cue.scope = scope == QLatin1String("Global") ? HitScope::Global
                             : scope == QLatin1String("List") ? HitScope::List

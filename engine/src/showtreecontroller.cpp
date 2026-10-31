@@ -4513,15 +4513,30 @@ void ShowTreeController::bake()
     m_layerScenes.clear();
     m_spanMembers.clear();
 
-    // Generated scenes are found again by what they play.
+    // Generated scenes are found again by what they play. An override
+    // hit's are its own (they play over the show, so never share one with
+    // a cue): found by what they play and the mark.
+    const QString overrideMark = QStringLiteral("|override");
+    QSet<quint32> overrideScenes;
+    for (const Production &p : m_productions)
+        for (const CueList &l : p.lists)
+            if (l.looks)
+                for (const Cue &c : l.cues)
+                    if (c.override)
+                        if (const Collection *coll = qobject_cast<const Collection *>(m_doc->function(c.collection)))
+                            for (quint32 fid : coll->functions())
+                                overrideScenes.insert(fid);
     QHash<QString, quint32> bySignature;
     QList<quint32> existing = m_generatedScenes.values();
     std::sort(existing.begin(), existing.end());
     for (quint32 id : existing)
     {
         const Scene *s = qobject_cast<const Scene *>(m_doc->function(id));
-        if (s != nullptr && !bySignature.contains(sceneSignature(s)))
-            bySignature.insert(sceneSignature(s), id);
+        if (s == nullptr)
+            continue;
+        const QString sig = sceneSignature(s) + (overrideScenes.contains(id) ? overrideMark : QString());
+        if (!bySignature.contains(sig))
+            bySignature.insert(sig, id);
     }
 
     for (Production &prod : m_productions)
@@ -4631,7 +4646,7 @@ void ShowTreeController::bake()
                 for (const ScenePlan &plan : plans)
                 {
                     const ResolvedLayer &rl = resolved.at(i).layers.at(plan.layer);
-                    const QString sig = plan.signature();
+                    const QString sig = plan.signature() + (list.looks && cue.override ? overrideMark : QString());
                     const QString layerName = rl.name.isEmpty() ? targetLabel(rl.target) : rl.name;
                     quint32 sid = bySignature.value(sig, Function::invalidId());
                     Scene *scene = qobject_cast<Scene *>(m_doc->function(sid));
@@ -4733,6 +4748,7 @@ void ShowTreeController::bake()
                     coll->setHitFades(cue.fadeIn, cue.fadeOut);
                 else
                     coll->setHitFades(0, 0);
+                coll->setHitOverride(list.looks && cue.override);
                 if (coll->functions() != members)
                 {
                     m_lastChanged << cue.id;
@@ -5952,6 +5968,7 @@ void ShowTreeController::loadState(QXmlStreamReader &root, bool snapshot)
                     {
                         coll->setFlashPlays(true);
                         coll->setHitFades(c.fadeIn, c.fadeOut);
+                        coll->setHitOverride(c.override);
                     }
             }
         }
@@ -6113,20 +6130,17 @@ quint32 ShowTreeController::editedCue() const
     return cue(m_editedCue) != nullptr ? m_editedCue : invalidId();
 }
 
-QHash<quint32, QByteArray> ShowTreeController::cueLevels(quint32 cueId) const
+/* One collection's levels into @a levels: HTP on intensity, else the last
+   wins; @a over: every channel it sets replaces what is there (an override
+   hit). */
+static void addCollectionLevels(Doc *doc, const Collection *coll, QHash<quint32, QByteArray> &levels, bool over)
 {
-    QHash<quint32, QByteArray> levels;
-    const Cue *c = cue(cueId);
-    const Collection *coll = c == nullptr ? nullptr
-                           : qobject_cast<const Collection *>(m_doc->function(c->collection));
-    if (coll == nullptr)
-        return levels;
     // One scene's levels, as Scene::write() lays them at its start: its own
     // values, then its looks in order (effect looks and the colours that
     // feed an effect left out, a look's left-out fixtures skipped), a
     // fixture with no dimmer dimmed by the look's Dimmer.
     auto put = [&](const SceneValue &scv, bool htp) {
-        Fixture *fx = m_doc->fixture(scv.fxi);
+        Fixture *fx = doc->fixture(scv.fxi);
         if (fx == nullptr || scv.channel >= fx->channels())
             return;
         QByteArray &bytes = levels[scv.fxi];
@@ -6137,7 +6151,7 @@ QHash<quint32, QByteArray> ShowTreeController::cueLevels(quint32 cueId) const
     };
     for (quint32 fid : coll->functions())
     {
-        Scene *scene = qobject_cast<Scene *>(m_doc->function(fid));
+        Scene *scene = qobject_cast<Scene *>(doc->function(fid));
         if (scene == nullptr)
             continue;
         QHash<QPair<quint32, quint32>, uchar> mine;
@@ -6154,30 +6168,55 @@ QHash<quint32, QByteArray> ShowTreeController::cueLevels(quint32 cueId) const
         const QHash<quint32, QList<quint32> > excluded = scene->excludedFixtures();
         for (quint32 pid : pals)
         {
-            QLCPalette *palette = m_doc->palette(pid);
+            QLCPalette *palette = doc->palette(pid);
             if (palette == nullptr || palette->type() == QLCPalette::Effect
-                || QLCPalette::isEffectScoped(m_doc, pals, pid))
+                || QLCPalette::isEffectScoped(doc, pals, pid))
                 continue;
-            const int cOff = QLCPalette::colorSetOffset(m_doc, pals, pid);
+            const int cOff = QLCPalette::colorSetOffset(doc, pals, pid);
             const QList<quint32> outList = excluded.value(pid);
-            QList<SceneValue> vals = palette->valuesFromFixtureGroups(m_doc, scene->fixtureGroups(), scene, cOff);
-            vals += palette->valuesFromFixtures(m_doc, scene->fixtures(), scene, cOff);
+            QList<SceneValue> vals = palette->valuesFromFixtureGroups(doc, scene->fixtureGroups(), scene, cOff);
+            vals += palette->valuesFromFixtures(doc, scene->fixtures(), scene, cOff);
             for (const SceneValue &scv : vals)
                 if (!outList.contains(scv.fxi))
                     set(scv);
         }
-        const int lookDim = QLCPalette::lookDimmerValue(m_doc, pals);
+        const int lookDim = QLCPalette::lookDimmerValue(doc, pals);
         for (const QPair<quint32, quint32> &k : order)
         {
-            Fixture *fx = m_doc->fixture(k.first);
+            Fixture *fx = doc->fixture(k.first);
             if (fx == nullptr)
                 continue;
             SceneValue scv(k.first, k.second, mine.value(k));
             scv.value = QLCPalette::dimScaleWithoutDimmer(fx, scv.channel, scv.value, lookDim);
             const QLCChannel *ch = fx->channel(scv.channel);
-            put(scv, ch != nullptr && ch->group() == QLCChannel::Intensity);
+            put(scv, !over && ch != nullptr && ch->group() == QLCChannel::Intensity);
         }
     }
+}
+
+QHash<quint32, QByteArray> ShowTreeController::cueLevels(quint32 cueId) const
+{
+    QHash<quint32, QByteArray> levels;
+    const Cue *c = cue(cueId);
+    const Collection *coll = c == nullptr ? nullptr
+                           : qobject_cast<const Collection *>(m_doc->function(c->collection));
+    if (coll != nullptr)
+        addCollectionLevels(m_doc, coll, levels, false);
+    return levels;
+}
+
+QHash<quint32, QByteArray> ShowTreeController::blindLevels(quint32 cueId) const
+{
+    QHash<quint32, QByteArray> levels = cueLevels(cueId);
+    // decided (can change): an override hit live on stage is drawn over the
+    // cue in edit -- it would win over that cue too; one not fired isn't.
+    for (const Production &p : m_productions)
+        if (const CueList *l = p.looks())
+            for (const Cue &h : l->cues)
+                if (h.override && h.id != cueId)
+                    if (const Collection *coll = qobject_cast<const Collection *>(m_doc->function(h.collection)))
+                        if (coll->isRunning())
+                            addCollectionLevels(m_doc, coll, levels, true);
     return levels;
 }
 

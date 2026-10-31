@@ -764,6 +764,17 @@ public:
      *  global hit -- so where @a narrow is armed it fires instead. */
     bool hitOverrides(quint32 narrow, quint32 wide) const;
 
+    /** Make hits @a hitIds override hits (or plain ones again): an
+     *  override wins over everything the show plays on its channels,
+     *  intensity too, and fades back to what plays then when let go
+     *  (ShowTree::Cue::override). One undo step; false when none changed. */
+    bool setHitsOverride(const QList<quint32> &hitIds, bool on);
+    bool isOverrideHit(quint32 hitId) const;
+    /** What the Blind view shows for cue @a cueId: its levels (cueLevels()),
+     *  and over them every override hit live on stage now -- they would win
+     *  over the cue too. A hit not fired is not drawn. */
+    QHash<quint32, QByteArray> blindLevels(quint32 cueId) const;
+
 signals:
     /** What is armed may have changed: a cue list started, stopped or went
      *  to another cue, the current production changed. Queued from the

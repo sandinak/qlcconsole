@@ -13,8 +13,9 @@ under `~/.claude/.../memory/`.
 Built: every GO, Back, Sub GO, Stop, Load... enters through
 `ShowControl::run(request, route)` and is guarded in one place,
 `App::runCommand()` (docs/design/RUN_COMMANDS.md; DONE.md 2026-10-31).
-Pad Run, the phone Run page and override hits call `run()` with their
-route. Open:
+Pad Run and the phone Run page call `run()` with their route (override
+hits, built, are fired by a VC button's start, not a run command; ALL OFF,
+which lets go of them, is one). Open:
 - Phone Run page: add `RouteWeb`, and refuse it in step 2 of
   `App::runCommand()` unless Teaching's "allow remote GO" (PIN) says yes.
 - Two stock paths still step a chaser directly: the VC Cue List (and the
@@ -23,6 +24,37 @@ route. Open:
   Show Tree list (decided: left as stock QLC+, can change).
 - decided (can change): GO is never refused by Operate's PIN or Teaching
   (they lock Design); a GO that finds nothing to play holds no preview.
+
+## Override hits — built, leftovers (0.4 item 5, ovr, 2026-10-31)
+
+Built (docs/features/show-tree.md "Override hits"; DONE.md 2026-10-31): a
+hit's **Override** wins over everything the Show Tree plays on its
+channels, intensity too, and fades back over its fade out to what plays
+then. Engine: `Universe::HitOverride` (between Override and Flashing),
+`GenericFader::startOverrideMix`/`releaseOverrideMix`, `Universe::writeMix`;
+`Collection::setHitOverride` raises its members, `Scene` mixes. Open, each
+"decided (can change)":
+- **Next: group intensity masters** (0.4 item 5, second half) share this
+  stage: a master is a per-group scale applied where the override mix is
+  (`GenericFader::write`, once a frame, no allocation), after the faders
+  below and before the Grand Master. Reuse `Universe::writeMix`'s place in
+  the order rather than adding a second post-fader pass.
+- Firing a hit stays a VC button's (or a step's) start, not a run command;
+  ALL OFF (a run command) and Stop all let go of overrides.
+- The Blind view draws a live override hit over the cue in edit; a hit
+  not fired isn't drawn.
+- A live override also beats the Design preview (Universe::Override);
+  Flashing, Simple Desk, Highlight, Flash, Focus and Park still beat it.
+- An override hit fades as a whole over its own fade in / out (per-look
+  fade times don't apply to it); its effects play as effects do (Override
+  priority, not raised); an opaque function in it (adopted chaser, EFX)
+  plays at HitOverride priority but mixes HTP/LTP as before.
+- An override hit's scenes are never shared with a cue (the bake keys
+  them with an override mark), so a cue never inherits its priority.
+- A 16-bit channel is mixed byte by byte during a fade (exact at either
+  end). An LTP channel nothing else plays keeps the hit's value after
+  release (QLC+'s LTP rule).
+- No command-line word yet (`override` on the selected hit).
 
 ## Breathe once — leftovers (brth, 2026-10-30)
 

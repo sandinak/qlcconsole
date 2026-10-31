@@ -901,6 +901,8 @@ private:
     QCheckBox *m_cueBase;
     QCheckBox *m_cueMix;
     QCheckBox *m_cueSkip = nullptr;
+    /** 0.4: a hit's Override (ShowTree::Cue::override). */
+    QCheckBox *m_hitOverride = nullptr;
     /** Q38: "Don't move in black into this cue"; the list's Move in black. */
     QCheckBox *m_cueNoMib = nullptr;
     QCheckBox *m_cueFocusCall = nullptr;

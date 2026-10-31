@@ -409,6 +409,29 @@ bool ShowTreeController::sameHitPlace(quint32 a, quint32 b) const
     return isLook(a) && isLook(b) && placeKey(this, a) == placeKey(this, b);
 }
 
+bool ShowTreeController::setHitsOverride(const QList<quint32> &hitIds, bool on)
+{
+    const QString label = on ? tr("Make override hit") : tr("Make plain hit");
+    return edit(label, [&](QList<Production> &ps) {
+        bool changed = false;
+        for (Production &p : ps)
+            if (CueList *l = p.looks())
+                for (Cue &c : l->cues)
+                    if (hitIds.contains(c.id) && c.override != on)
+                    {
+                        c.override = on;
+                        changed = true;
+                    }
+        return changed;
+    });
+}
+
+bool ShowTreeController::isOverrideHit(quint32 hitId) const
+{
+    const Cue *c = cue(hitId);
+    return c != nullptr && isLook(hitId) && c->override;
+}
+
 bool ShowTreeController::hitOverrides(quint32 narrow, quint32 wide) const
 {
     if (!isLook(narrow) || !isLook(wide))

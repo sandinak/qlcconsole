@@ -263,10 +263,22 @@ void GenericFader::write(Universe *universe)
 
     qreal compIntensity = intensity() * parentIntensity();
 
+
     //qDebug() << "[GenericFader] writing channels: " << this << m_channels.count();
 
     // iterate through all the channels handled by this fader
     std::lock_guard<ChannelsLock> l(m_channelsLock);
+
+    // An override hit's mix, once a frame: in over its fade in, held, then
+    // out over its fade out. Under the channels' lock, as the Scene sets it
+    // from the MasterTimer thread.
+    if (m_mixMode != MixOff && m_paused == false)
+    {
+        m_mixElapsed += MasterTimer::tick();
+        const qreal t = m_mixTime == 0 || m_mixElapsed >= m_mixTime
+                        ? 1.0 : qreal(m_mixElapsed) / qreal(m_mixTime);
+        m_mix = m_mixMode == MixIn ? t : m_mixFrom * (1.0 - t);
+    }
     QMutableHashIterator <quint32,FadeChannel> it(m_channels);
     while (it.hasNext() == true)
     {
@@ -346,6 +358,17 @@ void GenericFader::write(Universe *universe)
         }
 
         //qDebug() << "[GenericFader] >>> uni:" << universe->id() << ", address:" << address << ", value:" << value << "int:" << compIntensity;
+        if (m_mixMode != MixOff)
+        {
+            // An override hit: over what plays, by its mix. Kept while it
+            // plays, a 0 too (a blackout hit holds its zeros).
+            for (int i = 0; i < channelCount; i++)
+            {
+                const uchar b = channelCount == 1 ? uchar(value) : ((uchar *)&value)[channelCount - 1 - i];
+                universe->writeMix(int(address) + i, b, m_mix);
+            }
+            continue;
+        }
         if (flags & FadeChannel::Override)
         {
             // Every byte of a 16-bit channel (a fader handling secondary
@@ -407,6 +430,15 @@ void GenericFader::write(Universe *universe)
         }
     }
 
+    // An override hit let go of: gone once it is all the way out.
+    if (m_mixMode == MixOut && m_mix <= 0.0)
+    {
+        m_mixMode = MixOff;
+        m_fadeOut = false;
+        requestDelete();
+        return;
+    }
+
     // self-request deletion when fadeout is complete
     if (m_fadeOut && m_channels.isEmpty())
     {
@@ -455,6 +487,30 @@ bool GenericFader::isEnabled() const
 void GenericFader::setEnabled(bool enable)
 {
     m_enabled = enable;
+}
+
+void GenericFader::startOverrideMix(uint fadeInMs)
+{
+    std::lock_guard<ChannelsLock> l(m_channelsLock);
+    m_mixMode = MixIn;
+    m_mixTime = fadeInMs;
+    m_mixElapsed = 0;
+    m_mix = fadeInMs == 0 ? 1.0 : 0.0;
+}
+
+void GenericFader::releaseOverrideMix(uint fadeOutMs)
+{
+    std::lock_guard<ChannelsLock> l(m_channelsLock);
+    if (m_mixMode == MixOff)
+        return;
+    m_mixFrom = m_mix;
+    m_mixMode = MixOut;
+    m_mixTime = fadeOutMs;
+    m_mixElapsed = 0;
+    // Kept by the Universe until it is out (write() asks for deletion), and
+    // never stuck paused (a paused hit stopped).
+    m_fadeOut = true;
+    m_paused = false;
 }
 
 bool GenericFader::isFadingOut() const
