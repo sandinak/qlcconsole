@@ -23,7 +23,7 @@ Install, check and remove on the Pi:
 # Move it aside first, put it back after.
 sudo mv /usr/share/qlcconsole /usr/share/qlcconsole.devlinks
 sudo apt install ./qlcconsole_*_arm64.deb      # pulls the Qt 6 packages
-QT_QPA_PLATFORM=offscreen qlcconsole --version  # headless: no display needed
+qlcconsole --version                           # works with no display
 QT_QPA_PLATFORM=offscreen qlcconsole -d 0 -o /path/to/show.qlcc   # loads plugins + fixtures
 sudo apt purge qlcconsole                      # purge also removes the udev rules
 sudo mv /usr/share/qlcconsole.devlinks /usr/share/qlcconsole
@@ -35,8 +35,8 @@ the 26 MB package installed with apt, `dpkg -V` clean, the app started
 offscreen, loaded 14 I/O plugins from
 `/usr/lib/aarch64-linux-gnu/qt6/plugins/qlcconsole` and the stock fixtures
 from `/usr/share/qlcconsole/fixtures`, then `apt purge` left nothing behind
-and the dev checkout was untouched. Without a display, run with
-`QT_QPA_PLATFORM=offscreen` (a bare `qlcconsole --version` tries xcb first).
+and the dev checkout was untouched. Without a display, run the app itself
+with `QT_QPA_PLATFORM=offscreen`; `--version` and `--help` need no display.
 
 It installs the program, the I/O plugins and the stock fixtures, scripts and
 profiles under `/usr`, a desktop entry, icons, the MIME type, the man pages
