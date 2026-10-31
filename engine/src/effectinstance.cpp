@@ -196,7 +196,7 @@ void EffectInstance::startFadeOut(uint ms)
     }
     m_fadingOut = true;
     m_fadeOutMs = qMax(1u, ms);
-    m_fadeOutStartMs = m_elapsed.elapsed();
+    m_fadeOutStartMs = nowMs();
 }
 
 bool EffectInstance::fadeOutDone() const
@@ -205,7 +205,7 @@ bool EffectInstance::fadeOutDone() const
         return false;
     if (m_depthFade)
         return depthClockMs() - m_depthStartMs >= qint64(m_depthMs);
-    return (m_elapsed.elapsed() - m_fadeOutStartMs) >= qint64(m_fadeOutMs);
+    return (nowMs() - m_fadeOutStartMs) >= qint64(m_fadeOutMs);
 }
 
 void EffectInstance::fadeDepthIn(uint ms, qint64 alreadyMs, bool fromZero)
@@ -221,7 +221,8 @@ void EffectInstance::fadeDepthIn(uint ms, qint64 alreadyMs, bool fromZero)
 
 float EffectInstance::depth() const
 {
-    if (!m_depthFade)
+    // Off the stage (the Blind view) it plays as if its cue were up.
+    if (!m_depthFade || m_offStageMs >= 0)
         return 1.0f;
     if (m_depthMs == 0)
         return m_depthTo;

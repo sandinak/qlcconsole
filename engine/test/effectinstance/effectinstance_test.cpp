@@ -2283,6 +2283,12 @@ void EffectInstance_Test::anEffectsDepthRampsInAndOut()
                  qPrintable(QString("at %1 ms: %2").arg(f.at).arg(inst.depth())));
     }
     QVERIFY(!inst.depthMoving());
+    // Off the stage (the Blind view's own clock): as if its cue were up.
+    inst.setDepthClock(250);
+    inst.setOffStageClock(0);
+    QCOMPARE(inst.depth(), 1.0f);
+    inst.setOffStageClock(-1);
+    QVERIFY(qAbs(inst.depth() - 0.25f) < 0.001f);
 
     inst.setDepthClock(3000);
     inst.startFadeOut(2000);
