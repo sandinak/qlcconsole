@@ -20,6 +20,7 @@
 #ifndef VENUERIG_H
 #define VENUERIG_H
 
+#include <climits>
 #include <QByteArray>
 #include <QObject>
 #include <QString>

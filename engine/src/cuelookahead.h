@@ -13,6 +13,7 @@
 #ifndef CUELOOKAHEAD_H
 #define CUELOOKAHEAD_H
 
+#include <climits>
 #include <QList>
 
 class Doc;

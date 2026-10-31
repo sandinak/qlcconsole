@@ -20,6 +20,7 @@
 #ifndef QLCPALETTE_H
 #define QLCPALETTE_H
 
+#include <climits>
 #include <QColor>
 #include <QObject>
 #include <QVariant>

@@ -21,6 +21,7 @@
 #ifndef DOC_H
 #define DOC_H
 
+#include <climits>
 #include <QObject>
 #include <atomic>
 #include "qlcengine_export.h"

@@ -20,6 +20,7 @@
 #ifndef MONITORPROPERTIES_H
 #define MONITORPROPERTIES_H
 
+#include <climits>
 #include <QObject>
 #include <QMutex>
 #include "qlcengine_export.h"

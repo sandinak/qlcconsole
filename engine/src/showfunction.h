@@ -20,6 +20,7 @@
 #ifndef SHOWFUNCTION_H
 #define SHOWFUNCTION_H
 
+#include <climits>
 #include <QColor>
 
 #include "function.h"

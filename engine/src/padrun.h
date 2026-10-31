@@ -20,6 +20,7 @@
 #ifndef PADRUN_H
 #define PADRUN_H
 
+#include <climits>
 #include <QObject>
 #include <QColor>
 #include <QList>

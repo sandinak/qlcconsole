@@ -20,6 +20,7 @@
 #ifndef RIGOWNER_H
 #define RIGOWNER_H
 
+#include <climits>
 #include <QString>
 #include <QHash>
 #include <QList>

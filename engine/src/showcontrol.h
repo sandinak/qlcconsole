@@ -20,6 +20,7 @@
 #ifndef SHOWCONTROL_H
 #define SHOWCONTROL_H
 
+#include <climits>
 #include <QByteArray>
 #include "qlcengine_export.h"
 #include <QObject>
