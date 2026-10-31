@@ -235,6 +235,30 @@ private:
     QSize m_size;
 
     /************************************************************************
+     * Group master (0.4)
+     ************************************************************************/
+public:
+    /** A group master (GroupMasters): a fader that scales the intensity of
+     *  this group's heads, as the Grand Master does everything's. Off by
+     *  default; turning it on or off is an edit (changed()). */
+    void setMaster(bool on);
+    bool hasMaster() const { return m_master; }
+
+    /** The master's level, 0..255 (255, the default, changes nothing).
+     *  Only applies while hasMaster(). A move emits masterChanged(), not
+     *  changed(): moving a fader is playing the show, not editing it. */
+    void setMasterLevel(uchar level);
+    uchar masterLevel() const { return m_masterLevel; }
+
+signals:
+    /** The master was turned on or off, or its level moved */
+    void masterChanged(quint32 id);
+
+private:
+    bool m_master = false;
+    uchar m_masterLevel = UCHAR_MAX;
+
+    /************************************************************************
      * Load & Save
      ************************************************************************/
 public:

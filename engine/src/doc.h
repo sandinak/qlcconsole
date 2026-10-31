@@ -246,6 +246,7 @@ private:
     class ShowTreeController *m_showTree = nullptr;
     class PaletteOps *m_paletteOps = nullptr;
     class PowerLimiter *m_powerLimiter = nullptr;
+    class GroupMasters *m_groupMasters = nullptr;
     class ShutterAutoOpen *m_shutterAutoOpen = nullptr;
     class ShowWebAccess *m_webAccess = nullptr;
     class ControlMap *m_controlMap = nullptr;
@@ -1235,6 +1236,8 @@ public:
     class PaletteOps *paletteOps() const { return m_paletteOps; }
     /** Holds fixtures to their maximum draw (PowerLimiter) */
     class PowerLimiter *powerLimiter() const { return m_powerLimiter; }
+    /** The fixture groups' intensity masters (GroupMasters). Never null. */
+    class GroupMasters *groupMasters() const { return m_groupMasters; }
 
     /** Opens a lit head's shutter when nothing sets it (the show's setting) */
     class ShutterAutoOpen *shutterAutoOpen() const { return m_shutterAutoOpen; }

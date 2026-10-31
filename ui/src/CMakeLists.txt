@@ -208,6 +208,7 @@ add_library(${module_name}
     importsheet.cpp importsheet.h
     showconverter.cpp showconverter.h
     cuerunner.cpp cuerunner.h
+    groupmasterstrip.cpp groupmasterstrip.h
     updatechecker.cpp updatechecker.h
     updatedialog.cpp updatedialog.h
     updatedownloader.cpp updatedownloader.h

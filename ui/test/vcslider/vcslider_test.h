@@ -37,6 +37,8 @@ private slots:
     void speedMasterSavesAndLoads();
     void speedMasterProperties();
     void speedDialSetsAMaster();
+    void groupMasterMovesTheGroup();
+    void groupMasterSavesAndLoads();
 
     /* Effect mode */
     void effectControlFollowsTheCurrentEffect();

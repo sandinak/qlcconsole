@@ -57,6 +57,7 @@ private slots:
     void overrideHitCyclesLeaveNoFadersBehind();
     void aChaserKeepsItsFadersBounded();
     void aMatrixComputesAMapPerStepNotPerTick();
+    void aGroupMasterAddsNoAllocationPerFrame();
 
     /* The mixed rig (stresstest/engine/showbuilder.cpp, ShowSpec::MixedRig):
        movers, LED pars, pixel bars and strips, dimmers on 32 universes */

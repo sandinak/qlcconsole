@@ -30,6 +30,7 @@ private slots:
     void aStockShowLosesNothing();
     void eachForkBlockIsNamedOnce();
     void settingsQlcPlusDoesNotNeedAreQuiet();
+    void groupMastersAreNamed();
     void notAWorkspaceIsNothing();
 };
 

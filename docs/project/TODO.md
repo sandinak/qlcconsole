@@ -106,11 +106,7 @@ then. Engine: `Universe::HitOverride` (between Override and Flashing),
 `GenericFader::startOverrideMix`/`releaseOverrideMix`, `Universe::writeMix`;
 `Collection::setHitOverride` raises its members, `Scene` mixes. Open, each
 "decided (can change)":
-- **Next: group intensity masters** (0.4 item 5, second half) share this
-  stage: a master is a per-group scale applied where the override mix is
-  (`GenericFader::write`, once a frame, no allocation), after the faders
-  below and before the Grand Master. Reuse `Universe::writeMix`'s place in
-  the order rather than adding a second post-fader pass.
+- ~~Next: group intensity masters~~ -- built (gm, below).
 - Firing a hit stays a VC button's (or a step's) start, not a run command;
   ALL OFF (a run command) and Stop all let go of overrides.
 - The Blind view draws a live override hit over the cue in edit; a hit
@@ -127,6 +123,41 @@ then. Engine: `Universe::HitOverride` (between Override and Flashing),
   end). An LTP channel nothing else plays keeps the hit's value after
   release (QLC+'s LTP rule).
 - No command-line word yet (`override` on the selected hit).
+
+## Group masters — built, leftovers (0.4 item 5, gm, 2026-10-31)
+
+Built (docs/features/show-tree.md "Group masters"; `GroupMasters`,
+engine/src/groupmasters.*; `FixtureGroup::setMaster/setMasterLevel`;
+`Universe::setGroupMasters`; the Run tab's `GroupMasterStrip`; the VC
+slider's Group master mode). Open, each "decided (can change)":
+- Where it applies: in the universe's post-fader stage, multiplied just
+  before the Grand Master (`Universe::updatePostGMValue`, one byte test per
+  written channel, no allocation), not at `writeMix`'s place among the
+  faders: scaling the pre-GM values would change what an override hit or
+  an effect mixes from, and the post-fader stage is worked out again on
+  every path (a frame, a master or GM move). So it scales everything the
+  Grand Master does: cues, effects, VC, Simple Desk, override hits,
+  Highlight, a flash, Focus. Parked, Ignore-GM and relay channels are not
+  scaled.
+- Intensity only (the universe's Intensity channels: dimmers and an LED
+  fixture's colour mix). A group of some heads of a fixture scales those
+  heads; its non-head channels (a master dimmer) only when the group holds
+  the whole fixture.
+- Overlap: a channel in two mastered groups is scaled by both, multiplied
+  (not the lowest).
+- Saved: `<Master Level="N"/>` in the group (only when it has one); the
+  level is kept, so a show reopens as it was left. The stock QLC+ save
+  check names both it and a VC slider in Group master mode (which QLC+ 4
+  loads as a submaster).
+- Moving a master is playing, not editing: it does not mark the show
+  modified (turning a master on or off does).
+- Not on the Control Map (presses only) or the pad (Run is GO/Back/Stop):
+  a controller fader reaches a group master through a VC slider's
+  External Input.
+- Not done: a command-line word (`group Front master 50`), a master in the
+  web/phone Run page, group masters in the Show Tree's Blind view and the
+  "why is this on" answer (v2 provenance should say "held at 50 % by the
+  Front master").
 
 ## Breathe once — leftovers (brth, 2026-10-30)
 
