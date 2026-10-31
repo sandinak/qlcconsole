@@ -259,6 +259,8 @@ static QString testLayouts()
    behind such warnings. */
 void Monitor_Test::init()
 {
+    // Tests change the output and draw at once: heads snap unless a test is about the travel.
+    StructureStudioView::setMoveSpeed(false);
     QTest::failOnWarning(QRegularExpression(QStringLiteral("No such (slot|signal)")));
 }
 
@@ -5474,7 +5476,6 @@ void Monitor_Test::aJumpingMoverTravelsAtItsSpeed()
     drive(0, 255);
     at = stepAim(1900);
     QVERIFY(degBetween(at, from) < 0.5);
-    StructureStudioView::setMoveSpeed(true);
 
     m_doc->deleteFixture(fxi->id());
 }
