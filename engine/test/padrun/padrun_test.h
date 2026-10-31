@@ -25,6 +25,7 @@
 #include <QPair>
 
 #include "showcontrol.h"
+#include "showtreemodel.h"
 
 class IOPluginStub;
 class Doc;
@@ -64,8 +65,33 @@ private slots:
     /** The controller lost while armed: disarmed. */
     void aLostPadDisarms();
 
+    /* Walking the show (Q192). */
+    /** The walking map by role, the same for both pads. */
+    void walkMapByRole();
+    /** Menu in the Run role starts Focus this cue on the cue in hand, with
+     *  no GO on the pad; Menu again (or Focus this cue ending) stops it. */
+    void menuStartsAndStopsTheWalk();
+    /** RT / LT step the cues (previewed, no run() call), passing over one
+     *  with nothing to walk; refused with a change not kept, and in Operate. */
+    void theTriggersWalkTheCuesWithoutGo();
+    /** RB / LB step the layers, said with their place; a tap of Y changes
+     *  the scope, and the bumpers then step fixtures. */
+    void theBumpersWalkTheLayers();
+    /** View solos the walked layer (only its scene previews), following
+     *  the layer and the cue; again: the whole cue. */
+    void soloAndMixedOutput();
+    /** A D-pad adjust kept with A is undone by View + B. */
+    void anAdjustUndoes();
+    /** Y held tags the cue Needs work (one tree step, undone by View + B). */
+    void holdYTagsTheCue();
+    /** Needs work round-trips through the show file. */
+    void theTagSavesAndLoads();
+
 private:
     IOPluginStub *loadStub();
+    /** Four spots, a list: Opening (Fronts, Backs), Blackout (no layer),
+     *  Ballad (Fronts, Backs); Opening picked in the tree. */
+    void makeShow();
     void press(quint32 channel, quint32 universe = 0);
     void hold(quint32 channel, bool down, quint32 universe = 0);
 
@@ -73,6 +99,9 @@ private:
     Doc *m_doc = nullptr;
     QList<QPair<ShowControl::Request, ShowControl::Route>> m_runs;
     bool m_answer = true;          // what the run handler says it did
+    QList<quint32> m_fronts, m_backs;
+    ShowTree::Target m_frontTarget, m_backTarget;
+    quint32 m_list = 0, m_cue1 = 0, m_cue2 = 0, m_empty = 0, m_layer1 = 0, m_layer2 = 0;
 };
 
 #endif

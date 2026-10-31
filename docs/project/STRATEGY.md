@@ -403,7 +403,7 @@ order the note says why.
 | Laser aperture face, U yoke, LaserLook symbol | 2 | 3 | Rig Overview | 4 | L | M | 1.5 | LATER |
 | Star-field coverage + laser audience/eye-height warnings | 3 | 4 | drawStarField, Show Review | 5 | M | M | 1.9 | BUILD (0.5), with Show Review |
 | Pad Run role (MVP 6 d, full 10.5 d) | 4 | 5 | ShowControl::execute, focus pad stack | 6 | M | M | 2.7 | MVP BUILT 2026-10-31 (0.4, `PadRun`: arm + GO/Back/Sub GO/Stop, list pick, light bar); full (Hits page, focus confirm) next; see note 2 |
-| Walk the show from the stage with the controller (extends Focus this cue) | 4 | 4 | Refine, Layer/Group/Fixture scope, voice and light-bar feedback, cue notes | 5 | M | M | 2.5 | BUILD (0.4); user's call 2026-10-30 (Q192), see TODO.md |
+| Walk the show from the stage with the controller (extends Focus this cue) | 4 | 4 | Refine, Layer/Group/Fixture scope, voice and light-bar feedback, cue notes | 5 | M | M | 2.5 | MVP BUILT 2026-10-31 (0.4, `PadRun` walking map: cues, layers, solo, Needs work tag); leftovers in TODO.md |
 | "Why is this on?" v1 | 4 | 5 | GenericFader, Show Tree tracking | 9 | M | M | 1.8 | BUILD (0.5); see note 3 |
 | Teaching later items: lesson link, reset to handout, GO log, glossary popovers | 3 | 5 | Teaching | 4 | L | L | 3.8 | BUILD (0.5) |
 
@@ -540,7 +540,7 @@ Order and dependencies:
    **MVP built 2026-10-31:** the Run role (`PadRun`, the Run tab's **Pad:**
    button), LB-held arm, GO / Back / Sub GO / Stop through `run(r,
    RoutePad)`, list cycling on the triggers, the light bar and rumble.
-   Open: the Hits page, the focus confirm, then Q192's layer walk.
+   Open: the Hits page, the focus confirm. Q192's walk is built (item 9).
 3. **Phone/tablet Run page** on the secured web access, using the same GO
    path and Teaching's rules (a PIN-guarded "allow remote GO").
 4. **Timecode**: LTC in (built: a third source into the same follow path),
@@ -554,6 +554,11 @@ Order and dependencies:
 8. **QLab out** (OSC/MSC), if the show-control users ask.
 9. **Walk the show from the stage** (Q192, extends Focus this cue and
    Refine): cues, layers and "Needs work" tags from the controller.
+   **MVP built 2026-10-31:** Menu in the Run role walks (`PadRun`): cues
+   on the triggers (previewed, no GO), layers on the bumpers, View solo,
+   hold Y tags Needs work (in the tree, saved), Focus this cue's adjusts
+   with View + B undo. Open: the light-itself calibration on A, level,
+   the Needs work filter and cue sheet column, the touchpad shortcuts.
 10. **Course**: Lessons 2.2-2.4, and a Level 3 lesson on running from the
    pad or phone.
 

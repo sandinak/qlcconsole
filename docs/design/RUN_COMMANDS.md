@@ -101,9 +101,9 @@ the Show Tree runtime are untouched.
 ## Next
 
 - **Pad Run:** built (0.4): `PadRun` calls `run(r, RoutePad)`; see
-  docs/features/show-control.md "GO from the game controller". Next on
-  it: walking a cue's layers from the pad (Q192), through
-  `PadRun::actionFor()` and `handle()`.
+  docs/features/show-control.md "GO from the game controller". Walking
+  the show (Q192) is built on it: Menu enters a walking map
+  (`PadRun::handleWalk()`) that has no GO; cue steps preview, never run.
 - **Phone Run page:** add a `RouteWeb`, with Teaching's "allow remote
   GO" and a PIN in step 2.
 - **Override hits:** if hits get their own commands, they join

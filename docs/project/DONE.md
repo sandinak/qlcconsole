@@ -6,6 +6,32 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
+### 2026-10-31 — Walk the show from the stage with the controller, MVP *(feat/04-walk-the-show, 0.4, Q192, walk)*
+
+Menu in the pad's Run role (`PadRun::Walk`) starts `RefineSession` on the
+cue in hand (Design: `ShowTreeController::editedCue()`, else the picked
+list's standby cue; Operate: `runningCue()`), with `setWalking(true)` for
+the walk's lines ("Cue 4, Ballad. Needs work. Layer 1 of 3: Movers.").
+`ProgrammerController::routeFocusInput()` hands the walking map to
+`PadRun::handleWalk()` at the top of the Refine branch: the triggers step
+cues (`stepCue()`: Design only, restarts Refine on the next cue it can walk,
+refused with a change pending), the bumpers step layers at Layer scope, Y
+taps cycle the scope and a 0.8 s hold (`walkTick()` on the controller tick)
+toggles `Cue::needsWork` (`setCuesNeedsWork()`, one tree step, NeedsWork="1"
+in the file), Menu stops (refused with a change pending). View on its
+release toggles the solo (`setSolo()` → `ShowTreeController::
+setPreviewSolo(cue, layer)`: `syncPreview()` keeps only the layer's scene and
+its child layers' scenes, `layerScene()`); View + B is the undo while
+walking. The Show Tree flags the cue "needs work" (orange, the note in the
+tooltip) and the cue page has a **Needs work** box. The App opens Focus This
+Cue when a walk starts (`RefinePanel::showRunning()`); the Run tab's button
+says **Pad: Walk** and its tooltip lists the walking map; the Controller test
+adds "Walk: …". Tests: engine/test/padrun (walking map, Menu in/out, cue
+steps without run(), layer steps and scope, solo vs mixed preview functions,
+a D-pad adjust undone by View + B, hold-Y tag + undo, the tag through
+save/load), ui/test/showtreeview `needsWorkInTheTree`. Not on a hot path
+(the solo filter runs in `syncPreview()` only while a solo is set).
+
 ### 2026-10-31 — Pad Run MVP: run the show from a game controller *(feat/04-pad-run, 0.4 item 2, pad)*
 
 The controller has two roles: **Tools** (Focus mode, Venue focus,

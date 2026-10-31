@@ -39,6 +39,10 @@ In Build's [Workbench](build.md#the-workbench):
 Each is greyed, with the reason in its tooltip, while the show has no
 lights to focus.
 
+From the stage, with the controller in the Run role, **Menu** starts it
+on the cue in hand and walks from cue to cue and layer to layer. See
+[Walk the show from the stage](show-control.md#walk-the-show-from-the-stage).
+
 The controller works exactly the same on a Build scene; see
 [Focus this look: on a Build scene](#focus-this-look-on-a-build-scene).
 

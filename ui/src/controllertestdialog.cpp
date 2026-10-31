@@ -286,6 +286,11 @@ QString ControllerTestDialog::mapsTo(QLCIOPlugin *plugin, quint32 input, int cha
         if (run != PadRun::NoAction)
             parts << tr("Run: %1").arg(PadNames::expand(PadRun::label(run),
                                                          PadNames::familyFrom(plugin->inputDeviceKind(input))));
+        // Walking the show (Q192): the walking map's own controls.
+        const PadRun::WalkAction walk = PadRun::walkActionFor(role);
+        if (walk != PadRun::WalkNoAction)
+            parts << tr("Walk: %1").arg(PadNames::expand(PadRun::label(walk),
+                                                          PadNames::familyFrom(plugin->inputDeviceKind(input))));
     }
     return parts.join(QStringLiteral(" \u00B7 "));
 }

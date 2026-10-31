@@ -1504,6 +1504,8 @@ void saveXML(QXmlStreamWriter *doc, const Production &production)
                 doc->writeAttribute(QStringLiteral("NoMoveInBlack"), QStringLiteral("1"));
             if (cue.focusCall && !list.looks)
                 doc->writeAttribute(QStringLiteral("FocusCall"), QStringLiteral("1"));
+            if (cue.needsWork)
+                doc->writeAttribute(QStringLiteral("NeedsWork"), QStringLiteral("1"));
             if (list.isSubCues() && cue.follow)
             {
                 doc->writeAttribute(QStringLiteral("Follow"), QStringLiteral("Auto"));
@@ -1728,6 +1730,7 @@ bool loadXML(QXmlStreamReader &root, Production &production)
             cue.colour = readColour(a);
             cue.noMoveInBlack = !looks && a.value(QStringLiteral("NoMoveInBlack")).toString() == QLatin1String("1");
             cue.focusCall = !looks && a.value(QStringLiteral("FocusCall")).toString() == QLatin1String("1");
+            cue.needsWork = a.value(QStringLiteral("NeedsWork")).toString() == QLatin1String("1");
             if (looks)
             {
                 cue.folder = a.value(QStringLiteral("Folder")).toString();

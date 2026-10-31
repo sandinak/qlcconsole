@@ -88,11 +88,61 @@ ARMED**. While it's held:
   the previews hold for it, and in Design it offers Operate.
 - **The tools win.** A Focus mode or Focus this cue started on the laptop
   takes the controller until it ends. In the Run role, View + Menu doesn't
-  start Focus mode. A focus-call cue's Start (Menu) still begins its calls.
+  start Focus mode, and Menu alone walks the show (below). A focus-call
+  cue's Start (Menu) still begins its calls.
 - The sticks stay the follow spot's in either role.
 
 decided (can change): GO needs a modifier held (LB), not a double-press;
 Back, Sub GO and Stop need it too, so there is one rule.
+
+### Walk the show from the stage
+
+Stand on stage with the controller in the Run role and press **Menu**
+(Options): the pad walks the show. It is **Focus this cue** on the cue in
+hand, with its own map for moving around, so you can look at each cue and
+each layer where the audience will see it, fix what the pad can fix, and
+tag the rest for later.
+
+- **The cue in hand.** In Design, the cue picked in the Show Tree, else
+  the list's standby cue. In Operate, the cue the list is running.
+- **Focus This Cue** opens on the laptop, so whoever is there sees where
+  you are.
+
+While walking:
+
+| Xbox | PlayStation | Does |
+|---|---|---|
+| RT / LT | R2 / L2 | next / previous cue. In Design it is previewed, never a GO |
+| RB / LB | R1 / L1 | next / previous layer ("Layer 2 of 4: Movers.") |
+| View | Create | **solo** the layer, or play the whole cue again |
+| View + B | Create + Circle | undo the last keep or tag |
+| tap Y | tap Triangle | the scope: layer, group, fixture (the bumpers then step groups or fixtures) |
+| hold Y | hold Triangle | tag the cue **Needs work** (hold again to clear it) |
+| Menu | Options | stop walking (back to the Run map) |
+
+The sticks, the D-pad, A (keep), B (back to the cue), X, LS and RS do what
+they do in [Focus this cue](refine.md). Position, zoom, focus, colour and gobo can be changed. Every keep
+is one Show Tree step, so undo takes it back here or on the laptop.
+
+- **Solo** plays only the walked layer and its exception layers, as the cue
+  plays them. A light that a higher layer takes over stays dark. The solo
+  follows you to the next layer and the next cue.
+- **Needs work** marks the cue in the Show Tree. Write what needs doing in
+  the cue's note on the laptop. See [Needs work](show-tree.md#needs-work).
+- **Nothing is thrown away.** A cue step or Menu with a change not kept
+  is refused, and the voice says to keep it (A) or go back (B) first.
+- **In Operate** the walk follows the quiet Refine rules. Only the
+  running cue can be walked, GO moves it, nothing blinks or dims, and solo
+  is refused.
+- **No GO while walking.** Menu first, then hold LB and press A.
+- A focus-call cue that is armed still takes Menu to begin its calls.
+
+The PlayStation touchpad adds no walking shortcuts yet. Everything is on
+the buttons, the same on both kinds of pad.
+
+decided (can change): Menu enters and leaves the walk. View solos, so the
+undo moves to View + B. A tap of Y is still the scope and a hold tags.
+Solo is for Design only. A cue with nothing to walk is passed over.
 
 ## Sub-cues
 

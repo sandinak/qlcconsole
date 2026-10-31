@@ -101,6 +101,7 @@
 #include "fixture.h"
 #include "programmercontroller.h"
 #include "padrun.h"
+#include "refinepanel.h"
 #include "qxwimporter.h"
 #include "dmxmonitorwindow.h"
 #include "stockqlccheck.h"
@@ -744,6 +745,12 @@ void App::init()
         connect(pc->padRun(), &PadRun::enabledChanged, this, [](bool on) {
             QSettings().setValue(QStringLiteral("controller/role"),
                                  on ? QStringLiteral("run") : QStringLiteral("tools"));
+        });
+        /* Walking the show from the pad (Q192): the laptop shows Focus
+           This Cue as it does when the walk is started there. */
+        connect(pc->padRun(), &PadRun::walkingChanged, this, [this](bool on) {
+            if (on)
+                RefinePanel::showRunning(m_doc, this);
         });
         // Who focuses on this computer, for the focus report (Q134).
         pc->venueCorrections()->setCheckedBy(QSettings().value(QStringLiteral("focusCalls/checkedBy")).toString());

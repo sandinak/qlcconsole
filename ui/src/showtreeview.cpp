@@ -1829,6 +1829,19 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
                 return;
             m_st->setCuesFocusCall({ m_pageCue }, on);
         });
+        /* Needs work (Q192): a mark for later, usually set from the stage
+           while walking the show with the pad (hold Y). */
+        m_cueNeedsWork = new QCheckBox(tr("Needs work"), inner);
+        m_cueNeedsWork->setObjectName("stCueNeedsWork");
+        m_cueNeedsWork->setToolTip(tr("A mark for later work: nothing plays differently. Set from the stage "
+                                      "while walking the show with the game controller (hold Y), or here. "
+                                      "Say what needs doing in the cue's note."));
+        f->addRow(QString(), m_cueNeedsWork);
+        connect(m_cueNeedsWork, &QCheckBox::toggled, this, [this](bool on) {
+            if (m_inspectorUpdating || m_pageCue == invalidId())
+                return;
+            m_st->setCuesNeedsWork({ m_pageCue }, on);
+        });
         m_cueFocusState = new QLabel(inner);
         m_cueFocusState->setObjectName("stCueFocusState");
         m_cueFocusState->setStyleSheet(QStringLiteral("color: #d08a1c; font-weight: bold;"));
@@ -3099,6 +3112,15 @@ void ShowTreeView::buildTree()
                                                           "Start on the controller begins them.") })
                                .join(QStringLiteral("\n\n")).trimmed();
                 }
+                // Needs work (Q192): tagged for later, with its note.
+                if (cue.needsWork)
+                {
+                    badges << tr("needs work");
+                    badgeTip = QStringList({ badgeTip, cue.note.isEmpty()
+                                                 ? tr("Needs work: tagged for later work.")
+                                                 : tr("Needs work: %1").arg(cue.note) })
+                               .join(QStringLiteral("\n\n")).trimmed();
+                }
                 // Q38: a cue that says no move in black where its list
                 // would (a list's own setting is badged on the list).
                 if (!list.looks && cue.noMoveInBlack)
@@ -3140,6 +3162,9 @@ void ShowTreeView::buildTree()
                         ci->setTextAlignment(c, Qt::AlignCenter);
                     ci->setToolTip(c, QStringList({ trackingTip, badgeTip }).join(QStringLiteral("\n\n")).trimmed());
                 }
+                // Needs work stands out among the grey flags (Q192).
+                if (cue.needsWork)
+                    ci->setForeground(FlagsCol, QColor(0xd0, 0x8a, 0x1c));
                 const QString nameTip = cue.reusable == invalidId()
                                ? (cue.unlinkedFrom.isEmpty() ? cue.note
                                   : tr("Unlinked from %1. %2").arg(cue.unlinkedFrom, cue.note).trimmed())
@@ -4124,6 +4149,10 @@ void ShowTreeView::showCuePage(const CueList &list, int index)
     {
         QSignalBlocker block(m_cueNoMib);
         m_cueNoMib->setChecked(cue.noMoveInBlack);
+    }
+    {
+        QSignalBlocker block(m_cueNeedsWork);
+        m_cueNeedsWork->setChecked(cue.needsWork);
     }
     {
         QSignalBlocker block(m_cueFocusCall);

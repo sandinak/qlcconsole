@@ -488,6 +488,7 @@ void CueRunner::buildFullLayout()
     });
     connect(m_doc->programmer()->padRun(), &PadRun::enabledChanged, this, &CueRunner::refreshPadRun);
     connect(m_doc->programmer()->padRun(), &PadRun::armedChanged, this, &CueRunner::refreshPadRun);
+    connect(m_doc->programmer()->padRun(), &PadRun::walkingChanged, this, &CueRunner::refreshPadRun);
     connect(m_doc->programmer(), &ProgrammerController::focusControllerChanged,
             this, &CueRunner::refreshPadRun);
     head->addWidget(m_padRunBtn);
@@ -1070,6 +1071,7 @@ void CueRunner::refreshPadRun()
         m_padRunBtn->setChecked(run->isEnabled());
     }
     m_padRunBtn->setText(!run->isEnabled() ? tr("Pad: Tools")
+                         : run->isWalking() ? tr("Pad: Walk")
                          : run->isArmed() ? tr("Pad: ARMED") : tr("Pad: Run"));
     m_padRunBtn->setStyleSheet(run->isArmed()
         ? QStringLiteral("QToolButton { color: black; background: %1; }").arg(PadRun::armedColour().name())
@@ -1079,7 +1081,9 @@ void CueRunner::refreshPadRun()
            "follow spot, as before. Run: the controller runs the show &mdash; nothing moves it "
            "unless %1 is held. Click to switch.</p><p>%2</p>")
             .arg(pc->padText(QStringLiteral("{LB}")),
-                 PadRun::mapLines(pc->padFamily()).join(QStringLiteral("<br>"))));
+                 PadRun::mapLines(pc->padFamily()).join(QStringLiteral("<br>")))
+        + tr("<p><b>Walking</b> (Menu in Run):<br>%1</p>")
+            .arg(PadRun::walkMapLines(pc->padFamily()).join(QStringLiteral("<br>"))));
 }
 
 void CueRunner::refreshFocusArmed()

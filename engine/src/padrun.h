@@ -49,6 +49,21 @@ class Doc;
  *   LB + Y       Sub GO          LB + X   Stop the list
  *   RT / LT      next / previous list (no arm: it only picks)
  *   RS           say the list and what is on standby
+ *   Menu         walk the show (below)
+ *
+ * Walking the show (Q192, TODO.md "Walk the show from the stage"): Menu
+ * starts Focus this cue (RefineSession) on the cue in hand, with its own
+ * map while walking -- the rest of the controller is Focus this cue's:
+ *
+ *   RT / LT      next / previous cue (Design: previewed, never a GO)
+ *   RB / LB      next / previous layer (at Group or Fixture scope: the
+ *                groups or fixtures, as in Focus this cue)
+ *   View         solo the layer / the whole cue (Design)
+ *   View + B     undo the last keep or tag
+ *   tap Y        the scope: layer, group, fixture
+ *   hold Y       tag the cue Needs work (again: clear it)
+ *   Menu         stop walking (back to the Run map)
+ *   sticks, D-pad, A, B, X, LS, RS: Focus this cue's
  *
  * The same roles on every pad (an Xbox pad's A is a DualSense's Cross), so a
  * controller slot that moves to another pad keeps the map. Every command
@@ -85,9 +100,24 @@ public:
         Stop,               ///< X
         NextList,           ///< RT
         PreviousList,       ///< LT
-        WhereAmI            ///< RS
+        WhereAmI,           ///< RS
+        Walk                ///< Menu: walk the show
     };
     Q_ENUM(Action)
+
+    /** What a control does while walking (the walking map). */
+    enum WalkAction
+    {
+        WalkNoAction = 0,
+        NextCue,            ///< RT
+        PreviousCue,        ///< LT
+        NextLayer,          ///< RB
+        PreviousLayer,      ///< LB
+        Solo,               ///< View
+        TagCue,             ///< hold Y (a tap: the scope)
+        LeaveWalk           ///< Menu
+    };
+    Q_ENUM(WalkAction)
 
     /** The action of @p role (NoAction for the sticks and anything unused). */
     static Action actionFor(GamepadRole::Role role);
@@ -106,6 +136,17 @@ public:
     static QStringList mapLines(PadNames::Family family);
     /** The command an action sends (Go for anything that is not one). */
     static ShowControl::Command commandFor(Action action);
+
+    /** The walking map, by gamepad role (WalkNoAction: Focus this cue's). */
+    static WalkAction walkActionFor(GamepadRole::Role role);
+    static GamepadRole::Role roleFor(WalkAction action);
+    static QString label(WalkAction action);
+    static QList<WalkAction> walkActions();
+    /** The walking map, one line a control, in @p family's names; the
+     *  rest of the controller is Focus this cue's. */
+    static QStringList walkMapLines(PadNames::Family family);
+    /** How long Y is held to tag a cue, seconds. */
+    static constexpr double tagHoldSeconds() { return 0.8; }
 
     /** The light bar while armed, and its flash when a GO went. Colour-blind
      *  safe with each other: orange and blue. */
@@ -156,6 +197,43 @@ public:
     /** "Main. Next: cue 4." -- what RS says. */
     QString wherePhrase() const;
 
+    /*********************************************************************
+     * Walking the show (Q192)
+     *********************************************************************/
+public:
+    /** Walking: Focus this cue on, started from the pad. */
+    bool isWalking() const;
+    /** Walk from cue @p cueId (invalid: the cue in hand -- in Design the
+     *  cue picked in the Show Tree, else the picked list's standby cue,
+     *  else its first; in Operate the cue that list is running). False,
+     *  said and @p why, when Focus this cue refuses it. */
+    bool startWalk(quint32 cueId = 0xFFFFFFFF, QString *why = nullptr);
+    /** Stop walking: Focus this cue ends, the solo ends, the Run map is
+     *  back. Refused, and said, while a change is not kept. */
+    void stopWalk();
+    /** The cue walked (invalid: not walking). */
+    quint32 walkCue() const;
+    /** The cue in hand for startWalk() (invalid: none). */
+    quint32 cueInHand() const;
+    /** To the next (@p delta 1) or previous (-1) cue of the cue's list, as
+     *  Focus this cue on it. Design only: in Operate the cue moves with GO
+     *  (quiet Refine, Q130). Refused, and said, with changes not kept. */
+    bool stepCue(int delta);
+    /** To the next / previous layer of the cue (wrapping). */
+    void stepLayer(int delta);
+    /** Solo: only the walked layer of the cue plays (Design: the show
+     *  is not running; in Operate refused, and said). */
+    bool isSolo() const { return m_solo; }
+    bool setSolo(bool on);
+    /** Mark the walked cue Needs work, or clear the mark: one Show Tree
+     *  step (View + B or the laptop's undo takes it back). */
+    bool toggleNeedsWork();
+    /** A pad control while walking, from ProgrammerController's routing
+     *  (Focus this cue owns the rest): true when the walking map took it. */
+    bool handleWalk(GamepadRole::Role role, uchar value);
+    /** The controller tick while walking: the hold of Y. */
+    void walkTick(double dt);
+
 signals:
     void enabledChanged(bool on);
     void armedChanged(bool armed);
@@ -164,9 +242,20 @@ signals:
     void commandSent(ShowControl::Command command, bool done);
     /** A press that needs the arm came without it. */
     void refused(PadRun::Action action);
+    void walkingChanged(bool on);
+    void soloChanged(bool on);
 
 private:
     void showLight();
+    /** The preview's solo follows the walked layer. */
+    void syncSolo();
+    /** Start Focus this cue on @p cueId for the walk, saying nothing more
+     *  than it does; false (and @p why) when it refuses. */
+    bool tryStart(quint32 cueId, QString *why = nullptr);
+    void walkStarted();
+    void walkEnded();
+    bool refuseWalk(const QString &reason, QString *why = nullptr);
+    QString cueLabel(quint32 cueId) const;
 
 private:
     Doc *m_doc;
@@ -179,6 +268,13 @@ private:
     ControllerScheme::TriggerButton m_rt, m_lt;
     /** The light bar's flash after a GO. */
     QTimer *m_flash = nullptr;
+    /** Walking: Focus this cue was started here and runs. */
+    bool m_walking = false;
+    /** A cue step restarts Focus this cue: its stop is not the walk's. */
+    bool m_restarting = false;
+    bool m_solo = false;
+    ControllerScheme::TriggerButton m_walkRt, m_walkLt;
+    ControllerScheme::LongPress m_holdY { tagHoldSeconds() };
 };
 
 /** @} */

@@ -433,6 +433,13 @@ public:
      *  step; false when nothing changed (a Looks section has none). */
     bool setCuesFocusCall(const QList<quint32> &cueIds, bool on);
     bool isCueFocusCall(quint32 cueId) const;
+    /** "Needs work" (Q192): a mark for later work, set from the stage
+     *  (walking the show with the pad) or the cue page. One undo step;
+     *  false when nothing changed. */
+    bool setCuesNeedsWork(const QList<quint32> &cueIds, bool on);
+    bool isCueNeedsWork(quint32 cueId) const;
+    /** The cues marked Needs work, in tree order. */
+    QList<quint32> needsWorkCues() const;
     /** The show's own setting, read from Doc's programmer (false: none). */
     bool showMoveInBlack() const;
     /** Whether heads move in black into cue @a cueId: the cue's flag, else
@@ -1176,6 +1183,14 @@ public:
     void stopPreview();
     /** The cue the preview was asked for (invalid: none). */
     quint32 previewedCue() const { return m_previewCue; }
+    /** Solo (Q192, walking the show): while cue @a cueId previews, only
+     *  layer @a layerId of it plays -- the scenes its resolved layer and
+     *  that layer's child layers bake to, as the cue bakes them (a light
+     *  an upper layer takes stays dark). Invalid @a layerId: the whole
+     *  cue again. Design only, as the preview. */
+    void setPreviewSolo(quint32 cueId, quint32 layerId);
+    /** The layer soloed (invalid: none, the whole cue plays). */
+    quint32 previewSoloLayer() const { return m_soloLayer; }
     PreviewState previewState() const { return m_previewState; }
     /** What the preview runs now. */
     QList<quint32> previewFunctions() const { return m_previewRunning; }
@@ -1239,6 +1254,11 @@ private:
     void syncPreview();
 
     quint32 m_previewCue = 0xFFFFFFFF;
+    /** setPreviewSolo(): the cue and its layer soloed. */
+    quint32 m_soloCue = 0xFFFFFFFF;
+    quint32 m_soloLayer = 0xFFFFFFFF;
+    /** What of @a want (cue @a cueId's functions) its solo layer plays. */
+    QList<quint32> soloFunctions(quint32 cueId, const QList<quint32> &want) const;
     /** editedCue(). */
     quint32 m_editedCue = 0xFFFFFFFF;
     void setEditedCue(quint32 cueId);
