@@ -43,11 +43,10 @@ if [ -n "$REMOTE" ]; then
   ssh "$REMOTE" 'if pgrep -x cmake >/dev/null || pgrep -x ninja >/dev/null; then echo "a build is already running on this host" >&2; exit 1; fi; mkdir -p ~/pkgbuild'
   scp -q "$TMP/src.bundle" "$REMOTE:pkgbuild/$SHA.bundle"
   scp -q "$0" "$REMOTE:pkgbuild/make-pi-deb.sh"
-  ssh "$REMOTE" "set -e; cd ~/pkgbuild; rm -rf $SHA; git init -q $SHA; git -C $SHA fetch -q ../$SHA.bundle "refs/*:refs/*"; git -C $SHA checkout -q --detach $SHA; \
+  ssh "$REMOTE" "set -e; cd ~/pkgbuild; rm -rf $SHA; git init -q $SHA; git -C $SHA fetch -q ../$SHA.bundle \"refs/*:refs/*\"; git -C $SHA checkout -q --detach $SHA; \
     nice -n 10 bash make-pi-deb.sh --local ~/pkgbuild/$SHA --jobs $JOBS --out ~/pkgbuild/out" 2>&1 | tee "${PIDEB_LOG:-/dev/null}"
   mkdir -p "$HERE/dist"
-  scp -q "$REMOTE:pkgbuild/out/qlcconsole_*+git*.$SHA_*.deb" "$HERE/dist/" 2>/dev/null \
-    || scp -q "$REMOTE:pkgbuild/out/*$SHA*.deb" "$HERE/dist/"
+  scp -q "$REMOTE:pkgbuild/out/qlcconsole_*.${SHA}_*.deb" "$HERE/dist/"
   ls -l "$HERE"/dist/*"$SHA"*.deb
   exit 0
 fi
