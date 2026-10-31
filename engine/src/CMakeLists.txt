@@ -165,6 +165,7 @@ add_library(${module_name} SHARED
     effectinstance.cpp effectinstance.h
     matriximage.cpp matriximage.h
     effectscriptrunner.cpp effectscriptrunner.h
+    blindeffects.cpp blindeffects.h
     showembedding.cpp showembedding.h
     fixturedefupdates.cpp fixturedefupdates.h
     programmercontroller.cpp programmercontroller.h

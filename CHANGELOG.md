@@ -240,6 +240,11 @@ skipped). Upstream fixes taken:
   fixture picture show the cue you are editing in the Show Tree while the
   stage plays the run; nothing on the wire changes. The footer turns blue
   and names the cue (docs/design/LIVE_BLIND.md).
+- **The Blind view moves the cue's effects**: a dimmer pulse, a chase, a
+  colour change or a mover's sweep in the cue in edit plays on the plot,
+  the studio and the fixture pictures, on the view's own clock, while the
+  stage plays on untouched. It runs only while the view is up and the cue
+  has an effect.
 - **Bring over QLC+ 4's settings, once** (asked): the first start that
   finds QLC+ 4's settings on the computer lists them and asks once
   whether to copy its recent shows (after qlcconsole's own), I/O and
