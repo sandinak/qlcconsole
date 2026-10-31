@@ -768,6 +768,9 @@ skipped). Upstream fixes taken:
 
 ### Fixed
 
+- **`qlcconsole --version` and `--help` work with no display** (ssh, a
+  headless Pi): they answer before the application window system starts,
+  where they used to abort in Qt's xcb plugin.
 - **Performers no longer come and go in the Rig Overview** (and the plot):
   the cue scope (Show ▸ All targets off) was hiding the people along with
   the targets the cue does not aim at, so they vanished and returned as
