@@ -8,6 +8,30 @@ under `~/.claude/.../memory/`.
 
 ---
 
+## Pad Run — MVP built, leftovers (0.4 item 2, pad, 2026-10-31)
+
+Built: the controller's **Run** role (`PadRun`, engine/src/padrun.*; the
+Run tab's **Pad: Tools / Run / ARMED** button; docs/features/show-control.md
+"GO from the game controller"). Every command goes through
+`ShowControl::run(r, RoutePad)`. Open:
+- The full role (STRATEGY ROI row): a Hits page on the pad (fire the
+  production's hits), and the focus confirm.
+- Q192's layer walk and edits from the pad (below) build on
+  `PadRun::actionFor()` / `handle()`; the walking map then replaces the
+  Run map while walking.
+- A pad chord to switch roles without the laptop (today: the Run tab's
+  button). decided: none yet, so a pad can't take the show by accident
+  (can change).
+- Not verified on hardware: the DualSense light bar / rumble on GO with a
+  real pad (the code sends the same feedback the focus tools do).
+- decided (can change): GO needs LB held (a modifier, not a double-press);
+  Back, Sub GO and Stop need it too; RT / LT and RS need no arm. Tools is
+  the default role, kept per computer (QSettings controller/role). Any
+  patched pad in the Run role can GO; the arm is per pad. No voice on a GO
+  that went (the house hears the laptop): a buzz and the light bar; a GO
+  with nothing to play buzzes long and is said, as the Feedback setting
+  allows.
+
 ## One GO path — built, leftovers (0.4 item 1, go1, 2026-10-31)
 
 Built: every GO, Back, Sub GO, Stop, Load... enters through
@@ -252,6 +276,9 @@ laptop); Menu leaves. Plays live in Design; in Operate it follows the quiet
 Refine rules (Q130). Voice and light bar for feedback, no need to look at
 the laptop. Reuses Refine, the Layer/Group/Fixture scope cycle, the
 voice/light-bar feedback and the Show Tree's cue notes. Several days, opus.
+
+The pad's Run role is built (Pad Run MVP above): walking hooks in at
+`PadRun::handle()` with its own map while walking.
 
 Follow-up notes (chat 2026-10-30, for the 0.4 design):
 - Targets for layers are set as for any light (drop a Library > Target on

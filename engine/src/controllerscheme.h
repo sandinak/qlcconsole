@@ -43,8 +43,9 @@
  */
 namespace ControllerScheme
 {
-    /** The tool a label is for. */
-    enum Tool { FocusTool, FocusCallsTool, RefineTool };
+    /** The tool a label is for. RunTool: the pad's Run role, whose map is
+     *  PadRun's (PadRun::label()), not these verbs. */
+    enum Tool { FocusTool, FocusCallsTool, RefineTool, RunTool };
 
     /** What a control does, the same in every tool. */
     enum Verb

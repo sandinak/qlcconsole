@@ -39,6 +39,9 @@ private slots:
     void theRunnerShowsTheListAndItsSubCues();
     void theRunTabShowsHitsThatOverride();
     void goSubGoBackAndWhatChanges();
+    /** The pad's role on the Run tab (0.4 Pad Run): Tools / Run / ARMED,
+     *  a click switches it, and the tooltip carries the button map. */
+    void thePadRoleShowsOnTheRunTab();
     void clickLoadsDoubleClickJumps();
     void aClickInDesignShowsTheCue();
     void runnersAndShowControlMirrorOneState();

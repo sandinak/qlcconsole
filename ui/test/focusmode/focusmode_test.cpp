@@ -37,6 +37,7 @@
 #include "iopluginstub.h"
 #include "qlcfile.h"
 #include "programmercontroller.h"
+#include "padrun.h"
 #include "monitorproperties.h"
 #include "inputoutputmap.h"
 #include "qlcfixturedef.h"
@@ -1207,6 +1208,13 @@ void FocusMode_Test::theControllerTestListsEachInput()
     QCOMPARE(tree->topLevelItem(4)->text(2), QString("buttonOptions \u00B7 Share"));
     m_stub->m_deviceKind.clear();
     QCOMPARE(dlg->rowCount(), 5);
+    // The pad's Run role on (0.4): a new row also says what it does there.
+    m_doc->programmer()->padRun()->setEnabled(true, false);
+    m_stub->emitDiagnostic(0, dev, conn, "Button 2", 1, BtnB, 255);
+    QVERIFY2(tree->topLevelItem(5)->text(7).contains("Run: Back (LB held)"),
+             qPrintable(tree->topLevelItem(5)->text(7)));
+    m_doc->programmer()->padRun()->setEnabled(false, false);
+    QCOMPARE(dlg->rowCount(), 6);
 
     // The log: the devices, a row per element, every event in order.
     const QString log = dlg->logText();

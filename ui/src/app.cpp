@@ -100,6 +100,7 @@
 #include "shutterautoopen.h"
 #include "fixture.h"
 #include "programmercontroller.h"
+#include "padrun.h"
 #include "qxwimporter.h"
 #include "dmxmonitorwindow.h"
 #include "stockqlccheck.h"
@@ -734,6 +735,15 @@ void App::init()
         pc->setVoiceDetail(ControllerScheme::VoiceDetail(VoiceDetailCombo::savedDetail()));
         connect(pc, &ProgrammerController::voiceDetailChanged, this, [](ControllerScheme::VoiceDetail d) {
             VoiceDetailCombo::saveDetail(int(d));
+        });
+        /* The pad's role (0.4 Pad Run): Tools or Run, this computer's.
+           decided: Tools by default -- a pad picked up mid-show never
+           moves it unasked (can change). */
+        pc->padRun()->setEnabled(QSettings().value(QStringLiteral("controller/role")).toString()
+                                 == QLatin1String("run"), false);
+        connect(pc->padRun(), &PadRun::enabledChanged, this, [](bool on) {
+            QSettings().setValue(QStringLiteral("controller/role"),
+                                 on ? QStringLiteral("run") : QStringLiteral("tools"));
         });
         // Who focuses on this computer, for the focus report (Q134).
         pc->venueCorrections()->setCheckedBy(QSettings().value(QStringLiteral("focusCalls/checkedBy")).toString());
