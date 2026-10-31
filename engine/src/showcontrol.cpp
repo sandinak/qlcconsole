@@ -190,6 +190,7 @@ QString ShowControl::routeName(Route route)
         case RouteOsc:        return QStringLiteral("OSC");
         case RouteMsc:        return QStringLiteral("MSC");
         case RouteWeb:        return QStringLiteral("web");
+        case RouteTimecode:   return QStringLiteral("timecode");
         case RouteOther:      break;
     }
     return QStringLiteral("other");

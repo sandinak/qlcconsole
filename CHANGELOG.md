@@ -21,6 +21,7 @@ back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
   listener) as `/cue/{cue}/start` or `/go`, and/or as an MSC GO with the
   cue number on a MIDI output; every cue or only cues with a number of their own.
   Per show, on the Show control page; not for blind or previews.
+
 ### Run the show
 
 - **Phone and tablet Run page.** Web access serves **/run**: the
@@ -30,6 +31,16 @@ back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
   (a new `web` route). **File ▸ Show Settings… ▸ Allow GO from the phone Run
   page** turns it on, off in every show by default; with a PIN, the page
   asks for it once per session. See *The Run page* in Other improvements.
+
+### Timecode
+
+- **Cues at a timecode.** Tick **Follow timecode** on a Show Tree cue list and
+  give its cues a time ("cue 12 at 00:01:23:10", or **Learn** to stamp the
+  timecode coming in). The list goes to each cue as MTC, Art-Net TimeCode or
+  LTC reaches it, through the same GO path as the key. A jump forward plays only
+  the latest cue passed, a jump back re-arms, a dropout holds. The Run tab
+  shows the next timecode cue and a countdown. Saved with the show; a show
+  with no times plays as before.
 
 ### Teaching
 

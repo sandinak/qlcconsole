@@ -546,8 +546,9 @@ Order and dependencies:
    2026-10-31:** `/run`, `RouteWeb`, Show Settings ▸ Allow GO from the
    phone Run page (off by default).
 4. **Timecode**: LTC in (built: a third source into the same follow path),
-   then "cue N at 00:01:23:10" on cue lists, building on 0.3.1's Art-Net
-   TimeCode.
+   then "cue N at 00:01:23:10" on cue lists (**built 2026-10-31**: a list
+   that follows timecode fires each cue through the One GO path,
+   `RouteTimecode`; building on 0.3.1's Art-Net TimeCode).
 5. **Override hits** (priority layer, restore on release), building on
    0.3.1's hit fade times. **Built 2026-10-31:** a hit's Override wins
    over the show, intensity too, and fades back to what plays then

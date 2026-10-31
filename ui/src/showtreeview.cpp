@@ -44,6 +44,8 @@
 #include <QPushButton>
 #include <QComboBox>
 #include <QLineEdit>
+#include "timecodecues.h"
+#include "timecodesource.h"
 #include <QRegularExpression>
 #include <QCheckBox>
 #include <QSplitter>
@@ -1597,6 +1599,14 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
                                  "say \"Don't move in black into this cue\". The lead time is the show's."));
         f->addRow(tr("Move in black"), m_listMib);
         connect(m_listMib, QOverload<int>::of(&QComboBox::activated), this, &ShowTreeView::slotListMibChanged);
+        m_listFollowTc = new QCheckBox(tr("Follow timecode"), m_listPage);
+        m_listFollowTc->setObjectName("stListFollowTimecode");
+        m_listFollowTc->setToolTip(tr("Its cues that have a time (a cue's \"At timecode\") go on by themselves as "
+                                      "the incoming timecode reaches them. A jump forward plays only the latest "
+                                      "cue passed; a jump back re-arms; if timecode stops, the list holds. GO "
+                                      "by hand still works."));
+        f->addRow(QString(), m_listFollowTc);
+        connect(m_listFollowTc, &QCheckBox::toggled, this, &ShowTreeView::slotListFollowTimecodeToggled);
         m_listInfo = new QLabel(m_listPage);
         m_listInfo->setWordWrap(true);
         f->addRow(m_listInfo);
@@ -1861,6 +1871,26 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         });
         f->addRow(QString(), refine);
         connect(m_cueNoMib, &QCheckBox::toggled, this, &ShowTreeView::slotCueNoMibToggled);
+        // Cues at a timecode: when its list follows timecode, the cue goes on at this time.
+        m_cueTcRow = new QWidget(inner);
+        {
+            QHBoxLayout *tl = new QHBoxLayout(m_cueTcRow);
+            tl->setContentsMargins(0, 0, 0, 0);
+            m_cueTc = new QLineEdit(m_cueTcRow);
+            m_cueTc->setObjectName("stCueTimecode");
+            m_cueTc->setPlaceholderText(tr("hh:mm:ss:ff -- none"));
+            m_cueTc->setToolTip(tr("The incoming timecode at which this cue goes on, when its list is set to "
+                                   "follow timecode (hh:mm:ss:ff). Empty: timecode leaves the cue alone; GO "
+                                   "still plays it."));
+            m_cueTcLearn = new QPushButton(tr("Learn"), m_cueTcRow);
+            m_cueTcLearn->setObjectName("stCueTimecodeLearn");
+            m_cueTcLearn->setToolTip(tr("Stamp the timecode coming in now onto this cue."));
+            tl->addWidget(m_cueTc, 1);
+            tl->addWidget(m_cueTcLearn);
+        }
+        f->addRow(tr("At timecode"), m_cueTcRow);
+        connect(m_cueTc, &QLineEdit::editingFinished, this, &ShowTreeView::slotCueTimecodeEdited);
+        connect(m_cueTcLearn, &QPushButton::clicked, this, &ShowTreeView::slotCueTimecodeLearn);
         {
             // Includes (D8): this cue plays their output under its own,
             // in order -- the later wins.
@@ -3887,6 +3917,11 @@ void ShowTreeView::updateInspector()
             m_listForm->setRowVisible(m_listColour, true);
             showColourButton(m_listColour, list->colour, QString());
             m_listForm->setRowVisible(m_listMib, true);
+            m_listForm->setRowVisible(m_listFollowTc, !list->isSubCues());
+            {
+                QSignalBlocker block(m_listFollowTc);
+                m_listFollowTc->setChecked(list->followTimecode);
+            }
             if (m_listAddSection != nullptr)
                 m_listForm->setRowVisible(m_listAddSection, true);
             m_listMib->setItemText(0, showMibLabel());
@@ -4080,6 +4115,7 @@ void ShowTreeView::showCuePage(const CueList &list, int index)
                             static_cast<QWidget *>(m_cueTracked), static_cast<QWidget *>(m_cueSkip),
                             static_cast<QWidget *>(m_cueNoMib), static_cast<QWidget *>(m_cueFocusCall) })
             m_cueForm->setRowVisible(w, cueRows);
+        m_cueForm->setRowVisible(m_cueTcRow, cueRows && !list.isSubCues());
         m_cueForm->setRowVisible(m_lookFiredBy, list.looks);
         m_cueForm->setRowVisible(m_hitWhen, list.looks);
         m_cueForm->setRowVisible(m_hitOverride, list.looks);
@@ -4165,6 +4201,13 @@ void ShowTreeView::showCuePage(const CueList &list, int index)
     {
         QSignalBlocker block(m_cueNoMib);
         m_cueNoMib->setChecked(cue.noMoveInBlack);
+    }
+    {
+        QSignalBlocker block(m_cueTc);
+        if (!m_cueTc->hasFocus())
+            m_cueTc->setText(cue.timecode < 0 ? QString() : TimecodeCues::format(cue.timecode, tcFps()));
+        const TimecodeSource *src = m_doc->timecodeSource();
+        m_cueTcLearn->setEnabled(src != nullptr && src->health() != TimecodeSource::NoSource);
     }
     {
         QSignalBlocker block(m_cueFocusCall);
@@ -5628,6 +5671,50 @@ void ShowTreeView::slotCueNoMibToggled(bool on)
     if (m_inspectorUpdating || m_pageCue == invalidId())
         return;
     m_st->setCuesNoMoveInBlack({ m_pageCue }, on);
+}
+
+int ShowTreeView::tcFps() const
+{
+    const TimecodeSource *src = m_doc->timecodeSource();
+    return src != nullptr ? src->fps() : 30;
+}
+
+void ShowTreeView::slotCueTimecodeEdited()
+{
+    if (m_inspectorUpdating || m_pageCue == invalidId())
+        return;
+    const QString text = m_cueTc->text().trimmed();
+    qint32 ms = -1;
+    if (!text.isEmpty() && !TimecodeCues::parse(text, tcFps(), &ms))
+    {
+        m_cueTc->setStyleSheet(QStringLiteral("QLineEdit { border: 1px solid #c62828; }"));
+        m_cueTc->setToolTip(tr("Not a timecode: write hh:mm:ss:ff, for example 00:01:23:10."));
+        return;
+    }
+    m_cueTc->setStyleSheet(QString());
+    m_st->setCueTimecode(m_pageCue, ms);
+    const Cue *c = m_st->cue(m_pageCue);
+    m_cueTc->setText(c == nullptr || c->timecode < 0 ? QString() : TimecodeCues::format(c->timecode, tcFps()));
+}
+
+void ShowTreeView::slotCueTimecodeLearn()
+{
+    if (m_inspectorUpdating || m_pageCue == invalidId())
+        return;
+    const TimecodeSource *src = m_doc->timecodeSource();
+    if (src == nullptr || src->health() == TimecodeSource::NoSource)
+        return;
+    m_cueTc->setStyleSheet(QString());
+    m_st->setCueTimecode(m_pageCue, qint32(src->positionMs()));
+    const Cue *c = m_st->cue(m_pageCue);
+    m_cueTc->setText(c == nullptr || c->timecode < 0 ? QString() : TimecodeCues::format(c->timecode, tcFps()));
+}
+
+void ShowTreeView::slotListFollowTimecodeToggled(bool on)
+{
+    if (m_inspectorUpdating || currentKind() != ListNode)
+        return;
+    m_st->setListFollowTimecode(currentId(), on);
 }
 
 void ShowTreeView::slotListMibChanged(int index)
@@ -10170,6 +10257,7 @@ void ShowTreeView::showLooksPage(quint32 listId, const QString &folder)
         m_listForm->setRowVisible(w, false);
     m_listForm->setRowVisible(m_listColour, false);
     m_listForm->setRowVisible(m_listMib, false);
+    m_listForm->setRowVisible(m_listFollowTc, false);
     if (m_listAddSection != nullptr)
         m_listForm->setRowVisible(m_listAddSection, false);
     m_listConvert->hide();

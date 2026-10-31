@@ -97,6 +97,7 @@ public:
         RouteOsc,           //!< OSC (QLab and others)
         RouteMsc,           //!< MIDI Show Control
         RouteWeb,           //!< the phone / tablet Run page (web access; "allow remote GO")
+        RouteTimecode,      //!< a cue list following timecode reached a cue's time (TimecodeCues)
         RouteOther          //!< anything else (a test, a script)
     };
     Q_ENUM(Route)

@@ -767,6 +767,10 @@ private slots:
     void slotCueMixToggled(bool on);
     void slotCueSkipToggled(bool on);
     void slotCueNoMibToggled(bool on);
+    int tcFps() const;
+    void slotCueTimecodeEdited();
+    void slotCueTimecodeLearn();
+    void slotListFollowTimecodeToggled(bool on);
     void refreshFocusCallState();
     void slotListMibChanged(int index);
     void slotLayerReleaseToggled(bool on);
@@ -914,6 +918,10 @@ private:
     QCheckBox *m_hitOverride = nullptr;
     /** Q38: "Don't move in black into this cue"; the list's Move in black. */
     QCheckBox *m_cueNoMib = nullptr;
+    QWidget *m_cueTcRow = nullptr;          //!< "At timecode": the field and Learn
+    QLineEdit *m_cueTc = nullptr;
+    QPushButton *m_cueTcLearn = nullptr;
+    QCheckBox *m_listFollowTc = nullptr;
     QCheckBox *m_cueFocusCall = nullptr;
     QPushButton *m_cueRefine = nullptr;
     /** The cue page's Focus ▾ (board Q149), filled as it opens. */

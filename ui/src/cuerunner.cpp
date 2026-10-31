@@ -42,6 +42,7 @@
 
 #include "showtreecontroller.h"
 #include "timecodesource.h"
+#include "timecodecues.h"
 #include "chaserrunner.h"
 #include "focuscallsdialog.h"
 #include "venuecorrections.h"
@@ -582,6 +583,11 @@ void CueRunner::buildFullLayout()
     m_subNext->setFont(big);
     m_subNext->setWordWrap(true);
     v->addWidget(m_subNext);
+    m_tcNext = new QLabel(this);
+    m_tcNext->setObjectName(QStringLiteral("crTimecodeNext"));
+    m_tcNext->setFont(big);
+    m_tcNext->hide();
+    v->addWidget(m_tcNext);
 
     makeButtons();
     // Green only when GO has something to play (Q62).
@@ -682,6 +688,10 @@ void CueRunner::buildPanelLayout()
     m_subNext = new CueRunnerLabel(m_info);
     m_subNext->setObjectName(QStringLiteral("crSubNext"));
     iv->addWidget(m_subNext);
+    m_tcNext = new QLabel(m_info);
+    m_tcNext->setObjectName(QStringLiteral("crTimecodeNext"));
+    m_tcNext->hide();
+    iv->addWidget(m_tcNext);
     if (compact)
     {
         QPalette dim = m_info->palette();
@@ -1313,11 +1323,14 @@ void CueRunner::rebuildTree()
                 sectionItem = nullptr;
             lastSection = si;
             const Cue &c = list->cues.at(i);
+            const int tcFps = m_doc->timecodeSource() != nullptr ? m_doc->timecodeSource()->fps() : 30;
             QStringList timing;
             if (c.fadeIn > 0)
                 timing << tr("fade %1").arg(seconds(c.fadeIn));
             if (int(c.hold) >= 0)
                 timing << tr("follow %1").arg(seconds(c.hold));
+            if (list->followTimecode && c.timecode >= 0 && !c.skip)
+                timing << tr("at %1").arg(TimecodeCues::format(c.timecode, tcFps));
             QTreeWidgetItem *item = sectionItem != nullptr ? new QTreeWidgetItem(sectionItem)
                                                            : new QTreeWidgetItem(m_tree);
             row(item, p, -1, st->cueNumber(*list, i), c.name, timing.join(QStringLiteral(" · ")), c.note);
@@ -1429,6 +1442,24 @@ void CueRunner::updateStates()
         TimecodeSource *src = m_doc->timecodeSource();
         const bool hasSource = src != nullptr && src->health() != TimecodeSource::NoSource;
         m_timecode->setHidden(!hasSource || (m_size != Full && !m_showTimecode));
+
+        // The next cue that goes on at a timecode, and how long to wait.
+        QString nextText;
+        QString tcCue;
+        qint32 tcMs = 0;
+        if (ch != nullptr && src != nullptr && m_doc->timecodeCues()->next(ch->id(), &tcCue, &tcMs))
+        {
+            const int fps = src->fps();
+            const qint64 left = qint64(tcMs) - qint64(src->positionMs());
+            const qint64 s = (left + 999) / 1000;
+            const QString wait = !src->isRunning() ? tr("timecode holding")
+                               : s >= 60 ? tr("in %1:%2").arg(s / 60).arg(s % 60, 2, 10, QChar('0'))
+                                         : tr("in %1 s").arg(s);
+            nextText = tr("Timecode: cue %1 at %2, %3").arg(tcCue, TimecodeCues::format(tcMs, fps), wait);
+        }
+        if (m_tcNext->text() != nextText)
+            m_tcNext->setText(nextText);
+        m_tcNext->setVisible(!nextText.isEmpty());
     }
 
     const bool running = ch != nullptr && ch->isRunning();

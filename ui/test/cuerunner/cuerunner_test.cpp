@@ -697,6 +697,34 @@ void CueRunner_Test::liveDesignAndTimecode()
     m_doc->setMode(Doc::Design);
 }
 
+void CueRunner_Test::theNextCueAtATimecodeAndItsCountdown()
+{
+    show();
+    CueRunner runner(m_doc, CueRunner::Full);
+    ShowTreeController *st = m_doc->showTree();
+    quint32 lid = ShowTree::invalidId();
+    QVERIFY(runner.chaser() != nullptr);
+    st->productionOfChaser(runner.chaser()->id(), &lid);
+    const ShowTree::CueList *l = st->cueList(lid);
+    QVERIFY(l != nullptr && l->cues.size() >= 2);
+    QLabel *next = runner.findChild<QLabel *>("crTimecodeNext");
+    QVERIFY(next != nullptr);
+    m_doc->timecodeSource()->updateTimeCode(0, 4000, 30);
+    runner.refresh();
+    QVERIFY(next->isHidden());                          // the list doesn't follow timecode
+    QVERIFY(st->setListFollowTimecode(lid, true));
+    QVERIFY(st->setCueTimecode(st->cueList(lid)->cues[1].id, 10000));
+    runner.refresh();
+    QVERIFY(!next->isHidden());
+    QVERIFY2(next->text().contains("00:00:10:00") && next->text().contains("in 6 s"), qPrintable(next->text()));
+    m_doc->timecodeSource()->updateTimeCode(0, 9500, 30);
+    runner.refresh();
+    QVERIFY2(next->text().contains("in 1 s"), qPrintable(next->text()));
+    m_doc->timecodeSource()->updateTimeCode(0, 11000, 30);   // passed: nothing left
+    runner.refresh();
+    QVERIFY(next->isHidden());
+}
+
 void CueRunner_Test::spaceIsGoInTheRunTab()
 {
     show();

@@ -102,6 +102,39 @@ song restarted is caught up within two frames of the code coming back.
 - Forward play only: LTC read backwards (tape rewinding) is not followed.
 - On macOS the first time asks for microphone access, as audio triggers do.
 
+### Cues at a timecode
+
+A Show Tree **cue list** can play from the timecode instead of the GO
+key: "cue 12 at 00:01:23:10". This works with every timecode source above.
+
+1. Select the cue list in the Show Tree and tick **Follow timecode**.
+2. Select a cue and type its time in **At timecode** (hh:mm:ss:ff). Or, with
+   the timecode running, press **Learn** to stamp the timecode coming in
+   now onto the cue.
+3. As the timecode reaches a cue's time, the list goes to that cue, the
+   same as a GO that names it. The Run tab shows each cue's time, and under
+   the list **Timecode: cue 12 at 00:01:23:10, in 8 s** for the next one.
+
+The rules:
+
+- **Jump forward:** only the latest cue passed plays, not every one on the
+  way.
+- **Jump back:** the list is armed again. Nothing plays for the jump, and
+  the cues after the new place play as the timecode reaches them. A step
+  back of a quarter second or less is jitter and is ignored.
+- **Dropout:** if the timecode stops, nothing plays and nothing is
+  forgotten. When it returns it carries on from there.
+- **First position:** locking on part-way through plays nothing already
+  past, only a cue exactly there.
+- **A cue with no time**, or a skipped cue, is left alone by timecode.
+  GO still plays it.
+- **GO by hand** between timecode cues works as always. The next timecode
+  cue still plays at its time. It goes to the cue by its number, so it
+  does not matter where the list was.
+
+A show that sets no times plays as before. An older build ignores the
+times and plays the list by GO.
+
 While the show runs, Virtual Console faders and buttons can still take a
 channel over live.
 

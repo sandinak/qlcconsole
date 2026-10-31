@@ -1006,6 +1006,30 @@ bool ShowTreeController::setCuesNoMoveInBlack(const QList<quint32> &cueIds, bool
     });
 }
 
+bool ShowTreeController::setCueTimecode(quint32 cueId, qint32 ms)
+{
+    ms = qMax<qint32>(-1, ms);
+    return edit(ms < 0 ? tr("Clear cue timecode") : tr("Set cue timecode"), [&](QList<Production> &ps) {
+        CueList *l = nullptr;
+        Cue *c = cueIn(ps, cueId, &l);
+        if (c == nullptr || l->looks || l->isSubCues() || c->timecode == ms)
+            return false;
+        c->timecode = ms;
+        return true;
+    });
+}
+
+bool ShowTreeController::setListFollowTimecode(quint32 listId, bool follow)
+{
+    return edit(follow ? tr("Follow timecode") : tr("Stop following timecode"), [&](QList<Production> &ps) {
+        CueList *l = listIn(ps, listId);
+        if (l == nullptr || l->looks || l->isSubCues() || l->followTimecode == follow)
+            return false;
+        l->followTimecode = follow;
+        return true;
+    });
+}
+
 bool ShowTreeController::isCueNoMoveInBlack(quint32 cueId) const
 {
     const Cue *c = cue(cueId);

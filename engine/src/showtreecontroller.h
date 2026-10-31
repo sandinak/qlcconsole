@@ -428,6 +428,14 @@ public:
     ShowTree::MoveInBlack listMoveInBlack(quint32 listId) const;
     bool setCuesNoMoveInBlack(const QList<quint32> &cueIds, bool no);
     bool isCueNoMoveInBlack(quint32 cueId) const;
+
+    /** "Cue N at 00:01:23:10": @a ms (-1: none) is the incoming timecode
+     *  at which a list that follows timecode goes to the cue
+     *  (Cue::timecode, TimecodeCues). One undo step; false when nothing
+     *  changes (no such cue, a Looks section or sub-cue, the same time). */
+    bool setCueTimecode(quint32 cueId, qint32 ms);
+    /** Whether list @a listId follows timecode (CueList::followTimecode). */
+    bool setListFollowTimecode(quint32 listId, bool follow);
     /** A focus-call cue (docs/design/FOCUS_REFINE_DESIGN.md section 7): GO arms the
      *  show's focus calls, the controller's Start begins them. One undo
      *  step; false when nothing changed (a Looks section has none). */

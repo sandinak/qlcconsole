@@ -127,6 +127,8 @@
 #include "scene.h"
 #include "doc.h"
 
+#include "timecodecues.h"
+#include "timecodesource.h"
 #include "showtreeview_test.h"
 #include "../common/dragpos.h"
 
@@ -7445,6 +7447,57 @@ void ShowTreeView_Test::libraryGroupToolsOnARealShow()
     for (quint32 gid : tops)
         QCOMPARE(m_doc->fixtureGroup(gid)->path(), QString("Truss tops"));
     QCOMPARE(view.selectSimilarLibraryGroups(), int(tops.size()));   // alike still
+}
+
+void ShowTreeView_Test::cuesAtATimecodeAreSetOnTheCueAndListPages()
+{
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L", ListMode::Tracking);
+    QList<quint32> c;
+    for (int i = 0; i < 2; ++i)
+        c << st->addCue(list, i - 1, QString("C%1").arg(i + 1));
+    st->clearUndo();
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1280, 600);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    view.tree()->expandAll();
+
+    // The list's page: Follow timecode.
+    QVERIFY(view.selectNode(list));
+    QCheckBox *follow = view.findChild<QCheckBox *>("stListFollowTimecode");
+    QVERIFY(follow != nullptr && follow->isVisibleTo(&view));
+    QVERIFY(!follow->isChecked());
+    follow->setChecked(true);
+    QVERIFY(st->cueList(list)->followTimecode);
+    QVERIFY(st->undo());
+    QVERIFY(!st->cueList(list)->followTimecode);
+
+    // The cue's page: the time, typed; a bad one refused; cleared.
+    QVERIFY(view.selectNode(c[1]));
+    QLineEdit *tc = view.findChild<QLineEdit *>("stCueTimecode");
+    QVERIFY(tc != nullptr && tc->isVisibleTo(&view));
+    QVERIFY(tc->text().isEmpty());
+    tc->setText("00:01:23:10");
+    QMetaObject::invokeMethod(tc, "editingFinished");
+    QCOMPARE(TimecodeCues::format(st->cue(c[1])->timecode, 30), QString("00:01:23:10"));
+    tc->setText("nonsense");
+    QMetaObject::invokeMethod(tc, "editingFinished");
+    QCOMPARE(TimecodeCues::format(st->cue(c[1])->timecode, 30), QString("00:01:23:10"));   // unchanged
+    tc->setText(QString());
+    QMetaObject::invokeMethod(tc, "editingFinished");
+    QCOMPARE(st->cue(c[1])->timecode, -1);
+
+    // Learn stamps the timecode coming in now.
+    QPushButton *learn = view.findChild<QPushButton *>("stCueTimecodeLearn");
+    QVERIFY(learn != nullptr && !learn->isEnabled());           // none coming in
+    m_doc->timecodeSource()->updateTimeCode(0, 5000, 30);
+    QVERIFY(view.selectNode(c[0]));
+    QVERIFY(view.selectNode(c[1]));
+    QVERIFY(learn->isEnabled());
+    learn->click();
+    QCOMPARE(st->cue(c[1])->timecode, 5000);
 }
 
 void ShowTreeView_Test::moveInBlackPerListAndCueInTheTree()
