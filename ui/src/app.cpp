@@ -4265,7 +4265,7 @@ void App::refreshBlindView()
         return;
     ShowTreeController *st = m_doc->showTree();
     const quint32 cueId = st != nullptr ? st->editedCue() : ShowTree::invalidId();
-    m_blindLevels = st != nullptr ? st->cueLevels(cueId) : QHash<quint32, QByteArray>();
+    m_blindLevels = st != nullptr ? st->blindLevels(cueId) : QHash<quint32, QByteArray>();
     // Its effects too, as they would move: the stage's own effect runtime
     // on a private copy, never a universe. The same cue keeps them going.
     if (m_blindEffects == nullptr)

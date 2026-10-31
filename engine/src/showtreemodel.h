@@ -317,6 +317,12 @@ namespace ShowTree
          *  next cue. This use's, like its number. Saved as FocusCall="1",
          *  which an older build ignores (it is then an ordinary cue). */
         bool focusCall = false;
+        /** An override hit (0.4): it wins over everything the show plays on
+         *  the channels it sets, intensity too, the last fired on top; let
+         *  go, they fade back over its fade out to what the show plays then
+         *  (Collection::setHitOverride). Hits only. Saved as Override="1",
+         *  which an older build ignores (there it mixes as any hit). */
+        bool override = false;
 
         const Look *look(const QString &key) const;
         void setLook(const Look &look);

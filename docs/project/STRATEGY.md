@@ -549,7 +549,9 @@ Order and dependencies:
    then "cue N at 00:01:23:10" on cue lists, building on 0.3.1's Art-Net
    TimeCode and waiting for the One GO path.
 5. **Override hits** (priority layer, restore on release), building on
-   0.3.1's hit fade times. Then **group intensity masters**, which share
+   0.3.1's hit fade times. **Built 2026-10-31:** a hit's Override wins
+   over the show, intensity too, and fades back to what plays then
+   (`Universe::HitOverride`). Then **group intensity masters**, which share
    the same engine stage.
 6. **Effect fade in/out.** Built 2026-10-31: an effect's depth follows
    its cue's fades, or its own times, or none.
@@ -596,7 +598,7 @@ Teaching ─────┬─> phone Run rules (0.4)
               └─> Show Review teaching checks (0.5)
 one GO path (0.4, built) ─> pad Run (MVP built), phone Run, override hits
 Art-Net TC (0.3.1) ─> LTC + cues at timecode (0.4)
-hit fade times (0.3.1) ─> override hits ─> group masters (0.4)
+hit fade times (0.3.1) ─> override hits (built) ─> group masters (0.4)
 Show Review v1 ─> laser C, no-light zones, move speed checks (0.5)
 ```
 

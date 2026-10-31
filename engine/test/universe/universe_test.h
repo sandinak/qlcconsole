@@ -49,6 +49,7 @@ private slots:
     void applyGM();
     void write();
     void writeRelative();
+    void writeMix();
     void aWritePastTheEndKeepsToTheUniverse();
     void reset();
     void faderPriorityMovesBothWays();

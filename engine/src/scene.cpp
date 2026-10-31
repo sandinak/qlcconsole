@@ -1286,6 +1286,15 @@ void Scene::processValue(MasterTimer *timer, QList<Universe*> ua, uint fadeIn, S
         fader->setParentFunctionID(id());
         fader->setParentIntensity(getAttributeValue(ParentIntensity));
         fader->setHandleSecondary(true);
+        if (m_hitOverrideApplied)
+        {
+            // An override hit (Collection::setHitOverride): the fader mixes
+            // over what plays, intensity too, coming in over the fade in.
+            uint in = overrideFadeInSpeed() == defaultSpeed() ? fadeInSpeed() : overrideFadeInSpeed();
+            if (tempoType() == Beats)
+                in = beatsToTime(in, timer->beatTimeDuration());
+            fader->startOverrideMix(in == infiniteSpeed() ? 0 : in);
+        }
         m_fadersMap[universe->id()] = fader;
     }
 
@@ -1356,6 +1365,14 @@ void Scene::processValue(MasterTimer *timer, QList<Universe*> ua, uint fadeIn, S
         m_transitionIn.timing(m_transitionMapIn.placeForChannel(fixture, scv.channel), delay, fade);
         fc->setFadeTime(fc->canFade() ? fade : 0);
         fc->setDelay(delay);
+    }
+
+    // An override hit's channels are its values at once: its fader's mix
+    // is the fade (from what plays under it, not from 0).
+    if (m_hitOverrideApplied)
+    {
+        fc->setFadeTime(0);
+        fc->setDelay(0);
     }
 }
 
@@ -1544,7 +1561,16 @@ void Scene::handleFadersEnd(MasterTimer *timer)
                     fader->setChannelsFlag(FadeChannel::Override | FadeChannel::EditOverride, false);
             m_editOverrideApplied = false;
         }
-        if (m_transitionOut.isActive() && tempoType() != Beats)
+        if (m_hitOverrideApplied)
+        {
+            /* An override hit let go of: each channel back to what plays
+               under it (each frame's), over the fade out. */
+            foreach (QSharedPointer<GenericFader> fader, m_fadersMap)
+                if (!fader.isNull())
+                    fader->releaseOverrideMix(fadeout);
+            m_hitOverrideApplied = false;
+        }
+        else if (m_transitionOut.isActive() && tempoType() != Beats)
         {
             /* Leaving by a transition: every channel fades out, each head
                when the transition reaches it, over its share of the time. */
@@ -1722,6 +1748,7 @@ void Scene::write(MasterTimer *timer, QList<Universe*> ua)
         if (m_fadersMap.isEmpty())
         {
             m_editOverrideApplied = overrideWanted();
+            m_hitOverrideApplied = fadePriority() == int(Universe::HitOverride);
             // full build already resolves positions and palette values
             m_reaimRequested = false;
             m_repaletteRequested = false;

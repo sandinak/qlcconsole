@@ -106,5 +106,6 @@ the Show Tree runtime are untouched.
   `PadRun::actionFor()` and `handle()`.
 - **Phone Run page:** add a `RouteWeb`, with Teaching's "allow remote
   GO" and a PIN in step 2.
-- **Override hits:** if hits get their own commands, they join
-  `Command` and come through here.
+- **Override hits** (built 2026-10-31): firing a hit stays a VC button's
+  start, not a run command (decided, can change); ALL OFF, which lets go
+  of them, comes through here.

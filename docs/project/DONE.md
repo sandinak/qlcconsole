@@ -47,6 +47,33 @@ wrong role, an Xbox / DualSense controller slot, list picking, light bar
 and rumble, a lost pad), ui/test/cuerunner `thePadRoleShowsOnTheRunTab`,
 ui/test/focusmode controller-test row. Not on any hot path.
 
+### 2026-10-31 — Override hits *(feat/04-override-hits, 0.4 item 5, ovr)*
+
+A hit's **Override** (its page; the tree marks it **override**; saved as
+`Override="1"` on the hit, absent = a plain hit) makes it win over
+everything the Show Tree plays on the channels it sets, intensity too, and
+on release fade back over its fade out to what the show plays *then*. The
+bake sets `Collection::setHitOverride`; the collection raises its members
+to `Universe::HitOverride` (a new fader priority between Override and
+Flashing, so cue effects at Override lose too); a Scene built at that
+priority starts its faders in an override mix
+(`GenericFader::startOverrideMix`): every channel is written by
+`Universe::writeMix`, the line from what the faders below wrote this frame
+to the hit's value, by a mix that runs 0→1 over the fade in and back to 0
+over the fade out (`releaseOverrideMix`), after which the fader deletes
+itself. Its channels don't fade themselves. Faders at one priority keep
+start order, so the last fired override is on top and releasing it shows
+the one under it. Override hits get scenes of their own (the bake keys
+them with an override mark). The Blind view (`ShowTreeController::
+blindLevels`) draws live override hits over the cue in edit. Frame cost:
+one branch and a multiply per channel of an override fader, no allocation.
+Tests: showtreeplay (pull-down and restore to the changed cue with fades,
+stacked, Stop all and ALL OFF through `run()`, save/load/undo/blind),
+universe `writeMix`, hotpath `overrideHitCyclesLeaveNoFadersBehind`,
+showtreeview (the checkbox and the row mark).
+
+---
+
 ### 2026-10-31 — One GO path: `ShowControl::run()` + `App::runCommand()` *(feat/04-one-go-path, 0.4 item 1, go1)*
 
 Every route that runs the show (⌘↩ and its family, the Run tab and Space,
@@ -130,6 +157,7 @@ Show Tree; `ui/test/showtreeview` aSecondNewEffectPaletteStartsAfresh,
   palette, which then kept that name); `LookEditor` opens the picker for a
   new effect look on showEvent too (the Show Tree sets the look, then
   shows the editor).
+
 ### 2026-10-30 — Incremental Show Tree bake; fades on hits *(feat/031-bake, 0.3.1 bake)*
 
 - **Incremental bake.** `bake()` keeps each cue's plan (`bakePlan()`,
@@ -190,6 +218,7 @@ now covers the structure editor too:
   second, scale-2 pass); the directory takes ~16 s, was ~7.5.
 
 ---
+
 ### 2026-10-29 — Effect origins, Build search across sections, runs for any effect *(feat/031-effect-origins, efn)*
 
 - **Origins:** `EffectOrigin` (`ui/src/effectorigin.*`) names where an
@@ -235,6 +264,7 @@ now covers the structure editor too:
 - **Help:** effects.md "Where an effect came from" (the four kinds) and
   "How many times it runs"; build.md the search and the browser filters.
   Leftovers in TODO.md.
+
 ### 2026-10-29 — Show Tree tidy: list mode flag, skip by menu, Release on ▣ layers *(feat/031-showtree-tidy, stc)*
 
 Branson's three asks, all in the Show Tree:
@@ -1060,6 +1090,7 @@ question and the command line say so. Tests: showtree_test
 `deletingHereClearsTheShowTreesUses`.
 
 ---
+
 ### 2026-10-18 — Show Tree P5–P7: productions, sub-cues in the tree, the cue runner *(on feat/show-tree, built on the Linux build host, not merged)*
 
 docs/design/SHOW_TREE_DESIGN.md §8 P5–P7; notes §10.17–10.19, open 27–35; handoff in
@@ -1655,6 +1686,7 @@ address), keeping only the 6 WLED ones; re-patching didn't stick.
 ### 2026-10-17 — Rig Overview: dimmed RGB without a dimmer channel drew black
 
 `channelSetLiveState()` (`ui/src/monitor/fixturevisualtraits.cpp`) handed back the raw, already-dimmed colour *and* a level of max(R,G,B) for fixtures with no dimmer channel; every reader draws colour × level, so Blue at 19% (0,1,48) drew at 9/255. It now returns the hue at full and the level once. Fixtures with a dimmer channel are unchanged. Found from a Show Tree preview (feat/show-tree d8664080a); backported with its `monitor_test` case.
+
 ### 2026-10-17 — No colour profiles in the bundled PNGs (QTBUG-147602 guard) *(fix/png-colour-profiles)*
 
 Follow-up to the cursor crash below. QTBUG-147602 (Qt 6.11.x, macOS;
@@ -1907,6 +1939,7 @@ it was drag selecting other things vs dragging to folder."
   `deletingAPaletteSaysWhereItIsUsed`.
 
 ---
+
 ### 2026-10-16 — Fixture Manager: patch a universe from its row *(feat/fixtures-universe-patch)*
 
 Branson: "right click on universe in fixtures list should let me patch".
@@ -1994,6 +2027,7 @@ all go at the same time."
   it); a held port skipped; 4 unpatched from the real context menu in one
   step and one rebuild. Help: other-improvements.md (Connections &amp;
   patch), whats-new.md, the Devices hint tooltip.
+
 ### 2026-10-16 — Art-Net: new nodes without an address are found, flagged, and can be given one *(fix/artnet-unconfigured-nodes — NOT yet verified on a real node)*
 
 Branson put a new node on the show network and it didn't appear until its IP

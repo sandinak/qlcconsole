@@ -52,6 +52,13 @@ back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
   through / Together / Replace / Cancel, and a narrower one asks to
   override; the tree, the button face and the Run tab mark **↳
   overrides**; Show checks list overrides, shared places and dead hits.
+- **Override hits** (0.4): tick **Override** on a hit's page and it wins
+  over everything the show plays on its channels, intensity too, so a
+  blackout pulls lights down and "house lights to full" pulls them up.
+  Let go, those channels fade back over the hit's Fade out to what the
+  show plays then, not to a snapshot. The last override fired is on top;
+  Stop all and ALL OFF let go of them. The tree marks it **override**, and
+  it is saved with the show (an older build plays it as a plain hit).
 
 ### Moving layers in the Show Tree
 

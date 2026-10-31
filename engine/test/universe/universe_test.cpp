@@ -387,6 +387,22 @@ void Universe_Test::write()
     QCOMPARE(quint8(m_uni->postGMValues()->at(0)), quint8(127));
 }
 
+/* An override hit's write: over what is under it by the mix, on an HTP
+   channel too -- 1 pulls a level down, 0 leaves what is there. */
+void Universe_Test::writeMix()
+{
+    m_uni->setChannelCapability(9, QLCChannel::Intensity);
+    QVERIFY(m_uni->write(9, 200));
+    QVERIFY(m_uni->writeMix(9, 0, 1.0));
+    QCOMPARE(quint8(m_uni->preGMValues().at(9)), quint8(0));
+    QVERIFY(m_uni->write(9, 200, true));
+    QVERIFY(m_uni->writeMix(9, 100, 0.5));
+    QCOMPARE(quint8(m_uni->preGMValues().at(9)), quint8(150));
+    QVERIFY(m_uni->writeMix(9, 0, 0.0));
+    QCOMPARE(quint8(m_uni->preGMValues().at(9)), quint8(150));
+    QVERIFY(!m_uni->writeMix(UNIVERSE_SIZE, 0, 1.0));
+}
+
 void Universe_Test::writeRelative()
 {
     // 127 == 0

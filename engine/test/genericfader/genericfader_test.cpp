@@ -24,11 +24,15 @@
 #include <windows.h>
 #endif
 
+#define protected public                // Universe::processFaders()
+#include "universe.h"
+#undef protected
 #include "genericfader_test.h"
 #include "qlcfixturemode.h"
 #include "qlcfixturedef.h"
 #include "fadechannel.h"
 #include "qlcchannel.h"
+#include "mastertimer.h"
 #include "universe.h"
 #include "qlcfile.h"
 #include "doc.h"
@@ -170,6 +174,71 @@ void GenericFader_Test::anOverride16BitChannelWritesBothBytes()
     QCOMPARE(uchar(ua[0]->preGMValues()[15]), uchar(0x12));
     QCOMPARE(uchar(ua[0]->preGMValues()[16]), uchar(0x34));
     ua[0]->dismissFader(fader);
+}
+
+/* An effect fading in (FadeChannel::Mix, the EffectScriptRunner's Override
+   fader) under an override hit (startOverrideMix, HitOverride): each mix is
+   applied once, in priority order whatever order the faders came in. The
+   effect goes half way from the look under it to its value; the hit goes
+   half way from what the effect wrote to its own. */
+void GenericFader_Test::anOverrideHitMixesOverAnEffectFadingIn()
+{
+    Universe *uni = m_doc->inputOutputMap()->universes().at(0);
+    // Its own fixture: faders the tests before left in the universe still
+    // write the first one's channels.
+    Fixture *fxi = new Fixture(m_doc);
+    QLCFixtureDef *def = m_doc->fixtureDefCache()->fixtureDef("Futurelight", "DJScan250");
+    QVERIFY(def != NULL);
+    fxi->setFixtureDefinition(def, def->mode("Mode 1"));
+    fxi->setAddress(100);
+    m_doc->addFixture(fxi);
+    const quint32 fid = fxi->id();
+    const int addr = 105;       // its Shutter (an intensity, HTP)
+    QSharedPointer<GenericFader> hit = uni->requestFader(Universe::HitOverride);
+    QSharedPointer<GenericFader> effect = uni->requestFader(Universe::Override);
+    QSharedPointer<GenericFader> look = uni->requestFader();
+
+    FadeChannel base(m_doc, fid, 5);
+    base.setStart(100);
+    base.setCurrent(100);
+    base.setTarget(100);
+    base.setFadeTime(0);
+    look->add(base);
+
+    FadeChannel fx(m_doc, fid, 5);
+    fx.setStart(200);
+    fx.setCurrent(200);
+    fx.setTarget(200);
+    fx.setFadeTime(0);
+    fx.addFlag(FadeChannel::Override | FadeChannel::Mix);
+    fx.setMix(0.5f, 1.0f);
+    effect->add(fx);
+
+    FadeChannel ov(m_doc, fid, 5);
+    ov.setStart(0);
+    ov.setCurrent(0);
+    ov.setTarget(0);
+    ov.setFadeTime(0);
+    hit->add(ov);
+
+    // Without the hit: the effect half way from 100 to 200.
+    hit->setEnabled(false);
+    uni->processFaders();
+    QCOMPARE(uchar(uni->preGMValues()[addr]), uchar(150));
+
+    // The hit coming in over two ticks: half way, after one, from 150 to 0.
+    hit->setEnabled(true);
+    hit->startOverrideMix(2 * MasterTimer::tick());
+    uni->processFaders();
+    QCOMPARE(uchar(uni->preGMValues()[addr]), uchar(75));
+
+    // All the way in: the hit's value alone.
+    uni->processFaders();
+    QCOMPARE(uchar(uni->preGMValues()[addr]), uchar(0));
+
+    uni->dismissFader(hit);
+    uni->dismissFader(effect);
+    uni->dismissFader(look);
 }
 
 void GenericFader_Test::writeLoop()

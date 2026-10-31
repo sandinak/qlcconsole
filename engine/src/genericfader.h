@@ -255,6 +255,16 @@ public:
     bool zeroAll() const { return m_zeroAll; }
     void setZeroAll(bool z) { m_zeroAll = z; }
 
+    /** An override hit's fader (Universe::HitOverride, Scene): every channel
+     *  it holds is written over what the faders below wrote this frame,
+     *  intensity too (Universe::writeMix), mixed in from that over
+     *  @a fadeInMs (0: at once). Its channels themselves don't fade. */
+    void startOverrideMix(uint fadeInMs);
+    /** Let go of an override hit: from where its mix is, back to what the
+     *  faders below write -- each frame's, not a snapshot -- over
+     *  @a fadeOutMs; then the fader goes. */
+    void releaseOverrideMix(uint fadeOutMs);
+
 signals:
     /** Signal emitted when monitoring is enabled.
      *  Data is preGM and includes the whole universe */
@@ -282,6 +292,15 @@ private:
     Universe::BlendMode m_blendMode;
     bool m_monitoring;
     bool m_zeroAll = false;
+
+    /** An override hit's mix (startOverrideMix): off, coming in (and held
+     *  at 1 when in), or going. Worked out once a frame in write(). */
+    enum MixMode { MixOff, MixIn, MixOut };
+    MixMode m_mixMode = MixOff;
+    qreal m_mix = 1.0;
+    qreal m_mixFrom = 1.0;
+    uint m_mixTime = 0;
+    uint m_mixElapsed = 0;
 };
 
 /** @} */

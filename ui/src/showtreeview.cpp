@@ -1920,6 +1920,20 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         }
         f->addRow(tr("Fade in"), m_cueFadeIn);
         f->addRow(tr("Fade out"), m_cueFadeOut);
+        // 0.4: an override hit wins over the show, intensity too.
+        m_hitOverride = new QCheckBox(tr("Override: wins over everything the show plays"), inner);
+        m_hitOverride->setObjectName("stHitOverride");
+        m_hitOverride->setToolTip(tr("On the channels it sets, this hit wins over every cue and effect the show "
+                                     "is playing, intensity too: a blackout pulls lights down, house lights "
+                                     "to full pull them up. The last override fired is on top. Let go, those "
+                                     "channels fade back over its Fade out to what the show plays then. Stop "
+                                     "all lets go of it."));
+        f->addRow(QString(), m_hitOverride);
+        connect(m_hitOverride, &QCheckBox::toggled, this, [this](bool on) {
+            if (m_inspectorUpdating || m_pageCue == invalidId())
+                return;
+            m_st->setHitsOverride({ m_pageCue }, on);
+        });
         f->addRow(tr("Hold"), m_cueHold);
         {
             // P6: a sub-cue goes on by Sub GO, or by itself after a wait.
@@ -3083,6 +3097,15 @@ void ShowTreeView::buildTree()
                     if (!buttons.isEmpty())
                         vcTip = tr("Fired by %1").arg(buttons.join(QStringLiteral(", ")));
                 }
+                // 0.4: an override hit wins over the show.
+                if (list.looks && cue.override)
+                {
+                    badges << tr("override");
+                    vcTip = QStringList({ vcTip, tr("Override hit: wins over everything the show plays on its "
+                                                   "channels, intensity too; let go, they fade back to the "
+                                                   "show.") })
+                            .join(QStringLiteral("\n")).trimmed();
+                }
                 // Q157: it fires instead of a wider hit on a button.
                 if (list.looks && HitMap::overridesOnAButton(m_doc, cue.id))
                 {
@@ -4059,6 +4082,11 @@ void ShowTreeView::showCuePage(const CueList &list, int index)
             m_cueForm->setRowVisible(w, cueRows);
         m_cueForm->setRowVisible(m_lookFiredBy, list.looks);
         m_cueForm->setRowVisible(m_hitWhen, list.looks);
+        m_cueForm->setRowVisible(m_hitOverride, list.looks);
+        {
+            QSignalBlocker block(m_hitOverride);
+            m_hitOverride->setChecked(list.looks && cue.override);
+        }
         if (list.looks)
         {
             const HitScope scope = m_st->hitScope(cue.id);

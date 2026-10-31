@@ -554,6 +554,10 @@ private:
 
     std::atomic<bool> m_editOverride { false };
     bool m_editOverrideApplied = false;   //!< what the faders were built with
+    /** Played by an override hit (its fadePriority() is
+     *  Universe::HitOverride as its faders are built): they mix over what
+     *  plays (GenericFader::startOverrideMix) and are let go of back to it. */
+    bool m_hitOverrideApplied = false;
 
 private:
     /** Internal helper method to abtract Scene value processing */

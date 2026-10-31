@@ -28,6 +28,7 @@
 
 #include "mastertimer.h"
 #include "collection.h"
+#include "universe.h"
 #include "function.h"
 #include "doc.h"
 
@@ -337,7 +338,10 @@ void Collection::preRun(MasterTimer *timer)
             //function->adjustAttribute(getAttributeValue(Function::Intensity), Function::Intensity);
             // Propagate this collection's fader priority to each member (the Show
             // timeline lowers a collection to Background so the VC overrides it).
-            function->setFadePriority(fadePriority());
+            // An override hit raises them over the show (unless what
+            // started it chose a priority).
+            function->setFadePriority(m_hitOverride && fadePriority() == Universe::Auto
+                                      ? int(Universe::HitOverride) : fadePriority());
             function->setInheritedSpeedMaster(effectiveSpeedMaster());
             // A Show Tree hit's own fades, unless what started it gave some.
             uint fadeIn = overrideFadeInSpeed(), fadeOut = overrideFadeOutSpeed();

@@ -145,6 +145,7 @@ brackets.
 | **Eye candy** | Light that looks good on its own (moving scenery, sparkle) but doesn't light the people. It goes on the scenery, never at the cost of light on the performers. [2.4] |
 | **Speed master** | A tempo effects can run on, so one tap or fader moves them together; an effect's **Speed** in the Look Editor. Used ones show in the footer (*Main Speed 120*). [2.4] |
 | **Hit** | A short, sharp change on a musical accent [0.6]; a look kept ready to fire by hand over the running list, for busking [0.7]: the Show Tree's **Hits** section (right-click the production → **+ Hit**). It plays on top of whatever runs, and never tracks. [2.6] |
+| **Override hit** | A hit that wins over everything the show is playing on its lights, dimmers too: a blackout or "house lights to full" for an emergency or a stop. Let go, the lights fade back to what the show plays now. Tick **Override** on the hit's page. [2.6] |
 | **Virtual Console (VC)** | qlcconsole's on-screen control desk of buttons, faders and frames (⇧⌘6). **Make VC page** (right-click Hits) puts a frame on it with a Toggle button per hit; buttons fire only in Operate. [2.6] |
 
 ## Hardware (Level 3)
