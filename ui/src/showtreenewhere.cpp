@@ -227,8 +227,8 @@ quint32 ShowTreeView::newHere()
     case NewHerePlan::Bench:
         return dockedWorkbench()->newHere();
     case NewHerePlan::Look:
-        // In its name field, as + Look leaves it.
-        return newLook();
+        // In its name field, as + Look leaves it; where it lives (Q154).
+        return newHit();
     case NewHerePlan::Production:
     {
         QStringList taken;

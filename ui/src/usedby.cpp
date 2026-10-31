@@ -44,6 +44,24 @@ QList<VCButton *> UsedBy::vcButtons(const QSet<quint32> &functionIds)
     return out;
 }
 
+QList<VCButton *> UsedBy::allVcButtons()
+{
+    VirtualConsole *vc = VirtualConsole::instance();
+    if (vc == nullptr || vc->contents() == nullptr)
+        return QList<VCButton *>();
+    return vc->contents()->findChildren<VCButton *>();
+}
+
+QList<VCButton *> UsedBy::hitButtons(quint32 hitId, quint32 functionId)
+{
+    QList<VCButton *> out;
+    for (VCButton *b : allVcButtons())
+        if (b->hits().contains(hitId) || (b->hits().isEmpty() && functionId != 0xFFFFFFFF
+                                          && b->function() == functionId))
+            out << b;
+    return out;
+}
+
 QStringList UsedBy::vcLines(const QSet<quint32> &functionIds)
 {
     QStringList out;

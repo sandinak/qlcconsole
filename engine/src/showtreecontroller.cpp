@@ -168,6 +168,8 @@ ShowTreeController::ShowTreeController(Doc *doc)
     if (m_doc->showControl() != nullptr)
         connect(m_doc->showControl(), &ShowControl::mainCueListChanged,
                 this, &ShowTreeController::slotMainCueListChanged);
+    // A production made current arms its hits (Q154).
+    connect(this, &ShowTreeController::currentProductionChanged, this, &ShowTreeController::hitArmingChanged);
 }
 
 ShowTreeController::~ShowTreeController()
@@ -350,7 +352,11 @@ static void normalizeLooks(QList<Production> &ps)
             if (!l.looks)
             {
                 for (Cue &c : l.cues)
+                {
                     c.folder.clear();
+                    c.scope = HitScope::Production;     // a hit pasted into a list is a cue
+                    c.scopeOf = invalidId();
+                }
                 continue;
             }
             l.mode = ListMode::NonTracking;
@@ -365,6 +371,34 @@ static void normalizeLooks(QList<Production> &ps)
             }
             l.moveInBlack = MoveInBlack::Show;
         }
+    // Scoped hits (Q154): a hit whose cue or list is gone (deleted, or in
+    // another production now) moves up to its production's Hits section;
+    // only there does it keep a folder.
+    for (Production &p : ps)
+    {
+        QSet<quint32> lists, cues;
+        for (const CueList &l : p.lists)
+        {
+            if (l.looks)
+                continue;
+            if (!l.isSubCues())
+                lists.insert(l.id);
+            for (const Cue &c : l.cues)
+                cues.insert(c.id);
+        }
+        for (CueList &l : p.lists)
+            if (l.looks)
+                for (Cue &c : l.cues)
+                {
+                    if ((c.scope == HitScope::List && !lists.contains(c.scopeOf))
+                        || (c.scope == HitScope::Cue && !cues.contains(c.scopeOf)))
+                        c.scope = HitScope::Production;
+                    if (c.scope == HitScope::Production || c.scope == HitScope::Global)
+                        c.scopeOf = invalidId();
+                    if (c.scope != HitScope::Production)
+                        c.folder.clear();
+                }
+    }
 }
 
 bool ShowTreeController::edit(const QString &label,
@@ -1308,7 +1342,8 @@ QList<quint32> ShowTreeController::pasteCues(const QList<quint32> &cueIds, quint
     return ok ? made : QList<quint32>();
 }
 
-QList<quint32> ShowTreeController::pasteLayers(const QList<QPair<quint32, quint32>> &layers, quint32 toCueId)
+QList<quint32> ShowTreeController::pasteLayers(const QList<QPair<quint32, quint32>> &layers, quint32 toCueId,
+                                               quint32 afterLayerId)
 {
     if (cue(toCueId) == nullptr)
         return {};
@@ -1341,12 +1376,26 @@ QList<quint32> ShowTreeController::pasteLayers(const QList<QPair<quint32, quint3
     QList<quint32> made;
     const bool ok = edit(copies.count() == 1 ? tr("Paste layer") : tr("Paste %1 layers").arg(copies.count()),
                          [&](QList<Production> &ps) {
-        Cue *c = cueIn(ps, toCueId);
+        CueList *toList = nullptr;
+        Cue *c = cueIn(ps, toCueId, &toList);
         if (c == nullptr)
             return false;
+        // After the layer given (and its children): a top layer's place.
+        int place = afterLayerId == layerFirst ? 0 : int(c->layers.count());
+        if (const Layer *after = afterLayerId == invalidId() ? nullptr : c->layer(afterLayerId))
+        {
+            const QList<quint32> block = after->parent == invalidId() ? withChildren(*c, afterLayerId)
+                                                                       : QList<quint32> { afterLayerId };
+            place = 0;
+            for (int k = 0; k < c->layers.count(); ++k)
+                if (block.contains(c->layers.at(k).id))
+                    place = k + 1;
+        }
         for (int i = 0; i < copies.count(); ++i)
         {
             Layer l = copies.at(i);
+            if (toList != nullptr && toList->looks)
+                l.release = false;              // a hit never tracks: no Release
             if (l.parent == invalidId() && !parentTargets.at(i).isEmpty())
                 for (const Layer &have : c->layers)
                     if (have.target == parentTargets.at(i))
@@ -1375,11 +1424,144 @@ QList<quint32> ShowTreeController::pasteLayers(const QList<QPair<quint32, quint3
                 c->layers.insert(at, l);
             }
             else
-                c->layers << l;
+                c->layers.insert(qMin(place++, int(c->layers.count())), l);
             made << l.id;
         }
         return true;
     });
+    return ok ? made : QList<quint32>();
+}
+
+QList<quint32> ShowTreeController::moveLayers(const QList<QPair<quint32, quint32>> &layers, quint32 toCueId,
+                                              quint32 afterLayerId, QString *why)
+{
+    QList<quint32> made;
+    QString reason;
+    const bool ok = edit(layers.count() == 1 ? tr("Move layer") : tr("Move %1 layers").arg(layers.count()),
+                         [&](QList<Production> &ps) {
+        CueList *toList = nullptr;
+        Cue *dest = cueIn(ps, toCueId, &toList);
+        if (dest == nullptr)
+            return false;
+        // The layers asked for, once each; a layer whose parent comes too
+        // is carried by it (children go with their parent).
+        struct Item { quint32 cue; Layer layer; Target parentTarget; bool root; };
+        QList<Item> moving;
+        QList<QPair<quint32, quint32>> refs;
+        for (const QPair<quint32, quint32> &ref : layers)
+        {
+            Cue *src = cueIn(ps, ref.first);
+            if (src == nullptr || src->layer(ref.second) == nullptr || refs.contains(ref))
+                continue;
+            refs << ref;
+        }
+        QList<quint32> ids;
+        for (const QPair<quint32, quint32> &ref : refs)
+            ids << ref.second;
+        for (const QPair<quint32, quint32> &ref : refs)
+        {
+            Cue *src = cueIn(ps, ref.first);
+            const Layer *l = src->layer(ref.second);
+            const bool top = l->parent == invalidId() || !ids.contains(l->parent);
+            if (!top)
+                continue;
+            if (ref.first == toCueId && l->parent != invalidId())
+            {
+                reason = tr("A child layer stays under its parent: move the parent instead.");
+                return false;
+            }
+            const Layer *up = l->parent == invalidId() ? nullptr : src->layer(l->parent);
+            // The layer, then its children in the order they have.
+            for (const Layer &have : src->layers)
+                if (withChildren(*src, l->id).contains(have.id))
+                    moving << Item { ref.first, have, up == nullptr ? Target() : up->target, have.id == l->id };
+        }
+        if (moving.isEmpty())
+            return false;
+        QList<quint32> movingIds;
+        for (const Item &it : moving)
+            movingIds << it.layer.id;
+        if (afterLayerId != invalidId() && movingIds.contains(afterLayerId))
+        {
+            reason = tr("It is already there.");
+            return false;
+        }
+        // Out of where they are.
+        for (const Item &it : moving)
+        {
+            Cue *src = cueIn(ps, it.cue);
+            for (int i = src->layers.count() - 1; i >= 0; --i)
+                if (src->layers.at(i).id == it.layer.id)
+                    src->layers.removeAt(i);
+        }
+        int place = afterLayerId == layerFirst ? 0 : int(dest->layers.count());
+        if (const Layer *after = afterLayerId == invalidId() ? nullptr : dest->layer(afterLayerId))
+        {
+            const QList<quint32> block = after->parent == invalidId() ? withChildren(*dest, afterLayerId)
+                                                                       : QList<quint32> { afterLayerId };
+            place = 0;
+            for (int k = 0; k < dest->layers.count(); ++k)
+                if (block.contains(dest->layers.at(k).id))
+                    place = k + 1;
+        }
+        QHash<quint32, quint32> merged;         // a moved layer -> the layer it joined there
+        for (Item &it : moving)
+        {
+            Layer l = it.layer;
+            if (it.cue != toCueId)
+            {
+                l.continues = Target();
+                l.continuesAlso.clear();
+            }
+            if (toList != nullptr && toList->looks)
+                l.release = false;              // a hit never tracks: no Release
+            if (merged.contains(l.parent))
+                l.parent = merged.value(l.parent);
+            else if (it.root && it.cue != toCueId)
+            {
+                l.parent = invalidId();
+                if (!it.parentTarget.isEmpty())
+                    for (const Layer &have : dest->layers)
+                        if (have.target == it.parentTarget)
+                            l.parent = have.id;
+            }
+            Layer *same = nullptr;
+            if (it.cue != toCueId)
+                for (Layer &have : dest->layers)
+                    if (have.target == l.target && have.parent == l.parent)
+                        same = &have;
+            if (same != nullptr)
+            {
+                // One layer per target: the moved looks set there.
+                for (const Look &look : l.looks)
+                    same->setLook(look);
+                same->release = l.release;
+                merged.insert(l.id, same->id);
+                made << same->id;
+                continue;
+            }
+            int at = qMin(place, int(dest->layers.count()));
+            if (l.parent != invalidId() && it.cue != toCueId && it.root)
+            {
+                // After its parent's children.
+                const QList<quint32> under = withChildren(*dest, l.parent);
+                at = 0;
+                for (int k = 0; k < dest->layers.count(); ++k)
+                    if (under.contains(dest->layers.at(k).id))
+                        at = k + 1;
+                dest->layers.insert(at, l);
+            }
+            else
+            {
+                dest->layers.insert(at, l);
+                place = at + 1;
+            }
+            made << l.id;
+        }
+        return true;
+    });
+    if (why != nullptr)
+        *why = reason;
     return ok ? made : QList<quint32>();
 }
 
@@ -4828,6 +5010,46 @@ QString ShowTreeController::lockedText()
     return tr("Made by the Show Tree — edit it there.");
 }
 
+bool ShowTreeController::effectOnlyTracked(quint32 sceneId, quint32 paletteId, quint32 viaFunction) const
+{
+    QList<quint32> cues;
+    for (const Production &p : m_productions)
+        for (const CueList &l : p.lists)
+            for (const Cue &c : l.cues)
+            {
+                if (c.collection == invalidId())
+                    continue;
+                if (viaFunction != invalidId() ? c.collection == viaFunction : true)
+                {
+                    const Collection *coll = qobject_cast<const Collection *>(m_doc->function(c.collection));
+                    if (coll != nullptr && (viaFunction != invalidId()
+                                            || (coll->isRunning() && coll->functions().contains(sceneId))))
+                        cues << c.id;
+                }
+            }
+    bool tracked = false;
+    for (quint32 cueId : cues)
+    {
+        ResolvedCue rc;
+        if (!resolvedCue(cueId, &rc))
+            continue;
+        for (const ResolvedLayer &layer : rc.layers)
+        {
+            if (layerScene(cueId, layer.target) != sceneId)
+                continue;
+            for (const ResolvedValue &v : layer.values)
+            {
+                if (!v.look.palettes.contains(paletteId))
+                    continue;
+                if (v.origin != Origin::Tracked)
+                    return false;       // set in this cue: a new start
+                tracked = true;
+            }
+        }
+    }
+    return tracked;
+}
+
 bool ShowTreeController::generatedNode(quint32 functionId, quint32 *listId, quint32 *cueId,
                                        quint32 *layerId) const
 {
@@ -6104,6 +6326,7 @@ void ShowTreeController::slotModeChanged()
 
 void ShowTreeController::slotTimerFunctionStarted(quint32 fid)
 {
+    noteListRuntime(fid);       // scoped hits (Q154): what is armed
     // A cue list started for real -- from anywhere, a VC cue list too --
     // takes the stage: the preview holds (RC8). Not one a preview itself
     // plays (the Workbench on a list's chaser).
@@ -6123,6 +6346,7 @@ void ShowTreeController::slotTimerFunctionStarted(quint32 fid)
 
 void ShowTreeController::slotTimerFunctionStopped(quint32 fid)
 {
+    noteListRuntime(fid);
     // A list stopping changes what the header says; the hold stays until
     // the next cue selected or Play (a Stop all never brings a preview
     // back on stage by itself).

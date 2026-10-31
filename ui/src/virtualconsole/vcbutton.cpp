@@ -28,6 +28,8 @@
 #include <QInputDialog>
 #include <QFileDialog>
 #include <QPaintEvent>
+#include <QMimeData>
+#include <QDataStream>
 #include <QMouseEvent>
 #include <QMessageBox>
 #include <QTreeWidget>
@@ -71,6 +73,8 @@
 #include "mastertimer.h"
 #include "vcsoloframe.h"
 #include "showtreecontroller.h"
+#include "hitmap.h"
+#include "effectscriptrunner.h"
 #include "vcbutton.h"
 #include "function.h"
 #include "apputil.h"
@@ -99,9 +103,11 @@ VCButton::VCButton(QWidget* parent, Doc* doc) : VCWidget(parent, doc)
 
     /* No function is initially attached to the button */
     m_function = Function::invalidId();
-    m_hit = Function::invalidId();
+    m_armedHit = Function::invalidId();
 
     setType(VCWidget::ButtonWidget);
+    // Hits dragged from the Show Tree (Q154).
+    setAcceptDrops(true);
     setCaption(QString());
     setState(Inactive);
     setAction(Toggle);
@@ -181,7 +187,8 @@ bool VCButton::copyFrom(const VCWidget* widget)
     setIconPath(button->iconPath());
     setKeySequence(button->keySequence());
     setFunction(button->function());
-    setHit(button->hit());
+    setHits(button->hits());
+    setSamePlace(button->samePlace());
     enableStartupIntensity(button->isStartupIntensityEnabled());
     setStartupIntensity(button->startupIntensity());
     setStopAllFadeOutTime(button->stopAllFadeTime());
@@ -382,9 +389,15 @@ void VCButton::slotResetIcon()
 
 void VCButton::setFunction(quint32 fid)
 {
-    // Another function given: the button no longer fires its hit.
-    if (m_hit != Function::invalidId() && fid != m_doc->showTree()->lookFunction(m_hit))
-        setHit(Function::invalidId());
+    // Another function given: the button no longer fires its hits.
+    if (!m_hits.isEmpty() && fid != m_function)
+    {
+        bool ours = false;
+        for (quint32 h : m_hits)
+            ours = ours || fid == m_doc->showTree()->lookFunction(h);
+        if (!ours)
+            setHits(QList<quint32>());
+    }
     attachFunction(fid);
 }
 
@@ -431,26 +444,174 @@ quint32 VCButton::function() const
 
 void VCButton::setHit(quint32 hitId)
 {
+    setHits(hitId == Function::invalidId() ? QList<quint32>() : QList<quint32>({ hitId }));
+}
+
+void VCButton::setHits(const QList<quint32> &hitIds)
+{
     ShowTreeController *st = m_doc->showTree();
-    if (m_hit == Function::invalidId() && hitId != Function::invalidId())
+    QList<quint32> hits;
+    for (quint32 h : hitIds)
+        if (h != Function::invalidId() && !hits.contains(h))
+            hits << h;
+    if (m_hits.isEmpty() && !hits.isEmpty())
+    {
         connect(st, &ShowTreeController::changed, this, &VCButton::slotShowTreeChanged);
-    else if (m_hit != Function::invalidId() && hitId == Function::invalidId())
+        connect(st, &ShowTreeController::hitArmingChanged, this, &VCButton::slotShowTreeChanged);
+    }
+    else if (!m_hits.isEmpty() && hits.isEmpty())
+    {
         disconnect(st, &ShowTreeController::changed, this, &VCButton::slotShowTreeChanged);
-    m_hit = hitId;
+        disconnect(st, &ShowTreeController::hitArmingChanged, this, &VCButton::slotShowTreeChanged);
+        m_armedHit = Function::invalidId();
+        update();
+    }
+    const bool changed = m_hits != hits;
+    m_hits = hits;
     slotShowTreeChanged();
+    // Show checks (Q157): overrides, shared places, dead hits.
+    if (changed)
+    {
+        HitMap::watch(m_doc);
+        HitMap::refreshChecks(m_doc);
+    }
+}
+
+bool VCButton::addHits(const QList<quint32> &hitIds)
+{
+    QList<quint32> hits = m_hits;
+    for (quint32 h : hitIds)
+        if (m_doc->showTree()->isLook(h) && !hits.contains(h))
+            hits << h;
+    if (hits == m_hits)
+        return false;
+    if (m_action != Toggle && m_action != Flash)
+        setAction(Toggle);
+    setHits(hits);
+    return true;
+}
+
+void VCButton::prepareHitPress()
+{
+    m_together.clear();
+    const ShowTreeController *st = m_doc->showTree();
+    const QList<quint32> tier = st->armedTier(m_hits);
+    if (tier.count() < 2 || m_samePlace == SamePlaceUnset)
+        return;
+    if (m_samePlace == StepThrough)
+    {
+        const quint32 pick = tier.at(m_hitStep % tier.count());
+        ++m_hitStep;
+        const quint32 fid = st->lookFunction(pick);
+        if (fid != m_function)
+            attachFunction(fid);
+        m_armedHit = pick;
+        update();
+        return;
+    }
+    for (quint32 h : tier)
+    {
+        const quint32 fid = st->lookFunction(h);
+        if (fid != m_function && fid != Function::invalidId())
+            m_together << fid;
+    }
+}
+
+void VCButton::together(int op)
+{
+    for (quint32 fid : m_together)
+        if (Function *f = m_doc->function(fid))
+        {
+            if (op == 1)
+            {
+                adjustFunctionIntensity(f, intensity());
+                f->start(m_doc->masterTimer(), functionParent());
+            }
+            else if (op == 2)
+            {
+                adjustFunctionIntensity(f, intensity());
+                f->flash(m_doc->masterTimer(), flashOverrides(), flashForceLTP());
+            }
+            else if (op == 3)
+                f->unFlash(m_doc->masterTimer());
+            else
+                f->stop(functionParent());
+        }
+    if (op == 0 || op == 3)
+        m_together.clear();
+}
+
+bool VCButton::armedOverrides() const
+{
+    if (m_armedHit == Function::invalidId() || m_hits.count() < 2)
+        return false;
+    const ShowTreeController *st = m_doc->showTree();
+    for (quint32 h : m_hits)
+        if (h != m_armedHit && st->isHitArmed(h) && st->hitOverrides(m_armedHit, h))
+            return true;
+    return false;
+}
+
+bool VCButton::addHitsAsking(const QList<quint32> &hitIds, QWidget *parent)
+{
+    QList<quint32> hits = m_hits;
+    int same = m_samePlace;
+    if (!HitMap::askToAdd(m_doc, hits, same, hitIds, parent) && same == m_samePlace)
+        return false;
+    m_samePlace = SamePlace(same);
+    if (m_action != Toggle && m_action != Flash)
+        setAction(Toggle);
+    setHits(hits);
+    m_doc->setModified();
+    return true;
+}
+
+const char *VCButton::hitMimeType()
+{
+    // ShowTreeView::cueMimeType(): its cue rows, hits among them.
+    return "application/x-qlcconsole-showtree-cues";
 }
 
 void VCButton::slotShowTreeChanged()
 {
-    if (m_hit == Function::invalidId())
+    if (m_hits.isEmpty())
         return;
-    // The hit gone (deleted, maybe to come back on undo): the button keeps
-    // it and fires nothing meanwhile.
-    const quint32 fid = m_doc->showTree()->lookFunction(m_hit);
+    // The hit gone (deleted, maybe to come back on undo) or none armed: the
+    // button keeps its hits and fires nothing meanwhile.
+    const ShowTreeController *st = m_doc->showTree();
+    const quint32 armed = st->armedHit(m_hits);
+    const quint32 fid = armed == Function::invalidId() ? Function::invalidId() : st->lookFunction(armed);
     if (fid != m_function)
+    {
+        // What it held leaves with its place (Q154): let go over its fade out.
+        if (state() == Active && m_armedHit != armed && m_armedHit != Function::invalidId())
+        {
+            if (Function *held = m_doc->function(m_function))
+            {
+                if (m_action == Flash)
+                    held->unFlash(m_doc->masterTimer());
+                else if (m_action == Toggle)
+                    held->stop(functionParent());
+                together(m_action == Flash ? 3 : 0);
+                resetIntensityOverrideAttribute();
+            }
+            setState(Inactive);
+        }
         attachFunction(fid);
-    else if (const Function *f = m_doc->function(fid))
-        setToolTip(f->name());     // renamed
+    }
+    m_armedHit = armed;
+    const ShowTree::Cue *c = armed == Function::invalidId() ? nullptr : st->cue(armed);
+    if (c != nullptr && m_hits.count() == 1)
+    {
+        if (const Function *f = m_doc->function(fid))
+            setToolTip(f->name());     // renamed
+    }
+    else if (c != nullptr)
+        setToolTip(tr("%1, %2 (%n hit(s) on this button)", "", int(m_hits.count()))
+                   .arg(c->name, st->hitPlace(armed)));
+    else
+        setToolTip(tr("No hit armed now: the button does nothing here"));
+    update();
 }
 
 void VCButton::adjustFunctionIntensity(Function *f, qreal value)
@@ -1516,6 +1677,10 @@ void VCButton::pressFunction()
         return;
 
     Function* f = NULL;
+    // A same-place tier of hits: the next one, or all of them (Q157).
+    if (!m_hits.isEmpty() && ((m_action == Toggle && state() != Active)
+                              || (m_action == Flash && state() == Inactive)))
+        prepareHitPress();
     if (m_action == Toggle)
     {
         f = m_doc->function(m_function);
@@ -1525,9 +1690,21 @@ void VCButton::pressFunction()
         // if the button is in a SoloFrame and the function is running but was
         // started by a different function (a chaser or collection), turn other
         // functions off and start this one.
+        // A hit whose one-shot effects (Once / N times) have all finished
+        // and is still on: the press plays them again instead of turning it
+        // off. While one still runs, the press turns it off as usual.
+        if (state() == Active && f->isRunning()
+            && m_doc->effectScriptRunner()->oneShotState(m_function) == 1
+            && m_doc->effectScriptRunner()->restartOneShots(m_function))
+        {
+            for (quint32 fid : m_together)
+                m_doc->effectScriptRunner()->restartOneShots(fid);
+            return;
+        }
         if (state() == Active && !(isChildOfSoloFrame() && f->startedAsChild()))
         {
             f->stop(functionParent());
+            together(0);
             resetIntensityOverrideAttribute();
         }
         else
@@ -1551,6 +1728,7 @@ void VCButton::pressFunction()
             }
 
             f->start(m_doc->masterTimer(), functionParent());
+            together(1);
             setState(Active);
             emit functionStarting(m_function);
         }
@@ -1562,6 +1740,7 @@ void VCButton::pressFunction()
         {
             adjustFunctionIntensity(f, intensity());
             f->flash(m_doc->masterTimer(), flashOverrides(), flashForceLTP());
+            together(2);
             setState(Active);
         }
     }
@@ -1692,6 +1871,7 @@ void VCButton::releaseFunction()
         if (f != NULL)
         {
             f->unFlash(m_doc->masterTimer());
+            together(3);
             resetIntensityOverrideAttribute();
             setState(Inactive);
         }
@@ -1843,10 +2023,28 @@ bool VCButton::loadXML(QXmlStreamReader &root)
             {
                 bool ok = false;
                 const quint32 hitId = root.attributes().value(KXMLQLCVCButtonFunctionHit).toUInt(&ok);
+                QList<quint32> hits;
                 if (ok && m_doc->showTree()->isLook(hitId))
-                    setHit(hitId);
+                    hits << hitId;
+                const QString same = root.attributes().value(QStringLiteral("SamePlace")).toString();
+                m_samePlace = same == QLatin1String("Step") ? StepThrough
+                              : same == QLatin1String("Together") ? Together : SamePlaceUnset;
+                // The others of a button with several (Q154).
+                while (root.readNextStartElement())
+                {
+                    if (root.name() == KXMLQLCVCButtonFunctionHit)
+                    {
+                        const quint32 more = root.attributes().value(KXMLQLCVCButtonFunctionID).toUInt(&ok);
+                        if (ok && m_doc->showTree()->isLook(more))
+                            hits << more;
+                    }
+                    root.skipCurrentElement();
+                }
+                if (!hits.isEmpty())
+                    setHits(hits);
             }
-            root.skipCurrentElement();
+            else
+                root.skipCurrentElement();
         }
         else if (root.name() == KXMLQLCVCWidgetInput)
         {
@@ -1961,8 +2159,17 @@ bool VCButton::saveXML(QXmlStreamWriter *doc)
     /* Function */
     doc->writeStartElement(KXMLQLCVCButtonFunction);
     doc->writeAttribute(KXMLQLCVCButtonFunctionID, QString::number(function()));
-    if (m_hit != Function::invalidId())
-        doc->writeAttribute(KXMLQLCVCButtonFunctionHit, QString::number(m_hit));
+    if (!m_hits.isEmpty())
+        doc->writeAttribute(KXMLQLCVCButtonFunctionHit, QString::number(m_hits.first()));
+    if (m_samePlace != SamePlaceUnset)
+        doc->writeAttribute(QStringLiteral("SamePlace"), m_samePlace == StepThrough ? QStringLiteral("Step")
+                                                                                   : QStringLiteral("Together"));
+    for (int i = 1; i < m_hits.count(); ++i)
+    {
+        doc->writeStartElement(KXMLQLCVCButtonFunctionHit);
+        doc->writeAttribute(KXMLQLCVCButtonFunctionID, QString::number(m_hits.at(i)));
+        doc->writeEndElement();
+    }
     doc->writeEndElement();
 
     /* Action */
@@ -2090,15 +2297,44 @@ void VCButton::paintEvent(QPaintEvent* e)
         }
     }
 
-    /* Paint caption with text wrapping */
-    if (caption().isEmpty() == false)
+    /* Paint caption with text wrapping. A button with several hits shows
+       the one armed now (Q154). */
+    QString face = caption();
+    if (m_hits.count() > 1 && m_armedHit != Function::invalidId())
+        if (const ShowTree::Cue *c = m_doc->showTree()->cue(m_armedHit))
+            face = c->name.isEmpty() ? face : c->name;
+    if (face.isEmpty() == false)
     {
         style()->drawItemText(&painter,
                               rect(),
                               Qt::AlignCenter | Qt::TextWordWrap,
                               palette(),
                               (mode() == Doc::Operate),
-                              caption());
+                              face);
+    }
+
+    /* Hits (Q154): none armed here -- dimmed and crossed, it does nothing;
+       a dot marks a button holding several. */
+    if (!m_hits.isEmpty() && m_armedHit == Function::invalidId())
+    {
+        painter.fillRect(rect(), QColor(0, 0, 0, 140));
+        painter.setPen(QPen(QColor(200, 200, 200, 160), 2));
+        painter.drawLine(rect().topLeft() + QPoint(4, 4), rect().bottomRight() - QPoint(4, 4));
+    }
+    if (armedOverrides())
+    {
+        // Q157 (4): the armed hit overrides a wider one here.
+        QFont small = painter.font();
+        small.setPointSizeF(qMax(7.0, small.pointSizeF() * 0.8));
+        painter.setFont(small);
+        painter.setPen(palette().color(QPalette::ButtonText));
+        painter.drawText(rect().adjusted(4, 2, -4, -2), Qt::AlignLeft | Qt::AlignBottom, tr("↳ overrides"));
+    }
+    if (m_hits.count() > 1)
+    {
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(palette().color(QPalette::ButtonText));
+        painter.drawEllipse(QPoint(rect().width() - 8, rect().height() - 8), 3, 3);
     }
 
     /* Flash emblem */
@@ -2185,6 +2421,53 @@ void VCButton::paintEvent(QPaintEvent* e)
 
     /* Draw a selection frame if appropriate */
     VCWidget::paintEvent(e);
+}
+
+void VCButton::dragEnterEvent(QDragEnterEvent *e)
+{
+    bool any = false;
+    if (e->mimeData()->hasFormat(QLatin1String(hitMimeType())))
+    {
+        QByteArray data = e->mimeData()->data(QLatin1String(hitMimeType()));
+        QDataStream stream(&data, QIODevice::ReadOnly);
+        while (!stream.atEnd() && !any)
+        {
+            quint32 id;
+            stream >> id;
+            any = stream.status() == QDataStream::Ok && m_doc->showTree()->isLook(id);
+        }
+    }
+    if (any)
+        e->acceptProposedAction();
+    else
+        e->ignore();
+}
+
+void VCButton::dragMoveEvent(QDragMoveEvent *e)
+{
+    e->acceptProposedAction();
+}
+
+void VCButton::dropEvent(QDropEvent *e)
+{
+    QList<quint32> ids;
+    QByteArray data = e->mimeData()->data(QLatin1String(hitMimeType()));
+    QDataStream stream(&data, QIODevice::ReadOnly);
+    while (!stream.atEnd())
+    {
+        quint32 id;
+        stream >> id;
+        if (stream.status() != QDataStream::Ok)
+            break;
+        ids << id;
+    }
+    if (addHitsAsking(ids, this))
+    {
+        e->setDropAction(Qt::CopyAction);
+        e->accept();
+    }
+    else
+        e->ignore();
 }
 
 void VCButton::mousePressEvent(QMouseEvent* e)

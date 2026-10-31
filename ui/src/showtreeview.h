@@ -90,7 +90,9 @@ public:
         LayerNode,          //!< a cue's own layer
         TrackedLayerNode,   //!< carried into the cue (tracked, included, base)
         LookFolderNode,     //!< a folder of a Looks section (R3): IdRole its list, FolderRole its path
-        SectionNode         //!< a song section of a list (Q190): IdRole its list, SectionRole which
+        SectionNode,        //!< a song section of a list (Q190): IdRole its list, SectionRole which
+        HitsNode            //!< the hits living at a place (Q154): IdRole its production's Hits section,
+                            //!< ScopeRole the HitScope, PlaceRole the cue / list / production
     };
 
     /** Item roles in the tree and the Library. */
@@ -102,7 +104,9 @@ public:
         TargetRole = Qt::UserRole + 3,  //!< a tracked layer's target signature
         PathRole = Qt::UserRole + 4,    //!< a Library folder's path ("Groups/Movers/Front")
         FolderRole = Qt::UserRole + 5,  //!< a look folder's / palette folder's own path ("Hits")
-        SectionRole = Qt::UserRole + 6  //!< a section row's key ("1"), or "#<cue>" for a hand-made one
+        SectionRole = Qt::UserRole + 6, //!< a section row's key ("1"), or "#<cue>" for a hand-made one
+        ScopeRole = Qt::UserRole + 7,   //!< a Hits row's HitScope (int)
+        PlaceRole = Qt::UserRole + 8    //!< a Hits row's cue, list or production
     };
 
     /** The tree's columns (Q104): the name; what a list, a production or a
@@ -454,6 +458,17 @@ public:
      *  selected Looks section / folder; the section is made the first time.
      *  Selected, its name field focused. */
     quint32 newLook();
+    /** + Hit at a place (Q154): under the selected cue or list, in the
+     *  selected production, beside the selected hit; @a global: at the top
+     *  of the tree, armed everywhere. */
+    quint32 newHit(bool global = false);
+    /** Where a hit made or dropped on @a item would live (false: nowhere --
+     *  an empty spot is global only for + Hit). */
+    bool hitPlaceOf(QTreeWidgetItem *item, ShowTree::HitScope *scope, quint32 *place) const;
+    /** Hits @a cueIds dropped on @a item (⌥: @a copy): moved (copied) to
+     *  live there. @a apply false: only whether it would, and @a hint.
+     *  False: not a hit drop (a reorder, a folder, a cue drop). */
+    bool dropHitsAt(const QList<quint32> &cueIds, QTreeWidgetItem *item, bool copy, bool apply, QString *hint);
     /** Looks dropped on a folder of their Looks section ("": the section
      *  itself, no folder). One undo step. */
     bool dropLooksOnFolder(const QList<quint32> &lookIds, quint32 listId, const QString &folder);
@@ -571,8 +586,38 @@ public:
      *  the selected cues (in list order) or own layers; paste puts cues as
      *  a run after the selected cue, layers into it. One undo step. */
     bool copySelection();
+    /** ⌘X: copy, but the paste moves the layers (one undo step) and
+     *  empties the clipboard. Layers only; cues move by dragging. */
+    bool cutSelection();
     bool pasteClipboard();
     bool duplicateSelection();
+
+    typedef QPair<quint32, quint32> LayerRef;       //!< cue, layer
+    /** MIME type of layers dragged within the tree (cue, layer id pairs). */
+    static const char *layerMimeType();
+    static QList<LayerRef> layersFromMime(const QMimeData *mime);
+    /** Where a layer dropped on row (@a cueId, @a layerId; invalid: the cue
+     *  itself) goes: @a after for ShowTreeController::moveLayers (the
+     *  upper half of a row: before it). False: nowhere. */
+    bool layerDropPlace(const QList<LayerRef> &refs, quint32 cueId, quint32 layerId, bool lowerHalf,
+                        quint32 *after) const;
+    /** What dropping @a refs in cue @a cueId after @a after would do, in
+     *  words (empty, @a refused: it can't). @a copy: ⌥ held. */
+    QString layerDropHint(const QList<LayerRef> &refs, quint32 cueId, quint32 after, bool copy,
+                          bool *refused = nullptr) const;
+    /** Move (or, @a copy, copy) @a refs into the cue, one undo step; the
+     *  layers now there are selected. */
+    bool dropLayers(const QList<LayerRef> &refs, quint32 cueId, quint32 after, bool copy);
+    /** What dragging the selected rows would carry (the caller owns it;
+     *  null: nothing draggable) -- for tests. */
+    QMimeData *selectionDragMime() const;
+    /** The drop indicator a layer drag is showing in the tree's viewport
+     *  (a line between rows, or a frame round a cue); null: none. */
+    QRect dropIndicator() const;
+private:
+    void selectLayers(quint32 cueId, const QList<quint32> &layers);
+    QString layerNote(int count, quint32 cueId, bool copied) const;
+public:
 
     /** Open @a paletteId in the Look Editor under the tree. */
     void editPalette(quint32 paletteId);
@@ -1026,6 +1071,7 @@ private:
     QFormLayout *m_cueForm = nullptr;
     QFormLayout *m_listForm = nullptr;
     QLabel *m_lookFiredBy = nullptr;
+    QLabel *m_hitWhen = nullptr;        //!< a hit's place: when it fires (Q154)
     QPushButton *m_listVcPage = nullptr;
     QSet<QString> m_collapsedFolders;      //!< "listId:path" of look folders closed by hand
     /** Whether the selection is in a Looks section (its node, a folder, a

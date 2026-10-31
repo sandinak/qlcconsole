@@ -118,6 +118,7 @@ private slots:
     void aPaletteDeletedFromTheLibraryComesBackWithUndo();
     void paletteStepsAreOneUndoStepAndSharedWithProgramming();
     void looksSectionInTheTree();
+    void hitsLiveUnderTheirPlace();
     void makeVcPageAndAdoptAsLook();
     void makeVcPageUpdatesItsFrame();
     void looksAreOneUndoStepAndTyped();
@@ -196,6 +197,17 @@ private slots:
     /** COURSE_PLAN §8 #18: + Palette → Effect, twice: the second starts as
      *  New Effect with the picker open, whatever the editor showed. */
     void aSecondNewEffectPaletteStartsAfresh();
+
+    /** 0.3.1 (lyr): cut / copy / paste and drag move layers between cues,
+     *  hits and within a cue; Runs on an effect and `release` on a function
+     *  layer. */
+    void cutAndPasteMovesLayersInOneUndoStep();
+    void pasteOnALayerGoesAfterIt();
+    void aDragMovesLayersAndAltCopiesThem();
+    void aLayerRowIsDraggableAndAClickOnlySelects();
+    void layersIntoAHitLoseTheirRelease();
+    void effectRunsIsAnUndoStep();
+    void releaseTakesAFunctionLayer();
 
 private:
     quint32 dimmer(int level, const QString &name);

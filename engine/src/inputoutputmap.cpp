@@ -554,6 +554,11 @@ bool InputOutputMap::setInputPatch(quint32 universe, const QString &pluginName,
         return false;
     }
 
+    /* Patched by hand to one device (or unpatched): a controller slot gives
+       way, unless that device is one of its own. */
+    if (m_applyingSlot == false && m_universeArray.at(universe)->hasInputSlot())
+        keepOrDropInputSlot(universe, pluginName, inputUID, input);
+
     QMutexLocker locker(&m_universeMutex);
     // An explicit (re)patch or unpatch replaces any input kept offline.
     m_universeArray.at(universe)->clearOfflinePatches(Universe::InputPatchTag);
@@ -596,6 +601,8 @@ bool InputOutputMap::setInputPatch(quint32 universe, const QString &pluginName,
         ip = m_universeArray.at(universe)->inputPatch();
         if (ip != NULL)
         {
+            ip->setChannelMap(QVector<quint32>());  // a slot sets its own after
+
             connect(ip, SIGNAL(inputValueChanged(quint32,quint32,uchar,const QString&)),
                     this, SIGNAL(inputValueChanged(quint32,quint32,uchar,const QString&)));
             connect(ip, SIGNAL(inputTimeCodeChanged(quint32,quint32,uchar)),
@@ -725,7 +732,7 @@ bool InputOutputMap::setOutputPatch(quint32 universe, const QString &pluginName,
             if (NetworkRoute::isAddressIdentity(lineName) == false && index < uni->outputPatchesCount()
                 && uni->outputPatch(index) != NULL)
                 params = uni->outputPatch(index)->getPluginParameters();
-            const QString reason = transmitHoldReason(lineName, params);
+            const QString reason = transmitHoldReason(lineName, params, plugin);
             if (reason.isEmpty() == false && lineName.isEmpty() == false)
             {
                 holdOutputPatch(universe, index, plugin, lineName, output,
@@ -980,7 +987,7 @@ void InputOutputMap::loadPatch(quint32 universe, const Universe::OfflinePatch &p
         {
             const int index = uni->outputPatchesCount();
             const QString holdReason = line < 0 ? QString()
-                    : transmitHoldReason(plugin->outputs().value(line), patch.params);
+                    : transmitHoldReason(plugin->outputs().value(line), patch.params, plugin);
             if (line < 0)
             {
                 QMutexLocker locker(&m_universeMutex);
@@ -1074,7 +1081,7 @@ int InputOutputMap::retryOfflinePatches()
                 continue;
             }
             const QString reason = op->plugin() == NULL ? QString()
-                    : transmitHoldReason(op->plugin()->outputs().value(line), params);
+                    : transmitHoldReason(op->plugin()->outputs().value(line), params, op->plugin());
             if (reason.isEmpty() == false)
             {
                 op->setHeldReason(reason);
@@ -1098,6 +1105,8 @@ int InputOutputMap::retryOfflinePatches()
             for (int k = 0; k < kept.count(); k++)
             {
                 const Universe::OfflinePatch &rec = kept.at(k);
+                if (rec.tag == Universe::InputPatchTag && uni->hasInputSlot())
+                    continue;   // a controller slot's: applyInputSlots() picks
                 QLCIOPlugin *plugin = m_doc->ioPluginCache()->plugin(rec.plugin);
                 if (plugin == NULL)
                     continue;
@@ -1128,6 +1137,7 @@ int InputOutputMap::retryOfflinePatches()
 
 void InputOutputMap::slotRetryOfflinePatches()
 {
+    applyInputSlots();
     applyTransmitGate();
     if (hasOfflinePatches())
         retryOfflinePatches();
@@ -1140,6 +1150,8 @@ void InputOutputMap::forgetOfflinePatches(quint32 universe)
         return;
 
     Universe *uni = m_universeArray.at(universe);
+    if (uni->hasInputSlot())
+        setInputSlot(universe, QList<Universe::InputSlotDevice>());
     uni->clearOfflinePatches(Universe::InputPatchTag);
     uni->clearOfflinePatches(Universe::OutputPatchTag);
     uni->clearOfflinePatches(Universe::FeedbackPatchTag);
@@ -1299,15 +1311,34 @@ bool InputOutputMap::onRigNetwork() const
     return false;
 }
 
+bool InputOutputMap::isLocalHardwareOutput(const QString &lineName,
+                                           const QMap<QString, QVariant> &params,
+                                           const QLCIOPlugin *plugin) const
+{
+    if (plugin == NULL)
+        return false;
+    /* Nothing leaves the computer on these */
+    const QString name = plugin->name();
+    if (name == QLatin1String("Loopback") || name == QLatin1String("Dummy"))
+        return false;
+    /* A network plugin (Art-Net, E1.31, OSC, WLED) is judged by where it
+       sends: a loopback address stays inside the computer. */
+    if (NetworkRoute::isAddressIdentity(lineName) || ipTargets(params).isEmpty() == false)
+        return false;
+    return true;
+}
+
 QString InputOutputMap::transmitHoldReason(const QString &lineName,
-                                           const QMap<QString, QVariant> &params) const
+                                           const QMap<QString, QVariant> &params,
+                                           const QLCIOPlugin *plugin) const
 {
     if (transmitGateActive() == false)
         return QString();
 
     /* Teaching mode: nothing real leaves the computer until the teacher
        allows it (File ▸ Show Settings). */
-    if (m_teachingHold && isNetworkOutput(lineName, params))
+    if (m_teachingHold && (isNetworkOutput(lineName, params)
+                           || isLocalHardwareOutput(lineName, params, plugin)))
         return tr("Teaching mode holds real output (File \342\226\270 Show Settings allows it)");
     if (rigGateActive() == false)
         return QString();
@@ -1398,7 +1429,7 @@ int InputOutputMap::applyTransmitGate()
             const QString lineName = op->outputName();
             const QMap<QString, QVariant> params = NetworkRoute::isAddressIdentity(lineName)
                     ? QMap<QString, QVariant>() : op->getPluginParameters();
-            const QString reason = transmitHoldReason(lineName, params);
+            const QString reason = transmitHoldReason(lineName, params, op->plugin());
             if (reason.isEmpty())
                 continue;
 
@@ -1448,9 +1479,15 @@ InputOutputMap::TransmitGateStatus InputOutputMap::transmitGateStatus() const
             const QString lineName = op->outputName();
             const QMap<QString, QVariant> params = NetworkRoute::isAddressIdentity(lineName)
                     ? QMap<QString, QVariant>() : op->getPluginParameters();
-            if (isNetworkOutput(lineName, params) == false)
+            const bool network = isNetworkOutput(lineName, params);
+            /* Teaching also holds USB and other hardware outputs: counted
+               as held (not as network output, which says "looks like a
+               real show"). */
+            if (network == false
+                && (m_teachingHold == false || isLocalHardwareOutput(lineName, params, op->plugin()) == false))
                 continue;
-            st.networkOutputs++;
+            if (network)
+                st.networkOutputs++;
             if (op->isHeld())
             {
                 st.held++;
@@ -1459,7 +1496,7 @@ InputOutputMap::TransmitGateStatus InputOutputMap::transmitGateStatus() const
         }
     }
 
-    if (st.networkOutputs == 0)
+    if (st.networkOutputs == 0 && st.held == 0)
         st.state = TransmitGateStatus::Clear;
     else if (m_teachingHold && st.held > 0)
         st.state = TransmitGateStatus::Held;
@@ -1719,6 +1756,8 @@ void InputOutputMap::followInputDevices(QLCIOPlugin *plugin)
         InputPatch *ip = uni->inputPatch();
         if (ip == NULL || ip->plugin() != plugin || ip->inputUID().isEmpty())
             continue;
+        if (uni->hasInputSlot())
+            continue;   // a controller slot: applyInputSlots() follows it
 
         const QString device = ip->inputUID();
         const int line = lines.indexOf(device);
@@ -1763,7 +1802,10 @@ void InputOutputMap::slotPluginConfigurationChanged(QLCIOPlugin* plugin)
     /* A device input (game controller, MIDI surface) is a line that comes
        and goes: follow it by name before reopening anything by number. */
     if (plugin->linesAreHardware())
+    {
         followInputDevices(plugin);
+        applyInputSlots();
+    }
 
     QMutexLocker locker(&m_universeMutex);
     bool success = true;

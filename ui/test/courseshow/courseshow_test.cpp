@@ -2171,6 +2171,10 @@ void CourseShow_Test::lessonHouseLights()
             }
         return -1;
     };
+    // The reads above are of the pre-GM values (sends); cycOut and out read
+    // the post-GM ones, which the engine fills a frame later -- wait for
+    // them before Blackout, or a loaded machine reads the cyc still at 0.
+    QTRY_COMPARE_WITH_TIMEOUT(cycOut(), 255, kRigWait);
     m_app->m_controlBlackoutAction->trigger();
     QVERIFY(doc->inputOutputMap()->blackout());
     QCOMPARE(cycOut(), 255);
@@ -4673,6 +4677,80 @@ void CourseShow_Test::lessonTwoFourExtension()
     doc->resetModified();
 }
 
+void CourseShow_Test::lessonTwoFourStageChase()
+{
+    if (kLevelTwoLessons < 4)
+        QSKIP("not written yet");
+    // Lesson 2.4's extension, "one effect over the whole stage": a Color
+    // Chase (Stage Chase) dropped on a cue itself, in the tree, reaches
+    // every layer of it that has no colour effect of its own (so 1.0.2
+    // Chorus, not the Dance Break, whose washes keep the Truss Wave); each
+    // layer keeps its own level and the chase runs box by box. Then the
+    // white pixels of a truss box (TrussC-W) light from a white look.
+    QVERIFY(open(levelTwoFinish(4)));
+    Doc *doc = m_app->doc();
+    ShowTreeView *view = showTree();
+    const quint32 cue = cueNumbered(doc, "1.0.2");
+    QVERIFY(view->selectNode(cue));
+    settle(50);
+    QLCPalette *chase = newEffectPalette(doc, view, "01-Everybody Scream", "Color Chase", "Stage Chase");
+    QVERIFY(chase != nullptr);
+    QVERIFY(view->selectNode(cue));
+    settle(50);
+    QTreeWidgetItem *row = treeCue(view, "1.0.2");
+    QVERIFY(row != nullptr);
+    QTreeWidget *t = view->tree();
+    const QString said = dragAndDrop(t->viewport(), t->visualItemRect(row).center(),
+                                     idsMime(FunctionsTreeWidget::paletteDragMimeType(), { chase->id() }), hintOf(view));
+    qInfo().noquote() << "[2.4s] chase on the cue:" << said << "| layers" << view->cueLayerItems().join(" | ");
+    QVERIFY2(said.startsWith(QStringLiteral("Stage Chase → cue look on 1.0.2 Chorus: reaches 2 of 2 layers")), qPrintable(said));
+    QVERIFY(cueRow(view, "Steps")->text().contains(QStringLiteral("Stage Chase")));
+    QVERIFY(cueRow(view, "TrussC-RGB")->text().contains(QStringLiteral("Stage Chase")));
+
+    // Every layer moves, each at its own level (the chorus colour, Full),
+    // and the boxes go one after another: while one box is lit another is
+    // dark or lower.
+    const char *boxes[] = { "SR Truss Cyc 1", "SR Truss Cyc 2" };
+    QSet<QByteArray> stepFrames, cycFrames;
+    bool boxByBox = false;
+    int stepMax = 0;
+    for (int i = 0; i < 60; ++i)
+    {
+        const QByteArray st = sends(doc, "US Step 1", 48);
+        stepFrames.insert(st);
+        for (uchar c : st)
+            stepMax = qMax(stepMax, int(c));
+        cycFrames.insert(sends(doc, boxes[0], 48));
+        if (sends(doc, boxes[0], 3) != sends(doc, boxes[1], 3))
+            boxByBox = true;
+        QTest::qWait(50);
+    }
+    qInfo() << "[2.4s] frames: steps" << stepFrames.count() << "box" << cycFrames.count() << "box by box" << boxByBox
+            << "step max" << stepMax;
+    QVERIFY2(stepFrames.count() > 2, "the steps don't move with the chase");
+    QVERIFY2(cycFrames.count() > 2, "the truss box doesn't move with the chase");
+    QVERIFY2(boxByBox, "the boxes move together, not one after another");
+    QVERIFY2(stepMax <= 0xff && stepMax > 0, "the steps send nothing");
+
+    // White pixels: a white look on the box's white heads lights them.
+    QCOMPARE(dropGroupOnZone(doc, view, "TrussC-W"), QStringLiteral("a new layer on TrussC-W in 1.0.2 Chorus"));
+    QVERIFY(dropPaletteOnRow(doc, view, "TrussC-W", "White").startsWith(QStringLiteral("White → layer TrussC-W in 1.0.2 Chorus")));
+    auto whites = [doc]() {
+        int top = 0;
+        for (Fixture *fx : doc->fixtures())
+            if (fx->name() == QLatin1String("SR Truss Cyc 1"))
+            {
+                const QByteArray v = sends(doc, fx->name(), int(fx->channels()));
+                for (quint32 c = 0; c < fx->channels(); ++c)
+                    if (fx->channel(c)->name().startsWith(QLatin1String("White ")))
+                        top = qMax(top, int(uchar(v.at(int(c)))));
+            }
+        return top;
+    };
+    QVERIFY2(waitUntil([&whites]() { return whites() > 100; }, kRigWait), qPrintable(QString::number(whites())));
+    doc->resetModified();
+}
+
 void CourseShow_Test::lessonTwoFiveExtension()
 {
     if (kLevelTwoLessons < 5)
@@ -4696,6 +4774,52 @@ void CourseShow_Test::lessonTwoFiveExtension()
     settle(200);
     qInfo().noquote() << "[2.5x] Grouping" << rowText(view, KeyGrouping);
     QVERIFY2(rowText(view, KeyGrouping).startsWith(QStringLiteral("Pairs")), qPrintable(rowText(view, KeyGrouping)));
+
+    // Step 4: fan the upstage beams too: the USTs get a layer of their
+    // own, White, Full, aimed at the Riser Line, each beam to a place on it.
+    QVERIFY(view->selectNode(cueNumbered(doc, "1.0.7")));
+    settle(50);
+    QStringList usts;
+    for (Fixture *fx : doc->fixtures())
+        if (fx->name().startsWith(QLatin1String("UST ")))
+            usts << fx->name();
+    qInfo().noquote() << "[2.5x] USTs:" << usts.join(", ");
+    QCOMPARE(usts.count(), 8);
+    QCOMPARE(dropGroupOnZone(doc, view, "USTs"), QStringLiteral("a new layer on USTs in 1.0.7 Fan"));
+    for (const QString &pal : { QStringLiteral("White"), QStringLiteral("Full") })
+        QVERIFY(dropPaletteOnRow(doc, view, "USTs", pal).startsWith(pal + " → layer USTs in 1.0.7 Fan"));
+    const QString said = dropTargetOnRow(doc, view, "USTs", "Riser Line");
+    qInfo().noquote() << "[2.5x] Riser Line on the USTs:" << said;
+    QVERIFY2(said.startsWith(QStringLiteral("Aim at Riser Line → layer USTs in 1.0.7 Fan")), qPrintable(said));
+    for (Fixture *fx : doc->fixtures())
+        if (fx->name() == QLatin1String("UST 1"))
+        {
+            QStringList n;
+            for (quint32 c = 0; c < fx->channels(); ++c)
+                n << fx->channel(c)->name();
+            qInfo().noquote() << "[2.5x] UST channels:" << n.join(", ");
+        }
+    QTest::qWait(800);
+    QSet<QPair<int, int>> aims;
+    int lo = 255, hi = 0;
+    for (const QString &n : usts)
+    {
+        const QPair<int, int> pt = panTilt(doc, n);
+        qInfo().noquote() << "[2.5x]" << n << pt;
+        aims.insert(pt);
+        lo = qMin(lo, pt.first);
+        hi = qMax(hi, pt.first);
+    }
+    qInfo().noquote() << "[2.5x] rows" << view->cueLayerItems().join(" | ");
+    // White and Full: the beams are lit.
+    QVERIFY2(waitUntil([doc, &usts]() { return channelValue(doc, usts.first(), "Intensity") > 200
+                                               && channelValue(doc, usts.first(), "Red 1") > 200
+                                               && channelValue(doc, usts.first(), "Green 1") > 200
+                                               && channelValue(doc, usts.first(), "Blue 1") > 200; }),
+             "the USTs aren't lit white");
+    // The beams take places along the line, not one point: several aims,
+    // a pan spread across them.
+    QVERIFY2(aims.count() >= 6 && hi - lo >= 5, qPrintable(QStringLiteral("%1 aims, pan %2..%3").arg(aims.count()).arg(lo).arg(hi)));
     doc->resetModified();
 }
 

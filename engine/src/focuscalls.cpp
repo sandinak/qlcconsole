@@ -20,7 +20,9 @@
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
 
+#include "showtreecontroller.h"
 #include "monitorproperties.h"
+#include "qlcpalette.h"
 #include "fixturegroup.h"
 #include "stagetarget.h"
 #include "focuscalls.h"
@@ -70,14 +72,17 @@ void FocusCalls::touched()
 
 void FocusCalls::setCalls(const QList<FocusCall> &calls)
 {
-    if (calls == m_calls)
+    // Saved from the dialog: the built calls become the show's.
+    if (calls == m_calls && !m_fromShow)
         return;
+    m_fromShow = false;
     m_calls = calls;
     touched();
 }
 
 int FocusCalls::append(const FocusCall &call)
 {
+    m_fromShow = false;
     m_calls << call;
     touched();
     return m_calls.size() - 1;
@@ -87,8 +92,9 @@ bool FocusCalls::replace(int index, const FocusCall &call)
 {
     if (index < 0 || index >= m_calls.size())
         return false;
-    if (m_calls.at(index) == call)
+    if (m_calls.at(index) == call && !m_fromShow)
         return true;
+    m_fromShow = false;
     m_calls[index] = call;
     touched();
     return true;
@@ -98,6 +104,7 @@ bool FocusCalls::remove(int index)
 {
     if (index < 0 || index >= m_calls.size())
         return false;
+    m_fromShow = false;
     m_calls.removeAt(index);
     touched();
     return true;
@@ -107,6 +114,7 @@ bool FocusCalls::move(int from, int to)
 {
     if (from < 0 || from >= m_calls.size() || to < 0 || to >= m_calls.size())
         return false;
+    m_fromShow = false;
     if (from == to)
         return true;
     m_calls.move(from, to);
@@ -116,10 +124,93 @@ bool FocusCalls::move(int from, int to)
 
 void FocusCalls::clear()
 {
+    m_fromShow = false;
     if (m_calls.isEmpty())
         return;
     m_calls.clear();
     emit changed();
+}
+
+QList<FocusCall> FocusCalls::callsFromShow() const
+{
+    QList<FocusCall> out;
+    if (m_doc == nullptr || m_doc->showTree() == nullptr)
+        return out;
+    const ShowTreeController *tree = m_doc->showTree();
+    MonitorProperties *props = m_doc->monitorProperties();
+    if (props == nullptr)
+        return out;
+    QList<quint32> order;                       // the targets, as first aimed at
+    QHash<quint32, FocusCall> calls;
+    for (const ShowTree::Production &prod : tree->productions())
+        for (const ShowTree::CueList &list : prod.lists)
+            for (const ShowTree::ResolvedCue &rc : tree->resolved(list))
+                for (const ShowTree::ResolvedLayer &layer : rc.layers)
+                {
+                    const auto it = layer.values.constFind(ShowTree::KeyPosition);
+                    if (it == layer.values.constEnd() || it->look.none)
+                        continue;
+                    for (quint32 pid : it->look.palettes)
+                    {
+                        const QLCPalette *p = m_doc->palette(pid);
+                        if (p == nullptr || p->type() != QLCPalette::Aim
+                                || props->stageTarget(p->stageTargetId()) == nullptr)
+                            continue;
+                        const quint32 tid = p->stageTargetId();
+                        if (!calls.contains(tid))
+                        {
+                            order << tid;
+                            FocusCall c;
+                            c.target.kind = FocusSession::Reference::Target;
+                            c.target.id = tid;
+                            calls.insert(tid, c);
+                        }
+                        FocusCall &c = calls[tid];
+                        const ShowTree::Target t = tree->expandTarget(layer.target);
+                        for (quint32 gid : t.groups)
+                            if (m_doc->fixtureGroup(gid) != nullptr && !c.groups.contains(gid))
+                                c.groups << gid;
+                        for (quint32 fid : t.fixtures)
+                            if (m_doc->fixture(fid) != nullptr && !c.fixtures.contains(fid))
+                                c.fixtures << fid;
+                    }
+                }
+    for (quint32 tid : order)
+    {
+        FocusCall c = calls.value(tid);
+        if (fixturesOf(m_doc, c).isEmpty())
+            continue;                           // empty groups: nothing to focus
+        c.name = tr("From the show: %1").arg(displayName(m_doc, c));
+        out << c;
+    }
+    return out;
+}
+
+bool FocusCalls::ensureCalls()
+{
+    if (!m_calls.isEmpty() && !m_fromShow)
+        return true;
+    const QList<FocusCall> built = callsFromShow();
+    if (built == m_calls)
+        return !built.isEmpty();
+    m_calls = built;
+    m_fromShow = !built.isEmpty();
+    emit changed();                             // not touched(): the show is not edited
+    return !built.isEmpty();
+}
+
+bool FocusCalls::hasOrCanBuild() const
+{
+    return (!m_calls.isEmpty() && !m_fromShow) || !callsFromShow().isEmpty();
+}
+
+QString FocusCalls::whyNone() const
+{
+    if (hasOrCanBuild())
+        return QString();
+    return tr("No focus calls yet, and no layer of the show aims a group at a stage target to "
+              "build them from. Add calls with Focus \342\226\270 Edit focus calls\342\200\246, "
+              "or aim a layer at a target.");
 }
 
 QList<quint32> FocusCalls::fixturesOf(const Doc *doc, const FocusCall &call)
@@ -198,7 +289,7 @@ QList<FocusSession::Call> FocusCalls::sessionCalls() const
 bool FocusCalls::saveXML(QXmlStreamWriter *doc) const
 {
     // Nothing to say: nothing written, so a show without them is unchanged.
-    if (m_calls.isEmpty())
+    if (m_calls.isEmpty() || m_fromShow)
         return true;
     doc->writeStartElement(KXMLQLCFocusCalls);
     for (const FocusCall &c : m_calls)
@@ -262,6 +353,7 @@ bool FocusCalls::loadXML(QXmlStreamReader &root)
         calls << c;
     }
     m_calls = calls;
+    m_fromShow = false;
     emit changed();
     return true;
 }

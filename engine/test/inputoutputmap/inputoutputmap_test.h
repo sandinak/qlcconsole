@@ -72,6 +72,19 @@ private slots:
     void inputDeviceFollowedToANewLine();
     void inputDeviceAbsentAtLoadAttachesWhenItAppears();
     void inputOnANonDevicePluginIsLeftAlone();
+
+    // Controller slots: one input, any of several devices
+    void slotUsesTheFirstConnectedDevice();
+    void slotNoneConnectedKeepsTheFirstOffline();
+    void slotSavesAndLoads();
+    void singleDevicePatchSavesAsBefore();
+    void slotMapsControlsByRole();
+    void slotMappingLatency();
+    void slotAnyGameController();
+    void slotOfferAndAdopt();
+    void slotHandPatchDropsIt();
+    void slotRemoveAndMove();
+    void stockGamepadInputProfiles();
     void inputAndFeedbackKeptOffline();
     void missingPluginKept();
     void routeLookupLoopback();
@@ -121,6 +134,7 @@ private slots:
     void universeIdAlwaysEqualsItsArrayIndex();
     /** Teaching mode holds network output until the teacher lets it through */
     void teachingHoldsNetworkOutput();
+    void teachingHoldsUsbOutput();
 
 private:
     Doc* m_doc;

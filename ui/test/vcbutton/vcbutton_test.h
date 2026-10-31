@@ -50,9 +50,14 @@ private slots:
     void toggle();
     void flash();
     void flashPlaysAHit();
+    void toggleRestartsAFinishedOneShot();
+    void toggleWithoutAOneShotTurnsOff();
     void firesAHitByIdentity();
     void hitSavesAndLoads();
     void pickerHasAHitsSection();
+    void severalHitsFireTheArmedOne();
+    void severalHitsSaveLoadAndDrop();
+    void hitButtonMapAsksAndChecks();
     void input();
     void paint();
 

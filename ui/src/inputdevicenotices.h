@@ -22,6 +22,8 @@
 #include <QString>
 #include <QList>
 #include <QMap>
+#include <QSet>
+#include <QStringList>
 #include "qlcui_export.h"
 
 class QTimer;
@@ -56,6 +58,12 @@ public:
         QString plugin;
         QString name;
         bool connected = false;
+        /** A controller slot (InputOutputMap::setInputSlot()): which of how
+         *  many devices this is (1-based; 0 when none is connected), and
+         *  every device it may use. Empty / 0 for a single-device patch. */
+        int slotPosition = 0;
+        int slotCount = 0;
+        QStringList slotDevices;
     };
 
     /** Every input patched to a device (a plugin whose lines are hardware):
@@ -79,6 +87,17 @@ public:
 signals:
     /** Show @p text; @p warning (a device went): amber, and it stays. */
     void notice(const QString &text, bool warning);
+    /** A game controller is here that nothing has, and universe @p universe
+     *  waits for one that is not: @p text says so, @p button offers to use
+     *  it (InputOutputMap::addInputSlotDevice(), adopt()). Once per pad
+     *  and universe while it stays. */
+    void offer(const QString &text, const QString &button, quint32 universe,
+               const QString &plugin, const QString &device);
+
+public:
+    /** "Use '<pad>' for universe N (and remember it)": add it to the
+     *  universe's controller slot and use it now. */
+    bool adopt(quint32 universe, const QString &plugin, const QString &device);
 
 private:
     void schedule();
@@ -88,6 +107,8 @@ private:
     QTimer *m_settle;
     /** What was last said, by universe. */
     QMap<quint32, Device> m_said;
+    /** Offers made ("universe\nplugin\ndevice") while they stand. */
+    QSet<QString> m_offered;
 };
 
 #endif

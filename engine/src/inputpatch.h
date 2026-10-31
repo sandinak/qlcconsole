@@ -21,6 +21,7 @@
 #define INPUTPATCH_H
 
 #include <QObject>
+#include <QVector>
 #include <QMap>
 #include <QMutex>
 
@@ -129,8 +130,25 @@ public:
     /** Returns true if a valid plugin line has been set */
     bool isPatched() const;
 
+    /**
+     * A controller slot's device whose controls sit on other channels than
+     * the show's (InputOutputMap::setInputSlot()): @p map[device channel]
+     * is the show's channel for it. Channels past its end, and every
+     * channel with an empty map, pass through as they are. One lookup per
+     * value, nothing allocated.
+     */
+    void setChannelMap(const QVector<quint32> &map);
+    QVector<quint32> channelMap() const;
+    /** The show's channel for device channel @p channel. */
+    quint32 showChannel(quint32 channel) const;
+    /** The device's channel for the show's @p channel (the inverse). */
+    quint32 deviceChannel(quint32 channel) const;
+
     /** Set a parameter specific to the patched plugin */
     void setPluginParameter(QString prop, QVariant value);
+
+    /** Take parameter @p prop off the patched plugin (and the cache) */
+    void unsetPluginParameter(const QString &prop);
 
     /** Retrieve the map of custom parameters set to the patched plugin */
     QMap<QString, QVariant> getPluginParameters();
@@ -170,6 +188,9 @@ private:
     QString m_hidProfileName;
     /** The patch parameters cache */
     QMap<QString, QVariant>m_parametersCache;
+    /** Device channel -> show channel (setChannelMap()); guarded by
+     *  m_inputBufferMutex, which every value takes anyway */
+    QVector<quint32> m_channelMap;
 
     /************************************************************************
      * Pages

@@ -164,7 +164,7 @@ for a dance break.
 ## How this lesson was checked
 
 Every step of the handout is run by the course test (`ui/test/courseshow`,
-`levelTwoWithTheMouse`, `lessonTwoFourExtension`) on the real app,
+`levelTwoWithTheMouse`, `lessonTwoFourExtension`, `lessonTwoFourStageChase`) on the real app,
 offscreen, with the effect scripts the app ships with: the drops and
 their hints, **+ Palette → Effect** with the song folder selected (the
 palette is filed there), the effect browser (it opens on its own; the
@@ -175,8 +175,11 @@ the truss boxes still, then a moving wave; the step tops still
 throughout. The extension's Speed and the footer's **Main Speed 120**,
 and the at-home Amber and *None of its own*, are checked the same way.
 
-**Not yet in the course test:** the extension's Color Chase on the cue.
-It relies on the 0.3.1 fix (one effect over several layers moves them
-all; the chase goes box by box). Dimmer effects (Sparkle) still don't
-move the truss pixel boxes; colour effects do.
-.
+The extension's Color Chase is run too (`lessonTwoFourStageChase`): the
+chase dropped on **1.0.2 Chorus** in the tree says "reaches 2 of 2
+layers", the steps and the truss box both move, the boxes one after
+another, and **TrussC-W** with White lights the box's white pixels. It
+is the Chorus, not the Dance Break, because the Dance Break's washes keep
+their own Truss Wave (a cue-wide effect doesn't override a layer's own).
+Dimmer effects (Sparkle) still don't move the truss pixel boxes; colour
+effects do.

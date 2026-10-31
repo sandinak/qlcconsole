@@ -164,6 +164,15 @@ private slots:
      *  whole of a call with no "who" is said as "All N". */
     void callsStartingAreToldFirst();
 
+    /** No calls of the show's own: one built per stage target the show aims
+     *  at, with the groups aimed there; a light with no target is in none. */
+    void callsComeFromTheShowsTargets();
+    /** The built calls run, whoever owns the lights, and are not saved
+     *  unless the calls are. */
+    void builtCallsRunForEveryOwnerAndAreNotSaved();
+    /** Nothing to build from, or empty groups: the cue says so. */
+    void withNothingToBuildFromItSaysWhy();
+
 private:
     Doc *m_doc = nullptr;
     QTemporaryDir *m_dir = nullptr;

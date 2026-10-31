@@ -72,7 +72,8 @@ public:
 public:
     const QList<ShowTree::Production> &productions() const { return m_productions; }
     const ShowTree::Production *production(quint32 id) const;
-    /** The production and list a list id belongs to (null: none). */
+    /** The production and list a list id belongs to (null: none). Valid
+        until the next edit: an edit replaces the tree's lists. */
     const ShowTree::CueList *cueList(quint32 listId, quint32 *productionId = nullptr) const;
     /** The list a cue belongs to. */
     const ShowTree::CueList *listOfCue(quint32 cueId) const;
@@ -486,7 +487,21 @@ public:
      *  there instead (one layer per target). A child keeps its parent when
      *  the parent comes too, or the cue has a layer on the parent's target.
      *  The layers pasted (or set). */
-    QList<quint32> pasteLayers(const QList<QPair<quint32, quint32>> &layers, quint32 toCueId);
+    QList<quint32> pasteLayers(const QList<QPair<quint32, quint32>> &layers, quint32 toCueId,
+                               quint32 afterLayerId = 0xFFFFFFFF);
+    /** @a afterLayerId of pasteLayers / moveLayers: before the cue's first
+     *  layer (an invalid id: at the end). */
+    static const quint32 layerFirst = 0xFFFFFFFE;
+    /** Move layers (cue, layer pairs) to cue @a toCueId -- after layer
+     *  @a afterLayerId (and its children), else at the end -- or reorder
+     *  them within their cue: one undo step. Children go with their
+     *  parent. They keep their ids, looks, name and reusable link; a layer
+     *  on a target the cue already has joins that layer; a hit takes no
+     *  Release; what a layer carried on from is not carried to another cue.
+     *  The layers now there (empty: nothing moved; @a why says when it
+     *  was refused). */
+    QList<quint32> moveLayers(const QList<QPair<quint32, quint32>> &layers, quint32 toCueId,
+                              quint32 afterLayerId = 0xFFFFFFFF, QString *why = nullptr);
     /** Record as new cue (D22): what cue @a cueId puts on stage -- tracked,
      *  included and its own, resolved -- frozen into a new Block cue after
      *  it, numbered per D23. Every layer becomes the new cue's own with the
@@ -694,6 +709,73 @@ public:
      *  included and its own, resolved -- frozen into a new look of its
      *  production, named after the cue. No live link. One undo step. */
     quint32 copyCueToLook(quint32 cueId);
+
+    /************************************************************************
+     * Scoped hits (Q154, 0.3.1; docs/features/show-tree.md "Hits"): a hit
+     * lives under a cue, a cue list, a production (its Hits section) or
+     * the top of the tree (global), and is armed -- may fire -- while that
+     * place is live. It stays a look of its production's Hits section
+     * (CueList::looks) whatever its place, so it plays, bakes and is fired
+     * exactly as before. Arming is worked out per GO, cue change, list
+     * start or stop and production switch, never per frame.
+     ************************************************************************/
+public:
+    /** Hit @a hitId's place (Production when it is no hit); @a scopeOf:
+     *  its cue list or cue (invalid for a production or global hit). */
+    ShowTree::HitScope hitScope(quint32 hitId, quint32 *scopeOf = nullptr) const;
+    /** A new hit at a place: under cue @a placeId (Cue), cue list
+     *  @a placeId (List), in production @a placeId's Hits section
+     *  (Production), or global (@a placeId: the production to keep it in;
+     *  invalid: the current production, else the first). Its production's
+     *  Hits section is made first when it has none, in the same undo
+     *  step. One undo step; the new hit (invalid: no such place). */
+    quint32 addHit(ShowTree::HitScope scope, quint32 placeId, const QString &name = QString());
+    /** Move hits @a hitIds to a place (as addHit()): one undo step. A hit
+     *  moved into another production goes to that production's Hits
+     *  section; only a production's own hits keep a folder. False (@a why)
+     *  when the place is no place for a hit, or nothing moves. */
+    bool setHitScope(const QList<quint32> &hitIds, ShowTree::HitScope scope, quint32 placeId,
+                     QString *why = nullptr);
+    /** Copies of hits @a hitIds at a place (⌥-drag): one undo step. */
+    QList<quint32> copyHitsTo(const QList<quint32> &hitIds, ShowTree::HitScope scope, quint32 placeId);
+    /** The hits living exactly at a place (Global: every global hit), in
+     *  their sections' order. */
+    QList<quint32> hitsAt(ShowTree::HitScope scope, quint32 placeId) const;
+    /** Where hit @a hitId lives, as a sentence ends: "in cue 2.3 Chorus",
+     *  "in cue list Main", "in DanceHysteria", "everywhere". */
+    QString hitPlace(quint32 hitId) const;
+    /** Whether the place is live now (as above). */
+    bool isHitPlaceLive(ShowTree::HitScope scope, quint32 placeId) const;
+    /** Whether hit @a hitId may fire now: its place is live. */
+    bool isHitArmed(quint32 hitId) const;
+    /** Of @a hitIds (a VC button's), the one to fire now: the armed one
+     *  with the narrowest place (cue > list > production > global); the
+     *  first given among equals. Invalid: none is armed. */
+    quint32 armedHit(const QList<quint32> &hitIds) const;
+    /** Of @a hitIds, every armed one with the narrowest place (more than
+     *  one: they share a place -- a button steps through them or fires
+     *  them together, Q157), in the order given. */
+    QList<quint32> armedTier(const QList<quint32> &hitIds) const;
+    /** Whether hits @a a and @a b live at the same place. */
+    bool sameHitPlace(quint32 a, quint32 b) const;
+    /** Whether hit @a narrow overrides hit @a wide on a button holding
+     *  both (Q157): its place is narrower and inside @a wide's -- a cue of
+     *  @a wide's list, a cue or list of its production, anything for a
+     *  global hit -- so where @a narrow is armed it fires instead. */
+    bool hitOverrides(quint32 narrow, quint32 wide) const;
+
+signals:
+    /** What is armed may have changed: a cue list started, stopped or went
+     *  to another cue, the current production changed. Queued from the
+     *  MasterTimer; on the main thread. */
+    void hitArmingChanged();
+
+private slots:
+    void slotListStepChanged();
+private:
+    /** A tree list's chaser started or stopped: follow its steps. */
+    void noteListRuntime(quint32 chaserId);
+public:
 
     /************************************************************************
      * Detach a cue list to a plain chaser (D13 for lists, P4)
@@ -959,6 +1041,14 @@ public:
      *  when it isn't generated or no longer in the tree. */
     bool generatedNode(quint32 functionId, quint32 *listId, quint32 *cueId = nullptr,
                        quint32 *layerId = nullptr) const;
+
+    /** Whether effect palette @a paletteId on layer scene @a sceneId is
+     *  only TRACKED through in the cue playing it -- carried in, not set
+     *  there -- so its run carries on (a Once that is done stays done).
+     *  @a viaFunction: the cue collection that started the scene; invalid:
+     *  any running cue collection that plays it. False when no cue plays
+     *  it, or a cue sets it (its own, a cue look): that starts it afresh. */
+    bool effectOnlyTracked(quint32 sceneId, quint32 paletteId, quint32 viaFunction) const;
 
 private:
     /** One generated scene a cue plays: what a resolved layer bakes to,

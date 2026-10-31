@@ -159,6 +159,13 @@ void EffectInstance::reloadParamsFromPalette()
     QLCPalette *pal = m_doc->palette(m_effectPaletteId);
     if (pal == nullptr)
         return;
+    /* How it runs, before and after: a Runs edit (Loop to Once, Once to
+       3 times) plays the run again from its start, and so does a new speed
+       for a wave that has finished its cycles -- what the edit does is
+       seen, not a frozen last frame. */
+    const QString cyc = m_script.isOneShot() ? QString() : m_script.cycleParam();
+    const double runsWas = m_paramValues.value(EffectRuns::runsKey(), -1.0);
+    const double cycleWas = cyc.isEmpty() ? 0.0 : m_paramValues.value(cyc, 0.0);
     const QMap<QString, double> &pp = pal->effectParamValues();
     for (auto it = pp.constBegin(); it != pp.constEnd(); ++it)
         m_paramValues[it.key()] = it.value();
@@ -171,6 +178,36 @@ void EffectInstance::reloadParamsFromPalette()
     for (auto it = m_overrides.constBegin(); it != m_overrides.constEnd(); ++it)
         if (it.key() != spreadOverrideKey() && it.key() != hueOverrideKey())
             m_paramValues[it.key()] = it.value();
+    if (m_paramValues.value(EffectRuns::runsKey(), -1.0) != runsWas
+        || (m_oneShotDone && !cyc.isEmpty() && m_paramValues.value(cyc, 0.0) != cycleWas))
+        restartRun();
+}
+
+void EffectInstance::sceneStarted()
+{
+    if (!EffectRuns::resolve(m_paramValues, m_script.isOneShot(), m_scriptRelease).loops())
+        restartRun();
+}
+
+bool EffectInstance::endsByRuns() const
+{
+    return !EffectRuns::resolve(m_paramValues, m_script.isOneShot(), m_scriptRelease).loops();
+}
+
+void EffectInstance::restartRun()
+{
+    if (m_fadingOut)
+        return;     // its release fade runs on m_elapsed
+    m_elapsed.restart();
+    m_ownMs = 0;
+    m_ownLastMs = 0;
+    m_oneShotDone = false;
+    m_runIndex = 0;
+    m_cycleStart = -1.0;
+    m_cycleDone = false;
+    m_clockAssignment = -2;   // the beat count starts again too
+    if (m_script.isOneShot())
+        m_state = m_script.newState();
 }
 
 void EffectInstance::setOverride(const QString &name, double value)
@@ -258,6 +295,9 @@ void EffectInstance::runTick()
         return;
     }
 
+    // What this tick plays, for the runner to tell a starting scene.
+    m_tickedScenes = sceneIds();
+
     // A finished one-shot is frozen: "hold" keeps the last frame already in
     // m_lastResults, "release" left it cleared. Either way, skip the whole tick.
     if (m_oneShotDone)
@@ -329,7 +369,20 @@ void EffectInstance::runTick()
        starts each run afresh, as it did the first. Only a run that ends
        needs its length (a plain loop never looks it up). */
     const EffectRuns::Settings runs = EffectRuns::resolve(m_paramValues, m_script.isOneShot(), m_scriptRelease);
-    m_runLenMs = (!runs.loops() || m_script.isOneShot()) ? resolvedDurationMs() : 0;
+    /* A wave (its script names a cycleParam) that runs Once or N times
+       plays whole cycles at its rate: it ends where the wave ends (a
+       Breathe on its floor), not where a time cut it off. The run's Length
+       is then the cycle's (1 / rate), not the cue's. */
+    m_cycleEnd = -1.0;
+    if (!runs.loops() && !m_script.isOneShot() && !m_script.cycleParam().isEmpty())
+    {
+        bool ok = false;
+        const double rate = paramValue(m_script.cycleParam(), &ok);
+        if (ok && rate > 0.0)
+            m_cycleEnd = runs.runs / rate;
+    }
+    m_runLenMs = m_cycleEnd >= 0.0 ? 0
+               : (!runs.loops() || m_script.isOneShot()) ? resolvedDurationMs() : 0;
     if (m_script.isOneShot() && runs.runs != 1 && m_runLenMs > 0)
     {
         qint64 run = nowMs() / m_runLenMs;
@@ -419,7 +472,8 @@ void EffectInstance::runTick()
     if (!runs.loops() && !m_oneShotDone)
     {
         const qint64 el = nowMs();
-        if (m_runLenMs <= 0 || el >= qint64(m_runLenMs) * runs.runs
+        if (m_cycleEnd >= 0.0 ? m_cycleDone
+            : m_runLenMs <= 0 || el >= qint64(m_runLenMs) * runs.runs
             || (runs.runs == 1 && m_script.isOneShot() && m_state.property("done").toBool()))
         {
             m_oneShotDone = true;
@@ -1741,10 +1795,23 @@ QJSValue EffectInstance::buildInputsObject() const
             if (it != pp.constEnd() && it.value() > 0)
                 ownRate = it.value();
         }
-    const qint64 nowMs = nowMs();
-    m_ownMs += double(nowMs - m_ownLastMs) * ownRate;
-    m_ownLastMs = nowMs;
-    obj.setProperty("_time",      onMaster ? pos : m_ownMs / 1000.0);
+    const qint64 now = nowMs();
+    m_ownMs += double(now - m_ownLastMs) * ownRate;
+    m_ownLastMs = now;
+    double time = onMaster ? pos : m_ownMs / 1000.0;
+    if (m_cycleEnd >= 0.0)
+    {
+        // Whole cycles (runTick): counted from where it started, and the
+        // tick that reaches the end plays the wave exactly there.
+        if (m_cycleStart < 0.0)
+            m_cycleStart = onMaster ? pos : 0.0;
+        if (time - m_cycleStart >= m_cycleEnd)
+        {
+            time = m_cycleStart + m_cycleEnd;
+            m_cycleDone = true;
+        }
+    }
+    obj.setProperty("_time",      time);
     obj.setProperty("_bpm",       bpm);
     obj.setProperty("_beat",      pos - std::floor(pos));
     obj.setProperty("_beatCount", int(std::floor(pos) - m_startBeat));

@@ -56,6 +56,12 @@ private slots:
     /** A touchpad finger as the framework reports it: a lift is exactly
      *  (0, 0) and keeps its place; the middle's neighbours are touches. */
     void touchpadFingers();
+    /** Linux's joystick device: xpad's and hid-playstation's controls, by
+     *  evdev code, onto the one layout (a DualSense's Triangle is not an
+     *  Xbox X). */
+    void linuxJoystickControls();
+    /** The engine's standard order (controller slots) is this layout. */
+    void standardRolesMatchTheLayout();
 };
 
 #endif

@@ -44,6 +44,8 @@
 #include "qlcfixturehead.h"
 #include "focussession.h"
 #include "gamepadrole.h"
+#include "inputpatch.h"
+#include "padnames.h"
 #include "qlcphysical.h"
 #include "hidprofile.h"
 #include "stagetarget.h"
@@ -1341,6 +1343,53 @@ void FocusSession_Test::aLayerOutlivingItsDocNeverCallsIt()
     layer.set({ OutputLayer::Level{ 0, 0, 10 } });   // nothing to write through
     layer.clear();
     QVERIFY(layer.channelCounts().isEmpty());
+}
+
+void FocusSession_Test::theToolsFollowTheLivePadOfASlot()
+{
+    QDir dir("../iopluginstub");
+    dir.setFilter(QDir::Files);
+    dir.setNameFilters(QStringList() << QString("*%1").arg(KExtPlugin));
+    m_doc->ioPluginCache()->load(dir);
+    QVERIFY2(!m_doc->ioPluginCache()->plugins().isEmpty(), "no I/O plugin stub in ../iopluginstub");
+    IOPluginStub *stub = static_cast<IOPluginStub *>(m_doc->ioPluginCache()->plugins().at(0));
+    const QString xbox = QStringLiteral("Xbox Wireless Controller");
+    const QString dualSense = QStringLiteral("DualSense Wireless Controller");
+    stub->m_linesAreHardware = true;
+    stub->m_lineNames = QStringList() << xbox << dualSense;
+    QMap<quint32, QString> roles = { { 0, "lx" }, { 1, "ly" }, { 6, "a" }, { 7, "b" } };
+    stub->m_lineChannelRoles[0] = roles;
+    roles[6] = "b"; roles[7] = "a";     // the DualSense lists them the other way round
+    stub->m_lineChannelRoles[1] = roles;
+    stub->m_lineDeviceKind[0] = "xbox";
+    stub->m_lineDeviceKind[1] = "dualsense";
+
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QVERIFY(iom->setInputPatch(0, stub->name(), QString(), 0));
+    QVERIFY(iom->addInputSlotDevice(0, stub->name(), dualSense));
+    QCOMPARE(m_doc->programmer()->focusController().family, PadNames::Xbox);
+
+    // The Xbox pad off: the DualSense drives it, named as itself.
+    stub->m_lineNames = QStringList() << dualSense;
+    stub->m_lineChannelRoles.remove(0);
+    stub->m_lineChannelRoles[0] = roles;
+    stub->m_lineDeviceKind[0] = "dualsense";
+    stub->configure();
+    QCOMPARE(iom->inputSlotLive(0), 1);
+    const ProgrammerController::FocusController pad = m_doc->programmer()->focusController();
+    QVERIFY(pad.present);
+    QCOMPARE(pad.family, PadNames::DualSense);
+    QVERIFY(pad.controls.contains(GamepadRole::A));
+    // Its Cross (its own channel 7) arrives on the show's A (channel 6),
+    // and the show's channel 6 is its Cross when asked the other way.
+    InputPatch *ip = iom->inputPatch(0);
+    QCOMPARE(ip->showChannel(7), quint32(6));
+    QCOMPARE(stub->inputChannelRole(ip->input(), ip->deviceChannel(6)), QString("a"));
+
+    stub->m_linesAreHardware = false;
+    stub->m_lineNames.clear();
+    stub->m_lineChannelRoles.clear();
+    stub->m_lineDeviceKind.clear();
 }
 
 QTEST_MAIN(FocusSession_Test)

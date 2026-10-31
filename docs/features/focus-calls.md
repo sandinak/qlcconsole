@@ -32,6 +32,19 @@ focus calls…** opens the list.
 
 **Save calls** keeps them in the show (they are saved with it).
 
+**No calls yet?** Venue focus, and a venue focus cue, build them for you
+from the show's own targets: one call per stage target that a layer in
+any cue list or hit aims at (an Aim look, or a line aim), with the groups
+whose layers aim there, every owner (tour, house or rental), named "From
+the show: DH Tspots → DSC". They are rebuilt each time you start while you
+have not changed them, appear in **Edit focus calls…**, and are saved with
+the show only when you edit them or press **Save calls** (starting does
+not save). A light no layer aims at a target is in no call: it still gets
+its correction through calibration (the venue's pan/tilt offsets, a
+Quick focus). When there is nothing to build from, the cue page and the
+greyed buttons say so: no calls and no aimed layers, or the calls' groups
+are empty.
+
 ![The Venue Focus dialog: the calls in order, a call's groups and point, the venue](../images/focus-calls-dialog.png)
 
 1. The calls, in the order they are run.
@@ -276,7 +289,8 @@ The pad is recognised from its make and model, so a DualSense says
 
 ![A DualShock 4 on the Focus mode map: its own names and symbols, the touchpad and the light bar](../images/focus-mode-playstation-map.png)
 
-**The touchpad** (on a Mac) works like a laptop's trackpad:
+**The touchpad** (on a Mac; on Linux it is a separate device and is not
+read) works like a laptop's trackpad:
 
 - **One finger** dragged nudges the light by how far you drag, not how
   long you hold. A drag across the whole pad is about 4° of pan. Use it

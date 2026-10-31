@@ -41,6 +41,7 @@ add_library(${module_name} SHARED
     grandmaster.cpp grandmaster.h
     grouphead.cpp grouphead.h
     inputoutputmap.cpp inputoutputmap.h
+    inputslots.cpp
     patchundo.cpp patchundo.h
     inputpatch.cpp inputpatch.h
     ioplugincache.cpp ioplugincache.h
@@ -61,6 +62,7 @@ add_library(${module_name} SHARED
     showtreebridge.cpp
     showtreeconvert.cpp
     showtreelooks.cpp
+    showtreehits.cpp
     showtreeproductions.cpp
     showtreesubcues.cpp
     showtreesections.cpp

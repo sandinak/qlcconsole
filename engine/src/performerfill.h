@@ -26,6 +26,7 @@
 
 #include "qlcengine_export.h"
 
+class Doc;
 class MonitorProperties;
 class StagePlatform;
 class StageTarget;
@@ -120,6 +121,24 @@ namespace PerformerFill
      *  to a structure, and the platform is the topmost deck under them (a
      *  line: under its centre). They move with it. */
     QLC_ENGINE_EXPORT QList<StageTarget *> standingOn(const MonitorProperties *props, quint32 platformId);
+
+    /** The other performer lines in @p t's set (the group a fill makes, or
+     *  one the user grouped): same group, not @p t. Empty for a line on its
+     *  own. */
+    QLC_ENGINE_EXPORT QList<StageTarget *> setMates(const MonitorProperties *props, const StageTarget *t);
+
+    /** What a set shares when one line's look is changed in one place:
+     *  costume colour, mean height and the give or take. Each line keeps its
+     *  own seed (its own people) and its own count. Returns how many lines
+     *  changed. */
+    QLC_ENGINE_EXPORT int copyLookToSet(const MonitorProperties *props, const StageTarget *from);
+
+    /** The targets an aim-target list offers. The lines of a fill (a set of
+     *  performer lines) are left out, so a choir of fifteen rows does not
+     *  bury the targets by name; one on its own is listed, and so is any
+     *  line an aim palette uses or @p keepId (what the list already holds
+     *  selected). */
+    QLC_ENGINE_EXPORT QList<StageTarget *> pickable(Doc *doc, quint32 keepId = 0xFFFFFFFFu);
 
     struct Result
     {

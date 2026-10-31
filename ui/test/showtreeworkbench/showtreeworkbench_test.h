@@ -72,6 +72,10 @@ private slots:
      *  itself); ↩ Back does the same. A rename in the list: Esc cancels
      *  only the rename. */
     void escBacksOutOfAPaletteInBuild();
+    /** 0.3.1 (lyr): a layer row of the docked Workbench drags (it carried
+     *  nothing, so a drag only selected it): dropped on another own layer
+     *  it moves above it; the bottom is below the last. */
+    void layerRowsDragToReorder();
     /** Esc on a group's layout: ← Back to the scene (or to the rows'
      *  page); on a ▣ opened layer: ↩ to the collection, the row selected. */
     void escBacksOutOfALayoutAndAnOpenedLayer();

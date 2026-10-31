@@ -143,6 +143,12 @@ public:
     QString     onFinish()     const { return m_onFinish; }
     /** Fallback one-shot length (ms) when nothing else resolves it. */
     int         naturalDurationMs() const { return m_naturalDurationMs; }
+    /** A wave: the param that sets its cycles per second (per beat on a
+     *  speed master), declared as `effect.cycleParam = "rate"`; "" when it
+     *  names none. Run Once or N times, such an effect plays whole cycles
+     *  and ends where its wave does (EffectInstance), and the Look Editor
+     *  offers one cycle's Length for it. */
+    QString     cycleParam()   const { return m_cycleParam; }
 
     /** It takes the host's spread (SpreadLayer): reads fixture.phase when
      *  inputs._spread is on. Declared as `effect.hostSpread = "spread,reverse"`,
@@ -231,6 +237,7 @@ private:
     QString     m_syncTo    = QStringLiteral("span");
     QString     m_onFinish  = QStringLiteral("hold");
     int         m_naturalDurationMs = 2000;
+    QString     m_cycleParam;
     bool        m_takesHostSpread = false;
     QString     m_hostSpreadParam;
     QStringList m_fixtureTypes;

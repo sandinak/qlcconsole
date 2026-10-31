@@ -34,7 +34,10 @@ Students can:
 - [ ] qlcconsole on the projector computer and the class laptops.
 - [ ] `ShowChoir-Classroom.qlcc` on each laptop (from `docs/course/shows/`).
 - [ ] An Xbox or PlayStation controller per station if you have them
-  (USB or Bluetooth). Without one, every step has keys.
+  (USB or Bluetooth). Without one, every step has keys. Mixed pads are
+  fine: the show waits for the pad it was saved with, so on a station
+  with a different one click **Use '…' for universe N (and remember it)**
+  in the notice line once; the buttons do the same jobs on any of them.
 - [ ] Sound on the projector computer: the laptop's voice is part of the
   lesson. For Part 3, the voice into the headset system (**Voice to:** in
   the focus calls list, **Focus ▸ Edit focus calls…**, picks the output).
@@ -45,7 +48,10 @@ Students can:
   Settings… ▸ Teaching mode**, the handout says where), or you hand out a
   copy made with **Make Student Handout…** (same dialog): Teaching on, real
   output held, an optional PIN so it stays on, and no practice answer key
-  in the venue file. Keep your own copy without Teaching mode.
+  in the venue file. Keep your own copy without Teaching mode. A student
+  copy that has wandered can be put back with **Reset to Handout…** (same
+  dialog, asks for the PIN); a Teaching show also asks before its patch
+  changes, and holds USB dongles as well as network output.
 - [ ] Print the [handout](handout.md) and the [exit ticket](exit-ticket.md).
 
 ## Vocabulary (introduce in this order)

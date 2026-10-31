@@ -2070,8 +2070,14 @@ void ProgrammerController::autoBindFromProfile()
 
         // inputAxisForSlot matches profile by device VID/PID, not by the named profile
         // assignment in the I/O panel — so no hidProfileName() check needed here.
-        const int panCh = plugin->inputAxisForSlot(ip->input(), QStringLiteral("pan"));
-        const int tiltCh = plugin->inputAxisForSlot(ip->input(), QStringLiteral("tilt"));
+        /* The device's channels, as the show sees them: a controller slot's
+           pad may have its controls moved onto the show's (InputPatch). */
+        int panCh = plugin->inputAxisForSlot(ip->input(), QStringLiteral("pan"));
+        int tiltCh = plugin->inputAxisForSlot(ip->input(), QStringLiteral("tilt"));
+        if (panCh >= 0)
+            panCh = int(ip->showChannel(quint32(panCh)));
+        if (tiltCh >= 0)
+            tiltCh = int(ip->showChannel(quint32(tiltCh)));
         qDebug() << "[AutoBind] universe" << u << "plugin=" << plugin->name()
                     << "input=" << ip->input() << "profile=" << ip->hidProfileName()
                     << "panCh=" << panCh << "tiltCh=" << tiltCh;
@@ -2267,7 +2273,8 @@ void ProgrammerController::slotControllerInputChanged(quint32 universe, quint32 
         InputPatch *ip = m_doc->inputOutputMap()->inputPatch(universe);
         if (ip && ip->plugin())
         {
-            const QString action = ip->plugin()->inputButtonAction(ip->input(), channel);
+            const QString action = ip->plugin()->inputButtonAction(ip->input(),
+                                                                   ip->deviceChannel(channel));
             if (!action.isEmpty())
                 emit buttonActionTriggered(action);
         }
@@ -2280,8 +2287,10 @@ int ProgrammerController::controllerRole(quint32 universe, quint32 channel) cons
     InputPatch *ip = iom != nullptr ? iom->inputPatch(universe) : nullptr;
     if (ip == nullptr || ip->plugin() == nullptr)
         return GamepadRole::None;
-    return GamepadRole::fromProfile(ip->plugin()->inputChannelRole(ip->input(), channel),
-                                    ip->plugin()->inputChannelName(ip->input(), channel));
+    // The show's channel is the live pad's own (a controller slot may move them).
+    const quint32 device = ip->deviceChannel(channel);
+    return GamepadRole::fromProfile(ip->plugin()->inputChannelRole(ip->input(), device),
+                                    ip->plugin()->inputChannelName(ip->input(), device));
 }
 
 ProgrammerController::FocusController ProgrammerController::focusController() const
@@ -2322,12 +2331,14 @@ ProgrammerController::FocusController ProgrammerController::focusController() co
         // The follow spot's bound stick is the left stick here, named or not.
         if (m_panBound && m_panUniverse == u && !c.controls.contains(GamepadRole::LeftX))
         {
-            c.controls.insert(GamepadRole::LeftX, plugin->inputChannelName(ip->input(), m_panChannel));
+            c.controls.insert(GamepadRole::LeftX,
+                              plugin->inputChannelName(ip->input(), ip->deviceChannel(m_panChannel)));
             ++used;
         }
         if (m_tiltBound && m_tiltUniverse == u && !c.controls.contains(GamepadRole::LeftY))
         {
-            c.controls.insert(GamepadRole::LeftY, plugin->inputChannelName(ip->input(), m_tiltChannel));
+            c.controls.insert(GamepadRole::LeftY,
+                              plugin->inputChannelName(ip->input(), ip->deviceChannel(m_tiltChannel)));
             ++used;
         }
         if (used == 0)

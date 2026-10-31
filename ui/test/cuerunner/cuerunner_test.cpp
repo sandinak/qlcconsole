@@ -48,6 +48,8 @@
 #include "timecodesource.h"
 #include "inputoutputmap.h"
 #include "virtualconsole.h"
+#include "vcbutton.h"
+#include "vcframe.h"
 #include "fixturegroup.h"
 #include "showcontrol.h"
 #include "vccuerunnerproperties.h"
@@ -209,6 +211,39 @@ QList<quint32> CueRunner_Test::show()
 /****************************************************************************
  * Tests
  ****************************************************************************/
+
+/* Q157 (4): while running, the Run tab names the VC buttons whose hit for
+   this moment fires instead of a wider one. */
+void CueRunner_Test::theRunTabShowsHitsThatOverride()
+{
+    const QList<quint32> ids = show();
+    ScopedVc vc(m_doc);
+    ShowTreeController *st = m_doc->showTree();
+    quint32 prod = 0;
+    st->cueList(ids[0], &prod);
+    const quint32 blackout = st->addHit(ShowTree::HitScope::Global, prod, "Blackout");
+    const quint32 strobe = st->addHit(ShowTree::HitScope::Cue, ids[1], "Strobe");
+    VCButton *b = new VCButton(VirtualConsole::instance()->contents(), m_doc);
+    b->setCaption("HIT 1");
+    b->setHits({ blackout, strobe });
+    CueRunner runner(m_doc, CueRunner::Full);
+    QLabel *hits = runner.findChild<QLabel *>("crHitsNow");
+    QVERIFY(hits != nullptr);
+    QVERIFY(!hits->isVisibleTo(&runner));
+    runner.go();
+    settle();
+    QCoreApplication::processEvents();
+    QCOMPARE(st->runningCue(ids[0]), ids[1]);
+    QVERIFY(hits->isVisibleTo(&runner));
+    QCOMPARE(hits->text(), QString("HIT 1: Strobe \u21b3 overrides Blackout"));
+    runner.go();
+    settle();
+    QCoreApplication::processEvents();
+    QVERIFY(!hits->isVisibleTo(&runner));
+    runner.stop();
+    settle();
+    delete b;
+}
 
 void CueRunner_Test::theRunnerShowsTheListAndItsSubCues()
 {

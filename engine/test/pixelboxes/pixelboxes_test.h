@@ -39,6 +39,10 @@ private slots:
     void init();
     void cleanup();
 
+    /** Scoped hits (sch): a Once breathe in a hit under a cue, fired,
+     *  let go, the cue left and come back to, fired again: it breathes
+     *  every time. */
+    void aOnceBreatheInACuesHitBreathesEachFire();
     void whitePixelsLightFromALook_data();
     void whitePixelsLightFromALook();
     void dimmerEffectsMoveThePixelBoxes_data();
@@ -47,6 +51,15 @@ private slots:
     void aCueWideEffectMovesThePixelBoxes();
     void aColourChaseRunsAtItsSpeedOverPixelBoxes();
     void beamsAimedAtALineTiltUp();
+
+    // A Breathe on the step tops at 20% (the user's report, build 2593)
+    void aBreatheStartsAtItsFloor();
+    void aBreatheOnceEndsOnItsFloor_data();
+    void aBreatheOnceEndsOnItsFloor();
+    void aBreatheSetToOncePlaysItAgain();
+    void aOnceBreatheInEachOfThreeCopiedCues();
+    void aOnceBreatheInAHitFiredAgain();
+    void aOnceBreatheTrackedThroughStaysDone();
 
 private:
     quint32 group(const QString &name) const;
@@ -58,8 +71,12 @@ private:
     void go();
     void run(int ms);
     QByteArray sends(const QString &fixture, int from, int n) const;
+    /** A Breathe (dimmer-phaser at its preset) on the step tops in White at
+     *  20%: the cue's one layer. */
+    bool breatheOnTheStepTops(double rate, int runs);
 
     Doc *m_doc = nullptr;
+    quint32 m_cue = 0;      //!< oneCue()'s
 };
 
 #endif

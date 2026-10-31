@@ -206,12 +206,50 @@ bool InputPatch::isPatched() const
     return input() != QLCIOPlugin::invalidLine();
 }
 
+void InputPatch::setChannelMap(const QVector<quint32> &map)
+{
+    QMutexLocker inputBufferLocker(&m_inputBufferMutex);
+    m_channelMap = map;
+}
+
+QVector<quint32> InputPatch::channelMap() const
+{
+    QMutexLocker inputBufferLocker(const_cast<QMutex *>(&m_inputBufferMutex));
+    return m_channelMap;
+}
+
+quint32 InputPatch::showChannel(quint32 channel) const
+{
+    QMutexLocker inputBufferLocker(const_cast<QMutex *>(&m_inputBufferMutex));
+    return channel < quint32(m_channelMap.size()) ? m_channelMap.at(int(channel)) : channel;
+}
+
+quint32 InputPatch::deviceChannel(quint32 channel) const
+{
+    QMutexLocker inputBufferLocker(const_cast<QMutex *>(&m_inputBufferMutex));
+    if (m_channelMap.isEmpty())
+        return channel;
+    const int at = m_channelMap.indexOf(channel);
+    if (at >= 0)
+        return quint32(at);
+    /* Not where any of its controls go: past the map it is itself,
+       inside it nothing of the device lands there. */
+    return channel < quint32(m_channelMap.size()) ? QLCIOPlugin::invalidLine() : channel;
+}
+
 void InputPatch::setPluginParameter(QString prop, QVariant value)
 {
     qDebug() << "[InputPatch] caching parameter:" << prop << value;
     m_parametersCache[prop] = value;
     if (m_plugin != NULL)
         m_plugin->setParameter(m_universe, m_pluginLine, QLCIOPlugin::Input, prop, value);
+}
+
+void InputPatch::unsetPluginParameter(const QString &prop)
+{
+    m_parametersCache.remove(prop);
+    if (m_plugin != NULL)
+        m_plugin->unSetParameter(m_universe, m_pluginLine, QLCIOPlugin::Input, prop);
 }
 
 QMap<QString, QVariant> InputPatch::getPluginParameters()
@@ -232,6 +270,8 @@ void InputPatch::slotValueChanged(quint32 universe, quint32 input, quint32 chann
         if (universe == UINT_MAX || universe == m_universe)
         {
             QMutexLocker inputBufferLocker(&m_inputBufferMutex);
+            if (channel < quint32(m_channelMap.size()))
+                channel = m_channelMap.at(int(channel));
             InputValue val(value, key);
             if (m_inputBuffer.contains(channel))
             {

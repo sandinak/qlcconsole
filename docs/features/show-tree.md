@@ -93,8 +93,10 @@ from the Library lands in the tree right beside it.
   that plays a function as it is shows **▣**. A use
   of a [reusable](#reusable-layers-and-cues) layer or cue shows **⟲** and
   how many uses there are. Under the cue lists, **Hits** holds the
-  production's busking hits, in their folders; a hit a VC button fires
-  shows **VC ×1**.
+  production's busking hits, in their folders; a hit that lives under a
+  cue or a cue list is in a **Hits** row under it, and one for everywhere
+  in a **Hits** row at the bottom of the tree ([Hits](#hits-busking)). A hit a
+  VC button fires shows **VC ×1**.
 - **Right: the page** for what is selected:
   - **A production** shows whether it is **current**, its **main list**
     and its **timecode** source ([Productions](#productions)).
@@ -117,8 +119,9 @@ from the Library lands in the tree right beside it.
     puts the old time back.
   - **A layer** shows what it contains, then one row per attribute.
   - **A hit** shows its name, note, fade in / out, *Fired by* (the VC
-    buttons, **Make VC page**, **Move to folder…**), its looks and layers; **Hits** or a
-    hit folder lists its hits and has **Make VC page**.
+    buttons, **Make VC page**, **Move to folder…**), **When** (where it
+    lives, so when it fires, and whether it is armed now), its looks and
+    layers; **Hits** or a hit folder lists its hits and has **Make VC page**.
 - **Under the page: the Look Editor**, when **✎** opens a value or a
   palette is edited from the Library. Its **Used by** line says where the
   palette is used (*"Used by: 6 cue(s), 2 hit(s) · 1 VC button"*); click
@@ -1140,16 +1143,38 @@ running) asks instead. Typing `record selected`, `record running` or
 **Duplicate** (right-click a cue, ⌘D, or `dup`) copies the cue's own
 content, not what tracks into it. It is never the base cue.
 
-**Copy and paste.** In the tree, **⌘C** copies the selected cues (several:
-⌘-click them), **⌘V** pastes them right after the selected cue, in their
-order, each numbered in turn. This works into another cue list too. Copied
-**layers** paste into the selected cue (a layer on a group the cue already
-has sets its looks there). Also in the tree's right-click menu, and typed:
-`copy`, `copy cue 1.0.2 1.0.3`, `copy layer Towers`, then `paste`. The
-copies are the cue's own layers on the same groups, so they track as any
-cue's own do; includes come only within the same list. One undo step per
-paste. In the command line and the page's fields, ⌘C and ⌘V copy text as
-usual.
+**Copy, cut and paste.** In the tree, **⌘C** copies the selected cues
+(several: ⌘-click them), **⌘V** pastes them right after the selected cue, in
+their order, each numbered in turn. This works into another cue list too.
+Copied **layers** paste into the selected cue (at its end), or **after the
+layer** when a layer row is selected; a layer on a group the cue already has
+sets its looks there. **⌘X** cuts the selected **layers** (cues move by
+dragging): nothing is taken away until you paste, and **⌘V** then **moves**
+them, into another cue, a sub-cue, a hit or a cue of another list, or, in the
+same cue, to a new place in its order. The paste is one undo step and empties
+the clipboard. Several selected layers go together, with their child layers.
+A moved or pasted layer keeps its looks and, when it is a use of a reusable
+layer, stays that same reusable (the hint says so). A hit's layers have no
+Release, so a layer coming into a hit has it turned off. A layer that
+carried on from an earlier cue starts fresh in another cue. Also in the
+tree's right-click menu (**Cut**, **Copy**, **Paste after this layer** /
+**Move into this cue**) and typed: `copy`, `copy cue 1.0.2 1.0.3`,
+`copy layer Towers`, then `paste`. The copies are the cue's own layers on the
+same groups, so they track as any cue's own do; includes come only within the
+same list. One undo step per paste. In the command line and the page's
+fields, ⌘C and ⌘V copy text as usual.
+
+**Dragging a layer.** Press on a layer row and drag it: onto a **cue**, a
+sub-cue or a **hit** row it joins that cue, at the end; onto another **layer
+row** it lands before that row (the row's upper half) or after it (its lower
+half); a line between the rows, or a frame round the cue, shows where, and
+the line under the tree says what will happen. Hold **⌥** to copy instead of
+move. Select several layers (⌘-click) to drag them together. Dropping a layer
+on a list or production does nothing. A click without moving only selects the
+row; the drag starts when you move past the system's drag distance. A move is
+one undo step. A layer that is only carried into a cue (grey) isn't dragged:
+set a value on it first to make it the cue's own. A child layer moves with its
+parent; dragging it alone out to another cue puts it there as its own layer.
 
 Record and Duplicate number the new cue as + Cue does. + Cue goes after the
 selected cue and counts up its last number when that is free (1.0.0 →
@@ -1404,7 +1429,9 @@ effect](effects.md#stack-a-movement-and-an-intensity-effect).
 
 In the docked Workbench, **drag a look's row onto another layer** to move
 it there (⌥ copies), one undo step; press and drag moves, ⇧/⌘-click
-selects several. **Renaming** (Return, F2) selects the cue's words, not
+selects several. **Drag a layer row** onto another of the cue's own layers
+to put it above that one (below the last: it plays last); moving a layer to
+another cue is the tree's drag, or Cut and Paste. **Renaming** (Return, F2) selects the cue's words, not
 its number: type to rename, click into the number to change that too.
 
 ## The command line
@@ -1451,7 +1478,7 @@ is always there and calls the same operations as the mouse.
 | `Steps colour #33aa55` | Reuses the palette that plays exactly that, else makes one ([how](#values-you-pick-or-type)) |
 | `Steps dimmer 45` (or `45%`) | The same for a level, 0–100 |
 | `function Haze look, House lights` | Functions played as they are, a layer each |
-| `release Towers` | Turns Release on, or off again |
+| `release Towers` · `release Haze look` | Turns Release on, or off again, on the layer of those groups, or on the ▣ layer playing that function |
 | `include 0.0.3` | Includes that cue; again, takes it out |
 | `skip 0.0.3` · `skip 0.0.3 thru 0.0.5` · `skip 0.0.3, 0.0.7` · `skip` | **Skips** those cues (none named: the selected one); [Skipping cues](#skipping-cues) |
 | `unskip 0.0.3` · `unskip 0.0.3 thru 0.0.5` · `unskip` | Puts them back: GO plays them again |
@@ -1525,7 +1552,7 @@ command line reads, so it is always right. The table above is a summary.
 | `production` | `current`, `none` and the productions; after a name, `current` |
 | `sub` (and a name) | `follow`, `subgo` |
 | `function` | the functions |
-| `release` | groups and fixtures |
+| `release` | groups and fixtures, and the functions of ▣ layers |
 | `record` | `selected`, `running`, `lit` |
 | `set "name"` | groups |
 | `aim` | stage targets and Aim palettes |
@@ -1674,8 +1701,10 @@ layers](#editing-several-layers)), and Merge and Delete take them all.
 
 Right-click in the tree for:
 
-- **+ Cue list…**, **+ Hit**, **+ Cue** (and **+ Production…** on a
-  production or on empty space);
+- **+ Cue list…**, **+ Hit** (**+ Hit for this cue** on a cue, **for this
+  list** on a list: [where it fires](#hits-busking)), **+ Cue** (and
+  **+ Production…** on a production or on empty space, with **+ Hit for
+  everywhere**);
 - on a cue: **Copy to a hit** (what it puts on stage, as a new hit);
 - on Hits or a hit folder: **New folder…**, **Rename folder**, **Delete
   folder**, **Make VC page**; on a hit: **Move to folder**, **Make VC
@@ -1688,8 +1717,9 @@ Right-click in the tree for:
   **Unlink here**), **Add child layer**, **Split layer**, **Merge layers**,
   **Remove &lt;group&gt; from layer**;
 - on a cue list: **Convert to tracking…**, **Detach to plain chaser…**;
-- on a cue or layer: **Copy**, **Paste after this cue** / **Paste into this
-  cue**, **Duplicate**;
+- on a cue or layer: **Copy**, **Cut** (a layer), **Paste after this cue** /
+  **Paste into this cue** / **Paste after this layer** (a cut: **Move into
+  this cue** / **Move here, after this layer**), **Duplicate**;
 - **Rename…** on a production or cue list, and **Delete** on anything but a
   grey row.
 
@@ -1836,13 +1866,40 @@ chaser and collections.
 ## Hits (busking)
 
 A **hit** is a state you fire by hand from a Virtual Console button — a
-stab, a blackout, a crowd wash — rather than a cue in a list. Each
-production has a **Hits** section beside its cue lists. (Older shows called
-them looks; they open as they were.)
+stab, a blackout, a crowd wash — rather than a cue in a list. (Older shows
+called them looks; they open as they were.)
 
-- **Make one.** **+ Hit** (the header in a Hits section, or right-click
-  anywhere → **+ Hit**), or type `hit "Stab"`. The first hit makes the
-  section. Name it on its page.
+- **Where it lives is when it fires.** A hit lives somewhere in the tree,
+  and is **armed** — its buttons fire it — while that place is live:
+
+  | It lives | Shown | Armed |
+  |---|---|---|
+  | under a **cue** (or sub-cue) | a **Hits** row under the cue | while that cue is live |
+  | under a **cue list** | a **Hits** row under the list | while the list runs; with nothing of its production running, while it is the current production's main list |
+  | in a **production** | the production's **Hits** section, in its folders | while the production is current (or none is) |
+  | at the **top** | **Hits** marked *everywhere*, at the bottom of the tree | always |
+
+  In a show with several productions, a production's hits now fire only
+  while it is current: drag one to the top to fire it any time.
+  Outside its place a hit is disarmed: a button with only that hit is
+  dimmed, crossed out, and does nothing. A hit a button is holding when
+  its place ends — GO moves on, the list stops, another production is
+  made current — lets go over its **Fade out**.
+- **Make one.** **+ Hit** makes it where you are: right-click a cue →
+  **+ Hit for this cue**, a cue list → **+ Hit for this list**, a
+  production or its Hits section → **+ Hit**, a **Hits** row → **+ Hit**
+  (another for that place), empty space under the tree → **+ Hit for
+  everywhere**. The header's **+ Hit** (with a hit or a Hits row
+  selected), ⇧⌘N and `hit "Stab"` (the production's Hits) work too. The
+  first hit of a production makes its Hits section. Name it on its page.
+- **Move it** to change when it fires: drag it onto a cue, a cue list, a
+  production, a **Hits** row or another place's hit; **⌥** copies it
+  there instead. Dragged onto a folder of the production's Hits section,
+  it is filed there and is the production's again (only those hits have
+  folders). One undo step each. A hit can move to another production's
+  cue or list; it goes into that production's Hits section. Delete a cue
+  or a list and its hits move up to the production's **Hits** (undo puts
+  them back).
 - **Build it as a cue.** A hit has the same layers, attribute rows,
   child layers, group sets, effects, line aims and reusable layers as a cue,
   and the same drops, pickers and commands (`Towers colour Red dimmer
@@ -1856,12 +1913,20 @@ them looks; they open as they were.)
   with the show, undo like any edit, and come along when a cue is pasted
   into Hits. A hit played as a step of something else (a chaser, a
   timeline) takes that step's fades instead.
+- **A one-shot in a Toggle hit.** A Toggle button on a hit with a Once or
+  N times effect (a 5.5 s Breathe): when every such effect has finished,
+  the next press plays them again and the hit stays on; a press while one
+  is still playing turns the hit off. To end the hit after its breath has
+  finished, press again during the next breath. Flash and hits without a
+  one-shot are unchanged (see [Effects](effects.md)).
 - **Folders.** **New folder…** on Hits or a folder; drag hits onto a
   folder (or onto *Hits* for none), or **Move to folder**. **F2** renames
   a folder; **Delete** moves what is in it up.
 - **Fire it from VC.** In a VC button's properties, **Attach a function**
   opens the picker with a **Hits** section: each production's hits, by
-  folder. Pick one: **Toggle** turns it on and off, **Flash** plays it
+  folder. Or drag a hit from the tree onto a VC button (hover the
+  **Virtual Console** tab to open it): the button fires it, a Toggle if it
+  was neither a Toggle nor a Flash. Pick one: **Toggle** turns it on and off, **Flash** plays it
   while the button is held and lets go on release (a hit already on stays
   on; Flash's Override and Force LTP don't apply to hits). The button
   fires **the hit itself**, not just what plays it: rename the hit, edit
@@ -1878,6 +1943,38 @@ them looks; they open as they were.)
   your own in the frame stay as they are. Delete the frame on the console
   and the next Make VC page makes a new one. The hit's page lists the buttons that fire
   it (*Fired by*); the tree marks them **VC ×N**.
+- **One button, several hits.** Drag more hits onto a button (or **Add
+  hit…** in its properties): it fires the **armed hit with the narrowest
+  place** — the live cue's before the running list's, before the current
+  production's, before one for everywhere; among equals, the first added.
+  So one **HIT 1** button can be the stab of every song: a hit for
+  everywhere, and one under each song's cue or list that does something
+  else there. Its face shows the armed hit's name and a dot (it holds
+  several), and **↳ overrides** while that hit fires instead of a wider
+  one; with none armed it is dimmed. Its properties' **Hits** table lists
+  each hit with **When** (where it lives, read-only: move the hit in the
+  tree to change it) and what it overrides or shares, under the button's
+  map in words: *HIT 1 fires Blackout everywhere, except Strobe in cue
+  2.3 (overrides Blackout); 2 hits live in cue 4 (Pop, Flash): step
+  through.* **Add hit…** and **Remove** change it. A VC button's hits
+  have no undo of their own (the Virtual Console has none).
+- **Adding a hit asks** (by drag or Add hit…), never guessing:
+  - a second hit at the **same place** as one the button has: **Step
+    through** (each press fires the next), **Together** (a press fires
+    them all), **Replace** (the one there goes) or **Cancel**;
+  - a hit **narrower** than one it has (or wider): *“Blackout” fires
+    everywhere; “Strobe” fires instead in cue 2.3. Override there?*
+- **Seeing it.** A hit that overrides another on a button is marked
+  **↳ overrides** in the tree (its **VC ×N** names the buttons on hover).
+  While the show runs, the **Run** tab lists the buttons whose hit for
+  this moment overrides a wider one (*HIT 1: Strobe ↳ overrides
+  Blackout*). **Show checks** (the footer's status) list every override,
+  every pair sharing a place, and every deleted hit a button still holds
+  (a deleted hit, or a pair the button was never told how to fire, is a
+  warning).
+- **Older builds.** A show saved here opens in an older qlcconsole with
+  every hit in its production's Hits section, firing at any time, and a
+  button with several hits firing its first.
 - **Over a running cue list** a hit mixes as any function does: the
   highest intensity wins, and for colour, position and the rest the last
   started wins. Stop it, and what the list plays is back.
@@ -1886,8 +1983,9 @@ them looks; they open as they were.)
   stage. **Record as new cue → everything lit** records a hit a button
   fired as its layers.
 - **Copy to a hit** (right-click a cue) freezes what the cue puts on stage —
-  tracked, included and its own — into a new hit. **Copy / Paste** move
-  layers and cues between lists and hits too.
+  tracked, included and its own — into a new hit. **Copy / Paste** copy
+  layers and cues between lists and hits too; **Cut** and **Paste**, or a
+  drag, move a layer there (a hit's layers have no Release).
 - **Adopt as a hit** (Library → Functions, right-click a scene, or `adopt`)
   makes a hit from an existing scene: its groups and palettes become a
   layer when they play exactly the same, else the scene plays as it is
@@ -2151,7 +2249,8 @@ and *MIB · n* counts the lights a list set **On** is moving.
 | Double-click a cue, look or layer · **✎ Workbench** · `wb` | Open it in the Workbench, in place of the page ([Working on a cue in the Workbench](#working-on-a-cue-in-the-workbench)); **↩ Show Tree** comes back |
 | **Return** / **F2** (in the tree) | Rename the row in place; Return keeps, Esc leaves it |
 | **⇧⌘N** | New here: a production, cue list, the next cue, a layer or a hit, by what is selected ([New here](#new-here)) |
-| **⌘C** / **⌘V** / **⌘D** (in the tree) | Copy cues or layers / paste after (into) the selected cue / duplicate |
+| **⌘C** / **⌘X** / **⌘V** / **⌘D** (in the tree) | Copy cues or layers / cut layers / paste after (into) the selected cue, or after the selected layer (a cut moves) / duplicate |
+| Drag a layer row onto a cue, a hit or another layer row | Move it there (before a row in its upper half, after it in its lower); **⌥** copies |
 | **⌘/** (in the tree), or the tick on a cue row | Skip the selected cues, or put them back ([Skipping cues](#skipping-cues)) |
 | ⌥-click **+ Layer** | A layer for each group selected in the Library |
 | Drag cues up or down (before / after a row) | Move them there, renumbered for their place ([Reordering and numbering](#reordering-and-numbering)); with **⌥**, include it |

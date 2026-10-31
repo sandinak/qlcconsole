@@ -15,6 +15,72 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 A home for QLC+ 4 users: QLC+ 4's habits that qlcconsole had dropped are
 back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
 
+### Scoped hits
+
+- **A hit lives where it fires** (Q154): under a cue, a cue list, its
+  production (the Hits section, as before) or at the top of the tree for
+  everywhere, each place listing its hits under a **Hits** row. It is
+  armed only while that place is live — the cue live, the list running,
+  the production current — and a hit held when its place ends lets go
+  over its fade out. **+ Hit for this cue** / **for this list** /
+  **for everywhere** make one there; drag a hit to another place to move
+  it (**⌥** copies); its page says **When**.
+- **One VC button, several hits:** drag hits from the Show Tree onto a
+  button (or **Add hit…** in its properties). It fires the armed hit with
+  the narrowest place — cue, then list, then production, then everywhere —
+  shows its name, and is dimmed when none is armed. Existing buttons and
+  shows play as before; in a show with several productions, a
+  production's hits now fire only while it is current. An older build
+  sees every hit in its production's Hits section and fires a button's
+  first hit.
+- **A hit button explains itself** (Q157): its properties show what it
+  does across the show in a sentence and a Hits table (When, overrides,
+  shared places); adding a hit at a place it already has asks Step
+  through / Together / Replace / Cancel, and a narrower one asks to
+  override; the tree, the button face and the Run tab mark **↳
+  overrides**; Show checks list overrides, shared places and dead hits.
+
+### Moving layers in the Show Tree
+
+- **Cut, copy, paste and drag a layer.** ⌘X cuts the selected layers (Cut is
+  in the right-click menu too); ⌘V on a cue moves them to its end, on a layer
+  row puts them after it; several selected layers move together, and within
+  one cue it reorders. The Cut and the paste are one undo step. Copy and Paste
+  work as before, and also paste after a layer. Dragging a layer row now
+  moves it (a layer row used to carry nothing, so a drag only selected it);
+  ⌥-drag copies; a line between rows (or a frame round a cue) shows where it
+  lands, and the hint says what will happen. A hit takes no Release, a
+  reusable layer stays the same reusable. In the docked Workbench a drag of
+  a layer row reorders the cue's own layers.
+- **Runs on a Show Tree effect row is an undo step** (also Build ▸ Effects'
+  Runs menu): Runs, At the end and Length.
+- The command line's **release** takes a ▣ function layer (by the function's
+  name) as well as groups.
+### Toggle and one-shots
+
+- **A Toggle hit with a Once / N-times effect breathes again.** When the
+  hit is on and its one-shot effects have all finished, the next press of
+  its VC Toggle button restarts them instead of turning the hit off; a
+  press while one is still playing turns it off. Flash and hits without
+  a one-shot are unchanged. A Breathe's Length is one breath (final).
+### One input, whichever controller is here
+
+- **A universe's input can take any of a list of game controllers** — the
+  Xbox pad at one place, a DualShock 4 at the next, a DualSense at home.
+  The first one switched on drives it (higher in the list wins, and the
+  notice says which is in use); each keeps its own input and controller
+  profile, and Quick focus, the follow spot, focus calls, Control Map
+  bindings and VC inputs work from whichever it is, in its own button
+  names. A pad that turns up while a universe waits for a missing one is
+  offered — **Use '…' for universe 2 (and remember it)** — and never taken
+  without that click. The list is under the universe in Connections ▸
+  Devices (move up, move down, remove, "any game controller"); saved with
+  the show, and older builds open its first controller.
+- **DualSense and DualShock 4 on Linux** are read into the same layout as
+  on a Mac, so the stock PlayStation profile is right there too (Xbox pads
+  as well); **stock input profiles** for the Xbox pad, the DualShock 4 and
+  the DualSense ("Create", not "Share").
+
 ### Tonight's running order
 
 - **Running order…** on the production's page: change the song order for
@@ -87,6 +153,21 @@ skipped). Upstream fixes taken:
 
 ### Added
 
+- **Venue focus builds its own calls.** A show with no focus calls used to
+  come up empty ("no fixtures to focus"). Now Venue focus, and a venue
+  focus cue, build one call per stage target the show aims at, with the
+  groups whose layers aim there, every owner, when it starts. They show in
+  **Edit focus calls...** ("From the show: DH Tspots → DSC") and are saved
+  with the show only if you save the calls. When there is truly nothing to
+  focus, the cue and the buttons now say why.
+
+- **The .qxw notice says how much, and can be turned off.** Saving a .qxw
+  that holds what QLC+ 4 leaves out now names each kind with a count
+  ("the Show Tree (3 cue lists, 24 cues)", "the focus calls (5 calls)"),
+  covers the Teaching, Operate and web access settings and Effect Control
+  widgets too, and has **Don't ask again for this show** beside **Save as
+  .qlcc…**. See [Saving for QLC+ 4](docs/features/getting-started.md#saving-for-qlc-4).
+
 - **Teaching mode** (File ▸ Show Settings…, [guide](docs/features/teaching.md)).
   A flag saved with the show for a classroom show. While it is on: a
   **TEACHING** chip in the footer (every view) and "(Teaching)" in the
@@ -102,7 +183,11 @@ skipped). Upstream fixes taken:
   Teaching alone. **Make Student Handout…** saves a `.qlcc` copy with Teaching
   on, the PIN, and the practice venues and their answer key left out; the open
   show is untouched. Optional lesson and handout link add a menu entry on the
-  chip.
+  chip. A Teaching show also **holds USB and other hardware output** (not
+  only network), **asks before its patch changes** (add, remove, re-address
+  fixtures), and **Reset to Handout…** (Show Settings ▸ Teaching, behind the
+  PIN) puts a student copy back to the way the handout was made: the handout
+  carries its own state inside the file.
 - **Course: songs and effects match the app.** Lesson 1.1's handout steps match the student page (Save As first, 15 steps); one cue list per show, a song a section (+ Section), is taught in Lessons 0.7, 1.1 and the Level 1/2 checks; Lesson 2.4 uses the effect browser's words (Built-in · Mine · This show, "based on", Runs: Loop).
 - **One cue list per show, with song sections** (Q190). A production's
   **Numbering** says how its cues are numbered — Show.Part.Iteration
@@ -161,7 +246,8 @@ skipped). Upstream fixes taken:
   DMX USB, uDMX) and the interface preferences that mean the same here
   (Virtual Console widget sizes, Simple Desk pages, slider style...).
   Never QLC+ 4's window layouts, never a setting qlcconsole already has,
-  and QLC+ 4 itself is not changed. **Settings ▸ General ▸ QLC+ 4 ▸ Bring
+  and QLC+ 4 itself is not changed; the status bar says what came over.
+  **Settings ▸ General ▸ QLC+ 4 ▸ Bring
   over…** does it later. Fixtures, profiles and scripts still come from
   QLC+'s user folder by themselves. Help: Coming from QLC+ 4 ▸ Your QLC+
   4 settings.
@@ -264,6 +350,13 @@ skipped). Upstream fixes taken:
   its lock holds them), a fill's lines are one set, and they ride their
   riser when it moves or turns. The rig view draws a small figure with
   fewer facets, so a crowd stays quick.
+- **People on the stage, tidied**: a performer line in a set has **Costume
+  and height for the whole set** in its dialog, so a choir's costume or
+  height changes in one place; a fill's rows stay out of the aim-target
+  lists (Look Editor, Aim palettes, focus calls, Focus mode) unless an aim
+  palette uses them; a plain line made a performer line keeps its own
+  heights. The focus report's Owner column (Tour, House or Rental) was
+  already in the PDF, web page and Lightwright CSV.
 - **Web access saved with the show**: **Connections ▸ Devices ▸ Show
   control & sync ▸ Web access** turns on "Start web access with this show,
   on port" (9999 by default), with **Reachable from other devices on the
@@ -434,6 +527,16 @@ skipped). Upstream fixes taken:
 
 ### Changed
 
+- **A wave's Once is one whole cycle, and its Length is that cycle.** A
+  Breathe, Dimmer Phaser, Colour Phaser or pulse set to **Once** (or N
+  times) plays whole cycles at its rate and ends where its wave does: a
+  Breathe on its floor, not wherever a time cut it off. Its **Length** in
+  the Look Editor (and **Runs ▸ Length…**) is one cycle in seconds; type
+  5.5 for a 5.5 s breath and the rate follows (1 ÷ length). Changing Runs
+  while it plays starts the run again.
+- **An effect setting's number takes a typed value**: click the number
+  beside a setting's slider in the Look Editor or the effect designer and
+  type an exact value in the setting's units and range.
 - **Show Tree edits on a long list are quicker**: an edit works out again
   only the cues it changes (the edited cue and those tracking from it, up
   to a block or a value of their own), not every cue in the show. One
@@ -536,6 +639,21 @@ skipped). Upstream fixes taken:
 
 ### Fixed
 
+- **A Breathe no longer flashes the look's level before it starts.** A
+  scene with an effect holds its output until the effect's first frame
+  (a frame or two; at most a quarter second), so a Breathe on a look at
+  20% starts on its floor instead of flashing the 20% first.
+- **A Once effect plays again in each cue that sets it.** The same Once
+  Breathe in three cues in a row (a cue copied in place) breathed in the
+  first only: the copies share one engine, which stayed done. Each new
+  start of a scene carrying it now starts it afresh: a cue's GO, a hit
+  fired again, a chaser step. A cue that only tracks it through, and sets
+  nothing of its own on that layer, leaves it as it is.
+- **Breathe and the Dimmer Phaser breathe white pixels and dim once.** On
+  a light without a dimmer (the step tops) the effect scaled the look's
+  colour twice, so it sat near black for much of the breath, and it turned
+  the white pixels off. It now scales the look's colour and white once,
+  from the look's own level.
 - **An EFX keeps its spacing when fixtures change while it runs.** Adding,
   removing or moving a fixture in a running Serial or Asymmetric EFX
   re-spaces them at once, not at the next restart.

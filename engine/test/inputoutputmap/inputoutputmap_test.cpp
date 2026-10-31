@@ -19,12 +19,15 @@
 #include <QSignalSpy>
 #include <QtTest>
 #include <QBuffer>
+#include <QElapsedTimer>
 
 #define private public
 #include "iopluginstub.h"
 #include "inputoutputmap_test.h"
 #include "inputoutputmap.h"
 #include "qlcinputsource.h"
+#include "qlcinputchannel.h"
+#include "qlcinputprofile.h"
 #include "grandmaster.h"
 #include "outputpatch.h"
 #include "inputpatch.h"
@@ -360,6 +363,8 @@ void InputOutputMap_Test::cleanup()
     stub->setTransmitNetworks(QStringList());
     stub->m_gateRefreshes = 0;
     stub->m_gateAllowed.clear();
+    stub->m_lineChannelRoles.clear();
+    stub->m_lineDeviceKind.clear();
 }
 
 void InputOutputMap_Test::offlineShowSavesPatchesByteIdentical()
@@ -467,6 +472,64 @@ void InputOutputMap_Test::teachingHoldsNetworkOutput()
     QVERIFY(loadIOMap(held, xml));
     QVERIFY(held.outputPatch(0, 0)->isHeld());
     QVERIFY(stub->m_openOutputs.isEmpty());
+}
+
+void InputOutputMap_Test::teachingHoldsUsbOutput()
+{
+    mockMachine(QList<NetworkRoute::LocalAddress>() << localAddr("en0", "192.168.1.5", 24),
+                QMap<QString, QString>{ { "*", "192.168.1.5" } });
+    IOPluginStub *stub = namedStub(m_doc, "DMX USB", QStringList() << "FT232R USB UART");
+    const char *xml =
+        "<InputOutputMap>\n"
+        " <Universe Name=\"Stage\" ID=\"0\">\n"
+        "  <Output Plugin=\"DMX USB\" UID=\"FT232R USB UART\" Line=\"0\"/>\n"
+        " </Universe>\n"
+        "</InputOutputMap>\n";
+
+    // Not a teaching show: the dongle opens as before.
+    InputOutputMap iom(m_doc, 1);
+    QVERIFY(loadIOMap(iom, xml));
+    QVERIFY(iom.outputPatch(0, 0)->isPatched());
+    QCOMPARE(iom.transmitGateStatus().held, 0);
+
+    // Teaching: held, kept as saved, counted as held but not as network output
+    iom.setTeachingHold(true);
+    QVERIFY(iom.outputPatch(0, 0)->isHeld());
+    QVERIFY(iom.outputPatch(0, 0)->heldReason().contains("Teaching"));
+    InputOutputMap::TransmitGateStatus st = iom.transmitGateStatus();
+    QCOMPARE(st.held, 1);
+    QCOMPARE(st.networkOutputs, 0);
+    QCOMPARE(st.state, InputOutputMap::TransmitGateStatus::Held);
+    QCOMPARE(patchElements(saveIOMap(iom)).count(), 1);
+
+    // The teacher lets it through: it reopens
+    iom.setTeachingHold(false);
+    QVERIFY(!iom.outputPatch(0, 0)->isHeld());
+    QVERIFY(iom.outputPatch(0, 0)->isPatched());
+    st = iom.transmitGateStatus();
+    QCOMPARE(st.held, 0);
+
+    // A teaching show opened: never opens the dongle
+    stub->m_openOutputs.clear();
+    InputOutputMap held(m_doc, 1);
+    held.setTeachingHold(true);
+    QVERIFY(loadIOMap(held, xml));
+    QVERIFY(held.outputPatch(0, 0)->isHeld());
+    QVERIFY(stub->m_openOutputs.isEmpty());
+
+    // Loopback and Dummy never leave the computer: not held
+    namedStub(m_doc, "Loopback", QStringList() << "Loopback 1");
+    const char *loop =
+        "<InputOutputMap>\n"
+        " <Universe Name=\"Stage\" ID=\"0\">\n"
+        "  <Output Plugin=\"Loopback\" UID=\"Loopback 1\" Line=\"0\"/>\n"
+        " </Universe>\n"
+        "</InputOutputMap>\n";
+    InputOutputMap local(m_doc, 1);
+    local.setTeachingHold(true);
+    QVERIFY(loadIOMap(local, loop));
+    QVERIFY(local.outputPatch(0, 0)->isPatched());
+    QCOMPARE(local.transmitGateStatus().held, 0);
 }
 
 void InputOutputMap_Test::offlinePatchIsInertAndListed()
@@ -2255,6 +2318,457 @@ void InputOutputMap_Test::aNetworkPatchWithOnlyALineNumberIsNotGuessed()
     QVERIFY(loadIOMap(iom, targeted));
     QVERIFY(iom.outputPatch(0, 0) != nullptr && iom.outputPatch(0, 0)->isPatched());
     QCOMPARE(iom.outputPatch(0, 0)->output(), quint32(2));
+}
+
+/*****************************************************************************
+ * Controller slots: one input, any of several devices
+ *****************************************************************************/
+
+namespace
+{
+    const QString kXbox = QStringLiteral("Microsoft Xbox Wireless Controller (11-22)");
+    const QString kDs4 = QStringLiteral("Sony DualShock 4 Wireless Controller (33-44)");
+
+    /** The standard order (the stock profiles' layout), as a line's roles. */
+    QMap<quint32, QString> standardRoles()
+    {
+        QMap<quint32, QString> roles;
+        const QStringList std = InputOutputMap::standardChannelRoles();
+        for (int i = 0; i < std.count(); ++i)
+            if (std.at(i).isEmpty() == false)
+                roles.insert(quint32(i), std.at(i));
+        return roles;
+    }
+
+    /** A pad that lists its controls in its own order (a PlayStation pad
+     *  read raw): Cross/Circle and Square/Triangle elsewhere. */
+    QMap<quint32, QString> ownOrderRoles()
+    {
+        QMap<quint32, QString> roles = standardRoles();
+        roles[6] = "b"; roles[7] = "a";     // A <-> B
+        roles[8] = "y"; roles[9] = "x";     // X <-> Y
+        return roles;
+    }
+
+    Universe::InputSlotDevice slotDevice(const QString &plugin, const QString &uid)
+    {
+        Universe::InputSlotDevice d;
+        d.plugin = plugin;
+        d.uid = uid;
+        return d;
+    }
+}
+
+void InputOutputMap_Test::slotUsesTheFirstConnectedDevice()
+{
+    IOPluginStub *stub = devicePlugin(m_doc, QStringList() << "Keyboard" << kXbox);
+    stub->m_lineDeviceKind[1] = "xbox";
+    InputOutputMap iom(m_doc, 2);
+    QVERIFY(iom.setInputPatch(1, stub->name(), QString(), 1));
+    iom.inputPatch(1)->setHidProfileName("Microsoft Xbox Controller");
+
+    // Away from home: the DualShock 4 is remembered for the same input.
+    QSignalSpy changed(&iom, SIGNAL(inputSlotChanged(quint32)));
+    QVERIFY(iom.addInputSlotDevice(1, stub->name(), kDs4));
+    QVERIFY(changed.count() >= 1);
+    QCOMPARE(iom.inputSlot(1).count(), 2);
+    QCOMPARE(iom.inputSlot(1).at(0).uid, kXbox);
+    QCOMPARE(iom.inputSlot(1).at(0).hidProfile, QString("Microsoft Xbox Controller"));
+    QCOMPARE(iom.inputSlot(1).at(1).uid, kDs4);
+    QCOMPARE(iom.inputSlotLive(1), 0);
+    // The same device twice is not added.
+    QVERIFY(iom.addInputSlotDevice(1, stub->name(), kDs4) == false);
+
+    QSignalSpy back(&iom, SIGNAL(inputDeviceConnected(quint32,QString,QString)));
+    QSignalSpy gone(&iom, SIGNAL(inputDeviceDisconnected(quint32,QString,QString)));
+
+    // The Xbox pad is off, the DS4 on: the DS4 drives universe 2.
+    rescanned(stub, QStringList() << "Keyboard" << kDs4);
+    QCOMPARE(iom.inputSlotLive(1), 1);
+    QVERIFY(iom.inputPatch(1) != NULL);
+    QCOMPARE(iom.inputPatch(1)->inputUID(), kDs4);
+    QCOMPARE(iom.inputPatch(1)->input(), quint32(1));
+    QCOMPARE(back.count(), 1);
+    QCOMPARE(back.at(0).at(2).toString(), kDs4);
+    QCOMPARE(gone.count(), 0);      // switched, not lost
+    // The Xbox pad's own profile stays with its entry.
+    QCOMPARE(iom.inputSlot(1).at(0).hidProfile, QString("Microsoft Xbox Controller"));
+
+    // Both on: the first in the list wins.
+    rescanned(stub, QStringList() << kDs4 << "Keyboard" << kXbox);
+    QCOMPARE(iom.inputSlotLive(1), 0);
+    QCOMPARE(iom.inputPatch(1)->inputUID(), kXbox);
+    QCOMPARE(iom.inputPatch(1)->input(), quint32(2));
+    QCOMPARE(iom.inputPatch(1)->hidProfileName(), QString("Microsoft Xbox Controller"));
+    QCOMPARE(back.count(), 2);
+
+    // Its line moves (a device before it went): still it, on its new line.
+    rescanned(stub, QStringList() << "Keyboard" << kXbox);
+    QCOMPARE(iom.inputSlotLive(1), 0);
+    QCOMPARE(iom.inputPatch(1)->input(), quint32(1));
+    QCOMPARE(back.count(), 2);
+
+    // Its input reaches the universe.
+    QSignalSpy values(&iom, SIGNAL(inputValueChanged(quint32,quint32,uchar,const QString&)));
+    stub->emitValueChanged(UINT_MAX, 1, 7, 255);
+    iom.flushInputs();
+    QCOMPARE(values.count(), 1);
+    QCOMPARE(values.at(0).at(0).toUInt(), quint32(1));
+}
+
+void InputOutputMap_Test::slotNoneConnectedKeepsTheFirstOffline()
+{
+    IOPluginStub *stub = devicePlugin(m_doc, QStringList() << "Keyboard" << kXbox);
+    InputOutputMap iom(m_doc, 2);
+    QVERIFY(iom.setInputPatch(1, stub->name(), QString(), 1));
+    QVERIFY(iom.addInputSlotDevice(1, stub->name(), kDs4));
+    rescanned(stub, QStringList() << "Keyboard" << kDs4);
+    QCOMPARE(iom.inputSlotLive(1), 1);
+
+    QSignalSpy gone(&iom, SIGNAL(inputDeviceDisconnected(quint32,QString,QString)));
+    rescanned(stub, QStringList() << "Keyboard");
+    QCOMPARE(iom.inputSlotLive(1), -1);
+    QVERIFY(iom.inputPatch(1) == NULL);
+    QCOMPARE(gone.count(), 1);
+    QCOMPARE(gone.at(0).at(2).toString(), kDs4);   // the one that went
+    // Kept as its first device's patch, as a lone device's input is.
+    QCOMPARE(iom.universe(1)->offlinePatches().count(), 1);
+    QCOMPARE(iom.universe(1)->offlinePatches().first().uid, kXbox);
+    // The retry tick does not say it again, nor attach anything.
+    QCOMPARE(iom.retryOfflinePatches(), 0);
+    iom.applyInputSlots();
+    QCOMPARE(gone.count(), 1);
+    QCOMPARE(iom.universe(1)->offlinePatches().count(), 1);
+
+    // Any of them back: picked up.
+    rescanned(stub, QStringList() << kDs4);
+    QCOMPARE(iom.inputSlotLive(1), 1);
+    QCOMPARE(iom.inputPatch(1)->inputUID(), kDs4);
+    QVERIFY(iom.universe(1)->offlinePatches().isEmpty());
+}
+
+void InputOutputMap_Test::slotSavesAndLoads()
+{
+    IOPluginStub *stub = devicePlugin(m_doc, QStringList() << "Keyboard" << kDs4);
+    InputOutputMap iom(m_doc, 2);
+    QList<Universe::InputSlotDevice> devs;
+    devs << slotDevice(stub->name(), kXbox) << slotDevice(stub->name(), kDs4);
+    devs[0].hidProfile = "Microsoft Xbox Controller";
+    devs[1].hidProfile = "Sony PlayStation Controller";
+    devs[1].params.insert("mode", "pad");
+    Universe::InputSlotDevice any;
+    any.plugin = stub->name();
+    any.anyGamepad = true;
+    devs << any;
+    iom.setInputSlot(1, devs);
+    QCOMPARE(iom.inputSlotLive(1), 1);      // the DS4 is here
+
+    const QString saved = saveIOMap(iom);
+    // Older builds open the first device, from the <Input> they know.
+    QVERIFY2(saved.contains(QString("<Input Plugin=\"%1\" UID=\"%2\"").arg(stub->name(), kXbox)),
+             qPrintable(saved));
+    QVERIFY2(saved.contains("<InputSlot"), qPrintable(saved));
+    QVERIFY(saved.contains("Any=\"True\""));
+    QVERIFY(saved.indexOf(kXbox) < saved.indexOf(kDs4));
+
+    // Read back on a machine with only the Xbox pad (one plugin for both
+    // maps here: what the first left on the stub is not the show's).
+    stub->unSetParameter(1, 1, QLCIOPlugin::Input, "mode");
+    stub->m_lineNames = QStringList() << kXbox;
+    InputOutputMap other(m_doc, 2);
+    QVERIFY(loadIOMap(other, saved));
+    const QList<Universe::InputSlotDevice> loaded = other.inputSlot(1);
+    QCOMPARE(loaded.count(), 3);
+    QCOMPARE(loaded.at(0).uid, kXbox);
+    QCOMPARE(loaded.at(1).uid, kDs4);
+    QCOMPARE(loaded.at(1).hidProfile, QString("Sony PlayStation Controller"));
+    QCOMPARE(loaded.at(1).params.value("mode").toString(), QString("pad"));
+    QVERIFY(loaded.at(2).anyGamepad);
+    QCOMPARE(other.inputSlotLive(1), 0);
+    QCOMPARE(other.inputPatch(1)->inputUID(), kXbox);
+    QCOMPARE(other.inputPatch(1)->hidProfileName(), QString("Microsoft Xbox Controller"));
+    QCOMPARE(other.universe(1)->inputSlotRoles(), iom.universe(1)->inputSlotRoles());
+
+    // Saved again: the same.
+    QCOMPARE(saveIOMap(other), saved);
+
+    // An older build's view: <InputSlot> skipped, the first device opened.
+    QString older = saved;
+    const int from = older.indexOf("<InputSlot");
+    const int to = older.indexOf("</InputSlot>") + int(strlen("</InputSlot>"));
+    older.remove(from, to - from);
+    InputOutputMap old(m_doc, 2);
+    QVERIFY(loadIOMap(old, older));
+    QVERIFY(old.inputSlot(1).isEmpty());
+    QCOMPARE(old.inputPatch(1)->inputUID(), kXbox);
+}
+
+void InputOutputMap_Test::singleDevicePatchSavesAsBefore()
+{
+    IOPluginStub *stub = devicePlugin(m_doc, QStringList() << "Keyboard" << kXbox);
+    InputOutputMap iom(m_doc, 2);
+    const QString xml = QString(
+        "<InputOutputMap>\n"
+        " <Universe Name=\"Universe 1\" ID=\"0\"/>\n"
+        " <Universe Name=\"Pad\" ID=\"1\">\n"
+        "  <Input Plugin=\"%1\" UID=\"%2\" Line=\"1\" HIDProfile=\"Microsoft Xbox Controller\"/>\n"
+        " </Universe>\n"
+        "</InputOutputMap>\n").arg(stub->name(), kXbox);
+    QVERIFY(loadIOMap(iom, xml));
+    QVERIFY(iom.inputSlot(1).isEmpty());
+    QCOMPARE(iom.inputSlotLive(1), -1);
+    QCOMPARE(iom.inputPatch(1)->inputUID(), kXbox);
+    QVERIFY(iom.inputPatch(1)->channelMap().isEmpty());
+    const QString saved = saveIOMap(iom);
+    QVERIFY(saved.contains("InputSlot") == false);
+
+    // Another pad turning up is never taken for it, slot or not.
+    rescanned(stub, QStringList() << "Keyboard" << kDs4);
+    QVERIFY(iom.inputPatch(1) == NULL);
+    QCOMPARE(iom.universe(1)->offlinePatches().first().uid, kXbox);
+    QVERIFY(iom.inputSlot(1).isEmpty());
+    QCOMPARE(saveIOMap(iom), saved);
+}
+
+void InputOutputMap_Test::slotMapsControlsByRole()
+{
+    // Statically: by role, the rest where it is.
+    QVector<quint32> map = InputOutputMap::slotChannelMap(
+        QStringList() << "lx" << "ly" << "a" << "b",
+        QStringList() << "lx" << "ly" << "b" << "a" << "" << "guide");
+    QCOMPARE(map, QVector<quint32>() << 0 << 1 << 3 << 2 << 4 << 5);
+    // Same layout: nothing to do, nothing in the way.
+    QVERIFY(InputOutputMap::slotChannelMap(InputOutputMap::standardChannelRoles(),
+                                           InputOutputMap::standardChannelRoles()).isEmpty());
+    QVERIFY(InputOutputMap::slotChannelMap(QStringList(), QStringList() << "a").isEmpty());
+
+    // Live: the show was made on the Xbox pad (standard order); a pad that
+    // lists its own order stands in.
+    IOPluginStub *stub = devicePlugin(m_doc, QStringList() << kXbox << kDs4);
+    stub->m_lineChannelRoles[0] = standardRoles();
+    stub->m_lineChannelRoles[1] = ownOrderRoles();
+    InputOutputMap iom(m_doc, 1);
+    QVERIFY(iom.setInputPatch(0, stub->name(), QString(), 0));
+    QVERIFY(iom.addInputSlotDevice(0, stub->name(), kDs4));
+    QCOMPARE(iom.universe(0)->inputSlotRoles().value(6), QString("a"));
+    QVERIFY(iom.inputPatch(0)->channelMap().isEmpty());     // the Xbox: as it is
+
+    rescanned(stub, QStringList() << "Mouse" << kDs4);
+    QCOMPARE(iom.inputSlotLive(0), 1);
+    InputPatch *ip = iom.inputPatch(0);
+    QVERIFY(ip->channelMap().isEmpty() == false);
+
+    // Its "A" (its channel 7) fires the show's A (channel 6), and so on.
+    QSignalSpy values(&iom, SIGNAL(inputValueChanged(quint32,quint32,uchar,const QString&)));
+    stub->emitValueChanged(UINT_MAX, 1, 7, 255);
+    iom.flushInputs();
+    QCOMPARE(values.count(), 1);
+    QCOMPARE(values.at(0).at(1).toUInt(), quint32(6));
+    values.clear();
+    stub->emitValueChanged(UINT_MAX, 1, 9, 255);    // its X
+    stub->emitValueChanged(UINT_MAX, 1, 0, 30);     // the left stick: where it was
+    iom.flushInputs();
+    QCOMPARE(values.count(), 2);
+    QList<quint32> channels;
+    for (const QList<QVariant> &v : std::as_const(values))
+        channels << v.at(1).toUInt();
+    std::sort(channels.begin(), channels.end());
+    QCOMPARE(channels, QList<quint32>() << 0 << 8);
+    // Asked the other way (the role of the show's channel): the pad's own.
+    QCOMPARE(ip->deviceChannel(6), quint32(7));
+    QCOMPARE(ip->showChannel(7), quint32(6));
+    QCOMPARE(ip->deviceChannel(40), quint32(40));
+
+    // Back to the Xbox pad: no mapping.
+    rescanned(stub, QStringList() << kXbox << kDs4);
+    QCOMPARE(iom.inputSlotLive(0), 0);
+    QVERIFY(iom.inputPatch(0)->channelMap().isEmpty());
+}
+
+void InputOutputMap_Test::slotMappingLatency()
+{
+    /* What a controller slot adds to each input value: one bounds check and
+       one array read, under the lock the value takes anyway. Measured here
+       against the same patch with no map. */
+    IOPluginStub *stub = devicePlugin(m_doc, QStringList() << kXbox << kDs4);
+    stub->m_lineChannelRoles[0] = standardRoles();
+    stub->m_lineChannelRoles[1] = ownOrderRoles();
+    InputOutputMap iom(m_doc, 1);
+    QVERIFY(iom.setInputPatch(0, stub->name(), QString(), 1));
+    InputPatch *ip = iom.inputPatch(0);
+
+    const int kEvents = 200000;
+    auto run = [&]() {
+        QElapsedTimer t;
+        t.start();
+        for (int i = 0; i < kEvents; ++i)
+        {
+            stub->emitValueChanged(UINT_MAX, 1, quint32(6 + (i % 8)), uchar(i & 0x7F) | 1);
+            if ((i & 1023) == 1023)
+                iom.flushInputs();
+        }
+        iom.flushInputs();
+        QCoreApplication::processEvents();
+        return double(t.nsecsElapsed()) / kEvents;
+    };
+
+    run();      // warm up
+    double plain = 1e9, mapped = 1e9;
+    for (int round = 0; round < 3; ++round)
+    {
+        ip->setChannelMap(QVector<quint32>());
+        plain = qMin(plain, run());
+        ip->setChannelMap(InputOutputMap::slotChannelMap(InputOutputMap::standardChannelRoles(),
+                              InputOutputMap::channelRoles(stub, 1)));
+        QVERIFY(ip->channelMap().isEmpty() == false);
+        mapped = qMin(mapped, run());
+    }
+    qDebug("controller slot mapping: %.0f ns per input value plain, %.0f ns mapped (+%.0f ns)",
+           plain, mapped, mapped - plain);
+    // Generous: a few tens of nanoseconds expected; a regression is microseconds.
+    QVERIFY2(mapped - plain < 1000.0, qPrintable(QString::number(mapped - plain)));
+}
+
+void InputOutputMap_Test::slotAnyGameController()
+{
+    IOPluginStub *stub = devicePlugin(m_doc, QStringList() << "Keyboard" << kXbox);
+    stub->m_lineDeviceKind[1] = "xbox";
+    InputOutputMap iom(m_doc, 2);
+    QVERIFY(iom.setInputPatch(0, stub->name(), QString(), 1));     // universe 1 has the Xbox pad
+
+    Universe::InputSlotDevice any;
+    any.plugin = stub->name();
+    any.anyGamepad = true;
+    QList<Universe::InputSlotDevice> devs;
+    devs << slotDevice(stub->name(), "Some Pad Never Seen") << any;
+    iom.setInputSlot(1, devs);
+    // The only pad here is universe 1's: not taken.
+    QCOMPARE(iom.inputSlotLive(1), -1);
+    QVERIFY(iom.inputPatch(1) == NULL);
+
+    // A DualSense turns up: any game controller, so universe 2 has it.
+    stub->m_lineDeviceKind[2] = "dualsense";
+    rescanned(stub, QStringList() << "Keyboard" << kXbox << kPad);
+    QCOMPARE(iom.inputSlotLive(1), 1);
+    QCOMPARE(iom.inputPatch(1)->inputUID(), kPad);
+    QCOMPARE(iom.inputPatch(0)->inputUID(), kXbox);
+    // The keyboard is not a game controller: never taken.
+    rescanned(stub, QStringList() << "Keyboard" << kXbox);
+    QCOMPARE(iom.inputSlotLive(1), -1);
+}
+
+void InputOutputMap_Test::slotOfferAndAdopt()
+{
+    // The show was made with the Xbox pad; here there is a DS4.
+    IOPluginStub *stub = devicePlugin(m_doc, QStringList() << "Keyboard");
+    InputOutputMap iom(m_doc, 3);
+    const QString xml = QString(
+        "<InputOutputMap>\n"
+        " <Universe Name=\"A\" ID=\"0\"/>\n"
+        " <Universe Name=\"Pad\" ID=\"1\">\n"
+        "  <Input Plugin=\"%1\" UID=\"%2\" Line=\"1\" HIDProfile=\"Microsoft Xbox Controller\"/>\n"
+        " </Universe>\n"
+        " <Universe Name=\"C\" ID=\"2\"/>\n"
+        "</InputOutputMap>\n").arg(stub->name(), kXbox);
+    QVERIFY(loadIOMap(iom, xml));
+    QVERIFY(iom.inputSlotOffers().isEmpty());       // nothing to offer yet
+
+    stub->m_lineDeviceKind[1] = "dualshock4";
+    rescanned(stub, QStringList() << "Keyboard" << kDs4);
+    const QList<InputOutputMap::InputSlotOffer> offers = iom.inputSlotOffers();
+    QCOMPARE(offers.count(), 1);
+    QCOMPARE(offers.first().universe, quint32(1));
+    QCOMPARE(offers.first().device, kDs4);
+    QVERIFY(iom.inputPatch(1) == NULL);             // not taken without asking
+
+    // "Use it for universe 2 (and remember it)"
+    QVERIFY(iom.addInputSlotDevice(1, offers.first().plugin, offers.first().device));
+    QCOMPARE(iom.inputSlot(1).count(), 2);
+    QCOMPARE(iom.inputSlot(1).at(0).uid, kXbox);
+    QCOMPARE(iom.inputSlot(1).at(0).hidProfile, QString("Microsoft Xbox Controller"));
+    QCOMPARE(iom.inputSlotLive(1), 1);
+    QCOMPARE(iom.inputPatch(1)->inputUID(), kDs4);
+    QVERIFY(iom.inputSlotOffers().isEmpty());
+    // Saved: <Input> still the Xbox pad, for older builds.
+    const QString saved = saveIOMap(iom);
+    QVERIFY(saved.contains(QString("<Input Plugin=\"%1\" UID=\"%2\"").arg(stub->name(), kXbox)));
+}
+
+void InputOutputMap_Test::slotHandPatchDropsIt()
+{
+    IOPluginStub *stub = devicePlugin(m_doc, QStringList() << "Keyboard" << kXbox << kDs4);
+    InputOutputMap iom(m_doc, 1);
+    QVERIFY(iom.setInputPatch(0, stub->name(), QString(), 1));
+    QVERIFY(iom.addInputSlotDevice(0, stub->name(), kDs4));
+    QCOMPARE(iom.inputSlotLive(0), 0);
+
+    // Patched by hand to one of its own: kept, that one live.
+    QVERIFY(iom.setInputPatch(0, stub->name(), QString(), 2));
+    QCOMPARE(iom.inputSlot(0).count(), 2);
+    QCOMPARE(iom.inputSlotLive(0), 1);
+
+    // To something else: the slot goes, and stays gone.
+    QVERIFY(iom.setInputPatch(0, stub->name(), QString(), 0));
+    QVERIFY(iom.inputSlot(0).isEmpty());
+    iom.applyInputSlots();
+    QCOMPARE(iom.inputPatch(0)->inputName(), QString("Keyboard"));
+}
+
+void InputOutputMap_Test::slotRemoveAndMove()
+{
+    IOPluginStub *stub = devicePlugin(m_doc, QStringList() << kXbox << kDs4);
+    InputOutputMap iom(m_doc, 1);
+    QVERIFY(iom.setInputPatch(0, stub->name(), QString(), 0));
+    QVERIFY(iom.addInputSlotDevice(0, stub->name(), kDs4));
+    QVERIFY(iom.addInputSlotDevice(0, stub->name(), kPad));
+    QCOMPARE(iom.inputSlotLive(0), 0);
+
+    // The DS4 first: it takes over (both are on).
+    QVERIFY(iom.moveInputSlotDevice(0, 1, 0));
+    QCOMPARE(iom.inputSlot(0).at(0).uid, kDs4);
+    QCOMPARE(iom.inputSlotLive(0), 0);
+    QCOMPARE(iom.inputPatch(0)->inputUID(), kDs4);
+
+    // Removed: the Xbox pad (now second) takes over.
+    QVERIFY(iom.removeInputSlotDevice(0, 0));
+    QCOMPARE(iom.inputSlot(0).count(), 2);
+    QCOMPARE(iom.inputPatch(0)->inputUID(), kXbox);
+    QCOMPARE(iom.inputSlotLive(0), 0);
+
+    // One left: an ordinary patch on it.
+    QVERIFY(iom.removeInputSlotDevice(0, 1));
+    QVERIFY(iom.inputSlot(0).isEmpty());
+    QCOMPARE(iom.inputPatch(0)->inputUID(), kXbox);
+    QVERIFY(saveIOMap(iom).contains("InputSlot") == false);
+
+    QVERIFY(iom.moveInputSlotDevice(0, 0, 1) == false);
+    QVERIFY(iom.removeInputSlotDevice(0, 0) == false);
+}
+
+void InputOutputMap_Test::stockGamepadInputProfiles()
+{
+    /* A pad added to a slot gets the stock input profile for its kind: one
+       per kind, named as the slot asks, its channels the layout's. */
+    InputOutputMap iom(m_doc, 1);
+    iom.loadProfiles(QDir(INTERNAL_PROFILEDIR));
+    const QStringList roles = InputOutputMap::standardChannelRoles();
+    for (const char *kind : { "xbox", "dualshock4", "dualsense" })
+    {
+        const QString name = iom.stockInputProfile(kind);
+        QVERIFY2(name.isEmpty() == false, kind);
+        QLCInputProfile *p = iom.profile(name);
+        QVERIFY(p != NULL);
+        QCOMPARE(p->type(), QLCInputProfile::HID);
+        QVERIFY(p->channels().count() >= 22);
+        QCOMPARE(p->channel(0)->name(), QString("Left Stick X"));
+        QCOMPARE(p->channel(0)->type(), QLCInputChannel::Slider);
+        QCOMPARE(p->channel(6)->type(), QLCInputChannel::Button);
+    }
+    QCOMPARE(iom.profile(iom.stockInputProfile("dualsense"))->channel(12)->name(), QString("Create"));
+    QCOMPARE(iom.profile(iom.stockInputProfile("dualshock4"))->channel(12)->name(), QString("Share"));
+    QCOMPARE(iom.profile(iom.stockInputProfile("dualsense"))->channel(6)->name(), QString("Cross"));
+    QCOMPARE(iom.profile(iom.stockInputProfile("xbox"))->channel(16)->name(), QString("Xbox"));
+    QVERIFY(iom.stockInputProfile("joystick").isEmpty());
 }
 
 QTEST_GUILESS_MAIN(InputOutputMap_Test)

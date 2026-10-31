@@ -44,6 +44,7 @@
 #include "focusmodepanel.h"
 #include "programmercontroller.h"
 #include "monitorproperties.h"
+#include "performerfill.h"
 #include "stagetarget.h"
 #include "mastertimer.h"
 #include "aimsolver.h"
@@ -506,7 +507,7 @@ void FocusModeSetupDialog::fillReferences(QComboBox *combo, bool optional)
         combo->addItem(tr("The aim of \"%1\"").arg(scene->name()),
                        QVariantList({ int(FocusSession::Reference::SceneAim), m_sceneId }));
 
-    QList<StageTarget *> targets = m_doc->monitorProperties()->stageTargets();
+    QList<StageTarget *> targets = PerformerFill::pickable(m_doc);
     std::sort(targets.begin(), targets.end(), [](const StageTarget *a, const StageTarget *b) {
         return a->name().localeAwareCompare(b->name()) < 0;
     });

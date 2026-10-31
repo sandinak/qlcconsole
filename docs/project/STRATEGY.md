@@ -47,10 +47,13 @@ ratios between items hold, and ratios are what the ROI column uses.
   look and safety) moved out of it: pad Run to 0.4, why-on to 0.5.
 - **0.4: Run the show.** One GO path, then pad Run, the phone Run page,
   timecode (LTC and cues at a time), override hits, group masters, effect
-  fade-out, and the printed cue and tracking sheet.
+  fade-out, the printed cue and tracking sheet, and walking the show from
+  the stage with the controller (board Q192).
 - **0.5: The show explains itself.** Show Review v1, "Why is this on?" v1
-  to v3 with its student mode, the laser and audience safety checks, and
-  realistic move speed in the Rig Overview.
+  to v3 with its student mode, the laser and audience safety checks,
+  realistic move speed in the Rig Overview, and **AI Assist** (Design mode
+  only, off by default, a local model proposing command-line text the
+  operator reviews; docs/design/AI_ASSIST.md).
 - **The main risk is the one the usability review already found:**
   creeping featurism. Five design studies arrived in one day. The
   guardrails in section 5 are meant to stop the next 102-item menu.
@@ -362,8 +365,10 @@ order the note says why.
 | Restore creating and deleting input profiles | 4 | 5 | stock patch editor | 1 | L | L | **20** | BUILD (0.3.1) |
 | A DMX Monitor reachable in Classic | 3 | 5 | Studio's DMX view | 1 | L | L | **15** | BUILD (0.3.1) |
 | "Start new shows in Classic" preference | 3 | 5 | views | 0.5 | L | L | **30** | BUILD (0.3.1) |
-| Notice when a .qxw save holds content stock QLC+ will drop | 4 | 5 | Show Review FILE-05 idea | 1.5 | L | L | **13** | BUILD (0.3.1) |
+| Notice when a .qxw save holds content stock QLC+ will drop | 4 | 5 | Show Review FILE-05 idea | 1.5 | L | L | **13** | DONE (0.3.1: counts by kind, Teaching/Operate/web settings and Effect Control widgets named, "Don't ask again for this show") |
 | Import QLC+ settings and recent files once | 2 | 4 | mergeLegacyUserData | 1 | L | L | 8 | BUILD (0.3.1) |
+| Notice when a .qxw save holds content stock QLC+ will drop | 4 | 5 | Show Review FILE-05 idea | 1.5 | L | L | **13** | BUILD (0.3.1) |
+| Import QLC+ settings and recent files once | 2 | 4 | mergeLegacyUserData | 1 | L | L | 8 | DONE (0.3.1, LegacySettings: asked once, Settings ▸ General ▸ QLC+ 4 later) |
 | Run `lupdate` every release | 2 | 3 | Qt .ts | 0.5 | L | L | 12 | BUILD (0.3.1), then every release |
 | Show Manager parity review | 3 | 5 | Shows tab | 2 | L | L | 7.5 | BUILD (0.3.1) |
 | Send the fork's definitions upstream | 2 | 4 | fork/fixture-* branches | 1 | L | L | 8 | BUILD (0.3.1), user's call |
@@ -385,17 +390,20 @@ order the note says why.
 | Gel colour on fixed lights (Rig Overview, patch list) | 3 | 4 | Rig Overview, patch list | 1 | L | L | **12** | BUILD (0.3.1) |
 | Tonight's running order (reorder productions for Run) | 4 | 5 | productions, Run | 2 | L | L | **10** | BUILD (0.3.1) |
 | Fade in/out times on hits | 4 | 5 | Hits | 2 | M | M | 8 | BUILD (0.3.1); the override layer is 0.4 |
+| Scoped hits: a hit lives under a cue, list or production, or everywhere; a VC button holds several and fires the armed one (Q154); then the button map, same-scope prompt and override marks (Q157) | 4 | 5 | Hits, Show Tree runtime, VC buttons | 4 | M | M | **4** | BUILD (0.3.1): phase 1 places + arming, phase 2 Q157 |
 | Momentary / start-only / stop-only on Control Map bindings | 2 | 3 | Control Map | 1 | L | L | 6 | DONE (0.3.1, with the Control Map back: learn in Build and the Show Tree, saved with the show) |
 | Back view in the structure editors | 3 | 4 | StructureStudioView planes | 2 | L | M | 6 | BUILD (0.3.1) |
 | Fix batch: leaks, TSan, compat C2/C4-C7, Art-Net sequence per node, Windows relink, red-team items | 4 | 5 | the gate | 5 | L | L | 4 | BUILD (0.3.1), first |
 | Remaining plot alignment faults + structure-editor coverage | 3 | 4 | plotalignment test | 3 | L | L | 4 | BUILD (0.3.1) |
 | Lasers: one shared fixedThrow, Face for fixed units, yoke tilt with migration | 3 | 4 | RigHeads, studio placement | 3 | M | M | 3.2 | BUILD (0.3.1) |
 | PlayStation names and glyphs (PadNames table, tokens, map drawing) | 3 | 4 | controller schemes | 3 | L | L | 4 | BUILD (0.3.1); pad Run needs it |
+| Controller slots: one input from any of several pads (Xbox here, DualShock 4 there), offer-to-adopt, mapping by gamepad role; DualSense audit (Linux layout, stock input profiles) | 4 | 5 | device-following inputs, controller profiles, PadNames | 2 | M | M | **8** | DONE (0.3.1, user's ask 2026-10-30: a travelling show meets a different pad at each place; a DualSense arrived the same day) |
 | Teaching mode, must-haves (Show Settings, chip, Operate warning, safe output, PIN, Make Student Handout) | 5 | 5 | scramble practice, Design/Operate, .qlcc | 7 | M | M | 2.9 | BUILD (0.3.1); see note 1 |
 | Touchpad option A | 2 | 3 | HID plugin, focus tools | 3.5 | M | M | 1.4 | LATER (0.4 if pad Run users ask) |
 | Laser aperture face, U yoke, LaserLook symbol | 2 | 3 | Rig Overview | 4 | L | M | 1.5 | LATER |
 | Star-field coverage + laser audience/eye-height warnings | 3 | 4 | drawStarField, Show Review | 5 | M | M | 1.9 | BUILD (0.5), with Show Review |
 | Pad Run role (MVP 6 d, full 10.5 d) | 4 | 5 | ShowControl::execute, focus pad stack | 6 | M | M | 2.7 | BUILD (0.4); see note 2 |
+| Walk the show from the stage with the controller (extends Focus this cue) | 4 | 4 | Refine, Layer/Group/Fixture scope, voice and light-bar feedback, cue notes | 5 | M | M | 2.5 | BUILD (0.4); user's call 2026-10-30 (Q192), see TODO.md |
 | "Why is this on?" v1 | 4 | 5 | GenericFader, Show Tree tracking | 9 | M | M | 1.8 | BUILD (0.5); see note 3 |
 | Teaching later items: lesson link, reset to handout, GO log, glossary popovers | 3 | 5 | Teaching | 4 | L | L | 3.8 | BUILD (0.5) |
 
@@ -416,6 +424,7 @@ Notes:
 
 | Item | Value | Fit | Reuses | Effort | Risk | Maint. | ROI | Call |
 |---|---|---|---|---|---|---|---|---|
+| AI Assist P0–P3 (docs/design/AI_ASSIST.md): one operation registry under the command line, a Design-only assistant on a local model (Ollama), configuration import, an MCP server | 4 | 4 | Show Tree command line, undo, Design/Operate | 15 | M | M | 1.1 | BUILD (0.5), user's call 2026-10-30 (P2b configuration import also stands alone) |
 | One GO path (`App::runCommand`) for keys, Run tab, footer, pad, web | 4 | 5 | ShowControl, RC8 preview hold | 0.5 | L | L | **40** | BUILD (0.4), first; prerequisite |
 | Tracking sheet + printable cue sheet (PDF/XLSX) | 5 | 5 | tracking resolve, patch-list exports | 4 | L | L | **6.3** | BUILD (0.4) |
 | Course Level 2 lessons (7), one per release cycle | 5 | 5 | course template, courseshow_test | 2 a lesson | L | M | **12.5** a lesson | BUILD (0.3.1 onward) |
@@ -535,7 +544,9 @@ Order and dependencies:
 6. **Effect fade in/out.**
 7. **Tracking sheet and printable cue sheet**, the stage manager's paper.
 8. **QLab out** (OSC/MSC), if the show-control users ask.
-9. **Course**: Lessons 2.2-2.4, and a Level 3 lesson on running from the
+9. **Walk the show from the stage** (Q192, extends Focus this cue and
+   Refine): cues, layers and "Needs work" tags from the controller.
+10. **Course**: Lessons 2.2-2.4, and a Level 3 lesson on running from the
    pad or phone.
 
 ### 0.5: The show explains itself (about 6-8 weeks)

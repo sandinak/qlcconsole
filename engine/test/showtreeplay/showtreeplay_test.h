@@ -69,6 +69,7 @@ private slots:
     // The bake re-plans only what changed; hits fade (Q180)
     void incrementalBakeMatchesAFullBake();
     void hitsFadeInAndOut();
+    void hitsAreArmedWhileTheirPlaceIsLive();
 
 private:
     quint32 dimmer(int level, const QString &name);

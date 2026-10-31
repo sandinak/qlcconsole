@@ -8,6 +8,91 @@ under `~/.claude/.../memory/`.
 
 ---
 
+## Breathe once — leftovers (brth, 2026-10-30)
+
+Built (build 2593 report: flash at start, end lands anywhere, no typed
+values, rate awkward for one shot). Open, each "decided (can change)":
+- A wave (script `cycleParam`) on Once / N times runs whole cycles; its
+  Length is one cycle, stored as the rate (1 / length). The run Length
+  (`__durationMs`, auto = the cue's time) no longer applies to a wave.
+  FINAL (Branson, 2026-10-30): Length = one breath.
+- Toggle button on a hit with a Once / N-times effect (tgl): once every
+  one-shot has finished, a press restarts them (the hit stays on) instead
+  of turning it off; while one still runs, a press turns the hit off.
+  Decided (can change): a hit whose breath has ended is turned off by
+  pressing during the next breath, or with Stop all / the hit's own fade
+  out; there is no hold or double-press gesture. Flash is unchanged.
+- A scene with an effect holds its output until the effect's first frame,
+  at most 250 ms (the Doc's own timer only).
+- Dimmer Phaser sends the dimmer alone; the host scales the look's colour
+  (white too) on a light with no dimmer.
+- A Once / N times run starts afresh on every new start of a scene
+  carrying it (a cue's GO, a hit fired again, a chaser step): the user's
+  rule. A cue that only tracks the effect through leaves it running or
+  done (decided, can change). A tracked effect on a layer whose scene
+  changes in that cue (something else on it set) does start again.
+
+## Scoped hits (Q154 / Q157, sch, 2026-10-30)
+
+Built (docs/features/show-tree.md "Hits"): a hit lives under a
+cue, a cue list, its production or at the top; armed while its place is
+live; a VC button holds several and fires the narrowest armed one; drag
+hits between places and onto VC buttons. Open:
+- Phase 2 (Q157) built: the map and Hits table, the same-place and
+  override questions, ↳ overrides in the tree, on the face and in the Run
+  tab, Show checks. Decided (can change): the map shows in the button's
+  properties (no pop-up on OK); Step through / Together is one setting per
+  button; the tree keeps "VC ×N" with the button names on hover; the Run
+  tab's line is in the Run tab only (not the VC Cue Runner sizes); Show
+  checks warn only for deleted hits and unanswered shared places.
+- Decided (can change): a production's hits are armed while it is current
+  or none is (a show with several productions: another production's hits
+  are disarmed, a change from before); a list's hits while it runs, or —
+  nothing of its production running — while it is the current
+  production's main list; a hit for everywhere is kept in a production's
+  Hits section (the one it was made or moved from); only a production's
+  own hits have folders; a deleted cue or list moves its hits up to the
+  production; among equally narrow armed hits a button fires the first
+  added; a button with several hits shows the armed one's name instead of
+  its caption; drops onto a VC button work in Design and Operate and have
+  no undo (the VC has none).
+- The command line's `hit` makes production hits only; no `hit … for cue`.
+
+## Breathe once — leftovers (brth, 2026-10-30)
+
+Built (build 2593 report: flash at start, end lands anywhere, no typed
+values, rate awkward for one shot). Open, each "decided (can change)":
+- A wave (script `cycleParam`) on Once / N times runs whole cycles; its
+  Length is one cycle, stored as the rate (1 / length). The run Length
+  (`__durationMs`, auto = the cue's time) no longer applies to a wave.
+  Alternatives to put to the user: Length as the whole run (N cycles
+  fitted into it); a breathe with in / hold / out times of its own.
+- A scene with an effect holds its output until the effect's first frame,
+  at most 250 ms (the Doc's own timer only).
+- Dimmer Phaser sends the dimmer alone; the host scales the look's colour
+  (white too) on a light with no dimmer.
+- A Once / N times run starts afresh on every new start of a scene
+  carrying it (a cue's GO, a hit fired again, a chaser step): the user's
+  rule. A cue that only tracks the effect through leaves it running or
+  done (decided, can change). A tracked effect on a layer whose scene
+  changes in that cue (something else on it set) does start again.
+## Controller slots — leftovers (ctl, 2026-10-30)
+
+Built (CHANGELOG 0.3.1 "One input, whichever controller is here";
+docs/features/other-improvements.md). Open, each "decided (can change)":
+- The show's channels are the first device's (read off it when the slot is
+  made with it connected, else the standard gamepad order) and saved with
+  the slot; reordering does not change them.
+- "Any game controller" takes the first free pad by the plugin's kind or a
+  profile with gamepad roles; it keeps the one it has while it stays.
+- Patching the universe by hand to a device not in its list replaces the
+  list; undo of a patch does not restore a slot.
+- The offer names one pad at a time (the notice line holds one); a pad is
+  offered once per universe while it stays.
+- Not verified on hardware yet: the Linux joystick layout for xpad and
+  hid-playstation (codes from the drivers; SDL's mappings agree) and the
+  real DualSense checklist (report of ctl).
+
 ## Pixel boxes, effects and beams — leftovers (cbug, 2026-10-30)
 
 Built (DONE.md 2026-10-30). Open, each "decided (can change)":
@@ -54,11 +139,20 @@ Built (DONE.md 2026-10-29). Open, each "decided (can change)":
   only (their Run order); no Hold, no N times.
 - The *one-off* mark is on effect rows only, not on every one-off value.
 - Runs on a Show Tree effect row changes the palette (everywhere it plays
-  when it is the show's); it is not an undo step yet.
+  when it is the show's). ~~It is not an undo step yet.~~ Done (lyr): it is
+  one step (Runs, At the end, Length).
 ## Show Tree tidy — leftovers (2026-10-29, DONE.md)
 
-- The command line's `release` takes groups only; a ▣ (function) layer
-  is released from its page or the right-click menus.
+- ~~The command line's `release` takes groups only; a ▣ (function) layer
+  is released from its page or the right-click menus.~~ Done (lyr):
+  `release <function name>` toggles it.
+- Layers move (lyr, 2026-10-30): ⌘X / ⌘C / ⌘V and drag, ⌥ copies. Open,
+  each "decided (can change)": cutting cues isn't built (drag them, or
+  copy); a layer dropped on a row lands before it in its upper half, after
+  it in its lower; a child layer moves only with its parent (moving it
+  alone to another cue reparents it when that cue has the parent's target);
+  in the docked Workbench a layer row drags to reorder only (to another cue:
+  the tree's drag, or Cut and Paste).
 
 ## Live and blind — leftovers (docs/design/LIVE_BLIND.md, 2026-10-29)
 
@@ -92,11 +186,14 @@ Operate PIN). **Still open:**
 - **Momentary / start-only / stop-only on Control Map bindings**: built
   with the Control Map's return (cm, feat/031-control-map), not here.
 - **Teaching mode**: DONE (t, feat/031-teaching): must-haves + lesson link;
-  see docs/features/teaching.md. Still later: reset to handout, confirm
-  before patch changes in a Teaching show, a per-GO "what just happened"
-  log, glossary popovers, a Show Review "Teaching mode is on" check (when
-  Show Review exists), the course shows rebuilt with Teaching on (they ship
-  off; Lesson 3.6 says to tick it), and holding non-network (USB) output.
+  see docs/features/teaching.md. Also DONE (tch2, feat/031-teaching2): reset
+  to handout (state embedded in the handout, Show Settings, behind the PIN),
+  confirm before patch changes (Fixture Manager, Patch dialog), USB/hardware
+  output held. Still later: a per-GO "what just happened" log, glossary
+  popovers, a Show Review "Teaching mode is on" check (when Show Review
+  exists), the course shows rebuilt with Teaching on (they ship off; Lesson
+  3.6 says to tick it), and the patch confirm in the Lighting Studio's
+  Fixture Properties (monitor files were another agent's).
 
 ## Lighting Studio alignment — leftovers (0.3.1 d2, 2026-10-29)
 
@@ -108,6 +205,34 @@ Still open from it:
   H / V / Z readout counts from CL / ⌖ everywhere.
 - decided (can change): a lantern's glow at 45° doesn't pick it; its glass
   and cage do. A click on a ruler band picks nothing under it.
+
+## Walk the show from the stage with the controller (board Q192, answered 2026-10-30: build in 0.4)
+
+Design as asked (Q192): stand on stage and walk the cues, walk a cue's
+layers (solo or mixed), adjust what the pad can, tag cues that need more
+work. Built as an extension of Focus this cue (Q106/Q118), its own button
+map while walking: RT/LT next/previous cue; RB/LB next/previous layer
+(blinks, voice "Layer 2 of 4: Movers, Blue"); View toggles solo layer /
+whole cue; sticks, D-pad and A adjust and keep as Focus this cue does now,
+in its Layer/Group/Fixture scope; hold Y tags the cue "Needs work" (flag in
+the tree, a Needs work filter, an optional note typed or spoken on the
+laptop); Menu leaves. Plays live in Design; in Operate it follows the quiet
+Refine rules (Q130). Voice and light bar for feedback, no need to look at
+the laptop. Reuses Refine, the Layer/Group/Fixture scope cycle, the
+voice/light-bar feedback and the Show Tree's cue notes. Several days, opus.
+
+Follow-up notes (chat 2026-10-30, for the 0.4 design):
+- Targets for layers are set as for any light (drop a Library > Target on
+  the layer: Aim palette or line aim); only target-aimed layers can be
+  checked against a point.
+- Separate **the light itself** (venue calibration offset, used by every
+  cue, saved in Show.venues.xml as venue focus does) from **this cue's look**
+  (Refine) on A; default: the light itself when aiming at a target, a
+  modifier for this cue.
+- One button map for Xbox and PlayStation (consistency, the course,
+  controller slots move pads between rooms); the PS touchpad only adds
+  shortcuts (swipe = layer walk, tap = tag), never the only way. The button
+  budget is solved by the walking map + hold LB as a modifier.
 
 ## Focus calls and refining a cue from the stage (design, 2026-10-23)
 
@@ -134,16 +259,17 @@ check on the show VLAN.
 house rigs kept in the venue sidecar and swapped with the venue, group
 fills, Tour/House slots, the venue's output patch, "not ours", the clash
 check, the venue page, the plot's Owner overlay. Open: Branson confirms
-docs/design/VENUES.md section 11; the Rig Overview (3D) owner filter; the focus
-report's owner column; a real-rig check that a not-ours universe stays
+docs/design/VENUES.md section 11; the Rig Overview (3D) owner filter; a real-rig check that a not-ours universe stays
 silent on Art-Net/sACN.
 
 ## People on the stage: follow-ons (performer lines shipped 2026-10-29, DONE.md)
 
-Open: a set's costume/height changed in one place (now each line's
-dialog); keep performers out of aim-target pickers if they crowd them;
-people facing along a turned riser (everyone faces the house); a line
-converted from a plain line keeps its own heights rather than chest height.
+Open: people facing along a turned riser (everyone faces the house).
+Done 0.3.1 (`feat/031-owner-performers`): a set's costume and heights in
+one place (a whole-set box in the line's dialog), a fill's lines out of the
+aim-target lists (kept when a palette or the list holds them), a converted
+plain line keeps its heights. Decided (can change): the whole-set box
+starts unticked; lines of a fill vanish from pickers, a lone line does not.
 
 ## Lasers: orientation, look, starfield coverage (board Q172, 2026-10-29)
 
@@ -170,6 +296,24 @@ with the throw). **Open:** part
 C (H×V window, density by throw, coverage outline, the audience-zone
 safety check for Show Review), the Type=Laser emission inference, and
 FixtureDefCheck's laser checks.
+
+## AI Assist (0.5, docs/design/AI_ASSIST.md, scheduled 2026-10-30)
+
+Branson's design: type a request in Design mode ("movers 1–6 deep blue at
+50%", "find address conflicts") and get proposed command-line text to
+review; the model never touches the show, every apply is one undo step,
+off by default, torn down in Operate, works offline. Phases, each with its
+acceptance test in the design:
+- **P0** one operation registry the command line runs through (no change
+  in behaviour).
+- **P1** settings, provider adapters, read-only ops, full Design/Operate
+  gating. Ollama runs locally on ender for the acceptance checks (no live
+  model in CI: mock HTTP + recorded responses).
+- **P2** write ops with preview, confirm, undo; golden prompt suite.
+- **P2b** configuration import (§5b), usable with AI off.
+- **P3** MCP server over the registry.
+Guardrails: separate `ai/` module behind `QLC_AI_ASSIST`; no AI code on
+MasterTimer/universe threads; an ROI line is in STRATEGY.md §3.3.
 
 ## Show Review: an auditor for the show's design (post-0.3, asked 2026-10-25)
 

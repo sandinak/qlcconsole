@@ -35,6 +35,7 @@
 #include "universe.h"
 #include "scene.h"
 #include "doc.h"
+#include "effectscriptrunner.h"
 #include "aimsolver.h"
 #include "qlcchannel.h"
 #include "bus.h"
@@ -1826,6 +1827,16 @@ void Scene::write(MasterTimer *timer, QList<Universe*> ua)
             }
             m_passBeatOffset = INT_MIN;
             m_applyTransitionIn = false;   // the start only, not a later re-aim
+
+            // Its effects draw on the event loop: hold until they have
+            // (the runner hears the Doc's own timer only).
+            m_effectsToDraw.clear();
+            if (doc()->effectScriptRunner() != nullptr && timer == doc()->masterTimer())
+                for (quint32 pid : pals)
+                    if (QLCPalette *p = doc()->palette(pid))
+                        if (p->type() == QLCPalette::Effect)
+                            m_effectsToDraw << pid;
+            m_effectHoldFrom = elapsed();
         }
         else
         {
@@ -1901,6 +1912,9 @@ void Scene::write(MasterTimer *timer, QList<Universe*> ua)
            scene has "Dim lights that can't see the target" on. */
         if (!m_fadersMap.isEmpty())
             updateSightDim(ua);
+
+        if (!m_effectsToDraw.isEmpty())
+            holdForEffects();
     }
 
     if (isPaused() == false)
@@ -1909,6 +1923,33 @@ void Scene::write(MasterTimer *timer, QList<Universe*> ua)
         if (timer->isBeat() && tempoType() == Beats)
             incrementElapsedBeats();
     }
+}
+
+/* The longest a scene waits for its effects' first frame: the event loop
+   that draws them is a frame or two behind the start, more when it's busy;
+   one that stalls longer than this shows the look bare, as before. */
+static const quint32 kEffectHoldMs = 250;
+
+void Scene::holdForEffects()
+{
+    // m_valueListMutex held (write())
+    bool drawn = elapsed() - m_effectHoldFrom >= kEffectHoldMs;
+    if (!drawn)
+    {
+        const EffectScriptRunner *runner = doc()->effectScriptRunner();
+        drawn = true;
+        for (quint32 pid : m_effectsToDraw)
+            if (runner != nullptr && !runner->hasDrawn(id(), pid))
+            {
+                drawn = false;
+                break;
+            }
+    }
+    if (drawn)
+        m_effectsToDraw.clear();
+    for (auto it = m_fadersMap.constBegin(); it != m_fadersMap.constEnd(); ++it)
+        if (!it.value().isNull() && it.value()->isEnabled() != drawn)
+            it.value()->setEnabled(drawn);
 }
 
 void Scene::setEditOverride(bool on)

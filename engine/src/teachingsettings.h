@@ -21,6 +21,7 @@
 #define TEACHINGSETTINGS_H
 
 #include <QObject>
+#include <QByteArray>
 #include <QString>
 #include <QXmlStreamAttributes>
 
@@ -73,6 +74,19 @@ public:
     QString handedOut() const { return m_handedOut; }
     void setHandedOut(const QString &when);
 
+    /** The show as Make Student Handout wrote it (the whole file, deflated),
+     *  kept inside the handout so the teacher can put the show back to it
+     *  (Reset to handout). Empty in a show that was not made by a handout.
+     *  Saved as the text of the Teaching element; never part of itself. */
+    QByteArray handoutSnapshot() const { return m_snapshot; }
+    bool hasHandoutSnapshot() const { return m_snapshot.isEmpty() == false; }
+    /** Without marking the show modified: it travels with the file. */
+    void setHandoutSnapshot(const QByteArray &snapshot);
+    /** Deflate / inflate the file bytes of a show (the format of the
+     *  snapshot); inflate gives empty for a damaged one. */
+    static QByteArray packSnapshot(const QByteArray &file);
+    static QByteArray unpackSnapshot(const QByteArray &snapshot);
+
     /** What a copy of the show is written with instead of the open show's
      *  own settings (Make Student Handout): nothing is changed in the open
      *  show, so nothing is held, marked modified or undone. */
@@ -83,6 +97,7 @@ public:
         QString lesson;
         QString link;
         QString handedOut;
+        QByteArray snapshot;    //!< the Reset to handout state, or empty
     };
     /** Set for the duration of one save of the copy, then cleared with
      *  nullptr; the pointer is not owned. */
@@ -109,6 +124,7 @@ private:
     QString m_lesson;
     QString m_link;
     QString m_handedOut;
+    QByteArray m_snapshot;
     QXmlStreamAttributes m_unknown;
     const SaveOverride *m_saveOverride = nullptr;
 };

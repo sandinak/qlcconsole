@@ -7,8 +7,11 @@
        framework (else their HID elements) into the same layout as an Xbox
        pad, so the channels and roles below are the Xbox profile's: Cross is
        A, Circle B, Square X, Triangle Y. The light bar follows the focus
-       tools' status lamp. macOS only: other systems list these pads' own
-       order, which this profile does not describe. -->
+       tools' status lamp. On Linux the HID plugin reads the joystick
+       device's controls by their evdev codes into the same layout
+       (GamepadLayout::mapLinuxButton); the touchpad is a separate device
+       there and is not read. Windows lists these pads' own order, which
+       this profile does not describe. -->
   <Vendor id="0x054C" name="Sony"/>
   <Settings sensitivity="1.00" deadzone="0.060"/>
   <Products>

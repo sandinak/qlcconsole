@@ -504,6 +504,10 @@ void App::init()
         m_viewNoticeButton = new QPushButton(notice);
         m_viewNoticeButton->setObjectName(QStringLiteral("viewNoticeButton"));
         row->addWidget(m_viewNoticeButton);
+        m_viewNoticeButton2 = new QPushButton(notice);
+        m_viewNoticeButton2->setObjectName(QStringLiteral("viewNoticeButton2"));
+        m_viewNoticeButton2->hide();
+        row->addWidget(m_viewNoticeButton2);
         QToolButton *close = new QToolButton(notice);
         close->setObjectName(QStringLiteral("viewNoticeClose"));
         close->setText(QStringLiteral("×"));
@@ -516,6 +520,12 @@ void App::init()
             if (act)
                 act();
         });
+        connect(m_viewNoticeButton2, &QPushButton::clicked, this, [this]() {
+            std::function<void()> act = m_viewNoticeAction2;
+            hideViewNotice();
+            if (act)
+                act();
+        });
         connect(close, &QToolButton::clicked, this, &App::hideViewNotice);
         notice->hide();
         m_viewNotice = notice;
@@ -523,6 +533,10 @@ void App::init()
     }
     centralLayout->addWidget(m_tab, 1);
     setCentralWidget(central);
+    // A hit dragged from the Show Tree onto a VC button (Q154): hovering a
+    // tab opens it.
+    m_tab->tabBar()->setChangeCurrentOnDrag(true);
+    m_tab->tabBar()->setAcceptDrops(true);
 
 #if defined(__APPLE__) || defined(Q_OS_MAC)
     m_tab->setElideMode(Qt::TextElideMode::ElideNone);
@@ -848,6 +862,16 @@ void App::init()
     m_inputNotices = new InputDeviceNotices(m_doc, this);
     connect(m_inputNotices, &InputDeviceNotices::notice,
             this, &App::showInputDeviceNotice);
+    /* Another pad where the show's is missing: one click uses it here and
+       remembers it with the show (controller slots). */
+    connect(m_inputNotices, &InputDeviceNotices::offer, this,
+            [this](const QString &text, const QString &button, quint32 universe,
+                   const QString &plugin, const QString &device) {
+        showViewNotice(text, button, [this, universe, plugin, device]() {
+            hideViewNotice();
+            m_inputNotices->adopt(universe, plugin, device);
+        });
+    });
 
     // Listen to DMX value changes and update each Fixture values array
     connect(m_doc->inputOutputMap(), SIGNAL(universeWritten(quint32, const QByteArray&)),
@@ -1859,6 +1883,11 @@ void App::openShowSettings()
         return;
     ShowSettingsDialog dlg(m_doc, this);
     dlg.exec();
+    if (dlg.resetRequested())
+    {
+        resetToHandout();
+        return;
+    }
     if (dlg.handoutRequested())
     {
         HandoutOptions options;
@@ -1871,6 +1900,48 @@ void App::openShowSettings()
                                      tr("The handout is in %1. This show is as it was.")
                                      .arg(QDir::toNativeSeparators(options.path)));
     }
+}
+
+void App::resetToHandout()
+{
+    TeachingSettings *teach = m_doc->teachingSettings();
+    const QByteArray snapshot = teach->handoutSnapshot();
+    const QByteArray xml = TeachingSettings::unpackSnapshot(snapshot);
+    if (xml.isEmpty())
+    {
+        QMessageBox::warning(this, tr("Reset to Handout"),
+                             tr("This show has no handout state to go back to."));
+        return;
+    }
+
+    /* The handout is a show file: written out, then opened the way any show
+       is (its definitions, venue and views included). */
+    const QString tmp = QDir(QDir::tempPath()).filePath(
+            QStringLiteral("qlcconsole-handout-%1").arg(QCoreApplication::applicationPid())
+            + KExtWorkspaceConsole);
+    QFile f(tmp);
+    if (!f.open(QIODevice::WriteOnly) || f.write(xml) != xml.size())
+    {
+        QMessageBox::warning(this, tr("Reset to Handout"),
+                             tr("Cannot write %1.").arg(QDir::toNativeSeparators(tmp)));
+        return;
+    }
+    f.close();
+
+    const QString file = fileName();
+    const QString workspace = m_doc->workspacePath();
+    clearDocument();
+    const QFile::FileError error = loadXML(tmp);
+    QFile::remove(tmp);
+    if (workspace.isEmpty() == false)
+        m_doc->setWorkspacePath(workspace);
+    setFileName(file);
+    if (m_doc->programmer() != nullptr && m_doc->programmer()->venueCorrections() != nullptr && !file.isEmpty())
+        m_doc->programmer()->venueCorrections()->setShowFile(file, true);
+    /* The state is kept inside the show, so it can be reset again */
+    m_doc->teachingSettings()->setHandoutSnapshot(snapshot);
+    if (handleFileError(error) == true)
+        m_doc->setModified();
 }
 
 bool App::writeStudentHandout(const HandoutOptions &options, QString *why)
@@ -1894,7 +1965,19 @@ bool App::writeStudentHandout(const HandoutOptions &options, QString *why)
     m_doc->teachingSettings()->setSaveOverride(&teach);
     m_doc->operateSettings()->setSaveOverride(&lock);
     const bool wasModified = m_doc->isModified();
-    const QFile::FileError error = saveXML(path, true);
+    QFile::FileError error = saveXML(path, true);
+    /* The file as just written goes into itself, deflated, as the state
+       Reset to Handout returns to (a second write, the same show). */
+    if (error == QFile::NoError)
+    {
+        QFile written(path);
+        if (written.open(QIODevice::ReadOnly))
+        {
+            teach.snapshot = TeachingSettings::packSnapshot(written.readAll());
+            written.close();
+            error = saveXML(path, true);
+        }
+    }
     m_doc->teachingSettings()->setSaveOverride(nullptr);
     m_doc->operateSettings()->setSaveOverride(nullptr);
     if (wasModified)
@@ -3187,6 +3270,8 @@ void App::offerQlcPlusSettings()
         return;
     LegacySettings::apply(*qlcplus, own, plan);
     reloadRecentFiles();
+    statusBar()->showMessage(tr("Brought over from QLC+ 4: %1")
+                             .arg(LegacySettings::describe(plan).simplified()), 15000);
 }
 
 bool App::slotFileNew()
@@ -3850,7 +3935,7 @@ bool App::noticeStockLosses(const QString &fileName)
     if (!fileName.endsWith(KExtWorkspace, Qt::CaseInsensitive))
         return false;
     const QString key = QFileInfo(fileName).absoluteFilePath();
-    if (m_stockNoticeShown.contains(key))
+    if (m_stockNoticeShown.contains(key) || stockNoticeOff(fileName))
         return false;
 
     QStringList losses = StockQlcCheck::lossesInFile(fileName);
@@ -3875,8 +3960,28 @@ bool App::noticeStockLosses(const QString &fileName)
                    tr("Save as .qlcc…"), [this]() {
         m_saveAsQlccOnce = true;
         slotFileSaveAs();
+    }, tr("Don't ask again for this show"), [fileName]() {
+        setStockNoticeOff(fileName, true);
     });
     return true;
+}
+
+bool App::stockNoticeOff(const QString &fileName)
+{
+    QSettings settings;
+    return settings.value(QStringLiteral("stockNoticeOff")).toStringList()
+            .contains(QFileInfo(fileName).absoluteFilePath());
+}
+
+void App::setStockNoticeOff(const QString &fileName, bool off)
+{
+    QSettings settings;
+    QStringList list = settings.value(QStringLiteral("stockNoticeOff")).toStringList();
+    const QString key = QFileInfo(fileName).absoluteFilePath();
+    list.removeAll(key);
+    if (off)
+        list << key;
+    settings.setValue(QStringLiteral("stockNoticeOff"), list);
 }
 
 QStringList App::saveAsFilters()
@@ -4874,7 +4979,8 @@ void App::updateWorkspaceViewActions()
 }
 
 void App::showViewNotice(const QString &text, const QString &buttonText,
-                         const std::function<void()> &action)
+                         const std::function<void()> &action,
+                         const QString &button2Text, const std::function<void()> &action2)
 {
     if (m_viewNotice == nullptr)
         return;
@@ -4883,6 +4989,9 @@ void App::showViewNotice(const QString &text, const QString &buttonText,
     m_viewNoticeAction = action;
     m_viewNoticeButton->setText(buttonText);
     m_viewNoticeButton->setVisible(!buttonText.isEmpty() && action != nullptr);
+    m_viewNoticeAction2 = action2;
+    m_viewNoticeButton2->setText(button2Text);
+    m_viewNoticeButton2->setVisible(!button2Text.isEmpty() && action2 != nullptr);
     m_viewNotice->show();
 }
 
@@ -4892,6 +5001,7 @@ void App::hideViewNotice()
         return;
     m_viewNotice->hide();
     m_viewNoticeAction = nullptr;
+    m_viewNoticeAction2 = nullptr;
 }
 
 void App::showInputDeviceNotice(const QString &text, bool warning)

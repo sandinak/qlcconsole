@@ -311,6 +311,10 @@ private:
     QToolButton *m_focusCallsBtn = nullptr;
     QWidget *m_focusArmed = nullptr;
     QLabel *m_focusArmedLabel = nullptr;
+    /** Scoped hits (Q157): the VC buttons whose armed hit overrides a
+     *  wider one now -- "HIT 1: Strobe ↳ overrides Blackout" (Run tab). */
+    void refreshHitsNow();
+    QLabel *m_hitsNow = nullptr;
     QToolButton *m_focusStart = nullptr;
 };
 

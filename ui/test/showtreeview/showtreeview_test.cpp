@@ -58,6 +58,8 @@
 #undef private
 #include "functionliveeditdialog.h"
 #include "fadetimespin.h"
+#include "effectrunsmenu.h"
+#include "effectscriptrunner.h"
 #include "functionmanager.h"
 #include "chasereditor.h"
 #include "noteedit.h"
@@ -4866,6 +4868,134 @@ void ShowTreeView_Test::makeVcPageUpdatesItsFrame()
  * R3: the Looks section (docs/design/PROGRAMMING_ROLE_DESIGN.md §4.1, P-D5..P-D7)
  ****************************************************************************/
 
+/* Scoped hits (Q154): + Hit makes a hit where it is to fire -- for the
+   selected cue, list or production, or (on empty space) for everywhere;
+   each place lists its hits under a "Hits" row; a hit dragged to another
+   place lives there (⌥ copies); its page says when it fires. */
+static QTreeWidgetItem *rowOf(QTreeWidget *tree, quint32 id)
+{
+    for (QTreeWidgetItemIterator it(tree); *it; ++it)
+        if ((*it)->data(0, ShowTreeView::IdRole).toUInt() == id
+            && (*it)->data(0, ShowTreeView::KindRole).toInt() != ShowTreeView::HitsNode
+            && (*it)->data(0, ShowTreeView::KindRole).toInt() != ShowTreeView::LayerNode
+            && (*it)->data(0, ShowTreeView::KindRole).toInt() != ShowTreeView::TrackedLayerNode)
+            return *it;
+    return nullptr;
+}
+
+void ShowTreeView_Test::hitsLiveUnderTheirPlace()
+{
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("DanceHysteria");
+    const quint32 list = st->addCueList(prod, "Full Show");
+    const quint32 one = st->addCue(list, -1, "One");
+    const quint32 two = st->addCue(list, 0, "Two");
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1200, 800);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+
+    // + Hit for this cue: under the cue, in a Hits row.
+    QVERIFY(view.selectNode(one));
+    const quint32 strobe = view.newHit();
+    QVERIFY(strobe != invalidId());
+    quint32 at = invalidId();
+    QCOMPARE(st->hitScope(strobe, &at), HitScope::Cue);
+    QCOMPARE(at, one);
+    QTreeWidgetItem *row = rowOf(view.tree(), strobe);
+    QVERIFY(row != nullptr);
+    QCOMPARE(row->parent()->data(0, ShowTreeView::KindRole).toInt(), int(ShowTreeView::HitsNode));
+    QCOMPARE(row->parent()->text(0), QString("Hits"));
+    QCOMPARE(row->parent()->parent(), rowOf(view.tree(), one));
+    // Its page says when.
+    QVERIFY(view.selectNode(strobe));
+    QLabel *when = view.findChild<QLabel *>("stHitWhen");
+    QVERIFY(when->isVisibleTo(&view));
+    QVERIFY2(when->text().startsWith("While it is live"), qPrintable(when->text()));
+    QVERIFY(when->text().contains("not armed now"));
+    // + Hit on the Hits row: another for the same cue.
+    view.tree()->setCurrentItem(rowOf(view.tree(), strobe)->parent());
+    QCOMPARE(view.currentKind(), ShowTreeView::HitsNode);
+    QCOMPARE(view.findChild<QToolButton *>("stNewCue")->text(), QString("+ Hit"));
+    const quint32 second = view.newHit();
+    QCOMPARE(st->hitScope(second, &at), HitScope::Cue);
+    QCOMPARE(at, one);
+
+    // For the list, for the production, for everywhere.
+    QVERIFY(view.selectNode(list));
+    const quint32 red = view.newHit();
+    QCOMPARE(st->hitScope(red, &at), HitScope::List);
+    QCOMPARE(rowOf(view.tree(), red)->parent()->parent(), rowOf(view.tree(), list));
+    QVERIFY(view.selectNode(prod));
+    const quint32 wash = view.newHit();
+    QCOMPARE(st->hitScope(wash), HitScope::Production);
+    QCOMPARE(rowOf(view.tree(), wash)->parent(), rowOf(view.tree(), st->looksSection(prod)));
+    view.tree()->setCurrentItem(nullptr);
+    const quint32 black = view.newHit(true);
+    QCOMPARE(st->hitScope(black), HitScope::Global);
+    QTreeWidgetItem *top = view.tree()->topLevelItem(view.tree()->topLevelItemCount() - 1);
+    QCOMPARE(top->data(0, ShowTreeView::KindRole).toInt(), int(ShowTreeView::HitsNode));
+    QCOMPARE(rowOf(view.tree(), black)->parent(), top);
+
+    // Dragged onto cue Two: it lives there now; one undo step.
+    QString hint;
+    QVERIFY(view.dropHitsAt({ wash }, rowOf(view.tree(), two), false, false, &hint));
+    QVERIFY2(hint.contains("while cue"), qPrintable(hint));
+    QVERIFY(view.dropHitsAt({ wash }, rowOf(view.tree(), two), false, true, &hint));
+    QCOMPARE(st->hitScope(wash, &at), HitScope::Cue);
+    QCOMPARE(at, two);
+    QCOMPARE(rowOf(view.tree(), wash)->parent()->parent(), rowOf(view.tree(), two));
+    QVERIFY(st->undo());
+    QCOMPARE(st->hitScope(wash), HitScope::Production);
+    // ⌥: a copy for the list; the hit stays.
+    QVERIFY(view.dropHitsAt({ wash }, rowOf(view.tree(), list), true, true, &hint));
+    QCOMPARE(st->hitScope(wash), HitScope::Production);
+    QCOMPARE(st->hitsAt(HitScope::List, list).count(), 2);
+    // Onto a hit of another place: that place. Onto its own: a reorder.
+    QVERIFY(view.dropHitsAt({ black }, rowOf(view.tree(), strobe), false, true, &hint));
+    QCOMPARE(st->hitScope(black, &at), HitScope::Cue);
+    QCOMPARE(at, one);
+    QVERIFY(!view.dropHitsAt({ second }, rowOf(view.tree(), strobe), false, false, &hint));
+    // Cues are not hits: not this drop.
+    QVERIFY(!view.dropHitsAt({ two }, rowOf(view.tree(), list), false, false, &hint));
+    // A hit row drags as a hit, its layer row as a layer (lyr): each keeps
+    // its own drop.
+    {
+        const quint32 hl = st->addLayer(strobe, groupTarget(group("Towers", 0, 2)->id()));
+        Q_UNUSED(hl);
+        QTreeWidgetItem *hitRow = rowOf(view.tree(), strobe);
+        QTreeWidgetItem *layerRow = nullptr;
+        for (int i = 0; i < hitRow->childCount(); ++i)
+            if (hitRow->child(i)->data(0, ShowTreeView::KindRole).toInt() == ShowTreeView::LayerNode)
+                layerRow = hitRow->child(i);
+        QVERIFY(layerRow != nullptr);
+        // The tree model asks the tree's mimeData() for the rows dragged.
+        auto mimeOf = [&](QTreeWidgetItem *row) {
+            view.tree()->setCurrentItem(row, 0, QItemSelectionModel::ClearAndSelect);
+            QModelIndexList at;
+            for (const QModelIndex &i : view.tree()->selectionModel()->selectedIndexes())
+                if (i.column() == 0)
+                    at << i;
+            return view.tree()->model()->mimeData(at);
+        };
+        QScopedPointer<QMimeData> hm(mimeOf(hitRow));
+        QVERIFY(hm->hasFormat(ShowTreeView::cueMimeType()));
+        layerRow = nullptr;
+        for (int i = 0; i < rowOf(view.tree(), strobe)->childCount(); ++i)
+            if (rowOf(view.tree(), strobe)->child(i)->data(0, ShowTreeView::KindRole).toInt() == ShowTreeView::LayerNode)
+                layerRow = rowOf(view.tree(), strobe)->child(i);
+        QScopedPointer<QMimeData> lm(mimeOf(layerRow));
+        QVERIFY(lm->hasFormat(ShowTreeView::layerMimeType()));
+        QVERIFY(!lm->hasFormat(ShowTreeView::cueMimeType()));
+    }
+
+    // The cue deleted: its hits move up to the production's Hits.
+    QVERIFY(st->removeCue(one));
+    QCOMPARE(st->hitScope(strobe), HitScope::Production);
+    QCOMPARE(rowOf(view.tree(), strobe)->parent(), rowOf(view.tree(), st->looksSection(prod)));
+}
+
 void ShowTreeView_Test::looksSectionInTheTree()
 {
     FixtureGroup *towers = group("Towers", 0, 2);
@@ -8410,4 +8540,453 @@ void ShowTreeView_Test::aSecondNewEffectPaletteStartsAfresh()
     QCOMPARE(m_doc->palette(third)->name(), QString("New Effect"));
     QVERIFY(pick("Rainbow"));
     QCOMPARE(m_doc->palette(third)->name(), QString("Rainbow"));
+}
+
+/* ------------------------------------------------------------------ */
+/* 0.3.1 (lyr): moving layers                                          */
+/* ------------------------------------------------------------------ */
+
+static QStringList layerTargets(const ShowTreeController *st, quint32 cue, ShowTreeView_Test *)
+{
+    QStringList out;
+    for (const Layer &l : st->cue(cue)->layers)
+        out << st->targetLabel(l.target);
+    return out;
+}
+
+/* Branson (build 2593): "can't cut/paste a layer from places". ⌘X marks the
+   layers, ⌘V on a cue moves them there -- one undo step for the pair; several
+   selected layers go together; a reusable layer stays the same reusable. */
+void ShowTreeView_Test::cutAndPasteMovesLayersInOneUndoStep()
+{
+    FixtureGroup *towers = group("Towers", 0, 2);
+    FixtureGroup *usts = group("USTs", 2, 2);
+    FixtureGroup *floor = group("Floor", 3, 1);
+    const quint32 blue = colour(Qt::blue, "Blue");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L", ListMode::NonTracking);
+    const quint32 c1 = st->addCue(list, -1, "One");
+    const quint32 c2 = st->addCue(list, 0, "Two");
+    Target tt, tu, tf;
+    tt.groups << towers->id();
+    tu.groups << usts->id();
+    tf.groups << floor->id();
+    const quint32 lt = st->addLayer(c1, tt);
+    const quint32 lu = st->addLayer(c1, tu);
+    st->addLayer(c2, tf);
+    st->setLayerLook(c1, lt, st->lookForPalette(blue));
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1200, 800);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QTreeWidget *tree = view.tree();
+
+    // Cut one layer of One, paste on cue Two: it is Two's now (looks and all).
+    clickRow(tree, rowOf(tree, ShowTreeView::LayerNode, lt, c1));
+    tree->setFocus();
+    QTest::keySequence(tree, QKeySequence::Cut);
+    QCOMPARE(st->cue(c1)->layers.count(), 2);               // cut alone takes nothing away
+    clickRow(tree, rowOf(tree, ShowTreeView::CueNode, c2));
+    tree->setFocus();
+    QTest::keySequence(tree, QKeySequence::Paste);
+    QCOMPARE(st->cue(c1)->layers.count(), 1);
+    QCOMPARE(layerTargets(st, c2, this), QStringList({ "Floor", "Towers" }));
+    QVERIFY(st->cue(c2)->layer(lt) != nullptr);             // the same layer: id kept
+    QVERIFY(st->cue(c2)->layer(lt)->look(KeyColour) != nullptr);
+    // The clipboard is spent: a second paste does nothing.
+    QTest::keySequence(tree, QKeySequence::Paste);
+    // One undo puts it all back; redo moves it again.
+    QVERIFY(st->undo());
+    QCOMPARE(layerTargets(st, c1, this), QStringList({ "Towers", "USTs" }));
+    QCOMPARE(layerTargets(st, c2, this), QStringList({ "Floor" }));
+    QVERIFY(st->redo());
+    QCOMPARE(layerTargets(st, c1, this), QStringList({ "USTs" }));
+    QCOMPARE(layerTargets(st, c2, this), QStringList({ "Floor", "Towers" }));
+    QVERIFY(st->undo());
+
+    // Several selected layers move together, in their order.
+    clickRow(tree, rowOf(tree, ShowTreeView::LayerNode, lt, c1));
+    clickRow(tree, rowOf(tree, ShowTreeView::LayerNode, lu, c1), Qt::ControlModifier);
+    tree->setFocus();
+    QTest::keySequence(tree, QKeySequence::Cut);
+    clickRow(tree, rowOf(tree, ShowTreeView::CueNode, c2));
+    tree->setFocus();
+    QTest::keySequence(tree, QKeySequence::Paste);
+    QVERIFY(st->cue(c1)->layers.isEmpty());
+    QCOMPARE(layerTargets(st, c2, this), QStringList({ "Floor", "Towers", "USTs" }));
+    QVERIFY(st->undo());
+    QCOMPARE(int(st->cue(c1)->layers.count()), 2);
+
+    // Copy and paste still copy: the original stays.
+    clickRow(tree, rowOf(tree, ShowTreeView::LayerNode, lu, c1));
+    tree->setFocus();
+    QTest::keySequence(tree, QKeySequence::Copy);
+    clickRow(tree, rowOf(tree, ShowTreeView::CueNode, c2));
+    tree->setFocus();
+    QTest::keySequence(tree, QKeySequence::Paste);
+    QCOMPARE(int(st->cue(c1)->layers.count()), 2);
+    QCOMPARE(layerTargets(st, c2, this), QStringList({ "Floor", "USTs" }));
+    QVERIFY(st->undo());
+
+    // A reusable layer pastes as the same reusable.
+    const quint32 reusable = st->makeLayerReusable(c1, lu, "Back wash");
+    QVERIFY(reusable != invalidId());
+    clickRow(tree, rowOf(tree, ShowTreeView::LayerNode, lu, c1));
+    tree->setFocus();
+    QTest::keySequence(tree, QKeySequence::Cut);
+    clickRow(tree, rowOf(tree, ShowTreeView::CueNode, c2));
+    tree->setFocus();
+    QTest::keySequence(tree, QKeySequence::Paste);
+    QVERIFY(st->cue(c2)->layer(lu) != nullptr);
+    QCOMPARE(st->cue(c2)->layer(lu)->reusable, reusable);
+    QCOMPARE(st->reusableUses(reusable).count(), 1);
+
+    // Cut takes layers only: cues are dragged, or copied.
+    clickRow(tree, rowOf(tree, ShowTreeView::CueNode, c1));
+    tree->setFocus();
+    QVERIFY(!view.cutSelection());
+}
+
+/* Paste on a layer's row puts the layers after it; within a cue it is a
+   reorder (Cut + Paste) -- and onto its own children's parent it stays whole. */
+void ShowTreeView_Test::pasteOnALayerGoesAfterIt()
+{
+    FixtureGroup *towers = group("Towers", 0, 2);
+    FixtureGroup *usts = group("USTs", 2, 2);
+    FixtureGroup *floor = group("Floor", 3, 1);
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L", ListMode::NonTracking);
+    const quint32 c1 = st->addCue(list, -1, "One");
+    const quint32 c2 = st->addCue(list, 0, "Two");
+    Target tt, tu, tf;
+    tt.groups << towers->id();
+    tu.groups << usts->id();
+    tf.groups << floor->id();
+    const quint32 lt = st->addLayer(c1, tt);
+    const quint32 lu = st->addLayer(c1, tu);
+    const quint32 lf = st->addLayer(c1, tf);
+    const quint32 other = st->addLayer(c2, tt);
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1200, 800);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QTreeWidget *tree = view.tree();
+
+    // Reorder: cut Floor, paste on Towers' row: Towers, Floor, USTs.
+    clickRow(tree, rowOf(tree, ShowTreeView::LayerNode, lf, c1));
+    tree->setFocus();
+    QTest::keySequence(tree, QKeySequence::Cut);
+    clickRow(tree, rowOf(tree, ShowTreeView::LayerNode, lt, c1));
+    tree->setFocus();
+    QTest::keySequence(tree, QKeySequence::Paste);
+    QCOMPARE(layerTargets(st, c1, this), QStringList({ "Towers", "Floor", "USTs" }));
+    QCOMPARE(st->cue(c1)->layers.at(1).id, lf);             // the same layer, not a copy
+    QVERIFY(st->undo());
+    QCOMPARE(layerTargets(st, c1, this), QStringList({ "Towers", "USTs", "Floor" }));
+    QVERIFY(st->redo());
+    QVERIFY(st->undo());
+
+    // Into another cue, after a layer of it: copy pastes after it too.
+    clickRow(tree, rowOf(tree, ShowTreeView::LayerNode, lu, c1));
+    tree->setFocus();
+    QTest::keySequence(tree, QKeySequence::Copy);
+    clickRow(tree, rowOf(tree, ShowTreeView::LayerNode, other, c2));
+    tree->setFocus();
+    QTest::keySequence(tree, QKeySequence::Paste);
+    QCOMPARE(layerTargets(st, c2, this), QStringList({ "Towers", "USTs" }));
+    QCOMPARE(int(st->cue(c1)->layers.count()), 3);
+    QVERIFY(st->undo());
+
+    // The engine: first place, and a child stays under its parent.
+    const QList<QPair<quint32, quint32>> one { qMakePair(c1, lf) };
+    QVERIFY(!st->moveLayers(one, c1, ShowTreeController::layerFirst).isEmpty());
+    QCOMPARE(layerTargets(st, c1, this), QStringList({ "Floor", "Towers", "USTs" }));
+    QVERIFY(st->undo());
+    QString why;
+    const quint32 child = st->addLayer(c1, tu);             // same target as USTs: sets there
+    Q_UNUSED(child);
+    // A layer cannot be moved after itself.
+    QVERIFY(st->moveLayers(one, c1, lf, &why).isEmpty());
+    QVERIFY(!why.isEmpty());
+}
+
+/* Dragging a layer row moves it (⌥ copies), onto a cue, a layer row (its
+   upper half: before it), another cue's layer; a line shows the place. */
+void ShowTreeView_Test::aDragMovesLayersAndAltCopiesThem()
+{
+    FixtureGroup *towers = group("Towers", 0, 2);
+    FixtureGroup *usts = group("USTs", 2, 2);
+    FixtureGroup *floor = group("Floor", 3, 1);
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("P");
+    const quint32 list = st->addCueList(prod, "L", ListMode::NonTracking);
+    const quint32 c1 = st->addCue(list, -1, "One");
+    const quint32 c2 = st->addCue(list, 0, "Two");
+    const quint32 hit = st->addLook(prod, "Stab", "Hits");
+    Target tt, tu, tf;
+    tt.groups << towers->id();
+    tu.groups << usts->id();
+    tf.groups << floor->id();
+    const quint32 lt = st->addLayer(c1, tt);
+    const quint32 lu = st->addLayer(c1, tu);
+    const quint32 lf = st->addLayer(c2, tf);
+    st->setLayerRelease(c1, lu, true);
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1200, 800);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QTreeWidget *tree = view.tree();
+    QLabel *hint = view.findChild<QLabel *>("stDropHint");
+    for (QTreeWidgetItemIterator it(tree); *it; ++it)
+        (*it)->setExpanded(true);
+
+    auto mimeOf = [](const QList<QPair<quint32, quint32>> &refs) {
+        QMimeData *mime = new QMimeData();
+        QByteArray data;
+        QDataStream ds(&data, QIODevice::WriteOnly);
+        for (const auto &r : refs)
+            ds << r.first << r.second;
+        mime->setData(ShowTreeView::layerMimeType(), data);
+        return mime;
+    };
+    auto dragOnto = [&](QMimeData *mime, QTreeWidgetItem *row, double frac, Qt::KeyboardModifiers mods,
+                        bool drop, bool *accepted = nullptr) {
+        tree->scrollToItem(row);
+        const QRect r = tree->visualItemRect(row);
+        const QPoint at(r.center().x(), r.top() + int(r.height() * frac));
+        QDragEnterEvent enter(dragPos(at), Qt::MoveAction, mime, Qt::LeftButton, mods);
+        QCoreApplication::sendEvent(tree->viewport(), &enter);
+        QDragMoveEvent move(dragPos(at), Qt::MoveAction, mime, Qt::LeftButton, mods);
+        QCoreApplication::sendEvent(tree->viewport(), &move);
+        if (accepted != nullptr)
+            *accepted = move.isAccepted();
+        if (drop)
+        {
+            QDropEvent d(dragPos(at), Qt::MoveAction, mime, Qt::LeftButton, mods);
+            QCoreApplication::sendEvent(tree->viewport(), &d);
+        }
+    };
+
+    // A drag over a layer row's lower half: accepted, says what, and a line.
+    QMimeData *m1 = mimeOf({ qMakePair(c1, lt) });
+    bool ok = false;
+    dragOnto(m1, rowOf(tree, ShowTreeView::LayerNode, lf, c2), 0.8, Qt::NoModifier, false, &ok);
+    QVERIFY(ok);
+    QVERIFY2(hint->text().startsWith("Move “Towers” into"), qPrintable(hint->text()));
+    QVERIFY(!view.dropIndicator().isNull());
+    QVERIFY(view.dropIndicator().height() <= 2);            // a line between rows
+    QCOMPARE(view.dropIndicator().top(), tree->visualItemRect(rowOf(tree, ShowTreeView::LayerNode, lf, c2)).bottom() + 1);
+    // Alt: copy.
+    dragOnto(m1, rowOf(tree, ShowTreeView::LayerNode, lf, c2), 0.8, Qt::AltModifier, false, &ok);
+    QVERIFY(ok);
+    QVERIFY2(hint->text().startsWith("Copy “Towers” into"), qPrintable(hint->text()));
+    // Over the cue row: a frame round it.
+    dragOnto(m1, rowOf(tree, ShowTreeView::CueNode, c2), 0.5, Qt::NoModifier, false, &ok);
+    QVERIFY(ok);
+    QVERIFY(view.dropIndicator().height() > 4);
+    // Over a list row: nowhere.
+    QTreeWidgetItem *listRow = rowOf(tree, ShowTreeView::ListNode, list);
+    QVERIFY(listRow != nullptr);
+    dragOnto(m1, listRow, 0.5, Qt::NoModifier, false, &ok);
+    QVERIFY(!ok);
+    QVERIFY(view.dropIndicator().isNull());
+
+    // Drop: moved after Floor in Two. One undo step.
+    dragOnto(m1, rowOf(tree, ShowTreeView::LayerNode, lf, c2), 0.8, Qt::NoModifier, true);
+    QCOMPARE(layerTargets(st, c1, this), QStringList({ "USTs" }));
+    QCOMPARE(layerTargets(st, c2, this), QStringList({ "Floor", "Towers" }));
+    QVERIFY(view.dropIndicator().isNull());
+    QVERIFY(st->undo());
+    QCOMPARE(layerTargets(st, c1, this), QStringList({ "Towers", "USTs" }));
+    QCOMPARE(layerTargets(st, c2, this), QStringList({ "Floor" }));
+    delete m1;
+
+    // Upper half of the first layer: first place; reorders within the cue.
+    QMimeData *m2 = mimeOf({ qMakePair(c1, lu) });
+    dragOnto(m2, rowOf(tree, ShowTreeView::LayerNode, lt, c1), 0.2, Qt::NoModifier, true);
+    QCOMPARE(layerTargets(st, c1, this), QStringList({ "USTs", "Towers" }));
+    QVERIFY(st->undo());
+    // Onto itself: nothing to do, nothing taken.
+    dragOnto(m2, rowOf(tree, ShowTreeView::LayerNode, lu, c1), 0.8, Qt::NoModifier, true);
+    QCOMPARE(layerTargets(st, c1, this), QStringList({ "Towers", "USTs" }));
+    delete m2;
+
+    // ⌥-drag copies: the original stays, an undo step.
+    QMimeData *m3 = mimeOf({ qMakePair(c1, lt) });
+    dragOnto(m3, rowOf(tree, ShowTreeView::CueNode, c2), 0.5, Qt::AltModifier, true);
+    QCOMPARE(layerTargets(st, c1, this), QStringList({ "Towers", "USTs" }));
+    QCOMPARE(layerTargets(st, c2, this), QStringList({ "Floor", "Towers" }));
+    QVERIFY(st->undo());
+    delete m3;
+
+    // Two layers together, onto a hit: both move; the hit has no Release.
+    QMimeData *m4 = mimeOf({ qMakePair(c1, lt), qMakePair(c1, lu) });
+    dragOnto(m4, rowOf(tree, ShowTreeView::CueNode, hit), 0.5, Qt::NoModifier, false, &ok);
+    QVERIFY(ok);
+    QVERIFY2(hint->text().contains("2 layers into"), qPrintable(hint->text()));
+    QVERIFY2(hint->text().contains("no Release"), qPrintable(hint->text()));
+    dragOnto(m4, rowOf(tree, ShowTreeView::CueNode, hit), 0.5, Qt::NoModifier, true);
+    QVERIFY(st->cue(c1)->layers.isEmpty());
+    QCOMPARE(layerTargets(st, hit, this), QStringList({ "Towers", "USTs" }));
+    for (const Layer &l : st->cue(hit)->layers)
+        QVERIFY(!l.release);
+    QVERIFY(st->undo());
+    QVERIFY(st->cue(c1)->layer(lu)->release);               // undo brings Release back
+    delete m4;
+}
+
+/* Why a drag only selected: a layer row carried no data, so Qt never began
+   the drag. It carries (cue, layer) now -- the selected ones, together --
+   and a press and release in place still only selects. */
+void ShowTreeView_Test::aLayerRowIsDraggableAndAClickOnlySelects()
+{
+    FixtureGroup *towers = group("Towers", 0, 2);
+    FixtureGroup *usts = group("USTs", 2, 2);
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L", ListMode::NonTracking);
+    const quint32 c1 = st->addCue(list, -1, "One");
+    Target tt, tu;
+    tt.groups << towers->id();
+    tu.groups << usts->id();
+    const quint32 lt = st->addLayer(c1, tt);
+    const quint32 lu = st->addLayer(c1, tu);
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1200, 800);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QTreeWidget *tree = view.tree();
+    QTreeWidgetItem *row = rowOf(tree, ShowTreeView::LayerNode, lt, c1);
+    QVERIFY(row != nullptr);
+    QVERIFY(row->flags() & Qt::ItemIsDragEnabled);
+
+    // A press and release without moving: selected, nothing moved.
+    clickRow(tree, row);
+    QCOMPARE(view.currentId(), lt);
+    QCOMPARE(layerTargets(st, c1, this), QStringList({ "Towers", "USTs" }));
+    // A small wobble (inside the platform's start distance) is a click too.
+    QTreeWidgetItem *row2 = rowOf(tree, ShowTreeView::LayerNode, lu, c1);
+    const QPoint p = tree->visualItemRect(row2).center();
+    QTest::mousePress(tree->viewport(), Qt::LeftButton, Qt::NoModifier, p);
+    QTest::mouseMove(tree->viewport(), p + QPoint(1, 1));
+    QTest::mouseRelease(tree->viewport(), Qt::LeftButton, Qt::NoModifier, p + QPoint(1, 1));
+    QCOMPARE(view.currentId(), lu);
+    QCOMPARE(layerTargets(st, c1, this), QStringList({ "Towers", "USTs" }));
+
+    // What a real drag carries: the selected layers.
+    clickRow(tree, row);
+    clickRow(tree, row2, Qt::ControlModifier);
+    QMimeData *mime = view.selectionDragMime();
+    QVERIFY(mime != nullptr);
+    QVERIFY(mime->hasFormat(ShowTreeView::layerMimeType()));
+    const QList<ShowTreeView::LayerRef> refs = ShowTreeView::layersFromMime(mime);
+    QCOMPARE(refs.count(), 2);
+    QCOMPARE(refs.first(), qMakePair(c1, lt));
+    delete mime;
+}
+
+/* A hit never tracks: its layers have no Release. */
+void ShowTreeView_Test::layersIntoAHitLoseTheirRelease()
+{
+    FixtureGroup *towers = group("Towers", 0, 2);
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("P");
+    const quint32 list = st->addCueList(prod, "L", ListMode::NonTracking);
+    const quint32 c1 = st->addCue(list, -1, "One");
+    const quint32 hit = st->addLook(prod, "Stab", "Hits");
+    Target tt;
+    tt.groups << towers->id();
+    const quint32 lt = st->addLayer(c1, tt);
+    QVERIFY(st->setLayerRelease(c1, lt, true));
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1200, 800);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QTreeWidget *tree = view.tree();
+    clickRow(tree, rowOf(tree, ShowTreeView::LayerNode, lt, c1));
+    QVERIFY(view.copySelection());
+    clickRow(tree, rowOf(tree, ShowTreeView::CueNode, hit));
+    QVERIFY(view.pasteClipboard());
+    QCOMPARE(st->cue(hit)->layers.count(), 1);
+    QVERIFY(!st->cue(hit)->layers.first().release);
+    QVERIFY(st->cue(c1)->layer(lt)->release);               // the original keeps its own
+    // And back into a cue (cut): Release stays off, as it was in the hit.
+    clickRow(tree, rowOf(tree, ShowTreeView::LayerNode, st->cue(hit)->layers.first().id, hit));
+    QVERIFY(view.cutSelection());
+    clickRow(tree, rowOf(tree, ShowTreeView::CueNode, c1));
+    QVERIFY(view.pasteClipboard());
+    QVERIFY(st->cue(hit)->layers.isEmpty());
+}
+
+/* efn: Runs on a Show Tree effect row is an undo step, shared palette or the
+   tree's own one-off. */
+void ShowTreeView_Test::effectRunsIsAnUndoStep()
+{
+    QLCPalette *fx = new QLCPalette(QLCPalette::Effect, m_doc);
+    fx->setName("Confetti");
+    m_doc->addPalette(fx);
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 own = st->createInlinePalette(QLCPalette::Effect, QVariantList(), "Confetti · One Towers");
+    QVERIFY(own != QLCPalette::invalidId());
+    ShowTreeView view(nullptr, m_doc);
+
+    for (quint32 pid : { fx->id(), own })
+    {
+        QLCPalette *p = m_doc->palette(pid);
+        QVERIFY(p != nullptr);
+        QVERIFY(!p->effectParamValues().contains(EffectRuns::runsKey()));
+        EffectRunsMenu::apply(m_doc, { pid }, 3);
+        QCOMPARE(p->effectParamValues().value(EffectRuns::runsKey(), -1), 3.0);
+        QVERIFY(m_doc->paletteOps()->canUndo());
+        view.slotUndo();
+        QVERIFY2(!p->effectParamValues().contains(EffectRuns::runsKey()), "undo takes Runs back");
+        view.slotRedo();
+        QCOMPARE(p->effectParamValues().value(EffectRuns::runsKey(), -1), 3.0);
+        view.slotUndo();
+        // At the end and Length are steps too.
+        EffectRunsMenu::apply(m_doc, { pid }, 1, 1);
+        QCOMPARE(p->effectParamValues().value(EffectRuns::atEndKey(), -1), 1.0);
+        view.slotUndo();
+        QVERIFY(!p->effectParamValues().contains(EffectRuns::atEndKey()));
+    }
+    // Both at once (a layer's palettes): one step.
+    EffectRunsMenu::apply(m_doc, { fx->id(), own }, 0);
+    view.slotUndo();
+    QVERIFY(!m_doc->palette(fx->id())->effectParamValues().contains(EffectRuns::runsKey()));
+    QVERIFY(!m_doc->palette(own)->effectParamValues().contains(EffectRuns::runsKey()));
+}
+
+/* The command line's `release` takes a ▣ function layer, by its function's
+   name, as it does a group. */
+void ShowTreeView_Test::releaseTakesAFunctionLayer()
+{
+    FixtureGroup *towers = group("Towers", 0, 2);
+    Scene *haze = new Scene(m_doc);
+    haze->setName("Haze look");
+    m_doc->addFunction(haze);
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L", ListMode::NonTracking);
+    const quint32 c1 = st->addCue(list, -1, "One");
+    Target fn, tt;
+    fn.function = haze->id();
+    tt.groups << towers->id();
+    const quint32 lf = st->addLayer(c1, fn);
+    const quint32 lt = st->addLayer(c1, tt);
+
+    ShowTreeView view(nullptr, m_doc);
+    QVERIFY(view.selectNode(c1));
+    QVERIFY2(view.runCommand("release Haze look"), qPrintable(view.commandMessage()));
+    QVERIFY(st->cue(c1)->layer(lf)->release);
+    QVERIFY(!st->cue(c1)->layer(lt)->release);
+    QVERIFY(view.runCommand("release Haze look"));            // toggles, as for a group
+    QVERIFY(!st->cue(c1)->layer(lf)->release);
+    QVERIFY(view.runCommand("release Towers"));
+    QVERIFY(st->cue(c1)->layer(lt)->release);
+    QVERIFY(!st->cue(c1)->layer(lf)->release);
+    QVERIFY(!view.runCommand("release Nothing here"));
+    QCOMPARE(int(st->cue(c1)->layers.count()), 2);
 }

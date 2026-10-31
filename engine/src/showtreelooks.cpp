@@ -159,9 +159,12 @@ bool ShowTreeController::setLookFolder(const QList<quint32> &lookIds, const QStr
                 if (!l.looks)
                     continue;
                 for (Cue &c : l.cues)
-                    if (lookIds.contains(c.id) && c.folder != f)
+                    if (lookIds.contains(c.id) && (c.folder != f || c.scope != HitScope::Production))
                     {
+                        // Filed in a folder: a hit of its production (Q154).
                         c.folder = f;
+                        c.scope = HitScope::Production;
+                        c.scopeOf = invalidId();
                         any = true;
                     }
                 if (any)

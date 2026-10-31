@@ -75,6 +75,7 @@ void InputDeviceNotices_Test::cleanup()
     iom->forgetOfflinePatches(1);
     m_stub->m_linesAreHardware = false;
     m_stub->m_lineNames.clear();
+    m_stub->m_lineDeviceKind.clear();
     ShowStatus::instance()->clearStatus(QStringLiteral("input.devices"));
 }
 
@@ -218,6 +219,68 @@ void InputDeviceNotices_Test::theDefaultSettleIsTwoAndAHalfSeconds()
     notices.settleNow();                // back before it settled: a flap
     QCOMPARE(said.count(), 0);
     QVERIFY(footerEntry().key.isEmpty());
+}
+
+void InputDeviceNotices_Test::aControllerSlotSaysWhichIsInUse()
+{
+    const QString ds4 = QStringLiteral("DualShock 4 Wireless Controller (cc-dd)");
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QVERIFY(iom->addInputSlotDevice(1, m_stub->name(), ds4));
+    InputDeviceNotices notices(m_doc);
+    notices.setSettleTime(50);
+    notices.settleNow();
+    QSignalSpy said(&notices, &InputDeviceNotices::notice);
+    QCOMPARE(notices.devices().first().slotCount, 2);
+    QCOMPARE(notices.devices().first().slotPosition, 1);
+
+    // The DualSense off, the DS4 on: no alarm, just which one is in use.
+    rescanned(m_stub, QStringList() << "Keyboard" << ds4);
+    QTRY_COMPARE(said.count(), 1);
+    QCOMPARE(said.at(0).at(0).toString(),
+             QString("Input device '%1' in use — universe 2 (2 of 2 in its list)").arg(ds4));
+    QCOMPARE(said.at(0).at(1).toBool(), false);
+    QVERIFY(footerEntry().key.isEmpty());
+
+    // Both gone: amber, and the footer lists it.
+    rescanned(m_stub, QStringList() << "Keyboard");
+    QTRY_COMPARE(said.count(), 2);
+    QVERIFY2(said.at(1).at(0).toString().contains("none of its 2 controllers"),
+             qPrintable(said.at(1).at(0).toString()));
+    QCOMPARE(said.at(1).at(1).toBool(), true);
+    QCOMPARE(footerEntry().severity, ShowStatus::Warning);
+}
+
+void InputDeviceNotices_Test::anotherPadIsOfferedAndAdopted()
+{
+    const QString xbox = QStringLiteral("Xbox Wireless Controller (0b13)");
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    InputDeviceNotices notices(m_doc);
+    notices.setSettleTime(50);
+    notices.settleNow();
+    QSignalSpy offered(&notices, &InputDeviceNotices::offer);
+
+    // At the next venue: the DualSense is not here, an Xbox pad is.
+    rescanned(m_stub, QStringList() << "Keyboard");
+    m_stub->m_lineDeviceKind[1] = "xbox";
+    rescanned(m_stub, QStringList() << "Keyboard" << xbox);
+    QVERIFY(iom->inputPatch(1) == nullptr);     // never taken by itself
+    QTRY_COMPARE(offered.count(), 1);
+    QCOMPARE(offered.at(0).at(1).toString(),
+             QString("Use '%1' for universe 2 (and remember it)").arg(xbox));
+    QVERIFY(offered.at(0).at(0).toString().contains(kPad));
+    QCOMPARE(offered.at(0).at(2).toUInt(), quint32(1));
+    // Offered once while it stands.
+    notices.settleNow();
+    QCOMPARE(offered.count(), 1);
+
+    QVERIFY(notices.adopt(1, offered.at(0).at(3).toString(), offered.at(0).at(4).toString()));
+    QVERIFY(iom->inputPatch(1) != nullptr);
+    QCOMPARE(iom->inputPatch(1)->inputUID(), xbox);
+    QCOMPARE(iom->inputSlot(1).count(), 2);
+    QCOMPARE(iom->inputSlot(1).at(0).uid, kPad);
+    QVERIFY(m_doc->isModified());
+    notices.settleNow();
+    QCOMPARE(offered.count(), 1);
 }
 
 QTEST_MAIN(InputDeviceNotices_Test)

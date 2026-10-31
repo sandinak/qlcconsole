@@ -15,6 +15,8 @@
 #include <QCoreApplication>
 #include <QStringList>
 #include <QString>
+
+#include "effectscript.h"
 #include <QMap>
 
 class QLCPalette;
@@ -68,6 +70,9 @@ public:
     /** Script @p path's own run defaults: whether it is a one-shot, and
      *  whether it lets go at the end (read once per file). */
     static void scriptRunDefaults(const QString &path, bool *oneShot, bool *release);
+    /** Script @p path's cycle param (EffectScript::cycleParam()) when it is
+     *  a wave, with that param's definition in @p def; empty when not. */
+    static QString scriptCycleParam(const QString &path, EffectScript::ParamDef *def = nullptr);
 
     /** "based on Fire", and "· 2 changes" when there are some. */
     static QString basedOnLine(const QString &base, int changes);

@@ -7700,6 +7700,132 @@ void ShowTree_Test::aLookPlaysOverARunningListHtpLtp()
     QCOMPARE(st->listsRunning(), QStringList({ "L" }));
 }
 
+/* Scoped hits (Q154): a hit lives under a cue, a cue list, its production
+   or at the top (everywhere). It stays a hit of its production's Hits
+   section -- the same Collection -- whatever its place. Moving it is one
+   undo step; its cue or list deleted, it moves up to its production;
+   saved with the show, and a show without places loads as before. */
+void ShowTree_Test::hitsLiveAtAPlace()
+{
+    FixtureGroup *towers = group("Towers", { m_fixtures[0] });
+    const quint32 full = dimmer(255, "Full");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("P");
+    const quint32 list = st->addCueList(prod, "Main", ListMode::Tracking);
+    const quint32 c1 = st->addCue(list, -1, "One");
+    const quint32 c2 = st->addCue(list, 0, "Two");
+
+    // + Hit for this cue, for this list, for the production, everywhere.
+    const quint32 onCue = st->addHit(HitScope::Cue, c1, "Strobe");
+    const quint32 onList = st->addHit(HitScope::List, list, "Red");
+    const quint32 onProd = st->addHit(HitScope::Production, prod, "Wash");
+    const quint32 everywhere = st->addHit(HitScope::Global, ShowTree::invalidId(), "Blackout");
+    for (quint32 h : { onCue, onList, onProd, everywhere })
+    {
+        QVERIFY(st->isLook(h));
+        QVERIFY(st->lookFunction(h) != ShowTree::invalidId());
+    }
+    quint32 at = 0;
+    QCOMPARE(st->hitScope(onCue, &at), HitScope::Cue);
+    QCOMPARE(at, c1);
+    QCOMPARE(st->hitScope(onList, &at), HitScope::List);
+    QCOMPARE(at, list);
+    QCOMPARE(st->hitScope(onProd), HitScope::Production);
+    QCOMPARE(st->hitScope(everywhere), HitScope::Global);
+    QCOMPARE(st->hitsAt(HitScope::Cue, c1), QList<quint32>({ onCue }));
+    QCOMPARE(st->hitsAt(HitScope::List, list), QList<quint32>({ onList }));
+    QCOMPARE(st->hitsAt(HitScope::Global, ShowTree::invalidId()), QList<quint32>({ everywhere }));
+    QCOMPARE(st->hitPlace(onCue), QString("in cue %1").arg(st->cueLabel(*st->cueList(list), 0)));
+    QCOMPARE(st->hitPlace(onList), QString("in cue list Main"));
+    QCOMPARE(st->hitPlace(onProd), QString("in P"));
+    QCOMPARE(st->hitPlace(everywhere), QString("everywhere"));
+    // Not a place: a hit, or nothing.
+    QCOMPARE(st->addHit(HitScope::Cue, onProd, "No"), ShowTree::invalidId());
+    QCOMPARE(st->addHit(HitScope::List, st->looksSection(prod), "No"), ShowTree::invalidId());
+
+    // Moved (a drag): one undo step; the Collection stays.
+    st->setLayerLook(onProd, st->addLayer(onProd, groupTarget(towers->id())), st->lookForPalette(full));
+    const quint32 fid = st->lookFunction(onProd);
+    QVERIFY(st->setHitScope({ onProd }, HitScope::Cue, c2));
+    QCOMPARE(st->hitScope(onProd, &at), HitScope::Cue);
+    QCOMPARE(at, c2);
+    QCOMPARE(st->lookFunction(onProd), fid);
+    QVERIFY(!st->setHitScope({ onProd }, HitScope::Cue, c2));      // already there
+    QVERIFY(st->undo());
+    QCOMPARE(st->hitScope(onProd), HitScope::Production);
+    QVERIFY(st->redo());
+    // Filed in a folder: a production hit again.
+    QVERIFY(st->setLookFolder({ onProd }, "Stabs"));
+    QCOMPARE(st->hitScope(onProd), HitScope::Production);
+    QVERIFY(st->undo());
+    QCOMPARE(st->hitScope(onProd), HitScope::Cue);
+
+    // Copied (⌥-drag): a new hit there, its own layers.
+    const QList<quint32> copies = st->copyHitsTo({ onProd }, HitScope::List, list);
+    QCOMPARE(copies.count(), 1);
+    QCOMPARE(st->hitScope(copies.first()), HitScope::List);
+    QCOMPARE(st->cue(copies.first())->name, QString("Wash"));
+    QCOMPARE(st->cue(copies.first())->layers.count(), 1);
+    QVERIFY(st->cue(copies.first())->layers.first().id != st->cue(onProd)->layers.first().id);
+    QVERIFY(st->undo());
+    QVERIFY(st->cue(copies.first()) == nullptr);
+
+    // To another production: into its Hits section, the hit the same.
+    const quint32 other = st->addProduction("Q");
+    const quint32 otherList = st->addCueList(other, "Set", ListMode::Tracking);
+    QVERIFY(st->setHitScope({ onList }, HitScope::List, otherList));
+    QCOMPARE(st->listOfCue(onList)->id, st->looksSection(other));
+    QCOMPARE(st->hitPlace(onList), QString("in cue list Set"));
+    QVERIFY(st->undo());
+    QCOMPARE(st->listOfCue(onList)->id, st->looksSection(prod));
+
+    // Its cue deleted: it moves up to the production; undo puts it back.
+    QVERIFY(st->removeCue(c1));
+    QCOMPARE(st->hitScope(onCue), HitScope::Production);
+    QVERIFY(st->isLook(onCue));
+    QVERIFY(st->undo());
+    QCOMPARE(st->hitScope(onCue, &at), HitScope::Cue);
+    QCOMPARE(at, c1);
+
+    // Saved and read back with their places.
+    QByteArray xml;
+    {
+        QBuffer buf(&xml);
+        buf.open(QIODevice::WriteOnly);
+        QXmlStreamWriter w(&buf);
+        w.writeStartDocument();
+        st->saveXML(&w);
+        w.writeEndDocument();
+    }
+    QVERIFY(xml.contains(QStringLiteral("Scope=\"Cue\" ScopeOf=\"%1\"").arg(c1).toUtf8()));
+    QVERIFY(xml.contains("Scope=\"Global\""));
+    st->reset();
+    {
+        QXmlStreamReader r(xml);
+        while (!r.atEnd() && !r.isStartElement())
+            r.readNext();
+        QVERIFY(st->loadXML(r));
+    }
+    QCOMPARE(st->hitScope(onCue, &at), HitScope::Cue);
+    QCOMPARE(at, c1);
+    QCOMPARE(st->hitScope(onProd, &at), HitScope::Cue);
+    QCOMPARE(at, c2);
+    QCOMPARE(st->hitScope(onList), HitScope::List);
+    QCOMPARE(st->hitScope(everywhere), HitScope::Global);
+
+    // A show from before places: every hit is its production's.
+    xml.replace(QStringLiteral(" Scope=\"Cue\" ScopeOf=\"%1\"").arg(c1).toUtf8(), "");
+    st->reset();
+    {
+        QXmlStreamReader r(xml);
+        while (!r.atEnd() && !r.isStartElement())
+            r.readNext();
+        QVERIFY(st->loadXML(r));
+    }
+    QCOMPARE(st->hitScope(onCue), HitScope::Production);
+    QCOMPARE(st->hitPlace(onCue), QString("in P"));
+}
+
 void ShowTree_Test::lookFoldersSaveLoadAndUndo()
 {
     FixtureGroup *towers = group("Towers", { m_fixtures[0] });

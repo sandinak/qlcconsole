@@ -213,6 +213,7 @@ add_library(${module_name}
     updateinstaller.cpp updateinstaller.h
     updatemanager.cpp updatemanager.h
     usedby.cpp usedby.h
+    hitmap.cpp hitmap.h
     paletteeditdialog.cpp paletteeditdialog.h
     palettemanager.cpp palettemanager.h
     scripteditor.cpp scripteditor.h scripteditor.ui

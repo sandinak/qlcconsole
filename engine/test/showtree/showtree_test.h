@@ -207,6 +207,7 @@ private slots:
     void looksNeverTrack();
     void aLookPlaysOverARunningListHtpLtp();
     void lookFoldersSaveLoadAndUndo();
+    void hitsLiveAtAPlace();
     void adoptASceneAsALook();
     void recordLitTakesARunningLooksLayers();
     void lookCommands();

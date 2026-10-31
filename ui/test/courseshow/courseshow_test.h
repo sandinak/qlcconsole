@@ -163,6 +163,7 @@ private slots:
     /** Lesson 2.4's extension: an effect on a speed master (the Look
      *  Editor's Speed), shown in the footer. */
     void lessonTwoFourExtension();
+    void lessonTwoFourStageChase();
 
     /** Lesson 2.5's extension: the fan's Spread 0, and Grouping: Pairs. */
     void lessonTwoFiveExtension();

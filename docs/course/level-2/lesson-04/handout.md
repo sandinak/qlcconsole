@@ -111,7 +111,9 @@ Switch roles after each part.
    **(1)** the effect row and **(2)** its ⋯.
 
 The sparkle plays for as long as the cue does (**Runs: Loop** in the Look
-Editor); **Once** or **N times** stop it after that many runs.
+Editor); **Once** or **N times** stop it after that many runs. A wave such
+as Breathe runs whole breaths: on **Once** it rises, falls and stops on its
+floor, and its **Length** is that one breath.
 
 ![The steps sparkle](../../images/lesson-2-4/rig-dance-sparkle.png)
 
@@ -150,20 +152,22 @@ Editor); **Once** or **N times** stop it after that many runs.
 ## Done early? (Extension)
 
 **One effect over the whole stage.** An effect dropped on the cue, not
-a layer, plays on every layer in it, and each layer keeps its own level:
-the steps stay violet, the step tops dim. A chase across the stage then
-reads as a chase.
+a layer, plays on every layer in it that has no effect of its own, and
+each keeps its own level. A chase across the stage then reads as a chase.
 
 1. In the song's folder, **+ Palette → Effect**; search `Color Chase`,
    click it, **Done**; name it `Stage Chase`.
-2. Click **1.0.6 Dance Break** and drag **Stage Chase** onto the cue
-   itself (its row in the tree), not a layer.
-   - *You should see:* the colour runs box by box across the trusses, and
-     the steps and step tops move with it at their own levels.
+2. Click **1.0.2 Chorus** and drag **Stage Chase** onto the cue itself
+   (its row in the tree), not a layer. The Dance Break's washes keep
+   their own Truss Wave, so the chase would not reach them.
+   - *You should see:* the hint "reaches 2 of 2 layers"; the colour runs
+     box by box across the truss, and the steps move with it at their own
+     levels.
 3. Why would you keep this for the last chorus, not the verse?
 
-The truss boxes' white pixels now light from a colour's white, so a white
-or warm look fills the whole box, not only its RGB pixels.
+The truss boxes' white pixels now light from a colour's white: drop
+**TrussC-W** on the dashed box and **White** on its row, and the whole box
+is lit, not only its RGB pixels.
 
 
 **On the beat: a speed master.** An effect can run on a **speed

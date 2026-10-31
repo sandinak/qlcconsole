@@ -276,10 +276,15 @@ as patched at universe 1, address 1, keeping the first and deleting the
 rest — and any real fixture patched there. It now leaves them out, and
 qlcconsole reads them back.
 
+The Teaching, Operate and web access settings and Effect Control widgets
+are left out too.
+
 When a .qxw you save holds any of these, the line above the tabs says
-which, once for that file, after the save is done — it never stops the
+which, with how many of each (for example "the Show Tree (3 cue lists, 24
+cues)"), once for that file, after the save is done — it never stops the
 save. **Save as .qlcc…** there keeps a copy with everything; the .qxw
-stays as you saved it.
+stays as you saved it. **Don't ask again for this show** turns the line
+off for that file (on this computer; the show itself isn't changed).
 
 **Design and Operate.** In **Design** mode (the default) you build: the
 open scene plays live so you can see it, and nothing runs that you didn't
