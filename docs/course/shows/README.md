@@ -3,6 +3,7 @@
 | File | What |
 |---|---|
 | `ShowChoir-Classroom.qlcc` | The teaching show: the rig, groups, targets and base palettes, no productions. See [the teaching show](../rig.md). |
+| `lesson-3-6-start.qlcc` | Lesson 3.6's start: the classroom show with **Teaching mode on** (the scramble needs it). The only course show that has it. |
 | `lesson-1-1-start.qlcc` | Lesson 1.1's start (the same as the classroom show). |
 | `lesson-1-1-finish.qlcc` | Lesson 1.1 done: *Spring Show / 01-Everybody Scream*, cues Pose, Verse, Chorus, made current. Lesson 0.8 opens it too. |
 | `lesson-1-2-start.qlcc` | Lesson 1.2's start (the same as 1.1's finish). |
@@ -31,14 +32,18 @@ only the app's.
 ## Teaching mode
 
 The shows are safe on their own (see above), so they ship with **Teaching
-mode off**. It is a flag saved in the show (**File ▸ Show Settings…**), and
-Lesson 3.6's scramble needs it. To hand a class a copy that has it, use
-**File ▸ Show Settings… ▸ Make Student Handout…**: Teaching on, real network
-output held, an optional PIN (so a student cannot untick it by accident),
-and the practice answer key left out of the venue file. Keep your own master
-without it. The footer shows a **TEACHING** chip and Operate shows a quiet
-notice (Lesson 1.5 is unaffected: no dialog). See
-[Teaching mode](../../features/teaching.md).
+mode off**, except Lesson 3.6's start file, the one lesson whose text needs
+it (decided, can change). Every other lesson's text says nothing about it,
+and Teaching's patch question would stand in front of the lessons that
+patch (the Eos import in 3.10); a teacher who wants the GO log and the
+glossary popovers in every lesson ticks it in **File ▸ Show Settings…**.
+To hand a class a copy that has it, use **File ▸ Show Settings… ▸ Make
+Student Handout…**: Teaching on, real network output held, an optional PIN
+(so a student cannot untick it by accident), and the practice answer key
+left out of the venue file. Keep your own master without it. The footer
+shows a **TEACHING** chip and Operate shows a quiet notice (Lesson 1.5 is
+unaffected: no dialog). The Run tab writes what each GO did, and hovering a
+term defines it. See [Teaching mode](../../features/teaching.md).
 
 ## How they are made
 

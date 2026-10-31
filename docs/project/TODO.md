@@ -371,10 +371,15 @@ Operate PIN). **Still open:**
   see docs/features/teaching.md. Also DONE (tch2, feat/031-teaching2): reset
   to handout (state embedded in the handout, Show Settings, behind the PIN),
   confirm before patch changes (Fixture Manager, Patch dialog), USB/hardware
-  output held. Still later: a per-GO "what just happened" log, glossary
-  popovers, a Show Review "Teaching mode is on" check (when Show Review
-  exists), the course shows rebuilt with Teaching on (they ship off; Lesson
-  3.6 says to tick it). Also DONE (tch3, feat/031-teaching3): the patch
+  output held. Also DONE (tch4, feat/05-teaching-later): the per-GO "what just
+  happened" log (Run tab, `GoLog`, fed by `ShowControl::cueTaken`), glossary
+  popovers (`TeachingGlossary`, one source), and `lesson-3-6-start.qlcc`
+  (Teaching on; decided (can change): only 3.6's text expects it, so the
+  other course shows stay off, since the Teaching patch question would
+  stand in front of the lessons that patch, e.g. the 3.10 Eos import).
+  **Still open:** a Show Review check TEACH-01 "Teaching mode is on"
+  (note level, accept-able with "class copy"), to add when Show Review v1
+  (feat/05-show-review) is on main; a test with it. Also DONE (tch3, feat/031-teaching3): the patch
   confirm in the Lighting Studio's Fixture Properties (universe/address) and
   on pasting a truss with its fixtures patched; every other Studio add (curtain,
   fountain flame, pasted-unpatched) is unpatched, so changes nothing.

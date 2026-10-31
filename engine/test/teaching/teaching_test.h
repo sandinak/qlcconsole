@@ -50,6 +50,11 @@ private slots:
     /** The handout state travels in the Teaching element, deflated, and is not part of itself */
     void theHandoutStateIsKept();
 
+    /** The one glossary: lookups ignore case, every term has a one-line definition */
+    void glossaryLookups();
+    /** Off: the log keeps nothing (a GO, a hit) and the glossary line is not asked for */
+    void theLogDoesNothingWhenTeachingIsOff();
+
 private:
     Doc *m_doc = nullptr;
 };

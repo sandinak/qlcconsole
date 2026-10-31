@@ -57,6 +57,12 @@ back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
 
 ### Teaching
 
+- **What just happened, and the glossary.** In a Teaching show the Run tab
+  writes a line for every GO, Back and hit ("GO → cue 3 'Three': B →
+  Half; A, B tracked"), and hovering a term (the Show Tree's S T R M F
+  heads, the Run tab's heads and GO / Back buttons, the Operate settings)
+  adds its one-line definition. Nothing shows in a show that is not
+  Teaching. Lesson 3.6's start file, `lesson-3-6-start.qlcc`, has Teaching on.
 - **Fixture Properties ask too.** In a Teaching show the Lighting Studio's
   universe and address boxes, and pasting a truss with its fixtures patched,
   ask "Change the Patch" like the Fixture Manager does.

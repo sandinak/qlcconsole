@@ -32,6 +32,7 @@
 
 #include "showsettingsdialog.h"
 #include "teachingsettings.h"
+#include "teachingtips.h"
 #include "showoperate.h"
 #include "doc.h"
 
@@ -55,12 +56,15 @@ ShowSettingsDialog::ShowSettingsDialog(Doc *doc, QWidget *parent)
     m_openInOperate->setObjectName(QStringLiteral("showSettingsOpenInOperate"));
     m_openInOperate->setToolTip(tr("Opening the show goes straight to Operate, as the -p "
                                    "command-line option does, so the show is ready to run."));
+    TeachingTips::attach(m_doc, m_openInOperate, m_openInOperate->toolTip(), { QStringLiteral("operate") });
     m_openInOperate->setChecked(op->openInOperate());
     vl->addWidget(m_openInOperate);
     m_lockDesign = new QCheckBox(tr("Going back to Design asks for the PIN"), box);
     m_lockDesign->setObjectName(QStringLiteral("showSettingsLockDesign"));
     m_lockDesign->setToolTip(tr("With a PIN set: the show stays in Operate until the PIN is given, "
                                 "and Live Edit is off. Untick it to use the PIN for Teaching mode only."));
+    TeachingTips::attach(m_doc, m_lockDesign, m_lockDesign->toolTip(),
+                         { QStringLiteral("design"), QStringLiteral("operate") });
     m_lockDesign->setChecked(op->lockDesignSetting());
     vl->addWidget(m_lockDesign);
     m_remoteGo = new QCheckBox(tr("Allow GO from the phone Run page"), box);

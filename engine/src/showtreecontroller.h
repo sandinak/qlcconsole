@@ -181,6 +181,14 @@ public:
      *  Intensity 45%; USTs out". @a fromCue invalid: from dark. Empty: no
      *  change (or no such cue). */
     QString changeLine(quint32 fromCue, quint32 toCue) const;
+    /** The Teaching log's line for a GO or Back that took the stage from
+     *  @a fromCue (invalid: from dark) to @a toCue, in crew words: "GO →
+     *  cue 2.1 'Verse lights' (fade 3 s): Backs → Red; Fronts tracked".
+     *  @a verb is "GO", "Back", "Sub GO"... Built on the main thread when
+     *  the command arrives, from the resolved cue; never per frame. */
+    QString goLogLine(const QString &verb, quint32 fromCue, quint32 toCue) const;
+    /** The same for a hit fired from a Virtual Console button. */
+    QString hitLogLine(quint32 hitId) const;
 
     /************************************************************************
      * Group sets (the Library's "Make set", §1)

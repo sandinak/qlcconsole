@@ -210,6 +210,14 @@ signals:
     void commandFrom(ShowControl::Source source, quint32 universe,
                      const QString &what, bool done);
 
+    /** A GO or Back is carried out (not on a refusal): @a chaserId's list
+     *  went from step @a fromStep (sub-cue @a fromSub; -1: not playing) to
+     *  @a step (sub-cue @a sub, -1: the cue itself). Emitted once per
+     *  command on the thread it arrived on, never per frame: the Teaching
+     *  log (GoLog) builds its line from it. */
+    void cueTaken(ShowControl::Command command, quint32 chaserId, int fromStep, int fromSub,
+                  int step, int sub);
+
     /** A GO, Back, Sub GO or Sub Back is about to put a cue on stage, from
      *  anywhere (a key, the Run tab, OSC, MSC, the VC): emitted before it
      *  acts, on the thread the command arrived on. The Show Tree holds its

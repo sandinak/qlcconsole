@@ -209,6 +209,7 @@ add_library(${module_name}
     showconverter.cpp showconverter.h
     cuerunner.cpp cuerunner.h
     groupmasterstrip.cpp groupmasterstrip.h
+    teachingtips.cpp teachingtips.h
     updatechecker.cpp updatechecker.h
     updatedialog.cpp updatedialog.h
     updatedownloader.cpp updatedownloader.h

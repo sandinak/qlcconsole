@@ -36,6 +36,8 @@ add_library(${module_name} SHARED
     showreview.cpp showreview.h showreviewcontext.h
     showreviewchecks.cpp showreviewcuechecks.cpp
     showreviewcli.cpp showreviewcli.h
+    teachinglog.cpp teachinglog.h
+    teachingglossary.cpp teachingglossary.h
     outputrulekeeper.cpp outputrulekeeper.h
     fixturegroup.cpp fixturegroup.h
     function.cpp function.h

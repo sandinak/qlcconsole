@@ -23,7 +23,10 @@
    "Towers → Red, spread +5; BackStage in → Green, Intensity 45%". */
 
 #include "showtreecontroller.h"
+#include <QLocale>
+
 #include "qlcpalette.h"
+#include "function.h"
 #include "doc.h"
 
 using namespace ShowTree;
@@ -131,4 +134,71 @@ QString ShowTreeController::changeLine(quint32 fromCue, quint32 toCue) const
         if (!values(l).isEmpty() && (to.layer(l.target) == nullptr || values(*to.layer(l.target)).isEmpty()))
             parts << tr("%1 out").arg(label(l));
     return parts.join(QStringLiteral("; "));
+}
+
+/* A time as the crew says it: "3 s", "0.5 s", "1 min 30 s". */
+static QString crewTime(uint ms)
+{
+    if (ms >= 60000)
+    {
+        const uint secs = (ms + 500) / 1000;
+        return secs % 60 == 0 ? QObject::tr("%1 min").arg(secs / 60)
+                              : QObject::tr("%1 min %2 s").arg(secs / 60).arg(secs % 60);
+    }
+    return QObject::tr("%1 s").arg(QLocale::c().toString(ms / 1000.0, 'f', ms % 1000 == 0 ? 0 : (ms % 100 == 0 ? 1 : 2)));
+}
+
+QString ShowTreeController::goLogLine(const QString &verb, quint32 fromCue, quint32 toCue) const
+{
+    const CueList *list = listOfCue(toCue);
+    const Cue *c = list == nullptr ? nullptr : list->cue(toCue);
+    ResolvedCue to;
+    if (c == nullptr || !resolvedCue(toCue, &to))
+        return tr("%1 \u2192 (no such cue)").arg(verb);
+
+    QString head = tr("%1 \u2192 cue %2").arg(verb, cueNumber(*list, list->indexOf(toCue)));
+    if (!c->name.isEmpty())
+        head += QStringLiteral(" '") + c->name + QLatin1Char('\'');
+    QStringList timing;
+    if (c->fadeIn > 0)
+        timing << tr("fade in %1").arg(crewTime(c->fadeIn));
+    if (c->hold != Function::infiniteSpeed())
+        timing << tr("follows after %1").arg(crewTime(c->hold));
+    if (!timing.isEmpty())
+        head += QStringLiteral(" (") + timing.join(QStringLiteral(", ")) + QLatin1Char(')');
+
+    QStringList parts;
+    const QString change = changeLine(fromCue, toCue);
+    parts << (change.isEmpty() ? tr("no change") : change);
+
+    // Layers that carried in from earlier cues unchanged: tracked.
+    QStringList tracked;
+    for (const ResolvedLayer &l : to.layers)
+    {
+        if (l.values.isEmpty())
+            continue;
+        bool all = true;
+        for (const ResolvedValue &v : l.values)
+            all = all && v.origin == Origin::Tracked;
+        if (all)
+            tracked << (l.name.isEmpty() ? targetLabel(l.target) : l.name);
+    }
+    if (!tracked.isEmpty())
+        parts << tr("%1 tracked").arg(tracked.join(QStringLiteral(", ")));
+    return head + QStringLiteral(": ") + parts.join(QStringLiteral("; "));
+}
+
+QString ShowTreeController::hitLogLine(quint32 hitId) const
+{
+    const CueList *list = listOfCue(hitId);
+    const Cue *c = list == nullptr ? nullptr : list->cue(hitId);
+    if (c == nullptr)
+        return tr("HIT \u2192 (no such hit)");
+    QString head = tr("HIT \u2192 '%1'").arg(c->name);
+    const QString place = hitPlace(hitId);
+    if (!place.isEmpty())
+        head += QStringLiteral(" (") + place + QLatin1Char(')');
+    // From dark: what the hit lays over the cue playing.
+    const QString what = changeLine(invalidId(), hitId);
+    return head + QStringLiteral(": ") + (what.isEmpty() ? tr("no change") : what);
 }
