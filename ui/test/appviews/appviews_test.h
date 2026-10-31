@@ -164,6 +164,13 @@ private slots:
      *  cue's values reach the universe -- says so, and Play brings it
      *  back; a busked scene (the VC, Simple Desk) keeps running. */
     void goHoldsThePreviewSoOnlyTheRunPlays();
+    /** The one GO path (docs/design/RUN_COMMANDS.md): the keys, the Run
+     *  tab (button and Space), a VC Cue Runner, the pad's chaser step and
+     *  OSC all end in App::runCommand(), each with its route; the footer
+     *  only shows the Run tab. Only the console's routes speak. */
+    void everyRouteTakesTheOneGoPath();
+    /** ...and a GO that finds nothing to play holds no preview. */
+    void aGoThatFindsNothingHoldsNoPreview();
     /** Plain Esc is no playback action: in the main window, the Show Tree
      *  and the Workbench it leaves a function and the main list running;
      *  ⌘⇧Esc (Stop all) stops them. */

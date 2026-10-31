@@ -20,6 +20,7 @@
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
 #include <QSignalSpy>
+#include <QScopeGuard>
 #include <QtTest>
 #include <QtCore>
 
@@ -890,9 +891,18 @@ void FocusCalls_Test::aFocusCallCueArmsThenStartsOnTheController()
     s->setTrigger(1, 1.0f);
     QCOMPARE(exit.count(), 1);
     QCOMPARE(s->callIndex(), 1);
+    // The GO it goes on with takes the one GO path (RUN_COMMANDS.md).
+    QList<ShowControl::Route> routes;
+    ShowControl *sc = m_doc->showControl();
+    sc->setRunHandler([&routes, sc](const ShowControl::Request &r, ShowControl::Route route) {
+        routes << route;
+        return sc->execute(r);
+    });
+    auto unhook = qScopeGuard([sc]() { sc->setRunHandler(nullptr); });
     s->finish();
     // Leaving goes on with the list.
     QCOMPARE(fcc->state(), FocusCallCue::Idle);
+    QCOMPARE(routes, QList<ShowControl::Route>({ ShowControl::RouteFocusCall }));
     QCOMPARE(goOn.count(), 1);
     QCOMPARE(goOn.first().at(0).toUInt(), st->cueList(list)->chaser);
     // ...and does not arm the same cue again as the list moves off it.

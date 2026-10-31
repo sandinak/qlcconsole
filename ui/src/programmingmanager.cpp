@@ -57,7 +57,6 @@
 #include "vcbutton.h"
 #include "vcframe.h"
 #include "showcontrol.h"
-#include "cuerunner.h"
 #include "helpbrowser.h"
 #include "programmercontroller.h"
 #include "functionstreewidget.h"
@@ -3549,7 +3548,7 @@ void ProgrammingManager::slotButtonAction(const QString &action)
             ShowControl::Request r;
             r.command = stepType == ChaserNextStep ? ShowControl::Go : ShowControl::Back;
             r.chaser = ch->id();
-            CueRunner::runCommand(m_doc, r, true);
+            m_doc->showControl()->run(r, ShowControl::RoutePad);
             continue;
         }
         ch->setAction(chaserAction);

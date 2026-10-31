@@ -268,7 +268,7 @@ void FocusCallCue::sessionStopped()
             ShowControl::Request r;
             r.command = ShowControl::Go;
             r.chaser = chaser;
-            sc->execute(r);
+            sc->run(r, ShowControl::RouteFocusCall);
         }
     }
 }

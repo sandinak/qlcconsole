@@ -21,7 +21,6 @@
 #define CUERUNNER_H
 
 #include <QWidget>
-#include <functional>
 
 #include "showcontrol.h"
 #include "qlcui_export.h"
@@ -50,8 +49,8 @@ class Doc;
  * Tree, or the current production (the show's main cue list), and shows the
  * same state everywhere because it keeps none of its own: what plays is the
  * list's chaser, what is loaded is ShowControl's. Every button goes through
- * ShowControl::execute(), the same path the footer GO, ⌘↩ and QLab / OSC /
- * MSC take.
+ * ShowControl::run() (docs/design/RUN_COMMANDS.md), the same path ⌘↩, the
+ * pad, the Control Map and QLab / OSC / MSC take.
  *
  * Click a cue = LOAD (it becomes STANDBY); double-click = jump to it now (a
  * sub-cue: its cue first). GO plays the loaded cue, else the next; into a
@@ -115,16 +114,11 @@ public:
      *  This Show…, set by the App; a test's own). Null: no button. */
     static void setUpgradeAction(QAction *action);
     static QAction *upgradeAction();
-    /** RC8: the one path every console GO takes -- App::runCommand(),
-     *  set by the App: the previews hold first (ShowTreeController::
-     *  takeStageForRun()), then ShowControl::execute(); @a fromConsole
-     *  (the Run tab, the keys, the pad) also says so in the notice and
-     *  offers Operate after a GO in Design (Q92). Null: execute only (it
-     *  still holds the previews, through ShowControl::aboutToTakeStage). */
-    using RunHook = std::function<bool(const ShowControl::Request &request, bool fromConsole)>;
-    static void setRunHook(const RunHook &hook);
-    /** Carry out @a request on @a doc through the run hook. */
-    static bool runCommand(Doc *doc, const ShowControl::Request &request, bool fromConsole);
+    /** Carry out @a request on @a doc by the one run path
+     *  (ShowControl::run(), docs/design/RUN_COMMANDS.md): in the app,
+     *  App::runCommand() -- the guards, the preview hold (RC8), then
+     *  ShowControl::execute(). */
+    static bool runCommand(Doc *doc, const ShowControl::Request &request, ShowControl::Route route);
     /** The Run tab's empty state (no main cue list) shown now. */
     bool isEmptyStateShown() const;
     QPushButton *upgradeButton() const { return m_upgrade; }

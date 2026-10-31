@@ -1605,6 +1605,143 @@ void AppViews_Test::goHoldsThePreviewSoOnlyTheRunPlays()
     QTRY_VERIFY_WITH_TIMEOUT(list->currentStepIndex() == 1, 5000);
 }
 
+void AppViews_Test::everyRouteTakesTheOneGoPath()
+{
+    Doc *doc = m_app->m_doc;
+    ShowTreeController *st = doc->showTree();
+    ShowControl *sc = doc->showControl();
+    QList<quint32> fixtures, functions;
+    quint32 prod = ShowTree::invalidId();
+    auto tidy = qScopeGuard([&]() {
+        doc->masterTimer()->stopAllFunctions();
+        if (prod != ShowTree::invalidId())
+            st->removeProduction(prod);
+        takeAway(doc, fixtures, functions);
+        m_app->hideViewNotice();
+        QTRY_COMPARE_WITH_TIMEOUT(doc->masterTimer()->runningFunctions(), 0, 5000);
+        QCoreApplication::processEvents();
+    });
+    // The App is the run handler of its show's ShowControl.
+    QVERIFY(sc->hasRunHandler());
+
+    prod = st->addProduction("One GO");
+    const quint32 listId = st->addCueList(prod, "Main", ShowTree::ListMode::NonTracking);
+    for (int i = 0; i < 4; ++i)
+        st->addCue(listId, i - 1, QString("Cue %1").arg(i + 1));
+    Chaser *list = qobject_cast<Chaser *>(doc->function(st->cueList(listId)->chaser));
+    QVERIFY(list != nullptr);
+    sc->setMainCueList(list->id());
+    doc->setMode(Doc::Operate);
+    m_app->hideViewNotice();
+
+    QSignalSpy handled(sc, &ShowControl::commandHandled);
+    auto took = [&](ShowControl::Route route, ShowControl::Command command) -> bool {
+        return m_app->m_lastRunRoute == route && !handled.isEmpty()
+            && handled.last().at(0).toString().startsWith(ShowControl::commandName(command));
+    };
+    int count = m_app->m_runCommands;
+
+    // The keys: ⌘↩, ⌘⇧↩, Sub GO, Sub Back (Control ▸ GO is the same action).
+    m_app->m_cueGoAction->trigger();
+    QVERIFY(took(ShowControl::RouteKey, ShowControl::Go));
+    QCOMPARE(m_app->m_runCommands, ++count);
+    QTRY_VERIFY_WITH_TIMEOUT(list->isRunning() && list->currentStepIndex() == 0, 5000);
+    m_app->m_cueBackAction->trigger();
+    QVERIFY(took(ShowControl::RouteKey, ShowControl::Back));
+    QCOMPARE(m_app->m_runCommands, ++count);
+    m_app->m_cueSubGoAction->trigger();
+    QVERIFY(took(ShowControl::RouteKey, ShowControl::SubGo));
+    QCOMPARE(m_app->m_runCommands, ++count);
+    m_app->m_cueSubBackAction->trigger();
+    QVERIFY(took(ShowControl::RouteKey, ShowControl::SubBack));
+    QCOMPARE(m_app->m_runCommands, ++count);
+
+    // The Run tab: its buttons, and Space.
+    {
+        CueRunner runTab(doc, CueRunner::Full);
+        runTab.go();
+        QVERIFY(took(ShowControl::RouteRunTab, ShowControl::Go));
+        QCOMPARE(m_app->m_runCommands, ++count);
+        runTab.stop();
+        QVERIFY(took(ShowControl::RouteRunTab, ShowControl::Stop));
+        QCOMPARE(m_app->m_runCommands, ++count);
+        runTab.load(QStringLiteral("2"));
+        QVERIFY(took(ShowControl::RouteRunTab, ShowControl::Load));
+        QCOMPARE(m_app->m_runCommands, ++count);
+        QShortcut *space = nullptr;
+        for (QShortcut *k : runTab.findChildren<QShortcut *>())
+            if (k->key() == QKeySequence(Qt::Key_Space))
+                space = k;
+        QVERIFY(space != nullptr);
+        emit space->activated();
+        QVERIFY(took(ShowControl::RouteRunTab, ShowControl::Go));
+        QCOMPARE(m_app->m_runCommands, ++count);
+        QTRY_VERIFY_WITH_TIMEOUT(list->isRunning(), 5000);
+    }
+
+    // A VC Cue Runner: the VC's route, quiet.
+    {
+        CueRunner vc(doc, CueRunner::Compact);
+        m_app->hideViewNotice();
+        vc.go();
+        QVERIFY(took(ShowControl::RouteVcRunner, ShowControl::Go));
+        QCOMPARE(m_app->m_runCommands, ++count);
+        vc.back();
+        QVERIFY(took(ShowControl::RouteVcRunner, ShowControl::Back));
+        QCOMPARE(m_app->m_runCommands, ++count);
+    }
+
+    // The pad: a profile's chaser step on a running Show Tree list is a GO.
+    ProgrammingManager *pm = ProgrammingManager::instance();
+    QVERIFY(pm != nullptr);
+    QTRY_VERIFY_WITH_TIMEOUT(list->isRunning(), 5000);
+    pm->slotButtonAction(QStringLiteral("chaser_step_forward"));
+    QVERIFY(took(ShowControl::RoutePad, ShowControl::Go));
+    QCOMPARE(m_app->m_runCommands, ++count);
+    pm->slotButtonAction(QStringLiteral("chaser_step_back"));
+    QVERIFY(took(ShowControl::RoutePad, ShowControl::Back));
+    QCOMPARE(m_app->m_runCommands, ++count);
+
+    // OSC (QLab): through ShowControl::run() to the same place.
+    QByteArray datagram("/go");
+    datagram.append(QByteArray(4 - datagram.size() % 4, '\0'));
+    datagram.append(QByteArray(",\0\0\0", 4));
+    QCOMPARE(sc->handleOsc(datagram), 1);
+    QVERIFY(took(ShowControl::RouteOsc, ShowControl::Go));
+    QCOMPARE(m_app->m_runCommands, ++count);
+
+    // The footer's Next: status only -- a click shows the Run tab, no GO.
+    m_app->slotUpdateStandby();
+    QVERIFY(m_app->m_statusStandby != nullptr);
+    m_app->m_statusStandby->click();
+    QCOMPARE(m_app->m_runCommands, count);
+
+    doc->setMode(Doc::Design);
+}
+
+void AppViews_Test::aGoThatFindsNothingHoldsNoPreview()
+{
+    Doc *doc = m_app->m_doc;
+    ShowTreeController *st = doc->showTree();
+    ShowControl *sc = doc->showControl();
+    auto tidy = qScopeGuard([&]() { m_app->hideViewNotice(); });
+    m_app->hideViewNotice();
+    m_app->m_operateOffered = true;
+    doc->setMode(Doc::Design);
+    int taken = 0;
+    QMetaObject::Connection c = connect(st, &ShowTreeController::stageTakenForRun, this,
+                                        [&taken](QStringList *) { ++taken; });
+    auto unhook = qScopeGuard([c]() { disconnect(c); });
+    // A cue that isn't there: nothing played, nothing held, nothing said.
+    ShowControl::Request r;
+    r.command = ShowControl::Go;
+    r.list = QStringLiteral("no such list");
+    QVERIFY(!sc->run(r, ShowControl::RouteKey));
+    QCOMPARE(m_app->m_lastRunRoute, ShowControl::RouteKey);
+    QCOMPARE(taken, 0);
+    QVERIFY(m_app->m_viewNotice->isHidden());
+}
+
 /* CHANGELOG 0.2.2, "Esc backs out": "plain Esc is no playback action (Stop
    all is ⌘⇧Esc)". */
 void AppViews_Test::plainEscIsNoPlaybackAction()
