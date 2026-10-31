@@ -24,6 +24,7 @@
 #include <QToolButton>
 #include <QMutex>
 #include <QList>
+#include <climits>
 
 #include "clickandgoslider.h"
 #include "clickandgowidget.h"
