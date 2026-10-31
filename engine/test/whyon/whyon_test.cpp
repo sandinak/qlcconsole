@@ -36,6 +36,7 @@
 #include "fadechannel.h"
 #include "mastertimer.h"
 #include "fixturegroup.h"
+#include "groupmasters.h"
 #include "chaseraction.h"
 #include "qlcpalette.h"
 #include "collection.h"
@@ -291,6 +292,41 @@ void WhyOn_Test::anHtpFightNamesTheWinner()
              << "Scene “Cool” sets 100 % (started by VC button 7)"
              << "Scene “Warm” sets 78 % (lower: on this channel the highest level wins, HTP)");
     QCOMPARE(w.lines.at(0).widgetId, quint32(7));
+}
+
+/* A group master at 50 % scales the dimmer before the Grand Master; the
+   two multiply. */
+void WhyOn_Test::aGroupMasterAtHalf()
+{
+    FixtureGroup *front = group("Front", { m_fixtures[0] });
+    front->setMaster(true);
+    front->setMasterLevel(127);
+    m_doc->groupMasters()->rebuild();
+    Scene *s = new Scene(m_doc);
+    s->setName("Look");
+    s->setValue(m_fixtures[0], 0, 255);
+    QVERIFY(m_doc->addFunction(s));
+    s->start(m_doc->masterTimer(), FunctionParent::master());
+    tick(3);
+    QCOMPARE(int(out(0)), 127);
+
+    WhyOn::Answer w = WhyOn::explain(m_doc, m_fixtures[0]);
+    QCOMPARE(w.texts(), QStringList()
+             << "Scene \u201CLook\u201D sets 100 %"
+             << "Group master \u201CFront\u201D at 50 % scales it to 50 %");
+    QCOMPARE(w.lines.at(1).kind, WhyOn::Kind::GroupMaster);
+    QCOMPARE(w.lines.at(1).groupId, front->id());
+    QCOMPARE(w.headline, QString("At 50 %. Scene \u201CLook\u201D sets 100 %."));
+
+    // With the Grand Master at 50 % too: both, in the order they apply.
+    m_doc->inputOutputMap()->setGrandMasterValue(127);
+    tick(2);
+    w = WhyOn::explain(m_doc, m_fixtures[0]);
+    QCOMPARE(int(w.out), 63);
+    QCOMPARE(w.texts(), QStringList()
+             << "Scene \u201CLook\u201D sets 100 %"
+             << "Group master \u201CFront\u201D at 50 % scales it to 50 %"
+             << "Grand Master at 50 % scales it to 25 %");
 }
 
 /* Park over a running scene, with the Grand Master down: Park wins and goes

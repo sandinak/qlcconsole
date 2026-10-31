@@ -36,6 +36,7 @@
 #include "teachingsettings.h"
 #include "showtreeview.h"
 #include "simpledesk.h"
+#include "fixturemanager.h"
 #include "qlcchannel.h"
 #include "vcwidget.h"
 #include "monitor.h"
@@ -284,6 +285,7 @@ void WhyOnPanel::refresh()
         item->setFont(f);
         const bool goes = l.cueId != 0xFFFFFFFF || l.functionId != 0xFFFFFFFF || l.widgetId != 0xFFFFFFFF
                           || l.kind == WhyOn::Kind::SimpleDesk || l.kind == WhyOn::Kind::Park
+                          || l.kind == WhyOn::Kind::GroupMaster
                           || l.kind == WhyOn::Kind::Highlight || l.kind == WhyOn::Kind::Focus;
         item->setToolTip(goes ? tr("Click to go there") : QString());
     }
@@ -341,6 +343,10 @@ void WhyOnPanel::jump(const WhyOn::Line &line)
             break;
         case WhyOn::Kind::SimpleDesk:
             bringForward(SimpleDesk::instance());
+            break;
+        case WhyOn::Kind::GroupMaster:
+            // Where the group (and its master) is set up.
+            bringForward(FixtureManager::instance());
             break;
         case WhyOn::Kind::VCWidget:
             bringForward(VirtualConsole::instance());

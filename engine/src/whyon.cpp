@@ -32,6 +32,7 @@
 #include "qlcchannel.h"
 #include "qlcpalette.h"
 #include "fixturegroup.h"
+#include "groupmasters.h"
 #include "mastertimer.h"
 #include "universe.h"
 #include "function.h"
@@ -725,6 +726,34 @@ WhyOn::Answer WhyOn::explainAddress(Doc *doc, quint32 universe, int address, Wor
     int level = a.preGM;
     const bool parked = !sources.isEmpty() && sources.last().priority == Universe::Park
                         && sources.last().verdict == Verdict::Wins;
+
+    /* Group masters scale an intensity before the Grand Master (the two
+       multiply), never a parked, Ignore-GM or relay channel. */
+    const bool mastersApply = level > 0 && intensityCh && !parked && !snap.pastGM
+                              && !(snap.mask & (Universe::GMExempt | Universe::SwitchOutput));
+    if (snap.groupMaster != 255 && mastersApply)
+    {
+        Line l;
+        l.kind = Kind::GroupMaster;
+        l.verdict = Verdict::Scales;
+        QStringList names;
+        if (fxi != nullptr)
+            for (FixtureGroup *grp : doc->groupMasters()->groups())
+                if (grp->fixtureList().contains(fxi->id()) && grp->masterLevel() != 255)
+                {
+                    names << tr("%1 at %2").arg(quoted(grp->name()), percent(grp->masterLevel()));
+                    if (l.groupId == kInvalid)
+                        l.groupId = grp->id();
+                }
+        level = int((uint(level) * snap.groupMaster + 127) / 255);
+        if (names.count() == 1)
+            l.text = tr("Group master %1 scales it to %2").arg(names.first(), percent(level));
+        else if (names.count() > 1)
+            l.text = tr("Group masters %1 scale it to %2").arg(names.join(tr(" \u00D7 ")), percent(level));
+        else
+            l.text = tr("A group master at %1 scales it to %2").arg(percent(snap.groupMaster), percent(level));
+        a.lines << l;
+    }
 
     const uchar gmValue = io->grandMasterValue();
     const bool gmApplies = (io->grandMasterChannelMode() == GrandMaster::Intensity && intensityCh)

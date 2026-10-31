@@ -25,15 +25,16 @@ last frame:
   out, **Park**, **Highlight**, **Flash**, **Quick focus** and **Refine**,
   the **Simple Desk**, a **VC slider** or the widget that started a
   function, the programmer, a Design-mode **preview**;
-- then what changes it on the way out: the **Grand Master** (or that Park
-  or an output rule goes past it), a channel modifier, the input
-  passthrough, and **Blind**, **Blackout** or Teaching's output hold.
+- then what changes it on the way out: a **group master** and the
+  **Grand Master** (or that Park or an output rule goes past them), a
+  channel modifier, the input passthrough, and **Blind**, **Blackout** or
+  Teaching's output hold.
 
 Click a line to go to the cue and layer in the Show Tree, the function,
-the Simple Desk or the Virtual Console. **Copy** puts the answer on the
-clipboard as text. **Plain words** leaves out HTP and LTP; it's on by
-default in a Teaching show. The channel box picks another channel of the
-fixture. A **≈** line means the answer is an estimate: it was read
+the Simple Desk, the Virtual Console or the group in the Fixture Manager.
+**Copy** puts the answer on the clipboard as text. **Plain words** leaves
+out HTP and LTP; it's on by default in a Teaching show. The channel box
+picks another channel of the fixture. A **≈** line means the answer is an estimate: it was read
 between frames, or a blend mode can only be approximated.
 
 The window asks again four times a second while it's open; closed, it

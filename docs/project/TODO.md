@@ -23,7 +23,8 @@ is recorded per frame; the window re-asks at 4 Hz only while shown.
 Each "decided (can change)":
 - The lines are the engine's stack top-down (the last-written, highest
   layer first), then the stages after the faders in the order the
-  universe applies them (Grand Master, modifier, passthrough, Blind,
+  universe applies them (group masters, Grand Master, modifier,
+  passthrough, Blind,
   Blackout, Teaching's hold). The winner is bold; the headline repeats it.
 - A fixture with no channel picked is explained by its master dimmer
   (else its first intensity channel); the window's box picks another.
@@ -40,10 +41,8 @@ Each "decided (can change)":
   build on it.
 - Jumps: cue / hit / preview → the Show Tree node; function → reveal (a
   generated one) or open it; Simple Desk, VC, Park / Highlight / Flash /
-  Focus → their tab.
+  Focus → their tab; a group master → the Fixture Manager.
 Open:
-- Group masters: add their line when feat/04-group-masters is on main
-  (Universe::groupMaster, between the faders and the Grand Master).
 - v2: per-writer provenance (fader tokens, the watch-list probe) and the
   last-writer of a value left behind; Mark (move in black) onto an
   OutputLayer so it has a fader.

@@ -42,6 +42,7 @@ private slots:
     void anEffectAtHalfDepth();
     void anOverrideHitPullsItDown();
     void anHtpFightNamesTheWinner();
+    void aGroupMasterAtHalf();
     void parkHoldsItPastTheGrandMaster();
     void theGrandMasterScalesIt();
     void blindAndNothingSetsIt();

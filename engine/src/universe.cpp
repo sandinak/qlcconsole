@@ -635,6 +635,7 @@ Universe::ChannelSnapshot Universe::channelSnapshot(int address) const
         snap.modifier = m_modifiers.at(address)->name();
     if (m_passthrough && address < m_passthroughValues->size())
         snap.passthrough = uchar(m_passthroughValues->at(address));
+    snap.groupMaster = m_groupMaster[address].load(std::memory_order_relaxed);
     return snap;
 }
 

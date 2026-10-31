@@ -613,6 +613,7 @@ public:
         quint32 framesSinceWrite = 0;
         QString modifier;       //!< the channel modifier's name; empty: none
         uchar passthrough = 0;  //!< the input passthrough's level (0: off)
+        uchar groupMaster = 255;    //!< the group masters' scale (255: none)
     };
     ChannelSnapshot channelSnapshot(int address) const;
 
