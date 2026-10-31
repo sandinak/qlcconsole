@@ -41,6 +41,7 @@
 #include "programmercontroller.h"
 #include "controllerkeepalive.h"
 #include "focuscontrolmap.h"
+#include "padrun.h"
 #include "ioplugincache.h"
 #include "qlcioplugin.h"
 #include "gamepadrole.h"
@@ -278,6 +279,14 @@ QString ControllerTestDialog::mapsTo(QLCIOPlugin *plugin, quint32 input, int cha
     const QString focus = role != GamepadRole::None ? m_actions->actionText(int(role)) : QString();
     if (!focus.isEmpty())
         parts << tr("Focus: %1").arg(focus);
+    // The Run role on (0.4): what the control does while running the show.
+    if (role != GamepadRole::None && m_doc->programmer()->padRun()->isEnabled())
+    {
+        const PadRun::Action run = PadRun::actionFor(role);
+        if (run != PadRun::NoAction)
+            parts << tr("Run: %1").arg(PadNames::expand(PadRun::label(run),
+                                                         PadNames::familyFrom(plugin->inputDeviceKind(input))));
+    }
     return parts.join(QStringLiteral(" \u00B7 "));
 }
 

@@ -302,7 +302,10 @@ private:
     void refreshFocusArmed();
     /** The Venue focus button: greyed, with why, with nothing to focus. */
     void refreshFocusCalls();
+    void refreshPadRun();
     QToolButton *m_focusCallsBtn = nullptr;
+    /** The pad's Run role (0.4): on / off, and armed while LB is held. */
+    QToolButton *m_padRunBtn = nullptr;
     QWidget *m_focusArmed = nullptr;
     QLabel *m_focusArmedLabel = nullptr;
     /** Scoped hits (Q157): the VC buttons whose armed hit overrides a

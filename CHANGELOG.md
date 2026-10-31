@@ -186,6 +186,14 @@ skipped). Upstream fixes taken:
 
 ### Added
 
+- **Run the show from a game controller (Pad Run, 0.4).** The Run tab's
+  **Pad:** button switches the controller between **Tools** (Focus mode,
+  Refine, the follow spot, as before) and **Run**. In Run, hold LB (L1) to
+  arm, then A (Cross) is GO, B Back, Y Sub GO and X Stop; the triggers pick
+  the cue list and RS says what's next. The light bar turns orange while
+  armed and flashes blue with a short buzz on a GO. It is the same GO as
+  ⌘↩, and the same buttons on an Xbox pad or a DualSense. See Show control
+  ▸ GO from the game controller.
 - **Rig Overview owner filter**: an **Owner** box in the footer shows All
   fixtures, **House only** or **Ours only** (tour and rental), to see what
   the room gives against what travels. It hides drawing only.

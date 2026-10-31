@@ -41,9 +41,58 @@ A **cue list** is a chase (a chaser). Its steps are the **cues**.
   where GO, Back, Stop and LOAD are.
 - **GO** is ⌘↩ and **Back** ⌘⇧↩, in every window, and in
   **Control** → GO / Back (Main Cue List).
+- From a game controller: [Pad Run](#go-from-the-game-controller-pad-run).
 - A **Virtual Console cue list** shows a **Cue** column beside the step
   number and a **Next:** line under its list — the cue, its name and its
   note.
+
+## GO from the game controller (Pad Run)
+
+Stand anywhere with an Xbox, DualShock 4 or DualSense controller and run
+the show from it. The controller has two **roles**:
+
+- **Tools** (the default): Focus mode, Venue focus, Focus this cue and the
+  follow spot, as before. A controller picked up mid-show never moves it.
+- **Run**: the controller runs the show.
+
+Switch with the **Pad:** button in the **Run** tab's header (**Pad: Tools**
+/ **Pad: Run**). The choice belongs to this computer and is kept for next
+time. Its tooltip shows the button map in the words of the pad you're
+holding, and **Settings → Advanced → Game controllers → Controller test…** lists what each
+button does in the Run role (**Run: GO (LB held)**).
+
+**Nothing moves the show unless LB (L1) is held.** Holding it arms the
+pad: the light bar turns orange and the Run tab's button says **Pad:
+ARMED**. While it's held:
+
+| Control | Xbox | PlayStation | Does |
+|---|---|---|---|
+| hold | LB | L1 | arm |
+| + | A | Cross | **GO** |
+| + | B | Circle | **Back** |
+| + | Y | Triangle | **Sub GO** |
+| + | X | Square | **Stop** the list |
+| — | RT / LT | R2 / L2 | next / previous cue list (no arm needed) |
+| — | RS click | R3 | say the list and what's on standby |
+
+- **GO is confirmed on the pad.** A GO flashes the light bar blue and gives
+  a short buzz. A long buzz means there was nothing to play, and the
+  laptop says so if the voice is on.
+- **An unarmed press does nothing.** The voice says "Hold LB to arm."
+- **The list.** Commands go to the main cue list until a trigger picks
+  another list of the current production. The voice names it ("Act 2.").
+- **The same buttons on every pad.** The map goes by button, not by
+  channel, so a [controller slot](other-improvements.md#one-input-whichever-controller-is-here) that finds a
+  DualSense in place of the Xbox pad keeps it.
+- **One path.** A pad GO is the same GO as ⌘↩ and the Run tab's button:
+  the previews hold for it, and in Design it offers Operate.
+- **The tools win.** A Focus mode or Focus this cue started on the laptop
+  takes the controller until it ends. In the Run role, View + Menu doesn't
+  start Focus mode. A focus-call cue's Start (Menu) still begins its calls.
+- The sticks stay the follow spot's in either role.
+
+decided (can change): GO needs a modifier held (LB), not a double-press;
+Back, Sub GO and Stop need it too, so there is one rule.
 
 ## Sub-cues
 

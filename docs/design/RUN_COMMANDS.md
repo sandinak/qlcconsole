@@ -65,7 +65,8 @@ App) still holds the previews, through a queued connection.
 | Key | `App::m_cueGoAction` / Back / Sub GO / Sub Back (⌘↩, ⌘⇧↩, ⌥⌘↩, ⌥⌘⇧↩; Control ▸ GO…) | Go, Back, SubGo, SubBack on the main list | yes |
 | Run tab | `CueRunner` Full: buttons, Space, a click (Load) or double-click (Go cue) in the list | all but AllOff and Reset | yes |
 | VC Cue Runner | `CueRunner` Compact/List inside `VCCueRunner` (click, its key, its external input) | the same | no |
-| Pad | `ProgrammingManager::slotButtonAction("chaser_step_forward"/"back")` on a running Show Tree list | Go, Back | yes |
+| Pad (Run role) | `PadRun::trigger()` (engine/src/padrun.*): LB held + A / B / Y / X; RT / LT pick the list | Go, Back, SubGo, Stop on the main or picked list | yes |
+| Pad (profile action) | `ProgrammingManager::slotButtonAction("chaser_step_forward"/"back")` on a running Show Tree list, Tools role only | Go, Back | yes |
 | Control Map | `ControlMap::goList()` (GO / Stop a list or cue) | Go, Stop | no |
 | Focus call | `FocusCallCue` continuing its list when the calls are done | Go | no |
 | OSC | `ShowControl::handleOsc()` (from `ShowControlListener`) | all | no |
@@ -99,7 +100,10 @@ the Show Tree runtime are untouched.
 
 ## Next
 
-- **Pad Run:** a pad Run page calls `run(r, RoutePad)`.
+- **Pad Run:** built (0.4): `PadRun` calls `run(r, RoutePad)`; see
+  docs/features/show-control.md "GO from the game controller". Next on
+  it: walking a cue's layers from the pad (Q192), through
+  `PadRun::actionFor()` and `handle()`.
 - **Phone Run page:** add a `RouteWeb`, with Teaching's "allow remote
   GO" and a PIN in step 2.
 - **Override hits:** if hits get their own commands, they join

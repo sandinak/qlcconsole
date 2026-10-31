@@ -23,6 +23,7 @@
 #include <QtMath>
 
 #include "focuscontrolmap.h"
+#include "padrun.h"
 #include "focussession.h"
 
 namespace
@@ -247,6 +248,9 @@ void FocusControlMap::setTool(ControllerScheme::Tool tool)
 
 QString FocusControlMap::actionText(int role) const
 {
+    // The Run role has a map of its own (PadRun): only what it uses is named.
+    if (m_tool == ControllerScheme::RunTool)
+        return PadNames::expand(PadRun::label(PadRun::actionFor(GamepadRole::Role(role))), m_family);
     switch (role)
     {
         case R::LeftX: case R::LeftY:
@@ -340,6 +344,8 @@ static ControllerScheme::Verb keyVerb(int key)
 
 QString FocusControlMap::keyAction(int key) const
 {
+    if (m_tool == ControllerScheme::RunTool)
+        return QString();
     key = canonicalKey(key);
     const ControllerScheme::Verb verb = keyVerb(key);
     if (verb != ControllerScheme::NoVerb)
