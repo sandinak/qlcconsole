@@ -586,6 +586,22 @@ public:
      *  or is held (holdChannels()). */
     bool isChannelSet(int address) const;
 
+    /** One channel as the last frame left it, for "Why is this on?"
+     *  (WhyOn): read on demand from the UI under the frame lock, so a whole
+     *  frame's values -- never one half-built. Nothing is recorded for it. */
+    struct ChannelSnapshot
+    {
+        uchar preGM = 0;        //!< after the faders, before the masters
+        uchar postGM = 0;       //!< what goes out (before Blind / Blackout)
+        uchar mask = 0;         //!< ChannelType bits (HTP, Intensity, rules)
+        bool pastGM = false;    //!< written past the Grand Master (Park)
+        bool set = false;       //!< written lately (isChannelSet())
+        quint32 framesSinceWrite = 0;
+        QString modifier;       //!< the channel modifier's name; empty: none
+        uchar passthrough = 0;  //!< the input passthrough's level (0: off)
+    };
+    ChannelSnapshot channelSnapshot(int address) const;
+
 private:
     void markWritten(int address)
     {

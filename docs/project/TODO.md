@@ -8,6 +8,49 @@ under `~/.claude/.../memory/`.
 
 ---
 
+## "Why is this on?" v1 — built, leftovers (0.5, why, 2026-10-31)
+
+Built: `WhyOn` (engine/src/whyon.*) answers "why is this light / channel
+where it is" from the last frame, on demand, on the UI thread: it copies
+the universe's fader list, the one FadeChannel per fader that covers the
+channel (`GenericFader::peekAddress`) and the channel's stage values
+(`Universe::channelSnapshot`, under the frame lock), replays the merge in
+fader priority order and names each source; `WhyOnPanel` (ui/src/
+whyonpanel.*) shows it from a right-click in the plot, the Rig Overview,
+the Fixture Manager and a Simple Desk channel (docs/features/
+troubleshooting.md "Why is this light on?"; course: Lesson 2.1). Nothing
+is recorded per frame; the window re-asks at 4 Hz only while shown.
+Each "decided (can change)":
+- The lines are the engine's stack top-down (the last-written, highest
+  layer first), then the stages after the faders in the order the
+  universe applies them (Grand Master, modifier, passthrough, Blind,
+  Blackout, Teaching's hold). The winner is bold; the headline repeats it.
+- A fixture with no channel picked is explained by its master dimmer
+  (else its first intensity channel); the window's box picks another.
+- The Simple Desk, the programmer's live edits and VC sliders name their
+  faders when they make them (`setName`, once, not per frame); a VC
+  slider's is its widget id, named by the UI. Other unnamed faders read
+  "a source with no name".
+- An effect from the effect runner is named by the effect palettes
+  playing on that fixture's running scenes; its depth is the fader's Mix.
+- A Show Tree scene several cues share is named for the cue running (or
+  previewed) now, with the attribute's own tracking origin.
+- Wording::Simple (the **Plain words** box, on by default in a Teaching
+  show) only drops the merge words today; v3's full student sentences
+  build on it.
+- Jumps: cue / hit / preview → the Show Tree node; function → reveal (a
+  generated one) or open it; Simple Desk, VC, Park / Highlight / Flash /
+  Focus → their tab.
+Open:
+- Group masters: add their line when feat/04-group-masters is on main
+  (Universe::groupMaster, between the faders and the Grand Master).
+- v2: per-writer provenance (fader tokens, the watch-list probe) and the
+  last-writer of a value left behind; Mark (move in black) onto an
+  OutputLayer so it has a fader.
+- v3: the full "why not" list (shutter closed, colour at black, released
+  / skipped / Solo, power limiter), Show Tree and Workbench row entries,
+  ⌘I, Locate's "Why?" link, pin / several windows, Design-only actions.
+
 ## Effect fades — leftovers (efo, 2026-10-31)
 
 Built (STRATEGY §4 0.4 item 6; docs/features/show-tree.md "Effects"): a

@@ -161,6 +161,7 @@
 #include "outputpatch.h"
 #include "qlccapability.h"
 #include "monitor.h"
+#include "whyonpanel.h"
 #include "itemlock.h"
 #include "rigowner.h"
 #include "shrinkablebar.h"
@@ -3046,6 +3047,10 @@ void Monitor::showStageOverview()
         });
         led->setObjectName(QStringLiteral("ledLayoutAction"));
         led->setEnabled(LedLayoutDialog::canEdit(m_doc, fidUnder));
+        m.addSeparator();
+        m.addAction(WhyOnPanel::actionText(), this, [this, fidUnder, ovDlg, globalPos]() {
+            WhyOnPanel::showFor(m_doc, fidUnder, 0xFFFFFFFF, ovDlg, globalPos);
+        })->setObjectName(QStringLiteral("whyOnAction"));
         m.exec(globalPos);
     });
 

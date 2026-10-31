@@ -1717,6 +1717,7 @@ void VCSlider::writeDMXLevel(MasterTimer *timer, QList<Universe *> universes)
                 if (fader.isNull())
                 {
                     fader = universes[universe]->requestFader(m_monitorEnabled ? Universe::Override : Universe::Auto);
+                    fader->setName(QStringLiteral("VC %1").arg(id()));     // WhyOn: the widget
                     fader->adjustIntensity(intensity());
                     m_fadersMap[universe] = fader;
                     if (m_monitorEnabled)
@@ -1900,6 +1901,7 @@ void VCSlider::writeDMXParameter(MasterTimer *timer, QList<Universe *> universes
             if (fader.isNull())
             {
                 fader = universes[universe]->requestFader();
+                fader->setName(QStringLiteral("VC %1").arg(id()));         // WhyOn: the widget
                 fader->adjustIntensity(intensity());
                 m_fadersMap[universe] = fader;
             }

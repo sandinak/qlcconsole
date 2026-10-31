@@ -153,6 +153,17 @@ back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
   to. Saved with the show. Shows saved earlier open with their effects
   **At once**, so they play as before.
 
+### Why is this on?
+
+- **"Why is this on?"** (0.5): right-click a fixture in the Lighting
+  Studio plot, the Rig Overview or the Fixture Manager, or a Simple Desk
+  channel, and a small window names what sets it now, top-down: the cue
+  and layer (and the cue it tracked in from), an override hit, an effect
+  and its depth, Park, Highlight, Flash, the Simple Desk, a VC slider, a
+  preview; then the Grand Master, Blind and Blackout. Click a line to go
+  there. Worked out from the last frame when asked; closed, it costs the
+  show nothing.
+
 ### Based on QLC+ 4.14.4
 
 qlcconsole's QLC+ base moves from 4.14.2 to **4.14.4**: the build string

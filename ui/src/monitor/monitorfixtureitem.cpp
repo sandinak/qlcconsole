@@ -41,6 +41,7 @@
 #include "monitorfixtureitem.h"
 #include <QGraphicsScene>
 #include "monitor.h"
+#include "whyonpanel.h"
 
 // Returns a 16×16 open-hand cursor — much smaller than the macOS system hand.
 static QCursor smallOpenHandCursor()
@@ -1535,6 +1536,8 @@ void MonitorFixtureItem::contextMenuEvent(QGraphicsSceneContextMenuEvent *event)
        have while pointing at the canvas with the rig in front of you. Acts on
        the whole selection when several fixtures are selected. */
     QAction *locateAct = menu.addAction(tr("Locate"));
+    QAction *whyAct = menu.addAction(WhyOnPanel::actionText());
+    whyAct->setObjectName(QStringLiteral("whyOnAction"));
     menu.addSeparator();
 
     // Facing (pan-zero direction) quick-set for moving heads — rig editing, so
@@ -1581,6 +1584,12 @@ void MonitorFixtureItem::contextMenuEvent(QGraphicsSceneContextMenuEvent *event)
         return;
     }
 
+    if (chosen == whyAct)
+    {
+        WhyOnPanel::showFor(m_doc, m_fid, 0xFFFFFFFF, nullptr, event->screenPos());
+        event->accept();
+        return;
+    }
     if (chosen == locateAct)
     {
         /* The whole selection, so selecting a truss-worth of heads and asking

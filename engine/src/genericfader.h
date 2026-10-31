@@ -186,6 +186,19 @@ public:
     /** Get all channels in a non-modifiable hashmap */
     QHash <quint32,FadeChannel> channels() const;
 
+    /** "Why is this on?" (WhyOn), on demand from the UI -- never per frame:
+     *  a copy of the channel that covers @a address (in this fader's
+     *  universe; a 16-bit pair's either byte), taken under the channels'
+     *  lock. False: this fader doesn't write @a address. */
+    bool peekAddress(quint32 address, FadeChannel *out) const;
+
+    /** The blend mode write() uses (setBlendMode()) */
+    Universe::BlendMode blendMode() const { return m_blendMode; }
+
+    /** An override hit's mix as of the last frame (startOverrideMix()):
+     *  0..1, and whether this fader is a hit's at all. For WhyOn. */
+    qreal overrideMix(bool *isHit = nullptr) const;
+
     /** Return the number of channel added to this fader */
     int channelsCount() const;
 

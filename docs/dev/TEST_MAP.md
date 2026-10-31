@@ -798,6 +798,18 @@ its developer entry. Numbers: TEST_MATRIX.md, "Coverage".
 | M632 | Teaching mode | Operate: quiet notice and Not ready entry; the question only when output is let through and patched; never for -p | AppViews_Test::teachingOperateWarnsQuietlyThenAsksWhenItLooksReal | covered | covered | med | — |
 | M633 | Make Student Handout | A copy with Teaching and the PIN, practice venues and answer key left out, the open show untouched | AppViews_Test::aStudentHandoutIsACopy; FocusReport_Test::handoutLeavesOutThePractice; Teaching_Test::saveOverrideLeavesTheShowAlone | covered | covered | med | — |
 
+## 0.5: Why is this on? (v1)
+
+CHANGELOG **[0.3.1] - Unreleased**, "Why is this on?".
+
+| ID | Feature | Behaviour | Test(s) | Before | After | Risk | Gap / note |
+|---|---|---|---|---|---|---|---|
+| M640 | Tracked from a cue | Cue 1 sets a dimmer, cue 2 doesn't: under cue 2 the answer names cue 2 and layer, "tracked from cue 1"; cue 2's own layer is not tracked; the headline repeats the winner | **WhyOn_Test::aTrackedCueSaysWhereItCameFrom** (new) | none | covered | med | Included and base origins are worded but not driven |
+| M641 | An effect and its depth | An effect fader's Mix at 0.5 over a scene: out half way; the effect wins "at 50 % depth", the scene is replaced | **WhyOn_Test::anEffectAtHalfDepth** (new) | none | covered | med | The fader is made by hand as the effect runner makes it, not by a running effect palette |
+| M642 | Override hit, Park, Grand Master, Blind | An override hit at 0 holds the dimmer over a running cue; Park wins and goes past the Grand Master; the Grand Master scales it; Blind says not sent; nothing set says so | **WhyOn_Test::anOverrideHitPullsItDown**, **::parkHoldsItPastTheGrandMaster**, **::theGrandMasterScalesIt**, **::blindAndNothingSetsIt** (new) | none | covered | med | Group masters: added when they reach main |
+| M643 | HTP fight and the source's starter | Two scenes on an HTP dimmer: the higher wins, the other "lower", top-down order; a VC-started scene names its widget; the real Simple Desk overrides a higher scene | **WhyOn_Test::anHtpFightNamesTheWinner** (new), **WhyOnPanel_Test::theSimpleDeskBeatsAScene** (new) | none | covered | med | — |
+| M644 | The window | Lists the lines (winner bold), the headline; a click goes to what a line names; the same window moves to another light; the channel box; a bare address; Plain words on in a Teaching show; its timer runs only while shown | **WhyOnPanel_Test::listsTheChainAndAClickGoesThere**, **::aBareAddressAndTheChannelPicker**, **::plainWordsInATeachingShow**, **::asksNothingWhileHidden** (new), **WhyOn_Test::aChannelAndABareAddress**, **::simpleWordingDropsTheMergeWords** | none | covered | low | The four right-click menus are not opened offscreen |
+
 ## Data safety across features (old shows, file formats)
 
 | ID | Feature | Behaviour | Test(s) | Before | After | Risk | Gap / note |

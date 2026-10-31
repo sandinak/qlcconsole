@@ -65,6 +65,7 @@
 #include "addchannelsgroup.h"
 #include <functional>
 #include "fixturemanager.h"
+#include "whyonpanel.h"
 #include "venuecorrections.h"
 #include "ledlayouteditor.h"
 #include "measurementunits.h"
@@ -3159,6 +3160,15 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
         menu.addAction(m_locateAction);
         menu.addAction(m_resetAction);
     }
+    // "Why is this on?" (WhyOn): one fixture, the one under the menu.
+    QAction *whyOn = NULL;
+    if (selFixtures.size() == 1 && m_doc->fixture(selFixtures.first()) != NULL)
+    {
+        whyOn = menu.addAction(WhyOnPanel::actionText());
+        whyOn->setObjectName(QStringLiteral("whyOnAction"));
+        whyOn->setToolTip(tr("What sets this light now: the cue and layer, an effect, an override, "
+                             "a master, Park, the Simple Desk"));
+    }
 
     // ---- Organising it ----
     QAction *selectSimilar = NULL;
@@ -3473,6 +3483,11 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
     if (chosen == NULL)
         return;
 
+    if (whyOn != NULL && chosen == whyOn)
+    {
+        WhyOnPanel::showFor(m_doc, selFixtures.first(), 0xFFFFFFFF, this, QCursor::pos());
+        return;
+    }
     if (patchOut != NULL && chosen == patchOut)
     {
         if (ConnectionEditor::edit(m_doc, ctxUni, ctxPlugin, ctxLine, this)
