@@ -67,6 +67,8 @@ private:
     App *m_app;
     QTabWidget *m_tabs = nullptr;
     QWidget *m_advancedPage = nullptr;
+    /** Settings ▸ AI Assist (an AiSettingsPage; null without QLC_AI_ASSIST) */
+    QWidget *m_aiPage = nullptr;
     // Advanced: the show's auto-open shutters (ShutterAutoOpen)
     QCheckBox *m_autoOpenCheck = nullptr;
     class QComboBox *m_onAtOpenCombo = nullptr;

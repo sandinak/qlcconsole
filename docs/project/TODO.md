@@ -497,21 +497,57 @@ C (H×V window, density by throw, coverage outline, the audience-zone
 safety check for Show Review), the Type=Laser emission inference, and
 FixtureDefCheck's laser checks.
 
-## AI Assist (0.5, docs/design/AI_ASSIST.md, scheduled 2026-10-30)
+## AI Assist (0.5, docs/design/AI_ASSIST.md; P0+P1 built 2026-10-31, ai)
 
 Branson's design: type a request in Design mode ("movers 1–6 deep blue at
 50%", "find address conflicts") and get proposed command-line text to
 review; the model never touches the show, every apply is one undo step,
-off by default, torn down in Operate, works offline. Phases, each with its
-acceptance test in the design:
-- **P0** one operation registry the command line runs through (no change
-  in behaviour).
-- **P1** settings, provider adapters, read-only ops, full Design/Operate
-  gating. Ollama runs locally on ender for the acceptance checks (no live
-  model in CI: mock HTTP + recorded responses).
-- **P2** write ops with preview, confirm, undo; golden prompt suite.
+off by default, torn down in Operate, works offline. Help in
+docs/features/ai-assist.md.
+
+- ~~**P0** one operation registry the command line runs through (no change
+  in behaviour).~~ Built: `engine/src/operationregistry.*` (a static catalog
+  shaped like Show Review's; name, JSON schema, validate, execute,
+  cliSyntax, parse, describe). `ShowTreeView::runCommand` runs every line
+  through `OperationRegistry::runLine`: a registry word runs its question,
+  anything else is the `command` operation (the Show Tree grammar, a whole
+  line, unchanged). Tests: engine/test/operationregistry,
+  ShowTreeView_Test::commandLineAsksTheRegistry.
+- ~~**P1** settings, provider adapters, read-only ops, full Design/Operate
+  gating.~~ Built: the `ai/` module (static, `QLC_AI_ASSIST`, ON here):
+  `AiSettings` + `AiKeychain` (macOS keychain; elsewhere the environment),
+  `AiProvider` (OpenAI-compatible incl. Ollama's /v1, Anthropic Messages),
+  `AiAssist` (lazy network manager, tool loop over the read-only
+  operations only, a refused call shown as text, the §5a teardown/unload/
+  audit and the runtime guard), `AiCommandLine` (`? question` in the Show
+  Tree's command line, the AI button), `AiSettingsPage` (Settings ▸ AI
+  Assist). Read-only operations: list_fixtures, list_groups,
+  list_functions, describe_function, list_cues (cue sheet), why_on (Why is
+  this on?), find_conflicts (Show Review PAT-01/02, run as a query that
+  leaves the panel's result), find_unused_functions, find_problems (Show
+  Review), show_summary. Tests: ai/test/aiassist (fake model server on
+  loopback, a recorded Ollama tool call; no live model).
+  *decided: the Show Tree grammar stays one `command` operation in P0; its
+  words become operations of their own in P2, when write operations get
+  schemas and previews (can change).* *decided: `?` alone and `? <one
+  grammar word>` stay the command line's help; any other `? …` is a
+  question, only with AI Assist on (can change).* *decided: the answer shows
+  in the command line's help pane, no new panel or dock (can change).*
+  *decided: a resource error raised in Operate stays in the footer until
+  back in Design (can change).* *decided: Virtual Console widgets aren't
+  checked by `unused` yet (the UI can set
+  `OperationRegistry::setFunctionUseProbe`; the answer says so) (can
+  change).*
+
+**Next:**
+- **P2** write ops with preview, confirm, undo; golden prompt suite (≥15
+  recorded prompts); split the grammar's words into operations; the
+  checklist UI (§7).
 - **P2b** configuration import (§5b), usable with AI off.
 - **P3** MCP server over the registry.
+- Small: VC widgets in `unused`; Linux/Windows keychain (QtKeychain);
+  Tab completion of the registry's words.
+
 Guardrails: separate `ai/` module behind `QLC_AI_ASSIST`; no AI code on
 MasterTimer/universe threads; an ROI line is in STRATEGY.md §3.3.
 

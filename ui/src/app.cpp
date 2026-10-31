@@ -153,6 +153,9 @@
 #include <QFrame>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
+#ifdef QLC_AI_ASSIST
+#include "aiassist.h"
+#endif
 
 #if defined(WIN32) || defined(Q_OS_WIN)
 #   include "hotplugmonitor.h"
@@ -1190,6 +1193,21 @@ void App::initDoc()
     connect(m_doc, SIGNAL(needAutosave()), this, SLOT(slotDocAutosave()));
     connect(m_doc, SIGNAL(modeChanged(Doc::Mode)), this, SLOT(slotModeChanged(Doc::Mode)));
     connect(m_doc, SIGNAL(loadProgress(QString,int)), this, SLOT(slotLoadProgress(QString,int)));
+#ifdef QLC_AI_ASSIST
+    // AI Assist (docs/design/AI_ASSIST.md): off by default, nothing made
+    // until a question; torn down on entering Operate. Anything its audit
+    // finds still alive there stays in the footer until back in Design.
+    {
+        AiAssist *ai = new AiAssist(m_doc, this);
+        connect(ai, &AiAssist::resourceError, this, [](const QString &message) {
+            ShowStatus::instance()->setStatus(QStringLiteral("ai.resources"), ShowStatus::Error,
+                                              tr("AI Assist resources still active in Operate mode"), message);
+        });
+        connect(ai, &AiAssist::resourceErrorCleared, this, []() {
+            ShowStatus::instance()->clearStatus(QStringLiteral("ai.resources"));
+        });
+    }
+#endif
     // Something the show asked for and was refused (a Script's
     // systemcommand, RC8): say so in the footer for a while. Queued: a
     // Script runs on the MasterTimer thread.

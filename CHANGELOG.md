@@ -177,6 +177,23 @@ back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
   and a teacher's folder of hand-ins (exit 0 / 1 warnings / 2 blockers /
   3 unreadable; `--format json`). See docs/features/show-review.md.
 
+### AI Assist
+
+- **AI Assist, first part** (0.5, P0 and P1 of docs/design/AI_ASSIST.md):
+  off by default (**Settings ▸ AI Assist**: provider Ollama, an
+  OpenAI-compatible server or Anthropic; endpoint, model, Test connection;
+  a cloud provider's key in the keychain, never the settings). Then
+  `? <question>` in the Show Tree's command line asks the model, which
+  answers by calling the console's read-only questions (shown as links to
+  the commands, which are new command-line words: `fixtures`, `groups`,
+  `functions`, `describe`, `cues`, `conflicts`, `unused`, `review`,
+  `summary`). It changes nothing. Operate tears it down without delaying
+  the switch (aborts, closes its connections, unloads a local Ollama
+  model, then checks; anything left shows in the footer). Every command
+  line now runs through one Operation Registry, with the grammar
+  unchanged. Built as its own module (`ai/`, CMake `QLC_AI_ASSIST`).
+  See docs/features/ai-assist.md.
+
 ### Based on QLC+ 4.14.4
 
 qlcconsole's QLC+ base moves from 4.14.2 to **4.14.4**: the build string

@@ -953,7 +953,9 @@ void AppViews_Test::settingsAdvancedHoldsAutoOpen()
         AppSettings dlg(m_app);
         QTabWidget *tabs = dlg.findChild<QTabWidget *>(QStringLiteral("settingsTabs"));
         QVERIFY(tabs != nullptr);
-        QCOMPARE(tabs->count(), 3);
+        // General, Appearance, Advanced; AI Assist after them when it is
+        // built in (QLC_AI_ASSIST).
+        QVERIFY(tabs->count() == 3 || (tabs->count() == 4 && tabs->tabText(3) == QStringLiteral("AI Assist")));
         QCOMPARE(tabs->tabText(1), QStringLiteral("Appearance"));
         QCOMPARE(tabs->tabText(2), QStringLiteral("Advanced"));
         QWidget *adv = tabs->widget(2);

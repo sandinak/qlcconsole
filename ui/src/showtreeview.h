@@ -1016,6 +1016,10 @@ private:
     QLabel *m_commandSyntax = nullptr;
     QToolButton *m_commandSyntaxButton = nullptr;
     ShowTreeCommand *m_commander = nullptr;
+    /** The command line's front: every line runs through it (AI_ASSIST.md section 4). */
+    class OperationRegistry *m_operations = nullptr;
+    /** AI Assist in the command line (null without QLC_AI_ASSIST). */
+    class AiCommandLine *m_ai = nullptr;
     QStringList m_commandHistory;
     RecordAsker m_recordAsker;
     Confirm m_confirm;

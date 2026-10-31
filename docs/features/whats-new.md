@@ -4,6 +4,16 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ## 0.3.1 (unreleased)
 
+### AI Assist (first part)
+
+- **Ask about the show in plain words.** Turn it on in **Settings ▸ AI
+  Assist**, then type `? find address conflicts` in the Show Tree's command
+  line. It answers by asking the console read-only questions and shows
+  which, so you can type them yourself next time (`conflicts`, `fixtures`,
+  `unused`, `cues`...). It changes nothing, works with Ollama on this
+  computer, is off by default and is gone in Operate. See
+  [AI Assist](ai-assist.md).
+
 ### Show Review
 
 - **Show Review** checks the show's design and lists what is likely wrong,

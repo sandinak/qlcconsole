@@ -50,6 +50,9 @@
 #include "app.h"
 #include "speedmastersfooter.h"
 #include "legacysettings.h"
+#ifdef QLC_AI_ASSIST
+#include "aisettingspage.h"
+#endif
 
 AppSettings::AppSettings(App *app, QWidget *parent)
     : QDialog(parent)
@@ -82,6 +85,11 @@ AppSettings::AppSettings(App *app, QWidget *parent)
     advancedPage->setProperty("helpTopic", QStringLiteral("other-improvements.md#advanced-settings"));
     QVBoxLayout *advLayout = new QVBoxLayout(advancedPage);
     m_tabs->addTab(advancedPage, tr("Advanced"));
+#ifdef QLC_AI_ASSIST
+    // AI Assist (docs/design/AI_ASSIST.md section 5): this computer's.
+    m_aiPage = new AiSettingsPage(m_tabs);
+    m_tabs->addTab(m_aiPage, tr("AI Assist"));
+#endif
 
     // --- Appearance: this computer's, not the show's. Same settings the
     // View menu used to set (workspace/theme, workspace/tabLabelMode,
@@ -708,6 +716,9 @@ void AppSettings::accept()
         UpdateChecker::setAutoInstall(m_updateAuto->isChecked());
     }
 
+#ifdef QLC_AI_ASSIST
+    static_cast<AiSettingsPage *>(m_aiPage)->apply();
+#endif
     QDialog::accept();
 }
 
