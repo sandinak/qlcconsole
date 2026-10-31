@@ -1665,6 +1665,11 @@ void AppViews_Test::everyRouteTakesTheOneGoPath()
         runTab.stop();
         QVERIFY(took(ShowControl::RouteRunTab, ShowControl::Stop));
         QCOMPARE(m_app->m_runCommands, ++count);
+        // A stop is carried out on the next MasterTimer tick. A GO sent before
+        // it lands finds the list still "running", plays its next cue, and is
+        // then stopped by the late tick: on a loaded machine the list ended up
+        // stopped. Wait the stop out, as a person would.
+        QTRY_VERIFY_WITH_TIMEOUT(!list->isRunning(), 10000);
         runTab.load(QStringLiteral("2"));
         QVERIFY(took(ShowControl::RouteRunTab, ShowControl::Load));
         QCOMPARE(m_app->m_runCommands, ++count);
