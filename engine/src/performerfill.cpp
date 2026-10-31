@@ -115,6 +115,31 @@ float PerformerFill::personHeight(const StageTarget *t, int index)
     return t->effectivePersonHeight() + float((2.0 * u - 1.0) * double(t->heightSpread()));
 }
 
+QVector2D PerformerFill::facingAt(const MonitorProperties *props, float x, float y)
+{
+    if (props == nullptr)
+        return QVector2D(0.0f, 1.0f);
+    const StagePlatform *top = nullptr;
+    float topZ = 0.0f;
+    foreach (const StagePlatform *p, props->platforms())
+    {
+        if (p == nullptr || !p->containsPoint(x, y))
+            continue;
+        const float z = props->platformBaseZ(p->id()) + p->topAt(x, y);
+        if (top == nullptr || z > topZ)
+        {
+            top = p;
+            topZ = z;
+        }
+    }
+    // The highest deck decides; an unturned one (or none) faces the house.
+    if (top == nullptr || !top->isRotated())
+        return QVector2D(0.0f, 1.0f);
+    const QPointF c = top->centre();
+    const QPointF v = top->toWorld(c + QPointF(0.0, 1.0)) - top->toWorld(c);
+    return QVector2D(float(v.x()), float(v.y())).normalized();
+}
+
 QList<PerformerFill::Performer> PerformerFill::people(const MonitorProperties *props, const StageTarget *t)
 {
     QList<Performer> out;
@@ -132,6 +157,7 @@ QList<PerformerFill::Performer> PerformerFill::people(const MonitorProperties *p
         Performer p;
         p.feet = QVector3D(at.x(), at.y(), props->platformHeightAt(at.x(), at.y()));
         p.height = personHeight(t, i);
+        p.facing = facingAt(props, at.x(), at.y());
         out << p;
     }
     return out;

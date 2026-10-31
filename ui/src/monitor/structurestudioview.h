@@ -35,6 +35,7 @@
 #include <cstring>
 #include <QImage>
 #include <functional>
+#include <QVector2D>
 #include <QVector3D>
 #include <QColor>
 #include <QList>
@@ -143,6 +144,12 @@ public:
      *  it. 0 = clean air (no visible shafts), 1 = the usual stage haze,
      *  above 1 = thick. */
     void setHaze(double level);
+    /** Whose fixtures the overview draws (docs/design/VENUES.md): all, only
+     *  the House rig, or only ours (Tour and Rental). Performers and the
+     *  stage are not owned and stay. */
+    enum OwnerFilter { OwnerAll = 0, OwnerHouse, OwnerOurs };
+    void setOwnerFilter(OwnerFilter f);
+    OwnerFilter ownerFilter() const { return m_ownerFilter; }
     double haze() const { return m_haze; }
 
     /** A fixture's light against a reference 100 W LED fixture (3500 lm), from
@@ -181,7 +188,7 @@ public:
     /** Which stage targets are drawn (item 10, "only show targets if
      *  they're in scope for the cue"): @a all, or those in @a ids. */
     void setTargetScope(bool all, const QSet<quint32> &ids);
-    bool targetInScope(quint32 targetId) const { return m_targetScopeAll || m_targetScope.contains(targetId); }
+    bool targetInScope(quint32 targetId) const;
 
     /** Line of sight in the rig views: a beam stops at the first solid
      *  feature in its way -- a tower, a truss -- as it always does at
@@ -385,6 +392,12 @@ private:
     mutable QImage m_floorImage;    ///< the angled floor grid, drawn once (drawGrid())
     mutable QString m_floorKey;     ///< the view it was drawn for
     mutable QElapsedTimer m_floorPointsAge;
+    OwnerFilter m_ownerFilter = OwnerAll;
+    /** Each fixture's effective owner, kept (RigOwner::effectiveAll) while a
+     *  filter is on: rebuilt when the rig may have changed, never per frame. */
+    mutable QHash<quint32, int> m_ownerKept;
+    mutable bool m_ownerKeptValid = false;
+    mutable QElapsedTimer m_ownerKeptAge;   ///< an owner edited elsewhere shows within a second
     /** Every structure in the workspace, for StageKind. */
     QList<QPair<Kind, quint32> > everyStructure() const;
 
@@ -1298,11 +1311,12 @@ private:
     struct FigureFaces
     {
         QVector3D foot; float tall = 0.0f; int seg = 0; bool coarse = false; bool built = false;
+        QVector2D facing = QVector2D(0.0f, 1.0f);
         quint64 lightKey = 0; QVector<QColor> colours;  ///< the shading, and what it was for
         QVector<FigureFace> faces;
     };
     FigureFaces &figureFaces(int index, const QVector3D &foot, float tall, int seg, bool coarse,
-                             const QVector<double> &viewKey) const;
+                             const QVector2D &facing) const;
     mutable QVector<FigureFaces> m_figureFaces;   ///< by position in the drawn list
     mutable QVector<double> m_figureViewKey;
     bool     m_timerTick = false;    ///< liveTick() is running from the live timer

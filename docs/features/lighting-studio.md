@@ -257,13 +257,18 @@ button rotates the view 90° (a view setting only; nothing moves).
 
 **Its controls are along the foot**, in a footer bar like the Lighting
 Studio plot's: **Show** (with **Target positions**) and **Plot layers** on
-the left, then **Live**, **Beams**, **Room**, **Haze**, **Quality**,
+the left, then **Live**, **Beams**, **Room**, **Haze**, **Owner**, **Quality**,
 **GPU**, the frame rate, **Quick focus** and **Fit**, and **View** (Top,
 Front, Back, Side, 45°) on the right, where the plot has its own View. The
 window's title bar moves and closes it as before. Click a box (View,
 Room, Haze, Quality) to step to its next choice; its arrow lists them
 all. **Room** is how much light there is in the house apart from the
 rig: **Work light**, **House** (the default), **Dim** or **Blackout**.
+**Owner** shows **All** fixtures (the default), **House only** (the room's
+own rig) or **Ours only** (the tour package and rentals), by each
+fixture's owner (set in the Fixture Manager; a fixture follows its group
+unless it says otherwise). It only hides what is drawn; the stage and the
+people stay, and nothing about the show or the output changes.
 
 **It follows the Studio's layers.** Hide a layer in the Plot layers panel and
 everything on it — structures, scenery, stage figures and fixtures — leaves
@@ -405,6 +410,15 @@ set the same costume, height and give or take, so a choir changes in one
 place. Each line keeps its own count and its own shuffle. Turning a plain
 line into a performer line leaves its points at the heights they have;
 only a line made by **Add People…** or a fill runs at chest height.
+
+People face the house, unless the deck under them is turned: on a riser
+rotated in its properties, the rig view stands them facing that riser's
+front (the highest deck under their feet decides, so a flat step on a turned
+riser keeps them facing the same way).
+
+The cue scope does not hide people. **Show ▸ All targets** off narrows the
+targets drawn to the ones the cue on show aims at; the performers are the
+scene, not a marker, so they stay drawn while their layer is visible.
 
 Lines go in a **Performers** layer of their own (made the first time). Its
 eye hides them on the plot and in the rig view, and its lock holds them

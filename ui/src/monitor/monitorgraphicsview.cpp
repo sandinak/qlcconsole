@@ -6835,7 +6835,11 @@ void MonitorGraphicsView::setTargetScope(bool all, const QSet<quint32> &ids)
 
 bool MonitorGraphicsView::targetInScope(quint32 targetId) const
 {
-    return m_targetScopeAll || m_targetScope.contains(targetId) || m_placedTargets.contains(targetId);
+    if (m_targetScopeAll || m_targetScope.contains(targetId) || m_placedTargets.contains(targetId))
+        return true;
+    // The people on the stage are the scene, not a marker the cue scope narrows.
+    const MonitorProperties *props = m_doc->monitorProperties();
+    return props != nullptr && PerformerFill::isPerformer(props, props->stageTarget(targetId));
 }
 
 void MonitorGraphicsView::refreshTargetVisibility()

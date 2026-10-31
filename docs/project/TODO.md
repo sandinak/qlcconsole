@@ -261,12 +261,17 @@ check on the show VLAN.
 house rigs kept in the venue sidecar and swapped with the venue, group
 fills, Tour/House slots, the venue's output patch, "not ours", the clash
 check, the venue page, the plot's Owner overlay. Open: Branson confirms
-docs/design/VENUES.md section 11; the Rig Overview (3D) owner filter; a real-rig check that a not-ours universe stays
+docs/design/VENUES.md section 11; a real-rig check that a not-ours universe stays
 silent on Art-Net/sACN.
 
 ## People on the stage: follow-ons (performer lines shipped 2026-10-29, DONE.md)
 
-Open: people facing along a turned riser (everyone faces the house).
+Done 0.3.1 (`feat/031-rig2`): people on a turned riser face its front in
+the Rig Overview (the highest deck under them decides; the plot's
+silhouette is unchanged, decided: can change); the Rig Overview has an
+**Owner** filter (All / House only / Ours only); performers no longer
+vanish with the cue scope (Show > All targets off hid them with the
+targets the cue does not aim at).
 Done 0.3.1 (`feat/031-owner-performers`): a set's costume and heights in
 one place (a whole-set box in the line's dialog), a fill's lines out of the
 aim-target lists (kept when a palette or the list holds them), a converted
