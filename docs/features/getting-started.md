@@ -98,6 +98,10 @@ about its patch or cues. It's only open in Design.
   **Change PIN…** and **Remove PIN** ask for the current PIN first.
   Untick **Going back to Design asks for the PIN** to keep the PIN for
   Teaching mode only.
+- **Allow GO from the phone Run page**: web access serves a Run page for
+  a phone or tablet (see [The Run page](other-improvements.md#the-run-page-phone-and-tablet)).
+  Off in every show until you tick it; with a PIN set, the page asks for
+  the PIN once per session.
 - **Teaching mode**: marks the show as a classroom show, for students. The
   same PIN guards turning it off. See [Teaching mode](teaching.md).
 

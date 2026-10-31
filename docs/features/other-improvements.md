@@ -1054,6 +1054,51 @@ Devices ▸ Show control &amp; sync ▸ Web access**.
   reachable from the network, turn on logins. A show saved for QLC+ 4
   keeps the setting; QLC+ 4 ignores it.
 
+### The Run page (phone and tablet)
+
+Web access also serves a page to run the show from a phone or tablet:
+**http://&lt;address&gt;:9999/run**. It shows the production and cue list,
+the song section, the cue **on now** and the one **next** (number and name),
+and has big **GO**, **BACK** and **STOP** buttons, plus **SUB GO** and
+**SUB BACK** when the list has sub-cues. It is dark and made for one
+thumb: GO sits at the bottom of the screen. It keeps the screen awake where
+the phone allows, and follows the show live: a GO from the console, a
+pedal or QLab shows up on the phone too.
+
+To open it on a phone:
+
+1. In **Connections ▸ Devices ▸ Show control &amp; sync ▸ Web access**, tick
+   **Start web access with this show** and **Reachable from other devices
+   on the network** (or start with **--web-bind 0.0.0.0**). Phone and
+   computer must be on the same network.
+2. Read the address under **Open:** (there is one per network), add
+   **/run**, and type it into the phone's browser. There is no QR code:
+   type it once and add it to the phone's home screen.
+3. In **File ▸ Show Settings…** tick **Allow GO from the phone Run page**.
+   **This is off in every show** until you do: the page then shows the cues
+   but its buttons stay grey and say so.
+
+How it keeps the show safe:
+
+- **Off by default, per show.** The setting is saved with the show. A
+  student handout never carries it.
+- **A PIN, once per session.** When the show has a PIN (Show Settings), the
+  page asks for it before any button works, then remembers it until the
+  browser tab is closed. Five wrong tries in a row lock the PIN prompt for
+  30 seconds. Another phone asks for itself.
+- **With logins (-wa),** the account needs the level **Only Virtual
+  Console** or more. Without logins, anyone who can reach the page and has
+  the PIN (if any) can send GO: web access is plain http, so use it on the
+  show network, not a shared one.
+- **STOP takes two taps** (the button asks "tap again to stop"), so a thumb
+  in the dark doesn't end the show.
+- **It is the same GO.** The page sends the command by the route every
+  other GO takes (the console's keys, the Run tab, the pad, OSC), so cues
+  hold the Design previews and play exactly as from the console.
+
+The page drives the show's main cue list, as the Run tab does when it
+follows the current production.
+
 ## Show timeline &amp; MTC follow
 
 The Show Manager tab and the Build tab's embedded timeline editor

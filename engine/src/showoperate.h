@@ -55,8 +55,8 @@ namespace ShowPin
 /**
  * The show's Operate settings (File ▸ Show Settings): whether opening it
  * goes straight to Operate, and a PIN that going back to Design asks for.
- * Saved with the show as <Operate OpenIn="1" PinHash="..." LockDesign="0"/>
- * (LockDesign only when off) under the
+ * Saved with the show as <Operate OpenIn="1" PinHash="..." LockDesign="0"
+ * RemoteGo="1"/> (LockDesign only when off, RemoteGo only when on) under the
  * Engine, only when either is set, so a show without them saves as before.
  * QLC+ 4 skips the element.
  */
@@ -90,6 +90,12 @@ public:
     /** Does @p pin open the lock? True when there is no PIN. */
     bool checkPin(const QString &pin) const;
 
+    /** The phone Run page may send GO (RouteWeb): off by default, per show
+     *  (docs/design/RUN_COMMANDS.md). With a PIN set the page asks for it
+     *  once per session. */
+    bool remoteGo() const { return m_remoteGo; }
+    void setRemoteGo(bool on);
+
     /** What a copy of the show is written with instead of the open show's
      *  own Operate settings (Make Student Handout). */
     struct SaveOverride
@@ -116,6 +122,7 @@ private:
     Doc *m_doc;
     bool m_openInOperate = false;
     bool m_lockDesign = true;
+    bool m_remoteGo = false;
     QString m_pinHash;
     const SaveOverride *m_saveOverride = nullptr;
 };

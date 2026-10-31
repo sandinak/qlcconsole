@@ -171,6 +171,9 @@ private slots:
     void everyRouteTakesTheOneGoPath();
     /** ...and a GO that finds nothing to play holds no preview. */
     void aGoThatFindsNothingHoldsNoPreview();
+    /** The phone Run page's GO (RouteWeb) is refused until Show Settings
+     *  allows remote GO; every other route is not asked. */
+    void aWebGoIsRefusedUntilTheShowAllowsIt();
     /** Plain Esc is no playback action: in the main window, the Show Tree
      *  and the Workbench it leaves a function and the main list running;
      *  ⌘⇧Esc (Stop all) stops them. */

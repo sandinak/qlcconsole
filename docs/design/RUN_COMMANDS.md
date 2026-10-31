@@ -33,7 +33,7 @@ any route ──> ShowControl::run(request, route)
   chaser.
 - **The route** is `ShowControl::Route`, which says where a command came
   from: `RouteKey, RouteRunTab, RouteVcRunner, RoutePad, RouteControlMap,
-  RouteFocusCall, RouteOsc, RouteMsc, RouteOther`.
+  RouteFocusCall, RouteOsc, RouteMsc, RouteWeb, RouteOther`.
   `ShowControl::isConsoleRoute()` is true for Key, Run tab and Pad.
 - **The one function** is `ShowControl::run(request, route)`. A route
   never calls `execute()` itself.
@@ -42,9 +42,12 @@ any route ──> ShowControl::run(request, route)
   order, it:
   1. **Redirects:** ⌘↩ while a focus-call cue is armed starts its calls
      and plays no GO (this was in the key handler before).
-  2. **Refuses:** nothing, today. *decided: Operate's PIN and Teaching
-     lock Design, not GO (can change).* The phone Run page's "allow
-     remote GO" is checked here.
+  2. **Refuses:** a `RouteWeb` command while the show's **Allow GO from
+     the phone Run page** (`ShowOperate::remoteGo()`, Show Settings) is
+     off. *decided: Operate's PIN and Teaching lock Design, not GO (can
+     change).* The PIN is the page's to check, once per websocket session
+     (`WebAccessRun`), since only it knows the session; it also checks the
+     setting itself, so the page is as safe without the App.
   3. **Holds the previews (RC8):** if the command will put a cue on stage
      (`ShowControl::wouldTakeStage()`), it calls
      `ShowTreeController::takeStageForRun()` first and remembers what it
@@ -70,6 +73,7 @@ App) still holds the previews, through a queued connection.
 | Focus call | `FocusCallCue` continuing its list when the calls are done | Go | no |
 | OSC | `ShowControl::handleOsc()` (from `ShowControlListener`) | all | no |
 | MSC | `ShowControl::handleSysEx()` (a patched MIDI input) | Go, Pause, Resume, Load, AllOff, Reset, Stop | no |
+| Web | the phone Run page (`/run`, `WebAccessRun::command()`) | Go, Back, Stop, SubGo, SubBack on the main list | no |
 
 **Not routes:**
 - **The footer's "Next:"** shows status only (Q74). A click brings the
@@ -100,7 +104,8 @@ the Show Tree runtime are untouched.
 ## Next
 
 - **Pad Run:** a pad Run page calls `run(r, RoutePad)`.
-- **Phone Run page:** add a `RouteWeb`, with Teaching's "allow remote
-  GO" and a PIN in step 2.
+- **Phone Run page:** built (`RouteWeb`; webaccess/src/webaccessrun.*;
+  tests in webaccess/test and ui/test/appviews). The VC Cue List page of
+  stock web access still steps its chaser directly.
 - **Override hits:** if hits get their own commands, they join
   `Command` and come through here.

@@ -146,4 +146,36 @@ void ShowOperate_Test::savedWithTheShowOnlyWhenSet()
     QVERIFY(!saved(m_doc).contains("<Operate"));
 }
 
+void ShowOperate_Test::remoteGoIsOffAndSavedOnlyWhenOn()
+{
+    ShowOperate *op = m_doc->operateSettings();
+    QVERIFY(!op->remoteGo());
+    QVERIFY(!saved(m_doc).contains("<Operate"));
+
+    op->setRemoteGo(true);
+    QVERIFY(m_doc->isModified());
+    const QString xml = saved(m_doc);
+    QVERIFY2(xml.contains("<Operate RemoteGo=\"1\""), qPrintable(xml));
+
+    Doc other(this);
+    QXmlStreamReader r(xml);
+    while (!r.atEnd() && !(r.isStartElement() && r.name() == QLatin1String("Operate")))
+        r.readNext();
+    QVERIFY(r.isStartElement());
+    other.operateSettings()->loadXML(r);
+    QVERIFY(other.operateSettings()->remoteGo());
+    QVERIFY(!other.isModified());
+
+    // A handout never carries it
+    ShowOperate::SaveOverride handout;
+    op->setSaveOverride(&handout);
+    QVERIFY(!saved(m_doc).contains("RemoteGo"));
+    op->setSaveOverride(nullptr);
+
+    // A new show forgets it
+    m_doc->clearContents();
+    QVERIFY(!op->remoteGo());
+    QVERIFY(!saved(m_doc).contains("<Operate"));
+}
+
 QTEST_MAIN(ShowOperate_Test)

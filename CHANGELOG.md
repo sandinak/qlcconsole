@@ -15,6 +15,16 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 A home for QLC+ 4 users: QLC+ 4's habits that qlcconsole had dropped are
 back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
 
+### Run the show
+
+- **Phone and tablet Run page.** Web access serves **/run**: the
+  production and list, the song section, the cue on now and the next (number
+  and name), and big GO, Back and Stop (Sub GO and Sub Back when the list has
+  sub-cues), live over the web socket. It sends the same GO as the console
+  (a new `web` route). **File ▸ Show Settings… ▸ Allow GO from the phone Run
+  page** turns it on, off in every show by default; with a PIN, the page
+  asks for it once per session. See *The Run page* in Other improvements.
+
 ### Teaching
 
 - **Fixture Properties ask too.** In a Teaching show the Lighting Studio's

@@ -63,6 +63,13 @@ ShowSettingsDialog::ShowSettingsDialog(Doc *doc, QWidget *parent)
                                 "and Live Edit is off. Untick it to use the PIN for Teaching mode only."));
     m_lockDesign->setChecked(op->lockDesignSetting());
     vl->addWidget(m_lockDesign);
+    m_remoteGo = new QCheckBox(tr("Allow GO from the phone Run page"), box);
+    m_remoteGo->setObjectName(QStringLiteral("showSettingsRemoteGo"));
+    m_remoteGo->setToolTip(tr("Web access serves a Run page (address/run) with GO, Back and Stop for a "
+                              "phone or tablet. Off by default. With a PIN set, the page asks for it "
+                              "once per session."));
+    m_remoteGo->setChecked(op->remoteGo());
+    vl->addWidget(m_remoteGo);
     root->addWidget(box);
 
     QGroupBox *tbox = new QGroupBox(tr("Teaching"), this);
@@ -224,6 +231,7 @@ void ShowSettingsDialog::accept()
 
     op->setOpenInOperate(m_openInOperate->isChecked());
     op->setLockDesign(m_lockDesign->isChecked());
+    op->setRemoteGo(m_remoteGo->isChecked());
     if (m_newPinHash != op->pinHash())
     {
         if (m_newPinHash.isEmpty())

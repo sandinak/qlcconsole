@@ -42,6 +42,7 @@
 #include "vcclock.h"
 #include "vcxypad.h"
 #include "chaser.h"
+#include "webaccessrun.h"
 #include "doc.h"
 #include "grandmaster.h"
 #include "qhttprequest.h"
@@ -57,6 +58,9 @@ WebAccess::WebAccess(Doc *doc, VirtualConsole *vcInstance, SimpleDesk *sdInstanc
 {
     connect(m_vc, SIGNAL(loaded()),
             this, SLOT(slotVCLoaded()));
+
+    m_run = new WebAccessRun(m_doc, this);
+    connect(m_run, &WebAccessRun::stateChanged, this, &WebAccess::slotRunState);
 }
 
 WebAccess::~WebAccess()
@@ -71,6 +75,17 @@ void WebAccess::slotHandleHTTPRequest(QHttpRequest *req, QHttpResponse *resp)
 
     QString reqUrl = req->url().toString();
     QString content;
+
+    // The phone Run page: any visitor that got in may look at it; what it
+    // sends is checked per command (remote GO, the PIN, the account's level)
+    if (req->url().path() == QLatin1String("/run") && req->method() == QHttpRequest::HTTP_GET)
+    {
+        if (!permits(&user, LOGGED_IN_LEVEL))
+            sendForbidden(resp, tr("Log in to use the Run page."));
+        else
+            sendHtmlResponse(resp, WebAccessRun::html());
+        return;
+    }
 
     qDebug() << Q_FUNC_INFO << req->methodString() << req->url();
 
@@ -156,6 +171,11 @@ void WebAccess::slotHandleWebSocketRequest(QHttpConnection *conn, QString data)
         if (cmdList[1] == "opMode")
             emit toggleDocMode();
 
+        return;
+    }
+    if (cmdList[0] == "QLC+RUN")
+    {
+        handleRunCommand(conn, user, cmdList);
         return;
     }
     if (handleCommonWebSocketCommand(conn, user, cmdList, "[webaccess]", false))
@@ -651,6 +671,65 @@ void WebAccess::slotHandleWebSocketClose(QHttpConnection *conn)
     conn->deleteLater();
 
     m_webSocketsList.removeOne(conn);
+    m_runUnlocked.remove(conn);
+    if (m_runClients.remove(conn))
+        m_run->setClients(m_runClients.count());
+}
+
+void WebAccess::handleRunCommand(QHttpConnection *conn, WebAccessUser *user, const QStringList &cmdList)
+{
+    // With accounts (-wa) the Run page needs one that may press VC buttons;
+    // with -w alone, anyone the show's remote GO and PIN let in.
+    if (cmdList.count() < 2 || !permits(user, LOGGED_IN_LEVEL))
+        return;
+    if (m_auth != nullptr && !permits(user, VC_ONLY_LEVEL))
+        return;
+
+    const QString what = cmdList.at(1);
+    if (what == QLatin1String("hello"))
+    {
+        m_runClients.insert(conn);
+        m_run->setClients(m_runClients.count());
+        conn->webSocketWrite(QStringLiteral("RUN|state|") + QString::fromUtf8(m_run->stateJson()));
+        return;
+    }
+    if (what == QLatin1String("pin"))
+    {
+        const QString pin = cmdList.count() > 2 ? cmdList.at(2) : QString();
+        switch (m_run->checkPin(pin))
+        {
+            case WebAccessRun::PinOk:
+                m_runUnlocked.insert(conn);
+                conn->webSocketWrite(QStringLiteral("RUN|pin|ok"));
+                break;
+            case WebAccessRun::PinBad:
+                conn->webSocketWrite(QStringLiteral("RUN|pin|bad"));
+                break;
+            case WebAccessRun::PinLocked:
+                conn->webSocketWrite(QStringLiteral("RUN|pin|locked"));
+                break;
+        }
+        return;
+    }
+
+    const WebAccessRun::Result result = m_run->command(what, m_runUnlocked.contains(conn));
+    QString answer;
+    switch (result)
+    {
+        case WebAccessRun::Done:        answer = QStringLiteral("ok"); break;
+        case WebAccessRun::NothingToDo: answer = QStringLiteral("nothing"); break;
+        case WebAccessRun::Refused:     answer = QStringLiteral("refused"); break;
+        case WebAccessRun::NeedPin:     answer = QStringLiteral("needpin"); break;
+        case WebAccessRun::Unknown:     return;
+    }
+    conn->webSocketWrite(QStringLiteral("RUN|ack|%1|%2").arg(what, answer));
+}
+
+void WebAccess::slotRunState(const QByteArray &json)
+{
+    const QString message = QStringLiteral("RUN|state|") + QString::fromUtf8(json);
+    for (QHttpConnection *conn : m_runClients)
+        conn->webSocketWrite(message);
 }
 
 void WebAccess::slotFunctionStarted(quint32 fid)

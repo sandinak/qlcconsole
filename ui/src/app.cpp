@@ -5090,9 +5090,16 @@ bool App::runCommand(const ShowControl::Request &request, ShowControl::Route rou
         return true;
     }
 
-    /* 2. Refused: nothing, today. decided: Operate's PIN and Teaching lock
-       Design, not GO (can change); the phone Run page's "allow remote GO"
-       is checked here. */
+    /* 2. Refused: the phone Run page's GO while the show does not allow
+       remote GO (Show Settings; off by default). decided: Operate's PIN and
+       Teaching lock Design, not GO (can change); the PIN is the page's, once
+       per session (webaccess), because only it knows the session. */
+    if (route == ShowControl::RouteWeb && !m_doc->operateSettings()->remoteGo())
+    {
+        emit sc->commandHandled(tr("%1 from the web page: remote GO is off in Show Settings")
+                                .arg(ShowControl::commandName(request.command)), false);
+        return false;
+    }
 
     /* 3. RC8: what GO plays is all that reaches the stage. The previews
        hold BEFORE the command acts -- execute() holds them too, through

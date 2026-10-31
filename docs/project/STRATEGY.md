@@ -434,7 +434,7 @@ Notes:
 | Group / intensity masters on faders | 4 | 5 | groups, speed masters, Control Map | 4 | M | M | 4 | BUILD (0.4) |
 | QLab out (OSC / MSC out) | 3 | 4 | Show control page | 3 | L | M | 4 | BUILD (0.4) |
 | Override / priority hits (Normal / Override / Inhibit, restore on release) | 5 | 4 | Hits, OutputLayer | 5 | M | M | 3.2 | BUILD (0.4) |
-| Phone/tablet Run page (current, next, GO, Back, Hold) | 4 | 5 | secured web access, CueRunner | 5 | M | H | 3.2 | BUILD (0.4) |
+| Phone/tablet Run page (current, next, GO, Back, Hold) | 4 | 5 | secured web access, CueRunner | 5 | M | H | 3.2 | BUILT (0.4, GO/Back/Stop; Hold later) |
 | Calling script view (cues on lyric or script lines) | 3 | 4 | cue notes | 4 | L | M | 3 | BUILD (0.5) |
 | Encoder banks: MIDI controller drives the selection in Build | 3 | 4 | Focus-this-look mapping | 4 | L | M | 3 | LATER |
 | Duplicate a structure's setup (T1 → T2, T3) | 3 | 4 | Patch Others Like This | 4 | L | M | 3 | LATER |
@@ -538,7 +538,9 @@ Order and dependencies:
 2. **Pad Run MVP**, after 0.3.1's PS names and the voice settle. Then its
    Hits page, list cycling and the focus confirm.
 3. **Phone/tablet Run page** on the secured web access, using the same GO
-   path and Teaching's rules (a PIN-guarded "allow remote GO").
+   path and Teaching's rules (a PIN-guarded "allow remote GO"). **Built
+   2026-10-31:** `/run`, `RouteWeb`, Show Settings ▸ Allow GO from the
+   phone Run page (off by default).
 4. **Timecode**: LTC in, then "cue N at 00:01:23:10" on cue lists, building
    on 0.3.1's Art-Net TimeCode.
 5. **Override hits** (priority layer, restore on release), building on

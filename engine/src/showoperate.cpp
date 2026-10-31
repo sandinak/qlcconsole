@@ -30,6 +30,7 @@
 #define KXMLOperateOpenIn  QStringLiteral("OpenIn")
 #define KXMLOperatePinHash QStringLiteral("PinHash")
 #define KXMLOperateLockDesign QStringLiteral("LockDesign")
+#define KXMLOperateRemoteGo QStringLiteral("RemoteGo")
 
 /*********************************************************************
  * ShowPin
@@ -160,6 +161,14 @@ void ShowOperate::setLockDesign(bool on)
     changed();
 }
 
+void ShowOperate::setRemoteGo(bool on)
+{
+    if (on == m_remoteGo)
+        return;
+    m_remoteGo = on;
+    changed();
+}
+
 bool ShowOperate::checkPin(const QString &pin) const
 {
     if (m_pinHash.isEmpty())
@@ -169,9 +178,10 @@ bool ShowOperate::checkPin(const QString &pin) const
 
 void ShowOperate::reset()
 {
-    if (!m_openInOperate && m_pinHash.isEmpty() && m_lockDesign)
+    if (!m_openInOperate && m_pinHash.isEmpty() && m_lockDesign && !m_remoteGo)
         return;
     m_openInOperate = false;
+    m_remoteGo = false;
     m_lockDesign = true;
     m_pinHash.clear();
     emit settingsChanged();
@@ -184,7 +194,9 @@ void ShowOperate::saveXML(QXmlStreamWriter *doc) const
     const QString pinHash = m_saveOverride != nullptr ? m_saveOverride->pinHash : m_pinHash;
     const bool lockDesign = m_saveOverride != nullptr ? m_saveOverride->lockDesign : m_lockDesign;
     // Nothing set: nothing written, so the file is what it was before.
-    if (!openIn && pinHash.isEmpty())
+    // A handout never carries remote GO.
+    const bool remoteGo = m_saveOverride == nullptr && m_remoteGo;
+    if (!openIn && pinHash.isEmpty() && !remoteGo)
         return;
 
     doc->writeStartElement(KXMLQLCOperate);
@@ -194,6 +206,8 @@ void ShowOperate::saveXML(QXmlStreamWriter *doc) const
         doc->writeAttribute(KXMLOperatePinHash, pinHash);
     if (!lockDesign && !pinHash.isEmpty())
         doc->writeAttribute(KXMLOperateLockDesign, QStringLiteral("0"));
+    if (remoteGo)
+        doc->writeAttribute(KXMLOperateRemoteGo, QStringLiteral("1"));
     doc->writeEndElement();
 }
 
@@ -203,6 +217,7 @@ void ShowOperate::loadXML(QXmlStreamReader &root)
     m_openInOperate = attrs.value(KXMLOperateOpenIn) == QLatin1String("1");
     m_pinHash = attrs.value(KXMLOperatePinHash).toString();
     m_lockDesign = attrs.value(KXMLOperateLockDesign) != QLatin1String("0");
+    m_remoteGo = attrs.value(KXMLOperateRemoteGo) == QLatin1String("1");
     root.skipCurrentElement();
 
     // Loading doesn't modify the show.
