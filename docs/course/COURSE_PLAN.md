@@ -181,6 +181,13 @@ used from Lesson 1.1 to the capstone (it is in Lesson 1.1's handout).
 | 1.0.0 | Before the first note, singers in pose | Mystery, waiting | TrussC-RGB: Blue, Full | snap |
 | … | | | | |
 
+The app prints the same paper back (0.4): **More ▾ → Cue Sheet…** on the
+Show Tree tab makes the cue sheet (what the stage manager calls from) and
+the tracking sheet (what each layer holds in each cue, new values plain and
+tracked ones grey) from the show itself. Use it in the Level 2 capstone: the
+students' paper sheet is the plan, the printed one is what they built;
+where they differ, one of them is wrong. No lesson of its own.
+
 ---
 
 ## 4. Lesson template

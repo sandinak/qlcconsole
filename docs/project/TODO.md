@@ -23,6 +23,24 @@ route. Open:
   Show Tree list (decided: left as stock QLC+, can change).
 - decided (can change): GO is never refused by Operate's PIN or Teaching
   (they lock Design); a GO that finds nothing to play holds no preview.
+## Cue sheet and tracking sheet — leftovers (sheet, 2026-10-31)
+
+Built (`engine/src/cuesheet.*`, `ui/src/cuesheetdialog.*`, More ▾ → Cue
+Sheet… on the Show Tree tab; help: show-tree.md). Open, each "decided
+(can change)":
+- Decided (can change): the entry is the Show Tree's More ▾ menu, so the
+  menu-item count is flat; no File menu entry.
+- Decided (can change): the cue sheet follows tonight's running order; the
+  tracking sheet is always in number order (tracking resolves in list
+  order). A tracking cell lists the layer's values, a tracked one in
+  brackets (grey in the PDF); a layer is a row, not each fixture.
+- Decided (can change): one production at a time, every playable cue list
+  of it; sub-cues appear on the cue sheet only; the hits "armed there" are
+  those under the cue, the list / production / global ones sit once under
+  the list's name.
+- Not done: a row per fixture (fixtures x cues) with the fixture's own
+  values; a column for a cue's mode (Block / Track); printing straight to a
+  printer (the PDF prints); a Show Review check of notes and timing.
 
 ## Breathe once — leftovers (brth, 2026-10-30)
 

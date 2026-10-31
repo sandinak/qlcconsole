@@ -427,6 +427,8 @@ Notes:
 | AI Assist P0–P3 (docs/design/AI_ASSIST.md): one operation registry under the command line, a Design-only assistant on a local model (Ollama), configuration import, an MCP server | 4 | 4 | Show Tree command line, undo, Design/Operate | 15 | M | M | 1.1 | BUILD (0.5), user's call 2026-10-30 (P2b configuration import also stands alone) |
 | One GO path (`App::runCommand`) for keys, Run tab, footer, pad, web | 4 | 5 | ShowControl, RC8 preview hold | 0.5 | L | L | **40** | BUILT 2026-10-31 (0.4, first; docs/design/RUN_COMMANDS.md) |
 | Tracking sheet + printable cue sheet (PDF/XLSX) | 5 | 5 | tracking resolve, patch-list exports | 4 | L | L | **6.3** | BUILD (0.4) |
+| One GO path (`App::runCommand`) for keys, Run tab, footer, pad, web | 4 | 5 | ShowControl, RC8 preview hold | 0.5 | L | L | **40** | BUILD (0.4), first; prerequisite |
+| Tracking sheet + printable cue sheet (PDF/XLSX) | 5 | 5 | tracking resolve, patch-list exports | 4 | L | L | **6.3** | BUILT (0.4, sheet, 2026-10-31): More ▾ → Cue Sheet… |
 | Course Level 2 lessons (7), one per release cycle | 5 | 5 | course template, courseshow_test | 2 a lesson | L | M | **12.5** a lesson | BUILD (0.3.1 onward) |
 | Realistic move speed in the Rig Overview | 3 | 5 | Rig Overview, definitions' speeds | 3 | L | L | 5 | BUILD (0.5) |
 | LTC (audio) timecode in, plus cues at a timecode | 4 | 5 | MTC follow, audio capture | 4 | M | M | 4 | BUILD (0.4): **LTC in built** (feat/04-ltc); cues at a timecode next, after the One GO path |
@@ -481,7 +483,7 @@ list:
 8. Stock round-trip test and fixture library sync (12.5 each).
 9. Art-Net TimeCode receive (11) and tonight's running order (10).
 10. Tracking sheet and printable cue sheet (6.3), the highest-ROI large
-    feature.
+    feature. **Built** (2026-10-31).
 
 The docs and content items beat most of these: the LTS promise (40),
 the forum help pages (24), "Coming from QLC+ 4" (17) and each Level 2
@@ -547,6 +549,7 @@ Order and dependencies:
    the same engine stage.
 6. **Effect fade in/out.**
 7. **Tracking sheet and printable cue sheet**, the stage manager's paper.
+   **Built** (2026-10-31): More ▾ → Cue Sheet… on the Show Tree tab.
 8. **QLab out** (OSC/MSC), if the show-control users ask.
 9. **Walk the show from the stage** (Q192, extends Focus this cue and
    Refine): cues, layers and "Needs work" tags from the controller.

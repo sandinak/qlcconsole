@@ -53,6 +53,7 @@ add_library(${module_name} SHARED
     paletteops.cpp paletteops.h
     palettenaming.cpp palettenaming.h
     patchlist.cpp patchlist.h
+    cuesheet.cpp cuesheet.h
     xlsxwriter.cpp xlsxwriter.h
     csvfield.h
     speedmasters.cpp speedmasters.h

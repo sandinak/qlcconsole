@@ -176,6 +176,7 @@ add_library(${module_name}
     bugreportdialog.cpp bugreportdialog.h
     patchlabelsdialog.cpp patchlabelsdialog.h
     patchlistdialog.cpp patchlistdialog.h
+    cuesheetdialog.cpp cuesheetdialog.h
     speedmastersfooter.cpp speedmastersfooter.h
     speedmasterspanel.cpp speedmasterspanel.h
     spreadpreview.cpp spreadpreview.h
