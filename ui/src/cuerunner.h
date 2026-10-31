@@ -268,6 +268,7 @@ private:
     QLabel *m_now = nullptr;
     QLabel *m_next = nullptr;
     QLabel *m_subNext = nullptr;
+    QLabel *m_tcNext = nullptr;         //!< the next cue at a timecode (TimecodeCues)
     QToolButton *m_go = nullptr;
     QToolButton *m_subGo = nullptr;
     QToolButton *m_subBack = nullptr;

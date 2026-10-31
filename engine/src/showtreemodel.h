@@ -305,6 +305,12 @@ namespace ShowTree
          *  next cue. This use's, like its number. Saved as FocusCall="1",
          *  which an older build ignores (it is then an ordinary cue). */
         bool focusCall = false;
+        /** "Cue N at 00:01:23:10": the incoming timecode (ms) at which a
+         *  list that follows timecode GOes to this cue (TimecodeCues).
+         *  -1: none -- timecode skips it, GO still plays it. This use's,
+         *  like its number. Saved as Timecode=, which an older build
+         *  ignores. */
+        qint32 timecode = -1;
 
         const Look *look(const QString &key) const;
         void setLook(const Look &look);
@@ -339,6 +345,10 @@ namespace ShowTree
          *  follows its cue's list; a Looks section has none. Saved as
          *  MoveInBlack="On|Off", which an older build ignores. */
         MoveInBlack moveInBlack = MoveInBlack::Show;
+        /** The list's cues that have a timecode (Cue::timecode) go on by
+         *  themselves when the incoming timecode reaches it (TimecodeCues).
+         *  Saved as FollowTimecode="1", which an older build ignores. */
+        bool followTimecode = false;
         /** A cue's sub-cues (P6, §3C, D9, D25): the sub-cues of cue @a subOf
          *  (in another list of the same production) as a list of their own,
          *  as a Looks section is -- so every cue operation works on a

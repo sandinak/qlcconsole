@@ -15,6 +15,16 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 A home for QLC+ 4 users: QLC+ 4's habits that qlcconsole had dropped are
 back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
 
+### Timecode
+
+- **Cues at a timecode.** Tick **Follow timecode** on a Show Tree cue list and
+  give its cues a time ("cue 12 at 00:01:23:10", or **Learn** to stamp the
+  timecode coming in). The list goes to each cue as MTC, Art-Net TimeCode or
+  LTC reaches it, through the same GO path as the key. A jump forward plays only
+  the latest cue passed, a jump back re-arms, a dropout holds. The Run tab
+  shows the next timecode cue and a countdown. Saved with the show; a show
+  with no times plays as before.
+
 ### Teaching
 
 - **Fixture Properties ask too.** In a Teaching show the Lighting Studio's

@@ -186,6 +186,7 @@ QString ShowControl::routeName(Route route)
         case RouteFocusCall:  return QStringLiteral("focus call");
         case RouteOsc:        return QStringLiteral("OSC");
         case RouteMsc:        return QStringLiteral("MSC");
+        case RouteTimecode:   return QStringLiteral("timecode");
         case RouteOther:      break;
     }
     return QStringLiteral("other");

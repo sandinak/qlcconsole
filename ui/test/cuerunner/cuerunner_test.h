@@ -47,6 +47,7 @@ private slots:
     void oneListHasNothingToChoose();
     void theBoxNamesTheOpenedShowsProduction();
     void liveDesignAndTimecode();
+    void theNextCueAtATimecodeAndItsCountdown();
     void spaceIsGoInTheRunTab();
     void theVcWidgetSavesLoadsAndCopies();
     void swapWidgetOnAPage();

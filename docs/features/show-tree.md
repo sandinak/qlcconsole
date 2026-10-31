@@ -100,11 +100,14 @@ from the Library lands in the tree right beside it.
 - **Right: the page** for what is selected:
   - **A production** shows whether it is **current**, its **main list**
     and its **timecode** source ([Productions](#productions)).
-  - **A cue list** shows its mode and base cue, **Convert to tracking…**
-    and **Detach to plain chaser…**.
+  - **A cue list** shows its mode and base cue, **Follow timecode**
+    ([Cues at a timecode](shows.md#cues-at-a-timecode)), **Convert to
+    tracking…** and **Detach to plain chaser…**.
   - **A cue** shows its number, name, note, **Text colour**, mode, base
     check box, **Overlapping layers mix**, **Skip**, **Don't move in black
-    into this cue**, **Make this a venue focus cue**
+    into this cue**, **At timecode** with **Learn** (the time a list that
+    follows timecode plays it; [Cues at a timecode](shows.md#cues-at-a-timecode)),
+    **Make this a venue focus cue**
     ([A venue focus cue](focus-calls.md#a-venue-focus-cue-pre-show)),
     **Focus this cue…** ([Focus this cue](refine.md)), includes, fade in /
     out, hold, its **sub-cues** (and + Sub-cue), cue looks, every

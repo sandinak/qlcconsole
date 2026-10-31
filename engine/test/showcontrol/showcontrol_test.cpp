@@ -1081,7 +1081,7 @@ void ShowControl_Test::runGoesThroughTheHandlerWithItsRoute()
     QVERIFY(ShowControl::isConsoleRoute(ShowControl::RoutePad));
     for (ShowControl::Route r : { ShowControl::RouteVcRunner, ShowControl::RouteControlMap,
                                   ShowControl::RouteFocusCall, ShowControl::RouteOsc,
-                                  ShowControl::RouteMsc, ShowControl::RouteOther })
+                                  ShowControl::RouteMsc, ShowControl::RouteTimecode, ShowControl::RouteOther })
         QVERIFY(!ShowControl::isConsoleRoute(r));
     QCOMPARE(ShowControl::routeName(ShowControl::RouteOsc), QStringLiteral("OSC"));
 

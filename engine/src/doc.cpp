@@ -46,6 +46,7 @@
 #include "networktopology.h"
 #include "timecodesource.h"
 #include "ltcreceiver.h"
+#include "timecodecues.h"
 #include "audioplugincache.h"
 #include "capturemanager.h"
 #include "rgbscriptscache.h"
@@ -2498,6 +2499,7 @@ TimecodeSource *Doc::timecodeSource()
         m_timecodeSource = new TimecodeSource(this);
         // LTC from the audio input, when it is the picked source
         new LtcReceiver(this, m_timecodeSource);
+        m_timecodeCues = new TimecodeCues(this, m_timecodeSource);
     }
 
     return m_timecodeSource;

@@ -1424,6 +1424,8 @@ void saveXML(QXmlStreamWriter *doc, const Production &production)
         if (!list.looks && !list.isSubCues() && list.moveInBlack != MoveInBlack::Show)
             doc->writeAttribute(QStringLiteral("MoveInBlack"), list.moveInBlack == MoveInBlack::On
                                                                ? QStringLiteral("On") : QStringLiteral("Off"));
+        if (list.followTimecode && !list.looks && !list.isSubCues())
+            doc->writeAttribute(QStringLiteral("FollowTimecode"), QStringLiteral("1"));
         writeId(doc, QStringLiteral("Cue"), list.subOf);
         if (list.isSubCues())
         {
@@ -1504,6 +1506,8 @@ void saveXML(QXmlStreamWriter *doc, const Production &production)
                 doc->writeAttribute(QStringLiteral("NoMoveInBlack"), QStringLiteral("1"));
             if (cue.focusCall && !list.looks)
                 doc->writeAttribute(QStringLiteral("FocusCall"), QStringLiteral("1"));
+            if (cue.timecode >= 0 && !list.looks && !list.isSubCues())
+                doc->writeAttribute(QStringLiteral("Timecode"), QString::number(cue.timecode));
             if (list.isSubCues() && cue.follow)
             {
                 doc->writeAttribute(QStringLiteral("Follow"), QStringLiteral("Auto"));
@@ -1655,6 +1659,7 @@ bool loadXML(QXmlStreamReader &root, Production &production)
             list.moveInBlack = mib.compare(QLatin1String("On"), Qt::CaseInsensitive) == 0 ? MoveInBlack::On
                              : mib.compare(QLatin1String("Off"), Qt::CaseInsensitive) == 0 ? MoveInBlack::Off
                              : MoveInBlack::Show;
+            list.followTimecode = a.value(QStringLiteral("FollowTimecode")).toString() == QLatin1String("1");
             list.source = readId(a, QStringLiteral("Source"));
             list.inPlace = a.value(QStringLiteral("InPlace")).toString() == QLatin1String("1");
         }
@@ -1728,6 +1733,8 @@ bool loadXML(QXmlStreamReader &root, Production &production)
             cue.colour = readColour(a);
             cue.noMoveInBlack = !looks && a.value(QStringLiteral("NoMoveInBlack")).toString() == QLatin1String("1");
             cue.focusCall = !looks && a.value(QStringLiteral("FocusCall")).toString() == QLatin1String("1");
+            cue.timecode = (!looks && !subs && a.hasAttribute(QStringLiteral("Timecode")))
+                           ? qMax(-1, a.value(QStringLiteral("Timecode")).toString().toInt()) : -1;
             if (looks)
             {
                 cue.folder = a.value(QStringLiteral("Folder")).toString();

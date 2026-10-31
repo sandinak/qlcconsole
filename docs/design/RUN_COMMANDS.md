@@ -33,7 +33,7 @@ any route ──> ShowControl::run(request, route)
   chaser.
 - **The route** is `ShowControl::Route`, which says where a command came
   from: `RouteKey, RouteRunTab, RouteVcRunner, RoutePad, RouteControlMap,
-  RouteFocusCall, RouteOsc, RouteMsc, RouteOther`.
+  RouteFocusCall, RouteOsc, RouteMsc, RouteTimecode, RouteOther`.
   `ShowControl::isConsoleRoute()` is true for Key, Run tab and Pad.
 - **The one function** is `ShowControl::run(request, route)`. A route
   never calls `execute()` itself.
@@ -70,6 +70,7 @@ App) still holds the previews, through a queued connection.
 | Focus call | `FocusCallCue` continuing its list when the calls are done | Go | no |
 | OSC | `ShowControl::handleOsc()` (from `ShowControlListener`) | all | no |
 | MSC | `ShowControl::handleSysEx()` (a patched MIDI input) | Go, Pause, Resume, Load, AllOff, Reset, Stop | no |
+| Timecode | `TimecodeCues` (a list set to follow timecode reaches a cue's time) | Go (by cue number and chaser) | no |
 
 **Not routes:**
 - **The footer's "Next:"** shows status only (Q74). A click brings the

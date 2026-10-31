@@ -253,6 +253,7 @@ private:
     class OutputRuleKeeper *m_outputRuleKeeper = nullptr;
     NetworkTopology *m_networkTopology;
     TimecodeSource *m_timecodeSource;
+    class TimecodeCues *m_timecodeCues = nullptr;
 
     /*********************************************************************
      * Main operating mode
@@ -1268,6 +1269,8 @@ public:
     /** Returns the shared timecode source (e.g. MIDI Time Code) that the
      *  Show timeline can follow. Lazily created. */
     TimecodeSource *timecodeSource();
+    /** Cues at a timecode: alive once timecodeSource() has been made. */
+    class TimecodeCues *timecodeCues() { timecodeSource(); return m_timecodeCues; }
 
     /*********************************************************************
      * Load & Save

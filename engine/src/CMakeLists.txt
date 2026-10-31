@@ -176,6 +176,7 @@ add_library(${module_name} SHARED
     show.cpp show.h
     showfunction.cpp showfunction.h
     timecodesource.cpp timecodesource.h
+    timecodecues.cpp timecodecues.h
     ltcdecoder.cpp ltcdecoder.h
     ltcreceiver.cpp ltcreceiver.h
     showrunner.cpp showrunner.h

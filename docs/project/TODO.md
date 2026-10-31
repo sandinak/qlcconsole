@@ -192,9 +192,19 @@ allocation-free biphase decoder, 24/25/29.97 df/30, either polarity) fed by
 Connections ▸ Devices ▸ Show control & sync. decided: the first channel of
 the audio input chosen in the audio settings, no separate LTC device
 (can change). Test: `ltc_test`.
-**Next:** "cue N at 00:01:23:10" on cue lists (cues at a timecode), after
-go1's One GO path lands. Also open: LTC read backwards, a channel picker,
-and an input level meter beside the readout.
+**Built (tcq):** cues at a timecode -- `Cue::timecode` and
+`CueList::followTimecode` (saved as Timecode= / FollowTimecode=), the
+`TimecodeCues` engine class (engine/src/timecodecues.*) firing each cue
+through `ShowControl::run(…, RouteTimecode)`; the cue page's *At timecode*
+with Learn, the list page's *Follow timecode*, the Run tab's next-cue
+countdown. decided: a jump forward fires only the latest cue passed, a jump
+back re-arms (a step under 250 ms is jitter), a dropout holds, the first
+position fires only a cue exactly there, cues with no time are GO-only,
+times are stored in ms and shown at the source's frame rate (can change).
+Test: `timecodecues_test`.
+**Open:** LTC read backwards, a channel picker, an input level meter beside
+the readout, and a time per frame rate (a cue stamped at 25 fps reads the
+same milliseconds at 30).
 
 ## Forum quick wins (Q180, 0.3.1)
 
