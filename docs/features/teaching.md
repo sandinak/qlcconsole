@@ -81,6 +81,37 @@ Teaching Mode** and **Cancel**. It is asked once per opening. A start nobody
 answers for — the `-p` option, **Open this show in Operate**, kiosk mode, web
 access — only gets the line and the Not ready entry.
 
+## What just happened (the GO log)
+
+In a Teaching show the **Run tab** has a small log under the cue lines: one
+line for every GO, Back and hit, written when the command arrives, in crew
+words:
+
+```
+14:02:11 GO → cue 2.1 'Hit' (fade in 1 s): B in → Full; A tracked
+14:02:40 Back → cue 1 'One': A → Half
+14:03:05 HIT → 'Red Stab' (Dance): Towers in → Red
+```
+
+The cue and its name, the fade, and what changes on stage (the same words as
+NEXT above it), then the layers that carried in from earlier cues and did
+not change: **tracked**. It is the same line whichever way the command came
+(key, the Run tab, a controller, OSC, the phone page). It keeps the last 200
+lines, is cleared when Teaching is turned off, and is not saved with the
+show. In a show that is not Teaching the log is not there and nothing is
+kept. The line is built once, when the command arrives, from the cue as the
+Show Tree resolved it; nothing is added to the frame loop.
+
+## Glossary popovers
+
+In a Teaching show, hover a term and its tooltip ends with a one-line
+definition: the Show Tree's **S T R M F** column heads, the Run tab's cue
+list heads and its GO, Sub GO and Back buttons, and the Operate settings in
+Show Settings. (Shift+F1, What's This, shows the same on a touch screen.)
+All definitions come from one list (`TeachingGlossary`), worded from the
+course [glossary](../course/GLOSSARY.md) and cut to a line. A show that is
+not Teaching has the plain tooltips.
+
 ## Make Student Handout
 
 **File ▸ Show Settings… ▸ Make Student Handout…** saves a copy for students.

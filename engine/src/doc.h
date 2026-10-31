@@ -251,6 +251,7 @@ private:
     class ControlMap *m_controlMap = nullptr;
     class ShowOperate *m_operate = nullptr;
     class TeachingSettings *m_teaching = nullptr;
+    class GoLog *m_goLog = nullptr;
     class OutputRuleKeeper *m_outputRuleKeeper = nullptr;
     NetworkTopology *m_networkTopology;
     TimecodeSource *m_timecodeSource;
@@ -1251,6 +1252,8 @@ public:
     class ShowOperate *operateSettings() const { return m_operate; }
     /** Teaching mode (a flag saved with the show; docs/features/teaching.md) */
     class TeachingSettings *teachingSettings() const { return m_teaching; }
+    /** The Teaching show's "what just happened" log (does nothing unless Teaching is on) */
+    class GoLog *goLog() const { return m_goLog; }
 
     /** Applies the fixtures' output rules (Blackout / Grand Master exempt,
      *  Switch, OnAtOpen) to the universes (OutputRuleKeeper) */

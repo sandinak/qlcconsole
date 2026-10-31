@@ -83,7 +83,8 @@ controller?** Every step gives the keys too.
 
 ### Get ready
 
-1. Open qlcconsole. **File → Open** → `ShowChoir-Classroom.qlcc`.
+1. Open qlcconsole. **File → Open** → `lesson-3-6-start.qlcc` (the classroom
+   show with Teaching mode on; the footer says **TEACHING**).
 2. **File → Save As** → `Lesson3-6-yourname.qlcc` in **Documents →
    qlcconsole**. *Do this first:* a venue's corrections are kept in a file
    beside your show, and the course file must stay as it is.
@@ -177,9 +178,10 @@ controller?** Every step gives the keys too.
 
 ### D. The scramble (scored)
 
-The scramble is a classroom feature. If **Focus ▾** has no **Practice
-(scramble)…**, open **File ▸ Show Settings…**, tick **Teaching mode**, and
-press **OK** (your teacher may have done it for you).
+The scramble is a classroom feature, and `lesson-3-6-start.qlcc` has it
+on. If **Focus ▾** has no **Practice (scramble)…**, the show you opened is
+not that one: open **File ▸ Show Settings…**, tick **Teaching mode**, and
+press **OK**.
 
 17. Click **Focus ▾**, then **Practice (scramble)…**. The dialog says
     what a scramble does. Choose **Easy: 1–3° off** (not the default,

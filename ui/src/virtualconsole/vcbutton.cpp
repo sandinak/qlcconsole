@@ -74,6 +74,7 @@
 #include "vcsoloframe.h"
 #include "showtreecontroller.h"
 #include "hitmap.h"
+#include "teachinglog.h"
 #include "effectscriptrunner.h"
 #include "vcbutton.h"
 #include "function.h"
@@ -1681,6 +1682,13 @@ void VCButton::pressFunction()
     if (!m_hits.isEmpty() && ((m_action == Toggle && state() != Active)
                               || (m_action == Flash && state() == Inactive)))
         prepareHitPress();
+    // Teaching show: a hit fired is written to the "what just happened" log.
+    if (!m_hits.isEmpty() && m_doc->goLog()->active() && state() != Active)
+    {
+        const quint32 armed = m_doc->showTree()->armedHit(m_hits);
+        if (armed != Function::invalidId())
+            m_doc->goLog()->hit(armed);
+    }
     if (m_action == Toggle)
     {
         f = m_doc->function(m_function);

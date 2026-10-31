@@ -32,6 +32,7 @@
 #include <QPainter>
 #include <QPointer>
 #include <QPushButton>
+#include <QPlainTextEdit>
 #include <QAction>
 #include <QLabel>
 #include <QStyle>
@@ -52,6 +53,9 @@
 #include "focuscallcue.h"
 #include "padrun.h"
 #include "cuerunner.h"
+#include "teachingsettings.h"
+#include "teachingtips.h"
+#include "teachinglog.h"
 #include "vcbutton.h"
 #include "usedby.h"
 #include "chaser.h"
@@ -379,6 +383,10 @@ void CueRunner::makeButtons()
     m_back = makeButton(tr("Back"), tr("Back (⌘⇧↩): the previous main cue (its sub-cues dropped)"), "crBack");
     m_pause = makeButton(tr("Pause"), tr("Pause / Resume: holds the fade and an auto-follow's wait"), "crPause");
     m_stop = makeButton(tr("Stop"), tr("Stop this list (⌘⇧Esc stops everything)"), "crStop");
+    // Teaching show: the terms a button names, defined on hover.
+    TeachingTips::attach(m_doc, m_go, m_go->toolTip(), { QStringLiteral("go"), QStringLiteral("standby") });
+    TeachingTips::attach(m_doc, m_subGo, m_subGo->toolTip(), { QStringLiteral("sub-cue") });
+    TeachingTips::attach(m_doc, m_back, m_back->toolTip(), { QStringLiteral("back") });
     connect(m_go, &QToolButton::clicked, this, &CueRunner::go);
     connect(m_subGo, &QToolButton::clicked, this, &CueRunner::subGo);
     connect(m_subBack, &QToolButton::clicked, this, &CueRunner::subBack);
@@ -409,6 +417,16 @@ void CueRunner::makeTree()
     m_tree->header()->setSectionResizeMode(ColName, QHeaderView::Stretch);
     m_tree->setToolTip(tr("Click a cue: LOAD it (it becomes STANDBY, what GO plays). Double-click: jump to "
                           "it now (a sub-cue: its cue first)."));
+    {
+        // Teaching show: the column heads define their words on hover.
+        auto heads = [this]() {
+            m_tree->headerItem()->setToolTip(ColCue, TeachingTips::tip(m_doc, QString(), { QStringLiteral("cue") }));
+            m_tree->headerItem()->setToolTip(ColTiming, TeachingTips::tip(m_doc, QString(),
+                { QStringLiteral("fade"), QStringLiteral("hold"), QStringLiteral("follow") }));
+        };
+        heads();
+        connect(m_doc->teachingSettings(), &TeachingSettings::teachingChanged, m_tree, heads);
+    }
     connect(m_tree, &QTreeWidget::itemClicked, this, [this](QTreeWidgetItem *item) {
         load(rowCue(item));
         pickRowCue(rowCue(item));
@@ -589,6 +607,28 @@ void CueRunner::buildFullLayout()
     m_tcNext->setFont(big);
     m_tcNext->hide();
     v->addWidget(m_tcNext);
+
+    /* Teaching show: what each GO, Back and hit just did, in crew words
+       (GoLog). Not there at all in any other show. */
+    {
+        QPlainTextEdit *log = new QPlainTextEdit(this);
+        log->setObjectName(QStringLiteral("crGoLog"));
+        log->setReadOnly(true);
+        log->setMaximumBlockCount(GoLog::kMaxLines);
+        log->setFixedHeight(log->fontMetrics().lineSpacing() * 5 + 12);
+        log->setPlaceholderText(tr("What just happened: every GO, Back and hit is written here."));
+        log->setToolTip(tr("Teaching show: the last GO, Back or hit, and what it changed on stage."));
+        log->setPlainText(m_doc->goLog()->lines().join(QLatin1Char('\n')));
+        log->setVisible(m_doc->goLog()->active());
+        connect(m_doc->goLog(), &GoLog::added, log, [log](const QString &line) {
+            log->appendPlainText(line);
+        });
+        connect(m_doc->goLog(), &GoLog::cleared, log, &QPlainTextEdit::clear);
+        connect(m_doc->teachingSettings(), &TeachingSettings::teachingChanged, log, [this, log]() {
+            log->setVisible(m_doc->goLog()->active());
+        });
+        v->addWidget(log);
+    }
 
     makeButtons();
     // Green only when GO has something to play (Q62).

@@ -405,7 +405,7 @@ order the note says why.
 | Pad Run role (MVP 6 d, full 10.5 d) | 4 | 5 | ShowControl::execute, focus pad stack | 6 | M | M | 2.7 | MVP BUILT 2026-10-31 (0.4, `PadRun`: arm + GO/Back/Sub GO/Stop, list pick, light bar); full (Hits page, focus confirm) next; see note 2 |
 | Walk the show from the stage with the controller (extends Focus this cue) | 4 | 4 | Refine, Layer/Group/Fixture scope, voice and light-bar feedback, cue notes | 5 | M | M | 2.5 | MVP BUILT 2026-10-31 (0.4, `PadRun` walking map: cues, layers, solo, Needs work tag); leftovers in TODO.md |
 | "Why is this on?" v1 | 4 | 5 | GenericFader, Show Tree tracking | 9 | M | M | 1.8 | BUILD (0.5); see note 3 |
-| Teaching later items: lesson link, reset to handout, GO log, glossary popovers | 3 | 5 | Teaching | 4 | L | L | 3.8 | BUILD (0.5) |
+| Teaching later items: lesson link, reset to handout, GO log, glossary popovers | 3 | 5 | Teaching | 4 | L | L | 3.8 | BUILT (0.5: lesson link, reset to handout, GO log, glossary popovers; the Show Review TEACH-01 check follows Show Review v1) |
 
 Notes:
 1. **Teaching mode** has a lower ROI number than its call suggests,
@@ -586,7 +586,8 @@ Order and dependencies:
 4. **Realistic move speed in the Rig Overview**, which also feeds Show
    Review's "moves in light" checks.
 5. **Teaching's later items** (lesson link, reset to handout, GO log,
-   glossary).
+   glossary). Built; only Show Review's TEACH-01 check is left, for when
+   Show Review v1 lands.
 6. **Calling script view**, if the course's SM lesson wants it.
 7. **Raspberry Pi package**, so a school can leave a Pi as the show
    machine.

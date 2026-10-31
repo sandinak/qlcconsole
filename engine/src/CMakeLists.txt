@@ -32,6 +32,8 @@ add_library(${module_name} SHARED
     controlmap.cpp controlmap.h
     showoperate.cpp showoperate.h
     teachingsettings.cpp teachingsettings.h
+    teachinglog.cpp teachinglog.h
+    teachingglossary.cpp teachingglossary.h
     outputrulekeeper.cpp outputrulekeeper.h
     fixturegroup.cpp fixturegroup.h
     function.cpp function.h

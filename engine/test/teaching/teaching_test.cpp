@@ -25,6 +25,9 @@
 
 #include "teaching_test.h"
 #include "teachingsettings.h"
+#include "teachingglossary.h"
+#include "teachinglog.h"
+#include "showcontrol.h"
 #include "showoperate.h"
 #include "doc.h"
 
@@ -305,3 +308,52 @@ void Teaching_Test::theHandoutStateIsKept()
 }
 
 QTEST_MAIN(Teaching_Test)
+
+void Teaching_Test::glossaryLookups()
+{
+    QVERIFY(TeachingGlossary::terms().contains("cue"));
+    QVERIFY(TeachingGlossary::definition("Layer").startsWith("One group of lights"));
+    QCOMPARE(TeachingGlossary::definition("  CUE-ONLY "), TeachingGlossary::definition("cue-only"));
+    QCOMPARE(TeachingGlossary::definition("base_cue"), TeachingGlossary::definition("base cue"));
+    QVERIFY(TeachingGlossary::definition("no such word").isEmpty());
+    QVERIFY(TeachingGlossary::line("no such word").isEmpty());
+    QVERIFY(TeachingGlossary::line("hit").startsWith("Hit: "));
+    // Every term the app asks for has a definition, on one line.
+    for (const QString &term : TeachingGlossary::terms())
+    {
+        const QString d = TeachingGlossary::definition(term);
+        QVERIFY2(!d.isEmpty(), qPrintable(term));
+        QVERIFY2(!d.contains('\n'), qPrintable(term));
+    }
+    // The words the Show Tree's headers and the Run tab use.
+    for (const char *t : { "cue", "layer", "track", "block", "palette", "hit", "fade", "hold", "follow",
+                           "release", "go", "back", "standby", "design", "operate", "sub-cue", "skip" })
+        QVERIFY2(!TeachingGlossary::definition(t).isEmpty(), t);
+}
+
+void Teaching_Test::theLogDoesNothingWhenTeachingIsOff()
+{
+    GoLog *log = m_doc->goLog();
+    QVERIFY(log != nullptr);
+    QVERIFY(!log->active());
+    QSignalSpy spy(log, SIGNAL(added(QString)));
+    emit m_doc->showControl()->cueTaken(ShowControl::Go, 0, -1, -1, 0, -1);
+    log->hit(1);
+    QCOMPARE(spy.count(), 0);
+    QVERIFY(log->lines().isEmpty());
+
+    // On, a command that names no tree list still writes nothing.
+    m_doc->teachingSettings()->setEnabled(true);
+    QVERIFY(log->active());
+    emit m_doc->showControl()->cueTaken(ShowControl::Go, 12345, -1, -1, 0, -1);
+    QCOMPARE(spy.count(), 0);
+    // A hit that is not there says so.
+    log->hit(999);
+    QCOMPARE(spy.count(), 1);
+    QVERIFY(log->last().contains("no such hit"));
+    // Off again: cleared.
+    QSignalSpy cleared(log, SIGNAL(cleared()));
+    m_doc->teachingSettings()->setEnabled(false);
+    QCOMPARE(cleared.count(), 1);
+    QVERIFY(log->lines().isEmpty());
+}
