@@ -18,6 +18,7 @@
 */
 
 #include <QSharedPointer>
+#include <climits>
 #include <QtMath>
 
 #include "whyon.h"
