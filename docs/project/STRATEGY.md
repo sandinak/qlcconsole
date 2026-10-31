@@ -199,7 +199,7 @@ Blockers for some 4.x users:
   warning is design only. Fix: a one-time notice on saving a .qxw that
   has fork-only content, listing what stock QLC+ would lose (≈1.5 days),
   plus the round-trip test (section 2.1).
-- **No Raspberry Pi package** (section 2.4).
+- **No Raspberry Pi release** (section 2.4): a .deb is built by hand since 0.3.1, not yet on a release.
 
 Annoying:
 - **Save As offers only .qlcc** (`app.cpp:3372`); a .qxw needs the
@@ -278,11 +278,12 @@ Recommendation, in order of ROI:
 | macOS 12+ (universal) | Signed, notarized DMG; the gate's home | Same | none |
 | Windows 10/11 x64 | CI installer, **not code-signed**; tested on a Win10 VM that's "unreliable"; no Windows 11 machine in the matrix | An installer that school IT will allow | signing; a real Win11 check |
 | Linux x86_64 | CI AppImage; a Debian 13 build host | .deb or AppImage | `.spec`/`debian/changelog` inherited and stale ([RELEASE.md](../dev/RELEASE.md)) |
-| Raspberry Pi (arm64) | Builds on the Pi 5 (apt Qt 6.8.2, ~34 min); no package; Pi 4 build host still TODO | QLC+ 4 had an official Pi image; Pi users are a real 4.x group | no released build; MasterTimer late ticks on Linux (TODO) |
+| Raspberry Pi (arm64) | **Packaged** (0.3.1): a trixie arm64 .deb from `platforms/linux/make-pi-deb.sh`, installed, started and removed on the Pi 5 ([RASPI.md](../dev/RASPI.md)); not published; Pi 4 build host still TODO | QLC+ 4 had an official Pi image; Pi users are a real 4.x group | not a released build (built by hand, no CI); MasterTimer late ticks on Linux (TODO) |
 | Plugins | Art-Net, sACN, DMX USB, uDMX, Velleman, Peperoni, Enttec Wing, HID, MIDI, OSC, OS2L, OLA, loopback, GPIO/SPI/UART (Linux), plus WLED | Same as 4.14 | ShowNet and single-vendor dongles only on demand |
 
-Recommendation: promise macOS, Windows and Linux x86_64 now. Call the Pi
-"builds, not packaged" until an arm64 AppImage or .deb exists (0.5).
+Recommendation: promise macOS, Windows and Linux x86_64 now. The Pi is
+"packaged" (a .deb, decided: can change) since 0.3.1; "released" waits for
+the .deb to ride a release.
 Price a Windows code-signing certificate when the first school on Windows
 appears; school IT is the most likely place an unsigned installer is
 refused.
@@ -372,7 +373,7 @@ order the note says why.
 | Run `lupdate` every release | 2 | 3 | Qt .ts | 0.5 | L | L | 12 | BUILD (0.3.1), then every release |
 | Show Manager parity review | 3 | 5 | Shows tab | 2 | L | L | 7.5 | BUILD (0.3.1) |
 | Send the fork's definitions upstream | 2 | 4 | fork/fixture-* branches | 1 | L | L | 8 | BUILD (0.3.1), user's call |
-| Raspberry Pi arm64 package (AppImage or .deb) | 3 | 4 | Pi 5 build recipe | 4 | M | M | 2.4 | BUILD (0.5) |
+| Raspberry Pi arm64 package (AppImage or .deb) | 3 | 4 | Pi 5 build recipe | 4 | M | M | 2.4 | DONE (0.3.1: `make-pi-deb.sh`, a .deb; decided, can change) |
 | Windows code signing | 3 | 3 | CI installer | 2 + a yearly fee | L | M | 4.5 | LATER (when a Windows school appears) |
 | Translations of the fork's strings | 2 | 3 | Qt .ts | 10+ | L | H | 0.6 | LATER |
 | Native GDTF/MVR import | 3 | 2 | definition cache, plot | 15 | M | H | 0.3 | LATER (OFL route documented instead) |

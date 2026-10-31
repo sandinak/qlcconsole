@@ -15,6 +15,14 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 A home for QLC+ 4 users: QLC+ 4's habits that qlcconsole had dropped are
 back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
 
+### Raspberry Pi
+
+- **A Raspberry Pi package.** `platforms/linux/make-pi-deb.sh` builds an arm64
+  `.deb` for Raspberry Pi OS / Debian 13 (Qt 6.8 from apt), with the USB DMX
+  udev rules, the stock fixtures, a menu entry and icons, so a school can
+  leave a Pi as the show machine. Built by hand on the Pi (recipe:
+  docs/dev/RASPI.md); not published.
+
 ### Show control
 
 - **QLab out.** A GO from this console can be sent on to QLab (or any OSC

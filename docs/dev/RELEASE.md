@@ -10,6 +10,10 @@ qlcconsole releases are published to
   `build-windows` job. Not code-signed.
 - **Linux** — the x86_64 AppImage built by CI's `build-linux` job
   (`build-v4`).
+- **Raspberry Pi (arm64)** — a `.deb` built on the Pi 5 by
+  `platforms/linux/make-pi-deb.sh --remote rpi5` (recipe and install check in
+  [RASPI.md](RASPI.md)). Built by hand, **not** attached by `make attach` or
+  CI; decided (can change): a .deb, since the Pi's apt carries Qt 6.8.2.
 
 The Windows and Linux files are downloaded from the CI run of the release
 commit and attached afterwards with `make attach` (step 5 below).
@@ -351,11 +355,13 @@ plain CI (build + test on push/PR) and is unrelated to publishing releases.
 
 ## Out of scope for now
 
-- **Linux distribution packages** (`platforms/linux/qlcconsole.spec`,
-  `debian/changelog`) — inherited from upstream QLC+ and stale (the `.spec`
-  still reads a `QLCPLUS_VERSION` env var; `debian/changelog` is upstream's
-  4.14.x history). Linux ships as CI's AppImage only; these files need their
-  own version/branding pass before an .rpm or .deb is offered.
+- **Other Linux distribution packages** (`platforms/linux/qlcconsole.spec`,
+  `debian/`) — inherited from upstream QLC+ and stale (the `.spec` still
+  reads a `QLCPLUS_VERSION` env var; `debian/` is upstream's Qt5 packaging
+  and 4.14.x changelog; neither is used). The Pi .deb is built by
+  `make-pi-deb.sh` (dpkg-deb, no debhelper), not from `debian/`. x86_64
+  Linux ships as CI's AppImage only; an .rpm or a Debian-archive source
+  package needs its own pass.
 - **Windows code signing** — the installer is unsigned, so SmartScreen
   warns on first run. It has been installed and used on a Windows 10 VM
   (2026-10-15/16), not yet on a real Windows 11 machine (docs/project/TODO.md).
