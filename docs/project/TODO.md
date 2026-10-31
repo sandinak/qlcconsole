@@ -529,9 +529,10 @@ show); `qlcconsole --review show.qlcc` (text / JSON, `--min`, `--check`,
 writes the show, no plugins); the **Review** footer chip and panel (Fix,
 Accept…, Reopen, Why?, Turn Check Off…, Open/Accepted/All, search), also from
 the Show readiness dialog; the footer's design entries shown under their
-catalog id there and folded into the panel (FTR). 31 checks: PAT-01/02/03/04/06,
+catalog id there and folded into the panel (FTR). 34 checks: PAT-01/02/03/04/06,
 FIX-01/05/07/14, FX-07, PWR-01/03/05/06, FILE-01/02, NAME-01/02,
-PAL-01/02/03/05, CUE-01/02/04/05/06/07/08/11, VC-01; each with a trip and a
+PAL-01/02/03/05, CUE-01/02/04/05/06/07/08/11, VC-01, MOV-01/02/08 (realistic
+move speed, 2026-10-31: `engine/src/movespeed.*`); each with a trip and a
 near-miss test (ShowReview_Test; a registry test fails a check with neither).
 A full run on DanceHysteria-0.6 is 140 ms (Debug).
 
@@ -555,8 +556,17 @@ Decided (each can change):
 - PAL-02 reads Build's scenes only; the tree's say it as PAL-01/03.
 - Accept is not an undo step yet.
 
+Realistic move speed (mov, 2026-10-31): `MoveSpeed` (engine) gives travel time
+from the definition's pan/tilt range; speed itself is a default per type,
+decided (can change): moving head 0.4 s per 180 degrees, scanner 0.1 s (no
+speed field exists in definitions). The Rig Overview walks each head with a
+per-head `MoveSpeed::Follower` (Show menu item "Heads travel at their real
+speed", on by default). MOV-02 reads the dark gap as the cue before's hold.
+Left: MOV-03/04/05 (need cue-level position timing and the house zone); the
+2D plot still snaps; a per-fixture speed override.
+
 Leftovers of v1:
-- v1 checks not built: MOV-01, MOV-02, MOV-08, CUE-03, CUE-12, CUE-13,
+- v1 checks not built: CUE-03, CUE-12, CUE-13,
   PAT-05, FIX-02, FIX-08, VEN-01, VEN-02, VEN-05, VEN-09, VEN-10, FX-01
   (with the Pi 5 cost table), FX-02, FX-03, FILE-03; and VC-03, VC-04, VC-05,
   VC-06, VC-08, which need the VcIndex (VC facts from the live VC and from

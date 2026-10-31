@@ -162,6 +162,14 @@ back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
 
 ### Show Review
 
+- **Realistic move speed.** In the Rig Overview a moving head's beam now
+  travels at the speed its type can (0.4 s per half turn for a moving head,
+  0.1 s for a scanner) when the output jumps it, instead of snapping. Show →
+  Heads travel at their real speed turns it off. Show Review gains **MOV-01**
+  (a move in light), **MOV-02** (a move in the dark that move in black can't
+  hide) and **MOV-08** (heads lit in the first cue with nothing positioning
+  them), which use the same speed.
+
 - **Show Review** (0.5, v1): the show's design checked for what is likely
   wrong, each finding with the place to fix it. A **Review · 2 ⛔ 5 ⚠** chip
   in the footer opens the panel (also **Show Review…** in the Show

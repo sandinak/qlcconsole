@@ -192,6 +192,7 @@
 #define SETTINGS_CENTERLINES "monitor/centerlines"
 #define SETTINGS_ALLTARGETS "monitor/allTargets"
 #define SETTINGS_LINEOFSIGHT "monitor/lineOfSightBeams"
+#define SETTINGS_MOVESPEED "monitor/moveSpeed"
 #define SETTINGS_MOUNTEDFIXTURES "monitor/mountedfixtures"
 #define SETTINGS_STUDIOROTATION "monitor/studiorotation"
 #define SETTINGS_PLOTROTATION "monitor/plotrotation"
@@ -1136,6 +1137,26 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
        When Blocked, an Aim look's "Dim lights that can't see the target" and
        the blocked aim traces go by; whether the rig views stop beams at
        them too is a view choice, remembered here. */
+    /* Realistic move speed (0.5): the rig views draw a head travelling at
+       the speed its type can, not snapping to where the output jumped. */
+    QAction *moveSpeedAct = showMenu->addAction(tr("Heads travel at their real speed"));
+    moveSpeedAct->setObjectName("moveSpeed");
+    moveSpeedAct->setCheckable(true);
+    moveSpeedAct->setToolTip(tr("In the Rig Overview, a moving head takes the time it really "
+                                "needs to get there (about 0.4 s per half turn for a spot) "
+                                "when the output jumps; off, it snaps"));
+    {
+        const bool on = QSettings().value(SETTINGS_MOVESPEED, true).toBool();
+        moveSpeedAct->setChecked(on);
+        StructureStudioView::setMoveSpeed(on);
+    }
+    connect(moveSpeedAct, &QAction::toggled, this, [this](bool on) {
+        StructureStudioView::setMoveSpeed(on);
+        QSettings().setValue(SETTINGS_MOVESPEED, on);
+        foreach (StructureStudioView *v, findChildren<StructureStudioView *>())
+            v->update();
+    });
+
     QMenu *sightMenu = showMenu->addMenu(tr("Line of sight"));
     sightMenu->setObjectName("lineOfSightMenu");
     sightMenu->setToolTipsVisible(true);

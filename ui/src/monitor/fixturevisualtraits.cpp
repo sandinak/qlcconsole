@@ -1321,7 +1321,7 @@ bool fixtureHeadBeamState(Fixture *fx, const QByteArray &v, int head,
 }
 
 bool fixtureAimDirection(Fixture *fx, const FixtureRigProps &rp, QVector3D &dir,
-                         int headIndex)
+                         int headIndex, const double *panFrac, const double *tiltFrac)
 {
     if (fx == nullptr)
         return false;
@@ -1356,10 +1356,12 @@ bool fixtureAimDirection(Fixture *fx, const FixtureRigProps &rp, QVector3D &dir,
     /* Same mapping MonitorFixtureItem uses, so the plot and the rig view agree
        about where a head is looking: the centre DMX value is 0 degrees and the
        range is centred on it. */
-    auto degrees = [&](quint32 ch, double maxDeg) {
+    auto degrees = [&](quint32 ch, double maxDeg, const double *frac) {
         if (ch == QLCChannel::invalid() || ch >= quint32(v.size()))
             return 0.0;
-        const double val = double(uchar(v.at(int(ch))));
+        // A move-speed follower (MoveSpeed::Follower) gives the position
+        // the head has reached, as a fraction of its range.
+        const double val = frac != nullptr ? *frac * 255.0 : double(uchar(v.at(int(ch))));
         return (val * maxDeg) / 255.0 - (maxDeg / 2.0);
     };
     const double panMax  = (mode->physical().focusPanMax()  != 0)
@@ -1371,7 +1373,29 @@ bool fixtureAimDirection(Fixture *fx, const FixtureRigProps &rp, QVector3D &dir,
        offsets taken out, so every view draws the INTENDED aim: a head whose
        offset corrects a yoke bolted a few degrees round still draws its beam
        on its mark. */
-    return AimSolver::beamDirection(viewRp, degrees(panCh, panMax), degrees(tiltCh, tiltMax), dir);
+    return AimSolver::beamDirection(viewRp, degrees(panCh, panMax, panFrac), degrees(tiltCh, tiltMax, tiltFrac), dir);
+}
+
+bool fixtureAimFractions(Fixture *fx, int headIndex, double &pan, double &tilt)
+{
+    if (fx == nullptr)
+        return false;
+    QLCFixtureMode *mode = fx->fixtureMode();
+    if (mode == nullptr || mode->heads().isEmpty())
+        return false;
+    const QLCFixtureHead *head = &mode->heads().at(
+        (headIndex >= 0 && headIndex < mode->heads().size()) ? headIndex : 0);
+    if (head->channelNumber(QLCChannel::Pan,  QLCChannel::MSB) == QLCChannel::invalid()
+        && head->channelNumber(QLCChannel::Tilt, QLCChannel::MSB) == QLCChannel::invalid())
+        head = &mode->heads().first();
+    const quint32 panCh  = head->channelNumber(QLCChannel::Pan,  QLCChannel::MSB);
+    const quint32 tiltCh = head->channelNumber(QLCChannel::Tilt, QLCChannel::MSB);
+    if (panCh == QLCChannel::invalid() && tiltCh == QLCChannel::invalid())
+        return false;
+    const QByteArray v = fx->channelValues();
+    pan = (panCh != QLCChannel::invalid() && panCh < quint32(v.size())) ? uchar(v.at(int(panCh))) / 255.0 : 0.0;
+    tilt = (tiltCh != QLCChannel::invalid() && tiltCh < quint32(v.size())) ? uchar(v.at(int(tiltCh))) / 255.0 : 0.0;
+    return true;
 }
 
 bool practiceViewProps(Doc *doc, quint32 fid, FixtureRigProps &rp)

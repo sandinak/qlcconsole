@@ -1221,6 +1221,20 @@ On the plot, a head aimed at a target it can't see draws its aim line **red
 and dashed to the blocker**, with a cross where it stops and a faint dotted
 line on to the target; hover it for what's in the way and how far out.
 
+### Heads travel at their real speed
+
+A moving head takes time to get there. In the **Rig Overview**, when the
+output jumps a head to a new pan and tilt, its beam now travels at the speed
+that type of head can: 0.4 s for a half turn (180°) for a moving head, 0.1 s
+for a scanner, pan and tilt together. A cue that "snaps" a spot across the
+stage in a frame is drawn as the move it would be, so you see what the
+audience sees (and what Show Review's [MOV checks](show-review.md) are
+about). Definitions carry no speed, so these are defaults.
+
+Turn it off with **Show → Heads travel at their real speed**; the heads then
+snap to the output as before. Remembered. It changes only how the Rig
+Overview draws; the output itself is untouched.
+
 ### Washes and profiles: the edge of a pool
 
 A beam's angle (the definition's **Lens** degrees) is where the light is

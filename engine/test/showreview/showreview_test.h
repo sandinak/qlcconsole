@@ -70,6 +70,10 @@ private slots:
     void cue08();
     void cue11();
     void vc01();
+    void moveSpeed();
+    void mov01();
+    void mov02();
+    void mov08();
 
     /** Accept -> saved -> loaded: quiet; what it read changes: Changed with
      *  the note; something else changes: still accepted; the subject gone:
