@@ -148,12 +148,17 @@ void BlindEffects_Test::aDimmerEffectPulsesBlind()
         }
     }
 
-    // Over the cue's own level, an intensity is the higher of the two.
+    // Over a level the cue sets elsewhere, the pulse owns its dimmer as it
+    // does on stage (it can take it down); a channel it doesn't drive keeps
+    // the cue's.
     QHash<quint32, QByteArray> base;
     base.insert(m_dimmers.first(), QByteArray(1, char(200)));
+    base.insert(4242, QByteArray(1, char(99)));
     blind.advance(125);                               // an eighth: about 37
-    QCOMPARE(uchar(blind.apply(base).value(m_dimmers.first()).at(0)), uchar(200));
-    QVERIFY(uchar(blind.apply(base).value(m_dimmers.last()).at(0)) < 60);
+    const QHash<quint32, QByteArray> over = blind.apply(base);
+    QVERIFY2(qAbs(int(uchar(over.value(m_dimmers.first()).at(0))) - 37) <= 3,
+             qPrintable(QString::number(uchar(over.value(m_dimmers.first()).at(0)))));
+    QCOMPARE(uchar(over.value(4242).at(0)), uchar(99));
 }
 
 void BlindEffects_Test::aPositionEffectMovesBlind()

@@ -488,7 +488,7 @@ void MainBar_Test::theBlindViewMovesTheCuesEffects()
     doc->addPalette(dim);
     ShowTreeController *st = doc->showTree();
     const quint32 prod = st->addProduction("Blind motion P");
-    const quint32 list = st->addCueList(prod, "Blind motion L");
+    const quint32 list = st->addCueList(prod, "Blind motion L", ShowTree::ListMode::NonTracking);
     const quint32 moving = st->addCue(list, -1, "Moving");
     const quint32 still = st->addCue(list, 0, "Still");
     ShowTree::Target t;
