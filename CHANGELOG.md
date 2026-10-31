@@ -94,6 +94,15 @@ back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
   No cue is renumbered or rebuilt; **Reset to number order** undoes it, and
   it is saved with the show.
 
+### Cue sheet and tracking sheet
+
+- **Paper for the stage manager.** **More ▾ → Cue Sheet…** on the Show
+  Tree tab: the cue sheet (a row per cue in running order, song by song,
+  with number, name, fades, follow / wait, notes and the hits armed there)
+  and the tracking sheet (a row per layer, a column per cue; what a cue
+  changes plain, what only tracks in grey in brackets). Save either as
+  CSV, XLSX or a landscape PDF.
+
 ### Based on QLC+ 4.14.4
 
 qlcconsole's QLC+ base moves from 4.14.2 to **4.14.4**: the build string

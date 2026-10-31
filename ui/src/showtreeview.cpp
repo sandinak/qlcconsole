@@ -108,6 +108,7 @@
 #include "function.h"
 #include "fixture.h"
 #include "chaser.h"
+#include "cuesheetdialog.h"
 #include "doc.h"
 
 #include "virtualconsole.h"
@@ -1119,7 +1120,7 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
     m_merge = offBar(tr("Merge"), tr("Merge the layers selected in the tree (⌘- or ⇧-click two or more "
                                      "layers of one cue) into one layer on all their groups"), "stMerge");
     {
-        QToolButton *more = button(tr("More"), tr("+ Production, + Sub-cue and Merge"), "stMore");
+        QToolButton *more = button(tr("More"), tr("+ Production, + Sub-cue, Merge and Cue Sheet"), "stMore");
         more->setPopupMode(QToolButton::InstantPopup);
         QMenu *m = new QMenu(more);
         m->setToolTipsVisible(true);
@@ -1129,11 +1130,23 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
             a->setToolTip(b->toolTip());
             a->setObjectName(b->objectName() + QStringLiteral("Action"));
         }
-        connect(m, &QMenu::aboutToShow, this, [m, this]() {
+        // The stage manager's paper: the production's cue sheet and tracking sheet.
+        QAction *sheets = m->addAction(tr("Cue Sheet…"), this, [this]() {
+            const quint32 prod = currentProductionId();
+            if (prod == invalidId())
+                return;
+            CueSheetDialog dlg(m_doc, prod, this);
+            dlg.exec();
+        });
+        sheets->setObjectName(QStringLiteral("stCueSheetAction"));
+        sheets->setToolTip(tr("The production's cue sheet and tracking sheet: look them over, save as CSV, "
+                              "XLSX or a printable PDF"));
+        connect(m, &QMenu::aboutToShow, this, [m, this, sheets]() {
             const QList<QAction *> acts = m->actions();
             const QList<QToolButton *> btns = { m_newProduction, m_newSubCue, m_merge };
             for (int i = 0; i < acts.size() && i < btns.size(); i++)
                 acts.at(i)->setEnabled(btns.at(i)->isEnabled());
+            sheets->setEnabled(currentProductionId() != invalidId());
         });
         more->setMenu(m);
     }

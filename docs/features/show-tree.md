@@ -1356,6 +1356,37 @@ numbers. The show saves its scheme and section names (`Numbering=`,
 `Section` entries) and the running order (a `RunningOrder` element), which
 an older build ignores.
 
+## The cue sheet and the tracking sheet
+
+The stage manager's paper, made from the tree whenever you ask: **More ▾ →
+Cue Sheet…** on the Show Tree tab (a production selected, or the only one).
+Nothing is stored; change a cue and open it again.
+
+- **Cue sheet** — a row per cue in the order the Run plays them: the
+  production's cue lists in turn, each song (section) under its heading,
+  each cue under it with its sub-cues indented. Columns: the number (the
+  production's `{S}.{P}.{II}` or hundreds numbering), name, **Fade in**,
+  **Fade out**, **Follow / wait** (`GO`, `auto after 4s`, a sub-cue's `Sub
+  GO`), notes, and the **hits armed here** — the hits under that cue. The
+  hits armed the whole time (the list's, the production's and the global
+  ones) are listed once under the list's name. A skipped cue, or a cue of a
+  song left out tonight, is marked `SKIPPED`; tonight's running order
+  (above) is the order of the rows.
+- **Tracking sheet** — a row per layer (the groups and fixtures it lights,
+  children indented), a column per cue **in number order**, because that is
+  the order tracking resolves in. A cell holds what the layer plays in that
+  cue. A value the cue sets or changes is shown plain (bold on paper); one
+  that only **tracks** in from an earlier cue is grey in brackets, like
+  `(Red)`. `release` marks the cue a layer is released in, and `out` the
+  cue it has gone from the stage. It reads the same cascade the Run plays,
+  so it cannot disagree with the stage.
+
+The **Sheet** box switches between the two. **Save CSV…**, **Save XLSX…**
+and **Save PDF…** write the sheet shown: the CSV and XLSX open in any
+spreadsheet (a tracked value keeps its brackets, so it survives as text),
+the PDF is landscape Letter, a wide tracking sheet continuing across
+tables with the layer names repeated.
+
 ## Seeing it on the rig
 
 **Design mode: the cue you are editing is on the rig.**
