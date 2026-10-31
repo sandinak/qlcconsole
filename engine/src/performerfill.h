@@ -21,6 +21,7 @@
 #include <QColor>
 #include <QList>
 #include <QString>
+#include <QVector2D>
 #include <QVector3D>
 #include <functional>
 
@@ -61,7 +62,15 @@ namespace PerformerFill
     {
         QVector3D feet;
         float height = 0.0f;
+        /** The way they face on the plan (unit; x stage left, y downstage).
+         *  The house, (0,1), unless the highest deck under them is turned:
+         *  then that deck's front. */
+        QVector2D facing = QVector2D(0.0f, 1.0f);
     };
+
+    /** The way someone at (@p x, @p y) metres faces: the front of the
+     *  highest deck there (turned with it), else the house, (0,1). */
+    QLC_ENGINE_EXPORT QVector2D facingAt(const MonitorProperties *props, float x, float y);
 
     /** The people on performer line @p t, first end to last; empty for any
      *  other target. */

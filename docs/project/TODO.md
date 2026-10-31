@@ -33,6 +33,22 @@ generated scene as `Scene::setPaletteFade`, `FadeFollow` for the cue's;
   out alone plays as before.
 - No command-line words for effect fades yet (`effect … fade 2`).
 
+## One GO path — built, leftovers (0.4 item 1, go1, 2026-10-31)
+
+Built: every GO, Back, Sub GO, Stop, Load... enters through
+`ShowControl::run(request, route)` and is guarded in one place,
+`App::runCommand()` (docs/design/RUN_COMMANDS.md; DONE.md 2026-10-31).
+Pad Run, the phone Run page and override hits call `run()` with their
+route. Open:
+- Phone Run page: add `RouteWeb`, and refuse it in step 2 of
+  `App::runCommand()` unless Teaching's "allow remote GO" (PIN) says yes.
+- Two stock paths still step a chaser directly: the VC Cue List (and the
+  web page that drives it) and a VC button's next/previous step
+  (`Doc::stepCurrentChaser`). Move them onto `run()` if they ever play a
+  Show Tree list (decided: left as stock QLC+, can change).
+- decided (can change): GO is never refused by Operate's PIN or Teaching
+  (they lock Design); a GO that finds nothing to play holds no preview.
+
 ## Breathe once — leftovers (brth, 2026-10-30)
 
 Built (build 2593 report: flash at start, end lands anywhere, no typed
@@ -286,12 +302,17 @@ check on the show VLAN.
 house rigs kept in the venue sidecar and swapped with the venue, group
 fills, Tour/House slots, the venue's output patch, "not ours", the clash
 check, the venue page, the plot's Owner overlay. Open: Branson confirms
-docs/design/VENUES.md section 11; the Rig Overview (3D) owner filter; a real-rig check that a not-ours universe stays
+docs/design/VENUES.md section 11; a real-rig check that a not-ours universe stays
 silent on Art-Net/sACN.
 
 ## People on the stage: follow-ons (performer lines shipped 2026-10-29, DONE.md)
 
-Open: people facing along a turned riser (everyone faces the house).
+Done 0.3.1 (`feat/031-rig2`): people on a turned riser face its front in
+the Rig Overview (the highest deck under them decides; the plot's
+silhouette is unchanged, decided: can change); the Rig Overview has an
+**Owner** filter (All / House only / Ours only); performers no longer
+vanish with the cue scope (Show > All targets off hid them with the
+targets the cue does not aim at).
 Done 0.3.1 (`feat/031-owner-performers`): a set's costume and heights in
 one place (a whole-set box in the line's dialog), a fill's lines out of the
 aim-target lists (kept when a palette or the list holds them), a converted

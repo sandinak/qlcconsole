@@ -170,6 +170,11 @@ skipped). Upstream fixes taken:
 
 ### Added
 
+- **Rig Overview owner filter**: an **Owner** box in the footer shows All
+  fixtures, **House only** or **Ours only** (tour and rental), to see what
+  the room gives against what travels. It hides drawing only.
+- **People face the front of a turned riser** in the Rig Overview, not
+  always the house.
 - **Venue focus builds its own calls.** A show with no focus calls used to
   come up empty ("no fixtures to focus"). Now Venue focus, and a venue
   focus cue, build one call per stage target the show aims at, with the
@@ -544,6 +549,13 @@ skipped). Upstream fixes taken:
 
 ### Changed
 
+- **One GO path** (developer-facing, the first piece of 0.4 "Run the
+  show"): every GO, Back, Sub GO, Stop, Load... from the keys, the Run
+  tab, a VC Cue Runner, the pad, the Control Map, a focus-call cue, OSC
+  and MSC now enters through `ShowControl::run()` and is guarded in one
+  place, `App::runCommand()` (the preview hold, the Operate offer, the
+  notices). Nothing looks different; a GO that finds nothing to play no
+  longer stops the Show Tree preview. See docs/design/RUN_COMMANDS.md.
 - **A wave's Once is one whole cycle, and its Length is that cycle.** A
   Breathe, Dimmer Phaser, Colour Phaser or pulse set to **Once** (or N
   times) plays whole cycles at its rate and ends where its wave does: a
@@ -656,6 +668,10 @@ skipped). Upstream fixes taken:
 
 ### Fixed
 
+- **Performers no longer come and go in the Rig Overview** (and the plot):
+  the cue scope (Show ▸ All targets off) was hiding the people along with
+  the targets the cue does not aim at, so they vanished and returned as
+  cues changed while their layer stayed visible.
 - **A Breathe no longer flashes the look's level before it starts.** A
   scene with an effect holds its output until the effect's first frame
   (a frame or two; at most a quarter second), so a Breathe on a look at

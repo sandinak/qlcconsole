@@ -21,6 +21,7 @@
 #include <QXmlStreamWriter>
 #include <QSignalSpy>
 #include <QBuffer>
+#include <QScopeGuard>
 #include <QtTest>
 
 #define private public
@@ -372,6 +373,16 @@ void ControlMap_Test::aCueListGoesAndACueJumps()
     QCOMPARE(cm->targetName(ControlMap::cueList(listId)), QString("Cue list: Act 1"));
     QVERIFY(cm->targetName(ControlMap::cue(cues.at(2))).contains("Act 1"));
 
+    // The one GO path (docs/design/RUN_COMMANDS.md): each GO and Stop
+    // comes through ShowControl::run(), as the Control Map's.
+    QList<ShowControl::Route> routes;
+    ShowControl *sc = m_doc->showControl();
+    sc->setRunHandler([&routes, sc](const ShowControl::Request &r, ShowControl::Route route) {
+        routes << route;
+        return sc->execute(r);
+    });
+    auto unhook = qScopeGuard([sc]() { sc->setRunHandler(nullptr); });
+
     QSignalSpy fired(cm, &ControlMap::fired);
     send(10, 127);
     tick(2);
@@ -405,6 +416,10 @@ void ControlMap_Test::aCueListGoesAndACueJumps()
     send(10, 0);
     tick(3);
     QVERIFY(!chaser->isRunning());
+
+    QCOMPARE(routes.count(), 7);   // every GO and Stop the controls above sent
+    for (ShowControl::Route r : routes)
+        QCOMPARE(r, ShowControl::RouteControlMap);
 }
 
 void ControlMap_Test::aHitFires()

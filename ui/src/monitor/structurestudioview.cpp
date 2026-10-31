@@ -43,6 +43,7 @@
 #include "righeads.h"
 #include "humanfigure.h"
 #include "performerfill.h"
+#include "rigowner.h"
 #include "fixturevisualtraits.h"
 #include "lanternpixels.h"
 #include "monitorproperties.h"
@@ -997,6 +998,17 @@ bool StructureStudioView::layerShown(quint32 layerId) const
     return m_kind != StageKind || m_doc->monitorProperties()->layer(layerId).visible;
 }
 
+/* A person on the stage is part of the scene, not a marker for what a cue
+   aims at: the cue scope narrows the targets drawn, never the performers
+   (they came and went with whatever cue was on show). */
+bool StructureStudioView::targetInScope(quint32 targetId) const
+{
+    if (m_targetScopeAll || m_targetScope.contains(targetId))
+        return true;
+    const MonitorProperties *props = m_doc->monitorProperties();
+    return PerformerFill::isPerformer(props, props->stageTarget(targetId));
+}
+
 void StructureStudioView::setTargetScope(bool all, const QSet<quint32> &ids)
 {
     if (m_targetScopeAll == all && m_targetScope == ids)
@@ -1011,7 +1023,33 @@ bool StructureStudioView::fixtureShown(quint32 fid) const
     // A curtain is drawn as its drape, not as a fixture.
     if (Scenery::isCurtainFixture(m_doc->fixture(fid)))
         return false;
-    return layerShown(m_doc->monitorProperties()->fixtureLayer(fid));
+    if (!layerShown(m_doc->monitorProperties()->fixtureLayer(fid)))
+        return false;
+    if (m_ownerFilter == OwnerAll)
+        return true;
+    if (m_ownerKeptValid && (!m_ownerKeptAge.isValid() || m_ownerKeptAge.elapsed() > 1000))
+        m_ownerKeptValid = false;
+    if (!m_ownerKeptValid)
+    {
+        m_ownerKept.clear();
+        const QHash<quint32, RigOwner::Owner> all = RigOwner::effectiveAll(m_doc);
+        for (auto it = all.constBegin(); it != all.constEnd(); ++it)
+            m_ownerKept.insert(it.key(), int(it.value()));
+        m_ownerKeptValid = true;
+        m_ownerKeptAge.start();
+    }
+    const bool house = m_ownerKept.value(fid, int(RigOwner::Tour)) == int(RigOwner::House);
+    return (m_ownerFilter == OwnerHouse) == house;
+}
+
+void StructureStudioView::setOwnerFilter(OwnerFilter f)
+{
+    if (m_ownerFilter == f)
+        return;
+    m_ownerFilter = f;
+    m_ownerKeptValid = false;
+    rigMayHaveMoved();
+    update();
 }
 
 QList<QPair<StructureStudioView::Kind, quint32> > StructureStudioView::everyStructure() const
@@ -1226,14 +1264,15 @@ void StructureStudioView::drawFixturesInParallel(QPainter &p, const QVector<quin
 }
 
 StructureStudioView::FigureFaces &StructureStudioView::figureFaces(int index, const QVector3D &foot, float tall,
-                                                                   int seg, bool coarse, const QVector<double> &) const
+                                                                   int seg, bool coarse, const QVector2D &facing) const
 {
     if (index >= m_figureFaces.size())
         m_figureFaces.resize(index + 1);
     FigureFaces &f = m_figureFaces[index];
-    if (f.foot != foot || f.tall != tall || f.seg != seg || f.coarse != coarse)
+    if (f.foot != foot || f.tall != tall || f.seg != seg || f.coarse != coarse || f.facing != facing)
     {
         f = FigureFaces();
+        f.facing = facing;
         f.foot = foot;
         f.tall = tall;
         f.seg = seg;
@@ -1272,7 +1311,7 @@ void StructureStudioView::drawStageFigures(QPainter &p) const
     }
 
     /* Who is drawn: every Person, and everyone on a performer line. */
-    struct FigJob { QVector3D foot; float tall; QColor costume; QColor mark; bool ring; };
+    struct FigJob { QVector3D foot; float tall; QColor costume; QColor mark; bool ring; QVector2D facing; };
     QList<FigJob> jobs;
 
     foreach (StageTarget *t, targets)
@@ -1286,7 +1325,7 @@ void StructureStudioView::drawStageFigures(QPainter &p) const
         if (t->isPerformerLine())
         {
             foreach (const PerformerFill::Performer &pf, PerformerFill::people(props, t))
-                jobs << FigJob{ pf.feet, pf.height, t->costumeColor(), QColor(), false };
+                jobs << FigJob{ pf.feet, pf.height, t->costumeColor(), QColor(), false, pf.facing };
             continue;
         }
 
@@ -1341,7 +1380,12 @@ void StructureStudioView::drawStageFigures(QPainter &p) const
         const QVector3D aim = props->targetAimPoint(t, true);
         const QVector3D foot(aim.x(), aim.y(), aim.z() - props->targetAimHeight(t, true));
         const QColor mark = t->color().isValid() ? t->color() : QColor(255, 180, 0);
-        jobs << FigJob{ foot, tall, t->costumeColor(), mark, true };
+        /* One of the performers faces the front of the deck it stands on
+           (turned with it); any other person faces the house. */
+        const QVector2D facing = PerformerFill::isPerformer(props, t)
+                                     ? PerformerFill::facingAt(props, foot.x(), foot.y())
+                                     : QVector2D(0.0f, 1.0f);
+        jobs << FigJob{ foot, tall, t->costumeColor(), mark, true, facing };
     }
 
     /* What the view is, to tell when the kept faces stand: where the axes
@@ -1458,7 +1502,7 @@ void StructureStudioView::drawStageFigures(QPainter &p) const
            with the show. So the faces are kept from frame to frame and only
            shaded and queued here (seventy people at 70 ms a frame, mostly
            rebuilding rings that had not moved). */
-        FigureFaces &cached = figureFaces(jobIndex, foot, tall, SEG, coarse, viewKey);
+        FigureFaces &cached = figureFaces(jobIndex, foot, tall, SEG, coarse, job.facing);
         if (!cached.built)
         {
             auto face = [&](const QVector<QVector3D> &pts, const QVector3D &normal) {
@@ -1498,8 +1542,12 @@ void StructureStudioView::drawStageFigures(QPainter &p) const
                     for (int s = 0; s < SEG; ++s)
                     {
                         const double a = 2.0 * M_PI * s / SEG;
-                        ring << foot + QVector3D((fr.cx + fr.rx * float(qCos(a))) * tall,
-                                                 (fr.cy + fr.ry * float(qSin(a))) * tall,
+                        /* Across the body along the facing's right hand,
+                           front along the facing: (0,1) is the house. */
+                        const float lx = (fr.cx + fr.rx * float(qCos(a))) * tall;
+                        const float ly = (fr.cy + fr.ry * float(qSin(a))) * tall;
+                        ring << foot + QVector3D(lx * job.facing.y() + ly * job.facing.x(),
+                                                 -lx * job.facing.x() + ly * job.facing.y(),
                                                  fr.z * tall);
                     }
                     rings << ring;
@@ -1549,6 +1597,7 @@ void StructureStudioView::drawStageFigures(QPainter &p) const
 
 void StructureStudioView::rigMayHaveMoved()
 {
+    m_ownerKeptValid = false;
     m_floorPointsAge.invalidate();
     m_overlapAge.invalidate();
 }
