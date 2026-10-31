@@ -1220,8 +1220,13 @@ static void closeRig()
     settle();
 }
 
+/* Why the last lesson step failed. qWarning() alone is not enough: a long
+   run hits QtTest's warning cap ("Maximum amount of warnings exceeded") and
+   CI shows only the bare FALSE, so the reason also rides on the QVERIFY2. */
+static QString s_lessonWhy;
 #define LESSON_STEP(cond, what) \
-    do { if (!(cond)) { qWarning().noquote() << "lesson step failed:" << (what) << "line" << __LINE__ \
+    do { if (!(cond)) { s_lessonWhy = QStringLiteral("line %1: %2").arg(__LINE__).arg(QString(what)); \
+                        qWarning().noquote() << "lesson step failed:" << (what) << "line" << __LINE__ \
                                              << describe(doc).join(" || "); return false; } } while (0)
 
 /* Lesson 1.2 with the mouse, as its handout says: the verse made cooler and
@@ -1784,7 +1789,8 @@ void CourseShow_Test::lessonsOneTwoToOneFourWithTheMouse()
         // Each lesson starts where the one before finished.
         if (!before.isEmpty())
             QCOMPARE(describeAll(m_app->doc()), before);
-        QVERIFY2(l.byMouse(m_app->doc(), showTree()), qPrintable(l.start));
+        s_lessonWhy.clear();
+        QVERIFY2(l.byMouse(m_app->doc(), showTree()), qPrintable(l.start + QStringLiteral(": ") + s_lessonWhy));
         const QStringList built = describeAll(m_app->doc());
         m_app->doc()->resetModified();
         QVERIFY(open(l.finish));
@@ -3984,6 +3990,21 @@ static bool lessonTwoFourByMouse(Doc *doc, ShowTreeView *view, const QString &sh
         }
         return int(seen.count());
     };
+    // A moving effect shows more than two different frames. It comes up with
+    // its cue (effect fades), and a loaded runner delivers the first frames
+    // late, so wait for the movement (up to 10 s) rather than count a fixed
+    // 1.5 s; the still checks above keep the fixed window.
+    auto moves = [doc](const QString &fx) {
+        QSet<QByteArray> seen;
+        QElapsedTimer t;
+        t.start();
+        while (seen.count() <= 2 && t.elapsed() < 10000)
+        {
+            seen.insert(sends(doc, fx, 48));
+            QTest::qWait(50);
+        }
+        return int(seen.count());
+    };
     LESSON_STEP(view->selectNode(cueNumbered(doc, "1.0.5")), "select 1.0.5");
     settle(50);
     LESSON_STEP(newCueNamed(view, "Dance Break"), "new cue Dance Break");
@@ -4016,7 +4037,7 @@ static bool lessonTwoFourByMouse(Doc *doc, ShowTreeView *view, const QString &sh
         LESSON_STEP(said.startsWith(QStringLiteral("Step Sparkle → layer Steps in 1.0.6 Dance Break")), said);
     }
     {
-        const int n = frames("US Step 1");
+        const int n = moves("US Step 1");
         qInfo() << "[2.4] steps frames with the sparkle" << n << sends(doc, "US Step 1", 12).toHex(' ');
         LESSON_STEP(n > 2, "the sparkle doesn't move");
     }
@@ -4049,7 +4070,9 @@ static bool lessonTwoFourByMouse(Doc *doc, ShowTreeView *view, const QString &sh
     {
         // Somewhere along the steps, a white pixel now and then.
         bool white = false;
-        for (int i = 0; i < 40 && !white; ++i)
+        // Up to 10 s: the glints come with the effect's fade-in, and a loaded
+        // machine starts it late. Stops at the first one.
+        for (int i = 0; i < 200 && !white; ++i)
         {
             for (const char *fx : { "US Step 1", "CS Step 2", "DS Step 3" })
             {
@@ -4078,7 +4101,7 @@ static bool lessonTwoFourByMouse(Doc *doc, ShowTreeView *view, const QString &sh
         LESSON_STEP(said.startsWith(QStringLiteral("Truss Wave → layer TrussW-RGB in 1.0.6 Dance Break")), said);
     }
     {
-        const int w = frames("SR Truss Wash 1");
+        const int w = moves("SR Truss Wash 1");
         qInfo() << "[2.4] wash frames with the wave" << w << sends(doc, "SR Truss Wash 1", 9).toHex(' ');
         LESSON_STEP(w > 2, "the wave doesn't move the washes");
     }
@@ -5028,7 +5051,8 @@ void CourseShow_Test::levelTwoWithTheMouse()
             break;
         QVERIFY2(open(levelTwoStart(l.n)), qPrintable(levelTwoStart(l.n)));
         QCOMPARE(describeAll(m_app->doc()), before);
-        QVERIFY2(l.byMouse(m_app->doc(), showTree(), QString()), qPrintable(levelTwoStart(l.n)));
+        s_lessonWhy.clear();
+        QVERIFY2(l.byMouse(m_app->doc(), showTree(), QString()), qPrintable(levelTwoStart(l.n) + QStringLiteral(": ") + s_lessonWhy));
         const QStringList built = describeAll(m_app->doc());
         qInfo().noquote() << "[2." + QString::number(l.n) + "] built:" << built.join(" || ");
         m_app->doc()->resetModified();
