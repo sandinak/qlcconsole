@@ -164,6 +164,20 @@ Built (DONE.md 2026-10-29). Open, each "decided (can change)" in the note:
   a layer holds one effect per kind, so order changes nothing on stage
   today). Would need an order on Layer, saved, resolved and undone.
 
+## Timecode (0.4)
+
+**Built:** LTC (audio) timecode in -- `LtcDecoder` (engine/src/ltcdecoder.*,
+allocation-free biphase decoder, 24/25/29.97 df/30, either polarity) fed by
+`AudioCapture` through `LtcReceiver`, which pushes into the existing
+`TimecodeSource::updateTimeCode()` follow path as source
+`TimecodeSource::LtcUniverse`; picked in the footer MTC chip menu and in
+Connections ▸ Devices ▸ Show control & sync. decided: the first channel of
+the audio input chosen in the audio settings, no separate LTC device
+(can change). Test: `ltc_test`.
+**Next:** "cue N at 00:01:23:10" on cue lists (cues at a timecode), after
+go1's One GO path lands. Also open: LTC read backwards, a channel picker,
+and an input level meter beside the readout.
+
 ## Forum quick wins (Q180, 0.3.1)
 
 From the forum survey's quick wins (STRATEGY.md 3.2). **Built:** Art-Net

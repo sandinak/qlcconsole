@@ -45,6 +45,7 @@
 #include "powerdistribution.h"
 #include "networktopology.h"
 #include "timecodesource.h"
+#include "ltcreceiver.h"
 #include "audioplugincache.h"
 #include "capturemanager.h"
 #include "rgbscriptscache.h"
@@ -2493,7 +2494,11 @@ NetworkTopology *Doc::networkTopology()
 TimecodeSource *Doc::timecodeSource()
 {
     if (m_timecodeSource == NULL)
+    {
         m_timecodeSource = new TimecodeSource(this);
+        // LTC from the audio input, when it is the picked source
+        new LtcReceiver(this, m_timecodeSource);
+    }
 
     return m_timecodeSource;
 }
@@ -2692,7 +2697,8 @@ bool Doc::loadXML(QXmlStreamReader &doc, bool loadIO)
 
     /* A timecode source naming no universe of this show is as good as none:
        "any", as before it was saved. */
-    if (m_timecodeSource != NULL && m_timecodeSource->sourceUniverse() >= 0)
+    if (m_timecodeSource != NULL && m_timecodeSource->sourceUniverse() >= 0
+        && m_timecodeSource->sourceUniverse() != TimecodeSource::LtcUniverse)
     {
         bool found = false;
         for (quint32 i = 0; i < m_ioMap->universesCount() && !found; i++)

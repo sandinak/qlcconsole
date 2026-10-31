@@ -441,6 +441,16 @@ void ShowControlUi_Test::theTimecodeSourceAndHealth()
     QCOMPARE(tc->sourceUniverse(), 1);
     tc->setSourceUniverse(-1);
     QCOMPARE(source->currentData().toInt(), -1);
+
+    // LTC from the audio input is a source of its own in the same list, and
+    // the readout says where the code came from. (Not picked here: that
+    // would open the audio input.)
+    QVERIFY(source->findData(TimecodeSource::LtcUniverse) > 0);
+    tc->updateTimeCode(quint32(TimecodeSource::LtcUniverse), 7200000, 25);
+    QTest::qWait(220);
+    tc->updateTimeCode(quint32(TimecodeSource::LtcUniverse), 7200040, 25);
+    QTRY_VERIFY2(status->text().contains("audio input (LTC)"), qPrintable(status->text()));
+    QVERIFY2(status->text().contains("02:00:"), qPrintable(status->text()));
 }
 
 void ShowControlUi_Test::manyUniversesRebuildTheListOnce()

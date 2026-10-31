@@ -7447,6 +7447,22 @@ bool App::eventFilter(QObject *watched, QEvent *event)
             slotTimecodeStatusChanged();
         });
 
+        // LTC from the audio input: a source of its own, not a universe
+        QAction *ltcA = menu.addAction(tr("Audio input (LTC)"));
+        ltcA->setCheckable(true);
+        ltcA->setActionGroup(grp);
+        ltcA->setChecked(cur == TimecodeSource::LtcUniverse);
+        ltcA->setToolTip(tr("SMPTE timecode played into the audio input chosen in the audio "
+                            "settings (its first channel)."));
+        connect(ltcA, &QAction::triggered, this, [this, tc]() {
+            if (tc && tc->sourceUniverse() != TimecodeSource::LtcUniverse)
+            {
+                tc->setSourceUniverse(TimecodeSource::LtcUniverse);
+                m_doc->setModified();      // saved with the show
+            }
+            slotTimecodeStatusChanged();
+        });
+
         /* Only universes that could actually deliver a frame. Timecode reaches
            the engine down exactly one path -- QLCIOPlugin::timeCodeChanged --
            and the MIDI plugin is the only implementation that emits it, so a
@@ -7956,6 +7972,12 @@ void App::slotTimecodeStatusChanged()
         if (tc->sourceUniverse() >= 0 && m_doc != NULL)
         {
             QString uname;
+            if (tc->sourceUniverse() == TimecodeSource::LtcUniverse)
+            {
+                m_statusTimecodeLabel->setText(tr("LTC ◌ audio input — waiting"));
+                applyStyle(amber);
+                return;
+            }
             InputOutputMap *iom = m_doc->inputOutputMap();
             for (quint32 i = 0; i < iom->universesCount(); i++)
                 if (qint32(iom->getUniverseID(i)) == tc->sourceUniverse())
@@ -8038,14 +8060,16 @@ void App::slotTimecodeStatusChanged()
         }
     }
 
+    const QString tag = tc->lastUniverse() == TimecodeSource::LtcUniverse ? QStringLiteral("LTC")
+                                                                          : QStringLiteral("MTC");
     if (running)
     {
-        m_statusTimecodeLabel->setText(QString("MTC ● %1 @%2fps%3").arg(code).arg(fps).arg(ctx));
+        m_statusTimecodeLabel->setText(QString("%1 ● %2 @%3fps%4").arg(tag, code).arg(fps).arg(ctx));
         applyStyle(green);
     }
     else
     {
-        m_statusTimecodeLabel->setText(QString("MTC ❚❚ %1 (holding)%2").arg(code).arg(ctx));
+        m_statusTimecodeLabel->setText(QString("%1 ❚❚ %2 (holding)%3").arg(tag, code, ctx));
         applyStyle(amber);
     }
 }

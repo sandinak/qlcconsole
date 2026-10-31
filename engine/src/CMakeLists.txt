@@ -175,6 +175,8 @@ add_library(${module_name} SHARED
     show.cpp show.h
     showfunction.cpp showfunction.h
     timecodesource.cpp timecodesource.h
+    ltcdecoder.cpp ltcdecoder.h
+    ltcreceiver.cpp ltcreceiver.h
     showrunner.cpp showrunner.h
     track.cpp track.h
     universe.cpp universe.h

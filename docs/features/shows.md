@@ -83,6 +83,25 @@ Connections), and its timecode is followed exactly as MTC is. It shows in
 the source list as *Art-Net TimeCode*. The four rates are all read: film
 (24), EBU (25), drop-frame (29.97) and SMPTE (30).
 
+**LTC (audio timecode)** is the third source. Many playback rigs and
+recorders print SMPTE timecode as a sound on a spare track; patch that
+track to this computer's audio input and pick **Audio input (LTC)** as the
+source (the footer chip's menu, or Connections → Devices → Show control &amp;
+sync). It is read from the **first channel** of the input chosen in the
+audio settings (the one audio triggers use), at 24, 25, 29.97 drop-frame
+and 30 fps, either polarity; the rate is found by itself. The chip then
+reads **LTC** instead of MTC, and it is followed like the others: locates,
+seeks, and the look freezes when the sound stops. A cable pulled or a
+song restarted is caught up within two frames of the code coming back.
+
+- Feed it a line-level signal, not a microphone. A hot or distorted square
+  is fine; a signal under about half a percent of full scale is taken for
+  silence.
+- The audio input adds a little delay (a few tens of milliseconds, one
+  buffer plus a frame). Set the show's **offset** to take it out.
+- Forward play only: LTC read backwards (tape rewinding) is not followed.
+- On macOS the first time asks for microphone access, as audio triggers do.
+
 While the show runs, Virtual Console faders and buttons can still take a
 channel over live.
 

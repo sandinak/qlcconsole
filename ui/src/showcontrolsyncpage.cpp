@@ -281,7 +281,8 @@ QGroupBox *ShowControlSyncPage::buildMtcGroup()
     m_mtcSourceCombo->setSizeAdjustPolicy(QComboBox::AdjustToContents);
     m_mtcSourceCombo->setToolTip(tr("Which universe's input the timecode is taken from: MIDI "
                                     "timecode on a MIDI input, Art-Net TimeCode on an Art-Net "
-                                    "input. The same choice as the footer's MTC chip."));
+                                    "input, or LTC played into the audio input (the device chosen "
+                                    "in the audio settings). The same choice as the footer's MTC chip."));
     connect(m_mtcSourceCombo, &QComboBox::activated,
             this, &ShowControlSyncPage::slotMtcSourceActivated);
     form->addRow(tr("Source:"), m_mtcSourceCombo);
@@ -534,6 +535,8 @@ void ShowControlSyncPage::refreshMidiInputs()
     QStringList patchedMidiInputs;
     m_mtcSourceCombo->clear();
     m_mtcSourceCombo->addItem(tr("Any universe (auto-detect)"), -1);
+    // LTC from the audio input: a source of its own, not a universe
+    m_mtcSourceCombo->addItem(tr("Audio input (LTC, first channel)"), TimecodeSource::LtcUniverse);
 
     /* The same universes the footer chip's menu offers: those with a MIDI
        input (the only kind that carries timecode), plus the one picked and
@@ -683,9 +686,12 @@ void ShowControlSyncPage::refreshTimecode()
 
     QString from;
     InputOutputMap *iom = m_doc->inputOutputMap();
-    for (quint32 i = 0; i < iom->universesCount(); i++)
-        if (qint32(iom->getUniverseID(i)) == tc->lastUniverse())
-            from = universeName(iom, i);
+    if (tc->lastUniverse() == TimecodeSource::LtcUniverse)
+        from = tr("the audio input (LTC)");
+    else
+        for (quint32 i = 0; i < iom->universesCount(); i++)
+            if (qint32(iom->getUniverseID(i)) == tc->lastUniverse())
+                from = universeName(iom, i);
 
     const QString code = timecodeText(tc->positionMs(), tc->fps());
     if (tc->isRunning())

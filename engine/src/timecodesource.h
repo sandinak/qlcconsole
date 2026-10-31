@@ -75,6 +75,11 @@ class QLC_ENGINE_EXPORT TimecodeSource : public QObject
     Q_OBJECT
 
 public:
+    /** The "universe" LTC from the audio input arrives as: not a universe
+     *  of the show, a source of its own (LtcReceiver). Picked like one in
+     *  sourceUniverse() and saved the same way. */
+    static const qint32 LtcUniverse = 0x7FFFFFF0;
+
     explicit TimecodeSource(QObject *parent = 0);
     ~TimecodeSource();
 

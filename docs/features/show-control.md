@@ -188,7 +188,8 @@ cue from QLab and look there first.
 
 The same page's **MIDI timecode** section picks which universe's input
 timecode is taken from: MTC on a MIDI input, or Art-Net TimeCode on an
-Art-Net input (see [Following timecode](shows.md#following-timecode)) (the same choice as the footer's **MTC** chip) and
+Art-Net input, or LTC played into the audio input (see
+[Following timecode](shows.md#following-timecode)) (the same choice as the footer's **MTC** chip) and
 saves that choice with the show (it's a universe of the show's patch; a
 show that names a universe it doesn't have follows any), and shows the
 code as it arrives with its **sync health**: healthy, usable or
