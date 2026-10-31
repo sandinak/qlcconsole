@@ -36,12 +36,14 @@ if [ -n "$REMOTE" ]; then
   HERE="$(cd "$(dirname "$0")/../.." && pwd)"
   SHA="$(git -C "$HERE" rev-parse --short "$REV")"
   TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
-  git -C "$HERE" bundle create -q "$TMP/src.bundle" "$REV" QLC+_4.14.2 2>/dev/null \
-    || git -C "$HERE" bundle create -q "$TMP/src.bundle" "$REV"
+  git -C "$HERE" update-ref refs/pideb/rev "$SHA"
+  git -C "$HERE" bundle create -q "$TMP/src.bundle" refs/pideb/rev refs/tags/QLC+_4.14.2 2>/dev/null \
+    || git -C "$HERE" bundle create -q "$TMP/src.bundle" refs/pideb/rev
+  git -C "$HERE" update-ref -d refs/pideb/rev
   ssh "$REMOTE" 'if pgrep -x cmake >/dev/null || pgrep -x ninja >/dev/null; then echo "a build is already running on this host" >&2; exit 1; fi; mkdir -p ~/pkgbuild'
   scp -q "$TMP/src.bundle" "$REMOTE:pkgbuild/$SHA.bundle"
   scp -q "$0" "$REMOTE:pkgbuild/make-pi-deb.sh"
-  ssh "$REMOTE" "set -e; cd ~/pkgbuild; rm -rf $SHA; git clone -q $SHA.bundle $SHA; git -C $SHA checkout -q $SHA; \
+  ssh "$REMOTE" "set -e; cd ~/pkgbuild; rm -rf $SHA; git init -q $SHA; git -C $SHA fetch -q ../$SHA.bundle "refs/*:refs/*"; git -C $SHA checkout -q --detach $SHA; \
     nice -n 10 bash make-pi-deb.sh --local ~/pkgbuild/$SHA --jobs $JOBS --out ~/pkgbuild/out" 2>&1 | tee "${PIDEB_LOG:-/dev/null}"
   mkdir -p "$HERE/dist"
   scp -q "$REMOTE:pkgbuild/out/qlcconsole_*+git*.$SHA_*.deb" "$HERE/dist/" 2>/dev/null \
