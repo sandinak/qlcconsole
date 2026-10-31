@@ -50,6 +50,8 @@ FadeChannel::FadeChannel(const FadeChannel& ch)
     , m_primaryChannel(ch.m_primaryChannel)
     , m_channels(ch.m_channels)
     , m_address(ch.m_address)
+    , m_mixDepth(ch.m_mixDepth)
+    , m_mixScale(ch.m_mixScale)
     , m_channelRef(ch.m_channelRef)
     , m_start(ch.m_start)
     , m_target(ch.m_target)
@@ -94,6 +96,8 @@ FadeChannel &FadeChannel::operator=(const FadeChannel &fc)
         m_channels = fc.m_channels;
         m_channelRef = fc.m_channelRef;
         m_address = fc.m_address;
+        m_mixDepth = fc.m_mixDepth;
+        m_mixScale = fc.m_mixScale;
         m_start = fc.m_start;
         m_target = fc.m_target;
         m_current = fc.m_current;

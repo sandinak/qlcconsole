@@ -1064,6 +1064,10 @@ private:
         QHash<quint32, QList<quint32> > spanFixtures;
         /** Per attribute key: the layers (indexes) it is one with. */
         QHash<QString, QList<int> > spanMembers;
+        /** An effect palette's fade in / out (Scene::setPaletteFade;
+         *  Scene::FadeFollow: the cue's). None: it snaps, as before
+         *  effect fades. */
+        QHash<quint32, QPair<int, int> > fades;
         QString signature() const;
     };
     /** The scenes cue @a index of @a list plays, from @a resolved. A line

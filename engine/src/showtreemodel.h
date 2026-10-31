@@ -105,6 +105,18 @@ namespace ShowTree
         /** A value that is not a palette: a line aim's Spread ("2.5"),
          *  Grouping ("pairs") or Cross ("mirror"). */
         QString value;
+        /** An effect's fade in / fade out (ms): how its depth -- what it
+         *  does over the layer's base look -- comes up when it starts and
+         *  goes when it is released or replaced, while the base look fades
+         *  on the cue's own time. FadeFollowCue (a new effect's): the
+         *  cue's fade in / out. FadeSnap: at once -- an effect saved
+         *  before effect fades (no FadeIn/FadeOut in the file) or
+         *  converted from a scene, so it plays as it always did. Only an
+         *  effect's (isEffectKey()); other looks ignore them. */
+        static constexpr int FadeSnap = -1;
+        static constexpr int FadeFollowCue = -2;
+        int fadeIn = FadeFollowCue;
+        int fadeOut = FadeFollowCue;
 
         bool operator==(const Look &other) const;
         bool operator!=(const Look &other) const { return !(*this == other); }

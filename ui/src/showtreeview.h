@@ -514,6 +514,15 @@ public:
     bool setEffectOwn(quint32 cueId, quint32 layerId, const QString &effectKey,
                       const QList<quint32> &palettes,
                       const ShowTree::Target &target = ShowTree::Target());
+    /** An effect's fade in / fade out (ms, or Look::FadeFollowCue: the
+     *  cue's; Look::FadeSnap: at once), on its row's ⋯ menu. */
+    bool setEffectFades(quint32 cueId, quint32 layerId, const QString &effectKey,
+                        int fadeIn, int fadeOut,
+                        const ShowTree::Target &target = ShowTree::Target());
+    /** The effect @a effectKey as it plays on @a layerId / @a target in
+     *  cue @a cueId (set there, or inherited): false when it has none. */
+    bool effectLookHere(quint32 cueId, quint32 layerId, const QString &effectKey,
+                        const ShowTree::Target &target, ShowTree::Look *look) const;
     bool setAttributeNone(quint32 cueId, quint32 layerId, const QString &key);
 
     /** Set a line parameter look (@a key KeySpread / KeyGrouping /

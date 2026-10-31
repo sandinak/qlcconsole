@@ -6,6 +6,7 @@
 */
 
 #include <algorithm>
+#include <climits>
 #include "effectscriptrunner.h"
 #include "showtreecontroller.h"
 #include "effectinstance.h"
@@ -28,6 +29,27 @@ static const int TICK_INTERVAL_MS = 20; // ~50 Hz, matches MasterTimer default
 // effects has each instance collected every 5*N ticks, bounding the V4 heap
 // without a synchronized stop-the-world burst.
 static const int GC_EVERY_TICKS = 5;
+
+/* An effect's fade in (@p in) or out on scene @p sc, ms (Scene::
+   setPaletteFade): its own time, or (FadeFollow) the fade the scene is
+   started / stopped with -- a Show Tree cue's. -1: none. */
+static int effectFade(const Scene *sc, quint32 paletteId, bool in, const Doc *doc)
+{
+    const int set = in ? sc->paletteFadeIn(paletteId) : sc->paletteFadeOut(paletteId);
+    if (set != Scene::FadeFollow)
+        return set;
+    uint ms = in ? sc->overrideFadeInSpeed() : sc->overrideFadeOutSpeed();
+    if (ms == Function::defaultSpeed())
+        ms = in ? sc->fadeInSpeed() : sc->fadeOutSpeed();
+    if (ms == Function::defaultSpeed() || ms == Function::infiniteSpeed())
+        return 0;
+    if (sc->overrideTempoType() == Function::Beats)
+    {
+        MasterTimer *timer = doc->masterTimer();
+        ms = timer != nullptr ? Function::beatsToTime(ms, timer->beatTimeDuration()) : 0;
+    }
+    return int(qMin<uint>(ms, uint(INT_MAX)));
+}
 
 EffectScriptRunner::EffectScriptRunner(Doc *doc)
     : QObject(doc)
@@ -249,6 +271,10 @@ void EffectScriptRunner::createInstancesForScene(quint32 sceneId)
             {
                 existing->cancelFadeOut();
                 existing->rebindToScene(sceneId);
+                // With a depth fade: back up from where it had got to.
+                const int in = effectFade(scene, pid, true, m_doc);
+                if (in >= 0)
+                    existing->fadeDepthIn(uint(in), 0, false);
                 emit effectStarted(pid);
             }
             else
@@ -297,6 +323,11 @@ void EffectScriptRunner::createInstancesForScene(quint32 sceneId)
         }
         if (m_failures.remove(pid) > 0)
             emit failuresChanged();
+
+        // Its fade in: its depth comes up from 0 with its scene's start.
+        const int fadeIn = effectFade(scene, pid, true, m_doc);
+        if (fadeIn >= 0)
+            inst->fadeDepthIn(uint(fadeIn), qint64(scene->elapsed()), true);
 
         {
             QMutexLocker locker(&m_instanceMutex);
@@ -387,7 +418,7 @@ void EffectScriptRunner::destroyInstancesForScene(quint32 sceneId, bool release)
             Scene *sc = release ? qobject_cast<Scene*>(m_doc->function(sceneId)) : nullptr;
             if (sc != nullptr)
             {
-                fadeOutMs = sc->paletteFadeOut(inst->effectPaletteId());
+                fadeOutMs = effectFade(sc, inst->effectPaletteId(), false, m_doc);
                 // Leaving by a transition: the effect leaves by it too, cell
                 // by cell (EffectInstance::envelopeFor()), so it runs on for it.
                 if (sc->transitionOut().isActive() && sc->tempoType() != Function::Beats)
@@ -611,7 +642,12 @@ void EffectScriptRunner::slotTick()
 
     // Nothing ticked and nothing reaped → the aggregate is unchanged; skip the
     // rebuild. A reap must republish so the removed effect's last frame is dropped.
-    if (anyTicked || reaped)
+    // An idle effect fading in or out still moves: its depth is in the writes.
+    bool depthMoving = false;
+    if (!anyTicked && !reaped)
+        for (const EffectInstance *inst : m_instances)
+            depthMoving = depthMoving || inst->depthMoving();
+    if (anyTicked || reaped || depthMoving)
         publishWrites();
 
     // A completed fade-out may have emptied the instance list — release the
@@ -723,7 +759,13 @@ void EffectScriptRunner::publishWrites()
         QMutexLocker locker(&m_instanceMutex);
         for (const EffectInstance *inst : m_instances)
         {
+            const int from = int(combined.size());
             combined += inst->dmxWrites();
+            // Part way in or out: each write that far over what is under it.
+            const float depth = inst->depth();
+            if (depth < 1.0f)
+                for (int i = from; i < int(combined.size()); ++i)
+                    combined[i].depth = depth;
             for (quint32 sid : inst->tickedScenes())
                 drawn.insert((quint64(sid) << 32) | inst->effectPaletteId());
         }
@@ -951,6 +993,14 @@ void EffectScriptRunner::writeDMX(MasterTimer *timer, QList<Universe*> universes
         // scene's level (e.g. a candle dimmer flicker under a lit base).
         if (w.replace)
             fc.addFlag(FadeChannel::Override);
+        // Fading in or out: part way from what is under it to its value.
+        if (w.depth < 1.0f)
+        {
+            fc.addFlag(FadeChannel::Override | FadeChannel::Mix);
+            if (!w.replace && w.htp)
+                fc.addFlag(FadeChannel::MixHTP);
+            fc.setMix(qMax(0.0f, w.depth), w.scale >= 0 ? w.scale : 1.0f);
+        }
         // Not add(): the set is rebuilt from scratch, so add()'s HTP-merge
         // branch could never fire anyway -- but its insert branch logs a
         // qDebug() line per channel. At 50 Hz over a rig's worth of channels
@@ -988,11 +1038,19 @@ QList<EffectInstance::DmxWrite> EffectScriptRunner::composeWrites(const QList<Ef
     {
         const qint64 key = (qint64(w.universeId) << 32) | quint32(w.addr);
         auto it = at.constFind(key);
+        /* An effect fading in or out (depth < 1): a dimmer scales by as
+           much of itself as it is in, and the channel goes as far over
+           what is under it as the most of them is in; colours that set
+           it, each that far over the one before. All at depth 1: as
+           before, to the bit. */
+        const bool partial = w.depth < 1.0f;
+        const float wScale = w.scale < 0 ? 1.0f
+                             : partial ? 1.0f + (w.scale - 1.0f) * w.depth : w.scale;
         if (it == at.constEnd())
         {
             at.insert(key, composed.size());
             composed << w;
-            mul << (w.scale >= 0 ? w.scale : 1.0f);
+            mul << wScale;
             haveSet << (w.scale < 0);
             continue;
         }
@@ -1000,19 +1058,35 @@ QList<EffectInstance::DmxWrite> EffectScriptRunner::composeWrites(const QList<Ef
         EffectInstance::DmxWrite &c = composed[i];
         if (w.scale >= 0)
         {
-            mul[i] *= w.scale;
+            mul[i] *= wScale;
             if (!haveSet.at(i))
                 c.base = w.base;
+            if (partial || c.depth < 1.0f)
+                c.depth = qMax(c.depth, w.depth);
         }
         else if (haveSet.at(i) && c.htp && w.htp)
         {
             c.value = qMax(c.value, w.value);  // both only add: the higher
+            if (partial || c.depth < 1.0f)
+                c.depth = qMax(c.depth, w.depth);
         }
         else
         {
             // The lower in the list sets it -- a pan, a wheel slot, a colour
             // that owns its head -- whatever was above.
-            c.value = w.value;
+            if ((partial || c.depth < 1.0f) && haveSet.at(i))
+            {
+                const float a = 1.0f - (1.0f - c.depth) * (1.0f - w.depth);
+                const float v = (float(c.value) * c.depth * (1.0f - w.depth) + float(w.value) * w.depth) / a;
+                c.value = uchar(qBound(0, qRound(v), 255));
+                c.depth = a;
+            }
+            else
+            {
+                c.value = w.value;
+                if (partial || c.depth < 1.0f)
+                    c.depth = qMax(c.depth, w.depth);
+            }
             c.replace = c.replace || w.replace;
             c.htp = c.htp && w.htp;
             haveSet[i] = true;
@@ -1021,6 +1095,9 @@ QList<EffectInstance::DmxWrite> EffectScriptRunner::composeWrites(const QList<Ef
     for (int i = 0; i < composed.size(); ++i)
     {
         EffectInstance::DmxWrite &c = composed[i];
+        // Part way: what is under it is scaled by the dimmers too.
+        if (c.depth < 1.0f)
+            c.scale = mul.at(i);
         if (mul.at(i) == 1.0f && haveSet.at(i))
             continue;
         const int from = haveSet.at(i) ? c.value : c.base;

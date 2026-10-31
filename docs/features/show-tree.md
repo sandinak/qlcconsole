@@ -690,8 +690,8 @@ Each row shows its value, where it comes from, and four controls:
     never behind it). **Apply** or Return sets it; **Cancel** or Esc leaves
     the row as it was. See
     [Values you pick or type](#values-you-pick-or-type).
-  - **Its own colour / dimmer** (on an effect row): see
-    [Effects](#effects).
+  - **Its own colour / dimmer** and **Fade in / out** (on an effect
+    row): see [Effects](#effects).
   - **None (off here)**: the attribute is off in this layer, whatever it
     would inherit.
   - **Clear (inherit)**: takes this layer's value away, so the row inherits
@@ -877,6 +877,28 @@ Each layer still keeps its own level and colour under it. A layer that sets
 that kind of effect itself, or sets it to **None**, is left out. The rows
 say *"one effect with Towers + USTs"*. It carries on as one into the cues
 it tracks into, until a later cue changes some of those layers.
+
+**Effects fade in and out with the cue.** When a cue starts an effect,
+the effect comes up over the cue's fade in, and when a later cue releases
+or replaces it, it goes over that cue's fade out. Only how much the
+effect does fades: a dimmer pulse starts as a gentle wobble and grows to
+its full swing, while the layer's own level fades on the cue's time as
+usual. An effect that carries on into the next cue just keeps running. A
+cue with no fade times starts and stops its effects at once. On the
+effect's row, **⋯ → Fade in / out** chooses:
+
+- **With the cue's fades**: the default for a new effect.
+- **At once**: the effect starts and stops at full, whatever the cue's
+  fades are.
+- **Own times…**: its own fade in and fade out, in seconds, in the strip
+  at the bottom of the Show Tree.
+
+If an effect is let go while it is still fading in, it fades out from
+the point it had reached. Effect fades are saved with the show. A show
+saved before effect fades opens with its effects set to **At once**, so
+it plays as it did. An EFX or RGB Matrix played as a layer keeps QLC+'s
+own handling of the cue's fades: an EFX grows from nothing over the fade
+in and stops at once, and an RGB Matrix fades in and out.
 
 **From the effects bench.** An effect tried on groups in Build ▸ Effects
 can come here as a new layer: select the cue, then

@@ -117,6 +117,7 @@ EffectInstance::EffectInstance(Doc *doc, quint32 sceneId, quint32 effectPaletteI
     m_scriptRelease = m_script.onFinish() == QLatin1String("release");
     m_state = m_script.newState();
     m_elapsed.start();
+    m_depthClock.start();
 }
 
 double EffectInstance::runPhase(qint64 el, int len, int runs)
@@ -181,6 +182,56 @@ void EffectInstance::reloadParamsFromPalette()
     if (m_paramValues.value(EffectRuns::runsKey(), -1.0) != runsWas
         || (m_oneShotDone && !cyc.isEmpty() && m_paramValues.value(cyc, 0.0) != cycleWas))
         restartRun();
+}
+
+void EffectInstance::startFadeOut(uint ms)
+{
+    if (m_depthFade)
+    {
+        // From where it is (part way in, if it was still coming up).
+        m_depthFrom = depth();
+        m_depthTo = 0.0f;
+        m_depthStartMs = depthClockMs();
+        m_depthMs = qMax(1u, ms);
+    }
+    m_fadingOut = true;
+    m_fadeOutMs = qMax(1u, ms);
+    m_fadeOutStartMs = nowMs();
+}
+
+bool EffectInstance::fadeOutDone() const
+{
+    if (!m_fadingOut)
+        return false;
+    if (m_depthFade)
+        return depthClockMs() - m_depthStartMs >= qint64(m_depthMs);
+    return (nowMs() - m_fadeOutStartMs) >= qint64(m_fadeOutMs);
+}
+
+void EffectInstance::fadeDepthIn(uint ms, qint64 alreadyMs, bool fromZero)
+{
+    m_depthFrom = fromZero || !m_depthFade ? 0.0f : depth();
+    m_depthFade = true;
+    m_depthTo = 1.0f;
+    m_depthMs = ms;
+    m_depthStartMs = depthClockMs() - qMax<qint64>(0, alreadyMs);
+    if (ms == 0)
+        m_depthFrom = 1.0f;
+}
+
+float EffectInstance::depth() const
+{
+    // Off the stage (the Blind view) it plays as if its cue were up.
+    if (!m_depthFade || m_offStageMs >= 0)
+        return 1.0f;
+    if (m_depthMs == 0)
+        return m_depthTo;
+    const qint64 el = depthClockMs() - m_depthStartMs;
+    if (el <= 0)
+        return m_depthFrom;
+    if (el >= qint64(m_depthMs))
+        return m_depthTo;
+    return m_depthFrom + (m_depthTo - m_depthFrom) * float(el) / float(m_depthMs);
 }
 
 void EffectInstance::sceneStarted()
@@ -311,7 +362,11 @@ void EffectInstance::runTick()
     // fades in, then holds) instead of blasting at full independent of it.
     // While releasing (the look stopped with a Fade Out time) the scene is no
     // longer running, so drive the envelope down linearly instead.
-    if (m_fadingOut)
+    // A depth fade (the Show Tree's effect fades) carries it in and out
+    // instead: the envelope stays full, the runner writes it at its depth.
+    if (m_depthFade)
+        m_envelope = 1.0f;
+    else if (m_fadingOut)
     {
         const qint64 el = nowMs() - m_fadeOutStartMs;
         m_envelope = qBound(0.0f, 1.0f - float(el) / float(m_fadeOutMs), 1.0f);

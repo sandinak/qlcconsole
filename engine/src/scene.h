@@ -378,12 +378,19 @@ public:
      *  palette's channels, letting (say) colour snap in while movers glide, or
      *  a look punch in fast and release slow (a "pulse"). -1 = no override for
      *  that direction (falls back to the step/scene fade); 0 is a valid
-     *  override meaning "snap instantly". */
+     *  override meaning "snap instantly".
+     *
+     *  On an EFFECT palette it is the effect's depth fade
+     *  (EffectScriptRunner): its depth comes up over the fade-in when the
+     *  effect starts and goes over the fade-out when it is released.
+     *  FadeFollow (only on an effect: a Show Tree effect that follows its
+     *  cue) is the fade this scene is started / stopped with. */
+    static constexpr int FadeFollow = -2;
     struct PaletteFade
     {
         int fadeInMs = -1;
         int fadeOutMs = -1;
-        bool isEmpty() const { return fadeInMs < 0 && fadeOutMs < 0; }
+        bool isEmpty() const { return fadeInMs == -1 && fadeOutMs == -1; }
     };
 
     void setPaletteFade(quint32 paletteId, int fadeInMs, int fadeOutMs);

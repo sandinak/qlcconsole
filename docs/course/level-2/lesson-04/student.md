@@ -71,6 +71,8 @@ Which lights move, and which stay still?
 
 12. Click **↩ Back**. **File ▸ Save As** → `Lesson2-4-yourname.qlcc`.
 
+An effect comes in with its cue, so a sudden sparkle never jumps out of a slow build: over the cue's fade in it grows from nothing to its full movement, and over the fade out of the cue that ends it, it dies away. To change that, use **⋯ → Fade in / out** on the effect's row.
+
 The sparkle runs as long as the cue plays (**Runs: Loop** in the Look Editor). Once and N times stop it after that many runs. A wave such as Breathe runs whole breaths: on **Once** it rises, falls and stops on its floor, and its **Length** is that one breath.
 
 **Stuck?** The search finds nothing: clear the box first. No *Its own

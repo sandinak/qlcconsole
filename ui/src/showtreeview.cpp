@@ -5034,6 +5034,12 @@ QString ShowTreeView::updateSourceLabel(quint32 cueId, const Target &target, con
     return list == nullptr ? QString() : m_st->cueLabel(*list, list->indexOf(src));
 }
 
+/* An effect's own fade time as its menu reads it: "1.5s". */
+static QString fadeLabel(int ms)
+{
+    return QStringLiteral("%1s").arg(QString::number(qMax(0, ms) / 1000.0, 'f', ms % 1000 == 0 ? 0 : 1));
+}
+
 void ShowTreeView::attributeMenu(quint32 cueId, quint32 layerId, const Target &target,
                                  const Target &rowTarget, const QString &key, const QPoint &globalPos)
 {
@@ -5186,6 +5192,57 @@ void ShowTreeView::attributeMenu(quint32 cueId, quint32 layerId, const Target &t
         own->addAction(tr("None of its own"), this, [this, cueId, layerId, key, target]() {
             setEffectOwn(cueId, layerId, key, {}, target);
         });
+
+        // How it comes in and goes: its depth over the look under it.
+        Look here;
+        if (effectLookHere(cueId, layerId, key, target, &here))
+        {
+            QMenu *fades = menu.addMenu(tr("Fade in / out"));
+            fades->setObjectName("stEffectFades");
+            fades->setToolTipsVisible(true);
+            const bool follow = here.fadeIn == Look::FadeFollowCue && here.fadeOut == Look::FadeFollowCue;
+            const bool snap = here.fadeIn == Look::FadeSnap && here.fadeOut == Look::FadeSnap;
+            QAction *a = fades->addAction(tr("With the cue's fades"), this, [this, cueId, layerId, key, target]() {
+                setEffectFades(cueId, layerId, key, Look::FadeFollowCue, Look::FadeFollowCue, target);
+            });
+            a->setCheckable(true);
+            a->setChecked(follow);
+            a->setToolTip(tr("The effect comes up over the cue's fade in and goes over its fade out."));
+            a = fades->addAction(tr("At once"), this, [this, cueId, layerId, key, target]() {
+                setEffectFades(cueId, layerId, key, Look::FadeSnap, Look::FadeSnap, target);
+            });
+            a->setCheckable(true);
+            a->setChecked(snap);
+            a->setToolTip(tr("The effect starts and stops at full, whatever the cue's fades."));
+            a = fades->addAction(follow || snap ? tr("Own times…")
+                                                : tr("Own times (%1 in, %2 out)…")
+                                                  .arg(fadeLabel(here.fadeIn), fadeLabel(here.fadeOut)),
+                                 this, [this, cueId, layerId, key, target, here]() {
+                QWidget *box = new QWidget;
+                QHBoxLayout *h = new QHBoxLayout(box);
+                h->setContentsMargins(0, 0, 0, 0);
+                auto spin = [box, h](const QString &label, const QString &name, int ms) {
+                    h->addWidget(new QLabel(label, box));
+                    QDoubleSpinBox *sp = new QDoubleSpinBox(box);
+                    sp->setObjectName(name);
+                    sp->setRange(0.0, 600.0);
+                    sp->setDecimals(1);
+                    sp->setSingleStep(0.5);
+                    sp->setSuffix(tr(" s"));
+                    sp->setValue(ms >= 0 ? ms / 1000.0 : 0.0);
+                    h->addWidget(sp);
+                    return sp;
+                };
+                QDoubleSpinBox *in = spin(tr("Fade in"), "stEffectFadeIn", here.fadeIn);
+                QDoubleSpinBox *out = spin(tr("Fade out"), "stEffectFadeOut", here.fadeOut);
+                openDockedPicker(tr("Effect fades"), box, in, [this, cueId, layerId, key, target, in, out]() {
+                    setEffectFades(cueId, layerId, key, qRound(in->value() * 1000.0),
+                                   qRound(out->value() * 1000.0), target);
+                });
+            });
+            a->setCheckable(true);
+            a->setChecked(!follow && !snap);
+        }
     }
     if (key != QLatin1String("Effect."))
     {
@@ -7006,6 +7063,58 @@ void ShowTreeView::closeDockedPicker()
 bool ShowTreeView::dockedPickerOpen() const
 {
     return m_picker != nullptr && !m_picker->isHidden();
+}
+
+bool ShowTreeView::effectLookHere(quint32 cueId, quint32 layerId, const QString &key,
+                                  const Target &target, Look *out) const
+{
+    const Cue *cue = m_st->cue(cueId);
+    const CueList *list = m_st->listOfCue(cueId);
+    if (cue == nullptr || list == nullptr)
+        return false;
+    const Look *have = nullptr;
+    if (layerId != invalidId())
+    {
+        if (const Layer *l = cue->layer(layerId))
+            have = l->look(key);
+    }
+    else if (target.isEmpty())
+    {
+        have = cue->look(key);
+    }
+    if (have != nullptr && !have->none)
+    {
+        *out = *have;
+        return true;
+    }
+    const Target t = layerId != invalidId() && cue->layer(layerId) != nullptr
+                     ? cue->layer(layerId)->target : target;
+    if (t.isEmpty())
+        return false;
+    const QList<ResolvedCue> r = m_st->resolved(*list);
+    const int at = list->indexOf(cueId);
+    const ResolvedLayer *rl = at >= 0 && at < r.size() ? r.at(at).layer(t) : nullptr;
+    if (rl == nullptr || !rl->values.contains(key) || rl->values.value(key).look.none)
+        return false;
+    *out = rl->values.value(key).look;
+    return true;
+}
+
+bool ShowTreeView::setEffectFades(quint32 cueId, quint32 layerId, const QString &key,
+                                  int fadeIn, int fadeOut, const Target &target)
+{
+    if (isMulti(cueId, layerId))
+        return forEachEdited(cueId, layerId, tr("Set the effect's fades"), [&](quint32 c, quint32 l) {
+            return setEffectFades(c, l, key, fadeIn, fadeOut);
+        });
+    Look look;
+    if (!isEffectKey(key) || !effectLookHere(cueId, layerId, key, target, &look))
+        return false;
+    if (look.fadeIn == fadeIn && look.fadeOut == fadeOut)
+        return false;
+    look.fadeIn = fadeIn;
+    look.fadeOut = fadeOut;
+    return applyLook(cueId, layerId, target, look);
 }
 
 bool ShowTreeView::setEffectOwn(quint32 cueId, quint32 layerId, const QString &key,

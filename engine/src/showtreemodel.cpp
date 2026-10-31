@@ -134,7 +134,8 @@ QString keyLabel(const QString &key)
 bool Look::operator==(const Look &other) const
 {
     return key == other.key && palettes == other.palettes && own == other.own
-           && none == other.none && value == other.value;
+           && none == other.none && value == other.value
+           && (!isEffectKey(key) || (fadeIn == other.fadeIn && fadeOut == other.fadeOut));
 }
 
 static QList<quint32> sortedIds(QList<quint32> ids)
@@ -1311,8 +1312,32 @@ static void saveLooks(QXmlStreamWriter *doc, const QList<Look> &looks)
             doc->writeAttribute(QStringLiteral("None"), QStringLiteral("1"));
         if (!l.value.isEmpty())
             doc->writeAttribute(QStringLiteral("Value"), l.value);
+        // An effect's fades: absent is FadeSnap, as a show saved before
+        // them plays (an older build ignores both).
+        if (isEffectKey(l.key) && !l.none)
+        {
+            auto fade = [](int ms) {
+                return ms == Look::FadeFollowCue ? QStringLiteral("cue") : QString::number(ms);
+            };
+            if (l.fadeIn != Look::FadeSnap)
+                doc->writeAttribute(QStringLiteral("FadeIn"), fade(l.fadeIn));
+            if (l.fadeOut != Look::FadeSnap)
+                doc->writeAttribute(QStringLiteral("FadeOut"), fade(l.fadeOut));
+        }
         doc->writeEndElement();
     }
+}
+
+static int loadEffectFade(const QXmlStreamAttributes &a, const QString &name)
+{
+    const QString v = a.value(name).toString();
+    if (v.isEmpty())
+        return Look::FadeSnap;
+    if (v == QLatin1String("cue"))
+        return Look::FadeFollowCue;
+    bool ok = false;
+    const int ms = v.toInt(&ok);
+    return ok && ms >= 0 ? ms : Look::FadeSnap;
 }
 
 static Look loadLook(QXmlStreamReader &root)
@@ -1324,6 +1349,11 @@ static Look loadLook(QXmlStreamReader &root)
     l.own = stringToIds(a.value(QStringLiteral("Own")).toString());
     l.none = a.value(QStringLiteral("None")).toString() == QLatin1String("1");
     l.value = a.value(QStringLiteral("Value")).toString();
+    if (isEffectKey(l.key))
+    {
+        l.fadeIn = loadEffectFade(a, QStringLiteral("FadeIn"));
+        l.fadeOut = loadEffectFade(a, QStringLiteral("FadeOut"));
+    }
     root.skipCurrentElement();
     return l;
 }

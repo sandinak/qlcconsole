@@ -59,6 +59,9 @@ public:
         int     layer = 0;       // the effect's place in its look's list: lower wins
         bool    htp = false;     // a colour that only adds to what's there (a sparkle
                                  // over a pulse): combined highest-wins, not by layer
+        float   depth = 1.0f;    // < 1: the effect fading in or out (depth()) -- written
+                                 //      that far from what is under it to @value
+                                 //      (FadeChannel::Mix); set by the runner
     };
 
     EffectInstance(Doc *doc, quint32 sceneId, quint32 effectPaletteId);
@@ -108,13 +111,34 @@ public:
     // --- Release fade-out (main thread) ---------------------------------------
     // When a look stops, instead of snapping off the effect can keep rendering
     // with a linearly decaying envelope for @p ms, then be removed. Dormant
-    // unless the look sets a Fade Out time.
-    void startFadeOut(uint ms) { m_fadingOut = true; m_fadeOutMs = qMax(1u, ms);
-                                 m_fadeOutStartMs = m_elapsed.elapsed(); }
+    // unless the look sets a Fade Out time. With a depth fade (fadeDepthIn())
+    // it is the depth that goes, from where it is, over @p ms.
+    void startFadeOut(uint ms);
     void cancelFadeOut()       { m_fadingOut = false; }
     bool isFadingOut() const   { return m_fadingOut; }
-    bool fadeOutDone() const   { return m_fadingOut &&
-                                 (m_elapsed.elapsed() - m_fadeOutStartMs) >= qint64(m_fadeOutMs); }
+    bool fadeOutDone() const;
+
+    // --- Depth (main thread): an effect's fade in / out ----------------------
+    // (Scene::setPaletteFade on an effect; the Show Tree's effect fades.) Its
+    // depth -- how far its writes go from what is under them to its own
+    // values (DmxWrite::depth, FadeChannel::Mix) -- comes up over its fade
+    // in and goes over its fade out, while the look under it fades on its
+    // own time. Allocation-free: a ramp of a few numbers.
+    /** Depth from 0 (@p fromZero: a fresh start) or from where it is now
+     *  (the look came back while it was going) up to 1 over @p ms, @p
+     *  alreadyMs of which have passed (its scene started that long ago).
+     *  From then on its release fade lowers the depth, not the envelope. */
+    void fadeDepthIn(uint ms, qint64 alreadyMs, bool fromZero);
+    /** Its depth now, 0..1: 1 without a depth fade. */
+    float depth() const;
+    /** On a depth fade (fadeDepthIn() was called). */
+    bool hasDepthFade() const { return m_depthFade; }
+    /** Its depth is still on its way in or out. */
+    bool depthMoving() const { return m_depthFade && depth() != m_depthTo; }
+    /** The depth fade's clock, ms (tests: pinned with setDepthClock()). */
+    qint64 depthClockMs() const { return m_depthTestMs >= 0 ? m_depthTestMs : m_depthClock.elapsed(); }
+    /** Pin the depth fade's clock at @p ms (tests); -1: its own again. */
+    void setDepthClock(qint64 ms) { m_depthTestMs = ms; }
 
     // --- Input values (main thread, set by EffectScriptRunner on input events) ---
     void setInputValue(const QString &slotName, float norm01);
@@ -417,6 +441,17 @@ private:
     bool             m_fadingOut = false;   //!< in a release fade after the look stopped
     uint             m_fadeOutMs = 0;
     qint64           m_fadeOutStartMs = 0;  //!< m_elapsed.elapsed() when the fade began
+
+    /* The depth fade (fadeDepthIn()): from m_depthFrom to m_depthTo over
+       m_depthMs from m_depthStartMs, on m_depthClock -- its own, as
+       m_elapsed starts again with every run of a Once effect. */
+    bool             m_depthFade = false;
+    float            m_depthFrom = 1.0f;
+    float            m_depthTo = 1.0f;
+    qint64           m_depthStartMs = 0;
+    uint             m_depthMs = 0;
+    QElapsedTimer    m_depthClock;
+    qint64           m_depthTestMs = -1;    //!< setDepthClock()
 
     float m_envelope = 1.0f; //!< host-scene actuation level, applied per tick
     QString m_wledEffect;    //!< QLCPalette::wledEffect(), at construction
