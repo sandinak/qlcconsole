@@ -103,6 +103,7 @@ cat > "$STAGE/DEBIAN/postinst" <<'PI'
 #!/bin/sh
 set -e
 if [ "$1" = configure ]; then
+  ldconfig
   command -v update-mime-database >/dev/null && update-mime-database /usr/share/mime || true
   command -v gtk-update-icon-cache >/dev/null && gtk-update-icon-cache -q -t -f /usr/share/icons/hicolor 2>/dev/null || true
   command -v update-desktop-database >/dev/null && update-desktop-database -q || true
@@ -117,10 +118,12 @@ PI
 cat > "$STAGE/DEBIAN/postrm" <<'PR'
 #!/bin/sh
 set -e
+[ "$1" = remove ] || [ "$1" = purge ] && ldconfig || true
 command -v update-mime-database >/dev/null && update-mime-database /usr/share/mime || true
 command -v udevadm >/dev/null && udevadm control --reload-rules 2>/dev/null || true
 exit 0
 PR
+chmod -R go-w "$STAGE"
 chmod 755 "$STAGE/DEBIAN/postinst" "$STAGE/DEBIAN/postrm"
 fakeroot dpkg-deb --build -Zxz "$STAGE" "$OUT/qlcconsole_${VERSION}_${ARCH}.deb"
 dpkg-deb -I "$OUT/qlcconsole_${VERSION}_${ARCH}.deb" | sed -n '1,14p'
