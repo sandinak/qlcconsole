@@ -35,7 +35,9 @@ workspace view, and Teaching never changes which tabs you see.
   panel) shows "This is a Teaching show, and its patch is part of the
   lesson" with **Change the Patch** / Cancel. Staging fixtures in the
   Inventory does not ask, it changes nothing on the wire. Fixture
-  Properties in the Lighting Studio does not ask.
+  Properties in the Lighting Studio asks the same way when its universe or
+  address boxes move a fixture (Cancel puts the boxes back), and so does
+  pasting a truss with its fixtures patched at the next free addresses.
 - The **focus report** of a Teaching show says "Teaching show", the lesson, and
   whether a PIN was set, above the practice score.
 

@@ -184,6 +184,7 @@ private slots:
     /** "clean ways to assign fixtures into universes": the structure
      *  editor's inspector moves the selected fixture's universe/address. */
     void theInspectorMovesAFixturesDmxAddress();
+    void teachingAsksBeforeTheInspectorMovesAnAddress();
     /** "if I select all the fixtures in the left hand .. apply tilt/angle
      *  changes to all of them at same time .. auto distribute and
      *  multi-select to move them around". */

@@ -154,6 +154,7 @@
 #include "patchplanner.h"
 #include "doc.h"
 #include "teachingsettings.h"
+#include "showsettingsdialog.h"
 #include "qlcfile.h"
 #include "qlcfixturedefcache.h"
 #include <QFileInfo>
@@ -19151,6 +19152,62 @@ void Monitor_Test::theInspectorMovesAFixturesDmxAddress()
         QCOMPARE(spot->address(), quint32(200));
         doc->setMode(Doc::Design);
     }
+    delete doc;
+}
+
+/* Lighting Studio's Fixture Properties ask before a Teaching show's patch
+   moves, the same question the Fixture Manager asks. */
+void Monitor_Test::teachingAsksBeforeTheInspectorMovesAnAddress()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    Truss *t = props->addTruss();
+    t->setName("T-1");
+    t->setLength(3.0f);
+    Fixture *spot = new Fixture(doc);
+    spot->setName("Spot");
+    spot->setChannels(8);
+    QVERIFY(doc->addFixture(spot));
+    props->setFixturePosition(spot->id(), 0, 0, QVector3D(0, 0, 0));
+    FixtureRigProps rp;
+    rp.trussId = t->id();
+    rp.trussOffset = 1.0f;
+    props->setFixtureRigProps(spot->id(), rp);
+
+    ShowSettingsDialog::setTestMode(true);
+    auto back = qScopeGuard([]() { ShowSettingsDialog::setTestMode(false); });
+    int &asked = ShowSettingsDialog::patchQuestions();
+    asked = 0;
+    {
+        QWidget parent;
+        Monitor mon(&parent, doc);
+        QDialog dlg;
+        StructureStudioView *view = nullptr;
+        QVERIFY(mon.makeStudioPane(&dlg, 2 /* truss */, t->id(), nullptr, &view) != nullptr);
+        emit view->fixtureSelected(spot->id());
+        QSpinBox *addr = dlg.findChild<QSpinBox *>("fixtureAddress");
+        QVERIFY(addr != nullptr);
+
+        // Not a Teaching show: moves, no question.
+        addr->setValue(21);
+        QCOMPARE(spot->address(), quint32(20));
+        QCOMPARE(asked, 0);
+
+        // Teaching, "no": stays, and the box goes back.
+        doc->teachingSettings()->setEnabled(true);
+        ShowSettingsDialog::testAnswers() = { "no" };
+        addr->setValue(101);
+        QCOMPARE(asked, 1);
+        QCOMPARE(spot->address(), quint32(20));
+        QCOMPARE(addr->value(), 21);
+
+        // Teaching, "yes": moves.
+        ShowSettingsDialog::testAnswers() = { "yes" };
+        addr->setValue(101);
+        QCOMPARE(asked, 2);
+        QCOMPARE(spot->address(), quint32(100));
+    }
+    ShowSettingsDialog::testAnswers().clear();
     delete doc;
 }
 

@@ -15,6 +15,12 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 A home for QLC+ 4 users: QLC+ 4's habits that qlcconsole had dropped are
 back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
 
+### Teaching
+
+- **Fixture Properties ask too.** In a Teaching show the Lighting Studio's
+  universe and address boxes, and pasting a truss with its fixtures patched,
+  ask "Change the Patch" like the Fixture Manager does.
+
 ### Scoped hits
 
 - **A hit lives where it fires** (Q154): under a cue, a cue list, its
