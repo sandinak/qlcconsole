@@ -79,7 +79,7 @@ SHL="$(cd "$SD" && dpkg-shlibdeps -O -Sunused -e$(echo "$BINS" | tr '\n' ' ' | s
       | sed -n 's/^shlibs:Depends=//p')"
 # plus what is loaded at run time rather than linked
 EXTRA="shared-mime-info, qt6-image-formats-plugins, qt6-svg-plugins, qt6-multimedia-plugins | libqt6multimedia6, libqt6svg6"
-case "$ARCH" in *) EXTRA="$EXTRA, qt6-qpa-plugins";; esac
+case "$ARCH" in *) EXTRA="$EXTRA, qt6-qpa-plugins, libxcb-cursor0";; esac
 SIZE="$(du -sk "$STAGE/usr" "$STAGE/etc" | awk '{s+=$1} END{print s}')"
 cat > "$STAGE/DEBIAN/control" <<CTL
 Package: qlcconsole
@@ -90,7 +90,7 @@ Priority: optional
 Maintainer: Branson Matheson <branson.matheson@gmail.com>
 Installed-Size: $SIZE
 Depends: $SHL, $EXTRA
-Recommends: libasound2t64 | libasound2
+Recommends: qt6-wayland, libasound2t64 | libasound2
 Homepage: https://github.com/sandinak/qlcconsole
 Description: qlcconsole - a fork of Q Light Controller Plus, a DMX lighting desk
  Show Tree, Build workbench and the QLC+ 4 engine for professional lighting
