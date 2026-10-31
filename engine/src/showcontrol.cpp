@@ -20,6 +20,7 @@
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
 #include <QtEndian>
+#include <QThread>
 #include <cstring>
 
 #include "functionparent.h"
@@ -173,6 +174,49 @@ int ShowControl::standbySubCue(const Chaser *chaser) const
     return loaded.subCue;
 }
 
+QString ShowControl::routeName(Route route)
+{
+    switch (route)
+    {
+        case RouteKey:        return QStringLiteral("key");
+        case RouteRunTab:     return QStringLiteral("Run tab");
+        case RouteVcRunner:   return QStringLiteral("VC Cue Runner");
+        case RoutePad:        return QStringLiteral("pad");
+        case RouteControlMap: return QStringLiteral("Control Map");
+        case RouteFocusCall:  return QStringLiteral("focus call");
+        case RouteOsc:        return QStringLiteral("OSC");
+        case RouteMsc:        return QStringLiteral("MSC");
+        case RouteOther:      break;
+    }
+    return QStringLiteral("other");
+}
+
+bool ShowControl::run(const Request &request, Route route)
+{
+    /* The one way in (docs/design/RUN_COMMANDS.md). The handler is the UI's
+       (notices, the preview hold it reports): only on this object's thread.
+       Off it -- a command arriving on a plugin's thread -- execute() alone,
+       whose aboutToTakeStage() still holds the previews, queued. */
+    if (m_runHandler && QThread::currentThread() == thread())
+        return m_runHandler(request, route);
+    return execute(request);
+}
+
+bool ShowControl::wouldTakeStage(const Request &request) const
+{
+    if (m_doc == nullptr || !takesStage(request.command))
+        return false;
+    const Chaser *chaser = request.chaser != UINT_MAX ? qobject_cast<const Chaser *>(m_doc->function(request.chaser))
+                                                      : cueList(request.list);
+    if (chaser == nullptr)
+        return false;
+    // As execute(): Sub GO / Sub Back take no cue; a named cue must be there.
+    if (request.command == SubGo || request.command == SubBack || request.cue.isEmpty())
+        return true;
+    int step = -1, sub = -1;
+    return chaser->findCueOrSubCue(request.cue, &step, &sub);
+}
+
 bool ShowControl::execute(const Request &request)
 {
     // Sub GO / Sub Back take no cue: they step through the cue playing.
@@ -225,8 +269,7 @@ bool ShowControl::execute(const Request &request)
     }
 
     // What runs takes the stage from the previews first (RC8).
-    if (request.command == Go || request.command == Back
-            || request.command == SubGo || request.command == SubBack)
+    if (takesStage(request.command))
         emit aboutToTakeStage(m_source);
 
     switch (request.command)
@@ -448,7 +491,7 @@ void ShowControl::handleSysEx(quint32 universe, const QByteArray &sysEx)
         return;
     m_source = Msc;
     m_sourceUniverse = universe;
-    execute(r);
+    run(r, RouteMsc);
     m_source = Local;
     m_sourceUniverse = UINT_MAX;
 }
@@ -634,7 +677,7 @@ int ShowControl::handleOsc(const QByteArray &datagram)
     int done = 0;
     m_source = Osc;
     for (const Request &r : parseOsc(datagram))
-        if (execute(r))
+        if (run(r, RouteOsc))
             ++done;
     m_source = Local;
     return done;

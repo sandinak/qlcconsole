@@ -26,6 +26,7 @@
 #include <QString>
 #include <QList>
 #include <QHash>
+#include <functional>
 
 class QXmlStreamReader;
 class QXmlStreamWriter;
@@ -80,6 +81,37 @@ public:
 
     static QString commandName(Command command);
 
+    /** The route a run command took to get here (docs/design/RUN_COMMANDS.md):
+     *  every GO, Back, Sub GO, Stop... from anywhere enters through run()
+     *  with its route, so the one place that guards it (App::runCommand())
+     *  knows who asked. */
+    enum Route
+    {
+        RouteKey,           //!< ⌘↩ and its family, Control ▸ GO (the App's actions)
+        RouteRunTab,        //!< the Run tab's buttons and Space
+        RouteVcRunner,      //!< a Cue Runner VC widget (click, its key or input)
+        RoutePad,           //!< a controller profile's chaser step on a Show Tree list
+        RouteControlMap,    //!< a Control Map binding (GO / Stop a list or cue)
+        RouteFocusCall,     //!< a focus-call cue going on with its list when done
+        RouteOsc,           //!< OSC (QLab and others)
+        RouteMsc,           //!< MIDI Show Control
+        RouteOther          //!< anything else (a test, a script)
+    };
+    Q_ENUM(Route)
+    static QString routeName(Route route);
+    /** The console's own routes (a key, the Run tab, the pad): the App
+     *  says what a GO held and offers Operate after one in Design. */
+    static bool isConsoleRoute(Route route)
+    {
+        return route == RouteKey || route == RouteRunTab || route == RoutePad;
+    }
+    /** GO, Back, Sub GO and Sub Back put a cue on stage (RC8 holds the
+     *  previews for them). */
+    static bool takesStage(Command command)
+    {
+        return command == Go || command == Back || command == SubGo || command == SubBack;
+    }
+
     /*********************************************************************
      * Cue lists
      *********************************************************************/
@@ -97,9 +129,28 @@ public:
      * Commands
      *********************************************************************/
 public:
+    /** THE entry point of a run command (docs/design/RUN_COMMANDS.md): what
+     *  every route calls. With a run handler (the App's runCommand(): the
+     *  guards, the preview hold, the console's notices), it goes there,
+     *  which then calls execute(); with none (the engine alone, a test), or
+     *  off this object's thread, straight to execute(). */
+    bool run(const Request &request, Route route);
+
+    /** The one place run commands are guarded, set by the App; empty: none.
+     *  It must end in execute() for anything it lets through. */
+    using RunHandler = std::function<bool(const Request &request, Route route)>;
+    void setRunHandler(const RunHandler &handler) { m_runHandler = handler; }
+    bool hasRunHandler() const { return bool(m_runHandler); }
+
     /** Carries out @a request. False when it found nothing to act on (no
-     *  such list or cue); commandHandled() says what happened either way. */
+     *  such list or cue); commandHandled() says what happened either way.
+     *  Only run() and its handler call this: a route calls run(). */
     bool execute(const Request &request);
+
+    /** Would execute() put a cue on stage for @a request -- a GO, Back, Sub
+     *  GO or Sub Back whose list (and named cue) is there? Exactly when
+     *  execute() emits aboutToTakeStage(). */
+    bool wouldTakeStage(const Request &request) const;
 
     /** The cue GO with no cue goes to next, on a stopped list; -1: none.
      *  For a LOADed sub-cue, its parent step (loadedSubCue() says which). */
@@ -229,6 +280,7 @@ private:
     bool m_mscEnabled;
     QString m_mscInputPlugin;           ///< empty: any input
     QString m_mscInput;
+    RunHandler m_runHandler;            ///< the App's runCommand(); empty: none
     Source m_source;                    ///< of the command being carried out
     quint32 m_sourceUniverse;           ///< MSC: the universe it came in on
 };

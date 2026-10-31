@@ -8,6 +8,22 @@ under `~/.claude/.../memory/`.
 
 ---
 
+## One GO path — built, leftovers (0.4 item 1, go1, 2026-10-31)
+
+Built: every GO, Back, Sub GO, Stop, Load... enters through
+`ShowControl::run(request, route)` and is guarded in one place,
+`App::runCommand()` (docs/design/RUN_COMMANDS.md; DONE.md 2026-10-31).
+Pad Run, the phone Run page and override hits call `run()` with their
+route. Open:
+- Phone Run page: add `RouteWeb`, and refuse it in step 2 of
+  `App::runCommand()` unless Teaching's "allow remote GO" (PIN) says yes.
+- Two stock paths still step a chaser directly: the VC Cue List (and the
+  web page that drives it) and a VC button's next/previous step
+  (`Doc::stepCurrentChaser`). Move them onto `run()` if they ever play a
+  Show Tree list (decided: left as stock QLC+, can change).
+- decided (can change): GO is never refused by Operate's PIN or Teaching
+  (they lock Design); a GO that finds nothing to play holds no preview.
+
 ## Breathe once — leftovers (brth, 2026-10-30)
 
 Built (build 2593 report: flash at start, end lands anywhere, no typed

@@ -538,6 +538,13 @@ skipped). Upstream fixes taken:
 
 ### Changed
 
+- **One GO path** (developer-facing, the first piece of 0.4 "Run the
+  show"): every GO, Back, Sub GO, Stop, Load... from the keys, the Run
+  tab, a VC Cue Runner, the pad, the Control Map, a focus-call cue, OSC
+  and MSC now enters through `ShowControl::run()` and is guarded in one
+  place, `App::runCommand()` (the preview hold, the Operate offer, the
+  notices). Nothing looks different; a GO that finds nothing to play no
+  longer stops the Show Tree preview. See docs/design/RUN_COMMANDS.md.
 - **A wave's Once is one whole cycle, and its Length is that cycle.** A
   Breathe, Dimmer Phaser, Colour Phaser or pulse set to **Once** (or N
   times) plays whole cycles at its rate and ends where its wave does: a

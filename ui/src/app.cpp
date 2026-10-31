@@ -311,8 +311,9 @@ App::~App()
 {
     QSettings settings;
 
-    // The Run tab's GO path points at this App: not once it is gone.
-    CueRunner::setRunHook(nullptr);
+    // The one GO path points at this App: not once it is gone.
+    if (m_doc != NULL)
+        m_doc->showControl()->setRunHandler(nullptr);
 
     // Stop autosave timer
     if (m_autosaveTimer != NULL)
@@ -2385,27 +2386,19 @@ void App::initActions()
     m_cueGoAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Return));
     m_cueGoAction->setShortcutContext(Qt::ApplicationShortcut);
     connect(m_cueGoAction, &QAction::triggered, this, [this]() {
-        /* With a focus-call cue armed, the next thing to do is begin its
-           calls, and ⌘↩ does that (as the controller's Start does). It
-           was a second shortcut on the same key, which made both
-           ambiguous: neither GO nor the calls ran. */
-        if (m_doc->programmer() != nullptr && m_doc->programmer()->focusCallCue()->isArmed())
-        {
-            m_doc->programmer()->focusCallCue()->start();
-            return;
-        }
-        runCommand({ ShowControl::Go, QString(), QString() });
+        m_doc->showControl()->run({ ShowControl::Go, QString(), QString() }, ShowControl::RouteKey);
     });
-    // RC8: the Run tab's GO, Back and Sub GO come through runCommand() too,
-    // before they act (the hook used to run after the GO).
-    CueRunner::setRunHook([this](const ShowControl::Request &r, bool fromConsole) {
-        return runCommand(r, fromConsole);
+    /* The one GO path (docs/design/RUN_COMMANDS.md): whatever asks for a
+       GO, Back, Stop... -- the Run tab, a VC Cue Runner, the pad, the
+       Control Map, OSC, MSC -- asks ShowControl::run(), which comes here. */
+    m_doc->showControl()->setRunHandler([this](const ShowControl::Request &r, ShowControl::Route route) {
+        return runCommand(r, route);
     });
     m_cueBackAction = new QAction(tr("Back (Main Cue List)"), this);
     m_cueBackAction->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Return));
     m_cueBackAction->setShortcutContext(Qt::ApplicationShortcut);
     connect(m_cueBackAction, &QAction::triggered, this, [this]() {
-        runCommand({ ShowControl::Back, QString(), QString() });
+        m_doc->showControl()->run({ ShowControl::Back, QString(), QString() }, ShowControl::RouteKey);
     });
     /* ...and its Sub GO / Sub Back (docs/design/SUBCUES_DESIGN.md): through the sub-cues
        of the cue playing, 4.1, 4.2..., while GO goes on to 5. ⌥⌘↩ / ⌥⌘⇧↩
@@ -2416,13 +2409,13 @@ void App::initActions()
     // Through show control, as GO is: what came of it is reported the
     // same way (Connections → Devices → Show control & sync, last command).
     connect(m_cueSubGoAction, &QAction::triggered, this, [this]() {
-        runCommand({ ShowControl::SubGo, QString(), QString() });
+        m_doc->showControl()->run({ ShowControl::SubGo, QString(), QString() }, ShowControl::RouteKey);
     });
     m_cueSubBackAction = new QAction(tr("Sub Back (Main Cue List)"), this);
     m_cueSubBackAction->setShortcut(cueSubBackShortcut());
     m_cueSubBackAction->setShortcutContext(Qt::ApplicationShortcut);
     connect(m_cueSubBackAction, &QAction::triggered, this, [this]() {
-        runCommand({ ShowControl::SubBack, QString(), QString() });
+        m_doc->showControl()->run({ ShowControl::SubBack, QString(), QString() }, ShowControl::RouteKey);
     });
 
     m_helpIndexAction = new QAction(tr("QLC+ Reference (online)"), this);
@@ -5078,20 +5071,42 @@ QString App::heldForRunText()
     return tr("Stopped the Show Tree preview so GO plays alone \u2014 Play brings it back.");
 }
 
-bool App::runCommand(const ShowControl::Request &request, bool fromConsole)
+bool App::runCommand(const ShowControl::Request &request, ShowControl::Route route)
 {
     if (m_doc == nullptr)
         return false;
-    /* RC8: what GO plays is all that reaches the stage. The previews hold
-       BEFORE the command acts (ShowControl would hold them too, through
-       aboutToTakeStage, but this says what it held). */
+    ++m_runCommands;
+    m_lastRunRoute = route;
+    ShowControl *sc = m_doc->showControl();
+
+    /* 1. With a focus-call cue armed, the next thing to do is begin its
+       calls, and ⌘↩ does that (as the controller's Start does). It was a
+       second shortcut on the same key, which made both ambiguous: neither
+       GO nor the calls ran. */
+    if (route == ShowControl::RouteKey && request.command == ShowControl::Go
+            && m_doc->programmer() != nullptr && m_doc->programmer()->focusCallCue()->isArmed())
+    {
+        m_doc->programmer()->focusCallCue()->start();
+        return true;
+    }
+
+    /* 2. Refused: nothing, today. decided: Operate's PIN and Teaching lock
+       Design, not GO (can change); the phone Run page's "allow remote GO"
+       is checked here. */
+
+    /* 3. RC8: what GO plays is all that reaches the stage. The previews
+       hold BEFORE the command acts -- execute() holds them too, through
+       aboutToTakeStage(), on the same condition, but this says what it
+       held. */
     QStringList held;
-    const bool takesStage = request.command == ShowControl::Go || request.command == ShowControl::Back
-                         || request.command == ShowControl::SubGo || request.command == ShowControl::SubBack;
-    if (takesStage && m_doc->showTree() != nullptr)
+    if (m_doc->showTree() != nullptr && sc->wouldTakeStage(request))
         held = m_doc->showTree()->takeStageForRun();
-    const bool ok = m_doc->showControl()->execute(request);
-    if (!fromConsole)
+
+    const bool ok = sc->execute(request);
+
+    /* 4. The console's own routes speak; the VC, the Control Map, OSC and
+       MSC hold the previews quietly. */
+    if (!ShowControl::isConsoleRoute(route))
         return ok;
     if (request.command == ShowControl::Go && offerOperateAfterGo(!held.isEmpty()))
         return ok;
