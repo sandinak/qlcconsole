@@ -61,6 +61,7 @@ class App;
 class StartupWindow;
 class Chaser;
 class ShowControl;
+class BlindEffects;
 
 /** @addtogroup ui UI
  * @{
@@ -612,8 +613,22 @@ private:
     void updateBlindLook();
     /** Feed the fixtures the look in edit (Blind view on). */
     void refreshBlindView();
+    /** The look in edit's levels with its effects' frame over them, to
+     *  the fixtures. */
+    void pushBlindLevels();
+    /** Its effects run while the view is on, the cue has one and the
+     *  window shows; paused otherwise. */
+    void updateBlindMotion();
+    /** One frame of them, on the view's own clock. */
+    void blindMotionTick();
     bool m_blindView = false;
     QTimer *m_blindViewTimer = nullptr;
+    /** The cue in edit's effects, off the stage (engine/src/blindeffects.h). */
+    BlindEffects *m_blindEffects = nullptr;
+    QTimer *m_blindMotionTimer = nullptr;
+    QElapsedTimer m_blindMotionClock;
+    /** The cue in edit's levels, without its effects (cueLevels()). */
+    QHash<quint32, QByteArray> m_blindLevels;
     QLabel *m_statusBlindLabel = nullptr;
 public slots:
     /** Footer Grand Master fader moved by the user. */

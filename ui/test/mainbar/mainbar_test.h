@@ -61,6 +61,10 @@ private slots:
     /** Blind never survives into a show: Operate turns it off and greys it;
      *  Design gives the button back. */
     void operateClearsBlindAndMakesItAView();
+    /** The Blind view moves the cue in edit's effects (a dimmer pulsing)
+     *  on its own clock while it is up, and only then; the stage's
+     *  universe doesn't change by a byte. */
+    void theBlindViewMovesTheCuesEffects();
     /** Stop all's menu, Fade 1 second and stop: the scene stops and its
      *  light fades out over the second rather than snapping off */
     void fadeOneSecondAndStopFadesTheLightOut();

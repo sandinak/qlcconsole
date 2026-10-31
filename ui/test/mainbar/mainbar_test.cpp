@@ -41,6 +41,7 @@
 
 #include "mainbar_test.h"
 #include "showtreecontroller.h"
+#include "blindeffects.h"
 #include "functionparent.h"
 #include "showcontrol.h"
 #include "mastertimer.h"
@@ -457,6 +458,90 @@ void MainBar_Test::operateClearsBlindAndMakesItAView()
     doc->deleteFixtureGroup(grp->id());
     doc->deletePalette(dim->id());
     removeAddedFunctionsAndFixtures();
+}
+
+void MainBar_Test::theBlindViewMovesTheCuesEffects()
+{
+    auto tidy = qScopeGuard([this]() { removeAddedFunctionsAndFixtures(); });
+    Doc *doc = m_app->doc();
+    ShowControls *sc = m_app->m_showControls;
+    QVERIFY(sc != nullptr);
+    QCOMPARE(doc->mode(), Doc::Design);
+
+    // A cue in edit with a pulse (a sine, twice a second) on a dimmer of its own.
+    quint32 fid = Fixture::invalidId();
+    addDimmerScene(&fid);
+    Fixture *fx = doc->fixture(fid);
+    QVERIFY(fx != nullptr);
+    FixtureGroup *grp = new FixtureGroup(doc);
+    grp->setName("Blind motion");
+    doc->addFixtureGroup(grp);
+    grp->assignFixture(fid);
+    QLCPalette *pulse = new QLCPalette(QLCPalette::Effect, doc);
+    pulse->setName("Blind pulse");
+    pulse->setScriptPath(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts/dimmer-phaser.js");
+    pulse->setEffectParamValue("rate", 2.0);
+    doc->addPalette(pulse);
+    QLCPalette *dim = new QLCPalette(QLCPalette::Dimmer, doc);
+    dim->setName("Blind still");
+    dim->setValue(90);
+    doc->addPalette(dim);
+    ShowTreeController *st = doc->showTree();
+    const quint32 prod = st->addProduction("Blind motion P");
+    const quint32 list = st->addCueList(prod, "Blind motion L");
+    const quint32 moving = st->addCue(list, -1, "Moving");
+    const quint32 still = st->addCue(list, 0, "Still");
+    ShowTree::Target t;
+    t.groups << grp->id();
+    st->setLayerLook(moving, st->addLayer(moving, t), st->lookForPalette(pulse->id()));
+    st->setLayerLook(still, st->addLayer(still, t), st->lookForPalette(dim->id()));
+    auto untidy = qScopeGuard([&]() {
+        if (m_app->blindView())
+            sc->blindButton()->click();
+        if (doc->mode() != Doc::Design)
+            sc->designButton()->click();
+        st->removeProduction(prod);
+        doc->deleteFixtureGroup(grp->id());
+        doc->deletePalette(pulse->id());
+        doc->deletePalette(dim->id());
+    });
+
+    sc->operateButton()->click();
+    QCOMPARE(doc->mode(), Doc::Operate);
+    st->previewCue(moving);                             // the tree's selection, blind in Operate
+    QCOMPARE(st->editedCue(), moving);
+    Universe *uni = doc->inputOutputMap()->universes().at(int(fx->universe()));
+    const QByteArray stage = *uni->postGMValues();
+
+    sc->blindButton()->click();
+    QVERIFY(m_app->blindView());
+    QVERIFY(m_app->m_blindMotionTimer != nullptr && m_app->m_blindMotionTimer->isActive());
+    QSet<int> seen;
+    for (int f = 0; f < 12; ++f)
+    {
+        QTest::qWait(45);
+        m_app->blindMotionTick();
+        seen.insert(uchar(fx->channelValues().at(0)));
+        QCOMPARE(*uni->postGMValues(), stage);          // the stage: not a byte
+    }
+    QVERIFY2(seen.size() >= 4, qPrintable(QString("the pulse should show moving, saw %1 values").arg(seen.size())));
+    QVERIFY(m_app->m_blindEffects->clockMs() > 300);
+
+    // A cue with no effect: its level, and nothing left running.
+    st->previewCue(still);
+    m_app->refreshBlindView();
+    QCOMPARE(uchar(fx->channelValues().at(0)), uchar(90));
+    QVERIFY(!m_app->m_blindMotionTimer->isActive());
+
+    // Back to the effect, then Live: the effects go with the view.
+    st->previewCue(moving);
+    m_app->refreshBlindView();
+    QVERIFY(m_app->m_blindMotionTimer->isActive());
+    sc->blindButton()->click();
+    QVERIFY(!m_app->blindView());
+    QVERIFY(!m_app->m_blindMotionTimer->isActive());
+    QVERIFY(!m_app->m_blindEffects->hasEffects());
+    QCOMPARE(*uni->postGMValues(), stage);
 }
 
 /* A one-channel dimmer on universe 3 (the demo show uses only universe 1)

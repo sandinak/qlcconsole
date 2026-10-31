@@ -84,6 +84,7 @@
 #include "speedmastersfooter.h"
 #include "updatemanager.h"
 #include "app.h"
+#include "blindeffects.h"
 #include "layoutdiagnostics.h"
 #include <QClipboard>
 #include <QGuiApplication>
@@ -391,6 +392,9 @@ App::~App()
 
     if (m_videoProvider != NULL)
         delete m_videoProvider;
+
+    delete m_blindEffects;              // its effects read the Doc
+    m_blindEffects = nullptr;
 
     if (m_doc != NULL)
         delete m_doc;
@@ -1089,6 +1093,8 @@ void App::slotLoadProgress(const QString& stage, int count)
 void App::clearDocument()
 {
     m_doc->masterTimer()->stop();
+    if (m_blindEffects != nullptr)
+        m_blindEffects->clear();
     VirtualConsole::instance()->resetContents();
     ShowManager::instance()->clearContents();
     m_doc->clearContents();
@@ -4134,6 +4140,10 @@ void App::setBlindView(bool on)
         // Live again: the fixtures take the stage's values as they are now
         // (a universe only says when it changes).
         m_blindViewTimer->stop();
+        if (m_blindEffects != nullptr)
+            m_blindEffects->clear();
+        updateBlindMotion();
+        m_blindLevels.clear();
         for (Universe *uni : m_doc->inputOutputMap()->universes())
             if (uni != nullptr && uni->postGMValues() != nullptr)
                 slotUniverseWritten(uni->id(), *uni->postGMValues());
@@ -4147,8 +4157,21 @@ void App::refreshBlindView()
         return;
     ShowTreeController *st = m_doc->showTree();
     const quint32 cueId = st != nullptr ? st->editedCue() : ShowTree::invalidId();
-    const QHash<quint32, QByteArray> levels = st != nullptr ? st->cueLevels(cueId)
-                                                            : QHash<quint32, QByteArray>();
+    m_blindLevels = st != nullptr ? st->cueLevels(cueId) : QHash<quint32, QByteArray>();
+    // Its effects too, as they would move: the stage's own effect runtime
+    // on a private copy, never a universe. The same cue keeps them going.
+    if (m_blindEffects == nullptr)
+        m_blindEffects = new BlindEffects(m_doc);
+    m_blindEffects->setCue(cueId);
+    updateBlindMotion();
+    pushBlindLevels();
+    updateBlindLook();
+}
+
+void App::pushBlindLevels()
+{
+    const QHash<quint32, QByteArray> levels = m_blindEffects != nullptr
+                                            ? m_blindEffects->apply(m_blindLevels) : m_blindLevels;
     foreach (Fixture *fixture, m_doc->fixtures())
     {
         QByteArray v = levels.value(fixture->id());
@@ -4156,7 +4179,42 @@ void App::refreshBlindView()
             v = QByteArray(int(fixture->channels()), 0);
         fixture->setChannelValues(v);
     }
-    updateBlindLook();
+}
+
+void App::updateBlindMotion()
+{
+    // Only while someone can see it: the view on, an effect in the cue,
+    // the window up. A static cue costs nothing more than its levels.
+    const bool run = m_blindView && m_blindEffects != nullptr && m_blindEffects->hasEffects()
+                     && isVisible() && !isMinimized();
+    if (m_blindMotionTimer == nullptr)
+    {
+        if (!run)
+            return;
+        m_blindMotionTimer = new QTimer(this);
+        m_blindMotionTimer->setInterval(40);     // 25 frames a second: a screen's worth
+        connect(m_blindMotionTimer, &QTimer::timeout, this, &App::blindMotionTick);
+    }
+    if (run && !m_blindMotionTimer->isActive())
+    {
+        m_blindMotionClock.start();
+        m_blindMotionTimer->start();
+    }
+    else if (!run && m_blindMotionTimer->isActive())
+        m_blindMotionTimer->stop();
+}
+
+void App::blindMotionTick()
+{
+    if (!m_blindView || m_blindEffects == nullptr || !isVisible() || isMinimized())
+    {
+        updateBlindMotion();
+        return;
+    }
+    // Its own clock: real time while it runs, held while it is paused (a
+    // late frame catches up a little, never a jump).
+    m_blindEffects->advance(qMin<qint64>(m_blindMotionClock.restart(), 200));
+    pushBlindLevels();
 }
 
 void App::updateBlindLook()

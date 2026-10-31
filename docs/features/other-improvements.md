@@ -742,7 +742,7 @@ Build tab's tools:
   **Operate** it is the **Blind view**: nothing on the wire changes; the
   plot, the studio and the fixture pictures show the cue you are editing in
   the [Show Tree](show-tree.md#seeing-it-on-the-rig) while the stage plays
-  the run. Every mode change turns it off. Fixtures set to **Ignore Blackout**
+  the run, its effects moving as they would on stage. Every mode change turns it off. Fixtures set to **Ignore Blackout**
   (house and work lights, power relays —
   [Output rules](fixture-manager.md#output-rules)) stay as they are through
   Blind, as through Blackout: a universe with any sends them live and

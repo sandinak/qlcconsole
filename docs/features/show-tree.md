@@ -1379,8 +1379,12 @@ reach the stage on GO"*, in blue — blind is blue everywhere.
   Studio and every fixture picture show the cue you are editing here
   instead of the stage, while the stage keeps playing the run. Turn it on
   with the **Blind** button or **View ▸ Blind**; the footer turns blue and
-  names the cue. It shows the cue's levels; an effect shows its base, not
-  its motion. Off (and after every mode change) they show the stage.
+  names the cue. Its effects move there as they would on stage: a dimmer
+  pulsing, a chase, a colour change, a mover sweeping, timed from when you
+  turned the view on or picked the cue. Only the pictures move; the stage
+  doesn't change by a byte, and the effects stop when the view goes off,
+  the window is minimised or the cue has none. Off (and after every mode
+  change) they show the stage.
 - **Blind** in Design mutes the physical rig while the 2D views keep
   showing, and that includes the preview. The footer says so in blue.
 - The footer's live **power estimate** counts the preview as anything else
@@ -2189,7 +2193,10 @@ and *MIB · n* counts the lights a list set **On** is moving.
   and gobo rotation have no rows yet.
 - **Blind editing in Design** (editing a cue without previewing it while
   the rig shows something else) isn't there; Design's Blind mutes the whole
-  rig. In Operate the Blind view shows a cue's levels, not its effects.
+  rig. In Operate the Blind view's effects keep their own time, not the
+  stage's: a cue that also plays live isn't drawn in step with the stage,
+  and an effect that follows MIDI, audio or a joystick shows without that
+  input.
 - **Edits in Operate are blind** and reach the stage on the cue's next GO.
 - **Import** doesn't carry a step's own speed master or Sub GO steps (a
   chaser step plays as a function layer).

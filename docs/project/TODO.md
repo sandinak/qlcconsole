@@ -65,7 +65,9 @@ Built (DONE.md 2026-10-29). Open, each "decided (can change)":
 Built (DONE.md 2026-10-29). Open, each "decided (can change)" in the note:
 - Build's Workbench in Operate still plays what it loads live; make it
   blind too if "only the run is live" should cover Build.
-- The Blind view draws levels, not effects' motion.
+- ~~The Blind view draws levels, not effects' motion.~~ Done 2026-10-30:
+  its effects move (`engine/src/blindeffects.*`, the stage's EffectInstance
+  off the stage on the view's clock).
 - Reordering looks *within* one Show Tree layer (they play in kind order;
   a layer holds one effect per kind, so order changes nothing on stage
   today). Would need an order on Layer, saved, resolved and undone.
