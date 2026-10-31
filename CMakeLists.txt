@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 3.16)
 project(qlcconsole VERSION 4.14.4 LANGUAGES C CXX)
 
 option(qmlui "Build for QLC+ 5 QML UI" OFF)
+# Packaging builds (platforms/linux/make-pi-deb.sh) skip every test program.
+option(QLC_NO_TESTS "Do not build the unit tests" OFF)
 
 # -Wreorder-ctor is in CI's -Werror set, and locally it only surfaced on the
 # fourth leg of check-all.sh -- a forty-minute round trip to learn that one

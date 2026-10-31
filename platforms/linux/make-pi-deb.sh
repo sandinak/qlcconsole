@@ -61,7 +61,7 @@ SHA="$(git -C "$SRC" rev-parse --short HEAD)"
 VERSION="${VER_FILE}+git${N}.${SHA}"
 BUILD="$SRC/build-deb" STAGE="$SRC/stage-deb"
 
-cmake -S "$SRC" -B "$BUILD" -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr \
+cmake -S "$SRC" -B "$BUILD" -G Ninja -DQLC_NO_TESTS=ON -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr \
   -DCMAKE_INSTALL_RPATH_USE_LINK_PATH=OFF
 ninja -C "$BUILD" -j"$JOBS"
 
