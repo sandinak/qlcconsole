@@ -7973,7 +7973,7 @@ void ShowTreeView_Test::theHeaderFoldsUnderMore()
     QStringList names;
     for (QAction *a : more->menu()->actions())
         names << a->text();
-    QCOMPARE(names, QStringList({ "+ Production", "+ Sub-cue", "Merge" }));
+    QCOMPARE(names, QStringList({ "+ Production", "+ Sub-cue", "Merge", "Cue Sheet…" }));
     QVERIFY(!view.findChild<QToolButton *>("stNewSubCue")->isVisible());
     QVERIFY(!view.findChild<QToolButton *>("stMerge")->isVisible());
 
