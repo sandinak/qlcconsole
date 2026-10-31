@@ -119,8 +119,12 @@ QString countsOf(const QString &kind, const QHash<QString, int> &seen, int n)
         parts << plural(seen.value(QStringLiteral("Master")), "%1 master", "%1 masters");
     else if (kind == QLatin1String("FocusCalls") && seen.value(QStringLiteral("Call")) > 0)
         parts << plural(seen.value(QStringLiteral("Call")), "%1 call", "%1 calls");
+    else if (kind == QLatin1String("GroupMasters") && seen.value(QStringLiteral("Master")) > 0)
+        parts << plural(seen.value(QStringLiteral("Master")), "%1 group", "%1 groups");
     else if (kind == QLatin1String("ControlMap") && seen.value(QStringLiteral("Trigger")) > 0)
         parts << plural(seen.value(QStringLiteral("Trigger")), "%1 trigger", "%1 triggers");
+    else if (kind == QLatin1String("GroupMasterSliders"))
+        parts << plural(n, "%1 slider", "%1 sliders");
     else if (kind == QLatin1String("Rigging") || kind == QLatin1String("Widgets"))
         parts << (kind == QLatin1String("Rigging") ? plural(n, "%1 piece", "%1 pieces")
                                                    : plural(n, "%1 widget", "%1 widgets"));
@@ -148,6 +152,10 @@ QString engineLabel(const QString &kind)
         return tr("the focus calls");
     if (kind == QLatin1String("ControlMap"))
         return tr("the Control Map");
+    if (kind == QLatin1String("GroupMasters"))
+        return tr("the group masters");
+    if (kind == QLatin1String("GroupMasterSliders"))
+        return tr("Group master sliders on the Virtual Console (QLC+ 4 plays them as submasters)");
     if (kind == QLatin1String("StagedFixtures"))
         return tr("the Inventory's fixtures (not patched)");
     if (kind == QLatin1String("OutputRuleSettings"))
@@ -174,6 +182,12 @@ void scanVc(QXmlStreamReader &xml, Found *out, QMap<QString, QHash<QString, int>
         {
             out->add(QStringLiteral("Widgets"), 1);
             xml.skipCurrentElement();
+        }
+        else if (xml.name() == QLatin1String("SliderMode"))
+        {
+            // A slider mode QLC+ 4 doesn't know loads as a Submaster.
+            if (xml.readElementText() == QLatin1String("GroupMaster"))
+                out->add(QStringLiteral("GroupMasterSliders"), 1);
         }
         else
             scanVc(xml, out, seen);
@@ -207,6 +221,18 @@ QStringList StockQlcCheck::losses(QIODevice *device)
                         if (forkMonitor().contains(xml.name().toString()))
                             out.add(QStringLiteral("Rigging"), 1);
                         xml.skipCurrentElement();
+                    }
+                    continue;
+                }
+                // A fixture group QLC+ 4 reads, all but its master (0.4).
+                if (tag == QLatin1String("FixtureGroup"))
+                {
+                    QHash<QString, int> inGroup;
+                    tally(xml, &inGroup);
+                    if (inGroup.value(QStringLiteral("Master")) > 0)
+                    {
+                        out.add(QStringLiteral("GroupMasters"), 0);
+                        seen[QStringLiteral("GroupMasters")][QStringLiteral("Master")] += 1;
                     }
                     continue;
                 }

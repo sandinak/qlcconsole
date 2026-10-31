@@ -22,8 +22,15 @@
 #include <QTextStream>
 #include <algorithm>
 #include <functional>
+#include <atomic>
+#include <cstdlib>
+#include <new>
 #if defined(Q_OS_UNIX)
 #include <time.h>
+#include <pthread.h>
+#endif
+#if defined(Q_OS_MACOS)
+#include <malloc/malloc.h>
 #endif
 
 #include "hotpath_test.h"
@@ -56,6 +63,7 @@
 #include "qlcpalette.h"
 #include "showtreecontroller.h"
 #include "showtreemodel.h"
+#include "groupmasters.h"
 #include "doc.h"
 #undef protected
 #undef private
@@ -147,6 +155,83 @@ double nsPerOp(const std::function<void()> &op, int reps, int batches = 5, CpuCl
             best = per;
     }
     return best;
+}
+}
+
+/*****************************************************************************
+ * Allocation counting: every allocation this thread makes while counting.
+ * On macOS through libmalloc's logger hook, which sees malloc as well as
+ * new (Qt's arrays use malloc); elsewhere through a replaced operator new.
+ *****************************************************************************/
+
+namespace
+{
+std::atomic<long> g_allocs { 0 };
+#if defined(Q_OS_UNIX)
+std::atomic<pthread_t> g_countThread { pthread_t() };
+std::atomic<bool> g_counting { false };
+bool countingHere()
+{
+    return g_counting.load(std::memory_order_relaxed)
+           && pthread_equal(pthread_self(), g_countThread.load(std::memory_order_relaxed));
+}
+#else
+thread_local bool t_counting = false;
+bool countingHere() { return t_counting; }
+#endif
+}
+
+#if defined(Q_OS_MACOS)
+typedef void(malloc_logger_t)(uint32_t type, uintptr_t arg1, uintptr_t arg2, uintptr_t arg3,
+                              uintptr_t result, uint32_t num_hot_frames_to_skip);
+extern "C" malloc_logger_t *malloc_logger;
+static void countMalloc(uint32_t type, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uint32_t)
+{
+    if ((type & 2u) && countingHere())       // MALLOC_LOG_TYPE_ALLOCATE (realloc too)
+        g_allocs.fetch_add(1, std::memory_order_relaxed);
+}
+#else
+void *operator new(std::size_t n)
+{
+    if (countingHere())
+        g_allocs.fetch_add(1, std::memory_order_relaxed);
+    if (void *p = std::malloc(n ? n : 1))
+        return p;
+    throw std::bad_alloc();
+}
+void *operator new[](std::size_t n) { return operator new(n); }
+void operator delete(void *p) noexcept { std::free(p); }
+void operator delete[](void *p) noexcept { std::free(p); }
+void operator delete(void *p, std::size_t) noexcept { std::free(p); }
+void operator delete[](void *p, std::size_t) noexcept { std::free(p); }
+#endif
+
+namespace
+{
+/** The allocations @a work makes on this thread */
+long allocationsIn(const std::function<void()> &work)
+{
+    g_allocs.store(0);
+#if defined(Q_OS_UNIX)
+    g_countThread.store(pthread_self());
+    g_counting.store(true);
+#else
+    t_counting = true;
+#endif
+#if defined(Q_OS_MACOS)
+    malloc_logger_t *before = malloc_logger;
+    malloc_logger = countMalloc;
+#endif
+    work();
+#if defined(Q_OS_MACOS)
+    malloc_logger = before;
+#endif
+#if defined(Q_OS_UNIX)
+    g_counting.store(false);
+#else
+    t_counting = false;
+#endif
+    return g_allocs.load();
 }
 }
 
@@ -502,6 +587,38 @@ void HotPath_Test::aMatrixComputesAMapPerStepNotPerTick()
     QVERIFY2(maps >= steps - 1 && maps <= steps + 2,
              qPrintable(QString("%1 maps in %2 frames, %3 steps").arg(maps).arg(frames).arg(steps)));
     m_doc->deleteFixtureGroup(grp->id());
+}
+
+/* A group master (0.4) is a byte per channel the universe reads when it
+   works a written channel out: it adds no allocation to a frame, and none
+   when a whole universe of fixtures is mastered. */
+void HotPath_Test::aGroupMasterAddsNoAllocationPerFrame()
+{
+    Universe *uni = m_doc->inputOutputMap()->universes().at(0);
+    Scene *look = makeLook(0, kFixturesPerUniverse, 200);
+    look->start(m_doc->masterTimer(), FunctionParent::master());
+    frame(5);
+    QCOMPARE(uchar(uni->postGMValues()->at(0)), uchar(200));
+    const long without = allocationsIn([this]() { frame(50); });
+
+    FixtureGroup *grp = new FixtureGroup(m_doc);
+    grp->setSize(QSize(kFixturesPerUniverse, 1));
+    for (int i = 0; i < kFixturesPerUniverse; ++i)
+        grp->assignFixture(m_fixtures[0].at(i));
+    m_doc->addFixtureGroup(grp);
+    grp->setMaster(true);
+    grp->setMasterLevel(128);
+    m_doc->groupMasters()->rebuild();
+    frame(5);
+    QCOMPARE(uchar(uni->postGMValues()->at(0)), uchar(100));
+    const long with = allocationsIn([this]() { frame(50); });
+    qInfo("group master: %ld allocations in 50 frames, %ld without", with, without);
+    QVERIFY2(with <= without, qPrintable(QString("50 frames: %1 allocations with a master, %2 without")
+                                         .arg(with).arg(without)));
+
+    m_doc->deleteFixtureGroup(grp->id());
+    m_doc->groupMasters()->rebuild();
+    QCOMPARE(int(uni->groupMaster(0)), 255);
 }
 
 

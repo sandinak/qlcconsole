@@ -25,6 +25,7 @@
 #include <QSignalSpy>
 #include <QAction>
 #include <QLabel>
+#include <QSlider>
 #include <QComboBox>
 #include <QCheckBox>
 #include <QSpinBox>
@@ -57,6 +58,9 @@
 #include "qlcinputsource.h"
 #include "vccuerunner.h"
 #include "cuerunner.h"
+#include "groupmasterstrip.h"
+#include "groupmasters.h"
+#include "scene.h"
 #include "padrun.h"
 #include "programmercontroller.h"
 #include "qlcpalette.h"
@@ -376,6 +380,78 @@ void CueRunner_Test::thePadRoleShowsOnTheRunTab()
     // A compact runner (the VC's) has none.
     CueRunner compact(m_doc, CueRunner::Compact);
     QVERIFY(compact.findChild<QToolButton *>("crPadRun") == nullptr);
+}
+
+/* Group masters (0.4) on the Run tab: a fader a mastered group, beside the
+   list, none (and no strip) in a show without them. A fader scales the
+   group's intensity on the output at once; the strip follows the level
+   moved elsewhere; a double-click on the name is full again. */
+void CueRunner_Test::theRunTabHasTheGroupMasters()
+{
+    CueRunner runner(m_doc, CueRunner::Full);
+    runner.resize(900, 600);
+    GroupMasterStrip *strip = runner.findChild<GroupMasterStrip *>("groupMasterStrip");
+    QVERIFY(strip != nullptr);
+    QVERIFY(!strip->isVisibleTo(&runner));
+    QCOMPARE(strip->faderCount(), 0);
+
+    FixtureGroup *grp = new FixtureGroup(m_doc);
+    grp->setName("Front");
+    grp->setSize(QSize(2, 1));
+    QVERIFY(m_doc->addFixtureGroup(grp));
+    grp->assignFixture(m_fixtures[0]);
+    QCOMPARE(strip->faderCount(), 0);           // a group, but no master
+    grp->setMaster(true);
+    QVERIFY(strip->isVisibleTo(&runner));
+    QCOMPARE(strip->faderCount(), 1);
+    QSlider *fader = strip->fader(grp->id());
+    QVERIFY(fader != nullptr);
+    QCOMPARE(fader->value(), 255);
+
+    Scene *s = new Scene(m_doc);
+    s->setValue(m_fixtures[0], 0, 255);
+    s->setValue(m_fixtures[1], 0, 255);
+    m_doc->addFunction(s);
+    s->start(m_doc->masterTimer(), FunctionParent::master());
+    QCoreApplication::processEvents();          // the group's new head: coalesced
+    settle(3);
+    auto out = [this](int address) {
+        QList<Universe *> ua = m_doc->inputOutputMap()->claimUniverses();
+        const int v = uchar(ua.first()->postGMValues()->at(address));
+        m_doc->inputOutputMap()->releaseUniverses(false);
+        return v;
+    };
+    QCOMPARE(out(0), 255);
+
+    fader->setValue(128);
+    QCOMPARE(int(grp->masterLevel()), 128);
+    QCOMPARE(out(0), 128);
+    QCOMPARE(out(1), 255);                      // not in the group
+
+    grp->setMasterLevel(64);
+    QCOMPARE(fader->value(), 64);
+    QLabel *percent = nullptr;
+    QLabel *name = nullptr;
+    for (QLabel *l : strip->findChildren<QLabel *>())
+    {
+        if (l->text() == QLatin1String("25%"))
+            percent = l;
+        if (l->text() == QLatin1String("Front"))
+            name = l;
+    }
+    QVERIFY(percent != nullptr);
+    QVERIFY(name != nullptr);
+    QTest::mouseDClick(name, Qt::LeftButton);
+    QCOMPARE(int(grp->masterLevel()), 255);
+    QCOMPARE(fader->value(), 255);
+    QCOMPARE(out(0), 255);
+
+    grp->setMaster(false);
+    QVERIFY(!strip->isVisibleTo(&runner));
+
+    // The VC's compact runner has no strip: the VC has its own sliders.
+    CueRunner compact(m_doc, CueRunner::Compact);
+    QVERIFY(compact.findChild<GroupMasterStrip *>() == nullptr);
 }
 
 void CueRunner_Test::goSubGoBackAndWhatChanges()

@@ -66,6 +66,7 @@
 #include "paletteops.h"
 #include "doc.h"
 #include "powerlimiter.h"
+#include "groupmasters.h"
 #include "shutterautoopen.h"
 #include "showwebaccess.h"
 #include "controlmap.h"
@@ -155,6 +156,8 @@ Doc::Doc(QObject* parent, int universes)
 
     // Fixtures held to a maximum draw: kept in step with the show.
     m_powerLimiter = new PowerLimiter(this);
+    // Fixture groups' intensity masters, handed to the universes.
+    m_groupMasters = new GroupMasters(this);
     // Shutters opened for a lit head that nothing else opens.
     m_shutterAutoOpen = new ShutterAutoOpen(this);
     // Web access started with the show (off unless the show says so).

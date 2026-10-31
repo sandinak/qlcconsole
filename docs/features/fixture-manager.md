@@ -583,6 +583,13 @@ right in place: on a fixture group's row in the Lighting Studio's Plot layers
 list, **Lay Out from the Stage…** opens the same dialog on *that* group,
 keeping its name, and **Apply** re-lays it from where its fixtures stand.
 
+### Group master
+
+The group editor's **Group master** box gives the group an intensity
+master: a fader on the Run tab (and one a Virtual Console slider can
+take) that scales the group's dimmers as the Grand Master does everything.
+See [Group masters](show-tree.md#group-masters).
+
 ## Sub-groups: pasted blocks with provenance
 
 When you paste one group's layout into another as a block (via "Add group as

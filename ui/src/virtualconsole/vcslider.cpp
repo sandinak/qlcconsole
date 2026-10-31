@@ -50,6 +50,8 @@
 #include "qlcmacros.h"
 #include "universe.h"
 #include "speedmasters.h"
+#include "groupmasters.h"
+#include "fixturegroup.h"
 #include "vcslider.h"
 #include "apputil.h"
 #include "doc.h"
@@ -291,6 +293,9 @@ bool VCSlider::copyFrom(const VCWidget* widget)
     /* Copy effect control */
     m_effectControl = slider->effectControl();
 
+    /* Copy the group master's group */
+    m_groupMasterId = slider->groupMasterGroup();
+
     /* Copy speed master stuff */
     setSpeedMaster(slider->speedMaster());
     setSpeedControl(slider->speedControl());
@@ -499,6 +504,7 @@ QString VCSlider::sliderModeToString(SliderMode mode)
         case GrandMaster: return QString("GrandMaster"); break;
         case SpeedMaster: return QString("SpeedMaster"); break;
         case EffectControl: return QString("Effect"); break;
+        case GroupMaster: return QString("GroupMaster"); break;
         default: return QString("Unknown"); break;
     }
 }
@@ -517,6 +523,8 @@ VCSlider::SliderMode VCSlider::stringToSliderMode(const QString& mode)
         return SpeedMaster;
     else if (mode == QString("Effect"))
         return EffectControl;
+    else if (mode == QString("GroupMaster"))
+        return GroupMaster;
     else //if (mode == QString("Submaster"))
         return Submaster;
 }
@@ -689,7 +697,7 @@ VCSlider::SliderMode VCSlider::sliderMode() const
 
 void VCSlider::setSliderMode(SliderMode mode)
 {
-    Q_ASSERT(mode >= Level && mode <= EffectControl);
+    Q_ASSERT(mode >= Level && mode <= GroupMaster);
 
     // Manage Doc::programmerSelectionChanged subscription on transitions
     // into and out of Parameter mode.
@@ -718,6 +726,13 @@ void VCSlider::setSliderMode(SliderMode mode)
     }
     else if (m_sliderMode != SpeedMaster && mode == SpeedMaster)
         connect(sm, &SpeedMasters::changed, this, &VCSlider::slotSpeedMasterChanged);
+
+    // A group master slider follows its master moved elsewhere.
+    GroupMasters *gm = m_doc->groupMasters();
+    if (m_sliderMode == GroupMaster && mode != GroupMaster)
+        disconnect(gm, &GroupMasters::levelChanged, this, &VCSlider::slotGroupMasterLevel);
+    else if (m_sliderMode != GroupMaster && mode == GroupMaster)
+        connect(gm, &GroupMasters::levelChanged, this, &VCSlider::slotGroupMasterLevel);
 
     // An effect slider follows what plays (start, stop, selection).
     if (m_sliderMode == EffectControl && mode != EffectControl)
@@ -832,6 +847,23 @@ void VCSlider::setSliderMode(SliderMode mode)
         // GrandMaster writes go through InputOutputMap directly, so no
         // DMXSource registration needed.
     }
+    else if (mode == GroupMaster)
+    {
+        m_monitorEnabled = false;
+        m_cngType = ClickAndGoWidget::None;
+        if (m_cngButton)
+            m_cngButton->hide();
+        if (m_slider)
+        {
+            m_slider->setRange(0, UCHAR_MAX);
+            if (m_widgetMode == WSlider)
+                m_slider->setStyleSheet(submasterStyleSheet);
+        }
+        m_bottomLabel->show();
+        showGroupMaster();
+        // Not a DMX source: it sets the group's level when moved.
+        m_doc->masterTimer()->unregisterDMXSource(this);
+    }
     else if (mode == SpeedMaster)
     {
         m_monitorEnabled = false;
@@ -938,6 +970,34 @@ bool VCSlider::storeEffectControl()
 /*****************************************************************************
  * Speed master
  *****************************************************************************/
+
+void VCSlider::setGroupMaster(quint32 groupId)
+{
+    m_groupMasterId = groupId;
+    if (m_sliderMode == GroupMaster)
+        showGroupMaster();
+}
+
+void VCSlider::showGroupMaster()
+{
+    const FixtureGroup *grp = m_doc->fixtureGroup(m_groupMasterId);
+    if (m_slider)
+    {
+        const QSignalBlocker block(m_slider);
+        m_slider->setValue(grp != nullptr ? grp->masterLevel() : UCHAR_MAX);
+    }
+    if (m_slider)
+        setTopLabelText(m_slider->value());
+    setToolTip(grp != nullptr ? tr("Group master: %1").arg(grp->name())
+                              : tr("Group master: no group (Properties chooses one)"));
+}
+
+void VCSlider::slotGroupMasterLevel(quint32 groupId, uchar)
+{
+    if (m_sliderMode == GroupMaster && groupId == m_groupMasterId && m_slider != nullptr
+        && !m_slider->isSliderDown())
+        showGroupMaster();
+}
 
 void VCSlider::setSpeedMaster(int index)
 {
@@ -2169,6 +2229,15 @@ void VCSlider::setSliderValue(uchar value, bool scale, bool external)
         case EffectControl:
             applyEffectControl(int(val));
         break;
+
+        case GroupMaster:
+        {
+            // A show control, as the Grand Master: it works in Operate.
+            FixtureGroup *grp = m_doc->fixtureGroup(m_groupMasterId);
+            if (grp != nullptr && grp->hasMaster())
+                grp->setMasterLevel(uchar(val));
+        }
+        break;
     }
 }
 
@@ -2521,6 +2590,14 @@ bool VCSlider::loadXML(QXmlStreamReader &root)
         {
             m_effectControl.loadXML(root);
         }
+        else if (root.name() == KXMLQLCVCSliderGroupMaster)
+        {
+            bool ok = false;
+            const quint32 gid = root.attributes().value(KXMLQLCVCSliderGroupMasterGroup).toUInt(&ok);
+            if (ok)
+                setGroupMaster(gid);
+            root.skipCurrentElement();
+        }
         else if (root.name() == KXMLQLCVCSliderSpeedMaster)
         {
             QXmlStreamAttributes sAttrs = root.attributes();
@@ -2753,6 +2830,14 @@ bool VCSlider::saveXML(QXmlStreamWriter *doc)
     /* Effect mode (only when in it) */
     if (m_sliderMode == EffectControl)
         m_effectControl.saveXML(doc);
+
+    /* Group master mode (only when in it) */
+    if (m_sliderMode == GroupMaster)
+    {
+        doc->writeStartElement(KXMLQLCVCSliderGroupMaster);
+        doc->writeAttribute(KXMLQLCVCSliderGroupMasterGroup, QString::number(m_groupMasterId));
+        doc->writeEndElement();
+    }
 
     /* Speed master mode (only when in it: older shows stay as they were) */
     if (m_sliderMode == SpeedMaster)

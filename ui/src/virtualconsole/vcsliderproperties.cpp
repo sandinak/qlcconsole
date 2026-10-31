@@ -244,6 +244,7 @@ VCSliderProperties::VCSliderProperties(VCSlider* slider, Doc* doc)
 
     buildSpeedMasterPage();
     buildEffectPage();
+    buildGroupMasterPage();
 
     /* At last, sort out visibility */
     switch (m_sliderMode)
@@ -256,12 +257,16 @@ VCSliderProperties::VCSliderProperties(VCSlider* slider, Doc* doc)
             setParameterPageVisibility(false);
             setSpeedMasterPageVisibility(false);
             setEffectPageVisibility(false);
+            setGroupMasterPageVisibility(false);
         break;
         case VCSlider::SpeedMaster:
             slotModeSpeedMasterClicked();
         break;
         case VCSlider::EffectControl:
             slotModeEffectClicked();
+        break;
+        case VCSlider::GroupMaster:
+            slotModeGroupMasterClicked();
         break;
         default:
         case VCSlider::Level:
@@ -301,6 +306,7 @@ void VCSliderProperties::slotModeLevelClicked()
     setParameterPageVisibility(false);
     setSpeedMasterPageVisibility(false);
     setEffectPageVisibility(false);
+    setGroupMasterPageVisibility(false);
 
     int cngType = m_slider->clickAndGoType();
     switch(cngType)
@@ -347,6 +353,7 @@ void VCSliderProperties::slotModePlaybackClicked()
     setParameterPageVisibility(false);
     setSpeedMasterPageVisibility(false);
     setEffectPageVisibility(false);
+    setGroupMasterPageVisibility(false);
 }
 
 void VCSliderProperties::slotModeSubmasterClicked()
@@ -359,6 +366,7 @@ void VCSliderProperties::slotModeSubmasterClicked()
     setParameterPageVisibility(false);
     setSpeedMasterPageVisibility(false);
     setEffectPageVisibility(false);
+    setGroupMasterPageVisibility(false);
 }
 
 void VCSliderProperties::slotModeParameterClicked()
@@ -373,6 +381,7 @@ void VCSliderProperties::slotModeParameterClicked()
     setParameterPageVisibility(true);
     setSpeedMasterPageVisibility(false);
     setEffectPageVisibility(false);
+    setGroupMasterPageVisibility(false);
 }
 
 void VCSliderProperties::slotModeSpeedMasterClicked()
@@ -387,6 +396,7 @@ void VCSliderProperties::slotModeSpeedMasterClicked()
     setParameterPageVisibility(false);
     setSpeedMasterPageVisibility(true);
     setEffectPageVisibility(false);
+    setGroupMasterPageVisibility(false);
 }
 
 void VCSliderProperties::slotModeEffectClicked()
@@ -401,6 +411,79 @@ void VCSliderProperties::slotModeEffectClicked()
     setParameterPageVisibility(false);
     setSpeedMasterPageVisibility(false);
     setEffectPageVisibility(true);
+    setGroupMasterPageVisibility(false);
+}
+
+void VCSliderProperties::slotModeGroupMasterClicked()
+{
+    m_sliderMode = VCSlider::GroupMaster;
+
+    m_nameEdit->setEnabled(true);
+
+    setLevelPageVisibility(false);
+    setPlaybackPageVisibility(false);
+    setSubmasterPageVisibility(false);
+    setParameterPageVisibility(false);
+    setSpeedMasterPageVisibility(false);
+    setEffectPageVisibility(false);
+    setGroupMasterPageVisibility(true);
+}
+
+void VCSliderProperties::buildGroupMasterPage()
+{
+    QWidget *page = new QWidget(m_tab);
+    page->setObjectName(QStringLiteral("groupMasterTab"));
+    QVBoxLayout *vbox = new QVBoxLayout(page);
+    m_groupMasterBox = new QWidget(page);
+    QVBoxLayout *box = new QVBoxLayout(m_groupMasterBox);
+    box->setContentsMargins(0, 0, 0, 0);
+    QLabel *info = new QLabel(tr("Group master mode scales the intensity of a fixture group, as the Grand "
+                                 "Master does for everything: at full the group plays as programmed, at "
+                                 "half its dimmers give half. Positions and colours are left alone. The "
+                                 "same master is on the Run tab; choosing a group here gives it one."),
+                              m_groupMasterBox);
+    info->setWordWrap(true);
+    box->addWidget(info);
+
+    QFormLayout *form = new QFormLayout();
+    m_groupMasterCombo = new QComboBox(m_groupMasterBox);
+    m_groupMasterCombo->setObjectName(QStringLiteral("groupMasterCombo"));
+    QList<FixtureGroup *> groups = m_doc->fixtureGroups();
+    std::sort(groups.begin(), groups.end(), [](const FixtureGroup *a, const FixtureGroup *b) {
+        return a->name().localeAwareCompare(b->name()) < 0;
+    });
+    for (const FixtureGroup *g : groups)
+        m_groupMasterCombo->addItem(g->name(), QVariant::fromValue(g->id()));
+    m_groupMasterCombo->setCurrentIndex(
+        qMax(0, m_groupMasterCombo->findData(QVariant::fromValue(m_slider->groupMasterGroup()))));
+    form->addRow(tr("Group"), m_groupMasterCombo);
+    box->addLayout(form);
+    if (groups.isEmpty())
+    {
+        QLabel *none = new QLabel(tr("This show has no fixture groups yet: make one in the Fixture Manager."),
+                                  m_groupMasterBox);
+        none->setWordWrap(true);
+        box->addWidget(none);
+    }
+
+    vbox->addWidget(m_groupMasterBox);
+    vbox->addStretch();
+    m_switchToGroupMasterModeButton = new QPushButton(tr("Switch to Group Master Mode"), page);
+    m_switchToGroupMasterModeButton->setObjectName(QStringLiteral("switchToGroupMasterMode"));
+    m_switchToGroupMasterModeButton->setToolTip(tr("Make the slider a fixture group's intensity master"));
+    m_switchToGroupMasterModeButton->setEnabled(!groups.isEmpty());
+    connect(m_switchToGroupMasterModeButton, &QPushButton::clicked,
+            this, &VCSliderProperties::slotModeGroupMasterClicked);
+    vbox->addWidget(m_switchToGroupMasterModeButton);
+    m_tab->addTab(page, tr("Group master"));
+}
+
+void VCSliderProperties::setGroupMasterPageVisibility(bool visible)
+{
+    if (m_groupMasterBox == nullptr)
+        return;
+    m_groupMasterBox->setVisible(visible);
+    m_switchToGroupMasterModeButton->setVisible(!visible);
 }
 
 void VCSliderProperties::buildEffectPage()
@@ -1227,6 +1310,16 @@ void VCSliderProperties::accept()
     m_slider->setSpeedControl(m_speedTempoRadio->isChecked() ? VCSlider::SpeedTempo : VCSlider::SpeedRate);
     m_slider->setTempoRange(qMin(m_tempoMinSpin->value(), m_tempoMaxSpin->value() - 1),
                             qMax(m_tempoMaxSpin->value(), m_tempoMinSpin->value() + 1));
+
+    /* Group master page: the group chosen gets a master */
+    if (m_groupMasterCombo->count() > 0)
+    {
+        const quint32 gid = m_groupMasterCombo->currentData().toUInt();
+        m_slider->setGroupMaster(gid);
+        FixtureGroup *grp = m_doc->fixtureGroup(gid);
+        if (grp != nullptr && m_sliderMode == VCSlider::GroupMaster)
+            grp->setMaster(true);
+    }
 
     /* Slider mode */
     if (m_slider->sliderMode() != m_sliderMode)

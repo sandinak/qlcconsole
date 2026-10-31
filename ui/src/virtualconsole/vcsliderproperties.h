@@ -58,6 +58,7 @@ protected slots:
     void slotModeParameterClicked();
     void slotModeSpeedMasterClicked();
     void slotModeEffectClicked();
+    void slotModeGroupMasterClicked();
     void slotTabChanged();
 
 protected:
@@ -67,6 +68,9 @@ protected:
     void setParameterPageVisibility(bool visible);
     void setSpeedMasterPageVisibility(bool visible);
     void setEffectPageVisibility(bool visible);
+    void setGroupMasterPageVisibility(bool visible);
+    /** The Group master tab (GroupMasters), built here. */
+    void buildGroupMasterPage();
     /** The Effect tab (docs/design/VC_EFFECT_CONTROLS.md), built here. */
     void buildEffectPage();
     /** The Speed master tab (built here, not in the .ui). */
@@ -93,6 +97,10 @@ protected:
     QComboBox *m_effectGroupCombo = nullptr;
     QComboBox *m_effectRoleCombo = nullptr;
     QPushButton *m_switchToEffectModeButton = nullptr;
+
+    QWidget *m_groupMasterBox = nullptr;
+    QComboBox *m_groupMasterCombo = nullptr;
+    QPushButton *m_switchToGroupMasterModeButton = nullptr;
 
     /*********************************************************************
      * Level page

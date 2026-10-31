@@ -59,6 +59,13 @@ back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
   show plays then, not to a snapshot. The last override fired is on top;
   Stop all and ALL OFF let go of them. The tree marks it **override**, and
   it is saved with the show (an older build plays it as a plain hit).
+- **Group masters** (0.4): tick **Group master** in a fixture group's
+  editor and the group gets an intensity fader, on the Run tab beside the
+  cue list and as a VC slider mode (**Group master**). It scales the
+  group's dimmers as the Grand Master does everything (the two multiply),
+  override hits included; positions and colours are left alone. A fixture
+  in two mastered groups gets both. Saved with the show; a show without
+  them, and QLC+ 4, play as before.
 
 ### Moving layers in the Show Tree
 

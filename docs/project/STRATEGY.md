@@ -551,8 +551,9 @@ Order and dependencies:
 5. **Override hits** (priority layer, restore on release), building on
    0.3.1's hit fade times. **Built 2026-10-31:** a hit's Override wins
    over the show, intensity too, and fades back to what plays then
-   (`Universe::HitOverride`). Then **group intensity masters**, which share
-   the same engine stage.
+   (`Universe::HitOverride`). Then **group intensity masters**: **built
+   2026-10-31**, a fixture group's intensity fader on the Run tab and as a
+   VC slider mode, multiplied with the Grand Master.
 6. **Effect fade in/out.** Built 2026-10-31: an effect's depth follows
    its cue's fades, or its own times, or none.
 7. **Tracking sheet and printable cue sheet**, the stage manager's paper.
@@ -598,7 +599,7 @@ Teaching ─────┬─> phone Run rules (0.4)
               └─> Show Review teaching checks (0.5)
 one GO path (0.4, built) ─> pad Run (MVP built), phone Run, override hits
 Art-Net TC (0.3.1) ─> LTC + cues at timecode (0.4)
-hit fade times (0.3.1) ─> override hits (built) ─> group masters (0.4)
+hit fade times (0.3.1) ─> override hits (built) ─> group masters (built)
 Show Review v1 ─> laser C, no-light zones, move speed checks (0.5)
 ```
 

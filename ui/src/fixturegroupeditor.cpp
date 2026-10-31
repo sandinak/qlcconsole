@@ -21,6 +21,7 @@
 #include <QTableWidget>
 #include <QPushButton>
 #include <QComboBox>
+#include <QCheckBox>
 #include <QLabel>
 #include <QInputDialog>
 #include <QMenu>
@@ -211,6 +212,27 @@ FixtureGroupEditor::FixtureGroupEditor(FixtureGroup* grp, Doc* doc, QWidget* par
         {
             const QSignalBlocker block(m_ownerCombo);
             m_ownerCombo->setCurrentIndex(at);
+        }
+    });
+
+    /* Group master (0.4): a fader on the Run tab (and a VC slider's Group
+       master mode) that scales this group's intensity, as the Grand Master
+       does everything's. */
+    m_masterCheck = new QCheckBox(tr("Group master"), this);
+    m_masterCheck->setObjectName(QStringLiteral("fgMaster"));
+    m_masterCheck->setToolTip(tr("Give this group an intensity master: a fader on the Run tab, and one a "
+                                 "Virtual Console slider can take, that scales the group's dimmers like the "
+                                 "Grand Master (positions and colours are left alone)."));
+    m_masterCheck->setChecked(m_grp->hasMaster());
+    horizontalLayout->addWidget(m_masterCheck);
+    connect(m_masterCheck, &QCheckBox::toggled, this, [this](bool on) {
+        m_grp->setMaster(on);
+    });
+    connect(m_grp, &FixtureGroup::masterChanged, this, [this]() {
+        if (m_masterCheck->isChecked() != m_grp->hasMaster())
+        {
+            const QSignalBlocker block(m_masterCheck);
+            m_masterCheck->setChecked(m_grp->hasMaster());
         }
     });
 

@@ -160,6 +160,7 @@ brackets.
 | **Plot symbol** | What a fixture looks like on the plot and in the studio: a moving head, a PAR can, an LED bar, a lantern… Set per fixture; **Auto** draws it from its type. [3.3] |
 | **Relay** | A switch the console controls, for power: it is either on or off, never dimmed. Used for a circuit that powers LED fixtures, or for house lights on a relay panel. [3.7] |
 | **Grand Master (GM)** | The one fader over everything: at 50 % every light is at half its level. [3.7] |
+| **Group master** | A Grand Master for one fixture group: why a group is dimmer than its cues say. At 50 % the group's lights are at half; it and the GM multiply. A fader on the Run tab, given to a group in the Fixture Manager. |
 | **Blackout** | A switch that takes every light to zero at once, whatever is running; press it again to bring them back. [3.7] |
 | **Blind** | The screens show something the stage doesn't. In Design the real lights are muted while the screen preview stays live; in Operate the stage keeps playing the run while the plot shows the cue you are editing. Always shown in blue. [3.7] |
 | **Output rules** | Per-fixture rules for circuits that aren't show lights: ignore Blackout, ignore the Grand Master, switch like a relay, on when not in use. [3.7] |

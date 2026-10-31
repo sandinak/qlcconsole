@@ -33,6 +33,8 @@
 #define KXMLQLCFixtureGroupName QStringLiteral("Name")
 #define KXMLQLCFixtureGroupPath QStringLiteral("Path")
 #define KXMLQLCFixtureGroupOwner QStringLiteral("Owner")
+#define KXMLQLCFixtureGroupMaster QStringLiteral("Master")
+#define KXMLQLCFixtureGroupMasterLevel QStringLiteral("Level")
 
 /****************************************************************************
  * Initialization
@@ -60,6 +62,8 @@ void FixtureGroup::copyFrom(const FixtureGroup* grp)
     m_owner = grp->owner();
     m_size = grp->size();
     m_heads = grp->headsMap();
+    m_master = grp->hasMaster();
+    m_masterLevel = grp->masterLevel();
 }
 
 Doc* FixtureGroup::doc() const
@@ -355,6 +359,27 @@ QSize FixtureGroup::size() const
  * Load & Save
  ****************************************************************************/
 
+/****************************************************************************
+ * Group master
+ ****************************************************************************/
+
+void FixtureGroup::setMaster(bool on)
+{
+    if (on == m_master)
+        return;
+    m_master = on;
+    emit masterChanged(m_id);
+    emit changed(m_id);
+}
+
+void FixtureGroup::setMasterLevel(uchar level)
+{
+    if (level == m_masterLevel)
+        return;
+    m_masterLevel = level;
+    emit masterChanged(m_id);
+}
+
 bool FixtureGroup::loader(QXmlStreamReader &xmlDoc, Doc* doc)
 {
     bool result = false;
@@ -438,6 +463,14 @@ bool FixtureGroup::loadXML(QXmlStreamReader &xmlDoc)
         {
             m_owner = RigOwner::fromXmlName(xmlDoc.readElementText());
         }
+        else if (xmlDoc.name() == KXMLQLCFixtureGroupMaster)
+        {
+            m_master = true;
+            bool ok = false;
+            const int level = attrs.value(KXMLQLCFixtureGroupMasterLevel).toInt(&ok);
+            m_masterLevel = ok ? uchar(qBound(0, level, 255)) : uchar(UCHAR_MAX);
+            xmlDoc.skipCurrentElement();
+        }
         else
         {
             qWarning() << Q_FUNC_INFO << "Unknown fixture group tag:" << xmlDoc.name();
@@ -465,6 +498,14 @@ bool FixtureGroup::saveXML(QXmlStreamWriter *doc)
     // Only when set: a show that never says is byte-identical.
     if (m_owner != RigOwner::Unset)
         doc->writeTextElement(KXMLQLCFixtureGroupOwner, RigOwner::xmlName(m_owner));
+
+    /* Group master: only when there is one (QLC+ 4 skips the tag) */
+    if (m_master)
+    {
+        doc->writeStartElement(KXMLQLCFixtureGroupMaster);
+        doc->writeAttribute(KXMLQLCFixtureGroupMasterLevel, QString::number(m_masterLevel));
+        doc->writeEndElement();
+    }
 
     /* Matrix size */
     doc->writeStartElement(KXMLQLCFixtureGroupSize);
