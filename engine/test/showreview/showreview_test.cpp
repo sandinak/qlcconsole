@@ -30,6 +30,12 @@
 
 #include "showreview_test.h"
 #include "showreviewcli.h"
+#include "teachingsettings.h"
+#include "venuecorrections.h"
+#include "showembedding.h"
+#include "rgbmatrix.h"
+#include "chaser.h"
+#include "efx.h"
 #include "showtreecontroller.h"
 #include "programmercontroller.h"
 #include "powerdistribution.h"
@@ -69,7 +75,8 @@ QLCChannel *chan(QLCFixtureDef *def, const QString &name, QLCChannel::Preset pre
 
 Fixture *make(Doc *doc, const QString &name, const QString &model, QLCFixtureDef::FixtureType type,
               QLCFixtureDef *def, const QList<QLCChannel *> &chans, int watts,
-              quint32 universe, quint32 address)
+              quint32 universe, quint32 address,
+              QLCPhysical::Emission emission = QLCPhysical::BeamEmission, double lensDeg = 0.0)
 {
     def->setManufacturer(QStringLiteral("Test"));
     def->setModel(model);
@@ -84,6 +91,12 @@ Fixture *make(Doc *doc, const QString &name, const QString &model, QLCFixtureDef
     mode->insertHead(-1, head);
     QLCPhysical phy;
     phy.setPowerConsumption(watts);
+    phy.setEmission(emission);
+    if (lensDeg > 0.0)
+    {
+        phy.setLensDegreesMin(lensDeg);
+        phy.setLensDegreesMax(lensDeg);
+    }
     if (type == QLCFixtureDef::MovingHead)
     {
         phy.setFocusPanMax(540);
@@ -204,6 +217,27 @@ FixtureGroup *ShowReview_Test::group(const QString &name, const QList<Fixture *>
     for (Fixture *fx : members)
         g->assignFixture(fx->id());
     return g;
+}
+
+Fixture *ShowReview_Test::laser(const QString &name, quint32 address, QLCPhysical::Emission emission,
+                                double beamDeg, const QVector3D &at, double aimDown)
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    Fixture *fx = make(m_doc, name, QStringLiteral("Scan ") + name, QLCFixtureDef::Laser, def,
+                       { chan(def, "Dimmer", QLCChannel::IntensityMasterDimmer),
+                         chan(def, "Pattern", QLCChannel::Custom) }, 20, 0, address, emission, beamDeg);
+    if (fx == nullptr)
+        return nullptr;
+    MonitorProperties *mp = m_doc->monitorProperties();
+    FixturePreviewItem item;
+    item.m_baseItem.m_position = at;
+    mp->setFixtureProperties(fx->id(), item);
+    FixtureRigProps rp = mp->fixtureRigProps(fx->id());
+    rp.fixedAim = true;
+    rp.panZeroDir = 0;                      // toward +Y: downstage, the audience
+    rp.aimDown = float(aimDown);
+    mp->setFixtureRigProps(fx->id(), rp);
+    return fx;
 }
 
 QLCPalette *ShowReview_Test::colour(const QColor &c)
@@ -835,6 +869,241 @@ void ShowReview_Test::vc01()
     QVERIFY(findings("VC-01").first().message.contains("Red stab"));
     QVERIFY(st->setHitScope({ h2 }, HitScope::Cue, cue));   // another place
     QVERIFY(quiet("VC-01"));
+}
+
+/****************************************************************************
+ * Teaching, lasers, and the rest of the v1 list
+ ****************************************************************************/
+
+void ShowReview_Test::teach01()
+{
+    QVERIFY(quiet("TEACH-01"));
+    m_doc->teachingSettings()->setEnabled(true);
+    QVERIFY(fires("TEACH-01"));
+    ReviewFinding f = findings("TEACH-01").first();
+    QCOMPARE(f.severity, ReviewFinding::Note);
+    QCOMPARE(f.jump, QStringLiteral("showsettings"));
+    // Accepted with a note ("class copy"): quiet; letting output through is a change.
+    QVERIFY(m_doc->showReview()->accept(f, QStringLiteral("class copy"), QStringLiteral("Sam")));
+    QVERIFY(findings("TEACH-01").first().state == ReviewFinding::Accepted);
+    m_doc->teachingSettings()->setAllowOutput(true);
+    QVERIFY(findings("TEACH-01").first().state == ReviewFinding::Changed);
+    m_doc->teachingSettings()->setEnabled(false);
+    QVERIFY(quiet("TEACH-01"));
+}
+
+void ShowReview_Test::pwr09()
+{
+    MonitorProperties *mp = m_doc->monitorProperties();
+    mp->setGridSize(QVector3D(10, 3, 8));   // the stage's front edge is 8 m downstage
+    // A pencil laser on a truss at 5 m throwing 20 degrees down: it reaches the
+    // floor 2.8 m up the room past the edge, in the audience.
+    Fixture *l = laser("Laser 1", 0, QLCPhysical::LaserEmission, 10, QVector3D(5, 2, 5), 20);
+    QVERIFY(l != nullptr);
+    QVERIFY2(fires("PWR-09"), "beam into the house");
+    ReviewFinding f = findings("PWR-09").first();
+    QCOMPARE(f.severity, ReviewFinding::Warning);
+    QVERIFY(f.message.contains("Laser 1") && f.message.contains("beam"));
+    // Steep enough that the floor stops it on the stage: quiet.
+    mp->setFixtureProperties(l->id(), mp->fixtureProperties(l->id()));
+    FixtureRigProps rp = mp->fixtureRigProps(l->id());
+    rp.aimDown = 60;
+    mp->setFixtureRigProps(l->id(), rp);
+    QVERIFY(quiet("PWR-09"));
+    // Thrown upstage: quiet.
+    rp.aimDown = 20;
+    rp.panZeroDir = 180;
+    mp->setFixtureRigProps(l->id(), rp);
+    QVERIFY(quiet("PWR-09"));
+    rp.panZeroDir = 0;
+    rp.aimDown = -10;                       // tipped up over the heads
+    mp->setFixtureRigProps(l->id(), rp);
+    QVERIFY(quiet("PWR-09"));
+    // A wide star field on a level mount: its lower rim comes down into the house.
+    Fixture *s = laser("Stars", 10, QLCPhysical::StarEmission, 100, QVector3D(5, 2, 5), 0);
+    QVERIFY(s != nullptr);
+    QVERIFY2(fires("PWR-09"), "star field into the house");
+    f = findings("PWR-09").first();
+    QVERIFY(f.message.contains("star field"));
+    QCOMPARE(f.targets, QStringList() << QStringLiteral("fx:%1").arg(s->id()));
+    // Not a laser: a par thrown the same way is not this check's.
+    QVERIFY(m_doc->deleteFixture(s->id()));
+    Fixture *p = par("Par 1", 20);
+    QVERIFY(p != nullptr);
+    QVERIFY(quiet("PWR-09"));
+}
+
+void ShowReview_Test::cue03()
+{
+    Fixture *a = par("Par 1", 0);
+    QLCPalette *red = colour(Qt::red), *blue = colour(Qt::blue);
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 lid = st->addCueList(st->addProduction("Show"), "Act 1");
+    const quint32 c1 = st->addCue(lid, -1, "One");
+    const quint32 c2 = st->addCue(lid, 0, "Two");
+    Target t;
+    t.fixtures = { a->id() };
+    Look look;
+    look.key = KeyColour;
+    look.palettes = { red->id() };
+    const quint32 l1 = st->addLayer(c1, t);
+    QVERIFY(st->setLayerLook(c1, l1, look));
+    look.palettes = { blue->id() };
+    const quint32 l2 = st->addLayer(c2, t);
+    QVERIFY(st->setLayerLook(c2, l2, look));
+    QVERIFY(quiet("CUE-03"));               // red, then blue: a change
+    look.palettes = { red->id() };
+    QVERIFY(st->setLayerLook(c2, l2, look));
+    QVERIFY(fires("CUE-03"));               // red, then red again
+    const ReviewFinding f = findings("CUE-03").first();
+    QCOMPARE(f.severity, ReviewFinding::Note);
+    QCOMPARE(f.targets, QStringList() << QStringLiteral("list:%1/cue:%2").arg(lid).arg(c2));
+}
+
+void ShowReview_Test::cue12()
+{
+    Fixture *a = par("Par 1", 0);
+    Scene *sc = new Scene(m_doc);
+    sc->setName("Wash");
+    sc->setValue(a->id(), 3, 200);
+    m_doc->addFunction(sc);
+    Chaser *chaser = new Chaser(m_doc);
+    chaser->setName("Full Show");
+    m_doc->addFunction(chaser);
+    chaser->addStep(ChaserStep(sc->id(), 0, Function::infiniteSpeed(), 0));
+    chaser->addStep(ChaserStep(sc->id(), 0, Function::infiniteSpeed(), 0));
+    ShowTreeController *st = m_doc->showTree();
+    st->importInPlace(chaser->id());
+    QVERIFY(quiet("CUE-12"));               // the list plays the show, the chaser is only kept
+    // Something added later plays the old chaser again.
+    Collection *again = new Collection(m_doc);
+    again->setName("Old way");
+    again->addFunction(chaser->id());
+    m_doc->addFunction(again);
+    QVERIFY(fires("CUE-12"));
+    const ReviewFinding f = findings("CUE-12").first();
+    QCOMPARE(f.severity, ReviewFinding::Warning);
+    QVERIFY(f.message.contains("Old way") && f.message.contains("Full Show"));
+}
+
+void ShowReview_Test::pat05()
+{
+    Fixture *a = par("Par 1", 400);
+    VenueCorrections *v = m_doc->programmer()->venueCorrections();
+    QVERIFY(m_dir.isValid());
+    v->setShowFile(QDir(m_dir.path()).filePath("Tour.qlcc"), false);
+    const QString venue = v->addVenue(QStringLiteral("Lincoln HS"));
+    VenueRig::NotOurs keep;
+    keep.universe = 0;
+    keep.from = 100;
+    keep.to = 140;
+    QVERIFY(v->setNotOurs(venue, { keep }));
+    QVERIFY(quiet("PAT-05"));               // the venue keeps channels the show doesn't use
+    keep.from = 395;
+    keep.to = 405;
+    QVERIFY(v->setNotOurs(venue, { keep }));        // applied nowhere: a dry run says it
+    QVERIFY(fires("PAT-05"));
+    const ReviewFinding f = findings("PAT-05").first();
+    QCOMPARE(f.severity, ReviewFinding::Blocker);
+    QVERIFY(f.message.contains("Lincoln HS") && f.message.contains("Par 1"));
+    QVERIFY(m_doc->unpatchFixture(a->id()));
+    QVERIFY(quiet("PAT-05"));               // no longer patched: no clash
+}
+
+void ShowReview_Test::fix02()
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    Fixture *a = make(m_doc, "Par 1", "Par", QLCFixtureDef::ColorChanger, def,
+                      { chan(def, "R", QLCChannel::IntensityRed), chan(def, "Dimmer", QLCChannel::IntensityMasterDimmer) },
+                      100, 0, 0);
+    QVERIFY(a != nullptr);
+    QVERIFY(quiet("FIX-02"));
+    def->setModel(QString());               // an error the fixture editor shows: no model
+    QVERIFY(fires("FIX-02"));
+    const ReviewFinding f = findings("FIX-02").first();
+    QCOMPARE(f.severity, ReviewFinding::Warning);
+    QVERIFY(f.message.contains("model"));
+    QCOMPARE(f.targets, QStringList() << QStringLiteral("fx:%1").arg(a->id()));
+}
+
+void ShowReview_Test::fix08()
+{
+    Fixture *a = par("Par 1", 0);
+    VenueCorrections *v = m_doc->programmer()->venueCorrections();
+    QVERIFY(m_dir.isValid());
+    v->setShowFile(QDir(m_dir.path()).filePath("Tour.qlcc"), false);
+    const QString venue = v->addVenue(QStringLiteral("Lincoln HS"));
+    QVERIFY(v->setActiveVenue(venue));
+    QVERIFY(v->setDead(a->id(), true));
+    QVERIFY(quiet("FIX-08"));               // dead, and nothing lights it
+    Scene *s = new Scene(m_doc);
+    s->setName("Look");
+    s->setValue(a->id(), 3, 255);
+    m_doc->addFunction(s);
+    QVERIFY(fires("FIX-08"));
+    const ReviewFinding f = findings("FIX-08").first();
+    QCOMPARE(f.severity, ReviewFinding::Warning);
+    QVERIFY(f.message.contains("Par 1") && f.message.contains("Lincoln HS"));
+    QVERIFY(v->setDead(a->id(), false));
+    QVERIFY(quiet("FIX-08"));
+}
+
+void ShowReview_Test::fx02()
+{
+    Fixture *rgb = par("Par 1", 0);
+    Fixture *lamp = dimmer("Lamp", 10);
+    FixtureGroup *g = group("Truss", { rgb });
+    RGBMatrix *m = new RGBMatrix(m_doc);
+    m->setName("Rainbow");
+    m_doc->addFunction(m);
+    m->setFixtureGroup(g->id());
+    QVERIFY(quiet("FX-02"));                // every head mixes colour
+    g->assignFixture(lamp->id());
+    QVERIFY(fires("FX-02"));
+    const ReviewFinding f = findings("FX-02").first();
+    QCOMPARE(f.severity, ReviewFinding::Warning);
+    QVERIFY(f.message.contains("1 of 2") && f.message.contains("Rainbow"));
+}
+
+void ShowReview_Test::fx03()
+{
+    EFX *e = new EFX(m_doc);
+    e->setName("Circle");
+    e->setWidth(60);
+    e->setHeight(60);
+    e->setDuration(4000);
+    m_doc->addFunction(e);
+    QVERIFY(quiet("FX-03"));
+    e->setWidth(0);
+    e->setHeight(0);
+    QVERIFY(fires("FX-03"));
+    QVERIFY(findings("FX-03").first().message.contains("size 0"));
+    e->setWidth(60);
+    QVERIFY(quiet("FX-03"));
+    RGBMatrix *m = new RGBMatrix(m_doc);
+    m->setName("Rainbow");
+    m->setDuration(500);
+    m_doc->addFunction(m);
+    QVERIFY(quiet("FX-03"));
+    m->setDuration(0);
+    QVERIFY(fires("FX-03"));
+}
+
+void ShowReview_Test::file03()
+{
+    QVERIFY(quiet("FILE-03"));              // nothing carried
+    // A carried definition whose checksum doesn't match what was saved.
+    const QString xml = QStringLiteral(
+        "<Embedded><FixtureDefinition Manufacturer=\"Test\" Model=\"Par\" SHA256=\"0000\">"
+        "<![CDATA[<FixtureDefinition/>]]></FixtureDefinition></Embedded>");
+    QXmlStreamReader r(xml);
+    while (!r.atEnd() && !(r.isStartElement() && r.name() == KXMLShowEmbedded))
+        r.readNext();
+    QVERIFY(m_doc->showEmbedding()->loadXML(r));
+    QVERIFY(fires("FILE-03"));
+    const ReviewFinding f = findings("FILE-03").first();
+    QCOMPARE(f.severity, ReviewFinding::Warning);
+    QVERIFY(f.message.contains("altered"));
 }
 
 /****************************************************************************

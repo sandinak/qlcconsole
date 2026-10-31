@@ -1493,12 +1493,22 @@ Branson's review), after the freeze lifts.
 | PWR-03 | Lights on no circuit, once power is set up |
 | PWR-05 | Flashing over 3 Hz |
 | PWR-06 | Stage lights that ignore Blackout or the Grand Master |
+| PWR-09 | A laser's beam or a star field that can reach the audience (built after v1, see below) |
+| TEACH-01 | Teaching mode is on, before a show goes to a crew (built after v1) |
 | FILE-01 | Media outside the show folder or absolute |
 | FILE-02 | Missing media |
 | FILE-03 | Definitions and scripts the show doesn't carry |
 | NAME-01 | Names off the folder's SS-PP.II pattern |
 | NAME-02 | Default and "Copy of" names |
 | FTR | Every design-time footer item, under its catalog ID (§2) |
+
+Built after v1 (0.5): **PWR-09** and **TEACH-01** (new), and from the v1
+list CUE-03, CUE-12 (part), PAT-05, FIX-02, FIX-08, FX-02, FX-03, FILE-03
+(part). PWR-09: no audience area is modelled, so the house is everything
+downstage of the stage's front edge (`downstageEdgeY()`) and the audience's
+eyes anything below 3 m there (decided, can change); a laser or star
+projector that can't aim itself (`RigHeads::fixedThrow`) is a warning when
+any ray of its beam or star field (rings across the cone, 30 m) enters it.
 
 **v2 — geometry and the rest of the cheap ones (≈ 4–5 sessions).**
 MOV-03/04/05/06/09/10/11, the house zone (derived, then drawable);

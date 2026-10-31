@@ -190,6 +190,14 @@ back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
   `qlcconsole --review show.qlcc` does the same with no window, for CI
   and a teacher's folder of hand-ins (exit 0 / 1 warnings / 2 blockers /
   3 unreadable; `--format json`). See docs/features/show-review.md.
+- **Show Review, ten more checks** (41 in all): a laser's beam or a star
+  field that can reach the audience or eye height (PWR-09; the house is
+  downstage of the stage edge, below 3 m); Teaching mode still on
+  (TEACH-01); a cue that changes nothing (CUE-03); the old chaser still
+  played after Import in place (CUE-12); venue clashes for every venue
+  (PAT-05); definition errors (FIX-02); dead lights still used (FIX-08);
+  a matrix on lights with no colour (FX-02); effects of size or speed 0
+  (FX-03); embedded definitions that can't be read (FILE-03).
 
 ### Why is this on?
 

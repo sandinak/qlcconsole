@@ -22,6 +22,8 @@
    shown under the check's id (ShowReview::footerCheckId()). */
 
 #include <QCoreApplication>
+#include <QCryptographicHash>
+#include <QVector3D>
 #include <QRegularExpression>
 #include <QSettings>
 #include <QFileInfo>
@@ -34,7 +36,15 @@
 #include "showreviewcontext.h"
 #include "showtreecontroller.h"
 #include "programmercontroller.h"
+#include "venuecorrections.h"
+#include "teachingsettings.h"
 #include "powerdistribution.h"
+#include "showembedding.h"
+#include "fixturegroup.h"
+#include "qlcphysical.h"
+#include "rgbmatrix.h"
+#include "righeads.h"
+#include "efx.h"
 #include "monitorproperties.h"
 #include "fixturedefcheck.h"
 #include "qlcfixturemode.h"
@@ -909,6 +919,281 @@ static void name02(ReviewContext &ctx, QList<ReviewFinding> &out)
     }
 }
 
+
+/****************************************************************************
+ * More patch, fixture, effect and file checks
+ ****************************************************************************/
+
+static QString venueKey(const QString &venue)
+{
+    QString v = venue;
+    v.replace(QLatin1Char(','), QLatin1Char(' ')).replace(QLatin1Char('/'), QLatin1Char(' '));
+    return QStringLiteral("venue:") + v;
+}
+
+static void pat05(ReviewContext &ctx, QList<ReviewFinding> &out)
+{
+    VenueCorrections *vc = ctx.doc()->programmer() != nullptr ? ctx.doc()->programmer()->venueCorrections() : nullptr;
+    if (vc == nullptr)
+        return;
+    for (const QString &name : vc->venueNames())
+    {
+        const bool applied = vc->activeVenue() == name;
+        for (const VenueRig::Clash &c : vc->clashes(name))
+        {
+            // The applied venue's not-ours is PAT-04's (it names the fixture).
+            if (applied && c.kind == VenueRig::Clash::NotOursKind)
+                continue;
+            const bool slot = c.kind == VenueRig::Clash::Slot;
+            out << ReviewContext::make(QStringLiteral("PAT-05"),
+                slot ? ReviewFinding::Warning : ReviewFinding::Blocker,
+                tr("At %1: %2").arg(name, c.text),
+                { venueKey(name), QStringLiteral("clash:%1.%2.%3.%4").arg(int(c.kind)).arg(c.universe)
+                                      .arg(c.address).arg(c.channels) },
+                c.text.toUtf8(), QStringLiteral("status:fixtures.clash"), QVariantList() << name);
+        }
+    }
+}
+
+static void fix02(ReviewContext &ctx, QList<ReviewFinding> &out)
+{
+    // decided (can change): definition Errors only, as a warning. The editor's
+    // Warnings (no size, no beam angle) stay in the fixture editor; light
+    // output is FIX-07's.
+    QMap<const QLCFixtureDef *, QList<quint32>> byDef;
+    for (Fixture *fx : ctx.doc()->fixtures())
+        if (fx != nullptr && fx->fixtureDef() != nullptr && !fx->definitionUnavailable())
+            byDef[fx->fixtureDef()] << fx->id();
+    for (auto it = byDef.constBegin(); it != byDef.constEnd(); ++it)
+    {
+        QStringList errors;
+        for (const FixtureDefCheck::Issue &i : FixtureDefCheck::check(it.key()))
+            if (i.level == FixtureDefCheck::Issue::Error)
+                errors << i.message;
+        if (errors.isEmpty())
+            continue;
+        const QString name = QStringLiteral("%1 %2").arg(it.key()->manufacturer(), it.key()->model()).trimmed();
+        out << ReviewContext::make(QStringLiteral("FIX-02"), ReviewFinding::Warning,
+            trn("The definition of '%1' has %n problem(s) (%2 fixture(s) use it): %3",
+                errors.count()).arg(name, QString::number(it.value().count()), errors.first()),
+            fixtureKeys(it.value()), errors.join(QLatin1Char('|')).toUtf8(),
+            QStringLiteral("status:fixtures.output"), QVariantList() << it.key()->definitionSourceFile());
+    }
+}
+
+static void fix08(ReviewContext &ctx, QList<ReviewFinding> &out)
+{
+    VenueCorrections *vc = ctx.doc()->programmer() != nullptr ? ctx.doc()->programmer()->venueCorrections() : nullptr;
+    if (vc == nullptr || vc->activeVenue().isEmpty())
+        return;
+    const QSet<quint32> &used = ctx.usedFixtures();
+    for (quint32 fid : vc->deadLights())
+    {
+        if (!used.contains(fid) || ctx.doc()->fixture(fid) == nullptr)
+            continue;
+        out << ReviewContext::make(QStringLiteral("FIX-08"), ReviewFinding::Warning,
+            tr("%1 is marked dead at %2, and the show still lights it.")
+                .arg(ctx.fixtureName(fid), vc->activeVenue()),
+            { QStringLiteral("fx:%1").arg(fid), venueKey(vc->activeVenue()) },
+            QByteArray::number(fid), QStringLiteral("fixtures"), QVariantList() << fid);
+    }
+}
+
+/** How many of group @a g's heads have no colour mixing (RGB or CMY). */
+static int headsWithoutColour(Doc *doc, const FixtureGroup *g, int *total)
+{
+    int none = 0;
+    *total = 0;
+    for (const GroupHead &gh : g->headList())
+    {
+        Fixture *fx = doc->fixture(gh.fxi);
+        if (fx == nullptr)
+            continue;
+        ++*total;
+        if (fx->rgbChannels(gh.head).isEmpty() && fx->cmyChannels(gh.head).isEmpty())
+            ++none;
+    }
+    return none;
+}
+
+static void fx02(ReviewContext &ctx, QList<ReviewFinding> &out)
+{
+    Doc *doc = ctx.doc();
+    for (Function *f : doc->functionsByType(Function::RGBMatrixType))
+    {
+        RGBMatrix *m = qobject_cast<RGBMatrix *>(f);
+        const FixtureGroup *g = m != nullptr ? doc->fixtureGroup(m->fixtureGroup()) : nullptr;
+        if (g == nullptr)
+            continue;
+        int total = 0;
+        const int none = headsWithoutColour(doc, g, &total);
+        if (none == 0)
+            continue;
+        out << ReviewContext::make(QStringLiteral("FX-02"), ReviewFinding::Warning,
+            tr("Matrix '%1' on '%2': %3 of %4 heads have no colour mixing, so they get at most "
+               "intensity.").arg(m->name(), g->name()).arg(none).arg(total),
+            { QStringLiteral("fn:%1").arg(m->id()), QStringLiteral("grp:%1").arg(g->id()) },
+            QByteArray::number(none) + '/' + QByteArray::number(total),
+            QStringLiteral("function"), QVariantList() << m->id());
+    }
+}
+
+static void fx03(ReviewContext &ctx, QList<ReviewFinding> &out)
+{
+    Doc *doc = ctx.doc();
+    for (Function *f : doc->functionsByType(Function::EFXType))
+    {
+        EFX *e = qobject_cast<EFX *>(f);
+        if (e == nullptr)
+            continue;
+        QString why;
+        if (e->width() == 0 && e->height() == 0)
+            why = tr("has size 0; the lights just sit there");
+        else if (e->duration() == 0)
+            why = tr("has speed 0; it never gets going");
+        if (why.isEmpty())
+            continue;
+        out << ReviewContext::make(QStringLiteral("FX-03"), ReviewFinding::Warning,
+            tr("EFX '%1' %2.").arg(e->name(), why), { QStringLiteral("fn:%1").arg(e->id()) },
+            why.toUtf8(), QStringLiteral("function"), QVariantList() << e->id());
+    }
+    for (Function *f : doc->functionsByType(Function::RGBMatrixType))
+    {
+        if (f->duration() != 0)
+            continue;
+        out << ReviewContext::make(QStringLiteral("FX-03"), ReviewFinding::Warning,
+            tr("Matrix '%1' has speed 0; it never gets going.").arg(f->name()),
+            { QStringLiteral("fn:%1").arg(f->id()) }, QByteArray("speed0"),
+            QStringLiteral("function"), QVariantList() << f->id());
+    }
+}
+
+static void file03(ReviewContext &ctx, QList<ReviewFinding> &out)
+{
+    // decided (can change): what the show carries and could not use, or that
+    // differs from this computer's, is listed; definitions only the show has
+    // are normal for a .qlcc and stay information in the footer. The .qxw
+    // "uses this computer's user folder" case isn't built.
+    ShowEmbedding *e = ctx.doc()->showEmbedding();
+    if (e == nullptr)
+        return;
+    for (const QString &p : e->problems())
+        out << ReviewContext::make(QStringLiteral("FILE-03"), ReviewFinding::Warning, p,
+            { QStringLiteral("embedded:%1").arg(QString::fromLatin1(QCryptographicHash::hash(p.toUtf8(),
+                  QCryptographicHash::Sha1).toHex().left(8))) }, p.toUtf8(),
+            QStringLiteral("status:embedded.problems"));
+    for (const ShowEmbedding::Item &it : e->differences())
+        out << ReviewContext::make(QStringLiteral("FILE-03"), ReviewFinding::Note,
+            tr("%1: this computer's copy differs from the one the show carries; the show's is in use.")
+                .arg(it.displayName()),
+            { QStringLiteral("embedded:%1").arg(it.key()) }, it.sha256.toUtf8() + it.computerSha.toUtf8(),
+            QStringLiteral("status:embedded.differ"));
+}
+
+static void teach01(ReviewContext &ctx, QList<ReviewFinding> &out)
+{
+    const TeachingSettings *t = ctx.doc()->teachingSettings();
+    if (t == nullptr || !t->enabled())
+        return;
+    out << ReviewContext::make(QStringLiteral("TEACH-01"), ReviewFinding::Note,
+        t->allowOutput()
+            ? tr("Teaching mode is on, and real output is let through. Turn it off in File ▸ Show "
+                 "Settings before handing this show to a crew.")
+            : tr("Teaching mode is on: real network output is held. Turn it off in File ▸ Show "
+                 "Settings before handing this show to a crew."),
+        { QStringLiteral("teaching") }, QByteArray(t->allowOutput() ? "out" : "held"),
+        QStringLiteral("showsettings"));
+}
+
+/** Whether a ray from @a p along @a d enters the house -- downstage of
+ *  @a edgeY and below @a limitZ -- before the floor, or @a range metres, stops it. */
+static bool rayReachesHouse(const QVector3D &p, const QVector3D &d, double edgeY, double limitZ, double range)
+{
+    if (d.y() < 1e-4f)
+        return false;
+    const double t0 = qMax(0.0, (edgeY - p.y()) / d.y());
+    if (t0 > range)
+        return false;
+    const double z0 = p.z() + d.z() * t0;
+    if (z0 < 0.0)
+        return false;
+    if (z0 < limitZ)
+        return true;
+    // Still above eye height at the edge: it has to come down within range.
+    return d.z() < 0.0f && (limitZ - p.z()) / d.z() <= range;
+}
+
+static void pwr09(ReviewContext &ctx, QList<ReviewFinding> &out)
+{
+    // decided (can change): no audience area is modelled, so the house is
+    // everything downstage of the stage's front edge (the deck front, or the
+    // apron), and the audience's eyes are anything below 3 m there. A laser
+    // or star projector that cannot aim itself (fixed on a mount) is asked
+    // whether any ray of its beam or star field enters that space. Movers'
+    // aim is by cue, and not read here. A beam is followed 30 m: past that
+    // a wall or the back of the house has it.
+    Doc *doc = ctx.doc();
+    MonitorProperties *mp = doc->monitorProperties();
+    if (mp == nullptr)
+        return;
+    static const double kEyeLimit = 3.0, kRange = 30.0;
+    const double edge = mp->downstageEdgeY();
+    for (Fixture *fx : doc->fixtures())
+    {
+        if (fx == nullptr || !fx->isPatched() || fx->fixtureMode() == nullptr || !mp->containsFixture(fx->id()))
+            continue;
+        const QLCPhysical &phy = fx->fixtureMode()->physical();
+        const bool stars = phy.emission() == QLCPhysical::StarEmission;
+        const bool laser = phy.emission() == QLCPhysical::LaserEmission
+                           || (fx->fixtureDef() != nullptr && fx->fixtureDef()->type() == QLCFixtureDef::Laser);
+        if ((!stars && !laser) || !RigHeads::isFixedUnit(fx))
+            continue;
+        QVector3D dir;
+        if (!RigHeads::fixedThrow(doc, fx->id(), dir) || dir.isNull())
+            continue;
+        dir.normalize();
+        const QVector3D apex = RigHeads::fixtureCentre(doc, fx->id());
+        // The beam angle as the plot draws it: declared, else a star field
+        // is 100 degrees across and a laser's fan 40.
+        const double declared = qMax(phy.lensDegreesMin(), phy.lensDegreesMax());
+        const double deg = stars ? ((declared > 0.0 && declared < 170.0) ? declared : 100.0)
+                                 : (declared > 0.0 ? declared : 40.0);
+        const double half = qDegreesToRadians(qMin(deg, 160.0) / 2.0);
+        QVector3D u = QVector3D::crossProduct(dir, QVector3D(0, 0, 1));
+        if (u.length() < 1e-3f)
+            u = QVector3D(1, 0, 0);
+        u.normalize();
+        const QVector3D v = QVector3D::crossProduct(dir, u).normalized();
+        bool reaches = rayReachesHouse(apex, dir, edge, kEyeLimit, kRange);
+        // Rings across the cone, not only its rim: the rays that matter are
+        // often the ones between the axis and the edge.
+        for (int ring = 1; ring <= 3 && !reaches; ++ring)
+        {
+            const double cone = half * ring / 3.0;
+            for (int i = 0; i < 16 && !reaches; ++i)
+            {
+                const double a = i * M_PI / 8.0;
+                const QVector3D r = (dir * float(qCos(cone))
+                                     + (u * float(qCos(a)) + v * float(qSin(a))) * float(qSin(cone))).normalized();
+                reaches = rayReachesHouse(apex, r, edge, kEyeLimit, kRange);
+            }
+        }
+        if (!reaches)
+            continue;
+        out << ReviewContext::make(QStringLiteral("PWR-09"), ReviewFinding::Warning,
+            stars ? tr("%1's star field can reach the audience: it spreads over the space past the stage "
+                       "edge below 3 m (eye height).").arg(fx->name())
+                  : tr("%1's beam can reach the audience: it enters the space past the stage edge "
+                       "below 3 m (eye height).").arg(fx->name()),
+            { QStringLiteral("fx:%1").arg(fx->id()) },
+            QByteArray::number(qRound(apex.x() * 100)) + ',' + QByteArray::number(qRound(apex.y() * 100)) + ','
+                + QByteArray::number(qRound(apex.z() * 100)) + ',' + QByteArray::number(qRound(dir.x() * 100)) + ','
+                + QByteArray::number(qRound(dir.y() * 100)) + ',' + QByteArray::number(qRound(dir.z() * 100)) + ','
+                + QByteArray::number(qRound(deg)) + ',' + QByteArray::number(qRound(edge * 100)),
+            QStringLiteral("plot"), QVariantList() << fx->id());
+    }
+}
+
 /****************************************************************************
  * The list
  ****************************************************************************/
@@ -962,6 +1247,35 @@ QList<ShowReview::Check> ShowReviewChecks::showChecks()
         { QStringLiteral("PWR-06"), tr("Lights that ignore Blackout"), S::Power,
           tr("Blackout and the Grand Master are safety controls. A stage light that ignores them "
              "surprises the operator; that rule is for work and house lights."), pwr06 },
+        { QStringLiteral("PAT-05"), tr("Venue clashes"), S::Patch,
+          tr("Going live at a venue, its house rig, the channels it keeps and the tour's slots "
+             "must fit with your patch. Each clash is checked for every venue, applied or not."), pat05 },
+        { QStringLiteral("FIX-02"), tr("Definition problems"), S::Fixtures,
+          tr("A fixture definition with errors (a head on a missing channel, capabilities that "
+             "overlap, no model) plays wrong or loses parts of itself. Fix it in the fixture "
+             "editor."), fix02 },
+        { QStringLiteral("FIX-08"), tr("Dead lights still used"), S::Fixtures,
+          tr("A light marked dead at the applied venue won't light, but a cue or hit still "
+             "counts on it."), fix08 },
+        { QStringLiteral("FX-02"), tr("RGB matrix on non-RGB lights"), S::Effects,
+          tr("A matrix paints colour. Lights with no RGB or CMY mixing get intensity at most, or "
+             "nothing."), fx02 },
+        { QStringLiteral("FX-03"), tr("Effects that don't move"), S::Effects,
+          tr("An EFX with no size, or an effect with no speed, holds the lights where they "
+             "started."), fx03 },
+        { QStringLiteral("PWR-09"), tr("Laser or star field into the audience"), S::Power,
+          tr("A laser's beam or a star projector's field that can reach the audience, or eye "
+             "height past the stage edge, is a safety problem and often a venue rule. Aim it up "
+             "or away, or accept it with the note naming who approved it (the ILDA/FDA variance, "
+             "the venue's laser safety officer)."), pwr09 },
+        { QStringLiteral("FILE-03"), tr("Definitions not carried with the show"), S::Files,
+          tr("A .qlcc carries the definitions and scripts it uses. A copy that couldn't be read, "
+             "or that differs from this computer's, is worth a look before the show moves."),
+          file03 },
+        { QStringLiteral("TEACH-01"), tr("Teaching mode is on"), S::Teaching,
+          tr("A show in Teaching mode holds real network output and warns when run for real. "
+             "Before handing a show to a crew, turn it off. Accept it for a class copy."),
+          teach01 },
         { QStringLiteral("FILE-01"), tr("Media outside the show folder"), S::Files,
           tr("A sound or video file outside the show's folder works on this computer only. "
              "Collect for Transfer copies it in beside the show."), file01 },

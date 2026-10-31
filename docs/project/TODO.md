@@ -418,9 +418,7 @@ Operate PIN). **Still open:**
   (Teaching on; decided (can change): only 3.6's text expects it, so the
   other course shows stay off, since the Teaching patch question would
   stand in front of the lessons that patch, e.g. the 3.10 Eos import).
-  **Still open:** a Show Review check TEACH-01 "Teaching mode is on"
-  (note level, accept-able with "class copy"), to add when Show Review v1
-  (feat/05-show-review) is on main; a test with it. Also DONE (tch3, feat/031-teaching3): the patch
+  Also DONE (rev2, feat/05-review-checks): the Show Review check TEACH-01 "Teaching mode is on". Also DONE (tch3, feat/031-teaching3): the patch
   confirm in the Lighting Studio's Fixture Properties (universe/address) and
   on pasting a truss with its fixtures patched; every other Studio add (curtain,
   fountain flame, pasted-unpatched) is unpatched, so changes nothing.
@@ -545,9 +543,9 @@ housing stays dark and only the apertures light; on a truss the box is
 centred on its rig point (as a mover is, and the elevations), seated only
 on a deck, riser or tower shelf; a Laser given another symbol draws as
 that; the plot symbol turns with the icon rotation like every symbol (not
-with the throw). **Open:** part
-C (H×V window, density by throw, coverage outline, the audience-zone
-safety check for Show Review), the Type=Laser emission inference, and
+with the throw). **Part C, the audience-zone check, done** (Show Review PWR-09, rev2
+2026-10-31). **Open:** part C's H×V window, density by throw and coverage
+outline, the Type=Laser emission inference, and
 FixtureDefCheck's laser checks.
 
 ## AI Assist (0.5, docs/design/AI_ASSIST.md, scheduled 2026-10-30)
@@ -582,9 +580,10 @@ show); `qlcconsole --review show.qlcc` (text / JSON, `--min`, `--check`,
 writes the show, no plugins); the **Review** footer chip and panel (Fix,
 Accept…, Reopen, Why?, Turn Check Off…, Open/Accepted/All, search), also from
 the Show readiness dialog; the footer's design entries shown under their
-catalog id there and folded into the panel (FTR). 31 checks: PAT-01/02/03/04/06,
-FIX-01/05/07/14, FX-07, PWR-01/03/05/06, FILE-01/02, NAME-01/02,
-PAL-01/02/03/05, CUE-01/02/04/05/06/07/08/11, VC-01; each with a trip and a
+catalog id there and folded into the panel (FTR). 41 checks: PAT-01/02/03/04/05/06,
+FIX-01/02/05/07/08/14, FX-02/03/07, PWR-01/03/05/06/09, FILE-01/02/03,
+NAME-01/02, PAL-01/02/03/05, CUE-01/02/03/04/05/06/07/08/11/12, VC-01,
+TEACH-01; each with a trip and a
 near-miss test (ShowReview_Test; a registry test fails a check with neither).
 A full run on DanceHysteria-0.6 is 140 ms (Debug).
 
@@ -609,11 +608,20 @@ Decided (each can change):
 - Accept is not an undo step yet.
 
 Leftovers of v1:
-- v1 checks not built: MOV-01, MOV-02, MOV-08, CUE-03, CUE-12, CUE-13,
-  PAT-05, FIX-02, FIX-08, VEN-01, VEN-02, VEN-05, VEN-09, VEN-10, FX-01
-  (with the Pi 5 cost table), FX-02, FX-03, FILE-03; and VC-03, VC-04, VC-05,
-  VC-06, VC-08, which need the VcIndex (VC facts from the live VC and from
-  the file, section 5.3).
+- v1 checks not built: MOV-01, MOV-02, MOV-08, CUE-13 (needs the VcIndex),
+  VEN-01, VEN-02, VEN-05, VEN-09, VEN-10, FX-01 (with the Pi 5 cost table
+  and a plays-on setting); and VC-03, VC-04, VC-05, VC-06, VC-08, which
+  need the VcIndex (VC facts from the live VC and from the file, section
+  5.3).
+- Built after v1 (rev2, 2026-10-31): TEACH-01, PWR-09 (lasers and star
+  fields into the audience; decided: no audience area is modelled, so the
+  house is downstage of the stage edge below 3 m, can change), CUE-03,
+  CUE-12 (chasers/collections/timelines still playing an original; its VC
+  buttons and the edited-original cases wait on the VcIndex / a rebake
+  compare), PAT-05, FIX-02 (definition errors only), FIX-08, FX-02, FX-03
+  (EFX size/speed 0 and matrix speed 0; a paused speed master isn't read),
+  FILE-03 (carried copies that fail or differ; the .qxw "uses the user
+  folder" case isn't built).
 - Parts of built checks: CUE-01's "past N cues" rule; CUE-05's loop and
   last-cue cases; CUE-06's gaps (notes); CUE-07's "jumped to" cases; PAL-01
   against tracked layers; PWR-01 hits with the running list; PWR-05 chases

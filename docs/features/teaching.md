@@ -73,6 +73,8 @@ Operate without a dialog. You get:
   time the show is opened.
 - An entry in the footer's **Not ready** list: "Teaching mode is on". It clears
   when the show goes back to Design or Teaching is turned off.
+- A note in Show Review (**TEACH-01**) while Teaching is on, so a show isn't
+  handed to a crew with it still on. Accept it with a note such as "class copy".
 
 Only when real output has been let through **and** a network output is patched
 (the show looks like a real one) is there a question as well: **Run this show
