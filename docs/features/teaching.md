@@ -109,7 +109,7 @@ definition: the Show Tree's **S T R M F** column heads, the Run tab's cue
 list heads and its GO, Sub GO and Back buttons, and the Operate settings in
 Show Settings. (Shift+F1, What's This, shows the same on a touch screen.)
 All definitions come from one list (`TeachingGlossary`), worded from the
-course [glossary](../course/GLOSSARY.md) and cut to a line. A show that is
+course glossary (docs/course/GLOSSARY.md) and cut to a line. A show that is
 not Teaching has the plain tooltips.
 
 ## Make Student Handout
