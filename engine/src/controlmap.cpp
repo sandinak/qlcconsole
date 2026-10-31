@@ -589,7 +589,8 @@ void ControlMap::goList(const Binding &b, bool stop)
             return;
         r.cue = ShowControl::cueName(chaser, step, -1);
     }
-    if (m_doc->showControl()->execute(r))
+    // The console's one run path (docs/design/RUN_COMMANDS.md).
+    if (m_doc->showControl()->run(r, ShowControl::RouteControlMap))
         emit fired(tr("%1 %2").arg(stop ? tr("Stop") : tr("GO"), targetName(b.target)));
 }
 

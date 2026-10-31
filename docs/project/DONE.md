@@ -6,6 +6,23 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
+### 2026-10-31 — One GO path: `ShowControl::run()` + `App::runCommand()` *(feat/04-one-go-path, 0.4 item 1, go1)*
+
+Every route that runs the show (⌘↩ and its family, the Run tab and Space,
+a VC Cue Runner, the pad's chaser step on a Show Tree list, the Control
+Map, a focus-call cue going on, OSC, MSC) calls
+`ShowControl::run(request, route)`. With the App running, that is
+`App::runCommand()`, the one guard: ⌘↩ starts an armed focus call, nothing
+is refused, the RC8 preview hold when the command will play
+(`ShowControl::wouldTakeStage()`), `execute()`, then the console's notices
+and the Operate offer. With no App, or off ShowControl's thread, run() is
+`execute()`, as before. `CueRunner::setRunHook` is gone. No UI change; the
+hot path is untouched. Tests: showcontrol (5 new), controlmap and
+focuscalls (route assertions), appviews (`everyRouteTakesTheOneGoPath`,
+`aGoThatFindsNothingHoldsNoPreview`). Design: docs/design/RUN_COMMANDS.md.
+
+---
+
 ### 2026-10-30 — Breathe once: no flash, whole cycles, typed values, Length *(fix/031-breathe-once, 0.3.1 brth)*
 
 The user's build-2593 report (step tops, White, 20%, Breathe, Once, on

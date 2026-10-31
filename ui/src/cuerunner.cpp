@@ -76,18 +76,9 @@ void CueRunner::setUpgradeAction(QAction *action)
     s_upgradeAction = action;
 }
 
-static CueRunner::RunHook s_runHook;
-
-void CueRunner::setRunHook(const RunHook &hook)
+bool CueRunner::runCommand(Doc *doc, const ShowControl::Request &request, ShowControl::Route route)
 {
-    s_runHook = hook;
-}
-
-bool CueRunner::runCommand(Doc *doc, const ShowControl::Request &request, bool fromConsole)
-{
-    if (s_runHook)
-        return s_runHook(request, fromConsole);
-    return doc != nullptr && doc->showControl()->execute(request);
+    return doc != nullptr && doc->showControl()->run(request, route);
 }
 
 QAction *CueRunner::upgradeAction()
@@ -1037,7 +1028,8 @@ bool CueRunner::execute(ShowControl::Command command, const QString &cue)
     r.chaser = ch->id();
     // The Run tab speaks for the console (a notice, the Operate offer); a
     // VC Cue Runner is the VC's: the previews hold, quietly.
-    const bool ok = runCommand(m_doc, r, m_size == Full);
+    const bool ok = runCommand(m_doc, r, m_size == Full ? ShowControl::RouteRunTab
+                                                        : ShowControl::RouteVcRunner);
     refresh();
     return ok;
 }

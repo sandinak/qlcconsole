@@ -218,15 +218,22 @@ public:
      *  True when it offered. */
     bool offerOperateAfterGo(bool held = false);
 
-    /** RC8, "GO holds previews": the one path every console GO, Back and
-     *  Sub GO takes (⌘↩, the Run tab, the Control menu, a pad button bound
-     *  to step a cue list; CueRunner::setRunHook()). The Show Tree, the
-     *  Workbench, Solo and the editors' Test plays hold first
-     *  (ShowTreeController::takeStageForRun()), then ShowControl::execute()
-     *  runs it, so only the run's values reach the stage. @a fromConsole:
-     *  the notice says so, and a GO in Design offers Operate. Simple Desk,
-     *  the VC, Focus/Refine and the programmer keep running. */
-    bool runCommand(const ShowControl::Request &request, bool fromConsole = true);
+    /** The one GO path (docs/design/RUN_COMMANDS.md): every run command
+     *  from anywhere -- ⌘↩ and its family, the Run tab, a VC Cue Runner,
+     *  the pad, the Control Map, a focus-call cue, OSC, MSC -- comes here,
+     *  through ShowControl::run() (this is its run handler), and only here
+     *  is it guarded before ShowControl::execute() carries it out:
+     *  1. ⌘↩ with a focus-call cue armed begins its calls instead;
+     *  2. nothing is refused today: Operate's PIN and Teaching lock Design,
+     *     not GO (a remote route's "allow remote GO" goes here);
+     *  3. RC8, "GO holds previews": a GO, Back, Sub GO or Sub Back that will
+     *     play holds the Show Tree, the Workbench, Solo and the editors'
+     *     Test plays first (ShowTreeController::takeStageForRun()), so only
+     *     the run's values reach the stage; Simple Desk, the VC,
+     *     Focus/Refine and the programmer keep running;
+     *  4. the console's own routes (ShowControl::isConsoleRoute()) say what
+     *     was held, and a GO in Design offers Operate (Q92). */
+    bool runCommand(const ShowControl::Request &request, ShowControl::Route route);
     /** The notice runCommand() shows when it held something. */
     static QString heldForRunText();
     /** Blind's tooltip in Design (the mute). */
@@ -1101,6 +1108,9 @@ private:
     // workspace/showFooterGM). Independent of whether a chip currently has
     // anything to show (e.g. Power only ever appears once an estimate exists).
     bool m_operateOffered = false;   ///< Q92: offered once a session
+    /** What the last runCommand() came by, and how many came (the tests). */
+    ShowControl::Route m_lastRunRoute = ShowControl::RouteOther;
+    int m_runCommands = 0;
     bool m_showFooterLoad = false;
     bool m_showFooterPower = true;
     bool m_showFooterGM = true;

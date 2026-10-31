@@ -62,6 +62,13 @@ private slots:
     void loadASubCuePutsItOnStandby();
     void stopASubCueOnlyWhenItsPlaying();
 
+    // The one GO path (docs/design/RUN_COMMANDS.md).
+    void runWithoutAHandlerExecutes();
+    void runGoesThroughTheHandlerWithItsRoute();
+    void oscAndMscComeThroughRun();
+    void runOffTheThreadExecutesDirectly();
+    void wouldTakeStageMatchesExecute();
+
 private:
     Chaser *makeList(int steps, const QString &name);
     /** "Main": cues 1, 2, 3, cue 2 a chase of three steps on Sub GO. */

@@ -425,7 +425,7 @@ Notes:
 | Item | Value | Fit | Reuses | Effort | Risk | Maint. | ROI | Call |
 |---|---|---|---|---|---|---|---|---|
 | AI Assist P0–P3 (docs/design/AI_ASSIST.md): one operation registry under the command line, a Design-only assistant on a local model (Ollama), configuration import, an MCP server | 4 | 4 | Show Tree command line, undo, Design/Operate | 15 | M | M | 1.1 | BUILD (0.5), user's call 2026-10-30 (P2b configuration import also stands alone) |
-| One GO path (`App::runCommand`) for keys, Run tab, footer, pad, web | 4 | 5 | ShowControl, RC8 preview hold | 0.5 | L | L | **40** | BUILD (0.4), first; prerequisite |
+| One GO path (`App::runCommand`) for keys, Run tab, footer, pad, web | 4 | 5 | ShowControl, RC8 preview hold | 0.5 | L | L | **40** | BUILT 2026-10-31 (0.4, first; docs/design/RUN_COMMANDS.md) |
 | Tracking sheet + printable cue sheet (PDF/XLSX) | 5 | 5 | tracking resolve, patch-list exports | 4 | L | L | **6.3** | BUILD (0.4) |
 | Course Level 2 lessons (7), one per release cycle | 5 | 5 | course template, courseshow_test | 2 a lesson | L | M | **12.5** a lesson | BUILD (0.3.1 onward) |
 | Realistic move speed in the Rig Overview | 3 | 5 | Rig Overview, definitions' speeds | 3 | L | L | 5 | BUILD (0.5) |
@@ -469,7 +469,8 @@ list:
 
 1. Save As offers .qxw (60).
 2. One GO path, `App::runCommand` (40). It's small, and it unblocks pad
-   Run, the phone Run page and override hits.
+   Run, the phone Run page and override hits. **Built 2026-10-31**
+   (docs/design/RUN_COMMANDS.md).
 3. Restore Full Screen (40).
 4. "Start new shows in Classic" preference (30).
 5. Restore creating and deleting input profiles (20) and New from
@@ -532,6 +533,8 @@ track.*
 
 Order and dependencies:
 1. **One GO path** (`App::runCommand`). Everything below goes through it.
+   **Built 2026-10-31:** every route enters through `ShowControl::run()`
+   with its `Route` (docs/design/RUN_COMMANDS.md).
 2. **Pad Run MVP**, after 0.3.1's PS names and the voice settle. Then its
    Hits page, list cycling and the focus confirm.
 3. **Phone/tablet Run page** on the secured web access, using the same GO
@@ -582,7 +585,7 @@ voice settle┘                   ^
 Teaching ─────┬─> phone Run rules (0.4)
               ├─> why-on student mode (0.5)
               └─> Show Review teaching checks (0.5)
-one GO path (0.4, first) ─> pad Run, phone Run, override hits
+one GO path (0.4, built) ─> pad Run, phone Run, override hits
 Art-Net TC (0.3.1) ─> LTC + cues at timecode (0.4)
 hit fade times (0.3.1) ─> override hits ─> group masters (0.4)
 Show Review v1 ─> laser C, no-light zones, move speed checks (0.5)

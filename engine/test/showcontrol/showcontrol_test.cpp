@@ -21,6 +21,7 @@
 #include <QXmlStreamWriter>
 #include <QSignalSpy>
 #include <QtEndian>
+#include <QThread>
 #include <QtTest>
 #include <cstring>
 
@@ -1019,6 +1020,151 @@ void ShowControl_Test::stopASubCueOnlyWhenItsPlaying()
     tick();
     QVERIFY(!list->isRunning());
 
+    stopAll();
+}
+
+/*****************************************************************************
+ * The one GO path (docs/design/RUN_COMMANDS.md)
+ *****************************************************************************/
+
+/* No App: run() is execute(). */
+void ShowControl_Test::runWithoutAHandlerExecutes()
+{
+    MasterTimer *timer = m_doc->masterTimer();
+    Chaser *c = makeList(3, "Main");
+    ShowControl *sc = m_doc->showControl();
+    sc->setMainCueList(c->id());
+    QVERIFY(!sc->hasRunHandler());
+    QSignalSpy handled(sc, &ShowControl::commandHandled);
+    QVERIFY(sc->run({ ShowControl::Go, QStringLiteral("2"), QString() }, ShowControl::RouteOther));
+    QCOMPARE(handled.count(), 1);
+    for (int i = 0; i < 3; ++i)
+        timer->timerTick();
+    QCOMPARE(c->currentStepIndex(), 1);
+    stopAll();
+}
+
+/* With a handler, every run() goes to it with its route -- and only what
+   the handler executes acts. */
+void ShowControl_Test::runGoesThroughTheHandlerWithItsRoute()
+{
+    Chaser *c = makeList(3, "Main");
+    ShowControl *sc = m_doc->showControl();
+    sc->setMainCueList(c->id());
+    QList<ShowControl::Route> routes;
+    QList<ShowControl::Command> commands;
+    bool pass = false;
+    sc->setRunHandler([&](const ShowControl::Request &r, ShowControl::Route route) {
+        routes << route;
+        commands << r.command;
+        return pass ? sc->execute(r) : false;
+    });
+    QVERIFY(sc->hasRunHandler());
+    QSignalSpy handled(sc, &ShowControl::commandHandled);
+
+    // Refused by the handler: nothing happens.
+    QVERIFY(!sc->run({ ShowControl::Go, QString(), QString() }, ShowControl::RouteKey));
+    QCOMPARE(handled.count(), 0);
+    QVERIFY(!c->isRunning());
+
+    pass = true;
+    QVERIFY(sc->run({ ShowControl::Go, QString(), QString() }, ShowControl::RouteRunTab));
+    QVERIFY(sc->run({ ShowControl::Load, QStringLiteral("2"), QString() }, ShowControl::RoutePad));
+    QCOMPARE(handled.count(), 2);
+    QCOMPARE(routes, QList<ShowControl::Route>({ ShowControl::RouteKey, ShowControl::RouteRunTab,
+                                                  ShowControl::RoutePad }));
+    QCOMPARE(commands, QList<ShowControl::Command>({ ShowControl::Go, ShowControl::Go, ShowControl::Load }));
+
+    // The console's routes, and the names the notes use.
+    QVERIFY(ShowControl::isConsoleRoute(ShowControl::RouteKey));
+    QVERIFY(ShowControl::isConsoleRoute(ShowControl::RouteRunTab));
+    QVERIFY(ShowControl::isConsoleRoute(ShowControl::RoutePad));
+    for (ShowControl::Route r : { ShowControl::RouteVcRunner, ShowControl::RouteControlMap,
+                                  ShowControl::RouteFocusCall, ShowControl::RouteOsc,
+                                  ShowControl::RouteMsc, ShowControl::RouteOther })
+        QVERIFY(!ShowControl::isConsoleRoute(r));
+    QCOMPARE(ShowControl::routeName(ShowControl::RouteOsc), QStringLiteral("OSC"));
+
+    sc->setRunHandler(nullptr);
+    QVERIFY(!sc->hasRunHandler());
+    stopAll();
+}
+
+/* OSC and MSC are routes like any other: through run(), still said to come
+   from OSC / MSC. */
+void ShowControl_Test::oscAndMscComeThroughRun()
+{
+    Chaser *c = makeList(3, "Main");
+    ShowControl *sc = m_doc->showControl();
+    sc->setMainCueList(c->id());
+    QList<ShowControl::Route> routes;
+    sc->setRunHandler([&](const ShowControl::Request &r, ShowControl::Route route) {
+        routes << route;
+        return sc->execute(r);
+    });
+    QSignalSpy from(sc, &ShowControl::commandFrom);
+    QCOMPARE(sc->handleOsc(osc("/cue/2/start")), 1);
+    emit m_doc->inputOutputMap()->inputSysExReceived(0, msc(1, 0x01, 0x01, "3"));
+    QCOMPARE(routes, QList<ShowControl::Route>({ ShowControl::RouteOsc, ShowControl::RouteMsc }));
+    QCOMPARE(from.count(), 2);
+    QCOMPARE(from.at(0).at(0).value<ShowControl::Source>(), ShowControl::Osc);
+    QCOMPARE(from.at(1).at(0).value<ShowControl::Source>(), ShowControl::Msc);
+    sc->setRunHandler(nullptr);
+    stopAll();
+}
+
+/* The handler is the UI's: a command on another thread skips it and
+   executes, as before (the preview hold comes queued, by aboutToTakeStage). */
+void ShowControl_Test::runOffTheThreadExecutesDirectly()
+{
+    Chaser *c = makeList(3, "Main");
+    ShowControl *sc = m_doc->showControl();
+    sc->setMainCueList(c->id());
+    int handled = 0;
+    sc->setRunHandler([&](const ShowControl::Request &r, ShowControl::Route) {
+        ++handled;
+        return sc->execute(r);
+    });
+    bool ok = false;
+    QThread *t = QThread::create([&]() {
+        ok = sc->run({ ShowControl::Load, QStringLiteral("2"), QString() }, ShowControl::RouteMsc);
+    });
+    t->start();
+    QVERIFY(t->wait(5000));
+    delete t;
+    QVERIFY(ok);
+    QCOMPARE(handled, 0);
+    QCOMPARE(sc->loadedStep(c->id()), 1);
+    sc->setRunHandler(nullptr);
+}
+
+/* wouldTakeStage(): exactly when execute() says it takes the stage. */
+void ShowControl_Test::wouldTakeStageMatchesExecute()
+{
+    Chaser *c = makeList(3, "Main");
+    ShowControl *sc = m_doc->showControl();
+    QSignalSpy takes(sc, &ShowControl::aboutToTakeStage);
+    auto check = [&](const ShowControl::Request &r) {
+        const bool would = sc->wouldTakeStage(r);
+        const int before = takes.count();
+        sc->execute(r);
+        return would == (takes.count() > before);
+    };
+    // No main cue list, two lists: nothing plays, nothing taken.
+    makeList(1, "Other");
+    QVERIFY(!sc->wouldTakeStage({ ShowControl::Go, QString(), QString() }));
+    QVERIFY(check({ ShowControl::Go, QString(), QString() }));
+    sc->setMainCueList(c->id());
+    QVERIFY(sc->wouldTakeStage({ ShowControl::Go, QString(), QString() }));
+    QVERIFY(check({ ShowControl::Go, QString(), QString() }));
+    QVERIFY(check({ ShowControl::Go, QStringLiteral("9"), QString() }));       // no such cue
+    QVERIFY(!sc->wouldTakeStage({ ShowControl::Go, QStringLiteral("9"), QString() }));
+    QVERIFY(check({ ShowControl::Back, QString(), QString() }));
+    QVERIFY(check({ ShowControl::SubGo, QStringLiteral("9"), QString() }));    // takes no cue
+    QVERIFY(check({ ShowControl::Load, QStringLiteral("2"), QString() }));
+    QVERIFY(!sc->wouldTakeStage({ ShowControl::Load, QStringLiteral("2"), QString() }));
+    QVERIFY(check({ ShowControl::Go, QString(), QStringLiteral("7") }));       // no list 7
+    QVERIFY(check({ ShowControl::Stop, QString(), QString() }));
     stopAll();
 }
 
