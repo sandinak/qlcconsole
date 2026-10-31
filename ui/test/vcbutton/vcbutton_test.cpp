@@ -42,6 +42,8 @@
 #include "chaseraction.h"
 #include "functionparent.h"
 #include "showtreecontroller.h"
+#include "showcontrol.h"
+#include "programmercontroller.h"
 #include "functionselection.h"
 #include "functionstreewidget.h"
 #include "vcbuttonproperties.h"
@@ -692,6 +694,102 @@ void VCButton_Test::input()
     QTest::qWait(100);
     QCOMPARE(m_doc->masterTimer()->runningFunctions(), 0);
     m_doc->masterTimer()->stop();
+}
+
+void VCButton_Test::stepButtonsOnATreeListGoThroughTheOneGoPath()
+{
+    ShowTreeController *st = m_doc->showTree();
+    ShowControl *sc = m_doc->showControl();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L", ShowTree::ListMode::NonTracking);
+    for (int i = 0; i < 4; ++i)
+        st->addCue(list, i - 1, QString("C%1").arg(i + 1));
+    Chaser *tree = qobject_cast<Chaser *>(m_doc->function(st->cueList(list)->chaser));
+    QVERIFY(tree != NULL);
+
+    QList<QPair<ShowControl::Command, ShowControl::Route>> seen;
+    sc->setRunHandler([&](const ShowControl::Request &r, ShowControl::Route route) {
+        seen << qMakePair(r.command, route);
+        return sc->execute(r);
+    });
+    auto cleanup = qScopeGuard([&]() {
+        sc->setRunHandler(ShowControl::RunHandler());
+        tree->stop(FunctionParent::master());
+        m_doc->masterTimer()->timerTick();
+    });
+
+    m_doc->setMode(Doc::Operate);
+    MasterTimer *timer = m_doc->masterTimer();
+    tree->start(timer, FunctionParent::master());
+    timer->timerTick();
+    timer->timerTick();
+    QVERIFY(tree->isRunning());
+    QTRY_VERIFY(m_doc->programmer()->m_runningChasers.contains(tree->id()));
+
+    QWidget w;
+    VCButton next(&w, m_doc);
+    next.setAction(VCButton::ChaserStepNext);
+    next.pressFunction();
+    QCOMPARE(seen.size(), 1);
+    QCOMPARE(seen.last(), qMakePair(ShowControl::Go, ShowControl::RouteVcCueList));
+    VCButton prev(&w, m_doc);
+    prev.setAction(VCButton::ChaserStepPrev);
+    prev.pressFunction();
+    QCOMPARE(seen.size(), 2);
+    QCOMPARE(seen.last(), qMakePair(ShowControl::Back, ShowControl::RouteVcCueList));
+}
+
+void VCButton_Test::stepButtonsOnAPlainChaserStepDirectly()
+{
+    ShowControl *sc = m_doc->showControl();
+    int routed = 0;
+    sc->setRunHandler([&](const ShowControl::Request &r, ShowControl::Route) {
+        ++routed;
+        return sc->execute(r);
+    });
+    Chaser *c = NULL;
+    auto cleanup = qScopeGuard([&]() {
+        sc->setRunHandler(ShowControl::RunHandler());
+        if (c != NULL)
+            c->stop(FunctionParent::master());
+        m_doc->masterTimer()->timerTick();
+    });
+
+    Scene *a = new Scene(m_doc);
+    a->setValue(0, 0, 255);
+    m_doc->addFunction(a);
+    Scene *b = new Scene(m_doc);
+    b->setValue(0, 0, 100);
+    m_doc->addFunction(b);
+    c = new Chaser(m_doc);
+    c->setDuration(Function::infiniteSpeed());
+    c->addStep(ChaserStep(a->id()));
+    c->addStep(ChaserStep(b->id()));
+    m_doc->addFunction(c);
+    QVERIFY(!sc->isTreeGoList(c->id()));
+
+    m_doc->setMode(Doc::Operate);
+    MasterTimer *timer = m_doc->masterTimer();
+    c->start(timer, FunctionParent::master());
+    timer->timerTick();
+    timer->timerTick();
+    QVERIFY(c->isRunning());
+    QTRY_VERIFY(m_doc->programmer()->m_runningChasers.contains(c->id()));
+    QCOMPARE(c->currentStepIndex(), 0);
+
+    QWidget w;
+    VCButton next(&w, m_doc);
+    next.setAction(VCButton::ChaserStepNext);
+    next.pressFunction();
+    timer->timerTick();
+    timer->timerTick();
+    QCOMPARE(c->currentStepIndex(), 1);
+    VCButton prev(&w, m_doc);
+    prev.setAction(VCButton::ChaserStepPrev);
+    prev.pressFunction();
+    timer->timerTick();
+    timer->timerTick();
+    QCOMPARE(c->currentStepIndex(), 0);
+    QCOMPARE(routed, 0);
 }
 
 void VCButton_Test::paint()

@@ -49,6 +49,7 @@
 #include "qmath.h"
 #include "showtreecontroller.h"
 #include "showcontrol.h"
+#include "showcontrol.h"
 #include "doc.h"
 
 #define COL_NUM      0
@@ -907,7 +908,7 @@ void VCCueList::slotPlayback()
         }
         else if (playbackLayout() == PlayStopPause)
         {
-            stopChaser();
+            userStop();
             m_stopButton->setStyleSheet(QString("QToolButton{ background: %1; }")
                                             .arg(m_playbackButton->palette().window().color().name()));
         }
@@ -936,7 +937,7 @@ void VCCueList::slotStop()
     {
         if (playbackLayout() == PlayPauseStop)
         {
-            stopChaser();
+            userStop();
             m_playbackButton->setStyleSheet(QString("QToolButton{ background: %1; }")
                                             .arg(m_stopButton->palette().window().color().name()));
             m_progress->setFormat("");
@@ -983,7 +984,7 @@ void VCCueList::slotNextCue()
         {
             m_tree->setCurrentItem(m_tree->topLevelItem(getNextIndex()));
         }
-        else
+        else if (!runShowTree(ShowControl::Go))
         {
             ChaserAction action;
             action.m_action = ChaserNextStep;
@@ -1029,7 +1030,7 @@ void VCCueList::slotPreviousCue()
         {
             m_tree->setCurrentItem(m_tree->topLevelItem(getPrevIndex()));
         }
-        else
+        else if (!runShowTree(ShowControl::Back))
         {
             ChaserAction action;
             action.m_action = ChaserPreviousStep;
@@ -1176,7 +1177,7 @@ void VCCueList::slotSubGo()
     if (mode() != Doc::Operate)
         return;
     Chaser *ch = chaser();
-    if (ch != NULL && ch->isRunning())
+    if (ch != NULL && ch->isRunning() && !runShowTree(ShowControl::SubGo))
         ch->subGo();
 }
 
@@ -1185,7 +1186,7 @@ void VCCueList::slotSubBack()
     if (mode() != Doc::Operate)
         return;
     Chaser *ch = chaser();
-    if (ch != NULL && ch->isRunning())
+    if (ch != NULL && ch->isRunning() && !runShowTree(ShowControl::SubBack))
         ch->subBack();
 }
 
@@ -1388,10 +1389,33 @@ double VCCueList::progressPercent() const
     return ((double)m_progress->value() * 100) / (double)m_progress->width();
 }
 
+bool VCCueList::runShowTree(int command, int startIndex)
+{
+    Chaser *ch = chaser();
+    ShowControl *sc = m_doc->showControl();
+    if (ch == NULL || sc == NULL || !sc->isTreeGoList(ch->id()))
+        return false;                  // a plain chaser: stock QLC+, below
+    ShowControl::Request r;
+    r.command = ShowControl::Command(command);
+    r.chaser = ch->id();
+    if (startIndex >= 0)
+    {
+        // Starting a stopped list at a row: by that cue's number. A row
+        // with none is left to the stock start.
+        r.cue = ch->stepCue(startIndex);
+        if (r.cue.isEmpty())
+            return false;
+    }
+    sc->run(r, ShowControl::RouteVcCueList);
+    return true;
+}
+
 void VCCueList::startChaser(int startIndex)
 {
     Chaser *ch = chaser();
     if (ch == NULL)
+        return;
+    if (runShowTree(ShowControl::Go, startIndex))
         return;
 
     adjustFunctionIntensity(ch, intensity());
@@ -1406,6 +1430,16 @@ void VCCueList::startChaser(int startIndex)
 
     ch->start(m_doc->masterTimer(), functionParent());
     emit functionStarting(m_chaserID);
+}
+
+void VCCueList::userStop()
+{
+    // A Stop pressed on the widget (or the web page): on a Show Tree list,
+    // the Stop command.
+    if (!runShowTree(ShowControl::Stop))
+        stopChaser();
+    else
+        resetIntensityOverrideAttribute();
 }
 
 void VCCueList::stopChaser()
@@ -1958,7 +1992,11 @@ void VCCueList::playCueAtIndex(int idx)
     if (ch == NULL)
         return;
 
-    if (ch->isRunning())
+    if (ch->isRunning() && runShowTree(ShowControl::Go, m_primaryIndex))
+    {
+        // a Show Tree list: that cue by its number, through the one GO path
+    }
+    else if (ch->isRunning())
     {
         ChaserAction action;
         action.m_action = ChaserSetStepIndex;

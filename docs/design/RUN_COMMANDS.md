@@ -32,7 +32,7 @@ any route ──> ShowControl::run(request, route)
   carries one command, plus an optional cue, a list (by number) or a
   chaser.
 - **The route** is `ShowControl::Route`, which says where a command came
-  from: `RouteKey, RouteRunTab, RouteVcRunner, RoutePad, RouteControlMap,
+  from: `RouteKey, RouteRunTab, RouteVcRunner, RoutePad, RouteVcCueList, RouteControlMap,
   RouteFocusCall, RouteOsc, RouteMsc, RouteOther`.
   `ShowControl::isConsoleRoute()` is true for Key, Run tab and Pad.
 - **The one function** is `ShowControl::run(request, route)`. A route
@@ -66,6 +66,7 @@ App) still holds the previews, through a queued connection.
 | Run tab | `CueRunner` Full: buttons, Space, a click (Load) or double-click (Go cue) in the list | all but AllOff and Reset | yes |
 | VC Cue Runner | `CueRunner` Compact/List inside `VCCueRunner` (click, its key, its external input) | the same | no |
 | Pad | `ProgrammingManager::slotButtonAction("chaser_step_forward"/"back")` on a running Show Tree list | Go, Back | yes |
+| VC Cue List | `VCCueList` Next / Previous / Play / Stop, a row's double-click, Sub GO / Sub Back, and the web access page (same slots); a VC button's next / previous step (`ProgrammerController::stepCurrentChaser`), only when the chaser is a Show Tree main list | Go, Back, Stop, Sub GO, Sub Back | no |
 | Control Map | `ControlMap::goList()` (GO / Stop a list or cue) | Go, Stop | no |
 | Focus call | `FocusCallCue` continuing its list when the calls are done | Go | no |
 | OSC | `ShowControl::handleOsc()` (from `ShowControlListener`) | all | no |
@@ -77,11 +78,9 @@ App) still holds the previews, through a queued connection.
 - **The Show Tree command line** has no playback words.
 - **Stop all / panic** (⌘⇧Esc) stops the master timer itself. It is not
   a cue command, and it stays separate on purpose.
-- **Two stock QLC+ paths step a chaser directly:** the VC Cue List (and
-  the web access page that drives it) and a VC button's "next/previous
-  step" (`Doc::stepCurrentChaser`). They are left as they were. They can
-  be moved onto `run()` if a Show Tree list ever plays through them; the
-  phone Run page is the natural time to do it.
+- **Plain chasers:** the VC Cue List and a VC button's next / previous
+  step still step a chaser that is not a Show Tree list directly, so
+  QLC+ 4 shows play as before (`ShowControl::isTreeGoList()` decides).
 
 ## Behaviour
 

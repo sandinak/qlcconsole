@@ -42,10 +42,14 @@ Pad Run, the phone Run page and override hits call `run()` with their
 route. Open:
 - Phone Run page: add `RouteWeb`, and refuse it in step 2 of
   `App::runCommand()` unless Teaching's "allow remote GO" (PIN) says yes.
-- Two stock paths still step a chaser directly: the VC Cue List (and the
-  web page that drives it) and a VC button's next/previous step
-  (`Doc::stepCurrentChaser`). Move them onto `run()` if they ever play a
-  Show Tree list (decided: left as stock QLC+, can change).
+- DONE (vcgo, feat/04-vc-go-path): the VC Cue List (and the web page that
+  drives it, which calls the same slots) and a VC button's next / previous
+  step run a Show Tree main list through `run(request, RouteVcCueList)`;
+  a plain QLC+ chaser steps directly as before. Decided (can change): the
+  web VC page is not the phone Run page, so the remote-GO rule does not
+  apply to it; a routed GO plays at full level with the list's own fades
+  (the widget's submaster and crossfade apply to plain chasers only).
+  Still stock: pause / resume, a row's sub-cue double-click.
 - decided (can change): GO is never refused by Operate's PIN or Teaching
   (they lock Design); a GO that finds nothing to play holds no preview.
 ## Cue sheet and tracking sheet — leftovers (sheet, 2026-10-31)

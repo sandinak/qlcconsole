@@ -34,6 +34,7 @@
 #include "qlcioplugin.h"
 #include "chaser.h"
 #include "doc.h"
+#include "showtreecontroller.h"
 
 #define KXMLQLCShowControlMainCueList QStringLiteral("MainCueList")
 #define KXMLQLCShowControlOut QStringLiteral("Out")
@@ -185,6 +186,7 @@ QString ShowControl::routeName(Route route)
         case RouteRunTab:     return QStringLiteral("Run tab");
         case RouteVcRunner:   return QStringLiteral("VC Cue Runner");
         case RoutePad:        return QStringLiteral("pad");
+        case RouteVcCueList:  return QStringLiteral("VC Cue List");
         case RouteControlMap: return QStringLiteral("Control Map");
         case RouteFocusCall:  return QStringLiteral("focus call");
         case RouteOsc:        return QStringLiteral("OSC");
@@ -203,6 +205,13 @@ bool ShowControl::run(const Request &request, Route route)
     if (m_runHandler && QThread::currentThread() == thread())
         return m_runHandler(request, route);
     return execute(request);
+}
+
+bool ShowControl::isTreeGoList(quint32 chaserId) const
+{
+    // productionOfChaser() already leaves out Looks lists and sub-cues.
+    ShowTreeController *st = m_doc != nullptr ? m_doc->showTree() : nullptr;
+    return st != nullptr && st->productionOfChaser(chaserId) != ShowTree::invalidId();
 }
 
 bool ShowControl::wouldTakeStage(const Request &request) const

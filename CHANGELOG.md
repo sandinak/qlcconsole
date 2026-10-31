@@ -17,6 +17,11 @@ back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
 
 ### Show control
 
+- **One GO path for the Virtual Console.** A VC Cue List (and the web page
+  that drives it) and a VC button's next / previous step now send GO, Back,
+  Sub GO and Stop through the same path as the keys when the chaser is a
+  Show Tree cue list, so the preview hold applies to them too. A plain
+  QLC+ chaser steps exactly as before.
 - **QLab out.** A GO from this console can be sent on to QLab (or any OSC
   listener) as `/cue/{cue}/start` or `/go`, and/or as an MSC GO with the
   cue number on a MIDI output; every cue or only cues with a number of their own.

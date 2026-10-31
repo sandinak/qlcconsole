@@ -33,6 +33,7 @@
 #include "chaserrunner.h"
 #include "mastertimer.h"
 #include "universe.h"
+#include "showcontrol.h"
 #include "vccuelist.h"
 #include "vcwidget.h"
 #include "vcslider.h"
@@ -1170,6 +1171,110 @@ void VCCueList_Test::showTreeTextColoursAreShown()
     QTRY_VERIFY(!cl.m_tree->topLevelItem(1)->data(colName, Qt::ForegroundRole).isValid());
     QVERIFY(!cl.m_tree->topLevelItem(0)->data(colName, Qt::ForegroundRole).isValid());
     QCOMPARE(cl.m_standbyLabel->palette().color(QPalette::WindowText), cl.palette().color(QPalette::WindowText));
+}
+
+void VCCueList_Test::showTreeListGoesThroughTheOneGoPath()
+{
+    ShowTreeController *st = m_doc->showTree();
+    ShowControl *sc = m_doc->showControl();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L", ShowTree::ListMode::NonTracking);
+    for (int i = 0; i < 4; ++i)
+        st->addCue(list, i - 1, QString("C%1").arg(i + 1));
+    Chaser *tree = qobject_cast<Chaser *>(m_doc->function(st->cueList(list)->chaser));
+    QVERIFY(tree != NULL);
+    QVERIFY(sc->isTreeGoList(tree->id()));
+
+    // The run handler stands for the App's: it notes the route and carries on.
+    QList<QPair<ShowControl::Command, ShowControl::Route>> seen;
+    QStringList cues;
+    sc->setRunHandler([&](const ShowControl::Request &r, ShowControl::Route route) {
+        seen << qMakePair(r.command, route);
+        cues << r.cue;
+        return sc->execute(r);
+    });
+    auto cleanup = qScopeGuard([&]() {
+        sc->setRunHandler(ShowControl::RunHandler());
+        m_doc->masterTimer()->stopAllFunctions();
+    });
+
+    m_doc->setMode(Doc::Operate);
+    QWidget w;
+    VCCueList cl(&w, m_doc);
+    cl.setChaser(tree->id());
+    MasterTimer *timer = m_doc->masterTimer();
+
+    // Next on a stopped list: a GO.
+    cl.slotNextCue();
+    QCOMPARE(seen.size(), 1);
+    QCOMPARE(seen.last(), qMakePair(ShowControl::Go, ShowControl::RouteVcCueList));
+    timer->timerTick();
+    timer->timerTick();
+    QVERIFY(tree->isRunning());
+
+    // Next on a running list: a GO; Previous: a Back.
+    cl.slotNextCue();
+    QCOMPARE(seen.size(), 2);
+    QCOMPARE(seen.last(), qMakePair(ShowControl::Go, ShowControl::RouteVcCueList));
+    cl.slotPreviousCue();
+    QCOMPARE(seen.size(), 3);
+    QCOMPARE(seen.last(), qMakePair(ShowControl::Back, ShowControl::RouteVcCueList));
+
+    // A double-click on a row: that cue, by its number.
+    cl.slotItemActivated(cl.m_tree->topLevelItem(2));
+    QCOMPARE(seen.size(), 4);
+    QCOMPARE(seen.last(), qMakePair(ShowControl::Go, ShowControl::RouteVcCueList));
+    QCOMPARE(cues.last(), tree->stepCue(2));
+
+    // Stop: the Stop command.
+    cl.slotStop();
+    QCOMPARE(seen.size(), 5);
+    QCOMPARE(seen.last(), qMakePair(ShowControl::Stop, ShowControl::RouteVcCueList));
+    timer->timerTick();
+    timer->timerTick();
+    QVERIFY(!tree->isRunning());
+}
+
+void VCCueList_Test::plainChaserStillStepsDirectly()
+{
+    ShowControl *sc = m_doc->showControl();
+    int routed = 0;
+    sc->setRunHandler([&](const ShowControl::Request &r, ShowControl::Route) {
+        ++routed;
+        return sc->execute(r);
+    });
+    auto cleanup = qScopeGuard([&]() {
+        sc->setRunHandler(ShowControl::RunHandler());
+        m_doc->masterTimer()->stopAllFunctions();
+    });
+
+    Chaser *c = createChaser(m_doc);
+    c->setDuration(Function::infiniteSpeed());
+    QVERIFY(!sc->isTreeGoList(c->id()));
+    QWidget w;
+    VCCueList cl(&w, m_doc);
+    cl.setChaser(c->id());
+    m_doc->setMode(Doc::Operate);
+    MasterTimer *timer = m_doc->masterTimer();
+    Scene *s1 = qobject_cast<Scene *>(m_doc->function(c->steps()[0].fid));
+    Scene *s2 = qobject_cast<Scene *>(m_doc->function(c->steps()[1].fid));
+
+    cl.slotNextCue();
+    timer->timerTick();
+    timer->timerTick();
+    QVERIFY(c->isRunning());
+    QCOMPARE(timer->m_functionList[1], s1);
+    cl.slotNextCue();
+    timer->timerTick();
+    QCOMPARE(timer->m_functionList[1], s2);
+    cl.slotPreviousCue();
+    timer->timerTick();
+    QCOMPARE(timer->m_functionList[1], s1);
+    cl.slotItemActivated(cl.m_tree->topLevelItem(2));
+    cl.slotStop();
+    timer->timerTick();
+    timer->timerTick();
+    QVERIFY(!c->isRunning());
+    QCOMPARE(routed, 0);               // none of it went through run()
 }
 
 QTEST_MAIN(VCCueList_Test)

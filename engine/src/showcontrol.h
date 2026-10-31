@@ -92,6 +92,7 @@ public:
         RouteRunTab,        //!< the Run tab's buttons and Space
         RouteVcRunner,      //!< a Cue Runner VC widget (click, its key or input)
         RoutePad,           //!< a controller profile's chaser step on a Show Tree list
+        RouteVcCueList,     //!< a VC Cue List (and the web page driving it) or a VC button's next/previous step, on a Show Tree list
         RouteControlMap,    //!< a Control Map binding (GO / Stop a list or cue)
         RouteFocusCall,     //!< a focus-call cue going on with its list when done
         RouteOsc,           //!< OSC (QLab and others)
@@ -142,6 +143,13 @@ public:
     using RunHandler = std::function<bool(const Request &request, Route route)>;
     void setRunHandler(const RunHandler &handler) { m_runHandler = handler; }
     bool hasRunHandler() const { return bool(m_runHandler); }
+
+    /** True when chaser @a chaserId plays as a Show Tree main or parallel
+     *  cue list (not a Looks list, not sub-cues), so a stock QLC+ widget
+     *  that drives it (the VC Cue List, a VC button's next/previous step)
+     *  goes through run(). False for any other chaser, which those widgets
+     *  keep stepping directly, as in QLC+ 4. */
+    bool isTreeGoList(quint32 chaserId) const;
 
     /** Carries out @a request. False when it found nothing to act on (no
      *  such list or cue); commandHandled() says what happened either way.

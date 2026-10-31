@@ -50,6 +50,7 @@
 #include "scenevalue.h"
 #include "chaser.h"
 #include "chaseraction.h"
+#include "showcontrol.h"
 #include "collection.h"
 #include "show.h"
 #include "track.h"
@@ -1251,6 +1252,17 @@ void ProgrammerController::stepCurrentChaser(int direction)
     Chaser *chaser = qobject_cast<Chaser*>(m_doc->function(cid));
     if (chaser == NULL)
         return;
+    // A Show Tree cue list is run like any other GO / Back (the preview
+    // hold, the guards); any other chaser steps directly, as in QLC+ 4.
+    ShowControl *sc = m_doc->showControl();
+    if (sc != NULL && sc->isTreeGoList(cid))
+    {
+        ShowControl::Request r;
+        r.command = direction > 0 ? ShowControl::Go : ShowControl::Back;
+        r.chaser = cid;
+        sc->run(r, ShowControl::RouteVcCueList);
+        return;
+    }
     ChaserAction action;
     action.m_action = (direction > 0) ? ChaserNextStep : ChaserPreviousStep;
     chaser->setAction(action);
