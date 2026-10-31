@@ -358,6 +358,25 @@ bool parseArgs()
  */
 int main(int argc, char** argv)
 {
+    /* The info-only flags answer before any Qt GUI object exists: with no
+       display (ssh, a headless Pi) QApplication aborts in the platform
+       plugin. Same output as before: the version banner, then the usage. */
+    for (int i = 1; i < argc; i++)
+    {
+        const QByteArray arg(argv[i]);
+        if (arg == "-v" || arg == "--version")
+        {
+            printVersion();
+            return 0;
+        }
+        if (arg == "-h" || arg == "--help")
+        {
+            printVersion();
+            printUsage();
+            return 0;
+        }
+    }
+
     // Before anything reads a setting: the help's pictures start from the
     // default layout and leave the user's own settings alone.
     HelpShots::isolateSettings();
