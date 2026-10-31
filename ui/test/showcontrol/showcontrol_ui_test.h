@@ -52,6 +52,7 @@ private slots:
     void theRowsInConnectionsDevices();
     /** Web access, the show's own setting: edited here, its state shown. */
     void theWebAccessBoxEditsTheShow();
+    void theQLabOutBoxEditsTheShow();
 
 private:
     Chaser *makeList(int steps);

@@ -111,6 +111,11 @@ public:
     /** @reimp */
     void sendFeedBack(quint32 universe, quint32 input, quint32 channel, uchar value, const QVariant &params) override;
 
+    /** @reimp: a ready OSC packet to address:port from the line's socket
+     *  (opened for the purpose when no universe has it open). */
+    bool sendShowControl(quint32 output, const QByteArray &message,
+                         const QString &address, quint16 port) override;
+
     /*********************************************************************
      * Configuration
      *********************************************************************/

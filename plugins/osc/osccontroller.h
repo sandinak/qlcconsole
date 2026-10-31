@@ -136,6 +136,10 @@ public:
      *  cached answer. */
     void refreshTransmitGate();
 
+    /** Send one ready OSC packet to @a address:@a port from this line's
+     *  output socket (show control out). False when it didn't go. */
+    bool sendPacket(const QByteArray &packet, const QHostAddress &address, quint16 port);
+
     /** Send a feedback using the specified path and value */
     void sendFeedback(const quint32 universe, quint32 channel, uchar value, const QString &key);
 

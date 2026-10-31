@@ -292,6 +292,18 @@ void OSCController::sendDmx(const quint32 universe, const QByteArray &dmxData)
     }
 }
 
+bool OSCController::sendPacket(const QByteArray &packet, const QHostAddress &address, quint16 port)
+{
+    if (packet.isEmpty() || address.isNull() || port == 0)
+        return false;
+    QMutexLocker locker(&m_dataMutex);
+    const qint64 sent = m_outputSocket->writeDatagram(packet.constData(), packet.size(), address, port);
+    if (sent < 0)
+        return false;
+    m_packetSent++;
+    return true;
+}
+
 void OSCController::sendFeedback(const quint32 universe, quint32 channel, uchar value, const QString &key)
 {
     QMutexLocker locker(&m_dataMutex);

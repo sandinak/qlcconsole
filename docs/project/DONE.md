@@ -6,6 +6,25 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
+### 2026-10-31 — QLab out: a GO sent on by OSC and/or MSC *(feat/04-qlab-out, 0.4 item 8, qlab)*
+
+When a cue goes on stage from this console, `ShowControl::execute()` (the
+one place go1 made) hands the cue number to the show's out settings, after
+the GO acted, so a GO that finds nothing sends nothing; blind and previews
+never reach it. OSC: `/cue/{cue}/start` (or `/go`) to host:port from the OSC
+plugin's output on that network; MSC: GO (lighting) with the cue number as
+SysEx on a chosen MIDI output. Both through a new `QLCIOPlugin::sendShowControl()`
+(OSC: the line's own socket; MIDI: the output device, opened if needed), so no
+new sockets. Settings live on the Show control page ("QLab out") and in the
+show file (`ShowControl/Out`).
+decided (can change): per show, not per machine; the "external cue number" is
+the cue number a cue has been given (Send: every cue, or only cues with their
+own number) -- no second number; GO only (not Back/Stop); a command that came
+in by OSC/MSC is not echoed back; the MIDI output and OSC line are named, not
+numbered. Tests: `ShowControl_Test` (exact bytes through a fake sender: GO,
+unnumbered cue, disabled, nothing found, no echo, save/load) and
+`OSC_Test::aShowControlPacketLeavesTheLineToTheTarget` (a loopback UDP socket).
+
 ### 2026-10-31 — One GO path: `ShowControl::run()` + `App::runCommand()` *(feat/04-one-go-path, 0.4 item 1, go1)*
 
 Every route that runs the show (⌘↩ and its family, the Run tab and Space,

@@ -333,6 +333,20 @@ void MidiPlugin::sendSysEx(quint32 output, const QByteArray &data)
         dev->writeSysEx(data);
 }
 
+bool MidiPlugin::sendShowControl(quint32 output, const QByteArray &message,
+                                 const QString &address, quint16 port)
+{
+    Q_UNUSED(address)
+    Q_UNUSED(port)
+    MidiOutputDevice *dev = outputDevice(output);
+    if (dev == NULL || message.isEmpty())
+        return false;
+    if (dev->isOpen() == false && dev->open() == false)
+        return false;
+    dev->writeSysEx(message);
+    return true;
+}
+
 MidiInputDevice* MidiPlugin::inputDevice(quint32 input) const
 {
     if (input < quint32(m_enumerator->inputDevices().size()))

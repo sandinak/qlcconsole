@@ -411,6 +411,14 @@ QString Chaser::stepCue(int index) const
     return n.isEmpty() ? QString::number(index + 1) : n;
 }
 
+bool Chaser::stepHasCueNumber(int index) const
+{
+    QMutexLocker locker(&m_stepListMutex);
+    if (index < 0 || index >= m_steps.count())
+        return false;
+    return !m_steps.at(index).cueNumber.trimmed().isEmpty();
+}
+
 int Chaser::findCue(const QString &cue) const
 {
     const int count = stepsCount();

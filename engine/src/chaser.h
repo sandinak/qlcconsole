@@ -234,6 +234,9 @@ public:
     /** Step @a index's cue: its cue number, or its position counting from
      *  1 when it has none. Empty for a step that isn't there. */
     QString stepCue(int index) const;
+    /** Whether step @a index has a cue number of its own (set by hand or
+     *  by renumbering), not just its position. */
+    bool stepHasCueNumber(int index) const;
     /** The step whose cue is @a cue (cuesMatch()), or -1. */
     int findCue(const QString &cue) const;
     /** Numbers every step 1, 2, 3... in order. */

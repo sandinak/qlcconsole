@@ -49,6 +49,9 @@ private slots:
     void onlyChangedChannelsAreSent();
     void feedbackKeepsMultiValuePaths();
     void multiValueInputIsSplitPerValue();
+    /** Show control out: a ready packet leaves the line's socket for the
+     *  address and port given, byte for byte; nothing for a bad target. */
+    void aShowControlPacketLeavesTheLineToTheTarget();
     /** What the plugin keeps for the show file: only what differs from
      *  the default; its writes and feedback reach the controller */
     void pluginKeepsOnlyWhatDiffersFromTheDefault();

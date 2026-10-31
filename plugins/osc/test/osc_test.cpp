@@ -547,3 +547,29 @@ void OSC_Test::pluginKeepsOnlyWhatDiffersFromTheDefault()
 }
 
 QTEST_GUILESS_MAIN(OSC_Test)
+
+void OSC_Test::aShowControlPacketLeavesTheLineToTheTarget()
+{
+    OSCPlugin plugin;
+    OSCIO io;
+    io.IPAddress = "127.0.0.1";
+    io.controller = nullptr;
+    plugin.m_IOmapping.clear();
+    plugin.m_IOmapping.append(io);
+
+    QUdpSocket rx;
+    QVERIFY(rx.bind(QHostAddress::LocalHost, 0));
+    // "/cue/4/start": 12 bytes, a NUL and padding to 16, then ",\0\0\0"
+    const QByteArray packet("/cue/4/start\0\0\0\0,\0\0\0", 20);
+    QVERIFY(plugin.sendShowControl(0, packet, "127.0.0.1", rx.localPort()));
+    QCOMPARE(nextDatagram(rx), packet);
+    QVERIFY(plugin.m_IOmapping.at(0).controller != nullptr);
+    QCOMPARE(plugin.m_IOmapping.at(0).controller->getPacketSentNumber(), quint64(1));
+
+    // No such line, no address, no port, nothing to send: nothing goes
+    QVERIFY(!plugin.sendShowControl(5, packet, "127.0.0.1", rx.localPort()));
+    QVERIFY(!plugin.sendShowControl(0, packet, "not an address", rx.localPort()));
+    QVERIFY(!plugin.sendShowControl(0, packet, "127.0.0.1", 0));
+    QVERIFY(!plugin.sendShowControl(0, QByteArray(), "127.0.0.1", rx.localPort()));
+    QVERIFY(nextDatagram(rx, 50).isEmpty());
+}

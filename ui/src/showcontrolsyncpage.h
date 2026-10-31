@@ -34,6 +34,7 @@ class QCheckBox;
 class QGroupBox;
 class QSpinBox;
 class QLabel;
+class QLineEdit;
 class Doc;
 
 /** @addtogroup ui_io
@@ -99,6 +100,12 @@ private:
     QGroupBox *buildMtcGroup();
     QGroupBox *buildWebGroup();
     QGroupBox *buildMapGroup();
+    QGroupBox *buildOutGroup();
+
+    /** Show control out: the boxes from the show's settings / the settings
+     *  from the boxes (saved with the show). */
+    void refreshOut();
+    void applyOut();
 
     /** The web access box from the show's setting and the server's state. */
     void refreshWeb();
@@ -125,6 +132,18 @@ private:
     QLabel *m_mscInputs;
     QPushButton *m_patchMidiButton;
     QLabel *m_mscLast;
+
+    // Show control out (QLab out): the show's own, ShowControl::outSettings()
+    QCheckBox *m_outOscCheck = nullptr;
+    QLineEdit *m_outHost = nullptr;
+    QSpinBox *m_outPort = nullptr;
+    QComboBox *m_outPath = nullptr;
+    QComboBox *m_outLine = nullptr;
+    QCheckBox *m_outMscCheck = nullptr;
+    QComboBox *m_outMidi = nullptr;
+    QSpinBox *m_outDevice = nullptr;
+    QComboBox *m_outCues = nullptr;
+    QLabel *m_outLast = nullptr;
 
     // Web access (the show's own setting, Doc::webAccess())
     QCheckBox *m_webCheck;

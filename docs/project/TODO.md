@@ -1012,8 +1012,6 @@ before building):
     P3 show control (`/cue/4.2/go`, `/go 4.2`, MSC GO 4.2, `/subgo`,
     `/subback`, LOAD 4.2 on Next) is in 0.2.0. Still to do: P4 step-based
     effects on Sub GO.
-  - **Sending to QLab** — OSC / MSC out. Its home is ready: the "QLab out"
-    section of Connections → Show control & sync (`ShowControlSyncPage`).
   - **Duplicate a structure's setup** (Branson, 2026-10-15; replaces the
     one-off "tower patch rule") — from one structure (T1) and the fixtures
     on it, set up its likes (T2, T3…): the same fixtures placed and mounted

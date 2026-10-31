@@ -30,10 +30,13 @@
 #include "inputpatch.h"
 #include "mastertimer.h"
 #include "function.h"
+#include "ioplugincache.h"
+#include "qlcioplugin.h"
 #include "chaser.h"
 #include "doc.h"
 
 #define KXMLQLCShowControlMainCueList QStringLiteral("MainCueList")
+#define KXMLQLCShowControlOut QStringLiteral("Out")
 
 ShowControl::ShowControl(Doc *doc, QObject *parent)
     : QObject(parent)
@@ -272,6 +275,7 @@ bool ShowControl::execute(const Request &request)
     if (takesStage(request.command))
         emit aboutToTakeStage(m_source);
 
+    int sentStep = -1;
     switch (request.command)
     {
         case Go:
@@ -289,11 +293,18 @@ bool ShowControl::execute(const Request &request)
                         return finish(false, tr("every cue in %1 is skipped").arg(name));
                 }
             }
+            // The cue this GO plays, found before it acts (a GO on a running
+            // list plays the next).
+            sentStep = step >= 0 ? step : standbyStep(chaser);
             m_loaded.remove(chaser->id());
             if (sub >= 0)
                 goSubCue(chaser, step, sub);
             else
                 go(chaser, step);
+            // On to QLab and the like -- only a command from this console:
+            // one that came in by OSC or MSC is not echoed back.
+            if (m_source == Local && sentStep >= 0)
+                sendOut(chaser, sentStep, cueName(chaser, sentStep, sub));
             if (step >= 0 && cue.isEmpty())
                 what += tr(" cue %1").arg(cueName(chaser, step, sub));
             // A skipped cue named: played, as asked (GO alone passes over it).
@@ -691,6 +702,124 @@ void ShowControl::reset()
 {
     m_mainCueList = UINT_MAX;
     m_loaded.clear();
+    m_out = OutSettings();
+}
+
+/*****************************************************************************
+ * Show control out
+ *****************************************************************************/
+
+void ShowControl::setOutSettings(const OutSettings &settings)
+{
+    m_out = settings;
+    m_out.oscPort = qBound(1, m_out.oscPort, 65535);
+    m_out.mscDevice = (m_out.mscDevice >= 0 && m_out.mscDevice <= 0x6F) ? m_out.mscDevice : 0x7F;
+    if (m_out.oscPath.trimmed().isEmpty())
+        m_out.oscPath = OutSettings().oscPath;
+}
+
+QByteArray ShowControl::oscMessage(const QString &path)
+{
+    QByteArray b = path.toUtf8();
+    b.append(QByteArray(4 - (b.size() % 4), '\0'));
+    b.append(",\0\0\0", 4);
+    return b;
+}
+
+QByteArray ShowControl::mscGo(int deviceId, const QString &cue)
+{
+    QByteArray b;
+    b.append(char(0xF0));
+    b.append(char(0x7F));
+    b.append(char(deviceId & 0x7F));
+    b.append(char(0x02));       // MSC
+    b.append(char(0x01));       // lighting
+    b.append(char(0x01));       // GO
+    b.append(cue.toLatin1());
+    b.append(char(0xF7));
+    return b;
+}
+
+QList<ShowControl::OutMessage> ShowControl::outMessagesFor(const Chaser *chaser, int step,
+                                                           const QString &cue) const
+{
+    QList<OutMessage> list;
+    if (chaser == nullptr || cue.isEmpty())
+        return list;
+    if (m_out.cues == OutNumberedCues && !chaser->stepHasCueNumber(step))
+        return list;
+
+    if (m_out.oscEnabled && !m_out.oscHost.trimmed().isEmpty())
+    {
+        OutMessage m;
+        m.kind = OutMessage::Osc;
+        m.line = m_out.oscLine;
+        m.host = m_out.oscHost.trimmed();
+        m.port = m_out.oscPort;
+        QString path = m_out.oscPath;
+        path.replace(QStringLiteral("{cue}"), cue);
+        m.data = oscMessage(path);
+        list << m;
+    }
+    if (m_out.mscEnabled && !m_out.mscOutput.isEmpty())
+    {
+        OutMessage m;
+        m.kind = OutMessage::Msc;
+        m.line = m_out.mscOutput;
+        m.data = mscGo(m_out.mscDevice, cue);
+        list << m;
+    }
+    return list;
+}
+
+void ShowControl::sendOut(const Chaser *chaser, int step, const QString &cue)
+{
+    const QList<OutMessage> messages = outMessagesFor(chaser, step, cue);
+    for (const OutMessage &m : messages)
+    {
+        const QString what = m.kind == OutMessage::Osc
+            ? tr("sent %1 to %2:%3").arg(QString::fromUtf8(m.data.left(m.data.indexOf('\0'))), m.host)
+                  .arg(m.port)
+            : tr("sent MSC GO %1 to device %2").arg(cue).arg(m_out.mscDevice);
+        // The sockets and MIDI ports belong to the main thread.
+        if (QThread::currentThread() == thread())
+        {
+            const bool ok = m_outSender ? m_outSender(m) : sendViaPlugin(m);
+            emit sentOut(what, ok);
+        }
+        else
+        {
+            QMetaObject::invokeMethod(this, [this, m, what]() {
+                const bool ok = m_outSender ? m_outSender(m) : sendViaPlugin(m);
+                emit sentOut(what, ok);
+            }, Qt::QueuedConnection);
+        }
+    }
+}
+
+bool ShowControl::sendViaPlugin(const OutMessage &message)
+{
+    if (m_doc == nullptr || m_doc->ioPluginCache() == nullptr)
+        return false;
+    const bool osc = message.kind == OutMessage::Osc;
+    QLCIOPlugin *plugin = m_doc->ioPluginCache()->plugin(osc ? QStringLiteral("OSC") : QStringLiteral("MIDI"));
+    if (plugin == nullptr)
+        return false;
+    const QStringList outs = plugin->outputs();
+    int line = outs.indexOf(message.line);
+    if (line < 0 && osc && message.line.isEmpty())
+    {
+        // The interface on the target's subnet (/24); else the first.
+        const QString prefix = message.host.left(message.host.lastIndexOf('.') + 1);
+        for (int i = 0; i < outs.count() && line < 0; ++i)
+            if (!prefix.isEmpty() && outs.at(i).startsWith(prefix))
+                line = i;
+        if (line < 0 && !outs.isEmpty())
+            line = 0;
+    }
+    if (line < 0)
+        return false;
+    return plugin->sendShowControl(quint32(line), message.data, message.host, quint16(message.port));
 }
 
 bool ShowControl::loadXML(QXmlStreamReader &root)
@@ -700,16 +829,55 @@ bool ShowControl::loadXML(QXmlStreamReader &root)
     bool ok = false;
     const quint32 id = root.attributes().value(KXMLQLCShowControlMainCueList).toString().toUInt(&ok);
     m_mainCueList = ok ? id : UINT_MAX;
-    root.skipCurrentElement();
+    OutSettings out;
+    while (root.readNextStartElement())
+    {
+        if (root.name() == KXMLQLCShowControlOut)
+        {
+            const QXmlStreamAttributes a = root.attributes();
+            out.oscEnabled = a.value(QStringLiteral("Osc")) == QStringLiteral("1");
+            out.oscHost = a.value(QStringLiteral("Host")).toString();
+            out.oscPort = a.value(QStringLiteral("Port")).toInt();
+            if (out.oscPort <= 0)
+                out.oscPort = OutSettings().oscPort;
+            out.oscLine = a.value(QStringLiteral("Line")).toString();
+            if (a.hasAttribute(QStringLiteral("Path")))
+                out.oscPath = a.value(QStringLiteral("Path")).toString();
+            out.mscEnabled = a.value(QStringLiteral("Msc")) == QStringLiteral("1");
+            out.mscOutput = a.value(QStringLiteral("MidiOut")).toString();
+            if (a.hasAttribute(QStringLiteral("Device")))
+                out.mscDevice = a.value(QStringLiteral("Device")).toInt();
+            out.cues = a.value(QStringLiteral("Cues")) == QStringLiteral("numbered") ? OutNumberedCues
+                                                                                       : OutAllCues;
+        }
+        root.skipCurrentElement();
+    }
+    setOutSettings(out);
     return true;
 }
 
 bool ShowControl::saveXML(QXmlStreamWriter *doc) const
 {
-    if (m_mainCueList == UINT_MAX)
+    if (m_mainCueList == UINT_MAX && m_out == OutSettings())
         return true;
     doc->writeStartElement(KXMLQLCShowControl);
-    doc->writeAttribute(KXMLQLCShowControlMainCueList, QString::number(m_mainCueList));
+    if (m_mainCueList != UINT_MAX)
+        doc->writeAttribute(KXMLQLCShowControlMainCueList, QString::number(m_mainCueList));
+    if (!(m_out == OutSettings()))
+    {
+        doc->writeStartElement(KXMLQLCShowControlOut);
+        doc->writeAttribute(QStringLiteral("Osc"), m_out.oscEnabled ? QStringLiteral("1") : QStringLiteral("0"));
+        doc->writeAttribute(QStringLiteral("Host"), m_out.oscHost);
+        doc->writeAttribute(QStringLiteral("Port"), QString::number(m_out.oscPort));
+        doc->writeAttribute(QStringLiteral("Line"), m_out.oscLine);
+        doc->writeAttribute(QStringLiteral("Path"), m_out.oscPath);
+        doc->writeAttribute(QStringLiteral("Msc"), m_out.mscEnabled ? QStringLiteral("1") : QStringLiteral("0"));
+        doc->writeAttribute(QStringLiteral("MidiOut"), m_out.mscOutput);
+        doc->writeAttribute(QStringLiteral("Device"), QString::number(m_out.mscDevice));
+        doc->writeAttribute(QStringLiteral("Cues"), m_out.cues == OutNumberedCues ? QStringLiteral("numbered")
+                                                                                   : QStringLiteral("all"));
+        doc->writeEndElement();
+    }
     doc->writeEndElement();
     return true;
 }

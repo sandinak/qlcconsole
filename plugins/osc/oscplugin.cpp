@@ -327,6 +327,20 @@ void OSCPlugin::sendFeedBack(quint32 universe, quint32 input,
     }
 }
 
+bool OSCPlugin::sendShowControl(quint32 output, const QByteArray &message,
+                                const QString &address, quint16 port)
+{
+    if (output >= (quint32)m_IOmapping.count())
+        return false;
+    QHostAddress host(address);
+    if (host.isNull())
+        return false;
+    if (m_IOmapping[output].controller == NULL)
+        m_IOmapping[output].controller = new OSCController(m_IOmapping.at(output).IPAddress,
+                                                           OSCController::Output, output, this);
+    return m_IOmapping[output].controller->sendPacket(message, host, port);
+}
+
 /*********************************************************************
  * Configuration
  *********************************************************************/

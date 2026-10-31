@@ -15,6 +15,13 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 A home for QLC+ 4 users: QLC+ 4's habits that qlcconsole had dropped are
 back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
 
+### Show control
+
+- **QLab out.** A GO from this console can be sent on to QLab (or any OSC
+  listener) as `/cue/{cue}/start` or `/go`, and/or as an MSC GO with the
+  cue number on a MIDI output; every cue or only cues with a number of their own.
+  Per show, on the Show control page; not for blind or previews.
+
 ### Teaching
 
 - **Fixture Properties ask too.** In a Teaching show the Lighting Studio's
