@@ -1720,7 +1720,9 @@ input your controllers send, as it arrives, whether or not they are patched:
 - its **raw** value, and the lowest and highest seen;
 - the **channel** it feeds and that channel's value (0–255), and what it
   **maps to**: the profile's name, its gamepad role, its action, and what
-  it does in Quick focus. *nothing* means the input is not in the layout.
+  it does in Quick focus (and, with the pad's Run role on, in Run: see
+  [Pad Run](show-control.md#go-from-the-game-controller-pad-run)).
+  *nothing* means the input is not in the layout.
 
 Press every button once and move each stick and trigger all the way round;
 each input is one row. **Copy** puts the whole log — the devices, a row per

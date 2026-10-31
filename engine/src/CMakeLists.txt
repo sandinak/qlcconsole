@@ -146,6 +146,7 @@ add_library(${module_name} SHARED
     controllerkeepalive.cpp controllerkeepalive.h
     gamepadrole.cpp gamepadrole.h
     padnames.cpp padnames.h
+    padrun.cpp padrun.h
     touchpadgesture.cpp touchpadgesture.h
     parkeffect.cpp parkeffect.h
     outputlayer.cpp outputlayer.h

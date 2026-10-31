@@ -33,6 +33,7 @@
 #include <QVariant>
 
 #include "programmercontroller.h"
+#include "padrun.h"
 #include "controlmap.h"
 #include "controllerkeepalive.h"
 #include "venuecorrections.h"
@@ -98,6 +99,17 @@ ProgrammerController::ProgrammerController(Doc *doc)
     m_focusSession->setVenues(m_venues);
     m_focusCalls = new FocusCalls(m_doc, this);
     m_refineSession = new RefineSession(m_doc, this);
+    m_padRun = new PadRun(m_doc, this, this);
+    // The Run role reads the controller even with no tool or follow spot on.
+    connect(m_padRun, &PadRun::enabledChanged, this, [this](bool on) {
+        if (on)
+            connectControllerInput();
+        refreshControllerKeepAlive();
+    });
+    connect(this, &ProgrammerController::controllerLost, m_padRun, [this](bool lost) {
+        if (lost)
+            m_padRun->reset();
+    });
     m_focusCallCue = new FocusCallCue(m_doc, m_focusSession, m_focusCalls, this);
     /* Gap 5: one controller tool at a time, and a start never throws away
        another's (or its own) unsaved work: it is refused, saying what to
@@ -2135,9 +2147,10 @@ void ProgrammerController::refreshControllerKeepAlive()
     const bool focus = m_focusSession->isActive()
                        || (m_refineSession != nullptr && m_refineSession->isActive());
     const bool followSpot = hasFollowSpotInput();
-    m_keepAlive->setFocusActive(focus);
+    // The Run role needs the controller awake as a tool does.
+    m_keepAlive->setFocusActive(focus || (m_padRun != nullptr && m_padRun->isEnabled()));
     m_keepAlive->setFollowSpotActive(followSpot);
-    if (focus || followSpot)
+    if (focus || followSpot || (m_padRun != nullptr && m_padRun->isEnabled()))
     {
         const FocusController fc = focusController();
         m_keepAlive->setController(fc.present, fc.problem);
@@ -2511,14 +2524,22 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
             m_focusCallCue->start();
             return true;
         }
-        // View + Menu together: ask for Focus mode.
-        if (!active && value > 0 && m_heldRoles.contains(GamepadRole::Back)
+        // View + Menu together: ask for Focus mode (not in the Run role).
+        if (!active && value > 0 && !m_padRun->isEnabled() && m_heldRoles.contains(GamepadRole::Back)
             && m_heldRoles.contains(GamepadRole::Start))
         {
             emit focusModeRequested();
             return true;
         }
     }
+    /* The Run role (0.4): while no tool has the pad, its buttons and
+       triggers are the Run map's -- and nothing else's, so a profile's
+       button action never fires beside a GO. A tool started on the laptop
+       takes the pad until it ends. */
+    if (!active && !isPan && !isTilt && m_padRun->handle(universe, role, value))
+        return true;
+    if (active && m_padRun->isArmed())
+        m_padRun->reset();
     if (!active)
         return false;
 

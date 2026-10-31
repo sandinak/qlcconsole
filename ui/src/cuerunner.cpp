@@ -49,6 +49,7 @@
 #include "focusmenu.h"
 #include "programmercontroller.h"
 #include "focuscallcue.h"
+#include "padrun.h"
 #include "cuerunner.h"
 #include "vcbutton.h"
 #include "usedby.h"
@@ -476,6 +477,21 @@ void CueRunner::buildFullLayout()
     connect(m_doc->programmer()->venueCorrections(), &VenueCorrections::activeVenueChanged,
             this, &CueRunner::refreshFocusCalls);
     refreshFocusCalls();
+    /* The pad's Run role (0.4): the game controller runs the show -- hold
+       LB and press A to GO -- through the same one GO path as the keys.
+       This computer's choice (the App keeps it); armed shows here too. */
+    m_padRunBtn = new QToolButton(this);
+    m_padRunBtn->setObjectName(QStringLiteral("crPadRun"));
+    m_padRunBtn->setCheckable(true);
+    connect(m_padRunBtn, &QToolButton::toggled, this, [this](bool on) {
+        m_doc->programmer()->padRun()->setEnabled(on);
+    });
+    connect(m_doc->programmer()->padRun(), &PadRun::enabledChanged, this, &CueRunner::refreshPadRun);
+    connect(m_doc->programmer()->padRun(), &PadRun::armedChanged, this, &CueRunner::refreshPadRun);
+    connect(m_doc->programmer(), &ProgrammerController::focusControllerChanged,
+            this, &CueRunner::refreshPadRun);
+    head->addWidget(m_padRunBtn);
+    refreshPadRun();
     m_mode = new QLabel(this);
     m_mode->setObjectName(QStringLiteral("crMode"));
     m_mode->setFont(hf);
@@ -1041,6 +1057,29 @@ void CueRunner::refreshFocusCalls()
     FocusMenu::setAvailable(m_focusCallsBtn, FocusMenu::venueFocusBlocked(m_doc),
                             tr("Pre-show: focus the rig for this venue, call by call, on the controller "
                                "(Design mode)"));
+}
+
+void CueRunner::refreshPadRun()
+{
+    if (m_padRunBtn == nullptr)
+        return;
+    ProgrammerController *pc = m_doc->programmer();
+    const PadRun *run = pc->padRun();
+    {
+        const QSignalBlocker block(m_padRunBtn);
+        m_padRunBtn->setChecked(run->isEnabled());
+    }
+    m_padRunBtn->setText(!run->isEnabled() ? tr("Pad: Tools")
+                         : run->isArmed() ? tr("Pad: ARMED") : tr("Pad: Run"));
+    m_padRunBtn->setStyleSheet(run->isArmed()
+        ? QStringLiteral("QToolButton { color: black; background: %1; }").arg(PadRun::armedColour().name())
+        : QString());
+    m_padRunBtn->setToolTip(
+        tr("<p><b>The game controller's role.</b> Tools: Focus mode, Venue focus, Refine and the "
+           "follow spot, as before. Run: the controller runs the show &mdash; nothing moves it "
+           "unless %1 is held. Click to switch.</p><p>%2</p>")
+            .arg(pc->padText(QStringLiteral("{LB}")),
+                 PadRun::mapLines(pc->padFamily()).join(QStringLiteral("<br>"))));
 }
 
 void CueRunner::refreshFocusArmed()

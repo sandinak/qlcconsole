@@ -46,6 +46,7 @@ class FocusSession;
 class FocusCalls;
 class FocusCallCue;
 class RefineSession;
+class PadRun;
 class VenueCorrections;
 class ControllerKeepAlive;
 class ParkEffect;
@@ -227,6 +228,10 @@ public:
     int padRumbles() const { return m_padRumbles; }
     /** Refine: the controller on a Show Tree cue's own values. Never null. */
     RefineSession *refineSession() const { return m_refineSession; }
+    /** The pad's Run role (0.4): GO, Back, Sub GO, Stop and the list from
+     *  the controller, through ShowControl::run() with RoutePad, while no
+     *  tool has the pad. Never null. */
+    PadRun *padRun() const { return m_padRun; }
 
     bool saveFocusCallsXML(QXmlStreamWriter *doc) const;
     bool loadFocusCallsXML(QXmlStreamReader &root);
@@ -730,6 +735,7 @@ private:
     bool m_padLost = false;
     VenueCorrections *m_venues = nullptr;
     RefineSession *m_refineSession = nullptr;
+    PadRun *m_padRun = nullptr;
     /** See controllerKeepAlive(). */
     ControllerKeepAlive *m_keepAlive = nullptr;
     /** Asks the controller how it is while it is wanted: a plugin does not

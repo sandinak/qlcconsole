@@ -38,6 +38,9 @@ Students can:
   fine: the show waits for the pad it was saved with, so on a station
   with a different one click **Use '…' for universe N (and remember it)**
   in the notice line once; the buttons do the same jobs on any of them.
+  Check the Run tab's **Pad:** button says **Pad: Tools**. In **Run** the
+  same controller runs the show (hold LB, press A to GO), which is the
+  job at the show, not in this lesson.
 - [ ] Sound on the projector computer: the laptop's voice is part of the
   lesson. For Part 3, the voice into the headset system (**Voice to:** in
   the focus calls list, **Focus ▸ Edit focus calls…**, picks the output).

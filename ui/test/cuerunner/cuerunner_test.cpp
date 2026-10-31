@@ -57,6 +57,8 @@
 #include "qlcinputsource.h"
 #include "vccuerunner.h"
 #include "cuerunner.h"
+#include "padrun.h"
+#include "programmercontroller.h"
 #include "qlcpalette.h"
 #include "vccuelist.h"
 #include "vcframe.h"
@@ -344,6 +346,36 @@ void CueRunner_Test::noMainListGreysGoAndOffersUpgrade()
     const QColor green = shot.pixelColor(4, shot.height() / 2);
     QVERIFY2(green.green() > green.red() + 40, qPrintable(green.name()));
     CueRunner::setUpgradeAction(nullptr);
+}
+
+void CueRunner_Test::thePadRoleShowsOnTheRunTab()
+{
+    CueRunner runner(m_doc, CueRunner::Full);
+    QToolButton *pad = runner.findChild<QToolButton *>("crPadRun");
+    QVERIFY(pad != nullptr);
+    PadRun *run = m_doc->programmer()->padRun();
+    QVERIFY(!run->isEnabled());
+    QCOMPARE(pad->text(), QString("Pad: Tools"));
+    QVERIFY(!pad->isChecked());
+
+    pad->click();
+    QVERIFY(run->isEnabled());
+    QCOMPARE(pad->text(), QString("Pad: Run"));
+    QVERIFY2(pad->toolTip().contains("A: GO (LB held)"), qPrintable(pad->toolTip()));
+
+    // Armed from the pad: the button says so.
+    run->handle(0, GamepadRole::LB, 255);
+    QCOMPARE(pad->text(), QString("Pad: ARMED"));
+    run->handle(0, GamepadRole::LB, 0);
+    QCOMPARE(pad->text(), QString("Pad: Run"));
+
+    // Switched elsewhere (the App restoring it): the button follows.
+    run->setEnabled(false, false);
+    QVERIFY(!pad->isChecked());
+    QCOMPARE(pad->text(), QString("Pad: Tools"));
+    // A compact runner (the VC's) has none.
+    CueRunner compact(m_doc, CueRunner::Compact);
+    QVERIFY(compact.findChild<QToolButton *>("crPadRun") == nullptr);
 }
 
 void CueRunner_Test::goSubGoBackAndWhatChanges()

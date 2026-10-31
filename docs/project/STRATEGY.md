@@ -402,7 +402,7 @@ order the note says why.
 | Touchpad option A | 2 | 3 | HID plugin, focus tools | 3.5 | M | M | 1.4 | LATER (0.4 if pad Run users ask) |
 | Laser aperture face, U yoke, LaserLook symbol | 2 | 3 | Rig Overview | 4 | L | M | 1.5 | LATER |
 | Star-field coverage + laser audience/eye-height warnings | 3 | 4 | drawStarField, Show Review | 5 | M | M | 1.9 | BUILD (0.5), with Show Review |
-| Pad Run role (MVP 6 d, full 10.5 d) | 4 | 5 | ShowControl::execute, focus pad stack | 6 | M | M | 2.7 | BUILD (0.4); see note 2 |
+| Pad Run role (MVP 6 d, full 10.5 d) | 4 | 5 | ShowControl::execute, focus pad stack | 6 | M | M | 2.7 | MVP BUILT 2026-10-31 (0.4, `PadRun`: arm + GO/Back/Sub GO/Stop, list pick, light bar); full (Hits page, focus confirm) next; see note 2 |
 | Walk the show from the stage with the controller (extends Focus this cue) | 4 | 4 | Refine, Layer/Group/Fixture scope, voice and light-bar feedback, cue notes | 5 | M | M | 2.5 | BUILD (0.4); user's call 2026-10-30 (Q192), see TODO.md |
 | "Why is this on?" v1 | 4 | 5 | GenericFader, Show Tree tracking | 9 | M | M | 1.8 | BUILD (0.5); see note 3 |
 | Teaching later items: lesson link, reset to handout, GO log, glossary popovers | 3 | 5 | Teaching | 4 | L | L | 3.8 | BUILD (0.5) |
@@ -537,6 +537,10 @@ Order and dependencies:
    with its `Route` (docs/design/RUN_COMMANDS.md).
 2. **Pad Run MVP**, after 0.3.1's PS names and the voice settle. Then its
    Hits page, list cycling and the focus confirm.
+   **MVP built 2026-10-31:** the Run role (`PadRun`, the Run tab's **Pad:**
+   button), LB-held arm, GO / Back / Sub GO / Stop through `run(r,
+   RoutePad)`, list cycling on the triggers, the light bar and rumble.
+   Open: the Hits page, the focus confirm, then Q192's layer walk.
 3. **Phone/tablet Run page** on the secured web access, using the same GO
    path and Teaching's rules (a PIN-guarded "allow remote GO").
 4. **Timecode**: LTC in, then "cue N at 00:01:23:10" on cue lists, building
@@ -585,7 +589,7 @@ voice settle┘                   ^
 Teaching ─────┬─> phone Run rules (0.4)
               ├─> why-on student mode (0.5)
               └─> Show Review teaching checks (0.5)
-one GO path (0.4, built) ─> pad Run, phone Run, override hits
+one GO path (0.4, built) ─> pad Run (MVP built), phone Run, override hits
 Art-Net TC (0.3.1) ─> LTC + cues at timecode (0.4)
 hit fade times (0.3.1) ─> override hits ─> group masters (0.4)
 Show Review v1 ─> laser C, no-light zones, move speed checks (0.5)

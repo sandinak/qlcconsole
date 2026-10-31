@@ -6,6 +6,28 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
+### 2026-10-31 — Pad Run MVP: run the show from a game controller *(feat/04-pad-run, 0.4 item 2, pad)*
+
+The controller has two roles: **Tools** (Focus mode, Venue focus,
+Refine, the follow spot: unchanged, the default) and **Run**. In Run,
+`PadRun` (engine/src/padrun.*, owned by `ProgrammerController`, fed from
+`routeFocusInput()` while no tool is active) maps by gamepad role: LB held
+arms; A GO, B Back, Y Sub GO, X Stop; RT / LT pick the cue list of the
+current production; RS says the list and the cue on standby. Every command
+is `ShowControl::run(r, RoutePad)` with `r.chaser` set to the picked list
+(UINT_MAX: the main one), so `App::runCommand()` holds the previews and
+offers Operate as for ⌘↩. In the Run role every button and trigger is the
+map's: a profile's button action (chaser_step_forward) does not fire, and
+View + Menu does not ask for Focus mode; a focus-call cue's Start still
+works. The light bar is orange while armed and flashes blue on a GO, with
+a short buzz; nothing to play buzzes long. The role is set from the Run
+tab's **Pad:** button (crPadRun, which also shows ARMED), kept in QSettings
+`controller/role`, and the Controller test's Maps to adds "Run: …".
+Tests: engine/test/padrun (synthetic pad input: the arm, RoutePad, the
+wrong role, an Xbox / DualSense controller slot, list picking, light bar
+and rumble, a lost pad), ui/test/cuerunner `thePadRoleShowsOnTheRunTab`,
+ui/test/focusmode controller-test row. Not on any hot path.
+
 ### 2026-10-31 — One GO path: `ShowControl::run()` + `App::runCommand()` *(feat/04-one-go-path, 0.4 item 1, go1)*
 
 Every route that runs the show (⌘↩ and its family, the Run tab and Space,
