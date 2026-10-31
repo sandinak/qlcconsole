@@ -367,11 +367,11 @@ void EffectInstance::runTick()
         m_envelope = 1.0f;
     else if (m_fadingOut)
     {
-        const qint64 el = m_elapsed.elapsed() - m_fadeOutStartMs;
+        const qint64 el = nowMs() - m_fadeOutStartMs;
         m_envelope = qBound(0.0f, 1.0f - float(el) / float(m_fadeOutMs), 1.0f);
     }
     else
-        m_envelope = sceneEnvelope();
+        m_envelope = m_offStageMs >= 0 ? 1.0f : sceneEnvelope();
 
     /* The scene's transitions: each cell's own envelope (envelopeFor()). The
        places are worked out once, the first time they are needed. */
@@ -382,7 +382,7 @@ void EffectInstance::runTick()
     {
         m_transitionIn = sc->transitionIn();
         m_transitionOut = sc->transitionOut();
-        m_sceneRunning = sc->isRunning();
+        m_sceneRunning = sc->isRunning() && m_offStageMs < 0;
         m_sceneElapsed = sc->elapsed();
         if (m_transitionIn.isActive() && !m_transitionMapInBuilt)
         {
@@ -439,7 +439,7 @@ void EffectInstance::runTick()
                : (!runs.loops() || m_script.isOneShot()) ? resolvedDurationMs() : 0;
     if (m_script.isOneShot() && runs.runs != 1 && m_runLenMs > 0)
     {
-        qint64 run = m_elapsed.elapsed() / m_runLenMs;
+        qint64 run = nowMs() / m_runLenMs;
         if (runs.runs > 0)
             run = qMin<qint64>(run, runs.runs - 1);
         if (run != m_runIndex)
@@ -525,7 +525,7 @@ void EffectInstance::runTick()
     // way the frozen flag makes the next tick a no-op (see the top of runTick).
     if (!runs.loops() && !m_oneShotDone)
     {
-        const qint64 el = m_elapsed.elapsed();
+        const qint64 el = nowMs();
         if (m_cycleEnd >= 0.0 ? m_cycleDone
             : m_runLenMs <= 0 || el >= qint64(m_runLenMs) * runs.runs
             || (runs.runs == 1 && m_script.isOneShot() && m_state.property("done").toBool()))
@@ -777,7 +777,7 @@ int EffectInstance::resolvedDurationMs() const
     //    times a second (it walks every function).
     if (m_cueLenMs > 0)
         return m_cueLenMs;
-    const qint64 now = m_elapsed.elapsed();
+    const qint64 now = nowMs();
     if (m_cueLookedMs >= 0 && now - m_cueLookedMs < 250)
         return m_script.naturalDurationMs();
     m_cueLookedMs = now;
@@ -1849,9 +1849,9 @@ QJSValue EffectInstance::buildInputsObject() const
             if (it != pp.constEnd() && it.value() > 0)
                 ownRate = it.value();
         }
-    const qint64 nowMs = m_elapsed.elapsed();
-    m_ownMs += double(nowMs - m_ownLastMs) * ownRate;
-    m_ownLastMs = nowMs;
+    const qint64 now = nowMs();
+    m_ownMs += double(now - m_ownLastMs) * ownRate;
+    m_ownLastMs = now;
     double time = onMaster ? pos : m_ownMs / 1000.0;
     if (m_cycleEnd >= 0.0)
     {
@@ -1885,7 +1885,7 @@ QJSValue EffectInstance::buildInputsObject() const
     {
         const EffectRuns::Settings runs = EffectRuns::resolve(m_paramValues, true, m_scriptRelease);
         const int len = m_runLenMs > 0 ? m_runLenMs : resolvedDurationMs();   // outside a tick too
-        obj.setProperty("phase", runPhase(m_elapsed.elapsed(), len, runs.runs));
+        obj.setProperty("phase", runPhase(nowMs(), len, runs.runs));
         obj.setProperty("duration", double(len));
     }
 
@@ -2137,7 +2137,7 @@ float EffectInstance::envelopeFor(quint32 fid, int head) const
     // Leaving by a transition: each cell goes when it reaches it.
     if (m_fadingOut && m_transitionOut.isActive())
     {
-        const qint64 el = qMax<qint64>(0, m_elapsed.elapsed() - m_fadeOutStartMs);
+        const qint64 el = qMax<qint64>(0, nowMs() - m_fadeOutStartMs);
         return float(1.0 - m_transitionOut.progress(m_transitionMapOut.place(fid, head), uint(el)));
     }
     // Arriving by one: each cell comes when it reaches it.

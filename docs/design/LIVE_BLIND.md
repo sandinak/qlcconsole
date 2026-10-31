@@ -64,9 +64,19 @@ Blind: the cue in edit), all of them when nothing is on show or with
   stage"), a menu count kept flat.
 - **The cue in edit is the Show Tree's**, kept when the tab is left, so the
   Lighting Studio can show it blind.
-- **The Blind view draws levels, not effects**: a cue's scenes and static
-  looks; an effect shows its base. Animating effects blind would mean a
-  second effect engine.
+- **The Blind view moves effects** (2026-10-30): the cue's levels, and
+  its effects over them as the stage would lay them. No second engine:
+  `BlindEffects` (engine/src/blindeffects.*) makes one `EffectInstance`
+  an effect look, as the stage's runner does, but private (never a DMX
+  source) and timed by the view (`EffectInstance::setOffStageClock()`):
+  its scene counts as up, so a dimmer isn't held at 0 by a scene that
+  isn't running. It runs at 25 frames a second only while the view is
+  on, the cue has an effect and the window shows. The clock starts at 0
+  when the view comes on or another cue is picked, and keeps going
+  through an edit to the effect's settings.
+- **Decided (can change): the blind effects keep their own time**, not
+  the stage's: a cue that also plays live is not drawn in step with it.
+  Input-driven effects (MIDI, audio, joystick) get no input blind.
 - **A Run click in Design previews.** It was load-only; in Design it now
   also shows the cue (what you click is what you see; GO plays the same).
 - **Build's Workbench in Operate is unchanged**: what it loads plays live,
@@ -97,4 +107,6 @@ and makes blue mean blind only, in one shade.
 `showtreeview_test::theLatestActionWinsAndOperateIsBlind`,
 `inDesignTheEditShowsOverItsRunningList`;
 `cuerunner_test::aClickInDesignShowsTheCue`;
-`mainbar_test::operateClearsBlindAndMakesItAView`.
+`mainbar_test::operateClearsBlindAndMakesItAView`,
+`theBlindViewMovesTheCuesEffects`; `blindeffects_test` (a dimmer and a
+position effect frame by frame, the stage byte-identical meanwhile).

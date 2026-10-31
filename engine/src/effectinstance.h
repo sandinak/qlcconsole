@@ -190,6 +190,11 @@ public:
     // --- Run one tick (MAIN THREAD ONLY) ---
     void runTick();
 
+    /** Off the stage (the Blind view, BlindEffects): its time is @p ms,
+     *  set before each runTick(), not its own clock, and it plays as if
+     *  its scene were up, running or not. -1 (the default): the stage. */
+    void setOffStageClock(qint64 ms) { m_offStageMs = ms; }
+
     // --- Read last results (any thread, mutex-protected) ---
     QList<DmxWrite> dmxWrites() const;
 
@@ -351,6 +356,9 @@ private:
     EffectScript     m_script;
     QJSValue         m_state;
     QElapsedTimer    m_elapsed;
+    qint64           m_offStageMs = -1;     //!< setOffStageClock()
+    /** Its time, ms: m_elapsed, or the off-stage clock. */
+    qint64 nowMs() const { return m_offStageMs >= 0 ? m_offStageMs : m_elapsed.elapsed(); }
     /** The clock it reads and the whole beat _beatCount counts from --
      *  set on the first tick, and again when its speed master changes. */
     mutable int      m_clockAssignment = -2;
