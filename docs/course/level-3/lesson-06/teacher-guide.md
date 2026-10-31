@@ -201,6 +201,13 @@ On the theatre's rig, with the real movers patched:
   laptop says "Controller back." and the pad drives again once the keys
   are still (with **Keyboard** chosen on the panel, click **Use the
   controller**).
+- **Walk the show** (if time allows). Focus fixes the rig, but a cue can
+  still look wrong in the room. Put the pad in the **Run** role and
+  press **Menu**: the student on stage steps cue by cue (RT / LT) and
+  layer by layer (RB / LB), solos a layer (View) to see what it adds,
+  fixes zoom or aim as in Focus this cue, and holds **Y** to tag a cue
+  **Needs work** that the pad can't fix. Afterwards the laptop student
+  finds the tagged cues in the Show Tree.
 
 ## In the user guide
 

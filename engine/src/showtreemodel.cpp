@@ -1540,6 +1540,8 @@ void saveXML(QXmlStreamWriter *doc, const Production &production)
                 doc->writeAttribute(QStringLiteral("FocusCall"), QStringLiteral("1"));
             if (cue.timecode >= 0 && !list.looks && !list.isSubCues())
                 doc->writeAttribute(QStringLiteral("Timecode"), QString::number(cue.timecode));
+            if (cue.needsWork)
+                doc->writeAttribute(QStringLiteral("NeedsWork"), QStringLiteral("1"));
             if (list.isSubCues() && cue.follow)
             {
                 doc->writeAttribute(QStringLiteral("Follow"), QStringLiteral("Auto"));
@@ -1767,6 +1769,7 @@ bool loadXML(QXmlStreamReader &root, Production &production)
             cue.focusCall = !looks && a.value(QStringLiteral("FocusCall")).toString() == QLatin1String("1");
             cue.timecode = (!looks && !subs && a.hasAttribute(QStringLiteral("Timecode")))
                            ? qMax(-1, a.value(QStringLiteral("Timecode")).toString().toInt()) : -1;
+            cue.needsWork = a.value(QStringLiteral("NeedsWork")).toString() == QLatin1String("1");
             if (looks)
             {
                 cue.folder = a.value(QStringLiteral("Folder")).toString();

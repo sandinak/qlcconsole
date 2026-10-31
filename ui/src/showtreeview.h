@@ -923,6 +923,7 @@ private:
     QPushButton *m_cueTcLearn = nullptr;
     QCheckBox *m_listFollowTc = nullptr;
     QCheckBox *m_cueFocusCall = nullptr;
+    QCheckBox *m_cueNeedsWork = nullptr;
     QPushButton *m_cueRefine = nullptr;
     /** The cue page's Focus ▾ (board Q149), filled as it opens. */
     void fillCueFocusMenu(QMenu *menu);

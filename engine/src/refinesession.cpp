@@ -159,8 +159,18 @@ bool RefineSession::start(quint32 cueId, quint32 layerId, QString *why)
     flashSelection();
     const ShowTree::Cue *c = cue();
     // The first line is said at once (Q171): nothing to settle yet.
-    say(tr("Focusing cue %1. %2").arg(c->number.isEmpty() ? c->name : c->number, wherePhrase()),
-        ControllerScheme::WhereNowPriority);
+    if (m_walking)
+    {
+        // Walking (Q192): "Cue 4, Ballad. Needs work. Layer 1 of 3: Movers."
+        QString name = c->number.isEmpty() ? c->name
+                     : c->name.isEmpty() ? c->number : tr("%1, %2").arg(c->number, c->name);
+        if (c->needsWork)
+            name = tr("%1. Needs work").arg(name);
+        say(tr("Cue %1. %2").arg(name, wherePhrase()), ControllerScheme::WhereNowPriority);
+    }
+    else
+        say(tr("Focusing cue %1. %2").arg(c->number.isEmpty() ? c->name : c->number, wherePhrase()),
+            ControllerScheme::WhereNowPriority);
     return true;
 }
 
@@ -1348,6 +1358,8 @@ QString RefineSession::wherePhrase(ControllerScheme::VoiceDetail detail) const
                 return m_keepToSource ? tr("%1, tracked from %2. Keeps go into %2.").arg(name, from)
                                       : tr("%1, tracked from %2. Keeps go into this cue.").arg(name, from);
             }
+            if (m_walking)
+                return tr("Layer %1 of %2: %3.").arg(m_layerIndex + 1).arg(m_layers.size()).arg(name);
             return tr("%1, layer.").arg(name);
         case GroupScope:
             return tr("%1, group %2 of %3.").arg(targetName(scopeTarget()))

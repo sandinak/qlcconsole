@@ -54,6 +54,9 @@ public:
                                   quint32 first, quint32 groupId = 0xFFFFFFFF,
                                   quint32 fixtureId = 0xFFFFFFFF, QString *why = nullptr);
     static RefinePanel *instance();
+    /** Show the panel for the session already running (walking the show,
+     *  started from the pad); null when none runs. */
+    static RefinePanel *showRunning(Doc *doc, QWidget *parent);
 
     ~RefinePanel() override;
 

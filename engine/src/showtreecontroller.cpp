@@ -1063,6 +1063,43 @@ bool ShowTreeController::isCueFocusCall(quint32 cueId) const
     return c != nullptr && c->focusCall;
 }
 
+bool ShowTreeController::setCuesNeedsWork(const QList<quint32> &cueIds, bool on)
+{
+    const QString label = on ? (cueIds.count() == 1 ? tr("Mark cue Needs work")
+                                                    : tr("Mark %1 cues Needs work").arg(cueIds.count()))
+                             : (cueIds.count() == 1 ? tr("Clear Needs work on cue")
+                                                    : tr("Clear Needs work on %1 cues").arg(cueIds.count()));
+    return edit(label, [&](QList<Production> &ps) {
+        bool changed = false;
+        for (quint32 cueId : cueIds)
+        {
+            Cue *c = cueIn(ps, cueId, nullptr);
+            if (c == nullptr || c->needsWork == on)
+                continue;
+            c->needsWork = on;
+            changed = true;
+        }
+        return changed;
+    });
+}
+
+bool ShowTreeController::isCueNeedsWork(quint32 cueId) const
+{
+    const Cue *c = cue(cueId);
+    return c != nullptr && c->needsWork;
+}
+
+QList<quint32> ShowTreeController::needsWorkCues() const
+{
+    QList<quint32> out;
+    for (const Production &p : m_productions)
+        for (const CueList &l : p.lists)
+            for (const Cue &c : l.cues)
+                if (c.needsWork)
+                    out << c.id;
+    return out;
+}
+
 bool ShowTreeController::showMoveInBlack() const
 {
     return m_doc != nullptr && m_doc->programmer() != nullptr && m_doc->programmer()->isAutoMoveInBlack();
@@ -6289,6 +6326,54 @@ void ShowTreeController::resumePreview()
     syncPreview();
 }
 
+void ShowTreeController::setPreviewSolo(quint32 cueId, quint32 layerId)
+{
+    if (cue(cueId) == nullptr)
+        layerId = invalidId();
+    const quint32 soloCue = layerId == invalidId() ? invalidId() : cueId;
+    if (soloCue == m_soloCue && layerId == m_soloLayer)
+        return;
+    m_soloCue = soloCue;
+    m_soloLayer = layerId;
+    syncPreview();
+}
+
+QList<quint32> ShowTreeController::soloFunctions(quint32 cueId, const QList<quint32> &want) const
+{
+    ResolvedCue rc;
+    if (!resolvedCue(cueId, &rc))
+        return want;
+    // The layer, then its child layers (and theirs), by target.
+    QList<Target> targets;
+    for (const ResolvedLayer &rl : rc.layers)
+        if (rl.layerId == m_soloLayer && rl.depth == 0)
+            targets << rl.target;
+    if (targets.isEmpty())
+        return want;        // not a layer of this cue (any more): the whole cue
+    for (bool more = true; more; )
+    {
+        more = false;
+        for (const ResolvedLayer &rl : rc.layers)
+            if (rl.depth > 0 && targets.contains(rl.parent) && !targets.contains(rl.target))
+            {
+                targets << rl.target;
+                more = true;
+            }
+    }
+    QSet<quint32> keep;
+    for (const Target &t : targets)
+    {
+        const quint32 sid = t.isOpaque() ? t.function : layerScene(cueId, t);
+        if (sid != Function::invalidId())
+            keep.insert(sid);
+    }
+    QList<quint32> out;
+    for (quint32 fid : want)
+        if (keep.contains(fid))
+            out << fid;
+    return out;
+}
+
 void ShowTreeController::stopPreview()
 {
     m_previewCue = invalidId();
@@ -6343,6 +6428,9 @@ void ShowTreeController::syncPreview()
             for (quint32 fid : coll->functions())
                 if (m_doc->function(fid) != nullptr && !want.contains(fid))
                     want << fid;
+        // Solo (walking the show): one layer of the cue.
+        if (m_soloLayer != invalidId() && m_soloCue == c->id)
+            want = soloFunctions(c->id, want);
         state = want.isEmpty() ? PreviewState::Dark : PreviewState::Playing;
     }
 

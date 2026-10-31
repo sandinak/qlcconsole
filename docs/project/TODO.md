@@ -41,9 +41,7 @@ Run tab's **Pad: Tools / Run / ARMED** button; docs/features/show-control.md
 `ShowControl::run(r, RoutePad)`. Open:
 - The full role (STRATEGY ROI row): a Hits page on the pad (fire the
   production's hits), and the focus confirm.
-- Q192's layer walk and edits from the pad (below) build on
-  `PadRun::actionFor()` / `handle()`; the walking map then replaces the
-  Run map while walking.
+- Q192's walk is built (MVP, below): Menu in the Run role.
 - A pad chord to switch roles without the laptop (today: the Run tab's
   button). decided: none yet, so a pad can't take the show by accident
   (can change).
@@ -354,36 +352,51 @@ Still open from it:
 - decided (can change): a lantern's glow at 45° doesn't pick it; its glass
   and cage do. A click on a ruler band picks nothing under it.
 
-## Walk the show from the stage with the controller (board Q192, answered 2026-10-30: build in 0.4)
+## Walk the show from the stage with the controller — MVP built, leftovers (board Q192, 0.4, walk, 2026-10-31)
 
-Design as asked (Q192): stand on stage and walk the cues, walk a cue's
-layers (solo or mixed), adjust what the pad can, tag cues that need more
-work. Built as an extension of Focus this cue (Q106/Q118), its own button
-map while walking: RT/LT next/previous cue; RB/LB next/previous layer
-(blinks, voice "Layer 2 of 4: Movers, Blue"); View toggles solo layer /
-whole cue; sticks, D-pad and A adjust and keep as Focus this cue does now,
-in its Layer/Group/Fixture scope; hold Y tags the cue "Needs work" (flag in
-the tree, a Needs work filter, an optional note typed or spoken on the
-laptop); Menu leaves. Plays live in Design; in Operate it follows the quiet
-Refine rules (Q130). Voice and light bar for feedback, no need to look at
-the laptop. Reuses Refine, the Layer/Group/Fixture scope cycle, the
-voice/light-bar feedback and the Show Tree's cue notes. Several days, opus.
+Built (docs/features/show-control.md "Walk the show from the stage";
+DONE.md 2026-10-31): in the pad's Run role, **Menu** starts Focus this cue
+(RefineSession) on the cue in hand with the walking map (`PadRun::
+walkActionFor()` / `handleWalk()`): RT/LT next/previous cue (Design:
+previewed, never a GO; a cue with nothing to walk is passed over); RB/LB
+next/previous layer, said "Layer 2 of 4: Movers." (at Group/Fixture scope
+the bumpers step those, as in Refine); View solo layer / whole cue
+(`ShowTreeController::setPreviewSolo()`); View + B undo; tap Y scope, hold Y
+tags the cue **Needs work** (`Cue::needsWork`, saved NeedsWork="1", one
+tree step; orange "needs work" flag in the tree with the note in its
+tooltip, a box on the cue page); Menu leaves. Sticks, D-pad, A/B/X are
+Refine's; every keep is one tree step. Operate: quiet Refine (Q130), only
+the running cue, RT/LT and solo refused. The laptop opens Focus This Cue
+when a walk starts; the Run tab's button says **Pad: Walk**.
 
-The pad's Run role is built (Pad Run MVP above): walking hooks in at
-`PadRun::handle()` with its own map while walking.
+Open:
+- **The light itself on A** (Branson, 2026-10-30): on a target-aimed
+  layer, the stick nudges the light's venue calibration (kept for the
+  show run, used by every cue, as venue focus does) instead of refusing,
+  with hold LB as the modifier for "this cue". Today the walk says the
+  layer is aimed at a target (Refine's rule); venue focus zeroes it.
+- **Level** from the pad (Refine has no intensity edit yet).
+- A **Needs work filter** in the Show Tree, and a column in the cue sheet
+  once the sheet (sheet) is on main.
+- The cue's note **typed or spoken** from the walk (today: on the cue
+  page).
+- PlayStation touchpad shortcuts (swipe = layer walk, tap = tag), never
+  the only way.
+- In Operate, following the running cue as GO moves it (today Refine goes
+  blind until it runs again).
+- "Layer 2 of 4: Movers, Blue": the layer's colour in the line.
+- decided (can change): Menu enters and leaves; View solos, so undo is
+  View + B; a tap of Y is still the scope and a hold (0.8 s) tags; solo is
+  Design only and plays the layer's scene as the cue bakes it (a light an
+  upper layer takes stays dark); stepping off a cue with a change not kept
+  (or Menu) is refused and said; the walk starts on the cue picked in the
+  tree (Design) or the running cue (Operate); no wrap at the list's ends.
+- Not verified with a real pad on the rig.
 
-Follow-up notes (chat 2026-10-30, for the 0.4 design):
-- Targets for layers are set as for any light (drop a Library > Target on
-  the layer: Aim palette or line aim); only target-aimed layers can be
-  checked against a point.
-- Separate **the light itself** (venue calibration offset, used by every
-  cue, saved in Show.venues.xml as venue focus does) from **this cue's look**
-  (Refine) on A; default: the light itself when aiming at a target, a
-  modifier for this cue.
-- One button map for Xbox and PlayStation (consistency, the course,
-  controller slots move pads between rooms); the PS touchpad only adds
-  shortcuts (swipe = layer walk, tap = tag), never the only way. The button
-  budget is solved by the walking map + hold LB as a modifier.
+Follow-up notes kept from the design (chat 2026-10-30): targets for layers
+are set as for any light (drop a Library > Target on the layer); one button
+map for Xbox and PlayStation, the touchpad only adds shortcuts; the button
+budget is the walking map + hold LB as a modifier.
 
 ## Focus calls and refining a cue from the stage (design, 2026-10-23)
 

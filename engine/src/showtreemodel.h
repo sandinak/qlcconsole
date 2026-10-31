@@ -329,6 +329,11 @@ namespace ShowTree
          *  like its number. Saved as Timecode=, which an older build
          *  ignores. */
         qint32 timecode = -1;
+        /** "Needs work" (Q192): tagged, usually from the stage while walking
+         *  the show with the pad, for more work later at the laptop. Only a
+         *  mark: nothing plays differently. This use's, like its number.
+         *  Saved as NeedsWork="1", which an older build ignores. */
+        bool needsWork = false;
 
         const Look *look(const QString &key) const;
         void setLook(const Look &look);

@@ -141,6 +141,8 @@ private slots:
     void textColoursInTheTreePagesAndWorkbench();
     /** Q38: Move in black per list (page, right-click, command) and per cue
      *  (page, right-click, nomib), the badges and the MIB button's tooltip. */
+    /** Needs work (Q192): the cue page's box, the row's flag and note. */
+    void needsWorkInTheTree();
     void moveInBlackPerListAndCueInTheTree();
     void cuesAtATimecodeAreSetOnTheCueAndListPages();
     /** A picture of a real show with cues skipped: QLC_SKIPCUE_SHOW (a

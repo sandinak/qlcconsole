@@ -7500,6 +7500,40 @@ void ShowTreeView_Test::cuesAtATimecodeAreSetOnTheCueAndListPages()
     QCOMPARE(st->cue(c[1])->timecode, 5000);
 }
 
+void ShowTreeView_Test::needsWorkInTheTree()
+{
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "Main");
+    const quint32 c0 = st->addCue(list, -1, "One");
+    const quint32 c1 = st->addCue(list, 0, "Two");
+    ShowTree::Cue noted = *st->cue(c1);
+    noted.note = "Movers too slow into the chorus";
+    QVERIFY(st->setCue(noted));
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1200, 700);
+    QTreeWidget *tree = view.tree();
+
+    // The cue page's Needs work: one undo step, flagged on the row with the note.
+    QVERIFY(view.selectNode(c1));
+    QCheckBox *nw = view.findChild<QCheckBox *>("stCueNeedsWork");
+    QVERIFY(nw != nullptr && nw->isVisibleTo(&view));
+    QVERIFY(!nw->isChecked());
+    nw->setChecked(true);
+    QVERIFY(st->isCueNeedsWork(c1));
+    QCOMPARE(st->undoText(), QString("Mark cue Needs work"));
+    tree->expandAll();
+    QVERIFY(cueRow(tree, c1)->text(ShowTreeView::FlagsCol).contains("needs work"));
+    QVERIFY(cueRow(tree, c1)->toolTip(ShowTreeView::FlagsCol).contains("Movers too slow"));
+    QVERIFY(!cueRow(tree, c0)->text(ShowTreeView::FlagsCol).contains("needs work"));
+
+    // Set elsewhere (the pad): the page follows.
+    QVERIFY(st->setCuesNeedsWork({ c0 }, true));
+    QVERIFY(view.selectNode(c0));
+    QVERIFY(view.findChild<QCheckBox *>("stCueNeedsWork")->isChecked());
+    QVERIFY(st->undo());
+    QVERIFY(!st->isCueNeedsWork(c0));
+}
+
 void ShowTreeView_Test::moveInBlackPerListAndCueInTheTree()
 {
     FixtureGroup *towers = group("Towers", 0, 2);

@@ -221,6 +221,13 @@ skipped). Upstream fixes taken:
   armed and flashes blue with a short buzz on a GO. It is the same GO as
   ⌘↩, and the same buttons on an Xbox pad or a DualSense. See Show control
   ▸ GO from the game controller.
+- **Walk the show from the stage (0.4).** In the pad's Run role, Menu
+  walks the show: RT / LT step the cues (previewed in Design, never a GO),
+  RB / LB step a cue's layers, View solos the layer or plays the whole
+  cue, the sticks and D-pad adjust as Focus this cue does (each keep one
+  undo step; View + B undoes), and holding Y tags the cue **Needs work**.
+  The tag shows in the Show Tree, with a box on the cue's page, and is
+  saved with the show. See Show control ▸ Walk the show from the stage.
 - **Rig Overview owner filter**: an **Owner** box in the footer shows All
   fixtures, **House only** or **Ours only** (tour and rental), to see what
   the room gives against what travels. It hides drawing only.

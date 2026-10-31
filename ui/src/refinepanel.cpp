@@ -113,6 +113,13 @@ RefinePanel *RefinePanel::openScene(Doc *doc, QWidget *parent, const QList<quint
     return showPanel(doc, parent);
 }
 
+RefinePanel *RefinePanel::showRunning(Doc *doc, QWidget *parent)
+{
+    if (doc == nullptr || !doc->programmer()->refineSession()->isActive())
+        return nullptr;
+    return showPanel(doc, parent);
+}
+
 RefinePanel *RefinePanel::showPanel(Doc *doc, QWidget *parent)
 {
     if (s_instance != nullptr)

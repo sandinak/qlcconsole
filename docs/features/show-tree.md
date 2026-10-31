@@ -1128,6 +1128,24 @@ plays.
 - **Saved with the show.** An older build opens the show as it was, without
   the colours.
 
+### Needs work
+
+A cue can be tagged **Needs work**: a reminder that it needs more work
+later at the laptop. It is only a mark. Nothing plays differently.
+
+- **From the stage.** While [walking the show](show-control.md#walk-the-show-from-the-stage)
+  with the controller, hold **Y** (Triangle) to tag the cue you're on.
+  Hold it again to clear the tag.
+- **On the laptop.** Tick **Needs work** on the cue's page.
+- **Where it shows.** The cue's row says **needs work** in orange among
+  its flags. Its tooltip shows the cue's note, so write what needs doing
+  there. A walk that reaches the cue says "Needs work" too.
+- **Undo.** Each tag is one undo step.
+- **Saved with the show.** An older build opens the show as it was,
+  without the tag.
+
+Not yet: a filter that shows only the tagged cues.
+
 ### Changing a tracked value
 
 A grey value came from an earlier cue. On its row, **⋯** offers two

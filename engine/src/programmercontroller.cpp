@@ -2617,6 +2617,14 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
             m_focusSession->toggleDead();
         return true;
     }
+    /* Walking the show (Q192): View solos, so View + B is the undo. */
+    if (refine && role == GamepadRole::B && value > 0 && m_heldRoles.contains(GamepadRole::Back)
+        && m_padRun->isWalking())
+    {
+        m_viewChord = true;
+        m_refineSession->apply(ControllerScheme::Undo);
+        return true;
+    }
     /* A and B held (Q126): the press does its own thing below; held to
        holdFor(), save all / back to the last save (heldTick()). */
     if (role == GamepadRole::A)
@@ -2651,7 +2659,10 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
             m_viewChord = false;
         else if (!m_viewChord)
         {
-            if (refine)
+            // Walking the show (Q192): View solos the layer; View + B undoes.
+            if (refine && m_padRun->isWalking())
+                m_padRun->setSolo(!m_padRun->isSolo());
+            else if (refine)
                 m_refineSession->apply(ControllerScheme::Undo);
             else
                 m_focusSession->apply(FocusSession::UndoSave);
@@ -2690,6 +2701,10 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
     // Refine: the same controller on the cue's own values (ControllerScheme).
     if (refine)
     {
+        /* Walking the show (Q192): its own map for the triggers (cues),
+           the bumpers (layers), Y (scope / hold: tag) and Menu (stop). */
+        if (m_padRun->handleWalk(role, value))
+            return true;
         if (isPan || role == GamepadRole::LeftX)
             m_panNorm = norm;
         else if (isTilt || role == GamepadRole::LeftY)
@@ -2785,6 +2800,7 @@ void ProgrammerController::applyDesignJoystick()
         if (m_sayHold.due(dt))
             cycleOperatorFeedback();
         heldTick(dt);
+        m_padRun->walkTick(dt);     // walking: Y held tags the cue
         applyTouch();
         m_refineSession->tick(dt);
         return;

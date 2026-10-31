@@ -34,19 +34,159 @@
 #include "chaser.h"
 #include "qlcfile.h"
 #include "doc.h"
+#include "refinesession.h"
+#include "showtreemodel.h"
+#include "qlcfixturedef.h"
+#include "qlcfixturemode.h"
+#include "qlcfixturehead.h"
+#include "qlcphysical.h"
+#include "qlcchannel.h"
+#include "qlcpalette.h"
+#include "fixture.h"
 
 namespace
 {
 /* An Xbox pad as its profile describes it: axes, then buttons. */
 const quint32 kLT = 4, kRT = 5, kA = 10, kB = 11, kX = 12, kY = 13, kLB = 14, kRB = 15,
-              kView = 16, kMenu = 17, kRS = 19;
+              kView = 16, kMenu = 17, kRS = 19, kUp = 20;
 
 QMap<quint32, QString> xboxRoles()
 {
     return { { 0, "lx" }, { 1, "ly" }, { 2, "rx" }, { 3, "ry" }, { kLT, "lt" }, { kRT, "rt" },
              { kA, "a" }, { kB, "b" }, { kX, "x" }, { kY, "y" }, { kLB, "lb" }, { kRB, "rb" },
-             { kView, "back" }, { kMenu, "start" }, { kRS, "rs" } };
+             { kView, "back" }, { kMenu, "start" }, { kRS, "rs" }, { kUp, "dpad_up" } };
 }
+
+/* A spot: pan, pan fine, tilt, tilt fine, dimmer, zoom (10-40 degrees). */
+Fixture *makeSpot(Doc *doc, const QString &name)
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test"); def->setModel("Walk Spot " + name);
+    def->setType(QLCFixtureDef::MovingHead);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("6ch");
+    struct Ch { const char *name; QLCChannel::Group group; QLCChannel::ControlByte byte; QLCChannel::Preset preset; };
+    const Ch chans[6] = {
+        { "Pan", QLCChannel::Pan, QLCChannel::MSB, QLCChannel::Custom },
+        { "Pan fine", QLCChannel::Pan, QLCChannel::LSB, QLCChannel::Custom },
+        { "Tilt", QLCChannel::Tilt, QLCChannel::MSB, QLCChannel::Custom },
+        { "Tilt fine", QLCChannel::Tilt, QLCChannel::LSB, QLCChannel::Custom },
+        { "Dimmer", QLCChannel::Intensity, QLCChannel::MSB, QLCChannel::Custom },
+        { "Zoom", QLCChannel::Beam, QLCChannel::MSB, QLCChannel::BeamZoomSmallBig },
+    };
+    QLCFixtureHead head;
+    for (int k = 0; k < 6; ++k)
+    {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(chans[k].name);
+        ch->setGroup(chans[k].group);
+        ch->setControlByte(chans[k].byte);
+        if (chans[k].preset != QLCChannel::Custom)
+            ch->setPreset(chans[k].preset);
+        def->addChannel(ch);
+        mode->insertChannel(ch, k);
+        head.addChannel(k);
+    }
+    QLCPhysical ph;
+    ph.setFocusPanMax(540);
+    ph.setFocusTiltMax(270);
+    ph.setLensDegreesMin(10.0);
+    ph.setLensDegreesMax(40.0);
+    mode->setPhysical(ph);
+    mode->insertHead(-1, head);
+    def->addMode(mode);
+    Fixture *fxi = new Fixture(doc);
+    fxi->setName(name);
+    fxi->setFixtureDefinition(def, mode);
+    fxi->setUniverse(0);
+    fxi->setAddress(quint32(doc->fixtures().size() * 6));
+    doc->addFixture(fxi);
+    return fxi;
+}
+
+ShowTree::Look lookOf(const QString &key, quint32 palette)
+{
+    ShowTree::Look l;
+    l.key = key;
+    l.palettes = { palette };
+    return l;
+}
+
+QByteArray showXml(Doc *doc)
+{
+    QByteArray xml;
+    QBuffer buffer(&xml);
+    buffer.open(QIODevice::WriteOnly);
+    QXmlStreamWriter w(&buffer);
+    w.writeStartDocument();
+    doc->saveXML(&w);
+    w.writeEndDocument();
+    return xml;
+}
+}
+
+void PadRun_Test::makeShow()
+{
+    m_fronts.clear();
+    m_backs.clear();
+    for (int i = 0; i < 2; ++i)
+        m_fronts << makeSpot(m_doc, QString("Front %1").arg(i + 1))->id();
+    for (int i = 0; i < 2; ++i)
+        m_backs << makeSpot(m_doc, QString("Back %1").arg(i + 1))->id();
+    QLCPalette *full = new QLCPalette(QLCPalette::Dimmer);
+    full->setName("Full");
+    full->setValue(255);
+    m_doc->addPalette(full);
+
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("Spring");
+    m_list = st->addCueList(prod, "Main", ShowTree::ListMode::NonTracking);
+    m_cue1 = st->addCue(m_list, -1, "Opening");
+    m_empty = st->addCue(m_list, 0, "Blackout");      // nothing to walk
+    m_cue2 = st->addCue(m_list, 1, "Ballad");
+    m_frontTarget = ShowTree::Target();
+    m_frontTarget.fixtures = m_fronts;
+    m_backTarget = ShowTree::Target();
+    m_backTarget.fixtures = m_backs;
+    for (quint32 cue : { m_cue1, m_cue2 })
+    {
+        const quint32 front = st->addLayer(cue, m_frontTarget, "Fronts");
+        const quint32 back = st->addLayer(cue, m_backTarget, "Backs");
+        QVERIFY(st->setLayerLook(cue, front, lookOf(ShowTree::KeyDimmer, full->id())));
+        QVERIFY(st->setLayerLook(cue, back, lookOf(ShowTree::KeyDimmer, full->id())));
+        if (cue == m_cue1)
+        {
+            m_layer1 = front;
+            m_layer2 = back;
+        }
+    }
+    m_doc->programmer()->refineSession()->setFlashEnabled(false);
+    st->pickCue(m_cue1);
+}
+
+void PadRun_Test::walkMapByRole()
+{
+    QCOMPARE(PadRun::walkActionFor(GamepadRole::RightTrigger), PadRun::NextCue);
+    QCOMPARE(PadRun::walkActionFor(GamepadRole::LeftTrigger), PadRun::PreviousCue);
+    QCOMPARE(PadRun::walkActionFor(GamepadRole::RB), PadRun::NextLayer);
+    QCOMPARE(PadRun::walkActionFor(GamepadRole::LB), PadRun::PreviousLayer);
+    QCOMPARE(PadRun::walkActionFor(GamepadRole::Back), PadRun::Solo);
+    QCOMPARE(PadRun::walkActionFor(GamepadRole::Y), PadRun::TagCue);
+    QCOMPARE(PadRun::walkActionFor(GamepadRole::Start), PadRun::LeaveWalk);
+    // The adjusting controls stay Focus this cue's.
+    QCOMPARE(PadRun::walkActionFor(GamepadRole::A), PadRun::WalkNoAction);
+    QCOMPARE(PadRun::walkActionFor(GamepadRole::DpadUp), PadRun::WalkNoAction);
+    for (PadRun::WalkAction a : PadRun::walkActions())
+    {
+        QCOMPARE(PadRun::walkActionFor(PadRun::roleFor(a)), a);
+        QVERIFY(!PadRun::label(a).isEmpty());
+    }
+    // One map for both pads, in each pad's words.
+    const QStringList xbox = PadRun::walkMapLines(PadNames::Xbox);
+    const QStringList ps = PadRun::walkMapLines(PadNames::DualSense);
+    QCOMPARE(xbox.size(), PadRun::walkActions().size() + 1);
+    QCOMPARE(xbox.at(0).left(3), QString("RT:"));
+    QCOMPARE(ps.at(0).left(3), QString("R2:"));
 }
 
 void PadRun_Test::init()
@@ -102,7 +242,8 @@ void PadRun_Test::theMapByRole()
     QCOMPARE(PadRun::actionFor(GamepadRole::LeftTrigger), PadRun::PreviousList);
     QCOMPARE(PadRun::actionFor(GamepadRole::RS), PadRun::WhereAmI);
     QCOMPARE(PadRun::actionFor(GamepadRole::LeftX), PadRun::NoAction);
-    QCOMPARE(PadRun::actionFor(GamepadRole::Start), PadRun::NoAction);
+    QCOMPARE(PadRun::actionFor(GamepadRole::Start), PadRun::Walk);
+    QVERIFY(!PadRun::needsArm(PadRun::Walk));
     for (PadRun::Action a : PadRun::actions())
     {
         QCOMPARE(PadRun::actionFor(PadRun::roleFor(a)), a);
@@ -391,6 +532,309 @@ void PadRun_Test::aLostPadDisarms()
     QVERIFY(!pc->padRun()->isArmed());
     press(kA);
     QVERIFY(m_runs.isEmpty());
+}
+
+void PadRun_Test::menuStartsAndStopsTheWalk()
+{
+    IOPluginStub *stub = loadStub();
+    QVERIFY2(stub != nullptr, "no I/O plugin stub in ../iopluginstub");
+    QVERIFY(m_doc->inputOutputMap()->setInputPatch(0, stub->name(), QString(), 0));
+    makeShow();
+    ProgrammerController *pc = m_doc->programmer();
+    PadRun *run = pc->padRun();
+    RefineSession *r = pc->refineSession();
+    QSignalSpy said(pc, &ProgrammerController::operatorAnnounce);
+    QSignalSpy walking(run, &PadRun::walkingChanged);
+
+    // Menu does nothing in the Tools role.
+    press(kMenu);
+    QVERIFY(!run->isWalking());
+    run->setEnabled(true);
+    // In Run: the cue in hand, the one picked in the tree.
+    QCOMPARE(run->cueInHand(), m_cue1);
+    press(kMenu);
+    QVERIFY(run->isWalking());
+    QVERIFY(r->isActive());
+    QVERIFY(r->isWalking());
+    QCOMPARE(run->walkCue(), m_cue1);
+    QCOMPARE(walking.count(), 1);
+    QCOMPARE(r->currentLayer(), m_layer1);
+    // Said with its place among the layers.
+    QVERIFY(r->wherePhrase().startsWith("Layer 1 of 2: Fronts"));
+    // Walking has no GO: LB + A keeps, it sends nothing to run().
+    hold(kLB, true);
+    press(kA);
+    hold(kLB, false);
+    QVERIFY(m_runs.isEmpty());
+    QVERIFY(!run->isArmed());
+
+    // Menu again: the walk ends, the Run map is back.
+    said.clear();
+    press(kMenu);
+    QVERIFY(!run->isWalking());
+    QVERIFY(!r->isActive());
+    QVERIFY(!r->isWalking());
+    QCOMPARE(walking.count(), 2);
+    QVERIFY(said.count() > 0);
+    QVERIFY(said.last().at(0).toString().contains("Walk off"));
+    hold(kLB, true);
+    press(kA);
+    hold(kLB, false);
+    QCOMPARE(m_runs.size(), 1);
+
+    // Ended from the laptop (Focus this cue closed): the walk ends too.
+    QVERIFY(run->startWalk());
+    r->stop();
+    QVERIFY(!run->isWalking());
+
+    // Operate: the cue its list runs; with none running, refused and said.
+    m_doc->setMode(Doc::Operate);
+    QString why;
+    QVERIFY(!run->startWalk(0xFFFFFFFF, &why));
+    QVERIFY(why.contains("GO first"));
+    m_doc->setMode(Doc::Design);
+}
+
+void PadRun_Test::theTriggersWalkTheCuesWithoutGo()
+{
+    IOPluginStub *stub = loadStub();
+    QVERIFY(stub != nullptr);
+    QVERIFY(m_doc->inputOutputMap()->setInputPatch(0, stub->name(), QString(), 0));
+    makeShow();
+    ProgrammerController *pc = m_doc->programmer();
+    PadRun *run = pc->padRun();
+    RefineSession *r = pc->refineSession();
+    ShowTreeController *st = m_doc->showTree();
+    run->setEnabled(true);
+    press(kMenu);
+    QCOMPARE(run->walkCue(), m_cue1);
+    QSignalSpy said(pc, &ProgrammerController::operatorAnnounce);
+
+    // RT: the next cue it can walk (Blackout has no layer: passed over),
+    // previewed in Design -- never a GO.
+    press(kRT);
+    QVERIFY(run->isWalking());
+    QCOMPARE(run->walkCue(), m_cue2);
+    QCOMPARE(st->previewedCue(), m_cue2);
+    QVERIFY(m_runs.isEmpty());
+    // The last cue: it stays, and says so.
+    said.clear();
+    press(kRT);
+    QCOMPARE(run->walkCue(), m_cue2);
+    QVERIFY(said.count() > 0 && said.last().at(0).toString().contains("Last cue"));
+    // LT: back.
+    press(kLT);
+    QCOMPARE(run->walkCue(), m_cue1);
+    QVERIFY(m_runs.isEmpty());
+
+    // A change not kept: the step is refused, and the change stays.
+    QVERIFY(r->nudgeZoom(-5.0f));
+    press(kRT);
+    QCOMPARE(run->walkCue(), m_cue1);
+    QVERIFY(r->hasPending());
+    // ... and Menu does not throw it away either.
+    press(kMenu);
+    QVERIFY(run->isWalking());
+    r->revert();
+
+    // Operate: the cue moves with GO only (quiet Refine).
+    m_doc->setMode(Doc::Operate);
+    QVERIFY(!run->stepCue(1));
+    m_doc->setMode(Doc::Design);
+    run->stopWalk();
+}
+
+void PadRun_Test::theBumpersWalkTheLayers()
+{
+    IOPluginStub *stub = loadStub();
+    QVERIFY(stub != nullptr);
+    QVERIFY(m_doc->inputOutputMap()->setInputPatch(0, stub->name(), QString(), 0));
+    makeShow();
+    ProgrammerController *pc = m_doc->programmer();
+    PadRun *run = pc->padRun();
+    RefineSession *r = pc->refineSession();
+    run->setEnabled(true);
+    press(kMenu);
+    QSignalSpy said(pc, &ProgrammerController::operatorAnnounce);
+
+    press(kRB);
+    QCOMPARE(r->currentLayer(), m_layer2);
+    QVERIFY(said.count() > 0);
+    QCOMPARE(said.last().at(0).toString(), QString("Layer 2 of 2: Backs."));
+    press(kRB);
+    QCOMPARE(r->currentLayer(), m_layer1);      // wraps
+    press(kLB);
+    QCOMPARE(r->currentLayer(), m_layer2);
+
+    // A tap of Y: the scope (Fixture: one group only); the bumpers then
+    // step the fixtures, as in Focus this cue.
+    press(kY);
+    QCOMPARE(r->scope(), RefineSession::FixtureScope);
+    QCOMPARE(r->currentFixture(), m_backs.at(0));
+    press(kRB);
+    QCOMPARE(r->currentFixture(), m_backs.at(1));
+    QCOMPARE(r->currentLayer(), m_layer2);
+    QVERIFY(!m_doc->showTree()->isCueNeedsWork(m_cue1));   // a tap is not the tag
+    press(kY);
+    QCOMPARE(r->scope(), RefineSession::LayerScope);
+    run->stopWalk();
+}
+
+void PadRun_Test::soloAndMixedOutput()
+{
+    IOPluginStub *stub = loadStub();
+    QVERIFY(stub != nullptr);
+    QVERIFY(m_doc->inputOutputMap()->setInputPatch(0, stub->name(), QString(), 0));
+    makeShow();
+    ProgrammerController *pc = m_doc->programmer();
+    PadRun *run = pc->padRun();
+    ShowTreeController *st = m_doc->showTree();
+    run->setEnabled(true);
+    press(kMenu);
+
+    const quint32 frontScene = st->layerScene(m_cue1, m_frontTarget);
+    const quint32 backScene = st->layerScene(m_cue1, m_backTarget);
+    QVERIFY(frontScene != Function::invalidId() && backScene != Function::invalidId());
+    QVERIFY(frontScene != backScene);
+    // Mixed: the whole cue plays.
+    QVERIFY(st->previewFunctions().contains(frontScene));
+    QVERIFY(st->previewFunctions().contains(backScene));
+
+    // View: solo -- only the layer walked.
+    press(kView);
+    QVERIFY(run->isSolo());
+    QCOMPARE(st->previewSoloLayer(), m_layer1);
+    QCOMPARE(st->previewFunctions(), QList<quint32>({ frontScene }));
+    // The solo follows the layer.
+    press(kRB);
+    QCOMPARE(st->previewFunctions(), QList<quint32>({ backScene }));
+    // ... and the cue.
+    press(kRT);
+    QCOMPARE(run->walkCue(), m_cue2);
+    QCOMPARE(st->previewFunctions(), QList<quint32>({ st->layerScene(m_cue2, m_frontTarget) }));
+    press(kLT);
+
+    // View again: the whole cue.
+    press(kView);
+    QVERIFY(!run->isSolo());
+    QCOMPARE(st->previewSoloLayer(), ShowTree::invalidId());
+    QVERIFY(st->previewFunctions().contains(frontScene));
+    QVERIFY(st->previewFunctions().contains(backScene));
+
+    // Leaving the walk soloed puts the whole cue back.
+    press(kView);
+    QVERIFY(run->isSolo());
+    press(kMenu);
+    QVERIFY(!run->isSolo());
+    QCOMPARE(st->previewSoloLayer(), ShowTree::invalidId());
+
+    // Operate: nothing goes dark under a running show.
+    QVERIFY(run->startWalk(m_cue1));
+    m_doc->setMode(Doc::Operate);
+    if (run->isWalking())
+        QVERIFY(!run->setSolo(true));
+    m_doc->setMode(Doc::Design);
+}
+
+void PadRun_Test::anAdjustUndoes()
+{
+    IOPluginStub *stub = loadStub();
+    QVERIFY(stub != nullptr);
+    QVERIFY(m_doc->inputOutputMap()->setInputPatch(0, stub->name(), QString(), 0));
+    makeShow();
+    ProgrammerController *pc = m_doc->programmer();
+    PadRun *run = pc->padRun();
+    RefineSession *r = pc->refineSession();
+    ShowTreeController *st = m_doc->showTree();
+    run->setEnabled(true);
+    press(kMenu);
+    const QList<ShowTree::Look> before = st->cue(m_cue1)->layer(m_layer1)->looks;
+
+    // D-pad up: zoom in, pending on the rig; A keeps it in the cue.
+    press(kUp);
+    QVERIFY(r->hasPending());
+    press(kA);
+    QVERIFY(!r->hasPending());
+    QVERIFY(st->cue(m_cue1)->layer(m_layer1)->looks != before);
+
+    // View + B: one undo step takes it back (View alone would solo).
+    hold(kView, true);
+    press(kB);
+    hold(kView, false);
+    QCOMPARE(st->cue(m_cue1)->layer(m_layer1)->looks, before);
+    QVERIFY(!run->isSolo());
+    QVERIFY(run->isWalking());
+    run->stopWalk();
+}
+
+void PadRun_Test::holdYTagsTheCue()
+{
+    IOPluginStub *stub = loadStub();
+    QVERIFY(stub != nullptr);
+    QVERIFY(m_doc->inputOutputMap()->setInputPatch(0, stub->name(), QString(), 0));
+    makeShow();
+    ProgrammerController *pc = m_doc->programmer();
+    PadRun *run = pc->padRun();
+    RefineSession *r = pc->refineSession();
+    ShowTreeController *st = m_doc->showTree();
+    run->setEnabled(true);
+    press(kMenu);
+    QSignalSpy rumble(pc, &ProgrammerController::padRumbled);
+    QSignalSpy said(pc, &ProgrammerController::operatorAnnounce);
+
+    // Held: the tag, and no scope change on the release.
+    hold(kY, true);
+    run->walkTick(PadRun::tagHoldSeconds() / 2);
+    QVERIFY(!st->isCueNeedsWork(m_cue1));
+    run->walkTick(PadRun::tagHoldSeconds());
+    QVERIFY(st->isCueNeedsWork(m_cue1));
+    hold(kY, false);
+    QCOMPARE(r->scope(), RefineSession::LayerScope);
+    QVERIFY(rumble.count() > 0);
+    QVERIFY(said.last().at(0).toString().contains("needs work"));
+    QCOMPARE(st->needsWorkCues(), QList<quint32>({ m_cue1 }));
+
+    // A tagged cue says so when the walk comes to it.
+    press(kRT);
+    press(kLT);
+    QVERIFY(said.last().at(0).toString().contains("Needs work"));
+
+    // The tag is a tree step: View + B takes it back.
+    hold(kView, true);
+    press(kB);
+    hold(kView, false);
+    QVERIFY(!st->isCueNeedsWork(m_cue1));
+
+    // Held again, twice: on, then off.
+    QVERIFY(run->toggleNeedsWork());
+    QVERIFY(st->isCueNeedsWork(m_cue1));
+    QVERIFY(run->toggleNeedsWork());
+    QVERIFY(!st->isCueNeedsWork(m_cue1));
+    run->stopWalk();
+}
+
+void PadRun_Test::theTagSavesAndLoads()
+{
+    makeShow();
+    ShowTreeController *st = m_doc->showTree();
+    QVERIFY(st->setCuesNeedsWork({ m_cue2 }, true));
+    QVERIFY(!st->setCuesNeedsWork({ m_cue2 }, true));      // nothing changed
+    QCOMPARE(st->needsWorkCues(), QList<quint32>({ m_cue2 }));
+    const QByteArray xml = showXml(m_doc);
+    QVERIFY(xml.contains("NeedsWork=\"1\""));
+
+    Doc *other = new Doc(this);
+    QXmlStreamReader sr(xml);
+    sr.readNextStartElement();
+    QVERIFY(other->loadXML(sr, false));
+    QVERIFY(other->showTree()->isCueNeedsWork(m_cue2));
+    QVERIFY(!other->showTree()->isCueNeedsWork(m_cue1));
+    QCOMPARE(other->showTree()->needsWorkCues(), QList<quint32>({ m_cue2 }));
+    delete other;
+
+    // Cleared, it is not written at all (an older build sees nothing new).
+    QVERIFY(st->setCuesNeedsWork({ m_cue2 }, false));
+    QVERIFY(!showXml(m_doc).contains("NeedsWork"));
 }
 
 QTEST_MAIN(PadRun_Test)

@@ -262,6 +262,11 @@ public:
     void setFlashEnabled(bool on) { m_flashEnabled = on; }
     /** How much the voice says (ProgrammerController sets it for every tool). */
     void setVoiceDetail(ControllerScheme::VoiceDetail detail) { m_voiceDetail = detail; }
+    /** Walking the show from the pad (Q192, PadRun): a layer is said with
+     *  its place -- "Layer 2 of 4: Movers." -- and a start with the cue's
+     *  name and its Needs work mark, as the operator walks cue to cue. */
+    void setWalking(bool on) { m_walking = on; }
+    bool isWalking() const { return m_walking; }
     /** What its lines call the controls (board Q170): "A" or "Cross". */
     void setPadFamily(PadNames::Family family) { m_padFamily = family; }
     PadNames::Family padFamily() const { return m_padFamily; }
@@ -409,6 +414,7 @@ private:
     ControllerScheme::VoiceDetail m_voiceDetail = ControllerScheme::StandardVoice;
     PadNames::Family m_padFamily = PadNames::Xbox;
     bool m_flashEnabled = true;
+    bool m_walking = false;
     bool m_holding = false;
     bool m_warnFlash = false;
     std::function<quint32(quint32)> m_runningProbe;
