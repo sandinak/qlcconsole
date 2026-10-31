@@ -43,9 +43,11 @@ first note to the button.
    Child layers or group sets (2.3), a line (2.5) and sub-cues (2.7)
    score higher where the song calls for them. Save as
    `Level2-check-group.qlcc`.
-5. **Run it live** while the song plays, one of you calling as SM and
+5. **Review it** (the footer's **Review** chip): every blocker and warning
+   fixed, or accepted with a note saying why it's on purpose.
+6. **Run it live** while the song plays, one of you calling as SM and
    another on the board, with a hit fired at least once.
-6. **A two-minute talk:** what you wanted the audience to feel, and how
+7. **A two-minute talk:** what you wanted the audience to feel, and how
    the light did it, cue by cue for the big moments.
 
 ## Rubric
@@ -69,6 +71,12 @@ gets specific notes on what to work on, then runs it again.
   The tree shows tracking at a glance: **B** and **C** in the **M**
   column, **R** counts, grey rows; the Library shows the song folder;
   **Hits** shows **VC ×1** where a button fires a hit.
+- **Show Review does the first pass:** `qlcconsole --review
+  Level2-check-group.qlcc` lists what is open (exit 0 when nothing is
+  open at warning or above), and `--include-accepted` shows each
+  acceptance with the group's note: their reasoning, to mark. A whole
+  folder: `for f in *.qlcc; do qlcconsole --review "$f"; done`
+  ([Show Review](https://github.com/sandinak/qlcconsole/blob/main/docs/features/show-review.md)).
 - **Common problems:** a colour from the verse still on in the bridge
   (tracking: ask where it's released); an effect on the front light
   (eye candy over faces); hits named "Hit 1" (ask what each is for).

@@ -1,0 +1,175 @@
+# Show Review
+
+Show Review reads the show and lists what is likely wrong with its
+**design**, each with the place to fix it: two fixtures on the same
+channels, a missing fixture definition, a special from one song still up
+three songs later, two hits fighting over the same lights, a cue that
+strobes faster than 3 times a second, a sound file outside the show's
+folder. It is the audit a programmer runs before tech, and the checklist a
+student runs before handing a show in.
+
+It looks only at what is **saved in the show**, so a finding is true on any
+computer that opens it. What is true only now, on this computer (a
+controller asleep, an Art-Net node not answering, Blackout on) stays in the
+footer's readiness list.
+
+## The Review chip and the panel
+
+The footer has a **Review** chip beside the readiness chip:
+
+- **Review · 2 ⛔ 5 ⚠**: 2 blockers and 5 warnings are open (red with a
+  blocker, amber with only warnings). Notes are not counted on the chip.
+- **Reviewed** (grey): nothing open at warning or above.
+
+Show Review checks the show again a couple of seconds after you change it,
+in Design. Click the chip to open the **Show Review** panel. The **Show
+readiness** dialog (click the readiness chip) also has a **Show Review…**
+button.
+
+The panel lists findings by severity:
+
+| Severity | Means |
+|---|---|
+| ⛔ **Blocker** | The show will do something wrong or unsafe, or won't open or play elsewhere. Fix it before the show runs. |
+| ⚠ **Warning** | Probably wrong. Often fine once someone has decided. |
+| **Note** | Tidy-up and paperwork. Never blocks anything. |
+
+Each row shows its check's id (PAT-01, CUE-07...) and what it found, in the
+show's own names. Hover a row for **why it matters**. Show **Open**,
+**Accepted** or **All**, and type in **Search** to narrow the list.
+**Re-check** runs every check again.
+
+- **Fix ▸** (or double-click) goes to the place to fix it: the cue in the
+  Show Tree, the function, the Patch dialog on the fixtures, Connections on
+  the universe, the Lighting Studio.
+- **Accept…** says the finding is on purpose. Write a note (it is required)
+  and your name. See [Accepting a finding](#accepting-a-finding).
+- **Reopen** takes an acceptance back.
+- **Why?** opens the check's paragraph.
+- **Turn Check Off…** turns a check off for this show, with a note ("No
+  moving heads in this rig").
+
+## Accepting a finding
+
+Every finding ends one of two ways: you **fix** the show, or you **accept**
+it with a note. There is no "ignore": an acceptance is saved **with the
+show** (who, when and why), so the next person to open it reads the
+decision, not a fresh warning.
+
+An acceptance is tied to what the check looked at. When that changes (the
+fixture moves, the cue's strobe gets faster), the finding comes back
+marked **↺ Changed since accepted**, with the old note, because the decision
+was about something that is no longer there. A change elsewhere in the show
+doesn't reopen it. When the thing it was about is deleted, the acceptance is
+dropped at the next save.
+
+Your name comes from the Accept dialog; it remembers the last one typed on
+this computer and starts from your account name.
+
+An accepted blocker still counts in the summary as accepted ("0 blockers
+open · 1 accepted").
+
+## What it checks
+
+The checks built so far, by area. The full catalog, and what comes next, is
+in the design (docs/design/SHOW_REVIEW.md in the source).
+
+**Patch and outputs**
+
+- **PAT-01** Two fixtures on the same channels (blocker).
+- **PAT-02** A fixture running past channel 512 (blocker).
+- **PAT-03** Unpatched fixtures: a warning when cues or scenes light them, a
+  note when they only wait in the inventory.
+- **PAT-04** A fixture on channels the venue keeps (not ours) (blocker).
+- **PAT-06** A universe with fixtures and no output (a note when the show
+  patches no output at all: it only previews).
+
+**Fixtures and definitions**
+
+- **FIX-01** Missing fixture definition: the fixture stands in as a dimmer
+  (blocker).
+- **FIX-05** Not on the plot: a warning when a focus call needs to aim it.
+  Only asked of a show that uses the plot.
+- **FIX-07** A definition with no lumens or power.
+- **FIX-14** Two fixtures with one name.
+
+**Palettes and looks**
+
+- **PAL-01** Two layers of a cue set the same attribute on one fixture,
+  differently: the lower one wins, so the order decides the look.
+- **PAL-02** A look that never shows (what Build's ⚠ badge says).
+- **PAL-03** A palette its fixtures can't play: colour on lights with no
+  colour, a gobo on lights with no wheel.
+- **PAL-05** A cue, scene or palette pointing at a palette, group, fixture
+  or stage target that was deleted, or a group now empty.
+
+**Tracking and cues** (the Show Tree)
+
+- **CUE-01** A value from one song still on in a later song. Songs are the
+  song sections of the production's numbering scheme
+  ([Reordering and numbering](show-tree.md#reordering-and-numbering)).
+- **CUE-02** The first cue of a song tracks in from the song before: make it
+  a Block cue.
+- **CUE-04** An empty cue (fine in a Block cue called a blackout).
+- **CUE-05** An auto-follow with no fade and no hold: the cue is never seen.
+- **CUE-06** Two cues with one number in a list.
+- **CUE-07** Skipped cues left skipped, worst when it's the base cue or
+  another cue includes it.
+- **CUE-08** Released layers with no base cue (a note: they go dark), or a
+  base cue that is deleted, skipped or comes after.
+- **CUE-11** An include that would loop, or an include, reusable or sub-cue
+  list pointing at what was deleted.
+
+**Hits**
+
+- **VC-01** Two hits in the same place that set the same attribute on the
+  same lights: whichever was pressed last wins. Accept it when one button
+  steps through them.
+
+**Effects, power and safety**
+
+- **FX-07** An effect with no script, or whose script isn't on this
+  computer (blocker).
+- **PWR-01** A cue, hit or scene that can draw more than a circuit's breaker
+  (blocker) or over its derated limit (warning). Only once the power is set
+  up. A colour set by a palette counts as white, the most it can draw.
+- **PWR-03** Lights on no circuit, once the power is set up.
+- **PWR-05** Light flashing faster than 3 times a second (the
+  photosensitivity guidance): a warning for four lights or more at once, a
+  note for fewer. Accept it with a note that the strobe warning is posted.
+- **PWR-06** A stage light that ignores Blackout or the Grand Master.
+
+**Files and names**
+
+- **FILE-01** A sound or video outside the show's folder: it works on this
+  computer only. File ▸ Collect for Transfer copies it in.
+- **FILE-02** A sound or video that isn't there (blocker).
+- **NAME-01** A scene named off its folder's SS-PP.II-Description pattern.
+- **NAME-02** Default and copy names ("New Scene 4", "… (Copy)").
+
+The footer's design problems are the same problems: the Show readiness
+dialog shows their id ("PAT-01 · 1 fixture clashes with another's
+address"), and a design entry no check reads yet (definitions out of date,
+definitions only the show carries) is listed in the panel under its id.
+
+## From the command line
+
+`qlcconsole --review show.qlcc` reviews a show with no window: for CI, or a
+teacher checking a folder of hand-ins. It never writes the show, loads no
+plugins and sends nothing.
+
+```
+qlcconsole --review show.qlcc [--format text|json] [--min note|warning|blocker]
+           [--check PAT-01,CUE-*] [--include-accepted]
+```
+
+It exits **0** when nothing is open at or above `--min` (default: warning),
+**1** with open warnings, **2** with open blockers and **3** when the show
+couldn't be read. A folder of hand-ins:
+
+```
+for f in handins/*.qlcc; do qlcconsole --review "$f"; done
+```
+
+On macOS the program is inside the app:
+`/Applications/qlcconsole.app/Contents/MacOS/qlcconsole --review show.qlcc`.

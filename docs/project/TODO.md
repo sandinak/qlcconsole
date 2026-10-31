@@ -395,21 +395,61 @@ acceptance test in the design:
 Guardrails: separate `ai/` module behind `QLC_AI_ASSIST`; no AI code on
 MasterTimer/universe threads; an ROI line is in STRATEGY.md §3.3.
 
-## Show Review: an auditor for the show's design (post-0.3, asked 2026-10-25)
+## Show Review: an auditor for the show's design (0.5; v1 frame built, rev, 2026-10-31)
 
-Design in [docs/design/SHOW_REVIEW.md](../design/SHOW_REVIEW.md); nothing built, after
-the freeze. Reads the saved show (patch, plot, palettes, cues, hits, VC,
-venues, power, files) and lists design problems by severity (blocker /
-warning / note), each fixed or **accepted with a note saved in the show**
-(who, when, why; reopens when what it was about changes). Runtime problems
-stay in the footer; the footer's design-time items are folded in under
-catalog IDs. 120 checks in 12 groups (moves in light and sweeps, conflicting
-palettes, tracking across songs, hit collisions in a scope, venue clashes,
-not on the plot, unaimable focus lights, missing definitions, matrices too
-heavy for a Pi, circuit overload, strobe over 3 Hz, media outside the
-folder, naming); a v1 of 52. An engine registry runnable headless, a
-`qlcconsole --review show.qlcc` CLI for CI and the course, a Review panel
-and footer chip on top. Open questions in its section 8.
+Design in [docs/design/SHOW_REVIEW.md](../design/SHOW_REVIEW.md); help in
+docs/features/show-review.md. **Built (v1 frame):** the engine registry
+(`engine/src/showreview*.cpp`, headless; `Doc::showReview()`), findings with
+id, severity, crew-language message, stable target keys, a fingerprint and a
+Fix jump; **Accept with a note** saved with the show (`<ShowReview>`: who,
+when, why; reopens as *Changed since accepted* when what the check read
+changes; dropped at save when its subject is gone; a check turned off for the
+show); `qlcconsole --review show.qlcc` (text / JSON, `--min`, `--check`,
+`--include-accepted`; exit 0 / 1 warnings / 2 blockers / 3 unreadable; never
+writes the show, no plugins); the **Review** footer chip and panel (Fix,
+Accept…, Reopen, Why?, Turn Check Off…, Open/Accepted/All, search), also from
+the Show readiness dialog; the footer's design entries shown under their
+catalog id there and folded into the panel (FTR). 31 checks: PAT-01/02/03/04/06,
+FIX-01/05/07/14, FX-07, PWR-01/03/05/06, FILE-01/02, NAME-01/02,
+PAL-01/02/03/05, CUE-01/02/04/05/06/07/08/11, VC-01; each with a trip and a
+near-miss test (ShowReview_Test; a registry test fails a check with neither).
+A full run on DanceHysteria-0.6 is 140 ms (Debug).
+
+Decided (each can change):
+- Songs (Q1) are the production's numbering-scheme song sections (Q190); no
+  "song starts here" flag.
+- Who (Q3): the name typed in the Accept dialog, remembered on this computer,
+  starting from the account name; no new Settings item.
+- Blockers and Operate (Q4): no question in v1; the chip says it.
+- Hand In (Q5): the CLI only; the Level 2 check asks students to review.
+- Strobe (Q7): four lights or more over 3 Hz at once is a warning, fewer a note.
+- House zone (Q2) and Plays on (Q6): not needed yet (MOV-04/05, FX-01 not built).
+- The chip re-checks 2 s after an edit, in Design only, and stops doing so
+  after a run over 500 ms (the design had live review off by default).
+- No menu item and no shortcut (menu count flat; ⇧⌘R is the Rig Overview).
+- CUE-08 with no base cue is a note (releasing to dark is a way of working).
+- PWR-01 doesn't resolve colour palettes (most of a run's time on a big
+  show): an unresolved colour counts as white, the most it can draw.
+- VC-01: any two hits in one place can be on together (accept when a
+  button steps through them).
+- PAL-02 reads Build's scenes only; the tree's say it as PAL-01/03.
+- Accept is not an undo step yet.
+
+Leftovers of v1:
+- v1 checks not built: MOV-01, MOV-02, MOV-08, CUE-03, CUE-12, CUE-13,
+  PAT-05, FIX-02, FIX-08, VEN-01, VEN-02, VEN-05, VEN-09, VEN-10, FX-01
+  (with the Pi 5 cost table), FX-02, FX-03, FILE-03; and VC-03, VC-04, VC-05,
+  VC-06, VC-08, which need the VcIndex (VC facts from the live VC and from
+  the file, section 5.3).
+- Parts of built checks: CUE-01's "past N cues" rule; CUE-05's loop and
+  last-cue cases; CUE-06's gaps (notes); CUE-07's "jumped to" cases; PAL-01
+  against tracked layers; PWR-01 hits with the running list; PWR-05 chases
+  and matrices flashing under 333 ms; FILE-01 plot and scenery pictures.
+- Accept all like this; Accept as an undo step; one-click fixes; Review
+  before Operate and in Collect for Transfer; the chip hideable in
+  Settings ▸ Appearance; counts saved with the show for the chip on open.
+- The course and sample shows reviewed in the gate with expected results;
+  a timing test on the stress-test show (serial list).
 
 ## Focus mode: shutters on profiles (future, asked 2026-10-23)
 

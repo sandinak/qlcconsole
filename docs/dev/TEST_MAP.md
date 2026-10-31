@@ -796,6 +796,10 @@ its developer entry. Numbers: TEST_MATRIX.md, "Coverage".
 | M631 | Teaching mode | One PIN guards turning Teaching off and letting output through; the PIN can skip the Design lock | AppViews_Test::teachingModeIsGuardedByThePin; Teaching_Test::thePinCanSkipTheDesignLock | covered | covered | med | — |
 | M632 | Teaching mode | Operate: quiet notice and Not ready entry; the question only when output is let through and patched; never for -p | AppViews_Test::teachingOperateWarnsQuietlyThenAsksWhenItLooksReal | covered | covered | med | — |
 | M633 | Make Student Handout | A copy with Teaching and the PIN, practice venues and answer key left out, the open show untouched | AppViews_Test::aStudentHandoutIsACopy; FocusReport_Test::handoutLeavesOutThePractice; Teaching_Test::saveOverrideLeavesTheShowAlone | covered | covered | med | — |
+| M634 | Show Review | Each of the 31 checks trips on a tiny show and stays quiet on the near miss; a registry test fails a check with neither | ShowReview_Test (engine/test/showreview) | — | covered | high | the 23 v1 checks not built yet are in TODO |
+| M635 | Show Review | Accept with a note saved with the show; reopens as Changed when what it read changes, not otherwise; dropped at save when its subject is gone; unknown attributes kept; stable fingerprints | ShowReview_Test::acceptanceRoundTrip, acceptRules, xmlIsQuietAndKeepsTheUnknown, fingerprintsAreStable | — | covered | high | — |
+| M636 | Show Review | `qlcconsole --review`: exit codes, text and JSON, never writes the show | ShowReview_Test::cli | — | covered | med | — |
+| M637 | Show Review | Panel lists by severity, filters, Accept/Reopen, Fix runs the footer's fix or the app's jump; footer design entries fold in by id; the readiness dialog shows ids and opens it; the chip counts and re-checks after an edit | ShowReviewPanel_Test (ui/test/showreviewpanel); AppViews_Test::reviewChipCountsAndOpensThePanel | — | covered | med | — |
 
 ## Data safety across features (old shows, file formats)
 

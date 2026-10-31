@@ -121,6 +121,23 @@ back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
   to. Saved with the show. Shows saved earlier open with their effects
   **At once**, so they play as before.
 
+### Show Review
+
+- **Show Review** (0.5, v1): the show's design checked for what is likely
+  wrong, each finding with the place to fix it. A **Review · 2 ⛔ 5 ⚠** chip
+  in the footer opens the panel (also **Show Review…** in the Show
+  readiness dialog); it re-checks a moment after an edit, in Design. 31
+  checks so far: overlapping and not-ours addresses, missing definitions,
+  not on the plot, conflicting layers, palettes the lights can't play,
+  tracking across songs, skipped and duplicate cues, hits fighting in one
+  place, circuits over their breaker, strobe over 3 Hz, media outside the
+  show folder or missing, default names. **Accept…** saves a note with the
+  show (who, when, why); it reopens when what it was about changes. The
+  footer's design problems show their id in the readiness dialog.
+  `qlcconsole --review show.qlcc` does the same with no window, for CI
+  and a teacher's folder of hand-ins (exit 0 / 1 warnings / 2 blockers /
+  3 unreadable; `--format json`). See docs/features/show-review.md.
+
 ### Based on QLC+ 4.14.4
 
 qlcconsole's QLC+ base moves from 4.14.2 to **4.14.4**: the build string

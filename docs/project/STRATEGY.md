@@ -441,7 +441,7 @@ Notes:
 | Encoder banks: MIDI controller drives the selection in Build | 3 | 4 | Focus-this-look mapping | 4 | L | M | 3 | LATER |
 | Duplicate a structure's setup (T1 → T2, T3) | 3 | 4 | Patch Others Like This | 4 | L | M | 3 | LATER |
 | W6 shared Library + command bar in Build | 3 | 4 | Show Tree Library, ShowTreeCommand | 4 | M | M | 2.4 | LATER |
-| Show Review v1 (52 checks, CLI, panel) | 4 | 5 | ShowStatus, LookStackCheck, tracking | 8 | L | M | 2.5 | BUILD (0.5) |
+| Show Review v1 (52 checks, CLI, panel) | 4 | 5 | ShowStatus, LookStackCheck, tracking | 8 | L | M | 2.5 | BUILD (0.5): **frame built** (rev, 2026-10-31): registry, accept with a note, `--review` CLI, chip and panel, 31 checks; rest in TODO |
 | Plot handles (drag ends, ⌥-rotate) | 3 | 4 | Lighting Studio | 5 | M | M | 1.9 | LATER |
 | Stage and inventory across show files | 3 | 4 | inventory, structures | 5 | M | M | 1.9 | LATER |
 | RDM find-and-address in the Patch dialog | 4 | 5 | RDM manager, Patch dialog | 6 | H | H | 2 | LATER (needs the rig) |
@@ -564,7 +564,8 @@ light is doing what it's doing, in words a student can learn from.*
 
 Order and dependencies:
 1. **Show Review v1** (52 checks, CLI, panel), with Teaching's checks and
-   the course shows reviewed in the gate.
+   the course shows reviewed in the gate. The frame and 31 checks are
+   built (2026-10-31); the VC checks wait on the VcIndex.
 2. **"Why is this on?" v1**, then v2 (per-writer provenance, after the
    80-universe stress run), then **v3's student mode**, which needs
    Teaching (0.3.1) and reads best next to Show Review.

@@ -34,9 +34,14 @@ app: true
    - at least one **effect**;
    - at least one **hit** on a Virtual Console button.
 5. **Save** as `Level2-check-group.qlcc`.
-6. **Run it live** while the song plays: one of you calls as SM, another
+6. **Review it.** A show reviewer catches what the audience would see by
+   accident: a colour carried into the next song, two hits fighting over
+   the same lights. Click **Review** in the footer. Fix each blocker and
+   warning, or **Accept…** it with a note saying why it's on purpose.
+   Your notes are part of the mark.
+7. **Run it live** while the song plays: one of you calls as SM, another
    is on the board, and you fire a hit at least once.
-7. **Talk for two minutes:** what you wanted the audience to feel, and
+8. **Talk for two minutes:** what you wanted the audience to feel, and
    how the light did it.
 
 Everything you need is in Lessons 2.1–2.7, on top of Level 1.

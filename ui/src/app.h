@@ -571,6 +571,13 @@ public:
     /** The Teaching chip, tool-tip and the title: what the show's Teaching
      *  settings say (docs/features/teaching.md). */
     void updateTeachingStatus();
+    /** The Review chip (docs/features/show-review.md): "Review · 2 ⛔ 5 ⚠"
+     *  from Show Review's last run, grey "Reviewed" when nothing is open. */
+    void updateReviewStatus();
+    QLabel *reviewChip() const { return m_statusReviewLabel; }
+    /** Show Review's Fix: a finding's jump kind and ids to the view it is
+     *  fixed in (a Show Tree cue, Functions, Fixtures, the plot, Build). */
+    bool reviewJump(QWidget *parent, const QString &jump, const QVariantList &data);
 private:
     /** The Teaching chip's menu */
     void showTeachingMenu();
@@ -1074,6 +1081,10 @@ private:
     class VenueChip* m_venueChip = nullptr;
     /** "TEACHING" while the show is in Teaching mode; a click opens a menu */
     QLabel* m_statusTeachingLabel = nullptr;
+    /** Show Review's chip; a click opens the Review panel */
+    QLabel* m_statusReviewLabel = nullptr;
+    /** Re-checks the show quietly a moment after it changes (Design only) */
+    QTimer* m_reviewTimer = nullptr;
     bool m_teachingNoticeShown = false;     //!< the Operate notice, once per show
     bool m_teachingOperateAnswered = false; //!< "Operate in Teaching Mode", once per show
     bool m_unattendedOperate = false;       //!< slotModeOperate() from startInOperate()

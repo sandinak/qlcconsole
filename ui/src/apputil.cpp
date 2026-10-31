@@ -48,6 +48,7 @@
 #endif
 
 #include "apputil.h"
+#include "showreview.h"
 #include <QSet>
 #include "qlcfile.h"
 #include "qlcconfig.h"
@@ -851,24 +852,15 @@ void AppUtil::updateFixtureReadiness(Doc *doc)
         QStringList items;
         QVariantList ids;
         QHash<quint32, QString> why = doc->effectFailures();
-        QSet<quint32> inScenes;
-        foreach (Function *f, doc->functionsByType(Function::SceneType))
+        // The design half is Show Review's FX-07: one source for both.
+        const QHash<quint32, QString> design = ShowReview::designEffectProblems(doc);
+        for (auto it = design.constBegin(); it != design.constEnd(); ++it)
         {
-            if (Scene *sc = qobject_cast<Scene *>(f))
-            {
-                foreach (quint32 pid, sc->palettes())
-                    inScenes.insert(pid);
-            }
-        }
-        foreach (QLCPalette *p, doc->palettes())
-        {
-            if (p == nullptr || p->type() != QLCPalette::Effect || !inScenes.contains(p->id()))
+            QLCPalette *p = doc->palette(it.key());
+            // A chosen script that is missing: what failed while running says more.
+            if (p != nullptr && !p->scriptPath().isEmpty() && why.contains(it.key()))
                 continue;
-            if (p->scriptPath().isEmpty())
-                why.insert(p->id(), QCoreApplication::translate("AppUtil", "no effect is chosen"));
-            else if (!QFile::exists(p->scriptPath()) && !why.contains(p->id()))
-                why.insert(p->id(), QCoreApplication::translate("AppUtil", "its script is not on this computer (%1)")
-                                        .arg(QFileInfo(p->scriptPath()).fileName()));
+            why.insert(it.key(), it.value());
         }
         for (auto it = why.constBegin(); it != why.constEnd(); ++it)
         {
