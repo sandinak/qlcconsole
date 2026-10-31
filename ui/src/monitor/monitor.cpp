@@ -60,6 +60,7 @@
 #include <QXmlStreamWriter>
 #include <QXmlStreamReader>
 #include "studiotemplate.h"
+#include "showsettingsdialog.h"
 #include "mainbar.h"
 #include <QLineEdit>
 #include <QListWidget>
@@ -3910,6 +3911,10 @@ bool Monitor::pasteClipboard(float dxM, float dyM)
                                                            : PasteCancelled;
         }
         if (withFixtures == PasteCancelled)
+            return false;
+        // Patching the copies changes the patch: a Teaching show asks first.
+        if (withFixtures == PastePatched
+            && !ShowSettingsDialog::confirmPatchChange(m_doc, this, tr("Patch the pasted fixtures")))
             return false;
     }
     quint32 layer = 0;

@@ -34,6 +34,7 @@
 #include "apputil.h"
 #include "wledconfigcheck.h"
 #include "powerprofiledialog.h"
+#include "showsettingsdialog.h"
 #include "lightcontrols.h"
 #include "monitor.h"
 #include "fixture.h"
@@ -624,6 +625,16 @@ void FixtureFields::moveDmx()
     const quint32 addr = quint32(m_dmxAddr->value() - 1);
     if (uni == fx->universe() && addr == fx->address())
         return;
+    /* A Teaching show asks first, as the Fixture Manager does; declined, the
+       boxes go back to where the fixture is. */
+    if (!ShowSettingsDialog::confirmPatchChange(doc, m_dmxBox, tr("Move %1 to U %2, address %3")
+                                                    .arg(fx->name()).arg(uni + 1).arg(addr + 1)))
+    {
+        const QSignalBlocker bu(m_dmxUni), ba(m_dmxAddr);
+        m_dmxUni->setValue(int(fx->universe()) + 1);
+        m_dmxAddr->setValue(int(fx->address()) + 1);
+        return;
+    }
     emit aboutToEdit(QStringLiteral("dmx"));
     QString why;
     if (!doc->patchFixtures({ Doc::FixturePatch{ fx->id(), uni, addr } }, &why))

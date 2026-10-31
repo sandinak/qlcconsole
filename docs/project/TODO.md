@@ -190,8 +190,10 @@ Operate PIN). **Still open:**
   output held. Still later: a per-GO "what just happened" log, glossary
   popovers, a Show Review "Teaching mode is on" check (when Show Review
   exists), the course shows rebuilt with Teaching on (they ship off; Lesson
-  3.6 says to tick it), and the patch confirm in the Lighting Studio's
-  Fixture Properties (monitor files were another agent's).
+  3.6 says to tick it). Also DONE (tch3, feat/031-teaching3): the patch
+  confirm in the Lighting Studio's Fixture Properties (universe/address) and
+  on pasting a truss with its fixtures patched; every other Studio add (curtain,
+  fountain flame, pasted-unpatched) is unpatched, so changes nothing.
 
 ## Lighting Studio alignment — leftovers (0.3.1 d2, 2026-10-29)
 
