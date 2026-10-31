@@ -1331,8 +1331,9 @@ void WebAccess_Test::thePinIsAskedOncePerSession()
     // a wrong PIN does not open it
     ws->sendTextMessage(QStringLiteral("QLC+RUN|pin|1111"));
     QTRY_VERIFY(heardAn(heard, QStringLiteral("RUN|pin|bad")));
+    heard.clear();   // a state broadcast may follow the ack, so ask by content
     ws->sendTextMessage(QStringLiteral("QLC+RUN|go"));
-    QTRY_COMPARE(heard.last(), QStringLiteral("RUN|ack|go|needpin"));
+    QTRY_VERIFY(heardAn(heard, QStringLiteral("RUN|ack|go|needpin")));
     QCOMPARE(calls, 0);
     // the right one opens the session: every GO after it goes, no more asking
     ws->sendTextMessage(QStringLiteral("QLC+RUN|pin|4321"));
