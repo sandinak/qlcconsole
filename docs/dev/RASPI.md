@@ -18,18 +18,31 @@ platforms/linux/make-pi-deb.sh --remote rpi5 [--rev SHA]     # result in dist/
 Install, check and remove on the Pi:
 
 ```sh
+# The dev setup in section 3 puts symlinks into the checkout under
+# /usr/share/qlcconsole; dpkg would write THROUGH them into the checkout.
+# Move it aside first, put it back after.
+sudo mv /usr/share/qlcconsole /usr/share/qlcconsole.devlinks
 sudo apt install ./qlcconsole_*_arm64.deb      # pulls the Qt 6 packages
-qlcconsole --version
-QT_QPA_PLATFORM=offscreen qlcconsole -d 0 -o /path/to/show.qlcc
-sudo apt remove qlcconsole                     # udev rules are conffiles: purge removes them
+QT_QPA_PLATFORM=offscreen qlcconsole --version  # headless: no display needed
+QT_QPA_PLATFORM=offscreen qlcconsole -d 0 -o /path/to/show.qlcc   # loads plugins + fixtures
+sudo apt purge qlcconsole                      # purge also removes the udev rules
+sudo mv /usr/share/qlcconsole.devlinks /usr/share/qlcconsole
 ```
+
+Checked on rpi5 (Raspberry Pi 5, trixie, Qt 6.8.2) 2026-10-31: the build
+(854 steps, tests skipped with `-DQLC_NO_TESTS=ON`) took about 37 min at -j3;
+the 26 MB package installed with apt, `dpkg -V` clean, the app started
+offscreen, loaded 14 I/O plugins from
+`/usr/lib/aarch64-linux-gnu/qt6/plugins/qlcconsole` and the stock fixtures
+from `/usr/share/qlcconsole/fixtures`, then `apt purge` left nothing behind
+and the dev checkout was untouched. Without a display, run with
+`QT_QPA_PLATFORM=offscreen` (a bare `qlcconsole --version` tries xcb first).
 
 It installs the program, the I/O plugins and the stock fixtures, scripts and
 profiles under `/usr`, a desktop entry, icons, the MIME type, the man pages
 and the stock USB DMX udev rules (`/etc/udev/rules.d/z65-*.rules`: Enttec/FTDI,
 uDMX, Peperoni, HID, SPI); the post-install step reloads udev so an adapter
-already plugged in is picked up. It conflicts with the dev symlinks in
-section 3 below (same paths): remove those before installing the package.
+already plugged in is picked up. The dev symlinks of section 3 below share its `/usr/share/qlcconsole`.
 The package is not published anywhere; copy it to the Pi by hand.
 
 How qlcconsole was built and tested on `rpi5` (Raspberry Pi 5, 8 GB, aarch64)
