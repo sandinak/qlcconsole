@@ -145,6 +145,7 @@ Function *findFunction(Doc *doc, const QString &name, QString *why)
     return nullptr;
 }
 
+#ifdef QLC_HAVE_WHYON
 Fixture *findFixture(Doc *doc, const QString &name, QString *why)
 {
     const QString key = name.trimmed();
@@ -168,6 +169,7 @@ Fixture *findFixture(Doc *doc, const QString &name, QString *why)
                    .arg(hits.count()).arg(key).arg(hits.first()->id());
     return nullptr;
 }
+#endif
 
 /** Function types by their words ("scene", "rgbmatrix"). */
 QStringList functionTypeWords()

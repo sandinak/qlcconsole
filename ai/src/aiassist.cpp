@@ -364,8 +364,9 @@ void AiAssist::handleReply()
             why = t.error;
         if (r->error() == QNetworkReply::OperationCanceledError)
             why = tr("No answer from %1 in %2 s").arg(m_settings.endpoint).arg(m_settings.timeoutSec);
-        if (r->error() == QNetworkReply::ConnectionRefusedError || r->error() == QNetworkReply::HostNotFoundError
-            || r->error() == QNetworkReply::OperationCanceledError)
+        // No HTTP answer at all (refused, no such host, timed out, closed):
+        // the provider is down, not merely unhappy with the question.
+        if (!r->attribute(QNetworkRequest::HttpStatusCodeAttribute).isValid())
         {
             m_unreachable = tr("Can't reach %1: %2").arg(m_settings.endpoint, why);
             emit availabilityChanged();
