@@ -81,7 +81,6 @@
 #include "dmxmonitorwindow.h"
 #include "appsettings.h"
 #include "shutterautoopen.h"
-#include <QTabWidget>
 #include "measurementunits.h"
 #include "functionmanager.h"
 #include "programmingmanager.h"

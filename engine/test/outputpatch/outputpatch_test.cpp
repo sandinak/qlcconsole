@@ -19,6 +19,7 @@
 
 #include <QtTest>
 
+#include "../common/stdprelude.h"
 #define private public
 #include "iopluginstub.h"
 #include "outputpatch_test.h"

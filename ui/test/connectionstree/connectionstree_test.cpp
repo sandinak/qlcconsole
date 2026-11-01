@@ -36,6 +36,7 @@
 #include <QStackedWidget>
 #include <QToolButton>
 
+#include "../../../engine/test/common/stdprelude.h"
 #define protected public
 #define private public
 

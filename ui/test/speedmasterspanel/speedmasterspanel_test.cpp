@@ -31,6 +31,7 @@
 #include <QApplication>
 #include <QDialog>
 
+#include "../../../engine/test/common/stdprelude.h"
 #define private public
 #include "chasereditor.h"
 #undef private

@@ -16,6 +16,7 @@
 #include <QtTest>
 #include <QFile>
 
+#include "../common/stdprelude.h"
 #define protected public                // Universe::processFaders()
 #include "universe.h"
 #undef protected

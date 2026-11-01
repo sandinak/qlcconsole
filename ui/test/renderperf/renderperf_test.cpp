@@ -29,6 +29,7 @@
 #include "renderperf_test.h"
 
 // The live timer and the plot are driven by hand.
+#include "../../../engine/test/common/stdprelude.h"
 #define private public
 #define protected public
 #include "structurestudioview.h"

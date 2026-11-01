@@ -39,6 +39,7 @@
 #include <QColorDialog>
 #include <QSignalSpy>
 
+#include "../../../engine/test/common/stdprelude.h"
 #define private public
 #include "lookeditor.h"
 #include "matriximage.h"

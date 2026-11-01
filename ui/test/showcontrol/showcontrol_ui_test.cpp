@@ -33,6 +33,7 @@
 #include <QCryptographicHash>
 #include <QtTest>
 
+#include "../../../engine/test/common/stdprelude.h"
 #define private public
 #include "chasereditor.h"
 #include "connectionstree.h"

@@ -24,6 +24,7 @@
 
 #include "cuestack_test.h"
 
+#include "../common/stdprelude.h"
 #define private public
 #define protected public
 #include "qlcfixturemode.h"

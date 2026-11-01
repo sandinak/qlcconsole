@@ -25,6 +25,7 @@
 #include <QtTest>
 #include <cmath>
 
+#include "../common/stdprelude.h"
 #define private public
 #include "mastertimer.h"
 #undef private

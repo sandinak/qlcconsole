@@ -33,6 +33,7 @@
 #include <QLabel>
 #include <QFile>
 
+#include "../../../engine/test/common/stdprelude.h"
 #define protected public
 #define private public
 #include "programmingmanager.h"

@@ -18,6 +18,7 @@
 */
 
 #include <QtTest>
+#include "../common/stdprelude.h"
 #define private public
 #define protected public                // Universe::processFaders()
 #include "mastertimer.h"                // MasterTimer::timerTick()

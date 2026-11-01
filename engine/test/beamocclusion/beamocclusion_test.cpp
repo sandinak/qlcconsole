@@ -20,6 +20,7 @@
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
 
+#include "../common/stdprelude.h"
 #define protected public
 #define private public
 #include "mastertimer.h"

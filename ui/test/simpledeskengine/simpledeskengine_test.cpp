@@ -19,10 +19,11 @@
 
 #include <QtTest>
 
+#include <QSignalSpy>
+#include "../../../engine/test/common/stdprelude.h"
 #define protected public
 #define private public
 #include "simpledeskengine.h"
-#include <QSignalSpy>
 #include "inputoutputmap.h"
 #include "showstatus.h"
 #include "simpledesk.h"

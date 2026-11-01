@@ -20,6 +20,7 @@
 #include <QtTest>
 #include <QList>
 
+#include "../../../engine/test/common/stdprelude.h"
 #define protected public
 #define private public
 

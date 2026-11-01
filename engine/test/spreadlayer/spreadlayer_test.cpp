@@ -22,6 +22,7 @@
 #include <QtTest>
 #include <QDir>
 
+#include "../common/stdprelude.h"
 #define private public                  // EffectInstance's cells and fixtures
 #include "effectinstance.h"
 #undef private

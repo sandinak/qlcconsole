@@ -20,6 +20,7 @@
 #include <QLabel>
 #include <QtTest>
 
+#include "../../../engine/test/common/stdprelude.h"
 #define protected public
 #define private public
 #include "monitorfixture.h"

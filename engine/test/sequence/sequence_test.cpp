@@ -21,6 +21,7 @@
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
 
+#include "../common/stdprelude.h"
 #define protected public
 #include "mastertimer_stub.h"
 #include "sequence_test.h"

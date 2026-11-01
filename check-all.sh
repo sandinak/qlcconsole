@@ -237,6 +237,17 @@ if ! GUARD_OUT=$("$REPO/platforms/linux/check-test-guard.sh" --self-test 2>&1 \
     exit 1
 fi
 
+# `#define private public` in a test must not sit in front of a header that
+# first includes a standard header (libstdc++ rejects it; broke Windows CI
+# 2026-11-01). The check's own test first.
+if ! PP_OUT=$("$REPO/platforms/linux/check-private-public.sh" --self-test 2>&1 \
+        && "$REPO/platforms/linux/check-private-public.sh" --source "$REPO" 2>&1); then
+    echo >&2 "$PP_OUT"
+    { echo "gate=1 host=$GATE_HOST qt=$QT_VERSION rev=$GATE_REV"
+      echo "check-private-public.sh failed: a std header sits under #define private public. Nothing built or tested."; } | tee "$LOGS/summary.txt"
+    exit 1
+fi
+
 # No relative link in a Markdown file (docs, README, the help, the course)
 # may point at a file that isn't there.
 if ! LINKS_OUT=$(python3 "$REPO/tools/check-doc-links.py" "$REPO" 2>&1); then

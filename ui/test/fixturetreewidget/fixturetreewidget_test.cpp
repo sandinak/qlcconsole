@@ -26,6 +26,7 @@
 #include <QMimeData>
 #include <QLineEdit>
 
+#include "../../../engine/test/common/stdprelude.h"
 #define protected public
 #define private public
 #include "fixturetreewidget.h"

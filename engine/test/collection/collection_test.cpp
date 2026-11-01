@@ -22,6 +22,7 @@
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
 
+#include "../common/stdprelude.h"
 #define protected public
 #include "mastertimer_stub.h"
 #include "collection_test.h"

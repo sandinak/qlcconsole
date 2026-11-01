@@ -20,6 +20,7 @@
 #include <QtTest>
 #include <QJSEngine>
 
+#include "../common/stdprelude.h"
 #define private public
 #include "programmercontroller.h"
 #include "programmerflasher.h"

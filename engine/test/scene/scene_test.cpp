@@ -22,10 +22,11 @@
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
 
+#include <QBuffer>
+#include "../common/stdprelude.h"
 #define protected public
 #define private public
 #include "mastertimer_stub.h"
-#include <QBuffer>
 #include "qlcpalette.h"
 #include "scenetransition.h"
 #include "monitorproperties.h"

@@ -24,6 +24,7 @@
 #include <QScopeGuard>
 #include <QtTest>
 
+#include "../common/stdprelude.h"
 #define private public
 #include "mastertimer.h"
 #undef private

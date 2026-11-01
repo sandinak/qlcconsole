@@ -13,6 +13,7 @@
 #include <QtMath>
 
 #include "blindeffects_test.h"
+#include "../common/stdprelude.h"
 #define private public                  // MasterTimer::timerTick(), the runner's instances
 #define protected public                // Universe::processFaders()
 #include "doc.h"
