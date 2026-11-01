@@ -36,6 +36,7 @@ class QToolButton;
 class QDoubleSpinBox;
 class LinePlanView;
 class LineSpreadPreview;
+class LinePlanWindow;
 
 /** @addtogroup ui UI
  * @{
@@ -86,6 +87,11 @@ public:
     LineSpreadPreview *strip() const { return m_strip; }
     LinePlanView *plan() const { return m_plan; }
     QLabel *hint() const { return m_hint; }
+    /** The pop-out window, when open (tests). */
+    LinePlanWindow *planWindow() const;
+    /** Open the strip and plan in a window of their own, fed by this
+     *  page's preview. */
+    void openPlanWindow();
 
     /** The controls (tests). */
     QCheckBox *spreadSet() const { return m_spreadSet; }
@@ -138,6 +144,7 @@ private:
     QLabel *m_hint;
     LineSpreadPreview *m_strip;
     LinePlanView *m_plan;
+    QPointer<LinePlanWindow> m_planWindow;
 };
 
 /** @} */

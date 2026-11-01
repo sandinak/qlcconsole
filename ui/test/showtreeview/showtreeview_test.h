@@ -104,6 +104,7 @@ private slots:
     /** Q197: a Formation's rows say where their values came from; one on a
      *  layer not aimed at a line says on hover that it does nothing. */
     void formationRowsSayWhereTheyComeFrom();
+    void planPopOutWindow();
     void copyPasteAndHelp();
     void libraryTreeEditorAndAddingWithoutDragging();
     void aSplitSavedWhileDockedDoesNotHideThePage();

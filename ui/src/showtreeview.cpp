@@ -3947,6 +3947,18 @@ void ShowTreeView::updateInspector()
     m_inspectorUpdating = true;
     m_pageCue = invalidId();
     m_multi.clear();
+    // The pop-out follows the selection: fed by the layer page below when
+    // it shows a line aim, else dimmed, whichever way this returns.
+    m_planFed = false;
+    struct PlanWindowSync
+    {
+        ShowTreeView *v;
+        ~PlanWindowSync()
+        {
+            if (!v->m_planFed && v->m_planWindow != nullptr)
+                v->m_planWindow->setNoAim();
+        }
+    } planSync{this};
     m_layerRelease->setTristate(false);
     const NodeKind kind = currentKind();
     const quint32 id = currentId();
@@ -5105,6 +5117,13 @@ void ShowTreeView::showLayerPage(const CueList &list, int index, const Layer *ow
             planView->setFormation(sc, aimPal, prevSc, prevPal);
             m_rows->addWidget(planView, row, 1, 1, 4);
             ++row;
+            connect(strip, &LineSpreadPreview::popOutRequested, this, &ShowTreeView::openLinePlanWindow);
+            connect(planView, &LinePlanView::popOutRequested, this, &ShowTreeView::openLinePlanWindow);
+            if (m_planWindow != nullptr)
+            {
+                m_planWindow->setFormation(sc, aimPal, prevSc, prevPal);
+                m_planFed = true;
+            }
         }
     }
     m_rows->setRowStretch(row, 1);
@@ -5134,6 +5153,18 @@ QWidget *ShowTreeView::linePlan() const
     const QList<QWidget *> all = m_rowsHost == nullptr ? QList<QWidget *>()
                                  : m_rowsHost->findChildren<QWidget *>("stLinePlan");
     return all.isEmpty() ? nullptr : all.last();
+}
+
+void ShowTreeView::openLinePlanWindow()
+{
+    if (m_planWindow == nullptr)
+        m_planWindow = new LinePlanWindow(m_doc, this);
+    m_planWindow->show();
+    m_planWindow->raise();
+    m_planWindow->activateWindow();
+    // Fed by the inspector pass: the same path as every other change.
+    if (!m_inspectorUpdating)
+        updateInspector();
 }
 
 bool ShowTreeView::setLineParam(quint32 cueId, quint32 layerId, const QString &key, const QString &value,

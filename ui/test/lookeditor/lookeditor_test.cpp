@@ -2007,6 +2007,11 @@ void LookEditor_Test::aFormationsPreviewMatchesTheCue()
                             .arg(want.x()).arg(want.z())));
     }
     QCOMPARE(fe->strip()->dots().count(), 4);
+    // The pop-out works from here too, fed by the same preview.
+    emit fe->plan()->popOutRequested();
+    QVERIFY(fe->planWindow() != nullptr && fe->planWindow()->isVisible());
+    QCOMPARE(fe->planWindow()->plan()->beams().count(), 4);
+    fe->planWindow()->close();
 
     // A show with no aims yet: the line, no groups, and a hint.
     Doc empty(this);

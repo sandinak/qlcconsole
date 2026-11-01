@@ -59,12 +59,26 @@ public:
     /** What it shows, in light order (tests). */
     const QList<Dot> &dots() const { return m_dots; }
 
+    /** Drawn dimmed: the plan it still shows is the last one, not the selection's. */
+    void setDimmed(bool dimmed);
+    bool isDimmed() const { return m_dimmed; }
+    /** Whether the strip offers to open in a window (right-click); the window's own does not. */
+    void setPoppable(bool poppable) { m_poppable = poppable; }
+    /** Dot and label size at this widget size (1 at the embedded size; tests). */
+    double drawScale() const;
+
+signals:
+    void popOutRequested();
+
 protected:
     void paintEvent(QPaintEvent *) override;
+    void contextMenuEvent(QContextMenuEvent *event) override;
 
 private:
     Doc *m_doc;
     QList<Dot> m_dots;
+    bool m_dimmed = false;
+    bool m_poppable = true;
 };
 
 /** @} */

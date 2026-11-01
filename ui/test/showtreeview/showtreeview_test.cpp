@@ -3864,6 +3864,125 @@ void ShowTreeView_Test::planViewOfALineAim()
         img.save(qEnvironmentVariable("QLC_SHOWTREE_SHOT") + "-plan.png");
 }
 
+/* The pop-out: the strip and plan in a window of their own, fed by the
+   same update path as the embedded ones -- it follows Spread, the
+   selection, says so (dimmed) when there is no line aim, keeps its
+   geometry, is one at a time, and survives the cue being deleted. */
+void ShowTreeView_Test::planPopOutWindow()
+{
+    QSettings().remove(LinePlanWindow::geometryKey());
+    QList<Fixture *> spots { placedSpot(m_doc, "L1", -4), placedSpot(m_doc, "L2", -1),
+                             placedSpot(m_doc, "R1", 2), placedSpot(m_doc, "R2", 4) };
+    FixtureGroup *all = new FixtureGroup(m_doc);
+    all->setName("All");
+    m_doc->addFixtureGroup(all);
+    for (Fixture *f : spots)
+        all->assignFixture(f->id());
+    StageTarget *edge = m_doc->monitorProperties()->addStageTarget();
+    edge->setName("DS-Edge");
+    edge->setPosition(QVector3D(0, 3, 0));
+    edge->setLinePoints({ QVector3D(-5, 0, 0), QVector3D(5, 0, 0) });
+    edge->makeLine();
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L");
+    const quint32 c1 = st->addCue(list, -1, "Wide");
+    const quint32 c2 = st->addCue(list, 0, "Plain");
+    Target t;
+    t.groups << all->id();
+    const quint32 l1 = st->addLayer(c1, t);
+    QVERIFY(st->setLayerLook(c1, l1, st->lookForPalette(st->aimPaletteFor(edge->id()))));
+    QVERIFY(st->setLayerLook(c1, l1, ShowTreeController::lineParamLook(KeySpread, "5")));
+    Target other;   // a layer with no line aim
+    other.fixtures << spots.first()->id();
+    const quint32 l2 = st->addLayer(c2, other);
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1200, 900);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QVERIFY(view.selectNode(l1, c1));
+    QVERIFY(view.linePlanWindow() == nullptr);
+
+    // The embedded plan's button opens it; one at a time.
+    LinePlanView *embedded = qobject_cast<LinePlanView *>(view.linePlan());
+    QVERIFY(embedded != nullptr);
+    QToolButton *btn = embedded->findChild<QToolButton *>("linePlanPopOut");
+    QVERIFY(btn != nullptr);
+    btn->click();
+    LinePlanWindow *win = view.linePlanWindow();
+    QVERIFY(win != nullptr);
+    QVERIFY(win->isVisible());
+    QVERIFY(!win->isModal());
+    qobject_cast<LinePlanView *>(view.linePlan())->findChild<QToolButton *>("linePlanPopOut")->click();
+    QCOMPARE(view.linePlanWindow(), win);
+    QCOMPARE(win->plan()->beams().count(), 4);
+    QVERIFY(!win->plan()->isDimmed());
+    QVERIFY(!win->plan()->findChild<QToolButton *>("linePlanPopOut")->isVisibleTo(win));
+
+    // Scaled to its size, the same beams as the embedded view.
+    win->resize(1000, 800);
+    QTest::qWait(10);
+    QVERIFY(win->plan()->drawScale() > 2.0);
+    QVERIFY(win->strip()->drawScale() > 1.5);
+    QCOMPARE(qobject_cast<LinePlanView *>(view.linePlan())->drawScale(), 1.0);
+    auto sameBeams = [&]() {
+        LinePlanView *e = qobject_cast<LinePlanView *>(view.linePlan());
+        if (e == nullptr || e->beams().count() != win->plan()->beams().count())
+            return false;
+        for (int i = 0; i < e->beams().count(); ++i)
+        {
+            const LinePlanView::Beam &a = e->beams().at(i), &b = win->plan()->beams().at(i);
+            if (a.name != b.name || a.number != b.number || a.to != b.to || a.from != b.from)
+                return false;
+        }
+        return true;
+    };
+    QVERIFY(sameBeams());
+    const double wide = win->plan()->beams().last().to.x() - win->plan()->beams().first().to.x();
+    QVERIFY(wide > 5.0);
+
+    // Spread changed through the controller: the window re-lays out.
+    QVERIFY(view.setLineParam(c1, l1, KeySpread, "1"));
+    QVERIFY(win->plan()->beams().last().to.x() - win->plan()->beams().first().to.x() < wide - 1.0);
+    QVERIFY(sameBeams());
+    QCOMPARE(win->strip()->dots().count(), 4);
+    // Undo comes back through the same path.
+    st->undo();
+    QVERIFY(win->plan()->beams().last().to.x() - win->plan()->beams().first().to.x() > wide - 0.5);
+
+    // Selection with no line aim: dimmed, the last plan kept, and it says so.
+    const int kept = win->plan()->beams().count();
+    QVERIFY(view.selectNode(l2, c2));
+    QVERIFY(win->plan()->isDimmed());
+    QVERIFY(win->strip()->isDimmed());
+    QCOMPARE(win->plan()->beams().count(), kept);
+    QVERIFY(!win->message().isEmpty());
+    // Back to the line aim: live again.
+    QVERIFY(view.selectNode(l1, c1));
+    QVERIFY(!win->plan()->isDimmed());
+    QVERIFY(win->message().isEmpty());
+
+    // The cue is deleted while it is open: nothing breaks, it dims.
+    QVERIFY(st->removeCue(c1));
+    QVERIFY(view.linePlanWindow() == win);
+    QVERIFY(win->plan()->isDimmed());
+    QVERIFY(win->plan()->grab().width() > 0);
+
+    // Esc closes it; reopening restores size and place.
+    win->move(120, 90);
+    win->resize(730, 610);
+    const QRect geo = win->geometry();
+    QTest::keyClick(win, Qt::Key_Escape);
+    QTRY_VERIFY(view.linePlanWindow() == nullptr);
+    QVERIFY(QSettings().contains(LinePlanWindow::geometryKey()));
+    view.openLinePlanWindow();
+    LinePlanWindow *again = view.linePlanWindow();
+    QVERIFY(again != nullptr);
+    QCOMPARE(again->size(), geo.size());
+    again->close();
+    QSettings().remove(LinePlanWindow::geometryKey());
+}
+
 /* §3B in the tab: Library → Targets; a line dropped on the cue is one
    formation over its layers (the rows say so, the order strip numbers the
    lights across both by where they hang); Spread / Grouping / Cross rows

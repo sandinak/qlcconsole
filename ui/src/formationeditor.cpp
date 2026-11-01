@@ -159,6 +159,24 @@ FormationEditor::FormationEditor(Doc *doc, QWidget *parent)
     connect(m_pickList, &QListWidget::itemChanged, this, &FormationEditor::slotPickChanged);
     if (m_doc != nullptr)
         connect(m_doc, &Doc::cleared, this, &FormationEditor::slotDocCleared);
+    // The pop-out (as the Show Tree's): the same preview, bigger.
+    connect(m_strip, &LineSpreadPreview::popOutRequested, this, &FormationEditor::openPlanWindow);
+    connect(m_plan, &LinePlanView::popOutRequested, this, &FormationEditor::openPlanWindow);
+}
+
+LinePlanWindow *FormationEditor::planWindow() const
+{
+    return m_planWindow.data();
+}
+
+void FormationEditor::openPlanWindow()
+{
+    if (m_planWindow == nullptr)
+        m_planWindow = new LinePlanWindow(m_doc, this);
+    m_planWindow->show();
+    m_planWindow->raise();
+    m_planWindow->activateWindow();
+    updatePreview();
 }
 
 FormationEditor::~FormationEditor()
@@ -431,6 +449,8 @@ void FormationEditor::updatePreview()
         m_hint->show();
         m_strip->setLook(nullptr, nullptr);
         m_plan->setFormation(nullptr, nullptr);
+        if (m_planWindow != nullptr)
+            m_planWindow->setNoAim();
         return;
     }
     // The lights, as one formation: the picked groups' and fixtures'.
@@ -463,9 +483,13 @@ void FormationEditor::updatePreview()
         m_hint->show();
         m_strip->setLook(nullptr, &aim);
         m_plan->setFormation(nullptr, nullptr);
+        if (m_planWindow != nullptr)
+            m_planWindow->setNoAim();
         return;
     }
     m_hint->hide();
     m_strip->setLook(&scene, &aim);
     m_plan->setFormation(&scene, &aim);
+    if (m_planWindow != nullptr)
+        m_planWindow->setFormation(&scene, &aim, nullptr, nullptr);
 }

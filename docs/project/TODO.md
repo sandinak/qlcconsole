@@ -20,9 +20,19 @@ command words and AI Assist's `formation` attribute. Each "decided (can
 change)": the preview pick is remembered per palette for the session only
 (cleared when another show opens); a Formation on a non-line layer stays
 and says it does nothing (not refused); the preview uses the Aim palette a
-line aim there reuses as the base. Open: a course note when the line aims
-lesson is written; the plan view's pop-out from the Formation page if it
-didn't land with this.
+line aim there reuses as the base. The plan view's pop-out (lpv) works from
+the Formation page too, fed by its preview. Open: nothing known.
+
+## Line aim pop-out (lpv, 2026-11-01) — built, leftovers
+
+Built: `LinePlanWindow` (ui/src/lineplanview.*) shows the order strip and
+plan scaled to a resizable, non-modal window; `ShowTreeView::updateInspector`
+feeds it on every rebuild of the layer page (no second model, nothing per
+frame), dims it when the selection has no line aim, geometry in QSettings
+`showtree/linePlanWindow/geometry`. Entry: the ⤢ button on the plan and a
+right-click on either view; no menu item. Decided (can change): the window
+is a child of the Show Tree view (closes with it); light names show once the
+plan is drawn at 1.6x or more. Open: the strip does not name the lights.
 
 ## Raspberry Pi package — leftovers (pi, 2026-10-31)
 

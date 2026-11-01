@@ -17,7 +17,11 @@
   limitations under the License.
 */
 
+#include <QContextMenuEvent>
 #include <QPainter>
+#include <QMenu>
+#include <QtGlobal>
+#include <climits>
 #include <QMap>
 #include <cmath>
 
@@ -71,40 +75,66 @@ void LineSpreadPreview::setLook(const Scene *scene, const QLCPalette *look)
     update();
 }
 
+void LineSpreadPreview::setDimmed(bool dimmed)
+{
+    if (m_dimmed == dimmed)
+        return;
+    m_dimmed = dimmed;
+    update();
+}
+
+double LineSpreadPreview::drawScale() const
+{
+    return qBound(1.0, qMin(width() / 260.0, height() / 64.0), 3.5);
+}
+
+void LineSpreadPreview::contextMenuEvent(QContextMenuEvent *event)
+{
+    if (!m_poppable)
+        return;
+    QMenu menu(this);
+    QAction *open = menu.addAction(tr("Open in a window"));
+    if (menu.exec(event->globalPos()) == open)
+        emit popOutRequested();
+}
+
 void LineSpreadPreview::paintEvent(QPaintEvent *)
 {
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing);
     p.fillRect(rect(), QColor(30, 32, 38));
+    const double s = drawScale();
 
-    const double left = 18.0, right = width() - 18.0;
-    const double base = height() - 14.0;
-    p.setPen(QPen(QColor(255, 180, 0), 2.0));
+    const double left = 18.0 * s, right = width() - 18.0 * s;
+    const double base = height() - 14.0 * s;
+    p.setPen(QPen(QColor(255, 180, 0), 2.0 * s));
     p.drawLine(QPointF(left, base), QPointF(right, base));
     p.setPen(QColor(150, 150, 160));
     QFont f = p.font();
-    f.setPointSizeF(8.0);
+    f.setPointSizeF(8.0 * s);
     p.setFont(f);
-    p.drawText(QRectF(2, base - 8, 14, 16), Qt::AlignCenter, QStringLiteral("A"));
-    p.drawText(QRectF(right + 2, base - 8, 14, 16), Qt::AlignCenter, QStringLiteral("B"));
+    p.drawText(QRectF(2 * s, base - 8 * s, 14 * s, 16 * s), Qt::AlignCenter, QStringLiteral("A"));
+    p.drawText(QRectF(right + 2 * s, base - 8 * s, 14 * s, 16 * s), Qt::AlignCenter, QStringLiteral("B"));
     // The centre: where everything goes at spread 0.
-    p.drawLine(QPointF((left + right) / 2, base - 4), QPointF((left + right) / 2, base + 4));
+    p.drawLine(QPointF((left + right) / 2, base - 4 * s), QPointF((left + right) / 2, base + 4 * s));
 
     // Stack lights that share a point.
     QMap<int, int> stacked;
-    const double r = 7.0;
+    const double r = 7.0 * s;
     foreach (const Dot &d, m_dots)
     {
         const double x = left + (right - left) * d.fraction;
         const int key = int(std::lround(x));
         const int level = stacked.value(key, 0);
         stacked[key] = level + 1;
-        const QPointF c(x, base - r - 2.0 - level * (2 * r + 1.0));
-        p.setPen(QPen(QColor(20, 20, 24), 1.0));
+        const QPointF c(x, base - r - 2.0 * s - level * (2 * r + s));
+        p.setPen(QPen(QColor(20, 20, 24), s));
         p.setBrush(QColor(255, 210, 120));
         p.drawEllipse(c, r, r);
         p.setPen(QColor(20, 20, 24));
         p.drawText(QRectF(c.x() - r, c.y() - r, 2 * r, 2 * r), Qt::AlignCenter,
                    QString::number(d.number));
     }
+    if (m_dimmed)
+        p.fillRect(rect(), QColor(30, 32, 38, 150));
 }
