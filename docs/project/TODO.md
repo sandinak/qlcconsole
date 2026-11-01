@@ -21,6 +21,20 @@ right-click on either view; no menu item. Decided (can change): the window
 is a child of the Show Tree view (closes with it); light names show once the
 plan is drawn at 1.6x or more. Open: the strip does not name the lights.
 
+## Play / Solo on the Show Tree pages — leftovers (solo, 2026-11-01)
+
+Built (CHANGELOG 0.4.0 Fixed; DONE.md 2026-11-01): Play / Stop and Solo on
+the cue and layer pages, greyed in Operate there and in the docked
+Workbench. Open:
+- The docked Workbench's Solo plays the layer's own scene
+  (`TreeCueStack::playSolo`); the pages' Solo is the controller's
+  (`setPreviewSolo`, the pad walk's), which takes the layer's child layers
+  too. Decided (can change): left as they are; make the Workbench use the
+  controller's if the difference shows.
+- Decided (can change): Stop holds from layer to layer of a cue; picking
+  another cue plays it (the latest action wins). No keyboard shortcut (none
+  existed; the shortcut count stays flat).
+
 ## Raspberry Pi package — leftovers (pi, 2026-10-31)
 
 Built: `platforms/linux/make-pi-deb.sh` (a .deb; decided, can change),

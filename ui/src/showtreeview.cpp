@@ -1210,6 +1210,7 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
                                  "channels it plays), until the next GO"));
     connect(m_previewPlay, &QToolButton::clicked, this, [this]() {
         commitPendingCueEdits();   // a time typed and not yet left plays too
+        m_previewStopped = false;
         m_st->resumePreview();
     });
     m_previewPlayAction = bar->addWidget(m_previewPlay);
@@ -1762,6 +1763,7 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         QFormLayout *f = new QFormLayout(inner);
         m_cueForm = f;
         cueScroll->setWidget(inner);
+        f->addRow(makePageRig(inner, QStringLiteral("stCue")));
         m_cueNumber = new QLineEdit(inner);
         m_cueNumber->setObjectName("stCueNumber");
         m_cueName = new QLineEdit(inner);
@@ -2168,6 +2170,7 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
     m_layerPage->setObjectName("stLayerPage");
     {
         QVBoxLayout *v = new QVBoxLayout(m_layerPage);
+        v->addWidget(makePageRig(m_layerPage, QStringLiteral("stLayer")));
         m_layerTitle = new QLabel(m_layerPage);
         QFont bold = m_layerTitle->font();
         bold.setBold(true);
@@ -2407,6 +2410,7 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
             updateInspector();
         });
     connect(m_st, &ShowTreeController::previewChanged, this, &ShowTreeView::slotPreviewChanged);
+    connect(m_doc, &Doc::modeChanged, this, &ShowTreeView::updatePageRig);
     if (m_doc->inputOutputMap() != nullptr)
         connect(m_doc->inputOutputMap(), &InputOutputMap::outputInhibitedChanged,
                 this, &ShowTreeView::slotPreviewChanged);
@@ -3612,6 +3616,8 @@ void ShowTreeView::slotTreeSelectionChanged()
     const quint32 picked = currentCueId();
     const bool isPick = isVisible() && picked != invalidId() && picked != m_lastPickedCue;
     m_lastPickedCue = picked;
+    if (isPick)
+        m_previewStopped = false;       // another cue picked plays (Stop was for the one before)
     if (isPick && !isWorkbenchDocked())
         m_st->pickCue(picked);
     syncPreview();
@@ -3718,11 +3724,14 @@ void ShowTreeView::syncPreview()
     // W3: docked, the Workbench plays the cue (in context, or Solo).
     if (isWorkbenchDocked())
     {
+        syncSolo(invalidId());          // the Workbench has its own Solo
         slotPreviewChanged();
         return;
     }
     const quint32 cueId = currentCueId();
-    if (!isVisible() || cueId == invalidId())
+    // Solo first: the cue then starts as only its layer, no flash of the rest.
+    syncSolo(isVisible() ? cueId : invalidId());
+    if (!isVisible() || cueId == invalidId() || m_previewStopped)
         m_st->stopPreview();
     else
         m_st->previewCue(cueId);
@@ -3781,6 +3790,7 @@ void ShowTreeView::slotPreviewChanged()
     if (m_previewPlayAction != nullptr)
         m_previewPlayAction->setVisible(m_st->previewState() == ShowTreeController::PreviewState::Held
                                     && !isWorkbenchDocked());
+    updatePageRig();
     m_previewLabel->setToolTip(m_st->previewState() == ShowTreeController::PreviewState::Playing
                                ? tr("Design mode: the selected cue plays on the rig, and changes show at "
                                     "once. GO holds it so the show plays alone; Play previews over a "

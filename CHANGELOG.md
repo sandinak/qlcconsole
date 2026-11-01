@@ -909,6 +909,13 @@ skipped). Upstream fixes taken:
 
 ### Fixed
 
+- **Play and Solo on the Show Tree's cue and layer pages.** They were only
+  in the Workbench docked in the tree, so a cue opened the usual way (a
+  click) had neither. Now both pages have them: Play / Stop for the whole
+  cue, Solo for the selected layer alone — it follows you from layer to
+  layer and turns off when you leave the cue. In Operate they (and the
+  docked Workbench's Play, which used to vanish) stay in view, greyed,
+  saying why. A test now fails if they go missing again.
 - **A big show takes as little memory as before effect fades.** The
   effect fade (0.4) had made the engine's record of each channel a look
   plays 8 bytes bigger: about 15 MB more at 128 universes. It is back to

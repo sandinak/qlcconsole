@@ -183,7 +183,8 @@ the tree and the Workbench follows it.
   holds the preview, **Play** brings it back. A GO holds it too, and while
   the list runs it says **■ Held** until you press **Play** (see
   [Seeing it on the rig](#seeing-it-on-the-rig)). In Operate nothing
-  previews, as everywhere in the tree.
+  previews, as everywhere in the tree: **Play** and **Solo** stay in view,
+  greyed, and say why.
 - **Undo.** Every edit is one step of the tree's, on the one history:
   **⌘Z** in the Show Tree takes it back.
 - **↩ Show Tree** puts the page back, with the cue — and the layer the
@@ -1455,6 +1456,17 @@ tables with the layer names repeated.
 - Selecting another cue moves the preview there. A layer both cues share
   keeps running, with no re-fade.
 - Selecting the list or nothing, or leaving the tab, stops the preview.
+- **Play / Stop and Solo** sit at the top of the cue's page and of a
+  layer's page (docked, the Workbench's own pair takes their place):
+  - **Stop** takes the cue off the rig; it stays off while you move
+    between its layers, until **Play** or until you pick another cue.
+    **Play** puts it back: on a layer's page, the whole cue with that
+    layer in context.
+  - **Solo** plays only the selected layer (and its child layers), as the
+    controller's walk does. Select another layer of the cue and that one
+    plays alone instead; on the cue's page the whole cue plays until you
+    pick a layer. Leaving the cue turns Solo off.
+  - In Operate both stay in view, greyed: only the run is live there.
 - **GO holds the preview.** GO, Back or Sub GO — from the Run tab, ⌘↩,
   the Control menu, OSC, MSC, the Virtual Console or a controller button
   bound to step a list — stops the preview *before* the cue plays, so

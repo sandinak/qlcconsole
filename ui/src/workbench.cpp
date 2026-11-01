@@ -1049,9 +1049,19 @@ void Workbench::updateOnRig()
     Function *playing = m_doc->function(m_previewFunction);
     Function *live = m_doc->function(m_operateFunction);
     const bool canPlay = m_stack != nullptr && m_stack->previewFunction() != Function::invalidId();
+    // Operate: only the run is live -- a cue's Play and Solo stay in view,
+    // greyed, saying why (they were hidden, and seemed gone).
+    const bool design = m_doc->mode() == Doc::Design;
+    const QString blindWhy = tr("Operate: only the run is live — editing here is blind and reaches the "
+                                "stage on GO. Switch to Design to preview.");
+    m_playBtn->setEnabled(true);
     if (m_soloBtn != nullptr)
     {
         m_soloBtn->setVisible(m_stack != nullptr && m_stack->canSolo());
+        m_soloBtn->setEnabled(design);
+        m_soloBtn->setToolTip(design ? tr("Solo: only the selected layer plays. Off: the whole cue plays, in "
+                                          "context (what tracks in too), the selected layer highlighted")
+                                     : blindWhy);
         QSignalBlocker block(m_soloBtn);
         m_soloBtn->setChecked(m_stack != nullptr && m_stack->solo());
     }
@@ -1111,7 +1121,12 @@ void Workbench::updateOnRig()
         m_playBtn->setText(tr("Play"));
         m_playBtn->setToolTip(m_heldByRun ? tr("Preview this over the running show")
                                           : tr("Play what is loaded on the rig (Design mode)"));
-        m_playBtn->setVisible(canPlay && m_doc->mode() == Doc::Design);
+        // A Show Tree cue: greyed in Operate (the tree's rule), not hidden.
+        const bool treeCue = canPlay && m_stack->playsItself();
+        m_playBtn->setVisible(canPlay && (design || treeCue));
+        m_playBtn->setEnabled(design);
+        if (!design && treeCue)
+            m_playBtn->setToolTip(blindWhy);
     }
 }
 
