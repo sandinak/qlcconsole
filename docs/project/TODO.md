@@ -634,8 +634,6 @@ docs/features/ai-assist.md.
 **Next:**
 - **P2b** configuration import (§5b), usable with AI off.
 - **P3** MCP server over the registry.
-- Small: Linux/Windows keychain (QtKeychain);
-  Tab completion of the registry's words.
 - Small: VC widgets in `unused`; Linux/Windows keychain (QtKeychain);
   Tab completion of the registry's words; palette and authoring operations
   (patch_fixture, create_scene/chaser/group of §4) once they can join a
