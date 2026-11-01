@@ -826,6 +826,20 @@ CHANGELOG **[0.3.1] - Unreleased**, "Why is this on?".
 | M653 | Why it isn't on (v3) | Dimmer up, shutter closed and colour at black: no output, shutter (with what sets it), colour, in order, headline the shutter; Blind, Blackout, Grand Master 0, group master 0 in order; nothing sets the dimmer; not patched; parked at 0; a released layer under the next cue | **WhyOn_Test::whyNotListsTheBlockersInOrder**, **::whyNotTheMastersAndBlind**, **::whyNotNothingSetsItAndNotPatched**, **::whyNotParkedAtZero**, **::whyNotAReleasedLayer** (new) | none | covered | med | Power limiter and not-ours worded, not driven |
 | M654 | The window, v3 | Why-not rows under their header before what sets it (headers go nowhere); Unpark from a Park line, greyed in Operate; Release / Let go offered for desk and mark lines; ⌘I on the last selection or a hint; closing stops the timer and the engine has no extra fader open or closed | **WhyOnPanel_Test::aDarkLightSaysWhyNotFirst**, **::unparkFromALine**, **::theActionsALineOffers**, **::commandIOpensOnTheSelection**, **::closingTheWindowStopsAllWork** (new) | none | covered | low | The Show Tree / Workbench right-click entries are not opened offscreen |
 
+## 0.4.0: Play and Solo on the Show Tree's pages (solo, 2026-11-01)
+
+CHANGELOG **[0.4.0] - Unreleased**, Fixed, "Play and Solo on the Show Tree's cue and layer pages".
+**Regression guard:** these tests keep Play and Solo from disappearing again.
+They were never on the tree's own cue and layer pages (only in the
+Workbench docked there, from 4984db0be on 2026-10-22), so a cue opened by a
+click had neither, and in Operate the docked Workbench hid Play (4984db0be,
+updateOnRig). Both tests fail on 987c9c56e (before the fix) with "missing".
+
+| ID | Feature | Behaviour | Test(s) | Before | After | Risk | Gap / note |
+|---|---|---|---|---|---|---|---|
+| M660 | Play / Solo stay available | Design: on a cue's page, a layer's page, another layer and another cue, and in the docked Workbench (layer, other layer, other cue), Play and Solo are visible and enabled. Play / Stop puts the cue on and off the universe; Solo outputs only the layer's channels and follows the selected layer; leaving the cue drops Solo; Stop holds across layers until Play or another cue | **ShowTreeWorkbench_Test::soloAndPlayStayAvailable** (new) | none | covered | high | Do not delete: it guards against the buttons going missing again |
+| M661 | Greyed in Operate | Operate: the pages' and the docked Workbench's Play and Solo are visible, greyed, with a tooltip saying why; nothing previews; back to Design they work | **ShowTreeWorkbench_Test::soloAndPlayGreyInOperate** (new) | none | covered | med | — |
+
 ## Data safety across features (old shows, file formats)
 
 | ID | Feature | Behaviour | Test(s) | Before | After | Risk | Gap / note |

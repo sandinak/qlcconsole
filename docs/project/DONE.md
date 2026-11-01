@@ -6,6 +6,14 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
+### 2026-11-01 — Play and Solo on the Show Tree's cue and layer pages *(solo, fix/04-solo-play)*
+
+Branson: "what happened to our solo and play buttons .. they were really useful. We should make sure they work per cue and per layer in cue." Nothing removed them: since W3 (4984db0be, 2026-10-22) they were only in the Workbench docked in the tree (✎, double-click, `wb`); the tree's own cue and layer pages, where a click on a cue lands, never had them (the only Play there, RC8's `stPreviewPlay`, shows only while a GO holds the preview). Checked lb 69dcc628b, stc c4c465177, lyr 3d4e9ca48, walk 9201e600f and why2 d36eb401d: none touches them; an offscreen App run confirmed the docked pair works on 987c9c56e. In Operate the docked Workbench hid Play (updateOnRig).
+
+Fix: `ui/src/showtreeplay.cpp` gives the cue and layer pages a Play / Stop + Solo row (`stCuePlay`/`stCueSolo`, `stLayerPlay`/`stLayerSolo`), hidden while docked (the Workbench has its own). Solo is `ShowTreeController::setPreviewSolo`, the pad walk's: it follows the selected layer and drops on leaving the cue. Operate greys both, on the pages and in the docked Workbench, with a tooltip. Tests: `ShowTreeWorkbench_Test::soloAndPlayStayAvailable` (regression guard, TEST_MAP M660) and `::soloAndPlayGreyInOperate` (M661), both failing on 987c9c56e.
+
+---
+
 ### 2026-11-01 — Sub-cue getters crash fix *(crash, fix/05-courseshow-crash)*
 
 CI's Linux coverage leg segfaulted in `CourseShow_Test::lessonTwoSevenPlaysTheStomps` (run 41271371482, 66da743e5): `Function::direction(this=0x0)` from `Chaser::nextSubCueIndex()`, called by `CueRunner::updateStates()` on the GUI refresh timer. `nextSubCueIndex()` / `previousSubCueIndex()` read `currentStepIndex()` again after `currentSubCueIndex()` had checked the inner chase; the MasterTimer moving the list off the sub-cue step (or stopping it, which drops the runner) in between left `subCueChase()` NULL. Now one read of the step and its chase (`Chaser::currentSubCue`), null-checked. Regression: `SubCues_Test::subCueGettersAreSafeWhileTheListMoves` (a thread polls the getters while the list goes in and out of the sub-cue step); crashed 5/5 before the fix, passes 20/20 alone and 24/24 eight-wide.

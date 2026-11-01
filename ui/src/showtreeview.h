@@ -855,6 +855,18 @@ private:
     /** Preview the selected cue (Design mode, tab on screen), else stop. */
     void syncPreview();
 
+    // Play / Solo on the cue and layer pages (showtreeplay.cpp)
+    /** A page's Play / Stop and Solo row; @a prefix names them
+     *  (prefix + "Play", prefix + "Solo"). */
+    QWidget *makePageRig(QWidget *parent, const QString &prefix);
+    /** The pages' Play / Solo say what plays (Design), greyed in Operate. */
+    void updatePageRig();
+    void pagePlayClicked();
+    void pageSoloToggled(bool on);
+    /** Solo armed on cue @a m_soloCue: the selected layer of it plays
+     *  alone (ShowTreeController::setPreviewSolo); left with the cue. */
+    void syncSolo(quint32 cueId);
+
     Doc *m_doc;
     /** The Doc's; guarded, so a hide event during teardown (the Doc gone
      *  first) finds it null instead of freed. */
@@ -875,6 +887,11 @@ private:
     QLabel *m_hint;
     QLabel *m_previewLabel;
     QToolButton *m_previewPlay = nullptr;   //!< RC8: Play over a running show
+    QList<QToolButton *> m_pagePlay;        //!< the cue and layer pages' Play / Stop
+    QList<QToolButton *> m_pageSolo;        //!< ...and their Solo
+    bool m_previewStopped = false;          //!< Stop pressed: held until Play or another cue
+    quint32 m_soloCue = 0xFFFFFFFF;         //!< Solo armed on this cue (invalid: off)
+    bool m_soloSet = false;                 //!< the controller's Solo is the pages' (not the pad walk's)
     QAction *m_previewPlayAction = nullptr; //!< ...its place on the bar
 
     QTreeWidget *m_tree = nullptr;

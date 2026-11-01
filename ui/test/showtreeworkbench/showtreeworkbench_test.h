@@ -58,6 +58,16 @@ private slots:
     void waysIn();
     /** Solo: only the selected layer plays; off, the cue in context. */
     void solo();
+    /** REGRESSION GUARD (2026-11-01, "what happened to our solo and play
+     *  buttons"): Play and Solo are there, enabled, and change the output
+     *  on every step a user takes -- a cue, a layer, another layer,
+     *  another cue -- on the tree's own pages AND in the docked Workbench.
+     *  The pages never had them (only the docked Workbench did, since
+     *  4984db0be), so a cue opened the usual way had none. Don't delete. */
+    void soloAndPlayStayAvailable();
+    /** Operate: only the run is live -- Play and Solo stay in view, greyed,
+     *  saying why (the docked Workbench hid Play), on the pages and docked. */
+    void soloAndPlayGreyInOperate();
     /** A ▣ layer opens in the Workbench (↩ back to the cue); + EFX is one
      *  tree step with its function. */
     void opaqueLayersAndAddNew();

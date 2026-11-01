@@ -763,6 +763,177 @@ void ShowTreeWorkbench_Test::solo()
     QCOMPARE(st->previewedCue(), s.c2);
 }
 
+namespace
+{
+/* A page's (or the docked Workbench's) button, there for the user: on
+   screen and enabled. */
+QString usable(QToolButton *b)
+{
+    if (b == nullptr)
+        return QStringLiteral("missing");
+    if (!b->isVisible())
+        return QStringLiteral("hidden");
+    if (!b->isEnabled())
+        return QStringLiteral("greyed");
+    return QStringLiteral("ok");
+}
+}
+
+void ShowTreeWorkbench_Test::soloAndPlayStayAvailable()
+{
+    const Show s = SHOW();
+    ShowTreeController *st = m_doc->showTree();
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1400, 800);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    const QList<int> c1All({ 255, 255, 128, 128 });
+    const QList<int> c2All({ 51, 51, 128, 128 });
+    const QList<int> dark({ 0, 0, 0, 0 });
+
+    /* 1. The tree's own pages (a cue opened the usual way: a click). */
+    QVERIFY(view.selectNode(s.c1));
+    QToolButton *cuePlay = view.findChild<QToolButton *>("stCuePlay");
+    QToolButton *cueSolo = view.findChild<QToolButton *>("stCueSolo");
+    QCOMPARE(usable(cuePlay), QString("ok"));
+    QCOMPARE(usable(cueSolo), QString("ok"));
+    QCOMPARE(settle(m_doc, 20).mid(0, 4), c1All);
+    // Stop / Play: the whole cue.
+    QCOMPARE(cuePlay->text(), QString("Stop"));
+    cuePlay->click();
+    QCOMPARE(st->previewedCue(), invalidId());
+    QCOMPARE(settle(m_doc, 20).mid(0, 4), dark);
+    QCOMPARE(cuePlay->text(), QString("Play"));
+    cuePlay->click();
+    QCOMPARE(st->previewedCue(), s.c1);
+    QCOMPARE(settle(m_doc, 20).mid(0, 4), c1All);
+
+    // A layer: Play plays the cue, this layer in context.
+    QVERIFY(view.selectNode(s.towersLayer1, s.c1));
+    QToolButton *layerPlay = view.findChild<QToolButton *>("stLayerPlay");
+    QToolButton *layerSolo = view.findChild<QToolButton *>("stLayerSolo");
+    QCOMPARE(usable(layerPlay), QString("ok"));
+    QCOMPARE(usable(layerSolo), QString("ok"));
+    QCOMPARE(settle(m_doc, 20).mid(0, 4), c1All);
+    layerPlay->click();
+    QCOMPARE(settle(m_doc, 20).mid(0, 4), dark);
+    // Stopped stays stopped from layer to layer of the cue...
+    QVERIFY(view.selectNode(s.ustsLayer1, s.c1));
+    QCOMPARE(settle(m_doc, 20).mid(0, 4), dark);
+    QVERIFY(view.selectNode(s.towersLayer1, s.c1));
+    layerPlay->click();
+    QCOMPARE(settle(m_doc, 20).mid(0, 4), c1All);
+
+    // Solo: only Towers.
+    layerSolo->click();
+    QVERIFY(layerSolo->isChecked());
+    QCOMPARE(st->previewSoloLayer(), s.towersLayer1);
+    QCOMPARE(settle(m_doc, 20).mid(0, 4), QList<int>({ 255, 255, 0, 0 }));
+    // Another layer selected: Solo follows it (as the pad walk's does).
+    QVERIFY(view.selectNode(s.ustsLayer1, s.c1));
+    QCOMPARE(usable(layerSolo), QString("ok"));
+    QVERIFY(layerSolo->isChecked());
+    QCOMPARE(st->previewSoloLayer(), s.ustsLayer1);
+    QCOMPARE(settle(m_doc, 20).mid(0, 4), QList<int>({ 0, 0, 128, 128 }));
+    // The cue's page while soloed: the whole cue (no layer to solo), Solo still on.
+    QVERIFY(view.selectNode(s.c1));
+    QVERIFY(cueSolo->isChecked());
+    QCOMPARE(settle(m_doc, 20).mid(0, 4), c1All);
+    QVERIFY(view.selectNode(s.towersLayer1, s.c1));
+    QCOMPARE(settle(m_doc, 20).mid(0, 4), QList<int>({ 255, 255, 0, 0 }));
+
+    // Another cue: Solo drops, the new cue plays whole.
+    QVERIFY(view.selectNode(s.towersLayer2, s.c2));
+    QVERIFY(!layerSolo->isChecked());
+    QCOMPARE(st->previewSoloLayer(), invalidId());
+    QCOMPARE(usable(layerPlay), QString("ok"));
+    QCOMPARE(usable(layerSolo), QString("ok"));
+    QCOMPARE(settle(m_doc, 20).mid(0, 4), c2All);
+    // Off by hand too.
+    layerSolo->click();
+    QCOMPARE(settle(m_doc, 20).mid(0, 4), QList<int>({ 51, 51, 0, 0 }));
+    layerSolo->click();
+    QCOMPARE(st->previewSoloLayer(), invalidId());
+    QCOMPARE(settle(m_doc, 20).mid(0, 4), c2All);
+    // Stop held, then another cue picked: it plays (the latest action wins).
+    layerPlay->click();
+    QCOMPARE(settle(m_doc, 20).mid(0, 4), dark);
+    QVERIFY(view.selectNode(s.c1));
+    QCOMPARE(settle(m_doc, 20).mid(0, 4), c1All);
+
+    /* 2. The docked Workbench: the pages' pair hides (it has its own). */
+    QVERIFY(view.openInWorkbench(s.c1, s.towersLayer1));
+    Workbench *bench = view.dockedWorkbench();
+    QVERIFY(bench != nullptr);
+    QVERIFY(!view.findChild<QWidget *>("stLayerRig")->isVisible());
+    QCOMPARE(usable(bench->m_playBtn), QString("ok"));
+    QCOMPARE(usable(bench->m_soloBtn), QString("ok"));
+    QCOMPARE(settle(m_doc, 20).mid(0, 4), c1All);
+    bench->m_playBtn->click();
+    QCOMPARE(settle(m_doc, 20).mid(0, 4), dark);
+    QCOMPARE(usable(bench->m_playBtn), QString("ok"));
+    bench->m_playBtn->click();
+    QCOMPARE(settle(m_doc, 20).mid(0, 4), c1All);
+    bench->m_soloBtn->click();
+    QCOMPARE(settle(m_doc, 20).mid(0, 4), QList<int>({ 255, 255, 0, 0 }));
+    // Another layer (picked in the tree beside it): it plays alone.
+    QVERIFY(view.selectNode(s.ustsLayer1, s.c1));
+    QCOMPARE(usable(bench->m_soloBtn), QString("ok"));
+    QVERIFY(bench->isSolo());
+    QCOMPARE(settle(m_doc, 20).mid(0, 4), QList<int>({ 0, 0, 128, 128 }));
+    // Another cue: Solo drops, both buttons still there.
+    QVERIFY(view.selectNode(s.c2));
+    QTRY_VERIFY(qobject_cast<TreeCueStack *>(bench->stack())->cueId() == s.c2);
+    QVERIFY(!bench->isSolo());
+    QCOMPARE(usable(bench->m_playBtn), QString("ok"));
+    QCOMPARE(usable(bench->m_soloBtn), QString("ok"));
+    QCOMPARE(settle(m_doc, 20).mid(0, 4), c2All);
+
+    // ↩ Show Tree: the pages' pair is back.
+    QVERIFY(view.closeWorkbench());
+    QCOMPARE(usable(view.findChild<QToolButton *>(view.currentKind() == ShowTreeView::CueNode
+                                                  ? "stCuePlay" : "stLayerPlay")), QString("ok"));
+}
+
+void ShowTreeWorkbench_Test::soloAndPlayGreyInOperate()
+{
+    const Show s = SHOW();
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1400, 800);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+
+    QVERIFY(view.selectNode(s.towersLayer1, s.c1));
+    m_doc->setMode(Doc::Operate);
+    for (const char *name : { "stLayerPlay", "stLayerSolo" })
+    {
+        QToolButton *b = view.findChild<QToolButton *>(name);
+        QCOMPARE(usable(b), QString("greyed"));
+        QVERIFY2(b->toolTip().contains("Operate"), qPrintable(b->toolTip()));
+        b->click();                 // greyed: nothing happens
+    }
+    QCOMPARE(int(m_doc->showTree()->previewState()), int(ShowTreeController::PreviewState::NotDesign));
+    QCOMPARE(m_doc->showTree()->previewSoloLayer(), invalidId());
+    QCOMPARE(settle(m_doc, 20).mid(0, 4), QList<int>({ 0, 0, 0, 0 }));
+    QVERIFY(view.selectNode(s.c1));
+    QCOMPARE(usable(view.findChild<QToolButton *>("stCuePlay")), QString("greyed"));
+    QCOMPARE(usable(view.findChild<QToolButton *>("stCueSolo")), QString("greyed"));
+    m_doc->setMode(Doc::Design);
+    QCOMPARE(usable(view.findChild<QToolButton *>("stCuePlay")), QString("ok"));
+
+    // Docked: greyed there too, not hidden.
+    QVERIFY(view.openInWorkbench(s.c1, s.towersLayer1));
+    Workbench *bench = view.dockedWorkbench();
+    m_doc->setMode(Doc::Operate);
+    QCOMPARE(usable(bench->m_playBtn), QString("greyed"));
+    QCOMPARE(usable(bench->m_soloBtn), QString("greyed"));
+    QVERIFY2(bench->m_playBtn->toolTip().contains("Operate"), qPrintable(bench->m_playBtn->toolTip()));
+    QVERIFY2(bench->m_soloBtn->toolTip().contains("Operate"), qPrintable(bench->m_soloBtn->toolTip()));
+    m_doc->setMode(Doc::Design);
+    QCOMPARE(usable(bench->m_playBtn), QString("ok"));
+    QCOMPARE(usable(bench->m_soloBtn), QString("ok"));
+}
+
 void ShowTreeWorkbench_Test::newHereInTheDockedWorkbench()
 {
     const Show s = SHOW();
