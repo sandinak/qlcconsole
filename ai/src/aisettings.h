@@ -43,6 +43,12 @@ public:
     QString model = QStringLiteral("qwen3.6:35b-a3b-mtp-q4_K_M");
     QString sendShowContext = QStringLiteral("summary");    //!< none | summary
     int timeoutSec = 60;
+    /** The MCP server (P3): AI tools on this computer (Claude Code, Claude
+     *  Desktop, a local agent) use the show's operations. Needs AI Assist
+     *  on; only in Design. */
+    bool mcpEnabled = false;
+    /** ...and may propose changes (shown here, applied by the operator). */
+    bool mcpChanges = false;
 
     static AiSettings load();
     void save() const;

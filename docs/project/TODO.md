@@ -548,7 +548,7 @@ with the throw). **Part C, the audience-zone check, done** (Show Review PWR-09, 
 outline, the Type=Laser emission inference, and
 FixtureDefCheck's laser checks.
 
-## AI Assist (0.5, docs/design/AI_ASSIST.md; P0+P1 built 2026-10-31, ai; P2 built 2026-10-31, ai2; P2b built 2026-10-31, ai3)
+## AI Assist (0.5, docs/design/AI_ASSIST.md; P0+P1 built 2026-10-31, ai; P2 built 2026-10-31, ai2; P2b built 2026-10-31, ai3; P3 built 2026-10-31, mcp)
 
 Branson's design: type a request in Design mode ("movers 1–6 deep blue at
 50%", "find address conflicts") and get proposed command-line text to
@@ -677,8 +677,36 @@ docs/features/ai-assist.md.
   it), no "Any Supported File" dispatch to it since a `.qxw` is the
   Workspace importer's (can change).*
 
+- ~~**P3** MCP server over the registry.~~ Built: `ai/src/mcpserver.*`
+  (the registry's read-only operations as MCP tools with their own
+  schemas; the change operations only with "…and propose changes", each
+  call a step of a proposal in the Show Tree's command line via
+  `AiAssist::proposeExternal()`, applied by the operator as one undo
+  step; `command` never offered) and `ai/src/mcpbridge.*`
+  (`qlcconsole --mcp`, main/main.cpp: stdio to the app's local socket,
+  answering for an absent server itself). Settings ▸ AI Assist gains two
+  boxes (no menu item); the footer says when a tool's proposal waits.
+  Closed synchronously on entering Operate (each connection told why,
+  tracked by the Operate audit), refused there. Tests: McpServer_Test
+  (ai/test/mcpserver: an in-process client over the real socket lists
+  tools and schemas, runs find_conflicts, proposes without applying until
+  confirmed, is refused in Operate; loopback only, no network).
+  *decided: transport = stdio through `qlcconsole --mcp` to a QLocalServer
+  in the running app (a Unix socket in a per-user folder, a named pipe on
+  Windows): no TCP port at all, and it works on the show that is open
+  rather than loading a file headless (can change).* *decided: the
+  server needs AI Assist on as well as its own box, and proposals need a
+  second box, both off by default (can change).* *decided: a change call
+  answers at once ("proposed as step N") rather than waiting for the
+  operator; the client checks the result with the read-only tools (can
+  change).* *decided: an MCP proposal is refused while the operator has
+  an in-app question or proposal open, and a new question discards an
+  MCP proposal (can change).* *decided: only one qlcconsole per user
+  serves; a second reports it on the settings page (can change).*
+
 **Next:**
-- **P3** MCP server over the registry.
+- MCP: a headless `--mcp <show>` mode on a file (the 2026-09-10 idea
+  below) if wanted; Windows named-pipe path untested on the VM.
 - Small: VC widgets in `unused`; Linux/Windows keychain (QtKeychain);
   Tab completion of the registry's words; palette and authoring operations
   (patch_fixture, create_scene/chaser/group of §4) once they can join a
@@ -1529,6 +1557,10 @@ the Aim palette picker and the aim warnings.
 ---
 
 ### an MCP server for qlcconsole
+
+*Built as AI Assist P3 (2026-10-31): an MCP server in the running app over
+the Operation Registry (see the AI Assist section). The headless
+file-editing server sketched below is not built.*
 
 Branson, 2026-09-10: "shower thought .. can we consider an MCP for qlcconsole ..
 so that we can do this kinda thing inline?"

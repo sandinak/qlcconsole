@@ -26,6 +26,7 @@
 #include <QLabel>
 
 #include "aisettingspage.h"
+#include "mcpserver.h"
 #include "aiassist.h"
 
 AiSettingsPage::AiSettingsPage(QWidget *parent)
@@ -109,7 +110,30 @@ AiSettingsPage::AiSettingsPage(QWidget *parent)
     m_cloudNote->setWordWrap(true);
     m_cloudNote->setStyleSheet(QStringLiteral("QLabel { color: #b06000; }"));
     v->addWidget(m_cloudNote);
+
+    // The MCP server (P3): AI tools outside qlcconsole, on this computer.
+    m_mcp = new QCheckBox(tr("Let AI tools on this computer use the show (MCP server)"), this);
+    m_mcp->setObjectName("aiMcp");
+    m_mcp->setChecked(s.mcpEnabled);
+    m_mcp->setToolTip(tr("Claude Code, Claude Desktop or a local agent can ask the console the same read-only "
+                         "questions AI Assist asks. A local socket: no network port, this user only; closed in "
+                         "Operate."));
+    v->addWidget(m_mcp);
+    m_mcpChanges = new QCheckBox(tr("…and propose changes (you apply them here, one undo step)"), this);
+    m_mcpChanges->setObjectName("aiMcpChanges");
+    m_mcpChanges->setChecked(s.mcpChanges);
+    m_mcpChanges->setToolTip(tr("A change a tool asks for waits in the Show Tree's command line, like AI "
+                                "Assist's own: nothing changes until you apply it."));
+    v->addWidget(m_mcpChanges);
+    m_mcpNote = new QLabel(this);
+    m_mcpNote->setObjectName("aiMcpNote");
+    m_mcpNote->setWordWrap(true);
+    m_mcpNote->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    v->addWidget(m_mcpNote);
     v->addStretch(1);
+    connect(m_mcp, &QCheckBox::toggled, this, &AiSettingsPage::updateState);
+    if (McpServer *mcp = McpServer::instance())
+        connect(mcp, &McpServer::stateChanged, this, &AiSettingsPage::updateMcpNote);
 
     connect(m_enabled, &QCheckBox::toggled, this, &AiSettingsPage::updateState);
     connect(m_provider, &QComboBox::currentIndexChanged, this, &AiSettingsPage::slotProviderChanged);
@@ -137,6 +161,8 @@ AiSettings AiSettingsPage::settings() const
     s.model = m_model->currentText().trimmed();
     s.sendShowContext = m_context->currentData().toString();
     s.timeoutSec = m_timeout->value();
+    s.mcpEnabled = m_mcp->isChecked();
+    s.mcpChanges = m_mcpChanges->isChecked();
     return s;
 }
 
@@ -171,6 +197,29 @@ void AiSettingsPage::updateState()
                                  .arg(QUrl(s.endpoint).host()));
     else
         m_cloudNote->setText(tr("The model runs on this computer: nothing leaves it."));
+    m_mcp->setEnabled(s.enabled);
+    m_mcpChanges->setEnabled(s.enabled && s.mcpEnabled);
+    updateMcpNote();
+}
+
+void AiSettingsPage::updateMcpNote()
+{
+    const AiSettings s = settings();
+    if (!s.enabled || !s.mcpEnabled)
+    {
+        m_mcpNote->setText(tr("Off: no AI tool outside qlcconsole can reach the show."));
+        return;
+    }
+    QString text = tr("Set the tool up with the command <code>%1</code> -- for Claude Code: "
+                      "<code>claude mcp add qlcconsole -- %1</code>.")
+                       .arg(McpServer::clientCommand().toHtmlEscaped());
+    const McpServer *mcp = McpServer::instance();
+    const AiSettings saved = AiSettings::load();
+    if (saved.enabled != s.enabled || saved.mcpEnabled != s.mcpEnabled)
+        text += QLatin1Char(' ') + tr("Opens when you press OK.").toHtmlEscaped();
+    else if (mcp != nullptr)
+        text += QLatin1Char(' ') + mcp->statusText().toHtmlEscaped();
+    m_mcpNote->setText(text);
 }
 
 void AiSettingsPage::slotTest()

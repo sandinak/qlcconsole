@@ -23,6 +23,7 @@
 #include <QTextBrowser>
 #include <QLineEdit>
 #include <QLabel>
+#include <functional>
 
 #include "showtreecommand.h"
 #include "aiassist.h"
@@ -75,6 +76,10 @@ public:
      *  grammar, with the view's choosers). Unset: AI Assist's own. */
     void setOperations(OperationRegistry *registry) { m_registry = registry; }
 
+    /** Where the view's selection is now: what an MCP client's calls run
+     *  with (AiAssist::currentSelection()). */
+    void setSelectionProvider(const std::function<ShowTreeCommand::Context()> &provider);
+
     /** Apply the proposal's included steps (Apply, Enter). */
     bool applyProposal();
     /** Leave step @a index out (or back in). */
@@ -107,6 +112,7 @@ private:
     QToolButton *m_button;
     QPointer<AiAssist> m_ai;
     OperationRegistry *m_registry = nullptr;
+    std::function<ShowTreeCommand::Context()> m_selectionProvider;
     /** The answer the proposal came with (its text heads the checklist). */
     AiAssist::Answer m_answer;
     QList<bool> m_included;

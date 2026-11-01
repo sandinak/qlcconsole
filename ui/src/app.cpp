@@ -159,6 +159,7 @@
 #include <QHBoxLayout>
 #ifdef QLC_AI_ASSIST
 #include "aiassist.h"
+#include "mcpserver.h"
 #endif
 
 #if defined(WIN32) || defined(Q_OS_WIN)
@@ -1210,6 +1211,20 @@ void App::initDoc()
         connect(ai, &AiAssist::resourceErrorCleared, this, []() {
             ShowStatus::instance()->clearStatus(QStringLiteral("ai.resources"));
         });
+        // A change an MCP client proposed waits in the Show Tree's command
+        // line: the footer says so wherever the operator is.
+        connect(ai, &AiAssist::proposalChanged, this, [ai]() {
+            if (ai->isExternalProposal())
+                ShowStatus::instance()->setStatus(QStringLiteral("ai.mcp"), ShowStatus::Warning,
+                                                  tr("An AI tool proposes %n change(s)", "", ai->proposal().count()),
+                                                  tr("Nothing has changed yet. In the Show Tree's command line: Enter "
+                                                     "applies them as one undo step, Esc discards them."));
+            else
+                ShowStatus::instance()->clearStatus(QStringLiteral("ai.mcp"));
+        });
+        // The MCP server (P3): off by default, this computer only, Design
+        // only; it follows the settings and the mode itself.
+        new McpServer(m_doc, this);
     }
 #endif
     // Something the show asked for and was refused (a Script's

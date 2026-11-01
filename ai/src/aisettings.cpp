@@ -41,6 +41,8 @@ AiSettings AiSettings::load()
     if (a.sendShowContext != QLatin1String("none"))
         a.sendShowContext = QStringLiteral("summary");
     a.timeoutSec = qBound(5, s.value(KEY("timeoutSec"), a.timeoutSec).toInt(), 600);
+    a.mcpEnabled = s.value(KEY("mcpEnabled"), a.mcpEnabled).toBool();
+    a.mcpChanges = s.value(KEY("mcpChanges"), a.mcpChanges).toBool();
     return a;
 }
 
@@ -53,6 +55,8 @@ void AiSettings::save() const
     s.setValue(KEY("model"), model);
     s.setValue(KEY("sendShowContext"), sendShowContext);
     s.setValue(KEY("timeoutSec"), timeoutSec);
+    s.setValue(KEY("mcpEnabled"), mcpEnabled);
+    s.setValue(KEY("mcpChanges"), mcpChanges);
 }
 
 QStringList AiSettings::providers()
@@ -102,7 +106,8 @@ bool AiSettings::isLocalOllama() const
 bool AiSettings::operator==(const AiSettings &o) const
 {
     return enabled == o.enabled && provider == o.provider && endpoint == o.endpoint && model == o.model
-           && sendShowContext == o.sendShowContext && timeoutSec == o.timeoutSec;
+           && sendShowContext == o.sendShowContext && timeoutSec == o.timeoutSec
+           && mcpEnabled == o.mcpEnabled && mcpChanges == o.mcpChanges;
 }
 
 /****************************************************************************

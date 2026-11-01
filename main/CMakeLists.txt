@@ -20,6 +20,13 @@ target_link_libraries(${module_name} PRIVATE
     qlcpluswebaccess
 )
 
+# `qlcconsole --mcp` (AI Assist P3): the stdio bridge to the running app's
+# MCP server. Only McpBridge is pulled from the static library.
+if(QLC_AI_ASSIST)
+    target_link_libraries(${module_name} PRIVATE qlcconsoleai)
+    target_compile_definitions(${module_name} PRIVATE QLC_AI_ASSIST)
+endif()
+
 if(WIN32 OR APPLE)
     target_sources(${module_name} PRIVATE
         ../ui/src/debugbox.cpp ../ui/src/debugbox.h ../ui/src/debugbox.ui

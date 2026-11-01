@@ -50,6 +50,9 @@
 #include "webaccessauth.h"
 #include "helpshots.h"
 #include "showreviewcli.h"
+#ifdef QLC_AI_ASSIST
+#include "mcpbridge.h"
+#endif
 #include "connectionstree.h"
 #include "apputil.h"
 #include "app.h"
@@ -182,6 +185,10 @@ void printUsage()
     cout << "  -m or --nowm\t\t\tInform the application that the system doesn't provide a window manager" << endl;
     cout << "  -n or --nogui\t\t\tStart the application with the GUI hidden (requires --nowm)" << endl;
     cout << "  -o or --open <file>\t\tOpen the specified workspace file" << endl;
+#ifdef QLC_AI_ASSIST
+    cout << "  --mcp\t\t\t\tFor an MCP client (Claude Code, Claude Desktop): talk to the running qlcconsole" << endl;
+    cout << "\t\t\t\tover stdio (Settings > AI Assist > MCP server; this computer only)" << endl;
+#endif
     cout << "  -p or --operate\t\tStart in operate mode" << endl;
     cout << "  --review <file>\t\tShow Review with no window: list the show's design problems and exit" << endl;
     cout << "\t\t\t\t(0 clean, 1 warnings, 2 blockers, 3 unreadable; --review <file> --help for more)" << endl;
@@ -379,6 +386,14 @@ int main(int argc, char** argv)
             return 0;
         }
     }
+
+#ifdef QLC_AI_ASSIST
+    /* --mcp: an MCP client started us to reach the running qlcconsole
+       (AI Assist P3). No window, no show, no settings: stdin/stdout to the
+       app's local socket. */
+    if (McpBridge::wanted(argc, argv))
+        return McpBridge::cliMain(argc, argv);
+#endif
 
     // Before anything reads a setting: the help's pictures start from the
     // default layout and leave the user's own settings alone.

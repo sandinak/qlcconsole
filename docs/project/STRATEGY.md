@@ -58,7 +58,9 @@ ratios between items hold, and ratios are what the ROI column uses.
   with the full Design/Operate gating; P2 built 2026-10-31 (changes
   proposed, confirmed, one undo step); P2b built 2026-10-31
   (configuration import: File ▸ Import, command line, assistant); P3
-  (MCP) next.
+  built 2026-10-31 (an MCP server over the same registry: off by
+  default, this computer only, Design only, changes confirmed in the
+  app).
 - **The main risk is the one the usability review already found:**
   creeping featurism. Five design studies arrived in one day. The
   guardrails in section 5 are meant to stop the next 102-item menu.
@@ -430,7 +432,7 @@ Notes:
 
 | Item | Value | Fit | Reuses | Effort | Risk | Maint. | ROI | Call |
 |---|---|---|---|---|---|---|---|---|
-| AI Assist P0–P3 (docs/design/AI_ASSIST.md): one operation registry under the command line, a Design-only assistant on a local model (Ollama), configuration import, an MCP server | 4 | 4 | Show Tree command line, undo, Design/Operate | 15 | M | M | 1.1 | BUILD (0.5), user's call 2026-10-30 (P2b configuration import also stands alone); P0+P1 built 2026-10-31 (registry, settings, providers, read-only assistant, Operate gating); P2 built 2026-10-31 (change operations, confirm, one undo step); P2b built 2026-10-31 (configuration import); P3 next |
+| AI Assist P0–P3 (docs/design/AI_ASSIST.md): one operation registry under the command line, a Design-only assistant on a local model (Ollama), configuration import, an MCP server | 4 | 4 | Show Tree command line, undo, Design/Operate | 15 | M | M | 1.1 | BUILD (0.5), user's call 2026-10-30 (P2b configuration import also stands alone); P0+P1 built 2026-10-31 (registry, settings, providers, read-only assistant, Operate gating); P2 built 2026-10-31 (change operations, confirm, one undo step); P2b built 2026-10-31 (configuration import); P3 built 2026-10-31 (MCP server: `qlcconsole --mcp` over a local socket, read-only unless the operator allows proposals) |
 | One GO path (`App::runCommand`) for keys, Run tab, footer, pad, web | 4 | 5 | ShowControl, RC8 preview hold | 0.5 | L | L | **40** | BUILT 2026-10-31 (0.4, first; docs/design/RUN_COMMANDS.md) |
 | Tracking sheet + printable cue sheet (PDF/XLSX) | 5 | 5 | tracking resolve, patch-list exports | 4 | L | L | **6.3** | BUILT (0.4, sheet, 2026-10-31): More ▾ → Cue Sheet… |
 | Course Level 2 lessons (7), one per release cycle | 5 | 5 | course template, courseshow_test | 2 a lesson | L | M | **12.5** a lesson | BUILD (0.3.1 onward) |
@@ -458,7 +460,7 @@ Notes:
 | Shutters on profiles in Focus | 3 | 4 | focus tools, beams | 10 | M | H | 1 | LATER |
 | W7 conversions (EFX → movement effect, RGB Matrix → matrix effect) | 2 | 3 | effect designer | 4 | M | M | 1.2 | LATER |
 | Power by intensity per circuit | 2 | 3 | power model | 5 | M | M | 1 | LATER |
-| MCP server / plain-language command line | 2 | 2 | engine headless load | 8 | M | H | 0.4 | LATER |
+| MCP server / plain-language command line | 2 | 2 | engine headless load | 8 | M | H | 0.4 | DONE as AI Assist P2/P3 (2026-10-31); a headless server on a file is not built |
 | Relative / multiply layers (tilt over an effect, masks) | 2 | 3 | look stacking | 10 | H | H | 0.4 | NO for now: pro-console semantics, engine risk |
 | Fixture Editor inside the main window | 1 | 2 | fixture editor | 5 | M | M | 0.3 | NO: the separate editor works |
 | Ableton Link | 1 | 1 | none | 5 | H | H | 0.1 | NO: GPL, not this audience |

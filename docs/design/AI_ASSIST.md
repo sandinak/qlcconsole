@@ -1,8 +1,8 @@
 # qlcconsole — AI Assist (design + implementation handoff)
 
-Status: P0, P1, P2 and P2b built 2026-10-31 (engine/src/operationregistry.*,
-engine/src/configimport.*, ai/; help in docs/features/ai-assist.md;
-decisions in docs/project/TODO.md); P3 next. Owner: sandinak. Implementer: Claude Code.
+Status: P0, P1, P2, P2b and P3 built 2026-10-31 (engine/src/operationregistry.*,
+engine/src/configimport.*, ai/ incl. ai/src/mcpserver.* and mcpbridge.*;
+help in docs/features/ai-assist.md; decisions in docs/project/TODO.md). Owner: sandinak. Implementer: Claude Code.
 Read DONE.md / TODO.md first; follow existing conventions there for status tracking.
 
 ## 1. Goal
@@ -211,6 +211,12 @@ P1 must also ship the full §5a mode gating:
 - Standalone or in-process MCP server exposing the same ops (read-only by default, write behind
   a flag), usable from Claude Code and local agents against a show file.
 - Accept: Claude Code can list fixtures and run `find_conflicts` on a `.qxw` via MCP.
+- Built: in-process, in the running app. Transport (decided, can change):
+  the MCP stdio transport through `qlcconsole --mcp`, a bridge to a
+  local socket of the app (QLocalServer; no TCP port). Read-only tools
+  always; change tools only with "…and propose changes" on, and then as
+  a proposal the operator applies in the command line (one undo step).
+  Same Design/Operate gating as the assistant: closed in Operate.
 
 ## 9. Testing
 
