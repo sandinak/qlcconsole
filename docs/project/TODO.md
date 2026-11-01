@@ -14,6 +14,7 @@ Built: `platforms/linux/make-pi-deb.sh` (a .deb; decided, can change),
 docs/dev/RASPI.md. Open: build it in CI (an arm64 runner) and attach it to
 a release; a Pi 4 build host; a Pi image with the package preinstalled;
 `debian/` and the `.spec` are still upstream's stale copies (unused).
+
 ## "Why is this on?" v1 — built, leftovers (0.5, why, 2026-10-31)
 
 Built: `WhyOn` (engine/src/whyon.*) answers "why is this light / channel
@@ -126,6 +127,7 @@ which lets go of them, is one). Open:
   Still stock: pause / resume, a row's sub-cue double-click.
 - decided (can change): GO is never refused by Operate's PIN or Teaching
   (they lock Design); a GO that finds nothing to play holds no preview.
+
 ## Cue sheet and tracking sheet — leftovers (sheet, 2026-10-31)
 
 Built (`engine/src/cuesheet.*`, `ui/src/cuesheetdialog.*`, More ▾ → Cue
@@ -257,24 +259,6 @@ hits between places and onto VC buttons. Open:
   no undo (the VC has none).
 - The command line's `hit` makes production hits only; no `hit … for cue`.
 
-## Breathe once — leftovers (brth, 2026-10-30)
-
-Built (build 2593 report: flash at start, end lands anywhere, no typed
-values, rate awkward for one shot). Open, each "decided (can change)":
-- A wave (script `cycleParam`) on Once / N times runs whole cycles; its
-  Length is one cycle, stored as the rate (1 / length). The run Length
-  (`__durationMs`, auto = the cue's time) no longer applies to a wave.
-  Alternatives to put to the user: Length as the whole run (N cycles
-  fitted into it); a breathe with in / hold / out times of its own.
-- A scene with an effect holds its output until the effect's first frame,
-  at most 250 ms (the Doc's own timer only).
-- Dimmer Phaser sends the dimmer alone; the host scales the look's colour
-  (white too) on a light with no dimmer.
-- A Once / N times run starts afresh on every new start of a scene
-  carrying it (a cue's GO, a hit fired again, a chaser step): the user's
-  rule. A cue that only tracks the effect through leaves it running or
-  done (decided, can change). A tracked effect on a layer whose scene
-  changes in that cue (something else on it set) does start again.
 ## Controller slots — leftovers (ctl, 2026-10-30)
 
 Built (CHANGELOG 0.3.1 "One input, whichever controller is here";
@@ -324,6 +308,7 @@ change)":
 - Course: done (crs): Lesson 0.7, 1.1 (words, "In the app" box), the Level
   1/2 checks and the 3.8 outline say a show is one list, a song a section
   (+ Section). No lesson builds a second song yet.
+
 ## Effect origins, Build search, runs for any effect — leftovers (efn, 2026-10-29)
 
 Built (DONE.md 2026-10-29). Open, each "decided (can change)":
@@ -340,6 +325,7 @@ Built (DONE.md 2026-10-29). Open, each "decided (can change)":
 - Runs on a Show Tree effect row changes the palette (everywhere it plays
   when it is the show's). ~~It is not an undo step yet.~~ Done (lyr): it is
   one step (Runs, At the end, Length).
+
 ## Show Tree tidy — leftovers (2026-10-29, DONE.md)
 
 - ~~The command line's `release` takes groups only; a ▣ (function) layer
@@ -365,63 +351,15 @@ Built (DONE.md 2026-10-29). Open, each "decided (can change)" in the note:
   a layer holds one effect per kind, so order changes nothing on stage
   today). Would need an order on Layer, saved, resolved and undone.
 
-## Timecode (0.4)
+## Timecode (0.4) — built, leftovers
 
-**Built:** LTC (audio) timecode in -- `LtcDecoder` (engine/src/ltcdecoder.*,
-allocation-free biphase decoder, 24/25/29.97 df/30, either polarity) fed by
-`AudioCapture` through `LtcReceiver`, which pushes into the existing
-`TimecodeSource::updateTimeCode()` follow path as source
-`TimecodeSource::LtcUniverse`; picked in the footer MTC chip menu and in
-Connections ▸ Devices ▸ Show control & sync. decided: the first channel of
-the audio input chosen in the audio settings, no separate LTC device
-(can change). Test: `ltc_test`.
-**Built (tcq):** cues at a timecode -- `Cue::timecode` and
-`CueList::followTimecode` (saved as Timecode= / FollowTimecode=), the
-`TimecodeCues` engine class (engine/src/timecodecues.*) firing each cue
-through `ShowControl::run(…, RouteTimecode)`; the cue page's *At timecode*
-with Learn, the list page's *Follow timecode*, the Run tab's next-cue
-countdown. decided: a jump forward fires only the latest cue passed, a jump
-back re-arms (a step under 250 ms is jitter), a dropout holds, the first
-position fires only a cue exactly there, cues with no time are GO-only,
-times are stored in ms and shown at the source's frame rate (can change).
-Test: `timecodecues_test`.
+Built: LTC in (`ltc_test`) and cues at a timecode (`timecodecues_test`), DONE.md 2026-11-01 "Moved from TODO.md". Decided (each can change):
+- decided: the first channel of the audio input chosen in the audio settings, no separate LTC device (can change)
+- decided: a jump forward fires only the latest cue passed, a jump back re-arms (a step under 250 ms is jitter), a dropout holds, the first position fires only a cue exactly there, cues with no time are GO-only, times are stored in ms and shown at the source's frame rate (can change)
+
 **Open:** LTC read backwards, a channel picker, an input level meter beside
 the readout, and a time per frame rate (a cue stamped at 25 fps reads the
 same milliseconds at 30).
-
-## Forum quick wins (Q180, 0.3.1)
-
-From the forum survey's quick wins (STRATEGY.md 3.2). **Built:** Art-Net
-TimeCode in (the MTC follow path), the patch list's Gel column, help
-answers to common forum questions (Coming from QLC+ 4), File ▸ New from
-Template (the classroom stage), File ▸ Show Settings (open in Operate, an
-Operate PIN), fade in / out on hits (bake, 2026-10-30). **Still open:**
-- **Tonight's running order** (reorder productions for Run): Show Tree
-  code, left while another agent is in it.
-Operate PIN). **Still open:**
-- **Tonight's running order**: built (Running order… on the production's
-  page; `Production::runningOrder`, chaser steps in that order).
-- **Fade in/out on hits**: Show Tree (hit bake), same reason.
-- **Gel colour in the Rig Overview** (the 3D view): the rig view, same
-  reason. The patch list half is built.
-- **Fade in/out on hits**: Show Tree (hit bake), same reason.
-- ~~**Gel colour in the Rig Overview** (the 3D view)~~ — done (feat/rig-cost).
-- **Momentary / start-only / stop-only on Control Map bindings**: built
-  with the Control Map's return (cm, feat/031-control-map), not here.
-- **Teaching mode**: DONE (t, feat/031-teaching): must-haves + lesson link;
-  see docs/features/teaching.md. Also DONE (tch2, feat/031-teaching2): reset
-  to handout (state embedded in the handout, Show Settings, behind the PIN),
-  confirm before patch changes (Fixture Manager, Patch dialog), USB/hardware
-  output held. Also DONE (tch4, feat/05-teaching-later): the per-GO "what just
-  happened" log (Run tab, `GoLog`, fed by `ShowControl::cueTaken`), glossary
-  popovers (`TeachingGlossary`, one source), and `lesson-3-6-start.qlcc`
-  (Teaching on; decided (can change): only 3.6's text expects it, so the
-  other course shows stay off, since the Teaching patch question would
-  stand in front of the lessons that patch, e.g. the 3.10 Eos import).
-  Also DONE (rev2, feat/05-review-checks): the Show Review check TEACH-01 "Teaching mode is on". Also DONE (tch3, feat/031-teaching3): the patch
-  confirm in the Lighting Studio's Fixture Properties (universe/address) and
-  on pasting a truss with its fixtures patched; every other Studio add (curtain,
-  fountain flame, pasted-unpatched) is unpatched, so changes nothing.
 
 ## Lighting Studio alignment — leftovers (0.3.1 d2, 2026-10-29)
 
@@ -436,20 +374,7 @@ Still open from it:
 
 ## Walk the show from the stage with the controller — MVP built, leftovers (board Q192, 0.4, walk, 2026-10-31)
 
-Built (docs/features/show-control.md "Walk the show from the stage";
-DONE.md 2026-10-31): in the pad's Run role, **Menu** starts Focus this cue
-(RefineSession) on the cue in hand with the walking map (`PadRun::
-walkActionFor()` / `handleWalk()`): RT/LT next/previous cue (Design:
-previewed, never a GO; a cue with nothing to walk is passed over); RB/LB
-next/previous layer, said "Layer 2 of 4: Movers." (at Group/Fixture scope
-the bumpers step those, as in Refine); View solo layer / whole cue
-(`ShowTreeController::setPreviewSolo()`); View + B undo; tap Y scope, hold Y
-tags the cue **Needs work** (`Cue::needsWork`, saved NeedsWork="1", one
-tree step; orange "needs work" flag in the tree with the note in its
-tooltip, a box on the cue page); Menu leaves. Sticks, D-pad, A/B/X are
-Refine's; every keep is one tree step. Operate: quiet Refine (Q130), only
-the running cue, RT/LT and solo refused. The laptop opens Focus This Cue
-when a walk starts; the Run tab's button says **Pad: Walk**.
+Built: see DONE.md 2026-10-31 (Walk the show, MVP) and docs/features/show-control.md. Focus calls and Refine (built 2026-10-24, design note moved to DONE.md): Branson's "Try this" with a real pad and a real-rig check on the show VLAN are still open.
 
 Open:
 - **The light itself on A** (Branson, 2026-10-30): on a target-aimed
@@ -480,25 +405,6 @@ are set as for any light (drop a Library > Target on the layer); one button
 map for Xbox and PlayStation, the touchpad only adds shortcuts; the button
 budget is the walking map + hold LB as a modifier.
 
-## Focus calls and refining a cue from the stage (design, 2026-10-23)
-
-Two jobs, being designed on the board (Q105-Q108), built after the freeze:
-- **Focus calls** (pre-show alignment on a new stage): focus groups saved
-  with the show, in order, each with a target; run from a list cue or Run;
-  triggers step groups, bumpers step fixtures, stick nudges, A saves the
-  fixture's calibration -- so every cue lands right on this stage.
-- **Refining a cue in place**: with a cue live, the controller edits the
-  cue's own values (aim, zoom, focus, gobo, colour) at a chosen scope
-  (layer / group / fixture), with feedback to the operator on stage (the
-  selection flashing, spoken status from the laptop, rumble).
-
-**Status (2026-10-24):** built and merged to `main` (board Q105-Q136):
-focus calls, venues, Refine in the Show Tree and Build, the focus-call
-cue, the venue manager, feedback and voice, the gaps-review fixes. See
-[FOCUS_REFINE_DESIGN.md](../design/FOCUS_REFINE_DESIGN.md) section 12 for what is
-stubbed and next: Branson's "Try this" with a real pad, then a real-rig
-check on the show VLAN.
-
 ## House rig, tour package and universes per venue (board Q137-Q138, 2026-10-24)
 
 **Status:** built on `main` (docs/design/VENUES.md): owners on fixtures and groups,
@@ -507,20 +413,6 @@ fills, Tour/House slots, the venue's output patch, "not ours", the clash
 check, the venue page, the plot's Owner overlay. Open: Branson confirms
 docs/design/VENUES.md section 11; a real-rig check that a not-ours universe stays
 silent on Art-Net/sACN.
-
-## People on the stage: follow-ons (performer lines shipped 2026-10-29, DONE.md)
-
-Done 0.3.1 (`feat/031-rig2`): people on a turned riser face its front in
-the Rig Overview (the highest deck under them decides; the plot's
-silhouette is unchanged, decided: can change); the Rig Overview has an
-**Owner** filter (All / House only / Ours only); performers no longer
-vanish with the cue scope (Show > All targets off hid them with the
-targets the cue does not aim at).
-Done 0.3.1 (`feat/031-owner-performers`): a set's costume and heights in
-one place (a whole-set box in the line's dialog), a fill's lines out of the
-aim-target lists (kept when a palette or the list holds them), a converted
-plain line keeps its heights. Decided (can change): the whole-set box
-starts unticked; lines of a fill vanish from pickers, a lone line does not.
 
 ## Lasers: orientation, look, starfield coverage (board Q172, 2026-10-29)
 
@@ -548,161 +440,33 @@ with the throw). **Part C, the audience-zone check, done** (Show Review PWR-09, 
 outline, the Type=Laser emission inference, and
 FixtureDefCheck's laser checks.
 
-## AI Assist (0.5, docs/design/AI_ASSIST.md; P0+P1 built 2026-10-31, ai; P2 built 2026-10-31, ai2; P2b built 2026-10-31, ai3; P3 built 2026-10-31, mcp)
+## AI Assist — P0–P3 built, leftovers (0.5, docs/design/AI_ASSIST.md; ai, ai2, ai3, mcp, 2026-10-31)
 
-Branson's design: type a request in Design mode ("movers 1–6 deep blue at
-50%", "find address conflicts") and get proposed command-line text to
-review; the model never touches the show, every apply is one undo step,
-off by default, torn down in Operate, works offline. Help in
-docs/features/ai-assist.md.
+Built: P0 operation registry, P1 settings / providers / read-only ops, P2 write ops with preview and undo, P2b configuration import, P3 MCP server (DONE.md 2026-11-01 "Moved from TODO.md"; help in docs/features/ai-assist.md). Off by default, torn down in Operate, works offline; every apply is one undo step.
 
-- ~~**P0** one operation registry the command line runs through (no change
-  in behaviour).~~ Built: `engine/src/operationregistry.*` (a static catalog
-  shaped like Show Review's; name, JSON schema, validate, execute,
-  cliSyntax, parse, describe). `ShowTreeView::runCommand` runs every line
-  through `OperationRegistry::runLine`: a registry word runs its question,
-  anything else is the `command` operation (the Show Tree grammar, a whole
-  line, unchanged). Tests: engine/test/operationregistry,
-  ShowTreeView_Test::commandLineAsksTheRegistry.
-- ~~**P1** settings, provider adapters, read-only ops, full Design/Operate
-  gating.~~ Built: the `ai/` module (static, `QLC_AI_ASSIST`, ON here):
-  `AiSettings` + `AiKeychain` (macOS keychain; elsewhere the environment),
-  `AiProvider` (OpenAI-compatible incl. Ollama's /v1, Anthropic Messages),
-  `AiAssist` (lazy network manager, tool loop over the read-only
-  operations only, a refused call shown as text, the §5a teardown/unload/
-  audit and the runtime guard), `AiCommandLine` (`? question` in the Show
-  Tree's command line, the AI button), `AiSettingsPage` (Settings ▸ AI
-  Assist). Read-only operations: list_fixtures, list_groups,
-  list_functions, describe_function, list_cues (cue sheet), why_on (Why is
-  this on?), find_conflicts (Show Review PAT-01/02, run as a query that
-  leaves the panel's result), find_unused_functions, find_problems (Show
-  Review), show_summary. Tests: ai/test/aiassist (fake model server on
-  loopback, a recorded Ollama tool call; no live model).
-  *decided: the Show Tree grammar stays one `command` operation in P0; its
-  words become operations of their own in P2, when write operations get
-  schemas and previews (can change).* *decided: `?` alone and `? <one
-  grammar word>` stay the command line's help; any other `? …` is a
-  question, only with AI Assist on (can change).* *decided: the answer shows
-  in the command line's help pane, no new panel or dock (can change).*
-  *decided: a resource error raised in Operate stays in the footer until
-  back in Design (can change).* *decided: Virtual Console widgets aren't
-  checked by `unused` yet (the UI can set
-  `OperationRegistry::setFunctionUseProbe`; the answer says so; since vcx the
-  VcIndex answers it) (can
-  change).*
-
-- ~~**P2** write ops with preview, confirm, undo; golden prompt suite (≥15
-  recorded prompts); split the grammar's words into operations; the
-  checklist UI (§7).~~ Built: 16 change operations in the registry, each a
-  Show Tree grammar word with a strict JSON schema (`make_cue`, `add_cue`,
-  `make_cue_list`, `set_look`, `set_cue_look`, `set_intensity`,
-  `set_cue_mode`, `release_layer`, `skip_cues`, `unskip_cues`,
-  `record_cue`, `rename_selected`, `duplicate_cue`, `include_cue`,
-  `make_group_set`, `play_function`); `OperationRegistry::checkArgs()`
-  (schema check in run() before validate(), for every operation) and
-  `runPlan()` (check every step, run them in order threading the
-  selection, inside one `ShowTreeController` batch = one undo step; any
-  refusal rolls the batch back; refused in Operate). AiAssist offers them
-  as tools; a change call is a proposal (checked, never run), the model is
-  told "proposed as step N, not run" and goes on until it answers in text
-  (qwen3.6 sends one step a reply); `apply()` / `discard()`, the proposal
-  dropped on Operate, AI off, a new question. AiCommandLine shows the
-  checklist (☑/☐ per step, Apply · Discard), puts a single step in the
-  line, Enter applies, Esc discards; the view selects where the plan left
-  off. Tests: OperationRegistry_Test (renders, schema refusals, plan = one
-  undo step, part-way failure changes nothing, refusals); AiAssist_Test
-  (show/apply/undo, decline, leave a step out, Operate, bad arguments, a
-  plan over several replies, 17 golden prompts that each apply and undo
-  exactly; by hand liveOllamaChangeSmoke). Live 2026-10-31 on ender's
-  qwen3.6: "Towers Blue at 50" -> 2 steps; "new cue Bridge, block, Steps 30,
-  Towers blue" -> 3 steps; both applied and undone, Operate teardown clean.
-  *decided: a typed line still runs as the `command` operation, unchanged;
-  the change operations have no command-line word of their own -- they are
-  the tool forms of the grammar's words, each rendering and running one
-  grammar line, so the grammar stays the one text editor of the tree (can
-  change).* *decided: palette housekeeping (`palette … rename/delete`),
-  `use`/`reusable`, `detach`, `convert`, hits and `vcpage` aren't offered
-  yet: palette steps are a separate undo stack (PaletteOps) and would break
-  "one undo step" in a mixed plan; the others are rarer (can change).*
-  *decided: the proposal applies where it was asked (the selection at the
-  question), not where the tree is now (can change).* *decided: a step
-  refused when applied keeps the proposal on screen with why; Esc drops it
-  (can change).* *decided: the golden prompts are written in the shape
-  Ollama's /v1 sends (P1's recorded call is real); the two live runs above
-  are the real-model check (can change).*
-
-- ~~**P2b** configuration import (§5b), usable with AI off.~~ Built:
-  `engine/src/configimport.*` (read the source `.qxw` as XML -- nothing is
-  opened; `plan()` = problems, warnings, current -> resulting diff;
-  `apply()`), three registry operations (`read_config` and
-  `preview_config_import` questions, `import_config` a change), File ▸
-  Import ▸ *Universes and I/O Setup (.qxw)…* (`ConfigImportDialog`: what,
-  which universes and where they go, address and plugin maps, the two
-  choices, a live preview, Import), the command line (`config <file>`;
-  `import config <file> … apply` previews until `apply`), and the
-  assistant (reads the file, proposes `import_config`, the checklist
-  applies it). The non-AI path is the engine + dialog + command line; the
-  assistant only proposes the same operation. It rides `runPlan()`: the
-  Show Tree batch records the step (`ShowTreeController::
-  noteChangeOutsideTree()`) and the universes' before/after state is
-  attached to it (`attachToLastStep`), so Ctrl+Z / redo and a failing
-  later step in a plan put the universes back exactly. Sections: universe
-  names (+ passthrough), outputs, inputs with their input profile,
-  feedback. Route requirement (the patch's UID, `Network`, target address)
-  is copied as the file has it, through the same `loadPatch` a saved show
-  opens with, so an off-network import succeeds and the patch waits as a
-  kept/pending one (`NetworkRoute::checkRoute()`: no route -> "not
-  currently routable"; only the default route -> "would leave by the
-  DEFAULT route", both warnings). Tests: ConfigImport_Test (27: read,
-  off-network, intact route requirements, default route, real route,
-  mapping, subsets, collision and missing-plugin choices, undo/redo,
-  failing plan, command line, round trip, no AI), ConfigImportDialog_Test,
-  AiAssist_Test (propose + apply + undo, a choice sent back to the model,
-  Operate), ImportMenu_Test. *decided: fixtures, groups and palettes are
-  not part of `import_config`; File ▸ Import ▸ Workspace already brings
-  those in with id and address remapping, and the summary says how many
-  the file has, so the dangling-reference check has nothing to check (can
-  change).* *decided: a universe has a "collision" when the target
-  universe here has a non-default name or any patch in the selected
-  sections; a fresh show's empty universes are not collisions, and the
-  choice (skip / replace / renumber) must be given, never guessed (can
-  change).* *decided: an input profile that isn't installed here is a
-  warning, the profile name is kept (can change).* *decided: the typed
-  command shows the preview and only `apply` makes the change (can
-  change).* *decided: a universe's controller slot is not imported (a
-  warning says so); only `.qxw` is read (can change).* *decided: the
-  route checks run when planning/importing; the Operate-switch and
-  route-change re-check of §5b stays with the existing rig-network gate
-  (can change).* *decided: one new row in File ▸ Import (the design names
-  it), no "Any Supported File" dispatch to it since a `.qxw` is the
-  Workspace importer's (can change).*
-
-- ~~**P3** MCP server over the registry.~~ Built: `ai/src/mcpserver.*`
-  (the registry's read-only operations as MCP tools with their own
-  schemas; the change operations only with "…and propose changes", each
-  call a step of a proposal in the Show Tree's command line via
-  `AiAssist::proposeExternal()`, applied by the operator as one undo
-  step; `command` never offered) and `ai/src/mcpbridge.*`
-  (`qlcconsole --mcp`, main/main.cpp: stdio to the app's local socket,
-  answering for an absent server itself). Settings ▸ AI Assist gains two
-  boxes (no menu item); the footer says when a tool's proposal waits.
-  Closed synchronously on entering Operate (each connection told why,
-  tracked by the Operate audit), refused there. Tests: McpServer_Test
-  (ai/test/mcpserver: an in-process client over the real socket lists
-  tools and schemas, runs find_conflicts, proposes without applying until
-  confirmed, is refused in Operate; loopback only, no network).
-  *decided: transport = stdio through `qlcconsole --mcp` to a QLocalServer
-  in the running app (a Unix socket in a per-user folder, a named pipe on
-  Windows): no TCP port at all, and it works on the show that is open
-  rather than loading a file headless (can change).* *decided: the
-  server needs AI Assist on as well as its own box, and proposals need a
-  second box, both off by default (can change).* *decided: a change call
-  answers at once ("proposed as step N") rather than waiting for the
-  operator; the client checks the result with the read-only tools (can
-  change).* *decided: an MCP proposal is refused while the operator has
-  an in-app question or proposal open, and a new question discards an
-  MCP proposal (can change).* *decided: only one qlcconsole per user
-  serves; a second reports it on the settings page (can change).*
+Decided (each can change):
+- P1: decided: the Show Tree grammar stays one `command` operation in P0; its words become operations of their own in P2, when write operations get schemas and previews (can change).
+- P1: decided: `?` alone and `? <one grammar word>` stay the command line's help; any other `? …` is a question, only with AI Assist on (can change).
+- P1: decided: the answer shows in the command line's help pane, no new panel or dock (can change).
+- P1: decided: a resource error raised in Operate stays in the footer until back in Design (can change).
+- P1: decided: Virtual Console widgets aren't checked by `unused` yet (the UI can set `OperationRegistry::setFunctionUseProbe`; the answer says so; since vcx the VcIndex answers it) (can change).
+- P2: decided: a typed line still runs as the `command` operation, unchanged; the change operations have no command-line word of their own -- they are the tool forms of the grammar's words, each rendering and running one grammar line, so the grammar stays the one text editor of the tree (can change).
+- P2: decided: palette housekeeping (`palette … rename/delete`), `use`/`reusable`, `detach`, `convert`, hits and `vcpage` aren't offered yet: palette steps are a separate undo stack (PaletteOps) and would break "one undo step" in a mixed plan; the others are rarer (can change).
+- P2: decided: the proposal applies where it was asked (the selection at the question), not where the tree is now (can change).
+- P2: decided: a step refused when applied keeps the proposal on screen with why; Esc drops it (can change).
+- P2: decided: the golden prompts are written in the shape Ollama's /v1 sends (P1's recorded call is real); the two live runs above are the real-model check (can change).
+- P2b: decided: fixtures, groups and palettes are not part of `import_config`; File ▸ Import ▸ Workspace already brings those in with id and address remapping, and the summary says how many the file has, so the dangling-reference check has nothing to check (can change).
+- P2b: decided: a universe has a "collision" when the target universe here has a non-default name or any patch in the selected sections; a fresh show's empty universes are not collisions, and the choice (skip / replace / renumber) must be given, never guessed (can change).
+- P2b: decided: an input profile that isn't installed here is a warning, the profile name is kept (can change).
+- P2b: decided: the typed command shows the preview and only `apply` makes the change (can change).
+- P2b: decided: a universe's controller slot is not imported (a warning says so); only `.qxw` is read (can change).
+- P2b: decided: the route checks run when planning/importing; the Operate-switch and route-change re-check of §5b stays with the existing rig-network gate (can change).
+- P2b: decided: one new row in File ▸ Import (the design names it), no "Any Supported File" dispatch to it since a `.qxw` is the Workspace importer's (can change).
+- P3: decided: transport = stdio through `qlcconsole --mcp` to a QLocalServer in the running app (a Unix socket in a per-user folder, a named pipe on Windows): no TCP port at all, and it works on the show that is open rather than loading a file headless (can change).
+- P3: decided: the server needs AI Assist on as well as its own box, and proposals need a second box, both off by default (can change).
+- P3: decided: a change call answers at once ("proposed as step N") rather than waiting for the operator; the client checks the result with the read-only tools (can change).
+- P3: decided: an MCP proposal is refused while the operator has an in-app question or proposal open, and a new question discards an MCP proposal (can change).
+- P3: decided: only one qlcconsole per user serves; a second reports it on the settings page (can change).
 
 **Next:**
 - MCP: a headless `--mcp <show>` mode on a file (the 2026-09-10 idea
@@ -719,24 +483,7 @@ MasterTimer/universe threads; an ROI line is in STRATEGY.md §3.3.
 ## Show Review: an auditor for the show's design (0.5; v1 frame built, rev, 2026-10-31)
 
 Design in [docs/design/SHOW_REVIEW.md](../design/SHOW_REVIEW.md); help in
-docs/features/show-review.md. **Built (v1 frame):** the engine registry
-(`engine/src/showreview*.cpp`, headless; `Doc::showReview()`), findings with
-id, severity, crew-language message, stable target keys, a fingerprint and a
-Fix jump; **Accept with a note** saved with the show (`<ShowReview>`: who,
-when, why; reopens as *Changed since accepted* when what the check read
-changes; dropped at save when its subject is gone; a check turned off for the
-show); `qlcconsole --review show.qlcc` (text / JSON, `--min`, `--check`,
-`--include-accepted`; exit 0 / 1 warnings / 2 blockers / 3 unreadable; never
-writes the show, no plugins); the **Review** footer chip and panel (Fix,
-Accept…, Reopen, Why?, Turn Check Off…, Open/Accepted/All, search), also from
-the Show readiness dialog; the footer's design entries shown under their
-catalog id there and folded into the panel (FTR). 59 checks: PAT-01/02/03/04/05/06,
-FIX-01/02/05/07/08/14, FX-02/03/07, PWR-01/03/05/06/09, FILE-01/02/03,
-NAME-01/02, PAL-01/02/03/05, CUE-01/02/03/04/05/06/07/08/11/12/13/15, VC-01/02/03/04/05/06/07/08/09,
-VEN-01/02/05/09/10, TEACH-01, MOV-01/02/08 (realistic move speed,
-2026-10-31: `engine/src/movespeed.*`; the VC ones read the VcIndex, `engine/src/vcindex.*`); each with a trip and a
-near-miss test (ShowReview_Test; a registry test fails a check with neither).
-A full run on DanceHysteria-0.6 is 140 ms (Debug).
+docs/features/show-review.md. Built: the engine registry, Accept with a note, `--review`, the Review chip and panel, 59 checks (DONE.md 2026-11-01 "Moved from TODO.md").
 
 Decided (each can change):
 - Songs (Q1) are the production's numbering-scheme song sections (Q190); no
