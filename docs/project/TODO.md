@@ -548,7 +548,7 @@ with the throw). **Part C, the audience-zone check, done** (Show Review PWR-09, 
 outline, the Type=Laser emission inference, and
 FixtureDefCheck's laser checks.
 
-## AI Assist (0.5, docs/design/AI_ASSIST.md; P0+P1 built 2026-10-31, ai)
+## AI Assist (0.5, docs/design/AI_ASSIST.md; P0+P1 built 2026-10-31, ai; P2 built 2026-10-31, ai2)
 
 Branson's design: type a request in Design mode ("movers 1–6 deep blue at
 50%", "find address conflicts") and get proposed command-line text to
@@ -591,14 +591,56 @@ docs/features/ai-assist.md.
   VcIndex answers it) (can
   change).*
 
-**Next:**
-- **P2** write ops with preview, confirm, undo; golden prompt suite (≥15
+- ~~**P2** write ops with preview, confirm, undo; golden prompt suite (≥15
   recorded prompts); split the grammar's words into operations; the
-  checklist UI (§7).
+  checklist UI (§7).~~ Built: 16 change operations in the registry, each a
+  Show Tree grammar word with a strict JSON schema (`make_cue`, `add_cue`,
+  `make_cue_list`, `set_look`, `set_cue_look`, `set_intensity`,
+  `set_cue_mode`, `release_layer`, `skip_cues`, `unskip_cues`,
+  `record_cue`, `rename_selected`, `duplicate_cue`, `include_cue`,
+  `make_group_set`, `play_function`); `OperationRegistry::checkArgs()`
+  (schema check in run() before validate(), for every operation) and
+  `runPlan()` (check every step, run them in order threading the
+  selection, inside one `ShowTreeController` batch = one undo step; any
+  refusal rolls the batch back; refused in Operate). AiAssist offers them
+  as tools; a change call is a proposal (checked, never run), the model is
+  told "proposed as step N, not run" and goes on until it answers in text
+  (qwen3.6 sends one step a reply); `apply()` / `discard()`, the proposal
+  dropped on Operate, AI off, a new question. AiCommandLine shows the
+  checklist (☑/☐ per step, Apply · Discard), puts a single step in the
+  line, Enter applies, Esc discards; the view selects where the plan left
+  off. Tests: OperationRegistry_Test (renders, schema refusals, plan = one
+  undo step, part-way failure changes nothing, refusals); AiAssist_Test
+  (show/apply/undo, decline, leave a step out, Operate, bad arguments, a
+  plan over several replies, 17 golden prompts that each apply and undo
+  exactly; by hand liveOllamaChangeSmoke). Live 2026-10-31 on ender's
+  qwen3.6: "Towers Blue at 50" -> 2 steps; "new cue Bridge, block, Steps 30,
+  Towers blue" -> 3 steps; both applied and undone, Operate teardown clean.
+  *decided: a typed line still runs as the `command` operation, unchanged;
+  the change operations have no command-line word of their own -- they are
+  the tool forms of the grammar's words, each rendering and running one
+  grammar line, so the grammar stays the one text editor of the tree (can
+  change).* *decided: palette housekeeping (`palette … rename/delete`),
+  `use`/`reusable`, `detach`, `convert`, hits and `vcpage` aren't offered
+  yet: palette steps are a separate undo stack (PaletteOps) and would break
+  "one undo step" in a mixed plan; the others are rarer (can change).*
+  *decided: the proposal applies where it was asked (the selection at the
+  question), not where the tree is now (can change).* *decided: a step
+  refused when applied keeps the proposal on screen with why; Esc drops it
+  (can change).* *decided: the golden prompts are written in the shape
+  Ollama's /v1 sends (P1's recorded call is real); the two live runs above
+  are the real-model check (can change).*
+
+**Next:**
 - **P2b** configuration import (§5b), usable with AI off.
 - **P3** MCP server over the registry.
 - Small: Linux/Windows keychain (QtKeychain);
   Tab completion of the registry's words.
+- Small: VC widgets in `unused`; Linux/Windows keychain (QtKeychain);
+  Tab completion of the registry's words; palette and authoring operations
+  (patch_fixture, create_scene/chaser/group of §4) once they can join a
+  plan's one undo step; a ShowTreeView test of the applied selection
+  (needs AiAssist in ui/test).
 
 Guardrails: separate `ai/` module behind `QLC_AI_ASSIST`; no AI code on
 MasterTimer/universe threads; an ROI line is in STRATEGY.md §3.3.

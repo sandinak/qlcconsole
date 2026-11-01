@@ -20,6 +20,8 @@
 
 #include <QObject>
 
+#include "showtreecommand.h"
+
 class Doc;
 class Fixture;
 
@@ -51,8 +53,22 @@ private slots:
     void commandNeedsACommandLine();
     void longAnswersAreCut();
 
+    // P2: the change words
+    void changeRenders_data();
+    void changeRenders();
+    void schemaRejectsBadArguments_data();
+    void schemaRejectsBadArguments();
+    void changeRunsItsGrammarLine();
+    void planIsOneUndoStep();
+    void planFailingPartWayChangesNothing();
+    void planRefusals();
+
 private:
     Fixture *dimmer(const QString &name, quint32 address, quint32 channels = 4);
+    /** Towers (2 dimmers), Steps (1), production "P" with list "Song" and
+     *  cues 1 and 2; the selection on cue 1. */
+    ShowTreeCommand::Context smallShow();
+    QByteArray treeXml() const;
 
     Doc *m_doc = nullptr;
 };

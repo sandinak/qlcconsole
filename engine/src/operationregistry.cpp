@@ -19,8 +19,10 @@
    P0/P1: the Show Tree grammar as one operation, and the read-only
    questions -- each a pure read of the Doc that reuses what already answers
    it (Show Review's checks, the cue sheet, Doc::getUsage, Why is this on?)
-   instead of a second copy. */
+   instead of a second copy. P2: the grammar's change words as operations
+   with schemas, and runPlan() -- a confirmed plan as one undo step. */
 
+#include <QRegularExpression>
 #include <QJsonArray>
 #include <QUrl>
 #include <QSet>
@@ -325,6 +327,446 @@ bool noWords(const QStringList &words, QJsonObject *, QString *why)
 QString ok(Doc *, const QJsonObject &)
 {
     return QString();
+}
+
+/* ---- the change words (P2) ----
+   Each is one word of the Show Tree grammar with a schema: cliSyntax()
+   renders the one line that does it and execute() runs that line, so the
+   grammar stays the only thing that edits the tree from text, and a
+   model's call reads back as what the operator could have typed. Strict
+   schemas (additionalProperties: false): a model's call that doesn't fit is
+   refused before anything runs. */
+
+QJsonObject strictSchema(const QJsonObject &properties, const QStringList &required = QStringList())
+{
+    QJsonObject s = objectSchema(properties, required);
+    s.insert(QStringLiteral("additionalProperties"), false);
+    return s;
+}
+
+QJsonObject namesProperty(const QString &description, int minItems = 1)
+{
+    QJsonObject item { { QStringLiteral("type"), QStringLiteral("string") }, { QStringLiteral("minLength"), 1 } };
+    QJsonObject p { { QStringLiteral("type"), QStringLiteral("array") }, { QStringLiteral("items"), item },
+                    { QStringLiteral("description"), description } };
+    if (minItems > 0)
+        p.insert(QStringLiteral("minItems"), minItems);
+    return p;
+}
+
+const QString kCuePattern = QStringLiteral("^[0-9]+(\\.[0-9]+)*$");
+
+QJsonObject cueNumberProperty(const QString &description)
+{
+    QJsonObject p = stringProperty(description);
+    p.insert(QStringLiteral("pattern"), kCuePattern);
+    return p;
+}
+
+QStringList cueModes()
+{
+    return { QStringLiteral("track"), QStringLiteral("block"), QStringLiteral("cueonly"), QStringLiteral("default") };
+}
+
+QStringList lookAttributes()
+{
+    return { QStringLiteral("colour"), QStringLiteral("dimmer"), QStringLiteral("position"), QStringLiteral("aim"),
+             QStringLiteral("spread"), QStringLiteral("group"), QStringLiteral("cross"), QStringLiteral("gobo"),
+             QStringLiteral("zoom"), QStringLiteral("beam"), QStringLiteral("shutter"), QStringLiteral("effect") };
+}
+
+QJsonObject looksProperty()
+{
+    QJsonObject value { { QStringLiteral("type"), QJsonArray { QStringLiteral("string"), QStringLiteral("number") } },
+                        { QStringLiteral("description"),
+                          OperationRegistry::tr("A palette by name, a level 0-100 (dimmer), a hex colour "
+                                                "#rrggbb (colour), a stage target (aim), -5..+5 (spread), "
+                                                "none (off here) or clear (inherit again)") } };
+    QJsonObject item = strictSchema({ { QStringLiteral("attribute"),
+                                        stringProperty(OperationRegistry::tr("Which look"), lookAttributes()) },
+                                      { QStringLiteral("value"), value } },
+                                    { QStringLiteral("attribute"), QStringLiteral("value") });
+    return QJsonObject { { QStringLiteral("type"), QStringLiteral("array") }, { QStringLiteral("items"), item },
+                         { QStringLiteral("minItems"), 1 },
+                         { QStringLiteral("description"), OperationRegistry::tr("The looks, in order") } };
+}
+
+/** A name as the grammar reads it: quoted when it has a space, a '+' or a
+ *  ',' (they would end it), or is empty. */
+QString gq(const QString &name)
+{
+    if (name.isEmpty() || name.contains(QLatin1Char(' ')) || name.contains(QLatin1Char('+'))
+        || name.contains(QLatin1Char(',')))
+        return QStringLiteral("\"%1\"").arg(name);
+    return name;
+}
+
+QStringList strings(const QJsonObject &a, const char *key)
+{
+    QStringList out;
+    for (const QJsonValue &v : a.value(QLatin1String(key)).toArray())
+        out << v.toString().trimmed();
+    return out;
+}
+
+QString valueText(const QJsonValue &v)
+{
+    if (v.isDouble())
+        return QString::number(v.toDouble());
+    return v.toString().trimmed();
+}
+
+QString looksText(const QJsonObject &a)
+{
+    QStringList w;
+    for (const QJsonValue &v : a.value(QLatin1String("looks")).toArray())
+    {
+        // A value ends at a space or a comma only ("+5" is a spread).
+        const QJsonObject l = v.toObject();
+        const QString value = valueText(l.value(QLatin1String("value")));
+        w << l.value(QLatin1String("attribute")).toString()
+          << (value.isEmpty() || value.contains(QLatin1Char(' ')) || value.contains(QLatin1Char(','))
+                  ? QStringLiteral("\"%1\"").arg(value) : value);
+    }
+    return w.join(QLatin1Char(' '));
+}
+
+QString looksSentence(const QJsonObject &a)
+{
+    QStringList w;
+    for (const QJsonValue &v : a.value(QLatin1String("looks")).toArray())
+    {
+        const QJsonObject l = v.toObject();
+        w << OperationRegistry::tr("%1 %2").arg(l.value(QLatin1String("attribute")).toString(),
+                                                valueText(l.value(QLatin1String("value"))));
+    }
+    return w.join(QStringLiteral(", "));
+}
+
+QString targetsText(const QJsonObject &a, const char *key = "targets", bool each = false)
+{
+    QStringList w;
+    for (const QString &t : strings(a, key))
+        w << gq(t);
+    return w.join(each ? QStringLiteral(", ") : QStringLiteral(" "));
+}
+
+/** No name may hold a double quote: the grammar couldn't read it back. */
+QString noQuotes(const QJsonObject &a)
+{
+    for (auto it = a.constBegin(); it != a.constEnd(); ++it)
+    {
+        QStringList values;
+        if (it.value().isString())
+            values << it.value().toString();
+        else if (it.value().isArray())
+            for (const QJsonValue &v : it.value().toArray())
+            {
+                if (v.isString())
+                    values << v.toString();
+                else if (v.isObject())
+                    values << v.toObject().value(QLatin1String("value")).toString();
+            }
+        for (const QString &s : values)
+            if (s.contains(QLatin1Char('"')))
+                return OperationRegistry::tr("%1: a name can't hold a double quote").arg(it.key());
+    }
+    return QString();
+}
+
+/** Run the grammar line the operation renders: one undo step on its own,
+ *  part of the plan's one inside runPlan(). */
+OperationRegistry::Result runGrammar(OperationRegistry::Context &ctx, const QString &line)
+{
+    if (ctx.commander == nullptr)
+        return refusal(OperationRegistry::tr("The command line isn't open here"));
+    OperationRegistry::Result r;
+    r.command = ctx.commander->run(line, ctx.selection);
+    r.ok = r.command.ok;
+    r.message = r.command.message;
+    return r;
+}
+
+void appendChangeOperations(QList<OperationRegistry::Operation> &ops)
+{
+    typedef OperationRegistry R;
+    typedef OperationRegistry::Operation Op;
+
+    // Every change op: strict schema, no quotes in names, runs its line.
+    auto add = [&ops](Op op) {
+        op.readOnly = false;
+        const OperationRegistry::Validator extra = op.validate;
+        op.validate = [extra](Doc *doc, const QJsonObject &a) {
+            if (doc->showTree() == nullptr)
+                return R::tr("The show has no Show Tree");
+            const QString why = noQuotes(a);
+            if (!why.isEmpty())
+                return why;
+            return extra ? extra(doc, a) : QString();
+        };
+        const OperationRegistry::Renderer render = op.cliSyntax;
+        op.execute = [render](R::Context &ctx, const QJsonObject &a) { return runGrammar(ctx, render(a)); };
+        ops << op;
+    };
+
+    {
+        Op op;
+        op.name = QStringLiteral("make_cue");
+        op.title = R::tr("Select or make a cue");
+        op.description = R::tr("Selects cue <number> of the selected cue list, or makes it in number order "
+                               "(renamed if the name differs), optionally setting its mode. Later steps act "
+                               "on this cue.");
+        op.schema = strictSchema({ { QStringLiteral("number"), cueNumberProperty(R::tr("The cue number, e.g. 1.0.1")) },
+                                   { QStringLiteral("name"), stringProperty(R::tr("The cue's name")) },
+                                   { QStringLiteral("mode"), stringProperty(R::tr("Its tracking mode"), cueModes()) } },
+                                 { QStringLiteral("number") });
+        op.cliSyntax = [](const QJsonObject &a) {
+            QStringList w { QStringLiteral("cue"), arg(a, "number") };
+            if (a.contains(QLatin1String("name")) && a.value(QLatin1String("name")).isString())
+                w << QStringLiteral("\"%1\"").arg(arg(a, "name"));
+            if (!arg(a, "mode").isEmpty())
+                w << arg(a, "mode");
+            return w.join(QLatin1Char(' '));
+        };
+        op.describe = [](const QJsonObject &a) {
+            return arg(a, "name").isEmpty() ? R::tr("Go to cue %1 (made if it isn't there)").arg(arg(a, "number"))
+                                            : R::tr("Go to cue %1 \"%2\" (made if it isn't there)")
+                                                  .arg(arg(a, "number"), arg(a, "name"));
+        };
+        add(op);
+    }
+    {
+        Op op;
+        op.name = QStringLiteral("add_cue");
+        op.title = R::tr("Add a cue after the selected one");
+        op.description = R::tr("Makes a new cue right after the selected cue, numbered as + Cue does, "
+                               "optionally named and with a mode. Later steps act on the new cue.");
+        op.schema = strictSchema({ { QStringLiteral("name"), stringProperty(R::tr("The new cue's name")) },
+                                   { QStringLiteral("mode"), stringProperty(R::tr("Its tracking mode"), cueModes()) } });
+        op.cliSyntax = [](const QJsonObject &a) {
+            QStringList w { QStringLiteral("cue"), QStringLiteral("+") };
+            if (!arg(a, "name").isEmpty())
+                w << QStringLiteral("\"%1\"").arg(arg(a, "name"));
+            if (!arg(a, "mode").isEmpty())
+                w << arg(a, "mode");
+            return w.join(QLatin1Char(' '));
+        };
+        op.describe = [](const QJsonObject &a) {
+            return arg(a, "name").isEmpty() ? R::tr("Add a cue after the selected one")
+                                            : R::tr("Add cue \"%1\" after the selected one").arg(arg(a, "name"));
+        };
+        add(op);
+    }
+    {
+        Op op;
+        op.name = QStringLiteral("make_cue_list");
+        op.title = R::tr("Select or make a cue list");
+        op.description = R::tr("Selects that cue list of the selected production, or makes a new Tracking one.");
+        QJsonObject name = stringProperty(R::tr("The cue list's name"));
+        name.insert(QStringLiteral("minLength"), 1);
+        op.schema = strictSchema({ { QStringLiteral("name"), name } }, { QStringLiteral("name") });
+        op.cliSyntax = [](const QJsonObject &a) { return QStringLiteral("list \"%1\"").arg(arg(a, "name")); };
+        op.describe = [](const QJsonObject &a) { return R::tr("Go to cue list \"%1\" (made if it isn't there)").arg(arg(a, "name")); };
+        add(op);
+    }
+    {
+        Op op;
+        op.name = QStringLiteral("set_look");
+        op.title = R::tr("Set looks on groups");
+        op.description = R::tr("In the selected cue: the layer on these groups or fixtures (made if needed), "
+                               "then its looks -- colour, dimmer, position, gobo... by palette name, a "
+                               "dimmer level 0-100 or a #rrggbb colour (a palette playing exactly it is "
+                               "reused, else one is made). Several targets are ONE layer, unless each is true.");
+        op.schema = strictSchema({ { QStringLiteral("targets"), namesProperty(R::tr("Groups, sets or fixtures by name")) },
+                                   { QStringLiteral("each"), QJsonObject { { QStringLiteral("type"), QStringLiteral("boolean") },
+                                                                           { QStringLiteral("description"),
+                                                                             R::tr("A layer each instead of one on all") } } },
+                                   { QStringLiteral("looks"), looksProperty() } },
+                                 { QStringLiteral("targets"), QStringLiteral("looks") });
+        op.cliSyntax = [](const QJsonObject &a) {
+            return QStringLiteral("%1 %2").arg(targetsText(a, "targets", a.value(QLatin1String("each")).toBool()), looksText(a));
+        };
+        op.describe = [](const QJsonObject &a) {
+            return R::tr("%1: %2").arg(strings(a, "targets").join(QStringLiteral(", ")), looksSentence(a));
+        };
+        add(op);
+    }
+    {
+        Op op;
+        op.name = QStringLiteral("set_cue_look");
+        op.title = R::tr("Set a look on the whole cue");
+        op.description = R::tr("A look for the whole selected cue: it reaches the cue's own layers that don't "
+                               "set it themselves (spread: line aims only; effect: one effect across them).");
+        op.schema = strictSchema({ { QStringLiteral("looks"), looksProperty() } }, { QStringLiteral("looks") });
+        op.cliSyntax = [](const QJsonObject &a) { return QStringLiteral("cue look %1").arg(looksText(a)); };
+        op.describe = [](const QJsonObject &a) { return R::tr("The whole cue: %1").arg(looksSentence(a)); };
+        add(op);
+    }
+    {
+        Op op;
+        op.name = QStringLiteral("set_intensity");
+        op.title = R::tr("Set intensity");
+        op.description = R::tr("In the selected cue: the dimmer of these groups or fixtures, 0-100 percent "
+                               "(the Dimmer palette at that level is reused, else one is made).");
+        QJsonObject level { { QStringLiteral("type"), QStringLiteral("integer") }, { QStringLiteral("minimum"), 0 },
+                            { QStringLiteral("maximum"), 100 }, { QStringLiteral("description"), R::tr("Percent") } };
+        op.schema = strictSchema({ { QStringLiteral("targets"), namesProperty(R::tr("Groups, sets or fixtures by name")) },
+                                   { QStringLiteral("level"), level } },
+                                 { QStringLiteral("targets"), QStringLiteral("level") });
+        op.cliSyntax = [](const QJsonObject &a) {
+            return QStringLiteral("%1 dimmer %2").arg(targetsText(a)).arg(a.value(QLatin1String("level")).toInt());
+        };
+        op.describe = [](const QJsonObject &a) {
+            return R::tr("%1 at %2%").arg(strings(a, "targets").join(QStringLiteral(", ")))
+                .arg(a.value(QLatin1String("level")).toInt());
+        };
+        add(op);
+    }
+    {
+        Op op;
+        op.name = QStringLiteral("set_cue_mode");
+        op.title = R::tr("Set the cue's mode");
+        op.description = R::tr("The selected cue's tracking mode: track (starts from the cue before), block "
+                               "(from nothing), cueonly (its changes don't pass on), default (the list's).");
+        op.schema = strictSchema({ { QStringLiteral("mode"), stringProperty(R::tr("The mode"), cueModes()) } },
+                                 { QStringLiteral("mode") });
+        op.cliSyntax = [](const QJsonObject &a) { return arg(a, "mode"); };
+        op.describe = [](const QJsonObject &a) { return R::tr("Make the selected cue %1").arg(arg(a, "mode")); };
+        add(op);
+    }
+    {
+        Op op;
+        op.name = QStringLiteral("release_layer");
+        op.title = R::tr("Toggle Release on a layer");
+        op.description = R::tr("Turns Release on the selected cue's layer on these groups on (or off again): "
+                               "leaving the cue it goes back to the base cue, else dark.");
+        op.schema = strictSchema({ { QStringLiteral("targets"), namesProperty(R::tr("The layer's groups, or its function")) } },
+                                 { QStringLiteral("targets") });
+        op.cliSyntax = [](const QJsonObject &a) { return QStringLiteral("release %1").arg(targetsText(a)); };
+        op.describe = [](const QJsonObject &a) {
+            return R::tr("Toggle Release on the %1 layer").arg(strings(a, "targets").join(QStringLiteral(" + ")));
+        };
+        add(op);
+    }
+    for (const bool skip : { true, false })
+    {
+        Op op;
+        op.name = skip ? QStringLiteral("skip_cues") : QStringLiteral("unskip_cues");
+        op.title = skip ? R::tr("Skip cues") : R::tr("Put skipped cues back");
+        op.description = skip ? R::tr("Skips cues by number (the selected one when none is named): GO passes "
+                                      "over them; they track as if they weren't there.")
+                              : R::tr("Puts skipped cues back (the selected one when none is named).");
+        QJsonObject item = cueNumberProperty(R::tr("A cue number"));
+        QJsonObject cues { { QStringLiteral("type"), QStringLiteral("array") }, { QStringLiteral("items"), item },
+                           { QStringLiteral("description"), R::tr("Cue numbers; empty: the selected cue") } };
+        op.schema = strictSchema({ { QStringLiteral("cues"), cues } });
+        const QString word = skip ? QStringLiteral("skip") : QStringLiteral("unskip");
+        op.cliSyntax = [word](const QJsonObject &a) {
+            const QStringList c = strings(a, "cues");
+            return c.isEmpty() ? word : QStringLiteral("%1 %2").arg(word, c.join(QStringLiteral(", ")));
+        };
+        op.describe = [skip](const QJsonObject &a) {
+            const QStringList c = strings(a, "cues");
+            const QString which = c.isEmpty() ? R::tr("the selected cue") : R::tr("cue %1").arg(c.join(QStringLiteral(", ")));
+            return skip ? R::tr("Skip %1").arg(which) : R::tr("Put %1 back").arg(which);
+        };
+        add(op);
+    }
+    {
+        Op op;
+        op.name = QStringLiteral("record_cue");
+        op.title = R::tr("Record as new cue");
+        op.description = R::tr("Freezes what is on stage into a new Block cue after the selected one: from "
+                               "the selected cue, the list's running cue, or everything lit.");
+        op.schema = strictSchema({ { QStringLiteral("source"),
+                                     stringProperty(R::tr("What to record"),
+                                                    { QStringLiteral("selected"), QStringLiteral("running"), QStringLiteral("lit") }) } },
+                                 { QStringLiteral("source") });
+        op.cliSyntax = [](const QJsonObject &a) { return QStringLiteral("record %1").arg(arg(a, "source")); };
+        op.describe = [](const QJsonObject &a) { return R::tr("Record a new cue from %1").arg(arg(a, "source")); };
+        add(op);
+    }
+    {
+        Op op;
+        op.name = QStringLiteral("rename_selected");
+        op.title = R::tr("Name the selected layer or cue");
+        op.description = R::tr("Names the selected layer (else the selected cue); an empty name goes back to "
+                               "the automatic one. Tracking is unchanged.");
+        op.schema = strictSchema({ { QStringLiteral("name"), stringProperty(R::tr("The new name; \"\": automatic")) } },
+                                 { QStringLiteral("name") });
+        op.cliSyntax = [](const QJsonObject &a) { return QStringLiteral("name \"%1\"").arg(arg(a, "name")); };
+        op.describe = [](const QJsonObject &a) {
+            return arg(a, "name").isEmpty() ? R::tr("Give the selection its automatic name back")
+                                            : R::tr("Name the selection \"%1\"").arg(arg(a, "name"));
+        };
+        add(op);
+    }
+    {
+        Op op;
+        op.name = QStringLiteral("duplicate_cue");
+        op.title = R::tr("Duplicate the selected cue");
+        op.description = R::tr("Duplicates the selected cue right after it (numbered for you).");
+        op.schema = strictSchema(QJsonObject());
+        op.cliSyntax = [](const QJsonObject &) { return QStringLiteral("dup"); };
+        op.describe = [](const QJsonObject &) { return R::tr("Duplicate the selected cue"); };
+        add(op);
+    }
+    {
+        Op op;
+        op.name = QStringLiteral("include_cue");
+        op.title = R::tr("Include a cue");
+        op.description = R::tr("Includes that cue's output in the selected cue (as if standing in it); again "
+                               "takes it out.");
+        op.schema = strictSchema({ { QStringLiteral("number"), cueNumberProperty(R::tr("The cue to include")) } },
+                                 { QStringLiteral("number") });
+        op.cliSyntax = [](const QJsonObject &a) { return QStringLiteral("include %1").arg(arg(a, "number")); };
+        op.describe = [](const QJsonObject &a) { return R::tr("Include cue %1 in the selected cue").arg(arg(a, "number")); };
+        add(op);
+    }
+    {
+        Op op;
+        op.name = QStringLiteral("make_group_set");
+        op.title = R::tr("Make a group set");
+        op.description = R::tr("One name for several groups, reusable in any cue (Towers = SL + SR); an "
+                               "existing set gets these members again.");
+        QJsonObject name = stringProperty(R::tr("The set's name"));
+        name.insert(QStringLiteral("minLength"), 1);
+        op.schema = strictSchema({ { QStringLiteral("name"), name },
+                                   { QStringLiteral("groups"), namesProperty(R::tr("Its groups")) } },
+                                 { QStringLiteral("name"), QStringLiteral("groups") });
+        op.cliSyntax = [](const QJsonObject &a) {
+            return QStringLiteral("set \"%1\" %2").arg(arg(a, "name"), targetsText(a, "groups"));
+        };
+        op.describe = [](const QJsonObject &a) {
+            return R::tr("Set \"%1\" = %2").arg(arg(a, "name"), strings(a, "groups").join(QStringLiteral(" + ")));
+        };
+        add(op);
+    }
+    {
+        Op op;
+        op.name = QStringLiteral("play_function");
+        op.title = R::tr("Play functions as layers");
+        op.description = R::tr("In the selected cue: each function (an EFX, an RGB Matrix, a scene) played as "
+                               "it is, a layer each.");
+        op.schema = strictSchema({ { QStringLiteral("functions"), namesProperty(R::tr("Functions by name")) } },
+                                 { QStringLiteral("functions") });
+        op.validate = [](Doc *doc, const QJsonObject &a) {
+            for (const QString &name : strings(a, "functions"))
+            {
+                QString why;
+                if (findFunction(doc, name, &why) == nullptr)
+                    return why;
+            }
+            return QString();
+        };
+        op.cliSyntax = [](const QJsonObject &a) {
+            return QStringLiteral("function %1").arg(targetsText(a, "functions", true));
+        };
+        op.describe = [](const QJsonObject &a) {
+            return R::tr("Play %1 in the selected cue").arg(strings(a, "functions").join(QStringLiteral(", ")));
+        };
+        add(op);
+    }
 }
 
 QList<OperationRegistry::Operation> buildCatalog()
@@ -746,6 +1188,8 @@ QList<OperationRegistry::Operation> buildCatalog()
         op.describe = [](const QJsonObject &) { return R::tr("Summarise the show"); };
         ops << op;
     }
+
+    appendChangeOperations(ops);
     return ops;
 }
 } // namespace
@@ -777,6 +1221,136 @@ QList<const OperationRegistry::Operation *> OperationRegistry::readOnlyOperation
     return out;
 }
 
+QList<const OperationRegistry::Operation *> OperationRegistry::changeOperations()
+{
+    QList<const Operation *> out;
+    for (const Operation &op : catalog())
+        if (!op.readOnly && op.name != QLatin1String("command"))
+            out << &op;
+    return out;
+}
+
+namespace
+{
+QString typeName(const QJsonValue &v)
+{
+    switch (v.type())
+    {
+        case QJsonValue::Bool: return QStringLiteral("boolean");
+        case QJsonValue::Double: return QStringLiteral("number");
+        case QJsonValue::String: return QStringLiteral("string");
+        case QJsonValue::Array: return QStringLiteral("array");
+        case QJsonValue::Object: return QStringLiteral("object");
+        default: return QStringLiteral("null");
+    }
+}
+
+bool typeFits(const QString &type, const QJsonValue &v)
+{
+    if (type == QLatin1String("integer"))
+        return v.isDouble() && v.toDouble() == double(qint64(v.toDouble()));
+    if (type == QLatin1String("number"))
+        return v.isDouble();
+    return typeName(v) == type;
+}
+
+QString checkValue(const QString &where, const QJsonObject &schema, const QJsonValue &v)
+{
+    typedef OperationRegistry R;
+    const QJsonValue type = schema.value(QLatin1String("type"));
+    if (!type.isUndefined())
+    {
+        QStringList types;
+        if (type.isArray())
+            for (const QJsonValue &t : type.toArray())
+                types << t.toString();
+        else
+            types << type.toString();
+        bool fits = false;
+        for (const QString &t : types)
+            fits = fits || typeFits(t, v);
+        if (!fits)
+            return R::tr("%1: wants %2, not %3").arg(where, types.join(QStringLiteral(" or ")), typeName(v));
+    }
+    if (schema.contains(QLatin1String("enum")))
+    {
+        const QJsonArray choices = schema.value(QLatin1String("enum")).toArray();
+        if (!choices.contains(v))
+        {
+            QStringList c;
+            for (const QJsonValue &e : choices)
+                c << e.toString();
+            return R::tr("%1: one of %2").arg(where, c.join(QStringLiteral(", ")));
+        }
+    }
+    if (v.isDouble())
+    {
+        if (schema.contains(QLatin1String("minimum")) && v.toDouble() < schema.value(QLatin1String("minimum")).toDouble())
+            return R::tr("%1: %2 is below %3").arg(where).arg(v.toDouble()).arg(schema.value(QLatin1String("minimum")).toDouble());
+        if (schema.contains(QLatin1String("maximum")) && v.toDouble() > schema.value(QLatin1String("maximum")).toDouble())
+            return R::tr("%1: %2 is above %3").arg(where).arg(v.toDouble()).arg(schema.value(QLatin1String("maximum")).toDouble());
+    }
+    if (v.isString())
+    {
+        const QString s = v.toString();
+        if (schema.contains(QLatin1String("minLength")) && s.trimmed().length() < schema.value(QLatin1String("minLength")).toInt())
+            return R::tr("%1: can't be empty").arg(where);
+        if (schema.contains(QLatin1String("pattern"))
+            && !QRegularExpression(schema.value(QLatin1String("pattern")).toString()).match(s).hasMatch())
+            return R::tr("%1: \"%2\" isn't in the right form").arg(where, s);
+    }
+    if (v.isArray())
+    {
+        const QJsonArray a = v.toArray();
+        if (schema.contains(QLatin1String("minItems")) && a.count() < schema.value(QLatin1String("minItems")).toInt())
+            return R::tr("%1: needs at least %2").arg(where).arg(schema.value(QLatin1String("minItems")).toInt());
+        if (schema.contains(QLatin1String("maxItems")) && a.count() > schema.value(QLatin1String("maxItems")).toInt())
+            return R::tr("%1: at most %2").arg(where).arg(schema.value(QLatin1String("maxItems")).toInt());
+        const QJsonObject items = schema.value(QLatin1String("items")).toObject();
+        if (!items.isEmpty())
+            for (int i = 0; i < a.count(); ++i)
+            {
+                const QString why = checkValue(QStringLiteral("%1[%2]").arg(where).arg(i), items, a.at(i));
+                if (!why.isEmpty())
+                    return why;
+            }
+    }
+    if (v.isObject())
+    {
+        const QJsonObject o = v.toObject();
+        const QJsonObject props = schema.value(QLatin1String("properties")).toObject();
+        const QString prefix = where.isEmpty() ? QString() : where + QLatin1Char('.');
+        for (const QJsonValue &r : schema.value(QLatin1String("required")).toArray())
+        {
+            const QJsonValue got = o.value(r.toString());
+            if (got.isUndefined() || got.isNull())
+                return R::tr("%1%2: missing").arg(prefix, r.toString());
+        }
+        const bool strict = schema.value(QLatin1String("additionalProperties")) == QJsonValue(false);
+        for (auto it = o.constBegin(); it != o.constEnd(); ++it)
+        {
+            if (it.value().isNull())
+                continue;
+            if (!props.contains(it.key()))
+            {
+                if (strict)
+                    return R::tr("%1%2: not an argument of this operation").arg(prefix, it.key());
+                continue;
+            }
+            const QString why = checkValue(prefix + it.key(), props.value(it.key()).toObject(), it.value());
+            if (!why.isEmpty())
+                return why;
+        }
+    }
+    return QString();
+}
+} // namespace
+
+QString OperationRegistry::checkArgs(const QJsonObject &schema, const QJsonObject &args)
+{
+    return checkValue(QString(), schema, args);
+}
+
 void OperationRegistry::setFunctionUseProbe(const std::function<bool(quint32)> &probe)
 {
     s_functionUseProbe = probe;
@@ -795,17 +1369,78 @@ OperationRegistry::OperationRegistry(Doc *doc, ShowTreeCommand *commander)
 OperationRegistry::Result OperationRegistry::run(const QString &name, const QJsonObject &args,
                                                  const ShowTreeCommand::Context &selection)
 {
-    const Operation *op = operation(name);
-    if (op == nullptr)
-        return refusal(tr("No operation \"%1\"").arg(name));
-    const QString why = op->validate ? op->validate(m_doc, args) : QString();
+    const QString why = check(name, args);
     if (!why.isEmpty())
         return refusal(why);
+    const Operation *op = operation(name);
     Context ctx;
     ctx.doc = m_doc;
     ctx.commander = m_commander;
     ctx.selection = selection;
     return op->execute(ctx, args);
+}
+
+QString OperationRegistry::check(const QString &name, const QJsonObject &args) const
+{
+    const Operation *op = operation(name);
+    if (op == nullptr)
+        return tr("No operation \"%1\"").arg(name);
+    const QString bad = checkArgs(op->schema, args);
+    if (!bad.isEmpty())
+        return bad;
+    return op->validate ? op->validate(m_doc, args) : QString();
+}
+
+OperationRegistry::Result OperationRegistry::runPlan(const QList<Call> &calls,
+                                                     const ShowTreeCommand::Context &selection,
+                                                     const QString &label)
+{
+    if (calls.isEmpty())
+        return refusal(tr("Nothing to do"));
+    if (m_doc->mode() == Doc::Operate)
+        return refusal(tr("Changes can't be made in Operate mode"));
+    if (m_commander == nullptr || m_doc->showTree() == nullptr)
+        return refusal(tr("The command line isn't open here"));
+    // Everything checked before anything runs.
+    for (int i = 0; i < calls.count(); ++i)
+    {
+        const Operation *op = operation(calls.at(i).name);
+        QString why = check(calls.at(i).name, calls.at(i).args);
+        if (why.isEmpty() && (op->readOnly || op->name == QLatin1String("command")))
+            why = tr("not a change operation");
+        if (!why.isEmpty())
+            return refusal(tr("Step %1 (%2): %3. Nothing changed.").arg(i + 1).arg(calls.at(i).name, why));
+    }
+
+    ShowTreeController *st = m_doc->showTree();
+    st->beginBatch(label);
+    ShowTreeCommand::Context at = selection;
+    Result last;
+    for (int i = 0; i < calls.count(); ++i)
+    {
+        last = run(calls.at(i).name, calls.at(i).args, at);
+        if (!last.ok)
+        {
+            st->endBatch(false);
+            return refusal(tr("Step %1 (%2): %3. Nothing changed.")
+                               .arg(i + 1).arg(operation(calls.at(i).name)->cliSyntax(calls.at(i).args), last.message));
+        }
+        // Where the step leaves the selection, as the view would: its cue,
+        // and the layer it set (what a following `rename_selected` names).
+        const quint32 cueBefore = at.cue;
+        at = last.command.context;
+        if (last.command.layer != 0xFFFFFFFF)
+            at.layer = last.command.layer;
+        else if (at.cue != cueBefore)
+            at.layer = 0xFFFFFFFF;
+    }
+    st->endBatch(true);
+    last.ok = true;
+    last.command.ok = true;
+    last.command.context = at;
+    last.message = tr("✓ %1 (one undo step)").arg(label);
+    last.command.message = last.message;
+    return last;
 }
 
 QStringList OperationRegistry::splitWords(const QString &line)
