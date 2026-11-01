@@ -374,8 +374,6 @@ order the note says why.
 | A DMX Monitor reachable in Classic | 3 | 5 | Studio's DMX view | 1 | L | L | **15** | BUILD (0.3.1) |
 | "Start new shows in Classic" preference | 3 | 5 | views | 0.5 | L | L | **30** | BUILD (0.3.1) |
 | Notice when a .qxw save holds content stock QLC+ will drop | 4 | 5 | Show Review FILE-05 idea | 1.5 | L | L | **13** | DONE (0.3.1: counts by kind, Teaching/Operate/web settings and Effect Control widgets named, "Don't ask again for this show") |
-| Import QLC+ settings and recent files once | 2 | 4 | mergeLegacyUserData | 1 | L | L | 8 | BUILD (0.3.1) |
-| Notice when a .qxw save holds content stock QLC+ will drop | 4 | 5 | Show Review FILE-05 idea | 1.5 | L | L | **13** | BUILD (0.3.1) |
 | Import QLC+ settings and recent files once | 2 | 4 | mergeLegacyUserData | 1 | L | L | 8 | DONE (0.3.1, LegacySettings: asked once, Settings ▸ General ▸ QLC+ 4 later) |
 | Run `lupdate` every release | 2 | 3 | Qt .ts | 0.5 | L | L | 12 | BUILD (0.3.1), then every release |
 | Show Manager parity review | 3 | 5 | Shows tab | 2 | L | L | 7.5 | BUILD (0.3.1) |
@@ -437,17 +435,17 @@ Notes:
 | Tracking sheet + printable cue sheet (PDF/XLSX) | 5 | 5 | tracking resolve, patch-list exports | 4 | L | L | **6.3** | BUILT (0.4, sheet, 2026-10-31): More ▾ → Cue Sheet… |
 | Course Level 2 lessons (7), one per release cycle | 5 | 5 | course template, courseshow_test | 2 a lesson | L | M | **12.5** a lesson | BUILD (0.3.1 onward) |
 | Realistic move speed in the Rig Overview | 3 | 5 | Rig Overview, definitions' speeds | 3 | L | L | 5 | BUILT (0.5, mov, 2026-10-31): defaults 0.4 s / 180° (scanner 0.1), Rig Overview follower + MOV-01/02/08 |
-| LTC (audio) timecode in, plus cues at a timecode | 4 | 5 | MTC follow, audio capture | 4 | M | M | 4 | BUILD (0.4): **LTC in built** (feat/04-ltc); cues at a timecode next, after the One GO path |
+| LTC (audio) timecode in, plus cues at a timecode | 4 | 5 | MTC follow, audio capture | 4 | M | M | 4 | BUILT (0.4, 2026-10-31): LTC in (feat/04-ltc) and cues at a timecode (`TimecodeCues`, through the One GO path) |
 | Effect fade in / fade out (depth to 0 on release) | 4 | 5 | layered looks | 4 | M | M | 4 | BUILT (0.4, 2026-10-31) |
-| Group / intensity masters on faders | 4 | 5 | groups, speed masters, Control Map | 4 | M | M | 4 | BUILD (0.4) |
+| Group / intensity masters on faders | 4 | 5 | groups, speed masters, Control Map | 4 | M | M | 4 | BUILT (0.4, gm, 2026-10-31) |
 | QLab out (OSC / MSC out) | 3 | 4 | Show control page | 3 | L | M | 4 | BUILT (0.4) |
-| Override / priority hits (Normal / Override / Inhibit, restore on release) | 5 | 4 | Hits, OutputLayer | 5 | M | M | 3.2 | BUILD (0.4) |
+| Override / priority hits (Normal / Override / Inhibit, restore on release) | 5 | 4 | Hits, OutputLayer | 5 | M | M | 3.2 | BUILT (0.4, ovr, 2026-10-31) |
 | Phone/tablet Run page (current, next, GO, Back, Hold) | 4 | 5 | secured web access, CueRunner | 5 | M | H | 3.2 | BUILT (0.4, GO/Back/Stop; Hold later) |
 | Calling script view (cues on lyric or script lines) | 3 | 4 | cue notes | 4 | L | M | 3 | BUILD (0.5) |
 | Encoder banks: MIDI controller drives the selection in Build | 3 | 4 | Focus-this-look mapping | 4 | L | M | 3 | LATER |
 | Duplicate a structure's setup (T1 → T2, T3) | 3 | 4 | Patch Others Like This | 4 | L | M | 3 | LATER |
 | W6 shared Library + command bar in Build | 3 | 4 | Show Tree Library, ShowTreeCommand | 4 | M | M | 2.4 | LATER |
-| Show Review v1 (52 checks, CLI, panel) | 4 | 5 | ShowStatus, LookStackCheck, tracking | 8 | L | M | 2.5 | BUILD (0.5): **frame built** (rev, 2026-10-31): registry, accept with a note, `--review` CLI, chip and panel, 31 checks; rest in TODO |
+| Show Review v1 (59 checks, CLI, panel) | 4 | 5 | ShowStatus, LookStackCheck, tracking | 8 | L | M | 2.5 | BUILT (0.5, rev, 2026-10-31): registry, accept with a note, `--review` CLI, chip and panel, 59 checks; open checks in TODO |
 | Plot handles (drag ends, ⌥-rotate) | 3 | 4 | Lighting Studio | 5 | M | M | 1.9 | LATER |
 | Stage and inventory across show files | 3 | 4 | inventory, structures | 5 | M | M | 1.9 | LATER |
 | RDM find-and-address in the Patch dialog | 4 | 5 | RDM manager, Patch dialog | 6 | H | H | 2 | LATER (needs the rig) |
@@ -584,26 +582,29 @@ The story: *the console tells you what's wrong with the show and why a
 light is doing what it's doing, in words a student can learn from.*
 
 Order and dependencies:
-1. **Show Review v1** (52 checks, CLI, panel), with Teaching's checks and
-   the course shows reviewed in the gate. The frame and 31 checks are
-   built (2026-10-31); the VC checks wait on the VcIndex.
-2. **"Why is this on?" v1** (built 2026-10-31: replayed on demand, no
+1. **Show Review v1** (59 checks, CLI, panel), with Teaching's checks and
+   the course shows reviewed in the gate. **Built 2026-10-31:** the frame,
+   59 checks (the VC ones on the VcIndex, TEACH-01, PWR-09, MOV-01/02/08),
+   Accept with a note, `--review`, the chip and panel.
+2. **"Why is this on?" v1** (**built 2026-10-31:** replayed on demand, no
    per-frame cost; its Plain words box is the hook v3 builds on), then v2
    (per-writer provenance, after the 80-universe stress run), then
    **v3's student mode**, which needs Teaching (0.3.1) and reads best
    next to Show Review.
-3. **Laser part C** (coverage and audience/eye-height warnings) and the
-   **no-light zones** idea, both as Show Review checks rather than a
-   separate system.
-4. **Realistic move speed in the Rig Overview** (BUILT 2026-10-31), which also feeds Show
-   Review's "moves in light" checks.
+3. **Laser part C** (audience-zone check built as Show Review PWR-09,
+   2026-10-31; the H×V window and density are open) and the **no-light
+   zones** idea, as Show Review checks rather than a separate system.
+4. **Realistic move speed in the Rig Overview** (**built 2026-10-31**),
+   which also feeds Show Review's "moves in light" checks (MOV-01/02/08).
 5. **Teaching's later items** (lesson link, reset to handout, GO log,
-   glossary). Built; only Show Review's TEACH-01 check is left, for when
-   Show Review v1 lands.
+   glossary, Show Review's TEACH-01). **Built.**
 6. **Calling script view**, if the course's SM lesson wants it.
 7. **Raspberry Pi package**, so a school can leave a Pi as the show
-   machine.
-8. **Course**: the rest of Level 2, and Level 3's remaining lessons.
+   machine. **Built 2026-10-31** (`platforms/linux/make-pi-deb.sh`, a .deb).
+8. **AI Assist P0-P3** (docs/design/AI_ASSIST.md): operation registry,
+   Design-only assistant, configuration import, MCP server. **Built
+   2026-10-31;** off by default.
+9. **Course**: the rest of Level 2, and Level 3's remaining lessons.
 
 Dependency chain at a glance:
 

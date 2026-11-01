@@ -11,19 +11,14 @@ Versions here are independent of the QLC+ base version embedded in the
 in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relate).
 
 ## [0.3.1] - Unreleased
+<!-- Contains 0.4/0.5 roadmap features landed 2026-10-31; version split pending Branson's decision -->
 
 A home for QLC+ 4 users: QLC+ 4's habits that qlcconsole had dropped are
 back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
 
-### Raspberry Pi
+### Run the show
 
-- **A Raspberry Pi package.** `platforms/linux/make-pi-deb.sh` builds an arm64
-  `.deb` for Raspberry Pi OS / Debian 13 (Qt 6.8 from apt), with the USB DMX
-  udev rules, the stock fixtures, a menu entry and icons, so a school can
-  leave a Pi as the show machine. Built by hand on the Pi (recipe:
-  docs/dev/RASPI.md); not published.
-
-### Show control
+#### Show control
 
 - **One GO path for the Virtual Console.** A VC Cue List (and the web page
   that drives it) and a VC button's next / previous step now send GO, Back,
@@ -35,7 +30,7 @@ back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
   cue number on a MIDI output; every cue or only cues with a number of their own.
   Per show, on the Show control page; not for blind or previews.
 
-### Run the show
+#### Phone and tablet Run page
 
 - **Phone and tablet Run page.** Web access serves **/run**: the
   production and list, the song section, the cue on now and the next (number
@@ -45,7 +40,7 @@ back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
   page** turns it on, off in every show by default; with a PIN, the page
   asks for it once per session. See *The Run page* in Other improvements.
 
-### Timecode
+#### Timecode
 
 - **Cues at a timecode.** Tick **Follow timecode** on a Show Tree cue list and
   give its cues a time ("cue 12 at 00:01:23:10", or **Learn** to stamp the
@@ -55,19 +50,7 @@ back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
   shows the next timecode cue and a countdown. Saved with the show; a show
   with no times plays as before.
 
-### Teaching
-
-- **What just happened, and the glossary.** In a Teaching show the Run tab
-  writes a line for every GO, Back and hit ("GO → cue 3 'Three': B →
-  Half; A, B tracked"), and hovering a term (the Show Tree's S T R M F
-  heads, the Run tab's heads and GO / Back buttons, the Operate settings)
-  adds its one-line definition. Nothing shows in a show that is not
-  Teaching. Lesson 3.6's start file, `lesson-3-6-start.qlcc`, has Teaching on.
-- **Fixture Properties ask too.** In a Teaching show the Lighting Studio's
-  universe and address boxes, and pasting a truss with its fixtures patched,
-  ask "Change the Patch" like the Fixture Manager does.
-
-### Scoped hits
+#### Scoped hits
 
 - **A hit lives where it fires** (Q154): under a cue, a cue list, its
   production (the Hits section, as before) or at the top of the tree for
@@ -106,7 +89,7 @@ back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
   in two mastered groups gets both. Saved with the show; a show without
   them, and QLC+ 4, play as before.
 
-### Moving layers in the Show Tree
+#### Moving layers in the Show Tree
 
 - **Cut, copy, paste and drag a layer.** ⌘X cuts the selected layers (Cut is
   in the right-click menu too); ⌘V on a cue moves them to its end, on a layer
@@ -122,39 +105,23 @@ back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
   Runs menu): Runs, At the end and Length.
 - The command line's **release** takes a ▣ function layer (by the function's
   name) as well as groups.
-### Toggle and one-shots
+
+#### Toggle and one-shots
 
 - **A Toggle hit with a Once / N-times effect breathes again.** When the
   hit is on and its one-shot effects have all finished, the next press of
   its VC Toggle button restarts them instead of turning the hit off; a
   press while one is still playing turns it off. Flash and hits without
   a one-shot are unchanged. A Breathe's Length is one breath (final).
-### One input, whichever controller is here
 
-- **A universe's input can take any of a list of game controllers** — the
-  Xbox pad at one place, a DualShock 4 at the next, a DualSense at home.
-  The first one switched on drives it (higher in the list wins, and the
-  notice says which is in use); each keeps its own input and controller
-  profile, and Quick focus, the follow spot, focus calls, Control Map
-  bindings and VC inputs work from whichever it is, in its own button
-  names. A pad that turns up while a universe waits for a missing one is
-  offered — **Use '…' for universe 2 (and remember it)** — and never taken
-  without that click. The list is under the universe in Connections ▸
-  Devices (move up, move down, remove, "any game controller"); saved with
-  the show, and older builds open its first controller.
-- **DualSense and DualShock 4 on Linux** are read into the same layout as
-  on a Mac, so the stock PlayStation profile is right there too (Xbox pads
-  as well); **stock input profiles** for the Xbox pad, the DualShock 4 and
-  the DualSense ("Create", not "Share").
-
-### Tonight's running order
+#### Tonight's running order
 
 - **Running order…** on the production's page: change the song order for
   the Run and GO tonight, or leave a song out, by dragging the sections.
   No cue is renumbered or rebuilt; **Reset to number order** undoes it, and
   it is saved with the show.
 
-### Cue sheet and tracking sheet
+#### Cue sheet and tracking sheet
 
 - **Paper for the stage manager.** **More ▾ → Cue Sheet…** on the Show
   Tree tab: the cue sheet (a row per cue in running order, song by song,
@@ -163,7 +130,7 @@ back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
   changes plain, what only tracks in grey in brackets). Save either as
   CSV, XLSX or a landscape PDF.
 
-### Effect fades
+#### Effect fades
 
 - **Effects fade in and out with their cue** (0.4): a Show Tree effect
   comes up over its cue's fade in and goes over the fade out of the cue
@@ -176,6 +143,35 @@ back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
 
 ### Show Review
 
+- **Show Review** (0.5): the show's design checked for what is likely
+  wrong, each finding with the place to fix it. A **Review · 2 ⛔ 5 ⚠** chip
+  in the footer opens the panel (also **Show Review…** in the Show
+  readiness dialog); it re-checks a moment after an edit, in Design. 59
+  checks: overlapping and not-ours addresses, missing and broken
+  definitions, dead lights still used, not on the plot, conflicting layers,
+  palettes the lights can't play, tracking across songs, skipped, duplicate
+  and do-nothing cues, hits fighting in one place, circuits over their
+  breaker, strobe over 3 Hz, a laser's beam or star field that can reach the
+  audience or eye height (PWR-09; the house is downstage of the stage edge,
+  below 3 m), effects of size or speed 0, a matrix on lights with no
+  colour, media outside the show folder or missing, embedded definitions
+  that can't be read, default names, Teaching mode still on (TEACH-01), the
+  old chaser still played after Import in place (CUE-12, VC-09), venue and
+  focus problems (VEN-01/02/05/09/10: a focus call with no target or no
+  lights, swapped fixtures that need focus again, a venue file missing or
+  unreadable, a practice venue left applied), sub-cues on Sub GO with
+  nothing that sends it (CUE-15), and the Virtual Console (hits no button
+  fires, buttons and Cue Lists with no function, the same key or MIDI input
+  on two widgets, a Cue Runner on no list, a cue list nothing can play,
+  inputs from a universe with no input patched, a hit that overrides a
+  wider one). **Accept…** saves a note with the show (who, when, why); it
+  reopens when what it was about changes. The footer's design problems show
+  their id in the readiness dialog. `qlcconsole --review show.qlcc` does
+  the same with no window, for CI and a teacher's folder of hand-ins (exit
+  0 / 1 warnings / 2 blockers / 3 unreadable; `--format json`; it reads the
+  venue file beside the show and the Virtual Console from the saved file).
+  See docs/features/show-review.md.
+
 - **Realistic move speed.** In the Rig Overview a moving head's beam now
   travels at the speed its type can (0.4 s per half turn for a moving head,
   0.1 s for a scanner) when the output jumps it, instead of snapping. The
@@ -184,45 +180,7 @@ back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
   hide) and **MOV-08** (heads lit in the first cue with nothing positioning
   them), which use the same speed.
 
-- **Show Review** (0.5, v1): the show's design checked for what is likely
-  wrong, each finding with the place to fix it. A **Review · 2 ⛔ 5 ⚠** chip
-  in the footer opens the panel (also **Show Review…** in the Show
-  readiness dialog); it re-checks a moment after an edit, in Design. 31
-  checks so far: overlapping and not-ours addresses, missing definitions,
-  not on the plot, conflicting layers, palettes the lights can't play,
-  tracking across songs, skipped and duplicate cues, hits fighting in one
-  place, circuits over their breaker, strobe over 3 Hz, media outside the
-  show folder or missing, default names. **Accept…** saves a note with the
-  show (who, when, why); it reopens when what it was about changes. The
-  footer's design problems show their id in the readiness dialog.
-  `qlcconsole --review show.qlcc` does the same with no window, for CI
-  and a teacher's folder of hand-ins (exit 0 / 1 warnings / 2 blockers /
-  3 unreadable; `--format json`). See docs/features/show-review.md.
-- **Show Review, ten more checks** (41 in all): a laser's beam or a star
-  field that can reach the audience or eye height (PWR-09; the house is
-  downstage of the stage edge, below 3 m); Teaching mode still on
-  (TEACH-01); a cue that changes nothing (CUE-03); the old chaser still
-  played after Import in place (CUE-12); venue clashes for every venue
-  (PAT-05); definition errors (FIX-02); dead lights still used (FIX-08);
-  a matrix on lights with no colour (FX-02); effects of size or speed 0
-  (FX-03); embedded definitions that can't be read (FILE-03).
-- **Show Review, nine more checks** (59 in all): venues and focus: a focus call
-  with no target or no lights (VEN-01), lights a call can't aim (VEN-02), swapped
-  fixtures that need focus again (VEN-05), a venue file that is missing or
-  unreadable (VEN-09), a practice venue left applied (VEN-10); and on the
-  Virtual Console: a hit that overrides a wider one (VC-02, a note), inputs from
-  a universe with no input patched (VC-07), a VC Cue List on the old chaser
-  after Import in place (VC-09), sub-cues on Sub GO with nothing that sends it
-  (CUE-15). `--review` now reads the venue file beside the show.
-- **Show Review reads the Virtual Console** (50 checks in all): hits no button
-  fires (VC-03), buttons and Cue Lists with no function or a deleted one
-  (VC-04), the same key (VC-05) or MIDI input (VC-06) on two widgets, a
-  Cue Runner on no list (VC-08), a cue list nothing can play (CUE-13), and
-  CUE-12 now sees a VC button still on the old chaser. They run from the
-  saved file too (`--review`), through a headless index of the console
-  (`VcIndex`). AI Assist's `unused` now counts Virtual Console widgets.
-
-### Why is this on?
+#### Why is this on?
 
 - **"Why is this on?"** (0.5): right-click a fixture in the Lighting
   Studio plot, the Rig Overview or the Fixture Manager, or a Simple Desk
@@ -282,6 +240,46 @@ back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
   Operate. With **…and propose changes** a tool's changes wait in the
   Show Tree's command line for you to apply as one undo step; it never
   applies them itself.
+
+### Teaching
+
+- **What just happened, and the glossary.** In a Teaching show the Run tab
+  writes a line for every GO, Back and hit ("GO → cue 3 'Three': B →
+  Half; A, B tracked"), and hovering a term (the Show Tree's S T R M F
+  heads, the Run tab's heads and GO / Back buttons, the Operate settings)
+  adds its one-line definition. Nothing shows in a show that is not
+  Teaching. Lesson 3.6's start file, `lesson-3-6-start.qlcc`, has Teaching on.
+- **Fixture Properties ask too.** In a Teaching show the Lighting Studio's
+  universe and address boxes, and pasting a truss with its fixtures patched,
+  ask "Change the Patch" like the Fixture Manager does.
+
+### Rig and Studio
+
+#### Raspberry Pi
+
+- **A Raspberry Pi package.** `platforms/linux/make-pi-deb.sh` builds an arm64
+  `.deb` for Raspberry Pi OS / Debian 13 (Qt 6.8 from apt), with the USB DMX
+  udev rules, the stock fixtures, a menu entry and icons, so a school can
+  leave a Pi as the show machine. Built by hand on the Pi (recipe:
+  docs/dev/RASPI.md); not published.
+
+#### One input, whichever controller is here
+
+- **A universe's input can take any of a list of game controllers** — the
+  Xbox pad at one place, a DualShock 4 at the next, a DualSense at home.
+  The first one switched on drives it (higher in the list wins, and the
+  notice says which is in use); each keeps its own input and controller
+  profile, and Quick focus, the follow spot, focus calls, Control Map
+  bindings and VC inputs work from whichever it is, in its own button
+  names. A pad that turns up while a universe waits for a missing one is
+  offered — **Use '…' for universe 2 (and remember it)** — and never taken
+  without that click. The list is under the universe in Connections ▸
+  Devices (move up, move down, remove, "any game controller"); saved with
+  the show, and older builds open its first controller.
+- **DualSense and DualShock 4 on Linux** are read into the same layout as
+  on a Mac, so the stock PlayStation profile is right there too (Xbox pads
+  as well); **stock input profiles** for the Xbox pad, the DualShock 4 and
+  the DualSense ("Create", not "Share").
 
 ### Based on QLC+ 4.14.4
 
