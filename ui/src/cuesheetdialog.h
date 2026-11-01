@@ -22,6 +22,8 @@
 
 #include <QDialog>
 
+#include "qlcui_export.h"
+
 #include "cuesheet.h"
 
 class QTextBrowser;
@@ -39,7 +41,7 @@ class Doc;
  * or a printable PDF. Read-only; built when it opens, from the Show Tree's
  * own resolve.
  */
-class CueSheetDialog : public QDialog
+class QLC_UI_EXPORT CueSheetDialog : public QDialog
 {
     Q_OBJECT
 

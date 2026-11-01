@@ -47,7 +47,7 @@ namespace ShowReviewCli
     QLC_ENGINE_EXPORT bool wanted(int argc, char **argv);
 
     /** The whole command: makes its own (window-less) application, then run(). */
-    QLC_ENGINE_EXPORT int main(int argc, char **argv);
+    QLC_ENGINE_EXPORT int cliMain(int argc, char **argv);
 
     /** The command's work, with an application already made: @a args
      *  without the program name. Output to @a out, errors to @a err. Loads

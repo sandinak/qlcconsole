@@ -21,6 +21,8 @@
 #define WHYONPANEL_H
 
 #include <QFrame>
+
+#include "qlcui_export.h"
 #include <QPointer>
 #include <functional>
 
@@ -46,7 +48,7 @@ class Doc;
  * is shown it asks again four times a second on the UI thread; hidden, it
  * asks nothing (no timer, nothing in the engine).
  */
-class WhyOnPanel final : public QFrame
+class QLC_UI_EXPORT WhyOnPanel final : public QFrame
 {
     Q_OBJECT
 

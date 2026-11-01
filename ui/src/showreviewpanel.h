@@ -19,6 +19,8 @@
 #define SHOWREVIEWPANEL_H
 
 #include <QDialog>
+
+#include "qlcui_export.h"
 #include <QPointer>
 #include <QVariantList>
 #include <functional>
@@ -44,7 +46,7 @@ class Doc;
  * The footer's design-time readiness entries that no check reads yet are
  * listed too, under their catalog id, fixed with the footer's own action.
  */
-class ShowReviewPanel final : public QDialog
+class QLC_UI_EXPORT ShowReviewPanel final : public QDialog
 {
     Q_OBJECT
 
