@@ -20,6 +20,12 @@ back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
 
 #### Show control
 
+- **A QR code for the phone Run page, and command-line words for effect
+  fades.** The Show control page shows the Run page's address as a QR code
+  beside **Open:** (when web access is reachable from the network), so a
+  phone camera opens it. `Steps effect Sinelon fade 2`, `fade in 2 out 0.5`,
+  `fade cue` or `fade atonce` sets an effect's fade in / out from the
+  command line (one undo step, Design only; AI Assist plans can carry it).
 - **Small leftovers of the run features.** The command line moves a group
   master (`master Backs 50`, also `full` and `off`; playing, so it works in
   Operate) and makes the selected hit an override hit (`override`, `override

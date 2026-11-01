@@ -105,6 +105,7 @@ What it can propose (each is a word of the command line; see `help`):
 | Looks on groups or fixtures | `Towers colour Blue dimmer 45`, `Towers, Steps gobo none` |
 | A look for the whole cue | `cue look spread +5` |
 | Intensity | `Movers dimmer 50` |
+| An effect's fade in / out | `Steps effect Sinelon fade in 2 out 0.5`, `cue look effect Sinelon fade atonce` |
 | The cue's mode | `block`, `track`, `cueonly`, `default` |
 | Release on a layer | `release Towers` |
 | Skip or put back cues | `skip 2, 4`, `unskip 2` |

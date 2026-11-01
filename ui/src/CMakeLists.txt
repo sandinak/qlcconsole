@@ -191,6 +191,7 @@ add_library(${module_name}
     helpshots.cpp helpshots.h
     showcontrollistener.cpp showcontrollistener.h
     showcontrolsyncpage.cpp showcontrolsyncpage.h
+    qrencoder.cpp qrencoder.h
     controllearndialog.cpp controllearndialog.h
     controlmappanel.cpp controlmappanel.h
     shrinkablebar.h

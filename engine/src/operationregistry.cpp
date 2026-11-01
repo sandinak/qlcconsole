@@ -628,6 +628,78 @@ void appendChangeOperations(QList<OperationRegistry::Operation> &ops)
     }
     {
         Op op;
+        op.name = QStringLiteral("set_effect_fade");
+        op.title = R::tr("Set an effect's fade in / out");
+        op.description = R::tr("In the selected cue: how an effect comes in and goes (Show Tree effects). "
+                               "'with' cue: with the cue's own fades (the default of a new effect); atonce: "
+                               "starts and stops at full. Or fade_in / fade_out in seconds (one alone leaves "
+                               "the other as it was). On these groups' layer, or the whole cue when no "
+                               "targets are given. The effect's own looks are kept.");
+        QJsonObject secs { { QStringLiteral("type"), QStringLiteral("number") }, { QStringLiteral("minimum"), 0 },
+                           { QStringLiteral("maximum"), 600 }, { QStringLiteral("description"), R::tr("Seconds") } };
+        op.schema = strictSchema({ { QStringLiteral("effect"), stringProperty(R::tr("The effect palette's name")) },
+                                   { QStringLiteral("targets"), namesProperty(R::tr("Groups, sets or fixtures by name; none: the whole cue"), 0) },
+                                   { QStringLiteral("with"),
+                                     stringProperty(R::tr("Follow the cue's fades, or start and stop at once"),
+                                                    { QStringLiteral("cue"), QStringLiteral("atonce") }) },
+                                   { QStringLiteral("fade_in"), secs }, { QStringLiteral("fade_out"), secs } },
+                                 { QStringLiteral("effect") });
+        op.validate = [](Doc *doc, const QJsonObject &a) {
+            const QString name = arg(a, "effect");
+            bool found = false;
+            for (const QLCPalette *p : doc->palettes())
+                if (p->type() == QLCPalette::Effect && p->name().compare(name, Qt::CaseInsensitive) == 0)
+                    found = true;
+            if (!found)
+                return R::tr("No effect called \"%1\"").arg(name);
+            const bool times = a.contains(QLatin1String("fade_in")) || a.contains(QLatin1String("fade_out"));
+            const bool with = !arg(a, "with").isEmpty();
+            if (times == with)
+                return R::tr("Give either 'with' or fade_in / fade_out");
+            return QString();
+        };
+        op.cliSyntax = [](const QJsonObject &a) {
+            QStringList w;
+            if (strings(a, "targets").isEmpty())
+                w << QStringLiteral("cue") << QStringLiteral("look");
+            else
+                w << targetsText(a);
+            w << QStringLiteral("effect") << gq(arg(a, "effect")) << QStringLiteral("fade");
+            if (!arg(a, "with").isEmpty())
+            {
+                w << arg(a, "with");
+            }
+            else
+            {
+                for (const char *k : { "fade_in", "fade_out" })
+                    if (a.contains(QLatin1String(k)))
+                        w << QLatin1String(k).mid(5) << QString::number(a.value(QLatin1String(k)).toDouble(), 'g', 6);
+            }
+            return w.join(QLatin1Char(' '));
+        };
+        op.describe = [](const QJsonObject &a) {
+            const QStringList t = strings(a, "targets");
+            QString how;
+            if (arg(a, "with") == QLatin1String("cue"))
+                how = R::tr("with the cue's fades");
+            else if (arg(a, "with") == QLatin1String("atonce"))
+                how = R::tr("at once");
+            else
+            {
+                QStringList p;
+                if (a.contains(QLatin1String("fade_in")))
+                    p << R::tr("%1 s in").arg(a.value(QLatin1String("fade_in")).toDouble());
+                if (a.contains(QLatin1String("fade_out")))
+                    p << R::tr("%1 s out").arg(a.value(QLatin1String("fade_out")).toDouble());
+                how = p.join(QStringLiteral(", "));
+            }
+            return R::tr("%1: effect %2 fades %3")
+                .arg(t.isEmpty() ? R::tr("The whole cue") : t.join(QStringLiteral(", ")), arg(a, "effect"), how);
+        };
+        add(op);
+    }
+    {
+        Op op;
         op.name = QStringLiteral("set_cue_mode");
         op.title = R::tr("Set the cue's mode");
         op.description = R::tr("The selected cue's tracking mode: track (starts from the cue before), block "

@@ -1074,9 +1074,11 @@ To open it on a phone:
    **Start web access with this show** and **Reachable from other devices
    on the network** (or start with **--web-bind 0.0.0.0**). Phone and
    computer must be on the same network.
-2. Read the address under **Open:** (there is one per network), add
-   **/run**, and type it into the phone's browser. There is no QR code:
-   type it once and add it to the phone's home screen.
+2. Point the phone's camera at the **QR code** beside **Open:**: it is the
+   **/run** address of the first network address (it shows only when the
+   page is reachable from the network). Or read an address under
+   **Open:** (there is one per network), add **/run**, and type it into
+   the phone's browser. Either way, add it to the phone's home screen once.
 3. In **File ▸ Show Settings…** tick **Allow GO from the phone Run page**.
    **This is off in every show** until you do: the page then shows the cues
    but its buttons stay grey and say so.

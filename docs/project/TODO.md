@@ -80,7 +80,10 @@ generated scene as `Scene::setPaletteFade`, `FadeFollow` for the cue's;
 - Classic scenes: an effect look's per-look fade in (Look Editor) now
   starts its depth fade too (it was ignored for effects); a per-look fade
   out alone plays as before.
-- No command-line words for effect fades yet (`effect … fade 2`).
+- ~~No command-line words for effect fades yet~~ built (feat/05-small-items):
+  `Steps effect Sinelon fade 2 | in 2 out 0.5 | cue | atonce`, the
+  `set_effect_fade` operation (AI plans carry it). `effect X fade …` alone
+  keeps the effect's own looks (decided: can change).
 
 ## Pad Run — MVP built, leftovers (0.4 item 2, pad, 2026-10-31)
 
@@ -116,8 +119,10 @@ hits, built, are fired by a VC button's start, not a run command; ALL OFF,
 which lets go of them, is one). Open:
 - Phone Run page: built 2026-10-31 (feat/04-phone-run): `RouteWeb`, `/run`
   on web access, "Allow GO from the phone Run page" in Show Settings (off by
-  default, the show's PIN once per session). Open: a QR code for the
-  address (decided: type it, can change); ~~Hold (Pause/Resume) buttons~~
+  default, the show's PIN once per session). ~~a QR code for the
+  address~~ (built, feat/05-small-items: ui/src/qrencoder.*, beside "Open:" on
+  the Show control page, the first network address's /run; shown only when
+  reachable from the network); ~~Hold (Pause/Resume) buttons~~
   and ~~a slider for each group master~~ (built, feat/05-run-leftovers);
   following a list other than the main one (not decided; left open).
 - DONE (vcgo, feat/04-vc-go-path): the VC Cue List (and the web page that
