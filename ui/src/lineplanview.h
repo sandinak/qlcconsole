@@ -24,10 +24,14 @@
 #include <QPointF>
 #include <QList>
 #include <QHash>
+#include <QPointer>
 
 class Doc;
 class Scene;
 class QLCPalette;
+class QToolButton;
+class LineSpreadPreview;
+class QLabel;
 
 /** @addtogroup ui UI
  * @{
@@ -73,13 +77,69 @@ public:
     const QList<Beam> &beams() const { return m_beams; }
     const QList<QPointF> &line() const { return m_line; }
 
+    /** Drawn dimmed: what it shows is the last plan, not the selection's. */
+    void setDimmed(bool dimmed);
+    bool isDimmed() const { return m_dimmed; }
+    /** Whether the view offers to open in a window (the corner button, right-click). */
+    void setPoppable(bool poppable);
+    /** Dot and label size at this widget size (1 at the embedded size; tests). */
+    double drawScale() const;
+
+signals:
+    void popOutRequested();
+
 protected:
     void paintEvent(QPaintEvent *) override;
+    void resizeEvent(QResizeEvent *) override;
+    void contextMenuEvent(QContextMenuEvent *event) override;
 
 private:
     Doc *m_doc;
     QList<QPointF> m_line;
     QList<Beam> m_beams;
+    bool m_dimmed = false;
+    bool m_poppable = true;
+    QToolButton *m_popOut = nullptr;
+};
+
+/**
+ * The order strip and the plan in a window of their own (the pop-out of a
+ * line aim's Position rows): resizable, non-modal, one at a time, scaled to
+ * the window. It is fed by the Show Tree's inspector each time it rebuilds
+ * the layer page, so it follows every edit and the selection; with no line
+ * aim selected it says so and keeps the last plan, dimmed. Its size and
+ * place are remembered (QSettings showtree/linePlanWindow/geometry).
+ */
+class LinePlanWindow final : public QWidget
+{
+    Q_OBJECT
+
+public:
+    explicit LinePlanWindow(Doc *doc, QWidget *parent = nullptr);
+    ~LinePlanWindow() override;
+
+    /** The same arguments the embedded views take. */
+    void setFormation(const Scene *scene, const QLCPalette *look,
+                      const Scene *prevScene, const QLCPalette *prevLook);
+    /** The selection has no line aim: keep the last plan, dimmed, and say so. */
+    void setNoAim();
+
+    LineSpreadPreview *strip() const { return m_strip; }
+    LinePlanView *plan() const { return m_plan; }
+    QString message() const;
+
+    static QString geometryKey();
+
+protected:
+    void hideEvent(QHideEvent *) override;
+    void closeEvent(QCloseEvent *) override;
+
+private:
+    void saveGeometryNow();
+
+    LineSpreadPreview *m_strip;
+    LinePlanView *m_plan;
+    QLabel *m_note;
 };
 
 /** @} */

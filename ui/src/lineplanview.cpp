@@ -17,11 +17,24 @@
   limitations under the License.
 */
 
+#include <QContextMenuEvent>
+#include <QCloseEvent>
+#include <QHideEvent>
 #include <QPainter>
+#include <QToolButton>
+#include <QVBoxLayout>
+#include <QSettings>
+#include <QShortcut>
+#include <QKeySequence>
+#include <QLabel>
+#include <QMenu>
 #include <QRectF>
+#include <QtGlobal>
+#include <climits>
 #include <cmath>
 
 #include "lineplanview.h"
+#include "linespreadpreview.h"
 #include "monitorproperties.h"
 #include "stagetarget.h"
 #include "linecurve.h"
@@ -46,6 +59,13 @@ LinePlanView::LinePlanView(Doc *doc, QWidget *parent)
 {
     setObjectName(QStringLiteral("lineplanView"));
     setMinimumSize(200, 140);
+    m_popOut = new QToolButton(this);
+    m_popOut->setObjectName(QStringLiteral("linePlanPopOut"));
+    m_popOut->setText(QStringLiteral("\u2922"));
+    m_popOut->setAutoRaise(true);
+    m_popOut->setCursor(Qt::ArrowCursor);
+    m_popOut->setToolTip(tr("Open the strip and the plan in a window"));
+    connect(m_popOut, &QToolButton::clicked, this, &LinePlanView::popOutRequested);
     setToolTip(tr("The plan, from above: the line, each light where it hangs and its beam to its point "
                   "(numbered as the strip above). Rings: where the previous cue put the same lights -- "
                   "the beams sweep from there over the cue's fade."));
@@ -107,13 +127,48 @@ void LinePlanView::setFormation(const Scene *scene, const QLCPalette *look,
     update();
 }
 
+void LinePlanView::setDimmed(bool dimmed)
+{
+    if (m_dimmed == dimmed)
+        return;
+    m_dimmed = dimmed;
+    update();
+}
+
+void LinePlanView::setPoppable(bool poppable)
+{
+    m_poppable = poppable;
+    m_popOut->setVisible(poppable);
+}
+
+double LinePlanView::drawScale() const
+{
+    return qBound(1.0, qMin(width() / 260.0, height() / 170.0), 3.5);
+}
+
+void LinePlanView::resizeEvent(QResizeEvent *)
+{
+    m_popOut->move(width() - m_popOut->width() - 2, 2);
+}
+
+void LinePlanView::contextMenuEvent(QContextMenuEvent *event)
+{
+    if (!m_poppable)
+        return;
+    QMenu menu(this);
+    QAction *open = menu.addAction(tr("Open in a window"));
+    if (menu.exec(event->globalPos()) == open)
+        emit popOutRequested();
+}
+
 void LinePlanView::paintEvent(QPaintEvent *)
 {
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing);
     p.fillRect(rect(), QColor(30, 32, 38));
+    const double s = drawScale();
     QFont f = p.font();
-    f.setPointSizeF(8.0);
+    f.setPointSizeF(8.0 * s);
     p.setFont(f);
     p.setPen(QColor(120, 120, 130));
     p.drawText(rect().adjusted(6, 4, -6, -4), Qt::AlignTop | Qt::AlignLeft, tr("Plan (top)"));
@@ -139,7 +194,7 @@ void LinePlanView::paintEvent(QPaintEvent *)
     }
     const QPointF c = box.center();
     const double w = qMax(2.0, box.width()) * 1.15, h = qMax(2.0, box.height()) * 1.15;
-    const QRectF area = QRectF(rect()).adjusted(12, 16, -12, -10);
+    const QRectF area = QRectF(rect()).adjusted(12 * s, 16 * s, -12 * s, -10 * s);
     const double scale = qMin(area.width() / w, area.height() / h);
     auto toScreen = [&](const QPointF &pt) {
         return QPointF(area.center().x() + (pt.x() - c.x()) * scale,
@@ -150,24 +205,24 @@ void LinePlanView::paintEvent(QPaintEvent *)
     QPolygonF poly;
     for (const QPointF &pt : m_line)
         poly << toScreen(pt);
-    p.setPen(QPen(QColor(255, 180, 0), 2.0));
+    p.setPen(QPen(QColor(255, 180, 0), 2.0 * s));
     p.setBrush(Qt::NoBrush);
     p.drawPolyline(poly);
     p.setPen(QColor(150, 150, 160));
-    p.drawText(QRectF(poly.first() - QPointF(14, 14), QSizeF(12, 12)), Qt::AlignCenter, QStringLiteral("A"));
-    p.drawText(QRectF(poly.last() + QPointF(2, -14), QSizeF(12, 12)), Qt::AlignCenter, QStringLiteral("B"));
+    p.drawText(QRectF(poly.first() - QPointF(14 * s, 14 * s), QSizeF(12 * s, 12 * s)), Qt::AlignCenter, QStringLiteral("A"));
+    p.drawText(QRectF(poly.last() + QPointF(2 * s, -14 * s), QSizeF(12 * s, 12 * s)), Qt::AlignCenter, QStringLiteral("B"));
 
-    const double r = 6.0;
+    const double r = 6.0 * s;
     // The previous cue's points: rings, and the way each beam sweeps.
     for (const Beam &b : m_beams)
     {
         if (!b.hasPrevious)
             continue;
         const QPointF was = toScreen(b.previous), is = toScreen(b.to);
-        p.setPen(QPen(QColor(140, 170, 255, 170), 1.0, Qt::DashLine));
+        p.setPen(QPen(QColor(140, 170, 255, 170), s, Qt::DashLine));
         if (QLineF(was, is).length() > 1.0)
             p.drawLine(was, is);
-        p.setPen(QPen(QColor(140, 170, 255), 1.5));
+        p.setPen(QPen(QColor(140, 170, 255), 1.5 * s));
         p.setBrush(Qt::NoBrush);
         p.drawEllipse(was, r + 2, r + 2);
     }
@@ -175,14 +230,108 @@ void LinePlanView::paintEvent(QPaintEvent *)
     for (const Beam &b : m_beams)
     {
         const QPointF from = toScreen(b.from), to = toScreen(b.to);
-        p.setPen(QPen(QColor(255, 230, 160, 90), 1.0));
+        p.setPen(QPen(QColor(255, 230, 160, 90), s));
         p.drawLine(from, to);
-        p.setPen(QPen(QColor(20, 20, 24), 1.0));
+        p.setPen(QPen(QColor(20, 20, 24), s));
         p.setBrush(QColor(170, 170, 180));
-        p.drawRect(QRectF(from - QPointF(3, 3), QSizeF(6, 6)));
+        p.drawRect(QRectF(from - QPointF(3 * s, 3 * s), QSizeF(6 * s, 6 * s)));
         p.setBrush(QColor(255, 210, 120));
         p.drawEllipse(to, r, r);
         p.setPen(QColor(20, 20, 24));
         p.drawText(QRectF(to.x() - r, to.y() - r, 2 * r, 2 * r), Qt::AlignCenter, QString::number(b.number));
+        // Big enough to read: the light's name where it hangs.
+        if (s >= 1.6 && !b.name.isEmpty())
+        {
+            p.setPen(QColor(190, 190, 200));
+            p.drawText(QRectF(from.x() - 40 * s, from.y() + 4 * s, 80 * s, 12 * s),
+                       Qt::AlignHCenter | Qt::AlignTop, b.name);
+        }
     }
+    if (m_dimmed)
+        p.fillRect(rect(), QColor(30, 32, 38, 150));
+}
+
+// ---------------------------------------------------------------------------
+
+QString LinePlanWindow::geometryKey()
+{
+    return QStringLiteral("showtree/linePlanWindow/geometry");
+}
+
+LinePlanWindow::LinePlanWindow(Doc *doc, QWidget *parent)
+    : QWidget(parent, Qt::Window)
+{
+    setObjectName(QStringLiteral("linePlanWindow"));
+    setWindowTitle(tr("Line aim: order and plan"));
+    setAttribute(Qt::WA_DeleteOnClose);
+    QVBoxLayout *v = new QVBoxLayout(this);
+    v->setContentsMargins(8, 8, 8, 8);
+    m_strip = new LineSpreadPreview(doc, this);
+    m_strip->setObjectName(QStringLiteral("linePlanWindowStrip"));
+    m_strip->setPoppable(false);
+    m_strip->setMinimumSize(200, 56);
+    m_strip->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    m_plan = new LinePlanView(doc, this);
+    m_plan->setObjectName(QStringLiteral("linePlanWindowPlan"));
+    m_plan->setPoppable(false);
+    m_plan->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    m_note = new QLabel(this);
+    m_note->setObjectName(QStringLiteral("linePlanWindowNote"));
+    m_note->setWordWrap(true);
+    m_note->hide();
+    v->addWidget(m_note);
+    v->addWidget(m_strip, 1);
+    v->addWidget(m_plan, 3);
+
+    new QShortcut(QKeySequence(Qt::Key_Escape), this, SLOT(close()));
+    new QShortcut(QKeySequence::Close, this, SLOT(close()));
+
+    resize(640, 560);
+    const QByteArray geo = QSettings().value(geometryKey()).toByteArray();
+    if (!geo.isEmpty())
+        restoreGeometry(geo);
+}
+
+LinePlanWindow::~LinePlanWindow()
+{
+}
+
+void LinePlanWindow::setFormation(const Scene *scene, const QLCPalette *look,
+                                  const Scene *prevScene, const QLCPalette *prevLook)
+{
+    m_strip->setLook(scene, look);
+    m_plan->setFormation(scene, look, prevScene, prevLook);
+    m_strip->setDimmed(false);
+    m_plan->setDimmed(false);
+    m_note->hide();
+}
+
+void LinePlanWindow::setNoAim()
+{
+    m_strip->setDimmed(true);
+    m_plan->setDimmed(true);
+    m_note->setText(tr("The selection has no line aim. Showing the last plan."));
+    m_note->show();
+}
+
+QString LinePlanWindow::message() const
+{
+    return m_note->isVisible() ? m_note->text() : QString();
+}
+
+void LinePlanWindow::saveGeometryNow()
+{
+    QSettings().setValue(geometryKey(), saveGeometry());
+}
+
+void LinePlanWindow::hideEvent(QHideEvent *ev)
+{
+    saveGeometryNow();
+    QWidget::hideEvent(ev);
+}
+
+void LinePlanWindow::closeEvent(QCloseEvent *ev)
+{
+    saveGeometryNow();
+    QWidget::closeEvent(ev);
 }

@@ -32,6 +32,7 @@
 #include "showtreemodel.h"
 #include "showtreecommand.h"
 #include "qlcpalette.h"
+#include "lineplanview.h"
 
 class QStackedWidget;
 class QKeyEvent;
@@ -537,6 +538,11 @@ public:
     QWidget *lineStrip() const;
     /** The plan view under it (D19), a LinePlanView (tests). */
     QWidget *linePlan() const;
+    /** Open the order strip and plan in a window of their own (the pop-out;
+     *  raises the one there is). */
+    void openLinePlanWindow();
+    /** The pop-out window, null when closed (tests). */
+    LinePlanWindow *linePlanWindow() const { return m_planWindow; }
     /** The attribute rows the inspector shows for the selected layer, as
      *  text: "Colour | Blue | from cue 1" -- for the tests. */
     QStringList attributeRows() const;
@@ -992,6 +998,8 @@ private:
     QGridLayout *m_rows;
     QWidget *m_rowsHost;
     QStringList m_rowText;
+    QPointer<LinePlanWindow> m_planWindow;   //!< the pop-out of the strip and plan
+    bool m_planFed = false;                  //!< this inspector pass fed it a line aim
 
     LookEditor *m_lookEditor = nullptr;
 
