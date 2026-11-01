@@ -101,6 +101,7 @@ private slots:
     void renameInPlace();
     void lineAimsInTheTab();
     void planViewOfALineAim();
+    void planPopOutWindow();
     void copyPasteAndHelp();
     void libraryTreeEditorAndAddingWithoutDragging();
     void aSplitSavedWhileDockedDoesNotHideThePage();

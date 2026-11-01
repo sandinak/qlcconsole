@@ -10,6 +10,17 @@ under `~/.claude/.../memory/`.
 
 ---
 
+## Line aim pop-out (lpv, 2026-11-01) — built, leftovers
+
+Built: `LinePlanWindow` (ui/src/lineplanview.*) shows the order strip and
+plan scaled to a resizable, non-modal window; `ShowTreeView::updateInspector`
+feeds it on every rebuild of the layer page (no second model, nothing per
+frame), dims it when the selection has no line aim, geometry in QSettings
+`showtree/linePlanWindow/geometry`. Entry: the ⤢ button on the plan and a
+right-click on either view; no menu item. Decided (can change): the window
+is a child of the Show Tree view (closes with it); light names show once the
+plan is drawn at 1.6x or more. Open: the strip does not name the lights.
+
 ## Raspberry Pi package — leftovers (pi, 2026-10-31)
 
 Built: `platforms/linux/make-pi-deb.sh` (a .deb; decided, can change),

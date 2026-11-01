@@ -956,6 +956,14 @@ of its own.
   and, as **rings**, where the cue before put the same lights, with the
   sweep between them dashed. It follows Spread, Grouping and Cross as you
   change them.
+- **In a window.** On a small screen, **⤢** on the plan (or right-click
+  the strip or the plan ▸ **Open in a window**) opens both in a window of
+  their own: resize it, put it on a second screen, and the dots, numbers
+  and light names grow with it. It updates as you edit, from the tree rows,
+  the cue's Line ⋯, the command line, the pad or undo, and follows the cue
+  and layer you select. When the selection has no line aim it says so and
+  keeps the last plan, dimmed. There is one window; **Esc** or **⌘W**
+  closes it, and its size and place are remembered.
 - **Between cues** a Spread change fades over the cue's fade time, so the
   beams sweep.
 

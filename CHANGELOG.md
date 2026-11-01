@@ -43,6 +43,15 @@ back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
   cue number on a MIDI output; every cue or only cues with a number of their own.
   Per show, on the Show control page; not for blind or previews.
 
+- **A line aim's order strip and plan open in a window.** The **⤢** button
+  on the plan (or right-click either one ▸ **Open in a window**) opens them
+  in a window of their own, resizable and on any screen, so a laptop can
+  show them large with bigger numbered dots and the lights' names. It
+  follows Spread, Grouping and Cross from every route (tree rows, the cue's
+  Line ⋯, the command line, the pad, undo) and the selected cue and layer;
+  with no line aim selected it says so and keeps the last plan, dimmed. One
+  window; Esc or ⌘W closes it; its size and place are remembered.
+
 #### Phone and tablet Run page
 
 - **Phone and tablet Run page.** Web access serves **/run**: the
