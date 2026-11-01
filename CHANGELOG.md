@@ -251,6 +251,21 @@ back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
   Tree grammar's change words are now operations of their own (`make_cue`,
   `set_look`, `set_intensity`, `record_cue`... 16 of them).
 
+- **Bring in a setup from another show** (AI Assist P2b, works with AI
+  off): **File ▸ Import ▸ Universes and I/O Setup (.qxw)** takes universe
+  names and their output, input (with its input profile) and feedback
+  patches from another show file, with a mapping (file universe 3 on
+  universe 1, Art-Net destination 2.0.0.50 to 2.0.0.60, a plugin you
+  don't have to one you do). You see the problems, warnings and the
+  changes first; a universe that already has a setup, or a plugin that
+  isn't here, makes you choose (skip, replace, renumber; skip, keep
+  offline) instead of guessing. Patches keep their network requirement
+  as the file has it, so importing off the show network works and warns
+  ("not currently routable", or "would leave by the default route"). One
+  undo step. The command line has it too (`config <file>`,
+  `import config <file> … apply`), and AI Assist can read a file and
+  propose the same import for you to confirm.
+
 ### Based on QLC+ 4.14.4
 
 qlcconsole's QLC+ base moves from 4.14.2 to **4.14.4**: the build string

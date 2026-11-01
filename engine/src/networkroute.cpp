@@ -244,6 +244,48 @@ NetworkRoute::Resolution NetworkRoute::resolve(const QStringList &lines, const Q
     return res;
 }
 
+NetworkRoute::RouteCheck NetworkRoute::checkRoute(const QString &destination)
+{
+    RouteCheck out;
+    QString text = destination.trimmed();
+    if (text.contains(QLatin1Char('/')))
+    {
+        const QPair<QHostAddress, int> net = QHostAddress::parseSubnet(text);
+        if (net.first.isNull() || net.first.protocol() != QAbstractSocket::IPv4Protocol)
+            return out;
+        // A network: any local address inside it is a connected route; else
+        // ask about its first host.
+        const QList<LocalAddress> locals = localAddresses();
+        for (const LocalAddress &la : locals)
+            if (la.ip.isInSubnet(net))
+            {
+                out.kind = Reached;
+                out.via = describe(la);
+                return out;
+            }
+        const quint32 first = (net.first.toIPv4Address() & (net.second == 0 ? 0 : (0xFFFFFFFFu << (32 - net.second)))) + 1;
+        text = QHostAddress(first).toString();
+    }
+    const QHostAddress target = parseV4(text);
+    if (target.isNull())
+        return out;
+    const QList<LocalAddress> locals = localAddresses();
+    for (const LocalAddress &la : locals)
+        if (target.isInSubnet(la.ip, effectivePrefix(la)))
+        {
+            out.kind = Reached;
+            out.via = describe(la);
+            return out;
+        }
+    const QHostAddress src = sourceFor(target);
+    if (src.isNull())
+        return out;
+    const LocalAddress *la = findLocal(locals, src);
+    out.via = la != NULL ? describe(*la) : src.toString();
+    out.kind = (sourceFor(kDefaultRouteProbe) == src) ? DefaultRoute : Reached;
+    return out;
+}
+
 QString NetworkRoute::networkForLine(const QString &lineName)
 {
     const QHostAddress ip = parseV4(lineName);

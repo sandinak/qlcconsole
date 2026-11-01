@@ -481,6 +481,10 @@ private:
      *  export): the EosImportWizard, the usual picker and merge, then the
      *  cue lists into the Show Tree (docs/design/EOS_IMPORT_DESIGN.md). */
     void importEosShow(const QString &asciiPath);
+    /** File > Import of another show's universes and I/O setup: the
+     *  ConfigImportDialog form, then the `import_config` operation as one
+     *  undo step (docs/design/AI_ASSIST.md section 5b). */
+    void importConfigFile(const QString &path);
     /** File > Import's report: the merge, with @p before as its details
      *  (what an Eos file held) and @p after appended (the Show Tree). */
     void showImportSummary(const class QxwImportResult &result, const QStringList &before = QStringList(),

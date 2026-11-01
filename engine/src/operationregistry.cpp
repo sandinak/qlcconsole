@@ -23,12 +23,14 @@
    with schemas, and runPlan() -- a confirmed plan as one undo step. */
 
 #include <QRegularExpression>
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QUrl>
 #include <QSet>
 #include <algorithm>
 
 #include "operationregistry.h"
+#include "configimport.h"
 #include "showtreecontroller.h"
 #include "qlcfixturemode.h"
 #include "qlcfixturedef.h"
@@ -769,6 +771,349 @@ void appendChangeOperations(QList<OperationRegistry::Operation> &ops)
     }
 }
 
+/* ---- configuration import (P2b, AI_ASSIST.md section 5b) ---- */
+
+QJsonObject configProperties()
+{
+    QJsonObject sections { { QStringLiteral("type"), QStringLiteral("array") },
+                           { QStringLiteral("items"), stringProperty(OperationRegistry::tr("A section"), ConfigImport::allSections()) },
+                           { QStringLiteral("description"),
+                             OperationRegistry::tr("What to take: universes (names), outputs, inputs (with their "
+                                                   "input profile), feedback. Left out: all of them.") } };
+    QJsonObject universes { { QStringLiteral("type"), QStringLiteral("array") },
+                            { QStringLiteral("items"), QJsonObject { { QStringLiteral("type"), QStringLiteral("integer") },
+                                                                     { QStringLiteral("minimum"), 1 } } },
+                            { QStringLiteral("description"),
+                              OperationRegistry::tr("Universe numbers in the file (1 is the first). Left out: all.") } };
+    auto map = [](const QString &d) {
+        return QJsonObject { { QStringLiteral("type"), QStringLiteral("object") }, { QStringLiteral("description"), d } };
+    };
+    QJsonObject props;
+    props.insert(QStringLiteral("file"), stringProperty(OperationRegistry::tr("Path of the show file (.qxw) to take the setup from")));
+    props.insert(QStringLiteral("sections"), sections);
+    props.insert(QStringLiteral("universes"), universes);
+    props.insert(QStringLiteral("universeMap"),
+                 map(OperationRegistry::tr("File universe number to universe number here, e.g. {\"3\": \"1\"}")));
+    props.insert(QStringLiteral("addressMap"),
+                 map(OperationRegistry::tr("Network address in the file to the address here, e.g. {\"2.0.0.50\": \"2.0.0.60\"}")));
+    props.insert(QStringLiteral("pluginMap"),
+                 map(OperationRegistry::tr("Plugin in the file to the plugin here, for one that isn't installed")));
+    props.insert(QStringLiteral("onCollision"),
+                 stringProperty(OperationRegistry::tr("When a universe here already has a setup: skip it (keep ours), "
+                                                      "replace it, or renumber (put the file's on a new universe)"),
+                                { QStringLiteral("skip"), QStringLiteral("replace"), QStringLiteral("renumber") }));
+    props.insert(QStringLiteral("onMissingPlugin"),
+                 stringProperty(OperationRegistry::tr("When a plugin isn't available here: skip those patches, or "
+                                                      "keep them offline"),
+                                { QStringLiteral("skip"), QStringLiteral("keep") }));
+    return props;
+}
+
+QString configValidate(Doc *doc, const QJsonObject &a)
+{
+    ConfigImport::Options o;
+    QString why;
+    if (!ConfigImport::optionsFrom(a, &o, &why))
+        return why;
+    const ConfigImport::Plan p = ConfigImport::plan(doc, o);
+    return p.ok() ? QString() : p.problems.join(QStringLiteral("; "));
+}
+
+QString intText(const QJsonValue &v)
+{
+    return v.isDouble() ? QString::number(int(v.toDouble())) : v.toString().trimmed();
+}
+
+QString mapText(const QJsonObject &o, const QString &key)
+{
+    QStringList parts;
+    const QJsonObject m = o.value(key).toObject();
+    for (auto it = m.constBegin(); it != m.constEnd(); ++it)
+        parts << QStringLiteral("%1=%2").arg(it.key(), intText(it.value()));
+    return parts.join(QLatin1Char(','));
+}
+
+QString joinInts(const QJsonArray &arr)
+{
+    QStringList parts;
+    for (const QJsonValue &v : arr)
+        parts << QString::number(int(v.toDouble()));
+    return parts.join(QLatin1Char(','));
+}
+
+/** The command-line text of an import; "apply" ends it when it applies. */
+QString configLine(const QJsonObject &a, bool withApply)
+{
+    QStringList w { QStringLiteral("import"), QStringLiteral("config"),
+                    OperationRegistry::quoted(arg(a, "file")) };
+    const QJsonArray secs = a.value(QLatin1String("sections")).toArray();
+    if (!secs.isEmpty())
+    {
+        QStringList names;
+        for (const QJsonValue &v : secs)
+            names << v.toString();
+        w << QStringLiteral("sections") << names.join(QLatin1Char(','));
+    }
+    if (!a.value(QLatin1String("universes")).toArray().isEmpty())
+        w << QStringLiteral("universes") << joinInts(a.value(QLatin1String("universes")).toArray());
+    if (!mapText(a, QStringLiteral("universeMap")).isEmpty())
+        w << QStringLiteral("map") << mapText(a, QStringLiteral("universeMap"));
+    if (!mapText(a, QStringLiteral("addressMap")).isEmpty())
+        w << QStringLiteral("address") << mapText(a, QStringLiteral("addressMap"));
+    if (!mapText(a, QStringLiteral("pluginMap")).isEmpty())
+        w << QStringLiteral("plugin") << OperationRegistry::quoted(mapText(a, QStringLiteral("pluginMap")));
+    if (!arg(a, "onCollision").isEmpty())
+        w << QStringLiteral("collision") << arg(a, "onCollision");
+    if (!arg(a, "onMissingPlugin").isEmpty())
+        w << QStringLiteral("missing") << arg(a, "onMissingPlugin");
+    if (withApply)
+        w << QStringLiteral("apply");
+    return w.join(QLatin1Char(' '));
+}
+
+/** "a=b,c=d" -> {a: b, c: d}. */
+bool parseMap(const QString &text, QJsonObject *into, QString *why)
+{
+    for (const QString &pair : text.split(QLatin1Char(','), Qt::SkipEmptyParts))
+    {
+        const int eq = pair.indexOf(QLatin1Char('='));
+        if (eq <= 0 || eq == pair.length() - 1)
+        {
+            *why = OperationRegistry::tr("\"%1\" isn't from=to").arg(pair);
+            return false;
+        }
+        into->insert(pair.left(eq).trimmed(), pair.mid(eq + 1).trimmed());
+    }
+    return true;
+}
+
+bool parseConfigWords(const QStringList &words, QJsonObject *out, QString *why)
+{
+    if (words.count() < 2 || words.first().compare(QLatin1String("config"), Qt::CaseInsensitive) != 0)
+    {
+        *why = OperationRegistry::tr("import config <file> [sections a,b] [universes 1,3] [map 3=1] "
+                                     "[address 2.0.0.50=2.0.0.60] [plugin a=b] [collision skip|replace|renumber] "
+                                     "[missing skip|keep] [apply]");
+        return false;
+    }
+    QJsonObject a;
+    a.insert(QStringLiteral("file"), words.at(1));
+    bool apply = false;
+    for (int i = 2; i < words.count(); ++i)
+    {
+        const QString k = words.at(i).toLower();
+        if (k == QLatin1String("apply"))
+        {
+            apply = true;
+            continue;
+        }
+        if (i + 1 >= words.count())
+        {
+            *why = OperationRegistry::tr("\"%1\" needs a value").arg(k);
+            return false;
+        }
+        const QString v = words.at(++i);
+        if (k == QLatin1String("sections"))
+            a.insert(QStringLiteral("sections"), QJsonArray::fromStringList(v.toLower().split(QLatin1Char(','), Qt::SkipEmptyParts)));
+        else if (k == QLatin1String("universes"))
+        {
+            QJsonArray u;
+            for (const QString &n : v.split(QLatin1Char(','), Qt::SkipEmptyParts))
+            {
+                bool ok = false;
+                const int num = n.toInt(&ok);
+                if (!ok)
+                {
+                    *why = OperationRegistry::tr("\"%1\" isn't a universe number").arg(n);
+                    return false;
+                }
+                u << num;
+            }
+            a.insert(QStringLiteral("universes"), u);
+        }
+        else if (k == QLatin1String("map") || k == QLatin1String("address") || k == QLatin1String("plugin"))
+        {
+            const QString key = k == QLatin1String("map") ? QStringLiteral("universeMap")
+                              : k == QLatin1String("address") ? QStringLiteral("addressMap") : QStringLiteral("pluginMap");
+            QJsonObject m = a.value(key).toObject();
+            if (!parseMap(v, &m, why))
+                return false;
+            a.insert(key, m);
+        }
+        else if (k == QLatin1String("collision"))
+            a.insert(QStringLiteral("onCollision"), v.toLower());
+        else if (k == QLatin1String("missing"))
+            a.insert(QStringLiteral("onMissingPlugin"), v.toLower());
+        else
+        {
+            *why = OperationRegistry::tr("\"%1\" isn't part of import config").arg(k);
+            return false;
+        }
+    }
+    // Typed without "apply": the command line shows what it would do.
+    a.insert(QStringLiteral("apply"), apply);
+    *out = a;
+    return true;
+}
+
+QString configDescribe(const QJsonObject &a)
+{
+    QStringList bits;
+    const QString file = QFileInfo(arg(a, "file")).fileName();
+    const QJsonObject um = a.value(QLatin1String("universeMap")).toObject();
+    for (auto it = um.constBegin(); it != um.constEnd(); ++it)
+        bits << OperationRegistry::tr("universe %1 to %2").arg(it.key(), intText(it.value()));
+    const QJsonObject am = a.value(QLatin1String("addressMap")).toObject();
+    for (auto it = am.constBegin(); it != am.constEnd(); ++it)
+        bits << QStringLiteral("%1 → %2").arg(it.key(), intText(it.value()));
+    if (!arg(a, "onCollision").isEmpty())
+        bits << OperationRegistry::tr("collisions: %1").arg(arg(a, "onCollision"));
+    return bits.isEmpty() ? OperationRegistry::tr("Import the universes and I/O setup from %1").arg(file)
+                          : OperationRegistry::tr("Import the universes and I/O setup from %1 (%2)")
+                                .arg(file, bits.join(QStringLiteral(", ")));
+}
+
+void appendConfigOperations(QList<OperationRegistry::Operation> &ops, bool readOnly)
+{
+    typedef OperationRegistry R;
+    typedef OperationRegistry::Operation Op;
+    if (readOnly)
+    {
+        {
+            Op op;
+            op.name = QStringLiteral("read_config");
+            op.title = R::tr("Read a show file's universes and I/O setup");
+            op.description = R::tr("Reads another show file (.qxw) and lists its universes and their output, "
+                                   "input and feedback patches (plugin, line, target address, network, input "
+                                   "profile), and how many fixtures, groups and palettes it has. Changes nothing.");
+            op.schema = strictSchema({ { QStringLiteral("file"), stringProperty(R::tr("Path of the show file (.qxw)")) } },
+                                     { QStringLiteral("file") });
+            op.cliWord = QStringLiteral("config");
+            op.cliHelp = QStringLiteral("config <file>");
+            op.validate = [](Doc *, const QJsonObject &a) {
+                return arg(a, "file").isEmpty() ? R::tr("No file") : QString();
+            };
+            op.parse = [](const QStringList &w, QJsonObject *a, QString *why) {
+                if (w.count() != 1)
+                {
+                    *why = R::tr("config <file>");
+                    return false;
+                }
+                a->insert(QStringLiteral("file"), w.first());
+                return true;
+            };
+            op.execute = [](R::Context &, const QJsonObject &a) {
+                const ConfigImport::Source src = ConfigImport::readSource(arg(a, "file"));
+                if (!src.ok)
+                    return refusal(src.error);
+                return answer(R::tr("%n universe(s) in %1", "", src.universes.count()).arg(QFileInfo(arg(a, "file")).fileName()),
+                              ConfigImport::sourceText(src));
+            };
+            op.cliSyntax = [](const QJsonObject &a) { return QStringLiteral("config %1").arg(R::quoted(arg(a, "file"))); };
+            op.describe = [](const QJsonObject &a) { return R::tr("Read the setup in %1").arg(QFileInfo(arg(a, "file")).fileName()); };
+            ops << op;
+        }
+        {
+            Op op;
+            op.name = QStringLiteral("preview_config_import");
+            op.title = R::tr("Preview a configuration import");
+            op.description = R::tr("What import_config would do with the same arguments: the problems that would "
+                                   "stop it (a universe collision or a missing plugin that needs a choice), the "
+                                   "route warnings, and the current-to-resulting changes. Changes nothing.");
+            op.schema = strictSchema(configProperties(), { QStringLiteral("file") });
+            op.validate = [](Doc *, const QJsonObject &a) {
+                return arg(a, "file").isEmpty() ? R::tr("No file") : QString();
+            };
+            op.execute = [](R::Context &ctx, const QJsonObject &a) {
+                ConfigImport::Options o;
+                QString why;
+                if (!ConfigImport::optionsFrom(a, &o, &why))
+                    return refusal(why);
+                const ConfigImport::Plan p = ConfigImport::plan(ctx.doc, o);
+                return answer(p.ok() ? R::tr("Preview: nothing is changed") : R::tr("Preview: it needs choices"), p.text());
+            };
+            op.cliSyntax = [](const QJsonObject &a) { return configLine(a, false); };
+            op.describe = [](const QJsonObject &a) { return R::tr("Preview: %1").arg(configDescribe(a)); };
+            ops << op;
+        }
+        return;
+    }
+
+    Op op;
+    op.name = QStringLiteral("import_config");
+    op.title = R::tr("Import universes and I/O setup from a show file");
+    op.description = R::tr("Takes universes (names), output, input (with input profile) and feedback patches "
+                           "from another show file (.qxw), with a mapping (universes, network addresses, "
+                           "plugins). Patches keep their route requirement. Check with preview_config_import "
+                           "first: a universe that already has a setup needs onCollision, a plugin that isn't "
+                           "installed needs onMissingPlugin. Not fixtures, groups or palettes.");
+    QJsonObject props = configProperties();
+    props.insert(QStringLiteral("apply"),
+                 QJsonObject { { QStringLiteral("type"), QStringLiteral("boolean") },
+                               { QStringLiteral("description"), R::tr("false: only show what it would do") } });
+    op.schema = strictSchema(props, { QStringLiteral("file") });
+    op.readOnly = false;
+    op.cliWord = QStringLiteral("import");
+    op.cliHelp = QStringLiteral("import config <file> ... apply");
+    op.validate = [](Doc *doc, const QJsonObject &a) {
+        if (doc->showTree() == nullptr)
+            return R::tr("The show has no Show Tree");
+        if (a.contains(QLatin1String("apply")) && !a.value(QLatin1String("apply")).toBool(true))
+            return QString();       // a preview: nothing is refused for its choices
+        return configValidate(doc, a);
+    };
+    op.parse = parseConfigWords;
+    op.execute = [](R::Context &ctx, const QJsonObject &a) {
+        ConfigImport::Options o;
+        QString why;
+        if (!ConfigImport::optionsFrom(a, &o, &why))
+            return refusal(why);
+        if (a.contains(QLatin1String("apply")) && !a.value(QLatin1String("apply")).toBool(true))
+        {
+            const ConfigImport::Plan p = ConfigImport::plan(ctx.doc, o);
+            R::Result r = answer(p.ok() ? R::tr("Preview (add \"apply\" to make it)") : R::tr("Preview: it needs choices"),
+                                 p.text());
+            r.ok = true;
+            return r;
+        }
+        ShowTreeController *st = ctx.doc->showTree();
+        if (st == nullptr)
+            return refusal(R::tr("The show has no Show Tree"));
+        const bool own = !st->inBatch();
+        const QString label = R::tr("Import configuration from %1").arg(QFileInfo(o.file).fileName());
+        if (own)
+            st->beginBatch(label);
+        const ConfigImport::Applied ap = ConfigImport::apply(ctx.doc, o);
+        if (!ap.ok)
+        {
+            if (own)
+                st->endBatch(false);
+            return refusal(ap.message);
+        }
+        st->noteChangeOutsideTree();
+        if (own)
+        {
+            st->endBatch(true);
+            st->attachToLastStep(ap.undo);
+        }
+        else if (ctx.outside != nullptr)
+        {
+            ctx.outside->append(ap.undo);
+        }
+        R::Result r = answer(R::tr("✓ %1 (one undo step)").arg(ap.message), ap.report.join(QLatin1Char('\n')));
+        r.ok = true;
+        r.command.ok = true;
+        r.command.context = ctx.selection;
+        r.command.keepSelection = true;
+        return r;
+    };
+    op.cliSyntax = [](const QJsonObject &a) {
+        return configLine(a, !a.contains(QLatin1String("apply")) || a.value(QLatin1String("apply")).toBool(true));
+    };
+    op.describe = configDescribe;
+    ops << op;
+}
+
 QList<OperationRegistry::Operation> buildCatalog()
 {
     typedef OperationRegistry R;
@@ -1189,7 +1534,9 @@ QList<OperationRegistry::Operation> buildCatalog()
         ops << op;
     }
 
+    appendConfigOperations(ops, true);
     appendChangeOperations(ops);
+    appendConfigOperations(ops, false);
     return ops;
 }
 } // namespace
@@ -1377,6 +1724,7 @@ OperationRegistry::Result OperationRegistry::run(const QString &name, const QJso
     ctx.doc = m_doc;
     ctx.commander = m_commander;
     ctx.selection = selection;
+    ctx.outside = &m_outside;
     return op->execute(ctx, args);
 }
 
@@ -1413,6 +1761,13 @@ OperationRegistry::Result OperationRegistry::runPlan(const QList<Call> &calls,
     }
 
     ShowTreeController *st = m_doc->showTree();
+    m_outside.clear();
+    // Undo what steps did outside the Show Tree (a configuration import).
+    auto putOutsideBack = [this]() {
+        for (int i = m_outside.count() - 1; i >= 0; --i)
+            m_outside.at(i)(true);
+        m_outside.clear();
+    };
     st->beginBatch(label);
     ShowTreeCommand::Context at = selection;
     Result last;
@@ -1422,6 +1777,7 @@ OperationRegistry::Result OperationRegistry::runPlan(const QList<Call> &calls,
         if (!last.ok)
         {
             st->endBatch(false);
+            putOutsideBack();
             return refusal(tr("Step %1 (%2): %3. Nothing changed.")
                                .arg(i + 1).arg(operation(calls.at(i).name)->cliSyntax(calls.at(i).args), last.message));
         }
@@ -1435,6 +1791,9 @@ OperationRegistry::Result OperationRegistry::runPlan(const QList<Call> &calls,
             at.layer = 0xFFFFFFFF;
     }
     st->endBatch(true);
+    for (const std::function<void(bool)> &undo : m_outside)
+        st->attachToLastStep(undo);
+    m_outside.clear();
     last.ok = true;
     last.command.ok = true;
     last.command.context = at;

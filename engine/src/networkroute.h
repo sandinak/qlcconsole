@@ -110,6 +110,21 @@ namespace NetworkRoute
     /** Human readable "en5 (172.18.2.219)" for a local line name. */
     QString describeLine(const QString &lineName);
 
+    /** How a destination (an address, or a network "a.b.c.d/p") is reached
+     *  from this machine right now: nothing reaches it (NoRoute: expected
+     *  when the show network isn't connected), only the DEFAULT route does
+     *  (DefaultRoute: the show NIC is down and output would leave by the
+     *  house or Wi-Fi network), or a connected or specific route does
+     *  (Reached). Used by the configuration import's warnings (AI_ASSIST.md
+     *  section 5b); never a reason to refuse anything. */
+    enum RouteKind { NoRoute, DefaultRoute, Reached };
+    struct RouteCheck
+    {
+        RouteKind kind = NoRoute;
+        QString via;            //!< "en5 (172.18.2.219)" for DefaultRoute and Reached
+    };
+    RouteCheck checkRoute(const QString &destination);
+
     /** Replace the OS lookups (both, or reset with empty functions). */
     void setResolverForTest(std::function<QList<LocalAddress>()> addresses,
                             std::function<QHostAddress(const QHostAddress &)> source);

@@ -6,6 +6,13 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ### AI Assist
 
+- **Bring in a setup from another show, no AI needed.** **File ▸ Import ▸
+  Universes and I/O Setup** takes universe names and their output, input
+  and feedback patches from another show file, with a mapping (universe 3
+  on 1, one address for another) and a preview first. A universe that
+  already has a setup, or a plugin you don't have, makes you choose. One
+  undo step. See [AI Assist](ai-assist.md).
+
 - **It proposes changes; you apply them.** `? cue 3 towers blue at 50`
   shows the command-line steps that would do it, ticked, in the command
   line's pane. Enter or **Apply** makes them as one undo step; Esc

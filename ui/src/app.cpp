@@ -107,6 +107,9 @@
 #include "dmxmonitorwindow.h"
 #include "stockqlccheck.h"
 #include "importselectiondialog.h"
+#include "configimportdialog.h"
+#include "operationregistry.h"
+#include "showtreecommand.h"
 #include "eosimportwizard.h"
 #include "eosimporter.h"
 #include "lastlookeffect.h"
@@ -3575,6 +3578,18 @@ QList<App::ImportSource> App::importSources() const
                      tr("QLC+ Workspaces (*%1)").arg(KExtWorkspace), all },
         QStringList{ KExtWorkspaceConsole, KExtWorkspace },
         &App::importWorkspaceFile };
+    /* No extensions: "Any Supported File…" picks the Workspace importer for
+       a .qxw; this one is chosen by its entry. */
+    sources << ImportSource{
+        QStringLiteral("config"), fromShow,
+        tr("Universes and I/O &Setup (.qxw)…"),
+        tr("Import universes and I/O setup"),
+        tr("Take the universes and their Art-Net / sACN / MIDI / DMX patches from another "
+           "show, with a mapping: previewed first, one undo step"),
+        QString(),
+        QStringList{ tr("Workspaces (*%1 *%2)").arg(KExtWorkspaceConsole, KExtWorkspace), all },
+        QStringList(),
+        &App::importConfigFile };
     sources << ImportSource{
         QStringLiteral("eos"), fromShow,
         tr("ETC &Eos Show (ASCII .asc)…"),
@@ -3734,6 +3749,39 @@ void App::importWorkspaceFile(const QString &fn)
     QxwImportResult result = QxwImporter::import(scratchDoc, m_doc, fixtures, groups, functions, palettes);
     delete scratchDoc;
     showImportSummary(result);
+}
+
+void App::importConfigFile(const QString &path)
+{
+    ConfigImportDialog dialog(this, m_doc, path);
+    if (dialog.exec() != QDialog::Accepted)
+        return;
+    ShowTreeController *st = m_doc->showTree();
+    if (st == NULL)
+    {
+        QMessageBox::warning(this, tr("Import"), tr("The show has no Show Tree to keep the undo step in."));
+        return;
+    }
+    ShowTreeCommand commander(m_doc, st);
+    OperationRegistry registry(m_doc, &commander);
+    const OperationRegistry::Result r = registry.runPlan(
+        { OperationRegistry::Call { QStringLiteral("import_config"), dialog.arguments() } },
+        ShowTreeCommand::Context(),
+        tr("Import configuration from %1").arg(QFileInfo(path).fileName()));
+    if (FixtureManager::instance() != NULL)
+        FixtureManager::instance()->updateView();
+    if (InputOutputManager::instance() != NULL)
+        InputOutputManager::instance()->updateList();
+    if (Monitor::instance() != NULL)
+        Monitor::instance()->updateView();
+    if (!r.ok)
+    {
+        QMessageBox::warning(this, tr("Import"), r.message);
+        return;
+    }
+    QMessageBox box(QMessageBox::Information, tr("Import complete"), r.message, QMessageBox::Ok, this);
+    box.setDetailedText(r.text);
+    box.exec();
 }
 
 void App::importFixtureListFile(const QString &path)

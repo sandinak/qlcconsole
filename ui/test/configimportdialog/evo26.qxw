@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE Workspace>
+<Workspace xmlns="http://www.qlcplus.org/Workspace" CurrentWindow="FunctionManager">
+ <Creator>
+  <Name>Q Light Controller Plus</Name>
+  <Version>4.14.4 GIT</Version>
+  <Author>test</Author>
+ </Creator>
+ <Engine>
+  <InputOutputMap>
+   <Universe Name="Front" ID="0">
+    <Output Plugin="ArtNet" UID="2.0.0.50" Line="0" Network="2.0.0.0/8">
+     <PluginParameters outputIP="2.0.0.50" outputUni="0" transmitMode="Full"/>
+    </Output>
+   </Universe>
+   <Universe Name="Truss" ID="1" Passthrough="True">
+    <Input Plugin="ArtNet" UID="2.0.0.50" Line="0" Network="2.0.0.0/8" Profile="Launchpad X">
+     <PluginParameters inputUni="1"/>
+    </Input>
+    <Output Plugin="ArtNet" UID="2.0.0.50" Line="0" Network="2.0.0.0/8">
+     <PluginParameters outputIP="2.0.0.50" outputUni="1"/>
+    </Output>
+   </Universe>
+   <Universe Name="Movers" ID="2">
+    <Output Plugin="ENTTEC Gone" UID="DMX USB PRO" Line="0"/>
+    <Feedback Plugin="ArtNet" UID="2.0.0.50" Line="0">
+     <PluginParameters feedbackIP="2.0.0.50"/>
+    </Feedback>
+   </Universe>
+  </InputOutputMap>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic RGB</Model>
+   <Mode>RGB</Mode>
+   <ID>0</ID>
+   <Name>LED 1</Name>
+   <Universe>0</Universe>
+   <Address>0</Address>
+   <Channels>3</Channels>
+  </Fixture>
+  <FixtureGroup ID="0">
+   <Name>Wash</Name>
+   <Size X="1" Y="1"/>
+  </FixtureGroup>
+  <Palette ID="0" Type="Dimmer" Name="Half">
+   <Value>128</Value>
+  </Palette>
+ </Engine>
+</Workspace>

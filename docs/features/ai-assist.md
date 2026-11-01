@@ -158,8 +158,70 @@ reason to stop the show.
 A question typed in Operate gets *AI Assist is unavailable in Operate
 mode*, and nothing is sent. No change is ever applied in Operate.
 
+## Bring in a setup from another show
+
+**File ▸ Import ▸ Universes and I/O Setup (.qxw)…** takes the wiring of
+another show into this one. It needs no AI: AI Assist can read the file and
+propose the same import, but the form and the command line do it on their
+own.
+
+What it takes, for the universes you tick:
+
+- **Universe names** (and passthrough).
+- **Outputs**: each patch with its plugin, line and plugin settings
+  (Art-Net or sACN address and universe, transmit mode).
+- **Inputs**, with the input profile they use.
+- **Feedback**.
+
+It does not take fixtures, groups or palettes: **File ▸ Import ▸ Workspace**
+does, and the form says how many the file has.
+
+**Mapping.** Each file universe goes on a universe here (file universe 3 on
+universe 1). *Network addresses* swaps an address wherever it appears
+(`2.0.0.50 = 2.0.0.60`). *Plugins* swaps a plugin the file used for one you
+have.
+
+**Choices it will not guess.** If a universe here already has a setup (a
+name of its own, or any patch in what you are importing), choose to
+**skip** it (keep yours), **replace** it, or **renumber** (the file's goes
+on a new universe at the end). If the file uses a plugin that isn't
+installed here (a USB interface that isn't plugged in), choose to **skip**
+those patches or **keep** them offline, or map the plugin to one you have.
+Until you choose, **Import** stays grey and the preview says why. If
+anything is in the way, nothing at all is imported.
+
+**Networks.** A patch keeps the network it needs (its address and
+network) exactly as the file has it, and waits, kept, until that network is
+there, as a show opened away from its network does. So you can import at
+your desk. The preview warns, and never stops you:
+
+- *not currently routable* (expected when the show network isn't
+  connected);
+- *would leave by the DEFAULT route*: the address is only reachable through
+  the house or Wi-Fi gateway, which usually means the show network card is
+  down and output would go out the wrong network.
+
+The preview shows each universe: what it has now and what it will have.
+**Import** makes it as one undo step (Ctrl+Z puts the universes back
+exactly; Redo again). Design mode only.
+
+On the command line:
+
+    config evo26.qxw
+    import config evo26.qxw universes 2 map 2=1 address 2.0.0.50=2.0.0.60 missing keep
+    import config evo26.qxw universes 2 map 2=1 address 2.0.0.50=2.0.0.60 missing keep apply
+
+`config` lists the file's universes and patches. `import config …` shows
+the preview; add `apply` to make it. Other words: `sections
+universes,outputs,inputs,feedback`, `plugin Old=New`, `collision
+skip|replace|renumber`.
+
+With AI Assist on, `? take universe 2 and the Art-Net setup from
+evo26.qxw, put it on 1` makes the assistant read the file and propose the
+import as a step in the checklist; it is applied, like any step, only when
+you confirm.
+
 ## Not in this version
 
-Importing universes and Art-Net setup from another show (which will also
-work with AI Assist off), and an MCP server for outside tools, are planned
-next. AI Assist will never touch playback, timing or live output.
+An MCP server for outside tools is planned next. AI Assist will never touch
+playback, timing or live output.

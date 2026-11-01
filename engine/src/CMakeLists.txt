@@ -39,6 +39,7 @@ add_library(${module_name} SHARED
     vcindex.cpp vcindex.h
     showreviewcli.cpp showreviewcli.h
     operationregistry.cpp operationregistry.h
+    configimport.cpp configimport.h
     teachinglog.cpp teachinglog.h
     teachingglossary.cpp teachingglossary.h
     outputrulekeeper.cpp outputrulekeeper.h
