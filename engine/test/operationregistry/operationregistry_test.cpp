@@ -298,6 +298,20 @@ void OperationRegistry_Test::findUnusedFunctions()
     QVERIFY(!r.text.contains("On A Button"));
     QVERIFY(!r.text.contains("weren't checked"));
     QVERIFY(r.text.contains("Alone"));
+
+    // The Virtual Console as the VcIndex sees it: no probe needed.
+    R::setFunctionUseProbe(std::function<bool(quint32)>());
+    m_doc->showReview()->setVcXml(QStringLiteral(
+        "<Workspace><VirtualConsole><Frame Caption=\"\"><Button Caption=\"B\" ID=\"1\">"
+        "<Function ID=\"%1\"/><Action>Toggle</Action></Button></Frame></VirtualConsole></Workspace>")
+        .arg(onButton->id()).toUtf8());
+    r = reg.run("find_unused_functions", QJsonObject());
+    QVERIFY(!r.text.contains("On A Button"));
+    QVERIFY(!r.text.contains("weren't checked"));
+    QVERIFY(r.text.contains("Alone"));
+    m_doc->showReview()->setVcXml(QByteArray("<Workspace><VirtualConsole/></Workspace>"));
+    r = reg.run("find_unused_functions", QJsonObject());
+    QVERIFY(r.text.contains("On A Button"));            // an empty console: nothing runs it
 }
 
 void OperationRegistry_Test::findProblems()

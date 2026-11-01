@@ -71,7 +71,7 @@ These are command-line words too. Each one changes nothing:
 | `cues [production]` | The cue sheet: every cue in running order. |
 | `why <fixture>` | What is setting that fixture right now (see *Why is this on?* in [Troubleshooting](troubleshooting.md)). |
 | `conflicts` | Fixtures on the same channels, or past the end of the universe (Show Review's PAT-01 and PAT-02). |
-| `unused` | Functions nothing plays: no chaser, collection, cue or start-up uses them. |
+| `unused` | Functions nothing plays: no chaser, collection, cue, Virtual Console widget or start-up uses them. |
 | `review [warning]` | Show Review's open findings, worst first (see [Show Review](show-review.md)). |
 | `summary` | A short summary of the show. |
 

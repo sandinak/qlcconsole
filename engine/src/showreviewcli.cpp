@@ -245,6 +245,8 @@ int ShowReviewCli::run(const QStringList &args, QTextStream &out, QTextStream &e
         err << "Can't read " << path << " as a show\n";
         return Unreadable;
     }
+    // The Virtual Console is the UI's: read what it saved, without it.
+    doc.showReview()->setVcFile(info.absoluteFilePath());
     options.outputsLoaded = false;
     options.universesWithOutput = universesWithOutput(info.absoluteFilePath());
 

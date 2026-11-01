@@ -73,6 +73,7 @@ const QList<ShowReview::Check> &ShowReview::catalog()
         QList<Check> c = ShowReviewChecks::showChecks();
         c += ShowReviewChecks::moveChecks();
         c += ShowReviewChecks::treeChecks();
+        c += ShowReviewChecks::vcChecks();
         return c;
     }();
     return all;
@@ -390,6 +391,33 @@ void ShowReview::reset()
     emit reviewed();
 }
 
+void ShowReview::setVcSource(const std::function<QByteArray()> &source)
+{
+    m_vcSource = source;
+    m_hasVcFixed = false;
+}
+
+void ShowReview::setVcXml(const QByteArray &xml)
+{
+    m_vcSource = [xml]() { return xml; };
+    m_hasVcFixed = false;
+}
+
+void ShowReview::setVcFile(const QString &path)
+{
+    m_vcFixed = VcIndex::fromFile(path);
+    m_hasVcFixed = true;
+}
+
+VcIndex ShowReview::vcIndex() const
+{
+    if (m_hasVcFixed)
+        return m_vcFixed;
+    if (!m_vcSource)
+        return VcIndex();
+    return VcIndex::fromXml(m_vcSource());
+}
+
 bool ShowReview::targetExists(const Doc *doc, const QString &key)
 {
     if (doc == nullptr)
@@ -416,6 +444,12 @@ bool ShowReview::targetExists(const Doc *doc, const QString &key)
             return false;
         if (kind == QLatin1String("cue") && doc->showTree()->listOfCue(id) == nullptr)
             return false;
+        if (kind == QLatin1String("vc") && doc->showReview() != nullptr)
+        {
+            const VcIndex vc = doc->showReview()->vcIndex();
+            if (vc.available && vc.indexOf(id) < 0)
+                return false;
+        }
     }
     return true;
 }
@@ -563,6 +597,16 @@ const QSet<quint32> &ReviewContext::usedFixtures()
     for (const ShowTree::ReusableLayer &r : m_doc->showTree()->reusableLayers())
         addTargetFixtures(m_doc, r.target, m_used);
     return m_used;
+}
+
+const VcIndex &ReviewContext::vc()
+{
+    if (!m_vcBuilt)
+    {
+        m_vcBuilt = true;
+        m_vc = m_doc->showReview() != nullptr ? m_doc->showReview()->vcIndex() : VcIndex();
+    }
+    return m_vc;
 }
 
 bool ReviewContext::universeHasOutput(quint32 u) const

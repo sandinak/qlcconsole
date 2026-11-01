@@ -18,6 +18,7 @@
   limitations under the License.
 */
 
+#include <QBuffer>
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
 #include <QObject>
@@ -50,6 +51,8 @@
 #include "hitmap.h"
 #include "showstatus.h"
 #include "doc.h"
+#include "showreview.h"
+#include "vcindex.h"
 #include "fixturegroup.h"
 #include "qlcpalette.h"
 #include "inputoutputmap.h"
@@ -289,6 +292,46 @@ void VCButton_Test::keySequence()
     QVERIFY(btn.keySequence() != seq);
     btn.setKeySequence(seq);
     QCOMPARE(btn.keySequence(), seq);
+}
+
+void VCButton_Test::reviewIndex()
+{
+    // Show Review and AI Assist read the live console through the VcIndex
+    // (docs/design/SHOW_REVIEW.md 5.3): it matches what the widgets hold.
+    Scene *sc = new Scene(m_doc);
+    sc->setName("Wash");
+    m_doc->addFunction(sc);
+    const QString xml = QString("<VirtualConsole><Frame Caption=\"\"><Button Caption=\"Wash\" ID=\"3\">"
+                                "<Function ID=\"%1\"/><Action>Toggle</Action><Key>B</Key>"
+                                "<Input Universe=\"1\" Channel=\"20\"/></Button></Frame></VirtualConsole>")
+                            .arg(sc->id());
+    QByteArray bytes = xml.toUtf8();
+    QBuffer buffer(&bytes);                 // the widgets' loaders need a device
+    buffer.open(QIODevice::ReadOnly);
+    QXmlStreamReader reader(&buffer);
+    reader.readNextStartElement();
+    QVERIFY(VirtualConsole::instance()->loadXML(reader));
+    const VcIndex live = m_doc->showReview()->vcIndex();
+    QVERIFY(live.available);
+    const VcWidget *b = live.widget(3);
+    QVERIFY(b != nullptr);
+    QCOMPARE(b->type, QString("Button"));
+    QCOMPARE(b->caption, QString("Wash"));
+    QCOMPARE(b->function, sc->id());
+    QCOMPARE(b->action, QString("Toggle"));
+    QCOMPARE(b->bindings.count(), 1);
+    QCOMPARE(b->bindings.first().key, QString("B"));
+    QCOMPARE(b->bindings.first().universe, quint32(1));
+    QCOMPARE(b->bindings.first().channel, quint32(20));
+    // It follows the console: another button shows up at once.
+    VCButton *more = new VCButton(VirtualConsole::instance()->contents(), m_doc);
+    more->setCaption("More");
+    VirtualConsole::instance()->addWidgetInMap(more);
+    QVERIFY(m_doc->showReview()->vcIndex().widget(more->id()) != nullptr);
+    // A function that goes is a button with none.
+    delete VirtualConsole::instance();
+    QVERIFY(!m_doc->showReview()->vcIndex().available);     // no console, no source
+    new VirtualConsole(NULL, m_doc);
 }
 
 void VCButton_Test::copy()

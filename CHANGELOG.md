@@ -206,6 +206,13 @@ back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
   (PAT-05); definition errors (FIX-02); dead lights still used (FIX-08);
   a matrix on lights with no colour (FX-02); effects of size or speed 0
   (FX-03); embedded definitions that can't be read (FILE-03).
+- **Show Review reads the Virtual Console** (50 checks in all): hits no button
+  fires (VC-03), buttons and Cue Lists with no function or a deleted one
+  (VC-04), the same key (VC-05) or MIDI input (VC-06) on two widgets, a
+  Cue Runner on no list (VC-08), a cue list nothing can play (CUE-13), and
+  CUE-12 now sees a VC button still on the old chaser. They run from the
+  saved file too (`--review`), through a headless index of the console
+  (`VcIndex`). AI Assist's `unused` now counts Virtual Console widgets.
 
 ### Why is this on?
 

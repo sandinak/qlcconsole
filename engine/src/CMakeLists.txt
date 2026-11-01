@@ -35,6 +35,8 @@ add_library(${module_name} SHARED
     teachingsettings.cpp teachingsettings.h
     showreview.cpp showreview.h showreviewcontext.h
     showreviewchecks.cpp showreviewcuechecks.cpp showreviewmovechecks.cpp
+    showreviewvcchecks.cpp
+    vcindex.cpp vcindex.h
     showreviewcli.cpp showreviewcli.h
     operationregistry.cpp operationregistry.h
     teachinglog.cpp teachinglog.h

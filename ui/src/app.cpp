@@ -84,6 +84,7 @@
 #include "speedmastersfooter.h"
 #include "updatemanager.h"
 #include "app.h"
+#include "vcwidget.h"
 #include "blindeffects.h"
 #include "layoutdiagnostics.h"
 #include <QClipboard>
@@ -7052,6 +7053,8 @@ void App::initStatusBar()
         connect(m_doc, &Doc::functionRemoved, this, later);
         connect(m_doc, &Doc::functionChanged, this, later);
         connect(m_doc->showTree(), &ShowTreeController::changed, this, later);
+        // The Virtual Console marks the show modified on every edit.
+        connect(m_doc, &Doc::modified, this, later);
     }
     updateReviewStatus();
 
@@ -8740,6 +8743,17 @@ bool App::reviewJump(QWidget *parent, const QString &jump, const QVariantList &d
         showFunctions();
         if (FunctionManager::instance() != nullptr)
             FunctionManager::instance()->selectFunction(id);
+        return true;
+    }
+    if (jump == QLatin1String("vc"))
+    {
+        showContext(tr("Virtual Console"));
+        VirtualConsole *vc = VirtualConsole::instance();
+        VCWidget *widget = vc != nullptr ? vc->widget(id) : nullptr;
+        if (widget == nullptr)
+            return vc != nullptr;
+        vc->clearWidgetSelection();
+        vc->setWidgetSelected(widget, true);
         return true;
     }
     if (jump == QLatin1String("plot"))

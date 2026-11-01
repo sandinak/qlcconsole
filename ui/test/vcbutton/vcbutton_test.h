@@ -43,6 +43,7 @@ private slots:
     void iconPath();
     void on();
     void keySequence();
+    void reviewIndex();
     void copy();
     void load();
     void save();

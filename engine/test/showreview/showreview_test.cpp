@@ -281,6 +281,13 @@ QString ShowReview_Test::saveShow() const
     return QString::fromUtf8(buf.data());
 }
 
+void ShowReview_Test::console(const QString &widgets, const QString &properties)
+{
+    const QString xml = QStringLiteral("<Workspace><VirtualConsole><Frame Caption=\"\">%1</Frame>%2"
+                                       "</VirtualConsole></Workspace>").arg(widgets, properties);
+    m_doc->showReview()->setVcXml(xml.toUtf8());
+}
+
 bool ShowReview_Test::loadShow(Doc *doc, const QString &xml) const
 {
     QXmlStreamReader r(xml);
@@ -1111,6 +1118,278 @@ void ShowReview_Test::file03()
  * Acceptance
  ****************************************************************************/
 
+/****************************************************************************
+ * The Virtual Console (VcIndex) and the checks on it
+ ****************************************************************************/
+
+namespace
+{
+QString button(int id, const QString &caption, const QString &function, const QString &key = QString(),
+               const QString &input = QString(), const QString &action = QStringLiteral("Toggle"),
+               const QString &extra = QString())
+{
+    return QStringLiteral("<Button Caption=\"%1\" ID=\"%2\"%7><Function ID=\"%3\"/><Action>%4</Action>%5%6</Button>")
+        .arg(caption).arg(id).arg(function, action,
+                                  key.isEmpty() ? QString() : QStringLiteral("<Key>%1</Key>").arg(key),
+                                  input.isEmpty() ? QString() : input, extra);
+}
+
+QString inputOf(int universe, int channel)
+{
+    return QStringLiteral("<Input Universe=\"%1\" Channel=\"%2\"/>").arg(universe).arg(channel);
+}
+}
+
+void ShowReview_Test::vcIndexReads()
+{
+    const QString xml = QStringLiteral(
+        "<Workspace><Engine/><VirtualConsole><Frame Caption=\"\">"
+        "<Button Caption=\"Wash\" ID=\"1\" Page=\"2\"><Function ID=\"7\" Hit=\"31\" SamePlace=\"Step\">"
+        "<Hit ID=\"32\"/></Function><Action>Toggle</Action><Key>Ctrl+B</Key>"
+        "<Input Universe=\"1\" Channel=\"20\"/></Button>"
+        "<Slider Caption=\"Level\" ID=\"2\"><Input Universe=\"0\" Channel=\"3\"/>"
+        "<SliderMode>Level</SliderMode><Level><Channel Fixture=\"4\">2</Channel></Level>"
+        "<Playback><Function>9</Function></Playback></Slider>"
+        "<Slider Caption=\"Fader\" ID=\"3\"><SliderMode>Playback</SliderMode><Playback><Function>9</Function>"
+        "<Flash><Key>F</Key></Flash></Playback></Slider>"
+        "<Slider Caption=\"Group\" ID=\"4\"><SliderMode>GroupMaster</SliderMode><GroupMaster Group=\"6\"/></Slider>"
+        "<CueList Caption=\"Cues\" ID=\"5\"><Chaser>12</Chaser><Next><Key>N</Key><Input Universe=\"1\" Channel=\"5\"/></Next></CueList>"
+        "<CueRunner Caption=\"Go\" ID=\"6\" Follow=\"3\"/>"
+        "<SoloFrame Caption=\"Solo\" ID=\"7\"><Multipage PagesNum=\"2\" CurrentPage=\"0\"/>"
+        "<Button Caption=\"Inner\" ID=\"8\" Page=\"1\"><Function ID=\"4294967295\"/><Action>Flash</Action></Button></SoloFrame>"
+        "<Speed Caption=\"x\" ID=\"9\"/>"
+        "<SpeedDial Caption=\"Dial\" ID=\"10\"><Function>14</Function></SpeedDial>"
+        "<Clock Caption=\"Clk\" ID=\"11\"><Schedule Function=\"15\" Time=\"12:00:00\"/></Clock>"
+        "</Frame><Properties><GrandMaster Visible=\"1\"><Input Universe=\"0\" Channel=\"9\"/></GrandMaster></Properties>"
+        "</VirtualConsole></Workspace>");
+    const VcIndex vc = VcIndex::fromXml(xml.toUtf8());
+    QVERIFY(vc.available);
+    const VcWidget *b = vc.widget(1);
+    QVERIFY(b != nullptr);
+    QCOMPARE(b->type, QStringLiteral("Button"));
+    QCOMPARE(b->page, 2);
+    QCOMPARE(b->function, quint32(7));
+    QCOMPARE(b->hits, QList<quint32>() << 31 << 32);
+    QCOMPARE(b->action, QStringLiteral("Toggle"));
+    QCOMPARE(b->bindings.count(), 1);
+    QCOMPARE(b->bindings.first().key, QStringLiteral("Ctrl+B"));
+    QVERIFY(b->bindings.first().hasInput);
+    QCOMPARE(b->bindings.first().channel, quint32(20));
+    QVERIFY(vc.widget(2)->levelChannels.count() == 1 && vc.widget(2)->levelChannels.first().first == 4
+            && vc.widget(2)->levelChannels.first().second == 2);
+    QCOMPARE(vc.widget(2)->function, 0xFFFFFFFFu);      // only a Playback slider runs one
+    QCOMPARE(vc.widget(3)->function, quint32(9));
+    QCOMPARE(vc.widget(3)->bindings.first().role, QStringLiteral("Flash"));
+    QCOMPARE(vc.widget(4)->group, quint32(6));
+    QCOMPARE(vc.widget(5)->chaser, quint32(12));
+    QCOMPARE(vc.widget(5)->bindings.first().role, QStringLiteral("Next"));
+    QVERIFY(vc.widget(6)->follows);
+    QCOMPARE(vc.widget(6)->follow, quint32(3));
+    QVERIFY(vc.widget(7)->multipage);
+    QCOMPARE(vc.widgets.at(vc.indexOf(8)).parent, vc.indexOf(7));
+    QCOMPARE(vc.widget(10)->functions, QList<quint32>() << 14);
+    QCOMPARE(vc.widget(11)->functions, QList<quint32>() << 15);
+    QVERIFY(vc.functionsUsed().contains(7) && vc.functionsUsed().contains(9) && vc.functionsUsed().contains(12));
+    QVERIFY(vc.functionsUsed().contains(14) && vc.functionsUsed().contains(15));
+    QVERIFY(!vc.functionsUsed().contains(0xFFFFFFFFu));
+    QVERIFY(vc.hitsFired().contains(31) && vc.hitsFired().contains(32));
+    const VcWidget *props = vc.widget(VcIndex::propertiesId);
+    QVERIFY(props != nullptr && props->bindings.first().channel == 9);
+    // A file with no Virtual Console is an empty one; no source is none.
+    QVERIFY(VcIndex::fromXml("<Workspace/>").available);
+    QVERIFY(VcIndex::fromXml("<Workspace/>").widgets.isEmpty());
+    QVERIFY(!m_doc->showReview()->vcIndex().available);
+    // The same index from a source the app gives (its saved XML) and from the file.
+    m_doc->showReview()->setVcXml(xml.toUtf8());
+    QCOMPARE(m_doc->showReview()->vcIndex(), vc);
+    QVERIFY(m_dir.isValid());
+    const QString path = QDir(m_dir.path()).filePath("vc.qxw");
+    QFile f(path);
+    QVERIFY(f.open(QIODevice::WriteOnly));
+    f.write(xml.toUtf8());
+    f.close();
+    QCOMPARE(VcIndex::fromFile(path), vc);
+    m_doc->showReview()->setVcFile(path);
+    QCOMPARE(m_doc->showReview()->vcIndex(), vc);
+    QVERIFY(!VcIndex::fromFile(path + ".nope").available);
+}
+
+void ShowReview_Test::vc03()
+{
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 pid = st->addProduction("Show");
+    const quint32 hit = st->addLook(pid, "Confetti");
+    QVERIFY(hit != 0xFFFFFFFFu);
+    QVERIFY(quiet("VC-03"));                // no Virtual Console to ask: stays quiet
+    console(QString());
+    QVERIFY(fires("VC-03"));                // on no button
+    QVERIFY(findings("VC-03").first().message.contains("Confetti"));
+    console(button(1, "Confetti", "4294967295", QString(), QString(), "Toggle",
+                   QString()).replace("<Function ID=\"4294967295\"/>",
+                                      QStringLiteral("<Function ID=\"4294967295\" Hit=\"%1\"/>").arg(hit)));
+    QVERIFY(quiet("VC-03"));                // a button fires it
+}
+
+void ShowReview_Test::vc04()
+{
+    Fixture *a = par("Par 1", 0);
+    Scene *sc = new Scene(m_doc);
+    sc->setName("Wash");
+    m_doc->addFunction(sc);
+    Chaser *chaser = new Chaser(m_doc);
+    chaser->setName("Cues");
+    m_doc->addFunction(chaser);
+    const QString id = QString::number(sc->id());
+    console(button(1, "Haze", id));
+    QVERIFY(quiet("VC-04"));
+    console(button(1, "Haze on", "4294967295"));
+    QVERIFY(fires("VC-04"));
+    QVERIFY(findings("VC-04").first().message.contains("no function"));
+    QCOMPARE(findings("VC-04").first().targets, QStringList() << QStringLiteral("vc:1"));
+    console(button(1, "Haze on", "99"));
+    QVERIFY(fires("VC-04"));
+    QVERIFY(findings("VC-04").first().message.contains("deleted"));
+    // Not every button runs a function.
+    console(button(1, "Blackout", "4294967295", QString(), QString(), "Blackout"));
+    QVERIFY(quiet("VC-04"));
+    // A level slider on fixtures that are gone.
+    const QString slider = QStringLiteral("<Slider Caption=\"Dim\" ID=\"2\"><SliderMode>Level</SliderMode>"
+                                          "<Level><Channel Fixture=\"%1\">0</Channel></Level></Slider>");
+    console(slider.arg(a->id()));
+    QVERIFY(quiet("VC-04"));
+    console(slider.arg(99));
+    QVERIFY(fires("VC-04"));
+    // A Cue List on a deleted chaser.
+    const QString cues = QStringLiteral("<CueList Caption=\"Cues\" ID=\"3\"><Chaser>%1</Chaser></CueList>");
+    console(cues.arg(chaser->id()));
+    QVERIFY(quiet("VC-04"));
+    console(cues.arg(77));
+    QVERIFY(fires("VC-04"));
+}
+
+void ShowReview_Test::vc05()
+{
+    console(button(1, "Blackout", "1", "B") + button(2, "Blue stab", "2", "B"));
+    QVERIFY(fires("VC-05"));
+    const ReviewFinding f = findings("VC-05").first();
+    QVERIFY(f.message.contains("Blackout") && f.message.contains("Blue stab"));
+    QCOMPARE(f.targets, QStringList() << QStringLiteral("vc:1") << QStringLiteral("vc:2"));
+    // Different keys.
+    console(button(1, "Blackout", "1", "B") + button(2, "Blue stab", "2", "C"));
+    QVERIFY(quiet("VC-05"));
+    // The same key on different pages of one frame: never live together.
+    const QString pages = QStringLiteral("<Frame Caption=\"Busk\" ID=\"9\"><Multipage PagesNum=\"2\" CurrentPage=\"0\"/>"
+                                         "<Button Caption=\"A\" ID=\"1\" Page=\"0\"><Function ID=\"1\"/><Key>B</Key></Button>"
+                                         "<Button Caption=\"B\" ID=\"2\" Page=\"%1\"><Function ID=\"2\"/><Key>B</Key></Button></Frame>");
+    console(pages.arg(1));
+    QVERIFY(quiet("VC-05"));
+    console(pages.arg(0));                  // the same page
+    QVERIFY(fires("VC-05"));
+    // A key Operate answers to.
+    console(button(1, "Go", "1", "Ctrl+Return"));
+    QVERIFY(fires("VC-05"));
+    QVERIFY(findings("VC-05").first().message.contains("Operate"));
+    // Spelled differently, the same key.
+    console(button(1, "A", "1", "ctrl+b") + button(2, "B", "2", "Ctrl+B"));
+    QVERIFY(fires("VC-05"));
+}
+
+void ShowReview_Test::vc06()
+{
+    console(button(1, "Strobe", "1", QString(), inputOf(1, 35))
+            + button(2, "Haze", "2", QString(), inputOf(1, 35)));
+    QVERIFY(fires("VC-06"));
+    const ReviewFinding f = findings("VC-06").first();
+    QVERIFY(f.message.contains("Strobe") && f.message.contains("Haze"));
+    QVERIFY(f.message.contains("universe 2, channel 36"));      // as the input editor counts
+    // Another channel.
+    console(button(1, "Strobe", "1", QString(), inputOf(1, 35))
+            + button(2, "Haze", "2", QString(), inputOf(1, 36)));
+    QVERIFY(quiet("VC-06"));
+    // The same job twice is not two jobs.
+    console(button(1, "Strobe", "1", QString(), inputOf(1, 35))
+            + button(2, "Strobe too", "1", QString(), inputOf(1, 35)));
+    QVERIFY(quiet("VC-06"));
+}
+
+void ShowReview_Test::vc08()
+{
+    ShowTreeController *st = m_doc->showTree();
+    console(QStringLiteral("<CueRunner Caption=\"Main GO\" ID=\"1\"/>"));
+    QVERIFY(fires("VC-08"));                // follows the current production: none
+    QVERIFY(findings("VC-08").first().message.contains("no cue list"));
+    const quint32 pid = st->addProduction("Show");
+    const quint32 lid = st->addCueList(pid, "Main");
+    st->addCue(lid, -1, "One");
+    QVERIFY(quiet("VC-08"));
+    console(QStringLiteral("<CueRunner Caption=\"Main GO\" ID=\"1\" Follow=\"%1\"/>").arg(lid));
+    QVERIFY(quiet("VC-08"));
+    console(QStringLiteral("<CueRunner Caption=\"Main GO\" ID=\"1\" Follow=\"%1\"/>").arg(lid + 500));
+    QVERIFY(fires("VC-08"));
+    QVERIFY(findings("VC-08").first().message.contains("deleted"));
+}
+
+void ShowReview_Test::cue13()
+{
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 pid = st->addProduction("Show");
+    const quint32 main = st->addCueList(pid, "Main");
+    const quint32 encore = st->addCueList(pid, "Encore");
+    st->addCue(main, -1, "One");
+    st->addCue(encore, -1, "Two");
+    QVERIFY(st->mainList(pid) == main);
+    QVERIFY(quiet("CUE-13"));               // no Virtual Console to ask
+    console(QString());
+    QVERIFY(fires("CUE-13"));
+    const ReviewFinding f = findings("CUE-13").first();
+    QVERIFY(f.message.contains("Encore"));
+    QCOMPARE(f.targets, QStringList() << QStringLiteral("list:%1").arg(encore));
+    // A Cue Runner following it, or the list as the main one.
+    console(QStringLiteral("<CueRunner Caption=\"Encore GO\" ID=\"1\" Follow=\"%1\"/>").arg(encore));
+    QVERIFY(quiet("CUE-13"));
+    console(QString());
+    QVERIFY(fires("CUE-13"));
+    QVERIFY(st->setMainList(encore));
+    QVERIFY(fires("CUE-13"));               // now Main is the one nothing plays
+    QVERIFY(findings("CUE-13").first().message.contains("Main"));
+    QVERIFY(st->setMainList(main));
+    // A VC Cue List on its chaser.
+    const quint32 chaser = st->cueList(encore)->chaser;
+    if (chaser != 0xFFFFFFFFu)
+    {
+        console(QStringLiteral("<CueList Caption=\"Cues\" ID=\"2\"><Chaser>%1</Chaser></CueList>").arg(chaser));
+        QVERIFY(quiet("CUE-13"));
+    }
+    // A list that follows timecode plays by itself.
+    QVERIFY(st->setListFollowTimecode(encore, true));
+    console(QString());
+    QVERIFY(quiet("CUE-13"));
+}
+
+void ShowReview_Test::cue12Vc()
+{
+    Fixture *a = par("Par 1", 0);
+    Scene *sc = new Scene(m_doc);
+    sc->setName("Wash");
+    sc->setValue(a->id(), 3, 200);
+    m_doc->addFunction(sc);
+    Chaser *chaser = new Chaser(m_doc);
+    chaser->setName("Full Show");
+    m_doc->addFunction(chaser);
+    chaser->addStep(ChaserStep(sc->id(), 0, Function::infiniteSpeed(), 0));
+    chaser->addStep(ChaserStep(sc->id(), 0, Function::infiniteSpeed(), 0));
+    m_doc->showTree()->importInPlace(chaser->id());
+    console(QString());
+    QVERIFY(quiet("CUE-12"));
+    console(button(1, "Act 1", QString::number(chaser->id())));
+    QVERIFY(fires("CUE-12"));
+    const ReviewFinding f = findings("CUE-12").first();
+    QVERIFY2(f.message.contains("VC button 'Act 1'") && f.message.contains("Full Show"), qPrintable(f.message));
+    QVERIFY(f.targets.contains(QStringLiteral("vc:1")));
+    console(button(1, "Act 1", QString::number(sc->id())));     // another function
+    QVERIFY(quiet("CUE-12"));
+}
+
 void ShowReview_Test::acceptanceRoundTrip()
 {
     Fixture *a = par("Par 1", 0);
@@ -1299,6 +1578,23 @@ void ShowReview_Test::cli()
     const QByteArray after = [&]() { QFile f(broken); return f.open(QIODevice::ReadOnly) ? f.readAll() : QByteArray(); }();
     QCOMPARE(after, before);
     QCOMPARE(QFileInfo(broken).lastModified(), mtime);
+
+    // The Virtual Console is read from the file, without the UI: a button with no function.
+    const QString withVc = QDir(m_dir.path()).filePath("vc.qxw");
+    {
+        QString xml = saveShow();
+        xml.replace(QStringLiteral("</Workspace>"),
+                    QStringLiteral("<VirtualConsole><Frame Caption=\"\">") + button(1, "Haze on", "4294967295")
+                    + QStringLiteral("</Frame></VirtualConsole></Workspace>"));
+        QFile f(withVc);
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write(xml.toUtf8());
+    }
+    text.clear();
+    QCOMPARE(ShowReviewCli::run({ "--review", withVc, "--check", "VC-*" }, out, err, false), int(ShowReviewCli::Warnings));
+    QVERIFY2(text.contains("VC-04") && text.contains("Haze on"), qPrintable(text));
+    text.clear();
+    QCOMPARE(ShowReviewCli::run({ "--review", broken, "--check", "VC-*" }, out, err, false), int(ShowReviewCli::Clean));
 
     char prog[] = "qlcconsole", rev[] = "--review", file[] = "x.qxw", other[] = "-o";
     char *yes[] = { prog, rev, file };

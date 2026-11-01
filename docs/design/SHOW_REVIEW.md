@@ -1336,6 +1336,13 @@ follow, solo-frame membership, geometry. So:
   stream reader that keeps only those facts and skips everything else.
 - The two fillers are tested against each other on the test shows: the
   index from the live VC and from the saved file must be equal.
+- *As built (vcx, 2026-10-31; decided, can change):* one reader, not two
+  fillers. `engine/src/vcindex.*` reads the `<VirtualConsole>` element; the
+  app's source is the live console saved into memory (so the reader sees
+  exactly what a save would write), the CLI's is the file. Parity is by
+  construction; the one visible difference is that a live button whose
+  function is gone has already cleared it ("no function") where the file
+  still names the deleted id ("its function was deleted").
 
 ### 5.4 The CLI
 
