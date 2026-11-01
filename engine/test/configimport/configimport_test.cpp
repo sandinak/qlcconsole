@@ -53,7 +53,6 @@ QDir testPluginDir()
     return dir;
 }
 
-QStringList textOf(const QStringList &l) { return l; }
 } // namespace
 
 void ConfigImport_Test::initTestCase()
