@@ -145,8 +145,10 @@ private:
     quint32 m_primaryChannel;
     QVector<quint32> m_channels;
     quint32 m_address;
-    float m_mixDepth = 1.0f;    //!< setMix()
-    float m_mixScale = 1.0f;
+    /* setMix(): its two floats sit in what was padding (here and after
+       m_delay), so a FadeChannel stays 96 bytes -- a show holds one per
+       channel per fader (the static_assert in fadechannel.cpp). */
+    float m_mixDepth = 1.0f;
 
     /** Cache channel reference for faster lookup */
     const QLCChannel *m_channelRef;
@@ -246,6 +248,7 @@ private:
     uint m_fadeTime;
     uint m_elapsed;
     uint m_delay = 0;
+    float m_mixScale = 1.0f;    //!< setMix(), with m_mixDepth
 };
 
 /** @} */

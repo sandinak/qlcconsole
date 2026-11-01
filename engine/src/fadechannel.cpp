@@ -51,7 +51,6 @@ FadeChannel::FadeChannel(const FadeChannel& ch)
     , m_channels(ch.m_channels)
     , m_address(ch.m_address)
     , m_mixDepth(ch.m_mixDepth)
-    , m_mixScale(ch.m_mixScale)
     , m_channelRef(ch.m_channelRef)
     , m_start(ch.m_start)
     , m_target(ch.m_target)
@@ -61,6 +60,7 @@ FadeChannel::FadeChannel(const FadeChannel& ch)
     , m_fadeTime(ch.m_fadeTime)
     , m_elapsed(ch.m_elapsed)
     , m_delay(ch.m_delay)
+    , m_mixScale(ch.m_mixScale)
 {
     //qDebug() << Q_FUNC_INFO;
 }
@@ -433,3 +433,10 @@ uchar FadeChannel::calculateCurrent(uint fadeTime, uint elapsedTime)
     return uchar(m_current);
 }
 
+/* A show holds one FadeChannel per channel per fader, so its size is much of
+   the engine's memory per universe: 96 bytes on 64-bit, the vtable pointer
+   included. A new member goes into the padding first (setMix()'s two floats
+   did; as plain members they made it 104 and a 128-universe show 15 MB
+   bigger -- make perf's a1p rss_mb_per_universe, 2026-11-01). */
+static_assert(sizeof(void *) != 8 || sizeof(FadeChannel) <= 96,
+              "FadeChannel grew: fill the padding before adding a member");
