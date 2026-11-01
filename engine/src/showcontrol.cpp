@@ -308,6 +308,9 @@ bool ShowControl::execute(const Request &request)
             // list plays the next).
             sentStep = step >= 0 ? step : standbyStep(chaser);
             m_loaded.remove(chaser->id());
+            if (sentStep >= 0)
+                emit cueTaken(Go, chaser->id(), chaser->isRunning() ? chaser->currentStepIndex() : -1,
+                              chaser->isRunning() ? chaser->currentSubCueIndex() : -1, sentStep, sub);
             if (sub >= 0)
                 goSubCue(chaser, step, sub);
             else
@@ -360,6 +363,15 @@ bool ShowControl::execute(const Request &request)
             action.m_masterIntensity = 1.0;
             action.m_stepIntensity = 1.0;
             action.m_fadeMode = Chaser::FromFunction;
+            {
+                // The step before, passing over the skipped ones.
+                const int from = chaser->currentStepIndex();
+                int to = from - 1;
+                while (to > 0 && chaser->isStepSkipped(to))
+                    --to;
+                emit cueTaken(Back, chaser->id(), from, chaser->currentSubCueIndex(),
+                              to < 0 ? from : to, -1);
+            }
             chaser->setAction(action);
             m_loaded.remove(chaser->id());
             return finish(true, name);

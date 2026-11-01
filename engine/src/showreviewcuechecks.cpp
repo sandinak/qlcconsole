@@ -437,6 +437,82 @@ static void cue01and02(ReviewContext &ctx, QList<ReviewFinding> &out, bool value
 static void cue01(ReviewContext &ctx, QList<ReviewFinding> &out) { cue01and02(ctx, out, true); }
 static void cue02(ReviewContext &ctx, QList<ReviewFinding> &out) { cue01and02(ctx, out, false); }
 
+static void cue03(ReviewContext &ctx, QList<ReviewFinding> &out)
+{
+    ShowTreeController *st = ctx.doc()->showTree();
+    for (const auto &pl : plainLists(ctx.doc()))
+    {
+        const CueList &list = *pl.second;
+        const QList<ResolvedCue> &res = ctx.resolved(list);
+        if (res.count() != list.cues.count())
+            continue;
+        // A cue with sub-cues does something more than its own look.
+        QSet<quint32> withSubs;
+        for (const Production &prod : st->productions())
+            for (const CueList &l : prod.lists)
+                if (l.isSubCues())
+                    withSubs.insert(l.subOf);
+        for (int i = 0; i < list.cues.count(); ++i)
+        {
+            const Cue &cue = list.cues.at(i);
+            const int before = playedBefore(list, i);
+            if (cue.skip || before < 0 || cue.focusCall || withSubs.contains(cue.id)
+                || res.at(i).layers.isEmpty())              // empty is CUE-04's
+                continue;
+            const Cue &prev = list.cues.at(before);
+            if (prev.focusCall || stageOf(res.at(i)) != stageOf(res.at(before)))
+                continue;
+            out << ReviewContext::make(QStringLiteral("CUE-03"), ReviewFinding::Note,
+                tr("%1 looks exactly like %2: GO on it changes nothing.")
+                    .arg(ctx.cueText(list, i), st->cueLabel(list, before)),
+                { cueKey(list, cue.id) }, QByteArray::number(prev.id), QStringLiteral("cue"),
+                QVariantList() << cue.id);
+        }
+    }
+}
+
+static void cue12(ReviewContext &ctx, QList<ReviewFinding> &out)
+{
+    // decided (can change): only (a) of the design, and only what the engine
+    // sees: an original kept for Restore original that a chaser, collection
+    // or timeline still plays. A Virtual Console button on it needs the
+    // VcIndex; an original edited since, or a generated function edited by
+    // hand, isn't compared.
+    Doc *doc = ctx.doc();
+    ShowTreeController *st = doc->showTree();
+    for (const auto &pl : plainLists(doc))
+    {
+        const CueList &list = *pl.second;
+        if (!list.inPlace)
+            continue;
+        for (const CueList::Original &o : list.originals)
+        {
+            Function *orig = doc->function(o.function);
+            if (orig == nullptr)
+                continue;
+            QStringList users;
+            quint32 firstUser = o.function;
+            QStringList keys { QStringLiteral("fn:%1").arg(o.function), listKey(list) };
+            for (Function *f : doc->functions())
+            {
+                if (f == nullptr || f == orig || st->isLocked(f->id()) || !f->components().contains(o.function))
+                    continue;
+                if (users.isEmpty())
+                    firstUser = f->id();
+                users << QStringLiteral("'%1'").arg(f->name());
+                keys << QStringLiteral("fn:%1").arg(f->id());
+            }
+            if (users.isEmpty())
+                continue;
+            out << ReviewContext::make(QStringLiteral("CUE-12"), ReviewFinding::Warning,
+                tr("%1 still plays the original '%2', not the Show Tree list '%3' made from it.")
+                    .arg(users.join(QStringLiteral(", ")), orig->name(), list.name),
+                keys, users.join(QLatin1Char(',')).toUtf8(), QStringLiteral("function"),
+                QVariantList() << firstUser);
+        }
+    }
+}
+
 static void cue04(ReviewContext &ctx, QList<ReviewFinding> &out)
 {
     for (const auto &pl : plainLists(ctx.doc()))
@@ -776,6 +852,9 @@ QList<ShowReview::Check> ShowReviewChecks::treeChecks()
         { QStringLiteral("CUE-02"), tr("No block at the top of a song"), S::Cues,
           tr("When the first cue of a song tracks, editing the end of the song before changes "
              "it. A Block cue at the top of each song keeps songs apart."), cue02 },
+        { QStringLiteral("CUE-03"), tr("A cue that changes nothing"), S::Cues,
+          tr("A cue that puts out exactly what the cue before did: the stage manager calls GO and "
+             "nothing happens. Usually its content moved to another cue."), cue03 },
         { QStringLiteral("CUE-04"), tr("Empty cue"), S::Cues,
           tr("A cue with nothing in it. In a Block cue that's a blackout, which is fine when it's "
              "called one."), cue04 },
@@ -793,6 +872,10 @@ QList<ShowReview::Check> ShowReviewChecks::treeChecks()
         { QStringLiteral("CUE-11"), tr("Include loops and dangling references"), S::Cues,
           tr("An include that would loop is left out; an include, reusable or sub-cue list whose "
              "cue was deleted plays nothing."), cue11 },
+        { QStringLiteral("CUE-12"), tr("Originals still played"), S::Cues,
+          tr("After Import in place the Show Tree list plays the show and the chaser it came "
+             "from is kept to Restore. Something that still plays the old chaser plays a show "
+             "that no longer matches the list."), cue12 },
         { QStringLiteral("VC-01"), tr("Hits that fight in one place"), S::Hits,
           tr("Two hits in the same place that set the same attribute on the same lights: the "
              "stage depends on which was pressed last. Give them different places, or different "

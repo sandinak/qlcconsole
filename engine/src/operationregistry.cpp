@@ -38,12 +38,7 @@
 #include "fixture.h"
 #include "chaser.h"
 #include "scene.h"
-/* why_on: Why is this on? (engine/src/whyon.*), landing beside this in the
-   same train; the guard can go once both are on main. */
-#if __has_include("whyon.h")
 #include "whyon.h"
-#define QLC_HAVE_WHYON 1
-#endif
 #include "doc.h"
 
 namespace
@@ -145,7 +140,6 @@ Function *findFunction(Doc *doc, const QString &name, QString *why)
     return nullptr;
 }
 
-#ifdef QLC_HAVE_WHYON
 Fixture *findFixture(Doc *doc, const QString &name, QString *why)
 {
     const QString key = name.trimmed();
@@ -169,7 +163,6 @@ Fixture *findFixture(Doc *doc, const QString &name, QString *why)
                    .arg(hits.count()).arg(key).arg(hits.first()->id());
     return nullptr;
 }
-#endif
 
 /** Function types by their words ("scene", "rgbmatrix"). */
 QStringList functionTypeWords()
@@ -554,7 +547,6 @@ QList<OperationRegistry::Operation> buildCatalog()
         op.describe = [](const QJsonObject &) { return R::tr("Show the cue sheet"); };
         ops << op;
     }
-#ifdef QLC_HAVE_WHYON
     {
         Op op;
         op.name = QStringLiteral("why_on");
@@ -591,7 +583,6 @@ QList<OperationRegistry::Operation> buildCatalog()
         op.describe = [](const QJsonObject &a) { return R::tr("Why is %1 on?").arg(arg(a, "fixture")); };
         ops << op;
     }
-#endif
     {
         Op op;
         op.name = QStringLiteral("find_conflicts");

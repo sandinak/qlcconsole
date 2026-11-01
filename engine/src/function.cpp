@@ -1210,6 +1210,12 @@ void Function::start(MasterTimer* timer, FunctionParent source, quint32 startTim
     timer->startFunction(this);
 }
 
+QList<FunctionParent> Function::sources() const
+{
+    QMutexLocker locker(&m_sourcesMutex);
+    return m_sources;
+}
+
 bool Function::startedOnlyByPreview() const
 {
     return startedOnlyByPreview(0);

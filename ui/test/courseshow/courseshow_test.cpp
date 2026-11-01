@@ -121,6 +121,7 @@ const QString kL1Start = kShows + QStringLiteral("/lesson-1-1-start.qlcc");
 const QString kL1Finish = kShows + QStringLiteral("/lesson-1-1-finish.qlcc");
 const QString kL2Start = kShows + QStringLiteral("/lesson-1-2-start.qlcc");
 const QString kL2Finish = kShows + QStringLiteral("/lesson-1-2-finish.qlcc");
+const QString kL36Start = kShows + QStringLiteral("/lesson-3-6-start.qlcc");
 const QString kL3Start = kShows + QStringLiteral("/lesson-1-3-start.qlcc");
 const QString kL3Finish = kShows + QStringLiteral("/lesson-1-3-finish.qlcc");
 const QString kL4Start = kShows + QStringLiteral("/lesson-1-4-start.qlcc");
@@ -878,6 +879,13 @@ void CourseShow_Test::buildTheShows()
         QVERIFY(doc->addPalette(p));
     }
     QCOMPARE(m_app->saveXML(kClassroom), QFile::NoError);
+    // Lesson 3.6 is the one lesson that expects Teaching mode (decided, can
+    // change): its start file is the classroom show with it on.
+    doc->teachingSettings()->setLesson(QStringLiteral("3.6"), QString());
+    doc->teachingSettings()->setEnabled(true);
+    QCOMPARE(m_app->saveXML(kL36Start), QFile::NoError);
+    doc->teachingSettings()->setEnabled(false);
+    doc->teachingSettings()->setLesson(QString(), QString());
     QCOMPARE(m_app->saveXML(kL1Start), QFile::NoError);
 
     QVERIFY(open(kL1Start));
@@ -888,7 +896,16 @@ void CourseShow_Test::buildTheShows()
 
 void CourseShow_Test::theTeachingShowIsSafeAndComplete()
 {
-    QStringList shows = { kClassroom, kL1Start, kL1Finish, kL2Start, kL2Finish, kL3Start, kL3Finish,
+    // Only Lesson 3.6's start has Teaching mode on; every other show ships
+    // with it off, as the lessons before it do not mention it.
+    QVERIFY(open(kL36Start));
+    QVERIFY(m_app->doc()->teachingSettings()->enabled());
+    QCOMPARE(m_app->doc()->teachingSettings()->lesson(), QString("3.6"));
+    QVERIFY(m_app->doc()->teachingSettings()->holdsOutput());
+    QVERIFY(open(kClassroom));
+    QVERIFY(!m_app->doc()->teachingSettings()->enabled());
+
+    QStringList shows = { kClassroom, kL36Start, kL1Start, kL1Finish, kL2Start, kL2Finish, kL3Start, kL3Finish,
                           kL4Start, kL4Finish, kL5Start };
     // Level 2's, as many as are written.
     for (int n = 1; n <= kLevelTwoLessons; ++n)

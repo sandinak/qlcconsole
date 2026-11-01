@@ -101,6 +101,7 @@ QString ShowReview::areaName(Area area)
         case Power: return QCoreApplication::translate("ShowReview", "Power and safety");
         case Files: return QCoreApplication::translate("ShowReview", "Files");
         case Naming: return QCoreApplication::translate("ShowReview", "Naming");
+        case Teaching: return QCoreApplication::translate("ShowReview", "Teaching");
     }
     return QString();
 }

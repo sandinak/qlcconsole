@@ -99,6 +99,12 @@ Switch roles after each part.
      **Block** cue starts from nothing, so nothing tracks into it. It's a
      hard start (you made it in Lesson 1.3).
 
+**Why is that light on?** On a tracking show a light can be on because of
+a cue three cues back. Don't guess: ask. Right-click a step top in the
+Lighting Studio ▸ **Why is this on?** The top line names the cue and
+layer that set it and where the level tracked in from (*tracked from cue
+1.0.1 Verse*); click it to go there.
+
 ### Note 1: let the lavender go
 
 6. Click **1.0.1 Verse**, then its **StepTops** row (the white one, not

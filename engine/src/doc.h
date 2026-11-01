@@ -253,6 +253,7 @@ private:
     class ShowOperate *m_operate = nullptr;
     class TeachingSettings *m_teaching = nullptr;
     class ShowReview *m_showReview = nullptr;
+    class GoLog *m_goLog = nullptr;
     class OutputRuleKeeper *m_outputRuleKeeper = nullptr;
     NetworkTopology *m_networkTopology;
     TimecodeSource *m_timecodeSource;
@@ -1258,6 +1259,8 @@ public:
     /** Show Review: the show's acceptances and its last review
      *  (docs/features/show-review.md); saved with the show */
     class ShowReview *showReview() const { return m_showReview; }
+    /** The Teaching show's "what just happened" log (does nothing unless Teaching is on) */
+    class GoLog *goLog() const { return m_goLog; }
 
     /** Applies the fixtures' output rules (Blackout / Grand Master exempt,
      *  Switch, OnAtOpen) to the universes (OutputRuleKeeper) */

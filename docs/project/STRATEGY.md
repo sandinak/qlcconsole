@@ -202,7 +202,7 @@ Blockers for some 4.x users:
   warning is design only. Fix: a one-time notice on saving a .qxw that
   has fork-only content, listing what stock QLC+ would lose (≈1.5 days),
   plus the round-trip test (section 2.1).
-- **No Raspberry Pi package** (section 2.4).
+- **No Raspberry Pi release** (section 2.4): a .deb is built by hand since 0.3.1, not yet on a release.
 
 Annoying:
 - **Save As offers only .qlcc** (`app.cpp:3372`); a .qxw needs the
@@ -281,11 +281,12 @@ Recommendation, in order of ROI:
 | macOS 12+ (universal) | Signed, notarized DMG; the gate's home | Same | none |
 | Windows 10/11 x64 | CI installer, **not code-signed**; tested on a Win10 VM that's "unreliable"; no Windows 11 machine in the matrix | An installer that school IT will allow | signing; a real Win11 check |
 | Linux x86_64 | CI AppImage; a Debian 13 build host | .deb or AppImage | `.spec`/`debian/changelog` inherited and stale ([RELEASE.md](../dev/RELEASE.md)) |
-| Raspberry Pi (arm64) | Builds on the Pi 5 (apt Qt 6.8.2, ~34 min); no package; Pi 4 build host still TODO | QLC+ 4 had an official Pi image; Pi users are a real 4.x group | no released build; MasterTimer late ticks on Linux (TODO) |
+| Raspberry Pi (arm64) | **Packaged** (0.3.1): a trixie arm64 .deb from `platforms/linux/make-pi-deb.sh`, installed, started and removed on the Pi 5 ([RASPI.md](../dev/RASPI.md)); not published; Pi 4 build host still TODO | QLC+ 4 had an official Pi image; Pi users are a real 4.x group | not a released build (built by hand, no CI); MasterTimer late ticks on Linux (TODO) |
 | Plugins | Art-Net, sACN, DMX USB, uDMX, Velleman, Peperoni, Enttec Wing, HID, MIDI, OSC, OS2L, OLA, loopback, GPIO/SPI/UART (Linux), plus WLED | Same as 4.14 | ShowNet and single-vendor dongles only on demand |
 
-Recommendation: promise macOS, Windows and Linux x86_64 now. Call the Pi
-"builds, not packaged" until an arm64 AppImage or .deb exists (0.5).
+Recommendation: promise macOS, Windows and Linux x86_64 now. The Pi is
+"packaged" (a .deb, decided: can change) since 0.3.1; "released" waits for
+the .deb to ride a release.
 Price a Windows code-signing certificate when the first school on Windows
 appears; school IT is the most likely place an unsigned installer is
 refused.
@@ -375,7 +376,7 @@ order the note says why.
 | Run `lupdate` every release | 2 | 3 | Qt .ts | 0.5 | L | L | 12 | BUILD (0.3.1), then every release |
 | Show Manager parity review | 3 | 5 | Shows tab | 2 | L | L | 7.5 | BUILD (0.3.1) |
 | Send the fork's definitions upstream | 2 | 4 | fork/fixture-* branches | 1 | L | L | 8 | BUILD (0.3.1), user's call |
-| Raspberry Pi arm64 package (AppImage or .deb) | 3 | 4 | Pi 5 build recipe | 4 | M | M | 2.4 | BUILD (0.5) |
+| Raspberry Pi arm64 package (AppImage or .deb) | 3 | 4 | Pi 5 build recipe | 4 | M | M | 2.4 | DONE (0.3.1: `make-pi-deb.sh`, a .deb; decided, can change) |
 | Windows code signing | 3 | 3 | CI installer | 2 + a yearly fee | L | M | 4.5 | LATER (when a Windows school appears) |
 | Translations of the fork's strings | 2 | 3 | Qt .ts | 10+ | L | H | 0.6 | LATER |
 | Native GDTF/MVR import | 3 | 2 | definition cache, plot | 15 | M | H | 0.3 | LATER (OFL route documented instead) |
@@ -404,11 +405,11 @@ order the note says why.
 | Teaching mode, must-haves (Show Settings, chip, Operate warning, safe output, PIN, Make Student Handout) | 5 | 5 | scramble practice, Design/Operate, .qlcc | 7 | M | M | 2.9 | BUILD (0.3.1); see note 1 |
 | Touchpad option A | 2 | 3 | HID plugin, focus tools | 3.5 | M | M | 1.4 | LATER (0.4 if pad Run users ask) |
 | Laser aperture face, U yoke, LaserLook symbol | 2 | 3 | Rig Overview | 4 | L | M | 1.5 | LATER |
-| Star-field coverage + laser audience/eye-height warnings | 3 | 4 | drawStarField, Show Review | 5 | M | M | 1.9 | BUILD (0.5), with Show Review |
+| Star-field coverage + laser audience/eye-height warnings | 3 | 4 | drawStarField, Show Review | 5 | M | M | 1.9 | Warnings BUILT 2026-10-31 (Show Review PWR-09: fixed lasers and star projectors, house = downstage of the stage edge below 3 m); the coverage outline BUILD (0.5) |
 | Pad Run role (MVP 6 d, full 10.5 d) | 4 | 5 | ShowControl::execute, focus pad stack | 6 | M | M | 2.7 | MVP BUILT 2026-10-31 (0.4, `PadRun`: arm + GO/Back/Sub GO/Stop, list pick, light bar); full (Hits page, focus confirm) next; see note 2 |
 | Walk the show from the stage with the controller (extends Focus this cue) | 4 | 4 | Refine, Layer/Group/Fixture scope, voice and light-bar feedback, cue notes | 5 | M | M | 2.5 | MVP BUILT 2026-10-31 (0.4, `PadRun` walking map: cues, layers, solo, Needs work tag); leftovers in TODO.md |
-| "Why is this on?" v1 | 4 | 5 | GenericFader, Show Tree tracking | 9 | M | M | 1.8 | BUILD (0.5); see note 3 |
-| Teaching later items: lesson link, reset to handout, GO log, glossary popovers | 3 | 5 | Teaching | 4 | L | L | 3.8 | BUILD (0.5) |
+| "Why is this on?" v1 | 4 | 5 | GenericFader, Show Tree tracking | 9 | M | M | 1.8 | v1 BUILT 2026-10-31 (0.5, `WhyOn` + `WhyOnPanel`: replayed from the last frame on demand, right-click in the plot / Rig Overview / Fixture Manager / Simple Desk; Plain words = the Teaching hook); v2 and v3 next; see note 3 |
+| Teaching later items: lesson link, reset to handout, GO log, glossary popovers | 3 | 5 | Teaching | 4 | L | L | 3.8 | BUILT (0.5: lesson link, reset to handout, GO log, glossary popovers; the Show Review TEACH-01 check follows Show Review v1) |
 
 Notes:
 1. **Teaching mode** has a lower ROI number than its call suggests,
@@ -582,16 +583,19 @@ Order and dependencies:
 1. **Show Review v1** (52 checks, CLI, panel), with Teaching's checks and
    the course shows reviewed in the gate. The frame and 31 checks are
    built (2026-10-31); the VC checks wait on the VcIndex.
-2. **"Why is this on?" v1**, then v2 (per-writer provenance, after the
-   80-universe stress run), then **v3's student mode**, which needs
-   Teaching (0.3.1) and reads best next to Show Review.
+2. **"Why is this on?" v1** (built 2026-10-31: replayed on demand, no
+   per-frame cost; its Plain words box is the hook v3 builds on), then v2
+   (per-writer provenance, after the 80-universe stress run), then
+   **v3's student mode**, which needs Teaching (0.3.1) and reads best
+   next to Show Review.
 3. **Laser part C** (coverage and audience/eye-height warnings) and the
    **no-light zones** idea, both as Show Review checks rather than a
    separate system.
 4. **Realistic move speed in the Rig Overview**, which also feeds Show
    Review's "moves in light" checks.
 5. **Teaching's later items** (lesson link, reset to handout, GO log,
-   glossary).
+   glossary). Built; only Show Review's TEACH-01 check is left, for when
+   Show Review v1 lands.
 6. **Calling script view**, if the course's SM lesson wants it.
 7. **Raspberry Pi package**, so a school can leave a Pi as the show
    machine.

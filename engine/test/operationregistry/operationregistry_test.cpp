@@ -118,8 +118,6 @@ void OperationRegistry_Test::cliRoundTrip()
     QFETCH(QString, name);
     QFETCH(QJsonObject, args);
     const R::Operation *op = R::operation(name);
-    if (op == nullptr && name == QLatin1String("why_on"))
-        QSKIP("Why is this on? isn't in this build");
     QVERIFY(op != nullptr);
     R reg(m_doc);
     const QString line = op->cliSyntax(args);
@@ -340,8 +338,6 @@ void OperationRegistry_Test::listCues()
 
 void OperationRegistry_Test::whyOn()
 {
-    if (R::operation("why_on") == nullptr)
-        QSKIP("Why is this on? isn't in this build");
     Fixture *a = dimmer("Spot 1", 0);
     QVERIFY(a != nullptr);
     R reg(m_doc);

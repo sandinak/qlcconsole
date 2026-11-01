@@ -302,6 +302,7 @@ GenericFader::ChannelRef SimpleDeskEngine::getFader(QList<Universe *> universes,
     if (fader.isNull())
     {
         fader = universes[universeID]->requestFader(Universe::SimpleDesk);
+        fader->setName(QStringLiteral("Simple Desk"));     // WhyOn names it
         m_fadersMap[universeID] = fader;
     }
 

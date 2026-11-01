@@ -38,6 +38,12 @@ private slots:
 
     void theRunnerShowsTheListAndItsSubCues();
     void theRunTabShowsHitsThatOverride();
+    /** Teaching: each GO and Back is written in crew words, tracked layers named */
+    void theTeachingLogSaysWhatEachGoDid();
+    /** Not a Teaching show: no log pane, no lines kept, plain tooltips */
+    void nothingShowsWhenTeachingIsOff();
+    /** Teaching: terms on the Run tab's heads and buttons carry the glossary */
+    void glossaryLinesOnTheRunTab();
     void goSubGoBackAndWhatChanges();
     /** The pad's role on the Run tab (0.4 Pad Run): Tools / Run / ARMED,
      *  a click switches it, and the tooltip carries the button map. */

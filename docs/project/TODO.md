@@ -8,6 +8,54 @@ under `~/.claude/.../memory/`.
 
 ---
 
+## Raspberry Pi package — leftovers (pi, 2026-10-31)
+
+Built: `platforms/linux/make-pi-deb.sh` (a .deb; decided, can change),
+docs/dev/RASPI.md. Open: build it in CI (an arm64 runner) and attach it to
+a release; a Pi 4 build host; a Pi image with the package preinstalled;
+`debian/` and the `.spec` are still upstream's stale copies (unused).
+## "Why is this on?" v1 — built, leftovers (0.5, why, 2026-10-31)
+
+Built: `WhyOn` (engine/src/whyon.*) answers "why is this light / channel
+where it is" from the last frame, on demand, on the UI thread: it copies
+the universe's fader list, the one FadeChannel per fader that covers the
+channel (`GenericFader::peekAddress`) and the channel's stage values
+(`Universe::channelSnapshot`, under the frame lock), replays the merge in
+fader priority order and names each source; `WhyOnPanel` (ui/src/
+whyonpanel.*) shows it from a right-click in the plot, the Rig Overview,
+the Fixture Manager and a Simple Desk channel (docs/features/
+troubleshooting.md "Why is this light on?"; course: Lesson 2.1). Nothing
+is recorded per frame; the window re-asks at 4 Hz only while shown.
+Each "decided (can change)":
+- The lines are the engine's stack top-down (the last-written, highest
+  layer first), then the stages after the faders in the order the
+  universe applies them (group masters, Grand Master, modifier,
+  passthrough, Blind,
+  Blackout, Teaching's hold). The winner is bold; the headline repeats it.
+- A fixture with no channel picked is explained by its master dimmer
+  (else its first intensity channel); the window's box picks another.
+- The Simple Desk, the programmer's live edits and VC sliders name their
+  faders when they make them (`setName`, once, not per frame); a VC
+  slider's is its widget id, named by the UI. Other unnamed faders read
+  "a source with no name".
+- An effect from the effect runner is named by the effect palettes
+  playing on that fixture's running scenes; its depth is the fader's Mix.
+- A Show Tree scene several cues share is named for the cue running (or
+  previewed) now, with the attribute's own tracking origin.
+- Wording::Simple (the **Plain words** box, on by default in a Teaching
+  show) only drops the merge words today; v3's full student sentences
+  build on it.
+- Jumps: cue / hit / preview → the Show Tree node; function → reveal (a
+  generated one) or open it; Simple Desk, VC, Park / Highlight / Flash /
+  Focus → their tab; a group master → the Fixture Manager.
+Open:
+- v2: per-writer provenance (fader tokens, the watch-list probe) and the
+  last-writer of a value left behind; Mark (move in black) onto an
+  OutputLayer so it has a fader.
+- v3: the full "why not" list (shutter closed, colour at black, released
+  / skipped / Solo, power limiter), Show Tree and Workbench row entries,
+  ⌘I, Locate's "Why?" link, pin / several windows, Design-only actions.
+
 ## Effect fades — leftovers (efo, 2026-10-31)
 
 Built (STRATEGY §4 0.4 item 6; docs/features/show-tree.md "Effects"): a
@@ -364,10 +412,13 @@ Operate PIN). **Still open:**
   see docs/features/teaching.md. Also DONE (tch2, feat/031-teaching2): reset
   to handout (state embedded in the handout, Show Settings, behind the PIN),
   confirm before patch changes (Fixture Manager, Patch dialog), USB/hardware
-  output held. Still later: a per-GO "what just happened" log, glossary
-  popovers, a Show Review "Teaching mode is on" check (when Show Review
-  exists), the course shows rebuilt with Teaching on (they ship off; Lesson
-  3.6 says to tick it). Also DONE (tch3, feat/031-teaching3): the patch
+  output held. Also DONE (tch4, feat/05-teaching-later): the per-GO "what just
+  happened" log (Run tab, `GoLog`, fed by `ShowControl::cueTaken`), glossary
+  popovers (`TeachingGlossary`, one source), and `lesson-3-6-start.qlcc`
+  (Teaching on; decided (can change): only 3.6's text expects it, so the
+  other course shows stay off, since the Teaching patch question would
+  stand in front of the lessons that patch, e.g. the 3.10 Eos import).
+  Also DONE (rev2, feat/05-review-checks): the Show Review check TEACH-01 "Teaching mode is on". Also DONE (tch3, feat/031-teaching3): the patch
   confirm in the Lighting Studio's Fixture Properties (universe/address) and
   on pasting a truss with its fixtures patched; every other Studio add (curtain,
   fountain flame, pasted-unpatched) is unpatched, so changes nothing.
@@ -492,9 +543,9 @@ housing stays dark and only the apertures light; on a truss the box is
 centred on its rig point (as a mover is, and the elevations), seated only
 on a deck, riser or tower shelf; a Laser given another symbol draws as
 that; the plot symbol turns with the icon rotation like every symbol (not
-with the throw). **Open:** part
-C (H×V window, density by throw, coverage outline, the audience-zone
-safety check for Show Review), the Type=Laser emission inference, and
+with the throw). **Part C, the audience-zone check, done** (Show Review PWR-09, rev2
+2026-10-31). **Open:** part C's H×V window, density by throw and coverage
+outline, the Type=Laser emission inference, and
 FixtureDefCheck's laser checks.
 
 ## AI Assist (0.5, docs/design/AI_ASSIST.md; P0+P1 built 2026-10-31, ai)
@@ -545,8 +596,7 @@ docs/features/ai-assist.md.
   checklist UI (§7).
 - **P2b** configuration import (§5b), usable with AI off.
 - **P3** MCP server over the registry.
-- Small: drop the `__has_include("whyon.h")` guard in operationregistry.cpp
-  once Why is this on? is on main (it lands in the same train); VC widgets in `unused`; Linux/Windows keychain (QtKeychain);
+- Small: VC widgets in `unused`; Linux/Windows keychain (QtKeychain);
   Tab completion of the registry's words.
 
 Guardrails: separate `ai/` module behind `QLC_AI_ASSIST`; no AI code on
@@ -566,9 +616,10 @@ show); `qlcconsole --review show.qlcc` (text / JSON, `--min`, `--check`,
 writes the show, no plugins); the **Review** footer chip and panel (Fix,
 Accept…, Reopen, Why?, Turn Check Off…, Open/Accepted/All, search), also from
 the Show readiness dialog; the footer's design entries shown under their
-catalog id there and folded into the panel (FTR). 31 checks: PAT-01/02/03/04/06,
-FIX-01/05/07/14, FX-07, PWR-01/03/05/06, FILE-01/02, NAME-01/02,
-PAL-01/02/03/05, CUE-01/02/04/05/06/07/08/11, VC-01; each with a trip and a
+catalog id there and folded into the panel (FTR). 41 checks: PAT-01/02/03/04/05/06,
+FIX-01/02/05/07/08/14, FX-02/03/07, PWR-01/03/05/06/09, FILE-01/02/03,
+NAME-01/02, PAL-01/02/03/05, CUE-01/02/03/04/05/06/07/08/11/12, VC-01,
+TEACH-01; each with a trip and a
 near-miss test (ShowReview_Test; a registry test fails a check with neither).
 A full run on DanceHysteria-0.6 is 140 ms (Debug).
 
@@ -593,11 +644,20 @@ Decided (each can change):
 - Accept is not an undo step yet.
 
 Leftovers of v1:
-- v1 checks not built: MOV-01, MOV-02, MOV-08, CUE-03, CUE-12, CUE-13,
-  PAT-05, FIX-02, FIX-08, VEN-01, VEN-02, VEN-05, VEN-09, VEN-10, FX-01
-  (with the Pi 5 cost table), FX-02, FX-03, FILE-03; and VC-03, VC-04, VC-05,
-  VC-06, VC-08, which need the VcIndex (VC facts from the live VC and from
-  the file, section 5.3).
+- v1 checks not built: MOV-01, MOV-02, MOV-08, CUE-13 (needs the VcIndex),
+  VEN-01, VEN-02, VEN-05, VEN-09, VEN-10, FX-01 (with the Pi 5 cost table
+  and a plays-on setting); and VC-03, VC-04, VC-05, VC-06, VC-08, which
+  need the VcIndex (VC facts from the live VC and from the file, section
+  5.3).
+- Built after v1 (rev2, 2026-10-31): TEACH-01, PWR-09 (lasers and star
+  fields into the audience; decided: no audience area is modelled, so the
+  house is downstage of the stage edge below 3 m, can change), CUE-03,
+  CUE-12 (chasers/collections/timelines still playing an original; its VC
+  buttons and the edited-original cases wait on the VcIndex / a rebake
+  compare), PAT-05, FIX-02 (definition errors only), FIX-08, FX-02, FX-03
+  (EFX size/speed 0 and matrix speed 0; a paused speed master isn't read),
+  FILE-03 (carried copies that fail or differ; the .qxw "uses the user
+  folder" case isn't built).
 - Parts of built checks: CUE-01's "past N cues" rule; CUE-05's loop and
   last-cue cases; CUE-06's gaps (notes); CUE-07's "jumped to" cases; PAL-01
   against tracked layers; PWR-01 hits with the running list; PWR-05 chases

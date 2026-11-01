@@ -244,6 +244,35 @@ QHash<quint32, FadeChannel> GenericFader::channels() const
     return m_channels;
 }
 
+bool GenericFader::peekAddress(quint32 address, FadeChannel *out) const
+{
+    std::lock_guard<ChannelsLock> l(m_channelsLock);
+    for (auto it = m_channels.constBegin(); it != m_channels.constEnd(); ++it)
+    {
+        const FadeChannel &fc = it.value();
+        if (fc.isInert())
+            continue;
+        const quint32 base = fc.addressInUniverse();
+        if (base == QLCChannel::invalid())
+            continue;
+        if (address >= base && address < base + quint32(fc.channelCount()))
+        {
+            if (out != nullptr)
+                *out = fc;
+            return true;
+        }
+    }
+    return false;
+}
+
+qreal GenericFader::overrideMix(bool *isHit) const
+{
+    std::lock_guard<ChannelsLock> l(m_channelsLock);
+    if (isHit != nullptr)
+        *isHit = m_mixMode != MixOff;
+    return m_mixMode == MixOff ? 1.0 : m_mix;
+}
+
 int GenericFader::channelsCount() const
 {
     std::lock_guard<ChannelsLock> l(m_channelsLock);

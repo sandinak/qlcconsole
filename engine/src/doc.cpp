@@ -74,6 +74,7 @@
 #include "showoperate.h"
 #include "teachingsettings.h"
 #include "showreview.h"
+#include "teachinglog.h"
 #include "outputrulekeeper.h"
 #include "bus.h"
 #include "qlcpalette.h"
@@ -170,6 +171,8 @@ Doc::Doc(QObject* parent, int universes)
     m_operate = new ShowOperate(this);
     m_teaching = new TeachingSettings(this);
     m_showReview = new ShowReview(this);
+    m_goLog = new GoLog(this);
+    m_goLog->attach();
     // Relays, house and work lights: Blackout / GM exempt, switch, on at open.
     m_outputRuleKeeper = new OutputRuleKeeper(this);
 
@@ -341,6 +344,8 @@ void Doc::clearContents()
         m_teaching->reset();
     if (m_showReview != nullptr)
         m_showReview->reset();
+    if (m_goLog != nullptr)
+        m_goLog->clear();
     m_showControl->reset();
     m_showTree->reset();
     m_paletteOps->reset();

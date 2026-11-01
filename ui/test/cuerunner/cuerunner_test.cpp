@@ -63,6 +63,11 @@
 #include "scene.h"
 #include "padrun.h"
 #include "programmercontroller.h"
+#include "teachingsettings.h"
+#include "teachingglossary.h"
+#include "teachinglog.h"
+#include "teachingtips.h"
+#include <QPlainTextEdit>
 #include "qlcpalette.h"
 #include "vccuelist.h"
 #include "vcframe.h"
@@ -217,6 +222,115 @@ QList<quint32> CueRunner_Test::show()
 /****************************************************************************
  * Tests
  ****************************************************************************/
+
+/* Teaching mode's "what just happened" log: a line per GO and Back, built
+   from the resolved cue, with the layers that carried in named as tracked. */
+void CueRunner_Test::theTeachingLogSaysWhatEachGoDid()
+{
+    show();
+    m_doc->teachingSettings()->setEnabled(true);
+    CueRunner runner(m_doc, CueRunner::Full);
+    runner.show();
+    QPlainTextEdit *pane = runner.findChild<QPlainTextEdit *>("crGoLog");
+    QVERIFY(pane != nullptr);
+    QVERIFY(pane->isVisibleTo(&runner));
+    QVERIFY(m_doc->goLog()->lines().isEmpty());
+
+    ShowControl::Request go;
+    go.command = ShowControl::Go;
+    QVERIFY(m_doc->showControl()->run(go, ShowControl::RouteOther));
+    settle();
+    QCOMPARE(m_doc->goLog()->lines().count(), 1);
+    // From dark: cue 1 puts A at Half, nothing is tracked yet.
+    QVERIFY2(m_doc->goLog()->last().endsWith(QString("GO \u2192 cue 1 'One': A in \u2192 Half")),
+             qPrintable(m_doc->goLog()->last()));
+
+    // GO into cue 2: A to Full, B in at Half.
+    QVERIFY(m_doc->showControl()->run(go, ShowControl::RouteOther));
+    settle();
+    QCOMPARE(m_doc->goLog()->lines().count(), 2);
+    QVERIFY2(m_doc->goLog()->last().endsWith(QString("GO \u2192 cue 2 'Two': A \u2192 Full; B in \u2192 Half")),
+             qPrintable(m_doc->goLog()->last()));
+
+    // GO into cue 3, which sets nothing of its own: both layers tracked.
+    QVERIFY(m_doc->showControl()->run(go, ShowControl::RouteOther));
+    settle();
+    QCOMPARE(m_doc->goLog()->lines().count(), 3);
+    QVERIFY2(m_doc->goLog()->last().contains(QString("GO \u2192 cue 3 'Three': ")),
+             qPrintable(m_doc->goLog()->last()));
+    QVERIFY2(m_doc->goLog()->last().endsWith("A, B tracked"), qPrintable(m_doc->goLog()->last()));
+
+    // Back: the cue before.
+    ShowControl::Request back;
+    back.command = ShowControl::Back;
+    QVERIFY(m_doc->showControl()->run(back, ShowControl::RouteOther));
+    settle();
+    QCOMPARE(m_doc->goLog()->lines().count(), 4);
+    QVERIFY2(m_doc->goLog()->last().contains(QString("Back \u2192 cue 2 'Two': ")),
+             qPrintable(m_doc->goLog()->last()));
+
+    // The pane shows the same lines, newest last; each starts with a time.
+    QCOMPARE(pane->toPlainText().split('\n').count(), 4);
+    QVERIFY(QRegularExpression("^\\d\\d:\\d\\d:\\d\\d GO ").match(pane->toPlainText()).hasMatch());
+
+    // A refused command writes nothing.
+    ShowControl::Request nope;
+    nope.command = ShowControl::Go;
+    nope.cue = "99";
+    QVERIFY(!m_doc->showControl()->run(nope, ShowControl::RouteOther));
+    QCOMPARE(m_doc->goLog()->lines().count(), 4);
+
+    // A hit is a line too.
+    const quint32 prod = m_doc->showTree()->currentProduction();
+    QVERIFY(prod != ShowTree::invalidId());
+    // Turning Teaching off clears the log and hides the pane.
+    m_doc->teachingSettings()->setEnabled(false);
+    QVERIFY(m_doc->goLog()->lines().isEmpty());
+    QVERIFY(!pane->isVisibleTo(&runner));
+}
+
+void CueRunner_Test::nothingShowsWhenTeachingIsOff()
+{
+    show();
+    CueRunner runner(m_doc, CueRunner::Full);
+    runner.show();
+    QPlainTextEdit *pane = runner.findChild<QPlainTextEdit *>("crGoLog");
+    QVERIFY(pane != nullptr);
+    QVERIFY(!pane->isVisibleTo(&runner));
+
+    ShowControl::Request go;
+    go.command = ShowControl::Go;
+    QVERIFY(m_doc->showControl()->run(go, ShowControl::RouteOther));
+    settle();
+    QVERIFY(m_doc->goLog()->lines().isEmpty());
+    QVERIFY(pane->toPlainText().isEmpty());
+
+    // Tooltips are the plain ones.
+    QToolButton *goBtn = runner.findChild<QToolButton *>("crGo");
+    QVERIFY(!goBtn->toolTip().contains("Standby:"));
+    QVERIFY(goBtn->whatsThis().isEmpty());
+    QCOMPARE(TeachingTips::tip(m_doc, "base", { "cue" }), QString("base"));
+}
+
+void CueRunner_Test::glossaryLinesOnTheRunTab()
+{
+    show();
+    CueRunner runner(m_doc, CueRunner::Full);
+    QToolButton *goBtn = runner.findChild<QToolButton *>("crGo");
+    const QString plain = goBtn->toolTip();
+    m_doc->teachingSettings()->setEnabled(true);
+    QVERIFY(goBtn->toolTip().startsWith(plain));
+    QVERIFY2(goBtn->toolTip().contains("Standby: "), qPrintable(goBtn->toolTip()));
+    QVERIFY(goBtn->toolTip().contains(TeachingGlossary::definition("go")));
+    QVERIFY(!goBtn->whatsThis().isEmpty());
+    QTreeWidget *tree = runner.cueTree();
+    QVERIFY(tree->headerItem()->toolTip(1).startsWith("Cue: "));
+    QVERIFY(tree->headerItem()->toolTip(3).contains("Hold: "));
+    // And back to plain.
+    m_doc->teachingSettings()->setEnabled(false);
+    QCOMPARE(goBtn->toolTip(), plain);
+    QVERIFY(tree->headerItem()->toolTip(1).isEmpty());
+}
 
 /* Q157 (4): while running, the Run tab names the VC buttons whose hit for
    this moment fires instead of a wider one. */
