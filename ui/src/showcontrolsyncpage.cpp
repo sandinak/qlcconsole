@@ -32,8 +32,10 @@
 #include <QSpinBox>
 #include <QLabel>
 #include <QLineEdit>
+#include <QPixmap>
 
 #include "showcontrolsyncpage.h"
+#include "qrencoder.h"
 #include "controlmappanel.h"
 #include "showcontrollistener.h"
 #include "timecodesource.h"
@@ -505,7 +507,16 @@ QGroupBox *ShowControlSyncPage::buildWebGroup()
     m_webWhere->setObjectName(QStringLiteral("scWebWhere"));
     m_webWhere->setWordWrap(true);
     m_webWhere->setTextInteractionFlags(Qt::TextSelectableByMouse);
-    form->addRow(tr("Open:"), m_webWhere);
+
+    // The phone Run page's address as a QR code, beside the addresses.
+    m_webQr = new QLabel(box);
+    m_webQr->setObjectName(QStringLiteral("scWebQr"));
+    m_webQr->setAlignment(Qt::AlignCenter);
+    m_webQr->hide();
+    QHBoxLayout *whereRow = new QHBoxLayout;
+    whereRow->addWidget(m_webWhere, 1);
+    whereRow->addWidget(m_webQr, 0, Qt::AlignTop);
+    form->addRow(tr("Open:"), whereRow);
 
     m_webStatus = new QLabel(box);
     m_webStatus->setObjectName(QStringLiteral("scWebStatus"));
@@ -562,6 +573,25 @@ void ShowControlSyncPage::refreshWeb()
                 urls << QStringLiteral("http://%1:%2/").arg(a.toString()).arg(port);
     m_webWhere->setText(network ? urls.join(QStringLiteral("\n"))
                                 : tr("%1 (this computer only)").arg(urls.first()));
+
+    /* A phone camera opens the Run page: the first address another device
+       can reach (a loopback address is no use to a phone: then none). */
+    QString phone;
+    if (network && urls.count() > 1)
+        phone = urls.at(1) + QStringLiteral("run");
+    m_webQr->setProperty("qrUrl", phone);
+    const QImage qr = phone.isEmpty() ? QImage() : QrEncoder::image(phone, 4);
+    if (qr.isNull())
+    {
+        m_webQr->clear();
+        m_webQr->hide();
+    }
+    else
+    {
+        m_webQr->setPixmap(QPixmap::fromImage(qr));
+        m_webQr->setToolTip(tr("Point a phone camera here to open the Run page: %1").arg(phone));
+        m_webQr->show();
+    }
 
     QString text;
     if (running)

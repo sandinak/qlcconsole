@@ -184,10 +184,14 @@ const QList<ShowTreeCommand::Word> &ShowTreeCommand::words()
             { "Towers beam clear" }, { "gobo", "zoom" }, { "focus", "frost", "iris" }, true);
         add("shutter", "looks", "<groups> shutter <palette> | none | clear", "The Shutter (and strobe) look.",
             { "Towers shutter none" }, { "dimmer" }, { "strobe" }, true);
-        add("effect", "looks", "<groups> effect <palette> [colour <palette>] [dimmer <palette>] | none | clear",
+        add("effect", "looks", "<groups> effect <palette> [colour <palette>] [dimmer <palette>] [fade <seconds> | in <s> out <s> | cue | atonce] | none | clear",
             "An effect; a colour or dimmer right after it is the effect's own. On the cue: one effect "
-            "across its layers (those setting that effect themselves are left out).",
-            { "Steps effect Sinelon colour Red", "cue look effect Sinelon", "Steps effect none" },
+            "across its layers (those setting that effect themselves are left out). fade is how the "
+            "effect comes in and goes (cue: with the cue's fades, the default for a new one; atonce: "
+            "starts and stops at full); effect <palette> fade 2 alone changes the fades of the effect "
+            "already there and keeps its looks.",
+            { "Steps effect Sinelon colour Red", "cue look effect Sinelon", "Steps effect none",
+              "Steps effect Sinelon fade 2", "Steps effect Sinelon fade in 2 out 0.5", "Steps effect Sinelon fade atonce" },
             { "colour" }, { "fx" }, true);
         add("none", "looks", "<groups> <attribute> none | off | clear",
             "none (or off): the attribute is off here, whatever it would inherit. clear: takes this "
@@ -1219,6 +1223,7 @@ ShowTreeCommand::Result ShowTreeCommand::run(const QString &line, const Context 
     // attribute value, attribute value… on @a layers (none: the cue's looks)
     auto assigns = [&](const QList<quint32> &layers) -> QString {
         QString effect;         // the effect just set: a colour/dimmer after it is its own
+        static const int KeepFade = -3;     // a fade the line doesn't name: as it is
         int n = 0;
         auto setLook = [&](const Look &look) {
             if (layers.isEmpty())
@@ -1229,6 +1234,73 @@ ShowTreeCommand::Result ShowTreeCommand::run(const QString &line, const Context 
         while (!r.atEnd())
         {
             const QString kw = r.word();
+            if (kw.compare(QLatin1String("fade"), Qt::CaseInsensitive) == 0)
+            {
+                // An effect's fades (right after it, or after its own looks):
+                // fade 2 | fade in 2 out 1 | fade cue | fade atonce.
+                if (effect.isEmpty())
+                    return tr("fade goes right after an effect: Steps effect Sinelon fade 2");
+                int fadeIn = KeepFade;
+                int fadeOut = KeepFade;
+                int words = 0;
+                for (;; ++words)
+                {
+                    const QString w = r.peek().toLower();
+                    bool ok = false;
+                    if (w == QLatin1String("cue") || w == QLatin1String("follow"))
+                    {
+                        r.word();
+                        fadeIn = fadeOut = Look::FadeFollowCue;
+                    }
+                    else if (w == QLatin1String("atonce") || w == QLatin1String("snap") || w == QLatin1String("none"))
+                    {
+                        r.word();
+                        fadeIn = fadeOut = Look::FadeSnap;
+                    }
+                    else if (w == QLatin1String("in") || w == QLatin1String("out"))
+                    {
+                        r.word();
+                        const double s = r.word().toDouble(&ok);
+                        if (!ok || s < 0.0 || s > 600.0)
+                            return tr("fade %1 takes seconds, 0 to 600.").arg(w);
+                        (w == QLatin1String("in") ? fadeIn : fadeOut) = qRound(s * 1000.0);
+                    }
+                    else if (w.toDouble(&ok) >= 0.0 && ok)
+                    {
+                        const double s = r.word().toDouble();
+                        if (s > 600.0)
+                            return tr("A fade is 0 to 600 seconds.");
+                        fadeIn = fadeOut = qRound(s * 1000.0);
+                    }
+                    else
+                    {
+                        break;
+                    }
+                }
+                if (words == 0)
+                    return tr("fade <seconds> | in <seconds> out <seconds> | cue | atonce");
+                auto fade = [&](const Look *have) -> Look {
+                    Look l = *have;
+                    if (fadeIn != KeepFade)
+                        l.fadeIn = fadeIn;
+                    if (fadeOut != KeepFade)
+                        l.fadeOut = fadeOut;
+                    return l;
+                };
+                const Cue *c = m_st->cue(ctx.cue);
+                if (layers.isEmpty() && c != nullptr && c->look(effect) != nullptr)
+                    m_st->setCueLook(ctx.cue, fade(c->look(effect)));
+                for (quint32 lid : layers)
+                {
+                    c = m_st->cue(ctx.cue);
+                    const Layer *layer = c == nullptr ? nullptr : c->layer(lid);
+                    const Look *have = layer == nullptr ? nullptr : layer->look(effect);
+                    if (have != nullptr && !have->none)
+                        m_st->setLayerLook(ctx.cue, lid, fade(have));
+                }
+                ++n;
+                continue;
+            }
             const QString key = attributeKey(kw);
             if (key.isEmpty())
             {
@@ -1343,7 +1415,44 @@ ShowTreeCommand::Result ShowTreeCommand::run(const QString &line, const Context 
                         && isEffectKey(m_st->keyForPalette(have->id())) && !m_st->isInlinePalette(have->id()))
                         p = have;
                 const Look look = m_st->lookForPalette(p->id());
-                setLook(look);
+                if (r.peek().compare(QLatin1String("fade"), Qt::CaseInsensitive) == 0)
+                {
+                    // Only its fades: an effect already playing there keeps
+                    // its own looks; one only inherited is brought in as it
+                    // plays; else it is new.
+                    if (layers.isEmpty())
+                    {
+                        const Cue *c = m_st->cue(ctx.cue);
+                        const Look *have = c == nullptr ? nullptr : c->look(look.key);
+                        if (have == nullptr || have->none)
+                            m_st->setCueLook(ctx.cue, look);
+                    }
+                    for (quint32 lid : layers)
+                    {
+                        const Cue *c = m_st->cue(ctx.cue);
+                        const Layer *layer = c == nullptr ? nullptr : c->layer(lid);
+                        if (layer == nullptr)
+                            continue;
+                        const Look *have = layer->look(look.key);
+                        if (have != nullptr && !have->none)
+                            continue;
+                        Look start = look;
+                        const CueList *now = m_st->cueList(ctx.list);
+                        const int at = now == nullptr ? -1 : now->indexOf(ctx.cue);
+                        if (at >= 0)
+                        {
+                            const QList<ResolvedCue> rc = m_st->resolved(*now);
+                            const ResolvedLayer *rl = rc.at(at).layer(layer->target);
+                            if (rl != nullptr && rl->values.contains(look.key) && !rl->values.value(look.key).look.none)
+                                start = rl->values.value(look.key).look;
+                        }
+                        m_st->setLayerLook(ctx.cue, lid, start);
+                    }
+                }
+                else
+                {
+                    setLook(look);
+                }
                 effect = look.key;
                 ++n;
                 continue;
@@ -2668,17 +2777,65 @@ bool ShowTreeCommand::candidates(const QString &head, const Context &context, QS
 
     // attribute value, attribute value… to the end.
     auto assigns = [&]() -> bool {
+        bool afterEffect = false;      // an effect (and maybe its own looks) came just before
         for (;;)
         {
             if (r.atEnd())
             {
                 *out = attributeWords();
+                if (afterEffect)
+                    *out << QStringLiteral("fade");
                 return true;
             }
             const QString kw = r.word();
+            if (afterEffect && kw.compare(QLatin1String("fade"), Qt::CaseInsensitive) == 0)
+            {
+                // fade 2 | in 2 out 1 | cue | atonce
+                if (r.atEnd())
+                {
+                    *out = QStringList({ "cue", "atonce", "in", "out", "1", "2" });
+                    return true;
+                }
+                bool any = false;
+                for (;;)
+                {
+                    const QString w = r.peek().toLower();
+                    bool ok = false;
+                    if (w == QLatin1String("in") || w == QLatin1String("out"))
+                    {
+                        r.word();
+                        if (r.atEnd())
+                        {
+                            *out = QStringList({ "0.5", "1", "2" });
+                            return true;
+                        }
+                        r.word().toDouble(&ok);
+                        if (!ok)
+                            return false;
+                    }
+                    else if (w == QLatin1String("cue") || w == QLatin1String("follow") || w == QLatin1String("atonce")
+                             || w == QLatin1String("snap") || w == QLatin1String("none"))
+                    {
+                        r.word();
+                    }
+                    else if (w.toDouble(&ok) >= 0.0 && ok)
+                    {
+                        r.word();
+                    }
+                    else
+                    {
+                        break;
+                    }
+                    any = true;
+                }
+                if (!any)
+                    return false;
+                continue;
+            }
             const QString key = attributeKey(kw);
             if (key.isEmpty())
                 return false;
+            afterEffect = key == KeyEffectPrefix || (afterEffect && (key == KeyColour || key == KeyDimmer));
             const bool aim = kw.compare(QLatin1String("aim"), Qt::CaseInsensitive) == 0;
             if (r.atEnd())
             {

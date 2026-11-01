@@ -33,6 +33,7 @@
 #include "fixturegroup.h"
 #include "showreview.h"
 #include "collection.h"
+#include "qlcpalette.h"
 #include "fixture.h"
 #include "chaser.h"
 #include "scene.h"
@@ -124,6 +125,7 @@ void OperationRegistry_Test::catalogIsWhole()
     for (const char *n : { "make_cue", "add_cue", "make_cue_list", "set_look", "set_cue_look", "set_intensity",
                            "set_cue_mode", "release_layer", "skip_cues", "unskip_cues", "record_cue",
                            "rename_selected", "duplicate_cue", "include_cue", "make_group_set", "play_function",
+                           "set_effect_fade",
                            "import_config", "set_group_master", "set_hit_override" })
         QVERIFY2(names.contains(QLatin1String(n)), n);
     // A group master is playing, not editing: not a step of an AI plan.
@@ -586,6 +588,13 @@ void OperationRegistry_Test::changeRenders_data()
     QTest::newRow("include") << "include_cue" << QJsonObject { { "number", "0.0.3" } } << "include 0.0.3";
     QTest::newRow("set") << "make_group_set" << QJsonObject { { "name", "Towers" }, { "groups", QJsonArray { "SL", "SR" } } }
                          << "set \"Towers\" SL SR";
+    QTest::newRow("effect fade both") << "set_effect_fade"
+                                      << QJsonObject { { "effect", "Sinelon" }, { "targets", QJsonArray { "Towers" } },
+                                                       { "fade_in", 2 }, { "fade_out", 0.5 } }
+                                      << "Towers effect Sinelon fade in 2 out 0.5";
+    QTest::newRow("effect fade cue") << "set_effect_fade"
+                                     << QJsonObject { { "effect", "Big Sine" }, { "with", "cue" } }
+                                     << "cue look effect \"Big Sine\" fade cue";
     QTest::newRow("function") << "play_function" << QJsonObject { { "functions", QJsonArray { "Haze", "Big Look" } } }
                               << "function Haze, \"Big Look\"";
 }
@@ -624,6 +633,9 @@ void OperationRegistry_Test::schemaRejectsBadArguments_data()
     QTest::newRow("quote") << "rename_selected" << QJsonObject { { "name", "a\" record" } } << "double quote";
     QTest::newRow("record source") << "record_cue" << QJsonObject() << "source: missing";
     QTest::newRow("no function") << "play_function" << QJsonObject { { "functions", QJsonArray { "Nope" } } } << "Nope";
+    QTest::newRow("fade bad") << "set_effect_fade" << QJsonObject { { "effect", "Sinelon" }, { "fade_in", 700 } } << "above 600";
+    QTest::newRow("fade no effect") << "set_effect_fade" << QJsonObject { { "effect", "Nope" }, { "with", "cue" } } << "No effect";
+    QTest::newRow("fade enum") << "set_effect_fade" << QJsonObject { { "effect", "Sinelon" }, { "with", "slow" } } << "one of cue";
     QTest::newRow("unknown") << "patch_fixture" << QJsonObject() << "No operation";
 }
 
@@ -664,6 +676,115 @@ void OperationRegistry_Test::changeRunsItsGrammarLine()
     // Without a command line: refused, as `command` is.
     R bare(m_doc);
     QVERIFY(!bare.run("duplicate_cue", QJsonObject(), ctx).ok);
+}
+
+void OperationRegistry_Test::effectFadesByWords()
+{
+    const ShowTreeCommand::Context ctx = smallShow();
+    for (const char *n : { "Sinelon", "Big Sine" })
+    {
+        QLCPalette *fx = new QLCPalette(QLCPalette::Effect, m_doc);
+        fx->setName(n);
+        m_doc->addPalette(fx);
+    }
+    QLCPalette *red = new QLCPalette(QLCPalette::Color, m_doc);
+    red->setName("Red");
+    red->setValue(QLCPalette::colorToString(QColor(Qt::red), QColor(Qt::black)));
+    m_doc->addPalette(red);
+    ShowTreeController *st = m_doc->showTree();
+    ShowTreeCommand cmd(m_doc, st);
+    R reg(m_doc, &cmd);
+    auto effectLook = [&]() -> ShowTree::Look {
+        const ShowTree::Cue *c = st->cue(ctx.cue);
+        for (const ShowTree::Layer &l : c->layers)
+            for (const ShowTree::Look &lk : l.looks)
+                if (ShowTree::isEffectKey(lk.key))
+                    return lk;
+        return ShowTree::Look();
+    };
+    // A new effect follows the cue's fades.
+    ShowTreeCommand::Result made = cmd.run("Towers effect Sinelon", ctx);
+    QVERIFY2(made.ok, qPrintable(made.message));
+    QCOMPARE(effectLook().fadeIn, int(ShowTree::Look::FadeFollowCue));
+
+    // Own times: one undo step; the effect is kept.
+    const QString undoBefore = st->sharedUndoText();
+    R::Result r = reg.run("set_effect_fade", QJsonObject { { "effect", "Sinelon" }, { "targets", QJsonArray { "Towers" } },
+                                                           { "fade_in", 2 }, { "fade_out", 0.5 } }, ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    QCOMPARE(effectLook().fadeIn, 2000);
+    QCOMPARE(effectLook().fadeOut, 500);
+    QVERIFY(st->undoShared());
+    QCOMPARE(effectLook().fadeIn, int(ShowTree::Look::FadeFollowCue));
+    QCOMPARE(st->sharedUndoText(), undoBefore);
+    QVERIFY(st->redoShared());
+    QCOMPARE(effectLook().fadeIn, 2000);
+
+    // One side alone leaves the other.
+    r = reg.run("set_effect_fade", QJsonObject { { "effect", "Sinelon" }, { "targets", QJsonArray { "Towers" } },
+                                                 { "fade_out", 1 } }, ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    QCOMPARE(effectLook().fadeIn, 2000);
+    QCOMPARE(effectLook().fadeOut, 1000);
+
+    // At once, then the cue's again.
+    r = reg.run("set_effect_fade", QJsonObject { { "effect", "Sinelon" }, { "targets", QJsonArray { "Towers" } },
+                                                 { "with", "atonce" } }, ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    QCOMPARE(effectLook().fadeIn, int(ShowTree::Look::FadeSnap));
+    QCOMPARE(effectLook().fadeOut, int(ShowTree::Look::FadeSnap));
+    r = reg.run("set_effect_fade", QJsonObject { { "effect", "Sinelon" }, { "targets", QJsonArray { "Towers" } },
+                                                 { "with", "cue" } }, ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    QCOMPARE(effectLook().fadeOut, int(ShowTree::Look::FadeFollowCue));
+
+    // Typed, after the effect and its own looks; fades alone keep the colour.
+    QVERIFY(cmd.run("Towers effect Sinelon colour Red fade 3", ctx).ok);
+    QCOMPARE(effectLook().fadeIn, 3000);
+    QCOMPARE(effectLook().fadeOut, 3000);
+    const int ownBefore = effectLook().own.count();
+    QVERIFY(cmd.run("Towers effect Sinelon fade in 1 out 4", ctx).ok);
+    QCOMPARE(effectLook().own.count(), ownBefore);
+    QCOMPARE(effectLook().fadeIn, 1000);
+    QCOMPARE(effectLook().fadeOut, 4000);
+
+    // The whole cue.
+    r = reg.run("set_effect_fade", QJsonObject { { "effect", "Big Sine" }, { "fade_in", 1.5 } }, ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    bool found = false;
+    for (const ShowTree::Look &lk : st->cue(ctx.cue)->looks)
+        if (ShowTree::isEffectKey(lk.key))
+        {
+            found = true;
+            QCOMPARE(lk.fadeIn, 1500);
+        }
+    QVERIFY(found);
+
+    // Tab offers fade after an effect, and reads its words.
+    QStringList cands;
+    QVERIFY(cmd.candidates("Towers effect Sinelon ", ctx, &cands));
+    QVERIFY(cands.contains("fade"));
+    QVERIFY(cmd.candidates("Towers effect Sinelon fade ", ctx, &cands));
+    QVERIFY(cands.contains("atonce"));
+    QVERIFY(cmd.candidates("Towers effect Sinelon fade in 2 out 1 ", ctx, &cands));
+
+    // 'with' or times, one of them.
+    QVERIFY(reg.check("set_effect_fade", QJsonObject { { "effect", "Sinelon" } }).contains("either"));
+    QVERIFY(reg.check("set_effect_fade", QJsonObject { { "effect", "Sinelon" }, { "with", "cue" }, { "fade_in", 1 } })
+                .contains("either"));
+
+    // Words that don't fit: refused, nothing changed.
+    QVERIFY(!cmd.run("Towers effect Sinelon fade", ctx).ok);
+    QVERIFY(!cmd.run("Towers effect Sinelon fade in x", ctx).ok);
+    QVERIFY(!cmd.run("Towers colour Red fade 2", ctx).ok);
+
+    // Design only.
+    m_doc->setMode(Doc::Operate);
+    const QByteArray operateBefore = treeXml();
+    r = reg.runPlan({ { "set_effect_fade", QJsonObject { { "effect", "Sinelon" }, { "with", "cue" } } } }, ctx, "t");
+    QVERIFY(!r.ok);
+    QCOMPARE(treeXml(), operateBefore);
+    m_doc->setMode(Doc::Design);
 }
 
 void OperationRegistry_Test::planIsOneUndoStep()

@@ -896,6 +896,13 @@ effect's row, **⋯ → Fade in / out** chooses:
 - **Own times…**: its own fade in and fade out, in seconds, in the strip
   at the bottom of the Show Tree.
 
+From the command line, `fade` goes right after the effect (or after its
+own colour or dimmer): `Steps effect Sinelon fade 2` (in and out),
+`Steps effect Sinelon fade in 2 out 0.5`, `fade cue` (with the cue's
+fades) or `fade atonce`. On an effect already there, `effect Sinelon fade
+2` changes only its fades and keeps its own looks. It is one undo step,
+Design mode only, and AI Assist can propose it.
+
 If an effect is let go while it is still fading in, it fades out from
 the point it had reached. Effect fades are saved with the show. A show
 saved before effect fades opens with its effects set to **At once**, so

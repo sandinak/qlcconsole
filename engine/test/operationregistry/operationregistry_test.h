@@ -59,6 +59,7 @@ private slots:
     void schemaRejectsBadArguments_data();
     void schemaRejectsBadArguments();
     void changeRunsItsGrammarLine();
+    void effectFadesByWords();
     void planIsOneUndoStep();
     void planFailingPartWayChangesNothing();
     void planRefusals();

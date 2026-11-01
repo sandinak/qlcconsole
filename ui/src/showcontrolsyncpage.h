@@ -151,6 +151,7 @@ private:
     QCheckBox *m_webNetworkCheck;
     QCheckBox *m_webLoginCheck;
     QLabel *m_webWhere;
+    QLabel *m_webQr;
     QLabel *m_webStatus;
 
     // The Control Map's bindings

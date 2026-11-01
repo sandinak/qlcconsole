@@ -29,6 +29,8 @@
 #include <QLabel>
 #include <QRegularExpression>
 #include <QSettings>
+#include <QNetworkInterface>
+#include <QCryptographicHash>
 #include <QtTest>
 
 #define private public
@@ -42,6 +44,7 @@
 #include "functionparent.h"
 #include "showcontrol.h"
 #include "showwebaccess.h"
+#include "qrencoder.h"
 #include "chaserstep.h"
 #include "chaser.h"
 #include "scene.h"
@@ -627,6 +630,255 @@ void ShowControlUi_Test::theWebAccessBoxEditsTheShow()
 }
 
 QTEST_MAIN(ShowControlUi_Test)
+
+/* A QR code reader, test-side and written apart from the encoder's tables
+   where it can be: format information from the standard's list (error
+   correction M), the function patterns by their rules, the zigzag read, the
+   Reed-Solomon check (every block must divide evenly), then the byte-mode
+   payload. Returns the text, or a null string with @a why. */
+static QString decodeQr(const QVector<quint8> &m, int n, QString *why)
+{
+    static const int formatM[8] = { 0x5412, 0x5125, 0x5E7C, 0x5B4B, 0x45F9, 0x40CE, 0x4F97, 0x4AA0 };
+    const int ver = (n - 17) / 4;
+    auto at = [&](int x, int y) { return int(m[y * n + x]); };
+    int bits1 = 0, bits2 = 0;
+    // Copy one: round the top-left finder; copy two: split over the other two.
+    const int c1[15][2] = { { 8, 0 }, { 8, 1 }, { 8, 2 }, { 8, 3 }, { 8, 4 }, { 8, 5 }, { 8, 7 }, { 8, 8 },
+                            { 7, 8 }, { 5, 8 }, { 4, 8 }, { 3, 8 }, { 2, 8 }, { 1, 8 }, { 0, 8 } };
+    for (int i = 0; i < 15; ++i)
+        bits1 |= at(c1[i][0], c1[i][1]) << i;
+    for (int i = 0; i < 8; ++i)
+        bits2 |= at(n - 1 - i, 8) << i;
+    for (int i = 8; i < 15; ++i)
+        bits2 |= at(8, n - 15 + i) << i;
+    int mask = -1;
+    for (int k = 0; k < 8; ++k)
+        if (formatM[k] == bits1 && formatM[k] == bits2)
+            mask = k;
+    if (mask < 0)
+    {
+        *why = QStringLiteral("format information %1 / %2 is not level M").arg(bits1, 0, 16).arg(bits2, 0, 16);
+        return QString();
+    }
+    if (at(8, n - 8) != 1)
+    {
+        *why = QStringLiteral("no dark module");
+        return QString();
+    }
+
+    static const int align[11][4] = { { 0 }, { 0 }, { 6, 18, 0 }, { 6, 22, 0 }, { 6, 26, 0 }, { 6, 30, 0 },
+                                      { 6, 34, 0 }, { 6, 22, 38, 0 }, { 6, 24, 42, 0 }, { 6, 26, 46, 0 },
+                                      { 6, 28, 50, 0 } };
+    auto fixed = [&](int x, int y) {
+        if ((x < 9 && y < 9) || (x >= n - 8 && y < 9) || (x < 9 && y >= n - 8))
+            return true;
+        if (x == 6 || y == 6)
+            return true;
+        if (ver >= 7 && ((x < 6 && y >= n - 11) || (y < 6 && x >= n - 11)))
+            return true;
+        int cnt = 0;
+        while (align[ver][cnt] != 0)
+            ++cnt;
+        for (int i = 0; i < cnt; ++i)
+            for (int j = 0; j < cnt; ++j)
+            {
+                if ((i == 0 && j == 0) || (i == 0 && j == cnt - 1) || (i == cnt - 1 && j == 0))
+                    continue;
+                if (qAbs(x - align[ver][i]) <= 2 && qAbs(y - align[ver][j]) <= 2)
+                    return true;
+            }
+        return false;
+    };
+    auto masked = [&](int x, int y) {
+        switch (mask)
+        {
+            case 0: return (x + y) % 2 == 0;
+            case 1: return y % 2 == 0;
+            case 2: return x % 3 == 0;
+            case 3: return (x + y) % 3 == 0;
+            case 4: return (x / 3 + y / 2) % 2 == 0;
+            case 5: return x * y % 2 + x * y % 3 == 0;
+            case 6: return (x * y % 2 + x * y % 3) % 2 == 0;
+            default: return ((x + y) % 2 + x * y % 3) % 2 == 0;
+        }
+    };
+    QByteArray words;
+    int acc = 0, nbits = 0;
+    for (int right = n - 1; right >= 1; right -= 2)
+    {
+        if (right == 6)
+            right = 5;
+        const bool up = ((right + 1) & 2) == 0;
+        for (int v = 0; v < n; ++v)
+            for (int j = 0; j < 2; ++j)
+            {
+                const int x = right - j, y = up ? n - 1 - v : v;
+                if (fixed(x, y))
+                    continue;
+                acc = (acc << 1) | (at(x, y) ^ (masked(x, y) ? 1 : 0));
+                if (++nbits == 8)
+                {
+                    words.append(char(acc));
+                    acc = nbits = 0;
+                }
+            }
+    }
+    // Level M: blocks and error correction words by version (standard's table).
+    static const int eccLen[11] = { 0, 10, 16, 26, 18, 24, 16, 18, 22, 22, 26 };
+    static const int nBlocks[11] = { 0, 1, 1, 1, 2, 2, 4, 4, 4, 5, 5 };
+    const int total = words.size();
+    const int blocks = nBlocks[ver], ecc = eccLen[ver];
+    const int shortBlocks = blocks - total % blocks, shortLen = total / blocks;
+    QVector<QByteArray> block(blocks);
+    int pos = 0;
+    for (int i = 0; i < shortLen - ecc + 1; ++i)
+        for (int j = 0; j < blocks; ++j)
+            if (i < shortLen - ecc || j >= shortBlocks)
+                block[j].append(words[pos++]);
+    for (int i = 0; i < ecc; ++i)
+        for (int j = 0; j < blocks; ++j)
+            block[j].append(words[pos++]);
+    // GF(256) with 0x11D: each block's syndromes 1, a, a^2... must all be 0.
+    quint8 expT[512], logT[256] = {};
+    for (int i = 0, x = 1; i < 255; ++i)
+    {
+        expT[i] = quint8(x);
+        logT[x] = quint8(i);
+        x <<= 1;
+        if (x & 0x100)
+            x ^= 0x11D;
+    }
+    for (int i = 255; i < 512; ++i)
+        expT[i] = expT[i - 255];
+    QByteArray data;
+    for (const QByteArray &b : block)
+    {
+        for (int root = 0; root < ecc; ++root)
+        {
+            quint8 sum = 0;
+            for (char c : b)
+            {
+                sum = sum == 0 ? 0 : expT[logT[sum] + root];
+                sum ^= quint8(c);
+            }
+            if (sum != 0)
+            {
+                *why = QStringLiteral("a block does not check out");
+                return QString();
+            }
+        }
+        data.append(b.left(b.size() - ecc));
+    }
+    // Byte mode: 0100, count (8 bits; 16 from version 10), bytes.
+    QVector<bool> bits;
+    for (char c : data)
+        for (int i = 7; i >= 0; --i)
+            bits << (((quint8(c) >> i) & 1) != 0);
+    int p = 0;
+    auto take = [&](int count) {
+        int v = 0;
+        for (int i = 0; i < count; ++i)
+            v = (v << 1) | (p < bits.size() && bits[p++] ? 1 : 0);
+        return v;
+    };
+    if (take(4) != 4)
+    {
+        *why = QStringLiteral("not byte mode");
+        return QString();
+    }
+    const int count = take(ver < 10 ? 8 : 16);
+    QByteArray text;
+    for (int i = 0; i < count; ++i)
+        text.append(char(take(8)));
+    return QString::fromUtf8(text);
+}
+
+/* The phone Run page's address as a QR code: whatever the encoder makes
+   reads back (with every mask, and across the versions) as the same text. */
+void ShowControlUi_Test::theQrCodeReadsBackAsTheAddress()
+{
+    const QStringList payloads {
+        QStringLiteral("http://192.168.1.20:9999/run"),
+        QStringLiteral("http://10.0.0.7:8200/run"),
+        QStringLiteral("http://172.18.2.45:9999/run?x=") + QString(60, QLatin1Char('a')),       // a few blocks
+        QStringLiteral("http://[fe80::1ff:fe23:4567:890a]:9999/run/") + QString(150, QLatin1Char('Z')),   // version 9-10
+        QStringLiteral("caf\u00e9 \u2603"),                                                            // UTF-8 bytes
+    };
+    int lastVersion = 0;
+    for (const QString &url : payloads)
+    {
+        for (int mask = -1; mask < 8; ++mask)
+        {
+            int n = 0, ver = 0;
+            const QVector<quint8> m = QrEncoder::encode(url, &n, mask, &ver);
+            QVERIFY2(!m.isEmpty(), qPrintable(url));
+            QCOMPARE(n, ver * 4 + 17);
+            QString why;
+            const QString back = decodeQr(m, n, &why);
+            QVERIFY2(back == url, qPrintable(QStringLiteral("%1 (mask %2): %3").arg(url).arg(mask).arg(why)));
+            lastVersion = ver;
+        }
+    }
+    QVERIFY(lastVersion >= 1);
+    // Version 10 is reached, and one byte more than it holds is refused.
+    int n = 0, ver = 0;
+    QVERIFY(!QrEncoder::encode(QString(QrEncoder::MaxBytes, QLatin1Char('x')), &n, -1, &ver).isEmpty());
+    QCOMPARE(ver, 10);
+    QVERIFY(QrEncoder::encode(QString(QrEncoder::MaxBytes + 1, QLatin1Char('x')), &n).isEmpty());
+    QVERIFY(QrEncoder::encode(QString(), &n).isEmpty());
+
+    // A fixed code stays the same code (read back by Apple's CIDetector
+    // once, when written, with a longer one of version 4 and one of 10): a hash of its modules.
+    const QVector<quint8> fixedCode = QrEncoder::encode(QStringLiteral("http://192.168.1.20:9999/run"), &n);
+    QCOMPARE(n, 29);
+    QCOMPARE(QString::fromLatin1(QCryptographicHash::hash(QByteArray(reinterpret_cast<const char *>(fixedCode.constData()),
+                                                                     fixedCode.size()), QCryptographicHash::Sha1).toHex()),
+             QStringLiteral("c96a2998a7bba8f82829d9200662d8f2cd95d07f"));
+
+    const QImage img = QrEncoder::image(QStringLiteral("http://192.168.1.20:9999/run"), 3);
+    QCOMPARE(img.width(), (29 + 8) * 3);
+    QCOMPARE(qGray(img.pixel(0, 0)), 255);          // the quiet zone
+    QCOMPARE(qGray(img.pixel(4 * 3, 4 * 3)), 0);    // the finder's corner
+}
+
+/* On the Show Control page the code sits next to "Open:" and carries the
+   /run address of a network address -- only when the page is reachable from
+   the network and this computer has an address to give. */
+void ShowControlUi_Test::theWebBoxShowsTheRunPageAsAQrCode()
+{
+    ShowWebAccess *web = m_doc->webAccess();
+    ShowControlSyncPage page(m_doc);
+    QLabel *qr = page.findChild<QLabel *>("scWebQr");
+    QCheckBox *network = page.findChild<QCheckBox *>("scWebNetwork");
+    QLabel *where = page.findChild<QLabel *>("scWebWhere");
+    QVERIFY(qr && network && where);
+    QVERIFY(qr->isHidden());                         // this computer only: no use to a phone
+
+    web->setPort(8200);
+    network->setChecked(true);
+    QString address;
+    for (const QHostAddress &a : QNetworkInterface::allAddresses())
+        if (a.protocol() == QAbstractSocket::IPv4Protocol && !a.isLoopback())
+        {
+            address = a.toString();
+            break;
+        }
+    if (address.isEmpty())
+    {
+        QVERIFY(qr->isHidden());
+        QSKIP("No network address on this computer");
+    }
+    const QString url = QStringLiteral("http://%1:8200/run").arg(address);
+    QVERIFY(!qr->isHidden());
+    QCOMPARE(qr->property("qrUrl").toString(), url);
+    QVERIFY(qr->toolTip().contains(url));
+    QVERIFY(!qr->pixmap().isNull());
+    // The picture is the code of that address.
+    QCOMPARE(qr->pixmap().toImage().convertToFormat(QImage::Format_RGB32),
+             QrEncoder::image(url, 4).convertToFormat(QImage::Format_RGB32));
+    network->setChecked(false);
+    QVERIFY(qr->isHidden());
+}
 
 /* QLab out is the show's own setting: the boxes edit it, it marks the show
    changed, and a page opened on a show that has it shows it. */
