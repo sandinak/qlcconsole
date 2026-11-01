@@ -323,7 +323,7 @@ if [ -n "$LXPID" ]; then
         LXRC=0
     elif [ "$LXRC" -ne 0 ]; then
         LXTAIL="$LXTAIL
-Linux leg did not pass: the gate fails ($([ "$LXRC" = 99 ] && echo "unreachable; ALLOW_SKIP=1 accepts that"))."
+Linux leg did not pass: the gate fails.$([ "$LXRC" = 99 ] && echo " (Host unreachable: ALLOW_SKIP=1 accepts that.)")"
     fi
     if [ "$LXRC" -ne 0 ] && [ "$RC" -eq 0 ]; then
         RC=1

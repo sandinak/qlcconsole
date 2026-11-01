@@ -426,8 +426,8 @@ void Scenery_Test::flyingTakesItUpAndOut()
 static QLCFixtureDef *curtainDef()
 {
     QLCFixtureDef *def = new QLCFixtureDef();
-    const QString path = QFileInfo(QStringLiteral(__FILE__)).dir().absoluteFilePath(
-        QStringLiteral("../../../resources/fixtures/Generic/Generic-Stage-Curtain.qxf"));
+    // Not __FILE__: Ninja compiles with a relative one (Linux CI), and the test runs elsewhere.
+    const QString path = QStringLiteral(QLC_TEST_RESOURCE_ROOT "fixtures/Generic/Generic-Stage-Curtain.qxf");
     if (def->loadXML(path) != QFile::NoError)
     {
         delete def;
