@@ -21,6 +21,7 @@
 #include <QNetworkInterface>
 #include <QUdpSocket>
 
+#include "../../../engine/test/common/stdprelude.h"
 #define private public
 #include "e131_test.h"
 #include "e131controller.h"

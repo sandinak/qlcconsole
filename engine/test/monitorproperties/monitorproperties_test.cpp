@@ -26,6 +26,7 @@
 #include <QBuffer>
 #include <atomic>
 #include <thread>
+#include "../common/stdprelude.h"
 #define private public
 #include "monitorproperties.h"
 #include "righeads.h"

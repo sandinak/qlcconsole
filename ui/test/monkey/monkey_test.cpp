@@ -34,6 +34,7 @@
 #include <QTemporaryDir>
 
 #include "monkey_test.h"
+#include "../../../engine/test/common/stdprelude.h"
 #define protected public
 #define private public
 #include "app.h"

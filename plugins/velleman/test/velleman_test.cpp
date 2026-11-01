@@ -19,6 +19,7 @@
 
 #include <QtTest>
 
+#include "../../../engine/test/common/stdprelude.h"
 #define private public
 #include "velleman_test.h"
 #include "velleman.h"

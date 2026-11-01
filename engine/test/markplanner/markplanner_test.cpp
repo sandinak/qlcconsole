@@ -15,6 +15,7 @@
 // MasterTimer::timerTick() is private (only MasterTimerPrivate is a friend) --
 // the same trick chaser_test.cpp uses to drive it synchronously in tests
 // instead of waiting on the real ticking thread.
+#include "../common/stdprelude.h"
 #define protected public
 #define private public
 #include "mastertimer.h"

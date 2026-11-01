@@ -27,6 +27,7 @@
 #include <future>
 #include <chrono>
 
+#include "../../../engine/test/common/stdprelude.h"
 #define private public
 #include "artnet_test.h"
 #include "artnetpacketizer.h"

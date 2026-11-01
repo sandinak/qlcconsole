@@ -23,6 +23,7 @@
 #include <QBuffer>
 #include <QDir>
 
+#include "../common/stdprelude.h"
 #define protected public
 #define private public
 #include "channelsgroup_test.h"

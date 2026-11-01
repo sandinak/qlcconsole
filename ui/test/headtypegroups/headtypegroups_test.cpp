@@ -26,6 +26,7 @@
 #include <QSpinBox>
 #include <QFormLayout>
 
+#include "../../../engine/test/common/stdprelude.h"
 #define protected public
 #define private public
 #include "creategroupsdialog.h"

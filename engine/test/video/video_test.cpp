@@ -24,6 +24,7 @@
 #include <QVector3D>
 #include <QRect>
 
+#include "../common/stdprelude.h"
 #define protected public
 #define private public
 #include "mastertimer_stub.h"

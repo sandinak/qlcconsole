@@ -22,6 +22,7 @@
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
 
+#include "../common/stdprelude.h"
 #define private public
 #include "rgbalgorithm_test.h"
 #include "rgbscriptscache.h"

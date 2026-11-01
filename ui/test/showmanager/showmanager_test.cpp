@@ -11,6 +11,7 @@
 
 #include <QtTest>
 
+#include "../../../engine/test/common/stdprelude.h"
 #define private public
 #define protected public
 #include "showmanager.h"

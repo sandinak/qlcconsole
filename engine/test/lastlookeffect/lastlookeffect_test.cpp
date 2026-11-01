@@ -19,6 +19,7 @@
 #include <thread>
 #include <atomic>
 
+#include "../common/stdprelude.h"
 #define private public                  // MasterTimer::timerTick()
 #include "lastlookeffect_test.h"
 #define protected public                // Universe::processFaders()

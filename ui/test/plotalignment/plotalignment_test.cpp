@@ -32,6 +32,7 @@
 #include <QtMath>
 #include <functional>
 
+#include "../../../engine/test/common/stdprelude.h"
 #define protected public
 #define private public
 #include "monitor.h"

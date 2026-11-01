@@ -41,6 +41,12 @@
 #include <QScrollArea>
 #include <QLabel>
 
+#include <QRegularExpression>
+#include <QDateTime>
+#include <QTemporaryDir>
+#include <QPushButton>
+#include <QTreeWidget>
+#include "../../../engine/test/common/stdprelude.h"
 #define protected public
 #define private public
 #include "fadetimespin.h"
@@ -61,12 +67,7 @@
 #include "apputil.h"
 #include "showstatus.h"
 #include "qlcfixturedefcache.h"
-#include <QRegularExpression>
-#include <QDateTime>
-#include <QTemporaryDir>
 #include "showstatusdialog.h"
-#include <QPushButton>
-#include <QTreeWidget>
 #include "doc.h"
 #include "paletteops.h"
 #include "showtreecontroller.h"

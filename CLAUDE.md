@@ -52,7 +52,7 @@ Tests never touch the real screen: every test.sh and every test program
 (`engine/test/common/testguard.cpp`, linked into each by the top-level
 CMakeLists) force `QT_QPA_PLATFORM=offscreen`, and on macOS a crashing test
 exits with no "quit unexpectedly" dialog; `platforms/linux/check-test-guard.sh`
-fails the gate on a test without the guard. Opt out only on purpose:
+fails the gate on a test without the guard. `platforms/linux/check-private-public.sh` fails it on a test whose `#define private public` sits in front of a standard/Qt header or a project header that first pulls in a standard one (libstdc++ rejects that; it broke Windows CI): include `engine/test/common/stdprelude.h` above the define, or use a `friend`. Opt out only on purpose:
 `QLC_TEST_REAL_SCREEN=1` (+ `QT_QPA_PLATFORM=cocoa`); `QLC_TEST_CRASH_REPORTS=1`
 keeps crash reports.
 

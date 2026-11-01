@@ -19,6 +19,7 @@
 
 #include <QtTest>
 
+#include "../common/stdprelude.h"
 #define private public
 #include "rgbscript_test.h"
 #include "rgbscriptscache.h"

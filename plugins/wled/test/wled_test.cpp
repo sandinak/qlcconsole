@@ -21,6 +21,7 @@
 #include <QNetworkAccessManager>
 
 #include "wled_test.h"
+#include "../../../engine/test/common/stdprelude.h"
 #define private public
 #include "wledplugin.h"
 #undef private

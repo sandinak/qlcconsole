@@ -18,6 +18,7 @@
 #include <QSignalSpy>
 #include <QtTest>
 
+#include "../common/stdprelude.h"
 #define private public
 #define protected public
 

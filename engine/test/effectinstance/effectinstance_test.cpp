@@ -24,6 +24,7 @@
 #endif
 
 #include "effectinstance_test.h"
+#include "../common/stdprelude.h"
 #define private public                  // MasterTimer::timerTick(), and the instance's insides
 #define protected public                // Universe::processFaders()
 #include "doc.h"

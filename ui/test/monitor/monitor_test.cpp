@@ -56,11 +56,17 @@
 #include "showtreecontroller.h"
 #include "fixturegroup.h"
 
+#include <QFormLayout>
+#include <QActionGroup>
+#include <QTableWidget>
+#include <QHeaderView>
+#include <QTreeWidgetItemIterator>
+#include <QtMath>
+#include "../../../engine/test/common/stdprelude.h"
 #define protected public
 #define private public
 #include "monitor.h"
 #include "fixturefields.h"
-#include <QFormLayout>
 #include "righeads.h"
 #include "colourswatchbutton.h"
 #include "headtypesdialog.h"
@@ -95,9 +101,6 @@
 #include "universe.h"
 #include "genericfader.h"
 #include "fadechannel.h"
-#include <QActionGroup>
-#include <QTableWidget>
-#include <QHeaderView>
 #include "hanger.h"
 #include "beamoptics.h"
 #include "gobolibrary.h"
@@ -116,12 +119,10 @@
 #include "stagepiecedialog.h"
 #include "shrinkablebar.h"
 #include "studiotemplate.h"
-#include <QTreeWidgetItemIterator>
 #include "fixturevisualtraits.h"
 #include "aimsolver.h"
 #include "scene.h"
 #include "zraster.h"
-#include <QtMath>
 #include "trussitem.h"
 #include "powerdistribution.h"
 #include "targetitem.h"

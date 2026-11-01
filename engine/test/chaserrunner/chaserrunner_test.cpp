@@ -20,6 +20,7 @@
 #include <QtTest>
 #include <QMap>
 
+#include "../common/stdprelude.h"
 #define private public
 #define protected public
 #include "chaserrunner_test.h"

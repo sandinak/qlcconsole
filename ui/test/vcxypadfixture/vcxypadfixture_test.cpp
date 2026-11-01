@@ -22,6 +22,7 @@
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
 
+#include "../../../engine/test/common/stdprelude.h"
 #define private public
 #include "vcxypadfixture.h"
 #undef private

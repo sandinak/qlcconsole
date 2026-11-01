@@ -24,6 +24,7 @@
 
 #include "universe_test.h"
 
+#include "../common/stdprelude.h"
 #define protected public
 #include "universe.h"
 #undef protected

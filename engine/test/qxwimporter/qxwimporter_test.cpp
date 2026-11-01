@@ -7,6 +7,7 @@
 
 #include <QtTest>
 
+#include "../common/stdprelude.h"
 #define protected public
 #define private public
 #include "doc.h"
