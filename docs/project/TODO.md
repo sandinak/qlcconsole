@@ -88,12 +88,14 @@ Built: the controller's **Run** role (`PadRun`, engine/src/padrun.*; the
 Run tab's **Pad: Tools / Run / ARMED** button; docs/features/show-control.md
 "GO from the game controller"). Every command goes through
 `ShowControl::run(r, RoutePad)`. Open:
-- The full role (STRATEGY ROI row): a Hits page on the pad (fire the
-  production's hits), and the focus confirm.
+- ~~A Hits page on the pad~~ and ~~a pad chord to switch roles~~: built
+  (feat/05-pad-hits): LB + RB fires the armed hit (narrowest place wins,
+  through `armedTier()`, started like a VC button, Operate only, name
+  spoken); hold View + Menu 1 s switches Tools / Run (a short press in
+  Tools is Focus mode, on release; a third button cancels). decided: RB is
+  the hit button, several at one place take turns (can change). Open: the
+  focus confirm (the rest of "the full role"); not verified on a real pad.
 - Q192's walk is built (MVP, below): Menu in the Run role.
-- A pad chord to switch roles without the laptop (today: the Run tab's
-  button). decided: none yet, so a pad can't take the show by accident
-  (can change).
 - Not verified on hardware: the DualSense light bar / rumble on GO with a
   real pad (the code sends the same feedback the focus tools do).
 - decided (can change): GO needs LB held (a modifier, not a double-press);

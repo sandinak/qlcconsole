@@ -17,6 +17,10 @@
   limitations under the License.
 */
 
+#define private public                  // MasterTimer::timerTick()
+#include "mastertimer.h"
+#undef private
+
 #include <QtTest>
 #include <QSignalSpy>
 #include <QTemporaryDir>
@@ -1172,3 +1176,253 @@ void PadRun_Test::theLightItselfGoesIntoTheVenue()
 }
 
 QTEST_MAIN(PadRun_Test)
+
+quint32 PadRun_Test::hitWithLayer(ShowTree::HitScope scope, quint32 placeId, const QString &name)
+{
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 hit = st->addHit(scope, placeId, name);
+    const quint32 layer = st->addLayer(hit, m_frontTarget, "Fronts");
+    if (!st->setLayerLook(hit, layer, lookOf(ShowTree::KeyDimmer, m_doc->palettes().first()->id())))
+        return ShowTree::invalidId();
+    return hit;
+}
+
+PadRun *PadRun_Test::runPad(bool armed)
+{
+    IOPluginStub *stub = loadStub();
+    if (stub == nullptr || !m_doc->inputOutputMap()->setInputPatch(0, stub->name(), QString(), 0))
+        return nullptr;
+    PadRun *run = m_doc->programmer()->padRun();
+    run->setEnabled(true);
+    m_doc->setMode(Doc::Operate);
+    if (armed)
+        hold(kLB, true);
+    return run;
+}
+
+void PadRun_Test::rbFiresTheArmedHit()
+{
+    makeShow();
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->productions().first().id;
+    const quint32 breathe = hitWithLayer(ShowTree::HitScope::Production, prod, "Breathe");
+    PadRun *run = runPad(true);
+    QVERIFY2(run != nullptr, "no I/O plugin stub in ../iopluginstub");
+    ProgrammerController *pc = m_doc->programmer();
+    QSignalSpy fired(run, &PadRun::hitFired);
+    QSignalSpy said(pc, &ProgrammerController::operatorAnnounce);
+
+    QCOMPARE(run->armedHits(), QList<quint32>({ breathe }));
+    press(kRB);
+    QCOMPARE(fired.count(), 1);
+    QCOMPARE(fired.at(0).at(0).toUInt(), breathe);
+    QVERIFY(fired.at(0).at(1).toBool());
+    QVERIFY(said.last().at(0).toString().contains("Breathe"));
+    // Not a run command: the GO path saw nothing.
+    QVERIFY(m_runs.isEmpty());
+    Function *f = m_doc->function(st->lookFunction(breathe));
+    QVERIFY(f != nullptr);
+    m_doc->masterTimer()->timerTick();
+    QVERIFY(f->isRunning());
+
+    // Again: it is let go (and said).
+    press(kRB);
+    QCOMPARE(fired.count(), 2);
+    QVERIFY(!fired.at(1).at(1).toBool());
+    QVERIFY(said.last().at(0).toString().contains("Breathe off"));
+    m_doc->masterTimer()->timerTick();
+    QVERIFY(!f->isRunning());
+    hold(kLB, false);
+    m_doc->setMode(Doc::Design);
+}
+
+void PadRun_Test::noHitWithoutArmOrAnArmedHit()
+{
+    makeShow();
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->productions().first().id;
+    // A hit on a cue that is not running is not armed.
+    const quint32 onCue = st->addHit(ShowTree::HitScope::Cue, m_cue1, "Strobe");
+    PadRun *run = runPad(false);
+    QVERIFY2(run != nullptr, "no I/O plugin stub in ../iopluginstub");
+    ProgrammerController *pc = m_doc->programmer();
+    QSignalSpy fired(run, &PadRun::hitFired);
+    QSignalSpy refused(run, &PadRun::refused);
+    QSignalSpy said(pc, &ProgrammerController::operatorAnnounce);
+    QVERIFY(run->armedHits().isEmpty());
+
+    // No LB: refused, said, nothing starts.
+    press(kRB);
+    QCOMPARE(refused.count(), 1);
+    QCOMPARE(refused.at(0).at(0).value<PadRun::Action>(), PadRun::FireHit);
+    QVERIFY(said.last().at(0).toString().contains("LB"));
+    QCOMPARE(fired.count(), 0);
+
+    // LB held, no hit armed: said.
+    hold(kLB, true);
+    press(kRB);
+    QCOMPARE(fired.count(), 0);
+    QVERIFY(said.last().at(0).toString().contains("No hit armed"));
+
+    // An armed hit in Design: not fired either (as a VC button).
+    const quint32 wash = hitWithLayer(ShowTree::HitScope::Production, prod, "Wash");
+    m_doc->setMode(Doc::Design);
+    press(kRB);
+    QCOMPARE(fired.count(), 0);
+    QVERIFY(said.last().at(0).toString().contains("Operate"));
+    QVERIFY(!m_doc->function(st->lookFunction(wash))->isRunning());
+    QVERIFY(!m_doc->function(st->lookFunction(onCue))->isRunning());
+
+    // Let go of the arm in Operate: nothing again.
+    m_doc->setMode(Doc::Operate);
+    hold(kLB, false);
+    press(kRB);
+    QCOMPARE(fired.count(), 0);
+    hold(kLB, true);
+    press(kRB);
+    QCOMPARE(fired.count(), 1);
+    QCOMPARE(fired.at(0).at(0).toUInt(), wash);
+    hold(kLB, false);
+    m_doc->setMode(Doc::Design);
+}
+
+void PadRun_Test::theNarrowestArmedHitWins()
+{
+    makeShow();
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->productions().first().id;
+    const quint32 everywhere = hitWithLayer(ShowTree::HitScope::Global, ShowTree::invalidId(), "Blackout");
+    const quint32 onProd = hitWithLayer(ShowTree::HitScope::Production, prod, "Wash");
+    const quint32 onList = hitWithLayer(ShowTree::HitScope::List, m_list, "Red");
+    const quint32 onList2 = hitWithLayer(ShowTree::HitScope::List, m_list, "Blue");
+    const quint32 onCue = st->addHit(ShowTree::HitScope::Cue, m_cue1, "Strobe");
+    PadRun *run = runPad(true);
+    QVERIFY2(run != nullptr, "no I/O plugin stub in ../iopluginstub");
+    QSignalSpy fired(run, &PadRun::hitFired);
+
+    // The cue is not running: the list's two are the narrowest armed.
+    QCOMPARE(run->armedHits(), QList<quint32>({ onList, onList2 }));
+    // Two at one place take turns: Red, then (Red let go first) Blue.
+    press(kRB);
+    QCOMPARE(fired.last().at(0).toUInt(), onList);
+    m_doc->masterTimer()->timerTick();
+    press(kRB);                                  // lets Red go
+    QVERIFY(!fired.last().at(1).toBool());
+    m_doc->masterTimer()->timerTick();
+    press(kRB);
+    QCOMPARE(fired.last().at(0).toUInt(), onList2);
+    m_doc->masterTimer()->timerTick();
+    press(kRB);
+    QVERIFY(!fired.last().at(1).toBool());
+    QVERIFY(onCue != 0 && everywhere != 0 && onProd != 0);
+
+    // Only wider ones: the production's beats everywhere.
+    QVERIFY(st->setHitScope({ onList, onList2 }, ShowTree::HitScope::Production, prod));
+    QCOMPARE(run->armedHits().size(), 3);
+    QVERIFY(!run->armedHits().contains(everywhere));
+    QVERIFY(st->setHitScope({ onList, onList2, onProd }, ShowTree::HitScope::Global, ShowTree::invalidId()));
+    QCOMPARE(run->armedHits().size(), 4);
+    hold(kLB, false);
+    m_doc->setMode(Doc::Design);
+}
+
+void PadRun_Test::theRoleChordSwitches()
+{
+    IOPluginStub *stub = loadStub();
+    QVERIFY2(stub != nullptr, "no I/O plugin stub in ../iopluginstub");
+    QVERIFY(m_doc->inputOutputMap()->setInputPatch(0, stub->name(), QString(), 0));
+    ProgrammerController *pc = m_doc->programmer();
+    PadRun *run = pc->padRun();
+    run->setRoleChordMs(60);
+    pc->autoBindFromProfile();
+    QSignalSpy changed(run, &PadRun::enabledChanged);
+    QSignalSpy said(pc, &ProgrammerController::operatorAnnounce);
+    QSignalSpy focusAsked(pc, &ProgrammerController::focusModeRequested);
+    QVERIFY(!run->isEnabled());
+
+    // Tools to Run: held, the role switches and says so; nothing else fires.
+    hold(kView, true);
+    hold(kMenu, true);
+    QVERIFY(run->isRoleChordPending());
+    QVERIFY(!run->isEnabled());
+    QTRY_VERIFY(run->isEnabled());
+    QCOMPARE(changed.count(), 1);
+    QVERIFY(said.last().at(0).toString().contains("Run role"));
+    hold(kMenu, false);
+    hold(kView, false);
+    QCOMPARE(focusAsked.count(), 0);
+    QVERIFY(!run->isWalking());
+    QVERIFY(m_runs.isEmpty());
+
+    // Run to Tools, the other order.
+    hold(kMenu, true);
+    hold(kView, true);
+    QTRY_VERIFY(!run->isEnabled());
+    QVERIFY(said.last().at(0).toString().contains("Tools"));
+    hold(kView, false);
+    hold(kMenu, false);
+    QCOMPARE(changed.count(), 2);
+    QCOMPARE(focusAsked.count(), 0);
+
+    // The Run tab's button follows enabledChanged (the same signal).
+    run->setEnabled(false);
+}
+
+void PadRun_Test::theRoleChordResistsAccidents()
+{
+    IOPluginStub *stub = loadStub();
+    QVERIFY2(stub != nullptr, "no I/O plugin stub in ../iopluginstub");
+    QVERIFY(m_doc->inputOutputMap()->setInputPatch(0, stub->name(), QString(), 0));
+    ProgrammerController *pc = m_doc->programmer();
+    PadRun *run = pc->padRun();
+    run->setRoleChordMs(80);
+    pc->autoBindFromProfile();
+    QSignalSpy changed(run, &PadRun::enabledChanged);
+    QSignalSpy focusAsked(pc, &ProgrammerController::focusModeRequested);
+
+    // A brush: both down, up before the time. No switch; in Tools the
+    // short press is Focus mode, on its release, once.
+    hold(kView, true);
+    hold(kMenu, true);
+    hold(kMenu, false);
+    hold(kView, false);
+    QCOMPARE(focusAsked.count(), 1);
+    QTest::qWait(200);
+    QVERIFY(!run->isEnabled());
+    QCOMPARE(changed.count(), 0);
+
+    // A third button in the hold cancels it.
+    hold(kView, true);
+    hold(kMenu, true);
+    hold(kA, true);
+    QVERIFY(!run->isRoleChordPending());
+    QTest::qWait(200);
+    QVERIFY(!run->isEnabled());
+    hold(kA, false);
+    hold(kMenu, false);
+    hold(kView, false);
+    QCOMPARE(focusAsked.count(), 1);        // a cancelled chord is not Focus mode
+
+    // One alone, held long: nothing.
+    hold(kView, true);
+    QTest::qWait(200);
+    hold(kView, false);
+    hold(kMenu, true);
+    QTest::qWait(200);
+    hold(kMenu, false);
+    QVERIFY(!run->isEnabled());
+    QCOMPARE(changed.count(), 0);
+
+    // In the Run role a brush does nothing at all: no walk, no Focus mode.
+    run->setEnabled(true);
+    m_doc->setMode(Doc::Design);
+    hold(kView, true);
+    hold(kMenu, true);
+    hold(kMenu, false);
+    hold(kView, false);
+    QTest::qWait(150);
+    QVERIFY(run->isEnabled());
+    QVERIFY(!run->isWalking());
+    QCOMPARE(focusAsked.count(), 1);
+    run->setEnabled(false);
+}

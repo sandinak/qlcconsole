@@ -1135,9 +1135,11 @@ void CueRunner::refreshPadRun()
     m_padRunBtn->setToolTip(
         tr("<p><b>The game controller's role.</b> Tools: Focus mode, Venue focus, Refine and the "
            "follow spot, as before. Run: the controller runs the show &mdash; nothing moves it "
-           "unless %1 is held. Click to switch.</p><p>%2</p>")
+           "unless %1 is held. Click to switch, or hold %3 + %4 on the controller for a second.</p>"
+           "<p>%2</p>")
             .arg(pc->padText(QStringLiteral("{LB}")),
-                 PadRun::mapLines(pc->padFamily()).join(QStringLiteral("<br>")))
+                 PadRun::mapLines(pc->padFamily()).join(QStringLiteral("<br>")),
+                 pc->padText(QStringLiteral("{View}")), pc->padText(QStringLiteral("{Menu}")))
         + tr("<p><b>Walking</b> (Menu in Run):<br>%1</p>")
             .arg(PadRun::walkMapLines(pc->padFamily()).join(QStringLiteral("<br>"))));
 }

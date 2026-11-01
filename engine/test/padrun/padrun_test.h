@@ -28,6 +28,7 @@
 #include "showtreemodel.h"
 
 class IOPluginStub;
+class PadRun;
 class Doc;
 
 /* The pad's Run role (0.4): a game controller runs the show through the one
@@ -107,6 +108,21 @@ private slots:
      *  (its sidecar), not the show's calibration, and loads from it. */
     void theLightItselfGoesIntoTheVenue();
 
+    /* The Hits page (0.4 item 2 leftovers). */
+    /** LB + RB fires the armed hit and says its name; again lets it go. */
+    void rbFiresTheArmedHit();
+    /** Without LB, with no hit armed, or in Design: nothing starts. */
+    void noHitWithoutArmOrAnArmedHit();
+    /** Hits at several places: the narrowest armed place wins; several at
+     *  one place take turns. */
+    void theNarrowestArmedHitWins();
+    /** Hold View + Menu 1 s: Tools to Run and back, said, the Run tab's
+     *  button follows. */
+    void theRoleChordSwitches();
+    /** A brush of View + Menu, a third button, one of the two alone: no
+     *  switch; in Tools a short View + Menu is still Focus mode. */
+    void theRoleChordResistsAccidents();
+
 private:
     IOPluginStub *loadStub();
     /** Four spots, a list: Opening (Fronts, Backs), Blackout (no layer),
@@ -118,6 +134,10 @@ private:
      *  palette); the target's id. */
     quint32 aimFronts();
     void hold(quint32 channel, bool down, quint32 universe = 0);
+    /** A hit with one layer (so its look has something to play). */
+    quint32 hitWithLayer(ShowTree::HitScope scope, quint32 placeId, const QString &name);
+    /** A pad in the Run role, armed or not as asked; Operate. */
+    PadRun *runPad(bool armed);
 
 private:
     Doc *m_doc = nullptr;

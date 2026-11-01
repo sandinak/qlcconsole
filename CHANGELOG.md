@@ -360,6 +360,12 @@ skipped). Upstream fixes taken:
   armed and flashes blue with a short buzz on a GO. It is the same GO as
   ⌘↩, and the same buttons on an Xbox pad or a DualSense. See Show control
   ▸ GO from the game controller.
+- **Fire a hit and switch roles from the pad (0.4).** In the Run role, hold
+  LB (L1) and press RB (R1) to fire the hit that is armed now (the
+  narrowest place wins, as on a VC button); the voice says its name. Hold
+  View + Menu for a second to switch the controller between Tools and Run
+  with no laptop; a brush of the two does nothing (in Tools a short press
+  is Focus mode, on release).
 - **Walk the show from the stage (0.4).** In the pad's Run role, Menu
   walks the show: RT / LT step the cues (previewed in Design, never a GO),
   RB / LB step a cue's layers, View solos the layer or plays the whole

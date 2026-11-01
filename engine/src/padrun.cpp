@@ -18,12 +18,16 @@
 */
 
 #include <QTimer>
+#include <climits>
 
 #include "programmercontroller.h"
 #include "showtreecontroller.h"
 #include "refinesession.h"
 #include "focussession.h"
 #include "showcontrol.h"
+#include "effectscriptrunner.h"
+#include "functionparent.h"
+#include "mastertimer.h"
 #include "chaser.h"
 #include "function.h"
 #include "padrun.h"
@@ -37,6 +41,10 @@ PadRun::PadRun(Doc *doc, ProgrammerController *pc, QObject *parent)
     m_flash = new QTimer(this);
     m_flash->setSingleShot(true);
     m_flash->setInterval(wentFlashMs());
+    m_chord = new QTimer(this);
+    m_chord->setSingleShot(true);
+    m_chord->setInterval(defaultRoleChordMs());
+    connect(m_chord, &QTimer::timeout, this, &PadRun::roleChordFired);
     connect(m_flash, &QTimer::timeout, this, &PadRun::showLight);
     if (m_pc != nullptr)
     {
@@ -73,6 +81,7 @@ PadRun::Action PadRun::actionFor(GamepadRole::Role role)
         case GamepadRole::LeftTrigger:  return PreviousList;
         case GamepadRole::RS:           return WhereAmI;
         case GamepadRole::Start:        return Walk;
+        case GamepadRole::RB:           return FireHit;
         default:                        break;
     }
     return NoAction;
@@ -88,7 +97,7 @@ GamepadRole::Role PadRun::roleFor(Action action)
 
 bool PadRun::needsArm(Action action)
 {
-    return action == Go || action == Back || action == SubGo || action == Stop;
+    return action == Go || action == Back || action == SubGo || action == Stop || action == FireHit;
 }
 
 QString PadRun::label(Action action)
@@ -104,6 +113,7 @@ QString PadRun::label(Action action)
         case PreviousList: return tr("Previous cue list");
         case WhereAmI:     return tr("Say the list and what's next");
         case Walk:         return tr("Walk the show: cues, layers, adjust, tag");
+        case FireHit:      return tr("Fire the armed hit ({LB} held)");
         case NoAction:     break;
     }
     return QString();
@@ -111,7 +121,7 @@ QString PadRun::label(Action action)
 
 QList<PadRun::Action> PadRun::actions()
 {
-    return { Arm, Go, Back, SubGo, Stop, NextList, PreviousList, WhereAmI, Walk };
+    return { Arm, Go, Back, SubGo, Stop, NextList, PreviousList, WhereAmI, Walk, FireHit };
 }
 
 QStringList PadRun::mapLines(PadNames::Family family)
@@ -205,6 +215,7 @@ bool PadRun::handle(quint32 universe, GamepadRole::Role role, uchar value)
 
 void PadRun::reset()
 {
+    roleChordCancel();
     m_rt.reset();
     m_lt.reset();
     if (m_armedOn.isEmpty())
@@ -244,6 +255,8 @@ bool PadRun::trigger(Action action)
             return true;
         case Walk:
             return startWalk();
+        case FireHit:
+            return fireHit();
         case Go: case Back: case SubGo: case Stop:
             break;
         case Arm: case NoAction:
@@ -278,6 +291,134 @@ bool PadRun::trigger(Action action)
                            ControllerScheme::ConfirmPriority);
     }
     return done;
+}
+
+/*****************************************************************************
+ * Hits
+ *****************************************************************************/
+
+QList<quint32> PadRun::allHits() const
+{
+    QList<quint32> out;
+    const ShowTreeController *st = m_doc != nullptr ? m_doc->showTree() : nullptr;
+    if (st == nullptr)
+        return out;
+    for (const ShowTree::Production &p : st->productions())
+        if (const ShowTree::CueList *l = p.looks())
+            for (const ShowTree::Cue &c : l->cues)
+                out << c.id;
+    return out;
+}
+
+QList<quint32> PadRun::armedHits() const
+{
+    const ShowTreeController *st = m_doc != nullptr ? m_doc->showTree() : nullptr;
+    return st != nullptr ? st->armedTier(allHits()) : QList<quint32>();
+}
+
+bool PadRun::fireHit()
+{
+    ShowTreeController *st = m_doc != nullptr ? m_doc->showTree() : nullptr;
+    if (st == nullptr || m_pc == nullptr)
+        return false;
+    auto refuse = [this](const QString &why) {
+        m_pc->padRumble(1, ControllerScheme::rumbleLongMs());
+        m_pc->tellOperator(why, ControllerScheme::ConfirmPriority);
+        return false;
+    };
+    // Like a VC button: a hit fires in Operate only.
+    if (m_doc->mode() != Doc::Operate)
+        return refuse(tr("Hits fire in Operate."));
+    const QList<quint32> tier = armedHits();
+    if (tier.isEmpty())
+        return refuse(tr("No hit armed."));
+
+    // One running (a toggle on, or a one-shot still going): the press lets it go.
+    for (quint32 h : tier)
+    {
+        Function *f = m_doc->function(st->lookFunction(h));
+        if (f == nullptr || !f->isRunning())
+            continue;
+        EffectScriptRunner *esr = m_doc->effectScriptRunner();
+        const ShowTree::Cue *c = st->cue(h);
+        const QString name = c != nullptr ? c->name : f->name();
+        // A one-shot that has finished and is still on plays again.
+        if (esr != nullptr && esr->oneShotState(f->id()) == 1 && esr->restartOneShots(f->id()))
+        {
+            m_pc->padRumble(1, ControllerScheme::rumbleShortMs());
+            m_pc->tellOperator(tr("%1.").arg(name), ControllerScheme::ConfirmPriority);
+            emit hitFired(h, true);
+            return true;
+        }
+        f->stop(FunctionParent::master());
+        m_pc->padRumble(1, ControllerScheme::rumbleShortMs());
+        m_pc->tellOperator(tr("%1 off.").arg(name), ControllerScheme::ConfirmPriority);
+        emit hitFired(h, false);
+        return true;
+    }
+
+    // Several at the narrowest place: each press takes the next.
+    const quint32 pick = tier.at(m_hitStep % tier.count());
+    Function *f = m_doc->function(st->lookFunction(pick));
+    if (f == nullptr)
+        return refuse(tr("No hit armed."));
+    ++m_hitStep;
+    f->start(m_doc->masterTimer(), FunctionParent::master());
+    const ShowTree::Cue *c = st->cue(pick);
+    m_pc->padRumble(1, ControllerScheme::rumbleShortMs());
+    m_pc->tellOperator(tr("%1.").arg(c != nullptr ? c->name : f->name()), ControllerScheme::ConfirmPriority);
+    emit hitFired(pick, true);
+    return true;
+}
+
+/*****************************************************************************
+ * The role chord
+ *****************************************************************************/
+
+void PadRun::setRoleChordMs(int ms)
+{
+    m_chord->setInterval(ms);
+}
+
+void PadRun::roleChordBegin()
+{
+    if (m_chordPending || m_chordFired)
+        return;
+    m_chordPending = true;
+    m_chord->start();
+}
+
+void PadRun::roleChordCancel()
+{
+    m_chord->stop();
+    m_chordPending = false;
+    // A fired chord stays "fired" until its buttons are up (roleChordEnd()).
+}
+
+bool PadRun::roleChordEnd()
+{
+    const bool wasPending = m_chordPending;
+    m_chord->stop();
+    m_chordPending = false;
+    m_chordFired = false;
+    return wasPending;
+}
+
+void PadRun::roleChordFired()
+{
+    if (!m_chordPending)
+        return;
+    m_chordPending = false;
+    reset();
+    m_chordFired = true;
+    const bool on = !m_enabled;
+    setEnabled(on, false);
+    if (m_pc == nullptr)
+        return;
+    m_pc->padRumble(2, ControllerScheme::rumbleShortMs());
+    m_pc->tellOperator(on ? m_pc->padText(tr("Run role. Hold {LB} and press {A} to GO."))
+                          : tr("Tools role."),
+                       ControllerScheme::ConfirmPriority);
 }
 
 QList<quint32> PadRun::lists() const

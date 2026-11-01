@@ -74,6 +74,8 @@ ARMED**. While it's held:
 | + | X | Square | **Stop** the list |
 | — | RT / LT | R2 / L2 | next / previous cue list (no arm needed) |
 | — | RS click | R3 | say the list and what's on standby |
+| + | RB | R1 | fire the **armed hit** (below) |
+| hold 1 s | View + Menu | Create + Options | switch the role: Tools / Run |
 
 - **GO is confirmed on the pad.** A GO flashes the light bar blue and gives
   a short buzz. A long buzz means there was nothing to play, and the
@@ -91,6 +93,37 @@ ARMED**. While it's held:
   start Focus mode, and Menu alone walks the show (below). A focus-call
   cue's Start (Menu) still begins its calls.
 - The sticks stay the follow spot's in either role.
+
+### Fire a hit from the pad
+
+With the arm held, **RB (R1)** fires the hit that is armed right now. A
+[scoped hit](show-tree.md) is armed while its place is live: under a cue
+that is running, in a cue list, in the current production or everywhere.
+Where several are armed the **narrowest** wins, exactly as on a Virtual
+Console button holding them all (cue, then list, production, everywhere).
+Use it to call a one-shot, say a breathe, off a hit in a cue.
+
+- The voice says its name ("Breathe."). Press again and it lets go
+  ("Breathe off."); a one-shot that has finished plays again.
+- Two or more hits at the narrowest place take turns, one a press.
+- With no hit armed the pad says "No hit armed." and buzzes long. Without
+  LB held it says "Hold LB to arm", as for GO.
+- Hits fire in **Operate** only, as a button does. It is not a run command:
+  it starts the hit's look the way a VC button's press does.
+
+### Switch roles from the pad
+
+Hold **View + Menu** (Create + Options) for a second and the controller
+changes role: Tools to Run, or Run to Tools. The voice says which
+("Run role. Hold LB and press A to GO." / "Tools role.") and the Run tab's
+**Pad:** button follows. Neither button does anything alone, and any third
+button pressed during the hold cancels it, so a knocked pad cannot take the
+show. In Tools, View + Menu released before the second is still Focus mode,
+now on its release. Not while a tool (Focus mode, Focus this cue) has the
+pad: end it first.
+
+decided (can change): RB with LB is the hit gesture, so the Run map still
+has a free D-pad and LS; a hold of 1 s is the role chord.
 
 decided (can change): GO needs a modifier held (LB), not a double-press;
 Back, Sub GO and Stop need it too, so there is one rule.
