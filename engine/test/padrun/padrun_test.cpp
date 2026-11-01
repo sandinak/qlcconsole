@@ -17,9 +17,7 @@
   limitations under the License.
 */
 
-#define private public                  // MasterTimer::timerTick()
 #include "mastertimer.h"
-#undef private
 
 #include <QtTest>
 #include <QSignalSpy>
