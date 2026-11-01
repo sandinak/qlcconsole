@@ -83,7 +83,7 @@ void E131_Test::sustainedFailureIsReportedOnceAndRecovers()
     const QList<QPair<quint32, QString> > p = ctrl->outputProblems();
     QCOMPARE(p.count(), 1);
     QCOMPARE(p.first().first, quint32(2));
-    QVERIFY2(QRegularExpression("^E1\\.31 to 239\\.255\\.0\\.3: not reachable since \\d\\d:\\d\\d$")
+    QVERIFY2(QRegularExpression("^E1\\.31 to 239\\.255\\.0\\.3: not reachable since (\\w{3} \\d{1,2} )?\\d\\d:\\d\\d$")
                  .match(p.first().second).hasMatch(), qPrintable(p.first().second));
 
     // Working again: cleared after 30 s of good sends, not on the first
