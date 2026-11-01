@@ -60,6 +60,9 @@ private slots:
     void whyNotNothingSetsItAndNotPatched();
     void whyNotParkedAtZero();
     void whyNotAReleasedLayer();
+    void whyNotASkippedCue();
+    void whyNotSolo();
+    void whyNotAnOperateEditIsBlind();
 
 private:
     void tick(int n = 1);

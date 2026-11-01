@@ -409,6 +409,14 @@ QString releasedReason(ShowTreeController *st, quint32 fid, WhyOn::Line *l)
                 l->cueId = c.id;
                 l->layerId = ly.id;
                 const QString name = ly.name.isEmpty() ? st->targetLabel(ly.target) : ly.name;
+                // A skipped cue tracks as if it weren't in the list: its look
+                // never played, whatever it would have lit.
+                if (c.skip)
+                {
+                    l->kind = WhyOn::Kind::Skipped;
+                    return WhyOn::tr("%1, and cue %2 is skipped tonight, so its look (layer %3) never played")
+                            .arg(cue, st->cueLabel(list, i), name);
+                }
                 if (ly.release)
                     return WhyOn::tr("%1, and layer %2 was released leaving cue %3")
                             .arg(cue, name, st->cueLabel(list, i));
@@ -418,7 +426,11 @@ QString releasedReason(ShowTreeController *st, quint32 fid, WhyOn::Line *l)
         }
         return WhyOn::tr("%1, and no cue up to it lights this light").arg(cue);
     };
-    const quint32 previewed = st->previewedCue();
+    // A preview is Design's; in Operate the cue open for edit is blind.
+    const ShowTreeController::PreviewState ps = st->previewState();
+    const quint32 previewed = (ps == ShowTreeController::PreviewState::Playing
+                               || ps == ShowTreeController::PreviewState::Dark)
+                              ? st->previewedCue() : kInvalid;
     if (const ShowTree::CueList *list = previewed != kInvalid ? st->listOfCue(previewed) : nullptr)
         if (!list->looks)
         {
@@ -436,6 +448,80 @@ QString releasedReason(ShowTreeController *st, quint32 fid, WhyOn::Line *l)
                 return why;
         }
     return QString();
+}
+
+/** Solo (the Show Tree preview's, the pad walk's) plays one layer of the
+ *  previewed cue; this light is on another. Empty: not that. */
+QString soloReason(ShowTreeController *st, quint32 fid, WhyOn::Line *l)
+{
+    if (st == nullptr || st->previewSoloLayer() == kInvalid)
+        return QString();
+    const ShowTreeController::PreviewState ps = st->previewState();
+    if (ps != ShowTreeController::PreviewState::Playing && ps != ShowTreeController::PreviewState::Dark)
+        return QString();
+    const quint32 cueId = st->previewedCue();
+    const ShowTree::CueList *list = cueId != kInvalid ? st->listOfCue(cueId) : nullptr;
+    ShowTree::ResolvedCue rc;
+    if (list == nullptr || !st->resolvedCue(cueId, &rc))
+        return QString();
+    // The soloed layer and its child layers, as the preview plays them.
+    QList<ShowTree::Target> playing;
+    QString soloName;
+    for (const ShowTree::ResolvedLayer &rl : rc.layers)
+        if (rl.layerId == st->previewSoloLayer() && rl.depth == 0)
+        {
+            playing << rl.target;
+            soloName = rl.name.isEmpty() ? st->targetLabel(rl.target) : rl.name;
+        }
+    if (playing.isEmpty())
+        return QString();
+    for (bool more = true; more; )
+    {
+        more = false;
+        for (const ShowTree::ResolvedLayer &rl : rc.layers)
+            if (rl.depth > 0 && playing.contains(rl.parent) && !playing.contains(rl.target))
+            {
+                playing << rl.target;
+                more = true;
+            }
+    }
+    bool onOther = false;
+    for (const ShowTree::ResolvedLayer &rl : rc.layers)
+    {
+        if (rl.target.isOpaque() || !st->targetFixtures(rl.target).contains(fid))
+            continue;
+        if (playing.contains(rl.target))
+            return QString();       // the soloed layer has it: not Solo's doing
+        onOther = true;
+    }
+    if (!onOther)
+        return QString();
+    l->cueId = cueId;
+    l->layerId = st->previewSoloLayer();
+    return WhyOn::tr("Solo is on: only layer %1 of cue %2 plays, so this light stays dark")
+            .arg(soloName, st->cueLabel(*list, list->indexOf(cueId)));
+}
+
+/** In Operate the cue open for edit is blind: it reaches the stage only on
+ *  GO. This light is in it. Empty: not that. */
+QString blindEditReason(ShowTreeController *st, quint32 fid, WhyOn::Line *l)
+{
+    if (st == nullptr || st->previewState() != ShowTreeController::PreviewState::NotDesign)
+        return QString();
+    const quint32 cueId = st->previewedCue();
+    const ShowTree::CueList *list = cueId != kInvalid ? st->listOfCue(cueId) : nullptr;
+    ShowTree::ResolvedCue rc;
+    if (list == nullptr || list->looks || !st->resolvedCue(cueId, &rc))
+        return QString();
+    bool lit = false;
+    for (const ShowTree::ResolvedLayer &rl : rc.layers)
+        if (!rl.target.isOpaque() && st->targetFixtures(rl.target).contains(fid))
+            lit = true;
+    if (!lit)
+        return QString();
+    l->cueId = cueId;
+    return WhyOn::tr("Cue %1 is being edited blind (Operate): the edit reaches the stage only on GO")
+            .arg(st->cueLabel(*list, list->indexOf(cueId)));
 }
 
 /** A shutter value that closes it: a Close capability, or one named so */
@@ -1179,10 +1265,24 @@ void WhyOn::addWhyNot(Doc *doc, Answer &a)
         if (winner == nullptr)
         {
             Line l;
-            const QString why = releasedReason(doc->showTree(), fxi->id(), &l);
+            Kind kind = Kind::Solo;
+            QString why = soloReason(doc->showTree(), fxi->id(), &l);
+            if (why.isEmpty())
+            {
+                kind = Kind::BlindEdit;
+                why = blindEditReason(doc->showTree(), fxi->id(), &l);
+            }
+            if (why.isEmpty())
+            {
+                kind = Kind::Released;
+                l = Line();
+                why = releasedReason(doc->showTree(), fxi->id(), &l);
+                if (l.kind == Kind::Skipped)
+                    kind = Kind::Skipped;
+            }
             if (!why.isEmpty())
             {
-                Line &r = add(Kind::Released, why);
+                Line &r = add(kind, why);
                 r.cueId = l.cueId;
                 r.layerId = l.layerId;
             }
