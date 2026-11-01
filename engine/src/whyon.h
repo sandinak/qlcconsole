@@ -69,6 +69,11 @@ class Doc;
  * limiter, what holds the dimmer at 0 (Park, a cue that released its
  * layer, nothing at all, a source at 0), a closed shutter, colour at
  * black.
+ *
+ * v3b adds three more holders of the dimmer: a skipped cue (GO passes over
+ * it, so its look never played), the preview's Solo (only another layer
+ * plays) and an Operate edit (the cue open for edit is blind and reaches
+ * the stage only on GO).
  */
 class QLC_ENGINE_EXPORT WhyOn final
 {
@@ -110,7 +115,11 @@ public:
         PowerLimit,     //!< why not: the power limiter holds it back
         Released,       //!< why not: the running cue has no layer on it (cueId, layerId)
         Shutter,        //!< why not: its shutter is closed
-        ColourBlack     //!< why not: every colour emitter is at 0
+        ColourBlack,    //!< why not: every colour emitter is at 0
+        // v3b
+        Skipped,        //!< why not: a skipped cue's look never played (cueId)
+        Solo,           //!< why not: the preview's Solo plays another layer (cueId, layerId)
+        BlindEdit       //!< why not: an Operate edit is blind until GO (cueId)
     };
 
     /** How a line bears on the value */

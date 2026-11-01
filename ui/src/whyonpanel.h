@@ -51,7 +51,9 @@ class Doc;
  *
  * A dark light gets "Why it isn't on" first (WhyOn::Answer::whyNot), then
  * what sets it. A line can offer an action in Design mode: Unpark, Release
- * (a Simple Desk channel), Let go of a move in black. ⌘I opens it on the
+ * (a Simple Desk channel), Let go of a move in black, Stop a running
+ * function. "Follow selection" (off) moves the window to whatever light is
+ * selected next. ⌘I opens it on the
  * light last selected in any view; the Show Tree's layer rows and the
  * Workbench's fixture and group rows have it in their right-click menus.
  */
@@ -80,7 +82,7 @@ public:
     static QKeySequence shortcut();
 
     /** What a line offers to do from the window, in Design mode */
-    enum class Action { NoAction, Unpark, Release, LetGoMark };
+    enum class Action { NoAction, Unpark, Release, LetGoMark, StopFunction };
     static Action actionFor(const WhyOn::Line &line);
     static QString actionName(Action action);
     /** The line list row @a row's action, if any; false: none, or Operate */
@@ -93,6 +95,14 @@ public:
      *  Crew otherwise; the "Plain words" box switches it. */
     WhyOn::Wording wording() const;
     void setWording(WhyOn::Wording wording);
+
+    /** "Follow selection": the window moves to the light selected in any
+     *  view (the plot, the Rig Overview, the Fixture Manager, the Workbench)
+     *  as it is selected. Off by default; remembered (QSettings
+     *  whyon/followSelection). */
+    static bool followSelection();
+    static void setFollowSelection(bool follow);
+    QCheckBox *followBox() const { return m_follow; }
 
     /** Ask again now */
     void refresh();
@@ -131,11 +141,13 @@ private:
     WhyOn::Answer m_answer;
     /** The why-not lines, then the lines: what each list row points to */
     QList<WhyOn::Line> m_rows;
+    QStringList m_signature;    //!< what the list shows, to leave it be when unchanged
     QLabel *m_subject;
     QComboBox *m_channels;
     QLabel *m_headline;
     QListWidget *m_list;
     QCheckBox *m_plain;
+    QCheckBox *m_follow;
     QPushButton *m_copy;
     QPushButton *m_action;
     QTimer *m_timer;

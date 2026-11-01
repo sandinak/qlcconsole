@@ -46,7 +46,11 @@ under **Why it isn't on**, the reason that blocks first:
 - the **Grand Master** or a **group master** at 0, the power limiter;
 - what holds the dimmer at 0: **Park**, a cue whose layer was
   **released** (*Cue 1.0.2 Chorus runs, and layer StepTops was released
-  leaving cue 1.0.1 Verse*), a source set to 0, or nothing at all;
+  leaving cue 1.0.1 Verse*), a **skipped cue** (*Cue 3 runs, and cue 2 is
+  skipped tonight, so its look never played*), **Solo** (*Solo is on: only
+  layer Front of cue 1 plays*), an **Operate edit** (*Cue 1 is being edited
+  blind: the edit reaches the stage only on GO*), a source set to 0, or
+  nothing at all;
 - a **closed shutter** (and what closes it), a **colour at black**.
 
 The headline gives the first of them (no output only when it's the only
@@ -54,7 +58,13 @@ one: the screens show the light without it).
 
 **Act from a line** (Design mode): select a Park line ▸ **Unpark**, a
 Simple Desk line ▸ **Release the desk channel**, a move in black ▸ **Let
-go of the move in black**. In Operate the window only explains.
+go of the move in black**, a running function's line ▸ **Stop the
+function**. In Operate the window only explains.
+
+**Follow selection** (off; the window remembers it) moves the open window
+to the light you select next in the plot, the Rig Overview, the Fixture
+Manager or the Workbench, so you can click along a row and read each
+answer.
 
 Click a line to go to the cue and layer in the Show Tree, the function,
 the Simple Desk, the Virtual Console or the group in the Fixture Manager.

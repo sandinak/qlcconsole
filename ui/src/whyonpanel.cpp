@@ -18,6 +18,8 @@
 */
 
 #include <QGuiApplication>
+#include <QSettings>
+#include <QPointer>
 #include <QListWidget>
 #include <QPushButton>
 #include <QVBoxLayout>
@@ -42,6 +44,8 @@
 #include "qlcchannel.h"
 #include "vcwidget.h"
 #include "monitor.h"
+#include "functionparent.h"
+#include "function.h"
 #include "fixture.h"
 #include "doc.h"
 
@@ -100,8 +104,30 @@ void WhyOnPanel::setJumpOverride(const Jump &jump)
 
 void WhyOnPanel::noteSelection(const QList<quint32> &fixtureIds)
 {
-    if (!fixtureIds.isEmpty())
-        s_selection = fixtureIds;
+    if (fixtureIds.isEmpty())
+        return;
+    s_selection = fixtureIds;
+    // Follow selection: a window that is open goes to the new light.
+    WhyOnPanel *p = s_panel.data();
+    if (p == nullptr || !p->isVisible() || !p->m_follow->isChecked())
+        return;
+    for (quint32 fid : fixtureIds)
+        if (p->m_doc->fixture(fid) != nullptr)
+        {
+            if (fid != p->m_fixtureId)
+                p->setTarget(fid, WhyOn::defaultChannel(p->m_doc, fid), Universe::invalid(), -1);
+            return;
+        }
+}
+
+bool WhyOnPanel::followSelection()
+{
+    return QSettings().value(QStringLiteral("whyon/followSelection"), false).toBool();
+}
+
+void WhyOnPanel::setFollowSelection(bool follow)
+{
+    QSettings().setValue(QStringLiteral("whyon/followSelection"), follow);
 }
 
 QKeySequence WhyOnPanel::shortcut()
@@ -138,6 +164,8 @@ WhyOnPanel::Action WhyOnPanel::actionFor(const WhyOn::Line &line)
             return Action::LetGoMark;
         case WhyOn::Kind::SimpleDesk:
             return line.absAddress != 0xFFFFFFFF ? Action::Release : Action::NoAction;
+        case WhyOn::Kind::Function:
+            return line.functionId != 0xFFFFFFFF ? Action::StopFunction : Action::NoAction;
         default:
             return Action::NoAction;
     }
@@ -150,6 +178,7 @@ QString WhyOnPanel::actionName(Action action)
         case Action::Unpark: return tr("Unpark");
         case Action::Release: return tr("Release the desk channel");
         case Action::LetGoMark: return tr("Let go of the move in black");
+        case Action::StopFunction: return tr("Stop the function");
         case Action::NoAction:
         default: return QString();
     }
@@ -189,6 +218,14 @@ bool WhyOnPanel::runAction(int row)
                 return false;
             SimpleDesk::instance()->resetChannel(line->absAddress);
             break;
+        case Action::StopFunction:
+        {
+            Function *f = m_doc->function(line->functionId);
+            if (f == nullptr || !f->isRunning())
+                return false;
+            f->stop(FunctionParent::master());
+            break;
+        }
         case Action::NoAction:
         default:
             return false;
@@ -297,10 +334,21 @@ WhyOnPanel::WhyOnPanel(Doc *doc, QWidget *parent)
     const TeachingSettings *teach = doc->teachingSettings();
     m_plain->setChecked(teach != nullptr && teach->enabled());
     bar->addWidget(m_plain);
+    m_follow = new QCheckBox(tr("Follow selection"), this);
+    m_follow->setObjectName(QStringLiteral("whyOnFollow"));
+    m_follow->setToolTip(tr("Move to the light selected in the plot, the Rig Overview, the Fixture "
+                            "Manager or the Workbench as you select it"));
+    m_follow->setChecked(followSelection());
+    bar->addWidget(m_follow);
     bar->addStretch(1);
     m_action = new QPushButton(this);
     m_action->setObjectName(QStringLiteral("whyOnAction"));
     m_action->setVisible(false);
+    // Its room is kept: selecting a line must not move the list under the mouse.
+    QSizePolicy keep = m_action->sizePolicy();
+    keep.setRetainSizeWhenHidden(true);
+    m_action->setSizePolicy(keep);
+    m_action->setText(actionName(Action::LetGoMark));      // the widest label, for its room
     bar->addWidget(m_action);
     m_copy = new QPushButton(tr("Copy"), this);
     m_copy->setObjectName(QStringLiteral("whyOnCopy"));
@@ -329,6 +377,7 @@ WhyOnPanel::WhyOnPanel(Doc *doc, QWidget *parent)
     connect(m_list, &QListWidget::currentRowChanged, this, &WhyOnPanel::updateAction);
     connect(m_action, &QPushButton::clicked, this, [this]() { runAction(m_list->currentRow()); });
     connect(m_plain, &QCheckBox::toggled, this, &WhyOnPanel::refresh);
+    connect(m_follow, &QCheckBox::toggled, this, [](bool on) { setFollowSelection(on); });
     connect(m_copy, &QPushButton::clicked, this, [this]() {
         QGuiApplication::clipboard()->setText(m_answer.toText());
     });
@@ -389,6 +438,26 @@ void WhyOnPanel::refresh()
                                "the Workbench), then press %1.")
                             .arg(shortcut().toString(QKeySequence::NativeText)));
     }
+
+    // Four times a second: leave the list alone when nothing in it changed,
+    // so a click (press and release) is never lost to a rebuild.
+    QStringList signature;
+    auto note = [&signature](const WhyOn::Line &l) {
+        signature << QStringLiteral("%1/%2/%3/%4/%5/%6/%7").arg(int(l.kind)).arg(int(l.verdict))
+                     .arg(l.cueId).arg(l.layerId).arg(l.functionId).arg(l.absAddress).arg(l.text);
+    };
+    for (const WhyOn::Line &l : std::as_const(m_answer.whyNot))
+        note(l);
+    signature << QString();
+    for (const WhyOn::Line &l : std::as_const(m_answer.lines))
+        note(l);
+    signature << (m_answer.approximate ? QStringLiteral("~") : QString());
+    if (signature == m_signature && m_list->count() > 0)
+    {
+        updateAction();
+        return;
+    }
+    m_signature = signature;
 
     const int keep = m_list->currentRow();
     const QSignalBlocker block(m_list);
@@ -491,6 +560,9 @@ void WhyOnPanel::jump(const WhyOn::Line &line)
         case WhyOn::Kind::Hit:
         case WhyOn::Kind::Preview:
         case WhyOn::Kind::Released:
+        case WhyOn::Kind::Skipped:
+        case WhyOn::Kind::Solo:
+        case WhyOn::Kind::BlindEdit:
             if (tree != nullptr)
             {
                 bool ok = line.layerId != 0xFFFFFFFF ? tree->selectNode(line.layerId, line.cueId) : false;

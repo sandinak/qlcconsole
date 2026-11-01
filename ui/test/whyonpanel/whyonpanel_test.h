@@ -44,6 +44,8 @@ private slots:
     void unparkFromALine();
     void theActionsALineOffers();
     void commandIOpensOnTheSelection();
+    void followSelectionIsOffAndRemembered();
+    void stopAFunctionFromALine();
     void closingTheWindowStopsAllWork();
 
 private:

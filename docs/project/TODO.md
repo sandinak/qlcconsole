@@ -114,9 +114,28 @@ v2 and v3 built (why2, 2026-11-01), each "decided (can change)":
   channel), Let go of the move in black. ⌘I (free; ⇧⌘I is the VC's) is a
   shortcut on the main window, no menu entry: the light last selected in
   the plot, Rig Overview, Fixture Manager or Workbench.
-Open: skipped cue / Solo / Operate-blind reasons, Locate's "Why?" link,
-pin / several windows, following the selection, Stop a function from a
-line, Teaching's plain sentences per group, release-at-once provenance.
+v3b built (why3, 2026-11-01), each "decided (can change)":
+- Why not now also says a **skipped cue** (the nearest skipped cue with a
+  layer on the light, behind the running one: GO tracked past it), the
+  preview's **Solo** (`ShowTreeController::previewSoloLayer`: the Show
+  Tree's and the pad walk's; the Workbench's own Solo plays a plain scene
+  and reads as that function) and an **Operate blind edit** (preview state
+  NotDesign, the cue open for edit has a layer on the light). They sit
+  where "what holds the dimmer" is, Solo first, then the blind edit, then
+  released / skipped. A preview is only blamed in Design now (it was named
+  in Operate too, wrongly).
+- **Stop the function** on a Function line, Design only (`stop` with the
+  master as parent: every start of it ends). A cue list's own line is not
+  offered it.
+- **Follow selection**: a box in the window, off, kept in QSettings
+  `whyon/followSelection`; only a shown window moves.
+- Locate: it is a flash with no window of its own (Fixture Manager
+  toolbar, Monitor), so there is nowhere for a link; its right-click
+  already has "Why is this on?". Left.
+- Teaching's plain sentences per group: nothing here says what they are,
+  left.
+Open: pin / several windows, Teaching's plain sentences per group,
+release-at-once provenance.
 
 ## Effect fades — leftovers (efo, 2026-10-31)
 

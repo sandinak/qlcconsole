@@ -238,6 +238,13 @@ back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
   desk channel and let go of a move in black from a line (Design mode);
   **⌘I** opens it on the selected light; Show Tree layer rows and
   Workbench fixture rows have it in their right-click menus.
+- **"Why is this on?" v3b**: three more reasons a light is dark: a
+  **skipped cue** (*cue 2 is skipped tonight, so its look never played*),
+  **Solo** (the preview plays only another layer) and an **Operate edit**
+  (the cue open for edit is blind and reaches the stage only on GO). A
+  running function's line can be **stopped** from the window (Design
+  mode), and **Follow selection** (off, remembered) moves the open window
+  to the light you select next.
 
 ### AI Assist
 

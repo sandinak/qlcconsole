@@ -722,4 +722,118 @@ void WhyOn_Test::whyNotAReleasedLayer()
     QCOMPARE(w.whyNot.at(1).cueId, c1);
 }
 
+/* Cue 2 would light A but is skipped tonight: GO passes over it, so under
+   cue 3 A is dark, and the answer says the skipped cue never played. */
+void WhyOn_Test::whyNotASkippedCue()
+{
+    FixtureGroup *a = group("A", { m_fixtures[0] });
+    FixtureGroup *b = group("B", { m_fixtures[1] });
+    const quint32 full = dimmer(255, "Full");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("Dance");
+    const quint32 listId = st->addCueList(prod, "Song");
+    const quint32 c1 = st->addCue(listId, -1, "One");
+    const quint32 c2 = st->addCue(listId, 0, "Two");
+    const quint32 c3 = st->addCue(listId, 1, "Three");
+    QVERIFY(st->setTargetLook(c1, groupTarget(b->id()), st->lookForPalette(full)));
+    QVERIFY(st->setTargetLook(c2, groupTarget(a->id()), st->lookForPalette(full)));
+    QVERIFY(st->setTargetLook(c3, groupTarget(b->id()), st->lookForPalette(full)));
+    QVERIFY(st->setCuesSkipped({ c2 }, true));
+    Chaser *chaser = qobject_cast<Chaser *>(m_doc->function(st->cueList(listId)->chaser));
+    go(chaser);
+    tick(5);
+    go(chaser);
+    tick(5);
+    QCOMPARE(st->runningCue(listId), c3);
+    QCOMPARE(int(out(0)), 0);
+
+    const WhyOn::Answer w = WhyOn::explain(m_doc, m_fixtures[0]);
+    QCOMPARE(w.whyNotTexts(), QStringList()
+             << "Universe 1 has no output: nothing leaves the computer for it (Connections)"
+             << "Cue 3 Three runs, and cue 2 Two is skipped tonight, so its look (layer A) never played");
+    QCOMPARE(w.whyNot.at(1).kind, WhyOn::Kind::Skipped);
+    QCOMPARE(w.whyNot.at(1).cueId, c2);
+
+    // Put back, it is an ordinary cue that doesn't light A any more.
+    QVERIFY(st->setCuesSkipped({ c2 }, false));
+    const WhyOn::Answer back = WhyOn::explain(m_doc, m_fixtures[0]);
+    QVERIFY(!back.whyNotTexts().join('\n').contains("skipped"));
+}
+
+/* Design preview with Solo on layer A: B, in the same cue, stays dark and
+   the answer says Solo did it. */
+void WhyOn_Test::whyNotSolo()
+{
+    FixtureGroup *a = group("A", { m_fixtures[0] });
+    FixtureGroup *b = group("B", { m_fixtures[1] });
+    const quint32 full = dimmer(255, "Full");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("Dance");
+    const quint32 listId = st->addCueList(prod, "Song");
+    const quint32 c1 = st->addCue(listId, -1, "One");
+    QVERIFY(st->setTargetLook(c1, groupTarget(a->id()), st->lookForPalette(full)));
+    QVERIFY(st->setTargetLook(c1, groupTarget(b->id()), st->lookForPalette(full)));
+    m_doc->setMode(Doc::Design);
+    st->previewCue(c1);
+    tick(5);
+    QCOMPARE(int(out(1)), 255);
+    QVERIFY(WhyOn::explain(m_doc, m_fixtures[1]).whyNot.isEmpty());
+
+    ShowTree::ResolvedCue rc;
+    QVERIFY(st->resolvedCue(c1, &rc));
+    quint32 layerA = 0xFFFFFFFF;
+    for (const ShowTree::ResolvedLayer &rl : rc.layers)
+        if (rl.target == groupTarget(a->id()))
+            layerA = rl.layerId;
+    QVERIFY(layerA != 0xFFFFFFFF);
+    st->setPreviewSolo(c1, layerA);
+    tick(5);
+    QCOMPARE(int(out(0)), 255);
+    QCOMPARE(int(out(1)), 0);
+
+    const WhyOn::Answer w = WhyOn::explain(m_doc, m_fixtures[1]);
+    QCOMPARE(w.whyNotTexts(), QStringList()
+             << "Universe 1 has no output: nothing leaves the computer for it (Connections)"
+             << "Solo is on: only layer A of cue 1 One plays, so this light stays dark");
+    QCOMPARE(w.whyNot.at(1).kind, WhyOn::Kind::Solo);
+    QCOMPARE(w.whyNot.at(1).cueId, c1);
+    QCOMPARE(w.whyNot.at(1).layerId, layerA);
+    // The soloed layer's own light isn't dark.
+    QVERIFY(WhyOn::explain(m_doc, m_fixtures[0]).whyNot.isEmpty());
+
+    st->setPreviewSolo(0xFFFFFFFF, 0xFFFFFFFF);
+    tick(5);
+    QVERIFY(WhyOn::explain(m_doc, m_fixtures[1]).whyNot.isEmpty());
+}
+
+/* In Operate the cue open for edit is blind: it lights B only on GO. The
+   reason comes after the masters (here the Grand Master at 0). */
+void WhyOn_Test::whyNotAnOperateEditIsBlind()
+{
+    FixtureGroup *b = group("B", { m_fixtures[1] });
+    const quint32 full = dimmer(255, "Full");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("Dance");
+    const quint32 listId = st->addCueList(prod, "Song");
+    const quint32 c1 = st->addCue(listId, -1, "One");
+    QVERIFY(st->setTargetLook(c1, groupTarget(b->id()), st->lookForPalette(full)));
+    m_doc->setMode(Doc::Operate);
+    st->pickCue(c1);
+    QCOMPARE(int(st->previewState()), int(ShowTreeController::PreviewState::NotDesign));
+    m_doc->inputOutputMap()->setGrandMasterValue(0);
+    tick(5);
+    QCOMPARE(int(out(1)), 0);
+
+    const WhyOn::Answer w = WhyOn::explain(m_doc, m_fixtures[1]);
+    QCOMPARE(w.whyNotTexts(), QStringList()
+             << "Universe 1 has no output: nothing leaves the computer for it (Connections)"
+             << "The Grand Master is at 0 %"
+             << "Cue 1 One is being edited blind (Operate): the edit reaches the stage only on GO");
+    QCOMPARE(w.whyNot.at(2).kind, WhyOn::Kind::BlindEdit);
+    QCOMPARE(w.whyNot.at(2).cueId, c1);
+    // A light the cue doesn't touch isn't blamed on it.
+    QCOMPARE(WhyOn::explain(m_doc, m_fixtures[2]).whyNot.last().kind, WhyOn::Kind::Nothing);
+    m_doc->inputOutputMap()->setGrandMasterValue(255);
+}
+
 QTEST_MAIN(WhyOn_Test)

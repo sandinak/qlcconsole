@@ -46,6 +46,7 @@
 #include <QPushButton>
 #include "scene.h"
 #include "doc.h"
+#include <QCheckBox>
 
 void WhyOnPanel_Test::init()
 {
@@ -73,6 +74,7 @@ void WhyOnPanel_Test::init()
 
 void WhyOnPanel_Test::cleanup()
 {
+    WhyOnPanel::setFollowSelection(false);
     WhyOnPanel::setJumpOverride(nullptr);
     delete WhyOnPanel::current();
     for (Function *f : m_doc->functions())
@@ -287,9 +289,10 @@ void WhyOnPanel_Test::unparkFromALine()
     tick(3);
     p->refresh();
     QCOMPARE(p->answer().texts(), QStringList() << "Scene “Look” sets 78 %");
-    // A line with nothing to do: no button.
+    // A scene's line offers Stop; a line with nothing to do offers nothing.
     p->lines()->setCurrentRow(0);
-    QVERIFY(!act->isVisibleTo(p));
+    QVERIFY(act->isVisibleTo(p));
+    QCOMPARE(act->text(), QString("Stop the function"));
 }
 
 void WhyOnPanel_Test::theActionsALineOffers()
@@ -330,6 +333,79 @@ void WhyOnPanel_Test::commandIOpensOnTheSelection()
     QVERIFY(!p->answer().isValid());
     QVERIFY(p->findChild<QLabel *>("whyOnHeadline")->text().startsWith("Select a light"));
     QCOMPARE(p->lines()->count(), 0);
+}
+
+/* "Follow selection": off until asked, kept for the next window, and while
+   on, the window moves to the light selected next. */
+void WhyOnPanel_Test::followSelectionIsOffAndRemembered()
+{
+    QVERIFY(!WhyOnPanel::followSelection());
+    WhyOnPanel *p = WhyOnPanel::showFor(m_doc, m_fixtures[0]);
+    QVERIFY(p != nullptr);
+    QCheckBox *follow = p->followBox();
+    QCOMPARE(follow->text(), QString("Follow selection"));
+    QVERIFY(!follow->isChecked());
+
+    // Off: a new selection leaves the window where it is.
+    WhyOnPanel::noteSelection({ m_fixtures[1] });
+    QCOMPARE(p->answer().fixtureId, m_fixtures[0]);
+
+    follow->setChecked(true);
+    QVERIFY(WhyOnPanel::followSelection());
+    WhyOnPanel::noteSelection({ 9999, m_fixtures[1] });       // a gone light is passed over
+    QCOMPARE(p->answer().fixtureId, m_fixtures[1]);
+    WhyOnPanel::noteSelection({});                              // emptied: stays
+    QCOMPARE(p->answer().fixtureId, m_fixtures[1]);
+    WhyOnPanel::noteSelection({ m_fixtures[2] });
+    QCOMPARE(p->answer().fixtureId, m_fixtures[2]);
+
+    // Hidden, it does not move.
+    p->hide();
+    WhyOnPanel::noteSelection({ m_fixtures[0] });
+    QCOMPARE(p->answer().fixtureId, m_fixtures[2]);
+
+    // Remembered: the next window comes up with it on.
+    delete p;
+    p = WhyOnPanel::showFor(m_doc, m_fixtures[0]);
+    QVERIFY(p->followBox()->isChecked());
+    p->followBox()->setChecked(false);
+    QVERIFY(!WhyOnPanel::followSelection());
+}
+
+/* A running function's line offers Stop, in Design mode only. */
+void WhyOnPanel_Test::stopAFunctionFromALine()
+{
+    Scene *s = new Scene(m_doc);
+    s->setName("Wash");
+    s->setValue(m_fixtures[0], 0, 200);
+    QVERIFY(m_doc->addFunction(s));
+    s->start(m_doc->masterTimer(), FunctionParent::master());
+    tick(3);
+    QVERIFY(s->isRunning());
+    WhyOnPanel *p = WhyOnPanel::showFor(m_doc, m_fixtures[0]);
+    QCOMPARE(p->lineAt(0)->kind, WhyOn::Kind::Function);
+    QCOMPARE(WhyOnPanel::actionFor(*p->lineAt(0)), WhyOnPanel::Action::StopFunction);
+    QCOMPARE(WhyOnPanel::actionName(WhyOnPanel::Action::StopFunction), QString("Stop the function"));
+    p->lines()->setCurrentRow(0);
+    QCOMPARE(p->actionButton()->text(), QString("Stop the function"));
+
+    // Operate: the window only explains.
+    m_doc->setMode(Doc::Operate);
+    p->refresh();
+    QVERIFY(!p->actionButton()->isEnabled());
+    QVERIFY(!p->runAction(0));
+    QVERIFY(s->isRunning());
+
+    m_doc->setMode(Doc::Design);
+    p->refresh();
+    QVERIFY(p->actionButton()->isEnabled());
+    QTest::mouseClick(p->actionButton(), Qt::LeftButton);
+    for (int i = 0; i < 20 && s->isRunning(); ++i)
+        tick(1);
+    QVERIFY(!s->isRunning());
+    p->refresh();
+    QVERIFY(p->answer().lines.isEmpty() || p->answer().lines.first().kind != WhyOn::Kind::Function
+            || p->answer().lines.first().functionId != s->id());
 }
 
 /* Open, the window adds nothing to the engine (no fader, no probe); closed,
