@@ -41,15 +41,15 @@ ratios between items hold, and ratios are what the ROI column uses.
   test that stock QLC+ 4.14 opens what qlcconsole saves. The Classic view
   also lost two stock features that matter to some 4.x users: Full
   Screen, and creating or deleting input profiles.
-- **0.3.1: Polish and the classroom.** The fix batches, the 4.x home basics,
+- **0.3.1: Polish and the classroom.** *(Merged into 0.4.0, board Q193, 2026-11-01: 0.3.1 never ships separately; everything below through 0.5's built items ships as 0.4.0.)* The fix batches, the 4.x home basics,
   Teaching mode, the voice settle and the PlayStation names, and the
   forum quick wins. The bigger studies (pad Run, why-on, the laser
   look and safety) moved out of it: pad Run to 0.4, why-on to 0.5.
-- **0.4: Run the show.** One GO path, then pad Run, the phone Run page,
+- **0.4: Run the show.** *(Ships as 0.4.0, with 0.3.1.)* One GO path, then pad Run, the phone Run page,
   timecode (LTC and cues at a time), override hits, group masters, effect
   fade-out, the printed cue and tracking sheet, and walking the show from
   the stage with the controller (board Q192).
-- **0.5: The show explains itself.** Show Review v1, "Why is this on?" v1
+- **0.5: The show explains itself.** *(Mostly built; what is built ships in 0.4.0, the rest stays 0.5.)* Show Review v1, "Why is this on?" v1
   to v3 with its student mode, the laser and audience safety checks,
   realistic move speed in the Rig Overview, and **AI Assist** (Design mode
   only, off by default, a local model proposing command-line text the

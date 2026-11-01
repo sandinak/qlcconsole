@@ -6,7 +6,7 @@
 
 .DESCRIPTION
   powershell -ExecutionPolicy Bypass -File platforms\windows\release-check.ps1 <setup.exe>
-      [-Version 0.3.0] [-Rev 38e1963b8] [-WorkDir <dir>] [-OffscreenDir <dir>]
+      [-Version 0.4.0] [-Rev 38e1963b8] [-WorkDir <dir>] [-OffscreenDir <dir>]
       [-Waive id,id] [-SkipTakeover]
 
   Checks, in order:

@@ -40,7 +40,7 @@ body:
     id: version
     attributes:
       label: Version
-      description: Help ▸ About, e.g. "0.3.1 (build 4.14.4+qlcconsole.2461, 2adcf523d)".
+      description: Help ▸ About, e.g. "0.4.0 (build 4.14.4+qlcconsole.2461, 2adcf523d)".
     validations:
       required: false
   - type: textarea

@@ -69,7 +69,7 @@ definition — never just because it differs:
 4. Otherwise **the version that saved it** decides: 4.12.6 is older than
    4.14.4, which is older than 4.14.4+qlcconsole.2390 (a build based on
    it). A qlcconsole build and a later QLC+ release than its base (4.14.4
-   against a build before 0.3.1, which said 4.14.2+qlcconsole) are
+   against a build before 0.4.0, which said 4.14.2+qlcconsole) are
    different lines, so neither counts as newer by its number.
 5. At the same version (or when the numbers can't tell), between your own
    files **the one changed last is current**. A shipped file's date is when

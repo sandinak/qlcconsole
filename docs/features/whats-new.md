@@ -2,7 +2,7 @@
 
 The latest changes, newest first. Each links to the guide with the detail.
 
-## 0.3.1 (unreleased)
+## 0.4.0 (unreleased)
 
 ### AI Assist
 

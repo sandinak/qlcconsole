@@ -10,9 +10,10 @@ active work in [TODO.md](docs/project/TODO.md).
 Versions here are independent of the QLC+ base version embedded in the
 in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relate).
 
-## [0.3.1] - Unreleased
-<!-- Contains 0.4/0.5 roadmap features landed 2026-10-31; version split pending Branson's decision -->
+## [0.4.0] - Unreleased
 
+qlcconsole 0.4.0 carries the 0.3.1 polish, all of 0.4 ("Run the show") and
+most of 0.5 ("The show explains itself"); there is no separate 0.3.1.
 A home for QLC+ 4 users: QLC+ 4's habits that qlcconsole had dropped are
 back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
 

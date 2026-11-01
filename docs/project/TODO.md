@@ -6,6 +6,8 @@ sections moved there on 2026-10-11 are under "Moved from TODO.md". When
 something ships, move its entry to DONE.md. See also the session memory
 under `~/.claude/.../memory/`.
 
+**Release numbering (board Q193, 2026-11-01):** 0.3.1 merged into 0.4.0. One release, **0.4.0**, carries the 0.3.1 polish, all of 0.4 and most of 0.5; 0.3.1 never ships separately. "0.3.1", "0.4" and "0.5" in the sections below are roadmap names and stay as written. Releasing is the user's call.
+
 ---
 
 ## Raspberry Pi package — leftovers (pi, 2026-10-31)

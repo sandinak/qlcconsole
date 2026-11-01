@@ -31,7 +31,7 @@ them:
    e.g. `4.14.4+qlcconsole.2390`, where `N` is the git commit count since
    the original `QLC+_4.14.2` fork point (still counted from there when the
    base moves, so it never goes backwards). This is fully automatic; you
-   never edit it directly. `QLC_BASE_VERSION` (4.14.4 since 0.3.1) only
+   never edit it directly. `QLC_BASE_VERSION` (4.14.4 since 0.4.0) only
    changes when an upstream intake takes in a newer QLC+ release
    ([UPSTREAM.md](UPSTREAM.md)) — that's a deliberate, separate
    decision from cutting a qlcconsole release, so it's not tied to bumping
