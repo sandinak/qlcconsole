@@ -196,6 +196,15 @@ back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
   preview; then group masters, the Grand Master, Blind and Blackout. Click a line to go
   there. Worked out from the last frame when asked; closed, it costs the
   show nothing.
+- **"Why is this on?" v2 and v3**: a pan or colour nothing sets now
+  names who left it there (*cue 1.0.2 · layer Movers left it at 50 %,
+  3.0 s ago*); a move in black is a named fader under everything. A dark
+  light lists **why it isn't on** first: no output, Blind, Blackout, the
+  Grand Master or a group master at 0, the power limiter, Park, a
+  released layer, a closed shutter, a colour at black. Unpark, Release a
+  desk channel and let go of a move in black from a line (Design mode);
+  **⌘I** opens it on the selected light; Show Tree layer rows and
+  Workbench fixture rows have it in their right-click menus.
 
 ### AI Assist
 

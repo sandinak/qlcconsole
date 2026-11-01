@@ -35,6 +35,7 @@
 #include <QDebug>
 
 #include "workbench.h"
+#include "whyonpanel.h"
 #include "blindstyle.h"
 #include "shrinkablebar.h"
 #include "workbenchstack.h"
@@ -128,6 +129,9 @@ Workbench::Workbench(Doc *doc, QWidget *parent)
     , m_doc(doc)
 {
     setObjectName(QStringLiteral("workbench"));
+    // ⌘I ("Why is this on?") opens on what is picked here.
+    connect(this, &Workbench::fixturesSelected, this,
+            [](const QList<quint32> &ids) { WhyOnPanel::noteSelection(ids); });
     QHBoxLayout *root = new QHBoxLayout(this);
     root->setContentsMargins(0, 0, 0, 0);
     m_split = new QSplitter(Qt::Horizontal, this);

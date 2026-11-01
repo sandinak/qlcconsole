@@ -410,7 +410,7 @@ order the note says why.
 | Star-field coverage + laser audience/eye-height warnings | 3 | 4 | drawStarField, Show Review | 5 | M | M | 1.9 | Warnings BUILT 2026-10-31 (Show Review PWR-09: fixed lasers and star projectors, house = downstage of the stage edge below 3 m); the coverage outline BUILD (0.5) |
 | Pad Run role (MVP 6 d, full 10.5 d) | 4 | 5 | ShowControl::execute, focus pad stack | 6 | M | M | 2.7 | MVP BUILT 2026-10-31 (0.4, `PadRun`: arm + GO/Back/Sub GO/Stop, list pick, light bar); full (Hits page, focus confirm) next; see note 2 |
 | Walk the show from the stage with the controller (extends Focus this cue) | 4 | 4 | Refine, Layer/Group/Fixture scope, voice and light-bar feedback, cue notes | 5 | M | M | 2.5 | MVP BUILT 2026-10-31 (0.4, `PadRun` walking map: cues, layers, solo, Needs work tag); leftovers in TODO.md |
-| "Why is this on?" v1 | 4 | 5 | GenericFader, Show Tree tracking | 9 | M | M | 1.8 | v1 BUILT 2026-10-31 (0.5, `WhyOn` + `WhyOnPanel`: replayed from the last frame on demand, right-click in the plot / Rig Overview / Fixture Manager / Simple Desk; Plain words = the Teaching hook); v2 and v3 next; see note 3 |
+| "Why is this on?" v1 | 4 | 5 | GenericFader, Show Tree tracking | 9 | M | M | 1.8 | v1 BUILT 2026-10-31 (0.5, `WhyOn` + `WhyOnPanel`: replayed from the last frame on demand, right-click in the plot / Rig Overview / Fixture Manager / Simple Desk; Plain words = the Teaching hook); v2 + v3 BUILT 2026-11-01 (who left a value behind, noted on let-go, nothing per frame; Mark on a fader; "why it isn't on" list; Unpark / Release from a line; ⌘I; Show Tree + Workbench rows); see note 3 |
 | Teaching later items: lesson link, reset to handout, GO log, glossary popovers | 3 | 5 | Teaching | 4 | L | L | 3.8 | BUILT (0.5: lesson link, reset to handout, GO log, glossary popovers; the Show Review TEACH-01 check follows Show Review v1) |
 
 Notes:
@@ -588,9 +588,11 @@ Order and dependencies:
    Accept with a note, `--review`, the chip and panel.
 2. **"Why is this on?" v1** (**built 2026-10-31:** replayed on demand, no
    per-frame cost; its Plain words box is the hook v3 builds on), then v2
-   (per-writer provenance, after the 80-universe stress run), then
-   **v3's student mode**, which needs Teaching (0.3.1) and reads best
-   next to Show Review.
+   (per-writer provenance) and v3's "why not" list (**built 2026-11-01:**
+   who let go of a channel is noted when it happens, never per frame, so
+   no stress-run gate was needed; the dark-light reasons, actions from a
+   line, ⌘I), then **v3's student mode** (plain sentences per group),
+   which reads best next to Show Review.
 3. **Laser part C** (audience-zone check built as Show Review PWR-09,
    2026-10-31; the H×V window and density are open) and the **no-light
    zones** idea, as Show Review checks rather than a separate system.

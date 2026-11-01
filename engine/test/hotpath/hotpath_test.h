@@ -58,6 +58,7 @@ private slots:
     void aChaserKeepsItsFadersBounded();
     void aMatrixComputesAMapPerStepNotPerTick();
     void aGroupMasterAddsNoAllocationPerFrame();
+    void whoLetGoAddsNoAllocationPerFrame();
 
     /* The mixed rig (stresstest/engine/showbuilder.cpp, ShowSpec::MixedRig):
        movers, LED pars, pixel bars and strips, dimmers on 32 universes */

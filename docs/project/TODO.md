@@ -15,7 +15,7 @@ docs/dev/RASPI.md. Open: build it in CI (an arm64 runner) and attach it to
 a release; a Pi 4 build host; a Pi image with the package preinstalled;
 `debian/` and the `.spec` are still upstream's stale copies (unused).
 
-## "Why is this on?" v1 — built, leftovers (0.5, why, 2026-10-31)
+## "Why is this on?" v1–v3 — built, leftovers (0.5, why + why2, 2026-11-01)
 
 Built: `WhyOn` (engine/src/whyon.*) answers "why is this light / channel
 where it is" from the last frame, on demand, on the UI thread: it copies
@@ -49,13 +49,34 @@ Each "decided (can change)":
 - Jumps: cue / hit / preview → the Show Tree node; function → reveal (a
   generated one) or open it; Simple Desk, VC, Park / Highlight / Flash /
   Focus → their tab; a group master → the Fixture Manager.
-Open:
-- v2: per-writer provenance (fader tokens, the watch-list probe) and the
-  last-writer of a value left behind; Mark (move in black) onto an
-  OutputLayer so it has a fader.
-- v3: the full "why not" list (shutter closed, colour at black, released
-  / skipped / Solo, power limiter), Show Tree and Workbench row entries,
-  ⌘I, Locate's "Why?" link, pin / several windows, Design-only actions.
+v2 and v3 built (why2, 2026-11-01), each "decided (can change)":
+- Who left it there: no per-frame probe, no always-on per-write record.
+  Each fader gets a token (Universe::requestFader); the universe notes the
+  token and frame per channel when a fader lets go of it (an auto-removed
+  channel at its target, a fader dismissed or deleted with channels) and
+  keeps who the last 32 faders to leave were (name, function, priority:
+  a shared QString, no allocation). Nothing per frame; hotpath_test
+  ::whoLetGoAddsNoAllocationPerFrame. A channel written since (a direct
+  write) is "kept the last value" again. Not caught: a Show Tree partial
+  release at once (GenericFader::release with no fade drops the channel
+  with no universe at hand).
+- Mark (move in black) is an OutputLayer "Mark" at Universe::Hold, under
+  everything, intensity never held (as before: a direct write was zeroed
+  by the next frame); its DMXSource only watches for the hand-off.
+- Why not: computed when an intensity or shutter channel is asked about
+  and the fixture is dark (dimmer ≤ 2 %, a shutter at a Close / "closed"
+  capability, every colour emitter ≤ 2 %). Order: no output, not ours,
+  Blind, Teaching hold, Blackout, Grand Master 0, group master 0, power
+  limiter, what holds the dimmer (Park / released or missing layer in
+  the previewed or running cue / nothing / a source at 0), shutter,
+  colour. The headline gives the first reason that isn't "no output".
+- Actions from a line, Design only: Unpark, Release (a Simple Desk
+  channel), Let go of the move in black. ⌘I (free; ⇧⌘I is the VC's) is a
+  shortcut on the main window, no menu entry: the light last selected in
+  the plot, Rig Overview, Fixture Manager or Workbench.
+Open: skipped cue / Solo / Operate-blind reasons, Locate's "Why?" link,
+pin / several windows, following the selection, Stop a function from a
+line, Teaching's plain sentences per group, release-at-once provenance.
 
 ## Effect fades — leftovers (efo, 2026-10-31)
 

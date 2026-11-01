@@ -27,6 +27,7 @@
 #include <QComboBox>
 #include <QCheckBox>
 #include <QScreen>
+#include <QCursor>
 #include <QTimer>
 #include <QLabel>
 
@@ -37,6 +38,7 @@
 #include "showtreeview.h"
 #include "simpledesk.h"
 #include "fixturemanager.h"
+#include "programmercontroller.h"
 #include "qlcchannel.h"
 #include "vcwidget.h"
 #include "monitor.h"
@@ -47,6 +49,8 @@ namespace
 {
 QPointer<WhyOnPanel> s_panel;
 WhyOnPanel::Jump s_jumpOverride;
+QList<quint32> s_selection;
+const int kRowRole = Qt::UserRole + 1;
 
 /** Its tab forward, and its window */
 void bringForward(QWidget *w)
@@ -92,6 +96,117 @@ WhyOnPanel *WhyOnPanel::current()
 void WhyOnPanel::setJumpOverride(const Jump &jump)
 {
     s_jumpOverride = jump;
+}
+
+void WhyOnPanel::noteSelection(const QList<quint32> &fixtureIds)
+{
+    if (!fixtureIds.isEmpty())
+        s_selection = fixtureIds;
+}
+
+QKeySequence WhyOnPanel::shortcut()
+{
+    return QKeySequence(Qt::CTRL | Qt::Key_I);
+}
+
+WhyOnPanel *WhyOnPanel::showForSelection(Doc *doc, QWidget *parent)
+{
+    if (doc == nullptr)
+        return nullptr;
+    for (quint32 fid : std::as_const(s_selection))
+        if (doc->fixture(fid) != nullptr)
+            return showFor(doc, fid, 0xFFFFFFFF, parent, QCursor::pos());
+    // Nothing selected: the window says how.
+    if (s_panel.isNull() || s_panel->m_doc != doc)
+    {
+        delete s_panel.data();
+        s_panel = new WhyOnPanel(doc, parent);
+    }
+    s_panel->setTarget(Fixture::invalidId(), QLCChannel::invalid(), Universe::invalid(), -1);
+    s_panel->show();
+    s_panel->raise();
+    return s_panel.data();
+}
+
+WhyOnPanel::Action WhyOnPanel::actionFor(const WhyOn::Line &line)
+{
+    switch (line.kind)
+    {
+        case WhyOn::Kind::Park:
+            return Action::Unpark;
+        case WhyOn::Kind::Mark:
+            return Action::LetGoMark;
+        case WhyOn::Kind::SimpleDesk:
+            return line.absAddress != 0xFFFFFFFF ? Action::Release : Action::NoAction;
+        default:
+            return Action::NoAction;
+    }
+}
+
+QString WhyOnPanel::actionName(Action action)
+{
+    switch (action)
+    {
+        case Action::Unpark: return tr("Unpark");
+        case Action::Release: return tr("Release the desk channel");
+        case Action::LetGoMark: return tr("Let go of the move in black");
+        case Action::NoAction:
+        default: return QString();
+    }
+}
+
+const WhyOn::Line *WhyOnPanel::lineAt(int row) const
+{
+    QListWidgetItem *item = m_list->item(row);
+    if (item == nullptr)
+        return nullptr;
+    const QVariant v = item->data(kRowRole);
+    const int i = v.isValid() ? v.toInt() : -1;
+    return i >= 0 && i < m_rows.count() ? &m_rows.at(i) : nullptr;
+}
+
+bool WhyOnPanel::runAction(int row)
+{
+    const WhyOn::Line *line = lineAt(row);
+    if (line == nullptr || m_doc->mode() == Doc::Operate)
+        return false;
+    const Action action = actionFor(*line);
+    ProgrammerController *pc = m_doc->programmer();
+    switch (action)
+    {
+        case Action::Unpark:
+            if (pc == nullptr || m_fixtureId == Fixture::invalidId())
+                return false;
+            pc->unparkFixtures({ m_fixtureId });
+            break;
+        case Action::LetGoMark:
+            if (pc == nullptr || m_fixtureId == Fixture::invalidId())
+                return false;
+            pc->unmarkFixtures({ m_fixtureId });
+            break;
+        case Action::Release:
+            if (SimpleDesk::instance() == nullptr)
+                return false;
+            SimpleDesk::instance()->resetChannel(line->absAddress);
+            break;
+        case Action::NoAction:
+        default:
+            return false;
+    }
+    refresh();
+    return true;
+}
+
+void WhyOnPanel::updateAction()
+{
+    const WhyOn::Line *line = lineAt(m_list->currentRow());
+    const Action action = line != nullptr ? actionFor(*line) : Action::NoAction;
+    m_action->setVisible(action != Action::NoAction);
+    m_action->setText(actionName(action));
+    const bool operate = m_doc->mode() == Doc::Operate;
+    m_action->setEnabled(action != Action::NoAction && !operate);
+    m_action->setToolTip(operate ? tr("Operate mode: the window only explains (switch to Design to act)")
+                                 : tr("Do it now, from here"));
 }
 
 WhyOnPanel *WhyOnPanel::showFor(Doc *doc, quint32 fixtureId, quint32 channel, QWidget *parent,
@@ -183,6 +298,10 @@ WhyOnPanel::WhyOnPanel(Doc *doc, QWidget *parent)
     m_plain->setChecked(teach != nullptr && teach->enabled());
     bar->addWidget(m_plain);
     bar->addStretch(1);
+    m_action = new QPushButton(this);
+    m_action->setObjectName(QStringLiteral("whyOnAction"));
+    m_action->setVisible(false);
+    bar->addWidget(m_action);
     m_copy = new QPushButton(tr("Copy"), this);
     m_copy->setObjectName(QStringLiteral("whyOnCopy"));
     m_copy->setToolTip(tr("Copy the answer as text (for a note or a support thread)"));
@@ -207,6 +326,8 @@ WhyOnPanel::WhyOnPanel(Doc *doc, QWidget *parent)
     connect(m_list, &QListWidget::itemClicked, this, [this](QListWidgetItem *item) {
         activate(m_list->row(item));
     });
+    connect(m_list, &QListWidget::currentRowChanged, this, &WhyOnPanel::updateAction);
+    connect(m_action, &QPushButton::clicked, this, [this]() { runAction(m_list->currentRow()); });
     connect(m_plain, &QCheckBox::toggled, this, &WhyOnPanel::refresh);
     connect(m_copy, &QPushButton::clicked, this, [this]() {
         QGuiApplication::clipboard()->setText(m_answer.toText());
@@ -261,13 +382,41 @@ void WhyOnPanel::refresh()
                : WhyOn::explainAddress(m_doc, m_universe, m_address, wording());
     m_subject->setText(m_answer.subject);
     m_headline->setText(m_answer.headline);
+    if (m_fixtureId == Fixture::invalidId() && m_address < 0)
+    {
+        m_subject->setText(actionText());
+        m_headline->setText(tr("Select a light (in the plot, the Rig Overview, the Fixture Manager or "
+                               "the Workbench), then press %1.")
+                            .arg(shortcut().toString(QKeySequence::NativeText)));
+    }
 
     const int keep = m_list->currentRow();
+    const QSignalBlocker block(m_list);
     m_list->clear();
+    m_rows.clear();
     const QColor dim = palette().color(QPalette::Disabled, QPalette::Text);
-    for (const WhyOn::Line &l : m_answer.lines)
+    auto header = [this](const QString &text) {
+        QListWidgetItem *item = new QListWidgetItem(text, m_list);
+        QFont f = item->font();
+        f.setBold(true);
+        item->setFont(f);
+        item->setFlags(Qt::ItemIsEnabled);
+    };
+    QList<WhyOn::Line> all;
+    if (!m_answer.whyNot.isEmpty())
+        header(tr("Why it isn't on:"));
+    for (const WhyOn::Line &l : m_answer.whyNot)
+        all << l;
+    const int firstLine = all.count();
+    all << m_answer.lines;
+    for (int i = 0; i < all.count(); ++i)
     {
-        QListWidgetItem *item = new QListWidgetItem(l.text, m_list);
+        if (i == firstLine && !m_answer.whyNot.isEmpty())
+            header(tr("What sets it:"));
+        const WhyOn::Line &l = all.at(i);
+        m_rows << l;
+        QListWidgetItem *item = new QListWidgetItem(i < firstLine ? QStringLiteral("✖ ") + l.text : l.text, m_list);
+        item->setData(kRowRole, m_rows.count() - 1);
         QFont f = item->font();
         switch (l.verdict)
         {
@@ -287,7 +436,11 @@ void WhyOnPanel::refresh()
                           || l.kind == WhyOn::Kind::SimpleDesk || l.kind == WhyOn::Kind::Park
                           || l.kind == WhyOn::Kind::GroupMaster
                           || l.kind == WhyOn::Kind::Highlight || l.kind == WhyOn::Kind::Focus;
-        item->setToolTip(goes ? tr("Click to go there") : QString());
+        const Action act = actionFor(l);
+        QString tip = goes ? tr("Click to go there") : QString();
+        if (act != Action::NoAction)
+            tip += (tip.isEmpty() ? QString() : QStringLiteral(" · ")) + tr("Select it: %1").arg(actionName(act));
+        item->setToolTip(tip);
     }
     if (m_answer.approximate)
     {
@@ -298,13 +451,13 @@ void WhyOnPanel::refresh()
     }
     if (keep >= 0 && keep < m_list->count())
         m_list->setCurrentRow(keep);
+    updateAction();
 }
 
 void WhyOnPanel::activate(int row)
 {
-    if (row < 0 || row >= m_answer.lines.count())
-        return;
-    jump(m_answer.lines.at(row));
+    if (const WhyOn::Line *line = lineAt(row))
+        jump(*line);
 }
 
 void WhyOnPanel::jump(const WhyOn::Line &line)
@@ -317,9 +470,27 @@ void WhyOnPanel::jump(const WhyOn::Line &line)
     ShowTreeView *tree = ShowTreeView::instance();
     switch (line.kind)
     {
+        case WhyOn::Kind::LeftBehind:
+            // The writer that left it: where it is, as its own kind would go.
+            if (line.cueId == 0xFFFFFFFF && line.functionId == 0xFFFFFFFF)
+            {
+                if (line.widgetId != 0xFFFFFFFF)
+                    bringForward(VirtualConsole::instance());
+                else if (line.absAddress != 0xFFFFFFFF)
+                    bringForward(SimpleDesk::instance());
+                break;
+            }
+            if (line.cueId == 0xFFFFFFFF)
+            {
+                if (tree != nullptr)
+                    tree->openFunction(line.functionId);
+                break;
+            }
+            Q_FALLTHROUGH();
         case WhyOn::Kind::Cue:
         case WhyOn::Kind::Hit:
         case WhyOn::Kind::Preview:
+        case WhyOn::Kind::Released:
             if (tree != nullptr)
             {
                 bool ok = line.layerId != 0xFFFFFFFF ? tree->selectNode(line.layerId, line.cueId) : false;
@@ -355,7 +526,11 @@ void WhyOnPanel::jump(const WhyOn::Line &line)
         case WhyOn::Kind::Highlight:
         case WhyOn::Kind::Flash:
         case WhyOn::Kind::Focus:
+        case WhyOn::Kind::Mark:
             bringForward(Monitor::instance());
+            break;
+        case WhyOn::Kind::NotPatched:
+            bringForward(FixtureManager::instance());
             break;
         default:
             if (line.widgetId != 0xFFFFFFFF)

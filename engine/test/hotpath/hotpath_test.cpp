@@ -622,6 +622,40 @@ void HotPath_Test::aGroupMasterAddsNoAllocationPerFrame()
 }
 
 
+/* "Why is this on?" v2 (WhyOn) names who left a value behind: the universe
+   notes which fader let go of a channel when it does -- an auto-removed
+   channel, a fader dismissed or deleted -- and who the last 32 faders to
+   leave were. Nothing of it runs per frame, and noting costs no allocation:
+   frames after a hundred start/stop cycles cost what they did before, and
+   the window (open or closed) adds no work to the engine at all. */
+void HotPath_Test::whoLetGoAddsNoAllocationPerFrame()
+{
+    Universe *uni = m_doc->inputOutputMap()->universes().at(0);
+    Scene *look = makeLook(0, kFixturesPerUniverse, 200);
+    look->start(m_doc->masterTimer(), FunctionParent::master());
+    frame(5);
+    const long without = allocationsIn([this]() { frame(50); });
+
+    Scene *other = makeLook(0, kFixturesPerUniverse / 2, 120);
+    for (int i = 0; i < 100; ++i)
+    {
+        other->start(m_doc->masterTimer(), FunctionParent::master());
+        frame(2);
+        other->stop(FunctionParent::master());
+        frame(2);
+    }
+    QVERIFY(uni->m_letGoBy[0].load() != 0);
+    const long with = allocationsIn([this]() { frame(50); });
+    qInfo("who let go: %ld allocations in 50 frames after 100 departures, %ld before", with, without);
+    QVERIFY2(with <= without, qPrintable(QString("50 frames: %1 allocations after, %2 before").arg(with).arg(without)));
+
+    // Noting itself: no allocation, a whole universe at once or a fader leaving.
+    QCOMPARE(allocationsIn([uni]() { uni->noteLetGo(0, UNIVERSE_SIZE, 7); }), 0L);
+    QSharedPointer<GenericFader> f = uni->m_faders.last();
+    QCOMPARE(allocationsIn([uni, f]() { uni->noteDeparted(f); }), 0L);
+    QVERIFY(uni->m_departed.size() == 32);
+}
+
 /*****************************************************************************
  * The mixed rig
  *****************************************************************************/

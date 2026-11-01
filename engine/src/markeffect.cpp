@@ -15,10 +15,12 @@
 #include "qlcfixturemode.h"
 #include "mastertimer.h"
 #include "universe.h"
+#include "qlcchannel.h"
 
 MarkEffect::MarkEffect(Doc *doc)
     : QObject(doc)
     , m_doc(doc)
+    , m_layer(doc, Universe::Hold, 0, QStringLiteral("Mark"))
 {
     // Auto-handoff crosses threads: writeDMX (MasterTimer thread) emits, this
     // slot releases the mark on the GUI thread.
@@ -116,6 +118,27 @@ void MarkEffect::rebuild()
             entries.append(entry);
     }
 
+    /* The held values, as one layer under everything. A fixture a cue has
+       revealed is let go of by then (slotFixtureRevealed() unmarks it). */
+    QList<OutputLayer::Level> levels;
+    for (const FixEntry &e : entries)
+    {
+        Fixture *fxi = m_doc->fixture(e.fixtureId);
+        if (fxi == nullptr)
+            continue;
+        for (const auto &w : e.writes)
+        {
+            // Never an intensity (a colour mix too): a mark is dark. (Written
+            // straight to the universe, one was zeroed by the next frame.)
+            const quint32 ch = quint32(w.first) - fxi->address();
+            const QLCChannel *qch = fxi->channel(ch);
+            if (qch != nullptr && qch->group() == QLCChannel::Intensity)
+                continue;
+            levels.append({ e.fixtureId, ch, w.second });
+        }
+    }
+    m_layer.set(levels);
+
     {
         QMutexLocker locker(&m_mutex);
         m_entries = entries;
@@ -164,8 +187,7 @@ void MarkEffect::writeDMX(MasterTimer *timer, QList<Universe*> universes)
             continue;
         }
 
-        for (const auto &w : e.writes)
-            uni->write(w.first, w.second, /*forceLTP=*/true);
+        // The values themselves go out through m_layer (a fader).
     }
 }
 

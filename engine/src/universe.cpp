@@ -72,8 +72,12 @@ Universe::Universe(quint32 id, GrandMaster *gm, QObject *parent)
     m_held.reset(new std::atomic<quint8>[UNIVERSE_SIZE]);
     m_pastGMFrame.reset(new std::atomic<quint32>[UNIVERSE_SIZE]);
     m_groupMaster.reset(new std::atomic<quint8>[UNIVERSE_SIZE]);
+    m_letGoBy.reset(new std::atomic<quint32>[UNIVERSE_SIZE]);
+    m_letGoFrame.reset(new std::atomic<quint32>[UNIVERSE_SIZE]);
     for (int i = 0; i < UNIVERSE_SIZE; i++)
     {
+        m_letGoBy[i].store(0, std::memory_order_relaxed);
+        m_letGoFrame[i].store(0, std::memory_order_relaxed);
         m_groupMaster[i].store(UCHAR_MAX, std::memory_order_relaxed);
         m_writtenFrame[i].store(0, std::memory_order_relaxed);
         m_held[i].store(0, std::memory_order_relaxed);
@@ -264,6 +268,10 @@ QSharedPointer<GenericFader> Universe::requestFader(Universe::FaderPriority prio
 
     {
         QMutexLocker fadersLocker(&m_fadersMutex);
+        // Who it is, for "Why is this on?" (letGo()); never 0
+        if (++m_nextFaderToken == 0)
+            ++m_nextFaderToken;
+        fader->setToken(m_nextFaderToken);
         {
             for (int i = m_faders.count() - 1; i >= 0; i--)
             {
@@ -290,9 +298,63 @@ void Universe::dismissFader(QSharedPointer<GenericFader> fader)
     int index = m_faders.indexOf(fader);
     if (index >= 0)
     {
+        noteDeparted(fader);
         m_faders.takeAt(index);
         fader.clear();
     }
+}
+
+void Universe::noteDeparted(const QSharedPointer<GenericFader> &fader)
+{
+    if (fader.isNull() || fader->token() == 0)
+        return;
+    fader->noteLetGo(this);
+    Departed &d = m_departed[size_t(m_departedNext)];
+    d.token = fader->token();
+    d.name = fader->name();
+    d.functionId = fader->parentFunctionID();
+    d.priority = fader->priority();
+    m_departedNext = (m_departedNext + 1) % int(m_departed.size());
+}
+
+Universe::LetGo Universe::letGo(int address)
+{
+    LetGo g;
+    if (address < 0 || address >= UNIVERSE_SIZE)
+        return g;
+    QMutexLocker frameLocker(&m_frameMutex);
+    const quint32 token = m_letGoBy[address].load(std::memory_order_relaxed);
+    if (token == 0)
+        return g;
+    const quint32 at = m_letGoFrame[address].load(std::memory_order_relaxed);
+    const quint32 written = m_writtenFrame[address].load(std::memory_order_relaxed);
+    // Written since it let go: someone else has set it.
+    if (qint32(written - at) > 0)
+        return g;
+    g.token = token;
+    g.framesAgo = m_frame.load(std::memory_order_relaxed) - at;
+
+    QMutexLocker fadersLocker(&m_fadersMutex);
+    for (const QSharedPointer<GenericFader> &f : std::as_const(m_faders))
+    {
+        if (f.isNull() || f->token() != token)
+            continue;
+        g.alive = true;
+        g.name = f->name();
+        g.functionId = f->parentFunctionID();
+        g.priority = f->priority();
+        return g;
+    }
+    for (const Departed &d : m_departed)
+    {
+        if (d.token != token)
+            continue;
+        g.name = d.name;
+        g.functionId = d.functionId;
+        g.priority = d.priority;
+        break;
+    }
+    return g;
 }
 
 void Universe::requestFaderPriority(QSharedPointer<GenericFader> fader, Universe::FaderPriority priority)
@@ -390,6 +452,7 @@ void Universe::processFaders()
             // and it's not fading out
             if (fader->deleteRequested() && !fader->isFadingOut())
             {
+                noteDeparted(fader);
                 fader->removeAll();
                 it.remove();
                 fader.clear();

@@ -39,6 +39,10 @@
 #include "groupmasters.h"
 #include "chaseraction.h"
 #include "qlcpalette.h"
+#include "qlcfixturedef.h"
+#include "qlcfixturemode.h"
+#include "qlccapability.h"
+#include "qlcchannel.h"
 #include "collection.h"
 #include "universe.h"
 #include "fixture.h"
@@ -251,7 +255,12 @@ void WhyOn_Test::anOverrideHitPullsItDown()
     QCOMPARE(w.lines.at(0).layerId, hitLayer);
     QCOMPARE(w.lines.at(1).kind, WhyOn::Kind::Cue);
     QCOMPARE(w.lines.at(1).verdict, WhyOn::Verdict::Replaced);
-    QCOMPARE(w.headline, QString("At 0 %. Override hit “Blackout” · layer A holds it at 0 %."));
+    // Dark: the reason it isn't on is the hit (no output only comes last
+    // in the headline: the screens show the light without one).
+    QCOMPARE(w.headline, QString("At 0 %. Not on: Override hit “Blackout” · layer A holds it at 0 %."));
+    QCOMPARE(w.whyNotTexts(), QStringList()
+             << "Universe 1 has no output: nothing leaves the computer for it (Connections)"
+             << "Override hit “Blackout” · layer A holds it at 0 %");
 }
 
 /* Two scenes on one HTP dimmer: the higher wins, the other is named as
@@ -440,6 +449,277 @@ void WhyOn_Test::simpleWordingDropsTheMergeWords()
              << "Scene “Cool” sets 50 % (lower, so it doesn't show)"
              << "Scene “Warm” sets 78 %");
     QCOMPARE(w.headline, QString("It's at 78 %. Scene “Warm” sets 78 %."));
+}
+
+Fixture *WhyOn_Test::addSpot(quint32 address)
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test");
+    def->setModel("Why spot");
+    def->setType(QLCFixtureDef::MovingHead);
+    auto channel = [def](const QString &name, QLCChannel::Preset preset) {
+        QLCChannel *ch = new QLCChannel();
+        ch->setPreset(preset);
+        ch->setName(name);
+        def->addChannel(ch);
+        return ch;
+    };
+    QLCChannel *dim = channel("Dimmer", QLCChannel::IntensityMasterDimmer);
+    QLCChannel *r = channel("Red", QLCChannel::IntensityRed);
+    QLCChannel *g = channel("Green", QLCChannel::IntensityGreen);
+    QLCChannel *b = channel("Blue", QLCChannel::IntensityBlue);
+    QLCChannel *sh = new QLCChannel();
+    sh->setName("Shutter");
+    sh->setGroup(QLCChannel::Shutter);
+    sh->addCapability(new QLCCapability(0, 9, "Closed"));
+    sh->addCapability(new QLCCapability(10, 255, "Open"));
+    def->addChannel(sh);
+    QLCChannel *pan = channel("Pan", QLCChannel::PositionPan);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("6ch");
+    int i = 0;
+    for (QLCChannel *ch : { dim, r, g, b, sh, pan })
+        mode->insertChannel(ch, i++);
+    def->addMode(mode);
+    Fixture *fxi = new Fixture(m_doc);
+    fxi->setName("Spot");
+    fxi->setFixtureDefinition(def, mode);
+    fxi->setAddress(address);
+    fxi->setUniverse(0);
+    m_doc->addFixture(fxi);
+    return fxi;
+}
+
+/* v2: a pan nothing sets keeps the value its last writer left -- named,
+   whether the writer has gone (a scene stopped) or still runs on other
+   channels (the programmer, its edit auto-removed at its target). */
+void WhyOn_Test::aValueLeftBehindNamesItsWriter()
+{
+    Fixture *spot = addSpot(20);
+    Scene *aim = new Scene(m_doc);
+    aim->setName("Aim");
+    aim->setValue(spot->id(), 5, 100);
+    QVERIFY(m_doc->addFunction(aim));
+    aim->start(m_doc->masterTimer(), FunctionParent::master());
+    tick(3);
+    aim->stop(FunctionParent::master());
+    tick(50);
+    QCOMPARE(int(out(25)), 100);
+
+    WhyOn::Answer w = WhyOn::explain(m_doc, spot->id(), 5);
+    QCOMPARE(w.lines.count(), 1);
+    const WhyOn::Line &l = w.lines.first();
+    QCOMPARE(l.kind, WhyOn::Kind::LeftBehind);
+    QCOMPARE(l.functionId, aim->id());
+    QVERIFY2(l.text.startsWith("Nothing sets it now: Scene “Aim” left it at 39 %, "), qPrintable(l.text));
+    QVERIFY2(l.text.endsWith(" s ago (it keeps the last value it was given)"), qPrintable(l.text));
+    QVERIFY(w.whyNot.isEmpty());            // a pan: no "why not"
+
+    // The programmer's edit, auto-removed when it got there: its fader lives on.
+    m_doc->programmer()->writeChannelLive(spot->id(), 5, 200);
+    tick(5);
+    QCOMPARE(int(out(25)), 200);
+    w = WhyOn::explain(m_doc, spot->id(), 5);
+    QCOMPARE(w.lines.first().kind, WhyOn::Kind::LeftBehind);
+    QVERIFY2(w.lines.first().text.startsWith("Nothing sets it now: the programmer left it at 78 %, 0."),
+             qPrintable(w.lines.first().text));
+
+    // Plain words.
+    w = WhyOn::explain(m_doc, spot->id(), 5, WhyOn::Wording::Simple);
+    QVERIFY2(w.lines.first().text.endsWith(" s ago, and it stays there"), qPrintable(w.lines.first().text));
+}
+
+/* Written since by something with no fader (a direct write): the writer
+   that let go no longer explains it, and the answer says only that it kept
+   its last value. */
+void WhyOn_Test::aWriteSinceForgetsTheWriter()
+{
+    Fixture *spot = addSpot(20);
+    m_doc->programmer()->writeChannelLive(spot->id(), 5, 200);
+    tick(5);
+    Universe *uni = m_doc->inputOutputMap()->universe(0);
+    QVERIFY(uni->letGo(25).isValid());
+    QVERIFY(uni->letGo(25).alive);
+    QCOMPARE(uni->letGo(25).name, QString("Programmer"));
+    tick(1);
+    uni->write(25, 60, true);               // a maintenance button's one-shot
+    QVERIFY(!uni->letGo(25).isValid());
+    tick(30);
+    const WhyOn::Answer w = WhyOn::explain(m_doc, spot->id(), 5);
+    QCOMPARE(w.lines.first().kind, WhyOn::Kind::Nothing);
+    QVERIFY2(w.lines.first().text.startsWith("Nothing sets it now: it kept the last value it was given"),
+             qPrintable(w.lines.first().text));
+    QVERIFY(!uni->letGo(-1).isValid());
+    QVERIFY(!uni->letGo(512).isValid());
+}
+
+/* A move in black is a fader now ("Mark", under everything): named, and
+   it holds no intensity -- the light stays dark. */
+void WhyOn_Test::aMarkIsAFaderWithAName()
+{
+    Fixture *spot = addSpot(20);
+    Scene *aim = new Scene(m_doc);
+    aim->setName("Aim");
+    aim->setValue(spot->id(), 5, 100);
+    aim->setValue(spot->id(), 1, 255);      // red
+    QVERIFY(m_doc->addFunction(aim));
+    aim->start(m_doc->masterTimer(), FunctionParent::master());
+    tick(3);
+    m_doc->programmer()->markFixtures({ spot->id() });
+    aim->stop(FunctionParent::master());
+    tick(5);
+    QCOMPARE(int(out(25)), 100);            // the pan held
+    QCOMPARE(int(out(21)), 0);              // no colour held: dark
+
+    WhyOn::Answer w = WhyOn::explain(m_doc, spot->id(), 5);
+    QCOMPARE(w.texts(), QStringList() << "A move in black (Mark) presets it to 39 %, while the light is dark");
+    QCOMPARE(w.lines.first().kind, WhyOn::Kind::Mark);
+    QCOMPARE(w.lines.first().verdict, WhyOn::Verdict::Wins);
+
+    // Let go: the mark's fader leaves, and is named for what it left.
+    m_doc->programmer()->unmarkFixtures({ spot->id() });
+    tick(3);
+    QCOMPARE(int(out(25)), 100);
+    w = WhyOn::explain(m_doc, spot->id(), 5);
+    QCOMPARE(w.lines.first().kind, WhyOn::Kind::LeftBehind);
+    QVERIFY2(w.lines.first().text.startsWith("Nothing sets it now: a move in black (Mark) left it at 39 %"),
+             qPrintable(w.lines.first().text));
+}
+
+/* v3: the dimmer is up, the light is dark anyway -- the shutter is closed
+   and the colour is at black. Each reason, the blocking one first; the
+   headline gives the first that isn't "no output". */
+void WhyOn_Test::whyNotListsTheBlockersInOrder()
+{
+    Fixture *spot = addSpot(20);
+    Scene *look = new Scene(m_doc);
+    look->setName("Look");
+    look->setValue(spot->id(), 0, 255);
+    look->setValue(spot->id(), 4, 0);
+    QVERIFY(m_doc->addFunction(look));
+    look->start(m_doc->masterTimer(), FunctionParent::master());
+    tick(3);
+    QCOMPARE(int(out(20)), 255);
+
+    WhyOn::Answer w = WhyOn::explain(m_doc, spot->id());
+    QCOMPARE(w.texts(), QStringList() << "Scene “Look” sets 100 %");
+    QCOMPARE(w.whyNotTexts(), QStringList()
+             << "Universe 1 has no output: nothing leaves the computer for it (Connections)"
+             << "Its shutter is closed (Shutter at 0: “Closed”): Scene “Look” sets 0 %"
+             << "Its colour is at black: Red, Green, Blue are all at 0 %");
+    QCOMPARE(w.whyNot.at(0).kind, WhyOn::Kind::NoOutput);
+    QCOMPARE(w.whyNot.at(1).kind, WhyOn::Kind::Shutter);
+    QCOMPARE(w.whyNot.at(1).functionId, look->id());
+    QCOMPARE(w.whyNot.at(2).kind, WhyOn::Kind::ColourBlack);
+    QCOMPARE(w.headline, QString("At 100 %. Not on: Its shutter is closed (Shutter at 0: “Closed”): "
+                                 "Scene “Look” sets 0 %."));
+    QVERIFY(w.toText().contains("  ✖ Its colour is at black"));
+
+    // Open and red: it's on, no "why not".
+    look->setValue(spot->id(), 4, 255);
+    look->setValue(spot->id(), 1, 255);
+    tick(3);
+    w = WhyOn::explain(m_doc, spot->id());
+    QVERIFY(w.whyNot.isEmpty());
+    QCOMPARE(w.headline, QString("At 100 %. Scene “Look” sets 100 %."));
+    // A pan is never asked "why not".
+    QVERIFY(WhyOn::explain(m_doc, spot->id(), 5).whyNot.isEmpty());
+}
+
+/* The masters at 0 and Blind, in the order the universe applies them,
+   before what holds the dimmer. */
+void WhyOn_Test::whyNotTheMastersAndBlind()
+{
+    FixtureGroup *front = group("Front", { m_fixtures[0] });
+    front->setMaster(true);
+    front->setMasterLevel(0);
+    m_doc->groupMasters()->rebuild();
+    Scene *s = new Scene(m_doc);
+    s->setName("Look");
+    s->setValue(m_fixtures[0], 0, 255);
+    QVERIFY(m_doc->addFunction(s));
+    s->start(m_doc->masterTimer(), FunctionParent::master());
+    m_doc->inputOutputMap()->setGrandMasterValue(0);
+    m_doc->inputOutputMap()->setOutputInhibited(true);
+    m_doc->inputOutputMap()->setBlackout(true);
+    tick(3);
+    QCOMPARE(int(out(0)), 0);
+
+    const WhyOn::Answer w = WhyOn::explain(m_doc, m_fixtures[0]);
+    QCOMPARE(w.whyNotTexts(), QStringList()
+             << "Universe 1 has no output: nothing leaves the computer for it (Connections)"
+             << "Blind is on: the rig gets nothing (the screens still show it)"
+             << "Blackout is on"
+             << "The Grand Master is at 0 %"
+             << "Group master “Front” is at 0 %");
+    QCOMPARE(w.whyNot.at(4).groupId, front->id());
+    QVERIFY(w.headline.endsWith("Not on: Blind is on: the rig gets nothing (the screens still show it)."));
+    m_doc->inputOutputMap()->setOutputInhibited(false);
+    m_doc->inputOutputMap()->setBlackout(false);
+    m_doc->inputOutputMap()->setGrandMasterValue(255);
+}
+
+void WhyOn_Test::whyNotNothingSetsItAndNotPatched()
+{
+    tick(2);
+    WhyOn::Answer w = WhyOn::explain(m_doc, m_fixtures[2]);
+    QCOMPARE(w.whyNotTexts(), QStringList()
+             << "Universe 1 has no output: nothing leaves the computer for it (Connections)"
+             << "Nothing sets its dimmer: no cue, scene, desk or slider is on it");
+    QCOMPARE(w.headline, QString("At 0 %. Not on: Nothing sets its dimmer: no cue, scene, desk or slider is on it."));
+
+    Fixture *loose = new Fixture(m_doc);
+    loose->setName("Loose");
+    loose->setChannels(1);
+    loose->setPatched(false);               // in the inventory
+    m_doc->addFixture(loose);
+    w = WhyOn::explain(m_doc, loose->id());
+    QCOMPARE(w.whyNotTexts(), QStringList() << "It isn't patched: give it an address first (Fixture Manager)");
+    QCOMPARE(w.whyNot.first().kind, WhyOn::Kind::NotPatched);
+}
+
+void WhyOn_Test::whyNotParkedAtZero()
+{
+    tick(2);
+    m_doc->programmer()->parkFixtures({ m_fixtures[1] });
+    tick(3);
+    const WhyOn::Answer w = WhyOn::explain(m_doc, m_fixtures[1]);
+    QCOMPARE(w.whyNotTexts(), QStringList()
+             << "Universe 1 has no output: nothing leaves the computer for it (Connections)"
+             << "It's parked at 0 % (Park beats everything)");
+    QCOMPARE(w.whyNot.at(1).kind, WhyOn::Kind::Park);
+}
+
+/* Cue 1 lights A and releases it leaving; cue 2 lights B: under cue 2, A
+   is dark because its layer was released. */
+void WhyOn_Test::whyNotAReleasedLayer()
+{
+    FixtureGroup *a = group("A", { m_fixtures[0] });
+    FixtureGroup *b = group("B", { m_fixtures[1] });
+    const quint32 full = dimmer(255, "Full");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("Dance");
+    const quint32 listId = st->addCueList(prod, "Song");
+    const quint32 c1 = st->addCue(listId, -1, "One");
+    const quint32 c2 = st->addCue(listId, 0, "Two");
+    QVERIFY(st->setTargetLook(c1, groupTarget(a->id()), st->lookForPalette(full)));
+    QVERIFY(st->setTargetLook(c2, groupTarget(b->id()), st->lookForPalette(full)));
+    QVERIFY(st->setTargetRelease(c1, groupTarget(a->id()), true));
+    Chaser *chaser = qobject_cast<Chaser *>(m_doc->function(st->cueList(listId)->chaser));
+    go(chaser);
+    tick(5);
+    QVERIFY(WhyOn::explain(m_doc, m_fixtures[0]).whyNot.isEmpty());
+    go(chaser);
+    tick(5);
+    QCOMPARE(st->runningCue(listId), c2);
+    QCOMPARE(int(out(0)), 0);
+
+    const WhyOn::Answer w = WhyOn::explain(m_doc, m_fixtures[0]);
+    QCOMPARE(w.whyNotTexts(), QStringList()
+             << "Universe 1 has no output: nothing leaves the computer for it (Connections)"
+             << "Cue 2 Two runs, and layer A was released leaving cue 1 One");
+    QCOMPARE(w.whyNot.at(1).kind, WhyOn::Kind::Released);
+    QCOMPARE(w.whyNot.at(1).cueId, c1);
 }
 
 QTEST_MAIN(WhyOn_Test)
