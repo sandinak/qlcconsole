@@ -84,15 +84,17 @@ QString McpBridge::defaultServerName()
 #else
     // A folder only this user can write to, so nobody else can put a socket
     // of theirs where the bridge looks (macOS: $TMPDIR is per user; Linux:
-    // $XDG_RUNTIME_DIR, 0700). A Unix socket path is short (~104 bytes).
+    // $XDG_RUNTIME_DIR, 0700). A Unix socket path is short (~104 bytes),
+    // and QLocalServer first makes it in a folder named after it (+ ~10):
+    // a TMPDIR too long for that falls back to /tmp, with the user's name.
 # if defined(Q_OS_MACOS)
     QString dir = QDir::tempPath();
 # else
     QString dir = QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation);
 # endif
     QString path = QDir(dir).filePath(QStringLiteral("qlcconsole-mcp.sock"));
-    if (dir.isEmpty() || path.toLocal8Bit().size() > 100)
-        path = QDir(QDir::tempPath()).filePath(QStringLiteral("qlcconsole-mcp-%1.sock").arg(userName()));
+    if (dir.isEmpty() || path.toLocal8Bit().size() > MaxPath)
+        path = QStringLiteral("/tmp/qlcconsole-mcp-%1.sock").arg(userName());
     return path;
 #endif
 }

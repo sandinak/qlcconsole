@@ -77,7 +77,13 @@ void McpServer_Test::initTestCase()
     QCoreApplication::setApplicationName(QStringLiteral("mcpserver_test"));
     QSettings::setDefaultFormat(QSettings::IniFormat);
     QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, m_settingsDir.path());
+    // A short absolute path: the gate gives each test a long TMPDIR, too
+    // long for a Unix socket.
+#ifdef Q_OS_WIN
     m_socket = QStringLiteral("qlcmcp-test-%1").arg(QCoreApplication::applicationPid());
+#else
+    m_socket = QStringLiteral("/tmp/qlcmcp-test-%1").arg(QCoreApplication::applicationPid());
+#endif
     qputenv("QLC_MCP_SOCKET", m_socket.toLocal8Bit());
     AiAssist::setAssertOnViolation(false);
 }
@@ -451,7 +457,7 @@ void McpServer_Test::localOnly()
     const QString def = McpBridge::defaultServerName();
     qputenv("QLC_MCP_SOCKET", m_socket.toLocal8Bit());
     QVERIFY(def.startsWith('/'));
-    QVERIFY(def.toLocal8Bit().size() <= 104);
+    QVERIFY(def.toLocal8Bit().size() <= McpBridge::MaxPath + 14);
 #endif
 }
 

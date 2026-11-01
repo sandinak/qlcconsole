@@ -63,6 +63,9 @@ public:
      *  this user's (macOS: in the per-user temp folder; Linux: the user's
      *  runtime folder; Windows: a named pipe). */
     static QString defaultServerName();
+    /** The longest socket path used (bytes): QLocalServer needs room for
+     *  its temporary folder within the ~104 a Unix socket allows. */
+    static const int MaxPath = 90;
 
     /** Whether @a argv asks for the bridge (--mcp). */
     static bool wanted(int argc, char **argv);
