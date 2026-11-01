@@ -11,9 +11,10 @@ listed there with a fix.
 ### Why is this light on?
 
 Right-click a fixture in the Lighting Studio plot, the Rig Overview or the
-Fixture Manager, or a channel on the Simple Desk ▸ **Why is this on?** A
-small window names what sets it now, from what the console sent on the
-last frame:
+Fixture Manager, a layer row in the Show Tree, a fixture or group row in
+the Workbench, or a channel on the Simple Desk ▸ **Why is this on?** — or
+select a light anywhere and press **⌘I**. A small window names what sets
+it now, from what the console sent on the last frame:
 
 - the **top line wins**; the rest are listed top-down, the highest layer
   first, each with why it doesn't show (*lower*: on a dimmer the highest
@@ -30,6 +31,31 @@ last frame:
   channel modifier, the input passthrough, and **Blind**, **Blackout** or
   Teaching's output hold.
 
+**Nothing sets it, but it's not at 0** (a pan, a colour wheel): a
+channel like that keeps the last value it was given. The window names
+who left it there, if nothing has written it since: *Nothing sets it now:
+cue 1.0.2 Chorus · layer Movers left it at 50 %, 3.0 s ago*. The
+programmer, the Simple Desk and a move in black are named the same way.
+
+**Why isn't it on?** When the light is dark — its dimmer near 0, its
+shutter closed or its colour at black — the window lists why first,
+under **Why it isn't on**, the reason that blocks first:
+
+- the universe has no output, or the channel isn't ours (the venue's);
+- **Blind**, **Blackout** or Teaching's output hold;
+- the **Grand Master** or a **group master** at 0, the power limiter;
+- what holds the dimmer at 0: **Park**, a cue whose layer was
+  **released** (*Cue 1.0.2 Chorus runs, and layer StepTops was released
+  leaving cue 1.0.1 Verse*), a source set to 0, or nothing at all;
+- a **closed shutter** (and what closes it), a **colour at black**.
+
+The headline gives the first of them (no output only when it's the only
+one: the screens show the light without it).
+
+**Act from a line** (Design mode): select a Park line ▸ **Unpark**, a
+Simple Desk line ▸ **Release the desk channel**, a move in black ▸ **Let
+go of the move in black**. In Operate the window only explains.
+
 Click a line to go to the cue and layer in the Show Tree, the function,
 the Simple Desk, the Virtual Console or the group in the Fixture Manager.
 **Copy** puts the answer on the clipboard as text. **Plain words** leaves
@@ -38,7 +64,8 @@ picks another channel of the fixture. A **≈** line means the answer is an esti
 between frames, or a blend mode can only be approximated.
 
 The window asks again four times a second while it's open; closed, it
-costs the show nothing.
+costs the show nothing. Who let go of a channel is noted only when it
+happens, never per frame.
 
 **Nothing comes out of a universe, or only part of a rig lights.**
 Connections → tick **By universe**: every universe with where it goes.

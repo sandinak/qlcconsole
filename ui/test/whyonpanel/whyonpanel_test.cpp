@@ -22,6 +22,7 @@
 #include <QLabel>
 #include <QCheckBox>
 #include <QTimer>
+#include <QPointer>
 #include <QtTest>
 
 #define private public
@@ -40,7 +41,9 @@
 #include "qlcfixturedefcache.h"
 #include "qlcfixturedef.h"
 #include "qlcfixturemode.h"
+#include "programmercontroller.h"
 #include "fixture.h"
+#include <QPushButton>
 #include "scene.h"
 #include "doc.h"
 
@@ -134,7 +137,8 @@ void WhyOnPanel_Test::listsTheChainAndAClickGoesThere()
     // Asking about another light moves the same window.
     QCOMPARE(WhyOnPanel::showFor(m_doc, m_fixtures[1]), p);
     QCOMPARE(p->answer().fixtureId, m_fixtures[1]);
-    QCOMPARE(list->item(0)->text(),
+    // Dark: why it isn't on comes first, then what sets it.
+    QCOMPARE(list->item(list->count() - 1)->text(),
              QString("Nothing sets it now: an intensity is dark unless something sets it"));
 }
 
@@ -216,6 +220,138 @@ void WhyOnPanel_Test::asksNothingWhileHidden()
     QVERIFY(t->isActive());
     p->close();             // deletes itself
     QTRY_VERIFY(WhyOnPanel::current() == nullptr);
+}
+
+/* v3: a dark light -- why it isn't on, under its own header, before what
+   sets it; a header row goes nowhere. */
+void WhyOnPanel_Test::aDarkLightSaysWhyNotFirst()
+{
+    tick(2);
+    WhyOnPanel *p = WhyOnPanel::showFor(m_doc, m_fixtures[1]);
+    QListWidget *list = p->lines();
+    QStringList rows;
+    for (int i = 0; i < list->count(); ++i)
+        rows << list->item(i)->text();
+    QCOMPARE(rows, QStringList()
+             << "Why it isn't on:"
+             << "✖ Universe 1 has no output: nothing leaves the computer for it (Connections)"
+             << "✖ Nothing sets its dimmer: no cue, scene, desk or slider is on it"
+             << "What sets it:"
+             << "Nothing sets it now: an intensity is dark unless something sets it");
+    QVERIFY(p->lineAt(0) == nullptr);
+    QVERIFY(p->lineAt(3) == nullptr);
+    QCOMPARE(p->lineAt(1)->kind, WhyOn::Kind::NoOutput);
+    QCOMPARE(p->lineAt(4)->kind, WhyOn::Kind::Nothing);
+    QList<WhyOn::Line> went;
+    WhyOnPanel::setJumpOverride([&went](const WhyOn::Line &l) { went << l; });
+    p->activate(0);
+    QVERIFY(went.isEmpty());
+    p->activate(2);
+    QCOMPARE(went.count(), 1);
+    QCOMPARE(went.first().kind, WhyOn::Kind::Nothing);
+    QCOMPARE(p->findChild<QLabel *>("whyOnHeadline")->text(),
+             QString("At 0 %. Not on: Nothing sets its dimmer: no cue, scene, desk or slider is on it."));
+}
+
+/* A parked light: its Park line offers Unpark, in Design mode only. */
+void WhyOnPanel_Test::unparkFromALine()
+{
+    Scene *s = new Scene(m_doc);
+    s->setName("Look");
+    s->setValue(m_fixtures[0], 0, 200);
+    QVERIFY(m_doc->addFunction(s));
+    s->start(m_doc->masterTimer(), FunctionParent::master());
+    tick(3);
+    m_doc->programmer()->parkFixtures({ m_fixtures[0] });
+    tick(3);
+    WhyOnPanel *p = WhyOnPanel::showFor(m_doc, m_fixtures[0]);
+    QCOMPARE(p->answer().texts().first(), QString("Park holds it at 78 %"));
+    QPushButton *act = p->actionButton();
+    QVERIFY(!act->isVisibleTo(p));
+    p->lines()->setCurrentRow(0);
+    QVERIFY(act->isVisibleTo(p));
+    QCOMPARE(act->text(), QString("Unpark"));
+
+    // Operate: the window only explains.
+    m_doc->setMode(Doc::Operate);
+    p->refresh();
+    QVERIFY(!act->isEnabled());
+    QVERIFY(!p->runAction(0));
+    QVERIFY(m_doc->programmer()->isFixtureParked(m_fixtures[0]));
+    m_doc->setMode(Doc::Design);
+    p->refresh();
+    QVERIFY(act->isEnabled());
+
+    QTest::mouseClick(act, Qt::LeftButton);
+    QVERIFY(!m_doc->programmer()->isFixtureParked(m_fixtures[0]));
+    tick(3);
+    p->refresh();
+    QCOMPARE(p->answer().texts(), QStringList() << "Scene “Look” sets 78 %");
+    // A line with nothing to do: no button.
+    p->lines()->setCurrentRow(0);
+    QVERIFY(!act->isVisibleTo(p));
+}
+
+void WhyOnPanel_Test::theActionsALineOffers()
+{
+    WhyOn::Line l;
+    l.kind = WhyOn::Kind::Park;
+    QCOMPARE(WhyOnPanel::actionFor(l), WhyOnPanel::Action::Unpark);
+    l.kind = WhyOn::Kind::Mark;
+    QCOMPARE(WhyOnPanel::actionFor(l), WhyOnPanel::Action::LetGoMark);
+    QCOMPARE(WhyOnPanel::actionName(WhyOnPanel::Action::LetGoMark), QString("Let go of the move in black"));
+    l.kind = WhyOn::Kind::Cue;
+    QCOMPARE(WhyOnPanel::actionFor(l), WhyOnPanel::Action::NoAction);
+
+    // The real Simple Desk's line knows its channel: Release.
+    SimpleDeskEngine *desk = new SimpleDeskEngine(m_doc);
+    desk->setValue(2, 255);
+    tick(4);
+    const WhyOn::Answer w = WhyOn::explain(m_doc, m_fixtures[2]);
+    QCOMPARE(w.lines.first().kind, WhyOn::Kind::SimpleDesk);
+    QCOMPARE(w.lines.first().absAddress, quint32(2));
+    QCOMPARE(WhyOnPanel::actionFor(w.lines.first()), WhyOnPanel::Action::Release);
+    QCOMPARE(WhyOnPanel::actionName(WhyOnPanel::Action::Release), QString("Release the desk channel"));
+    delete desk;
+}
+
+/* ⌘I: on the light picked last in any view; none (or gone), a hint. */
+void WhyOnPanel_Test::commandIOpensOnTheSelection()
+{
+    QCOMPARE(WhyOnPanel::shortcut(), QKeySequence(Qt::CTRL | Qt::Key_I));
+    WhyOnPanel::noteSelection({ m_fixtures[2], m_fixtures[0] });
+    WhyOnPanel::noteSelection({});          // an emptied selection keeps the last
+    WhyOnPanel *p = WhyOnPanel::showForSelection(m_doc);
+    QVERIFY(p != nullptr);
+    QCOMPARE(p->answer().fixtureId, m_fixtures[2]);
+
+    WhyOnPanel::noteSelection({ 9999 });    // a light since deleted
+    p = WhyOnPanel::showForSelection(m_doc);
+    QVERIFY(!p->answer().isValid());
+    QVERIFY(p->findChild<QLabel *>("whyOnHeadline")->text().startsWith("Select a light"));
+    QCOMPARE(p->lines()->count(), 0);
+}
+
+/* Open, the window adds nothing to the engine (no fader, no probe); closed,
+   its timer is gone with it and nothing asks again. */
+void WhyOnPanel_Test::closingTheWindowStopsAllWork()
+{
+    Universe *uni = m_doc->inputOutputMap()->universe(0);
+    const int faders = uni->faders().count();
+    WhyOnPanel *p = WhyOnPanel::showFor(m_doc, m_fixtures[0]);
+    QCOMPARE(uni->faders().count(), faders);
+    QPointer<QTimer> timer = p->m_timer;
+    QVERIFY(timer->isActive());
+    int asked = 0;
+    QObject::connect(timer.data(), &QTimer::timeout, [&asked]() { ++asked; });
+    QTRY_VERIFY(asked > 0);
+    p->close();
+    QTRY_VERIFY(WhyOnPanel::current() == nullptr);
+    QVERIFY(timer.isNull());
+    const int before = asked;
+    QTest::qWait(600);
+    QCOMPARE(asked, before);
+    QCOMPARE(uni->faders().count(), faders);
 }
 
 QTEST_MAIN(WhyOnPanel_Test)

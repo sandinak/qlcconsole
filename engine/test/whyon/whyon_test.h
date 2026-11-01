@@ -24,6 +24,7 @@
 #include <QList>
 
 class FixtureGroup;
+class Fixture;
 class Chaser;
 class Doc;
 
@@ -49,12 +50,26 @@ private slots:
     void aChannelAndABareAddress();
     void simpleWordingDropsTheMergeWords();
 
+    // v2: who left it there
+    void aValueLeftBehindNamesItsWriter();
+    void aWriteSinceForgetsTheWriter();
+    void aMarkIsAFaderWithAName();
+    // v3: why not
+    void whyNotListsTheBlockersInOrder();
+    void whyNotTheMastersAndBlind();
+    void whyNotNothingSetsItAndNotPatched();
+    void whyNotParkedAtZero();
+    void whyNotAReleasedLayer();
+
 private:
     void tick(int n = 1);
     uchar out(int address);
     quint32 dimmer(int level, const QString &name);
     FixtureGroup *group(const QString &name, const QList<quint32> &fixtures);
     void go(Chaser *c);
+    /** A spot at @a address: Dimmer, Red, Green, Blue, Shutter (0-9
+     *  "Closed"), Pan -- channels 0..5 */
+    Fixture *addSpot(quint32 address);
 
     Doc *m_doc = nullptr;
     QList<quint32> m_fixtures;

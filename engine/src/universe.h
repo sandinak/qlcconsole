@@ -32,6 +32,7 @@
 #include <climits>
 #include <atomic>
 #include <memory>
+#include <array>
 
 #include "inputpatch.h"
 #include "qlcchannel.h"
@@ -617,7 +618,63 @@ public:
     };
     ChannelSnapshot channelSnapshot(int address) const;
 
+    /** "Why is this on?" v2: a fader that stopped writing @p count channels
+     *  from @p address (an auto-removed channel at its target, a fader
+     *  dismissed or deleted with channels left). Only when that happens --
+     *  never per frame -- and no allocation: two relaxed stores a channel.
+     *  An LTP channel keeps the value its last writer left: letGo() names
+     *  that writer later. */
+    void noteLetGo(int address, int count, quint32 token)
+    {
+        const quint32 frame = m_frame.load(std::memory_order_relaxed);
+        for (int i = 0; i < count; ++i)
+        {
+            const int a = address + i;
+            if (a < 0 || a >= UNIVERSE_SIZE)
+                continue;
+            m_letGoBy[a].store(token, std::memory_order_relaxed);
+            m_letGoFrame[a].store(frame, std::memory_order_relaxed);
+        }
+    }
+
+    /** Who left channel @p address where it is: the last fader that let
+     *  go of it, if nothing has written it since. Asked for on demand (the
+     *  UI), under the frame lock then the faders' lock. */
+    struct LetGo
+    {
+        quint32 token = 0;          //!< 0: nobody known
+        quint32 framesAgo = 0;      //!< since it let go
+        bool alive = false;         //!< the fader still runs (other channels)
+        QString name;               //!< the fader's name
+        quint32 functionId = UINT_MAX;
+        int priority = 0;
+        bool isValid() const { return token != 0; }
+    };
+    LetGo letGo(int address);
+
 private:
+    /** A fader leaving the list (dismissed or deleted): its channels let
+     *  go, and who it was is kept a while for letGo(). Under m_fadersMutex. */
+    void noteDeparted(const QSharedPointer<GenericFader> &fader);
+
+    /** Per channel: the token (GenericFader::token()) of the fader that let
+     *  go of it last, and the frame it did */
+    std::unique_ptr<std::atomic<quint32>[]> m_letGoBy;
+    std::unique_ptr<std::atomic<quint32>[]> m_letGoFrame;
+    /** The next fader's token (requestFader()); under m_fadersMutex */
+    quint32 m_nextFaderToken = 0;
+    /** The last faders that left, who they were: a fixed ring, so a fader
+     *  leaving copies a name (shared, never allocated) and nothing more */
+    struct Departed
+    {
+        quint32 token = 0;
+        QString name;
+        quint32 functionId = UINT_MAX;
+        int priority = 0;
+    };
+    std::array<Departed, 32> m_departed;
+    int m_departedNext = 0;
+
     void markWritten(int address)
     {
         m_writtenFrame[address].store(m_frame.load(std::memory_order_relaxed),

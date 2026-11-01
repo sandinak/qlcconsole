@@ -211,6 +211,17 @@ FixtureManager::FixtureManager(QWidget* parent, Doc* doc)
         });
     connect(m_fixtures_tree, &QTreeWidget::itemSelectionChanged,
             this, &FixtureManager::syncUniversePickOrder);
+    // ⌘I ("Why is this on?") opens on the fixture picked here.
+    connect(m_fixtures_tree, &QTreeWidget::itemSelectionChanged, this, [this]() {
+        QList<quint32> ids;
+        for (QTreeWidgetItem *item : m_fixtures_tree->selectedItems())
+        {
+            const QVariant fv = item->data(KColumnName, PROP_ID);
+            if (fv.isValid() && !item->data(KColumnName, PROP_GROUP).isValid())
+                ids << fv.toUInt();
+        }
+        WhyOnPanel::noteSelection(ids);
+    });
 
     connect(m_doc, SIGNAL(channelsGroupRemoved(quint32)),
             this, SLOT(slotChannelsGroupRemoved(quint32)));

@@ -31,6 +31,7 @@
 #include "fadechannel.h"
 #include "grandmaster.h"
 #include "qlcchannel.h"
+#include "qlccapability.h"
 #include "qlcpalette.h"
 #include "fixturegroup.h"
 #include "groupmasters.h"
@@ -283,6 +284,179 @@ QStringList effectsOn(Doc *doc, quint32 fixtureId, quint32 *sceneId)
     return names;
 }
 
+/** v2: who a fader that let go of a channel was, in words ("cue 1 One ·
+ *  layer A", "the programmer"); fills the line's kind and where it goes */
+QString writerName(Doc *doc, const Universe::LetGo &g, const QString &key, WhyOn::Line *l)
+{
+    ShowTreeController *st = doc->showTree();
+    const QString &n = g.name;
+    if (n == QLatin1String("Mark"))
+    {
+        l->kind = WhyOn::Kind::Mark;
+        return WhyOn::tr("a move in black (Mark)");
+    }
+    if (g.priority == Universe::Park || n == QLatin1String("Park"))
+    {
+        l->kind = WhyOn::Kind::Park;
+        return WhyOn::tr("Park");
+    }
+    if (g.priority == Universe::Focus)
+    {
+        l->kind = WhyOn::Kind::Focus;
+        return n == QLatin1String("Refine") ? WhyOn::tr("Refine") : WhyOn::tr("Quick focus");
+    }
+    if (g.priority == Universe::Flash)
+    {
+        l->kind = WhyOn::Kind::Flash;
+        return WhyOn::tr("Flash (identify)");
+    }
+    if (g.priority == Universe::Highlight)
+    {
+        l->kind = WhyOn::Kind::Highlight;
+        return WhyOn::tr("Highlight");
+    }
+    if (n == QLatin1String("Last look"))
+    {
+        l->kind = WhyOn::Kind::LastLook;
+        return WhyOn::tr("the last look");
+    }
+    if (n == QLatin1String("EffectScript"))
+    {
+        l->kind = WhyOn::Kind::Effect;
+        return WhyOn::tr("an effect");
+    }
+    if (n == QLatin1String("FixtureTest") || n == QLatin1String("FixtureLocate"))
+    {
+        l->kind = WhyOn::Kind::Locate;
+        return WhyOn::tr("Locate / fixture test");
+    }
+    if (g.priority == Universe::SimpleDesk && g.functionId == Function::invalidId())
+    {
+        l->kind = WhyOn::Kind::SimpleDesk;
+        return n.isEmpty() || n == QLatin1String("Simple Desk") ? WhyOn::tr("the Simple Desk") : n;
+    }
+    if (g.priority == Universe::Tracked)
+    {
+        l->kind = WhyOn::Kind::TrackedRestack;
+        return WhyOn::tr("cue list %1 (its tracked state)").arg(quoted(n.section(QStringLiteral(" (tracked)"), 0, 0)));
+    }
+    if (g.functionId != Function::invalidId())
+    {
+        Function *f = doc->function(g.functionId);
+        if (f == nullptr)
+            return WhyOn::tr("a function since deleted");
+        l->functionId = f->id();
+        CuePlace place;
+        if (findPlace(st, f->id(), key, false, &place))
+        {
+            l->kind = place.hit ? WhyOn::Kind::Hit : WhyOn::Kind::Cue;
+            l->cueId = place.cueId;
+            l->layerId = place.layerId;
+            const QString layer = place.layerName.isEmpty() ? QString()
+                                  : WhyOn::tr(" · layer %1").arg(place.layerName);
+            return place.hit ? WhyOn::tr("hit %1%2").arg(quoted(cueText(st, place.cueId)), layer)
+                             : WhyOn::tr("cue %1%2").arg(cueText(st, place.cueId), layer);
+        }
+        l->kind = WhyOn::Kind::Function;
+        return WhyOn::tr("%1 %2").arg(Function::typeToString(f->type()), quoted(f->name()));
+    }
+    if (n.startsWith(QLatin1String("VC ")))
+    {
+        l->kind = WhyOn::Kind::VCWidget;
+        bool ok = false;
+        const quint32 wid = n.mid(3).toUInt(&ok);
+        if (ok)
+            l->widgetId = wid;
+        const QString who = ok && widgetNamer() ? widgetNamer()(wid) : QString();
+        return who.isEmpty() ? WhyOn::tr("a Virtual Console slider") : who;
+    }
+    if (n == QLatin1String("Programmer"))
+    {
+        l->kind = WhyOn::Kind::Programmer;
+        return WhyOn::tr("the programmer");
+    }
+    if (!n.isEmpty())
+        return n;
+    return g.alive || g.priority != 0 ? WhyOn::tr("a source with no name") : WhyOn::tr("a writer that has gone");
+}
+
+/** v3: a fixture the running cue of a list doesn't light, and why: its
+ *  layer was released, or the cue has none on it. Empty: no list runs, or
+ *  the running cue has a layer on it. */
+QString releasedReason(ShowTreeController *st, quint32 fid, WhyOn::Line *l)
+{
+    if (st == nullptr)
+        return QString();
+    // One cue: why it doesn't light the fixture; empty: it does.
+    auto check = [st, fid, l](const ShowTree::CueList &list, quint32 cueId, bool preview) -> QString {
+        ShowTree::ResolvedCue rc;
+        if (cueId == kInvalid || !st->resolvedCue(cueId, &rc))
+            return QString();
+        for (const ShowTree::ResolvedLayer &rl : rc.layers)
+            if (!rl.target.isOpaque() && st->targetFixtures(rl.target).contains(fid))
+                return QString();
+        const int at = list.indexOf(cueId);
+        const QString cue = preview ? WhyOn::tr("Cue %1 is previewed (Design)").arg(st->cueLabel(list, at))
+                                    : WhyOn::tr("Cue %1 runs").arg(st->cueLabel(list, at));
+        l->cueId = cueId;
+        for (int i = at - 1; i >= 0; --i)
+        {
+            const ShowTree::Cue &c = list.cues.at(i);
+            for (const ShowTree::Layer &ly : c.layers)
+            {
+                if (ly.target.isOpaque() || !st->targetFixtures(ly.target).contains(fid))
+                    continue;
+                l->cueId = c.id;
+                l->layerId = ly.id;
+                const QString name = ly.name.isEmpty() ? st->targetLabel(ly.target) : ly.name;
+                if (ly.release)
+                    return WhyOn::tr("%1, and layer %2 was released leaving cue %3")
+                            .arg(cue, name, st->cueLabel(list, i));
+                return WhyOn::tr("%1, and has no layer on this light (layer %2 last lit it, in cue %3)")
+                        .arg(cue, name, st->cueLabel(list, i));
+            }
+        }
+        return WhyOn::tr("%1, and no cue up to it lights this light").arg(cue);
+    };
+    const quint32 previewed = st->previewedCue();
+    if (const ShowTree::CueList *list = previewed != kInvalid ? st->listOfCue(previewed) : nullptr)
+        if (!list->looks)
+        {
+            const QString why = check(*list, previewed, true);
+            if (!why.isEmpty())
+                return why;
+        }
+    for (const ShowTree::Production &p : st->productions())
+        for (const ShowTree::CueList &list : p.lists)
+        {
+            if (list.looks)
+                continue;
+            const QString why = check(list, st->runningCue(list.id), false);
+            if (!why.isEmpty())
+                return why;
+        }
+    return QString();
+}
+
+/** A shutter value that closes it: a Close capability, or one named so */
+const QLCCapability *closedCapability(const QLCChannel *ch, uchar value)
+{
+    if (ch == nullptr)
+        return nullptr;
+    const QLCCapability *cap = ch->searchCapability(value);
+    if (cap == nullptr)
+        return nullptr;
+    if (cap->preset() == QLCCapability::ShutterClose)
+        return cap;
+    const QString n = cap->name().toLower();
+    if (n.contains(QLatin1String("open")))
+        return nullptr;
+    if (n.contains(QLatin1String("close")) || n.contains(QLatin1String("blackout"))
+        || n.contains(QLatin1String("shut")))
+        return cap;
+    return nullptr;
+}
+
 QString fadeNote(const FadeChannel &fc, quint32 address)
 {
     if (fc.isReady() || fc.fadeTime() == 0 || fc.fadeTime() == UINT_MAX)
@@ -318,6 +492,8 @@ QString WhyOn::Answer::toText() const
     if (!subject.isEmpty())
         out << subject;
     out << headline;
+    for (const Line &l : whyNot)
+        out << QStringLiteral("  ✖ ") + l.text;
     for (const Line &l : lines)
         out << QStringLiteral("  • ") + l.text;
     if (approximate)
@@ -329,6 +505,14 @@ QStringList WhyOn::Answer::texts() const
 {
     QStringList out;
     for (const Line &l : lines)
+        out << l.text;
+    return out;
+}
+
+QStringList WhyOn::Answer::whyNotTexts() const
+{
+    QStringList out;
+    for (const Line &l : whyNot)
         out << l.text;
     return out;
 }
@@ -358,12 +542,17 @@ WhyOn::Answer WhyOn::explain(Doc *doc, quint32 fixtureId, quint32 channel, Wordi
         channel = defaultChannel(doc, fixtureId);
     if (channel == QLCChannel::invalid() || channel >= fxi->channels())
         return a;
-    if (fxi->address() == QLCChannel::invalid() || fxi->universe() == Universe::invalid())
+    if (!fxi->isPatched() || fxi->address() == QLCChannel::invalid() || fxi->universe() == Universe::invalid())
     {
         a.fixtureId = fixtureId;
         a.channel = channel;
         a.subject = fxi->name();
         a.headline = tr("Not patched: it has no address, so nothing reaches it.");
+        Line l;
+        l.kind = Kind::NotPatched;
+        l.verdict = Verdict::Blocks;
+        l.text = tr("It isn't patched: give it an address first (Fixture Manager)");
+        a.whyNot << l;
         return a;
     }
     a = explainAddress(doc, fxi->universe(), int(fxi->address() + channel), wording);
@@ -371,6 +560,11 @@ WhyOn::Answer WhyOn::explain(Doc *doc, quint32 fixtureId, quint32 channel, Wordi
 }
 
 WhyOn::Answer WhyOn::explainAddress(Doc *doc, quint32 universe, int address, Wording wording)
+{
+    return explainAt(doc, universe, address, wording, true);
+}
+
+WhyOn::Answer WhyOn::explainAt(Doc *doc, quint32 universe, int address, Wording wording, bool whyNot)
 {
     Answer a;
     if (doc == nullptr || address < 0 || address >= 512)
@@ -522,7 +716,12 @@ WhyOn::Answer WhyOn::explainAddress(Doc *doc, quint32 universe, int address, Wor
         const QString level = percent(s.own);
         QString what;
 
-        if (s.priority == Universe::Park || s.name == QLatin1String("Park"))
+        if (s.name == QLatin1String("Mark"))
+        {
+            l.kind = Kind::Mark;
+            what = tr("A move in black (Mark) presets it to %1, while the light is dark").arg(level);
+        }
+        else if (s.priority == Universe::Park || s.name == QLatin1String("Park"))
         {
             l.kind = Kind::Park;
             what = tr("Park holds it at %1").arg(level);
@@ -569,6 +768,7 @@ WhyOn::Answer WhyOn::explainAddress(Doc *doc, quint32 universe, int address, Wor
         else if (s.priority == Universe::SimpleDesk && s.functionId == Function::invalidId())
         {
             l.kind = Kind::SimpleDesk;
+            l.absAddress = (universe << 9) | quint32(address);
             what = s.name.isEmpty() || s.name == QLatin1String("Simple Desk")
                    ? tr("Simple Desk sets %1").arg(level)
                    : tr("%1 sets %2").arg(s.name, level);
@@ -712,8 +912,25 @@ WhyOn::Answer WhyOn::explainAddress(Doc *doc, quint32 universe, int address, Wor
         Line l;
         l.kind = Kind::Nothing;
         l.verdict = Verdict::Info;
+        const Universe::LetGo gone = intensityCh ? Universe::LetGo() : uni->letGo(address);
         if (intensityCh)
             l.text = tr("Nothing sets it now: an intensity is dark unless something sets it");
+        else if (gone.isValid())
+        {
+            // v2: the writer that left it there, if nothing wrote it since.
+            l.kind = Kind::LeftBehind;
+            const QString who = writerName(doc, gone, key, &l);
+            const Kind named = l.kind;
+            l.kind = Kind::LeftBehind;
+            if (named == Kind::SimpleDesk)
+                l.absAddress = (universe << 9) | quint32(address);
+            l.value = a.preGM;
+            const QString ago = QString::number(gone.framesAgo / qreal(MasterTimer::frequency()), 'f', 1);
+            l.text = simple ? tr("Nothing sets it now: %1 left it at %2, %3 s ago, and it stays there")
+                              .arg(who, percent(a.preGM), ago)
+                            : tr("Nothing sets it now: %1 left it at %2, %3 s ago (it keeps the last value it was given)")
+                              .arg(who, percent(a.preGM), ago);
+        }
         else if (snap.framesSinceWrite > 1 && snap.framesSinceWrite < 0x7FFFFFFF)
             l.text = tr("Nothing sets it now: it kept the last value it was given (%1 s ago)")
                     .arg(QString::number(snap.framesSinceWrite / qreal(MasterTimer::frequency()), 'f', 1));
@@ -840,11 +1057,24 @@ WhyOn::Answer WhyOn::explainAddress(Doc *doc, quint32 universe, int address, Wor
         a.lines << l;
     }
 
-    // The headline: where it is, and the one thing that set it.
+    if (whyNot && fxi != nullptr)
+        addWhyNot(doc, a);
+
+    // The headline: where it is, and the one thing that set it -- or, dark,
+    // the first reason it is not on (no output only when it's the one: the
+    // screens show the light without it).
     QString head = simple ? tr("It's at %1.").arg(percent(a.out)) : tr("At %1.").arg(percent(a.out));
     if (!a.sent)
         head += simple ? tr(" The rig doesn't get it right now.") : tr(" Not sent (see below).");
-    if (!winnerText.isEmpty())
+    const Line *reason = nullptr;
+    for (const Line &l : a.whyNot)
+        if (reason == nullptr && l.kind != Kind::NoOutput)
+            reason = &l;
+    if (reason == nullptr && !a.whyNot.isEmpty())
+        reason = &a.whyNot.first();
+    if (reason != nullptr)
+        head += simple ? tr(" It isn't on: %1.").arg(reason->text) : tr(" Not on: %1.").arg(reason->text);
+    else if (!winnerText.isEmpty())
     {
         QString w = winnerText;
         if (simple)
@@ -854,4 +1084,156 @@ WhyOn::Answer WhyOn::explainAddress(Doc *doc, quint32 universe, int address, Wor
     }
     a.headline = head;
     return a;
+}
+
+void WhyOn::addWhyNot(Doc *doc, Answer &a)
+{
+    Fixture *fxi = doc->fixture(a.fixtureId);
+    InputOutputMap *io = doc->inputOutputMap();
+    Universe *uni = io->universe(a.universe);
+    if (fxi == nullptr || uni == nullptr)
+        return;
+    const QLCChannel *asked = fxi->channel(a.channel);
+    if (asked == nullptr
+        || (asked->group() != QLCChannel::Intensity && asked->group() != QLCChannel::Shutter))
+        return;
+
+    // The light's parts: its dimmer, its colour emitters, its shutters.
+    const quint32 base = fxi->address();
+    quint32 dim = fxi->masterIntensityChannel();
+    QList<quint32> emitters, shutters;
+    for (quint32 c = 0; c < fxi->channels(); ++c)
+    {
+        const QLCChannel *ch = fxi->channel(c);
+        if (ch == nullptr)
+            continue;
+        if (ch->group() == QLCChannel::Intensity && ch->colour() != QLCChannel::NoColour)
+            emitters << c;
+        else if (ch->group() == QLCChannel::Intensity && dim == QLCChannel::invalid())
+            dim = c;
+        else if (ch->group() == QLCChannel::Shutter)
+            shutters << c;
+    }
+    auto outOf = [&](quint32 c) -> int {
+        return c == a.channel ? int(a.out) : int(uni->channelSnapshot(int(base + c)).postGM);
+    };
+    const int dimOut = dim != QLCChannel::invalid() ? outOf(dim) : -1;
+    const bool dimDark = dimOut >= 0 && dimOut <= kDark;
+    QList<quint32> closed;
+    for (quint32 c : shutters)
+        if (closedCapability(fxi->channel(c), uchar(outOf(c))) != nullptr)
+            closed << c;
+    bool colourBlack = !emitters.isEmpty();
+    for (quint32 c : emitters)
+        if (outOf(c) > kDark)
+            colourBlack = false;
+    if (!dimDark && closed.isEmpty() && !colourBlack)
+        return;
+
+    auto add = [&a](Kind kind, const QString &text) -> Line & {
+        Line l;
+        l.kind = kind;
+        l.verdict = Verdict::Blocks;
+        l.text = text;
+        a.whyNot << l;
+        return a.whyNot.last();
+    };
+    const Universe::ChannelSnapshot snap = uni->channelSnapshot(a.address);
+    const bool exempt = snap.mask & Universe::BlackoutExempt;
+
+    // Nothing reaches the rig.
+    if (io->outputPatchesCount(a.universe) == 0)
+        add(Kind::NoOutput, tr("Universe %1 has no output: nothing leaves the computer for it (Connections)")
+                                .arg(a.universe + 1));
+    if (uni->isNotOurs(a.address))
+        add(Kind::NotOurs, tr("This channel isn't ours: the venue's console runs it"));
+    if (io->outputInhibited() && !exempt)
+        add(Kind::Blind, tr("Blind is on: the rig gets nothing (the screens still show it)"));
+    if (doc->teachingSettings() != nullptr && doc->teachingSettings()->holdsOutput())
+        add(Kind::Blind, tr("Teaching mode holds network output until the teacher lets it through"));
+    if (io->blackout() && !exempt)
+        add(Kind::Blackout, tr("Blackout is on"));
+
+    // The masters, the limiter.
+    const bool ruled = snap.mask & (Universe::GMExempt | Universe::SwitchOutput);
+    if (dimDark && io->grandMasterValue() == 0 && !ruled && !snap.pastGM)
+        add(Kind::GrandMaster, tr("The Grand Master is at 0 %"));
+    if (dimDark && !ruled && !snap.pastGM)
+        for (FixtureGroup *grp : doc->groupMasters()->groups())
+            if (grp->masterLevel() == 0 && grp->fixtureList().contains(fxi->id()))
+                add(Kind::GroupMaster, tr("Group master %1 is at 0 %").arg(quoted(grp->name()))).groupId = grp->id();
+    const QHash<quint32, QPair<double, double> > held = uni->powerHeldBack();
+    if (held.contains(fxi->id()))
+        add(Kind::PowerLimit, tr("The power limiter holds it back: it asks for %1 A, %2 A allowed")
+                                  .arg(held.value(fxi->id()).first, 0, 'f', 1)
+                                  .arg(held.value(fxi->id()).second, 0, 'f', 1));
+
+    // What holds the dimmer down.
+    if (dimDark)
+    {
+        const Answer d = dim == a.channel ? a : explainAt(doc, a.universe, int(base + dim), Wording::Crew, false);
+        const Line *winner = nullptr;
+        for (const Line &l : d.lines)
+            if (l.verdict == Verdict::Wins)
+                winner = &l;
+        if (winner == nullptr)
+        {
+            Line l;
+            const QString why = releasedReason(doc->showTree(), fxi->id(), &l);
+            if (!why.isEmpty())
+            {
+                Line &r = add(Kind::Released, why);
+                r.cueId = l.cueId;
+                r.layerId = l.layerId;
+            }
+            else
+            {
+                add(Kind::Nothing, tr("Nothing sets its dimmer: no cue, scene, desk or slider is on it"));
+            }
+        }
+        else if (winner->kind == Kind::Park)
+        {
+            add(Kind::Park, tr("It's parked at %1 (Park beats everything)").arg(percent(winner->value)));
+        }
+        else if (winner->value >= 0 && winner->value <= kDark)
+        {
+            // Asked about the dimmer itself: the line above says it already.
+            Line &r = add(winner->kind, dim == a.channel ? winner->text
+                                        : tr("Its dimmer is at %1: %2").arg(percent(winner->value), winner->text));
+            r.cueId = winner->cueId;
+            r.layerId = winner->layerId;
+            r.functionId = winner->functionId;
+            r.widgetId = winner->widgetId;
+            r.absAddress = winner->absAddress;
+        }
+    }
+
+    // The beam itself: a closed shutter, a colour at black.
+    for (quint32 c : closed)
+    {
+        const QLCChannel *ch = fxi->channel(c);
+        const QLCCapability *cap = closedCapability(ch, uchar(outOf(c)));
+        QString text = tr("Its shutter is closed (%1 at %2: %3)")
+                       .arg(ch->name()).arg(outOf(c)).arg(quoted(cap != nullptr ? cap->name() : QString()));
+        Line &r = add(Kind::Shutter, text);
+        const Answer sh = c == a.channel ? a : explainAt(doc, a.universe, int(base + c), Wording::Crew, false);
+        for (const Line &l : sh.lines)
+            if (l.verdict == Verdict::Wins)
+            {
+                r.text += QStringLiteral(": ") + l.text;
+                r.cueId = l.cueId;
+                r.layerId = l.layerId;
+                r.functionId = l.functionId;
+                r.widgetId = l.widgetId;
+            }
+    }
+    if (colourBlack)
+    {
+        QStringList names;
+        for (quint32 c : emitters)
+            names << fxi->channel(c)->name();
+        add(Kind::ColourBlack, emitters.count() == 1
+                               ? tr("Its colour is at black: %1 is at 0 %").arg(names.first())
+                               : tr("Its colour is at black: %1 are all at 0 %").arg(names.join(QStringLiteral(", "))));
+    }
 }

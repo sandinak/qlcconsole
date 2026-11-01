@@ -35,6 +35,7 @@
 #include <cmath>
 
 #include "structurestudioview.h"
+#include "whyonpanel.h"
 #if defined(Q_OS_UNIX)
 #include <time.h>
 #endif
@@ -91,6 +92,9 @@ StructureStudioView::StructureStudioView(Doc *doc, Kind kind, quint32 id, QWidge
     setMouseTracking(true);
     setFocusPolicy(Qt::StrongFocus);
     setAcceptDrops(true);   // fixtures dragged in from the source tree
+    // ⌘I ("Why is this on?") opens on what is picked here.
+    connect(this, &StructureStudioView::fixturesSelected, this,
+            [](const QList<quint32> &ids) { WhyOnPanel::noteSelection(ids); });
     m_lanternPixels = new LanternPixels(doc, this);
     connect(m_lanternPixels, &LanternPixels::changed, this, QOverload<>::of(&QWidget::update));
 

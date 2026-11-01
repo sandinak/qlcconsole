@@ -40,6 +40,11 @@ private slots:
     void aBareAddressAndTheChannelPicker();
     void plainWordsInATeachingShow();
     void asksNothingWhileHidden();
+    void aDarkLightSaysWhyNotFirst();
+    void unparkFromALine();
+    void theActionsALineOffers();
+    void commandIOpensOnTheSelection();
+    void closingTheWindowStopsAllWork();
 
 private:
     void tick(int n = 1);

@@ -22,6 +22,7 @@
 | ⇧⌘M | Lighting Studio |
 | ⌥⌘F | **Quick focus** (View ▸ Quick Focus…) |
 | ⇧⌘R | **Rig Overview** — and again to close it when it's in front |
+| ⌘I | **Why is this on?** for the light selected last (in the plot, the Rig Overview, the Fixture Manager or the Workbench): what sets it, or why it isn't on ([Troubleshooting](troubleshooting.md#why-is-this-light-on)) |
 | ⌘W | Close the window in front: the Rig Overview, a structure's editor (as Cancel), a dialog. In the Classic Functions tab ⌘W is the Function Wizard |
 | ⌘Q | Quit (Ctrl+Q on Windows and Linux) |
 | ⌘M | Minimize |

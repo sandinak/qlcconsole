@@ -10526,6 +10526,7 @@ void Monitor::slotViewClicked()
     QList<quint32> ids;
     for (MonitorFixtureItem *item : m_graphicsView->selectedFixtureItems())
         ids.append(item->fixtureID());
+    WhyOnPanel::noteSelection(ids);     // ⌘I opens on it
     emit fixturesSelected(ids);
 }
 

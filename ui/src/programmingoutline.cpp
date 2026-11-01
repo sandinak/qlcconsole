@@ -36,6 +36,8 @@
 #include <algorithm>
 
 #include "programmingoutline.h"
+#include "whyonpanel.h"
+#include <QCursor>
 #include "controllearndialog.h"
 #include "focusmenu.h"
 #include "itemicons.h"
@@ -2116,6 +2118,22 @@ void ProgrammingOutline::slotContextMenu(const QPoint &pos)
         menu.addAction(tr("Close all under this"), this, [this, clicked]() { setSubtreeExpanded(clicked, false); });
         menu.exec(viewport()->mapToGlobal(pos));
         return;
+    }
+    // "Why is this on?" about a fixture row's light, a group row's first.
+    if (m_doc != nullptr && clicked != nullptr && (at.kind == FixtureRow || at.kind == GroupRow))
+    {
+        quint32 fid = at.kind == FixtureRow ? at.id : 0xFFFFFFFF;
+        if (at.kind == GroupRow)
+            if (FixtureGroup *grp = m_doc->fixtureGroup(at.id))
+                if (!grp->fixtureList().isEmpty())
+                    fid = grp->fixtureList().first();
+        if (m_doc->fixture(fid) != nullptr)
+        {
+            menu.addAction(WhyOnPanel::actionText(), this, [this, fid]() {
+                WhyOnPanel::showFor(m_doc, fid, 0xFFFFFFFF, this, QCursor::pos());
+            })->setObjectName("outlineWhyOn");
+            menu.addSeparator();
+        }
     }
     if (readOnly)
         parts.clear();

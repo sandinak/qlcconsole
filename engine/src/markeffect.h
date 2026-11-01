@@ -12,9 +12,12 @@
   over seamlessly. Marks round-trip to the workspace <Mark> element.
 
   Started as a copy of ParkEffect (captured values); the two are independent.
-  A mark writes no intensity (the fixture is dark), so a DMXSource writing
-  the universes directly is enough here -- Park itself now goes through a
-  fader (OutputLayer), since processFaders() zeroes intensity every frame.
+  The values go out through an OutputLayer named "Mark" at Universe::Hold,
+  under everything (a mark only pre-sets what nothing else sets): a fader
+  with a name, so "Why is this on?" can say a mark holds a channel (it wrote
+  the universes directly before, from the MasterTimer, out of every fader's
+  sight). No intensity channel is held -- the fixture stays dark. The
+  DMXSource only watches for the hand-off; it writes nothing.
 
   Licensed under the Apache License, Version 2.0 (the "License");
 */
@@ -29,6 +32,7 @@
 #include <QList>
 
 #include "dmxsource.h"
+#include "outputlayer.h"
 
 class QXmlStreamReader;
 class QXmlStreamWriter;
@@ -104,6 +108,9 @@ private:
     QList<FixEntry> m_entries;
     QSet<quint32> m_revealed;   //!< fixtures we've already emitted a reveal for
     bool m_registered = false;
+
+    /** Where the held values go out (Universe::Hold, named "Mark") */
+    OutputLayer m_layer;
 };
 
 #endif // MARKEFFECT_H

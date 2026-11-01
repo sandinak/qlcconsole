@@ -126,6 +126,10 @@ layer that set it and where the level tracked in from (*tracked from cue
 
 ![The chorus, step tops released](../../images/lesson-2-1/rig-chorus-released.png)
 
+Not sure why a light is dark? Right-click a step top ▸ **Why is this
+on?** A dark light lists why it isn't on first: here *layer StepTops was
+released leaving cue 1.0.1 Verse*.
+
 ### Note 2: a flash for one beat
 
 9. With **1.0.2 Chorus** selected, click **+ Cue**, type `Flash` and

@@ -54,6 +54,21 @@ class Doc;
  * nothing. A value read between frames can be a frame old, and the blend
  * modes other than Normal are approximated; the answer says so
  * (Answer::approximate).
+ *
+ * v2, who left it there: an LTP channel nothing sets keeps the value its
+ * last writer left. The universe notes which fader let go of a channel
+ * when it does (Universe::noteLetGo(): an auto-removed channel, a fader
+ * dismissed or deleted) -- an event, never a frame -- and keeps who the
+ * last 32 faders to leave were. The answer names that writer ("Cue 1 One ·
+ * layer A left it at 50 %, 3.0 s ago"). A mark (move in black) is a fader
+ * too ("Mark"), so it is named like the rest.
+ *
+ * v3, why not: a dark light gets the reasons it is dark, the blocking one
+ * first (Answer::whyNot): no output, not ours, Blind / Blackout /
+ * Teaching's hold, the Grand Master or a group master at 0, the power
+ * limiter, what holds the dimmer at 0 (Park, a cue that released its
+ * layer, nothing at all, a source at 0), a closed shutter, colour at
+ * black.
  */
 class QLC_ENGINE_EXPORT WhyOn final
 {
@@ -85,7 +100,17 @@ public:
         Modifier,
         Passthrough,
         Blind,
-        Blackout
+        Blackout,
+        // v2 / v3
+        Mark,           //!< a move in black (MarkEffect) holds it
+        LeftBehind,     //!< nothing sets it: the writer that left it there
+        NotPatched,     //!< why not: the fixture has no address
+        NoOutput,       //!< why not: the universe goes nowhere
+        NotOurs,        //!< why not: the venue's console runs the channel
+        PowerLimit,     //!< why not: the power limiter holds it back
+        Released,       //!< why not: the running cue has no layer on it (cueId, layerId)
+        Shutter,        //!< why not: its shutter is closed
+        ColourBlack     //!< why not: every colour emitter is at 0
     };
 
     /** How a line bears on the value */
@@ -115,6 +140,9 @@ public:
         quint32 functionId = 0xFFFFFFFF;
         quint32 groupId = 0xFFFFFFFF;
         quint32 widgetId = 0xFFFFFFFF;
+        /** The channel the line is about: universe << 9 | address (a
+         *  Simple Desk line's Release); UINT_MAX: the answer's own */
+        quint32 absAddress = 0xFFFFFFFF;
     };
 
     struct Answer
@@ -130,13 +158,22 @@ public:
         bool sent = true;           //!< false: Blind or Blackout holds it back
         bool approximate = false;   //!< the replay can't be exact (see above)
         QList<Line> lines;          //!< the chain, top-down
+        /** v3: why the light is NOT on, the blocking reason first. Filled
+         *  when the fixture is dark (its dimmer near 0, its shutter closed,
+         *  its colour at black) and an intensity or shutter is asked about. */
+        QList<Line> whyNot;
 
         bool isValid() const { return address >= 0; }
         /** The headline and every line, one per line, as plain text */
         QString toText() const;
         /** The lines' texts, in order (for tests) */
         QStringList texts() const;
+        /** The why-not lines' texts, in order (for tests) */
+        QStringList whyNotTexts() const;
     };
+
+    /** At or under this a light reads as off (2 %) */
+    static const int kDark = 5;
 
     /** Why channel @a channel of fixture @a fixtureId is where it is. An
      *  invalid @a channel: the fixture's intensity (its master dimmer, else
@@ -158,6 +195,10 @@ public:
 
     /** "50 %" */
     static QString percent(int dmx);
+
+private:
+    static Answer explainAt(Doc *doc, quint32 universe, int address, Wording wording, bool whyNot);
+    static void addWhyNot(Doc *doc, Answer &a);
 };
 
 /** @} */

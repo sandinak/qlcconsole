@@ -63,6 +63,14 @@ public:
     quint32 parentFunctionID() const;
     void setParentFunctionID(quint32 fid);
 
+    /** Who this fader is in its universe ("Why is this on?" v2): set once
+     *  by Universe::requestFader(), never 0 there */
+    quint32 token() const { return m_token; }
+    void setToken(quint32 token) { m_token = token; }
+    /** Tell @p universe every channel this fader holds lets go of it now
+     *  (Universe::noteLetGo()): when it leaves the universe's list */
+    void noteLetGo(Universe *universe) const;
+
     /** Get/Set a priority for this fader.
      *  The Universe class is in charge of sorting faders by priority */
     int priority() const;
@@ -286,6 +294,7 @@ signals:
 private:
     QString m_name;
     quint32 m_fid;
+    quint32 m_token = 0;
     int m_priority;
     bool m_handleSecondary;
     QHash <quint32,FadeChannel> m_channels;

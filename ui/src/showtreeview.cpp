@@ -93,6 +93,7 @@
 #include "focuscallsdialog.h"
 #include "focusmenu.h"
 #include "showtreeview.h"
+#include "whyonpanel.h"
 #include "effectrunsmenu.h"
 #include "controllearndialog.h"
 #include "itemicons.h"
@@ -7827,6 +7828,16 @@ void ShowTreeView::slotTreeContextMenu(const QPoint &pos)
                     setLayerReleaseIn(cueId, lid, t, on);
                 });
                 menu.setToolTipsVisible(true);
+            }
+            // "Why is this on?" about the layer's first light.
+            Target lt = own != nullptr ? own->target : t;
+            const QList<quint32> lit = lt.isEmpty() || lt.isOpaque() ? QList<quint32>() : m_st->targetFixtures(lt);
+            if (!lit.isEmpty())
+            {
+                const quint32 fid = lit.first();
+                menu.addAction(WhyOnPanel::actionText(), this, [this, fid]() {
+                    WhyOnPanel::showFor(m_doc, fid, 0xFFFFFFFF, this, QCursor::pos());
+                })->setObjectName("stWhyOn");
             }
         }
         if (kind == LayerNode)

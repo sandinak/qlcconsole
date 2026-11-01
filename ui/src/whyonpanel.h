@@ -21,6 +21,7 @@
 #define WHYONPANEL_H
 
 #include <QFrame>
+#include <QKeySequence>
 
 #include "qlcui_export.h"
 #include <QPointer>
@@ -47,6 +48,12 @@ class Doc;
  * One window, reused: asking about another light moves it there. While it
  * is shown it asks again four times a second on the UI thread; hidden, it
  * asks nothing (no timer, nothing in the engine).
+ *
+ * A dark light gets "Why it isn't on" first (WhyOn::Answer::whyNot), then
+ * what sets it. A line can offer an action in Design mode: Unpark, Release
+ * (a Simple Desk channel), Let go of a move in black. ⌘I opens it on the
+ * light last selected in any view; the Show Tree's layer rows and the
+ * Workbench's fixture and group rows have it in their right-click menus.
  */
 class QLC_UI_EXPORT WhyOnPanel final : public QFrame
 {
@@ -63,6 +70,22 @@ public:
     /** The window, if one is open (tests) */
     static WhyOnPanel *current();
 
+    /** The views note what is selected (the plot, the Rig Overview, the
+     *  Fixture Manager, the Workbench); ⌘I opens the window on it */
+    static void noteSelection(const QList<quint32> &fixtureIds);
+    /** ⌘I: open the window on the last selected light; none selected, on a
+     *  hint saying to select one */
+    static WhyOnPanel *showForSelection(Doc *doc, QWidget *parent = nullptr);
+    /** ⌘I, the same everywhere */
+    static QKeySequence shortcut();
+
+    /** What a line offers to do from the window, in Design mode */
+    enum class Action { NoAction, Unpark, Release, LetGoMark };
+    static Action actionFor(const WhyOn::Line &line);
+    static QString actionName(Action action);
+    /** The line list row @a row's action, if any; false: none, or Operate */
+    bool runAction(int row);
+
     /** The menu entry's words, the same everywhere */
     static QString actionText();
 
@@ -78,6 +101,9 @@ public:
     QListWidget *lines() const { return m_list; }
     /** Go to what line @a row names (a click does this) */
     void activate(int row);
+    /** The line list row @a row is (headers: nullptr) */
+    const WhyOn::Line *lineAt(int row) const;
+    QPushButton *actionButton() const { return m_action; }
 
     /** In place of the real jumps (tests): given the line clicked */
     typedef std::function<void(const WhyOn::Line &)> Jump;
@@ -95,6 +121,7 @@ private:
     void fillChannels();
     void jump(const WhyOn::Line &line);
     void place(const QPoint &globalPos);
+    void updateAction();
 
     Doc *m_doc;
     quint32 m_fixtureId = 0xFFFFFFFF;
@@ -102,12 +129,15 @@ private:
     quint32 m_universe = 0xFFFFFFFF;
     int m_address = -1;
     WhyOn::Answer m_answer;
+    /** The why-not lines, then the lines: what each list row points to */
+    QList<WhyOn::Line> m_rows;
     QLabel *m_subject;
     QComboBox *m_channels;
     QLabel *m_headline;
     QListWidget *m_list;
     QCheckBox *m_plain;
     QPushButton *m_copy;
+    QPushButton *m_action;
     QTimer *m_timer;
 };
 

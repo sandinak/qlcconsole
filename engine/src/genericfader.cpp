@@ -265,6 +265,21 @@ bool GenericFader::peekAddress(quint32 address, FadeChannel *out) const
     return false;
 }
 
+void GenericFader::noteLetGo(Universe *universe) const
+{
+    if (universe == nullptr || m_token == 0)
+        return;
+    std::lock_guard<ChannelsLock> l(m_channelsLock);
+    for (auto it = m_channels.constBegin(); it != m_channels.constEnd(); ++it)
+    {
+        const FadeChannel &fc = it.value();
+        const quint32 base = fc.addressInUniverse();
+        if (fc.isInert() || base == QLCChannel::invalid())
+            continue;
+        universe->noteLetGo(int(base), qMax(1, fc.channelCount()), m_token);
+    }
+}
+
 qreal GenericFader::overrideMix(bool *isHit) const
 {
     std::lock_guard<ChannelsLock> l(m_channelsLock);
@@ -469,6 +484,8 @@ void GenericFader::write(Universe *universe)
             // (SetTarget) is a function letting go, not setting anything.
             if (m_fadeOut == false && (flags & FadeChannel::Release) == 0)
                 universe->holdChannels(int(address), channelCount);
+            // Who left it there, for "Why is this on?" (only now, not per frame)
+            universe->noteLetGo(int(address), channelCount, m_token);
             it.remove();
         }
     }

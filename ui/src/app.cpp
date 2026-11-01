@@ -129,6 +129,7 @@
 #include "videoprovider.h"
 #include "qlcconfig.h"
 #include "helpbrowser.h"
+#include "whyonpanel.h"
 #include "showcontrollistener.h"
 #include "showwebaccess.h"
 #include "chaserstep.h"
@@ -2436,6 +2437,15 @@ void App::initActions()
     m_helpContextAction->setShortcutContext(Qt::ApplicationShortcut);
     m_helpContextAction->setToolTip(tr("Help on what you're looking at"));
     connect(m_helpContextAction, &QAction::triggered, this, &App::slotHelpContext);
+
+    /* "Why is this on?" on the light selected last in any view (⌘I, "Get
+       Info"): a shortcut, not a menu entry -- the right-click menus have it. */
+    QAction *whyOn = new QAction(WhyOnPanel::actionText(), this);
+    whyOn->setObjectName(QStringLiteral("whyOnShortcut"));
+    whyOn->setShortcut(WhyOnPanel::shortcut());
+    whyOn->setShortcutContext(Qt::ApplicationShortcut);
+    connect(whyOn, &QAction::triggered, this, [this]() { WhyOnPanel::showForSelection(m_doc, this); });
+    addAction(whyOn);
 
     /* The main cue list's GO and Back (docs/design/SHOW_CONTROL_DESIGN.md), from any
        window: what the footer's "Next:" says GO plays. */
