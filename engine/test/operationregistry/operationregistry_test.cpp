@@ -21,7 +21,9 @@
 */
 
 #include <QtTest>
+#include <QXmlStreamWriter>
 #include <QJsonObject>
+#include <QJsonArray>
 #include <QSet>
 
 #include "operationregistry_test.h"
@@ -77,6 +79,14 @@ void OperationRegistry_Test::catalogIsWhole()
             QVERIFY(!op.readOnly);
             continue;
         }
+        if (!op.readOnly)
+        {
+            // P2: a change word -- strict schema, no command-line word of
+            // its own (a typed line is the grammar's, unchanged).
+            QVERIFY2(op.cliWord.isEmpty() && !op.parse, qPrintable(op.name));
+            QVERIFY2(op.schema.value("additionalProperties") == QJsonValue(false), qPrintable(op.name));
+            continue;
+        }
         // P1: every other operation is a read-only question with a word.
         QVERIFY2(op.readOnly, qPrintable(op.name));
         QVERIFY2(!op.cliWord.isEmpty() && op.parse && op.cliHelp.startsWith(op.cliWord), qPrintable(op.name));
@@ -88,7 +98,13 @@ void OperationRegistry_Test::catalogIsWhole()
     for (const char *n : { "command", "list_fixtures", "list_groups", "list_functions", "describe_function",
                            "list_cues", "find_conflicts", "find_unused_functions", "find_problems", "show_summary" })
         QVERIFY2(names.contains(QLatin1String(n)), n);
-    QCOMPARE(R::readOnlyOperations().count(), R::catalog().count() - 1);
+    for (const char *n : { "make_cue", "add_cue", "make_cue_list", "set_look", "set_cue_look", "set_intensity",
+                           "set_cue_mode", "release_layer", "skip_cues", "unskip_cues", "record_cue",
+                           "rename_selected", "duplicate_cue", "include_cue", "make_group_set", "play_function" })
+        QVERIFY2(names.contains(QLatin1String(n)), n);
+    QCOMPARE(R::readOnlyOperations().count() + R::changeOperations().count(), R::catalog().count() - 1);
+    for (const R::Operation *op : R::changeOperations())
+        QVERIFY(op->name != QLatin1String("command"));
 }
 
 void OperationRegistry_Test::cliRoundTrip_data()
@@ -438,6 +454,252 @@ void OperationRegistry_Test::longAnswersAreCut()
     QVERIFY(r.ok);
     QVERIFY(r.text.size() <= R::MaxText + 80);
     QVERIFY(r.text.endsWith("(cut: the answer was longer)"));
+}
+
+/****************************************************************************
+ * P2: the change words
+ ****************************************************************************/
+
+ShowTreeCommand::Context OperationRegistry_Test::smallShow()
+{
+    auto group = [this](const QString &name, const QList<Fixture *> &fixtures) {
+        FixtureGroup *g = new FixtureGroup(m_doc);
+        g->setName(name);
+        m_doc->addFixtureGroup(g);
+        for (Fixture *fx : fixtures)
+            g->assignFixture(fx->id());
+    };
+    group("Towers", { dimmer("T1", 0), dimmer("T2", 10) });
+    group("Steps", { dimmer("S1", 20) });
+    ShowTreeController *st = m_doc->showTree();
+    ShowTreeCommand cmd(m_doc, st);
+    ShowTreeCommand::Context ctx;
+    ctx.production = st->addProduction("P");
+    for (const char *line : { "list \"Song\"", "cue 1 \"Verse\"", "cue 2 \"Chorus\"", "cue 1" })
+    {
+        const ShowTreeCommand::Result r = cmd.run(QLatin1String(line), ctx);
+        if (!r.ok)
+            qWarning() << line << r.message;
+        ctx = r.context;
+    }
+    return ctx;
+}
+
+QByteArray OperationRegistry_Test::treeXml() const
+{
+    QByteArray out;
+    QXmlStreamWriter w(&out);
+    w.writeStartDocument();
+    m_doc->showTree()->saveXML(&w);
+    w.writeEndDocument();
+    // The id counter only counts up (an undo never hands an id out twice).
+    return QString::fromUtf8(out).remove(QRegularExpression(" NextId=\"\\d+\"")).toUtf8();
+}
+
+void OperationRegistry_Test::changeRenders_data()
+{
+    // The grammar line each call stands for: what the preview shows and
+    // what runs.
+    QTest::addColumn<QString>("name");
+    QTest::addColumn<QJsonObject>("args");
+    QTest::addColumn<QString>("line");
+    QTest::newRow("cue") << "make_cue" << QJsonObject { { "number", "1.0.1" } } << "cue 1.0.1";
+    QTest::newRow("cue named") << "make_cue" << QJsonObject { { "number", "3" }, { "name", "Big Finish" }, { "mode", "block" } }
+                               << "cue 3 \"Big Finish\" block";
+    QTest::newRow("cue +") << "add_cue" << QJsonObject { { "name", "Chorus" } } << "cue + \"Chorus\"";
+    QTest::newRow("cue + bare") << "add_cue" << QJsonObject() << "cue +";
+    QTest::newRow("list") << "make_cue_list" << QJsonObject { { "name", "01-Opener" } } << "list \"01-Opener\"";
+    QTest::newRow("look") << "set_look"
+                          << QJsonObject { { "targets", QJsonArray { "Towers" } },
+                                           { "looks", QJsonArray { QJsonObject { { "attribute", "colour" }, { "value", "Blue" } },
+                                                                   QJsonObject { { "attribute", "dimmer" }, { "value", 45 } } } } }
+                          << "Towers colour Blue dimmer 45";
+    QTest::newRow("look one layer") << "set_look"
+                                    << QJsonObject { { "targets", QJsonArray { "Towers", "Front Wash" } },
+                                                     { "looks", QJsonArray { QJsonObject { { "attribute", "colour" }, { "value", "Deep Blue" } } } } }
+                                    << "Towers \"Front Wash\" colour \"Deep Blue\"";
+    QTest::newRow("look each") << "set_look"
+                               << QJsonObject { { "targets", QJsonArray { "Towers", "Steps" } }, { "each", true },
+                                                { "looks", QJsonArray { QJsonObject { { "attribute", "gobo" }, { "value", "none" } } } } }
+                               << "Towers, Steps gobo none";
+    QTest::newRow("cue look") << "set_cue_look"
+                              << QJsonObject { { "looks", QJsonArray { QJsonObject { { "attribute", "spread" }, { "value", "+5" } } } } }
+                              << "cue look spread +5";
+    QTest::newRow("intensity") << "set_intensity" << QJsonObject { { "targets", QJsonArray { "Movers" } }, { "level", 50 } }
+                               << "Movers dimmer 50";
+    QTest::newRow("mode") << "set_cue_mode" << QJsonObject { { "mode", "cueonly" } } << "cueonly";
+    QTest::newRow("release") << "release_layer" << QJsonObject { { "targets", QJsonArray { "Towers" } } } << "release Towers";
+    QTest::newRow("skip") << "skip_cues" << QJsonObject { { "cues", QJsonArray { "0.0.3", "0.0.7" } } } << "skip 0.0.3, 0.0.7";
+    QTest::newRow("skip selected") << "skip_cues" << QJsonObject() << "skip";
+    QTest::newRow("unskip") << "unskip_cues" << QJsonObject { { "cues", QJsonArray { "2" } } } << "unskip 2";
+    QTest::newRow("record") << "record_cue" << QJsonObject { { "source", "running" } } << "record running";
+    QTest::newRow("name") << "rename_selected" << QJsonObject { { "name", "Hero" } } << "name \"Hero\"";
+    QTest::newRow("name auto") << "rename_selected" << QJsonObject { { "name", "" } } << "name \"\"";
+    QTest::newRow("dup") << "duplicate_cue" << QJsonObject() << "dup";
+    QTest::newRow("include") << "include_cue" << QJsonObject { { "number", "0.0.3" } } << "include 0.0.3";
+    QTest::newRow("set") << "make_group_set" << QJsonObject { { "name", "Towers" }, { "groups", QJsonArray { "SL", "SR" } } }
+                         << "set \"Towers\" SL SR";
+    QTest::newRow("function") << "play_function" << QJsonObject { { "functions", QJsonArray { "Haze", "Big Look" } } }
+                              << "function Haze, \"Big Look\"";
+}
+
+void OperationRegistry_Test::changeRenders()
+{
+    QFETCH(QString, name);
+    QFETCH(QJsonObject, args);
+    QFETCH(QString, line);
+    const R::Operation *op = R::operation(name);
+    QVERIFY(op != nullptr);
+    QVERIFY2(R::checkArgs(op->schema, args).isEmpty(), qPrintable(R::checkArgs(op->schema, args)));
+    QCOMPARE(op->cliSyntax(args), line);
+    QVERIFY(!op->describe(args).isEmpty());
+}
+
+void OperationRegistry_Test::schemaRejectsBadArguments_data()
+{
+    QTest::addColumn<QString>("name");
+    QTest::addColumn<QJsonObject>("args");
+    QTest::addColumn<QString>("why");
+    const QJsonArray towers { "Towers" };
+    QTest::newRow("above max") << "set_intensity" << QJsonObject { { "targets", towers }, { "level", 140 } } << "above 100";
+    QTest::newRow("not integer") << "set_intensity" << QJsonObject { { "targets", towers }, { "level", 4.5 } } << "integer";
+    QTest::newRow("string level") << "set_intensity" << QJsonObject { { "targets", towers }, { "level", "half" } } << "integer";
+    QTest::newRow("missing") << "set_intensity" << QJsonObject { { "targets", towers } } << "level: missing";
+    QTest::newRow("no targets") << "set_intensity" << QJsonObject { { "targets", QJsonArray() }, { "level", 5 } } << "at least 1";
+    QTest::newRow("extra") << "set_intensity" << QJsonObject { { "targets", towers }, { "level", 5 }, { "fade", 3 } }
+                           << "fade: not an argument";
+    QTest::newRow("enum") << "set_cue_mode" << QJsonObject { { "mode", "loop" } } << "one of track";
+    QTest::newRow("cue number") << "make_cue" << QJsonObject { { "number", "1; undo" } } << "right form";
+    QTest::newRow("attribute") << "set_look"
+                               << QJsonObject { { "targets", towers },
+                                                { "looks", QJsonArray { QJsonObject { { "attribute", "smell" }, { "value", "x" } } } } }
+                               << "looks[0].attribute";
+    QTest::newRow("quote") << "rename_selected" << QJsonObject { { "name", "a\" record" } } << "double quote";
+    QTest::newRow("record source") << "record_cue" << QJsonObject() << "source: missing";
+    QTest::newRow("no function") << "play_function" << QJsonObject { { "functions", QJsonArray { "Nope" } } } << "Nope";
+    QTest::newRow("unknown") << "patch_fixture" << QJsonObject() << "No operation";
+}
+
+void OperationRegistry_Test::schemaRejectsBadArguments()
+{
+    QFETCH(QString, name);
+    QFETCH(QJsonObject, args);
+    QFETCH(QString, why);
+    const ShowTreeCommand::Context ctx = smallShow();
+    const QByteArray before = treeXml();
+    const QString undoBefore = m_doc->showTree()->sharedUndoText();
+    ShowTreeCommand cmd(m_doc, m_doc->showTree());
+    R reg(m_doc, &cmd);
+    QVERIFY(reg.check(name, args).contains(why));
+    const R::Result r = reg.run(name, args, ctx);
+    QVERIFY(!r.ok);
+    QVERIFY2(r.message.contains(why), qPrintable(r.message));
+    // Refused before it ran: nothing changed, no undo step.
+    QCOMPARE(treeXml(), before);
+    QCOMPARE(m_doc->showTree()->sharedUndoText(), undoBefore);
+    // In a plan the same: nothing at all runs.
+    const R::Result p = reg.runPlan({ { "make_cue", QJsonObject { { "number", "9" } } }, { name, args } }, ctx, "test");
+    QVERIFY(!p.ok);
+    QVERIFY2(p.message.startsWith("Step 2"), qPrintable(p.message));
+    QCOMPARE(treeXml(), before);
+}
+
+void OperationRegistry_Test::changeRunsItsGrammarLine()
+{
+    // One change on its own is the line it renders: one undo step.
+    const ShowTreeCommand::Context ctx = smallShow();
+    ShowTreeCommand cmd(m_doc, m_doc->showTree());
+    R reg(m_doc, &cmd);
+    const R::Result r = reg.run("set_intensity", QJsonObject { { "targets", QJsonArray { "Towers" } }, { "level", 50 } }, ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    QVERIFY(r.command.layer != ShowTree::invalidId());
+    QCOMPARE(m_doc->showTree()->cue(ctx.cue)->layers.count(), 1);
+    // Without a command line: refused, as `command` is.
+    R bare(m_doc);
+    QVERIFY(!bare.run("duplicate_cue", QJsonObject(), ctx).ok);
+}
+
+void OperationRegistry_Test::planIsOneUndoStep()
+{
+    const ShowTreeCommand::Context ctx = smallShow();
+    ShowTreeController *st = m_doc->showTree();
+    ShowTreeCommand cmd(m_doc, st);
+    R reg(m_doc, &cmd);
+    const QByteArray before = treeXml();
+    const QString undoBefore = st->sharedUndoText();
+    const int cuesBefore = st->cueList(ctx.list)->cues.count();
+
+    const QList<R::Call> plan {
+        { "add_cue", QJsonObject { { "name", "Bridge" }, { "mode", "block" } } },
+        { "set_look", QJsonObject { { "targets", QJsonArray { "Towers" } },
+                                    { "looks", QJsonArray { QJsonObject { { "attribute", "dimmer" }, { "value", 80 } } } } } },
+        { "rename_selected", QJsonObject { { "name", "Hero" } } },
+        { "set_intensity", QJsonObject { { "targets", QJsonArray { "Steps" } }, { "level", 30 } } },
+    };
+    const R::Result r = reg.runPlan(plan, ctx, "AI Assist: bridge");
+    QVERIFY2(r.ok, qPrintable(r.message));
+    // The steps ran where the one before left the selection: in the new cue.
+    const quint32 bridge = r.command.context.cue;
+    QVERIFY(bridge != ctx.cue);
+    QCOMPARE(st->cueList(ctx.list)->cues.count(), cuesBefore + 1);
+    const ShowTree::Cue *c = st->cue(bridge);
+    QCOMPARE(c->name, QStringLiteral("Bridge"));
+    QCOMPARE(c->layers.count(), 2);
+    QCOMPARE(c->layers.first().name, QStringLiteral("Hero"));
+    // ONE undo step, named for the plan.
+    QCOMPARE(st->sharedUndoText(), QStringLiteral("AI Assist: bridge"));
+    QVERIFY(st->undoShared());
+    QCOMPARE(st->sharedUndoText(), undoBefore);
+    QCOMPARE(treeXml(), before);
+    // ...and redo puts it all back.
+    QVERIFY(st->redoShared());
+    QCOMPARE(st->cueList(ctx.list)->cues.count(), cuesBefore + 1);
+}
+
+void OperationRegistry_Test::planFailingPartWayChangesNothing()
+{
+    const ShowTreeCommand::Context ctx = smallShow();
+    ShowTreeController *st = m_doc->showTree();
+    ShowTreeCommand cmd(m_doc, st);
+    R reg(m_doc, &cmd);
+    const QByteArray before = treeXml();
+    const QString undoBefore = st->sharedUndoText();
+    const int palettes = m_doc->palettes().count();
+    // Fits every schema; the grammar refuses step 3 (no such group).
+    const R::Result r = reg.runPlan({ { "add_cue", QJsonObject { { "name", "New" } } },
+                                      { "set_intensity", QJsonObject { { "targets", QJsonArray { "Towers" } }, { "level", 70 } } },
+                                      { "set_intensity", QJsonObject { { "targets", QJsonArray { "Nobody" } }, { "level", 70 } } } },
+                                    ctx, "test");
+    QVERIFY(!r.ok);
+    QVERIFY2(r.message.startsWith("Step 3"), qPrintable(r.message));
+    QVERIFY(r.message.contains("Nothing changed"));
+    QCOMPARE(treeXml(), before);
+    QCOMPARE(st->sharedUndoText(), undoBefore);
+    QVERIFY(!st->inBatch());
+    QCOMPARE(m_doc->palettes().count(), palettes);   // the level's one-off palette went too
+}
+
+void OperationRegistry_Test::planRefusals()
+{
+    const ShowTreeCommand::Context ctx = smallShow();
+    ShowTreeCommand cmd(m_doc, m_doc->showTree());
+    R reg(m_doc, &cmd);
+    const QByteArray before = treeXml();
+    const QList<R::Call> plan { { "duplicate_cue", QJsonObject() } };
+    // A question isn't a change; nor is the raw command line.
+    QVERIFY(!reg.runPlan({ { "find_conflicts", QJsonObject() } }, ctx, "t").ok);
+    QVERIFY(!reg.runPlan({ { "command", QJsonObject { { "line", "dup" } } } }, ctx, "t").ok);
+    QVERIFY(!reg.runPlan({}, ctx, "t").ok);
+    // No command line: refused.
+    QVERIFY(!R(m_doc).runPlan(plan, ctx, "t").ok);
+    // Operate: never.
+    m_doc->setMode(Doc::Operate);
+    const R::Result r = reg.runPlan(plan, ctx, "t");
+    QVERIFY(!r.ok);
+    QVERIFY(r.message.contains("Operate"));
+    m_doc->setMode(Doc::Design);
+    QCOMPARE(treeXml(), before);
+    QVERIFY(reg.runPlan(plan, ctx, "t").ok);
 }
 
 QTEST_MAIN(OperationRegistry_Test)

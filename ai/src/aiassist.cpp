@@ -21,6 +21,7 @@
 #include <QJsonDocument>
 #include <QJsonArray>
 #include <QThread>
+#include <QHash>
 #include <QTimer>
 #include <QDebug>
 
@@ -171,6 +172,7 @@ AiAssist::AiAssist(Doc *doc, QObject *parent)
     , m_doc(doc)
 {
     qRegisterMetaType<AiAssist::Answer>();
+    qRegisterMetaType<AiAssist::Step>();
     m_settings = AiSettings::load();
     m_operate = doc->mode() == Doc::Operate;
     connect(doc, &Doc::modeChanged, this, &AiAssist::slotModeChanged);
@@ -268,6 +270,8 @@ QList<AiTool> AiAssist::tools()
     QList<AiTool> out;
     for (const OperationRegistry::Operation *op : OperationRegistry::readOnlyOperations())
         out << AiTool { op->name, op->description, op->schema };
+    for (const OperationRegistry::Operation *op : OperationRegistry::changeOperations())
+        out << AiTool { op->name, op->description, op->schema };
     return out;
 }
 
@@ -275,10 +279,14 @@ QString AiAssist::systemPrompt(const ShowTreeCommand::Context &selection) const
 {
     QString s = tr(
         "You are AI Assist inside qlcconsole, a lighting console. You answer the operator's questions "
-        "about the show that is open, by calling the tools; each tool is a read-only question to the "
-        "console. In this version you cannot change the show: if asked to, say what to type or click "
-        "instead. Answer briefly, in plain lighting-crew language, from what the tools return; don't "
-        "invent fixtures, addresses or cues.");
+        "about the show that is open by calling the read-only tools (list_*, find_*, describe_*, why_on, "
+        "show_summary). To change the show, call the change tools (make_cue, set_look, set_intensity, "
+        "record_cue...): they are NOT run; they are shown to the operator as a proposal, who applies "
+        "them all as one undo step or discards them. Put every change of one request in ONE reply, in "
+        "the order they should run: each acts on the Show Tree's selected cue, and make_cue, add_cue "
+        "and make_cue_list change which cue or list later steps act on. Use only names the show has "
+        "(ask the read-only tools first when unsure). Answer briefly, in plain lighting-crew language, "
+        "from what the tools return; don't invent fixtures, groups, palettes or cues.");
     if (m_settings.sendShowContext != QLatin1String("summary"))
         return s;
     OperationRegistry reg(m_doc);
@@ -331,6 +339,7 @@ bool AiAssist::ask(const QString &question, const ShowTreeCommand::Context &sele
     m_round = 0;
     m_answer = Answer();
     m_answer.question = q.text;
+    discard();                          // a new question: the old proposal goes
     sendRound();
     emit busyChanged(true);
     return true;
@@ -387,18 +396,22 @@ void AiAssist::handleReply()
     }
     if (turn.calls.isEmpty())
     {
-        finish(true, turn.text);
+        finishWithProposal(turn.text);
         return;
     }
 
-    // Every call must be a read-only operation of the registry; one that
-    // isn't is refused and the reply is shown as plain text.
+    // Every call must be an operation of the registry the model is offered
+    // (read-only or a change; never the raw `command`); one that isn't is
+    // refused and the reply is shown as plain text.
+    QList<AiToolCall> changes;
     for (const AiToolCall &c : turn.calls)
     {
         const OperationRegistry::Operation *op = OperationRegistry::operation(c.name);
-        if (op == nullptr || !op->readOnly)
+        if (op == nullptr || op->name == QLatin1String("command"))
             m_answer.rejected << QStringLiteral("%1 %2").arg(c.name,
                                      QString::fromUtf8(QJsonDocument(c.args).toJson(QJsonDocument::Compact)));
+        else if (!op->readOnly)
+            changes << c;
     }
     if (!m_answer.rejected.isEmpty())
     {
@@ -408,7 +421,10 @@ void AiAssist::handleReply()
     }
     if (++m_round > MaxRounds)
     {
-        finish(false, tr("Stopped after %1 rounds of questions to the console.").arg(MaxRounds));
+        if (!m_answer.proposal.isEmpty())
+            finishWithProposal(tr("Stopped after %1 rounds; this is what was proposed so far.").arg(MaxRounds));
+        else
+            finish(false, tr("Stopped after %1 rounds of questions to the console.").arg(MaxRounds));
         return;
     }
 
@@ -416,8 +432,54 @@ void AiAssist::handleReply()
     said.role = AiMessage::Assistant;
     said.text = turn.text;
     said.calls = turn.calls;
-    m_messages << said;
     OperationRegistry reg(m_doc);
+
+    if (!changes.isEmpty())
+    {
+        // Changes are proposals: checked against their schemas (and what
+        // validate() can tell) now, run only when the operator applies
+        // them. The model hears each was proposed, not run, and goes on
+        // until it answers in text (a model that sends one step a reply
+        // builds the plan over several). One that doesn't fit is refused
+        // with why -- with the rest of its reply -- and runs nothing.
+        QHash<QString, QString> errors;
+        for (const AiToolCall &c : changes)
+        {
+            const QString why = reg.check(c.name, c.args);
+            if (!why.isEmpty())
+                errors.insert(c.id, why);
+        }
+        if (errors.isEmpty())
+            for (const AiToolCall &c : changes)
+            {
+                const OperationRegistry::Operation *op = OperationRegistry::operation(c.name);
+                m_answer.proposal << Step { c.name, c.args, op->cliSyntax(c.args), op->describe(c.args) };
+            }
+        m_messages << said;
+        for (const AiToolCall &c : turn.calls)
+        {
+            const OperationRegistry::Operation *op = OperationRegistry::operation(c.name);
+            AiMessage result;
+            result.role = AiMessage::Tool;
+            result.toolCallId = c.id;
+            result.toolName = c.name;
+            if (!errors.isEmpty())
+                result.text = errors.contains(c.id)
+                                  ? tr("error: %1. Nothing in this reply was taken; send it again, corrected.").arg(errors.value(c.id))
+                                  : tr("not taken: another call in this reply was refused.");
+            else if (op->readOnly)
+                result.text = tr("not run: ask questions before proposing changes.");
+            else
+                result.text = tr("proposed as step %1 (not run yet: the operator applies every step together, as "
+                                 "one undo step). Send any further steps, or answer in text when the change is "
+                                 "complete.").arg(m_answer.proposal.count());
+            m_messages << result;
+        }
+        sendRound();
+        return;
+    }
+
+    m_messages << said;
     for (const AiToolCall &c : turn.calls)
     {
         const OperationRegistry::Operation *op = OperationRegistry::operation(c.name);
@@ -438,6 +500,20 @@ void AiAssist::handleReply()
         m_messages << result;
     }
     sendRound();
+}
+
+void AiAssist::finishWithProposal(const QString &text)
+{
+    if (m_answer.proposal.isEmpty())
+    {
+        finish(true, text);
+        return;
+    }
+    m_proposal = m_answer.proposal;
+    m_proposalSelection = m_selection;
+    m_proposalQuestion = m_answer.question;
+    finish(true, text.trimmed().isEmpty() ? tr("Proposed %n change(s).", "", m_proposal.count()) : text.trimmed());
+    emit proposalChanged();
 }
 
 void AiAssist::finish(bool ok, const QString &text)
@@ -461,6 +537,67 @@ void AiAssist::cancel()
     r->abort();
     r->deleteLater();
     finish(false, tr("Cancelled"));
+}
+
+bool AiAssist::apply(const QList<int> &included, OperationRegistry *registry, ShowTreeCommand::Result *result)
+{
+    ShowTreeCommand::Result out;
+    out.context = m_proposalSelection;
+    auto refuse = [&out, result](const QString &why) {
+        out.ok = false;
+        out.message = why;
+        if (result != nullptr)
+            *result = out;
+        return false;
+    };
+    if (m_proposal.isEmpty())
+        return refuse(tr("Nothing proposed"));
+    // Never in Operate: refused before any AI path runs (and the guard
+    // would say so if one did).
+    if (m_operate || m_doc->mode() == Doc::Operate)
+        return refuse(tr("AI Assist is unavailable in Operate mode"));
+    if (!m_settings.enabled)
+        return refuse(tr("AI Assist is off (Settings ▸ AI Assist)"));
+    if (!checkGuard("apply"))
+        return refuse(tr("AI Assist is unavailable in Operate mode"));
+
+    QList<OperationRegistry::Call> calls;
+    for (int i = 0; i < m_proposal.count(); ++i)
+        if (included.isEmpty() || included.contains(i))
+            calls << OperationRegistry::Call { m_proposal.at(i).name, m_proposal.at(i).args };
+    if (calls.isEmpty())
+        return refuse(tr("No step is included"));
+
+    std::unique_ptr<OperationRegistry> own;
+    if (registry == nullptr)
+    {
+        if (!m_commander && m_doc->showTree() != nullptr)
+            m_commander.reset(new ShowTreeCommand(m_doc, m_doc->showTree()));
+        own.reset(new OperationRegistry(m_doc, m_commander.get()));
+        registry = own.get();
+    }
+    QString label = m_proposalQuestion.simplified();
+    if (label.size() > 40)
+        label = label.left(39) + QChar(0x2026);
+    const OperationRegistry::Result r = registry->runPlan(calls, m_proposalSelection, tr("AI Assist: %1").arg(label));
+    if (!r.ok)
+        return refuse(r.message);
+    out = r.command;
+    out.ok = true;
+    out.message = r.message;
+    if (result != nullptr)
+        *result = out;
+    m_proposal.clear();
+    emit proposalChanged();
+    return true;
+}
+
+void AiAssist::discard()
+{
+    if (m_proposal.isEmpty())
+        return;
+    m_proposal.clear();
+    emit proposalChanged();
 }
 
 bool AiAssist::testConnection(const AiSettings &settings, const QString &apiKey)
@@ -541,6 +678,9 @@ void AiAssist::abortAll()
     m_nam = nullptr;
     m_provider.reset();
     m_messages.clear();
+    // A proposal never outlives Design (nor AI Assist being on).
+    discard();
+    m_commander.reset();
     if (wasBusy)
     {
         m_answer.ok = false;

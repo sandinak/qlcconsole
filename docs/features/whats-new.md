@@ -4,7 +4,12 @@ The latest changes, newest first. Each links to the guide with the detail.
 
 ## 0.3.1 (unreleased)
 
-### AI Assist (first part)
+### AI Assist
+
+- **It proposes changes; you apply them.** `? cue 3 towers blue at 50`
+  shows the command-line steps that would do it, ticked, in the command
+  line's pane. Enter or **Apply** makes them as one undo step; Esc
+  discards. See [AI Assist](ai-assist.md).
 
 - **Ask about the show in plain words.** Turn it on in **Settings ▸ AI
   Assist**, then type `? find address conflicts` in the Show Tree's command

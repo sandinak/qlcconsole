@@ -234,6 +234,15 @@ back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
   line now runs through one Operation Registry, with the grammar
   unchanged. Built as its own module (`ai/`, CMake `QLC_AI_ASSIST`).
   See docs/features/ai-assist.md.
+- **AI Assist proposes changes, you apply them** (P2): `? cue 3 towers
+  blue at 50` comes back as a checklist of command-line steps (`cue 3`,
+  `Towers colour Blue`, `Towers dimmer 50`) in the command line's pane;
+  nothing changes until Enter or **Apply**, and then the whole change is
+  one undo step. Leave steps out, or Esc to discard. Every step is checked
+  against its schema before it is shown, a step refused when applied
+  leaves nothing behind, and nothing is ever applied in Operate. The Show
+  Tree grammar's change words are now operations of their own (`make_cue`,
+  `set_look`, `set_intensity`, `record_cue`... 16 of them).
 
 ### Based on QLC+ 4.14.4
 

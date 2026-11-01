@@ -22,6 +22,8 @@
 #include <QObject>
 #include <QHash>
 
+#include "showtreecommand.h"
+
 class FakeModelServer;
 class AiAssist;
 class Doc;
@@ -70,12 +72,29 @@ private slots:
     void guardFires();
     void toggleRepeatedlyWithRequestsInFlight();
 
+    // P2: changes, proposed, confirmed, one undo step
+    void proposalShowsAppliesAndUndoesInOneStep();
+    void decliningChangesNothing();
+    void leavingAStepOut();
+    void nothingChangesInOperate();
+    void badArgumentsAreRefusedBeforeAnythingRuns();
+    void aPlanOverSeveralReplies();
+    void aRefusedStepAppliesNothing();
+    void goldenPrompts_data();
+    void goldenPrompts();
+
     // By hand only: QLC_AI_LIVE_OLLAMA=http://localhost:11434
     void liveOllamaSmoke();
+    void liveOllamaChangeSmoke();
 
 private:
     void enable(bool on = true, const QString &provider = QStringLiteral("ollama"));
     void overlappingPars();
+    /** Towers (2 dimmers), Steps (1), a Colour palette Blue, a scene Haze,
+     *  production "P" with list "Song", cues 1 "Verse" and 2 "Chorus"; the
+     *  selection on cue 1. */
+    ShowTreeCommand::Context smallShow();
+    QByteArray treeXml() const;
 
     QTemporaryDir m_settingsDir;
     QHash<QString, QString> m_keys;

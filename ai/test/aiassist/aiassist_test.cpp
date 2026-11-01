@@ -34,6 +34,8 @@
 #include <QSettings>
 #include <QLabel>
 #include <QThread>
+#include <QXmlStreamWriter>
+#include <QRegularExpression>
 
 #include "aiassist_test.h"
 #include "aisettingspage.h"
@@ -41,7 +43,11 @@
 #include "aiprovider.h"
 #include "aisettings.h"
 #include "aiassist.h"
+#include "showtreecontroller.h"
+#include "fixturegroup.h"
+#include "qlcpalette.h"
 #include "fixture.h"
+#include "scene.h"
 #include "doc.h"
 
 /****************************************************************************
@@ -166,6 +172,24 @@ QByteArray toolReply(const QString &name, const QJsonObject &args)
                                    { "tool_calls", QJsonArray { call } } } } } } } }).toJson();
 }
 
+/** Several tool calls in one reply (a plan). */
+QByteArray toolsReply(const QList<QPair<QString, QJsonObject>> &calls, const QString &text = QString())
+{
+    QJsonArray arr;
+    int n = 0;
+    for (const auto &c : calls)
+        arr << QJsonObject { { "id", QStringLiteral("call_%1").arg(++n) }, { "type", "function" },
+                             { "function", QJsonObject { { "name", c.first },
+                                                         { "arguments", QString::fromUtf8(QJsonDocument(c.second).toJson()) } } } };
+    return QJsonDocument(QJsonObject { { "choices", QJsonArray { QJsonObject {
+        { "message", QJsonObject { { "role", "assistant" }, { "content", text }, { "tool_calls", arr } } } } } } }).toJson();
+}
+
+QJsonObject look(const QString &attribute, const QJsonValue &value)
+{
+    return QJsonObject { { "attribute", attribute }, { "value", value } };
+}
+
 AiSettings ollamaAt(const QString &endpoint)
 {
     AiSettings s;
@@ -241,6 +265,59 @@ void AiAssist_Test::overlappingPars()
         if (i == 1)
             fx->setAddress(2);               // Par 2 on Par 1's 3-4, as a hand-edited file can
     }
+}
+
+ShowTreeCommand::Context AiAssist_Test::smallShow()
+{
+    auto dimmer = [this](const QString &name, quint32 address) {
+        Fixture *fx = new Fixture(m_doc);
+        fx->setName(name);
+        fx->setChannels(4);
+        fx->setUniverse(0);
+        fx->setAddress(address);
+        m_doc->addFixture(fx);
+        return fx;
+    };
+    auto group = [this](const QString &name, const QList<Fixture *> &fixtures) {
+        FixtureGroup *g = new FixtureGroup(m_doc);
+        g->setName(name);
+        m_doc->addFixtureGroup(g);
+        for (Fixture *fx : fixtures)
+            g->assignFixture(fx->id());
+    };
+    group("Towers", { dimmer("T1", 0), dimmer("T2", 10) });
+    group("Steps", { dimmer("S1", 20) });
+    QLCPalette *blue = new QLCPalette(QLCPalette::Color, m_doc);
+    blue->setName("Blue");
+    blue->setValue(QLCPalette::colorToString(QColor(Qt::blue), QColor(Qt::black)));
+    m_doc->addPalette(blue);
+    Scene *haze = new Scene(m_doc);
+    haze->setName("Haze");
+    m_doc->addFunction(haze);
+
+    ShowTreeController *st = m_doc->showTree();
+    ShowTreeCommand cmd(m_doc, st);
+    ShowTreeCommand::Context ctx;
+    ctx.production = st->addProduction("P");
+    for (const char *line : { "list \"Song\"", "cue 1 \"Verse\"", "cue 2 \"Chorus\"", "cue 1" })
+    {
+        const ShowTreeCommand::Result r = cmd.run(QLatin1String(line), ctx);
+        if (!r.ok)
+            qWarning() << line << r.message;
+        ctx = r.context;
+    }
+    return ctx;
+}
+
+QByteArray AiAssist_Test::treeXml() const
+{
+    QByteArray out;
+    QXmlStreamWriter w(&out);
+    w.writeStartDocument();
+    m_doc->showTree()->saveXML(&w);
+    w.writeEndDocument();
+    // The id counter only counts up (an undo never hands an id out twice).
+    return QString::fromUtf8(out).remove(QRegularExpression(" NextId=\"\\d+\"")).toUtf8();
 }
 
 /****************************************************************************
@@ -865,6 +942,389 @@ void AiAssist_Test::toggleRepeatedlyWithRequestsInFlight()
     QVERIFY2(worst < 100, qPrintable(QString::number(worst)));
 }
 
+/****************************************************************************
+ * P2: changes -- proposed, shown, applied on confirm as one undo step
+ ****************************************************************************/
+
+namespace
+{
+/** The model proposes with @a reply, then (asked again with "proposed
+ *  as step N") answers @a text: done. */
+void propose(FakeModelServer *server, const QByteArray &reply, const QString &text = QString())
+{
+    server->clearQueue();
+    server->queueJson(kChat, reply);
+    server->queueJson(kChat, textReply(text));
+}
+
+struct Bar
+{
+    QWidget bar;
+    QHBoxLayout *row;
+    QLineEdit *line;
+    QTextBrowser pane;
+    QLabel *msg;
+    std::unique_ptr<AiCommandLine> cl;
+    Bar()
+    {
+        row = new QHBoxLayout(&bar);
+        line = new QLineEdit(&bar);
+        row->addWidget(line);
+        msg = new QLabel(&bar);
+        cl.reset(new AiCommandLine(line, &pane, msg, row, nullptr));
+    }
+};
+}
+
+void AiAssist_Test::proposalShowsAppliesAndUndoesInOneStep()
+{
+    enable();
+    const ShowTreeCommand::Context ctx = smallShow();
+    ShowTreeController *st = m_doc->showTree();
+    const QByteArray before = treeXml();
+    const QString undoBefore = st->sharedUndoText();
+    Bar b;
+    propose(m_server, toolsReply({ { "set_look", QJsonObject { { "targets", QJsonArray { "Towers" } },
+                                                                 { "looks", QJsonArray { look("colour", "Blue") } } } },
+                                     { "set_intensity", QJsonObject { { "targets", QJsonArray { "Towers" } }, { "level", 50 } } } }),
+            "Towers blue at half: apply it to make it so.");
+    QSignalSpy answered(m_ai, &AiAssist::answered);
+    QVERIFY(b.cl->handle("? towers blue at 50", ctx));
+    QVERIFY(answered.wait(5000));
+    const AiAssist::Answer a = answered.first().first().value<AiAssist::Answer>();
+    QVERIFY2(a.ok, qPrintable(a.text));
+    QCOMPARE(a.text, QStringLiteral("Towers blue at half: apply it to make it so."));
+    QCOMPARE(a.proposal.count(), 2);
+    QCOMPARE(a.proposal.at(0).command, QStringLiteral("Towers colour Blue"));
+    QCOMPARE(a.proposal.at(1).command, QStringLiteral("Towers dimmer 50"));
+    // Shown, not run: the show is as it was; the model was told so.
+    QCOMPARE(treeXml(), before);
+    QCOMPARE(m_server->count(kChat), 2);
+    const QJsonArray told = m_server->requests.at(1).json().value("messages").toArray();
+    QVERIFY(told.last().toObject().value("content").toString().startsWith("proposed as step 2 (not run yet"));
+    QVERIFY(m_ai->hasProposal());
+    const QString html = b.pane.toHtml();
+    QVERIFY(html.contains("Towers colour Blue"));
+    QVERIFY(html.contains("ai:apply"));
+    QVERIFY(html.contains("ai:discard"));
+    QVERIFY(b.msg->text().contains("Enter applies"));
+    // The tools offered carried the change operations, never `command`.
+    QStringList offered;
+    for (const QJsonValue &t : m_server->requests.first().json().value("tools").toArray())
+        offered << t.toObject().value("function").toObject().value("name").toString();
+    QVERIFY(offered.contains("set_look"));
+    QVERIFY(offered.contains("find_conflicts"));
+    QVERIFY(!offered.contains("command"));
+
+    // Enter on the empty line applies: both steps, one undo step.
+    QSignalSpy applied(b.cl.get(), &AiCommandLine::applied);
+    QVERIFY(b.cl->handle("", ctx));
+    QCOMPARE(applied.count(), 1);
+    QVERIFY(!m_ai->hasProposal());
+    const ShowTree::Cue *c = st->cue(ctx.cue);
+    QCOMPARE(c->layers.count(), 1);
+    QVERIFY(c->layers.first().look(ShowTree::KeyColour) != nullptr);
+    QVERIFY(c->layers.first().look(ShowTree::KeyDimmer) != nullptr);
+    QVERIFY(st->sharedUndoText().startsWith("AI Assist: towers blue at 50"));
+    QVERIFY(b.msg->text().contains("one undo step"));
+    QVERIFY(st->undoShared());
+    QCOMPARE(treeXml(), before);
+    QCOMPARE(st->sharedUndoText(), undoBefore);
+}
+
+void AiAssist_Test::decliningChangesNothing()
+{
+    enable();
+    const ShowTreeCommand::Context ctx = smallShow();
+    ShowTreeController *st = m_doc->showTree();
+    const QByteArray before = treeXml();
+    const QString undoBefore = st->sharedUndoText();
+    Bar b;
+    const QByteArray reply = toolReply("duplicate_cue", QJsonObject());
+    propose(m_server, reply);
+    QSignalSpy answered(m_ai, &AiAssist::answered);
+
+    // A single step goes in the line as typed; Esc discards it.
+    QVERIFY(b.cl->handle("? duplicate this cue", ctx));
+    QVERIFY(answered.wait(5000));
+    QCOMPARE(b.line->text(), QStringLiteral("dup"));
+    QVERIFY(b.cl->cancel());
+    QVERIFY(!m_ai->hasProposal());
+    QVERIFY(b.line->text().isEmpty());
+    QVERIFY(b.msg->text().contains("nothing in the show changed"));
+    QVERIFY(!b.cl->cancel());                // nothing left to discard
+    QVERIFY(!b.cl->handle("", ctx));         // Enter now: the command line's again
+
+    // The Discard link does the same.
+    answered.clear();
+    propose(m_server, reply);
+    QVERIFY(b.cl->handle("? duplicate this cue", ctx));
+    QVERIFY(answered.wait(5000));
+    emit b.pane.anchorClicked(QUrl("ai:discard"));
+    QVERIFY(!m_ai->hasProposal());
+
+    // Typing something else drops it: the line runs as typed.
+    answered.clear();
+    propose(m_server, reply);
+    QVERIFY(b.cl->handle("? duplicate this cue", ctx));
+    QVERIFY(answered.wait(5000));
+    QVERIFY(!b.cl->handle("cue 2", ctx));
+    QVERIFY(!m_ai->hasProposal());
+
+    // A new question drops it too.
+    answered.clear();
+    propose(m_server, reply);
+    QVERIFY(b.cl->handle("? duplicate this cue", ctx));
+    QVERIFY(answered.wait(5000));
+    m_server->clearQueue();
+    m_server->queueJson(kChat, textReply("ok"));
+    QVERIFY(b.cl->handle("? anything else", ctx));
+    QVERIFY(!m_ai->hasProposal());
+    QVERIFY(answered.wait(5000));
+
+    QCOMPARE(treeXml(), before);
+    QCOMPARE(st->sharedUndoText(), undoBefore);
+}
+
+void AiAssist_Test::leavingAStepOut()
+{
+    enable();
+    const ShowTreeCommand::Context ctx = smallShow();
+    ShowTreeController *st = m_doc->showTree();
+    Bar b;
+    propose(m_server, toolsReply({ { "set_intensity", QJsonObject { { "targets", QJsonArray { "Towers" } }, { "level", 50 } } },
+                                     { "set_intensity", QJsonObject { { "targets", QJsonArray { "Steps" } }, { "level", 20 } } } }));
+    QSignalSpy answered(m_ai, &AiAssist::answered);
+    QVERIFY(b.cl->handle("? towers 50 steps 20", ctx));
+    QVERIFY(answered.wait(5000));
+    QCOMPARE(answered.first().first().value<AiAssist::Answer>().text, QStringLiteral("Proposed 2 change(s)."));
+    emit b.pane.anchorClicked(QUrl("ai:toggle:1"));
+    QCOMPARE(b.cl->included(), QList<bool>({ true, false }));
+    QVERIFY(b.pane.toHtml().contains("line-through"));
+    emit b.pane.anchorClicked(QUrl("ai:apply"));
+    QVERIFY(!m_ai->hasProposal());
+    QCOMPARE(st->cue(ctx.cue)->layers.count(), 1);   // Towers only
+
+    // Every step left out: nothing to apply, the proposal stays.
+    answered.clear();
+    propose(m_server, toolReply("duplicate_cue", QJsonObject()));
+    QVERIFY(b.cl->handle("? duplicate it", ctx));
+    QVERIFY(answered.wait(5000));
+    QCOMPARE(b.cl->included().count(), 1);
+    b.cl->toggleStep(0);
+    QVERIFY(!b.cl->applyProposal());
+    QVERIFY(m_ai->hasProposal());
+}
+
+void AiAssist_Test::nothingChangesInOperate()
+{
+    enable();
+    const ShowTreeCommand::Context ctx = smallShow();
+    const QByteArray before = treeXml();
+    Bar b;
+    propose(m_server, toolReply("duplicate_cue", QJsonObject()));
+    QSignalSpy answered(m_ai, &AiAssist::answered);
+    QVERIFY(b.cl->handle("? duplicate it", ctx));
+    QVERIFY(answered.wait(5000));
+    QVERIFY(m_ai->hasProposal());
+    const int violations = AiAssist::guardViolations();
+
+    // Going to Operate drops the proposal: the line and the checklist go.
+    m_doc->setMode(Doc::Operate);
+    QVERIFY(!m_ai->hasProposal());
+    QVERIFY(b.line->text().isEmpty());
+    QVERIFY(b.pane.isHidden());
+    ShowTreeCommand::Result r;
+    QVERIFY(!m_ai->apply(QList<int>(), nullptr, &r));
+    QVERIFY(!b.cl->applyProposal());
+    QVERIFY(!b.cl->handle("", ctx));                 // Enter: the command line's
+    QVERIFY(b.cl->handle("? duplicate it", ctx));
+    QVERIFY(b.msg->text().contains("unavailable in Operate mode"));
+    QCOMPARE(treeXml(), before);
+    QCOMPARE(m_server->count(kChat), 2);             // nothing more was sent
+    QCOMPARE(AiAssist::guardViolations(), violations);
+    m_doc->setMode(Doc::Design);
+    QVERIFY(!m_ai->hasProposal());                   // it doesn't come back
+    QCOMPARE(treeXml(), before);
+}
+
+void AiAssist_Test::badArgumentsAreRefusedBeforeAnythingRuns()
+{
+    enable();
+    const ShowTreeCommand::Context ctx = smallShow();
+    const QByteArray before = treeXml();
+    // A good step and a bad one in the same reply: neither is proposed;
+    // the model is told why and gives up.
+    m_server->queueJson(kChat, toolsReply({ { "duplicate_cue", QJsonObject() },
+                                            { "set_intensity", QJsonObject { { "targets", QJsonArray { "Towers" } }, { "level", 140 } } } }));
+    m_server->queueJson(kChat, textReply("Levels go up to 100."));
+    QSignalSpy answered(m_ai, &AiAssist::answered);
+    QVERIFY(m_ai->ask("towers at 140", ctx));
+    QVERIFY(answered.wait(5000));
+    const AiAssist::Answer a = answered.first().first().value<AiAssist::Answer>();
+    QVERIFY(a.proposal.isEmpty());
+    QVERIFY(!m_ai->hasProposal());
+    QCOMPARE(m_server->count(kChat), 2);
+    const QJsonArray msgs = m_server->requests.at(1).json().value("messages").toArray();
+    const QString bad = msgs.last().toObject().value("content").toString();
+    QVERIFY2(bad.startsWith("error: level: 140 is above 100"), qPrintable(bad));
+    QVERIFY(msgs.at(msgs.count() - 2).toObject().value("content").toString().startsWith("not taken"));
+    QCOMPARE(treeXml(), before);
+
+    // An argument the operation doesn't take: refused the same way.
+    answered.clear();
+    m_server->clearQueue();
+    m_server->requests.clear();
+    m_server->queueJson(kChat, toolReply("record_cue", QJsonObject { { "source", "lit" }, { "fade", 3 } }));
+    m_server->queueJson(kChat, textReply("Sorry."));
+    QVERIFY(m_ai->ask("record it with a fade", ctx));
+    QVERIFY(answered.wait(5000));
+    QVERIFY(!m_ai->hasProposal());
+    const QJsonArray msgs2 = m_server->requests.at(1).json().value("messages").toArray();
+    QVERIFY(msgs2.last().toObject().value("content").toString().contains("fade: not an argument"));
+    QCOMPARE(treeXml(), before);
+}
+
+void AiAssist_Test::aPlanOverSeveralReplies()
+{
+    // As qwen3.6 really does it: one step a reply, then text. One plan.
+    enable();
+    const ShowTreeCommand::Context ctx = smallShow();
+    const QByteArray before = treeXml();
+    m_server->queueJson(kChat, toolReply("add_cue", QJsonObject { { "name", "Bridge" }, { "mode", "block" } }));
+    m_server->queueJson(kChat, toolReply("set_intensity", QJsonObject { { "targets", QJsonArray { "Steps" } }, { "level", 30 } }));
+    m_server->queueJson(kChat, textReply("A Bridge cue with Steps at 30."));
+    QSignalSpy answered(m_ai, &AiAssist::answered);
+    QVERIFY(m_ai->ask("a Bridge cue with steps at 30", ctx));
+    QVERIFY(answered.wait(5000));
+    const AiAssist::Answer a = answered.first().first().value<AiAssist::Answer>();
+    QCOMPARE(a.proposal.count(), 2);
+    QCOMPARE(a.proposal.at(1).command, QStringLiteral("Steps dimmer 30"));
+    QCOMPARE(m_server->count(kChat), 3);
+    QCOMPARE(treeXml(), before);
+    ShowTreeCommand::Result r;
+    QVERIFY2(m_ai->apply(QList<int>(), nullptr, &r), qPrintable(r.message));
+    const ShowTree::Cue *bridge = m_doc->showTree()->cue(r.context.cue);
+    QVERIFY(bridge != nullptr);
+    QCOMPARE(bridge->name, QStringLiteral("Bridge"));
+    QCOMPARE(bridge->layers.count(), 1);         // Steps went in the new cue
+    QVERIFY(m_doc->showTree()->undoShared());
+    QCOMPARE(treeXml(), before);
+}
+
+void AiAssist_Test::aRefusedStepAppliesNothing()
+{
+    // Every schema fits, but the show has no "Nobody": step 2 is refused
+    // when applied, and step 1 is taken back with it.
+    enable();
+    const ShowTreeCommand::Context ctx = smallShow();
+    const QByteArray before = treeXml();
+    const QString undoBefore = m_doc->showTree()->sharedUndoText();
+    Bar b;
+    propose(m_server, toolsReply({ { "add_cue", QJsonObject { { "name", "New" } } },
+                                     { "set_intensity", QJsonObject { { "targets", QJsonArray { "Nobody" } }, { "level", 40 } } } }));
+    QSignalSpy answered(m_ai, &AiAssist::answered);
+    QVERIFY(b.cl->handle("? new cue nobody at 40", ctx));
+    QVERIFY(answered.wait(5000));
+    QVERIFY(!b.cl->applyProposal());
+    QVERIFY2(b.msg->text().contains("Step 2"), qPrintable(b.msg->text()));
+    QVERIFY(b.msg->text().contains("Nothing changed"));
+    QCOMPARE(treeXml(), before);
+    QCOMPARE(m_doc->showTree()->sharedUndoText(), undoBefore);
+    QVERIFY(m_ai->hasProposal());            // still there to read; Esc drops it
+}
+
+void AiAssist_Test::goldenPrompts_data()
+{
+    // Prompt -> the model's tool calls -> the commands proposed. Written in
+    // the shape Ollama's /v1 sends (kRecordedToolCall is a real one), on
+    // smallShow(); each applies and undoes on it.
+    QTest::addColumn<QString>("prompt");
+    QTest::addColumn<QByteArray>("reply");
+    QTest::addColumn<QStringList>("commands");
+    const QJsonArray towers { "Towers" };
+    auto row = [](const char *name, const QString &prompt, const QList<QPair<QString, QJsonObject>> &calls,
+                  const QStringList &commands) {
+        QTest::newRow(name) << prompt << toolsReply(calls) << commands;
+    };
+    row("blue", "towers blue", { { "set_look", QJsonObject { { "targets", towers }, { "looks", QJsonArray { look("colour", "Blue") } } } } },
+        { "Towers colour Blue" });
+    row("level", "steps at 75", { { "set_intensity", QJsonObject { { "targets", QJsonArray { "Steps" } }, { "level", 75 } } } },
+        { "Steps dimmer 75" });
+    row("hex", "towers deep red", { { "set_look", QJsonObject { { "targets", towers }, { "looks", QJsonArray { look("colour", "#8b0000") } } } } },
+        { "Towers colour #8b0000" });
+    row("both", "towers and steps blue as one layer",
+        { { "set_look", QJsonObject { { "targets", QJsonArray { "Towers", "Steps" } }, { "looks", QJsonArray { look("colour", "Blue") } } } } },
+        { "Towers Steps colour Blue" });
+    row("each", "towers and steps at 40 each",
+        { { "set_look", QJsonObject { { "targets", QJsonArray { "Towers", "Steps" } }, { "each", true },
+                                      { "looks", QJsonArray { look("dimmer", 40) } } } } },
+        { "Towers, Steps dimmer 40" });
+    row("cue named", "make cue 3 called Bridge, block",
+        { { "make_cue", QJsonObject { { "number", "3" }, { "name", "Bridge" }, { "mode", "block" } } } },
+        { "cue 3 \"Bridge\" block" });
+    row("cue and look", "cue 3 towers blue",
+        { { "make_cue", QJsonObject { { "number", "3" } } },
+          { "set_look", QJsonObject { { "targets", towers }, { "looks", QJsonArray { look("colour", "Blue") } } } } },
+        { "cue 3", "Towers colour Blue" });
+    row("cue after", "a new cue after this one called Outro with towers at 20",
+        { { "add_cue", QJsonObject { { "name", "Outro" } } },
+          { "set_intensity", QJsonObject { { "targets", towers }, { "level", 20 } } } },
+        { "cue + \"Outro\"", "Towers dimmer 20" });
+    row("mode", "make this cue cue-only", { { "set_cue_mode", QJsonObject { { "mode", "cueonly" } } } }, { "cueonly" });
+    row("skip", "skip cue 2", { { "skip_cues", QJsonObject { { "cues", QJsonArray { "2" } } } } }, { "skip 2" });
+    row("dup", "duplicate this cue", { { "duplicate_cue", QJsonObject() } }, { "dup" });
+    row("record", "record what's selected as a new cue", { { "record_cue", QJsonObject { { "source", "selected" } } } },
+        { "record selected" });
+    row("name", "towers at full and call the layer Hero",
+        { { "set_intensity", QJsonObject { { "targets", towers }, { "level", 100 } } },
+          { "rename_selected", QJsonObject { { "name", "Hero" } } } },
+        { "Towers dimmer 100", "name \"Hero\"" });
+    row("function", "play Haze in this cue", { { "play_function", QJsonObject { { "functions", QJsonArray { "Haze" } } } } },
+        { "function Haze" });
+    row("set", "make a set All of towers and steps",
+        { { "make_group_set", QJsonObject { { "name", "All" }, { "groups", QJsonArray { "Towers", "Steps" } } } } },
+        { "set \"All\" Towers Steps" });
+    row("list", "a new cue list Encore with cue 1",
+        { { "make_cue_list", QJsonObject { { "name", "Encore" } } }, { "make_cue", QJsonObject { { "number", "1" } } } },
+        { "list \"Encore\"", "cue 1" });
+    row("release", "towers at 60 and release them after",
+        { { "set_intensity", QJsonObject { { "targets", towers }, { "level", 60 } } },
+          { "release_layer", QJsonObject { { "targets", towers } } } },
+        { "Towers dimmer 60", "release Towers" });
+}
+
+void AiAssist_Test::goldenPrompts()
+{
+    QFETCH(QString, prompt);
+    QFETCH(QByteArray, reply);
+    QFETCH(QStringList, commands);
+    enable();
+    const ShowTreeCommand::Context ctx = smallShow();
+    ShowTreeController *st = m_doc->showTree();
+    const QByteArray before = treeXml();
+    const QString undoBefore = st->sharedUndoText();
+    propose(m_server, reply);
+    QSignalSpy answered(m_ai, &AiAssist::answered);
+    QVERIFY(m_ai->ask(prompt, ctx));
+    QVERIFY(answered.wait(5000));
+    const AiAssist::Answer a = answered.first().first().value<AiAssist::Answer>();
+    QVERIFY2(a.ok, qPrintable(a.text));
+    QStringList got;
+    for (const AiAssist::Step &s : a.proposal)
+        got << s.command;
+    QCOMPARE(got, commands);
+    QCOMPARE(treeXml(), before);
+    ShowTreeCommand::Result r;
+    QVERIFY2(m_ai->apply(QList<int>(), nullptr, &r), qPrintable(r.message));
+    QVERIFY(treeXml() != before);
+    QVERIFY(st->sharedUndoText().startsWith("AI Assist"));
+    // One undo step takes the whole plan back, exactly.
+    QVERIFY(st->undoShared());
+    QCOMPARE(treeXml(), before);
+    QCOMPARE(st->sharedUndoText(), undoBefore);
+}
+
 /* A real model, run by hand only (the gate never sets it):
    QLC_AI_LIVE_OLLAMA=http://localhost:11434 [QLC_AI_LIVE_MODEL=…] ./aiassist_test liveOllamaSmoke
    Asks the P1 acceptance question on a show with one overlap, then goes to
@@ -902,6 +1362,53 @@ void AiAssist_Test::liveOllamaSmoke()
     QVERIFY(done.wait(30000));
     qInfo().noquote() << "teardown + audit done in" << t.elapsed() << "ms; clean:" << done.first().first().toBool()
                       << (err.isEmpty() ? QString() : err.first().first().toString());
+    QVERIFY(done.first().first().toBool());
+}
+
+/* P2 against a real model, by hand only (same rules as liveOllamaSmoke):
+   asks for a change on smallShow(), checks a proposal comes back that
+   changes nothing until applied, applies it and undoes it in one step. */
+void AiAssist_Test::liveOllamaChangeSmoke()
+{
+    const QString endpoint = qEnvironmentVariable("QLC_AI_LIVE_OLLAMA");
+    if (endpoint.isEmpty())
+        QSKIP("set QLC_AI_LIVE_OLLAMA to run against a real Ollama");
+    AiSettings s;
+    s.enabled = true;
+    s.endpoint = endpoint;
+    if (qEnvironmentVariableIsSet("QLC_AI_LIVE_MODEL"))
+        s.model = qEnvironmentVariable("QLC_AI_LIVE_MODEL");
+    s.timeoutSec = 300;
+    s.save();
+    m_ai->settingsChanged();
+    const ShowTreeCommand::Context ctx = smallShow();
+    ShowTreeController *st = m_doc->showTree();
+    const QByteArray before = treeXml();
+    QSignalSpy answered(m_ai, &AiAssist::answered);
+    QElapsedTimer t;
+    t.start();
+    const QString prompt = qEnvironmentVariable("QLC_AI_LIVE_PROMPT",
+                                                QStringLiteral("In this cue, set Towers to the Blue palette at 50 percent."));
+    QVERIFY(m_ai->ask(prompt, ctx));
+    QVERIFY(answered.wait(300000));
+    const AiAssist::Answer a = answered.first().first().value<AiAssist::Answer>();
+    qInfo().noquote() << "model:" << s.model << "in" << t.elapsed() << "ms";
+    qInfo().noquote() << "read:" << a.commands.join(", ");
+    for (const AiAssist::Step &step : a.proposal)
+        qInfo().noquote() << "proposed:" << step.command << "--" << step.description;
+    qInfo().noquote() << "answer:" << a.text;
+    QVERIFY2(a.ok, qPrintable(a.text));
+    QVERIFY(!a.proposal.isEmpty());
+    QCOMPARE(treeXml(), before);
+    ShowTreeCommand::Result r;
+    QVERIFY2(m_ai->apply(QList<int>(), nullptr, &r), qPrintable(r.message));
+    qInfo().noquote() << "applied:" << r.message;
+    QVERIFY(st->undoShared());
+    QCOMPARE(treeXml(), before);
+    QSignalSpy done(m_ai, &AiAssist::teardownFinished);
+    m_doc->setMode(Doc::Operate);
+    QVERIFY(done.wait(30000));
+    qInfo().noquote() << "Operate teardown clean:" << done.first().first().toBool();
     QVERIFY(done.first().first().toBool());
 }
 
