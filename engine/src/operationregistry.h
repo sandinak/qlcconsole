@@ -146,8 +146,9 @@ public:
      *  says so): what a model is sent stays bounded. */
     static const int MaxText = 8000;
 
-    /** Is function @a id used somewhere the engine can't see (a Virtual
-     *  Console widget)? The UI sets it; unset: nothing is. */
+    /** Is function @a id used somewhere the engine can't see? An extra
+     *  to the Virtual Console (ShowReview::vcIndex(), which the registry
+     *  reads itself); unset: nothing more is. */
     static void setFunctionUseProbe(const std::function<bool(quint32)> &probe);
 
 private:

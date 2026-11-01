@@ -19,6 +19,7 @@
 */
 
 #include <QXmlStreamReader>
+#include <QBuffer>
 #include <QXmlStreamWriter>
 #include <QApplication>
 #include <QInputDialog>
@@ -63,6 +64,7 @@
 #include "chaser.h"
 #include "vccuelist.h"
 #include "showtreecontroller.h"
+#include "showreview.h"
 #include "functionwizard.h"
 #include "programmerframewizard.h"
 #include "doc.h"
@@ -163,10 +165,26 @@ VirtualConsole::VirtualConsole(QWidget* parent, Doc* doc)
 
     // Nothing is selected
     updateActions();
+
+    // Show Review and AI Assist read what this console holds through the
+    // VcIndex, without the widgets: save into memory, read back
+    // (docs/design/SHOW_REVIEW.md section 5.3).
+    m_reviewDoc = m_doc;
+    if (m_doc->showReview() != NULL)
+        m_doc->showReview()->setVcSource([this]() {
+            QByteArray xml;
+            QBuffer buffer(&xml);
+            buffer.open(QIODevice::WriteOnly);
+            QXmlStreamWriter writer(&buffer);
+            saveXML(&writer);
+            return xml;
+        });
 }
 
 VirtualConsole::~VirtualConsole()
 {
+    if (m_reviewDoc != NULL && m_reviewDoc->showReview() != NULL)
+        m_reviewDoc->showReview()->setVcSource(std::function<QByteArray()>());
     s_instance = NULL;
 }
 

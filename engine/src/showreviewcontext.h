@@ -45,6 +45,10 @@ public:
     /** Every fixture a scene, a group, a palette or a Show Tree layer
      *  reaches -- what "used" means for PAT-03. */
     const QSet<quint32> &usedFixtures();
+    /** What the Virtual Console holds, read once a run (not available: the
+     *  Doc has no Virtual Console source, and the checks on it stay quiet). */
+    const VcIndex &vc();
+
     /** Whether universe @a u has an output patch (in the Doc, or as the
      *  file says when the Doc's I/O isn't loaded). */
     bool universeHasOutput(quint32 u) const;
@@ -73,6 +77,8 @@ public:
 private:
     Doc *m_doc;
     ShowReview::Options m_options;
+    bool m_vcBuilt = false;
+    VcIndex m_vc;
     bool m_usedBuilt = false;
     QSet<quint32> m_used;
     QHash<quint32, QList<ShowTree::ResolvedCue>> m_resolved;
@@ -84,6 +90,9 @@ namespace ShowReviewChecks
     QList<ShowReview::Check> showChecks();
     /** The checks over the Show Tree: palettes in cues, tracking, hits */
     QList<ShowReview::Check> treeChecks();
+    /** The checks over the Virtual Console (VcIndex): buttons, keys, inputs,
+     *  Cue Runners, hits nobody fires, lists nothing can play */
+    QList<ShowReview::Check> vcChecks();
     /** Effect looks in scenes that can't run, by design: no script chosen,
      *  or the script isn't on this computer (palette id -> why). */
     QHash<quint32, QString> designEffectProblems(Doc *doc);

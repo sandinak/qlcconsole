@@ -587,7 +587,8 @@ docs/features/ai-assist.md.
   *decided: a resource error raised in Operate stays in the footer until
   back in Design (can change).* *decided: Virtual Console widgets aren't
   checked by `unused` yet (the UI can set
-  `OperationRegistry::setFunctionUseProbe`; the answer says so) (can
+  `OperationRegistry::setFunctionUseProbe`; the answer says so; since vcx the
+  VcIndex answers it) (can
   change).*
 
 **Next:**
@@ -596,7 +597,7 @@ docs/features/ai-assist.md.
   checklist UI (§7).
 - **P2b** configuration import (§5b), usable with AI off.
 - **P3** MCP server over the registry.
-- Small: VC widgets in `unused`; Linux/Windows keychain (QtKeychain);
+- Small: Linux/Windows keychain (QtKeychain);
   Tab completion of the registry's words.
 
 Guardrails: separate `ai/` module behind `QLC_AI_ASSIST`; no AI code on
@@ -618,8 +619,8 @@ Accept…, Reopen, Why?, Turn Check Off…, Open/Accepted/All, search), also fro
 the Show readiness dialog; the footer's design entries shown under their
 catalog id there and folded into the panel (FTR). 41 checks: PAT-01/02/03/04/05/06,
 FIX-01/02/05/07/08/14, FX-02/03/07, PWR-01/03/05/06/09, FILE-01/02/03,
-NAME-01/02, PAL-01/02/03/05, CUE-01/02/03/04/05/06/07/08/11/12, VC-01,
-TEACH-01; each with a trip and a
+NAME-01/02, PAL-01/02/03/05, CUE-01/02/03/04/05/06/07/08/11/12/13, VC-01/03/04/05/06/08,
+TEACH-01 (47; the VC ones read the VcIndex, `engine/src/vcindex.*`); each with a trip and a
 near-miss test (ShowReview_Test; a registry test fails a check with neither).
 A full run on DanceHysteria-0.6 is 140 ms (Debug).
 
@@ -644,17 +645,20 @@ Decided (each can change):
 - Accept is not an undo step yet.
 
 Leftovers of v1:
-- v1 checks not built: MOV-01, MOV-02, MOV-08, CUE-13 (needs the VcIndex),
-  VEN-01, VEN-02, VEN-05, VEN-09, VEN-10, FX-01 (with the Pi 5 cost table
-  and a plays-on setting); and VC-03, VC-04, VC-05, VC-06, VC-08, which
-  need the VcIndex (VC facts from the live VC and from the file, section
-  5.3).
+- v1 checks not built: MOV-01, MOV-02, MOV-08, VEN-01, VEN-02, VEN-05,
+  VEN-09, VEN-10, FX-01 (with the Pi 5 cost table and a plays-on setting).
+- VcIndex (done, vcx, 2026-10-31): one reader of the `<VirtualConsole>`
+  element in the engine; the app saves the live console into memory and
+  reads it back, `--review` reads the file, so they can't differ (decided,
+  can change: not two fillers tested against each other, §5.3). VC-03/04/05/
+  06/08 and CUE-13 on it, CUE-12's VC buttons, AI Assist `unused`. Open:
+  VC-02, VC-07, VC-09, CUE-15 (they also read the index); show-control and
+  OSC routes don't count for CUE-13 yet.
 - Built after v1 (rev2, 2026-10-31): TEACH-01, PWR-09 (lasers and star
   fields into the audience; decided: no audience area is modelled, so the
   house is downstage of the stage edge below 3 m, can change), CUE-03,
-  CUE-12 (chasers/collections/timelines still playing an original; its VC
-  buttons and the edited-original cases wait on the VcIndex / a rebake
-  compare), PAT-05, FIX-02 (definition errors only), FIX-08, FX-02, FX-03
+  CUE-12 (chasers/collections/timelines and VC widgets still playing an
+  original; the edited-original cases wait on a rebake compare), PAT-05, FIX-02 (definition errors only), FIX-08, FX-02, FX-03
   (EFX size/speed 0 and matrix speed 0; a paused speed master isn't read),
   FILE-03 (carried copies that fail or differ; the .qxw "uses the user
   folder" case isn't built).

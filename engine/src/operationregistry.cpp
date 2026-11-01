@@ -203,12 +203,28 @@ QString reviewText(Doc *doc, const QStringList &checks, ReviewFinding::Severity 
     return lines.join(QLatin1Char('\n'));
 }
 
+/** Whether the show has a Virtual Console to ask (its VcIndex), or the UI
+ *  gave a probe. */
+bool vcChecked(Doc *doc)
+{
+    if (s_functionUseProbe)
+        return true;
+    return doc->showReview() != nullptr && doc->showReview()->vcIndex().available;
+}
+
 /** Functions nothing uses: no function holds them (Doc::getUsage), no cue
  *  plays them as a function layer, the tree didn't make them, they aren't
- *  the start-up function, and the UI's probe (VC widgets) doesn't claim
- *  them. */
+ *  the start-up function, and no Virtual Console widget runs them (the
+ *  VcIndex; the UI's probe, if one is set, too). */
 QList<Function *> unusedFunctions(Doc *doc)
 {
+    QSet<quint32> onConsole;
+    if (doc->showReview() != nullptr)
+    {
+        const VcIndex vc = doc->showReview()->vcIndex();
+        if (vc.available)
+            onConsole = vc.functionsUsed();
+    }
     QSet<quint32> inTree;
     if (doc->showTree() != nullptr)
     {
@@ -233,6 +249,8 @@ QList<Function *> unusedFunctions(Doc *doc)
         if (doc->showTree() != nullptr && doc->showTree()->isGenerated(f->id()))
             continue;
         if (!doc->getUsage(f->id()).isEmpty())
+            continue;
+        if (onConsole.contains(f->id()))
             continue;
         if (s_functionUseProbe && s_functionUseProbe(f->id()))
             continue;
@@ -624,9 +642,10 @@ QList<OperationRegistry::Operation> buildCatalog()
                 const QString where = f->path(true).isEmpty() ? QString() : f->path(true) + QLatin1Char('/');
                 lines << QStringLiteral("%1%2 · %3 · #%4").arg(where, f->name(), Function::typeToString(f->type())).arg(f->id());
             }
-            if (!s_functionUseProbe)
+            const bool checked = vcChecked(ctx.doc);
+            if (!checked)
                 lines << R::tr("(Virtual Console widgets weren't checked.)");
-            return answer(R::tr("%n unused function(s)", "", lines.count() - (s_functionUseProbe ? 0 : 1)),
+            return answer(R::tr("%n unused function(s)", "", lines.count() - (checked ? 0 : 1)),
                           lines.join(QLatin1Char('\n')));
         };
         op.cliSyntax = [](const QJsonObject &) { return QStringLiteral("unused"); };

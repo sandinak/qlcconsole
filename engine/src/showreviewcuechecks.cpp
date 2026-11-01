@@ -471,13 +471,27 @@ static void cue03(ReviewContext &ctx, QList<ReviewFinding> &out)
     }
 }
 
+/** "VC button 'Act 1'" */
+static QString vcWidgetText(const VcWidget &w)
+{
+    QString kind = tr("VC widget");
+    if (w.type == QLatin1String("Button"))
+        kind = tr("VC button");
+    else if (w.type == QLatin1String("CueList"))
+        kind = tr("VC Cue List");
+    else if (w.type == QLatin1String("Slider"))
+        kind = tr("VC slider");
+    else if (w.type == QLatin1String("Matrix"))
+        kind = tr("VC matrix");
+    return QStringLiteral("%1 '%2'").arg(kind, w.label());
+}
+
 static void cue12(ReviewContext &ctx, QList<ReviewFinding> &out)
 {
-    // decided (can change): only (a) of the design, and only what the engine
-    // sees: an original kept for Restore original that a chaser, collection
-    // or timeline still plays. A Virtual Console button on it needs the
-    // VcIndex; an original edited since, or a generated function edited by
-    // hand, isn't compared.
+    // decided (can change): only (a) of the design: an original kept for
+    // Restore original that a chaser, collection, timeline or Virtual
+    // Console widget still plays. An original edited since, or a generated
+    // function edited by hand, isn't compared (it needs a rebake compare).
     Doc *doc = ctx.doc();
     ShowTreeController *st = doc->showTree();
     for (const auto &pl : plainLists(doc))
@@ -501,6 +515,13 @@ static void cue12(ReviewContext &ctx, QList<ReviewFinding> &out)
                     firstUser = f->id();
                 users << QStringLiteral("'%1'").arg(f->name());
                 keys << QStringLiteral("fn:%1").arg(f->id());
+            }
+            for (const VcWidget &w : ctx.vc().widgets)
+            {
+                if (w.id == 0xFFFFFFFF || !w.allFunctions().contains(o.function))
+                    continue;
+                users << vcWidgetText(w);
+                keys << QStringLiteral("vc:%1").arg(w.id);
             }
             if (users.isEmpty())
                 continue;

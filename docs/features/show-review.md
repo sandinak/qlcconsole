@@ -129,16 +129,33 @@ in the design (docs/design/SHOW_REVIEW.md in the source).
 - **CUE-08** Released layers with no base cue (a note: they go dark), or a
   base cue that is deleted, skipped or comes after.
 - **CUE-12** After Import in place, a chaser, collection or timeline that
-  still plays the original chaser the Show Tree list was made from. (Virtual
-  Console buttons on it are not read yet.)
+  still plays the original chaser the Show Tree list was made from, or a
+  Virtual Console button, Cue List or slider that runs it.
 - **CUE-11** An include that would loop, or an include, reusable or sub-cue
   list pointing at what was deleted.
+- **CUE-13** A cue list nothing can play: it isn't the production's main
+  list, no Cue Runner follows it, no VC Cue List or button runs it, and no
+  timecode or control-map route reaches it.
 
 **Hits**
 
 - **VC-01** Two hits in the same place that set the same attribute on the
   same lights: whichever was pressed last wins. Accept it when one button
   steps through them.
+- **VC-03** A hit no VC button, key or input fires.
+- **VC-04** A button, matrix or playback slider with no function (or a
+  deleted one), a level slider on fixtures that were deleted, a Cue List on
+  a deleted list.
+- **VC-05** The same key on two widgets that can be live together (not on
+  different pages of one frame), or a key Operate already answers to (the
+  GO keys, Space).
+- **VC-06** Two widgets with different jobs on one input control.
+- **VC-08** A Cue Runner that follows a deleted cue list, or the current
+  production in a show with no cue list.
+
+The Virtual Console checks read what the console holds, not the console: in
+the app that is the open console, and `--review` reads it from the file, so
+both give the same answer.
 
 **Effects, power and safety**
 

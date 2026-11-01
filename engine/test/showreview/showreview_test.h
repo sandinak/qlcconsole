@@ -82,6 +82,16 @@ private slots:
     void fx02();
     void fx03();
     void file03();
+    /** The VcIndex reads the Virtual Console without it */
+    void vcIndexReads();
+    void vc03();
+    void vc04();
+    void vc05();
+    void vc06();
+    void vc08();
+    void cue13();
+    /** CUE-12's Virtual Console button */
+    void cue12Vc();
 
     /** Accept -> saved -> loaded: quiet; what it read changes: Changed with
      *  the note; something else changes: still accepted; the subject gone:
@@ -117,6 +127,8 @@ private:
     /** Rewrite the Show Tree's saved XML and load it back */
     void editTree(const std::function<void(QString &)> &edit);
     QString saveShow() const;
+    /** Give the Doc a Virtual Console of @a widgets (inside its top frame) */
+    void console(const QString &widgets, const QString &properties = QString());
     bool loadShow(Doc *doc, const QString &xml) const;
 
 private:

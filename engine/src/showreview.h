@@ -31,6 +31,8 @@
 #include <QXmlStreamAttributes>
 #include <functional>
 
+#include "vcindex.h"
+
 #include "qlcengine_export.h"
 
 class QXmlStreamReader;
@@ -208,6 +210,22 @@ public:
     void saveXML(QXmlStreamWriter *doc) const;
     void loadXML(QXmlStreamReader &root);
 
+    /************************************************************************
+     * The Virtual Console, without it
+     ************************************************************************/
+    /** Where the Virtual Console checks (VC-03..06, 08, CUE-12, CUE-13) and
+     *  AI Assist's "unused" learn what the Virtual Console holds, as the
+     *  XML of its <VirtualConsole> element. The app gives a function that
+     *  saves the live Virtual Console into memory; the command line gives
+     *  the saved file's (setVcXml()). Without either, vcIndex() is not
+     *  available and the checks that need it stay quiet. */
+    void setVcSource(const std::function<QByteArray()> &source);
+    void setVcXml(const QByteArray &xml);
+    /** The command line: read the saved file's <VirtualConsole> once. */
+    void setVcFile(const QString &path);
+    /** The index, read afresh (the live Virtual Console may have changed). */
+    VcIndex vcIndex() const;
+
     /** Whether target key @a key ("fx:7") still names something in @a doc. */
     static bool targetExists(const Doc *doc, const QString &key);
 
@@ -227,6 +245,9 @@ private:
     QList<TurnedOff> m_off;
     QXmlStreamAttributes m_unknown;
     Result m_last;
+    std::function<QByteArray()> m_vcSource;
+    VcIndex m_vcFixed;
+    bool m_hasVcFixed = false;
 };
 
 /** @} */

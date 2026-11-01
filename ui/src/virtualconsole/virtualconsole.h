@@ -22,6 +22,7 @@
 #define VIRTUALCONSOLE_H
 
 #include <QKeySequence>
+#include <QPointer>
 #include <QWidget>
 #include <QFrame>
 #include <QList>
@@ -77,6 +78,8 @@ protected:
 protected:
     static VirtualConsole* s_instance;
     Doc* m_doc;
+    /** The Doc whose Show Review reads this console (gone with it). */
+    QPointer<Doc> m_reviewDoc;
 
 private:
     /** Latest assigned widget ID */
