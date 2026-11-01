@@ -864,6 +864,10 @@ skipped). Upstream fixes taken:
 
 ### Fixed
 
+- **A big show takes as little memory as before effect fades.** The
+  effect fade (0.4) had made the engine's record of each channel a look
+  plays 8 bytes bigger: about 15 MB more at 128 universes. It is back to
+  its old size, and the build now fails if it grows again.
 - **`qlcconsole --version` and `--help` work with no display** (ssh, a
   headless Pi): they answer before the application window system starts,
   where they used to abort in Qt's xcb plugin.
