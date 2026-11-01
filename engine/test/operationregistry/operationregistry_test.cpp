@@ -79,6 +79,15 @@ void OperationRegistry_Test::catalogIsWhole()
             QVERIFY(!op.readOnly);
             continue;
         }
+        if (!op.readOnly && op.name == QLatin1String("import_config"))
+        {
+            // P2b: the configuration import also has a command-line form
+            // (`import config <file> ... apply`): it previews until "apply".
+            QVERIFY(op.cliWord == QLatin1String("import") && op.parse);
+            QVERIFY(op.schema.value("additionalProperties") == QJsonValue(false));
+            QVERIFY(ShowTreeCommand::word(op.cliWord) == nullptr);
+            continue;
+        }
         if (!op.readOnly)
         {
             // P2: a change word -- strict schema, no command-line word of
@@ -89,6 +98,8 @@ void OperationRegistry_Test::catalogIsWhole()
         }
         // P1: every other operation is a read-only question with a word.
         QVERIFY2(op.readOnly, qPrintable(op.name));
+        if (op.name == QLatin1String("preview_config_import"))
+            continue;       // P2b: the assistant's preview; the typed form is `import config`
         QVERIFY2(!op.cliWord.isEmpty() && op.parse && op.cliHelp.startsWith(op.cliWord), qPrintable(op.name));
         QVERIFY2(!words.contains(op.cliWord), qPrintable(op.cliWord));
         words.insert(op.cliWord);
@@ -96,11 +107,13 @@ void OperationRegistry_Test::catalogIsWhole()
         QVERIFY2(ShowTreeCommand::word(op.cliWord) == nullptr, qPrintable(op.cliWord));
     }
     for (const char *n : { "command", "list_fixtures", "list_groups", "list_functions", "describe_function",
-                           "list_cues", "find_conflicts", "find_unused_functions", "find_problems", "show_summary" })
+                           "list_cues", "find_conflicts", "find_unused_functions", "find_problems", "show_summary",
+                           "read_config", "preview_config_import" })
         QVERIFY2(names.contains(QLatin1String(n)), n);
     for (const char *n : { "make_cue", "add_cue", "make_cue_list", "set_look", "set_cue_look", "set_intensity",
                            "set_cue_mode", "release_layer", "skip_cues", "unskip_cues", "record_cue",
-                           "rename_selected", "duplicate_cue", "include_cue", "make_group_set", "play_function" })
+                           "rename_selected", "duplicate_cue", "include_cue", "make_group_set", "play_function",
+                           "import_config" })
         QVERIFY2(names.contains(QLatin1String(n)), n);
     QCOMPARE(R::readOnlyOperations().count() + R::changeOperations().count(), R::catalog().count() - 1);
     for (const R::Operation *op : R::changeOperations())

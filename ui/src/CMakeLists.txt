@@ -77,6 +77,7 @@ add_library(${module_name}
     groupsconsole.cpp groupsconsole.h
     horizontalpan.cpp horizontalpan.h
     importselectiondialog.cpp importselectiondialog.h
+    configimportdialog.cpp configimportdialog.h
     eosimportwizard.cpp eosimportwizard.h
     inputchanneleditor.cpp inputchanneleditor.h inputchanneleditor.ui
     inputdevicenotices.cpp inputdevicenotices.h

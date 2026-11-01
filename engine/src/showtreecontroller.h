@@ -598,6 +598,11 @@ public:
     void beginBatch(const QString &label);
     void endBatch(bool keep);
     bool inBatch() const { return m_batchDepth > 0; }
+    /** A command changed something outside the tree (a configuration
+     *  import: universes and patches): the batch still records its step,
+     *  and the caller attaches the outside part with attachToLastStep()
+     *  once endBatch(true) has. No-op outside a batch. */
+    void noteChangeOutsideTree() { if (m_batchDepth > 0) m_batchChanged = true; }
 
     /** The cues whose Collection the last bake changed (what they play),
      *  in tree order: the re-bake chain of the last edit, as it came out. */

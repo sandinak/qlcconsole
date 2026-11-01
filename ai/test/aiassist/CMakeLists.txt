@@ -10,3 +10,5 @@ target_link_libraries(aiassist_test PRIVATE
     qlcplusengine
     qlcconsoleai
 )
+target_compile_definitions(aiassist_test PRIVATE
+    AIASSIST_SAMPLES="${CMAKE_CURRENT_SOURCE_DIR}")

@@ -548,7 +548,7 @@ with the throw). **Part C, the audience-zone check, done** (Show Review PWR-09, 
 outline, the Type=Laser emission inference, and
 FixtureDefCheck's laser checks.
 
-## AI Assist (0.5, docs/design/AI_ASSIST.md; P0+P1 built 2026-10-31, ai; P2 built 2026-10-31, ai2)
+## AI Assist (0.5, docs/design/AI_ASSIST.md; P0+P1 built 2026-10-31, ai; P2 built 2026-10-31, ai2; P2b built 2026-10-31, ai3)
 
 Branson's design: type a request in Design mode ("movers 1–6 deep blue at
 50%", "find address conflicts") and get proposed command-line text to
@@ -630,8 +630,53 @@ docs/features/ai-assist.md.
   Ollama's /v1 sends (P1's recorded call is real); the two live runs above
   are the real-model check (can change).*
 
+- ~~**P2b** configuration import (§5b), usable with AI off.~~ Built:
+  `engine/src/configimport.*` (read the source `.qxw` as XML -- nothing is
+  opened; `plan()` = problems, warnings, current -> resulting diff;
+  `apply()`), three registry operations (`read_config` and
+  `preview_config_import` questions, `import_config` a change), File ▸
+  Import ▸ *Universes and I/O Setup (.qxw)…* (`ConfigImportDialog`: what,
+  which universes and where they go, address and plugin maps, the two
+  choices, a live preview, Import), the command line (`config <file>`;
+  `import config <file> … apply` previews until `apply`), and the
+  assistant (reads the file, proposes `import_config`, the checklist
+  applies it). The non-AI path is the engine + dialog + command line; the
+  assistant only proposes the same operation. It rides `runPlan()`: the
+  Show Tree batch records the step (`ShowTreeController::
+  noteChangeOutsideTree()`) and the universes' before/after state is
+  attached to it (`attachToLastStep`), so Ctrl+Z / redo and a failing
+  later step in a plan put the universes back exactly. Sections: universe
+  names (+ passthrough), outputs, inputs with their input profile,
+  feedback. Route requirement (the patch's UID, `Network`, target address)
+  is copied as the file has it, through the same `loadPatch` a saved show
+  opens with, so an off-network import succeeds and the patch waits as a
+  kept/pending one (`NetworkRoute::checkRoute()`: no route -> "not
+  currently routable"; only the default route -> "would leave by the
+  DEFAULT route", both warnings). Tests: ConfigImport_Test (27: read,
+  off-network, intact route requirements, default route, real route,
+  mapping, subsets, collision and missing-plugin choices, undo/redo,
+  failing plan, command line, round trip, no AI), ConfigImportDialog_Test,
+  AiAssist_Test (propose + apply + undo, a choice sent back to the model,
+  Operate), ImportMenu_Test. *decided: fixtures, groups and palettes are
+  not part of `import_config`; File ▸ Import ▸ Workspace already brings
+  those in with id and address remapping, and the summary says how many
+  the file has, so the dangling-reference check has nothing to check (can
+  change).* *decided: a universe has a "collision" when the target
+  universe here has a non-default name or any patch in the selected
+  sections; a fresh show's empty universes are not collisions, and the
+  choice (skip / replace / renumber) must be given, never guessed (can
+  change).* *decided: an input profile that isn't installed here is a
+  warning, the profile name is kept (can change).* *decided: the typed
+  command shows the preview and only `apply` makes the change (can
+  change).* *decided: a universe's controller slot is not imported (a
+  warning says so); only `.qxw` is read (can change).* *decided: the
+  route checks run when planning/importing; the Operate-switch and
+  route-change re-check of §5b stays with the existing rig-network gate
+  (can change).* *decided: one new row in File ▸ Import (the design names
+  it), no "Any Supported File" dispatch to it since a `.qxw` is the
+  Workspace importer's (can change).*
+
 **Next:**
-- **P2b** configuration import (§5b), usable with AI off.
 - **P3** MCP server over the registry.
 - Small: VC widgets in `unused`; Linux/Windows keychain (QtKeychain);
   Tab completion of the registry's words; palette and authoring operations

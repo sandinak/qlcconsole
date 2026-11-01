@@ -104,6 +104,7 @@ void ImportMenu_Test::submenuHasTheSources()
     const QStringList expected {
         QStringLiteral("## From a show file"),
         QStringLiteral("fileImport_workspace=QLC+ / qlcconsole &Workspace (.qxw, .qlcc)…"),
+        QStringLiteral("fileImport_config=Universes and I/O &Setup (.qxw)…"),
         QStringLiteral("fileImport_eos=ETC &Eos Show (ASCII .asc)…"),
         QStringLiteral("## Fixtures && patch"),
         QStringLiteral("fileImport_fixturelist=QLC+ &Fixtures List (.qxfl)…"),
@@ -118,12 +119,14 @@ void ImportMenu_Test::submenuHasTheSources()
     QVERIFY(entry("any")->icon().isNull() == false);
 
     // The table and the menu agree: a row is an entry.
-    QCOMPARE(m_app->importSources().size(), 3);
+    QCOMPARE(m_app->importSources().size(), 4);
     foreach (const App::ImportSource &src, m_app->importSources())
     {
         QVERIFY2(entry(src.key) != nullptr, qPrintable(src.key));
         QVERIFY(src.handler != nullptr);
-        QVERIFY(src.extensions.isEmpty() == false);
+        // Every row is dispatched by extension, but the configuration
+        // import: it is chosen by its entry (a .qxw is the Workspace's).
+        QVERIFY(src.extensions.isEmpty() == (src.key == QLatin1String("config")));
     }
 }
 
@@ -136,6 +139,8 @@ void ImportMenu_Test::eachEntryRoutesToItsImporter_data()
     QTest::newRow("workspace") << "workspace" << "/shows/other.qlcc"
         << QStringList{ "Workspaces (*.qlcc *.qxw)", "qlcconsole Workspaces (*.qlcc)",
                         "QLC+ Workspaces (*.qxw)", ALL_FILES };
+    QTest::newRow("config") << "config" << "/shows/evo26.qxw"
+        << QStringList{ "Workspaces (*.qlcc *.qxw)", ALL_FILES };
     QTest::newRow("eos") << "eos" << "/shows/venue.asc"
         << QStringList{ "ETC Eos shows, USITT ASCII export (*.asc *.ASC)", ALL_FILES };
     QTest::newRow("fixturelist") << "fixturelist" << "/shows/rig.qxfl"
@@ -165,6 +170,8 @@ void ImportMenu_Test::eachEntryRoutesToItsImporter()
     void (App::*expected)(const QString &) = nullptr;
     if (key == "workspace")
         expected = &App::importWorkspaceFile;
+    else if (key == "config")
+        expected = &App::importConfigFile;
     else if (key == "eos")
         expected = &App::importEosShow;
     else if (key == "fixturelist")
@@ -183,10 +190,11 @@ void ImportMenu_Test::cancelImportsNothing()
 {
     m_pickResult.clear();
     entry("workspace")->trigger();
+    entry("config")->trigger();
     entry("eos")->trigger();
     entry("fixturelist")->trigger();
     entry("any")->trigger();
-    QCOMPARE(m_picks, 4);
+    QCOMPARE(m_picks, 5);
     QVERIFY(m_runs.isEmpty());
 }
 
@@ -240,7 +248,7 @@ void ImportMenu_Test::entriesShowInEveryView()
         QMenu *menu = m_app->fileImportMenu();
         QVERIFY(menu->menuAction()->isVisible());
         QVERIFY(menu->menuAction()->isEnabled());
-        const QStringList keys { "workspace", "eos", "fixturelist", "any" };
+        const QStringList keys { "workspace", "config", "eos", "fixturelist", "any" };
         foreach (const QString &key, keys)
         {
             QAction *a = entry(key);

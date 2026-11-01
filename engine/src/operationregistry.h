@@ -74,6 +74,10 @@ public:
         ShowTreeCommand *commander = nullptr;
         /** Where the command line's selection is. */
         ShowTreeCommand::Context selection;
+        /** Inside runPlan(): where a change that lives outside the Show
+         *  Tree (a configuration import) leaves how to undo and redo it
+         *  (true/false), to hang on the plan's one undo step. */
+        QList<std::function<void(bool undone)>> *outside = nullptr;
     };
 
     struct Result
@@ -191,6 +195,9 @@ public:
 
 private:
     bool nameTaken(const QString &word) const;
+    /** What a change operation of the running plan did outside the Show
+     *  Tree (Context::outside). */
+    QList<std::function<void(bool undone)>> m_outside;
 
     Doc *m_doc;
     ShowTreeCommand *m_commander;

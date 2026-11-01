@@ -44,6 +44,7 @@
 #include "aisettings.h"
 #include "aiassist.h"
 #include "showtreecontroller.h"
+#include "inputoutputmap.h"
 #include "fixturegroup.h"
 #include "qlcpalette.h"
 #include "fixture.h"
@@ -1232,6 +1233,105 @@ void AiAssist_Test::aRefusedStepAppliesNothing()
     QCOMPARE(treeXml(), before);
     QCOMPARE(m_doc->showTree()->sharedUndoText(), undoBefore);
     QVERIFY(m_ai->hasProposal());            // still there to read; Esc drops it
+}
+
+/****************************************************************************
+ * P2b: configuration import through the assistant (fake provider only)
+ ****************************************************************************/
+
+void AiAssist_Test::configImportProposedThenApplied()
+{
+    enable();
+    const ShowTreeCommand::Context ctx = smallShow();
+    const QString file = QStringLiteral(AIASSIST_SAMPLES "/evo26.qxw");
+    const quint32 universes = m_doc->inputOutputMap()->universesCount();
+    const QString undoBefore = m_doc->showTree()->sharedUndoText();
+    // "take the universes and Art-Net setup from evo26.qxw, put universe 2 on 1":
+    // it reads the file (a question, run as asked), then proposes the import.
+    m_server->queueJson(kChat, toolReply("read_config", QJsonObject { { "file", file } }));
+    m_server->queueJson(kChat, toolReply("import_config",
+                                         QJsonObject { { "file", file }, { "universes", QJsonArray { 2 } },
+                                                       { "universeMap", QJsonObject { { "2", "1" } } },
+                                                       { "addressMap", QJsonObject { { "2.0.0.50", "2.0.0.60" } } },
+                                                       { "onMissingPlugin", "keep" } }));
+    m_server->queueJson(kChat, textReply("Universe 2 (Truss) of evo26 goes on universe 1, Art-Net at 2.0.0.60."));
+    QSignalSpy answered(m_ai, &AiAssist::answered);
+    QVERIFY(m_ai->ask("take universe 2 and the Art-Net setup from evo26.qxw, put it on 1, destination 2.0.0.60", ctx));
+    QVERIFY(answered.wait(5000));
+    const AiAssist::Answer a = answered.first().first().value<AiAssist::Answer>();
+    QVERIFY2(a.ok, qPrintable(a.text));
+    QCOMPARE(a.proposal.count(), 1);
+    QVERIFY2(a.proposal.first().command.startsWith("import config "), qPrintable(a.proposal.first().command));
+    QVERIFY(a.proposal.first().command.endsWith(" apply"));
+    // The file was read for the model (its summary went back), nothing applied.
+    const QJsonArray msgs = m_server->requests.at(1).json().value("messages").toArray();
+    QVERIFY(msgs.last().toObject().value("content").toString().contains("Universe 2 \"Truss\""));
+    QCOMPARE(m_doc->inputOutputMap()->universesCount(), universes);
+    QVERIFY(!m_doc->inputOutputMap()->hasOfflinePatches());
+    QVERIFY(m_ai->hasProposal());
+
+    // Confirmed: one undo step, undone exactly.
+    ShowTreeCommand::Result r;
+    QVERIFY2(m_ai->apply(QList<int>(), nullptr, &r), qPrintable(r.message));
+    QCOMPARE(m_doc->inputOutputMap()->getUniverseNameByIndex(0), QStringLiteral("Truss"));
+    QVERIFY(m_doc->inputOutputMap()->hasOfflinePatches());
+    QVERIFY(m_doc->showTree()->sharedUndoText().startsWith("AI Assist:"));
+    QVERIFY(m_doc->showTree()->undoShared());
+    QCOMPARE(m_doc->showTree()->sharedUndoText(), undoBefore);
+    QCOMPARE(m_doc->inputOutputMap()->getUniverseNameByIndex(0), QStringLiteral("Universe 1"));
+    QVERIFY(!m_doc->inputOutputMap()->hasOfflinePatches());
+}
+
+void AiAssist_Test::configImportChoiceGoesBackToTheModel()
+{
+    enable();
+    const ShowTreeCommand::Context ctx = smallShow();
+    const QString file = QStringLiteral(AIASSIST_SAMPLES "/evo26.qxw");
+    m_doc->inputOutputMap()->setUniverseName(0, QStringLiteral("House"));
+    // No onCollision for a universe that has a setup: not proposed; the
+    // model is told what to choose, and asks again with it.
+    m_server->queueJson(kChat, toolReply("import_config", QJsonObject { { "file", file }, { "universes", QJsonArray { 1 } } }));
+    m_server->queueJson(kChat, toolReply("import_config", QJsonObject { { "file", file }, { "universes", QJsonArray { 1 } },
+                                                                        { "onCollision", "renumber" }, { "onMissingPlugin", "keep" } }));
+    m_server->queueJson(kChat, textReply("Put on a new universe, as universe 1 is in use."));
+    QSignalSpy answered(m_ai, &AiAssist::answered);
+    QVERIFY(m_ai->ask("bring in universe 1 of evo26.qxw", ctx));
+    QVERIFY(answered.wait(5000));
+    const AiAssist::Answer a = answered.first().first().value<AiAssist::Answer>();
+    QCOMPARE(a.proposal.count(), 1);
+    const QJsonArray msgs = m_server->requests.at(1).json().value("messages").toArray();
+    const QString told = msgs.last().toObject().value("content").toString();
+    QVERIFY2(told.contains("already has a setup") && told.contains("renumber"), qPrintable(told));
+    const quint32 before = m_doc->inputOutputMap()->universesCount();
+    ShowTreeCommand::Result r;
+    QVERIFY2(m_ai->apply(QList<int>(), nullptr, &r), qPrintable(r.message));
+    QCOMPARE(m_doc->inputOutputMap()->universesCount(), before + 1);
+    QCOMPARE(m_doc->inputOutputMap()->getUniverseNameByIndex(0), QStringLiteral("House"));
+    QCOMPARE(m_doc->inputOutputMap()->getUniverseNameByIndex(int(before)), QStringLiteral("Front"));
+    QVERIFY(m_doc->showTree()->undoShared());
+    QCOMPARE(m_doc->inputOutputMap()->universesCount(), before);
+}
+
+void AiAssist_Test::configImportNeverInOperate()
+{
+    enable();
+    const ShowTreeCommand::Context ctx = smallShow();
+    const QString file = QStringLiteral(AIASSIST_SAMPLES "/evo26.qxw");
+    m_server->queueJson(kChat, toolReply("import_config", QJsonObject { { "file", file }, { "onMissingPlugin", "keep" } }));
+    m_server->queueJson(kChat, textReply("ok"));
+    QSignalSpy answered(m_ai, &AiAssist::answered);
+    QVERIFY(m_ai->ask("import evo26", ctx));
+    QVERIFY(answered.wait(5000));
+    QVERIFY(m_ai->hasProposal());
+    const quint32 universes = m_doc->inputOutputMap()->universesCount();
+    // Operate drops the proposal and refuses the change.
+    m_doc->setMode(Doc::Operate);
+    QVERIFY(!m_ai->hasProposal());
+    ShowTreeCommand::Result r;
+    QVERIFY(!m_ai->apply(QList<int>(), nullptr, &r));
+    QCOMPARE(m_doc->inputOutputMap()->universesCount(), universes);
+    QVERIFY(!m_doc->inputOutputMap()->hasOfflinePatches());
+    m_doc->setMode(Doc::Design);
 }
 
 void AiAssist_Test::goldenPrompts_data()

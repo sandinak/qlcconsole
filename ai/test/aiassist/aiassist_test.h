@@ -80,6 +80,11 @@ private slots:
     void badArgumentsAreRefusedBeforeAnythingRuns();
     void aPlanOverSeveralReplies();
     void aRefusedStepAppliesNothing();
+
+    // P2b: configuration import
+    void configImportProposedThenApplied();
+    void configImportChoiceGoesBackToTheModel();
+    void configImportNeverInOperate();
     void goldenPrompts_data();
     void goldenPrompts();
 

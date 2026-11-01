@@ -1,8 +1,8 @@
 # qlcconsole — AI Assist (design + implementation handoff)
 
-Status: P0, P1 and P2 built 2026-10-31 (engine/src/operationregistry.*, ai/;
-help in docs/features/ai-assist.md; decisions in docs/project/TODO.md);
-P2b, P3 next. Owner: sandinak. Implementer: Claude Code.
+Status: P0, P1, P2 and P2b built 2026-10-31 (engine/src/operationregistry.*,
+engine/src/configimport.*, ai/; help in docs/features/ai-assist.md;
+decisions in docs/project/TODO.md); P3 next. Owner: sandinak. Implementer: Claude Code.
 Read DONE.md / TODO.md first; follow existing conventions there for status tracking.
 
 ## 1. Goal
