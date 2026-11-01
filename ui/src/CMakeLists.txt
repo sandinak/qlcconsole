@@ -322,6 +322,13 @@ target_link_libraries(${module_name} PUBLIC
     qlcplusengine
 )
 
+# AI Assist (ai/, docs/design/AI_ASSIST.md): a static module linked in when
+# QLC_AI_ASSIST is on; the UI's hooks are under #ifdef QLC_AI_ASSIST.
+if(QLC_AI_ASSIST)
+    target_link_libraries(${module_name} PRIVATE qlcconsoleai)
+    target_compile_definitions(${module_name} PRIVATE QLC_AI_ASSIST)
+endif()
+
 # The voice that tells the operator on stage where the controller is
 # (operatorvoice.cpp): Qt's TextToSpeech where this Qt has it. A Mac uses its
 # own `say` and needs nothing more deployed, so it is not linked there.

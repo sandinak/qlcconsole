@@ -211,6 +211,8 @@ ShowReview::Result ShowReview::run(const Options &options)
     r.ms = all.elapsed();
     r.when = QDateTime::currentDateTime();
     r.ran = true;
+    if (!options.record)
+        return r;
     m_last = r;
     emit reviewed();
     return r;

@@ -134,6 +134,10 @@ public:
          *  an output on instead. */
         bool outputsLoaded = true;
         QSet<quint32> universesWithOutput;
+        /** Keep the result as lastResult() and emit reviewed(). False: a
+         *  question asked of the checks (the command line, AI Assist) that
+         *  leaves the panel's and the footer's result as it was. */
+        bool record = true;
     };
 
     struct Result

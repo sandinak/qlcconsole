@@ -105,6 +105,13 @@ if(qmlui)
     add_subdirectory(qmlui)
 else()
     message("Building QLC+ 4 QtWidget UI")
+    # AI Assist (docs/design/AI_ASSIST.md section 2.6): its own module, ai/,
+    # that the engine never sees. decided: ON here, since this tree is the
+    # release build; -DQLC_AI_ASSIST=OFF builds the app without it (can change).
+    option(QLC_AI_ASSIST "Build AI Assist (ai/)" ON)
+    if(QLC_AI_ASSIST)
+        add_subdirectory(ai)
+    endif()
     add_subdirectory(ui)
     add_subdirectory(main)
     add_subdirectory(fixtureeditor)

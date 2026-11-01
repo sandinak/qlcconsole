@@ -227,6 +227,11 @@ list_tests()
             echo "$d"
         done
     fi
+    # AI Assist (ai/, docs/design/AI_ASSIST.md): only when it was built
+    # (QLC_AI_ASSIST, on by default).
+    if [ -e ai/test/aiassist/aiassist_test ] || [ -e ai/test/aiassist/aiassist_test.exe ]; then
+        echo ai/test/aiassist
+    fi
     echo plugins/enttecwing/test
     if [[ "$OSTYPE" == "darwin"* ]]; then
         echo >&2 "Skip Velleman test (not supported on OSX)"

@@ -7812,6 +7812,39 @@ void ShowTreeView_Test::textColoursInTheTreePagesAndWorkbench()
 /* Q59 (UX review problem 3): the command line stays, its three lines of
    syntax don't -- not even on an empty show. ? typed first in the line, the
    ? button beside it, or F1 in the line shows them; the choice is kept. */
+/* AI_ASSIST.md section 4 (P0): every command-line line goes through the
+   Operation Registry. Its read-only questions answer in the help pane and
+   leave the selection; the grammar is unchanged; AI Assist off, "? words"
+   is still help and no AI button shows. */
+void ShowTreeView_Test::commandLineAsksTheRegistry()
+{
+    QSettings().remove(QStringLiteral("ai/enabled"));
+    Fixture *a = new Fixture(m_doc);
+    a->setName("Par A");
+    a->setChannels(4);
+    a->setUniverse(1);
+    a->setAddress(100);
+    QVERIFY(m_doc->addFixture(a));
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1200, 800);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QVERIFY(view.runCommand("fixtures"));
+    QVERIFY(view.isHelpShown());
+    QVERIFY2(view.helpOutput().contains("Par A"), qPrintable(view.helpOutput()));
+    QVERIFY(view.runCommand("conflicts"));
+    QVERIFY(view.helpOutput().contains("No two fixtures share a channel"));
+    QCOMPARE(view.commandMessage(), QString("No address conflicts"));
+    QVERIFY(!view.runCommand("conflicts now"));
+    QVERIFY(view.commandMessage().startsWith("conflicts:"));
+    QVERIFY(view.runCommand("help"));
+    QVERIFY(view.helpOutput().contains("Questions"));
+    QVERIFY(view.runCommand("? spread"));                 // still the grammar's help
+    QToolButton *ai = view.findChild<QToolButton *>("stAiButton");
+    if (ai != nullptr)
+        QVERIFY(!ai->isVisible());                         // AI Assist off: no chrome
+}
+
 void ShowTreeView_Test::commandSyntaxFoldsAwayAndIsRemembered()
 {
     QSettings().remove(QStringLiteral("showtree/commandSyntax"));

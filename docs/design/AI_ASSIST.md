@@ -1,6 +1,8 @@
 # qlcconsole — AI Assist (design + implementation handoff)
 
-Status: proposed for next release. Owner: sandinak. Implementer: Claude Code.
+Status: P0 and P1 built 2026-10-31 (engine/src/operationregistry.*, ai/;
+help in docs/features/ai-assist.md; decisions in docs/project/TODO.md);
+P2, P2b, P3 next. Owner: sandinak. Implementer: Claude Code.
 Read DONE.md / TODO.md first; follow existing conventions there for status tracking.
 
 ## 1. Goal

@@ -73,6 +73,10 @@
 #include "programmercontroller.h"
 #include "showtreecontroller.h"
 #include "showtreecommand.h"
+#include "operationregistry.h"
+#ifdef QLC_AI_ASSIST
+#include "aicommandline.h"
+#endif
 #include "showcontrollistener.h"
 #include "fixturegroupsource.h"
 #include "fixturemanager.h"
@@ -1264,6 +1268,9 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
     m_commander->setVcPageMaker([this](quint32 listId, const QString &folder, QString *message) {
         return makeVcPage(listId, folder, message);
     });
+    // Every line goes through the Operation Registry (docs/design/AI_ASSIST.md
+    // section 4): its questions, else the grammar above, unchanged.
+    m_operations = new OperationRegistry(m_doc, m_commander);
     m_commandBar = new QWidget(this);
     {
         QVBoxLayout *v = new QVBoxLayout(m_commandBar);
@@ -1318,6 +1325,9 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         h->addWidget(m_commandSyntaxButton);
         m_commandMsg = new QLabel(m_commandBar);
         m_commandMsg->setObjectName("stCommandMessage");
+#ifdef QLC_AI_ASSIST
+        m_ai = new AiCommandLine(m_command, m_commandHelp, m_commandMsg, h, this);
+#endif
         h->addWidget(m_commandMsg);
         v->addLayout(h);
         m_commandSyntax = new QLabel(ShowTreeCommand::grammar(), m_commandBar);
@@ -2472,6 +2482,7 @@ ShowTreeView::~ShowTreeView()
         disconnect(child, nullptr, this, nullptr);
     if (s_instance == this)
         s_instance = nullptr;
+    delete m_operations;
     delete m_commander;
 }
 
@@ -10764,7 +10775,17 @@ bool ShowTreeView::runCommand(const QString &line)
     ctx.layers = selectedLayerRefs();
     ctx.recentPalettes = recentPalettes();
 
-    const ShowTreeCommand::Result r = m_commander->run(line, ctx);
+#ifdef QLC_AI_ASSIST
+    // "? question": AI Assist's (it answers in the help pane, later).
+    if (m_ai != nullptr && m_ai->handle(line, ctx))
+    {
+        if (m_commandHistory.isEmpty() || m_commandHistory.last() != line)
+            m_commandHistory << line;
+        m_historyAt = -1;
+        return true;
+    }
+#endif
+    const ShowTreeCommand::Result r = m_operations->runLine(line, ctx);
     m_commandMsg->setText(r.message);
     // A palette made or named for editing: in the Look Editor, and shown
     // in the Library (R2).
@@ -10878,6 +10899,11 @@ bool ShowTreeView::eventFilter(QObject *obj, QEvent *ev)
         }
         if (ke->key() == Qt::Key_Escape)
         {
+#ifdef QLC_AI_ASSIST
+            // A question in flight first.
+            if (m_ai != nullptr && m_ai->cancel())
+                return true;
+#endif
             // The help first, then back to the tree.
             if (m_commandHelp->isVisible())
                 m_commandHelp->hide();

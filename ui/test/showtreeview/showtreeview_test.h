@@ -166,6 +166,7 @@ private slots:
     /** Q59: the command line's syntax folded away, shown on ? / F1 / the
      *  button, remembered. */
     void commandSyntaxFoldsAwayAndIsRemembered();
+    void commandLineAsksTheRegistry();
     /** Q61: Level… / Colour… open docked in the window, not in a separate
      *  window that can fall behind it: Return / Apply applies, Esc / Cancel
      *  just closes, one at a time. */

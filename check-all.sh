@@ -383,7 +383,7 @@ elif [ "$QUICK" = 1 ]; then
             case "$f" in
                 CMakeLists.txt|*.cmake|unittest.sh|platforms/linux/unittest*|*/test/CMakeLists.txt|engine/test/common/*|ui/test/common/*)
                     QUICK_TESTS=ALL ;;
-                engine/test/*/*|ui/test/*/*)
+                engine/test/*/*|ui/test/*/*|ai/test/*/*)
                     QUICK_TESTS="$QUICK_TESTS $(echo "$f" | cut -d/ -f1-3)" ;;
                 plugins/*/test/*)
                     QUICK_TESTS="$QUICK_TESTS $(echo "$f" | cut -d/ -f1-3)" ;;
@@ -397,7 +397,7 @@ elif [ "$QUICK" = 1 ]; then
             case "$f" in
                 *.h|*.cpp)
                     stem=$(basename "$f"); stem="${stem%.*}"
-                    for d in $(cd "$REPO" && grep -rlE "#include [\"<]$stem\.h[\">]" engine/test ui/test plugins/*/test 2>/dev/null \
+                    for d in $(cd "$REPO" && grep -rlE "#include [\"<]$stem\.h[\">]" engine/test ui/test ai/test plugins/*/test 2>/dev/null \
                                | cut -d/ -f1-3 | sort -u); do
                         case "$d" in engine/test/common|ui/test/common) continue ;; esac
                         QUICK_TESTS="$QUICK_TESTS $d"
@@ -466,7 +466,7 @@ fi
 # (engine, UI, and the plugins unittest.sh runs; Velleman not on macOS). A
 # leg that runs fewer -- none found, a group gone missing -- fails, however
 # its programs did: "the tests passed" means nothing about tests not run.
-EXPECTED=$(cd "$REPO" && { ls engine/test/*/test.sh ui/test/*/test.sh
+EXPECTED=$(cd "$REPO" && { ls engine/test/*/test.sh ui/test/*/test.sh ai/test/*/test.sh
     ls plugins/{enttecwing,midi,artnet,E1.31,wled}/test/test.sh
     [ "$(uname)" = Darwin ] && ls plugins/hid/test/test.sh
     [ "$(uname)" = Darwin ] || ls plugins/velleman/test/test.sh; } 2>/dev/null | wc -l | tr -d ' ')
