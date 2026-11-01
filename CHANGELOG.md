@@ -864,6 +864,12 @@ skipped). Upstream fixes taken:
 
 ### Fixed
 
+- **No more crash in the Run tab as GO leaves a cue with sub-cues.** The
+  Run tab (and the VC Cue List, the phone Run page and the standby line)
+  asks what Sub GO plays next several times a second; if GO moved the list
+  off a sub-cue step, or the list stopped, in the middle of that question,
+  qlcconsole crashed. The answer is now taken from one look at the cue
+  playing.
 - **`qlcconsole --version` and `--help` work with no display** (ssh, a
   headless Pi): they answer before the application window system starts,
   where they used to abort in Qt's xcb plugin.

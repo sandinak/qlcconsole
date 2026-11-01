@@ -592,29 +592,44 @@ bool Chaser::findCueOrSubCue(const QString &cue, int *index, int *subIndex) cons
 
 int Chaser::currentSubCueIndex() const
 {
+    return currentSubCue(NULL, NULL);
+}
+
+int Chaser::currentSubCue(int *step, const Chaser **inner) const
+{
+    // Read the outer step once: the MasterTimer thread advances or stops the
+    // runner while the UI asks, so a second currentStepIndex() can name a
+    // different step (or none) than the one whose inner chase was checked.
     if (isRunning() == false)
         return -1;
-    const Chaser *inner = subCueChase(currentStepIndex());
-    if (inner == NULL || inner->isRunning() == false)
+    const int index = currentStepIndex();
+    const Chaser *chase = subCueChase(index);
+    if (chase == NULL || chase->isRunning() == false)
         return -1;
-    return inner->currentStepIndex();
+    if (step != NULL)
+        *step = index;
+    if (inner != NULL)
+        *inner = chase;
+    return chase->currentStepIndex();
 }
 
 int Chaser::nextSubCueIndex() const
 {
-    const int current = currentSubCueIndex();
-    if (current < 0 || isSubGoStep(currentStepIndex()) == false)
+    int step = -1;
+    const Chaser *inner = NULL;
+    const int current = currentSubCue(&step, &inner);
+    if (current < 0 || inner == NULL || isSubGoStep(step) == false)
         return -1;
-    const Chaser *inner = subCueChase(currentStepIndex());
     return inner->nextPlayableStep(current, inner->direction() == Function::Backward ? -1 : 1);
 }
 
 int Chaser::previousSubCueIndex() const
 {
-    const int current = currentSubCueIndex();
-    if (current < 0 || isSubGoStep(currentStepIndex()) == false)
+    int step = -1;
+    const Chaser *inner = NULL;
+    const int current = currentSubCue(&step, &inner);
+    if (current < 0 || inner == NULL || isSubGoStep(step) == false)
         return -1;
-    const Chaser *inner = subCueChase(currentStepIndex());
     return inner->nextPlayableStep(current, inner->direction() == Function::Backward ? 1 : -1);
 }
 

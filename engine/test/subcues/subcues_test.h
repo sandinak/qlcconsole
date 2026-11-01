@@ -45,6 +45,7 @@ private slots:
     void aJumpFromStoppedStartsThere();
     void subCuesAreSavedOnlyWhenSubGo();
     void consecutiveCuesOnOneChaseStartWhereAsked();
+    void subCueGettersAreSafeWhileTheListMoves();
 
 private:
     /** A cue list: steps that hold until GO, each a scene, but step
