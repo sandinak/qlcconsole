@@ -1327,6 +1327,17 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         m_commandMsg->setObjectName("stCommandMessage");
 #ifdef QLC_AI_ASSIST
         m_ai = new AiCommandLine(m_command, m_commandHelp, m_commandMsg, h, this);
+        // A proposal runs through this line's registry, and the selection
+        // goes where it left it -- as a typed command's does.
+        m_ai->setOperations(m_operations);
+        connect(m_ai, &AiCommandLine::applied, this, [this](const ShowTreeCommand::Result &r) {
+            if (r.layer != invalidId() && r.context.cue != invalidId())
+                selectNode(r.layer, r.context.cue);
+            else if (r.context.cue != invalidId())
+                selectNode(r.context.cue);
+            else if (r.context.list != invalidId())
+                selectNode(r.context.list);
+        });
 #endif
         h->addWidget(m_commandMsg);
         v->addLayout(h);

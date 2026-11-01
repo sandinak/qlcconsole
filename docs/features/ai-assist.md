@@ -6,18 +6,20 @@ scenes does nothing use"*, *"? how many movers are patched"*. It works by
 asking the console the same read-only questions you can type yourself, and
 it shows you which ones, so you learn the command line as you go.
 
-In this version it **only reads**. It never changes the show: no patching,
-no cues, no values. It is off until you turn it on, it works with a model
+It can also **propose changes** to the Show Tree: *"? cue 5 towers blue at
+50"*, *"? a new cue after this one called Bridge with the steps at 30"*.
+Nothing changes until you apply the proposal, and then the whole of it is
+one undo step. It is off until you turn it on, it works with a model
 running on this computer (no internet needed), and it is never there in
 Operate.
 
-## Why it reads, and you decide
+## Why it proposes, and you decide
 
 A lighting console must do exactly what the operator tells it. A language
 model can misread a request, so AI Assist never touches the show itself:
-the model asks, the console answers, and only you act. Later versions will
-propose changes as command-line text you review before anything happens;
-every change will be one undo step.
+the model asks the console questions and proposes changes, the console
+checks each proposed change and shows it to you as command-line text, and
+only you apply it. One undo takes the whole change back.
 
 ## Turning it on
 
@@ -58,6 +60,63 @@ If the model can't be reached (Ollama not running, the wrong address), the
 **AI** button greys out and its tooltip says why. Ask again or use **Test
 connection** once it is back.
 
+## Changes: proposed, then applied by you
+
+Ask for a change the same way: `? cue 3 towers blue at 50`. The model
+can't change anything itself. Its proposal appears in the pane above the
+line as a checklist, each step the command-line text that does it and a
+sentence saying what it does:
+
+| | | |
+|---|---|---|
+| ☑ | `cue 3` | Go to cue 3 (made if it isn't there) |
+| ☑ | `Towers colour Blue` | Towers: colour Blue |
+| ☑ | `Towers dimmer 50` | Towers at 50% |
+
+**Apply · Discard**
+
+- **Enter** (on the empty line) or **Apply** makes the ticked steps, in
+  order, as **one undo step** named *AI Assist: …*. Undo (⌘Z, or type
+  `undo`) takes all of it back. The tree selects where the change left
+  off, as a typed command does.
+- Click a step's ☑ to leave it out (☐); click again to put it back.
+- **Esc** or **Discard** drops the proposal. Typing anything else in the
+  line, or asking a new question, drops it too. Nothing has changed.
+- A single step also goes straight into the line, as you could have typed
+  it: Enter runs it.
+
+Each step runs where the one before left the selection, so `cue 3` then
+`Towers colour Blue` sets the colour in cue 3. Before anything runs, every
+step is checked: a value out of range, a word the step doesn't take or a
+function the show doesn't have goes back to the model, and nothing is
+proposed. If a step still can't be done when you apply (a group the show
+doesn't have, no cue selected), the message says which step and why, and
+**nothing** is applied: no part of the change is left behind.
+
+What it can propose (each is a word of the command line; see `help`):
+
+| Change | The command line it becomes |
+|---|---|
+| Go to or make a cue | `cue 3 "Bridge" block` |
+| A new cue after the selected one | `cue + "Outro"` |
+| Go to or make a cue list | `list "Encore"` |
+| Looks on groups or fixtures | `Towers colour Blue dimmer 45`, `Towers, Steps gobo none` |
+| A look for the whole cue | `cue look spread +5` |
+| Intensity | `Movers dimmer 50` |
+| The cue's mode | `block`, `track`, `cueonly`, `default` |
+| Release on a layer | `release Towers` |
+| Skip or put back cues | `skip 2, 4`, `unskip 2` |
+| Record as new cue | `record selected` |
+| Name the selected layer or cue | `name "Hero"` |
+| Duplicate the cue | `dup` |
+| Include a cue | `include 0.0.3` |
+| A group set | `set "All" Towers Steps` |
+| Play a function as a layer | `function Haze` |
+
+Palettes made, renamed or deleted, patching and configuration import are
+not changes it can propose yet; a colour or level it sets reuses the
+palette that plays exactly that, or makes one, as the command line does.
+
 ## The questions it can ask
 
 These are command-line words too. Each one changes nothing:
@@ -82,8 +141,9 @@ still works on a group called Summary.
 
 Operate carries no AI at all. Going to Operate:
 
-1. hides the AI button and stops any question in flight (it says
-   *Cancelled: the console went to Operate*);
+1. hides the AI button, stops any question in flight (it says
+   *Cancelled: the console went to Operate*) and drops a proposal waiting
+   to be applied: nothing of it is made;
 2. closes every connection AI Assist had open;
 3. if the model is an Ollama on this computer that answered a question this
    session, asks Ollama to unload it, so it gives back its memory;
@@ -96,11 +156,10 @@ stays until you go back to Design. It is a warning about memory, not a
 reason to stop the show.
 
 A question typed in Operate gets *AI Assist is unavailable in Operate
-mode*, and nothing is sent.
+mode*, and nothing is sent. No change is ever applied in Operate.
 
 ## Not in this version
 
-Proposing changes (patch, scenes, cues) with a preview and one undo step,
-importing universes and Art-Net setup from another show, and an MCP server
-for outside tools are planned next. AI Assist will never touch playback,
-timing or live output.
+Importing universes and Art-Net setup from another show (which will also
+work with AI Assist off), and an MCP server for outside tools, are planned
+next. AI Assist will never touch playback, timing or live output.

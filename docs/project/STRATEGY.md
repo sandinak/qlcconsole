@@ -55,8 +55,9 @@ ratios between items hold, and ratios are what the ROI column uses.
   only, off by default, a local model proposing command-line text the
   operator reviews; docs/design/AI_ASSIST.md). P0+P1 built 2026-10-31:
   the Operation Registry under the command line and a read-only assistant
-  with the full Design/Operate gating; P2 (changes with undo), P2b
-  (configuration import) and P3 (MCP) next.
+  with the full Design/Operate gating; P2 built 2026-10-31 (changes
+  proposed, confirmed, one undo step); P2b (configuration import) and P3
+  (MCP) next.
 - **The main risk is the one the usability review already found:**
   creeping featurism. Five design studies arrived in one day. The
   guardrails in section 5 are meant to stop the next 102-item menu.
@@ -428,7 +429,7 @@ Notes:
 
 | Item | Value | Fit | Reuses | Effort | Risk | Maint. | ROI | Call |
 |---|---|---|---|---|---|---|---|---|
-| AI Assist P0–P3 (docs/design/AI_ASSIST.md): one operation registry under the command line, a Design-only assistant on a local model (Ollama), configuration import, an MCP server | 4 | 4 | Show Tree command line, undo, Design/Operate | 15 | M | M | 1.1 | BUILD (0.5), user's call 2026-10-30 (P2b configuration import also stands alone); P0+P1 built 2026-10-31 (registry, settings, providers, read-only assistant, Operate gating); P2, P2b, P3 next |
+| AI Assist P0–P3 (docs/design/AI_ASSIST.md): one operation registry under the command line, a Design-only assistant on a local model (Ollama), configuration import, an MCP server | 4 | 4 | Show Tree command line, undo, Design/Operate | 15 | M | M | 1.1 | BUILD (0.5), user's call 2026-10-30 (P2b configuration import also stands alone); P0+P1 built 2026-10-31 (registry, settings, providers, read-only assistant, Operate gating); P2 built 2026-10-31 (change operations, confirm, one undo step); P2b, P3 next |
 | One GO path (`App::runCommand`) for keys, Run tab, footer, pad, web | 4 | 5 | ShowControl, RC8 preview hold | 0.5 | L | L | **40** | BUILT 2026-10-31 (0.4, first; docs/design/RUN_COMMANDS.md) |
 | Tracking sheet + printable cue sheet (PDF/XLSX) | 5 | 5 | tracking resolve, patch-list exports | 4 | L | L | **6.3** | BUILT (0.4, sheet, 2026-10-31): More ▾ → Cue Sheet… |
 | Course Level 2 lessons (7), one per release cycle | 5 | 5 | course template, courseshow_test | 2 a lesson | L | M | **12.5** a lesson | BUILD (0.3.1 onward) |

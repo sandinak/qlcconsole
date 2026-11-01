@@ -42,9 +42,10 @@ class Doc;
  * (cliSyntax()) and a sentence for a preview (describe()).
  *
  * The front ends are thin: the Show Tree command line (runLine(): every
- * line it runs goes through here), AI Assist (the model's tool calls; in
- * P1 only the read-only operations) and, later, an MCP server. No operation
- * logic lives in a front end.
+ * line it runs goes through here), AI Assist (the model's tool calls: the
+ * read-only operations run as asked, the change operations only once the
+ * operator has confirmed them, as one plan -- runPlan()) and, later, an MCP
+ * server. No operation logic lives in a front end.
  *
  * Shaped like Show Review's registry (a static catalog of plain structs
  * with std::function bodies, headless, owned by nobody): the catalog is
@@ -52,8 +53,12 @@ class Doc;
  * the view's ShowTreeCommand.
  *
  * The Show Tree grammar is the `command` operation (a whole line, one undo
- * step, exactly as before). Its words become operations of their own when
- * P2 gives write operations schemas, previews and confirm.
+ * step, exactly as before): what a typed line that isn't a question runs.
+ * Its change words are also operations of their own (P2: `make_cue`,
+ * `set_look`, `record_cue`...), each with a schema, so a model can call
+ * them as tools: each renders the one grammar line that does it
+ * (cliSyntax()) and runs that line, so the grammar stays the only place
+ * the Show Tree is edited from text.
  */
 class QLC_ENGINE_EXPORT OperationRegistry final
 {
@@ -80,8 +85,17 @@ public:
          *  findings): what the command line's help pane shows and what the
          *  model is given back. Empty for the `command` operation. */
         QString text;
-        /** The `command` operation: what ShowTreeCommand::run() said. */
+        /** The `command` operation and the change operations: what
+         *  ShowTreeCommand::run() said (runPlan(): the last step's, with
+         *  where the plan leaves the selection). */
         ShowTreeCommand::Result command;
+    };
+
+    /** One step of a plan: an operation and its arguments. */
+    struct Call
+    {
+        QString name;
+        QJsonObject args;
     };
 
     typedef std::function<QString(Doc *, const QJsonObject &)> Validator;
@@ -111,15 +125,40 @@ public:
     /** Every operation, in catalog order. */
     static const QList<Operation> &catalog();
     static const Operation *operation(const QString &name);
-    /** The read-only operations: what AI Assist P1 offers the model. */
+    /** The read-only operations: what AI Assist runs when the model asks. */
     static QList<const Operation *> readOnlyOperations();
+    /** The change operations (not `command`): what AI Assist P2 may
+     *  propose, run only after the operator confirms. */
+    static QList<const Operation *> changeOperations();
+
+    /** @a args against JSON schema @a schema (the subset the catalog uses:
+     *  type, properties, required, additionalProperties: false, enum,
+     *  minimum/maximum, minLength, pattern, items, minItems/maxItems).
+     *  "" when they fit, else why not ("level: 140 is above 100"). A null
+     *  value counts as left out. */
+    static QString checkArgs(const QJsonObject &schema, const QJsonObject &args);
 
     OperationRegistry(Doc *doc, ShowTreeCommand *commander = nullptr);
 
     /** Validate and run operation @a name with @a args. An unknown
-     *  operation, or arguments that fail validate(), run nothing. */
+     *  operation, or arguments that fail the schema (checkArgs()) or
+     *  validate(), run nothing. */
     Result run(const QString &name, const QJsonObject &args,
                const ShowTreeCommand::Context &selection = ShowTreeCommand::Context());
+
+    /** What run() would refuse @a name with @a args for, without running
+     *  it: "" when it would run. */
+    QString check(const QString &name, const QJsonObject &args) const;
+
+    /** A confirmed plan of change operations (docs/design/AI_ASSIST.md
+     *  section 7): every step is checked first, then they run in order --
+     *  each where the one before left the selection -- as ONE undo step
+     *  named @a label on the Show Tree's history. Any step that is refused
+     *  (checked or run) puts everything back: nothing partial. Refused
+     *  outright in Operate, for a read-only step, or without the command
+     *  line's grammar. */
+    Result runPlan(const QList<Call> &calls, const ShowTreeCommand::Context &selection,
+                   const QString &label);
 
     /** The command line: a registry word ("conflicts", "why Spot 1") runs
      *  its operation, unless a group, fixture or function of the show is

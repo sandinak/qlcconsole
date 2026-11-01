@@ -29,6 +29,7 @@
 #include "doc.h"
 
 class QNetworkAccessManager;
+class OperationRegistry;
 class QNetworkReply;
 
 /** @addtogroup ai AI Assist
@@ -55,8 +56,11 @@ public:
 /**
  * AI Assist (docs/design/AI_ASSIST.md): a Design-mode helper that answers
  * questions about the show by calling the Operation Registry's read-only
- * operations (P1). The model proposes, the console executes; in P1 there
- * is nothing to execute but reads.
+ * operations (P1), and proposes changes with its change operations (P2).
+ * The model proposes, the console executes: a read runs when asked; a
+ * change is only a proposal -- checked against its schema, shown, and run
+ * by apply() once the operator confirms, the whole plan one undo step
+ * (OperationRegistry::runPlan()). Never in Operate.
  *
  * - Off by default (AiSettings::enabled): off, nothing is made and nothing
  *   is sent.
@@ -82,6 +86,15 @@ public:
 
     static AiAssist *instance();
 
+    /** One change the model proposed: checked, not run. */
+    struct Step
+    {
+        QString name;               //!< the operation ("set_look")
+        QJsonObject args;
+        QString command;            //!< its command-line text
+        QString description;        //!< a sentence for the preview
+    };
+
     /** What a question came to. */
     struct Answer
     {
@@ -94,6 +107,8 @@ public:
         /** A tool call that isn't a read-only operation of the registry:
          *  refused and shown as plain text. */
         QStringList rejected;
+        /** The changes proposed (P2): shown, applied only on confirm. */
+        QList<Step> proposal;
     };
 
     /** AiSettings::enabled, from QSettings (read each time). */
@@ -116,6 +131,18 @@ public:
     /** Esc: drop the question in flight (answered() with "Cancelled"). */
     void cancel();
 
+    /** The changes waiting for the operator (empty: none). */
+    QList<Step> proposal() const { return m_proposal; }
+    bool hasProposal() const { return !m_proposal.isEmpty(); }
+    /** Apply the proposal's steps @a included (indexes; all when empty)
+     *  as one undo step, through @a registry (the command line's; null: a
+     *  grammar of AI Assist's own). Refused in Operate or off. The
+     *  proposal is spent when it worked; kept, with @a result saying why,
+     *  when a step was refused -- and then nothing changed. */
+    bool apply(const QList<int> &included, OperationRegistry *registry, ShowTreeCommand::Result *result);
+    /** Drop the proposal: nothing changes. */
+    void discard();
+
     /** Settings ▸ AI Assist ▸ Test connection, with @a settings as typed:
      *  connectionTested() follows. False when it can't be tried now. */
     bool testConnection(const AiSettings &settings, const QString &apiKey);
@@ -133,15 +160,19 @@ public:
 
     /** The system prompt (and, with "summary", the show context). */
     QString systemPrompt(const ShowTreeCommand::Context &selection) const;
-    /** The tools offered: the registry's read-only operations. */
+    /** The tools offered: the registry's read-only operations, then its
+     *  change operations (never `command`). */
     static QList<AiTool> tools();
 
-    /** At most this many rounds of tool calls per question. */
-    static const int MaxRounds = 5;
+    /** At most this many rounds of tool calls per question (a model that
+     *  proposes one step a reply spends one per step). */
+    static const int MaxRounds = 8;
 
 signals:
     void answered(const AiAssist::Answer &answer);
     void busyChanged(bool busy);
+    /** A proposal came, was applied or was dropped. */
+    void proposalChanged();
     /** Enabled, Design/Operate, reachable: the entry points redraw. */
     void availabilityChanged();
     void connectionTested(bool ok, const QStringList &models, const QString &message);
@@ -163,6 +194,8 @@ private:
     void sendRound();
     void handleReply();
     void finish(bool ok, const QString &text);
+    /** The model answered in text: done, with the proposal if it made one. */
+    void finishWithProposal(const QString &text);
     void abortAll();
     void teardown();
     void audit(bool modelResident, const QString &extra);
@@ -179,6 +212,12 @@ private:
     Answer m_answer;
     ShowTreeCommand::Context m_selection;
     QString m_unreachable;
+    /** The changes proposed, where they were asked from, and a grammar to
+     *  run them when no command line lends one. */
+    QList<Step> m_proposal;
+    ShowTreeCommand::Context m_proposalSelection;
+    QString m_proposalQuestion;
+    std::unique_ptr<ShowTreeCommand> m_commander;
     QString m_resourceError;
     /** A question went to the model this Design session: Operate asks a
      *  local Ollama to unload it. */
@@ -187,6 +226,7 @@ private:
 };
 
 Q_DECLARE_METATYPE(AiAssist::Answer)
+Q_DECLARE_METATYPE(AiAssist::Step)
 
 /** @} */
 
