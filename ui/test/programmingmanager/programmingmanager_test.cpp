@@ -2105,7 +2105,7 @@ void ProgrammingManager_Test::newHereMakesASceneInTheFolder()
     QCOMPARE(mgr.workbench()->loadedFunction(), madeId);      // loaded
     QVERIFY(o->currentItem() != nullptr);
     QCOMPARE(o->currentItem()->data(0, ProgrammingOutline::IdRole).toUInt(), madeId);
-    QCOMPARE(o->state(), QAbstractItemView::EditingState);    // renaming
+    QVERIFY(o->findChild<QLineEdit *>() != nullptr);          // renaming: the editor is open
     // One step: ⌘Z takes it away.
     QVERIFY(m_doc->showTree()->undoShared());
     QVERIFY(m_doc->function(madeId) == nullptr);
