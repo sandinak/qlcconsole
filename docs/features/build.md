@@ -576,7 +576,7 @@ and Bundles stay here.
 1. Open the **Build** tab.
 2. If you don't have any palettes yet, switch to **Palettes**, right-click
    the list and pick a type — Color, Dimmer, Pan/Tilt, Aim, Beam, Gobo, Shutter, Strobe,
-   or Effect. It opens straight into the Look Editor for you to set its
+   Effect or Formation. It opens straight into the Look Editor for you to set its
    value; drag it into a folder afterward to file it.
 3. Switch to **Scenes** and click a scene in the outline, or **+ Scene** to
    make one (it goes in the folder of the row selected; F2 names it). It
@@ -670,11 +670,38 @@ The editor shown depends on the selected look's palette type:
 | **Gobo / Shutter** | A slider plus a picker of the target fixture's actual named capabilities, with thumbnail previews. |
 | **Strobe** | A single rate slider (0–100%). |
 | **Effect** | The **effect browser** (below), a dynamically-built parameter panel, and Save/Export/Import for sharing `.qxfx` effect files. |
+| **Formation** | A line aim's **Spread**, **Grouping** and **Cross**, each ticked to set it or left unticked so it comes from elsewhere, and a **preview**: the order strip and the plan view on a line and lights you pick there. See [Formation palettes](#formation-palettes). |
 
 Every type except Effect also shows a per-look **Fade in / Fade out**
 override (leave at "step" to inherit the scene or chaser's own timing). A
 scene [transition](#transitions), when set, takes the place of the scene's
 fade.
+
+### Formation palettes
+
+A **Formation** is a line aim's shape without the line: Spread (−5 … +5),
+Grouping (each light, pairs, threes, fours, halves) and Cross (groups swap
+sides, or each group flips), any of them. One *Pairs crossed* works with
+every line target, stacked with whatever Aim palette a layer uses (see
+[Line aims](show-tree.md#line-aims) for how it resolves).
+
+- **Make one:** Palettes → right-click → **New Formation**, or type
+  `palette formation "Pairs crossed" spread 0 group pairs cross mirror`.
+  It is filed, renamed, duplicated, moved and deleted like any palette.
+- **Set it:** tick **Spread**, **Grouping** or **Cross** to set it; untick it
+  and the Formation leaves it to the cue's formation, else the Aim look's
+  own. Each change is one undo step, and every cue using the Formation
+  changes with it.
+- **See it:** under the settings, pick a **Line** and tick **groups**
+  (several make one formation, numbered by where the lights hang, as a
+  cue-wide aim does) or **fixtures one by one**. The order strip and the
+  plan view show where each light lands. It starts on the show's first
+  line target and the groups the show most often aims at it.
+- **The preview is only to look.** It is drawn on the page and nothing
+  plays on stage, as in Blind. The pick is not saved in the palette, the
+  show or the undo history, and changing it doesn't mark the show changed.
+  It is remembered per palette until you quit, so flipping between
+  Formations keeps each one's preview.
 
 ### The name follows the value
 

@@ -6401,6 +6401,355 @@ void ShowTree_Test::aSpreadChangeFadesOverTheCueFade()
 }
 
 /****************************************************************************
+ * Formation palettes (Q197): Spread / Grouping / Cross stacked with any Aim
+ ****************************************************************************/
+
+namespace
+{
+enum : quint32 { LineAim = 301, PointAim = 302, FormA = 401, FormB = 402, FormCue = 403 };
+
+Look lineRow(const QString &key, const QString &value)
+{
+    return ShowTreeController::lineParamLook(key, value);
+}
+
+/* What the model-only tests' Formations set. */
+QList<Look> testFormation(quint32 pid)
+{
+    switch (pid)
+    {
+        case FormA: return { lineRow(KeySpread, "0"), lineRow(KeyGrouping, "pairs"), lineRow(KeyCross, "mirror") };
+        case FormB: return { lineRow(KeySpread, "-5"), lineRow(KeyGrouping, "threes") };
+        case FormCue: return { lineRow(KeySpread, "2.5"), lineRow(KeyGrouping, "fours"), lineRow(KeyCross, "mirror") };
+        default: return {};
+    }
+}
+
+StageTarget *lineTarget(Doc *doc, const QString &name)
+{
+    StageTarget *edge = doc->monitorProperties()->addStageTarget();
+    edge->setName(name);
+    edge->setPosition(QVector3D(0, 3, 0));
+    edge->setLinePoints({ QVector3D(-5, 0, 0), QVector3D(5, 0, 0) });
+    edge->makeLine();
+    return edge;
+}
+
+quint32 formationPalette(Doc *doc, const QString &name, const QList<Look> &rows)
+{
+    return doc->paletteOps()->create(QLCPalette::Formation, QString(), name, QVariantList(),
+                                     [&rows](QLCPalette *p) {
+                                         for (const Look &l : rows)
+                                             ShowTreeController::applyFormationLook(p, l);
+                                     });
+}
+}
+
+/* Per parameter: a layer's own row > a Formation on the layer > the cue's
+   row > a Formation on the cue > the Aim look's own (nothing resolved). */
+void ShowTree_Test::formationResolveOrder()
+{
+    CueList list;
+    list.mode = ListMode::Tracking;
+    list.cues << cue(1, "1", CueMode::ListDefault,
+                     { layer(11, Towers, { look(KeyFormation, { FormA }), lineRow(KeySpread, "5") }),
+                       layer(12, USTs, {}),
+                       layer(13, ATSpots, { look(KeyFormation, { FormB }) }),
+                       layer(14, BackStage, { look(KeyPosition, { PointAim }) }) },
+                     { look(KeyPosition, { LineAim }), lineRow(KeyCross, "swap"), look(KeyFormation, { FormCue }) });
+    list.cues << cue(2, "2", CueMode::Block, { layer(21, StepTops, { look(KeyPosition, { LineAim }) }) });
+    const LineAimTest isLine = [](const Look &l) { return l.palettes.value(0) == LineAim; };
+    const QList<ResolvedCue> r = resolve(list, isLine, nullptr, testFormation);
+
+    auto at = [&](quint32 g, const QString &key) { return value(r.at(0), g, key); };
+    // Towers: its own Spread row; Grouping and Cross from its Formation
+    // (over the cue's Cross row).
+    QCOMPARE(at(Towers, KeySpread)->look.value, QString("5"));
+    QCOMPARE(at(Towers, KeySpread)->formation, invalidId());
+    QCOMPARE(at(Towers, KeyGrouping)->look.value, QString("pairs"));
+    QCOMPARE(at(Towers, KeyGrouping)->formation, quint32(FormA));
+    QCOMPARE(int(at(Towers, KeyGrouping)->origin), int(Origin::Own));
+    QCOMPARE(at(Towers, KeyCross)->look.value, QString("mirror"));
+    QCOMPARE(at(Towers, KeyCross)->formation, quint32(FormA));
+    QCOMPARE(at(Towers, KeyFormation)->look.palettes, QList<quint32>({ FormA }));
+    // USTs: nothing of its own: the cue's Cross row, the rest from the
+    // cue's Formation, as one formation (span: the cue).
+    QCOMPARE(at(USTs, KeySpread)->look.value, QString("2.5"));
+    QCOMPARE(at(USTs, KeySpread)->formation, quint32(FormCue));
+    QCOMPARE(int(at(USTs, KeySpread)->origin), int(Origin::CueLook));
+    QCOMPARE(at(USTs, KeySpread)->span, quint32(1));
+    QCOMPARE(at(USTs, KeyGrouping)->look.value, QString("fours"));
+    QCOMPARE(at(USTs, KeyCross)->look.value, QString("swap"));
+    QCOMPARE(at(USTs, KeyCross)->formation, invalidId());
+    QCOMPARE(at(USTs, KeyFormation)->look.palettes, QList<quint32>({ FormCue }));
+    // ATSpots: its Formation's Spread and Grouping; Cross, which it leaves
+    // unset, from the cue's row.
+    QCOMPARE(at(ATSpots, KeySpread)->look.value, QString("-5"));
+    QCOMPARE(at(ATSpots, KeyGrouping)->look.value, QString("threes"));
+    QCOMPARE(at(ATSpots, KeyCross)->look.value, QString("swap"));
+    QCOMPARE(at(ATSpots, KeyFormation)->look.palettes, QList<quint32>({ FormB }));
+    // BackStage aims at a point: the cue's formation doesn't reach it.
+    QVERIFY(at(BackStage, KeySpread) == nullptr);
+    QVERIFY(at(BackStage, KeyFormation) == nullptr);
+    // Nothing set anywhere: the Aim look's own (no row resolves).
+    QVERIFY(value(r.at(1), StepTops, KeySpread) == nullptr);
+    QVERIFY(value(r.at(1), StepTops, KeyFormation) == nullptr);
+    // A Formation plays through its rows, never as a look of its own.
+    for (const Look &l : r.at(0).layer(groupTarget(Towers))->playedLooks())
+        QVERIFY(l.key != KeyFormation);
+    // Without the lookup (an older caller), a Formation sets nothing.
+    QVERIFY(value(resolve(list, isLine).at(0), USTs, KeyGrouping) == nullptr);
+}
+
+/* Each row a Formation sets tracks on by itself, still saying where it came
+   from; a later Formation changes only what it sets; a later row wins. */
+void ShowTree_Test::formationTracksRowByRow()
+{
+    CueList list;
+    list.mode = ListMode::Tracking;
+    list.cues << cue(1, "1", CueMode::ListDefault,
+                     { layer(11, Towers, { look(KeyPosition, { LineAim }), look(KeyFormation, { FormA }) }) });
+    list.cues << cue(2, "2", CueMode::ListDefault, { layer(21, Towers, { look(KeyFormation, { FormB }) }) });
+    list.cues << cue(3, "3", CueMode::ListDefault, {});
+    list.cues << cue(4, "4", CueMode::ListDefault, { layer(41, Towers, { lineRow(KeySpread, "1") }) });
+    const LineAimTest isLine = [](const Look &l) { return l.palettes.value(0) == LineAim; };
+    const QList<ResolvedCue> r = resolve(list, isLine, nullptr, testFormation);
+
+    // Cue 2: B's Spread and Grouping; Cross tracked from A in cue 1.
+    QCOMPARE(value(r.at(1), Towers, KeySpread)->look.value, QString("-5"));
+    QCOMPARE(value(r.at(1), Towers, KeySpread)->formation, quint32(FormB));
+    QCOMPARE(value(r.at(1), Towers, KeyCross)->look.value, QString("mirror"));
+    QCOMPARE(int(value(r.at(1), Towers, KeyCross)->origin), int(Origin::Tracked));
+    QCOMPARE(value(r.at(1), Towers, KeyCross)->fromCue, quint32(1));
+    QCOMPARE(value(r.at(1), Towers, KeyCross)->formation, quint32(FormA));
+    // Cue 3 sets nothing: all of it tracks, B the layer's Formation.
+    QCOMPARE(value(r.at(2), Towers, KeyGrouping)->look.value, QString("threes"));
+    QCOMPARE(int(value(r.at(2), Towers, KeyGrouping)->origin), int(Origin::Tracked));
+    QCOMPARE(value(r.at(2), Towers, KeyFormation)->look.palettes, QList<quint32>({ FormB }));
+    // Cue 4: its own Spread row; Grouping still B's, tracked.
+    QCOMPARE(value(r.at(3), Towers, KeySpread)->look.value, QString("1"));
+    QCOMPARE(value(r.at(3), Towers, KeySpread)->formation, invalidId());
+    QCOMPARE(value(r.at(3), Towers, KeyGrouping)->formation, quint32(FormB));
+}
+
+/* One Formation on two cues: changing it changes both, as a shared palette
+   does, and undoing the change puts both back. */
+void ShowTree_Test::formationSharedEditChangesEveryCue()
+{
+    Fixture *left = placedSpot(m_doc, "Left", -4), *right = placedSpot(m_doc, "Right", 4);
+    FixtureGroup *pair = group("Pair", { left->id(), right->id() });
+    StageTarget *edge = lineTarget(m_doc, "Edge");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 aim = st->aimPaletteFor(edge->id());
+    const quint32 form = formationPalette(m_doc, "Centre", { lineRow(KeySpread, "0") });
+    QVERIFY(form != QLCPalette::invalidId());
+    QCOMPARE(m_doc->palette(form)->type(), QLCPalette::Formation);
+    QCOMPARE(st->keyForPalette(form), KeyFormation);
+
+    const quint32 listId = st->addCueList(st->addProduction("P"), "L");
+    QList<quint32> cues;
+    for (int i = 0; i < 2; ++i)
+    {
+        const quint32 c = st->addCue(listId, i - 1, QStringLiteral("C%1").arg(i));
+        const quint32 l = st->addLayer(c, groupTarget(pair->id()));
+        QVERIFY(st->setLayerLook(c, l, st->lookForPalette(aim)));
+        QVERIFY(st->setLayerLook(c, l, st->lookForPalette(form)));
+        ShowTree::Cue cc = *st->cue(c);
+        cc.mode = CueMode::Block;
+        QVERIFY(st->setCue(cc));
+        cues << c;
+    }
+    auto xOf = [&](quint32 c, Fixture *f) {
+        const Scene *sc = sceneOf(st, m_doc, c, groupTarget(pair->id()));
+        return sc == nullptr ? -99.f : aimedAt(m_doc, sc, f->id()).x();
+    };
+    for (quint32 c : cues)
+    {
+        QVERIFY2(qAbs(xOf(c, left)) < 0.05f, qPrintable(QString::number(xOf(c, left))));
+        QVERIFY(qAbs(xOf(c, right)) < 0.05f);
+    }
+    // One edit of the shared palette: both cues spread end to end.
+    QVERIFY(st->setFormationValue(form, KeySpread, "5"));
+    for (quint32 c : cues)
+    {
+        QVERIFY2(qAbs(xOf(c, left) + 5.f) < 0.05f, qPrintable(QString::number(xOf(c, left))));
+        QVERIFY(qAbs(xOf(c, right) - 5.f) < 0.05f);
+    }
+    // One undo step on the palette history: both back.
+    QVERIFY(m_doc->paletteOps()->undo());
+    for (quint32 c : cues)
+        QVERIFY2(qAbs(xOf(c, left)) < 0.05f, qPrintable(QString::number(xOf(c, left))));
+    // A setting it leaves unset is unset, not a default.
+    QVERIFY(st->setFormationValue(form, KeySpread, QString()));
+    QVERIFY(!m_doc->palette(form)->formationHas(QLCPalette::FormationSpread));
+    QVERIFY(!st->setFormationValue(form, KeyGrouping, "sevens"));
+}
+
+/* A Formation on the cue is the cue's formation: it reaches every layer
+   aiming at a line, as one formation across them. */
+void ShowTree_Test::formationOnTheCue()
+{
+    Fixture *a1 = placedSpot(m_doc, "A1", -4), *a2 = placedSpot(m_doc, "A2", -2);
+    Fixture *b1 = placedSpot(m_doc, "B1", 2), *b2 = placedSpot(m_doc, "B2", 4);
+    FixtureGroup *ga = group("A", { a1->id(), a2->id() });
+    FixtureGroup *gb = group("B", { b1->id(), b2->id() });
+    StageTarget *edge = lineTarget(m_doc, "Edge");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 aim = st->aimPaletteFor(edge->id());
+    const quint32 form = formationPalette(m_doc, "Centre", { lineRow(KeySpread, "0") });
+    const quint32 listId = st->addCueList(st->addProduction("P"), "L");
+    const quint32 c1 = st->addCue(listId, -1, "One");
+    st->addLayer(c1, groupTarget(ga->id()));
+    st->addLayer(c1, groupTarget(gb->id()));
+    QVERIFY(st->setCueLook(c1, st->lookForPalette(aim)));
+    // Without it: one formation end to end.
+    QVERIFY(qAbs(aimedAt(m_doc, sceneOf(st, m_doc, c1, groupTarget(ga->id())), a1->id()).x() + 5.f) < 0.05f);
+    QVERIFY(st->setCueLook(c1, st->lookForPalette(form)));
+    for (Fixture *f : { a1, a2 })
+        QVERIFY(qAbs(aimedAt(m_doc, sceneOf(st, m_doc, c1, groupTarget(ga->id())), f->id()).x()) < 0.05f);
+    for (Fixture *f : { b1, b2 })
+        QVERIFY(qAbs(aimedAt(m_doc, sceneOf(st, m_doc, c1, groupTarget(gb->id())), f->id()).x()) < 0.05f);
+    ResolvedCue rc;
+    QVERIFY(st->resolvedCue(c1, &rc));
+    const ResolvedValue sv = rc.layer(groupTarget(gb->id()))->values.value(KeySpread);
+    QCOMPARE(sv.formation, form);
+    QCOMPARE(int(sv.origin), int(Origin::CueLook));
+    QCOMPARE(st->spanMembers(c1, groupTarget(ga->id()), KeyPosition).count(), 2);
+}
+
+/* A Formation on a layer whose Position isn't at a line: kept, but nothing
+   to shape -- the layer plays its Aim as it is. */
+void ShowTree_Test::formationOnANonLineLayer()
+{
+    Fixture *left = placedSpot(m_doc, "Left", -4), *right = placedSpot(m_doc, "Right", 4);
+    FixtureGroup *pair = group("Pair", { left->id(), right->id() });
+    StageTarget *spot = m_doc->monitorProperties()->addStageTarget();
+    spot->setName("DSC");
+    spot->setPosition(QVector3D(0, 3, 0));
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 aim = st->aimPaletteFor(spot->id());
+    const quint32 form = formationPalette(m_doc, "Centre", { lineRow(KeySpread, "0"), lineRow(KeyCross, "mirror") });
+    const quint32 listId = st->addCueList(st->addProduction("P"), "L");
+    const quint32 c1 = st->addCue(listId, -1, "One");
+    const quint32 l1 = st->addLayer(c1, groupTarget(pair->id()));
+    QVERIFY(st->setLayerLook(c1, l1, st->lookForPalette(aim)));
+    QVERIFY(!st->isLineAim(st->lookForPalette(aim)));
+    QVERIFY(st->setLayerLook(c1, l1, st->lookForPalette(form)));
+    ResolvedCue rc;
+    QVERIFY(st->resolvedCue(c1, &rc));
+    QVERIFY(rc.layer(groupTarget(pair->id()))->values.contains(KeyFormation));
+    // The scene plays the Aim palette itself: no line palette made for it.
+    const Scene *sc = sceneOf(st, m_doc, c1, groupTarget(pair->id()));
+    QVERIFY(sc != nullptr);
+    QVERIFY(sc->palettes().contains(aim));
+    QVERIFY(!sc->palettes().contains(form));
+    for (quint32 pid : sc->palettes())
+        QVERIFY(!st->isInlinePalette(pid));
+    QVERIFY(qAbs(aimedAt(m_doc, sc, left->id()).x()) < 0.05f);   // both at the point
+}
+
+/* Saved in the show and read back; a palette of a type this build doesn't
+   know (what an older build makes of a Formation) loads as an empty
+   palette that plays nothing, and the rest of the show still loads. */
+void ShowTree_Test::formationSavesAndAnUnknownTypeLoads()
+{
+    const quint32 form = formationPalette(m_doc, "Pairs crossed",
+                                          { lineRow(KeySpread, "0"), lineRow(KeyCross, "mirror") });
+    QByteArray xml;
+    {
+        QBuffer buf(&xml);
+        buf.open(QIODevice::WriteOnly);
+        QXmlStreamWriter w(&buf);
+        QVERIFY(m_doc->palette(form)->saveXML(&w));
+    }
+    QVERIFY(xml.contains("Type=\"Formation\""));
+    {
+        QXmlStreamReader r(xml);
+        r.readNextStartElement();
+        QLCPalette back(QLCPalette::Dimmer);
+        QVERIFY(back.loadXML(r));
+        QCOMPARE(back.type(), QLCPalette::Formation);
+        QCOMPARE(back.name(), QString("Pairs crossed"));
+        QVERIFY(back.formationHas(QLCPalette::FormationSpread));
+        QCOMPARE(back.formationValue(QLCPalette::FormationSpread), 0.0);
+        QVERIFY(!back.formationHas(QLCPalette::FormationGroup));
+        QCOMPARE(ShowTreeController::formationLooks(&back).count(), 2);
+    }
+    // An older build doesn't know "Formation": as any unknown type.
+    QByteArray unknown = xml;
+    unknown.replace("Type=\"Formation\"", "Type=\"Hologram\"");
+    const QByteArray show = "<Engine>" + unknown
+        + "<Palette ID=\"77\" Type=\"Dimmer\" Name=\"After\" Value=\"128\"/></Engine>";
+    Doc other(this);
+    QXmlStreamReader r(show);
+    r.readNextStartElement();
+    int loaded = 0;
+    while (r.readNextStartElement())
+    {
+        QVERIFY(r.name() == QLatin1String("Palette"));
+        QVERIFY(QLCPalette::loader(r, &other));
+        ++loaded;
+    }
+    QCOMPARE(loaded, 2);
+    QLCPalette *u = nullptr;
+    for (QLCPalette *p : other.palettes())
+        if (p->name() == QLatin1String("Pairs crossed"))
+            u = p;
+    QVERIFY(u != nullptr);
+    QCOMPARE(u->type(), QLCPalette::Undefined);
+    QVERIFY(u->valuesFromFixtures(&other, { m_fixtures.first() }).isEmpty());
+    QVERIFY(other.palette(77) != nullptr);
+    QCOMPARE(other.palette(77)->value().toInt(), 128);
+}
+
+/* palette formation "name" spread … group … cross …: one undo step, its
+   settings in it; <groups> formation "name" drops it on a layer. */
+void ShowTree_Test::formationCommandWords()
+{
+    group("Towers", { m_fixtures[0], m_fixtures[1] });
+    ShowTreeController *st = m_doc->showTree();
+    ShowTreeCommand cmd(m_doc, st);
+    ShowTreeCommand::Context ctx;
+    ctx.production = st->addProduction("P");
+    ctx.list = st->addCueList(ctx.production, "L");
+    ctx.cue = st->addCue(ctx.list, -1, "One");
+
+    ShowTreeCommand::Result r = cmd.run("palette formation \"Pairs crossed\" spread 0 group pairs cross mirror", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    const QLCPalette *p = m_doc->palette(r.editPalette);
+    QVERIFY(p != nullptr);
+    QCOMPARE(p->type(), QLCPalette::Formation);
+    QCOMPARE(p->name(), QString("Pairs crossed"));
+    QCOMPARE(ShowTreeController::formationSummary(p), QString("spread 0, pairs, mirror"));
+    const quint32 pid = p->id();
+    // Undo takes it away; Redo brings it back with its settings.
+    QVERIFY(m_doc->paletteOps()->undo());
+    QVERIFY(m_doc->palette(pid) == nullptr);
+    QVERIFY(m_doc->paletteOps()->redo());
+    QVERIFY(m_doc->palette(pid) != nullptr);
+    QCOMPARE(ShowTreeController::formationSummary(m_doc->palette(pid)), QString("spread 0, pairs, mirror"));
+    // Some only; a bad word says what it takes.
+    r = cmd.run("palette formation \"Just pairs\" group pairs", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    QCOMPARE(ShowTreeController::formationLooks(m_doc->palette(r.editPalette)).count(), 1);
+    r = cmd.run("palette formation \"Bad\" spread 9", ctx);
+    QVERIFY(!r.ok);
+    QVERIFY(r.message.contains("spread"));
+    // Tab offers its words.
+    QStringList next;
+    QVERIFY(cmd.candidates("palette formation \"X\" ", ctx, &next));
+    QVERIFY(next.contains("spread") && next.contains("cross"));
+    // On a layer.
+    r = cmd.run("Towers formation \"Pairs crossed\"", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    const ShowTree::Cue *c = st->cue(ctx.cue);
+    QVERIFY(c != nullptr && !c->layers.isEmpty());
+    const Look *fl = c->layers.first().look(KeyFormation);
+    QVERIFY(fl != nullptr);
+    QCOMPARE(fl->palettes, QList<quint32>({ pid }));
+}
+
+/****************************************************************************
  * The command line's language: help from the parser's own table
  ****************************************************************************/
 
@@ -6421,6 +6770,9 @@ void ShowTree_Test::everyCommandWordHasHelpAndItsExamplesParse()
     QLCPalette *gobo = new QLCPalette(QLCPalette::Gobo, m_doc);
     gobo->setName("Breakup");
     m_doc->addPalette(gobo);
+    QLCPalette *form = new QLCPalette(QLCPalette::Formation, m_doc);
+    form->setName("Pairs crossed");
+    m_doc->addPalette(form);
     StageTarget *edge = m_doc->monitorProperties()->addStageTarget();
     edge->setName("DS-Edge");
     edge->makeLine();
@@ -6448,7 +6800,7 @@ void ShowTree_Test::everyCommandWordHasHelpAndItsExamplesParse()
                                  "layer", "copy", "paste", "help", "?", "in", "none", "off", "clear",
                                  "colour", "color", "dimmer", "dim", "level", "position", "pos", "aim", "spread",
                                  "group", "grouping", "cross", "gobo", "zoom", "beam", "focus", "frost", "iris",
-                                 "shutter", "strobe", "effect", "fx", "reusable", "use", "unlink", "detach",
+                                 "shutter", "strobe", "effect", "fx", "formation", "reusable", "use", "unlink", "detach",
                                  "convert", "palette", "pal", "look", "vcpage", "adopt" };
     for (const QString &w : parsed)
         QVERIFY2(ShowTreeCommand::word(w) != nullptr, qPrintable(QString("no help for “%1”").arg(w)));
@@ -7643,7 +7995,9 @@ void ShowTree_Test::paletteCommands()
     QVERIFY(next.contains("none"));
     QCOMPARE(cmd.complete("palette Blue d", ctx), QString("palette Blue d"));   // dup / delete
     QCOMPARE(cmd.complete("palette Blue du", ctx), QString("palette Blue dup "));
-    QCOMPARE(cmd.complete("palette fo", ctx), QString("palette folder "));
+    QCOMPARE(cmd.complete("palette fo", ctx), QString("palette fo"));          // folder / formation
+    QCOMPARE(cmd.complete("palette fol", ctx), QString("palette folder "));
+    QCOMPARE(cmd.complete("palette form", ctx), QString("palette formation "));
     QVERIFY(ShowTreeCommand::helpText("palette").contains("<b>palette</b>"));
 }
 

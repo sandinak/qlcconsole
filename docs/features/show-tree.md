@@ -959,6 +959,32 @@ of its own.
 - **Between cues** a Spread change fades over the cue's fade time, so the
   beams sweep.
 
+### Formation palettes
+
+A **Formation** palette holds Spread, Grouping and Cross (any of them) and
+works with any line: drop *Pairs crossed* on a layer, or on a cue for the
+cue's formation, beside an Aim palette. Make and edit them in Build
+([Formation palettes](build.md#formation-palettes)); typed:
+`Towers formation "Pairs crossed"`, `cue look formation "Pairs crossed"`.
+
+- **Who wins**, setting by setting: the layer's own Spread / Grouping /
+  Cross row, else a Formation on the layer, else the cue's formation (its
+  own rows, then a Formation on the cue), else the Aim look's own.
+- **It shows where it came from.** A **Formation** row sits under Position
+  with the palette and what it sets (*Pairs crossed (spread 0, pairs,
+  mirror)*), and each row it sets says so: *"Pairs — from Formation 'Pairs
+  crossed'"*. The row's **⋯**, and the cue's **Line ⋯ ▸ Formation**, set or
+  clear it.
+- **It tracks** row by row, as the rows do: a later cue's Formation changes
+  only what it sets; the rest carries on.
+- **It is shared.** Editing the palette changes every cue that uses it.
+- **Not at a line:** on a layer whose Position doesn't aim at a line it does
+  nothing, and its row says so (hover for why).
+- A show with no Formation palettes plays as before. An older qlcconsole (or
+  QLC+ 4) reads a Formation as a palette of unknown type: it loads, plays
+  nothing, and the cues it was on play the Aim look's own spread. Saving
+  the show from such a build keeps the palette but drops its settings.
+
 ## Renaming
 
 A layer's **name** is its own, separate from its groups (until you name it,

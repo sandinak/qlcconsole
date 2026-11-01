@@ -10,6 +10,20 @@ under `~/.claude/.../memory/`.
 
 ---
 
+## Formation palettes — built, leftovers (0.4, form, Q197, 2026-11-01)
+
+Built: `QLCPalette::Formation` (Spread / Grouping / Cross, any subset, as
+the `__line*` params), `ShowTree::KeyFormation` resolved per row (layer row
+> layer Formation > cue row > cue Formation > Aim's own), Build's
+Formation page with its never-saved preview (`FormationEditor`), the
+command words and AI Assist's `formation` attribute. Each "decided (can
+change)": the preview pick is remembered per palette for the session only
+(cleared when another show opens); a Formation on a non-line layer stays
+and says it does nothing (not refused); the preview uses the Aim palette a
+line aim there reuses as the base. Open: a course note when the line aims
+lesson is written; the plan view's pop-out from the Formation page if it
+didn't land with this.
+
 ## Raspberry Pi package — leftovers (pi, 2026-10-31)
 
 Built: `platforms/linux/make-pi-deb.sh` (a .deb; decided, can change),

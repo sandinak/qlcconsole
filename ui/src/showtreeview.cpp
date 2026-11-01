@@ -4836,7 +4836,7 @@ void ShowTreeView::showLayerPage(const CueList &list, int index, const Layer *ow
     // under Position, when it aims at a line (or they are set anyway).
     const bool lineAim = rl->values.contains(KeyPosition) && m_st->isLineAim(rl->values.value(KeyPosition).look);
     if (lineAim)
-        keys << KeySpread << KeyGrouping << KeyCross;
+        keys << KeyFormation << KeySpread << KeyGrouping << KeyCross;
     for (const QString &k : rl->values.keys())
         if (!keys.contains(k))
             keys << k;
@@ -4857,7 +4857,7 @@ void ShowTreeView::showLayerPage(const CueList &list, int index, const Layer *ow
     {
         const bool addEffect = key == QLatin1String("Effect.");
         QLabel *label = new QLabel(addEffect ? tr("Effect") : keyLabel(key), m_rowsHost);
-        if (key.startsWith(QLatin1String("Beam.")) || isLineParamKey(key))
+        if (key.startsWith(QLatin1String("Beam.")) || isLineParamKey(key) || key == KeyFormation)
             label->setText(QStringLiteral("   ") + label->text());     // Beam's / a line aim's children
         QLabel *value = new QLabel(m_rowsHost);
         value->setObjectName(QStringLiteral("stRow:%1").arg(key));
@@ -4868,6 +4868,25 @@ void ShowTreeView::showLayerPage(const CueList &list, int index, const Layer *ow
             text = isLineParamKey(key) && !v.look.none ? ShowTreeController::lineParamText(key, v.look.value)
                                                        : lookText(v.look);
             origin = originText(list, v);
+            // From a Formation palette (Q197): says which.
+            if (isLineParamKey(key) && v.formation != invalidId())
+            {
+                const QLCPalette *fp = m_doc->palette(v.formation);
+                const QString from = tr("from Formation “%1”").arg(fp == nullptr ? tr("(missing)") : fp->name());
+                origin = v.origin == Origin::Own || origin.isEmpty() ? from
+                                                                     : QStringLiteral("%1 · %2").arg(from, origin);
+            }
+            if (key == KeyFormation && !v.look.none)
+                if (const QLCPalette *fp = m_doc->palette(v.look.palettes.value(0)))
+                    text = tr("%1 (%2)").arg(fp->name(), ShowTreeController::formationSummary(fp));
+            // A Formation where Position isn't at a line: nothing to shape.
+            if (key == KeyFormation && !lineAim && !v.look.none)
+            {
+                origin = origin.isEmpty() ? tr("does nothing here") : QStringLiteral("%1 · %2").arg(origin, tr("does nothing here"));
+                value->setToolTip(tr("This layer's Position isn't aimed at a line target, so the Formation "
+                                     "(Spread / Grouping / Cross) has nothing to shape here. Aim it at a line "
+                                     "and the Formation takes effect."));
+            }
             if (v.origin != Origin::Own)
             {
                 QPalette pal = value->palette();
@@ -5159,6 +5178,39 @@ void ShowTreeView::lineParamMenu(QMenu *menu, quint32 cueId, quint32 layerId, co
         { KeySpread, { "5", "2.5", "0", "-2.5", "-5" } },
         { KeyGrouping, { "each", "pairs", "threes", "fours", "halves" } },
         { KeyCross, { "swap", "mirror" } } };
+    // A Formation palette (Q197): all three at once, shared.
+    if (onlyKey.isEmpty() || onlyKey == KeyFormation)
+    {
+        QMenu *fm = onlyKey.isEmpty() ? menu->addMenu(keyLabel(KeyFormation)) : menu;
+        fm->setObjectName(QStringLiteral("stFormationMenu"));
+        QList<QLCPalette *> forms;
+        for (QLCPalette *p : m_doc->palettes())
+            if (p->type() == QLCPalette::Formation)
+                forms << p;
+        std::sort(forms.begin(), forms.end(), [](const QLCPalette *a, const QLCPalette *b) {
+            return a->name().compare(b->name(), Qt::CaseInsensitive) < 0;
+        });
+        for (const QLCPalette *p : forms)
+        {
+            const quint32 pid = p->id();
+            fm->addAction(tr("%1 (%2)").arg(p->name(), ShowTreeController::formationSummary(p)), this,
+                          [this, cueId, layerId, target, pid]() {
+                              applyLook(cueId, layerId, target, m_st->lookForPalette(pid));
+                          });
+        }
+        if (forms.isEmpty())
+            fm->addAction(tr("No Formation palettes yet (Build ▸ Palettes ▸ New Formation)"))->setEnabled(false);
+        fm->addSeparator();
+        fm->addAction(tr("Clear (inherit)"), this, [this, cueId, layerId, target]() {
+            if (layerId == invalidId() && !target.isEmpty())
+                return;
+            Look l;
+            l.key = KeyFormation;
+            applyLook(cueId, layerId, target, l);
+        });
+        if (onlyKey == KeyFormation)
+            return;
+    }
     for (const auto &k : all)
     {
         if (!onlyKey.isEmpty() && k.first != onlyKey)

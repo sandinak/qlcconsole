@@ -85,7 +85,8 @@ public:
         Gobo,
         Zoom,
         Beam,
-        Effect      ///< Computed by a JS effect script (tick-driven)
+        Effect,     ///< Computed by a JS effect script (tick-driven)
+        Formation   ///< A line aim's Spread / Grouping / Cross, stacked with any Aim (no channels)
     };
     Q_ENUM(PaletteType)
 
@@ -399,6 +400,29 @@ public:
 private:
     quint32 m_stageTargetId = UINT_MAX;
     bool m_dimWhenBlocked = false;
+
+    /************************************************************************
+     * Formation (type == Formation only), docs/features/show-tree.md "Line aims"
+     ************************************************************************/
+public:
+    /** What a Formation sets. Any subset may be set; one left unset comes
+     *  from elsewhere (the cue's formation, the Aim look's own). */
+    enum FormationSetting
+    {
+        FormationSpread = 0,    //!< -5..+5 (LineSpread::Settings::spread)
+        FormationGroup,         //!< lights per group, 1..4; 0 = halves (LineSpread::Halves)
+        FormationCross          //!< LineSpread::Cross: 0 swap sides, 1 mirror
+    };
+    /** Whether this Formation sets @p s. Stored as the line params a line
+     *  Aim look carries ("__lineSpread", "__lineGroup", "__lineCross"),
+     *  each present only when set -- so "spread +5" set is not "unset". */
+    bool formationHas(FormationSetting s) const;
+    /** Its value for @p s (0 when unset: ask formationHas() first). */
+    double formationValue(FormationSetting s) const;
+    void setFormationValue(FormationSetting s, double value);
+    void clearFormationValue(FormationSetting s);
+    /** The param name @p s is stored under. */
+    static QString formationParam(FormationSetting s);
 
     /************************************************************************
      * Gobo by name (type == Gobo only), docs/design/SHOW_TREE_DESIGN.md §3A / §10.7

@@ -225,6 +225,7 @@ void PaletteOps::setStartValue(QLCPalette *p)
         case QLCPalette::PanTilt: p->setValue(270, 135); break;
         case QLCPalette::Aim:     break;    // no values: the target is set in the Look Editor
         case QLCPalette::Effect:  break;    // the script is picked in the Look Editor
+        case QLCPalette::Formation: break;  // sets nothing until picked: inherits all
         case QLCPalette::Strobe:  p->setValue(0.25f); break;
         default:                  p->setValue(0); break;
     }
@@ -248,7 +249,7 @@ QString PaletteOps::newName(QLCPalette::PaletteType type, const QString &base) c
 }
 
 quint32 PaletteOps::create(QLCPalette::PaletteType type, const QString &path, const QString &name,
-                           const QVariantList &values)
+                           const QVariantList &values, const std::function<void(QLCPalette *)> &setup)
 {
     if (type == QLCPalette::Undefined)
         return QLCPalette::invalidId();
@@ -262,6 +263,8 @@ quint32 PaletteOps::create(QLCPalette::PaletteType type, const QString &path, co
             p->setValues(values);
         p->setName(nm);
         p->setPath(path);
+        if (setup)
+            setup(p);
         if (!m_doc->addPalette(p))
         {
             delete p;

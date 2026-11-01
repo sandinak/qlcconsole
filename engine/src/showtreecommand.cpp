@@ -175,6 +175,12 @@ const QList<ShowTreeCommand::Word> &ShowTreeCommand::words()
         add("cross", "looks", "<groups> cross swap|mirror | none | clear",
             "A line aim's Cross, below spread 0: groups swap sides keeping their order, or each group "
             "flips in place.", { "Towers cross mirror" }, { "spread", "group" }, {}, true);
+        add("formation", "looks", "<groups> formation <Formation palette> | none | clear",
+            "A Formation palette (Spread / Grouping / Cross, any of them) stacked with the layer's Aim: "
+            "a layer's own Spread / Grouping / Cross rows still win over it. On the cue it is the cue's "
+            "formation, reaching only layers aiming at a line.",
+            { "Towers formation \"Pairs crossed\"", "cue look formation \"Pairs crossed\"" },
+            { "aim", "spread", "group", "cross" }, {}, true);
         add("gobo", "looks", "<groups> gobo <palette> | none | clear",
             "The Gobo look (by name per fixture type).", { "Towers gobo Breakup", "Towers gobo none" },
             { "zoom", "beam" }, {}, true);
@@ -280,14 +286,16 @@ const QList<ShowTreeCommand::Word> &ShowTreeCommand::words()
             { "convert", "convert apply" }, { "track" });
         // palettes (R2): the Library's housekeeping, typed
         add("palette", "palettes", "palette <type> [\"name\"] [#rrggbb | <0-100>] [in <folder>] | "
+                                   "palette formation [\"name\"] [spread <-5…+5>] [group <…>] [cross swap|mirror] | "
                                    "palette <name> rename \"new\" | move <folder>|none | dup | delete [anyway] | edit | "
                                    "palette folder <folder> [rename \"new\" | delete]",
             "Palettes as the Library keeps them: a new one of a type (colour, dimmer, position, aim, beam, gobo, "
-            "zoom, shutter, strobe, effect), named, valued and filed if you say so, opened in the Look Editor; a "
+            "zoom, shutter, strobe, effect, formation -- a line aim's Spread / Grouping / Cross, any of them, "
+            "stacked with any Aim), named, valued and filed if you say so, opened in the Look Editor; a "
             "palette renamed, moved to a folder (folders hold any type), duplicated, deleted (refused while "
             "something uses it, unless anyway -- then every use is cleared with it) or edited; folders made, renamed, deleted (what is in one moves "
             "up). One undo step each.",
-            { "palette colour \"Amber 2\" #ffb000", "palette dimmer \"Half\" 50 in \"Levels\"",
+            { "palette colour \"Amber 2\" #ffb000", "palette formation \"Pairs crossed\" spread 0 group pairs cross mirror", "palette dimmer \"Half\" 50 in \"Levels\"",
               "palette Blue rename \"Navy\"", "palette Blue move \"01-Song\"", "palette Blue dup",
               "palette Blue edit", "palette folder \"01-Song\"", "palette folder \"01-Song\" rename \"02-Song\"" },
             { "colour", "look" }, { "pal" });
@@ -474,6 +482,8 @@ QString ShowTreeCommand::attributeKey(const QString &word)
         return KeyGrouping;
     if (w == QLatin1String("cross"))
         return KeyCross;
+    if (w == QLatin1String("formation"))
+        return KeyFormation;
     if (w == QLatin1String("gobo"))
         return KeyGobo;
     if (w == QLatin1String("zoom"))
@@ -759,12 +769,15 @@ int ShowTreeCommand::paletteTypeWord(const QString &word)
         return QLCPalette::Strobe;
     if (w == QLatin1String("effect"))
         return QLCPalette::Effect;
+    if (w == QLatin1String("formation"))
+        return QLCPalette::Formation;
     return QLCPalette::Undefined;
 }
 
 QStringList ShowTreeCommand::paletteTypeWords()
 {
-    return { "colour", "dimmer", "position", "aim", "beam", "gobo", "zoom", "shutter", "strobe", "effect" };
+    return { "colour", "dimmer", "position", "aim", "beam", "gobo", "zoom", "shutter", "strobe", "effect",
+             "formation" };
 }
 
 QStringList ShowTreeCommand::cueNumbers(const Context &context) const
@@ -2535,6 +2548,23 @@ ShowTreeCommand::Result ShowTreeCommand::runPalette(const QString &line, const C
             r.word();
             values << QLCPalette::colorToString(QColor(v), QColor(Qt::black));
         }
+        // A Formation's settings (Q197): spread <-5…+5> group <…> cross <…>,
+        // any of them, in any order.
+        QList<Look> formation;
+        while (type == QLCPalette::Formation && !r.atEnd())
+        {
+            const QString key = attributeKey(r.peek());
+            if (!isLineParamKey(key))
+                break;
+            r.word();
+            const QString word = r.word();
+            const QString val = ShowTreeController::lineParamValue(key, word);
+            if (val.isEmpty())
+                return fail(key == KeySpread ? tr("spread -5 … +5 (0: all on the line's centre), got “%1”.").arg(word)
+                            : key == KeyGrouping ? tr("group each | pairs | threes | fours | halves, got “%1”.").arg(word)
+                                                 : tr("cross swap | mirror, got “%1”.").arg(word));
+            formation << ShowTreeController::lineParamLook(key, val);
+        }
         QString path = m_st->suggestPaletteFolder(type);
         if (r.peek().toLower() == QLatin1String("in"))
         {
@@ -2547,14 +2577,19 @@ ShowTreeCommand::Result ShowTreeCommand::runPalette(const QString &line, const C
         if (!r.atEnd())
             return fail(tr("palette %1 \"name\" %2 [in \"folder\"] -- don't know “%3”")
                         .arg(w1, type == QLCPalette::Dimmer ? QStringLiteral("[0-100]")
-                                 : type == QLCPalette::Color ? QStringLiteral("[#rrggbb]") : QString(), r.peek()));
+                                 : type == QLCPalette::Color ? QStringLiteral("[#rrggbb]")
+                                 : type == QLCPalette::Formation ? QStringLiteral("[spread <-5…+5>] [group <…>] [cross swap|mirror]")
+                                 : QString(), r.peek()));
         QString nm = name.isNull() ? QString() : name.trimmed();
         if (nm.isEmpty())
             nm = values.isEmpty() ? ops->newName(type) : m_st->suggestPaletteName(type, values);
         for (const QLCPalette *have : m_doc->palettes())
             if (have->type() == type && have->name().compare(nm, Qt::CaseInsensitive) == 0)
                 return fail(tr("There is a %1 palette “%2” already.").arg(w1, have->name()));
-        const quint32 id = ops->create(type, path, nm, values);
+        const quint32 id = ops->create(type, path, nm, values, [&formation](QLCPalette *p) {
+            for (const Look &l : formation)
+                ShowTreeController::applyFormationLook(p, l);
+        });
         if (id == QLCPalette::invalidId())
             return fail(tr("Couldn't make the palette."));
         const QString folder = PaletteOps::folderOf(m_doc->palette(id));
@@ -3012,15 +3047,28 @@ bool ShowTreeCommand::candidates(const QString &head, const Context &context, QS
         if (paletteTypeWord(w1) != QLCPalette::Undefined)
         {
             // palette <type> ["name"] [value] [in <folder>]
-            r.word();
+            const bool formation = paletteTypeWord(r.word()) == QLCPalette::Formation;
             if (r.src.mid(r.i).trimmed().startsWith(QLatin1Char('"')))
                 r.quoted();
             static const QRegularExpression value(QStringLiteral("^(\\d{1,3}%?|#[0-9a-fA-F]{6})$"));
             if (value.match(r.peek()).hasMatch())
                 r.word();
+            // A Formation's settings: spread <n> group <w> cross <w>.
+            while (formation && !r.atEnd() && isLineParamKey(attributeKey(r.peek())))
+            {
+                const QString key = attributeKey(r.word());
+                if (r.atEnd())
+                {
+                    *out = key == KeySpread ? QStringList({ "5", "2.5", "0", "-2.5", "-5" })
+                           : key == KeyGrouping ? QStringList({ "each", "pairs", "threes", "fours", "halves" })
+                                                : QStringList({ "swap", "mirror" });
+                    return true;
+                }
+                r.word();
+            }
             if (r.atEnd())
             {
-                *out = QStringList({ "in" });
+                *out = formation ? QStringList({ "spread", "group", "cross", "in" }) : QStringList({ "in" });
                 return true;
             }
             if (r.word().toLower() != QLatin1String("in"))

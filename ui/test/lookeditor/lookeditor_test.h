@@ -91,6 +91,17 @@ private slots:
     /** A new colour in a folder whose colours share a naming is named
      *  their way ("Act2 Red", "Act2 Blue" -> "Act2 Amber"). */
     void aNewColourIsNamedLikeItsSiblings();
+
+    /** Q197: a Formation palette's page -- Spread / Grouping / Cross, each
+     *  set or left unset, one undo step each. */
+    void aFormationIsEditedOnItsPage();
+    /** Its preview pick (line, groups, fixtures) never sticks: the show
+     *  stays unmodified, no undo step, the saved file unchanged. */
+    void aFormationsPreviewPickNeverSticks();
+    /** The plan for two picked groups is what the same Formation and line
+     *  give on a cue with those two layers; the default pick is the line's
+     *  most-aimed groups. */
+    void aFormationsPreviewMatchesTheCue();
 };
 
 #endif

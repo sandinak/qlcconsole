@@ -184,6 +184,7 @@ add_library(${module_name}
     spreadpreview.cpp spreadpreview.h
     linespreadpreview.cpp linespreadpreview.h
     lineplanview.cpp lineplanview.h
+    formationeditor.cpp formationeditor.h
     networktopologydialog.cpp networktopologydialog.h
     noteedit.cpp noteedit.h
     patchinventorydialog.cpp patchinventorydialog.h

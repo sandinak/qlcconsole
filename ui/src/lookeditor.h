@@ -234,6 +234,12 @@ private:
     QLabel *m_fadeInLabel = nullptr;
     QLabel *m_fadeOutLabel = nullptr;
     QStackedWidget *m_stack;
+    int m_pageFormation = -1;
+    class FormationEditor *m_formationEditor = nullptr;
+public:
+    /** The Formation page's editor (tests). */
+    FormationEditor *formationEditor() const { return m_formationEditor; }
+private:
     int m_pageEmpty, m_pageColor, m_pageDimmer, m_pagePanTilt, m_pageAim, m_pageBeam, m_pageSingle, m_pageStrobe;
 
     QColorDialog *m_colorDialog;

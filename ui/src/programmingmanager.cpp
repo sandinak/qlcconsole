@@ -2849,6 +2849,9 @@ void ProgrammingManager::slotPaletteTreeMenu(const QPoint &pos)
           QT_TR_NOOP("Strobe rate.") },
         { QT_TR_NOOP("New Effect"),     QLCPalette::Effect,
           QT_TR_NOOP("A scripted/reactive effect (audio, MIDI, time-based).") },
+        { QT_TR_NOOP("New Formation"),  QLCPalette::Formation,
+          QT_TR_NOOP("A line aim's Spread, Grouping and Cross (any of them), stacked with any Aim "
+                     "palette: one \"Pairs crossed\" works on every line.") },
     };
     QList<QAction*> newActions;
     for (uint i = 0; i < sizeof(types) / sizeof(types[0]); i++)

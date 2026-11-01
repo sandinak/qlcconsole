@@ -107,6 +107,7 @@
 #include "spreadlayer.h"
 #include "wledconfigcheck.h"
 #include "spreadpreview.h"
+#include "formationeditor.h"
 
 // VC XY pad works in DMX space [0..256); palette pan/tilt are degrees.
 static const qreal XY_MAX = 256.0;
@@ -1033,6 +1034,14 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     connect(m_effectScriptCombo, SIGNAL(currentIndexChanged(int)),
             this, SLOT(slotEffectScriptChanged(int)));
 
+    // Formation page (Q197): Spread / Grouping / Cross and a preview.
+    m_formationEditor = new FormationEditor(m_doc, m_stack);
+    m_pageFormation = m_stack->addWidget(m_formationEditor);
+    connect(m_formationEditor, &FormationEditor::edited, this, [this](quint32 pid) {
+        m_shownSignature = valueSignature(m_doc->palette(pid));
+        emit paletteChanged(pid);
+    });
+
     setPalette(QLCPalette::invalidId());
 }
 
@@ -1326,6 +1335,14 @@ void LookEditor::setPalette(quint32 paletteId)
 
     switch (p->type())
     {
+    case QLCPalette::Formation:
+    {
+        m_formationEditor->setPalette(paletteId);
+        m_stack->setCurrentIndex(m_pageFormation);
+        setMaximumHeight(QWIDGETSIZE_MAX);
+        updateGeometry();
+        break;
+    }
     case QLCPalette::Color:
     {
         const QColor rgb = p->rgbValue();
@@ -1725,6 +1742,12 @@ QString LookEditor::valueSignature(const QLCPalette *p)
     parts << p->name() << p->colourMacro() << p->goboName();
     for (const QVariant &v : p->values())
         parts << v.toString();
+    if (p->type() == QLCPalette::Formation)
+    {
+        const QMap<QString, double> params = p->effectParamValues();
+        for (auto it = params.constBegin(); it != params.constEnd(); ++it)
+            parts << it.key() + QLatin1Char('=') + QString::number(it.value());
+    }
     return parts.join(QLatin1Char('\x1f'));
 }
 

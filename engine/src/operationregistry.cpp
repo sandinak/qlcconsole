@@ -376,7 +376,8 @@ QStringList lookAttributes()
 {
     return { QStringLiteral("colour"), QStringLiteral("dimmer"), QStringLiteral("position"), QStringLiteral("aim"),
              QStringLiteral("spread"), QStringLiteral("group"), QStringLiteral("cross"), QStringLiteral("gobo"),
-             QStringLiteral("zoom"), QStringLiteral("beam"), QStringLiteral("shutter"), QStringLiteral("effect") };
+             QStringLiteral("zoom"), QStringLiteral("beam"), QStringLiteral("shutter"), QStringLiteral("effect"),
+             QStringLiteral("formation") };
 }
 
 QJsonObject looksProperty()
@@ -384,7 +385,8 @@ QJsonObject looksProperty()
     QJsonObject value { { QStringLiteral("type"), QJsonArray { QStringLiteral("string"), QStringLiteral("number") } },
                         { QStringLiteral("description"),
                           OperationRegistry::tr("A palette by name, a level 0-100 (dimmer), a hex colour "
-                                                "#rrggbb (colour), a stage target (aim), -5..+5 (spread), "
+                                                "#rrggbb (colour), a stage target (aim), -5..+5 (spread), a Formation "
+                                                "palette by name (formation: spread/group/cross in one), "
                                                 "none (off here) or clear (inherit again)") } };
     QJsonObject item = strictSchema({ { QStringLiteral("attribute"),
                                         stringProperty(OperationRegistry::tr("Which look"), lookAttributes()) },

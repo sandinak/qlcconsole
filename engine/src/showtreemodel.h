@@ -71,6 +71,12 @@ namespace ShowTree
     extern QLC_ENGINE_EXPORT const QString KeyGrouping;     //!< "Position.Grouping"
     extern QLC_ENGINE_EXPORT const QString KeyCross;        //!< "Position.Cross"
     QLC_ENGINE_EXPORT bool isLineParamKey(const QString &key);
+    /** A Formation palette on a layer or a cue (Q197): Spread / Grouping /
+     *  Cross, any subset, from one shared palette stacked with any Aim. A
+     *  look of its own (palettes: the Formation), so it tracks as a key;
+     *  what it sets reaches the three rows above as values whose
+     *  ResolvedValue::formation names it. It plays no channels itself. */
+    extern QLC_ENGINE_EXPORT const QString KeyFormation;    //!< "Position.Formation"
 
     /** "Effect.<kind>" for an effect of @a kind ("Color", "Dimmer",
      *  "Position", "Beam", "Other"). */
@@ -510,6 +516,10 @@ namespace ShowTree
          *  and span are one effect / one formation until a later cue
          *  changes some of them. Invalid: the layer's own. */
         quint32 span = 0xFFFFFFFF;
+        /** A line parameter (Spread / Grouping / Cross) that came from a
+         *  Formation palette: that palette (kept as it tracks). Invalid:
+         *  set as a row of its own. */
+        quint32 formation = 0xFFFFFFFF;
     };
 
     struct QLC_ENGINE_EXPORT ResolvedLayer
@@ -555,6 +565,10 @@ namespace ShowTree
     /** Whether a Position look aims at a line (D18): only those take a
      *  cue's Spread / Grouping / Cross. Without one, none do. */
     typedef std::function<bool(const Look &)> LineAimTest;
+    /** What Formation palette @a paletteId sets, as line parameter looks
+     *  (KeySpread / KeyGrouping / KeyCross with their values); empty for a
+     *  palette that is no Formation, or sets nothing. */
+    typedef std::function<QList<Look>(quint32 paletteId)> FormationRows;
 
     /** Resolve every cue of @a list, in list order. Pure: no Doc. A list of
      *  sub-cues (CueList::subOf) starts from @a start: what its cue puts
@@ -564,8 +578,16 @@ namespace ShowTree
      *  from what the cue before it passes on -- but passes on nothing of
      *  its own: its ResolvedCue::passOn is what it was handed, so every
      *  cue after it resolves as if it weren't in the list. */
+    /*
+     *  A Formation (KeyFormation, @a formations reads what it sets) reaches
+     *  the line parameters in this order, per parameter: a layer's own row,
+     *  else a Formation on the layer, else the cue's row, else a Formation on
+     *  the cue -- the cue's two only where the layer's Position aims at a
+     *  line, as a cue's rows (D18). Each lands as the row's value, so it
+     *  tracks row by row. */
     QLC_ENGINE_EXPORT QList<ResolvedCue> resolve(const CueList &list, const LineAimTest &isLineAim = LineAimTest(),
-                                                 const QList<ResolvedLayer> *start = nullptr);
+                                                 const QList<ResolvedLayer> *start = nullptr,
+                                                 const FormationRows &formations = FormationRows());
 
     /** What a cue puts on stage, per unit -- each group, fixture and opaque
      *  function a layer lights ("g:12", "f:3", "x:40") -- and attribute:
@@ -581,7 +603,8 @@ namespace ShowTree
     QLC_ENGINE_EXPORT bool stageDiffers(const CueList &before, const CueList &after,
                                         quint32 *cueId = nullptr, QString *unit = nullptr,
                                         QString *key = nullptr,
-                                        const LineAimTest &isLineAim = LineAimTest());
+                                        const LineAimTest &isLineAim = LineAimTest(),
+                                        const FormationRows &formations = FormationRows());
 
     /** The mode @a cue really plays in, in @a list (List default made
      *  Track or Block; a look of a Looks section is always Block, a sub-cue

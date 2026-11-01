@@ -641,7 +641,8 @@ const QList<ShowTree::ResolvedCue> &ReviewContext::resolved(const ShowTree::CueL
 {
     auto it = m_resolved.find(list.id);
     if (it == m_resolved.end())
-        it = m_resolved.insert(list.id, ShowTree::resolve(list, m_doc->showTree()->lineAimTest()));
+        it = m_resolved.insert(list.id, ShowTree::resolve(list, m_doc->showTree()->lineAimTest(), nullptr,
+                                                                   m_doc->showTree()->formationRows()));
     return it.value();
 }
 

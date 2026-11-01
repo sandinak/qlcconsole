@@ -57,6 +57,7 @@ const QString KeyEffectPrefix = QStringLiteral("Effect.");
 const QString KeySpread = QStringLiteral("Position.Spread");
 const QString KeyGrouping = QStringLiteral("Position.Grouping");
 const QString KeyCross = QStringLiteral("Position.Cross");
+const QString KeyFormation = QStringLiteral("Position.Formation");
 
 bool isLineParamKey(const QString &key)
 {
@@ -79,8 +80,8 @@ bool isEffectKey(const QString &key)
    own Colour/Dimmer follow it, which is what makes them its own. */
 static int keyRank(const QString &key)
 {
-    static const QStringList base = { KeyColour, KeyDimmer, KeyPosition, KeySpread, KeyGrouping,
-                                      KeyCross, KeyGobo, KeyZoom, KeyBeam, KeyShutter };
+    static const QStringList base = { KeyColour, KeyDimmer, KeyPosition, KeyFormation, KeySpread,
+                                      KeyGrouping, KeyCross, KeyGobo, KeyZoom, KeyBeam, KeyShutter };
     static const QStringList effects = { QStringLiteral("Color"), QStringLiteral("Dimmer"),
                                          QStringLiteral("Position"), QStringLiteral("Beam"),
                                          QStringLiteral("Other") };
@@ -115,6 +116,8 @@ QString keyLabel(const QString &key)
         return QStringLiteral("Grouping");
     if (key == KeyCross)
         return QStringLiteral("Cross");
+    if (key == KeyFormation)
+        return QStringLiteral("Formation");
     if (isEffectKey(key))
     {
         const QString kind = key.mid(KeyEffectPrefix.length());
@@ -343,7 +346,8 @@ QList<Look> ResolvedLayer::playedLooks() const
     for (const QString &k : keys)
     {
         const Look &l = values.value(k).look;
-        if (!l.none && !l.palettes.isEmpty())
+        // A Formation plays through the rows it sets, not as a look.
+        if (!l.none && !l.palettes.isEmpty() && k != KeyFormation)
             out << l;
     }
     return out;
@@ -503,12 +507,22 @@ struct Resolver
     const CueList &list;
     LineAimTest isLineAim;
     const QList<ResolvedLayer> *startState;
+    FormationRows formations;
     QVector<ResolvedCue> out;
     QVector<int> state;     // 0 not yet, 1 in progress, 2 done
 
-    Resolver(const CueList &l, const LineAimTest &lineAim, const QList<ResolvedLayer> *s)
-        : list(l), isLineAim(lineAim), startState(s), out(l.cues.count()), state(l.cues.count(), 0)
+    Resolver(const CueList &l, const LineAimTest &lineAim, const QList<ResolvedLayer> *s,
+             const FormationRows &f)
+        : list(l), isLineAim(lineAim), startState(s), formations(f), out(l.cues.count()), state(l.cues.count(), 0)
     {
+    }
+
+    /** What the Formation look @a look (KeyFormation) sets; empty for none. */
+    QList<Look> formationOf(const Look *look) const
+    {
+        if (look == nullptr || look->none || look->palettes.isEmpty() || !formations)
+            return QList<Look>();
+        return formations(look->palettes.first());
     }
 
     void resolveAt(int i)
@@ -682,7 +696,7 @@ struct Resolver
                 if (!child)
                     for (const Look &cl : cue.looks)
                     {
-                        if (isLineParamKey(cl.key))
+                        if (isLineParamKey(cl.key) || cl.key == KeyFormation)
                             continue;                   // below (D18)
                         ResolvedValue v { cl, Origin::CueLook, cue.id };
                         if (isEffectKey(cl.key) || cl.key == KeyPosition)
@@ -691,20 +705,64 @@ struct Resolver
                     }
                 for (const Look &ll : layer.looks)
                     r.values.insert(ll.key, ResolvedValue { ll, Origin::Own, cue.id });
-                // D18: the cue's Spread / Grouping / Cross reach only layers
-                // whose Position, as it resolves here, aims at a line.
+                // A Formation on the layer (Q197): what it sets, under the
+                // layer's own rows.
+                const Look *layerForm = layer.look(KeyFormation);
+                const QList<Look> layerRows = formationOf(layerForm);
+                for (const Look &fl : layerRows)
+                {
+                    if (layer.look(fl.key) != nullptr)
+                        continue;
+                    ResolvedValue v { fl, Origin::Own, cue.id };
+                    v.formation = layerForm->palettes.first();
+                    r.values.insert(fl.key, v);
+                }
+                auto layerSets = [&layer, &layerRows](const QString &key) {
+                    if (layer.look(key) != nullptr)
+                        return true;
+                    for (const Look &fl : layerRows)
+                        if (fl.key == key)
+                            return true;
+                    return false;
+                };
+                // D18: the cue's Spread / Grouping / Cross -- its rows, then
+                // a Formation on it -- reach only layers whose Position, as
+                // it resolves here, aims at a line.
                 if (!child)
                 {
                     const auto pos = r.values.constFind(KeyPosition);
                     const bool line = pos != r.values.constEnd() && !pos.value().look.none
                                       && isLineAim && isLineAim(pos.value().look);
+                    const Look *cueForm = nullptr;
                     for (const Look &cl : cue.looks)
                     {
-                        if (!isLineParamKey(cl.key) || !line || layer.look(cl.key) != nullptr)
+                        if (!line)
+                            break;
+                        if (cl.key == KeyFormation)
+                        {
+                            cueForm = &cl;
+                            if (layerForm == nullptr)
+                            {
+                                ResolvedValue v { cl, Origin::CueLook, cue.id };
+                                v.span = cue.id;
+                                r.values.insert(cl.key, v);
+                            }
+                            continue;
+                        }
+                        if (!isLineParamKey(cl.key) || layerSets(cl.key))
                             continue;
                         ResolvedValue v { cl, Origin::CueLook, cue.id };
                         v.span = cue.id;
                         r.values.insert(cl.key, v);
+                    }
+                    for (const Look &fl : formationOf(cueForm))
+                    {
+                        if (layerSets(fl.key) || cue.look(fl.key) != nullptr)
+                            continue;
+                        ResolvedValue v { fl, Origin::CueLook, cue.id };
+                        v.span = cue.id;
+                        v.formation = cueForm->palettes.first();
+                        r.values.insert(fl.key, v);
                     }
                 }
             }
@@ -859,9 +917,10 @@ QList<quint32> rebakeChain(const CueList &list, quint32 cueId)
     return out;
 }
 
-QList<ResolvedCue> resolve(const CueList &list, const LineAimTest &isLineAim, const QList<ResolvedLayer> *start)
+QList<ResolvedCue> resolve(const CueList &list, const LineAimTest &isLineAim, const QList<ResolvedLayer> *start,
+                           const FormationRows &formations)
 {
-    Resolver r(list, isLineAim, start);
+    Resolver r(list, isLineAim, start, formations);
     for (int i = 0; i < list.cues.count(); ++i)
         r.resolveAt(i);
     // A skipped cue passes on what it was handed: what the cue played
@@ -940,10 +999,10 @@ Stage stageOf(const ResolvedCue &cue)
 }
 
 bool stageDiffers(const CueList &before, const CueList &after, quint32 *cueId, QString *unit, QString *key,
-                  const LineAimTest &isLineAim)
+                  const LineAimTest &isLineAim, const FormationRows &formations)
 {
-    const QList<ResolvedCue> a = resolve(before, isLineAim);
-    const QList<ResolvedCue> b = resolve(after, isLineAim);
+    const QList<ResolvedCue> a = resolve(before, isLineAim, nullptr, formations);
+    const QList<ResolvedCue> b = resolve(after, isLineAim, nullptr, formations);
     for (const ResolvedCue &rb : b)
     {
         Stage sa;

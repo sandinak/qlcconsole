@@ -147,7 +147,7 @@ static void pal01(ReviewContext &ctx, QList<ReviewFinding> &out)
                             continue;
                         for (const Look &la : top.at(a)->looks)
                         {
-                            if (la.key == KeyDimmer || isLineParamKey(la.key))
+                            if (la.key == KeyDimmer || isLineParamKey(la.key) || la.key == KeyFormation)
                                 continue;       // intensity mixes (HTP)
                             const Look *lb = top.at(b)->look(la.key);
                             if (lb == nullptr || lookValue(la) == lookValue(*lb))
@@ -218,7 +218,7 @@ static void pal03(ReviewContext &ctx, QList<ReviewFinding> &out)
                         continue;
                     for (const Look &look : l.looks)
                     {
-                        if (look.none || look.palettes.isEmpty() || isLineParamKey(look.key))
+                        if (look.none || look.palettes.isEmpty() || isLineParamKey(look.key) || look.key == KeyFormation)
                             continue;
                         const QList<quint32> misses = st->lookMisses(l.target, look);
                         if (misses.isEmpty())
@@ -775,7 +775,7 @@ QHash<QPair<quint32, QString>, QPair<QString, QString>> ShowReviewChecks::hitSta
         const QList<quint32> fixtures = ctx.targetFixtures(layer.target);
         for (auto it = layer.values.constBegin(); it != layer.values.constEnd(); ++it)
         {
-            if (it.key() == KeyDimmer || isLineParamKey(it.key()) || it.value().look.none)
+            if (it.key() == KeyDimmer || isLineParamKey(it.key()) || it.key() == KeyFormation || it.value().look.none)
                 continue;
             const QPair<QString, QString> v(lookValue(it.value().look), lookName(ctx, it.value().look));
             for (quint32 fid : fixtures)
