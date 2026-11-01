@@ -115,6 +115,12 @@ private:
      *  every fade twice as fast. */
     void timerTick(bool wakeUniverses = false);
 
+    /** The tests drive ticks by hand; a friend instead of a test-side
+     *  `#define private public`, which breaks standard headers. */
+    friend class PadRun_Test;
+    friend class ShowTree_Test;
+    friend class SpeedMasters_Test;
+
 private:
     /** The timer tick frequency in Hertz */
     static uint s_frequency;

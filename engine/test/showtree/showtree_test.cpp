@@ -24,12 +24,8 @@
 #include <atomic>
 #include <thread>
 
-#define private public
-#define protected public
 #include "mastertimer.h"
 #include "universe.h"
-#undef protected
-#undef private
 #include "showtreecontroller.h"
 #include "showtreecommand.h"
 #include "showcontrol.h"

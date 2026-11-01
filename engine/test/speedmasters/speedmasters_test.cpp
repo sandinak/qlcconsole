@@ -24,9 +24,7 @@
 
 #include <cmath>
 
-#define private public                  // MasterTimer::timerTick()
 #include "mastertimer.h"
-#undef private
 #include "speedmasters.h"
 #include "qlcpalette.h"
 #include "chaserstep.h"
