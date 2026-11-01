@@ -518,7 +518,7 @@ static void cue12(ReviewContext &ctx, QList<ReviewFinding> &out)
             }
             for (const VcWidget &w : ctx.vc().widgets)
             {
-                if (w.id == 0xFFFFFFFF || !w.allFunctions().contains(o.function))
+                if (w.id == 0xFFFFFFFF || w.type == QLatin1String("CueList") || !w.allFunctions().contains(o.function))
                     continue;
                 users << vcWidgetText(w);
                 keys << QStringLiteral("vc:%1").arg(w.id);
@@ -767,7 +767,7 @@ static void cue11(ReviewContext &ctx, QList<ReviewFinding> &out)
 
 /** What a hit puts on stage per fixture and attribute (not intensity, which
  *  mixes): the winning look's value and name. */
-static QHash<QPair<quint32, QString>, QPair<QString, QString>> hitStage(ReviewContext &ctx, const ResolvedCue &rc)
+QHash<QPair<quint32, QString>, QPair<QString, QString>> ShowReviewChecks::hitStage(ReviewContext &ctx, const ShowTree::ResolvedCue &rc)
 {
     QHash<QPair<quint32, QString>, QPair<QString, QString>> stage;
     for (const ResolvedLayer &layer : rc.layers)
@@ -798,7 +798,7 @@ static void vc01(ReviewContext &ctx, QList<ReviewFinding> &out)
             continue;
         QList<QHash<QPair<quint32, QString>, QPair<QString, QString>>> stages;
         for (const ResolvedCue &rc : res)
-            stages << hitStage(ctx, rc);
+            stages << ShowReviewChecks::hitStage(ctx, rc);
         for (int a = 0; a < looks->cues.count(); ++a)
         {
             for (int b = a + 1; b < looks->cues.count(); ++b)

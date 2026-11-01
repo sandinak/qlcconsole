@@ -150,18 +150,27 @@ the same speed (see [Lighting Studio](lighting-studio.md#heads-travel-at-their-r
   base cue that is deleted, skipped or comes after.
 - **CUE-12** After Import in place, a chaser, collection or timeline that
   still plays the original chaser the Show Tree list was made from, or a
-  Virtual Console button, Cue List or slider that runs it.
+  Virtual Console button or slider that runs it (a Cue List widget is VC-09's).
 - **CUE-11** An include that would loop, or an include, reusable or sub-cue
   list pointing at what was deleted.
 - **CUE-13** A cue list nothing can play: it isn't the production's main
   list, no Cue Runner follows it, no VC Cue List or button runs it, and no
   timecode or control-map route reaches it.
 
+- **CUE-15** A cue with sub-cues that wait for Sub GO (a note), when no Cue
+  Runner shows a Sub GO button and no Cue Runner key or input sends it. The
+  keyboard shortcut (Ctrl+Alt+Return) still works, but nothing on the
+  console says so.
+
 **Hits**
 
 - **VC-01** Two hits in the same place that set the same attribute on the
   same lights: whichever was pressed last wins. Accept it when one button
   steps through them.
+- **VC-02** A hit that overrides a wider one (a note): on a button holding
+  hits from several places, the narrowest place that is live fires, so a
+  hit in a cue wins over the same button's hit in the list or the
+  production when both set the same things. It tells you which one fires.
 - **VC-03** A hit no VC button, key or input fires.
 - **VC-04** A button, matrix or playback slider with no function (or a
   deleted one), a level slider on fixtures that were deleted, a Cue List on
@@ -170,12 +179,37 @@ the same speed (see [Lighting Studio](lighting-studio.md#heads-travel-at-their-r
   different pages of one frame), or a key Operate already answers to (the
   GO keys, Space).
 - **VC-06** Two widgets with different jobs on one input control.
+- **VC-07** Widgets listening to an input universe the show has no input
+  patched on (or no controller slot): a controller can never reach them.
+  Counted per universe. From the command line, the file's input patches
+  are what is read.
 - **VC-08** A Cue Runner that follows a deleted cue list, or the current
   production in a show with no cue list.
+- **VC-09** A VC Cue List still on the old chaser after Import in place: it
+  plays a show that no longer matches the Show Tree list. Point it at the
+  list.
 
 The Virtual Console checks read what the console holds, not the console: in
 the app that is the open console, and `--review` reads it from the file, so
 both give the same answer.
+
+**Venues and focus**
+
+- **VEN-01** A focus call with no target, a stage target or scene that was
+  deleted, or no lights left (its groups are gone): Venue focus has nothing
+  to do for it.
+- **VEN-02** Lights in a focus call that can't be aimed (no pan or tilt, and
+  not a light Quick focus can place on the plot): they're left out when it
+  runs. A light off the plot is FIX-05's.
+- **VEN-05** A light the applied venue corrected as another fixture (a lamp
+  swapped for a mover, a new mode): the old correction is left off until
+  it's focused again.
+- **VEN-09** The venue file beside the show (`Show.venues.xml`) can't be read,
+  or is missing while the show has venues or house universes. The show
+  opens without the venues' corrections. From the command line the venue
+  file is read, never applied.
+- **VEN-10** A scramble-practice venue still applied (a warning: the lights
+  are off on purpose), or practice venues and no real one (a note).
 
 **Effects, power and safety**
 

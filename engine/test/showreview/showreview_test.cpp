@@ -57,6 +57,7 @@
 #include "scene.h"
 #include "doc.h"
 #include "movespeed.h"
+#include "stagetarget.h"
 
 using namespace ShowTree;
 
@@ -1366,6 +1367,258 @@ void ShowReview_Test::cue13()
     QVERIFY(quiet("CUE-13"));
 }
 
+void ShowReview_Test::vc02()
+{
+    Fixture *a = par("Par 1", 0);
+    FixtureGroup *g = group("All", { a });
+    QLCPalette *red = colour(Qt::red), *blue = colour(Qt::blue);
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 pid = st->addProduction("Show");
+    const quint32 lid = st->addCueList(pid, "Main");
+    const quint32 cue = st->addCue(lid, -1, "One");
+    const quint32 h1 = st->addLook(pid, "Warm wash");
+    const quint32 h2 = st->addLook(pid, "Solo spot");
+    Target t;
+    t.groups = { g->id() };
+    Look look;
+    look.key = KeyColour;
+    look.palettes = { red->id() };
+    QVERIFY(st->setLayerLook(h1, st->addLayer(h1, t), look));
+    look.palettes = { blue->id() };
+    QVERIFY(st->setLayerLook(h2, st->addLayer(h2, t), look));
+    const QString stab = QStringLiteral("<Button Caption=\"Stab\" ID=\"1\"><Function ID=\"4294967295\" Hit=\"%1\">"
+                                        "<Hit ID=\"%2\"/></Function><Action>Toggle</Action></Button>");
+    console(stab.arg(h1).arg(h2));
+    QVERIFY(quiet("VC-02"));                // the same place: VC-01's
+    QVERIFY(st->setHitScope({ h2 }, HitScope::Cue, cue));
+    QVERIFY(fires("VC-02"));
+    const ReviewFinding f = findings("VC-02").first();
+    QCOMPARE(f.severity, ReviewFinding::Note);
+    QVERIFY(f.message.contains("Solo spot") && f.message.contains("Warm wash") && f.message.contains("Par 1"));
+    // The same hit twice: nothing to choose between.
+    console(stab.arg(h1).arg(h1));
+    QVERIFY(quiet("VC-02"));
+    // Narrower, but on other lights.
+    Fixture *b = par("Par 2", 10);
+    FixtureGroup *g2 = group("Back", { b });
+    t.groups = { g2->id() };
+    const quint32 h3 = st->addLook(pid, "Back wash");
+    look.palettes = { blue->id() };
+    QVERIFY(st->setLayerLook(h3, st->addLayer(h3, t), look));
+    QVERIFY(st->setHitScope({ h3 }, HitScope::Cue, cue));
+    console(stab.arg(h1).arg(h3));
+    QVERIFY(quiet("VC-02"));
+}
+
+void ShowReview_Test::vc07()
+{
+    console(button(1, "Strobe", "1", QString(), inputOf(1, 35))
+            + button(2, "Haze", "2", QString(), inputOf(1, 36)) + button(3, "Fog", "3", QString(), inputOf(0, 5)));
+    ShowReview::Options o;
+    o.outputsLoaded = false;
+    o.universesWithInput = { 0, 1 };
+    QVERIFY(quiet("VC-07", o));
+    o.universesWithInput = { 0 };
+    QVERIFY(fires("VC-07", o));
+    const ReviewFinding f = findings("VC-07", o).first();
+    QVERIFY2(f.message.contains("universe 2") && f.message.contains("Strobe"), qPrintable(f.message));
+    QVERIFY(f.message.contains("2 widget"));
+    QCOMPARE(f.targets, QStringList() << "vc:1" << "vc:2");
+    // With the Doc's own I/O: its universes have no input patched.
+    QVERIFY(fires("VC-07"));
+    // No Virtual Console to ask.
+    m_doc->showReview()->setVcXml(QByteArray());
+}
+
+void ShowReview_Test::vc09()
+{
+    Fixture *a = par("Par 1", 0);
+    Scene *sc = new Scene(m_doc);
+    sc->setName("Wash");
+    sc->setValue(a->id(), 3, 200);
+    m_doc->addFunction(sc);
+    Chaser *chaser = new Chaser(m_doc);
+    chaser->setName("Full Show");
+    m_doc->addFunction(chaser);
+    chaser->addStep(ChaserStep(sc->id(), 0, Function::infiniteSpeed(), 0));
+    chaser->addStep(ChaserStep(sc->id(), 0, Function::infiniteSpeed(), 0));
+    m_doc->showTree()->importInPlace(chaser->id());
+    const QString cues = QStringLiteral("<CueList Caption=\"Act 1\" ID=\"2\"><Chaser>%1</Chaser></CueList>");
+    console(QString());
+    QVERIFY(quiet("VC-09"));
+    console(cues.arg(chaser->id()));
+    QVERIFY(fires("VC-09"));
+    const ReviewFinding f = findings("VC-09").first();
+    QVERIFY2(f.message.contains("Act 1") && f.message.contains("Full Show"), qPrintable(f.message));
+    QVERIFY(f.targets.contains(QStringLiteral("vc:2")));
+    QVERIFY(quiet("CUE-12"));               // the Cue List is VC-09's, not said twice
+    console(cues.arg(chaser->id() + 500));  // another chaser
+    QVERIFY(quiet("VC-09"));
+}
+
+void ShowReview_Test::cue15()
+{
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 pid = st->addProduction("Show");
+    const quint32 lid = st->addCueList(pid, "Main");
+    const quint32 cue = st->addCue(lid, -1, "Chorus");
+    QVERIFY(st->addSubCue(cue, "Flash") != ShowTree::invalidId());
+    const quint32 second = st->addSubCue(cue, "Blackout");
+    QVERIFY(second != ShowTree::invalidId());
+    st->setSubCueFollow(second, false, 0);       // on Sub GO, as a new sub-cue is
+    console(QString());
+    QVERIFY(fires("CUE-15"));
+    const ReviewFinding f = findings("CUE-15").first();
+    QCOMPARE(f.severity, ReviewFinding::Note);
+    QVERIFY2(f.message.contains("Chorus") && f.message.contains("1 sub-cue"), qPrintable(f.message));
+    // A Cue Runner shows Sub GO unless it is turned off.
+    console(QStringLiteral("<CueRunner Caption=\"Main GO\" ID=\"1\"/>"));
+    QVERIFY(quiet("CUE-15"));
+    console(QStringLiteral("<CueRunner Caption=\"Main GO\" ID=\"1\" SubGo=\"0\"/>"));
+    QVERIFY(fires("CUE-15"));
+    console(QStringLiteral("<CueRunner Caption=\"Main GO\" ID=\"1\" SubGo=\"0\"><SubGo><Key>J</Key></SubGo></CueRunner>"));
+    QVERIFY(quiet("CUE-15"));
+    // The second sub-cue follows by itself: nothing waits for Sub GO.
+    console(QString());
+    QVERIFY(st->setSubCueFollow(second, true, 500));
+    QVERIFY(quiet("CUE-15"));
+}
+
+/****************************************************************************
+ * Venues and focus
+ ****************************************************************************/
+
+void ShowReview_Test::ven01()
+{
+    Fixture *a = par("Par 1", 0);
+    FixtureGroup *g = group("Spots", { a });
+    FocusCalls *calls = m_doc->programmer()->focusCalls();
+    QVERIFY(quiet("VEN-01"));               // no calls
+    StageTarget *dsc = m_doc->monitorProperties()->addStageTarget();
+    dsc->setName("DSC");
+    FocusCall call;
+    call.groups = { g->id() };
+    calls->append(call);
+    QVERIFY(fires("VEN-01"));               // no target
+    QVERIFY(findings("VEN-01").first().message.contains("no target"));
+    call.target.kind = FocusSession::Reference::Target;
+    call.target.id = dsc->id() + 40;
+    QVERIFY(calls->replace(0, call));
+    QVERIFY(fires("VEN-01"));               // a target that was deleted
+    QVERIFY(findings("VEN-01").first().message.contains("deleted"));
+    call.target.id = dsc->id();
+    QVERIFY(calls->replace(0, call));
+    QVERIFY(quiet("VEN-01"));
+    call.groups = { g->id() + 40 };
+    QVERIFY(calls->replace(0, call));
+    QVERIFY(fires("VEN-01"));               // its group is gone
+}
+
+void ShowReview_Test::ven02()
+{
+    Fixture *a = par("Par 1", 0);
+    QLCFixtureDef *def = new QLCFixtureDef();
+    QLCChannel *fan = chan(def, "Fan", QLCChannel::Custom);
+    fan->setGroup(QLCChannel::Nothing);     // nothing that makes light
+    Fixture *haze = make(m_doc, "Hazer", "Haze", QLCFixtureDef::Smoke, def, { fan }, 500, 0, 40);
+    QVERIFY(haze != nullptr);
+    FixtureGroup *g = group("Rig", { a, haze });
+    MonitorProperties *mp = m_doc->monitorProperties();
+    mp->setFixtureProperties(a->id(), FixturePreviewItem());
+    mp->setFixtureProperties(haze->id(), FixturePreviewItem());
+    StageTarget *dsc = mp->addStageTarget();
+    FocusCall call;
+    call.groups = { g->id() };
+    call.target.kind = FocusSession::Reference::Target;
+    call.target.id = dsc->id();
+    m_doc->programmer()->focusCalls()->append(call);
+    QVERIFY(fires("VEN-02"));               // a hazer can't be aimed
+    const ReviewFinding f = findings("VEN-02").first();
+    QVERIFY2(f.message.contains("Hazer") && !f.message.contains("Par 1"), qPrintable(f.message));
+    // A light off the plot is FIX-05's to say.
+    mp->setFixtureProperties(a->id(), FixturePreviewItem());
+    FixtureGroup *g2 = group("Lonely", { a });
+    call.groups = { g2->id() };
+    QVERIFY(m_doc->programmer()->focusCalls()->replace(0, call));
+    QVERIFY(quiet("VEN-02"));               // a par on the plot: a fixed light Quick focus places
+    QVERIFY(m_doc->programmer()->focusCalls()->remove(0));
+    QVERIFY(quiet("VEN-02"));
+}
+
+void ShowReview_Test::ven05()
+{
+    Fixture *a = par("Par 1", 0);
+    VenueCorrections *v = m_doc->programmer()->venueCorrections();
+    QVERIFY(m_dir.isValid());
+    v->setShowFile(QDir(m_dir.path()).filePath("Tour.qlcc"), false);
+    const QString venue = v->addVenue(QStringLiteral("Lincoln HS"));
+    QVERIFY(quiet("VEN-05"));               // no venue applied
+    QVERIFY(v->setActiveVenue(venue));
+    MonitorProperties *mp = m_doc->monitorProperties();
+    FixtureRigProps rp = mp->fixtureRigProps(a->id());
+    rp.panOffsetDeg = 3.0f;
+    mp->setFixtureRigProps(a->id(), rp);
+    QVERIFY(v->record(a->id()));
+    QVERIFY(v->hasCorrection(a->id()));
+    QVERIFY(quiet("VEN-05"));               // still the light that was focused
+    const_cast<QLCFixtureDef *>(a->fixtureDef())->setModel(QStringLiteral("ADJ Focus Spot"));
+    QVERIFY(fires("VEN-05"));
+    const ReviewFinding f = findings("VEN-05").first();
+    QCOMPARE(f.severity, ReviewFinding::Warning);
+    QVERIFY2(f.message.contains("Par 1") && f.message.contains("Lincoln HS") && f.message.contains("ADJ Focus Spot"),
+             qPrintable(f.message));
+    QVERIFY(v->setActiveVenue(QString()));
+    QVERIFY(quiet("VEN-05"));
+}
+
+void ShowReview_Test::ven09()
+{
+    par("Par 1", 0);
+    VenueCorrections *v = m_doc->programmer()->venueCorrections();
+    QVERIFY(m_dir.isValid());
+    QVERIFY(quiet("VEN-09"));               // the show isn't saved: no file to miss
+    v->setShowFile(QDir(m_dir.path()).filePath("Tour.qlcc"), false);
+    QVERIFY(quiet("VEN-09"));               // no venues, no file, nothing needs it
+    v->addVenue(QStringLiteral("Lincoln HS"));
+    QVERIFY2(QFileInfo::exists(v->filePath()), "a venue is written the moment it is made");
+    QVERIFY(quiet("VEN-09"));
+    QVERIFY(QFile::remove(v->filePath()));
+    QVERIFY(fires("VEN-09"));
+    QVERIFY(findings("VEN-09").first().message.contains("Tour.venues.xml"));
+    QVERIFY(v->save());
+    QVERIFY(quiet("VEN-09"));
+    QFile f(v->filePath());
+    QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    f.write("<Venues Show=\"Tour.qlcc\"><Venue Name=\"x\"");
+    f.close();
+    QVERIFY(fires("VEN-09"));
+    QVERIFY(findings("VEN-09").first().message.contains("can't be read"));
+}
+
+void ShowReview_Test::ven10()
+{
+    Fixture *m = mover("Spot 1", 0);
+    VenueCorrections *v = m_doc->programmer()->venueCorrections();
+    QVERIFY(m_dir.isValid());
+    v->setShowFile(QDir(m_dir.path()).filePath("Tour.qlcc"), false);
+    QVERIFY(quiet("VEN-10"));
+    QVERIFY(v->setActiveVenue(v->addVenue(QStringLiteral("Lincoln HS"))));
+    m_doc->monitorProperties()->setFixtureProperties(m->id(), FixturePreviewItem());
+    m_doc->teachingSettings()->setEnabled(true);
+    QString why;
+    const QString practice = v->startPractice({ m->id() }, 7, 2.0f, 8.0f, &why);
+    QVERIFY2(!practice.isEmpty(), qPrintable(why));
+    QVERIFY(fires("VEN-10"));
+    const ReviewFinding f = findings("VEN-10").first();
+    QCOMPARE(f.severity, ReviewFinding::Warning);
+    QVERIFY(f.message.contains(practice));
+    QVERIFY(v->endPractice());
+    QVERIFY(quiet("VEN-10"));               // ended, and a real venue exists
+    QVERIFY(v->removeVenue(QStringLiteral("Lincoln HS")));
+    QVERIFY(fires("VEN-10"));               // a practice left, and no real venue
+    QCOMPARE(findings("VEN-10").first().severity, ReviewFinding::Note);
+}
+
 void ShowReview_Test::cue12Vc()
 {
     Fixture *a = par("Par 1", 0);
@@ -1595,6 +1848,32 @@ void ShowReview_Test::cli()
     QVERIFY2(text.contains("VC-04") && text.contains("Haze on"), qPrintable(text));
     text.clear();
     QCOMPARE(ShowReviewCli::run({ "--review", broken, "--check", "VC-*" }, out, err, false), int(ShowReviewCli::Clean));
+
+    // A button listening to an input the file doesn't patch (VC-07), and a
+    // venue file beside the show that can't be read (VEN-09).
+    const QString withInput = QDir(m_dir.path()).filePath("input.qxw");
+    {
+        QString xml = saveShow();
+        xml.replace(QStringLiteral("</Workspace>"),
+                    QStringLiteral("<VirtualConsole><Frame Caption=\"\">") + button(1, "Strobe", "1", QString(), inputOf(2, 3))
+                    + QStringLiteral("</Frame></VirtualConsole></Workspace>"));
+        QFile f(withInput);
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write(xml.toUtf8());
+    }
+    text.clear();
+    QCOMPARE(ShowReviewCli::run({ "--review", withInput, "--check", "VC-07" }, out, err, false), int(ShowReviewCli::Warnings));
+    QVERIFY2(text.contains("universe 3"), qPrintable(text));
+    text.clear();
+    QCOMPARE(ShowReviewCli::run({ "--review", withInput, "--check", "VEN-*" }, out, err, false), int(ShowReviewCli::Clean));
+    {
+        QFile f(VenueCorrections::sidecarPath(withInput));
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write("<Venues Show=\"input.qxw\"><Venue");
+    }
+    text.clear();
+    QCOMPARE(ShowReviewCli::run({ "--review", withInput, "--check", "VEN-*" }, out, err, false), int(ShowReviewCli::Warnings));
+    QVERIFY2(text.contains("VEN-09"), qPrintable(text));
 
     char prog[] = "qlcconsole", rev[] = "--review", file[] = "x.qxw", other[] = "-o";
     char *yes[] = { prog, rev, file };

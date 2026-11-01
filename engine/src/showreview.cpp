@@ -74,6 +74,7 @@ const QList<ShowReview::Check> &ShowReview::catalog()
         c += ShowReviewChecks::moveChecks();
         c += ShowReviewChecks::treeChecks();
         c += ShowReviewChecks::vcChecks();
+        c += ShowReviewChecks::venueChecks();
         return c;
     }();
     return all;
@@ -615,6 +616,14 @@ bool ReviewContext::universeHasOutput(quint32 u) const
         return m_options.universesWithOutput.contains(u);
     InputOutputMap *io = m_doc->inputOutputMap();
     return u < io->universesCount() && io->outputPatchesCount(u) > 0;
+}
+
+bool ReviewContext::universeHasInput(quint32 u) const
+{
+    if (!m_options.outputsLoaded)
+        return m_options.universesWithInput.contains(u);
+    InputOutputMap *io = m_doc->inputOutputMap();
+    return u < io->universesCount() && (io->inputPatch(u) != nullptr || !io->inputSlot(u).isEmpty());
 }
 
 bool ReviewContext::anyOutput() const

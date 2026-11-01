@@ -702,10 +702,10 @@ show); `qlcconsole --review show.qlcc` (text / JSON, `--min`, `--check`,
 writes the show, no plugins); the **Review** footer chip and panel (Fix,
 Accept…, Reopen, Why?, Turn Check Off…, Open/Accepted/All, search), also from
 the Show readiness dialog; the footer's design entries shown under their
-catalog id there and folded into the panel (FTR). 50 checks: PAT-01/02/03/04/05/06,
+catalog id there and folded into the panel (FTR). 59 checks: PAT-01/02/03/04/05/06,
 FIX-01/02/05/07/08/14, FX-02/03/07, PWR-01/03/05/06/09, FILE-01/02/03,
-NAME-01/02, PAL-01/02/03/05, CUE-01/02/03/04/05/06/07/08/11/12/13, VC-01/03/04/05/06/08,
-TEACH-01, MOV-01/02/08 (realistic move speed,
+NAME-01/02, PAL-01/02/03/05, CUE-01/02/03/04/05/06/07/08/11/12/13/15, VC-01/02/03/04/05/06/07/08/09,
+VEN-01/02/05/09/10, TEACH-01, MOV-01/02/08 (realistic move speed,
 2026-10-31: `engine/src/movespeed.*`; the VC ones read the VcIndex, `engine/src/vcindex.*`); each with a trip and a
 near-miss test (ShowReview_Test; a registry test fails a check with neither).
 A full run on DanceHysteria-0.6 is 140 ms (Debug).
@@ -740,15 +740,21 @@ Left: MOV-03/04/05 (need cue-level position timing and the house zone); the
 2D plot still snaps; a per-fixture speed override.
 
 Leftovers of v1:
-- v1 checks not built: VEN-01, VEN-02, VEN-05,
-  VEN-09, VEN-10, FX-01 (with the Pi 5 cost table
-  and a plays-on setting).
+- v1 check not built: FX-01 (needs the plays-on setting and a per-script
+  cost table per platform, measured on each target; not cheap). Built since
+  (rev3, 2026-10-31): VEN-01/02/05/09/10, VC-02/07/09, CUE-15. Decided (can
+  change): VEN-09 fires for an unreadable venue file, or a missing one when
+  the show has venues or House universe slots (the show file itself never
+  says a venue is applied); the CLI loads the venue file beside the show
+  without applying it (`VenueCorrections::loadForReview`); CUE-15 doesn't
+  count Operate's own Sub GO key (nothing on the console shows it), so it is
+  a note; VC-09 owns Cue List widgets on an imported chaser and CUE-12 no
+  longer says them twice; VC-02 only reads buttons holding both hits.
 - VcIndex (done, vcx, 2026-10-31): one reader of the `<VirtualConsole>`
   element in the engine; the app saves the live console into memory and
   reads it back, `--review` reads the file, so they can't differ (decided,
   can change: not two fillers tested against each other, §5.3). VC-03/04/05/
-  06/08 and CUE-13 on it, CUE-12's VC buttons, AI Assist `unused`. Open:
-  VC-02, VC-07, VC-09, CUE-15 (they also read the index); show-control and
+  06/08 and CUE-13 on it, CUE-12's VC buttons, AI Assist `unused`. Show-control and
   OSC routes don't count for CUE-13 yet.
 - Built after v1 (rev2, 2026-10-31): TEACH-01, PWR-09 (lasers and star
   fields into the audience; decided: no audience area is modelled, so the

@@ -94,6 +94,15 @@ private slots:
     void vc06();
     void vc08();
     void cue13();
+    void vc02();
+    void vc07();
+    void vc09();
+    void cue15();
+    void ven01();
+    void ven02();
+    void ven05();
+    void ven09();
+    void ven10();
     /** CUE-12's Virtual Console button */
     void cue12Vc();
 
