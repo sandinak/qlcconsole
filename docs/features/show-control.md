@@ -113,7 +113,10 @@ While walking:
 | Xbox | PlayStation | Does |
 |---|---|---|
 | RT / LT | R2 / L2 | next / previous cue. In Design it is previewed, never a GO |
-| RB / LB | R1 / L1 | next / previous layer ("Layer 2 of 4: Movers.") |
+| RB / tap LB | R1 / tap L1 | next / previous layer ("Layer 2 of 4: Movers."). LB steps on its release, because it is also the modifier |
+| hold LB + LT / RT | hold L1 + L2 / R2 | **level** of the walked layer, group or fixture, down / up. Pull harder to go faster. Let go of the trigger and the voice says the level ("Level 60%.") |
+| hold LB + sticks | hold L1 + sticks | **the light itself**: turn the picked light on its target (below) |
+| hold LB + A | hold L1 + Cross | keep the light itself |
 | View | Create | **solo** the layer, or play the whole cue again |
 | View + B | Create + Circle | undo the last keep or tag |
 | tap Y | tap Triangle | the scope: layer, group, fixture (the bumpers then step groups or fixtures) |
@@ -121,8 +124,43 @@ While walking:
 | Menu | Options | stop walking (back to the Run map) |
 
 The sticks, the D-pad, A (keep), B (back to the cue), X, LS and RS do what
-they do in [Focus this cue](refine.md). Position, zoom, focus, colour and gobo can be changed. Every keep
+they do in [Focus this cue](refine.md). Position, zoom, focus, level, colour and gobo can be changed. Every keep
 is one Show Tree step, so undo takes it back here or on the laptop.
+
+#### Level
+
+Hold LB and pull LT to bring the level down, RT to bring it up. A full
+pull moves half the range a second. The change starts from what the cue
+gives it, shows on the rig at once, and A keeps it in the cue as the
+layer's own intensity (at Group or Fixture scope, an exception), the same
+as a zoom or a colour. One level for the scope: a fan in the old
+intensity is not kept.
+
+#### Zero a light on its target
+
+A light that is twisted on its mount misses its target in every cue that
+aims it there. Fix it once, from the stage:
+
+1. Walk to a cue that aims the light at a target (an Aim position).
+2. Tap Y until the voice names the light (Fixture scope).
+3. Hold LB and move the sticks until the beam sits on the target. The
+   left stick is coarse, the right stick fine.
+4. Still holding LB, press A to keep it.
+
+This moves the light's own calibration, not the cue. Every cue that aims
+it at a target uses the new aim. It goes where [Venue focus](focus-calls.md)
+saves its corrections: into the venue that is applied, or into the show's
+own calibration when no venue is. Keeping it is one Show Tree step, so
+View + B (or undo on the laptop) puts the light back.
+
+- Without LB the sticks still do what Focus this cue does. On a layer
+  aimed at a target they are refused, and the voice says to pick the
+  light and hold LB.
+- At Layer or Group scope the light itself is refused ("Pick the light
+  first"), and on a light this cue doesn't aim at a target too.
+- B, or leaving the cue, puts a light not kept back where it was.
+- **In Operate** it follows the quiet Refine rules: only while the cue
+  runs. When GO moves on, it is refused, because nothing is sent.
 
 - **Solo** plays only the walked layer and its exception layers, as the cue
   plays them. A light that a higher layer takes over stays dark. The solo
@@ -143,6 +181,9 @@ the buttons, the same on both kinds of pad.
 decided (can change): Menu enters and leaves the walk. View solos, so the
 undo moves to View + B. A tap of Y is still the scope and a hold tags.
 Solo is for Design only. A cue with nothing to walk is passed over.
+Hold LB is the modifier for level and for the light itself, so a tap of LB
+steps back a layer when it is let go. The sticks without LB stay the cue's.
+The light itself works on one light at a time, at Fixture scope.
 
 ## Sub-cues
 

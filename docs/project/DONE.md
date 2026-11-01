@@ -284,6 +284,32 @@ in by OSC/MSC is not echoed back; the MIDI output and OSC line are named, not
 numbered. Tests: `ShowControl_Test` (exact bytes through a fake sender: GO,
 unnumbered cue, disabled, nothing found, no echo, save/load) and
 `OSC_Test::aShowControlPacketLeavesTheLineToTheTarget` (a loopback UDP socket).
+### 2026-11-01 — Walk the show: level and the light itself *(feat/05-walk-leftovers, 0.4, Q192, walk2)*
+
+Hold LB while walking is the modifier (`PadRun::handleWalk()`: LB acts on
+its release as the previous layer only when nothing was done with it; the
+both-bumpers chord calls `PadRun::bumperChord()`). LB + LT / RT drive
+`RefineSession::nudgeLevel()` from `walkTick()` (`levelRate()` 127.5/s at
+full pull, said "Level 60%." on letting go): a new `Edit::hasLevel`,
+previewed as a Dimmer palette would play it, kept as an inline Dimmer look
+on the layer or exception (X clears it with the beam page). LB + sticks
+switch `RefineSession::setLightMode()` so `tick()` calls `nudgeLight()`:
+Fixture scope, a light whose position look in the cue is an Aim palette,
+not blind (Operate: cue running); it moves `FixtureRigProps` pan / tilt
+offset live (AimSolver re-aims every Aim look), the light held from
+`VenueCorrections` record-on-change and its base ensured, as Focus mode
+does. `keepLight()` (LB + A, or A when only it is pending) is one Show
+Tree step: `beginBatch` / `noteChangeOutsideTree` / `endBatch` with the
+calibration attached (`attachToLastStep`, before / after), then
+`VenueCorrections::record()` + `markChecked()` with a venue applied, else
+the show's own calibration (saved in the show file). B / stop put a light
+not kept back. Refusals said once while held (`refuseOnce()`, 3 s).
+Tests: engine/test/padrun `levelFromTheTriggers` (Xbox and a DualSense
+channel order), `theLightItselfOnItsTarget` (a second cue's own Aim
+palette moves Front 1 only, View + B, redo, save / load),
+`theLightItselfIsRefused`, `theLightItselfGoesIntoTheVenue` (sidecar,
+base untouched, undo drops the correction). Not on a hot path.
+
 ### 2026-10-31 — Walk the show from the stage with the controller, MVP *(feat/04-walk-the-show, 0.4, Q192, walk)*
 
 Menu in the pad's Run role (`PadRun::Walk`) starts `RefineSession` on the

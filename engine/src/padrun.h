@@ -58,7 +58,12 @@ class Doc;
  *
  *   RT / LT      next / previous cue (Design: previewed, never a GO)
  *   RB / LB      next / previous layer (at Group or Fixture scope: the
- *                groups or fixtures, as in Focus this cue)
+ *                groups or fixtures, as in Focus this cue); LB on its
+ *                release, as it is also the modifier:
+ *   hold LB + RT / LT   level up / down (this cue, A keeps)
+ *   hold LB + sticks    the light itself on its target (Fixture scope, a
+ *                       light the cue aims): its calibration, used by every
+ *                       cue aimed with it; hold LB + A keeps it
  *   View         solo the layer / the whole cue (Design)
  *   View + B     undo the last keep or tag
  *   tap Y        the scope: layer, group, fixture
@@ -148,6 +153,9 @@ public:
     static QStringList walkMapLines(PadNames::Family family);
     /** How long Y is held to tag a cue, seconds. */
     static constexpr double tagHoldSeconds() { return 0.8; }
+    /** Level from the triggers with LB held: 0..255 a second at full pull
+     *  (half the range a second). */
+    static constexpr float levelRate() { return 127.5f; }
 
     /** The light bar while armed, and its flash when a GO went. Colour-blind
      *  safe with each other: orange and blue. */
@@ -232,8 +240,13 @@ public:
     /** A pad control while walking, from ProgrammerController's routing
      *  (Focus this cue owns the rest): true when the walking map took it. */
     bool handleWalk(GamepadRole::Role role, uchar value);
-    /** The controller tick while walking: the hold of Y. */
+    /** The controller tick while walking: the hold of Y, the level. */
     void walkTick(double dt);
+    /** LB is held as the walk's modifier (level, the light itself). */
+    bool isModifierHeld() const { return m_lbHeld; }
+    /** Both bumpers made a chord (the next change not kept): LB was not a
+     *  tap, so its release steps nothing. */
+    void bumperChord() { m_lbUsed = true; }
 
 signals:
     void enabledChanged(bool on);
@@ -256,6 +269,8 @@ private:
     void walkStarted();
     void walkEnded();
     bool refuseWalk(const QString &reason, QString *why = nullptr);
+    /** LB let go (or the walk changed): the modifier off, the level said. */
+    void releaseModifier();
     QString cueLabel(quint32 cueId) const;
 
 private:
@@ -276,6 +291,15 @@ private:
     bool m_solo = false;
     ControllerScheme::TriggerButton m_walkRt, m_walkLt;
     ControllerScheme::LongPress m_holdY { tagHoldSeconds() };
+    /** LB held as the modifier, and whether anything was done with it (a
+     *  tap of LB alone steps back a layer on its release). */
+    bool m_lbHeld = false;
+    bool m_lbUsed = false;
+    int m_lightAsksAt = 0;
+    /** The triggers' pull while LB is held, 0..1, and a level moved. */
+    float m_levelUp = 0.0f;
+    float m_levelDown = 0.0f;
+    bool m_levelMoved = false;
 };
 
 /** @} */

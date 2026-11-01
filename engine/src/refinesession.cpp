@@ -21,6 +21,8 @@
 #include <algorithm>
 
 #include "showtreecontroller.h"
+#include "monitorproperties.h"
+#include "venuecorrections.h"
 #include "inputoutputmap.h"
 #include "paletteops.h"
 #include "function.h"
@@ -43,6 +45,27 @@ const quint32 kInvalid = 0xFFFFFFFF;
 bool isPositionType(QLCPalette::PaletteType t)
 {
     return t == QLCPalette::PanTilt || t == QLCPalette::Pan || t == QLCPalette::Tilt;
+}
+
+// The offset fields' own range, and their two places (as Focus mode keeps them).
+const float kPanOffsetLimit = 720.0f;
+const float kTiltOffsetLimit = 360.0f;
+
+float roundOffset(float v)
+{
+    return float(qRound(double(v) * 100.0) / 100.0);
+}
+
+/** The channel a level goes on, as a Dimmer palette finds it: the master
+ *  intensity (a dimmer's first), else the first head's dimmer. */
+quint32 levelChannel(const Fixture *fx)
+{
+    if (fx == nullptr || fx->fixtureMode() == nullptr)
+        return QLCChannel::invalid();
+    quint32 ch = fx->type() == QLCFixtureDef::Dimmer ? 0 : fx->masterIntensityChannel();
+    if (ch == QLCChannel::invalid() && fx->heads() > 0)
+        ch = fx->channelNumber(QLCChannel::Intensity, QLCChannel::MSB, 0);
+    return ch;
 }
 
 int focusChannel(const Fixture *fx, bool *reversed)
@@ -178,6 +201,10 @@ void RefineSession::stop()
 {
     if (!m_active)
         return;
+    // The light itself not kept goes back (never left moved in the rig).
+    revertLight();
+    m_lightMode = false;
+    m_lastRefusal.clear();
     m_active = false;
     m_edits.clear();
     m_editOrder.clear();
@@ -697,7 +724,10 @@ bool RefineSession::nudgePosition(float dPan, float dTilt)
                     if (!isPositionType(p->type()))
                     {
                         if (!m_edits.contains(editKey()))
-                            warn(tr("This layer is aimed at a target. Focus a fixture, or move the target."));
+                            refuseOnce(m_walking
+                                ? PadNames::expand(tr("This layer is aimed at a target. Focus a fixture, or move the target; "
+                                                      "to zero a light on it, pick the light and hold {LB}."), m_padFamily)
+                                : tr("This layer is aimed at a target. Focus a fixture, or move the target."));
                         return false;
                     }
         Edit &e = edit();
@@ -882,8 +912,259 @@ bool RefineSession::pendingFocus(quint32 fid, int &value) const
     return found;
 }
 
+bool RefineSession::pendingLevel(quint32 fid, int &value) const
+{
+    bool found = false;
+    for (const QString &k : m_editOrder)
+        if (m_edits[k].hasLevel && m_edits[k].fixtures.contains(fid))
+        {
+            value = qRound(m_edits[k].level);
+            found = true;
+        }
+    return found;
+}
+
+bool RefineSession::nudgeLevel(float dLevel)
+{
+    const QList<quint32> fixtures = scopeFixtures();
+    if (!m_active || m_holding || fixtures.isEmpty() || dLevel == 0.0f)
+        return false;
+    if (m_sceneMode)
+    {
+        refuseOnce(tr("Level is set in the Build scene's own values."));
+        return false;
+    }
+    quint32 first = kInvalid;
+    for (quint32 fid : fixtures)
+        if (levelChannel(m_doc->fixture(fid)) != QLCChannel::invalid())
+        {
+            first = fid;
+            break;
+        }
+    if (first == kInvalid)
+    {
+        refuseOnce(tr("No dimmer here."));
+        return false;
+    }
+    Edit &e = edit();
+    if (!e.hasLevel)
+    {
+        // From what the cue gives it: its Dimmer look, else what it is at.
+        int from = -1;
+        if (const ShowTree::Look *look = lookFor(first, ShowTree::KeyDimmer))
+            if (const QLCPalette *p = m_doc->palette(look->palettes.value(0, kInvalid)))
+                if (p->type() == QLCPalette::Dimmer)
+                    from = p->value().toInt();
+        if (from < 0)
+            from = cueLevel(first, levelChannel(m_doc->fixture(first)));
+        e.level = float(qBound(0, from, 255));
+        e.hasLevel = true;
+    }
+    const float was = e.level;
+    e.level = qBound(0.0f, e.level + dLevel, 255.0f);
+    if (e.level == was)
+        return false;
+    m_lastRefusal.clear();
+    rebuildWrites();
+    emit changed();
+    return true;
+}
+
+QString RefineSession::levelPhrase() const
+{
+    const auto it = m_edits.constFind(editKey());
+    if (!m_active || it == m_edits.constEnd() || !it->hasLevel)
+        return QString();
+    return tr("Level %1%.").arg(qRound(it->level * 100.0f / 255.0f));
+}
+
+void RefineSession::refuseOnce(const QString &text)
+{
+    /* Asked on every controller tick while a stick or trigger is held: said
+       once, again only after a pause of it (or another refusal). */
+    const bool repeat = text == m_lastRefusal && m_refusalClock.isValid()
+                        && m_refusalClock.elapsed() < 3000;
+    m_refusalClock.start();
+    if (repeat)
+        return;
+    m_lastRefusal = text;
+    warn(text);
+}
+
+void RefineSession::setVenues(VenueCorrections *venues)
+{
+    m_venues = venues;
+}
+
+void RefineSession::setLightMode(bool on)
+{
+    if (on == m_lightMode)
+        return;
+    m_lightMode = on;
+    m_lastRefusal.clear();
+}
+
+quint32 RefineSession::lightFixture(QString *why) const
+{
+    auto refuse = [why](const QString &reason) {
+        if (why != nullptr)
+            *why = reason;
+        return kInvalid;
+    };
+    if (!m_active)
+        return refuse(QString());
+    if (m_sceneMode)
+        return refuse(tr("A light is zeroed on its target from a Show Tree cue."));
+    // Quiet Refine (Q130): in Operate only while its cue runs.
+    if (isBlind())
+        return refuse(tr("Cue %1 is not running: nothing is sent.").arg(cueNumber()));
+    if (m_scope != FixtureScope)
+        return refuse(PadNames::expand(tr("Pick the light first: tap {Y} to a fixture."), m_padFamily));
+    const quint32 fid = currentFixture();
+    const Fixture *fx = m_doc->fixture(fid);
+    if (fx == nullptr)
+        return refuse(QString());
+    if (hasLightPending() && m_light.fid != fid)
+    {
+        const Fixture *other = m_doc->fixture(m_light.fid);
+        return refuse(PadNames::expand(tr("Keep %1 first ({LB} + {A}), or put it back ({B})."), m_padFamily)
+                      .arg(other != nullptr ? other->name() : QString()));
+    }
+    bool aimed = false;
+    if (const ShowTree::Look *look = lookFor(fid, ShowTree::KeyPosition))
+        for (quint32 pid : look->palettes)
+            if (const QLCPalette *p = m_doc->palette(pid))
+                aimed = aimed || p->type() == QLCPalette::Aim;
+    if (!aimed)
+        return refuse(tr("%1 is not aimed at a target in this cue: a light is zeroed on a target.")
+                      .arg(fx->name()));
+    return fid;
+}
+
+bool RefineSession::nudgeLight(float dPan, float dTilt)
+{
+    if (!m_active || m_holding || (dPan == 0.0f && dTilt == 0.0f))
+        return false;
+    ++m_lightAsks;
+    QString why;
+    const quint32 fid = lightFixture(&why);
+    if (fid == kInvalid)
+    {
+        if (!why.isEmpty())
+            refuseOnce(why);
+        return false;
+    }
+    MonitorProperties *props = m_doc->monitorProperties();
+    if (props == nullptr)
+        return false;
+    FixtureRigProps rp = props->fixtureRigProps(fid);
+    const float pan = roundOffset(qBound(-kPanOffsetLimit, rp.panOffsetDeg + dPan, kPanOffsetLimit));
+    const float tilt = roundOffset(qBound(-kTiltOffsetLimit, rp.tiltOffsetDeg + dTilt, kTiltOffsetLimit));
+    if (pan == rp.panOffsetDeg && tilt == rp.tiltOffsetDeg)
+        return false;
+    if (!hasLightPending())
+    {
+        /* As Focus mode does: the show's own calibration held first, and the
+           light held from the venue's record-on-change -- a live nudge is
+           not a correction until it is kept. */
+        if (!m_venues.isNull() && m_venues->isActive())
+            m_venues->ensureBase(fid);
+        m_light.fid = fid;
+        m_light.before = RigCalibration::of(rp);
+        if (!m_venues.isNull())
+            m_venues->setHeld({ fid });
+    }
+    rp.panOffsetDeg = pan;
+    rp.tiltOffsetDeg = tilt;
+    props->setFixtureRigProps(fid, rp);
+    m_lastRefusal.clear();
+    rebuildWrites();
+    emit changed();
+    return true;
+}
+
+void RefineSession::revertLight()
+{
+    if (!hasLightPending())
+        return;
+    const LightEdit was = m_light;
+    m_light = LightEdit();
+    if (MonitorProperties *props = m_doc->monitorProperties())
+    {
+        FixtureRigProps rp = props->fixtureRigProps(was.fid);
+        was.before.applyTo(rp);
+        props->setFixtureRigProps(was.fid, rp);     // still held: not recorded
+    }
+    if (!m_venues.isNull())
+        m_venues->setHeld(QList<quint32>());
+    rebuildWrites();
+    emit changed();
+}
+
+bool RefineSession::keepLight(QString *why)
+{
+    MonitorProperties *props = m_doc != nullptr ? m_doc->monitorProperties() : nullptr;
+    if (!m_active || !hasLightPending() || props == nullptr)
+        return false;
+    const quint32 fid = m_light.fid;
+    const RigCalibration before = m_light.before;
+    const RigCalibration after = RigCalibration::of(props->fixtureRigProps(fid));
+    m_light = LightEdit();
+    if (!m_venues.isNull())
+        m_venues->setHeld(QList<quint32>());
+    const Fixture *fx = m_doc->fixture(fid);
+    const QString name = fx != nullptr ? fx->name() : QString();
+    if (after == before)
+    {
+        rebuildWrites();
+        emit changed();
+        confirm(tr("%1 as it was.").arg(name));
+        return false;
+    }
+    const bool toVenue = !m_venues.isNull() && m_venues->isActive();
+    /* One Show Tree step: the tree is as it was, the calibration is the
+       change, carried by the step (View + B, the tab's undo). */
+    ShowTreeController *st = m_doc->showTree();
+    st->beginBatch(tr("Zero %1 on its target").arg(name));
+    st->noteChangeOutsideTree();
+    st->endBatch(true);
+    Doc *doc = m_doc;
+    const QPointer<VenueCorrections> venues = m_venues;
+    st->attachToLastStep([doc, venues, fid, before, after](bool undone) {
+        MonitorProperties *p = doc->monitorProperties();
+        if (p == nullptr || doc->fixture(fid) == nullptr)
+            return;
+        FixtureRigProps rp = p->fixtureRigProps(fid);
+        (undone ? before : after).applyTo(rp);
+        // With a venue applied this is recorded into it (board Q111).
+        p->setFixtureRigProps(fid, rp);
+        if (venues.isNull() || !venues->isActive())
+            doc->setModified();
+    });
+    QString err;
+    if (toVenue)
+    {
+        // Held while it moved, so recorded now: into the venue's file.
+        if (!m_venues->record(fid, &err) && why != nullptr)
+            *why = err;
+        m_venues->markChecked({ fid });
+    }
+    else
+        m_doc->setModified();
+    rebuildWrites();
+    emit changed();
+    emit kept();
+    confirm(toVenue ? tr("%1 zeroed on its target for %2: every cue aimed with it uses it.")
+                          .arg(name, m_venues->activeVenue())
+                    : tr("%1 zeroed on its target: every cue aimed with it uses it.").arg(name));
+    return true;
+}
+
 bool RefineSession::keep(QString *why)
 {
+    // Only the light itself pending: A keeps that.
+    if (m_active && m_edits.isEmpty() && hasLightPending())
+        return keepLight(why);
     if (!m_active || m_edits.isEmpty())
         return false;
     if (m_sceneMode)
@@ -1007,7 +1288,7 @@ bool RefineSession::keep(QString *why)
         }
         if (!ok)
             break;
-        const bool rest = e.hasZoom || e.hasFocus || e.colour != kInvalid || e.gobo != kInvalid;
+        const bool rest = e.hasZoom || e.hasFocus || e.hasLevel || e.colour != kInvalid || e.gobo != kInvalid;
         if (e.scope == GroupScope && !rest)
             continue;
         if (e.scope != LayerScope)
@@ -1088,6 +1369,13 @@ bool RefineSession::keep(QString *why)
             ShowTree::Look look;
             look.key = ShowTree::KeyBeam;
             look.palettes << st->createInlinePalette(QLCPalette::Beam, v, tr("Refined focus"));
+            ok = ok && setLook(onLayer, look);
+        }
+        if (e.hasLevel)
+        {
+            ShowTree::Look look;
+            look.key = ShowTree::KeyDimmer;
+            look.palettes << st->createInlinePalette(QLCPalette::Dimmer, { qRound(e.level) }, tr("Refined level"));
             ok = ok && setLook(onLayer, look);
         }
         if (e.colour != kInvalid)
@@ -1211,6 +1499,17 @@ void RefineSession::revert()
     m_sharedConfirmed = false;
     m_sharedWarning.clear();
     m_sharedUsers.clear();
+    if (hasLightPending())
+    {
+        revertLight();
+        if (m_edits.isEmpty())
+        {
+            rebuildWrites();
+            emit changed();
+            confirm(tr("Back to the cue."));
+            return;
+        }
+    }
     if (m_edits.isEmpty())
         return;
     m_edits.clear();
@@ -1276,7 +1575,7 @@ bool RefineSession::clearException()
     const quint32 childId = child->id;
     QStringList keys;
     if (m_page == BeamPage)
-        keys << ShowTree::KeyPosition << ShowTree::KeyZoom << ShowTree::KeyBeam;
+        keys << ShowTree::KeyPosition << ShowTree::KeyZoom << ShowTree::KeyBeam << ShowTree::KeyDimmer;
     else
         keys << (m_page == ColourPage ? ShowTree::KeyColour : ShowTree::KeyGobo);
     ShowTreeController *st = m_doc->showTree();
@@ -1657,7 +1956,7 @@ void RefineSession::tick(double dt)
         dTilt -= FocusSession::stickVelocity(m_stick[s][1], m_deadzone) * rate;
     }
     if (dPan != 0.0f || dTilt != 0.0f)
-        nudgePosition(dPan, dTilt);
+        m_lightMode ? nudgeLight(dPan, dTilt) : nudgePosition(dPan, dTilt);
 }
 
 /*****************************************************************************
@@ -1708,6 +2007,13 @@ QList<SceneValue> RefineSession::previewValues(const Edit &e) const
             const int fc = focusChannel(fx, &rev);
             if (fc >= 0)
                 out << SceneValue(fid, quint32(fc), uchar(rev ? 255 - e.focus : e.focus));
+        }
+        if (e.hasLevel)
+        {
+            // As the Dimmer look will play it (a dimmer's ceiling honoured).
+            QLCPalette level(QLCPalette::Dimmer);
+            level.setValue(qRound(e.level));
+            out << level.valuesFromFixtures(m_doc, { fid });
         }
         for (quint32 pid : { e.colour, e.gobo })
             if (pid != kInvalid)
@@ -1763,6 +2069,20 @@ void RefineSession::rebuildWrites()
         for (const SceneValue &sv : m_kept)
             if (Fixture *fx = m_doc->fixture(sv.fxi))
                 put(fx, sv.channel, sv.value);
+        /* The light itself, pending: where its target look aims it with the
+           calibration moved (the running cue re-aims too; this makes sure). */
+        if (hasLightPending())
+        {
+            QList<quint32> lit;
+            if (const ShowTree::Look *look = lookFor(m_light.fid, ShowTree::KeyPosition, &lit))
+                for (quint32 pid : look->palettes)
+                    if (QLCPalette *p = m_doc->palette(pid))
+                        if (p->type() == QLCPalette::Aim)
+                            for (const SceneValue &sv : p->valuesFromFixtures(m_doc, lit))
+                                if (sv.fxi == m_light.fid)
+                                    if (Fixture *fx = m_doc->fixture(sv.fxi))
+                                        put(fx, sv.channel, sv.value);
+        }
         // The pending values, the most specific last.
         QList<QString> order = m_editOrder;
         std::stable_sort(order.begin(), order.end(), [this](const QString &a, const QString &b) {

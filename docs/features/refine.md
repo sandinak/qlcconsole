@@ -140,6 +140,15 @@ degrees as a whole: it would stop following its target. Move the target
 in the Lighting Studio, or pick one fixture (Y) and give it a position of
 its own.
 
+**Level and the light itself from the walk.** When you walk the show
+from the pad ([Walk the show from the stage](show-control.md#walk-the-show-from-the-stage)),
+hold LB and pull LT / RT to change the level, kept with A like any other
+change. Hold LB and use the sticks on a light the cue aims at a target to
+zero **the light itself** on it. That moves the light's calibration, the
+same one Quick focus and Venue focus set, so every cue that aims it uses
+the new aim. LB + A keeps it as one Show Tree step. With a venue applied
+it goes into that venue's corrections.
+
 ## A layer the cue only tracks
 
 A cue that sets nothing on a layer still plays it, tracked in from an
