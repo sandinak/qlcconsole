@@ -31,6 +31,7 @@
 
 #include "hostilecase.h"
 #include "webaccess_test.h"
+#include "fixturegroup.h"
 
 #define private public
 #define protected public
@@ -1303,6 +1304,121 @@ void WebAccess_Test::remoteGoIsOffByDefault()
 
     dropPage(ws);
     sc->setRunHandler(nullptr);
+}
+
+void WebAccess_Test::holdAndResumeAreWebCommands()
+{
+    runShow();
+    m_doc->operateSettings()->setRemoteGo(true);
+    ShowControl *sc = m_doc->showControl();
+    QList<ShowControl::Command> commands;
+    QList<ShowControl::Route> routes;
+    sc->setRunHandler([&](const ShowControl::Request &r, ShowControl::Route route) {
+        commands << r.command;
+        routes << route;
+        return true;
+    });
+    startWeb(false);
+    QStringList heard;
+    QWebSocket *ws = runPage(&heard);
+    ws->sendTextMessage(QStringLiteral("QLC+RUN|hello"));
+    QTRY_VERIFY(heardAn(heard, QStringLiteral("RUN|state|")));
+    ws->sendTextMessage(QStringLiteral("QLC+RUN|pause"));
+    ws->sendTextMessage(QStringLiteral("QLC+RUN|resume"));
+    QTRY_COMPARE(commands.count(), 2);
+    QCOMPARE(commands, (QList<ShowControl::Command>{ ShowControl::Pause, ShowControl::Resume }));
+    QCOMPARE(routes.first(), ShowControl::RouteWeb);
+    QTRY_VERIFY(heardAn(heard, QStringLiteral("RUN|ack|pause|ok")));
+    // the page has the button
+    QVERIFY(WebAccessRun::html().contains(QStringLiteral("id=\"hold\"")));
+
+    // off in Show Settings: refused like GO
+    m_doc->operateSettings()->setRemoteGo(false);
+    commands.clear();
+    ws->sendTextMessage(QStringLiteral("QLC+RUN|pause"));
+    QTRY_VERIFY(heardAn(heard, QStringLiteral("RUN|ack|pause|refused")));
+    QVERIFY(commands.isEmpty());
+    dropPage(ws);
+    sc->setRunHandler(nullptr);
+}
+
+void WebAccess_Test::groupMastersMoveFromThePage()
+{
+    // the newest state the page heard (an ack may come after it)
+    auto lastState = [](const QStringList &h) {
+        for (int i = h.count() - 1; i >= 0; --i)
+            if (h.at(i).startsWith(QStringLiteral("RUN|state|")))
+                return h.at(i);
+        return QString();
+    };
+    runShow();
+    m_doc->operateSettings()->setRemoteGo(true);
+    FixtureGroup *grp = new FixtureGroup(m_doc);
+    grp->setName(QStringLiteral("Backs"));
+    m_doc->addFixtureGroup(grp);
+    grp->setMaster(true);
+    FixtureGroup *plain = new FixtureGroup(m_doc);
+    plain->setName(QStringLiteral("Plain"));
+    m_doc->addFixtureGroup(plain);
+
+    startWeb(false);
+    QStringList heard;
+    QWebSocket *ws = runPage(&heard);
+    ws->sendTextMessage(QStringLiteral("QLC+RUN|hello"));
+    QTRY_VERIFY(heardAn(heard, QStringLiteral("RUN|state|")));
+    // only a group with a master is on the page, at its level
+    QVERIFY(heard.first().contains(QStringLiteral("\"name\":\"Backs\"")));
+    QVERIFY(heard.first().contains(QStringLiteral("\"level\":100")));
+    QVERIFY(!heard.first().contains(QStringLiteral("Plain")));
+
+    ws->sendTextMessage(QStringLiteral("QLC+RUN|master|%1|50").arg(grp->id()));
+    QTRY_COMPARE(int(grp->masterLevel()), 128);
+    QTRY_VERIFY(heardAn(heard, QStringLiteral("RUN|ack|master|ok")));
+    QTRY_VERIFY(lastState(heard).contains(QStringLiteral("\"level\":50")));
+    // moved elsewhere (the desk): the page hears it
+    grp->setMasterLevel(0);
+    QTRY_VERIFY(lastState(heard).contains(QStringLiteral("\"level\":0")));
+    // a level out of range is held to 0..100; a group without a master does nothing
+    ws->sendTextMessage(QStringLiteral("QLC+RUN|master|%1|900").arg(grp->id()));
+    QTRY_COMPARE(int(grp->masterLevel()), 255);
+    heard.clear();
+    ws->sendTextMessage(QStringLiteral("QLC+RUN|master|%1|10").arg(plain->id()));
+    QTRY_VERIFY(heardAn(heard, QStringLiteral("RUN|ack|master|nothing")));
+    QCOMPARE(int(plain->masterLevel()), 255);
+    dropPage(ws);
+}
+
+void WebAccess_Test::groupMastersFollowTheRemoteGoAndPinRules()
+{
+    runShow();
+    FixtureGroup *grp = new FixtureGroup(m_doc);
+    grp->setName(QStringLiteral("Backs"));
+    m_doc->addFixtureGroup(grp);
+    grp->setMaster(true);
+    startWeb(false);
+    QStringList heard;
+    QWebSocket *ws = runPage(&heard);
+    ws->sendTextMessage(QStringLiteral("QLC+RUN|hello"));
+    QTRY_VERIFY(heardAn(heard, QStringLiteral("RUN|state|")));
+
+    // remote GO off: refused
+    ws->sendTextMessage(QStringLiteral("QLC+RUN|master|%1|40").arg(grp->id()));
+    QTRY_VERIFY(heardAn(heard, QStringLiteral("RUN|ack|master|refused")));
+    QCOMPARE(int(grp->masterLevel()), 255);
+
+    // on, with a PIN: refused until the session gave it
+    m_doc->operateSettings()->setRemoteGo(true);
+    QVERIFY(m_doc->operateSettings()->setPin(QStringLiteral("4321")));
+    QTRY_VERIFY(heard.last().contains(QStringLiteral("\"pin\":true")));
+    heard.clear();
+    ws->sendTextMessage(QStringLiteral("QLC+RUN|master|%1|40").arg(grp->id()));
+    QTRY_VERIFY(heardAn(heard, QStringLiteral("RUN|ack|master|needpin")));
+    QCOMPARE(int(grp->masterLevel()), 255);
+    ws->sendTextMessage(QStringLiteral("QLC+RUN|pin|4321"));
+    QTRY_VERIFY(heardAn(heard, QStringLiteral("RUN|pin|ok")));
+    ws->sendTextMessage(QStringLiteral("QLC+RUN|master|%1|40").arg(grp->id()));
+    QTRY_COMPARE(int(grp->masterLevel()), 102);
+    dropPage(ws);
 }
 
 void WebAccess_Test::thePinIsAskedOncePerSession()

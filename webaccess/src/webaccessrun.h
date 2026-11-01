@@ -55,7 +55,8 @@ public:
 
     /** The state now, as JSON text:
      *  {list, production, now:{num,name,sub}, next:{...}, subNext, section,
-     *   running, paused, hasSub, mode, remote, pin, teaching}. */
+     *   running, paused, hasSub, mode, remote, pin, teaching,
+     *   masters:[{id,name,level}] (percent; only when there are some)}. */
     QByteArray stateJson() const;
 
     /** Remote GO is on in Show Settings. */
@@ -71,10 +72,16 @@ public:
 
     /** The result of one command from a page. */
     enum Result { Done, NothingToDo, Refused, NeedPin, Unknown };
-    /** Carry out @a command ("go", "back", "stop", "subgo", "subback")
+    /** Carry out @a command ("go", "back", "stop", "subgo", "subback",
+     *  "pause", "resume")
      *  through ShowControl::run() with RouteWeb. @a unlocked: this page
      *  gave the PIN (or the show has none). */
     Result command(const QString &command, bool unlocked);
+
+    /** Move group master @a groupId to @a percent (0..100), under the same
+     *  rules as a command (remote GO on, the PIN given). A group without a
+     *  master is NothingToDo. */
+    Result setMaster(quint32 groupId, int percent, bool unlocked);
 
     /** How many Run pages are open: the state is watched while there are some. */
     void setClients(int count);

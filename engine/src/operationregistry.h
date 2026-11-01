@@ -115,6 +115,9 @@ public:
         QString title;          //!< "Find address conflicts"
         QString description;    //!< for the model and the help: what it answers
         bool readOnly = true;   //!< a pure read of the Doc
+        /** Playing, not editing (a group master): runs in Operate too, has
+         *  no undo step, and is left out of AI plans (changeOperations()). */
+        bool live = false;
         QJsonObject schema;     //!< JSON schema of the arguments (an "object")
         /** Its word in the command line ("conflicts"); empty: none. */
         QString cliWord;

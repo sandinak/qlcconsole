@@ -1059,8 +1059,11 @@ Devices ▸ Show control &amp; sync ▸ Web access**.
 Web access also serves a page to run the show from a phone or tablet:
 **http://&lt;address&gt;:9999/run**. It shows the production and cue list,
 the song section, the cue **on now** and the one **next** (number and name),
-and has big **GO**, **BACK** and **STOP** buttons, plus **SUB GO** and
-**SUB BACK** when the list has sub-cues. It is dark and made for one
+and has big **GO**, **BACK** and **STOP** buttons, a **HOLD** button
+(it pauses the running list and becomes **RESUME**), plus **SUB GO** and
+**SUB BACK** when the list has sub-cues. A show with
+[group masters](show-tree.md#group-masters) gets a slider for each under the
+cues. It is dark and made for one
 thumb: GO sits at the bottom of the screen. It keeps the screen awake where
 the phone allows, and follows the show live: a GO from the console, a
 pedal or QLab shows up on the phone too.
@@ -1090,6 +1093,9 @@ How it keeps the show safe:
   Console** or more. Without logins, anyone who can reach the page and has
   the PIN (if any) can send GO: web access is plain http, so use it on the
   show network, not a shared one.
+- **Masters and Hold follow the same rules.** HOLD, RESUME and the group
+  master sliders are refused while **Allow GO from the phone Run page** is
+  off, and wait for the PIN like GO does.
 - **STOP takes two taps** (the button asks "tap again to stop"), so a thumb
   in the dark doesn't end the show.
 - **It is the same GO.** The page sends the command by the route every

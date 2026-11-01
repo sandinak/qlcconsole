@@ -437,6 +437,16 @@ void MainBar_Test::operateClearsBlindAndMakesItAView()
     dim->setValue(90);
     m_app->refreshBlindView();
     QCOMPARE(uchar(fx->channelValues().at(0)), uchar(90));
+    // A group master holds the picture back as it holds the stage back
+    // (docs/features/show-tree.md "Group masters"); full again, it is the cue.
+    grp->setMaster(true);
+    grp->setMasterLevel(128);
+    m_app->refreshBlindView();
+    QCOMPARE(uchar(fx->channelValues().at(0)), uchar((90 * 128 + 127) / 255));
+    grp->setMasterLevel(UCHAR_MAX);
+    m_app->refreshBlindView();
+    QCOMPARE(uchar(fx->channelValues().at(0)), uchar(90));
+    grp->setMaster(false);
 
     // Live again: the stage as it is.
     sc->blindButton()->click();

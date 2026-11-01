@@ -63,6 +63,13 @@ private slots:
     void planFailingPartWayChangesNothing();
     void planRefusals();
 
+    // 0.4 leftovers: the playing words
+    void masterWordMovesAGroupMaster();
+    void masterWordRefusals();
+    void masterIsPlayingNotEditing();
+    void overrideWordMakesTheSelectedHitAnOverride();
+    void overrideWordRefusals();
+
 private:
     Fixture *dimmer(const QString &name, quint32 address, quint32 channels = 4);
     /** Towers (2 dimmers), Steps (1), production "P" with list "Song" and

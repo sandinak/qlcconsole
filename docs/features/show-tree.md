@@ -2077,6 +2077,9 @@ called them looks; they open as they were.)
     the hit plays as it is (an adopted chaser, an EFX) plays above the
     show but mixes as before. A live override also wins over the Design
     preview of a cue. *Decided (can change).*
+  - **From the command line:** `override` makes the selected hit an
+    override hit, `override off` a plain one again (one undo step; Design
+    only). Firing it stays below.
   - Firing a hit stays a VC button's (or a step's) start, not a run
     command; ALL OFF, which lets go of it, comes through the one GO path.
     *Decided (can change).*
@@ -2262,6 +2265,17 @@ fader, not an edit to every cue.
   cue list, its level over it (orange below full) and its name under it.
   **Double-click the name** for full. A show without group masters has no
   strip.
+- **The command line:** `master Backs 50` moves the master of the group
+  called Backs to 50%; `master "Front Wash" full`, `master Backs off`.
+  It works in Operate and is not an undo step: moving a master is playing.
+- **The phone Run page** lists the masters under the cues, a slider each,
+  and follows them when they move elsewhere. They move under the same rules
+  as GO from the page: **Allow GO from the phone Run page** on, and the
+  show's PIN once per session.
+- **The Blind view** shows them: the fixtures it draws are held back by a
+  master as the stage is, so you see the cue as it would look tonight.
+  The Grand Master and Blackout stay out of that picture. *Decided (can
+  change).*
 - **A Virtual Console slider** can be one too: its properties' **Group
   master** tab ▸ choose the group ▸ **Switch to Group Master Mode**
   (choosing a group gives it a master). It moves with the Run tab's

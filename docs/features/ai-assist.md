@@ -139,6 +139,14 @@ These are command-line words too. Each one changes nothing:
 A group or fixture with one of these names keeps it: `summary colour Red`
 still works on a group called Summary.
 
+Two more words play instead of asking, and AI Assist never proposes them
+for you (they are not in its plans):
+
+| Type | Does |
+|---|---|
+| `master <group> <0-100>` (or `full`, `off`) | Moves a [group master](show-tree.md#group-masters): `master Backs 50`, `master "Front Wash" 20%`. It works in Operate too and has no undo step, since it is playing, not editing. A group with no master is said, not guessed. |
+| `override [on\|off]` | Makes the selected hit an [override hit](show-tree.md#hits-busking) (or a plain one again) as one undo step. Design mode only. Select a hit first. |
+
 ## Operate
 
 Operate carries no AI at all. Going to Operate:

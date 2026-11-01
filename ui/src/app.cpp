@@ -52,6 +52,7 @@
 #include "workbench.h"
 #include "inputoutputmap.h"
 #include "universe.h"
+#include <climits>
 #include "inputdevicenotices.h"
 #include "ioplugincache.h"
 #include "patchundo.h"
@@ -4371,11 +4372,28 @@ void App::pushBlindLevels()
 {
     const QHash<quint32, QByteArray> levels = m_blindEffects != nullptr
                                             ? m_blindEffects->apply(m_blindLevels) : m_blindLevels;
+    // The group masters scale what the cue would put out, as the universe does
+    // (intensity channels, not a Grand Master exempt one or a relay); the
+    // Grand Master and Blackout stay out: this view shows the cue, not the rig.
+    const QList<Universe *> universes = m_doc->inputOutputMap()->universes();
     foreach (Fixture *fixture, m_doc->fixtures())
     {
         QByteArray v = levels.value(fixture->id());
         if (v.size() != int(fixture->channels()))
             v = QByteArray(int(fixture->channels()), 0);
+        const int u = int(fixture->universe());
+        Universe *uni = fixture->isPatched() && u >= 0 && u < universes.size() ? universes.at(u) : nullptr;
+        if (uni != nullptr)
+            for (int c = 0; c < v.size(); ++c)
+            {
+                const int abs = int(fixture->address()) + c;
+                const uchar group = uni->groupMaster(abs);
+                if (group == UCHAR_MAX || abs >= UNIVERSE_SIZE)
+                    continue;
+                const uchar mask = uni->channelCapabilities(ushort(abs));
+                if ((mask & Universe::Intensity) && (mask & (Universe::GMExempt | Universe::SwitchOutput)) == 0)
+                    v[c] = char((uint(uchar(v.at(c))) * group + 127) / 255);
+            }
         fixture->setChannelValues(v);
     }
 }

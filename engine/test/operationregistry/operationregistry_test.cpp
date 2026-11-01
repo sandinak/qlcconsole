@@ -88,6 +88,17 @@ void OperationRegistry_Test::catalogIsWhole()
             QVERIFY(ShowTreeCommand::word(op.cliWord) == nullptr);
             continue;
         }
+        if (!op.readOnly && (op.name == QLatin1String("set_group_master") || op.name == QLatin1String("set_hit_override")))
+        {
+            // 0.4 leftovers: the playing words (`master Backs 50`, `override`)
+            QVERIFY(op.parse && !op.cliWord.isEmpty() && op.cliHelp.startsWith(op.cliWord));
+            QVERIFY(op.schema.value("additionalProperties") == QJsonValue(false));
+            QVERIFY(ShowTreeCommand::word(op.cliWord) == nullptr);
+            QVERIFY(!words.contains(op.cliWord));
+            words.insert(op.cliWord);
+            QCOMPARE(op.live, op.name == QLatin1String("set_group_master"));
+            continue;
+        }
         if (!op.readOnly)
         {
             // P2: a change word -- strict schema, no command-line word of
@@ -113,11 +124,16 @@ void OperationRegistry_Test::catalogIsWhole()
     for (const char *n : { "make_cue", "add_cue", "make_cue_list", "set_look", "set_cue_look", "set_intensity",
                            "set_cue_mode", "release_layer", "skip_cues", "unskip_cues", "record_cue",
                            "rename_selected", "duplicate_cue", "include_cue", "make_group_set", "play_function",
-                           "import_config" })
+                           "import_config", "set_group_master", "set_hit_override" })
         QVERIFY2(names.contains(QLatin1String(n)), n);
-    QCOMPARE(R::readOnlyOperations().count() + R::changeOperations().count(), R::catalog().count() - 1);
+    // A group master is playing, not editing: not a step of an AI plan.
+    int live = 0;
+    for (const R::Operation &op : R::catalog())
+        live += op.live ? 1 : 0;
+    QCOMPARE(live, 1);
+    QCOMPARE(R::readOnlyOperations().count() + R::changeOperations().count(), R::catalog().count() - 1 - live);
     for (const R::Operation *op : R::changeOperations())
-        QVERIFY(op->name != QLatin1String("command"));
+        QVERIFY(op->name != QLatin1String("command") && !op->live);
 }
 
 void OperationRegistry_Test::cliRoundTrip_data()
@@ -140,6 +156,10 @@ void OperationRegistry_Test::cliRoundTrip_data()
     QTest::newRow("review") << "find_problems" << QJsonObject();
     QTest::newRow("review min") << "find_problems" << QJsonObject { { "min", "warning" } };
     QTest::newRow("summary") << "show_summary" << QJsonObject();
+    QTest::newRow("master") << "set_group_master" << QJsonObject { { "group", "Backs" }, { "level", 50 } };
+    QTest::newRow("master quoted") << "set_group_master" << QJsonObject { { "group", "Front Wash" }, { "level", 0 } };
+    QTest::newRow("override") << "set_hit_override" << QJsonObject();
+    QTest::newRow("override off") << "set_hit_override" << QJsonObject { { "on", false } };
 }
 
 void OperationRegistry_Test::cliRoundTrip()
@@ -730,3 +750,147 @@ void OperationRegistry_Test::planRefusals()
 }
 
 QTEST_MAIN(OperationRegistry_Test)
+
+/****************************************************************************
+ * 0.4 leftovers: the playing words
+ ****************************************************************************/
+
+void OperationRegistry_Test::masterWordMovesAGroupMaster()
+{
+    smallShow();
+    FixtureGroup *towers = m_doc->fixtureGroups().first();
+    QCOMPARE(towers->name(), QStringLiteral("Towers"));
+    towers->setMaster(true);
+    R reg(m_doc);
+    ShowTreeCommand::Result r = reg.runLine("master Towers 50", ShowTreeCommand::Context());
+    QVERIFY2(r.ok, qPrintable(r.message));
+    QCOMPARE(int(towers->masterLevel()), 128);
+    QVERIFY(r.message.contains("50%"));
+    QVERIFY(reg.runLine("master towers 25%", ShowTreeCommand::Context()).ok);
+    QCOMPARE(int(towers->masterLevel()), 64);
+    QVERIFY(reg.runLine("master Towers off", ShowTreeCommand::Context()).ok);
+    QCOMPARE(int(towers->masterLevel()), 0);
+    QVERIFY(reg.runLine("master Towers full", ShowTreeCommand::Context()).ok);
+    QCOMPARE(int(towers->masterLevel()), 255);
+    // a quoted name with a space, and one typed without quotes
+    FixtureGroup *wash = new FixtureGroup(m_doc);
+    wash->setName(QStringLiteral("Front Wash"));
+    m_doc->addFixtureGroup(wash);
+    wash->setMaster(true);
+    QVERIFY(reg.runLine("master \"Front Wash\" 10", ShowTreeCommand::Context()).ok);
+    QCOMPARE(int(wash->masterLevel()), 26);
+    QVERIFY(reg.runLine("master Front Wash 100", ShowTreeCommand::Context()).ok);
+    QCOMPARE(int(wash->masterLevel()), 255);
+    // as an operation, the same
+    QVERIFY(reg.run("set_group_master", QJsonObject { { "group", "Towers" }, { "level", 100 } }).ok);
+    // moving it is not an edit: no undo step on the Show Tree's history
+    const QString undo = m_doc->showTree()->sharedUndoText();
+    QVERIFY(reg.runLine("master Towers 30", ShowTreeCommand::Context()).ok);
+    QCOMPARE(m_doc->showTree()->sharedUndoText(), undo);
+}
+
+void OperationRegistry_Test::masterWordRefusals()
+{
+    smallShow();
+    R reg(m_doc);
+    ShowTreeCommand::Result r = reg.runLine("master Towers 50", ShowTreeCommand::Context());
+    QVERIFY(!r.ok);                 // a group without a master: said, not guessed
+    QVERIFY2(r.message.contains("no master"), qPrintable(r.message));
+    r = reg.runLine("master Nobody 50", ShowTreeCommand::Context());
+    QVERIFY(!r.ok);
+    QVERIFY(r.message.contains("No group called"));
+    r = reg.runLine("master Towers", ShowTreeCommand::Context());
+    QVERIFY(!r.ok);
+    QVERIFY(r.message.startsWith("master:"));
+    r = reg.runLine("master Towers loud", ShowTreeCommand::Context());
+    QVERIFY(!r.ok);
+    QVERIFY(r.message.contains("isn't a level"));
+    m_doc->fixtureGroups().first()->setMaster(true);
+    r = reg.runLine("master Towers 140", ShowTreeCommand::Context());
+    QVERIFY(!r.ok);
+    QVERIFY(r.message.contains("above 100"));
+    QCOMPARE(int(m_doc->fixtureGroups().first()->masterLevel()), 255);
+    // the show's own names win: a group called "master" is the grammar's
+    FixtureGroup *g = new FixtureGroup(m_doc);
+    g->setName(QStringLiteral("master"));
+    m_doc->addFixtureGroup(g);
+    QJsonObject args;
+    QCOMPARE(reg.resolveLine("master 50", &args), QStringLiteral("command"));
+}
+
+void OperationRegistry_Test::masterIsPlayingNotEditing()
+{
+    smallShow();
+    FixtureGroup *towers = m_doc->fixtureGroups().first();
+    towers->setMaster(true);
+    R reg(m_doc);
+    // Operate mode locks editing, not playing
+    m_doc->setMode(Doc::Operate);
+    QVERIFY(reg.runLine("master Towers 20", ShowTreeCommand::Context()).ok);
+    QCOMPARE(int(towers->masterLevel()), 51);
+    m_doc->setMode(Doc::Design);
+    // and an AI plan can't carry it
+    ShowTreeCommand cmd(m_doc, m_doc->showTree());
+    R withCmd(m_doc, &cmd);
+    const R::Result p = withCmd.runPlan({ { "set_group_master", QJsonObject { { "group", "Towers" }, { "level", 5 } } } },
+                                        ShowTreeCommand::Context(), "test");
+    QVERIFY(!p.ok);
+    QVERIFY(p.message.contains("not a change operation"));
+    QCOMPARE(int(towers->masterLevel()), 51);
+}
+
+void OperationRegistry_Test::overrideWordMakesTheSelectedHitAnOverride()
+{
+    ShowTreeCommand::Context ctx = smallShow();
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 hit = st->addHit(ShowTree::HitScope::Production, ctx.production, "Blackout");
+    QVERIFY(st->isLook(hit));
+    QVERIFY(!st->isOverrideHit(hit));
+    ctx.cue = hit;
+    ShowTreeCommand cmd(m_doc, st);
+    R reg(m_doc, &cmd);
+    ShowTreeCommand::Result r = reg.runLine("override", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    QVERIFY(st->isOverrideHit(hit));
+    QCOMPARE(r.context.cue, hit);        // the selection stays
+    // again: said, nothing to do
+    r = reg.runLine("override on", ctx);
+    QVERIFY(r.ok);
+    QVERIFY(r.message.contains("already"));
+    // one undo step takes it back
+    st->undo();
+    QVERIFY(!st->isOverrideHit(hit));
+    QVERIFY(reg.runLine("override", ctx).ok);
+    QVERIFY(reg.runLine("override off", ctx).ok);
+    QVERIFY(!st->isOverrideHit(hit));
+    // a plan can carry it (it is an edit, one undo step)
+    const R::Result p = reg.runPlan({ { "set_hit_override", QJsonObject() } }, ctx, "Override");
+    QVERIFY2(p.ok, qPrintable(p.message));
+    QVERIFY(st->isOverrideHit(hit));
+    st->undo();
+    QVERIFY(!st->isOverrideHit(hit));
+}
+
+void OperationRegistry_Test::overrideWordRefusals()
+{
+    ShowTreeCommand::Context ctx = smallShow();
+    ShowTreeController *st = m_doc->showTree();
+    R reg(m_doc);
+    // a cue of a cue list is not a hit
+    ShowTreeCommand::Result r = reg.runLine("override", ctx);
+    QVERIFY(!r.ok);
+    QVERIFY2(r.message.contains("Select a hit"), qPrintable(r.message));
+    ctx.cue = 0xFFFFFFFF;
+    QVERIFY(!reg.runLine("override", ctx).ok);
+    r = reg.runLine("override maybe", ctx);
+    QVERIFY(!r.ok);
+    QVERIFY(r.message.startsWith("override:"));
+    // not in Operate: editing is locked
+    ctx.cue = st->addHit(ShowTree::HitScope::Production, ctx.production, "Blackout");
+    m_doc->setMode(Doc::Operate);
+    r = reg.runLine("override", ctx);
+    QVERIFY(!r.ok);
+    QVERIFY(r.message.contains("Operate"));
+    QVERIFY(!st->isOverrideHit(ctx.cue));
+    m_doc->setMode(Doc::Design);
+}
