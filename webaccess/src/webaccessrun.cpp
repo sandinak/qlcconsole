@@ -23,8 +23,15 @@
 #include "teachingsettings.h"
 #include "showcontrol.h"
 #include "showoperate.h"
+#include "groupmasters.h"
+#include "fixturegroup.h"
 #include "chaser.h"
 #include "doc.h"
+
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <climits>
 
 using namespace ShowTree;
 
@@ -37,6 +44,9 @@ WebAccessRun::WebAccessRun(Doc *doc, QObject *parent)
     // A command lands at once; the poll catches a list that steps on its own.
     connect(m_doc->showControl(), &ShowControl::commandHandled, this, &WebAccessRun::poll);
     connect(m_doc->operateSettings(), &ShowOperate::settingsChanged, this, &WebAccessRun::poll);
+    // A master moved from the desk, a VC slider or a controller shows on the phone.
+    connect(m_doc->groupMasters(), &GroupMasters::changed, this, &WebAccessRun::poll);
+    connect(m_doc->groupMasters(), &GroupMasters::levelChanged, this, &WebAccessRun::poll);
 }
 
 void WebAccessRun::setClients(int count)
@@ -110,6 +120,10 @@ WebAccessRun::Result WebAccessRun::command(const QString &command, bool unlocked
         r.command = ShowControl::SubGo;
     else if (command == QLatin1String("subback"))
         r.command = ShowControl::SubBack;
+    else if (command == QLatin1String("pause"))
+        r.command = ShowControl::Pause;
+    else if (command == QLatin1String("resume"))
+        r.command = ShowControl::Resume;
     else
         return Unknown;
 
@@ -124,6 +138,20 @@ WebAccessRun::Result WebAccessRun::command(const QString &command, bool unlocked
         return NothingToDo;
     r.chaser = ch->id();
     return m_doc->showControl()->run(r, ShowControl::RouteWeb) ? Done : NothingToDo;
+}
+
+WebAccessRun::Result WebAccessRun::setMaster(quint32 groupId, int percent, bool unlocked)
+{
+    // The same rules as GO: the show's switch, then the PIN.
+    if (!remoteAllowed())
+        return Refused;
+    if (pinRequired() && !unlocked)
+        return NeedPin;
+    FixtureGroup *g = m_doc->fixtureGroup(groupId);
+    if (g == nullptr || !g->hasMaster())
+        return NothingToDo;
+    g->setMasterLevel(uchar(qRound(qBound(0, percent, 100) * double(UCHAR_MAX) / 100.0)));
+    return Done;
 }
 
 /*********************************************************************
@@ -169,6 +197,17 @@ QByteArray WebAccessRun::stateJson() const
     o[QStringLiteral("mode")] = m_doc->mode() == Doc::Operate ? QStringLiteral("LIVE") : QStringLiteral("DESIGN");
     o[QStringLiteral("teaching")] = m_doc->teachingSettings() != nullptr && m_doc->teachingSettings()->enabled();
     o[QStringLiteral("hasList")] = ch != nullptr;
+    QJsonArray masters;
+    for (const FixtureGroup *g : m_doc->groupMasters()->groups())
+    {
+        QJsonObject m;
+        m[QStringLiteral("id")] = int(g->id());
+        m[QStringLiteral("name")] = g->name();
+        m[QStringLiteral("level")] = qRound(g->masterLevel() * 100.0 / UCHAR_MAX);
+        masters.append(m);
+    }
+    if (!masters.isEmpty())
+        o[QStringLiteral("masters")] = masters;
     if (ch == nullptr)
         return QJsonDocument(o).toJson(QJsonDocument::Compact);
 

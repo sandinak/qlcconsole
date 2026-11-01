@@ -28,9 +28,11 @@
 #include <QUrl>
 #include <QSet>
 #include <algorithm>
+#include <climits>
 
 #include "operationregistry.h"
 #include "configimport.h"
+#include "groupmasters.h"
 #include "showtreecontroller.h"
 #include "qlcfixturemode.h"
 #include "qlcfixturedef.h"
@@ -1114,6 +1116,182 @@ void appendConfigOperations(QList<OperationRegistry::Operation> &ops, bool readO
     ops << op;
 }
 
+
+/* ---- playing words (0.4 leftovers): a group master, an override hit ---- */
+
+/** The group @a name names that has a master; null and @a why when none or
+ *  several do. */
+FixtureGroup *findMasteredGroup(Doc *doc, const QString &name, QString *why)
+{
+    const QString key = name.trimmed();
+    QList<FixtureGroup *> hits;
+    FixtureGroup *plain = nullptr;
+    for (FixtureGroup *g : doc->fixtureGroups())
+        if (g->name().compare(key, Qt::CaseInsensitive) == 0)
+        {
+            if (g->hasMaster())
+                hits << g;
+            else
+                plain = g;
+        }
+    if (hits.count() == 1)
+        return hits.first();
+    if (hits.count() > 1)
+        *why = OperationRegistry::tr("Several groups called \"%1\" have a master").arg(key);
+    else if (plain != nullptr)
+        *why = OperationRegistry::tr("\"%1\" has no master (Fixture Manager > the group > Group master)").arg(key);
+    else
+        *why = OperationRegistry::tr("No group called \"%1\"").arg(key);
+    return nullptr;
+}
+
+bool parseMasterWords(const QStringList &words, QJsonObject *out, QString *why)
+{
+    if (words.count() < 2)
+    {
+        *why = OperationRegistry::tr("master <group> <0-100>[%] | full | off");
+        return false;
+    }
+    QString level = words.last().toLower();
+    int percent = 0;
+    if (level == QLatin1String("full"))
+        percent = 100;
+    else if (level == QLatin1String("off"))
+        percent = 0;
+    else
+    {
+        if (level.endsWith(QLatin1Char('%')))
+            level.chop(1);
+        bool ok = false;
+        percent = level.toInt(&ok);
+        if (!ok)
+        {
+            *why = OperationRegistry::tr("\"%1\" isn't a level (0-100, full or off)").arg(words.last());
+            return false;
+        }
+    }
+    out->insert(QStringLiteral("group"), words.mid(0, words.count() - 1).join(QLatin1Char(' ')));
+    out->insert(QStringLiteral("level"), percent);
+    return true;
+}
+
+void appendLiveOperations(QList<OperationRegistry::Operation> &ops)
+{
+    typedef OperationRegistry R;
+    typedef OperationRegistry::Operation Op;
+    {
+        Op op;
+        op.name = QStringLiteral("set_group_master");
+        op.title = R::tr("Set a group master");
+        op.description = R::tr("Moves a fixture group's master (a fader that scales the intensity of its heads) "
+                               "to a percentage. Playing, not editing: it works in Operate and has no undo step.");
+        QJsonObject level { { QStringLiteral("type"), QStringLiteral("integer") },
+                            { QStringLiteral("minimum"), 0 }, { QStringLiteral("maximum"), 100 },
+                            { QStringLiteral("description"), R::tr("Percent, 0 to 100") } };
+        op.schema = strictSchema({ { QStringLiteral("group"), stringProperty(R::tr("The fixture group's name")) },
+                                   { QStringLiteral("level"), level } },
+                                 { QStringLiteral("group"), QStringLiteral("level") });
+        op.readOnly = false;
+        op.live = true;
+        op.cliWord = QStringLiteral("master");
+        op.cliHelp = QStringLiteral("master <group> <0-100>|full|off");
+        op.parse = parseMasterWords;
+        op.validate = [](Doc *doc, const QJsonObject &a) {
+            QString why;
+            findMasteredGroup(doc, arg(a, "group"), &why);
+            return why;
+        };
+        op.execute = [](R::Context &ctx, const QJsonObject &a) {
+            QString why;
+            FixtureGroup *g = findMasteredGroup(ctx.doc, arg(a, "group"), &why);
+            if (g == nullptr)
+                return refusal(why);
+            const int percent = a.value(QLatin1String("level")).toInt();
+            g->setMasterLevel(uchar(qRound(percent * double(UCHAR_MAX) / 100.0)));
+            R::Result r;
+            r.ok = true;
+            r.message = R::tr("%1 master at %2%").arg(g->name()).arg(percent);
+            r.command.ok = true;
+            r.command.context = ctx.selection;
+            r.command.keepSelection = true;
+            return r;
+        };
+        op.cliSyntax = [](const QJsonObject &a) {
+            return QStringLiteral("master %1 %2").arg(R::quoted(arg(a, "group"))).arg(a.value(QLatin1String("level")).toInt());
+        };
+        op.describe = [](const QJsonObject &a) {
+            return R::tr("Move the %1 master to %2%").arg(arg(a, "group")).arg(a.value(QLatin1String("level")).toInt());
+        };
+        ops << op;
+    }
+    {
+        Op op;
+        op.name = QStringLiteral("set_hit_override");
+        op.title = R::tr("Make the selected hit an override");
+        op.description = R::tr("Makes the selected hit an override hit (it wins over everything the show plays "
+                               "on its channels, intensity too), or a plain hit again.");
+        op.schema = strictSchema({ { QStringLiteral("on"), QJsonObject { { QStringLiteral("type"), QStringLiteral("boolean") },
+                                                                          { QStringLiteral("description"), R::tr("false: a plain hit again") } } } });
+        op.readOnly = false;
+        op.cliWord = QStringLiteral("override");
+        op.cliHelp = QStringLiteral("override [on|off]");
+        op.parse = [](const QStringList &words, QJsonObject *out, QString *why) {
+            if (words.count() > 1)
+            {
+                *why = R::tr("override [on|off]");
+                return false;
+            }
+            if (words.isEmpty() || words.first().compare(QLatin1String("on"), Qt::CaseInsensitive) == 0)
+                return true;
+            if (words.first().compare(QLatin1String("off"), Qt::CaseInsensitive) == 0)
+            {
+                out->insert(QStringLiteral("on"), false);
+                return true;
+            }
+            *why = R::tr("override [on|off]");
+            return false;
+        };
+        op.validate = [](Doc *doc, const QJsonObject &) {
+            return doc->showTree() == nullptr ? R::tr("The show has no Show Tree") : QString();
+        };
+        op.execute = [](R::Context &ctx, const QJsonObject &a) {
+            ShowTreeController *st = ctx.doc->showTree();
+            if (st == nullptr)
+                return refusal(R::tr("The show has no Show Tree"));
+            if (ctx.doc->mode() == Doc::Operate)
+                return refusal(R::tr("Changes can't be made in Operate mode"));
+            const quint32 id = ctx.selection.cue;
+            if (id == kInvalid || st->cue(id) == nullptr || !st->isLook(id))
+                return refusal(R::tr("Select a hit first (a cue of a hits list)"));
+            const bool on = a.value(QLatin1String("on")).toBool(true);
+            R::Result r;
+            r.command.context = ctx.selection;
+            r.command.keepSelection = true;
+            if (st->isOverrideHit(id) == on)
+            {
+                r.ok = r.command.ok = true;
+                r.message = on ? R::tr("already an override hit") : R::tr("already a plain hit");
+                return r;
+            }
+            if (!st->setHitsOverride({ id }, on))
+                return refusal(R::tr("Nothing changed"));
+            r.ok = r.command.ok = true;
+            r.message = on ? R::tr("✓ override hit: wins over everything the show plays")
+                           : R::tr("✓ plain hit again");
+            r.command.message = r.message;
+            return r;
+        };
+        op.cliSyntax = [](const QJsonObject &a) {
+            return a.value(QLatin1String("on")).toBool(true) ? QStringLiteral("override") : QStringLiteral("override off");
+        };
+        op.describe = [](const QJsonObject &a) {
+            return a.value(QLatin1String("on")).toBool(true) ? R::tr("Make the selected hit an override hit")
+                                                              : R::tr("Make the selected hit a plain hit");
+        };
+        ops << op;
+    }
+}
+
 QList<OperationRegistry::Operation> buildCatalog()
 {
     typedef OperationRegistry R;
@@ -1537,6 +1715,7 @@ QList<OperationRegistry::Operation> buildCatalog()
     appendConfigOperations(ops, true);
     appendChangeOperations(ops);
     appendConfigOperations(ops, false);
+    appendLiveOperations(ops);
     return ops;
 }
 } // namespace
@@ -1572,7 +1751,7 @@ QList<const OperationRegistry::Operation *> OperationRegistry::changeOperations(
 {
     QList<const Operation *> out;
     for (const Operation &op : catalog())
-        if (!op.readOnly && op.name != QLatin1String("command"))
+        if (!op.readOnly && !op.live && op.name != QLatin1String("command"))
             out << &op;
     return out;
 }
@@ -1754,7 +1933,7 @@ OperationRegistry::Result OperationRegistry::runPlan(const QList<Call> &calls,
     {
         const Operation *op = operation(calls.at(i).name);
         QString why = check(calls.at(i).name, calls.at(i).args);
-        if (why.isEmpty() && (op->readOnly || op->name == QLatin1String("command")))
+        if (why.isEmpty() && (op->readOnly || op->live || op->name == QLatin1String("command")))
             why = tr("not a change operation");
         if (!why.isEmpty())
             return refusal(tr("Step %1 (%2): %3. Nothing changed.").arg(i + 1).arg(calls.at(i).name, why));

@@ -20,6 +20,12 @@ back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
 
 #### Show control
 
+- **Small leftovers of the run features.** The command line moves a group
+  master (`master Backs 50`, also `full` and `off`; playing, so it works in
+  Operate) and makes the selected hit an override hit (`override`, `override
+  off`). The phone Run page has a HOLD / RESUME button and a slider for each
+  group master, under the same remote-GO and PIN rules as GO. The Blind view
+  holds its picture back by the group masters, as the stage is.
 - **One GO path for the Virtual Console.** A VC Cue List (and the web page
   that drives it) and a VC button's next / previous step now send GO, Back,
   Sub GO and Stop through the same path as the keys when the chaser is a

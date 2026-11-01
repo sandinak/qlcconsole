@@ -115,8 +115,9 @@ which lets go of them, is one). Open:
 - Phone Run page: built 2026-10-31 (feat/04-phone-run): `RouteWeb`, `/run`
   on web access, "Allow GO from the phone Run page" in Show Settings (off by
   default, the show's PIN once per session). Open: a QR code for the
-  address (decided: type it, can change); Hold (Pause/Resume) buttons;
-  following a list other than the main one.
+  address (decided: type it, can change); ~~Hold (Pause/Resume) buttons~~
+  and ~~a slider for each group master~~ (built, feat/05-run-leftovers);
+  following a list other than the main one (not decided; left open).
 - DONE (vcgo, feat/04-vc-go-path): the VC Cue List (and the web page that
   drives it, which calls the same slots) and a VC button's next / previous
   step run a Show Tree main list through `run(request, RouteVcCueList)`;
@@ -172,7 +173,8 @@ then. Engine: `Universe::HitOverride` (between Override and Flashing),
 - A 16-bit channel is mixed byte by byte during a fade (exact at either
   end). An LTP channel nothing else plays keeps the hit's value after
   release (QLC+'s LTP rule).
-- No command-line word yet (`override` on the selected hit).
+- ~~No command-line word yet~~ -- built: `override [on|off]` on the selected
+  hit (Operation Registry; one undo step; Design only).
 
 ## Group masters — built, leftovers (0.4 item 5, gm, 2026-10-31)
 
@@ -204,9 +206,10 @@ slider's Group master mode). Open, each "decided (can change)":
 - Not on the Control Map (presses only) or the pad (Run is GO/Back/Stop):
   a controller fader reaches a group master through a VC slider's
   External Input.
-- Not done: a command-line word (`group Front master 50`), a master in the
-  web/phone Run page, group masters in the Show Tree's Blind view and the
-  "why is this on" answer (v2 provenance should say "held at 50 % by the
+- ~~A command-line word~~ (built: `master Front 50`), ~~a master on the
+  phone Run page~~ (built, behind remote GO and the PIN) and ~~masters in
+  the Blind view~~ (built: the picture is held back by them; the Grand
+  Master stays out, decided, can change). Not done: the "why is this on" answer (v2 provenance should say "held at 50 % by the
   Front master").
 
 ## Breathe once — leftovers (brth, 2026-10-30)
@@ -360,6 +363,8 @@ Built: LTC in (`ltc_test`) and cues at a timecode (`timecodecues_test`), DONE.md
 **Open:** LTC read backwards, a channel picker, an input level meter beside
 the readout, and a time per frame rate (a cue stamped at 25 fps reads the
 same milliseconds at 30).
+(Left open on purpose in feat/05-run-leftovers: a time per frame rate
+changes how a cue's time is stored and read back, which is not small.)
 
 ## Lighting Studio alignment — leftovers (0.3.1 d2, 2026-10-29)
 

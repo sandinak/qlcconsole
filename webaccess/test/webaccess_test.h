@@ -98,6 +98,9 @@ private slots:
     void thePinIsAskedOncePerSession();
     void tooManyWrongPinsLockTheGate();
     void stateReachesThePage();
+    void holdAndResumeAreWebCommands();
+    void groupMastersMoveFromThePage();
+    void groupMastersFollowTheRemoteGoAndPinRules();
     void aPageNeedsAnAccountWithAccounts();
 
     /* Many clients: a phone per crew member (make perf, "web") */

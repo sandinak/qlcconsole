@@ -712,7 +712,21 @@ void WebAccess::handleRunCommand(QHttpConnection *conn, WebAccessUser *user, con
         return;
     }
 
-    const WebAccessRun::Result result = m_run->command(what, m_runUnlocked.contains(conn));
+    WebAccessRun::Result result;
+    if (what == QLatin1String("master"))
+    {
+        // QLC+RUN|master|<group id>|<percent>
+        bool okId = false, okLevel = false;
+        const quint32 id = cmdList.value(2).toUInt(&okId);
+        const int level = cmdList.value(3).toInt(&okLevel);
+        if (!okId || !okLevel)
+            return;
+        result = m_run->setMaster(id, level, m_runUnlocked.contains(conn));
+    }
+    else
+    {
+        result = m_run->command(what, m_runUnlocked.contains(conn));
+    }
     QString answer;
     switch (result)
     {

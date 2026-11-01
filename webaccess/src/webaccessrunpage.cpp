@@ -56,6 +56,12 @@ button:disabled{opacity:.35}
 .row{display:flex;gap:10px;margin-bottom:10px}
 #stop.armed{background:var(--stop);border-color:#e57368;color:#fff}
 #subrow{display:none}
+#masters{display:none}
+.mrow{display:flex;align-items:center;gap:10px;margin:6px 0}
+.mrow span{width:34%;font-size:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mrow output{width:3.2em;text-align:right;font-variant-numeric:tabular-nums;color:var(--dim)}
+.mrow input{flex:1;min-width:0;height:36px}
+#hold.paused{background:var(--warn);border-color:var(--warn);color:#101214}
 #msg{min-height:1.4em;text-align:center;font-size:15px;color:var(--warn);padding-bottom:6px}
 #lock{position:fixed;inset:0;background:rgba(10,12,14,.96);display:none;flex-direction:column;justify-content:center;gap:14px;padding:24px}
 #lock.show{display:flex}
@@ -70,12 +76,13 @@ button:disabled{opacity:.35}
 <div class="card" id="now"><small>On now</small><div class="num" id="nnum">&mdash;</div><div class="name" id="nname"></div></div>
 <div id="sub"></div>
 <div class="card" id="next"><small>Next</small><div class="num" id="xnum">&mdash;</div><div class="name" id="xname"></div></div>
+<div class="card" id="masters"><small>Masters</small><div id="mlist"></div></div>
 </main>
 <div id="pad">
 <div id="msg"></div>
 <button id="go" disabled>GO</button>
 <div class="row" id="subrow"><button id="subback" disabled>SUB BACK</button><button id="subgo" disabled>SUB GO</button></div>
-<div class="row"><button id="back" disabled>BACK</button><button id="stop" disabled>STOP</button></div>
+<div class="row"><button id="back" disabled>BACK</button><button id="hold" disabled>HOLD</button><button id="stop" disabled>STOP</button></div>
 </div>
 <div id="lock"><p id="lockwhy">This show asks for its PIN before the page can send GO.</p>
 <input id="pin" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="8" autocomplete="off" placeholder="PIN">
@@ -106,11 +113,35 @@ function paint(){
   $('subrow').style.display=st.hasSub?'flex':'none';
   var ok=canSend();
   ['go','back','stop','subgo','subback'].forEach(function(i){$(i).disabled=!ok});
+  $('hold').disabled=!ok||!st.running;
+  $('hold').textContent=st.paused?'RESUME':'HOLD';
+  $('hold').className=st.paused?'paused':'';
+  masters(ok);
   var off='GO from the phone is off in Show Settings.';
   if(st.remote===false)msg(off);
   else if($('msg').textContent===off)msg('');
   if(st.remote&&st.pin&&!unlocked&&$('lock').className!=='show')askPin('');
   $('go').textContent=st.paused?'GO (paused)':'GO'}
+var mrows={},touching={};
+function masters(ok){
+  var list=st.masters||[],box=$('mlist'),seen={};
+  $('masters').style.display=list.length?'block':'none';
+  list.forEach(function(m){
+    seen[m.id]=1;
+    var r=mrows[m.id];
+    if(!r){
+      var d=document.createElement('div');d.className='mrow';
+      var n=document.createElement('span');
+      var i=document.createElement('input');i.type='range';i.min=0;i.max=100;
+      var o=document.createElement('output');
+      i.oninput=function(){o.textContent=i.value+'%';send('QLC+RUN|master|'+m.id+'|'+i.value)};
+      i.onpointerdown=function(){touching[m.id]=1};
+      i.onpointerup=i.onpointercancel=function(){delete touching[m.id]};
+      d.appendChild(n);d.appendChild(i);d.appendChild(o);box.appendChild(d);
+      r=mrows[m.id]={d:d,n:n,i:i,o:o}}
+    r.n.textContent=m.name;r.i.disabled=!ok;
+    if(!touching[m.id]){r.i.value=m.level;r.o.textContent=m.level+'%'}});
+  Object.keys(mrows).forEach(function(k){if(!seen[k]){box.removeChild(mrows[k].d);delete mrows[k]}})}
 function askPin(err){$('lock').className='show';$('pinerr').textContent=err||'';}
 function send(t){if(ws&&ws.readyState===1)ws.send(t)}
 function connect(){
@@ -140,6 +171,7 @@ $('go').onclick=function(){cmd('go');if(navigator.vibrate)navigator.vibrate(30)}
 $('back').onclick=function(){cmd('back')};
 $('subgo').onclick=function(){cmd('subgo')};
 $('subback').onclick=function(){cmd('subback')};
+$('hold').onclick=function(){cmd(st.paused?'resume':'pause')};
 $('stop').onclick=function(){
   var b=$('stop');
   if(b.className==='armed'){b.className='';b.textContent='STOP';clearTimeout(armedTimer);cmd('stop');return}
