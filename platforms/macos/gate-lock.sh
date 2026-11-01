@@ -36,12 +36,26 @@
 #                        it itself when done: gl_done)
 #   gl_done ID           drop the lock if ID holds it (the gate's own end)
 #
+#   gl_reap              kill the orphans of dead gates (below); run by
+#                        every gl_holder that cleans, and by the pool's probe
+#
 #   platforms/macos/gate-lock.sh --self-test    the lock's own test, on a
 #                                               scratch ~/gates (seconds)
+#
+# Orphans (2026-11-01): a gate that was killed leaves its test programs
+# running when the kill didn't reach their process group -- a *_test that
+# spins at 100% for days, on a host the next gate then shares. So every host
+# a pool run touches also gets: kill each *_test process (the user's own)
+# whose executable is under ~/gates/<id>/ when gate <id> is dead (its .pid
+# not running, or none) and the process is older than GL_REAP_AGE seconds
+# (default 3600, 1 h). Nothing else is ever killed: not the app, not a
+# running gate's tests, not anything outside ~/gates, not a program whose
+# name doesn't end in _test. Each kill is a line in ~/gates/cleanup.log.
 
 GL_MAX="${GL_MAX:-7200}"
 GL_GRACE="${GL_GRACE:-900}"
 GL_CLEAN="${GL_CLEAN:-1}"
+GL_REAP_AGE="${GL_REAP_AGE:-3600}"
 
 gl_g() { echo "$HOME/gates"; }
 gl_now() { date +%s; }
@@ -70,7 +84,53 @@ gl_info() { # <key>: from the lock's info
     sed -n "s/^$1=//p" "$(gl_g)/.gatelock/info" 2>/dev/null | head -n 1
 }
 
+# ps's elapsed time ([[dd-]hh:]mm:ss) in seconds.
+gl_secs() {
+    awk -v t="$1" 'BEGIN { d = 0; if (split(t, a, "-") == 2) { d = a[1]; t = a[2] }
+        n = split(t, b, ":"); s = 0; for (i = 1; i <= n; i++) s = s * 60 + b[i]; print d * 86400 + s }'
+}
+
+# The path of process PID's executable (Linux /proc, else lsof's first txt).
+gl_exe() {
+    local e
+    if e=$(readlink "/proc/$1/exe" 2>/dev/null) && [ -n "$e" ]; then
+        printf '%s\n' "${e% (deleted)}"
+    else
+        lsof -a -p "$1" -d txt -Fn 2>/dev/null | sed -n 's/^n//p' | head -n 1
+    fi
+}
+
+# Kill the *_test processes of dead gates (see the header); log each.
+gl_reap() {
+    [ "$GL_CLEAN" = 1 ] || return 0
+    local G Gr pid et args exe rel id age
+    G=$(gl_g)
+    [ -d "$G" ] || return 0
+    Gr=$(cd "$G" && pwd -P)
+    ps -u "$(id -u)" -o pid= -o etime= -o args= 2>/dev/null | while read -r pid et args; do
+        case "${args%% *}" in *_test) ;; *) continue ;; esac
+        [ "$pid" = "$$" ] && continue
+        age=$(gl_secs "$et")
+        [ "$age" -ge "$GL_REAP_AGE" ] || continue
+        exe=$(gl_exe "$pid")
+        case "$exe" in
+            "$G"/*) rel=${exe#"$G"/} ;;
+            "$Gr"/*) rel=${exe#"$Gr"/} ;;
+            *) continue ;;
+        esac
+        id=${rel%%/*}
+        case "$id" in ''|.*|*/*) continue ;; esac
+        gl_alive "$id" && continue
+        kill -TERM "$pid" 2>/dev/null
+        sleep 1
+        kill -0 "$pid" 2>/dev/null && kill -KILL "$pid" 2>/dev/null
+        echo "$(date '+%Y-%m-%d %H:%M:%S') killed pid $pid ${exe##*/} (${age}s old, gate $id is dead): $exe" >> "$G/cleanup.log"
+        echo "note: killed ${exe##*/} (pid $pid, ${age}s old) left by dead gate $id"
+    done
+}
+
 gl_holder() {
+    gl_reap
     local own="${1:-}" G id sha since f
     G=$(gl_g)
     if [ -d "$G/.gatelock" ]; then
@@ -263,6 +323,48 @@ gl_selftest() {
     wait
     n=$(cat "$T"/race? | grep -c '^@@ok$')
     check "one of six concurrent takers wins (got $n)" [ "$n" = 1 ]
+
+    # Orphans (Q196): a *_test of a dead gate, over GL_REAP_AGE, under
+    # ~/gates is killed and logged; nothing else is.
+    mkdir -p "$G"
+    dummy() { # <path>: a process that sleeps, named by that path
+        mkdir -p "$(dirname "$1")"
+        cp "$(command -v sleep)" "$1" && chmod +x "$1" || return 1
+        # macOS kills a copied system binary until it is signed again.
+        [ "$(uname)" = Darwin ] && { codesign --force -s - "$1" >/dev/null 2>&1 || return 1; }
+        "$1" 300 > /dev/null 2>&1 &
+        echo $!
+    }
+    local reapok=1 p_dead p_live p_plain p_out p_young livegate
+    if p_dead=$(dummy "$G/deadgate/ui/x_test") && [ -n "$p_dead" ]; then
+        p_plain=$(dummy "$G/deadgate/ui/plain_prog")
+        p_out=$(dummy "$T/outside/z_test")
+        sleep 300 & livegate=$!
+        echo $livegate > "$G/livegate.pid"
+        p_live=$(dummy "$G/livegate/ui/y_test")
+        sleep 2
+        GL_REAP_AGE=3600 gl_reap >/dev/null
+        check "a young orphan is left" kill -0 "$p_dead"
+        GL_REAP_AGE=1 GL_CLEAN=0 gl_reap >/dev/null
+        check "a status probe kills nothing" kill -0 "$p_dead"
+        out=$(GL_REAP_AGE=1 gl_reap)
+        check "the dead gate's old _test is killed" [ "${out#note: killed x_test}" != "$out" ]
+        check "its process is gone" bash -c "! kill -0 $p_dead 2>/dev/null"
+        check "the kill is logged" grep -q "killed pid $p_dead x_test.*gate deadgate is dead" "$G/cleanup.log"
+        check "a running gate's _test is left" kill -0 "$p_live"
+        check "a program not named *_test is left" kill -0 "$p_plain"
+        check "a _test outside ~/gates is left" kill -0 "$p_out"
+        check "only one kill is logged" [ "$(wc -l < "$G/cleanup.log" | tr -d ' ')" = 1 ]
+        # gl_holder does it too (every pool run); the dead pid-file case.
+        p_young=$(dummy "$G/gone2/ui/w_test"); echo 99999999 > "$G/gone2.pid"
+        sleep 2
+        out=$(GL_REAP_AGE=1 gl_holder)
+        check "gl_holder cleans orphans too" [ "${out#note: killed w_test}" != "$out" ]
+        kill $p_live $p_plain $p_out $livegate 2>/dev/null
+        wait 2>/dev/null
+    else
+        echo "note: could not run a copy of sleep here; orphan cleanup not tested"
+    fi
 
     rm -rf "$T"
     if [ "$fails" -eq 0 ]; then
