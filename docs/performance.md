@@ -193,11 +193,11 @@ Art-Net input and 8 of OSC input. Each phase ran 3 minutes.
   which share the main thread with the input's processing: with 16 fully
   changing universes coming in, a web client waited seconds for an answer
   on the Pi 5 and the i7. OSC and web load on their own cost little.
-  **Fixed in 0.3.1:** the main thread rebuilt the effect scripts' MIDI
+  **Fixed in 0.4.0:** the main thread rebuilt the effect scripts' MIDI
   data on every input value, and every value crossed from its universe's
   thread as a separate event. On the i7, 16 universes in, 120 s:
 
-  | 16 universes of Art-Net in | 0.3.0 base | 0.3.1 |
+  | 16 universes of Art-Net in | 0.3.0 base | 0.4.0 |
   |---|---|---|
   | CPU | 2.2 cores | 1.2 cores |
   | Ticks over 20 ms | 22–25 | 0 |

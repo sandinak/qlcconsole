@@ -130,7 +130,7 @@ near that size (a 240-fixture show ran for five hours at about half a
 core, but a show with dozens of RGB matrices and chasers added kept three
 of its four cores busy and fell behind). Heavy Art-Net *input* (a dozen
 or more universes coming in) slowed the windows and the web interface in
-0.3.0; 0.3.1 fixed it, and the output kept its rate in both. On Linux, the light timing is steadier when the
+0.3.0; 0.4.0 fixed it, and the output kept its rate in both. On Linux, the light timing is steadier when the
 app may use real-time priority (an rtprio limit for your user).
 
 The measurements, charts and method are on the
