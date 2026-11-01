@@ -136,6 +136,8 @@ public:
          *  an output on instead. */
         bool outputsLoaded = true;
         QSet<quint32> universesWithOutput;
+        /** The same for inputs (an input patch, or a controller slot). */
+        QSet<quint32> universesWithInput;
         /** Keep the result as lastResult() and emit reviewed(). False: a
          *  question asked of the checks (the command line, AI Assist) that
          *  leaves the panel's and the footer's result as it was. */

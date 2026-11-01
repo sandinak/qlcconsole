@@ -206,6 +206,14 @@ back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
   (PAT-05); definition errors (FIX-02); dead lights still used (FIX-08);
   a matrix on lights with no colour (FX-02); effects of size or speed 0
   (FX-03); embedded definitions that can't be read (FILE-03).
+- **Show Review, nine more checks** (59 in all): venues and focus: a focus call
+  with no target or no lights (VEN-01), lights a call can't aim (VEN-02), swapped
+  fixtures that need focus again (VEN-05), a venue file that is missing or
+  unreadable (VEN-09), a practice venue left applied (VEN-10); and on the
+  Virtual Console: a hit that overrides a wider one (VC-02, a note), inputs from
+  a universe with no input patched (VC-07), a VC Cue List on the old chaser
+  after Import in place (VC-09), sub-cues on Sub GO with nothing that sends it
+  (CUE-15). `--review` now reads the venue file beside the show.
 - **Show Review reads the Virtual Console** (50 checks in all): hits no button
   fires (VC-03), buttons and Cue Lists with no function or a deleted one
   (VC-04), the same key (VC-05) or MIDI input (VC-06) on two widgets, a

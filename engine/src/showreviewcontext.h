@@ -52,6 +52,8 @@ public:
     /** Whether universe @a u has an output patch (in the Doc, or as the
      *  file says when the Doc's I/O isn't loaded). */
     bool universeHasOutput(quint32 u) const;
+    /** Whether universe @a u has an input (a patch or a controller slot). */
+    bool universeHasInput(quint32 u) const;
     /** Whether the show patches any output at all. */
     bool anyOutput() const;
 
@@ -86,6 +88,10 @@ private:
 
 namespace ShowReviewChecks
 {
+    /** What a hit puts on stage per fixture and attribute (not intensity,
+     *  which mixes): the winning look's value and name. */
+    QHash<QPair<quint32, QString>, QPair<QString, QString>> hitStage(ReviewContext &ctx,
+                                                                      const ShowTree::ResolvedCue &rc);
     /** The checks over the patch, fixtures, effects, power, files and names */
     QList<ShowReview::Check> showChecks();
     /** The movement checks: moves in light, in the dark, before the first cue */
@@ -95,6 +101,9 @@ namespace ShowReviewChecks
     /** The checks over the Virtual Console (VcIndex): buttons, keys, inputs,
      *  Cue Runners, hits nobody fires, lists nothing can play */
     QList<ShowReview::Check> vcChecks();
+    /** The checks over venues and focus: focus calls, swapped fixtures, the
+     *  venue file, a practice venue left on */
+    QList<ShowReview::Check> venueChecks();
     /** Effect looks in scenes that can't run, by design: no script chosen,
      *  or the script isn't on this computer (palette id -> why). */
     QHash<quint32, QString> designEffectProblems(Doc *doc);

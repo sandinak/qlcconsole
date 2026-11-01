@@ -424,6 +424,201 @@ static void cue13(ReviewContext &ctx, QList<ReviewFinding> &out)
     }
 }
 
+
+/****************************************************************************
+ * VC-02 A hit that overrides a wider one
+ ****************************************************************************/
+
+static void vc02(ReviewContext &ctx, QList<ReviewFinding> &out)
+{
+    const VcIndex &vc = ctx.vc();
+    if (!vc.available)
+        return;
+    ShowTreeController *st = ctx.doc()->showTree();
+    QSet<QPair<quint32, quint32>> done;
+    auto stageOf = [&](quint32 hit, const CueList **list) {
+        QHash<QPair<quint32, QString>, QPair<QString, QString>> none;
+        const CueList *l = st->listOfCue(hit);
+        if (l == nullptr || !l->looks)
+            return none;
+        const int at = l->indexOf(hit);
+        const QList<ResolvedCue> &res = ctx.resolved(*l);
+        if (at < 0 || res.count() != l->cues.count())
+            return none;
+        *list = l;
+        return ShowReviewChecks::hitStage(ctx, res.at(at));
+    };
+    for (const VcWidget &w : vc.widgets)
+    {
+        if (w.hits.count() < 2)
+            continue;
+        for (quint32 narrow : w.hits)
+            for (quint32 wide : w.hits)
+            {
+                if (narrow == wide || !st->hitOverrides(narrow, wide)
+                    || done.contains(qMakePair(narrow, wide)))
+                    continue;
+                const CueList *ln = nullptr, *lw = nullptr;
+                const auto a = stageOf(narrow, &ln), b = stageOf(wide, &lw);
+                if (ln == nullptr || lw == nullptr)
+                    continue;
+                QList<quint32> shared;
+                for (auto it = a.constBegin(); it != a.constEnd(); ++it)
+                    if (b.contains(it.key()) && !shared.contains(it.key().first))
+                        shared << it.key().first;
+                if (shared.isEmpty())
+                    continue;
+                std::sort(shared.begin(), shared.end());
+                done.insert(qMakePair(narrow, wide));
+                QStringList fixtures;
+                for (quint32 fid : shared.mid(0, 3))
+                    fixtures << ctx.fixtureName(fid);
+                QByteArray fp = QByteArray::number(narrow) + '>' + QByteArray::number(wide);
+                for (quint32 fid : shared)
+                    fp += ',' + QByteArray::number(fid);
+                const Cue *cn = ln->cue(narrow), *cw = lw->cue(wide);
+                const QString nameN = cn != nullptr && !cn->name.isEmpty() ? cn->name : st->cueLabel(*ln, ln->indexOf(narrow));
+                const QString nameW = cw != nullptr && !cw->name.isEmpty() ? cw->name : st->cueLabel(*lw, lw->indexOf(wide));
+                out << ReviewContext::make(QStringLiteral("VC-02"), ReviewFinding::Note,
+                    tr("Hit '%1' (%2) overrides '%3' (%4) on %5, where both set the same things: "
+                       "while its place is live, the button fires it instead.")
+                        .arg(nameN, st->hitPlace(narrow), nameW, st->hitPlace(wide), nameList(fixtures)),
+                    { QStringLiteral("list:%1/cue:%2").arg(ln->id).arg(narrow),
+                      QStringLiteral("list:%1/cue:%2").arg(lw->id).arg(wide) },
+                    fp, QStringLiteral("cue"), QVariantList() << narrow);
+            }
+    }
+}
+
+/****************************************************************************
+ * VC-07 Inputs from a universe with no input
+ ****************************************************************************/
+
+static void vc07(ReviewContext &ctx, QList<ReviewFinding> &out)
+{
+    const VcIndex &vc = ctx.vc();
+    if (!vc.available)
+        return;
+    QMap<quint32, QList<int>> byUniverse;       // universe -> widgets listening
+    for (int i = 0; i < vc.widgets.count(); ++i)
+        for (const VcBinding &b : vc.widgets.at(i).bindings)
+            if (b.hasInput && !ctx.universeHasInput(b.universe) && !byUniverse[b.universe].contains(i))
+                byUniverse[b.universe] << i;
+    for (auto it = byUniverse.constBegin(); it != byUniverse.constEnd(); ++it)
+    {
+        QStringList targets;
+        QByteArray fp = QByteArray::number(it.key());
+        QStringList labels;
+        for (int i : it.value())
+        {
+            const VcWidget &w = vc.widgets.at(i);
+            targets << vcKey(w);
+            fp += '|' + QByteArray::number(w.id);
+            labels << widgetText(vc, i);
+        }
+        targets.removeDuplicates();
+        out << ReviewContext::make(QStringLiteral("VC-07"), ReviewFinding::Warning,
+            trn("%n widget(s) listen to universe %1, which has no input patched: %2. Nothing can reach "
+                "them. Patch an input there, or move them.", it.value().count())
+                .arg(it.key() + 1).arg(nameList(labels)),
+            targets, fp, QStringLiteral("vc"), QVariantList() << vc.widgets.at(it.value().first()).id);
+    }
+}
+
+/****************************************************************************
+ * VC-09 A VC Cue List on an upgraded chaser
+ ****************************************************************************/
+
+static void vc09(ReviewContext &ctx, QList<ReviewFinding> &out)
+{
+    const VcIndex &vc = ctx.vc();
+    if (!vc.available)
+        return;
+    Doc *doc = ctx.doc();
+    ShowTreeController *st = doc->showTree();
+    for (int i = 0; i < vc.widgets.count(); ++i)
+    {
+        const VcWidget &w = vc.widgets.at(i);
+        if (w.type != QLatin1String("CueList") || w.chaser == kInvalid || w.id == kInvalid)
+            continue;
+        for (const Production &p : st->productions())
+            for (const CueList &list : p.lists)
+            {
+                if (!list.inPlace)
+                    continue;
+                for (const CueList::Original &o : list.originals)
+                {
+                    if (o.function != w.chaser || doc->function(o.function) == nullptr)
+                        continue;
+                    out << ReviewContext::make(QStringLiteral("VC-09"), ReviewFinding::Warning,
+                        tr("%1 runs the old chaser '%2', not the Show Tree list '%3' made from it. "
+                           "Point it at the list.")
+                            .arg(widgetText(vc, i), doc->function(o.function)->name(), list.name),
+                        { vcKey(w), QStringLiteral("list:%1").arg(list.id) },
+                        QByteArray::number(o.function) + '>' + QByteArray::number(list.id),
+                        QStringLiteral("vc"), QVariantList() << w.id);
+                }
+            }
+    }
+}
+
+/****************************************************************************
+ * CUE-15 Sub GO with no Sub GO
+ ****************************************************************************/
+
+static void cue15(ReviewContext &ctx, QList<ReviewFinding> &out)
+{
+    const VcIndex &vc = ctx.vc();
+    if (!vc.available)
+        return;
+    ShowTreeController *st = ctx.doc()->showTree();
+    // decided (can change): Operate's own Sub GO key and the Control menu
+    // don't count as offering it: nothing on the console shows them. A key
+    // or input on a Cue Runner's Sub GO does, a Cue Runner that shows the
+    // button does, and so does a VC Cue List on the parent's list.
+    bool runner = false;
+    QSet<quint32> cueLists;
+    for (const VcWidget &w : vc.widgets)
+    {
+        runner = runner || (w.type == QLatin1String("CueRunner") && w.showSubGo);
+        if (w.type == QLatin1String("CueList") && w.chaser != kInvalid)
+            cueLists.insert(w.chaser);
+        for (const VcBinding &b : w.bindings)
+            if (b.role == QLatin1String("SubGo") && (!b.key.isEmpty() || b.hasInput))
+                runner = true;
+    }
+    if (runner)
+        return;
+    for (const Production &p : st->productions())
+        for (const CueList &sub : p.lists)
+        {
+            if (!sub.isSubCues())
+                continue;
+            int onSubGo = 0;
+            for (int i = 1; i < sub.cues.count(); ++i)     // the first plays with GO
+                if (!sub.cues.at(i).follow && !sub.cues.at(i).skip)
+                    ++onSubGo;
+            if (onSubGo == 0)
+                continue;
+            const CueList *parent = nullptr;
+            int at = -1;
+            for (const CueList &l : p.lists)
+                if (l.cue(sub.subOf) != nullptr)
+                {
+                    parent = &l;
+                    at = l.indexOf(sub.subOf);
+                }
+            if (parent == nullptr || cueLists.contains(parent->chaser))
+                continue;
+            out << ReviewContext::make(QStringLiteral("CUE-15"), ReviewFinding::Note,
+                trn("%1 has %n sub-cue(s) on Sub GO, but no Cue Runner shows a Sub GO button and no "
+                    "widget sends it. The keyboard (Ctrl+Alt+Return) is the only way.", onSubGo)
+                    .arg(ctx.cueText(*parent, at)),
+                { QStringLiteral("list:%1/cue:%2").arg(parent->id).arg(sub.subOf) },
+                QByteArray::number(onSubGo), QStringLiteral("cue"), QVariantList() << sub.subOf);
+        }
+}
+
 /****************************************************************************
  * The list
  ****************************************************************************/
@@ -435,6 +630,14 @@ QList<ShowReview::Check> ShowReviewChecks::vcChecks()
         { QStringLiteral("CUE-13"), tr("A list nothing can play"), S::Cues,
           tr("A cue list that isn't the main list, that no Cue Runner follows, no VC Cue List or "
              "button runs and no timecode or control route reaches can't be GOne in Operate."), cue13 },
+        { QStringLiteral("CUE-15"), tr("Sub GO with no Sub GO"), S::Cues,
+          tr("A cue whose sub-cues wait for Sub GO needs something to send it: a Cue Runner "
+             "with its Sub GO button, or a key or input on one. Only the keyboard shortcut left "
+             "is easy to forget on a busy night."), cue15 },
+        { QStringLiteral("VC-02"), tr("A hit that overrides a wider one"), S::Hits,
+          tr("On a button holding hits from several places, the narrowest place that is live "
+             "wins: a hit in a cue beats the same button's hit in the list or the production. "
+             "Information, so you know which one fires."), vc02 },
         { QStringLiteral("VC-03"), tr("Hits nobody can fire"), S::Hits,
           tr("A hit is fired from a VC button, a key or an input. One on none of them is "
              "a look nobody can call."), vc03 },
@@ -448,8 +651,14 @@ QList<ShowReview::Check> ShowReviewChecks::vcChecks()
         { QStringLiteral("VC-06"), tr("Same input twice"), S::Hits,
           tr("Two widgets with different jobs on one MIDI or input control: one fader or pad "
              "moves both."), vc06 },
+        { QStringLiteral("VC-07"), tr("Inputs from a universe with no input"), S::Hits,
+          tr("A widget listening to an input universe the show has no input patched on can never "
+             "be reached by a controller."), vc07 },
         { QStringLiteral("VC-08"), tr("Cue Runner on no list"), S::Hits,
           tr("A Cue Runner that follows a cue list that was deleted, or follows the current "
              "production in a show with no cue list, shows nothing and GOes nothing."), vc08 },
+        { QStringLiteral("VC-09"), tr("A Cue List on an upgraded chaser"), S::Hits,
+          tr("After Import in place the Show Tree list plays the show. A VC Cue List still on the "
+             "old chaser plays a show that no longer matches the list."), vc09 },
     };
 }

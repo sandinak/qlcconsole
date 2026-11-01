@@ -34,6 +34,8 @@
 #include "showembedding.h"
 #include "inputoutputmap.h"
 #include "showreview.h"
+#include "programmercontroller.h"
+#include "venuecorrections.h"
 #include "qlcconfig.h"
 #include "universe.h"
 #include "qlcfile.h"
@@ -94,8 +96,9 @@ int ShowReviewCli::cliMain(int argc, char **argv)
     return code;
 }
 
-/** Which universes the file patches an output on (the Doc loads no I/O). */
-static QSet<quint32> universesWithOutput(const QString &path)
+/** Which universes the file patches an output (or, with @a inputs, an input
+ *  or a controller slot) on: the Doc loads no I/O. */
+static QSet<quint32> universesWithPatch(const QString &path, bool inputs)
 {
     QSet<quint32> unis;
     QFile file(path);
@@ -113,7 +116,9 @@ static QSet<quint32> universesWithOutput(const QString &path)
                 inMap = true;
             else if (inMap && r.name() == KXMLQLCUniverse)
                 current = r.attributes().value(KXMLQLCUniverseID).toLongLong();
-            else if (inMap && current >= 0 && r.name() == KXMLQLCUniverseOutputPatch)
+            else if (inMap && current >= 0
+                     && (inputs ? (r.name() == KXMLQLCUniverseInputPatch || r.name() == KXMLQLCUniverseInputSlot)
+                                : r.name() == KXMLQLCUniverseOutputPatch))
                 unis.insert(quint32(current));
         }
         else if (t == QXmlStreamReader::EndElement)
@@ -245,10 +250,14 @@ int ShowReviewCli::run(const QStringList &args, QTextStream &out, QTextStream &e
         err << "Can't read " << path << " as a show\n";
         return Unreadable;
     }
+    // The venues beside the show, read and not applied.
+    if (doc.programmer() != nullptr && doc.programmer()->venueCorrections() != nullptr)
+        doc.programmer()->venueCorrections()->loadForReview(info.absoluteFilePath());
     // The Virtual Console is the UI's: read what it saved, without it.
     doc.showReview()->setVcFile(info.absoluteFilePath());
     options.outputsLoaded = false;
-    options.universesWithOutput = universesWithOutput(info.absoluteFilePath());
+    options.universesWithOutput = universesWithPatch(info.absoluteFilePath(), false);
+    options.universesWithInput = universesWithPatch(info.absoluteFilePath(), true);
 
     const ShowReview::Result result = doc.showReview()->run(options);
 

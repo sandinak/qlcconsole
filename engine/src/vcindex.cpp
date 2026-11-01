@@ -49,7 +49,7 @@ bool VcWidget::operator==(const VcWidget &o) const
     return parent == o.parent && id == o.id && type == o.type && caption == o.caption
            && page == o.page && multipage == o.multipage && action == o.action
            && mode == o.mode && function == o.function && hits == o.hits
-           && chaser == o.chaser && follows == o.follows && follow == o.follow
+           && chaser == o.chaser && showSubGo == o.showSubGo && follows == o.follows && follow == o.follow
            && functions == o.functions && levelChannels == o.levelChannels
            && group == o.group && bindings == o.bindings;
 }
@@ -215,6 +215,8 @@ void readWidget(QXmlStreamReader &r, VcIndex &ix, int parent)
     w.page = a.value(QStringLiteral("Page")).toInt();
     if (w.type == QLatin1String("ShowControl"))
         w.function = toId(a.value(QStringLiteral("Function")).toString());
+    if (w.type == QLatin1String("CueRunner") && a.hasAttribute(QStringLiteral("SubGo")))
+        w.showSubGo = a.value(QStringLiteral("SubGo")).toInt() != 0;
     if (w.type == QLatin1String("CueRunner") && a.hasAttribute(QStringLiteral("Follow")))
     {
         w.follow = toId(a.value(QStringLiteral("Follow")).toString());

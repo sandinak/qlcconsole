@@ -139,6 +139,10 @@ public:
     /** Where the corrections are written; empty with no show file. */
     QString filePath() const { return sidecarPath(m_showFile); }
 
+    /** Show Review from the command line: take @p showFile as the show's
+     *  file and read its sidecar, applying nothing and writing nothing --
+     *  the venues are there to be read, the rig is as the show has it. */
+    void loadForReview(const QString &showFile);
     /** Read the sidecar (replacing what is held). False, with @p why, on a
      *  file that cannot be read; a missing file is no venues, and true. */
     bool load(QString *why = nullptr);

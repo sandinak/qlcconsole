@@ -67,6 +67,7 @@ struct QLC_ENGINE_EXPORT VcWidget
     quint32 function = 0xFFFFFFFF;
     QList<quint32> hits;            //!< Button: the hits (Looks cues) it fires
     quint32 chaser = 0xFFFFFFFF;    //!< Cue List: the chaser it shows
+    bool showSubGo = true;          //!< Cue Runner: it shows its Sub GO button
     bool follows = false;           //!< Cue Runner: it follows a given list...
     quint32 follow = 0xFFFFFFFF;    //!< ...this one (not set: the current production)
     QList<quint32> functions;       //!< Speed Dial's functions, Clock's schedules

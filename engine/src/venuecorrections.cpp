@@ -208,6 +208,13 @@ void VenueCorrections::setShowFile(const QString &showFile, bool opened)
         save();
 }
 
+void VenueCorrections::loadForReview(const QString &showFile)
+{
+    reset();
+    m_showFile = showFile;
+    load();
+}
+
 bool VenueCorrections::load(QString *why)
 {
     const QString path = filePath();
