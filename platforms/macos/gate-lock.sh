@@ -327,16 +327,19 @@ gl_selftest() {
     # Orphans (Q196): a *_test of a dead gate, over GL_REAP_AGE, under
     # ~/gates is killed and logged; nothing else is.
     mkdir -p "$G"
+    # A tiny program of our own to copy and run: macOS kills a copy of a
+    # system binary (sleep) outright, signed again or not.
+    printf '#include <unistd.h>\nint main(void) { sleep(300); return 0; }\n' > "$T/dummy.c"
+    local dummybin=""
+    cc -o "$T/dummybin" "$T/dummy.c" >/dev/null 2>&1 && dummybin="$T/dummybin"
     dummy() { # <path>: a process that sleeps, named by that path
         mkdir -p "$(dirname "$1")"
-        cp "$(command -v sleep)" "$1" && chmod +x "$1" || return 1
-        # macOS kills a copied system binary until it is signed again.
-        [ "$(uname)" = Darwin ] && { codesign --force -s - "$1" >/dev/null 2>&1 || return 1; }
-        "$1" 300 > /dev/null 2>&1 &
+        cp "$dummybin" "$1" && chmod +x "$1" || return 1
+        "$1" > /dev/null 2>&1 &
         echo $!
     }
     local reapok=1 p_dead p_live p_plain p_out p_young livegate
-    if p_dead=$(dummy "$G/deadgate/ui/x_test") && [ -n "$p_dead" ]; then
+    if [ -n "$dummybin" ] && p_dead=$(dummy "$G/deadgate/ui/x_test") && [ -n "$p_dead" ]; then
         p_plain=$(dummy "$G/deadgate/ui/plain_prog")
         p_out=$(dummy "$T/outside/z_test")
         sleep 300 & livegate=$!
@@ -363,7 +366,7 @@ gl_selftest() {
         kill $p_live $p_plain $p_out $livegate 2>/dev/null
         wait 2>/dev/null
     else
-        echo "note: could not run a copy of sleep here; orphan cleanup not tested"
+        echo "FAIL: no C compiler (cc) to build the dummy process: orphan cleanup not tested"; fails=$((fails + 1))
     fi
 
     rm -rf "$T"
