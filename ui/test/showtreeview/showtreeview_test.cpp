@@ -3721,6 +3721,61 @@ Fixture *placedSpot(Doc *doc, const QString &name, double x)
 }
 }
 
+void ShowTreeView_Test::formationRowsSayWhereTheyComeFrom()
+{
+    QList<Fixture *> spots { placedSpot(m_doc, "L1", -4), placedSpot(m_doc, "R1", 4) };
+    FixtureGroup *all = new FixtureGroup(m_doc);
+    all->setName("All");
+    m_doc->addFixtureGroup(all);
+    for (Fixture *f : spots)
+        all->assignFixture(f->id());
+    StageTarget *edge = m_doc->monitorProperties()->addStageTarget();
+    edge->setName("DS-Edge");
+    edge->setPosition(QVector3D(0, 3, 0));
+    edge->setLinePoints({ QVector3D(-5, 0, 0), QVector3D(5, 0, 0) });
+    edge->makeLine();
+    StageTarget *mark = m_doc->monitorProperties()->addStageTarget();
+    mark->setName("Mark");
+    mark->setPosition(QVector3D(0, 3, 0));
+    const quint32 form = m_doc->paletteOps()->create(QLCPalette::Formation, QString(), "Pairs crossed",
+                                                     QVariantList(), [](QLCPalette *p) {
+                                                         p->setFormationValue(QLCPalette::FormationGroup, 2);
+                                                     });
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L");
+    const quint32 c1 = st->addCue(list, -1, "One");
+    Target t;
+    t.groups << all->id();
+    const quint32 l1 = st->addLayer(c1, t);
+    QVERIFY(st->setLayerLook(c1, l1, st->lookForPalette(st->aimPaletteFor(edge->id()))));
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1200, 900);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    // Dropped on the layer, as any palette.
+    QVERIFY(view.dropPalettes(c1, l1, { form }));
+    QVERIFY(view.selectNode(l1, c1));
+    QLabel *group = view.findChild<QLabel *>(QStringLiteral("stRow:%1").arg(KeyGrouping));
+    QVERIFY(group != nullptr);
+    QVERIFY2(group->text().contains(QString::fromUtf8("Pairs — from Formation “Pairs crossed”")),
+             qPrintable(group->text()));
+    QLabel *formRow = view.findChild<QLabel *>(QStringLiteral("stRow:%1").arg(KeyFormation));
+    QVERIFY(formRow != nullptr);
+    QVERIFY2(formRow->text().contains("Pairs crossed (pairs)"), qPrintable(formRow->text()));
+    QVERIFY(formRow->toolTip().isEmpty());
+
+    // Aimed at a point instead: the Formation stays, does nothing, says so.
+    QVERIFY(st->setLayerLook(c1, l1, st->lookForPalette(st->aimPaletteFor(mark->id()))));
+    QVERIFY(view.selectNode(c1));
+    QVERIFY(view.selectNode(l1, c1));
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    formRow = view.findChild<QLabel *>(QStringLiteral("stRow:%1").arg(KeyFormation));
+    QVERIFY(formRow != nullptr);
+    QVERIFY2(formRow->text().contains("does nothing here"), qPrintable(formRow->text()));
+    QVERIFY(formRow->toolTip().contains("isn't aimed at a line"));
+}
+
 /* D19 / open 14: the plan view under a line aim's order strip -- the line
    from above, each light's beam to its point, and the previous cue's
    points as rings; it follows Spread at once. Rendered offscreen. */

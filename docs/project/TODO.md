@@ -10,6 +10,19 @@ under `~/.claude/.../memory/`.
 
 ---
 
+## Formation palettes — built, leftovers (0.4, form, Q197, 2026-11-01)
+
+Built: `QLCPalette::Formation` (Spread / Grouping / Cross, any subset, as
+the `__line*` params), `ShowTree::KeyFormation` resolved per row (layer row
+> layer Formation > cue row > cue Formation > Aim's own), Build's
+Formation page with its never-saved preview (`FormationEditor`), the
+command words and AI Assist's `formation` attribute. Each "decided (can
+change)": the preview pick is remembered per palette for the session only
+(cleared when another show opens); a Formation on a non-line layer stays
+and says it does nothing (not refused); the preview uses the Aim palette a
+line aim there reuses as the base. The plan view's pop-out (lpv) works from
+the Formation page too, fed by its preview. Open: nothing known.
+
 ## Line aim pop-out (lpv, 2026-11-01) — built, leftovers
 
 Built: `LinePlanWindow` (ui/src/lineplanview.*) shows the order strip and

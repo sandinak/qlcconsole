@@ -575,6 +575,11 @@ Order and dependencies:
    the Needs work filter and cue sheet column, the touchpad shortcuts.
 10. **Course**: Lessons 2.2-2.4, and a Level 3 lesson on running from the
    pad or phone.
+11. **Formation palettes** (board Q197, 2026-11-01: "a separate Formation
+   palette type you stack with any Aim palette"). Attaches to line aims
+   and Build ▸ Palettes: Spread / Grouping / Cross in one shared palette,
+   on a layer or a cue, under a layer's own rows. **Built 2026-11-01**
+   (docs/features/show-tree.md "Formation palettes").
 
 ### 0.5: The show explains itself (about 6-8 weeks)
 

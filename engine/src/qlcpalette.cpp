@@ -152,6 +152,7 @@ QString QLCPalette::typeToString(QLCPalette::PaletteType type)
         case Zoom:      return "Zoom";
         case Beam:      return "Beam";
         case Effect:    return "Effect";
+        case Formation: return "Formation";
         case Undefined: return "";
     }
 
@@ -184,6 +185,8 @@ QLCPalette::PaletteType QLCPalette::stringToType(const QString &str)
         return Beam;
     else if (str == "Effect")
         return Effect;
+    else if (str == "Formation")
+        return Formation;
 
     return Undefined;
 }
@@ -206,6 +209,7 @@ QString QLCPalette::iconResource(bool svg) const
         case Zoom: return QString("%1:/beam.%2").arg(prefix).arg(ext);
         case Beam:   return QString("%1:/beam.%2").arg(prefix).arg(ext);
         case Effect: return QString("%1:/script.%2").arg(prefix).arg(ext);
+        case Formation: return QString("%1:/target.%2").arg(prefix).arg(ext);
         default: return "";
     }
 }
@@ -1063,6 +1067,7 @@ QList<SceneValue> QLCPalette::valuesFromFixtures(Doc *doc, QList<quint32> fixtur
             }
             break;
             case Effect:
+            case Formation:     // no channels: it shapes a line Aim look
             case Undefined:
             break;
         }
@@ -1758,6 +1763,7 @@ bool QLCPalette::loadXML(QXmlStreamReader &doc)
                 setValue(strVal.toFloat()); // 0.0–1.0 relative rate
             break;
             case Effect:
+            case Formation:
             case Undefined: break;
         }
     }
@@ -1801,6 +1807,7 @@ bool QLCPalette::loadXML(QXmlStreamReader &doc)
                 case Strobe:    break;
                 case Gobo:      break;
                 case Effect:    break;
+                case Formation: break;
                 case Undefined: break;
             }
         }
@@ -1880,7 +1887,7 @@ bool QLCPalette::loadXML(QXmlStreamReader &doc)
             doc.skipCurrentElement();
         }
     }
-    else if (m_type == Aim)
+    else if (m_type == Aim || m_type == Formation)
     {
         // A line's spread, group and cross (see saveXML()).
         while (doc.readNextStartElement())
@@ -1915,7 +1922,7 @@ bool QLCPalette::saveXML(QXmlStreamWriter *doc)
     // with a zeroed value instead and warn; the ref stays resolvable and the
     // user can see and fix the palette rather than losing it.
     if (m_values.isEmpty() && m_type != Shutter && m_type != Gobo
-        && m_type != Effect && m_type != Aim)
+        && m_type != Effect && m_type != Aim && m_type != Formation)
     {
         qWarning() << "Saving palette" << this->id() << name()
                    << "of type" << typeToString(m_type)
@@ -1982,6 +1989,9 @@ bool QLCPalette::saveXML(QXmlStreamWriter *doc)
         break;
         case Effect:
             // Script path and bindings saved as child elements below
+        break;
+        case Formation:
+            // What it sets: EffectParam children below, as an Aim's line.
         break;
         case Undefined: break;
     }
@@ -2091,8 +2101,10 @@ bool QLCPalette::saveXML(QXmlStreamWriter *doc)
     }
     /* An Aim look on a line carries its spread (LineSpread's "__line*"
        params), one element each so each can be inherited on its own. A build
-       that predates lines skips an Aim palette's children. */
-    else if (m_type == Aim)
+       that predates lines skips an Aim palette's children. A Formation keeps
+       what it sets the same way; a build that predates Formations reads its
+       type as Undefined, skips the children and plays nothing for it. */
+    else if (m_type == Aim || m_type == Formation)
     {
         for (auto it = m_effectParamValues.constBegin();
              it != m_effectParamValues.constEnd(); ++it)
@@ -2107,6 +2119,47 @@ bool QLCPalette::saveXML(QXmlStreamWriter *doc)
     doc->writeEndElement();
 
     return true;
+}
+
+/************************************************************************
+ * Formation
+ ************************************************************************/
+
+QString QLCPalette::formationParam(FormationSetting s)
+{
+    switch (s)
+    {
+        case FormationSpread: return QStringLiteral("__lineSpread");
+        case FormationGroup:  return QStringLiteral("__lineGroup");
+        case FormationCross:  return QStringLiteral("__lineCross");
+    }
+    return QString();
+}
+
+bool QLCPalette::formationHas(FormationSetting s) const
+{
+    return m_effectParamValues.contains(formationParam(s));
+}
+
+double QLCPalette::formationValue(FormationSetting s) const
+{
+    return m_effectParamValues.value(formationParam(s), 0.0);
+}
+
+void QLCPalette::setFormationValue(FormationSetting s, double value)
+{
+    switch (s)
+    {
+        case FormationSpread: value = qBound(-5.0, value, 5.0); break;
+        case FormationGroup:  value = qBound(0, int(value), 4); break;
+        case FormationCross:  value = value != 0.0 ? 1 : 0; break;
+    }
+    m_effectParamValues[formationParam(s)] = value;
+}
+
+void QLCPalette::clearFormationValue(FormationSetting s)
+{
+    m_effectParamValues.remove(formationParam(s));
 }
 
 QColor QLCPalette::colorValue() const

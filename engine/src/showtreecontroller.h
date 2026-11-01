@@ -89,6 +89,33 @@ public:
     /** Whether @a look (a Position) aims at a line target. */
     bool isLineAim(const ShowTree::Look &look) const;
     ShowTree::LineAimTest lineAimTest() const;
+    /** What a Formation palette sets, as line parameter looks (Q197):
+     *  formationLooks() of the show's palette. */
+    ShowTree::FormationRows formationRows() const;
+    /** The line parameter looks Formation @a palette sets (KeySpread,
+     *  KeyGrouping, KeyCross with their row values); empty for anything
+     *  else. */
+    static QList<ShowTree::Look> formationLooks(const QLCPalette *palette);
+    /** "spread 0, pairs, mirror": what Formation @a palette sets, as a
+     *  person reads it ("sets nothing" for none). */
+    static QString formationSummary(const QLCPalette *palette);
+    /** Set what line parameter look @a look (KeySpread / KeyGrouping /
+     *  KeyCross, a row value; empty value: unset) says on Formation
+     *  @a palette. No undo step: the caller's. False: it doesn't read. */
+    static bool applyFormationLook(QLCPalette *palette, const ShowTree::Look &look);
+    /** An Aim look's line params @a params with line parameter looks
+     *  @a rows applied over them, as a line aim's layer plays them
+     *  (lineAimPalette()): for a preview of a Formation on a line. */
+    static QMap<QString, double> lineParamsWith(const QMap<QString, double> &params,
+                                                const QList<ShowTree::Look> &rows);
+    /** The Aim palette a line aim at stage target @a targetId reuses: the
+     *  first named (not one-off) Aim palette pointing there; invalid: none. */
+    quint32 namedAimPalette(quint32 targetId) const;
+    /** Set Formation @a paletteId's @a key (KeySpread / KeyGrouping /
+     *  KeyCross) to row value @a value (empty: unset it) as one palette
+     *  undo step, then bake: every cue that uses it changes. False: no
+     *  such Formation, or @a value doesn't read. */
+    bool setFormationValue(quint32 paletteId, const QString &key, const QString &value);
 
     /************************************************************************
      * Productions (P5): which one is current -- what GO, the footer, VC
@@ -1134,6 +1161,10 @@ private:
     /** Bumped whenever the rig under the plans changes (fixtures, groups,
      *  palettes, group sets): every plan made before is planned again. */
     quint64 m_planWorld = 1;
+    /** What the show's Formation palettes set, as of the last bake that
+     *  followed one (formationSignature()). */
+    QByteArray m_formationSignature;
+    QByteArray formationSignature() const;
     QList<ShowTree::GroupSet> m_planGroupSets;
     int m_lastBakePlanned = 0;
     /** What an expanded target lights: its fixtures, and per fixture the

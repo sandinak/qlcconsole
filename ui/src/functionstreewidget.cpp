@@ -108,7 +108,8 @@ static bool isPaletteTypeName(const QString &name)
     static const QLCPalette::PaletteType kTypes[] = {
         QLCPalette::Dimmer, QLCPalette::Color, QLCPalette::Pan, QLCPalette::Tilt,
         QLCPalette::PanTilt, QLCPalette::Aim, QLCPalette::Shutter, QLCPalette::Strobe,
-        QLCPalette::Gobo, QLCPalette::Zoom, QLCPalette::Beam, QLCPalette::Effect };
+        QLCPalette::Gobo, QLCPalette::Zoom, QLCPalette::Beam, QLCPalette::Effect,
+        QLCPalette::Formation };
     for (QLCPalette::PaletteType t : kTypes)
         if (name == QLCPalette::typeToString(t))
             return true;

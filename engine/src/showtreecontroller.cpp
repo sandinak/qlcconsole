@@ -170,6 +170,33 @@ ShowTreeController::ShowTreeController(Doc *doc)
                 this, &ShowTreeController::slotMainCueListChanged);
     // A production made current arms its hits (Q154).
     connect(this, &ShowTreeController::currentProductionChanged, this, &ShowTreeController::hitArmingChanged);
+    // A Formation palette edited (or its edit undone) in Build or the Look
+    // Editor changes every cue that uses it (Q197): bake when what the
+    // show's Formations set changed.
+    if (m_doc->paletteOps() != nullptr)
+        connect(m_doc->paletteOps(), &PaletteOps::changed, this, [this]() {
+            const QByteArray sig = formationSignature();
+            if (sig == m_formationSignature)
+                return;
+            m_formationSignature = sig;
+            if (!m_productions.isEmpty())
+                bake();
+        });
+}
+
+QByteArray ShowTreeController::formationSignature() const
+{
+    QByteArray sig;
+    for (const QLCPalette *p : m_doc->palettes())
+    {
+        if (p->type() != QLCPalette::Formation)
+            continue;
+        sig += QByteArray::number(p->id()) + ':';
+        for (const Look &l : formationLooks(p))
+            sig += l.key.toLatin1() + '=' + l.value.toLatin1() + ';';
+        sig += '|';
+    }
+    return sig;
 }
 
 ShowTreeController::~ShowTreeController()
@@ -239,6 +266,106 @@ LineAimTest ShowTreeController::lineAimTest() const
     return [this](const Look &look) { return isLineAim(look); };
 }
 
+FormationRows ShowTreeController::formationRows() const
+{
+    return [this](quint32 pid) { return formationLooks(m_doc->palette(pid)); };
+}
+
+QList<Look> ShowTreeController::formationLooks(const QLCPalette *palette)
+{
+    QList<Look> out;
+    if (palette == nullptr || palette->type() != QLCPalette::Formation)
+        return out;
+    if (palette->formationHas(QLCPalette::FormationSpread))
+    {
+        const double v = qRound(palette->formationValue(QLCPalette::FormationSpread) * 10.0) / 10.0;
+        out << lineParamLook(KeySpread, QString::number(v));
+    }
+    if (palette->formationHas(QLCPalette::FormationGroup))
+    {
+        static const char *words[] = { "halves", "each", "pairs", "threes", "fours" };
+        const int g = qBound(0, int(palette->formationValue(QLCPalette::FormationGroup)), 4);
+        out << lineParamLook(KeyGrouping, QLatin1String(words[g]));
+    }
+    if (palette->formationHas(QLCPalette::FormationCross))
+        out << lineParamLook(KeyCross, palette->formationValue(QLCPalette::FormationCross) != 0.0
+                                           ? QStringLiteral("mirror") : QStringLiteral("swap"));
+    return out;
+}
+
+QString ShowTreeController::formationSummary(const QLCPalette *palette)
+{
+    QStringList parts;
+    for (const Look &l : formationLooks(palette))
+    {
+        if (l.key == KeySpread)
+            parts << tr("spread %1").arg(lineParamText(l.key, l.value));
+        else if (l.key == KeyGrouping)
+            parts << (l.value == QLatin1String("each") ? tr("each light") : l.value);
+        else if (l.key == KeyCross)
+            parts << (l.value == QLatin1String("mirror") ? tr("mirror") : tr("swap sides"));
+    }
+    return parts.isEmpty() ? tr("sets nothing") : parts.join(QStringLiteral(", "));
+}
+
+bool ShowTreeController::applyFormationLook(QLCPalette *palette, const Look &look)
+{
+    if (palette == nullptr || palette->type() != QLCPalette::Formation || !isLineParamKey(look.key))
+        return false;
+    const QLCPalette::FormationSetting what = look.key == KeySpread ? QLCPalette::FormationSpread
+                                              : look.key == KeyGrouping ? QLCPalette::FormationGroup
+                                                                        : QLCPalette::FormationCross;
+    if (look.value.isEmpty())
+    {
+        palette->clearFormationValue(what);
+        return true;
+    }
+    const QString w = lineParamValue(look.key, look.value);
+    if (w.isEmpty())
+        return false;
+    double v = 0;
+    if (look.key == KeySpread)
+        v = w.toDouble();
+    else if (look.key == KeyGrouping)
+        v = w == QLatin1String("halves") ? 0 : w == QLatin1String("pairs") ? 2
+            : w == QLatin1String("threes") ? 3 : w == QLatin1String("fours") ? 4 : 1;
+    else
+        v = w == QLatin1String("mirror") ? 1 : 0;
+    palette->setFormationValue(what, v);
+    return true;
+}
+
+bool ShowTreeController::setFormationValue(quint32 paletteId, const QString &key, const QString &value)
+{
+    QLCPalette *p = m_doc->palette(paletteId);
+    if (p == nullptr || p->type() != QLCPalette::Formation || !isLineParamKey(key))
+        return false;
+    Look look;
+    look.key = key;
+    if (!value.isEmpty())
+    {
+        look.value = lineParamValue(key, value);
+        if (look.value.isEmpty())
+            return false;
+    }
+    auto change = [&]() { applyFormationLook(p, look); };
+    PaletteOps *ops = m_doc->paletteOps();
+    if (ops != nullptr)
+        ops->effectParamStep(tr("%1 of %2").arg(keyLabel(key), p->name()), { paletteId }, change);
+    else
+        change();
+    // PaletteOps::changed bakes; without it (or with nothing changed) bake
+    // here so the cues follow at once.
+    const QByteArray sig = formationSignature();
+    if (sig != m_formationSignature)
+    {
+        m_formationSignature = sig;
+        if (!m_productions.isEmpty())
+            bake();
+    }
+    return true;
+}
+
 QList<ResolvedCue> ShowTreeController::resolved(const CueList &list) const
 {
     // Sub-cues (P6): the first starts from what its cue puts on stage.
@@ -251,12 +378,12 @@ QList<ResolvedCue> ShowTreeController::resolved(const CueList &list) const
                     parent = &l;
         if (parent != nullptr)
         {
-            const QList<ResolvedCue> up = resolve(*parent, lineAimTest());
+            const QList<ResolvedCue> up = resolve(*parent, lineAimTest(), nullptr, formationRows());
             const QList<ResolvedLayer> start = up.at(parent->indexOf(list.subOf)).layers;
-            return resolve(list, lineAimTest(), &start);
+            return resolve(list, lineAimTest(), &start, formationRows());
         }
     }
-    return resolve(list, lineAimTest());
+    return resolve(list, lineAimTest(), nullptr, formationRows());
 }
 
 static Cue *cueIn(QList<Production> &productions, quint32 cueId, CueList **listOut = nullptr)
@@ -2058,7 +2185,7 @@ bool ShowTreeController::splitLayer(quint32 cueId, quint32 layerId, QList<quint3
 
         quint32 cid = invalidId();
         QString unit, key;
-        if (stageDiffers(beforeList, *list, &cid, &unit, &key, lineAimTest()))
+        if (stageDiffers(beforeList, *list, &cid, &unit, &key, lineAimTest(), formationRows()))
         {
             refusal = tr("Splitting would change what cue %1 plays on %2 (%3), so it was left as it is.")
                       .arg(cueLabel(beforeList, beforeList.indexOf(cid)), unitLabel(unit), keyLabel(key));
@@ -2266,7 +2393,7 @@ quint32 ShowTreeController::mergeLayers(quint32 cueId, const QList<quint32> &lay
 
         quint32 cid = invalidId();
         QString unit, key;
-        if (stageDiffers(beforeList, *list, &cid, &unit, &key, lineAimTest()))
+        if (stageDiffers(beforeList, *list, &cid, &unit, &key, lineAimTest(), formationRows()))
         {
             refusal = tr("Merging would change what cue %1 plays on %2 (%3), so it was left as it is.")
                       .arg(cueLabel(beforeList, beforeList.indexOf(cid)), unitLabel(unit), keyLabel(key));
@@ -2842,6 +2969,32 @@ static void applyLineParam(LineSpread::Settings &s, const QString &key, const QS
         s.cross = value == QLatin1String("mirror") ? LineSpread::Mirror : LineSpread::SwapSides;
 }
 
+QMap<QString, double> ShowTreeController::lineParamsWith(const QMap<QString, double> &params,
+                                                        const QList<Look> &rows)
+{
+    LineSpread::Settings s = LineSpread::fromParams(params);
+    for (const Look &l : rows)
+        if (!l.none)
+            applyLineParam(s, l.key, l.value);
+    QMap<QString, double> out = params;
+    LineSpread::toParams(s, out);
+    return out;
+}
+
+quint32 ShowTreeController::namedAimPalette(quint32 targetId) const
+{
+    QList<QLCPalette *> pl = m_doc->palettes();
+    std::sort(pl.begin(), pl.end(), [](const QLCPalette *a, const QLCPalette *b) { return a->id() < b->id(); });
+    // As aimPaletteFor() reuses one (nothing of its own first), else any.
+    for (int pass = 0; pass < 2; ++pass)
+        for (const QLCPalette *p : pl)
+            if (p->type() == QLCPalette::Aim && p->stageTargetId() == targetId && !isInlinePalette(p->id())
+                && !p->name().isEmpty()
+                && (pass == 1 || LineSpread::fromParams(p->effectParamValues()) == LineSpread::Settings()))
+                return p->id();
+    return QLCPalette::invalidId();
+}
+
 quint32 ShowTreeController::lineAimPalette(quint32 basePid, const ResolvedLayer &layer, bool create)
 {
     QLCPalette *base = m_doc->palette(basePid);
@@ -3381,6 +3534,7 @@ QString ShowTreeController::keyForPalette(quint32 paletteId) const
         case QLCPalette::Zoom: return KeyZoom;
         case QLCPalette::Beam: return KeyBeam;
         case QLCPalette::Effect: return effectKey(effectKind(p));
+        case QLCPalette::Formation: return KeyFormation;
         case QLCPalette::Undefined: break;
     }
     return QStringLiteral("Other");

@@ -184,6 +184,13 @@ private slots:
     void cueSpreadReachesOnlyLineAims();
     void aCueAimIsOneFormationByPosition();
     void aSpreadChangeFadesOverTheCueFade();
+    void formationResolveOrder();
+    void formationTracksRowByRow();
+    void formationSharedEditChangesEveryCue();
+    void formationOnTheCue();
+    void formationOnANonLineLayer();
+    void formationSavesAndAnUnknownTypeLoads();
+    void formationCommandWords();
 
     // The command line's help; copy / paste
     void everyCommandWordHasHelpAndItsExamplesParse();

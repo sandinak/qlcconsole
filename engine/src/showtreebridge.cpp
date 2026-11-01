@@ -1059,7 +1059,7 @@ bool ShowTreeController::captureIntoPalettes(quint32 sceneId, CapturePlan *planO
     typedef QPair<QHash<quint64, uchar>, QStringList> Out;
     auto outputs = [&](const CueList &l) {
         QList<Out> o;
-        const QList<ResolvedCue> r = resolve(l, aimTest);
+        const QList<ResolvedCue> r = resolve(l, aimTest, nullptr, formationRows());
         for (int i = 0; i < l.cues.count(); ++i)
         {
             QStringList e;

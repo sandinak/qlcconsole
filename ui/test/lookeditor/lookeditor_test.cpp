@@ -72,6 +72,14 @@
 #include "qlcfixturedefcache.h"
 #include "qlcfile.h"
 #include "paletteops.h"
+#include "formationeditor.h"
+#include "lineplanview.h"
+#include "showtreecontroller.h"
+#include "showtreemodel.h"
+#include "fixturegroup.h"
+#include "qlcfixturehead.h"
+#include "qlcphysical.h"
+#include "aimsolver.h"
 
 void LookEditor_Test::aColourDarkerThanAFifthIsCalledOut()
 {
@@ -1763,3 +1771,259 @@ void LookEditor_Test::aNewColourIsNamedLikeItsSiblings()
 }
 
 QTEST_MAIN(LookEditor_Test)
+
+/****************************************************************************
+ * Formation palettes (Q197)
+ ****************************************************************************/
+
+namespace
+{
+Fixture *formationSpot(Doc *doc, const QString &name, double x)
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test");
+    def->setModel("Spot " + name);
+    def->setType(QLCFixtureDef::MovingHead);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("2ch");
+    const QLCChannel::Group groups[] = { QLCChannel::Pan, QLCChannel::Tilt };
+    for (int k = 0; k < 2; ++k)
+    {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(k == 0 ? "Pan" : "Tilt");
+        ch->setGroup(groups[k]);
+        ch->setControlByte(QLCChannel::MSB);
+        def->addChannel(ch);
+        mode->insertChannel(ch, k);
+    }
+    QLCPhysical ph;
+    ph.setFocusPanMax(540);
+    ph.setFocusTiltMax(270);
+    mode->setPhysical(ph);
+    QLCFixtureHead head;
+    head.addChannel(0);
+    head.addChannel(1);
+    mode->insertHead(-1, head);
+    def->addMode(mode);
+    Fixture *fxi = new Fixture(doc);
+    fxi->setName(name);
+    fxi->setFixtureDefinition(def, mode);
+    fxi->setUniverse(0);
+    fxi->setAddress(quint32(100 + doc->fixtures().size() * 2));
+    if (!doc->addFixture(fxi))
+        return nullptr;
+    doc->monitorProperties()->setFixturePosition(fxi->id(), 0, 0, QVector3D(float(x * 1000.0), 0, 6));
+    return fxi;
+}
+
+FixtureGroup *formationGroup(Doc *doc, const QString &name, const QList<Fixture *> &fixtures)
+{
+    FixtureGroup *g = new FixtureGroup(doc);
+    g->setName(name);
+    doc->addFixtureGroup(g);
+    for (Fixture *f : fixtures)
+        g->assignFixture(f->id());
+    return g;
+}
+
+StageTarget *formationLine(Doc *doc)
+{
+    StageTarget *edge = doc->monitorProperties()->addStageTarget();
+    edge->setName("Edge");
+    edge->setPosition(QVector3D(0, 3, 0));
+    edge->setLinePoints({ QVector3D(-5, 0, 0), QVector3D(5, 0, 0) });
+    edge->makeLine();
+    return edge;
+}
+
+QByteArray showXml(Doc *doc)
+{
+    QByteArray xml;
+    QBuffer buf(&xml);
+    buf.open(QIODevice::WriteOnly);
+    QXmlStreamWriter w(&buf);
+    w.writeStartDocument();
+    doc->saveXML(&w);
+    w.writeEndDocument();
+    return xml;
+}
+}
+
+void LookEditor_Test::aFormationIsEditedOnItsPage()
+{
+    Doc doc(this);
+    formationLine(&doc);
+    const quint32 pid = doc.paletteOps()->create(QLCPalette::Formation, QString(), "Pairs crossed");
+    QVERIFY(pid != QLCPalette::invalidId());
+    LookEditor ed(&doc);
+    ed.resize(800, 700);
+    ed.show();
+    ed.setPalette(pid);
+    QApplication::processEvents();
+    FormationEditor *fe = ed.formationEditor();
+    QVERIFY(fe != nullptr && fe->isVisible());
+    // New: sets nothing; every control off.
+    QVERIFY(!fe->spreadSet()->isChecked() && !fe->groupSet()->isChecked() && !fe->crossSet()->isChecked());
+    QVERIFY(!fe->spreadSpin()->isEnabled());
+
+    QSignalSpy changed(&ed, &LookEditor::paletteChanged);
+    fe->spreadSet()->setChecked(true);              // at +5: set, and +5
+    QLCPalette *p = doc.palette(pid);
+    QVERIFY(p->formationHas(QLCPalette::FormationSpread));
+    QCOMPARE(p->formationValue(QLCPalette::FormationSpread), 5.0);
+    fe->spreadSpin()->setValue(0.0);
+    QCOMPARE(p->formationValue(QLCPalette::FormationSpread), 0.0);
+    fe->groupSet()->setChecked(true);
+    fe->groupCombo()->setCurrentIndex(fe->groupCombo()->findData(QString("pairs")));
+    fe->crossSet()->setChecked(true);
+    fe->crossCombo()->setCurrentIndex(fe->crossCombo()->findData(QString("mirror")));
+    QCOMPARE(ShowTreeController::formationSummary(p), QString("spread 0, pairs, mirror"));
+    QVERIFY(changed.count() >= 4);
+    // Undo the last: Cross back to unset; the page follows when re-shown.
+    QVERIFY(doc.paletteOps()->undo());
+    QCOMPARE(p->formationValue(QLCPalette::FormationCross), 0.0);
+    QVERIFY(doc.paletteOps()->undo());
+    QVERIFY(!p->formationHas(QLCPalette::FormationCross));
+    ed.setPalette(pid);
+    QVERIFY(!fe->crossSet()->isChecked());
+    QVERIFY(fe->groupSet()->isChecked());
+    // Unticked: unset again (not the default).
+    fe->groupSet()->setChecked(false);
+    QVERIFY(!p->formationHas(QLCPalette::FormationGroup));
+    fe->grab();
+}
+
+void LookEditor_Test::aFormationsPreviewPickNeverSticks()
+{
+    Doc doc(this);
+    StageTarget *edge = formationLine(&doc);
+    StageTarget *other = doc.monitorProperties()->addStageTarget();
+    other->setName("Back");
+    other->setLinePoints({ QVector3D(-3, 0, -3), QVector3D(3, 0, -3) });
+    other->makeLine();
+    Fixture *a1 = formationSpot(&doc, "A1", -3), *a2 = formationSpot(&doc, "A2", 3);
+    FixtureGroup *ga = formationGroup(&doc, "A", { a1, a2 });
+    const quint32 pid = doc.paletteOps()->create(QLCPalette::Formation, QString(), "Centre", QVariantList(),
+                                                 [](QLCPalette *p) {
+                                                     p->setFormationValue(QLCPalette::FormationSpread, 0);
+                                                 });
+    LookEditor ed(&doc);
+    ed.resize(800, 700);
+    ed.show();
+    ed.setPalette(pid);
+    QApplication::processEvents();
+    FormationEditor *fe = ed.formationEditor();
+
+    doc.resetModified();
+    doc.paletteOps()->clearUndo();
+    const QByteArray before = showXml(&doc);
+    QVERIFY(!doc.isModified());
+
+    // The line, a group, a fixture: picked and unpicked through the page.
+    fe->lineCombo()->setCurrentIndex(fe->lineCombo()->findData(QVariant(other->id())));
+    QCOMPARE(fe->pick().line, other->id());
+    for (int i = 0; i < fe->pickList()->count(); ++i)
+        fe->pickList()->item(i)->setCheckState(Qt::Checked);
+    QCOMPARE(fe->pick().groups, QList<quint32>({ ga->id() }));
+    QCOMPARE(fe->pick().fixtures.count(), 2);
+    QVERIFY(!fe->plan()->beams().isEmpty());
+    fe->lineCombo()->setCurrentIndex(fe->lineCombo()->findData(QVariant(edge->id())));
+
+    QVERIFY(!doc.isModified());
+    QVERIFY(!doc.paletteOps()->canUndo());
+    QCOMPARE(showXml(&doc), before);
+
+    // Kept for the session, per palette: another palette, then back.
+    const FormationEditor::Pick kept = fe->pick();
+    const quint32 pid2 = doc.paletteOps()->create(QLCPalette::Formation, QString(), "Other");
+    ed.setPalette(pid2);
+    QVERIFY(fe->pick().fixtures.isEmpty());
+    ed.setPalette(pid);
+    QCOMPARE(fe->pick().line, kept.line);
+    QCOMPARE(fe->pick().groups, kept.groups);
+    QCOMPARE(fe->pick().fixtures, kept.fixtures);
+}
+
+void LookEditor_Test::aFormationsPreviewMatchesTheCue()
+{
+    Doc doc(this);
+    StageTarget *edge = formationLine(&doc);
+    Fixture *a1 = formationSpot(&doc, "A1", -4), *a2 = formationSpot(&doc, "A2", -1);
+    Fixture *b1 = formationSpot(&doc, "B1", 2), *b2 = formationSpot(&doc, "B2", 4);
+    FixtureGroup *ga = formationGroup(&doc, "A", { a1, a2 });
+    FixtureGroup *gb = formationGroup(&doc, "B", { b1, b2 });
+    formationGroup(&doc, "Unused", { a1 });
+    ShowTreeController *st = doc.showTree();
+    const quint32 aim = st->aimPaletteFor(edge->id());
+    const quint32 pid = doc.paletteOps()->create(QLCPalette::Formation, QString(), "Pairs crossed", QVariantList(),
+                                                 [](QLCPalette *p) {
+                                                     p->setFormationValue(QLCPalette::FormationSpread, -2.5);
+                                                     p->setFormationValue(QLCPalette::FormationGroup, 2);
+                                                     p->setFormationValue(QLCPalette::FormationCross, 1);
+                                                 });
+    // A cue with the two layers, aimed at the line as one, the Formation on it.
+    const quint32 listId = st->addCueList(st->addProduction("P"), "L");
+    const quint32 c1 = st->addCue(listId, -1, "One");
+    ShowTree::Target ta, tb;
+    ta.groups << ga->id();
+    tb.groups << gb->id();
+    st->addLayer(c1, ta);
+    st->addLayer(c1, tb);
+    QVERIFY(st->setCueLook(c1, st->lookForPalette(aim)));
+    QVERIFY(st->setCueLook(c1, st->lookForPalette(pid)));
+    QHash<quint32, QVector3D> onCue;
+    for (const ShowTree::Target &t : { ta, tb })
+    {
+        const Scene *sc = qobject_cast<const Scene *>(doc.function(st->layerScene(c1, t)));
+        QVERIFY(sc != nullptr);
+        for (const AimSolver::SceneAim &a : AimSolver::sceneAims(&doc, sc))
+            onCue.insert(a.fixtureId, a.point);
+    }
+    QCOMPARE(onCue.count(), 4);
+
+    // The default pick: the first line, and the groups aimed at it most.
+    const FormationEditor::Pick def = FormationEditor::defaultPick(&doc);
+    QCOMPARE(def.line, edge->id());
+    QList<quint32> both { ga->id(), gb->id() };
+    std::sort(both.begin(), both.end());
+    QCOMPARE(def.groups, both);
+
+    LookEditor ed(&doc);
+    ed.resize(800, 700);
+    ed.show();
+    ed.setPalette(pid);
+    QApplication::processEvents();
+    FormationEditor *fe = ed.formationEditor();
+    QCOMPARE(fe->pick().groups, both);
+    QVERIFY(fe->hint()->isHidden());
+    const QList<LinePlanView::Beam> &beams = fe->plan()->beams();
+    QCOMPARE(beams.count(), 4);
+    for (const LinePlanView::Beam &b : beams)
+    {
+        QVERIFY(onCue.contains(b.fixture));
+        const QVector3D want = onCue.value(b.fixture);
+        QVERIFY2(qAbs(b.to.x() - want.x()) < 0.05 && qAbs(b.to.y() - want.z()) < 0.05,
+                 qPrintable(QString("%1: preview %2,%3 cue %4,%5").arg(b.name).arg(b.to.x()).arg(b.to.y())
+                            .arg(want.x()).arg(want.z())));
+    }
+    QCOMPARE(fe->strip()->dots().count(), 4);
+    // The pop-out works from here too, fed by the same preview.
+    emit fe->plan()->popOutRequested();
+    QVERIFY(fe->planWindow() != nullptr && fe->planWindow()->isVisible());
+    QCOMPARE(fe->planWindow()->plan()->beams().count(), 4);
+    fe->planWindow()->close();
+
+    // A show with no aims yet: the line, no groups, and a hint.
+    Doc empty(this);
+    formationLine(&empty);
+    const FormationEditor::Pick none = FormationEditor::defaultPick(&empty);
+    QVERIFY(none.groups.isEmpty());
+    const quint32 pe = empty.paletteOps()->create(QLCPalette::Formation, QString(), "F");
+    LookEditor ed2(&empty);
+    ed2.resize(800, 700);
+    ed2.show();
+    ed2.setPalette(pe);
+    QApplication::processEvents();
+    QVERIFY(!ed2.formationEditor()->hint()->isHidden());
+    QVERIFY(ed2.formationEditor()->hint()->text().contains("Tick"));
+}

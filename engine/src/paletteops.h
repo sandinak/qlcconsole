@@ -108,9 +108,12 @@ public:
     /** A new palette of @a type stored at @a path (a raw path, as
      *  pathForFolder() makes or the Programming tab's tree gives), named
      *  @a name (empty: newName()), playing @a values (empty: the type's
-     *  start value). Invalid: refused. */
+     *  start value). @a setup, when given, sets the rest before it is
+     *  added (a Formation's settings), inside the same step. Invalid:
+     *  refused. */
     quint32 create(QLCPalette::PaletteType type, const QString &path, const QString &name = QString(),
-                   const QVariantList &values = QVariantList());
+                   const QVariantList &values = QVariantList(),
+                   const std::function<void(QLCPalette *)> &setup = std::function<void(QLCPalette *)>());
     /** A copy, "<name> (copy)", in the same folder. */
     quint32 duplicate(quint32 paletteId);
     bool rename(quint32 paletteId, const QString &name);

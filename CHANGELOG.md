@@ -128,6 +128,23 @@ back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
 - The command line's **release** takes a ▣ function layer (by the function's
   name) as well as groups.
 
+#### Formation palettes
+
+- **A Formation palette: Spread, Grouping and Cross you stack with any
+  Aim.** One *Pairs crossed* works on every line target: drop it on a layer,
+  or on a cue for the cue's formation, beside an Aim palette. A layer's own
+  rows still win; what the Formation leaves unset comes from the cue, else
+  the Aim look. Rows say where a value came from (*"Pairs — from Formation
+  'Pairs crossed'"*), it tracks row by row, editing it changes every cue
+  that uses it, and on a layer not aimed at a line it says it does nothing.
+  Made in Build ▸ Palettes (**New Formation**), whose page previews it with
+  the order strip and plan view on a line and groups you pick (a preview
+  only: nothing on stage, nothing saved), or typed: `palette formation
+  "Pairs crossed" spread 0 group pairs cross mirror`, `Towers formation
+  "Pairs crossed"`. AI Assist plans can set one (`formation`). Shows without
+  one play as before; an older build loads it as an unknown palette that
+  plays nothing.
+
 #### Toggle and one-shots
 
 - **A Toggle hit with a Once / N-times effect breathes again.** When the
