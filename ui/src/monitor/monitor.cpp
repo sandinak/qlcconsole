@@ -161,6 +161,7 @@
 #include "outputpatch.h"
 #include "qlccapability.h"
 #include "monitor.h"
+#include "whyonpanel.h"
 #include "itemlock.h"
 #include "rigowner.h"
 #include "shrinkablebar.h"
@@ -1137,26 +1138,6 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
        When Blocked, an Aim look's "Dim lights that can't see the target" and
        the blocked aim traces go by; whether the rig views stop beams at
        them too is a view choice, remembered here. */
-    /* Realistic move speed (0.5): the rig views draw a head travelling at
-       the speed its type can, not snapping to where the output jumped. */
-    QAction *moveSpeedAct = showMenu->addAction(tr("Heads travel at their real speed"));
-    moveSpeedAct->setObjectName("moveSpeed");
-    moveSpeedAct->setCheckable(true);
-    moveSpeedAct->setToolTip(tr("In the Rig Overview, a moving head takes the time it really "
-                                "needs to get there (about 0.4 s per half turn for a spot) "
-                                "when the output jumps; off, it snaps"));
-    {
-        const bool on = QSettings().value(SETTINGS_MOVESPEED, true).toBool();
-        moveSpeedAct->setChecked(on);
-        StructureStudioView::setMoveSpeed(on);
-    }
-    connect(moveSpeedAct, &QAction::toggled, this, [this](bool on) {
-        StructureStudioView::setMoveSpeed(on);
-        QSettings().setValue(SETTINGS_MOVESPEED, on);
-        foreach (StructureStudioView *v, findChildren<StructureStudioView *>())
-            v->update();
-    });
-
     QMenu *sightMenu = showMenu->addMenu(tr("Line of sight"));
     sightMenu->setObjectName("lineOfSightMenu");
     sightMenu->setToolTipsVisible(true);
@@ -3067,6 +3048,10 @@ void Monitor::showStageOverview()
         });
         led->setObjectName(QStringLiteral("ledLayoutAction"));
         led->setEnabled(LedLayoutDialog::canEdit(m_doc, fidUnder));
+        m.addSeparator();
+        m.addAction(WhyOnPanel::actionText(), this, [this, fidUnder, ovDlg, globalPos]() {
+            WhyOnPanel::showFor(m_doc, fidUnder, 0xFFFFFFFF, ovDlg, globalPos);
+        })->setObjectName(QStringLiteral("whyOnAction"));
         m.exec(globalPos);
     });
 
@@ -3264,6 +3249,29 @@ void Monitor::showStageOverview()
     connect(beamBtn, &QToolButton::toggled, view,
             [view](bool on) { view->setBeams(on); });
     beamBtn->setChecked(true);
+
+    /* Realistic move speed (0.5): a head travels at the speed its type can
+       when the output jumps it, instead of snapping. Shared by every rig
+       view, on by default, remembered. */
+    QToolButton *moveBtn = new QToolButton(footer);
+    moveBtn->setObjectName(QStringLiteral("rigMoveSpeed"));
+    moveBtn->setText(tr("Real move speed"));
+    moveBtn->setCheckable(true);
+    moveBtn->setStyleSheet(toggleStyle);
+    moveBtn->setToolTip(tr("Moving heads take the time they really need to get there (about "
+                           "0.4 s per half turn for a spot) when the output jumps; off, they "
+                           "snap"));
+    bar->addWidget(moveBtn);
+    {
+        const bool on = QSettings().value(SETTINGS_MOVESPEED, true).toBool();
+        StructureStudioView::setMoveSpeed(on);
+        moveBtn->setChecked(on);
+    }
+    connect(moveBtn, &QToolButton::toggled, view, [view](bool on) {
+        StructureStudioView::setMoveSpeed(on);
+        QSettings().setValue(SETTINGS_MOVESPEED, on);
+        view->update();
+    });
 
     bar->addWidget(new QLabel(tr("Room:"), footer));
     bar->addWidget(ambientCombo);

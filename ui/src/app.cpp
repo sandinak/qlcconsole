@@ -8734,6 +8734,11 @@ bool App::reviewJump(QWidget *parent, const QString &jump, const QVariantList &d
         showContext(tr("Build"));
         return true;
     }
+    if (jump == QLatin1String("showsettings"))
+    {
+        openShowSettings();
+        return true;
+    }
     if (jump == QLatin1String("fixtures") || jump == QLatin1String("power"))
     {
         showContext(tr("Fixtures"));

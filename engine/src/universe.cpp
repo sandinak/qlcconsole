@@ -617,6 +617,28 @@ bool Universe::isChannelSet(int address) const
     return writtenRecently(address) || m_held[address].load(std::memory_order_relaxed) != 0;
 }
 
+Universe::ChannelSnapshot Universe::channelSnapshot(int address) const
+{
+    ChannelSnapshot snap;
+    if (address < 0 || address >= UNIVERSE_SIZE)
+        return snap;
+    QMutexLocker frameLocker(&m_frameMutex);
+    snap.preGM = uchar(m_preGMValues->at(address));
+    snap.postGM = address < m_postGMValues->size() ? uchar(m_postGMValues->at(address)) : 0;
+    snap.mask = uchar(m_channelsMask->at(address));
+    const quint32 frame = m_frame.load(std::memory_order_relaxed);
+    // The frame just finished: m_frame has already moved on past it.
+    snap.pastGM = quint32(frame - m_pastGMFrame[address].load(std::memory_order_relaxed)) <= 1;
+    snap.framesSinceWrite = quint32(frame - m_writtenFrame[address].load(std::memory_order_relaxed));
+    snap.set = isChannelSet(address);
+    if (address < m_modifiers.count() && m_modifiers.at(address) != nullptr)
+        snap.modifier = m_modifiers.at(address)->name();
+    if (m_passthrough && address < m_passthroughValues->size())
+        snap.passthrough = uchar(m_passthroughValues->at(address));
+    snap.groupMaster = m_groupMaster[address].load(std::memory_order_relaxed);
+    return snap;
+}
+
 void Universe::applyAutoOpen()
 {
     QMutexLocker locker(&m_autoOpenMutex);

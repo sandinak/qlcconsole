@@ -15,6 +15,14 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 A home for QLC+ 4 users: QLC+ 4's habits that qlcconsole had dropped are
 back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
 
+### Raspberry Pi
+
+- **A Raspberry Pi package.** `platforms/linux/make-pi-deb.sh` builds an arm64
+  `.deb` for Raspberry Pi OS / Debian 13 (Qt 6.8 from apt), with the USB DMX
+  udev rules, the stock fixtures, a menu entry and icons, so a school can
+  leave a Pi as the show machine. Built by hand on the Pi (recipe:
+  docs/dev/RASPI.md); not published.
+
 ### Show control
 
 - **One GO path for the Virtual Console.** A VC Cue List (and the web page
@@ -49,6 +57,12 @@ back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
 
 ### Teaching
 
+- **What just happened, and the glossary.** In a Teaching show the Run tab
+  writes a line for every GO, Back and hit ("GO → cue 3 'Three': B →
+  Half; A, B tracked"), and hovering a term (the Show Tree's S T R M F
+  heads, the Run tab's heads and GO / Back buttons, the Operate settings)
+  adds its one-line definition. Nothing shows in a show that is not
+  Teaching. Lesson 3.6's start file, `lesson-3-6-start.qlcc`, has Teaching on.
 - **Fixture Properties ask too.** In a Teaching show the Lighting Studio's
   universe and address boxes, and pasting a truss with its fixtures patched,
   ask "Change the Patch" like the Fixture Manager does.
@@ -164,8 +178,8 @@ back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
 
 - **Realistic move speed.** In the Rig Overview a moving head's beam now
   travels at the speed its type can (0.4 s per half turn for a moving head,
-  0.1 s for a scanner) when the output jumps it, instead of snapping. Show →
-  Heads travel at their real speed turns it off. Show Review gains **MOV-01**
+  0.1 s for a scanner) when the output jumps it, instead of snapping. The
+  Rig Overview footer's Real move speed button turns it off. Show Review gains **MOV-01**
   (a move in light), **MOV-02** (a move in the dark that move in black can't
   hide) and **MOV-08** (heads lit in the first cue with nothing positioning
   them), which use the same speed.
@@ -184,6 +198,25 @@ back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
   `qlcconsole --review show.qlcc` does the same with no window, for CI
   and a teacher's folder of hand-ins (exit 0 / 1 warnings / 2 blockers /
   3 unreadable; `--format json`). See docs/features/show-review.md.
+- **Show Review, ten more checks** (41 in all): a laser's beam or a star
+  field that can reach the audience or eye height (PWR-09; the house is
+  downstage of the stage edge, below 3 m); Teaching mode still on
+  (TEACH-01); a cue that changes nothing (CUE-03); the old chaser still
+  played after Import in place (CUE-12); venue clashes for every venue
+  (PAT-05); definition errors (FIX-02); dead lights still used (FIX-08);
+  a matrix on lights with no colour (FX-02); effects of size or speed 0
+  (FX-03); embedded definitions that can't be read (FILE-03).
+
+### Why is this on?
+
+- **"Why is this on?"** (0.5): right-click a fixture in the Lighting
+  Studio plot, the Rig Overview or the Fixture Manager, or a Simple Desk
+  channel, and a small window names what sets it now, top-down: the cue
+  and layer (and the cue it tracked in from), an override hit, an effect
+  and its depth, Park, Highlight, Flash, the Simple Desk, a VC slider, a
+  preview; then group masters, the Grand Master, Blind and Blackout. Click a line to go
+  there. Worked out from the last frame when asked; closed, it costs the
+  show nothing.
 
 ### Based on QLC+ 4.14.4
 
@@ -768,6 +801,9 @@ skipped). Upstream fixes taken:
 
 ### Fixed
 
+- **`qlcconsole --version` and `--help` work with no display** (ssh, a
+  headless Pi): they answer before the application window system starts,
+  where they used to abort in Qt's xcb plugin.
 - **Performers no longer come and go in the Rig Overview** (and the plot):
   the cue scope (Show ▸ All targets off) was hiding the people along with
   the targets the cue does not aim at, so they vanished and returned as

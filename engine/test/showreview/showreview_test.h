@@ -28,6 +28,8 @@ class FixtureGroup;
 class QLCPalette;
 class Fixture;
 class Doc;
+#include "qlcphysical.h"
+#include <QVector3D>
 
 class ShowReview_Test final : public QObject
 {
@@ -70,6 +72,16 @@ private slots:
     void cue08();
     void cue11();
     void vc01();
+    void teach01();
+    void pwr09();
+    void cue03();
+    void cue12();
+    void pat05();
+    void fix02();
+    void fix08();
+    void fx02();
+    void fx03();
+    void file03();
     void moveSpeed();
     void mov01();
     void mov02();
@@ -100,6 +112,10 @@ private:
     Fixture *par(const QString &name, quint32 address, quint32 universe = 0);
     Fixture *dimmer(const QString &name, quint32 address);
     Fixture *mover(const QString &name, quint32 address);
+    /** A laser (or star projector) on the plot at @a at, thrown @a aimDown degrees below
+     *  level toward the audience; @a beamDeg its lens */
+    Fixture *laser(const QString &name, quint32 address, QLCPhysical::Emission emission,
+                   double beamDeg, const QVector3D &at, double aimDown);
     FixtureGroup *group(const QString &name, const QList<Fixture *> &members);
     QLCPalette *colour(const QColor &c);
     /** Rewrite the Show Tree's saved XML and load it back */

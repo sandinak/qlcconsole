@@ -95,7 +95,7 @@ class QLC_ENGINE_EXPORT ShowReview final : public QObject
 
 public:
     enum Area { Movement, Palettes, Cues, Hits, ShowControl, Patch, Fixtures, Venues,
-                Effects, Power, Files, Naming };
+                Effects, Power, Files, Naming, Teaching };
 
     typedef std::function<void(ReviewContext &, QList<ReviewFinding> &)> Runner;
 

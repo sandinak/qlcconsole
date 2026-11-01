@@ -567,7 +567,10 @@ void SimpleDesk::initUniverseSliders()
         ConsoleChannel* slider = NULL;
         Fixture* fxi = m_doc->fixture(m_doc->fixtureForAddress(start + i));
         if (fxi == NULL)
+        {
             slider = new ConsoleChannel(this, m_doc, Fixture::invalidId(), i, false);
+            slider->setProperty("whyUniverse", m_currentUniverse);   // "Why is this on?"
+        }
         else
         {
             uint ch = (start + i) - fxi->universeAddress();
@@ -832,6 +835,7 @@ void SimpleDesk::slotUniversePageChanged(int page)
         if (fx == NULL)
         {
             slider = new ConsoleChannel(this, m_doc, Fixture::invalidId(), start + i, false);
+            slider->setProperty("whyUniverse", m_currentUniverse);   // "Why is this on?"
             slider->setVisible(false);
             if (m_engine->hasChannel((m_currentUniverse << 9) + (start + i)))
                 slider->setChannelStyleSheet(ssOverride);

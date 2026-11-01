@@ -111,6 +111,8 @@
 #include "fixture.h"
 #include "chaser.h"
 #include "cuesheetdialog.h"
+#include "teachingsettings.h"
+#include "teachingtips.h"
 #include "doc.h"
 
 #include "virtualconsole.h"
@@ -1462,9 +1464,23 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
             tr("F \u2014 Flags. base: the list's base cue. skip: GO passes over it. no MIB: no move in "
                "black into it. focus: a venue focus cue (GO arms Venue focus). \u2295 includes, "
                "\u00d7 reusable uses, mix, VC buttons that fire it.") };
-        for (int c = 0; c < tips.size(); ++c)
-            if (!tips.at(c).isEmpty())
-                m_tree->headerItem()->setToolTip(c, tips.at(c));
+        /* In a Teaching show each tip ends with the glossary's line for the
+           word it names (hover; the right-click menu keeps the first
+           sentence). */
+        static const QList<QStringList> words = {
+            {}, {},
+            { QStringLiteral("layer") },
+            { QStringLiteral("tracking") },
+            { QStringLiteral("release") },
+            { QStringLiteral("block"), QStringLiteral("cue-only") },
+            { QStringLiteral("base cue"), QStringLiteral("skip") } };
+        auto apply = [this, tips]() {
+            for (int c = 0; c < tips.size(); ++c)
+                if (!tips.at(c).isEmpty())
+                    m_tree->headerItem()->setToolTip(c, TeachingTips::tip(m_doc, tips.at(c), words.at(c)));
+        };
+        apply();
+        connect(m_doc->teachingSettings(), &TeachingSettings::teachingChanged, m_tree, apply);
     }
     /* Right-click the header: show or hide each flag column, remembered. */
     m_tree->header()->setContextMenuPolicy(Qt::CustomContextMenu);

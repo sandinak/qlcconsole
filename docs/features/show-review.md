@@ -101,6 +101,10 @@ the same speed (see [Lighting Studio](lighting-studio.md#heads-travel-at-their-r
 - **PAT-03** Unpatched fixtures: a warning when cues or scenes light them, a
   note when they only wait in the inventory.
 - **PAT-04** A fixture on channels the venue keeps (not ours) (blocker).
+- **PAT-05** A venue's clash with the show: house fixtures overlapping the
+  tour's channels, channels the venue keeps (not ours), a house fixture in a
+  Tour slot. Checked for every venue, applied or not (a blocker; a slot
+  clash is a warning). The applied venue's not-ours is PAT-04's.
 - **PAT-06** A universe with fixtures and no output (a note when the show
   patches no output at all: it only previews).
 
@@ -108,9 +112,14 @@ the same speed (see [Lighting Studio](lighting-studio.md#heads-travel-at-their-r
 
 - **FIX-01** Missing fixture definition: the fixture stands in as a dimmer
   (blocker).
+- **FIX-02** A fixture definition with errors (a head on a channel the mode
+  doesn't have, overlapping capabilities, no model): it plays wrong or
+  loses parts of itself. The editor's smaller warnings stay in the editor.
 - **FIX-05** Not on the plot: a warning when a focus call needs to aim it.
   Only asked of a show that uses the plot.
 - **FIX-07** A definition with no lumens or power.
+- **FIX-08** A light marked dead at the applied venue that a cue, hit or
+  scene still lights.
 - **FIX-14** Two fixtures with one name.
 
 **Palettes and looks**
@@ -130,6 +139,8 @@ the same speed (see [Lighting Studio](lighting-studio.md#heads-travel-at-their-r
   ([Reordering and numbering](show-tree.md#reordering-and-numbering)).
 - **CUE-02** The first cue of a song tracks in from the song before: make it
   a Block cue.
+- **CUE-03** A cue that looks exactly like the cue before it: GO changes
+  nothing (a note). Cues with sub-cues and focus calls are left alone.
 - **CUE-04** An empty cue (fine in a Block cue called a blackout).
 - **CUE-05** An auto-follow with no fade and no hold: the cue is never seen.
 - **CUE-06** Two cues with one number in a list.
@@ -137,6 +148,9 @@ the same speed (see [Lighting Studio](lighting-studio.md#heads-travel-at-their-r
   another cue includes it.
 - **CUE-08** Released layers with no base cue (a note: they go dark), or a
   base cue that is deleted, skipped or comes after.
+- **CUE-12** After Import in place, a chaser, collection or timeline that
+  still plays the original chaser the Show Tree list was made from. (Virtual
+  Console buttons on it are not read yet.)
 - **CUE-11** An include that would loop, or an include, reusable or sub-cue
   list pointing at what was deleted.
 
@@ -148,6 +162,10 @@ the same speed (see [Lighting Studio](lighting-studio.md#heads-travel-at-their-r
 
 **Effects, power and safety**
 
+- **FX-02** An RGB matrix on a group with heads that have no RGB or CMY
+  mixing: they get intensity at most.
+- **FX-03** An EFX of size 0 or speed 0, or a matrix of speed 0: the lights
+  just sit there.
 - **FX-07** An effect with no script, or whose script isn't on this
   computer (blocker).
 - **PWR-01** A cue, hit or scene that can draw more than a circuit's breaker
@@ -158,14 +176,29 @@ the same speed (see [Lighting Studio](lighting-studio.md#heads-travel-at-their-r
   photosensitivity guidance): a warning for four lights or more at once, a
   note for fewer. Accept it with a note that the strobe warning is posted.
 - **PWR-06** A stage light that ignores Blackout or the Grand Master.
+- **PWR-09** A laser, or a star projector, whose beam or star field can
+  reach the audience or eye height. The plot has no audience area, so the
+  rule is a fixed unit whose beam, followed 30 m, enters the space downstage
+  of the stage's front edge below 3 m. Aim it up or away, or accept it with a
+  note saying who approved it (the venue's laser safety officer, the
+  variance). Lasers on pan and tilt aren't read: their aim is by cue.
 
 **Files and names**
 
 - **FILE-01** A sound or video outside the show's folder: it works on this
   computer only. File ▸ Collect for Transfer copies it in.
 - **FILE-02** A sound or video that isn't there (blocker).
+- **FILE-03** A definition or script the .qlcc carries that couldn't be read
+  or was altered (a warning), or that differs from this computer's (a note).
+  Definitions only the show has are normal and stay information.
 - **NAME-01** A scene named off its folder's SS-PP.II-Description pattern.
 - **NAME-02** Default and copy names ("New Scene 4", "… (Copy)").
+
+**Teaching**
+
+- **TEACH-01** Teaching mode is on (a note). Turn it off in File ▸ Show
+  Settings before handing the show to a crew, or accept it with a note such
+  as "class copy".
 
 The footer's design problems are the same problems: the Show readiness
 dialog shows their id ("PAT-01 · 1 fixture clashes with another's

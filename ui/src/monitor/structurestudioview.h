@@ -199,8 +199,8 @@ public:
     static void setLineOfSightBeams(bool on);
     /** Realistic move speed (0.5): moving heads travel at the speed their
      *  type can (MoveSpeed), so a jump in the output is drawn as the move it
-     *  would be, not a snap. On by default; every view shares it (Lighting
-     *  Studio: Show > Heads travel at their real speed). */
+     *  would be, not a snap. On by default; every view shares it (Rig
+     *  Overview footer: Real move speed). */
     static void setMoveSpeed(bool on);
     static bool moveSpeed();
     /** Walk every head toward where the output puts it, to @a nowMs (a

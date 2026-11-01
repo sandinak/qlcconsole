@@ -1231,8 +1231,8 @@ stage in a frame is drawn as the move it would be, so you see what the
 audience sees (and what Show Review's [MOV checks](show-review.md) are
 about). Definitions carry no speed, so these are defaults.
 
-Turn it off with **Show → Heads travel at their real speed**; the heads then
-snap to the output as before. Remembered. It changes only how the Rig
+Turn it off with **Real move speed** in the Rig Overview's footer, beside
+Beams; the heads then snap to the output as before. Remembered. It changes only how the Rig
 Overview draws; the output itself is untouched.
 
 ### Washes and profiles: the edge of a pool

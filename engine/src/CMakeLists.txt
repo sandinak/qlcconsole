@@ -36,6 +36,8 @@ add_library(${module_name} SHARED
     showreview.cpp showreview.h showreviewcontext.h
     showreviewchecks.cpp showreviewcuechecks.cpp showreviewmovechecks.cpp
     showreviewcli.cpp showreviewcli.h
+    teachinglog.cpp teachinglog.h
+    teachingglossary.cpp teachingglossary.h
     outputrulekeeper.cpp outputrulekeeper.h
     fixturegroup.cpp fixturegroup.h
     function.cpp function.h
@@ -155,6 +157,7 @@ add_library(${module_name} SHARED
     touchpadgesture.cpp touchpadgesture.h
     parkeffect.cpp parkeffect.h
     outputlayer.cpp outputlayer.h
+    whyon.cpp whyon.h
     markeffect.cpp markeffect.h
     cueoutput.cpp cueoutput.h
     cuelookahead.cpp cuelookahead.h

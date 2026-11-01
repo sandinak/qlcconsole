@@ -847,6 +847,10 @@ public:
      *  and chasers that started it: it plays to be looked at only. */
     bool startedOnlyByPreview() const;
 
+    /** What started this function and keeps it running (a copy, under its
+     *  lock): for "Why is this on?" (WhyOn), on demand. */
+    QList<FunctionParent> sources() const;
+
 private:
     bool startedOnlyByPreview(int depth) const;
 

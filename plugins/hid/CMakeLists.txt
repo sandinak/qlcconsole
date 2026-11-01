@@ -106,5 +106,7 @@ install(TARGETS ${module_name}
 
 # The GameController framework side (a pad's auto-off and wake), macOS only.
 if(APPLE)
-    add_subdirectory(test)
+    if(NOT QLC_NO_TESTS)
+        add_subdirectory(test)
+    endif()
 endif()

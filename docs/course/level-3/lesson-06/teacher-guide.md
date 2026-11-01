@@ -47,7 +47,9 @@ Students can:
 - [ ] On the projector: the show saved as `Lesson3-6-demo.qlcc`, the
   **Lighting Studio** tab, **View → Rig Overview** beside it.
 - [ ] **Teaching mode** on in the show the students use: the scramble is
-  only offered in a Teaching show. Either they tick it (**File ▸ Show
+  only offered in a Teaching show. The lesson's start file,
+  `shows/lesson-3-6-start.qlcc`, has it on (the other course shows ship
+  with it off). In any other show they tick it (**File ▸ Show
   Settings… ▸ Teaching mode**, the handout says where), or you hand out a
   copy made with **Make Student Handout…** (same dialog): Teaching on, real
   output held, an optional PIN so it stays on, and no practice answer key
