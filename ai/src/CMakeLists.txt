@@ -1,7 +1,8 @@
 # AI Assist (docs/design/AI_ASSIST.md): settings, provider adapters, the
 # assistant and its Design/Operate gating, the command-line hook and the
-# settings page. Static (position independent) so the app bundle gains no
-# library to deploy; linked privately into qlcplusui.
+# settings page, and the MCP server (P3) with its stdio bridge. Static
+# (position independent) so the app bundle gains no library to deploy;
+# linked privately into qlcplusui (and into main/ for `--mcp`).
 set(module_name "qlcconsoleai")
 
 add_library(${module_name} STATIC
@@ -10,6 +11,8 @@ add_library(${module_name} STATIC
     aiassist.cpp aiassist.h
     aicommandline.cpp aicommandline.h
     aisettingspage.cpp aisettingspage.h
+    mcpbridge.cpp mcpbridge.h
+    mcpserver.cpp mcpserver.h
 )
 set_target_properties(${module_name} PROPERTIES POSITION_INDEPENDENT_CODE ON)
 

@@ -54,6 +54,7 @@ public:
 
 private slots:
     void slotProviderChanged();
+    void updateMcpNote();
     void slotTest();
     void updateState();
 
@@ -69,6 +70,10 @@ private:
     QPushButton *m_test;
     QLabel *m_testResult;
     QLabel *m_cloudNote;
+    /** The MCP server (P3). */
+    QCheckBox *m_mcp;
+    QCheckBox *m_mcpChanges;
+    QLabel *m_mcpNote;
     QString m_lastProvider;
     bool m_keyEdited = false;
 };

@@ -34,6 +34,8 @@ only you apply it. One undo takes the whole change back.
 | **API key** | Cloud providers only. Kept in the macOS keychain, never in the settings. On other systems set `QLC_AI_API_KEY` in the environment. |
 | **Send with a question** | **A summary of the show** (fixture names, definitions and addresses, groups, counts) or **Nothing up front**. Never the show file. |
 | **Give up after** | Seconds to wait for an answer (60 by default). |
+| **Let AI tools on this computer use the show (MCP server)** | Off by default. Claude Code, Claude Desktop or a local agent can ask the console the same read-only questions; see [Outside AI tools (MCP)](#outside-ai-tools-mcp). |
+| **…and propose changes** | Off by default. A change an outside tool asks for waits in the command line for you to apply, like AI Assist's own. |
 
 When the model runs anywhere but this computer, the page says so in amber:
 your questions, and what the console answers them with (fixture names,
@@ -158,6 +160,10 @@ reason to stop the show.
 A question typed in Operate gets *AI Assist is unavailable in Operate
 mode*, and nothing is sent. No change is ever applied in Operate.
 
+The MCP server closes too, with every outside tool connected to it; each
+is told why, and gets the same answer until the console is back in
+Design, when it opens again by itself.
+
 ## Bring in a setup from another show
 
 **File ▸ Import ▸ Universes and I/O Setup (.qxw)…** takes the wiring of
@@ -221,7 +227,84 @@ evo26.qxw, put it on 1` makes the assistant read the file and propose the
 import as a step in the checklist; it is applied, like any step, only when
 you confirm.
 
+## Outside AI tools (MCP)
+
+An AI tool that runs outside qlcconsole on this computer, such as Claude
+Code, Claude Desktop or a local agent, can work with the show that is open
+through the Model Context Protocol (MCP). It gets the same operations AI
+Assist uses, with the same names, descriptions and arguments: list the
+fixtures, find address conflicts, describe a function, say why a fixture is
+on, and so on.
+
+### Turning it on
+
+In **Settings ▸ AI Assist**, with **Turn on AI Assist** ticked:
+
+- **Let AI tools on this computer use the show (MCP server)** lets a tool
+  ask questions. Questions change nothing.
+- **…and propose changes** also lets it propose changes. A proposed change
+  is never applied by the tool. It appears in the Show Tree's command line
+  as a checklist, as AI Assist's own proposals do, and the footer shows
+  *An AI tool proposes N change(s)* wherever you are. **Enter** (or
+  **Apply**) applies every ticked step as one undo step; **Esc** discards
+  them. Each further change the tool sends adds a step to the same
+  checklist.
+
+Both are off by default. Under the boxes the page shows the command to give
+the tool, and whether the server is listening.
+
+### Connecting a tool
+
+The tool starts `qlcconsole --mcp`. That opens no window and loads no show:
+it passes the tool's messages to the qlcconsole that is running. Use the
+path the settings page shows. For the app in Applications:
+
+**Claude Code** (in a terminal):
+
+```
+claude mcp add qlcconsole -- /Applications/qlcconsole.app/Contents/MacOS/qlcconsole --mcp
+```
+
+**Claude Desktop**: **Settings ▸ Developer ▸ Edit Config**, then add to
+`claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "qlcconsole": {
+      "command": "/Applications/qlcconsole.app/Contents/MacOS/qlcconsole",
+      "args": ["--mcp"]
+    }
+  }
+}
+```
+
+Any other MCP client that starts a "stdio" server is set up the same way:
+the command with `--mcp`.
+
+Open the show in qlcconsole, stay in Design, and ask the tool something
+like *"list the fixtures in qlcconsole and check for address conflicts"*.
+The tool works on the show that is open, not on a file. To work on another
+show, open that show in qlcconsole.
+
+### What keeps it safe
+
+- **This computer only.** The tool reaches qlcconsole through a local
+  socket (a named pipe on Windows), never a network port, and only your
+  user account can open it.
+- **You decide.** Questions run when asked. Changes are only proposals until
+  you apply them, always as one undo step. The tool can't send a raw
+  command line.
+- **Never in Operate.** Going to Operate closes the server. A tool that asks
+  then is told *AI Assist is unavailable in Operate mode*, and nothing
+  runs.
+- **Off means off.** With the box unticked nothing listens. The tool gets
+  *qlcconsole isn't taking MCP requests* with what to check. Fix that and
+  reconnect (in Claude Code: `/mcp`).
+
+Only one qlcconsole on a computer can have the server. A second one says
+so on its settings page.
+
 ## Not in this version
 
-An MCP server for outside tools is planned next. AI Assist will never touch
-playback, timing or live output.
+AI Assist will never touch playback, timing or live output.

@@ -30,6 +30,7 @@
 
 #include "showtreecontroller.h"
 #include "showtreemodel.h"
+#include "showtreecommand.h"
 #include "qlcpalette.h"
 
 class QStackedWidget;
@@ -578,6 +579,9 @@ public:
     bool isCommandLineVisible() const;
     /** Run a command as if typed and Enter pressed: true when it ran. */
     bool runCommand(const QString &line);
+    /** Where a typed command line runs: the selected production, list,
+     *  cue and layers. */
+    ShowTreeCommand::Context commandContext();
     /** What the line under the command line says now. */
     QString commandMessage() const;
     QLineEdit *commandLine() const { return m_command; }

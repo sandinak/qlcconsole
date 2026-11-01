@@ -588,16 +588,75 @@ bool AiAssist::apply(const QList<int> &included, OperationRegistry *registry, Sh
     if (result != nullptr)
         *result = out;
     m_proposal.clear();
+    m_external = false;
     emit proposalChanged();
     return true;
 }
 
 void AiAssist::discard()
 {
+    m_external = false;
     if (m_proposal.isEmpty())
         return;
     m_proposal.clear();
     emit proposalChanged();
+}
+
+void AiAssist::setSelectionProvider(QObject *owner, const std::function<ShowTreeCommand::Context()> &provider)
+{
+    m_selectionOwner = owner;
+    m_selectionProvider = provider;
+}
+
+ShowTreeCommand::Context AiAssist::currentSelection() const
+{
+    if (m_selectionOwner.isNull() || !m_selectionProvider)
+        return ShowTreeCommand::Context();
+    return m_selectionProvider();
+}
+
+int AiAssist::proposeExternal(const QString &name, const QJsonObject &args, const QString &client, QString *error)
+{
+    auto refuse = [error](const QString &why) {
+        if (error != nullptr)
+            *error = why;
+        return 0;
+    };
+    m_settings = AiSettings::load();
+    if (!m_settings.enabled || !m_settings.mcpEnabled || !m_settings.mcpChanges)
+        return refuse(tr("Changes over MCP are off (Settings ▸ AI Assist)"));
+    if (m_operate || m_doc->mode() == Doc::Operate)
+        return refuse(tr("AI Assist is unavailable in Operate mode"));
+    if (!checkGuard("proposeExternal"))
+        return refuse(tr("AI Assist is unavailable in Operate mode"));
+    if (m_reply != nullptr || (!m_proposal.isEmpty() && !m_external))
+        return refuse(tr("The operator has a question to AI Assist open; try again once it is answered"));
+    const OperationRegistry::Operation *op = OperationRegistry::operation(name);
+    if (op == nullptr || op->readOnly || !OperationRegistry::changeOperations().contains(op))
+        return refuse(tr("%1 isn't a change operation").arg(name));
+    OperationRegistry reg(m_doc);
+    const QString why = reg.check(name, args);
+    if (!why.isEmpty())
+        return refuse(why);
+
+    const QString who = client.trimmed().isEmpty() ? tr("An MCP client") : client.trimmed();
+    if (m_proposal.isEmpty())
+    {
+        // A new proposal, from where the operator is now.
+        m_external = true;
+        m_proposalSelection = currentSelection();
+        m_proposalQuestion = tr("%1 (MCP)").arg(who);
+        m_answer = Answer();
+        m_answer.question = tr("%1 over MCP").arg(who);
+    }
+    m_answer.ok = true;
+    m_answer.proposal << Step { op->name, args, op->cliSyntax(args), op->describe(args) };
+    m_answer.text = tr("%1 proposes these changes from outside qlcconsole. Nothing has changed: apply them "
+                       "here, or discard them.").arg(who);
+    m_proposal = m_answer.proposal;
+    emit answered(m_answer);
+    emit proposalChanged();
+    return m_proposal.count();
 }
 
 bool AiAssist::testConnection(const AiSettings &settings, const QString &apiKey)

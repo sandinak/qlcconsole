@@ -69,8 +69,17 @@ AiAssist *AiCommandLine::assist()
         connect(ai, &AiAssist::busyChanged, this, &AiCommandLine::update);
         connect(ai, &AiAssist::answered, this, &AiCommandLine::showAnswer);
         connect(ai, &AiAssist::proposalChanged, this, &AiCommandLine::proposalChanged);
+        if (m_selectionProvider)
+            ai->setSelectionProvider(this, m_selectionProvider);
     }
     return ai;
+}
+
+void AiCommandLine::setSelectionProvider(const std::function<ShowTreeCommand::Context()> &provider)
+{
+    m_selectionProvider = provider;
+    if (AiAssist *ai = assist())
+        ai->setSelectionProvider(this, provider);
 }
 
 void AiCommandLine::update()

@@ -23,6 +23,8 @@
 #include <QNetworkReply>
 #include <QStringList>
 #include <QList>
+#include <functional>
+#include <memory>
 
 #include "showtreecommand.h"
 #include "aiprovider.h"
@@ -144,6 +146,24 @@ public:
     /** Drop the proposal: nothing changes. */
     void discard();
 
+    /** A change an MCP client asked for (P3, McpServer): checked like the
+     *  model's and added to the proposal -- one the client started, which
+     *  each further call extends -- and shown in the command line for the
+     *  operator to apply (one undo step) or discard. Nothing runs here.
+     *  Returns the step's number (from 1); 0 and @a error when refused:
+     *  off, Operate, not a change operation, bad arguments, or the
+     *  operator has a question or another proposal of AI Assist's open. */
+    int proposeExternal(const QString &name, const QJsonObject &args, const QString &client,
+                        QString *error = nullptr);
+    /** The proposal waiting came from an MCP client. */
+    bool isExternalProposal() const { return m_external && !m_proposal.isEmpty(); }
+
+    /** Where the Show Tree's selection is now (what a typed line would run
+     *  with): asked of @a owner's @a provider while @a owner lives -- the
+     *  command line sets it. MCP calls run with it. */
+    void setSelectionProvider(QObject *owner, const std::function<ShowTreeCommand::Context()> &provider);
+    ShowTreeCommand::Context currentSelection() const;
+
     /** Settings ▸ AI Assist ▸ Test connection, with @a settings as typed:
      *  connectionTested() follows. False when it can't be tried now. */
     bool testConnection(const AiSettings &settings, const QString &apiKey);
@@ -218,6 +238,10 @@ private:
     QList<Step> m_proposal;
     ShowTreeCommand::Context m_proposalSelection;
     QString m_proposalQuestion;
+    /** The proposal came from an MCP client (proposeExternal()). */
+    bool m_external = false;
+    QPointer<QObject> m_selectionOwner;
+    std::function<ShowTreeCommand::Context()> m_selectionProvider;
     std::unique_ptr<ShowTreeCommand> m_commander;
     QString m_resourceError;
     /** A question went to the model this Design session: Operate asks a

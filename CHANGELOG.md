@@ -265,6 +265,15 @@ back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
   undo step. The command line has it too (`config <file>`,
   `import config <file> … apply`), and AI Assist can read a file and
   propose the same import for you to confirm.
+- **Outside AI tools can use the show (MCP)** (AI Assist P3): with
+  **Settings ▸ AI Assist ▸ Let AI tools on this computer use the show**,
+  Claude Code, Claude Desktop or a local agent started as
+  `qlcconsole --mcp` gets AI Assist's operations as MCP tools (same names
+  and schemas) on the show that is open. Off by default. This computer
+  only (a local socket, no network port, your account only), closed in
+  Operate. With **…and propose changes** a tool's changes wait in the
+  Show Tree's command line for you to apply as one undo step; it never
+  applies them itself.
 
 ### Based on QLC+ 4.14.4
 

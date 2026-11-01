@@ -1330,6 +1330,9 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         // A proposal runs through this line's registry, and the selection
         // goes where it left it -- as a typed command's does.
         m_ai->setOperations(m_operations);
+        // An MCP client's calls run where the selection is, as a typed
+        // line does.
+        m_ai->setSelectionProvider([this]() { return commandContext(); });
         connect(m_ai, &AiCommandLine::applied, this, [this](const ShowTreeCommand::Result &r) {
             if (r.layer != invalidId() && r.context.cue != invalidId())
                 selectNode(r.layer, r.context.cue);
@@ -10772,7 +10775,7 @@ QString ShowTreeView::commandMessage() const
     return m_commandMsg->text();
 }
 
-bool ShowTreeView::runCommand(const QString &line)
+ShowTreeCommand::Context ShowTreeView::commandContext()
 {
     ShowTreeCommand::Context ctx;
     for (QTreeWidgetItem *item = m_tree->currentItem(); item != nullptr; item = item->parent())
@@ -10785,6 +10788,12 @@ bool ShowTreeView::runCommand(const QString &line)
     ctx.layer = currentKind() == LayerNode ? currentId() : invalidId();
     ctx.layers = selectedLayerRefs();
     ctx.recentPalettes = recentPalettes();
+    return ctx;
+}
+
+bool ShowTreeView::runCommand(const QString &line)
+{
+    const ShowTreeCommand::Context ctx = commandContext();
 
 #ifdef QLC_AI_ASSIST
     // "? question": AI Assist's (it answers in the help pane, later).

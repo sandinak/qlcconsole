@@ -232,6 +232,9 @@ list_tests()
     if [ -e ai/test/aiassist/aiassist_test ] || [ -e ai/test/aiassist/aiassist_test.exe ]; then
         echo ai/test/aiassist
     fi
+    if [ -e ai/test/mcpserver/mcpserver_test ] || [ -e ai/test/mcpserver/mcpserver_test.exe ]; then
+        echo ai/test/mcpserver
+    fi
     echo plugins/enttecwing/test
     if [[ "$OSTYPE" == "darwin"* ]]; then
         echo >&2 "Skip Velleman test (not supported on OSX)"
