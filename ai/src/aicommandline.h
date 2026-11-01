@@ -20,6 +20,9 @@
 
 #include <QObject>
 #include <QPointer>
+#include <QTextBrowser>
+#include <QLineEdit>
+#include <QLabel>
 
 #include "showtreecommand.h"
 #include "aiassist.h"

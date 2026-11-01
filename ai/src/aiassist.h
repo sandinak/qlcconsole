@@ -20,6 +20,7 @@
 
 #include <QObject>
 #include <QPointer>
+#include <QNetworkReply>
 #include <QStringList>
 #include <QList>
 
