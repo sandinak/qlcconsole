@@ -27,6 +27,7 @@
 #include <QTemporaryDir>
 #include <QStyleOptionGraphicsItem>
 
+#include "../../../engine/test/common/stdprelude.h"
 #define protected public
 #define private public
 #include "monitorfixtureitem.h"

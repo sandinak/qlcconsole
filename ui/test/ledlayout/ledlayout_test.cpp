@@ -31,6 +31,7 @@
 #include <functional>
 #include <memory>
 
+#include "../../../engine/test/common/stdprelude.h"
 #define protected public
 #define private public
 #include "ledlayouteditor.h"

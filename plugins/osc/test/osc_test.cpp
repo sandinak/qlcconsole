@@ -26,6 +26,7 @@
 #include "osc_test.h"
 #include "oscpacketizer.h"
 
+#include "../../../engine/test/common/stdprelude.h"
 #define private public
 #define protected public
 #include "osccontroller.h"

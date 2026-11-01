@@ -41,6 +41,12 @@
 #include <QScrollArea>
 #include <QLabel>
 
+#include <QRegularExpression>
+#include <QDateTime>
+#include <QTemporaryDir>
+#include <QPushButton>
+#include <QTreeWidget>
+#include "../../../engine/test/common/stdprelude.h"
 #define protected public
 #define private public
 #include "fadetimespin.h"
@@ -61,12 +67,7 @@
 #include "apputil.h"
 #include "showstatus.h"
 #include "qlcfixturedefcache.h"
-#include <QRegularExpression>
-#include <QDateTime>
-#include <QTemporaryDir>
 #include "showstatusdialog.h"
-#include <QPushButton>
-#include <QTreeWidget>
 #include "doc.h"
 #include "paletteops.h"
 #include "showtreecontroller.h"
@@ -2104,7 +2105,7 @@ void ProgrammingManager_Test::newHereMakesASceneInTheFolder()
     QCOMPARE(mgr.workbench()->loadedFunction(), madeId);      // loaded
     QVERIFY(o->currentItem() != nullptr);
     QCOMPARE(o->currentItem()->data(0, ProgrammingOutline::IdRole).toUInt(), madeId);
-    QCOMPARE(o->state(), QAbstractItemView::EditingState);    // renaming
+    QVERIFY(o->findChild<QLineEdit *>() != nullptr);          // renaming: the editor is open
     // One step: ⌘Z takes it away.
     QVERIFY(m_doc->showTree()->undoShared());
     QVERIFY(m_doc->function(madeId) == nullptr);

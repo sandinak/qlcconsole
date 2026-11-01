@@ -20,6 +20,7 @@
 #include <QFrame>
 #include <QtTest>
 
+#include "../../../engine/test/common/stdprelude.h"
 #define protected public
 #include "vcframeproperties_test.h"
 #include "qlcfixturedefcache.h"

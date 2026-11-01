@@ -22,6 +22,7 @@
 #include <QtGui>
 
 #include "efxpreviewarea_test.h"
+#include "../../../engine/test/common/stdprelude.h"
 #define private public
 #include "efxpreviewarea.h"
 #undef private

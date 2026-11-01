@@ -25,6 +25,7 @@
 #include <QtTest>
 #include <cstring>
 
+#include "../common/stdprelude.h"
 #define private public
 #include "timecodesource.h"
 #include "ioplugincache.h"

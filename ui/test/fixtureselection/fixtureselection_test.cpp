@@ -25,6 +25,7 @@
 #include "qlcchannel.h"
 #include "fixture.h"
 
+#include "../../../engine/test/common/stdprelude.h"
 #define protected public
 #define private public
 #include "fixtureselection.h"

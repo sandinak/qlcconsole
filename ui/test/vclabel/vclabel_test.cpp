@@ -25,6 +25,7 @@
 #include <QMenu>
 #include <QSet>
 
+#include "../../../engine/test/common/stdprelude.h"
 #define protected public
 #define private public
 

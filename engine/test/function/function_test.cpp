@@ -28,6 +28,7 @@
 
 #include "function_test.h"
 
+#include "../common/stdprelude.h"
 #define protected public
 #define private public
 #include "function_stub.h"

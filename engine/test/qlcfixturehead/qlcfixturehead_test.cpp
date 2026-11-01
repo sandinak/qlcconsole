@@ -22,6 +22,7 @@
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
 
+#include "../common/stdprelude.h"
 #define protected public
 #include "qlcfixturehead_test.h"
 #include "qlcfixturehead.h"

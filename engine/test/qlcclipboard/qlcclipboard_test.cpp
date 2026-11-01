@@ -18,6 +18,7 @@
 */
 
 #include <QtTest>
+#include "../common/stdprelude.h"
 #define private public
 #include "qlcclipboard.h"
 #undef private

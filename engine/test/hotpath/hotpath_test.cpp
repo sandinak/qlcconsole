@@ -36,6 +36,7 @@
 #include "hotpath_test.h"
 
 // The counts read the universes' faders and drive the timer by hand.
+#include "../common/stdprelude.h"
 #define private public
 #define protected public
 #include "inputoutputmap.h"

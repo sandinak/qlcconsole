@@ -22,6 +22,7 @@
 #include <future>
 #include <chrono>
 
+#include "../common/stdprelude.h"
 #define private public
 #define protected public                // Universe::processFaders()
 #include "mastertimer_test.h"

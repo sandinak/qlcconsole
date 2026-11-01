@@ -20,6 +20,7 @@
 #include <QtTest>
 #include <QSettings>
 
+#include "../../../engine/test/common/stdprelude.h"
 #define private public
 #include "programmingmanager.h"
 #undef private

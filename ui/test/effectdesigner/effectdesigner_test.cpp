@@ -33,6 +33,7 @@
 #include <QMessageBox>
 #include <QtTest>
 
+#include "../../../engine/test/common/stdprelude.h"
 #define private public
 #include "showtreeview.h"
 #include "mastertimer.h"

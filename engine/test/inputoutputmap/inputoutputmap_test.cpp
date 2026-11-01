@@ -21,6 +21,7 @@
 #include <QBuffer>
 #include <QElapsedTimer>
 
+#include "../common/stdprelude.h"
 #define private public
 #include "iopluginstub.h"
 #include "inputoutputmap_test.h"

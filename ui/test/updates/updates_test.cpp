@@ -41,6 +41,7 @@
 #include "updatechecker.h"
 #include "updatedialog.h"
 #include "updates_test.h"
+#include "../../../engine/test/common/stdprelude.h"
 #define private public
 #include "mastertimer.h"
 #undef private

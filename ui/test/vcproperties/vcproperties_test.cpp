@@ -22,6 +22,7 @@
 #include <QXmlStreamWriter>
 #include <QtTest>
 
+#include "../../../engine/test/common/stdprelude.h"
 #define private public
 #include "vcwidgetproperties.h"
 #include "vcproperties.h"

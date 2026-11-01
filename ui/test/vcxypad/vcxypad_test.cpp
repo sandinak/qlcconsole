@@ -23,6 +23,7 @@
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
 
+#include "../../../engine/test/common/stdprelude.h"
 #define protected public
 #define private public
 #include "qlcfixturedefcache.h"

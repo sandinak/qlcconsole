@@ -31,6 +31,7 @@
 #include <QMessageBox>
 #include <QTreeWidgetItemIterator>
 
+#include "../../../engine/test/common/stdprelude.h"
 #define private public
 #define protected public
 #include "addfixture.h"
