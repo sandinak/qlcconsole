@@ -191,6 +191,13 @@ static void countMalloc(uint32_t type, uintptr_t, uintptr_t, uintptr_t, uintptr_
         g_allocs.fetch_add(1, std::memory_order_relaxed);
 }
 #else
+// GCC 14 (Linux, -Werror) inlines the replacement delete into callers that
+// it saw the stock operator new for, and calls the malloc/free pair mismatched.
+// It is the counting pair on purpose.
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wmismatched-new-delete"
+#endif
 void *operator new(std::size_t n)
 {
     if (countingHere())
@@ -204,6 +211,9 @@ void operator delete(void *p) noexcept { std::free(p); }
 void operator delete[](void *p) noexcept { std::free(p); }
 void operator delete(void *p, std::size_t) noexcept { std::free(p); }
 void operator delete[](void *p, std::size_t) noexcept { std::free(p); }
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic pop
+#endif
 #endif
 
 namespace

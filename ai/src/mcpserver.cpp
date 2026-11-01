@@ -437,7 +437,7 @@ QJsonObject McpServer::callTool(const QJsonValue &id, const QJsonObject &params)
     const int step = ai->proposeExternal(op->name, args, m_clientName, &why);
     if (step == 0)
         return rpcResult(id, toolResult(tr("Not proposed: %1").arg(why), true));
-    const AiAssist::Step &st = ai->proposal().at(step - 1);
+    const AiAssist::Step st = ai->proposal().at(step - 1);   // proposal() is by value: copy, don't bind
     return rpcResult(id, toolResult(
         tr("Proposed as step %1: %2 (%3). Nothing has changed yet: the operator applies every proposed step "
            "together, as one undo step, in qlcconsole's Show Tree command line (Enter applies, Esc "

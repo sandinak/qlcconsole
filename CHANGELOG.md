@@ -377,6 +377,12 @@ skipped). Upstream fixes taken:
 
 ### Added
 
+- **The gate has a Linux leg (dev).** `check-all.sh --remote` also compiles
+  and tests the commit on the Linux build host (GCC 14, Qt 6.8, as CI's Linux
+  job), beside the Mac gate; the result line ends `linux=0 linux_qt=6.8.2` and
+  `gate=0` needs it. And each pool run kills a dead gate's leftover `*_test`
+  processes (over 1 h old, under `~/gates` only), logged in
+  `~/gates/cleanup.log`.
 - **Run the show from a game controller (Pad Run, 0.4).** The Run tab's
   **Pad:** button switches the controller between **Tools** (Focus mode,
   Refine, the follow spot, as before) and **Run**. In Run, hold LB (L1) to

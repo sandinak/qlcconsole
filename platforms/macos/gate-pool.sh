@@ -33,8 +33,17 @@
 # progress, and waits out an unreachable stretch of up to GATE_POOL_PATIENCE
 # seconds (default 1800). Ctrl-C stops the gate there and removes the copy.
 #
+# The Linux leg (platforms/macos/gate-linux.sh): next to the Mac's gate, from
+# here, the pool compiles and tests the same commit on the Linux build host
+# (GATE_LINUX_HOST, default branson@192.168.1.245: GCC 14, Qt 6.8 -- what
+# CI's Linux job breaks on). It has the host's lock like any gate, runs while
+# the Mac gate does, and its result joins the summary: gate=0 needs it green.
+# Host unreachable: gate=1, "linux=99", unless ALLOW_SKIP=1 (then
+# "linux=skipped", like a skipped Mac leg). Not run for --quick or --leg
+# (partial runs, not gates), or with GATE_LINUX=off.
+#
 # The last block is the gate's summary; its first line is the result:
-#     gate=0 host=newaudio qt=6.12.0 rev=3c423d721a5f
+#     gate=0 host=newaudio qt=6.12.0 rev=3c423d721a5f linux=0 linux_qt=6.8.2
 # (gate=99: the host couldn't be reached or the copy failed; 98: lost
 # touch with it mid-gate.) The exit status is N. Kept on the host, small:
 # ~/gates/<id>.log (check-all's output) and ~/gates/<id>.summary.txt, plus
@@ -98,6 +107,7 @@ onlock() { # <i> [ssh options...]
 
 probe() { # <i>: "perfcores load1 gates claims qt-ok"
     onlock "$1" <<EOF
+gl_reap >/dev/null 2>&1
 p=\$(sysctl -n hw.perflevel0.logicalcpu 2>/dev/null || sysctl -n hw.ncpu)
 l=\$(sysctl -n vm.loadavg | awk '{ print \$2 }')
 g=\$(pgrep -f '[c]heck-all\.sh' | wc -l | tr -d ' ')
@@ -164,9 +174,19 @@ fail() { # <code> <why>
     exit "$1"
 }
 
+# The Linux leg, beside the Mac's gate (gate-linux.sh): started now, it waits
+# for its own host's lock. Only for a whole gate.
+LXPID=""; LXOUT="$PROBES/linux.txt"; LXWANT=0
+case " ${ARGS[*]-} " in *" --quick "*|*" --leg "*) ;; *) [ "${GATE_LINUX:-on}" = off ] || LXWANT=1 ;; esac
+lxstop() { [ -n "$LXPID" ] && kill -TERM "$LXPID" 2>/dev/null; return 0; }
+if [ "$LXWANT" = 1 ]; then
+    "$HERE/gate-linux.sh" --rev "$SHA" --out "$LXOUT" > >(sed -u 's/^/  /') 2>&1 &
+    LXPID=$!
+fi
+
 # The host's lock: taken, or waited for (gate-lock.sh).
 WAITED=0; DOWN=0; SAID=""
-trap 'echo; fail 130 "stopped while waiting for $NAME"' INT TERM
+trap 'echo; lxstop; fail 130 "stopped while waiting for $NAME"' INT TERM
 while :; do
     out=$(onlock $H <<<"gl_try '$ID' '$SHA' '$(hostname -s)'" 2>/dev/null)
     last=$(printf '%s\n' "$out" | tail -n 1)
@@ -191,7 +211,7 @@ done
 trap - INT TERM
 # Dropped on the way out, whatever happens here -- unless the gate is still
 # running there (lost touch): it keeps it, and drops it itself when done.
-trap 'onlock $H <<<"gl_release $ID" >/dev/null 2>&1; rm -rf "${PROBES:?}"' EXIT
+trap 'lxstop; onlock $H <<<"gl_release $ID" >/dev/null 2>&1; rm -rf "${PROBES:?}"' EXIT
 [ "$WAITED" -gt 0 ] && echo "gate pool: $NAME is free after ${WAITED}s"
 
 echo "gate pool: ${SHA:0:12} on $NAME (${DEST[H]}), ~/gates/$ID"
@@ -238,6 +258,7 @@ EOF
 stop() {
     trap - INT TERM
     echo; echo "gate pool: stopping the gate on $NAME"
+    lxstop
     on $H <<EOF
 G="\$HOME/gates"
 p=\$(cat "\$G/$ID.pid" 2>/dev/null) && [ -n "\$p" ] && kill -TERM -- "-\$p" 2>/dev/null
@@ -284,6 +305,34 @@ trap - INT TERM
 
 SUMMARY=$(on $H <<<"cat \"\$HOME/gates/$ID.summary.txt\"; rm -f \"\$HOME/gates/$ID.rc\" \"\$HOME/gates/$ID.pid\"" 2>/dev/null)
 [ -n "$SUMMARY" ] || fail "${RC:-98}" "no summary; see ~/gates/$ID.log on $NAME"
+
+# The Linux leg's result joins the summary: gate=0 needs it green too.
+if [ -n "$LXPID" ]; then
+    if kill -0 "$LXPID" 2>/dev/null; then echo "gate pool: $NAME is done; waiting for the Linux leg"; fi
+    wait "$LXPID" 2>/dev/null
+    LXPID=""
+    LXHEAD=$(head -n 1 "$LXOUT" 2>/dev/null)
+    LXRC=$(printf '%s\n' "$LXHEAD" | sed -n 's/^linux=\([0-9]*\) .*/\1/p')
+    [ -n "$LXRC" ] || { LXRC=98; LXHEAD="linux=98 linux_qt=? (no result from the Linux leg)"; }
+    LXTAIL=$(tail -n +2 "$LXOUT" 2>/dev/null)
+    LXFIRST=$(printf '%s\n' "$SUMMARY" | head -n 1)
+    LXREST=$(printf '%s\n' "$SUMMARY" | tail -n +2)
+    if [ "$LXRC" = 99 ] && [ -n "${ALLOW_SKIP:-}" ]; then
+        LXHEAD="linux=skipped"
+        LXTAIL="SKIPPED: Linux -- ${LXTAIL:-the Linux host is unreachable} -- allowed by ALLOW_SKIP"
+        LXRC=0
+    elif [ "$LXRC" -ne 0 ]; then
+        LXTAIL="$LXTAIL
+Linux leg did not pass: the gate fails.$([ "$LXRC" = 99 ] && echo " (Host unreachable: ALLOW_SKIP=1 accepts that.)")"
+    fi
+    if [ "$LXRC" -ne 0 ] && [ "$RC" -eq 0 ]; then
+        RC=1
+        LXFIRST=$(printf '%s\n' "$LXFIRST" | sed 's/^gate=0/gate=1/')
+    fi
+    SUMMARY="$LXFIRST ${LXHEAD}
+$LXREST
+$LXTAIL"
+fi
 printf '%s\n' "$SUMMARY" > "$REPO/build-gate-logs/pool-$ID.txt"
 echo
 echo "gate pool: $NAME, $(( $(date +%s) - T0 ))s from copy to result$([ "$RC" -ne 0 ] && echo "; full logs on $NAME: ~/gates/$ID.logs/")"

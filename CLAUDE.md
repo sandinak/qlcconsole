@@ -71,8 +71,31 @@ holder whose gate is dead or over 2 h old is cleared. It `git archive`s the SHA 
 (survives ssh drops), streams progress, removes the copy, and keeps
 `~/gates/<id>.log` + `.summary.txt` (+ `.logs/` on failure). Every gate's
 result line names where and with what it ran — **`gate=N host=NAME qt=6.x.y
-rev=SHA`** — so read the host and Qt, not just `gate=0`; then push that exact
-SHA: `git push origin <sha>:main`. Host notes: memory `remote-gate-hosts`.
+rev=SHA linux=0 linux_qt=6.8.2`** — so read the host and Qt, not just `gate=0`;
+then push that exact SHA: `git push origin <sha>:main`. Host notes: memory
+`remote-gate-hosts`.
+
+**The Linux leg** (`platforms/macos/gate-linux.sh`, started by the pool beside
+the Mac's gate, so it is off the critical path): the same SHA is `git
+archive`d to `~/gates/lx-<sha>…` on the Linux build host (`GATE_LINUX_HOST`,
+default `branson@192.168.1.245`: GCC 14, Qt 6.8.2 — what CI's Linux job uses;
+memory `linux-build-host`), configured and built as CI does (Ninja, Release,
+ccache, Linux's own `-Werror`), and `unittest.sh` runs offscreen with the same
+"every program ran" count. It takes that host's `~/gates/.gatelock` like any
+gate (one at a time; waits) and its result is the `linux=N linux_qt=` part of
+the line: **`gate=0` needs it green**. Host unreachable → `linux=99`, gate=1,
+unless `ALLOW_SKIP=1` (`linux=skipped`, said in the summary). `--quick`,
+`--leg` and `GATE_LINUX=off` don't run it (not gates). It exists because a
+missing `<climits>` and a `QPointer` of a forward-declared type passed the Mac
+gate and broke Linux CI. A killed pool call leaves the Linux leg's own
+`~/gates/lx-….summary.txt` on that host.
+
+**Orphan cleanup**: every pool run (its host probe and each lock attempt,
+`gl_reap` in `gate-lock.sh`) kills a `*_test` process of the user whose
+executable is under `~/gates/<id>/`, whose gate `<id>` is dead (its `.pid` not
+running) and that is over 1 h old (`GL_REAP_AGE`); nothing else, never the app
+or a running gate's tests. Each kill is a line in that host's
+`~/gates/cleanup.log`. Both are covered by `gate-lock.sh --self-test`.
 
 CI (`.github/workflows/build.yml`) runs macOS + Linux + Linux-coverage on every
 push. It had never executed before 2026-08-25; if runs stop appearing, check
