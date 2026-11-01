@@ -72,7 +72,7 @@ QString ShowReviewCli::usage()
         "Never writes the show; loads no plugins and sends nothing.\n");
 }
 
-int ShowReviewCli::main(int argc, char **argv)
+int ShowReviewCli::cliMain(int argc, char **argv)
 {
     // No window, no Dock icon, no display needed (a CI box, a Pi over ssh).
     if (qEnvironmentVariableIsEmpty("QT_QPA_PLATFORM"))

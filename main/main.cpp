@@ -387,7 +387,7 @@ int main(int argc, char** argv)
     /* --review show.qlcc: Show Review with no window (CI, a teacher's folder
        of hand-ins); before the QApplication, so no window ever opens. */
     if (ShowReviewCli::wanted(argc, argv))
-        return ShowReviewCli::main(argc, argv);
+        return ShowReviewCli::cliMain(argc, argv);
 
 #if !defined(Q_OS_MACOS)
     /* Asked for a style by name (-style / QT_STYLE_OVERRIDE)? Looked for
