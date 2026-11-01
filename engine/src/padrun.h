@@ -50,7 +50,17 @@ class Doc;
  *   LB + Y       Sub GO          LB + X   Stop the list
  *   RT / LT      next / previous list (no arm: it only picks)
  *   RS           say the list and what is on standby
+ *   LB + RB      fire the hit that is armed now (the Hits page, below)
  *   Menu         walk the show (below)
+ *   hold View + Menu 1 s   switch the role (Tools / Run), either way
+ *
+ * Hits (Q154, show-tree.md "Hits"): every hit of the show whose place is
+ * live now is armed; the narrowest place wins (cue, then list, production,
+ * everywhere), as on a Virtual Console button holding them all
+ * (ShowTreeController::armedTier()). LB + RB starts it (a one-shot effect
+ * plays again if it has finished; while it runs, the press lets it go) and
+ * says its name. Several at the narrowest place: each press takes the
+ * next. Needs the arm, as GO does; Operate only, as a VC button.
  *
  * Walking the show (Q192, TODO.md "Walk the show from the stage"): Menu
  * starts Focus this cue (RefineSession) on the cue in hand, with its own
@@ -107,7 +117,8 @@ public:
         NextList,           ///< RT
         PreviousList,       ///< LT
         WhereAmI,           ///< RS
-        Walk                ///< Menu: walk the show
+        Walk,               ///< Menu: walk the show
+        FireHit             ///< RB: fire the armed hit
     };
     Q_ENUM(Action)
 
@@ -192,6 +203,16 @@ public:
      *  did something. */
     bool trigger(Action action);
 
+    /** Every hit of the show (a look of a Hits section), in tree order. */
+    QList<quint32> allHits() const;
+    /** The hits that may fire now at the narrowest armed place (more than
+     *  one: they share a place and the presses step through them). */
+    QList<quint32> armedHits() const;
+    /** Fire the armed hit: start it, or let it go when it runs (a finished
+     *  one-shot plays again). Says its name; false, said, when none is
+     *  armed or the show is in Design. */
+    bool fireHit();
+
     /** The cue lists the pad picks between: the current production's lists
      *  (else every production's) that play -- not a Looks section or a
      *  cue's sub-cues -- by their chaser, in order. */
@@ -248,6 +269,26 @@ public:
      *  tap, so its release steps nothing. */
     void bumperChord() { m_lbUsed = true; }
 
+    /*********************************************************************
+     * The role chord: hold View + Menu to switch Tools / Run
+     *********************************************************************/
+public:
+    /** How long View + Menu are held to switch the role, ms. */
+    static constexpr int defaultRoleChordMs() { return 1000; }
+    /** Both chord buttons are down: start timing the hold. */
+    void roleChordBegin();
+    /** Any other button went down: it was no chord. */
+    void roleChordCancel();
+    /** One of the two went up. True when it was a short press (the chord
+     *  neither fired nor was cancelled) and so Tools' View + Menu, Focus
+     *  mode, is the caller's to do. */
+    bool roleChordEnd();
+    bool isRoleChordPending() const { return m_chordPending; }
+    /** The chord switched the role and its buttons are not yet up. */
+    bool roleChordFinished() const { return m_chordFired; }
+    /** The time the hold takes (tests shorten it). */
+    void setRoleChordMs(int ms);
+
 signals:
     void enabledChanged(bool on);
     void armedChanged(bool armed);
@@ -256,6 +297,8 @@ signals:
     void commandSent(ShowControl::Command command, bool done);
     /** A press that needs the arm came without it. */
     void refused(PadRun::Action action);
+    /** A hit was started (@p on) or let go by the pad. */
+    void hitFired(quint32 hitId, bool on);
     void walkingChanged(bool on);
     void soloChanged(bool on);
 
@@ -272,6 +315,7 @@ private:
     /** LB let go (or the walk changed): the modifier off, the level said. */
     void releaseModifier();
     QString cueLabel(quint32 cueId) const;
+    void roleChordFired();
 
 private:
     Doc *m_doc;
@@ -281,6 +325,11 @@ private:
     QSet<quint32> m_armedOn;
     /** The list picked (UINT_MAX: the main one). */
     quint32 m_list = UINT_MAX;
+    /** The next hit a press takes among several at the narrowest place. */
+    int m_hitStep = 0;
+    QTimer *m_chord = nullptr;
+    bool m_chordPending = false;    ///< both down, still timing
+    bool m_chordFired = false;      ///< switched: the releases do nothing
     ControllerScheme::TriggerButton m_rt, m_lt;
     /** The light bar's flash after a GO. */
     QTimer *m_flash = nullptr;

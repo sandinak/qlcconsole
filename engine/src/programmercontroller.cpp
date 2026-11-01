@@ -2528,6 +2528,9 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
             if (role != GamepadRole::Back && m_heldRoles.contains(GamepadRole::Back))
                 m_viewChord = true;
             m_heldRoles.insert(role);
+            // Anything but View and Menu during their hold: no role chord.
+            if (role != GamepadRole::Back && role != GamepadRole::Start)
+                m_padRun->roleChordCancel();
         }
         else
             m_heldRoles.remove(role);
@@ -2538,12 +2541,25 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
             m_focusCallCue->start();
             return true;
         }
-        // View + Menu together: ask for Focus mode (not in the Run role).
-        if (!active && value > 0 && !m_padRun->isEnabled() && m_heldRoles.contains(GamepadRole::Back)
-            && m_heldRoles.contains(GamepadRole::Start))
+        /* View + Menu together: held 1 s, the role switches (Tools / Run,
+           PadRun); in Tools a shorter press, on its release, asks for Focus
+           mode as it always did. Neither does anything on its own before
+           that, so a brush of both cannot take the show. */
+        if (!active && (role == GamepadRole::Back || role == GamepadRole::Start))
         {
-            emit focusModeRequested();
-            return true;
+            const GamepadRole::Role other = role == GamepadRole::Back ? GamepadRole::Start : GamepadRole::Back;
+            if (value > 0 && m_heldRoles.contains(other))
+            {
+                m_padRun->roleChordBegin();
+                return true;
+            }
+            if (value == 0 && (m_padRun->isRoleChordPending() || m_padRun->roleChordFinished()))
+            {
+                const bool shortPress = m_padRun->roleChordEnd();
+                if (shortPress && !m_padRun->isEnabled())
+                    emit focusModeRequested();
+                return true;
+            }
         }
     }
     /* The Run role (0.4): while no tool has the pad, its buttons and
