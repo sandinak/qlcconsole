@@ -322,6 +322,10 @@ public:
     bool beginRestart();
 
 private:
+    /** currentSubCueIndex() from one read of the step playing, with that
+     *  step and its chase in @a step / @a inner (either may be NULL). */
+    int currentSubCue(int *step, const Chaser **inner) const;
+
     bool m_subCueHeld = false;
     bool m_subCueFollow = false;
     bool m_restarting = false;

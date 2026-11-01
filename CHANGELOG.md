@@ -868,6 +868,12 @@ skipped). Upstream fixes taken:
   effect fade (0.4) had made the engine's record of each channel a look
   plays 8 bytes bigger: about 15 MB more at 128 universes. It is back to
   its old size, and the build now fails if it grows again.
+- **No more crash in the Run tab as GO leaves a cue with sub-cues.** The
+  Run tab (and the VC Cue List, the phone Run page and the standby line)
+  asks what Sub GO plays next several times a second; if GO moved the list
+  off a sub-cue step, or the list stopped, in the middle of that question,
+  qlcconsole crashed. The answer is now taken from one look at the cue
+  playing.
 - **`qlcconsole --version` and `--help` work with no display** (ssh, a
   headless Pi): they answer before the application window system starts,
   where they used to abort in Qt's xcb plugin.

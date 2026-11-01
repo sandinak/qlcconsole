@@ -6,6 +6,12 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
+### 2026-11-01 — Sub-cue getters crash fix *(crash, fix/05-courseshow-crash)*
+
+CI's Linux coverage leg segfaulted in `CourseShow_Test::lessonTwoSevenPlaysTheStomps` (run 41271371482, 66da743e5): `Function::direction(this=0x0)` from `Chaser::nextSubCueIndex()`, called by `CueRunner::updateStates()` on the GUI refresh timer. `nextSubCueIndex()` / `previousSubCueIndex()` read `currentStepIndex()` again after `currentSubCueIndex()` had checked the inner chase; the MasterTimer moving the list off the sub-cue step (or stopping it, which drops the runner) in between left `subCueChase()` NULL. Now one read of the step and its chase (`Chaser::currentSubCue`), null-checked. Regression: `SubCues_Test::subCueGettersAreSafeWhileTheListMoves` (a thread polls the getters while the list goes in and out of the sub-cue step); crashed 5/5 before the fix, passes 20/20 alone and 24/24 eight-wide.
+
+---
+
 ### 2026-11-01 — Moved from TODO.md: built sections, tracking-doc tidy *(docs/tidy-project-tracking)*
 
 The built halves of TODO sections whose work has shipped (their open leftovers and "decided (can change)" notes stay in TODO.md under one heading each).

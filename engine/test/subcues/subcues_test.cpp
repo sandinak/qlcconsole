@@ -20,6 +20,8 @@
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
 #include <QElapsedTimer>
+#include <QAtomicInt>
+#include <thread>
 #include <QtTest>
 #include <cmath>
 
@@ -590,6 +592,58 @@ void SubCues_Test::consecutiveCuesOnOneChaseStartWhereAsked()
         tick(10);
         QCOMPARE(list->currentSubCueIndex(), 1);
     }
+}
+
+/* CI crash 2026-11-01 (courseshow lessonTwoSevenPlaysTheStomps): the Run
+   tab's refresh asked nextSubCueIndex() just as GO left the sub-cue step;
+   it read the step playing twice and the second read had no inner chase,
+   so it dereferenced NULL. The UI asks from its thread while the
+   MasterTimer moves the list: the getters must hold up to that. */
+void SubCues_Test::subCueGettersAreSafeWhileTheListMoves()
+{
+    Chaser *inner = makeInner(3);
+    Chaser *list = makeList(3, 1, inner, ChaserStep::SubGo);
+
+    QAtomicInt done(0);
+    QAtomicInt asked(0);
+    // The UI: asks over and over, as CueRunner::updateStates does.
+    std::thread ui([&]() {
+        while (done.loadAcquire() == 0)
+        {
+            const int cur = list->currentSubCueIndex();
+            const int next = list->nextSubCueIndex();
+            const int prev = list->previousSubCueIndex();
+            if (cur < -1 || cur > 2 || next < -1 || next > 2 || prev < -1 || prev > 2)
+                asked.storeRelease(-1000000);
+            asked.fetchAndAddRelaxed(1);
+        }
+    });
+
+    // The MasterTimer: into the sub-cue step and out of it, both ways,
+    // and stopped (the runner goes) -- for a while.
+    QElapsedTimer t;
+    t.start();
+    int round = 0;
+    while (t.elapsed() < 750)
+    {
+        go(list);
+        tick(1);
+        if (round % 3 == 0)
+            list->subGo();
+        go(list);
+        tick(1);
+        back(list);
+        tick(1);
+        if (round % 4 == 0)
+        {
+            list->stop(FunctionParent::master());
+            tick(2);
+        }
+        ++round;
+    }
+    done.storeRelease(1);
+    ui.join();
+    QVERIFY2(asked.loadAcquire() > 0, "the getters returned an index out of range");
 }
 
 QTEST_MAIN(SubCues_Test)
