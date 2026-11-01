@@ -396,7 +396,7 @@ QString PadRun::label(WalkAction action)
         case NextCue:       return tr("Next cue (Design: previewed, no GO)");
         case PreviousCue:   return tr("Previous cue");
         case NextLayer:     return tr("Next layer (group or fixture at that scope)");
-        case PreviousLayer: return tr("Previous layer");
+        case PreviousLayer: return tr("Previous layer (tap; held: the modifier)");
         case Solo:          return tr("Solo the layer / the whole cue ({View} + {B}: undo)");
         case TagCue:        return tr("Hold: tag the cue Needs work (tap: layer, group, fixture)");
         case LeaveWalk:     return tr("Stop walking");
@@ -416,6 +416,10 @@ QStringList PadRun::walkMapLines(PadNames::Family family)
     for (WalkAction a : walkActions())
         out << QStringLiteral("%1: %2").arg(PadNames::name(roleFor(a), family),
                                             PadNames::expand(label(a), family));
+    // Hold LB: the modifier (a tap of it is the previous layer).
+    out << PadNames::expand(tr("{LB} held + {RT} / {LT}: level up / down ({A} keeps it in the cue)"), family);
+    out << PadNames::expand(tr("{LB} held + sticks: the light itself on its target, for every cue "
+                               "(a fixture the cue aims); {LB} + {A} keeps it"), family);
     out << PadNames::expand(tr("Sticks, D-pad, {A} keep, {B} back, {X}, {LS}, {RS}: as Focus this cue"), family);
     return out;
 }
@@ -490,6 +494,8 @@ void PadRun::walkStarted()
     m_walkRt.reset();
     m_walkLt.reset();
     m_holdY.reset();
+    releaseModifier();
+    m_lbUsed = true;        // an LB still held from the step: not a tap
     if (wasArmed)
         emit armedChanged(false);
     if (!m_walking)
@@ -506,6 +512,7 @@ void PadRun::walkEnded()
         return;
     m_walking = false;
     m_pc->refineSession()->setWalking(false);
+    releaseModifier();
     m_holdY.reset();
     m_walkRt.reset();
     m_walkLt.reset();
@@ -666,29 +673,103 @@ bool PadRun::toggleNeedsWork()
     return true;
 }
 
+void PadRun::releaseModifier()
+{
+    const bool was = m_lbHeld;
+    m_lbHeld = false;
+    m_levelUp = m_levelDown = 0.0f;
+    if (m_pc == nullptr)
+        return;
+    RefineSession *r = m_pc->refineSession();
+    r->setLightMode(false);
+    if (m_levelMoved && was)
+    {
+        const QString level = r->levelPhrase();
+        if (!level.isEmpty())
+            m_pc->tellOperator(level, ControllerScheme::ConfirmPriority);
+    }
+    m_levelMoved = false;
+}
+
 bool PadRun::handleWalk(GamepadRole::Role role, uchar value)
 {
     if (!isWalking())
         return false;
     RefineSession *r = m_pc->refineSession();
     const bool down = value > 0;
+    /* LB held is the modifier: anything done with it makes LB no tap. */
+    if (m_lbHeld && role != GamepadRole::LB)
+    {
+        if (!GamepadRole::isAxis(role) && down)
+            m_lbUsed = true;
+        else if (role == GamepadRole::LeftX || role == GamepadRole::LeftY
+                 || role == GamepadRole::RightX || role == GamepadRole::RightY)
+        {
+            if (qAbs(value / 255.0f - 0.5f) > 0.25f)
+                m_lbUsed = true;
+        }
+        // Hold LB + A: keep the light itself (else A is Focus this cue's keep).
+        if (role == GamepadRole::A && down && r->hasLightPending())
+        {
+            r->keepLight();
+            return true;
+        }
+    }
     switch (walkActionFor(role))
     {
         case NextCue:
         case PreviousCue:
         {
-            ControllerScheme::TriggerButton &t = role == GamepadRole::RightTrigger ? m_walkRt : m_walkLt;
-            if (t.update(value / 255.0f))
-                stepCue(role == GamepadRole::RightTrigger ? 1 : -1);
+            const bool right = role == GamepadRole::RightTrigger;
+            ControllerScheme::TriggerButton &t = right ? m_walkRt : m_walkLt;
+            const bool pressed = t.update(value / 255.0f);
+            if (m_lbHeld)
+            {
+                // With LB held the triggers are the level (walkTick()), not cues.
+                (right ? m_levelUp : m_levelDown) = value / 255.0f;
+                if (value / 255.0f > 0.05f)
+                    m_lbUsed = true;
+                return true;
+            }
+            if (pressed)
+                stepCue(right ? 1 : -1);
             return true;
         }
-        case NextLayer:
         case PreviousLayer:
+            // LB: held, the modifier; a tap on its own steps back on release.
+            if (down)
+            {
+                if (!m_lbHeld)
+                {
+                    m_lbHeld = true;
+                    m_lbUsed = false;
+                    m_lightAsksAt = r->lightAsks();
+                    m_levelMoved = false;
+                    r->setLightMode(true);
+                }
+                return true;
+            }
+            if (!m_lbHeld)
+                return true;
+            {
+                const bool tap = !m_lbUsed && r->lightAsks() == m_lightAsksAt;
+                releaseModifier();
+                if (tap)
+                {
+                    // At Group or Fixture scope LB steps those, as in Focus this cue.
+                    if (r->scope() == RefineSession::LayerScope)
+                        stepLayer(-1);
+                    else
+                        r->previousItem();
+                }
+            }
+            return true;
+        case NextLayer:
             // At Group or Fixture scope the bumpers are Focus this cue's.
             if (r->scope() != RefineSession::LayerScope)
                 return false;
             if (down)
-                stepLayer(role == GamepadRole::RB ? 1 : -1);
+                stepLayer(1);
             return true;
         case TagCue:
             // A tap is the scope (on the release); held, the tag (walkTick()).
@@ -710,6 +791,26 @@ bool PadRun::handleWalk(GamepadRole::Role role, uchar value)
 
 void PadRun::walkTick(double dt)
 {
-    if (isWalking() && m_holdY.due(dt))
+    if (!isWalking())
+        return;
+    if (m_holdY.due(dt))
         toggleNeedsWork();
+    if (!m_lbHeld)
+        return;
+    // Level: the triggers' pull with LB held, as fast as they are pulled.
+    const float drive = m_levelUp - m_levelDown;
+    RefineSession *r = m_pc->refineSession();
+    if (qAbs(drive) > 0.05f)
+    {
+        if (r->nudgeLevel(drive * levelRate() * float(dt)))
+            m_levelMoved = true;
+    }
+    else if (m_levelMoved)
+    {
+        // Let go of the trigger: the level said once.
+        const QString level = r->levelPhrase();
+        if (!level.isEmpty())
+            m_pc->tellOperator(level, ControllerScheme::ConfirmPriority);
+        m_levelMoved = false;
+    }
 }

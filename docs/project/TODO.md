@@ -376,13 +376,14 @@ Still open from it:
 
 Built: see DONE.md 2026-10-31 (Walk the show, MVP) and docs/features/show-control.md. Focus calls and Refine (built 2026-10-24, design note moved to DONE.md): Branson's "Try this" with a real pad and a real-rig check on the show VLAN are still open.
 
+Built since (walk2, 2026-11-01, DONE.md): **level** (hold LB + LT / RT)
+and **the light itself** on its target (hold LB + sticks, LB + A keeps;
+VenueCorrections / the show's calibration, one Show Tree step).
+
 Open:
-- **The light itself on A** (Branson, 2026-10-30): on a target-aimed
-  layer, the stick nudges the light's venue calibration (kept for the
-  show run, used by every cue, as venue focus does) instead of refusing,
-  with hold LB as the modifier for "this cue". Today the walk says the
-  layer is aimed at a target (Refine's rule); venue focus zeroes it.
-- **Level** from the pad (Refine has no intensity edit yet).
+- Level and the light itself in Focus this cue without walking (no free
+  control on Refine's own map yet; `RefineSession::nudgeLevel()` /
+  `nudgeLight()` are there for one).
 - A **Needs work filter** in the Show Tree, and a column in the cue sheet
   once the sheet (sheet) is on main.
 - The cue's note **typed or spoken** from the walk (today: on the cue
@@ -392,6 +393,15 @@ Open:
 - In Operate, following the running cue as GO moves it (today Refine goes
   blind until it runs again).
 - "Layer 2 of 4: Movers, Blue": the layer's colour in the line.
+- decided (can change, walk2): hold LB is the modifier for level and the
+  light itself, so a tap of LB steps back a layer on its release; the
+  sticks without LB stay the cue's (on an aimed layer still refused, now
+  saying "pick the light and hold LB"); the light itself is one light at
+  Fixture scope on a light the cue aims (an Aim position); A alone keeps
+  the light when only it is pending; level is one value for the scope (a
+  fan in the old Dimmer look is not kept) and a Show Tree cue only (not a
+  Build scene); in Operate the light itself needs the cue running (quiet
+  Refine, blind refuses).
 - decided (can change): Menu enters and leaves; View solos, so undo is
   View + B; a tap of Y is still the scope and a hold (0.8 s) tags; solo is
   Design only and plays the layer's scene as the cue bakes it (a light an

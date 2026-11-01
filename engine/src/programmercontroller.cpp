@@ -100,6 +100,8 @@ ProgrammerController::ProgrammerController(Doc *doc)
     m_focusSession->setVenues(m_venues);
     m_focusCalls = new FocusCalls(m_doc, this);
     m_refineSession = new RefineSession(m_doc, this);
+    // The light itself, from the walk (Q192): its corrections go where Focus mode's do.
+    m_refineSession->setVenues(m_venues);
     m_padRun = new PadRun(m_doc, this, this);
     // The Run role reads the controller even with no tool or follow spot on.
     connect(m_padRun, &PadRun::enabledChanged, this, [this](bool on) {
@@ -2651,7 +2653,10 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
     {
         // From where the first bumper of the pair stepped from.
         if (refine)
+        {
+            m_padRun->bumperChord();    // walking: LB was not a tap
             m_refineSession->nextPending();
+        }
         else
             m_focusSession->nextUnsaved(m_bumperFrom);
         return true;

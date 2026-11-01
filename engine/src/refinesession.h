@@ -21,6 +21,7 @@
 #define REFINESESSION_H
 
 #include <QElapsedTimer>
+#include <QPointer>
 #include <QObject>
 #include <QMutex>
 #include <QHash>
@@ -32,9 +33,11 @@
 #include "padnames.h"
 #include "showtreemodel.h"
 #include "outputlayer.h"
+#include "truss.h"
 
 #include "scenevalue.h"
 
+class VenueCorrections;
 class QLCPalette;
 class Fixture;
 class QTimer;
@@ -195,9 +198,53 @@ public:
     bool nudgeFocus(int dValue);
     /** Step to the next (+1) or previous (-1) colour / gobo palette. */
     bool stepPalette(int dir);
+    /** Level (walking the show, Q192): brighter (+) / dimmer (-) by
+     *  @p dLevel of 0..255, from what the cue gives the scope's first
+     *  fixture. Kept as the layer's (or the exception's) own Dimmer look,
+     *  one level for all (a fan in the old look is not kept). A Show Tree
+     *  cue only: false in Build scenes, or with no dimmer in the scope. */
+    bool nudgeLevel(float dLevel);
+    /** "Level 60%." for the change pending here; empty when none. */
+    QString levelPhrase() const;
 
-    bool hasPending() const { return !m_edits.isEmpty(); }
-    int pendingCount() const { return m_editOrder.size(); }
+    /*********************************************************************
+     * The light itself (walking the show, Q192): a light twisted on its
+     * mount is zeroed on its target once, and every cue aimed with it
+     * uses that. Its calibration (pan / tilt offset) is moved -- the same
+     * as Focus mode and Venue focus move it: into the venue applied
+     * (VenueCorrections), else the show's own calibration. Never a second
+     * store of offsets.
+     *********************************************************************/
+public:
+    /** Move the picked light's own aim by @p dPan, @p dTilt degrees on its
+     *  target. Fixture scope, a light the cue aims at a target; in
+     *  Operate only while the cue runs (quiet Refine, Q130). Pending (on
+     *  the rig, not recorded) until keepLight(). False, said once, when
+     *  it cannot. */
+    bool nudgeLight(float dPan, float dTilt);
+    bool hasLightPending() const { return m_light.fid != 0xFFFFFFFF; }
+    quint32 lightPendingFixture() const { return m_light.fid; }
+    /** Keep the light's new aim: ONE Show Tree step (its undo puts the
+     *  calibration back), recorded into the venue applied (else the show's
+     *  calibration). */
+    bool keepLight(QString *why = nullptr);
+    /** The light back to its calibration before the nudge. */
+    void revertLight();
+    /** The sticks move the light itself (hold LB while walking), not the
+     *  cue's position. */
+    void setLightMode(bool on);
+    bool isLightMode() const { return m_lightMode; }
+    /** How many times the sticks asked to move the light itself (moved or
+     *  refused): the walk reads it to tell LB held from a tap. */
+    int lightAsks() const { return m_lightAsks; }
+    /** Where the light's corrections go (ProgrammerController's). */
+    void setVenues(VenueCorrections *venues);
+    /** A refusal said while a control is held is said once: let go, and
+     *  it can be said again. */
+    void resetRefusal() { m_lastRefusal.clear(); }
+
+    bool hasPending() const { return !m_edits.isEmpty() || hasLightPending(); }
+    int pendingCount() const { return m_editOrder.size() + (hasLightPending() ? 1 : 0); }
     /** A change pending where the controller is now (this layer, group or
      *  fixture). */
     bool hasPendingHere() const { return m_active && m_edits.contains(editKey()); }
@@ -234,6 +281,8 @@ public:
     bool pendingPosition(quint32 fid, float &pan, float &tilt) const;
     bool pendingZoom(quint32 fid, float &deg) const;
     bool pendingFocus(quint32 fid, int &value) const;
+    /** The level (0..255) pending for @p fid. */
+    bool pendingLevel(quint32 fid, int &value) const;
 
     /** The position @p fid has in the cue now (child layer, else layer),
      *  degrees; false when the cue sets none. */
@@ -327,6 +376,8 @@ private:
         float zoom = 0.0f;
         bool hasFocus = false;
         int focus = 0;
+        bool hasLevel = false;
+        float level = 0.0f;            ///< 0..255
         quint32 colour = 0xFFFFFFFF;
         quint32 gobo = 0xFFFFFFFF;
     };
@@ -370,6 +421,10 @@ private:
     { emit announce(text, priority); }
     void confirm(const QString &text) { say(text, ControllerScheme::ConfirmPriority); }
     void warn(const QString &text) { say(text, ControllerScheme::ImportantPriority); }
+    /** warn(), once while the control that asks is held. */
+    void refuseOnce(const QString &text);
+    /** The light the light itself would move now (invalid, @p why). */
+    quint32 lightFixture(QString *why) const;
 
 private:
     Doc *m_doc;
@@ -425,6 +480,19 @@ private:
     /** The list moved on (or back): release the hold, go blind. */
     void checkRunning();
     bool m_lightsFeedback = true;
+
+    /** The light itself, pending: its calibration before the nudge. */
+    struct LightEdit
+    {
+        quint32 fid = 0xFFFFFFFF;
+        RigCalibration before;
+    };
+    LightEdit m_light;
+    bool m_lightMode = false;
+    int m_lightAsks = 0;
+    QString m_lastRefusal;
+    QElapsedTimer m_refusalClock;
+    QPointer<VenueCorrections> m_venues;
 
     mutable QMutex m_writesMutex;
     QHash<QPair<int, int>, uchar> m_writes;

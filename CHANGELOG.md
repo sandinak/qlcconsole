@@ -361,6 +361,14 @@ skipped). Upstream fixes taken:
   undo step; View + B undoes), and holding Y tags the cue **Needs work**.
   The tag shows in the Show Tree, with a box on the cue's page, and is
   saved with the show. See Show control ▸ Walk the show from the stage.
+- **Walk the show: level and the light itself (0.4).** While walking,
+  hold LB (L1) and pull LT / RT to bring the walked layer's level down or
+  up (A keeps it in the cue). Hold LB and use the sticks on a light the cue
+  aims at a target to zero the light itself on it, and LB + A keeps it: its
+  calibration moves, so every cue aimed with it uses it, saved where Venue
+  focus saves (the venue applied, else the show). One undo step each. A tap
+  of LB still steps back a layer. See Show control ▸ Walk the show from
+  the stage.
 - **Rig Overview owner filter**: an **Owner** box in the footer shows All
   fixtures, **House only** or **Ours only** (tour and rental), to see what
   the room gives against what travels. It hides drawing only.

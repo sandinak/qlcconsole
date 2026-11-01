@@ -87,12 +87,36 @@ private slots:
     /** Needs work round-trips through the show file. */
     void theTagSavesAndLoads();
 
+    /* The walk's leftovers: level, and the light itself (Q192). */
+    /** Hold LB + LT / RT moves the walked layer's level (no cue step), a
+     *  tap of LB still steps back a layer; A keeps it as one tree step,
+     *  undone by View + B. The same by role on an Xbox pad and a
+     *  DualSense whose channels come in another order. */
+    void levelFromTheTriggers_data();
+    void levelFromTheTriggers();
+    /** Hold LB + stick on a fixture the cue aims at a target moves that
+     *  light's calibration (no cue changes); LB + A keeps it as one tree
+     *  step; a second cue aimed with it plays it; View + B undoes, redo
+     *  puts it back; it saves and loads with the show (no venue). */
+    void theLightItselfOnItsTarget();
+    /** Refused, and said: at Layer scope, on a light the cue does not aim,
+     *  and in Operate while the cue is not running (quiet Refine); allowed
+     *  in Operate while it runs. B puts a light not kept back. */
+    void theLightItselfIsRefused();
+    /** With a venue applied the light's correction goes into the venue
+     *  (its sidecar), not the show's calibration, and loads from it. */
+    void theLightItselfGoesIntoTheVenue();
+
 private:
     IOPluginStub *loadStub();
     /** Four spots, a list: Opening (Fronts, Backs), Blackout (no layer),
      *  Ballad (Fronts, Backs); Opening picked in the tree. */
     void makeShow();
     void press(quint32 channel, quint32 universe = 0);
+    void axis(quint32 channel, uchar value, quint32 universe = 0);
+    /** Aim the Fronts at a stage target in both cues (each its own Aim
+     *  palette); the target's id. */
+    quint32 aimFronts();
     void hold(quint32 channel, bool down, quint32 universe = 0);
 
 private:

@@ -19,6 +19,7 @@
 
 #include <QtTest>
 #include <QSignalSpy>
+#include <QTemporaryDir>
 
 #include "programmercontroller.h"
 #include "showtreecontroller.h"
@@ -43,11 +44,14 @@
 #include "qlcchannel.h"
 #include "qlcpalette.h"
 #include "fixture.h"
+#include "monitorproperties.h"
+#include "venuecorrections.h"
+#include "stagetarget.h"
 
 namespace
 {
 /* An Xbox pad as its profile describes it: axes, then buttons. */
-const quint32 kLT = 4, kRT = 5, kA = 10, kB = 11, kX = 12, kY = 13, kLB = 14, kRB = 15,
+const quint32 kLX = 0, kLT = 4, kRT = 5, kA = 10, kB = 11, kX = 12, kY = 13, kLB = 14, kRB = 15,
               kView = 16, kMenu = 17, kRS = 19, kUp = 20;
 
 QMap<quint32, QString> xboxRoles()
@@ -184,9 +188,13 @@ void PadRun_Test::walkMapByRole()
     // One map for both pads, in each pad's words.
     const QStringList xbox = PadRun::walkMapLines(PadNames::Xbox);
     const QStringList ps = PadRun::walkMapLines(PadNames::DualSense);
-    QCOMPARE(xbox.size(), PadRun::walkActions().size() + 1);
+    QCOMPARE(xbox.size(), PadRun::walkActions().size() + 3);
     QCOMPARE(xbox.at(0).left(3), QString("RT:"));
     QCOMPARE(ps.at(0).left(3), QString("R2:"));
+    // The modifier, in each pad's words.
+    QVERIFY(xbox.join('\n').contains("LB held + RT / LT: level"));
+    QVERIFY(ps.join('\n').contains("L1 held + R2 / L2: level"));
+    QVERIFY(ps.join('\n').contains("the light itself on its target"));
 }
 
 void PadRun_Test::init()
@@ -224,6 +232,11 @@ void PadRun_Test::press(quint32 channel, quint32 universe)
 {
     emit m_doc->inputOutputMap()->inputValueChanged(universe, channel, 255, QString());
     emit m_doc->inputOutputMap()->inputValueChanged(universe, channel, 0, QString());
+}
+
+void PadRun_Test::axis(quint32 channel, uchar value, quint32 universe)
+{
+    emit m_doc->inputOutputMap()->inputValueChanged(universe, channel, value, QString());
 }
 
 void PadRun_Test::hold(quint32 channel, bool down, quint32 universe)
@@ -835,6 +848,327 @@ void PadRun_Test::theTagSavesAndLoads()
     // Cleared, it is not written at all (an older build sees nothing new).
     QVERIFY(st->setCuesNeedsWork({ m_cue2 }, false));
     QVERIFY(!showXml(m_doc).contains("NeedsWork"));
+}
+
+/*****************************************************************************
+ * The walk's leftovers: level and the light itself
+ *****************************************************************************/
+
+namespace
+{
+/* The pan a palette sends @p fid, 16 bit, 0 when none. */
+int panOf(Doc *doc, QLCPalette *p, const QList<quint32> &lit, quint32 fid)
+{
+    int v = 0;
+    for (const SceneValue &sv : p->valuesFromFixtures(doc, lit))
+        if (sv.fxi == fid && sv.channel == 0)
+            v |= sv.value << 8;
+        else if (sv.fxi == fid && sv.channel == 1)
+            v |= sv.value;
+    return v;
+}
+}
+
+quint32 PadRun_Test::aimFronts()
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    int x = 0;
+    for (quint32 fid : m_fronts + m_backs)
+        props->setFixturePosition(fid, 0, 0, QVector3D(float(x++) * 1000.0f, 2000.0f, 5.0f));
+    StageTarget *dsc = props->addStageTarget();
+    dsc->setName("DSC");
+    dsc->setPosition(QVector3D(5.0f, 6.0f, 0.0f));
+    ShowTreeController *st = m_doc->showTree();
+    for (quint32 cue : { m_cue1, m_cue2 })
+    {
+        QLCPalette *aim = new QLCPalette(QLCPalette::Aim);
+        aim->setName(cue == m_cue1 ? "Aim DSC" : "Aim DSC again");
+        aim->setStageTargetId(dsc->id());
+        m_doc->addPalette(aim);
+        quint32 front = ShowTree::invalidId();
+        for (const ShowTree::Layer &l : st->cue(cue)->layers)
+            if (l.target == m_frontTarget)
+                front = l.id;
+        st->setLayerLook(cue, front, lookOf(ShowTree::KeyPosition, aim->id()));
+    }
+    st->clearUndo();
+    return dsc->id();
+}
+
+void PadRun_Test::levelFromTheTriggers_data()
+{
+    QTest::addColumn<bool>("dualSense");
+    QTest::newRow("xbox") << false;
+    QTest::newRow("dualsense") << true;
+}
+
+void PadRun_Test::levelFromTheTriggers()
+{
+    QFETCH(bool, dualSense);
+    IOPluginStub *stub = loadStub();
+    QVERIFY(stub != nullptr);
+    // A DualSense lists its controls in another order: the same roles.
+    quint32 lt = kLT, lb = kLB, a = kA, view = kView, b = kB, menu = kMenu, rb = kRB;
+    if (dualSense)
+    {
+        lt = 30; lb = 31; a = 32; view = 33; b = 34; menu = 35; rb = 36;
+        stub->m_channelRoles = { { lt, "lt" }, { 31, "lb" }, { 32, "a" }, { 33, "back" },
+                                 { 34, "b" }, { 35, "start" }, { 36, "rb" }, { kRT, "rt" } };
+    }
+    QVERIFY(m_doc->inputOutputMap()->setInputPatch(0, stub->name(), QString(), 0));
+    makeShow();
+    ProgrammerController *pc = m_doc->programmer();
+    PadRun *run = pc->padRun();
+    RefineSession *r = pc->refineSession();
+    ShowTreeController *st = m_doc->showTree();
+    run->setEnabled(true);
+    press(menu);
+    QVERIFY(run->isWalking());
+    QCOMPARE(r->currentLayer(), m_layer1);
+    const QList<ShowTree::Look> before = st->cue(m_cue1)->layer(m_layer1)->looks;
+    QSignalSpy said(pc, &ProgrammerController::operatorAnnounce);
+
+    // LB held + LT pulled all the way for a second: half the range down,
+    // from Full -- and no cue step.
+    hold(lb, true);
+    QVERIFY(run->isModifierHeld());
+    axis(lt, 255);
+    run->walkTick(1.0);
+    QCOMPARE(run->walkCue(), m_cue1);
+    int level = -1;
+    QVERIFY(r->pendingLevel(m_fronts.at(0), level));
+    QCOMPARE(level, 128);
+    QVERIFY(!r->pendingLevel(m_backs.at(0), level));
+    // On the rig: the Fronts' dimmer (channel 4).
+    const QHash<QPair<int, int>, uchar> w = r->pendingWrites();
+    const Fixture *f0 = m_doc->fixture(m_fronts.at(0));
+    QCOMPARE(int(w.value(qMakePair(0, int(f0->address()) + 4))), 128);
+    // Let go of the trigger: the level is said.
+    axis(lt, 0);
+    run->walkTick(0.02);
+    QVERIFY(said.count() > 0);
+    QCOMPARE(said.last().at(0).toString(), QString("Level 50%."));
+    hold(lb, false);
+    // LB was the modifier, not a tap: the layer stays.
+    QCOMPARE(r->currentLayer(), m_layer1);
+    QVERIFY(!run->isModifierHeld());
+
+    // A keeps it in the cue: the layer's own Dimmer look, one tree step.
+    press(a);
+    QVERIFY(!r->hasPending());
+    const ShowTree::Look *dim = st->cue(m_cue1)->layer(m_layer1)->look(ShowTree::KeyDimmer);
+    QVERIFY(dim != nullptr);
+    QCOMPARE(m_doc->palette(dim->palettes.first())->value().toInt(), 128);
+    QCOMPARE(st->undoText(), QString("Focus this cue"));
+
+    // View + B: undone.
+    hold(view, true);
+    press(b);
+    hold(view, false);
+    QCOMPARE(st->cue(m_cue1)->layer(m_layer1)->looks, before);
+
+    // A tap of LB on its own still steps back a layer (on its release).
+    press(rb);
+    QCOMPARE(r->currentLayer(), m_layer2);
+    press(lb);
+    QCOMPARE(r->currentLayer(), m_layer1);
+    run->stopWalk();
+    QVERIFY(!run->isWalking());
+}
+
+void PadRun_Test::theLightItselfOnItsTarget()
+{
+    IOPluginStub *stub = loadStub();
+    QVERIFY(stub != nullptr);
+    QVERIFY(m_doc->inputOutputMap()->setInputPatch(0, stub->name(), QString(), 0));
+    makeShow();
+    aimFronts();
+    ProgrammerController *pc = m_doc->programmer();
+    PadRun *run = pc->padRun();
+    RefineSession *r = pc->refineSession();
+    ShowTreeController *st = m_doc->showTree();
+    MonitorProperties *props = m_doc->monitorProperties();
+    const quint32 f0 = m_fronts.at(0), f1 = m_fronts.at(1);
+    QLCPalette *aim2 = m_doc->palette(st->cue(m_cue2)->layers.first().look(ShowTree::KeyPosition)->palettes.first());
+    QVERIFY(aim2 != nullptr && aim2->type() == QLCPalette::Aim);
+    const int cue2Pan0 = panOf(m_doc, aim2, m_fronts, f0);
+    const int cue2Pan1 = panOf(m_doc, aim2, m_fronts, f1);
+    QVERIFY(cue2Pan0 > 0);
+    const QList<ShowTree::Look> cue1Looks = st->cue(m_cue1)->layer(m_layer1)->looks;
+
+    run->setEnabled(true);
+    press(kMenu);
+    press(kY);                                  // Fixture scope: Front 1
+    QCOMPARE(r->scope(), RefineSession::FixtureScope);
+    QCOMPARE(r->currentFixture(), f0);
+
+    // Hold LB, stick right for half a second: the light itself turns.
+    hold(kLB, true);
+    QVERIFY(r->isLightMode());
+    axis(kLX, 255);
+    r->tick(0.5);
+    axis(kLX, 128);
+    QVERIFY(r->hasLightPending());
+    QCOMPARE(r->lightPendingFixture(), f0);
+    const float offset = props->fixtureRigProps(f0).panOffsetDeg;
+    QVERIFY2(offset > 1.0f, qPrintable(QString::number(offset)));
+    // The cue itself is not changed; the rig shows where it lands now.
+    QCOMPARE(st->cue(m_cue1)->layer(m_layer1)->looks, cue1Looks);
+    QVERIFY(r->pendingWrites().contains(qMakePair(0, int(m_doc->fixture(f0)->address()))));
+    QVERIFY(!st->canUndo());
+    // A change not kept: no cue step, no leaving.
+    press(kRT);                                 // LB held: a level, not a cue
+    QCOMPARE(run->walkCue(), m_cue1);
+
+    // LB + A keeps it: one Show Tree step.
+    press(kA);
+    hold(kLB, false);
+    QCOMPARE(r->currentFixture(), f0);          // LB was no tap
+    QVERIFY(!r->hasLightPending());
+    QVERIFY(!r->hasPending());
+    QCOMPARE(props->fixtureRigProps(f0).panOffsetDeg, offset);
+    QVERIFY(st->canUndo());
+    QCOMPARE(st->undoText(), QString("Zero Front 1 on its target"));
+    QCOMPARE(st->cue(m_cue1)->layer(m_layer1)->looks, cue1Looks);
+
+    // Every cue aimed with it uses it: cue 2's own Aim palette moved Front 1
+    // (by the offset) and left Front 2 alone.
+    const int cue2Now0 = panOf(m_doc, aim2, m_fronts, f0);
+    QVERIFY2(cue2Now0 > cue2Pan0, qPrintable(QString("%1 %2").arg(cue2Now0).arg(cue2Pan0)));
+    QCOMPARE(panOf(m_doc, aim2, m_fronts, f1), cue2Pan1);
+
+    // View + B: one undo puts the calibration back; redo moves it again.
+    hold(kView, true);
+    press(kB);
+    hold(kView, false);
+    QCOMPARE(props->fixtureRigProps(f0).panOffsetDeg, 0.0f);
+    QCOMPARE(panOf(m_doc, aim2, m_fronts, f0), cue2Pan0);
+    QVERIFY(st->redo());
+    QCOMPARE(props->fixtureRigProps(f0).panOffsetDeg, offset);
+    run->stopWalk();
+
+    // No venue applied: it is the show's own calibration, saved and loaded.
+    const QByteArray xml = showXml(m_doc);
+    Doc *other = new Doc(this);
+    QXmlStreamReader sr(xml);
+    sr.readNextStartElement();
+    QVERIFY(other->loadXML(sr, false));
+    QCOMPARE(other->monitorProperties()->fixtureRigProps(f0).panOffsetDeg, offset);
+    QCOMPARE(other->monitorProperties()->fixtureRigProps(f1).panOffsetDeg, 0.0f);
+    delete other;
+}
+
+void PadRun_Test::theLightItselfIsRefused()
+{
+    IOPluginStub *stub = loadStub();
+    QVERIFY(stub != nullptr);
+    QVERIFY(m_doc->inputOutputMap()->setInputPatch(0, stub->name(), QString(), 0));
+    makeShow();
+    aimFronts();
+    ProgrammerController *pc = m_doc->programmer();
+    PadRun *run = pc->padRun();
+    RefineSession *r = pc->refineSession();
+    MonitorProperties *props = m_doc->monitorProperties();
+    QSignalSpy said(r, &RefineSession::announce);
+    run->setEnabled(true);
+    press(kMenu);
+
+    // Layer scope: pick the light first.
+    r->setLightMode(true);
+    QVERIFY(!r->nudgeLight(1.0f, 0.0f));
+    QVERIFY(said.last().at(0).toString().contains("Pick the light first"));
+    // Said once while the stick is held, not every tick.
+    const int n = said.count();
+    QVERIFY(!r->nudgeLight(1.0f, 0.0f));
+    QCOMPARE(said.count(), n);
+    // Without the modifier an aimed layer still asks for a fixture -- and
+    // says how to zero a light while walking.
+    r->setLightMode(false);
+    QVERIFY(!r->nudgePosition(1.0f, 0.0f));
+    QVERIFY(said.last().at(0).toString().contains("hold LB"));
+
+    // A light the cue does not aim (the Backs: no position).
+    press(kRB);
+    press(kY);
+    QCOMPARE(r->currentFixture(), m_backs.at(0));
+    QVERIFY(!r->nudgeLight(1.0f, 0.0f));
+    QVERIFY(said.last().at(0).toString().contains("not aimed at a target"));
+    press(kY);                                  // back to Layer scope
+    press(kRB);                                 // the Fronts
+    press(kY);
+    QCOMPARE(r->currentFixture(), m_fronts.at(0));
+
+    // B puts a light not kept back.
+    QVERIFY(r->nudgeLight(2.0f, 0.0f));
+    QCOMPARE(props->fixtureRigProps(m_fronts.at(0)).panOffsetDeg, 2.0f);
+    press(kB);
+    QVERIFY(!r->hasLightPending());
+    QCOMPARE(props->fixtureRigProps(m_fronts.at(0)).panOffsetDeg, 0.0f);
+    QVERIFY(!m_doc->showTree()->canUndo());
+    // Stopping puts it back too.
+    QVERIFY(r->nudgeLight(2.0f, 0.0f));
+    r->revert();
+    run->stopWalk();
+    QCOMPARE(props->fixtureRigProps(m_fronts.at(0)).panOffsetDeg, 0.0f);
+
+    // Operate (quiet Refine): only while its cue runs.
+    quint32 running = m_cue1;
+    r->setRunningCueProbe([&running](quint32) { return running; });
+    m_doc->setMode(Doc::Operate);
+    QVERIFY(r->start(m_cue1));
+    r->setScope(RefineSession::FixtureScope);
+    QVERIFY(r->nudgeLight(1.0f, 0.0f));
+    QVERIFY(r->keepLight());
+    QCOMPARE(props->fixtureRigProps(m_fronts.at(0)).panOffsetDeg, 1.0f);
+    running = m_cue2;                           // GO moved on: blind
+    QVERIFY(!r->nudgeLight(1.0f, 0.0f));
+    QVERIFY(said.last().at(0).toString().contains("not running"));
+    QCOMPARE(props->fixtureRigProps(m_fronts.at(0)).panOffsetDeg, 1.0f);
+    r->stop();
+    m_doc->setMode(Doc::Design);
+    r->setRunningCueProbe(std::function<quint32(quint32)>());
+}
+
+void PadRun_Test::theLightItselfGoesIntoTheVenue()
+{
+    makeShow();
+    aimFronts();
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    ProgrammerController *pc = m_doc->programmer();
+    VenueCorrections *v = pc->venueCorrections();
+    v->setShowFile(dir.filePath("Tour.qlcc"), false);
+    QVERIFY(v->setActiveVenue(v->addVenue("Lincoln HS")));
+    RefineSession *r = pc->refineSession();
+    MonitorProperties *props = m_doc->monitorProperties();
+    const quint32 f0 = m_fronts.at(0);
+
+    QVERIFY(r->start(m_cue1));
+    r->setScope(RefineSession::FixtureScope);
+    QVERIFY(r->nudgeLight(-1.5f, 0.5f));
+    // Live, not a correction yet.
+    QVERIFY(!v->hasCorrection(f0));
+    QVERIFY(r->keepLight());
+    QVERIFY(v->hasCorrection(f0));
+    QCOMPARE(v->correction(f0).panOffsetDeg, -1.5f);
+    QCOMPARE(v->correction(f0).tiltOffsetDeg, 0.5f);
+    QVERIFY(v->isChecked(f0));
+    // The show's own calibration is untouched: the base.
+    QCOMPARE(props->calibrationBase(f0).panOffsetDeg, 0.0f);
+    QVERIFY(!showXml(m_doc).contains("PanOfs"));
+    // The sidecar has it, and a reader of it gets it back.
+    QVERIFY(QFile::exists(v->filePath()));
+    QFile side(v->filePath());
+    QVERIFY(side.open(QIODevice::ReadOnly));
+    VenueCorrections reread(m_doc);
+    QVERIFY(reread.fromXml(side.readAll()));
+    QCOMPARE(reread.venue("Lincoln HS").fixtures.value(f0).panOffsetDeg, -1.5f);
+
+    // Undo takes the correction out of the venue again.
+    QVERIFY(m_doc->showTree()->undo());
+    QVERIFY(!v->hasCorrection(f0));
+    QCOMPARE(props->fixtureRigProps(f0).panOffsetDeg, 0.0f);
+    r->stop();
 }
 
 QTEST_MAIN(PadRun_Test)
