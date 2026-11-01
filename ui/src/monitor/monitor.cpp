@@ -193,6 +193,7 @@
 #define SETTINGS_CENTERLINES "monitor/centerlines"
 #define SETTINGS_ALLTARGETS "monitor/allTargets"
 #define SETTINGS_LINEOFSIGHT "monitor/lineOfSightBeams"
+#define SETTINGS_MOVESPEED "monitor/moveSpeed"
 #define SETTINGS_MOUNTEDFIXTURES "monitor/mountedfixtures"
 #define SETTINGS_STUDIOROTATION "monitor/studiorotation"
 #define SETTINGS_PLOTROTATION "monitor/plotrotation"
@@ -3248,6 +3249,29 @@ void Monitor::showStageOverview()
     connect(beamBtn, &QToolButton::toggled, view,
             [view](bool on) { view->setBeams(on); });
     beamBtn->setChecked(true);
+
+    /* Realistic move speed (0.5): a head travels at the speed its type can
+       when the output jumps it, instead of snapping. Shared by every rig
+       view, on by default, remembered. */
+    QToolButton *moveBtn = new QToolButton(footer);
+    moveBtn->setObjectName(QStringLiteral("rigMoveSpeed"));
+    moveBtn->setText(tr("Real move speed"));
+    moveBtn->setCheckable(true);
+    moveBtn->setStyleSheet(toggleStyle);
+    moveBtn->setToolTip(tr("Moving heads take the time they really need to get there (about "
+                           "0.4 s per half turn for a spot) when the output jumps; off, they "
+                           "snap"));
+    bar->addWidget(moveBtn);
+    {
+        const bool on = QSettings().value(SETTINGS_MOVESPEED, true).toBool();
+        StructureStudioView::setMoveSpeed(on);
+        moveBtn->setChecked(on);
+    }
+    connect(moveBtn, &QToolButton::toggled, view, [view](bool on) {
+        StructureStudioView::setMoveSpeed(on);
+        QSettings().setValue(SETTINGS_MOVESPEED, on);
+        view->update();
+    });
 
     bar->addWidget(new QLabel(tr("Room:"), footer));
     bar->addWidget(ambientCombo);

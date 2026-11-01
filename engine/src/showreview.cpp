@@ -71,6 +71,7 @@ const QList<ShowReview::Check> &ShowReview::catalog()
 {
     static const QList<Check> all = []() {
         QList<Check> c = ShowReviewChecks::showChecks();
+        c += ShowReviewChecks::moveChecks();
         c += ShowReviewChecks::treeChecks();
         return c;
     }();

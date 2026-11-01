@@ -56,6 +56,7 @@
 #include "qlcfile.h"
 #include "scene.h"
 #include "doc.h"
+#include "movespeed.h"
 
 using namespace ShowTree;
 
@@ -1304,6 +1305,153 @@ void ShowReview_Test::cli()
     char *no[] = { prog, other, file };
     QVERIFY(ShowReviewCli::wanted(3, yes));
     QVERIFY(!ShowReviewCli::wanted(3, no));
+}
+
+/****************************************************************************
+ * Movement (MOV) and the move speed they use
+ ****************************************************************************/
+
+namespace
+{
+/** A cue with one mover, lit at @a dim, at @a pan / @a tilt degrees. */
+void cueHead(Doc *doc, quint32 cue, Fixture *f, int panDeg, int tiltDeg, int dim)
+{
+    ShowTreeController *st = doc->showTree();
+    QLCPalette *pos = new QLCPalette(QLCPalette::PanTilt, doc);
+    pos->setValues(QVariantList() << panDeg << tiltDeg);
+    pos->setName(QStringLiteral("Pos %1/%2").arg(panDeg).arg(tiltDeg));
+    doc->addPalette(pos);
+    QLCPalette *level = new QLCPalette(QLCPalette::Dimmer, doc);
+    level->setValue(dim);
+    level->setName(QStringLiteral("Dim %1").arg(dim));
+    doc->addPalette(level);
+    Target t;
+    t.fixtures = { f->id() };
+    const quint32 layer = st->addLayer(cue, t);
+    Look look;
+    look.key = KeyPosition;
+    look.palettes = { pos->id() };
+    QVERIFY(st->setLayerLook(cue, layer, look));
+    Look d;
+    d.key = KeyDimmer;
+    d.palettes = { level->id() };
+    QVERIFY(st->setLayerLook(cue, layer, d));
+}
+}
+
+void ShowReview_Test::moveSpeed()
+{
+    Fixture *spot = mover("Spot 1", 0);
+    QCOMPARE(MoveSpeed::secondsPer180(spot), 0.4);          // decided: a typical spot
+    QCOMPARE(MoveSpeed::degreesPerSecond(spot), 450.0);
+    QCOMPARE(MoveSpeed::panSpanDeg(spot), 540.0);
+    QCOMPARE(MoveSpeed::tiltSpanDeg(spot), 270.0);
+    // Half of a 540 degree pan is 270 degrees: 0.6 s. Tilt 270 degrees: 0.6 s too.
+    QVERIFY(qAbs(MoveSpeed::travelMs(spot, 0, 0, 0.5, 0) - 600.0) < 0.001);
+    QVERIFY(qAbs(MoveSpeed::travelMs(spot, 0, 0, 0, 1) - 600.0) < 0.001);
+    // Pan and tilt run together: the slower axis, not the sum.
+    QVERIFY(qAbs(MoveSpeed::travelMs(spot, 0, 0, 1, 1) - 1200.0) < 0.001);
+    QCOMPARE(MoveSpeed::travelMs(spot, 0.3, 0.3, 0.3, 0.3), 0.0);
+    QCOMPARE(MoveSpeed::travelMs(nullptr, 0, 0, 1, 1), 0.0);
+    // A scanner's mirror is four times quicker.
+    QLCFixtureDef *def = new QLCFixtureDef();
+    Fixture *scan = make(m_doc, "Scan 1", QStringLiteral("Scan"), QLCFixtureDef::Scanner, def,
+                         { chan(def, "Pan", QLCChannel::PositionPan), chan(def, "Tilt", QLCChannel::PositionTilt) },
+                         50, 0, 20);
+    QVERIFY(scan != nullptr);
+    QCOMPARE(MoveSpeed::secondsPer180(scan), 0.1);
+    // A follower never outruns the head: 100 ms is 45 degrees of a 540 degree pan.
+    MoveSpeed::Follower f;
+    QVERIFY(!f.step(spot, 1.0, 0.0, 1000));                 // first sight: it is there
+    QCOMPARE(f.pan, 1.0);
+    f.step(spot, 0.0, 0.0, 1100);
+    QVERIFY(qAbs(f.pan - (1.0 - 45.0 / 540.0)) < 1e-9);
+    QVERIFY(f.step(spot, 0.0, 0.0, 1200));                  // still going
+    QVERIFY(!f.step(spot, 0.0, 0.0, 2300));                 // 450 degrees more: arrives, and says so
+    QCOMPARE(f.pan, 0.0);
+    // Looking away for a while (the view hidden) snaps rather than crawls.
+    f.step(spot, 1.0, 1.0, 20000);
+    QCOMPARE(f.pan, 1.0);
+}
+
+void ShowReview_Test::mov01()
+{
+    Fixture *a = mover("Spot 1", 0);
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 lid = st->addCueList(st->addProduction("Show"), "Act 1");
+    const quint32 c1 = st->addCue(lid, -1, "One");
+    const quint32 c2 = st->addCue(lid, 0, "Two");
+    cueHead(m_doc, c1, a, 100, 90, 200);
+    cueHead(m_doc, c2, a, 100, 90, 200);
+    QVERIFY(quiet("MOV-01"));                               // same place: nothing moves
+    st->removeLayer(c2, st->cueList(lid)->cue(c2)->layers.last().id);
+    cueHead(m_doc, c2, a, 400, 90, 200);
+    QVERIFY(fires("MOV-01"));                               // 300 degrees, lit in both
+    QVERIFY(findings("MOV-01").first().message.contains("Spot 1"));
+    // Dark before: it moves in the dark, which is MOV-02's, not this.
+    st->removeLayer(c1, st->cueList(lid)->cue(c1)->layers.last().id);
+    cueHead(m_doc, c1, a, 100, 90, 0);
+    QVERIFY(quiet("MOV-01"));
+}
+
+void ShowReview_Test::mov02()
+{
+    Fixture *a = mover("Spot 1", 0);
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 lid = st->addCueList(st->addProduction("Show"), "Act 1");
+    const quint32 c1 = st->addCue(lid, -1, "One");
+    const quint32 c2 = st->addCue(lid, 0, "Two");
+    cueHead(m_doc, c1, a, 100, 90, 0);
+    cueHead(m_doc, c2, a, 400, 90, 200);
+    auto setHold = [&](uint hold) {
+        Cue cue = *st->cueList(lid)->cue(c1);
+        cue.hold = hold;
+        QVERIFY(st->setCue(cue));
+    };
+    // Move in black off for the show (the default): it can't hide the move.
+    setHold(5000);
+    QVERIFY(fires("MOV-02"));
+    QVERIFY(findings("MOV-02").first().message.contains("off for the show"));
+    m_doc->programmer()->setAutoMoveInBlack(true);
+    QVERIFY(quiet("MOV-02"));                               // 5 s of dark, enough
+    setHold(Function::infiniteSpeed());
+    QVERIFY(quiet("MOV-02"));                               // waits for GO: plenty
+    setHold(300);                                           // a 0.3 s dark gap
+    QVERIFY(fires("MOV-02"));
+    QVERIFY(findings("MOV-02").first().message.contains("0.3"));
+    // Longer than the lead time, shorter than the head needs to travel
+    // (300 degrees of a 540 degree pan: 0.67 s -- under the 0.8 s lead time).
+    setHold(900);
+    QVERIFY(quiet("MOV-02"));
+    // Over the full pan (about 1 s of travel from 100 degrees) the same gap is too short.
+    st->removeLayer(c2, st->cueList(lid)->cue(c2)->layers.last().id);
+    cueHead(m_doc, c2, a, 540, 90, 200);
+    QVERIFY(fires("MOV-02"));
+    QVERIFY(findings("MOV-02").first().message.contains("1.0"));
+    // "Don't move in black into this cue" on the cue.
+    Cue cue = *st->cueList(lid)->cue(c2);
+    cue.noMoveInBlack = true;
+    QVERIFY(st->setCue(cue));
+    QVERIFY(fires("MOV-02"));
+    QVERIFY(findings("MOV-02").first().message.contains("not to move in black"));
+}
+
+void ShowReview_Test::mov08()
+{
+    Fixture *a = mover("Spot 1", 0);
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 lid = st->addCueList(st->addProduction("Show"), "Act 1");
+    const quint32 c1 = st->addCue(lid, -1, "Opener");
+    cueHead(m_doc, c1, a, 270, 135, 200);                   // the middle of both ranges: home
+    QVERIFY(quiet("MOV-08"));
+    st->removeLayer(c1, st->cueList(lid)->cue(c1)->layers.last().id);
+    cueHead(m_doc, c1, a, 60, 40, 200);                     // lit, away from home, nothing before
+    QVERIFY(fires("MOV-08"));
+    QVERIFY(findings("MOV-08").first().message.contains("Spot 1"));
+    // Dark in the opener (a preshow would be the thing): nothing to swing in lit.
+    st->removeLayer(c1, st->cueList(lid)->cue(c1)->layers.last().id);
+    cueHead(m_doc, c1, a, 60, 40, 0);
+    QVERIFY(quiet("MOV-08"));
 }
 
 void ShowReview_Test::everyCheckIsTested()

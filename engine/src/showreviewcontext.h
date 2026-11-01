@@ -82,6 +82,8 @@ namespace ShowReviewChecks
 {
     /** The checks over the patch, fixtures, effects, power, files and names */
     QList<ShowReview::Check> showChecks();
+    /** The movement checks: moves in light, in the dark, before the first cue */
+    QList<ShowReview::Check> moveChecks();
     /** The checks over the Show Tree: palettes in cues, tracking, hits */
     QList<ShowReview::Check> treeChecks();
     /** Effect looks in scenes that can't run, by design: no script chosen,

@@ -47,6 +47,7 @@
 #include <QPolygonF>
 #include <climits>
 #include <QElapsedTimer>
+#include "movespeed.h"
 
 #include "beamoptics.h"
 #include "rhiraster.h"
@@ -196,6 +197,18 @@ public:
      *  stage counts). Off by default; every view shares it (Lighting Studio:
      *  Show > Line of sight). */
     static void setLineOfSightBeams(bool on);
+    /** Realistic move speed (0.5): moving heads travel at the speed their
+     *  type can (MoveSpeed), so a jump in the output is drawn as the move it
+     *  would be, not a snap. On by default; every view shares it (Rig
+     *  Overview footer: Real move speed). */
+    static void setMoveSpeed(bool on);
+    static bool moveSpeed();
+    /** Walk every head toward where the output puts it, to @a nowMs (a
+     *  clock in ms; the view's own when drawing), before the fixtures are
+     *  drawn. Public so a test can walk the clock. */
+    void stepHeads(qint64 nowMs);
+    /** Whether a head is still travelling to where the output puts it. */
+    bool headsTravelling() const { return m_followersMoving; }
     static bool lineOfSightBeams();
 
     /** Metres along truss @p trussId to the point nearest @p viewPos as it
@@ -1231,6 +1244,11 @@ private:
      *  horizontal screen axis is reversed and the upstage side is nearer. */
     bool     m_fromBehind = false;
     bool     m_beams = true;   ///< draw beam cones for lit movers
+    static bool s_moveSpeed;
+    /** One follower per head (fixture id << 8 | unit): where it is drawn. */
+    mutable QHash<quint64, MoveSpeed::Follower> m_followers;
+    mutable bool m_followersMoving = false;   ///< some head is still travelling
+    mutable QElapsedTimer m_moveClock;
     quint32  m_activeSceneId = 0xFFFFFFFF;
     /** The active scene is playing: its heads go where the DMX sends them. */
     bool activeSceneRunning() const;

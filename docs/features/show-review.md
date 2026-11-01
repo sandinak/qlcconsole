@@ -74,6 +74,26 @@ open · 1 accepted").
 The checks built so far, by area. The full catalog, and what comes next, is
 in the design (docs/design/SHOW_REVIEW.md in the source).
 
+**Movement** (the Show Tree; heads that can move, with a dimmer)
+
+- **MOV-01** Moves in light: a head's position changes between cues while it
+  is lit in both. Often deliberate (a drift with the soloist); otherwise move
+  it in the cue before. The message says how far it turns and how long that
+  takes at the head's real speed.
+- **MOV-02** Can't move in black: a head dark in the cue before and
+  repositioned in this one, but move in black can't hide it: it is off for
+  the show, the list or the cue, or the dark before the cue is shorter than
+  the lead time (or than the head needs to travel, if that is longer). A
+  cue that waits for GO has all the time it needs.
+- **MOV-08** Not marked before its first cue: heads lit in the first cue of a
+  list (or a Block cue that nothing positions them for) away from the middle
+  of their range, with nothing before it to put them there.
+
+How long a move takes comes from the head's type: a moving head turns 180°
+in 0.4 s, a scanner in 0.1 s, pan and tilt together (the slower of the two).
+Definitions don't carry a speed, so this is a default; the Rig Overview draws
+the same speed (see [Lighting Studio](lighting-studio.md#heads-travel-at-their-real-speed)).
+
 **Patch and outputs**
 
 - **PAT-01** Two fixtures on the same channels (blocker).

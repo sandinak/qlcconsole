@@ -259,6 +259,8 @@ static QString testLayouts()
    behind such warnings. */
 void Monitor_Test::init()
 {
+    // Tests change the output and draw at once: heads snap unless a test is about the travel.
+    StructureStudioView::setMoveSpeed(false);
     QTest::failOnWarning(QRegularExpression(QStringLiteral("No such (slot|signal)")));
 }
 
@@ -5391,6 +5393,92 @@ void Monitor_Test::deletingAGroupKeepsItsFixtures()
     foreach (quint32 fid, fids) m_doc->deleteFixture(fid);
 }
 
+
+/* Realistic move speed (0.5): a head the output sends from one end of its pan
+   to the other is drawn travelling at its type's speed (0.4 s per 180 degrees:
+   450 degrees a second), not snapping; with the option off it snaps. */
+void Monitor_Test::aJumpingMoverTravelsAtItsSpeed()
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test"); def->setModel("Travel Head");
+    def->setType(QLCFixtureDef::MovingHead);
+    QLCChannel *pan = new QLCChannel();
+    pan->setName("Pan"); pan->setGroup(QLCChannel::Pan);
+    pan->setControlByte(QLCChannel::MSB);
+    def->addChannel(pan);
+    QLCChannel *tilt = new QLCChannel();
+    tilt->setName("Tilt"); tilt->setGroup(QLCChannel::Tilt);
+    tilt->setControlByte(QLCChannel::MSB);
+    def->addChannel(tilt);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("2ch");
+    QLCPhysical ph;
+    ph.setWidth(300); ph.setHeight(400); ph.setDepth(300);
+    ph.setFocusPanMax(360); ph.setFocusTiltMax(180);
+    mode->setPhysical(ph);
+    mode->insertChannel(pan, 0);
+    mode->insertChannel(tilt, 1);
+    QLCFixtureHead head;
+    head.addChannel(0); head.addChannel(1);
+    mode->insertHead(-1, head);
+    def->addMode(mode);
+    Fixture *fxi = new Fixture(m_doc);
+    fxi->setName("Travel"); fxi->setFixtureDefinition(def, mode);
+    fxi->setUniverse(3); fxi->setAddress(200);
+    QVERIFY(m_doc->addFixture(fxi));
+
+    auto drive = [&](int panVal, int tiltVal) {
+        QByteArray u(512, char(0));
+        u[200] = char(panVal);
+        u[201] = char(tiltVal);
+        fxi->setChannelValues(u);
+    };
+    auto degBetween = [](const QVector3D &a, const QVector3D &b) {
+        return qRadiansToDegrees(qAcos(qBound(-1.0, double(QVector3D::dotProduct(a.normalized(), b.normalized())), 1.0)));
+    };
+
+    StructureStudioView v(m_doc, StructureStudioView::StageKind, 0);
+    v.setLiveValues(true);
+    StructureStudioView::setMoveSpeed(true);
+    auto stepAim = [&](qint64 t) {
+        v.stepHeads(t);
+        return v.moverAim(fxi->id(), 0);
+    };
+
+    drive(0, 255);                                  // tilted out, pan at one end
+    const QVector3D from = stepAim(1000);
+    QVERIFY(!from.isNull());
+    QVERIFY(!v.headsTravelling());                  // first sight: where it is
+    drive(255, 255);                                // the other end: 360 degrees away
+    const QVector3D target = [&] {
+        FixtureRigProps rp;
+        QVector3D d;
+        fixtureAimDirection(fxi, rp, d);
+        return d;
+    }();
+    // 100 ms at 450 degrees a second: 45 degrees along the way.
+    QVector3D at = stepAim(1100);
+    QVERIFY(v.headsTravelling());
+    QVERIFY2(qAbs(degBetween(from, at) - 45.0) < 2.0, qPrintable(QString::number(degBetween(from, at))));
+    QVERIFY(degBetween(at, target) > 1.0);
+    // The same instant again costs nothing and doesn't move it.
+    QCOMPARE(stepAim(1100), at);
+    // 800 ms in the 360 degrees are done.
+    for (qint64 t = 1200; t <= 1700; t += 100)
+        at = stepAim(t);
+    v.m_followersMoving = false;                    // (a frame start does this)
+    at = stepAim(1800);
+    QVERIFY(degBetween(at, target) < 0.5);
+    QVERIFY(!v.headsTravelling());
+
+    // Off: it snaps, as it always did.
+    StructureStudioView::setMoveSpeed(false);
+    drive(0, 255);
+    at = stepAim(1900);
+    QVERIFY(degBetween(at, from) < 0.5);
+
+    m_doc->deleteFixture(fxi->id());
+}
 
 void Monitor_Test::moverAimFollowsPanAndTilt()
 {

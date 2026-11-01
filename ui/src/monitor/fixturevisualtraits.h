@@ -363,7 +363,13 @@ bool fixtureHeadBeamState(Fixture *fx, const QByteArray &values, int head,
  *  @return false when the fixture has no pan or tilt to read, so callers can
  *          leave the head in its rest position. */
 bool fixtureAimDirection(Fixture *fx, const struct FixtureRigProps &rp, QVector3D &dir,
-                         int head = 0);
+                         int head = 0, const double *panFrac = nullptr, const double *tiltFrac = nullptr);
+
+/** The pan and tilt DMX (coarse byte, as a fraction 0..1 of the range) that
+ *  fixtureAimDirection() reads for @p head, so a view can walk them to where
+ *  the head can really get to (MoveSpeed::Follower) and hand them back as
+ *  @p panFrac / @p tiltFrac. False for a fixture with nothing to point. */
+bool fixtureAimFractions(Fixture *fx, int head, double &pan, double &tilt);
 
 /** Focus mode: while a session is aiming @p fid, where it is MEANT to point --
  *  at its reference, with no calibration and no nudge in it -- as a world

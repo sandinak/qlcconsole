@@ -432,7 +432,7 @@ Notes:
 | One GO path (`App::runCommand`) for keys, Run tab, footer, pad, web | 4 | 5 | ShowControl, RC8 preview hold | 0.5 | L | L | **40** | BUILT 2026-10-31 (0.4, first; docs/design/RUN_COMMANDS.md) |
 | Tracking sheet + printable cue sheet (PDF/XLSX) | 5 | 5 | tracking resolve, patch-list exports | 4 | L | L | **6.3** | BUILT (0.4, sheet, 2026-10-31): More ▾ → Cue Sheet… |
 | Course Level 2 lessons (7), one per release cycle | 5 | 5 | course template, courseshow_test | 2 a lesson | L | M | **12.5** a lesson | BUILD (0.3.1 onward) |
-| Realistic move speed in the Rig Overview | 3 | 5 | Rig Overview, definitions' speeds | 3 | L | L | 5 | BUILD (0.5) |
+| Realistic move speed in the Rig Overview | 3 | 5 | Rig Overview, definitions' speeds | 3 | L | L | 5 | BUILT (0.5, mov, 2026-10-31): defaults 0.4 s / 180° (scanner 0.1), Rig Overview follower + MOV-01/02/08 |
 | LTC (audio) timecode in, plus cues at a timecode | 4 | 5 | MTC follow, audio capture | 4 | M | M | 4 | BUILD (0.4): **LTC in built** (feat/04-ltc); cues at a timecode next, after the One GO path |
 | Effect fade in / fade out (depth to 0 on release) | 4 | 5 | layered looks | 4 | M | M | 4 | BUILT (0.4, 2026-10-31) |
 | Group / intensity masters on faders | 4 | 5 | groups, speed masters, Control Map | 4 | M | M | 4 | BUILD (0.4) |
@@ -591,7 +591,7 @@ Order and dependencies:
 3. **Laser part C** (coverage and audience/eye-height warnings) and the
    **no-light zones** idea, both as Show Review checks rather than a
    separate system.
-4. **Realistic move speed in the Rig Overview**, which also feeds Show
+4. **Realistic move speed in the Rig Overview** (BUILT 2026-10-31), which also feeds Show
    Review's "moves in light" checks.
 5. **Teaching's later items** (lesson link, reset to handout, GO log,
    glossary). Built; only Show Review's TEACH-01 check is left, for when

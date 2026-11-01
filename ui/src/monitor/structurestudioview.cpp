@@ -4755,9 +4755,72 @@ QVector3D StructureStudioView::moverAim(quint32 fid, int unit) const
         if (toTarget.length() > 1e-3f)
             return toTarget.normalized();
     }
-    if (m_liveValues && fixtureAimDirection(fx, m_doc->monitorProperties()->fixtureRigProps(fid), dir, unit))
-        return dir;
+    if (m_liveValues)
+    {
+        /* Fixtures are drawn on several threads at once: this only READS the
+           followers, which stepHeads() walked before any of them started. */
+        double pan = 0.0, tilt = 0.0;
+        if (s_moveSpeed)
+        {
+            const auto it = m_followers.constFind((quint64(fid) << 8) | quint64(unit & 0xFF));
+            if (it != m_followers.constEnd() && it.value().valid)
+            {
+                pan = it.value().pan;
+                tilt = it.value().tilt;
+                return fixtureAimDirection(fx, m_doc->monitorProperties()->fixtureRigProps(fid), dir, unit,
+                                           &pan, &tilt)
+                           ? dir : QVector3D();
+            }
+        }
+        if (fixtureAimDirection(fx, m_doc->monitorProperties()->fixtureRigProps(fid), dir, unit))
+            return dir;
+    }
     return QVector3D();
+}
+
+bool StructureStudioView::s_moveSpeed = true;
+
+void StructureStudioView::setMoveSpeed(bool on)
+{
+    s_moveSpeed = on;
+}
+
+bool StructureStudioView::moveSpeed()
+{
+    return s_moveSpeed;
+}
+
+/* Every head as far as it can have got: the output's pan and tilt, walked
+ * toward by MoveSpeed::Follower at the speed the fixture's type travels, so a
+ * jump of the DMX is a move you watch (a head that nothing drives keeps
+ * snapping, as before). One follower per head, stepped here once a frame
+ * BEFORE the fixtures are drawn -- they are drawn on several threads, which
+ * only read it (moverAim()). No allocation after a head's first frame. */
+void StructureStudioView::stepHeads(qint64 nowMs)
+{
+    if (m_doc == nullptr || !m_liveValues || !s_moveSpeed)
+    {
+        if (!m_followers.isEmpty())
+            m_followers.clear();
+        return;
+    }
+    const QList<Fixture *> fixtures = m_doc->fixtures();
+    for (Fixture *fx : fixtures)
+    {
+        if (fx == nullptr)
+            continue;
+        QLCFixtureMode *mode = fx->fixtureMode();
+        const int heads = mode != nullptr ? mode->heads().size() : 0;
+        for (int u = 0; u < heads; ++u)
+        {
+            double pan = 0.0, tilt = 0.0;
+            if (!fixtureAimFractions(fx, u, pan, tilt))
+                break;                  // not a mover: no head of it is
+            MoveSpeed::Follower &f = m_followers[(quint64(fx->id()) << 8) | quint64(u & 0xFF)];
+            if (f.step(fx, pan, tilt, nowMs))
+                m_followersMoving = true;
+        }
+    }
 }
 
 bool StructureStudioView::activeSceneRunning() const
@@ -9945,6 +10008,8 @@ bool StructureStudioView::liveInputsChanged() const
 {
     if (m_liveDirty || m_settleFrame || m_qualityFrame || m_opticsAnimating)
         return true;
+    if (m_followersMoving)
+        return true;            // a head is still travelling to where the output is
     if (activeSceneRunning() != m_paintedSceneRunning)
         return true;
     if (m_doc == nullptr)
@@ -10014,6 +10079,10 @@ void StructureStudioView::paintEvent(QPaintEvent *)
     m_lastFrameAt.start();
     const qint64 cpuFrom = processCpuNs();
     m_liveDirty = false;                 // this frame shows the rig as it is now
+    m_followersMoving = false;           // stepping sets it again for a head still travelling
+    if (!m_moveClock.isValid())
+        m_moveClock.start();
+    stepHeads(m_moveClock.elapsed());
     m_settleFrame = false;
     m_paintedSceneRunning = activeSceneRunning();
     // The decks every beam ray is thrown against, worked out once this frame.

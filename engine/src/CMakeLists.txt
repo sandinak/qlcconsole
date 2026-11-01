@@ -34,7 +34,7 @@ add_library(${module_name} SHARED
     showoperate.cpp showoperate.h
     teachingsettings.cpp teachingsettings.h
     showreview.cpp showreview.h showreviewcontext.h
-    showreviewchecks.cpp showreviewcuechecks.cpp
+    showreviewchecks.cpp showreviewcuechecks.cpp showreviewmovechecks.cpp
     showreviewcli.cpp showreviewcli.h
     operationregistry.cpp operationregistry.h
     teachinglog.cpp teachinglog.h
@@ -163,6 +163,7 @@ add_library(${module_name} SHARED
     cueoutput.cpp cueoutput.h
     cuelookahead.cpp cuelookahead.h
     markplanner.cpp markplanner.h
+    movespeed.cpp movespeed.h
     controlsurface.h
     controlsurfaceengine.cpp controlsurfaceengine.h
     lastlookeffect.cpp lastlookeffect.h
