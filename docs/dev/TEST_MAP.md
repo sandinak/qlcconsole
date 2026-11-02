@@ -971,7 +971,7 @@ to B9, are all fixed. Their tests no longer use QEXPECT_FAIL.
 | The clicked layer's scene is what a control surface addresses | Workbench_Test::aCollectionsMembersAreLayers (currentSceneId only) | partial | partial | med |
 | Workbench → 2D Monitor follows the scene being edited | Monitor_Test::editingALookUpdatesTheRigView (setActiveScene called directly) | partial | partial | med |
 | Designer In context / Solo; Try on ▾ groups remembered | none | none | none | low |
-| Library and command bar in Build (W6): one Library instance lent to Build and home again, Recent shared; a drop and Return apply and undo; command words, "Show Tree only" refusals, `?` help | BuildLibrary_Test (all 6) | covered | covered | med |
+| Library and command bar in Build (W6): one Library instance lent to Build and home again, Recent shared; a drop and Return apply and undo; command words, "Show Tree only" refusals, `?` help | LibraryBuild_Test (all 6) | covered | covered | med |
 
 ## Show Tree
 

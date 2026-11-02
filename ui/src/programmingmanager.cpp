@@ -79,7 +79,7 @@
 #include "chasereditor.h"
 #include "showtreecontroller.h"
 #include "showtreeview.h"
-#include "buildcommand.h"
+#include "workbenchcommand.h"
 #include "collectioneditor.h"
 #include "efxeditor.h"
 #include "rgbmatrixeditor.h"
