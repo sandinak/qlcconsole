@@ -2586,6 +2586,47 @@ void InputOutputMap_Test::slotMapsControlsByRole()
     QVERIFY(iom.inputPatch(0)->channelMap().isEmpty());
 }
 
+// "A universe's input from a list of game controllers": when the second pad of the slot is the
+// live one, its input reaches the universe; the pad that is off, and an unrelated line, do not.
+void InputOutputMap_Test::theSecondPadOfASlotDrivesTheInputAndNoOtherDoes()
+{
+    IOPluginStub *stub = devicePlugin(m_doc, QStringList() << "Keyboard" << kXbox);
+    InputOutputMap iom(m_doc, 2);
+    QVERIFY(iom.setInputPatch(1, stub->name(), QString(), 1));      // universe 2: the Xbox pad
+    QVERIFY(iom.addInputSlotDevice(1, stub->name(), kDs4));
+
+    // Only the DS4 is here, on line 2 behind the keyboard and a mouse.
+    rescanned(stub, QStringList() << "Keyboard" << "Mouse" << kDs4);
+    QCOMPARE(iom.inputSlotLive(1), 1);
+    QCOMPARE(iom.inputPatch(1)->input(), quint32(2));
+
+    QSignalSpy values(&iom, SIGNAL(inputValueChanged(quint32,quint32,uchar,const QString&)));
+    stub->emitValueChanged(UINT_MAX, 2, 5, 200);        // the live second pad
+    iom.flushInputs();
+    QCOMPARE(values.count(), 1);
+    QCOMPARE(values.at(0).at(0).toUInt(), quint32(1));  // universe 2
+    QCOMPARE(values.at(0).at(1).toUInt(), quint32(5));
+    QCOMPARE(values.at(0).at(2).toUInt(), quint32(200));
+    values.clear();
+
+    // The mouse's line and the Xbox pad's old line 1 are not this input.
+    stub->emitValueChanged(UINT_MAX, 1, 5, 99);
+    stub->emitValueChanged(UINT_MAX, 0, 5, 98);
+    iom.flushInputs();
+    QCOMPARE(values.count(), 0);
+
+    // The Xbox pad returns and takes the slot: the DS4's line is no longer heard.
+    rescanned(stub, QStringList() << "Keyboard" << kXbox << kDs4);
+    QCOMPARE(iom.inputSlotLive(1), 0);
+    QCOMPARE(iom.inputPatch(1)->input(), quint32(1));
+    stub->emitValueChanged(UINT_MAX, 2, 5, 77);
+    iom.flushInputs();
+    QCOMPARE(values.count(), 0);
+    stub->emitValueChanged(UINT_MAX, 1, 5, 66);
+    iom.flushInputs();
+    QCOMPARE(values.count(), 1);
+}
+
 void InputOutputMap_Test::slotMappingLatency()
 {
     /* What a controller slot adds to each input value: one bounds check and

@@ -43,6 +43,7 @@ private slots:
      *  SliderMode(-1), which UBSan flags: matrix 2) and follows the Grand
      *  Master only while in that mode. */
     void sliderStartsInAValidMode();
+    void anOuterSubmasterScalesASceneStartedInANestedFrame();
 
 private:
     Doc* m_doc;

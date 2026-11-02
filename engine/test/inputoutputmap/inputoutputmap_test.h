@@ -79,6 +79,7 @@ private slots:
     void slotSavesAndLoads();
     void singleDevicePatchSavesAsBefore();
     void slotMapsControlsByRole();
+    void theSecondPadOfASlotDrivesTheInputAndNoOtherDoes();
     void slotMappingLatency();
     void slotAnyGameController();
     void slotOfferAndAdopt();

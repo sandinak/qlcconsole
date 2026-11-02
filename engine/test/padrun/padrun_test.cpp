@@ -1835,4 +1835,80 @@ void PadRun_Test::swipesStepAndNeverGo()
     m_doc->setMode(Doc::Design);
 }
 
+// 0.4.0 "DualSense extras for the Run role": while walking, the touchpad aim nudge
+// needs LB held (a one-finger drag alone is a swipe, never an aim).
+void PadRun_Test::whileWalkingTheTouchpadAimsOnlyWithLBHeld()
+{
+    makeShow();
+    ProgrammerController *pc = m_doc->programmer();
+    IOPluginStub *stub = loadStub();
+    QVERIFY(stub != nullptr);
+    QVERIFY(m_doc->inputOutputMap()->setInputPatch(0, stub->name(), QString(), 0));
+    PadRun *run = pc->padRun();
+    RefineSession *r = pc->refineSession();
+    run->setEnabled(true);
+    press(kMenu);
+    QVERIFY(run->isWalking());
+    QVERIFY(!r->hasPending());
+
+    // A slow drag along the pad (below swipe distance per frame), the joystick tick after each.
+    auto drag = [&](float x0, float y0, float x1, float y1) {
+        axis(kTouchX, uchar(x0 * 255.0f));
+        axis(kTouchY, uchar(y0 * 255.0f));
+        axis(kTouchDown, 255);
+        pc->applyDesignJoystick();
+        for (int i = 1; i <= 10; ++i)
+        {
+            axis(kTouchX, uchar((x0 + (x1 - x0) * i / 10.0f) * 255.0f));
+            axis(kTouchY, uchar((y0 + (y1 - y0) * i / 10.0f) * 255.0f));
+            pc->applyDesignJoystick();
+        }
+        axis(kTouchDown, 0);
+        pc->applyDesignJoystick();
+    };
+
+    // LB not held: nothing is aimed.
+    drag(0.3f, 0.5f, 0.45f, 0.5f);
+    QVERIFY(!r->hasPending());
+    run->swipeTick(1.0);
+
+    // LB held: the same drag nudges the aim.
+    hold(kLB, true);
+    QVERIFY(run->isModifierHeld());
+    drag(0.3f, 0.5f, 0.45f, 0.5f);
+    QVERIFY(r->hasPending());
+    hold(kLB, false);
+    run->swipeTick(1.0);
+    run->stopWalk();
+}
+
+// "Other pads: nothing changes": a pad whose profile has no touchpad sends no touch
+// channels, so whatever arrives on those numbers steps nothing.
+void PadRun_Test::aPadWithoutATouchpadGetsNoSwipeSteps()
+{
+    makeShow();
+    ProgrammerController *pc = m_doc->programmer();
+    IOPluginStub *stub = loadStub();
+    QVERIFY(stub != nullptr);
+    QMap<quint32, QString> roles = xboxRoles();
+    for (quint32 ch : { kTouchX, kTouchY, kTouchDown, kTouch2Down, kTouchClick })
+        roles.remove(ch);
+    stub->m_channelRoles = roles;
+    QVERIFY(m_doc->inputOutputMap()->setInputPatch(0, stub->name(), QString(), 0));
+    PadRun *run = pc->padRun();
+    run->setEnabled(true);
+
+    swipeAcross(0.2f, 0.5f, 0.8f, 0.5f);
+    QVERIFY(!run->isWalking());
+    press(kMenu);
+    QVERIFY(run->isWalking());
+    const quint32 cue = run->walkCue();
+    swipeAcross(0.2f, 0.5f, 0.8f, 0.5f);
+    QCOMPARE(run->walkCue(), cue);
+    swipeAcross(0.5f, 0.2f, 0.5f, 0.8f);
+    QCOMPARE(pc->refineSession()->currentLayer(), m_layer1);
+    QVERIFY(m_runs.isEmpty());
+    run->stopWalk();
+}
+
 QTEST_MAIN(PadRun_Test)

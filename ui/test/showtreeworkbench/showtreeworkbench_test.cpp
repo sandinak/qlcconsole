@@ -29,6 +29,8 @@
 #include <QLineEdit>
 #include <QLabel>
 #include <QDir>
+#include <QMenu>
+#include <QTimer>
 #include <QtTest>
 
 #include "../../../engine/test/common/stdprelude.h"
@@ -334,6 +336,85 @@ void ShowTreeWorkbench_Test::editUndoRedo()
                 && bench->rows()->layerItem(towers)->child(0)->font(0).italic());
     QVERIFY(st->undo());
     QCOMPARE(settle(m_doc).at(0), 128);
+}
+
+/* Changelog: the docked Workbench's layer menu has the tree's Release and
+   Cue mode. Each is one undo step on the shared history and moves the
+   controller's state (and the rig, for the mode) -- not just the menu. */
+void ShowTreeWorkbench_Test::theDockedLayerMenuReleasesAndSetsTheCueMode()
+{
+    const Show s = SHOW();
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1400, 800);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QVERIFY(view.openInWorkbench(s.c2, s.towersLayer2));
+    Workbench *bench = view.dockedWorkbench();
+    WorkbenchStack *stack = bench->stack();
+    const int towers = layerNamed(stack, "Towers");
+    QVERIFY(towers >= 0);
+    ShowTreeController *st = m_doc->showTree();
+    QVERIFY(!st->canUndo());
+    QVERIFY(!st->cue(s.c2)->layer(s.towersLayer2)->release);
+    QCOMPARE(settle(m_doc).mid(0, 4), QList<int>({ 51, 51, 128, 128 }));    // USTs track in
+
+    // Opens the layer's menu, runs @a pick on it from inside its event loop.
+    auto menuDo = [&](const std::function<void(QMenu *)> &pick) {
+        bool done = false;
+        std::function<void()> poll;
+        poll = [&]() {
+            QMenu *menu = qobject_cast<QMenu *>(QApplication::activePopupWidget());
+            if (menu == nullptr)
+            {
+                QTimer::singleShot(10, bench, poll);
+                return;
+            }
+            pick(menu);
+            done = true;
+            menu->close();
+        };
+        QTimer::singleShot(10, bench, poll);
+        stack->showMenu(towers, -1, bench->mapToGlobal(QPoint(40, 40)));
+        return done;
+    };
+
+    // Release (leaving this cue): ticked, the layer's flag is set, in one step.
+    QVERIFY(menuDo([](QMenu *menu) {
+        QAction *release = menu->findChild<QAction *>("cueStackRelease");
+        QVERIFY(release != nullptr && release->isCheckable() && !release->isChecked());
+        release->trigger();
+    }));
+    QVERIFY(st->cue(s.c2)->layer(s.towersLayer2)->release);
+    QVERIFY(st->canUndo());
+    QVERIFY(st->undo());
+    QVERIFY(!st->cue(s.c2)->layer(s.towersLayer2)->release);   // looked up again after the undo
+    QVERIFY(!st->canUndo());                                     // it was the one step
+    QVERIFY(st->redo());
+    QVERIFY(st->cue(s.c2)->layer(s.towersLayer2)->release);
+
+    // Cue mode ▸ Block: Two starts from nothing, so the USTs no longer track in.
+    QVERIFY(st->cue(s.c2)->mode != CueMode::Block);
+    QVERIFY(menuDo([](QMenu *menu) {
+        QAction *sub = menu->findChild<QAction *>("cueStackMode");
+        QMenu *mode = sub != nullptr ? sub->menu() : nullptr;
+        if (mode == nullptr)
+            for (QAction *a : menu->actions())
+                if (a->menu() != nullptr && a->menu()->objectName() == QLatin1String("cueStackMode"))
+                    mode = a->menu();
+        QVERIFY(mode != nullptr);
+        QAction *block = nullptr;
+        for (QAction *a : mode->actions())
+            if (a->objectName() == QStringLiteral("stCueMode%1").arg(int(CueMode::Block)))
+                block = a;
+        QVERIFY(block != nullptr);
+        block->trigger();
+    }));
+    QCOMPARE(int(st->cue(s.c2)->mode), int(CueMode::Block));
+    QCOMPARE(settle(m_doc).mid(0, 4), QList<int>({ 51, 51, 0, 0 }));
+    QVERIFY(st->undo());
+    QVERIFY(st->cue(s.c2)->mode != CueMode::Block);
+    QCOMPARE(settle(m_doc).mid(0, 4), QList<int>({ 51, 51, 128, 128 }));
+    QVERIFY(st->cue(s.c2)->layer(s.towersLayer2)->release);     // the Release step is still there
 }
 
 /* "click and drag is doing multi-select vs relocate on palettes under a

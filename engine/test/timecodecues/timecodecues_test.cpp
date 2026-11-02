@@ -22,13 +22,26 @@
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
 
+#include "../common/stdprelude.h"
+#define private public
+#include "mastertimer.h"
+#undef private
 #include "timecodecues.h"
+#include "ioplugincache.h"
+#include "inputoutputmap.h"
+#include "qlcioplugin.h"
+#include "functionparent.h"
+#include "qlcfile.h"
 #include "timecodesource.h"
 #include "showtreecontroller.h"
 #include "showcontrol.h"
 #include "chaser.h"
 #include "doc.h"
 #include "timecodecues_test.h"
+
+/* The MIDI plugin's own MTC decoder (plugins/midi), built in here: the
+   test feeds it quarter frames and full frames as a MIDI port does. */
+#include "../../../plugins/midi/src/common/midimtcdecoder.cpp"
 
 using namespace ShowTree;
 
@@ -318,6 +331,109 @@ void TimecodeCues_Test::anOldShowFollowsNothing()
     feed(0);
     feed(5000);
     QVERIFY(m_calls.isEmpty());
+}
+
+namespace
+{
+/* Quarter-frame data bytes for hh:mm:ss:ff (as midi_test.cpp builds them). */
+void quarterFrames(int hh, int mm, int ss, int ff, int rateCode, uchar out[8])
+{
+    out[0] = (0 << 4) | (ff & 0x0F);
+    out[1] = (1 << 4) | ((ff >> 4) & 0x01);
+    out[2] = (2 << 4) | (ss & 0x0F);
+    out[3] = (3 << 4) | ((ss >> 4) & 0x03);
+    out[4] = (4 << 4) | (mm & 0x0F);
+    out[5] = (5 << 4) | ((mm >> 4) & 0x03);
+    out[6] = (6 << 4) | (hh & 0x0F);
+    out[7] = (7 << 4) | (((rateCode & 0x03) << 1) | ((hh >> 4) & 0x01));
+}
+
+QByteArray fullFrame(int hh, int mm, int ss, int ff, int rateCode)
+{
+    QByteArray sysex;
+    for (int b : { 0xF0, 0x7F, 0x7F, 0x01, 0x01, ((rateCode & 0x03) << 5) | hh, mm, ss, ff, 0xF7 })
+        sysex.append(char(b));
+    return sysex;
+}
+}
+
+/* CHANGELOG 0.4.0 "Cues at a timecode": MTC from a patched MIDI input,
+   decoded as the MIDI plugin decodes it and handed on as the plugin hands
+   it (timeCodeChanged on its line), fires each cue at its time through the
+   one GO path; a locate forward plays only the latest cue passed, a locate
+   back re-arms, and MTC on a line that isn't patched does nothing. */
+void TimecodeCues_Test::mtcFromAPatchedMidiInputFiresTheCues()
+{
+    QDir dir(QStringLiteral("../iopluginstub"));
+    dir.setFilter(QDir::Files);
+    dir.setNameFilters(QStringList() << QString("*%1").arg(KExtPlugin));
+    m_doc->ioPluginCache()->load(dir);
+    QVERIFY(!m_doc->ioPluginCache()->plugins().isEmpty());
+    QLCIOPlugin *midi = m_doc->ioPluginCache()->plugins().at(0);
+    QVERIFY(midi->inputs().size() >= 2);
+    QVERIFY(m_doc->inputOutputMap()->setInputPatch(0, midi->name(), midi->inputs().at(0), 0));
+
+    const quint32 list = makeList(4, { 1000, 2000, 3000, 4000 });
+    const ShowTreeController *st = m_doc->showTree();
+    const quint32 ch = st->cueList(list)->chaser;
+    auto number = [&](int i) { return st->cueNumber(*st->cueList(list), i); };
+
+    MidiMtcDecoder dec;
+    // As MidiPlugin::slotMtcTimeChanged: the device's line, every universe.
+    auto handOn = [&](quint32 line) { emit midi->timeCodeChanged(UINT_MAX, line, dec.milliseconds(), uchar(dec.fps())); };
+    auto play = [&](int ss, int ff, quint32 line = 0) {
+        uchar qf[8];
+        quarterFrames(0, 0, ss, ff, 3, qf);           // 30 fps
+        for (int i = 0; i < 8; ++i)
+            if (dec.feedQuarterFrame(qf[i]))
+                handOn(line);
+    };
+    auto locate = [&](int ss, int ff) {
+        QVERIFY(dec.feedFullFrame(fullFrame(0, 0, ss, ff, 3)));
+        handOn(0);
+    };
+
+    // Rolling from zero: nothing until cue 1's time.
+    for (int ff = 0; ff < 28; ff += 2)
+        play(0, ff);
+    QVERIFY(m_calls.isEmpty());
+    play(0, 28);                                // 00:00:00:28 + 2 frames: 1000 ms
+    QCOMPARE(m_calls.size(), 1);
+    QCOMPARE(m_calls.at(0).cue, number(0));
+    QCOMPARE(m_calls.at(0).chaser, ch);
+    QCOMPARE(m_calls.at(0).route, int(ShowControl::RouteTimecode));
+    QCOMPARE(m_calls.at(0).command, int(ShowControl::Go));
+    // It really went: the list plays cue 1.
+    Chaser *c = qobject_cast<Chaser *>(m_doc->function(ch));
+    QVERIFY(c != nullptr);
+    for (int i = 0; i < 3; ++i)
+        m_doc->masterTimer()->timerTick();
+    QVERIFY(c->isRunning());
+    QCOMPARE(c->currentStepIndex(), 0);
+
+    // MTC on a line that isn't patched: not this show's timecode.
+    play(2, 10, 1);
+    QCOMPARE(m_calls.size(), 1);
+
+    // A locate forward past cues 2 and 3: only cue 3 plays.
+    locate(3, 15);
+    QCOMPARE(m_calls.size(), 2);
+    QCOMPARE(m_calls.at(1).cue, number(2));
+    for (int i = 0; i < 3; ++i)
+        m_doc->masterTimer()->timerTick();
+    QCOMPARE(c->currentStepIndex(), 2);
+
+    // A locate back: nothing for the jump; rolling on fires cue 1 again.
+    locate(0, 10);
+    QCOMPARE(m_calls.size(), 2);
+    play(0, 20);
+    play(1, 0);
+    QCOMPARE(m_calls.size(), 3);
+    QCOMPARE(m_calls.at(2).cue, number(0));
+
+    c->stop(FunctionParent::master());
+    for (int i = 0; i < 3; ++i)
+        m_doc->masterTimer()->timerTick();
 }
 
 QTEST_MAIN(TimecodeCues_Test)

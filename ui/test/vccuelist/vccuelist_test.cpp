@@ -1235,6 +1235,59 @@ void VCCueList_Test::showTreeListGoesThroughTheOneGoPath()
     QVERIFY(!tree->isRunning());
 }
 
+// Changelog: one GO path -- the VC Cue List's Sub GO / Sub Back buttons on a
+// Show Tree list enter ShowControl like every other GO, never step the chaser.
+void VCCueList_Test::showTreeSubGoAndBackGoThroughShowControl()
+{
+    ShowTreeController *st = m_doc->showTree();
+    ShowControl *sc = m_doc->showControl();
+    const quint32 list = st->addCueList(st->addProduction("P2"), "L2", ShowTree::ListMode::NonTracking);
+    const quint32 c1 = st->addCue(list, -1, "C1");
+    st->addCue(list, 0, "C2");
+    QVERIFY(st->addSubCue(c1, "S1") != ShowTree::invalidId());
+    QVERIFY(st->addSubCue(c1, "S2") != ShowTree::invalidId());
+    Chaser *tree = qobject_cast<Chaser *>(m_doc->function(st->cueList(list)->chaser));
+    QVERIFY(tree != NULL);
+
+    QList<QPair<ShowControl::Command, ShowControl::Route>> seen;
+    sc->setRunHandler([&](const ShowControl::Request &r, ShowControl::Route route) {
+        seen << qMakePair(r.command, route);
+        return sc->execute(r);
+    });
+    auto cleanup = qScopeGuard([&]() {
+        sc->setRunHandler(ShowControl::RunHandler());
+        m_doc->masterTimer()->stopAllFunctions();
+    });
+
+    m_doc->setMode(Doc::Operate);
+    QWidget w;
+    VCCueList cl(&w, m_doc);
+    cl.setChaser(tree->id());
+    MasterTimer *timer = m_doc->masterTimer();
+
+    // Not running: Sub GO does nothing, and asks no one.
+    cl.slotSubGo();
+    QCOMPARE(seen.size(), 0);
+
+    cl.slotNextCue();
+    timer->timerTick();
+    timer->timerTick();
+    QVERIFY(tree->isRunning());
+    seen.clear();
+
+    cl.slotSubGo();
+    QCOMPARE(seen.size(), 1);
+    QCOMPARE(seen.last(), qMakePair(ShowControl::SubGo, ShowControl::RouteVcCueList));
+    cl.slotSubBack();
+    QCOMPARE(seen.size(), 2);
+    QCOMPARE(seen.last(), qMakePair(ShowControl::SubBack, ShowControl::RouteVcCueList));
+    QVERIFY(tree->isRunning());
+    cl.slotStop();
+    for (int i = 0; i < 4; ++i)
+        timer->timerTick();
+    QVERIFY(!tree->isRunning());
+}
+
 void VCCueList_Test::plainChaserStillStepsDirectly()
 {
     ShowControl *sc = m_doc->showControl();

@@ -38,6 +38,7 @@
 #include <QScopeGuard>
 #include <QSlider>
 #include <QMutex>
+#include <atomic>
 
 #include "mainbar_test.h"
 #include "showtreecontroller.h"
@@ -468,6 +469,87 @@ void MainBar_Test::operateClearsBlindAndMakesItAView()
     doc->deleteFixtureGroup(grp->id());
     doc->deletePalette(dim->id());
     removeAddedFunctionsAndFixtures();
+}
+
+/* Changelog: Blind in Operate is the Blind view. With a cue playing on the
+   stage, switching it on shows the cue in edit on the fixtures and leaves
+   the DMX universe's bytes alone, frame after frame. */
+void MainBar_Test::blindInOperateLeavesAPlayingCuesBytesAlone()
+{
+    auto tidy = qScopeGuard([this]() { removeAddedFunctionsAndFixtures(); });
+    Doc *doc = m_app->doc();
+    ShowControls *sc = m_app->m_showControls;
+    QVERIFY(sc != nullptr);
+    QCOMPARE(doc->mode(), Doc::Design);
+
+    quint32 fid = Fixture::invalidId();
+    addDimmerScene(&fid);
+    Fixture *fx = doc->fixture(fid);
+    QVERIFY(fx != nullptr);
+    FixtureGroup *grp = new FixtureGroup(doc);
+    grp->setName("Blind plays");
+    doc->addFixtureGroup(grp);
+    grp->assignFixture(fid);
+    QLCPalette *live = new QLCPalette(QLCPalette::Dimmer, doc);
+    live->setName("Blind live 200");
+    live->setValue(200);
+    doc->addPalette(live);
+    QLCPalette *edit = new QLCPalette(QLCPalette::Dimmer, doc);
+    edit->setName("Blind edit 40");
+    edit->setValue(40);
+    doc->addPalette(edit);
+    ShowTreeController *st = doc->showTree();
+    const quint32 prod = st->addProduction("Blind plays P");
+    const quint32 list = st->addCueList(prod, "Blind plays L", ShowTree::ListMode::NonTracking);
+    const quint32 playing = st->addCue(list, -1, "Playing");
+    const quint32 inEdit = st->addCue(list, 0, "In edit");
+    ShowTree::Target t;
+    t.groups << grp->id();
+    st->setLayerLook(playing, st->addLayer(playing, t), st->lookForPalette(live->id()));
+    st->setLayerLook(inEdit, st->addLayer(inEdit, t), st->lookForPalette(edit->id()));
+    auto untidy = qScopeGuard([&]() {
+        if (m_app->blindView())
+            sc->blindButton()->click();
+        ShowControl::Request stop;
+        stop.command = ShowControl::AllOff;
+        doc->showControl()->execute(stop);
+        QTest::qWait(100);                              // the timer thread takes the stop
+        if (doc->mode() != Doc::Design)
+            sc->designButton()->click();
+        st->removeProduction(prod);
+        doc->deleteFixtureGroup(grp->id());
+        doc->deletePalette(live->id());
+        doc->deletePalette(edit->id());
+    });
+
+    sc->operateButton()->click();
+    QCOMPARE(doc->mode(), Doc::Operate);
+    ShowControl::Request go;
+    go.command = ShowControl::Go;
+    go.chaser = st->cueList(list)->chaser;
+    QVERIFY(doc->showControl()->execute(go));
+    Universe *uni = doc->inputOutputMap()->universes().at(int(fx->universe()));
+    const int addr = int(fx->address());
+    QTRY_COMPARE_WITH_TIMEOUT(int(uni->postGMValue(addr)), 200, 5000);
+    st->previewCue(inEdit);                             // the cue in edit, blind
+
+    // Count MasterTimer ticks (the stage's frames) while the Blind view is up;
+    // the universe is read on each, from the timer thread.
+    std::atomic<int> ticks(0);
+    std::atomic<int> wrong(0);
+    QObject listening;
+    connect(doc->masterTimer(), &MasterTimer::tickReady, &listening, [&]() {
+        ++ticks;
+        if (int(uni->postGMValue(addr)) != 200)
+            ++wrong;
+    }, Qt::DirectConnection);
+    sc->blindButton()->click();
+    QVERIFY(m_app->blindView());
+    QCOMPARE(uchar(fx->channelValues().at(0)), uchar(40));     // the picture: the cue in edit
+    QTRY_VERIFY_WITH_TIMEOUT(ticks.load() >= 8, 5000);
+    QCOMPARE(wrong.load(), 0);                          // the wire: the cue playing, every tick
+    QCOMPARE(int(uni->postGMValue(addr)), 200);
+    QVERIFY(!doc->inputOutputMap()->outputInhibited());
 }
 
 void MainBar_Test::theBlindViewMovesTheCuesEffects()

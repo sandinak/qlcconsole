@@ -193,6 +193,7 @@ private slots:
     void formationOnANonLineLayer();
     void formationSavesAndAnUnknownTypeLoads();
     void formationCommandWords();
+    void aFormationPlaysOnTheUniverseAndSurvivesSaveAndLoad();
 
     // The command line's help; copy / paste
     void everyCommandWordHasHelpAndItsExamplesParse();

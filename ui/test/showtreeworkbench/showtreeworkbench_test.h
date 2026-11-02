@@ -42,6 +42,7 @@ private slots:
     /** A value dropped on a layer changes the output at once; Undo and
      *  Redo (the tree's) take it back and put it back, the rows follow. */
     void editUndoRedo();
+    void theDockedLayerMenuReleasesAndSetsTheCueMode();
     /** Carried-in rows: not removed, cleared or moved; a value set on one
      *  makes it the cue's own (the tree's rule). */
     void lookRowsDragToAnotherLayer();

@@ -1021,3 +1021,62 @@ void OperationRegistry_Test::overrideWordRefusals()
     QVERIFY(!st->isOverrideHit(ctx.cue));
     m_doc->setMode(Doc::Design);
 }
+
+/* CHANGELOG 0.4.0 "command-line effect fades ... Design only; AI Assist
+   plans can carry it": in Operate a plan of set_effect_fade or of another
+   change (set_intensity) is refused with the tree and the undo history
+   unchanged; back in Design the same plans change the cue, one undo step
+   each. (A single typed line in Operate is a blind tree edit, as every
+   tree edit there is -- docs/features/show-tree.md "Operate".) */
+void OperationRegistry_Test::aChangeWordIsRefusedInOperateAndWorksInDesign()
+{
+    const ShowTreeCommand::Context ctx = smallShow();
+    QLCPalette *fx = new QLCPalette(QLCPalette::Effect, m_doc);
+    fx->setName("Sinelon");
+    m_doc->addPalette(fx);
+    ShowTreeController *st = m_doc->showTree();
+    ShowTreeCommand cmd(m_doc, st);
+    R reg(m_doc, &cmd);
+    QVERIFY(cmd.run("Towers effect Sinelon", ctx).ok);
+    auto effectFadeIn = [&]() {
+        for (const ShowTree::Layer &l : st->cue(ctx.cue)->layers)
+            for (const ShowTree::Look &lk : l.looks)
+                if (ShowTree::isEffectKey(lk.key))
+                    return lk.fadeIn;
+        return -12345;
+    };
+    QCOMPARE(effectFadeIn(), int(ShowTree::Look::FadeFollowCue));
+    const QList<R::Call> fade { { "set_effect_fade", QJsonObject { { "effect", "Sinelon" },
+                                                                  { "targets", QJsonArray { "Towers" } },
+                                                                  { "fade_in", 2 } } } };
+    const QList<R::Call> level { { "set_intensity", QJsonObject { { "targets", QJsonArray { "Steps" } },
+                                                                { "level", 40 } } } };
+    const int layersBefore = st->cue(ctx.cue)->layers.count();
+
+    m_doc->setMode(Doc::Operate);
+    const QByteArray before = treeXml();
+    const QString undoBefore = st->sharedUndoText();
+    for (const QList<R::Call> &plan : { fade, level })
+    {
+        const R::Result r = reg.runPlan(plan, ctx, "t");
+        QVERIFY(!r.ok);
+        QVERIFY2(r.message.contains("Operate"), qPrintable(r.message));
+    }
+    QCOMPARE(treeXml(), before);
+    QCOMPARE(st->sharedUndoText(), undoBefore);
+    QCOMPARE(effectFadeIn(), int(ShowTree::Look::FadeFollowCue));
+
+    // Design: the same plans work, one undo step each.
+    m_doc->setMode(Doc::Design);
+    R::Result r = reg.runPlan(fade, ctx, "Fade");
+    QVERIFY2(r.ok, qPrintable(r.message));
+    QCOMPARE(effectFadeIn(), 2000);
+    r = reg.runPlan(level, ctx, "Level");
+    QVERIFY2(r.ok, qPrintable(r.message));
+    QCOMPARE(st->cue(ctx.cue)->layers.count(), layersBefore + 1);
+    QVERIFY(st->undoShared());
+    QCOMPARE(st->cue(ctx.cue)->layers.count(), layersBefore);
+    QCOMPARE(effectFadeIn(), 2000);
+    QVERIFY(st->undoShared());
+    QCOMPARE(effectFadeIn(), int(ShowTree::Look::FadeFollowCue));
+}

@@ -3436,6 +3436,54 @@ void AppViews_Test::aPinKeepsTheShowInOperate()
     QCOMPARE(doc->mode(), Doc::Design);
 }
 
+/* Changelog: Open in Operate (File ▸ Show Settings) with no PIN: the saved
+   show loads in Operate and Design is one click away, no prompt; a show
+   without it loads in Design and stays there. */
+void AppViews_Test::openInOperateWithoutAPinLoadsInOperateAndLeavesFreely()
+{
+    m_app->clearDocument();
+    Doc *doc = m_app->doc();
+    ShowSettingsDialog::setTestMode(true);
+    auto cleanup = qScopeGuard([this]() {
+        ShowSettingsDialog::setTestMode(false);
+        ShowSettingsDialog::testAnswers().clear();
+        if (m_app->doc()->mode() == Doc::Operate)
+            m_app->slotModeDesign();
+        m_app->clearDocument();
+    });
+    QTemporaryDir dir;
+
+    // Without it: saved, loaded, in Design.
+    QCOMPARE(m_app->saveXML(dir.filePath("plain.qlcc")), QFile::NoError);
+    m_app->clearDocument();
+    QCOMPARE(m_app->loadXML(dir.filePath("plain.qlcc")), QFile::NoError);
+    QTest::qWait(50);
+    QCOMPARE(doc->mode(), Doc::Design);
+    QVERIFY(!doc->operateSettings()->openInOperate());
+
+    // Ticked in Show Settings (no PIN): saved with the show.
+    {
+        ShowSettingsDialog dlg(doc, m_app);
+        QCheckBox *openIn = dlg.findChild<QCheckBox *>("showSettingsOpenInOperate");
+        QVERIFY(openIn != nullptr);
+        openIn->setChecked(true);
+        dlg.accept();
+    }
+    QVERIFY(doc->operateSettings()->openInOperate());
+    QVERIFY(!doc->operateSettings()->hasPin());
+    QCOMPARE(m_app->saveXML(dir.filePath("open.qlcc")), QFile::NoError);
+    m_app->clearDocument();
+    QVERIFY(!doc->operateSettings()->openInOperate());
+    QCOMPARE(m_app->loadXML(dir.filePath("open.qlcc")), QFile::NoError);
+    QTRY_COMPARE(doc->mode(), Doc::Operate);
+    QVERIFY(doc->operateSettings()->openInOperate());
+
+    // No PIN: Design is not asked for anything.
+    ShowSettingsDialog::testAnswers().clear();
+    m_app->slotModeDesign();
+    QCOMPARE(doc->mode(), Doc::Design);
+}
+
 void AppViews_Test::reviewChipCountsAndOpensThePanel()
 {
     m_app->clearDocument();

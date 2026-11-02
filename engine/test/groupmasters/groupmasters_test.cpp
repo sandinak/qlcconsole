@@ -387,4 +387,49 @@ void GroupMasters_Test::aDeletedGroupLetsGo()
     QCOMPARE(int(uni()->groupMaster(kDimmer)), 255);
 }
 
+/* 0.4.0 Group masters "saved with the show": after New + Open of the saved file the
+   master is still on the stage -- a cue at full comes out at the master's level. */
+void GroupMasters_Test::aReopenedShowStillScalesByItsMaster()
+{
+    group("Front", { m_movers[0] }, 128);
+    group("Plain", { m_movers[1] });
+    Scene *s = look({ m_movers[0], m_movers[1] }, 255, 0);
+    const quint32 sceneId = s->id();
+    s->start(m_doc->masterTimer(), FunctionParent::master());
+    frame(3);
+    QCOMPARE(out(uni(), kDimmer), 128);
+    QCOMPARE(out(uni(), kMoverStride + kDimmer), 255);
+    s->stop(FunctionParent::master());
+    frame(3);
+
+    QByteArray xml;
+    {
+        QBuffer buffer(&xml);
+        buffer.open(QIODevice::WriteOnly | QIODevice::Text);
+        QXmlStreamWriter w(&buffer);
+        w.writeStartElement("TestRoot");
+        QVERIFY(m_doc->saveXML(&w));
+        w.writeEndDocument();
+    }
+
+    m_doc->clearContents();                     // New
+    QCoreApplication::processEvents();
+    frame(3);
+    QVERIFY(m_doc->function(sceneId) == nullptr);
+    QCOMPARE(int(uni()->groupMaster(kDimmer)), 255);
+
+    QXmlStreamReader r(xml);
+    r.readNextStartElement();                   // TestRoot
+    r.readNextStartElement();                   // Engine
+    QVERIFY(m_doc->loadXML(r));                 // Open
+    QCoreApplication::processEvents();
+    Function *again = m_doc->function(sceneId);
+    QVERIFY(again != nullptr);
+    again->start(m_doc->masterTimer(), FunctionParent::master());
+    frame(3);
+    QCOMPARE(out(uni(), kDimmer), 128);                          // scaled by the loaded master
+    QCOMPARE(out(uni(), kMoverStride + kDimmer), 255);           // the plain group is not
+    QCOMPARE(int(uni()->groupMaster(kDimmer)), 128);
+}
+
 QTEST_GUILESS_MAIN(GroupMasters_Test)

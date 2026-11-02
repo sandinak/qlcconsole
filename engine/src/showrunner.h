@@ -22,6 +22,7 @@
 
 #include <QObject>
 #include <QMutex>
+#include <QAtomicInt>
 #include <QMap>
 #include <QHash>
 #include <QSet>
@@ -182,6 +183,20 @@ private:
      *  audible. Targeted (only changed tracks), so it doesn't disturb the rest. */
     void enforceLiveMuteSolo();
 
+    /** A function deleted from the Doc while it is in m_runningQueue must not be
+     *  touched again (the Doc deletes it right after announcing it). The slot runs on
+     *  the deleting thread and only notes the id; the timer thread drops the queue
+     *  entry (by the id kept at start, never through the dangling pointer). */
+    void dropRemovedChildren();
+    QHash<Function *, quint32> m_childIds;
+    QSet<quint32> m_removedIds;
+    QMutex m_removedMutex;
+    QAtomicInt m_removedPending;
+
+private slots:
+    void slotFunctionRemoved(quint32 fid);
+
+private:
     /** Show start time (ms) of each running child — for the lockstep offset. */
     QHash<Function *, quint32> m_childStartMs;
     /** Track ids that were effectively silent last frame (live mute/solo diff). */

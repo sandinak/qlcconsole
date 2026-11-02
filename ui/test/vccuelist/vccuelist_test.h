@@ -47,6 +47,7 @@ private slots:
     void cuesSkipsAndNextAreShown();
     void showTreeTextColoursAreShown();
     void showTreeListGoesThroughTheOneGoPath();
+    void showTreeSubGoAndBackGoThroughShowControl();
     void plainChaserStillStepsDirectly();
     void manualActivation();
     void keyboardNextPrevious();

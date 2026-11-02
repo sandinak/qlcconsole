@@ -77,6 +77,11 @@ private slots:
     void stopAllAndAllOffReleaseOverrides();
     void overrideHitsSaveLoadUndoAndBlind();
 
+    /* 0.4 coverage */
+    void aPreviewOrBlindEditSendsNothingToQLab();
+    void aHeldCueHitLetsGoOverItsFadeOutWhenItsCueEnds();
+    void aListHitDoesNothingWhileItsListIsntRunning();
+
 private:
     quint32 dimmer(int level, const QString &name);
     FixtureGroup *group(const QString &name, const QList<quint32> &fixtures);

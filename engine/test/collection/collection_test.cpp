@@ -24,11 +24,14 @@
 
 #include "../common/stdprelude.h"
 #define protected public
+#define private public
 #include "mastertimer_stub.h"
 #include "collection_test.h"
 #include "collection.h"
 #include "qlcchannel.h"
 #include "universe.h"
+#include "mastertimer.h"
+#include "inputoutputmap.h"
 #include "function.h"
 #include "fixture.h"
 #include "qlcfile.h"
@@ -36,6 +39,7 @@
 #include "scene.h"
 #include "doc.h"
 #undef protected
+#undef private
 
 void Collection_Test::initTestCase()
 {
@@ -612,6 +616,94 @@ void Collection_Test::totalDurationOfParallelMembers()
 
     // members run in parallel: the longest one is the duration
     QCOMPARE(c->totalDuration(), quint32(500));
+}
+
+// A function deleted from the show while a Collection holding it plays (0.4.0 upstream
+// fixes): no crash, the other members keep playing, the saved collection forgets it.
+void Collection_Test::aMemberDeletedWhileTheCollectionPlaysLeavesTheRestPlaying()
+{
+    Doc doc(this);
+    Fixture *fxi = new Fixture(&doc);
+    fxi->setAddress(0);
+    fxi->setUniverse(0);
+    fxi->setChannels(4);
+    doc.addFixture(fxi);
+
+    Scene *a = new Scene(&doc);
+    a->setValue(fxi->id(), 0, 200);
+    doc.addFunction(a);
+    Scene *b = new Scene(&doc);
+    b->setValue(fxi->id(), 1, 100);
+    doc.addFunction(b);
+    Scene *c3 = new Scene(&doc);
+    c3->setValue(fxi->id(), 2, 50);
+    doc.addFunction(c3);
+
+    Collection *col = new Collection(&doc);
+    col->addFunction(a->id());
+    col->addFunction(b->id());
+    col->addFunction(c3->id());
+    doc.addFunction(col);
+    const quint32 aId = a->id(), bId = b->id(), cId = c3->id(), colId = col->id();
+
+    Universe *u = doc.inputOutputMap()->universes().first();
+    auto frame = [&](int n) {
+        for (int i = 0; i < n; ++i)
+        {
+            doc.masterTimer()->timerTick();
+            u->processFaders();
+        }
+    };
+    auto out = [&](int ch) { return int(uchar(u->postGMValues()->at(ch))); };
+
+    col->start(doc.masterTimer(), FunctionParent::master());
+    frame(3);
+    QCOMPARE(out(0), 200);
+    QCOMPARE(out(1), 100);
+    QCOMPARE(out(2), 50);
+
+    // The middle member is deleted from the Doc while everything runs.
+    QVERIFY(doc.deleteFunction(bId));
+    frame(5);                                   // must not crash on the missing member
+    QVERIFY(!col->stopped());
+    QCOMPARE(col->functions(), QList<quint32>({ aId, cId }));
+    QVERIFY(!doc.function(aId)->stopped());
+    QVERIFY(!doc.function(cId)->stopped());
+    QCOMPARE(out(0), 200);
+    QCOMPARE(out(2), 50);
+    QCOMPARE(out(1), 0);                        // the deleted look no longer holds its channel
+
+    // What is saved no longer refers to it.
+    QBuffer buffer;
+    buffer.open(QIODevice::WriteOnly | QIODevice::Text);
+    QXmlStreamWriter w(&buffer);
+    QVERIFY(col->saveXML(&w));
+    w.setDevice(NULL);
+    buffer.close();
+    const QString xml = QString::fromUtf8(buffer.data());
+    QVERIFY(xml.contains(QString(">%1<").arg(aId)));
+    QVERIFY(xml.contains(QString(">%1<").arg(cId)));
+    QVERIFY(!xml.contains(QString(">%1<").arg(bId)));
+
+    // Stop and start again with the survivors.
+    col->stop(FunctionParent::master());
+    frame(5);
+    QVERIFY(col->stopped());
+    QCOMPARE(out(0), 0);
+    doc.function(colId)->start(doc.masterTimer(), FunctionParent::master());
+    frame(3);
+    QCOMPARE(out(0), 200);
+    QCOMPARE(out(1), 0);
+    QCOMPARE(out(2), 50);
+
+    // A running member deleted on its own, collection still going.
+    QVERIFY(doc.deleteFunction(aId));
+    frame(5);
+    QVERIFY(!doc.function(colId)->stopped());
+    QCOMPARE(out(2), 50);
+    QCOMPARE(out(0), 0);
+    doc.function(colId)->stop(FunctionParent::master());
+    frame(3);
 }
 
 QTEST_APPLESS_MAIN(Collection_Test)
