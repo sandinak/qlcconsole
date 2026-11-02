@@ -14,3 +14,5 @@ It is 7:20 and the house opens at 7:30. Students are handed a show someone left 
 | Teacher | [Teacher guide](https://github.com/sandinak/qlcconsole/blob/main/docs/course/level-3/lesson-09/teacher-guide.md) · [Slides outline](https://github.com/sandinak/qlcconsole/blob/main/docs/course/level-3/lesson-09/slides.md) |
 | Students | [Handout](handout.md) · [Exit ticket](exit-ticket.md) · [At home](at-home.md) |
 | Show files | [`lesson-3-9-start.qlcc`](../../shows/lesson-3-9-start.qlcc) · [`lesson-3-9-finish.qlcc`](../../shows/lesson-3-9-finish.qlcc) |
+
+![Show Review's findings](../../images/lesson-3-9/show-review.png)

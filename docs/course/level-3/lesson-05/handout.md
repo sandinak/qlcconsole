@@ -47,8 +47,12 @@ Roles: **Driver** (mouse), **Navigator** (reads each step aloud and checks *You 
    Change nothing: today the clock is the show's.
 3. Back in the Show Tree, click the list **01-Everybody Scream** and tick
    **Follow timecode**.
+
+   ![Follow timecode on the list](../../images/lesson-3-5/follow-timecode.png)
 4. Click **1.0.0 Pose**. In **At timecode**, type `00:00:02:00` and press
    **Return**. Do the same for each cue in the table below.
+
+   ![The At timecode box on the Verse](../../images/lesson-3-5/cue-time.png)
 
    | Cue | At timecode |
    |---|---|
@@ -67,6 +71,8 @@ Roles: **Driver** (mouse), **Navigator** (reads each step aloud and checks *You 
 5. Open the **Run** tab (⇧⌘8).
    - *You should see:* **at 00:00:10:00** on the Verse's row, and the
      other times down the list. The Flash has none.
+
+     ![The times on the Run tab](../../images/lesson-3-5/run-times.png)
 6. Click **Operate**, then **GO** and **GO** again. A GO by hand still
    plays, whatever the clock says. Click **Stop**, then **Design**.
 7. **File ▸ Show Settings…**: find **Allow GO from the phone Run page**.

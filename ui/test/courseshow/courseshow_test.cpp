@@ -79,6 +79,7 @@
 #include "stagetarget.h"
 #include "qlcpalette.h"
 #include "cuerunner.h"
+#include "groupmasterstrip.h"
 #include "outputrulesdialog.h"
 #include "focuscallsdialog.h"
 #include "monitorgraphicsview.h"
@@ -110,6 +111,9 @@
 #include "showoperate.h"
 #include "fixturegroupeditor.h"
 #include "cuesheet.h"
+#include "cuesheetdialog.h"
+#include "showreviewpanel.h"
+#include "whyonpanel.h"
 #include "showreview.h"
 #include "whyon.h"
 #include "lineplanview.h"
@@ -5910,6 +5914,223 @@ void CourseShow_Test::levelTwoPictures()
         QVERIFY(open(levelTwoStart(7)));
         QVERIFY(lessonTwoSevenByMouse(m_app->doc(), showTree(), d));
         m_app->doc()->resetModified();
+    }
+}
+
+void CourseShow_Test::levelThreePictures()
+{
+    // Lessons 3.5, 3.8 and 3.9's pictures, taken at the steps their pages
+    // number; set COURSE_SHOTS to docs/course/images (3.6's are taken by
+    // lessonFocusAndCalibration).
+    const QString root = qEnvironmentVariable("COURSE_SHOTS");
+    if (root.isEmpty())
+        QSKIP("set COURSE_SHOTS to the course's images folder");
+    m_app->setTheme(App::ThemeBlue);
+    m_app->resize(1280, 800);
+    auto expandAll = [](ShowTreeView *v) {
+        for (QTreeWidgetItemIterator it(v->tree()); *it; ++it)
+            (*it)->setExpanded(true);
+    };
+    auto toRun = [this]() {
+        CueRunner *run = runTab(m_app);
+        m_app->m_tab->setCurrentWidget(run);
+        settle(300);
+        return run;
+    };
+
+    // --- 3.5: Follow timecode on the list, a time on a cue, the times on the Run tab.
+    {
+        const QString d = root + QStringLiteral("/lesson-3-5");
+        QVERIFY(open(levelThreeFile(5, "start")));
+        Doc *doc = m_app->doc();
+        ShowTreeView *v = showTree();
+        expandAll(v);
+        QVERIFY(v->selectNode(listNamed(doc, QStringLiteral("01-Everybody Scream"))->id));
+        settle(100);
+        layOutForShot(v);
+        QVERIFY(v->m_listFollowTc != nullptr && v->m_listFollowTc->isVisible());
+        v->m_listFollowTc->click();
+        settle(100);
+        {
+            HelpShots::Frame f = showTreeFrame(m_app, v);
+            f.callouts << mark(v->m_listFollowTc, 1);
+            QVERIFY(shoot(f, d, "follow-timecode"));
+        }
+        QVERIFY(v->selectNode(cueNumbered(doc, "1.0.1")));
+        settle(100);
+        layOutForShot(v);
+        QVERIFY(v->m_cueTc != nullptr && v->m_cueTc->isVisible());
+        v->m_cueTc->setText(QStringLiteral("00:00:10:00"));
+        QTest::keyClick(v->m_cueTc, Qt::Key_Return);
+        settle(100);
+        if (QScrollArea *page = qobject_cast<QScrollArea *>(v->m_cuePage))
+            page->ensureWidgetVisible(v->m_cueTc, 0, 120);
+        settle(100);
+        {
+            HelpShots::Frame f = showTreeFrame(m_app, v);
+            f.callouts << mark(v->m_cueTc, 1);
+            QVERIFY(shoot(f, d, "cue-time"));
+        }
+        doc->resetModified();
+        QVERIFY(open(levelThreeFile(5, "finish")));
+        CueRunner *run = toRun();
+        // The Timing column wide enough for "fade 2s · at 00:00:10:00".
+        run->cueTree()->setColumnWidth(3, 400);
+        settle(100);
+        {
+            HelpShots::Frame f;
+            f.grab = m_app;
+            f.callouts << mark(run->cueTree(), 1);
+            QVERIFY(shoot(f, d, "run-times"));
+        }
+    }
+
+    // --- 3.8: Numbering, a song's header with Block, the Lanterns fader, the cue sheet.
+    {
+        const QString d = root + QStringLiteral("/lesson-3-8");
+        QVERIFY(open(levelThreeFile(8, "start")));
+        Doc *doc = m_app->doc();
+        ShowTreeView *v = showTree();
+        expandAll(v);
+        QVERIFY(v->selectNode(doc->showTree()->productions().first().id));
+        settle(100);
+        layOutForShot(v);
+        QComboBox *num = stFind<QComboBox>(v, "stProdNumbering");
+        QVERIFY(num != nullptr && num->isVisible());
+        const int at = num->findData(int(ShowTree::Numbering::ShowPartIteration));
+        QVERIFY(at >= 0);
+        num->setCurrentIndex(at);
+        emit num->activated(at);
+        settle(100);
+        {
+            HelpShots::Frame f = showTreeFrame(m_app, v);
+            f.callouts << mark(num, 1, HelpShots::Above);
+            QVERIFY(shoot(f, d, "numbering"));
+        }
+        doc->resetModified();
+
+        QVERIFY(open(levelThreeFile(8, "finish")));
+        doc = m_app->doc();
+        v = showTree();
+        expandAll(v);
+        QTreeWidgetItem *head = sectionRow(v, QStringLiteral("2"));
+        QVERIFY(head != nullptr);
+        v->tree()->setCurrentItem(head);
+        settle(100);
+        layOutForShot(v);
+        QVERIFY(v->m_sectionBlock != nullptr && v->m_sectionBlock->isVisible());
+        {
+            HelpShots::Frame f = showTreeFrame(m_app, v);
+            f.callouts << markRect(v->tree()->viewport(), v->tree()->visualItemRect(head), m_app, 1)
+                       << mark(v->m_sectionBlock, 2);
+            QVERIFY(shoot(f, d, "section-block"));
+        }
+        CueRunner *run = toRun();
+        run->cueTree()->setColumnWidth(3, 400);
+        settle(100);
+        GroupMasterStrip *strip = run->findChild<GroupMasterStrip *>();
+        QVERIFY(strip != nullptr && strip->isVisible());
+        {
+            HelpShots::Frame f;
+            f.grab = m_app;
+            f.callouts << mark(strip, 1) << mark(run->cueTree(), 2);
+            QVERIFY(shoot(f, d, "group-master"));
+        }
+        {
+            m_app->m_tab->setCurrentWidget(v);
+            settle(100);
+            CueSheetDialog dlg(doc, doc->showTree()->productions().first().id, m_app);
+            dlg.resize(900, 600);
+            dlg.show();
+            settle(200);
+            HelpShots::Frame f;
+            f.grab = &dlg;
+            f.callouts << mark(dlg.findChild<QWidget *>("cueSheetPage"), 1, HelpShots::Above)
+                       << mark(dlg.findChild<QWidget *>("cueSheetView"), 2)
+                       << mark(dlg.findChild<QWidget *>("cueSheetPdf"), 3, HelpShots::Above)
+                       << mark(dlg.findChild<QWidget *>("cueSheetCallingScript"), 4, HelpShots::Above);
+            QVERIFY(save(HelpShots::annotate(dlg.grab().toImage(), f), d, "cue-sheet"));
+            dlg.setPage(CueSheetDialog::TrackingPage);
+            settle(200);
+            QVERIFY(save(HelpShots::annotate(dlg.grab().toImage(), f), d, "tracking-sheet"));
+            dlg.close();
+        }
+        doc->resetModified();
+    }
+
+    // --- 3.9: Show Review on the faulty show, why a light is dark, Solo on a layer.
+    {
+        const QString d = root + QStringLiteral("/lesson-3-9");
+        QVERIFY(open(levelThreeFile(9, "start")));
+        Doc *doc = m_app->doc();
+        ShowTreeView *v = showTree();
+        QVERIFY(ShowReviewPanel::canOpenShared());
+        ShowReviewPanel *panel = ShowReviewPanel::openShared();
+        QVERIFY(panel != nullptr);
+        panel->recheck();
+        panel->resize(900, 520);
+        settle(300);
+        QVERIFY(panel->selectCheck(QStringLiteral("CUE-02")));
+        settle(100);
+        {
+            HelpShots::Frame f;
+            f.grab = panel;
+            f.callouts << mark(panel->tree(), 1) << mark(panel->fixButton(), 2, HelpShots::Above)
+                       << mark(panel->acceptButton(), 3, HelpShots::Above);
+            QVERIFY(save(HelpShots::annotate(panel->grab().toImage(), f), d, "show-review"));
+        }
+        panel->close();
+
+        expandAll(v);
+        QVERIFY(v->selectNode(cueNumbered(doc, "2.0.1")));
+        settle(200);
+        quint32 id = Fixture::invalidId();
+        for (Fixture *fx : doc->fixtures())
+            if (fx->name() == QLatin1String("Lantern 1"))
+                id = fx->id();
+        QVERIFY(id != Fixture::invalidId());
+        QTRY_COMPARE_WITH_TIMEOUT(outputValue(doc, "Lantern 1", "Master Dimmer"), 0, kRigWait);
+        WhyOnPanel *why = WhyOnPanel::showFor(doc, id, 0xFFFFFFFF, m_app, QPoint(200, 200));
+        QVERIFY(why != nullptr);
+        why->resize(560, 360);
+        settle(300);
+        {
+            HelpShots::Frame f;
+            f.grab = why;
+            QVERIFY(save(HelpShots::annotate(why->grab().toImage(), f), d, "why-not-on"));
+        }
+        why->close();
+        doc->resetModified();
+
+        QVERIFY(open(levelThreeFile(9, "finish")));
+        doc = m_app->doc();
+        v = showTree();
+        expandAll(v);
+        const quint32 cue = cueNumbered(doc, "2.0.1");
+        quint32 cycLayer = ShowTree::invalidId();
+        for (const Production &p : doc->showTree()->productions())
+            for (const CueList &l : p.lists)
+                for (const Cue &c : l.cues)
+                    if (c.id == cue)
+                        for (const Layer &ly : c.layers)
+                            if (doc->showTree()->targetLabel(ly.target) == QLatin1String("TrussC-RGB"))
+                                cycLayer = ly.id;
+        QVERIFY(cycLayer != ShowTree::invalidId());
+        QVERIFY(v->selectNode(cycLayer, cue));
+        settle(200);
+        layOutForShot(v);
+        QToolButton *solo = stFind<QToolButton>(v, "stLayerSolo");
+        QToolButton *play = stFind<QToolButton>(v, "stLayerPlay");
+        QVERIFY(solo != nullptr && solo->isVisible() && play != nullptr);
+        solo->click();
+        settle(200);
+        {
+            HelpShots::Frame f = showTreeFrame(m_app, v);
+            f.callouts << mark(solo, 1, HelpShots::Right) << mark(play, 2, HelpShots::Left);
+            QVERIFY(shoot(f, d, "solo-layer"));
+        }
+        solo->click();
+        doc->resetModified();
     }
 }
 

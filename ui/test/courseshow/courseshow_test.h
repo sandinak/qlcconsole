@@ -187,6 +187,7 @@ private slots:
     /** COURSE_SHOTS=<folder>: Level 2's pictures (COURSE_LESSON=2.N: that
      *  lesson's only). Skipped otherwise. */
     void levelTwoPictures();
+    void levelThreePictures();
 
     /** The features of 0.4 where Level 2 has room for them: "Why is this
      *  on?" on the chorus's dark step tops (2.1), Solo on a layer of the
