@@ -334,17 +334,30 @@ void EncoderBank_Test::turnsAreGatheredIntoOne()
     b->setDevice(generic(EncoderBank::TwosComplement));     // the default gather time
     QCOMPARE(b->coalesceMs(), 25);
     QSignalSpy spy(b, &EncoderBank::adjusted);
+    // send() runs the event loop, so under load the 25 ms gather could end
+    // mid-burst. Hold the gather open for the burst; the timer itself is
+    // checked below with a single turn.
+    b->setCoalesceMs(600000);
     for (int i = 0; i < 6; ++i)
         send(kTurn, dmx(1));
     send(kTurn, dmx(127));
     QCOMPARE(spy.count(), 0);               // held for the gather
-    QTRY_COMPARE_WITH_TIMEOUT(spy.count(), 1, 1000);
+    b->flush();
+    QCOMPARE(spy.count(), 1);
     QCOMPARE(spy.last().at(0).toInt(), int(EncoderBank::IntensityBank));
     QCOMPARE(spy.last().at(2).toInt(), 5);
+    // The gather timer delivers on its own (a single turn: nothing to split).
+    b->setCoalesceMs(25);
+    spy.clear();
+    send(kTurn, dmx(1));
+    QTRY_COMPARE_WITH_TIMEOUT(spy.count(), 1, 5000);
+    QCOMPARE(spy.last().at(2).toInt(), 1);
+    b->setCoalesceMs(600000);
+    spy.clear();
     // Intensity has the one encoder: the second is nothing in this bank.
     send(kTurn + 1, dmx(1));
     b->flush();
-    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.count(), 0);
 
     b->setBank(EncoderBank::ColourBank);
     spy.clear();
