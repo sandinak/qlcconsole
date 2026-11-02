@@ -59,6 +59,7 @@
 #include "qlcchannel.h"
 #include "stagetarget.h"
 #include "aimsolver.h"
+#include "truss.h"
 #include "showembedding.h"
 #include <QTemporaryDir>
 
@@ -5971,7 +5972,7 @@ namespace
 {
 /* A two-channel spot (pan, tilt), placed at @a x metres across the stage,
    6 m up. */
-Fixture *placedSpot(Doc *doc, const QString &name, double x)
+Fixture *placedSpot(Doc *doc, const QString &name, double x, int tiltMax = 270)
 {
     QLCFixtureDef *def = new QLCFixtureDef();
     def->setManufacturer("Test");
@@ -5991,7 +5992,7 @@ Fixture *placedSpot(Doc *doc, const QString &name, double x)
     }
     QLCPhysical ph;
     ph.setFocusPanMax(540);
-    ph.setFocusTiltMax(270);
+    ph.setFocusTiltMax(tiltMax);
     mode->setPhysical(ph);
     QLCFixtureHead head;
     head.addChannel(0);
@@ -6006,6 +6007,20 @@ Fixture *placedSpot(Doc *doc, const QString &name, double x)
     if (!doc->addFixture(fxi))
         return nullptr;
     doc->monitorProperties()->setFixturePosition(fxi->id(), 0, 0, QVector3D(float(x * 1000.0), 0, 6));
+    return fxi;
+}
+
+/* A standing head (floor mounted, 180 degrees of tilt like the two-arm
+   beams) on a 0.6 m deck at @a x, the front of the stage. */
+Fixture *standingHead(Doc *doc, const QString &name, double x)
+{
+    Fixture *fxi = placedSpot(doc, name, x, 180);
+    if (fxi == nullptr)
+        return nullptr;
+    doc->monitorProperties()->setFixturePosition(fxi->id(), 0, 0, QVector3D(float(x * 1000.0), 0, 0.6f));
+    FixtureRigProps rp;
+    rp.mountingType = Truss::FloorMounted;
+    doc->monitorProperties()->setFixtureRigProps(fxi->id(), rp);
     return fxi;
 }
 
@@ -6347,6 +6362,143 @@ void ShowTree_Test::aCueAimIsOneFormationByPosition()
     // Undo: gone with it.
     QVERIFY(st->undo());
     QVERIFY(m_doc->palette(derived) == nullptr);
+}
+
+/* "Both sets of lights are supposed to point at the line" (2026-11-01):
+   one layer holding a group of hung spots and a group of standing heads,
+   aimed at a line with Spread +5, is one formation -- all six lights along
+   the line end to end, numbered by where they hang across both groups, not
+   group by group. A standing head that can't tilt below its horizon lights
+   the people on its point (subject height above it) and can reach it. */
+void ShowTree_Test::aLayerOfHungAndStandingGroupsIsOneLineFormation()
+{
+    Fixture *h1 = placedSpot(m_doc, "T-1", -4), *h2 = placedSpot(m_doc, "T-2", -1);
+    Fixture *h3 = placedSpot(m_doc, "T-3", 2);
+    Fixture *u1 = standingHead(m_doc, "UST-1", -2.5), *u2 = standingHead(m_doc, "UST-2", 0.5);
+    Fixture *u3 = standingHead(m_doc, "UST-3", 3.5);
+    QVERIFY(h1 && h2 && h3 && u1 && u2 && u3);
+    FixtureGroup *spots = group("T-Spots", { h3->id(), h1->id(), h2->id() });
+    FixtureGroup *usts = group("USTs", { u2->id(), u3->id(), u1->id() });
+    StageTarget *edge = m_doc->monitorProperties()->addStageTarget();
+    edge->setPosition(QVector3D(0, 3, 0));
+    edge->setLinePoints({ QVector3D(-5, 0, 0), QVector3D(5, 0, 0) });
+    edge->makeLine();
+    QVERIFY(edge->isLine());
+
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 aim = st->aimPaletteFor(edge->id());
+    const quint32 listId = st->addCueList(st->addProduction("P"), "L");
+    const quint32 c1 = st->addCue(listId, -1, "Music Start");
+    Target both;
+    both.groups << spots->id() << usts->id();
+    const quint32 layer = st->addLayer(c1, both);
+    QVERIFY(st->setLayerLook(c1, layer, st->lookForPalette(aim)));
+    QVERIFY(st->setLayerLook(c1, layer, ShowTreeController::lineParamLook(KeySpread, "5")));
+
+    const Scene *sc = sceneOf(st, m_doc, c1, both);
+    QVERIFY(sc != nullptr);
+    QCOMPARE(AimSolver::sceneAims(m_doc, sc).count(), 6);
+    // By X across both groups: T-1 UST-1 T-2 UST-2 T-3 UST-3, end to end.
+    const QList<QPair<Fixture *, float>> want = { { h1, -5.f }, { u1, -3.f }, { h2, -1.f },
+                                                  { u2, 1.f }, { h3, 3.f }, { u3, 5.f } };
+    MonitorProperties *props = m_doc->monitorProperties();
+    for (const auto &w : want)
+    {
+        const QVector3D p = aimedAt(m_doc, sc, w.first->id());
+        QVERIFY2(qAbs(p.x() - w.second) < 0.05f && qAbs(p.y() - 3.f) < 0.05f,
+                 qPrintable(QString("%1 aims at (%2,%3), not (%4,3)")
+                            .arg(w.first->name()).arg(p.x()).arg(p.y()).arg(w.second)));
+        AimSolver::Solution sol;
+        QVERIFY(AimSolver::reach(m_doc, w.first->id(), p, sol));
+        QVERIFY2(sol.reachable(), qPrintable(QString("%1 can't reach its point (margin %2)")
+                                             .arg(w.first->name()).arg(double(sol.marginDeg))));
+        // And the DMX the cue plays for it is that aim.
+        float panDeg = 0, tiltDeg = 0;
+        QVERIFY(AimSolver::aimDegrees(m_doc, w.first->id(), p, panDeg, tiltDeg));
+        const QList<SceneValue> dmx = m_doc->palette(aim)->valuesFromFixtures(
+            m_doc, { w.first->id() }, sc);
+        QList<SceneValue> expect = w.first->positionToValues(QLCChannel::Pan, panDeg);
+        expect << w.first->positionToValues(QLCChannel::Tilt, tiltDeg);
+        QCOMPARE(dmx.count(), expect.count());
+        for (int i = 0; i < dmx.count(); ++i)
+        {
+            QCOMPARE(dmx.at(i).channel, expect.at(i).channel);
+            QCOMPARE(int(dmx.at(i).value), int(expect.at(i).value));
+        }
+    }
+    // The standing heads can't tilt below their horizon: they aim at the
+    // subject height above their point (the line is on the deck, 0.6 m
+    // below them), not at the line's own height, and well downstage.
+    for (Fixture *u : { u1, u2, u3 })
+    {
+        const QVector3D p = aimedAt(m_doc, sc, u->id());
+        QVERIFY2(qAbs(p.z() - props->aimSubjectHeight()) < 0.05f,
+                 qPrintable(QString("%1 aims at z=%2").arg(u->name()).arg(p.z())));
+    }
+    // The hung ones at the line itself.
+    QVERIFY(qAbs(aimedAt(m_doc, sc, h2->id()).z()) < 0.05f);
+}
+
+/* Two layers of one cue, each with the same line aim and Spread, each spread
+   on their own: a layer that sets its own Position spreads on its own
+   (docs/features/show-tree.md "Line aims"), so each group covers the whole
+   line end to end. One formation across layers is the cue's aim. */
+void ShowTree_Test::layersWithTheSameLineAimEachSpreadEndToEnd()
+{
+    Fixture *h1 = placedSpot(m_doc, "T-1", -4), *h2 = placedSpot(m_doc, "T-2", -1);
+    Fixture *h3 = placedSpot(m_doc, "T-3", 2);
+    Fixture *u1 = standingHead(m_doc, "UST-1", -2.5), *u2 = standingHead(m_doc, "UST-2", 0.5);
+    Fixture *u3 = standingHead(m_doc, "UST-3", 3.5);
+    QVERIFY(h1 && h2 && h3 && u1 && u2 && u3);
+    FixtureGroup *spots = group("T-Spots", { h1->id(), h2->id(), h3->id() });
+    FixtureGroup *usts = group("USTs", { u1->id(), u2->id(), u3->id() });
+    StageTarget *edge = m_doc->monitorProperties()->addStageTarget();
+    edge->setPosition(QVector3D(0, 3, 0));
+    edge->setLinePoints({ QVector3D(-5, 0, 0), QVector3D(5, 0, 0) });
+    edge->makeLine();
+
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 aim = st->aimPaletteFor(edge->id());
+    const quint32 prod = st->addProduction("P");
+    const quint32 listId = st->addCueList(prod, "L");
+    const quint32 c1 = st->addCue(listId, -1, "Music Start");
+    for (FixtureGroup *g : { spots, usts })
+    {
+        const quint32 layer = st->addLayer(c1, groupTarget(g->id()));
+        QVERIFY(st->setLayerLook(c1, layer, st->lookForPalette(aim)));
+        QVERIFY(st->setLayerLook(c1, layer, ShowTreeController::lineParamLook(KeySpread, "5")));
+    }
+    const Scene *ss = sceneOf(st, m_doc, c1, groupTarget(spots->id()));
+    const Scene *us = sceneOf(st, m_doc, c1, groupTarget(usts->id()));
+    QVERIFY(ss && us && ss != us);
+    const float ends[] = { -5.f, 0.f, 5.f };
+    const Fixture *hs[] = { h1, h2, h3 }, *ws[] = { u1, u2, u3 };
+    for (int i = 0; i < 3; ++i)
+    {
+        const QVector3D hp = aimedAt(m_doc, ss, hs[i]->id());
+        const QVector3D up = aimedAt(m_doc, us, ws[i]->id());
+        QVERIFY2(qAbs(hp.x() - ends[i]) < 0.05f,
+                 qPrintable(QString("%1 aims at x=%2, not %3").arg(hs[i]->name()).arg(hp.x()).arg(ends[i])));
+        QVERIFY2(qAbs(up.x() - ends[i]) < 0.05f,
+                 qPrintable(QString("%1 aims at x=%2, not %3").arg(ws[i]->name()).arg(up.x()).arg(ends[i])));
+        AimSolver::Solution sol;
+        QVERIFY(AimSolver::reach(m_doc, ws[i]->id(), up, sol));
+        QVERIFY(sol.reachable());
+    }
+
+    // The same two layers under one aim set on the cue (a list of its own,
+    // so nothing tracks in): one formation again, interleaved as the single
+    // layer of both groups is.
+    const quint32 c2 = st->addCue(st->addCueList(prod, "L2"), -1, "Together");
+    st->addLayer(c2, groupTarget(spots->id()));
+    st->addLayer(c2, groupTarget(usts->id()));
+    QVERIFY(st->setCueLook(c2, st->lookForPalette(aim)));
+    const Scene *us2 = sceneOf(st, m_doc, c2, groupTarget(usts->id()));
+    const Scene *ss2 = sceneOf(st, m_doc, c2, groupTarget(spots->id()));
+    QVERIFY(us2 && ss2);
+    QVERIFY(qAbs(aimedAt(m_doc, ss2, h1->id()).x() + 5.f) < 0.05f);
+    QVERIFY(qAbs(aimedAt(m_doc, us2, u1->id()).x() + 3.f) < 0.05f);
+    QVERIFY(qAbs(aimedAt(m_doc, us2, u3->id()).x() - 5.f) < 0.05f);
 }
 
 /* D19: a Spread change between cues fades over the cue's fade time (pan

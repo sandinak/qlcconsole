@@ -98,10 +98,14 @@ struct FixtureHead
     quint32 m_panChannel;
     int m_panMaxDegrees;
     qreal m_panDegrees;
+    //! the DMX band that points (Fixture::positionBand()); the whole channel
+    //! unless it has an indexed-position range
+    uchar m_panBandLo = 0, m_panBandHi = 255;
     QColor m_panColor;
     quint32 m_tiltChannel;
     int m_tiltMaxDegrees;
     qreal m_tiltDegrees;
+    uchar m_tiltBandLo = 0, m_tiltBandHi = 255;
     QColor m_tiltColor;
 };
 

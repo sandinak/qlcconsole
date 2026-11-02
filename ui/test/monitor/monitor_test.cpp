@@ -13541,6 +13541,99 @@ void Monitor_Test::aHeadAimedAtAMarkDrawsItsBeamThere()
     delete doc;
 }
 
+void Monitor_Test::anIndexedPanBandDrawsWhereItPoints()
+{
+    /* "The USTs point off stage right" (2026-11-01). The two-arm beam's pan
+       points with DMX 0-127 and spins with 128-255; positionToValues() writes
+       into the band, so its DMX was right, but every view read the channel
+       back over 0-255: the centre (64) became a quarter turn off centre, and
+       a head aimed straight downstage was drawn aiming at the wings. */
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test");
+    def->setModel("Two Arm");
+    def->setType(QLCFixtureDef::MovingHead);
+    QLCChannel *pan = new QLCChannel();
+    pan->setName("Pan");
+    pan->setGroup(QLCChannel::Pan);
+    pan->setControlByte(QLCChannel::MSB);
+    pan->addCapability(new QLCCapability(0, 127, "Indexed position"));
+    pan->capabilities().first()->setPreset(QLCCapability::RotationIndexed);
+    pan->addCapability(new QLCCapability(128, 255, "Rotation"));
+    def->addChannel(pan);
+    QLCChannel *tilt = new QLCChannel();
+    tilt->setName("Tilt");
+    tilt->setGroup(QLCChannel::Tilt);
+    tilt->setControlByte(QLCChannel::MSB);
+    def->addChannel(tilt);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("2ch");
+    QLCPhysical ph;
+    ph.setFocusPanMax(360);
+    ph.setFocusTiltMax(180);
+    mode->setPhysical(ph);
+    mode->insertChannel(pan, 0);
+    mode->insertChannel(tilt, 1);
+    QLCFixtureHead head;
+    head.addChannel(0);
+    head.addChannel(1);
+    mode->insertHead(-1, head);
+    def->addMode(mode);
+
+    uchar lo = 0, hi = 0;
+    QVERIFY(Fixture::positionBand(pan, lo, hi));
+    QCOMPARE(int(lo), 0);
+    QCOMPARE(int(hi), 127);
+    QVERIFY(!Fixture::positionBand(tilt, lo, hi));
+    QCOMPARE(Fixture::positionFraction(tilt, 51.0), 0.2);   // no band: dmx / 255
+    QVERIFY(qAbs(Fixture::positionFraction(pan, 63.5) - 0.5) < 1e-9);
+    QCOMPARE(Fixture::positionFraction(pan, 200.0), 1.0);   // the spin zone: clamped
+
+    Fixture *fx = new Fixture(doc);
+    fx->setName("UST");
+    fx->setFixtureDefinition(def, mode);
+    fx->setUniverse(0);
+    fx->setAddress(0);
+    QVERIFY(doc->addFixture(fx));
+    // Standing on the deck, 0.6 m up, facing downstage.
+    props->setFixturePosition(fx->id(), 0, 0, QVector3D(0.0f, 0.0f, 0.6f));
+    FixtureRigProps rp;
+    rp.mountingType = Truss::FloorMounted;
+    props->setFixtureRigProps(fx->id(), rp);
+
+    const QList<QVector3D> marks = { QVector3D(0.0f, 5.0f, 1.8f),     // straight downstage
+                                     QVector3D(-1.5f, 5.0f, 1.8f),    // a little stage right
+                                     QVector3D(2.0f, 4.0f, 2.5f) };   // stage left
+    for (const QVector3D &mark : marks)
+    {
+        float panDeg = 0.0f, tiltDeg = 0.0f;
+        QVERIFY(AimSolver::aimDegrees(doc, fx->id(), mark, panDeg, tiltDeg));
+        QByteArray v(512, char(0));
+        for (const SceneValue &sv : fx->positionToValues(QLCChannel::Pan, panDeg))
+            v[int(sv.channel)] = char(sv.value);
+        for (const SceneValue &sv : fx->positionToValues(QLCChannel::Tilt, tiltDeg))
+            v[int(sv.channel)] = char(sv.value);
+        QVERIFY2(uchar(v.at(0)) <= 127, "the pan was written into the spin zone");
+        fx->setChannelValues(v);
+
+        QVector3D dir;
+        QVERIFY(fixtureAimDirection(fx, props->fixtureRigProps(fx->id()), dir));
+        QVector3D want = mark - props->fixtureRigPosition(fx->id());
+        want.normalize();
+        const float offBy = float(qRadiansToDegrees(qAcos(double(qBound(-1.0f,
+                                    QVector3D::dotProduct(dir, want), 1.0f)))));
+        QVERIFY2(offBy < 3.0f,
+                 qPrintable(QString("aimed at (%1,%2,%3), pan DMX %4, drawn %5 degrees away "
+                                    "(ray %6,%7,%8)")
+                            .arg(double(mark.x())).arg(double(mark.y())).arg(double(mark.z()))
+                            .arg(int(uchar(v.at(0)))).arg(double(offBy))
+                            .arg(double(dir.x())).arg(double(dir.y())).arg(double(dir.z()))));
+    }
+    delete doc;
+}
+
 void Monitor_Test::aCalibratedHeadsPoolLandsOnItsMark()
 {
     // The Doc outlives the views below (a view's items ask it for their

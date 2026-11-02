@@ -375,6 +375,24 @@ static void indexedPositionBand(const QLCChannel *msbChannel, quint32 &lo16, qui
     }
 }
 
+bool Fixture::positionBand(const QLCChannel *ch, uchar &lo, uchar &hi)
+{
+    quint32 lo16, hi16;
+    indexedPositionBand(ch, lo16, hi16);
+    lo = uchar(lo16 >> 8);
+    hi = uchar(hi16 >> 8);
+    return lo != 0 || hi != 255;
+}
+
+double Fixture::positionFraction(const QLCChannel *ch, double dmx)
+{
+    uchar lo = 0, hi = 255;
+    positionBand(ch, lo, hi);
+    if (hi <= lo)
+        return 0.0;
+    return qBound(0.0, (dmx - double(lo)) / double(hi - lo), 1.0);
+}
+
 QList<SceneValue> Fixture::positionToValues(int type, float degrees, bool isRelative)
 {
     QList<SceneValue> posList;

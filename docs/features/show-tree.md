@@ -940,6 +940,11 @@ of its own.
   Set them from the row's **⋯** (values, or **Spread…** for any), or type
   `Towers spread 0 group pairs cross mirror`. A row says where its value
   came from, as any row does: *"0 — from cue 1.0.1"*.
+- **A layer is one formation.** A layer of several groups (*T-Spots +
+  USTs*) spreads all their lights along the line as one row, numbered by
+  where they hang: hung spots and standing heads interleave. Two layers
+  that each set the same aim spread on their own, so each group covers the
+  line end to end; for one row across layers, set the aim on the cue.
 - **On the cue: one formation.** An aim at a line set on the cue spreads the
   lights of all the cue's own layers along it **as one row**, numbered by
   where they hang along the line across all of them. Towers and the spots

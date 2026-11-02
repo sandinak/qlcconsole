@@ -289,6 +289,8 @@ MonitorFixtureItem::MonitorFixtureItem(Doc *doc, quint32 fid)
             {
                 if (mode->physical().focusPanMax() != 0)
                     fxiItem->m_panMaxDegrees = mode->physical().focusPanMax();
+                Fixture::positionBand(mode->channel(fxiItem->m_panChannel),
+                                      fxiItem->m_panBandLo, fxiItem->m_panBandHi);
             }
             fxiItem->m_panDegrees = 0;
             qDebug() << "Pan channel on" << fxiItem->m_panChannel << "max degrees:" << fxiItem->m_panMaxDegrees;
@@ -304,6 +306,8 @@ MonitorFixtureItem::MonitorFixtureItem(Doc *doc, quint32 fid)
             {
                 if (mode->physical().focusTiltMax() != 0)
                     fxiItem->m_tiltMaxDegrees = mode->physical().focusTiltMax();
+                Fixture::positionBand(mode->channel(fxiItem->m_tiltChannel),
+                                      fxiItem->m_tiltBandLo, fxiItem->m_tiltBandHi);
             }
             fxiItem->m_tiltDegrees = 0;
             qDebug() << "Tilt channel on" << fxiItem->m_tiltChannel << "max degrees:" << fxiItem->m_tiltMaxDegrees;
@@ -1662,16 +1666,23 @@ bool MonitorFixtureItem::askMountingHeight(QWidget *parent, MonitorProperties *p
     return true;
 }
 
+/* DMX to degrees, centred. Over the channel's pointing band when it has one
+   (Fixture::positionBand()): a head whose 128-255 spins it points with 0-127
+   only, so its centre is 64, not 128. Without one, the stock mapping. */
+static qreal bandDegrees(uchar value, uchar lo, uchar hi, int maxDegrees)
+{
+    if (lo == 0 && hi == 255)
+        return ((double)value * maxDegrees) / 256.0 - (maxDegrees / 2);
+    const double frac = hi > lo ? qBound(0.0, double(int(value) - lo) / double(hi - lo), 1.0) : 0.0;
+    return frac * maxDegrees - (maxDegrees / 2.0);
+}
+
 void MonitorFixtureItem::computeTiltPosition(FixtureHead *h, uchar value)
 {
-    // find the TILT degrees based on value
-    h->m_tiltDegrees = ((double)value * h->m_tiltMaxDegrees) / (256.0 - 1/256) - (h->m_tiltMaxDegrees / 2);
-    //qDebug() << "TILT degrees:" << h->m_tiltDegrees;
+    h->m_tiltDegrees = bandDegrees(value, h->m_tiltBandLo, h->m_tiltBandHi, h->m_tiltMaxDegrees);
 }
 
 void MonitorFixtureItem::computePanPosition(FixtureHead *h, uchar value)
 {
-    // find the PAN degrees based on value
-    h->m_panDegrees = ((double)value * h->m_panMaxDegrees) / (256.0 - 1/256) - (h->m_panMaxDegrees / 2);
-    //qDebug() << "PAN degrees:" << h->m_panDegrees;
+    h->m_panDegrees = bandDegrees(value, h->m_panBandLo, h->m_panBandHi, h->m_panMaxDegrees);
 }

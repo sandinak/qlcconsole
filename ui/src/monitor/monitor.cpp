@@ -11159,6 +11159,10 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
                 bool hasFine = (lsbCh != QLCChannel::invalid());
                 quint32 raw16 = hasFine ? (quint32(msb) << 8 | quint32(lsb)) : quint32(msb) << 8;
                 float deg = (raw16 / 65535.0f) * maxDeg;
+                // Over the indexed-position band when the channel has one.
+                uchar bandLo = 0, bandHi = 255;
+                if (Fixture::positionBand(fxi->channel(msbCh), bandLo, bandHi))
+                    deg = float(Fixture::positionFraction(fxi->channel(msbCh), msb + lsb / 256.0)) * maxDeg;
 
                 QString txt;
                 if (hasFine)
