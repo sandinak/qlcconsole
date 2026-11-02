@@ -2149,7 +2149,8 @@ void LookEditor::slotPanTiltChanged(const QPointF &pos)
         return;
     const int pan = int(pos.x() / XY_MAX * PAN_DEG);
     const int tilt = int(pos.y() / XY_MAX * TILT_DEG);
-    p->setValue(pan, tilt);
+    // One undo step for a drag (and for an encoder's turn), as every other look value.
+    editValue([pan, tilt](QLCPalette *pal) { pal->setValue(pan, tilt); });
     m_doc->setModified();
     emit paletteChanged(m_paletteId);
 }
@@ -2620,7 +2621,8 @@ void LookEditor::slotBeamChanged(int)
 
     QVariantList vals;
     vals << focus << frost << iris;
-    p->setValues(vals);
+    editValue([vals](QLCPalette *pal) { pal->setValues(vals); });
+    m_doc->setModified();
     emit paletteChanged(m_paletteId);
 }
 

@@ -1153,6 +1153,10 @@ list (GO), one cue of a list (a jump to it) or a hit.
 - **Saved with the show.** A show without triggers saves as before; QLC+
   4 opens a show with them and skips the Control Map (the save check says
   so). Deleting a function takes its trigger with it.
+- **Encoders too.** A controller with endless encoders can turn Build's
+  selection (intensity, colour, position, beam, gobo / prism, banks with
+  a button): the **Encoder bank** section under the table, described in
+  [Build](build.md#encoder-banks-a-midi-controller-turns-the-selection).
 - **Or the QLC+ way.** A Virtual Console button, slider or cue list with
   an external input works as in QLC+, and is what you want for a fader
   that sets a level. Game pads have their own map in the focus tools

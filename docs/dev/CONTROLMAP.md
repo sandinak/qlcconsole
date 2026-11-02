@@ -164,3 +164,14 @@ field on `ControlMapEntry` in Phase 1 even if the layer is built last.
    avoid an XML migration later.
 2. **Storage owner** — `Doc` (recommended, VC-independent) vs `VCProperties`
    (where Grand Master's binding lives). Recommendation: `Doc`.
+
+## Encoder bank (0.4, enc)
+
+The Control Map also carries one Encoder bank scheme: `engine/src/encoderbank.*`
+(the controller side: relative decodings, banks, push, rings and lamps;
+saved as an `<EncoderBank>` child of `<ControlMap>`, which QLC+ 4 and older
+builds skip), `engine/src/encoderattributes.*` (what a slot is on a fixture
+selection) and the Workbench glue (`ui/src/workbenchencoders.cpp`,
+`ui/src/lookeditorencoders.cpp`). The input path allocates nothing per turn
+(`EncoderBank_Test::theInputPathDoesNotAllocate`). User help:
+docs/features/build.md, "Encoder banks".

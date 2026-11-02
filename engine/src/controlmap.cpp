@@ -30,6 +30,7 @@
 #include "showcontrol.h"
 #include "mastertimer.h"
 #include "controlmap.h"
+#include "encoderbank.h"
 #include "inputpatch.h"
 #include "qlcioplugin.h"
 #include "function.h"
@@ -64,6 +65,8 @@ ControlMap::ControlMap(Doc *doc)
     , m_doc(doc)
 {
     Q_ASSERT(doc != nullptr);
+    m_encoderBank = new EncoderBank(doc);
+    m_encoderBank->setParent(this);
     // A function deleted takes its binding with it.
     connect(m_doc, &Doc::functionRemoved, this, &ControlMap::slotFunctionRemoved);
 }
@@ -159,6 +162,7 @@ void ControlMap::removeAll()
 
 void ControlMap::reset()
 {
+    m_encoderBank->reset();
     const bool had = !m_bindings.isEmpty() || m_listening;
     m_bindings.clear();
     m_down.clear();
@@ -686,7 +690,7 @@ bool ControlMap::saveXML(QXmlStreamWriter *doc) const
 {
     if (doc == nullptr)
         return false;
-    if (m_bindings.isEmpty())
+    if (m_bindings.isEmpty() && m_encoderBank->device().encoders < 0)
         return true;    // a show with none saves as before
     doc->writeStartElement(KXMLQLCControlMap);
     for (const Binding &b : m_bindings)
@@ -700,6 +704,7 @@ bool ControlMap::saveXML(QXmlStreamWriter *doc) const
             doc->writeAttribute(KXMLMode, modeToString(b.mode));
         doc->writeEndElement();
     }
+    m_encoderBank->saveXML(doc);
     doc->writeEndElement();
     return true;
 }
@@ -714,8 +719,14 @@ bool ControlMap::loadXML(QXmlStreamReader &root)
     m_bindings.clear();
     m_down.clear();
     m_heldStarted.clear();
+    m_encoderBank->reset();
     while (root.readNextStartElement())
     {
+        if (root.name() == KXMLQLCEncoderBank)
+        {
+            m_encoderBank->loadXML(root);
+            continue;
+        }
         if (root.name() != KXMLTrigger)
         {
             root.skipCurrentElement();

@@ -79,6 +79,23 @@ public:
     /** The line as plain text (tests). */
     QString usedByText() const;
 
+    /** @name Encoder banks (EncoderBank: a MIDI controller's encoders)
+     *  A turn sets the control the shown look's own page has for the
+     *  attribute -- the same edit and the same undo step as a hand on it.
+     *  @a bank / @a slot are EncoderBank's: Intensity for a Dimmer look,
+     *  Colour (hue, saturation, R G B, W A UV) for a Colour look, Position
+     *  (pan, tilt) for a Pan / tilt look, Beam (zoom, focus, iris, frost)
+     *  and Gobo for the Beam, Zoom and Gobo looks. @{ */
+    /** Whether the look shown has that control. */
+    bool encoderHas(int bank, int slot) const;
+    /** Turn it by @a detents (signed); false: the look has no such control. */
+    bool encoderAdjust(int bank, int slot, int detents, bool fine);
+    /** Back to its default. */
+    bool encoderHome(int bank, int slot);
+    /** Where it is, 0-1 (a hue is its place round the wheel). */
+    bool encoderValue(int bank, int slot, float *norm) const;
+    /** @} */
+
     /** A back button at the head of the editor ("↩ Back"), for a host
      *  that opened it over something else: clicked, backRequested().
      *  Empty hides it. Esc is the host's (it reaches it: the colour
@@ -140,6 +157,9 @@ private slots:
     void slotFadeTimeChanged();
 
 private:
+    QSlider *encoderSlider(int bank, int slot) const;
+    void setPanTilt(int pan, int tilt);
+    void setColourHsv(float h, float s, float v);
     /** Whether any target fixture of the context scene has a channel in the
      *  given QLCChannel::Group. */
     bool targetsHaveChannelGroup(int group) const;

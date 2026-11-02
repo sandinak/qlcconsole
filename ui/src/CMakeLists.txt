@@ -167,7 +167,7 @@ add_library(${module_name}
     effectdesigner.cpp effectdesigner.h
     effectspage.cpp effectspage.h
     fadetimespin.cpp fadetimespin.h
-    lookeditor.cpp lookeditor.h
+    lookeditor.cpp lookeditor.h lookeditorencoders.cpp
     blindstyle.h
     mainbar.cpp mainbar.h
     moveinblackbutton.cpp moveinblackbutton.h
@@ -203,7 +203,7 @@ add_library(${module_name}
     programmingmanager.cpp programmingmanager.h
     programmingoutline.cpp programmingoutline.h
     splitterhandles.cpp splitterhandles.h
-    workbench.cpp workbench.h
+    workbench.cpp workbench.h workbenchencoders.cpp
     workbenchstack.cpp workbenchstack.h
     showtreeview.cpp showtreeview.h
     refinepanel.cpp refinepanel.h

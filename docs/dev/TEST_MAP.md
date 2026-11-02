@@ -1043,6 +1043,8 @@ to B9, are all fixed. Their tests no longer use QEXPECT_FAIL.
 | Shows timeline: ⌘T exact timing, scale cue timing, copy/paste, transport | EndHandle_Test (end handle only); ShowRunner_Test::stopRunner | none | none | med |
 | Shows timeline: end handle, markers, time division | EndHandle_Test (5); Show_Test::timeDivision, ::markers | partial | partial | low |
 | Control Map: learn, modes, feedback, cue list / cue / hit, save and load | ControlMap_Test (13, engine/test/controlmap); ControlMapUi_Test (7, ui/test/controlmapui) | none | covered | high |
+| Encoder banks: relative decoding, banks, push fine / home, rings and lamps, Operate refusal, save and load, no allocation per turn; channels of a fixture selection | EncoderBank_Test (30, engine/test/encoderbank) | none | covered | high |
+| Encoder banks in Build: a turn edits the selected fixture / group / look on the Look Editor's path, one undo step per gesture, rings follow, panel setup | EncoderBankUi_Test (16, ui/test/encoderbankui) | none | covered | high |
 | Command-line -o / -p / -k / -w; a bare file name is not opened | untestable without moving parseArgs() out of main.cpp | none | none (untestable) | high |
 
 ## Studio/Monitor
