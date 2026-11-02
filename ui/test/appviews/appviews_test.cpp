@@ -3306,6 +3306,15 @@ void AppViews_Test::newFromTemplateOpensTheClassroomStageUntitled()
     Doc *doc = m_app->doc();
     QCOMPARE(doc->fixtures().count(), 68);      // docs/course/rig.md
     QVERIFY(!doc->fixtureGroups().isEmpty());
+    // The stock colours include Flesh, #ffcdaa
+    QLCPalette *flesh = nullptr;
+    for (QLCPalette *p : doc->palettes())
+        if (p->type() == QLCPalette::Color && p->name() == QLatin1String("Flesh"))
+            flesh = p;
+    QVERIFY(flesh != nullptr);
+    QColor rgb, wauv;
+    QVERIFY(QLCPalette::stringToColor(flesh->value().toString(), rgb, wauv));
+    QCOMPARE(rgb, QColor(255, 205, 170));
     // Untitled and unchanged: Save asks where; nothing to save on close
     QVERIFY(m_app->fileName().isEmpty());
     QVERIFY(!doc->isModified());

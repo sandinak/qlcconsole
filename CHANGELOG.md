@@ -17,6 +17,14 @@ most of 0.5 ("The show explains itself"); there is no separate 0.3.1.
 A home for QLC+ 4 users: QLC+ 4's habits that qlcconsole had dropped are
 back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
 
+### Flesh as a stored colour
+
+- **Flesh is a stock colour.** A colour palette at Flesh (#ffcdaa, a warm
+  skin tone) is named "Flesh" by the palette naming table, the show-choir
+  stage from File > New from Template has a Flesh colour palette, and
+  `Towers colour flesh` works on the command line (it is found by name like
+  any palette). Existing palette names do not change.
+
 ### Run the show
 
 #### Show control
