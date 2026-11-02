@@ -283,6 +283,7 @@ Workbench::Workbench(Doc *doc, QWidget *parent)
     connect(m_fixtureConsole, SIGNAL(checked(quint32,quint32,bool)),
             this, SLOT(slotFixtureChecked(quint32,quint32,bool)));
 
+    connectEncoders();
     updateHeader();
     updateAddBar();
     showPage(EmptyPage);
@@ -434,6 +435,13 @@ void Workbench::buildHeader(QWidget *column)
     m_info->setWordWrap(true);
     m_info->setTextInteractionFlags(Qt::TextSelectableByMouse);
     m_headerLayout->addWidget(m_info);
+
+    // What the encoders turn (a MIDI controller's; hidden while it is off).
+    m_encoderLine = new QLabel(head);
+    m_encoderLine->setObjectName(QStringLiteral("workbenchEncoders"));
+    m_encoderLine->setWordWrap(true);
+    m_encoderLine->hide();
+    m_headerLayout->addWidget(m_encoderLine);
 
     // What is on the rig, with Stop / Play.
     QHBoxLayout *rigRow = new QHBoxLayout;
@@ -2269,6 +2277,7 @@ void Workbench::showEvent(QShowEvent *ev)
     QWidget::showEvent(ev);
     startPreview();
     startOperate();
+    scheduleEncoderRings();
 }
 
 void Workbench::holdForRun(QStringList *held)
@@ -2308,6 +2317,7 @@ void Workbench::hideEvent(QHideEvent *ev)
     // Leaving the tab (or the dock): nothing left playing from here.
     stopPreview();
     stopOperate();
+    scheduleEncoderRings();     // the controller's rings go dark
     QWidget::hideEvent(ev);
 }
 
@@ -2387,6 +2397,7 @@ void Workbench::showStackRow(const ProgrammingOutline::Row &row)
     loadCanvas(Function::invalidId());
     clearEditors();
     m_stack->setFocusLayer(layer);
+    m_stackLayer = layer;
 
     // The selected layer, highlighted on the 2D view; Flash / Park follow.
     const QList<quint32> fixtures = m_stack->layerFixtures(layer);

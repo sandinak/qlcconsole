@@ -25,6 +25,9 @@
 #include "qlcui_export.h"
 
 class QTableWidget;
+class QVBoxLayout;
+class QGroupBox;
+class QCheckBox;
 class QPushButton;
 class QLabel;
 class Doc;
@@ -51,6 +54,12 @@ public:
 
     QTableWidget *table() const { return m_table; }
 
+    /** The Encoder bank section (the scheme of a MIDI controller's
+     *  endless encoders; docs/features/encoder-banks.md): the device's
+     *  preset, its universe and relative encoding, learn the first
+     *  encoder, what it is mapped to. */
+    QGroupBox *encoderBox() const { return m_encoderBox; }
+
 public slots:
     void refresh();
 
@@ -64,6 +73,10 @@ private slots:
     void slotRemove();
     void slotRemoveAll();
     void slotFired(const QString &what);
+    void slotEncoderPreset(int index);
+    void slotEncoderEdited();
+    void slotEncoderLearn();
+    void slotEncoderHeard(quint32 universe, quint32 channel);
 
 private:
     Doc *m_doc;
@@ -72,6 +85,20 @@ private:
     QPushButton *m_removeAll;
     QLabel *m_empty;
     QLabel *m_last;
+
+    void buildEncoderBox(QVBoxLayout *lay);
+    void refreshEncoder();
+
+    QGroupBox *m_encoderBox = nullptr;
+    QComboBox *m_encPreset = nullptr;
+    QComboBox *m_encUniverse = nullptr;
+    QComboBox *m_encEncoding = nullptr;
+    QCheckBox *m_encInvert = nullptr;
+    QPushButton *m_encLearn = nullptr;
+    QLabel *m_encNote = nullptr;
+    QLabel *m_encMap = nullptr;
+    bool m_encLearning = false;
+    bool m_encShowing = false;
 };
 
 /** @} */

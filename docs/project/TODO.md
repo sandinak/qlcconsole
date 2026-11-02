@@ -31,6 +31,32 @@ real controller (needs the rig and a pad; it is a demo in 3.8's teacher
 guide); a short lesson on Running order for a show whose songs change
 night to night (an extension in 3.8); the preshow as section 0 of the
 show (3.8 Part 3). No pictures yet for 3.5, 3.8, 3.9.
+## Encoder banks — built, leftovers (0.4, enc, 2026-11-01)
+
+Built: `EncoderBank` (engine/src/encoderbank.*, owned by the Control Map and
+saved in its element), `EncoderAttributes` (what a slot is on a fixture
+selection), the Look Editor's `encoderAdjust/Home/Value` (lookeditorencoders.cpp),
+the Workbench glue (workbenchencoders.cpp, the line under the title) and the
+Control Map panel's Encoder bank section. Each "decided (can change)":
+presets are three generic encodings plus the X-Touch Mini (standard mode,
+layer A, Relative 1), the Midi Fighter Twister (3FH/41H, Omni patch) and the
+APC40 knobs (absolute, read as a change); the numbers are the makers'
+documented layouts and none was checked on a unit here; push held = fine,
+tap = home; in Operate the encoders refuse (banks still step); a channel a
+look of the scene drives is left alone and the line says so; the Workbench
+must be showing. Open:
+- Check the three presets on the real controllers (CC/note numbers, ring
+  and lamp lines, relative mode names), and add the ones Branson owns.
+- Direct bank buttons and lamps are in the model but only the X-Touch Mini
+  preset uses them; a "Learn" for the bank button and for the pushes/rings.
+- Colour: hue / saturation are for RGB and CMY heads only (not a colour
+  wheel); Position steps whole degrees in a Pan / tilt look (the palette
+  stores integers); no encoder for Shutter / Strobe looks, Aim looks,
+  effects' parameters, nor for a Show Tree cue layer's attribute rows (the
+  Look Editor panes there are the way).
+- RGB-only fixtures (no dimmer) take Intensity as the strongest colour.
+- Hue wraps; everything else clamps. No acceleration beyond the speed the
+  controller sends (a fast spin is several detents in one message).
 
 ## Formation palettes — built, leftovers (0.4, form, Q197, 2026-11-01)
 

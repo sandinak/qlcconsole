@@ -944,6 +944,69 @@ for Aim looks specifically — the outline marks with ⚠ (hover for which)
 the fixtures that physically **can't reach** the point they're aimed at (see
 [Stage Targets](stage-targets.md#reachability)).
 
+## Encoder banks (a MIDI controller turns the selection)
+
+A MIDI controller with **endless encoders** (a Behringer X-Touch Mini, a
+Midi Fighter Twister, the knobs of an APC40) can turn what Build has
+selected, so the hands stay on the knobs and the eyes on the stage. One row
+of eight encoders reaches five **banks** of attributes:
+
+| Bank | Encoders |
+|---|---|
+| Intensity | Intensity |
+| Colour | Hue, Saturation, Red, Green, Blue, White, Amber, UV |
+| Position | Pan, Tilt |
+| Beam | Zoom, Focus, Iris, Frost |
+| Gobo / prism | Gobo, Gobo rotation, Prism, Prism rotation |
+
+- **Set it up** in **Connections ▸ Devices ▸ Show control & sync ▸ Control
+  Map ▸ Encoder bank**: pick the controller (or a generic one by how it
+  counts: two's complement, binary offset, sign-magnitude), its input
+  universe, and **Learn encoder 1…** for a controller that is not listed.
+  If a knob runs backwards or jumps, change **Encoders** (the way it says
+  which way it turned) or tick **Reverse**. The setting is saved with the
+  show, in the Control Map.
+- **A button steps the banks** (or one button a bank, where the controller
+  has them); the controller's lamps show the bank. The line under the
+  Workbench's title says which bank, which encoders have something to turn
+  and what the last turn did.
+- **Push** an encoder and turn it for a **fine** step; a **tap** on its
+  push sends the attribute **home** (intensity and colours to 0, pan and
+  tilt to the middle, the rest to the channel's default; hue to red,
+  saturation to full).
+- **The ring shows the value** of the encoder's attribute on the selection
+  (and follows undo and a new selection), on controllers with a ring or LED
+  feedback line patched.
+- **It turns what you picked.** A look open in the Look Editor: the turn
+  sets the control the look's own page has (a Dimmer look's bar, a Colour
+  look's sliders, a Pan / tilt look's position, a Beam or Gobo look's
+  sliders), exactly as a hand on it. Fixtures or a group picked under a
+  scene, or a layer of a cue in the Show Tree's Workbench: the turn moves
+  the **channels of every selected fixture** from where each one is, in the
+  scene (a fixture without that attribute is left alone).
+- **Undo is one step per gesture.** Turns of one encoder within a moment of
+  each other are one step on the shared history; another encoder is another
+  step. Undo and Redo work from either tab.
+- **If a look drives the channel** (the scene has a Dimmer look, say), a
+  turn of the raw channel would show nothing: it is left alone and the line
+  says so. Edit the look.
+- **In Operate the encoders do not edit.** The show is running and a look
+  about to be GOne is no place for a knob that was brushed; the line says
+  "Encoders are off in Operate" and the banks still step. Switch to Design
+  to edit. *(Decided, can change: Refine's quiet rule is for the one cue
+  that runs, and an encoder has no cue to hold to.)*
+- **Only while the Workbench is showing.** A hidden Build tab (or a Show
+  Tree with the Workbench not docked) leaves the encoders alone and their
+  rings dark.
+
+The presets are the makers' factory layouts as documented, a starting
+point to check on the unit (*decided, can change*): the X-Touch Mini in
+standard mode, layer A, with its encoders set to **Relative 1** in the
+X-Touch Editor; the Midi Fighter Twister in its 3FH/41H mode (its pushes and
+side buttons are on MIDI channels 2 and 4, so patch the input in Omni
+mode); the APC40's Device Control knobs, which send their position, so they
+stop at the ends of their travel.
+
 ## Design vs. Operate mode
 
 It follows the app's global Design/Operate mode:

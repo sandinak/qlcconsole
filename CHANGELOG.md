@@ -40,6 +40,20 @@ back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
   `Towers colour flesh` works on the command line (it is found by name like
   any palette). Existing palette names do not change.
 
+### Encoder banks
+
+- **A MIDI controller's endless encoders turn the selection in Build.**
+  An X-Touch Mini, a Midi Fighter Twister or an APC40's knobs (or a generic
+  two's complement, binary offset or sign-magnitude controller) reach five
+  banks of attributes (Intensity, Colour, Position, Beam, Gobo / prism); a
+  button steps the banks, a push is fine and a tap is home, and the rings and
+  bank lamps are lit back. A turn edits what Build has selected on the Look
+  Editor's own path (a look's controls, or the channels of the selected
+  fixtures, groups or a Show Tree layer's scene), one undo step per gesture.
+  Set up under Connections ▸ Devices ▸ Show control & sync ▸ Control Map ▸
+  Encoder bank; saved in the Control Map. In Operate the encoders do not
+  edit. A Pan / tilt or Beam look's controls now also take undo.
+
 ### Run the show
 
 #### No-light zones and laser windows

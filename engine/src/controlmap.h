@@ -31,6 +31,7 @@
 
 class QXmlStreamReader;
 class QXmlStreamWriter;
+class EncoderBank;
 class Doc;
 
 /** @addtogroup engine Engine
@@ -108,6 +109,11 @@ public:
     static Target cueList(quint32 id) { return Target{ CueListTarget, id }; }
     static Target cue(quint32 id) { return Target{ CueTarget, id }; }
     static Target hit(quint32 id) { return Target{ HitTarget, id }; }
+
+    /** The Encoder bank scheme: a MIDI controller's endless encoders
+     *  driving the selection in Build (docs/features/encoder-banks.md).
+     *  Saved with this map; off until a device is set up. */
+    EncoderBank *encoderBank() const { return m_encoderBank; }
 
     /*********************************************************************
      * Bindings
@@ -228,6 +234,7 @@ private:
 
 private:
     Doc *m_doc;
+    EncoderBank *m_encoderBank = nullptr;
     QList<Binding> m_bindings;
     /** control -> index in m_bindings */
     QHash<quint64, int> m_byControl;

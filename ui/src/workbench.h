@@ -442,6 +442,45 @@ private:
     quint32 m_benchFromScene = 0xFFFFFFFF;
     /** Host the factory's @a pane under @a heading. */
     void hostEffectPane(QWidget *pane, const QString &heading, bool bench);
+    /************************************************************************
+     * Encoder banks: a MIDI controller's encoders turn the selection
+     * (EncoderBank, docs/features/encoder-banks.md)
+     ************************************************************************/
+public:
+    /** What the encoders turn now: a look in the Look Editor, or the
+     *  channels of the selected fixtures in a scene (the scene of the page,
+     *  or of the Show Tree layer picked). Both empty: nothing selected. */
+    struct EncoderTarget
+    {
+        LookEditor *look = nullptr;
+        Scene *scene = nullptr;
+        QList<quint32> fixtures;
+        bool isValid() const { return look != nullptr || (scene != nullptr && !fixtures.isEmpty()); }
+    };
+    EncoderTarget encoderTarget() const;
+    /** The line under the title that says what the encoders turn / why not
+     *  (empty and hidden while the Encoder bank is off). */
+    QString encoderLine() const;
+
+private:
+    void connectEncoders();
+    void encoderAdjusted(int bank, int slot, int detents, bool fine);
+    void encoderHomed(int bank, int slot);
+    void encoderMessage(const QString &text);
+    /** The rings and the line, as they are now (queued: one per event loop turn). */
+    void scheduleEncoderRings();
+    void refreshEncoderRings();
+    /** One undo step for the scene's raw edit; @a before is the scene as it was. */
+    void afterEncoderEdit(const EncoderTarget &target, const QString &what,
+                          const QSharedPointer<Scene> &before, int bank, int slot, bool home = false);
+    void recordEncoderStep(Scene *scene, const QSharedPointer<Scene> &before, const QString &what, int bank,
+                           int slot, bool home = false);
+
+    QLabel *m_encoderLine = nullptr;
+    QString m_encoderMessage;
+    bool m_encoderRingsQueued = false;
+    int m_stackLayer = -1;      //!< the layer showStackRow() last showed
+
     QToolButton *m_sendToTreeBtn = nullptr;
     /** The header's Focus ▾ (board Q149). */
     QToolButton *m_refineBtn = nullptr;
