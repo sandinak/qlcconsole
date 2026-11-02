@@ -1,0 +1,3 @@
+date,sha,text,charts
+2026-10-31T18:54Z,869649d1349b,"Oct 31: effect fade adds FadeChannel floats, 96 to 104 bytes",a1p-rss-per-universe
+2026-11-01T05:25Z,aaf65a9e4a33,"Nov 1: floats moved into padding, back to 96 bytes",a1p-rss-per-universe

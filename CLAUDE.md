@@ -229,6 +229,9 @@ on a busy machine were noise). A regression it finds is bisected across
 that release's merges and fixed before the release. Per change, the gate's
 `hotpath_test` still runs; a change that should make a hot path faster may
 show its own numbers, but none are required.
+Every guard run also adds rows to `docs/perf-data/history.csv` (kind perf / record /
+nightly; `make perf-history-commit` commits it, never pushes) and
+`plot.py trends` charts it: [Performance over time](docs/performance.md#performance-over-time).
 A measurable slowdown is a bug. A baseline is rebased only on purpose
 (`make perf-record`), with the reason in the commit.
 

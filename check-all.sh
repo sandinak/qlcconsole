@@ -266,6 +266,16 @@ if ! PERF_OUT=$(python3 "$REPO/tools/perf/guard.py" --self-test 2>&1); then
     exit 1
 fi
 
+# The performance history (tools/perf/history.py: the append and the long
+# format round trip) and the trend charts (plot.py trends on a fixture): no
+# build, under a second.
+if ! HIST_OUT=$(python3 "$REPO/tools/perf/history.py" --self-test 2>&1 && python3 -I "$REPO/tools/perf/plot.py" --self-test 2>&1); then
+    echo >&2 "$HIST_OUT"
+    { echo "gate=1 host=$GATE_HOST qt=$QT_VERSION rev=$GATE_REV"
+      echo "tools/perf/history.py or plot.py --self-test failed. Nothing built or tested."; } | tee "$LOGS/summary.txt"
+    exit 1
+fi
+
 # The gate pool's per-host lock (platforms/macos/gate-lock.sh): its
 # self-test, on a scratch ~/gates -- under a second.
 if ! LOCK_OUT=$("$REPO/platforms/macos/gate-lock.sh" --self-test 2>&1); then

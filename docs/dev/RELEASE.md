@@ -141,6 +141,10 @@ Steps:
    idle machine. `make beta` / `make release` refuse to publish without
    `perf=0` for HEAD in `build-perf/guard-result.txt` (`PERF_WAIVE="reason"`
    publishes anyway; say why in the notes). A regression is a release bug.
+   Then `make perf-history-commit` (merges the nightly's rows into
+   `docs/perf-data/history.csv` and commits that file; it never pushes) and
+   `python3 -I tools/perf/plot.py trends` for the charts
+   ([docs/performance.md](../performance.md#performance-over-time)).
    If the release moves the envelope (a faster engine, or a slowdown taken
    on purpose), rerun the sweeps and update
    [docs/performance.md](../performance.md#keeping-it-fast) as it says.
