@@ -9,8 +9,6 @@
 #include <QToolBar>
 #include <QAction>
 #include <QMessageBox>
-#include <QFileDialog>
-#include <QFile>
 #include <QInputDialog>
 #include <QToolButton>
 #include <QMenu>
@@ -29,8 +27,6 @@
 #include "showfunction.h"
 #include "track.h"
 #include "show.h"
-#include "markerimport.h"
-#include "timecodesource.h"
 
 #include "collection.h"
 #include "rgbmatrix.h"
@@ -146,8 +142,6 @@ ShowTimelineEditor::ShowTimelineEditor(QWidget *parent, Show *show, Doc *doc)
     // Markers
     connect(m_showview, SIGNAL(markerAddRequested(quint32)),
             this, SLOT(slotMarkerAddRequested(quint32)));
-    connect(m_showview, SIGNAL(markersImportRequested()),
-            this, SLOT(slotMarkersImportRequested()));
     connect(m_showview, SIGNAL(markerEditRequested(quint32)),
             this, SLOT(slotMarkerEditRequested(quint32)));
     connect(m_showview, SIGNAL(markerColorRequested(quint32)),
@@ -617,26 +611,6 @@ void ShowTimelineEditor::slotMarkerColorRequested(quint32 time)
     m_show->setMarker(time, m.end, m.label, c);
     m_showview->setMarkers(m_show->markers());
     m_doc->setModified();
-}
-
-void ShowTimelineEditor::slotMarkersImportRequested()
-{
-    if (m_show == NULL)
-        return;
-    const QString fn = QFileDialog::getOpenFileName(this, tr("Import markers"), QString(),
-                        tr("Marker lists (*.csv *.txt *.tsv);;All files (*)"));
-    if (fn.isEmpty())
-        return;
-    QFile f(fn);
-    if (f.open(QIODevice::ReadOnly | QIODevice::Text) == false)
-        return;
-    const MarkerImport::Result r = MarkerImport::parse(QString::fromUtf8(f.readAll()),
-                                                       m_doc->timecodeSource()->fps());
-    if (MarkerImport::apply(m_show, r) > 0)
-    {
-        m_showview->setMarkers(m_show->markers());
-        m_doc->setModified();
-    }
 }
 
 void ShowTimelineEditor::slotMarkerDeleteRequested(quint32 time)

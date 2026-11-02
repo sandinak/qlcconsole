@@ -38,9 +38,6 @@ private slots:
     /** Undo of one edit leaves every track as it was set: hold last look,
      *  solo-safe, priority, intensity and a locked item survive the rebuild. */
     void undoKeepsEveryTracksSettings();
-    /** Markers from a DAW list: parsed, saved and loaded, undone in one step */
-    void importedMarkersSaveLoadAndUndo();
-    void markerListFormats();
     void aCueSnapsToAMarker();
     /** The timeline paints with an audio clip whose file is missing */
     void drawsWithoutTheAudioFile();

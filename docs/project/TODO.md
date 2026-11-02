@@ -484,10 +484,7 @@ added the cached background waveform, the DAW marker import and the marker snap.
   in its markers lane; the Show Tree's cue list has no linked audio track and no
   time view, so no waveform there.
 - decided (can change): peaks are cached in the user cache, not beside the show.
-- decided (can change): CSV / tab text only; MIDI marker files and bar-based
-  positions are not read (a Logic list needs its SMPTE column).
-- Open: snap a cue's time to a beat (BPM ruler), snap while resizing, and Q198
-  (re-timing cues to a re-cut song) which waits on its answer.
+- Marker import and section anchors moved to the Q198 timing model (q198); snap to a beat and snap while resizing are open.
 
 ## Lighting Studio alignment — leftovers (0.3.1 d2, 2026-10-29)
 

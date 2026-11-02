@@ -30,7 +30,6 @@
 #include "show.h"
 #include "doc.h"
 #include "audio.h"
-#include "markerimport.h"
 #include <QBuffer>
 #include <QXmlStreamWriter>
 #include <QXmlStreamReader>
@@ -107,73 +106,6 @@ void ShowManager_Test::undoPutsAMarkerBack()
     QCOMPARE(m_show->markers().value(1000).label, QStringLiteral("Verse"));
     QCOMPARE(m_show->markers().value(1000).end, quint32(3000));
     QCOMPARE(m_show->markerCueList(1000), m_sceneB);
-}
-
-void ShowManager_Test::importedMarkersSaveLoadAndUndo()
-{
-    m_show->setMarker(500, 900, "Intro", QColor("#4a90d9"));
-    const QString list = "Name,Start\nVerse 1,00:00:10.000\n\"Chorus, big\",00:00:40.500\nBridge,00:01:10.000\n";
-    QCOMPARE(m_manager->importMarkers(list), 3);
-
-    QMap<quint32, ShowMarker> mk = m_show->markers();
-    QCOMPARE(mk.count(), 4);
-    QCOMPARE(mk.value(10000).label, QStringLiteral("Verse 1"));
-    QCOMPARE(mk.value(10000).end, quint32(40500));          // runs to the next section
-    QCOMPARE(mk.value(40500).label, QStringLiteral("Chorus, big"));
-    QCOMPARE(mk.value(70000).end, quint32(85000));          // the last gets 15 s
-    QVERIFY(m_doc->isModified());
-
-    // saved in the show and loaded back
-    QBuffer buf;
-    buf.open(QIODevice::WriteOnly | QIODevice::Text);
-    QXmlStreamWriter w(&buf);
-    QVERIFY(m_show->saveXML(&w));
-    w.setDevice(nullptr);
-    buf.close();
-    buf.open(QIODevice::ReadOnly | QIODevice::Text);
-    QXmlStreamReader r(&buf);
-    r.readNextStartElement();
-    Show loaded(m_doc);
-    QVERIFY(loaded.loadXML(r));
-    QCOMPARE(loaded.markers().count(), 4);
-    QCOMPARE(loaded.markers().value(40500).label, QStringLiteral("Chorus, big"));
-    QCOMPARE(loaded.markers().value(40500).end, quint32(70000));
-
-    // one Undo takes all three back
-    m_manager->slotUndo();
-    mk = m_show->markers();
-    QCOMPARE(mk.count(), 1);
-    QCOMPARE(mk.value(500).label, QStringLiteral("Intro"));
-
-    // nothing to import: no marker, no undo step
-    QVERIFY(!m_manager->m_undoAction->isEnabled());
-    QCOMPARE(m_manager->importMarkers("Marker,Position\nnothing here\n"), 0);
-    QVERIFY(!m_manager->m_undoAction->isEnabled());
-}
-
-void ShowManager_Test::markerListFormats()
-{
-    // Logic's list: tab separated, SMPTE with sub-frames, starts at 01:00:00:00
-    MarkerImport::Result r = MarkerImport::parse(
-        "Position\tName\tLength\n"
-        "01:00:10:12.00\tVerse\t00:00:30:00.00\n"
-        "01:00:42:00.00\tChorus\t00:00:20:00.00\n"
-        "17 1 1 1\tBars only\t4 0 0 0\n", 25.0);
-    QCOMPARE(r.markers.size(), 2);
-    QCOMPARE(r.skipped, 2);                                 // the header and the bars line
-    QCOMPARE(r.offsetMs, quint32(3600000));
-    QCOMPARE(r.markers.at(0).start, quint32(10480));        // 10 s + 12 frames at 25 fps
-    QCOMPARE(r.markers.at(1).label, QStringLiteral("Chorus"));
-    QCOMPARE(r.markers.at(1).start, quint32(42000));
-
-    // plain seconds, minutes:seconds, any order, unsorted
-    r = MarkerImport::parse("2:05,Late\nEarly,1.5\n", 30.0);
-    QCOMPARE(r.markers.size(), 2);
-    QCOMPARE(r.markers.at(0).label, QStringLiteral("Early"));
-    QCOMPARE(r.markers.at(0).start, quint32(1500));
-    QCOMPARE(r.markers.at(1).start, quint32(125000));
-    QCOMPARE(r.offsetMs, quint32(0));
-    QCOMPARE(MarkerImport::parseTime("12", 25.0), qint64(-1));  // a bare number is not a time
 }
 
 void ShowManager_Test::aCueSnapsToAMarker()

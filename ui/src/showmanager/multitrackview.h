@@ -218,7 +218,8 @@ public:
 
     /** @p timeMs moved onto the closest section marker edge within a small
      *  pixel zone (about 8 px at the current zoom), else unchanged. Doesn't
-     *  depend on the Snap-to-grid toggle. @p snapped tells whether it moved. */
+     *  depend on the Snap-to-grid toggle. The one place that reads section starts for
+     *  snapping; section anchors (Q198) can replace it. @p snapped tells whether it moved. */
     quint32 snapToMarker(quint32 timeMs, bool *snapped = NULL) const;
 
     /** The show length (ms) an end-handle drag to @p scenePos maps to — absolute
@@ -365,8 +366,6 @@ signals:
     void markerAddRequested(quint32 time);
     void markerEditRequested(quint32 time);
     void markerDeleteRequested(quint32 time);
-    /** "Import markers from a file…" on the marker lane */
-    void markersImportRequested();
     void markerColorRequested(quint32 time);
     void markerSetCueListRequested(quint32 time);
     /** Inline rename committed: set the marker's label. */

@@ -450,7 +450,7 @@ Notes:
 | Stage and inventory across show files | 3 | 4 | inventory, structures | 5 | M | M | 1.9 | LATER |
 | RDM find-and-address in the Patch dialog | 4 | 5 | RDM manager, Patch dialog | 6 | H | H | 2 | LATER (needs the rig) |
 | Signalling: stand-by/go cue lights, curtain | 3 | 4 | curtain fixture, cues | 6 | M | M | 1.6 | LATER |
-| Timeline waveform + markers | 3 | 3 | Shows timeline | 4 | L | M | 2.3 | BUILT (0.4, tlw, 2026-11-01): cached background waveform on the Shows timeline, marker import (Logic / CSV), snap to a marker; Q198 re-timing not built |
+| Timeline waveform + markers | 3 | 3 | Shows timeline | 4 | L | M | 2.3 | BUILT (0.4, tlw, 2026-11-01): cached background waveform on the Shows timeline, snap to a marker; marker import and re-timing are Q198 (q198 agent) |
 | Stream Deck / Companion module | 3 | 3 | OSC in | 4 | L | M | 2.3 | LATER |
 | People on stage as a layer (whole choir) | 2 | 4 | Person target | 4 | L | M | 2 | LATER |
 | App-wide UI zoom (⌘+ / ⌘-), useful on a classroom projector | 3 | 3 | none | 5 | M | M | 1.4 | LATER |

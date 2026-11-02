@@ -80,7 +80,7 @@ back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
   shows the next timecode cue and a countdown. Saved with the show; a show
   with no times plays as before.
 
-#### Timeline waveform and markers
+#### Timeline waveform
 
 - **The song on the Shows timeline.** An audio clip now draws its waveform
   by itself (it used to need a right-click and was drawn again at every
@@ -89,10 +89,8 @@ back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
   decoders, kept in the user cache by the file's path, size and date, and
   redrawn at any zoom from a 10 ms envelope, so a 5-minute song stays smooth.
   Right-click the clip for left / right / both channels or to hide it.
-- **Import markers from a DAW.** The markers lane's menu reads a Logic Marker
-  List or a Reaper / Audition / Pro Tools marker CSV (a time and a name per
-  line) as sections, in one undo step. With Snap to grid on, a dropped item
-  also snaps to a section's start or end.
+- **Snap to a section.** With Snap to grid on, a dropped item also snaps to
+  a section marker's start or end.
 
 #### Scoped hits
 

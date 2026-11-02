@@ -1207,7 +1207,6 @@ void MultiTrackView::contextMenuEvent(QContextMenuEvent *event)
         quint32 hit = markerAt(scenePos.x());
         QMenu mmenu;
         QAction *addAct = mmenu.addAction(tr("Add marker here…"));
-        QAction *impAct = mmenu.addAction(tr("Import markers from a file…"));
         QAction *renAct = NULL;
         QAction *colAct = NULL;
         QAction *cueAct = NULL;
@@ -1223,8 +1222,6 @@ void MultiTrackView::contextMenuEvent(QContextMenuEvent *event)
         QAction *chosen = mmenu.exec(event->globalPos());
         if (chosen == addAct)
             emit markerAddRequested(startTime);
-        else if (chosen != NULL && chosen == impAct)
-            emit markersImportRequested();
         else if (chosen != NULL && chosen == renAct)
             emit markerEditRequested(hit);
         else if (chosen != NULL && chosen == colAct)
