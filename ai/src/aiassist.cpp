@@ -306,7 +306,17 @@ QString AiAssist::systemPrompt(const ShowTreeCommand::Context &selection) const
     return s + QStringLiteral("\n\nThe show now:") + context;
 }
 
-bool AiAssist::ask(const QString &question, const ShowTreeCommand::Context &selection, QString *error)
+QString AiAssist::syntaxReference()
+{
+    QString s = ShowTreeCommand::grammar();
+    s += QLatin1Char('\n');
+    for (const ShowTreeCommand::Word &w : ShowTreeCommand::words())
+        s += QStringLiteral("\n%1: %2").arg(w.word, w.syntax.isEmpty() ? w.word : w.syntax);
+    return s;
+}
+
+bool AiAssist::ask(const QString &question, const ShowTreeCommand::Context &selection, QString *error,
+                   const QString &parserError)
 {
     auto refuse = [error](const QString &why) {
         if (error != nullptr)
@@ -333,6 +343,18 @@ bool AiAssist::ask(const QString &question, const ShowTreeCommand::Context &sele
     m_provider = AiProvider::create(m_settings, key);
     m_selection = selection;
     m_system = systemPrompt(selection);
+    if (!parserError.isEmpty())
+    {
+        // The one command line: the operator typed this where a command goes
+        // and it didn't parse. A corrected command is a change tool call
+        // (a proposal they see and apply); a question is answered in words.
+        m_system += tr("\n\nThe operator typed the next message into the command line as a command, and "
+                       "the command line refused it: \"%1\". If they meant a command, propose the "
+                       "corrected command with the change tools (or call a read-only tool): the "
+                       "operator sees the real syntax and applies it. If it is a plain question or a "
+                       "request, answer it. Never run anything. The command line's syntax:\n%2")
+                        .arg(parserError, syntaxReference());
+    }
     m_messages.clear();
     AiMessage q;
     q.text = question.trimmed();

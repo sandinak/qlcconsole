@@ -139,6 +139,7 @@ private slots:
 
     // Skipped cues (2026-10-21)
     void skipCuesInTheTree();
+    void subCuesAndInlineCuesFromTheMenu();
     void listModeIsAFlag();
     void releaseAFunctionLayer();
     void cueModeFromTheMenus();
@@ -171,6 +172,7 @@ private slots:
      *  button, remembered. */
     void commandSyntaxFoldsAwayAndIsRemembered();
     void commandLineAsksTheRegistry();
+    void oneCommandLineSpellChecksAndHintsAtAi();
     /** Q61: Level… / Colour… open docked in the window, not in a separate
      *  window that can fall behind it: Return / Apply applies, Esc / Cancel
      *  just closes, one at a time. */

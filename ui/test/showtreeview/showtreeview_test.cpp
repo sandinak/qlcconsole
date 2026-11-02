@@ -4810,7 +4810,6 @@ void ShowTreeView_Test::palettesInTheLibrary()
     QVERIFY(view.libraryPaletteRows().contains("Colour"));
     // One-off values never show in All (D21) and aren't managed here.
     const quint32 inl = st->createInlinePalette(QLCPalette::Dimmer, { 10 }, "4% · 1 Towers");
-    view.reload();
     for (const QString &row : view.libraryPaletteRows())
         QVERIFY(!row.contains("4% · 1 Towers"));
     QVERIFY(!m_doc->paletteOps()->isManaged(inl));
@@ -5918,6 +5917,69 @@ static QString contextAction(ShowTreeView &view, QTreeWidgetItem *row, const QSt
     QTreeWidget *tree = view.tree();
     QMetaObject::invokeMethod(&view, "slotTreeContextMenu", Q_ARG(QPoint, tree->visualItemRect(row).center()));
     return seen;
+}
+
+/* 0.4: "need a function to convert subcues to inline cues ... and vice
+   versa". A cue's right-click ▸ Make Sub-cue of <the cue before>, a sub-cue's
+   ▸ Make Inline Cue; one undo step each, said in the hint line, greyed in
+   Operate. */
+void ShowTreeView_Test::subCuesAndInlineCuesFromTheMenu()
+{
+    FixtureGroup *towers = group("Towers", 0, 2);
+    const quint32 half = dimmer(127, "Half");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L", ListMode::Tracking);
+    QList<quint32> c;
+    for (int i = 0; i < 3; ++i)
+        c << st->addCue(list, i - 1, QString("C%1").arg(i + 1));
+    st->setLayerLook(c[1], st->addLayer(c[1], groupTarget(towers->id())), st->lookForPalette(half));
+    st->clearUndo();
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1280, 600);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QTreeWidget *tree = view.tree();
+    QLabel *hint = view.findChild<QLabel *>("stDropHint");
+    QVERIFY(hint != nullptr);
+    tree->expandAll();
+
+    // The first cue has no cue before it: nothing offered.
+    QVERIFY(view.selectNode(c[0]));
+    QCOMPARE(contextAction(view, cueRow(tree, c[0]), "stMakeSubCueMenu"), QString());
+
+    // Greyed in Operate.
+    m_doc->setMode(Doc::Operate);
+    bool enabled = true;
+    QVERIFY(view.selectNode(c[1]));
+    QCOMPARE(contextAction(view, cueRow(tree, c[1]), "stMakeSubCueMenu", nullptr, &enabled),
+             QString("Make Sub-cue of 1"));
+    QVERIFY(!enabled);
+    QVERIFY(!st->isSubCue(c[1]));
+    m_doc->setMode(Doc::Design);
+
+    tree->expandAll();
+    QVERIFY(view.selectNode(c[1]));
+    QCOMPARE(contextAction(view, cueRow(tree, c[1]), "stMakeSubCueMenu"), QString("Make Sub-cue of 1"));
+    quint32 parent = invalidId();
+    QVERIFY(st->isSubCue(c[1], &parent));
+    QCOMPARE(parent, c[0]);
+    QCOMPARE(st->undoText(), QString("Make sub-cue"));
+    QVERIFY2(hint->text().contains("is a sub-cue of 1"), qPrintable(hint->text()));
+
+    tree->expandAll();
+    QTreeWidgetItem *row = cueRow(tree, c[1]);
+    QVERIFY(row != nullptr);
+    QVERIFY(view.selectNode(c[1]));
+    QCOMPARE(contextAction(view, row, "stMakeInlineCueMenu"), QString("Make Inline Cue"));
+    QVERIFY(!st->isSubCue(c[1]));
+    QCOMPARE(st->undoText(), QString("Make inline cue"));
+    QCOMPARE(st->cueList(list)->cues.count(), 3);
+    QVERIFY2(hint->text().contains("is a cue now"), qPrintable(hint->text()));
+    QVERIFY(st->undo());
+    QVERIFY(st->isSubCue(c[1]));
+    QVERIFY(st->undo());
+    QVERIFY(!st->isSubCue(c[1]));
 }
 
 /* Branson: "in the show-tree we need a way to disable cues inline and skip
@@ -8015,9 +8077,62 @@ void ShowTreeView_Test::commandLineAsksTheRegistry()
     QVERIFY(view.runCommand("help"));
     QVERIFY(view.helpOutput().contains("Questions"));
     QVERIFY(view.runCommand("? spread"));                 // still the grammar's help
-    QToolButton *ai = view.findChild<QToolButton *>("stAiButton");
-    if (ai != nullptr)
-        QVERIFY(!ai->isVisible());                         // AI Assist off: no chrome
+    QVERIFY(view.findChild<QToolButton *>("stAiButton") == nullptr);   // one line: no button
+    QVERIFY(!view.commandLine()->placeholderText().contains("AI Assist"));   // off: no chrome
+}
+
+/* One command line (AI_ASSIST.md section 7): a command runs as typed; a typo
+   puts the corrected command in the line (nothing runs; Enter runs it, Esc
+   puts back what was typed); plain words with AI Assist off say where to
+   turn it on, and in Operate say nothing and ask no one. */
+void ShowTreeView_Test::oneCommandLineSpellChecksAndHintsAtAi()
+{
+    QSettings().setValue(QStringLiteral("ai/enabled"), false);
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1200, 800);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QLineEdit *line = view.commandLine();
+    QVERIFY(line != nullptr);
+
+    // It parses: runs, exactly as before.
+    QVERIFY(view.runCommand("help"));
+    QVERIFY(view.isHelpShown());
+
+    // A typo: the corrected line is put in the line, and nothing ran.
+    line->setText("hlep");
+    QVERIFY(!view.runCommand("hlep"));
+    QCOMPARE(line->text(), QStringLiteral("help"));
+    QVERIFY2(view.commandMessage().contains("Did you mean"), qPrintable(view.commandMessage()));
+    QVERIFY(view.commandMessage().contains("help"));
+    // Esc puts back what was typed.
+    line->setFocus();
+    QTest::keyClick(line, Qt::Key_Escape);
+    QCOMPARE(line->text(), QStringLiteral("hlep"));
+    QVERIFY(view.commandMessage().isEmpty());
+    // Enter on the suggestion runs it.
+    QVERIFY(!view.runCommand("hlep"));
+    QCOMPARE(line->text(), QStringLiteral("help"));
+    QTest::keyClick(line, Qt::Key_Return);
+    QVERIFY(line->text().isEmpty());
+    QVERIFY(view.isHelpShown());
+
+    // Plain words, AI Assist off in Settings: the way to turn it on.
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L", ListMode::NonTracking);
+    QVERIFY(view.selectNode(st->addCue(list, -1, "One")));
+    QVERIFY(!view.runCommand("please make everything blue"));
+    QVERIFY2(view.commandMessage().contains("Settings ▸ AI Assist"), qPrintable(view.commandMessage()));
+    // One word of nonsense: just the parser's answer.
+    QVERIFY(!view.runCommand("xyzzy"));
+    QVERIFY(!view.commandMessage().contains("Settings"));
+    // Operate: the hint (a Design thing) stays out, and nothing is asked.
+    m_doc->setMode(Doc::Operate);
+    QVERIFY(!view.runCommand("please make everything blue"));
+    QVERIFY(!view.commandMessage().contains("Settings ▸ AI Assist"));
+    QVERIFY(!view.commandMessage().contains("Asking"));
+    m_doc->setMode(Doc::Design);
+    QVERIFY(!view.commandLine()->placeholderText().contains("AI Assist"));
 }
 
 void ShowTreeView_Test::commandSyntaxFoldsAwayAndIsRemembered()

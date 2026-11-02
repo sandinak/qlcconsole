@@ -39,6 +39,7 @@
 #define KXMLSceneryDoorAt     QStringLiteral("DoorAt")
 #define KXMLSceneryColor    QStringLiteral("Color")
 #define KXMLSceneryLocked   QStringLiteral("Locked")
+#define KXMLSceneryOnPurpose QStringLiteral("LightOnPurpose")
 #define KXMLSceneryLayerId  QStringLiteral("LayerId")
 #define KXMLSceneryGroupId  QStringLiteral("GroupId")
 #define KXMLSceneryFixture  QStringLiteral("Fixture")
@@ -490,6 +491,8 @@ bool Scenery::loadXML(QXmlStreamReader &root)
     }
     if (a.hasAttribute(KXMLSceneryColor))    m_color = QColor(a.value(KXMLSceneryColor).toString());
     if (a.hasAttribute(KXMLSceneryLocked))   m_locked = (a.value(KXMLSceneryLocked).toString() == "true");
+    if (a.hasAttribute(KXMLSceneryOnPurpose))
+        m_onPurpose = (a.value(KXMLSceneryOnPurpose).toString() == "true") ? 1 : 0;
     if (a.hasAttribute(KXMLSceneryLayerId))  m_layerId = a.value(KXMLSceneryLayerId).toUInt();
     if (a.hasAttribute(KXMLSceneryGroupId))  m_groupId = a.value(KXMLSceneryGroupId).toUInt();
     if (a.hasAttribute(KXMLSceneryFixture))  m_driver = a.value(KXMLSceneryFixture).toUInt();
@@ -540,6 +543,10 @@ bool Scenery::saveXML(QXmlStreamWriter *doc) const
         doc->writeAttribute(KXMLSceneryColor, m_color.name());
     if (m_locked)
         doc->writeAttribute(KXMLSceneryLocked, "true");
+    // Written only when set apart from the kind's default (so a kind
+    // change keeps meaning "the default" for one never touched).
+    if (m_onPurpose >= 0)
+        doc->writeAttribute(KXMLSceneryOnPurpose, m_onPurpose > 0 ? "true" : "false");
     if (m_layerId != 0)
         doc->writeAttribute(KXMLSceneryLayerId, QString::number(m_layerId));
     if (m_groupId != 0)

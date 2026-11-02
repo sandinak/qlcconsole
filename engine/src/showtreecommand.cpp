@@ -61,7 +61,7 @@ QString ShowTreeCommand::grammar()
               "name \"Hero\" · T1-CW … (a fixture) · function Haze · include 0.0.3 · skip 0.0.3 [thru 0.0.5] · unskip · "
               "mib on|off|show list · nomib 0.0.3 · allowmib · textcolour red [list | 0.0.3] · "
               "record [selected|running|lit] · list \"name\" · dup · reusable · use BackStage · unlink · "
-              "detach [list] · convert [apply] · undo — Tab completes every word "
+              "sub of 4 · inline · detach [list] · convert [apply] · undo — Tab completes every word "
               "(again: the next), ↑ recalls");
 }
 
@@ -101,12 +101,19 @@ const QList<ShowTreeCommand::Word> &ShowTreeCommand::words()
             "Makes the selected cue list its production's main list: what GO plays while the production "
             "is current.",
             { "main" }, { "production", "list" });
-        add("sub", "subcues", "sub [+] [\"name\"] [follow <seconds> | subgo]",
+        add("sub", "subcues", "sub [+] [\"name\"] [follow <seconds> | subgo] | sub of [<cue number>]",
             "A new sub-cue of the selected cue (after the selected sub-cue): 4.1, 4.2... It starts from "
             "what is on stage before it (4.1 from cue 4); its changes are cue-only (cue 5 starts from cue "
             "4's own state). Sub GO plays it, or follow <seconds> makes it go on by itself that long after "
-            "the one before has faded in. The first plays with GO.",
-            { "sub \"Hit\"", "sub + \"Sweep\" follow 0.5", "sub \"Strobe\" subgo" }, { "follow", "subgo", "cue" });
+            "the one before has faded in. The first plays with GO. sub of makes the selected cue the last "
+            "sub-cue of the cue before it (or of cue <number>), every cue playing as before.",
+            { "sub \"Hit\"", "sub + \"Sweep\" follow 0.5", "sub \"Strobe\" subgo" },
+            { "follow", "subgo", "cue", "inline" });
+        add("inline", "subcues", "inline",
+            "The selected sub-cue (and the sub-cues after it) becomes a cue of the list, right after its "
+            "cue: GO steps through it. Auto-follow becomes the hold of the cue before; every cue plays "
+            "as before (looks carried in where needed). Design mode only.",
+            { "inline" }, { "sub", "subgo" });
         add("follow", "subcues", "follow [<seconds>]",
             "The selected sub-cue goes on by itself <seconds> after the sub-cue before has faded in "
             "(Auto-follow; 0 when left out).",
@@ -443,7 +450,7 @@ bool ShowTreeCommand::showTreeOnlyWord(const QString &word)
     // `set`, the attribute words, `layer`, `undo`, `redo` and `help` are
     // not here: they mean something in Build.
     static const QStringList only {
-        "production", "main", "sub", "follow", "subgo", "list", "cue", "track", "block", "cueonly", "cue-only",
+        "production", "main", "sub", "inline", "follow", "subgo", "list", "cue", "track", "block", "cueonly", "cue-only",
         "default", "base", "release", "skip", "unskip", "mib", "nomib", "allowmib", "textcolour", "textcolor", "include",
         "record", "dup", "copy", "paste", "cut", "reusable", "use", "unlink", "detach", "convert", "hit", "look",
         "vcpage", "adopt", "wb", "workbench", "name", "function", "fn", "new", "go" };
@@ -972,6 +979,21 @@ struct Reader
 } // namespace
 
 ShowTreeCommand::Result ShowTreeCommand::run(const QString &line, const Context &context)
+{
+    Result res = runParsed(line, context);
+    if (res.ok)
+        return res;
+    // Which failures are the grammar's ("Don't know “x”", "Expected an
+    // attribute…", "Unknown word…") and which are the show's (no such cue).
+    auto lead = [](const QString &format) { return format.left(format.indexOf(QLatin1String("%1"))); };
+    for (const QString &prefix : { lead(tr("Don't know “%1”.")), lead(tr("Unknown word “%1” (track, block, cueonly, default, base)")),
+                                   QStringLiteral("Expected an attribute") })
+        if (!prefix.isEmpty() && res.message.startsWith(prefix))
+            res.unparsed = true;
+    return res;
+}
+
+ShowTreeCommand::Result ShowTreeCommand::runParsed(const QString &line, const Context &context)
 {
     Result res;
     res.context = context;
@@ -2034,6 +2056,57 @@ ShowTreeCommand::Result ShowTreeCommand::run(const QString &line, const Context 
     {
         error = tr("Select a cue first (or: cue 1.0.0 \"name\").");
     }
+    else if (w0 == QLatin1String("inline"))
+    {
+        // inline: the selected sub-cue (and the ones after it) become cues
+        // of the list, after their cue.
+        r.word();
+        QString msg;
+        if (!r.atEnd())
+            error = tr("inline -- then nothing more");
+        else if (!m_st->isSubCue(ctx.cue))
+            error = tr("Select a sub-cue first: inline makes it a cue of the list.");
+        else if (!m_st->makeInlineCues({ ctx.cue }, &msg))
+            error = msg;
+        else
+        {
+            if (const CueList *l = m_st->listOfCue(ctx.cue))
+                ctx.list = l->id;
+            res.message = msg;
+        }
+    }
+    else if (w0 == QLatin1String("sub")
+             && r.src.mid(r.i).simplified().section(QLatin1Char(' '), 1, 1).toLower() == QLatin1String("of"))
+    {
+        // sub of [<number>]: the selected cue becomes the last sub-cue of
+        // cue <number> (left out: the cue before it).
+        r.word();
+        r.word();
+        quint32 parent = invalidId();
+        QString msg;
+        if (!r.atEnd())
+        {
+            const QString num = r.word();
+            const int idx = r.atEnd() && list != nullptr ? indexOfNumber(*list, num) : -1;
+            if (!r.atEnd())
+                error = tr("sub of [<cue number>]");
+            else if (idx < 0)
+                error = tr("No cue %1 in this list.").arg(num);
+            else
+                parent = list->cues.at(idx).id;
+        }
+        if (error.isEmpty())
+        {
+            if (!m_st->makeSubCues({ ctx.cue }, parent, &msg))
+                error = msg;
+            else
+            {
+                if (const CueList *l = m_st->listOfCue(ctx.cue))
+                    ctx.list = l->id;
+                res.message = msg;
+            }
+        }
+    }
     else if (w0 == QLatin1String("sub"))
     {
         // sub [+] ["name"] [follow <s> | subgo]: after the selected sub-cue,
@@ -3047,7 +3120,7 @@ bool ShowTreeCommand::candidates(const QString &head, const Context &context, QS
     if (w0 == QLatin1String("undo") || w0 == QLatin1String("redo") || w0 == QLatin1String("dup")
         || w0 == QLatin1String("name") || w0 == QLatin1String("paste") || w0 == QLatin1String("reusable")
         || w0 == QLatin1String("unlink") || w0 == QLatin1String("main") || w0 == QLatin1String("subgo")
-        || w0 == QLatin1String("follow"))
+        || w0 == QLatin1String("follow") || w0 == QLatin1String("inline"))
         return true;
     if (w0 == QLatin1String("sub"))
     {
@@ -3058,7 +3131,7 @@ bool ShowTreeCommand::candidates(const QString &head, const Context &context, QS
         if (r.src.mid(r.i).trimmed().startsWith(QLatin1Char('"')))
             r.quoted();
         if (r.atEnd())
-            *out << QStringLiteral("follow") << QStringLiteral("subgo");
+            *out << QStringLiteral("follow") << QStringLiteral("subgo") << QStringLiteral("of");
         return true;
     }
     if (w0 == QLatin1String("use"))
@@ -3514,4 +3587,150 @@ QString ShowTreeCommand::tab(const QString &line, const Context &context, QStrin
     if (current != nullptr)
         *current = -1;
     return out;
+}
+
+/****************************************************************************
+ * Spell-check
+ ****************************************************************************/
+
+// Edit distance where swapping two neighbours ("recrod") costs one.
+static int typoDistance(const QString &a, const QString &b)
+{
+    const int n = int(a.length()), m = int(b.length());
+    QVector<QVector<int>> d(n + 1, QVector<int>(m + 1));
+    for (int i = 0; i <= n; ++i)
+        d[i][0] = i;
+    for (int j = 0; j <= m; ++j)
+        d[0][j] = j;
+    for (int i = 1; i <= n; ++i)
+        for (int j = 1; j <= m; ++j)
+        {
+            const int cost = a.at(i - 1) == b.at(j - 1) ? 0 : 1;
+            d[i][j] = qMin(qMin(d[i - 1][j] + 1, d[i][j - 1] + 1), d[i - 1][j - 1] + cost);
+            if (i > 1 && j > 1 && a.at(i - 1) == b.at(j - 2) && a.at(i - 2) == b.at(j - 1))
+                d[i][j] = qMin(d[i][j], d[i - 2][j - 2] + 1);
+        }
+    return d[n][m];
+}
+
+QString ShowTreeCommand::suggest(const QString &line, const Context &context) const
+{
+    // The line's words (a quoted name is one word, quotes kept off).
+    QStringList toks;
+    {
+        QString cur;
+        bool quoted = false, any = false;
+        for (const QChar c : line.trimmed())
+        {
+            if (c == QLatin1Char('"'))
+            {
+                quoted = !quoted;
+                any = true;
+            }
+            else if (c == QLatin1Char(' ') && !quoted)
+            {
+                if (any)
+                    toks << cur;
+                cur.clear();
+                any = false;
+            }
+            else
+            {
+                cur += c;
+                any = true;
+            }
+        }
+        if (any)
+            toks << cur;
+    }
+    if (toks.isEmpty())
+        return QString();
+
+    auto hasLetter = [](const QString &s) {
+        for (const QChar c : s)
+            if (c.isLetter())
+                return true;
+        return false;
+    };
+
+    QString head;
+    bool changed = false;
+    int i = 0;
+    while (i < toks.count())
+    {
+        QStringList cands;
+        candidates(head, context, &cands);
+        const int most = qMin(4, int(toks.count()) - i);
+
+        // A word that already stands there, whole (the longest run of
+        // words first: "AT W ALL").
+        int exactWords = 0;
+        for (int k = most; k >= 1 && exactWords == 0; --k)
+        {
+            const QString chunk = toks.mid(i, k).join(QLatin1Char(' '));
+            for (const QString &c : cands)
+                if (c.compare(chunk, Qt::CaseInsensitive) == 0)
+                {
+                    exactWords = k;
+                    break;
+                }
+        }
+        if (exactWords > 0)
+        {
+            head += typed(toks.mid(i, exactWords).join(QLatin1Char(' ')), false) + QLatin1Char(' ');
+            i += exactWords;
+            continue;
+        }
+
+        // Else the nearest that could: a small edit distance, or the one
+        // word the typed part begins. Numbers and values are left alone.
+        int bestD = 99, bestK = 0, prefixK = 0;
+        QString best, prefix;
+        for (int k = 1; k <= qMin(3, most); ++k)
+        {
+            const QString chunk = toks.mid(i, k).join(QLatin1Char(' '));
+            if (chunk.length() < 3 || !hasLetter(chunk))
+                continue;
+            const QString t = chunk.toLower();
+            const int limit = t.length() >= 8 ? 2 : 1;
+            QStringList begun;
+            for (const QString &c : cands)
+            {
+                if (!hasLetter(c))
+                    continue;
+                const QString lc = c.toLower();
+                if (lc.startsWith(t) && !begun.contains(c))
+                    begun << c;
+                const int d = typoDistance(t, lc);
+                if (d <= limit && (d < bestD || (d == bestD && k > bestK)))
+                {
+                    bestD = d;
+                    bestK = k;
+                    best = c;
+                }
+            }
+            if (begun.count() == 1 && prefixK == 0)
+            {
+                prefixK = k;
+                prefix = begun.first();
+            }
+        }
+        if (bestK == 0 && prefixK > 0)
+        {
+            bestK = prefixK;
+            best = prefix;
+        }
+        if (bestK > 0)
+        {
+            head += typed(best, false) + QLatin1Char(' ');
+            i += bestK;
+            changed = true;
+            continue;
+        }
+        head += toks.at(i).contains(QLatin1Char(' ')) ? QStringLiteral("\"%1\" ").arg(toks.at(i))
+                                                       : toks.at(i) + QLatin1Char(' ');
+        ++i;
+    }
+    const QString out = head.trimmed();
+    return changed && out.compare(line.trimmed(), Qt::CaseSensitive) != 0 ? out : QString();
 }

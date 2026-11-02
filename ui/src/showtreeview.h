@@ -140,6 +140,20 @@ public:
     /** Open the current production's calling script (a window of its own; 0.5). */
     CallingScriptView *showCallingScript();
 
+    /** Backwash (Show Review PWR-12, showtreebackwash.cpp): mark every cue
+     *  that puts light on the cyc nobody meant -- "⚠ cyc" in its flags, the
+     *  fixtures in the tooltip -- from Show Review's last result. */
+    void applyBackwashMarks();
+    /** The open PWR-12 finding cue @a cueId is marked for: its key, or
+     *  empty when it has none. */
+    QString backwashFindingKey(quint32 cueId) const;
+    /** Open Show Review on that finding (a click on the mark). */
+    bool openBackwashFinding(quint32 cueId);
+private:
+    void setupBackwashMarks();
+    void backwashLayerMenu(QMenu *menu, quint32 cueId, quint32 layerId);
+public:
+
     /************************************************************************
      * What the mouse does (drops, pickers) -- public for the tests
      ************************************************************************/
@@ -1034,6 +1048,10 @@ public:
     /** + Sub-cue: a sub-cue of the selected cue (after the selected
      *  sub-cue). Its id (invalid: none). */
     quint32 newSubCue();
+    /** Make Inline Cue (the selected sub-cues) or Make Sub-cue of the cue
+     *  before (the selected cues): ShowTreeController::makeInlineCues() /
+     *  makeSubCues(), what happened said in the hint line. */
+    bool convertSelectedCues(bool toInline);
 private:
     QLabel *m_cueLooks;
     QListWidget *m_cueLayers;
@@ -1137,7 +1155,15 @@ private:
     QLabel *m_cueReuse = nullptr;
     QPushButton *m_listConvert = nullptr;
     QPushButton *m_listDetach = nullptr;
+    /** A line that failed (@a r): the spell-check's correction goes in the
+     *  line, else the assistant is asked (*sent). True: handled. */
+    bool oneLineFallback(const QString &line, const ShowTreeCommand::Context &ctx, ShowTreeCommand::Result *r,
+                         bool *sent);
     int m_historyAt = -1;
+    /** The one line's spell-check: what was typed, and what the line holds
+     *  in its place (Esc puts it back). */
+    QString m_suggestedFrom;
+    QString m_suggestedLine;
     QList<quint32> m_expanded;
     quint32 m_pageCue = 0xFFFFFFFF;      //!< the cue the cue page shows
     bool m_reloading = false;

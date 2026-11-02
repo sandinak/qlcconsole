@@ -1503,6 +1503,7 @@ Branson's review), after the freeze lifts.
 | PWR-09 | A laser's beam or a star field that can reach the audience (built after v1, see below) |
 | PWR-10 | A laser whose scan window is a static pencil or tight (built after v1) |
 | PWR-11 | A lit beam's cone crossing a no-light zone of the plot, by cue (built after v1) |
+| PWR-12 | Backwash: light on a cyc / scrim (scenery "only on purpose") nobody meant, by cue (built 0.4) |
 | TEACH-01 | Teaching mode is on, before a show goes to a crew (built after v1) |
 | FILE-01 | Media outside the show folder or absolute |
 | FILE-02 | Missing media |

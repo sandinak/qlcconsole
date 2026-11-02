@@ -7884,6 +7884,17 @@ void Monitor::slotEditScenery(quint32 sid)
     colorBtn->setResetColour(Scenery::defaultColor(s->kind()));
     form->addRow(tr("Colour:"), colorBtn);
     showRows();
+    // Backwash (Show Review PWR-12): light here only when it is meant.
+    QCheckBox *onPurpose = new QCheckBox(tr("Light here only on purpose"), &dlg);
+    onPurpose->setObjectName("sceneryOnPurpose");
+    onPurpose->setChecked(s->lightOnPurposeOnly());
+    onPurpose->setToolTip(tr("Show Review warns, cue by cue, when light lands here that nobody meant: "
+                             "a front light carrying on past a performer. Meant is a cyc or uplight "
+                             "fixture, a look aimed at a target on it, or I Meant It. On by default for "
+                             "a cyc and a scrim"));
+    form->addRow(QString(), onPurpose);
+    bool onPurposeTouched = false;
+    connect(onPurpose, &QCheckBox::toggled, &dlg, [&onPurposeTouched](bool) { onPurposeTouched = true; });
 
     auto apply = [&]() {
         s->setName(nameEdit->text().trimmed().isEmpty() ? oldName : nameEdit->text().trimmed());
@@ -7895,6 +7906,14 @@ void Monitor::slotEditScenery(quint32 sid)
         s->setBow(float(bowSpin->value() * fromDisp));
         s->setRotation(float(rotSpin->value()));
         s->setKind(kindCombo->currentData().toInt());
+        if (onPurposeTouched)
+            s->setLightOnPurposeOnly(onPurpose->isChecked());
+        else
+        {
+            // Untouched, it follows the kind's default as the kind changes.
+            const QSignalBlocker block(onPurpose);
+            onPurpose->setChecked(s->lightOnPurposeOnly());
+        }
         const bool built = s->isBuilt();
         s->setOutline(built && s->kind() != Scenery::Proscenium ? outlineCombo->currentData().toInt()
                                                                 : int(Scenery::SheetOutline));

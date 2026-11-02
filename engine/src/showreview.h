@@ -72,6 +72,10 @@ struct QLC_ENGINE_EXPORT ReviewFinding
     QString acceptedWhen;
     QString acceptedNote;
     bool checkOff = false;      //!< accepted because its check is off for the show
+    /** Accepted by a mark in the show itself rather than an acceptance:
+     *  PWR-12's "I meant it", held on the Show Tree layers that light it
+     *  (Layer::meantOnScenery). Taking it back is ShowReview::setLightMeant(). */
+    bool intended = false;
 
     /** The acceptance key: the check and its sorted targets. */
     QString key() const;
@@ -227,6 +231,25 @@ public:
     void setVcFile(const QString &path);
     /** The index, read afresh (the live Virtual Console may have changed). */
     VcIndex vcIndex() const;
+
+    /************************************************************************
+     * Backwash (PWR-12): light on the cyc only on purpose
+     ************************************************************************/
+    /** Whether @a finding is one "I meant it" answers: an open PWR-12
+     *  finding (meant true), or a PWR-12 one already marked (intended:
+     *  meant false takes it back). */
+    static bool canMarkMeant(const ReviewFinding &finding, bool meant = true);
+    /** "I meant it" for @a finding's fixtures (on the layer that lights
+     *  each in the cue it starts landing: Layer::meantOnScenery), or with
+     *  @a meant false the marks it was intended by taken off. One Show Tree
+     *  undo step ("I meant it" / "Not meant"). False when nothing changed. */
+    static bool setLightMeant(Doc *doc, const ReviewFinding &finding, bool meant);
+    /** Take every "I meant it" off layer @a layerId of cue @a cueId: one
+     *  Show Tree undo step. False when it had none. */
+    static bool clearLayerMeant(Doc *doc, quint32 cueId, quint32 layerId);
+    /** Every cue @a finding (PWR-12) breaches in: the cue the light starts
+     *  landing in and the cues it tracks on into while it still lands. */
+    static QList<quint32> findingCues(const ReviewFinding &finding);
 
     /** Whether target key @a key ("fx:7") still names something in @a doc. */
     static bool targetExists(const Doc *doc, const QString &key);

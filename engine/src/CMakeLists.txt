@@ -78,6 +78,7 @@ add_library(${module_name} SHARED
     showtreehits.cpp
     showtreeproductions.cpp
     showtreesubcues.cpp
+    showtreesubcueconvert.cpp
     showtreesections.cpp
     showtreescript.cpp
     callingscript.cpp callingscript.h

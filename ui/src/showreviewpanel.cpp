@@ -289,7 +289,9 @@ void ShowReviewPanel::rebuild()
         QString text = f.message;
         if (f.state == ReviewFinding::Changed)
             text = tr("↺ Changed since accepted: %1").arg(text);
-        if (f.state != ReviewFinding::Open)
+        if (f.intended)
+            text += QStringLiteral("\n— ") + tr("“%1”, kept on its layer in the Show Tree").arg(f.acceptedNote);
+        else if (f.state != ReviewFinding::Open)
             text += QStringLiteral("\n— “%1” · %2 · %3").arg(f.acceptedNote, f.acceptedBy, f.acceptedWhen.left(10));
         item->setText(1, text);
         item->setData(0, IndexRole, i);
@@ -407,9 +409,65 @@ void ShowReviewPanel::updateButtons()
         footerRow = footerRow || !item->data(0, FooterKeyRole).toString().isEmpty();
     m_fix->setEnabled((sel.count() == 1 && !sel.first().jump.isEmpty()) || (footerRow && sel.isEmpty()));
     m_accept->setEnabled(anyOpen);
+    /* PWR-12 (light on the cyc): Accept is "I meant it", kept on the layer
+       that lights it rather than as a note; Reopen takes that back; Fix
+       shows the layer. */
+    const bool meantRows = allMeantRows(sel, true), unmeantRows = allMeantRows(sel, false);
+    bool backwash = !sel.isEmpty();
+    for (const ReviewFinding &f : sel)
+        backwash = backwash && f.check == QLatin1String("PWR-12");
+    m_fix->setText(backwash ? tr("Show Me ▸") : tr("Fix ▸"));
+    m_accept->setText(meantRows ? tr("I Meant It") : tr("Accept…"));
+    m_accept->setToolTip(meantRows ? tr("This light on the cyc is on purpose: kept on the layer that lights "
+                                        "it (one undo step), so the warning goes away and stays away")
+                                   : tr("It's on purpose: say why. The note is saved with the show, and the "
+                                        "finding comes back if what it's about changes."));
+    m_reopen->setText(unmeantRows ? tr("Not Meant") : tr("Reopen"));
     m_reopen->setEnabled(anyAccepted || (sel.count() == 1 && sel.first().checkOff));
     m_why->setEnabled(sel.count() == 1);
     m_off->setEnabled(sel.count() == 1);
+}
+
+bool ShowReviewPanel::allMeantRows(const QList<ReviewFinding> &findings, bool meant)
+{
+    if (findings.isEmpty())
+        return false;
+    for (const ReviewFinding &f : findings)
+        if (!ShowReview::canMarkMeant(f, meant))
+            return false;
+    return true;
+}
+
+bool ShowReviewPanel::markMeantSelected(bool meant)
+{
+    if (m_doc == nullptr)
+        return false;
+    bool any = false;
+    for (const ReviewFinding &f : selectedFindings())
+        if (ShowReview::canMarkMeant(f, meant))
+            any = ShowReview::setLightMeant(m_doc, f, meant) || any;
+    if (any)
+        recheck();
+    return any;
+}
+
+bool ShowReviewPanel::selectFinding(const QString &key)
+{
+    QTreeWidgetItemIterator it(m_tree);
+    while (*it)
+    {
+        const int idx = (*it)->data(0, IndexRole).toInt();
+        if (idx >= 0 && idx < m_findings.count() && m_findings.at(idx).key() == key)
+        {
+            m_tree->clearSelection();
+            (*it)->setSelected(true);
+            m_tree->setCurrentItem(*it);
+            m_tree->scrollToItem(*it);
+            return true;
+        }
+        ++it;
+    }
+    return false;
 }
 
 bool ShowReviewPanel::acceptSelected(const QString &note, const QString &by)
@@ -428,14 +486,22 @@ bool ShowReviewPanel::reopenSelected()
     if (m_doc == nullptr)
         return false;
     bool any = false;
+    bool marks = false;
     for (const ReviewFinding &f : selectedFindings())
     {
+        if (f.intended)
+        {
+            marks = ShowReview::setLightMeant(m_doc, f, false) || marks;
+            continue;
+        }
         if (f.checkOff)
             any = m_doc->showReview()->turnOn(f.check) || any;
         else
             any = m_doc->showReview()->reopen(f) || any;
     }
-    return any;
+    if (marks)
+        recheck();
+    return any || marks;
 }
 
 bool ShowReviewPanel::fixSelected()
@@ -476,6 +542,11 @@ void ShowReviewPanel::slotAccept()
     const QList<ReviewFinding> sel = selectedFindings();
     if (sel.isEmpty())
         return;
+    if (allMeantRows(sel, true))
+    {
+        markMeantSelected(true);        // no note: the mark is the answer
+        return;
+    }
     QDialog dlg(this);
     dlg.setWindowTitle(tr("Accept"));
     QFormLayout *form = new QFormLayout(&dlg);

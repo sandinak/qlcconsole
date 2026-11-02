@@ -917,7 +917,7 @@ and are not repeated here. Tests added by the audit are **bold** with *(new)*.
   (largest: AppViews ~2 s, MainBar ~1.2 s, the web ones ~1 s each); run in
   parallel, under 10 s of wall time per leg.
 
-## Landing during the audit
+## Landed during the audit
 
 These landed (or were ready to land) while the audit ran; their own
 branches bring their tests. Rows are written from those branches.

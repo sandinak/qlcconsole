@@ -245,6 +245,11 @@ namespace ShowTree
         /** After Unlink here (open 20): the reusable it was a use of, by
          *  name, for the tooltip "Unlinked from BackStage". Empty: none. */
         QString unlinkedFrom;
+        /** "I meant it" (Show Review PWR-12, backwash): the fixtures of
+         *  this layer whose light on scenery kept for light on purpose (a
+         *  cyc, a scrim) is meant, so it is not reported. This use's, like
+         *  release. Saved as MeantOnScenery=, which an older build ignores. */
+        QList<quint32> meantOnScenery;
 
         /** The pieces a split makes: one per group, per set, and one on the
          *  fixtures. */

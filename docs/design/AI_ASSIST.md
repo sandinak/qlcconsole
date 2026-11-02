@@ -168,7 +168,23 @@ call with mapping → normal preview/confirm.
 
 ## 7. UX
 
-- Command line: a prefix (`?` at start of line) or toggle key switches to assistant mode.
+- Command line: **one line, no mode** (decided: can change; cli1). `?` at the start still forces
+  a question. Otherwise the line decides, in this order:
+  1. It parses as a command: it runs exactly as typed. The model is never involved (so Operate
+     and timing stay local).
+  2. It doesn't parse: a **local spell-check** (`ShowTreeCommand::suggest`, no AI, works with AI
+     off): for each word, the candidates that could stand there (the Tab completion's) nearest
+     what was typed (edit distance with swapped neighbours at 1, or the one word it begins), on
+     grammar words and on names of the show; numbers and values are left alone. The corrected
+     command goes in the line with "Did you mean ...?": Enter runs it, Esc puts back what was
+     typed. Nothing runs by itself.
+  3. Still not a command (`Result::unparsed`: the grammar's refusal, not the show's "no such
+     palette"), AI Assist on and Design: the text goes to the assistant with the parser's error,
+     the syntax reference (`AiAssist::syntaxReference`) and the selection. It answers with a
+     corrected command (a proposal as below: never auto-run, Enter applies as one undo step, the
+     real syntax is in the line) or words.
+  4. Operate: step 2 only. AI Assist off: the message says Settings > AI Assist turns plain words
+     on. The old "AI" button is gone; the line's placeholder says when the fallback is on.
 - Response: proposed command(s) rendered in the command line + one-line explanation.
   Multi-step plans render as a checklist with per-step include/exclude and "Apply".
 - Apply → validate all → execute as **one undo group**. Any validation failure aborts the whole

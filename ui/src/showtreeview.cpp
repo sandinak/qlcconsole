@@ -1335,10 +1335,11 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         m_commandMsg = new QLabel(m_commandBar);
         m_commandMsg->setObjectName("stCommandMessage");
 #ifdef QLC_AI_ASSIST
-        m_ai = new AiCommandLine(m_command, m_commandHelp, m_commandMsg, h, this);
+        m_ai = new AiCommandLine(m_command, m_commandHelp, m_commandMsg, this);
         // A proposal runs through this line's registry, and the selection
         // goes where it left it -- as a typed command's does.
         m_ai->setOperations(m_operations);
+        m_ai->setPlainWords(true);
         // An MCP client's calls run where the selection is, as a typed
         // line does.
         m_ai->setSelectionProvider([this]() { return commandContext(); });
@@ -1575,6 +1576,7 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
     m_tree->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(m_tree, &QTreeWidget::itemSelectionChanged, this, &ShowTreeView::slotTreeSelectionChanged);
     connect(m_tree, &QTreeWidget::customContextMenuRequested, this, &ShowTreeView::slotTreeContextMenu);
+    setupBackwashMarks();     // PWR-12: "⚠ cyc" on a cue (showtreebackwash.cpp)
     // W3: double-click a cue, a look or a layer: it opens in the Workbench,
     // docked here (a layer that plays a function as it is, W0's Open, too:
     // its editor is the Workbench's, and ▣ Open loads it there).
@@ -3570,6 +3572,7 @@ void ShowTreeView::buildTree()
     for (const QPair<quint32, quint32> &sel : alsoSelected)
         if (QTreeWidgetItem *item = findItem(sel.first, sel.second))
             item->setSelected(true);
+    applyBackwashMarks();
     m_reloading = false;
 }
 
@@ -7701,6 +7704,24 @@ void ShowTreeView::slotTreeContextMenu(const QPoint &pos)
             menu.addAction(tr("+ Cue"), this, &ShowTreeView::slotNewCue);
         if ((kind == CueNode || kind == LayerNode || kind == TrackedLayerNode) && !inLooks)
             menu.addAction(tr("+ Sub-cue"), this, [this]() { newSubCue(); })->setObjectName("stNewSubCueMenu");
+        // 0.4: a sub-cue becomes a cue of the list, a cue a sub-cue of the
+        // one before; every step plays as before. Design mode only.
+        if (kind == CueNode && !inLooks)
+        {
+            const quint32 cueId = item->data(0, IdRole).toUInt();
+            const CueList *l = m_st->listOfCue(cueId);
+            QAction *convert = nullptr;
+            if (m_st->isSubCue(cueId))
+                convert = menu.addAction(tr("Make Inline Cue"), this, [this]() { convertSelectedCues(true); });
+            else if (l != nullptr && l->indexOf(cueId) > 0)
+                convert = menu.addAction(tr("Make Sub-cue of %1").arg(m_st->cueNumber(*l, l->indexOf(cueId) - 1)),
+                                         this, [this]() { convertSelectedCues(false); });
+            if (convert != nullptr)
+            {
+                convert->setObjectName(m_st->isSubCue(cueId) ? "stMakeInlineCueMenu" : "stMakeSubCueMenu");
+                convert->setEnabled(m_doc->mode() == Doc::Design);
+            }
+        }
         if (kind == CueNode || kind == LayerNode || kind == TrackedLayerNode)
             menu.addAction(tr("Open in Workbench"), this, [this]() { openSelectionInWorkbench(); })
                 ->setObjectName("stOpenWorkbenchMenu");
@@ -7981,6 +8002,7 @@ void ShowTreeView::slotTreeContextMenu(const QPoint &pos)
             menu.addAction(tr("Detach to plain scene"), this, [this, cueId, layerId]() {
                 m_st->detachLayer(cueId, layerId);
             });
+            backwashLayerMenu(&menu, cueId, layerId);     // PWR-12: I meant it, taken back
             // P4: a reusable layer, or this use unlinked.
             if (const Cue *rc = m_st->cue(cueId))
                 if (const Layer *rl = rc->layer(layerId))
@@ -10076,6 +10098,40 @@ quint32 ShowTreeView::newSubCue()
     return id;
 }
 
+bool ShowTreeView::convertSelectedCues(bool toInline)
+{
+    const quint32 current = currentCueId();
+    if (current == invalidId())
+    {
+        m_hint->setText(tr("Select a cue first."));
+        return false;
+    }
+    // The selected cues of the current one's kind (sub-cues, or cues of its
+    // list), the current one first if nothing else is selected.
+    const CueList *home = m_st->listOfCue(current);
+    QList<quint32> ids;
+    for (QTreeWidgetItem *sel : m_tree->selectedItems())
+    {
+        if (sel->data(0, KindRole).toInt() != CueNode)
+            continue;
+        const quint32 id = sel->data(0, IdRole).toUInt();
+        if (toInline ? m_st->isSubCue(id) : (home != nullptr && home->indexOf(id) >= 0))
+            ids << id;
+    }
+    if (!ids.contains(current))
+        ids = { current };
+    QString msg;
+    const bool ok = toInline ? m_st->makeInlineCues(ids, &msg) : m_st->makeSubCues(ids, invalidId(), &msg);
+    if (ok)
+    {
+        selectNode(current);
+        if (QTreeWidgetItem *item = m_tree->currentItem())
+            m_tree->scrollToItem(item);
+    }
+    m_hint->setText(msg);
+    return ok;
+}
+
 bool ShowTreeView::hitPlaceOf(QTreeWidgetItem *item, HitScope *scope, quint32 *place) const
 {
     if (item == nullptr)
@@ -11003,7 +11059,22 @@ bool ShowTreeView::runCommand(const QString &line)
         return true;
     }
 #endif
-    const ShowTreeCommand::Result r = m_operations->runLine(line, ctx);
+    ShowTreeCommand::Result r = m_operations->runLine(line, ctx);
+    // One line (docs/design/AI_ASSIST.md section 7): a line that isn't a
+    // command is spell-checked here first, then (AI Assist on, Design) asked
+    // of the assistant with the parser's error. Neither runs anything.
+    if (!r.ok && r.help.isEmpty())
+    {
+        bool sent = false;
+        if (oneLineFallback(line, ctx, &r, &sent))
+        {
+            if (sent && (m_commandHistory.isEmpty() || m_commandHistory.last() != line))
+                m_commandHistory << line;
+            m_historyAt = -1;
+            return sent;
+        }
+    }
+    m_suggestedFrom.clear();
     m_commandMsg->setText(r.message);
     // A palette made or named for editing: in the Look Editor, and shown
     // in the Library (R2).
@@ -11041,6 +11112,45 @@ bool ShowTreeView::runCommand(const QString &line)
     else if (r.context.list != invalidId())
         selectNode(r.context.list);
     return true;
+}
+
+bool ShowTreeView::oneLineFallback(const QString &line, const ShowTreeCommand::Context &ctx,
+                                   ShowTreeCommand::Result *r, bool *sent)
+{
+    // Step 2: the local spell-check -- a word of the grammar or a name of
+    // the show put right. The corrected line goes in the line, to read and
+    // run with Enter (Esc puts back what was typed); nothing ran.
+    const QString fix = m_commander->suggest(line, ctx);
+    if (!fix.isEmpty())
+    {
+        m_suggestedFrom = line;
+        m_suggestedLine = fix;
+        m_command->setText(fix);
+        m_command->end(false);
+        m_commandMsg->setText(tr("Did you mean “%1”? Enter runs it, Esc puts back what you typed.").arg(fix));
+        QPalette pal = m_commandMsg->palette();
+        pal.setColor(QPalette::WindowText, palette().color(QPalette::WindowText));
+        m_commandMsg->setPalette(pal);
+        *sent = false;
+        return true;
+    }
+#ifdef QLC_AI_ASSIST
+    // Step 3: not in the grammar at all. Design only; Operate never asks.
+    if (r->unparsed && m_ai != nullptr && m_doc->mode() == Doc::Design)
+    {
+        QString note;
+        if (m_ai->fallback(line, r->message, ctx, &note))
+        {
+            *sent = true;
+            return true;
+        }
+        if (!note.isEmpty())
+            r->message += QLatin1Char(' ') + note;
+    }
+#else
+    Q_UNUSED(sent)
+#endif
+    return false;
 }
 
 void ShowTreeView::slotCommandEntered()
@@ -11117,6 +11227,14 @@ bool ShowTreeView::eventFilter(QObject *obj, QEvent *ev)
         }
         if (ke->key() == Qt::Key_Escape)
         {
+            // A suggestion in the line: what was typed comes back.
+            if (!m_suggestedFrom.isNull() && m_command->text() == m_suggestedLine)
+            {
+                m_command->setText(m_suggestedFrom);
+                m_suggestedFrom.clear();
+                m_commandMsg->clear();
+                return true;
+            }
 #ifdef QLC_AI_ASSIST
             // A question in flight first.
             if (m_ai != nullptr && m_ai->cancel())

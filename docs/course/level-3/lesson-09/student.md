@@ -41,6 +41,8 @@ Roles: **Driver** (mouse), **Navigator** (reads each step aloud and checks *You 
 3. Click **Review** in the footer.
    - *You should see:* findings, worst first. Hover a row for why it
      matters. Look for **CUE-02**, and for four **CUE-01** under it.
+
+   ![Show Review's findings](../../images/lesson-3-9/show-review.png)
 4. Select **CUE-02** and click **Fix ▸**. It takes you to the second song.
    Click the header **2 — Slow Dance** and tick **Block at section start**.
    Click **Re-check**.
@@ -58,11 +60,15 @@ Roles: **Driver** (mouse), **Navigator** (reads each step aloud and checks *You 
    - *You should see:* under **Why it isn't on**, a line *Group master
      "Lanterns" is at 0 %*. The line about the universe having no output is the
      classroom.
+
+   ![Why the Lanterns aren't on](../../images/lesson-3-9/why-not-on.png)
 8. Open the **Run** tab (⇧⌘8). Double-click the name under the **Lanterns**
    fader to put it back to full. Look at the Rig Overview again.
 9. Back in the Show Tree, click the **TrussC-RGB** layer of 2.0.1 and press
    **Solo**. Only that layer plays: the lanterns go out. Press **Solo**
    again, and the cue is whole.
+
+   ![Solo on one layer](../../images/lesson-3-9/solo-layer.png)
 10. **File ▸ Save As** → `Lesson3-9-yourname.qlcc`.
 
 **Stuck?** No **Review** chip: it appears a couple of seconds after the show

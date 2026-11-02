@@ -61,6 +61,7 @@
 #include "nolightzone.h"
 #include "aimsolver.h"
 #include "righeads.h"
+#include "scenery.h"
 
 using namespace ShowTree;
 
@@ -2294,6 +2295,278 @@ void ShowReview_Test::pwr11Mover()
    reads that pan across the band, so a head aimed into a zone trips PWR-11 and
    the same head aimed away does not -- and a zone where the whole-channel
    reading would have put the beam stays quiet. */
+namespace
+{
+/** A cyc 10 m wide and 6 m tall across the stage at y = 2 m, facing the house. */
+Scenery *addCyc(MonitorProperties *mp, int kind = Scenery::Cyclorama, float y = 2.0f)
+{
+    Scenery *s = mp->addScenery();
+    s->setKind(kind);
+    s->setName(kind == Scenery::Cyclorama ? QStringLiteral("Cyc") : Scenery::kindName(kind));
+    s->setOriginX(5.0f);
+    s->setOriginY(y);
+    s->setWidth(10.0f);
+    s->setHeight(6.0f);
+    if (kind == Scenery::BackWall)
+        s->setThickness(0.2f);
+    return s;
+}
+
+/** A front light at 6 m, 10 m downstage of the cyc, thrown upstage and
+ *  @a down degrees down: at 20 it carries on to the cyc, at 70 it lands on
+ *  the floor well short of it. */
+void aimFront(MonitorProperties *mp, Fixture *fx, float x, float down)
+{
+    FixturePreviewItem item;
+    item.m_baseItem.m_position = QVector3D(x * 1000.0f, 12000.0f, 6.0f);
+    mp->setFixtureProperties(fx->id(), item);
+    FixtureRigProps rp = mp->fixtureRigProps(fx->id());
+    rp.fixedAim = true;
+    rp.panZeroDir = 180;                    // toward -Y: upstage
+    rp.aimDown = down;
+    mp->setFixtureRigProps(fx->id(), rp);
+}
+
+QString findingText(const QList<ReviewFinding> &list)
+{
+    QStringList out;
+    for (const ReviewFinding &f : list)
+        out << f.message + QLatin1Char('|') + f.targets.join(QLatin1Char(',')) + QLatin1Char('|')
+               + QString::fromLatin1(f.fingerprint) + QLatin1Char('|')
+               + QString::fromUtf8(QJsonDocument::fromVariant(f.jumpData).toJson(QJsonDocument::Compact));
+    return out.join(QLatin1Char('\n'));
+}
+}
+
+void ShowReview_Test::pwr12Backwash()
+{
+    MonitorProperties *mp = m_doc->monitorProperties();
+    mp->setGridSize(QVector3D(10, 3, 14));
+    Fixture *front = par("Front 1", 0);
+    aimFront(mp, front, 5.0f, 20.0f);
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 lid = st->addCueList(st->addProduction("Show"), "Act 1");
+    const quint32 c1 = st->addCue(lid, -1, "One");
+    const quint32 c2 = st->addCue(lid, 0, "Two");
+    const quint32 c3 = st->addCue(lid, 1, "Three");
+    cueLit(m_doc, c1, front, 255);
+    // No scenery: quiet.
+    QVERIFY(quiet("PWR-12"));
+    Scenery *sc = addCyc(mp);
+    QVERIFY(sc->lightOnPurposeOnly());              // a cyc: on by default
+    QVERIFY2(fires("PWR-12"), "a front light carrying on to the cyc");
+    ReviewFinding f = findings("PWR-12").first();
+    QCOMPARE(f.severity, ReviewFinding::Warning);
+    QVERIFY(f.isOpen() && !f.intended);
+    QVERIFY(f.message.contains("Front 1") && f.message.contains("'Cyc'") && f.message.contains("One"));
+    QVERIFY(f.message.contains("about"));
+    QVERIFY(f.targets.contains(QStringLiteral("fx:%1").arg(front->id())));
+    QVERIFY(f.targets.contains(QStringLiteral("scenery:%1").arg(sc->id())));
+    QVERIFY(ShowReview::canMarkMeant(f));
+    // Tracked on (set again in two and three): one finding, every cue of it named.
+    cueLit(m_doc, c2, front, 255);
+    cueLit(m_doc, c3, front, 255);
+    QCOMPARE(findings("PWR-12").count(), 1);
+    QCOMPARE(ShowReview::findingCues(findings("PWR-12").first()), QList<quint32>() << c1 << c2 << c3);
+    // Deterministic: the same show gives the same findings, word for word.
+    const QString once = findingText(findings("PWR-12"));
+    for (int i = 0; i < 3; ++i)
+        QCOMPARE(findingText(findings("PWR-12")), once);
+    // Thrown steeply down it lands on the floor short of the cyc.
+    aimFront(mp, front, 5.0f, 70.0f);
+    QVERIFY(quiet("PWR-12"));
+    aimFront(mp, front, 5.0f, 20.0f);
+    // Off the side of the cyc: quiet.
+    aimFront(mp, front, 30.0f, 20.0f);
+    QVERIFY(quiet("PWR-12"));
+    aimFront(mp, front, 5.0f, 20.0f);
+    // The cyc switched off "light here only on purpose": quiet.
+    sc->setLightOnPurposeOnly(false);
+    QVERIFY(quiet("PWR-12"));
+    sc->setLightOnPurposeOnly(true);
+    // A cyc light is meant to light it.
+    front->setStageLook(Fixture::CycStripLook);
+    QVERIFY(quiet("PWR-12"));
+    front->setStageLook(Fixture::UplightWashLook);
+    QVERIFY(quiet("PWR-12"));
+    front->setStageLook(Fixture::AutoLook);
+    QVERIFY(fires("PWR-12"));
+    // A back wall in front of it stops the light: quiet. A scrim there lets it
+    // through and takes light itself: both named.
+    Scenery *wall = addCyc(mp, Scenery::BackWall, 4.0f);
+    QVERIFY(!wall->lightOnPurposeOnly());
+    QVERIFY(quiet("PWR-12"));
+    mp->removeScenery(wall->id());
+    Scenery *scrim = addCyc(mp, Scenery::Scrim, 4.0f);
+    QVERIFY(scrim->lightOnPurposeOnly());
+    QCOMPARE(findings("PWR-12").count(), 2);
+    scrim->setLightOnPurposeOnly(false);
+    QCOMPARE(findings("PWR-12").count(), 1);
+    QVERIFY(findings("PWR-12").first().targets.contains(QStringLiteral("scenery:%1").arg(sc->id())));
+    // Dark in every cue: quiet.
+    for (quint32 c : { c1, c2, c3 })
+    {
+        st->removeLayer(c, st->cueList(lid)->cue(c)->layers.last().id);
+        cueLit(m_doc, c, front, 0);
+    }
+    QVERIFY(quiet("PWR-12"));
+}
+
+void ShowReview_Test::pwr12Meant()
+{
+    MonitorProperties *mp = m_doc->monitorProperties();
+    mp->setGridSize(QVector3D(10, 3, 14));
+    addCyc(mp);
+    Fixture *front = par("Front 1", 0);
+    aimFront(mp, front, 5.0f, 20.0f);
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 lid = st->addCueList(st->addProduction("Show"), "Act 1");
+    const quint32 c1 = st->addCue(lid, -1, "One");
+    const quint32 c2 = st->addCue(lid, 0, "Two");
+    cueLit(m_doc, c1, front, 255);
+    cueLit(m_doc, c2, front, 255);
+    const quint32 layer1 = st->cueList(lid)->cue(c1)->layers.last().id;
+    ReviewFinding f = findings("PWR-12").first();
+    QVERIFY(f.isOpen());
+    // "Show me" goes to the layer that lights it.
+    QCOMPARE(f.jump, QStringLiteral("cue"));
+    QCOMPARE(f.jumpData.first().toUInt(), layer1);
+
+    // I meant it: kept on the layer, one undo step; not open any more.
+    QVERIFY(ShowReview::setLightMeant(m_doc, f, true));
+    QCOMPARE(st->undoText(), QStringLiteral("I meant it"));
+    QVERIFY(!findings("PWR-12").first().isOpen());
+    QVERIFY(st->undo());                            // one step takes it back
+    QVERIFY(findings("PWR-12").first().isOpen());
+    QVERIFY(ShowReview::setLightMeant(m_doc, findings("PWR-12").first(), true));
+    QCOMPARE(st->cueList(lid)->cue(c1)->layer(layer1)->meantOnScenery, QList<quint32>() << front->id());
+    ShowReview::Result r = m_doc->showReview()->run();
+    QCOMPARE(r.open[ReviewFinding::Warning], 0);
+    QList<ReviewFinding> all = findings("PWR-12");
+    QCOMPARE(all.count(), 1);
+    QVERIFY(all.first().intended && !all.first().isOpen());
+    QVERIFY(ShowReview::canMarkMeant(all.first(), false));
+    QVERIFY(!ShowReview::canMarkMeant(all.first(), true));
+    // It carries on into cue two, where its layer is set again.
+    for (const ReviewFinding &x : all)
+        QVERIFY(!x.isOpen());
+
+    // Saved with the show: it stays meant after a save and load.
+    editTree([](QString &xml) { QVERIFY(xml.contains(QStringLiteral("MeantOnScenery="))); });
+    QCOMPARE(st->cueList(lid)->cue(c1)->layer(layer1)->meantOnScenery, QList<quint32>() << front->id());
+    QVERIFY(!findings("PWR-12").first().isOpen());
+
+    // Not meant (Reopen in the panel), and undo of that.
+    QVERIFY(ShowReview::setLightMeant(m_doc, findings("PWR-12").first(), false));
+    QVERIFY(findings("PWR-12").first().isOpen());
+    QVERIFY(st->undo());
+    QVERIFY(!findings("PWR-12").first().isOpen());
+
+    // Cleared from the layer (its right-click).
+    QVERIFY(ShowReview::clearLayerMeant(m_doc, c1, layer1));
+    QVERIFY(!ShowReview::clearLayerMeant(m_doc, c1, layer1));     // nothing left on it
+    QVERIFY(findings("PWR-12").first().isOpen());
+
+    // An intended finding stays intended when another acceptance changes.
+    QVERIFY(ShowReview::setLightMeant(m_doc, findings("PWR-12").first(), true));
+    m_doc->showReview()->run();
+    QVERIFY(m_doc->showReview()->turnOff(QStringLiteral("PAT-01"), QStringLiteral("test"), QStringLiteral("me")));
+    for (const ReviewFinding &x : m_doc->showReview()->lastResult().findings)
+        if (x.check == QLatin1String("PWR-12"))
+            QVERIFY(x.intended && !x.isOpen());
+}
+
+void ShowReview_Test::pwr12AimAtCyc()
+{
+    MonitorProperties *mp = m_doc->monitorProperties();
+    mp->setGridSize(QVector3D(10, 3, 14));
+    Scenery *sc = addCyc(mp);
+    Fixture *spot = mover("Spot 1", 0);
+    FixturePreviewItem item;
+    item.m_baseItem.m_position = QVector3D(5000, 9000, 6);
+    mp->setFixtureProperties(spot->id(), item);
+    // A mark on the cyc itself, a quarter of a metre in front of it.
+    StageTarget *mark = mp->addStageTarget();
+    mark->setName(QStringLiteral("Cyc centre"));
+    mark->setPosition(QVector3D(5.0f, 2.25f, 3.0f));
+    QLCPalette *aim = new QLCPalette(QLCPalette::Aim, m_doc);
+    aim->setName(QStringLiteral("At the cyc"));
+    aim->setStageTargetId(mark->id());
+    QVERIFY(m_doc->addPalette(aim));
+    QLCPalette *level = new QLCPalette(QLCPalette::Dimmer, m_doc);
+    level->setValue(255);
+    level->setName(QStringLiteral("Full"));
+    QVERIFY(m_doc->addPalette(level));
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 lid = st->addCueList(st->addProduction("Show"), "Act 1");
+    const quint32 c1 = st->addCue(lid, -1, "One");
+    Target t;
+    t.fixtures = { spot->id() };
+    const quint32 layer = st->addLayer(c1, t);
+    Look pos;
+    pos.key = KeyPosition;
+    pos.palettes = { aim->id() };
+    QVERIFY(st->setLayerLook(c1, layer, pos));
+    Look d;
+    d.key = KeyDimmer;
+    d.palettes = { level->id() };
+    QVERIFY(st->setLayerLook(c1, layer, d));
+    // Aimed at a target on the cyc: meant.
+    sc->setLightOnPurposeOnly(false);
+    QVERIFY(quiet("PWR-12"));
+    sc->setLightOnPurposeOnly(true);
+    QVERIFY2(quiet("PWR-12"), "a look aimed at a target on the cyc is meant");
+    // The mark 0.9 m in front of the cyc (more than 0.5 m): the light behind it is not meant.
+    mark->setPosition(QVector3D(5.0f, 2.9f, 3.0f));
+    QVERIFY2(fires("PWR-12"), "a mark off the cyc does not mean the cyc");
+    mark->setPosition(QVector3D(5.0f, 2.25f, 3.0f));
+    QVERIFY(quiet("PWR-12"));
+    // The same place, but a person standing there: not the cyc, so not meant.
+    mark->setKind(StageTarget::Kind::Person);
+    QVERIFY2(fires("PWR-12"), "a performer in front of the cyc: the light behind them is not meant");
+    QVERIFY(findings("PWR-12").first().message.contains("Spot 1"));
+}
+
+void ShowReview_Test::sceneryOnPurposeSaves()
+{
+    Scenery cyc(0);
+    QVERIFY(cyc.lightOnPurposeOnly());
+    cyc.setKind(Scenery::BackWall);
+    QVERIFY(!cyc.lightOnPurposeOnly());              // follows the kind's default
+    cyc.setKind(Scenery::Scrim);
+    QVERIFY(cyc.lightOnPurposeOnly());
+    cyc.setKind(Scenery::Wall);
+    cyc.setLightOnPurposeOnly(true);                 // a painted wall opts in
+    auto roundTrip = [](const Scenery &s) {
+        QBuffer buf;
+        buf.open(QIODevice::WriteOnly);
+        {
+            QXmlStreamWriter w(&buf);
+            w.writeStartDocument();
+            s.saveXML(&w);
+            w.writeEndDocument();
+        }
+        Scenery *back = new Scenery(1);
+        QXmlStreamReader r(buf.data());
+        while (!r.atEnd() && !(r.isStartElement() && r.name() == KXMLScenery))
+            r.readNext();
+        back->loadXML(r);
+        return back;
+    };
+    Scenery *wall = roundTrip(cyc);
+    QVERIFY(wall->lightOnPurposeOnly());
+    delete wall;
+    Scenery plain(2);
+    plain.setLightOnPurposeOnly(false);              // a cyc opted out
+    Scenery *off = roundTrip(plain);
+    QVERIFY(!off->lightOnPurposeOnly());
+    delete off;
+    Scenery untouched(3);
+    Scenery *same = roundTrip(untouched);
+    QVERIFY(same->lightOnPurposeOnly());
+    delete same;
+}
+
 void ShowReview_Test::pwr11BandedPan()
 {
     MonitorProperties *mp = m_doc->monitorProperties();

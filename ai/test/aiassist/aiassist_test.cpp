@@ -683,26 +683,21 @@ void AiAssist_Test::providerDownGreysTheEntry()
     QVERIFY(m_ai->unreachableReason().contains(QString::number(port)));
     QVERIFY(avail.count() >= 1);
 
-    // The command line's AI button greys, with why.
+    // The command line keeps saying it takes plain words: a down provider
+    // doesn't take that away (a retry is one Enter).
     QWidget bar;
     QHBoxLayout *row = new QHBoxLayout(&bar);
     QLineEdit *line = new QLineEdit(&bar);
     row->addWidget(line);
     QTextBrowser pane;
     QLabel msg(&bar);
-    AiCommandLine cl(line, &pane, &msg, row, &bar);
-    QVERIFY(!cl.button()->isHidden());
-    QVERIFY(cl.button()->isEnabled());                 // never greys: a retry stays one click away
-    QVERIFY(cl.button()->toolTip().contains(QString::number(port)));
-    cl.button()->click();
-    QCOMPARE(line->text(), QStringLiteral("? "));      // the pick sticks
-    QVERIFY(msg.text().contains(QString::number(port)));
-    QVERIFY(msg.text().contains("tries again"));
+    AiCommandLine cl(line, &pane, &msg, &bar);
+    QVERIFY(line->placeholderText().contains("AI Assist"));
     // Back up: a good connection test lifts it.
     s.endpoint = m_server->endpoint();
     s.save();
     m_ai->settingsChanged();
-    QVERIFY(cl.button()->isEnabled());
+    QVERIFY(line->placeholderText().contains("AI Assist"));
 }
 
 void AiAssist_Test::testConnectionListsModels()
@@ -859,15 +854,12 @@ void AiAssist_Test::commandLineShowsTheAnswer()
     row->addWidget(line);
     QTextBrowser pane;
     QLabel msg(&bar);
-    AiCommandLine cl(line, &pane, &msg, row, &bar);
-    QVERIFY(cl.button()->isHidden());        // off: no chrome
+    AiCommandLine cl(line, &pane, &msg, &bar);
+    QVERIFY(!line->placeholderText().contains("AI Assist"));   // off: no chrome
     QVERIFY(!cl.handle("? find address conflicts", ShowTreeCommand::Context()));   // off: the grammar's
 
     enable();
-    QVERIFY(!cl.button()->isHidden());
-    QVERIFY(cl.button()->isEnabled());
-    QTest::mouseClick(cl.button(), Qt::LeftButton);
-    QCOMPARE(line->text(), QStringLiteral("? "));
+    QVERIFY(line->placeholderText().contains("AI Assist"));    // the indicator
 
     overlappingPars();
     m_server->queueJson(kChat, kRecordedToolCall);
@@ -880,13 +872,13 @@ void AiAssist_Test::commandLineShowsTheAnswer()
     QVERIFY(pane.toHtml().contains("ex:conflicts"));     // a link: the command to type
     QVERIFY(msg.text().contains("nothing in the show changed"));
 
-    // Operate: the button goes.
+    // Operate: the indicator goes.
     m_doc->setMode(Doc::Operate);
-    QVERIFY(cl.button()->isHidden());
+    QVERIFY(!line->placeholderText().contains("AI Assist"));
     QVERIFY(cl.handle("? anything", ShowTreeCommand::Context()));
     QVERIFY(msg.text().contains("unavailable in Operate mode"));
     m_doc->setMode(Doc::Design);
-    QVERIFY(!cl.button()->isHidden());
+    QVERIFY(line->placeholderText().contains("AI Assist"));
 }
 
 /****************************************************************************
@@ -1072,7 +1064,7 @@ struct Bar
         line = new QLineEdit(&bar);
         row->addWidget(line);
         msg = new QLabel(&bar);
-        cl.reset(new AiCommandLine(line, &pane, msg, row, nullptr));
+        cl.reset(new AiCommandLine(line, &pane, msg, nullptr));
     }
 };
 }
@@ -1131,6 +1123,83 @@ void AiAssist_Test::proposalShowsAppliesAndUndoesInOneStep()
     QVERIFY(st->undoShared());
     QCOMPARE(treeXml(), before);
     QCOMPARE(st->sharedUndoText(), undoBefore);
+}
+
+/* One command line: a line that is not a command goes to the assistant with
+   the parser's error and the syntax reference; the answer is words, or a
+   corrected command as a proposal (nothing runs). */
+void AiAssist_Test::oneLineFallbackSendsTheParserError()
+{
+    enable();
+    const ShowTreeCommand::Context ctx = smallShow();
+    Bar b;
+    m_server->clearQueue();
+    m_server->queueJson(kChat, textReply("The Towers are the front truss. Say: Towers colour Blue."));
+    QSignalSpy answered(m_ai, &AiAssist::answered);
+    QString note;
+    QVERIFY(b.cl->fallback("make the towers a nice blue", "Don't know “make”.", ctx, &note));
+    QVERIFY(b.msg->text().contains("Don't know “make”."));
+    QVERIFY(b.msg->text().contains("Asking"));
+    QVERIFY(answered.wait(5000));
+    QVERIFY(b.pane.toHtml().contains("front truss"));
+    QCOMPARE(m_server->count(kChat), 1);
+    // The request carries what the model needs: the line, the parser's
+    // error, the syntax reference.
+    const QJsonObject body = m_server->requests.first().json();
+    const QString all = QString::fromUtf8(QJsonDocument(body).toJson(QJsonDocument::Compact));
+    QVERIFY(all.contains("make the towers a nice blue"));
+    QVERIFY(all.contains("Don't know"));
+    QVERIFY(all.contains("cueonly"));              // the syntax reference
+    QVERIFY(all.contains("refused"));
+}
+
+void AiAssist_Test::oneLineFallbackProposesACorrectedCommand()
+{
+    enable();
+    const ShowTreeCommand::Context ctx = smallShow();
+    ShowTreeController *st = m_doc->showTree();
+    const QByteArray before = treeXml();
+    Bar b;
+    propose(m_server, toolsReply({ { "set_look", QJsonObject { { "targets", QJsonArray { "Towers" } },
+                                                                 { "looks", QJsonArray { look("colour", "Blue") } } } } }),
+            "Towers colour Blue: Enter applies it.");
+    QSignalSpy answered(m_ai, &AiAssist::answered);
+    QVERIFY(b.cl->fallback("paint towers blue", "Don't know “paint”.", ctx));
+    QVERIFY(answered.wait(5000));
+    // A proposal, in the line as it would be typed; nothing has changed.
+    QVERIFY(m_ai->hasProposal());
+    QCOMPARE(b.line->text(), QStringLiteral("Towers colour Blue"));
+    QCOMPARE(treeXml(), before);
+    QVERIFY(b.msg->text().contains("Enter applies"));
+    // Enter applies it, one undo step.
+    QVERIFY(b.cl->handle("Towers colour Blue", ctx));
+    QVERIFY(!m_ai->hasProposal());
+    QVERIFY(st->cue(ctx.cue)->layers.first().look(ShowTree::KeyColour) != nullptr);
+    QVERIFY(st->undoShared());
+    QCOMPARE(treeXml(), before);
+}
+
+void AiAssist_Test::oneLineFallbackOffOrOperateAsksNothing()
+{
+    const ShowTreeCommand::Context ctx = smallShow();
+    Bar b;
+    // Off in Settings: nothing is sent; plain words say where to turn it on.
+    enable(false);
+    QString note;
+    QVERIFY(!b.cl->fallback("make the towers blue", "Don't know “make”.", ctx, &note));
+    QVERIFY(note.contains("Settings ▸ AI Assist"));
+    note.clear();
+    QVERIFY(!b.cl->fallback("xyzzy", "Don't know “xyzzy”.", ctx, &note));   // one word: no hint
+    QVERIFY(note.isEmpty());
+    // On, but Operate: still nothing.
+    enable();
+    m_doc->setMode(Doc::Operate);
+    note.clear();
+    QVERIFY(!b.cl->fallback("make the towers blue", "Don't know “make”.", ctx, &note));
+    QVERIFY(note.isEmpty());
+    m_doc->setMode(Doc::Design);
+    QTest::qWait(50);
+    QCOMPARE(m_server->requests.count(), 0);
 }
 
 void AiAssist_Test::decliningChangesNothing()

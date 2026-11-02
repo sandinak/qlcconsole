@@ -79,6 +79,9 @@ private slots:
 
     // P2: changes, proposed, confirmed, one undo step
     void proposalShowsAppliesAndUndoesInOneStep();
+    void oneLineFallbackSendsTheParserError();
+    void oneLineFallbackProposesACorrectedCommand();
+    void oneLineFallbackOffOrOperateAsksNothing();
     void decliningChangesNothing();
     void leavingAStepOut();
     void nothingChangesInOperate();
