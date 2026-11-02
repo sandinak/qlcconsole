@@ -85,7 +85,10 @@ public:
      *  @a bank / @a slot are EncoderBank's: Intensity for a Dimmer look,
      *  Colour (hue, saturation, R G B, W A UV) for a Colour look, Position
      *  (pan, tilt) for a Pan / tilt look, Beam (zoom, focus, iris, frost)
-     *  and Gobo for the Beam, Zoom and Gobo looks. @{ */
+     *  and Gobo for the Beam, Zoom and Gobo looks. A Strobe look takes the
+     *  Beam bank's Strobe (its rate), a Shutter look its Shutter (open,
+     *  closed, strobe: range to range), and an Aim at a line takes Position's
+     *  first encoder as its Spread (decided, can change). @{ */
     /** Whether the look shown has that control. */
     bool encoderHas(int bank, int slot) const;
     /** Turn it by @a detents (signed); false: the look has no such control. */
@@ -94,6 +97,12 @@ public:
     bool encoderHome(int bank, int slot);
     /** Where it is, 0-1 (a hue is its place round the wheel). */
     bool encoderValue(int bank, int slot, float *norm) const;
+    /** What the encoder is called on this look when it is not the bank's
+     *  name ("Spread" for an Aim); empty: the bank's name. */
+    QString encoderLabel(int bank, int slot) const;
+    /** Why this look has nothing to turn on any bank (for the status line);
+     *  empty when it has something, or nothing to say. */
+    QString encoderHint() const;
     /** @} */
 
     /** A back button at the head of the editor ("↩ Back"), for a host
@@ -159,6 +168,8 @@ private slots:
 private:
     QSlider *encoderSlider(int bank, int slot) const;
     void setPanTilt(int pan, int tilt);
+    /** An Aim at a line: its Spread (an encoder's turn: one param step per gesture). */
+    void setSpread(double spread);
     void setColourHsv(float h, float s, float v);
     /** Whether any target fixture of the context scene has a channel in the
      *  given QLCChannel::Group. */

@@ -39,6 +39,7 @@
 #include "programmingoutline.h"
 #include "encoderbank.h"
 #include "controlmap.h"
+#include "showtreecontroller.h"
 #include "paletteops.h"
 #include "lookeditor.h"
 #include "qlcpalette.h"
@@ -66,8 +67,17 @@ Workbench::EncoderTarget Workbench::encoderTarget() const
     }
     if (s == nullptr && m_stack != nullptr && m_stackLayer >= 0 && m_stackLayer < m_stack->layers().size())
     {
-        Scene *layer = qobject_cast<Scene *>(m_doc->function(m_stack->layerScene(m_stackLayer)));
-        if (layer != nullptr)
+        const quint32 layerId = m_stack->layerScene(m_stackLayer);
+        Scene *layer = qobject_cast<Scene *>(m_doc->function(layerId));
+        ShowTreeController *tree = m_doc->showTree();
+        if (layer != nullptr && tree != nullptr && tree->isGenerated(layerId))
+        {
+            /* A cue layer's scene is baked from its looks, shared with every
+               cue that plays the same, and never saved: a raw channel value
+               written into it would be lost at the next bake. */
+            t.why = tr("a cue layer is made from its looks — open one to turn it");
+        }
+        else if (layer != nullptr)
         {
             t.scene = layer;
             t.fixtures = m_selectedFixtures;
@@ -143,7 +153,8 @@ void Workbench::refreshEncoderRings()
     {
         enc->clearRings();
         if (m_encoderMessage.isEmpty())
-            line += tr(" · select a fixture, a group or a look to turn");
+            line += t.why.isEmpty() ? tr(" · select a fixture, a group or a look to turn")
+                                    : QStringLiteral(" · ") + t.why;
     }
     else
     {
@@ -158,14 +169,25 @@ void Workbench::refreshEncoderRings()
                           : EncoderAttributes::read(m_doc, t.scene, t.fixtures, bank, slot, &norm);
             enc->setRing(slot, has ? norm : -1.0f);
             if (has)
-                names << EncoderBank::slotName(bank, slot);
+                names << encoderSlotLabel(t, bank, slot);
         }
         if (m_encoderMessage.isEmpty())
-            line += names.isEmpty() ? tr(" · nothing here to turn") : QStringLiteral(" · ") + names.join(QStringLiteral(", "));
+        {
+            const QString hint = t.look != nullptr ? t.look->encoderHint() : QString();
+            line += !names.isEmpty() ? QStringLiteral(" · ") + names.join(QStringLiteral(", "))
+                  : hint.isEmpty() ? tr(" · nothing here to turn")
+                                   : QStringLiteral(" · ") + hint;
+        }
     }
     if (!m_encoderMessage.isEmpty())
         line += QStringLiteral(" · ") + m_encoderMessage;
     m_encoderLine->setText(line);
+}
+
+QString Workbench::encoderSlotLabel(const EncoderTarget &t, int bank, int slot) const
+{
+    const QString own = t.look != nullptr ? t.look->encoderLabel(bank, slot) : QString();
+    return own.isEmpty() ? EncoderBank::slotName(bank, slot) : own;
 }
 
 void Workbench::recordEncoderStep(Scene *scene, const QSharedPointer<Scene> &before, const QString &what,
@@ -191,17 +213,18 @@ void Workbench::encoderAdjusted(int bank, int slot, int detents, bool fine)
     const EncoderTarget t = encoderTarget();
     if (!t.isValid())
     {
-        encoderMessage(tr("nothing selected to turn"));
+        encoderMessage(t.why.isEmpty() ? tr("nothing selected to turn") : t.why);
         return;
     }
-    const QString what = EncoderBank::slotName(bank, slot);
+    const QString what = encoderSlotLabel(t, bank, slot);
     bool ok = false;
     if (t.look != nullptr)
     {
         ok = t.look->encoderAdjust(bank, slot, detents, fine);
         if (!ok)
         {
-            encoderMessage(tr("this look has no %1").arg(what.toLower()));
+            const QString hint = t.look->encoderHint();
+            encoderMessage(hint.isEmpty() ? tr("this look has no %1").arg(what.toLower()) : hint);
             return;
         }
     }
@@ -258,10 +281,10 @@ void Workbench::encoderHomed(int bank, int slot)
     const EncoderTarget t = encoderTarget();
     if (!t.isValid())
     {
-        encoderMessage(tr("nothing selected to turn"));
+        encoderMessage(t.why.isEmpty() ? tr("nothing selected to turn") : t.why);
         return;
     }
-    const QString what = EncoderBank::slotName(bank, slot);
+    const QString what = encoderSlotLabel(t, bank, slot);
     if (t.look != nullptr)
     {
         if (!t.look->encoderHome(bank, slot))

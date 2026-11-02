@@ -22,6 +22,7 @@
    same path as a hand on that control -- the same edit, the same undo step
    (merged for a gesture), the same preview. */
 
+#include <QDoubleSpinBox>
 #include <QSignalBlocker>
 #include <QSlider>
 #include <QColor>
@@ -30,6 +31,8 @@
 #include "virtualconsole/vcxypadarea.h"
 #include "encoderattributes.h"
 #include "capabilitybar.h"
+#include "linespread.h"
+#include "paletteops.h"
 #include "qlccapability.h"
 #include "encoderbank.h"
 #include "lookeditor.h"
@@ -42,6 +45,10 @@ namespace
 const int kPanDeg = 540;        // as the pan / tilt page maps its pad
 const int kTiltDeg = 270;
 const qreal kPadMax = 256.0;
+const int kBeamStrobe = 4;      // EncoderBank's Beam slots past frost
+const int kBeamShutter = 5;
+
+double spreadUnit(bool fine) { return fine ? 0.1 : 0.5; }
 
 int unitOf(int bank, int slot, bool fine, int range)
 {
@@ -78,6 +85,10 @@ QSlider *LookEditor::encoderSlider(int bank, int slot) const
         return bank == EncoderBank::GoboBank && slot == 0 ? m_singleSlider : nullptr;
     case QLCPalette::Zoom:
         return bank == EncoderBank::BeamBank && slot == 0 ? m_singleSlider : nullptr;
+    case QLCPalette::Strobe:
+        return bank == EncoderBank::BeamBank && slot == kBeamStrobe ? m_strobeSlider : nullptr;
+    case QLCPalette::Shutter:
+        return bank == EncoderBank::BeamBank && slot == kBeamShutter ? m_singleSlider : nullptr;
     default:
         break;
     }
@@ -97,6 +108,8 @@ bool LookEditor::encoderHas(int bank, int slot) const
         return bank == EncoderBank::PositionBank;
     case QLCPalette::Color:
         return bank == EncoderBank::ColourBank && (slot < 2 || encoderSlider(bank, slot) != nullptr);
+    case QLCPalette::Aim:
+        return bank == EncoderBank::PositionBank && slot == 0 && !m_lineBox->isHidden();
     default:
         return encoderSlider(bank, slot) != nullptr;
     }
@@ -124,12 +137,18 @@ bool LookEditor::encoderValue(int bank, int slot, float *norm) const
             return true;
         }
         break;
+    case QLCPalette::Aim:
+    {
+        const double max = LineSpread::maxSpread();
+        *norm = float((m_lineSpreadSpin->value() + max) / (2.0 * max));
+        return true;
+    }
     default:
         break;
     }
     if (QSlider *sl = encoderSlider(bank, slot))
     {
-        *norm = float(sl->value()) / 255.0f;
+        *norm = float(sl->value()) / float(qMax(1, sl->maximum()));
         return true;
     }
     return false;
@@ -180,6 +199,9 @@ bool LookEditor::encoderAdjust(int bank, int slot, int detents, bool fine)
             return true;
         }
         break;
+    case QLCPalette::Aim:
+        setSpread(m_lineSpreadSpin->value() + detents * spreadUnit(fine));
+        return true;
     default:
         break;
     }
@@ -187,10 +209,11 @@ bool LookEditor::encoderAdjust(int bank, int slot, int detents, bool fine)
     QSlider *sl = encoderSlider(bank, slot);
     if (sl == nullptr)
         return false;
-    if (p->type() == QLCPalette::Gobo && !fine && m_singleChannel != nullptr
+    if ((p->type() == QLCPalette::Gobo || p->type() == QLCPalette::Shutter) && !fine && m_singleChannel != nullptr
         && m_singleChannel->capabilities().size() > 1)
     {
-        // A gobo wheel steps range to range (a turn is a gobo), fine is raw.
+        // A gobo wheel or a shutter steps range to range (a turn is a gobo, or open /
+        // closed / strobe), fine is raw.
         const QList<QLCCapability *> caps = m_singleChannel->capabilities();
         const int cur = sl->value();
         int at = 0;
@@ -203,7 +226,7 @@ bool LookEditor::encoderAdjust(int bank, int slot, int detents, bool fine)
         return true;
     }
     // The slider's own change is the Look Editor's edit.
-    sl->setValue(sl->value() + detents * unitOf(bank, slot, fine, 255));
+    sl->setValue(sl->value() + detents * unitOf(bank, slot, fine, sl->maximum()));
     return true;
 }
 
@@ -231,6 +254,9 @@ bool LookEditor::encoderHome(int bank, int slot)
             return true;
         }
         break;
+    case QLCPalette::Aim:
+        setSpread(0.0);
+        return true;
     default:
         break;
     }
@@ -240,6 +266,51 @@ bool LookEditor::encoderHome(int bank, int slot)
         return true;
     }
     return false;
+}
+
+QString LookEditor::encoderLabel(int bank, int slot) const
+{
+    const QLCPalette *p = m_doc->palette(m_paletteId);
+    if (p != nullptr && p->type() == QLCPalette::Aim && bank == EncoderBank::PositionBank && slot == 0)
+        return tr("Spread");
+    if (p != nullptr && p->type() == QLCPalette::Strobe && bank == EncoderBank::BeamBank && slot == kBeamStrobe)
+        return tr("Strobe rate");
+    return QString();
+}
+
+QString LookEditor::encoderHint() const
+{
+    const QLCPalette *p = m_doc->palette(m_paletteId);
+    if (p == nullptr)
+        return QString();
+    switch (p->type())
+    {
+    case QLCPalette::Aim:
+        return m_lineBox->isHidden() ? tr("an Aim at a single target has no spread to turn") : QString();
+    case QLCPalette::Effect:
+        return tr("an effect is set on its own page, not with the encoders");
+    case QLCPalette::Formation:
+        return tr("a Formation is set on its own page, not with the encoders");
+    default:
+        break;
+    }
+    return QString();
+}
+
+void LookEditor::setSpread(double spread)
+{
+    QLCPalette *p = m_doc->palette(m_paletteId);
+    if (p == nullptr || p->type() != QLCPalette::Aim || m_lineBox->isHidden())
+        return;
+    const double max = LineSpread::maxSpread();
+    const double to = qBound(-max, spread, max);
+    auto set = [this, to]() { m_lineSpreadSpin->setValue(to); };
+    // The spread is a param of the look, so it is a param step (merged for a gesture).
+    if (PaletteOps *ops = m_doc->paletteOps())
+        ops->effectParamStep(tr("Edit %1").arg(p->name()), { p->id() }, set,
+                             QStringLiteral("lookspread:%1").arg(p->id()));
+    else
+        set();
 }
 
 void LookEditor::setPanTilt(int pan, int tilt)

@@ -49,10 +49,20 @@ back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
   button steps the banks, a push is fine and a tap is home, and the rings and
   bank lamps are lit back. A turn edits what Build has selected on the Look
   Editor's own path (a look's controls, or the channels of the selected
-  fixtures, groups or a Show Tree layer's scene), one undo step per gesture.
+  fixtures or groups), one undo step per gesture.
   Set up under Connections ▸ Devices ▸ Show control & sync ▸ Control Map ▸
   Encoder bank; saved in the Control Map. In Operate the encoders do not
   edit. A Pan / tilt or Beam look's controls now also take undo.
+- **Encoder banks: learn the rest, and Strobe, Shutter and Aim looks.**
+  Control Map ▸ Encoder bank ▸ **Learn more…** learns the pushes, the
+  next / previous bank buttons, the bank 1 button (the others follow) and
+  the rings by pressing the control. The Beam bank gains Strobe and Shutter
+  encoders: a Strobe look's rate, a Shutter look's state (open, closed,
+  strobe); an Aim at a line turns its Spread on Position's first encoder
+  (one undo step per gesture). A look with nothing to turn says so on the
+  Workbench's line. A Show Tree cue layer's baked scene is no longer
+  written to by a turn (it was lost at the next bake): open one of the
+  layer's looks and turn that.
 
 ### Run the show
 

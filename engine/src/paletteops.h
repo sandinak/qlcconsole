@@ -234,7 +234,8 @@ public:
      *  one step, shared palettes and the tree's own one-offs alike. Undo and
      *  Redo put the parameters back and tell the playing effect. Nothing
      *  changed: no step (false). */
-    bool effectParamStep(const QString &label, const QList<quint32> &paletteIds, const std::function<void()> &change);
+    bool effectParamStep(const QString &label, const QList<quint32> &paletteIds, const std::function<void()> &change,
+                         const QString &mergeKey = QString());
 
     /************************************************************************
      * Function steps (docs/design/WORKFLOW_DESIGN.md W1): the Workbench's edits to a

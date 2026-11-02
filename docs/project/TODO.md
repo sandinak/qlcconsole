@@ -47,13 +47,29 @@ look of the scene drives is left alone and the line says so; the Workbench
 must be showing. Open:
 - Check the three presets on the real controllers (CC/note numbers, ring
   and lamp lines, relative mode names), and add the ones Branson owns.
-- Direct bank buttons and lamps are in the model but only the X-Touch Mini
-  preset uses them; a "Learn" for the bank button and for the pushes/rings.
+- ~~Direct bank buttons: a "Learn" for the bank button and for the
+  pushes/rings.~~ Done (enc2): Control Map ▸ Encoder bank ▸ Learn more…
+  (pushes, next / previous, bank 1 button with its lamps, rings = the
+  control turned, Forget). Decided: the ring base is learned from the
+  encoder turned (the same number); a controller with rings elsewhere
+  needs its preset.
+- ~~Show Tree layer fallback untested.~~ Done (enc2), and it was wrong:
+  a cue layer's scene is baked (shared by signature, never saved), so a
+  turn there was lost at the next bake and merged into no step. The layer
+  row now refuses and says "made from its looks"; an opened look row takes
+  the turn (Look Editor path, one undo step). Tests: EncoderBankUi_Test.
+  A Build stack of real scenes (collection / chaser) still turns the
+  focused layer's scene; no test for that path yet.
 - Colour: hue / saturation are for RGB and CMY heads only (not a colour
   wheel); Position steps whole degrees in a Pan / tilt look (the palette
-  stores integers); no encoder for Shutter / Strobe looks, Aim looks,
-  effects' parameters, nor for a Show Tree cue layer's attribute rows (the
-  Look Editor panes there are the way).
+  stores integers); no encoder for effects' parameters.
+  ~~Shutter / Strobe looks, Aim looks.~~ Done (enc2): Beam bank slots 5-6
+  (Strobe rate; Shutter state, range to range) on Strobe and Shutter
+  looks, Position's first encoder is an Aim-at-a-line look's Spread (a
+  param step, merged per gesture; decided: there is no target offset in
+  the look, the stage target is shared). Strobe / Shutter on a fixture
+  selection (a scene's raw channels) are not mapped yet: the line says
+  "the selection has no strobe".
 - RGB-only fixtures (no dimmer) take Intensity as the strongest colour.
 - Hue wraps; everything else clamps. No acceleration beyond the speed the
   controller sends (a fast spin is several detents in one message).

@@ -142,7 +142,7 @@ int EncoderBank::slotCount(int bank)
     case IntensityBank: return 1;
     case ColourBank: return 8;
     case PositionBank: return 2;
-    case BeamBank: return 4;
+    case BeamBank: return 6;
     case GoboBank: return 4;
     default: return 0;
     }
@@ -168,7 +168,7 @@ QString EncoderBank::slotName(int bank, int slot)
     case BeamBank:
     {
         const QStringList names = { QObject::tr("Zoom"), QObject::tr("Focus"), QObject::tr("Iris"),
-                                    QObject::tr("Frost") };
+                                    QObject::tr("Frost"), QObject::tr("Strobe"), QObject::tr("Shutter") };
         return names.at(slot);
     }
     case GoboBank:
