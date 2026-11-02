@@ -75,6 +75,7 @@ void ShowTreeView::buildTimecodeRows()
     }
     m_cueTcBase = new QLabel(m_cueTc->parentWidget());
     m_cueTcBase->setObjectName("stCueTimecodeBase");
+    m_cueTcBase->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);   // never widens the page
     m_cueTcBase->setToolTip(tr("Its time counts from its section's start (or the anchor before it): move "
                                "that and this cue follows"));
     if (QHBoxLayout *tl = qobject_cast<QHBoxLayout *>(m_cueTcRow->layout()))
@@ -84,8 +85,10 @@ void ShowTreeView::buildTimecodeRows()
     if (QFormLayout *f = qobject_cast<QFormLayout *>(m_sectionPage->layout()))
     {
         m_sectionStartRow = new QWidget(m_sectionPage);
-        QHBoxLayout *h = new QHBoxLayout(m_sectionStartRow);
-        h->setContentsMargins(0, 0, 0, 0);
+        QVBoxLayout *v = new QVBoxLayout(m_sectionStartRow);
+        v->setContentsMargins(0, 0, 0, 0);
+        QHBoxLayout *h = new QHBoxLayout();
+        v->addLayout(h);
         m_sectionStart = new QLineEdit(m_sectionStartRow);
         m_sectionStart->setObjectName("stSectionStart");
         m_sectionStart->setPlaceholderText(tr("hh:mm:ss:ff -- none"));
@@ -100,7 +103,7 @@ void ShowTreeView::buildTimecodeRows()
                                        "much (a section cut or made longer)"));
         h->addWidget(m_sectionStart, 1);
         h->addWidget(m_sectionStartLearn);
-        h->addWidget(m_sectionFollow);
+        v->addWidget(m_sectionFollow);
         f->insertRow(f->rowCount() - 1, tr("Starts at"), m_sectionStartRow);
         auto setStart = [this](qint32 ms) {
             Section s;
@@ -130,7 +133,7 @@ void ShowTreeView::buildTimecodeRows()
     if (m_listForm != nullptr)
     {
         m_listTcRow = new QWidget(m_listPage);
-        QHBoxLayout *h = new QHBoxLayout(m_listTcRow);
+        QVBoxLayout *h = new QVBoxLayout(m_listTcRow);
         h->setContentsMargins(0, 0, 0, 0);
         m_listTcConvert = new QPushButton(tr("Section times…"), m_listTcRow);
         m_listTcConvert->setObjectName("stListTcConvert");
@@ -146,7 +149,8 @@ void ShowTreeView::buildTimecodeRows()
         h->addWidget(m_listTcConvert);
         h->addWidget(m_listTcMarkers);
         h->addWidget(m_listTcLearn);
-        h->addStretch(1);
+        for (QPushButton *b : { m_listTcConvert, m_listTcMarkers, m_listTcLearn })
+            h->setAlignment(b, Qt::AlignLeft);
         m_listForm->addRow(tr("Timecode"), m_listTcRow);
         connect(m_listTcConvert, &QPushButton::clicked, this, [this]() {
             if (currentKind() == ListNode)
@@ -413,7 +417,10 @@ void ShowTreeView::updateLearnButton()
         return;
     if (m_learnSection >= 0)
     {
-        m_listTcLearn->setText(tr("Tap at: %1").arg(learnSection()));
+        QString title = learnSection();
+        if (title.length() > 32)                // a long song name doesn't widen the page
+            title = title.left(31) + QChar(0x2026);
+        m_listTcLearn->setText(tr("Tap at: %1").arg(title));
         m_listTcLearn->setToolTip(tr("Tap as the section starts: it takes the timecode coming in, then the next "
                                      "section is up"));
     }
