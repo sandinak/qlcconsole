@@ -3008,6 +3008,110 @@ void EffectInstance_Test::theTextEffectSpellsOnAGrid()
     timer.timerTick();
 }
 
+/* Crackle: each fixture rests, pulses up at random and fades back; it never
+   goes below rest, never writes a colour (so the pulse is the look's own),
+   pulses at about the rate asked for, and the same seed gives the same
+   crackle. */
+void EffectInstance_Test::crackleRestsPulsesUpAndFadesBack()
+{
+    EffectScript crackle;
+    QVERIFY(crackle.load(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts/crackle.js"));
+    QCOMPARE(crackle.name(), QString("Crackle"));
+    QJSEngine *eng = crackle.engine();
+    const int n = 8;
+    QJSValue fixtures = eng->newArray(n);
+    for (int i = 0; i < n; ++i)
+    {
+        QJSValue o = eng->newObject();
+        o.setProperty("id", i);
+        o.setProperty("head", 0);
+        o.setProperty("hasRGB", true);
+        fixtures.setProperty(quint32(i), o);
+    }
+
+    auto run = [&](double seed, double rate, double decay, double seconds) -> QList<QList<double>> {
+        QList<QList<double>> frames;       // [tick][fixture] dimmer
+        QJSValue state = crackle.newState();
+        for (int tick = 0; tick < int(seconds * 50); ++tick)
+        {
+            QJSValue inputs = eng->newObject();
+            inputs.setProperty("_time", tick * 0.02);
+            QJSValue params = eng->newObject();
+            for (const EffectScript::ParamDef &d : crackle.paramDefs())
+                params.setProperty(d.name, double(d.defaultValue));
+            params.setProperty("seed", seed);
+            params.setProperty("rate", rate);
+            params.setProperty("decay", decay);
+            const QJSValue out = crackle.callTick(fixtures, inputs, eng->newObject(), params, state, eng->newObject());
+            if (!out.isArray())
+                return QList<QList<double>>();
+            QList<double> row;
+            for (int i = 0; i < n; ++i)
+            {
+                const QJSValue o = out.property(quint32(i));
+                // Intensity only: the look's colour is left alone.
+                if (!o.property("r").isUndefined() || !o.property("g").isUndefined()
+                    || !o.property("b").isUndefined() || !o.property("w").isUndefined())
+                    return QList<QList<double>>();
+                row << o.property("dimmer").toNumber();
+            }
+            frames << row;
+        }
+        return frames;
+    };
+
+    const double rest = double(0.35f);   // the default, as the float it is stored in
+    const auto a = run(1, 3, 0.7, 60);
+    QVERIFY2(!a.isEmpty(), "Crackle wrote a colour");
+    // Same seed, same crackle; another seed, another.
+    QCOMPARE(run(1, 3, 0.7, 60), a);
+    QVERIFY(run(2, 3, 0.7, 60) != a);
+
+    int rises = 0;
+    double top = 0.0;
+    for (int i = 0; i < n; ++i)
+    {
+        bool up = false;
+        for (int t = 0; t < a.size(); ++t)
+        {
+            const double v = a[t][i];
+            QVERIFY2(v >= rest - 1e-6 && v <= 1.0 + 1e-6, qPrintable(QString("fixture %1 tick %2: %3").arg(i).arg(t).arg(v)));
+            top = qMax(top, v);
+            // A pulse counts when it leaves rest.
+            if (!up && v > rest + 0.5) { ++rises; up = true; }
+            if (up && v < rest + 0.01) up = false;
+        }
+    }
+    // About 3 a second across the group over 60 s = 180 (overlaps and the
+    // clipped ends shave a few off).
+    QVERIFY2(rises > 120 && rises < 240, qPrintable(QString("%1 pulses").arg(rises)));
+    QVERIFY2(top > 0.99, "a pulse reaches the look's level");
+
+    // Returns to rest once the decay is over: every fixture is at rest at
+    // some time and not stuck up.
+    int atRest = 0;
+    for (const QList<double> &row : a)
+        for (double v : row)
+            if (qAbs(v - rest) < 1e-6) ++atRest;
+    QVERIFY2(atRest > a.size() * n / 2, qPrintable(QString("%1 of %2 at rest").arg(atRest).arg(a.size() * n)));
+
+    // A single slow fixture's pulse in isolation: a snap up then a fade
+    // down, never rising again before the next pulse.
+    const auto sparse = run(5, 0.1, 0.5, 60);
+    bool sawPulse = false;
+    for (int i = 0; i < n && !sawPulse; ++i)
+        for (int t = 1; t < sparse.size() - 40; ++t)
+            if (sparse[t][i] > 0.9 && sparse[t - 1][i] < sparse[t][i])
+            {
+                // Fading a quarter second on, and back at rest by 0.8 s.
+                QVERIFY2(sparse[t + 12][i] > rest + 0.01 && sparse[t + 12][i] < sparse[t][i], "not fading");
+                QVERIFY(qAbs(sparse[t + 40][i] - rest) < 1e-6);
+                sawPulse = true;
+                break;
+            }
+    QVERIFY(sawPulse);
+}
+
 /*****************************************************************************
  * Matrix effects
  *****************************************************************************/

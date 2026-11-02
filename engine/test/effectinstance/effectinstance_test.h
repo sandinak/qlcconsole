@@ -24,6 +24,7 @@ private slots:
     void theFixturesAScriptSeesFollowTheRig();
     void aWholeRigOfPixelsTicksQuickly();
     void theTextEffectSpellsOnAGrid();
+    void crackleRestsPulsesUpAndFadesBack();
     /** The matrix effects on a box of RGB and white pixel rows, eight boxes
      *  as one canvas, its RGB-only and white-only modes and a plain RGB
      *  matrix: each head told what it emits, every effect running through
