@@ -10,6 +10,27 @@ under `~/.claude/.../memory/`.
 
 ---
 
+## 0.4.0 coverage audit — leftovers (tcov, 2026-11-02)
+
+Map: docs/dev/TEST_MAP.md Part 1b. Decide or fix:
+
+- **Engine Show keeps a deleted function's block** (only the Shows tab
+  prunes it); `Show_Test::aSceneDeletedWhileTheShowPlaysLeavesTheRestPlaying`
+  has the QEXPECT_FAIL ("TODO 0.4 tcov").
+- **"Design only" effect fades:** CHANGELOG says Design only; a typed
+  `… effect … fade 2` works in Operate (plans are refused). Wording or code?
+- **QLab out with Blind on:** a real GO while Blind is on still sends.
+  Intended?
+- **Teaching's question from the web Design/Operate toggle:** goes through
+  `App::slotModeOperate` without `m_unattendedOperate`; may ask on the console.
+- **Add Fixture says nothing when the engine refuses** a fixture past
+  universe 1024 (`FixtureCreator::addFromDialog`).
+- Still untested (med): HID trigger feedback per pad type (plugins/hid),
+  Fixture Properties' universe box / truss paste Teaching asks, audio-trigger
+  log bands, real LTC audio and the timecode footer chip, Snap-to-section on a
+  real drop, Why-on entry points in each view, Show Review CLI warning-only
+  exit, Companion module JS tests not in the gate.
+
 ## Backwash: light on the cyc only on purpose — built, leftovers (0.4, cyc, 2026-11-02)
 
 Built: Show Review **PWR-12** (engine/src/showreviewzonechecks.cpp, sharing

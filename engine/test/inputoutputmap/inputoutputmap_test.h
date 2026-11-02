@@ -79,6 +79,7 @@ private slots:
     void slotSavesAndLoads();
     void singleDevicePatchSavesAsBefore();
     void slotMapsControlsByRole();
+    void theSecondPadOfASlotDrivesTheInputAndNoOtherDoes();
     void slotMappingLatency();
     void slotAnyGameController();
     void slotOfferAndAdopt();
@@ -135,6 +136,8 @@ private slots:
     /** Teaching mode holds network output until the teacher lets it through */
     void teachingHoldsNetworkOutput();
     void teachingHoldsUsbOutput();
+    void heavyInputIsHandedOverOncePerUniversePerFrame();
+    void unpatchingAUniverseKeepsTheOthersOutputSettings();
 
 private:
     Doc* m_doc;

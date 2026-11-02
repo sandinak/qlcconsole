@@ -218,6 +218,7 @@ private slots:
     void layersIntoAHitLoseTheirRelease();
     void effectRunsIsAnUndoStep();
     void releaseTakesAFunctionLayer();
+    void theHitPageFadeBoxesSetTheHitsFades();
 
 private:
     quint32 dimmer(int level, const QString &name);

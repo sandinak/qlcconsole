@@ -49,6 +49,7 @@ private slots:
      *  a head's channel map never lists, so it has to be found per fixture. */
     void aGoboLookReachesTheGoboChannel();
     void aColourLookOnAGroupOnlyLightsTheGroupsHeads();
+    void aDimmerPaletteKeepsAFractionalValue();
 
     /** Gobo by name (docs/design/SHOW_TREE_DESIGN.md §10.7): exact, then singular /
      *  plural, then a unique prefix/contains; several in a tier: none. */

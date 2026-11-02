@@ -27,12 +27,16 @@
 
 #include "../../../engine/test/common/stdprelude.h"
 #define protected public
+#define private public
 
 #include "qlcfixturedefcache.h"
 #include "virtualconsole.h"
 #include "vcframe_test.h"
 #include "mastertimer.h"
 #include "vcbutton.h"
+#include "scene.h"
+#include "fixture.h"
+#include "universe.h"
 #include "vcslider.h"
 #include "inputoutputmap.h"
 #include "vcwidget.h"
@@ -40,6 +44,7 @@
 #include "vcframe.h"
 #include "doc.h"
 
+#undef private
 #undef protected
 
 void VCFrame_Test::initTestCase()
@@ -461,4 +466,70 @@ void VCFrame_Test::sliderStartsInAValidMode()
     const int playback = s.sliderValue();
     iom->setGrandMasterValue(200);
     QCOMPARE(s.sliderValue(), playback);
+}
+
+/* Changelog (upstream 4.14.4): a submaster slider in an outer frame scales
+   a scene started from a button in a frame nested inside it -- in the DMX
+   universe, and again when the slider is moved while the scene plays. */
+void VCFrame_Test::anOuterSubmasterScalesASceneStartedInANestedFrame()
+{
+    Fixture *fxi = new Fixture(m_doc);
+    fxi->setChannels(1);
+    QVERIFY(m_doc->addFixture(fxi));
+    Scene *scene = new Scene(m_doc);
+    scene->setName("Full dimmer");
+    scene->setValue(fxi->id(), 0, 200);
+    QVERIFY(m_doc->addFunction(scene));
+
+    QWidget w;
+    VCFrame outer(&w, m_doc, true);
+    VCFrame *inner = new VCFrame(&outer, m_doc, true);
+    VCButton *btn = new VCButton(inner, m_doc);
+    btn->setFunction(scene->id());
+    btn->setAction(VCButton::Toggle);
+    VCSlider *sub = new VCSlider(&outer, m_doc);
+    sub->setSliderMode(VCSlider::Submaster);
+    VirtualConsole::instance()->connectWidgetToParent(inner, &outer);
+    VirtualConsole::instance()->connectWidgetToParent(btn, inner);
+    VirtualConsole::instance()->connectWidgetToParent(sub, &outer);
+    sub->setSliderValue(128, false);                    // about half, before anything plays
+    const qreal half = 128 / 255.0;
+
+    auto level = [this]() {
+        m_doc->masterTimer()->timerTick();
+        QList<Universe *> unis = m_doc->inputOutputMap()->claimUniverses();
+        for (Universe *u : unis)
+            u->processFaders();
+        const int v = uchar(unis.first()->preGMValues().at(0));
+        m_doc->inputOutputMap()->releaseUniverses(false);
+        return v;
+    };
+
+    m_doc->setMode(Doc::Operate);
+    btn->pressFunction();
+    QVERIFY(level() > 0);
+    QVERIFY(scene->isRunning());
+    for (int i = 0; i < 3; ++i)
+        level();
+    const int scaled = level();
+    QVERIFY2(qAbs(scaled - int(200 * half)) <= 2, qPrintable(QString::number(scaled)));
+
+    // Moved while it plays: a quarter.
+    sub->setSliderValue(64, false);
+    for (int i = 0; i < 3; ++i)
+        level();
+    const int quarter = level();
+    QVERIFY2(qAbs(quarter - int(200 * 64 / 255.0)) <= 2, qPrintable(QString::number(quarter)));
+
+    // All the way up: the scene's own level.
+    sub->setSliderValue(255, false);
+    for (int i = 0; i < 3; ++i)
+        level();
+    QCOMPARE(level(), 200);
+
+    btn->pressFunction();
+    for (int i = 0; i < 4; ++i)
+        level();
+    QVERIFY(!scene->isRunning());
+    m_doc->setMode(Doc::Design);
 }

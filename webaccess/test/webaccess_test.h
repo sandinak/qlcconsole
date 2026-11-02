@@ -102,6 +102,10 @@ private slots:
     void groupMastersMoveFromThePage();
     void groupMastersFollowTheRemoteGoAndPinRules();
     void aPageNeedsAnAccountWithAccounts();
+    void thePageDrivesAShowTreeCueListThroughTheOneGoPath();
+    void theUploadPickersTakeOnlyFixtureFiles();
+    void theKeypadPageSendsChannelsToTheDesk();
+    void aSliderTopLabelIsEscapedInThePage();
 
     /* The Companion / Stream Deck surface: the same websocket, more words */
     void goToACueOnAListIsOneRun();

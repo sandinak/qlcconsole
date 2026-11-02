@@ -6973,6 +6973,129 @@ void ShowTree_Test::formationCommandWords()
     QCOMPARE(fl->palettes, QList<quint32>({ pid }));
 }
 
+/* CHANGELOG 0.4.0 "A Formation palette": a cue whose layer aims at a line
+   with a Formation plays it on the universe -- the pan/tilt bytes are the
+   formation's (Left to the line's left end, Right to its right end), a
+   shared edit of the Formation changes what the cue outputs (on its next
+   GO; at once in Design's preview), and the show saved and loaded plays
+   the same bytes. */
+void ShowTree_Test::aFormationPlaysOnTheUniverseAndSurvivesSaveAndLoad()
+{
+    Fixture *left = placedSpot(m_doc, "Left", -4), *right = placedSpot(m_doc, "Right", 4);
+    FixtureGroup *pair = group("Pair", { left->id(), right->id() });
+    StageTarget *edge = lineTarget(m_doc, "Edge");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 aim = st->aimPaletteFor(edge->id());
+    const quint32 form = formationPalette(m_doc, "Wide", { lineRow(KeySpread, "5") });
+    const quint32 listId = st->addCueList(st->addProduction("P"), "L");
+    const quint32 c1 = st->addCue(listId, -1, "One");
+    const quint32 l1 = st->addLayer(c1, groupTarget(pair->id()));
+    QVERIFY(st->setLayerLook(c1, l1, st->lookForPalette(aim)));
+    QVERIFY(st->setLayerLook(c1, l1, st->lookForPalette(form)));
+    const quint32 chaserId = st->cueList(listId)->chaser;
+    Chaser *chaser = qobject_cast<Chaser *>(m_doc->function(chaserId));
+    QVERIFY(chaser != nullptr);
+
+    // The four pan/tilt bytes of Left and Right on universe 1.
+    const QList<int> addrs = { int(left->universeAddress()), int(left->universeAddress()) + 1,
+                               int(right->universeAddress()), int(right->universeAddress()) + 1 };
+    auto bytesOf = [&addrs](Doc *doc) {
+        QList<int> out;
+        QList<Universe *> ua = doc->inputOutputMap()->claimUniverses();
+        for (int a : addrs)
+            out << int(uchar(ua.first()->preGMValues().at(a)));
+        doc->inputOutputMap()->releaseUniverses(false);
+        return out;
+    };
+    go(chaser);
+    tick(20);
+    const QList<int> wide = bytesOf(m_doc);
+    QVERIFY2(wide.mid(0, 2) != wide.mid(2, 2), "both lights point the same way");
+    const Scene *sc = sceneOf(st, m_doc, c1, groupTarget(pair->id()));
+    QVERIFY(qAbs(aimedAt(m_doc, sc, left->id()).x() + 5.f) < 0.05f);
+    QVERIFY(qAbs(aimedAt(m_doc, sc, right->id()).x() - 5.f) < 0.05f);
+
+    // The shared Formation edited: the list's cue plays it the next time it
+    // goes (the cue already running keeps the bytes it started with).
+    QVERIFY(st->setFormationValue(form, KeySpread, "0"));
+    stopAll();
+    go(chaser);
+    tick(20);
+    const QList<int> centre = bytesOf(m_doc);
+    QVERIFY(centre != wide);
+    sc = sceneOf(st, m_doc, c1, groupTarget(pair->id()));
+    QVERIFY(qAbs(aimedAt(m_doc, sc, left->id()).x()) < 0.05f);
+    QVERIFY(qAbs(aimedAt(m_doc, sc, right->id()).x()) < 0.05f);
+    // Undone: back to the wide bytes.
+    QVERIFY(m_doc->paletteOps()->undo());
+    stopAll();
+    go(chaser);
+    tick(20);
+    QCOMPARE(bytesOf(m_doc), wide);
+    stopAll();
+
+    // In Design's preview an edit of the Formation shows on the rig at once.
+    st->previewCue(c1);
+    tick(20);
+    QCOMPARE(bytesOf(m_doc), wide);
+    QVERIFY(st->setFormationValue(form, KeySpread, "0"));
+    tick(20);
+    QCOMPARE(bytesOf(m_doc), centre);
+    QVERIFY(m_doc->paletteOps()->undo());
+    tick(20);
+    QCOMPARE(bytesOf(m_doc), wide);
+    // Spread below 0: the beams cross, the two lights trade ends.
+    QVERIFY(st->setFormationValue(form, KeySpread, "-5"));
+    tick(20);
+    sc = sceneOf(st, m_doc, c1, groupTarget(pair->id()));
+    QVERIFY2(qAbs(aimedAt(m_doc, sc, left->id()).x() - 5.f) < 0.05f,
+             qPrintable(QString::number(aimedAt(m_doc, sc, left->id()).x())));
+    QVERIFY(qAbs(aimedAt(m_doc, sc, right->id()).x() + 5.f) < 0.05f);
+    const QList<int> crossed = bytesOf(m_doc);
+    QVERIFY(crossed != wide && crossed != centre);
+    QVERIFY(m_doc->paletteOps()->undo());
+    tick(20);
+    QCOMPARE(bytesOf(m_doc), wide);
+    st->stopPreview();
+    stopAll();
+
+    // Saved and loaded (the spots' made-up definitions known to the other
+    // show's cache, as a user's own fixtures are): the same bytes.
+    const QByteArray xml = engineXml(m_doc);
+    QVERIFY(xml.contains("Type=\"Formation\""));
+    Doc *other = new Doc(this);
+    for (Fixture *f : { left, right })
+        QVERIFY(other->fixtureDefCache()->addFixtureDef(new QLCFixtureDef(f->fixtureDef())));
+    QXmlStreamReader r(xml);
+    r.readNextStartElement();
+    QVERIFY(other->loadXML(r, false));
+    QVERIFY(other->palette(form) != nullptr);
+    QCOMPARE(other->palette(form)->type(), QLCPalette::Formation);
+    QCOMPARE(other->palette(form)->formationValue(QLCPalette::FormationSpread), 5.0);
+    Chaser *otherChaser = qobject_cast<Chaser *>(other->function(chaserId));
+    QVERIFY(otherChaser != nullptr);
+    ChaserAction action;
+    action.m_action = ChaserNextStep;
+    action.m_stepIndex = -1;
+    action.m_masterIntensity = 1.0;
+    action.m_stepIntensity = 1.0;
+    action.m_fadeMode = Chaser::FromFunction;
+    otherChaser->setAction(action);
+    otherChaser->start(other->masterTimer(), FunctionParent::master());
+    for (int i = 0; i < 20; ++i)
+    {
+        other->masterTimer()->timerTick();
+        QList<Universe *> ua = other->inputOutputMap()->claimUniverses();
+        ua.first()->processFaders();
+        other->inputOutputMap()->releaseUniverses(false);
+    }
+    QCOMPARE(bytesOf(other), wide);
+    otherChaser->stop(FunctionParent::master());
+    for (int i = 0; i < 5; ++i)
+        other->masterTimer()->timerTick();
+    delete other;
+}
+
 /****************************************************************************
  * The command line's language: help from the parser's own table
  ****************************************************************************/

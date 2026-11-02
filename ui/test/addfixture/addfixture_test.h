@@ -51,6 +51,7 @@ private slots:
     void aTakenNameIsRefusedWhenEditingAndNumberedWhenAdding();
     void eachModelSaysWhereItsDefinitionComesFrom();
     void aNetworkFixtureCanBeSentToByWled();
+    void aFixturePastTheUniverseLimitIsRefused();
 
 private:
     Doc* m_doc;

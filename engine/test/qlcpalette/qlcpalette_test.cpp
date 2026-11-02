@@ -325,6 +325,51 @@ void QLCPalette_Test::aGoboLookReachesTheGoboChannel()
     spot->setFixtureDefinition(nullptr, nullptr);   // def is on the stack
 }
 
+// 0.4.0 "Based on QLC+ 4.14.4": a Dimmer palette's fractional value is read from the
+// file (not 0), survives a save and reload, and drives the dimmer channel.
+void QLCPalette_Test::aDimmerPaletteKeepsAFractionalValue()
+{
+    auto xmlOf = [](QLCPalette &p) {
+        QBuffer buffer;
+        buffer.open(QIODevice::WriteOnly | QIODevice::Text);
+        QXmlStreamWriter w(&buffer);
+        const bool ok = p.saveXML(&w);
+        w.setDevice(NULL);
+        buffer.close();
+        return ok ? buffer.data() : QByteArray();
+    };
+
+    const QByteArray src = "<Palette ID=\"4\" Type=\"Dimmer\" Name=\"Half\" Value=\"50.5\"/>";
+    QXmlStreamReader r1(src);
+    r1.readNextStartElement();
+    QLCPalette p(QLCPalette::Undefined);
+    QVERIFY(p.loadXML(r1));
+    QCOMPARE(p.type(), QLCPalette::Dimmer);
+    QVERIFY(qAbs(p.value().toDouble() - 50.5) < 0.001);
+
+    // Saved and loaded again: still 50.5, not 0 and not cut to 50.
+    const QByteArray saved = xmlOf(p);
+    QVERIFY(saved.contains("50.5"));
+    QXmlStreamReader r2(saved);
+    r2.readNextStartElement();
+    QLCPalette back(QLCPalette::Undefined);
+    QVERIFY(back.loadXML(r2));
+    QVERIFY(qAbs(back.value().toDouble() - 50.5) < 0.001);
+
+    // And it reaches a dimmer channel as a level, not as zero.
+    Doc doc(this);
+    Fixture *dim = new Fixture(&doc);
+    dim->setChannels(1);
+    QVERIFY(doc.addFixture(dim));
+    const QList<SceneValue> vals = back.valuesFromFixtures(&doc, QList<quint32>() << dim->id());
+    QVERIFY(!vals.isEmpty());
+    for (const SceneValue &sv : vals)
+    {
+        QCOMPARE(sv.channel, quint32(0));
+        QVERIFY(int(sv.value) >= 50 && int(sv.value) <= 51);
+    }
+}
+
 void QLCPalette_Test::aColourLookOnAGroupOnlyLightsTheGroupsHeads()
 {
     /* "lighting the white leds as well as the RGB": a bar whose RGB pixels

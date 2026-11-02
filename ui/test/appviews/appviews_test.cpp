@@ -3436,6 +3436,54 @@ void AppViews_Test::aPinKeepsTheShowInOperate()
     QCOMPARE(doc->mode(), Doc::Design);
 }
 
+/* Changelog: Open in Operate (File ▸ Show Settings) with no PIN: the saved
+   show loads in Operate and Design is one click away, no prompt; a show
+   without it loads in Design and stays there. */
+void AppViews_Test::openInOperateWithoutAPinLoadsInOperateAndLeavesFreely()
+{
+    m_app->clearDocument();
+    Doc *doc = m_app->doc();
+    ShowSettingsDialog::setTestMode(true);
+    auto cleanup = qScopeGuard([this]() {
+        ShowSettingsDialog::setTestMode(false);
+        ShowSettingsDialog::testAnswers().clear();
+        if (m_app->doc()->mode() == Doc::Operate)
+            m_app->slotModeDesign();
+        m_app->clearDocument();
+    });
+    QTemporaryDir dir;
+
+    // Without it: saved, loaded, in Design.
+    QCOMPARE(m_app->saveXML(dir.filePath("plain.qlcc")), QFile::NoError);
+    m_app->clearDocument();
+    QCOMPARE(m_app->loadXML(dir.filePath("plain.qlcc")), QFile::NoError);
+    QTest::qWait(50);
+    QCOMPARE(doc->mode(), Doc::Design);
+    QVERIFY(!doc->operateSettings()->openInOperate());
+
+    // Ticked in Show Settings (no PIN): saved with the show.
+    {
+        ShowSettingsDialog dlg(doc, m_app);
+        QCheckBox *openIn = dlg.findChild<QCheckBox *>("showSettingsOpenInOperate");
+        QVERIFY(openIn != nullptr);
+        openIn->setChecked(true);
+        dlg.accept();
+    }
+    QVERIFY(doc->operateSettings()->openInOperate());
+    QVERIFY(!doc->operateSettings()->hasPin());
+    QCOMPARE(m_app->saveXML(dir.filePath("open.qlcc")), QFile::NoError);
+    m_app->clearDocument();
+    QVERIFY(!doc->operateSettings()->openInOperate());
+    QCOMPARE(m_app->loadXML(dir.filePath("open.qlcc")), QFile::NoError);
+    QTRY_COMPARE(doc->mode(), Doc::Operate);
+    QVERIFY(doc->operateSettings()->openInOperate());
+
+    // No PIN: Design is not asked for anything.
+    ShowSettingsDialog::testAnswers().clear();
+    m_app->slotModeDesign();
+    QCOMPARE(doc->mode(), Doc::Design);
+}
+
 void AppViews_Test::reviewChipCountsAndOpensThePanel()
 {
     m_app->clearDocument();
@@ -4241,4 +4289,91 @@ void AppViews_Test::theVenueChipIsInTheFooter()
     }
     QCOMPARE(vc->activeVenue(), QString("Kennedy"));
     QCOMPARE(chip->text(), QString("Venue: Kennedy"));
+}
+
+// Changelog (Teaching, output hold): the "Run this show for real?" question is
+// never asked of a show that opens itself in Operate, from a file or the web.
+void AppViews_Test::aLoadedTeachingShowOpensInOperateWithoutAsking()
+{
+    m_app->clearDocument();
+    Doc *doc = m_app->doc();
+    QTemporaryDir dir;
+    auto back = qScopeGuard([this]() {
+        if (m_app->doc()->mode() == Doc::Operate)
+            m_app->slotModeDesign();
+        m_app->doc()->teachingSettings()->setEnabled(false);
+        m_app->clearDocument();
+        NetworkRoute::setResolverForTest(nullptr, nullptr);
+    });
+
+    QDir stubDir(QStringLiteral("../../../engine/test/iopluginstub"));
+    stubDir.setFilter(QDir::Files);
+    stubDir.setNameFilters(QStringList() << QString("*%1").arg(KExtPlugin));
+    IOPluginCache *cache = doc->ioPluginCache();
+    // an earlier test may have loaded it already, under the name it gave it
+    QLCIOPlugin *plug = cache->plugin(QStringLiteral("ArtNet"));
+    if (plug == nullptr)
+        plug = cache->plugin(QStringLiteral("I/O Plugin Stub"));
+    if (plug == nullptr)
+    {
+        cache->load(stubDir);
+        plug = cache->plugin(QStringLiteral("I/O Plugin Stub"));
+    }
+    IOPluginStub *stub = static_cast<IOPluginStub *>(plug);
+    QVERIFY2(stub != nullptr, "the I/O plugin stub did not load");
+    stub->m_nameOverride = QStringLiteral("ArtNet");
+    stub->m_lineNames = QStringList() << QStringLiteral("10.4.12.7");
+    NetworkRoute::LocalAddress school;
+    school.iface = "en0";
+    school.ip = QHostAddress("10.4.12.7");
+    school.prefix = 16;
+    NetworkRoute::setResolverForTest(
+        [school]() { return QList<NetworkRoute::LocalAddress>() << school; },
+        [](const QHostAddress &) { return QHostAddress("10.4.12.7"); });
+
+    // A student copy that looks real: output let through, patched, opens in Operate
+    doc->teachingSettings()->setEnabled(true);
+    doc->teachingSettings()->setAllowOutput(true);
+    doc->operateSettings()->setOpenInOperate(true);
+    QXmlStreamReader xml(QStringLiteral(
+        "<InputOutputMap>\n"
+        " <Universe Name=\"U01\" ID=\"0\">\n"
+        "  <Output Plugin=\"ArtNet\" UID=\"10.4.12.7\" Line=\"0\"/>\n"
+        " </Universe>\n"
+        "</InputOutputMap>\n"));
+    xml.readNextStartElement();
+    QVERIFY(doc->inputOutputMap()->loadXML(xml));
+    QVERIFY(doc->inputOutputMap()->transmitGateStatus().networkOutputs > 0);
+
+    const QString path = dir.filePath(QStringLiteral("student") + KExtWorkspaceConsole);
+    QCOMPARE(m_app->saveXML(path), QFile::NoError);
+    QFile f(path);
+    QVERIFY(f.open(QIODevice::ReadOnly));
+    const QString saved = QString::fromUtf8(f.readAll());
+    f.close();
+    QVERIFY(saved.contains(QLatin1String("Teaching")));
+
+    // Open: the show opens itself in Operate, and nobody is asked
+    m_app->clearDocument();
+    bool boxed = false;
+    QTimer probe;
+    probe.setInterval(10);
+    connect(&probe, &QTimer::timeout, this, [&boxed]() {
+        if (qobject_cast<QMessageBox *>(QApplication::activeModalWidget()) != nullptr)
+            boxed = true;
+    });
+    probe.start();
+    QCOMPARE(m_app->loadXML(path), QFile::NoError);
+    QTRY_COMPARE_WITH_TIMEOUT(m_app->doc()->mode(), Doc::Operate, 3000);
+    QTest::qWait(60);
+    QVERIFY(m_app->doc()->teachingSettings()->enabled());
+    QVERIFY(m_app->doc()->teachingSettings()->allowOutput());
+    QVERIFY(!boxed);
+    m_app->slotModeDesign();
+
+    // The same show sent to the web page's load: no dialog either
+    m_app->clearDocument();
+    m_app->slotLoadDocFromMemory(saved);
+    QTest::qWait(60);
+    QVERIFY(!boxed);
 }

@@ -42,6 +42,7 @@ private slots:
     /** A value dropped on a layer changes the output at once; Undo and
      *  Redo (the tree's) take it back and put it back, the rows follow. */
     void editUndoRedo();
+    void theDockedLayerMenuReleasesAndSetsTheCueMode();
     /** Carried-in rows: not removed, cleared or moved; a value set on one
      *  makes it the cue's own (the tree's rule). */
     void lookRowsDragToAnotherLayer();
@@ -97,6 +98,9 @@ private slots:
     /** W3_SHOTS=<dir> W3_SHOW_06=<copy of DanceHysteria-0.6.qlcc>
      *  W3_SHOW_01=<copy of DanceHysteria-0.1.qlcc>: real-cue pictures. */
     void shots();
+    void aRealMouseDragMovesALookRowAndAltCopiesIt();
+    void aFunctionLayerCanBeReleasedFromTheDockedWorkbench();
+    void aHoldTypedInTheStepHeaderIsWhatGoPlays();
 
 private:
     quint32 dimmer(int level, const QString &name);

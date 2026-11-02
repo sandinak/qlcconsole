@@ -678,6 +678,15 @@ first and restored byte-for-byte afterwards.
   (cfprefsd ignores `CFFIXED_USER_HOME`). It is new on val: delete it, and
   `~/matrix2/rc4-soak`, after collecting the results.
 
+## 0.4.0 coverage
+
+The pre-beta audit of 2026-11-02 matched every item of CHANGELOG [0.4.0]
+to its tests, reading each test: [TEST_MAP.md Part 1b](TEST_MAP.md#part-1b-the-0400-changelog).
+284 rows: covered 185 → 206, partial 60 → 45, none 17 → 11 (n/a 22); every
+high-risk row (92) is now covered. The audit added 32 tests and fixed one
+crash (deleting a function a playing Show runs); its open questions are in
+TEST_MAP and TODO.md.
+
 ## Coverage
 
 The 0.3.1 coverage campaign: measure the whole build, find the gaps in the

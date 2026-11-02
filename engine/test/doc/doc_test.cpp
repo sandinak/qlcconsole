@@ -1371,6 +1371,53 @@ void Doc_Test::save()
     QVERIFY(m_doc->isModified() == true);
 }
 
+// 0.4.0 "Based on QLC+ 4.14.4" (upstream #1963): New and Open forget the last show's startup function.
+void Doc_Test::newAndOpenForgetTheStartupFunction()
+{
+    auto saveToXml = [this]() {
+        QBuffer buffer;
+        buffer.open(QIODevice::WriteOnly | QIODevice::Text);
+        QXmlStreamWriter w(&buffer);
+        w.writeStartElement("TestRoot");
+        bool ok = m_doc->saveXML(&w);
+        w.setDevice(NULL);
+        buffer.close();
+        return ok ? buffer.data() : QByteArray();
+    };
+    auto loadFromXml = [this](const QByteArray &xml) {
+        QXmlStreamReader r(xml);
+        r.readNextStartElement(); // TestRoot
+        r.readNextStartElement(); // Engine
+        return m_doc->loadXML(r);
+    };
+
+    Scene *s = new Scene(m_doc);
+    m_doc->addFunction(s);
+    const quint32 sid = s->id();
+    m_doc->setStartupFunction(sid);
+    const QByteArray withStartup = saveToXml();
+    QVERIFY(withStartup.contains("Autostart"));
+
+    // New
+    m_doc->clearContents();
+    QCOMPARE(m_doc->startupFunction(), Function::invalidId());
+
+    // Open a show with one: it comes back...
+    QVERIFY(loadFromXml(withStartup));
+    QCOMPARE(m_doc->startupFunction(), sid);
+
+    // ...then Open a show without one: the old one must not linger.
+    m_doc->setStartupFunction(Function::invalidId());
+    Scene *s2 = new Scene(m_doc);
+    m_doc->addFunction(s2);
+    const QByteArray without = saveToXml();
+    QVERIFY(!without.contains("Autostart"));
+    m_doc->setStartupFunction(s2->id());
+    m_doc->clearContents();               // what Open does before it loads
+    QVERIFY(loadFromXml(without));
+    QCOMPARE(m_doc->startupFunction(), Function::invalidId());
+}
+
 void Doc_Test::createFixtureNode(QXmlStreamWriter &doc, quint32 id, quint32 address, quint32 channels,
                                  const QString &universe)
 {

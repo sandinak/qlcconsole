@@ -2045,4 +2045,170 @@ void ShowTreePlay_Test::overrideHitsSaveLoadUndoAndBlind()
     delete other;
 }
 
+/****************************************************************************
+ * 0.4 coverage
+ ****************************************************************************/
+
+/* CHANGELOG 0.4.0 "QLab out ... not for blind or previews": a Design
+   preview of a cue (it plays on the rig) and an edit made with the rig in
+   Blind send nothing to QLab; the GO that then plays a cue sends it. */
+void ShowTreePlay_Test::aPreviewOrBlindEditSendsNothingToQLab()
+{
+    FixtureGroup *a = group("A", { m_fixtures[0] });
+    const quint32 full = dimmer(255, "Full");
+    const quint32 half = dimmer(128, "Half");
+    ShowTreeController *st = m_doc->showTree();
+    ShowControl *sc = m_doc->showControl();
+    const quint32 listId = oneListProduction("Dance", a->id(), 2, full);
+    const quint32 c1 = st->cueList(listId)->cues.at(0).id;
+    const quint32 c2 = st->cueList(listId)->cues.at(1).id;
+    QCOMPARE(sc->mainCueList(), st->cueList(listId)->chaser);
+    QCOMPARE(m_doc->mode(), Doc::Design);
+
+    QList<ShowControl::OutMessage> got;
+    sc->setOutSender([&got](const ShowControl::OutMessage &m) { got << m; return true; });
+    ShowControl::OutSettings o;
+    o.oscEnabled = true;
+    o.oscHost = "127.0.0.1";
+    o.mscEnabled = true;
+    o.mscOutput = "Out";
+    sc->setOutSettings(o);
+
+    // A preview: on the rig, not sent.
+    st->previewCue(c2);
+    QCOMPARE(int(settle(5)[0]), 255);
+    QCOMPARE(st->previewedCue(), c2);
+    QVERIFY(got.isEmpty());
+
+    // Blind: the rig muted; picking another cue and editing it sends nothing.
+    QVERIFY(m_doc->inputOutputMap()->setOutputInhibited(true));
+    st->pickCue(c1);
+    QVERIFY(st->setTargetLook(c1, groupTarget(a->id()), st->lookForPalette(half)));
+    QCOMPARE(int(settle(5)[0]), 128);
+    QVERIFY(got.isEmpty());
+    m_doc->inputOutputMap()->setOutputInhibited(false);
+    st->stopPreview();
+    settle(3);
+    QVERIFY(got.isEmpty());
+
+    // The GO: cue 1 on stage, and on to QLab (OSC and MSC).
+    QVERIFY(sc->execute({ ShowControl::Go, QString(), QString() }));
+    QCOMPARE(int(settle(5)[0]), 128);
+    QCOMPARE(got.count(), 2);
+    QVERIFY(got.at(0).data.startsWith("/cue/1/start"));
+    QCOMPARE(got.at(1).kind, ShowControl::OutMessage::Msc);
+}
+
+/* CHANGELOG 0.4.0 "Scoped hits": a hit under a cue, held (fired while its
+   cue was live) when GO takes the list to the next cue, lets go over its
+   Fade out -- the channel ramps down across the ticks to 0. The holder
+   lets go on hitArmingChanged() as a VC button does
+   (VCButton::slotShowTreeChanged); the ramp is the engine's. */
+void ShowTreePlay_Test::aHeldCueHitLetsGoOverItsFadeOutWhenItsCueEnds()
+{
+    FixtureGroup *a = group("A", { m_fixtures[0] });
+    FixtureGroup *b = group("B", { m_fixtures[1] });
+    const quint32 full = dimmer(255, "Full");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 listId = oneListProduction("Dance", a->id(), 2, full);
+    const quint32 c1 = st->cueList(listId)->cues.at(0).id;
+    const quint32 c2 = st->cueList(listId)->cues.at(1).id;
+    const quint32 hit = st->addHit(HitScope::Cue, c1, "Strobe");
+    QVERIFY(hit != ShowTree::invalidId());
+    st->setLayerLook(hit, st->addLayer(hit, groupTarget(b->id())), st->lookForPalette(full));
+    ShowTree::Cue h = *st->cue(hit);
+    h.fadeOut = 1000;
+    QVERIFY(st->setCue(h));
+    Function *coll = m_doc->function(st->lookFunction(hit));
+    QVERIFY(coll != nullptr);
+    Chaser *chaser = qobject_cast<Chaser *>(m_doc->function(st->cueList(listId)->chaser));
+    QVERIFY(chaser != nullptr);
+
+    // The holder: fires the armed hit, lets go when it is armed no more.
+    QObject holder;
+    connect(st, &ShowTreeController::hitArmingChanged, &holder, [&]() {
+        if (!st->isHitArmed(hit) && coll->isRunning())
+            coll->stop(FunctionParent::master());
+    });
+
+    go(chaser);
+    settle(5);
+    QCoreApplication::processEvents();
+    QCOMPARE(st->runningCue(listId), c1);
+    QCOMPARE(st->armedHit({ hit }), hit);
+    coll->start(m_doc->masterTimer(), FunctionParent::master());
+    QCOMPARE(int(settle(5)[1]), 255);
+
+    // GO: cue 2 live, the hit's cue over -- it lets go over its 1 s.
+    go(chaser);
+    tick(2);
+    QCoreApplication::processEvents();
+    QCOMPARE(st->runningCue(listId), c2);
+    QVERIFY(!st->isHitArmed(hit));
+    QList<int> ramp;
+    const int step = int(MasterTimer::frequency() / 5);       // 200 ms
+    for (int i = 0; i < 4; ++i)
+        ramp << int(settle(step)[1]);
+    for (int i = 1; i < ramp.count(); ++i)
+        QVERIFY2(ramp.at(i) < ramp.at(i - 1), qPrintable(QString("not a ramp: %1").arg(
+                     QStringList({ QString::number(ramp[0]), QString::number(ramp[1]),
+                                   QString::number(ramp[2]), QString::number(ramp[3]) }).join(' '))));
+    QVERIFY2(ramp.first() > 128 && ramp.first() < 255, qPrintable(QString::number(ramp.first())));
+    QVERIFY2(ramp.last() > 0 && ramp.last() < 128, qPrintable(QString::number(ramp.last())));
+    QHash<quint32, uchar> v = settle(int(MasterTimer::frequency() / 2));
+    QCOMPARE(int(v[1]), 0);
+    QCOMPARE(int(v[0]), 255);                                   // the cue plays on
+    QVERIFY(!coll->isRunning());
+}
+
+/* CHANGELOG 0.4.0 "Scoped hits": a hit under a list is not armed while
+   another list runs, so the button (which fires the armed hit) changes
+   nothing on the rig; with its list running the same press lights it. */
+void ShowTreePlay_Test::aListHitDoesNothingWhileItsListIsntRunning()
+{
+    FixtureGroup *a = group("A", { m_fixtures[0] });
+    FixtureGroup *b = group("B", { m_fixtures[1] });
+    const quint32 full = dimmer(255, "Full");
+    ShowTreeController *st = m_doc->showTree();
+    quint32 prod = 0;
+    const quint32 mainList = oneListProduction("Dance", a->id(), 1, full, &prod);
+    const quint32 encore = st->addCueList(prod, "Encore");
+    const quint32 e1 = st->addCue(encore, -1, "E");
+    st->setLayerLook(e1, st->addLayer(e1, groupTarget(a->id())), st->lookForPalette(full));
+    const quint32 hit = st->addHit(HitScope::List, mainList, "Red");
+    st->setLayerLook(hit, st->addLayer(hit, groupTarget(b->id())), st->lookForPalette(full));
+    Chaser *enc = qobject_cast<Chaser *>(m_doc->function(st->cueList(encore)->chaser));
+    Chaser *main = qobject_cast<Chaser *>(m_doc->function(st->cueList(mainList)->chaser));
+    QVERIFY(enc != nullptr && main != nullptr);
+
+    // A button holding the hit: fires the armed one, if any.
+    auto press = [&]() {
+        const quint32 armed = st->armedHit({ hit });
+        if (armed == ShowTree::invalidId())
+            return false;
+        m_doc->function(st->lookFunction(armed))->start(m_doc->masterTimer(), FunctionParent::master());
+        return true;
+    };
+
+    go(enc);
+    QHash<quint32, uchar> v = settle(5);
+    QCoreApplication::processEvents();
+    QCOMPARE(int(v[0]), 255);
+    QVERIFY(!st->isHitArmed(hit));
+    QVERIFY(!press());
+    v = settle(5);
+    QCOMPARE(int(v[1]), 0);
+    QVERIFY(!m_doc->function(st->lookFunction(hit))->isRunning());
+
+    // Its own list running: the same press lights it.
+    enc->stop(FunctionParent::master());
+    settle(3);
+    go(main);
+    settle(5);
+    QCoreApplication::processEvents();
+    QVERIFY(st->isHitArmed(hit));
+    QVERIFY(press());
+    QCOMPARE(int(settle(5)[1]), 255);
+}
+
 QTEST_MAIN(ShowTreePlay_Test)

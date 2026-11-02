@@ -32,6 +32,7 @@
 #include "universe.h"
 #include "timecodesource.h"
 #include "show.h"
+#include "doc.h"
 
 #define TIMER_INTERVAL 50
 
@@ -100,6 +101,9 @@ ShowRunner::ShowRunner(const Doc* doc, quint32 showID, quint32 startTime)
 {
     Q_ASSERT(m_doc != NULL);
     Q_ASSERT(showID != Show::invalidId());
+
+    connect(m_doc, &Doc::functionRemoved, this, &ShowRunner::slotFunctionRemoved,
+            Qt::DirectConnection);
 
     m_show = qobject_cast<Show*>(m_doc->function(showID));
     if (m_show == NULL)
@@ -198,6 +202,7 @@ void ShowRunner::applyPauseToChildren(bool enable)
 
 void ShowRunner::stop()
 {
+    dropRemovedChildren();
     m_elapsedTime = 0;
     m_elapsedBeats = 0;
     m_currentTimeFunctionIndex = 0;
@@ -212,6 +217,7 @@ void ShowRunner::stop()
 
     m_runningQueue.clear();
     m_childStartMs.clear();
+    m_childIds.clear();
     m_suspended = false;
     m_tcHolding = false;
     {
@@ -266,6 +272,7 @@ void ShowRunner::seekTo(quint32 targetMs)
     }
     m_runningQueue.clear();
     m_childStartMs.clear();
+    m_childIds.clear();
 
     // Rewind and skip past functions that have fully ended before the target,
     // so write()'s start phase only (re)starts the ones actually active now.
@@ -302,6 +309,39 @@ int ShowRunner::stepAtLocalMs(Chaser *c, quint32 localMs) const
     return c->stepIndexAtLocalMs(localMs, SHOW_NOMINAL_CUE_MS);
 }
 
+void ShowRunner::slotFunctionRemoved(quint32 fid)
+{
+    QMutexLocker locker(&m_removedMutex);
+    m_removedIds.insert(fid);
+    m_removedPending.storeRelease(1);
+}
+
+void ShowRunner::dropRemovedChildren()
+{
+    // Called every frame: only an atomic read unless a function was deleted.
+    if (m_removedPending.loadAcquire() == 0)
+        return;
+    QSet<quint32> gone;
+    {
+        QMutexLocker locker(&m_removedMutex);
+        m_removedPending.storeRelease(0);
+        if (m_removedIds.isEmpty())
+            return;
+        gone.swap(m_removedIds);
+    }
+    for (int i = m_runningQueue.count() - 1; i >= 0; i--)
+    {
+        Function *f = m_runningQueue.at(i).first;
+        if (gone.contains(m_childIds.value(f, Function::invalidId())))
+        {
+            // Already stopped by the MasterTimer when the Doc removed it.
+            m_childStartMs.remove(f);
+            m_childIds.remove(f);
+            m_runningQueue.removeAt(i);
+        }
+    }
+}
+
 void ShowRunner::releaseChild(Function *f)
 {
     if (f == NULL)
@@ -311,6 +351,7 @@ void ShowRunner::releaseChild(Function *f)
     if (c != NULL)
         c->setShowClocked(false);
     m_childStartMs.remove(f);
+    m_childIds.remove(f);
 }
 
 bool ShowRunner::trackSilent(Track *track, bool anySolo) const
@@ -365,6 +406,7 @@ void ShowRunner::startChild(ShowFunction *sf, Track *track, quint32 offset)
     f->start(m_doc->masterTimer(), functionParent(), offset);
     m_runningQueue.append(QPair<Function *, quint32>(f, sf->startTime() + sf->duration(m_doc)));
     m_childStartMs.insert(f, sf->startTime());
+    m_childIds.insert(f, f->id());
 }
 
 void ShowRunner::enforceLiveMuteSolo()
@@ -437,6 +479,7 @@ void ShowRunner::enforceLiveMuteSolo()
 void ShowRunner::write(MasterTimer *timer, const QList<Universe*> &universes)
 {
     //qDebug() << Q_FUNC_INFO << "elapsed:" << m_elapsedTime << ", total:" << m_totalRunTime;
+    dropRemovedChildren();
 
     // In timecode-follow mode the elapsed clock chases an external absolute
     // position. Incoming timecode only arrives ~12x/second, so snapping to it
@@ -566,6 +609,7 @@ void ShowRunner::write(MasterTimer *timer, const QList<Universe*> &universes)
             }
             m_runningQueue.clear();
             m_childStartMs.clear();
+    m_childIds.clear();
         }
         else
         {

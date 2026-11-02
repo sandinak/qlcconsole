@@ -45,6 +45,7 @@ private slots:
     void parkAndIgnoreGmAreNotScaled();
     void saveAndLoad();
     void aDeletedGroupLetsGo();
+    void aReopenedShowStillScalesByItsMaster();
 
 private:
     void frame(int frames = 1);

@@ -145,6 +145,8 @@ private slots:
      *  one finger aims only with LB held. In Run: up / down pick the list,
      *  left / right walk from the next cue (Design), refused in Operate. */
     void swipesStepAndNeverGo();
+    void whileWalkingTheTouchpadAimsOnlyWithLBHeld();
+    void aPadWithoutATouchpadGetsNoSwipeSteps();
 
 private:
     IOPluginStub *loadStub();

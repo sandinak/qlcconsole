@@ -51,6 +51,7 @@ private slots:
 
     void stopNotOwnChildren();
     void totalDurationOfParallelMembers();
+    void aMemberDeletedWhileTheCollectionPlaysLeavesTheRestPlaying();
 
 private:
     Doc* m_doc;

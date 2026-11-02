@@ -54,6 +54,9 @@
 #include "virtualconsole.h"
 #include "vcframe.h"
 #include "vcbutton.h"
+#include "vccuelist.h"
+#include "vcslider.h"
+#include <QLabel>
 #include "vclabel.h"
 #include "simpledesk.h"
 #include "function.h"
@@ -1886,4 +1889,129 @@ void WebAccess_Test::aPageNeedsAnAccountWithAccounts()
     QVERIFY2(!reply.startsWith("HTTP/1.1 200"), reply.left(40).constData());
     QCOMPARE(calls, 0);
     m_doc->showControl()->setRunHandler(nullptr);
+}
+
+// Changelog (One GO path): the web page's Play / Next / Previous on a VC Cue List
+// that holds a Show Tree list send GO / Back through the Show Control path.
+void WebAccess_Test::thePageDrivesAShowTreeCueListThroughTheOneGoPath()
+{
+    Chaser *tree = runShow();
+    ShowControl *sc = m_doc->showControl();
+    QVERIFY(sc->isTreeGoList(tree->id()));
+    QList<QPair<ShowControl::Command, ShowControl::Route>> seen;
+    sc->setRunHandler([&](const ShowControl::Request &r, ShowControl::Route route) {
+        seen << qMakePair(r.command, route);
+        return sc->execute(r);
+    });
+    auto cleanup = qScopeGuard([&]() {
+        sc->setRunHandler(nullptr);
+        m_doc->masterTimer()->stopAllFunctions();
+        m_doc->setMode(Doc::Design);
+    });
+    m_doc->setMode(Doc::Operate);
+    VCCueList *cl = new VCCueList(m_vc->contents(), m_doc);
+    m_vc->addWidgetInMap(cl);
+    cl->setChaser(tree->id());
+    startWeb(false);
+    QStringList heard;
+    QWebSocket *ws = runPage(&heard);
+    const QString id = QString::number(cl->id());
+    MasterTimer *timer = m_doc->masterTimer();
+
+    // Play on a stopped list: a GO
+    ws->sendTextMessage(id + QStringLiteral("|PLAY"));
+    QTRY_VERIFY(!seen.isEmpty());
+    QCOMPARE(seen.last(), qMakePair(ShowControl::Go, ShowControl::RouteVcCueList));
+    timer->timerTick();
+    timer->timerTick();
+    QVERIFY(tree->isRunning());
+
+    // Next and Previous on the running list: GO and Back, same route
+    seen.clear();
+    ws->sendTextMessage(id + QStringLiteral("|NEXT"));
+    QTRY_COMPARE(seen.size(), 1);
+    QCOMPARE(seen.last(), qMakePair(ShowControl::Go, ShowControl::RouteVcCueList));
+    ws->sendTextMessage(id + QStringLiteral("|PREV"));
+    QTRY_COMPARE(seen.size(), 2);
+    QCOMPARE(seen.last(), qMakePair(ShowControl::Back, ShowControl::RouteVcCueList));
+
+    // Stop: the list ends
+    ws->sendTextMessage(id + QStringLiteral("|STOP"));
+    QTRY_VERIFY(seen.size() >= 3);
+    for (int i = 0; i < 4; ++i)
+        timer->timerTick();
+    QVERIFY(!tree->isRunning());
+    dropPage(ws);
+}
+
+// Changelog (4.14.4): the upload pickers take only what they can store.
+void WebAccess_Test::theUploadPickersTakeOnlyFixtureFiles()
+{
+    startWeb(false);
+    const QByteArray reply = http("GET /config HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n");
+    QVERIFY2(reply.startsWith("HTTP/1.1 200"), reply.left(40).constData());
+    // the fixture picker: .qxf and .d4, posting to /loadFixture
+    const int form = reply.indexOf("action=\"/loadFixture\"");
+    QVERIFY(form >= 0);
+    const QByteArray after = reply.mid(form, 400);
+    QVERIFY(after.contains("accept=\".qxf,.d4\""));
+    QVERIFY(after.contains("name=\"qlcfxi\""));
+    // the project picker on the main page takes a show, not a fixture
+    const QByteArray main = http("GET / HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n");
+    QVERIFY(main.contains("accept=\".qxw\""));
+    QVERIFY(!main.contains("accept=\".qxf"));
+}
+
+// Changelog (4.14.4): the keypad page has Enter and Clear, and what its Enter sends
+// ("CH|channel|value") sets the Simple Desk channel.
+void WebAccess_Test::theKeypadPageSendsChannelsToTheDesk()
+{
+    startWeb(false);
+    // the page as shipped (the web folder is not installed beside a test)
+    // __FILE__ is relative on some builds (the Linux leg): also look up from
+    // the working directory for the source tree's webaccess/res.
+    QString path = QFileInfo(QStringLiteral(__FILE__)).dir().filePath(QStringLiteral("../res/keypad.html"));
+    for (QDir up = QDir::current(); !QFileInfo::exists(path); )
+    {
+        const QString here = up.filePath(QStringLiteral("webaccess/res/keypad.html"));
+        if (QFileInfo::exists(here))
+            path = here;
+        else if (!up.cdUp())
+            break;
+    }
+    QFile page(path);
+    QVERIFY2(page.open(QIODevice::ReadOnly), "webaccess/res/keypad.html not found");
+    const QByteArray reply = page.readAll();
+    QVERIFY(reply.contains("commInput"));
+    QVERIFY(reply.contains("event.key === 'Enter'"));
+    QVERIFY(reply.contains("\"CH|\" + c + \"|\" + v"));
+    QVERIFY(reply.contains(">CLR<"));
+
+    QCOMPARE(int(m_sd->getAbsoluteChannelValue(4)), 0);
+    QVERIFY(wsRoundTrip({ QStringLiteral("CH|5|200"), QStringLiteral("CH|6|90") }).isEmpty());
+    QCOMPARE(int(m_sd->getAbsoluteChannelValue(4)), 200);
+    QCOMPARE(int(m_sd->getAbsoluteChannelValue(5)), 90);
+}
+
+// Changelog (4.14.4): the slider's top label is escaped in the page.
+void WebAccess_Test::aSliderTopLabelIsEscapedInThePage()
+{
+    startWeb(false);
+    VCSlider *slider = new VCSlider(m_vc->contents(), m_doc);
+    const QList<QLabel *> labels = slider->findChildren<QLabel *>();
+    QVERIFY(!labels.isEmpty());
+    const QString bad = QStringLiteral("<img src=x onerror=alert(3)>&");
+    QLabel *top = nullptr;
+    for (QLabel *l : labels)
+        if (l->text() == slider->topLabelText())
+        {
+            top = l;
+            break;
+        }
+    QVERIFY(top != nullptr);
+    top->setText(bad);
+    QCOMPARE(slider->topLabelText(), bad);
+    const QString html = m_web->getSliderHTML(slider);
+    QVERIFY2(!html.contains(QLatin1String("<img src=x")), "the slider's top label was emitted as live HTML");
+    QVERIFY(html.contains(QLatin1String("&lt;img src=x onerror=alert(3)&gt;&amp;")));
 }

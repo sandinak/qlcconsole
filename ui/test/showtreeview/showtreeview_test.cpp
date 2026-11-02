@@ -9439,3 +9439,84 @@ void ShowTreeView_Test::releaseTakesAFunctionLayer()
     QVERIFY(!view.runCommand("release Nothing here"));
     QCOMPARE(int(st->cue(c1)->layers.count()), 2);
 }
+
+/* 0.4 changelog: Show Tree hits fade in and out. The hit page's Fade in /
+   Fade out boxes set the hit's fades (one undo step, saved), and a hit
+   copied and pasted keeps them. */
+void ShowTreeView_Test::theHitPageFadeBoxesSetTheHitsFades()
+{
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("P");
+    const quint32 hit = st->addLook(prod, "Stab", "Hits");
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1200, 800);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    view.activateWindow();
+    QVERIFY(QTest::qWaitForWindowActive(&view));
+    QVERIFY(view.selectNode(hit));
+    QDoubleSpinBox *in = view.findChild<QDoubleSpinBox *>("stCueFadeIn");
+    QDoubleSpinBox *out = view.findChild<QDoubleSpinBox *>("stCueFadeOut");
+    QVERIFY(in->isVisibleTo(&view) && out->isVisibleTo(&view));
+    const QString before = treeState(m_doc);
+
+    // Typed in both boxes, then Tab out: committed together.
+    in->setFocus();
+    QTRY_VERIFY(in->hasFocus());
+    in->selectAll();
+    QTest::keyClicks(in, "1.5");
+    QTest::keyClick(in, Qt::Key_Tab);
+    out->setFocus();
+    QTRY_VERIFY(out->hasFocus());
+    out->selectAll();
+    QTest::keyClicks(out, "3");
+    QTest::keyClick(out, Qt::Key_Return);
+    QCOMPARE(st->cue(hit)->fadeIn, 1500u);
+    QCOMPARE(st->cue(hit)->fadeOut, 3000u);
+    Collection *col = qobject_cast<Collection *>(m_doc->function(st->cue(hit)->collection));
+    QVERIFY(col != nullptr);
+    QCOMPARE(col->hitFadeIn(), 1500u);
+    QCOMPARE(col->hitFadeOut(), 3000u);
+
+    // Saved: the production's XML carries both.
+    auto xmlOf = [&]() {
+        QByteArray xml;
+        QBuffer buffer(&xml);
+        buffer.open(QIODevice::WriteOnly);
+        QXmlStreamWriter w(&buffer);
+        for (const Production &p : st->productions())
+            ShowTree::saveXML(&w, p);
+        return QString::fromUtf8(xml);
+    };
+    QVERIFY2(xmlOf().contains("1500") && xmlOf().contains("3000"), qPrintable(xmlOf()));
+
+    // A copy pasted next to it keeps the fades.
+    const QList<quint32> hitsBefore = st->allHits();
+    QTreeWidgetItem *row = nullptr;
+    for (QTreeWidgetItemIterator i(view.tree()); *i && row == nullptr; ++i)
+        if ((*i)->data(0, ShowTreeView::KindRole).toInt() == ShowTreeView::CueNode
+            && (*i)->data(0, ShowTreeView::IdRole).toUInt() == hit)
+            row = *i;
+    QVERIFY(row != nullptr);
+    QTest::mouseClick(view.tree()->viewport(), Qt::LeftButton, Qt::NoModifier, view.tree()->visualItemRect(row).center());
+    QVERIFY(view.copySelection());
+    QVERIFY(view.pasteClipboard());
+    QList<quint32> added = st->allHits();
+    for (quint32 id : hitsBefore)
+        added.removeAll(id);
+    QCOMPARE(int(added.count()), 1);
+    QCOMPARE(st->cue(added.first())->fadeIn, 1500u);
+    QCOMPARE(st->cue(added.first())->fadeOut, 3000u);
+    QVERIFY(st->undo());                                   // the paste
+    QCOMPARE(int(st->allHits().count()), int(hitsBefore.count()));
+
+    // Each box is one undo step, and its collection follows.
+    QVERIFY(st->undo());
+    QCOMPARE(st->cue(hit)->fadeOut, 0u);
+    QCOMPARE(st->cue(hit)->fadeIn, 1500u);
+    QVERIFY(st->undo());
+    QCOMPARE(st->cue(hit)->fadeIn, 0u);
+    QCOMPARE(qobject_cast<Collection *>(m_doc->function(st->cue(hit)->collection))->hitFadeIn(), 0u);
+    QCOMPARE(treeState(m_doc), before);
+}

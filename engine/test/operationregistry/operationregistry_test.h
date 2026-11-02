@@ -71,6 +71,9 @@ private slots:
     void overrideWordMakesTheSelectedHitAnOverride();
     void overrideWordRefusals();
 
+    // 0.4 coverage: Design-only change words
+    void aChangeWordIsRefusedInOperateAndWorksInDesign();
+
 private:
     Fixture *dimmer(const QString &name, quint32 address, quint32 channels = 4);
     /** Towers (2 dimmers), Steps (1), production "P" with list "Song" and

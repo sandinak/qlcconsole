@@ -533,6 +533,95 @@ void InputOutputMap_Test::teachingHoldsUsbOutput()
     QCOMPARE(local.transmitGateStatus().held, 0);
 }
 
+/** Counts the queued calls an object is sent */
+namespace {
+class CallCounter : public QObject
+{
+public:
+    int calls = 0;
+    bool eventFilter(QObject *, QEvent *e) override
+    {
+        if (e->type() == QEvent::MetaCall)
+            calls++;
+        return false;
+    }
+};
+}
+
+// Fixed: heavy Art-Net input starved the GUI -- one hand-over per universe per
+// frame, not one per value.
+void InputOutputMap_Test::heavyInputIsHandedOverOncePerUniversePerFrame()
+{
+    const int universes = 16, values = 100;
+    InputOutputMap im(m_doc, universes);
+    IOPluginStub *stub = static_cast<IOPluginStub*>(m_doc->ioPluginCache()->plugins().at(0));
+    QVERIFY(stub != NULL);
+
+    CallCounter counter;
+    for (int u = 0; u < universes; u++)
+    {
+        QVERIFY(im.setInputPatch(u, stub->name(), "", 0));
+        im.inputPatch(u)->installEventFilter(&counter);
+    }
+
+    QSignalSpy spy(&im, SIGNAL(inputValueChanged(quint32, quint32, uchar, const QString&)));
+    for (int u = 0; u < universes; u++)
+        for (int c = 0; c < values; c++)
+            stub->emitValueChanged(u, 0, c, uchar(1 + (c + u) % 200));
+    QCOMPARE(spy.size(), 0);   // nothing is emitted as the values arrive
+
+    // The universe threads flush a frame: not on the GUI thread
+    QThread *t = QThread::create([&im]() { im.flushInputs(); });
+    t->start();
+    QVERIFY(t->wait(5000));
+    delete t;
+
+    QCOMPARE(spy.size(), 0);   // still waiting for the GUI thread
+    QCoreApplication::processEvents();
+    QCOMPARE(counter.calls, universes);          // one queued call per universe
+    QCOMPARE(spy.size(), universes * values);    // and every value came through
+
+    // A quiet frame hands nothing over
+    counter.calls = 0;
+    QThread *q = QThread::create([&im]() { im.flushInputs(); });
+    q->start();
+    QVERIFY(q->wait(5000));
+    delete q;
+    QCoreApplication::processEvents();
+    QCOMPARE(counter.calls, 0);
+}
+
+// Fixed: unpatching a universe wiped another universe's output settings -- the
+// map closes (universe, line) in the order every plugin expects.
+void InputOutputMap_Test::unpatchingAUniverseKeepsTheOthersOutputSettings()
+{
+    InputOutputMap iom(m_doc, 4);
+    IOPluginStub *stub = static_cast<IOPluginStub*>(m_doc->ioPluginCache()->plugins().at(0));
+    QVERIFY(stub != NULL);
+    typedef QLCIOPlugin P;
+
+    // Universe 0 on line 1, universe 1 on line 0, each with a setting
+    QVERIFY(iom.setOutputPatch(0, stub->name(), "", 1));
+    QVERIFY(iom.setOutputPatch(1, stub->name(), "", 0));
+    iom.outputPatch(0)->setPluginParameter("target", "10.0.0.1");
+    iom.outputPatch(1)->setPluginParameter("target", "10.0.0.2");
+    QCOMPARE(stub->getParameters(0, 1, P::Output).value("target").toString(), QString("10.0.0.1"));
+    QCOMPARE(stub->getParameters(1, 0, P::Output).value("target").toString(), QString("10.0.0.2"));
+
+    // Unpatch universe 0: universe 1 keeps its own
+    QVERIFY(iom.setOutputPatch(0, QString(), QString(), P::invalidLine()));
+    QVERIFY(stub->getParameters(0, 1, P::Output).isEmpty());
+    QCOMPARE(stub->getParameters(1, 0, P::Output).value("target").toString(), QString("10.0.0.2"));
+
+    // Same for inputs
+    QVERIFY(iom.setInputPatch(2, stub->name(), "", 3));
+    QVERIFY(iom.setInputPatch(3, stub->name(), "", 2));
+    iom.inputPatch(2)->setPluginParameter("p", 1);
+    iom.inputPatch(3)->setPluginParameter("p", 2);
+    QVERIFY(iom.setInputPatch(2, QString(), QString(), P::invalidLine()));
+    QCOMPARE(stub->getParameters(3, 2, P::Input).value("p").toInt(), 2);
+}
+
 void InputOutputMap_Test::offlinePatchIsInertAndListed()
 {
     mockMachine(QList<NetworkRoute::LocalAddress>() << localAddr("en0", "192.168.1.5", 24),
@@ -2584,6 +2673,47 @@ void InputOutputMap_Test::slotMapsControlsByRole()
     rescanned(stub, QStringList() << kXbox << kDs4);
     QCOMPARE(iom.inputSlotLive(0), 0);
     QVERIFY(iom.inputPatch(0)->channelMap().isEmpty());
+}
+
+// "A universe's input from a list of game controllers": when the second pad of the slot is the
+// live one, its input reaches the universe; the pad that is off, and an unrelated line, do not.
+void InputOutputMap_Test::theSecondPadOfASlotDrivesTheInputAndNoOtherDoes()
+{
+    IOPluginStub *stub = devicePlugin(m_doc, QStringList() << "Keyboard" << kXbox);
+    InputOutputMap iom(m_doc, 2);
+    QVERIFY(iom.setInputPatch(1, stub->name(), QString(), 1));      // universe 2: the Xbox pad
+    QVERIFY(iom.addInputSlotDevice(1, stub->name(), kDs4));
+
+    // Only the DS4 is here, on line 2 behind the keyboard and a mouse.
+    rescanned(stub, QStringList() << "Keyboard" << "Mouse" << kDs4);
+    QCOMPARE(iom.inputSlotLive(1), 1);
+    QCOMPARE(iom.inputPatch(1)->input(), quint32(2));
+
+    QSignalSpy values(&iom, SIGNAL(inputValueChanged(quint32,quint32,uchar,const QString&)));
+    stub->emitValueChanged(UINT_MAX, 2, 5, 200);        // the live second pad
+    iom.flushInputs();
+    QCOMPARE(values.count(), 1);
+    QCOMPARE(values.at(0).at(0).toUInt(), quint32(1));  // universe 2
+    QCOMPARE(values.at(0).at(1).toUInt(), quint32(5));
+    QCOMPARE(values.at(0).at(2).toUInt(), quint32(200));
+    values.clear();
+
+    // The mouse's line and the Xbox pad's old line 1 are not this input.
+    stub->emitValueChanged(UINT_MAX, 1, 5, 99);
+    stub->emitValueChanged(UINT_MAX, 0, 5, 98);
+    iom.flushInputs();
+    QCOMPARE(values.count(), 0);
+
+    // The Xbox pad returns and takes the slot: the DS4's line is no longer heard.
+    rescanned(stub, QStringList() << "Keyboard" << kXbox << kDs4);
+    QCOMPARE(iom.inputSlotLive(1), 0);
+    QCOMPARE(iom.inputPatch(1)->input(), quint32(1));
+    stub->emitValueChanged(UINT_MAX, 2, 5, 77);
+    iom.flushInputs();
+    QCOMPARE(values.count(), 0);
+    stub->emitValueChanged(UINT_MAX, 1, 5, 66);
+    iom.flushInputs();
+    QCOMPARE(values.count(), 1);
 }
 
 void InputOutputMap_Test::slotMappingLatency()

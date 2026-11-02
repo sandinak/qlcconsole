@@ -45,6 +45,7 @@ private slots:
     void aCommandReceivedShowsAsLast();
     void aPortInUseShowsAnError();
     void theTimecodeSourceAndHealth();
+    void anArtNetInputIsOfferedAsATimecodeSourceAndNamed();
     /** A show's universes are added one at a time as it loads: the page's
      *  lists are rebuilt once for the run, not once for each (F1). */
     void manyUniversesRebuildTheListOnce();

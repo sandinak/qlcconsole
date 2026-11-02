@@ -51,6 +51,10 @@
 #include "scene.h"
 #include "inputoutputmap.h"
 #include "doc.h"
+#include "qlcfile.h"
+#include "ioplugincache.h"
+#include "../../../engine/test/iopluginstub/iopluginstub.h"
+#include "inputpatch.h"
 
 #include "showcontrol_ui_test.h"
 
@@ -455,6 +459,60 @@ void ShowControlUi_Test::theTimecodeSourceAndHealth()
     tc->updateTimeCode(quint32(TimecodeSource::LtcUniverse), 7200040, 25);
     QTRY_VERIFY2(status->text().contains("audio input (LTC)"), qPrintable(status->text()));
     QVERIFY2(status->text().contains("02:00:"), qPrintable(status->text()));
+}
+
+/* Art-Net TimeCode in: an Art-Net input is a timecode source in the list
+   (named for what it is), code arriving on it is followed, and the readout
+   names the universe it came from. The input is the I/O stub standing in for
+   the Art-Net plugin. */
+void ShowControlUi_Test::anArtNetInputIsOfferedAsATimecodeSourceAndNamed()
+{
+    QDir dir("../../../engine/test/iopluginstub");
+    dir.setFilter(QDir::Files);
+    dir.setNameFilters(QStringList() << QString("*%1").arg(KExtPlugin));
+    m_doc->ioPluginCache()->load(dir);
+    QVERIFY2(!m_doc->ioPluginCache()->plugins().isEmpty(),
+             "the I/O plugin stub did not load (build the iopluginstub target)");
+    IOPluginStub *stub = static_cast<IOPluginStub *>(m_doc->ioPluginCache()->plugins().at(0));
+    stub->m_nameOverride = "ArtNet";
+    stub->m_lineNames = QStringList() << "192.168.1.5";
+
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QVERIFY(iom->universesCount() >= 3);
+    iom->setUniverseName(2, "Truss Art-Net");
+    QVERIFY(iom->setInputPatch(2, "ArtNet", "192.168.1.5", 0));
+    QCOMPARE(iom->inputPatch(2)->pluginName(), QString("ArtNet"));
+
+    ShowControlSyncPage page(m_doc);
+    TimecodeSource *tc = m_doc->timecodeSource();
+    QComboBox *source = page.findChild<QComboBox *>("scMtcSource");
+    QLabel *status = page.findChild<QLabel *>("scMtcStatus");
+    QVERIFY(source && status);
+
+    // Offered, named as Art-Net TimeCode on that input; an unpatched universe is not
+    const int at = source->findData(2);
+    QVERIFY(at > 0);
+    QVERIFY2(source->itemText(at).contains("Art-Net TimeCode (192.168.1.5)"),
+             qPrintable(source->itemText(at)));
+    QCOMPARE(source->findData(0), -1);
+
+    // Picked, and code arrives on it
+    emit source->activated(at);
+    QCOMPARE(tc->sourceUniverse(), 2);
+    for (int i = 0; i < 6; ++i)
+    {
+        emit stub->timeCodeChanged(UINT_MAX, 0, 3600000 + quint32(i) * 40, 25);
+        QTest::qWait(210);
+    }
+    QVERIFY(tc->isRunning());
+    QCOMPARE(tc->lastUniverse(), 2);
+    QCOMPARE(tc->fps(), 25);
+    QVERIFY2(status->text().contains("01:00:"), qPrintable(status->text()));
+    QVERIFY2(status->text().contains("25 fps"), qPrintable(status->text()));
+    QVERIFY2(status->text().contains(QString("Truss Art-Net")), qPrintable(status->text()));
+
+    stub->m_nameOverride.clear();
+    stub->m_lineNames.clear();
 }
 
 void ShowControlUi_Test::manyUniversesRebuildTheListOnce()

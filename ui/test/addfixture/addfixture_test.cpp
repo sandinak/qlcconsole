@@ -29,6 +29,7 @@
 #include "qlcfile.h"
 #include "fixture.h"
 #include "doc.h"
+#include "inputoutputmap.h"
 
 #include "addfixture_test.h"
 #define protected public
@@ -705,4 +706,51 @@ void AddFixture_Test::aNetworkFixtureCanBeSentToByWled()
     AddFixture edit(NULL, m_doc, lantern);
     QCOMPARE(edit.transport(), Fixture::WledTransport);
     QCOMPARE(edit.ipAddress(), QString("192.168.20.185"));
+}
+
+// Fixed: a fixture past the 1024-universe maximum is refused. The Add Fixture
+// search finds no address once every universe up to the maximum is full (and
+// offers none past it); the engine refuses one handed in anyway, adding no
+// universe under it. (The dialog itself cannot be driven to universe 1025: its
+// combo lists existing universes and the address clamps inside one; building
+// 1024 universes costs ~18 s, so the maximum is exercised without them.)
+void AddFixture_Test::aFixturePastTheUniverseLimitIsRefused()
+{
+    const quint32 maxU = InputOutputMap::maxUniverses();
+    Doc doc(this);
+    const quint32 before = doc.inputOutputMap()->universesCount();
+
+    // Every universe up to the maximum has a fixture in its middle (channel 256),
+    // leaving no 300 contiguous: no address is found anywhere, none past the end
+    QList<Fixture*> blocked;
+    for (quint32 u = 0; u < maxU; u++)
+    {
+        Fixture *fxi = new Fixture(&doc);
+        fxi->setChannels(1);
+        fxi->setUniverse(u);
+        fxi->setAddress(255);
+        fxi->setID(u);
+        blocked << fxi;
+    }
+    QCOMPARE(AddFixture::findAddress(300, blocked, maxU), QLCChannel::invalid());
+    QCOMPARE(AddFixture::findAddress(255, blocked, maxU), quint32(0));
+    QCOMPARE(AddFixture::findAddress(300, blocked.mid(0, int(maxU) - 1), maxU),
+             quint32((maxU - 1) << 9));
+    qDeleteAll(blocked);
+
+    // The engine's own refusal, were one handed in anyway
+    Fixture *past = new Fixture(&doc);
+    past->setChannels(20);
+    past->setUniverse(maxU);
+    past->setAddress(0);
+    QVERIFY(!doc.addFixture(past));
+    delete past;
+    Fixture *over = new Fixture(&doc);
+    over->setChannels(20);
+    over->setUniverse(maxU - 1);
+    over->setAddress(500);                    // ends in universe maxU + 1
+    QVERIFY(!doc.addFixture(over));
+    delete over;
+    QCOMPARE(doc.fixtures().size(), 0);
+    QCOMPARE(doc.inputOutputMap()->universesCount(), before);   // none added under it
 }

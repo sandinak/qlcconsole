@@ -34,6 +34,7 @@ private slots:
     void defaults();
     void copy();
     void copyExactly();
+    void aSceneDeletedWhileTheShowPlaysLeavesTheRestPlaying();
     void timeDivision();
     void tracks();
     void duration();

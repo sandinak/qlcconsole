@@ -81,6 +81,7 @@ private slots:
     void loadUniverseOutOfRange_data();
     void loadUniverseOutOfRange();
     void save();
+    void newAndOpenForgetTheStartupFunction();
 
 private:
     void createFixtureNode(QXmlStreamWriter &doc, quint32 id, quint32 address, quint32 channels,

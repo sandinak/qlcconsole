@@ -227,6 +227,7 @@ private slots:
     /** File ▸ Show Settings: a PIN keeps the show in Operate (and Live Edit
      *  off) until it's given; "Open in Operate" opens the saved show there. */
     void aPinKeepsTheShowInOperate();
+    void openInOperateWithoutAPinLoadsInOperateAndLeavesFreely();
     /** Teaching mode (docs/features/teaching.md): the chip and the title in
      *  every view, the scramble only in a teaching show */
     void teachingModeShowsItselfAndThePractice();
@@ -251,6 +252,11 @@ private slots:
      *  Undo/Redo show the tabs' keys without binding them (so they never
      *  fire twice); Settings… is called that everywhere. */
     void theMenusShowTheirKeys();
+
+    /** Teaching: a show opened with "Open in Operate" (from a file, and as the
+     *  web page loads one) goes to Operate with real output let through and
+     *  patched, without the "Run this show for real?" question */
+    void aLoadedTeachingShowOpensInOperateWithoutAsking();
 
     /** Quitting with the window still up and the Show Tree in front: the
      *  tab goes before the Doc, so its hide event (which stops its preview)

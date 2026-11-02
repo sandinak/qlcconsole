@@ -51,6 +51,9 @@ private slots:
     void saveAndLoad();
     void anOldShowFollowsNothing();
 
+    // 0.4 coverage: MIDI Time Code, as the MIDI plugin decodes it
+    void mtcFromAPatchedMidiInputFiresTheCues();
+
 private:
     quint32 makeList(int cues, const QList<int> &timesMs, bool follow = true);
     void feed(quint32 ms);

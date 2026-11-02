@@ -24,11 +24,15 @@
 #include <QToolButton>
 #include <QPushButton>
 #include <QTreeWidget>
+#include <QDrag>
+#include <QPointer>
 #include <QMimeData>
 #include <QSplitter>
 #include <QLineEdit>
 #include <QLabel>
 #include <QDir>
+#include <QMenu>
+#include <QTimer>
 #include <QtTest>
 
 #include "../../../engine/test/common/stdprelude.h"
@@ -46,6 +50,8 @@
 
 #include "functionstreewidget.h"
 #include "showtreecontroller.h"
+#include "showcontrol.h"
+#include "chaserwalker.h"
 #include "inputoutputmap.h"
 #include "functionparent.h"
 #include "fixturegroup.h"
@@ -60,6 +66,7 @@
 #include "chaser.h"
 #include "collection.h"
 #include "scene.h"
+#include "../common/dragpos.h"
 #include "efx.h"
 #include "doc.h"
 
@@ -334,6 +341,85 @@ void ShowTreeWorkbench_Test::editUndoRedo()
                 && bench->rows()->layerItem(towers)->child(0)->font(0).italic());
     QVERIFY(st->undo());
     QCOMPARE(settle(m_doc).at(0), 128);
+}
+
+/* Changelog: the docked Workbench's layer menu has the tree's Release and
+   Cue mode. Each is one undo step on the shared history and moves the
+   controller's state (and the rig, for the mode) -- not just the menu. */
+void ShowTreeWorkbench_Test::theDockedLayerMenuReleasesAndSetsTheCueMode()
+{
+    const Show s = SHOW();
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1400, 800);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QVERIFY(view.openInWorkbench(s.c2, s.towersLayer2));
+    Workbench *bench = view.dockedWorkbench();
+    WorkbenchStack *stack = bench->stack();
+    const int towers = layerNamed(stack, "Towers");
+    QVERIFY(towers >= 0);
+    ShowTreeController *st = m_doc->showTree();
+    QVERIFY(!st->canUndo());
+    QVERIFY(!st->cue(s.c2)->layer(s.towersLayer2)->release);
+    QCOMPARE(settle(m_doc).mid(0, 4), QList<int>({ 51, 51, 128, 128 }));    // USTs track in
+
+    // Opens the layer's menu, runs @a pick on it from inside its event loop.
+    auto menuDo = [&](const std::function<void(QMenu *)> &pick) {
+        bool done = false;
+        std::function<void()> poll;
+        poll = [&]() {
+            QMenu *menu = qobject_cast<QMenu *>(QApplication::activePopupWidget());
+            if (menu == nullptr)
+            {
+                QTimer::singleShot(10, bench, poll);
+                return;
+            }
+            pick(menu);
+            done = true;
+            menu->close();
+        };
+        QTimer::singleShot(10, bench, poll);
+        stack->showMenu(towers, -1, bench->mapToGlobal(QPoint(40, 40)));
+        return done;
+    };
+
+    // Release (leaving this cue): ticked, the layer's flag is set, in one step.
+    QVERIFY(menuDo([](QMenu *menu) {
+        QAction *release = menu->findChild<QAction *>("cueStackRelease");
+        QVERIFY(release != nullptr && release->isCheckable() && !release->isChecked());
+        release->trigger();
+    }));
+    QVERIFY(st->cue(s.c2)->layer(s.towersLayer2)->release);
+    QVERIFY(st->canUndo());
+    QVERIFY(st->undo());
+    QVERIFY(!st->cue(s.c2)->layer(s.towersLayer2)->release);   // looked up again after the undo
+    QVERIFY(!st->canUndo());                                     // it was the one step
+    QVERIFY(st->redo());
+    QVERIFY(st->cue(s.c2)->layer(s.towersLayer2)->release);
+
+    // Cue mode ▸ Block: Two starts from nothing, so the USTs no longer track in.
+    QVERIFY(st->cue(s.c2)->mode != CueMode::Block);
+    QVERIFY(menuDo([](QMenu *menu) {
+        QAction *sub = menu->findChild<QAction *>("cueStackMode");
+        QMenu *mode = sub != nullptr ? sub->menu() : nullptr;
+        if (mode == nullptr)
+            for (QAction *a : menu->actions())
+                if (a->menu() != nullptr && a->menu()->objectName() == QLatin1String("cueStackMode"))
+                    mode = a->menu();
+        QVERIFY(mode != nullptr);
+        QAction *block = nullptr;
+        for (QAction *a : mode->actions())
+            if (a->objectName() == QStringLiteral("stCueMode%1").arg(int(CueMode::Block)))
+                block = a;
+        QVERIFY(block != nullptr);
+        block->trigger();
+    }));
+    QCOMPARE(int(st->cue(s.c2)->mode), int(CueMode::Block));
+    QCOMPARE(settle(m_doc).mid(0, 4), QList<int>({ 51, 51, 0, 0 }));
+    QVERIFY(st->undo());
+    QVERIFY(st->cue(s.c2)->mode != CueMode::Block);
+    QCOMPARE(settle(m_doc).mid(0, 4), QList<int>({ 51, 51, 128, 128 }));
+    QVERIFY(st->cue(s.c2)->layer(s.towersLayer2)->release);     // the Release step is still there
 }
 
 /* "click and drag is doing multi-select vs relocate on palettes under a
@@ -1492,3 +1578,218 @@ void ShowTreeWorkbench_Test::shots()
 }
 
 QTEST_MAIN(ShowTreeWorkbench_Test)
+
+/* 0.4 changelog: drag a cue layer's look row onto another layer in the
+   docked Workbench. The real press-and-drag (QTest mouse events on the
+   rows), not mimeData: it used to only select. Drag moves, Alt copies,
+   each one undo step. */
+void ShowTreeWorkbench_Test::aRealMouseDragMovesALookRowAndAltCopiesIt()
+{
+    const Show s = SHOW();
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1400, 800);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QVERIFY(view.openInWorkbench(s.c1));
+    Workbench *bench = view.dockedWorkbench();
+    WorkbenchStack *stack = bench->stack();
+    ShowTreeController *st = m_doc->showTree();
+    ProgrammingOutline *rows = bench->rows();
+    const int towers = layerNamed(stack, "Towers");
+    const int usts = layerNamed(stack, "USTs");
+    QVERIFY(towers >= 0 && usts >= 0);
+    rows->expandAll();
+    QTreeWidgetItem *dimRow = bench->rows()->layerItem(towers)->child(attributeKeyed(stack, towers, KeyDimmer));
+    QVERIFY(dimRow != nullptr);
+    QVERIFY(bench->rows()->layerItem(usts) != nullptr);
+
+    // The press-and-drag a hand makes, as window-system mouse events (the
+    // button held, as the platform delivers it): a click selects the row,
+    // then a press and moves past the start distance make the view start a
+    // QDrag (seen as the QDrag it creates on the rows; it used to only
+    // select). The offscreen platform has no pointer to carry a drop across
+    // windows, so the drop is sent to the rows as drag events carrying what
+    // the selected row drags.
+    struct DragSpy : QObject
+    {
+        int drags = 0;
+        bool eventFilter(QObject *, QEvent *e) override
+        {
+            // At ChildAdded the QDrag is still only a QObject being built: look again from the loop.
+            if (e->type() == QEvent::ChildAdded)
+            {
+                QPointer<QObject> c = static_cast<QChildEvent *>(e)->child();
+                QTimer::singleShot(0, this, [this, c]() { if (qobject_cast<QDrag *>(c.data()) != nullptr) ++drags; });
+            }
+            return false;
+        }
+    } spy;
+    qApp->installEventFilter(&spy);
+    QWidget *vp = rows->viewport();
+    QWindow *win = view.windowHandle();
+    QVERIFY(win != nullptr);
+    auto inWindow = [&](const QPoint &p) { return vp->mapTo(view.window(), p); };
+    struct Unspy { QObject *s; ~Unspy() { qApp->removeEventFilter(s); } } unspy{ &spy };
+    auto drag = [&](Qt::KeyboardModifiers mods) {
+        dimRow = rows->layerItem(towers)->child(attributeKeyed(stack, towers, KeyDimmer));
+        QVERIFY(dimRow != nullptr);
+        const QPoint from = inWindow(rows->visualItemRect(dimRow).center());
+        QTest::mouseClick(win, Qt::LeftButton, Qt::NoModifier, from);
+        QTest::qWait(50);
+        dimRow = rows->layerItem(towers)->child(attributeKeyed(stack, towers, KeyDimmer));
+        const QPoint at = inWindow(rows->visualItemRect(dimRow).center());
+        const int before = spy.drags;
+        QTest::mousePress(win, Qt::LeftButton, mods, at);
+        QTest::mouseMove(win, at + QPoint(5, 8), 10);
+        QTest::mouseMove(win, at + QPoint(20, 16), 10);
+        QTest::mouseMove(win, at + QPoint(40, 30), 10);
+        QTest::mouseRelease(win, Qt::LeftButton, mods, at + QPoint(40, 30), 10);
+        QVERIFY2(spy.drags > before, "pressing a look row and moving starts a drag");
+        // What that selected row drags, dropped on the USTs layer.
+        QVERIFY(rows->currentItem() != nullptr);
+        QScopedPointer<QMimeData> carried(rows->mimeData(rows->selectedItems()));
+        QVERIFY(carried != nullptr && carried->hasFormat(QString::fromLatin1(WorkbenchStack::attributeMimeType())));
+        const QPoint to = rows->visualItemRect(rows->layerItem(layerNamed(stack, "USTs"))).center();
+        QDragEnterEvent enter(dragPos(to), Qt::MoveAction | Qt::CopyAction, carried.data(), Qt::LeftButton, mods);
+        QApplication::sendEvent(vp, &enter);
+        QDragMoveEvent move(dragPos(to), Qt::MoveAction | Qt::CopyAction, carried.data(), Qt::LeftButton, mods);
+        QApplication::sendEvent(vp, &move);
+        QDropEvent drop(QPointF(to), Qt::MoveAction | Qt::CopyAction, carried.data(), Qt::LeftButton, mods);
+        QApplication::sendEvent(vp, &drop);
+    };
+
+    // A drag moves it: USTs plays Full, Towers' own is gone; one undo step.
+    drag(Qt::NoModifier);
+    QCOMPARE(st->cue(s.c1)->layer(s.ustsLayer1)->look(KeyDimmer)->palettes, QList<quint32>({ s.full }));
+    QVERIFY(st->cue(s.c1)->layer(s.towersLayer1)->look(KeyDimmer) == nullptr);
+    QVERIFY(st->undo());
+    QCOMPARE(st->cue(s.c1)->layer(s.ustsLayer1)->look(KeyDimmer)->palettes, QList<quint32>({ s.half }));
+    QCOMPARE(st->cue(s.c1)->layer(s.towersLayer1)->look(KeyDimmer)->palettes, QList<quint32>({ s.full }));
+
+    // Alt held: a copy; Towers keeps its own, one undo step.
+    QTRY_VERIFY(bench->rows()->layerItem(towers) != nullptr);
+    rows->expandAll();
+    dimRow = bench->rows()->layerItem(towers)->child(attributeKeyed(stack, towers, KeyDimmer));
+    QVERIFY(dimRow != nullptr);
+    drag(Qt::AltModifier);
+    QTRY_COMPARE(st->cue(s.c1)->layer(s.ustsLayer1)->look(KeyDimmer)->palettes, QList<quint32>({ s.full }));
+    QCOMPARE(st->cue(s.c1)->layer(s.towersLayer1)->look(KeyDimmer)->palettes, QList<quint32>({ s.full }));
+    QVERIFY(st->undo());
+    QCOMPARE(st->cue(s.c1)->layer(s.ustsLayer1)->look(KeyDimmer)->palettes, QList<quint32>({ s.half }));
+}
+
+/* 0.4 changelog: a scene played as it is (a square layer) can be released --
+   Release is on its layer menu in the docked Workbench, it stops tracking
+   into the next cue, in one undo step. */
+void ShowTreeWorkbench_Test::aFunctionLayerCanBeReleasedFromTheDockedWorkbench()
+{
+    const Show s = SHOW();
+    Scene *haze = new Scene(m_doc);
+    haze->setName("Haze");
+    m_doc->addFunction(haze);
+    haze->setValue(m_fixtures[5], 0, 200);
+    ShowTreeController *st = m_doc->showTree();
+    Target ft;
+    ft.function = haze->id();
+    const quint32 hazeLayer = st->addLayer(s.c2, ft);
+    const quint32 c3 = st->addCue(s.list, 1, "Three");
+    st->clearUndo();
+    QVERIFY(!st->cue(s.c2)->layer(hazeLayer)->release);
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1400, 800);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    // Cue Three, on its own: the haze tracks in from Two.
+    QVERIFY(view.openInWorkbench(c3));
+    QCOMPARE(settle(m_doc).at(5), 200);
+
+    QVERIFY(view.openInWorkbench(s.c2));
+    Workbench *bench = view.dockedWorkbench();
+    WorkbenchStack *stack = bench->stack();
+    const int row = layerNamed(stack, "Haze");
+    QVERIFY(row >= 0);
+    QCOMPARE(stack->layers().at(row).kind, WorkbenchStack::Layer::FunctionLayer);
+    bool done = false;
+    std::function<void()> poll;
+    poll = [&]() {
+        QMenu *menu = qobject_cast<QMenu *>(QApplication::activePopupWidget());
+        if (menu == nullptr)
+        {
+            QTimer::singleShot(10, bench, poll);
+            return;
+        }
+        QAction *release = menu->findChild<QAction *>("cueStackRelease");
+        QVERIFY(release != nullptr && release->isCheckable() && !release->isChecked());
+        release->trigger();
+        done = true;
+        menu->close();
+    };
+    QTimer::singleShot(10, bench, poll);
+    stack->showMenu(row, -1, bench->mapToGlobal(QPoint(40, 40)));
+    QVERIFY(done);
+    QVERIFY(st->cue(s.c2)->layer(hazeLayer)->release);
+
+    // Released: Three no longer carries the haze; one undo step takes it back.
+    QVERIFY(view.openInWorkbench(c3));
+    QCOMPARE(settle(m_doc).at(5), 0);
+    QVERIFY(st->undo());
+    QVERIFY(!st->cue(s.c2)->layer(hazeLayer)->release);
+    QVERIFY(!st->canUndo());
+    QVERIFY(view.openInWorkbench(c3));
+    QCOMPARE(settle(m_doc).at(5), 200);
+}
+
+/* 0.4 changelog: a cue time typed and not yet left is what GO plays. In the
+   docked Workbench's step header (a list's chaser walked step by step): a
+   hold typed with no Return, the focus still in the field, then GO from
+   elsewhere (ShowControl, as a key / OSC / VC does) -- the step has it. */
+void ShowTreeWorkbench_Test::aHoldTypedInTheStepHeaderIsWhatGoPlays()
+{
+    const Show s = SHOW();
+    Scene *one = new Scene(m_doc);
+    one->setName("One look");
+    m_doc->addFunction(one);
+    Scene *two = new Scene(m_doc);
+    two->setName("Two look");
+    m_doc->addFunction(two);
+    Chaser *chaser = new Chaser(m_doc);
+    chaser->setName("Walk");
+    chaser->setFadeInMode(Chaser::PerStep);
+    chaser->setDurationMode(Chaser::PerStep);
+    m_doc->addFunction(chaser);
+    chaser->addStep(ChaserStep(one->id()));
+    chaser->addStep(ChaserStep(two->id()));
+    const quint32 chaserId = chaser->id();
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1400, 800);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    view.activateWindow();
+    QVERIFY(QTest::qWaitForWindowActive(&view));
+    QVERIFY(view.openInWorkbench(s.c1));
+    Workbench *bench = view.dockedWorkbench();
+    bench->open(chaserId);
+    QCOMPARE(bench->loadedFunction(), chaserId);
+    ChaserWalker *walker = qobject_cast<ChaserWalker *>(bench->m_stackWidget.data());
+    QVERIFY(walker != nullptr);
+    QLineEdit *hold = walker->findChild<QLineEdit *>("walkerHold");
+    QVERIFY(hold != nullptr);
+    QTRY_VERIFY(hold->isVisible() && hold->isEnabled());
+    const uint before = chaser->steps().first().hold;
+
+    hold->setFocus();
+    QTRY_VERIFY(hold->hasFocus());
+    hold->selectAll();
+    QTest::keyClicks(hold, "7s");
+    QVERIFY(hold->hasFocus());                         // not left, no Return
+    QCOMPARE(chaser->steps().first().hold, before);
+
+    // GO from elsewhere (a key, OSC, the VC): the step has the typed hold.
+    ShowControl::Request go;
+    go.command = ShowControl::Go;
+    go.chaser = chaserId;
+    QVERIFY(m_doc->showControl()->execute(go));
+    QCOMPARE(qobject_cast<Chaser *>(m_doc->function(chaserId))->steps().first().hold, 7000u);
+}
