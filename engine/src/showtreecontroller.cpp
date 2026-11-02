@@ -138,6 +138,8 @@ ShowTreeController::ShowTreeController(Doc *doc)
     connect(m_doc, &Doc::functionRemoved, this, stale);
     connect(m_doc, &Doc::functionChanged, this, stale);
     connect(this, &ShowTreeController::changed, this, stale);
+    // Q198: views of the section starts (the timeline) hear when they move.
+    connect(this, &ShowTreeController::changed, this, &ShowTreeController::checkTimecodeAnchors);
     // What bake() planned for each cue stands on the rig: a change to it
     // plans every cue again.
     auto rigChanged = [this]() { ++m_planWorld; };
@@ -538,6 +540,7 @@ bool ShowTreeController::edit(const QString &label,
         if (!change(work))
             return false;
         normalizeLooks(work);
+        resolveAllTimecodes(work);
         syncReusables(m_productions, work);
         m_productions = work;
         m_batchChanged = true;
@@ -549,6 +552,7 @@ bool ShowTreeController::edit(const QString &label,
     if (!change(work))
         return false;
     normalizeLooks(work);
+    resolveAllTimecodes(work);          // Q198: cues timed from a section follow it
 
     // A reusable's use edited: every use (P4).
     syncReusables(m_productions, work);
@@ -1136,13 +1140,16 @@ bool ShowTreeController::setCuesNoMoveInBlack(const QList<quint32> &cueIds, bool
 bool ShowTreeController::setCueTimecode(quint32 cueId, qint32 ms)
 {
     ms = qMax<qint32>(-1, ms);
+    const CueList *have = listOfCue(cueId);
+    const Numbering scheme = have == nullptr ? Numbering::None : listNumbering(have->id);
     return edit(ms < 0 ? tr("Clear cue timecode") : tr("Set cue timecode"), [&](QList<Production> &ps) {
         CueList *l = nullptr;
         Cue *c = cueIn(ps, cueId, &l);
         if (c == nullptr || l->looks || l->isSubCues() || c->timecode == ms)
             return false;
-        c->timecode = ms;
-        return true;
+        // Q198: a new time counts from its section (or anchor) when that
+        // has a start; a time it had keeps counting from where it did.
+        return setCueTimecodeAt(*l, scheme, l->indexOf(cueId), ms);
     });
 }
 

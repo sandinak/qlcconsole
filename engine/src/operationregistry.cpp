@@ -34,6 +34,7 @@
 #include "configimport.h"
 #include "groupmasters.h"
 #include "showtreecontroller.h"
+#include "timecodeanchors.h"
 #include "qlcfixturemode.h"
 #include "qlcfixturedef.h"
 #include "fixturegroup.h"
@@ -1366,6 +1367,234 @@ void appendLiveOperations(QList<OperationRegistry::Operation> &ops)
     }
 }
 
+/* Q198: a time typed for ripple / stretch -- seconds ("2.5", "2.5s") or
+   [h:]m:ss[.f] ("0:42", "1:02.5"). Its ms; -1 when it isn't one. */
+qint64 parseTimeWords(const QString &text)
+{
+    QString t = text.trimmed();
+    if (t.endsWith(QLatin1Char('s'), Qt::CaseInsensitive))
+        t.chop(1);
+    if (t.isEmpty())
+        return -1;
+    const QStringList parts = t.split(QLatin1Char(':'));
+    if (parts.count() > 3)
+        return -1;
+    double total = 0;
+    for (int i = 0; i < parts.count(); ++i)
+    {
+        bool ok = false;
+        const double v = parts.at(i).toDouble(&ok);
+        if (!ok || v < 0 || (i > 0 && v >= 60))
+            return -1;
+        if (i < parts.count() - 1 && v != double(qint64(v)))
+            return -1;
+        total = total * 60 + v;
+    }
+    if (total > double(INT_MAX) / 1000.0)
+        return -1;
+    return qint64(total * 1000.0 + 0.5);
+}
+
+QString secondsText(double seconds)
+{
+    return QString::number(seconds, 'g', 10);
+}
+
+/* The cue list a timecode word acts on: the selection's, else the current
+   production's main list. */
+quint32 timecodeList(ShowTreeController *st, const ShowTreeCommand::Context &sel)
+{
+    if (sel.list != kInvalid && st->cueList(sel.list) != nullptr)
+        return sel.list;
+    if (sel.cue != kInvalid)
+        if (const ShowTree::CueList *l = st->listOfCue(sel.cue))
+            return l->id;
+    const quint32 prod = st->currentProduction() != kInvalid ? st->currentProduction()
+                         : (st->productions().isEmpty() ? kInvalid : st->productions().first().id);
+    return prod == kInvalid ? kInvalid : st->mainList(prod);
+}
+
+void appendTimecodeOperations(QList<OperationRegistry::Operation> &ops)
+{
+    typedef OperationRegistry R;
+    typedef OperationRegistry::Operation Op;
+    {
+        Op op;
+        op.name = QStringLiteral("ripple_timecode");
+        op.title = R::tr("Insert or remove time at a cue");
+        op.description = R::tr("Ripple: the cue and every timed cue and section start after it move later "
+                               "(positive seconds) or earlier (negative), on the incoming timecode. "
+                               "One undo step.");
+        QJsonObject seconds { { QStringLiteral("type"), QStringLiteral("number") },
+                              { QStringLiteral("description"), R::tr("Seconds: + inserts, - removes") } };
+        op.schema = strictSchema({ { QStringLiteral("seconds"), seconds },
+                                   { QStringLiteral("cue"), stringProperty(R::tr("The cue's number (empty: the selected cue)")) } },
+                                 { QStringLiteral("seconds") });
+        op.readOnly = false;
+        op.cliWord = QStringLiteral("ripple");
+        op.cliHelp = QStringLiteral("ripple +2.5 [at <cue>]");
+        op.parse = [](const QStringList &words, QJsonObject *out, QString *why) {
+            const QString usage = R::tr("ripple +2.5 at 3.1 (or -2.5; seconds or m:ss)");
+            if (words.isEmpty() || (words.count() != 1 && words.count() != 3)
+                || (words.count() == 3 && words.at(1).compare(QLatin1String("at"), Qt::CaseInsensitive) != 0))
+            {
+                *why = usage;
+                return false;
+            }
+            QString amount = words.first();
+            const bool remove = amount.startsWith(QLatin1Char('-'));
+            if (remove || amount.startsWith(QLatin1Char('+')))
+                amount = amount.mid(1);
+            const qint64 ms = parseTimeWords(amount);
+            if (ms <= 0)
+            {
+                *why = usage;
+                return false;
+            }
+            out->insert(QStringLiteral("seconds"), (remove ? -1.0 : 1.0) * double(ms) / 1000.0);
+            if (words.count() == 3)
+                out->insert(QStringLiteral("cue"), words.at(2));
+            return true;
+        };
+        op.validate = [](Doc *doc, const QJsonObject &a) {
+            if (doc->showTree() == nullptr)
+                return R::tr("The show has no Show Tree");
+            if (qAbs(a.value(QLatin1String("seconds")).toDouble()) < 0.001)
+                return R::tr("No time to insert or remove");
+            return QString();
+        };
+        op.execute = [](R::Context &ctx, const QJsonObject &a) {
+            ShowTreeController *st = ctx.doc->showTree();
+            if (ctx.doc->mode() == Doc::Operate)
+                return refusal(R::tr("Changes can't be made in Operate mode"));
+            quint32 cueId = ctx.selection.cue;
+            const QString number = arg(a, "cue");
+            if (!number.isEmpty())
+            {
+                cueId = kInvalid;
+                const quint32 listId = timecodeList(st, ctx.selection);
+                if (const ShowTree::CueList *l = st->cueList(listId))
+                    for (int i = 0; i < l->cues.count() && cueId == kInvalid; ++i)
+                        if (st->cueNumber(*l, i) == number)
+                            cueId = l->cues.at(i).id;
+                if (cueId == kInvalid)
+                    return refusal(R::tr("No cue %1 in this list").arg(number));
+            }
+            if (cueId == kInvalid || st->cue(cueId) == nullptr || st->isLook(cueId))
+                return refusal(R::tr("Select a cue first, or say which: ripple +2.5 at 3.1"));
+            const qint32 ms = qint32(qRound(a.value(QLatin1String("seconds")).toDouble() * 1000.0));
+            if (!st->rippleTimecode(cueId, ms))
+                return refusal(R::tr("Nothing changed: no cue from there on has a time"));
+            R::Result r;
+            r.ok = r.command.ok = true;
+            r.command.context = ctx.selection;
+            r.command.keepSelection = true;
+            r.message = ms > 0 ? R::tr("✓ %1 inserted").arg(MarkerPlan::formatDelta(ms))
+                               : R::tr("✓ %1 removed").arg(MarkerPlan::formatDelta(ms));
+            r.command.message = r.message;
+            return r;
+        };
+        op.cliSyntax = [](const QJsonObject &a) {
+            const double sec = a.value(QLatin1String("seconds")).toDouble();
+            QString line = QStringLiteral("ripple %1%2").arg(sec < 0 ? QStringLiteral("-") : QStringLiteral("+"),
+                                                            secondsText(qAbs(sec)));
+            if (!arg(a, "cue").isEmpty())
+                line += QStringLiteral(" at ") + arg(a, "cue");
+            return line;
+        };
+        op.describe = [](const QJsonObject &a) {
+            const double sec = a.value(QLatin1String("seconds")).toDouble();
+            const QString at = arg(a, "cue").isEmpty() ? R::tr("the selected cue") : R::tr("cue %1").arg(arg(a, "cue"));
+            return sec >= 0 ? R::tr("Insert %1 s of timecode at %2").arg(secondsText(sec), at)
+                            : R::tr("Remove %1 s of timecode at %2").arg(secondsText(-sec), at);
+        };
+        ops << op;
+    }
+    {
+        Op op;
+        op.name = QStringLiteral("stretch_section");
+        op.title = R::tr("Stretch a song section");
+        op.description = R::tr("Makes a song section this long on the timecode (from its start to the next "
+                               "section's): its cues spread in proportion, everything after moves. "
+                               "One undo step.");
+        QJsonObject seconds { { QStringLiteral("type"), QStringLiteral("number") },
+                              { QStringLiteral("minimum"), 0 },
+                              { QStringLiteral("description"), R::tr("Its new length, seconds") } };
+        op.schema = strictSchema({ { QStringLiteral("section"), stringProperty(R::tr("The section's name or number")) },
+                                   { QStringLiteral("seconds"), seconds } },
+                                 { QStringLiteral("section"), QStringLiteral("seconds") });
+        op.readOnly = false;
+        op.cliWord = QStringLiteral("stretch");
+        op.cliHelp = QStringLiteral("stretch <section> to 0:42");
+        op.parse = [](const QStringList &words, QJsonObject *out, QString *why) {
+            const QString usage = R::tr("stretch Chorus 2 to 0:42 (seconds or m:ss)");
+            int to = -1;
+            for (int i = 0; i < words.count(); ++i)
+                if (words.at(i).compare(QLatin1String("to"), Qt::CaseInsensitive) == 0)
+                    to = i;
+            if (to < 1 || to != words.count() - 2)
+            {
+                *why = usage;
+                return false;
+            }
+            const qint64 ms = parseTimeWords(words.last());
+            if (ms <= 0)
+            {
+                *why = usage;
+                return false;
+            }
+            out->insert(QStringLiteral("section"), words.mid(0, to).join(QLatin1Char(' ')));
+            out->insert(QStringLiteral("seconds"), double(ms) / 1000.0);
+            return true;
+        };
+        op.validate = [](Doc *doc, const QJsonObject &a) {
+            if (doc->showTree() == nullptr)
+                return R::tr("The show has no Show Tree");
+            if (a.value(QLatin1String("seconds")).toDouble() < 0.001)
+                return R::tr("A section can't be stretched to nothing");
+            return QString();
+        };
+        op.execute = [](R::Context &ctx, const QJsonObject &a) {
+            ShowTreeController *st = ctx.doc->showTree();
+            if (ctx.doc->mode() == Doc::Operate)
+                return refusal(R::tr("Changes can't be made in Operate mode"));
+            const quint32 listId = timecodeList(st, ctx.selection);
+            const QString want = MarkerPlan::matchKey(arg(a, "section"));
+            const QList<ShowTree::Section> secs = st->sections(listId);
+            const ShowTree::Section *hit = nullptr;
+            for (int pass = 0; pass < 3 && hit == nullptr; ++pass)
+                for (const ShowTree::Section &s : secs)
+                {
+                    const QString name = pass == 0 ? s.name : pass == 1 ? ShowTree::sectionTitle(s) : s.key;
+                    if (hit == nullptr && !name.isEmpty() && MarkerPlan::matchKey(name) == want)
+                        hit = &s;
+                }
+            if (hit == nullptr)
+                return refusal(R::tr("No section called %1 in this list").arg(arg(a, "section")));
+            const qint32 ms = qint32(qRound(a.value(QLatin1String("seconds")).toDouble() * 1000.0));
+            QString why;
+            if (!st->stretchSection(listId, *hit, ms, &why))
+                return refusal(why);
+            R::Result r;
+            r.ok = r.command.ok = true;
+            r.command.context = ctx.selection;
+            r.command.keepSelection = true;
+            r.message = R::tr("✓ %1 is %2 long").arg(ShowTree::sectionTitle(*hit), MarkerPlan::formatTime(ms));
+            r.command.message = r.message;
+            return r;
+        };
+        op.cliSyntax = [](const QJsonObject &a) {
+            return QStringLiteral("stretch %1 to %2").arg(arg(a, "section"),
+                                                          secondsText(a.value(QLatin1String("seconds")).toDouble()));
+        };
+        op.describe = [](const QJsonObject &a) {
+            return R::tr("Stretch section %1 to %2 s").arg(arg(a, "section"),
+                                                           secondsText(a.value(QLatin1String("seconds")).toDouble()));
+        };
+        ops << op;
+    }
+}
+
 QList<OperationRegistry::Operation> buildCatalog()
 {
     typedef OperationRegistry R;
@@ -1790,6 +2019,7 @@ QList<OperationRegistry::Operation> buildCatalog()
     appendChangeOperations(ops);
     appendConfigOperations(ops, false);
     appendLiveOperations(ops);
+    appendTimecodeOperations(ops);
     return ops;
 }
 } // namespace

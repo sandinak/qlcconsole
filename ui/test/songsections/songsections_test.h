@@ -38,6 +38,7 @@ private slots:
     void theProductionPageSuggestsAScheme();
     void mergeThenRunShowsEverySection();
     void runningOrderReordersTheRun();
+    void timecodeAnchorsOnThePages();
 
 private:
     /** A production of two lists, a song each: {pre, song, cue ids...}. */

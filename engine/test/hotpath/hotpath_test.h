@@ -66,6 +66,7 @@ private slots:
     void thePowerEstimateOfABigRigAddsUp();
     void theCapHoldsEveryParOfABigRig();
     void aGoInABigShowTreeMakesAndDeletesNothing();
+    void timecodeFramesWithAnchorsAllocateNothing();
 
     /* CPU time per operation (report only) */
     void cpuPerOperation();

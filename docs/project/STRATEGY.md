@@ -436,6 +436,7 @@ Notes:
 | Course Level 2 lessons (7), one per release cycle | 5 | 5 | course template, courseshow_test | 2 a lesson | L | M | **12.5** a lesson | BUILD (0.3.1 onward) |
 | Realistic move speed in the Rig Overview | 3 | 5 | Rig Overview, definitions' speeds | 3 | L | L | 5 | BUILT (0.5, mov, 2026-10-31): defaults 0.4 s / 180° (scanner 0.1), Rig Overview follower + MOV-01/02/08 |
 | LTC (audio) timecode in, plus cues at a timecode | 4 | 5 | MTC follow, audio capture | 4 | M | M | 4 | BUILT (0.4, 2026-10-31): LTC in (feat/04-ltc) and cues at a timecode (`TimecodeCues`, through the One GO path) |
+| Timecode shows that survive edits in the DAW session (Q198): section starts + cue offsets / anchors, Logic markers from an exported MIDI file, ripple / stretch, Learn section starts | 4 | 5 | cues at a timecode, song sections (Q190), registry, undo | 3 | M | M | 4 | BUILT 1–4 (0.4, q198, 2026-11-01): `engine/src/showtreetimecode.cpp`, `midimarkers.*`, `timecodeanchors.*`; 5 (timing maps per session version — festival cut vs full — switchable like venues) LATER |
 | Effect fade in / fade out (depth to 0 on release) | 4 | 5 | layered looks | 4 | M | M | 4 | BUILT (0.4, 2026-10-31) |
 | Group / intensity masters on faders | 4 | 5 | groups, speed masters, Control Map | 4 | M | M | 4 | BUILT (0.4, gm, 2026-10-31) |
 | QLab out (OSC / MSC out) | 3 | 4 | Show control page | 3 | L | M | 4 | BUILT (0.4) |

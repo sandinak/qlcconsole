@@ -471,6 +471,58 @@ public:
     bool setCueTimecode(quint32 cueId, qint32 ms);
     /** Whether list @a listId follows timecode (CueList::followTimecode). */
     bool setListFollowTimecode(quint32 listId, bool follow);
+
+    /************************************************************************
+     * Timecode anchors (Q198, engine/src/showtreetimecode.cpp)
+     *
+     * A song section has a start on the timecode and its cues count from
+     * it; any cue can be an anchor the cues after it in its section count
+     * from. Cue::timecode stays the resolved time, so the runtime is
+     * unchanged. A new time set on a cue (setCueTimecode()) counts from its
+     * section when the section has a start; an older show's absolute times
+     * stay until convertToSectionTimes().
+     *
+     * For views (the timeline): timecodeAnchors() and Section::start
+     * (sections()), re-read on timecodeAnchorsChanged().
+     ************************************************************************/
+public:
+    /** List @a listId's section starts and anchor cues, in list order. */
+    QList<ShowTree::TimecodeAnchor> timecodeAnchors(quint32 listId) const;
+    /** Where @a section of list @a listId starts on the timecode (ms; -1: none). */
+    qint32 sectionStart(quint32 listId, const ShowTree::Section &section) const;
+    /** @a section starts at @a ms (-1: none): its cues timed from it follow;
+     *  with @a laterFollow every later section and cue moves by as much.
+     *  One undo step. */
+    bool setSectionStart(quint32 listId, const ShowTree::Section &section, qint32 ms, bool laterFollow = false);
+    /** Several sections' starts (section index in sections(), ms) as one undo
+     *  step named @a label -- the Logic marker import. A section getting its
+     *  first start keeps its cues where they are, counting from it now. */
+    bool setSectionStarts(quint32 listId, const QList<QPair<int, qint32>> &starts, const QString &label);
+    /** Cue @a cueId an anchor or not: every cue stays where it is. One undo step. */
+    bool setCueTimecodeAnchor(quint32 cueId, bool anchor);
+    bool isCueTimecodeAnchor(quint32 cueId) const;
+    /** How many cues of list @a listId have absolute times a section could hold. */
+    int absoluteTimedCues(quint32 listId) const;
+    /** Convert to section times (offered, not forced): one undo step. */
+    bool convertToSectionTimes(quint32 listId, int *converted = nullptr);
+    /** Ripple: insert (@a deltaMs > 0) or remove time at cue @a cueId -- it
+     *  and everything after move. One undo step. */
+    bool rippleTimecode(quint32 cueId, qint32 deltaMs);
+    /** Stretch @a section to @a lengthMs: its cues spread in proportion,
+     *  everything after moves. One undo step; @a why when it can't. */
+    bool stretchSection(quint32 listId, const ShowTree::Section &section, qint32 lengthMs, QString *why = nullptr);
+    /** What cue @a cueId's time counts from ("Chorus 2", "cue 3.4") and
+     *  where that is; false for a time of its own. */
+    bool cueTimecodeBase(quint32 cueId, QString *from, qint32 *baseMs = nullptr) const;
+signals:
+    /** List @a listId's section starts or anchors changed (moved, added,
+     *  removed, or the cues that follow them). */
+    void timecodeAnchorsChanged(quint32 listId);
+private:
+    void checkTimecodeAnchors();
+    static void resolveAllTimecodes(QList<ShowTree::Production> &ps);
+    QHash<quint32, QList<ShowTree::TimecodeAnchor>> m_anchors;
+public:
     /** A focus-call cue (docs/design/FOCUS_REFINE_DESIGN.md section 7): GO arms the
      *  show's focus calls, the controller's Start begins them. One undo
      *  step; false when nothing changed (a Looks section has none). */

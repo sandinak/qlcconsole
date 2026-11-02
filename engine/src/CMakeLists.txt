@@ -77,6 +77,7 @@ add_library(${module_name} SHARED
     showtreeproductions.cpp
     showtreesubcues.cpp
     showtreesections.cpp
+    showtreetimecode.cpp
     showtreenumbering.cpp
     showtreerunner.cpp
     showtreereusable.cpp
@@ -193,6 +194,8 @@ add_library(${module_name} SHARED
     showfunction.cpp showfunction.h
     timecodesource.cpp timecodesource.h
     timecodecues.cpp timecodecues.h
+    timecodeanchors.cpp timecodeanchors.h
+    midimarkers.cpp midimarkers.h
     ltcdecoder.cpp ltcdecoder.h
     ltcreceiver.cpp ltcreceiver.h
     showrunner.cpp showrunner.h

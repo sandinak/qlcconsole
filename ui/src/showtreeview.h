@@ -1185,6 +1185,51 @@ private:
     QCheckBox *m_sectionBlock = nullptr;
     QLabel *m_sectionInfo = nullptr;
     QPushButton *m_sectionRemove = nullptr;
+
+    /************************************************************************
+     * Timecode anchors (Q198, showtreetimecode.cpp): section starts, the
+     * Logic marker import, ripple / stretch, Learn section starts
+     ************************************************************************/
+public:
+    /** Import Logic markers… onto list @a listId's sections: the markers of
+     *  the MIDI file at @a path (empty: asks for it), a preview through
+     *  confirm(), then one undo step. */
+    bool importLogicMarkers(quint32 listId, const QString &path = QString());
+    /** Convert to section times… (asks through confirm()). */
+    bool convertListToSectionTimes(quint32 listId);
+    enum RippleMode { RippleInsert, RippleRemove, RippleStretch };
+    /** The cue's Ripple timecode…: insert or remove @a ms at cue @a cueId,
+     *  or stretch its section to @a ms. One undo step. */
+    bool rippleCue(quint32 cueId, RippleMode mode, qint32 ms);
+    /** Learn section starts on list @a listId from section @a fromSection:
+     *  each learnTap() sets the next one (the button taps with the
+     *  timecode coming in). */
+    void startLearnSections(quint32 listId, int fromSection = 0);
+    bool learnTap(qint32 ms);
+    /** The section the next tap sets (empty: not learning). */
+    QString learnSection() const;
+    void stopLearnSections();
+private:
+    void buildTimecodeRows();
+    void updateListTimecodeRows(const ShowTree::CueList &list);
+    void updateCueTimecodeRows(const ShowTree::Cue &cue);
+    void updateSectionTimecodeRows(quint32 listId, const ShowTree::Section &section);
+    void timecodeMenu(QMenu *menu, quint32 cueId);
+    void updateLearnButton();
+    QWidget *m_listTcRow = nullptr;
+    QPushButton *m_listTcConvert = nullptr;
+    QPushButton *m_listTcMarkers = nullptr;
+    QPushButton *m_listTcLearn = nullptr;
+    QCheckBox *m_cueTcAnchor = nullptr;
+    QLabel *m_cueTcBase = nullptr;
+    QWidget *m_sectionStartRow = nullptr;
+    QLineEdit *m_sectionStart = nullptr;
+    QPushButton *m_sectionStartLearn = nullptr;
+    QCheckBox *m_sectionFollow = nullptr;
+    quint32 m_learnList = 0xFFFFFFFF;
+    int m_learnSection = -1;
+    int m_learnCount = 0;
+    qint32 m_learnLast = -1;
 };
 
 /** @} */

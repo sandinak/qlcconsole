@@ -71,6 +71,15 @@ Roles: **Driver** (mouse), **Navigator** (reads each step aloud and checks *You 
 around the time: write all four parts, `hh:mm:ss:ff`. No times on the
 Run tab: tick **Follow timecode** on the list first.
 
+## When the song changes
+
+Cut a verse for time and every cue after it goes late. So a song section can
+start at a time of its own, and its cues count from that start. Click the
+section's header row (**1 — …**) and set **Starts at**: change that one
+number and every cue in the song follows. When the music comes from a Logic
+session, its markers can set the starts (**Import Logic markers…** on the
+list's page), or you tap **Learn section starts** as each section plays.
+
 ## One GO
 
 Whichever way a GO arrives, it is the same GO: the key, the Run tab's

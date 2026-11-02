@@ -1947,6 +1947,7 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         f->addRow(tr("At timecode"), m_cueTcRow);
         connect(m_cueTc, &QLineEdit::editingFinished, this, &ShowTreeView::slotCueTimecodeEdited);
         connect(m_cueTcLearn, &QPushButton::clicked, this, &ShowTreeView::slotCueTimecodeLearn);
+        buildTimecodeRows();        // Q198: anchors, section starts (showtreetimecode.cpp)
         {
             // Includes (D8): this cue plays their output under its own,
             // in order -- the later wins.
@@ -4013,6 +4014,7 @@ void ShowTreeView::updateInspector()
             }
             if (m_listAddSection != nullptr)
                 m_listForm->setRowVisible(m_listAddSection, true);
+            updateListTimecodeRows(*list);
             m_listMib->setItemText(0, showMibLabel());
             m_listMib->setCurrentIndex(qMax(0, m_listMib->findData(int(list->moveInBlack))));
             m_listMode->setCurrentIndex(list->mode == ListMode::Tracking ? 1 : 0);
@@ -4297,6 +4299,7 @@ void ShowTreeView::showCuePage(const CueList &list, int index)
             m_cueTc->setText(cue.timecode < 0 ? QString() : TimecodeCues::format(cue.timecode, tcFps()));
         const TimecodeSource *src = m_doc->timecodeSource();
         m_cueTcLearn->setEnabled(src != nullptr && src->health() != TimecodeSource::NoSource);
+        updateCueTimecodeRows(cue);
     }
     {
         QSignalBlocker block(m_cueNeedsWork);
@@ -7839,8 +7842,11 @@ void ShowTreeView::slotTreeContextMenu(const QPoint &pos)
             });
             down->setEnabled(list != nullptr && at + 1 < list->cues.count());
             if (list != nullptr && !list->looks)
+            {
                 menu.addAction(tr("Renumber this level…"), this, [this, cueId]() { renumberLevel(cueId); })
                     ->setObjectName("stRenumberLevel");
+                timecodeMenu(&menu, cueId);     // Q198: only on a list that follows timecode
+            }
         }
         const QList<QPair<quint32, quint32>> sel = selectedLayerRefs();
         if (kind == LayerNode && sel.count() > 1 && item->isSelected())
@@ -10434,6 +10440,8 @@ void ShowTreeView::showLooksPage(quint32 listId, const QString &folder)
     m_listForm->setRowVisible(m_listFollowTc, false);
     if (m_listAddSection != nullptr)
         m_listForm->setRowVisible(m_listAddSection, false);
+    if (m_listTcRow != nullptr)
+        m_listForm->setRowVisible(m_listTcRow, false);
     m_listConvert->hide();
     m_listDetach->hide();
     m_listVcPage->show();
