@@ -41,7 +41,7 @@ Which cues change when Chorus Colour changes?
 2. Click the **Show Tree** tab (⇧⌘5); open **View ▸ Rig Overview** (⇧⌘R)
    beside it.
 3. Library → **All → Palettes → Colour**: right-click **Magenta** →
-   **Used by**. One use: the chorus's Steps.
+   **Used By**. One use: the chorus's Steps.
 
    {% include inapp.html do="Right-click" mac="Control-click" win="right button" see="On a Mac trackpad, a two-finger click works too. A menu of what you can do with that item opens." %}
 4. Right-click **Magenta** → **Duplicate**. The copy opens in the Look
@@ -50,7 +50,7 @@ Which cues change when Chorus Colour changes?
    ![The copy in the Look Editor](../../images/lesson-2-2/duplicate.png)
 
 5. In its **Name** box type `Chorus Colour`, press **Return**.
-6. Right-click **Chorus Colour** → **Move to folder** → **New folder…**,
+6. Right-click **Chorus Colour** → **Move to Folder** → **New Folder…**,
    type `01-Everybody Scream`, **OK**.
 
    ![The song's folder](../../images/lesson-2-2/song-folder.png)

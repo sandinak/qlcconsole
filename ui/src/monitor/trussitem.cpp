@@ -331,39 +331,3 @@ void TrussItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
         emit itemDropped(this);
 }
 
-void TrussItem::contextMenuEvent(QGraphicsSceneContextMenuEvent *event)
-{
-    QMenu menu;
-
-    // "Add Fixture Here" — compute the offset along the truss at the click point.
-    QPointF delta = event->scenePos() - pos();
-    float offsetM = 0.0f;
-    if (m_truss->type() != Truss::Vertical && m_pxLen > 0.0f)
-    {
-        float angleRad = float(qDegreesToRadians(double(rotation())));
-        QPointF dir(qCos(angleRad), qSin(angleRad));
-        float pxOffset = float(delta.x() * dir.x() + delta.y() * dir.y());
-        pxOffset = qBound(0.0f, pxOffset, m_pxLen);
-        offsetM  = pxOffset * m_truss->length() / m_pxLen;
-    }
-    QAction *addFixAct = menu.addAction(tr("Add Fixture to Truss here…"));
-    menu.addSeparator();
-    QAction *lockAct = menu.addAction(
-        m_truss->locked() ? tr("Unlock Truss") : tr("Lock Truss"));
-
-    QAction *chosen = menu.exec(event->screenPos());
-    if (chosen == addFixAct)
-    {
-        emit addFixtureRequested(m_truss->id(), offsetM);
-    }
-    else if (chosen == lockAct)
-    {
-        m_truss->setLocked(!m_truss->locked());
-        bool canMove = !m_truss->locked();
-        setFlag(ItemIsMovable, canMove);
-        setCursor(canMove ? smallOpenHandCursor() : Qt::ArrowCursor);
-        update();
-        if (m_doc)
-            m_doc->setModified();
-    }
-}

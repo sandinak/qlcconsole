@@ -536,6 +536,10 @@ protected slots:
 
     /** Show the Add context menu at the given scene position. */
     void slotCanvasContextMenu(QPointF scenePos);
+public:
+    /** The empty plot's right-click menu into @p menu (the canon's layout) */
+    void fillCanvasMenu(class QMenu *menu, QPointF scenePos);
+protected slots:
 
     /** Add a fixture onto a truss at the given offset (from TrussItem right-click). */
     void slotAddFixtureToTruss(quint32 trussId, float offsetMetres);

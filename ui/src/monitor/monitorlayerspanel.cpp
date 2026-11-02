@@ -70,6 +70,7 @@ static QIcon glyphIcon(const QString &glyph, const QColor &c)
 }
 
 #include "monitorlayerspanel.h"
+#include "contextmenus.h"
 #include "monitorgraphicsview.h"
 #include "hanger.h"
 #include "monitorproperties.h"
@@ -2383,118 +2384,14 @@ void MonitorLayersPanel::buildContextMenu(QMenu *out, QTreeWidgetItem *item)
             sub->setObjectName(QStringLiteral("layersNewSubFolder"));
         }
     }
-    else if (type == NodeFixtureGroup && m_doc->fixtureGroup(id) != nullptr)
+
+    if (type == NodeFixtureGroup)
     {
-        /* The others like it: the step fronts are four groups of eight of the
-           same bar, laid out the same -- select them all at once. When none
-           match the layout exactly, the groups of the same fixtures in any
-           layout. Selecting is not an edit: offered in any mode. */
-        FixtureGroup *fg = m_doc->fixtureGroup(id);
-        const QList<FixtureGroup *> same = CreateFixtureGroup::similarGroups(m_doc, fg, true);
-        const QList<FixtureGroup *> sameFixtures = CreateFixtureGroup::similarGroups(m_doc, fg, false);
-        auto idsOf = [](const QList<FixtureGroup *> &gs) {
-            QList<quint32> ids;
-            foreach (FixtureGroup *g, gs) ids << g->id();
-            return ids;
-        };
-        QAction *sim = menu.addAction(same.size() > 1 ? tr("Select All Similar (%1)").arg(same.size())
-                                                      : tr("Select All Similar"),
-                                      this, [this, ids = idsOf(same)]() { selectFixtureGroups(ids); });
-        sim->setEnabled(same.size() > 1);
-        sim->setToolTip(tr("Fixture groups of the same fixture models, laid out the same way"));
-        if (sameFixtures.size() > same.size())
-            menu.addAction(tr("Select All with the Same Fixtures (%1)").arg(sameFixtures.size()),
-                           this, [this, ids = idsOf(sameFixtures)]() { selectFixtureGroups(ids); });
-        menu.addSeparator();
+        buildFixtureGroupMenu(out, item, place.selection);
+        return;
     }
-    if (type == NodeFixtureGroup && m_editable)
-    {
-        FixtureGroup *fg = m_doc->fixtureGroup(id);
-        /* Listed under a truss, tower or boom: it can be taken out of it
-           ("I can't right click the 3z fixture group and have an option to
-           remove from truss .. which it clearly shouldn't be there"). */
-        for (QTreeWidgetItem *up = item->parent(); up != nullptr && fg != nullptr; up = up->parent())
-        {
-            if (up->data(0, NodeTypeRole).toInt() != NodeGroup)
-                continue;
-            const MonitorProperties::MonitorGroup host = m_props->group(up->data(0, NodeIdRole).toUInt());
-            if (host.anchorKind != QLatin1String("truss") && host.anchorKind != QLatin1String("tower")
-                && host.anchorKind != QLatin1String("pipe"))
-                continue;
-            const QString kind = host.anchorKind;
-            const quint32 anchor = host.anchorId;
-            const QList<quint32> members = fg->fixtureList();
-            menu.addAction(tr("Remove “%1” from “%2”").arg(fg->name(), up->text(0).section(QStringLiteral("  "), 0, 0)),
-                           this, [this, members, kind, anchor]() {
-                if (m_view) m_view->takeOutOfStructure(members, kind, anchor);
-                reload();
-            });
-            break;
-        }
 
-        /* Several fixture groups: one group of them, laid out as they stand on
-           stage ("create fixture group from those groups that uses the
-           relative layout sizing from the studio"). */
-        QList<quint32> groups;
-        foreach (QTreeWidgetItem *sel, m_tree->selectedItems())
-            if (sel->data(0, NodeTypeRole).toInt() == NodeFixtureGroup)
-                groups << sel->data(0, NodeIdRole).toUInt();
-        if (!groups.contains(id))
-            groups = { id };
-        if (groups.size() > 1)
-            menu.addAction(tr("Create Fixture Group from %1 Groups…").arg(groups.size()),
-                           this, [this, groups]() {
-                if (CreateFixtureGroup::createFromGroups(m_doc, groups, this) != nullptr)
-                    reload();
-            });
-
-        /* Its layout made again from where its fixtures stand -- a group
-           filled in head order (US2f: eight 64-head bars poured into a 23 x
-           23 square) is put right without making a new one. */
-        if (fg != nullptr && StageGroupDialog::anyOnStage(m_doc, fg->fixtureList()))
-            menu.addAction(tr("Lay Out from the Stage…"), this, [this, id]() {
-                FixtureGroup *g = m_doc->fixtureGroup(id);
-                if (g == nullptr)
-                    return;
-                StageGroupDialog dlg(m_doc, g->fixtureList(), g->name(), this);
-                dlg.setEditing(g);
-                if (dlg.exec() == QDialog::Accepted)
-                    reload();
-            });
-
-        // Mixed heads (RGB and white rows): a group per kind of head.
-        if (fg != nullptr && HeadTypesDialog::anyMixed(m_doc, fg->fixtureList()))
-        {
-            const QList<quint32> members = fg->fixtureList();
-            const QString base = fg->name();
-            menu.addAction(tr("Split “%1” by Head Type…").arg(base), this, [this, members, base]() {
-                HeadTypesDialog dlg(m_doc, members, base, this);
-                if (dlg.exec() == QDialog::Accepted)
-                    reload();
-            });
-        }
-
-        /* The group itself can go -- "UST" was a duplicate of "USTs", the
-           same eight fixtures, with no way to get rid of it from here. The
-           fixtures stay; only the group (its head layout) is removed. */
-        if (fg != nullptr)
-        {
-            menu.addSeparator();
-            const QString name = fg->name();
-            menu.addAction(tr("Delete Fixture Group “%1”…").arg(name), this, [this, id, name]() {
-                if (QMessageBox::question(this, tr("Delete Fixture Group"),
-                        tr("Delete the fixture group “%1”?\n\nIts fixtures are not deleted -- "
-                           "only the group and its head layout. Anything set up to use this "
-                           "group will no longer find it.").arg(name),
-                        QMessageBox::Yes | QMessageBox::No) != QMessageBox::Yes)
-                    return;
-                m_doc->deleteFixtureGroup(id);
-                m_doc->setModified();
-                reload();
-            });
-        }
-    }
-    else if (type == NodeLayer && m_editable)
+    if (type == NodeLayer && m_editable)
     {
         menu.addAction(tr("Rename Layer…"), this, [this, item]() {
             m_tree->editItem(item, 0);
@@ -2508,6 +2405,90 @@ void MonitorLayersPanel::buildContextMenu(QMenu *out, QTreeWidgetItem *item)
     }
 
     m_view->populateOrganiseMenu(&menu, place.selection);
+}
+
+/* A fixture group's row: the canon's fixture-group menu (ContextMenus::rig),
+   the same as in the Fixtures tab, Build and the Show Tree, with what only
+   the Plot offers in its Place section -- out of the truss it is listed
+   under -- and the Plot's organising (layers, folders) in Organise. */
+void MonitorLayersPanel::buildFixtureGroupMenu(QMenu *out, QTreeWidgetItem *item,
+                                               const QList<QPair<QString, quint32> > &selection)
+{
+    const quint32 id = item->data(0, NodeIdRole).toUInt();
+    FixtureGroup *fg = m_doc->fixtureGroup(id);
+    if (fg == nullptr)
+        return;
+    ContextMenu menu(out);
+
+    QList<quint32> groups;
+    foreach (QTreeWidgetItem *sel, m_tree->selectedItems())
+        if (sel->data(0, NodeTypeRole).toInt() == NodeFixtureGroup)
+            groups << sel->data(0, NodeIdRole).toUInt();
+    if (!groups.contains(id))
+        groups = { id };
+
+    /* The others like it: the step fronts are four groups of eight of the
+       same bar, laid out the same -- select them all at once. When none
+       match the layout exactly, the groups of the same fixtures in any
+       layout. Selecting is not an edit: offered in any mode. */
+    const QList<FixtureGroup *> same = CreateFixtureGroup::similarGroups(m_doc, fg, true);
+    const QList<FixtureGroup *> sameFixtures = CreateFixtureGroup::similarGroups(m_doc, fg, false);
+    auto idsOf = [](const QList<FixtureGroup *> &gs) {
+        QList<quint32> ids;
+        foreach (FixtureGroup *g, gs) ids << g->id();
+        return ids;
+    };
+
+    ContextMenus::RigPlace place;
+    place.parent = this;
+    place.editable = m_editable;
+    place.changed = [this]() { reload(); };
+    place.renameInPlace = [this, item](quint32) { m_tree->editItem(item, 0); };
+    // Offered whenever, off when there is nothing like it.
+    place.selectSimilar = [this, ids = idsOf(same)]() { selectFixtureGroups(ids); };
+    place.similarCount = qMax(1, int(same.size()));
+    place.offerMoveToFolder = false;    // the Plot's folders are its own (Organise, below)
+    ContextMenus::rig(menu, m_doc, groups, QList<quint32>(), place);
+    if (sameFixtures.size() > same.size())
+        menu.add(ContextMenu::Selection,
+                 tr("Select All with the Same Fixtures (%1)").arg(sameFixtures.size()),
+                 [this, ids = idsOf(sameFixtures)]() { selectFixtureGroups(ids); });
+
+    if (m_editable)
+    {
+        /* Listed under a truss, tower or boom: it can be taken out of it
+           ("I can't right click the 3z fixture group and have an option to
+           remove from truss .. which it clearly shouldn't be there"). */
+        for (QTreeWidgetItem *up = item->parent(); up != nullptr; up = up->parent())
+        {
+            if (up->data(0, NodeTypeRole).toInt() != NodeGroup)
+                continue;
+            const MonitorProperties::MonitorGroup host = m_props->group(up->data(0, NodeIdRole).toUInt());
+            if (host.anchorKind != QLatin1String("truss") && host.anchorKind != QLatin1String("tower")
+                && host.anchorKind != QLatin1String("pipe"))
+                continue;
+            const QString kind = host.anchorKind;
+            const quint32 anchor = host.anchorId;
+            const QList<quint32> members = fg->fixtureList();
+            menu.add(ContextMenu::Remove,
+                     tr("Remove from “%1”").arg(up->text(0).section(QStringLiteral("  "), 0, 0)),
+                     [this, members, kind, anchor]() {
+                if (m_view) m_view->takeOutOfStructure(members, kind, anchor);
+                reload();
+            });
+            break;
+        }
+
+        // The Plot's own filing -- layers and folders -- for the selection.
+        if (m_view != nullptr)
+        {
+            QMenu *staging = new QMenu(out);
+            m_view->populateOrganiseMenu(staging, selection);
+            for (QAction *a : staging->actions())
+                if (!a->isSeparator())
+                    menu.add(ContextMenu::Organise, a);
+        }
+    }
 }
 
 bool MonitorLayersPanel::revealItem(const QString &kind, quint32 id)

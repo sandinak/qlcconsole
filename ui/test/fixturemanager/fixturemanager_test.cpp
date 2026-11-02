@@ -1400,12 +1400,12 @@ void FixtureManager_Test::moveToFolderMenuFilesGroups()
         FixtureManager mgr(nullptr, m_doc);
         selectOnly(mgr.m_fixtures_tree, { groupRow(mgr, a->id()), groupRow(mgr, b->id()) });
         const QStringList texts = contextMenuTree(mgr);
-        QVERIFY2(texts.contains("Group ▸ Move 2 Groups to Folder ▸ Fixture Groups (no folder)"),
+        QVERIFY2(texts.contains("Move 2 Fixture Groups to Folder ▸ Fixture Groups (no folder)"),
                  qPrintable(texts.join(" | ")));
-        QVERIFY2(texts.contains("Group ▸ Move 2 Groups to Folder ▸ Floor"), qPrintable(texts.join(" | ")));
-        QVERIFY2(texts.contains("Group ▸ Move 2 Groups to Folder ▸ New Folder…"),
+        QVERIFY2(texts.contains("Move 2 Fixture Groups to Folder ▸ Floor"), qPrintable(texts.join(" | ")));
+        QVERIFY2(texts.contains("Move 2 Fixture Groups to Folder ▸ New Folder…"),
                  qPrintable(texts.join(" | ")));
-        QVERIFY2(texts.contains("Group ▸ Create Group(s) from Selection…"), qPrintable(texts.join(" | ")));
+        QVERIFY2(texts.contains("Selection ▸ Create Fixture Group from Selection…"), qPrintable(texts.join(" | ")));
     }
 
     QMenu sub;

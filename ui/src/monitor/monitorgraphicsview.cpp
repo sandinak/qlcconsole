@@ -8546,7 +8546,7 @@ void MonitorGraphicsView::contextMenuEvent(QContextMenuEvent *event)
         {
             QMenu zm(this);
             zm.addAction(tr("Edit No-light Zone…"), this, [this, zid]() { emit zoneDoubleClicked(zid); });
-            zm.addAction(tr("Remove No-light Zone"), this, [this, zid]() { emit zoneRemoveRequested(zid); });
+            zm.addAction(tr("Delete No-light Zone"), this, [this, zid]() { emit zoneRemoveRequested(zid); });
             zm.exec(event->globalPos());
             return;
         }
@@ -8619,7 +8619,7 @@ void MonitorGraphicsView::buildStagePieceMenu(QMenu *menu, int piece, bool inLis
     typedef MonitorProperties MP;
     const MP::StagePiece sp = MP::StagePiece(piece);
     const bool design = (m_doc->mode() == Doc::Design);
-    QAction *edit = menu->addAction(tr("%1 Properties…").arg(MP::stagePieceName(sp)), this,
+    QAction *edit = menu->addAction(tr("Edit %1…").arg(MP::stagePieceName(sp)), this,
                                     [this, piece]() { emit stagePieceDoubleClicked(piece); });
     edit->setObjectName(QStringLiteral("stagePieceProperties"));
     menu->addSeparator();
@@ -8656,8 +8656,8 @@ void MonitorGraphicsView::buildStagePieceMenu(QMenu *menu, int piece, bool inLis
     {
         const bool isAuto = (sp == MP::CurtainPiece) ? props->curtainLineIsAuto()
                           : (sp == MP::NumberPiece) ? props->numberLineIsAuto() : props->apronAuto();
-        QAction *autoAct = menu->addAction(sp == MP::ApronPiece ? tr("Auto depth (to the deck's front)")
-                                                               : tr("Auto position"));
+        QAction *autoAct = menu->addAction(sp == MP::ApronPiece ? tr("Auto Depth (to the Deck's Front)")
+                                                               : tr("Auto Position"));
         autoAct->setObjectName(QStringLiteral("stagePieceAuto"));
         autoAct->setCheckable(true);
         autoAct->setChecked(isAuto);

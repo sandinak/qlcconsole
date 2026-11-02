@@ -1160,7 +1160,7 @@ of, and doesn't override, the real locks above.
   its shape.
 - **Group** (Ctrl/⌘+G) makes the selection one piece that selects and
   moves together; **Ungroup** (Ctrl/⌘+Shift+G) splits it again.
-- **Align fixtures ▸** (two or more selected) and **Distribute fixtures
+- **Align Fixtures ▸** (two or more selected) and **Distribute Fixtures
   ▸** (three or more) are on the plot's right-click menu. They work on
   what the plot draws: **Same X** and **Same Y** line up the fixtures'
   centres, **Left**, **Right**, **Upstage** and **Downstage** line up those
@@ -1184,8 +1184,8 @@ of, and doesn't override, the real locks above.
   paste or edit: a whole drag at once (everything it moved — structures,
   scenery, targets, nodes, fixtures — and a deck brings its fixtures back
   with it), or everything one dialog did when you pressed OK.
-- **Copy and paste** (Ctrl/⌘+C, Ctrl/⌘+V; **Duplicate selected**, **Paste
-  features here**) — trusses, decks, targets, scenery (walls, drapes, the
+- **Copy and paste** (Ctrl/⌘+C, Ctrl/⌘+V; **Copy Selected**, **Paste Here**,
+  **Duplicate Selected**) — trusses, decks, targets, scenery (walls, drapes, the
   cyc), towers, booms and stands. A truss brings the
   fixtures hung on it as new copies, and the paste asks what they get:
   **Patch at next free addresses** (after the originals, in their universe;

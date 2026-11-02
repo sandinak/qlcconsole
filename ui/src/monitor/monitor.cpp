@@ -162,6 +162,7 @@
 #include "outputpatch.h"
 #include "qlccapability.h"
 #include "monitor.h"
+#include "contextmenus.h"
 #include "selectionmenu.h"
 #include "selectionhintchip.h"
 #include "whyonpanel.h"
@@ -8924,11 +8925,20 @@ void Monitor::slotCanvasContextMenu(QPointF scenePos)
 {
     m_pendingAddScenePos = scenePos;
     QMenu menu(this);
+    fillCanvasMenu(&menu, scenePos);
+    menu.exec(QCursor::pos());
+}
+
+/* The empty plot's menu, laid out by the canon (ContextMenu): adding, then
+   organising the selection, then the clipboard, deleting last. */
+void Monitor::fillCanvasMenu(QMenu *out, QPointF scenePos)
+{
+    ContextMenu cm(out);
     /* Everything you can add, under one "Add here" -- the list had grown to
        ten entries at the top level and buried the things you do to what is
        already there. Grouped the way the plot is built: lights, then what
        holds them, then what they point at. */
-    QMenu *addMenu = menu.addMenu(tr("Add Here"));
+    QMenu *addMenu = cm.addMenu(ContextMenu::Kind, tr("Add Here"));
     addMenu->addAction(QIcon(":/fixture.png"), tr("Fixture…"),
                        this, SLOT(slotAddFixture()));
     addMenu->addSeparator();
@@ -8965,20 +8975,22 @@ void Monitor::slotCanvasContextMenu(QPointF scenePos)
     addMenu->addAction(tr("Network Node"),
                        this, SLOT(slotAddNetworkNode()));
 
-    menu.addSeparator();
-    QAction *groupAct = menu.addAction(QIcon(":/group.png"), tr("Group selected (Ctrl+G)"),
-                                       this, SLOT(slotGroupItems()));
+    // Shortcuts are on the actions (Qt shows them), not typed into the names.
+    QAction *groupAct = cm.add(ContextMenu::Organise, tr("Group Selected"), [this]() { slotGroupItems(); });
+    groupAct->setIcon(QIcon(":/group.png"));
+    groupAct->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_G));
     groupAct->setEnabled(m_graphicsView != NULL && m_graphicsView->selectionGroupable());
-    QAction *ungroupAct = menu.addAction(QIcon(":/ungroup.png"), tr("Ungroup (Ctrl+Shift+G)"),
-                                         this, SLOT(slotUngroupItems()));
+    QAction *ungroupAct = cm.add(ContextMenu::Organise, tr("Ungroup"), [this]() { slotUngroupItems(); });
+    ungroupAct->setIcon(QIcon(":/ungroup.png"));
+    ungroupAct->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_G));
     ungroupAct->setEnabled(m_graphicsView != NULL && m_graphicsView->selectionHasGroup());
-    QAction *rotateAct = menu.addAction(tr("Rotate…  ([ / ])"), this, [this]() { slotRotateSelection(); });
+    QAction *rotateAct = cm.add(ContextMenu::Organise, tr("Rotate…"), [this]() { slotRotateSelection(); });
+    rotateAct->setToolTip(tr("Or [ and ] to turn the selection"));
     rotateAct->setEnabled(m_graphicsView != NULL && !m_graphicsView->scene()->selectedItems().isEmpty());
 
     // Fixture Studio component library — browse/stamp saved components. Stamps
     // onto the current fixture selection (the browser disables stamp if none).
-    menu.addSeparator();
-    menu.addAction(tr("Browse Studio Components…"), this, [this]() {
+    cm.add(ContextMenu::Kind, tr("Browse Studio Components…"), [this]() {
         if (m_graphicsView != NULL)
             m_graphicsView->browseStudioComponents();
     });
@@ -8988,49 +9000,36 @@ void Monitor::slotCanvasContextMenu(QPointF scenePos)
     const int nFix = (m_graphicsView != NULL) ? m_graphicsView->selectedFixtureCount() : 0;
     if (nFix >= 2)
     {
-        menu.addSeparator();
-        QMenu *alignMenu = menu.addMenu(tr("Align fixtures"));
-        alignMenu->addAction(tr("Same Y (straight row)"), this, [this]() { m_graphicsView->alignSelectedFixtures(3); });
-        alignMenu->addAction(tr("Same X (straight column)"), this, [this]() { m_graphicsView->alignSelectedFixtures(0); });
+        QMenu *alignMenu = cm.addMenu(ContextMenu::Organise, tr("Align Fixtures"));
+        alignMenu->addAction(tr("Same Y (Straight Row)"), this, [this]() { m_graphicsView->alignSelectedFixtures(3); });
+        alignMenu->addAction(tr("Same X (Straight Column)"), this, [this]() { m_graphicsView->alignSelectedFixtures(0); });
         alignMenu->addSeparator();
-        alignMenu->addAction(tr("Upstage edge"),   this, [this]() { m_graphicsView->alignSelectedFixtures(4); });
-        alignMenu->addAction(tr("Downstage edge"), this, [this]() { m_graphicsView->alignSelectedFixtures(5); });
-        alignMenu->addAction(tr("Left edge"),      this, [this]() { m_graphicsView->alignSelectedFixtures(1); });
-        alignMenu->addAction(tr("Right edge"),     this, [this]() { m_graphicsView->alignSelectedFixtures(2); });
+        alignMenu->addAction(tr("Upstage Edge"),   this, [this]() { m_graphicsView->alignSelectedFixtures(4); });
+        alignMenu->addAction(tr("Downstage Edge"), this, [this]() { m_graphicsView->alignSelectedFixtures(5); });
+        alignMenu->addAction(tr("Left Edge"),      this, [this]() { m_graphicsView->alignSelectedFixtures(1); });
+        alignMenu->addAction(tr("Right Edge"),     this, [this]() { m_graphicsView->alignSelectedFixtures(2); });
         if (nFix >= 3)
         {
-            QMenu *distMenu = menu.addMenu(tr("Distribute fixtures"));
-            distMenu->addAction(tr("Evenly left↔right"), this, [this]() { m_graphicsView->distributeSelectedFixtures(true); });
-            distMenu->addAction(tr("Evenly up↔down"),    this, [this]() { m_graphicsView->distributeSelectedFixtures(false); });
+            QMenu *distMenu = cm.addMenu(ContextMenu::Organise, tr("Distribute Fixtures"));
+            distMenu->addAction(tr("Evenly Left↔Right"), this, [this]() { m_graphicsView->distributeSelectedFixtures(true); });
+            distMenu->addAction(tr("Evenly Up↔Down"),    this, [this]() { m_graphicsView->distributeSelectedFixtures(false); });
         }
     }
 
-    menu.addSeparator();
     // Delete whatever is selected (truss / platform / boom / stand / tower /
     // target / image / fixtures) — a reliable path when a right-click just misses
     // a small feature's hit-area. Detaches or removes attached fixtures gracefully.
     if (!m_graphicsView->scene()->selectedItems().isEmpty())
     {
-        menu.addAction(QIcon(":/delete.png"), tr("Delete selected"),
-                       this, SLOT(slotRemoveSelected()));
+        cm.add(ContextMenu::Remove, tr("Delete Selected"), [this]() { slotRemoveSelected(); })
+            ->setIcon(QIcon(":/delete.png"));
     }
-    // Duplicate = copy the current selection and paste it offset by ~0.5 m, in
-    // one step. Works for everything copy does (slotCopySelected()).
-    if (!m_graphicsView->scene()->selectedItems().isEmpty())
-    {
-        menu.addAction(QIcon(":/editcopy.png"), tr("Duplicate selected"),
-                       this, [this]() {
-            slotCopySelected();
-            if (clipboardHasFeatures())
-                pasteClipboard(0.5f, 0.5f);   // small offset so the copy is visible
-        });
-    }
-    menu.addAction(QIcon(":/editcopy.png"), tr("Copy selected features"),
-                   this, SLOT(slotCopySelected()));
+    cm.add(ContextMenu::Edit, tr("Copy Selected"), [this]() { slotCopySelected(); })
+        ->setIcon(QIcon(":/editcopy.png"));
     if (clipboardHasFeatures())
     {
-        QAction *pasteHere = menu.addAction(QIcon(":/editpaste.png"),
-                                            tr("Paste features here"));
+        QAction *pasteHere = cm.add(ContextMenu::Edit, tr("Paste Here"));
+        pasteHere->setIcon(QIcon(":/editpaste.png"));
         connect(pasteHere, &QAction::triggered, this, [this, scenePos]() {
             // Anchor the paste so the first clipboard feature lands at the
             // cursor; the rest keep their relative offsets.
@@ -9050,8 +9049,16 @@ void Monitor::slotCanvasContextMenu(QPointF scenePos)
                            float(curMm.y() / 1000.0) - refM.y());
         });
     }
-
-    menu.exec(QCursor::pos());
+    // Duplicate = copy the current selection and paste it offset by ~0.5 m, in
+    // one step. Works for everything copy does (slotCopySelected()).
+    if (!m_graphicsView->scene()->selectedItems().isEmpty())
+    {
+        cm.add(ContextMenu::Edit, tr("Duplicate Selected"), [this]() {
+            slotCopySelected();
+            if (clipboardHasFeatures())
+                pasteClipboard(0.5f, 0.5f);   // small offset so the copy is visible
+        })->setIcon(QIcon(":/editcopy.png"));
+    }
 }
 
 void Monitor::slotAddFixtureToTruss(quint32 trussId, float offsetMetres)

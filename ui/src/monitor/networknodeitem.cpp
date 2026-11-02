@@ -116,17 +116,6 @@ void NetworkNodeItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
     emit itemDropped(this);
 }
 
-void NetworkNodeItem::contextMenuEvent(QGraphicsSceneContextMenuEvent *event)
-{
-    QMenu menu;
-    QAction *lockAct = menu.addAction(
-        m_locked ? tr("Unlock Network Node") : tr("Lock Network Node"));
-
-    // The model (and persistence) lives in NetworkTopology, which the view
-    // owns -- it toggles the flag and rebuilds this item with the new state.
-    if (menu.exec(event->screenPos()) == lockAct)
-        emit lockToggleRequested(m_index);
-}
 
 QPointF NetworkNodeItem::centre() const
 {

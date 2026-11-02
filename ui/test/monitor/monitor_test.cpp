@@ -26824,7 +26824,7 @@ void Monitor_Test::duplicateSelectedBringsATrussesFixtures()
         for (QAction *a : menu->actions())
         {
             seen << a->text();
-            if (a->text() == QLatin1String("Duplicate selected"))
+            if (a->text() == QLatin1String("Duplicate Selected"))
                 dup = a;
         }
         if (dup == nullptr)

@@ -145,64 +145,10 @@ void NetworkNodeItem_Test::releasingADragReportsTheDrop()
     QCOMPARE(node->nodeIndex(), 4);
 }
 
-/* Open @p item's context menu, pick the action whose text starts with
- * @p pick (or none), and return every action text seen. */
-static QStringList runContextMenu(QGraphicsScene &scene, QGraphicsItem *item, const QString &pick)
-{
-    QStringList texts;
-    auto poll = std::make_shared<std::function<void()>>();
-    *poll = [&texts, pick, poll]() {
-        QMenu *m = qobject_cast<QMenu *>(QApplication::activePopupWidget());
-        if (m == nullptr)
-        {
-            QTimer::singleShot(10, *poll);
-            return;
-        }
-        QAction *chosen = nullptr;
-        foreach (QAction *a, m->actions())
-        {
-            texts << a->text();
-            if (!pick.isEmpty() && a->text().startsWith(pick))
-                chosen = a;
-        }
-        // exec() only reports an action picked through the menu itself.
-        if (chosen != nullptr)
-        {
-            m->setActiveAction(chosen);
-            QTest::keyClick(m, Qt::Key_Return);
-        }
-        else
-        {
-            m->close();
-        }
-    };
-    QTimer::singleShot(0, *poll);
-    QGraphicsSceneContextMenuEvent ev(QEvent::GraphicsSceneContextMenu);
-    ev.setScreenPos(QPoint(100, 100));
-    scene.sendEvent(item, &ev);
-    return texts;
-}
-
-void NetworkNodeItem_Test::theContextMenuTogglesTheLock()
-{
-    QGraphicsScene scene;
-    NetworkNodeItem *open = new NetworkNodeItem(1, "Open", NetworkNode::ArtNet, false);
-    NetworkNodeItem *locked = new NetworkNodeItem(2, "Locked", NetworkNode::ArtNet, true);
-    scene.addItem(open);
-    scene.addItem(locked);
-    QSignalSpy openSpy(open, &NetworkNodeItem::lockToggleRequested);
-    QSignalSpy lockedSpy(locked, &NetworkNodeItem::lockToggleRequested);
-
-    // Dismissed: nothing toggles.
-    QStringList texts = runContextMenu(scene, open, QString());
-    QCOMPARE(texts, QStringList({ "Lock Network Node" }));
-    QCOMPARE(openSpy.count(), 0);
-
-    texts = runContextMenu(scene, locked, "Unlock");
-    QCOMPARE(texts, QStringList({ "Unlock Network Node" }));
-    QCOMPARE(lockedSpy.count(), 1);
-    QCOMPARE(lockedSpy.first().first().toInt(), 2);
-}
+/* The node's lock is on the Plot's right-click menu (Lock Position, the
+   canon's one menu for every stage feature: MonitorGraphicsView::
+   buildItemMenu). The item's own menu could never open on the Plot and is
+   gone (docs/design/CONTEXT_MENUS.md). */
 
 void NetworkNodeItem_Test::aRunIsHittableAlongItsLengthOnly()
 {

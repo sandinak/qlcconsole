@@ -94,6 +94,7 @@
 #include "focuscallsdialog.h"
 #include "focusmenu.h"
 #include "showtreeview.h"
+#include "contextmenus.h"
 #include "whyonpanel.h"
 #include "effectrunsmenu.h"
 #include "controllearndialog.h"
@@ -9394,9 +9395,21 @@ void ShowTreeView::slotFilterChanged(const QString &text)
 
 void ShowTreeView::slotLibraryContextMenu(const QPoint &pos)
 {
-    QTreeWidgetItem *item = m_library->itemAt(pos);
-    if (item == nullptr)
+    QMenu menu(this);
+    fillLibraryMenu(&menu, m_library->itemAt(pos));
+    if (!menu.isEmpty())
+        menu.exec(m_library->viewport()->mapToGlobal(pos));
+}
+
+/* The Library's right-click menus, laid out by the canon (ContextMenu,
+   docs/design/CONTEXT_MENUS.md): a fixture group or fixture gets the same
+   menu here as in the Fixtures tab, Build and the Plot (ContextMenus::rig),
+   with the Library's own Pin and Make Set… beside it. */
+void ShowTreeView::fillLibraryMenu(QMenu *out, QTreeWidgetItem *item)
+{
+    if (item == nullptr || out == nullptr)
         return;
+    ContextMenu menu(out);
     const int kind = item->data(0, KindRole).toInt();
     const quint32 id = item->data(0, IdRole).toUInt();
     const bool paletteHeading = kind == LibFolder && item->data(0, PathRole).toString().startsWith(QLatin1String("Palettes"));
@@ -9406,47 +9419,39 @@ void ShowTreeView::slotLibraryContextMenu(const QPoint &pos)
         if (!item->isSelected())
             m_library->setCurrentItem(item);
         const QString folder = kind == LibPaletteFolder ? item->data(0, FolderRole).toString() : QString();
-        QMenu menu(this);
-        fillNewPaletteMenu(menu.addMenu(tr("New palette")), folder);
-        menu.addAction(tr("New folder…"), this, [this]() {
+        fillNewPaletteMenu(menu.addMenu(ContextMenu::Kind, tr("New Palette")), folder);
+        menu.add(ContextMenu::Organise, tr("New Folder…"), [this]() {
             bool ok = false;
-            const QString n = QInputDialog::getText(this, tr("New folder"), tr("Folder name"), QLineEdit::Normal,
+            const QString n = QInputDialog::getText(this, tr("New Folder"), tr("Folder name"), QLineEdit::Normal,
                                                     QString(), &ok);
             if (ok && !n.trimmed().isEmpty())
                 newPaletteFolder(n.trimmed());
-        })->setObjectName("stNewPaletteFolder");
-        if (kind == LibPaletteFolder && !folder.isEmpty())
-        {
-            menu.addAction(tr("Rename folder"), this, [this]() { startLibraryRename(); });
-            menu.addAction(tr("Delete folder (its palettes move up)"), this, [this]() { deleteLibrarySelection(); });
-        }
-        menu.addSeparator();
-        QAction *byType = menu.addAction(tr("Group by type"), this, [this](bool on) { setPaletteGroupByType(on); });
+        }, QStringLiteral("stNewPaletteFolder"));
+        QAction *byType = menu.add(ContextMenu::View, tr("Group by Type"), std::function<void()>(),
+                                   QStringLiteral("stPaletteByType"));
         byType->setCheckable(true);
         byType->setChecked(m_paletteByType);
-        menu.exec(m_library->viewport()->mapToGlobal(pos));
+        connect(byType, &QAction::toggled, this, [this](bool on) { setPaletteGroupByType(on); });
+        if (kind == LibPaletteFolder && !folder.isEmpty())
+        {
+            menu.add(ContextMenu::Edit, tr("Rename Folder"), [this]() { startLibraryRename(); });
+            menu.add(ContextMenu::Remove, tr("Delete Folder"), [this]() { deleteLibrarySelection(); })
+                ->setToolTip(tr("Its palettes move up a level; none is deleted"));
+        }
         return;
     }
     if (kind == LibReusable)
     {
-        // P4: rename, who uses it, put it in, delete.
-        QMenu menu(this);
+        // P4: put it in, who uses it, rename, delete.
         const QString name = m_st->reusableName(id);
-        menu.addAction(tr("Use in the selected cue"), this, [this, id]() {
+        menu.add(ContextMenu::Kind, tr("Use in the Selected Cue"), [this, id]() {
             const quint32 cue = currentCueId();
             if (cue == invalidId())
                 m_hint->setText(tr("Select a cue in the tree first"));
             else
                 dropReusables(cue, { id });
         });
-        menu.addAction(tr("Rename…"), this, [this, id, name]() {
-            bool ok = false;
-            const QString n = QInputDialog::getText(this, tr("Rename"), tr("Name"), QLineEdit::Normal, name, &ok);
-            if (ok)
-                m_st->renameReusable(id, n);
-        });
-        QMenu *usedBy = menu.addMenu(tr("Used by"));
-        usedBy->setObjectName("stReusableUsedBy");
+        QMenu *usedBy = menu.addMenu(ContextMenu::Place, tr("Used By"), QStringLiteral("stReusableUsedBy"));
         const QList<ShowTreeController::ReusableUse> uses = m_st->reusableUses(id);
         for (const ShowTreeController::ReusableUse &u : uses)
             usedBy->addAction(u.label, this, [this, u]() {
@@ -9460,19 +9465,17 @@ void ShowTreeView::slotLibraryContextMenu(const QPoint &pos)
                 usedBy->addAction(x)->setEnabled(false);
         if (usedBy->isEmpty())
             usedBy->addAction(tr("(not used)"))->setEnabled(false);
-        menu.addSeparator();
-        menu.addAction(tr("Delete…"), this, [this, id]() { deleteReusable(id); });
-        menu.exec(m_library->viewport()->mapToGlobal(pos));
+        menu.add(ContextMenu::Edit, tr("Rename…"), [this, id, name]() {
+            bool ok = false;
+            const QString n = QInputDialog::getText(this, tr("Rename"), tr("Name"), QLineEdit::Normal, name, &ok);
+            if (ok)
+                m_st->renameReusable(id, n);
+        });
+        menu.add(ContextMenu::Remove, tr("Delete…"), [this, id]() { deleteReusable(id); });
         return;
     }
     if (kind != LibGroup && kind != LibFixture && kind != LibPalette && kind != LibFunction && kind != LibSet)
         return;
-    QMenu menu(this);
-    const bool pinned = isPinned(kind, id);
-    menu.addAction(pinned ? tr("Unpin") : tr("Pin"), this, [this, kind, id, pinned]() {
-        setPinned(kind, id, !pinned);
-    });
-    // Make set (§1): the groups (and fixtures) selected, as one named set.
     if (!item->isSelected())
         m_library->setCurrentItem(item);
     QList<quint32> selGroups, selFixtures;
@@ -9485,117 +9488,101 @@ void ShowTreeView::slotLibraryContextMenu(const QPoint &pos)
         else if (k == LibFixture && !selFixtures.contains(sid))
             selFixtures << sid;
     }
-    if (kind == LibGroup)
-    {
-        // Select All Similar (as in the Fixture Manager and Build): the
-        // groups like these, selected -- for Make set, right below.
-        menu.addSeparator();
-        QAction *similar = menu.addAction(tr("Select all similar"), this, [this]() {
-            selectSimilarLibraryGroups();
-        });
-        similar->setObjectName("stSelectSimilarGroups");
-        similar->setToolTip(tr("Every group in the same folder made of the same fixtures (as many of each "
-                               "kind) and as many heads -- then Make set… for a group set of them"));
-    }
+
+    // ---- The Library's own grouping: Make Set…, right after Select All
+    //      Similar (the groups like these, made a set) ----
+    // Make set (§1): the groups (and fixtures) selected, as one named set.
     if (kind == LibGroup || kind == LibFixture || kind == LibSet)
     {
-        QAction *make = menu.addAction(tr("Make set…"), this, [this]() {
+        QAction *make = menu.add(ContextMenu::Organise, tr("Make Set…"), [this]() {
             bool ok = false;
-            const QString n = QInputDialog::getText(this, tr("Make set"),
+            const QString n = QInputDialog::getText(this, tr("Make Set"),
                                                     tr("Name of the set (e.g. Towers):"), QLineEdit::Normal,
                                                     QString(), &ok);
             if (ok && !n.trimmed().isEmpty())
                 makeSetFromLibrary(n.trimmed());
-        });
-        make->setObjectName("stMakeSet");
+        }, QStringLiteral("stMakeSet"));
         make->setToolTip(tr("A named set of the groups selected (⌘-click several), reusable by name "
                             "in any cue"));
     }
-    if (kind == LibGroup && !selGroups.isEmpty())
+
+    // ---- A fixture group or fixture: the canon's menu, as everywhere ----
+    if (kind == LibGroup || kind == LibFixture)
     {
-        // Move to folder (the Fixture Manager's folders): each folder in
-        // use, none, or New Folder… -- the groups stay selected.
-        QMenu *move = menu.addMenu(QIcon(":/folder.png"), selGroups.count() > 1
-                                       ? tr("Move %1 groups to folder").arg(selGroups.count())
-                                       : tr("Move to folder"));
-        move->setObjectName("stMoveGroupsToFolder");
-        FixtureManager::fillMoveToFolderMenu(move, m_doc, selGroups);
-        connect(move, &QMenu::triggered, this, [this, selGroups](QAction *chosen) {
-            if (!FixtureManager::applyMoveToFolder(this, m_doc, selGroups, chosen))
-                return;
-            m_libraryTimer->stop();
-            reloadLibrary();
-            selectLibraryGroups(selGroups);
-        });
-        menu.addSeparator();
+        ContextMenus::RigPlace place;
+        place.parent = this;
+        place.changed = [this]() { reloadLibrary(); };
+        if (kind == LibGroup)
+        {
+            // The groups like these, selected -- for Make Set…, right below.
+            place.selectSimilar = [this]() { selectSimilarLibraryGroups(); };
+        }
+        place.offerCreateGroup = false;     // Make Set… is the Library's grouping
+        if (!selGroups.isEmpty())
+            place.changed = [this, selGroups]() {
+                m_libraryTimer->stop();
+                reloadLibrary();
+                selectLibraryGroups(selGroups);
+            };
+        ContextMenus::rig(menu, m_doc, selGroups, selFixtures, place);
     }
-    if ((kind == LibGroup || kind == LibFixture) && (!selGroups.isEmpty() || !selFixtures.isEmpty()))
-    {
-        // Relays, house and work lights: for the fixtures or groups' members.
-        menu.addAction(OutputRulesDialog::actionText(), this, [this, selGroups, selFixtures]() {
-            if (OutputRulesDialog::edit(this, m_doc, selGroups, selFixtures))
-                reloadLibrary();    // the badges
-        })->setObjectName("stOutputRules");
-    }
+
+    // ---- The Library's own: pinning, sets ----
+    const bool pinned = isPinned(kind, id);
+    menu.add(ContextMenu::Organise, pinned ? tr("Unpin") : tr("Pin"), [this, kind, id, pinned]() {
+        setPinned(kind, id, !pinned);
+    });
     if (kind == LibSet)
     {
-        menu.addAction(tr("Rename set…"), this, [this, id]() {
-            const GroupSet *gs = m_st->groupSet(id);
-            bool ok = false;
-            const QString n = QInputDialog::getText(this, tr("Rename set"), tr("Name"), QLineEdit::Normal,
-                                                    gs == nullptr ? QString() : gs->name, &ok);
-            if (ok)
-                m_st->renameGroupSet(id, n);
-        });
         if (!selGroups.isEmpty() || !selFixtures.isEmpty())
-            menu.addAction(tr("Members: the %n selected group(s)", "", int(selGroups.count() + selFixtures.count())),
-                           this, [this, id, selGroups, selFixtures]() {
+            menu.add(ContextMenu::Kind, tr("Set Members to the %n Selected Group(s)", "",
+                                           int(selGroups.count() + selFixtures.count())),
+                     [this, id, selGroups, selFixtures]() {
                 if (!m_st->setGroupSetMembers(id, selGroups, selFixtures))
                     QMessageBox::information(this, tr("Group set"),
                                              tr("Not changed: a child layer under a layer on this set "
                                                 "would no longer be part of it."));
             });
-        menu.addAction(tr("Delete set"), this, [this, id]() {
+        menu.add(ContextMenu::Edit, tr("Rename Set…"), [this, id]() {
+            const GroupSet *gs = m_st->groupSet(id);
+            bool ok = false;
+            const QString n = QInputDialog::getText(this, tr("Rename Set"), tr("Name"), QLineEdit::Normal,
+                                                    gs == nullptr ? QString() : gs->name, &ok);
+            if (ok)
+                m_st->renameGroupSet(id, n);
+        });
+        menu.add(ContextMenu::Remove, tr("Delete Set"), [this, id]() {
             QString why;
             if (!m_st->removeGroupSet(id, &why) && !why.isEmpty())
-                QMessageBox::information(this, tr("Delete set"), why);
+                QMessageBox::information(this, tr("Delete Set"), why);
         });
     }
     if (kind == LibPalette && m_doc->paletteOps()->isManaged(id))
     {
-        // R2 (P-D8): the everyday operations, as in Programming.
-        menu.addSeparator();
-        menu.addAction(tr("Edit"), this, [this, id]() { editPalette(id); })->setObjectName("stEditPalette");
-        menu.addAction(tr("Rename"), this, [this]() { startLibraryRename(); });
-        menu.addAction(tr("Duplicate"), this, [this, id]() {
-            const quint32 copy = m_doc->paletteOps()->duplicate(id);
-            if (copy != QLCPalette::invalidId())
-            {
-                reloadLibrary();
-                selectLibraryPalette(copy);
-                editPalette(copy);
-            }
-        });
+        // R2 (P-D8): the everyday operations, as in Build.
+        menu.add(ContextMenu::Open, tr("Edit Palette"), [this, id]() { editPalette(id); },
+                 QStringLiteral("stEditPalette"));
         QList<quint32> pids;
         for (QTreeWidgetItem *sel : m_library->selectedItems())
             if (sel->data(0, KindRole).toInt() == LibPalette && !pids.contains(sel->data(0, IdRole).toUInt()))
                 pids << sel->data(0, IdRole).toUInt();
         if (!pids.contains(id))
             pids = { id };
-        QMenu *moveMenu = menu.addMenu(pids.count() > 1 ? tr("Move %1 to folder").arg(pids.count()) : tr("Move to folder"));
+        QMenu *moveMenu = menu.addMenu(ContextMenu::Organise, pids.count() > 1
+                                           ? tr("Move %1 Palettes to Folder").arg(pids.count())
+                                           : tr("Move to Folder"));
         moveMenu->addAction(tr("(no folder)"), this, [this, pids]() { dropPalettesOnFolder(pids, QString()); });
         for (const QString &f : m_doc->paletteOps()->folders())
             moveMenu->addAction(f, this, [this, pids, f]() { dropPalettesOnFolder(pids, f); });
         moveMenu->addSeparator();
-        moveMenu->addAction(tr("New folder…"), this, [this, pids]() {
+        moveMenu->addAction(tr("New Folder…"), this, [this, pids]() {
             bool ok = false;
-            const QString n = QInputDialog::getText(this, tr("Move to a new folder"), tr("Folder name"),
+            const QString n = QInputDialog::getText(this, tr("Move to a New Folder"), tr("Folder name"),
                                                     QLineEdit::Normal, QString(), &ok);
             if (ok && !n.trimmed().isEmpty())
                 dropPalettesOnFolder(pids, n.trimmed());
         });
-        QMenu *used = menu.addMenu(tr("Used by"));
-        used->setObjectName("stPaletteUsedBy");
+        QMenu *used = menu.addMenu(ContextMenu::Place, tr("Used By"), QStringLiteral("stPaletteUsedBy"));
         for (const PaletteOps::Use &u : m_doc->paletteOps()->usage(id))
         {
             QAction *a = used->addAction(u.label);
@@ -9617,26 +9604,36 @@ void ShowTreeView::slotLibraryContextMenu(const QPoint &pos)
             used->addAction(vc)->setEnabled(false);
         if (used->isEmpty())
             used->addAction(tr("(not used)"))->setEnabled(false);
-        menu.addSeparator();
-        menu.addAction(pids.count() > 1 ? tr("Delete %1 palettes…").arg(pids.count()) : tr("Delete…"), this,
-                       [this]() { deleteLibrarySelection(); })->setObjectName("stDeletePalette");
+        menu.add(ContextMenu::Edit, tr("Duplicate"), [this, id]() {
+            const quint32 copy = m_doc->paletteOps()->duplicate(id);
+            if (copy != QLCPalette::invalidId())
+            {
+                reloadLibrary();
+                selectLibraryPalette(copy);
+                editPalette(copy);
+            }
+        });
+        menu.add(ContextMenu::Edit, tr("Rename"), [this]() { startLibraryRename(); });
+        menu.add(ContextMenu::Remove, pids.count() > 1 ? tr("Delete %1 Palettes…").arg(pids.count())
+                                                       : tr("Delete Palette…"),
+                 [this]() { deleteLibrarySelection(); }, QStringLiteral("stDeletePalette"));
     }
     if (kind == LibFunction)
     {
         const Function *f = m_doc->function(id);
         if (f != nullptr && f->type() == Function::SceneType)
-            menu.addAction(tr("Adopt as a hit"), this, [this, id]() { adoptAsLook(id); })
-                ->setObjectName("stAdoptAsLook");
+            menu.add(ContextMenu::Kind, tr("Adopt as a Hit"), [this, id]() { adoptAsLook(id); },
+                     QStringLiteral("stAdoptAsLook"));
     }
     if (kind == LibPalette && m_st->isInlinePalette(id))
     {
-        menu.addAction(tr("Make reusable…"), this, [this, id]() {
+        menu.add(ContextMenu::Organise, tr("Make Reusable…"), [this, id]() {
             bool ok = false;
             const QLCPalette *p = m_doc->palette(id);
             if (p == nullptr)
                 return;
             // Named as the show's palettes of that type are, to start with.
-            const QString n = QInputDialog::getText(this, tr("Make reusable"), tr("Name"), QLineEdit::Normal,
+            const QString n = QInputDialog::getText(this, tr("Make Reusable"), tr("Name"), QLineEdit::Normal,
                                                     m_st->suggestPaletteName(p->type(), p->values()), &ok);
             if (!ok || n.trimmed().isEmpty())
                 return;
@@ -9645,7 +9642,6 @@ void ShowTreeView::slotLibraryContextMenu(const QPoint &pos)
             reloadLibrary();
         });
     }
-    menu.exec(m_library->viewport()->mapToGlobal(pos));
 }
 
 /****************************************************************************

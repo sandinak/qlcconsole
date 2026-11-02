@@ -31,7 +31,7 @@ If every cue uses one palette, it's one change, and every cue follows.
 | Word | Means |
 |---|---|
 | **Palette** | A saved, named value (a colour, a level, a position). Every cue that uses it shows its value; change it and they all change. |
-| **Used by** | Right-click a palette in the Library: every cue and layer that uses it. |
+| **Used By** | Right-click a palette in the Library: every cue and layer that uses it. |
 | **Duplicate** | A copy of a palette, to change without touching the original. |
 | **Look Editor** | Opens under the page (**✎** on a layer's row, or **Edit** in the Library) to change a palette's value and name. |
 | **Palette folder** | A folder in the Library's Palettes. A folder per song keeps its colours, levels and positions together. |
@@ -68,7 +68,7 @@ right-click on a Mac trackpad, click with two fingers.
 ### Who uses Magenta?
 
 3. In the Library, open **All → Palettes → Colour**. Right-click
-   **Magenta** → **Used by**.
+   **Magenta** → **Used By**.
    - *You should see:* one use, *Cue 1.0.2 Chorus in 01-Everybody Scream
      — Steps*. Click it: the tree goes to the chorus's Steps.
 
@@ -85,7 +85,7 @@ right-click on a Mac trackpad, click with two fingers.
 5. In the Look Editor's **Name** box, type `Chorus Colour` and press
    **Return**. Name a palette for its job, not its colour: the colour may
    change, the job won't.
-6. Right-click **Chorus Colour** → **Move to folder** → **New folder…**,
+6. Right-click **Chorus Colour** → **Move to Folder** → **New Folder…**,
    type `01-Everybody Scream` and click **OK**.
    - *You should see:* **Palettes → Colour → 01-Everybody Scream →
      Chorus Colour**.
@@ -138,7 +138,7 @@ right-click on a Mac trackpad, click with two fingers.
 
 | Problem | Try |
 |---|---|
-| No **Used by** or **Duplicate** in the menu | Right-click the palette under **All → Palettes → Colour**, not in Recent. |
+| No **Used By** or **Duplicate** in the menu | Right-click the palette under **All → Palettes → Colour**, not in Recent. |
 | The cyc didn't change in step 8 | Drop it on the grey **⤳ TrussC-RGB** row itself; the top bar says where it lands before you let go. |
 | Magenta changed too | You opened Magenta, not the copy. Undo (⌘Z) and click **✎** on the chorus's Steps row. |
 | Something else went wrong | Undo (⌘Z) one step at a time. |
@@ -146,7 +146,7 @@ right-click on a Mac trackpad, click with two fingers.
 ## Done early? (Extension)
 
 1. **The song's folder first.** Right-click **Palettes** (under All) and
-   untick **Group by type**. Now **01-Everybody Scream** is right under
+   untick **Group by Type**. Now **01-Everybody Scream** is right under
    Palettes, with Chorus Colour in it: a song's colours, levels and
    positions can all live there. Tick it again to go back.
 2. Which other values in our song would you make the song's own, and

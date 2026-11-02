@@ -318,20 +318,3 @@ void PlatformItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
         emit itemDropped(this);
 }
 
-void PlatformItem::contextMenuEvent(QGraphicsSceneContextMenuEvent *event)
-{
-    QMenu menu;
-    QAction *lockAct = menu.addAction(
-        m_platform->locked() ? tr("Unlock Platform") : tr("Lock Platform"));
-
-    if (menu.exec(event->screenPos()) == lockAct)
-    {
-        m_platform->setLocked(!m_platform->locked());
-        const bool canMove = !m_platform->locked();
-        setFlag(ItemIsMovable, canMove);
-        setCursor(canMove ? AppUtil::nativeCursorShape(Qt::SizeAllCursor) : Qt::ArrowCursor);
-        update();
-        if (m_doc)
-            m_doc->setModified();
-    }
-}

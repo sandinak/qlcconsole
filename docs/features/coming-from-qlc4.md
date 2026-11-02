@@ -170,7 +170,7 @@ Every left-hand column still works, in the Classic QLC+ view.
 | set channels with the scene editor's sliders | Same | In the Workbench, click a group or fixture row for its channels; the [Look Editor](build.md#the-inline-look-editor) for colour, position, beam and gobo by name |
 | build **collections** of scenes, EFX and RGB matrices | Same | Load the collection in the Workbench: its members are layers, **+ Scene** and **+ Effect ▾** add more, and it plays as you build ([The Workbench](build.md#the-workbench)) |
 | run a **chaser as a cue list** from a VC Cue List | Same; tick **Main cue list** in the chaser editor and GO (⌘↩) and the **Run** tab play it too | **Upgrade This Show…** makes it a Show Tree cue list: tracking, cue numbers, sub-cues, notes, and the Run tab ([Show Tree](show-tree.md)) |
-| set the rig, save a scene, chase the scenes | Same | Build keeps it: **Chaser from selection** ([Two QLC+ habits, kept](build.md#two-qlc-habits-kept)) |
+| set the rig, save a scene, chase the scenes | Same | Build keeps it: **Chaser from Selection** ([Two QLC+ habits, kept](build.md#two-qlc-habits-kept)) |
 | busk with VC buttons on scenes | Same | **Hits**: busking states on VC buttons, built like cues ([Hits](show-tree.md#hits-busking)) |
 | make **EFX** and **RGB matrices** | Stock editors, in Functions or the Workbench | **Build ▸ Effects**: effect palettes that take the look's colours ([Effects](effects.md)) |
 | run a **Show Manager** timeline | **Shows** tab | The same timeline, with track flags and timecode follow ([Shows](shows.md)); for cue-by-cue shows, the Show Tree; QLab can fire cues ([Show control](show-control.md)) |

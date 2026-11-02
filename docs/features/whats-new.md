@@ -1051,7 +1051,7 @@ their house lights, relays and subs.
   head type for each fixture, in a folder. The groups are listed — names,
   head counts, layout — before any is made. It replaces the two separate
   items. See
-  [Create Group(s) from Selection](fixture-manager.md#create-groups-from-selection).
+  [Create Group(s) from Selection](fixture-manager.md#create-fixture-group-from-selection).
 
 ### Effects
 

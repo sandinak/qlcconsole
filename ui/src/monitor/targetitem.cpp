@@ -704,59 +704,6 @@ void TargetItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
     emit itemDropped(this);
 }
 
-void TargetItem::contextMenuEvent(QGraphicsSceneContextMenuEvent *event)
-{
-    QMenu menu;
-    /* A line: add a point where the click was, or take a mid point out. */
-    QAction *addPointAct = nullptr;
-    QAction *removePointAct = nullptr;
-    double addAt = 0.0;
-    const int handle = isLine() ? lineHandleAt(event->pos()) : -1;
-    const bool canEdit = (flags() & ItemIsMovable);
-    if (isLine() && canEdit)
-    {
-        if (handle > 0 && handle < m_handles.size() - 1)
-            removePointAct = menu.addAction(tr("Remove Point"));
-        else if (handle < 0 && lineHitAt(event->pos(), &addAt))
-            addPointAct = menu.addAction(tr("Add Point Here"));
-        if (addPointAct != nullptr || removePointAct != nullptr)
-            menu.addSeparator();
-    }
-    QAction *lockAct = menu.addAction(
-        m_target->locked() ? tr("Unlock Target") : tr("Lock Target"));
-    menu.addSeparator();
-    QAction *deleteAct = menu.addAction(tr("Delete Target…"));
-
-    QAction *chosen = menu.exec(event->screenPos());
-    if (chosen == NULL)
-        return;
-
-    if (chosen == addPointAct)
-    {
-        emit lineInsertRequested(this, addAt);
-        return;
-    }
-    if (chosen == removePointAct)
-    {
-        emit lineRemoveRequested(this, handle);
-        return;
-    }
-
-    if (chosen == lockAct)
-    {
-        m_target->setLocked(!m_target->locked());
-        const bool canMove = !m_target->locked();
-        setFlag(ItemIsMovable, canMove);
-        setCursor(canMove ? Qt::PointingHandCursor : Qt::ArrowCursor);
-        update();
-        if (m_doc)
-            m_doc->setModified();
-        return;
-    }
-
-    if (chosen == deleteAct)
-        confirmAndDelete();
-}
 
 /** Delete this target, saying first what else it will take with it.
  *

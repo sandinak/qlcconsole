@@ -136,6 +136,9 @@ public:
      *  shown: the item's own section comes from the plot, so the list offers
      *  everything the plot does. */
     void buildContextMenu(class QMenu *menu, QTreeWidgetItem *item);
+    /** A fixture group row's menu: ContextMenus::rig plus the Plot's own */
+    void buildFixtureGroupMenu(class QMenu *menu, QTreeWidgetItem *item,
+                               const QList<QPair<QString, quint32> > &selection);
 
     /** Select and scroll to the row for @p kind / @p id ("Show in Layers").
      *  False when the list has no such row. */

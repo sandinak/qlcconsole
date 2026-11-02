@@ -127,7 +127,7 @@ Switch roles after each part.
 
 | Problem | Try |
 |---|---|
-| **Make set…** made a set of one group | ⌘-click the second group before you right-click, so both are selected. |
+| **Make Set…** made a set of one group | ⌘-click the second group before you right-click, so both are selected. |
 | US became a layer of its own, not a child | Undo (⌘Z), and hold **⇧** all the way through the drop. |
 | The whole truss turned amber | You dropped Amber on Truss Sides. Undo and drop it on the **↳ Trusses SR** row. |
 | No **Add child layer** in the menu | Right-click the layer's row in the tree (under 1.0.5), not the cue. |

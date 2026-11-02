@@ -902,9 +902,10 @@ void EffectDesigner_Test::buildEffectsMakesAndDesignsEffects()
     // The right-click menu on an effect palette.
     QCoreApplication::processEvents();          // a queued rebuild: rows are new
     QMenu *menu = pm.effectsContextMenu(effectsRow(list, "Phaser"), &pm);
-    for (const char *name : { "effectsDesign", "effectsDuplicate", "effectsRename", "effectsMove", "effectsDelete",
-                              "effectsNewPalette", "effectsNewEfx", "effectsNewMatrix" })
+    for (const char *name : { "effectsDesign", "effectsDuplicate", "effectsRename", "effectsMove", "effectsDelete" })
         QVERIFY2(menuAction(menu, name) != nullptr, name);
+    // New… is empty space's (and + New's), not a row's (the canon).
+    QVERIFY(menuAction(menu, "effectsNewEfx") == nullptr);
     QVERIFY(menuAction(menu, "effectsOpen") == nullptr);
     const int before = m_doc->palettes().count();
     menuAction(menu, "effectsDuplicate")->trigger();

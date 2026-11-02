@@ -158,6 +158,10 @@ public:
      * What the mouse does (drops, pickers) -- public for the tests
      ************************************************************************/
 public:
+    /** The Library's right-click menu for @p item (and the selection) into
+     *  @p menu: the canon's layout (ContextMenu) */
+    void fillLibraryMenu(QMenu *menu, QTreeWidgetItem *item);
+
     /** Groups / fixtures / group sets dropped on a cue: one layer on all
      *  of them, or (@a separate, ⌥ held) one layer per group -- a set's
      *  members each a layer of their own -- and one on the fixtures. */

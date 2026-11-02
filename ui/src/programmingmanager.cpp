@@ -46,6 +46,7 @@
 #include "mainbar.h"
 #include "speedmasterspanel.h"
 #include "programmingmanager.h"
+#include "contextmenus.h"
 #include "effectrunsmenu.h"
 #include "effectorigin.h"
 #include "controllearndialog.h"
@@ -1029,7 +1030,7 @@ QWidget *ProgrammingManager::buildScenesSection()
         m_wizardAction->setObjectName(QStringLiteral("buildFunctionWizard"));
         m_wizardAction->setToolTip(tr("Make chasers, scenes and effects for the fixtures you pick, in one go"));
         connect(m_wizardAction, &QAction::triggered, this, &ProgrammingManager::runFunctionWizard);
-        m_startupAction = new QAction(QIcon(":/autostart.png"), tr("Startup function…"), page);
+        m_startupAction = new QAction(QIcon(":/autostart.png"), tr("Startup Function…"), page);
         m_startupAction->setObjectName(QStringLiteral("buildStartupFunction"));
         m_startupAction->setToolTip(tr("The function that starts by itself when the show goes to Operate mode"));
         connect(m_startupAction, &QAction::triggered, this, &ProgrammingManager::chooseStartupFunction);
@@ -1491,36 +1492,53 @@ QMenu *ProgrammingManager::effectsContextMenu(QTreeWidgetItem *clicked, QWidget 
     const QPersistentModelIndex index = clicked == nullptr ? QPersistentModelIndex()
                                                            : QPersistentModelIndex(m_effectsList->indexFromItem(clicked));
 
+    /* Laid out by the canon (ContextMenu, docs/design/CONTEXT_MENUS.md):
+       what it is first, what it does, its name, delete last; New… on
+       empty space. */
+    ContextMenu cm(menu);
+    // ControlLearnDialog / EffectRunsMenu add to a QMenu: staged, then filed.
+    auto staged = [menu, &cm](ContextMenu::Section section, const std::function<void(QMenu *)> &fill) {
+        QMenu *staging = new QMenu(menu);
+        fill(staging);
+        for (QAction *a : staging->actions())
+            if (!a->isSeparator())
+                cm.add(section, a);
+    };
     // On a row: what it is first.
     if (kind == EffectsList::PaletteItem)
     {
-        QAction *a = menu->addAction(tr("Design / edit…"), this, [this, id]() { designEffect(id); });
-        a->setObjectName(QStringLiteral("effectsDesign"));
+        QAction *a = cm.add(ContextMenu::Open, tr("Edit Effect"), [this, id]() { designEffect(id); },
+                            QStringLiteral("effectsDesign"));
         a->setToolTip(tr("In the effect designer, in the Workbench: a copy on the bench until you update "
                          "the palette or save a new one"));
         menu->setDefaultAction(a);
     }
     else if (kind == EffectsList::FunctionItem)
     {
-        QAction *a = menu->addAction(tr("Open in editor"), this, [this, id]() {
+        QAction *a = cm.add(ContextMenu::Open, tr("Open in Editor"), [this, id]() {
             selectEffectRow(false, id);
             m_workbench->load(id);
-        });
-        a->setObjectName(QStringLiteral("effectsOpen"));
+        }, QStringLiteral("effectsOpen"));
         a->setToolTip(tr("Load it in the Workbench, with its own (QLC+) editor"));
         menu->setDefaultAction(a);
     }
     // An effect function (EFX, RGB Matrix): fired from a MIDI or OSC control.
     if (kind == EffectsList::FunctionItem && fns.size() <= 1)
-        ControlLearnDialog::addTo(menu, m_doc, ControlMap::function(id), this);
+        staged(ContextMenu::Kind, [this, id](QMenu *m) {
+            ControlLearnDialog::addTo(m, m_doc, ControlMap::function(id), this);
+        });
     // How it runs: Loop | Once | N times (a classic effect: its Run order).
     if (kind == EffectsList::PaletteItem)
-        EffectRunsMenu::add(menu, m_doc, pals.isEmpty() ? QList<quint32>{ id } : pals, this);
+        staged(ContextMenu::Kind, [this, pals, id](QMenu *m) {
+            EffectRunsMenu::add(m, m_doc, pals.isEmpty() ? QList<quint32>{ id } : pals, this);
+        });
     else if (kind == EffectsList::FunctionItem)
-        EffectRunsMenu::addForFunction(menu, m_doc, m_doc->function(id));
+        staged(ContextMenu::Kind, [this, id](QMenu *m) {
+            EffectRunsMenu::addForFunction(m, m_doc, m_doc->function(id));
+        });
     if (kind != 0)
     {
-        QAction *a = menu->addAction(tr("Duplicate"), this, [this, kind, id]() {
+        QAction *a = cm.add(ContextMenu::Edit, tr("Duplicate"), [this, kind, id]() {
             if (kind == EffectsList::PaletteItem)
             {
                 const quint32 copy = m_doc->paletteOps()->duplicate(id);
@@ -1552,20 +1570,20 @@ QMenu *ProgrammingManager::effectsContextMenu(QTreeWidgetItem *clicked, QWidget 
             }
         });
         a->setObjectName(QStringLiteral("effectsDuplicate"));
-        a = menu->addAction(tr("Rename"), this, [this, index]() {
+        a = cm.add(ContextMenu::Edit, tr("Rename"), [this, index]() {
             if (index.isValid())
                 m_effectsList->editItem(m_effectsList->itemFromIndex(index), 0);
         });
         a->setObjectName(QStringLiteral("effectsRename"));
         a->setShortcut(QKeySequence(Qt::Key_F2));
-        a = menu->addAction(tr("Move to folder…"), this, [this, pals, fns]() {
+        a = cm.add(ContextMenu::Organise, tr("Move to Folder…"), [this, pals, fns]() {
             QString current;
             if (!pals.isEmpty())
                 current = PaletteOps::folderOf(m_doc->palette(pals.first()));
             else if (Function *f = m_doc->function(fns.first()))
                 current = f->path(true);
             bool ok = false;
-            const QString folder = QInputDialog::getText(this, tr("Move to folder"),
+            const QString folder = QInputDialog::getText(this, tr("Move to Folder"),
                 tr("Folder (e.g. \"01-Song\"; empty for none):"), QLineEdit::Normal, current, &ok).trimmed();
             if (!ok)
                 return;
@@ -1587,28 +1605,29 @@ QMenu *ProgrammingManager::effectsContextMenu(QTreeWidgetItem *clicked, QWidget 
             rebuildEffects();
         });
         a->setObjectName(QStringLiteral("effectsMove"));
-        menu->addSeparator();
         const int n = pals.size() + fns.size();
-        a = menu->addAction(n > 1 ? tr("Delete %1 effects").arg(n) : tr("Delete"), this, [this, pals, fns]() {
+        a = cm.add(ContextMenu::Remove, n > 1 ? tr("Delete %1 Effects…").arg(n) : tr("Delete…"), [this, pals, fns]() {
             if (!pals.isEmpty())
                 deletePalettes(pals);
             if (!fns.isEmpty())
                 deleteFunctions(fns);
         });
         a->setObjectName(QStringLiteral("effectsDelete"));
-        menu->addSeparator();
     }
-
-    // Everywhere (empty space too): a new one.
-    QAction *a = menu->addAction(QIcon(":/script.png"), tr("New effect…"), this,
-                                 [this]() { designEffect(QLCPalette::invalidId()); });
-    a->setObjectName(QStringLiteral("effectsNewPalette"));
-    a->setToolTip(tr("A new effect palette, designed in the Workbench on the Try on groups"));
-    a = menu->addAction(QIcon(":/efx.png"), tr("New EFX"), this, [this]() { newClassicEffect(Function::EFXType); });
-    a->setObjectName(QStringLiteral("effectsNewEfx"));
-    a = menu->addAction(QIcon(":/rgbmatrix.png"), tr("New RGB Matrix"), this,
-                        [this]() { newClassicEffect(Function::RGBMatrixType); });
-    a->setObjectName(QStringLiteral("effectsNewMatrix"));
+    else
+    {
+        // Empty space (or a heading): a new one. On a row, the + New button.
+        QAction *a = cm.add(ContextMenu::Kind, tr("New Effect"),
+                            [this]() { designEffect(QLCPalette::invalidId()); },
+                            QStringLiteral("effectsNewPalette"));
+        a->setIcon(QIcon(":/script.png"));
+        a->setToolTip(tr("A new effect palette, designed in the Workbench on the Try on groups"));
+        cm.add(ContextMenu::Kind, tr("New EFX"), [this]() { newClassicEffect(Function::EFXType); },
+               QStringLiteral("effectsNewEfx"))->setIcon(QIcon(":/efx.png"));
+        cm.add(ContextMenu::Kind, tr("New RGB Matrix"), [this]() { newClassicEffect(Function::RGBMatrixType); },
+               QStringLiteral("effectsNewMatrix"))->setIcon(QIcon(":/rgbmatrix.png"));
+    }
+    cm.finish();
     return menu;
 }
 
@@ -1979,7 +1998,7 @@ void ProgrammingManager::addFunctionTools(QMenu *menu)
 {
     if (menu == nullptr || m_newFunctionActions.isEmpty())
         return;
-    QMenu *sub = menu->addMenu(QIcon(":/function.png"), tr("New function"));
+    QMenu *sub = menu->addMenu(QIcon(":/function.png"), tr("New Function"));
     sub->setObjectName(QStringLiteral("buildNewFunctionMenu"));
     sub->setToolTipsVisible(true);
     sub->addActions(m_newFunctionActions);
@@ -2914,6 +2933,13 @@ void ProgrammingManager::slotPaletteTreeMenu(const QPoint &pos)
 {
     QMenu menu(this);
     menu.setToolTipsVisible(true);   // off by default on most platforms (incl. macOS)
+    /* Laid out by the canon (ContextMenu, docs/design/CONTEXT_MENUS.md): a
+       palette's own editor first, delete last; New Palette ▸ on empty space
+       and folders, as in the Show Tree's Library. */
+    ContextMenu cm(&menu);
+    QTreeWidgetItem *clickedPalItem = m_paletteTree->itemAt(pos);
+    const quint32 pid =
+        m_paletteTree->itemPaletteId(clickedPalItem);
     // Type list, like the function tree's New menu. Only the types the
     // engine resolves per-fixture are offered.
     struct { const char *label; int type; const char *tip; } types[] = {
@@ -2948,30 +2974,35 @@ void ProgrammingManager::slotPaletteTreeMenu(const QPoint &pos)
                      "palette: one \"Pairs crossed\" works on every line.") },
     };
     QList<QAction*> newActions;
-    for (uint i = 0; i < sizeof(types) / sizeof(types[0]); i++)
+    QMenu *newMenu = NULL;
+    if (pid == QLCPalette::invalidId())
     {
-        QAction *a = menu.addAction(tr(types[i].label));
+        newMenu = cm.addMenu(ContextMenu::Kind, tr("New Palette"), QStringLiteral("buildNewPaletteMenu"));
+        newMenu->setToolTipsVisible(true);
+    }
+    for (uint i = 0; newMenu != NULL && i < sizeof(types) / sizeof(types[0]); i++)
+    {
+        QAction *a = newMenu->addAction(tr(types[i].label));
         a->setData(types[i].type);
         a->setToolTip(tr(types[i].tip));
         a->setStatusTip(tr(types[i].tip));
         newActions << a;
     }
 
-    menu.addSeparator();
-    QAction *aNewFolder = menu.addAction(tr("New folder…"));
+    QAction *aNewFolder = cm.add(ContextMenu::Organise, tr("New Folder…"));
     // Folders first (default: a song's folder holds its colours, aims and
     // effects together) or grouped by type first. Persisted.
-    QAction *aByType = menu.addAction(tr("Group by type"));
+    QAction *aByType = cm.add(ContextMenu::View, tr("Group by Type"));
     aByType->setCheckable(true);
     aByType->setChecked(m_paletteTree->paletteTypesFirst());
 
-    QTreeWidgetItem *clickedPalItem = m_paletteTree->itemAt(pos);
     QAction *aRenameFolder = NULL;
     QAction *aDeleteFolder = NULL;
     if (m_paletteTree->isUserFolder(clickedPalItem))
     {
-        aRenameFolder = menu.addAction(tr("Rename folder"));
-        aDeleteFolder = menu.addAction(tr("Delete folder"));
+        aRenameFolder = cm.add(ContextMenu::Edit, tr("Rename Folder"));
+        aDeleteFolder = cm.add(ContextMenu::Remove, tr("Delete Folder"));
+        aDeleteFolder->setToolTip(tr("Its palettes move up a level; none is deleted"));
     }
 
     // Palettes the menu acts on: the whole selection if the clicked row is part
@@ -2982,26 +3013,28 @@ void ProgrammingManager::slotPaletteTreeMenu(const QPoint &pos)
     QAction *aMove = NULL;
     QAction *aDuplicate = NULL;
     QAction *aBundle = NULL;
-    const quint32 pid =
-        m_paletteTree->itemPaletteId(m_paletteTree->itemAt(pos));
     if (pid != QLCPalette::invalidId())
     {
-        aDuplicate = menu.addAction(tr("Duplicate"));
-        aMove = menu.addAction(tr("Move to folder…"));
-        menu.addSeparator();
-        aBundle = menu.addAction(targetPalettes.size() > 1
-                                     ? tr("Save %1 palettes as Bundle…").arg(targetPalettes.size())
+        cm.add(ContextMenu::Open, tr("Edit Palette"), [this, pid]() { m_workbench->editPalette(pid); },
+               QStringLiteral("buildEditPalette"));
+        aMove = cm.add(ContextMenu::Organise, tr("Move to Folder…"));
+        aBundle = cm.add(ContextMenu::Organise, targetPalettes.size() > 1
+                                     ? tr("Save %1 Palettes as Bundle…").arg(targetPalettes.size())
                                      : tr("Save as Bundle…"));
+        aDuplicate = cm.add(ContextMenu::Edit, tr("Duplicate"));
+        cm.add(ContextMenu::Edit, tr("Rename"), [this, clickedPalItem]() {
+            m_paletteTree->editItem(clickedPalItem, 0);
+        });
     }
 
     QAction *aDelete = NULL;
     if (targetPalettes.isEmpty() == false)
     {
-        menu.addSeparator();
-        aDelete = menu.addAction(targetPalettes.size() > 1
-                                     ? tr("Delete %1 palettes").arg(targetPalettes.size())
-                                     : tr("Delete"));
+        aDelete = cm.add(ContextMenu::Remove, targetPalettes.size() > 1
+                                     ? tr("Delete %1 Palettes…").arg(targetPalettes.size())
+                                     : tr("Delete Palette…"));
     }
+    cm.finish();
 
     QAction *chosen = menu.exec(m_paletteTree->viewport()->mapToGlobal(pos));
     if (chosen == NULL)

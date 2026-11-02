@@ -597,19 +597,19 @@ A **group set** is one name for several groups, made once and used in any
 cue, list or production: *Towers* = *SL* + *SR*.
 
 - **Make one:** in the Library, select the groups (⌘-click), right-click →
-  **Make set…**, and name it. Or type `set "Towers" SL SR`. It shows under
+  **Make Set…**, and name it. Or type `set "Towers" SL SR`. It shows under
   **All → Group sets**, as *"Towers (SL + SR)"*.
-- **Groups that are alike:** right-click a group → **Select all similar**
+- **Groups that are alike:** right-click a group → **Select All Similar**
   selects every group in the same folder made of the same fixtures (as
   many of each kind) and as many heads: all the truss tops, say, but not
-  their RGB-only groups. **Make set…** is right below it on the same menu.
+  their RGB-only groups. **Make Set…** is right below it on the same menu.
 - **Use it** as a group: drag it onto a cue for one layer on the whole set,
   or type its name (`Towers dimmer 45`). With **⌥**, you get a layer per
   member instead. Onto a layer, it joins it. Onto a **Build** scene, it adds
   the set's groups (*SL* and *SR*): a scene holds groups, not sets, so it
   doesn't follow later changes to the set.
-- **Change it:** right-click the set → **Members: the selected groups**
-  (select them first), **Rename set…** or **Delete set** (refused while a
+- **Change it:** right-click the set → **Set Members to the Selected
+  Groups** (select them first), **Rename Set…** or **Delete Set** (refused while a
   cue uses it, naming the cues). Typing `set "Towers" …` again gives it new
   members. Each is one undo step.
 - **It stays the same layer.** The set, not its members, is what the layer
@@ -796,7 +796,7 @@ When no palette plays it:
 - **Picked:** you get a **one-off** value, just for this layer. It shows in
   the Library's **Recent**, not in All. **Make reusable** next to it on the
   row turns it into a palette in one click, named as above. To choose the
-  name yourself, right-click it in Recent → **Make reusable…**. Either is one
+  name yourself, right-click it in Recent → **Make Reusable…**. Either is one
   undo step: undo makes it a one-off again. A one-off that no cue uses any
   more is deleted.
 
@@ -805,7 +805,7 @@ When no palette plays it:
 Some movers have a **colour ring**: a ring of LEDs round the lens, driven
 by one channel of named colours and chases (off, Red … White,
 Red/Yellow-Chase … RGB/Random-Chase). With a definition that makes the
-ring a head of its own, **Create Group(s) from Selection** by head type
+ring a head of its own, **Create Fixture Group from Selection…** by head type
 makes a **Movers** group and a **Ring** group, and each is an ordinary
 layer: cascade, tracking, Release and the preview all work on it as on any
 group.
@@ -1742,7 +1742,7 @@ is always there and calls the same operations as the mouse.
 | `palette folder "01-Song"` · `rename "02-Song"` · `delete` | A palette folder: new, renamed, deleted (what is in it moves up) |
 | `hit "Stab"` · `hit "Stab" in "Stings"` | Selects that **hit** of the production, or makes it (and the Hits section); `in` files it. Then set its layers as on a cue (`look` still works) |
 | `vcpage` | **Make VC page** for the selected hit's folder (else every hit) |
-| `adopt "Old Busk"` | **Adopt as a hit**: a scene becomes a hit |
+| `adopt "Old Busk"` | **Adopt as a Hit**: a scene becomes a hit |
 | `wb` · `wb 0.0.3` | The selected cue (or layer), or that cue, in the **Workbench** ([Working on a cue in the Workbench](#working-on-a-cue-in-the-workbench)) |
 | `dup` · `undo` · `redo` | As Duplicate (⌘D), Undo and Redo (one history with the palettes, [Undo](#undo)) |
 | `help` · `help spread` · `?` | The language, with examples (see below) |
@@ -1869,20 +1869,23 @@ again what it opened.
   computer.
 - **All**:
   - **Targets**: the stage's points, areas and lines ([Line aims](#line-aims));
-  - **Group sets** ([Group sets](#group-sets)): right-click groups → **Make set…**;
+  - **Group sets** ([Group sets](#group-sets)): right-click groups → **Make Set…**;
   - **Reusable**: the [reusable layers and cues](#reusable-layers-and-cues),
     each with how many use it (hover: *Used by*);
   - **Groups**, in the Fixture Manager's folders. Right-click one (or
-    several) for **Select all similar**, **Make set…** and **Move to
-    folder ▸**: the folders in use, *no folder*, or **New Folder…** (made
-    inside the one they are in). They stay selected where they land. The
-    Fixture Manager uses the same folders. **Output Rules…** (on groups
-    and fixtures) sets [output rules](fixture-manager.md#output-rules) on
-    every member;
+    several) for the same menu a fixture group has everywhere ([one menu
+    per kind](fixture-manager.md#right-click-menus)): **Edit Head
+    Layout…**, **Locate**, **Output Rules…** (sets [output
+    rules](fixture-manager.md#output-rules) on every member), **Select All
+    Similar**, **Make Set…**, **Move to Folder ▸** (the folders in use,
+    *no folder*, or **New Folder…**, made inside the one they are in; they
+    stay selected where they land), **Rename…** and **Delete Fixture
+    Group…**. A fixture gets **Fixture Properties…**, **Locate**, **Why is
+    this on?**, **Patch…** and **Output Rules…**;
   - **Palettes**, by type with your folders under each, or folders first
     ([Palettes in the Library](#palettes-in-the-library));
   - **Functions (played as they are)**: not chasers, and not what the tree
-    made. Right-click a scene → **Adopt as a hit** ([Hits](#hits-busking)).
+    made. Right-click a scene → **Adopt as a Hit** ([Hits](#hits-busking)).
 
 Select several items (⌘- or ⇧-click) to drag them together or use **+
 Layer**.
@@ -1893,7 +1896,7 @@ The everyday palette work happens here, without going to Build. Every
 operation is one undo step on the tab's [Undo](#undo).
 
 - **+ Palette** (beside the filter, or right-click a palette folder →
-  **New palette**): pick the type — Colour, Dimmer, Pan/Tilt, Aim, Beam,
+  **New Palette ▸**): pick the type — Colour, Dimmer, Pan/Tilt, Aim, Beam,
   Gobo, Zoom, Shutter, Strobe, Effect. It is made in the folder selected in
   the Library (else where the show keeps that type), selected, and opened
   in the Look Editor under the page.
@@ -1901,21 +1904,22 @@ operation is one undo step on the tab's [Undo](#undo).
   place; Return keeps, Esc leaves it.
 - **Folders hold any type.** A folder per song, *01-Everybody Scream*, can
   hold its colours, levels, positions and effects together. Right-click →
-  **New folder…**; **F2** renames a folder; right-click → **Delete folder**
+  **New Folder…**; **F2** (or **Rename Folder**) renames a folder;
+  right-click → **Delete Folder**
   moves what is in it up a level (nothing is deleted). Every type follows a
   folder renamed or deleted.
 - **Move** palettes by dragging them onto a folder (the **Palettes**
-  heading itself is *no folder*), or right-click → **Move to folder**.
-- **Duplicate**, **Edit** (the Look Editor), **Used by** (every cue and
+  heading itself is *no folder*), or right-click → **Move to Folder ▸**.
+- **Edit Palette** (the Look Editor), **Duplicate**, **Used By** (every cue and
   look by number and layer, scenes, effect slots, and the VC buttons that
   fire them; click a cue or look to go there).
-- **Delete** (⌫, or right-click → Delete…) asks first and names everything
+- **Delete** (⌫, or right-click → **Delete Palette…**) asks first and names everything
   that uses it — and everything that uses it lets go of it: every cue,
   layer and look (a look with nothing else left is cleared, not set to
   None), reusable layers and cues, scenes and effect slots. Nothing is left
   showing *(missing)*. One Undo brings the palette back with every use, each
   in its place.
-- **Two views.** Right-click the Palettes heading → **Group by type**:
+- **Two views.** Right-click the Palettes heading → **Group by Type**:
   ticked (the default), Colour, Dimmer… each with your folders under it;
   unticked, your folders first with every type inside, and the palettes in
   no folder below. It is remembered.
@@ -2035,7 +2039,7 @@ reusables are reusable *arrangements*.
   a plain copy of its own, as it is now. The other uses stay linked. No
   badge stays on it; its tooltip says *"Unlinked from Back Wash"*. A
   reusable deleted while used leaves the same on each use.
-- **Used by.** Right-click it in the Library → **Used by** lists every use
+- **Used by.** Right-click it in the Library → **Used By** lists every use
   by list and cue (click one to go there), the reusable cues it is part of,
   and any VC button that plays one of its uses' cues or layers. The page's
   **Used by…** link does the same.
@@ -2257,7 +2261,7 @@ called them looks; they open as they were.)
   tracked, included and its own — into a new hit. **Copy / Paste** copy
   layers and cues between lists and hits too; **Cut** and **Paste**, or a
   drag, move a layer there (a hit's layers have no Release).
-- **Adopt as a hit** (Library → Functions, right-click a scene, or `adopt`)
+- **Adopt as a Hit** (Library → Functions, right-click a scene, or `adopt`)
   makes a hit from an existing scene: its groups and palettes become a
   layer when they play exactly the same, else the scene plays as it is
   inside the hit. The scene stays. When VC buttons fire the scene, it

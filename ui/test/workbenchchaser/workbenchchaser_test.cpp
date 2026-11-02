@@ -1157,7 +1157,7 @@ void WorkbenchChaser_Test::functionsWindowToolsLiveInBuild()
         QStringList texts;
         for (QAction *act : m.actions())
             texts << act->text();
-        QVERIFY(texts.contains("New function"));
+        QVERIFY(texts.contains("New Function"));
         QVERIFY(texts.contains(mgr.m_wizardAction->text()));
         QVERIFY(texts.contains(mgr.m_startupAction->text()));
     }
@@ -1195,8 +1195,8 @@ void WorkbenchChaser_Test::functionsWindowToolsLiveInBuild()
     seen.clear();
     whenItOpens(&seen);
     nav->slotContextMenu(nav->visualItemRect(folder).center());
-    QVERIFY2(seen.contains("Rename folder") && seen.contains("Delete folder"), qPrintable(seen.join(" | ")));
-    QVERIFY(seen.contains("New function"));
+    QVERIFY2(seen.contains("Rename Folder") && seen.contains("Delete Folder"), qPrintable(seen.join(" | ")));
+    QVERIFY(seen.contains("New Function"));
     QVERIFY(seen.contains("Function Wizard…"));
     mgr.removeFunctionFolder("Act 1");
     QCOMPARE(a->path(true), QString());

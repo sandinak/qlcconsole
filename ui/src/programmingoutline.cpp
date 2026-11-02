@@ -36,6 +36,7 @@
 #include <algorithm>
 
 #include "programmingoutline.h"
+#include "contextmenus.h"
 #include "selectionmenu.h"
 #include "whyonpanel.h"
 #include <QCursor>
@@ -2037,16 +2038,6 @@ void ProgrammingOutline::slotContextMenu(const QPoint &pos)
         clicked->setSelected(true);
     }
     const Row at = rowOf(clicked);
-    const QList<Row> rows = selectedRows();
-    QList<quint32> scenes;
-    QList<Row> parts;
-    for (const Row &r : rows)
-    {
-        if (r.kind == SceneRow || r.kind == FunctionRow)
-            scenes << r.id;
-        else if (r.kind == GroupRow || r.kind == FixtureRow || r.kind == PaletteRow)
-            parts << r;
-    }
 
     // W3: a cue's layer or attribute row: the tree's own menu for it.
     if (m_mode == Stack && m_stack != nullptr && clicked != nullptr
@@ -2057,8 +2048,43 @@ void ProgrammingOutline::slotContextMenu(const QPoint &pos)
 
     QMenu menu(this);
     menu.setToolTipsVisible(true);
+    fillContextMenu(&menu, clicked);
+    if (!menu.isEmpty())
+        menu.exec(viewport()->mapToGlobal(pos));
+}
+
+/* Laid out by the canon (ContextMenu, docs/design/CONTEXT_MENUS.md): its
+   editor, what it does, more like it, organising, this place's own, the
+   list's view, its name, and taking it out last. A group or fixture row
+   gets the canon's rig menu (ContextMenus::rig), as everywhere. */
+void ProgrammingOutline::fillContextMenu(QMenu *out, QTreeWidgetItem *clicked)
+{
+    const Row at = rowOf(clicked);
+    const QList<Row> rows = selectedRows();
+    QList<quint32> scenes;
+    QList<Row> parts;
+    for (const Row &r : rows)
+    {
+        if (r.kind == SceneRow || r.kind == FunctionRow)
+            scenes << r.id;
+        else if (r.kind == GroupRow || r.kind == FixtureRow || r.kind == PaletteRow)
+            parts << r;
+    }
+    ContextMenu menu(out);
     const QString folder = folderFor(clicked);
     const bool readOnly = m_mode == Stack && (m_stack == nullptr || !m_stack->readOnlyReason().isEmpty());
+    // ControlLearnDialog::addTo() adds to a QMenu: staged, then filed.
+    auto learnTrigger = [this, &menu, out](quint32 fid) {
+        QMenu *staging = new QMenu(out);
+        if (QAction *learn = ControlLearnDialog::addTo(staging, m_doc, ControlMap::function(fid), this))
+            menu.add(ContextMenu::Kind, learn);
+    };
+    auto subtreeItems = [this, &menu, clicked]() {
+        if (clicked == nullptr || clicked->childCount() == 0)
+            return;
+        menu.add(ContextMenu::View, tr("Expand All Under This"), [this, clicked]() { setSubtreeExpanded(clicked, true); });
+        menu.add(ContextMenu::View, tr("Collapse All Under This"), [this, clicked]() { setSubtreeExpanded(clicked, false); });
+    };
 
     if (m_mode == Stack && clicked != nullptr && clicked->parent() == nullptr && layerOf(clicked) >= 0)
     {
@@ -2068,13 +2094,13 @@ void ProgrammingOutline::slotContextMenu(const QPoint &pos)
         for (QTreeWidgetItem *it : selectedItems())
             if (it->parent() == nullptr && layerOf(it) >= 0)
                 layers << layerOf(it);
-        menu.addAction(tr("Open"), this, [this, at]() { emit openRequested(at.id); })
+        menu.add(ContextMenu::Open, tr("Open"), [this, at]() { emit openRequested(at.id); })
             ->setToolTip(tr("Load it in the Workbench on its own (↩ comes back here)"));
         // Fire it from a MIDI or OSC control (the Control Map).
         if (layers.size() == 1 && m_doc != nullptr && m_doc->function(at.id) != nullptr)
-            ControlLearnDialog::addTo(&menu, m_doc, ControlMap::function(at.id), this);
+            learnTrigger(at.id);
         if (!readOnly && layers.size() == 1 && m_stack->canMakeOwnCopy(layer))
-            menu.addAction(tr("Make own copy"), this, [this, layer]() {
+            menu.add(ContextMenu::Organise, tr("Make Own Copy"), [this, layer]() {
                 if (m_stack->makeOwnCopy(layer) != kInvalid)
                 {
                     QTimer::singleShot(0, this, [this, layer]() {
@@ -2089,13 +2115,9 @@ void ProgrammingOutline::slotContextMenu(const QPoint &pos)
                     emit layersEdited();
                 }
             })->setToolTip(tr("It is shared: split it off as a copy of its own here, so an edit changes only this one"));
-        if (!readOnly && m_stack->canRemoveLayers())
-            menu.addAction(layers.size() > 1 ? tr("Remove %n layer(s)", "", layers.size()) : tr("Remove the layer"),
-                           this, [this, layers]() { removeLayers(layers); })
-                ->setToolTip(tr("Take it out of what is loaded; the function itself stays"));
         if (!readOnly && m_stack->canReorderLayers() && layers.size() == 1)
         {
-            menu.addAction(tr("Move layer up"), this, [this, layer]() {
+            menu.add(ContextMenu::Place, tr("Move Layer Up"), [this, layer]() {
                 if (m_stack->moveLayer(layer, layer - 1))
                 {
                     selectKeys({ key(layerItem(layer)) });
@@ -2103,7 +2125,7 @@ void ProgrammingOutline::slotContextMenu(const QPoint &pos)
                     emit layersEdited();
                 }
             });
-            menu.addAction(tr("Move layer down"), this, [this, layer]() {
+            menu.add(ContextMenu::Place, tr("Move Layer Down"), [this, layer]() {
                 if (m_stack->moveLayer(layer, layer + 1))
                 {
                     selectKeys({ key(layerItem(layer)) });
@@ -2112,139 +2134,130 @@ void ProgrammingOutline::slotContextMenu(const QPoint &pos)
                 }
             });
         }
-        menu.addSeparator();
+        subtreeItems();
         if (at.kind == SceneRow && !readOnly)
-            menu.addAction(tr("Rename"), this, [this, clicked]() { editItem(clicked, NameCol); });
-        menu.addAction(tr("Open all under this"), this, [this, clicked]() { setSubtreeExpanded(clicked, true); });
-        menu.addAction(tr("Close all under this"), this, [this, clicked]() { setSubtreeExpanded(clicked, false); });
-        menu.exec(viewport()->mapToGlobal(pos));
+            menu.add(ContextMenu::Edit, tr("Rename"), [this, clicked]() { editItem(clicked, NameCol); });
+        if (!readOnly && m_stack->canRemoveLayers())
+            menu.add(ContextMenu::Remove, layers.size() > 1 ? tr("Remove %1 Layers").arg(layers.size())
+                                                            : tr("Remove Layer"),
+                     [this, layers]() { removeLayers(layers); })
+                ->setToolTip(tr("Take it out of what is loaded; the function itself stays"));
         return;
     }
-    // "Why is this on?" about a fixture row's light, a group row's first.
-    if (m_doc != nullptr && clicked != nullptr && (at.kind == FixtureRow || at.kind == GroupRow))
-    {
-        quint32 fid = at.kind == FixtureRow ? at.id : 0xFFFFFFFF;
-        if (at.kind == GroupRow)
-            if (FixtureGroup *grp = m_doc->fixtureGroup(at.id))
-                if (!grp->fixtureList().isEmpty())
-                    fid = grp->fixtureList().first();
-        if (m_doc->fixture(fid) != nullptr)
-        {
-            menu.addAction(WhyOnPanel::actionText(), this, [this, fid]() {
-                WhyOnPanel::showFor(m_doc, fid, 0xFFFFFFFF, this, QCursor::pos());
-            })->setObjectName("outlineWhyOn");
-            menu.addSeparator();
-        }
-        // Selection ▸ (Q201): the selected target rows' fixtures.
-        QList<quint32> picked;
-        for (const Row &r : rows)
-        {
-            QList<quint32> ids;
-            if (r.kind == FixtureRow)
-                ids << r.id;
-            else if (r.kind == GroupRow)
-                if (FixtureGroup *grp = m_doc->fixtureGroup(r.id))
-                    ids = grp->fixtureList();
-            for (quint32 id : ids)
-                if (m_doc->fixture(id) != nullptr && !picked.contains(id))
-                    picked << id;
-        }
-        if (!picked.isEmpty())
-        {
-            SelectionMenu::addTo(&menu, m_doc, picked);
-            menu.addSeparator();
-        }
-    }
+
     if (readOnly)
         parts.clear();
-    if (!parts.isEmpty())
+
+    // ---- A group or fixture row: the canon's rig menu ----
+    if (m_doc != nullptr && clicked != nullptr && (at.kind == FixtureRow || at.kind == GroupRow))
     {
-        menu.addAction(parts.size() == 1 ? tr("Remove from the scene") : tr("Remove %n from their scenes", "", parts.size()),
-                       this, [this, parts]() { removeRows(parts); });
-        if (parts.size() == 1 && at.kind == PaletteRow)
+        QList<quint32> groups, fixtures;
+        for (const Row &r : rows)
         {
-            menu.addAction(tr("Move up"), this, [this, at]() { shiftLook(at, -1); });
-            menu.addAction(tr("Move down"), this, [this, at]() { shiftLook(at, +1); });
-            menu.addAction(tr("Rename palette"), this, [this, clicked]() { editItem(clicked, NameCol); });
-            menu.addAction(tr("Show in Palettes"), this, [this, at]() { emit revealPaletteRequested(at.id); });
+            if (r.kind == GroupRow && !groups.contains(r.id))
+                groups << r.id;
+            else if (r.kind == FixtureRow && !fixtures.contains(r.id))
+                fixtures << r.id;
         }
-        if (parts.size() == 1 && at.kind == GroupRow)
-            menu.addAction(tr("Edit the group's layout"), this, [this, at]() { emit editGroupLayoutRequested(at.id); });
+        if (groups.isEmpty() && fixtures.isEmpty())
+            (at.kind == GroupRow ? groups : fixtures) << at.id;
+        ContextMenus::RigPlace place;
+        place.parent = this;
+        place.editable = !readOnly;
+        place.editLayout = [this](quint32 gid) { emit editGroupLayoutRequested(gid); };
+        // A row here is the group in this scene: it is taken out of the
+        // scene (below), not deleted from the show.
+        place.offerDelete = false;
+        place.offerMoveToFolder = false;
+        place.offerCreateGroup = false;
+        ContextMenus::rig(menu, m_doc, groups, fixtures, place);
         // Focus this look (docs/design/FOCUS_REFINE_DESIGN.md 6B): this row from the stage.
-        if (parts.size() == 1 && m_mode == Stack && (at.kind == GroupRow || at.kind == FixtureRow))
+        if (parts.size() == 1 && m_mode == Stack)
         {
-            QAction *refine = menu.addAction(focusThisText(), this, [this, at]() {
+            QAction *refine = menu.add(ContextMenu::Place, focusThisText(), [this, at]() {
                 emit refineRequested(at.scene, at.kind == GroupRow ? at.id : 0xFFFFFFFF,
                                      at.kind == FixtureRow ? at.id : 0xFFFFFFFF);
-            });
-            refine->setObjectName(QStringLiteral("outlineRefine"));
+            }, QStringLiteral("outlineRefine"));
             FocusMenu::setAvailable(refine, FocusMenu::focusCueBlocked(m_doc),
                                     tr("Move, zoom, focus and recolour this from the stage with the controller"));
         }
-        menu.addSeparator();
     }
+    // ---- A palette (look) row ----
+    if (parts.size() == 1 && at.kind == PaletteRow)
+    {
+        menu.add(ContextMenu::Place, tr("Show in Palettes"), [this, at]() { emit revealPaletteRequested(at.id); });
+        menu.add(ContextMenu::Place, tr("Move Up"), [this, at]() { shiftLook(at, -1); });
+        menu.add(ContextMenu::Place, tr("Move Down"), [this, at]() { shiftLook(at, +1); });
+        menu.add(ContextMenu::Edit, tr("Rename"), [this, clicked]() { editItem(clicked, NameCol); });
+    }
+    if (!parts.isEmpty())
+        menu.add(ContextMenu::Remove, ContextMenus::removeFromSceneText(parts.size()),
+                 [this, parts]() { removeRows(parts); }, QStringLiteral("outlineRemoveFromScene"));
+
+    // ---- A scene (or another function) ----
     if (at.kind == SceneRow && m_mode == Stack && clicked != nullptr && !readOnly)
     {
-        QAction *refine = menu.addAction(focusThisText(), this, [this, at]() {
+        QAction *refine = menu.add(ContextMenu::Place, focusThisText(), [this, at]() {
             emit refineRequested(at.id, 0xFFFFFFFF, 0xFFFFFFFF);
-        });
-        refine->setObjectName(QStringLiteral("outlineRefine"));
+        }, QStringLiteral("outlineRefine"));
         FocusMenu::setAvailable(refine, FocusMenu::focusCueBlocked(m_doc),
                                 tr("Move, zoom, focus and recolour this from the stage with the controller"));
     }
     if (!scenes.isEmpty() && m_mode == Navigator)
     {
         if (scenes.size() == 1)
-            menu.addAction(tr("Rename"), this, [this, clicked]() { editItem(clicked, NameCol); });
-        menu.addAction(scenes.size() == 1 ? tr("Duplicate") : tr("Duplicate %n", "", scenes.size()),
-                       this, [this, scenes]() { emit duplicateRequested(scenes); });
-        menu.addAction(scenes.size() == 1 ? tr("Delete…") : tr("Delete %n…", "", scenes.size()),
-                       this, [this, scenes]() { emit deleteScenesRequested(scenes); });
-        if (scenes.size() == 1)
-            ControlLearnDialog::addTo(&menu, m_doc, ControlMap::function(scenes.first()), this);
-        const QList<quint32> ordered = selectedFunctionsInOrder();
-        menu.addAction(QIcon(QStringLiteral(":/chaser.png")), tr("Chaser from selection"), this,
-                       [this, ordered, folder]() { emit chaserRequested(ordered, folder); })
-            ->setToolTip(tr("A new chaser with these as its steps, in the order you selected them"));
+            learnTrigger(scenes.first());
         // A chaser: make it a Show Tree cue list in place (W5's Import).
         const Function *one = scenes.size() == 1 && m_doc != nullptr ? m_doc->function(scenes.first()) : nullptr;
         if (one != nullptr && one->type() == Function::ChaserType)
         {
             const quint32 chaserId = one->id();
             const QString why = m_doc->showTree()->whyNotSend(chaserId);
-            QAction *send = menu.addAction(tr("Send to Show Tree…"), this,
-                                           [this, chaserId]() { emit sendToShowTreeRequested(chaserId); });
-            send->setObjectName(QStringLiteral("outlineSendToTree"));
+            QAction *send = menu.add(ContextMenu::Kind, tr("Send to Show Tree…"),
+                                     [this, chaserId]() { emit sendToShowTreeRequested(chaserId); },
+                                     QStringLiteral("outlineSendToTree"));
             send->setEnabled(why.isEmpty());
             send->setToolTip(why.isEmpty() ? tr("Make this chaser a Show Tree cue list in place, checked to play "
                                                 "the same; Restore original puts it back")
                                            : why);
         }
-        menu.addSeparator();
+        const QList<quint32> ordered = selectedFunctionsInOrder();
+        menu.add(ContextMenu::Organise, tr("Chaser from Selection"),
+                 [this, ordered, folder]() { emit chaserRequested(ordered, folder); })
+            ->setToolTip(tr("A new chaser with these as its steps, in the order you selected them"));
+        menu.add(ContextMenu::Edit, scenes.size() == 1 ? tr("Duplicate") : tr("Duplicate %1").arg(scenes.size()),
+                 [this, scenes]() { emit duplicateRequested(scenes); });
+        if (scenes.size() == 1)
+            menu.add(ContextMenu::Edit, tr("Rename"), [this, clicked]() { editItem(clicked, NameCol); });
+        menu.add(ContextMenu::Remove, scenes.size() == 1 ? tr("Delete…") : tr("Delete %1…").arg(scenes.size()),
+                 [this, scenes]() { emit deleteScenesRequested(scenes); });
     }
-    if (at.kind == FolderRow && !clicked->data(NameCol, PathRole).toString().isEmpty())
+
+    // ---- A folder, or empty space: what can be made here ----
+    const bool folderRow = at.kind == FolderRow && clicked != nullptr
+                           && !clicked->data(NameCol, PathRole).toString().isEmpty();
+    if (folderRow)
     {
         const QString path = clicked->data(NameCol, PathRole).toString();
-        menu.addAction(tr("Rename folder"), this, [this, clicked]() { editItem(clicked, NameCol); });
-        menu.addAction(tr("Delete folder"), this, [this, path]() { emit removeFolderRequested(path); })
+        menu.add(ContextMenu::Edit, tr("Rename Folder"), [this, clicked]() { editItem(clicked, NameCol); });
+        menu.add(ContextMenu::Remove, tr("Delete Folder"), [this, path]() { emit removeFolderRequested(path); })
             ->setToolTip(tr("What is filed in it moves up a level; nothing is deleted"));
     }
-    if (m_mode == Navigator)
+    if (m_mode == Navigator && (clicked == nullptr || at.kind == FolderRow))
     {
-        menu.addAction(QIcon(QStringLiteral(":/scene.png")),
-                       folder.isEmpty() ? tr("New scene") : tr("New scene in %1").arg(folder),
-                       this, [this, folder]() { emit newSceneRequested(folder); });
-        emit extendMenu(&menu);
-        menu.addSeparator();
+        menu.add(ContextMenu::Kind, folder.isEmpty() ? tr("New Scene") : tr("New Scene in %1").arg(folder),
+                 [this, folder]() { emit newSceneRequested(folder); })
+            ->setIcon(QIcon(QStringLiteral(":/scene.png")));
+        // The Build tab's own creators (New Function ▸, Function Wizard…).
+        QMenu *staging = new QMenu(out);
+        emit extendMenu(staging);
+        for (QAction *a : staging->actions())
+            if (!a->isSeparator())
+                menu.add(ContextMenu::Kind, a);
     }
-    if (clicked != nullptr && clicked->childCount() > 0)
-    {
-        menu.addAction(tr("Open all under this"), this, [this, clicked]() { setSubtreeExpanded(clicked, true); });
-        menu.addAction(tr("Close all under this"), this, [this, clicked]() { setSubtreeExpanded(clicked, false); });
-    }
-    menu.addAction(tr("Expand all"), this, &ProgrammingOutline::expandEverything);
-    menu.addAction(tr("Collapse all"), this, &ProgrammingOutline::collapseEverything);
-    menu.exec(viewport()->mapToGlobal(pos));
+    subtreeItems();
+    menu.add(ContextMenu::View, tr("Expand All"), [this]() { expandEverything(); });
+    menu.add(ContextMenu::View, tr("Collapse All"), [this]() { collapseEverything(); });
 }
 
 /****************************************************************************

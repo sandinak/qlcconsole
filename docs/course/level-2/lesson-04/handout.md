@@ -144,7 +144,7 @@ floor, and its **Length** is that one breath.
 | Problem | Try |
 |---|---|
 | The browser shows nothing for your search | Clear the search box first: it keeps what you typed last time. |
-| The new palette isn't in the song's folder | Click the folder in the Library before **+ Palette**. Or right-click it → **Move to folder**. |
+| The new palette isn't in the song's folder | Click the folder in the Library before **+ Palette**. Or right-click it → **Move to Folder**. |
 | No **Its own colour / dimmer** in the menu | Use the ⋯ on the **Dimmer effect** row, not the Colour row. |
 | The steps don't twinkle | Drop Step Sparkle on the **Steps** row, not on the dashed box. |
 | Something else went wrong | Undo (⌘Z) one step at a time. |

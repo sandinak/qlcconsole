@@ -112,14 +112,3 @@ void PowerSourceItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
     emit itemDropped(this);
 }
 
-void PowerSourceItem::contextMenuEvent(QGraphicsSceneContextMenuEvent *event)
-{
-    QMenu menu;
-    QAction *lockAct = menu.addAction(
-        m_locked ? tr("Unlock Power Source") : tr("Lock Power Source"));
-
-    // The model (and persistence) lives in PowerDistribution, which the view
-    // owns — it toggles the flag and rebuilds this item with the new state.
-    if (menu.exec(event->screenPos()) == lockAct)
-        emit lockToggleRequested(m_index);
-}
