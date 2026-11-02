@@ -4,22 +4,22 @@
 <context>
     <name>ArtNetController</name>
     <message>
-        <location filename="artnetcontroller.cpp" line="890"/>
+        <location filename="artnetcontroller.cpp" line="922"/>
         <source>Art-Net to %1: not reachable since %2</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="artnetcontroller.cpp" line="906"/>
+        <location filename="artnetcontroller.cpp" line="938"/>
         <source>Art-Net node %1: stopped answering since %2</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="artnetcontroller.cpp" line="909"/>
+        <location filename="artnetcontroller.cpp" line="941"/>
         <source>Art-Net node %1, port %2 (%3): DMX output short since %4</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="artnetcontroller.cpp" line="913"/>
+        <location filename="artnetcontroller.cpp" line="945"/>
         <source>Art-Net node %1, port %2 (%3): not outputting DMX since %4</source>
         <translation type="unfinished"></translation>
     </message>
@@ -293,7 +293,7 @@
     </message>
     <message>
         <location filename="artnetplugin.cpp" line="193"/>
-        <location filename="artnetplugin.cpp" line="659"/>
+        <location filename="artnetplugin.cpp" line="661"/>
         <source>Status: Not open</source>
         <translation>Stav: Neotevřený</translation>
     </message>
@@ -366,57 +366,57 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="artnetplugin.cpp" line="655"/>
+        <location filename="artnetplugin.cpp" line="657"/>
         <source>Input</source>
         <translation>Vstup</translation>
     </message>
     <message>
-        <location filename="artnetplugin.cpp" line="664"/>
+        <location filename="artnetplugin.cpp" line="666"/>
         <source>Bind failed</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="artnetplugin.cpp" line="666"/>
+        <location filename="artnetplugin.cpp" line="668"/>
         <source>Open</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="artnetplugin.cpp" line="667"/>
+        <location filename="artnetplugin.cpp" line="669"/>
         <source>Status</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="artnetplugin.cpp" line="670"/>
+        <location filename="artnetplugin.cpp" line="672"/>
         <source>Packets received: </source>
         <translation>Přijaté pakety:</translation>
     </message>
     <message>
-        <location filename="artnetplugin.cpp" line="728"/>
+        <location filename="artnetplugin.cpp" line="730"/>
         <source>has no IP address yet: set its IP</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="artnetplugin.cpp" line="730"/>
+        <location filename="artnetplugin.cpp" line="732"/>
         <source>self-assigned address (no DHCP server answered it): set its IP</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="artnetplugin.cpp" line="732"/>
+        <location filename="artnetplugin.cpp" line="734"/>
         <source>on its factory Art-Net address, not this network: set its IP</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="artnetplugin.cpp" line="733"/>
+        <location filename="artnetplugin.cpp" line="735"/>
         <source>not on this computer&apos;s network: set its IP</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="artnetplugin.cpp" line="744"/>
+        <location filename="artnetplugin.cpp" line="746"/>
         <source>No network on this computer contains %1, so it cannot be sent to directly.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="artnetplugin.cpp" line="752"/>
+        <location filename="artnetplugin.cpp" line="754"/>
         <source>The send failed (see the log).</source>
         <translation type="unfinished"></translation>
     </message>

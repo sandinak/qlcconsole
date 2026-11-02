@@ -14,13 +14,13 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="unix/peperoni.cpp" line="210"/>
+        <location filename="unix/peperoni.cpp" line="211"/>
         <location filename="win32/peperoni.cpp" line="221"/>
         <source>Do you wish to re-scan your hardware?</source>
         <translation type="unfinished">ハードウェアを再スキャンしますか？</translation>
     </message>
     <message>
-        <location filename="unix/peperoni.cpp" line="101"/>
+        <location filename="unix/peperoni.cpp" line="102"/>
         <source>This plugin provides DMX input and output support for Peperoni DMX devices.</source>
         <translation type="unfinished">このプラグインは、Peperoni DMX デバイスとの間でDMX信号を送受信します。</translation>
     </message>
@@ -28,7 +28,7 @@
 <context>
     <name>PeperoniDevice</name>
     <message>
-        <location filename="unix/peperonidevice.cpp" line="172"/>
+        <location filename="unix/peperonidevice.cpp" line="188"/>
         <location filename="win32/peperonidevice.cpp" line="70"/>
         <source>Device is working correctly.</source>
         <translation type="unfinished">デバイスは正常に動作しています。</translation>
@@ -44,50 +44,50 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="unix/peperonidevice.cpp" line="140"/>
+        <location filename="unix/peperonidevice.cpp" line="156"/>
         <location filename="win32/peperonidevice.cpp" line="111"/>
         <source>Unknown</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="unix/peperonidevice.cpp" line="159"/>
+        <location filename="unix/peperonidevice.cpp" line="175"/>
         <source>Universe</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="unix/peperonidevice.cpp" line="174"/>
+        <location filename="unix/peperonidevice.cpp" line="190"/>
         <source>Firmware version: %1</source>
         <translation type="unfinished">ファームウェアバージョン: %1</translation>
     </message>
     <message>
-        <location filename="unix/peperonidevice.cpp" line="180"/>
+        <location filename="unix/peperonidevice.cpp" line="196"/>
         <source>Unknown device</source>
         <translation type="unfinished">不明なデバイス</translation>
     </message>
     <message>
-        <location filename="unix/peperonidevice.cpp" line="183"/>
+        <location filename="unix/peperonidevice.cpp" line="199"/>
         <source>Cannot connect to USB device.</source>
         <translation type="unfinished">USBデバイスに接続できません。</translation>
     </message>
     <message>
-        <location filename="unix/peperonidevice.cpp" line="195"/>
+        <location filename="unix/peperonidevice.cpp" line="211"/>
         <source>Input line</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="unix/peperonidevice.cpp" line="197"/>
-        <location filename="unix/peperonidevice.cpp" line="214"/>
+        <location filename="unix/peperonidevice.cpp" line="213"/>
+        <location filename="unix/peperonidevice.cpp" line="230"/>
         <source>Open</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="unix/peperonidevice.cpp" line="199"/>
-        <location filename="unix/peperonidevice.cpp" line="216"/>
+        <location filename="unix/peperonidevice.cpp" line="215"/>
+        <location filename="unix/peperonidevice.cpp" line="232"/>
         <source>Close</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="unix/peperonidevice.cpp" line="212"/>
+        <location filename="unix/peperonidevice.cpp" line="228"/>
         <source>Output line</source>
         <translation type="unfinished"></translation>
     </message>

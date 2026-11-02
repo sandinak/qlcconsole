@@ -58,17 +58,17 @@
 <context>
     <name>HIDOSXJoystick</name>
     <message>
-        <location filename="macx/hidosxjoystick.cpp" line="354"/>
+        <location filename="macx/hidosxjoystick.cpp" line="360"/>
         <source>macOS does not list this controller any more</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="macx/hidosxjoystick.cpp" line="356"/>
+        <location filename="macx/hidosxjoystick.cpp" line="362"/>
         <source>macOS is not letting qlcconsole read the controller. Allow qlcconsole in System Settings → Privacy &amp; Security → Input Monitoring, then quit and reopen it.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="macx/hidosxjoystick.cpp" line="360"/>
+        <location filename="macx/hidosxjoystick.cpp" line="366"/>
         <source>macOS could not open the controller (IOKit error 0x%1)</source>
         <translation type="unfinished"></translation>
     </message>

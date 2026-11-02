@@ -14,13 +14,13 @@
         <translation>Impossible de trouver la bibliothèque usbdmx.dll ou celle-ci est trop ancienne pour être utilisée avec QLC.</translation>
     </message>
     <message>
-        <location filename="unix/peperoni.cpp" line="210"/>
+        <location filename="unix/peperoni.cpp" line="211"/>
         <location filename="win32/peperoni.cpp" line="221"/>
         <source>Do you wish to re-scan your hardware?</source>
         <translation>Souhaitez-vous redétecter le matériel ?</translation>
     </message>
     <message>
-        <location filename="unix/peperoni.cpp" line="101"/>
+        <location filename="unix/peperoni.cpp" line="102"/>
         <source>This plugin provides DMX input and output support for Peperoni DMX devices.</source>
         <translation>Ce plugin offre le support de l&apos;entrée et la sortie des interfaces Peperoni.</translation>
     </message>
@@ -28,7 +28,7 @@
 <context>
     <name>PeperoniDevice</name>
     <message>
-        <location filename="unix/peperonidevice.cpp" line="172"/>
+        <location filename="unix/peperonidevice.cpp" line="188"/>
         <location filename="win32/peperonidevice.cpp" line="70"/>
         <source>Device is working correctly.</source>
         <translation>Le périphérique fonctionne correctement.</translation>
@@ -44,50 +44,50 @@
         <translation>Aucun</translation>
     </message>
     <message>
-        <location filename="unix/peperonidevice.cpp" line="140"/>
+        <location filename="unix/peperonidevice.cpp" line="156"/>
         <location filename="win32/peperonidevice.cpp" line="111"/>
         <source>Unknown</source>
         <translation>Inconnu</translation>
     </message>
     <message>
-        <location filename="unix/peperonidevice.cpp" line="159"/>
+        <location filename="unix/peperonidevice.cpp" line="175"/>
         <source>Universe</source>
         <translation>Univers</translation>
     </message>
     <message>
-        <location filename="unix/peperonidevice.cpp" line="174"/>
+        <location filename="unix/peperonidevice.cpp" line="190"/>
         <source>Firmware version: %1</source>
         <translation>Version du firmware : %1</translation>
     </message>
     <message>
-        <location filename="unix/peperonidevice.cpp" line="180"/>
+        <location filename="unix/peperonidevice.cpp" line="196"/>
         <source>Unknown device</source>
         <translation>Périphérique inconnu</translation>
     </message>
     <message>
-        <location filename="unix/peperonidevice.cpp" line="183"/>
+        <location filename="unix/peperonidevice.cpp" line="199"/>
         <source>Cannot connect to USB device.</source>
         <translation>Impossible de se connecter au périphérique USB.</translation>
     </message>
     <message>
-        <location filename="unix/peperonidevice.cpp" line="195"/>
+        <location filename="unix/peperonidevice.cpp" line="211"/>
         <source>Input line</source>
         <translation>Ligne d&apos;entrée</translation>
     </message>
     <message>
-        <location filename="unix/peperonidevice.cpp" line="197"/>
-        <location filename="unix/peperonidevice.cpp" line="214"/>
+        <location filename="unix/peperonidevice.cpp" line="213"/>
+        <location filename="unix/peperonidevice.cpp" line="230"/>
         <source>Open</source>
         <translation>Ouvert</translation>
     </message>
     <message>
-        <location filename="unix/peperonidevice.cpp" line="199"/>
-        <location filename="unix/peperonidevice.cpp" line="216"/>
+        <location filename="unix/peperonidevice.cpp" line="215"/>
+        <location filename="unix/peperonidevice.cpp" line="232"/>
         <source>Close</source>
         <translation>Fermé</translation>
     </message>
     <message>
-        <location filename="unix/peperonidevice.cpp" line="212"/>
+        <location filename="unix/peperonidevice.cpp" line="228"/>
         <source>Output line</source>
         <translation>Ligne de sortie</translation>
     </message>

@@ -14,13 +14,13 @@
         <translation>La llibrería compartida usbdmc.dll no spha trobat o es massa vell per ser emprat amb QLC+.</translation>
     </message>
     <message>
-        <location filename="unix/peperoni.cpp" line="210"/>
+        <location filename="unix/peperoni.cpp" line="211"/>
         <location filename="win32/peperoni.cpp" line="221"/>
         <source>Do you wish to re-scan your hardware?</source>
         <translation>Vol tornar a escanejar el seu maquinari?</translation>
     </message>
     <message>
-        <location filename="unix/peperoni.cpp" line="101"/>
+        <location filename="unix/peperoni.cpp" line="102"/>
         <source>This plugin provides DMX input and output support for Peperoni DMX devices.</source>
         <translation>Aquest plugin proveeix suport d&apos;entrada i sortida DMX per dispositius Peperoni.</translation>
     </message>
@@ -28,7 +28,7 @@
 <context>
     <name>PeperoniDevice</name>
     <message>
-        <location filename="unix/peperonidevice.cpp" line="172"/>
+        <location filename="unix/peperonidevice.cpp" line="188"/>
         <location filename="win32/peperonidevice.cpp" line="70"/>
         <source>Device is working correctly.</source>
         <translation>El dispositiu està treballant correctament.</translation>
@@ -44,50 +44,50 @@
         <translation>Res</translation>
     </message>
     <message>
-        <location filename="unix/peperonidevice.cpp" line="140"/>
+        <location filename="unix/peperonidevice.cpp" line="156"/>
         <location filename="win32/peperonidevice.cpp" line="111"/>
         <source>Unknown</source>
         <translation>Desconegut</translation>
     </message>
     <message>
-        <location filename="unix/peperonidevice.cpp" line="159"/>
+        <location filename="unix/peperonidevice.cpp" line="175"/>
         <source>Universe</source>
         <translation>Univers</translation>
     </message>
     <message>
-        <location filename="unix/peperonidevice.cpp" line="174"/>
+        <location filename="unix/peperonidevice.cpp" line="190"/>
         <source>Firmware version: %1</source>
         <translation>Revisió del Firmware: %1</translation>
     </message>
     <message>
-        <location filename="unix/peperonidevice.cpp" line="180"/>
+        <location filename="unix/peperonidevice.cpp" line="196"/>
         <source>Unknown device</source>
         <translation>Dispositiu desconegut</translation>
     </message>
     <message>
-        <location filename="unix/peperonidevice.cpp" line="183"/>
+        <location filename="unix/peperonidevice.cpp" line="199"/>
         <source>Cannot connect to USB device.</source>
         <translation>No es pot connectar al dispositiu USB.</translation>
     </message>
     <message>
-        <location filename="unix/peperonidevice.cpp" line="195"/>
+        <location filename="unix/peperonidevice.cpp" line="211"/>
         <source>Input line</source>
         <translation>Línia d&apos;entrada</translation>
     </message>
     <message>
-        <location filename="unix/peperonidevice.cpp" line="197"/>
-        <location filename="unix/peperonidevice.cpp" line="214"/>
+        <location filename="unix/peperonidevice.cpp" line="213"/>
+        <location filename="unix/peperonidevice.cpp" line="230"/>
         <source>Open</source>
         <translation>Obre</translation>
     </message>
     <message>
-        <location filename="unix/peperonidevice.cpp" line="199"/>
-        <location filename="unix/peperonidevice.cpp" line="216"/>
+        <location filename="unix/peperonidevice.cpp" line="215"/>
+        <location filename="unix/peperonidevice.cpp" line="232"/>
         <source>Close</source>
         <translation>Tanca</translation>
     </message>
     <message>
-        <location filename="unix/peperonidevice.cpp" line="212"/>
+        <location filename="unix/peperonidevice.cpp" line="228"/>
         <source>Output line</source>
         <translation>Línia de sortida</translation>
     </message>
