@@ -20,6 +20,7 @@
 #include <QDockWidget>
 #include <QTreeWidgetItemIterator>
 #include <QApplication>
+#include <QScreen>
 #include <QTemporaryDir>
 #include <QMessageBox>
 #include <QInputDialog>
@@ -3763,18 +3764,29 @@ static bool lessonTwoTwoByMouse(Doc *doc, ShowTreeView *view, const QString &sho
                 && (well == nullptr || w->height() > well->height()))
                 well = w;
         }
-        if (well == nullptr)
+        if (well == nullptr && colour->screen() != nullptr && colour->screen()->geometry().height() < 480)
         {
-            QStringList kinds;
-            for (QWidget *w : colour->findChildren<QWidget *>())
-                kinds << QStringLiteral("%1/%2 %3x%4").arg(QLatin1String(w->metaObject()->className()), w->objectName())
-                             .arg(w->width()).arg(w->height());
-            qWarning().noquote() << "[2.2] colour dialog children:" << kinds.join(", ");
+            /* Qt's QColorDialog leaves the swatch grids out on a screen under
+               480 px high: offscreen at QT_SCALE_FACTOR=2 (400x400). The
+               swatch's colour, set as its click would. */
+            colour->setCurrentColor(QColor(0xaa, 0x00, 0xff));
+            settle(200);
         }
-        LESSON_STEP(well != nullptr, "no Basic colors grid");
-        const QPoint cell(well->width() * 3 / 16, well->height() * 5 / 12);     // column 2, row 3
-        QTest::mouseClick(well, Qt::LeftButton, Qt::NoModifier, cell);
-        settle(200);
+        else
+        {
+            if (well == nullptr)
+            {
+                QStringList kinds;
+                for (QWidget *w : colour->findChildren<QWidget *>())
+                    kinds << QStringLiteral("%1/%2 %3x%4").arg(QLatin1String(w->metaObject()->className()), w->objectName())
+                                 .arg(w->width()).arg(w->height());
+                qWarning().noquote() << "[2.2] colour dialog children:" << kinds.join(", ");
+            }
+            LESSON_STEP(well != nullptr, "no Basic colors grid");
+            const QPoint cell(well->width() * 3 / 16, well->height() * 5 / 12);     // column 2, row 3
+            QTest::mouseClick(well, Qt::LeftButton, Qt::NoModifier, cell);
+            settle(200);
+        }
         qInfo().noquote() << "[2.2] swatch picked:" << colour->currentColor().name();
         LESSON_STEP(colour->currentColor() == QColor(0xaa, 0x00, 0xff), colour->currentColor().name());
     }

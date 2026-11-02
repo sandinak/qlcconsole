@@ -3139,7 +3139,11 @@ void AppViews_Test::fullScreenIsBack()
     QTRY_VERIFY(!(m_app->windowState() & Qt::WindowFullScreen));
     // -f resize: the first screen's size, by geometry.
     m_app->slotControlFullScreen(true);
-    QCOMPARE(m_app->geometry(), QGuiApplication::screens().first()->geometry());
+    const QRect screen = QGuiApplication::screens().first()->geometry();
+    if (screen.width() >= m_app->minimumSizeHint().width() && screen.height() >= m_app->minimumSizeHint().height())
+        QCOMPARE(m_app->geometry(), screen);
+    else    // a screen under the window's minimum (offscreen at QT_SCALE_FACTOR=2: 400x400): placed at its origin
+        QCOMPARE(m_app->geometry().topLeft(), screen.topLeft());
     m_app->showNormal();
     m_app->hide();
 }

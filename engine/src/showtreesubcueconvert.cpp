@@ -698,6 +698,8 @@ bool ShowTreeController::makeSubCues(const QList<quint32> &cueIds, quint32 paren
     for (int i = 0; i < m_productions.count() && pi < 0; ++i)
         if (m_productions.at(i).list(list->id) != nullptr)
             pi = i;
+    if (pi < 0)
+        return no(tr("No such cue."));
     const Production &prod = m_productions.at(pi);
     for (int i : at)
     {

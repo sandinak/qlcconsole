@@ -15,6 +15,8 @@
 #include <QMap>
 #include <QString>
 
+#include <climits>
+
 /** @addtogroup engine Engine
  * @{
  */
@@ -51,6 +53,17 @@ struct Settings
     bool loops() const { return runs <= 0; }
 };
 
+/** @p v as an int in [@p lo, @p hi], NaN as @p lo. Clamped as a double first:
+ *  a value from a show file (1e30) cast straight to int is undefined. */
+inline int clampToInt(double v, int lo, int hi)
+{
+    if (!(v >= double(lo)))
+        return lo;
+    if (v >= double(hi))
+        return hi;
+    return int(v);
+}
+
 /** @p params' run settings (a QMap or QHash of name to value), with the script's own for anything not set:
  *  @p oneShot (it runs once unless told otherwise) and @p scriptRelease
  *  (its onFinish is "release"). */
@@ -59,11 +72,11 @@ inline Settings resolve(const Map &params, bool oneShot, bool scriptRelease)
 {
     Settings s;
     auto it = params.constFind(runsKey());
-    s.runs = it != params.constEnd() ? qBound(0, int(it.value() + 0.5), kMaxRuns) : (oneShot ? 1 : 0);
+    s.runs = it != params.constEnd() ? clampToInt(double(it.value()) + 0.5, 0, kMaxRuns) : (oneShot ? 1 : 0);
     it = params.constFind(atEndKey());
     s.release = it != params.constEnd() ? it.value() >= 0.5 : scriptRelease;
     it = params.constFind(lengthKey());
-    s.lengthMs = it != params.constEnd() ? qMax(0, int(it.value())) : 0;
+    s.lengthMs = it != params.constEnd() ? clampToInt(double(it.value()), 0, INT_MAX) : 0;
     return s;
 }
 }

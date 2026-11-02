@@ -3970,8 +3970,11 @@ void ShowTreeView_Test::planPopOutWindow()
     QVERIFY(win->plan()->grab().width() > 0);
 
     // Esc closes it; reopening restores size and place.
-    win->move(120, 90);
-    win->resize(730, 610);
+    /* Within the screen: restoreGeometry() fits a window onto it (offscreen
+       at QT_SCALE_FACTOR=2 the screen is 400x400). */
+    const QRect avail = win->screen()->availableGeometry();
+    win->move(avail.topLeft() + QPoint(qMin(120, avail.width() / 10), qMin(90, avail.height() / 10)));
+    win->resize(QSize(730, 610).boundedTo(avail.size() * 3 / 4).expandedTo(win->minimumSizeHint()));
     const QRect geo = win->geometry();
     QTest::keyClick(win, Qt::Key_Escape);
     QTRY_VERIFY(view.linePlanWindow() == nullptr);

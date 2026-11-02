@@ -16,13 +16,15 @@ option(QLC_NO_TESTS "Do not build the unit tests" OFF)
 # -Wreorder -- and GCC treats -Werror=<unknown warning> as an error in itself,
 # so hard-coding either name breaks the other toolchain outright. Probe instead
 # of guessing: the check costs one compile at configure time and cannot break a
-# compiler nobody here has tried.
+# compiler nobody here has tried. C++ only: the tree has C sources too
+# (webaccess's http_parser.c), and GCC warns that -Werror=reorder is not
+# valid for C.
 include(CheckCXXCompilerFlag)
 foreach(_reorder_flag -Werror=reorder-ctor -Werror=reorder)
     string(MAKE_C_IDENTIFIER "HAVE${_reorder_flag}" _reorder_var)
     check_cxx_compiler_flag("${_reorder_flag}" ${_reorder_var})
     if(${_reorder_var})
-        add_compile_options(${_reorder_flag})
+        add_compile_options($<$<COMPILE_LANGUAGE:CXX>:${_reorder_flag}>)
         break()
     endif()
 endforeach()

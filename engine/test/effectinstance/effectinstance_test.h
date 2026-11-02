@@ -129,6 +129,9 @@ private slots:
      *  tick, not once per value: a busy Art-Net input landed there too and
      *  rebuilt it ~90,000 times a second on the GUI thread (pb5). */
     void midiDataIsPublishedOncePerTick();
+    /** Runs and length from a show file are clamped before they become ints:
+     *  1e30, -1e30 and NaN were cast straight to int (undefined). */
+    void outOfRangeRunSettingsAreClamped();
 
 private:
     Doc          *m_doc = nullptr;
