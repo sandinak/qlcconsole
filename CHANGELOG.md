@@ -1076,6 +1076,14 @@ skipped). Upstream fixes taken:
 
 ### Fixed
 
+- **Show Review's no-light-zone check reads a UST where it points.** A
+  head that points with pan DMX 0-127 and spins above it (the two-arm
+  beam) was read over the whole channel, so PWR-11 tested a quarter turn
+  off: a UST aimed into a zone could pass, one aimed away could be flagged.
+  The check now reads pan and tilt across the pointing band the fixture
+  declares, as the rig views and the move-speed checks do; heads without a
+  band read as before.
+
 - **Heads whose pan spins past half the channel are drawn where they
   point.** A two-arm beam (the USTs) points with pan DMX 0-127 and spins
   with 128-255. Its DMX was right, but the Rig Overview, the plot and the

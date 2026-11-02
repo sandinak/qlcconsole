@@ -80,7 +80,9 @@ indexed pan band (`RotationIndexed`) over the whole channel and drew the
 USTs a quarter turn off. Fixed with `Fixture::positionBand()` /
 `positionFraction()` in the rig view, the plot and the readout (CHANGELOG
 0.4.0 Fixed). `MoveSpeed`'s travel time and follower now measure a banded head along
-its band too (lft2, 2026-11-01). Open: nothing known.
+its band too (lft2, 2026-11-01), and Show Review's no-light-zone check
+(PWR-11) reads a banded head's pan and tilt across it (zpan, 2026-11-02).
+Open: nothing known.
 
 ## Line aim pop-out (lpv, 2026-11-01) — built, leftovers
 
