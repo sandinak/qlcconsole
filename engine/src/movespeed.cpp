@@ -56,12 +56,41 @@ double tiltSpanDeg(const Fixture *fx)
     return max != 0 ? max : 270.0;
 }
 
+/* The axis's pointing band (Fixture::positionBand()): a head that points with
+   DMX 0-127 and spins above that covers its whole degree range in that band,
+   not in the whole channel. Fractions here are of the DMX range (value / 255).
+   Allocation-free: the follower steps this every frame. */
+static const QLCChannel *axisChannel(const Fixture *fx, QLCChannel::Group group)
+{
+    const QLCFixtureMode *mode = fx != nullptr ? fx->fixtureMode() : nullptr;
+    const quint32 ch = fx != nullptr ? fx->channelNumber(group, QLCChannel::MSB) : QLCChannel::invalid();
+    return (mode != nullptr && ch != QLCChannel::invalid()) ? mode->channel(ch) : nullptr;
+}
+
+/** How far along the band (0..1) a DMX fraction is; the fraction itself when
+ *  the axis has no band (and no channel). */
+static double bandPos(const QLCChannel *ch, double dmxFraction)
+{
+    return ch != nullptr ? Fixture::positionFraction(ch, dmxFraction * 255.0) : dmxFraction;
+}
+
+/** The share of the DMX range the pointing band covers (1 when it is all). */
+static double bandWidth(const QLCChannel *ch)
+{
+    uchar lo = 0, hi = 255;
+    if (ch != nullptr)
+        Fixture::positionBand(ch, lo, hi);
+    return hi > lo ? double(hi - lo) / 255.0 : 1.0;
+}
+
 double travelMs(const Fixture *fx, double panFrom, double tiltFrom, double panTo, double tiltTo)
 {
     if (fx == nullptr)
         return 0.0;
-    const double panDeg = qAbs(panTo - panFrom) * panSpanDeg(fx);
-    const double tiltDeg = qAbs(tiltTo - tiltFrom) * tiltSpanDeg(fx);
+    const QLCChannel *panCh = axisChannel(fx, QLCChannel::Pan);
+    const QLCChannel *tiltCh = axisChannel(fx, QLCChannel::Tilt);
+    const double panDeg = qAbs(bandPos(panCh, panTo) - bandPos(panCh, panFrom)) * panSpanDeg(fx);
+    const double tiltDeg = qAbs(bandPos(tiltCh, tiltTo) - bandPos(tiltCh, tiltFrom)) * tiltSpanDeg(fx);
     return 1000.0 * qMax(panDeg, tiltDeg) / degreesPerSecond(fx);
 }
 
@@ -115,8 +144,9 @@ bool Follower::step(const Fixture *fx, double panTo, double tiltTo, qint64 nowMs
         const double d = to - at;
         at = qAbs(d) <= maxFrac ? to : at + (d > 0 ? maxFrac : -maxFrac);
     };
-    approach(pan, panTo, deg / panSpanDeg(fx));
-    approach(tilt, tiltTo, deg / tiltSpanDeg(fx));
+    // A degree is a smaller share of the DMX range on a banded axis.
+    approach(pan, panTo, deg / panSpanDeg(fx) * bandWidth(axisChannel(fx, QLCChannel::Pan)));
+    approach(tilt, tiltTo, deg / tiltSpanDeg(fx) * bandWidth(axisChannel(fx, QLCChannel::Tilt)));
     return !atRest(panTo, tiltTo);
 }
 

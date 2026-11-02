@@ -31,7 +31,9 @@
  * hatched outline with its name) or a laser's scan window (a dashed amber
  * outline where its H x V window lands). Both take no mouse buttons -- the
  * canvas under them stays clickable; MonitorGraphicsView finds a zone by
- * hit-testing (zoneAt()) for double-click and right-click.
+ * hit-testing (zoneAt()) for double-click and right-click. A zone is dragged
+ * by its outline or its centre handle only (grabAt()), never by its inside,
+ * so the plot under it stays selectable.
  */
 class ZoneItem final : public QGraphicsItem
 {
@@ -46,6 +48,11 @@ public:
     quint32 id() const { return m_id; }
     QPolygonF outline() const { return m_outline; }
     bool contains(const QPointF &scenePos) const;
+    /** Whether @a scenePos is on the zone's outline (within @a tol pixels) or
+     *  on its centre handle: where a drag takes hold. Only a Zone grabs. */
+    bool grabAt(const QPointF &scenePos, qreal tol) const;
+    /** The centre handle's rectangle, in scene pixels. */
+    QRectF handleRect() const;
 
     QRectF boundingRect() const override;
     QPainterPath shape() const override;

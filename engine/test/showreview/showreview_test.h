@@ -89,6 +89,7 @@ private slots:
     void fx03();
     void file03();
     void moveSpeed();
+    void moveSpeedUsesThePointingBand();
     void mov01();
     void mov02();
     void mov08();

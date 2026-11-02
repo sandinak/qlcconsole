@@ -23,6 +23,8 @@
 #include "structureduplicate_test.h"
 #include "structureduplicate.h"
 #include "monitorproperties.h"
+#include "hanger.h"
+#include "truss.h"
 #include "patchplanner.h"
 #include "fixturegroup.h"
 #include "scene.h"
@@ -505,3 +507,186 @@ void StructureDuplicate_Test::nothingToCopyIsSaid()
 }
 
 QTEST_MAIN(StructureDuplicate_Test)
+
+/* A hanger with a light on it (rp.hangerId), and a child bar of @p parent with
+   a light on that and a hanger on the bar. */
+static Fixture *lightOn(Doc *doc, const QString &name, quint32 address, FixtureRigProps rp)
+{
+    Fixture *fx = new Fixture(doc);
+    fx->setChannels(5);
+    fx->setUniverse(0);
+    fx->setAddress(address);
+    fx->setPatched(true);
+    fx->setName(name);
+    if (!doc->addFixture(fx))
+    {
+        delete fx;
+        return nullptr;
+    }
+    doc->monitorProperties()->setFixtureRigProps(fx->id(), rp);
+    return fx;
+}
+
+struct Hung
+{
+    Hanger *h1 = nullptr, *h2 = nullptr;
+    Truss *bar = nullptr;
+    Fixture *onH1 = nullptr, *onBar = nullptr, *onH2 = nullptr;
+};
+
+static Hung hangThings(Doc *doc, const Rig &r)
+{
+    Hung g;
+    MonitorProperties *props = doc->monitorProperties();
+    g.h1 = props->addHanger(Hanger::OnTruss, r.t1->id());
+    g.h1->setName("Hook A");
+    g.h1->setAlong(1.0f);
+    g.h1->setArm(0.4f);
+    g.h1->setDrop(0.6f);
+    g.h1->setAngle(90.0f);
+    g.bar = props->addTruss();
+    g.bar->setName("T1 Bar");
+    g.bar->setLength(2.0f);
+    g.bar->setParentTrussId(r.t1->id());
+    g.bar->setParentOffset(2.0f);
+    g.bar->setBarStandoff(0.5f);
+    g.bar->setBarCrossShift(0.2f);
+    props->recomputeChildTrusses();
+    g.h2 = props->addHanger(Hanger::OnTruss, g.bar->id());
+    g.h2->setName("Bar Hook");
+    g.h2->setAlong(0.5f);
+    props->recomputeHangers();
+
+    FixtureRigProps rp;
+    rp.hangerId = g.h1->id();
+    rp.panOffsetDeg = 5.0f;
+    g.onH1 = lightOn(doc, "T1-Hung 1", 30, rp);
+    FixtureRigProps rb;
+    rb.trussId = g.bar->id();
+    rb.trussOffset = 1.0f;
+    g.onBar = lightOn(doc, "T1-Bar Spot", 35, rb);
+    FixtureRigProps rh;
+    rh.hangerId = g.h2->id();
+    g.onH2 = lightOn(doc, "T1-Bar Hung", 40, rh);
+    return g;
+}
+
+void StructureDuplicate_Test::hangersAndChildBarsAreCopied()
+{
+    const Rig r = makeRig(m_doc);
+    const Hung g = hangThings(m_doc, r);
+    MonitorProperties *props = m_doc->monitorProperties();
+    const int trussesBefore = props->trusses().size();
+    const int hangersBefore = props->hangers().size();
+
+    SD::Options opt;
+    const SD::Preview pv = SD::preview(m_doc, r.k1, { r.k2, r.k3 }, opt);
+    QCOMPARE(pv.rows.size(), 12);                       // 6 on the truss, 6 hung
+    QCOMPARE(pv.newHangers, 4);
+    QCOMPARE(pv.newBars, 2);
+    QCOMPARE(m_doc->fixtures().size(), 6);              // preview changes nothing
+    QCOMPARE(props->hangers().size(), hangersBefore);
+
+    const SD::Result res = SD::apply(m_doc, r.k1, { r.k2, r.k3 }, opt);
+    QCOMPARE(res.created, 12);
+    QCOMPARE(res.patched, 12);
+    QCOMPARE(res.createdHangers, 4);
+    QCOMPARE(res.createdBars, 2);
+    QCOMPARE(props->trusses().size(), trussesBefore + 2);
+    QCOMPARE(props->hangers().size(), hangersBefore + 4);
+
+    // T-2's bar and hangers: named for it, hung from it, shaped like the originals.
+    Truss *bar2 = nullptr;
+    foreach (Truss *t, props->trusses())
+        if (t->isChildBar() && t->parentTrussId() == r.t2->id())
+            bar2 = t;
+    QVERIFY(bar2 != nullptr);
+    QCOMPARE(bar2->name(), QString("T2 Bar"));
+    QCOMPARE(bar2->length(), 2.0f);
+    QCOMPARE(bar2->parentOffset(), 2.0f);
+    QCOMPARE(bar2->barStandoff(), 0.5f);
+    QCOMPARE(bar2->barCrossShift(), 0.2f);
+    QVERIFY(bar2->id() != g.bar->id());
+    QVERIFY(qAbs(bar2->origin().x() - g.bar->origin().x() - 5.0f) < 0.01f);   // moved with T-2
+
+    Hanger *hook2 = nullptr, *barHook2 = nullptr;
+    foreach (Hanger *h, props->hangers())
+    {
+        if (h->parentKind() == Hanger::OnTruss && h->parentId() == r.t2->id())
+            hook2 = h;
+        if (h->parentKind() == Hanger::OnTruss && h->parentId() == bar2->id())
+            barHook2 = h;
+    }
+    QVERIFY(hook2 != nullptr && barHook2 != nullptr);
+    QCOMPARE(hook2->name(), QString("T-2 Hook A"));
+    QCOMPARE(hook2->along(), 1.0f);
+    QCOMPARE(hook2->arm(), 0.4f);
+    QCOMPARE(hook2->drop(), 0.6f);
+    QCOMPARE(hook2->angle(), 90.0f);
+    QCOMPARE(barHook2->along(), 0.5f);
+
+    // The lights on them: named, mounted on the copies, calibration kept, patched.
+    const quint32 f1 = props->fixtureOnHanger(hook2->id());
+    QVERIFY(f1 != UINT_MAX);
+    QCOMPARE(m_doc->fixture(f1)->name(), QString("T2-Hung 1"));
+    QCOMPARE(props->fixtureRigProps(f1).panOffsetDeg, 5.0f);
+    QVERIFY(m_doc->fixture(f1)->isPatched());
+    const quint32 f2 = props->fixtureOnHanger(barHook2->id());
+    QCOMPARE(m_doc->fixture(f2)->name(), QString("T2-Bar Hung"));
+    const QList<Fixture *> onBar = on(m_doc, QString("truss:%1").arg(bar2->id()));
+    QCOMPARE(onBar.size(), 1);
+    QCOMPARE(onBar.first()->name(), QString("T2-Bar Spot"));
+    QCOMPARE(props->fixtureRigProps(onBar.first()->id()).trussOffset, 1.0f);
+    // The originals are untouched, and no address is used twice.
+    QCOMPARE(props->fixtureOnHanger(g.h1->id()), g.onH1->id());
+    QCOMPARE(props->fixtureRigProps(g.onBar->id()).trussId, g.bar->id());
+    QSet<quint32> seen;
+    foreach (Fixture *fx, m_doc->fixtures())
+        for (quint32 a = fx->address(); a < fx->address() + fx->channels(); ++a)
+        {
+            QVERIFY2(!seen.contains(a), "an address is used twice");
+            seen.insert(a);
+        }
+
+    // One step back.
+    SD::undo(m_doc, res.undo);
+    QCOMPARE(props->trusses().size(), trussesBefore);
+    QCOMPARE(props->hangers().size(), hangersBefore);
+    QCOMPARE(m_doc->fixtures().size(), 6);
+    QCOMPARE(props->fixtureOnHanger(g.h1->id()), g.onH1->id());
+}
+
+void StructureDuplicate_Test::replaceTakesTheTargetsHangersAndBarsAndUndoPutsThemBack()
+{
+    const Rig r = makeRig(m_doc);
+    const Hung g = hangThings(m_doc, r);
+    MonitorProperties *props = m_doc->monitorProperties();
+
+    // T-2 gets a copy first, then a second copy replaces it.
+    SD::Options opt;
+    QVERIFY(SD::apply(m_doc, r.k1, { r.k2 }, opt).created > 0);
+    const int hangers = props->hangers().size();
+    const int trusses = props->trusses().size();
+    const int fixtures = m_doc->fixtures().size();
+
+    opt.defaultExisting = SD::Replace;
+    const SD::Result res = SD::apply(m_doc, r.k1, { r.k2 }, opt);
+    QCOMPARE(props->hangers().size(), hangers);         // replaced, not doubled
+    QCOMPARE(props->trusses().size(), trusses);
+    QCOMPARE(m_doc->fixtures().size(), fixtures);
+
+    SD::undo(m_doc, res.undo);
+    QCOMPARE(props->hangers().size(), hangers);
+    QCOMPARE(props->trusses().size(), trusses);
+    QCOMPARE(m_doc->fixtures().size(), fixtures);
+    // The first copy is whole again: a bar on T-2 with its light.
+    int bars = 0;
+    foreach (Truss *t, props->trusses())
+        if (t->parentTrussId() == r.t2->id())
+        {
+            ++bars;
+            QCOMPARE(on(m_doc, QString("truss:%1").arg(t->id())).size(), 1);
+        }
+    QCOMPARE(bars, 1);
+    Q_UNUSED(g);
+}

@@ -29,6 +29,8 @@
 #include "naturalcompare.h"
 #include "inputoutputmap.h"
 #include "monitorproperties.h"
+#include "hanger.h"
+#include "truss.h"
 #include "patchplanner.h"
 #include "fixturegroup.h"
 #include "grouphead.h"
@@ -45,6 +47,7 @@ namespace
 struct StructInfo
 {
     bool ok = false;
+    quint32 id = 0;
     QString name;
     quint32 layer = 0;
     quint32 group = 0;
@@ -58,6 +61,7 @@ StructInfo infoOf(Doc *doc, const QString &key)
     MonitorProperties *props = doc->monitorProperties();
     const QString kind = key.section(':', 0, 0);
     const quint32 id = key.section(':', 1, 1).toUInt();
+    s.id = id;
     if (kind == QLatin1String("truss"))
     {
         if (const Truss *t = props->truss(id))
@@ -192,6 +196,91 @@ QByteArray groupXml(FixtureGroup *g)
     return xml;
 }
 
+/* What hangs on a structure: its hangers and child bars (and the hangers on
+   those), parents before children. A truss has both; a tower, hangers; the
+   rest nothing. */
+struct Sub
+{
+    QList<quint32> hangers;
+    QList<quint32> bars;
+};
+
+Sub subOf(Doc *doc, const QString &key)
+{
+    Sub sub;
+    MonitorProperties *props = doc->monitorProperties();
+    const QString kind = key.section(':', 0, 0);
+    const quint32 id = key.section(':', 1, 1).toUInt();
+    auto byId = [](QList<Hanger *> hs) {
+        std::sort(hs.begin(), hs.end(), [](Hanger *a, Hanger *b) { return a->id() < b->id(); });
+        return hs;
+    };
+    if (kind == QLatin1String("truss"))
+    {
+        QList<quint32> queue;
+        queue << id;
+        for (int i = 0; i < queue.size(); ++i)
+        {
+            QList<Truss *> kids;
+            foreach (Truss *t, props->trusses())
+                if (t != nullptr && t->parentTrussId() == queue.at(i) && !queue.contains(t->id()))
+                    kids << t;
+            std::sort(kids.begin(), kids.end(), [](Truss *a, Truss *b) { return a->id() < b->id(); });
+            foreach (Truss *t, kids)
+            {
+                queue << t->id();
+                sub.bars << t->id();
+            }
+        }
+        foreach (quint32 tid, queue)
+            foreach (Hanger *h, byId(props->hangersOn(Hanger::OnTruss, tid)))
+                sub.hangers << h->id();
+    }
+    else if (kind == QLatin1String("tower"))
+    {
+        foreach (Hanger *h, byId(props->hangersOn(Hanger::OnTower, id)))
+            sub.hangers << h->id();
+    }
+    return sub;
+}
+
+/* The lights on a structure and on what hangs on it: its own first, then
+   those on its hangers, then on its child bars. */
+QList<quint32> fixturesUnder(Doc *doc, const QString &key, const Sub &sub)
+{
+    MonitorProperties *props = doc->monitorProperties();
+    QList<quint32> out = PatchPlanner::fixturesOn(doc, key);
+    foreach (quint32 h, sub.hangers)
+    {
+        const quint32 f = props->fixtureOnHanger(h);
+        if (f != UINT_MAX && doc->fixture(f) != nullptr)
+            out << f;
+    }
+    foreach (quint32 b, sub.bars)
+        out << PatchPlanner::fixturesOn(doc, QStringLiteral("truss:%1").arg(b));
+    return out;
+}
+
+QByteArray trussXml(const Truss *t)
+{
+    QByteArray xml;
+    QXmlStreamWriter w(&xml);
+    w.writeStartDocument();
+    t->saveXML(&w);
+    w.writeEndDocument();
+    return xml;
+}
+
+QByteArray hangerXml(const Hanger *h)
+{
+    QByteArray xml;
+    QXmlStreamWriter w(&xml);
+    w.writeStartDocument();
+    h->saveXML(&w);
+    w.writeEndDocument();
+    return xml;
+}
+
 /* One fixture to be made, and how it is to be placed. */
 struct Planned
 {
@@ -205,6 +294,9 @@ struct Plan
     QString sourceKind;
     StructInfo source;
     QList<quint32> sourceIds;               // in their order on it
+    Sub sourceSub;                          // its hangers and child bars
+    QList<Sub> targetSub;                   // parallel to targets
+    QList<Sub> removeSub;                   // what Replace takes off, per target
     QStringList targets;                    // the ones that are done, in order
     QList<StructInfo> targetInfo;           // parallel
     QList<int> targetNumber;                // parallel: the 1-based place in the asked list
@@ -218,7 +310,8 @@ void buildPlan(Doc *doc, const QString &source, const QStringList &asked,
     StructureDuplicate::Preview &pv = plan.pv;
     plan.sourceKind = source.section(':', 0, 0);
     plan.source = infoOf(doc, source);
-    plan.sourceIds = PatchPlanner::fixturesOn(doc, source);
+    plan.sourceSub = subOf(doc, source);
+    plan.sourceIds = fixturesUnder(doc, source, plan.sourceSub);
     if (!plan.source.ok || plan.sourceIds.isEmpty())
     {
         pv.problems << QObject::tr("%1 carries no fixtures to copy")
@@ -236,7 +329,9 @@ void buildPlan(Doc *doc, const QString &source, const QStringList &asked,
         const StructInfo ti = infoOf(doc, t);
         if (!ti.ok)
             continue;
-        const QList<quint32> there = PatchPlanner::fixturesOn(doc, t);
+        const Sub tsub = subOf(doc, t);
+        const QList<quint32> there = fixturesUnder(doc, t, tsub);
+        const bool replacing = opt.existingFor(t) == StructureDuplicate::Replace;
         if (!there.isEmpty())
         {
             pv.occupied.insert(t, there.size());
@@ -258,6 +353,10 @@ void buildPlan(Doc *doc, const QString &source, const QStringList &asked,
         plan.targets << t;
         plan.targetInfo << ti;
         plan.targetNumber << number;
+        plan.targetSub << tsub;
+        plan.removeSub << (replacing ? tsub : Sub());
+        pv.newHangers += plan.sourceSub.hangers.size();
+        pv.newBars += plan.sourceSub.bars.size();
     }
 
     // What scenes lose when Replace takes lights off.
@@ -507,7 +606,7 @@ QString StructureDuplicate::renamed(const QString &name, const QString &sourceSt
 QStringList StructureDuplicate::targetsFor(Doc *doc, const QString &key)
 {
     QStringList out;
-    if (doc == nullptr || PatchPlanner::fixturesOn(doc, key).isEmpty())
+    if (doc == nullptr || fixturesUnder(doc, key, subOf(doc, key)).isEmpty())
         return out;
     MonitorProperties *props = doc->monitorProperties();
     const QString kind = key.section(':', 0, 0);
@@ -602,6 +701,116 @@ StructureDuplicate::Result StructureDuplicate::apply(Doc *doc, const QString &so
         ++res.replaced;
     }
 
+    /* Replace also takes the target's own hangers and child bars off (what
+       hung on them is gone with the lights above). Their XML is kept, parents
+       first, so undo puts them back. */
+    for (int ti = 0; ti < plan.removeSub.size(); ++ti)
+    {
+        const Sub &rs = plan.removeSub.at(ti);
+        foreach (quint32 h, rs.hangers)
+            if (const Hanger *hg = props->hanger(h))
+            {
+                RemovedStructure r;
+                r.id = h;
+                r.xml = hangerXml(hg);
+                undo.removedStructures << r;
+            }
+        foreach (quint32 b, rs.bars)
+            if (const Truss *tr = props->truss(b))
+            {
+                RemovedStructure r;
+                r.id = b;
+                r.xml = trussXml(tr);
+                r.bar = true;
+                undo.removedStructures << r;
+            }
+        foreach (quint32 h, rs.hangers)
+            props->removeHanger(h);
+        for (int i = rs.bars.size() - 1; i >= 0; --i)
+            props->removeTruss(rs.bars.at(i));
+    }
+
+    /* Hangers and child bars first: the lights on them are placed by them.
+       Each copy is the original's own XML on the target, with a new id, the
+       target's layer and plot group, and a name that follows the show's. */
+    QHash<QString, quint32> newHanger;          // "<target index>:<source id>" -> new id
+    QHash<QString, quint32> newBar;
+    auto key2 = [](int ti, quint32 id) { return QString::number(ti) + QLatin1Char(':') + QString::number(id); };
+    {
+        QSet<QString> structNames;
+        foreach (Truss *t, props->trusses())
+            structNames.insert(t->name());
+        foreach (Hanger *h, props->hangers())
+            structNames.insert(h->name());
+        auto nameFor = [&](const QString &old, const StructInfo &ti) {
+            return Doc::nextUniqueModelName(renamed(old, plan.source.name, ti.name),
+                                            [&structNames](const QString &c) { return structNames.contains(c); });
+        };
+        const quint32 srcNum = plan.source.id;
+        for (int ti = 0; ti < plan.targets.size(); ++ti)
+        {
+            const StructInfo &tinfo = plan.targetInfo.at(ti);
+            const quint32 tnum = plan.targets.at(ti).section(':', 1, 1).toUInt();
+            foreach (quint32 bid, plan.sourceSub.bars)
+            {
+                const Truss *src = props->truss(bid);
+                if (src == nullptr)
+                    continue;
+                Truss *nt = props->addTruss();
+                const quint32 nid = nt->id();
+                QXmlStreamReader r(trussXml(src));
+                while (!r.atEnd() && !r.isStartElement())
+                    r.readNext();
+                if (!r.isStartElement() || !nt->loadXML(r))
+                {
+                    props->removeTruss(nid);
+                    res.problems << QObject::tr("%1: could not be copied").arg(src->name());
+                    continue;
+                }
+                nt->setId(nid);
+                const quint32 par = src->parentTrussId();
+                nt->setParentTrussId(par == srcNum ? tnum
+                                                   : newBar.value(key2(ti, par), Truss::invalidId()));
+                nt->setName(nameFor(src->name(), tinfo));
+                structNames.insert(nt->name());
+                nt->setLayerId(tinfo.layer);
+                nt->setGroupId(tinfo.group);
+                newBar.insert(key2(ti, bid), nid);
+                undo.createdBars << nid;
+            }
+            // Origins of the bars come from their parents, which the hangers hang on.
+            props->recomputeChildTrusses();
+            foreach (quint32 hid, plan.sourceSub.hangers)
+            {
+                const Hanger *src = props->hanger(hid);
+                if (src == nullptr)
+                    continue;
+                quint32 parent;
+                if (src->parentKind() == Hanger::OnTruss)
+                    parent = src->parentId() == srcNum ? tnum
+                                                       : newBar.value(key2(ti, src->parentId()), UINT_MAX);
+                else
+                    parent = tnum;
+                if (parent == UINT_MAX)
+                    continue;
+                Hanger *nh = props->addHanger(src->parentKind(), parent);
+                nh->setName(nameFor(src->name(), tinfo));
+                structNames.insert(nh->name());
+                nh->setAlong(src->along());
+                nh->setAngle(src->angle());
+                nh->setArm(src->arm());
+                nh->setDrop(src->drop());
+                nh->setLayerId(tinfo.layer);
+                newHanger.insert(key2(ti, hid), nh->id());
+                undo.createdHangers << nh->id();
+            }
+        }
+        props->recomputeChildTrusses();
+        props->recomputeHangers();
+    }
+    res.createdHangers = int(undo.createdHangers.size());
+    res.createdBars = int(undo.createdBars.size());
+
     // The copies.
     QHash<QString, quint32> newIds;             // "<target index>:<source id>" -> new id
     QHash<QString, quint32> mapGroupFor;        // "<target index>:<group id>" -> group
@@ -642,14 +851,33 @@ StructureDuplicate::Result StructureDuplicate::apply(Doc *doc, const QString &so
         newIds.insert(QString::number(p.target) + QLatin1Char(':') + QString::number(sid), fid);
 
         FixtureRigProps rp = props->fixtureRigProps(sid);
-        retarget(rp, kind, plan.targets.at(p.target).section(':', 1, 1).toUInt());
+        quint32 ownGroup = 0;           // the plot group of the bar the original hangs on
+        if (rp.onHanger())
+        {
+            const Hanger *sh = props->hanger(rp.hangerId);
+            if (sh != nullptr && sh->parentKind() == Hanger::OnTruss && sh->parentId() != plan.source.id)
+                if (const Truss *bar = props->truss(sh->parentId()))
+                    ownGroup = bar->groupId();
+            rp.hangerId = newHanger.value(QString::number(p.target) + QLatin1Char(':')
+                                          + QString::number(rp.hangerId), UINT_MAX);
+        }
+        else if (kind == QLatin1String("truss") && rp.trussId != Truss::invalidId()
+                 && rp.trussId != plan.source.id)
+        {
+            if (const Truss *bar = props->truss(rp.trussId))
+                ownGroup = bar->groupId();
+            rp.trussId = newBar.value(QString::number(p.target) + QLatin1Char(':')
+                                      + QString::number(rp.trussId), Truss::invalidId());
+        }
+        else
+            retarget(rp, kind, plan.targets.at(p.target).section(':', 1, 1).toUInt());
         props->setFixtureRigProps(fid, rp);
 
         FixturePreviewItem item = props->fixtureProperties(sid);
         item.m_baseItem.m_layerId = ti.layer;
         // A light on the structure's own plot group joins the target's.
         quint32 gid = item.m_baseItem.m_groupId;
-        if (gid != 0 && gid != plan.source.group && props->hasGroup(gid))
+        if (gid != 0 && gid != plan.source.group && gid != ownGroup && props->hasGroup(gid))
         {
             const MonitorProperties::MonitorGroup g = props->group(gid);
             const bool parallel = !g.hasFrame && g.anchorKind.isEmpty()
@@ -669,7 +897,7 @@ StructureDuplicate::Result StructureDuplicate::apply(Doc *doc, const QString &so
                 gid = mapGroupFor.value(gk);
             }
         }
-        else if (gid != 0 && gid == plan.source.group)
+        else if (gid != 0 && (gid == plan.source.group || gid == ownGroup))
             gid = ti.group;
         item.m_baseItem.m_groupId = gid;
         const bool deck = (rp.primaryMount() == FixtureRigProps::DeckMount);
@@ -772,6 +1000,36 @@ void StructureDuplicate::undo(Doc *doc, const Undo &u)
     foreach (quint32 id, u.createdFixtures)
         if (doc->fixture(id) != nullptr)
             doc->deleteFixture(id);
+    foreach (quint32 id, u.createdHangers)
+        props->removeHanger(id);
+    for (int i = u.createdBars.size() - 1; i >= 0; --i)
+        props->removeTruss(u.createdBars.at(i));
+    // What Replace took off: bars before their hangers, parents before children.
+    for (int pass = 0; pass < 2; ++pass)
+        foreach (const RemovedStructure &rs, u.removedStructures)
+        {
+            if (rs.bar != (pass == 0))
+                continue;
+            QXmlStreamReader rd(rs.xml);
+            while (!rd.atEnd() && !rd.isStartElement())
+                rd.readNext();
+            if (!rd.isStartElement())
+                continue;
+            if (rs.bar)
+            {
+                Truss *t = new Truss(rs.id, props);
+                if (!t->loadXML(rd) || !props->adoptTruss(t))
+                    delete t;
+            }
+            else
+            {
+                Hanger *h = new Hanger(rs.id, props);
+                if (!h->loadXML(rd) || !props->adoptHanger(h))
+                    delete h;
+            }
+        }
+    props->recomputeChildTrusses();
+    props->recomputeHangers();
     foreach (quint32 id, u.createdFixtureGroups)
         if (doc->fixtureGroup(id) != nullptr)
             doc->deleteFixtureGroup(id);

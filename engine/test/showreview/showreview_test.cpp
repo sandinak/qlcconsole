@@ -1950,6 +1950,36 @@ void ShowReview_Test::moveSpeed()
     QCOMPARE(f.pan, 1.0);
 }
 
+/* A head that points within DMX 0-127 and spins above it (RotationIndexed):
+   its travel is measured along that band, not the whole channel -- the same
+   band the rig views read (Fixture::positionBand()). */
+void ShowReview_Test::moveSpeedUsesThePointingBand()
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    QLCChannel *pan = chan(def, "Pan", QLCChannel::PositionPan);
+    pan->addCapability(new QLCCapability(0, 127, "Indexed position"));
+    pan->capabilities().first()->setPreset(QLCCapability::RotationIndexed);
+    pan->addCapability(new QLCCapability(128, 255, "Rotation"));
+    Fixture *ust = make(m_doc, "UST 1", QStringLiteral("UST"), QLCFixtureDef::MovingHead, def,
+                        { pan, chan(def, "Tilt", QLCChannel::PositionTilt) }, 100, 0, 40);
+    QVERIFY(ust != nullptr);
+    // DMX 0 to 127 (of 255) is the whole 540 degrees: 1.2 s, not half of it.
+    QVERIFY(qAbs(MoveSpeed::travelMs(ust, 0, 0, 127.0 / 255.0, 0) - 1200.0) < 0.001);
+    QVERIFY(qAbs(MoveSpeed::travelMs(ust, 0, 0, 63.5 / 255.0, 0) - 600.0) < 0.001);
+    // Into the spin zone it is clamped at the band's end.
+    QVERIFY(qAbs(MoveSpeed::travelMs(ust, 0, 0, 1.0, 0) - 1200.0) < 0.001);
+    // Tilt has no band: unchanged.
+    QVERIFY(qAbs(MoveSpeed::travelMs(ust, 0, 0, 0, 1) - 600.0) < 0.001);
+    // The follower crosses the band at the head's speed: 100 ms is 45 of 540 degrees.
+    MoveSpeed::Follower f;
+    f.step(ust, 0.0, 0.0, 1000);
+    f.step(ust, 127.0 / 255.0, 0.0, 1100);
+    QVERIFY(qAbs(f.pan - (45.0 / 540.0) * (127.0 / 255.0)) < 1e-9);
+    QVERIFY(f.step(ust, 127.0 / 255.0, 0.0, 1200));
+    QVERIFY(!f.step(ust, 127.0 / 255.0, 0.0, 2300));
+    QCOMPARE(f.pan, 127.0 / 255.0);
+}
+
 void ShowReview_Test::mov01()
 {
     Fixture *a = mover("Spot 1", 0);

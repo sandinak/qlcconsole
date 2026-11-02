@@ -2636,6 +2636,23 @@ Hanger *MonitorProperties::addHanger(Hanger::ParentKind kind, quint32 parentId)
     return h;
 }
 
+bool MonitorProperties::adoptHanger(Hanger *h)
+{
+    if (h == nullptr || m_hangers.contains(h->id()))
+        return false;
+    m_hangers.insert(h->id(), h);
+    recomputeHangers();
+    return true;
+}
+
+bool MonitorProperties::adoptTruss(Truss *t)
+{
+    if (t == nullptr || m_trusses.contains(t->id()))
+        return false;
+    m_trusses.insert(t->id(), t);
+    return true;
+}
+
 void MonitorProperties::removeHanger(quint32 id)
 {
     if (!m_hangers.contains(id))

@@ -24926,6 +24926,90 @@ void Monitor_Test::noLightZonesAreOnThePlot()
     delete doc;
 }
 
+/* A no-light zone is dragged by its outline or centre handle: Top moves X and
+   Y, Front moves X and the bottom, Side Y and the bottom -- one undo step each.
+   Its inside grabs nothing, so the plot under it stays selectable. */
+void Monitor_Test::aNoLightZoneDragsByItsOutline()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    const quint32 id = props->addNoLightZone(3.0f, 9.0f);
+    NoLightZone z0 = props->noLightZone(id);
+    z0.width = 6.0f;
+    z0.depth = 6.0f;
+    props->setNoLightZone(z0);
+    {
+        QWidget parent;
+        Monitor mon(&parent, doc);
+        MonitorGraphicsView *gv = mon.m_graphicsView;
+        gv->setViewPOV(MonitorGraphicsView::PovTop);
+        gv->updateTrusses();
+        gv->updateNoLightZones();
+        QCOMPARE(gv->m_zoneItems.size(), 1);
+
+        // The inside (off the handle) grabs nothing; the outline and handle do.
+        const QPointF inside = gv->projectMm(4500.0, 10500.0, 0.0);
+        const QPointF edge = gv->projectMm(3000.0, 12000.0, 0.0);       // the left edge
+        const QPointF centre = gv->projectMm(6000.0, 12000.0, 0.0);
+        QCOMPARE(gv->zoneGrabAt(inside), UINT_MAX);
+        QCOMPARE(gv->zoneGrabAt(edge), id);
+        QCOMPARE(gv->zoneGrabAt(centre), id);
+
+        auto drag = [&](const QPointF &from, const QPointF &to) {
+            QTest::mousePress(gv->viewport(), Qt::LeftButton, Qt::NoModifier, gv->mapFromScene(from));
+            QTest::mouseMove(gv->viewport(), gv->mapFromScene((from + to) / 2));
+            QTest::mouseMove(gv->viewport(), gv->mapFromScene(to));
+            QTest::mouseRelease(gv->viewport(), Qt::LeftButton, Qt::NoModifier, gv->mapFromScene(to));
+        };
+
+        // Top: 1 m stage-left-ward in X, 2 m in Y.
+        drag(edge, gv->projectMm(4000.0, 14000.0, 0.0));
+        NoLightZone z = props->noLightZone(id);
+        QVERIFY2(qAbs(z.x - 4.0f) < 0.15f, qPrintable(QString::number(z.x)));
+        QVERIFY2(qAbs(z.y - 11.0f) < 0.15f, qPrintable(QString::number(z.y)));
+        QCOMPARE(z.floorZ, 0.0f);
+        const float x1 = z.x, y1 = z.y;
+
+        // One undo step puts it back.
+        gv->undoLastMove();
+        z = props->noLightZone(id);
+        QCOMPARE(z.x, 3.0f);
+        QCOMPARE(z.y, 9.0f);
+
+        // A click on the outline without moving changes nothing.
+        QTest::mouseClick(gv->viewport(), Qt::LeftButton, Qt::NoModifier, gv->mapFromScene(gv->projectMm(3000.0, 12000.0, 0.0)));
+        QCOMPARE(props->noLightZone(id).x, 3.0f);
+
+        // Front: X and the bottom; Y stays.
+        gv->setViewPOV(MonitorGraphicsView::PovFront);
+        gv->updateTrusses();
+        gv->updateNoLightZones();
+        const QPointF fEdge = gv->projectMm(3000.0, 0.0, 1000.0);        // the left edge, mid-height
+        QCOMPARE(gv->zoneGrabAt(fEdge), id);
+        drag(fEdge, gv->projectMm(3000.0 + 1000.0, 0.0, 1000.0 + 1000.0));
+        z = props->noLightZone(id);
+        QVERIFY2(qAbs(z.x - 4.0f) < 0.15f, qPrintable(QString::number(z.x)));
+        QVERIFY2(qAbs(z.floorZ - 1.0f) < 0.15f, qPrintable(QString::number(z.floorZ)));
+        QCOMPARE(z.y, 9.0f);
+        Q_UNUSED(x1);
+        Q_UNUSED(y1);
+
+        // Side: Y and the bottom; X stays.
+        gv->setViewPOV(MonitorGraphicsView::PovSide);
+        gv->updateTrusses();
+        gv->updateNoLightZones();
+        const float xs = z.x, fz = z.floorZ;
+        const QPointF sEdge = gv->projectMm(0.0, 9000.0, (fz + 1.0) * 1000.0);
+        QCOMPARE(gv->zoneGrabAt(sEdge), id);
+        drag(sEdge, gv->projectMm(0.0, 12000.0, (fz + 1.0) * 1000.0 - 500.0));
+        z = props->noLightZone(id);
+        QVERIFY2(qAbs(z.y - 12.0f) < 0.15f, qPrintable(QString::number(z.y)));
+        QVERIFY2(qAbs(z.floorZ - (fz - 0.5f)) < 0.15f, qPrintable(QString::number(z.floorZ)));
+        QCOMPARE(z.x, xs);
+    }
+    delete doc;
+}
+
 /* Test matrix M1: a new or opened show deletes every stage structure
    (MonitorProperties::reset()) and only then does the rig view rebuild. Each
    structure's item borrows its structure, so the items must go first: on

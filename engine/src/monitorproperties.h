@@ -824,6 +824,10 @@ public:
     /** Remove and delete the truss with the given ID. */
     void removeTruss(quint32 id);
 
+    /** Take a truss (and later a hanger) that already carries its id -- put
+     *  back by an undo. False, and nothing taken, when the id is in use. */
+    bool adoptTruss(Truss *t);
+
     /** Next unused truss ID. */
     quint32 nextTrussId() const;
 
@@ -1028,6 +1032,7 @@ public:
     Hanger *addHanger(Hanger::ParentKind kind, quint32 parentId);
     /** Remove it; a fixture hung on it comes off (keeps its place). */
     void removeHanger(quint32 id);
+    bool adoptHanger(Hanger *h);
     quint32 nextHangerId() const;
     /** Hangers on @p kind @p parentId. */
     QList<Hanger*> hangersOn(Hanger::ParentKind kind, quint32 parentId) const;

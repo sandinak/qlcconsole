@@ -426,8 +426,14 @@ back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
   originals' fixture groups, or get a parallel group named by the structure
   ("T2 Spots"), per kind of group; a target that already has fixtures is
   skipped, added to or replaced, as you choose. One undo step; a Teaching
-  show asks before the patch changes. Hangers and child bars are not copied
-  yet.
+  show asks before the patch changes. Hangers and child bars on a truss or
+  tower (and the hangers on those bars) are copied too, with the lights hung
+  on them, named, patched and undone like the rest; Replace takes the
+  target's own off first.
+- **No-light zones can be dragged.** Take a zone by its outline or the
+  handle at its centre and drag it: X and Y in Top, X and the bottom in Front,
+  Y and the bottom in Side, one undo step. The inside of a zone still lets
+  the plot under it be selected.
 
 #### Raspberry Pi
 
@@ -1070,6 +1076,8 @@ skipped). Upstream fixes taken:
   good (seen with a pad on 0.4.0 build 2825). The input patch now passes
   the press on only after it has let go of its own lock, and a test fails
   fast if any input path locks up again.
+  reads the pointing band the fixture declares. Real move speed and the MOV
+  checks time such a head along that band too, not the whole channel.
 - **Play and Solo on the Show Tree's cue and layer pages.** They were only
   in the Workbench docked in the tree, so a cue opened the usual way (a
   click) had neither. Now both pages have them: Play / Stop for the whole

@@ -262,7 +262,11 @@ void StructureDuplicateDialog::refresh()
             ++patched;
     m_summary->setText(tr("%1 fixtures: %2 patched, %3 left unpatched. %4 left alone.")
                            .arg(m_preview.rows.size()).arg(patched)
-                           .arg(m_preview.rows.size() - patched).arg(m_preview.skipped.size()));
+                           .arg(m_preview.rows.size() - patched).arg(m_preview.skipped.size())
+                       + (m_preview.newHangers + m_preview.newBars > 0
+                              ? tr(" With %1 hangers and %2 child bars.")
+                                    .arg(m_preview.newHangers).arg(m_preview.newBars)
+                              : QString()));
     QString warn;
     if (m_preview.replacedFixtures > 0)
         warn = tr("Replace removes %1 fixtures already on the target%2. Undo puts the fixtures back.")

@@ -502,6 +502,7 @@ protected slots:
     /** Add No-light Zone: a floor area that must stay dark (Show Review PWR-11). */
     void slotAddNoLightZone();
     void slotEditNoLightZone(quint32 zoneId);
+    void slotMoveNoLightZone(quint32 zoneId, float dx, float dy, float dz);
     void slotRemoveNoLightZone(quint32 zoneId);
 
 protected:

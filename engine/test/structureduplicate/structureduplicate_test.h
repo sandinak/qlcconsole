@@ -49,6 +49,8 @@ private slots:
     void undoPutsEverythingBack();
     void aDeckCarriesItsLightsToTheOtherDeck();
     void nothingToCopyIsSaid();
+    void hangersAndChildBarsAreCopied();
+    void replaceTakesTheTargetsHangersAndBarsAndUndoPutsThemBack();
 
 private:
     Doc *m_doc = nullptr;

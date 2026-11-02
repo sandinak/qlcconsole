@@ -79,8 +79,8 @@ above their points, DMX pan 61-67 of the 0-127 band); the views read an
 indexed pan band (`RotationIndexed`) over the whole channel and drew the
 USTs a quarter turn off. Fixed with `Fixture::positionBand()` /
 `positionFraction()` in the rig view, the plot and the readout (CHANGELOG
-0.4.0 Fixed). Open: `MoveSpeed`'s travel time still measures a banded head
-over the whole channel (its follower is right, only the timing is off).
+0.4.0 Fixed). `MoveSpeed`'s travel time and follower now measure a banded head along
+its band too (lft2, 2026-11-01). Open: nothing known.
 
 ## Line aim pop-out (lpv, 2026-11-01) — built, leftovers
 
@@ -670,7 +670,8 @@ degrees when none); a zone keeps out all light, narrow beams (25 degrees or
 less) and lasers, or lasers and star projectors; a beam stops at the stage
 floor, so a pit's zone must reach up to it; PWR-11 names the first cue a beam
 starts to cross; zones are click-through boxes (edit by double-click or the
-right-click menu, no drag yet); one new Add entry. **Open:** a density rule
+right-click menu; dragging by the outline or centre handle since lft2,
+2026-11-01); one new Add entry. **Open:** a density rule
 that reads the laser's pattern (the show doesn't describe patterns), the
 coverage outline, the Type=Laser emission inference, and FixtureDefCheck's
 laser checks.
@@ -1468,8 +1469,9 @@ before building):
     right-click a structure → Duplicate Setup to… (`StructureDuplicate`,
     engine/src/structureduplicate.*; dialog in ui/src/monitor). Decided
     (can change): fixture groups default to adding, plot folders to
-    parallel; an occupied target defaults to Skip. Still to do: hangers
-    and child bars (and the lights on them) are not copied.
+    parallel; an occupied target defaults to Skip. Hangers and child
+    bars (and the lights on them) are copied too (lft2, 2026-11-01); Replace
+    takes the target's own off, undo puts them back.
   - **Playback timing** (docs/design/PLAYBACK_TIMING_DESIGN.md): P2 fade shapes, P3
     per-chase-step transitions, P4 Swop, P5 clickable Load chip.
   - **Rig Overview frame rate** — maybe automatic (30, lower when the
