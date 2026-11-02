@@ -231,7 +231,7 @@ void settle(int ms = 0)
    asks -- and much later when the machine is busy (parallel gates). So a
    check of what the rig sends polls until it's there (waitUntil, QTRY_*
    with kRigWait); it never reads once after a fixed sleep. */
-const int kRigWait = 5000;
+const int kRigWait = 15000;   // 5 s timed out on the Linux leg under load (2026-11-02)
 
 /* Waits (up to @a ms) until @a ok holds, as the rig shows a change a
    frame or two (or, on a loaded machine, many) after it's made. */
