@@ -66,6 +66,7 @@
 #include "chaser.h"
 #include "collection.h"
 #include "scene.h"
+#include "../common/dragpos.h"
 #include "efx.h"
 #include "doc.h"
 
@@ -1600,7 +1601,7 @@ void ShowTreeWorkbench_Test::aRealMouseDragMovesALookRowAndAltCopiesIt()
     rows->expandAll();
     QTreeWidgetItem *dimRow = bench->rows()->layerItem(towers)->child(attributeKeyed(stack, towers, KeyDimmer));
     QVERIFY(dimRow != nullptr);
-    QTreeWidgetItem *ustsRow = bench->rows()->layerItem(usts);
+    QVERIFY(bench->rows()->layerItem(usts) != nullptr);
 
     // The press-and-drag a hand makes, as window-system mouse events (the
     // button held, as the platform delivers it): a click selects the row,
@@ -1649,9 +1650,9 @@ void ShowTreeWorkbench_Test::aRealMouseDragMovesALookRowAndAltCopiesIt()
         QScopedPointer<QMimeData> carried(rows->mimeData(rows->selectedItems()));
         QVERIFY(carried != nullptr && carried->hasFormat(QString::fromLatin1(WorkbenchStack::attributeMimeType())));
         const QPoint to = rows->visualItemRect(rows->layerItem(layerNamed(stack, "USTs"))).center();
-        QDragEnterEvent enter(to, Qt::MoveAction | Qt::CopyAction, carried.data(), Qt::LeftButton, mods);
+        QDragEnterEvent enter(dragPos(to), Qt::MoveAction | Qt::CopyAction, carried.data(), Qt::LeftButton, mods);
         QApplication::sendEvent(vp, &enter);
-        QDragMoveEvent move(to, Qt::MoveAction | Qt::CopyAction, carried.data(), Qt::LeftButton, mods);
+        QDragMoveEvent move(dragPos(to), Qt::MoveAction | Qt::CopyAction, carried.data(), Qt::LeftButton, mods);
         QApplication::sendEvent(vp, &move);
         QDropEvent drop(QPointF(to), Qt::MoveAction | Qt::CopyAction, carried.data(), Qt::LeftButton, mods);
         QApplication::sendEvent(vp, &drop);
@@ -1669,7 +1670,6 @@ void ShowTreeWorkbench_Test::aRealMouseDragMovesALookRowAndAltCopiesIt()
     QTRY_VERIFY(bench->rows()->layerItem(towers) != nullptr);
     rows->expandAll();
     dimRow = bench->rows()->layerItem(towers)->child(attributeKeyed(stack, towers, KeyDimmer));
-    ustsRow = bench->rows()->layerItem(usts);
     QVERIFY(dimRow != nullptr);
     drag(Qt::AltModifier);
     QTRY_COMPARE(st->cue(s.c1)->layer(s.ustsLayer1)->look(KeyDimmer)->palettes, QList<quint32>({ s.full }));
