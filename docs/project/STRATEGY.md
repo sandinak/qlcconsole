@@ -443,7 +443,7 @@ Notes:
 | Phone/tablet Run page (current, next, GO, Back, Hold) | 4 | 5 | secured web access, CueRunner | 5 | M | H | 3.2 | BUILT (0.4, GO/Back/Stop; Hold later) |
 | Calling script view (cues on lyric or script lines) | 3 | 4 | cue notes | 4 | L | M | 3 | BUILD (0.5) |
 | Encoder banks: MIDI controller drives the selection in Build | 3 | 4 | Focus-this-look mapping | 4 | L | M | 3 | LATER |
-| Duplicate a structure's setup (T1 → T2, T3) | 3 | 4 | Patch Others Like This | 4 | L | M | 3 | LATER |
+| Duplicate a structure's setup (T1 → T2, T3) | 3 | 4 | Patch Others Like This | 4 | L | M | 3 | BUILT (0.4, sdup, 2026-11-01): Duplicate Setup to… in the plot's structure menu; hangers and child bars later |
 | W6 shared Library + command bar in Build | 3 | 4 | Show Tree Library, ShowTreeCommand | 4 | M | M | 2.4 | LATER |
 | Show Review v1 (59 checks, CLI, panel) | 4 | 5 | ShowStatus, LookStackCheck, tracking | 8 | L | M | 2.5 | BUILT (0.5, rev, 2026-10-31): registry, accept with a note, `--review` CLI, chip and panel, 59 checks; open checks in TODO |
 | Plot handles (drag ends, ⌥-rotate) | 3 | 4 | Lighting Studio | 5 | M | M | 1.9 | LATER |

@@ -318,6 +318,21 @@ back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
 
 ### Rig and Studio
 
+#### Duplicate a structure's setup
+
+- **Duplicate Setup to…** Right-click a truss, tower, pipe or deck in the
+  Lighting Studio that carries fixtures, and **Duplicate Setup to…** copies
+  its whole setup onto the other structures of its kind (T1 to T2, T3): the
+  same definitions and modes, the same place on the structure, orientation
+  and calibration offsets, a name that follows the show's own ("T1-Spot 3"
+  becomes "T2-Spot 3"), and addresses at the next free ones or with an
+  address / universe step, all previewed first. The copies join the
+  originals' fixture groups, or get a parallel group named by the structure
+  ("T2 Spots"), per kind of group; a target that already has fixtures is
+  skipped, added to or replaced, as you choose. One undo step; a Teaching
+  show asks before the patch changes. Hangers and child bars are not copied
+  yet.
+
 #### Raspberry Pi
 
 - **A Raspberry Pi package.** `platforms/linux/make-pi-deb.sh` builds an arm64

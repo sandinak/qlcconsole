@@ -882,6 +882,7 @@ to B9, are all fixed. Their tests no longer use QEXPECT_FAIL.
 | Addressing order: by name / movers first | PatchInventoryDialog_Test::theSameGroupLandsTheSameWayInNameOrder, ::moversFirstThenByKind | covered | covered | med |
 | Addressing order "as they hang"; order remembered | none | none | none | med |
 | Into free space, no-room flag, Carry on, Fit by changing modes; keep spacing / packed / one universe each | PatchInventoryDialog_Test::fitKeepsWhatIsThereAndFillsTheGaps, ::whatHasNoRoomIsFlaggedAndCanCarryOn, ::fitByChangingModesShrinksTheBiggestFirst, ::placeKeepsSpacingAsOneBlock | covered | covered | high |
+| Duplicate a structure's setup (T1 → T2, T3): mounts, calibration, names, next-free / offset patch, groups, occupied target, undo, Teaching confirm | StructureDuplicate_Test (all); StructureDuplicateUi_Test (all) | covered | covered | low |
 | Patch the others like [structure] | Inventory_Test::likeStructuresArePatchedAlike; PatchInventoryDialog_Test::likeStructuresAreMatched (Studio menu entry not driven) | partial | partial | med |
 | Patch Apply is one ⌘Z; moving a patched fixture is Design-only | Monitor_Test::aPatchCanBeUndone, ::aModeChangedByThePatchIsUndone; Inventory_Test::movingAPatchedFixtureIsDesignModeOnly | covered | covered | high |
 | Drop fixtures or a group on a universe opens the Patch dialog there | FixtureTreeWidget_Test::aDropOnAUniverseNamesItAndItsFixtures (mime only) | partial | partial | med |

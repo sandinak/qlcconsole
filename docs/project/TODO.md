@@ -1316,12 +1316,12 @@ before building):
     P3 show control (`/cue/4.2/go`, `/go 4.2`, MSC GO 4.2, `/subgo`,
     `/subback`, LOAD 4.2 on Next) is in 0.2.0. Still to do: P4 step-based
     effects on Sub GO.
-  - **Duplicate a structure's setup** (Branson, 2026-10-15; replaces the
-    one-off "tower patch rule") — from one structure (T1) and the fixtures
-    on it, set up its likes (T2, T3…): the same fixtures placed and mounted
-    the same way, matched by their labels, and addressed. The addressing
-    half exists (right-click → Patch Others Like This / the Patch dialog's
-    Match); the placement half is the new part. Design first.
+  - **Duplicate a structure's setup** — BUILT (0.4, sdup, 2026-11-01):
+    right-click a structure → Duplicate Setup to… (`StructureDuplicate`,
+    engine/src/structureduplicate.*; dialog in ui/src/monitor). Decided
+    (can change): fixture groups default to adding, plot folders to
+    parallel; an occupied target defaults to Skip. Still to do: hangers
+    and child bars (and the lights on them) are not copied.
   - **Playback timing** (docs/design/PLAYBACK_TIMING_DESIGN.md): P2 fade shapes, P3
     per-chase-step transitions, P4 Swop, P5 clickable Load chip.
   - **Rig Overview frame rate** — maybe automatic (30, lower when the
