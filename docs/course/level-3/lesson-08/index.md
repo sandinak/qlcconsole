@@ -14,3 +14,5 @@ A show is several songs under one GO. Students turn the song into a section of a
 | Teacher | [Teacher guide](https://github.com/sandinak/qlcconsole/blob/main/docs/course/level-3/lesson-08/teacher-guide.md) · [Slides outline](https://github.com/sandinak/qlcconsole/blob/main/docs/course/level-3/lesson-08/slides.md) |
 | Students | [Handout](handout.md) · [Exit ticket](exit-ticket.md) · [At home](at-home.md) |
 | Show files | [`lesson-3-8-start.qlcc`](../../shows/lesson-3-8-start.qlcc) · [`lesson-3-8-finish.qlcc`](../../shows/lesson-3-8-finish.qlcc) |
+
+![The cue sheet](../../images/lesson-3-8/cue-sheet.png)

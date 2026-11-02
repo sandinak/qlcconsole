@@ -12,10 +12,10 @@ power, running and fixing a real show.
 
 | # | Lesson | Status |
 |---|---|---|
-| 3.1 | DMX, universes and patching | outline |
-| 3.2 | Fixtures and definitions | outline |
+| 3.1 | DMX, universes and patching | outline, waits on the real rig |
+| 3.2 | Fixtures and definitions | outline, waits on the real rig |
 | 3.3 | [Reading the plot: symbols](lesson-03/index.md) | written |
-| 3.4 | Building the rig | outline |
+| 3.4 | Building the rig | outline, waits on the real rig |
 | 3.5 | [Show control and timecode](lesson-05/index.md) | written |
 | 3.6 | [Focus and calibration](lesson-06/index.md) | written |
 | 3.7 | [House lights, work lights and power](lesson-07/index.md) | written |

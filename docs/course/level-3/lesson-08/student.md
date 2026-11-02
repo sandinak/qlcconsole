@@ -37,6 +37,8 @@ Roles: **Driver** (mouse), **Navigator** (reads each step aloud and checks *You 
    the **Show Tree** tab (⇧⌘5) and **View ▸ Rig Overview** (⇧⌘R).
 2. Click **Spring Show**. In **Numbering**, pick **Show.Part.Iteration**.
    - *You should see:* the song's cues fold under a header, **1**.
+
+   ![Numbering on the production](../../images/lesson-3-8/numbering.png)
 3. Click that header. In **Name**, type `Everybody Scream` and press
    **Return**.
 4. Click the list **01-Everybody Scream**, then **+ Section**. Name it
@@ -58,6 +60,8 @@ Roles: **Driver** (mouse), **Navigator** (reads each step aloud and checks *You 
    (it may be ticked already). Click **1.0.8 Button**, then **2.0.1**, in
    the Show Tree. The Button's red and the Fan's beams stay in song 1: the
    Rig Overview shows none of them in 2.0.1.
+
+   ![Block at section start on song 2's header](../../images/lesson-3-8/section-block.png)
 7. **Fixtures** tab (⇧⌘2): click the group **Lanterns** and tick **Group
    master**.
 8. Back in the Show Tree, type these lines. The hit is **Hush**, and
@@ -81,12 +85,16 @@ Roles: **Driver** (mouse), **Navigator** (reads each step aloud and checks *You 
 11. Beside the cue list is a fader for **Lanterns**. Drag it to half. The
     lanterns drop to half and the cues don't change. Double-click its name
     to put it back to full.
+
+    ![The Lanterns master beside the cue list](../../images/lesson-3-8/group-master.png)
 12. **Virtual Console**: click **Hush**. The lanterns drop to a quarter
     whatever the cue says. Click it again: back to full.
 13. **Run** tab: **Stop**, then **Design**.
 14. In the Show Tree, **More ▾ → Cue Sheet…**. The **Sheet** box has two
     sheets. Read the **Cue sheet** (the cues by song), then the **Tracking
-    sheet**. Save one as a PDF with **Save PDF…**.
+    sheet**. Save one as a PDF with **Save PDF…**. The dialog's **Calling Script…** button opens the script with the cues on its lines.
+
+    ![The cue sheet, with Save PDF… and Calling Script…](../../images/lesson-3-8/cue-sheet.png)
 
 **Stuck?** No **Numbering** box: click the production, not the list. **+
 Section** greyed: pick a **Numbering** first. No Group master on the Run
