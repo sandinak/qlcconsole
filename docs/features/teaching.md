@@ -104,6 +104,18 @@ show. In a show that is not Teaching the log is not there and nothing is
 kept. The line is built once, when the command arrives, from the cue as the
 Show Tree resolved it; nothing is added to the frame loop.
 
+## Why is this on?, in plain sentences
+
+**Why is this on?** (right-click a light, or ⌘I) opens with **Plain words**
+ticked in a Teaching show, and then tells each fixture group the light is
+in as two or three sentences above the detailed lines: the level, the cue
+(or hit, effect, Park, desk) that set it, and the Grand Master or group
+master if one scales it. A dark group gets its reason in one sentence. It
+reads best next to Show Review: the review says what is likely wrong, the
+window says what a given light is doing now. Outside a Teaching show,
+tick **Plain words** to get the same. See
+[Troubleshooting](troubleshooting.md#why-is-this-light-on).
+
 ## Glossary popovers
 
 In a Teaching show, hover a term and its tooltip ends with a one-line

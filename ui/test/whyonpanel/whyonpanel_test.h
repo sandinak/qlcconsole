@@ -39,6 +39,7 @@ private slots:
     void theSimpleDeskBeatsAScene();
     void aBareAddressAndTheChannelPicker();
     void plainWordsInATeachingShow();
+    void plainSentencesPerGroup();
     void asksNothingWhileHidden();
     void aDarkLightSaysWhyNotFirst();
     void unparkFromALine();

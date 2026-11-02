@@ -62,6 +62,12 @@ private slots:
     void whyNotAReleasedLayer();
     void whyNotASkippedCue();
     void whyNotSolo();
+    void studentATrackedGroup();
+    void studentAReleasedGroup();
+    void studentUnderMasters();
+    void studentAnEffect();
+    void studentAnOverrideHit();
+    void studentAMixedGroup();
     void whyNotAnOperateEditIsBlind();
 
 private:

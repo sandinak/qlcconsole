@@ -837,4 +837,169 @@ void WhyOn_Test::whyNotAnOperateEditIsBlind()
     m_doc->inputOutputMap()->setGrandMasterValue(255);
 }
 
+/* Student mode: plain sentences per group. Cue 1 sets the Front Wash to
+   70 %; cue 2 doesn't touch it. */
+void WhyOn_Test::studentATrackedGroup()
+{
+    FixtureGroup *front = group("Front Wash", { m_fixtures[0], m_fixtures[1] });
+    FixtureGroup *other = group("Other", { m_fixtures[2] });
+    const quint32 seventy = dimmer(179, "Seventy");
+    const quint32 half = dimmer(128, "Half");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("Dance");
+    const quint32 listId = st->addCueList(prod, "Song");
+    const quint32 c1 = st->addCue(listId, -1, "Verse");
+    const quint32 c2 = st->addCue(listId, 0, "Chorus");
+    QVERIFY(st->setTargetLook(c1, groupTarget(front->id()), st->lookForPalette(seventy)));
+    QVERIFY(st->setTargetLook(c2, groupTarget(other->id()), st->lookForPalette(half)));
+    Chaser *chaser = qobject_cast<Chaser *>(m_doc->function(st->cueList(listId)->chaser));
+    go(chaser);
+    tick(5);
+
+    WhyOn::GroupAnswer g = WhyOn::explainGroup(m_doc, front->id());
+    QVERIFY(g.isValid());
+    QCOMPARE(g.fixtures, 2);
+    QCOMPARE(g.differing, 0);
+    QCOMPARE(g.sentences, QStringList()
+             << "The Front Wash is at 70 % because cue 1 “Verse” set it, and nothing later changed it."
+             << "The Grand Master is at full.");
+
+    go(chaser);
+    tick(5);
+    QCOMPARE(st->runningCue(listId), c2);
+    g = WhyOn::explainGroup(m_doc, front->id());
+    QCOMPARE(g.sentences.first(),
+             QString("The Front Wash is at 70 % because cue 1 “Verse” set it, and cue 2 “Chorus” leaves it as it was."));
+}
+
+/* Cue 1 lights the Backs and releases them leaving; cue 2 lights others. */
+void WhyOn_Test::studentAReleasedGroup()
+{
+    FixtureGroup *backs = group("Backs", { m_fixtures[0], m_fixtures[1] });
+    FixtureGroup *b = group("B", { m_fixtures[2] });
+    const quint32 full = dimmer(255, "Full");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("Dance");
+    const quint32 listId = st->addCueList(prod, "Song");
+    const quint32 c1 = st->addCue(listId, -1, "Verse");
+    const quint32 c2 = st->addCue(listId, 0, "Bridge");
+    QVERIFY(st->setTargetLook(c1, groupTarget(backs->id()), st->lookForPalette(full)));
+    QVERIFY(st->setTargetLook(c2, groupTarget(b->id()), st->lookForPalette(full)));
+    QVERIFY(st->setTargetRelease(c1, groupTarget(backs->id()), true));
+    Chaser *chaser = qobject_cast<Chaser *>(m_doc->function(st->cueList(listId)->chaser));
+    go(chaser);
+    tick(5);
+    go(chaser);
+    tick(5);
+    QCOMPARE(st->runningCue(listId), c2);
+
+    const WhyOn::GroupAnswer g = WhyOn::explainGroup(m_doc, backs->id());
+    QCOMPARE(g.sentences, QStringList()
+             << "The Backs are dark because cue 1 “Verse” released them when the show left it.");
+}
+
+/* A group master at 50 % and the Grand Master at 80 %. */
+void WhyOn_Test::studentUnderMasters()
+{
+    FixtureGroup *front = group("Front", { m_fixtures[0] });
+    front->setMaster(true);
+    front->setMasterLevel(127);
+    m_doc->groupMasters()->rebuild();
+    m_doc->inputOutputMap()->setGrandMasterValue(204);
+    Scene *s = new Scene(m_doc);
+    s->setName("Look");
+    s->setValue(m_fixtures[0], 0, 255);
+    QVERIFY(m_doc->addFunction(s));
+    s->start(m_doc->masterTimer(), FunctionParent::master());
+    tick(3);
+
+    const WhyOn::GroupAnswer g = WhyOn::explainGroup(m_doc, front->id());
+    QCOMPARE(g.sentences, QStringList()
+             << "The Front is at full because scene “Look” sets it."
+             << "The group master “Front” is at 50 % and the Grand Master is at 80 %, so it goes out at 40 %.");
+    m_doc->inputOutputMap()->setGrandMasterValue(255);
+}
+
+/* An effect at half depth over a base scene. */
+void WhyOn_Test::studentAnEffect()
+{
+    FixtureGroup *g1 = group("Movers", { m_fixtures[0] });
+    Scene *s = new Scene(m_doc);
+    s->setName("Base");
+    s->setValue(m_fixtures[0], 0, 100);
+    QVERIFY(m_doc->addFunction(s));
+    s->start(m_doc->masterTimer(), FunctionParent::master());
+    tick(3);
+    Universe *uni = m_doc->inputOutputMap()->universe(0);
+    QSharedPointer<GenericFader> fader = uni->requestFader(Universe::Override);
+    fader->setName(QStringLiteral("EffectScript"));
+    FadeChannel fc(m_doc, m_fixtures[0], 0);
+    fc.setTarget(200);
+    fc.setCurrent(200);
+    fc.setFadeTime(0);
+    fc.addFlag(FadeChannel::Override | FadeChannel::Mix);
+    fc.setMix(0.5f, 1.0f);
+    fader->replace(fc);
+    tick(2);
+
+    const WhyOn::GroupAnswer g = WhyOn::explainGroup(m_doc, g1->id());
+    QCOMPARE(g.sentences.first(),
+             QString("The Movers are at 59 % because an effect is moving them, at 50 % depth."));
+    uni->dismissFader(fader);
+}
+
+/* An override hit at 0 over a cue: the group is dark, and the hit is why. */
+void WhyOn_Test::studentAnOverrideHit()
+{
+    FixtureGroup *a = group("Front", { m_fixtures[0] });
+    const quint32 full = dimmer(255, "Full");
+    const quint32 outLevel = dimmer(0, "Out");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("Dance");
+    const quint32 listId = st->addCueList(prod, "Song");
+    const quint32 c1 = st->addCue(listId, -1, "One");
+    QVERIFY(st->setTargetLook(c1, groupTarget(a->id()), st->lookForPalette(full)));
+    const quint32 hit = st->addHit(HitScope::Production, prod, "Blackout");
+    const quint32 hitLayer = st->addLayer(hit, groupTarget(a->id()));
+    st->setLayerLook(hit, hitLayer, st->lookForPalette(outLevel));
+    QVERIFY(st->setHitsOverride({ hit }, true));
+    Collection *coll = qobject_cast<Collection *>(m_doc->function(st->cue(hit)->collection));
+    Chaser *chaser = qobject_cast<Chaser *>(m_doc->function(st->cueList(listId)->chaser));
+    go(chaser);
+    tick(5);
+    coll->start(m_doc->masterTimer(), FunctionParent::master());
+    tick(5);
+
+    const WhyOn::GroupAnswer g = WhyOn::explainGroup(m_doc, a->id());
+    QCOMPARE(g.sentences, QStringList()
+             << "The Front is dark because the override hit “Blackout” is holding it at 0.");
+}
+
+/* Fixtures that differ: two are lit by a cue, one has nothing on it. */
+void WhyOn_Test::studentAMixedGroup()
+{
+    FixtureGroup *two = group("Lit", { m_fixtures[0], m_fixtures[1] });
+    FixtureGroup *all = group("Whole Rig", { m_fixtures[0], m_fixtures[1], m_fixtures[2] });
+    const quint32 full = dimmer(255, "Full");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("Dance");
+    const quint32 listId = st->addCueList(prod, "Song");
+    const quint32 c1 = st->addCue(listId, -1, "Verse");
+    QVERIFY(st->setTargetLook(c1, groupTarget(two->id()), st->lookForPalette(full)));
+    Chaser *chaser = qobject_cast<Chaser *>(m_doc->function(st->cueList(listId)->chaser));
+    go(chaser);
+    tick(5);
+
+    const WhyOn::GroupAnswer g = WhyOn::explainGroup(m_doc, all->id());
+    QCOMPARE(g.fixtures, 3);
+    QCOMPARE(g.differing, 1);
+    QCOMPARE(g.sentences, QStringList()
+             << "Most of the Whole Rig (2 of 3 fixtures) are at full because cue 1 “Verse” set them, and nothing later changed them."
+             << "The Grand Master is at full."
+             << "The other fixture differs: Dim 3 is dark because the running cue has no layer on it.");
+    // A group that is not there, and an empty one, say nothing.
+    QVERIFY(!WhyOn::explainGroup(m_doc, 9999).isValid());
+    QVERIFY(!WhyOn::explainFixtures(m_doc, "Nobody", QList<quint32>()).isValid());
+}
+
 QTEST_MAIN(WhyOn_Test)

@@ -132,10 +132,23 @@ v3b built (why3, 2026-11-01), each "decided (can change)":
 - Locate: it is a flash with no window of its own (Fixture Manager
   toolbar, Monitor), so there is nowhere for a link; its right-click
   already has "Why is this on?". Left.
-- Teaching's plain sentences per group: nothing here says what they are,
-  left.
-Open: pin / several windows, Teaching's plain sentences per group,
-release-at-once provenance.
+v3 student mode built (why4, 2026-11-01), each "decided (can change)":
+- `WhyOn::explainGroup` / `explainFixtures` (engine/src/whyon.*): two or
+  three sentences per **fixture group**, built from each fixture's
+  intensity answer (`explain()` with no channel), so no new replay and
+  nothing per frame. Fixtures with the same source and state are told
+  together; a mixed group leads with the biggest bunch ("Most of the X (4
+  of 6 fixtures) ...") and adds one sentence on the rest. A layer is told
+  through its fixtures (`explainFixtures`); the window only offers groups.
+- Shown by the **Plain words** box (on in Teaching, offered elsewhere), no
+  new box or menu entry: a block above the chain for the (up to two)
+  groups the light is in, a light in no group on its own; recomputed once a
+  second while shown, and put on the clipboard with Copy.
+- A sentence names the level before the masters; a second one names the
+  group masters and the Grand Master when they scale it. English only
+  (`tr()`), like the rest of the window.
+Open: pin / several windows, release-at-once provenance, a group name that
+is plural by more than a trailing "s" ("Wash" is read as singular).
 
 ## Effect fades — leftovers (efo, 2026-10-31)
 

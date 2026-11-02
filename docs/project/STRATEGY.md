@@ -596,7 +596,8 @@ Order and dependencies:
    (per-writer provenance) and v3's "why not" list (**built 2026-11-01:**
    who let go of a channel is noted when it happens, never per frame, so
    no stress-run gate was needed; the dark-light reasons, actions from a
-   line, ⌘I), then **v3's student mode** (plain sentences per group),
+   line, ⌘I), then **v3's student mode** (**built 2026-11-01:** plain
+   sentences per fixture group, shown by the Plain words box, on in Teaching),
    which reads best next to Show Review.
 3. **Laser part C** (audience-zone check built as Show Review PWR-09,
    2026-10-31; the H×V window and density are open) and the **no-light

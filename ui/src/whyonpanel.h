@@ -108,6 +108,9 @@ public:
     void refresh();
     /** What it shows (tests) */
     const WhyOn::Answer &answer() const { return m_answer; }
+    /** The plain sentences shown (empty: none) */
+    QString storyText() const { return m_storyText; }
+    QLabel *storyLabel() const { return m_story; }
     QListWidget *lines() const { return m_list; }
     /** Go to what line @a row names (a click does this) */
     void activate(int row);
@@ -132,6 +135,7 @@ private:
     void jump(const WhyOn::Line &line);
     void place(const QPoint &globalPos);
     void updateAction();
+    void updateStory();
 
     Doc *m_doc;
     quint32 m_fixtureId = 0xFFFFFFFF;
@@ -145,6 +149,9 @@ private:
     QLabel *m_subject;
     QComboBox *m_channels;
     QLabel *m_headline;
+    QLabel *m_story;            //!< student mode: plain sentences per group
+    QString m_storyText;
+    int m_storyAge = 0;         //!< refreshes since the sentences were worked out
     QListWidget *m_list;
     QCheckBox *m_plain;
     QCheckBox *m_follow;
