@@ -20,6 +20,7 @@
 #ifndef MONITORGRAPHICSVIEW_H
 #define MONITORGRAPHICSVIEW_H
 
+#include <climits>
 #include <QElapsedTimer>
 #include "../qlcui_export.h"
 #include <QGraphicsView>
