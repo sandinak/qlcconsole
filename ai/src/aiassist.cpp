@@ -32,6 +32,7 @@ namespace
 {
 AiAssist *s_instance = nullptr;
 int s_violations = 0;
+int s_testCapMs = 0;
 #ifdef QT_DEBUG
 bool s_assertOnViolation = true;
 #else
@@ -659,6 +660,11 @@ int AiAssist::proposeExternal(const QString &name, const QJsonObject &args, cons
     return m_proposal.count();
 }
 
+void AiAssist::setTestCapMs(int ms)
+{
+    s_testCapMs = ms;
+}
+
 bool AiAssist::testConnection(const AiSettings &settings, const QString &apiKey)
 {
     if (!settings.enabled || m_operate || m_doc->mode() == Doc::Operate)
@@ -670,15 +676,36 @@ bool AiAssist::testConnection(const AiSettings &settings, const QString &apiKey)
         m_testReply->disconnect(this);
         m_testReply->abort();
         m_testReply->deleteLater();
+        m_testReply = nullptr;
     }
+    // A test is a quick question: its own cap, never the model's long timeout.
+    const int capMs = qMin(settings.timeoutSec * 1000, s_testCapMs > 0 ? s_testCapMs : 10000);
     std::shared_ptr<AiProvider> p(AiProvider::create(settings, apiKey).release());
-    QNetworkReply *r = network()->get(p->modelsRequest());
+    QNetworkRequest req = p->modelsRequest();
+    req.setTransferTimeout(capMs + 1000);          // the backstop; the timer below says why
+    QNetworkReply *r = network()->get(req);
     AiResources::track(r, QStringLiteral("connection test"));
     m_testReply = r;
-    connect(r, &QNetworkReply::finished, this, [this, r, p, settings]() {
+    m_testTimedOut = false;
+    if (m_testTimer == nullptr)
+    {
+        m_testTimer = new QTimer(this);
+        m_testTimer->setSingleShot(true);
+    }
+    m_testTimer->disconnect(this);
+    connect(m_testTimer, &QTimer::timeout, this, [this, r]() {
+        if (r == m_testReply)
+        {
+            m_testTimedOut = true;
+            r->abort();                             // finished() follows with the message below
+        }
+    });
+    m_testTimer->start(capMs);
+    connect(r, &QNetworkReply::finished, this, [this, r, p, settings, capMs]() {
         if (r != m_testReply)
             return;
         m_testReply = nullptr;
+        m_testTimer->stop();
         r->deleteLater();
         QString error;
         QStringList models;
@@ -686,7 +713,11 @@ bool AiAssist::testConnection(const AiSettings &settings, const QString &apiKey)
         {
             const QByteArray body = r->readAll();
             p->parseModels(body, &error);
-            if (error.isEmpty() || error == AiSettings::tr("The server's answer isn't JSON"))
+            if (m_testTimedOut || r->error() == QNetworkReply::TimeoutError)
+                error = tr("no answer within %1 s").arg(qMax(1, capMs / 1000));
+            else if (r->error() == QNetworkReply::OperationCanceledError)
+                error = tr("cancelled");
+            else if (error.isEmpty() || error == AiSettings::tr("The server's answer isn't JSON"))
                 error = r->errorString();
         }
         else
@@ -731,6 +762,10 @@ void AiAssist::abortAll()
         m_testReply = nullptr;
         r->disconnect(this);
         r->abort();
+        if (m_testTimer != nullptr)
+            m_testTimer->stop();
+        // The page must hear back, or its Test button stays grey.
+        emit connectionTested(false, QStringList(), tr("Test cancelled."));
     }
     // The replies are the manager's children: they go with it, now.
     delete m_nam;

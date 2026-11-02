@@ -44,6 +44,12 @@ AiCommandLine::AiCommandLine(QLineEdit *line, QTextBrowser *pane, QLabel *messag
             m_line->setText(QStringLiteral("? "));
         m_line->setFocus(Qt::OtherFocusReason);
         m_line->end(false);
+        // The pick stays picked: if the provider was down the last time,
+        // say so and that Enter tries again.
+        if (AiAssist *ai = assist())
+            if (ai->isUnreachable())
+                setMessage(tr("%1 -- Enter on a question tries again; Settings ▸ AI Assist ▸ Test connection.")
+                               .arg(ai->unreachableReason()), true);
     });
     // The proposal's links (the view's own handler only takes "ex:").
     if (!m_pane.isNull())
@@ -89,10 +95,12 @@ void AiCommandLine::update()
     m_button->setVisible(shown);
     if (!shown)
         return;
-    m_button->setEnabled(!ai->isUnreachable());
+    // Never greyed: a greyed button was "AI turned itself off" with no way
+    // to retry. Unreachable only changes what it says.
+    m_button->setEnabled(true);
     if (ai->isUnreachable())
-        m_button->setToolTip(tr("AI Assist: %1. Settings ▸ AI Assist ▸ Test connection; or ask again "
-                                "(? and your question).").arg(ai->unreachableReason()));
+        m_button->setToolTip(tr("AI Assist: %1. Press to ask again (? and your question), or Settings ▸ "
+                                "AI Assist ▸ Test connection.").arg(ai->unreachableReason()));
     else if (ai->isBusy())
         m_button->setToolTip(tr("AI Assist is answering (Esc in the line cancels)."));
     else

@@ -31,6 +31,7 @@
 #include <QCheckBox>
 #include <QComboBox>
 #include <QLineEdit>
+#include <QPushButton>
 #include <QSettings>
 #include <QLabel>
 #include <QThread>
@@ -453,7 +454,7 @@ void AiAssist_Test::endpointPaths()
     QCOMPARE(p->modelsRequest().url().toString(), QStringLiteral("http://box:8080/v1/models"));
     QCOMPARE(p->chatRequest().rawHeader("Authorization"), QByteArray("Bearer k"));
     p = AiProvider::create(ollamaAt("http://localhost:11434"), QString());
-    QCOMPARE(p->modelsRequest().url().toString(), QStringLiteral("http://localhost:11434/api/tags"));
+    QCOMPARE(p->modelsRequest().url().toString(), QStringLiteral("http://127.0.0.1:11434/api/tags"));
     QVERIFY(p->chatRequest().rawHeader("Authorization").isEmpty());
     // A key never follows a redirect.
     QCOMPARE(p->chatRequest().attribute(QNetworkRequest::RedirectPolicyAttribute).toInt(),
@@ -691,8 +692,12 @@ void AiAssist_Test::providerDownGreysTheEntry()
     QLabel msg(&bar);
     AiCommandLine cl(line, &pane, &msg, row, &bar);
     QVERIFY(!cl.button()->isHidden());
-    QVERIFY(!cl.button()->isEnabled());
+    QVERIFY(cl.button()->isEnabled());                 // never greys: a retry stays one click away
     QVERIFY(cl.button()->toolTip().contains(QString::number(port)));
+    cl.button()->click();
+    QCOMPARE(line->text(), QStringLiteral("? "));      // the pick sticks
+    QVERIFY(msg.text().contains(QString::number(port)));
+    QVERIFY(msg.text().contains("tries again"));
     // Back up: a good connection test lifts it.
     s.endpoint = m_server->endpoint();
     s.save();
@@ -717,6 +722,101 @@ void AiAssist_Test::testConnectionListsModels()
     QVERIFY(m_ai->testConnection(other, QString()));
     QVERIFY(tested.wait(5000));
     QVERIFY(tested.first().at(2).toString().contains("missing"));
+}
+
+void AiAssist_Test::testFromUnsavedPage()
+{
+    // He ticks Enabled and presses Test without OK: nothing saved, AI Assist off.
+    QVERIFY(!AiSettings::load().enabled);
+    m_server->queueJson("/api/tags", "{\"models\":[{\"name\":\"llama\"}]}");
+    AiSettingsPage page;
+    QCheckBox *enabled = page.findChild<QCheckBox *>("aiEnabled");
+    QLineEdit *endpoint = page.findChild<QLineEdit *>("aiEndpoint");
+    QPushButton *test = page.findChild<QPushButton *>("aiTest");
+    QLabel *result = page.findChild<QLabel *>("aiTestResult");
+    QVERIFY(enabled && endpoint && test && result);
+    enabled->setChecked(true);
+    endpoint->setText(m_server->endpoint());
+    test->click();
+    QVERIFY(!test->isEnabled());
+    QTRY_VERIFY_WITH_TIMEOUT(test->isEnabled(), 5000);
+    QVERIFY2(result->text().startsWith("Connected"), qPrintable(result->text()));
+    QVERIFY(!AiSettings::load().enabled);           // still unsaved
+}
+
+void AiAssist_Test::testAgainstASilentServer()
+{
+    // A server that accepts and never answers: a result inside the test's own cap.
+    m_server->hold("/api/tags");
+    AiSettingsPage page;
+    QCheckBox *enabled = page.findChild<QCheckBox *>("aiEnabled");
+    QLineEdit *endpoint = page.findChild<QLineEdit *>("aiEndpoint");
+    QPushButton *test = page.findChild<QPushButton *>("aiTest");
+    QLabel *result = page.findChild<QLabel *>("aiTestResult");
+    enabled->setChecked(true);
+    endpoint->setText(m_server->endpoint());
+    AiAssist::setTestCapMs(300);
+    test->click();
+    QVERIFY(!test->isEnabled());
+    QTRY_VERIFY_WITH_TIMEOUT(test->isEnabled(), 3000);
+    QVERIFY2(result->text().contains("Can't reach") || result->text().contains("No answer"),
+             qPrintable(result->text()));
+    AiAssist::setTestCapMs(0);
+}
+
+void AiAssist_Test::abortedTestSaysSo()
+{
+    // Whatever drops the network manager mid-test, the page hears back.
+    m_server->hold("/api/tags");
+    AiSettingsPage page;
+    page.findChild<QCheckBox *>("aiEnabled")->setChecked(true);
+    page.findChild<QLineEdit *>("aiEndpoint")->setText(m_server->endpoint());
+    QPushButton *test = page.findChild<QPushButton *>("aiTest");
+    QLabel *result = page.findChild<QLabel *>("aiTestResult");
+    test->click();
+    QVERIFY(!test->isEnabled());
+    QTRY_COMPARE_WITH_TIMEOUT(m_server->count("/api/tags"), 1, 3000);
+    // Saved as off while it runs, then "Off" applied: abortAll.
+    AiSettings on = AiSettings::load();
+    on.enabled = true;
+    on.endpoint = m_server->endpoint();
+    on.save();
+    m_ai->settingsChanged();
+    on.enabled = false;
+    on.save();
+    m_ai->settingsChanged();
+    QVERIFY2(test->isEnabled(), "the Test button stayed greyed");
+    QVERIFY2(result->text().contains("ancel"), qPrintable(result->text()));
+}
+
+void AiAssist_Test::testNeverReadsTheKeychainForOllama()
+{
+    bool asked = false;
+    AiKeychain::setBackend([&asked](const QString &) { asked = true; return QString(); },
+                           [](const QString &, const QString &) { return true; });
+    m_server->queueJson("/api/tags", "{\"models\":[]}");
+    AiSettingsPage page;
+    page.findChild<QCheckBox *>("aiEnabled")->setChecked(true);
+    page.findChild<QLineEdit *>("aiEndpoint")->setText(m_server->endpoint());
+    QPushButton *test = page.findChild<QPushButton *>("aiTest");
+    test->click();
+    QTRY_VERIFY_WITH_TIMEOUT(test->isEnabled(), 5000);
+    QVERIFY(!asked);
+    AiKeychain::setBackend([this](const QString &p) { return m_keys.value(p); },
+                           [this](const QString &p, const QString &k) { m_keys.insert(p, k); return true; });
+}
+
+void AiAssist_Test::localhostFallsBackToIpv4()
+{
+    // Ollama listens on 127.0.0.1 only; "localhost" may resolve to ::1 first.
+    m_server->queueJson("/api/tags", "{\"models\":[{\"name\":\"llama\"}]}");
+    AiSettings s;
+    s.enabled = true;
+    s.endpoint = QStringLiteral("http://localhost:%1").arg(m_server->serverPort());
+    QSignalSpy tested(m_ai, &AiAssist::connectionTested);
+    QVERIFY(m_ai->testConnection(s, QString()));
+    QVERIFY(tested.wait(8000));
+    QVERIFY2(tested.first().at(0).toBool(), qPrintable(tested.first().at(2).toString()));
 }
 
 void AiAssist_Test::cancel()
