@@ -111,6 +111,31 @@ Use it to call a one-shot, say a breathe, off a hit in a cue.
 - Hits fire in **Operate** only, as a button does. It is not a run command:
   it starts the hit's look the way a VC button's press does.
 
+### DualSense extras: triggers and swipes
+
+Two things a PlayStation DualSense adds to the Run role. Neither is needed:
+everything has a button, and an Xbox pad simply has no triggers to feel.
+
+- **Adaptive triggers.** While you hold LB (L1) to arm, R2 pushes back
+  firmly, so a GO takes a deliberate squeeze and a brush cannot fire one.
+  Let go of LB and the trigger is loose again. While walking, both
+  triggers give a light click at the end of each pull, one click a cue
+  stepped. The triggers go back to off when you disarm, leave the walk or
+  the Run role, lose the pad, or quit.
+- **Touchpad swipes.** One finger across the touchpad steps. One swipe is
+  one step, and a swipe never fires a GO: it previews and selects.
+  While walking: swipe **right / left** for the next / previous cue and
+  **down / up** for the next / previous layer. In the Run map, not walking:
+  down / up pick the next / previous list, and right / left start a walk
+  from the next / previous cue (Design only; in Operate the cue moves with
+  GO). A second finger, a click, a slanted drag and a swipe too soon after
+  the last do nothing.
+
+While walking, one finger now swipes, so aiming with the touchpad needs LB
+held (two fingers still zoom and focus).
+
+decided (can change): swipes need no arm, as picking a list does not.
+
 ### Switch roles from the pad
 
 Hold **View + Menu** (Create + Options) for a second and the controller
@@ -208,8 +233,8 @@ View + B (or undo on the laptop) puts the light back.
 - **No GO while walking.** Menu first, then hold LB and press A.
 - A focus-call cue that is armed still takes Menu to begin its calls.
 
-The PlayStation touchpad adds no walking shortcuts yet. Everything is on
-the buttons, the same on both kinds of pad.
+Everything above is on the buttons, the same on both kinds of pad. The
+PlayStation touchpad adds [swipes](#dualsense-extras-triggers-and-swipes).
 
 decided (can change): Menu enters and leaves the walk. View solos, so the
 undo moves to View + B. A tap of Y is still the scope and a hold tags.

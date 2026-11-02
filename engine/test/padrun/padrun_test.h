@@ -131,8 +131,24 @@ private slots:
      *  watchdog fails the run instead of hanging the gate. */
     void inputThroughThePatchDoesNotDeadlock();
 
+    /* Adaptive triggers and swipes (Q199). */
+    /** The feel by state: off outside the Run role, R2 firm while armed,
+     *  both clicking while walking. */
+    void theTriggerFeelByState();
+    /** Arm, disarm, walk, leave the walk, leave the role, lose the pad,
+     *  quit: what the pad is told each time, and nothing twice. */
+    void theTriggersFollowTheArm();
+    /** One swipe is one step; a pause, a second finger and a click are no
+     *  swipe; a slanted drag is none. */
+    void oneSwipeIsOneStep();
+    /** Walking: left / right the cues, up / down the layers, never a GO;
+     *  one finger aims only with LB held. In Run: up / down pick the list,
+     *  left / right walk from the next cue (Design), refused in Operate. */
+    void swipesStepAndNeverGo();
+
 private:
     IOPluginStub *loadStub();
+    void swipeAcross(float x0, float y0, float x1, float y1);
     /** Four spots, a list: Opening (Fronts, Backs), Blackout (no layer),
      *  Ballad (Fronts, Backs); Opening picked in the tree. */
     void makeShow();

@@ -43,6 +43,12 @@ bool HIDOSXJoystick::setPadLight(float r, float g, float b)
     return gc != 0 && HIDGameController::setLight(gc, r, g, b);
 }
 
+bool HIDOSXJoystick::setPadTriggers(int right, int left)
+{
+    const int gc = m_gcHandle.loadRelaxed();
+    return gc != 0 && HIDGameController::setTriggers(gc, right, left);
+}
+
 bool HIDOSXJoystick::padRumble(int pulses, int lengthMs)
 {
     const int gc = m_gcHandle.loadRelaxed();

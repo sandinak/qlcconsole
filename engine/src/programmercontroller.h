@@ -37,6 +37,7 @@
 #include "controllerscheme.h"
 #include "padnames.h"
 #include "touchpadgesture.h"
+#include "padtriggers.h"
 #include "scenevalue.h"
 #include "doc.h"
 
@@ -75,6 +76,7 @@ class QLC_ENGINE_EXPORT ProgrammerController final : public QObject
 
 public:
     ProgrammerController(Doc *doc);
+    ~ProgrammerController() override;
 
     /** Everything a Revert has to put back. Scene::clear() wipes the baked
      *  values, the fixture list, the group list AND the attached palette
@@ -225,6 +227,11 @@ public:
     void setHolding(bool on);
     void toggleHolding() { setHolding(!m_holding); }
     QColor padLight() const { return m_padLight; }
+    /** The feel of the pad's adaptive triggers (a DualSense; nothing
+     *  elsewhere), last asked for. @p force: ask again even when it is
+     *  the same (the pad came back). */
+    void setPadTriggers(const PadTriggers::State &state, bool force = false);
+    PadTriggers::State padTriggers() const { return m_padTriggers; }
     int padRumbles() const { return m_padRumbles; }
     /** Refine: the controller on a Show Tree cue's own values. Never null. */
     RefineSession *refineSession() const { return m_refineSession; }
@@ -537,6 +544,7 @@ signals:
     void operatorFeedbackChanged(ControllerScheme::Feedback feedback);
     void voiceDetailChanged(ControllerScheme::VoiceDetail detail);
     void padLightChanged(const QColor &colour);
+    void padTriggersChanged();
     void padRumbled(int pulses, int lengthMs);
     /** A controller came or went, or its profile changed: ask
      *  focusController() again. */
@@ -710,6 +718,8 @@ private:
     quint32 m_bumperFrom = 0xFFFFFFFF;
     ControllerScheme::LongPress m_holdB;
     QColor m_padLight;
+    PadTriggers::State m_padTriggers;
+    bool m_padTriggersSent = false;
     int m_padRumbles = 0;
     void sendPadFeedback(const QVariantMap &params);
     void refreshPadLight();

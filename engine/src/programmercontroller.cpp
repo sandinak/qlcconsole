@@ -1569,6 +1569,27 @@ void ProgrammerController::setPadLight(const QColor &colour)
     emit padLightChanged(colour);
 }
 
+void ProgrammerController::setPadTriggers(const PadTriggers::State &state, bool force)
+{
+    if (m_padTriggersSent && state == m_padTriggers && !force)
+        return;
+    m_padTriggers = state;
+    m_padTriggersSent = true;
+    QVariantMap p;
+    p.insert(QStringLiteral("gamepad"), QStringLiteral("triggers"));
+    p.insert(QStringLiteral("right"), QString::fromLatin1(PadTriggers::name(state.right)));
+    p.insert(QStringLiteral("left"), QString::fromLatin1(PadTriggers::name(state.left)));
+    sendPadFeedback(p);
+    emit padTriggersChanged();
+}
+
+ProgrammerController::~ProgrammerController()
+{
+    // Quit: the pad's triggers go back to off (a pad keeps what it was told).
+    if (m_padTriggersSent && m_padTriggers != PadTriggers::State())
+        setPadTriggers(PadTriggers::State());
+}
+
 void ProgrammerController::padRumble(int pulses, int lengthMs)
 {
     if (pulses <= 0)
@@ -1745,6 +1766,9 @@ void ProgrammerController::checkControllerPresence()
         /* Mid-move or mid-hold, the pad sends no "let go": everything it
            held is let go here, so no light drifts and no hold fires. */
         freezeController();
+        // A pad that comes back starts with its triggers off.
+        m_padTriggersSent = false;
+        m_padTriggers = PadTriggers::State();
         // The owner gone: the next pad to press takes it.
         m_ownerUniverse = 0xFFFFFFFF;
         if (tool)
@@ -1766,7 +1790,10 @@ void ProgrammerController::checkControllerPresence()
         if (wasLost)
             emit controllerLost(false);
     }
+    const bool cameBack = !m_padPresent && present;
     m_padPresent = present;
+    if (cameBack && m_padRun != nullptr)
+        m_padRun->updateTriggers(true);
 }
 
 void ProgrammerController::sayNoController()
@@ -2412,6 +2439,10 @@ void ProgrammerController::applyTouch()
     if (m.kind == TouchpadGesture::NoMotion || m_holding)
         return;
     const bool refine = m_refineSession->isActive();
+    // Walking, one finger swipes (Q199); to aim, hold LB.
+    if (refine && m.kind == TouchpadGesture::Drag && m_padRun->isEnabled()
+        && m_padRun->isWalking() && !m_padRun->isModifierHeld())
+        return;
     if (!refine && m_focusSession->inputDevice() == FocusSession::KeyboardInput)
         return;
     /* Carried until a step is big enough to send: the tools hold offsets
@@ -2495,6 +2526,11 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
         return false;
 
     const GamepadRole::Role role = GamepadRole::Role(controllerRole(universe, channel));
+    // The touchpad's swipes (Q199): kept here, read on the tick.
+    if (GamepadRole::isTouch(role))
+        m_padRun->touchValue(role, norm);
+    else if (role == GamepadRole::TouchClick)
+        m_padRun->touchClick(value > 0);
     if (role == GamepadRole::None && !active)
         return false;
 
@@ -2799,6 +2835,8 @@ void ProgrammerController::applyDesignJoystick()
     /* Focus mode is the follow spot's stick put to another use: the same
        bound axes, the same profile deadzone and sensitivity, this same tick --
        nudging the current head's calibration instead of moving a target. */
+    if (m_padRun != nullptr && (m_focusSession == nullptr || !m_focusSession->isActive()))
+        m_padRun->swipeTick(m_designJoyTimer != nullptr ? m_designJoyTimer->interval() / 1000.0 : 0.02);
     if (m_focusSession != nullptr && m_focusSession->isActive())
     {
         m_focusSession->setStickResponse(m_joystickDeadzone, m_joystickSensitivity);

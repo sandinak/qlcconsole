@@ -31,6 +31,8 @@
 #include "gamepadrole.h"
 #include "padnames.h"
 #include "showcontrol.h"
+#include "touchswipe.h"
+#include "padtriggers.h"
 
 class ProgrammerController;
 class QTimer;
@@ -89,6 +91,18 @@ class Doc;
  * decided: GO needs a modifier held (LB), not a double-press (can change).
  * decided: Back, Sub GO and Stop need it too: one rule, "nothing moves the
  * show unless LB is held" (can change).
+ *
+ * Triggers and swipes (Q199): on a DualSense the arm firms R2 (a GO takes a
+ * squeeze, a brush cannot fire) and walking clicks both triggers
+ * (PadTriggers); on any pad with a touchpad a swipe steps -- left / right
+ * the previous / next cue, up / down the previous / next layer (in Run, not
+ * walking: right / left walk from the next / previous cue, up / down pick
+ * the list). Never a GO: swipes preview and select only.
+ *
+ * decided: while walking, one finger on the touchpad swipes; the aim nudge
+ * it used to make needs LB held (can change).
+ * decided: a swipe in Run, not walking, left / right starts a walk (Design
+ * only; in Operate the cue moves with GO) (can change).
  *
  * The API is meant to grow into walking a cue's layers from the pad (Q192):
  * actionFor() is the one table, and handle() the one entry.
@@ -193,6 +207,25 @@ public:
     bool isArmed() const { return !m_armedOn.isEmpty(); }
     /** Let go of everything held (the pad went away, a tool took it). */
     void reset();
+
+    /*********************************************************************
+     * Triggers and swipes (Q199)
+     *********************************************************************/
+public:
+    /** The feel the pad's triggers should have now. */
+    PadTriggers::State triggerState() const;
+    /** Tell the pad (ProgrammerController::setPadTriggers()); @p force:
+     *  even when it is what was last sent (a pad that came back). */
+    void updateTriggers(bool force = false);
+
+    /** A touchpad reading / click, kept for the tick. */
+    void touchValue(GamepadRole::Role role, float norm);
+    void touchClick(bool down);
+    /** The controller tick: a swipe made since the last, acted on. */
+    void swipeTick(double dt);
+    /** Act on @p swipe: the walking steps, or Run's picks. True when it
+     *  did something. Never a GO. */
+    bool swipe(TouchSwipe::Swipe swipe);
 
     /*********************************************************************
      * Commands
@@ -331,6 +364,7 @@ private:
     bool m_chordPending = false;    ///< both down, still timing
     bool m_chordFired = false;      ///< switched: the releases do nothing
     ControllerScheme::TriggerButton m_rt, m_lt;
+    TouchSwipe m_swipe;
     /** The light bar's flash after a GO. */
     QTimer *m_flash = nullptr;
     /** Walking: Focus this cue was started here and runs. */

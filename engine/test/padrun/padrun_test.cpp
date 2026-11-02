@@ -40,6 +40,8 @@
 #include "inputpatch.h"
 #include "padnames.h"
 #include "padrun.h"
+#include "padtriggers.h"
+#include "touchswipe.h"
 #include "chaser.h"
 #include "qlcfile.h"
 #include "doc.h"
@@ -60,13 +62,16 @@ namespace
 {
 /* An Xbox pad as its profile describes it: axes, then buttons. */
 const quint32 kLX = 0, kLT = 4, kRT = 5, kA = 10, kB = 11, kX = 12, kY = 13, kLB = 14, kRB = 15,
-              kView = 16, kMenu = 17, kRS = 19, kUp = 20;
+              kView = 16, kMenu = 17, kRS = 19, kUp = 20,
+              kTouchX = 30, kTouchY = 31, kTouchDown = 32, kTouch2Down = 33, kTouchClick = 34;
 
 QMap<quint32, QString> xboxRoles()
 {
     return { { 0, "lx" }, { 1, "ly" }, { 2, "rx" }, { 3, "ry" }, { kLT, "lt" }, { kRT, "rt" },
              { kA, "a" }, { kB, "b" }, { kX, "x" }, { kY, "y" }, { kLB, "lb" }, { kRB, "rb" },
-             { kView, "back" }, { kMenu, "start" }, { kRS, "rs" }, { kUp, "dpad_up" } };
+             { kView, "back" }, { kMenu, "start" }, { kRS, "rs" }, { kUp, "dpad_up" },
+             { kTouchX, "touch_x" }, { kTouchY, "touch_y" }, { kTouchDown, "touch_down" },
+             { kTouch2Down, "touch2_down" }, { kTouchClick, "touchpad" } };
 }
 
 /* A spot: pan, pan fine, tilt, tilt fine, dimmer, zoom (10-40 degrees). */
@@ -1587,6 +1592,247 @@ void PadRun_Test::inputThroughThePatchDoesNotDeadlock()
     stub->m_lineChannelRoles.clear();
     stub->m_lineDeviceKind.clear();
     stub->m_buttonActions.clear();
+}
+
+/*****************************************************************************
+ * Adaptive triggers and swipes (Q199)
+ *****************************************************************************/
+
+void PadRun_Test::theTriggerFeelByState()
+{
+    using T = PadTriggers;
+    // The role off: always off.
+    QCOMPARE(T::forState(false, true, true), T::State());
+    QCOMPARE(T::forState(true, false, false), T::State());
+    // Armed: R2 firm, L2 free.
+    QCOMPARE(T::forState(true, true, false).right, T::Firm);
+    QCOMPARE(T::forState(true, true, false).left, T::Off);
+    // Walking: both click, the arm or not.
+    QCOMPARE(T::forState(true, false, true).right, T::Click);
+    QCOMPARE(T::forState(true, true, true).left, T::Click);
+    for (T::Feel f : { T::Off, T::Firm, T::Click })
+        QCOMPARE(T::fromName(T::name(f)), f);
+    QCOMPARE(T::fromName("nonsense"), T::Off);
+    QCOMPARE(T::fromName(nullptr), T::Off);
+}
+
+void PadRun_Test::theTriggersFollowTheArm()
+{
+    makeShow();
+    ProgrammerController *pc = m_doc->programmer();
+    IOPluginStub *stub = loadStub();
+    QVERIFY(stub != nullptr);
+    QVERIFY(m_doc->inputOutputMap()->setInputPatch(0, stub->name(), QString(), 0));
+    PadRun *run = pc->padRun();
+    QSignalSpy told(pc, &ProgrammerController::padTriggersChanged);
+
+    // Tools role: nothing is sent for an arm that is not one.
+    hold(kLB, true);
+    hold(kLB, false);
+    QCOMPARE(pc->padTriggers(), PadTriggers::State());
+
+    run->setEnabled(true);
+    told.clear();
+    hold(kLB, true);
+    QVERIFY(run->isArmed());
+    QCOMPARE(pc->padTriggers().right, PadTriggers::Firm);
+    QCOMPARE(pc->padTriggers().left, PadTriggers::Off);
+    QCOMPARE(told.count(), 1);
+    // Held, nothing is said again.
+    hold(kLB, true);
+    QCOMPARE(told.count(), 1);
+    // Disarm: off.
+    hold(kLB, false);
+    QCOMPARE(pc->padTriggers(), PadTriggers::State());
+    QCOMPARE(told.count(), 2);
+
+    // Walking: both click; leaving the walk: off.
+    press(kMenu);
+    QVERIFY(run->isWalking());
+    QCOMPARE(pc->padTriggers().right, PadTriggers::Click);
+    QCOMPARE(pc->padTriggers().left, PadTriggers::Click);
+    press(kMenu);
+    QVERIFY(!run->isWalking());
+    QCOMPARE(pc->padTriggers(), PadTriggers::State());
+    // The walk ended from the laptop.
+    QVERIFY(run->startWalk());
+    QCOMPARE(pc->padTriggers().right, PadTriggers::Click);
+    pc->refineSession()->stop();
+    QCOMPARE(pc->padTriggers(), PadTriggers::State());
+
+    // Armed, then the role leaves: off.
+    hold(kLB, true);
+    QCOMPARE(pc->padTriggers().right, PadTriggers::Firm);
+    run->setEnabled(false);
+    QCOMPARE(pc->padTriggers(), PadTriggers::State());
+    hold(kLB, false);
+
+    // Armed, the controller is lost: reset puts them off.
+    run->setEnabled(true);
+    hold(kLB, true);
+    QCOMPARE(pc->padTriggers().right, PadTriggers::Firm);
+    run->reset();
+    QCOMPARE(pc->padTriggers(), PadTriggers::State());
+
+    // Quit while armed: off before the controller goes.
+    hold(kLB, true);
+    QCOMPARE(pc->padTriggers().right, PadTriggers::Firm);
+}
+
+void PadRun_Test::swipeAcross(float x0, float y0, float x1, float y1)
+{
+    // As a pad sends them: down at (x0, y0), moving in steps, up.
+    auto at = [this](float x, float y) {
+        axis(kTouchX, uchar(x * 255.0f));
+        axis(kTouchY, uchar(y * 255.0f));
+    };
+    at(x0, y0);
+    axis(kTouchDown, 255);
+    PadRun *run = m_doc->programmer()->padRun();
+    run->swipeTick(0.02);
+    for (int i = 1; i <= 10; ++i)
+    {
+        at(x0 + (x1 - x0) * i / 10.0f, y0 + (y1 - y0) * i / 10.0f);
+        run->swipeTick(0.02);
+    }
+    axis(kTouchDown, 0);
+    run->swipeTick(0.02);
+}
+
+void PadRun_Test::oneSwipeIsOneStep()
+{
+    TouchSwipe s;
+    using R = GamepadRole::Role;
+    auto finger = [&s](float x, float y, bool down) {
+        s.setValue(R::TouchX, x);
+        s.setValue(R::TouchY, y);
+        s.setValue(R::TouchDown, down ? 1.0f : 0.0f);
+    };
+    // A right swipe: one, once, however far on; none until the lift.
+    finger(0.2f, 0.5f, true);
+    QCOMPARE(s.take(0.02), TouchSwipe::None);
+    finger(0.35f, 0.5f, true);
+    QCOMPARE(s.take(0.02), TouchSwipe::None);       // not far enough
+    finger(0.5f, 0.5f, true);
+    QCOMPARE(s.take(0.02), TouchSwipe::Right);
+    finger(0.9f, 0.5f, true);
+    QCOMPARE(s.take(0.02), TouchSwipe::None);
+    finger(0.9f, 0.5f, false);
+    QCOMPARE(s.take(0.02), TouchSwipe::None);
+
+    // The next one waits out the cooldown, then is swallowed (not queued).
+    finger(0.8f, 0.5f, true);
+    s.take(0.02);
+    finger(0.4f, 0.5f, true);
+    QCOMPARE(s.take(0.02), TouchSwipe::None);
+    finger(0.4f, 0.5f, false);
+    s.take(TouchSwipe::cooldown());
+    // After it: left, up, down.
+    finger(0.8f, 0.5f, true);
+    s.take(0.02);
+    finger(0.4f, 0.5f, true);
+    QCOMPARE(s.take(0.02), TouchSwipe::Left);
+    finger(0.4f, 0.5f, false);
+    s.take(TouchSwipe::cooldown());
+    finger(0.5f, 0.8f, true);
+    s.take(0.02);
+    finger(0.5f, 0.4f, true);
+    QCOMPARE(s.take(0.02), TouchSwipe::Up);
+    finger(0.5f, 0.4f, false);
+    s.take(TouchSwipe::cooldown());
+    finger(0.5f, 0.2f, true);
+    s.take(0.02);
+    finger(0.5f, 0.6f, true);
+    QCOMPARE(s.take(0.02), TouchSwipe::Down);
+    finger(0.5f, 0.6f, false);
+    s.take(TouchSwipe::cooldown());
+
+    // A slanted drag is none; a second finger or a click spoils the touch.
+    finger(0.2f, 0.2f, true);
+    s.take(0.02);
+    finger(0.6f, 0.6f, true);
+    QCOMPARE(s.take(0.02), TouchSwipe::None);
+    finger(0.6f, 0.6f, false);
+    s.take(0.02);
+    finger(0.2f, 0.5f, true);
+    s.take(0.02);
+    s.setValue(R::Touch2Down, 1.0f);
+    finger(0.7f, 0.5f, true);
+    QCOMPARE(s.take(0.02), TouchSwipe::None);
+    s.setValue(R::Touch2Down, 0.0f);
+    finger(0.7f, 0.5f, false);
+    s.take(0.02);
+    finger(0.2f, 0.5f, true);
+    s.take(0.02);
+    s.setClick(true);
+    finger(0.7f, 0.5f, true);
+    QCOMPARE(s.take(0.02), TouchSwipe::None);
+    s.setClick(false);
+    // Even after a long wait the spoilt touch gives nothing more.
+    QCOMPARE(s.take(1.0), TouchSwipe::None);
+}
+
+void PadRun_Test::swipesStepAndNeverGo()
+{
+    makeShow();
+    ProgrammerController *pc = m_doc->programmer();
+    IOPluginStub *stub = loadStub();
+    QVERIFY(stub != nullptr);
+    QVERIFY(m_doc->inputOutputMap()->setInputPatch(0, stub->name(), QString(), 0));
+    PadRun *run = pc->padRun();
+    RefineSession *r = pc->refineSession();
+
+    // Not in the Run role: a swipe does nothing.
+    swipeAcross(0.2f, 0.5f, 0.8f, 0.5f);
+    QVERIFY(!run->isWalking());
+    run->setEnabled(true);
+
+    // Run, not walking, Operate: left / right refused; up / down pick lists.
+    m_doc->setMode(Doc::Operate);
+    swipeAcross(0.2f, 0.5f, 0.8f, 0.5f);
+    QVERIFY(!run->isWalking());
+    QVERIFY(m_runs.isEmpty());
+    run->swipeTick(1.0);
+    m_doc->setMode(Doc::Design);
+
+    // Design: a swipe right walks from the next cue (Blackout has no layer:
+    // passed over to Ballad), never a GO.
+    QCOMPARE(run->cueInHand(), m_cue1);
+    swipeAcross(0.2f, 0.5f, 0.8f, 0.5f);
+    QVERIFY(run->isWalking());
+    QCOMPARE(run->walkCue(), m_cue2);
+    QVERIFY(m_runs.isEmpty());
+    run->swipeTick(PadRun::tagHoldSeconds());     // the cooldown
+    // Left: back to the first cue.
+    swipeAcross(0.8f, 0.5f, 0.2f, 0.5f);
+    QCOMPARE(run->walkCue(), m_cue1);
+    run->swipeTick(1.0);
+
+    // Down / up: the next / previous layer (wrapping).
+    QCOMPARE(r->currentLayer(), m_layer1);
+    swipeAcross(0.5f, 0.2f, 0.5f, 0.8f);
+    QCOMPARE(r->currentLayer(), m_layer2);
+    run->swipeTick(1.0);
+    swipeAcross(0.5f, 0.8f, 0.5f, 0.2f);
+    QCOMPARE(r->currentLayer(), m_layer1);
+    run->swipeTick(1.0);
+    QVERIFY(m_runs.isEmpty());
+    QVERIFY(!run->isArmed());
+
+    // A click while the finger is down is no swipe (a firm press).
+    hold(kTouchClick, true);
+    swipeAcross(0.2f, 0.5f, 0.8f, 0.5f);
+    hold(kTouchClick, false);
+    QCOMPARE(run->walkCue(), m_cue1);
+    run->swipeTick(1.0);
+
+    // In Operate the cue moves with GO: a left / right swipe is refused,
+    // the layers still step.
+    m_doc->setMode(Doc::Operate);
+    swipeAcross(0.2f, 0.5f, 0.8f, 0.5f);
+    QCOMPARE(run->walkCue(), m_cue1);
+    QVERIFY(m_runs.isEmpty());
+    m_doc->setMode(Doc::Design);
 }
 
 QTEST_MAIN(PadRun_Test)
