@@ -10,7 +10,7 @@ active work in [TODO.md](docs/project/TODO.md).
 Versions here are independent of the QLC+ base version embedded in the
 in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relate).
 
-## [0.4.0] - Unreleased
+## [0.4.0] - 2026-11-02
 
 qlcconsole 0.4.0 carries the 0.3.1 polish, all of 0.4 ("Run the show") and
 most of 0.5 ("The show explains itself"); there is no separate 0.3.1.

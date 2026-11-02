@@ -29,6 +29,13 @@ February sync's upstream commits out and drop `N` by about 550.
 
 ## Intake log
 
+### 2026-11-02: fixture definitions check (qlcconsole 0.4.0 beta)
+
+`tools/sync-fixtures.py --dry-run` against upstream master: nothing new or
+changed since the 2026-10-29 sync (0 added, 0 taken, 0 merged, 0
+conflicts; the fork's 1 edited and 10 fork-only definitions kept). No
+change to the library.
+
 ### 2026-10-30: upstream master after 4.14.4 (qlcconsole 0.3.1)
 
 `QLC+_4.14.4..4cd37df23` is 411 non-merge commits; 247 touch only qmlui,
