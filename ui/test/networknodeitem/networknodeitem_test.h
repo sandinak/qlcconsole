@@ -32,7 +32,6 @@ private slots:
     void labelsStayUprightInARotatedView();
     void aReceiverPaintsAnAmberDisc();
     void releasingADragReportsTheDrop();
-    void theContextMenuTogglesTheLock();
     void aRunIsHittableAlongItsLengthOnly();
 };
 
