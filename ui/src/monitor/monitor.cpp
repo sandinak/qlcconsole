@@ -136,6 +136,7 @@
 #include "monitorimageitem.h"
 #include "feetinchesspinbox.h"
 #include "rigeditsession.h"
+#include "nolightzone.h"
 #include "performersdialog.h"
 #include "stagepiecedialog.h"
 #include "colourswatchbutton.h"
@@ -708,6 +709,10 @@ void Monitor::initGraphicsView()
             this, &Monitor::slotHangerRemoveRequested);
     connect(m_graphicsView, &MonitorGraphicsView::hangerDoubleClicked,
             this, &Monitor::slotEditHanger);
+    connect(m_graphicsView, &MonitorGraphicsView::zoneDoubleClicked,
+            this, &Monitor::slotEditNoLightZone);
+    connect(m_graphicsView, &MonitorGraphicsView::zoneRemoveRequested,
+            this, &Monitor::slotRemoveNoLightZone);
     connect(m_graphicsView, &MonitorGraphicsView::standRemoveRequested,
             this, &Monitor::slotStandRemoveRequested);
     connect(m_graphicsView, &MonitorGraphicsView::sceneryRemoveRequested,
@@ -2252,6 +2257,8 @@ void Monitor::initGraphicsToolbar()
                            this, SLOT(slotAddImage()));
         addMenu->addAction(tr("Add Network Node"),
                            this, SLOT(slotAddNetworkNode()));
+        addMenu->addAction(tr("Add No-light Zone"),
+                           this, SLOT(slotAddNoLightZone()));
         addMenu->addSeparator();
         addMenu->addAction(tr("Add Target Position"),
                            this, SLOT(slotAddTarget()));
@@ -6454,6 +6461,108 @@ void Monitor::slotEditImage(quint32 id)
     if (m_layersPanel) m_layersPanel->reload();
     m_doc->setModified();
     edit.accept();
+}
+
+void Monitor::slotAddNoLightZone()
+{
+    /* Where it starts: just downstage of the stage's front edge, in the
+       middle -- the audience's eyes, which is what a first zone is most
+       often for; the dialog moves it. */
+    RigEditSession edit(this);
+    const QVector3D c = m_props->stageCentre();
+    const quint32 id = m_props->addNoLightZone(c.x() - 1.0f, m_props->downstageEdgeY() + 1.0f);
+    m_graphicsView->updateNoLightZones();
+    if (!editNoLightZone(id))
+    {
+        edit.cancel();                  // refused: the zone it added goes with it
+        m_graphicsView->updateNoLightZones();
+    }
+}
+
+void Monitor::slotRemoveNoLightZone(quint32 zoneId)
+{
+    if (!m_props->hasNoLightZone(zoneId))
+        return;
+    RigEditSession edit(this);
+    m_props->removeNoLightZone(zoneId);
+    m_graphicsView->updateNoLightZones();
+    m_doc->setModified();
+}
+
+void Monitor::slotEditNoLightZone(quint32 zoneId)
+{
+    if (!m_props->hasNoLightZone(zoneId))
+        return;
+    RigEditSession edit(this);
+    if (!editNoLightZone(zoneId))
+        edit.cancel();
+}
+
+bool Monitor::editNoLightZone(quint32 zoneId)
+{
+    NoLightZone z = m_props->noLightZone(zoneId);
+    const bool isFeet = (m_props->gridUnits() == MonitorProperties::Feet);
+    const double toDisp   = isFeet ? 3.28084 : 1.0;
+    const double fromDisp = isFeet ? (1.0 / 3.28084) : 1.0;
+
+    QDialog dlg(this);
+    dlg.setObjectName(QStringLiteral("noLightZoneDialog"));
+    dlg.setWindowTitle(tr("No-light Zone — %1").arg(z.name));
+    QFormLayout *form = new QFormLayout(&dlg);
+    QLineEdit *nameEdit = new QLineEdit(z.name, &dlg);
+    nameEdit->setObjectName(QStringLiteral("zoneName"));
+    form->addRow(tr("Name:"), nameEdit);
+    QComboBox *kindCb = new QComboBox(&dlg);
+    kindCb->setObjectName(QStringLiteral("zoneKind"));
+    kindCb->addItem(tr("No light — every lit beam"), int(NoLightZone::NoLight));
+    kindCb->addItem(tr("No beams — directional beams and lasers"), int(NoLightZone::NoBeams));
+    kindCb->addItem(tr("No lasers — lasers and star projectors"), int(NoLightZone::NoLasers));
+    kindCb->setCurrentIndex(qMax(0, kindCb->findData(z.kind)));
+    form->addRow(tr("Keeps out:"), kindCb);
+    auto mk = [&](const QString &obj, double v, double lo, double hi) {
+        QDoubleSpinBox *s = new FeetInchesSpinBox(isFeet, &dlg);
+        s->setObjectName(obj);
+        s->setRange(lo * toDisp, hi * toDisp);
+        s->setDecimals(2);
+        s->setValue(v * toDisp);
+        return s;
+    };
+    const double range = isFeet ? 164.0 : 50.0;
+    QDoubleSpinBox *xs = mk(QStringLiteral("zoneX"), double(z.x), -range, range);
+    QDoubleSpinBox *ys = mk(QStringLiteral("zoneY"), double(z.y), -range, range);
+    QDoubleSpinBox *ws = mk(QStringLiteral("zoneWidth"), double(z.width), 0.1, range);
+    QDoubleSpinBox *ds = mk(QStringLiteral("zoneDepth"), double(z.depth), 0.1, range);
+    QDoubleSpinBox *fs = mk(QStringLiteral("zoneFloor"), double(z.floorZ), -20.0, 50.0);
+    QDoubleSpinBox *hs = mk(QStringLiteral("zoneHeight"), double(z.height), 0.1, 50.0);
+    form->addRow(tr("X (stage left edge):"), xs);
+    form->addRow(tr("Y (upstage edge):"), ys);
+    form->addRow(tr("Width (across):"), ws);
+    form->addRow(tr("Depth (downstage):"), ds);
+    form->addRow(tr("Bottom (a pit is below 0):"), fs);
+    form->addRow(tr("Height above the bottom:"), hs);
+    QLabel *hint = new QLabel(tr("A beam stops at the stage floor, so a pit's zone has to reach up to it. "
+                                 "Show Review checks every cue for lit beams crossing it."), &dlg);
+    hint->setWordWrap(true);
+    form->addRow(hint);
+    QDialogButtonBox *btns = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);
+    form->addRow(btns);
+    connect(btns, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+    connect(btns, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+
+    if (dlg.exec() != QDialog::Accepted)
+        return false;
+    z.name = nameEdit->text().trimmed().isEmpty() ? z.name : nameEdit->text().trimmed();
+    z.kind = kindCb->currentData().toInt();
+    z.x = float(xs->value() * fromDisp);
+    z.y = float(ys->value() * fromDisp);
+    z.width = float(ws->value() * fromDisp);
+    z.depth = float(ds->value() * fromDisp);
+    z.floorZ = float(fs->value() * fromDisp);
+    z.height = float(hs->value() * fromDisp);
+    m_props->setNoLightZone(z);
+    m_graphicsView->updateNoLightZones();
+    m_doc->setModified();
+    return true;
 }
 
 void Monitor::slotAddNetworkNode()

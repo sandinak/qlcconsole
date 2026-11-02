@@ -96,6 +96,8 @@ namespace ShowReviewChecks
     QList<ShowReview::Check> showChecks();
     /** The movement checks: moves in light, in the dark, before the first cue */
     QList<ShowReview::Check> moveChecks();
+    /** The no-light zone check: a lit beam's cone crossing a zone, by cue */
+    QList<ShowReview::Check> zoneChecks();
     /** The checks over the Show Tree: palettes in cues, tracking, hits */
     QList<ShowReview::Check> treeChecks();
     /** The checks over the Virtual Console (VcIndex): buttons, keys, inputs,

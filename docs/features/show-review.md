@@ -232,7 +232,26 @@ both give the same answer.
   rule is a fixed unit whose beam, followed 30 m, enters the space downstage
   of the stage's front edge below 3 m. Aim it up or away, or accept it with a
   note saying who approved it (the venue's laser safety officer, the
-  variance). Lasers on pan and tilt aren't read: their aim is by cue.
+  variance). A laser's beam is its **scan window**, H × V degrees (the
+  definition's widest lens angle across, its narrowest up and down when that
+  is declared and narrower, else a square; 40 degrees when it declares none),
+  not a round cone. Lasers on pan and tilt aren't read here: their aim is by
+  cue (PWR-11 reads it).
+- **PWR-10** A laser whose scan window is a **static pencil** (under 1 degree
+  either way) or **tight** (under 10 × 10 degrees' worth), which puts all its
+  power on a few spots. A note; a warning when a fixed laser's window also
+  reaches the audience or a no-light zone. Wide, moving patterns spread the
+  power. The pattern itself is the laser's own and isn't in the show, so the
+  window is what is read.
+- **PWR-11** A **no-light zone** on the plot (the orchestra pit, the
+  conductor, a camera, the audience's eyes) that a lit beam's cone crosses in
+  a cue. The finding names the cue, the lights and the zone, in the first cue
+  the beam starts to cross it (not again in the cues that track it on). Each
+  lit light's cone is followed 30 m from where it is in the rig: a mover from
+  its position in the cue, a fixed light from where it throws, a laser as its
+  window. A beam stops at the stage floor, so a pit's zone reaches up to it.
+  Aim it off, darken it in that cue, or move the zone. Zones are drawn and
+  edited in the [Lighting Studio](lighting-studio.md#no-light-zones).
 
 **Files and names**
 

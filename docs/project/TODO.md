@@ -573,9 +573,21 @@ centred on its rig point (as a mover is, and the elevations), seated only
 on a deck, riser or tower shelf; a Laser given another symbol draws as
 that; the plot symbol turns with the icon rotation like every symbol (not
 with the throw). **Part C, the audience-zone check, done** (Show Review PWR-09, rev2
-2026-10-31). **Open:** part C's H×V window, density by throw and coverage
-outline, the Type=Laser emission inference, and
-FixtureDefCheck's laser checks.
+2026-10-31). **Part C's H×V window and the no-light zones, done** (nlz,
+2026-11-01): a laser is its H×V scan window (drawn in Top, checked by
+PWR-09 and PWR-11); `NoLightZone` on the plot (Add ▸ Add No-light Zone,
+saved in the show), Show Review PWR-11 (cue, lights, zone) and PWR-10 (static
+or tight window). Decided (each can change): zones are saved in the show, not
+the venue file (which carries only the power); H is the definition's widest
+lens angle, V its narrowest when declared and narrower, else square (40
+degrees when none); a zone keeps out all light, narrow beams (25 degrees or
+less) and lasers, or lasers and star projectors; a beam stops at the stage
+floor, so a pit's zone must reach up to it; PWR-11 names the first cue a beam
+starts to cross; zones are click-through boxes (edit by double-click or the
+right-click menu, no drag yet); one new Add entry. **Open:** a density rule
+that reads the laser's pattern (the show doesn't describe patterns), the
+coverage outline, the Type=Laser emission inference, and FixtureDefCheck's
+laser checks.
 
 ## AI Assist — P0–P3 built, leftovers (0.5, docs/design/AI_ASSIST.md; ai, ai2, ai3, mcp, 2026-10-31)
 

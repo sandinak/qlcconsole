@@ -34,7 +34,7 @@ add_library(${module_name} SHARED
     showoperate.cpp showoperate.h
     teachingsettings.cpp teachingsettings.h
     showreview.cpp showreview.h showreviewcontext.h
-    showreviewchecks.cpp showreviewcuechecks.cpp showreviewmovechecks.cpp
+    showreviewchecks.cpp showreviewcuechecks.cpp showreviewmovechecks.cpp showreviewzonechecks.cpp
     showreviewvcchecks.cpp showreviewvenuechecks.cpp
     vcindex.cpp vcindex.h
     showreviewcli.cpp showreviewcli.h
@@ -90,6 +90,7 @@ add_library(${module_name} SHARED
     aimsolver.cpp aimsolver.h
     beamocclusion.cpp beamocclusion.h
     stageplatform.cpp stageplatform.h
+    nolightzone.cpp nolightzone.h
     pipe.cpp pipe.h
     scenery.cpp scenery.h
     stockqlccheck.cpp stockqlccheck.h

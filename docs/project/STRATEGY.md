@@ -600,7 +600,8 @@ Order and dependencies:
    sentences per fixture group, shown by the Plain words box, on in Teaching),
    which reads best next to Show Review.
 3. **Laser part C** (audience-zone check built as Show Review PWR-09,
-   2026-10-31; the H×V window and density are open) and the **no-light
+   2026-10-31; **the H×V window, a density note (PWR-10) and the no-light
+   zones (PWR-11) built 2026-11-01**) and the **no-light
    zones** idea, as Show Review checks rather than a separate system.
 4. **Realistic move speed in the Rig Overview** (**built 2026-10-31**),
    which also feeds Show Review's "moves in light" checks (MOV-01/02/08).

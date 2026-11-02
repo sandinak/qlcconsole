@@ -1390,6 +1390,37 @@ green and blue all at 0 it puts out nothing).
   off. The bundled **Generic → Silk Flame (relay)** is one channel for a DMX
   relay pack.
 
+### No-light zones
+
+Some places must stay dark: the orchestra pit, the conductor, a camera
+position, the audience's eyes. **Add ▸ Add No-light Zone** puts one on the
+plot (just downstage of the stage's front edge to start with); its dialog
+sets the **name**, where it is (X, Y of its upstage edge, **width** and
+**depth** on the floor), its **bottom** (a pit is below 0) and its **height**
+above that, and what it **keeps out**:
+
+- **No light**: every lit beam.
+- **No beams**: directional beams (a lens of 25 degrees or narrower) and
+  lasers, not a wash that only fills.
+- **No lasers**: lasers and star projectors.
+
+A zone is a red hatched box with its name: a rectangle in Top, a box in the
+Front and Side views. It takes no clicks of its own, so the plot under it
+stays selectable; **double-click** bare plot inside it, or right-click it,
+to **Edit** or **Remove** it. A beam stops at the stage floor, so a pit's
+zone must reach up to 0 to catch what comes down into it. Every change is one
+undo step.
+
+The zones are saved **in the show** with the rest of the plot, not in the
+venue file (decided, can change: a venue file carries only the power today).
+[Show Review](show-review.md) PWR-11 names every cue where a lit beam's cone
+crosses one, and the lights and the zone.
+
+A fixed laser also gets its **scan window** drawn in Top: a dashed amber
+outline where its H × V window lands on the floor (30 m out when it doesn't
+come down), the same window PWR-09 checks against the audience and PWR-11
+against the zones.
+
 ## Calibration offsets
 
 A moving head's **Pan offset** and **Tilt offset** (Fixture Properties ▸

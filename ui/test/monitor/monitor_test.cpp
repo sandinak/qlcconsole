@@ -93,6 +93,8 @@
 #include "sceneryitem.h"
 #include "monitorruler.h"
 #include "hangeritem.h"
+#include "zoneitem.h"
+#include "nolightzone.h"
 #include "patchinventorydialog.h"
 #include "fixturemanager.h"
 #include "itemicons.h"
@@ -24745,6 +24747,88 @@ void Monitor_Test::hangersAreOnThePlot()
         props->removeHanger(h->id());
         gv->updateHangers();
         QVERIFY(gv->m_hangerItems.isEmpty());
+    }
+    delete doc;
+}
+
+/* No-light zones on the plot: Add makes one through its dialog, the plot
+   draws it (a box in the elevations), double-click edits it, Remove takes
+   it off, and a fixed laser gets its scan window drawn. */
+void Monitor_Test::noLightZonesAreOnThePlot()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    {
+        QWidget parent;
+        Monitor mon(&parent, doc);
+        MonitorGraphicsView *gv = mon.m_graphicsView;
+        gv->setViewPOV(MonitorGraphicsView::PovTop);
+        gv->updateTrusses();
+        QVERIFY(gv->m_zoneItems.isEmpty());
+
+        driveDialog([](QWidget *dlg) {
+            if (!dlg->windowTitle().contains("No-light Zone"))
+                return false;
+            dlg->findChild<QLineEdit *>("zoneName")->setText("Conductor");
+            dlg->findChild<QComboBox *>("zoneKind")->setCurrentIndex(2);
+            dlg->findChild<QDoubleSpinBox *>("zoneX")->setValue(3.0);
+            dlg->findChild<QDoubleSpinBox *>("zoneY")->setValue(9.0);
+            dlg->findChild<QDoubleSpinBox *>("zoneWidth")->setValue(2.0);
+            dlg->findChild<QDoubleSpinBox *>("zoneDepth")->setValue(2.0);
+            return true;
+        });
+        mon.slotAddNoLightZone();
+        QCOMPARE(props->noLightZones().count(), 1);
+        const NoLightZone z = props->noLightZones().first();
+        QCOMPARE(z.name, QStringLiteral("Conductor"));
+        QCOMPARE(z.kind, int(NoLightZone::NoLasers));
+        QCOMPARE(z.x, 3.0f);
+        QCOMPARE(z.width, 2.0f);
+        QCOMPARE(gv->m_zoneItems.size(), 1);
+        const QPointF mid = gv->projectMm(4000.0, 10000.0, 0.0);
+        QCOMPARE(gv->zoneAt(mid), z.id);
+        QCOMPARE(gv->zoneAt(gv->projectMm(9000.0, 10000.0, 0.0)), UINT_MAX);
+
+        // Cancelled: nothing is added.
+        driveDialog([](QWidget *) { return true; }, false);
+        mon.slotAddNoLightZone();
+        QCOMPARE(props->noLightZones().count(), 1);
+        QCOMPARE(gv->m_zoneItems.size(), 1);
+
+        // Double-click on bare plot inside it opens its dialog.
+        QSignalSpy edit(gv, &MonitorGraphicsView::zoneDoubleClicked);
+        driveDialog([](QWidget *dlg) { return dlg->findChild<QLineEdit *>("zoneName") != nullptr; }, false);
+        QTest::mouseDClick(gv->viewport(), Qt::LeftButton, Qt::NoModifier, gv->mapFromScene(mid));
+        QCOMPARE(edit.count(), 1);
+        QCOMPARE(edit.first().first().toUInt(), z.id);
+
+        // The elevations draw it as a box.
+        gv->setViewPOV(MonitorGraphicsView::PovFront);
+        gv->updateTrusses();
+        QCOMPARE(gv->m_zoneItems.size(), 1);
+        gv->setViewPOV(MonitorGraphicsView::PovTop);
+        gv->updateTrusses();
+
+        // A fixed laser gets its H x V scan window drawn where it lands.
+        Fixture *laser = rigFacedLaser(doc, QLCPhysical::LaserEmission);
+        QVERIFY(laser != nullptr);
+        gv->updateNoLightZones();
+        int windows = 0;
+        for (ZoneItem *zi : gv->m_zoneItems)
+            if (zi->role() == ZoneItem::ScanWindow && zi->id() == laser->id())
+            {
+                ++windows;
+                QVERIFY(zi->outline().size() >= 30);
+            }
+        QCOMPARE(windows, 1);
+        QCOMPARE(gv->zoneAt(gv->projectMm(5000.0, 1000.0, 0.0)), UINT_MAX);    // a window is no zone
+
+        mon.slotRemoveNoLightZone(z.id);
+        QVERIFY(props->noLightZones().isEmpty());
+        QCOMPARE(gv->m_zoneItems.size(), 1);                 // the laser's window stays
+        // And it comes back with Undo.
+        gv->undoLastMove();
+        QCOMPARE(props->noLightZones().count(), 1);
     }
     delete doc;
 }

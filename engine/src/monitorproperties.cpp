@@ -1087,6 +1087,7 @@ void MonitorProperties::reset()
     ensureDefaultLayer();
     m_groups.clear();
     m_images.clear();
+    m_zones.clear();
 }
 
 /********************************************************************
@@ -2907,6 +2908,35 @@ void MonitorProperties::removeImage(quint32 id)
     m_images.remove(id);
 }
 
+quint32 MonitorProperties::nextNoLightZoneId() const
+{
+    quint32 id = 0;
+    while (m_zones.contains(id))
+        ++id;
+    return id;
+}
+
+quint32 MonitorProperties::addNoLightZone(float x, float y)
+{
+    NoLightZone z;
+    z.id = nextNoLightZoneId();
+    z.name = QStringLiteral("Zone %1").arg(z.id + 1);
+    z.x = x;
+    z.y = y;
+    m_zones.insert(z.id, z);
+    return z.id;
+}
+
+void MonitorProperties::setNoLightZone(const NoLightZone &z)
+{
+    m_zones.insert(z.id, z);
+}
+
+void MonitorProperties::removeNoLightZone(quint32 id)
+{
+    m_zones.remove(id);
+}
+
 quint32 MonitorProperties::platformIdAt(float xMetres, float yMetres) const
 {
     quint32 best = FixtureRigProps::invalidPlatformId();
@@ -3620,6 +3650,12 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
                 m_groups.insert(gid, g);
             }
             root.skipCurrentElement();
+        }
+        else if (root.name() == QStringLiteral("NoLightZone"))
+        {
+            NoLightZone z;
+            if (NoLightZone::loadXML(root, z) && !m_zones.contains(z.id))
+                m_zones.insert(z.id, z);
         }
         else if (root.name() == QStringLiteral("MonitorImage"))
         {
@@ -4595,6 +4631,10 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument, 
             doc->writeAttribute(QStringLiteral("Locked"), QStringLiteral("1"));
         doc->writeEndElement();
     }
+
+    // No-light zones
+    foreach (const NoLightZone &z, m_zones)
+        z.saveXML(doc);
 
     // Trusses
     foreach (const Truss *t, m_trusses)

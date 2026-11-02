@@ -27,6 +27,18 @@ back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
 
 ### Run the show
 
+#### No-light zones and laser windows
+
+- **Mark the places that must stay dark, and Show Review checks every cue.**
+  **Add ▸ Add No-light Zone** in the Lighting Studio marks an area on the
+  plot (the orchestra pit, the conductor, a camera, the audience's eyes) with
+  a floor area, a bottom and a height, keeping out every lit beam, only
+  directional beams, or only lasers. New Show Review checks: **PWR-11**
+  names the cue, the lights and the zone where a lit beam's cone crosses
+  one; **PWR-10** warns of a laser whose scan window is a static pencil or
+  tight. A laser's beam is now its H × V scan window (drawn in Top, and what
+  PWR-09 checks against the audience). Zones are saved with the show.
+
 #### Show control
 
 - **A QR code for the phone Run page, and command-line words for effect
