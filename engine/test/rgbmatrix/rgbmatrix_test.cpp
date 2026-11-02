@@ -305,6 +305,51 @@ void RGBMatrix_Test::anUninstalledScriptSurvivesASave()
     QVERIFY(m_doc->errorLog().isEmpty());
 }
 
+/* A saved show declares a default namespace on <Workspace>, so the reader
+   gives every element in it that namespace. The kept <Algorithm> of an
+   uninstalled script came out of the copy as <n1:Algorithm xmlns:n1=...>
+   and then saved as nothing: the second save of a show lost the effect
+   (found by the 0.4.0 beta matrix on a stress show). Save, reload, save
+   again must be identical, with the element still there. */
+void RGBMatrix_Test::anUninstalledScriptSurvivesInAShowWithANamespace()
+{
+    const QString in = QStringLiteral(
+        "<Function xmlns=\"http://www.qlcplus.org/Workspace\" ID=\"3\" Type=\"RGBMatrix\" Name=\"NS\">"
+        "<Speed FadeIn=\"0\" FadeOut=\"0\" Duration=\"50\"/>"
+        "<Direction>Forward</Direction>"
+        "<RunOrder>Loop</RunOrder>"
+        "<Algorithm Type=\"Script\">No Such Script</Algorithm>"
+        "<ControlMode>RGB</ControlMode>"
+        "<FixtureGroup>0</FixtureGroup>"
+        "</Function>");
+    auto save = [](const RGBMatrix &m) {
+        QString out;
+        QXmlStreamWriter w(&out);
+        m.saveXML(&w);
+        return out;
+    };
+
+    QXmlStreamReader reader(in);
+    reader.readNextStartElement();
+    RGBMatrix first(m_doc);
+    first.setName("NS");
+    QVERIFY(first.loadXML(reader));
+    const QString a = save(first);
+    QVERIFY2(a.contains("<Algorithm Type=\"Script\">No Such Script</Algorithm>"), qPrintable(a));
+
+    // As the app writes it: the element inside a document with the namespace
+    QXmlStreamReader reader2(QStringLiteral("<Workspace xmlns=\"http://www.qlcplus.org/Workspace\">") + a
+                             + QStringLiteral("</Workspace>"));
+    reader2.readNextStartElement();
+    reader2.readNextStartElement();
+    RGBMatrix second(m_doc);
+    second.setName("NS");
+    QVERIFY(second.loadXML(reader2));
+    const QString b = save(second);
+    QCOMPARE(b, a);
+    m_doc->clearErrorLog();
+}
+
 void RGBMatrix_Test::loadSave()
 {
     RGBMatrix* mtx = new RGBMatrix(m_doc);
