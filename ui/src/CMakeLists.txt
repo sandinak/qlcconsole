@@ -180,6 +180,7 @@ add_library(${module_name}
     patchlabelsdialog.cpp patchlabelsdialog.h
     patchlistdialog.cpp patchlistdialog.h
     cuesheetdialog.cpp cuesheetdialog.h
+    callingscriptview.cpp callingscriptview.h
     whyonpanel.cpp whyonpanel.h
     speedmastersfooter.cpp speedmastersfooter.h
     speedmasterspanel.cpp speedmasterspanel.h

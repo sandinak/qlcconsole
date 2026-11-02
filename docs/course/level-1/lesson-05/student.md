@@ -51,6 +51,12 @@ the op jumping early. Swap.
 Roles: **SM**, **Board op** (the only one on the laptop), **Spotter**
 (watches the Rig Overview). Switch after each run.
 
+A real SM calls from a **script**, with the cue numbers pencilled on the
+words where each standby and GO is called. The app can keep that copy:
+**More ▾ → Calling Script…** on the Show Tree tab shows the lyrics with
+the cues in the margin and follows the show as it runs. You don't need it
+today; you may want it for the check.
+
 ## Steps
 
 1. **File ▸ Open** → `lesson-1-5-start.qlcc`.

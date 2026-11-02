@@ -300,6 +300,32 @@ which lets go of them, is one). Open:
 - decided (can change): GO is never refused by Operate's PIN or Teaching
   (they lock Design); a GO that finds nothing to play holds no preview.
 
+## Calling script view — built, leftovers (0.5 item 6, csv, 2026-11-01)
+
+Built (`engine/src/callingscript.*`, `engine/src/showtreescript.cpp`,
+`ui/src/callingscriptview.*`, More ▾ → Calling Script… on the Show Tree
+tab; help: show-tree.md "The calling script"; course note: Lesson 1.5). Open,
+each "decided (can change)":
+- Decided (can change): it is a window of its own opened from the Show
+  Tree's More menu, not a tab or a Run tab pane (no new top-level tab); the
+  menu gains one item (Cue Sheet… and Calling Script… sit together).
+- Decided (can change): the script and its anchors are part of the
+  production (`<CallingScript>` in the Show Tree XML, an older build skips
+  it). A cue is anchored by id, so renumbering and moving keep it; deleting
+  the cue removes the marker (undo brings it back); a deleted cue's anchor
+  is not saved. Text edits move anchors by a prefix/suffix diff; a cue on
+  replaced words goes to the start of the change.
+- Decided (can change): GO in the view is the Run tab's route
+  (`RouteRunTab`), no route of its own; it GOes the production's main list.
+- Decided (can change): headings are Markdown `#` lines and lines equal to
+  a song section's title or name (Q190); no other detection.
+- Not done: one script per production only (no per-list scripts); editing
+  keeps no markers in the margin until Done; no drag of an existing marker
+  to move it (re-drop or Cue here moves it); a sub-cue is placeable but
+  GO there is the cue's, not Sub GO; no per-page print layout (the PDF is
+  the cue sheet's landscape Letter); a Show Review check ("cue with no line
+  in the script"); web (phone) display of the script; .docx / .pdf import.
+
 ## Cue sheet and tracking sheet — leftovers (sheet, 2026-10-31)
 
 Built (`engine/src/cuesheet.*`, `ui/src/cuesheetdialog.*`, More ▾ → Cue

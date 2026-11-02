@@ -116,6 +116,7 @@
 #include "function.h"
 #include "fixture.h"
 #include "chaser.h"
+#include "callingscriptview.h"
 #include "cuesheetdialog.h"
 #include "teachingsettings.h"
 #include "teachingtips.h"
@@ -1148,15 +1149,22 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
             CueSheetDialog dlg(m_doc, prod, this);
             dlg.exec();
         });
+        // The calling script: the production's script or lyrics with its cues
+        // in the margin (a window of its own, not a tab).
+        QAction *script = m->addAction(tr("Calling Script…"), this, [this]() { showCallingScript(); });
+        script->setObjectName(QStringLiteral("stCallingScriptAction"));
+        script->setToolTip(tr("The production's script or lyrics with its cues placed on the lines: "
+                              "standby and GO in the margin, following the show as it runs"));
         sheets->setObjectName(QStringLiteral("stCueSheetAction"));
         sheets->setToolTip(tr("The production's cue sheet and tracking sheet: look them over, save as CSV, "
                               "XLSX or a printable PDF"));
-        connect(m, &QMenu::aboutToShow, this, [m, this, sheets]() {
+        connect(m, &QMenu::aboutToShow, this, [m, this, sheets, script]() {
             const QList<QAction *> acts = m->actions();
             const QList<QToolButton *> btns = { m_newProduction, m_newSubCue, m_merge };
             for (int i = 0; i < acts.size() && i < btns.size(); i++)
                 acts.at(i)->setEnabled(btns.at(i)->isEnabled());
             sheets->setEnabled(currentProductionId() != invalidId());
+            script->setEnabled(currentProductionId() != invalidId());
         });
         more->setMenu(m);
     }
@@ -11190,4 +11198,26 @@ bool ShowTreeView::eventFilter(QObject *obj, QEvent *ev)
         return true;
     }
     return QWidget::eventFilter(obj, ev);
+}
+
+CallingScriptView *ShowTreeView::showCallingScript()
+{
+    const quint32 prod = currentProductionId();
+    if (prod == invalidId())
+        return nullptr;
+    if (m_scriptView != nullptr && m_scriptView->productionId() != prod)
+    {
+        m_scriptView->close();
+        delete m_scriptView;
+    }
+    if (m_scriptView == nullptr)
+    {
+        m_scriptView = new CallingScriptView(m_doc, prod, this);
+        m_scriptView->setAttribute(Qt::WA_DeleteOnClose, false);
+        m_scriptView->setCueSource([this]() { return currentCueId(); });
+    }
+    m_scriptView->show();
+    m_scriptView->raise();
+    m_scriptView->activateWindow();
+    return m_scriptView;
 }

@@ -441,7 +441,7 @@ Notes:
 | QLab out (OSC / MSC out) | 3 | 4 | Show control page | 3 | L | M | 4 | BUILT (0.4) |
 | Override / priority hits (Normal / Override / Inhibit, restore on release) | 5 | 4 | Hits, OutputLayer | 5 | M | M | 3.2 | BUILT (0.4, ovr, 2026-10-31) |
 | Phone/tablet Run page (current, next, GO, Back, Hold) | 4 | 5 | secured web access, CueRunner | 5 | M | H | 3.2 | BUILT (0.4, GO/Back/Stop; Hold later) |
-| Calling script view (cues on lyric or script lines) | 3 | 4 | cue notes | 4 | L | M | 3 | BUILD (0.5) |
+| Calling script view (cues on lyric or script lines) | 3 | 4 | cue notes | 4 | L | M | 3 | BUILT (0.5, csv, 2026-11-01): a window from the Show Tree's More menu, saved with the production |
 | Encoder banks: MIDI controller drives the selection in Build | 3 | 4 | Focus-this-look mapping | 4 | L | M | 3 | BUILT (0.4, enc, 2026-11-01): Control Map ▸ Encoder bank; five banks, push fine / tap home, rings and bank lamps, one undo step per gesture |
 | Duplicate a structure's setup (T1 → T2, T3) | 3 | 4 | Patch Others Like This | 4 | L | M | 3 | BUILT (0.4, sdup, 2026-11-01): Duplicate Setup to… in the plot's structure menu; hangers and child bars later |
 | W6 shared Library + command bar in Build | 3 | 4 | Show Tree Library, ShowTreeCommand | 4 | M | M | 2.4 | BUILT (0.4, w6, 2026-11-01): the Library lent to Build, a Command bar through the Operation Registry |
@@ -607,7 +607,8 @@ Order and dependencies:
    which also feeds Show Review's "moves in light" checks (MOV-01/02/08).
 5. **Teaching's later items** (lesson link, reset to handout, GO log,
    glossary, Show Review's TEACH-01). **Built.**
-6. **Calling script view**, if the course's SM lesson wants it.
+6. **Calling script view** (**built 2026-11-01**: the script or lyrics with
+   cues placed on the lines, following the running cue; docs/features/show-tree.md).
 7. **Raspberry Pi package**, so a school can leave a Pi as the show
    machine. **Built 2026-10-31** (`platforms/linux/make-pi-deb.sh`, a .deb).
 8. **AI Assist P0-P3** (docs/design/AI_ASSIST.md): operation registry,

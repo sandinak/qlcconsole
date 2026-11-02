@@ -1481,6 +1481,44 @@ spreadsheet (a tracked value keeps its brackets, so it survives as text),
 the PDF is landscape Letter, a wide tracking sheet continuing across
 tables with the layer names repeated.
 
+## The calling script
+
+The stage manager's script or the lyrics, with the cues on the lines where
+they are called: **More ▾ → Calling Script…** on the Show Tree tab (a
+production selected, or the only one). It opens a window of its own beside
+the tree; it is a view of the production's cue lists, not another place
+to keep cues.
+
+- **Get the text in.** **Edit text** lets you type or paste it; **Import…**
+  reads a plain text or Markdown file (UTF-8). The script is kept with the
+  production in the show file. A production without one has none.
+- **Place a cue.** Drag a cue from the Show Tree onto a word: its **GO** is
+  called there (hold Alt for its **standby**). Or select the words, pick the
+  cue in the box beside **Import…** (it follows the cue selected in the
+  tree) and press **Cue here** or **Standby here**; the box then moves to
+  the next cue, so a script is called through from top to bottom. Right-click
+  a line to place a cue there or take a cue off.
+- **Read the margin.** Each line shows the cues called on it: `STBY 1.0.2
+  Chorus`, `GO 1.0.2 Chorus`, with the number and name as the cue has them
+  now (note in the printout). The words a cue is called on are underlined.
+  Markdown `#` lines and lines that are a song section's title or name
+  (the production's numbering scheme) are drawn as headings.
+- **The cue stays on its words.** Cues are placed by identity: renumbering
+  or moving a cue changes the number in the margin and leaves it on its
+  line; deleting the cue removes its marker (undo brings it back). Editing
+  the text moves the markers with their words; a marker on words you rewrite
+  goes to the start of the change.
+- **Follow the show.** With **Follow** on, the running cue's line is marked
+  green and scrolled into view, and the next standby (the loaded cue, else
+  the next to play) is marked amber. **GO** in the window is the Run tab's
+  GO of the main cue list: it goes through the same GO path as ⌘↩, the pad
+  and show control, with the same guards.
+- **Print.** **PDF…** writes the script with its margin as a PDF, in the
+  cue sheet's page layout.
+
+The script is saved as a `CallingScript` element of its production, which
+an older build ignores.
+
 ## Seeing it on the rig
 
 **Design mode: the cue you are editing is on the rig.**

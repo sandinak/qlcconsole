@@ -227,6 +227,20 @@ back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
   changes plain, what only tracks in grey in brackets). Save either as
   CSV, XLSX or a landscape PDF.
 
+#### Calling script
+
+- **A calling script, with the cues on its lines.** **More ▾ → Calling
+  Script…** on the Show Tree tab: paste or import (a .txt or .md file) the
+  production's script or lyrics, then place cues on it by dragging a cue
+  from the tree onto a word (Alt: standby) or selecting text and pressing
+  **Cue here** / **Standby here**. The margin shows each cue's standby and
+  GO with its number and name; song-section titles and Markdown `#` lines
+  read as headings. In Operate it follows the running cue (the line being
+  called scrolls into view, the next standby is marked), **GO** in the view
+  is the Run tab's GO, and **PDF…** prints it with the cue sheet's writer.
+  A cue keeps its words through renumbering and moves; deleting the cue
+  removes its marker. Saved with the show.
+
 #### Effect fades
 
 - **Effects fade in and out with their cue** (0.4): a Show Tree effect

@@ -1471,6 +1471,14 @@ static void saveLayer(QXmlStreamWriter *doc, const Layer &layer)
     doc->writeEndElement();
 }
 
+const ScriptAnchor *CallingScript::anchor(quint32 cue) const
+{
+    for (const ScriptAnchor &a : anchors)
+        if (a.cue == cue)
+            return &a;
+    return nullptr;
+}
+
 void saveXML(QXmlStreamWriter *doc, const Production &production)
 {
     doc->writeStartElement(KXMLShowTreeProduction);
@@ -1493,6 +1501,31 @@ void saveXML(QXmlStreamWriter *doc, const Production &production)
             doc->writeAttribute(QStringLiteral("Section"), r.id);
             if (r.skip)
                 doc->writeAttribute(QStringLiteral("Skip"), QStringLiteral("1"));
+            doc->writeEndElement();
+        }
+        doc->writeEndElement();
+    }
+
+    // The calling script (0.5): an older build skips the element. A cue
+    // that is gone leaves no anchor behind.
+    if (!production.script.isEmpty())
+    {
+        doc->writeStartElement(QStringLiteral("CallingScript"));
+        doc->writeAttribute(QStringLiteral("Title"), production.script.title);
+        doc->writeTextElement(QStringLiteral("Text"), production.script.text);
+        for (const ScriptAnchor &an : production.script.anchors)
+        {
+            bool there = false;
+            for (const CueList &l : production.lists)
+                there = there || l.indexOf(an.cue) >= 0;
+            if (!there)
+                continue;
+            doc->writeStartElement(QStringLiteral("Anchor"));
+            writeId(doc, QStringLiteral("Cue"), an.cue);
+            if (an.go >= 0)
+                doc->writeAttribute(QStringLiteral("Go"), QString::number(an.go));
+            if (an.standby >= 0)
+                doc->writeAttribute(QStringLiteral("Standby"), QString::number(an.standby));
             doc->writeEndElement();
         }
         doc->writeEndElement();
@@ -1724,6 +1757,33 @@ bool loadXML(QXmlStreamReader &root, Production &production)
                     r.skip = root.attributes().value(QStringLiteral("Skip")).toString() == QLatin1String("1");
                     if (!r.id.isEmpty())
                         production.runningOrder << r;
+                }
+                root.skipCurrentElement();
+            }
+            continue;
+        }
+        if (root.name() == QLatin1String("CallingScript"))
+        {
+            production.script.title = root.attributes().value(QStringLiteral("Title")).toString();
+            while (root.readNextStartElement())
+            {
+                if (root.name() == QLatin1String("Text"))
+                {
+                    production.script.text = root.readElementText();
+                    continue;
+                }
+                if (root.name() == QLatin1String("Anchor"))
+                {
+                    const QXmlStreamAttributes aa = root.attributes();
+                    ScriptAnchor an;
+                    an.cue = readId(aa, QStringLiteral("Cue"));
+                    an.go = aa.value(QStringLiteral("Go")).toString().toInt();
+                    an.standby = aa.hasAttribute(QStringLiteral("Standby"))
+                                 ? aa.value(QStringLiteral("Standby")).toString().toInt() : -1;
+                    if (!aa.hasAttribute(QStringLiteral("Go")))
+                        an.go = -1;
+                    if (an.cue != invalidId() && (an.go >= 0 || an.standby >= 0))
+                        production.script.anchors << an;
                 }
                 root.skipCurrentElement();
             }

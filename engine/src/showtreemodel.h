@@ -426,6 +426,30 @@ namespace ShowTree
         bool operator==(const RunningSong &o) const { return id == o.id && skip == o.skip; }
     };
 
+    /** A cue placed on the production's calling script (0.5): the character
+     *  offsets in CallingScript::text where the stage manager calls its
+     *  standby and its GO. Keyed by the cue's id, so a renumber or a move
+     *  leaves it where it is; a deleted cue's anchor is ignored (and not
+     *  saved). -1: not placed. */
+    struct QLC_ENGINE_EXPORT ScriptAnchor
+    {
+        quint32 cue = 0xFFFFFFFF;
+        int go = -1;
+        int standby = -1;
+    };
+
+    /** A production's calling script: the lyrics or script as plain text and
+     *  the cues placed on it. Saved with the show; an older build skips it.
+     *  Empty: no script. */
+    struct QLC_ENGINE_EXPORT CallingScript
+    {
+        QString title;                  //!< where it came from ("Act 1.txt"), or what it is called
+        QString text;                   //!< lines separated by '\n'
+        QList<ScriptAnchor> anchors;
+        bool isEmpty() const { return text.isEmpty() && anchors.isEmpty(); }
+        const ScriptAnchor *anchor(quint32 cue) const;
+    };
+
     struct QLC_ENGINE_EXPORT Production
     {
         quint32 id = 0xFFFFFFFF;
@@ -446,6 +470,8 @@ namespace ShowTree
          *  number order. Saved as a RunningOrder element, which an older
          *  build skips. See ShowTree::playOrder(). */
         QList<RunningSong> runningOrder;
+        /** The calling script (0.5), if the production has one. */
+        CallingScript script;
 
         CueList *list(quint32 id);
         const CueList *list(quint32 id) const;
