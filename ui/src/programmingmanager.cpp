@@ -79,6 +79,7 @@
 #include "chasereditor.h"
 #include "showtreecontroller.h"
 #include "showtreeview.h"
+#include "buildcommand.h"
 #include "collectioneditor.h"
 #include "efxeditor.h"
 #include "rgbmatrixeditor.h"
@@ -596,6 +597,32 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
     splitter->setStretchFactor(1, 7);
     SplitterHandles::remember(splitter, QStringLiteral("programming/buildSplitter"));
 
+    /* W6: the command bar, under both panes: the Show Tree's command line
+       through the same Operation Registry, for the scene the Workbench has. */
+    {
+        BuildCommandBar::Host host;
+        host.sceneId = [this]() { return m_workbench->currentSceneId(); };
+        host.addToScene = [this](const QMimeData *mime, quint32 scene) {
+            return m_outline->addFromSources(mime, scene, Function::invalidId());
+        };
+        host.recentPalettes = []() {
+            ShowTreeView *tree = ShowTreeView::instance();
+            return tree != nullptr ? tree->recentPalettes() : QList<quint32>();
+        };
+        host.noteRecent = [](const QMimeData *mime) {
+            if (ShowTreeView *tree = ShowTreeView::instance())
+                tree->noteRecentFromMime(mime);
+        };
+        host.workbenchLent = [this]() { return isWorkbenchLent(); };
+        host.showPalette = [this](quint32 id) { revealPalette(id); };
+        m_commandBar = new BuildCommandBar(m_doc, host, this);
+        root->addWidget(m_commandBar);
+        // : in the scenes list goes to the line, as : in the Show Tree's tree.
+        QShortcut *colon = new QShortcut(QKeySequence(QStringLiteral(":")), m_outline);
+        colon->setContext(Qt::WidgetShortcut);
+        connect(colon, &QShortcut::activated, m_commandBar, &BuildCommandBar::focusLine);
+    }
+
     /* Once, on a first run -- queued, so it lands after the window is up.
        Never on a headless platform ("offscreen", or "minimal" under xvfb):
        nobody can dismiss a dialog there (it hung a CI test for five
@@ -731,6 +758,8 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
 
 ProgrammingManager::~ProgrammingManager()
 {
+    // The Show Tree's Library goes home before this tab (its holder) is gone.
+    returnLibrary();
     if (s_buildTab == this)
         s_buildTab = nullptr;
 }
@@ -830,21 +859,34 @@ QWidget *ProgrammingManager::buildNavigator()
         QSettings().setValue(QStringLiteral("programming/buildSection"), id);
     });
 
-    // Groups and fixtures, under every section: dragged onto a layer.
+    // Groups and fixtures, under every section: dragged onto a layer. When the
+    // Show Tree is there, its Library (W6: the same widget) takes this place.
     QWidget *src = new QWidget(m_navSplit);
     QVBoxLayout *srcCol = new QVBoxLayout(src);
     srcCol->setContentsMargins(0, 0, 0, 0);
     srcCol->setSpacing(2);
-    srcCol->addWidget(new QLabel(tr("Groups & fixtures"), src));
+    m_fixGroupPane = new QWidget(src);
+    m_fixGroupPane->setObjectName(QStringLiteral("buildGroupsPane"));
+    QVBoxLayout *oldCol = new QVBoxLayout(m_fixGroupPane);
+    oldCol->setContentsMargins(0, 0, 0, 0);
+    oldCol->setSpacing(2);
+    oldCol->addWidget(new QLabel(tr("Groups & fixtures"), m_fixGroupPane));
     // Find a group or fixture by name in a long list (as Layers does).
-    QLineEdit *fixGroupFilter = new QLineEdit(src);
+    QLineEdit *fixGroupFilter = new QLineEdit(m_fixGroupPane);
     fixGroupFilter->setObjectName(QStringLiteral("fixGroupFilter"));
     fixGroupFilter->setPlaceholderText(tr("Search fixtures & groups…"));
     fixGroupFilter->setClearButtonEnabled(true);
-    srcCol->addWidget(fixGroupFilter);
-    m_fixGroupSource = new FixtureGroupSource(m_doc, src);
+    oldCol->addWidget(fixGroupFilter);
+    m_fixGroupSource = new FixtureGroupSource(m_doc, m_fixGroupPane);
     m_fixGroupSource->setObjectName("programmingFixturesGroups");
-    srcCol->addWidget(m_fixGroupSource, 1);
+    oldCol->addWidget(m_fixGroupSource, 1);
+    srcCol->addWidget(m_fixGroupPane, 1);
+    m_libraryHolder = new QWidget(src);
+    m_libraryHolder->setObjectName(QStringLiteral("buildLibraryHolder"));
+    m_libraryLayout = new QVBoxLayout(m_libraryHolder);
+    m_libraryLayout->setContentsMargins(0, 0, 0, 0);
+    m_libraryHolder->hide();
+    srcCol->addWidget(m_libraryHolder, 1);
     connect(fixGroupFilter, &QLineEdit::textChanged,
             m_fixGroupSource, &FixtureGroupSource::setFilterText);
     connect(m_fixGroupSource, &QTreeWidget::itemSelectionChanged,
@@ -2501,7 +2543,63 @@ void ProgrammingManager::showEvent(QShowEvent *ev)
         pc->autoBindFromProfile();
     updatePowerEstimateActive();
     slotParkChanged(); // reflect any parks restored from the workspace
+    // W6: the Show Tree's Library, lent for as long as this tab shows.
+    borrowLibrary();
     QWidget::showEvent(ev);
+}
+
+bool ProgrammingManager::borrowLibrary()
+{
+    ShowTreeView *tree = ShowTreeView::instance();
+    if (tree == nullptr || m_libraryLent || tree->isLibraryLent())
+        return false;
+    ShowTreeView::LibraryHost host;
+    // Return / double-click in the Library: what is selected goes onto the
+    // scene the Workbench has, as a drop of it would (one undo step).
+    host.apply = [this](const QMimeData *mime, bool) {
+        const quint32 scene = m_workbench->currentSceneId();
+        if (scene == Function::invalidId())
+        {
+            m_outlineHint->setText(tr("Load a scene first (click one in the Scenes list)."));
+            return false;
+        }
+        const bool ok = m_outline->addFromSources(mime, scene, Function::invalidId());
+        if (ok)
+            if (ShowTreeView *t = ShowTreeView::instance())
+                t->noteRecentFromMime(mime);
+        return ok;
+    };
+    host.hint = [this](const QMimeData *, bool) {
+        Function *f = m_doc->function(m_workbench->currentSceneId());
+        return f == nullptr ? tr("Load a scene: Return adds the Library's selection to it")
+                            : tr("Return: add to “%1”").arg(f->name());
+    };
+    host.showHint = [this](const QString &text) { m_outlineHint->setText(text); };
+    host.released = [this]() {
+        m_libraryLent = false;
+        m_libraryHolder->hide();
+        m_fixGroupPane->show();
+    };
+    if (!tree->lendLibrary(m_libraryLayout, host))
+        return false;
+    m_libraryLent = true;
+    m_fixGroupPane->hide();
+    m_libraryHolder->show();
+    return true;
+}
+
+void ProgrammingManager::returnLibrary()
+{
+    if (!m_libraryLent)
+        return;
+    if (ShowTreeView *tree = ShowTreeView::instance())
+        tree->returnLibrary();      // its released() puts this pane back
+    if (m_libraryLent)
+    {
+        m_libraryLent = false;
+        m_libraryHolder->hide();
+        m_fixGroupPane->show();
+    }
 }
 
 void ProgrammingManager::hideEvent(QHideEvent *ev)
@@ -2514,6 +2612,7 @@ void ProgrammingManager::hideEvent(QHideEvent *ev)
         disconnect(mon, &Monitor::fixturesSelected,
                    this, &ProgrammingManager::slotFixturesSelected);
     updatePowerEstimateActive(); // stops the timer
+    returnLibrary();
     QWidget::hideEvent(ev);
 }
 

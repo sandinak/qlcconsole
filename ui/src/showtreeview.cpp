@@ -49,6 +49,7 @@
 #include <QRegularExpression>
 #include <QCheckBox>
 #include <QSplitter>
+#include <QBoxLayout>
 #include <QShortcut>
 #include <QTextBrowser>
 #include <QTextDocument>
@@ -1374,6 +1375,7 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
     // edited; the command line stays full width at the bottom.
     QSplitter *split = new QSplitter(Qt::Horizontal, this);
     split->setObjectName("stSplitter");
+    m_mainSplit = split;
     main->addWidget(split, 1);
     {
         /* The docked picker (Q61): Level… and Colour… open here, in the
@@ -2276,6 +2278,7 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
 
     // Left: the Library
     QWidget *lib = new QWidget(split);
+    m_libraryPane = lib;
     {
         QVBoxLayout *v = new QVBoxLayout(lib);
         v->setContentsMargins(0, 0, 0, 0);
@@ -2333,7 +2336,12 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         });
         connect(m_library, &QTreeWidget::itemSelectionChanged, this, [this]() {
             if (m_library->hasFocus() || m_filter->hasFocus())
-                m_hint->setText(libraryReturnHint());
+            {
+                if (m_libraryHost != nullptr && m_libraryHost->showHint)
+                    m_libraryHost->showHint(libraryReturnHint());
+                else
+                    m_hint->setText(libraryReturnHint());
+            }
         });
         // The filter: Return takes the first match there is (or what is
         // selected) and adds it; ↓ goes into the list.
@@ -2359,8 +2367,9 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
             settings.remove(SETTINGS_SPLITTER);
         connect(split, &QSplitter::splitterMoved, this, [this, split]() {
             // Docked, the panes are not the page's: closeWorkbench() puts the
-            // split back as it was, and that is what is kept.
-            if (isWorkbenchDocked())
+            // split back as it was, and that is what is kept. Nor while
+            // Build has the Library.
+            if (isWorkbenchDocked() || m_libraryHost != nullptr)
                 return;
             QSettings s;
             s.setValue(SETTINGS_SPLITTER, split->saveState());
@@ -2493,6 +2502,8 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
 
 ShowTreeView::~ShowTreeView()
 {
+    // The Library goes back from Build before it is gone with this view.
+    returnLibrary();
     // A docked Workbench goes back to Build (or with the tree's own).
     destroyWorkbenchDock();
     // A field with the focus (a cue's name, just made) loses it as the
@@ -3657,6 +3668,8 @@ quint32 ShowTreeView::currentListId() const
 
 void ShowTreeView::showEvent(QShowEvent *ev)
 {
+    // W6: the Library is this tab's again (Build lent it while it showed).
+    returnLibrary();
     QWidget::showEvent(ev);
     syncPreview();
     // W3: docked when the tab was left: docked again.
@@ -8865,6 +8878,62 @@ void ShowTreeView::reuseLinkActivated(const QString &link)
  * Library
  ****************************************************************************/
 
+bool ShowTreeView::lendLibrary(QBoxLayout *into, const LibraryHost &host)
+{
+    if (m_libraryHost != nullptr || into == nullptr || m_libraryPane == nullptr || m_mainSplit == nullptr)
+        return false;
+    m_splitBeforeLend = m_mainSplit->saveState();
+    m_libraryHost = new LibraryHost(host);
+    into->addWidget(m_libraryPane);
+    m_libraryPane->show();
+    return true;
+}
+
+void ShowTreeView::returnLibrary()
+{
+    if (m_libraryHost == nullptr)
+        return;
+    LibraryHost *host = m_libraryHost;
+    m_libraryHost = nullptr;
+    m_libraryPane->hide();
+    m_libraryPane->setParent(m_mainSplit);
+    m_mainSplit->insertWidget(0, m_libraryPane);
+    m_libraryPane->show();
+    if (!m_splitBeforeLend.isEmpty())
+        m_mainSplit->restoreState(m_splitBeforeLend);
+    if (host->released)
+        host->released();
+    delete host;
+}
+
+QMimeData *ShowTreeView::librarySelectionMime() const
+{
+    const QList<QTreeWidgetItem *> sel = m_library->selectedItems();
+    if (sel.isEmpty())
+        return nullptr;
+    return static_cast<LibraryWidget *>(m_library)->mimeFor(sel);
+}
+
+void ShowTreeView::noteRecentFromMime(const QMimeData *mime)
+{
+    if (mime == nullptr)
+        return;
+    auto note = [this, mime](const char *type, int kind) {
+        for (quint32 id : idsFromMime(mime, type))
+        {
+            const QPair<int, quint32> key(kind, id);
+            m_recent.removeAll(key);
+            m_recent.prepend(key);
+        }
+    };
+    note(FunctionsTreeWidget::paletteDragMimeType(), LibPalette);
+    note(FixtureGroupSource::fixtureGroupMimeType(), LibGroup);
+    note(setMimeType(), LibSet);
+    while (m_recent.count() > kRecentMax)
+        m_recent.removeLast();
+    reloadLibrary();
+}
+
 void ShowTreeView::noteRecent(int kind, quint32 id, const QString &label)
 {
     Q_UNUSED(label)
@@ -10556,6 +10625,11 @@ QString ShowTreeView::libraryReturnHint(bool separate) const
     const QList<QTreeWidgetItem *> sel = m_library->selectedItems();
     if (sel.isEmpty())
         return QString();
+    if (m_libraryHost != nullptr)
+    {
+        QScopedPointer<QMimeData> hm(librarySelectionMime());
+        return hm.isNull() || !m_libraryHost->hint ? QString() : m_libraryHost->hint(hm.data(), separate);
+    }
     quint32 cue, layer;
     Target carried;
     libraryTarget(this, m_tree, &cue, &layer, &carried);
@@ -10570,6 +10644,12 @@ QString ShowTreeView::libraryReturnHint(bool separate) const
 bool ShowTreeView::applyLibrarySelection(bool separate)
 {
     const QList<QTreeWidgetItem *> sel = m_library->selectedItems();
+    if (m_libraryHost != nullptr)
+    {
+        // Build has the Library: what is selected acts on the Workbench.
+        QScopedPointer<QMimeData> hm(librarySelectionMime());
+        return !hm.isNull() && m_libraryHost->apply && m_libraryHost->apply(hm.data(), separate);
+    }
     quint32 cue, layer;
     Target carried;
     libraryTarget(this, m_tree, &cue, &layer, &carried);

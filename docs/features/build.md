@@ -43,7 +43,9 @@ QLC+ plays it.
    ([The Workbench](#the-workbench)).
 5. **+ Scene, + Effect ▾** (EFX or RGB Matrix), ▲ ▼, **Remove**, **▣ Open**.
 6. **The editor pane** — what the selected row edits; here, the Look Editor.
-7. **Groups &amp; fixtures** — under every section, to drag onto a layer.
+7. **The Library** — under every section, to drag onto a layer
+   ([The Library and the command bar](#the-library-and-the-command-bar)).
+8. **Command** — the command bar under both panes.
 
 Two panes, left to right:
 
@@ -63,7 +65,9 @@ Two panes, left to right:
   - **Scenes**: [the outline](#the-outline) of your scene folders. Click a
     scene, a collection or a chaser and it loads in the Workbench.
 
-  Under every section, **Groups &amp; fixtures**, with a **Search fixtures &
+  Under every section, **the Library** (the Show Tree's own, see
+  [The Library and the command bar](#the-library-and-the-command-bar)). A
+  show without a Show Tree view has **Groups &amp; fixtures** there instead, with a **Search fixtures &
   groups…** box: a row stays when it or anything under it matches, the
   folders on the way down open, and a matching group keeps all its
   fixtures. Right-click a row for **Select all similar** (the
@@ -96,6 +100,52 @@ handle moves its edge and stops where a pane reaches its smallest — no pane
 snaps shut. **Double-click a handle** to put it back where it started. The
 badge columns are handles of their own (drag the line between the columns).
 Where you leave them is remembered.
+
+### The Library and the command bar
+
+The bottom of the navigator is **the Library**: the Show Tree's very
+widget, lent to Build while this tab shows and handed back when you go to
+the Show Tree. It is one list, not a copy: the same groups, fixtures,
+group sets, palettes and functions, the same **Recent**, the same filter
+and the same **+ Palette**. A palette you used in Build is Recent in the
+Show Tree and the other way round.
+
+- **Drag** a palette, a group or a fixture onto a layer row, onto the
+  Look Editor or onto the Workbench, as you drag onto the tree.
+- **Return** (or a double-click) in the Library adds what is selected to the
+  scene the Workbench has: one undo step. The hint line says where it goes
+  (*Return: add to “Mine”*).
+
+Under both panes is **Command**, the Show Tree's command line, run through
+the same Operation Registry, for the scene loaded in the Workbench:
+
+    Towers colour Blue
+    USTs colour Red dimmer 50
+    dimmer 50
+    Steps effect Sinelon
+    Towers formation "Pairs crossed"
+    palette colour "Amber" #ffb000
+    undo
+    ?
+
+- **Groups and values** put the group and the palettes the values mean
+  (the palette that plays exactly that, else a new one named as the
+  show's are) on the scene, as a drop of them would. A value alone
+  (`dimmer 50`) is the scene's own look. Every line is one undo step, **⌘Z**
+  or `undo`.
+- **`palette …`**, `set`, `?`, `help`, and the registry's questions
+  (`groups`, `fixtures`, `conflicts`, `why …`) work as in the tree, and so
+  does AI Assist's `? question`.
+- **The cue words** — `cue`, `list`, `record`, `include`, `skip`, `mib`,
+  `reusable`, `GO`, `wb` and the rest that need a cue — answer *“… is Show
+  Tree only”* and change nothing. An effect's `fade` belongs to the cue
+  that plays it, so it answers the same; Build's effect designer has the
+  effect's own.
+- **Tab** completes the word, **↑** recalls, **Esc** closes the help, **:**
+  in the scenes list jumps to the line, **?** shows the syntax.
+
+With the Workbench lent to the Show Tree there is nothing loaded here, and
+the bar says so.
 
 ### Backing out (Esc)
 

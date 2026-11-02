@@ -17,6 +17,18 @@ most of 0.5 ("The show explains itself"); there is no separate 0.3.1.
 A home for QLC+ 4 users: QLC+ 4's habits that qlcconsole had dropped are
 back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
 
+### The Library and the command line in Build
+
+- **One Library, and the command line, in Build.** The bottom of Build's
+  navigator is now the Show Tree's own Library (the same widget and list,
+  with the same Recent, filter and + Palette): drag a palette, group or fixture onto a layer
+  row or the Workbench, or press Return to add the selection to the scene
+  loaded. A **Command** bar under both panes runs the Show Tree's command
+  line through the Operation Registry for that scene: `Towers colour Blue`,
+  `dimmer 50`, `Steps effect Sinelon`, `palette …`, `undo`, `?` and AI Assist's
+  `? question`, one undo step a line; the words that need a cue (`cue`,
+  `list`, `record`, GO…) answer "Show Tree only". No new tab or menu item.
+
 ### Flesh as a stored colour
 
 - **Flesh is a stock colour.** A colour palette at Flesh (#ffcdaa, a warm

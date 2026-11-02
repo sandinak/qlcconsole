@@ -38,6 +38,9 @@ class QStackedWidget;
 class QKeyEvent;
 class QListWidget;
 class ShowTreeCommand;
+class QBoxLayout;
+class QSplitter;
+class QMimeData;
 class QDoubleSpinBox;
 class QTreeWidgetItem;
 class LookEditor;
@@ -304,6 +307,39 @@ public:
     QString libraryReturnHint(bool separate = false) const;
     /** ⌘F, or / in the tree: to the Library's filter. */
     void focusLibraryFilter();
+
+    /** W6: the Library is ONE widget with ONE model, used by this tab and by
+     *  Build. Build lends it (lendLibrary()) while it is the tab shown and
+     *  gives it back when the Show Tree is: same instance, same Recent and
+     *  Pinned, same filter. What Return / double-click do, and the hint
+     *  line, are the host's while it is lent. */
+    struct LibraryHost
+    {
+        /** Return / double-click: apply @a mime (the selected items) where
+         *  the host's selection is (@a separate: ⌥). */
+        std::function<bool(const QMimeData *mime, bool separate)> apply;
+        /** What Return would do now ("" nothing). */
+        std::function<QString(const QMimeData *mime, bool separate)> hint;
+        /** Show the hint line. */
+        std::function<void(const QString &text)> showHint;
+        /** The pane was taken back (the Show Tree is shown again). */
+        std::function<void()> released;
+    };
+    /** The Library pane: filter, + Palette and the tree. */
+    QWidget *libraryPane() const { return m_libraryPane; }
+    /** Put the pane into @a into (a layout of the host's) and hand it the
+     *  Library's actions. False: it is lent already. */
+    bool lendLibrary(QBoxLayout *into, const LibraryHost &host);
+    /** Take the pane back into the tab's splitter, first. No-op if it is
+     *  home. Calls the host's released(). */
+    void returnLibrary();
+    bool isLibraryLent() const { return m_libraryHost != nullptr; }
+    /** The Library's selected items as a drag would carry them (the caller
+     *  owns it; null: nothing that can be dragged). */
+    QMimeData *librarySelectionMime() const;
+    /** Palettes, groups and sets in @a mime became Recent (a drop or a
+     *  command in Build, as one in the tree does). */
+    void noteRecentFromMime(const QMimeData *mime);
     bool acceptsDrop(quint32 cueId, quint32 layerId, const QMimeData *mime,
                      const ShowTree::Target &target = ShowTree::Target(), bool child = false) const;
     /** Any drop on (@a cueId, @a layerId or carried-in @a target), as the
@@ -1023,6 +1059,10 @@ private:
     // Library
     QLineEdit *m_filter = nullptr;
     QTreeWidget *m_library;
+    QWidget *m_libraryPane = nullptr;       //!< filter, + Palette and m_library
+    QSplitter *m_mainSplit = nullptr; //!< Library | tree | page
+    QByteArray m_splitBeforeLend;
+    LibraryHost *m_libraryHost = nullptr;   //!< non-null while Build has the pane
     QList<QPair<int, quint32>> m_recent;
     QList<QPair<int, quint32>> m_pinned;
     /** Library folders open before a filter was typed (it opens more). */

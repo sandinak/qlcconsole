@@ -444,7 +444,7 @@ Notes:
 | Calling script view (cues on lyric or script lines) | 3 | 4 | cue notes | 4 | L | M | 3 | BUILD (0.5) |
 | Encoder banks: MIDI controller drives the selection in Build | 3 | 4 | Focus-this-look mapping | 4 | L | M | 3 | LATER |
 | Duplicate a structure's setup (T1 → T2, T3) | 3 | 4 | Patch Others Like This | 4 | L | M | 3 | LATER |
-| W6 shared Library + command bar in Build | 3 | 4 | Show Tree Library, ShowTreeCommand | 4 | M | M | 2.4 | LATER |
+| W6 shared Library + command bar in Build | 3 | 4 | Show Tree Library, ShowTreeCommand | 4 | M | M | 2.4 | BUILT (0.4, w6, 2026-11-01): the Library lent to Build, a Command bar through the Operation Registry |
 | Show Review v1 (59 checks, CLI, panel) | 4 | 5 | ShowStatus, LookStackCheck, tracking | 8 | L | M | 2.5 | BUILT (0.5, rev, 2026-10-31): registry, accept with a note, `--review` CLI, chip and panel, 59 checks; open checks in TODO |
 | Plot handles (drag ends, ⌥-rotate) | 3 | 4 | Lighting Studio | 5 | M | M | 1.9 | LATER |
 | Stage and inventory across show files | 3 | 4 | inventory, structures | 5 | M | M | 1.9 | LATER |
