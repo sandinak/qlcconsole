@@ -103,6 +103,7 @@ add_library(${module_name}
     monitor/focuscontrolmap.cpp monitor/focuscontrolmap.h
     monitor/focusmodepanel.cpp monitor/focusmodepanel.h
     monitor/focuscallsdialog.cpp monitor/focuscallsdialog.h
+    monitor/structureduplicatedialog.cpp monitor/structureduplicatedialog.h
     monitor/focusmenu.cpp monitor/focusmenu.h
     monitor/venuemenu.cpp monitor/venuemenu.h
     monitor/venuerigdialog.cpp monitor/venuerigdialog.h

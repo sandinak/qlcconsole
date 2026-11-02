@@ -851,6 +851,49 @@ each fixture takes the address of the one in the same place on it, in its
 own structure's universe. See
 [Fixture Manager → Patching](fixture-manager.md#patching-the-patch-dialog).
 
+**Duplicating a structure's setup.** Right-click a truss, tower, pipe or
+deck that carries fixtures → **Duplicate Setup to…** copies what is on it
+onto the other structures of its kind ("T1 to T2, T3"), where **Patch Others
+Like This** only addresses structures that already carry the same lights.
+The dialog lists the other structures; tick the ones to fill, choose the
+rest, and read the preview (every copy, its name and its address) before
+pressing **Duplicate**:
+
+- **What is copied.** The same definition, mode and settings, and the same
+  place on the structure: offset along it, side, shelf or deck position,
+  face and orientation, and the calibration offsets (pan / tilt offset and
+  invert). A copy is hung where the *target* puts that place, so a tower 5 m
+  further on holds its lights 5 m further on. Hangers and child bars on the
+  structure, and the lights on them, are not copied yet.
+- **Names.** The structure's name inside the light's name becomes the
+  target's: "T1-Spot 3" on T1 is "T2-Spot 3" on T2, and "T-1" is also found
+  as "T1". A name with no trace of the structure gets the target's name in
+  front ("T2 Spot 3"). A taken name gets the usual " #2".
+- **Addresses.** *At the next free addresses* (the default) runs on from the
+  end of the originals, spilling into the next universe. *With an address
+  pattern* puts the Nth target N steps on from the original, in addresses
+  and universes ("+100 addresses, +1 universe"): a copy whose address is
+  taken, off the end of the universe or kept by the venue is left unpatched
+  and says why in the preview. *Leave them unpatched* puts them in the
+  inventory.
+- **Groups.** Fixture groups (Fixture Manager) and plot folders are
+  decided separately: **add the copies to the same groups**, or **make a
+  parallel group** for each structure ("T2 All Spots"). A group named for
+  the structure ("T1 Spots") always gets a parallel group, since adding T2's
+  lights to T1's group would be wrong; T1's own plot group is swapped for the
+  target's.
+  *Decided, can change:* fixture groups default to adding, plot folders to
+  parallel.
+- **A target that already has fixtures** is asked about, target by target:
+  **Skip it** (the default; nothing is removed or doubled), **Add
+  alongside**, or **Replace them**. Replace removes the lights already
+  there; scenes that used them lose those values, and the dialog counts the
+  scenes. Undo brings the lights back but not their values in those scenes.
+- **One undo step** (Ctrl/⌘+Z in the plot) removes every copy and group made
+  and brings back anything replaced. In a **Teaching** show, when the patch
+  would change, you are asked first ("Change the Patch"); declining makes
+  nothing.
+
 **Testing which way it points.** Fixture Properties → **Test orientation**:
 the first pose centres pan and tilt, and is named for how the fixture is
 mounted — **Straight down** hung, **Straight up** upright, **Straight out**

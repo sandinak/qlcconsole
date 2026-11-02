@@ -35,6 +35,7 @@
 #include "fixture.h"
 #include "scenery.h"
 #include "function.h"
+#include "structureduplicate.h"
 
 class MonitorProperties;
 class StageTarget;
@@ -301,6 +302,16 @@ public:
     /** The Patch view on structure @p key ("truss:1") and its @p like ones,
      *  matched to it (PatchPlanner::matchLike()). */
     void patchOthersLike(const QString &key, const QStringList &like);
+
+    /** "Duplicate Setup to...": the dialog on structure @p key; what it
+     *  asks for is then done by duplicateStructureSetup(). */
+    void duplicateSetupDialog(const QString &key);
+    /** Copy the fixtures on structure @p key onto @p targets
+     *  (engine/src/structureduplicate.h), as one undo step. A Teaching
+     *  show asks first when the patch would change (declined: nothing is
+     *  done). Returns whether anything was made. */
+    bool duplicateStructureSetup(const QString &key, const QStringList &targets,
+                                 const StructureDuplicate::Options &options);
 
     /** Return the gel color of the fixture with the given ID */
     QColor fixtureGelColor(quint32 id);
@@ -1443,7 +1454,9 @@ private:
                     ItemMove,
                     /** Anything else -- a dialog, a studio edit: the whole
                      *  rig as it was (rigBefore), put back by the Monitor. */
-                    RigEdit } type;
+                    RigEdit,
+                    /** "Duplicate Setup to...": dupUndo puts it all back. */
+                    DuplicateSetup } type;
         /** Entries recorded by ONE drag share a batch (0 = on its own), and
          *  one Ctrl+Z undoes the whole batch -- a Select All drag records one
          *  entry per kind it moved. */
@@ -1463,6 +1476,7 @@ private:
         QList<quint32> pastedPaletteIds;
         QList<quint32> pastedFixtureIds;
         QByteArray rigBefore;                       ///< type == RigEdit
+        StructureDuplicate::Undo dupUndo;           ///< type == DuplicateSetup
     };
     std::function<void(const QByteArray &)> m_rigRestorer;
     std::function<QByteArray()> m_rigSnapshotter;

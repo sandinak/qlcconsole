@@ -63,6 +63,8 @@
 #include "qlcfixturedef.h"
 #include <climits>
 #include "patchinventorydialog.h"
+#include "structureduplicatedialog.h"
+#include "showsettingsdialog.h"
 #include "headtypesdialog.h"
 #include "ledlayouteditor.h"
 #include "monitorfixtureitem.h"
@@ -9090,6 +9092,13 @@ void MonitorGraphicsView::populateItemMenu(QMenu *menu, const QString &kind, qui
             menu->addAction(tr("Patch Others Like This (%1)…").arg(like.size()), this,
                             [this, key, like]() { patchOthersLike(key, like); });
         }
+        /* Its whole setup onto the others of its kind (T1 to T2, T3): the
+           fixtures, hung the same way, named, addressed and grouped. */
+        if (!StructureDuplicate::targetsFor(m_doc, key).isEmpty())
+        {
+            menu->addAction(tr("Duplicate Setup to…"), this,
+                            [this, key]() { duplicateSetupDialog(key); });
+        }
 
         /* One "Add" submenu per structure, rather than a handful of loose
            "Add X" entries at the top level: "the add section should probably
@@ -11529,6 +11538,25 @@ void MonitorGraphicsView::undoOne(const UndoEntry &entry)
             m_rigRestorer(entry.rigBefore);
         return;
     }
+    if (entry.type == UndoEntry::DuplicateSetup)
+    {
+        StructureDuplicate::undo(m_doc, entry.dupUndo);
+        // The Monitor drops the copies' icons as they go; a bare view does it here.
+        foreach (quint32 id, entry.dupUndo.createdFixtures)
+            if (m_doc->fixture(id) == nullptr && m_fixtures.contains(id))
+                removeFixture(id);
+        MonitorProperties *props = m_doc->monitorProperties();
+        foreach (const StructureDuplicate::Removed &r, entry.dupUndo.removed)
+        {
+            const QVector3D at = props->fixtureProperties(r.id).m_baseItem.m_position;
+            addFixture(r.id, QPointF(at.x(), at.y()));
+            updateFixture(r.id);
+        }
+        refreshFixtureLabels();
+        refreshFixtureCountBadges();
+        emit mapStructureChanged();
+        return;
+    }
     if (entry.type == UndoEntry::ItemMove)
     {
         MonitorProperties *props = m_doc->monitorProperties();
@@ -11751,6 +11779,47 @@ void MonitorGraphicsView::patchOthersLike(const QString &key, const QStringList 
     foreach (quint32 f, ids)
         updateFixture(f);
     emit mapStructureChanged();
+}
+
+void MonitorGraphicsView::duplicateSetupDialog(const QString &key)
+{
+    StructureDuplicateDialog dlg(m_doc, key, this);
+    if (dlg.exec() != QDialog::Accepted)
+        return;
+    duplicateStructureSetup(key, dlg.targets(), dlg.options());
+}
+
+bool MonitorGraphicsView::duplicateStructureSetup(const QString &key, const QStringList &targets,
+                                                  const StructureDuplicate::Options &options)
+{
+    const StructureDuplicate::Preview pv = StructureDuplicate::preview(m_doc, key, targets, options);
+    bool changesPatch = pv.replacedFixtures > 0;
+    foreach (const StructureDuplicate::Row &r, pv.rows)
+        changesPatch = changesPatch || r.patched;
+    if (pv.rows.isEmpty() && pv.replacedFixtures == 0)
+        return false;
+    // The patch is part of a Teaching show's lesson: ask first, as the Fixture Manager does.
+    if (changesPatch
+        && !ShowSettingsDialog::confirmPatchChange(m_doc, this, tr("Patch the duplicated fixtures")))
+        return false;
+
+    const StructureDuplicate::Result res = StructureDuplicate::apply(m_doc, key, targets, options);
+    if (res.undo.isEmpty())
+        return false;
+    MonitorProperties *props = m_doc->monitorProperties();
+    foreach (quint32 id, res.createdIds)
+    {
+        const QVector3D at = props->fixtureProperties(id).m_baseItem.m_position;
+        addFixture(id, QPointF(at.x(), at.y()));
+    }
+    UndoEntry e;
+    e.type = UndoEntry::DuplicateSetup;
+    e.dupUndo = res.undo;
+    pushUndo(e);
+    refreshFixtureLabels();
+    refreshFixtureCountBadges();
+    emit mapStructureChanged();
+    return true;
 }
 
 int MonitorGraphicsView::standOnDeck(const QList<quint32> &fids, quint32 platformId)

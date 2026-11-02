@@ -111,6 +111,7 @@ add_library(${module_name} SHARED
     rignetwork.cpp rignetwork.h
     outputpatch.cpp outputpatch.h
     patchplanner.cpp patchplanner.h
+    structureduplicate.cpp structureduplicate.h
     qlccapability.cpp qlccapability.h
     qlcchannel.cpp qlcchannel.h
     qlcclipboard.cpp qlcclipboard.h
