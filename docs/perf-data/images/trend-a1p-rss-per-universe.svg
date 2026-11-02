@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="450" viewBox="0 0 760 450" font-family="system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" role="img" aria-labelledby="t d">
+<title id="t">Memory per universe</title>
+<desc id="d">Realistic mixed load: slope of RSS from 8 to 256 universes. Lower is better. One point per run, in date order.</desc>
+<rect x="0.5" y="0.5" width="759" height="449" rx="8" fill="#fcfcfb" stroke="#d9d8d2"/>
+<text x="20" y="30" font-size="16" font-weight="600" fill="#0b0b0b">Memory per universe</text>
+<text x="20" y="50" font-size="12.5" fill="#52514e">Realistic mixed load: slope of RSS from 8 to 256 universes. Lower is better. One point per run, in date order.</text>
+<line x1="20" y1="70" x2="42" y2="70" stroke="#eb6834" stroke-width="2"/>
+<rect x="27" y="66" width="8" height="8" fill="#eb6834" stroke="#fcfcfb" stroke-width="1.5"></rect>
+<text x="50" y="74.5" font-size="12.5" fill="#0b0b0b">Intel i7-9750H (Linux container)</text>
+<line x1="306" y1="70" x2="328" y2="70" stroke="#eda100" stroke-width="2"/>
+<polygon points="317.4,64.8 322.6,70 317.4,75.2 312.2,70" fill="#eda100" stroke="#fcfcfb" stroke-width="1.5"></polygon>
+<text x="336" y="74.5" font-size="12.5" fill="#0b0b0b">Apple M4 Max Mac</text>
+<text x="20" y="93" font-size="11.5" fill="#6f6d68">Red: this metric past its tolerance. Hollow: a short hand run (A/B or bisect), not judged.</text>
+<text x="20" y="108" font-size="11.5" fill="#6f6d68">Dashed line: that host's baseline re-recorded. Dotted: a change worth knowing.</text>
+<line x1="70" y1="388" x2="610" y2="388" stroke="#e9e8e2" stroke-width="1"/>
+<text x="62" y="392" font-size="12" fill="#52514e" text-anchor="end">0</text>
+<line x1="70" y1="336.8" x2="610" y2="336.8" stroke="#e9e8e2" stroke-width="1"/>
+<text x="62" y="340.8" font-size="12" fill="#52514e" text-anchor="end">0.5</text>
+<line x1="70" y1="285.6" x2="610" y2="285.6" stroke="#e9e8e2" stroke-width="1"/>
+<text x="62" y="289.6" font-size="12" fill="#52514e" text-anchor="end">1</text>
+<line x1="70" y1="234.4" x2="610" y2="234.4" stroke="#e9e8e2" stroke-width="1"/>
+<text x="62" y="238.4" font-size="12" fill="#52514e" text-anchor="end">1.5</text>
+<line x1="70" y1="183.2" x2="610" y2="183.2" stroke="#e9e8e2" stroke-width="1"/>
+<text x="62" y="187.2" font-size="12" fill="#52514e" text-anchor="end">2</text>
+<line x1="70" y1="132" x2="610" y2="132" stroke="#e9e8e2" stroke-width="1"/>
+<text x="62" y="136" font-size="12" fill="#52514e" text-anchor="end">2.5</text>
+<line x1="97" y1="388" x2="97" y2="393" stroke="#c3c2b7" stroke-width="1"/>
+<text x="97" y="408" font-size="12" fill="#52514e" text-anchor="middle">Oct 29</text>
+<line x1="313" y1="388" x2="313" y2="393" stroke="#c3c2b7" stroke-width="1"/>
+<text x="313" y="408" font-size="12" fill="#52514e" text-anchor="middle">Nov 1</text>
+<line x1="70" y1="388" x2="610" y2="388" stroke="#c3c2b7" stroke-width="1"/>
+<text x="340" y="432" font-size="12.5" fill="#52514e" text-anchor="middle">Date of the run (runs evenly spaced)</text>
+<text transform="translate(20 260) rotate(-90)" font-size="12.5" fill="#52514e" text-anchor="middle">Peak RSS added per universe (MB)</text>
+<line x1="97" y1="388" x2="97" y2="132" stroke="#eda100" stroke-width="1.25" stroke-dasharray="6 4"><title>Apple M4 Max Mac: baseline re-recorded 2026-10-29T06:22Z at 0302ef2f7a93</title></line>
+<line x1="151" y1="388" x2="151" y2="132" stroke="#eb6834" stroke-width="1.25" stroke-dasharray="6 4"><title>Intel i7-9750H (Linux container): baseline re-recorded 2026-10-29T06:25Z at 0302ef2f7a93</title></line>
+<path d="M151 243.6 L259 243.8" fill="none" stroke="#eb6834" stroke-width="2" stroke-linejoin="round"/>
+<rect x="147" y="239.6" width="8" height="8" fill="#eb6834" stroke="#fcfcfb" stroke-width="1.5"><title>Intel i7-9750H (Linux container), 2026-10-29T06:25Z, 0302ef2f7a93 (record): 1.4; baseline 1.4099; this metric: record; run: record</title></rect>
+<rect x="255" y="239.8" width="8" height="8" fill="#eb6834" stroke="#fcfcfb" stroke-width="1.5"><title>Intel i7-9750H (Linux container), 2026-10-29T06:47Z, 0302ef2f7a93 (perf): 1.4; baseline 1.4099; this metric: ok; run: ok</title></rect>
+<path d="M97 243 L205 243.1 L313 221 L583 305.1" fill="none" stroke="#eda100" stroke-width="2" stroke-linejoin="round"/>
+<polygon points="367,242.8 371.2,247 367,251.2 362.8,247" fill="#fcfcfb" stroke="#eda100" stroke-width="2"><title>Apple M4 Max Mac, 2026-11-01T04:57Z, b74fa32c6575 (ab, ender): 1.4; baseline 1.4158</title></polygon>
+<polygon points="421,256.5 425.2,260.7 421,264.9 416.8,260.7" fill="#fcfcfb" stroke="#eda100" stroke-width="2"><title>Apple M4 Max Mac, 2026-11-01T04:59Z, fa45c44ee31e (ab, ender): 1.2; baseline 1.4158</title></polygon>
+<polygon points="475,242.4 479.2,246.6 475,250.8 470.8,246.6" fill="#fcfcfb" stroke="#eda100" stroke-width="2"><title>Apple M4 Max Mac, 2026-11-01T05:01Z, b74fa32c6575 (ab, ender): 1.4; baseline 1.4158</title></polygon>
+<polygon points="529,255.7 533.2,259.9 529,264.1 524.8,259.9" fill="#fcfcfb" stroke="#eda100" stroke-width="2"><title>Apple M4 Max Mac, 2026-11-01T05:04Z, fa45c44ee31e (ab, ender): 1.2; baseline 1.4158</title></polygon>
+<polygon points="97,237.8 102.2,243 97,248.2 91.8,243" fill="#eda100" stroke="#fcfcfb" stroke-width="1.5"><title>Apple M4 Max Mac, 2026-10-29T06:22Z, 0302ef2f7a93 (record): 1.4; baseline 1.4158; this metric: record; run: record</title></polygon>
+<polygon points="205,237.9 210.2,243.1 205,248.3 199.8,243.1" fill="#eda100" stroke="#fcfcfb" stroke-width="1.5"><title>Apple M4 Max Mac, 2026-10-29T06:37Z, 0302ef2f7a93 (perf): 1.4; baseline 1.4158; this metric: ok; run: ok</title></polygon>
+<polygon points="313,215.8 318.2,221 313,226.2 307.8,221" fill="#d03b30" stroke="#fcfcfb" stroke-width="1.5"><title>Apple M4 Max Mac, 2026-11-01T04:34Z, 66da743e5e44 (perf, ender): 1.6; baseline 1.4158; this metric: regressed; run: regressed</title></polygon>
+<polygon points="583,299.9 588.2,305.1 583,310.3 577.8,305.1" fill="#eda100" stroke="#fcfcfb" stroke-width="1.5"><title>Apple M4 Max Mac, 2026-11-01T05:25Z, aaf65a9e4a33 (perf, ender): 0.8; baseline 1.4158; this metric: improved; run: regressed</title></polygon>
+<line x1="286" y1="388" x2="286" y2="136" stroke="#52514e" stroke-width="1.5" stroke-dasharray="2 4"><title>2026-10-31T18:54Z 869649d1349b: Oct 31: effect fade adds FadeChannel floats, 96 to 104 bytes</title></line>
+<text x="291" y="146" font-size="11.5" fill="#0b0b0b" text-anchor="start">Oct 31: effect fade adds FadeChannel floats, 96 to 104 bytes</text>
+<line x1="583" y1="388" x2="583" y2="136" stroke="#52514e" stroke-width="1.5" stroke-dasharray="2 4"><title>2026-11-01T05:25Z aaf65a9e4a33: Nov 1: floats moved into padding, back to 96 bytes</title></line>
+<text x="578" y="160" font-size="11.5" fill="#0b0b0b" text-anchor="end">Nov 1: floats moved into padding, back to 96 bytes</text>
+<line x1="266" y1="243.8" x2="621" y2="243.8" stroke="#c3c2b7" stroke-width="1"/>
+<rect x="624.5" y="240.3" width="7" height="7" fill="#eb6834" stroke="#fcfcfb" stroke-width="1.5"></rect>
+<text x="637" y="247.8" font-size="12" fill="#0b0b0b">i7: 1.4</text>
+<line x1="590" y1="305.1" x2="621" y2="305.1" stroke="#c3c2b7" stroke-width="1"/>
+<polygon points="628,300.4 632.7,305.1 628,309.8 623.3,305.1" fill="#eda100" stroke="#fcfcfb" stroke-width="1.5"></polygon>
+<text x="637" y="309.1" font-size="12" fill="#0b0b0b">M4 Max: 0.8</text>
+</svg>

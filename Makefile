@@ -12,7 +12,7 @@ SHELL := /bin/bash
 DEV_APP ?= $(HOME)/Applications/qlcconsole-dev.app
 export DEV_APP
 
-.PHONY: help test run check quick pool pool-status perf perf-record translations dmg release-check beta release attach publish
+.PHONY: help test run check quick pool pool-status perf perf-record perf-history-commit translations dmg release-check beta release attach publish
 
 help:
 	@v=$$(cat VERSION); \
@@ -39,6 +39,7 @@ help:
 	echo "                  (build-perf/) under the stress harness at fixed loads + the hot-path"; \
 	echo "                  CPU costs, against this machine's baseline in docs/perf-data/;"; \
 	echo "                  ends with perf=0 (within tolerance) or perf=1 (a regression)."; \
+	echo "  make perf-history-commit  Commit docs/perf-data/history.csv (the nightly's rows merged in); never pushes."; \
 	echo "  make perf-record  Record or rebase this machine's baseline (3 runs, ~27 min);"; \
 	echo "                  commit it with the reason. HOST_CLASS=name names the machine."; \
 	echo "                  PERF_ARGS=--points=gui,web adds only those points."; \
@@ -94,6 +95,13 @@ pool-status:
 
 perf:
 	python3 tools/perf/guard.py $(if $(HOST_CLASS),--host-class $(HOST_CLASS)) $(PERF_ARGS)
+
+# decided (can change): history rows are committed by this step, not by the
+# guard. It merges the nightly's file (PERF_HISTORY_FROM, default
+# ~/git/perf-nightly/history.csv) into docs/perf-data/history.csv and commits
+# that one file; it never pushes.
+perf-history-commit:
+	python3 tools/perf/history.py commit $(if $(PERF_HISTORY_FROM),--from $(PERF_HISTORY_FROM))
 
 perf-record:
 	python3 tools/perf/guard.py --record $(if $(HOST_CLASS),--host-class $(HOST_CLASS)) $(PERF_ARGS)

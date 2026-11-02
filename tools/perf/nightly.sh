@@ -11,6 +11,9 @@
 #   trend.csv        the history: one row per metric per night (format in
 #                    docs/performance.md, "Keeping it fast"); copied into
 #                    docs/perf-data/trend.csv at a release, not nightly
+#   history.csv      the same runs in docs/perf-data/history.csv's long format
+#                    (tools/perf/history.py); `make perf-history-commit` merges
+#                    it into the repository's copy at a release
 #   latest.txt       the last night's summary: its first line is
 #                    "perf=N host=CLASS rev=SHA date=..." (N: 0 within
 #                    tolerance, 1 regression, 2 build/run error, 3 skipped
@@ -73,7 +76,8 @@ if pgrep -f "check-all[.]sh" >/dev/null 2>&1 || pgrep -f "perf_sweep[.]py|run_so
     echo "a gate or a perf run is running" > "$OUT/guard.log"
 else
     python3 "$SRC/tools/perf/guard.py" --rev "$REV" --build-dir "$PERF_NIGHTLY/build-perf" \
-        --out "$OUT" --trend "$PERF_NIGHTLY/trend.csv" > "$OUT/guard.log" 2>&1
+        --out "$OUT" --trend "$PERF_NIGHTLY/trend.csv" \
+        --kind nightly --history "$PERF_NIGHTLY/history.csv" > "$OUT/guard.log" 2>&1
     RC=$?
 fi
 

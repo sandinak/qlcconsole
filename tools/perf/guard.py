@@ -69,6 +69,7 @@ import os
 import platform
 import re
 import shutil
+import socket
 import statistics
 import subprocess
 import sys
@@ -535,6 +536,22 @@ def append_trend(path, meta, results):
             w.writerow([meta["recorded"], meta["rev"], meta["host_class"], meta["qt"], point, metric,
                         "" if value is None else round(value, 4), base["value"], verdict])
 
+def add_history(a, meta, hc, kind, results, rc, recorded=None):
+    """Append this run to the history (tools/perf/history.py). Never fails the run."""
+    if a.no_history:
+        return
+    try:
+        import history
+        path = a.history or history.HISTORY
+        machine = socket.gethostname().split(".")[0]
+        rows = (history.rows_for_record(meta, recorded, machine) if recorded is not None
+                else history.rows_for_run(meta, kind, results, rc, machine))
+        if history.append(path, rows):
+            log("history: %d rows -> %s" % (len(rows), os.path.relpath(path, REPO)))
+    except Exception as e:
+        print("guard: history not written: %s (the run is not affected)" % e, file=sys.stderr)
+
+
 # ---------------------------------------------------------------------------
 # Self-test (the gate runs this; no build, no measuring)
 # ---------------------------------------------------------------------------
@@ -610,6 +627,22 @@ def self_test():
         check(meta2.get("rev") == "old" and len(rows2) == 3, "after adding %s %s" % (meta2, rows2))
     finally:
         shutil.rmtree(d)
+    # The history: a run appends its key metrics; a bad path only warns.
+    d = tempfile.mkdtemp()
+    try:
+        h = os.path.join(d, "history.csv")
+        ns = types.SimpleNamespace(no_history=False, history=h)
+        hmeta = dict(recorded="2026-11-01T04:34Z", rev="abc", host_class="x", qt="6")
+        add_history(ns, hmeta, "x", "perf", res, 1)
+        add_history(ns, hmeta, "x", "record", None, 0, recorded=rows)
+        lines = open(h).read().splitlines()
+        check(lines[0].startswith("date,sha,host,machine,qt,kind,scenario,metric,value,baseline,verdict"), "history header")
+        check(any(",perf,a1p-u0008,tick_p99_ms,9," in l for l in lines) and any(",record,all,perf," in l for l in lines),
+              "history rows %s" % lines)
+        ns.history = os.path.join(h, "no", "history.csv")
+        add_history(ns, hmeta, "x", "perf", res, 0)          # must not raise
+    finally:
+        shutil.rmtree(d)
     # Every point has a known metric set.
     names = all_point_names()
     check(len(names) == len(set(names)) and all(re.match(r"^[a-z0-9-]+$", n) for n in names), names)
@@ -639,6 +672,11 @@ def main():
     ap.add_argument("--out", default="", help="results folder (default a temporary one)")
     ap.add_argument("--trend", default="", help="append the comparison to this trend CSV")
     ap.add_argument("--rev", default="", help="the revision measured (default: git HEAD)")
+    ap.add_argument("--kind", default="perf", help="the run kind in the history: perf (default), nightly "
+                    "(a record is always 'record')")
+    ap.add_argument("--history", default="", help="append the run to this history CSV (default "
+                    "docs/perf-data/history.csv; see tools/perf/history.py)")
+    ap.add_argument("--no-history", action="store_true", help="do not append to the history")
     ap.add_argument("--force", action="store_true", help="measure even on a busy machine")
     ap.add_argument("--busy-limit", type=float, default=35.0, help="%% of the CPU others may use (35)")
     ap.add_argument("--no-nice", action="store_true", help="full priority in working hours too")
@@ -731,6 +769,7 @@ def main():
                 meta["runs"] = a.runs
                 write_baseline(bpath, meta, runs)
             _, rows = read_baseline(bpath)
+            add_history(a, meta, hc, "record", None, 0, recorded=rows)
             print("\nRecorded %s (%d runs, %.0f min). Spread and tolerance per metric:" % (
                 os.path.relpath(bpath, REPO), a.runs, (time.time() - t0) / 60))
             for (p, m), r in sorted(rows.items()):
@@ -772,6 +811,7 @@ def main():
         mins = (time.time() - t0) / 60
         if a.trend:
             append_trend(a.trend, meta, results)
+        add_history(a, meta, hc, a.kind, results, 1 if regressed else 0)
         # What a release checks for (docs/dev/RELEASE.md step 0, publish.sh)
         sha = sh(["git", "-C", REPO, "rev-parse", "HEAD"]) if not a.rev else a.rev
         with open(os.path.join(a.build_dir, "guard-result.txt"), "w") as f:

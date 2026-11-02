@@ -508,6 +508,74 @@ three computers and update the tables and charts when:
 - the Qt version a release is built with changes.
 
 
+## Performance over time
+
+Every guard run adds to a history, so the page gains data points as tests
+run, not only when someone rebases a baseline. The charts below plot one
+metric over the runs in date order, a line per machine class; lower is
+better. A **red** point is a metric past its tolerance in that run, a
+**hollow** point is a short hand run (an A/B or a bisect, not judged), a
+**dashed vertical line** is a baseline re-recorded, a **dotted** one is a
+change worth knowing. Hover a point for its commit, machine, baseline and
+verdict.
+
+![Mixed rig: timer tick, median, over runs](perf-data/images/trend-rig-tick-p50.svg)
+
+![Mixed rig: CPU over runs](perf-data/images/trend-rig-cpu.svg)
+
+![64 RGB matrices: timer tick, median, over runs](perf-data/images/trend-c-matrix-tick.svg)
+
+![64 chasers: timer tick, median, over runs](perf-data/images/trend-cp-chasers-tick.svg)
+
+Memory per universe shows the 2026-10-31 regression and its fix: the
+effect-fade merge grew `FadeChannel` from 96 to 104 bytes, a 128-universe
+show held about 15 MB more, and the next day's run (red) found it; the
+floats went into existing padding and the size is back to 96 (a
+`static_assert` guards it).
+
+![Memory per universe over runs, with the FadeChannel regression and its fix marked](perf-data/images/trend-a1p-rss-per-universe.svg)
+
+![Hot path: a scene frame, over runs](perf-data/images/trend-hotpath-scene-frame.svg)
+
+![Hot path: a fader write, over runs](perf-data/images/trend-hotpath-fader-write.svg)
+
+![Hot path: a universe frame, over runs](perf-data/images/trend-hotpath-universe-frame.svg)
+
+### How a point gets added
+
+- `tools/perf/guard.py` appends the run to
+  [`perf-data/history.csv`](perf-data/history.csv): `make perf` as kind
+  `perf`, `make perf-record` as `record`, and `nightly.sh` as `nightly`
+  (into its own `~/git/perf-nightly/history.csv`). Appending never fails a
+  run: a write that goes wrong only warns. `--no-history` skips it,
+  `--history FILE` writes elsewhere.
+- The file is in a long format, one row per metric per run, so a new
+  metric or scenario needs no new column:
+  `date,sha,host,machine,qt,kind,scenario,metric,value,baseline,verdict`.
+  `date` is UTC; `host` is the host class the baselines use; `scenario`
+  is a guard point (`all` carries the run's own verdict, metric `perf`,
+  value 0 or 1); `verdict` is `ok`, `improved`, `regressed`, `missing`,
+  `record`, or empty for a run that was not judged. The metrics kept are
+  `tick_p50_ms`, `tick_p99_ms`, `tick_cpu_ms`, `cpu_pct`, `rss_mb`,
+  `rss_mb_per_universe` and every hot-path `*_ns`.
+- **Getting rows into the repository** (decided, can change): a guard run
+  in a checkout only changes the working tree, and the nightly runs in a
+  detached clone that is reset every night, so a step does it:
+  `make perf-history-commit` merges the nightly's file
+  (`PERF_HISTORY_FROM=FILE`, default `~/git/perf-nightly/history.csv`)
+  into `docs/perf-data/history.csv` and commits that one file. It never
+  pushes; the release flow runs it (RELEASE.md, step 0) and the merge
+  train or the lead pushes the commit.
+- `python3 -I tools/perf/plot.py trends` redraws the charts into
+  `docs/perf-data/images/trend-*.svg`. Changes worth a mark go in
+  [`perf-data/annotations.csv`](perf-data/annotations.csv)
+  (`date,sha,text,charts`).
+- The first rows were filled in from what already existed: the two
+  baselines (and the points added to the M4 Max one), the first guard
+  check on each, and the 2026-11-01 runs including the RSS bisect. A
+  bisect row's date is when its file was last written. Numbers are as the
+  guard measured them; nothing was estimated.
+
 ## Method
 
 1. **Engine sweeps.** `stresstest/perf_sweep.py` drives `qlcstress engine

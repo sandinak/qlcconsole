@@ -2,9 +2,11 @@
 """Charts for docs/performance.md, as static SVG, from docs/perf-data/*.csv.
 
   python3 -I tools/perf/plot.py [DATA_DIR] [OUT_DIR]
+  python3 -I tools/perf/plot.py trends [DATA_DIR] [OUT_DIR]   # history.csv -> trend-*.svg
+  python3 -I tools/perf/plot.py --self-test                   # the trends on a fixture (the gate)
 
 DATA_DIR defaults to docs/perf-data (made by tools/perf/extract.py), OUT_DIR
-to docs/images/perf. No dependencies: a small SVG writer is below. The
+to docs/images/perf (trends: docs/perf-data/images). No dependencies: a small SVG writer is below. The
 output is deterministic (no dates, fixed number formatting), so rerunning
 on the same data gives byte-identical files.
 
@@ -74,6 +76,7 @@ class Chart:
         self.body = []
         self.ends = []                   # (host, y px, text) for direct labels
         self.notes = []
+        self.top = T
 
     # plot area
     @property
@@ -90,7 +93,7 @@ class Chart:
 
     @property
     def py1(self):
-        return T
+        return self.top
 
     def X(self, v):
         return self.px0 + self.x.frac(v) * (self.px1 - self.px0)
@@ -98,8 +101,8 @@ class Chart:
     def Y(self, v):
         return self.py0 - self.y.frac(v) * (self.py0 - self.py1)
 
-    def marker(self, host, cx, cy, hollow=False, tip=None, size=8):
-        c = COLOR[host]
+    def marker(self, host, cx, cy, hollow=False, tip=None, size=8, color=None):
+        c = color or COLOR[host]
         fill = SURFACE if hollow else c
         r = size / 2
         t = "<title>%s</title>" % esc(tip) if tip else ""
@@ -298,6 +301,19 @@ def by_host(rows):
 
 
 def main():
+    if sys.argv[1:2] == ["--self-test"]:
+        sys.exit(self_test())
+    if sys.argv[1:2] == ["trends"]:
+        here = os.path.dirname(os.path.abspath(__file__))
+        data = sys.argv[2] if len(sys.argv) > 2 else os.path.join(here, "..", "..", "docs", "perf-data")
+        out = sys.argv[3] if len(sys.argv) > 3 else os.path.join(data, "images")
+        classes = {}
+        for r in read(os.path.join(data, "hosts.csv")):
+            HOST_LABEL[r["host"]] = r["label"]
+            if r.get("host_class"):
+                classes[r["host_class"]] = r["host"]
+        trends(data, out, classes)
+        return
     here = os.path.dirname(os.path.abspath(__file__))
     data = sys.argv[1] if len(sys.argv) > 1 else os.path.join(here, "..", "..", "docs", "perf-data")
     out = sys.argv[2] if len(sys.argv) > 2 else os.path.join(here, "..", "..", "docs", "images", "perf")
@@ -445,6 +461,229 @@ def trend_chart(rows, classes, path):
                      HOST_LABEL[h], r["date"], r["rev"], label_num(round(y, 1)), r["n"], r["bad"]),
                  hollow=lambda p: p[2]["bad"] > 0)
     c.render(path)
+
+
+# ---------------------------------------------------------------------------
+# Performance over time: docs/perf-data/history.csv (tools/perf/history.py)
+# ---------------------------------------------------------------------------
+
+BAD = "#d03b30"          # a metric past its tolerance (a second cue besides colour: the tooltip says so)
+# (file, title, scenario, metric, y label, how to read it)
+TRENDS = [
+    ("trend-rig-tick-p50", "Mixed rig: timer tick, median", "rig-mixed-u0032", "tick_p50_ms",
+     "Tick time, median (ms)", "32 universes of moving heads, pixel bars and dimmers."),
+    ("trend-rig-cpu", "Mixed rig: CPU", "rig-mixed-u0032", "cpu_pct",
+     "CPU (% of one core)", "The same run: whole process, mean after warm-up."),
+    ("trend-c-matrix-tick", "64 RGB matrices: timer tick, median", "c-matrix-n0064", "tick_p50_ms",
+     "Tick time, median (ms)", "Scripted matrices, 32 universes."),
+    ("trend-cp-chasers-tick", "64 chasers: timer tick, median", "cp-chasers-n0064", "tick_p50_ms",
+     "Tick time, median (ms)", "Per-step chasers, 32 universes."),
+    ("trend-a1p-rss-per-universe", "Memory per universe", "a1p", "rss_mb_per_universe",
+     "Peak RSS added per universe (MB)", "Realistic mixed load: slope of RSS from 8 to 256 universes."),
+    ("trend-hotpath-scene-frame", "Hot path: a scene frame", "hotpath", "scene_frame_170_ns",
+     "CPU per scene frame, 170 fixtures (ns)", "One thread, no I/O."),
+    ("trend-hotpath-fader-write", "Hot path: a fader write", "hotpath", "genericfader_write_510_ns",
+     "CPU per fader write, 510 channels (ns)", "One thread, no I/O."),
+    ("trend-hotpath-universe-frame", "Hot path: a universe frame", "hotpath", "universe_frame_510_ns",
+     "CPU per universe frame (ns)", "One thread, no I/O."),
+]
+
+
+class Runs:
+    """The x axis: the runs in date order, evenly spaced (runs cluster in time),
+    labelled with their dates."""
+    MONTHS = Days.MONTHS
+
+    def __init__(self, dates):
+        self.dates = dates            # one 'YYYY-MM-DD...' per run, in order
+        self.lo, self.hi = -0.5, len(dates) - 0.5
+
+    def frac(self, v):
+        return (v - self.lo) / (self.hi - self.lo)
+
+    def ticks(self):
+        firsts = [i for i, d in enumerate(self.dates) if i == 0 or d[:10] != self.dates[i - 1][:10]]
+        gap = len(self.dates) / 8.0        # labels about 70 px apart at most 8 across
+        out = []
+        for i in firsts:
+            if not out or i - out[-1] >= gap:
+                out.append(i)
+        return out
+
+    def fmt(self, v):
+        d = self.dates[int(v)]
+        return "%s %d" % (self.MONTHS[int(d[5:7]) - 1], int(d[8:10]))
+
+
+def sig3(v):
+    """3 significant digits, no trailing zeros (0.15, 1.63, 11000)."""
+    if v == 0:
+        return "0"
+    d = max(0, 2 - int(math.floor(math.log10(abs(v)))))
+    return label_num(round(v, d))
+
+
+def nice_axis(hi):
+    """A linear axis from 0 over a 'nice' step: about 5 ticks, hi rounded up."""
+    hi = max(hi, 1e-9) * 1.25      # headroom for the notes
+    mag = 10 ** math.floor(math.log10(hi / 5.0))
+    for k in (1, 2, 2.5, 5, 10):
+        if hi / (k * mag) <= 5.0 + 1e-9:
+            step = k * mag
+            break
+    top = math.ceil(hi / step) * step
+    return Lin(0, top, step, lambda v, step=step: ("%g" % round(v, 6)) if step < 1 else label_num(v))
+
+
+def read_annotations(data):
+    p = os.path.join(data, "annotations.csv")
+    return read(p) if os.path.exists(p) else []
+
+
+def trends(data, out, classes, hist=None, annotations=None):
+    """One SVG per key metric: its value over the runs in history.csv, per host class."""
+    path = os.path.join(data, "history.csv")
+    if hist is None:
+        if not os.path.exists(path):
+            print("no", path)
+            return []
+        hist = read(path)
+    if annotations is None:
+        annotations = read_annotations(data)
+    os.makedirs(out, exist_ok=True)
+    verdict_of = {(r["date"], r["sha"], r["host"], r["kind"]): r["verdict"]
+                  for r in hist if r["scenario"] == "all" and r["metric"] == "perf"}
+    written = []
+    for fname, title, scenario, metric, ylabel, what in TRENDS:
+        rows = [r for r in hist if r["scenario"] == scenario and r["metric"] == metric
+                and num(r["value"]) is not None and classes.get(r["host"])]
+        if not rows:
+            continue
+        # the runs of this chart, in date order (history.csv is in run order within a date)
+        order = []
+        for i, r in sorted(enumerate(rows), key=lambda t: (t[1]["date"], t[0])):
+            k = (r["date"], r["sha"], r["kind"])
+            if k not in order:
+                order.append(k)
+        pos = {k: i for i, k in enumerate(order)}
+        dates = [k[0] for k in order]
+
+        def xat(date, sha=""):
+            for k in order:
+                if k[0] == date and (not sha or k[1] == sha):
+                    return pos[k]
+            return sum(1 for d in dates if d < date) - 0.5
+
+        hosts = [h for h in TREND_HOSTS if any(classes[r["host"]] == h for r in rows)]
+        top = max(num(r["value"]) for r in rows)
+        c = Chart(title, "%s Lower is better. One point per run, in date order." % what,
+                  "Date of the run (runs evenly spaced)", ylabel, Runs(dates), nice_axis(top), hosts)
+        c.notes = ["Red: this metric past its tolerance. Hollow: a short hand run (A/B or bisect), not judged.",
+                   "Dashed line: that host's baseline re-recorded. Dotted: a change worth knowing."]
+        c.top = 132
+        # re-records of the baselines (the record rows of these hosts)
+        shown = set()
+        for r in rows:
+            if r["kind"] != "record":
+                continue
+            h = classes[r["host"]]
+            x = pos[(r["date"], r["sha"], r["kind"])]
+            c.body.append('<line x1="%s" y1="%s" x2="%s" y2="%s" stroke="%s" stroke-width="1.25" '
+                          'stroke-dasharray="6 4"><title>%s</title></line>' % (
+                              f(c.X(x)), f(c.py0), f(c.X(x)), f(c.py1), COLOR[h],
+                              esc("%s: baseline re-recorded %s at %s" % (HOST_LABEL.get(h, h), r["date"], r["sha"]))))
+            shown.add(h)
+        for hname in hosts:
+            cls = [k for k, v in classes.items() if v == hname]
+            pts, shorts = [], []
+            for i, r in sorted(enumerate(rows), key=lambda t: (t[1]["date"], t[0])):
+                if r["host"] not in cls:
+                    continue
+                x, y = pos[(r["date"], r["sha"], r["kind"])], num(r["value"])
+                run = verdict_of.get((r["date"], r["sha"], r["host"], r["kind"]), "")
+                tip = "%s, %s, %s (%s%s): %s%s" % (
+                    HOST_LABEL.get(hname, hname), r["date"], r["sha"], r["kind"],
+                    ", " + r["machine"] if r["machine"] else "", sig3(y),
+                    "; baseline %s" % r["baseline"] if r["baseline"] else "")
+                if run or r["verdict"]:
+                    tip += "; this metric: %s; run: %s" % (r["verdict"] or "-", run or "-")
+                (shorts if r["kind"] in ("ab", "bisect") else pts).append((x, y, r, tip))
+            if pts:
+                d = " ".join(("M" if i == 0 else "L") + "%s %s" % (f(c.X(x)), f(c.Y(y)))
+                             for i, (x, y, _, _) in enumerate(pts))
+                c.body.append('<path d="%s" fill="none" stroke="%s" stroke-width="2" stroke-linejoin="round"/>'
+                              % (d, COLOR[hname]))
+            for x, y, r, tip in shorts:
+                c.body.append(c.marker(hname, c.X(x), c.Y(y), hollow=True, tip=tip, size=6))
+            for x, y, r, tip in pts:
+                bad = r["verdict"] == "regressed"
+                c.body.append(c.marker(hname, c.X(x), c.Y(y), tip=tip, color=BAD if bad else None))
+            if pts:
+                x, y, r, _ = pts[-1]
+                c.ends.append((hname, c.X(x), c.Y(y), "%s: %s" % (SHORT[hname], sig3(y))))
+        # annotations: a line where it happened, the words above the plot
+        slot = 0
+        for a in annotations:
+            if a.get("charts") not in ("*", None, "") and fname.replace("trend-", "") not in a["charts"].split(","):
+                continue
+            x = xat(a["date"], a.get("sha", "") if a.get("sha") and any(k[1] == a["sha"] for k in order) else "")
+            px = c.X(x)
+            c.body.append('<line x1="%s" y1="%s" x2="%s" y2="%s" stroke="%s" stroke-width="1.5" '
+                          'stroke-dasharray="2 4"><title>%s</title></line>' % (
+                              f(px), f(c.py0), f(px), f(c.py1 + 4), REF, esc("%s %s: %s" % (a["date"], a.get("sha", ""), a["text"]))))
+            anchor = "end" if px > (c.px0 + c.px1) / 2 else "start"
+            c.body.append('<text x="%s" y="%s" font-size="11.5" fill="%s" text-anchor="%s">%s</text>' % (
+                f(px + (-5 if anchor == "end" else 5)), f(c.py1 + 14 + 14 * slot), INK, anchor, esc(a["text"])))
+            slot += 1
+        c.render(os.path.join(out, fname + ".svg"))
+        written.append(os.path.join(out, fname + ".svg"))
+    return written
+
+
+def self_test():
+    import tempfile
+    ok = True
+
+    def check(cond, what):
+        nonlocal ok
+        if not cond:
+            ok = False
+            print("FAIL plot:", what)
+
+    def row(date, sha, host, kind, scen, metric, value, base="", verdict=""):
+        return dict(date=date, sha=sha, host=host, machine="box", qt="6", kind=kind, scenario=scen,
+                    metric=metric, value=value, baseline=base, verdict=verdict)
+    h1, h2 = "macos-apple-m4-max-10p4e", "linux-intel-core-i7-9750h-8t"
+    hist = []
+    for d, sha, kind, v, vd, run in (("2026-10-29T06:22Z", "aaa", "record", "1.4", "record", "record"),
+                                     ("2026-10-30T03:00Z", "bbb", "nightly", "1.45", "ok", "ok"),
+                                     ("2026-11-01T04:34Z", "ccc", "perf", "1.63", "regressed", "regressed"),
+                                     ("2026-11-01T05:10Z", "ddd", "bisect", "1.5", "", "")):
+        hist.append(row(d, sha, h1, kind, "a1p", "rss_mb_per_universe", v, "1.4", vd))
+        hist.append(row(d, sha, h1, kind, "all", "perf", "1" if run == "regressed" else "0", "", run) if run else {})
+    hist = [r for r in hist if r]
+    hist.append(row("2026-10-29T06:25Z", "eee", h2, "record", "a1p", "rss_mb_per_universe", "1.1", "1.1", "record"))
+    hist.append(row("2026-11-01T04:34Z", "ccc", h1, "perf", "hotpath", "scene_frame_170_ns", "11000", "11151", "ok"))
+    ann = [dict(date="2026-10-31T18:54Z", sha="zzz", text="FadeChannel grows", charts="a1p-rss-per-universe")]
+    classes = {h1: "m4max", h2: "linux"}
+    HOST_LABEL.update({"m4max": "Apple M4 Max Mac", "linux": "Intel i7 (Linux)"})
+    with tempfile.TemporaryDirectory() as d:
+        w = trends(d, d, classes, hist=hist, annotations=ann)
+        names = sorted(os.path.basename(p) for p in w)
+        check(names == ["trend-a1p-rss-per-universe.svg", "trend-hotpath-scene-frame.svg"], "only charts with data: %s" % names)
+        svg = open(os.path.join(d, "trend-a1p-rss-per-universe.svg")).read()
+        check(svg.startswith("<svg") and svg.rstrip().endswith("</svg>"), "an svg")
+        check(BAD in svg, "a failed metric is red")
+        check("baseline re-recorded" in svg and "FadeChannel grows" in svg, "record line and annotation")
+        check("66da" not in svg and "ccc" in svg, "commits in the hover text")
+        check("Apple M4 Max Mac" in svg and "Intel i7 (Linux)" in svg, "both hosts")
+        check(svg.count("<polygon") + svg.count("<circle") + svg.count("<rect") >= 8, "markers drawn")
+        w2 = trends(d, os.path.join(d, "again"), classes, hist=hist, annotations=ann)
+        check(open(w2[0]).read() == svg, "deterministic")
+        check(trends(d, os.path.join(d, "none"), classes, hist=[], annotations=[]) == [], "empty history draws nothing")
+    check(Runs(["2026-10-29T0", "2026-10-29T1", "2026-11-01T0"]).ticks() == [0, 2], "date ticks at the first run of a day")
+    print("plot self-test:", "ok" if ok else "FAILED")
+    return 0 if ok else 1
 
 
 if __name__ == "__main__":
