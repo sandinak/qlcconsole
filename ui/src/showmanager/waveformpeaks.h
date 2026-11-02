@@ -29,6 +29,7 @@
 #include <functional>
 
 #include "audiodecoder.h"
+#include "qlcui_export.h"
 
 class QPainter;
 
@@ -101,7 +102,7 @@ private:
  * thread pool, never on the GUI thread. One per application; ready() is
  * emitted (on the GUI thread) when a file's envelope became available.
  */
-class WaveformService : public QObject
+class QLC_UI_EXPORT WaveformService : public QObject
 {
     Q_OBJECT
 

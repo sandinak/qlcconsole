@@ -336,7 +336,10 @@ WaveformService::WaveformService(QObject *parent)
 WaveformService::~WaveformService()
 {
     m_cancel.store(true);
-    QThreadPool::globalInstance()->waitForDone();
+    // the global pool is already gone (and has waited for its tasks) when the
+    // application object is torn down after main() returns
+    if (QThreadPool *pool = QThreadPool::globalInstance())
+        pool->waitForDone();
 }
 
 WaveformService *WaveformService::instance()

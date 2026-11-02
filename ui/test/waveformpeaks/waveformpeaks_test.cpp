@@ -63,7 +63,8 @@ static QString makeFile(const QTemporaryDir &dir, const QString &name, int bytes
 {
     const QString p = dir.filePath(name);
     QFile f(p);
-    f.open(QIODevice::WriteOnly);
+    if (f.open(QIODevice::WriteOnly) == false)
+        qFatal("can not write the temp file");
     f.write(QByteArray(bytes, 'x'));
     return p;
 }
