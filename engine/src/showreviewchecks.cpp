@@ -44,6 +44,7 @@
 #include "qlcphysical.h"
 #include "rgbmatrix.h"
 #include "righeads.h"
+#include "nolightzone.h"
 #include "efx.h"
 #include "monitorproperties.h"
 #include "fixturedefcheck.h"
@@ -1158,26 +1159,18 @@ static void pwr09(ReviewContext &ctx, QList<ReviewFinding> &out)
         const double declared = qMax(phy.lensDegreesMin(), phy.lensDegreesMax());
         const double deg = stars ? ((declared > 0.0 && declared < 170.0) ? declared : 100.0)
                                  : (declared > 0.0 ? declared : 40.0);
-        const double half = qDegreesToRadians(qMin(deg, 160.0) / 2.0);
-        QVector3D u = QVector3D::crossProduct(dir, QVector3D(0, 0, 1));
-        if (u.length() < 1e-3f)
-            u = QVector3D(1, 0, 0);
-        u.normalize();
-        const QVector3D v = QVector3D::crossProduct(dir, u).normalized();
-        bool reaches = rayReachesHouse(apex, dir, edge, kEyeLimit, kRange);
-        // Rings across the cone, not only its rim: the rays that matter are
-        // often the ones between the axis and the edge.
-        for (int ring = 1; ring <= 3 && !reaches; ++ring)
-        {
-            const double cone = half * ring / 3.0;
-            for (int i = 0; i < 16 && !reaches; ++i)
-            {
-                const double a = i * M_PI / 8.0;
-                const QVector3D r = (dir * float(qCos(cone))
-                                     + (u * float(qCos(a)) + v * float(qSin(a))) * float(qSin(cone))).normalized();
-                reaches = rayReachesHouse(apex, r, edge, kEyeLimit, kRange);
-            }
-        }
+        // A laser's window is H x V; a star field is a cone.
+        double hDeg = deg, vDeg = deg;
+        if (!stars)
+            LightRays::laserWindow(phy, hDeg, vDeg);
+        const QVector<QVector3D> rays = stars ? LightRays::cone(dir, qDegreesToRadians(qMin(deg, 160.0) / 2.0))
+                                              : LightRays::window(dir, hDeg, vDeg);
+        // The axis and rings across the cone, not only its rim: the rays
+        // that matter are often between the axis and the edge.
+        bool reaches = false;
+        for (const QVector3D &r : rays)
+            if ((reaches = rayReachesHouse(apex, r, edge, kEyeLimit, kRange)))
+                break;
         if (!reaches)
             continue;
         out << ReviewContext::make(QStringLiteral("PWR-09"), ReviewFinding::Warning,
@@ -1190,6 +1183,62 @@ static void pwr09(ReviewContext &ctx, QList<ReviewFinding> &out)
                 + QByteArray::number(qRound(apex.z() * 100)) + ',' + QByteArray::number(qRound(dir.x() * 100)) + ','
                 + QByteArray::number(qRound(dir.y() * 100)) + ',' + QByteArray::number(qRound(dir.z() * 100)) + ','
                 + QByteArray::number(qRound(deg)) + ',' + QByteArray::number(qRound(edge * 100)),
+            QStringLiteral("plot"), QVariantList() << fx->id());
+    }
+}
+
+static void pwr10(ReviewContext &ctx, QList<ReviewFinding> &out)
+{
+    // decided (can change): a laser's power sits on a few spots when its
+    // scan window is a pencil (static: under 1 degree either way) or tight
+    // (the window covers under 100 square degrees, 10 x 10). Only lasers the
+    // show uses are read, and the definition's window: patterns are the
+    // laser's own and not described in the show. A Warning when the fixed
+    // laser's window also reaches the house or a no-light zone that keeps
+    // lasers out; otherwise a Note.
+    static const double kStaticDeg = 1.0, kTightSquareDeg = 100.0, kEyeLimit = 3.0, kRange = 30.0;
+    Doc *doc = ctx.doc();
+    MonitorProperties *mp = doc->monitorProperties();
+    const QSet<quint32> &used = ctx.usedFixtures();
+    for (Fixture *fx : doc->fixtures())
+    {
+        if (fx == nullptr || !fx->isPatched() || fx->fixtureMode() == nullptr || !used.contains(fx->id()))
+            continue;
+        const QLCPhysical &phy = fx->fixtureMode()->physical();
+        const bool laser = phy.emission() == QLCPhysical::LaserEmission
+                           || (fx->fixtureDef() != nullptr && fx->fixtureDef()->type() == QLCFixtureDef::Laser);
+        if (!laser)
+            continue;
+        double h, v;
+        LightRays::laserWindow(phy, h, v);
+        const bool isStatic = qMin(h, v) < kStaticDeg;
+        if (!isStatic && h * v >= kTightSquareDeg)
+            continue;
+        bool reaches = false;
+        QVector3D dir;
+        if (mp != nullptr && mp->containsFixture(fx->id()) && RigHeads::isFixedUnit(fx)
+            && RigHeads::fixedThrow(doc, fx->id(), dir) && !dir.isNull())
+        {
+            dir.normalize();
+            const QVector3D apex = RigHeads::fixtureCentre(doc, fx->id());
+            const QVector<QVector3D> rays = LightRays::window(dir, h, v);
+            const double edge = mp->downstageEdgeY();
+            for (const QVector3D &r : rays)
+                if ((reaches = rayReachesHouse(apex, r, edge, kEyeLimit, kRange)))
+                    break;
+            for (const NoLightZone &z : mp->noLightZones())
+                if (!reaches && z.applies(true, 0.0) && z.hitByRays(apex, rays, kRange))
+                    reaches = true;
+        }
+        const QString size = tr("%1 by %2 degrees").arg(qRound(h)).arg(qRound(v));
+        out << ReviewContext::make(QStringLiteral("PWR-10"),
+            reaches ? ReviewFinding::Warning : ReviewFinding::Note,
+            (isStatic ? tr("%1 is a static pencil (%2): all its power stays on one spot.")
+                      : tr("%1 has a tight scan window (%2): its power is packed into a few spots."))
+                .arg(fx->name(), size)
+                + (reaches ? tr(" Its window also reaches the audience or a no-light zone.") : QString()),
+            { QStringLiteral("fx:%1").arg(fx->id()) },
+            QByteArray::number(qRound(h * 10)) + ',' + QByteArray::number(qRound(v * 10)) + (reaches ? ",r" : ""),
             QStringLiteral("plot"), QVariantList() << fx->id());
     }
 }
@@ -1268,6 +1317,11 @@ QList<ShowReview::Check> ShowReviewChecks::showChecks()
              "height past the stage edge, is a safety problem and often a venue rule. Aim it up "
              "or away, or accept it with the note naming who approved it (the ILDA/FDA variance, "
              "the venue's laser safety officer)."), pwr09 },
+        { QStringLiteral("PWR-10"), tr("Laser pattern too tight or static"), S::Power,
+          tr("A laser whose scan window is a pencil or a few degrees across puts all its power "
+             "on a few spots, which is what makes a beam dangerous to look at. A wide, moving "
+             "pattern spreads it. Check the pattern with the laser safety officer, or accept it "
+             "with the note naming who approved it."), pwr10 },
         { QStringLiteral("FILE-03"), tr("Definitions not carried with the show"), S::Files,
           tr("A .qlcc carries the definitions and scripts it uses. A copy that couldn't be read, "
              "or that differs from this computer's, is worth a look before the show moves."),

@@ -127,6 +127,7 @@ add_library(${module_name}
     monitor/stagepiecedialog.cpp monitor/stagepiecedialog.h
     monitor/standitem.cpp monitor/standitem.h
     monitor/hangeritem.cpp monitor/hangeritem.h
+    monitor/zoneitem.cpp monitor/zoneitem.h
     monitor/toweritem.cpp monitor/toweritem.h
     monitor/powersourceitem.cpp monitor/powersourceitem.h
     monitor/networknodeitem.cpp monitor/networknodeitem.h

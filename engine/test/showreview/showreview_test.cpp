@@ -58,6 +58,7 @@
 #include "doc.h"
 #include "movespeed.h"
 #include "stagetarget.h"
+#include "nolightzone.h"
 
 using namespace ShowTree;
 
@@ -2027,6 +2028,234 @@ void ShowReview_Test::mov08()
     st->removeLayer(c1, st->cueList(lid)->cue(c1)->layers.last().id);
     cueHead(m_doc, c1, a, 60, 40, 0);
     QVERIFY(quiet("MOV-08"));
+}
+
+namespace
+{
+/** A cue layer lighting fixture @a f at @a dim (no position). */
+void cueLit(Doc *doc, quint32 cue, Fixture *f, int dim)
+{
+    ShowTreeController *st = doc->showTree();
+    QLCPalette *level = new QLCPalette(QLCPalette::Dimmer, doc);
+    level->setValue(dim);
+    level->setName(QStringLiteral("Dim %1").arg(dim));
+    doc->addPalette(level);
+    Target t;
+    t.fixtures = { f->id() };
+    const quint32 layer = st->addLayer(cue, t);
+    Look d;
+    d.key = KeyDimmer;
+    d.palettes = { level->id() };
+    QVERIFY(st->setLayerLook(cue, layer, d));
+}
+}
+
+void ShowReview_Test::zonesSaveAndLoad()
+{
+    MonitorProperties *mp = m_doc->monitorProperties();
+    const quint32 a = mp->addNoLightZone(2.0f, 3.0f);
+    NoLightZone z = mp->noLightZone(a);
+    z.name = QStringLiteral("Orchestra pit");
+    z.width = 8.0f;
+    z.depth = 3.5f;
+    z.floorZ = -1.8f;
+    z.height = 4.0f;
+    z.kind = NoLightZone::NoLasers;
+    mp->setNoLightZone(z);
+    const quint32 b = mp->addNoLightZone();
+    QCOMPARE(mp->noLightZones().count(), 2);
+    QVERIFY(a != b);
+
+    QByteArray xml;
+    {
+        QBuffer buf(&xml);
+        buf.open(QIODevice::WriteOnly);
+        QXmlStreamWriter w(&buf);
+        w.writeStartDocument();
+        QVERIFY(mp->saveXML(&w, m_doc));
+        w.writeEndDocument();
+    }
+    MonitorProperties other;
+    QXmlStreamReader r(xml);
+    QVERIFY(r.readNextStartElement());
+    QVERIFY(other.loadXML(r, m_doc));
+    QCOMPARE(other.noLightZones().count(), 2);
+    const NoLightZone back = other.noLightZone(a);
+    QCOMPARE(back.name, QStringLiteral("Orchestra pit"));
+    QCOMPARE(back.kind, int(NoLightZone::NoLasers));
+    QCOMPARE(back.width, 8.0f);
+    QCOMPARE(back.depth, 3.5f);
+    QCOMPARE(back.floorZ, -1.8f);
+    QCOMPARE(back.height, 4.0f);
+    QCOMPARE(back.x, 2.0f);
+    QCOMPARE(back.y, 3.0f);
+    // An undo snapshot keeps them too, and removal is undone with it.
+    const QByteArray snap = mp->snapshot(m_doc);
+    mp->removeNoLightZone(a);
+    QCOMPARE(mp->noLightZones().count(), 1);
+    QVERIFY(mp->restoreSnapshot(snap, m_doc));
+    QCOMPARE(mp->noLightZones().count(), 2);
+}
+
+void ShowReview_Test::zoneGeometry()
+{
+    NoLightZone z;
+    z.x = 4; z.y = 10; z.width = 2; z.depth = 2; z.floorZ = 0; z.height = 6;
+    const QVector3D apex(5, 2, 5);
+    // Straight at it, level: through it at 5 m up.
+    QVERIFY(z.hitByRay(apex, QVector3D(0, 1, 0), 30));
+    // Past its far wall within range, or out of range, or aimed away.
+    QVERIFY(!z.hitByRay(apex, QVector3D(0, -1, 0), 30));
+    QVERIFY(!z.hitByRay(apex, QVector3D(0, 1, 0), 5));
+    // The floor stops a ray coming down short of it.
+    QVERIFY(!z.hitByRay(apex, QVector3D(0, 1, -1).normalized(), 30));
+    QVERIFY(z.hitByRay(apex, QVector3D(0, 1, -0.35f).normalized(), 30));
+    // A pit below the stage is reached through the floor line it opens.
+    NoLightZone pit;
+    pit.x = 0; pit.y = 0; pit.width = 4; pit.depth = 4; pit.floorZ = -2; pit.height = 2.5f;
+    QVERIFY(pit.hitByRay(QVector3D(2, 2, 5), QVector3D(0, 0, -1), 30));
+    // Kinds: a wash is not a beam; a laser is both.
+    NoLightZone beams; beams.kind = NoLightZone::NoBeams;
+    NoLightZone lasers; lasers.kind = NoLightZone::NoLasers;
+    NoLightZone any;
+    QVERIFY(beams.applies(false, 10) && !beams.applies(false, 50) && beams.applies(true, 0));
+    QVERIFY(lasers.applies(true, 0) && !lasers.applies(false, 10));
+    QVERIFY(any.applies(false, 50));
+    QCOMPARE(NoLightZone::stringToKind(NoLightZone::kindToString(NoLightZone::NoBeams)), int(NoLightZone::NoBeams));
+}
+
+void ShowReview_Test::laserWindowAndPwr09()
+{
+    QLCPhysical phy;
+    double h, v;
+    LightRays::laserWindow(phy, h, v);
+    QCOMPARE(h, 40.0);
+    QCOMPARE(v, 40.0);
+    phy.setLensDegreesMin(12);
+    phy.setLensDegreesMax(60);
+    LightRays::laserWindow(phy, h, v);
+    QCOMPARE(h, 60.0);
+    QCOMPARE(v, 12.0);
+    // The window is wide, not tall: rays reach 30 degrees sideways, 6 up/down.
+    const QVector<QVector3D> rays = LightRays::window(QVector3D(0, 1, 0), h, v);
+    double maxX = 0, maxZ = 0;
+    for (const QVector3D &r : rays)
+    {
+        maxX = qMax(maxX, double(qAbs(r.x())));
+        maxZ = qMax(maxZ, double(qAbs(r.z())));
+    }
+    QVERIFY(maxX > 0.45 && maxX < 0.51);
+    QVERIFY(maxZ > 0.09 && maxZ < 0.11);
+}
+
+void ShowReview_Test::pwr10()
+{
+    MonitorProperties *mp = m_doc->monitorProperties();
+    mp->setGridSize(QVector3D(10, 3, 8));
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 lid = st->addCueList(st->addProduction("Show"), "Act 1");
+    const quint32 c1 = st->addCue(lid, -1, "One");
+    // A wide fan: quiet.
+    Fixture *wide = laser("Wide", 0, QLCPhysical::LaserEmission, 40, QVector3D(5000, 2000, 5), 60);
+    cueLit(m_doc, c1, wide, 255);
+    QVERIFY(quiet("PWR-10"));
+    // A pencil (0.5 degrees): static; it stays a note while it hits nobody.
+    Fixture *pencil = laser("Pencil", 10, QLCPhysical::LaserEmission, 0.5, QVector3D(5000, 2000, 5), 60);
+    cueLit(m_doc, c1, pencil, 255);
+    QVERIFY(fires("PWR-10"));
+    ReviewFinding f = findings("PWR-10").first();
+    QCOMPARE(f.severity, ReviewFinding::Note);
+    QVERIFY(f.message.contains("Pencil") && f.message.contains("static"));
+    QVERIFY(m_doc->deleteFixture(pencil->id()));
+    // A tight 8 x 8 window pointed at a no-lasers zone: a warning.
+    Fixture *tight = laser("Tight", 20, QLCPhysical::LaserEmission, 8, QVector3D(5000, 2000, 5), 20);
+    cueLit(m_doc, c1, tight, 255);
+    QVERIFY(fires("PWR-10"));
+    f = findings("PWR-10").first();
+    QVERIFY(f.message.contains("tight"));
+    QVERIFY(f.severity == ReviewFinding::Warning);    // it also reaches the house
+}
+
+void ShowReview_Test::pwr11()
+{
+    MonitorProperties *mp = m_doc->monitorProperties();
+    mp->setGridSize(QVector3D(10, 3, 8));
+    Fixture *l = laser("Laser 1", 0, QLCPhysical::LaserEmission, 10, QVector3D(5000, 2000, 5), 20);
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 lid = st->addCueList(st->addProduction("Show"), "Act 1");
+    const quint32 c1 = st->addCue(lid, -1, "One");
+    const quint32 c2 = st->addCue(lid, 0, "Two");
+    const quint32 c3 = st->addCue(lid, 1, "Three");
+    cueLit(m_doc, c1, l, 255);
+    // No zones: quiet. The beam lands about 15.7 m downstage, 0.9 m either side of x = 5.
+    QVERIFY(quiet("PWR-11"));
+    const quint32 zid = mp->addNoLightZone(4.0f, 10.0f);
+    NoLightZone z = mp->noLightZone(zid);
+    z.name = QStringLiteral("Conductor");
+    z.width = 2.0f;
+    z.depth = 2.0f;
+    z.height = 2.5f;
+    mp->setNoLightZone(z);
+    QVERIFY2(fires("PWR-11"), "beam through the zone");
+    ReviewFinding f = findings("PWR-11").first();
+    QCOMPARE(f.severity, ReviewFinding::Warning);
+    QVERIFY(f.message.contains("Laser 1") && f.message.contains("Conductor") && f.message.contains("One"));
+    QVERIFY(f.targets.contains(QStringLiteral("fx:%1").arg(l->id())));
+    QVERIFY(f.targets.contains(QStringLiteral("zone:%1").arg(zid)));
+    // Tracked on into cues two and three it is still one finding: the cue it starts in.
+    cueLit(m_doc, c2, l, 255);
+    cueLit(m_doc, c3, l, 255);
+    QCOMPARE(findings("PWR-11").count(), 1);
+    // Near miss: the zone moved 3 m across, clear of the window's 0.9 m.
+    z.x = 8.0f;
+    mp->setNoLightZone(z);
+    QVERIFY(quiet("PWR-11"));
+    // Back in the way but a pit below the beam's end: still clear above it.
+    z.x = 4.0f;
+    z.floorZ = -3.0f;
+    z.height = 2.5f;                        // tops out at -0.5 m: under the stage
+    mp->setNoLightZone(z);
+    QVERIFY(quiet("PWR-11"));
+    // A no-lasers zone catches a laser; the same zone as no-beams does too (lasers are beams).
+    z.floorZ = 0.0f;
+    z.kind = NoLightZone::NoLasers;
+    mp->setNoLightZone(z);
+    QVERIFY(fires("PWR-11"));
+    // Dark in the cue: quiet. (A zone is about lit beams.)
+    st->removeLayer(c1, st->cueList(lid)->cue(c1)->layers.last().id);
+    st->removeLayer(c2, st->cueList(lid)->cue(c2)->layers.last().id);
+    st->removeLayer(c3, st->cueList(lid)->cue(c3)->layers.last().id);
+    cueLit(m_doc, c1, l, 0);
+    cueLit(m_doc, c2, l, 0);
+    cueLit(m_doc, c3, l, 0);
+    QVERIFY(quiet("PWR-11"));
+    // A par through the same place is not a laser: a no-lasers zone leaves it alone.
+    Fixture *p = par("Par 1", 20);
+    QVERIFY(p != nullptr);
+}
+
+void ShowReview_Test::pwr11Mover()
+{
+    MonitorProperties *mp = m_doc->monitorProperties();
+    Fixture *a = mover("Spot 1", 0);
+    FixturePreviewItem item;
+    item.m_baseItem.m_position = QVector3D(5000, 5000, 6);
+    mp->setFixtureProperties(a->id(), item);
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 lid = st->addCueList(st->addProduction("Show"), "Act 1");
+    const quint32 c1 = st->addCue(lid, -1, "One");
+    cueHead(m_doc, c1, a, 270, 135, 200);               // the middle of both ranges: its home
+    const quint32 zid = mp->addNoLightZone(0.0f, 0.0f);
+    NoLightZone z = mp->noLightZone(zid);
+    z.name = QStringLiteral("Pit");
+    z.width = 20.0f; z.depth = 20.0f; z.height = 2.0f;  // under the stage's whole floor area
+    mp->setNoLightZone(z);
+    QVERIFY2(fires("PWR-11"), "a hung head at home points down into the zone");
+    QVERIFY(findings("PWR-11").first().message.contains("Spot 1"));
+    // Near miss: the zone well off to one side.
+    z.x = 14.0f; z.width = 2.0f;
+    mp->setNoLightZone(z);
+    QVERIFY(quiet("PWR-11"));
 }
 
 void ShowReview_Test::everyCheckIsTested()

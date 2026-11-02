@@ -499,6 +499,16 @@ protected slots:
     void slotTowerRemoveRequested(quint32 tid);
     void slotSceneryRemoveRequested(quint32 sid);
     void slotAddImage();
+    /** Add No-light Zone: a floor area that must stay dark (Show Review PWR-11). */
+    void slotAddNoLightZone();
+    void slotEditNoLightZone(quint32 zoneId);
+    void slotRemoveNoLightZone(quint32 zoneId);
+
+protected:
+    /** The zone's dialog; false when refused (nothing changed). */
+    bool editNoLightZone(quint32 zoneId);
+
+protected slots:
 
     /** Stage a fixture in the inventory (no universe/address yet). */
     void slotAddToInventory();

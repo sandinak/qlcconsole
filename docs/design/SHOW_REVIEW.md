@@ -1501,6 +1501,8 @@ Branson's review), after the freeze lifts.
 | PWR-05 | Flashing over 3 Hz |
 | PWR-06 | Stage lights that ignore Blackout or the Grand Master |
 | PWR-09 | A laser's beam or a star field that can reach the audience (built after v1, see below) |
+| PWR-10 | A laser whose scan window is a static pencil or tight (built after v1) |
+| PWR-11 | A lit beam's cone crossing a no-light zone of the plot, by cue (built after v1) |
 | TEACH-01 | Teaching mode is on, before a show goes to a crew (built after v1) |
 | FILE-01 | Media outside the show folder or absolute |
 | FILE-02 | Missing media |
@@ -1516,6 +1518,21 @@ downstage of the stage's front edge (`downstageEdgeY()`) and the audience's
 eyes anything below 3 m there (decided, can change); a laser or star
 projector that can't aim itself (`RigHeads::fixedThrow`) is a warning when
 any ray of its beam or star field (rings across the cone, 30 m) enters it.
+A laser is followed as its **scan window** (H × V, `LightRays::laserWindow`:
+widest lens angle across, narrowest up and down when declared and narrower,
+else square, 40 degrees when none; decided, can change). **PWR-10** (laser
+density): a laser the show uses whose window is under 1 degree either way
+(static) or under 100 square degrees (tight) is a note, a warning when a fixed
+laser's window also reaches the house or a zone. **PWR-11** (no-light
+zones, `NoLightZone` in `MonitorProperties`, saved in the show; decided, can
+change): per cue, each lit light (dimmer above 0, or any colour when it has
+no dimmer) throws its cone (`LightRays::cone`, the sampling PWR-09 shares) from
+its rig place -- a mover from its resolved Position through
+`AimSolver::beamDirection`, anything else from `RigHeads::fixedThrow` -- and
+the first cue a light starts to cross a zone it applies to is one warning
+naming the cue, the lights and the zone. A zone keeps out *no light* (all),
+*no beams* (lens at most 25 degrees, and lasers) or *no lasers* (lasers and
+star projectors).
 
 **v2 — geometry and the rest of the cheap ones (≈ 4–5 sessions).**
 MOV-03/04/05/06/09/10/11, the house zone (derived, then drawable);

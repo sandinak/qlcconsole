@@ -74,6 +74,12 @@ private slots:
     void vc01();
     void teach01();
     void pwr09();
+    void zonesSaveAndLoad();
+    void zoneGeometry();
+    void laserWindowAndPwr09();
+    void pwr10();
+    void pwr11();
+    void pwr11Mover();
     void cue03();
     void cue12();
     void pat05();

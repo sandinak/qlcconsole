@@ -468,6 +468,10 @@ public:
     /** Rebuild the placeable image items from MonitorProperties (only those on
      *  the plane matching the current POV are shown). */
     void updateImages();
+    /** The no-light zones and the lasers' scan windows, drawn (ZoneItem). */
+    void updateNoLightZones();
+    /** The zone under a scene point, or UINT_MAX. */
+    quint32 zoneAt(const QPointF &scenePos) const;
 
     /** Inverse of projectMm() for the CURRENT point of view.
      *
@@ -1171,6 +1175,9 @@ signals:
     void platformDoubleClicked(quint32 pid);
     void pipeDoubleClicked(quint32 pipeId);
     void hangerDoubleClicked(quint32 hangerId);
+    /** A no-light zone was double-clicked / asked to be removed from its menu. */
+    void zoneDoubleClicked(quint32 zoneId);
+    void zoneRemoveRequested(quint32 zoneId);
     void standDoubleClicked(quint32 standId);
     void sceneryDoubleClicked(quint32 sceneryId);
     void towerDoubleClicked(quint32 towerId);
@@ -1342,6 +1349,7 @@ private:
     QHash <quint32, SceneryItem*> m_sceneryItems;
     QHash <quint32, TowerItem*> m_towerItems;
     QHash <quint32, class HangerItem*> m_hangerItems;
+    QList<class ZoneItem*> m_zoneItems;
 
     /** Power-source markers, indexed positionally to PowerDistribution::sources(). */
     QList <PowerSourceItem*> m_powerSourceItems;

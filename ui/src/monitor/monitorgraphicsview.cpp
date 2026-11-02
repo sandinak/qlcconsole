@@ -59,6 +59,9 @@
 #include "stagemarklabel.h"
 #include "stagepieceitem.h"
 #include "righeads.h"
+#include "qlcphysical.h"
+#include "qlcfixturedef.h"
+#include <climits>
 #include "patchinventorydialog.h"
 #include "headtypesdialog.h"
 #include "ledlayouteditor.h"
@@ -76,6 +79,8 @@
 #include "structurestudioview.h"
 #include "toweritem.h"
 #include "hangeritem.h"
+#include "zoneitem.h"
+#include "nolightzone.h"
 #include "hanger.h"
 #include "tower.h"
 #include "stand.h"
@@ -4383,6 +4388,7 @@ void MonitorGraphicsView::updateTrusses()
     }
 
     updateHangers();      // they hang off trusses
+    updateNoLightZones();
     refreshItemLayerState();
 }
 
@@ -5121,6 +5127,7 @@ void MonitorGraphicsView::updatePlatforms()
     }
 
     updateHangers();      // and off towers
+    updateNoLightZones();
     refreshItemLayerState();
 }
 
@@ -5142,6 +5149,7 @@ void MonitorGraphicsView::dropStructureItems()
         items.clear();
     };
     drop(m_hangerItems);
+    drop(m_zoneItems);
     drop(m_trussItems);
     drop(m_platformItems);
     drop(m_pipeItems);
@@ -5235,6 +5243,87 @@ void MonitorGraphicsView::updateHangers()
         m_scene->addItem(hi);
         m_hangerItems.insert(h->id(), hi);
     }
+}
+
+void MonitorGraphicsView::updateNoLightZones()
+{
+    /* The zones that must stay dark, and where each fixed laser's H x V window
+       lands: drawn in whichever view the plot shows (a zone's box in the
+       elevations, both on the floor in Top), over the structures and under the
+       fixtures. They take no clicks; zoneAt() finds a zone for the menu. */
+    foreach (ZoneItem *zi, m_zoneItems)
+    {
+        m_scene->removeItem(zi);
+        delete zi;
+    }
+    m_zoneItems.clear();
+    MonitorProperties *props = m_doc->monitorProperties();
+    if (props == nullptr || m_cellPixels <= 0)
+        return;
+    auto pt = [this](double xm, double ym, double zm) {
+        return projectMm(xm * 1000.0, ym * 1000.0, zm * 1000.0);
+    };
+    foreach (const NoLightZone &z, props->noLightZones())
+    {
+        const double x0 = z.x, x1 = z.x + z.width, y0 = z.y, y1 = z.y + z.depth;
+        const double z0 = z.floorZ, z1 = z.floorZ + z.height;
+        QPolygonF poly;
+        if (m_pov == PovTop)
+            poly << pt(x0, y0, 0) << pt(x1, y0, 0) << pt(x1, y1, 0) << pt(x0, y1, 0);
+        else if (m_pov == PovFront)
+            poly << pt(x0, 0, z1) << pt(x1, 0, z1) << pt(x1, 0, z0) << pt(x0, 0, z0);
+        else
+            poly << pt(0, y0, z1) << pt(0, y1, z1) << pt(0, y1, z0) << pt(0, y0, z0);
+        ZoneItem *zi = new ZoneItem(ZoneItem::Zone, z.id, poly,
+                                    QStringLiteral("%1 (%2)").arg(z.name, NoLightZone::kindLabel(z.kind)));
+        zi->setZValue(1.7);
+        m_scene->addItem(zi);
+        m_zoneItems.append(zi);
+    }
+    if (m_pov != PovTop)
+        return;
+    foreach (Fixture *fx, m_doc->fixtures())
+    {
+        if (fx == nullptr || fx->fixtureMode() == nullptr || !props->containsFixture(fx->id())
+            || !RigHeads::isFixedUnit(fx))
+            continue;
+        const QLCPhysical &phy = fx->fixtureMode()->physical();
+        if (phy.emission() != QLCPhysical::LaserEmission
+            && !(fx->fixtureDef() != nullptr && fx->fixtureDef()->type() == QLCFixtureDef::Laser))
+            continue;
+        QVector3D dir;
+        if (!RigHeads::fixedThrow(m_doc, fx->id(), dir) || dir.isNull())
+            continue;
+        dir.normalize();
+        const QVector3D apex = RigHeads::fixtureCentre(m_doc, fx->id());
+        double h, v;
+        LightRays::laserWindow(phy, h, v);
+        const QVector<QVector3D> rays = LightRays::window(dir, h, v);     // 9 x 9, i-major
+        auto landing = [&](int i, int j) {
+            const QVector3D r = rays.at((i + 4) * 9 + (j + 4));
+            double t = 30.0;
+            if (r.z() < -1e-4f && apex.z() > 0.0f)
+                t = qMin(t, double(apex.z()) / -double(r.z()));
+            return pt(double(apex.x()) + double(r.x()) * t, double(apex.y()) + double(r.y()) * t, 0);
+        };
+        QPolygonF poly;
+        for (int j = -4; j <= 4; ++j)  poly << landing(-4, j);
+        for (int i = -3; i <= 4; ++i)  poly << landing(i, 4);
+        for (int j = 3; j >= -4; --j)  poly << landing(4, j);
+        for (int i = 3; i >= -3; --i)  poly << landing(i, -4);
+        ZoneItem *zi = new ZoneItem(ZoneItem::ScanWindow, fx->id(), poly, fx->name());
+        zi->setZValue(1.6);
+        m_scene->addItem(zi);
+        m_zoneItems.append(zi);
+    }
+}
+
+quint32 MonitorGraphicsView::zoneAt(const QPointF &scenePos) const
+{
+    for (int i = m_zoneItems.size() - 1; i >= 0; --i)
+        if (m_zoneItems.at(i)->role() == ZoneItem::Zone && m_zoneItems.at(i)->contains(scenePos))
+            return m_zoneItems.at(i)->id();
+    return UINT_MAX;
 }
 
 void MonitorGraphicsView::slotTowerMoved(TowerItem *item)
@@ -8149,6 +8238,19 @@ void MonitorGraphicsView::mouseDoubleClickEvent(QMouseEvent *event)
         }
     }
 
+    /* A no-light zone takes no clicks of its own: double-click on bare plot
+       inside one edits it. */
+    if (topPickableAt(sp) == nullptr)
+    {
+        const quint32 zid = zoneAt(sp);
+        if (zid != UINT_MAX)
+        {
+            emit zoneDoubleClicked(zid);
+            event->accept();
+            return;
+        }
+    }
+
     QGraphicsItem *it = topPickableAt(sp);
 
     // Walk up to the top-level item (e.g. from a label child to TrussItem).
@@ -8356,6 +8458,15 @@ void MonitorGraphicsView::contextMenuEvent(QContextMenuEvent *event)
 
     if (kind.isEmpty())
     {
+        const quint32 zid = zoneAt(sp);
+        if (zid != UINT_MAX)
+        {
+            QMenu zm(this);
+            zm.addAction(tr("Edit No-light Zone…"), this, [this, zid]() { emit zoneDoubleClicked(zid); });
+            zm.addAction(tr("Remove No-light Zone"), this, [this, zid]() { emit zoneRemoveRequested(zid); });
+            zm.exec(event->globalPos());
+            return;
+        }
         // Empty canvas → the generic add/paste menu.
         emit contextMenuRequested(sp);
         return;

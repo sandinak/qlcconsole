@@ -44,6 +44,7 @@
 #include "stand.h"
 #include "tower.h"
 #include "stagetarget.h"
+#include "nolightzone.h"
 
 class QXmlStreamReader;
 class QXmlStreamWriter;
@@ -1096,8 +1097,22 @@ public:
     /** Next unused image id. */
     quint32 nextImageId() const;
 
+    /** The no-light zones: areas of the plot that must stay dark (the pit,
+     *  the conductor, a camera, the audience's eyes). Saved with the show;
+     *  Show Review's PWR-11 reads them. */
+    QList<NoLightZone> noLightZones() const { return m_zones.values(); }
+    NoLightZone noLightZone(quint32 id) const { return m_zones.value(id); }
+    bool hasNoLightZone(quint32 id) const { return m_zones.contains(id); }
+    /** A new zone with the defaults at (@p x, @p y); returns its id. */
+    quint32 addNoLightZone(float x = 0.0f, float y = 0.0f);
+    /** Insert or replace a zone (keyed by z.id). */
+    void setNoLightZone(const NoLightZone &z);
+    void removeNoLightZone(quint32 id);
+    quint32 nextNoLightZoneId() const;
+
 private:
     QMap<quint32, MonitorImage> m_images;
+    QMap<quint32, NoLightZone> m_zones;
 
     /********************************************************************
      * Stage targets
