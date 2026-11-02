@@ -863,8 +863,14 @@ pressing **Duplicate**:
   place on the structure: offset along it, side, shelf or deck position,
   face and orientation, and the calibration offsets (pan / tilt offset and
   invert). A copy is hung where the *target* puts that place, so a tower 5 m
-  further on holds its lights 5 m further on. Hangers and child bars on the
-  structure, and the lights on them, are not copied yet.
+  further on holds its lights 5 m further on.
+- **Hangers and child bars.** A truss's hangers and the child bars hung
+  from it (with the hangers on those bars), or a tower's hangers, are copied
+  onto each target with the same place, arm, drop, face and run, together
+  with the lights hung on them; they take the target's layer and plot group
+  and a name that follows the same rule as the lights. The preview counts
+  them. **Replace** takes the target's own hangers and child bars off with
+  its lights, and Undo puts them back.
 - **Names.** The structure's name inside the light's name becomes the
   target's: "T1-Spot 3" on T1 is "T2-Spot 3" on T2, and "T-1" is also found
   as "T1". A name with no trace of the structure gets the target's name in
@@ -1272,7 +1278,9 @@ that type of head can: 0.4 s for a half turn (180°) for a moving head, 0.1 s
 for a scanner, pan and tilt together. A cue that "snaps" a spot across the
 stage in a frame is drawn as the move it would be, so you see what the
 audience sees (and what Show Review's [MOV checks](show-review.md) are
-about). Definitions carry no speed, so these are defaults.
+about). Definitions carry no speed, so these are defaults. A head that points
+within only part of its pan channel (a two-arm beam: pan 0-127 points, above
+that it spins) travels its range along that pointing band.
 
 Turn it off with **Real move speed** in the Rig Overview's footer, beside
 Beams; the heads then snap to the output as before. Remembered. It changes only how the Rig
@@ -1448,8 +1456,10 @@ above that, and what it **keeps out**:
 - **No lasers**: lasers and star projectors.
 
 A zone is a red hatched box with its name: a rectangle in Top, a box in the
-Front and Side views. It takes no clicks of its own, so the plot under it
-stays selectable; **double-click** bare plot inside it, or right-click it,
+Front and Side views. Its inside takes no clicks, so the plot under it
+stays selectable; **drag its outline or the small square at its centre**
+to move it (X and Y in Top; X and the bottom in Front; Y and the bottom in
+Side), one undo step. **Double-click** bare plot inside it, or right-click it,
 to **Edit** or **Remove** it. A beam stops at the stage floor, so a pit's
 zone must reach up to 0 to catch what comes down into it. Every change is one
 undo step.

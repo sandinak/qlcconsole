@@ -713,6 +713,8 @@ void Monitor::initGraphicsView()
             this, &Monitor::slotEditNoLightZone);
     connect(m_graphicsView, &MonitorGraphicsView::zoneRemoveRequested,
             this, &Monitor::slotRemoveNoLightZone);
+    connect(m_graphicsView, &MonitorGraphicsView::zoneMoved,
+            this, &Monitor::slotMoveNoLightZone);
     connect(m_graphicsView, &MonitorGraphicsView::standRemoveRequested,
             this, &Monitor::slotStandRemoveRequested);
     connect(m_graphicsView, &MonitorGraphicsView::sceneryRemoveRequested,
@@ -6485,6 +6487,20 @@ void Monitor::slotRemoveNoLightZone(quint32 zoneId)
         return;
     RigEditSession edit(this);
     m_props->removeNoLightZone(zoneId);
+    m_graphicsView->updateNoLightZones();
+    m_doc->setModified();
+}
+
+void Monitor::slotMoveNoLightZone(quint32 zoneId, float dx, float dy, float dz)
+{
+    if (!m_props->hasNoLightZone(zoneId))
+        return;
+    RigEditSession edit(this);              // one drag, one undo step
+    NoLightZone z = m_props->noLightZone(zoneId);
+    z.x += dx;
+    z.y += dy;
+    z.floorZ += dz;
+    m_props->setNoLightZone(z);
     m_graphicsView->updateNoLightZones();
     m_doc->setModified();
 }

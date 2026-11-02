@@ -483,6 +483,9 @@ public:
     void updateNoLightZones();
     /** The zone under a scene point, or UINT_MAX. */
     quint32 zoneAt(const QPointF &scenePos) const;
+    /** The zone whose outline or centre handle is under @a scenePos (a drag
+     *  takes hold there; the inside of a zone grabs nothing), else UINT_MAX. */
+    quint32 zoneGrabAt(const QPointF &scenePos) const;
 
     /** Inverse of projectMm() for the CURRENT point of view.
      *
@@ -1189,6 +1192,9 @@ signals:
     /** A no-light zone was double-clicked / asked to be removed from its menu. */
     void zoneDoubleClicked(quint32 zoneId);
     void zoneRemoveRequested(quint32 zoneId);
+    /** A zone was dragged: how far in stage metres (the axes the view shows;
+     *  the other stays 0). The host moves it as one undo step. */
+    void zoneMoved(quint32 zoneId, float dxMetres, float dyMetres, float dzMetres);
     void standDoubleClicked(quint32 standId);
     void sceneryDoubleClicked(quint32 sceneryId);
     void towerDoubleClicked(quint32 towerId);
@@ -1426,6 +1432,8 @@ private:
      *  sweep — otherwise every plain click would re-persist (and dirty) the
      *  current selection's positions for no reason. */
     QPoint m_pressViewPos;
+    quint32 m_zoneDragId = UINT_MAX;    //!< the no-light zone being dragged
+    QPointF m_zoneDragStart;            //!< scene point where the drag took hold
 
     /** The press landed on something the plot holds still -- the plot is
      *  locked, or the object, its layer or its folder is. Until the release,

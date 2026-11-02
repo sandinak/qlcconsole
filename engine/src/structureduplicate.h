@@ -50,8 +50,13 @@ class Doc;
  *  preview() decides all of it without changing anything; apply() does it
  *  and returns what undo() needs to put it all back as one step.
  *
- *  Not part of "the setup" (yet): hangers and child bars, and the lights
- *  hung on them. */
+ *  The setup includes what hangs on the structure: its hangers and child
+ *  bars (and the hangers on those), copied onto each target with the same
+ *  place, arm, drop, face and run, and the lights on them -- named, patched
+ *  and grouped like the rest, and undone with them. A truss's setup is the
+ *  hangers on it and the child bars hung from it; a tower's, its hangers.
+ *  Replace takes the target's own hangers and child bars off with its lights.
+ *  Decided (can change): the copies take the target's layer and plot group. */
 class QLC_ENGINE_EXPORT StructureDuplicate
 {
 public:
@@ -137,6 +142,9 @@ public:
         /** Fixtures a Replace removes that scenes use, and those scenes. */
         int replacedFixtures = 0;
         int replacedInScenes = 0;
+        /** Hangers and child bars the copies get, over all targets. */
+        int newHangers = 0;
+        int newBars = 0;
     };
 
     /** A fixture taken off a target by Replace, to be put back. */
@@ -155,16 +163,28 @@ public:
         QByteArray xml;
     };
 
+    /** A hanger or child bar taken off a target by Replace, to be put back. */
+    struct RemovedStructure
+    {
+        quint32 id = 0;
+        QByteArray xml;
+        bool bar = false;           ///< a child bar; else a hanger
+    };
+
     /** Everything undo() needs. */
     struct Undo
     {
+        QList<quint32> createdHangers;
+        QList<quint32> createdBars;
+        QList<RemovedStructure> removedStructures;      ///< parents before children
         QList<quint32> createdFixtures;
         QList<Removed> removed;
         QList<quint32> createdFixtureGroups;
         QList<GroupState> groupsBefore;
         QList<quint32> createdMapGroups;
         bool isEmpty() const
-        { return createdFixtures.isEmpty() && removed.isEmpty(); }
+        { return createdFixtures.isEmpty() && removed.isEmpty() && createdHangers.isEmpty()
+                 && createdBars.isEmpty() && removedStructures.isEmpty(); }
     };
 
     struct Result
@@ -172,6 +192,8 @@ public:
         int created = 0;
         int patched = 0;
         int replaced = 0;
+        int createdHangers = 0;
+        int createdBars = 0;
         QStringList skipped;
         QStringList problems;
         QList<quint32> createdIds;

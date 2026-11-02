@@ -471,6 +471,23 @@ void MonitorGraphicsView::mousePressEvent(QMouseEvent *event)
     m_dragRefusedNoted = false;
     m_pressOnLockedLayer = false;
 
+    /* A no-light zone is dragged by its outline or centre handle, nothing
+       else: the plot under its inside stays selectable. Something drawn on
+       the outline (a fixture, a truss) keeps the click. */
+    if (event->button() == Qt::LeftButton && event->modifiers() == Qt::NoModifier
+        && !m_layoutLocked && !m_zoneItems.isEmpty())
+    {
+        const QPointF sp = mapToScene(event->pos());
+        const quint32 zid = zoneGrabAt(sp);
+        if (zid != UINT_MAX && topPickableAt(sp) == nullptr)
+        {
+            m_zoneDragId = zid;
+            m_zoneDragStart = sp;
+            event->accept();
+            return;
+        }
+    }
+
     /* A reveal is a question about one stack -- "which of these is it?" -- and
        it ends the moment you look somewhere else. Selecting another item ends
        it too (see the selectionChanged handler), but a click on bare deck
@@ -5320,6 +5337,16 @@ void MonitorGraphicsView::updateNoLightZones()
     }
 }
 
+quint32 MonitorGraphicsView::zoneGrabAt(const QPointF &scenePos) const
+{
+    const qreal m = qMax<qreal>(0.01, qAbs(transform().m11()));
+    const qreal tol = 5.0 / m;          // five screen pixels
+    for (int i = m_zoneItems.size() - 1; i >= 0; --i)
+        if (m_zoneItems.at(i)->grabAt(scenePos, tol))
+            return m_zoneItems.at(i)->id();
+    return UINT_MAX;
+}
+
 quint32 MonitorGraphicsView::zoneAt(const QPointF &scenePos) const
 {
     for (int i = m_zoneItems.size() - 1; i >= 0; --i)
@@ -7968,6 +7995,27 @@ void MonitorGraphicsView::scrollContentsBy(int dx, int dy)
 
 void MonitorGraphicsView::mouseReleaseEvent(QMouseEvent *e)
 {
+    if (m_zoneDragId != UINT_MAX && e->button() == Qt::LeftButton)
+    {
+        const quint32 zid = m_zoneDragId;
+        m_zoneDragId = UINT_MAX;
+        const QVector3D a = unprojectMm(m_zoneDragStart, QVector3D());
+        const QVector3D b = unprojectMm(mapToScene(e->pos()), QVector3D());
+        const QVector3D d = (b - a) / 1000.0f;          // mm to stage metres
+        foreach (ZoneItem *zi, m_zoneItems)
+            if (zi->id() == zid)
+                zi->setPos(0, 0);
+        // The axes this view shows: Top x,y; Front x,z; Side y,z.
+        const float dx = m_pov == PovSide ? 0.0f : d.x();
+        const float dy = m_pov == PovFront ? 0.0f : d.y();
+        const float dz = m_pov == PovTop ? 0.0f : d.z();
+        if ((e->pos() - m_pressViewPos).manhattanLength() >= QApplication::startDragDistance()
+            && (dx != 0.0f || dy != 0.0f || dz != 0.0f))
+            emit zoneMoved(zid, dx, dy, dz);
+        e->accept();
+        return;
+    }
+
     // The end of a right-press: the context menu has it. Not a click, not a drop.
     if (e->button() == Qt::RightButton)
     {
@@ -8131,6 +8179,17 @@ void MonitorGraphicsView::mouseReleaseEvent(QMouseEvent *e)
 
 void MonitorGraphicsView::mouseMoveEvent(QMouseEvent *event)
 {
+    if (m_zoneDragId != UINT_MAX)
+    {
+        // The zone follows the pointer; the show changes on release.
+        const QPointF d = mapToScene(event->pos()) - m_zoneDragStart;
+        foreach (ZoneItem *zi, m_zoneItems)
+            if (zi->role() == ZoneItem::Zone && zi->id() == m_zoneDragId)
+                zi->setPos(d);
+        emit cursorReadout(viewportToReadout(event->pos()));
+        event->accept();
+        return;
+    }
     /* A press on something held still: the pointer moves, nothing else does.
        Said once on the status line (Q178), and the move never reaches the
        scene, so no item thinks it was dragged. */

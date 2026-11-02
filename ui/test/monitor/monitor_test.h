@@ -48,6 +48,7 @@ private slots:
     void aModeChangedByThePatchIsUndone();
     void hangersAreOnThePlot();
     void noLightZonesAreOnThePlot();
+    void aNoLightZoneDragsByItsOutline();
     void aNewShowDropsTheStructureItemsFirst();
     void removingAStructureDropsItsItemFirst();
     void aRebuiltPlotItemStartsShownAndUnzoomed();

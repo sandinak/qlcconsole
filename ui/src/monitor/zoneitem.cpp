@@ -31,7 +31,7 @@ ZoneItem::ZoneItem(Role role, quint32 id, const QPolygonF &outline, const QStrin
 {
     setAcceptedMouseButtons(Qt::NoButton);
     if (role == Zone)
-        setToolTip(QObject::tr("No-light zone '%1' -- double-click to edit").arg(label));
+        setToolTip(QObject::tr("No-light zone '%1' -- drag its outline to move, double-click to edit").arg(label));
     else
         setToolTip(QObject::tr("Scan window of %1").arg(label));
 }
@@ -39,6 +39,33 @@ ZoneItem::ZoneItem(Role role, quint32 id, const QPolygonF &outline, const QStrin
 bool ZoneItem::contains(const QPointF &scenePos) const
 {
     return m_outline.containsPoint(scenePos, Qt::OddEvenFill);
+}
+
+QRectF ZoneItem::handleRect() const
+{
+    const QPointF c = m_outline.boundingRect().center();
+    return QRectF(c.x() - 5.0, c.y() - 5.0, 10.0, 10.0);
+}
+
+bool ZoneItem::grabAt(const QPointF &scenePos, qreal tol) const
+{
+    if (m_role != Zone || m_outline.size() < 2)
+        return false;
+    if (handleRect().adjusted(-tol / 2, -tol / 2, tol / 2, tol / 2).contains(scenePos))
+        return true;
+    for (int i = 0; i < m_outline.size(); ++i)
+    {
+        const QPointF a = m_outline.at(i);
+        const QPointF b = m_outline.at((i + 1) % m_outline.size());
+        const QPointF ab = b - a;
+        const qreal len2 = ab.x() * ab.x() + ab.y() * ab.y();
+        qreal t = len2 > 0.0 ? ((scenePos.x() - a.x()) * ab.x() + (scenePos.y() - a.y()) * ab.y()) / len2 : 0.0;
+        t = qBound<qreal>(0.0, t, 1.0);
+        const QPointF d = scenePos - (a + ab * t);
+        if (d.x() * d.x() + d.y() * d.y() <= tol * tol)
+            return true;
+    }
+    return false;
 }
 
 QRectF ZoneItem::boundingRect() const
@@ -70,6 +97,12 @@ void ZoneItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *, QWidge
         painter->setPen(QPen(QColor(240, 170, 20), 1.2, Qt::DashLine));
         painter->setBrush(QColor(240, 170, 20, 25));
         painter->drawPolygon(m_outline);
+    }
+    if (m_role == Zone)
+    {
+        painter->setPen(QPen(QColor(220, 40, 40), 1.0));
+        painter->setBrush(QColor(255, 255, 255, 200));
+        painter->drawRect(handleRect());
     }
     if (!m_label.isEmpty() && m_role == Zone)
     {

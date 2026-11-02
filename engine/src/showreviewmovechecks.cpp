@@ -137,8 +137,8 @@ QHash<quint32, Head> headsOf(ReviewContext &ctx, const ResolvedCue &cue,
 
 double degreesMoved(const Fixture *fx, const Head &a, const Head &b)
 {
-    return qMax(qAbs(b.pan - a.pan) * MoveSpeed::panSpanDeg(fx),
-                qAbs(b.tilt - a.tilt) * MoveSpeed::tiltSpanDeg(fx));
+    // Degrees along the pointing band (a banded head's DMX range is not its travel).
+    return MoveSpeed::travelMs(fx, a.pan, a.tilt, b.pan, b.tilt) * MoveSpeed::degreesPerSecond(fx) / 1000.0;
 }
 
 QString secs(double ms)

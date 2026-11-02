@@ -83,6 +83,8 @@ public:
      * Identity
      ********************************************************************/
     quint32 id() const { return m_id; }
+    /** For a copy loaded from XML (loadXML() reads the source's id). */
+    void setId(quint32 id) { m_id = id; }
 
     QString name() const { return m_name; }
     void setName(const QString &name) { m_name = name; }
