@@ -22,5 +22,8 @@
 	},
 	"devDependencies": {
 		"@companion-module/tools": "^3.2.0"
+	},
+	"overrides": {
+		"minimatch": "^11.0.1"
 	}
 }
