@@ -1169,6 +1169,11 @@ skipped). Upstream fixes taken:
 
 ### Fixed
 
+- **Loading the I/O plugins could crash** when a folder in the plugin
+  directory had a plugin's name (as in a build tree): the "duplicate" it
+  resolved to was the same library, and unloading it freed the plugin in
+  use. Folders are skipped, and the same library found twice is kept once.
+
 - **A show saved here no longer loses an effect on its second save.** An RGB
   matrix whose script isn't installed on the computer is kept as it came;
   that copy carried the file's XML namespace, so saving it again wrote

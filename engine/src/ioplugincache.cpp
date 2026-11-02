@@ -57,7 +57,10 @@ void IOPluginCache::load(const QDir& dir)
     QVariant hotplug = settings.value(SETTINGS_HOTPLUG);
 
     /* Loop through all files in the directory */
-    QStringListIterator it(dir.entryList());
+    /* Files only: a sub-directory named like a plugin ("wled" beside
+       libwled.dylib in a build tree) resolves to the same library, and
+       unloading that "duplicate" would free the plugin already kept. */
+    QStringListIterator it(dir.entryList(QDir::Files));
     while (it.hasNext() == true)
     {
         /* Attempt to load a plugin from the path */
@@ -73,7 +76,14 @@ void IOPluginCache::load(const QDir& dir)
         if (ptr != NULL)
         {
             /* Check for duplicates */
-            if (plugin(ptr->name()) == NULL)
+            QLCIOPlugin *existing = plugin(ptr->name());
+            if (existing == ptr)
+            {
+                /* The same library reached by another path: already kept,
+                   and unloading it here would delete the instance in use. */
+                continue;
+            }
+            if (existing == NULL)
             {
                 /* New plugin. Append and init. */
                 qDebug() << "Loaded I/O plugin" << ptr->name() << "from" << fileName;
