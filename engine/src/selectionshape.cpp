@@ -233,15 +233,15 @@ SelectionShape::Hint SelectionShape::hint(const Doc *doc, const QList<quint32> &
                 // A rubber band that just missed: members within a third of
                 // the group's spacing of its edge.
                 const double reach = spacingOf(c, positions) / 3.0;
-                QList<quint32> near;
+                QList<quint32> closeBy;
                 for (quint32 fid : missing)
                     if (reach > 0.0 && positions.contains(fid)
                         && distanceToRect(positions.value(fid), band) <= reach)
-                        near << fid;
-                if (!near.isEmpty() && near.size() <= 2)
+                        closeBy << fid;
+                if (!closeBy.isEmpty() && closeBy.size() <= 2)
                 {
                     h.kind = Hint::AddMissing;
-                    h.fixtures = near;
+                    h.fixtures = closeBy;
                     h.nearBand = true;
                 }
             }
