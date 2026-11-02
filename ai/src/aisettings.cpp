@@ -167,6 +167,12 @@ QString AiKeychain::read(const QString &provider)
     CFMutableDictionaryRef q = keyQuery(provider);
     CFDictionarySetValue(q, kSecReturnData, kCFBooleanTrue);
     CFDictionarySetValue(q, kSecMatchLimit, kSecMatchLimitOne);
+    // Never a Keychain prompt on the GUI thread: one hidden behind a modal
+    // dialog froze the app. Where it would ask, this finds nothing.
+    QT_WARNING_PUSH
+    QT_WARNING_DISABLE_DEPRECATED
+    CFDictionarySetValue(q, kSecUseAuthenticationUI, kSecUseAuthenticationUIFail);
+    QT_WARNING_POP
     CFTypeRef data = nullptr;
     const OSStatus st = SecItemCopyMatching(q, &data);
     CFRelease(q);

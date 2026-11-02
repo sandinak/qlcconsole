@@ -17,6 +17,10 @@ most of 0.5 ("The show explains itself"); there is no separate 0.3.1.
 A home for QLC+ 4 users: QLC+ 4's habits that qlcconsole had dropped are
 back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
 
+### AI Assist: Test connection never hangs
+
+- **Settings > AI Assist > Test connection always answers.** It works from what is on the page (Enabled need not be saved with OK first), gives up after 10 seconds at most with "no answer within 10 s" instead of sitting for the model timeout and showing "Operation canceled", says "Test cancelled." and frees the button if AI Assist is switched off meanwhile, and reads no Keychain prompt on the screen thread. `localhost` endpoints are reached on 127.0.0.1 (a stock Ollama listens on IPv4 only, and "localhost" went to ::1 first). The command line's AI button no longer greys after a failed question: it stays pressable and says why and that Enter retries.
+
 ### Performance over time
 
 - **The [Performance](docs/performance.md#performance-over-time) page gains data points as tests run.** Every `make perf`, `make perf-record` and nightly run appends its key metrics to `docs/perf-data/history.csv`; `tools/perf/plot.py trends` draws them per machine class (baseline re-records, failed metrics and the FadeChannel memory regression and fix marked); `make perf-history-commit` commits the history. Backfilled from the existing baselines and the 2026-11-01 runs.

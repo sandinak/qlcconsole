@@ -168,6 +168,10 @@ public:
      *  connectionTested() follows. False when it can't be tried now. */
     bool testConnection(const AiSettings &settings, const QString &apiKey);
 
+    /** The cap on one connection test, ms (10 s; the setting's timeout when
+     *  shorter). @a ms 0 restores the default; for tests. */
+    static void setTestCapMs(int ms);
+
     /** The resource error raised by the last Operate audit (empty: none). */
     QString resourceErrorText() const { return m_resourceError; }
 
@@ -225,6 +229,8 @@ private:
     QNetworkAccessManager *m_nam = nullptr;
     QPointer<QNetworkReply> m_reply;
     QPointer<QNetworkReply> m_testReply;
+    QTimer *m_testTimer = nullptr;
+    bool m_testTimedOut = false;
     std::unique_ptr<AiProvider> m_provider;
     AiSettings m_settings;
     QList<AiMessage> m_messages;

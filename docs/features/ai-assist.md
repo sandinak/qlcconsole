@@ -30,7 +30,7 @@ only you apply it. One undo takes the whole change back.
 | **Turn on AI Assist** | Off by default. Off, nothing is made and nothing is sent anywhere. |
 | **Provider** | **Ollama** (a model on this computer or your network), an **OpenAI-compatible server** (LM Studio, llama.cpp, vLLM and most local servers) or **Anthropic** (cloud). |
 | **Endpoint** | Where the model answers. Ollama on this computer: `http://localhost:11434`. |
-| **Model** | The model's name, as the server knows it. **Test connection** lists the ones it has. |
+| **Model** | The model's name, as the server knows it. **Test connection** lists the ones it has; it uses what is on the page (no need to press OK first) and says "no answer within 10 s" rather than waiting. |
 | **API key** | Cloud providers only. Kept in the macOS keychain, never in the settings. On other systems set `QLC_AI_API_KEY` in the environment. |
 | **Send with a question** | **A summary of the show** (fixture names, definitions and addresses, groups, counts) or **Nothing up front**. Never the show file. |
 | **Give up after** | Seconds to wait for an answer (60 by default). |

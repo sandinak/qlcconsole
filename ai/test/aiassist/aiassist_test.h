@@ -59,6 +59,11 @@ private slots:
     void invalidArgumentsGoBackToTheModel();
     void providerDownGreysTheEntry();
     void testConnectionListsModels();
+    void testFromUnsavedPage();
+    void testAgainstASilentServer();
+    void abortedTestSaysSo();
+    void testNeverReadsTheKeychainForOllama();
+    void localhostFallsBackToIpv4();
     void cancel();
     void systemPromptContext();
     void commandLineShowsTheAnswer();

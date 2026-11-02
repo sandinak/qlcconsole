@@ -73,7 +73,12 @@ QUrl AiProvider::url(const QString &path) const
     QString p = path;
     if (base.endsWith(QLatin1String("/v1")) && p.startsWith(QLatin1String("/v1/")))
         p = p.mid(3);
-    return QUrl(base + p);
+    QUrl u(base + p);
+    // "localhost" may resolve to ::1 first, where Ollama (127.0.0.1 only)
+    // refuses or Qt stalls before falling back: say what is meant.
+    if (u.host().compare(QLatin1String("localhost"), Qt::CaseInsensitive) == 0)
+        u.setHost(QStringLiteral("127.0.0.1"));
+    return u;
 }
 
 QNetworkRequest AiProvider::jsonRequest(const QUrl &url) const
