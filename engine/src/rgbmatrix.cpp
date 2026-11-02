@@ -469,7 +469,21 @@ QString copyElement(QXmlStreamReader &root)
             depth++;
         else if (root.isEndElement())
             depth--;
-        w.writeCurrentToken(root);
+        /* Token by token, names and attributes only: writeCurrentToken()
+           carries the reader's namespace along. A show saved by us declares
+           one on <Workspace>, so every copy came out as <n1:Algorithm
+           xmlns:n1=...>, which saved back as nothing at all -- the effect
+           vanished on the second save. */
+        if (root.isStartElement())
+        {
+            w.writeStartElement(root.name().toString());
+            foreach (const QXmlStreamAttribute &attr, root.attributes())
+                w.writeAttribute(attr.name().toString(), attr.value().toString());
+        }
+        else if (root.isEndElement())
+            w.writeEndElement();
+        else if (root.isCharacters())
+            w.writeCharacters(root.text().toString());
         if (depth <= 0 || root.atEnd() || root.hasError())
             break;
         root.readNext();

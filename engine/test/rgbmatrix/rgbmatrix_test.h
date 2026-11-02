@@ -42,6 +42,7 @@ private slots:
     void property();
     void loadSave();
     void anUninstalledScriptSurvivesASave();
+    void anUninstalledScriptSurvivesInAShowWithANamespace();
     void aMatrixDoesNotStartTheAudioCapture();
     /** Running (coverage campaign: preRun/write/postRun were never run):
      *  a Plain matrix writes its colour to every head and follows a change;

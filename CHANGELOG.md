@@ -1162,6 +1162,11 @@ skipped). Upstream fixes taken:
 
 ### Fixed
 
+- **A show saved here no longer loses an effect on its second save.** An RGB
+  matrix whose script isn't installed on the computer is kept as it came;
+  that copy carried the file's XML namespace, so saving it again wrote
+  nothing. Save, reopen, save now gives the same file.
+
 - **Show Review's no-light-zone check reads a UST where it points.** A
   head that points with pan DMX 0-127 and spins above it (the two-arm
   beam) was read over the whole channel, so PWR-11 tested a quarter turn

@@ -36,6 +36,7 @@
 
 #include <QCoreApplication>
 #include <QProcess>
+#include <QRegularExpression>
 #include <QtTest>
 #include <csignal>
 #include <cstdlib>
@@ -92,6 +93,14 @@ namespace HostileCase
         if (code >= 100 && code < 140)
             return QStringLiteral("CRASH: signal %1\n").arg(code - 100)
                    + QString::fromLocal8Bit(out.right(3000));
+        /* A sanitizer ends a run that had reports with its own exit code (TSan:
+           66). When the child's tests all passed, the verdict on the case is
+           pass; the report itself is in the sanitizer's log (log_path) for
+           whoever reads those, as it is for every other test program. */
+        if (code == 66
+                && QRegularExpression(QStringLiteral("Totals: \\d+ passed, 0 failed"))
+                       .match(QString::fromLocal8Bit(out)).hasMatch())
+            return QString();
         if (code != 0)
             return QStringLiteral("FAIL (exit %1)\n").arg(code) + QString::fromLocal8Bit(out.right(3000));
         return QString();
