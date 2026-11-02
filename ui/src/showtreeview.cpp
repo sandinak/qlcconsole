@@ -1147,24 +1147,22 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
             if (prod == invalidId())
                 return;
             CueSheetDialog dlg(m_doc, prod, this);
+            // Its Calling Script... button: the script, in a window of its own.
+            bool script = false;
+            connect(&dlg, &CueSheetDialog::callingScriptRequested, &dlg, [&script]() { script = true; });
             dlg.exec();
+            if (script)
+                showCallingScript();
         });
-        // The calling script: the production's script or lyrics with its cues
-        // in the margin (a window of its own, not a tab).
-        QAction *script = m->addAction(tr("Calling Script…"), this, [this]() { showCallingScript(); });
-        script->setObjectName(QStringLiteral("stCallingScriptAction"));
-        script->setToolTip(tr("The production's script or lyrics with its cues placed on the lines: "
-                              "standby and GO in the margin, following the show as it runs"));
         sheets->setObjectName(QStringLiteral("stCueSheetAction"));
         sheets->setToolTip(tr("The production's cue sheet and tracking sheet: look them over, save as CSV, "
                               "XLSX or a printable PDF"));
-        connect(m, &QMenu::aboutToShow, this, [m, this, sheets, script]() {
+        connect(m, &QMenu::aboutToShow, this, [m, this, sheets]() {
             const QList<QAction *> acts = m->actions();
             const QList<QToolButton *> btns = { m_newProduction, m_newSubCue, m_merge };
             for (int i = 0; i < acts.size() && i < btns.size(); i++)
                 acts.at(i)->setEnabled(btns.at(i)->isEnabled());
             sheets->setEnabled(currentProductionId() != invalidId());
-            script->setEnabled(currentProductionId() != invalidId());
         });
         more->setMenu(m);
     }

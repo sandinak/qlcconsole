@@ -21,6 +21,7 @@
 
 #include <QTemporaryDir>
 #include <QPlainTextEdit>
+#include <QApplication>
 #include <QToolButton>
 #include <QPushButton>
 #include <QCheckBox>
@@ -42,6 +43,7 @@
 #include "showtreecontroller.h"
 #include "showtreemodel.h"
 #include "callingscriptview.h"
+#include "cuesheetdialog.h"
 #include "inputoutputmap.h"
 #include "showtreeview.h"
 #include "fixturegroup.h"
@@ -338,15 +340,32 @@ void CallingScriptView_Test::theShowTreeMenuOpensIt()
     ShowTreeView tree(nullptr, m_doc);
     QToolButton *more = tree.findChild<QToolButton *>("stMore");
     QVERIFY(more != nullptr && more->menu() != nullptr);
-    QAction *open = nullptr;
+    QAction *sheets = nullptr;
     for (QAction *a : more->menu()->actions())
-        if (a->objectName() == "stCallingScriptAction")
-            open = a;
-    QVERIFY(open != nullptr);
-    QCOMPARE(open->text(), QString("Calling Script…"));
+    {
+        QVERIFY(a->objectName() != "stCallingScriptAction");   // folded into Cue Sheet...
+        if (a->objectName() == "stCueSheetAction")
+            sheets = a;
+    }
+    QVERIFY(sheets != nullptr);
     more->menu()->aboutToShow();
-    QVERIFY(open->isEnabled());
-    open->trigger();
+    QVERIFY(sheets->isEnabled());
+
+    // Cue Sheet... opens its dialog; its Calling Script... button opens the script.
+    QTimer::singleShot(200, [&]() {
+        CueSheetDialog *dlg = nullptr;
+        for (QWidget *w : QApplication::topLevelWidgets())
+            if (w->objectName() == "cueSheetDialog")
+                dlg = qobject_cast<CueSheetDialog *>(w);
+        if (dlg == nullptr)
+            return;
+        QPushButton *b = dlg->findChild<QPushButton *>("cueSheetCallingScript");
+        if (b != nullptr)
+            b->click();
+        else
+            dlg->reject();
+    });
+    sheets->trigger();
     CallingScriptView *view = tree.findChild<CallingScriptView *>("callingScriptView");
     QVERIFY(view != nullptr);
     QVERIFY(view->isVisible());

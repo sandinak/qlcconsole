@@ -1444,7 +1444,7 @@ green and blue all at 0 it puts out nothing).
 ### No-light zones
 
 Some places must stay dark: the orchestra pit, the conductor, a camera
-position, the audience's eyes. **Add ▸ Add No-light Zone** puts one on the
+position, the audience's eyes. **Add ▸ Add Scenery ▸ No-light Zone…** puts one on the
 plot (just downstage of the stage's front edge to start with); its dialog
 sets the **name**, where it is (X, Y of its upstage edge, **width** and
 **depth** on the floor), its **bottom** (a pit is below 0) and its **height**

@@ -1506,7 +1506,8 @@ the cue goes now, so an older build plays the show the same.
 
 The stage manager's paper, made from the tree whenever you ask: **More ▾ →
 Cue Sheet…** on the Show Tree tab (a production selected, or the only one).
-Nothing is stored; change a cue and open it again.
+Nothing is stored; change a cue and open it again. The dialog's
+**Calling Script...** button closes it and opens the calling script (below).
 
 - **Cue sheet** — a row per cue in the order the Run plays them: the
   production's cue lists in turn, each song (section) under its heading,
@@ -1536,7 +1537,7 @@ tables with the layer names repeated.
 ## The calling script
 
 The stage manager's script or the lyrics, with the cues on the lines where
-they are called: **More ▾ → Calling Script…** on the Show Tree tab (a
+they are called: **More ▾ → Cue Sheet… → Calling Script…** on the Show Tree tab (a
 production selected, or the only one). It opens a window of its own beside
 the tree; it is a view of the production's cue lists, not another place
 to keep cues.

@@ -263,8 +263,8 @@ back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
 
 #### Calling script
 
-- **A calling script, with the cues on its lines.** **More ▾ → Calling
-  Script…** on the Show Tree tab: paste or import (a .txt or .md file) the
+- **A calling script, with the cues on its lines.** **More ▾ → Cue Sheet… →
+  Calling Script…** on the Show Tree tab: paste or import (a .txt or .md file) the
   production's script or lyrics, then place cues on it by dragging a cue
   from the tree onto a word (Alt: standby) or selecting text and pressing
   **Cue here** / **Standby here**. The margin shows each cue's standby and
@@ -435,6 +435,12 @@ back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
   `courseshow_test`.
 
 ### Rig and Studio
+
+- **Two menu entries folded away.** The Lighting Studio's **Add** menu no
+  longer has **Add No-light Zone**: it is **Add ▸ Add Scenery ▸ No-light
+  Zone…** (same dialog, same Undo). The Show Tree's **More ▾** is back to
+  four items: **Calling Script…** is a button in the **Cue Sheet…**
+  dialog.
 
 #### Duplicate a structure's setup
 

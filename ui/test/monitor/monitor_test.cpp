@@ -24870,7 +24870,23 @@ void Monitor_Test::noLightZonesAreOnThePlot()
             dlg->findChild<QDoubleSpinBox *>("zoneDepth")->setValue(2.0);
             return true;
         });
-        mon.slotAddNoLightZone();
+        // It is a choice in the Add button's Scenery list, not an entry of its own.
+        {
+            QStringList top;
+            QAction *zoneAct = nullptr;
+            QToolButton *add = mon.m_addBtn;
+            for (QAction *a : add->menu()->actions())
+            {
+                top << a->text();
+                if (a->menu() != nullptr)
+                    for (QAction *b : a->menu()->actions())
+                        if (b->objectName() == "addNoLightZoneAction")
+                            zoneAct = b;
+            }
+            QVERIFY(zoneAct != nullptr);
+            QVERIFY2(!top.contains("Add No-light Zone"), qPrintable(top.join(", ")));
+            zoneAct->trigger();
+        }
         QCOMPARE(props->noLightZones().count(), 1);
         const NoLightZone z = props->noLightZones().first();
         QCOMPARE(z.name, QStringLiteral("Conductor"));
