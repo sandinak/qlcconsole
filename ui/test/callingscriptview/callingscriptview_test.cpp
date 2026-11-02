@@ -51,6 +51,7 @@
 #include "chaser.h"
 #include "doc.h"
 
+#include "../common/dragpos.h"
 #include "callingscriptview_test.h"
 
 using namespace ShowTree;
@@ -172,7 +173,7 @@ void CallingScriptView_Test::droppingACueFromTheTreeOnAWord()
     c.setPosition(offsetOfLine(2) + 3);                 // in the middle of "Line"
     const QPoint at = view.textEdit()->cursorRect(c).center();
     QDropEvent drop(at, Qt::CopyAction, &mime, Qt::LeftButton, Qt::NoModifier);
-    QDragEnterEvent enter(at, Qt::CopyAction, &mime, Qt::LeftButton, Qt::NoModifier);
+    QDragEnterEvent enter(dragPos(at), Qt::CopyAction, &mime, Qt::LeftButton, Qt::NoModifier);
     QApplication::sendEvent(view.textEdit()->viewport(), &enter);
     QApplication::sendEvent(view.textEdit()->viewport(), &drop);
     QVERIFY(drop.isAccepted());
@@ -181,7 +182,7 @@ void CallingScriptView_Test::droppingACueFromTheTreeOnAWord()
     QCOMPARE(view.sheet().lineOfCue(m_cues[1]), 2);
 
     // Alt: standby.
-    QDragEnterEvent enter2(at, Qt::CopyAction, &mime, Qt::LeftButton, Qt::AltModifier);
+    QDragEnterEvent enter2(dragPos(at), Qt::CopyAction, &mime, Qt::LeftButton, Qt::AltModifier);
     QApplication::sendEvent(view.textEdit()->viewport(), &enter2);
     QDropEvent alt(at, Qt::CopyAction, &mime, Qt::LeftButton, Qt::AltModifier);
     QApplication::sendEvent(view.textEdit()->viewport(), &alt);
