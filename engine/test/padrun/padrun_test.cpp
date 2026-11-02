@@ -22,6 +22,12 @@
 #include <QtTest>
 #include <QSignalSpy>
 #include <QTemporaryDir>
+#include <QSemaphore>
+#include <QThread>
+
+#include <climits>
+#include <cstdio>
+#include <cstdlib>
 
 #include "programmercontroller.h"
 #include "showtreecontroller.h"
@@ -1173,7 +1179,6 @@ void PadRun_Test::theLightItselfGoesIntoTheVenue()
     r->stop();
 }
 
-QTEST_MAIN(PadRun_Test)
 
 quint32 PadRun_Test::hitWithLayer(ShowTree::HitScope scope, quint32 placeId, const QString &name)
 {
@@ -1424,3 +1429,164 @@ void PadRun_Test::theRoleChordResistsAccidents()
     QCOMPARE(focusAsked.count(), 1);
     run->setEnabled(false);
 }
+
+namespace
+{
+/* Fails the run, fast, when the GUI thread is stuck: a deadlock in the input
+   path would otherwise hang the test (and the gate) until it is killed. */
+class InputWatchdog
+{
+public:
+    InputWatchdog(int ms, const char *what)
+    {
+        m_thread = QThread::create([this, ms, what]() {
+            if (m_done.tryAcquire(1, ms))
+                return;
+            std::fprintf(stderr, "FAIL!  : %s: the GUI thread is still blocked after %d ms "
+                                 "(a deadlock in the input path)\n", what, ms);
+            std::fflush(stderr);
+            std::_Exit(3);
+        });
+        m_thread->start();
+    }
+    ~InputWatchdog()
+    {
+        m_done.release();
+        m_thread->wait();
+        delete m_thread;
+    }
+
+private:
+    QSemaphore m_done;
+    QThread *m_thread = nullptr;
+};
+}
+
+void PadRun_Test::padPress(IOPluginStub *stub, quint32 line, quint32 channel)
+{
+    stub->emitValueChanged(UINT_MAX, line, channel, 255);
+    stub->emitValueChanged(UINT_MAX, line, channel, 0);
+    m_doc->inputOutputMap()->flushInputs();
+}
+
+void PadRun_Test::padHold(IOPluginStub *stub, quint32 line, quint32 channel, bool down)
+{
+    stub->emitValueChanged(UINT_MAX, line, channel, down ? 255 : 0);
+    m_doc->inputOutputMap()->flushInputs();
+}
+
+void PadRun_Test::inputThroughThePatchDoesNotDeadlock()
+{
+    InputWatchdog watchdog(20000, "PadRun_Test::inputThroughThePatchDoesNotDeadlock");
+
+    IOPluginStub *stub = loadStub();
+    QVERIFY2(stub != nullptr, "no I/O plugin stub in ../iopluginstub");
+    makeShow();
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 breathe = hitWithLayer(ShowTree::HitScope::Production,
+                                         st->productions().first().id, "Breathe");
+
+    /* Two pads in one controller slot, the DualSense's controls on other
+       channels: the role lookup goes through the patch's channel map. */
+    const QString xbox = QStringLiteral("Xbox Wireless Controller");
+    const QString dualSense = QStringLiteral("DualSense Wireless Controller");
+    const quint32 xA = 6, xLB = 8, xRB = 10, xMenu = 11;
+    const quint32 dA = 7, dLB = 9, dRB = 11, dMenu = 10;
+    stub->m_linesAreHardware = true;
+    stub->m_lineNames = QStringList() << xbox << dualSense;
+    const QMap<quint32, QString> xroles = { { 6, "a" }, { 7, "b" }, { 8, "lb" }, { 9, "x" },
+                                            { 10, "rb" }, { 11, "start" }, { 12, "back" } };
+    const QMap<quint32, QString> droles = { { 6, "x" }, { 7, "a" }, { 8, "b" }, { 9, "lb" },
+                                            { 10, "start" }, { 11, "rb" }, { 12, "back" } };
+    stub->m_lineChannelRoles[0] = xroles;
+    stub->m_lineChannelRoles[1] = droles;
+    stub->m_lineDeviceKind[0] = "xbox";
+    stub->m_lineDeviceKind[1] = "dualsense";
+    stub->m_buttonActions = { { xA, "chaser_step_forward" } };
+
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QVERIFY(iom->setInputPatch(0, stub->name(), QString(), 0));
+    QVERIFY(iom->addInputSlotDevice(0, stub->name(), dualSense));
+    ProgrammerController *pc = m_doc->programmer();
+    PadRun *run = pc->padRun();
+    // The controller is read (in the app the auto-bind at start sees to it).
+    run->setEnabled(true);
+    run->setEnabled(false);
+
+    // The Tools role: A is the profile's button action, as it always was.
+    QSignalSpy actions(pc, &ProgrammerController::buttonActionTriggered);
+    padPress(stub, 0, xA);
+    QCOMPARE(actions.count(), 1);
+    QCOMPARE(actions.at(0).at(0).toString(), QString("chaser_step_forward"));
+    QVERIFY(m_runs.isEmpty());
+
+    // The Run role: LB + A is one GO through the pad's route.
+    run->setEnabled(true);
+    padHold(stub, 0, xLB, true);
+    QVERIFY(run->isArmed());
+    padPress(stub, 0, xA);
+    padHold(stub, 0, xLB, false);
+    QCOMPARE(m_runs.size(), 1);
+    QCOMPARE(m_runs.at(0).first.command, ShowControl::Go);
+    QCOMPARE(m_runs.at(0).second, ShowControl::RoutePad);
+    QCOMPARE(actions.count(), 1);          // no profile action beside it
+
+    // A walk: Menu starts Focus this cue on the cue in hand, Menu ends it.
+    padPress(stub, 0, xMenu);
+    QVERIFY(run->isWalking());
+    padPress(stub, 0, xMenu);
+    QVERIFY(!run->isWalking());
+
+    // A hit: LB + RB fires the armed one, in Operate.
+    m_doc->setMode(Doc::Operate);
+    QSignalSpy fired(run, &PadRun::hitFired);
+    padHold(stub, 0, xLB, true);
+    padPress(stub, 0, xRB);
+    QCOMPARE(fired.count(), 1);
+    QCOMPARE(fired.at(0).at(0).toUInt(), breathe);
+    padPress(stub, 0, xRB);                 // and lets it go
+    QCOMPARE(fired.count(), 2);
+    padHold(stub, 0, xLB, false);
+    m_doc->setMode(Doc::Design);
+
+    // The Xbox pad gone: the DualSense on its line, its own channels mapped.
+    stub->m_lineNames = QStringList() << dualSense;
+    stub->m_lineChannelRoles.clear();
+    stub->m_lineChannelRoles[0] = droles;
+    stub->m_lineDeviceKind.clear();
+    stub->m_lineDeviceKind[0] = "dualsense";
+    stub->configure();
+    QCOMPARE(iom->inputSlotLive(0), 1);
+    QVERIFY(!iom->inputPatch(0)->channelMap().isEmpty());
+
+    padHold(stub, 0, dLB, true);
+    padPress(stub, 0, dA);
+    padHold(stub, 0, dLB, false);
+    QCOMPARE(m_runs.size(), 2);
+    QCOMPARE(m_runs.at(1).first.command, ShowControl::Go);
+    padPress(stub, 0, dMenu);
+    QVERIFY(run->isWalking());
+    padPress(stub, 0, dMenu);
+    QVERIFY(!run->isWalking());
+    m_doc->setMode(Doc::Operate);
+    padHold(stub, 0, dLB, true);
+    padPress(stub, 0, dRB);
+    QCOMPARE(fired.count(), 3);
+    padPress(stub, 0, dRB);
+    padHold(stub, 0, dLB, false);
+    m_doc->setMode(Doc::Design);
+
+    // Back to the Tools role: nothing of the Run map fires, nothing locks.
+    run->setEnabled(false);
+    padPress(stub, 0, dA);
+    QCOMPARE(m_runs.size(), 2);
+
+    run->setEnabled(false);
+    stub->m_linesAreHardware = false;
+    stub->m_lineNames.clear();
+    stub->m_lineChannelRoles.clear();
+    stub->m_lineDeviceKind.clear();
+    stub->m_buttonActions.clear();
+}
+
+QTEST_MAIN(PadRun_Test)

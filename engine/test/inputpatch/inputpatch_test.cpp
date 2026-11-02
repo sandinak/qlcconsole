@@ -19,6 +19,10 @@
 
 #include <QtTest>
 
+#include <climits>
+#include <cstdio>
+#include <cstdlib>
+
 #include "../common/stdprelude.h"
 #define private public
 #include "iopluginstub.h"
@@ -215,6 +219,59 @@ void InputPatch_Test::flushFromAUniverseThreadIsOneEvent()
     ip.flush(8);
     QCOMPARE(counter.values, 513);
     QCOMPARE(ip.m_inputBuffer.size(), 1);
+}
+
+void InputPatch_Test::receiversCanCallBackIn()
+{
+    InputPatch ip(0, this);
+    // A controller slot's map: device 1 is the show's 5, device 2 its 6.
+    const QVector<quint32> map = { 0, 5, 6 };
+    ip.setChannelMap(map);
+
+    QList<QPair<quint32, uchar>> seen;
+    quint32 device = 0, show = 0;
+    connect(&ip, &InputPatch::inputValueChanged, &ip,
+            [&](quint32, quint32 channel, uchar value, const QString &) {
+        seen << qMakePair(channel, value);
+        device = ip.deviceChannel(channel);
+        show = ip.showChannel(device);
+        ip.setChannelMap(ip.channelMap());
+    }, Qt::DirectConnection);
+
+    /* On a worker thread, so a lock taken twice stalls it, not the test:
+       a press and its release in one frame (the release passes the press
+       straight through), then the frame's flush. */
+    const quint32 line = QLCIOPlugin::invalidLine();
+    QThread *worker = QThread::create([&ip, line]() {
+        ip.slotValueChanged(UINT_MAX, line, 1, 255);
+        ip.slotValueChanged(UINT_MAX, line, 1, 0);
+        ip.slotValueChanged(UINT_MAX, line, 2, 200);
+        ip.slotValueChanged(UINT_MAX, line, 2, 0);
+    });
+    worker->start();
+    if (!worker->wait(10000))
+    {
+        std::fprintf(stderr, "FAIL!  : InputPatch_Test::receiversCanCallBackIn(): "
+                             "a receiver calling back in deadlocked the patch\n");
+        std::fflush(stderr);
+        std::_Exit(3);
+    }
+    delete worker;
+    ip.flush(0);
+
+    QCOMPARE(seen.size(), 4);
+    // The press, at once, on the show's channel; the release on the frame.
+    QCOMPARE(seen.at(0), qMakePair(quint32(5), uchar(255)));
+    QCOMPARE(seen.at(1), qMakePair(quint32(6), uchar(200)));
+    QSet<quint32> released;
+    for (int i = 2; i < 4; ++i)
+    {
+        QCOMPARE(seen.at(i).second, uchar(0));
+        released << seen.at(i).first;
+    }
+    QCOMPARE(released, QSet<quint32>({ 5, 6 }));
+    QCOMPARE(show, quint32(device == 1 ? 5 : 6));
+    QCOMPARE(ip.channelMap(), map);
 }
 
 QTEST_GUILESS_MAIN(InputPatch_Test)
