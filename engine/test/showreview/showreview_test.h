@@ -81,6 +81,10 @@ private slots:
     void pwr11();
     void pwr11Mover();
     void pwr11BandedPan();
+    void pwr12Backwash();
+    void pwr12Meant();
+    void pwr12AimAtCyc();
+    void sceneryOnPurposeSaves();
     void cue03();
     void cue12();
     void pat05();

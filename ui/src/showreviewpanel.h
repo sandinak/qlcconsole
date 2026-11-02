@@ -84,6 +84,14 @@ public:
      *  work); false when nothing could be. */
     bool acceptSelected(const QString &note, const QString &by);
     bool reopenSelected();
+    /** PWR-12: "I meant it" for the selected rows (@a meant), or "Not
+     *  meant" for rows marked so; then re-check. False when none could be. */
+    bool markMeantSelected(bool meant = true);
+    /** Select the row of finding @a key (ReviewFinding::key()). */
+    bool selectFinding(const QString &key);
+    /** Whether every one of @a findings is a PWR-12 row "I meant it"
+     *  answers (@a meant) or takes back (false). */
+    static bool allMeantRows(const QList<ReviewFinding> &findings, bool meant);
     /** Fix the selected row: its jump, or a footer row's action. */
     bool fixSelected();
 

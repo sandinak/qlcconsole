@@ -140,6 +140,20 @@ public:
     /** Open the current production's calling script (a window of its own; 0.5). */
     CallingScriptView *showCallingScript();
 
+    /** Backwash (Show Review PWR-12, showtreebackwash.cpp): mark every cue
+     *  that puts light on the cyc nobody meant -- "⚠ cyc" in its flags, the
+     *  fixtures in the tooltip -- from Show Review's last result. */
+    void applyBackwashMarks();
+    /** The open PWR-12 finding cue @a cueId is marked for: its key, or
+     *  empty when it has none. */
+    QString backwashFindingKey(quint32 cueId) const;
+    /** Open Show Review on that finding (a click on the mark). */
+    bool openBackwashFinding(quint32 cueId);
+private:
+    void setupBackwashMarks();
+    void backwashLayerMenu(QMenu *menu, quint32 cueId, quint32 layerId);
+public:
+
     /************************************************************************
      * What the mouse does (drops, pickers) -- public for the tests
      ************************************************************************/

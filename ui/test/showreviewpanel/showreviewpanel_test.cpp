@@ -25,6 +25,11 @@
 #include "showreviewpanel_test.h"
 #include "showstatusdialog.h"
 #include "showreviewpanel.h"
+#include "showtreecontroller.h"
+#include "monitorproperties.h"
+#include "showtreeview.h"
+#include "qlcpalette.h"
+#include "scenery.h"
 #include "qlcfixturemode.h"
 #include "qlcfixturedef.h"
 #include "showstatus.h"
@@ -229,6 +234,150 @@ void ShowReviewPanel_Test::readinessDialogLeadsHere()
     QVERIFY(ShowReviewPanel::shared()->isVisible());
     QVERIFY(m_doc->showReview()->lastResult().ran);         // opened: checked
     ShowReviewPanel::shared()->close();
+    ShowReviewPanel::setShared(nullptr, nullptr);
+}
+
+namespace
+{
+/* A cyc 10 m wide at y = 2 m, a front light 10 m downstage of it at 6 m,
+   thrown upstage 20 degrees down -- its light carries on to the cyc -- and
+   a list of two cues, the light up in both. Returns the cue ids. */
+QList<quint32> backwashShow(Doc *doc, Fixture **lightOut)
+{
+    MonitorProperties *mp = doc->monitorProperties();
+    mp->setGridSize(QVector3D(10, 3, 14));
+    Scenery *cyc = mp->addScenery();
+    cyc->setName("Cyc");
+    cyc->setOriginX(5.0f);
+    cyc->setOriginY(2.0f);
+    Fixture *front = dimmer(doc, "Front 1", 20);
+    FixturePreviewItem item;
+    item.m_baseItem.m_position = QVector3D(5000.0f, 12000.0f, 6.0f);
+    mp->setFixtureProperties(front->id(), item);
+    FixtureRigProps rp = mp->fixtureRigProps(front->id());
+    rp.fixedAim = true;
+    rp.panZeroDir = 180;
+    rp.aimDown = 20;
+    mp->setFixtureRigProps(front->id(), rp);
+    QLCPalette *full = new QLCPalette(QLCPalette::Dimmer, doc);
+    full->setValue(255);
+    full->setName("Full");
+    doc->addPalette(full);
+    ShowTreeController *st = doc->showTree();
+    const quint32 lid = st->addCueList(st->addProduction("Show"), "Act 1");
+    QList<quint32> cues { st->addCue(lid, -1, "One") };
+    cues << st->addCue(lid, 0, "Two");
+    for (quint32 c : cues)
+    {
+        ShowTree::Target t;
+        t.fixtures = { front->id() };
+        const quint32 layer = st->addLayer(c, t);
+        ShowTree::Look d;
+        d.key = ShowTree::KeyDimmer;
+        d.palettes = { full->id() };
+        st->setLayerLook(c, layer, d);
+    }
+    if (lightOut != nullptr)
+        *lightOut = front;
+    return cues;
+}
+}
+
+void ShowReviewPanel_Test::iMeantItFromTheRow()
+{
+    Fixture *front = nullptr;
+    const QList<quint32> cues = backwashShow(m_doc, &front);
+    ShowReviewPanel panel(m_doc);
+    panel.recheck();
+    QTreeWidgetItem *row = rowOf(panel.tree(), "PWR-12");
+    QVERIFY(row != nullptr);
+    QVERIFY(row->text(1).contains("Front 1"));
+    panel.tree()->clearSelection();
+    row->setSelected(true);
+    QCOMPARE(panel.acceptButton()->text(), QStringLiteral("I Meant It"));
+    QCOMPARE(panel.fixButton()->text(), QStringLiteral("Show Me ▸"));
+    // Show Me: the layer that lights it in its first cue.
+    QString jump;
+    QVariantList data;
+    ShowReviewPanel::setJumper([&](QWidget *, const QString &j, const QVariantList &d) {
+        jump = j;
+        data = d;
+        return true;
+    });
+    QVERIFY(panel.fixSelected());
+    QCOMPARE(jump, QStringLiteral("cue"));
+    QCOMPARE(data.first().toUInt(), m_doc->showTree()->cue(cues.first())->layers.first().id);
+    ShowReviewPanel::setJumper(ShowReviewPanel::Jumper());
+    // I Meant It: no note asked; the row goes to Accepted.
+    panel.acceptButton()->click();
+    QCOMPARE(m_doc->showTree()->cue(cues.first())->layers.first().meantOnScenery,
+             QList<quint32>() << front->id());
+    panel.setFilter(ShowReviewPanel::OpenOnly);
+    QVERIFY(rowOf(panel.tree(), "PWR-12") == nullptr);
+    panel.setFilter(ShowReviewPanel::AcceptedOnly);
+    row = rowOf(panel.tree(), "PWR-12");
+    QVERIFY(row != nullptr);
+    QVERIFY(row->text(1).contains("I meant it"));
+    row->setSelected(true);
+    QCOMPARE(panel.reopenButton()->text(), QStringLiteral("Not Meant"));
+    panel.reopenButton()->click();
+    QVERIFY(m_doc->showTree()->cue(cues.first())->layers.first().meantOnScenery.isEmpty());
+    panel.setFilter(ShowReviewPanel::OpenOnly);
+    QVERIFY(rowOf(panel.tree(), "PWR-12") != nullptr);
+    // Other rows keep Accept… and Reopen.
+    row = rowOf(panel.tree(), "PAT-01");
+    QVERIFY(row != nullptr);
+    panel.tree()->clearSelection();
+    row->setSelected(true);
+    QCOMPARE(panel.acceptButton()->text(), QStringLiteral("Accept…"));
+    QCOMPARE(panel.fixButton()->text(), QStringLiteral("Fix ▸"));
+}
+
+void ShowReviewPanel_Test::showTreeMarksBreachingCues()
+{
+    const QList<quint32> cues = backwashShow(m_doc, nullptr);
+    ShowTreeView view(nullptr, m_doc);
+    m_doc->showReview()->run();
+    auto rowOfCue = [&view](quint32 id) -> QTreeWidgetItem * {
+        for (QTreeWidgetItemIterator it(view.tree()); *it; ++it)
+            if ((*it)->data(0, ShowTreeView::KindRole).toInt() == ShowTreeView::CueNode
+                && (*it)->data(0, ShowTreeView::IdRole).toUInt() == id)
+                return *it;
+        return nullptr;
+    };
+    // Both cues the light lands in are marked, the fixture named.
+    for (quint32 c : cues)
+    {
+        QTreeWidgetItem *item = rowOfCue(c);
+        QVERIFY(item != nullptr);
+        QVERIFY(item->text(ShowTreeView::FlagsCol).contains(QStringLiteral("⚠ cyc")));
+        QVERIFY(item->toolTip(ShowTreeView::FlagsCol).contains("Front 1"));
+        QVERIFY(item->toolTip(ShowTreeView::FlagsCol).contains("not marked as meant"));
+        QVERIFY(!view.backwashFindingKey(c).isEmpty());
+    }
+    // A click on the mark opens Show Review on that row.
+    ShowReviewPanel::setShared(m_doc, nullptr);
+    QVERIFY(view.openBackwashFinding(cues.last()));
+    ShowReviewPanel *panel = ShowReviewPanel::shared();
+    QVERIFY(panel != nullptr);
+    QCOMPARE(panel->selectedFindings().count(), 1);
+    QCOMPARE(panel->selectedFindings().first().check, QStringLiteral("PWR-12"));
+    // I meant it: the marks go, the rebuilt tree stays clean.
+    QVERIFY(ShowReview::setLightMeant(m_doc, panel->selectedFindings().first(), true));
+    m_doc->showReview()->run();
+    for (quint32 c : cues)
+    {
+        QTreeWidgetItem *item = rowOfCue(c);
+        QVERIFY(item != nullptr);
+        QVERIFY(!item->text(ShowTreeView::FlagsCol).contains(QStringLiteral("⚠ cyc")));
+        QVERIFY(view.backwashFindingKey(c).isEmpty());
+    }
+    // Taken back from the layer: marked again.
+    QVERIFY(ShowReview::clearLayerMeant(m_doc, cues.first(),
+                                        m_doc->showTree()->cue(cues.first())->layers.first().id));
+    m_doc->showReview()->run();
+    QVERIFY(rowOfCue(cues.first())->text(ShowTreeView::FlagsCol).contains(QStringLiteral("⚠ cyc")));
+    delete panel;
     ShowReviewPanel::setShared(nullptr, nullptr);
 }
 

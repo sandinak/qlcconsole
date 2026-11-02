@@ -77,6 +77,16 @@ back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
   one; **PWR-10** warns of a laser whose scan window is a static pencil or
   tight. A laser's beam is now its H × V scan window (drawn in Top, and what
   PWR-09 checks against the audience). Zones are saved with the show.
+- **Light on the cyc only on purpose (backwash).** New Show Review check
+  **PWR-12** names, cue by cue, light that lands on a cyc or a scrim nobody
+  meant — a front light at a performer that carries on to the cyc — with the
+  fixtures and how much of each beam lands. Exact from the plot (any ray of
+  the cone that reaches it), and meant only when the show says so: a Cyc /
+  strip light or Uplight wash fixture, a look aimed at a target on the cyc, or
+  **I Meant It** on the row (kept on the layer, one undo step; **Not Meant** or
+  the layer's right-click takes it back). Each cue it lands in reads **⚠ cyc**
+  in the Show Tree; a click opens the row. Scenery gets **Light here only on
+  purpose** (on for a cyc and a scrim), so a painted drop or a wall can opt in.
 
 #### Show control
 

@@ -252,6 +252,19 @@ both give the same answer.
   window. A beam stops at the stage floor, so a pit's zone reaches up to it.
   Aim it off, darken it in that cue, or move the zone. Zones are drawn and
   edited in the [Lighting Studio](lighting-studio.md#no-light-zones).
+- **PWR-12** Light on the cyc nobody meant (*backwash*): a lit beam whose
+  cone reaches a cyc or a scrim (or any scenery with **Light here only on
+  purpose**) and isn't meant. Any part of the cone counts, followed from the
+  plot as PWR-11 follows it, stopping at the floor and at anything solid; the
+  finding names the cue, the fixtures and roughly how much of each beam lands
+  there, once, in the cue the light starts landing. Meant is only what the
+  show says: a **Cyc / strip light** or **Uplight wash** fixture, a look aimed
+  at a target on the cyc, or **I Meant It**. On a PWR-12 row **Accept** reads
+  **I Meant It** (no note: the mark is kept on the layer that lights it, one
+  undo step, and the row moves to Accepted), **Fix** reads **Show Me** (the
+  layer in the Show Tree), and on a marked row **Reopen** reads **Not Meant**.
+  Every cue it lands in is marked **⚠ cyc** in the Show Tree. See [Light on
+  the cyc only on purpose](lighting-studio.md#light-on-the-cyc-only-on-purpose).
 
 **Files and names**
 

@@ -1575,6 +1575,7 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
     m_tree->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(m_tree, &QTreeWidget::itemSelectionChanged, this, &ShowTreeView::slotTreeSelectionChanged);
     connect(m_tree, &QTreeWidget::customContextMenuRequested, this, &ShowTreeView::slotTreeContextMenu);
+    setupBackwashMarks();     // PWR-12: "⚠ cyc" on a cue (showtreebackwash.cpp)
     // W3: double-click a cue, a look or a layer: it opens in the Workbench,
     // docked here (a layer that plays a function as it is, W0's Open, too:
     // its editor is the Workbench's, and ▣ Open loads it there).
@@ -3570,6 +3571,7 @@ void ShowTreeView::buildTree()
     for (const QPair<quint32, quint32> &sel : alsoSelected)
         if (QTreeWidgetItem *item = findItem(sel.first, sel.second))
             item->setSelected(true);
+    applyBackwashMarks();
     m_reloading = false;
 }
 
@@ -7981,6 +7983,7 @@ void ShowTreeView::slotTreeContextMenu(const QPoint &pos)
             menu.addAction(tr("Detach to plain scene"), this, [this, cueId, layerId]() {
                 m_st->detachLayer(cueId, layerId);
             });
+            backwashLayerMenu(&menu, cueId, layerId);     // PWR-12: I meant it, taken back
             // P4: a reusable layer, or this use unlinked.
             if (const Cue *rc = m_st->cue(cueId))
                 if (const Layer *rl = rc->layer(layerId))

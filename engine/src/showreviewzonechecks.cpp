@@ -32,6 +32,9 @@
 #include "monitorproperties.h"
 #include "programmercontroller.h"
 #include "nolightzone.h"
+#include "beamocclusion.h"
+#include "stagetarget.h"
+#include "scenery.h"
 #include "qlcphysical.h"
 #include "qlcfixturemode.h"
 #include "qlcchannel.h"
@@ -61,6 +64,12 @@ struct Beam
     bool lit = false;
     bool hasPos = false;
     double pan = 0.5, tilt = 0.5;   //!< DMX fractions (value / 255)
+    /** PWR-12: the layer whose look lit it (its cue, its id) ... */
+    QPair<quint32, quint32> litBy { invalidId(), invalidId() };
+    /** ... every layer of the cue on it ... */
+    QVector<QPair<quint32, quint32>> layers;
+    /** ... and the stage targets its position looks aim at. */
+    QVector<quint32> aimTargets;
 };
 
 bool isMover(const Fixture *fx)
@@ -99,6 +108,10 @@ QHash<quint32, Beam> beamsOf(ReviewContext &ctx, const ResolvedCue &cue,
                 || !fx->fixtureMode()->physical().emitsLight() || !mp->containsFixture(fid))
                 continue;
             Beam &b = beams[fid];
+            const QPair<quint32, quint32> from(layer.fromCue, layer.layerId);
+            if (!b.layers.contains(from))
+                b.layers << from;
+            const bool wasLit = b.lit;
             if (QLCPalette::fixtureHasDimmer(fx))
             {
                 if (dimIt != layer.values.constEnd())
@@ -112,6 +125,8 @@ QHash<quint32, Beam> beamsOf(ReviewContext &ctx, const ResolvedCue &cue,
             else if (colIt != layer.values.constEnd() && !colIt.value().look.none
                      && !colIt.value().look.palettes.isEmpty())
                 b.lit = true;
+            if (b.lit && !wasLit)
+                b.litBy = from;
             if (posIt != layer.values.constEnd() && !posIt.value().look.none)
             {
                 for (quint32 pid : posIt.value().look.palettes)
@@ -119,6 +134,9 @@ QHash<quint32, Beam> beamsOf(ReviewContext &ctx, const ResolvedCue &cue,
                     QLCPalette *pal = doc->palette(pid);
                     if (pal == nullptr)
                         continue;
+                    if (pal->stageTargetId() != StageTarget::invalidId()
+                        && !b.aimTargets.contains(pal->stageTargetId()))
+                        b.aimTargets << pal->stageTargetId();
                     const QPair<quint32, quint32> key(pid, fid);
                     auto c = cache.find(key);
                     if (c == cache.end())
@@ -291,6 +309,358 @@ void pwr11(ReviewContext &ctx, QList<ReviewFinding> &out)
         }
     }
 }
+/* PWR-12, backwash: light on scenery kept for light on purpose (a cyc, a
+   scrim: Scenery::lightOnPurposeOnly()) that nobody meant. Exact and
+   reproducible from the show: a lit beam's sampled rays (LightRays::cone,
+   the axis and three rings of sixteen) are followed from the light until
+   they meet the stage floor, anything solid the stage counts
+   (BeamOcclusion), or a piece of scenery -- a scrim lets them on through.
+   Any ray that ends on a guarded piece is light on it. Meant comes only
+   from the show: the fixture's stage look (Cyc / strip light, Uplight
+   wash), a look aiming it at a target standing on that piece, or "I meant
+   it" on a layer that lights it (Layer::meantOnScenery). */
+
+const double kOnSurface = 0.5;      //!< metres: a target this close stands on it
+
+/** How much of one beam lands on each guarded piece (scenery id -> rays). */
+struct Landing
+{
+    QVector<QPair<quint32, int>> on;
+    int rays = 0;
+};
+
+/** The horizontal distance from @a p to piece @a sc's line, and whether @a p
+ *  is within its height; for "a target standing on it". */
+bool standsOn(const Scenery *sc, const QVector3D &p)
+{
+    const double tol = kOnSurface + double(sc->thickness()) / 2.0;
+    if (double(p.z()) < double(sc->bottom()) - tol || double(p.z()) > double(sc->bottom() + sc->height()) + tol)
+        return false;
+    const QList<QPointF> line = sc->baseLine(qMax(16, sc->segments()));
+    for (int i = 0; i + 1 < line.count(); ++i)
+    {
+        const QPointF a = line.at(i), b = line.at(i + 1);
+        const double ex = b.x() - a.x(), ey = b.y() - a.y();
+        const double len2 = ex * ex + ey * ey;
+        double t = len2 > 1e-12 ? ((double(p.x()) - a.x()) * ex + (double(p.y()) - a.y()) * ey) / len2 : 0.0;
+        t = qBound(0.0, t, 1.0);
+        const double dx = double(p.x()) - (a.x() + ex * t), dy = double(p.y()) - (a.y() + ey * t);
+        if (dx * dx + dy * dy <= tol * tol)
+            return true;
+    }
+    return false;
+}
+
+/** Whether target @a tid stands on @a sc: a mark, an area, a structure or a
+ *  line (every point of it) -- never a person or a kit, who stand in front. */
+bool targetOn(MonitorProperties *mp, quint32 tid, const Scenery *sc)
+{
+    const StageTarget *t = mp->stageTarget(tid);
+    if (t == nullptr || t->kind() == StageTarget::Kind::Person || t->kind() == StageTarget::Kind::DrumKit)
+        return false;
+    if (t->isLine())
+    {
+        const QVector<QVector3D> pts = mp->targetLinePoints(t);
+        if (pts.isEmpty())
+            return false;
+        for (const QVector3D &p : pts)
+            if (!standsOn(sc, p))
+                return false;
+        return true;
+    }
+    return standsOn(sc, mp->targetAimPoint(t));
+}
+
+Landing landingOf(Doc *doc, Fixture *fx, const Beam &b, const QList<Scenery *> &all,
+                  const BeamOcclusion::ModelPtr &sight)
+{
+    Landing out;
+    QVector3D apex;
+    QVector<QVector3D> rays;
+    bool laser;
+    double cone;
+    if (!raysOf(doc, fx, b, apex, rays, laser, cone))
+        return out;
+    out.rays = rays.count();
+    const QVector<BeamOcclusion::Exclude> own = BeamOcclusion::ownMounts(doc->monitorProperties(), fx->id());
+    QMap<quint32, int> on;
+    for (QVector3D d : rays)
+    {
+        d.normalize();
+        // The floor, or as far as Show Review follows a beam.
+        double best = kRange;
+        if (d.z() < -1e-6f && apex.z() > 0.0f)
+            best = qMin(best, double(-apex.z() / d.z()));
+        // Anything solid the stage counts but scenery (taken below, as it is).
+        if (sight && !sight->isEmpty())
+        {
+            const BeamOcclusion::Hit h = sight->ray(apex, d, float(best), own);
+            if (h.blocked && h.kind != BeamOcclusion::Drapes && h.kind != BeamOcclusion::Walls
+                && double(h.distance) > 0.05 && double(h.distance) < best)
+                best = double(h.distance);
+        }
+        // Scenery, nearest first: a scrim lets the ray on through.
+        QVector<QPair<double, const Scenery *>> hits;
+        for (const Scenery *sc : all)
+        {
+            double t = 0.0;
+            if (sc->rayHit(apex, d, t, best) && t > 0.05)
+                hits << qMakePair(t, sc);
+        }
+        std::sort(hits.begin(), hits.end(), [](const QPair<double, const Scenery *> &x,
+                                               const QPair<double, const Scenery *> &y) {
+            return x.first != y.first ? x.first < y.first : x.second->id() < y.second->id();
+        });
+        for (const auto &h : hits)
+        {
+            if (h.second->lightOnPurposeOnly())
+                on[h.second->id()]++;
+            if (!h.second->isSeeThrough())
+                break;
+        }
+    }
+    for (auto it = on.constBegin(); it != on.constEnd(); ++it)
+        out.on << qMakePair(it.key(), it.value());
+    return out;
+}
+
+bool meantLook(const Fixture *fx)
+{
+    return fx->stageLook() == Fixture::CycStripLook || fx->stageLook() == Fixture::UplightWashLook;
+}
+
+/** The "I meant it" marks of the show: (cue, layer) -> fixtures. */
+QHash<QPair<quint32, quint32>, QList<quint32>> meantMarks(Doc *doc)
+{
+    QHash<QPair<quint32, quint32>, QList<quint32>> marks;
+    for (const Production &p : doc->showTree()->productions())
+        for (const CueList &list : p.lists)
+            for (const Cue &cue : list.cues)
+                for (const Layer &layer : cue.layers)
+                    if (!layer.meantOnScenery.isEmpty())
+                        marks.insert(qMakePair(cue.id, layer.id), layer.meantOnScenery);
+    return marks;
+}
+
+/** What one cue puts on the guarded scenery: (scenery, fixture) -> rays on
+ *  it, split by how it is meant. */
+struct CueLanding
+{
+    QMap<QPair<quint32, quint32>, int> unmeant;     //!< not meant
+    QMap<QPair<quint32, quint32>, int> marked;      //!< meant only by "I meant it"
+    QSet<QPair<quint32, quint32>> meant;            //!< meant some other way
+    QHash<quint32, int> rays;                       //!< fixture -> rays sampled
+    QHash<quint32, QPair<quint32, quint32>> litBy;
+    QHash<quint32, QVector<QPair<quint32, quint32>>> markedOn;  //!< fixture -> layers marking it
+};
+
+void pwr12(ReviewContext &ctx, QList<ReviewFinding> &out)
+{
+    Doc *doc = ctx.doc();
+    MonitorProperties *mp = doc->monitorProperties();
+    if (mp == nullptr)
+        return;
+    QList<Scenery *> all;
+    bool anyGuarded = false;
+    for (Scenery *sc : mp->sceneries())
+    {
+        if (sc == nullptr)
+            continue;
+        all << sc;
+        anyGuarded = anyGuarded || sc->lightOnPurposeOnly();
+    }
+    if (!anyGuarded)
+        return;
+    std::sort(all.begin(), all.end(), [](const Scenery *a, const Scenery *b) { return a->id() < b->id(); });
+    // Curtains at their fixed state: the show's, never where one is now.
+    const BeamOcclusion::ModelPtr sight = mp->occlusionModel(BeamOcclusion::Poses());
+    const QHash<QPair<quint32, quint32>, QList<quint32>> marks = meantMarks(doc);
+    QHash<QPair<quint32, quint32>, QList<SceneValue>> cache;
+    // (fixture, pan, tilt) -> where it lands: a look reused across cues is followed once.
+    QHash<QString, Landing> landings;
+
+    for (const Production &p : doc->showTree()->productions())
+    {
+        for (const CueList &list : p.lists)
+        {
+            if (list.looks || list.isSubCues())
+                continue;
+            const QList<ResolvedCue> &res = ctx.resolved(list);
+            if (res.count() != list.cues.count())
+                continue;
+            QHash<int, CueLanding> done;
+            auto landingAt = [&](int i) -> CueLanding {
+                auto it = done.find(i);
+                if (it != done.end())
+                    return it.value();
+                CueLanding cl;
+                const QHash<quint32, Beam> beams = beamsOf(ctx, res.at(i), cache);
+                QList<quint32> ids = beams.keys();
+                std::sort(ids.begin(), ids.end());
+                for (quint32 fid : ids)
+                {
+                    const Beam &b = beams[fid];
+                    if (!b.lit)
+                        continue;
+                    Fixture *fx = doc->fixture(fid);
+                    const QString key = QStringLiteral("%1/%2/%3/%4").arg(fid).arg(b.hasPos)
+                                        .arg(b.pan, 0, 'g', 17).arg(b.tilt, 0, 'g', 17);
+                    auto lit = landings.find(key);
+                    if (lit == landings.end())
+                        lit = landings.insert(key, landingOf(doc, fx, b, all, sight));
+                    const Landing &land = lit.value();
+                    if (land.on.isEmpty())
+                        continue;
+                    cl.rays.insert(fid, land.rays);
+                    cl.litBy.insert(fid, b.litBy);
+                    QVector<QPair<quint32, quint32>> markedBy;
+                    for (const QPair<quint32, quint32> &l : b.layers)
+                        if (marks.value(l).contains(fid))
+                            markedBy << l;
+                    cl.markedOn.insert(fid, markedBy);
+                    for (const QPair<quint32, int> &on : land.on)
+                    {
+                        const QPair<quint32, quint32> pair(on.first, fid);
+                        bool aimed = false;
+                        for (quint32 tid : b.aimTargets)
+                            aimed = aimed || targetOn(mp, tid, mp->scenery(on.first));
+                        if (meantLook(fx) || aimed)
+                            cl.meant.insert(pair);
+                        else if (!markedBy.isEmpty())
+                            cl.marked.insert(pair, on.second);
+                        else
+                            cl.unmeant.insert(pair, on.second);
+                    }
+                }
+                done.insert(i, cl);
+                return cl;
+            };
+
+            /* Play order. A light marked meant stays meant while it keeps
+               landing in the cues that follow (its layer set again, say);
+               a light not meant is one run from the cue it starts landing
+               in until it stops: one finding, every cue of it marked. */
+            QHash<int, QSet<QPair<quint32, quint32>>> meantNow;       // cue -> pairs meant (any way)
+            QHash<int, QHash<QPair<quint32, quint32>, int>> runOf;   // cue -> pair -> run start cue
+            QMap<QPair<int, quint32>, QList<quint32>> fresh;          // (cue, scenery) -> fixtures
+            QMap<QPair<int, quint32>, QList<quint32>> freshMarked;
+            QMap<QPair<int, quint32>, QList<quint32>> runCues;        // (start, scenery) -> cue indexes
+            for (int i = 0; i < list.cues.count(); ++i)
+            {
+                if (list.cues.at(i).skip)
+                    continue;
+                const int before = playedBefore(list, i);
+                CueLanding cl = landingAt(i);
+                const QSet<QPair<quint32, quint32>> prevMeant = before >= 0 ? meantNow.value(before)
+                                                                            : QSet<QPair<quint32, quint32>>();
+                const QHash<QPair<quint32, quint32>, int> prevRun = before >= 0 ? runOf.value(before)
+                                                                                : QHash<QPair<quint32, quint32>, int>();
+                QSet<QPair<quint32, quint32>> nowMeant = cl.meant;
+                for (auto it = cl.marked.constBegin(); it != cl.marked.constEnd(); ++it)
+                {
+                    nowMeant.insert(it.key());
+                    if (!prevMeant.contains(it.key()))
+                        freshMarked[qMakePair(i, it.key().first)] << it.key().second;
+                }
+                QHash<QPair<quint32, quint32>, int> nowRun;
+                for (auto it = cl.unmeant.constBegin(); it != cl.unmeant.constEnd(); ++it)
+                {
+                    if (prevMeant.contains(it.key()))
+                    {
+                        nowMeant.insert(it.key());      // carried on from a cue it was meant in
+                        continue;
+                    }
+                    const auto pr = prevRun.constFind(it.key());
+                    const int start = pr != prevRun.constEnd() ? pr.value() : i;
+                    nowRun.insert(it.key(), start);
+                    if (start == i)
+                        fresh[qMakePair(i, it.key().first)] << it.key().second;
+                    QList<quint32> &rc = runCues[qMakePair(start, it.key().first)];
+                    if (!rc.contains(quint32(i)))
+                        rc << quint32(i);
+                }
+                meantNow.insert(i, nowMeant);
+                runOf.insert(i, nowRun);
+                done.insert(i, cl);
+            }
+
+            auto fxText = [&](const CueLanding &cl, quint32 sid, const QList<quint32> &fids) {
+                QStringList parts;
+                for (int k = 0; k < fids.count() && k < 4; ++k)
+                {
+                    const quint32 fid = fids.at(k);
+                    const QPair<quint32, quint32> pair(sid, fid);
+                    const int on = cl.unmeant.value(pair, cl.marked.value(pair));
+                    const int rays = qMax(1, cl.rays.value(fid));
+                    parts << tr("%1 (about %2%)").arg(ctx.fixtureName(fid))
+                                 .arg(qMax(1, qRound(100.0 * on / rays)));
+                }
+                QString s = parts.join(QStringLiteral(", "));
+                if (fids.count() > 4)
+                    s += tr(" and %1 more").arg(fids.count() - 4);
+                return s;
+            };
+            auto emitFinding = [&](int i, quint32 sid, QList<quint32> fids, bool intended) {
+                std::sort(fids.begin(), fids.end());
+                const Cue &cue = list.cues.at(i);
+                const Scenery *sc = mp->scenery(sid);
+                const CueLanding cl = landingAt(i);
+                QStringList keys { QStringLiteral("list:%1/cue:%2").arg(list.id).arg(cue.id),
+                                   QStringLiteral("scenery:%1").arg(sid) };
+                QByteArray print = QByteArray::number(sid) + ':';
+                QVariantList markList;
+                quint32 jumpTo = cue.id;
+                for (quint32 fid : fids)
+                {
+                    keys << QStringLiteral("fx:%1").arg(fid);
+                    print += QByteArray::number(fid) + ',';
+                    if (intended)
+                    {
+                        for (const QPair<quint32, quint32> &l : cl.markedOn.value(fid))
+                            markList << QVariant(QVariantList() << l.first << l.second << fid);
+                    }
+                    else
+                    {
+                        const QPair<quint32, quint32> l = cl.litBy.value(fid);
+                        if (l.first != invalidId() && l.second != invalidId())
+                        {
+                            markList << QVariant(QVariantList() << l.first << l.second << fid);
+                            if (jumpTo == cue.id && l.first == cue.id)
+                                jumpTo = l.second;      // "Show me": its layer in this cue
+                        }
+                    }
+                }
+                QVariantList cues;
+                for (quint32 idx : runCues.value(qMakePair(i, sid), QList<quint32>() << quint32(i)))
+                    cues << list.cues.at(int(idx)).id;
+                const QString what = sc != nullptr ? QStringLiteral("%1 '%2'")
+                                     .arg(Scenery::kindName(sc->kind()).toLower(), sc->name()) : QString();
+                ReviewFinding f = ReviewContext::make(QStringLiteral("PWR-12"), ReviewFinding::Warning,
+                    intended
+                        ? tr("In %1 light from %2 lands on the %3: meant (I meant it).")
+                              .arg(ctx.cueText(list, i), fxText(cl, sid, fids), what)
+                        : tr("In %1 light from %2 lands on the %3, not marked as meant. If you meant it, "
+                             "say so (I meant it); if not, aim it off, shutter or zoom it, or darken it "
+                             "in this cue.")
+                              .arg(ctx.cueText(list, i), fxText(cl, sid, fids), what),
+                    keys, print, QStringLiteral("cue"),
+                    QVariantList() << jumpTo << QVariant(cues) << QVariant(markList));
+                if (intended)
+                {
+                    f.state = ReviewFinding::Accepted;
+                    f.intended = true;
+                    f.acceptedNote = tr("I meant it");
+                }
+                out << f;
+            };
+            for (auto it = fresh.constBegin(); it != fresh.constEnd(); ++it)
+                emitFinding(it.key().first, it.key().second, it.value(), false);
+            for (auto it = freshMarked.constBegin(); it != freshMarked.constEnd(); ++it)
+                emitFinding(it.key().first, it.key().second, it.value(), true);
+        }
+    }
+}
+
 }
 
 QList<ShowReview::Check> ShowReviewChecks::zoneChecks()
@@ -302,5 +672,90 @@ QList<ShowReview::Check> ShowReviewChecks::zoneChecks()
              "audience's eyes) that a lit beam's cone crosses in a cue. It is named once, in the "
              "first cue the beam starts to cross it. Aim the light off, darken it, or move the "
              "zone."), pwr11 },
+        { QStringLiteral("PWR-12"), tr("Light on the cyc nobody meant (backwash)"), S::Power,
+          tr("Light that lands on a cyc or a scrim (or any scenery set to take light only on "
+             "purpose) by accident: a front light or a special at a performer that carries on and "
+             "splashes the cyc behind them. Any part of a lit beam's cone that reaches it counts, "
+             "followed from the plot. It is meant when the fixture is a Cyc / strip light or an "
+             "Uplight wash, when its look aims it at a target on the cyc, or when you said so: "
+             "I meant it, kept on the layer that lights it. Named once, in the cue it starts to "
+             "land; the Show Tree marks every cue it lands in."), pwr12 },
     };
+}
+
+/* PWR-12's answers, from the panel and the Show Tree. */
+
+bool ShowReview::canMarkMeant(const ReviewFinding &finding, bool meant)
+{
+    if (finding.check != QLatin1String("PWR-12") || finding.jumpData.count() < 3)
+        return false;
+    return meant ? (!finding.intended && finding.isOpen()) : finding.intended;
+}
+
+QList<quint32> ShowReview::findingCues(const ReviewFinding &finding)
+{
+    QList<quint32> cues;
+    if (finding.check != QLatin1String("PWR-12") || finding.jumpData.count() < 2)
+        return cues;
+    for (const QVariant &v : finding.jumpData.at(1).toList())
+        cues << v.toUInt();
+    return cues;
+}
+
+namespace
+{
+Layer *findLayer(QList<Production> &tree, quint32 cueId, quint32 layerId)
+{
+    for (Production &p : tree)
+        for (CueList &list : p.lists)
+            for (Cue &cue : list.cues)
+                if (cue.id == cueId)
+                    return cue.layer(layerId);
+    return nullptr;
+}
+}
+
+bool ShowReview::setLightMeant(Doc *doc, const ReviewFinding &finding, bool meant)
+{
+    if (doc == nullptr || !canMarkMeant(finding, meant))
+        return false;
+    const QVariantList marks = finding.jumpData.at(2).toList();
+    if (marks.isEmpty())
+        return false;
+    return doc->showTree()->edit(meant ? tr("I meant it") : tr("Not meant"),
+                                 [&marks, meant](QList<Production> &tree) {
+        bool any = false;
+        for (const QVariant &v : marks)
+        {
+            const QVariantList m = v.toList();
+            if (m.count() < 3)
+                continue;
+            Layer *layer = findLayer(tree, m.at(0).toUInt(), m.at(1).toUInt());
+            const quint32 fid = m.at(2).toUInt();
+            if (layer == nullptr)
+                continue;
+            if (meant && !layer->meantOnScenery.contains(fid))
+            {
+                layer->meantOnScenery << fid;
+                std::sort(layer->meantOnScenery.begin(), layer->meantOnScenery.end());
+                any = true;
+            }
+            else if (!meant && layer->meantOnScenery.removeAll(fid) > 0)
+                any = true;
+        }
+        return any;
+    });
+}
+
+bool ShowReview::clearLayerMeant(Doc *doc, quint32 cueId, quint32 layerId)
+{
+    if (doc == nullptr)
+        return false;
+    return doc->showTree()->edit(tr("Not meant"), [cueId, layerId](QList<Production> &tree) {
+        Layer *layer = findLayer(tree, cueId, layerId);
+        if (layer == nullptr || layer->meantOnScenery.isEmpty())
+            return false;
+        layer->meantOnScenery.clear();
+        return true;
+    });
 }
