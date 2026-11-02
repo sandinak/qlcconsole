@@ -41,6 +41,7 @@
 #include <algorithm>
 
 #include "showitem.h"
+#include "audioitem.h"
 
 static const char *SM_FUNCTION_MIME = "application/x-qlcplus-functions";
 
@@ -400,6 +401,12 @@ void MultiTrackView::setItemCommonProperties(ShowItem *item, ShowFunction *func,
             this, SLOT(slotAlignToCursor(ShowItem*)));
     m_scene->addItem(item);
     m_items.append(item);
+    if (AudioItem *au = qobject_cast<AudioItem *>(item))
+        connect(au, &AudioItem::waveformChanged, this, [this]()
+        {
+            if (viewport() != NULL)
+                viewport()->update();
+        });
     bool trackLocked = (trackNum >= 0 && trackNum < m_tracks.count())
                        ? m_tracks.at(trackNum)->getTrack()->isLocked() : false;
     item->setEditable(m_editable && !trackLocked);
@@ -807,6 +814,39 @@ quint32 MultiTrackView::getTimeFromPosition(qreal pos) const
     return ((double)(pos - TRACK_WIDTH) *
             (double)(m_header->getTimeScale() * 1000) /
             (double)(m_header->getHalfSecondWidth() * 2));
+}
+
+quint32 MultiTrackView::snapToMarker(quint32 timeMs, bool *snapped) const
+{
+    if (snapped != NULL)
+        *snapped = false;
+    if (m_header == NULL || m_markers.isEmpty())
+        return timeMs;
+    const double msPerPx = double(getTimeFromPosition(TRACK_WIDTH + 200)) / 200.0;
+    if (msPerPx <= 0.0)
+        return timeMs;
+
+    const quint32 thresh = quint32(8.0 * msPerPx);   // same ~8 px zone as the grid
+    quint32 best = timeMs;
+    quint32 bestDist = thresh + 1;
+    QMapIterator<quint32, ShowMarker> it(m_markers);
+    while (it.hasNext())
+    {
+        it.next();
+        const quint32 edges[2] = { it.key(), it.value().end };
+        for (int i = 0; i < 2; i++)
+        {
+            const quint32 d = (edges[i] > timeMs) ? (edges[i] - timeMs) : (timeMs - edges[i]);
+            if (d <= thresh && d < bestDist)
+            {
+                bestDist = d;
+                best = edges[i];
+            }
+        }
+    }
+    if (snapped != NULL)
+        *snapped = (bestDist <= thresh);
+    return best;
 }
 
 quint32 MultiTrackView::snapTimeMs(quint32 timeMs) const
@@ -1260,6 +1300,46 @@ void MultiTrackView::setEmptyMessage(const QString &msg)
         viewport()->update();
 }
 
+AudioItem *MultiTrackView::firstAudioItem() const
+{
+    AudioItem *best = NULL;
+    foreach (ShowItem *item, m_items)
+    {
+        AudioItem *au = qobject_cast<AudioItem *>(item);
+        if (au != NULL && (best == NULL || au->getStartTime() < best->getStartTime()))
+            best = au;
+    }
+    return best;
+}
+
+bool MultiTrackView::paintLaneWaveform(QPainter *painter, const QRectF &rect, qreal leftX)
+{
+    AudioItem *au = firstAudioItem();
+    if (au == NULL || au->waveformMode() == AudioItem::Hidden || au->peaks().isNull()
+        || m_header == NULL)
+        return false;
+
+    const qreal laneTop = HEADER_HEIGHT;
+    const qreal x0 = qMax(rect.left(), leftX + TRACK_WIDTH);
+    if (rect.bottom() < laneTop || rect.top() > laneTop + MARKER_LANE_HEIGHT || rect.right() <= x0)
+        return true;
+
+    const double msPerPx = double(getTimeFromPosition(TRACK_WIDTH + 200)) / 200.0;
+    if (msPerPx <= 0.0)
+        return false;
+
+    const QRectF lane(x0, laneTop, rect.right() - x0, MARKER_LANE_HEIGHT);
+    const QRectF target(getPositionFromTime(au->getStartTime()), laneTop + 1,
+                        au->peaks()->durationMs() / msPerPx, MARKER_LANE_HEIGHT - 2);
+    painter->save();
+    painter->setClipRect(lane);
+    painter->fillRect(lane, QColor(40, 52, 62));
+    painter->setPen(QPen(QColor(150, 180, 205, 210), 1));
+    au->peaks()->paint(painter, target, msPerPx, lane, WaveformPeaks::Mixed);
+    painter->restore();
+    return true;
+}
+
 void MultiTrackView::drawForeground(QPainter *painter, const QRectF &rect)
 {
     QGraphicsView::drawForeground(painter, rect);
@@ -1303,6 +1383,10 @@ void MultiTrackView::drawForeground(QPainter *painter, const QRectF &rect)
                           Qt::AlignVCenter | Qt::AlignLeft, tr("MARKERS"));
     }
 
+    // The show's audio as a waveform strip in the marker lane, so a section
+    // can be placed on the song itself. The bands below are translucent.
+    const bool waveInLane = paintLaneWaveform(painter, rect, leftX);
+
     // Collect the markers to draw (the map is never mutated by dragging; we
     // just substitute the dragged marker's live geometry here).
     QMap<quint32, ShowMarker> toDraw = m_markers;
@@ -1330,7 +1414,10 @@ void MultiTrackView::drawForeground(QPainter *painter, const QRectF &rect)
 
         // Region band in the lane + boundary lines through the tracks.
         painter->setPen(Qt::NoPen);
-        painter->setBrush(col);
+        QColor band = col;
+        if (waveInLane)
+            band.setAlpha(150);
+        painter->setBrush(band);
         painter->drawRect(QRectF(sx, laneTop + 1, ex - sx, MARKER_LANE_HEIGHT - 2));
         QColor line = col.lighter(130);
         line.setAlpha(120);
@@ -1971,6 +2058,14 @@ void MultiTrackView::slotItemMoved(QGraphicsSceneMouseEvent *event, ShowItem *it
         float gridPos = ((int)(item->x() / step) * step);
         item->setPos(gridPos + 2, ypos);
         s_time = getTimeFromPosition(gridPos);
+        // a section marker's edge wins over a grid line when it is close
+        bool onMarker = false;
+        const quint32 m = snapToMarker(getTimeFromPosition(item->x() - 2), &onMarker);
+        if (onMarker)
+        {
+            s_time = m;
+            item->setPos(getPositionFromTime(m) + 2, ypos);
+        }
     }
     else
     {

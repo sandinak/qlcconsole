@@ -63,6 +63,28 @@ Right-click a track's header:
 - **Play / pause** — Space; **stop** — ⌘Space (twice: back to 0).
 - **Undo** — ⌘Z.
 
+## The song and its sections
+
+A Shows timeline with an **audio** clip draws the song's waveform on the clip
+and, small, in the **markers** lane above the tracks, so a section can be
+placed on the song itself. It is built from the same decoders that play the
+file (no separate player), once, in the background; the timeline stays
+usable meanwhile. The result is kept in your user cache, keyed by the file's
+path, size and date, so the next open is instant and an edited or replaced
+file is read again by itself. Right-click the clip: **Waveform** (both
+channels mixed, the default), **Left channel**, **Right channel**, **Both
+channels**, or **Hide waveform**. Zooming and scrolling draw only what is on
+screen, so a 5-minute song stays smooth.
+
+- **Sections (markers)** — right-click the markers lane: **Add marker here…**;
+  drag a marker or its edges, double-click to rename. They are saved in the
+  show and ⌘Z takes back each edit. A section's start is also where a dropped
+  item snaps: with **Snap to grid** on (⌘G), an item dropped within about 8
+  pixels of a section's start or end lands exactly on it, ahead of the grid.
+
+Section anchors (a start timecode per section, cues timed from it) and DAW marker import are
+a separate piece of work; the markers drawn here are what they build on.
+
 ## Following timecode
 
 **Follow MIDI Time Code** locks the playhead to the band's MTC: it finds

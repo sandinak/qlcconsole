@@ -27,6 +27,7 @@
 
 #include "showitem.h"
 #include "audio.h"
+#include "waveformpeaks.h"
 
 /** @addtogroup ui_functions
  * @{
@@ -60,6 +61,18 @@ public:
     /** Return a pointer to a Audio Function associated to this item */
     Audio *getAudio() const;
 
+    /** The file's waveform envelope once it is ready, else null */
+    WaveformService::PeaksPtr peaks() const { return m_peaks; }
+
+    /** How the waveform is drawn; Hidden draws none */
+    enum { Hidden = -1 };
+    void setWaveformMode(int mode);
+    int waveformMode() const { return m_waveMode; }
+
+signals:
+    /** The waveform became available (or its mode changed) */
+    void waveformChanged();
+
 protected:
     /** @reimp */
     void contextMenuEvent(QGraphicsSceneContextMenuEvent *event) override;
@@ -67,41 +80,26 @@ protected:
 protected slots:
     void slotAudioChanged(quint32);
 
-    void slotAudioPreviewLeft();
-    void slotAudioPreviewRight();
-    void slotAudioPreviewStereo();
+    void slotWaveformReady(const QString &path);
 
 private:
     /** Calculate sequence width for paint() and boundingRect() */
     void calculateWidth();
 
-    /** Start a thread to elapse a waveform preview over the item */
-    void updateWaveformPreview();
+    /** Ask the WaveformService for the file's envelope (cached on disk, built
+     *  on a worker thread when missing) */
+    void requestWaveform();
 
 public:
     /** Reference to the actual Audio Function */
     Audio *m_audio;
 
-    /** Context menu actions */
-    QAction *m_previewLeftAction;
-    QAction *m_previewRightAction;
-    QAction *m_previewStereoAction;
-
-    /** Pixmap holding the waveform (if enabled) */
-    QPixmap *m_preview;
-};
-
-class PreviewThread final : public QThread
-{
-public:
-    void setAudioItem(AudioItem *item);
+    /** Context menu actions (a WaveformPeaks::Mode each, plus hide) */
+    QAction *m_waveActions[5];
 
 private:
-    /** Retrieve a sample value from an audio buffer, given the sample size */
-    qint32 getSample(unsigned char *data, quint32 idx, int sampleSize) const;
-    void run() override;
-
-    AudioItem *m_item;
+    WaveformService::PeaksPtr m_peaks;
+    int m_waveMode;
 };
 
 /** @} */

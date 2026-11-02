@@ -130,6 +130,18 @@ back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
   shows the next timecode cue and a countdown. Saved with the show; a show
   with no times plays as before.
 
+#### Timeline waveform
+
+- **The song on the Shows timeline.** An audio clip now draws its waveform
+  by itself (it used to need a right-click and was drawn again at every
+  change), and a small copy sits in the markers lane so sections can be
+  placed on the song. It is built once in the background from the existing
+  decoders, kept in the user cache by the file's path, size and date, and
+  redrawn at any zoom from a 10 ms envelope, so a 5-minute song stays smooth.
+  Right-click the clip for left / right / both channels or to hide it.
+- **Snap to a section.** With Snap to grid on, a dropped item also snaps to
+  a section marker's start or end.
+
 #### Scoped hits
 
 - **A hit lives where it fires** (Q154): under a cue, a cue list, its

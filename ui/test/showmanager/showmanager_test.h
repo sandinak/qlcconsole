@@ -38,6 +38,9 @@ private slots:
     /** Undo of one edit leaves every track as it was set: hold last look,
      *  solo-safe, priority, intensity and a locked item survive the rebuild. */
     void undoKeepsEveryTracksSettings();
+    void aCueSnapsToAMarker();
+    /** The timeline paints with an audio clip whose file is missing */
+    void drawsWithoutTheAudioFile();
     /** Undo keeps which track is soloed (and which isn't) */
     void undoKeepsATracksSolo();
     /** Undo history is the show's: another show or a new document starts

@@ -29,6 +29,10 @@
 #include <QGraphicsSceneMouseEvent>
 #include "show.h"
 #include "doc.h"
+#include "audio.h"
+#include <QBuffer>
+#include <QXmlStreamWriter>
+#include <QXmlStreamReader>
 
 void ShowManager_Test::init()
 {
@@ -102,6 +106,40 @@ void ShowManager_Test::undoPutsAMarkerBack()
     QCOMPARE(m_show->markers().value(1000).label, QStringLiteral("Verse"));
     QCOMPARE(m_show->markers().value(1000).end, quint32(3000));
     QCOMPARE(m_show->markerCueList(1000), m_sceneB);
+}
+
+void ShowManager_Test::aCueSnapsToAMarker()
+{
+    MultiTrackView *v = m_manager->m_showview;
+    m_show->setMarker(10000, 20000, "Chorus", QColor("#4a90d9"));
+    v->setMarkers(m_show->markers());
+    const double msPerPx = double(v->getTimeFromPosition(TRACK_WIDTH + 200)) / 200.0;
+    QVERIFY(msPerPx > 0);
+
+    bool snapped = false;
+    QCOMPARE(v->snapToMarker(10000 + quint32(3 * msPerPx), &snapped), quint32(10000));
+    QVERIFY(snapped);
+    QCOMPARE(v->snapToMarker(20000 - quint32(2 * msPerPx), &snapped), quint32(20000));   // its end too
+    QVERIFY(snapped);
+    const quint32 farAway = 10000 + quint32(60 * msPerPx);
+    QCOMPARE(v->snapToMarker(farAway, &snapped), farAway);
+    QVERIFY(!snapped);
+}
+
+void ShowManager_Test::drawsWithoutTheAudioFile()
+{
+    Audio *a = new Audio(m_doc);
+    a->setName("Song");
+    m_doc->addFunction(a);
+    a->setSourceFileName("/no/such/dir/song.wav");
+    Track *t = m_show->tracks().first();
+    t->createShowFunction(a->id())->setStartTime(0);
+    m_manager->m_showview->setMarkers(QMap<quint32, ShowMarker>{ { 0, ShowMarker(5000, "Intro", QColor("#4a90d9")) } });
+    m_manager->updateMultiTrackView();
+    QVERIFY(m_manager->m_showview->firstAudioItem() != nullptr);
+    m_manager->resize(900, 400);
+    const QImage img = m_manager->grab().toImage();
+    QVERIFY(!img.isNull());
 }
 
 void ShowManager_Test::undoKeepsEveryTracksSettings()

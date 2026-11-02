@@ -216,6 +216,12 @@ public:
      *  editing on a chase block. */
     quint32 snapTimeMs(quint32 timeMs) const;
 
+    /** @p timeMs moved onto the closest section marker edge within a small
+     *  pixel zone (about 8 px at the current zoom), else unchanged. Doesn't
+     *  depend on the Snap-to-grid toggle. The one place that reads section starts for
+     *  snapping; section anchors (Q198) can replace it. @p snapped tells whether it moved. */
+    quint32 snapToMarker(quint32 timeMs, bool *snapped = NULL) const;
+
     /** The show length (ms) an end-handle drag to @p scenePos maps to — absolute
      *  for an on-screen grab, relative-to-anchor for the off-screen edge chip. */
     quint32 computeEndDragValue(const QPointF &scenePos) const;
@@ -283,6 +289,11 @@ private:
     /** Inline marker rename state */
     QGraphicsProxyWidget *m_markerEditProxy;
     quint32 m_markerEditKey;
+
+    /** The show's earliest audio clip, if there is one */
+    AudioItem *firstAudioItem() const;
+    /** Draw its waveform in the marker lane; false when there is none */
+    bool paintLaneWaveform(QPainter *painter, const QRectF &rect, qreal leftX);
 
 protected:
     /** Paints the time-division grid behind all items so the divisions are
