@@ -18,6 +18,8 @@
 */
 
 #include <QSharedPointer>
+#include <QHash>
+#include <algorithm>
 #include <climits>
 #include <QtMath>
 
@@ -418,8 +420,11 @@ QString releasedReason(ShowTreeController *st, quint32 fid, WhyOn::Line *l)
                             .arg(cue, st->cueLabel(list, i), name);
                 }
                 if (ly.release)
+                {
+                    l->released = true;
                     return WhyOn::tr("%1, and layer %2 was released leaving cue %3")
                             .arg(cue, name, st->cueLabel(list, i));
+                }
                 return WhyOn::tr("%1, and has no layer on this light (layer %2 last lit it, in cue %3)")
                         .arg(cue, name, st->cueLabel(list, i));
             }
@@ -840,6 +845,8 @@ WhyOn::Answer WhyOn::explainAt(Doc *doc, quint32 universe, int address, Wording 
             const QStringList names = fxi != nullptr ? effectsOn(doc, fxi->id(), &sceneId) : QStringList();
             l.functionId = sceneId;
             const QString who = names.isEmpty() ? tr("An effect") : tr("Effect %1").arg(quoted(names.join(QStringLiteral(", "))));
+            l.name = names.join(QStringLiteral(", "));
+            l.depth = (s.flags & FadeChannel::Mix) ? qRound(s.fc.mixDepth() * 100.0f) : 100;
             if (s.flags & FadeChannel::Mix)
                 what = tr("%1 moves it to %2, at %3 depth (fading)")
                         .arg(who, level).arg(tr("%1 %").arg(qRound(s.fc.mixDepth() * 100.0f)));
@@ -862,6 +869,7 @@ WhyOn::Answer WhyOn::explainAt(Doc *doc, quint32 universe, int address, Wording 
         else if (s.priority == Universe::Tracked)
         {
             l.kind = Kind::TrackedRestack;
+            l.name = s.name.section(QStringLiteral(" (tracked)"), 0, 0);
             what = tr("Cue list %1 put its tracked state back (after Back or a jump): %2")
                     .arg(quoted(s.name.section(QStringLiteral(" (tracked)"), 0, 0)), level);
         }
@@ -882,6 +890,9 @@ WhyOn::Answer WhyOn::explainAt(Doc *doc, quint32 universe, int address, Wording 
                 {
                     l.kind = Kind::Hit;
                     const bool over = s.hit;
+                    l.name = cue;
+                    if (over)
+                        l.depth = qRound(qBound(qreal(0), s.hitMix, qreal(1)) * 100);
                     if (over && s.hitMix < 0.999)
                         what = tr("Override hit %1%2 is pulling it to %3 (%4 in)")
                                 .arg(quoted(cue), layer, level).arg(tr("%1 %").arg(qRound(s.hitMix * 100)));
@@ -897,18 +908,23 @@ WhyOn::Answer WhyOn::explainAt(Doc *doc, quint32 universe, int address, Wording 
                            ? tr("Preview of cue %1%2 (Design: selected, not a GO) sets %3").arg(cue, layer, level)
                            : tr("Cue %1%2 sets %3").arg(cue, layer, level);
                     const QString from = cueText(st, place.fromCue);
+                    l.fromCueId = place.fromCue;
                     switch (place.origin)
                     {
                         case ShowTree::Origin::Tracked:
+                            l.from = Line::From::Tracked;
                             what += tr(", tracked from cue %1").arg(from);
                             break;
                         case ShowTree::Origin::Included:
+                            l.from = Line::From::Included;
                             what += tr(", from included cue %1").arg(from);
                             break;
                         case ShowTree::Origin::Base:
+                            l.from = Line::From::Base;
                             what += tr(", back to the base cue %1 (the layer is released)").arg(from);
                             break;
                         case ShowTree::Origin::CueLook:
+                            l.from = Line::From::CueLook;
                             what += tr(", from the cue's own look");
                             break;
                         case ShowTree::Origin::Own:
@@ -924,6 +940,7 @@ WhyOn::Answer WhyOn::explainAt(Doc *doc, quint32 universe, int address, Wording 
                 const QString label = st != nullptr && st->isGenerated(f->id()) && !st->describeGenerated(f->id()).isEmpty()
                                       ? st->describeGenerated(f->id())
                                       : tr("%1 %2").arg(Function::typeToString(f->type()), quoted(f->name()));
+                l.name = isEffect ? f->name() : tr("%1 %2").arg(Function::typeToString(f->type()).toLower(), quoted(f->name()));
                 what = isEffect ? tr("Effect %1 moves it: %2").arg(label, level)
                                 : tr("%1 sets %2").arg(label, level);
                 const QString by = startedBy(f);
@@ -948,6 +965,7 @@ WhyOn::Answer WhyOn::explainAt(Doc *doc, quint32 universe, int address, Wording 
                 l.widgetId = wid;
             if (who.isEmpty())
                 who = tr("A Virtual Console slider");
+            l.name = who;
             what = tr("%1 sets %2").arg(who, level);
         }
         else if (s.name == QLatin1String("Programmer"))
@@ -958,6 +976,7 @@ WhyOn::Answer WhyOn::explainAt(Doc *doc, quint32 universe, int address, Wording 
         else if (!s.name.isEmpty())
         {
             l.kind = Kind::Other;
+            l.name = s.name;
             what = tr("%1 sets %2").arg(s.name, level);
         }
         else
@@ -1011,6 +1030,7 @@ WhyOn::Answer WhyOn::explainAt(Doc *doc, quint32 universe, int address, Wording 
             if (named == Kind::SimpleDesk)
                 l.absAddress = (universe << 9) | quint32(address);
             l.value = a.preGM;
+            l.name = who;
             const QString ago = QString::number(gone.framesAgo / qreal(MasterTimer::frequency()), 'f', 1);
             l.text = simple ? tr("Nothing sets it now: %1 left it at %2, %3 s ago, and it stays there")
                               .arg(who, percent(a.preGM), ago)
@@ -1127,6 +1147,7 @@ WhyOn::Answer WhyOn::explainAt(Doc *doc, quint32 universe, int address, Wording 
         Line l;
         l.kind = Kind::Blind;
         l.verdict = Verdict::Blocks;
+        l.hold = true;
         l.text = tr("Teaching mode holds network output: a networked rig doesn't get it until the teacher lets it through");
         a.lines << l;
     }
@@ -1236,7 +1257,7 @@ void WhyOn::addWhyNot(Doc *doc, Answer &a)
     if (io->outputInhibited() && !exempt)
         add(Kind::Blind, tr("Blind is on: the rig gets nothing (the screens still show it)"));
     if (doc->teachingSettings() != nullptr && doc->teachingSettings()->holdsOutput())
-        add(Kind::Blind, tr("Teaching mode holds network output until the teacher lets it through"));
+        add(Kind::Blind, tr("Teaching mode holds network output until the teacher lets it through")).hold = true;
     if (io->blackout() && !exempt)
         add(Kind::Blackout, tr("Blackout is on"));
 
@@ -1285,6 +1306,7 @@ void WhyOn::addWhyNot(Doc *doc, Answer &a)
                 Line &r = add(kind, why);
                 r.cueId = l.cueId;
                 r.layerId = l.layerId;
+                r.released = l.released;
             }
             else
             {
@@ -1305,6 +1327,11 @@ void WhyOn::addWhyNot(Doc *doc, Answer &a)
             r.functionId = winner->functionId;
             r.widgetId = winner->widgetId;
             r.absAddress = winner->absAddress;
+            r.name = winner->name;
+            r.from = winner->from;
+            r.fromCueId = winner->fromCueId;
+            r.depth = winner->depth;
+            r.value = winner->value;
         }
     }
 
@@ -1336,4 +1363,385 @@ void WhyOn::addWhyNot(Doc *doc, Answer &a)
                                ? tr("Its colour is at black: %1 is at 0 %").arg(names.first())
                                : tr("Its colour is at black: %1 are all at 0 %").arg(names.join(QStringLiteral(", "))));
     }
+}
+
+
+/****************************************************************************
+ * Student mode: the plain sentences per group
+ ****************************************************************************/
+
+namespace
+{
+
+/** "cue 3 “Verse”" (a cue with no name: "cue 3"; a look: "hit “Name”") */
+QString cueRef(Doc *doc, quint32 cueId)
+{
+    ShowTreeController *st = doc->showTree();
+    const ShowTree::CueList *list = st != nullptr && cueId != kInvalid ? st->listOfCue(cueId) : nullptr;
+    const int at = list != nullptr ? list->indexOf(cueId) : -1;
+    if (at < 0)
+        return WhyOn::tr("a cue");
+    const ShowTree::Cue &c = list->cues.at(at);
+    if (list->looks)
+        return c.name.isEmpty() ? WhyOn::tr("a hit") : WhyOn::tr("hit %1").arg(quoted(c.name));
+    const QString number = st->cueNumber(*list, at);
+    return c.name.isEmpty() ? WhyOn::tr("cue %1").arg(number)
+                            : WhyOn::tr("cue %1 %2").arg(number, quoted(c.name));
+}
+
+QString upperFirst(QString s)
+{
+    if (!s.isEmpty())
+        s[0] = s.at(0).toUpper();
+    return s;
+}
+
+/** What one fixture's intensity is doing, boiled down */
+struct FixtureState
+{
+    quint32 id = kInvalid;
+    QString name;
+    bool dark = false;
+    bool haveSource = false;
+    WhyOn::Line source;         //!< what sets it, or (dark) the reason it isn't on
+    int level = 0;              //!< before the masters, DMX
+    int out = 0;
+    WhyOn::Answer answer;
+    QString signature;
+};
+
+/** The source as a noun phrase: "cue 3 “Verse”", "the Simple Desk" */
+QString sourceNoun(Doc *doc, const WhyOn::Line &l)
+{
+    using K = WhyOn::Kind;
+    switch (l.kind)
+    {
+        case K::Cue: return cueRef(doc, l.cueId);
+        case K::Preview: return WhyOn::tr("the preview of %1").arg(cueRef(doc, l.cueId));
+        case K::Hit: return WhyOn::tr("the override hit %1").arg(quoted(l.name));
+        case K::Effect: return l.name.isEmpty() ? WhyOn::tr("an effect") : WhyOn::tr("the effect %1").arg(quoted(l.name));
+        case K::Function: return l.name.isEmpty() ? WhyOn::tr("a function") : l.name;
+        case K::Park: return WhyOn::tr("Park");
+        case K::Highlight: return WhyOn::tr("Highlight");
+        case K::Flash: return WhyOn::tr("Flash");
+        case K::Focus: return WhyOn::tr("Quick focus");
+        case K::LastLook: return WhyOn::tr("the last look");
+        case K::Locate: return WhyOn::tr("Locate");
+        case K::SimpleDesk: return WhyOn::tr("the Simple Desk");
+        case K::Programmer: return WhyOn::tr("the programmer");
+        case K::VCWidget: return l.name.isEmpty() ? WhyOn::tr("a Virtual Console widget") : l.name;
+        case K::Mark: return WhyOn::tr("a move in black");
+        case K::TrackedRestack: return WhyOn::tr("cue list %1").arg(quoted(l.name));
+        case K::Other: return l.name.isEmpty() ? WhyOn::tr("a source with no name") : l.name;
+        default: break;
+    }
+    return WhyOn::tr("something");
+}
+
+/** What comes after "because" for a lit group; @a it is "it" or "them" */
+QString litClause(Doc *doc, const WhyOn::Line &l, const QString &it)
+{
+    using K = WhyOn::Kind;
+    switch (l.kind)
+    {
+        case K::Cue:
+            switch (l.from)
+            {
+                case WhyOn::Line::From::Tracked:
+                    return WhyOn::tr("%1 set %3, and %2 leaves %3 as it was")
+                            .arg(cueRef(doc, l.fromCueId), cueRef(doc, l.cueId), it);
+                case WhyOn::Line::From::Included:
+                    return WhyOn::tr("%1 takes %3 from the included %2")
+                            .arg(cueRef(doc, l.cueId), cueRef(doc, l.fromCueId), it);
+                case WhyOn::Line::From::Base:
+                    return WhyOn::tr("%1 released that layer, so %3 is back to what %2 set")
+                            .arg(cueRef(doc, l.cueId), cueRef(doc, l.fromCueId), it);
+                case WhyOn::Line::From::CueLook:
+                    return WhyOn::tr("the cue's own look in %1 sets %2").arg(cueRef(doc, l.cueId), it);
+                case WhyOn::Line::From::Own:
+                default:
+                    return WhyOn::tr("%1 set %2, and nothing later changed %2").arg(cueRef(doc, l.cueId), it);
+            }
+        case K::Preview:
+            return WhyOn::tr("you are previewing %1 in Design, so it is not a GO yet").arg(cueRef(doc, l.cueId));
+        case K::Hit:
+            if (l.depth >= 0 && l.depth < 100)
+                return WhyOn::tr("%1 is pulling %2 there (%3 % in)").arg(sourceNoun(doc, l), it).arg(l.depth);
+            return WhyOn::tr("%1 is holding %2").arg(sourceNoun(doc, l), it);
+        case K::Effect:
+            if (l.depth >= 0 && l.depth < 100)
+                return WhyOn::tr("%1 is moving %2, at %3 % depth").arg(sourceNoun(doc, l), it).arg(l.depth);
+            return WhyOn::tr("%1 is moving %2").arg(sourceNoun(doc, l), it);
+        case K::Park:
+        case K::Highlight:
+        case K::Flash:
+        case K::Focus:
+        case K::Locate:
+            return WhyOn::tr("%1 is holding %2").arg(sourceNoun(doc, l), it);
+        case K::LastLook:
+            return WhyOn::tr("the last look is holding %1, left from when the show stopped").arg(it);
+        case K::Mark:
+            return WhyOn::tr("a move in black presets %1 while the light is dark").arg(it);
+        case K::TrackedRestack:
+            return WhyOn::tr("%1 put its tracked state back").arg(sourceNoun(doc, l));
+        case K::Nothing:
+            return WhyOn::tr("nothing sets %1 now, so %1 kept the last value %1 was given").arg(it);
+        case K::LeftBehind:
+            return WhyOn::tr("%1 left %2 there and nothing has written %2 since").arg(l.name.isEmpty() ? WhyOn::tr("something") : l.name, it);
+        default:
+            break;
+    }
+    return WhyOn::tr("%1 sets %2").arg(sourceNoun(doc, l), it);
+}
+
+/** What comes after "because" for a dark group */
+QString darkClause(Doc *doc, const WhyOn::Line &l, const QString &it, const QString &their)
+{
+    using K = WhyOn::Kind;
+    switch (l.kind)
+    {
+        case K::NotPatched: return WhyOn::tr("they have no address");
+        case K::NoOutput: return WhyOn::tr("their universe has no output");
+        case K::NotOurs: return WhyOn::tr("the venue's console runs them");
+        case K::Blind:
+            return l.hold ? WhyOn::tr("Teaching is holding network output")
+                          : WhyOn::tr("Blind is on");
+        case K::Blackout: return WhyOn::tr("Blackout is on");
+        case K::GrandMaster: return WhyOn::tr("the Grand Master is at 0");
+        case K::GroupMaster: return WhyOn::tr("a group master is at 0");
+        case K::PowerLimit: return WhyOn::tr("the power limiter is holding %1 back").arg(it);
+        case K::Released:
+            return l.released ? WhyOn::tr("%1 released %2 when the show left it").arg(cueRef(doc, l.cueId), it)
+                              : WhyOn::tr("the running cue has no layer on %1").arg(it);
+        case K::Skipped:
+            return WhyOn::tr("%1 is skipped tonight, so its look never played").arg(cueRef(doc, l.cueId));
+        case K::Solo: return WhyOn::tr("Solo is on, so only another layer plays");
+        case K::BlindEdit:
+            return WhyOn::tr("%1 is being edited blind, and the edit reaches the stage on GO").arg(cueRef(doc, l.cueId));
+        case K::Nothing: return WhyOn::tr("nothing sets %1").arg(it);
+        case K::Shutter: return WhyOn::tr("%1 shutter is closed").arg(their);
+        case K::ColourBlack: return WhyOn::tr("%1 colour is at black").arg(their);
+        case K::Park: return WhyOn::tr("Park is holding %1 at 0").arg(it);
+        case K::Hit: return WhyOn::tr("%1 is holding %2 at 0").arg(sourceNoun(doc, l), it);
+        default: break;
+    }
+    return WhyOn::tr("%1 has %2 at 0").arg(sourceNoun(doc, l), it);
+}
+
+/** "Par 5", "Par 5 and Par 6", "Par 5, Par 6 and 2 more" */
+QString nameList(const QStringList &names)
+{
+    if (names.count() == 1)
+        return names.first();
+    if (names.count() == 2)
+        return WhyOn::tr("%1 and %2").arg(names.at(0), names.at(1));
+    return WhyOn::tr("%1, %2 and %3 more").arg(names.at(0), names.at(1)).arg(names.count() - 2);
+}
+
+QString levelText(int lo, int hi)
+{
+    if (lo >= 255)
+        return WhyOn::tr("full");
+    if (lo == hi)
+        return WhyOn::percent(lo);
+    return WhyOn::tr("%1 to %2").arg(WhyOn::percent(lo).remove(QStringLiteral(" %")), WhyOn::percent(hi));
+}
+
+} // namespace
+
+WhyOn::GroupAnswer WhyOn::explainGroup(Doc *doc, quint32 groupId)
+{
+    FixtureGroup *grp = doc != nullptr ? doc->fixtureGroup(groupId) : nullptr;
+    if (grp == nullptr)
+        return GroupAnswer();
+    return explainFixtures(doc, grp->name(), grp->fixtureList());
+}
+
+WhyOn::GroupAnswer WhyOn::explainFixtures(Doc *doc, const QString &name, const QList<quint32> &fixtureIds,
+                                          bool article)
+{
+    GroupAnswer g;
+    g.name = name;
+    if (doc == nullptr)
+        return g;
+
+    QList<FixtureState> states;
+    for (quint32 fid : fixtureIds)
+    {
+        Fixture *fxi = doc->fixture(fid);
+        if (fxi == nullptr)
+            continue;
+        FixtureState st;
+        st.id = fid;
+        st.name = fxi->name();
+        st.answer = explain(doc, fid);
+        const Answer &a = st.answer;
+        if (a.fixtureId == kInvalid)
+            continue;
+        st.out = a.out;
+        st.level = a.preGM;
+        const QLCChannel *ch = fxi->channel(a.channel);
+        const bool intensity = ch != nullptr && ch->group() == QLCChannel::Intensity;
+        st.dark = !a.whyNot.isEmpty() || (a.isValid() && intensity && a.out <= kDark);
+        const Line *src = nullptr;
+        if (!a.whyNot.isEmpty())
+        {
+            for (const Line &l : a.whyNot)
+                if (src == nullptr && l.kind != Kind::NoOutput)
+                    src = &l;
+            if (src == nullptr)
+                src = &a.whyNot.first();
+        }
+        else
+        {
+            for (const Line &l : a.lines)
+                if (src == nullptr && l.verdict == Verdict::Wins)
+                    src = &l;
+            if (src == nullptr)
+                for (const Line &l : a.lines)
+                    if (src == nullptr && (l.kind == Kind::Nothing || l.kind == Kind::LeftBehind))
+                        src = &l;
+        }
+        if (src != nullptr)
+        {
+            st.source = *src;
+            st.haveSource = true;
+        }
+        st.signature = QStringLiteral("%1/%2/%3/%4/%5/%6").arg(st.dark ? 'd' : 'l').arg(int(st.source.kind))
+                       .arg(st.source.cueId).arg(st.source.layerId).arg(st.source.functionId).arg(st.source.name);
+        states << st;
+    }
+    g.fixtures = states.count();
+    if (states.isEmpty())
+        return g;
+
+    // Fixtures answered the same way go together; the biggest bunch leads.
+    QStringList order;
+    QHash<QString, QList<int> > bunches;
+    for (int i = 0; i < states.count(); ++i)
+    {
+        if (!bunches.contains(states.at(i).signature))
+            order << states.at(i).signature;
+        bunches[states.at(i).signature] << i;
+    }
+    std::stable_sort(order.begin(), order.end(), [&bunches](const QString &x, const QString &y) {
+        return bunches.value(x).count() > bunches.value(y).count();
+    });
+
+    const bool plural = name.endsWith(QLatin1Char('s'), Qt::CaseInsensitive) && !name.endsWith(QLatin1String("ss"), Qt::CaseInsensitive);
+    const QString it = plural ? tr("them") : tr("it");
+    const QString their = plural ? tr("their") : tr("its");
+    const QString be = plural ? tr("are") : tr("is");
+    const QString subject = !article ? name
+                            : name.startsWith(QLatin1String("the "), Qt::CaseInsensitive) ? upperFirst(name)
+                                                                                         : tr("The %1").arg(name);
+
+    auto levels = [&](const QList<int> &idx, int *lo, int *hi) {
+        *lo = 255;
+        *hi = 0;
+        for (int i : idx)
+        {
+            *lo = qMin(*lo, states.at(i).level);
+            *hi = qMax(*hi, states.at(i).level);
+        }
+    };
+    auto stateText = [&](const FixtureState &rep, const QList<int> &idx, const QString &who, bool whoPlural) -> QString {
+        const QString pit = whoPlural ? tr("them") : tr("it");
+        const QString ptheir = whoPlural ? tr("their") : tr("its");
+        const QString pbe = whoPlural ? tr("are") : tr("is");
+        if (rep.dark)
+            return tr("%1 %2 dark because %3").arg(who, pbe, darkClause(doc, rep.source, pit, ptheir));
+        int lo, hi;
+        levels(idx, &lo, &hi);
+        const QString clause = rep.haveSource ? litClause(doc, rep.source, pit) : tr("nothing sets %1").arg(pit);
+        return tr("%1 %2 at %3 because %4").arg(who, pbe, levelText(lo, hi), clause);
+    };
+
+    const QList<int> &lead = bunches.value(order.first());
+    const FixtureState &rep = states.at(lead.first());
+    const bool mixed = order.count() > 1;
+    g.differing = states.count() - lead.count();
+
+    // 1: what the group is doing, and why.
+    if (!mixed)
+    {
+        g.sentences << stateText(rep, lead, subject, plural) + QLatin1Char('.');
+    }
+    else
+    {
+        const QString part = lead.count() * 2 > states.count() ? tr("Most of") : tr("Part of");
+        QString low = subject;
+        if (article)
+            low[0] = low.at(0).toLower();
+        const QString who = tr("%1 %2 (%3 of %4 fixtures)").arg(part, low).arg(lead.count()).arg(states.count());
+        g.sentences << stateText(rep, lead, who, lead.count() > 1) + QLatin1Char('.');
+    }
+
+    // 2: the masters (a lit group), or what differs (a mixed one).
+    if (!rep.dark)
+    {
+        const Answer &a = rep.answer;
+        QStringList parts;
+        bool scaled = false;
+        Fixture *fxi = doc->fixture(rep.id);
+        bool groupMasterApplies = false;
+        for (const Line &l : a.lines)
+            if (l.kind == Kind::GroupMaster)
+                groupMasterApplies = true;
+        if (groupMasterApplies && fxi != nullptr)
+            for (FixtureGroup *grp : doc->groupMasters()->groups())
+                if (grp->masterLevel() != 255 && grp->fixtureList().contains(fxi->id()))
+                {
+                    parts << tr("the group master %1 is at %2").arg(quoted(grp->name()), percent(grp->masterLevel()));
+                    scaled = true;
+                }
+        const uchar gm = doc->inputOutputMap()->grandMasterValue();
+        bool gmLine = false;
+        for (const Line &l : a.lines)
+            if (l.kind == Kind::GrandMaster)
+                gmLine = l.verdict == Verdict::Scales;
+        if (gmLine)
+        {
+            parts << tr("the Grand Master is at %1").arg(percent(gm));
+            scaled = true;
+        }
+        if (scaled)
+            g.sentences << upperFirst(parts.join(tr(" and ")))
+                           + (rep.out != rep.level ? tr(", so %1 goes out at %2.").arg(it, percent(rep.out))
+                                                   : QStringLiteral("."));
+        else if (gm == 255)
+            g.sentences << tr("The Grand Master is at full.");
+
+        for (const Line &l : a.lines)
+            if (l.verdict == Verdict::Blocks)
+            {
+                if (l.kind == Kind::Blackout)
+                    g.sentences << tr("Blackout is on, so the rig gets 0.");
+                else if (l.hold)
+                    g.sentences << tr("Teaching is holding network output, so a networked rig doesn't get %1 yet.").arg(it);
+                else
+                    g.sentences << tr("Blind is on, so the rig doesn't get %1 (the screens still show %1).").arg(it);
+                break;
+            }
+    }
+    if (mixed)
+    {
+        // The rest, briefly: who is not like the others, and how.
+        QStringList told;
+        for (int b = 1; b < order.count() && b < 3; ++b)
+        {
+            const QList<int> &idx = bunches.value(order.at(b));
+            QStringList names;
+            for (int i : idx)
+                names << states.at(i).name;
+            const FixtureState &r = states.at(idx.first());
+            told << stateText(r, idx, nameList(names), idx.count() > 1);
+        }
+        QString rest = told.join(tr("; "));
+        if (order.count() > 3)
+            rest += tr("; and the rest differ again");
+        g.sentences << (g.differing == 1 ? tr("The other fixture differs: %1.").arg(rest)
+                                         : tr("The other %1 differ: %2.").arg(g.differing).arg(rest));
+    }
+    return g;
 }

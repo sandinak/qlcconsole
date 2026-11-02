@@ -46,6 +46,7 @@
 #include "monitor.h"
 #include "functionparent.h"
 #include "function.h"
+#include "fixturegroup.h"
 #include "fixture.h"
 #include "doc.h"
 
@@ -320,6 +321,14 @@ WhyOnPanel::WhyOnPanel(Doc *doc, QWidget *parent)
     m_headline->setWordWrap(true);
     root->addWidget(m_headline);
 
+    m_story = new QLabel(this);
+    m_story->setObjectName(QStringLiteral("whyOnStory"));
+    m_story->setWordWrap(true);
+    m_story->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    m_story->setToolTip(tr("The same in plain sentences, per group. The lines below are the detail."));
+    m_story->hide();
+    root->addWidget(m_story);
+
     m_list = new QListWidget(this);
     m_list->setObjectName(QStringLiteral("whyOnLines"));
     m_list->setWordWrap(true);
@@ -376,10 +385,15 @@ WhyOnPanel::WhyOnPanel(Doc *doc, QWidget *parent)
     });
     connect(m_list, &QListWidget::currentRowChanged, this, &WhyOnPanel::updateAction);
     connect(m_action, &QPushButton::clicked, this, [this]() { runAction(m_list->currentRow()); });
-    connect(m_plain, &QCheckBox::toggled, this, &WhyOnPanel::refresh);
+    connect(m_plain, &QCheckBox::toggled, this, [this]() {
+        m_storyAge = 0;
+        refresh();
+    });
     connect(m_follow, &QCheckBox::toggled, this, [](bool on) { setFollowSelection(on); });
     connect(m_copy, &QPushButton::clicked, this, [this]() {
-        QGuiApplication::clipboard()->setText(m_answer.toText());
+        QGuiApplication::clipboard()->setText(m_story->isVisibleTo(this) && !m_storyText.isEmpty()
+                                              ? m_storyText + QStringLiteral("\n\n") + m_answer.toText()
+                                              : m_answer.toText());
     });
     connect(close, &QPushButton::clicked, this, &QWidget::close);
 }
@@ -405,6 +419,7 @@ void WhyOnPanel::setTarget(quint32 fixtureId, quint32 channel, quint32 universe,
     m_channel = channel;
     m_universe = universe;
     m_address = address;
+    m_storyAge = 0;
     fillChannels();
     refresh();
 }
@@ -438,6 +453,8 @@ void WhyOnPanel::refresh()
                                "the Workbench), then press %1.")
                             .arg(shortcut().toString(QKeySequence::NativeText)));
     }
+
+    updateStory();
 
     // Four times a second: leave the list alone when nothing in it changed,
     // so a click (press and release) is never lost to a rebuild.
@@ -521,6 +538,49 @@ void WhyOnPanel::refresh()
     if (keep >= 0 && keep < m_list->count())
         m_list->setCurrentRow(keep);
     updateAction();
+}
+
+/* Student mode: plain sentences per group the light is in (a light in no
+   group is told on its own), beside the chain. Once a second at most: a
+   big group asks each of its fixtures. */
+void WhyOnPanel::updateStory()
+{
+    const bool on = wording() == WhyOn::Wording::Simple && m_fixtureId != Fixture::invalidId();
+    if (!on)
+    {
+        m_storyText.clear();
+        m_storyAge = 0;
+        m_story->hide();
+        return;
+    }
+    if (m_storyAge > 0 && m_storyAge < 4 && m_story->isVisibleTo(this))
+    {
+        ++m_storyAge;
+        return;
+    }
+    m_storyAge = 1;
+    QStringList paragraphs;
+    int told = 0;
+    for (FixtureGroup *grp : m_doc->fixtureGroups())
+    {
+        if (!grp->fixtureList().contains(m_fixtureId))
+            continue;
+        const WhyOn::GroupAnswer g = WhyOn::explainGroup(m_doc, grp->id());
+        if (g.isValid())
+            paragraphs << g.toText();
+        if (++told >= 2)
+            break;
+    }
+    if (told == 0)
+        if (Fixture *fxi = m_doc->fixture(m_fixtureId))
+        {
+            const WhyOn::GroupAnswer g = WhyOn::explainFixtures(m_doc, fxi->name(), QList<quint32>() << m_fixtureId, false);
+            if (g.isValid())
+                paragraphs << g.toText();
+        }
+    m_storyText = paragraphs.join(QStringLiteral("\n"));
+    m_story->setText(m_storyText);
+    m_story->setVisible(!m_storyText.isEmpty());
 }
 
 void WhyOnPanel::activate(int row)

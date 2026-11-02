@@ -152,6 +152,16 @@ public:
         /** The channel the line is about: universe << 9 | address (a
          *  Simple Desk line's Release); UINT_MAX: the answer's own */
         quint32 absAddress = 0xFFFFFFFF;
+        /** Student mode (explainGroup): what the line is about, by name
+         *  (the function, the effect(s), the widget, the writer that left
+         *  it), and how a cue's value got here. */
+        QString name;
+        enum class From { Own, Tracked, Included, Base, CueLook };
+        From from = From::Own;
+        quint32 fromCueId = 0xFFFFFFFF;     //!< Tracked / Included / Base: the cue it came from
+        int depth = -1;                     //!< an effect's or hit's depth, % (-1: not one)
+        bool released = false;              //!< Released: a layer was released (else: no layer)
+        bool hold = false;                  //!< Blind: it is Teaching's output hold
     };
 
     struct Answer
@@ -180,6 +190,32 @@ public:
         /** The why-not lines' texts, in order (for tests) */
         QStringList whyNotTexts() const;
     };
+
+    /**
+     * v3, student mode: the answer for a whole group in two or three crew-
+     * level sentences, "The Front Wash is at 70 % because cue 3 “Verse” set
+     * it, and nothing later changed it. The Grand Master is at full." The
+     * light asked about is each fixture's intensity (explain() with no
+     * channel); fixtures answered by the same source and state are told
+     * together, and a group whose fixtures differ says so ("Most of ...").
+     * It sits beside the detailed chain, never in place of it.
+     */
+    struct GroupAnswer
+    {
+        QString name;               //!< "Front Wash"
+        int fixtures = 0;           //!< how many were asked about
+        int differing = 0;          //!< how many are not like most of the group
+        QStringList sentences;
+        bool isValid() const { return fixtures > 0 && !sentences.isEmpty(); }
+        QString toText() const { return sentences.join(QLatin1Char(' ')); }
+    };
+
+    /** The student answer for the fixtures of @a groupId (a FixtureGroup) */
+    static GroupAnswer explainGroup(Doc *doc, quint32 groupId);
+    /** The same for @a fixtureIds under @a name (a layer's fixtures, or one
+     *  fixture that is in no group: @a article false, no "The" before it) */
+    static GroupAnswer explainFixtures(Doc *doc, const QString &name, const QList<quint32> &fixtureIds,
+                                       bool article = true);
 
     /** At or under this a light reads as off (2 %) */
     static const int kDark = 5;

@@ -103,7 +103,10 @@ Switch roles after each part.
 a cue three cues back. Don't guess: ask. Right-click a step top in the
 Lighting Studio ▸ **Why is this on?** The top line names the cue and
 layer that set it and where the level tracked in from (*tracked from cue
-1.0.1 Verse*); click it to go there.
+1.0.1 Verse*); click it to go there. Tick **Plain words** and the window
+adds a sentence per group, such as *The Front Wash is at 70 % because cue
+1.0.1 Verse set it, and nothing later changed it*. Read that first, then
+the lines under it.
 
 ### Note 1: let the lavender go
 

@@ -56,6 +56,30 @@ under **Why it isn't on**, the reason that blocks first:
 The headline gives the first of them (no output only when it's the only
 one: the screens show the light without it).
 
+**Plain sentences per group.** With **Plain words** on, the window tells
+the same answer for each fixture group the light is in (two at most; a
+light in no group is told on its own), in two or three sentences above the
+chain:
+
+> The Front Wash is at 70 % because cue 3 “Verse” set it, and nothing
+> later changed it. The Grand Master is at full.
+>
+> The Backs are dark because cue 4 “Bridge” released them when the show
+> left it.
+
+The first sentence says the level and the one thing that sets it (a cue,
+and the cue it tracked in from; an override hit; an effect and its depth;
+Park; the Simple Desk; a slider) or, for a dark group, the first reason it
+isn't on. The second names the group masters and the Grand Master when they
+scale it (*The group master “Front” is at 50 % and the Grand Master is at
+80 %, so it goes out at 40 %.*); a third says when Blind, Blackout or
+Teaching's output hold keeps it from the rig. The lines below are the
+detail and stay one click away. A group whose fixtures differ says so: *Most
+of the Front Wash (4 of 6 fixtures) are at 70 % because …*, then *The other 2
+differ: Par 5 is dark because …*. The sentences are read from each
+fixture's intensity (or dimmer), worked out once a second while the window
+is open; Plain words off, they are gone. Copy takes them with the answer.
+
 **Act from a line** (Design mode): select a Park line ▸ **Unpark**, a
 Simple Desk line ▸ **Release the desk channel**, a move in black ▸ **Let
 go of the move in black**, a running function's line ▸ **Stop the
@@ -69,7 +93,8 @@ answer.
 Click a line to go to the cue and layer in the Show Tree, the function,
 the Simple Desk, the Virtual Console or the group in the Fixture Manager.
 **Copy** puts the answer on the clipboard as text. **Plain words** leaves
-out HTP and LTP; it's on by default in a Teaching show. The channel box
+out HTP and LTP and adds the **plain sentences** below (next section); it's
+on by default in a Teaching show. The channel box
 picks another channel of the fixture. A **≈** line means the answer is an estimate: it was read
 between frames, or a blend mode can only be approximated.
 

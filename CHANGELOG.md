@@ -254,6 +254,14 @@ back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
   mode), and **Follow selection** (off, remembered) moves the open window
   to the light you select next.
 
+- **"Why is this on?" in plain sentences** (0.5, student mode): with
+  **Plain words** on (the default in a Teaching show) the window tells each
+  fixture group the light is in as two or three sentences above the chain:
+  *The Front Wash is at 70 % because cue 3 “Verse” set it, and nothing
+  later changed it. The Grand Master is at full.* A dark group gets its
+  reason (*The Backs are dark because cue 4 “Bridge” released them*), a
+  group whose fixtures differ says so, and the detailed lines stay below.
+
 ### AI Assist
 
 - **AI Assist, first part** (0.5, P0 and P1 of docs/design/AI_ASSIST.md):

@@ -43,6 +43,7 @@
 #include "qlcfixturedef.h"
 #include "qlcfixturemode.h"
 #include "programmercontroller.h"
+#include "fixturegroup.h"
 #include "fixture.h"
 #include <QPushButton>
 #include "scene.h"
@@ -208,6 +209,39 @@ void WhyOnPanel_Test::plainWordsInATeachingShow()
     p->setWording(WhyOn::Wording::Crew);
     QVERIFY(p->answer().headline.startsWith("At 0 %."));
     m_doc->teachingSettings()->setEnabled(false);
+}
+
+/* Student mode: with Plain words on, a sentence block per group the light
+   is in sits above the chain, and the chain is still there; off, it goes. */
+void WhyOnPanel_Test::plainSentencesPerGroup()
+{
+    FixtureGroup *g = new FixtureGroup(m_doc);
+    g->setName("Front Wash");
+    m_doc->addFixtureGroup(g);
+    g->assignFixture(m_fixtures[0]);
+    g->assignFixture(m_fixtures[1]);
+    Scene *s = new Scene(m_doc);
+    s->setName("Look");
+    s->setValue(m_fixtures[0], 0, 255);
+    s->setValue(m_fixtures[1], 0, 255);
+    QVERIFY(m_doc->addFunction(s));
+    s->start(m_doc->masterTimer(), FunctionParent::master());
+    tick(3);
+
+    WhyOnPanel *p = WhyOnPanel::showFor(m_doc, m_fixtures[0]);
+    p->setWording(WhyOn::Wording::Crew);
+    QVERIFY(p->storyText().isEmpty());
+    QVERIFY(!p->storyLabel()->isVisibleTo(p));
+    p->setWording(WhyOn::Wording::Simple);
+    QCOMPARE(p->storyText(), QString("The Front Wash is at full because scene \u201CLook\u201D sets it. The Grand Master is at full."));
+    QVERIFY(p->storyLabel()->isVisibleTo(p));
+    QVERIFY(p->lines()->count() > 0);       // the detail is still there
+
+    // A light in no group is told on its own.
+    p = WhyOnPanel::showFor(m_doc, m_fixtures[2]);
+    QVERIFY(p->storyText().startsWith("Dim 3 is dark"));
+    s->stop(FunctionParent::master());
+    tick(3);
 }
 
 /* Shown, it asks again on a UI timer; hidden, the timer stops: nothing
