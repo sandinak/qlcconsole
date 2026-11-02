@@ -24,6 +24,7 @@
 
 class QTreeWidgetItem;
 class Workbench;
+class ShowTreeView;
 class Fixture;
 class Scene;
 class Doc;
@@ -53,6 +54,13 @@ private slots:
     void nothingSelectedSaysSo();
     void aHiddenWorkbenchIgnoresTheEncoders();
     void theControlMapPanelSetsTheBankUp();
+    void theControlMapPanelLearnsBankButtonsAndRings();
+    void anAimAtALineTurnsItsSpread();
+    void anAimAtAPointSaysItHasNothingToTurn();
+    void aStrobeLookTurnsItsRate();
+    void aShutterLookStepsItsState();
+    void aShowTreeLayerTakesATurnAsOneUndoStep();
+    void aShowTreeLayerRefusesInOperate();
 
 private:
     Fixture *mover(const QString &name, quint32 address);
@@ -63,6 +71,9 @@ private:
     void turn(int n, int detents);
     void push(int n, bool down);
     void gather();
+    /** A cue with one layer on a group of two movers (fixtures @a a, @a b, dimmer 51), its Workbench
+     *  docked in @a view with the layer selected; the layer's scene is @a scene. */
+    Workbench *dockedLayer(ShowTreeView *view, Fixture *a, Fixture *b, Scene **scene);
 
 private:
     Doc *m_doc = nullptr;

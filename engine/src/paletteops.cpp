@@ -809,7 +809,7 @@ bool PaletteOps::valueStep(const QString &label, quint32 paletteId, const std::f
 }
 
 bool PaletteOps::effectParamStep(const QString &label, const QList<quint32> &paletteIds,
-                                 const std::function<void()> &change)
+                                 const std::function<void()> &change, const QString &mergeKey)
 {
     Step st;
     st.label = label;
@@ -833,6 +833,22 @@ bool PaletteOps::effectParamStep(const QString &label, const QList<quint32> &pal
     }
     if (!differs)
         return false;
+
+    // The same one palette, further on (an encoder's gesture): keep where it started.
+    const qint64 at = QDateTime::currentMSecsSinceEpoch();
+    if (!mergeKey.isEmpty() && st.after.size() == 1 && !m_undo.isEmpty() && m_undo.last().mergeKey == mergeKey
+        && at - m_undo.last().mergeAt < 1500 && m_redo.isEmpty()
+        && m_undo.last().after.size() == 1 && m_undo.last().after.first().id == st.after.first().id)
+    {
+        Step &top = m_undo.last();
+        top.after[0] = st.after.first();
+        top.mergeAt = at;
+        m_doc->setModified();
+        emit changed();
+        return true;
+    }
+    st.mergeKey = mergeKey;
+    st.mergeAt = at;
     st.foldersBefore = st.foldersAfter = m_emptyFolders;
     st.stamp = nextUndoStamp();
     m_undo << st;

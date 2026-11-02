@@ -449,12 +449,15 @@ private:
 public:
     /** What the encoders turn now: a look in the Look Editor, or the
      *  channels of the selected fixtures in a scene (the scene of the page,
-     *  or of the Show Tree layer picked). Both empty: nothing selected. */
+     *  or of a layer picked in a Build stack). Both empty: nothing selected;
+     *  @a why then says so when there is a reason (a Show Tree cue's layer is
+     *  made from its looks, so a turn is made on a look, not on the layer). */
     struct EncoderTarget
     {
         LookEditor *look = nullptr;
         Scene *scene = nullptr;
         QList<quint32> fixtures;
+        QString why;
         bool isValid() const { return look != nullptr || (scene != nullptr && !fixtures.isEmpty()); }
     };
     EncoderTarget encoderTarget() const;
@@ -470,6 +473,7 @@ private:
     /** The rings and the line, as they are now (queued: one per event loop turn). */
     void scheduleEncoderRings();
     void refreshEncoderRings();
+    QString encoderSlotLabel(const EncoderTarget &target, int bank, int slot) const;
     /** One undo step for the scene's raw edit; @a before is the scene as it was. */
     void afterEncoderEdit(const EncoderTarget &target, const QString &what,
                           const QSharedPointer<Scene> &before, int bank, int slot, bool home = false);

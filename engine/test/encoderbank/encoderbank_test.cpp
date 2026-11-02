@@ -380,6 +380,25 @@ void EncoderBank_Test::theInputPathDoesNotAllocate()
     b->flush();
     tl_counting = false;
     QCOMPARE(tl_allocations, 0);
+
+    // The Beam bank has six encoders (Strobe and Shutter are the last two): their turns, and
+    // the bank buttons a person learned, take the same path.
+    b->setBank(EncoderBank::BeamBank);
+    b->handleInput(0, kTurn + 5, dmx(1));
+    b->flush();
+    tl_allocations = 0;
+    tl_counting = true;
+    for (int i = 0; i < 2000; ++i)
+    {
+        b->handleInput(0, kTurn + 4 + (i % 4), dmx(i % 2 ? 1 : 127));  // slots 4-7: the last two count, 6 and 7 do not
+        b->handleInput(0, kNext, i % 5 ? 0 : 255);
+    }
+    b->flush();
+    tl_counting = false;
+    QCOMPARE(tl_allocations, 0);
+    QCOMPARE(EncoderBank::slotCount(EncoderBank::BeamBank), 6);
+    QCOMPARE(EncoderBank::slotName(EncoderBank::BeamBank, 4), QString("Strobe"));
+    QCOMPARE(EncoderBank::slotName(EncoderBank::BeamBank, 5), QString("Shutter"));
 }
 
 void EncoderBank_Test::turnsComeThroughTheInputPatch()

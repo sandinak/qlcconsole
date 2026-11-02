@@ -956,13 +956,20 @@ of eight encoders reaches five **banks** of attributes:
 | Intensity | Intensity |
 | Colour | Hue, Saturation, Red, Green, Blue, White, Amber, UV |
 | Position | Pan, Tilt |
-| Beam | Zoom, Focus, Iris, Frost |
+| Beam | Zoom, Focus, Iris, Frost, Strobe, Shutter |
 | Gobo / prism | Gobo, Gobo rotation, Prism, Prism rotation |
 
 - **Set it up** in **Connections ▸ Devices ▸ Show control & sync ▸ Control
   Map ▸ Encoder bank**: pick the controller (or a generic one by how it
   counts: two's complement, binary offset, sign-magnitude), its input
   universe, and **Learn encoder 1…** for a controller that is not listed.
+  **Learn more…** learns the rest the same way: press or turn the control
+  and it is set as the pushes (encoder 1's), the next-bank or previous-bank
+  button, the first of the bank buttons (the next four follow it, and their
+  lamps share the same numbers), or the rings (turn encoder 1: its ring is
+  lit on that same number, as on an X-Touch Mini; a controller whose rings
+  are on other numbers needs its preset). *Forget…* clears all of those but
+  the encoders.
   If a knob runs backwards or jumps, change **Encoders** (the way it says
   which way it turned) or tick **Reverse**. The setting is saved with the
   show, in the Control Map.
@@ -980,10 +987,20 @@ of eight encoders reaches five **banks** of attributes:
 - **It turns what you picked.** A look open in the Look Editor: the turn
   sets the control the look's own page has (a Dimmer look's bar, a Colour
   look's sliders, a Pan / tilt look's position, a Beam or Gobo look's
-  sliders), exactly as a hand on it. Fixtures or a group picked under a
-  scene, or a layer of a cue in the Show Tree's Workbench: the turn moves
-  the **channels of every selected fixture** from where each one is, in the
-  scene (a fixture without that attribute is left alone).
+  sliders), exactly as a hand on it. A **Strobe** look takes the Beam
+  bank's Strobe (its rate), a **Shutter** look its Shutter (open, closed,
+  strobe: a turn is one range of the fixture's shutter); an **Aim at a
+  line** takes Position's first encoder as its **Spread** (a tap is 0).
+  An Aim at a single target, an effect or a Formation has nothing to turn
+  and the line says so. Fixtures or a group picked under a scene: the turn
+  moves the **channels of every selected fixture** from where each one is,
+  in the scene (a fixture without that attribute is left alone).
+- **A Show Tree cue's layer is turned through its looks.** The layer's own
+  scene is baked from its looks, shared with every cue that plays the same
+  and not saved, so the layer row refuses a turn ("a cue layer is made from
+  its looks") instead of writing into it. Open one of its look rows (the
+  Look Editor opens in the docked Workbench) and the encoders turn that
+  look, as above.
 - **Undo is one step per gesture.** Turns of one encoder within a moment of
   each other are one step on the shared history; another encoder is another
   step. Undo and Redo work from either tab.

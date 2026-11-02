@@ -19,6 +19,8 @@
 
 #include <QtTest>
 #include <QSignalSpy>
+#include <QAction>
+#include <QMenu>
 #include <QTreeWidget>
 #include <QGroupBox>
 #include <QComboBox>
@@ -40,12 +42,17 @@
 #include "qlccapability.h"
 #include "fixturegroup.h"
 #include "controlmap.h"
+#include "showtreecontroller.h"
+#include "showtreeview.h"
+#include "monitorproperties.h"
+#include "stagetarget.h"
 #include "lookeditor.h"
 #include "qlcphysical.h"
 #include "qlcpalette.h"
 #include "qlcchannel.h"
 #include "fixture.h"
 #include "scene.h"
+#include "linespread.h"
 #include "doc.h"
 
 namespace
@@ -666,6 +673,344 @@ void EncoderBankUi_Test::theControlMapPanelSetsTheBankUp()
     QCOMPARE(enc->device().encoders, 40);
     QCOMPARE(enc->presetKey(), QString("custom"));
     QVERIFY(map->text().contains("CC 40"));
+}
+
+void EncoderBankUi_Test::theControlMapPanelLearnsBankButtonsAndRings()
+{
+    EncoderBank *enc = m_doc->controlMap()->encoderBank();
+    enc->reset();
+    ControlMapPanel panel(m_doc);
+    panel.show();
+    QGroupBox *box = panel.encoderBox();
+    QPushButton *more = box->findChild<QPushButton *>("encoderLearnMore");
+    QVERIFY(more != nullptr);
+    QVERIFY(!more->isEnabled());                // off until a controller is set up
+
+    EncoderBank::Device d = generic();
+    d.pushes = d.rings = d.bankNext = -1;
+    enc->setDevice(d, "custom");
+    panel.refresh();
+    QVERIFY(more->isEnabled());
+
+    auto action = [&](const char *name) {
+        QAction *a = more->menu()->findChild<QAction *>(name);
+        return a;
+    };
+    auto learn = [&](const char *name, quint32 universe, quint32 channel) {
+        QAction *a = action(name);
+        a->trigger();
+        QVERIFY(m_doc->controlMap()->isListening());
+        m_doc->controlMap()->handleInput(universe, channel, 127);
+        QVERIFY(!m_doc->controlMap()->isListening());
+        QCOMPARE(more->text(), QString("Learn more…"));
+    };
+    QVERIFY(action("encoderLearnPushes") && action("encoderLearnNext") && action("encoderLearnPrevious")
+            && action("encoderLearnDirect") && action("encoderLearnRings") && action("encoderForget"));
+
+    action("encoderLearnNext")->trigger();
+    QVERIFY(more->text() != QString("Learn more…"));       // it says what it waits for
+    m_doc->controlMap()->handleInput(0, 60, 127);
+    QCOMPARE(enc->device().bankNext, 60);
+    QCOMPARE(enc->device().encoders, qint32(kTurn));          // the rest is kept
+
+    action("encoderLearnPrevious")->trigger();
+    m_doc->controlMap()->handleInput(0, 61, 127);
+    QCOMPARE(enc->device().bankPrevious, 61);
+
+    action("encoderLearnPushes")->trigger();
+    m_doc->controlMap()->handleInput(0, 128 + 8, 127);
+    QCOMPARE(enc->device().pushes, 128 + 8);
+
+    action("encoderLearnDirect")->trigger();
+    m_doc->controlMap()->handleInput(0, 128 + 20, 127);
+    QCOMPARE(enc->device().bankDirect, 128 + 20);
+    QCOMPARE(enc->device().bankLamps, 128 + 20);          // the lamps are on the buttons' lines
+
+    action("encoderLearnRings")->trigger();
+    m_doc->controlMap()->handleInput(0, 24, 127);
+    QCOMPARE(enc->device().rings, 24);
+    QCOMPARE(enc->presetKey(), QString("custom"));
+    QLabel *map = box->findChild<QLabel *>("encoderMap");
+    QVERIFY(map->text().contains("next bank CC 60"));
+    QVERIFY(map->text().contains("rings from CC 24"));
+
+    // What was learned drives the bank: the learned next button steps it.
+    enc->handleInput(0, 60, 255);
+    QCOMPARE(enc->bank(), int(EncoderBank::ColourBank));
+    // The direct button 3 is bank 3.
+    enc->handleInput(0, 128 + 22, 255);
+    QCOMPARE(enc->bank(), int(EncoderBank::PositionBank));
+
+    // Forget: the encoders stay.
+    action("encoderForget")->trigger();
+    QCOMPARE(enc->device().bankNext, -1);
+    QCOMPARE(enc->device().rings, -1);
+    QCOMPARE(enc->device().bankDirect, -1);
+    QCOMPARE(enc->device().encoders, qint32(kTurn));
+    (void)learn;
+}
+
+void EncoderBankUi_Test::anAimAtALineTurnsItsSpread()
+{
+    Fixture *a = mover("A", 0);
+    Workbench wb(m_doc);
+    Scene *s = sceneWith(wb, { a });
+    StageTarget *line = m_doc->monitorProperties()->addStageTarget();
+    line->setName("Edge");
+    line->makeLine();
+    QLCPalette *aim = new QLCPalette(QLCPalette::Aim, m_doc);
+    aim->setName("Along the edge");
+    aim->setStageTargetId(line->id());
+    m_doc->addPalette(aim);
+    s->addPalette(aim->id());
+    wb.editPalette(aim->id());
+    QCOMPARE(wb.currentPage(), Workbench::LookPage);
+    EncoderBank *enc = m_doc->controlMap()->encoderBank();
+    enc->setBank(EncoderBank::PositionBank);
+    QCoreApplication::processEvents();
+    QVERIFY2(wb.encoderLine().contains("Spread"), qPrintable(wb.encoderLine()));
+    QVERIFY(!wb.encoderLine().contains("Tilt"));
+
+    const double was = LineSpread::fromParams(aim->effectParamValues()).spread;
+    QCOMPARE(was, 5.0);
+    PaletteOps *ops = m_doc->paletteOps();
+    QVERIFY(!ops->canUndo());
+    for (int i = 0; i < 6; ++i)
+    {
+        turn(0, -1);
+        if (i % 2)
+            gather();
+    }
+    gather();
+    const double now = LineSpread::fromParams(aim->effectParamValues()).spread;
+    QVERIFY2(now < was, qPrintable(QString::number(now)));
+    QVERIFY(wb.encoderLine().contains("Spread"));
+
+    // A gesture is one undo step; it puts the spread back.
+    QVERIFY(ops->canUndo());
+    QVERIFY(ops->undo());
+    QCOMPARE(LineSpread::fromParams(aim->effectParamValues()).spread, was);
+    QVERIFY2(!ops->canUndo(), "the turn was more than one step");
+    QVERIFY(ops->redo());
+    QCOMPARE(LineSpread::fromParams(aim->effectParamValues()).spread, now);
+
+    // A tap on the push: no spread.
+    push(0, true);
+    push(0, false);
+    QCoreApplication::processEvents();
+    QCOMPARE(LineSpread::fromParams(aim->effectParamValues()).spread, 0.0);
+
+    // The second encoder is not on this look: the line says so.
+    turn(1, 2);
+    gather();
+    QVERIFY2(wb.encoderLine().contains("no tilt"), qPrintable(wb.encoderLine()));
+}
+
+void EncoderBankUi_Test::anAimAtAPointSaysItHasNothingToTurn()
+{
+    Fixture *a = mover("A", 0);
+    Workbench wb(m_doc);
+    Scene *s = sceneWith(wb, { a });
+    StageTarget *mark = m_doc->monitorProperties()->addStageTarget();
+    mark->setName("Mark");
+    QLCPalette *aim = new QLCPalette(QLCPalette::Aim, m_doc);
+    aim->setName("On the mark");
+    aim->setStageTargetId(mark->id());
+    m_doc->addPalette(aim);
+    s->addPalette(aim->id());
+    wb.editPalette(aim->id());
+    m_doc->controlMap()->encoderBank()->setBank(EncoderBank::PositionBank);
+    QCoreApplication::processEvents();
+    QVERIFY2(wb.encoderLine().contains("single target"), qPrintable(wb.encoderLine()));
+    turn(0, 3);
+    gather();
+    QVERIFY2(wb.encoderLine().contains("single target"), qPrintable(wb.encoderLine()));
+    QVERIFY(!m_doc->paletteOps()->canUndo());
+}
+
+void EncoderBankUi_Test::aStrobeLookTurnsItsRate()
+{
+    Fixture *a = mover("A", 0);
+    Workbench wb(m_doc);
+    Scene *s = sceneWith(wb, { a });
+    QLCPalette *strobe = new QLCPalette(QLCPalette::Strobe, m_doc);
+    strobe->setName("Strobe 50%");
+    strobe->setValue(0.5f);
+    m_doc->addPalette(strobe);
+    s->addPalette(strobe->id());
+    wb.editPalette(strobe->id());
+    m_doc->controlMap()->encoderBank()->setBank(EncoderBank::BeamBank);
+    QCoreApplication::processEvents();
+    QVERIFY2(wb.encoderLine().contains("Strobe rate"), qPrintable(wb.encoderLine()));
+
+    PaletteOps *ops = m_doc->paletteOps();
+    turn(4, 5);                                 // Strobe is the Beam bank's fifth encoder
+    gather();
+    QVERIFY(strobe->value().toFloat() > 0.5f);
+    const float up = strobe->value().toFloat();
+    QVERIFY(ops->canUndo());
+    turn(4, -1);
+    gather();
+    QVERIFY(strobe->value().toFloat() < up);
+    // A tap on its push: off.
+    push(4, true);
+    push(4, false);
+    QCoreApplication::processEvents();
+    QCOMPARE(strobe->value().toFloat(), 0.0f);
+    QVERIFY(ops->undo());
+    QVERIFY(strobe->value().toFloat() > 0.0f);
+}
+
+void EncoderBankUi_Test::aShutterLookStepsItsState()
+{
+    Fixture *a = mover("A", 0);
+    Workbench wb(m_doc);
+    Scene *s = sceneWith(wb, { a });
+    QLCPalette *shutter = new QLCPalette(QLCPalette::Shutter, m_doc);
+    shutter->setName("Shutter");
+    shutter->setValue(0);
+    m_doc->addPalette(shutter);
+    s->addPalette(shutter->id());
+    wb.editPalette(shutter->id());
+    m_doc->controlMap()->encoderBank()->setBank(EncoderBank::BeamBank);
+    QCoreApplication::processEvents();
+    QVERIFY2(wb.encoderLine().contains("Shutter"), qPrintable(wb.encoderLine()));
+
+    turn(5, 4);
+    gather();
+    QVERIFY(shutter->intValue1() > 0);
+    QVERIFY(m_doc->paletteOps()->canUndo());
+    // Zoom, focus and the rest are not on a Shutter look.
+    turn(1, 2);
+    gather();
+    QVERIFY2(wb.encoderLine().contains("no focus"), qPrintable(wb.encoderLine()));
+    QVERIFY(m_doc->paletteOps()->undo());
+    QCOMPARE(shutter->intValue1(), 0);
+}
+
+Workbench *EncoderBankUi_Test::dockedLayer(ShowTreeView *view, Fixture *a, Fixture *b, Scene **scene)
+{
+    FixtureGroup *g = new FixtureGroup(m_doc);
+    g->setName("Movers");
+    g->setSize(QSize(2, 1));
+    m_doc->addFixtureGroup(g);
+    g->assignFixture(a->id(), QLCPoint(0, 0));
+    g->assignFixture(b->id(), QLCPoint(1, 0));
+    QLCPalette *low = new QLCPalette(QLCPalette::Dimmer, m_doc);
+    low->setName("Low");
+    low->setValue(51);
+    m_doc->addPalette(low);
+
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L", ShowTree::ListMode::Tracking);
+    const quint32 cue = st->addCue(list, -1, "One");
+    ShowTree::Target t;
+    t.groups << g->id();
+    const quint32 layer = st->addLayer(cue, t);
+    st->setLayerLook(cue, layer, st->lookForPalette(low->id()));
+    st->clearUndo();
+
+    view->resize(1400, 800);
+    view->show();
+    if (!QTest::qWaitForWindowExposed(view) || !view->openInWorkbench(cue, layer))
+        return nullptr;
+    Workbench *bench = view->dockedWorkbench();
+    if (bench == nullptr)
+        return nullptr;
+    ProgrammingOutline::Row row;
+    row.kind = ProgrammingOutline::CueLayerRow;
+    row.scene = 0;
+    row.id = 0;
+    bench->selectRow(row);
+    QCoreApplication::processEvents();
+    *scene = qobject_cast<Scene *>(m_doc->function(st->layerScene(cue, t)));
+    return bench;
+}
+
+void EncoderBankUi_Test::aShowTreeLayerTakesATurnAsOneUndoStep()
+{
+    Fixture *a = mover("A", 0);
+    Fixture *b = mover("B", 10);
+    ShowTreeView view(nullptr, m_doc);
+    Scene *layerScene = nullptr;
+    Workbench *bench = dockedLayer(&view, a, b, &layerScene);
+    QVERIFY(bench != nullptr);
+    QVERIFY(layerScene != nullptr);
+    QVERIFY(bench->isVisible());
+    PaletteOps *ops = m_doc->paletteOps();
+    EncoderBank *enc = m_doc->controlMap()->encoderBank();
+    QVERIFY(!ops->canUndo());
+
+    // The layer row itself: its scene is baked from its looks (shared, never
+    // saved), so a turn refuses and says where to turn instead.
+    QVERIFY(!bench->encoderTarget().isValid());
+    QVERIFY(bench->encoderTarget().why.contains("looks"));
+    enc->setBank(EncoderBank::ColourBank);
+    QCoreApplication::processEvents();
+    QVERIFY2(bench->encoderLine().contains("open one"), qPrintable(bench->encoderLine()));
+    const int blue = int(layerScene->value(a->id(), 7));
+    turn(4, 3);
+    gather();
+    QCOMPARE(int(layerScene->value(a->id(), 7)), blue);
+    QVERIFY2(bench->encoderLine().contains("made from its looks"), qPrintable(bench->encoderLine()));
+    QVERIFY(!ops->canUndo());
+
+    // Its look opened in the Look Editor (the layer's Dimmer row): the turn is the
+    // look's own edit and its own undo step, for a whole gesture.
+    enc->setBank(EncoderBank::IntensityBank);
+    ProgrammingOutline::Row row;
+    row.kind = ProgrammingOutline::AttributeRow;
+    row.scene = 0;
+    row.id = 0;
+    QVERIFY(bench->selectRow(row));
+    QCoreApplication::processEvents();
+    QCOMPARE(bench->currentPage(), Workbench::LookPage);
+    QVERIFY(bench->encoderTarget().look != nullptr);
+    QLCPalette *low = nullptr;
+    for (QLCPalette *p : m_doc->palettes())
+        if (p->name() == "Low")
+            low = p;
+    QVERIFY(low != nullptr);
+    for (int i = 0; i < 5; ++i)
+        turn(0, 1);
+    gather();
+    QVERIFY(low->intValue1() > 51);
+    const int end = low->intValue1();
+    QVERIFY(ops->canUndo());
+    QVERIFY(ops->undo());
+    QCOMPARE(low->intValue1(), 51);
+    QVERIFY2(!ops->canUndo(), "the turn was more than one step");
+    QVERIFY(ops->redo());
+    QCOMPARE(low->intValue1(), end);
+}
+
+void EncoderBankUi_Test::aShowTreeLayerRefusesInOperate()
+{
+    Fixture *a = mover("A", 0);
+    Fixture *b = mover("B", 10);
+    ShowTreeView view(nullptr, m_doc);
+    Scene *layerScene = nullptr;
+    Workbench *bench = dockedLayer(&view, a, b, &layerScene);
+    QVERIFY(bench != nullptr && layerScene != nullptr);
+    ProgrammingOutline::Row row;
+    row.kind = ProgrammingOutline::AttributeRow;
+    row.scene = 0;
+    row.id = 0;
+    QVERIFY(bench->selectRow(row));
+    QCoreApplication::processEvents();
+    QVERIFY(bench->encoderTarget().look != nullptr);
+    QLCPalette *low = nullptr;
+    for (QLCPalette *p : m_doc->palettes())
+        if (p->name() == "Low")
+            low = p;
+    QVERIFY(low != nullptr);
+
+    m_doc->setMode(Doc::Operate);
+    turn(0, 3);
+    gather();
+    QCOMPARE(low->intValue1(), 51);
+    QVERIFY(!m_doc->paletteOps()->canUndo());
+    QVERIFY2(bench->encoderLine().contains("Operate"), qPrintable(bench->encoderLine()));
 }
 
 QTEST_MAIN(EncoderBankUi_Test)

@@ -24,6 +24,8 @@
 #include <QHeaderView>
 #include <QMessageBox>
 #include <QPushButton>
+#include <QAction>
+#include <QMenu>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QComboBox>
@@ -229,6 +231,26 @@ void ControlMapPanel::buildEncoderBox(QVBoxLayout *lay)
     m_encLearn->setObjectName(QStringLiteral("encoderLearn"));
     m_encLearn->setToolTip(tr("Turn the first encoder of the controller: the other encoders are the "
                               "channels after it"));
+    m_encLearnMore = new QPushButton(tr("Learn more…"), m_encoderBox);
+    m_encLearnMore->setObjectName(QStringLiteral("encoderLearnMore"));
+    m_encLearnMore->setToolTip(tr("Press or turn the control: it is set as the pushes, a bank button or the "
+                                  "rings. The ones that follow are the controls after it"));
+    QMenu *more = new QMenu(m_encLearnMore);
+    auto learnItem = [&](const QString &text, const QString &name, int target) {
+        QAction *a = more->addAction(text);
+        a->setObjectName(name);
+        a->setData(target);
+    };
+    learnItem(tr("Push of encoder 1…"), QStringLiteral("encoderLearnPushes"), LearnPushes);
+    learnItem(tr("Next-bank button…"), QStringLiteral("encoderLearnNext"), LearnNext);
+    learnItem(tr("Previous-bank button…"), QStringLiteral("encoderLearnPrevious"), LearnPrevious);
+    learnItem(tr("Bank 1 button (the next four follow)…"), QStringLiteral("encoderLearnDirect"), LearnDirect);
+    learnItem(tr("Ring of encoder 1 (turn that encoder)…"), QStringLiteral("encoderLearnRings"), LearnRings);
+    more->addSeparator();
+    QAction *forget = more->addAction(tr("Forget the pushes, bank buttons and rings"));
+    forget->setObjectName(QStringLiteral("encoderForget"));
+    forget->setData(-1);
+    m_encLearnMore->setMenu(more);
     top->addWidget(new QLabel(tr("Controller"), m_encoderBox));
     top->addWidget(m_encPreset, 1);
     top->addWidget(m_encUniverse);
@@ -238,6 +260,7 @@ void ControlMapPanel::buildEncoderBox(QVBoxLayout *lay)
     mid->addWidget(m_encEncoding, 1);
     mid->addWidget(m_encInvert);
     mid->addWidget(m_encLearn);
+    mid->addWidget(m_encLearnMore);
     box->addLayout(mid);
 
     m_encMap = new QLabel(m_encoderBox);
@@ -256,6 +279,7 @@ void ControlMapPanel::buildEncoderBox(QVBoxLayout *lay)
     connect(m_encEncoding, QOverload<int>::of(&QComboBox::activated), this, &ControlMapPanel::slotEncoderEdited);
     connect(m_encInvert, &QCheckBox::clicked, this, &ControlMapPanel::slotEncoderEdited);
     connect(m_encLearn, &QPushButton::clicked, this, &ControlMapPanel::slotEncoderLearn);
+    connect(more, &QMenu::triggered, this, &ControlMapPanel::slotEncoderLearnMore);
     connect(m_doc->controlMap(), &ControlMap::heard, this, &ControlMapPanel::slotEncoderHeard);
 }
 
@@ -290,6 +314,7 @@ void ControlMapPanel::refreshEncoder()
     m_encEncoding->setEnabled(on);
     m_encInvert->setEnabled(on);
     m_encLearn->setEnabled(on);
+    m_encLearnMore->setEnabled(on);
 
     QString map;
     if (d.encoders >= 0)
@@ -356,23 +381,77 @@ void ControlMapPanel::slotEncoderEdited()
     refresh();
 }
 
+void ControlMapPanel::startEncoderLearn(int target)
+{
+    endEncoderLearn();
+    m_encLearning = target;
+    if (target == LearnEncoders)
+    {
+        m_encLearn->setText(tr("Turn encoder 1…"));
+    }
+    else
+    {
+        const QString what = target == LearnPushes ? tr("Push encoder 1…")
+                           : target == LearnNext ? tr("Press next bank…")
+                           : target == LearnPrevious ? tr("Press previous bank…")
+                           : target == LearnDirect ? tr("Press bank 1…") : tr("Turn encoder 1…");
+        m_encLearnMore->setText(what);
+    }
+    m_doc->controlMap()->listen();
+}
+
+void ControlMapPanel::endEncoderLearn()
+{
+    m_encLearning = LearnNone;
+    m_encLearn->setText(tr("Learn encoder 1…"));
+    m_encLearnMore->setText(tr("Learn more…"));
+}
+
 void ControlMapPanel::slotEncoderLearn()
 {
-    m_encLearning = true;
-    m_encLearn->setText(tr("Turn encoder 1…"));
-    m_doc->controlMap()->listen();
+    startEncoderLearn(LearnEncoders);
+}
+
+void ControlMapPanel::slotEncoderLearnMore(QAction *action)
+{
+    const int target = action->data().toInt();
+    if (target < 0)
+    {
+        // Forget: the controls a preset or a learn set, other than the encoders.
+        EncoderBank *enc = m_doc->controlMap()->encoderBank();
+        EncoderBank::Device d = enc->device();
+        d.pushes = d.rings = d.bankNext = d.bankPrevious = d.bankDirect = d.bankLamps = -1;
+        enc->setDevice(d, QStringLiteral("custom"));
+        refresh();
+        return;
+    }
+    startEncoderLearn(target);
 }
 
 void ControlMapPanel::slotEncoderHeard(quint32 universe, quint32 channel)
 {
-    if (!m_encLearning)
+    if (m_encLearning == LearnNone)
         return;
-    m_encLearning = false;
-    m_encLearn->setText(tr("Learn encoder 1…"));
+    const int target = m_encLearning;
+    endEncoderLearn();
     EncoderBank *enc = m_doc->controlMap()->encoderBank();
     EncoderBank::Device d = enc->device();
     d.universe = universe;
-    d.encoders = qint32(channel);
+    const qint32 ch = qint32(channel);
+    switch (target)
+    {
+    case LearnEncoders: d.encoders = ch; break;
+    case LearnPushes: d.pushes = ch; break;
+    case LearnNext: d.bankNext = ch; break;
+    case LearnPrevious: d.bankPrevious = ch; break;
+    case LearnDirect:
+        // The lamps are the buttons' own lines unless they were set apart.
+        if (d.bankLamps < 0 || d.bankLamps == d.bankDirect)
+            d.bankLamps = ch;
+        d.bankDirect = ch;
+        break;
+    case LearnRings: d.rings = ch; break;
+    }
     enc->setDevice(d, QStringLiteral("custom"));
     refresh();
 }

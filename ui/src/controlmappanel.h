@@ -29,6 +29,7 @@ class QVBoxLayout;
 class QGroupBox;
 class QCheckBox;
 class QPushButton;
+class QAction;
 class QLabel;
 class Doc;
 
@@ -57,7 +58,8 @@ public:
     /** The Encoder bank section (the scheme of a MIDI controller's
      *  endless encoders; docs/features/encoder-banks.md): the device's
      *  preset, its universe and relative encoding, learn the first
-     *  encoder, what it is mapped to. */
+     *  encoder, the pushes, the bank buttons and the rings, what it is
+     *  mapped to. */
     QGroupBox *encoderBox() const { return m_encoderBox; }
 
 public slots:
@@ -76,6 +78,7 @@ private slots:
     void slotEncoderPreset(int index);
     void slotEncoderEdited();
     void slotEncoderLearn();
+    void slotEncoderLearnMore(QAction *action);
     void slotEncoderHeard(quint32 universe, quint32 channel);
 
 private:
@@ -86,7 +89,12 @@ private:
     QLabel *m_empty;
     QLabel *m_last;
 
+    /** What the next control heard is set as. */
+    enum LearnTarget { LearnNone = 0, LearnEncoders, LearnPushes, LearnNext, LearnPrevious, LearnDirect,
+                       LearnRings };
     void buildEncoderBox(QVBoxLayout *lay);
+    void startEncoderLearn(int target);
+    void endEncoderLearn();
     void refreshEncoder();
 
     QGroupBox *m_encoderBox = nullptr;
@@ -95,9 +103,10 @@ private:
     QComboBox *m_encEncoding = nullptr;
     QCheckBox *m_encInvert = nullptr;
     QPushButton *m_encLearn = nullptr;
+    QPushButton *m_encLearnMore = nullptr;
     QLabel *m_encNote = nullptr;
     QLabel *m_encMap = nullptr;
-    bool m_encLearning = false;
+    int m_encLearning = LearnNone;
     bool m_encShowing = false;
 };
 
