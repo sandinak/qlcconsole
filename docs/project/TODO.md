@@ -475,6 +475,20 @@ same milliseconds at 30).
 (Left open on purpose in feat/05-run-leftovers: a time per frame rate
 changes how a cue's time is stored and read back, which is not small.)
 
+## Timeline waveform + markers — built, leftovers (0.4, tlw, 2026-11-01)
+
+Built: DONE.md 2026-11-01 (`waveformpeaks_test`, `ShowManager_Test`), docs/features/shows.md.
+Markers, their undo and the timeline were already in the Shows timeline; this
+added the cached background waveform, the DAW marker import and the marker snap.
+- decided (can change): the waveform is on the Shows timeline's audio clip and
+  in its markers lane; the Show Tree's cue list has no linked audio track and no
+  time view, so no waveform there.
+- decided (can change): peaks are cached in the user cache, not beside the show.
+- decided (can change): CSV / tab text only; MIDI marker files and bar-based
+  positions are not read (a Logic list needs its SMPTE column).
+- Open: snap a cue's time to a beat (BPM ruler), snap while resizing, and Q198
+  (re-timing cues to a re-cut song) which waits on its answer.
+
 ## Lighting Studio alignment — leftovers (0.3.1 d2, 2026-10-29)
 
 The audit's rows are fixed (DONE.md 2026-10-29, ui/test/plotalignment);

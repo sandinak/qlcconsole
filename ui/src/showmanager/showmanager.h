@@ -293,6 +293,10 @@ protected slots:
     void slotShowLockedChanged(bool locked);
     void slotTrackColorChangeRequested(Track *track);
     void slotMarkerAddRequested(quint32 time);
+    /** Pick a DAW marker list and add its sections (one undo step) */
+    void slotMarkersImportRequested();
+    /** Add the sections in @p text as markers; returns how many (undoable) */
+    int importMarkers(const QString &text);
     void slotMarkerEditRequested(quint32 time);
     void slotMarkerDeleteRequested(quint32 time);
     void slotMarkerColorRequested(quint32 time);

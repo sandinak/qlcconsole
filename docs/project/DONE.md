@@ -6,6 +6,12 @@ not-yet-built work lives in [TODO.md](TODO.md); move an entry here when it ships
 
 ---
 
+### 2026-11-01 — Timeline waveform and marker import *(tlw, feat/05-timeline-waveform)*
+
+Found first: the Shows timeline (`ui/src/showmanager`) already had section markers (add, drag, rename, recolour, cue-list link, saved in `Show`, undone by the coarse snapshot), a marker snap in `snapTimeMs`, and an opt-in waveform on audio clips (`PreviewThread`: a pixmap per change, a thread touching the item, no cache). The Show Tree has no linked audio track and no time view. So: `WaveformPeaks` (10 ms min/max per channel from the existing `AudioDecoder`s, binary cache in the user cache keyed by path+size+mtime) and `WaveformService` (global thread pool, one build per file, ready() on the GUI thread) replace `PreviewThread`; `AudioItem` paints from the envelope per exposed pixel column and `MultiTrackView` draws the first audio clip in the marker lane (bands go translucent). `MarkerImport` reads Logic / CSV lists (hh:mm:ss.mmm, SMPTE with frames, seconds, 1 h DAW offset removed), `ShowManager::importMarkers` is one undo step; the lane menu got "Import markers from a file…" (no new menu). `MultiTrackView::snapToMarker` snaps a dropped item to a marker edge with Snap to grid on. Tests: `waveformpeaks_test` (peaks, cache key, service build-once, invalidation, no file, 5-minute redraw) and four in `showmanager_test`. Not built: Q198 re-timing, beat snap.
+
+---
+
 ### 2026-11-01 — Play and Solo on the Show Tree's cue and layer pages *(solo, fix/04-solo-play)*
 
 Branson: "what happened to our solo and play buttons .. they were really useful. We should make sure they work per cue and per layer in cue." Nothing removed them: since W3 (4984db0be, 2026-10-22) they were only in the Workbench docked in the tree (✎, double-click, `wb`); the tree's own cue and layer pages, where a click on a cue lands, never had them (the only Play there, RC8's `stPreviewPlay`, shows only while a GO holds the preview). Checked lb 69dcc628b, stc c4c465177, lyr 3d4e9ca48, walk 9201e600f and why2 d36eb401d: none touches them; an offscreen App run confirmed the docked pair works on 987c9c56e. In Operate the docked Workbench hid Play (updateOnRig).

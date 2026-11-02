@@ -48,6 +48,7 @@
 #include "audioplugincache.h"
 #include "rgbmatrixeditor.h"
 #include "multitrackview.h"
+#include "markerimport.h"
 #include "chasereditor.h"
 #include "showtreecontroller.h"
 #include "showtreeview.h"
@@ -203,6 +204,8 @@ ShowManager::ShowManager(QWidget* parent, Doc* doc)
             this, SLOT(slotNewTrackRequested()));
     connect(m_showview, SIGNAL(markerAddRequested(quint32)),
             this, SLOT(slotMarkerAddRequested(quint32)));
+    connect(m_showview, SIGNAL(markersImportRequested()),
+            this, SLOT(slotMarkersImportRequested()));
     connect(m_showview, SIGNAL(markerEditRequested(quint32)),
             this, SLOT(slotMarkerEditRequested(quint32)));
     connect(m_showview, SIGNAL(markerDeleteRequested(quint32)),
@@ -2071,6 +2074,46 @@ void ShowManager::slotMarkerAddRequested(quint32 time)
     m_show->setMarker(time, end, label.trimmed(), QColor(palette[idx]));
     m_showview->setMarkers(m_show->markers());
     m_doc->setModified();
+}
+
+int ShowManager::importMarkers(const QString &text)
+{
+    if (m_show == NULL)
+        return 0;
+    const MarkerImport::Result r = MarkerImport::parse(text, m_doc->timecodeSource()->fps());
+    if (r.markers.isEmpty())
+        return 0;
+    pushUndoSnapshot();
+    const int n = MarkerImport::apply(m_show, r);
+    m_showview->setMarkers(m_show->markers());
+    m_doc->setModified();
+    return n;
+}
+
+void ShowManager::slotMarkersImportRequested()
+{
+    if (m_show == NULL)
+        return;
+    const QString fn = QFileDialog::getOpenFileName(this, tr("Import markers"), QString(),
+                        tr("Marker lists (*.csv *.txt *.tsv);;All files (*)"));
+    if (fn.isEmpty())
+        return;
+    QFile f(fn);
+    if (f.open(QIODevice::ReadOnly | QIODevice::Text) == false)
+    {
+        QMessageBox::warning(this, tr("Import markers"), tr("Can't read %1.").arg(fn));
+        return;
+    }
+    const QString text = QString::fromUtf8(f.readAll());
+    const MarkerImport::Result r = MarkerImport::parse(text, m_doc->timecodeSource()->fps());
+    const int n = importMarkers(text);
+    if (n == 0)
+        QMessageBox::information(this, tr("Import markers"),
+            tr("No markers found. Each line needs a time (00:01:23.500, 00:01:23:12 or seconds) and a name."));
+    else
+        QMessageBox::information(this, tr("Import markers"),
+            tr("Added %1 markers%2.").arg(n)
+              .arg(r.skipped ? tr(" (%1 lines without a time were skipped)").arg(r.skipped) : QString()));
 }
 
 void ShowManager::slotMarkerEditRequested(quint32 time)

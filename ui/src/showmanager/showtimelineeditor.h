@@ -80,6 +80,7 @@ private slots:
 
     // Markers (section labels + manual-cue-list links = the timecode↔manual seam)
     void slotMarkerAddRequested(quint32 time);
+    void slotMarkersImportRequested();
     void slotMarkerEditRequested(quint32 time);
     void slotMarkerColorRequested(quint32 time);
     void slotMarkerDeleteRequested(quint32 time);

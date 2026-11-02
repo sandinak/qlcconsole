@@ -839,6 +839,8 @@ updateOnRig). Both tests fail on 987c9c56e (before the fix) with "missing".
 |---|---|---|---|---|---|---|---|
 | M660 | Play / Solo stay available | Design: on a cue's page, a layer's page, another layer and another cue, and in the docked Workbench (layer, other layer, other cue), Play and Solo are visible and enabled. Play / Stop puts the cue on and off the universe; Solo outputs only the layer's channels and follows the selected layer; leaving the cue drops Solo; Stop holds across layers until Play or another cue | **ShowTreeWorkbench_Test::soloAndPlayStayAvailable** (new) | none | covered | high | Do not delete: it guards against the buttons going missing again |
 | M661 | Greyed in Operate | Operate: the pages' and the docked Workbench's Play and Solo are visible, greyed, with a tooltip saying why; nothing previews; back to Design they work | **ShowTreeWorkbench_Test::soloAndPlayGreyInOperate** (new) | none | covered | med | — |
+| M662 | Timeline waveform | An audio clip's peaks follow the samples, are cached by path+size+mtime, built once off the GUI thread, rebuilt when the file changes, drawn at any zoom (5-minute song) and without a file | **WaveformPeaks_Test** (ui/test/waveformpeaks) | none | covered | med | the clip painting itself is not pixel-checked |
+| M663 | Marker import and snap | A DAW marker list (Logic tab text, CSV, SMPTE/seconds) becomes saved sections in one undo step; a dropped item snaps to a marker edge; the timeline draws with a missing audio file | **ShowManager_Test::importedMarkersSaveLoadAndUndo, markerListFormats, aCueSnapsToAMarker, drawsWithoutTheAudioFile** | none | covered | med |  |
 
 ## Data safety across features (old shows, file formats)
 
