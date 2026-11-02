@@ -7496,6 +7496,7 @@
   <Palette ID="17" Type="Aim" Name="Aim Soloist DS" StageTarget="0"/>
   <Palette ID="18" Type="Aim" Name="Aim Center" StageTarget="1"/>
   <Palette ID="19" Type="Aim" Name="Aim Riser Line" StageTarget="2"/>
+  <Palette ID="20" Type="Color" Name="Flesh" Value="#ffcdaa000000"/>
   <SpeedMasters>
    <Master Index="0" Name="Main Speed" Mode="Own" BPM="120"/>
    <Master Index="1" Mode="Own" BPM="120"/>

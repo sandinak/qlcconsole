@@ -247,6 +247,7 @@ private slots:
     void textColoursInheritSaveLoadAndUndo();
     void textColoursAnOlderReaderIgnores();
     void textColourTyped();
+    void colourFleshTypedByName();
     void textColoursAreMadeReadable();
     // Mutation gaps (2026-10-28)
     /** Between two tracked values on a fixture, the later cue's wins. */

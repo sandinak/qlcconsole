@@ -723,7 +723,7 @@ stays, and the look stays in its folder:
 | Crimson Tide | anything | Crimson Tide (yours: never changed) |
 
 Colour names come from a table of colours with light and dark variants,
-such as Red, Dark Red, Light Red, Amber, Warm White and UV. A colour word
+such as Red, Dark Red, Light Red, Amber, Warm White, Flesh and UV. A colour word
 the old value was close to also counts, so a "Blue" named by an older
 version follows too. A look still called **New Color** (or **New Dimmer**)
 is named after its value. If at least two other looks of that type in the

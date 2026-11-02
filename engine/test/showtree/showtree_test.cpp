@@ -5628,6 +5628,32 @@ void ShowTree_Test::exclusionIsThreadSafeWithLivePreview()
  * P3: group sets, child layers and overlap (§1, §3.5)
  ****************************************************************************/
 
+/* "Towers colour flesh": the stock Flesh palette, found by name in any case. */
+void ShowTree_Test::colourFleshTypedByName()
+{
+    FixtureGroup *g = group("Towers", { m_fixtures[0], m_fixtures[1] });
+    QLCPalette *flesh = new QLCPalette(QLCPalette::Color, m_doc);
+    flesh->setName("Flesh");
+    flesh->setValue(QLCPalette::colorToString(QColor(255, 205, 170), QColor(Qt::black)));
+    m_doc->addPalette(flesh);
+
+    ShowTreeController *st = m_doc->showTree();
+    ShowTreeCommand cmd(m_doc, st);
+    ShowTreeCommand::Context ctx;
+    ctx.production = st->addProduction("P");
+    ShowTreeCommand::Result r = cmd.run("list \"Song\"", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    ctx = r.context;
+    r = cmd.run("cue 1 block", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    ctx = r.context;
+    r = cmd.run("Towers colour flesh", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    const Layer &layer = st->cue(ctx.cue)->layers.first();
+    QCOMPARE(layer.target.groups, QList<quint32>({ g->id() }));
+    QCOMPARE(layer.look(KeyColour)->palettes.value(0), flesh->id());
+}
+
 /* A group set is one target of all its members (one scene, each member a
    group of its own, so it keeps its head layout); the set is the layer's
    identity, so changing its members keeps the layer (and what tracks). */

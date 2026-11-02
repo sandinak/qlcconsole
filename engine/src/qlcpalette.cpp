@@ -2398,7 +2398,7 @@ QColor QLCPalette::capabilityColour(const QLCCapability *cap)
         { "amber", QColor(255, 191, 0) }, { "uv", QColor(148, 0, 211) },
         { "ultraviolet", QColor(148, 0, 211) }, { "warmwhite", QColor(255, 220, 180) },
         { "coolwhite", QColor(220, 235, 255) }, { "coldwhite", QColor(220, 235, 255) },
-        { "cto", QColor(255, 200, 140) }, { "ctb", QColor(200, 220, 255) },
+        { "flesh", QColor(255, 205, 170) }, { "cto", QColor(255, 200, 140) }, { "ctb", QColor(200, 220, 255) },
         { "lightgreen", QColor(144, 238, 144) }, { "darkblue", QColor(0, 0, 139) } };
     if (extra.contains(key))
         return extra.value(key);

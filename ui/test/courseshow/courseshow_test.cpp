@@ -165,6 +165,10 @@ const QStringList kPaletteCommands = {
     "palette shutter \"Open\"",
 };
 
+/* In the classroom template (File > New from Template) after the aims, and
+   not in the lessons' contract: Flesh, the stock skin tone. */
+const QString kFleshCommand = QStringLiteral("palette colour \"Flesh\" #ffcdaa");
+
 /* What the lessons name: if one of these changes, a handout is wrong. */
 const QStringList kGroups = { "Steps", "US", "CS", "DS", "StepTops",
                               "Trusses", "Trusses SR", "Trusses SL", "Truss-Spots",
@@ -879,6 +883,7 @@ void CourseShow_Test::buildTheShows()
         p->setStageTargetId(t->id());
         QVERIFY(doc->addPalette(p));
     }
+    QVERIFY2(view->runCommand(kFleshCommand), qPrintable(view->commandMessage()));
     QCOMPARE(m_app->saveXML(kClassroom), QFile::NoError);
     // Lesson 3.6 is the one lesson that expects Teaching mode (decided, can
     // change): its start file is the classroom show with it on.

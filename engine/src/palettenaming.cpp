@@ -49,6 +49,7 @@ const NamedColour kColours[] = {
     { "Magenta",      255,   0, 255 }, { "Dark Magenta",  128,   0, 128 }, { "Light Magenta", 255, 140, 255 },
     { "Pink",         255,   0, 128 }, { "Dark Pink",     140,   0,  70 }, { "Light Pink",    255, 170, 200 },
     { "White",        255, 255, 255 }, { "Warm White",    255, 210, 150 }, { "Cool White",    210, 225, 255 },
+    { "Flesh",        255, 205, 170 },
     { "Grey",         128, 128, 128 }, { "Dark Grey",      64,  64,  64 }, { "Light Grey",    192, 192, 192 },
     { "Black",          0,   0,   0 },
 };

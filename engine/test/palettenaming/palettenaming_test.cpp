@@ -43,6 +43,11 @@ void PaletteNaming_Test::colourNames_data()
     QTest::newRow("magenta")      << QColor(255, 0, 255)   << none << "Magenta";
     QTest::newRow("white")        << QColor(255, 255, 255) << none << "White";
     QTest::newRow("warm white")   << QColor(255, 205, 140) << none << "Warm White";
+    QTest::newRow("flesh")        << QColor(255, 205, 170) << none << "Flesh";
+    QTest::newRow("flesh, near")  << QColor(250, 200, 165) << none << "Flesh";
+    QTest::newRow("warm white, stock") << QColor(255, 201, 130) << none << "Warm White";
+    QTest::newRow("light orange") << QColor(255, 180, 110) << none << "Light Orange";
+    QTest::newRow("light pink")   << QColor(255, 170, 200) << none << "Light Pink";
     QTest::newRow("black")        << QColor(0, 0, 0)       << none << "Black";
     QTest::newRow("W only")       << QColor(0, 0, 0)       << QColor(255, 0, 0) << "White";
     QTest::newRow("A only")       << QColor(0, 0, 0)       << QColor(0, 200, 0) << "Amber";
