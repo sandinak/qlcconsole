@@ -89,9 +89,11 @@ void OperationRegistry_Test::catalogIsWhole()
             QVERIFY(ShowTreeCommand::word(op.cliWord) == nullptr);
             continue;
         }
-        if (!op.readOnly && (op.name == QLatin1String("set_group_master") || op.name == QLatin1String("set_hit_override")))
+        if (!op.readOnly && (op.name == QLatin1String("set_group_master") || op.name == QLatin1String("set_hit_override")
+                             || op.name == QLatin1String("ripple_timecode") || op.name == QLatin1String("stretch_section")))
         {
-            // 0.4 leftovers: the playing words (`master Backs 50`, `override`)
+            // 0.4 leftovers: the playing words (`master Backs 50`, `override`);
+            // Q198: the timecode words (`ripple +2.5 at 3.1`, `stretch Chorus 2 to 0:42`)
             QVERIFY(op.parse && !op.cliWord.isEmpty() && op.cliHelp.startsWith(op.cliWord));
             QVERIFY(op.schema.value("additionalProperties") == QJsonValue(false));
             QVERIFY(ShowTreeCommand::word(op.cliWord) == nullptr);
@@ -126,7 +128,8 @@ void OperationRegistry_Test::catalogIsWhole()
                            "set_cue_mode", "release_layer", "skip_cues", "unskip_cues", "record_cue",
                            "rename_selected", "duplicate_cue", "include_cue", "make_group_set", "play_function",
                            "set_effect_fade",
-                           "import_config", "set_group_master", "set_hit_override" })
+                           "import_config", "set_group_master", "set_hit_override",
+                           "ripple_timecode", "stretch_section" })
         QVERIFY2(names.contains(QLatin1String(n)), n);
     // A group master is playing, not editing: not a step of an AI plan.
     int live = 0;
@@ -162,6 +165,9 @@ void OperationRegistry_Test::cliRoundTrip_data()
     QTest::newRow("master quoted") << "set_group_master" << QJsonObject { { "group", "Front Wash" }, { "level", 0 } };
     QTest::newRow("override") << "set_hit_override" << QJsonObject();
     QTest::newRow("override off") << "set_hit_override" << QJsonObject { { "on", false } };
+    QTest::newRow("ripple") << "ripple_timecode" << QJsonObject { { "seconds", 2.5 }, { "cue", "3.1" } };
+    QTest::newRow("ripple back") << "ripple_timecode" << QJsonObject { { "seconds", -1.5 } };
+    QTest::newRow("stretch") << "stretch_section" << QJsonObject { { "section", "Chorus 2" }, { "seconds", 42.0 } };
 }
 
 void OperationRegistry_Test::cliRoundTrip()

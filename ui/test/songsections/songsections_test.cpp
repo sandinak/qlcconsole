@@ -25,10 +25,13 @@
 #include <QLineEdit>
 #include <QLabel>
 #include <QtTest>
+#include <QTemporaryDir>
+#include <QFile>
 
 #include "showtreecontroller.h"
 #include "functionparent.h"
 #include "showtreeview.h"
+#include "timecodesource.h"
 #include "fixturegroup.h"
 #include "qlcpalette.h"
 #include "cuerunner.h"
@@ -332,6 +335,133 @@ void ShowTreeSectionsUi_Test::mergeThenRunShowsEverySection()
     QCOMPARE(tree->topLevelItem(0)->text(0), QString("0 — Preshow"));
     QVERIFY(!tree->topLevelItem(0)->isExpanded());
     QVERIFY(tree->topLevelItem(1)->isExpanded());
+}
+
+/* Q198: a section's Starts at (typed, Later sections follow), a cue's
+   Anchor and what its time counts from, the list page's Section times…,
+   Import Logic markers… (a MIDI file's markers), Learn section starts,
+   and the cue's ripple / stretch. */
+void ShowTreeSectionsUi_Test::timecodeAnchorsOnThePages()
+{
+    const QList<quint32> ids = twoSongs();
+    ShowTreeController *st = m_doc->showTree();
+    QVERIFY(st->mergeLists(m_production, { ids[0], ids[1] }));
+    const quint32 list = ids[0];
+    ShowTreeView view(nullptr, m_doc);
+    QStringList asked;
+    view.setConfirm([&asked](const QString &title, const QString &, const QString &details) {
+        asked << title + QStringLiteral(": ") + details;
+        return true;
+    });
+    view.resize(1280, 700);
+    view.reload();
+
+    // Not following timecode: no Starts at, no timecode row on the list.
+    view.tree()->setCurrentItem(sectionRows(view.tree()).at(1));
+    QLineEdit *start = view.findChild<QLineEdit *>("stSectionStart");
+    QVERIFY(start != nullptr && !start->isVisibleTo(&view));
+    QVERIFY(st->setListFollowTimecode(list, true));
+
+    // The section page: typed.
+    view.tree()->setCurrentItem(sectionRows(view.tree()).at(1));
+    QVERIFY(start->isVisibleTo(&view));
+    start->setText("00:00:30:00");
+    emit start->editingFinished();
+    QCOMPARE(st->sectionStart(list, st->sections(list).at(1)), 30000);
+
+    // A cue's time counts from it; the cue page says from what.
+    QVERIFY(st->setCueTimecode(ids[5], 34000));
+    QVERIFY(view.selectNode(ids[5]));
+    QLabel *base = view.findChild<QLabel *>("stCueTimecodeBase");
+    QVERIFY(base != nullptr && base->isVisibleTo(&view));
+    QCOMPARE(base->text(), QString("+4.0 s from 1 — 01-Everybody Scream"));
+    QCheckBox *anchor = view.findChild<QCheckBox *>("stCueTimecodeAnchor");
+    QVERIFY(anchor != nullptr && !anchor->isChecked());
+    anchor->setChecked(true);
+    QVERIFY(st->isCueTimecodeAnchor(ids[5]));
+    QVERIFY(st->undo());
+
+    // Moving the start moves the cue.
+    view.tree()->setCurrentItem(sectionRows(view.tree()).at(1));
+    QCheckBox *follow = view.findChild<QCheckBox *>("stSectionFollow");
+    QVERIFY(follow != nullptr);
+    start->setText("00:00:36:00");
+    emit start->editingFinished();
+    QCOMPARE(st->cue(ids[5])->timecode, 40000);
+
+    // The list page: Section times… for the cue with a time of its own.
+    QVERIFY(st->setCueTimecode(ids[3], 1000));
+    QVERIFY(view.selectNode(list));
+    QPushButton *convert = view.findChild<QPushButton *>("stListTcConvert");
+    QVERIFY(convert != nullptr && convert->isVisibleTo(&view));
+    convert->click();
+    QVERIFY(st->cue(ids[3])->tcFromSection);
+    QCOMPARE(st->sectionStart(list, st->sections(list).at(0)), 1000);
+    QVERIFY(asked.last().startsWith("Section times"));
+    QVERIFY(view.selectNode(list));
+    QVERIFY(!convert->isVisibleTo(&view));
+
+    // Import Logic markers…: a MIDI file's marker named for the song.
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    auto vlq = [](quint32 n) {
+        QByteArray out;
+        out.prepend(char(n & 0x7F));
+        while ((n >>= 7) != 0)
+            out.prepend(char((n & 0x7F) | 0x80));
+        return out;
+    };
+    const QByteArray name("01-Everybody Scream");
+    QByteArray track = vlq(50000) + char(0xFF) + char(0x06) + vlq(quint32(name.size())) + name
+                       + vlq(0) + char(0xFF) + char(0x2F) + char(0);
+    auto be = [](quint32 v, int bytes) {
+        QByteArray out;
+        for (int i = bytes - 1; i >= 0; --i)
+            out += char((v >> (8 * i)) & 0xFF);
+        return out;
+    };
+    const QByteArray mid = QByteArray("MThd") + be(6, 4) + be(0, 2) + be(1, 2) + be(0xE728, 2)   // 25 fps x 40: 1 ms
+                           + QByteArray("MTrk") + be(quint32(track.size()), 4) + track;
+    const QString path = dir.filePath("export.mid");
+    {
+        QFile f(path);
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write(mid);
+    }
+    st->clearUndo();
+    QVERIFY(view.importLogicMarkers(list, path));
+    QVERIFY2(asked.last().contains("1 — 01-Everybody Scream moved +14.0 s, 1 cue(s) follow"), qPrintable(asked.last()));
+    QVERIFY(asked.last().contains("No marker for 0 — 00-Preshow"));
+    QCOMPARE(st->cue(ids[5])->timecode, 54000);
+    QCOMPARE(st->undoText(), QString("Import Logic markers"));
+    QVERIFY(st->undo());
+    QCOMPARE(st->cue(ids[5])->timecode, 40000);
+    QVERIFY(!view.importLogicMarkers(list, dir.filePath("none.mid")));
+
+    // Learn section starts: a tap a section.
+    QVERIFY(view.selectNode(list));
+    QPushButton *learn = view.findChild<QPushButton *>("stListTcLearn");
+    QVERIFY(learn != nullptr && learn->isVisibleTo(&view));
+    QCOMPARE(learn->text(), QString("Learn section starts"));
+    learn->click();
+    QCOMPARE(view.learnSection(), QString("0 — 00-Preshow"));
+    QCOMPARE(learn->text(), QString("Tap at: 0 — 00-Preshow"));
+    m_doc->timecodeSource()->updateTimeCode(0, 2000, 30);
+    learn->click();
+    QCOMPARE(st->sectionStart(list, st->sections(list).at(0)), 2000);
+    QVERIFY(view.learnTap(41000));
+    QCOMPARE(st->cue(ids[5])->timecode, 45000);
+    QVERIFY(view.learnSection().isEmpty());
+    QCOMPARE(learn->text(), QString("Learn section starts"));
+    QVERIFY(!view.learnTap(50000));
+
+    // Ripple and stretch, as the cue's Ripple timecode… does.
+    QVERIFY(view.rippleCue(ids[5], ShowTreeView::RippleInsert, 1500));
+    QCOMPARE(st->cue(ids[5])->timecode, 46500);
+    QVERIFY(view.rippleCue(ids[5], ShowTreeView::RippleRemove, 1500));
+    QCOMPARE(st->cue(ids[5])->timecode, 45000);
+    QVERIFY(view.rippleCue(ids[5], ShowTreeView::RippleStretch, 8000));
+    QCOMPARE(st->cue(ids[5])->timecode, 49000);
 }
 
 QTEST_MAIN(ShowTreeSectionsUi_Test)

@@ -476,6 +476,12 @@ code as it arrives with its **sync health**: healthy, usable or
 unstable, from how fast it runs against real time, its jitter and how
 often it updates.
 
+When the music runs from a DAW session, time the cues from their song
+sections: a section's start moves its cues with it, Logic's markers (from an
+exported MIDI file) or a tap per section set the starts, and **ripple** /
+**stretch** shift everything after a cut. See [Song sections on the
+timecode](show-tree.md#song-sections-on-the-timecode).
+
 The page's **Web access** section starts the web server (the Virtual
 Console in a browser) whenever this show opens, on the port you pick; see
 [Web access saved with the show](other-improvements.md#web-access-saved-with-the-show).

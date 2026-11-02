@@ -1580,6 +1580,8 @@ void saveXML(QXmlStreamWriter *doc, const Production &production)
                 doc->writeAttribute(QStringLiteral("Key"), h.key);
             writeId(doc, QStringLiteral("Cue"), h.cue);
             doc->writeAttribute(QStringLiteral("Name"), h.name);
+            if (h.start >= 0)
+                doc->writeAttribute(QStringLiteral("Start"), QString::number(h.start));    // Q198
             doc->writeEndElement();
         }
         for (const QString &f : list.folders)
@@ -1631,7 +1633,14 @@ void saveXML(QXmlStreamWriter *doc, const Production &production)
             if (cue.focusCall && !list.looks)
                 doc->writeAttribute(QStringLiteral("FocusCall"), QStringLiteral("1"));
             if (cue.timecode >= 0 && !list.looks && !list.isSubCues())
+            {
                 doc->writeAttribute(QStringLiteral("Timecode"), QString::number(cue.timecode));
+                // Q198: and where it counts from (an older build plays Timecode=).
+                if (cue.tcFromSection)
+                    doc->writeAttribute(QStringLiteral("TimecodeOffset"), QString::number(cue.tcOffset));
+            }
+            if (cue.tcAnchor && !list.looks && !list.isSubCues())
+                doc->writeAttribute(QStringLiteral("TimecodeAnchor"), QStringLiteral("1"));
             if (cue.needsWork)
                 doc->writeAttribute(QStringLiteral("NeedsWork"), QStringLiteral("1"));
             if (list.isSubCues() && cue.follow)
@@ -1845,6 +1854,12 @@ bool loadXML(QXmlStreamReader &root, Production &production)
                 h.key = sa.value(QStringLiteral("Key")).toString();
                 h.cue = readId(sa, QStringLiteral("Cue"));
                 h.name = sa.value(QStringLiteral("Name")).toString();
+                if (sa.hasAttribute(QStringLiteral("Start")))
+                {
+                    bool ok = false;
+                    const int start = sa.value(QStringLiteral("Start")).toString().toInt(&ok);
+                    h.start = ok && start >= 0 ? start : -1;
+                }
                 if (!h.key.isEmpty() || h.cue != invalidId())
                     list.sections << h;
                 root.skipCurrentElement();
@@ -1888,6 +1903,14 @@ bool loadXML(QXmlStreamReader &root, Production &production)
             cue.focusCall = !looks && a.value(QStringLiteral("FocusCall")).toString() == QLatin1String("1");
             cue.timecode = (!looks && !subs && a.hasAttribute(QStringLiteral("Timecode")))
                            ? qMax(-1, a.value(QStringLiteral("Timecode")).toString().toInt()) : -1;
+            if (cue.timecode >= 0 && a.hasAttribute(QStringLiteral("TimecodeOffset")))
+            {
+                bool ok = false;
+                const int off = a.value(QStringLiteral("TimecodeOffset")).toString().toInt(&ok);
+                cue.tcFromSection = ok;
+                cue.tcOffset = ok ? off : 0;
+            }
+            cue.tcAnchor = !looks && !subs && a.value(QStringLiteral("TimecodeAnchor")).toString() == QLatin1String("1");
             cue.needsWork = a.value(QStringLiteral("NeedsWork")).toString() == QLatin1String("1");
             if (looks)
             {

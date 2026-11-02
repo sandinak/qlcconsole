@@ -105,7 +105,9 @@ from the Library lands in the tree right beside it.
   - **A production** shows whether it is **current**, its **main list**
     and its **timecode** source ([Productions](#productions)).
   - **A cue list** shows its mode and base cue, **Follow timecode**
-    ([Cues at a timecode](shows.md#cues-at-a-timecode)), **Convert to
+    ([Cues at a timecode](shows.md#cues-at-a-timecode)) and, with song
+    sections, its **Timecode** row ([Song sections on the
+    timecode](#song-sections-on-the-timecode)), **Convert to
     tracking…** and **Detach to plain chaser…**.
   - **A cue** shows its number, name, note, **Text colour**, mode, base
     check box, **Overlapping layers mix**, **Skip**, **Don't move in black
@@ -1449,6 +1451,56 @@ Apart from the running order, sections are only how the list reads and
 numbers. The show saves its scheme and section names (`Numbering=`,
 `Section` entries) and the running order (a `RunningOrder` element), which
 an older build ignores.
+
+### Song sections on the timecode
+
+A show on timecode often runs from a DAW session: Logic plays the track,
+the click and the timecode. When the song is cut for time or a section gets
+longer, every later cue's time is wrong. So in a list that **follows
+timecode** ([Cues at a timecode](shows.md#cues-at-a-timecode)) each song
+section can have a **start** on the timecode, and its cues' times count from
+it. Move the start and the section's cues move with it: one number, not
+every cue.
+
+- **Starts at** (the section's page): where the section starts, typed
+  (hh:mm:ss:ff) or **Learn** (the timecode coming in now). Tick **Later
+  sections follow** before you change it to move every later section, and
+  every later cue, by as much: a verse cut short or a chorus made longer.
+- **A cue's time** (its page's **At timecode**) is still typed as the time
+  it goes. In a section with a start it is kept as an offset from it, and
+  the page says so: *+4.0 s from 1 — Everybody Scream*.
+- **Anchor** (the cue's page, beside At timecode): the cues after it in its
+  section count from this cue instead. Move it (a hit that moved in the new
+  mix) and they move with it.
+- **Section times…** (the list's page, in its **Timecode** row): an older
+  show keeps its times as they are until you click this. Each section
+  without a start then starts at its first timed cue, and every cue stays
+  exactly where it was. One undo step.
+- **Import Logic markers…** (the same row): in Logic, export the project as
+  a MIDI file with its markers (File ▸ Export ▸ Selection as MIDI File, with
+  the marker track). The markers are matched to the sections by name
+  (*Chorus 2* matches *CHORUS-2*; case and punctuation don't count), and you
+  see what changes before anything does: *3 — Chorus 2 moved +6.0 s, 14
+  cue(s) follow*, a marker no section is named for, a section no marker
+  names. The markers count from the file's SMPTE start; with none, and the
+  show's starts past 01:00:00:00 (Logic's usual session start), an hour is
+  added. A section that gets its first start keeps its cues where they are.
+  **OK** applies all of it as one undo step.
+- **Learn section starts** (the same row): play the new export with its
+  timecode out, and press the button (it reads **Tap at: 2 — Chorus**) as
+  each section starts. Each tap sets that section's start, its cues follow,
+  and the next section is up. Each tap is its own undo step.
+- **Ripple timecode…** (a cue's right-click menu, only in a list that
+  follows timecode): **Insert time** or **Remove time** at the cue — it and
+  everything after move later or earlier — or **Stretch** its section to a
+  length, its cues spread in proportion and everything after moving by the
+  difference. One undo step each. Typed in the command line too:
+  `ripple +2.5 at 3.1`, `ripple -1 at 4`, `stretch Chorus 2 to 0:42`
+  (seconds, or m:ss).
+
+The show saves each section's start (`Start=`) and each cue's offset
+(`TimecodeOffset=`) beside its time; the time saved (`Timecode=`) is where
+the cue goes now, so an older build plays the show the same.
 
 ## The cue sheet and the tracking sheet
 

@@ -65,6 +65,7 @@
 #include "showtreecontroller.h"
 #include "showtreemodel.h"
 #include "groupmasters.h"
+#include "timecodesource.h"
 #include "doc.h"
 #undef protected
 #undef private
@@ -835,6 +836,52 @@ void HotPath_Test::aGoInABigShowTreeMakesAndDeletesNothing()
     disconnect(a);
     disconnect(r);
     stopRig();
+}
+
+/* Timecode anchors (Q198): a cue timed from its section's start is resolved
+   when the tree is edited, never per timecode frame -- Cue::timecode stays
+   the absolute time TimecodeCues compares with. So frames of a show timed
+   from its sections cost no more allocations than frames of the same show
+   with absolute times, and the frames themselves resolve nothing. */
+void HotPath_Test::timecodeFramesWithAnchorsAllocateNothing()
+{
+    Doc *doc = new Doc(this);
+    ShowTreeController *st = doc->showTree();
+    const quint32 prod = st->addProduction("TC");
+    const quint32 list = st->addCueList(prod, "TC");
+    st->setNumbering(prod, ShowTree::Numbering::ShowPartIteration);
+    const QStringList numbers { "1", "1.1", "1.2", "2", "2.1", "2.2", "3", "3.1" };
+    QList<quint32> cues;
+    for (int i = 0; i < numbers.count(); ++i)
+    {
+        const quint32 id = st->addCue(list, i - 1, QStringLiteral("C%1").arg(i));
+        ShowTree::Cue c = *st->cue(id);
+        c.number = numbers.at(i);
+        QVERIFY(st->setCue(c));
+        cues << id;
+        st->setCueTimecode(id, 10000 + i * 20000);          // absolute, as an older show
+    }
+    st->setListFollowTimecode(list, true);
+    TimecodeSource *src = doc->timecodeSource();
+    quint32 at = 0;
+    auto frames = [src, &at]() {
+        for (int k = 0; k < 50; ++k)
+            src->updateTimeCode(0, at += 33, 30);           // between cues: nothing fires
+    };
+    src->updateTimeCode(0, at, 30);
+    frames();
+    const long absolute = allocationsIn(frames);
+
+    QVERIFY(st->convertToSectionTimes(list));
+    QVERIFY(st->setCueTimecodeAnchor(cues.at(4), true));
+    QVERIFY(st->setSectionStart(list, st->sections(list).at(0), 60000));   // no cue fires in the frames
+    QVERIFY(st->cue(cues.at(1))->tcFromSection);
+    frames();                                               // TimecodeCues rebuilds once, here
+    const long anchored = allocationsIn(frames);
+    qInfo("timecode frames: %ld allocations in 50 frames timed from sections, %ld absolute", anchored, absolute);
+    QVERIFY2(anchored <= absolute, qPrintable(QString("50 frames: %1 allocations timed from sections, %2 absolute")
+                                              .arg(anchored).arg(absolute)));
+    delete doc;
 }
 
 /*****************************************************************************

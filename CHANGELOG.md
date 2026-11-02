@@ -129,6 +129,18 @@ back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
   the latest cue passed, a jump back re-arms, a dropout holds. The Run tab
   shows the next timecode cue and a countdown. Saved with the show; a show
   with no times plays as before.
+- **Song sections on the timecode** (Q198). A section of a list that
+  follows timecode gets a **Starts at**, and its cues' times count from it:
+  move the start and its cues follow (**Later sections follow** moves
+  everything after too). Any cue can be an **Anchor** the cues after it
+  count from. **Section times…** converts an older show (offered, not
+  forced; every cue stays put). **Import Logic markers…** reads the markers
+  of a MIDI file exported from Logic, matches them to the sections by name
+  and previews what moves ("Chorus 2 moved +6.0 s, 14 cues follow") before
+  one undo step. **Ripple timecode…** on a cue inserts or removes time, or
+  stretches its section (also typed: `ripple +2.5 at 3.1`, `stretch Chorus
+  2 to 0:42`), and **Learn section starts** sets each start with a tap as
+  the new export plays. An older build plays the saved show the same.
 
 #### Timeline waveform
 

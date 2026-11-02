@@ -557,6 +557,20 @@ Built: LTC in (`ltc_test`) and cues at a timecode (`timecodecues_test`), DONE.md
 - decided: the first channel of the audio input chosen in the audio settings, no separate LTC device (can change)
 - decided: a jump forward fires only the latest cue passed, a jump back re-arms (a step under 250 ms is jitter), a dropout holds, the first position fires only a cue exactly there, cues with no time are GO-only, times are stored in ms and shown at the source's frame rate (can change)
 
+Built (Q198 1–4, q198, 2026-11-01): song sections on the timecode — a
+section's start with cue offsets and anchor cues, Section times… for an
+older show, Import Logic markers… (MIDI marker meta events, matched by name,
+previewed, one undo step), Ripple timecode… / `ripple` / `stretch`, Learn
+section starts (`timecodeanchors_test`, songsections_test, hotpath_test).
+decided: the marker import adds the file's SMPTE offset, else one hour when
+the show's starts are past 01:00:00:00 and the markers aren't (can change);
+decided: Later sections follow also moves later cues with a time of their
+own; a ripple at a section's first cue moves that section's start (can
+change); decided: a section's first start (markers, Learn) keeps its cues in
+place and makes them count from it (can change).
+**Later (Q198 5):** timing maps per session version (festival cut vs full),
+switchable like venues.
+
 **Open:** LTC read backwards, a channel picker, an input level meter beside
 the readout, and a time per frame rate (a cue stamped at 25 fps reads the
 same milliseconds at 30).

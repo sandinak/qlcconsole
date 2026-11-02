@@ -202,6 +202,11 @@ namespace ShowTree
         QString key;                    //!< "1", "200"; empty for Manual
         quint32 cue = 0xFFFFFFFF;       //!< Manual: the cue it begins at
         QString name;
+        /** Where the section starts on the incoming timecode (ms, Q198
+         *  anchors): the cues of it that count from it (Cue::tcFromSection)
+         *  follow when it moves. -1: none. Saved as Start=, which an older
+         *  build ignores (it reads every cue's own time). */
+        qint32 start = -1;
     };
 
     QLC_ENGINE_EXPORT QString cueModeToString(CueMode mode);
@@ -335,6 +340,18 @@ namespace ShowTree
          *  like its number. Saved as Timecode=, which an older build
          *  ignores. */
         qint32 timecode = -1;
+        /** Q198 anchors: @a timecode counts from its section's start (or
+         *  the anchor cue before it in the section): @a tcOffset ms after
+         *  it. @a timecode stays the time it goes at, resolved
+         *  (resolveTimecodes()), so everything that reads it is unchanged;
+         *  moving the section's start moves it. Saved as TimecodeOffset=
+         *  beside Timecode= (the resolved time, which an older build plays). */
+        bool tcFromSection = false;
+        qint32 tcOffset = 0;
+        /** Q198: an anchor -- the cues after it in its section that count
+         *  from their section count from it instead, so moving it moves
+         *  them. Saved as TimecodeAnchor="1", which an older build ignores. */
+        bool tcAnchor = false;
         /** "Needs work" (Q192): tagged, usually from the stage while walking
          *  the show with the pad, for more work later at the laptop. Only a
          *  mark: nothing plays differently. This use's, like its number.
@@ -722,6 +739,7 @@ namespace ShowTree
         QString name;                   //!< its SectionHead's (empty: none)
         int first = -1;                 //!< index of its first cue
         int last = -1;                  //!< index of its last cue
+        qint32 start = -1;              //!< its SectionHead's start (ms; -1: none)
     };
 
     /** The song sections of @a list, in list order (none for None, a Looks
@@ -774,6 +792,72 @@ namespace ShowTree
     /** A new section after the last (Q190): its key and its first cue's
      *  number ("4", "4.0.1"; "400", "400"). False for None and Manual. */
     QLC_ENGINE_EXPORT bool nextSection(const CueList &list, Numbering numbering, QString *key, QString *number);
+
+    /************************************************************************
+     * Timecode anchors (Q198): section starts, cues timed from them
+     ************************************************************************/
+
+    /** A point the cues of a list are timed from: a section's start or an
+     *  anchor cue (Cue::tcAnchor). */
+    struct QLC_ENGINE_EXPORT TimecodeAnchor
+    {
+        enum Kind { SectionStart, CueAnchor };
+        Kind kind = SectionStart;
+        int section = -1;               //!< index in sectionsOf() (-1: in none)
+        quint32 cue = 0xFFFFFFFF;       //!< the section's head cue, or the anchor cue
+        QString name;                   //!< sectionTitle(), or the cue's number
+        qint32 ms = -1;                 //!< where it is on the timecode
+        int follow = 0;                 //!< cues timed from it
+        bool operator==(const TimecodeAnchor &o) const
+        {
+            return kind == o.kind && section == o.section && cue == o.cue && name == o.name && ms == o.ms
+                   && follow == o.follow;
+        }
+    };
+
+    /** A cue's time from its base and offset: never before 0. */
+    inline qint32 resolveTimecode(qint32 base, qint32 offset)
+    {
+        const qint64 t = qint64(base) + qint64(offset);
+        return t < 0 ? 0 : (t > 0x7FFFFFFF ? 0x7FFFFFFF : qint32(t));
+    }
+    /** Every cue of @a list that counts from its section (or an anchor) gets
+     *  its time again (Cue::timecode) from where that is now. A cue whose
+     *  base has no time keeps the time it has. True when one changed. */
+    QLC_ENGINE_EXPORT bool resolveTimecodes(CueList &list, Numbering numbering);
+    /** Cue @a index of @a list at @a ms (-1: none). A new time counts from
+     *  its section's start (or the anchor before it) when that has one; a
+     *  time it had keeps counting from where it did. An anchor moved moves
+     *  the cues that count from it; an anchor cleared leaves them where
+     *  they are. False when nothing changed. */
+    QLC_ENGINE_EXPORT bool setCueTimecodeAt(CueList &list, Numbering numbering, int index, qint32 ms);
+    /** The section starts and anchor cues of @a list, in list order. */
+    QLC_ENGINE_EXPORT QList<TimecodeAnchor> anchorsOf(const CueList &list, Numbering numbering);
+    /** Section @a section starts at @a ms (-1: none): its cues timed from it
+     *  follow; with @a laterFollow every later section's start and every
+     *  later cue with a time of its own moves by as much (when it had a
+     *  start). A section losing its start keeps its cues' times. */
+    QLC_ENGINE_EXPORT bool setSectionStart(CueList &list, Numbering numbering, int section, qint32 ms,
+                                           bool laterFollow);
+    /** Convert to section times: every section with timed cues and no start
+     *  starts at its earliest cue; its cues count from it, each at the
+     *  time it had. @a converted gets how many cues. False when none. */
+    QLC_ENGINE_EXPORT bool convertToSectionTimes(CueList &list, Numbering numbering, int *converted = nullptr);
+    /** How many cues of @a list have a time of their own that a section with
+     *  a start could hold (what convertToSectionTimes() offers). */
+    QLC_ENGINE_EXPORT int absoluteTimedCues(const CueList &list, Numbering numbering);
+    /** Ripple: insert (@a deltaMs > 0) or remove time at cue @a index -- it
+     *  and every timed cue after it, and the start of every section from
+     *  it on, move by @a deltaMs (never before 0). */
+    QLC_ENGINE_EXPORT bool rippleTimecodes(CueList &list, Numbering numbering, int index, qint32 deltaMs);
+    /** Stretch section @a section to @a lengthMs long (its start to the next
+     *  section's, else to its last timed cue): its cues spread in
+     *  proportion, everything after moves by the difference. @a why when
+     *  it can't (no times, no length). */
+    QLC_ENGINE_EXPORT bool stretchSection(CueList &list, Numbering numbering, int section, qint32 lengthMs,
+                                          QString *why = nullptr);
+    /** Section @a section's length as stretchSection() measures it (-1: none). */
+    QLC_ENGINE_EXPORT qint32 sectionLength(const CueList &list, Numbering numbering, int section);
 
     /** What Merge lists into one did (Q190). */
     struct QLC_ENGINE_EXPORT MergeReport

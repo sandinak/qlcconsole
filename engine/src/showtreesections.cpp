@@ -102,10 +102,10 @@ QList<Section> ShowTree::sectionsOf(const CueList &list, Numbering numbering)
 
     if (numbering == Numbering::Manual)
     {
-        QHash<quint32, QString> heads;
+        QHash<quint32, const SectionHead *> heads;
         for (const SectionHead &h : list.sections)
             if (h.cue != invalidId())
-                heads.insert(h.cue, h.name);
+                heads.insert(h.cue, &h);
         for (int i = 0; i < list.cues.count(); ++i)
         {
             const quint32 id = list.cues.at(i).id;
@@ -113,7 +113,8 @@ QList<Section> ShowTree::sectionsOf(const CueList &list, Numbering numbering)
             {
                 Section s;
                 s.headCue = id;
-                s.name = heads.value(id);
+                s.name = heads.value(id)->name;
+                s.start = heads.value(id)->start;
                 s.first = s.last = i;
                 out << s;
             }
@@ -123,10 +124,10 @@ QList<Section> ShowTree::sectionsOf(const CueList &list, Numbering numbering)
         return out;
     }
 
-    QHash<QString, QString> names;
+    QHash<QString, const SectionHead *> names;
     for (const SectionHead &h : list.sections)
         if (!h.key.isEmpty() && !names.contains(h.key))
-            names.insert(h.key, h.name);
+            names.insert(h.key, &h);
     for (int i = 0; i < list.cues.count(); ++i)
     {
         const QString key = sectionKey(numbering, cueNumberAt(list, i));
@@ -135,7 +136,11 @@ QList<Section> ShowTree::sectionsOf(const CueList &list, Numbering numbering)
             Section s;
             s.key = key;
             s.headCue = list.cues.at(i).id;
-            s.name = names.value(key);
+            if (const SectionHead *h = names.value(key, nullptr))
+            {
+                s.name = h->name;
+                s.start = h->start;
+            }
             s.first = s.last = i;
             out << s;
         }
@@ -759,7 +764,7 @@ bool ShowTreeController::setSectionName(quint32 listId, const Section &section, 
         if (at >= 0)
         {
             // A scheme's section with no name needs no entry.
-            if (n.isEmpty() && !section.key.isEmpty())
+            if (n.isEmpty() && !section.key.isEmpty() && l->sections.at(at).start < 0)
                 l->sections.removeAt(at);
             else
                 l->sections[at].name = n;

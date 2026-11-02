@@ -264,6 +264,7 @@ void ShowTreeView::showSectionPage(quint32 listId, const Section &section)
     if (!tracking)
         info += QStringLiteral(" ") + tr("The list is Non-tracking: every cue starts from nothing already.");
     m_sectionInfo->setText(info);
+    updateSectionTimecodeRows(listId, section);
     m_pages->setCurrentWidget(m_sectionPage);
 }
 
