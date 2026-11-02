@@ -72,6 +72,18 @@ back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
 
 - **DualSense extras for the Run role.** Armed (LB held), R2 pushes back so a GO takes a deliberate squeeze; walking, both triggers click per cue step; they go off on disarm, leaving, pad loss and quit. One finger swiped across the touchpad steps: while walking right / left the next / previous cue and down / up the next / previous layer; in the Run map down / up pick the list. A swipe previews and selects, never a GO. Other pads: nothing changes. While walking the touchpad aim nudge needs LB held. See [Pad Run](docs/features/show-control.md#dualsense-extras-triggers-and-swipes).
 
+#### Sub-cue ↔ inline cue
+
+- **Make Inline Cue and Make Sub-cue, with every step playing as before.**
+  A sub-cue's right-click ▸ **Make Inline Cue** (`inline`) makes it, and the
+  sub-cues after it, cues of the list after their cue; a cue's right-click
+  ▸ **Make Sub-cue of 4** (`sub of`, `sub of 4`) makes it the last sub-cue
+  of the cue before. Advance maps (Auto-follow ↔ the hold before, Sub GO ↔
+  GO), ids stay (script anchors, hits, show-control references, skip), the
+  number too when free; where tracking differs the edit carries looks so
+  the stage is the same at every press, or refuses and says where. One
+  undo step, Design mode only ([Show Tree](docs/features/show-tree.md#sub-cue--inline-cue)).
+
 #### No-light zones and laser windows
 
 - **Mark the places that must stay dark, and Show Review checks every cue.**

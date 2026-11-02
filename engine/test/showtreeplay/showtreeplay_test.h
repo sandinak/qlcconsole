@@ -61,6 +61,14 @@ private slots:
     void subCuesAreRefusedWhereTheyCantBe();
     void subCueCommands();
 
+    // 0.4: sub-cue <-> inline cue, every step playing as before
+    void subCuesBecomeInlineCuesAndBack();
+    void aCueBecomesASubCueCarryingWhatItPassedOn();
+    void aBlockCueBecomesASubCueAndBack();
+    void aLaterSubCueBringsTheOnesAfterIt();
+    void subCueConversionKeepsIdsAndRefusesWhatItCant();
+    void subCueConversionCommands();
+
     // P7: the cue runner
     void showControlStepsThroughSubCues();
     void whatChangesComesFromTheResolvedTracking();
@@ -90,6 +98,9 @@ private:
      *  own). Ids in order: list, c1, c2, c3, s1, s2. */
     QList<quint32> subCueShow();
     void go(Chaser *c);
+    /** Run the main list of @a listId from the top through @a presses
+     *  ('g' GO, 's' Sub GO): the rig after each. */
+    QList<QHash<quint32, uchar>> walk(quint32 listId, const QString &presses);
     void tick(int n = 1);
 
     Doc *m_doc = nullptr;

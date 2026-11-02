@@ -1690,6 +1690,8 @@ is always there and calls the same operations as the mouse.
 | `sub "Hit"` · `sub + "Sweep" follow 0.5` · `sub "Strobe" subgo` | A **sub-cue** of the selected cue (after the selected sub-cue); Auto-follow after 0.5 s, or Sub GO |
 | `follow 1.5` · `subgo` | The selected sub-cue auto-follows after 1.5 s, or waits for Sub GO |
 | `cue 4.2` | Selects sub-cue 4.2 (when no main cue has that number) |
+| `inline` | The selected sub-cue (and the sub-cues after it) becomes a cue of the list, right after its cue ([Sub-cue ↔ inline cue](#sub-cue--inline-cue)) |
+| `sub of` · `sub of 4` | The selected cue becomes the last sub-cue of the cue before it, or of cue 4 |
 | `track` · `block` · `cueonly` · `default` | Sets the selected cue's mode (`default` = List default). Also works after `cue …`: `cue + "Out" block` |
 | `base` | Makes the selected cue the base cue |
 | `Towers colour Blue dimmer 45` | The cue's layer on Towers (made if needed; a grey one is brought in), then its looks |
@@ -2315,6 +2317,52 @@ strobe inside a chorus.
   collections, held on Sub GO — the same sub-cues a hand-made chaser gets
   ([sub-cues in the chaser editor](show-control.md#sub-cues)). A scene two
   sub-cues share keeps running through Sub GO, with no re-fade.
+
+### Sub-cue ↔ inline cue
+
+A stomp built as point cue 4.5 that should be a sub-cue, or a sub-cue that
+should be a cue GO steps through: right-click it. **What is on stage at
+every press stays the same**; only which button takes you there changes.
+One undo step each, Design mode only (greyed in Operate).
+
+- **Make Inline Cue** (a sub-cue's right-click; `inline`): the sub-cue
+  becomes a cue of the list right after its cue, numbered as it was (4.2)
+  when that is free and in order there, else as **+ Cue** would (the hint
+  line says so). Sub-cues after it come along, in order: a sub-cue plays
+  only after the ones before it. Several selected convert together.
+  - **Advance:** Sub GO becomes GO; Auto-follow after 0.5 s becomes the
+    hold of the cue before (*auto after 0.5s*). The first sub-cue played
+    with GO, so cue 4 now goes on to it at once (hold 0); cue 4's own
+    hold moves to the last of them.
+  - **Tracking:** a sub-cue started from its cue's look and passed nothing
+    on. When the list's own rule plays every cue the same, that is what
+    they get; otherwise they are **Cue-only**, each **including** the one
+    before (4.2 from 4.1's look, cue 5 still from cue 4's).
+  - A sub-cue that only stood for its cue's own look (Make Sub-cue puts
+    one first) goes when it is all that is left.
+- **Make Sub-cue of 4** (a cue's right-click, naming the cue before;
+  `sub of`, or `sub of 4` for another cue before it): the cue becomes the
+  last sub-cue of that cue, numbered 4.5 when its number is 4.5 (else as
+  **+ Sub-cue** does). Reached by GO, it is Sub GO; reached by cue 4's
+  hold, it auto-follows after that wait, and its own hold becomes cue 4's.
+  Its own sub-cues come along after it, the first following at once.
+  - If cue 4 had no sub-cues, its own look was a step of its own: a
+    first sub-cue (4.1, cue 4's fades, nothing of its own) stands for it,
+    so GO still plays it — unless cue 4 went on to the cue at once.
+  - **Carried looks:** a cue that tracked passed its changes on to cue 5;
+    as a sub-cue it wouldn't, so they are set in cue 5 (*Looks carried
+    into 5*). A Block cue started from nothing; as a sub-cue it starts
+    from cue 4's look, so what it didn't light is turned off in it.
+- **Kept:** the cue's id, so its calling-script anchors, hits under it,
+  show-control and MSC references by number, its skip flag, note, colour
+  and fades stay with it.
+- **Refused, with why, nothing changed:** the list's base cue, a cue on
+  timecode, a focus-call cue, a cue that begins a song section (Manual
+  numbering), a cue another cue includes, under a skipped cue, and
+  anything that would still play differently after carrying looks (a
+  look set for the whole cue that would split into one per layer, a
+  reusable cue's use that would have to change): the hint line names the
+  cue and what would change.
 
 ## The cue runner
 
