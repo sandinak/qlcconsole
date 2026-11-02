@@ -98,6 +98,9 @@ private slots:
     /** W3_SHOTS=<dir> W3_SHOW_06=<copy of DanceHysteria-0.6.qlcc>
      *  W3_SHOW_01=<copy of DanceHysteria-0.1.qlcc>: real-cue pictures. */
     void shots();
+    void aRealMouseDragMovesALookRowAndAltCopiesIt();
+    void aFunctionLayerCanBeReleasedFromTheDockedWorkbench();
+    void aHoldTypedInTheStepHeaderIsWhatGoPlays();
 
 private:
     quint32 dimmer(int level, const QString &name);

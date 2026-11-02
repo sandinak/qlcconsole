@@ -136,6 +136,8 @@ private slots:
     /** Teaching mode holds network output until the teacher lets it through */
     void teachingHoldsNetworkOutput();
     void teachingHoldsUsbOutput();
+    void heavyInputIsHandedOverOncePerUniversePerFrame();
+    void unpatchingAUniverseKeepsTheOthersOutputSettings();
 
 private:
     Doc* m_doc;

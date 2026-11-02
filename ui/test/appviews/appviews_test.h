@@ -253,6 +253,11 @@ private slots:
      *  fire twice); Settings… is called that everywhere. */
     void theMenusShowTheirKeys();
 
+    /** Teaching: a show opened with "Open in Operate" (from a file, and as the
+     *  web page loads one) goes to Operate with real output let through and
+     *  patched, without the "Run this show for real?" question */
+    void aLoadedTeachingShowOpensInOperateWithoutAsking();
+
     /** Quitting with the window still up and the Show Tree in front: the
      *  tab goes before the Doc, so its hide event (which stops its preview)
      *  doesn't land on a freed Doc. Last: it deletes the app. */

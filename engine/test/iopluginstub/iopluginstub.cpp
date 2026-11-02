@@ -87,8 +87,10 @@ bool IOPluginStub::openOutput(quint32 output, quint32 universe)
 
 void IOPluginStub::closeOutput(quint32 output, quint32 universe)
 {
-    Q_UNUSED(universe)
     m_openOutputs.removeAll(output);
+    /* like the real plugins: forget (universe, line) -- universe FIRST */
+    if (output < 4)
+        removeFromMap(universe, output, Output);
 }
 
 QStringList IOPluginStub::outputs()
@@ -139,8 +141,9 @@ bool IOPluginStub::openInput(quint32 input, quint32 universe)
 
 void IOPluginStub::closeInput(quint32 input, quint32 universe)
 {
-    Q_UNUSED(universe)
     m_openInputs.removeAll(input);
+    if (input < 4)
+        removeFromMap(universe, input, Input);
 }
 
 QStringList IOPluginStub::inputs()
