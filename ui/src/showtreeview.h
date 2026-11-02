@@ -1155,7 +1155,15 @@ private:
     QLabel *m_cueReuse = nullptr;
     QPushButton *m_listConvert = nullptr;
     QPushButton *m_listDetach = nullptr;
+    /** A line that failed (@a r): the spell-check's correction goes in the
+     *  line, else the assistant is asked (*sent). True: handled. */
+    bool oneLineFallback(const QString &line, const ShowTreeCommand::Context &ctx, ShowTreeCommand::Result *r,
+                         bool *sent);
     int m_historyAt = -1;
+    /** The one line's spell-check: what was typed, and what the line holds
+     *  in its place (Esc puts it back). */
+    QString m_suggestedFrom;
+    QString m_suggestedLine;
     QList<quint32> m_expanded;
     quint32 m_pageCue = 0xFFFFFFFF;      //!< the cue the cue page shows
     bool m_reloading = false;

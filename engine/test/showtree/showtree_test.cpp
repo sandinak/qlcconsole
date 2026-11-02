@@ -4696,6 +4696,56 @@ void ShowTree_Test::commandLineCompletes()
     QVERIFY(!ShowTreeCommand::grammar().isEmpty());
 }
 
+/* The one command line's spell-check (no AI): a word of the grammar or a
+   name of the show put right from what could stand there; nothing near, or a
+   line that already reads, gives nothing. */
+void ShowTree_Test::commandLineSpellCheck()
+{
+    group("Towers", { m_fixtures[0] });
+    group("Tops", { m_fixtures[1] });
+    group("AT W ALL", { m_fixtures[2] });
+    colour("Blue");
+    colour("Red");
+    ShowTreeController *st = m_doc->showTree();
+    ShowTreeCommand cmd(m_doc, st);
+    ShowTreeCommand::Context ctx;
+    ctx.production = st->addProduction("P");
+    ctx.list = st->addCueList(ctx.production, "L", ListMode::NonTracking);
+    ctx.cue = st->addCue(ctx.list, -1, "One");
+
+    // A line that parses is nobody's business.
+    QVERIFY(cmd.run("Towers colour Blue", ctx).ok);
+    QVERIFY(cmd.suggest("Towers colour Blue", ctx).isEmpty());
+    // Grammar words.
+    QCOMPARE(cmd.suggest("Towers colur Blue", ctx), QString("Towers colour Blue"));
+    QCOMPARE(cmd.suggest("Towers colour Blue dimer 45", ctx), QString("Towers colour Blue dimmer 45"));
+    QCOMPARE(cmd.suggest("recrod", ctx), QString("record"));
+    // Names of the show: groups, palettes, and several at once.
+    QCOMPARE(cmd.suggest("Towrs colour Bleu", ctx), QString("Towers colour Blue"));
+    QCOMPARE(cmd.suggest("Towers colour Rde dimer 30", ctx), QString("Towers colour Red dimmer 30"));
+    // A name with spaces, spelt wrong (and the values after it are left alone).
+    QCOMPARE(cmd.suggest("AT W AL colour Red", ctx), QString("AT W ALL colour Red"));
+    // Cue numbers are never "corrected": a number that isn't there is the show's answer.
+    QVERIFY(cmd.suggest("cue 1.0.9", ctx).isEmpty());
+    // Nothing is near: no guess.
+    QVERIFY(cmd.suggest("xyzzy plugh", ctx).isEmpty());
+    QVERIFY(cmd.suggest("make everything blue please", ctx).isEmpty());
+    QVERIFY(cmd.suggest("", ctx).isEmpty());
+    // Deterministic, and nothing ran.
+    QCOMPARE(cmd.suggest("Towrs colour Bleu", ctx), cmd.suggest("Towrs colour Bleu", ctx));
+    QVERIFY(st->cue(ctx.cue)->layers.count() == 1);      // only the one that parsed
+
+    // Which failures are the grammar's (the AI fallback's) and which are the show's.
+    ShowTreeCommand::Result r = cmd.run("make everything blue please", ctx);
+    QVERIFY(!r.ok && r.unparsed);
+    r = cmd.run("Towers colur Blue", ctx);
+    QVERIFY(!r.ok && r.unparsed);
+    r = cmd.run("Towers colour Nonesuch", ctx);
+    QVERIFY(!r.ok && !r.unparsed);
+    QVERIFY(cmd.run("Towers colour Blue", ctx).ok);
+    QVERIFY(!cmd.run("Towers colour Blue", ctx).unparsed);
+}
+
 /* Tab for every kind of word the grammar takes (2026-10-17): a show set up
    with one of each, then a table -- what is typed, what Tab makes of it,
    and a word the options must hold. */

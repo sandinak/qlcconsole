@@ -980,6 +980,21 @@ struct Reader
 
 ShowTreeCommand::Result ShowTreeCommand::run(const QString &line, const Context &context)
 {
+    Result res = runParsed(line, context);
+    if (res.ok)
+        return res;
+    // Which failures are the grammar's ("Don't know “x”", "Expected an
+    // attribute…", "Unknown word…") and which are the show's (no such cue).
+    auto lead = [](const QString &format) { return format.left(format.indexOf(QLatin1String("%1"))); };
+    for (const QString &prefix : { lead(tr("Don't know “%1”.")), lead(tr("Unknown word “%1” (track, block, cueonly, default, base)")),
+                                   QStringLiteral("Expected an attribute") })
+        if (!prefix.isEmpty() && res.message.startsWith(prefix))
+            res.unparsed = true;
+    return res;
+}
+
+ShowTreeCommand::Result ShowTreeCommand::runParsed(const QString &line, const Context &context)
+{
     Result res;
     res.context = context;
     Reader r;
@@ -3572,4 +3587,150 @@ QString ShowTreeCommand::tab(const QString &line, const Context &context, QStrin
     if (current != nullptr)
         *current = -1;
     return out;
+}
+
+/****************************************************************************
+ * Spell-check
+ ****************************************************************************/
+
+// Edit distance where swapping two neighbours ("recrod") costs one.
+static int typoDistance(const QString &a, const QString &b)
+{
+    const int n = int(a.length()), m = int(b.length());
+    QVector<QVector<int>> d(n + 1, QVector<int>(m + 1));
+    for (int i = 0; i <= n; ++i)
+        d[i][0] = i;
+    for (int j = 0; j <= m; ++j)
+        d[0][j] = j;
+    for (int i = 1; i <= n; ++i)
+        for (int j = 1; j <= m; ++j)
+        {
+            const int cost = a.at(i - 1) == b.at(j - 1) ? 0 : 1;
+            d[i][j] = qMin(qMin(d[i - 1][j] + 1, d[i][j - 1] + 1), d[i - 1][j - 1] + cost);
+            if (i > 1 && j > 1 && a.at(i - 1) == b.at(j - 2) && a.at(i - 2) == b.at(j - 1))
+                d[i][j] = qMin(d[i][j], d[i - 2][j - 2] + 1);
+        }
+    return d[n][m];
+}
+
+QString ShowTreeCommand::suggest(const QString &line, const Context &context) const
+{
+    // The line's words (a quoted name is one word, quotes kept off).
+    QStringList toks;
+    {
+        QString cur;
+        bool quoted = false, any = false;
+        for (const QChar c : line.trimmed())
+        {
+            if (c == QLatin1Char('"'))
+            {
+                quoted = !quoted;
+                any = true;
+            }
+            else if (c == QLatin1Char(' ') && !quoted)
+            {
+                if (any)
+                    toks << cur;
+                cur.clear();
+                any = false;
+            }
+            else
+            {
+                cur += c;
+                any = true;
+            }
+        }
+        if (any)
+            toks << cur;
+    }
+    if (toks.isEmpty())
+        return QString();
+
+    auto hasLetter = [](const QString &s) {
+        for (const QChar c : s)
+            if (c.isLetter())
+                return true;
+        return false;
+    };
+
+    QString head;
+    bool changed = false;
+    int i = 0;
+    while (i < toks.count())
+    {
+        QStringList cands;
+        candidates(head, context, &cands);
+        const int most = qMin(4, int(toks.count()) - i);
+
+        // A word that already stands there, whole (the longest run of
+        // words first: "AT W ALL").
+        int exactWords = 0;
+        for (int k = most; k >= 1 && exactWords == 0; --k)
+        {
+            const QString chunk = toks.mid(i, k).join(QLatin1Char(' '));
+            for (const QString &c : cands)
+                if (c.compare(chunk, Qt::CaseInsensitive) == 0)
+                {
+                    exactWords = k;
+                    break;
+                }
+        }
+        if (exactWords > 0)
+        {
+            head += typed(toks.mid(i, exactWords).join(QLatin1Char(' ')), false) + QLatin1Char(' ');
+            i += exactWords;
+            continue;
+        }
+
+        // Else the nearest that could: a small edit distance, or the one
+        // word the typed part begins. Numbers and values are left alone.
+        int bestD = 99, bestK = 0, prefixK = 0;
+        QString best, prefix;
+        for (int k = 1; k <= qMin(3, most); ++k)
+        {
+            const QString chunk = toks.mid(i, k).join(QLatin1Char(' '));
+            if (chunk.length() < 3 || !hasLetter(chunk))
+                continue;
+            const QString t = chunk.toLower();
+            const int limit = t.length() >= 8 ? 2 : 1;
+            QStringList begun;
+            for (const QString &c : cands)
+            {
+                if (!hasLetter(c))
+                    continue;
+                const QString lc = c.toLower();
+                if (lc.startsWith(t) && !begun.contains(c))
+                    begun << c;
+                const int d = typoDistance(t, lc);
+                if (d <= limit && (d < bestD || (d == bestD && k > bestK)))
+                {
+                    bestD = d;
+                    bestK = k;
+                    best = c;
+                }
+            }
+            if (begun.count() == 1 && prefixK == 0)
+            {
+                prefixK = k;
+                prefix = begun.first();
+            }
+        }
+        if (bestK == 0 && prefixK > 0)
+        {
+            bestK = prefixK;
+            best = prefix;
+        }
+        if (bestK > 0)
+        {
+            head += typed(best, false) + QLatin1Char(' ');
+            i += bestK;
+            changed = true;
+            continue;
+        }
+        head += toks.at(i).contains(QLatin1Char(' ')) ? QStringLiteral("\"%1\" ").arg(toks.at(i))
+                                                       : toks.at(i) + QLatin1Char(' ');
+        ++i;
+    }
+    const QString out = head.trimmed();
+    return changed && out.compare(line.trimmed(), Qt::CaseSensitive) != 0 ? out : QString();
 }

@@ -17,6 +17,10 @@ most of 0.5 ("The show explains itself"); there is no separate 0.3.1.
 A home for QLC+ 4 users: QLC+ 4's habits that qlcconsole had dropped are
 back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
 
+### One command line: spell-check, then AI Assist
+
+- **A line that isn't a command no longer needs a different button.** A command runs as typed. One that doesn't read is spell-checked first on this computer, with no AI: a word of the grammar, or a cue list, group, fixture, palette or function of the show, spelt slightly wrong puts the corrected command in the line (*Did you mean …?*; Enter runs it, Esc puts back what you typed). A line the spell-check can't fix goes to AI Assist (when on, in Design) with the command line's error and the syntax, and comes back as a corrected command to apply (one undo step) or an answer. `?` still forces a question; Operate never asks the model; with AI Assist off, plain words say to turn it on in Settings ▸ AI Assist. The **AI** button is gone; the line's hint says when plain words go to the assistant.
+
 ### AI Assist: Test connection never hangs
 
 - **Settings > AI Assist > Test connection always answers.** It works from what is on the page (Enabled need not be saved with OK first), gives up after 10 seconds at most with "no answer within 10 s" instead of sitting for the model timeout and showing "Operation canceled", says "Test cancelled." and frees the button if AI Assist is switched off meanwhile, and reads no Keychain prompt on the screen thread. `localhost` endpoints are reached on 127.0.0.1 (a stock Ollama listens on IPv4 only, and "localhost" went to ::1 first). The command line's AI button no longer greys after a failed question: it stays pressable and says why and that Enter retries.

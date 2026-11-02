@@ -147,9 +147,22 @@ public:
         /** `wb`: open the cue in context (and the layer, if one) in the
          *  Workbench (W3) -- the view's to do. */
         bool openWorkbench = false;
+        /** The line failed because it isn't in the grammar -- a word it
+         *  doesn't know, an attribute that isn't one -- not because a name
+         *  or a cue it names isn't there. The one command line's fallback
+         *  (suggest(), then AI Assist) starts from these. */
+        bool unparsed = false;
     };
 
     Result run(const QString &line, const Context &context);
+
+    /** The one command line's spell-check (no AI, nothing run): @a line with
+     *  its misspelt words put right -- a word of the grammar, a cue number's
+     *  or list's name, a group, fixture, palette or function of the show --
+     *  as the word that could stand there (candidates()) nearest what was
+     *  typed (a small edit distance, or the one word it begins). Empty when
+     *  nothing is near or nothing would change. Deterministic. */
+    QString suggest(const QString &line, const Context &context) const;
 
     /** Is @a word (the first word of a line) one that only means something
      *  with a cue to act on -- cue, list, record, include, skip, mib, GO...?
@@ -237,6 +250,7 @@ public:
     QStringList colourMacroNames() const;
 
 private:
+    Result runParsed(const QString &line, const Context &context);
     /** What Tab would do with @a line: the text before the word, the
      *  matches (sorted), and whether the word was begun with a quote. */
     struct Completion

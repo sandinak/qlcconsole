@@ -1673,6 +1673,15 @@ is always there and calls the same operations as the mouse.
   folded away. Show them with the **?** button beside the line, with **?**
   typed first in the line, or with **F1** while the line has the
   keyboard; the button or F1 hides them again. The choice is remembered.
+- **Typos and plain words.** A line that doesn't read is spell-checked
+  first: a word of the grammar, or a cue, group, fixture or palette of the
+  show spelt a little wrong, is put right in the line (*Did you mean …?*),
+  nothing runs, and **Enter** runs the corrected line while **Esc** puts back
+  what you typed. If AI Assist is on (Settings ▸ AI Assist) a line the
+  spell-check can't fix is sent to it with the error, and what comes back is
+  a command to apply or an answer; the line's hint says so. With it off,
+  plain words say where to turn it on. In Operate only the spell-check
+  runs. See [AI Assist](ai-assist.md).
 - **One undo step each.** Every command is one undo step. A command that
   fails part way changes nothing: the line stays, and the reason shows in
   red beside it.

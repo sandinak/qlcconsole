@@ -1335,10 +1335,11 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         m_commandMsg = new QLabel(m_commandBar);
         m_commandMsg->setObjectName("stCommandMessage");
 #ifdef QLC_AI_ASSIST
-        m_ai = new AiCommandLine(m_command, m_commandHelp, m_commandMsg, h, this);
+        m_ai = new AiCommandLine(m_command, m_commandHelp, m_commandMsg, this);
         // A proposal runs through this line's registry, and the selection
         // goes where it left it -- as a typed command's does.
         m_ai->setOperations(m_operations);
+        m_ai->setPlainWords(true);
         // An MCP client's calls run where the selection is, as a typed
         // line does.
         m_ai->setSelectionProvider([this]() { return commandContext(); });
@@ -11058,7 +11059,22 @@ bool ShowTreeView::runCommand(const QString &line)
         return true;
     }
 #endif
-    const ShowTreeCommand::Result r = m_operations->runLine(line, ctx);
+    ShowTreeCommand::Result r = m_operations->runLine(line, ctx);
+    // One line (docs/design/AI_ASSIST.md section 7): a line that isn't a
+    // command is spell-checked here first, then (AI Assist on, Design) asked
+    // of the assistant with the parser's error. Neither runs anything.
+    if (!r.ok && r.help.isEmpty())
+    {
+        bool sent = false;
+        if (oneLineFallback(line, ctx, &r, &sent))
+        {
+            if (sent && (m_commandHistory.isEmpty() || m_commandHistory.last() != line))
+                m_commandHistory << line;
+            m_historyAt = -1;
+            return sent;
+        }
+    }
+    m_suggestedFrom.clear();
     m_commandMsg->setText(r.message);
     // A palette made or named for editing: in the Look Editor, and shown
     // in the Library (R2).
@@ -11096,6 +11112,45 @@ bool ShowTreeView::runCommand(const QString &line)
     else if (r.context.list != invalidId())
         selectNode(r.context.list);
     return true;
+}
+
+bool ShowTreeView::oneLineFallback(const QString &line, const ShowTreeCommand::Context &ctx,
+                                   ShowTreeCommand::Result *r, bool *sent)
+{
+    // Step 2: the local spell-check -- a word of the grammar or a name of
+    // the show put right. The corrected line goes in the line, to read and
+    // run with Enter (Esc puts back what was typed); nothing ran.
+    const QString fix = m_commander->suggest(line, ctx);
+    if (!fix.isEmpty())
+    {
+        m_suggestedFrom = line;
+        m_suggestedLine = fix;
+        m_command->setText(fix);
+        m_command->end(false);
+        m_commandMsg->setText(tr("Did you mean “%1”? Enter runs it, Esc puts back what you typed.").arg(fix));
+        QPalette pal = m_commandMsg->palette();
+        pal.setColor(QPalette::WindowText, palette().color(QPalette::WindowText));
+        m_commandMsg->setPalette(pal);
+        *sent = false;
+        return true;
+    }
+#ifdef QLC_AI_ASSIST
+    // Step 3: not in the grammar at all. Design only; Operate never asks.
+    if (r->unparsed && m_ai != nullptr && m_doc->mode() == Doc::Design)
+    {
+        QString note;
+        if (m_ai->fallback(line, r->message, ctx, &note))
+        {
+            *sent = true;
+            return true;
+        }
+        if (!note.isEmpty())
+            r->message += QLatin1Char(' ') + note;
+    }
+#else
+    Q_UNUSED(sent)
+#endif
+    return false;
 }
 
 void ShowTreeView::slotCommandEntered()
@@ -11172,6 +11227,14 @@ bool ShowTreeView::eventFilter(QObject *obj, QEvent *ev)
         }
         if (ke->key() == Qt::Key_Escape)
         {
+            // A suggestion in the line: what was typed comes back.
+            if (!m_suggestedFrom.isNull() && m_command->text() == m_suggestedLine)
+            {
+                m_command->setText(m_suggestedFrom);
+                m_suggestedFrom.clear();
+                m_commandMsg->clear();
+                return true;
+            }
 #ifdef QLC_AI_ASSIST
             // A question in flight first.
             if (m_ai != nullptr && m_ai->cancel())

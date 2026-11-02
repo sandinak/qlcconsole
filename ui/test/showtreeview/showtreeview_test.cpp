@@ -4810,7 +4810,6 @@ void ShowTreeView_Test::palettesInTheLibrary()
     QVERIFY(view.libraryPaletteRows().contains("Colour"));
     // One-off values never show in All (D21) and aren't managed here.
     const quint32 inl = st->createInlinePalette(QLCPalette::Dimmer, { 10 }, "4% · 1 Towers");
-    view.reload();
     for (const QString &row : view.libraryPaletteRows())
         QVERIFY(!row.contains("4% · 1 Towers"));
     QVERIFY(!m_doc->paletteOps()->isManaged(inl));
@@ -8078,9 +8077,62 @@ void ShowTreeView_Test::commandLineAsksTheRegistry()
     QVERIFY(view.runCommand("help"));
     QVERIFY(view.helpOutput().contains("Questions"));
     QVERIFY(view.runCommand("? spread"));                 // still the grammar's help
-    QToolButton *ai = view.findChild<QToolButton *>("stAiButton");
-    if (ai != nullptr)
-        QVERIFY(!ai->isVisible());                         // AI Assist off: no chrome
+    QVERIFY(view.findChild<QToolButton *>("stAiButton") == nullptr);   // one line: no button
+    QVERIFY(!view.commandLine()->placeholderText().contains("AI Assist"));   // off: no chrome
+}
+
+/* One command line (AI_ASSIST.md section 7): a command runs as typed; a typo
+   puts the corrected command in the line (nothing runs; Enter runs it, Esc
+   puts back what was typed); plain words with AI Assist off say where to
+   turn it on, and in Operate say nothing and ask no one. */
+void ShowTreeView_Test::oneCommandLineSpellChecksAndHintsAtAi()
+{
+    QSettings().setValue(QStringLiteral("ai/enabled"), false);
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1200, 800);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QLineEdit *line = view.commandLine();
+    QVERIFY(line != nullptr);
+
+    // It parses: runs, exactly as before.
+    QVERIFY(view.runCommand("help"));
+    QVERIFY(view.isHelpShown());
+
+    // A typo: the corrected line is put in the line, and nothing ran.
+    line->setText("hlep");
+    QVERIFY(!view.runCommand("hlep"));
+    QCOMPARE(line->text(), QStringLiteral("help"));
+    QVERIFY2(view.commandMessage().contains("Did you mean"), qPrintable(view.commandMessage()));
+    QVERIFY(view.commandMessage().contains("help"));
+    // Esc puts back what was typed.
+    line->setFocus();
+    QTest::keyClick(line, Qt::Key_Escape);
+    QCOMPARE(line->text(), QStringLiteral("hlep"));
+    QVERIFY(view.commandMessage().isEmpty());
+    // Enter on the suggestion runs it.
+    QVERIFY(!view.runCommand("hlep"));
+    QCOMPARE(line->text(), QStringLiteral("help"));
+    QTest::keyClick(line, Qt::Key_Return);
+    QVERIFY(line->text().isEmpty());
+    QVERIFY(view.isHelpShown());
+
+    // Plain words, AI Assist off in Settings: the way to turn it on.
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L", ListMode::NonTracking);
+    QVERIFY(view.selectNode(st->addCue(list, -1, "One")));
+    QVERIFY(!view.runCommand("please make everything blue"));
+    QVERIFY2(view.commandMessage().contains("Settings ▸ AI Assist"), qPrintable(view.commandMessage()));
+    // One word of nonsense: just the parser's answer.
+    QVERIFY(!view.runCommand("xyzzy"));
+    QVERIFY(!view.commandMessage().contains("Settings"));
+    // Operate: the hint (a Design thing) stays out, and nothing is asked.
+    m_doc->setMode(Doc::Operate);
+    QVERIFY(!view.runCommand("please make everything blue"));
+    QVERIFY(!view.commandMessage().contains("Settings ▸ AI Assist"));
+    QVERIFY(!view.commandMessage().contains("Asking"));
+    m_doc->setMode(Doc::Design);
+    QVERIFY(!view.commandLine()->placeholderText().contains("AI Assist"));
 }
 
 void ShowTreeView_Test::commandSyntaxFoldsAwayAndIsRemembered()

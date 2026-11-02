@@ -144,6 +144,7 @@ private slots:
     void commandLine();
     void commandLineFailsAsAWhole();
     void commandLineCompletes();
+    void commandLineSpellCheck();
     void commandLineCompletesEveryWord_data();
     void commandLineCompletesEveryWord();
     void commandLineTabCyclesAndRuns();
