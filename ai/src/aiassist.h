@@ -130,7 +130,11 @@ public:
 
     /** Ask @a question. Returns false (and @a error) when it can't be
      *  asked: off, Operate, already asking. Otherwise answered() follows. */
-    bool ask(const QString &question, const ShowTreeCommand::Context &selection, QString *error = nullptr);
+    bool ask(const QString &question, const ShowTreeCommand::Context &selection, QString *error = nullptr,
+             const QString &parserError = QString());
+    /** The syntax reference the model gets with a line that wasn't a command:
+     *  the grammar and every word's syntax, from the table the parser uses. */
+    static QString syntaxReference();
     /** Esc: drop the question in flight (answered() with "Cancelled"). */
     void cancel();
 

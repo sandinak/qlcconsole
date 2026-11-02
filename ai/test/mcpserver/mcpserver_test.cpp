@@ -61,7 +61,7 @@ struct Bar
         line = new QLineEdit(&bar);
         row->addWidget(line);
         msg = new QLabel(&bar);
-        cl.reset(new AiCommandLine(line, &pane, msg, row, nullptr));
+        cl.reset(new AiCommandLine(line, &pane, msg, nullptr));
     }
 };
 }

@@ -46,10 +46,26 @@ A good start is Ollama on the same Mac with a model that can call tools
 
 ## Asking
 
-Open the Show Tree's command line (`:` from the tree) and type `?`, a
-space and your question, then press Return. The **AI** button beside the
-syntax button `?` starts one for you. You can keep working while it thinks;
-**Esc** in the line cancels the question.
+There is one line, and it decides. Open the Show Tree's command line (`:`
+from the tree) and type. A command runs as you typed it, and the model is
+never involved. A line that isn't a command is first **spell-checked**
+here, on this computer (a word of the grammar, or a cue, group, fixture or
+palette of the show spelt slightly wrong: *Did you mean `Towers colour
+Blue`?*; Enter runs the corrected line, **Esc** puts back what you typed).
+Only a line the spell-check can't put right goes to AI Assist, with the
+command line's error and the syntax, and only while AI Assist is on and the
+console is in Design. The line says when it will: its grey hint ends *or ask
+in plain words (AI Assist)*. You can keep working while it thinks; **Esc**
+in the line cancels.
+
+What comes back is either a corrected command, shown as a change to apply
+(see below, with the real syntax in the line), or an answer in words. Start
+the line with `?`, a space and your question to ask a question even when it
+could read as a command.
+
+With AI Assist off, plain words get the command line's error and *To type
+in plain words, turn on Settings ▸ AI Assist*. In Operate only the
+spell-check runs; the line never asks the model.
 
 The answer appears in the pane above the line, with **Asked the console:**
 and the commands it used (`conflicts`, `fixtures Spot`). Click one to put
@@ -59,8 +75,8 @@ it in the line: next time you can type it and skip the model.
 still the command line's own help.
 
 If the model can't be reached (Ollama not running, the wrong address), the
-**AI** button greys out and its tooltip says why. Ask again or use **Test
-connection** once it is back.
+line shows the command line's own error and why the model didn't answer.
+Type it again, or use **Test connection** once it is back.
 
 ## Changes: proposed, then applied by you
 
@@ -152,7 +168,7 @@ for you (they are not in its plans):
 
 Operate carries no AI at all. Going to Operate:
 
-1. hides the AI button, stops any question in flight (it says
+1. takes the plain-words hint off the line, stops any question in flight (it says
    *Cancelled: the console went to Operate*) and drops a proposal waiting
    to be applied: nothing of it is made;
 2. closes every connection AI Assist had open;

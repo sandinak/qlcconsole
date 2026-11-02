@@ -104,7 +104,7 @@ BuildCommandBar::BuildCommandBar(Doc *doc, const Host &host, QWidget *parent)
 #ifdef QLC_AI_ASSIST
     // "? question": AI Assist's, through the registry, as in the tree. What
     // it proposes changes the Show Tree, so it has no cue to act on here.
-    m_ai = new AiCommandLine(m_line, m_help, m_message, h, this);
+    m_ai = new AiCommandLine(m_line, m_help, m_message, this);
     m_ai->setOperations(m_operations);
     m_ai->setSelectionProvider([]() { return ShowTreeCommand::Context(); });
 #endif

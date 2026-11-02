@@ -16,8 +16,6 @@
 */
 
 #include <QTextBrowser>
-#include <QToolButton>
-#include <QBoxLayout>
 #include <QLineEdit>
 #include <QLabel>
 #include <QUrl>
@@ -25,32 +23,13 @@
 #include "operationregistry.h"
 #include "aicommandline.h"
 
-AiCommandLine::AiCommandLine(QLineEdit *line, QTextBrowser *pane, QLabel *message, QBoxLayout *row,
-                             QObject *parent)
+AiCommandLine::AiCommandLine(QLineEdit *line, QTextBrowser *pane, QLabel *message, QObject *parent)
     : QObject(parent)
     , m_line(line)
     , m_pane(pane)
     , m_message(message)
+    , m_placeholder(line->placeholderText())
 {
-    m_button = new QToolButton(line->parentWidget());
-    m_button->setObjectName("stAiButton");
-    m_button->setText(tr("AI"));
-    m_button->setAutoRaise(true);
-    row->addWidget(m_button);
-    connect(m_button, &QToolButton::clicked, this, [this]() {
-        if (m_line.isNull())
-            return;
-        if (!m_line->text().trimmed().startsWith(QLatin1Char('?')))
-            m_line->setText(QStringLiteral("? "));
-        m_line->setFocus(Qt::OtherFocusReason);
-        m_line->end(false);
-        // The pick stays picked: if the provider was down the last time,
-        // say so and that Enter tries again.
-        if (AiAssist *ai = assist())
-            if (ai->isUnreachable())
-                setMessage(tr("%1 -- Enter on a question tries again; Settings ▸ AI Assist ▸ Test connection.")
-                               .arg(ai->unreachableReason()), true);
-    });
     // The proposal's links (the view's own handler only takes "ex:").
     if (!m_pane.isNull())
         connect(m_pane.data(), &QTextBrowser::anchorClicked, this, [this](const QUrl &url) {
@@ -90,23 +69,49 @@ void AiCommandLine::setSelectionProvider(const std::function<ShowTreeCommand::Co
 
 void AiCommandLine::update()
 {
-    AiAssist *ai = assist();
-    const bool shown = ai != nullptr && ai->isAvailable();
-    m_button->setVisible(shown);
-    if (!shown)
+    if (m_line.isNull())
         return;
-    // Never greyed: a greyed button was "AI turned itself off" with no way
-    // to retry. Unreachable only changes what it says.
-    m_button->setEnabled(true);
-    if (ai->isUnreachable())
-        m_button->setToolTip(tr("AI Assist: %1. Press to ask again (? and your question), or Settings ▸ "
-                                "AI Assist ▸ Test connection.").arg(ai->unreachableReason()));
-    else if (ai->isBusy())
-        m_button->setToolTip(tr("AI Assist is answering (Esc in the line cancels)."));
-    else
-        m_button->setToolTip(tr("Ask AI Assist about the show: type ? and a question (\"? find address "
-                                "conflicts\", \"? cue 5 movers blue at 50\"). Questions change nothing; "
-                                "a change it proposes waits for you to apply it (one undo step)."));
+    AiAssist *ai = assist();
+    const bool on = ai != nullptr && ai->isAvailable();
+    // The indicator: the line says it takes plain words too.
+    m_line->setPlaceholderText(!on ? m_placeholder
+                               : m_plainWords ? tr("%1 · or ask in plain words (AI Assist)").arg(m_placeholder)
+                                              : tr("%1 · ? asks AI Assist").arg(m_placeholder));
+}
+
+void AiCommandLine::setPlainWords(bool on)
+{
+    m_plainWords = on;
+    update();
+}
+
+bool AiCommandLine::fallback(const QString &line, const QString &parserError,
+                             const ShowTreeCommand::Context &selection, QString *note)
+{
+    if (!AiAssist::isEnabled())
+    {
+        // Plain words: only worth a hint when it looks like some.
+        if (note != nullptr && line.trimmed().split(QLatin1Char(' '), Qt::SkipEmptyParts).count() >= 2)
+            *note = tr("To type in plain words, turn on Settings ▸ AI Assist.");
+        return false;
+    }
+    AiAssist *ai = assist();
+    if (ai == nullptr || !ai->isAvailable())
+        return false;
+    if (ai->hasProposal())
+        ai->discard();
+    QString why;
+    if (!ai->ask(line.trimmed(), selection, &why, parserError))
+    {
+        if (note != nullptr)
+            *note = why;
+        return false;
+    }
+    m_fallbackError = parserError;
+    setMessage(tr("Not a command (%1). Asking %2… (Esc cancels)").arg(parserError, AiSettings::load().model),
+               false);
+    update();
+    return true;
 }
 
 void AiCommandLine::setMessage(const QString &text, bool error)
@@ -259,6 +264,8 @@ void AiCommandLine::showProposal()
 
 void AiCommandLine::showAnswer(const AiAssist::Answer &answer)
 {
+    const QString fallbackError = m_fallbackError;
+    m_fallbackError.clear();
     if (!answer.proposal.isEmpty())
     {
         m_answer = answer;
@@ -298,7 +305,9 @@ void AiCommandLine::showAnswer(const AiAssist::Answer &answer)
         m_pane->setHtml(html);
         m_pane->show();
     }
-    setMessage(answer.ok ? tr("AI Assist answered; nothing in the show changed") : tr("AI Assist: %1").arg(answer.text.left(120)),
-               !answer.ok);
+    QString failure = tr("AI Assist: %1").arg(answer.text.left(120));
+    if (!answer.ok && !fallbackError.isEmpty())
+        failure = tr("%1 (AI Assist could not help: %2)").arg(fallbackError, answer.text.left(120));
+    setMessage(answer.ok ? tr("AI Assist answered; nothing in the show changed") : failure, !answer.ok);
     update();
 }

@@ -740,6 +740,11 @@ Decided (each can change):
 - P3: decided: an MCP proposal is refused while the operator has an in-app question or proposal open, and a new question discards an MCP proposal (can change).
 - P3: decided: only one qlcconsole per user serves; a second reports it on the settings page (can change).
 
+- One command line (feat/04-one-command-line, cli1): built -- command → run; typo → local spell-check (`ShowTreeCommand::suggest`, Enter runs / Esc restores); unparsed + AI on + Design → the assistant with the parser error and syntax (`AiAssist::ask(..., parserError)`); `?` forces a question; Operate never asks; the AI button is removed.
+- cli1: decided: the correction goes in the line and a second Enter runs it (nothing runs that wasn't read), Esc puts back what was typed (can change).
+- cli1: decided: only grammar failures (`Result::unparsed`) go to the AI; a failure the show answers (no such palette) gets the spell-check only (can change).
+- cli1: decided: Build's command bar keeps `?` questions but has no plain-words fallback or spell-check yet (can change).
+
 **Next:**
 - MCP: a headless `--mcp <show>` mode on a file (the 2026-09-10 idea
   below) if wanted; Windows named-pipe path untested on the VM.
