@@ -220,6 +220,7 @@ previews.
 | Effect | What it does |
 |---|---|
 | **Candle Flicker** | Organic per-fixture brightness flicker around the look's own level |
+| **Crackle** | Fixtures pulse up at random in their own colour and fade back to a rest level |
 | **Dimmer Phaser** | A waveform intensity chase with phase spread |
 | **Firelight** | Warm flickering fire colours, each fixture on its own |
 | **Lightning** | Random storm flashes across the rig |
@@ -227,6 +228,25 @@ previews.
 | **Spotlight Chase** | A hot spot chases across the rig, with a dimmer trail |
 | **Wave** | A travelling sine wave across the fixtures |
 | **Native Strobe** | The fixture's own shutter strobe |
+
+**Crackle** rests every fixture at a quiet level and, at random moments,
+snaps one up to the look's own level in the look's own colour, then fades it
+back to rest. Sparkle flashes and fades like stars; Crackle keeps the
+colour and returns to the look's level. A dimmer effect only scales the
+look, so the look's level is the **peak** and the effect cannot rise above
+it: set the look's Dimmer to the brightness you want the pulses to reach, and
+**Rest** (a fraction of that, 35% by default) is the level between them. A
+look at full still crackles, from Rest up to full. Raise Rest to 100% and
+nothing pulses.
+
+| Setting | Does |
+|---|---|
+| **Rate** | Pulses a second across the whole group (3) |
+| **Rest** | The level between pulses, of the look's level (0.35) |
+| **Peak** | How high a pulse goes, of the look's level (1.0) |
+| **Attack** | How fast it snaps up, in seconds (0.03) |
+| **Decay** | How long it takes to fade back, in seconds (0.7); a long decay lets several overlap |
+| **Seed** | The same seed gives the same crackle every run (1) |
 
 ## Position (moving heads)
 

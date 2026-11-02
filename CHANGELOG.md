@@ -624,6 +624,13 @@ skipped). Upstream fixes taken:
 
 ### Added
 
+- **Crackle, a new Dimmer effect.** Fixtures rest at a quiet level and, at
+  random moments, one snaps up to the look's own level in the look's own
+  colour and fades back to rest. Rate (pulses a second across the group),
+  Rest, Peak, Attack, Decay and Seed; the same seed gives the same crackle.
+  Unlike Sparkle (a flash that fades to dark) the colour stays the look's.
+  See [Effects](docs/features/effects.md#dimmer).
+
 - **The gate has a Linux leg (dev).** `check-all.sh --remote` also compiles
   and tests the commit on the Linux build host (GCC 14, Qt 6.8, as CI's Linux
   job), beside the Mac gate; the result line ends `linux=0 linux_qt=6.8.2` and
