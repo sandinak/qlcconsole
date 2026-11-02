@@ -474,6 +474,70 @@ bool TreeCueStack::moveLayer(int from, int to)
     });
 }
 
+int TreeCueStack::addSelectionLayers(const QList<quint32> &groups, const QList<quint32> &fixtures,
+                                     int after)
+{
+    Q_UNUSED(after)     // a cue's layers play in the tree's order
+    if (!canAddLayers())
+        return -1;
+    QList<Target> targets;
+    for (quint32 gid : groups)
+        if (m_doc->fixtureGroup(gid) != nullptr)
+        {
+            Target t;
+            t.groups << gid;
+            targets << t;
+        }
+    Target rest;
+    for (quint32 fid : fixtures)
+        if (m_doc->fixture(fid) != nullptr && !rest.fixtures.contains(fid))
+            rest.fixtures << fid;
+    if (!rest.fixtures.isEmpty())
+        targets << rest;
+    if (targets.isEmpty())
+        return -1;
+    // Its own path: layers of the cue, one tree step for all of them.
+    ShowTreeController *controller = st();
+    controller->beginBatch(tr("New Layer from Selection"));
+    quint32 first = ShowTree::invalidId();
+    for (const Target &t : targets)
+    {
+        const quint32 lid = controller->addLayer(m_cue, t);
+        if (first == ShowTree::invalidId())
+            first = lid;
+    }
+    controller->endBatch(first != ShowTree::invalidId());
+    if (first == ShowTree::invalidId())
+        return -1;
+    return indexOfLayer(first);
+}
+
+bool TreeCueStack::canAddFixturesToLayer(int layer) const
+{
+    if (!canAddLayers())
+        return false;
+    const quint32 lid = layerIdAt(layer);
+    return lid != ShowTree::invalidId() && !targetAt(layer).isOpaque();
+}
+
+bool TreeCueStack::addSelectionToLayer(int layer, const QList<quint32> &groups,
+                                       const QList<quint32> &fixtures)
+{
+    if (!canAddFixturesToLayer(layer))
+        return false;
+    const ShowTree::Target t = targetAt(layer);
+    QList<quint32> addGroups, addFixtures;
+    for (quint32 gid : groups)
+        if (m_doc->fixtureGroup(gid) != nullptr && !t.groups.contains(gid) && !addGroups.contains(gid))
+            addGroups << gid;
+    for (quint32 fid : fixtures)
+        if (m_doc->fixture(fid) != nullptr && !t.fixtures.contains(fid) && !addFixtures.contains(fid))
+            addFixtures << fid;
+    if (addGroups.isEmpty() && addFixtures.isEmpty())
+        return false;
+    return st()->addToLayer(m_cue, layerIdAt(layer), addGroups, addFixtures);
+}
+
 quint32 TreeCueStack::addNew(Function::Type type, int after, const QList<GroupHead> &heads, quint32 group)
 {
     Q_UNUSED(after)

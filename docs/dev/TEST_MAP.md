@@ -842,6 +842,7 @@ updateOnRig). Both tests fail on 987c9c56e (before the fix) with "missing".
 | M661 | Greyed in Operate | Operate: the pages' and the docked Workbench's Play and Solo are visible, greyed, with a tooltip saying why; nothing previews; back to Design they work | **ShowTreeWorkbench_Test::soloAndPlayGreyInOperate** (new) | none | covered | med | — |
 | M662 | Timeline waveform | An audio clip's peaks follow the samples, are cached by path+size+mtime, built once off the GUI thread, rebuilt when the file changes, drawn at any zoom (5-minute song) and without a file | **WaveformPeaks_Test** (ui/test/waveformpeaks) | none | covered | med | the clip painting itself is not pixel-checked |
 | M663 | Marker snap | A dropped item snaps to a marker edge; the timeline draws with a missing audio file | **ShowManager_Test::aCueSnapsToAMarker, drawsWithoutTheAudioFile** | none | covered | med |  |
+| M664 | One selection (Q201) | Studio / plot / Fixture Manager picks set the programmer selection; Workbench, plot and Studio follow (Build hidden); whole groups recognised; near-miss chip; Selection ▸ New Layer from Selection / Add to Current Layer (FunctionStack, TreeCueStack, undo) | **SelectionSync_Test (all, ui/test/selectionsync)** | none | covered | med | The Studio pick is its signal, not a synthetic click. |
 
 ## Data safety across features (old shows, file formats)
 

@@ -65,6 +65,8 @@
 #include "addchannelsgroup.h"
 #include <functional>
 #include "fixturemanager.h"
+#include "selectionmenu.h"
+#include "selectionhintchip.h"
 #include "whyonpanel.h"
 #include "venuecorrections.h"
 #include "ledlayouteditor.h"
@@ -221,6 +223,22 @@ FixtureManager::FixtureManager(QWidget* parent, Doc* doc)
                 ids << fv.toUInt();
         }
         WhyOnPanel::noteSelection(ids);
+        /* One selection (Q201): fixtures picked here are the programmer's
+           target -- the Workbench, the plot and the Studio follow. Only
+           while the tree shows, and never a deselect: a rebuild of the tree
+           clears its selection, and that is no pick. */
+        if (m_fixtures_tree->isVisible())
+        {
+            const QList<quint32> pick = pickedFixtures();
+            if (!pick.isEmpty())
+            {
+                m_doc->setProgrammerSelection(pick);
+                // A group but for one or two (or one stray): offered.
+                if (m_selectionHint == NULL)
+                    m_selectionHint = new SelectionHintChip(m_doc, m_fixtures_tree);
+                m_selectionHint->offer(SelectionShape::hint(m_doc, pick));
+            }
+        }
     });
 
     connect(m_doc, SIGNAL(channelsGroupRemoved(quint32)),
@@ -897,6 +915,29 @@ void FixtureManager::createInfo()
     m_splitter->insertWidget(1, m_info);
 
     m_splitter->restoreState(state);
+}
+
+QList<quint32> FixtureManager::pickedFixtures() const
+{
+    QList<quint32> ids;
+    for (QTreeWidgetItem *item : m_fixtures_tree->selectedItems())
+    {
+        const QVariant gv = item->data(KColumnName, PROP_GROUP);
+        if (gv.isValid())
+        {
+            // A group row picks its fixtures (decided Q201; can change).
+            if (FixtureGroup *g = m_doc->fixtureGroup(gv.toUInt()))
+                for (quint32 fid : g->fixtureList())
+                    if (!ids.contains(fid))
+                        ids << fid;
+            continue;
+        }
+        // A fixture row, or one of its heads: the fixture.
+        const QVariant fv = item->data(KColumnName, PROP_ID);
+        if (fv.isValid() && m_doc->fixture(fv.toUInt()) != NULL && !ids.contains(fv.toUInt()))
+            ids << fv.toUInt();
+    }
+    return ids;
 }
 
 void FixtureManager::slotSelectionChanged()
@@ -3193,6 +3234,8 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
     if (haveFixtureOrGroupSelection)
     {
         menu.addSeparator();
+        // Selection ▸ New Layer from Selection / Add to Current Layer (Q201).
+        SelectionMenu::addTo(&menu, m_doc, pickedFixtures());
         selectSimilar = menu.addAction(tr("Select All Similar"));
         selectSimilar->setObjectName(QStringLiteral("selectAllSimilar"));
         selectSimilar->setToolTip(tr("Fixtures: every one of the same definition and mode -- "

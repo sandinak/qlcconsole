@@ -65,6 +65,15 @@ public:
     /** Get the singleton instance */
     static FixtureManager* instance();
 
+    /** The fixtures the tree's selection picks (Q201): fixture and head
+     *  rows their fixture, a group row its members. */
+    QList<quint32> pickedFixtures() const;
+    /** Q201's near-miss chip over the tree (null until a pick needs it). */
+    class SelectionHintChip *selectionHint() const { return m_selectionHint; }
+private:
+    class SelectionHintChip *m_selectionHint = nullptr;
+public:
+
     /** Match the main window's icon/text display preference
      *  (workspace/tabLabelMode) — mirrors Monitor::applyToolbarLabelMode(). */
     void applyToolbarLabelMode();

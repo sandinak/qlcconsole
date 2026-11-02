@@ -55,6 +55,7 @@
 #include "monitorproperties.h"
 #include <cmath>
 #include "monitorgraphicsview.h"
+#include "selectionmenu.h"
 #include "itemlock.h"
 #include "stagemarklabel.h"
 #include "stagepieceitem.h"
@@ -467,6 +468,7 @@ void MonitorGraphicsView::mousePressEvent(QMouseEvent *event)
     // via its private m_dragMoved before deciding whether to emit
     // itemDropped() at all.
     m_pressViewPos = event->pos();
+    m_lastBand = QRectF();      // Q201: a click, until a band is dragged
     m_dragRefused = false;
     m_dragRefusedNoted = false;
     m_pressOnLockedLayer = false;
@@ -7061,6 +7063,22 @@ void MonitorGraphicsView::setFollowSpotPin(bool visible, float xMeters, float yM
     m_fsPinV->setVisible(true);
 }
 
+void MonitorGraphicsView::setHintedFixtures(const QList<quint32> &ids)
+{
+    const QSet<quint32> idSet(ids.begin(), ids.end());
+    for (auto it = m_fixtures.begin(); it != m_fixtures.end(); ++it)
+        it.value()->setHinted(idSet.contains(it.key()));
+}
+
+QHash<quint32, QPointF> MonitorGraphicsView::fixtureCentres() const
+{
+    QHash<quint32, QPointF> out;
+    for (auto it = m_fixtures.constBegin(); it != m_fixtures.constEnd(); ++it)
+        if (it.value() != nullptr && it.value()->isVisible())
+            out.insert(it.key(), it.value()->sceneBoundingRect().center());
+    return out;
+}
+
 void MonitorGraphicsView::highlightFixtures(const QList<quint32> &ids)
 {
     const QSet<quint32> idSet(ids.begin(), ids.end());
@@ -8256,7 +8274,11 @@ void MonitorGraphicsView::mouseMoveEvent(QMouseEvent *event)
 
     QGraphicsView::mouseMoveEvent(event);
     if (event->buttons() & Qt::LeftButton)
+    {
         dropLayerLockedFromRubberBand();
+        if (!rubberBandRect().isNull())
+            m_lastBand = mapToScene(rubberBandRect()).boundingRect();
+    }
 }
 
 void MonitorGraphicsView::clickAgainToPickOut(QGraphicsItem *item)
@@ -8764,7 +8786,19 @@ void MonitorGraphicsView::buildItemMenu(QMenu *menu, const QString &kind, quint3
     QList<QPair<QString, quint32> > objects = place.selection;
     if (!objects.contains(qMakePair(kind, id)))
         objects.prepend(qMakePair(kind, id));
-    populateOrganiseMenu(menu, objects);
+    QList<QAction *> selectionItems;
+    populateOrganiseMenu(menu, objects, &selectionItems);
+
+    /* Selection ▸ (Q201): the fixtures picked, as a layer of the Workbench
+       or the Show Tree cue -- and the plot's own selection items. */
+    QList<quint32> fixtures;
+    for (const auto &o : objects)
+        if (o.first == QLatin1String("fixture") && !fixtures.contains(o.second))
+            fixtures << o.second;
+    if (!fixtures.isEmpty())
+        SelectionMenu::addTo(menu, m_doc, fixtures, selectionItems);
+    else
+        menu->addActions(selectionItems);
 
     // 4. Removing, last.
     addItemRemoval(menu, kind, id);
@@ -8933,7 +8967,8 @@ void MonitorGraphicsView::removeFromFolder(const QList<QPair<QString, quint32> >
 }
 
 void MonitorGraphicsView::populateOrganiseMenu(QMenu *menu,
-                                               const QList<QPair<QString, quint32> > &objects)
+                                               const QList<QPair<QString, quint32> > &objects,
+                                               QList<QAction *> *selectionItems)
 {
     if (menu == nullptr || objects.isEmpty() || m_doc->mode() != Doc::Design)
         return;
@@ -9037,10 +9072,18 @@ void MonitorGraphicsView::populateOrganiseMenu(QMenu *menu,
             }
         }
         if (allFixtures)
-            menu->addAction(tr("Create Fixture Group from Selection…"), this, [this, fixtures]() {
+        {
+            QAction *create = new QAction(tr("Create Fixture Group from Selection…"), menu);
+            connect(create, &QAction::triggered, this, [this, fixtures]() {
                 if (CreateFixtureGroup::createFromFixtures(m_doc, fixtures, this) != nullptr)
                     emit mapStructureChanged();
             });
+            // On the plot it goes under Selection ▸ (Q201).
+            if (selectionItems != nullptr)
+                *selectionItems << create;
+            else
+                menu->addAction(create);
+        }
     }
 
     // Layers.
@@ -9053,10 +9096,12 @@ void MonitorGraphicsView::populateOrganiseMenu(QMenu *menu,
             emit mapStructureChanged();
         });
     }
-    menu->addAction(tr("New Layer from Selection…"), this, [this, objects]() {
+    // A layer of the plot, not of a cue: Selection ▸ New Layer from
+    // Selection makes that.
+    menu->addAction(tr("New Map Layer from Selection…"), this, [this, objects]() {
         MonitorProperties *p = m_doc->monitorProperties();
         bool ok = false;
-        const QString name = QInputDialog::getText(this, tr("New Layer"), tr("Layer name:"),
+        const QString name = QInputDialog::getText(this, tr("New Map Layer"), tr("Layer name:"),
                                                    QLineEdit::Normal,
                                                    tr("Layer %1").arg(p->layers().count()), &ok).trimmed();
         if (!ok || name.isEmpty())

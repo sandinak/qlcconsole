@@ -193,6 +193,7 @@ add_library(${module_name} SHARED
     showembedding.cpp showembedding.h
     fixturedefupdates.cpp fixturedefupdates.h
     programmercontroller.cpp programmercontroller.h
+    selectionshape.cpp selectionshape.h
     scene.cpp scene.h
     scenevalue.cpp scenevalue.h
     scriptwrapper.h

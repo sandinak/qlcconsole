@@ -34,6 +34,28 @@ state. Leftovers, not built:
   built; the cost is a new playback path and hot-path work.
 - "I Meant It" on a layer of a reusable cue's use is not synced to the
   reusable.
+## One selection — built, leftovers (Q201, xsel, 2026-11-02)
+
+Built: Studio / plot / Fixture Manager picks set the programmer selection;
+Workbench, plot and Studio views follow it in front or not; whole groups
+recognised (SelectionShape); near-miss chip (plot band outlines the miss);
+Selection ▸ (New Layer from Selection, Add to Current Layer) in the plot,
+Studio views, Fixture Manager, Fixtures & Groups and Workbench target rows.
+Decided (can change): a group row picks its fixtures; only groups of 2+
+count; whole groups → a layer each plus one for the rest; deselecting in the
+Fixture Manager doesn't clear the programmer; a structure editor rings only
+what is mounted on it; the Fixture Manager tree doesn't follow the selection
+back; Create Group(s) from Selection stays under FM's Group ▸.
+Leftovers:
+- Head-level selections: the programmer selection is fixtures, so "a group's
+  heads" is recognised only as its fixtures.
+- The Studio views have no rubber band, so the "just outside the box" case
+  is the plot's only; the Studio and FM chips use the count rules.
+- The Look Editor has no fixture list of its own: it follows through the
+  Workbench; ctx (context-menu audit) can slot SelectionMenu into any
+  canonical menu still missing it.
+- Offscreen tests emit the Studio's pick signal rather than a synthetic
+  mouse click on a fixture.
 
 ## Course: Level 3's remaining lessons (0.5 item 9, crs3, 2026-11-01)
 

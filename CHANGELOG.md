@@ -28,6 +28,13 @@ back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
 ### Performance over time
 
 - **The [Performance](docs/performance.md#performance-over-time) page gains data points as tests run.** Every `make perf`, `make perf-record` and nightly run appends its key metrics to `docs/perf-data/history.csv`; `tools/perf/plot.py trends` draws them per machine class (baseline re-records, failed metrics and the FadeChannel memory regression and fix marked); `make perf-history-commit` commits the history. Backfilled from the existing baselines and the 2026-11-01 runs.
+### One selection (Q201)
+
+- **Pick lights anywhere; they are what you program.** A click or rubber band on the Lighting Studio plot, a click in the Rig Overview or a structure editor, or a Fixture Manager row sets the programmer selection, and the Workbench, the plot and every Studio view follow it whichever tab is in front (the Show Tree's Workbench still jumps to the fixture's layer). See [One selection](docs/features/build.md#one-selection).
+- **Whole groups are groups.** All of Front Wash selected reads **Front Wash (6)** in the status bar; both towers **SL Tower + SR Tower (12)** (an exact parent group wins); **SR Tower + 1 fixture** for the rest. Ties go to the group used most, then the name.
+- **Near misses are offered, never applied.** A group short by one or two, a group plus a stray, or (on the plot) a member just outside the rubber band, outlined, brings a chip: "Front Wash is 6 — select all 6?" Click or **Tab** takes it, **Esc** leaves it.
+- **Selection ▸ on every fixture right-click menu** (plot, Studio views, Fixture Manager, Fixtures & Groups, Workbench targets): **New Layer from Selection** (a layer per whole group, on the group, plus one for the rest; in a Show Tree cue, layers of the cue; one Undo) and **Add to Current Layer**. The plot's Create Fixture Group from Selection… moved in there; its map-layer action is now **New Map Layer from Selection…**.
+
 ### The Library and the command line in Build
 
 - **One Library, and the command line, in Build.** The bottom of Build's
