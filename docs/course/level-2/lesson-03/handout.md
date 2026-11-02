@@ -147,3 +147,13 @@ Switch roles after each part.
    layer again.
 4. Undo (⌘Z) back to your bridge. When would you want two layers, and
    when one?
+
+**Solo.** Hear one row of the choir on its own. Click the Bridge's
+**Truss Sides** layer and press **Solo**, at the top of the layer's page.
+
+1. Only that layer plays: the steps go dark. Click the **Steps** layer:
+   Solo follows it, and now the trusses are dark.
+2. Press **Solo** again, or click the cue itself, and the whole cue is back.
+   Solo is a preview; it never changes the show.
+3. When you are hunting for which layer makes a look, why is Solo faster
+   than switching layers off?

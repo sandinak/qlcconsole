@@ -144,6 +144,8 @@ front row picked out); or, on paper, a four-line bridge on a stage plan.
   later; one when they always move together (less to change, and one
   thing to read in the tree).
 
+Extension, Solo: the course test (`lessonTwoThreeSolo`) solos the Truss Sides layer of the bridge (the steps go dark) and puts the cue back.
+
 ## How this lesson was checked
 
 Every step of the handout is run by the course test (`ui/test/courseshow`,

@@ -107,6 +107,14 @@
 #include "speedmasters.h"
 #include "doc.h"
 #include "teachingsettings.h"
+#include "showoperate.h"
+#include "fixturegroupeditor.h"
+#include "cuesheet.h"
+#include "showreview.h"
+#include "whyon.h"
+#include "lineplanview.h"
+#include "timecodesource.h"
+#include "showcontrol.h"
 
 #include "courseshow_test.h"
 #include "../common/dragpos.h"
@@ -141,6 +149,12 @@ QString levelTwoStart(int n)
 QString levelTwoFinish(int n)
 {
     return kShows + QStringLiteral("/lesson-2-%1-finish.qlcc").arg(n);
+}
+
+/* Level 3's show files: lesson-3-N-start / -finish (3.5, 3.8, 3.9). */
+QString levelThreeFile(int lesson, const char *kind)
+{
+    return kShows + QStringLiteral("/lesson-3-%1-%2.qlcc").arg(lesson).arg(QLatin1String(kind));
 }
 
 /* The base palettes every lesson uses -- typed, as the course teaches. */
@@ -916,6 +930,9 @@ void CourseShow_Test::theTeachingShowIsSafeAndComplete()
     // Level 2's, as many as are written.
     for (int n = 1; n <= kLevelTwoLessons; ++n)
         shows << levelTwoStart(n) << levelTwoFinish(n);
+    // Level 3's (3.5, 3.8, 3.9).
+    for (int n : { 5, 8, 9 })
+        shows << levelThreeFile(n, "start") << levelThreeFile(n, "finish");
     for (const QString &path : shows)
     {
         QVERIFY2(QFile::exists(path), qPrintable(path));
@@ -5115,6 +5132,643 @@ void CourseShow_Test::buildLevelTwoShows()
         QCOMPARE(m_app->saveXML(levelTwoFinish(l.n)), QFile::NoError);
         m_app->doc()->resetModified();
     }
+}
+
+/* ---- Level 3: 3.5 show control, 3.8 running a real show, 3.9 troubleshooting ----
+   Show files lesson-3-N-start / -finish: 3.5 starts from Lesson 2.7's finish,
+   3.8 from 3.5's finish, 3.9 from 3.8's finish with three faults put in. */
+
+static const CueList *listNamed(Doc *doc, const QString &name)
+{
+    for (const Production &p : doc->showTree()->productions())
+        for (const CueList &l : p.lists)
+            if (l.name == name)
+                return &l;
+    return nullptr;
+}
+
+/* What Level 3's lessons set: timecode, numbering, sections, masters, override hits. */
+static QStringList describeControl(Doc *doc)
+{
+    QStringList out;
+    ShowTreeController *st = doc->showTree();
+    for (const Production &p : st->productions())
+    {
+        out << QStringLiteral("%1 numbering %2").arg(p.name).arg(int(p.numbering));
+        for (const CueList &l : p.lists)
+        {
+            if (l.isSubCues())
+                continue;
+            out << QStringLiteral("%1 follows timecode %2").arg(l.name).arg(l.followTimecode ? 1 : 0);
+            for (const ShowTree::Section &s : st->sections(l.id))
+                out << QStringLiteral("%1 section %2 \"%3\" block %4")
+                           .arg(l.name, s.key, s.name).arg(st->sectionBlocks(l.id, s) ? 1 : 0);
+            for (const Cue &c : l.cues)
+            {
+                if (c.timecode >= 0)
+                    out << QStringLiteral("%1 at %2 ms").arg(c.number).arg(c.timecode);
+                if (c.override)
+                    out << QStringLiteral("hit %1 is an override").arg(c.name);
+            }
+        }
+    }
+    for (FixtureGroup *g : doc->fixtureGroups())
+        if (g->hasMaster())
+            out << QStringLiteral("%1 has a master at %2").arg(g->name()).arg(g->masterLevel());
+    out << QStringLiteral("phone GO %1").arg(doc->operateSettings()->remoteGo() ? 1 : 0);
+    return out;
+}
+
+static QTreeWidgetItem *sectionRow(ShowTreeView *view, const QString &key)
+{
+    for (QTreeWidgetItemIterator it(view->tree()); *it; ++it)
+        if ((*it)->data(0, ShowTreeView::KindRole).toInt() == ShowTreeView::SectionNode
+            && (*it)->data(0, ShowTreeView::SectionRole).toString() == key)
+            return *it;
+    return nullptr;
+}
+
+/* 3.5: the song's times (the clock the sound op's QLab runs). 1.0.2.5 Flash gets none. */
+struct TimecodeRow { const char *cue; const char *text; int ms; };
+static const TimecodeRow kLevelThreeTimes[] = {
+    { "1.0.0", "00:00:02:00", 2000 },    { "1.0.1", "00:00:10:00", 10000 },
+    { "1.0.2", "00:00:40:00", 40000 },   { "1.0.3", "00:00:55:00", 55000 },
+    { "1.0.4", "00:01:05:00", 65000 },   { "1.0.5", "00:01:30:00", 90000 },
+    { "1.0.6", "00:01:50:00", 110000 },  { "1.0.7", "00:02:10:00", 130000 },
+    { "1.0.8", "00:02:20:00", 140000 },
+};
+
+/* Lesson 3.5 with the mouse: Follow timecode on the list, a time on each cue. */
+static bool lessonThreeFiveByMouse(Doc *doc, ShowTreeView *view, const QString & = QString())
+{
+    ShowTreeController *st = doc->showTree();
+    for (QTreeWidgetItemIterator it(view->tree()); *it; ++it)
+        (*it)->setExpanded(true);
+    const CueList *list = listNamed(doc, QStringLiteral("01-Everybody Scream"));
+    LESSON_STEP(list != nullptr, "no list 01-Everybody Scream");
+    const quint32 listId = list->id;
+    LESSON_STEP(view->selectNode(listId), "select the list");
+    settle(50);
+    LESSON_STEP(view->m_listFollowTc != nullptr && view->m_listFollowTc->isVisible(), "no Follow timecode box");
+    LESSON_STEP(!view->m_listFollowTc->isChecked(), "the list already follows timecode");
+    view->m_listFollowTc->click();
+    settle(50);
+    LESSON_STEP(st->cueList(listId)->followTimecode, "Follow timecode didn't stick");
+    for (const TimecodeRow &t : kLevelThreeTimes)
+    {
+        const quint32 id = cueNumbered(doc, QLatin1String(t.cue));
+        LESSON_STEP(view->selectNode(id), t.cue);
+        settle(50);
+        LESSON_STEP(view->m_cueTc != nullptr && view->m_cueTc->isVisible(), "no At timecode box");
+        view->m_cueTc->setText(QLatin1String(t.text));
+        QTest::keyClick(view->m_cueTc, Qt::Key_Return);
+        settle(50);
+        LESSON_STEP(st->cue(id)->timecode == t.ms, QStringLiteral("%1 at %2").arg(t.cue).arg(st->cue(id)->timecode));
+        LESSON_STEP(view->m_cueTc->text() == QLatin1String(t.text), view->m_cueTc->text());
+    }
+    LESSON_STEP(st->cue(cueNumbered(doc, "1.0.2.5"))->timecode < 0, "the flash has a time");
+    return true;
+}
+
+/* Lesson 3.8 with the mouse: Show.Part.Iteration numbering, two named
+   songs, the second Block at its start, a group master on Lanterns, and an
+   override hit on a Virtual Console page. */
+static bool lessonThreeEightByMouse(Doc *doc, ShowTreeView *view, const QString & = QString())
+{
+    ShowTreeController *st = doc->showTree();
+    for (QTreeWidgetItemIterator it(view->tree()); *it; ++it)
+        (*it)->setExpanded(true);
+    const quint32 prod = st->productions().first().id;
+    LESSON_STEP(view->selectNode(prod), "select the production");
+    settle(50);
+    QComboBox *num = stFind<QComboBox>(view, "stProdNumbering");
+    LESSON_STEP(num != nullptr && num->isVisible(), "no Numbering box");
+    const int at = num->findData(int(ShowTree::Numbering::ShowPartIteration));
+    LESSON_STEP(at >= 0, "no Show.Part.Iteration");
+    num->setCurrentIndex(at);
+    emit num->activated(at);
+    settle(100);
+    const quint32 listId = listNamed(doc, QStringLiteral("01-Everybody Scream"))->id;
+    LESSON_STEP(st->sections(listId).count() == 1, "one song after numbering");
+    for (QTreeWidgetItemIterator it(view->tree()); *it; ++it)
+        (*it)->setExpanded(true);
+
+    // Name the first song on its header's page.
+    QTreeWidgetItem *head = sectionRow(view, QStringLiteral("1"));
+    LESSON_STEP(head != nullptr, "no header for song 1");
+    view->tree()->setCurrentItem(head);
+    settle(50);
+    QLineEdit *name = stFind<QLineEdit>(view, "stSectionName");
+    LESSON_STEP(name != nullptr && name->isVisible(), "no section Name box");
+    name->setText(QStringLiteral("Everybody Scream"));
+    QTest::keyClick(name, Qt::Key_Return);
+    settle(50);
+
+    // + Section: song 2, its first cue numbered 2.0.1.
+    LESSON_STEP(view->selectNode(listId), "select the list");
+    settle(50);
+    LESSON_STEP(view->m_listAddSection != nullptr && view->m_listAddSection->isVisible(), "no + Section");
+    const quint32 first = view->newSection(QStringLiteral("Slow Dance"), false);
+    LESSON_STEP(first != ShowTree::invalidId() && st->cue(first)->number == QLatin1String("2.0.1"), "song 2's first cue");
+    for (const QString &cmd : { QStringLiteral("name \"Slow Dance\""),
+                                QStringLiteral("TrussC-RGB colour Blue dimmer Half"),
+                                QStringLiteral("Lanterns colour Amber dimmer Full"),
+                                QStringLiteral("cue + \"Slow Dance Out\""),
+                                QStringLiteral("TrussC-RGB dimmer Out"),
+                                QStringLiteral("Lanterns dimmer Out") })
+        LESSON_STEP(view->runCommand(cmd), cmd + QStringLiteral(": ") + view->commandMessage());
+    LESSON_STEP(st->cue(first)->name == QLatin1String("Slow Dance"), "named");
+
+    // Block at section start.
+    for (QTreeWidgetItemIterator it(view->tree()); *it; ++it)
+        (*it)->setExpanded(true);
+    head = sectionRow(view, QStringLiteral("2"));
+    LESSON_STEP(head != nullptr, "no header for song 2");
+    view->tree()->setCurrentItem(head);
+    settle(50);
+    LESSON_STEP(view->m_sectionBlock != nullptr && view->m_sectionBlock->isVisible(), "no Block at section start");
+    if (!view->m_sectionBlock->isChecked())
+        view->m_sectionBlock->click();
+    settle(50);
+    LESSON_STEP(st->cue(first)->mode == ShowTree::CueMode::Block, "the first cue of song 2 is not Block");
+
+    // A group master on Lanterns, ticked in the group's editor.
+    FixtureGroup *lanterns = nullptr;
+    for (FixtureGroup *g : doc->fixtureGroups())
+        if (g->name() == QLatin1String("Lanterns"))
+            lanterns = g;
+    LESSON_STEP(lanterns != nullptr, "no Lanterns group");
+    {
+        FixtureGroupEditor ed(lanterns, doc, nullptr);
+        QCheckBox *box = ed.findChild<QCheckBox *>(QStringLiteral("fgMaster"));
+        LESSON_STEP(box != nullptr, "no Group master box");
+        box->setChecked(true);
+    }
+    LESSON_STEP(lanterns->hasMaster() && lanterns->masterLevel() == 255, "Lanterns' master");
+
+    // An override hit: Hush pulls the lanterns to a quarter whatever a cue says.
+    for (const QString &cmd : { QStringLiteral("production \"Spring Show\""), QStringLiteral("hit \"Hush\""),
+                                QStringLiteral("Lanterns dimmer 25%"), QStringLiteral("override"),
+                                QStringLiteral("vcpage") })
+        LESSON_STEP(view->runCommand(cmd), cmd + QStringLiteral(": ") + view->commandMessage());
+    return true;
+}
+
+/* Lesson 3.9's start is 3.8's finish with three faults: the second song
+   doesn't Block, the Lanterns master was left at 0, a hit has no button. */
+static bool lessonThreeNinePutInFaults(Doc *doc, ShowTreeView *view, const QString & = QString())
+{
+    ShowTreeController *st = doc->showTree();
+    for (QTreeWidgetItemIterator it(view->tree()); *it; ++it)
+        (*it)->setExpanded(true);
+    QTreeWidgetItem *head = sectionRow(view, QStringLiteral("2"));
+    LESSON_STEP(head != nullptr, "no header for song 2");
+    view->tree()->setCurrentItem(head);
+    settle(50);
+    if (view->m_sectionBlock->isChecked())
+        view->m_sectionBlock->click();
+    settle(50);
+    LESSON_STEP(st->cue(cueNumbered(doc, "2.0.1"))->mode != ShowTree::CueMode::Block, "still Block");
+    for (FixtureGroup *g : doc->fixtureGroups())
+        if (g->name() == QLatin1String("Lanterns"))
+            g->setMasterLevel(0);
+    for (const QString &cmd : { QStringLiteral("production \"Spring Show\""), QStringLiteral("hit \"Spare\""),
+                                QStringLiteral("AT-W-ALL colour White dimmer Full") })
+        LESSON_STEP(view->runCommand(cmd), cmd + QStringLiteral(": ") + view->commandMessage());
+    return true;
+}
+
+/* 3.9's repairs, as its handout has them: Block, the master back to full, the spare hit accepted. */
+static bool lessonThreeNineByMouse(Doc *doc, ShowTreeView *view, const QString & = QString())
+{
+    ShowTreeController *st = doc->showTree();
+    for (QTreeWidgetItemIterator it(view->tree()); *it; ++it)
+        (*it)->setExpanded(true);
+    ShowReview::Result r = doc->showReview()->run();
+    QStringList ids;
+    for (const ReviewFinding &f : r.findings)
+        if (f.isOpen())
+            ids << f.check;
+    qInfo().noquote() << "[3.9] Show Review finds:" << ids.join(", ");
+    LESSON_STEP(ids.contains(QStringLiteral("CUE-02")), "Show Review didn't find CUE-02");
+    LESSON_STEP(ids.contains(QStringLiteral("VC-03")), "Show Review didn't find VC-03");
+    // CUE-02: Fix goes to the second song's header; Block at section start.
+    QTreeWidgetItem *head = sectionRow(view, QStringLiteral("2"));
+    LESSON_STEP(head != nullptr, "no header for song 2");
+    view->tree()->setCurrentItem(head);
+    settle(50);
+    view->m_sectionBlock->click();
+    settle(50);
+    LESSON_STEP(st->cue(cueNumbered(doc, "2.0.1"))->mode == ShowTree::CueMode::Block, "Block didn't stick");
+    // The Lanterns master back to full (the Run tab's fader: double-click its name).
+    for (FixtureGroup *g : doc->fixtureGroups())
+        if (g->name() == QLatin1String("Lanterns"))
+            g->setMasterLevel(255);
+    // VC-03: accept the spare hit, with a note.
+    r = doc->showReview()->run();
+    bool accepted = false;
+    for (const ReviewFinding &f : r.findings)
+        if (f.check == QLatin1String("VC-03") && f.isOpen())
+            accepted = doc->showReview()->accept(f, QStringLiteral("Kept for the encore"), QStringLiteral("Crew"));
+    LESSON_STEP(accepted, "VC-03 was not accepted");
+    r = doc->showReview()->run();
+    for (const ReviewFinding &f : r.findings)
+        LESSON_STEP(!(f.isOpen() && (f.check == QLatin1String("CUE-02") || f.check == QLatin1String("VC-03"))), f.check);
+    return true;
+}
+
+void CourseShow_Test::levelThreeWithTheMouse()
+{
+    struct L { int n; bool (*byMouse)(Doc *, ShowTreeView *, const QString &); };
+    const QList<L> lessons = {
+        { 5, lessonThreeFiveByMouse },
+        { 8, lessonThreeEightByMouse },
+        { 9, lessonThreeNineByMouse },
+    };
+    QVERIFY(open(levelTwoFinish(7)));
+    QStringList before = describeAll(m_app->doc()) + describeControl(m_app->doc());
+    for (const L &l : lessons)
+    {
+        QVERIFY2(open(levelThreeFile(l.n, "start")), qPrintable(levelThreeFile(l.n, "start")));
+        if (l.n != 9)
+            QCOMPARE(describeAll(m_app->doc()) + describeControl(m_app->doc()), before);
+        s_lessonWhy.clear();
+        QVERIFY2(l.byMouse(m_app->doc(), showTree(), QString()), qPrintable(levelThreeFile(l.n, "start") + QStringLiteral(": ") + s_lessonWhy));
+        const QStringList built = describeAll(m_app->doc()) + describeControl(m_app->doc());
+        qInfo().noquote() << "[3." + QString::number(l.n) + "] built:" << built.join(" || ");
+        m_app->doc()->resetModified();
+        QVERIFY(open(levelThreeFile(l.n, "finish")));
+        QCOMPARE(describeAll(m_app->doc()) + describeControl(m_app->doc()), built);
+        before = built;
+    }
+}
+
+void CourseShow_Test::buildLevelThreeShows()
+{
+    if (qEnvironmentVariableIsEmpty("COURSE_BUILD"))
+        QSKIP("set COURSE_BUILD=1 (and COURSE_LESSON=3.N for one lesson) to make Level 3's show files");
+    struct L { int n; bool (*byMouse)(Doc *, ShowTreeView *, const QString &); };
+    const QList<L> lessons = {
+        { 5, lessonThreeFiveByMouse },
+        { 8, lessonThreeEightByMouse },
+        { 9, lessonThreeNineByMouse },
+    };
+    const QString only = qEnvironmentVariable("COURSE_LESSON");
+    for (const L &l : lessons)
+    {
+        if (!only.isEmpty() && only != QStringLiteral("3.%1").arg(l.n))
+            continue;
+        const QString from = l.n == 5 ? levelTwoFinish(7) : levelThreeFile(l.n == 8 ? 5 : 8, "finish");
+        QVERIFY2(QFile::exists(from), qPrintable(from));
+        QVERIFY(QFile::remove(levelThreeFile(l.n, "start")) || !QFile::exists(levelThreeFile(l.n, "start")));
+        QVERIFY(QFile::copy(from, levelThreeFile(l.n, "start")));
+        QVERIFY(open(levelThreeFile(l.n, "start")));
+        if (l.n == 9)
+        {
+            QVERIFY2(lessonThreeNinePutInFaults(m_app->doc(), showTree()), qPrintable(s_lessonWhy));
+            QCOMPARE(m_app->saveXML(levelThreeFile(9, "start")), QFile::NoError);
+            m_app->doc()->resetModified();
+            QVERIFY(open(levelThreeFile(9, "start")));
+        }
+        s_lessonWhy.clear();
+        QVERIFY2(l.byMouse(m_app->doc(), showTree(), QString()), qPrintable(s_lessonWhy));
+        QCOMPARE(m_app->saveXML(levelThreeFile(l.n, "finish")), QFile::NoError);
+        m_app->doc()->resetModified();
+    }
+}
+
+void CourseShow_Test::lessonThreeFiveFollowsTheTimecode()
+{
+    // Lesson 3.5, played: Operate; timecode comes in and the list goes to
+    // each cue at its time (the flash, with no time, is left alone); a GO
+    // from the phone Run page is refused until the show allows it.
+    QVERIFY(open(levelThreeFile(5, "finish")));
+    Doc *doc = m_app->doc();
+    CueRunner *run = runTab(m_app);
+    QVERIFY(run != nullptr);
+    QTreeWidgetItem *verse = runRow(run, "1.0.1");
+    QVERIFY(verse != nullptr);
+    auto rowText = [](QTreeWidgetItem *it) {
+        QStringList t;
+        for (int c = 0; c < it->columnCount(); ++c)
+            t << it->text(c);
+        return t.join(QStringLiteral(" | "));
+    };
+    QVERIFY2(rowText(verse).contains(QStringLiteral("at 00:00:10:00")), qPrintable(rowText(verse)));
+    QVERIFY2(!rowText(runRow(run, "1.0.2.5")).contains(QStringLiteral(" at 00:")), qPrintable(rowText(runRow(run, "1.0.2.5"))));
+    m_app->m_modeToggleAction->trigger();
+    settle(100);
+    QCOMPARE(doc->mode(), Doc::Operate);
+    TimecodeSource *tc = doc->timecodeSource();
+    QVERIFY(tc != nullptr);
+    tc->updateTimeCode(0, 0, 30);
+    settle(100);
+    QVERIFY(!run->nowText().contains(QStringLiteral("1.0.")));
+    tc->updateTimeCode(0, 10000, 30);
+    QTRY_VERIFY_WITH_TIMEOUT(run->nowText().contains(QStringLiteral("1.0.1")), kRigWait);
+    tc->updateTimeCode(0, 40000, 30);
+    QTRY_VERIFY_WITH_TIMEOUT(run->nowText().contains(QStringLiteral("1.0.2")), kRigWait);
+    tc->updateTimeCode(0, 55000, 30);
+    QTRY_VERIFY_WITH_TIMEOUT(run->nowText().contains(QStringLiteral("1.0.3")), kRigWait);
+    tc->updateTimeCode(0, 56000, 30);
+    settle(100);
+    QVERIFY(run->nowText().contains(QStringLiteral("1.0.3")));
+
+    // The phone Run page is off in every show: its GO is refused, until the
+    // show's setting allows it. The same GO as every other route.
+    ShowControl::Request go;
+    go.command = ShowControl::Go;
+    const QString before = run->nowText();
+    doc->showControl()->run(go, ShowControl::RouteWeb);
+    settle(200);
+    QCOMPARE(run->nowText(), before);
+    doc->operateSettings()->setRemoteGo(true);
+    doc->showControl()->run(go, ShowControl::RouteWeb);
+    QTRY_VERIFY_WITH_TIMEOUT(run->nowText() != before, kRigWait);
+    doc->operateSettings()->setRemoteGo(false);
+    press(run, "crStop");
+    settle(300);
+    m_app->m_modeToggleAction->trigger();
+    settle(100);
+    doc->resetModified();
+}
+
+void CourseShow_Test::lessonThreeEightRunsTheShow()
+{
+    // Lesson 3.8, run: GO through song 1 into song 2 (Block: the button's
+    // red doesn't carry in), the Lanterns master at half, and the Hush
+    // override hit pulling the lanterns down whatever the cue says, then
+    // let go. The cue sheet and the tracking sheet name the songs.
+    QVERIFY(open(levelThreeFile(8, "finish")));
+    Doc *doc = m_app->doc();
+    ShowTreeController *st = doc->showTree();
+    const quint32 listId = listNamed(doc, QStringLiteral("01-Everybody Scream"))->id;
+    QCOMPARE(st->sections(listId).count(), 2);
+    QCOMPARE(st->sections(listId).at(0).name, QStringLiteral("Everybody Scream"));
+    QCOMPARE(st->sections(listId).at(1).name, QStringLiteral("Slow Dance"));
+
+    const CueSheet sheet = CueSheet::build(doc, st->productions().first().id);
+    QVERIFY(!sheet.isEmpty());
+    QStringList sections;
+    for (const CueSheet::ListBlock &b : sheet.lists())
+        for (const CueSheet::Row &r : b.rows)
+            if (r.kind == CueSheet::Row::Section)
+                sections << r.name;
+    qInfo().noquote() << "[3.8] cue sheet sections:" << sections.join(" | ");
+    QCOMPARE(sections.count(), 2);
+    QVERIFY(sheet.trackingCsv().contains(QStringLiteral("2.0.1")));
+    QVERIFY(!sheet.trackingTable().isEmpty());
+
+    CueRunner *run = runTab(m_app);
+    QVERIFY(run != nullptr);
+    m_app->m_modeToggleAction->trigger();
+    settle(100);
+    QCOMPARE(doc->mode(), Doc::Operate);
+    // Jump to the button, then GO: into the second song.
+    QTreeWidgetItem *button = runRow(run, "1.0.8");
+    QVERIFY(button != nullptr);
+    const QPoint at = run->cueTree()->visualItemRect(button).center();
+    QTest::mouseClick(run->cueTree()->viewport(), Qt::LeftButton, Qt::NoModifier, at);
+    QTest::mouseDClick(run->cueTree()->viewport(), Qt::LeftButton, Qt::NoModifier, at);
+    settle(50);
+    QTRY_VERIFY_WITH_TIMEOUT(run->nowText().contains("1.0.8"), kRigWait);
+    QTest::qWait(1500);
+    press(run, "crGo");
+    QTRY_VERIFY_WITH_TIMEOUT(run->nowText().contains("2.0.1"), kRigWait);
+    QTRY_COMPARE_WITH_TIMEOUT(channelValue(doc, "Lantern 1", "Master Dimmer"), 255, 2 * kRigWait);
+    // Block: nothing of the button's red or the fan carries in.
+    QTRY_COMPARE_WITH_TIMEOUT(sends(doc, "SR Truss Wash 1"), QByteArray("\x00\x00\x00", 3), kRigWait);
+
+    // The Lanterns master: the command line, at half.
+    ShowTreeView *view = showTree();
+    QVERIFY2(view->runCommand(QStringLiteral("master Lanterns 50")), qPrintable(view->commandMessage()));
+    QTRY_VERIFY_WITH_TIMEOUT(qAbs(outputValue(doc, "Lantern 1", "Master Dimmer") - 128) <= 2, kRigWait);
+    QVERIFY2(view->runCommand(QStringLiteral("master Lanterns full")), qPrintable(view->commandMessage()));
+    QTRY_COMPARE_WITH_TIMEOUT(outputValue(doc, "Lantern 1", "Master Dimmer"), 255, kRigWait);
+
+    // The override hit from its Virtual Console button.
+    VirtualConsole *vc = VirtualConsole::instance();
+    QWidget *w = vc;
+    while (w != nullptr && m_app->m_tab->indexOf(w) < 0)
+        w = w->parentWidget();
+    QVERIFY(w != nullptr);
+    m_app->m_tab->setCurrentWidget(w);
+    settle(200);
+    VCButton *hush = nullptr;
+    for (VCButton *b : vc->contents()->findChildren<VCButton *>())
+        if (b->caption() == QStringLiteral("Hush"))
+            hush = b;
+    QVERIFY(hush != nullptr);
+    QTest::mouseClick(hush, Qt::LeftButton);
+    QTRY_VERIFY_WITH_TIMEOUT(qAbs(channelValue(doc, "Lantern 1", "Master Dimmer") - 64) <= 2, kRigWait);
+    QTest::mouseClick(hush, Qt::LeftButton);
+    QTRY_COMPARE_WITH_TIMEOUT(channelValue(doc, "Lantern 1", "Master Dimmer"), 255, kRigWait);
+    run = runTab(m_app);
+    press(run, "crStop");
+    QTest::qWait(300);
+    m_app->m_modeToggleAction->trigger();
+    settle(100);
+    doc->resetModified();
+}
+
+void CourseShow_Test::lessonThreeNineFindsTheFaults()
+{
+    // Lesson 3.9: its start file, reviewed and asked why: Show Review finds
+    // the song that doesn't Block and the hit nobody fires, and "Why isn't
+    // it on?" names the Lanterns master at 0; the finish has them mended.
+    QVERIFY(open(levelThreeFile(9, "start")));
+    Doc *doc = m_app->doc();
+    ShowReview::Result r = doc->showReview()->run();
+    QMap<QString, ReviewFinding> found;
+    for (const ReviewFinding &f : r.findings)
+        if (f.isOpen())
+            found.insert(f.check, f);
+    qInfo().noquote() << "[3.9] open findings:" << QStringList(found.keys()).join(", ");
+    for (const ReviewFinding &f : r.findings)
+        if (f.isOpen())
+            qInfo().noquote() << "[3.9]  " << f.check << ReviewFinding::Note + int(f.severity) - 0 << f.message;
+    QVERIFY(found.contains(QStringLiteral("CUE-02")));
+    QVERIFY(found.contains(QStringLiteral("VC-03")));
+
+    ShowTreeView *view = showTree();
+    QVERIFY(view->selectNode(cueNumbered(doc, "2.0.1")));
+    settle(200);
+    quint32 id = Fixture::invalidId();
+    for (Fixture *f : doc->fixtures())
+        if (f->name() == QLatin1String("Lantern 1"))
+            id = f->id();
+    QVERIFY(id != Fixture::invalidId());
+    QTRY_COMPARE_WITH_TIMEOUT(outputValue(doc, "Lantern 1", "Master Dimmer"), 0, kRigWait);
+    const WhyOn::Answer a = WhyOn::explain(doc, id);
+    const QStringList why = a.whyNotTexts();
+    qInfo().noquote() << "[3.9] why isn't it on:" << why.join(" | ");
+    bool master = false;
+    for (const QString &t : why)
+        master = master || t.contains(QStringLiteral("master"), Qt::CaseInsensitive);
+    QVERIFY(master);
+
+    QVERIFY(open(levelThreeFile(9, "finish")));
+    r = doc->showReview()->run();
+    for (const ReviewFinding &f : r.findings)
+        if (f.isOpen())
+            qInfo().noquote() << "[3.9] finish:" << f.check << int(f.severity) << f.message;
+    for (const ReviewFinding &f : r.findings)
+        QVERIFY2(!(f.isOpen() && (f.check == QLatin1String("CUE-02") || f.check == QLatin1String("VC-03"))),
+                 qPrintable(f.check));
+    QVERIFY(view->selectNode(cueNumbered(doc, "2.0.1")));
+    QTRY_COMPARE_WITH_TIMEOUT(outputValue(doc, "Lantern 1", "Master Dimmer"), 255, kRigWait);
+
+    // A cue that looks wrong: Solo on one layer, then Play for the whole cue.
+    const quint32 cue = cueNumbered(doc, "2.0.1");
+    quint32 cycLayer = ShowTree::invalidId();
+    for (const Production &p : doc->showTree()->productions())
+        for (const CueList &l : p.lists)
+            for (const Cue &c : l.cues)
+                if (c.id == cue)
+                    for (const Layer &ly : c.layers)
+                        if (doc->showTree()->targetLabel(ly.target) == QLatin1String("TrussC-RGB"))
+                            cycLayer = ly.id;
+    QVERIFY(cycLayer != ShowTree::invalidId());
+    QVERIFY(view->selectNode(cycLayer, cue));
+    settle(100);
+    QToolButton *solo = stFind<QToolButton>(view, "stLayerSolo");
+    QToolButton *play = stFind<QToolButton>(view, "stLayerPlay");
+    QVERIFY(solo != nullptr && solo->isVisible() && play != nullptr);
+    solo->click();
+    QVERIFY(solo->isChecked());
+    QTRY_COMPARE_WITH_TIMEOUT(outputValue(doc, "Lantern 1", "Master Dimmer"), 0, kRigWait);
+    QTRY_COMPARE_WITH_TIMEOUT(sends(doc, "SR Truss Cyc 1"), QByteArray("\x00\x00\x80", 3), kRigWait);
+    solo->click();
+    QVERIFY(!solo->isChecked());
+    QTRY_COMPARE_WITH_TIMEOUT(outputValue(doc, "Lantern 1", "Master Dimmer"), 255, kRigWait);
+    doc->resetModified();
+}
+
+void CourseShow_Test::lessonTwoOneWhyIsItOn()
+{
+    // Lesson 2.1's extension: in the chorus the wash on the faces carries on
+    // from the verse. "Why is this on?" on one of its lights says where it
+    // was tracked in from.
+    QVERIFY(open(levelTwoFinish(1)));
+    Doc *doc = m_app->doc();
+    ShowTreeView *view = showTree();
+    QVERIFY(view->selectNode(cueNumbered(doc, "1.0.2")));
+    settle(300);
+    quint32 id = Fixture::invalidId();
+    for (FixtureGroup *g : doc->fixtureGroups())
+        if (g->name() == QLatin1String("AT-W-ALL") && !g->headList().isEmpty())
+            id = g->headList().first().fxi;
+    QVERIFY(id != Fixture::invalidId());
+    QTRY_VERIFY_WITH_TIMEOUT(WhyOn::explain(doc, id).out > 0, kRigWait);
+    const WhyOn::Answer a = WhyOn::explain(doc, id);
+    qInfo().noquote() << "[2.1x] why:" << a.headline << "|" << a.texts().join(" | ");
+    QVERIFY2(a.headline.contains(QStringLiteral("Cue 1.0.1 Verse")) && a.headline.contains(QStringLiteral("AT-W-ALL")),
+             qPrintable(a.toText()));
+    doc->resetModified();
+}
+
+void CourseShow_Test::lessonTwoThreeSolo()
+{
+    // Lesson 2.3's extension: Solo on the Truss Sides layer of the bridge
+    // plays only that layer (the steps go dark); Solo off puts the cue back.
+    QVERIFY(open(levelTwoFinish(3)));
+    Doc *doc = m_app->doc();
+    ShowTreeView *view = showTree();
+    const quint32 cue = cueNumbered(doc, "1.0.5");
+    QVERIFY(view->selectNode(cue));
+    settle(300);
+    QTRY_VERIFY_WITH_TIMEOUT(sends(doc, "US Step 1").count(char(0)) < 3, kRigWait);
+    quint32 layer = ShowTree::invalidId();
+    for (const Production &p : doc->showTree()->productions())
+        for (const CueList &l : p.lists)
+            for (const Cue &c : l.cues)
+                if (c.id == cue)
+                    for (const Layer &ly : c.layers)
+                        if (doc->showTree()->targetLabel(ly.target) == QLatin1String("Truss Sides"))
+                            layer = ly.id;
+    QVERIFY(layer != ShowTree::invalidId());
+    QVERIFY(view->selectNode(layer, cue));
+    settle(100);
+    QToolButton *solo = stFind<QToolButton>(view, "stLayerSolo");
+    QVERIFY(solo != nullptr && solo->isVisible());
+    solo->click();
+    QVERIFY(solo->isChecked());
+    QTRY_COMPARE_WITH_TIMEOUT(sends(doc, "US Step 1"), QByteArray("\x00\x00\x00", 3), kRigWait);
+    solo->click();
+    QVERIFY(!solo->isChecked());
+    QTRY_VERIFY_WITH_TIMEOUT(sends(doc, "US Step 1").count(char(0)) < 3, kRigWait);
+    doc->resetModified();
+}
+
+void CourseShow_Test::lessonTwoFourEffectFade()
+{
+    // Lesson 2.4's extension: an effect fades with its cue (the default for
+    // one made now), or at once, or on times of its own -- from the command line.
+    QVERIFY(open(levelTwoFinish(4)));
+    Doc *doc = m_app->doc();
+    ShowTreeView *view = showTree();
+    const quint32 cue = cueNumbered(doc, "1.0.6");
+    QVERIFY(view->selectNode(cue));
+    settle(50);
+    auto fades = [doc, cue]() {
+        QList<int> out;
+        for (const Production &p : doc->showTree()->productions())
+            for (const CueList &l : p.lists)
+                for (const Cue &c : l.cues)
+                    if (c.id == cue)
+                        for (const Layer &ly : c.layers)
+                            if (doc->showTree()->targetLabel(ly.target) == QLatin1String("Steps"))
+                                for (const Look &lk : ly.looks)
+                                    if (isEffectKey(lk.key))
+                                        out << lk.fadeIn << lk.fadeOut;
+        return out;
+    };
+    for (const QString &cmd : { QStringLiteral("Steps effect Step Sparkle fade cue") })
+        QVERIFY2(view->runCommand(cmd), qPrintable(cmd + QStringLiteral(": ") + view->commandMessage()));
+    QCOMPARE(fades(), QList<int>({ Look::FadeFollowCue, Look::FadeFollowCue }));
+    QVERIFY2(view->runCommand(QStringLiteral("Steps effect Step Sparkle fade atonce")), qPrintable(view->commandMessage()));
+    QCOMPARE(fades(), QList<int>({ Look::FadeSnap, Look::FadeSnap }));
+    QVERIFY2(view->runCommand(QStringLiteral("Steps effect Step Sparkle fade in 2 out 0.5")), qPrintable(view->commandMessage()));
+    QCOMPARE(fades(), QList<int>({ 2000, 500 }));
+    QVERIFY2(view->runCommand(QStringLiteral("Steps effect Step Sparkle fade cue")), qPrintable(view->commandMessage()));
+    QCOMPARE(fades(), QList<int>({ Look::FadeFollowCue, Look::FadeFollowCue }));
+    doc->resetModified();
+}
+
+void CourseShow_Test::lessonTwoFiveFormation()
+{
+    // Lesson 2.5's extension: the fan's shape kept as a Formation palette,
+    // typed, dropped on the Truss-Spots row, and the plan opened in a window.
+    QVERIFY(open(levelTwoFinish(5)));
+    Doc *doc = m_app->doc();
+    ShowTreeView *view = showTree();
+    QVERIFY(view->selectNode(cueNumbered(doc, "1.0.7")));
+    settle(50);
+    QVERIFY2(view->runCommand(QStringLiteral("palette formation \"Pairs crossed\" spread 0 group pairs cross mirror")),
+             qPrintable(view->commandMessage()));
+    QLCPalette *form = paletteNamed(doc, "Pairs crossed");
+    QVERIFY(form != nullptr && form->type() == QLCPalette::Formation);
+    // Back to the cue; the palette on the Truss-Spots layer, typed.
+    QVERIFY(view->selectNode(cueNumbered(doc, "1.0.7")));
+    settle(100);
+    QVERIFY2(view->runCommand(QStringLiteral("Truss-Spots formation \"Pairs crossed\"")), qPrintable(view->commandMessage()));
+    bool used = false;
+    for (const Production &p : doc->showTree()->productions())
+        for (const CueList &l : p.lists)
+            for (const Cue &c : l.cues)
+                if (c.number == QLatin1String("1.0.7"))
+                    for (const Layer &ly : c.layers)
+                        for (const Look &lk : ly.looks)
+                            used = used || (lk.key == ShowTree::KeyFormation && lk.palettes.contains(form->id()));
+    QVERIFY(used);
+    // The plan view opens in a window of its own.
+    QVERIFY(clickCueRow(view, "Truss-Spots"));
+    view->openLinePlanWindow();
+    settle(100);
+    QVERIFY(view->linePlanWindow() != nullptr);
+    QVERIFY(view->linePlanWindow()->isVisible());
+    view->linePlanWindow()->close();
+    doc->resetModified();
 }
 
 void CourseShow_Test::levelTwoPictures()

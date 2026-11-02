@@ -138,3 +138,18 @@ Switch roles after each part.
    **Riser Line** onto the row. The eight beams aim at the singers on the
    line, each to a place along it. Why would the USTs and the truss spots
    make a stronger fan together than either alone?
+
+**Keep the shape.** A Formation palette is a line aim's Spread, Grouping and
+Cross without the line, so the same fan works on any line.
+
+1. Type `palette formation "Pairs crossed" spread 0 group pairs cross mirror`.
+   It opens in an editor: press **Esc** to back out of it.
+2. Click **1.0.7 Fan**, then in the command line `Truss-Spots formation "Pairs crossed"`.
+   Click the **Truss-Spots** layer: a **Formation** row under Position says
+   where its spread comes from.
+3. Under the Position rows are the order strip and the plan view. On a small
+   screen, **⤢** on the plan opens both in a window you can make bigger, even
+   on a second screen. It follows the cue and layer you select. **Esc**
+   closes it.
+4. Change the Formation in Build and look at the plan again. Which cues
+   changed with it, and why is that the point of a palette?

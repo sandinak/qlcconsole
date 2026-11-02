@@ -611,7 +611,8 @@ Order and dependencies:
 8. **AI Assist P0-P3** (docs/design/AI_ASSIST.md): operation registry,
    Design-only assistant, configuration import, MCP server. **Built
    2026-10-31;** off by default.
-9. **Course**: the rest of Level 2, and Level 3's remaining lessons.
+9. **Course**: the rest of Level 2, and Level 3's remaining lessons. **Built
+   2026-11-01 (3.5, 3.8, 3.9, the Level 3 check; 3.1, 3.2, 3.4 remain).**
 
 Dependency chain at a glance:
 

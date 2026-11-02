@@ -188,6 +188,31 @@ private slots:
      *  lesson's only). Skipped otherwise. */
     void levelTwoPictures();
 
+    /** The features of 0.4 where Level 2 has room for them: "Why is this
+     *  on?" on the chorus's dark step tops (2.1), Solo on a layer of the
+     *  bridge (2.3), an effect's fade (2.4), a Formation palette and the
+     *  plan in a window (2.5). */
+    void lessonTwoOneWhyIsItOn();
+    void lessonTwoThreeSolo();
+    void lessonTwoFourEffectFade();
+    void lessonTwoFiveFormation();
+
+    /** Level 3's lessons 3.5 (show control and timecode), 3.8 (running a
+     *  real show) and 3.9 (troubleshooting), done with the mouse from the
+     *  start files and ending as the finish files. */
+    void levelThreeWithTheMouse();
+    /** COURSE_BUILD=1 (COURSE_LESSON=3.N: one lesson): makes Level 3's show files. */
+    void buildLevelThreeShows();
+    /** 3.5, played: timecode takes the list to each cue at its time; the
+     *  phone Run page's GO is refused until the show allows it. */
+    void lessonThreeFiveFollowsTheTimecode();
+    /** 3.8, run: song 1 into song 2 (Block), the Lanterns master, the Hush
+     *  override hit; the cue sheet and tracking sheet. */
+    void lessonThreeEightRunsTheShow();
+    /** 3.9: Show Review finds the start file's faults, Why isn't it on? names
+     *  the master at 0, the finish has them mended. */
+    void lessonThreeNineFindsTheFaults();
+
 private:
     bool open(const QString &path);
     ShowTreeView *showTree() const;

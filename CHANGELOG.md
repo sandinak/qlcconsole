@@ -316,6 +316,18 @@ back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
   universe and address boxes, and pasting a truss with its fixtures patched,
   ask "Change the Patch" like the Fixture Manager does.
 
+- **Course: Level 3's show-control, running and troubleshooting lessons.**
+  Lessons 3.5 (cues at a timecode, QLab's numbers, the one GO from a key,
+  the Run tab, a pad, the phone page), 3.8 (a show of songs as sections
+  with Block, a group master, an override hit, the cue sheet and tracking
+  sheet) and 3.9 (Show Review, "Why is this on?", Solo; with the Level 3
+  check, `/class/3-check/`), each with a student page, teacher guide,
+  handout, slides outline, exit ticket, at-home page and show files
+  (`lesson-3-5`, `3-8`, `3-9` start and finish). Level 2's 2.1, 2.3, 2.4
+  and 2.5 gain extensions for "Why is this on?", Solo, effect fades and
+  Formation palettes with the line plan in a window. All checked by
+  `courseshow_test`.
+
 ### Rig and Studio
 
 #### Raspberry Pi

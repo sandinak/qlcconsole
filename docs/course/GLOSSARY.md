@@ -160,7 +160,7 @@ brackets.
 | **Plot symbol** | What a fixture looks like on the plot and in the studio: a moving head, a PAR can, an LED bar, a lantern… Set per fixture; **Auto** draws it from its type. [3.3] |
 | **Relay** | A switch the console controls, for power: it is either on or off, never dimmed. Used for a circuit that powers LED fixtures, or for house lights on a relay panel. [3.7] |
 | **Grand Master (GM)** | The one fader over everything: at 50 % every light is at half its level. [3.7] |
-| **Group master** | A Grand Master for one fixture group: why a group is dimmer than its cues say. At 50 % the group's lights are at half; it and the GM multiply. A fader on the Run tab, given to a group in the Fixture Manager. |
+| **Group master** | A Grand Master for one fixture group: why a group is dimmer than its cues say. At 50 % the group's lights are at half; it and the GM multiply. A fader on the Run tab, given to a group in the Fixture Manager. [3.8] |
 | **Blackout** | A switch that takes every light to zero at once, whatever is running; press it again to bring them back. [3.7] |
 | **Blind** | The screens show something the stage doesn't. In Design the real lights are muted while the screen preview stays live; in Operate the stage keeps playing the run while the plot shows the cue you are editing. Always shown in blue. [3.7] |
 | **Output rules** | Per-fixture rules for circuits that aren't show lights: ignore Blackout, ignore the Grand Master, switch like a relay, on when not in use. [3.7] |
@@ -181,3 +181,13 @@ brackets.
 | **Venue focus** | Running the show's focus calls in a new room, the corrections kept for that venue. [3.6] |
 | **Special circuit** | On an Eos desk, a channel that isn't a stage light: a relay, house lights, work lights, backstage blues. [3.10] |
 | **Sub (submaster)** | On an Eos desk, a fader that brings up a set of levels by hand. An imported sub becomes a Virtual Console fader. [3.10] |
+| **Show control** | Another computer (QLab) fires the lights' cues by number over OSC or MIDI Show Control. [3.5] |
+| **Timecode** | A clock counting hh:mm:ss:ff with the music. A list that follows it goes to each cue at the cue's time. [3.5] |
+| **Pad Run** | A game controller as a GO button: hold LB to arm it, then A for GO. [3.5] |
+| **Phone Run page** | A web page with GO, Back and Stop, off in every show until the show allows it. [3.5] |
+| **Override hit** | A hit that wins over everything the show plays, brightness included. Let go and the show is back. [3.8] |
+| **Cue sheet / tracking sheet** | The stage manager's paper, made from the show: cues in running order; each layer across the cues, what each cue sets and what only carries in. [3.8] |
+| **Show Review** | A read of the saved show that lists what is probably wrong with its design, each finding with where to fix it. [3.9] |
+| **Finding / accept** | One thing Show Review reports; to accept it is to say it is on purpose, with a note and your name saved in the show. [3.9] |
+| **Why is this on?** | Right-click a light (or ⌘I): what sets it now, or, when it is dark, what holds it down. [3.9] |
+| **Solo** | On a layer's page: only that layer plays, as a preview. Play puts the whole cue back. [3.9] |
