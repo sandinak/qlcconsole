@@ -134,6 +134,8 @@ they'd use; or, on paper, the three spreads drawn from above.
 - **Part 1 question:** the movement of the sweep reads as the music's
   last gesture; a snap is the other good choice.
 
+Extension, Formation palettes: the course test (`lessonTwoFiveFormation`) types the palette, puts it on the Truss-Spots layer by the command line and opens the plan in its window.
+
 ## How this lesson was checked
 
 Every step of the handout is run by the course test (`ui/test/courseshow`,

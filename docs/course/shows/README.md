@@ -18,6 +18,9 @@
 | `lesson-2-5-start.qlcc` · `lesson-2-5-finish.qlcc` | 2.5: 1.0.7 *Fan* (Block): Truss-Spots White, Full, aimed at the Riser Line; 1.0.8 *Button*: Spread −5, Red, fade in 1 s. |
 | `lesson-2-6-start.qlcc` · `lesson-2-6-finish.qlcc` | 2.6: the Hits section (*Red Stab*, *Glow*, *Faces*) and its Virtual Console page, a Toggle button each. |
 | `lesson-2-7-start.qlcc` · `lesson-2-7-finish.qlcc` | 2.7: the chorus's sub-cues 1.0.2.1 *Chorus*, 1.0.2.2 *Stomp* (Lanterns White, Full; Sub GO), 1.0.2.3 *Stomp Out* (Out; auto-follow 0.5 s). |
+| `lesson-3-5-start.qlcc` · `lesson-3-5-finish.qlcc` | 3.5 (from 2.7's finish): the list follows timecode, with a time on every cue but the Flash (Pose 00:00:02:00 … Button 00:02:20:00). |
+| `lesson-3-8-start.qlcc` · `lesson-3-8-finish.qlcc` | 3.8 (from 3.5's finish): numbering Show.Part.Iteration, songs *Everybody Scream* and *Slow Dance* (2.0.1, 2.0.2; Block at section start), a group master on Lanterns, an override hit *Hush* (Lanterns 25%) with its Virtual Console button. |
+| `lesson-3-9-start.qlcc` · `lesson-3-9-finish.qlcc` | 3.9: 3.8's finish with three faults in the start (Slow Dance doesn't Block, the Lanterns master at 0, a hit *Spare* no button fires); the finish has them mended (Block on, master full, *Spare* accepted with a note in Show Review). |
 | `classroom-eos.asc` | Lesson 3.10: a small Eos show in USITT ASCII, written by hand for the course (not a real production): ten dimmer channels — front, back, a cyc, specials, and house, work, relay and backstage circuits, one labelled so the import guesses it wrong — a cue list of four cues and one sub. |
 
 Each lesson starts from the one before's finish, so a student who missed
@@ -67,9 +70,10 @@ would save:
    `lesson-1-1-start.qlcc`, then does Lesson 1.1 **with the mouse, as the
    handout says**, and saves `lesson-1-1-finish.qlcc`. Then
    `buildLessonShows` does Lessons 1.2–1.4 the same way, each from the
-   one before's finish, and `buildLevelTwoShows` Level 2's lessons
+   one before's finish, `buildLevelTwoShows` Level 2's lessons
    (`COURSE_LESSON=2.N` for one of them, so the others' files stay as
-   they are):
+   they are) and `buildLevelThreeShows` Lessons 3.5, 3.8 and 3.9
+   (`COURSE_LESSON=3.N`; 3.9's start has its faults put in first):
 
    ```sh
    cd build/ui/test/courseshow
@@ -82,6 +86,9 @@ would save:
    COURSE_BUILD=1 COURSE_LESSON=2.1 QT_QPA_PLATFORM=offscreen \
        DYLD_FALLBACK_LIBRARY_PATH=../../src:../../../engine/src \
        ./courseshow_test.app/Contents/MacOS/courseshow_test buildLevelTwoShows
+   COURSE_BUILD=1 COURSE_LESSON=3.5 QT_QPA_PLATFORM=offscreen \
+       DYLD_FALLBACK_LIBRARY_PATH=../../src:../../../engine/src \
+       ./courseshow_test.app/Contents/MacOS/courseshow_test buildLevelThreeShows
    ```
 
 3. **Take the pictures** (every lesson's, into `docs/course/images/lesson-L-N/`),

@@ -178,3 +178,16 @@ master**, so one tap moves everything on it together.
 3. Look at the footer: a **Main Speed 120** button appears, beside the
    Grand Master. The wave now counts in beats of that master.
 4. Which effects in a show would you put on the same master, and why?
+
+**An effect fades with its cue.** Click **1.0.6 Dance Break** and select
+the **Steps** layer. An effect made now fades in with its cue, and out with
+the fade out of the cue that replaces it, while the layer's colour fades as
+usual.
+
+1. In the command line, type `Steps effect Step Sparkle fade atonce`: the
+   sparkle starts and stops at full, whatever the cue's fades are.
+2. Now `Steps effect Step Sparkle fade in 2 out 0.5`: its own times.
+3. Back with `Steps effect Step Sparkle fade cue`. (The same three choices
+   are in the effect row's **⋯ → Fade in / out**.)
+4. When would a sparkle that snaps on be right, and when would it be
+   wrong? Think about the cue's fade.

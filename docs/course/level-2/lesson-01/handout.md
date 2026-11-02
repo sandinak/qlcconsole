@@ -183,3 +183,12 @@ it doesn't light them.
    dim blue instead of going dark.
 4. Which do you prefer under the magenta chorus: dark, or a dim blue
    glow? Why?
+
+**Ask the light.** Which lights are on in the chorus, and which cue is
+holding them? Click **1.0.2 Chorus**, right-click a light of **AT-W-ALL** in
+the Rig Overview → **Why is this on?** (or select it and press ⌘I).
+
+1. Read the top line: it names cue **1.0.1 Verse**, and the layer
+   AT-W-ALL, though the Chorus is the cue on the rig.
+2. Why is the verse's layer still lighting the faces in the chorus? Which
+   of the two kinds of cue in this lesson would have switched it off?

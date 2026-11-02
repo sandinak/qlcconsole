@@ -161,6 +161,8 @@ for a dance break.
 - **At home A:** any answer with a reason: white glints read as
   glitter, amber warms the violet, none keeps it all one colour.
 
+Extension, effect fades: the course test (`lessonTwoFourEffectFade`) types the three commands and reads the effect's fade in and out (the cue's, at once, 2 and 0.5 seconds).
+
 ## How this lesson was checked
 
 Every step of the handout is run by the course test (`ui/test/courseshow`,

@@ -158,6 +158,8 @@ and modes.
 - **Extension:** either is a fair answer with a reason: dark gives the
   magenta steps the most contrast; a dim glow keeps the risers' shape.
 
+Extension, "Why is this on?": the answer names the Verse for a light the Chorus tracks (Block or Release would have ended it); the course test (`lessonTwoOneWhyIsItOn`) reads the same answer from the engine.
+
 ## How this lesson was checked
 
 Every step of the handout is run by the course test (`ui/test/courseshow`,

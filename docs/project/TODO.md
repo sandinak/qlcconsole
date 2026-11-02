@@ -10,6 +10,28 @@ under `~/.claude/.../memory/`.
 
 ---
 
+## Course: Level 3's remaining lessons (0.5 item 9, crs3, 2026-11-01)
+
+Written and checked by `courseshow_test` (CHANGELOG 0.4.0 Teaching):
+Level 2 was already complete (2.1-2.7 and the check); it gained
+extensions for "Why is this on?" (2.1), Solo (2.3), effect fades (2.4) and
+Formation palettes with the line plan in a window (2.5). Level 3 gained 3.5
+(show control and timecode: the one GO, pad Run, the phone Run page), 3.8
+(sections and Block, group master, override hit, cue sheet and tracking
+sheet) and 3.9 (Show Review, "Why is this on?", Solo; the Level 3 check).
+Still outlines in COURSE_PLAN.md: 3.1 DMX, universes and patching; 3.2
+fixtures and definitions; 3.4 building the rig. Each needs the real network
+or the Lighting Studio, so they are the next batch, with Branson on the rig.
+Decided (can change): the Level 3 check is on the real rig with Branson, so
+it has a page and a rubric but no course show of its own; 3.9's start file
+carries its faults (a song that doesn't Block, a hit no button fires, a
+group master at 0) rather than students building a broken show.
+Candidates, not in the plan: a lesson on the pad's walk-the-show with a
+real controller (needs the rig and a pad; it is a demo in 3.8's teacher
+guide); a short lesson on Running order for a show whose songs change
+night to night (an extension in 3.8); the preshow as section 0 of the
+show (3.8 Part 3). No pictures yet for 3.5, 3.8, 3.9.
+
 ## Formation palettes — built, leftovers (0.4, form, Q197, 2026-11-01)
 
 Built: `QLCPalette::Formation` (Spread / Grouping / Cross, any subset, as

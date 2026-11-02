@@ -15,11 +15,13 @@ time, each published when done: all seven (2.1 tracking and Block,
 2.2 palettes, 2.3 parts of a group, 2.4 effects, 2.5 lines, 2.6 hits,
 2.7 sub-cues) and the Level 2 check are written and checked by the
 course test. Level 3 has
-four lessons written — 3.3 plot symbols, 3.6 focus and calibration (focus
+seven lessons written — 3.3 plot symbols, 3.5 show control and timecode,
+3.6 focus and calibration (focus
 calls on the controller, venues, the scramble practice and its focus
 report, Focus this cue; with pictures), 3.7 house lights, work lights and power,
-3.10 coming from Eos — each checked by the course test; the rest of Level
-3 is an outline. Volunteers start at
+3.8 running a real show, 3.9 troubleshooting and the Level 3 check,
+3.10 coming from Eos — each checked by the course test; 3.1, 3.2 and 3.4
+(patching, definitions, building the rig) are outlines. Volunteers start at
 [For volunteers](VOLUNTEER.md); new lessons start from `_template/`.*
 
 The Show Tree is the main tool for this year's show. This course takes a
@@ -142,11 +144,11 @@ here.*
 | 3.2 | **Fixtures and definitions** | The Fixture Manager; definitions and modes; the Fixture Editor; groups by head type (a pixel box's RGB and white heads; colour rings). Shows that carry their own definitions. |
 | 3.3 | **Reading the plot: symbols** *(written)* | A plot and its symbol key. The Lighting Studio plot's **Show ▸ Show Auto fixtures as their closest plot symbol**; **Plot Symbol ▸** to correct the guesses (AT-W-ALL: *Moving head round wash*); the Lanterns as **practicals**. A symbol is only the picture. |
 | 3.4 | **Building the rig** | Lighting Studio: structures (walls with a door, towers, booms, stands; copy and paste them), mounting fixtures (a group Shift-dropped on a truss all hangs; **Mount on** for the selection), a fixed light's **Face**, **Points** and **Tilt in yoke** in **Aim & Mount**, **Plot layers** (what hangs on what; a layer's lock and an object's own lock), stage targets and lines; why the rig must match the room for aims to work. |
-| 3.5 | **Show control** | QLab (or a sound op) firing cues by number (and why renumbering matters then); OSC in, MIDI Show Control in and MIDI timecode, each a row in **Connections ▸ Devices**; a pad on a MIDI controller as the GO button, or firing a hit, with **Learn trigger…** (the Control Map: why a dedicated button beats a mouse in the dark). |
+| 3.5 | **Show control and timecode** *(written)* | QLab (or a sound op) firing cues by number (and why renumbering matters then); OSC in, MIDI Show Control in and MIDI timecode, each a row in **Connections ▸ Devices ▸ Show control & sync**; **cues at a timecode** (**Follow timecode** on the list, **At timecode** on each cue; a stab left to the hand); the **one GO**: key, Run tab, pad (**Pad Run**: hold LB, A), the **phone Run page** (off in every show, **Allow GO from the phone Run page**), QLab and the clock are one GO. Extension: **Learn**, and a MIDI controller button with **Learn trigger…**. |
 | 3.6 | **Focus and calibration** *(written)* | How a focus call runs: the electrician at the light, the designer at the point (back to the light), the words (hot spot, home, sharp and soft, spot down and flood out, "lock it"), the laptop's voice on the headsets. **Stage marks** (the plot's **Stage** layer in Plot layers): the curtain line, the number line, the apron; reading "SL 1' · DS 1' 1"" off the plot. **Venue focus** with the show's focus calls (Truss-Spots → Center, AT-Spots → Soloist DS, AT-W-ALL → Center) run on the controller or the keys, corrections kept for the venue *Classroom* in a file beside the show (the footer's **Venue: Classroom** chip); touring: house rig and tour package, outputs per venue. Scored: **Practice (scramble)** on Easy. Hand-in: its **focus report** (PDF). **Focus this cue** on a typed solo cue: spot down kept in the cue, one spot as an exception. On the real rig (Part 3): Quick focus's fixed lights, holds, dead lamps, the real report. |
 | 3.7 | **House lights, work lights and power** *(written)* | Three generic dimmers (House Lights, Work Lights, Stage Power); **Output Rules…**: Ignore Blackout, Ignore the Grand Master, Switch (relay), On when not in use; Settings ▸ Advanced ▸ Output; a preshow list typed; Blackout, the GM slider and Blind. Part 3 on the theatre's own house and work lights. |
-| 3.8 | **Running a real show** | Operate mode (it locks editing), the panic button, the preshow checklist, power. A show of several songs is one cue list: a section per song (**+ Section**, numbered by the scheme), the preshow as section 0, **Block at section start** so one song doesn't carry into the next. |
-| 3.9 | **Troubleshooting** | The Not ready list, a light that won't come on, a cue that looks wrong, Undo and backups. **Capstone** (below). |
+| 3.8 | **Running a real show** *(written)* | Operate mode (it locks editing), the preshow checklist, power. A show of several songs is one cue list: a section per song (**Numbering ▸ Show.Part.Iteration**, **+ Section**, a name on the header), **Block at section start** so one song doesn't carry into the next. The operator's tools: a **group master** (Fixtures ▸ the group ▸ **Group master**; the Run tab's fader; `master Lanterns 50`), an **override hit** (`hit "Hush"`, `override`, `vcpage`), Blackout and **Stop all** (⌘⇧Esc), and the paper: **More ▾ → Cue Sheet…** (cue sheet and tracking sheet). The pad's Menu walk is a teacher demo. Extension: **Running order…**. |
+| 3.9 | **Troubleshooting, and the Level 3 check** *(written)* | The footer's **Not ready** list (true now, here) against **Show Review** (true in the saved show): **Fix ▸**, **Accept…** with a note; **Why is this on?** (right-click a light or ⌘I; *Why it isn't on*); **Solo** and **Play** on a cue's layers; Undo and the autosave copy. The start file is 3.8's finish with three faults (a song that doesn't Block, a hit no button fires, the Lanterns master at 0). **Level check** (`/class/3-check/`, with the rubric): the preshow check and a song on the real rig, with Branson. |
 | 3.10 | **Coming from Eos** *(written, optional)* | For students from an Eos programme, any time after 3.7: **File ▸ Import ▸ ETC Eos Show** with `shows/classroom-eos.asc`; the **Special circuits** page (one wrong guess to fix); where channels, groups, cue lists and subs land. |
 
 ---
