@@ -1167,6 +1167,11 @@ skipped). Upstream fixes taken:
   that copy carried the file's XML namespace, so saving it again wrote
   nothing. Save, reopen, save now gives the same file.
 
+- **An effect's run count and length from a damaged show are clamped.** A
+  huge or not-a-number Runs or Length was turned straight into a whole
+  number, which C++ leaves undefined (a Release build could read anything);
+  it now reads as the nearest allowed value.
+
 - **Show Review's no-light-zone check reads a UST where it points.** A
   head that points with pan DMX 0-127 and spins above it (the two-arm
   beam) was read over the whole channel, so PWR-11 tested a quarter turn

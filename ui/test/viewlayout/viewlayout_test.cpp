@@ -719,6 +719,17 @@ void ViewLayout_Test::aStuckMainLayoutIsHealedOnTheNextResize()
     rig->setFeatures(QDockWidget::DockWidgetClosable | QDockWidget::DockWidgetMovable);
     moveByTitleBar(rig, QPoint(-150, 90));
     m_app->resize(1500, 900);
+    if (mainLayoutProblem(m_app).isEmpty() && m_app->devicePixelRatio() != 1.0)
+    {
+        /* The u9 fault is made by Qt's own dock-drag state, which the synthetic
+           title-bar drag above only reaches at 1x (QT_SCALE_FACTOR=2: the
+           layout simply follows, which is the healthy outcome). */
+        m_app->resize(1280, 800);
+        rig->close();
+        QCoreApplication::processEvents();
+        WindowSizeGuard::clearLog();
+        QSKIP("the u9 fault is only made at a device pixel ratio of 1");
+    }
     QVERIFY2(!mainLayoutProblem(m_app).isEmpty(), "the layout followed: the test no longer makes the u9 fault");
     QTRY_VERIFY2_WITH_TIMEOUT(mainLayoutProblem(m_app).isEmpty(), qPrintable(mainLayoutProblem(m_app)), 2000);
     QCOMPARE(m_app->centralWidget()->width(), 1500);

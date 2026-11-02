@@ -35,6 +35,7 @@
 #include "mastertimer.h"
 #include "speedmasters.h"
 #include "qlcpalette.h"
+#include "effectruns.h"
 #include "qlcfixturedef.h"
 #include "qlcfixturemode.h"
 #include "qlcchannel.h"
@@ -4159,6 +4160,35 @@ void EffectInstance_Test::midiDataIsPublishedOncePerTick()
     QCOMPARE(midi.value(QStringLiteral("held")).toList().at(2).toBool(), true);
     QCOMPARE(midi.value(QStringLiteral("velocity")).toList().at(2).toInt(), 100);
     QVERIFY(midi.value(QStringLiteral("universes")).toMap().contains(QStringLiteral("1")));
+}
+
+void EffectInstance_Test::outOfRangeRunSettingsAreClamped()
+{
+    QMap<QString, double> p;
+    p[EffectRuns::runsKey()] = 1e30;
+    p[EffectRuns::lengthKey()] = 1e30;
+    EffectRuns::Settings s = EffectRuns::resolve(p, false, false);
+    QCOMPARE(s.runs, EffectRuns::kMaxRuns);
+    QCOMPARE(s.lengthMs, INT_MAX);
+
+    p[EffectRuns::runsKey()] = -1e30;
+    p[EffectRuns::lengthKey()] = -1e30;
+    s = EffectRuns::resolve(p, false, false);
+    QCOMPARE(s.runs, 0);
+    QCOMPARE(s.lengthMs, 0);
+
+    p[EffectRuns::runsKey()] = qQNaN();
+    p[EffectRuns::lengthKey()] = qQNaN();
+    s = EffectRuns::resolve(p, true, false);
+    QCOMPARE(s.runs, 0);
+    QCOMPARE(s.lengthMs, 0);
+
+    // In range: as before (rounded runs, truncated length).
+    p[EffectRuns::runsKey()] = 2.6;
+    p[EffectRuns::lengthKey()] = 1500.9;
+    s = EffectRuns::resolve(p, false, false);
+    QCOMPARE(s.runs, 3);
+    QCOMPARE(s.lengthMs, 1500);
 }
 
 QTEST_GUILESS_MAIN(EffectInstance_Test)
