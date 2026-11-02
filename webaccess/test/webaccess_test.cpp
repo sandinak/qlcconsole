@@ -1968,7 +1968,18 @@ void WebAccess_Test::theKeypadPageSendsChannelsToTheDesk()
 {
     startWeb(false);
     // the page as shipped (the web folder is not installed beside a test)
-    QFile page(QFileInfo(QStringLiteral(__FILE__)).dir().filePath(QStringLiteral("../res/keypad.html")));
+    // __FILE__ is relative on some builds (the Linux leg): also look up from
+    // the working directory for the source tree's webaccess/res.
+    QString path = QFileInfo(QStringLiteral(__FILE__)).dir().filePath(QStringLiteral("../res/keypad.html"));
+    for (QDir up = QDir::current(); !QFileInfo::exists(path); )
+    {
+        const QString here = up.filePath(QStringLiteral("webaccess/res/keypad.html"));
+        if (QFileInfo::exists(here))
+            path = here;
+        else if (!up.cdUp())
+            break;
+    }
+    QFile page(path);
     QVERIFY2(page.open(QIODevice::ReadOnly), "webaccess/res/keypad.html not found");
     const QByteArray reply = page.readAll();
     QVERIFY(reply.contains("commInput"));

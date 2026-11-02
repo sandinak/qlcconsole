@@ -533,14 +533,18 @@ void MainBar_Test::blindInOperateLeavesAPlayingCuesBytesAlone()
     QTRY_COMPARE_WITH_TIMEOUT(int(uni->postGMValue(addr)), 200, 5000);
     st->previewCue(inEdit);                             // the cue in edit, blind
 
-    // Count MasterTimer ticks (the stage's frames) while the Blind view is up;
-    // the universe is read on each, from the timer thread.
+    // Count MasterTimer ticks (the stage's frames) while the Blind view is up,
+    // and check every finished frame the universe sends out (universeWritten,
+    // emitted by the universe's own thread once the frame is complete; a read
+    // at tickReady would race that thread mid-frame).
     std::atomic<int> ticks(0);
     std::atomic<int> wrong(0);
     QObject listening;
     connect(doc->masterTimer(), &MasterTimer::tickReady, &listening, [&]() {
         ++ticks;
-        if (int(uni->postGMValue(addr)) != 200)
+    }, Qt::DirectConnection);
+    connect(uni, &Universe::universeWritten, &listening, [&](quint32, const QByteArray &frame) {
+        if (addr >= frame.size() || uchar(frame.at(addr)) != 200)
             ++wrong;
     }, Qt::DirectConnection);
     sc->blindButton()->click();
