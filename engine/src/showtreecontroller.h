@@ -400,6 +400,31 @@ public:
     bool setRunningOrder(quint32 productionId, const QList<ShowTree::RunningSong> &order);
     /** Back to number order, every song in. */
     bool resetRunningOrder(quint32 productionId);
+    /************************************************************************
+     * The calling script (0.5): a production's lyrics or script, with its
+     * cues placed on the lines where the stage manager calls them
+     ************************************************************************/
+public:
+    enum class ScriptMark { Go, Standby };
+    /** Production @a productionId's calling script, its anchors only those
+     *  of cues that are still there (a deleted cue leaves no marker; undo
+     *  brings it back). Empty: no script. */
+    ShowTree::CallingScript callingScript(quint32 productionId) const;
+    /** Set the script's text (and title), one undo step "Calling script".
+     *  Line ends are made '\n'. Cues placed after the changed place move
+     *  with their words; those inside it go to its start. */
+    bool setScriptText(quint32 productionId, const QString &text, const QString &title = QString());
+    /** Read a plain text or Markdown file as the script (UTF-8). */
+    bool importScript(quint32 productionId, const QString &path, QString *error = nullptr);
+    /** Call cue @a cueId's GO (or standby) at character @a offset of the
+     *  script; moves it if it was already placed. Refused for a cue not in
+     *  the production, or an offset outside the text. One undo step. */
+    bool anchorCue(quint32 productionId, quint32 cueId, int offset, ScriptMark mark = ScriptMark::Go);
+    /** Take the cue's marker off (one mark, or both when @a both). */
+    bool unanchorCue(quint32 productionId, quint32 cueId, ScriptMark mark, bool both = false);
+    /** No script. One undo step. */
+    bool clearScript(quint32 productionId);
+
     /** The cues of list @a listId in the order it plays: list indexes, one
      *  per chaser step (the identity without a running order). */
     QList<int> playOrderOf(quint32 listId, QList<bool> *skipped = nullptr) const;

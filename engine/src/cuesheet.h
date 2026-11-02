@@ -162,9 +162,13 @@ public:
      *  brackets, "(Red) · Intensity 45%". */
     static QString cellText(const Cell &cell);
 
+    /** Lay @p html out on landscape Letter pages and write them as a PDF
+     *  (the one PDF writer of the stage manager's paper: the calling script
+     *  uses it too). False, with @p error, if the file can't be written. */
+    static bool writePdf(const QString &path, const QString &title, const QString &html, QString *error);
+
 private:
     static bool writeFile(const QString &path, const QByteArray &data, QString *error);
-    static bool writePdf(const QString &path, const QString &title, const QString &html, QString *error);
 
     QString m_production;
     QList<ListBlock> m_lists;

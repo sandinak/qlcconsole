@@ -134,8 +134,8 @@ void CueSheetDialog_Test::theShowTreeMoreMenuOpensIt()
     // One production in the show: it is the one the sheet is of.
     more->menu()->aboutToShow();
     QVERIFY(sheets->isEnabled());
-    // The menu-item count stays: the three it had, plus this one, in the same menu.
-    QCOMPARE(more->menu()->actions().count(), 4);
+    // The three it had, the cue sheet, and the calling script (0.5), in the same menu.
+    QCOMPARE(more->menu()->actions().count(), 5);
 }
 
 QTEST_MAIN(CueSheetDialog_Test)

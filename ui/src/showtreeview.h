@@ -41,6 +41,7 @@ class ShowTreeCommand;
 class QDoubleSpinBox;
 class QTreeWidgetItem;
 class LookEditor;
+class CallingScriptView;
 class QTreeWidget;
 class QPushButton;
 class QToolButton;
@@ -133,6 +134,8 @@ public:
     NodeKind currentKind() const;
     quint32 currentId() const;
     quint32 currentCueId() const;
+    /** Open the current production's calling script (a window of its own; 0.5). */
+    CallingScriptView *showCallingScript();
 
     /************************************************************************
      * What the mouse does (drops, pickers) -- public for the tests
@@ -1185,6 +1188,7 @@ private:
     QCheckBox *m_sectionBlock = nullptr;
     QLabel *m_sectionInfo = nullptr;
     QPushButton *m_sectionRemove = nullptr;
+    QPointer<CallingScriptView> m_scriptView;
 };
 
 /** @} */
