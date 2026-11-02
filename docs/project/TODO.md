@@ -189,6 +189,18 @@ Run tab's **Pad: Tools / Run / ARMED** button; docs/features/show-control.md
   with nothing to play buzzes long and is said, as the Feedback setting
   allows.
 
+## Stream Deck / Companion module — built (sd, 2026-11-01)
+
+Built: `tools/companion-module/` (`@companion-module/base` 2.2, node tests with
+a mock server) over the Run socket (webaccess/src/webaccessrun.*; docs/features/show-control.md
+"Stream Deck (Companion)"). Open:
+- Not published (npm, Companion's module store, a PR to Bitfocus): Branson's call.
+  See the ready file for what it takes.
+- Hands-on on a Stream Deck + (dials, touch strip level bar): scratchpad checklist.
+- A selected layer's dimmer on a dial (Design) is not built: web access has no selection.
+- Web access with logins (-wa) is not supported by the module (PIN only).
+- Hit and master "numbers" are positions in the show's list; a renamed or reordered list moves them.
+
 ## One GO path — built, leftovers (0.4 item 1, go1, 2026-10-31)
 
 Built: every GO, Back, Sub GO, Stop, Load... enters through

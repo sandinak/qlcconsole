@@ -25,6 +25,11 @@
 #include "showoperate.h"
 #include "groupmasters.h"
 #include "fixturegroup.h"
+#include "effectscriptrunner.h"
+#include "inputoutputmap.h"
+#include "functionparent.h"
+#include "mastertimer.h"
+#include "function.h"
 #include "chaser.h"
 #include "doc.h"
 
@@ -47,6 +52,8 @@ WebAccessRun::WebAccessRun(Doc *doc, QObject *parent)
     // A master moved from the desk, a VC slider or a controller shows on the phone.
     connect(m_doc->groupMasters(), &GroupMasters::changed, this, &WebAccessRun::poll);
     connect(m_doc->groupMasters(), &GroupMasters::levelChanged, this, &WebAccessRun::poll);
+    connect(m_doc->inputOutputMap(), &InputOutputMap::blackoutChanged, this, &WebAccessRun::poll);
+    connect(m_doc->inputOutputMap(), &InputOutputMap::grandMasterValueChanged, this, &WebAccessRun::poll);
 }
 
 void WebAccessRun::setClients(int count)
@@ -107,7 +114,8 @@ WebAccessRun::PinResult WebAccessRun::checkPin(const QString &pin)
     return PinBad;
 }
 
-WebAccessRun::Result WebAccessRun::command(const QString &command, bool unlocked)
+WebAccessRun::Result WebAccessRun::command(const QString &command, bool unlocked, const QString &cue,
+                                           const QString &list)
 {
     ShowControl::Request r;
     if (command == QLatin1String("go"))
@@ -132,12 +140,24 @@ WebAccessRun::Result WebAccessRun::command(const QString &command, bool unlocked
     if (pinRequired() && !unlocked)
         return NeedPin;
 
-    // The main cue list, as the Run tab's default follow does.
-    Chaser *ch = m_doc->showControl()->cueList(QString());
+    // The main cue list, as the Run tab's default follow does; or the list
+    // by its number, and a cue by its number, as OSC names them.
+    Chaser *ch = m_doc->showControl()->cueList(list);
     if (ch == nullptr)
         return NothingToDo;
     r.chaser = ch->id();
+    r.cue = cue;
     return m_doc->showControl()->run(r, ShowControl::RouteWeb) ? Done : NothingToDo;
+}
+
+static uchar percentToByte(int percent)
+{
+    return uchar(qRound(qBound(0, percent, 100) * double(UCHAR_MAX) / 100.0));
+}
+
+static int byteToPercent(uchar value)
+{
+    return qRound(value * 100.0 / UCHAR_MAX);
 }
 
 WebAccessRun::Result WebAccessRun::setMaster(quint32 groupId, int percent, bool unlocked)
@@ -150,8 +170,112 @@ WebAccessRun::Result WebAccessRun::setMaster(quint32 groupId, int percent, bool 
     FixtureGroup *g = m_doc->fixtureGroup(groupId);
     if (g == nullptr || !g->hasMaster())
         return NothingToDo;
-    g->setMasterLevel(uchar(qRound(qBound(0, percent, 100) * double(UCHAR_MAX) / 100.0)));
+    g->setMasterLevel(percentToByte(percent));
     return Done;
+}
+
+WebAccessRun::Result WebAccessRun::hit(quint32 hitId, bool unlocked)
+{
+    if (!remoteAllowed())
+        return Refused;
+    if (pinRequired() && !unlocked)
+        return NeedPin;
+    ShowTreeController *st = m_doc->showTree();
+    // Like a VC button: a hit fires in Operate only.
+    if (m_doc->mode() != Doc::Operate)
+        return WrongMode;
+    const QList<quint32> tier = st->armedTier(st->allHits());
+    if (tier.isEmpty())
+        return NothingToDo;
+    if (hitId != UINT_MAX && !tier.contains(hitId))
+        return NothingToDo;
+
+    // One running (a toggle on, or a one-shot still going): this lets it go.
+    for (quint32 h : tier)
+    {
+        if (hitId != UINT_MAX && h != hitId)
+            continue;
+        Function *f = m_doc->function(st->lookFunction(h));
+        if (f == nullptr || !f->isRunning())
+            continue;
+        EffectScriptRunner *esr = m_doc->effectScriptRunner();
+        if (esr != nullptr && esr->oneShotState(f->id()) == 1 && esr->restartOneShots(f->id()))
+            return Done;
+        f->stop(FunctionParent::master());
+        return Done;
+    }
+    const quint32 pick = hitId != UINT_MAX ? hitId : tier.at(m_hitStep++ % tier.count());
+    Function *f = m_doc->function(st->lookFunction(pick));
+    if (f == nullptr)
+        return NothingToDo;
+    f->start(m_doc->masterTimer(), FunctionParent::master());
+    return Done;
+}
+
+WebAccessRun::Result WebAccessRun::blackout(const QString &what, bool unlocked)
+{
+    if (!remoteAllowed())
+        return Refused;
+    if (pinRequired() && !unlocked)
+        return NeedPin;
+    InputOutputMap *io = m_doc->inputOutputMap();
+    if (what == QLatin1String("toggle"))
+        io->toggleBlackout();
+    else if (what == QLatin1String("on"))
+        io->setBlackout(true);
+    else if (what == QLatin1String("off"))
+        io->setBlackout(false);
+    else
+        return Unknown;
+    return Done;
+}
+
+WebAccessRun::Result WebAccessRun::setGrand(int percent, bool unlocked)
+{
+    if (!remoteAllowed())
+        return Refused;
+    if (pinRequired() && !unlocked)
+        return NeedPin;
+    m_doc->inputOutputMap()->setGrandMasterValue(percentToByte(percent));
+    return Done;
+}
+
+WebAccessRun::Result WebAccessRun::nudgeGrand(int delta, bool unlocked)
+{
+    return setGrand(byteToPercent(m_doc->inputOutputMap()->grandMasterValue()) + delta, unlocked);
+}
+
+WebAccessRun::Result WebAccessRun::nudgeMaster(quint32 groupId, int delta, bool unlocked)
+{
+    if (!remoteAllowed())
+        return Refused;
+    if (pinRequired() && !unlocked)
+        return NeedPin;
+    FixtureGroup *g = m_doc->fixtureGroup(groupId);
+    if (g == nullptr || !g->hasMaster())
+        return NothingToDo;
+    return setMaster(groupId, byteToPercent(g->masterLevel()) + delta, unlocked);
+}
+
+WebAccessRun::Result WebAccessRun::standby(int direction, bool unlocked)
+{
+    if (!remoteAllowed())
+        return Refused;
+    if (pinRequired() && !unlocked)
+        return NeedPin;
+    ShowControl *sc = m_doc->showControl();
+    Chaser *ch = sc->cueList(QString());
+    if (ch == nullptr)
+        return NothingToDo;
+    const int cur = sc->standbyStep(ch);
+    const int target = (cur < 0 ? (direction > 0 ? 0 : ch->stepsCount() - 1) : cur + (direction > 0 ? 1 : -1));
+    if (target < 0 || target >= ch->stepsCount())
+        return NothingToDo;
+    ShowControl::Request r;
+    r.command = ShowControl::Load;
+    r.chaser = ch->id();
+    r.cue = ch->stepCue(target);
+    return sc->run(r, ShowControl::RouteWeb) ? Done : NothingToDo;
 }
 
 /*********************************************************************
@@ -197,13 +321,34 @@ QByteArray WebAccessRun::stateJson() const
     o[QStringLiteral("mode")] = m_doc->mode() == Doc::Operate ? QStringLiteral("LIVE") : QStringLiteral("DESIGN");
     o[QStringLiteral("teaching")] = m_doc->teachingSettings() != nullptr && m_doc->teachingSettings()->enabled();
     o[QStringLiteral("hasList")] = ch != nullptr;
+    o[QStringLiteral("api")] = 1;
+    o[QStringLiteral("blackout")] = m_doc->inputOutputMap()->blackout();
+    o[QStringLiteral("grand")] = byteToPercent(m_doc->inputOutputMap()->grandMasterValue());
+    const QList<quint32> hitIds = st->allHits();
+    if (!hitIds.isEmpty())
+    {
+        const QList<quint32> tier = st->armedTier(hitIds);
+        QJsonArray hits;
+        for (quint32 h : hitIds)
+        {
+            const ShowTree::Cue *c = st->cue(h);
+            const Function *f = m_doc->function(st->lookFunction(h));
+            QJsonObject ho;
+            ho[QStringLiteral("id")] = int(h);
+            ho[QStringLiteral("name")] = c != nullptr ? c->name : QString();
+            ho[QStringLiteral("on")] = f != nullptr && f->isRunning();
+            ho[QStringLiteral("armed")] = tier.contains(h);
+            hits.append(ho);
+        }
+        o[QStringLiteral("hits")] = hits;
+    }
     QJsonArray masters;
     for (const FixtureGroup *g : m_doc->groupMasters()->groups())
     {
         QJsonObject m;
         m[QStringLiteral("id")] = int(g->id());
         m[QStringLiteral("name")] = g->name();
-        m[QStringLiteral("level")] = qRound(g->masterLevel() * 100.0 / UCHAR_MAX);
+        m[QStringLiteral("level")] = byteToPercent(g->masterLevel());
         masters.append(m);
     }
     if (!masters.isEmpty())

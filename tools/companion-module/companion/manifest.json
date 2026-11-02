@@ -1,0 +1,28 @@
+{
+	"$schema": "../node_modules/@companion-module/base/assets/manifest.schema.json",
+	"type": "connection",
+	"id": "qlcconsole",
+	"name": "qlcconsole",
+	"shortname": "qlcconsole",
+	"description": "Run a qlcconsole show (GO, Back, hits, masters, blackout) from a Stream Deck, with live feedback",
+	"version": "0.1.0",
+	"license": "MIT",
+	"repository": "git+https://github.com/sandinak/qlcconsole.git",
+	"bugs": "https://github.com/sandinak/qlcconsole/issues",
+	"maintainers": [
+		{
+			"name": "Branson Matheson",
+			"email": "branson.matheson@gmail.com"
+		}
+	],
+	"runtime": {
+		"type": "node22",
+		"api": "nodejs-ipc",
+		"apiVersion": "0.0.0",
+		"entrypoint": "../src/main.js"
+	},
+	"legacyIds": [],
+	"manufacturer": "qlcconsole",
+	"products": ["qlcconsole"],
+	"keywords": ["lighting", "dmx", "show control", "qlc+", "stream deck"]
+}

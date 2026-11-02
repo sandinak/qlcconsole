@@ -20,6 +20,7 @@
 #include <QDebug>
 #include <QMap>
 #include <QUrl>
+#include <climits>
 #include <qmath.h>
 
 #include "webaccesssimpledesk.h"
@@ -723,9 +724,66 @@ void WebAccess::handleRunCommand(QHttpConnection *conn, WebAccessUser *user, con
             return;
         result = m_run->setMaster(id, level, m_runUnlocked.contains(conn));
     }
+    else if (what == QLatin1String("grand"))
+    {
+        // QLC+RUN|grand|<percent>
+        bool ok = false;
+        const int level = cmdList.value(2).toInt(&ok);
+        if (!ok)
+            return;
+        result = m_run->setGrand(level, m_runUnlocked.contains(conn));
+    }
+    else if (what == QLatin1String("nudge"))
+    {
+        // QLC+RUN|nudge|master|<group id>|<delta>  or  QLC+RUN|nudge|grand|<delta>
+        // (a dial turn: a signed percent, added to what the level is now)
+        bool ok = false;
+        if (cmdList.value(2) == QLatin1String("grand"))
+        {
+            const int delta = cmdList.value(3).toInt(&ok);
+            if (!ok)
+                return;
+            result = m_run->nudgeGrand(delta, m_runUnlocked.contains(conn));
+        }
+        else if (cmdList.value(2) == QLatin1String("master"))
+        {
+            bool okId = false;
+            const quint32 id = cmdList.value(3).toUInt(&okId);
+            const int delta = cmdList.value(4).toInt(&ok);
+            if (!okId || !ok)
+                return;
+            result = m_run->nudgeMaster(id, delta, m_runUnlocked.contains(conn));
+        }
+        else
+        {
+            return;
+        }
+    }
+    else if (what == QLatin1String("standby"))
+    {
+        // QLC+RUN|standby|next  or  |prev
+        const QString dir = cmdList.value(2);
+        if (dir != QLatin1String("next") && dir != QLatin1String("prev"))
+            return;
+        result = m_run->standby(dir == QLatin1String("next") ? 1 : -1, m_runUnlocked.contains(conn));
+    }
+    else if (what == QLatin1String("hit"))
+    {
+        // QLC+RUN|hit[|<hit id>]: the armed hit when no id is given
+        bool ok = true;
+        const quint32 id = cmdList.count() > 2 ? cmdList.at(2).toUInt(&ok) : UINT_MAX;
+        if (!ok)
+            return;
+        result = m_run->hit(id, m_runUnlocked.contains(conn));
+    }
+    else if (what == QLatin1String("blackout"))
+    {
+        result = m_run->blackout(cmdList.value(2, QStringLiteral("toggle")), m_runUnlocked.contains(conn));
+    }
     else
     {
-        result = m_run->command(what, m_runUnlocked.contains(conn));
+        // QLC+RUN|go[|<cue>[|<list>]] -- a cue, on a list, by number
+        result = m_run->command(what, m_runUnlocked.contains(conn), cmdList.value(2), cmdList.value(3));
     }
     QString answer;
     switch (result)
@@ -734,6 +792,7 @@ void WebAccess::handleRunCommand(QHttpConnection *conn, WebAccessUser *user, con
         case WebAccessRun::NothingToDo: answer = QStringLiteral("nothing"); break;
         case WebAccessRun::Refused:     answer = QStringLiteral("refused"); break;
         case WebAccessRun::NeedPin:     answer = QStringLiteral("needpin"); break;
+        case WebAccessRun::WrongMode:   answer = QStringLiteral("design"); break;
         case WebAccessRun::Unknown:     return;
     }
     conn->webSocketWrite(QStringLiteral("RUN|ack|%1|%2").arg(what, answer));

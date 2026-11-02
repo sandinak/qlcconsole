@@ -54,6 +54,15 @@ back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
 
 #### Phone and tablet Run page
 
+- **Stream Deck and Bitfocus Companion.** A Companion module
+  (`tools/companion-module/`) runs the show from a Stream Deck or a Stream
+  Deck + over web access: GO, Back, Stop, Sub GO, Hold, GO a cue, fire a hit
+  (the narrowest armed one, Operate only), group masters, the Grand Master and
+  Blackout, with the current and next cue, hit state and master levels on the
+  keys. Dials move masters or walk the cues (press GOes only when armed). The
+  Run socket gained those words and state fields; remote GO, the PIN and
+  Operate rules are the phone page's. Not published yet.
+
 - **Phone and tablet Run page.** Web access serves **/run**: the
   production and list, the song section, the cue on now and the next (number
   and name), and big GO, Back and Stop (Sub GO and Sub Back when the list has

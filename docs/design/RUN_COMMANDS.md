@@ -75,7 +75,7 @@ App) still holds the previews, through a queued connection.
 | Focus call | `FocusCallCue` continuing its list when the calls are done | Go | no |
 | OSC | `ShowControl::handleOsc()` (from `ShowControlListener`) | all | no |
 | MSC | `ShowControl::handleSysEx()` (a patched MIDI input) | Go, Pause, Resume, Load, AllOff, Reset, Stop | no |
-| Web | the phone Run page (`/run`, `WebAccessRun::command()`) | Go, Back, Stop, SubGo, SubBack on the main list | no |
+| Web | the phone Run page (`/run`, `WebAccessRun::command()`) and the Companion module (same socket) | Go (a cue, a list), Back, Stop, SubGo, SubBack, Pause, Resume, Load (standby dial) | no |
 | Timecode | `TimecodeCues` (a list set to follow timecode reaches a cue's time) | Go (by cue number and chaser) | no |
 
 **Not routes:**

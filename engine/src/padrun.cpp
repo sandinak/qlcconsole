@@ -299,15 +299,8 @@ bool PadRun::trigger(Action action)
 
 QList<quint32> PadRun::allHits() const
 {
-    QList<quint32> out;
     const ShowTreeController *st = m_doc != nullptr ? m_doc->showTree() : nullptr;
-    if (st == nullptr)
-        return out;
-    for (const ShowTree::Production &p : st->productions())
-        if (const ShowTree::CueList *l = p.looks())
-            for (const ShowTree::Cue &c : l->cues)
-                out << c.id;
-    return out;
+    return st != nullptr ? st->allHits() : QList<quint32>();
 }
 
 QList<quint32> PadRun::armedHits() const
