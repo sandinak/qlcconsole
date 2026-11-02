@@ -1354,15 +1354,18 @@ bool fixtureAimDirection(Fixture *fx, const FixtureRigProps &rp, QVector3D &dir,
     const QByteArray v = fx->channelValues();
 
     /* Same mapping MonitorFixtureItem uses, so the plot and the rig view agree
-       about where a head is looking: the centre DMX value is 0 degrees and the
-       range is centred on it. */
+       about where a head is looking: the centre of the pointing band is 0
+       degrees and the range is centred on it. The band is the channel's
+       indexed-position range when it has one (Fixture::positionFraction()):
+       read across the whole channel, a two-arm beam pointing straight
+       downstage (DMX 64 of 0-127) was drawn a quarter turn off, at the wings. */
     auto degrees = [&](quint32 ch, double maxDeg, const double *frac) {
         if (ch == QLCChannel::invalid() || ch >= quint32(v.size()))
             return 0.0;
         // A move-speed follower (MoveSpeed::Follower) gives the position
-        // the head has reached, as a fraction of its range.
+        // the head has reached, as a fraction of its DMX range.
         const double val = frac != nullptr ? *frac * 255.0 : double(uchar(v.at(int(ch))));
-        return (val * maxDeg) / 255.0 - (maxDeg / 2.0);
+        return Fixture::positionFraction(mode->channel(ch), val) * maxDeg - (maxDeg / 2.0);
     };
     const double panMax  = (mode->physical().focusPanMax()  != 0)
                          ? mode->physical().focusPanMax()  : 360.0;

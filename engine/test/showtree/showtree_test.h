@@ -183,6 +183,8 @@ private slots:
     void anEffectFadesWithItsCue();
     void cueSpreadReachesOnlyLineAims();
     void aCueAimIsOneFormationByPosition();
+    void aLayerOfHungAndStandingGroupsIsOneLineFormation();
+    void layersWithTheSameLineAimEachSpreadEndToEnd();
     void aSpreadChangeFadesOverTheCueFade();
     void formationResolveOrder();
     void formationTracksRowByRow();

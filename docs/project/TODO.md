@@ -45,6 +45,17 @@ and says it does nothing (not refused); the preview uses the Aim palette a
 line aim there reuses as the base. The plan view's pop-out (lpv) works from
 the Formation page too, fed by its preview. Open: nothing known.
 
+## Line aim, mixed groups (ust, 2026-11-01) — fixed, leftovers
+
+Branson's "USTs point off stage right" in *T-Spots + USTs*: the resolve was
+right (all 16 lights on Line 1 in hang order, the USTs at subject height
+above their points, DMX pan 61-67 of the 0-127 band); the views read an
+indexed pan band (`RotationIndexed`) over the whole channel and drew the
+USTs a quarter turn off. Fixed with `Fixture::positionBand()` /
+`positionFraction()` in the rig view, the plot and the readout (CHANGELOG
+0.4.0 Fixed). Open: `MoveSpeed`'s travel time still measures a banded head
+over the whole channel (its follower is right, only the timing is off).
+
 ## Line aim pop-out (lpv, 2026-11-01) — built, leftovers
 
 Built: `LinePlanWindow` (ui/src/lineplanview.*) shows the order strip and

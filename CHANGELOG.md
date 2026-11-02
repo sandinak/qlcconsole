@@ -1003,6 +1003,13 @@ skipped). Upstream fixes taken:
 
 ### Fixed
 
+- **Heads whose pan spins past half the channel are drawn where they
+  point.** A two-arm beam (the USTs) points with pan DMX 0-127 and spins
+  with 128-255. Its DMX was right, but the Rig Overview, the plot and the
+  pan/tilt readout read the channel over 0-255, so a light aimed straight
+  downstage was drawn a quarter turn off, at the wings: in a line aim of
+  *T-Spots + USTs* only the spots seemed to reach the line. Every view now
+  reads the pointing band the fixture declares.
 - **Play and Solo on the Show Tree's cue and layer pages.** They were only
   in the Workbench docked in the tree, so a cue opened the usual way (a
   click) had neither. Now both pages have them: Play / Stop for the whole

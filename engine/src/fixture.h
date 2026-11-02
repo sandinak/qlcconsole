@@ -389,6 +389,20 @@ public:
      *  and the provided type (Pan or Tilt) */
     QList<SceneValue> positionToValues(int type, float degrees, bool isRelative = false);
 
+    /** The DMX band (MSB, 0..255) of position channel @p ch that points the
+     *  head: its RotationIndexed capability when it declares one (the rest of
+     *  the channel spins the head -- the Junman two-arm beam: 0-127 points,
+     *  128-255 rotates), else the whole channel. positionToValues() writes
+     *  only into it. False when the band is the whole channel. */
+    static bool positionBand(const QLCChannel *ch, uchar &lo, uchar &hi);
+
+    /** Where raw DMX @p dmx (MSB, 0..255, fractions allowed) on position
+     *  channel @p ch lies in the head's range, 0..1 -- the inverse of
+     *  positionToValues(): across positionBand(), so a view reading the
+     *  channel back draws the head where it really points. With no band it
+     *  is dmx / 255, as stock QLC+ has it. */
+    static double positionFraction(const QLCChannel *ch, double dmx);
+
     /** Return a list of DMX values based on the given zoom degrees */
     QList<SceneValue> zoomToValues(float degrees, bool isRelative);
 

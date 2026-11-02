@@ -595,6 +595,11 @@ private slots:
     /** Aim a head at a mark, feed it its own DMX, and the beam it draws
      *  arrives at that mark -- hung or standing, inverted or not. */
     void aHeadAimedAtAMarkDrawsItsBeamThere();
+    /** A head whose pan channel points only over part of it (0-127; the
+     *  rest spins it -- the two-arm beam) draws its beam where its DMX
+     *  points it, read over that band: aimed downstage, drawn downstage,
+     *  not a quarter turn off at the wings. */
+    void anIndexedPanBandDrawsWhereItPoints();
     /** The plot's pool from live DMX of a head with calibration offsets
      *  lands on the mark it is aimed at, not the offset beside it. */
     void aCalibratedHeadsPoolLandsOnItsMark();
