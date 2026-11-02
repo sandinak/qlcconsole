@@ -66,6 +66,8 @@ back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
 
 ### Run the show
 
+- **DualSense extras for the Run role.** Armed (LB held), R2 pushes back so a GO takes a deliberate squeeze; walking, both triggers click per cue step; they go off on disarm, leaving, pad loss and quit. One finger swiped across the touchpad steps: while walking right / left the next / previous cue and down / up the next / previous layer; in the Run map down / up pick the list. A swipe previews and selects, never a GO. Other pads: nothing changes. While walking the touchpad aim nudge needs LB held. See [Pad Run](docs/features/show-control.md#dualsense-extras-triggers-and-swipes).
+
 #### No-light zones and laser windows
 
 - **Mark the places that must stay dark, and Show Review checks every cue.**

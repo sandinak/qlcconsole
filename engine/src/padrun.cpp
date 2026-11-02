@@ -56,6 +56,8 @@ PadRun::PadRun(Doc *doc, ProgrammerController *pc, QObject *parent)
         });
         // The solo follows the layer walked.
         connect(r, &RefineSession::changed, this, &PadRun::syncSolo);
+        // The walk's feel for the triggers follows Focus this cue.
+        connect(r, &RefineSession::stopped, this, [this]() { updateTriggers(); });
     }
 }
 
@@ -155,6 +157,7 @@ void PadRun::setEnabled(bool on, bool say)
         return;
     reset();
     m_enabled = on;
+    updateTriggers();
     emit enabledChanged(on);
     if (say && m_pc != nullptr)
         m_pc->tellOperator(on ? m_pc->padText(tr("Run role. Hold {LB} and press {A} to GO."))
@@ -192,6 +195,7 @@ bool PadRun::handle(quint32 universe, GamepadRole::Role role, uchar value)
             m_armedOn.remove(universe);
         if (was != isArmed())
         {
+            updateTriggers();
             showLight();
             emit armedChanged(isArmed());
         }
@@ -218,9 +222,14 @@ void PadRun::reset()
     roleChordCancel();
     m_rt.reset();
     m_lt.reset();
+    m_swipe.reset();
     if (m_armedOn.isEmpty())
+    {
+        updateTriggers();
         return;
+    }
     m_armedOn.clear();
+    updateTriggers();
     showLight();
     emit armedChanged(false);
 }
@@ -233,6 +242,68 @@ void PadRun::showLight()
     if (m_pc->focusSession()->isActive() || m_pc->refineSession()->isActive())
         return;
     m_pc->setPadLight(isArmed() ? armedColour() : QColor());
+}
+
+/*****************************************************************************
+ * Triggers and swipes
+ *****************************************************************************/
+
+PadTriggers::State PadRun::triggerState() const
+{
+    return PadTriggers::forState(m_enabled, isArmed(), isWalking());
+}
+
+void PadRun::updateTriggers(bool force)
+{
+    if (m_pc != nullptr)
+        m_pc->setPadTriggers(triggerState(), force);
+}
+
+void PadRun::touchValue(GamepadRole::Role role, float norm)
+{
+    if (m_enabled)
+        m_swipe.setValue(role, norm);
+}
+
+void PadRun::touchClick(bool down)
+{
+    if (m_enabled)
+        m_swipe.setClick(down);
+}
+
+void PadRun::swipeTick(double dt)
+{
+    if (!m_enabled)
+        return;
+    const TouchSwipe::Swipe s = m_swipe.take(dt);
+    if (s != TouchSwipe::None)
+        swipe(s);
+}
+
+bool PadRun::swipe(TouchSwipe::Swipe s)
+{
+    if (!m_enabled || m_pc == nullptr || s == TouchSwipe::None)
+        return false;
+    const bool horizontal = s == TouchSwipe::Left || s == TouchSwipe::Right;
+    const int delta = (s == TouchSwipe::Right || s == TouchSwipe::Down) ? 1 : -1;
+    if (isWalking())
+    {
+        if (horizontal)
+            return stepCue(delta);
+        stepLayer(delta);
+        return true;
+    }
+    if (!horizontal)
+    {
+        stepList(delta);
+        return true;
+    }
+    // Run, not walking: a walk from the next / previous cue, Design only.
+    if (m_doc->mode() == Doc::Operate)
+        return refuseWalk(tr("In Operate the cue moves with GO."));
+    if (!startWalk())
+        return false;
+    return stepCue(delta);
 }
 
 /*****************************************************************************
@@ -638,6 +709,7 @@ void PadRun::walkStarted()
         emit walkingChanged(true);
     }
     syncSolo();
+    updateTriggers();
 }
 
 void PadRun::walkEnded()
@@ -652,6 +724,7 @@ void PadRun::walkEnded()
     m_walkLt.reset();
     setSolo(false);
     emit walkingChanged(false);
+    updateTriggers();
     m_pc->tellOperator(tr("Walk off. Run role."), ControllerScheme::ConfirmPriority);
 }
 

@@ -730,6 +730,15 @@ void HIDPlugin::sendFeedBack(quint32 universe, quint32 inputLine, quint32 channe
         const QColor show = c.isValid() ? c : QColor(0, 0, 255);
         pad->setPadLight(float(show.redF()), float(show.greenF()), float(show.blueF()));
     }
+    else if (what == QLatin1String("triggers"))
+    {
+        // Q199: "off" / "firm" / "click", to the DualSense's adaptive triggers.
+        auto feel = [&p](const char *key) {
+            const QByteArray n = p.value(QLatin1String(key)).toString().toLatin1();
+            return n == "firm" ? 1 : n == "click" ? 2 : 0;
+        };
+        pad->setPadTriggers(feel("right"), feel("left"));
+    }
     else if (what == QLatin1String("rumble"))
         pad->padRumble(p.value(QStringLiteral("pulses")).toInt(),
                        p.value(QStringLiteral("ms"), 120).toInt());

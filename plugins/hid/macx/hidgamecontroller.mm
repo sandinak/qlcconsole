@@ -396,6 +396,8 @@ int claim(const QString &preferredName, Kind kind)
 
 void release(int handle)
 {
+    // Quit, unplug or release: the triggers go back to off (outside the lock).
+    setTriggers(handle, 0, 0);
     std::lock_guard<std::mutex> lock(g_mutex);
     auto it = g_claims.find(handle);
     if (it == g_claims.end())
@@ -441,6 +443,47 @@ bool setLight(int handle, float r, float g, float b)
         if (light == nil)
             return false;
         light.color = [[GCColor alloc] initWithRed:r green:g blue:b];
+        return true;
+    }
+    return false;
+}
+
+namespace
+{
+void applyFeel(GCDualSenseAdaptiveTrigger *t, int feel) API_AVAILABLE(macos(11.3))
+{
+    switch (feel)
+    {
+        case 1:     // firm: resists from a quarter of the pull
+            [t setModeFeedbackWithStartPosition:0.25f resistiveStrength:0.9f];
+            break;
+        case 2:     // click: a give between 0.5 and 0.7 of the pull
+            [t setModeWeaponWithStartPosition:0.5f endPosition:0.7f resistiveStrength:0.5f];
+            break;
+        default:
+            [t setModeOff];
+            break;
+    }
+}
+}
+
+bool setTriggers(int handle, int right, int left)
+{
+    GCController *c = nil;
+    {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        auto it = g_claims.find(handle);
+        if (it == g_claims.end())
+            return false;
+        c = it->second.controller;
+    }
+    if (@available(macOS 11.3, *))
+    {
+        GCDualSenseGamepad *ds = (GCDualSenseGamepad *)c.extendedGamepad;
+        if (ds == nil || ![ds isKindOfClass:[GCDualSenseGamepad class]])
+            return false;
+        applyFeel(ds.rightTrigger, right);
+        applyFeel(ds.leftTrigger, left);
         return true;
     }
     return false;

@@ -80,6 +80,9 @@ public:
     /** The pad's light bar (Q126): through the GameController framework when
      *  this pad is read that way; false otherwise (or no light). */
     bool setPadLight(float r, float g, float b);
+    /** The adaptive triggers (0 off, 1 firm, 2 click); false on any pad but
+     *  a DualSense. */
+    bool setPadTriggers(int right, int left);
     /** @p pulses buzzes, the same way; false where it cannot. */
     bool padRumble(int pulses, int lengthMs = 120);
 

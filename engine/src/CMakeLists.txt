@@ -166,6 +166,8 @@ add_library(${module_name} SHARED
     padnames.cpp padnames.h
     padrun.cpp padrun.h
     touchpadgesture.cpp touchpadgesture.h
+    touchswipe.cpp touchswipe.h
+    padtriggers.cpp padtriggers.h
     parkeffect.cpp parkeffect.h
     outputlayer.cpp outputlayer.h
     whyon.cpp whyon.h

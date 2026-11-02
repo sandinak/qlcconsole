@@ -633,8 +633,10 @@ Open:
   once the sheet (sheet) is on main.
 - The cue's note **typed or spoken** from the walk (today: on the cue
   page).
-- PlayStation touchpad shortcuts (swipe = layer walk, tap = tag), never
-  the only way.
+- PlayStation touchpad swipes (cue / layer) and the adaptive triggers:
+  DONE (feat/04-dualsense-extras, Q199); a real-DualSense touch test is
+  open. Still open: tap = tag, and the trigger click (Weapon mode) tuned
+  by hand.
 - In Operate, following the running cue as GO moves it (today Refine goes
   blind until it runs again).
 - "Layer 2 of 4: Movers, Blue": the layer's colour in the line.

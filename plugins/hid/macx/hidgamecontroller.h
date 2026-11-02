@@ -84,6 +84,12 @@ namespace HIDGameController
      *  in r, g, b 0..1. False where the claimed pad has none -- an Xbox pad
      *  has no coloured light. Any thread. */
     bool setLight(int handle, float r, float g, float b);
+    /** The adaptive triggers (a DualSense: GCDualSenseAdaptiveTrigger,
+     *  macOS 11.3+) for @p right and @p left: 0 off, 1 firm (a steady
+     *  resistance from a short way in -- a deliberate squeeze), 2 click (a
+     *  light give at the end of the pull). False where the claimed pad has
+     *  no adaptive triggers -- every other pad. Any thread. */
+    bool setTriggers(int handle, int right, int left);
     /** @p pulses buzzes of @p lengthMs each (GCDeviceHaptics, Core
      *  Haptics; macOS 11+): 120 ms for a keep, one of 700 ms for
      *  something important.
