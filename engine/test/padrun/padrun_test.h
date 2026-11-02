@@ -123,6 +123,14 @@ private slots:
      *  switch; in Tools a short View + Menu is still Focus mode. */
     void theRoleChordResistsAccidents();
 
+    /** A pad's input as a real one arrives (the plugin's valueChanged
+     *  through the InputPatch, a controller slot moving its channels): the
+     *  Tools role, the Run role's GO, a walk and a hit all answer, and
+     *  nothing locks up. Main db08acd9a froze here: InputPatch emitted the
+     *  value with its lock held, and the role lookup took it again. A
+     *  watchdog fails the run instead of hanging the gate. */
+    void inputThroughThePatchDoesNotDeadlock();
+
 private:
     IOPluginStub *loadStub();
     /** Four spots, a list: Opening (Fronts, Backs), Blackout (no layer),
@@ -134,6 +142,11 @@ private:
      *  palette); the target's id. */
     quint32 aimFronts();
     void hold(quint32 channel, bool down, quint32 universe = 0);
+    /** As a pad's plugin sends them, on device line @p line: the press and
+     *  release (the release passes the press straight through the patch),
+     *  then the frame's flush; a hold, then the flush. */
+    void padPress(IOPluginStub *stub, quint32 line, quint32 channel);
+    void padHold(IOPluginStub *stub, quint32 line, quint32 channel, bool down);
     /** A hit with one layer (so its look has something to play). */
     quint32 hitWithLayer(ShowTree::HitScope scope, quint32 placeId, const QString &name);
     /** A pad in the Run role, armed or not as asked; Operate. */

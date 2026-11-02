@@ -206,7 +206,7 @@ public:
 
     struct InputValue
     {
-        InputValue() {}
+        InputValue() : value(0) {}
         InputValue(uchar v, QString const& k)
             : value(v)
             , key(k)
@@ -215,6 +215,10 @@ public:
         QString key;
     };
 
+    /** Guards m_inputBuffer and m_channelMap. Held only to copy or swap
+     *  them: NEVER while emitting. A receiver of inputValueChanged() on the
+     *  same thread may call back in (deviceChannel(), showChannel(),
+     *  channelMap(), setChannelMap()), and the mutex is not recursive. */
     QMutex m_inputBufferMutex;
     QHash<quint32, InputValue> m_inputBuffer;
 

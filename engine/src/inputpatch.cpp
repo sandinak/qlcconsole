@@ -265,33 +265,43 @@ void InputPatch::slotValueChanged(quint32 universe, quint32 input, quint32 chann
 {
     // In case we have several lines connected to the same plugin, emit only
     // such values that belong to this particular patch.
-    if (input == m_pluginLine)
+    if (input != m_pluginLine)
+        return;
+    if (universe != UINT_MAX && universe != m_universe)
+        return;
+
+    /* Every ON/OFF change must pass through: the value it replaces goes out
+       now, not at the next flush. It goes out AFTER the lock is let go --
+       never emit with m_inputBufferMutex held. A receiver on this thread
+       (the pad's role lookup: ProgrammerController::controllerRole() ->
+       deviceChannel()) takes it again, and the GUI froze for good (0.4.0
+       on ender, a game controller). Copying the value is a refcount, not
+       an allocation. */
+    bool passThrough = false;
+    InputValue previous;
     {
-        if (universe == UINT_MAX || universe == m_universe)
+        QMutexLocker inputBufferLocker(&m_inputBufferMutex);
+        if (channel < quint32(m_channelMap.size()))
+            channel = m_channelMap.at(int(channel));
+        QHash<quint32, InputValue>::iterator it = m_inputBuffer.find(channel);
+        if (it == m_inputBuffer.end())
         {
-            QMutexLocker inputBufferLocker(&m_inputBufferMutex);
-            if (channel < quint32(m_channelMap.size()))
-                channel = m_channelMap.at(int(channel));
-            InputValue val(value, key);
-            if (m_inputBuffer.contains(channel))
+            m_inputBuffer.insert(channel, InputValue(value, key));
+        }
+        else if (it->value != value)
+        {
+            if (it->value == 0 || value == 0)
             {
-                InputValue const& curVal = m_inputBuffer.value(channel);
-                if (curVal.value != val.value)
-                {
-                    // Every ON/OFF changes must pass through
-                    if (curVal.value == 0 || val.value == 0)
-                    {
-                        emit inputValueChanged(m_universe, channel, curVal.value, curVal.key);
-                    }
-                    m_inputBuffer.insert(channel, val);
-                }
+                previous = *it;
+                passThrough = true;
             }
-            else
-            {
-                m_inputBuffer.insert(channel, val);
-            }
+            it->value = value;
+            it->key = key;
         }
     }
+
+    if (passThrough)
+        emit inputValueChanged(m_universe, channel, previous.value, previous.key);
 }
 
 void InputPatch::slotTimeCodeChanged(quint32 universe, quint32 input,

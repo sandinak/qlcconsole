@@ -621,6 +621,11 @@ bool InputOutputMap::setInputPatch(quint32 universe, const QString &pluginName,
         return false;
     }
 
+    /* Said with the universes let go: profileChanged reaches the pad's
+       tools (ProgrammerController::focusControllerChanged) on this thread,
+       and anything there that takes m_universeMutex (Blackout, a re-patch)
+       would lock up the GUI. */
+    locker.unlock();
     if (ip != NULL && currProfile != ip->profile())
         emit profileChanged(universe, ip->profileName());
 

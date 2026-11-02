@@ -947,6 +947,11 @@ skipped). Upstream fixes taken:
 
 ### Fixed
 
+- **The app could freeze when a game controller was used.** A button
+  pressed and let go within one frame could lock up the whole app for
+  good (seen with a pad on 0.4.0 build 2825). The input patch now passes
+  the press on only after it has let go of its own lock, and a test fails
+  fast if any input path locks up again.
 - **Play and Solo on the Show Tree's cue and layer pages.** They were only
   in the Workbench docked in the tree, so a cue opened the usual way (a
   click) had neither. Now both pages have them: Play / Stop for the whole

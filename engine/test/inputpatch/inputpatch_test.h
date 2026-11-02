@@ -38,6 +38,11 @@ private slots:
      *  thread as ONE queued call, not one event per value per receiver,
      *  every value in it, in the patch's universe (pb5). */
     void flushFromAUniverseThreadIsOneEvent();
+    /** A receiver of inputValueChanged() may call back into the patch
+     *  (deviceChannel(), showChannel(), channelMap(), setChannelMap()) from
+     *  the emit: the patch never emits with its lock held. 0.4.0 froze
+     *  when the pad's role lookup did (watchdog: fails, never hangs). */
+    void receiversCanCallBackIn();
 
 private:
     Doc* m_doc;
