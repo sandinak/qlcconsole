@@ -189,8 +189,8 @@ void ShowManager_Test::aCueSnapsToAMarker()
     QVERIFY(snapped);
     QCOMPARE(v->snapToMarker(20000 - quint32(2 * msPerPx), &snapped), quint32(20000));   // its end too
     QVERIFY(snapped);
-    const quint32 far = 10000 + quint32(60 * msPerPx);
-    QCOMPARE(v->snapToMarker(far, &snapped), far);
+    const quint32 farAway = 10000 + quint32(60 * msPerPx);
+    QCOMPARE(v->snapToMarker(farAway, &snapped), farAway);
     QVERIFY(!snapped);
 }
 
