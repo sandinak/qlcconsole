@@ -79,7 +79,7 @@ struct Rig
         mine->setName("Mine");
         doc->addFunction(mine);
         window.show();
-        QTest::qWaitForWindowExposed(&window);
+        (void)QTest::qWaitForWindowExposed(&window);
         tabs->setCurrentWidget(pm);
         pm->showFunction(mine->id());
     }
