@@ -31,6 +31,27 @@ real controller (needs the rig and a pad; it is a demo in 3.8's teacher
 guide); a short lesson on Running order for a show whose songs change
 night to night (an extension in 3.8); the preshow as section 0 of the
 show (3.8 Part 3). No pictures yet for 3.5, 3.8, 3.9.
+## Sub-cue ↔ inline cue — built, leftovers (0.4, subx, 2026-11-02)
+
+Built: `ShowTreeController::makeInlineCues()` / `makeSubCues()`
+(engine/src/showtreesubcueconvert.cpp), the tree's right-click (Make
+Inline Cue, Make Sub-cue of <the cue before>), `inline` and `sub of [n]`
+on the command line, help in show-tree.md, tests in showtreeplay_test
+(rig output per press, round trips) and showtreeview_test. Each edit is
+checked by resolving the production before and after (stage and
+cue-wide spans per cue) and carries looks where the rules differ, else
+refuses. Decided (can change): Make Inline Cue on 4.2 brings 4.3… along
+(a sub-cue plays only after the ones before it); a cue's own sub-cues
+come along as following sub-cues (the first auto-following at once);
+converted sub-cues are Cue-only and include the one before when the
+list's own rule wouldn't play them the same; a cue with no sub-cues gets
+a stand-in first sub-cue for its own look (removed again by Make Inline
+Cue when it is all that is left); the first sub-cue's "plays with GO"
+is the cue's hold 0. Leftovers: the menu offers only the cue before
+(`sub of 4` for another); a carried look can't keep a cue-wide effect
+whole (refused); looks carried into the next cue stay there after a
+round trip (the stage is the same).
+
 ## Encoder banks — built, leftovers (0.4, enc, 2026-11-01)
 
 Built: `EncoderBank` (engine/src/encoderbank.*, owned by the Control Map and

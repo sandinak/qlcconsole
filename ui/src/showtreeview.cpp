@@ -7701,6 +7701,24 @@ void ShowTreeView::slotTreeContextMenu(const QPoint &pos)
             menu.addAction(tr("+ Cue"), this, &ShowTreeView::slotNewCue);
         if ((kind == CueNode || kind == LayerNode || kind == TrackedLayerNode) && !inLooks)
             menu.addAction(tr("+ Sub-cue"), this, [this]() { newSubCue(); })->setObjectName("stNewSubCueMenu");
+        // 0.4: a sub-cue becomes a cue of the list, a cue a sub-cue of the
+        // one before; every step plays as before. Design mode only.
+        if (kind == CueNode && !inLooks)
+        {
+            const quint32 cueId = item->data(0, IdRole).toUInt();
+            const CueList *l = m_st->listOfCue(cueId);
+            QAction *convert = nullptr;
+            if (m_st->isSubCue(cueId))
+                convert = menu.addAction(tr("Make Inline Cue"), this, [this]() { convertSelectedCues(true); });
+            else if (l != nullptr && l->indexOf(cueId) > 0)
+                convert = menu.addAction(tr("Make Sub-cue of %1").arg(m_st->cueNumber(*l, l->indexOf(cueId) - 1)),
+                                         this, [this]() { convertSelectedCues(false); });
+            if (convert != nullptr)
+            {
+                convert->setObjectName(m_st->isSubCue(cueId) ? "stMakeInlineCueMenu" : "stMakeSubCueMenu");
+                convert->setEnabled(m_doc->mode() == Doc::Design);
+            }
+        }
         if (kind == CueNode || kind == LayerNode || kind == TrackedLayerNode)
             menu.addAction(tr("Open in Workbench"), this, [this]() { openSelectionInWorkbench(); })
                 ->setObjectName("stOpenWorkbenchMenu");
@@ -10074,6 +10092,40 @@ quint32 ShowTreeView::newSubCue()
     if (QTreeWidgetItem *item = m_tree->currentItem())
         m_tree->scrollToItem(item);
     return id;
+}
+
+bool ShowTreeView::convertSelectedCues(bool toInline)
+{
+    const quint32 current = currentCueId();
+    if (current == invalidId())
+    {
+        m_hint->setText(tr("Select a cue first."));
+        return false;
+    }
+    // The selected cues of the current one's kind (sub-cues, or cues of its
+    // list), the current one first if nothing else is selected.
+    const CueList *home = m_st->listOfCue(current);
+    QList<quint32> ids;
+    for (QTreeWidgetItem *sel : m_tree->selectedItems())
+    {
+        if (sel->data(0, KindRole).toInt() != CueNode)
+            continue;
+        const quint32 id = sel->data(0, IdRole).toUInt();
+        if (toInline ? m_st->isSubCue(id) : (home != nullptr && home->indexOf(id) >= 0))
+            ids << id;
+    }
+    if (!ids.contains(current))
+        ids = { current };
+    QString msg;
+    const bool ok = toInline ? m_st->makeInlineCues(ids, &msg) : m_st->makeSubCues(ids, invalidId(), &msg);
+    if (ok)
+    {
+        selectNode(current);
+        if (QTreeWidgetItem *item = m_tree->currentItem())
+            m_tree->scrollToItem(item);
+    }
+    m_hint->setText(msg);
+    return ok;
 }
 
 bool ShowTreeView::hitPlaceOf(QTreeWidgetItem *item, HitScope *scope, quint32 *place) const

@@ -1034,6 +1034,10 @@ public:
     /** + Sub-cue: a sub-cue of the selected cue (after the selected
      *  sub-cue). Its id (invalid: none). */
     quint32 newSubCue();
+    /** Make Inline Cue (the selected sub-cues) or Make Sub-cue of the cue
+     *  before (the selected cues): ShowTreeController::makeInlineCues() /
+     *  makeSubCues(), what happened said in the hint line. */
+    bool convertSelectedCues(bool toInline);
 private:
     QLabel *m_cueLooks;
     QListWidget *m_cueLayers;

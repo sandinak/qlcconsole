@@ -192,6 +192,44 @@ public:
     /** How many of @a listId's cues have sub-cues. */
     int subCueListsOf(quint32 listId) const;
 
+    /** Make Inline Cue (0.4): sub-cues @a subCueIds (of one cue) and every
+     *  sub-cue after them become cues of its list, right after the cue, in
+     *  order; GO steps through them. Advance: Auto-follow after N s is the
+     *  hold of the cue before ("auto after N s"), Sub GO is GO; the first
+     *  sub-cue played with GO, so the cue goes on to it at once (hold 0).
+     *  Ids are kept; numbers too when free, else numbered as + Cue does.
+     *  Every cue plays as before: they play as the list's cues if that
+     *  matches, else Cue-only, each including the one before (a sub-cue's
+     *  rule), with looks carried in where that still differs. One undo
+     *  step, Design mode only. False (and @a message why) when nothing
+     *  changed; @a message says what happened otherwise. */
+    bool makeInlineCues(const QList<quint32> &subCueIds, QString *message = nullptr);
+    /** Make Sub-cue (0.4): cues @a cueIds become the last sub-cues of
+     *  @a parentId (invalid: the cue before the first), in order, their own
+     *  sub-cues coming along after each (the first auto-following at once:
+     *  it played with GO). Reached by GO: Sub GO; by the cue's hold:
+     *  Auto-follow after that wait. A cue with no sub-cues yet gets a first
+     *  one that stands for its own look (GO plays it), unless it went on at
+     *  once. Every cue plays as before: what a cue started from is carried
+     *  in as looks where the two rules differ, else refused. Refused for the
+     *  base cue, a timecode, focus-call or (Manual) section-head cue, an
+     *  included cue, and under a skipped cue. One undo step, Design only. */
+    bool makeSubCues(const QList<quint32> &cueIds, quint32 parentId = ShowTree::invalidId(),
+                     QString *message = nullptr);
+
+private:
+    /** "g:12" as a person reads it: the group's or fixture's name. */
+    QString unitText(const QString &unit) const;
+    /** Carry looks into @a work's cues (with @a carry) until every cue of
+     *  production @a pi plays as it does now (@a pair: a new cue -> the cue
+     *  whose step it plays). */
+    bool carryUntilSame(QList<ShowTree::Production> &work, int pi, const QHash<quint32, quint32> &pair,
+                        bool carry, QList<quint32> *carriedInto, QString *why);
+    bool reusablesKept(const QList<ShowTree::Production> &work, int pi, const QList<quint32> &cues,
+                       QString *why) const;
+
+public:
+
     /************************************************************************
      * The cue runner (P7, §6B): what it reads of the tree
      ************************************************************************/

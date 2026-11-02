@@ -66,6 +66,18 @@ back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
 
 ### Run the show
 
+#### Sub-cue ↔ inline cue
+
+- **Make Inline Cue and Make Sub-cue, with every step playing as before.**
+  A sub-cue's right-click ▸ **Make Inline Cue** (`inline`) makes it, and the
+  sub-cues after it, cues of the list after their cue; a cue's right-click
+  ▸ **Make Sub-cue of 4** (`sub of`, `sub of 4`) makes it the last sub-cue
+  of the cue before. Advance maps (Auto-follow ↔ the hold before, Sub GO ↔
+  GO), ids stay (script anchors, hits, show-control references, skip), the
+  number too when free; where tracking differs the edit carries looks so
+  the stage is the same at every press, or refuses and says where. One
+  undo step, Design mode only ([Show Tree](docs/features/show-tree.md#sub-cue--inline-cue)).
+
 #### No-light zones and laser windows
 
 - **Mark the places that must stay dark, and Show Review checks every cue.**

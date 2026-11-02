@@ -5920,6 +5920,69 @@ static QString contextAction(ShowTreeView &view, QTreeWidgetItem *row, const QSt
     return seen;
 }
 
+/* 0.4: "need a function to convert subcues to inline cues ... and vice
+   versa". A cue's right-click ▸ Make Sub-cue of <the cue before>, a sub-cue's
+   ▸ Make Inline Cue; one undo step each, said in the hint line, greyed in
+   Operate. */
+void ShowTreeView_Test::subCuesAndInlineCuesFromTheMenu()
+{
+    FixtureGroup *towers = group("Towers", 0, 2);
+    const quint32 half = dimmer(127, "Half");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L", ListMode::Tracking);
+    QList<quint32> c;
+    for (int i = 0; i < 3; ++i)
+        c << st->addCue(list, i - 1, QString("C%1").arg(i + 1));
+    st->setLayerLook(c[1], st->addLayer(c[1], groupTarget(towers->id())), st->lookForPalette(half));
+    st->clearUndo();
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1280, 600);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QTreeWidget *tree = view.tree();
+    QLabel *hint = view.findChild<QLabel *>("stDropHint");
+    QVERIFY(hint != nullptr);
+    tree->expandAll();
+
+    // The first cue has no cue before it: nothing offered.
+    QVERIFY(view.selectNode(c[0]));
+    QCOMPARE(contextAction(view, cueRow(tree, c[0]), "stMakeSubCueMenu"), QString());
+
+    // Greyed in Operate.
+    m_doc->setMode(Doc::Operate);
+    bool enabled = true;
+    QVERIFY(view.selectNode(c[1]));
+    QCOMPARE(contextAction(view, cueRow(tree, c[1]), "stMakeSubCueMenu", nullptr, &enabled),
+             QString("Make Sub-cue of 1"));
+    QVERIFY(!enabled);
+    QVERIFY(!st->isSubCue(c[1]));
+    m_doc->setMode(Doc::Design);
+
+    tree->expandAll();
+    QVERIFY(view.selectNode(c[1]));
+    QCOMPARE(contextAction(view, cueRow(tree, c[1]), "stMakeSubCueMenu"), QString("Make Sub-cue of 1"));
+    quint32 parent = invalidId();
+    QVERIFY(st->isSubCue(c[1], &parent));
+    QCOMPARE(parent, c[0]);
+    QCOMPARE(st->undoText(), QString("Make sub-cue"));
+    QVERIFY2(hint->text().contains("is a sub-cue of 1"), qPrintable(hint->text()));
+
+    tree->expandAll();
+    QTreeWidgetItem *row = cueRow(tree, c[1]);
+    QVERIFY(row != nullptr);
+    QVERIFY(view.selectNode(c[1]));
+    QCOMPARE(contextAction(view, row, "stMakeInlineCueMenu"), QString("Make Inline Cue"));
+    QVERIFY(!st->isSubCue(c[1]));
+    QCOMPARE(st->undoText(), QString("Make inline cue"));
+    QCOMPARE(st->cueList(list)->cues.count(), 3);
+    QVERIFY2(hint->text().contains("is a cue now"), qPrintable(hint->text()));
+    QVERIFY(st->undo());
+    QVERIFY(st->isSubCue(c[1]));
+    QVERIFY(st->undo());
+    QVERIFY(!st->isSubCue(c[1]));
+}
+
 /* Branson: "in the show-tree we need a way to disable cues inline and skip
    them" -- then (2026-10-29) "skipping cues should be a right click menu off
    of a selected cue or set of cues ... the checkbox is overmuch". The menu's

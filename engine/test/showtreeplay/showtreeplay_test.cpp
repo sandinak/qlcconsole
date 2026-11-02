@@ -940,6 +940,324 @@ void ShowTreePlay_Test::subCueCommands()
 }
 
 /****************************************************************************
+ * 0.4: sub-cue <-> inline cue
+ ****************************************************************************/
+
+namespace
+{
+
+/** Every cue's stage, by id (sub-cues from their cue's look). */
+QHash<quint32, Stage> stagesOf(const ShowTreeController *st)
+{
+    QHash<quint32, Stage> out;
+    for (const Production &p : st->productions())
+        for (const CueList &l : p.lists)
+        {
+            if (l.looks)
+                continue;
+            const QList<ResolvedCue> rc = st->resolved(l);
+            for (const ResolvedCue &c : rc)
+                out.insert(c.cueId, stageOf(c));
+        }
+    return out;
+}
+
+/** The production's XML with the ids a new sub-cue list gets (its own and
+    its chaser's) left out: a round trip makes a new list. */
+QString productionXml(const ShowTreeController *st)
+{
+    QString xml;
+    QXmlStreamWriter w(&xml);
+    w.setAutoFormatting(true);
+    for (const Production &p : st->productions())
+        saveXML(&w, p);
+    static const QRegularExpression subs(QStringLiteral("(<SubCues[^>]*?) ID=\"\\d+\"([^>]*?) Chaser=\"\\d+\""));
+    xml.replace(subs, QStringLiteral("\\1\\2"));
+    static const QRegularExpression coll(QStringLiteral(" Collection=\"\\d+\""));
+    xml.replace(coll, QString());
+    return xml;
+}
+
+} // namespace
+
+QList<QHash<quint32, uchar>> ShowTreePlay_Test::walk(quint32 listId, const QString &presses)
+{
+    for (Function *f : m_doc->functions())
+        f->stop(FunctionParent::master());
+    tick(5);
+    Chaser *outer = qobject_cast<Chaser *>(m_doc->function(m_doc->showTree()->cueList(listId)->chaser));
+    QList<QHash<quint32, uchar>> out;
+    if (outer == nullptr)
+        return out;
+    for (const QChar &c : presses)
+    {
+        if (c == QLatin1Char('g'))
+            go(outer);
+        else
+            outer->subGo();
+        out << settle(20);
+    }
+    return out;
+}
+
+/* Make Inline Cue: 2.1 and 2.2 become cues after 2 (Cue-only, 2.2 from
+   2.1's look), GO steps through them and every press lights the rig as
+   before; Make Sub-cue puts them back, the same show. One undo step each. */
+void ShowTreePlay_Test::subCuesBecomeInlineCuesAndBack()
+{
+    const QList<quint32> ids = subCueShow();
+    ShowTreeController *st = m_doc->showTree();
+    QVERIFY(st->setSubCueFollow(ids[5], true, 200));
+    const QString xml = productionXml(st);
+    const QHash<quint32, Stage> stages = stagesOf(st);
+    const QList<QHash<quint32, uchar>> before = walk(ids[0], "ggsg");   // 1, 2.1, 2.2, 3
+
+    QString msg;
+    QVERIFY2(st->makeInlineCues({ ids[4] }, &msg), qPrintable(msg));
+    QVERIFY2(msg.contains("2.1 and 2.2 are cues now"), qPrintable(msg));
+    QVERIFY2(msg.contains("2.2 came along"), qPrintable(msg));
+    const CueList *list = st->cueList(ids[0]);
+    QCOMPARE(list->cues.count(), 5);
+    QCOMPARE(list->cues.at(2).id, ids[4]);
+    QCOMPARE(list->cues.at(3).id, ids[5]);
+    QCOMPARE(st->cueNumber(*list, 2), QString("2.1"));
+    QCOMPARE(st->cueNumber(*list, 3), QString("2.2"));
+    QCOMPARE(st->subCueList(ids[2]), invalidId());
+    // Advance: 2.1 played with GO (cue 2 goes on at once), 2.2 auto-
+    // followed 0.2 s after 2.1, cue 3 on GO as before.
+    QCOMPARE(list->cues.at(1).hold, 0u);
+    QCOMPARE(list->cues.at(2).hold, 200u);
+    QVERIFY(int(list->cues.at(3).hold) < 0);
+    // Cue-only (sub-cue changes never passed on), 2.2 from 2.1's look.
+    QCOMPARE(list->cues.at(3).mode, CueMode::CueOnly);
+    QCOMPARE(list->cues.at(3).includes, QList<quint32>({ ids[4] }));
+    QCOMPARE(stagesOf(st), stages);
+    const QList<QHash<quint32, uchar>> want { before[0], before[2], before[3] };
+    QCOMPARE(walk(ids[0], "ggg"), want);
+    const QList<QHash<quint32, uchar>> mid = walk(ids[0], "gg");
+    QCOMPARE(mid.last(), before[1]);    // GO into 2 lands on 2.1 (2.2 still 0.2 s away)
+
+    // And back: the same show.
+    QVERIFY2(st->makeSubCues({ ids[4], ids[5] }, ids[2], &msg), qPrintable(msg));
+    QVERIFY2(msg.contains("sub-cues of 2"), qPrintable(msg));
+    QCOMPARE(productionXml(st), xml);
+    QCOMPARE(walk(ids[0], "ggsg"), before);
+
+    // One undo step each way.
+    QVERIFY(st->undo());
+    QCOMPARE(st->cueList(ids[0])->cues.count(), 5);
+    QVERIFY(st->undo());
+    QCOMPARE(productionXml(st), xml);
+}
+
+/* A point cue that tracks passes its changes on; as a sub-cue it wouldn't,
+   so they are carried into the cue after. Cue 2 had no sub-cues: 2.1 stands
+   for its own look (GO still plays it), 2.5 is Sub GO. */
+void ShowTreePlay_Test::aCueBecomesASubCueCarryingWhatItPassedOn()
+{
+    FixtureGroup *a = group("A", { m_fixtures[0] });
+    FixtureGroup *b = group("B", { m_fixtures[1] });
+    const quint32 half = dimmer(127, "Half");
+    const quint32 full = dimmer(255, "Full");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("Dance");
+    const quint32 listId = st->addCueList(prod, "Song");
+    const quint32 c1 = st->addCue(listId, -1, "One");
+    const quint32 c2 = st->addCue(listId, 0, "Two");
+    const quint32 c3 = st->addCue(listId, 1, "Three");
+    st->setTargetLook(c1, groupTarget(a->id()), st->lookForPalette(half));
+    st->setTargetLook(c2, groupTarget(a->id()), st->lookForPalette(full));
+    const quint32 point = st->addCue(listId, 1, "Hit");
+    st->setTargetLook(point, groupTarget(b->id()), st->lookForPalette(full));
+    QCOMPARE(st->cueNumber(*st->cueList(listId), 2), QString("2.5"));
+    const QHash<quint32, Stage> stages = stagesOf(st);
+    const QList<QHash<quint32, uchar>> before = walk(listId, "gggg");   // 1, 2, 2.5, 3
+    QCOMPARE(int(before[3][1]), 255);                                   // B tracks into 3
+
+    QString msg;
+    QVERIFY2(st->makeSubCues({ point }, invalidId(), &msg), qPrintable(msg));
+    QVERIFY2(msg.contains("2.5 is a sub-cue of 2"), qPrintable(msg));
+    QVERIFY2(msg.contains("carried into 3"), qPrintable(msg));
+    const CueList *subs = st->cueList(st->subCueList(c2));
+    QVERIFY(subs != nullptr);
+    QCOMPARE(subs->cues.count(), 2);
+    QCOMPARE(subs->cues.at(1).id, point);
+    QCOMPARE(st->cueNumber(*subs, 1), QString("2.5"));
+    QVERIFY(!subs->cues.at(1).follow);                 // it was GO: Sub GO now
+    QVERIFY(subs->cues.at(0).layers.isEmpty());        // cue 2's own look
+    QVERIFY(!st->cue(c3)->layers.isEmpty());           // B carried into 3
+    const QHash<quint32, Stage> now = stagesOf(st);
+    for (auto it = stages.constBegin(); it != stages.constEnd(); ++it)
+        QCOMPARE(now.value(it.key()), it.value());
+    QCOMPARE(now.value(subs->cues.at(0).id), stages.value(c2));
+    QCOMPARE(walk(listId, "ggsg"), before);
+
+    // Back inline: the stand-in goes, 2.5 tracks again, cue 3 as before.
+    QVERIFY2(st->makeInlineCues({ point }, &msg), qPrintable(msg));
+    QCOMPARE(st->subCueList(c2), invalidId());
+    QCOMPARE(st->cueList(listId)->cues.count(), 4);
+    QCOMPARE(st->cue(point)->mode, CueMode::ListDefault);
+    QCOMPARE(st->cueNumber(*st->cueList(listId), 2), QString("2.5"));
+    QCOMPARE(walk(listId, "gggg"), before);
+}
+
+/* A non-tracking list: each cue plays only its own. As a sub-cue, 2.5 would
+   start from cue 2's look, so what cue 2 lights that 2.5 doesn't is turned
+   off in it ("Off here"); back inline, that goes again. */
+void ShowTreePlay_Test::aBlockCueBecomesASubCueAndBack()
+{
+    FixtureGroup *a = group("A", { m_fixtures[0] });
+    FixtureGroup *b = group("B", { m_fixtures[1] });
+    const quint32 half = dimmer(127, "Half");
+    const quint32 full = dimmer(255, "Full");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("Dance");
+    const quint32 listId = st->addCueList(prod, "Song", ListMode::NonTracking);
+    const quint32 c1 = st->addCue(listId, -1, "One");
+    const quint32 c2 = st->addCue(listId, 0, "Two");
+    const quint32 c3 = st->addCue(listId, 1, "Three");
+    const quint32 c4 = st->addCue(listId, 2, "Four");
+    st->setTargetLook(c1, groupTarget(a->id()), st->lookForPalette(half));
+    st->setTargetLook(c2, groupTarget(a->id()), st->lookForPalette(full));
+    st->setTargetLook(c2, groupTarget(b->id()), st->lookForPalette(half));
+    st->setTargetLook(c3, groupTarget(b->id()), st->lookForPalette(full));
+    st->setTargetLook(c4, groupTarget(a->id()), st->lookForPalette(half));
+    const QString xml = productionXml(st);
+    const QList<QHash<quint32, uchar>> before = walk(listId, "gggg");
+    QCOMPARE(int(before[2][0]), 0);                     // 3 alone: A dark
+
+    QString msg;
+    QVERIFY2(st->makeSubCues({ c3 }, invalidId(), &msg), qPrintable(msg));
+    QVERIFY(st->isSubCue(c3));
+    QCOMPARE(walk(listId, "ggsg"), before);
+    // 3 isn't a number under 2: it is numbered as + Sub-cue does (2.2, after
+    // the stand-in 2.1), and keeps that number back in the list.
+    QVERIFY2(msg.contains("Numbered as + Sub-cue does"), qPrintable(msg));
+    QCOMPARE(st->cueNumber(*st->cueList(st->subCueList(c2)), 1), QString("2.2"));
+    QVERIFY2(st->makeInlineCues({ c3 }, &msg), qPrintable(msg));
+    QCOMPARE(productionXml(st).replace("Number=\"2.2\" Name=\"Three\"", "Number=\"3\" Name=\"Three\""), xml);
+    QCOMPARE(walk(listId, "gggg"), before);
+}
+
+/* Make Inline Cue on 2.2 of three: 2.2 and 2.3 go (a sub-cue plays only after
+   the ones before it), 2.1 stays; 2.2 starts from 2.1's look all the same. */
+void ShowTreePlay_Test::aLaterSubCueBringsTheOnesAfterIt()
+{
+    const QList<quint32> ids = subCueShow();
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 s3 = st->addSubCue(ids[2], "Out");
+    const QHash<quint32, Stage> stages = stagesOf(st);
+    const QList<QHash<quint32, uchar>> before = walk(ids[0], "ggssg");  // 1, 2.1, 2.2, 2.3, 3
+
+    QString msg;
+    QVERIFY2(st->makeInlineCues({ ids[5] }, &msg), qPrintable(msg));
+    QVERIFY2(msg.contains("2.3 came along"), qPrintable(msg));
+    const CueList *subs = st->cueList(st->subCueList(ids[2]));
+    QCOMPARE(subs->cues.count(), 1);
+    const CueList *list = st->cueList(ids[0]);
+    QCOMPARE(list->cues.at(2).id, ids[5]);
+    QCOMPARE(list->cues.at(3).id, s3);
+    QCOMPARE(stagesOf(st), stages);
+    const QList<QHash<quint32, uchar>> want { before[0], before[1], before[2], before[3] };
+    QCOMPARE(walk(ids[0], "gggg"), want);
+    QCOMPARE(walk(ids[0], "ggggg").last(), before[4]);
+}
+
+/* Ids stay (a script anchor, a hit under the cue, skip); a taken number is
+   renumbered as + Cue would; and what can't be is refused, changing nothing. */
+void ShowTreePlay_Test::subCueConversionKeepsIdsAndRefusesWhatItCant()
+{
+    const QList<quint32> ids = subCueShow();
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->productions().first().id;
+    QVERIFY(st->setScriptText(prod, "Verse one\nChorus", QString()));
+    QVERIFY(st->anchorCue(prod, ids[5], 3, ShowTreeController::ScriptMark::Go));
+    const quint32 hit = st->addHit(HitScope::Cue, ids[5], "Flash");
+    QVERIFY(hit != invalidId());
+    QVERIFY(st->setCuesSkipped({ ids[5] }, true));
+    Cue clash;
+    QString msg;
+
+    QVERIFY2(st->makeInlineCues({ ids[5] }, &msg), qPrintable(msg));
+    QVERIFY(!st->isSubCue(ids[5]));
+    QVERIFY(st->cue(ids[5])->skip);
+    QCOMPARE(st->cue(hit)->scopeOf, ids[5]);
+    QVERIFY(st->productions().first().script.anchor(ids[5]) != nullptr);
+    QVERIFY(st->undo());
+
+    // Refused: Operate, the first cue, a cue under itself, a base cue, a
+    // timecode cue, an included cue -- nothing changes.
+    const QString xml = productionXml(st);
+    m_doc->setMode(Doc::Operate);
+    QVERIFY(!st->makeInlineCues({ ids[4] }, &msg));
+    QVERIFY(msg.contains("Design"));
+    m_doc->setMode(Doc::Design);
+    QVERIFY(!st->makeSubCues({ ids[1] }, invalidId(), &msg));
+    QVERIFY2(msg.contains("first cue"), qPrintable(msg));
+    QVERIFY(!st->makeSubCues({ ids[3] }, ids[4], &msg));      // under a sub-cue
+    QVERIFY(!st->makeInlineCues({ ids[3] }, &msg));           // not a sub-cue
+    QVERIFY(st->setBaseCue(ids[0], ids[3]));
+    QVERIFY(!st->makeSubCues({ ids[3] }, invalidId(), &msg));
+    QVERIFY2(msg.contains("base cue"), qPrintable(msg));
+    QVERIFY(st->undo());
+    QVERIFY(st->setCueTimecode(ids[3], 5000));
+    QVERIFY(!st->makeSubCues({ ids[3] }, invalidId(), &msg));
+    QVERIFY2(msg.contains("timecode"), qPrintable(msg));
+    QVERIFY(st->undo());
+    QVERIFY(st->addInclude(ids[3], ids[1]));
+    QVERIFY(!st->makeSubCues({ ids[1] }, invalidId(), &msg));
+    QVERIFY(st->undo());
+    QCOMPARE(productionXml(st), xml);
+
+    // A cue 2.0.5 right after cue 2: 2.1 and 2.2 don't fit there in number
+    // order, so they are numbered as + Cue would and the message says so.
+    clash = *st->cue(st->addCue(ids[0], 1, "Squeeze"));
+    clash.number = "2.0.5";
+    QVERIFY2(st->setCue(clash, &msg), qPrintable(msg));
+    QVERIFY2(st->makeInlineCues({ ids[4] }, &msg), qPrintable(msg));
+    QVERIFY2(msg.contains("2.1 is numbered"), qPrintable(msg));
+    const CueList *list = st->cueList(ids[0]);
+    for (int i = 1; i < list->cues.count(); ++i)
+        QVERIFY(compareCueNumbers(st->cueNumber(*list, i - 1), st->cueNumber(*list, i)) < 0);
+}
+
+void ShowTreePlay_Test::subCueConversionCommands()
+{
+    const QList<quint32> ids = subCueShow();
+    ShowTreeController *st = m_doc->showTree();
+    ShowTreeCommand cmd(m_doc, st);
+    ShowTreeCommand::Context ctx;
+    ctx.production = st->productions().first().id;
+    ctx.list = st->subCueList(ids[2]);
+    ctx.cue = ids[5];
+
+    ShowTreeCommand::Result r = cmd.run("inline", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    QVERIFY(!st->isSubCue(ids[5]));
+    QCOMPARE(r.context.list, ids[0]);
+    QCOMPARE(r.context.cue, ids[5]);
+    r = cmd.run("inline", r.context);
+    QVERIFY(!r.ok);                                    // not a sub-cue now
+    r = cmd.run("sub of 9", r.context);
+    QVERIFY(!r.ok);
+    QVERIFY2(r.message.contains("No cue 9"), qPrintable(r.message));
+    r = cmd.run("sub of 2", r.context);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    QVERIFY(st->isSubCue(ids[5]));
+    QCOMPARE(r.context.list, st->subCueList(ids[2]));
+    // `sub of` alone: under the cue before.
+    ctx.list = ids[0];
+    ctx.cue = ids[3];
+    r = cmd.run("sub of", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    quint32 parent = invalidId();
+    QVERIFY(st->isSubCue(ids[3], &parent));
+    QCOMPARE(parent, ids[2]);
+    // A new sub-cue named "of…" still works: `sub "of"`.
+    QVERIFY(ShowTreeCommand::word("inline") != nullptr);
+}
+
+/****************************************************************************
  * P7: the cue runner
  ****************************************************************************/
 
