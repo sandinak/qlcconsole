@@ -80,6 +80,7 @@ private slots:
     void pwr10();
     void pwr11();
     void pwr11Mover();
+    void pwr11BandedPan();
     void cue03();
     void cue12();
     void pat05();

@@ -34,6 +34,7 @@
 #include "nolightzone.h"
 #include "qlcphysical.h"
 #include "qlcfixturemode.h"
+#include "qlcchannel.h"
 #include "qlcfixturedef.h"
 #include "qlcpalette.h"
 #include "aimsolver.h"
@@ -59,7 +60,7 @@ struct Beam
 {
     bool lit = false;
     bool hasPos = false;
-    double pan = 0.5, tilt = 0.5;   //!< fractions of the range
+    double pan = 0.5, tilt = 0.5;   //!< DMX fractions (value / 255)
 };
 
 bool isMover(const Fixture *fx)
@@ -134,6 +135,20 @@ QHash<quint32, Beam> beamsOf(ReviewContext &ctx, const ResolvedCue &cue,
     return beams;
 }
 
+/** Where a DMX fraction (value / 255) on @a fx's pan or tilt lies in the head's
+ *  range: across the pointing band (Fixture::positionBand()) when the channel
+ *  declares one -- a UST points with 0-127 and spins above -- else unchanged. */
+double headFraction(const Fixture *fx, QLCChannel::Group group, double dmxFraction)
+{
+    const QLCFixtureMode *mode = fx->fixtureMode();
+    const quint32 n = fx->channelNumber(group, QLCChannel::MSB);
+    const QLCChannel *ch = (mode != nullptr && n != QLCChannel::invalid()) ? mode->channel(n) : nullptr;
+    uchar lo = 0, hi = 255;
+    if (ch == nullptr || !Fixture::positionBand(ch, lo, hi))
+        return dmxFraction;
+    return Fixture::positionFraction(ch, dmxFraction * 255.0);
+}
+
 /** The rays a lit light throws, from @a apex. False when it has no throw. */
 bool raysOf(Doc *doc, Fixture *fx, const Beam &b, QVector3D &apex, QVector<QVector3D> &rays,
             bool &laser, double &coneDeg)
@@ -146,8 +161,10 @@ bool raysOf(Doc *doc, Fixture *fx, const Beam &b, QVector3D &apex, QVector<QVect
     if (isMover(fx))
     {
         const double panSpan = MoveSpeed::panSpanDeg(fx), tiltSpan = MoveSpeed::tiltSpanDeg(fx);
-        if (!AimSolver::beamDirection(mp->fixtureRigProps(fx->id()), (b.pan - 0.5) * panSpan,
-                                      (b.tilt - 0.5) * tiltSpan, dir))
+        if (!AimSolver::beamDirection(mp->fixtureRigProps(fx->id()),
+                                      (headFraction(fx, QLCChannel::Pan, b.pan) - 0.5) * panSpan,
+                                      (headFraction(fx, QLCChannel::Tilt, b.tilt) - 0.5) * tiltSpan,
+                                      dir))
             return false;
     }
     else if (!RigHeads::fixedThrow(doc, fx->id(), dir))

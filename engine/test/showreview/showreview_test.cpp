@@ -59,6 +59,8 @@
 #include "movespeed.h"
 #include "stagetarget.h"
 #include "nolightzone.h"
+#include "aimsolver.h"
+#include "righeads.h"
 
 using namespace ShowTree;
 
@@ -2286,6 +2288,66 @@ void ShowReview_Test::pwr11Mover()
     z.x = 14.0f; z.width = 2.0f;
     mp->setNoLightZone(z);
     QVERIFY(quiet("PWR-11"));
+}
+
+/* A UST points with pan DMX 0-127 and spins above it. The no-light-zone check
+   reads that pan across the band, so a head aimed into a zone trips PWR-11 and
+   the same head aimed away does not -- and a zone where the whole-channel
+   reading would have put the beam stays quiet. */
+void ShowReview_Test::pwr11BandedPan()
+{
+    MonitorProperties *mp = m_doc->monitorProperties();
+    QLCFixtureDef *def = new QLCFixtureDef();
+    QLCChannel *pan = chan(def, "Pan", QLCChannel::PositionPan);
+    pan->addCapability(new QLCCapability(0, 127, "Indexed position"));
+    pan->capabilities().first()->setPreset(QLCCapability::RotationIndexed);
+    pan->addCapability(new QLCCapability(128, 255, "Rotation"));
+    Fixture *ust = make(m_doc, "UST 1", QStringLiteral("UST"), QLCFixtureDef::MovingHead, def,
+                        { pan, chan(def, "Tilt", QLCChannel::PositionTilt),
+                          chan(def, "Dimmer", QLCChannel::IntensityMasterDimmer) }, 200, 0, 0);
+    QVERIFY(ust != nullptr);
+    const quint32 fid = ust->id();
+    FixturePreviewItem item;
+    item.m_baseItem.m_position = QVector3D(5000, 5000, 6);
+    mp->setFixtureProperties(fid, item);
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 lid = st->addCueList(st->addProduction("Show"), "Act 1");
+    const quint32 c1 = st->addCue(lid, -1, "One");
+    cueHead(m_doc, c1, ust, 270, 180, 200);     // mid band (DMX 63.5), 45 degrees off straight down
+
+    // Where the beam lands on the floor for a pan offset from home, in metres.
+    const FixtureRigProps rp = mp->fixtureRigProps(fid);
+    const QVector3D apex = RigHeads::fixtureCentre(m_doc, fid);
+    auto landing = [&](double panOffsetDeg) {
+        QVector3D dir;
+        AimSolver::beamDirection(rp, panOffsetDeg, 45.0, dir);
+        dir.normalize();
+        const float t = apex.z() / -dir.z();
+        return QVector3D(apex.x() + dir.x() * t, apex.y() + dir.y() * t, 0);
+    };
+    // Banded: DMX 63.5 is the middle of the band, pan offset 0. Over the whole
+    // channel the same DMX would read 0.249, 135 degrees round.
+    uchar lo, hi;
+    QVERIFY(Fixture::positionBand(pan, lo, hi));
+    QVERIFY(qAbs(Fixture::positionFraction(pan, 63.5) - 0.5) < 1e-9);
+    QVERIFY(qAbs(63.5 / 255.0 - 0.5) > 0.2);
+    const QVector3D right = landing(0.0), wrong = landing((63.5 / 255.0 - 0.5) * 540.0);
+    QVERIFY((right - wrong).length() > 3.0);
+
+    const quint32 zid = mp->addNoLightZone(0.0f, 0.0f);
+    auto zoneAt = [&](const QVector3D &p) {
+        NoLightZone z = mp->noLightZone(zid);
+        z.name = QStringLiteral("Zone");
+        z.width = 3.0f; z.depth = 3.0f; z.height = 3.0f; z.floorZ = 0.0f;
+        z.x = p.x() - 1.5f; z.y = p.y() - 1.5f;
+        mp->setNoLightZone(z);
+    };
+    // The zone where the head points: PWR-11.
+    zoneAt(right);
+    QVERIFY2(fires("PWR-11"), "a banded head aimed into the zone");
+    // The zone where the whole channel would have put the beam: quiet.
+    zoneAt(wrong);
+    QVERIFY2(quiet("PWR-11"), "the head does not point there");
 }
 
 void ShowReview_Test::everyCheckIsTested()
