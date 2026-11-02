@@ -17,6 +17,37 @@ most of 0.5 ("The show explains itself"); there is no separate 0.3.1.
 A home for QLC+ 4 users: QLC+ 4's habits that qlcconsole had dropped are
 back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
 
+### One right-click menu per kind
+
+- **A fixture group, a fixture or a palette has the same right-click menu
+  wherever you click it.** Fixtures tab, Build ▸ Groups & fixtures, a Build
+  scene, Plot Layers and the Show Tree's Library all build the menu with
+  one builder, so the items, names and order match. A fixture group gets
+  Edit Head Layout…, Locate, Why is this on?, Output Rules…, Select All
+  Similar, Move to Folder ▸, Rename and Delete Fixture Group…. A fixture
+  gets Fixture Properties…, Locate, Why is this on?, Patch… and Output
+  Rules….
+- **Every migrated menu follows one order:** editor first, then actions,
+  selection, organising, the place's own items, view, then Copy, Paste,
+  Duplicate and Rename. Delete is always last.
+- **Wording is consistent.** Items are Title Case, and "…" appears only
+  when a dialog follows. Delete destroys something; Remove from… takes it
+  out of a scene or a truss.
+- **Fewer items on a row's menu.**
+  - The ten "New Color… New Formation" items are one **New Palette ▸** on
+    empty space.
+  - "New effect…" and "New scene" are on empty space and folders, not on
+    every row.
+  - The Fixtures tab's "Remove Group (Keep Fixtures)" is Delete Fixture
+    Group….
+  - Nine plot items' unreachable right-click menus are gone.
+- **The empty plot's menu** names no shortcut in its labels and puts Delete
+  Selected last. A stage piece says Edit X… like every other feature, and
+  a no-light zone's is Delete No-light Zone.
+- **A test builds every migrated menu in every place** and fails the gate
+  on drift. See [CONTEXT_MENUS.md](docs/design/CONTEXT_MENUS.md) for the
+  inventory and the canon.
+
 ### Performance over time
 
 - **The [Performance](docs/performance.md#performance-over-time) page gains data points as tests run.** Every `make perf`, `make perf-record` and nightly run appends its key metrics to `docs/perf-data/history.csv`; `tools/perf/plot.py trends` draws them per machine class (baseline re-records, failed metrics and the FadeChannel memory regression and fix marked); `make perf-history-commit` commits the history. Backfilled from the existing baselines and the 2026-11-01 runs.

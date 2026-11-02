@@ -1125,7 +1125,7 @@ list (GO), one cue of a list (a jump to it) or a hit.
 
 - **Learn it where the thing is.** Right-click a scene in Build (the
   navigator, or a layer in the Workbench), an effect in Build ▸ Effects,
-  or a cue list, cue or hit in the Show Tree → **Learn trigger…**. Press
+  or a cue list, cue or hit in the Show Tree → **Learn Trigger…**. Press
   the control; the dialog names it (*"MIDI · Note 60 (C4), MIDI ch 1"*).
   Press another to change your mind, pick how a press acts, then **OK**.
   Any patched input universe is heard. A sub-cue has no trigger of its

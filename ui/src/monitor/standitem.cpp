@@ -148,18 +148,3 @@ void StandItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
         emit itemDropped(this);
 }
 
-void StandItem::contextMenuEvent(QGraphicsSceneContextMenuEvent *event)
-{
-    QMenu menu;
-    QAction *lockAct = menu.addAction(
-        m_stand->locked() ? tr("Unlock Stand") : tr("Lock Stand"));
-    if (menu.exec(event->screenPos()) == lockAct)
-    {
-        m_stand->setLocked(!m_stand->locked());
-        const bool canMove = !m_stand->locked();
-        setFlag(ItemIsMovable, canMove && !m_elevation);
-        setCursor((canMove && !m_elevation) ? AppUtil::nativeCursorShape(Qt::SizeAllCursor) : Qt::ArrowCursor);
-        update();
-        if (m_doc) m_doc->setModified();
-    }
-}

@@ -168,7 +168,7 @@ void ControlMapUi_Test::theMenuActionSaysWhatIsBound()
     QMenu menu;
     QAction *learn = ControlLearnDialog::addTo(&menu, m_doc, ControlMap::function(a->id()), nullptr);
     QVERIFY(learn != nullptr);
-    QCOMPARE(learn->text(), QString("Learn trigger…"));
+    QCOMPARE(learn->text(), QString("Learn Trigger…"));
     QCOMPARE(learn->objectName(), QString("learnTrigger"));
     m_doc->controlMap()->setBinding({ 0, 7, ControlMap::function(a->id()), ControlMap::Toggle });
     QAction *bound = ControlLearnDialog::addTo(&menu, m_doc, ControlMap::function(a->id()), nullptr);

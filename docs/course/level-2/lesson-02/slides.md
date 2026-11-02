@@ -30,7 +30,7 @@ teacher says. It can be turned into a deck as it is.*
 
 ## 4. Who uses it?
 
-- Library → right-click → **Used by**.
+- Library → right-click → **Used By**.
 - Check it before you change a palette.
 
 ## 5. The song's own colours

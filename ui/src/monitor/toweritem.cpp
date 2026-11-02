@@ -162,18 +162,3 @@ void TowerItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
         emit itemDropped(this);
 }
 
-void TowerItem::contextMenuEvent(QGraphicsSceneContextMenuEvent *event)
-{
-    QMenu menu;
-    QAction *lockAct = menu.addAction(
-        m_tower->locked() ? tr("Unlock Tower") : tr("Lock Tower"));
-    if (menu.exec(event->screenPos()) == lockAct)
-    {
-        m_tower->setLocked(!m_tower->locked());
-        const bool canMove = !m_tower->locked();
-        setFlag(ItemIsMovable, canMove && !m_elevation);
-        setCursor((canMove && !m_elevation) ? AppUtil::nativeCursorShape(Qt::SizeAllCursor) : Qt::ArrowCursor);
-        update();
-        if (m_doc) m_doc->setModified();
-    }
-}

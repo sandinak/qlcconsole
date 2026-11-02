@@ -76,7 +76,7 @@ On the projector:
 
 1. Click **1.0.4 Solo** → **+ Cue** → `Bridge`, **Mode: Block**.
 2. Library → **All → Groups → Trusses**: click **Trusses SR**, ⌘-click
-   **Trusses SL**, right-click → **Make set…** → `Truss Sides`. Drag it
+   **Trusses SL**, right-click → **Make Set…** → `Truss Sides`. Drag it
    onto the dashed box; **Blue**, **Full**.
 3. Right-click the layer in the tree: point at **Split** greyed out (a set
    is one layer). **Add child layer → Trusses SR**, then **Amber** on it.
@@ -93,7 +93,7 @@ On the projector:
 
 | You see | Likely cause | Say |
 |---|---|---|
-| The set holds only one group | Only one group was selected for Make set… | "⌘-click the second group first, then right-click." |
+| The set holds only one group | Only one group was selected for Make Set… | "⌘-click the second group first, then right-click." |
 | US is a layer of its own below Steps | ⇧ wasn't held through the drop | "Undo, and hold ⇧ until you let go. Read the top bar first." |
 | The whole truss is amber | Amber dropped on Truss Sides, not the child | "Which row is the SR side?" |
 | The Solo's spots are in the bridge | Mode not set to Block | "What mode is a hard start?" |
@@ -150,7 +150,7 @@ Extension, Solo: the course test (`lessonTwoThreeSolo`) solos the Truss Sides la
 
 Every step of the handout is run by the course test (`ui/test/courseshow`,
 `levelTwoWithTheMouse`, `lessonTwoThreeExtension`) on the real app,
-offscreen: the Library's **Make set…** on two selected groups, the set's
+offscreen: the Library's **Make Set…** on two selected groups, the set's
 drop and its hint, the tree's right-click menu (**Add child layer →
 Trusses SR**; **Split** greyed on a set's layer), the ⇧-drop of US onto
 the Steps row and its hint, and what the rig sends (both sides blue; SR

@@ -16,7 +16,7 @@ Do **one** of these.
 2. Give the verse a colour of the song's own, the same way: right-click
    **Lavender** → **Duplicate**, name it `Verse Colour` in the Look
    Editor, and move it to the **01-Everybody Scream** folder (right-click
-   → **Move to folder** → **01-Everybody Scream**).
+   → **Move to Folder** → **01-Everybody Scream**).
 3. Click **1.0.1 Verse** and drag **Verse Colour** onto its **StepTops**
    row.
 4. Open it with **✎** and pick a verse colour you like better. Check

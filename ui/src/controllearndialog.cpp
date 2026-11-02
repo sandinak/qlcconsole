@@ -122,7 +122,7 @@ QAction *ControlLearnDialog::addTo(QMenu *menu, Doc *doc, const ControlMap::Targ
     if (menu == nullptr || doc == nullptr || !target.isValid())
         return nullptr;
     const ControlMap::Binding *b = doc->controlMap()->binding(target);
-    const QString text = b == nullptr ? tr("Learn trigger…")
+    const QString text = b == nullptr ? tr("Learn Trigger…")
                                       : tr("Trigger: %1…").arg(doc->controlMap()->controlName(b->universe, b->channel));
     QAction *a = menu->addAction(text, parent, [doc, target, parent]() {
         ControlLearnDialog d(doc, target, parent);

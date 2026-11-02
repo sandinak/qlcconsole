@@ -50,6 +50,7 @@
 #include "collectioneditor.h"
 #include "audioplugincache.h"
 #include "functionmanager.h"
+#include "contextmenus.h"
 #include "rgbmatrixeditor.h"
 #include "functionwizard.h"
 #include "palettemanager.h"
@@ -278,7 +279,7 @@ void FunctionManager::initActions()
 {
     /* Manage actions */
     m_addSceneAction = new QAction(QIcon(":/scene.png"),
-                                   tr("New &scene"), this);
+                                   tr("New &Scene"), this);
     m_addSceneAction->setShortcut(QKeySequence("CTRL+1"));
     m_addSceneAction->setToolTip(tr(
         "Creates a new scene — rename it to follow this show's naming "
@@ -287,7 +288,7 @@ void FunctionManager::initActions()
             this, SLOT(slotAddScene()));
 
     m_addChaserAction = new QAction(QIcon(":/chaser.png"),
-                                    tr("New c&haser"), this);
+                                    tr("New C&haser"), this);
     m_addChaserAction->setShortcut(QKeySequence("CTRL+2"));
     m_addChaserAction->setToolTip(tr(
         "Creates a new chaser — rename it to follow this show's naming "
@@ -296,7 +297,7 @@ void FunctionManager::initActions()
             this, SLOT(slotAddChaser()));
 
     m_addSequenceAction = new QAction(QIcon(":/sequence.png"),
-                                    tr("New se&quence"), this);
+                                    tr("New Se&quence"), this);
     m_addSequenceAction->setShortcut(QKeySequence("CTRL+3"));
     connect(m_addSequenceAction, SIGNAL(triggered(bool)),
             this, SLOT(slotAddSequence()));
@@ -308,7 +309,7 @@ void FunctionManager::initActions()
             this, SLOT(slotAddEFX()));
 
     m_addCollectionAction = new QAction(QIcon(":/collection.png"),
-                                        tr("New c&ollection"), this);
+                                        tr("New C&ollection"), this);
     m_addCollectionAction->setShortcut(QKeySequence("CTRL+5"));
     connect(m_addCollectionAction, SIGNAL(triggered(bool)),
             this, SLOT(slotAddCollection()));
@@ -320,25 +321,25 @@ void FunctionManager::initActions()
             this, SLOT(slotAddRGBMatrix()));
 
     m_addScriptAction = new QAction(QIcon(":/script.png"),
-                                 tr("New scrip&t"), this);
+                                 tr("New Scrip&t"), this);
     m_addScriptAction->setShortcut(QKeySequence("CTRL+7"));
     connect(m_addScriptAction, SIGNAL(triggered(bool)),
             this, SLOT(slotAddScript()));
 
     m_addAudioAction = new QAction(QIcon(":/audio.png"),
-                                   tr("New au&dio"), this);
+                                   tr("New Au&dio"), this);
     m_addAudioAction->setShortcut(QKeySequence("CTRL+8"));
     connect(m_addAudioAction, SIGNAL(triggered(bool)),
             this, SLOT(slotAddAudio()));
 
     m_addVideoAction = new QAction(QIcon(":/video.png"),
-                                   tr("New vid&eo"), this);
+                                   tr("New Vid&eo"), this);
     m_addVideoAction->setShortcut(QKeySequence("CTRL+9"));
     connect(m_addVideoAction, SIGNAL(triggered(bool)),
             this, SLOT(slotAddVideo()));
 
     m_addFolderAction = new QAction(QIcon(":/folder.png"),
-                                   tr("New fo&lder"), this);
+                                   tr("New Fo&lder"), this);
     m_addFolderAction->setShortcut(QKeySequence("CTRL+L"));
     connect(m_addFolderAction, SIGNAL(triggered(bool)),
             this, SLOT(slotAddFolder()));
@@ -349,7 +350,7 @@ void FunctionManager::initActions()
             this, SLOT(slotSelectAutostartFunction()));
 
     m_wizardAction = new QAction(QIcon(":/wizard.png"),
-                                 tr("Function &Wizard"), this);
+                                 tr("Function &Wizard…"), this);
     m_wizardAction->setShortcut(QKeySequence("CTRL+W"));
     connect(m_wizardAction, SIGNAL(triggered(bool)),
             this, SLOT(slotWizard()));
@@ -365,7 +366,7 @@ void FunctionManager::initActions()
     connect(m_paletteManagerAction, SIGNAL(triggered(bool)),
             this, SLOT(slotPaletteManager()));
 
-    m_showTreeFunctionsAction = new QAction(tr("Show the Show Tree's own functions"), this);
+    m_showTreeFunctionsAction = new QAction(tr("Show the Show Tree's Own Functions"), this);
     m_showTreeFunctionsAction->setObjectName(QStringLiteral("fmShowTreeFunctions"));
     m_showTreeFunctionsAction->setCheckable(true);
     m_showTreeFunctionsAction->setChecked(showTreeFunctionsShown());
@@ -379,14 +380,14 @@ void FunctionManager::initActions()
     // Create a new palette directly in the tree (under the "Palettes"
     // category / currently-selected palette folder).
     m_addPaletteAction = new QAction(QIcon(":/color.png"),
-                                     tr("New p&alette…"), this);
+                                     tr("New P&alette…"), this);
     m_addPaletteAction->setToolTip(tr("Create a new palette in the tree"));
     connect(m_addPaletteAction, SIGNAL(triggered(bool)),
             this, SLOT(slotAddPalette()));
 
     /* Edit actions */
     m_cloneAction = new QAction(QIcon(":/editcopy.png"),
-                                tr("&Clone"), this);
+                                tr("&Duplicate"), this);
     m_cloneAction->setShortcut(QKeySequence("CTRL+C"));
     connect(m_cloneAction, SIGNAL(triggered(bool)),
             this, SLOT(slotClone()));
@@ -398,7 +399,7 @@ void FunctionManager::initActions()
             this, SLOT(slotDelete()));
 
     m_selectAllAction = new QAction(QIcon(":/selectall.png"),
-                                    tr("Select &all"), this);
+                                    tr("Select &All"), this);
     m_selectAllAction->setShortcut(QKeySequence("CTRL+A"));
     connect(m_selectAllAction, SIGNAL(triggered(bool)),
             this, SLOT(slotSelectAll()));
@@ -1264,28 +1265,22 @@ void FunctionManager::slotTreeItemDoubleClicked(QTreeWidgetItem* item)
 
 void FunctionManager::slotTreeContextMenuRequested()
 {
+    /* Laid out by the canon (ContextMenu, docs/design/CONTEXT_MENUS.md):
+       making one, the selection, filing, the list's view, duplicating, and
+       deleting last. */
     QMenu menu(this);
-    menu.addAction(m_cloneAction);
-    menu.addAction(m_selectAllAction);
-    menu.addSeparator();
-    menu.addAction(m_deleteAction);
-    menu.addSeparator();
-    menu.addAction(m_addSceneAction);
-    menu.addAction(m_addChaserAction);
-    menu.addAction(m_addEFXAction);
-    menu.addAction(m_addCollectionAction);
-    menu.addAction(m_addRGBMatrixAction);
-    menu.addAction(m_addScriptAction);
-    menu.addAction(m_addAudioAction);
-    menu.addAction(m_addVideoAction);
-    menu.addSeparator();
-    menu.addAction(m_addFolderAction);
-    menu.addSeparator();
-    menu.addAction(m_addPaletteAction);
-    menu.addAction(m_wizardAction);
-    menu.addAction(m_paletteManagerAction);
-    menu.addSeparator();
-    menu.addAction(m_showTreeFunctionsAction);
+    ContextMenu cm(&menu);
+    for (QAction *a : { m_addSceneAction, m_addChaserAction, m_addSequenceAction, m_addEFXAction,
+                        m_addCollectionAction, m_addRGBMatrixAction, m_addScriptAction,
+                        m_addAudioAction, m_addVideoAction, m_wizardAction, m_addPaletteAction,
+                        m_paletteManagerAction })
+        cm.add(ContextMenu::Kind, a);
+    cm.add(ContextMenu::Selection, m_selectAllAction);
+    cm.add(ContextMenu::Organise, m_addFolderAction);
+    cm.add(ContextMenu::View, m_showTreeFunctionsAction);
+    cm.add(ContextMenu::Edit, m_cloneAction);
+    cm.add(ContextMenu::Remove, m_deleteAction);
+    cm.finish();
 
     updateActionStatus();
 

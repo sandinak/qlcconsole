@@ -79,10 +79,10 @@ values. Notes change values.
 On the projector:
 
 1. Library → **All → Palettes → Colour** → right-click **Magenta** →
-   **Used by**: one use, the chorus's Steps. Click it.
+   **Used By**: one use, the chorus's Steps. Click it.
 2. Right-click **Magenta** → **Duplicate**. Point at the Look Editor
    under the page: *Used by: nothing yet*. Type `Chorus Colour` in Name.
-3. Right-click it → **Move to folder → New folder…** →
+3. Right-click it → **Move to Folder → New Folder…** →
    `01-Everybody Scream`.
 4. Leave using it and the note for the students.
 
@@ -121,7 +121,7 @@ reads the **Changed:** line aloud.
 
 ## Extension (fast groups)
 
-From the handout: **Group by type** off, so the song's folder comes
+From the handout: **Group by Type** off, so the song's folder comes
 first with every type in it; then tick it again.
 
 ## At home
@@ -150,7 +150,7 @@ the verse; or, on paper, a palette plan for a song, by job.
 Every step of the handout is run by the course test (`ui/test/courseshow`,
 `levelTwoWithTheMouse`, `lessonTwoTwoExtension`) on the real app,
 offscreen: the Library's right-click menus (Used by and its click,
-Duplicate, Move to folder → New folder…, Group by type), the Look
+Duplicate, Move to Folder → New Folder…, Group by Type), the Look
 Editor's Name box and its Used by line, the drops and the top bar's text,
 the click on the Basic colors swatch, and what the rig sends (the steps
 and the cyc magenta, then both violet, and the scream's cyc violet too).

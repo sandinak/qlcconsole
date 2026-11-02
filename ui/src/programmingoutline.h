@@ -224,6 +224,11 @@ protected:
     void resizeEvent(QResizeEvent *event) override;
     void showEvent(QShowEvent *event) override;
 
+public:
+    /** The right-click menu for @p clicked (and the selection) into @p menu,
+     *  laid out by the canon (ContextMenu) */
+    void fillContextMenu(class QMenu *menu, QTreeWidgetItem *clicked);
+
 private slots:
     void slotContextMenu(const QPoint &pos);
     void slotItemChanged(QTreeWidgetItem *item, int column);

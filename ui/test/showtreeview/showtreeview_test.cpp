@@ -7487,7 +7487,7 @@ void ShowTreeView_Test::libraryGroupToolsSelectSimilarAndMove()
         for (QAction *act : menu->actions())
             if (!act->isSeparator())
                 names << (act->menu() != nullptr ? act->menu()->objectName() : act->objectName());
-        QAction *similar = menu->findChild<QAction *>("stSelectSimilarGroups");
+        QAction *similar = menu->findChild<QAction *>("selectAllSimilar");
         menu->close();
         if (similar != nullptr)
             similar->trigger();
@@ -7495,12 +7495,12 @@ void ShowTreeView_Test::libraryGroupToolsSelectSimilarAndMove()
     driver.start();
     emit lib->customContextMenuRequested(lib->visualItemRect(a).center());
     QTRY_VERIFY(!driver.isActive());
-    const int similarAt = names.indexOf("stSelectSimilarGroups");
+    const int similarAt = names.indexOf("selectAllSimilar");
     QVERIFY2(similarAt >= 0, qPrintable(names.join(", ")));
     QCOMPARE(names.value(similarAt + 1), QString("stMakeSet"));
-    QCOMPARE(names.value(similarAt + 2), QString("stMoveGroupsToFolder"));
+    QCOMPARE(names.value(similarAt + 2), QString("ctxMoveToFolder"));
     // Output Rules… for the groups' members (relays, house lights).
-    QVERIFY2(names.contains("stOutputRules"), qPrintable(names.join(", ")));
+    QVERIFY2(names.contains("outputRulesAction"), qPrintable(names.join(", ")));
     QTRY_COMPARE(selectedGroups(), QSet<quint32>({ sl->id(), sr->id() }));
     QVERIFY(view.findChild<QLabel *>("stDropHint")->text().contains("Make set"));
     QVERIFY(!selectedGroups().contains(mid->id()) && !selectedGroups().contains(other->id()));
@@ -7529,7 +7529,7 @@ void ShowTreeView_Test::libraryGroupToolsSelectSimilarAndMove()
         if (menu == nullptr)
             return;
         driver2.stop();
-        QMenu *move = menu->findChild<QMenu *>("stMoveGroupsToFolder");
+        QMenu *move = menu->findChild<QMenu *>("ctxMoveToFolder");
         QAction *nf = move == nullptr ? nullptr : move->findChild<QAction *>("newGroupFolder");
         if (move != nullptr)
             for (QAction *act : move->actions())
@@ -8590,7 +8590,7 @@ void ShowTreeView_Test::theHitMenusSayHit()
     view.library()->scrollToItem(sceneRow);
     const QString adopt = viaMenu("slotLibraryContextMenu", &view,
                                   view.library()->visualItemRect(sceneRow).center(), "stAdoptAsLook");
-    QCOMPARE(adopt, QString("Adopt as a hit"));
+    QCOMPARE(adopt, QString("Adopt as a Hit"));
     QVERIFY(!adopt.contains("look", Qt::CaseInsensitive));
     const QList<quint32> afterAdopt = hits();
     QCOMPARE(afterAdopt.count(), afterCopy.count() + 1);

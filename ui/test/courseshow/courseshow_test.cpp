@@ -3644,7 +3644,7 @@ static bool lessonTwoTwoByMouse(Doc *doc, ShowTreeView *view, const QString &sho
         qInfo().noquote() << "[2.2] Magenta used by:" << uses.join(" | ");
         LESSON_STEP(uses.count() == 1 && uses.first().contains(QStringLiteral("1.0.2")), uses.join(" | "));
         // The menu has it (the click on a use goes there).
-        LESSON_STEP(libraryMenu(view, "Magenta", { QStringLiteral("Used by"), uses.first() }), "Used by menu");
+        LESSON_STEP(libraryMenu(view, "Magenta", { QStringLiteral("Used By"), uses.first() }), "Used by menu");
         qInfo().noquote() << "[2.2] after Used by click: kind" << int(view->currentKind()) << "cue"
                           << (doc->showTree()->cue(view->currentCueId()) ? doc->showTree()->cue(view->currentCueId())->number : "-");
     }
@@ -3674,7 +3674,7 @@ static bool lessonTwoTwoByMouse(Doc *doc, ShowTreeView *view, const QString &sho
     LESSON_STEP(copy->name() == QStringLiteral("Chorus Colour"), copy->name());
     // Into a folder of the song's own: Move to folder → New folder….
     answerNextInputDialog(QStringLiteral("01-Everybody Scream"));
-    LESSON_STEP(libraryMenu(view, "Chorus Colour", { QStringLiteral("Move to folder"), QStringLiteral("New folder…") }),
+    LESSON_STEP(libraryMenu(view, "Chorus Colour", { QStringLiteral("Move to Folder"), QStringLiteral("New Folder…") }),
                 "Move to folder");
     settle(100);
     qInfo().noquote() << "[2.2] Chorus Colour path:" << copy->path();
@@ -3852,7 +3852,7 @@ static bool lessonTwoThreeByMouse(Doc *doc, ShowTreeView *view, const QString &s
                 if (QMenu *m = qobject_cast<QMenu *>(w))
                     if (m->isVisible())
                         for (QAction *a : m->actions())
-                            if (a->text() == QStringLiteral("Make set…"))
+                            if (a->text() == QStringLiteral("Make Set…"))
                             {
                                 chose = true;
                                 m->close();
@@ -4584,11 +4584,11 @@ void CourseShow_Test::lessonTwoTwoExtension()
     };
     qInfo().noquote() << "[2.2x] by type:" << where("Chorus Colour");
     QCOMPARE(where("Chorus Colour"), QStringLiteral("All → Palettes → Colour → 01-Everybody Scream → Chorus Colour"));
-    QVERIFY(libraryMenu(view, "Palettes", { QStringLiteral("Group by type") }));
+    QVERIFY(libraryMenu(view, "Palettes", { QStringLiteral("Group by Type") }));
     settle(100);
     qInfo().noquote() << "[2.2x] folders first:" << where("Chorus Colour") << "| Magenta:" << where("Magenta");
     QCOMPARE(where("Chorus Colour"), QStringLiteral("All → Palettes → 01-Everybody Scream → Chorus Colour"));
-    QVERIFY(libraryMenu(view, "Palettes", { QStringLiteral("Group by type") }));
+    QVERIFY(libraryMenu(view, "Palettes", { QStringLiteral("Group by Type") }));
     settle(100);
     QCOMPARE(where("Chorus Colour"), QStringLiteral("All → Palettes → Colour → 01-Everybody Scream → Chorus Colour"));
 
@@ -4604,7 +4604,7 @@ void CourseShow_Test::lessonTwoTwoExtension()
     QTest::keyClick(name, Qt::Key_Return);
     settle(100);
     QVERIFY(paletteNamed(doc, "Verse Colour") != nullptr);
-    QVERIFY(libraryMenu(view, "Verse Colour", { QStringLiteral("Move to folder"), QStringLiteral("01-Everybody Scream") }));
+    QVERIFY(libraryMenu(view, "Verse Colour", { QStringLiteral("Move to Folder"), QStringLiteral("01-Everybody Scream") }));
     QCOMPARE(where("Verse Colour"), QStringLiteral("All → Palettes → Colour → 01-Everybody Scream → Verse Colour"));
     QVERIFY(view->selectNode(cueNumbered(doc, "1.0.1")));
     settle(50);
@@ -4704,7 +4704,7 @@ void CourseShow_Test::lessonTwoFourExtension()
     QVERIFY(open(levelTwoFinish(4)));
     Doc *doc = m_app->doc();
     ShowTreeView *view = showTree();
-    QVERIFY(libraryMenu(view, "Truss Wave", { QStringLiteral("Edit") }));
+    QVERIFY(libraryMenu(view, "Truss Wave", { QStringLiteral("Edit Palette") }));
     settle(200);
     QComboBox *speed = view->findChild<QComboBox *>(QStringLiteral("effectSpeedMaster"));
     QVERIFY(speed != nullptr && speed->isVisible());

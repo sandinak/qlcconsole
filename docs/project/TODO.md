@@ -10,6 +10,39 @@ under `~/.claude/.../memory/`.
 
 ---
 
+## Context-menu cohesion: built, leftovers (ctx, 2026-11-02)
+
+[CONTEXT_MENUS.md](../design/CONTEXT_MENUS.md) holds the inventory and the
+canon (eight sections, the rules for words, one builder per kind).
+`ui/src/contextmenus.*` and `ui/test/contextmenus` are the code and its
+check.
+
+Fixture groups and fixtures are on the shared builder in the Fixtures tab,
+Build ▸ Groups & fixtures, Build scenes, Plot Layers and the Library.
+Palette and effect menus in Build and the Library are migrated, and so are
+Build ▸ Scenes, the Functions tab and the empty plot. Stage pieces and
+no-light zones are renamed, and the dead item menus are deleted.
+
+Left:
+- [ ] **Show Tree tree menus** (production / list / cue / sub-cue / hit /
+  layer, `slotTreeContextMenu`) and the cue stack's layer row, onto
+  sections. Name the same act the same way: "Remove the layer" vs
+  "Delete", and "Cue mode ▸" vs "Mode ▸". Put creation (+ Cue…) in Kind.
+  Make Inline Cue / Make Sub-cue (subx) go in Organise.
+- [ ] **The Plot's item menu** (`buildItemMenu` / `populateItemMenu`) onto
+  ContextMenu. It already has one builder for the map and the list, but
+  it still adds its own separators. A Plot fixture should call
+  `ContextMenus::rig` for its common items. Selection ▸ (xsel) goes in
+  section 3.
+- [ ] **Virtual Console**: its right-click menu is the menu bar's Edit menu,
+  so Delete is fourth and "Widget Properties" has no "…". Give it its own
+  menu.
+- [ ] **Connections, power widget, show timeline**: title case,
+  Delete last ("Delete universe entirely…" is followed by Add Universe),
+  one word for remove ("Unassign", "Forget").
+- [ ] **Structure Studio's fixture menu** ("Edit fixture…", "Remove from
+  Truss") and the riser-face editor's onto `ContextMenus::rig`.
+
 ## Course: Level 3's remaining lessons (0.5 item 9, crs3, 2026-11-01)
 
 Written and checked by `courseshow_test` (CHANGELOG 0.4.0 Teaching):

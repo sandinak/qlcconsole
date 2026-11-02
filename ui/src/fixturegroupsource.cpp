@@ -23,6 +23,7 @@
 #include <cmath>
 
 #include "createfixturegroup.h"
+#include "contextmenus.h"
 #include "itemicons.h"
 #include "creategroupsdialog.h"
 #include "fixturemanager.h"
@@ -322,17 +323,21 @@ void FixtureGroupSource::addFixtureLeaf(QTreeWidgetItem *parent, Fixture *f)
 
 void FixtureGroupSource::slotContextMenu(const QPoint &pos)
 {
+    QMenu menu(this);
+    fillContextMenu(&menu, itemAt(pos));
+    if (!menu.isEmpty())
+        menu.exec(viewport()->mapToGlobal(pos));
+}
+
+void FixtureGroupSource::fillContextMenu(QMenu *out, QTreeWidgetItem *item)
+{
     // A universe row is a single-item, non-draggable category rather than
     // something that mixes into a fixture/group selection, so it gets its
     // own short menu rather than folding into the collection below.
-    QTreeWidgetItem *hovered = itemAt(pos);
-    if (hovered != NULL && hovered->data(0, KindRole).toInt() == UniverseNode)
+    if (item != NULL && item->data(0, KindRole).toInt() == UniverseNode)
     {
-        QMenu uMenu(this);
-        QAction *uRename = uMenu.addAction(tr("Rename universe…"));
-        QAction *uChosen = uMenu.exec(viewport()->mapToGlobal(pos));
-        if (uChosen == uRename)
-            beginRename(hovered);
+        ContextMenu cm(out);
+        cm.add(ContextMenu::Edit, tr("Rename Universe"), [this, item]() { beginRename(item); });
         return;
     }
 
@@ -349,7 +354,6 @@ void FixtureGroupSource::slotContextMenu(const QPoint &pos)
             fixtureIds << it->data(0, IdRole).toUInt();
     }
 
-    QTreeWidgetItem *item = itemAt(pos);
     if (item != NULL)
     {
         const int kind = item->data(0, KindRole).toInt();
@@ -363,108 +367,44 @@ void FixtureGroupSource::slotContextMenu(const QPoint &pos)
     if (groupIds.isEmpty() && fixtureIds.isEmpty())
         return;
 
-    QMenu menu(this);
-    QAction *similar = menu.addAction(tr("Select all similar"));
-    similar->setObjectName(QStringLiteral("selectAllSimilar"));
-    similar->setToolTip(tr("Fixtures: every one of the same definition and mode -- inside a "
-                           "group, that group's; elsewhere, the rig's. Groups: every group in "
-                           "the same folder made of the same fixtures (as many of each kind) and "
-                           "as many heads."));
-    menu.addSeparator();
-
-    /* Creating a group: of the fixtures, or of groups and fixtures (each
-       group a block) -- filed in the folder the selection was made in. */
-    QAction *create = menu.addAction(groupIds.isEmpty()
-        ? (fixtureIds.size() > 1
-            ? tr("Create fixture group from %1 fixtures…").arg(fixtureIds.size())
-            : tr("Create fixture group from fixture…"))
-        : tr("Create fixture group from selection…"));
-
-    // Relays, house and work lights (all of a group's members).
-    QAction *rules = menu.addAction(OutputRulesDialog::actionText());
-    rules->setObjectName(QStringLiteral("outputRulesAction"));
-
-    QAction *rename = NULL;
-    QMenu *move = NULL;
-    QAction *del = NULL;
-    if (groupIds.isEmpty() == false)
+    /* The canon's fixture / fixture-group menu (ContextMenus::rig), the
+       same here as in the Fixtures tab, the Plot and the Show Tree. What
+       this tree does its own way: renaming in the row, selecting the
+       similar rows here, and filing a new group where the selection was. */
     {
-        if (groupIds.size() == 1)
-            rename = menu.addAction(tr("Rename group…"));
-        move = menu.addMenu(QIcon(":/folder.png"), groupIds.size() > 1
-            ? tr("Move %1 groups to folder").arg(groupIds.size())
-            : tr("Move to folder"));
-        FixtureManager::fillMoveToFolderMenu(move, m_doc, groupIds);
-        menu.addSeparator();
-        del = menu.addAction(groupIds.size() > 1
-            ? tr("Delete %1 groups").arg(groupIds.size())
-            : tr("Delete group"));
+        ContextMenu cm(out);
+        ContextMenus::RigPlace place;
+        place.parent = this;
+        place.renameInPlace = [this](quint32 gid) { beginRename(groupItemById(gid)); };
+        place.selectSimilar = [this, item]() { selectAllSimilar(item); };
+        place.changed = [this]() { reload(); };
+        place.createGroup = [this, item, groupIds, fixtureIds]() {
+            // Where it was made: the groups' folder, or the group the fixtures are in.
+            QList<quint32> where = groupIds;
+            QList<QTreeWidgetItem *> picked = selectedItems();
+            if (item != NULL && !picked.contains(item))
+                picked << item;
+            foreach (QTreeWidgetItem *it, picked)
+                if (it->data(0, KindRole).toInt() == FixtureNode && it->parent() != NULL
+                    && it->parent()->data(0, KindRole).toInt() == GroupNode)
+                    where << it->parent()->data(0, IdRole).toUInt();
+            const QString folder = FixtureManager::commonGroupFolder(m_doc, where);
+            if (groupIds.isEmpty())
+            {
+                FixtureGroup *g = CreateFixtureGroup::createFromFixtures(m_doc, fixtureIds, this);
+                if (g != NULL && g->path().isEmpty() && !folder.isEmpty())
+                    FixtureManager::moveGroupsToFolder(m_doc, QList<quint32>() << g->id(), folder);
+            }
+            else
+            {
+                CreateGroupsDialog dlg(m_doc, fixtureIds, groupIds, QString(), this);
+                dlg.setFolder(folder);
+                if (dlg.heads() > 0 && dlg.exec() == QDialog::Accepted)
+                    m_doc->setModified();
+            }
+        };
+        ContextMenus::rig(cm, m_doc, groupIds, fixtureIds, place);
     }
-
-    QAction *chosen = menu.exec(viewport()->mapToGlobal(pos));
-    if (chosen == NULL)
-        return;
-
-    if (chosen == similar)
-    {
-        selectAllSimilar(item);
-        return;
-    }
-    if (chosen == create)
-    {
-        // Where it was made: the groups' folder, or the group the fixtures are in.
-        QList<quint32> where = groupIds;
-        QList<QTreeWidgetItem *> picked = selectedItems();
-        if (item != NULL && !picked.contains(item))
-            picked << item;
-        foreach (QTreeWidgetItem *it, picked)
-            if (it->data(0, KindRole).toInt() == FixtureNode && it->parent() != NULL
-                && it->parent()->data(0, KindRole).toInt() == GroupNode)
-                where << it->parent()->data(0, IdRole).toUInt();
-        const QString folder = FixtureManager::commonGroupFolder(m_doc, where);
-        if (groupIds.isEmpty())
-        {
-            FixtureGroup *g = CreateFixtureGroup::createFromFixtures(m_doc, fixtureIds, this);
-            if (g != NULL && g->path().isEmpty() && !folder.isEmpty())
-                FixtureManager::moveGroupsToFolder(m_doc, QList<quint32>() << g->id(), folder);
-        }
-        else
-        {
-            CreateGroupsDialog dlg(m_doc, fixtureIds, groupIds, QString(), this);
-            dlg.setFolder(folder);
-            if (dlg.heads() > 0 && dlg.exec() == QDialog::Accepted)
-                m_doc->setModified();
-        }
-        return;
-    }
-    if (chosen == rules)
-    {
-        if (OutputRulesDialog::edit(this, m_doc, groupIds, fixtureIds))
-            reload();   // the badges
-        return;
-    }
-    if (chosen == rename)
-    {
-        beginRename(groupItemById(groupIds.first()));
-        return;
-    }
-    if (chosen == del)
-    {
-        const QString msg = groupIds.size() > 1
-            ? tr("Delete these %1 fixture groups? (The fixtures themselves are kept.)")
-                  .arg(groupIds.size())
-            : tr("Delete this fixture group? (The fixtures themselves are kept.)");
-        if (QMessageBox::question(this, tr("Delete group"), msg,
-                QMessageBox::Yes | QMessageBox::No, QMessageBox::No) != QMessageBox::Yes)
-            return;
-        foreach (quint32 gid, groupIds)
-            m_doc->deleteFixtureGroup(gid); // emits fixtureGroupRemoved -> reload()
-        m_doc->setModified();
-        return;
-    }
-    // setPath() emits changed() -> Doc::fixtureGroupChanged -> reload()
-    if (move != NULL && move->actions().contains(chosen))
-        FixtureManager::applyMoveToFolder(this, m_doc, groupIds, chosen);
 }
 
 int FixtureGroupSource::selectAllSimilar(QTreeWidgetItem *also)

@@ -378,7 +378,7 @@ Three ways to file a group into one:
 1. **Right-click a folder (or the root) → "New Group..."** — the new group
    is filed there immediately; typing a never-before-seen path creates the
    folder.
-2. **Group ▸ Move to Folder ▸** on one or more selected groups — pick
+2. **Move to Folder ▸** (right-click one or more selected groups) — pick
    **Fixture Groups (no folder)** or any folder in use, or **New Folder…**
    to name a new one; it is made inside the folder the groups are in (a
    `/` in the name nests it further).
@@ -397,8 +397,8 @@ of its kind, ready to group or file in one go:
   fixtures, only their RGB heads) are not. The grid shape is not
   compared.
 
-Then **Group ▸ Move N Groups to Folder ▸ New Folder…** files them together,
-or **Group ▸ Create Group(s) from Selection…** makes one group of them, each
+Then **Move N Fixture Groups to Folder ▸ New Folder…** files them together,
+or **Create Fixture Group from Selection…** makes one group of them, each
 as a block. Groups made from a selection start in the folder it was made in.
 None of these are on the Undo (⌘Z) history, which covers the rig and the
 patch; moving them back is the same menu.
@@ -415,14 +415,14 @@ group in a sub-folder underneath it — gets its path updated to match.
   Groups" selected: an empty 4×4 group named *New Group* in that folder,
   selected, with its name in the editor ready to type. The **Edit** menu
   says where it goes (*New Group in Movers (⇧⌘N)*).
-- **Select fixtures and/or groups → Group → "Create Group(s) from
-  Selection…"** — one group of the selection, a group per head type, or a
+- **Select fixtures and/or groups → right-click → "Create Fixture Group
+  from Selection…"** — one group of the selection, a group per head type, or a
   group per head type for each fixture, previewed before any is made
   (below).
 
-### Create Group(s) from Selection
+### Create Fixture Group from Selection
 
-One menu item, **Group → Create Group(s) from Selection…**, for one group
+One menu item, **Create Fixture Group from Selection…**, for one group
 or many. Take eight bars, each with 16 RGB pixels and 4 white strobe
 cells. It offers:
 
@@ -573,7 +573,7 @@ to start with — as your default for the model.
 It's offered when making a group from mixed fixtures on the Lighting
 Studio plot's fixture menu, and on a fixture group's row in the Studio's
 Plot layers list. (In the Fixture Manager, option 2 of
-[Create Group(s) from Selection](#create-groups-from-selection) does the
+[Create Fixture Group from Selection](#create-fixture-group-from-selection) does the
 same job.)
 
 ### Lay Out from the Stage
@@ -593,7 +593,7 @@ See [Group masters](show-tree.md#group-masters).
 ## Sub-groups: pasted blocks with provenance
 
 When you paste one group's layout into another as a block (via "Add group as
-block…" or **Group → Add to Group**), every head that came along is tagged with the
+block…" or **Group ▸ Add to Group**), every head that came along is tagged with the
 source group's id. This is what lets the editor:
 
 - **Color-code** the pasted block distinctly from the rest of the grid, so
@@ -660,32 +660,64 @@ without them is unchanged; QLC+ and older qlcconsole builds skip them.
 
 ## Context menu
 
-Right-click is laid out by what it is about, in the same order whatever is
-selected, and only offers what applies:
+### Right-click menus
 
-1. **The fixture itself** — Fixture Properties… (several fixtures at once
-   too), Definition & Mode… and [LED Layout…](#led-layout) (one fixture),
-   **Edit Fixture Definition…** (one fixture, several fixtures or one group,
-   when they all share one definition; several definitions show it greyed
-   out as *(several definitions)*), Change Definition… (fixtures of one
-   definition, when another is a drop-in for it), **Plot Symbol ▸** (below)
-   and [Output Rules…](#output-rules).
-2. **Its address** — **Patch…** (the one name for giving an address and
-   moving one, here, on the plot and in the studio; "Patch N Fixtures…" for
-   several) and Return to Inventory….
-3. **Finding it on the rig** — Test Fixture…, Locate, Reset.
-4. **Organising it** — a **Group** submenu (Create Group(s) from Selection…,
-   Add to Group ▸, Remove from Group; for a group: Move to Folder ▸, Remove
-   Group (Keep Fixtures), Rebuild Composite), a **Power** submenu (Add to
-   Circuit ▸, Remove from Circuit), and Channel Behaviour & Modifiers….
-5. **Deleting it** — Delete….
+A fixture group has one right-click menu wherever you right-click it: here,
+in Build's **Groups & fixtures**, in a Build scene, in **Plot Layers** and
+in the Show Tree's **Library**. A fixture has one too. The items keep the
+same names in the same order. A place adds only what is its own, and drops
+only what makes no sense there; each such case is listed below.
 
-Then what the clicked row offers — Add Fixture / Add RGB Panel on empty
-space, the universe's output and Delete Universe… on a universe (below),
-Add Power Source… / Add Circuit…,
-New Group… on a group folder, Number the Duplicates and Patch the Clashing
-Fixtures… on their roots, Add … to Inventory / Patch Inventory… on the
-inventory — and Expand All / Collapse All last.
+Every menu in the app is laid out in the same order:
+
+1. the thing's own editor;
+2. what it does;
+3. selecting more like it;
+4. making something from it and filing it;
+5. what only this place offers;
+6. the list's view;
+7. Copy, Paste, Duplicate and Rename;
+8. taking it out (**Remove from…**) and **Delete…**, always last.
+
+| | A fixture group | A fixture |
+|---|---|---|
+| 1 | **Edit Head Layout…** | **Fixture Properties…** (several at once too) |
+| 2 | **Locate**, **Why is this on?** (its first light), **Output Rules…**, [Split by Head Type…](#split-by-head-type), [Lay Out from the Stage…](#lay-out-from-the-stage) | **Locate**, **Why is this on?**, **Patch…** ("Patch N Fixtures…"), **Output Rules…** |
+| 3 | **Select All Similar** | **Select All Similar** |
+| 4 | **Create Fixture Group from Selection…** (several groups, each a block), **Move to Folder ▸** | **Create Fixture Group from Selection…** |
+| 7 | **Rename** (in place) or **Rename…** | |
+| 8 | **Delete Fixture Group…**: it asks first, and the fixtures stay | |
+
+What a place adds or leaves out:
+
+- **The Fixtures tab** adds:
+  - in 1: Definition & Mode…, Change Definition…, Edit Fixture Definition…;
+  - in 2: Plot Symbol ▸ (below), [LED Layout…](#led-layout), Return to
+    Inventory…, Test Fixture…, Reset, Channel Behaviour & Modifiers…;
+  - in 4: a **Group** submenu (Add to Group ▸, Remove from Group, Rebuild
+    Composite from Members) and a **Power** submenu (Add to Circuit ▸,
+    Remove from Circuit);
+  - in 8: **Delete…** for fixtures.
+- **A Build scene** lists a group or fixture as part of that scene. It
+  offers **Remove from Scene** and **Focus This Look…**, and has no Delete,
+  Move to Folder or Select All Similar.
+- **Plot Layers** files groups in the Plot's own folders and layers (Move
+  to Layer ▸, New Folder from Selection…), so it has no Move to Folder ▸.
+  It adds **Remove from “Truss”** for a group listed under a truss, tower
+  or boom.
+- **The Library** adds Pin and **Make Set…**, its own way of grouping, so
+  it has no Create Fixture Group.
+
+The rest of what the Fixtures tab offers depends on the row clicked:
+
+- empty space: Add Fixture / Add RGB Panel;
+- a universe: its output and Delete Universe… (below);
+- the power roots: Add Power Source… / Add Circuit…;
+- a group folder: New Group…;
+- their roots: Number the Duplicates, Patch the Clashing Fixtures…;
+- the inventory: Add … to Inventory / Patch Inventory….
+
+Expand All / Collapse All come last on every row.
 
 Patch is offered whenever none of the fixtures has an address yet; moving
 patched ones is Design mode's — the same rule everywhere.

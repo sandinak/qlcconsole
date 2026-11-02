@@ -70,11 +70,16 @@ Two panes, left to right:
   show without a Show Tree view has **Groups &amp; fixtures** there instead, with a **Search fixtures &
   groups…** box: a row stays when it or anything under it matches, the
   folders on the way down open, and a matching group keeps all its
-  fixtures. Right-click a row for **Select all similar** (the
+  fixtures. Right-click a row for the menu a fixture or group has
+  everywhere ([one menu per kind](fixture-manager.md#right-click-menus)):
+  on a group **Edit Head Layout…**, **Locate**, [Output
+  Rules…](fixture-manager.md#output-rules), **Select All Similar** (the
   [Fixture Manager's rule](fixture-manager.md#fixture-group-folders)),
-  **Create fixture group from selection…** (filed in the folder it was
-  made in), [Output Rules…](fixture-manager.md#output-rules) and, on
-  groups, **Move to folder ▸** (a folder in use, or **New Folder…**). The section you pick is the one the tab opens on next
+  **Move to Folder ▸** (a folder in use, or **New Folder…**), **Rename**
+  and **Delete Fixture Group…**; on a fixture **Fixture Properties…**,
+  **Locate**, **Why is this on?**, **Patch…**, **Output Rules…**, **Select
+  All Similar** and **Create Fixture Group from Selection…** (filed in the
+  folder it was made in). The section you pick is the one the tab opens on next
   time.
 - **Right — [the Workbench](#the-workbench)**: what is loaded, its layers,
   and the editor pane for the selected row. It is the same in every
@@ -238,7 +243,7 @@ layers — move, or copy with **⌥**.
 **Shared members.** A scene in more than one collection or chaser step
 carries a badge, **also in 2**; hover for where (*0.0.4-SHOUT, Full Show
 (step 3)*). An edit here changes it everywhere it is used. To change it here
-only, select it and press **Own copy** (or right-click → **Make own copy**):
+only, select it and press **Own copy** (or right-click → **Make Own Copy**):
 the layer becomes a copy of its own (named as a duplicate is, filed beside
 the original) in the same place, and the other collections keep the
 original. It is one step: ⌘Z puts the shared one back and the copy goes.
@@ -303,7 +308,7 @@ puts it back. See
 
 - **Set the rig, save a scene, chase the scenes, run.** In Build ▸ Scenes
   select scenes in the order you want them (⌘-click), then **+ Scene ▾ →
-  Chaser from selection** or right-click → **Chaser from selection**: a new
+  Chaser from selection** or right-click → **Chaser from Selection**: a new
   chaser with those scenes as its steps, in that order, filed in the last
   one's folder and
   loaded to walk. Or drag scenes onto a chaser's row in the navigator to
@@ -352,11 +357,12 @@ the tab.
   Show Tree's selected cue, another scene, or a new one. Each is one undo
   step, and the new layer is selected afterwards. See
   [Make a layer](effects.md#make-a-layer).
-- **Right-click** an effect: **Design / edit…** (an effect palette) or
-  **Open in editor** (an EFX or RGB Matrix), **Duplicate**, **Rename**
-  (or F2), **Move to folder…** and **Delete** (⌫ too; it asks first, and
-  says where the effect is used). Right-click empty space, or any row,
-  for **New effect…**, **New EFX** and **New RGB Matrix**.
+- **Right-click** an effect: **Edit Effect** (an effect palette) or
+  **Open in Editor** (an EFX or RGB Matrix), then **Learn Trigger…** and
+  **Runs ▸**, **Move to Folder…**, **Duplicate**, **Rename** (or F2) and
+  **Delete…** last (⌫ too; it asks first, and says where the effect is
+  used). Right-click empty space for **New Effect**, **New EFX** and **New
+  RGB Matrix** (or **+ New**).
 
 Loading anything else in the Workbench puts the designer away, and an
 unsaved design with it; **Esc** asks first
@@ -456,15 +462,15 @@ Most of what the Function Manager did is also here in Build:
 |---|---|
 | The function tree, every function by type | **Scenes** lists scenes, collections and chasers in your folders; every type is in the Functions tab |
 | Double-click to edit | Click the row: it loads in the Workbench with its own editor (scene, chaser, sequence, collection, EFX, RGB Matrix, show, script, audio, video) |
-| Add ▸ Scene, Chaser, Sequence, EFX, Collection, RGB Matrix, Script, Audio, Video (⌘1 … ⌘9) | **+ Scene ▾ → New function ▸**, or right-click in the outline → **New function ▸**; ⌘1 … ⌘9 work with the Scenes section focused. **Show** is there too |
+| Add ▸ Scene, Chaser, Sequence, EFX, Collection, RGB Matrix, Script, Audio, Video (⌘1 … ⌘9) | **+ Scene ▾ → New Function ▸**, or right-click a folder or empty space in the outline → **New Function ▸**; ⌘1 … ⌘9 work with the Scenes section focused. **Show** is there too |
 | New folder | **+ Scene ▾ → New scene in a new folder…**; drag rows onto a folder to file them |
-| Rename / rename folder | **F2**, or right-click → **Rename** / **Rename folder** |
-| Delete folder | Right-click a folder → **Delete folder**: what is in it moves up a level, nothing is deleted |
+| Rename / rename folder | **F2**, or right-click → **Rename** / **Rename Folder** |
+| Delete folder | Right-click a folder → **Delete Folder**: what is in it moves up a level, nothing is deleted |
 | Clone | Right-click → **Duplicate** (or ⌘C then ⌘V) |
 | Delete | **⌫**, or right-click → **Delete…** (the question lists where each is used) |
 | Select all | ⌘A in the outline |
-| Function Wizard | **+ Scene ▾ → Function Wizard…** (also on the outline's right-click) |
-| Select Startup Function | **+ Scene ▾ → Startup function…** |
+| Function Wizard | **+ Scene ▾ → Function Wizard…** (also on the outline's right-click, on a folder or empty space) |
+| Select Startup Function | **+ Scene ▾ → Startup Function…** |
 | Palettes… / New palette | **Build ▸ Palettes** |
 | Test / run in an editor | The same editors, with their own test and play buttons, in the Workbench |
 
@@ -588,10 +594,10 @@ the **VC buttons** that fire those are listed too.
 **Palette folders hold any type.** A folder in Build ▸ Palettes can hold
 colours, aims, dimmers and effects together — say a folder per song,
 "01-Everybody Scream", with everything that song uses. Right-click empty
-space → **New folder…** makes one at the top level. Drag a palette onto a
+space → **New Folder…** makes one at the top level. Drag a palette onto a
 folder to file it; drag a folder into another. The tab shows folders first,
 each palette with its type's icon, and the palettes in no folder below them.
-Tick **Group by type** in the right-click menu to see it the other way
+Tick **Group by Type** in the right-click menu to see it the other way
 round: Aim, Color, Dimmer… first, with the same folders under each type (it
 is remembered). In that view a folder is still one folder: renaming or
 deleting it under Color does it for every type, and dropping a palette on it

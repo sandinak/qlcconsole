@@ -42,7 +42,7 @@ Where will the audience look first?
 3. Click **1.0.4 Solo**, **+ Cue**, type `Bridge`, **Return**. Set
    **Mode** to **Block**.
 4. Library → **All → Groups → Trusses**: click **Trusses SR**, ⌘-click
-   **Trusses SL**, right-click → **Make set…**, type `Truss Sides`, **OK**.
+   **Trusses SL**, right-click → **Make Set…**, type `Truss Sides`, **OK**.
 
    {% include inapp.html do="Add to a selection" mac="⌘-click" win="Ctrl-click" see="Not Control-click on a Mac: that's a right-click." %}
 

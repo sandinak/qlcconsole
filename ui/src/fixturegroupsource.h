@@ -19,6 +19,7 @@
 
 class QTreeWidgetItem;
 class QMimeData;
+class QMenu;
 class Fixture;
 class Doc;
 
@@ -60,6 +61,10 @@ public:
      *  fixture was picked in, or across the rig -- and similarGroups().
      *  Returns how many rows are selected. */
     int selectAllSimilar(QTreeWidgetItem *also = nullptr);
+
+    /** The right-click menu for the selection and @p at, the row under the
+     *  cursor, into @p menu (ContextMenus::rig: the canon's menu) */
+    void fillContextMenu(QMenu *menu, QTreeWidgetItem *at);
 
 public slots:
     /** Rebuild the tree from the Doc's fixtures and groups. */
