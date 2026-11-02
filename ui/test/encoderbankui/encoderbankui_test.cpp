@@ -451,7 +451,6 @@ void EncoderBankUi_Test::aBeamLookTakesTheBeamBank()
     QCOMPARE(beam->values().at(0).toInt(), 10);
     QCOMPARE(beam->values().at(2).toInt(), 30);
     // The Zoom is a look of its own: this one has none.
-    QSignalSpy line(&wb, &Workbench::paletteEdited);
     turn(0, 3);
     gather();
     QVERIFY(wb.encoderLine().contains("no zoom"));
