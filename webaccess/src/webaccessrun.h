@@ -56,7 +56,9 @@ public:
     /** The state now, as JSON text:
      *  {list, production, now:{num,name,sub}, next:{...}, subNext, section,
      *   running, paused, hasSub, mode, remote, pin, teaching,
-     *   masters:[{id,name,level}] (percent; only when there are some)}. */
+     *   masters:[{id,name,level}] (percent; only when there are some),
+     *   grand (percent), blackout, api (1),
+     *   hits:[{id,name,on,armed}] (only when the show has some)}. */
     QByteArray stateJson() const;
 
     /** Remote GO is on in Show Settings. */
@@ -71,12 +73,35 @@ public:
     PinResult checkPin(const QString &pin);
 
     /** The result of one command from a page. */
-    enum Result { Done, NothingToDo, Refused, NeedPin, Unknown };
+    enum Result { Done, NothingToDo, Refused, NeedPin, Unknown, WrongMode };
     /** Carry out @a command ("go", "back", "stop", "subgo", "subback",
      *  "pause", "resume")
      *  through ShowControl::run() with RouteWeb. @a unlocked: this page
      *  gave the PIN (or the show has none). */
-    Result command(const QString &command, bool unlocked);
+    Result command(const QString &command, bool unlocked, const QString &cue = QString(),
+                   const QString &list = QString());
+
+    /** Fire hit @a hitId, or let it go when it runs, as a VC button does:
+     *  only a hit that is armed at the narrowest armed place, in Operate
+     *  (else WrongMode / NothingToDo). 0xFFFFFFFF: the armed one, taking
+     *  turns among several. Same rules as a command. */
+    Result hit(quint32 hitId, bool unlocked);
+
+    /** Blackout "on", "off" or "toggle". Same rules as a command. */
+    Result blackout(const QString &what, bool unlocked);
+
+    /** Grand Master to @a percent (0..100). Same rules as a command. */
+    Result setGrand(int percent, bool unlocked);
+    /** Move the Grand Master by @a delta percent, clamped to 0..100 (a dial
+     *  turn: relative, so a burst of turns adds up). */
+    Result nudgeGrand(int delta, bool unlocked);
+    /** Move group master @a groupId by @a delta percent, clamped to 0..100. */
+    Result nudgeMaster(quint32 groupId, int delta, bool unlocked);
+
+    /** Put the cue @a direction (+1 next, -1 previous) of the standby cue
+     *  on standby (a LOAD through ShowControl::run(), no GO): a dial that
+     *  walks the cue list. Same rules as a command. */
+    Result standby(int direction, bool unlocked);
 
     /** Move group master @a groupId to @a percent (0..100), under the same
      *  rules as a command (remote GO on, the PIN given). A group without a
@@ -102,6 +127,7 @@ private:
     QByteArray m_last;
     int m_clients = 0;
     int m_failures = 0;
+    int m_hitStep = 0;
     QElapsedTimer m_lockout;
     bool m_locked = false;
 };

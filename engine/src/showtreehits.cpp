@@ -368,6 +368,16 @@ quint32 ShowTreeController::armedHit(const QList<quint32> &hitIds) const
     return best;
 }
 
+QList<quint32> ShowTreeController::allHits() const
+{
+    QList<quint32> out;
+    for (const ShowTree::Production &p : productions())
+        if (const ShowTree::CueList *l = p.looks())
+            for (const ShowTree::Cue &c : l->cues)
+                out << c.id;
+    return out;
+}
+
 QList<quint32> ShowTreeController::armedTier(const QList<quint32> &hitIds) const
 {
     QList<quint32> out;

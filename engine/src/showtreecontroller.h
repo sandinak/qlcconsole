@@ -803,6 +803,8 @@ public:
     bool isHitPlaceLive(ShowTree::HitScope scope, quint32 placeId) const;
     /** Whether hit @a hitId may fire now: its place is live. */
     bool isHitArmed(quint32 hitId) const;
+    /** Every hit of the show (a look of a production's Hits section), in tree order. */
+    QList<quint32> allHits() const;
     /** Of @a hitIds (a VC button's), the one to fire now: the armed one
      *  with the narrowest place (cue > list > production > global); the
      *  first given among equals. Invalid: none is armed. */

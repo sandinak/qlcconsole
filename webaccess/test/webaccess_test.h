@@ -103,6 +103,15 @@ private slots:
     void groupMastersFollowTheRemoteGoAndPinRules();
     void aPageNeedsAnAccountWithAccounts();
 
+    /* The Companion / Stream Deck surface: the same websocket, more words */
+    void goToACueOnAListIsOneRun();
+    void blackoutAndGrandMasterFromTheSocket();
+    void dialTurnsAddUpAndClampAtTheEnds();
+    void aDialWalksTheStandbyCue();
+    void aHitFiresAtTheNarrowestArmedPlace();
+    void companionWordsFollowRemoteGoPinAndMode();
+    void aSpinIsOneNudge();
+
     /* Many clients: a phone per crew member (make perf, "web") */
     void fiftyClientsGetEveryChange();
     void cpuPerBroadcast();

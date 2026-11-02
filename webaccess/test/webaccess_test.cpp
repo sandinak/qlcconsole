@@ -18,6 +18,9 @@
 /* Everything here talks to 127.0.0.1 only. */
 
 #include <QtTest>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QTcpSocket>
 #include <QTcpServer>
 #include <QWebSocket>
@@ -61,6 +64,12 @@
 #include "showtreecontroller.h"
 #include "showwebaccess.h"
 #include "qlcfixturedefcache.h"
+#include "qlcfixturedef.h"
+#include "qlcfixturemode.h"
+#include "qlcchannel.h"
+#include "qlcpalette.h"
+#include "fixture.h"
+#include "groupmasters.h"
 #include "inputoutputmap.h"
 #include "qlcconfig.h"
 
@@ -1419,6 +1428,342 @@ void WebAccess_Test::groupMastersFollowTheRemoteGoAndPinRules()
     ws->sendTextMessage(QStringLiteral("QLC+RUN|master|%1|40").arg(grp->id()));
     QTRY_COMPARE(int(grp->masterLevel()), 102);
     dropPage(ws);
+}
+
+/*****************************************************************************
+ * The Companion / Stream Deck surface
+ *****************************************************************************/
+
+namespace {
+uchar percentLevel(int p) { return uchar(qRound(p * 255.0 / 100.0)); }
+/** The newest state a page heard (an ack may come after it). */
+QString newestState(const QStringList &h)
+{
+    for (int i = h.count() - 1; i >= 0; --i)
+        if (h.at(i).startsWith(QStringLiteral("RUN|state|")))
+            return h.at(i);
+    return QString();
+}
+
+QJsonObject stateObject(const QStringList &h)
+{
+    return QJsonDocument::fromJson(newestState(h).mid(10).toUtf8()).object();
+}
+
+/** A one-channel dimmer, for a hit with a look to run. */
+Fixture *dimmer(Doc *doc, const QString &name)
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test");
+    def->setModel("Dim " + name);
+    def->setType(QLCFixtureDef::Dimmer);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("1ch");
+    QLCChannel *ch = new QLCChannel();
+    ch->setName("Dimmer");
+    ch->setGroup(QLCChannel::Intensity);
+    def->addChannel(ch);
+    mode->insertChannel(ch, 0);
+    QLCFixtureHead head;
+    head.addChannel(0);
+    mode->insertHead(-1, head);
+    def->addMode(mode);
+    Fixture *fxi = new Fixture(doc);
+    fxi->setName(name);
+    fxi->setFixtureDefinition(def, mode);
+    fxi->setUniverse(0);
+    fxi->setAddress(quint32(doc->fixtures().size()));
+    doc->addFixture(fxi);
+    return fxi;
+}
+}
+
+void WebAccess_Test::goToACueOnAListIsOneRun()
+{
+    runShow();
+    m_doc->operateSettings()->setRemoteGo(true);
+    ShowControl *sc = m_doc->showControl();
+    QList<ShowControl::Request> got;
+    QList<ShowControl::Route> routes;
+    sc->setRunHandler([&](const ShowControl::Request &r, ShowControl::Route route) {
+        got << r;
+        routes << route;
+        return true;
+    });
+    startWeb(false);
+    QStringList heard;
+    QWebSocket *ws = runPage(&heard);
+    ws->sendTextMessage(QStringLiteral("QLC+RUN|hello"));
+    QTRY_VERIFY(heardAn(heard, QStringLiteral("RUN|state|")));
+    QVERIFY(stateObject(heard).value(QStringLiteral("api")).toInt() >= 1);
+
+    // a plain GO names no cue; a GO with a cue names it
+    ws->sendTextMessage(QStringLiteral("QLC+RUN|go"));
+    QTRY_COMPARE(got.count(), 1);
+    QVERIFY(got.at(0).cue.isEmpty());
+    ws->sendTextMessage(QStringLiteral("QLC+RUN|go|3"));
+    QTRY_COMPARE(got.count(), 2);
+    QCOMPARE(got.at(1).command, ShowControl::Go);
+    QCOMPARE(got.at(1).cue, QStringLiteral("3"));
+    QCOMPARE(routes.last(), ShowControl::RouteWeb);
+    // a list that isn't there: nothing runs
+    ws->sendTextMessage(QStringLiteral("QLC+RUN|go|1|99"));
+    QTRY_VERIFY(heardAn(heard, QStringLiteral("RUN|ack|go|nothing")));
+    QCOMPARE(got.count(), 2);
+    dropPage(ws);
+    sc->setRunHandler(nullptr);
+}
+
+void WebAccess_Test::blackoutAndGrandMasterFromTheSocket()
+{
+    runShow();
+    m_doc->operateSettings()->setRemoteGo(true);
+    startWeb(false);
+    QStringList heard;
+    QWebSocket *ws = runPage(&heard);
+    ws->sendTextMessage(QStringLiteral("QLC+RUN|hello"));
+    QTRY_VERIFY(heardAn(heard, QStringLiteral("RUN|state|")));
+    QVERIFY(!stateObject(heard).value(QStringLiteral("blackout")).toBool());
+    QCOMPARE(stateObject(heard).value(QStringLiteral("grand")).toInt(), 100);
+
+    ws->sendTextMessage(QStringLiteral("QLC+RUN|blackout|toggle"));
+    QTRY_VERIFY(m_doc->inputOutputMap()->blackout());
+    QTRY_VERIFY(stateObject(heard).value(QStringLiteral("blackout")).toBool());
+    ws->sendTextMessage(QStringLiteral("QLC+RUN|blackout|off"));
+    QTRY_VERIFY(!m_doc->inputOutputMap()->blackout());
+    ws->sendTextMessage(QStringLiteral("QLC+RUN|blackout|on"));
+    QTRY_VERIFY(m_doc->inputOutputMap()->blackout());
+    m_doc->inputOutputMap()->setBlackout(false);
+
+    ws->sendTextMessage(QStringLiteral("QLC+RUN|grand|50"));
+    QTRY_COMPARE(int(m_doc->inputOutputMap()->grandMasterValue()), 128);
+    QTRY_COMPARE(stateObject(heard).value(QStringLiteral("grand")).toInt(), 50);
+    dropPage(ws);
+}
+
+void WebAccess_Test::dialTurnsAddUpAndClampAtTheEnds()
+{
+    runShow();
+    m_doc->operateSettings()->setRemoteGo(true);
+    FixtureGroup *grp = new FixtureGroup(m_doc);
+    grp->setName(QStringLiteral("Backs"));
+    m_doc->addFixtureGroup(grp);
+    grp->setMaster(true);
+    grp->setMasterLevel(percentLevel(50));
+    startWeb(false);
+    QStringList heard;
+    QWebSocket *ws = runPage(&heard);
+    ws->sendTextMessage(QStringLiteral("QLC+RUN|hello"));
+    QTRY_VERIFY(heardAn(heard, QStringLiteral("RUN|state|")));
+
+    // relative: two nudges add up, none is lost
+    ws->sendTextMessage(QStringLiteral("QLC+RUN|nudge|master|%1|10").arg(grp->id()));
+    ws->sendTextMessage(QStringLiteral("QLC+RUN|nudge|master|%1|-3").arg(grp->id()));
+    QTRY_COMPARE(int(grp->masterLevel()), int(percentLevel(57)));
+    // clamped at 100 and at 0
+    ws->sendTextMessage(QStringLiteral("QLC+RUN|nudge|master|%1|500").arg(grp->id()));
+    QTRY_COMPARE(int(grp->masterLevel()), 255);
+    ws->sendTextMessage(QStringLiteral("QLC+RUN|nudge|master|%1|-900").arg(grp->id()));
+    QTRY_COMPARE(int(grp->masterLevel()), 0);
+    // the Grand Master the same
+    m_doc->inputOutputMap()->setGrandMasterValue(percentLevel(95));
+    ws->sendTextMessage(QStringLiteral("QLC+RUN|nudge|grand|10"));
+    QTRY_COMPARE(int(m_doc->inputOutputMap()->grandMasterValue()), 255);
+    ws->sendTextMessage(QStringLiteral("QLC+RUN|nudge|grand|-1000"));
+    QTRY_COMPARE(int(m_doc->inputOutputMap()->grandMasterValue()), 0);
+    // not a number, a missing group: nothing moves
+    heard.clear();
+    ws->sendTextMessage(QStringLiteral("QLC+RUN|nudge|master|x|5"));
+    ws->sendTextMessage(QStringLiteral("QLC+RUN|nudge|master|99999|5"));
+    QTRY_VERIFY(heardAn(heard, QStringLiteral("RUN|ack|nudge|nothing")));
+    dropPage(ws);
+}
+
+void WebAccess_Test::aDialWalksTheStandbyCue()
+{
+    Chaser *list = runShow();
+    m_doc->operateSettings()->setRemoteGo(true);
+    ShowControl *sc = m_doc->showControl();
+    QVERIFY(sc->standbyStep(list) <= 0);
+    QList<ShowControl::Request> got;
+    QList<ShowControl::Route> routes;
+    // the real LOAD, noted
+    sc->setRunHandler([&](const ShowControl::Request &r, ShowControl::Route route) {
+        got << r;
+        routes << route;
+        return sc->execute(r);
+    });
+    startWeb(false);
+    QStringList heard;
+    QWebSocket *ws = runPage(&heard);
+    ws->sendTextMessage(QStringLiteral("QLC+RUN|hello"));
+    QTRY_VERIFY(heardAn(heard, QStringLiteral("RUN|state|")));
+
+    ws->sendTextMessage(QStringLiteral("QLC+RUN|standby|next"));
+    QTRY_COMPARE(got.count(), 1);
+    QCOMPARE(got.at(0).command, ShowControl::Load);      // standby only, never a GO
+    QCOMPARE(routes.at(0), ShowControl::RouteWeb);
+    const int first = sc->standbyStep(list);
+    ws->sendTextMessage(QStringLiteral("QLC+RUN|standby|next"));
+    QTRY_COMPARE(sc->standbyStep(list), first + 1);
+    ws->sendTextMessage(QStringLiteral("QLC+RUN|standby|prev"));
+    QTRY_COMPARE(sc->standbyStep(list), first);
+    QVERIFY(!list->isRunning());
+    for (const ShowControl::Request &r : got)
+        QCOMPARE(r.command, ShowControl::Load);
+    // off the ends: nothing
+    for (int i = 0; i < 6; ++i)
+        ws->sendTextMessage(QStringLiteral("QLC+RUN|standby|next"));
+    QTRY_VERIFY(heardAn(heard, QStringLiteral("RUN|ack|standby|nothing")));
+    QVERIFY(sc->standbyStep(list) < list->stepsCount());
+    dropPage(ws);
+    sc->setRunHandler(nullptr);
+}
+
+void WebAccess_Test::aHitFiresAtTheNarrowestArmedPlace()
+{
+    runShow();
+    m_doc->operateSettings()->setRemoteGo(true);
+    ShowTreeController *st = m_doc->showTree();
+    Fixture *fx = dimmer(m_doc, QStringLiteral("D1"));
+    QLCPalette *full = new QLCPalette(QLCPalette::Dimmer);
+    full->setName(QStringLiteral("Full"));
+    full->setValue(255);
+    m_doc->addPalette(full);
+    ShowTree::Target target;
+    target.fixtures = { fx->id() };
+    const quint32 prod = st->productions().first().id;
+    auto makeHit = [&](ShowTree::HitScope scope, quint32 place, const QString &name) {
+        const quint32 h = st->addHit(scope, place, name);
+        const quint32 layer = st->addLayer(h, target, name);
+        ShowTree::Look look;
+        look.key = ShowTree::KeyDimmer;
+        look.palettes = { full->id() };
+        st->setLayerLook(h, layer, look);
+        return h;
+    };
+    const quint32 wide = makeHit(ShowTree::HitScope::Global, ShowTree::invalidId(), QStringLiteral("Wide"));
+    const quint32 narrow = makeHit(ShowTree::HitScope::Production, prod, QStringLiteral("Narrow"));
+    QVERIFY(wide != ShowTree::invalidId() && narrow != ShowTree::invalidId());
+
+    startWeb(false);
+    QStringList heard;
+    QWebSocket *ws = runPage(&heard);
+    ws->sendTextMessage(QStringLiteral("QLC+RUN|hello"));
+    QTRY_VERIFY(heardAn(heard, QStringLiteral("RUN|state|")));
+    // both are on the page, the narrowest one armed
+    QJsonArray hits = stateObject(heard).value(QStringLiteral("hits")).toArray();
+    QCOMPARE(hits.count(), 2);
+    for (const QJsonValue &v : hits)
+    {
+        const QJsonObject o = v.toObject();
+        QCOMPARE(o.value(QStringLiteral("armed")).toBool(), o.value(QStringLiteral("id")).toInt() == int(narrow));
+        QVERIFY(!o.value(QStringLiteral("on")).toBool());
+    }
+
+    // in Design a hit doesn't fire (a button doesn't)
+    m_doc->setMode(Doc::Design);
+    ws->sendTextMessage(QStringLiteral("QLC+RUN|hit"));
+    QTRY_VERIFY(heardAn(heard, QStringLiteral("RUN|ack|hit|design")));
+    m_doc->setMode(Doc::Operate);
+
+    // the wide one isn't armed while a narrower one is
+    heard.clear();
+    ws->sendTextMessage(QStringLiteral("QLC+RUN|hit|%1").arg(wide));
+    QTRY_VERIFY(heardAn(heard, QStringLiteral("RUN|ack|hit|nothing")));
+    Function *fn = m_doc->function(st->lookFunction(narrow));
+    QVERIFY(fn != nullptr);
+    QVERIFY(!fn->isRunning());
+
+    // no id: the armed one; the second press lets it go
+    ws->sendTextMessage(QStringLiteral("QLC+RUN|hit"));
+    // the master timer is not running in a test: tick it by hand
+    QTRY_VERIFY((m_doc->masterTimer()->timerTick(), fn->isRunning()));
+    auto onOf = [&](quint32 id) {
+        for (const QJsonValue &v : stateObject(heard).value(QStringLiteral("hits")).toArray())
+            if (v.toObject().value(QStringLiteral("id")).toInt() == int(id))
+                return v.toObject().value(QStringLiteral("on")).toBool();
+        return false;
+    };
+    QTRY_VERIFY(onOf(narrow));
+    ws->sendTextMessage(QStringLiteral("QLC+RUN|hit|%1").arg(narrow));
+    QTRY_VERIFY((m_doc->masterTimer()->timerTick(), !fn->isRunning()));
+    QTRY_VERIFY(!onOf(narrow));
+    dropPage(ws);
+}
+
+void WebAccess_Test::companionWordsFollowRemoteGoPinAndMode()
+{
+    Chaser *list = runShow();
+    Q_UNUSED(list);
+    FixtureGroup *grp = new FixtureGroup(m_doc);
+    grp->setName(QStringLiteral("Backs"));
+    m_doc->addFixtureGroup(grp);
+    grp->setMaster(true);
+    ShowControl *sc = m_doc->showControl();
+    int runs = 0;
+    sc->setRunHandler([&](const ShowControl::Request &, ShowControl::Route) { ++runs; return true; });
+    startWeb(false);
+    QStringList heard;
+    QWebSocket *ws = runPage(&heard);
+    ws->sendTextMessage(QStringLiteral("QLC+RUN|hello"));
+    QTRY_VERIFY(heardAn(heard, QStringLiteral("RUN|state|")));
+
+    const QStringList words = {
+        QStringLiteral("go|2"), QStringLiteral("standby|next"), QStringLiteral("hit"),
+        QStringLiteral("blackout|on"), QStringLiteral("grand|10"), QStringLiteral("nudge|grand|-5"),
+        QStringLiteral("nudge|master|%1|-5").arg(grp->id()) };
+    // remote GO off (the default): every one refused, nothing moves
+    for (const QString &w : words)
+        ws->sendTextMessage(QStringLiteral("QLC+RUN|") + w);
+    QTRY_COMPARE(heard.count(QStringLiteral("RUN|ack|go|refused")), 1);
+    QTRY_COMPARE(heard.count(QStringLiteral("RUN|ack|nudge|refused")), 2);
+    QTRY_VERIFY(heardAn(heard, QStringLiteral("RUN|ack|blackout|refused")));
+    QTRY_VERIFY(heardAn(heard, QStringLiteral("RUN|ack|hit|refused")));
+    QTRY_VERIFY(heardAn(heard, QStringLiteral("RUN|ack|grand|refused")));
+    QTRY_VERIFY(heardAn(heard, QStringLiteral("RUN|ack|standby|refused")));
+    QCOMPARE(runs, 0);
+    QVERIFY(!m_doc->inputOutputMap()->blackout());
+    QCOMPARE(int(m_doc->inputOutputMap()->grandMasterValue()), 255);
+    QCOMPARE(int(grp->masterLevel()), 255);
+
+    // on, with a PIN: needpin until the session gave it
+    m_doc->operateSettings()->setRemoteGo(true);
+    QVERIFY(m_doc->operateSettings()->setPin(QStringLiteral("4321")));
+    QTRY_VERIFY(stateObject(heard).value(QStringLiteral("pin")).toBool());
+    heard.clear();
+    for (const QString &w : words)
+        ws->sendTextMessage(QStringLiteral("QLC+RUN|") + w);
+    QTRY_COMPARE(heard.count(QStringLiteral("RUN|ack|nudge|needpin")), 2);
+    QCOMPARE(runs, 0);
+    QVERIFY(!m_doc->inputOutputMap()->blackout());
+    ws->sendTextMessage(QStringLiteral("QLC+RUN|pin|4321"));
+    QTRY_VERIFY(heardAn(heard, QStringLiteral("RUN|pin|ok")));
+    ws->sendTextMessage(QStringLiteral("QLC+RUN|go|2"));
+    QTRY_COMPARE(runs, 1);
+    dropPage(ws);
+    sc->setRunHandler(nullptr);
+}
+
+void WebAccess_Test::aSpinIsOneNudge()
+{
+    // The module sends one nudge for a whole spin (tools/companion-module
+    // coalesces them); the app adds a big delta in one step, so a flood
+    // of small ones and one big one end in the same place.
+    runShow();
+    m_doc->operateSettings()->setRemoteGo(true);
+    FixtureGroup *grp = new FixtureGroup(m_doc);
+    grp->setName(QStringLiteral("Backs"));
+    m_doc->addFixtureGroup(grp);
+    grp->setMaster(true);
+    grp->setMasterLevel(percentLevel(20));
+    WebAccessRun run(m_doc);
+    for (int i = 0; i < 30; ++i)
+        QCOMPARE(run.nudgeMaster(grp->id(), 1, true), WebAccessRun::Done);
+    QCOMPARE(int(grp->masterLevel()), int(percentLevel(50)));
+    grp->setMasterLevel(percentLevel(20));
+    QCOMPARE(run.nudgeMaster(grp->id(), 30, true), WebAccessRun::Done);
+    QCOMPARE(int(grp->masterLevel()), int(percentLevel(50)));
 }
 
 void WebAccess_Test::thePinIsAskedOncePerSession()

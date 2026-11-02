@@ -1,0 +1,26 @@
+{
+	"name": "companion-module-qlcconsole",
+	"version": "0.1.0",
+	"main": "src/main.js",
+	"type": "module",
+	"private": true,
+	"scripts": {
+		"test": "node --test test/*.test.js",
+		"package": "companion-module-build"
+	},
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/sandinak/qlcconsole.git"
+	},
+	"engines": {
+		"node": "^22.20 || ^26.5"
+	},
+	"dependencies": {
+		"@companion-module/base": "~2.2.2",
+		"ws": "^8.18.0"
+	},
+	"devDependencies": {
+		"@companion-module/tools": "^3.2.0"
+	}
+}

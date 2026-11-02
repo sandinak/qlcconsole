@@ -375,6 +375,85 @@ qlcconsole can't GO each other in a loop. **Last sent** on the page shows
 what went. Back, Stop and the like are not sent (decided: GO only, can
 change).
 
+## Stream Deck (Companion)
+
+Bitfocus Companion can drive a show from a Stream Deck, a Stream Deck +
+(with its four dials and touch strip) or any Companion surface, and put the
+current and next cue on the keys. The module is `companion-module-qlcconsole`
+in the repository's `tools/companion-module/` folder. It talks to the same
+web access socket as the phone [Run page](other-improvements.md#the-run-page-phone-and-tablet),
+so there is nothing new to switch on in qlcconsole and the same safety rules
+apply.
+
+### Set it up
+
+1. In qlcconsole: **Connections ▸ Devices ▸ Show control &amp; sync ▸ Web
+   access**, tick **Start web access with this show** and **Reachable from
+   other devices on the network** (Companion on the same computer needs only
+   the first).
+2. **File ▸ Show Settings…**, tick **Allow GO from the phone Run page**.
+   This is off in every show until you do. If the show has a PIN, you give it
+   to Companion in the connection's settings.
+3. In Companion, **Settings ▸ Developer modules path**: the `tools` folder's
+   `companion-module` directory (run `npm install` in it once). Add a
+   connection of type **qlcconsole**, enter the computer's address and the
+   port (9999).
+4. Presets: **Run the show** (GO showing the next cue, Back, Stop, Sub GO,
+   Hold, Blackout, now/mode displays), **Hits** and **Dials**. Drag them onto
+   keys or dials.
+
+It is for the show network: web access is plain http, so keep it off a
+shared network. A web access with logins (**-wa**) is not supported by the
+module (decided: can change); use it with the show's PIN instead.
+
+### What the keys and dials do
+
+- **GO, Back, Stop, Sub GO, Hold/Resume, GO a cue** (a cue number on the
+  main list or a numbered list) are run commands by the web route, so a GO
+  holds the Design previews exactly as from the keys. Refused while **Allow
+  GO** is off, and until the PIN is given.
+- **Hits.** A key fires the hit as a Virtual Console button does: only a hit
+  that is armed, the **narrowest** armed place wins, and only in Operate;
+  press again to let it go. There are 32 numbered hit keys and one that
+  fires "the armed hit". A key lights red while its hit is on and blue
+  while it is armed.
+- **Blackout** toggles, and shows red while it is on.
+- **Dials.** Turn a **group master** dial to move it (5 percent a click, set
+  in the connection), press it to go to full, press again to go to 0. The
+  **Grand Master** dial is the same. The touch strip shows the name, the
+  level and a level bar. Fast spins are added up in the module and sent as
+  one message, and the level is held between 0 and 100.
+- **Walk the cues dial.** Turning puts the next or previous cue on standby,
+  without playing it (the footer's *Next:* and the key show it). **Pressing
+  GOes only while the dial is armed**, that is within five seconds of a turn,
+  so a knock on the dial does not GO the show. It follows the same Allow GO
+  and PIN rules.
+
+### What the keys show
+
+The current and next cue (number and name), the list, production and song
+section, Design or Operate, whether remote control is allowed, blackout,
+the Grand Master and each group master's level, and each hit's on and armed
+state, as Companion variables (`$(qlcconsole:next_num)`,
+`$(qlcconsole:next_name)`, `master_1_level`, `hit_1_name`...) and as
+feedbacks that colour a key.
+
+### The socket (for other tools)
+
+The module sends one text per command to `ws://host:9999/qlcplusWS`, after
+`QLC+RUN|hello` (and `QLC+RUN|pin|…` when the show has a PIN); it hears
+`RUN|state|{json}` on every change and `RUN|ack|word|answer` to each
+command (`ok`, `nothing`, `refused`, `needpin`, `design`). The words are
+`go[|cue[|list]]`, `back`, `stop`, `subgo`, `subback`, `pause`, `resume`,
+`standby|next|prev` (a LOAD, no GO), `hit[|id]`, `blackout|on|off|toggle`,
+`grand|percent`, `master|group|percent`, `nudge|grand|delta` and
+`nudge|master|group|delta` (a signed percent added to the level now, held to
+0..100).
+
+decided (can change): nudging the selected layer's dimmer from a dial is not
+built; web access has no selection to act on (it lives in the Build tab), and
+Design edits are not remote-controlled.
+
 ## Checking the hookup
 
 **Connections → Devices → Show control & sync** says whether OSC is listening —
