@@ -1465,6 +1465,25 @@ skipped). Upstream fixes taken:
   auth, scripts) have new tests, and the bugs above came out of them.
   Numbers and how to reproduce them: docs/dev/TEST_MATRIX.md, "Coverage".
 
+### Known issues
+
+- **Not yet tried on real hardware:** the DualSense adaptive triggers and
+  touchpad swipes (the strengths and swipe distance are first guesses),
+  encoder presets on a real encoder controller, the Stream Deck + in a real
+  Companion, and a third-party "Edge" pad's back buttons (they send nothing
+  until programmed on the pad itself).
+- **Crackle** pulses up to the look's level from a lower Rest level; it
+  can't rise above the look.
+- **Tested less than usual for this beta:** the thread-race (TSan) and
+  ten-times random-order runs, and the Windows installer checks, didn't run
+  on this build (CI's own Windows tests did). The macOS-style test variant
+  still crashes offscreen without a real window, as on 0.3.0.
+- **Open questions** on a few edge cases: an effect fade typed on the
+  command line works in Operate; a real GO while Blind is on still sends
+  QLab out; switching to Operate from the phone page may ask Teaching's
+  question on the console; Add Fixture says nothing when a fixture is
+  refused past universe 1024.
+
 ## [0.3.0] - 2026-10-26
 
 qlcconsole 0.3.0: the Build tab and its Workbench (scenes, collections and
