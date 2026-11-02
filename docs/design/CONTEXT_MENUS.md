@@ -177,7 +177,8 @@ that are both present, and nowhere else at the top level.
   For fixtures:
   - "Fixture Properties…"
   - "Locate"
-  - "Why Is This On?"
+  - "Why is this on?" (the panel's name, a question kept as asked: the one
+    exception to Title Case)
   - "Patch…"
   - "Output Rules…"
   - "Select All Similar"
@@ -195,10 +196,12 @@ that are both present, and nowhere else at the top level.
 
 ### 3.3 Per kind
 
-**Fixture group.** Every place calls `ContextMenus::fixtureGroup()`.
+**Fixture group.** Every place calls `ContextMenus::rig()` (or its
+`fixtureGroup()` wrapper).
 - **Open:** Edit Head Layout…
 - **Kind:**
   - Locate
+  - Why is this on? (its first light)
   - Output Rules…
   - Split by Head Type… (if mixed)
   - Lay Out from the Stage… (if on the plot)
@@ -220,11 +223,12 @@ What each place supplies:
 - Rename is inline where the list can edit the row in place, and a dialog
   otherwise.
 
-**Fixture.** Every place calls `ContextMenus::fixture()`.
+**Fixture.** Every place calls `ContextMenus::rig()` (or `fixture()`); a
+mixed selection of groups and fixtures gets one menu for both.
 - **Open:** Fixture Properties…
 - **Kind:**
   - Locate
-  - Why Is This On? (one fixture)
+  - Why is this on? (one fixture)
   - Patch… / Patch %n Fixtures…
   - Output Rules…
 - **Selection:** Select All Similar, or the *Selection ▸* submenu from
@@ -243,11 +247,14 @@ These keep the one Plot builder (`buildItemMenu`), with three changes:
 - A no-light zone's destroy item is "Delete No-light Zone".
 - The dead item `contextMenuEvent`s are gone.
 
-**Palette.** Every place calls `ContextMenus::palette()`.
-- **Open:** Edit Palette…
+**Palette.** Build ▸ Palettes, Build ▸ Effects and the Library build it in
+the canon's sections with the same names (no shared builder yet: the three
+lists act on different models).
+- **Open:** Edit Palette (it opens in the Workbench, not a dialog) / Edit
+  Effect / Open in Editor
 - **Kind:** Runs ▸ (effects)
 - **Organise:** Move to Folder…, Save as Bundle…
-- **Place:** Used by ▸ in the Library
+- **Place:** Used By ▸ in the Library
 - **Edit:** Duplicate, Rename
 - **Remove:** Delete Palette… / Delete %n Palettes…
 - "New …" items belong to empty space and folders. They are not in an
@@ -255,7 +262,8 @@ These keep the one Plot builder (`buildItemMenu`), with three changes:
 
 **Function** (scene, chaser, EFX, collection, RGB matrix).
 - **Open:** Open in Workbench / Open in Editor
-- **Kind:** Learn Trigger…, Runs ▸, Chaser from Selection, Send to Show Tree…
+- **Kind:** Learn Trigger…, Runs ▸, Send to Show Tree…
+- **Organise:** Chaser from Selection
 - **Edit:** Duplicate, Rename
 - **Remove:** Delete…
 - "New …" items go to empty space and folders.
