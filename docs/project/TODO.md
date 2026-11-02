@@ -773,8 +773,9 @@ undo as one step, how it reads in Front/Side).
     layer); "make a collection of this scene and…" could come later.
   - (Chasers: done in W2, below.)
   - Palettes and Effects sections are today's lists behind the switch; the
-    shared Library (P2/W6), the bench (W4) and the effect designer on a
-    layer (W4) are to come. No command bar yet (W6).
+    shared Library (P2/W6; **the Library and the command bar are in Build
+    since 0.4**, below), the bench (W4) and the effect designer on a
+    layer (W4) are to come.
   - Look Editor *value* edits (a colour, a level) are not on the history
     yet — only scene and collection edits are. Deleting a function is still
     not undoable.
@@ -822,7 +823,21 @@ undo as one step, how it reads in Front/Side).
     (`View=` on `<Workspace>`); old QLC+ shows open in Classic, the rest
     and new shows in qlcconsole; a hidden tab's jump shows Everything
     with a note; Upgrade This Show… offers qlcconsole once.
-- Then W6 → W7.
+- **W6 shared Library + command bar in Build — done (0.4, w6,
+  2026-11-01).** The Show Tree's Library is lent to Build (one instance, one
+  model, Recent shared); the Command bar runs the registry with a Build
+  context (`Towers colour Blue`, `dimmer 50`, `palette …`, `undo`, `?`;
+  cue words answer "Show Tree only"). Left over:
+  - The Palettes section still shows its own palette tree and Bundles tab
+    above the Library; folding them into the Library ("Bundles as a Library
+    section") is the rest of P2.
+  - A line's new palette (`dimmer 50` made one) is not part of the line's
+    undo step; the scene's change is.
+  - An effect's `fade` (and its own colour / dimmer) is the cue's: Build
+    refuses it and points at the effect designer.
+  - The AI Assist `? question` answers here; a plan it proposes needs a cue
+    and so is for the Show Tree.
+- Then W7.
 
 ## Show Manager parity (review 2026-10-29, docs/dev/SHOW_MANAGER_PARITY.md)
 

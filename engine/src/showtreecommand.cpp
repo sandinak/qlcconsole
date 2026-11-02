@@ -437,6 +437,19 @@ QString ShowTreeCommand::helpText(const QString &w)
     return out;
 }
 
+bool ShowTreeCommand::showTreeOnlyWord(const QString &word)
+{
+    // What needs a cue, a cue list, a production or the run. `palette`,
+    // `set`, the attribute words, `layer`, `undo`, `redo` and `help` are
+    // not here: they mean something in Build.
+    static const QStringList only {
+        "production", "main", "sub", "follow", "subgo", "list", "cue", "track", "block", "cueonly", "cue-only",
+        "default", "base", "release", "skip", "unskip", "mib", "nomib", "allowmib", "textcolour", "textcolor", "include",
+        "record", "dup", "copy", "paste", "cut", "reusable", "use", "unlink", "detach", "convert", "hit", "look",
+        "vcpage", "adopt", "wb", "workbench", "name", "function", "fn", "new", "go" };
+    return only.contains(word.toLower());
+}
+
 QStringList ShowTreeCommand::keywords()
 {
     // The words a command starts with: the table's (less the attributes
@@ -993,6 +1006,16 @@ ShowTreeCommand::Result ShowTreeCommand::run(const QString &line, const Context 
         return res;
     }
 
+    // W6: Build's command bar. The words that act on a cue, a list or the
+    // run are the Show Tree's: said so, nothing changed.
+    const bool buildMode = context.build != nullptr;
+    if (buildMode && showTreeOnlyWord(w0))
+    {
+        res.message = tr("“%1” is Show Tree only: the Build tab edits the scene loaded in the Workbench. "
+                         "Type help for the words that work here.").arg(r.peek());
+        return res;
+    }
+
     if (w0 == QLatin1String("wb") || w0 == QLatin1String("workbench"))
     {
         // W3: the view docks the Workbench; here only which cue.
@@ -1095,7 +1118,9 @@ ShowTreeCommand::Result ShowTreeCommand::run(const QString &line, const Context 
     // Values typed as a level or a hex: the palettes they came to (reused
     // or new), to say so.
     QList<quint32> valuePalettes, madeNew;
-    m_st->beginBatch(r.src);
+    if (!buildMode)
+        m_st->beginBatch(r.src);
+    QString buildError;
 
     // The selected cue's mode words, after "cue …" or on their own.
     auto modeWords = [&]() -> QString {
@@ -1226,6 +1251,13 @@ ShowTreeCommand::Result ShowTreeCommand::run(const QString &line, const Context 
     // The selected cue's own layer on @a t: there, or made (a carried-in
     // one is brought into the cue).
     auto layerOn = [&](const Target &t) -> quint32 {
+        if (buildMode)
+        {
+            // Build: no layer made; the target is the scene's to take.
+            if (!context.build->targets.contains(t))
+                context.build->targets << t;
+            return 0;
+        }
         if (const Cue *c = m_st->cue(ctx.cue))
             for (const Layer &l : c->layers)
                 if (l.target == t)
@@ -1239,6 +1271,17 @@ ShowTreeCommand::Result ShowTreeCommand::run(const QString &line, const Context 
         static const int KeepFade = -3;     // a fade the line doesn't name: as it is
         int n = 0;
         auto setLook = [&](const Look &look) {
+            if (buildMode)
+            {
+                // Build holds palettes: a scene's looks. A value that is
+                // not one (a line aim's spread, none) is the cue's.
+                if (look.none || look.palettes.isEmpty())
+                    buildError = tr("Build sets palettes: that value is a Show Tree cue's. Type a palette's name.");
+                for (quint32 pid : look.palettes)
+                    if (!context.build->palettes.contains(pid))
+                        context.build->palettes << pid;
+                return;
+            }
             if (layers.isEmpty())
                 m_st->setCueLook(ctx.cue, look);
             for (quint32 lid : layers)
@@ -1246,7 +1289,12 @@ ShowTreeCommand::Result ShowTreeCommand::run(const QString &line, const Context 
         };
         while (!r.atEnd())
         {
+            if (!buildError.isEmpty())
+                return buildError;
             const QString kw = r.word();
+            if (kw.compare(QLatin1String("fade"), Qt::CaseInsensitive) == 0 && buildMode)
+                return tr("A fade is a Show Tree cue's setting (an effect fades with its cue); in Build the "
+                          "effect designer has the effect's own.");
             if (kw.compare(QLatin1String("fade"), Qt::CaseInsensitive) == 0)
             {
                 // An effect's fades (right after it, or after its own looks):
@@ -1428,6 +1476,9 @@ ShowTreeCommand::Result ShowTreeCommand::run(const QString &line, const Context 
                         && isEffectKey(m_st->keyForPalette(have->id())) && !m_st->isInlinePalette(have->id()))
                         p = have;
                 const Look look = m_st->lookForPalette(p->id());
+                if (buildMode && r.peek().compare(QLatin1String("fade"), Qt::CaseInsensitive) == 0)
+                    return tr("A fade is a Show Tree cue's setting (an effect fades with its cue); in Build the "
+                              "effect designer has the effect's own.");
                 if (r.peek().compare(QLatin1String("fade"), Qt::CaseInsensitive) == 0)
                 {
                     // Only its fades: an effect already playing there keeps
@@ -1532,6 +1583,8 @@ ShowTreeCommand::Result ShowTreeCommand::run(const QString &line, const Context 
             if (pid == QLCPalette::invalidId())
                 return tr("Couldn't make that value.");
 
+            if (buildMode && !effect.isEmpty() && (key == KeyColour || key == KeyDimmer))
+                return tr("An effect's own colour or dimmer is set in the effect designer in Build.");
             if (!effect.isEmpty() && (key == KeyColour || key == KeyDimmer))
             {
                 // After an effect: that effect's own look (inside it only).
@@ -1568,6 +1621,8 @@ ShowTreeCommand::Result ShowTreeCommand::run(const QString &line, const Context 
             }
             ++n;
         }
+        if (!buildError.isEmpty())
+            return buildError;
         return n == 0 ? tr("Nothing to set.") : QString();
     };
 
@@ -1735,7 +1790,7 @@ ShowTreeCommand::Result ShowTreeCommand::run(const QString &line, const Context 
             ctx.cue = invalidId();
         }
     }
-    else if (list == nullptr)
+    else if (list == nullptr && !buildMode)
     {
         error = tr("Select a cue list first (or: list \"name\").");
     }
@@ -1975,7 +2030,7 @@ ShowTreeCommand::Result ShowTreeCommand::run(const QString &line, const Context 
     {
         error = ctx.cue == invalidId() ? tr("Select a cue first.") : modeWords();
     }
-    else if (ctx.cue == invalidId() || list->indexOf(ctx.cue) < 0)
+    else if (!buildMode && (ctx.cue == invalidId() || list->indexOf(ctx.cue) < 0))
     {
         error = tr("Select a cue first (or: cue 1.0.0 \"name\").");
     }
@@ -2279,12 +2334,17 @@ ShowTreeCommand::Result ShowTreeCommand::run(const QString &line, const Context 
             m_st->setLayerRelease(ref.first, ref.second, on);
         res.keepSelection = true;
     }
-    else if (!attributeKey(w0).isEmpty() && !ctx.layers.isEmpty() && targetNames().indexOf(QRegularExpression(
+    else if (!attributeKey(w0).isEmpty() && (buildMode || !ctx.layers.isEmpty()) && targetNames().indexOf(QRegularExpression(
                  QStringLiteral("^%1$").arg(QRegularExpression::escape(w0)),
                  QRegularExpression::CaseInsensitiveOption)) < 0)
     {
         // `colour Blue`, `dimmer 45`… with several layers selected: on all
-        // of them, cue by cue, one undo step.
+        // of them, cue by cue, one undo step. In Build: the scene loaded.
+        if (buildMode)
+        {
+            error = assigns({ 0 });
+            res.keepSelection = true;
+        }
         QList<quint32> cues;
         for (const QPair<quint32, quint32> &ref : ctx.layers)
             if (!cues.contains(ref.first))
@@ -2380,7 +2440,11 @@ ShowTreeCommand::Result ShowTreeCommand::run(const QString &line, const Context 
         else
         {
             QList<quint32> layers;
-            if (r.peek().toLower() == QLatin1String("in"))
+            if (r.peek().toLower() == QLatin1String("in") && buildMode)
+            {
+                error = tr("“in” makes a child layer of a Show Tree cue: Show Tree only.");
+            }
+            else if (r.peek().toLower() == QLatin1String("in"))
             {
                 // US in Steps …: child layers of the cue's Steps layer (§3.5).
                 r.word();
@@ -2424,7 +2488,8 @@ ShowTreeCommand::Result ShowTreeCommand::run(const QString &line, const Context 
                 }
             if (!error.isEmpty())
             {
-                m_st->endBatch(false);
+                if (!buildMode)
+                    m_st->endBatch(false);
                 res.message = error;
                 return res;
             }
@@ -2435,7 +2500,8 @@ ShowTreeCommand::Result ShowTreeCommand::run(const QString &line, const Context 
         }
     }
 
-    m_st->endBatch(error.isEmpty());
+    if (!buildMode)
+        m_st->endBatch(error.isEmpty());
     if (!error.isEmpty())
     {
         res.message = error;

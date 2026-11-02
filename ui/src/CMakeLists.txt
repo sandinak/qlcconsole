@@ -204,6 +204,7 @@ add_library(${module_name}
     universeusagewidget.cpp universeusagewidget.h
     programmingmanager.cpp programmingmanager.h
     programmingoutline.cpp programmingoutline.h
+    workbenchcommand.cpp workbenchcommand.h
     splitterhandles.cpp splitterhandles.h
     workbench.cpp workbench.h
     workbenchstack.cpp workbenchstack.h

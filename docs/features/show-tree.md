@@ -61,7 +61,11 @@ from the Library lands in the tree right beside it.
 
 - **Left: the [Library](#the-library).** It holds groups, group sets,
   targets, palettes and functions to drag in, or to add with Return (see
-  [Adding layers](#adding-layers)).
+  [Adding layers](#adding-layers)). It is one widget shared with
+  [Build](build.md#the-library-and-the-command-bar): Build borrows it while
+  that tab shows, so Recent, the filter and + Palette are the same in both,
+  and Build has the same command line (words that need a cue answer *Show
+  Tree only* there).
 - **Middle: the tree.** It shows productions, cue lists, cues, and each cue's
   layers. Grey **⤳** rows under a cue are layers it doesn't hold itself but
   that are on stage in it. Beside each is only the number of the cue it

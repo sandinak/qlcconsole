@@ -20,6 +20,17 @@ back, and a .qxw saved here is checked against QLC+ 4.14.4 itself.
 ### Performance over time
 
 - **The [Performance](docs/performance.md#performance-over-time) page gains data points as tests run.** Every `make perf`, `make perf-record` and nightly run appends its key metrics to `docs/perf-data/history.csv`; `tools/perf/plot.py trends` draws them per machine class (baseline re-records, failed metrics and the FadeChannel memory regression and fix marked); `make perf-history-commit` commits the history. Backfilled from the existing baselines and the 2026-11-01 runs.
+### The Library and the command line in Build
+
+- **One Library, and the command line, in Build.** The bottom of Build's
+  navigator is now the Show Tree's own Library (the same widget and list,
+  with the same Recent, filter and + Palette): drag a palette, group or fixture onto a layer
+  row or the Workbench, or press Return to add the selection to the scene
+  loaded. A **Command** bar under both panes runs the Show Tree's command
+  line through the Operation Registry for that scene: `Towers colour Blue`,
+  `dimmer 50`, `Steps effect Sinelon`, `palette …`, `undo`, `?` and AI Assist's
+  `? question`, one undo step a line; the words that need a cue (`cue`,
+  `list`, `record`, GO…) answer "Show Tree only". No new tab or menu item.
 
 ### Flesh as a stored colour
 

@@ -96,9 +96,24 @@ class QLC_ENGINE_EXPORT ShowTreeCommand
 public:
     ShowTreeCommand(Doc *doc, ShowTreeController *controller);
 
+    /** Build's command bar (W6): what a looks line came to, recorded
+     *  instead of written to a cue. The groups and fixtures it named and the
+     *  palettes its values meant (reused, or made) -- Build adds them to the
+     *  scene it has loaded, as a drop of them would. */
+    struct BuildEdit
+    {
+        QList<ShowTree::Target> targets;
+        QList<quint32> palettes;
+    };
+
     /** Where the command runs: the selected production, list and cue. */
     struct Context
     {
+        /** Non-null: the line runs in Build (docs/design/WORKFLOW_DESIGN.md
+         *  W6). Words of the Show Tree alone (cue, list, record, include…)
+         *  answer "Show Tree only"; a looks line fills this in and changes
+         *  no cue. */
+        BuildEdit *build = nullptr;
         quint32 production = 0xFFFFFFFF;
         quint32 list = 0xFFFFFFFF;
         quint32 cue = 0xFFFFFFFF;
@@ -135,6 +150,11 @@ public:
     };
 
     Result run(const QString &line, const Context &context);
+
+    /** Is @a word (the first word of a line) one that only means something
+     *  with a cue to act on -- cue, list, record, include, skip, mib, GO...?
+     *  Build answers "Show Tree only" to these. */
+    static bool showTreeOnlyWord(const QString &word);
 
     /** Tab: @a line with its last word completed as far as it is the same
      *  in every word that fits there (keywords, cue numbers, cue lists,

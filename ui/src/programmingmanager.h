@@ -118,6 +118,20 @@ public:
      *  place, its sheet offering to go there. Whether it was sent. */
     bool sendToShowTree(quint32 chaserId);
 
+    /** W6: the command bar under the two panes (the Show Tree's command
+     *  line through the same Operation Registry, with a Build context). */
+    class BuildCommandBar *commandBar() const { return m_commandBar; }
+    /** W6: the Library is the Show Tree's own widget, lent while Build is
+     *  the tab shown (same instance, model, Recent and Pinned). */
+    bool isLibraryShared() const { return m_libraryLent; }
+    /** The pane's holder in the navigator (the Library sits in it). */
+    QWidget *libraryHolder() const { return m_libraryHolder; }
+    /** Borrow the Library from the Show Tree (showEvent does it); false:
+     *  there is no Show Tree view, or it is lent already. */
+    bool borrowLibrary();
+    /** ...and give it back (hideEvent). */
+    void returnLibrary();
+
     /** The Workbench (W3 docks this same widget in the Show Tree). */
     Workbench *workbench() const { return m_workbench; }
     /** W3: lend the Workbench to the Show Tree (it docks it there); a note
@@ -368,6 +382,11 @@ private:
     class QLineEdit *m_buildSearch = nullptr;   //!< searches every section
     QTreeWidget *m_searchResults = nullptr;     //!< its results, a page of m_sectionStack
     ProgrammingOutline *m_outline = nullptr;
+    class BuildCommandBar *m_commandBar = nullptr;
+    QWidget *m_fixGroupPane = nullptr;      //!< "Groups & fixtures" (stock source), hidden while the Library is here
+    QWidget *m_libraryHolder = nullptr;     //!< where the Show Tree's Library is lent to
+    class QVBoxLayout *m_libraryLayout = nullptr;
+    bool m_libraryLent = false;
     QLabel *m_outlineHint = nullptr;  //!< what a drag would do / what the outline is
     QToolButton *m_addFuncBtn; //!< "+ New" dropdown
     class QSplitter *m_mainSplit = nullptr;
