@@ -259,6 +259,9 @@ void StructureDuplicate_Test::groupsTakeTheCopiesOrGoParallel()
     all->assignFixture(r.lights.at(0)->id());
     all->assignFixture(r.lights.at(1)->id());
     m_doc->addFixtureGroup(all);
+    // Undo deletes the group and loads it back under the same id, so the
+    // test looks it up by id afterwards and never through the old pointer.
+    const quint32 allId = all->id();
 
     // Added to: the copies of the two spots join it.
     SD::Options opt;
@@ -274,7 +277,8 @@ void StructureDuplicate_Test::groupsTakeTheCopiesOrGoParallel()
         QCOMPARE(all->fixtureList().contains(f->id()), f->name() != "T2-Wash");
     SD::undo(m_doc, res.undo);
     QCOMPARE(m_doc->fixtures().size(), 3);
-    QCOMPARE(m_doc->fixtureGroup(all->id())->fixtureList().size(), 2);
+    QVERIFY(m_doc->fixtureGroup(allId) != nullptr);
+    QCOMPARE(m_doc->fixtureGroup(allId)->fixtureList().size(), 2);
 
     // Parallel: a group of their own, named by the structure.
     opt.fixtureGroups = SD::ParallelGroups;
@@ -284,7 +288,7 @@ void StructureDuplicate_Test::groupsTakeTheCopiesOrGoParallel()
     QCOMPARE(pv.groups.first().name, QString("T-2 All Spots"));
     res = SD::apply(m_doc, r.k1, { r.k2, r.k3 }, opt);
     QCOMPARE(m_doc->fixtureGroups().size(), 3);
-    QCOMPARE(m_doc->fixtureGroup(all->id())->fixtureList().size(), 2);      // T-1's own is as it was
+    QCOMPARE(m_doc->fixtureGroup(allId)->fixtureList().size(), 2);      // T-1's own is as it was
     QStringList names;
     foreach (FixtureGroup *g, m_doc->fixtureGroups())
         names << g->name();
