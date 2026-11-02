@@ -42,6 +42,10 @@ private slots:
     void footerEntriesFoldIn();
     /** The Show readiness dialog shows design entries' ids and opens the panel */
     void readinessDialogLeadsHere();
+    /** PWR-12: I Meant It and Not Meant from the row; Show Me goes to the layer */
+    void iMeantItFromTheRow();
+    /** PWR-12: each breaching cue is marked in the Show Tree; a click opens its row */
+    void showTreeMarksBreachingCues();
 
 private:
     Doc *m_doc = nullptr;

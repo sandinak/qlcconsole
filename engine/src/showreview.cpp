@@ -24,6 +24,8 @@
 #include <algorithm>
 
 #include "showreview.h"
+#include "monitorproperties.h"
+#include "scenery.h"
 #include "showreviewcontext.h"
 #include "showtreecontroller.h"
 #include "inputoutputmap.h"
@@ -256,6 +258,8 @@ void ShowReview::changed()
     // Keep the last result's states in step without a full run.
     for (ReviewFinding &f : m_last.findings)
     {
+        if (f.intended)
+            continue;           // a mark in the show, not an acceptance
         f.state = ReviewFinding::Open;
         f.checkOff = false;
         f.acceptedBy.clear();
@@ -446,6 +450,12 @@ bool ShowReview::targetExists(const Doc *doc, const QString &key)
             return false;
         if (kind == QLatin1String("cue") && doc->showTree()->listOfCue(id) == nullptr)
             return false;
+        if (kind == QLatin1String("scenery"))
+        {
+            MonitorProperties *mp = const_cast<Doc *>(doc)->monitorProperties();
+            if (mp != nullptr && mp->scenery(id) == nullptr)
+                return false;
+        }
         if (kind == QLatin1String("vc") && doc->showReview() != nullptr)
         {
             const VcIndex vc = doc->showReview()->vcIndex();

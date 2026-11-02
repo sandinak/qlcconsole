@@ -233,6 +233,17 @@ public:
     QColor color() const { return m_color; }
     void   setColor(const QColor &c) { m_color = c; }
 
+    /** "Light here only on purpose" (Show Review PWR-12, backwash): a lit
+     *  beam that lands on it must be meant -- a cyc or strip light, a look
+     *  aimed at a target on it, or marked "I meant it" -- or Show Review
+     *  names it, cue by cue. On by default for a cyclorama and a scrim
+     *  (decided, can change); a painted drop or a wall can opt in. */
+    bool lightOnPurposeOnly() const
+    { return m_onPurpose < 0 ? defaultOnPurposeOnly(m_kind) : m_onPurpose > 0; }
+    void setLightOnPurposeOnly(bool on)
+    { m_onPurpose = (on == defaultOnPurposeOnly(m_kind)) ? -1 : (on ? 1 : 0); }
+    static bool defaultOnPurposeOnly(int kind) { return kind == Cyclorama || kind == Scrim; }
+
     bool locked() const { return m_locked; }
     void setLocked(bool l) { m_locked = l; }
     quint32 layerId() const { return m_layerId; }
@@ -308,6 +319,7 @@ private:
     float   m_doorAt = 0.0f;
     QColor  m_color;
     bool    m_locked   = false;
+    int     m_onPurpose = -1;       ///< -1: the kind's default; 0 off; 1 on
     quint32 m_layerId  = 0;
     quint32 m_groupId  = 0;
     quint32 m_driver   = UINT_MAX;

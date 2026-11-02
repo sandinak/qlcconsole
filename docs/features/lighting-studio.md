@@ -539,6 +539,11 @@ for some kinds show only there:
   too) — **Straight or bowed**, or
   **U, rounded front**: a half-round front as wide as the wall, straight sides
   running back to its **Depth**, the open back at its position.
+- **Light here only on purpose** (every kind) — light that lands on it must
+  be meant, or [Show Review](show-review.md) warns about it cue by cue
+  (PWR-12, *backwash*: see [Light on the cyc only on purpose](#light-on-the-cyc-only-on-purpose)).
+  On by default for a **Cyclorama** and a **Scrim**; tick it for a painted
+  drop or a wall that must stay clean too.
 
 On the plot it's a band from the Top (a built wall its footprint, an open
 curtain its two gathered ends) and the sheet in the elevations; drag, lock,
@@ -549,6 +554,45 @@ drapes hang in folds, a scrim is seen through, and a wall has its faces, top
 and ends. Everything but a flown curtain stops the
 light that reaches it and takes its pool — a beam coming down on a wall lands
 on its top — and hides what is behind it.
+
+#### Light on the cyc only on purpose
+
+*Backwash* is light that lands on the cyc by accident: a front light or a
+special aimed at a performer whose beam carries on past them and splashes
+(or shadows) the cyc behind. Light on the cyc should be there because you
+meant it. Each piece of scenery with **Light here only on purpose** on (a
+cyc and a scrim, by default) is checked by [Show Review](show-review.md)
+**PWR-12** in every cue:
+
+- **What counts as landing on it.** The rule is exact, from the plot: each
+  lit light (dimmer above 0) throws its cone from where it is in the rig, the
+  way PWR-11 follows it — the axis and three rings of sixteen rays across the
+  cone. A ray stops at the stage floor, at anything solid the stage counts
+  (a riser, a tower), or at scenery; a scrim lets it on through. **Any ray**
+  that ends on the cyc is light on the cyc, and the finding says roughly how
+  much of the beam (the share of rays). Curtains are read at their set state,
+  never where a driven one is now, so the same show always gives the same
+  warnings.
+- **What counts as meant.** Only something the show says: the fixture's plot
+  symbol is **Cyc / strip light** or **Uplight wash**; or its look aims it at
+  a target standing on that cyc (a mark, an area or a line within 0.5 m of
+  it — never a person or a kit, who stand in front of it); or you said so with
+  **I Meant It**. Nothing is guessed.
+- **I Meant It** (the Show Review row) keeps the mark on the layer that lights
+  the fixture in the cue its light starts landing, one undo step, saved in the
+  show. It stays meant through the cues that follow while it keeps landing,
+  even where the layer is set again. Take it back with **Not Meant** on the row
+  (Show Review's Accepted list) or **Light on the Cyc: Not Meant** on the
+  layer's right-click in the Show Tree.
+- **Where you work.** Each cue that puts unmeant light on the cyc reads
+  **⚠ cyc** in its Show Tree flags; the tooltip names the fixtures, and a click
+  opens the Show Review row (**I Meant It**, **Show Me**). The marks follow
+  Show Review's own re-check, a moment after an edit in Design — never while
+  the show is running.
+
+There is no live hint in the Workbench and no automatic "keep it off" mode:
+holding unmeant light off the cyc would mean clamping output while the show
+plays, which this check never touches (decided, can change).
 
 #### Curtains that move
 

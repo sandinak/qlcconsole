@@ -10,6 +10,31 @@ under `~/.claude/.../memory/`.
 
 ---
 
+## Backwash: light on the cyc only on purpose — built, leftovers (0.4, cyc, 2026-11-02)
+
+Built: Show Review **PWR-12** (engine/src/showreviewzonechecks.cpp, sharing
+PWR-11's beams), `Scenery::lightOnPurposeOnly()` (on for Cyclorama and Scrim),
+`Layer::meantOnScenery` ("I Meant It", one Show Tree undo step), the panel's
+I Meant It / Show Me / Not Meant, the Show Tree's "⚠ cyc" cue mark
+(ui/src/showtreebackwash.cpp) and the layer right-click. ROI: one check on
+geometry PWR-11 already follows; catches the commonest plot mistake a
+student (and a tired LD) makes, before tech, at ~10 ms a review on
+DanceHysteria. Each "decided (can change)": scrim guarded by default; a
+target "on" the cyc is a mark / area / line within 0.5 m (never a person);
+meant carries on while the light keeps landing; curtains read at their set
+state. Leftovers, not built:
+- The Lighting Studio drawing an unmeant beam's pool on the cyc in the
+  warning colour (needs the cue the Studio is showing; the Studio draws live
+  output, not a cue).
+- A live hint in the Workbench while building a layer (nothing live exists
+  for zones either; the Show Tree mark follows the re-check a moment later).
+- The Cue Sheet's notes column.
+- "Keep unmeant light off" per cyc: it would clamp output in the runtime
+  (per-frame, per-fixture geometry or a baked mask on the GO path) -- not
+  built; the cost is a new playback path and hot-path work.
+- "I Meant It" on a layer of a reusable cue's use is not synced to the
+  reusable.
+
 ## Course: Level 3's remaining lessons (0.5 item 9, crs3, 2026-11-01)
 
 Written and checked by `courseshow_test` (CHANGELOG 0.4.0 Teaching):

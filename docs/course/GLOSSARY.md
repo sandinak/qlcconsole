@@ -189,5 +189,6 @@ brackets.
 | **Cue sheet / tracking sheet** | The stage manager's paper, made from the show: cues in running order; each layer across the cues, what each cue sets and what only carries in. [3.8] |
 | **Show Review** | A read of the saved show that lists what is probably wrong with its design, each finding with where to fix it. [3.9] |
 | **Finding / accept** | One thing Show Review reports; to accept it is to say it is on purpose, with a note and your name saved in the show. [3.9] |
+| **Backwash** | Light that lands on the cyc by accident: a front light aimed at a singer that carries on past them and splashes the cloth behind. Light on the cyc should be there because you meant it; Show Review names backwash cue by cue, and **I Meant It** says it is on purpose. [3.9] |
 | **Why is this on?** | Right-click a light (or ⌘I): what sets it now, or, when it is dark, what holds it down. [3.9] |
 | **Solo** | On a layer's page: only that layer plays, as a preview. Play puts the whole cue back. [3.9] |
