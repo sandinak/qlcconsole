@@ -690,6 +690,15 @@ inventory — and Expand All / Collapse All last.
 Patch is offered whenever none of the fixtures has an address yet; moving
 patched ones is Design mode's — the same rule everywhere.
 
+**Selection ▸** (in *Organising it*) works on what the rows pick: **New
+Layer from Selection** and **Add to Current Layer** put them in the
+Workbench or the Show Tree cue open now. Picking rows here is the
+programmer's selection too — a fixture or head row its fixture, a group row
+its fixtures — so the Workbench, the plot and the Studio follow it; a
+deselect (or the tree rebuilding) leaves the selection alone. One or two
+short of a group brings a chip under the tree offering the rest (click it
+or **Tab**; **Esc** leaves it). See [One selection](build.md#one-selection).
+
 ### Plot Symbol
 
 **Plot Symbol ▸** sets what the fixtures selected — and every fixture of a

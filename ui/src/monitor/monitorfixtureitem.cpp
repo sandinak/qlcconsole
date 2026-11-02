@@ -1127,6 +1127,8 @@ void MonitorFixtureItem::paint(QPainter *painter, const QStyleOptionGraphicsItem
 
     if (m_highlighted)
         defColor = QColor(255, 140, 0);   // orange — externally highlighted
+    else if (m_hinted)
+        defColor = QColor(80, 170, 255);  // blue — the selection chip's likely miss
     else if (m_ghosted)
         defColor = QColor(200, 60, 60);   // red — on a locked layer, like every locked object
     else if (this->isSelected() == true)

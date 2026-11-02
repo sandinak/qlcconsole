@@ -263,6 +263,10 @@ public:
 
     /** Highlight from an external source (e.g. Programming tab selection). */
     void setHighlighted(bool h) { m_highlighted = h; update(); }
+    /** Q201: a likely miss the selection chip offers to add (blue). */
+    void setHinted(bool h) { if (m_hinted != h) { m_hinted = h; update(); } }
+    bool isHinted() const { return m_hinted; }
+    bool isHighlighted() const { return m_highlighted; }
     /** Focus mode: this light has changes not yet saved -- a yellow dashed
      *  ring (not on the highlighted head, drawn as it is) and a badge. */
     void setUnsaved(bool u) { if (u != m_unsaved) { m_unsaved = u; update(); } }
@@ -398,6 +402,7 @@ private:
     bool m_isolated      = false;   ///< drilled-in single selection within a group
     bool m_ghosted       = false;   ///< locked-layer indicator: red + click-through
     bool m_highlighted   = false;
+    bool m_hinted        = false;
     bool m_unsaved       = false;
     bool m_needsFocus    = false;
 

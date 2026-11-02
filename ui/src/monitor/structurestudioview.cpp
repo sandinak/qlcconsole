@@ -9,6 +9,7 @@
       http://www.apache.org/licenses/LICENSE-2.0.txt
 */
 
+#include <algorithm>
 #include <QPainter>
 #include <QMatrix4x4>
 #include <QFontMetricsF>
@@ -48,6 +49,8 @@
 #include "fixturevisualtraits.h"
 #include "lanternpixels.h"
 #include "monitorproperties.h"
+#include "monitor.h"
+#include "selectionhintchip.h"
 #include "pipe.h"
 #include "stand.h"
 #include "tower.h"
@@ -95,6 +98,38 @@ StructureStudioView::StructureStudioView(Doc *doc, Kind kind, quint32 id, QWidge
     // ⌘I ("Why is this on?") opens on what is picked here.
     connect(this, &StructureStudioView::fixturesSelected, this,
             [](const QList<quint32> &ids) { WhyOnPanel::noteSelection(ids); });
+    /* One selection (Q201): a click or a rubber band here is the
+       programmer's selection -- the Workbench, the plot and every other
+       Studio view follow it -- and the ring here follows it back, whoever
+       set it. Our own write is not followed (no loop). */
+    connect(this, &StructureStudioView::fixturesSelected, this, [this](const QList<quint32> &ids) {
+        m_writingSelection = true;
+        if (Monitor *mon = Monitor::instance())
+            mon->pickFixtures(ids);
+        else
+            m_doc->setProgrammerSelection(ids);
+        m_writingSelection = false;
+        // Q201: a group but for one or two (or one stray) -- offered here.
+        if (m_selectionHint == nullptr)
+            m_selectionHint = new SelectionHintChip(m_doc, this);
+        QPoint anchor;
+        if (!ids.isEmpty())
+            anchor = w2s(fixtureCentre(ids.last())).toPoint();
+        m_selectionHint->offer(SelectionShape::hint(m_doc, ids), anchor);
+        // Ring what it is now: something that follows may have widened it
+        // (the Show Tree's Workbench jumps to the fixture's whole layer).
+        followProgrammerSelection();
+    });
+    connect(m_doc, &Doc::programmerSelectionChanged, this, [this]() {
+        if (!m_writingSelection)
+            followProgrammerSelection();
+    });
+    // The whole rig opens on what is selected now.
+    if (m_kind == StageKind)
+    {
+        const QList<quint32> sel = m_doc->programmerSelection();
+        m_highlight = QSet<quint32>(sel.begin(), sel.end());
+    }
     m_lanternPixels = new LanternPixels(doc, this);
     connect(m_lanternPixels, &LanternPixels::changed, this, QOverload<>::of(&QWidget::update));
 
@@ -189,6 +224,20 @@ void StructureStudioView::reload()
     /* The aim association depends on the rig's geometry and on which
        fixtures exist, so it is rebuilt with everything else. */
     rebuildAimTargets();
+}
+
+void StructureStudioView::followProgrammerSelection()
+{
+    QList<quint32> sel = m_doc->programmerSelection();
+    if (m_kind != StageKind)
+    {
+        // A structure's editor rings only what is mounted on it.
+        const QList<quint32> mounted = mountedFixtures();
+        const QSet<quint32> here(mounted.begin(), mounted.end());
+        sel.erase(std::remove_if(sel.begin(), sel.end(),
+                                 [&here](quint32 fid) { return !here.contains(fid); }), sel.end());
+    }
+    setHighlight(sel);
 }
 
 void StructureStudioView::setHighlight(const QList<quint32> &ids)

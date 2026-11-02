@@ -36,6 +36,7 @@
 #include <algorithm>
 
 #include "programmingoutline.h"
+#include "selectionmenu.h"
 #include "whyonpanel.h"
 #include <QCursor>
 #include "controllearndialog.h"
@@ -2132,6 +2133,25 @@ void ProgrammingOutline::slotContextMenu(const QPoint &pos)
             menu.addAction(WhyOnPanel::actionText(), this, [this, fid]() {
                 WhyOnPanel::showFor(m_doc, fid, 0xFFFFFFFF, this, QCursor::pos());
             })->setObjectName("outlineWhyOn");
+            menu.addSeparator();
+        }
+        // Selection ▸ (Q201): the selected target rows' fixtures.
+        QList<quint32> picked;
+        for (const Row &r : rows)
+        {
+            QList<quint32> ids;
+            if (r.kind == FixtureRow)
+                ids << r.id;
+            else if (r.kind == GroupRow)
+                if (FixtureGroup *grp = m_doc->fixtureGroup(r.id))
+                    ids = grp->fixtureList();
+            for (quint32 id : ids)
+                if (m_doc->fixture(id) != nullptr && !picked.contains(id))
+                    picked << id;
+        }
+        if (!picked.isEmpty())
+        {
+            SelectionMenu::addTo(&menu, m_doc, picked);
             menu.addSeparator();
         }
     }

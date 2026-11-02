@@ -76,6 +76,21 @@ quint32 WorkbenchStack::addNew(Function::Type, int, const QList<GroupHead> &, qu
     return Function::invalidId();
 }
 
+int WorkbenchStack::addSelectionLayers(const QList<quint32> &, const QList<quint32> &, int)
+{
+    return -1;
+}
+
+bool WorkbenchStack::canAddFixturesToLayer(int) const
+{
+    return false;
+}
+
+bool WorkbenchStack::addSelectionToLayer(int, const QList<quint32> &, const QList<quint32> &)
+{
+    return false;
+}
+
 QString WorkbenchStack::dropPlanOn(int, const QMimeData *, bool) const
 {
     return QString();
@@ -789,6 +804,111 @@ bool FunctionStack::moveStep(int from, int to)
         ++m_step;
     emit changed();
     return true;
+}
+
+int FunctionStack::addSelectionLayers(const QList<quint32> &groups, const QList<quint32> &fixtures,
+                                      int after)
+{
+    Collection *c = editCollection();
+    if (c == nullptr || !canAddLayers() || m_doc->paletteOps() == nullptr)
+        return -1;
+    // What each new scene targets: a group each, then the fixtures left.
+    QList<QPair<QList<quint32>, QList<quint32> > > made;
+    for (quint32 gid : groups)
+        if (m_doc->fixtureGroup(gid) != nullptr)
+            made << qMakePair(QList<quint32>{ gid }, QList<quint32>());
+    QList<quint32> rest;
+    for (quint32 fid : fixtures)
+        if (m_doc->fixture(fid) != nullptr && !rest.contains(fid))
+            rest << fid;
+    if (!rest.isEmpty())
+        made << qMakePair(QList<quint32>(), rest);
+    if (made.isEmpty())
+        return -1;
+    const quint32 cid = c->id();
+    quint32 first = Function::invalidId();
+    const bool ok = m_doc->paletteOps()->functionStep(
+        tr("add %n new scene(s) from the selection to %1", "", int(made.size())).arg(c->name()), { cid },
+        [&](QList<quint32> &news) {
+            Collection *col = qobject_cast<Collection *>(m_doc->function(cid));
+            if (col == nullptr)
+                return false;
+            int pos = after < 0 || after + 1 >= col->functions().size() ? -1 : after + 1;
+            for (const auto &targets : made)
+            {
+                Scene *s = new Scene(m_doc);
+                s->setPath(col->path(true));
+                if (!m_doc->addFunction(s))
+                {
+                    delete s;
+                    return !news.isEmpty();
+                }
+                s->setName(QStringLiteral("%1 %2").arg(tr("New Scene")).arg(s->id()));
+                for (quint32 gid : targets.first)
+                    s->addFixtureGroup(gid);
+                for (quint32 fid : targets.second)
+                    s->addFixture(fid);
+                news << s->id();
+                if (first == Function::invalidId())
+                    first = s->id();
+                col->addFunction(s->id(), pos);
+                if (pos >= 0)
+                    ++pos;
+            }
+            return true;
+        });
+    if (!ok)
+        return -1;
+    emit changed();
+    const QList<Layer> ls = layers();
+    for (int i = 0; i < ls.size(); ++i)
+        if (ls.at(i).functionId == first)
+            return i;
+    return -1;
+}
+
+bool FunctionStack::canAddFixturesToLayer(int layer) const
+{
+    const QList<Layer> ls = layers();
+    if (layer < 0 || layer >= ls.size() || !readOnlyReason().isEmpty())
+        return false;
+    return ls.at(layer).kind == Layer::SceneLayer
+           && qobject_cast<Scene *>(m_doc->function(ls.at(layer).functionId)) != nullptr;
+}
+
+bool FunctionStack::addSelectionToLayer(int layer, const QList<quint32> &groups,
+                                        const QList<quint32> &fixtures)
+{
+    if (!canAddFixturesToLayer(layer) || m_doc->paletteOps() == nullptr)
+        return false;
+    const quint32 sid = layers().at(layer).functionId;
+    Scene *scene = qobject_cast<Scene *>(m_doc->function(sid));
+    const int count = int(groups.size() + fixtures.size());
+    const bool ok = m_doc->paletteOps()->functionStep(
+        tr("add %n target(s) to %1", "", count).arg(scene->name()), { sid },
+        [this, sid, &groups, &fixtures](QList<quint32> &) {
+            // Looked up inside: the step keeps the scene whole either side.
+            Scene *s = qobject_cast<Scene *>(m_doc->function(sid));
+            if (s == nullptr)
+                return false;
+            bool changed = false;
+            for (quint32 gid : groups)
+                if (m_doc->fixtureGroup(gid) != nullptr && !s->fixtureGroups().contains(gid))
+                {
+                    s->addFixtureGroup(gid);
+                    changed = true;
+                }
+            for (quint32 fid : fixtures)
+                if (m_doc->fixture(fid) != nullptr && !s->fixtures().contains(fid))
+                {
+                    s->addFixture(fid);
+                    changed = true;
+                }
+            return changed;
+        });
+    if (ok)
+        emit changed();
+    return ok;
 }
 
 quint32 FunctionStack::addNewStep()

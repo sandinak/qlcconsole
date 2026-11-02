@@ -256,6 +256,10 @@ public:
 
     /** Ring-highlight a set of fixtures (driven by the tree selection). */
     void setHighlight(const QList<quint32> &ids);
+    QList<quint32> highlighted() const { return m_highlight.values(); }
+    /** Ring the programmer selection (Q201; a structure's editor: what of
+     *  it is mounted there). */
+    void followProgrammerSelection();
     /** Focus mode: mark the lights with unsaved changes (a yellow ring and
      *  badge; the ring-highlighted one keeps its own ring). */
     void setUnsavedMarks(const QList<quint32> &ids);
@@ -1378,6 +1382,11 @@ private:
     bool     m_hasCursor = false;
     bool     m_locked = true;   ///< movement prevented until unlocked
     QSet<quint32> m_highlight;  ///< ring-highlighted fixtures (tree selection)
+    bool m_writingSelection = false;  ///< setting the programmer selection (Q201)
+    class SelectionHintChip *m_selectionHint = nullptr;    ///< Q201's near-miss chip
+public:
+    class SelectionHintChip *selectionHint() const { return m_selectionHint; }
+private:
     QSet<quint32> m_unsaved;    ///< Focus mode: lights with unsaved changes
     quint32  m_selectedBarId = UINT_MAX;  ///< highlighted bar (canvas/tree selection)
     quint32  m_selectedPipeBarId = UINT_MAX;  ///< highlighted crossbar (canvas/tree selection)

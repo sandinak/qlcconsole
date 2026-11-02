@@ -69,6 +69,7 @@
 #include "lookeditor.h"
 #include "efxeditor.h"
 #include "paletteops.h"
+#include "selectionshape.h"
 #include "qlcpalette.h"
 #include "scenevalue.h"
 #include "collection.h"
@@ -246,6 +247,10 @@ Workbench::Workbench(Doc *doc, QWidget *parent)
         clear();
     });
     connect(m_doc, SIGNAL(modeChanged(Doc::Mode)), this, SLOT(slotModeChanged()));
+    // One selection (Q201): fixtures picked anywhere -- the Lighting Studio,
+    // the 2D plot, the Fixture Manager, a VC button -- are what this edits,
+    // whichever tab is in front.
+    connect(m_doc, &Doc::programmerSelectionChanged, this, &Workbench::followProgrammerSelection);
     // RC8: a GO (from anywhere) takes the stage: what previews here stops
     // and holds until Play -- the run's values alone reach the rig.
     if (m_doc->showTree() != nullptr)
@@ -1951,6 +1956,110 @@ void Workbench::selectFixtures(const QList<quint32> &fixtureIds)
     showFixtures(fixtureIds);
 }
 
+void Workbench::followProgrammerSelection()
+{
+    // Our own write coming back, or nothing new: nothing to do (no loop).
+    if (m_writingSelection)
+        return;
+    const QList<quint32> sel = m_doc->programmerSelection();
+    if (sel == m_selectedFixtures)
+        return;
+    if (sel.isEmpty())
+    {
+        // Cleared (or the show closing): nothing selected, nothing looked up.
+        m_selectedFixtures.clear();
+        m_selectedFixturesScene = m_currentScene;
+        m_fixtureScroll->hide();
+        m_fixtureMixedNote->hide();
+        emit fixturesSelected(m_selectedFixtures);
+        return;
+    }
+    showFixtures(sel);
+}
+
+int Workbench::currentLayer() const
+{
+    if (m_stack == nullptr)
+        return -1;
+    const int layer = selectedLayer();
+    if (layer >= 0)
+        return layer;
+    if (m_stackLayer >= 0 && m_stackLayer < m_stack->layers().size())
+        return m_stackLayer;
+    // A scene loaded on its own is its one layer.
+    return m_stack->layers().size() == 1 ? 0 : -1;
+}
+
+QString Workbench::newLayerBlocker(const QList<quint32> &fixtures) const
+{
+    if (fixtures.isEmpty())
+        return tr("Select fixtures first");
+    if (m_stack == nullptr)
+        return tr("Load a collection in Build, or open a Show Tree cue, to add a layer");
+    if (!m_stack->readOnlyReason().isEmpty())
+        return m_stack->readOnlyReason();
+    if (!m_stack->canAddLayers())
+        return tr("A scene is one layer: load a collection or a Show Tree cue to add layers");
+    return QString();
+}
+
+bool Workbench::newLayerFromFixtures(const QList<quint32> &fixtures)
+{
+    if (!newLayerBlocker(fixtures).isEmpty())
+        return false;
+    // Whole groups picked are those groups: a layer each (Q201).
+    const SelectionShape shape = SelectionShape::resolve(m_doc, fixtures);
+    const int at = m_stack->addSelectionLayers(shape.groups, shape.fixtures, selectedLayer());
+    if (at < 0)
+        return false;
+    layersChanged();
+    // The new layer, selected; the fixtures its target, ready to edit.
+    m_rows->rebuild();
+    selectLayer(at);
+    m_doc->setProgrammerSelection(fixtures);
+    return true;
+}
+
+QString Workbench::addToLayerBlocker(const QList<quint32> &fixtures) const
+{
+    if (fixtures.isEmpty())
+        return tr("Select fixtures first");
+    if (m_stack == nullptr)
+        return tr("Load a scene, a collection or a Show Tree cue first");
+    if (!m_stack->readOnlyReason().isEmpty())
+        return m_stack->readOnlyReason();
+    const int layer = currentLayer();
+    if (layer < 0)
+        return tr("Select a layer in the Workbench first");
+    if (!m_stack->canAddFixturesToLayer(layer))
+        return tr("This layer plays a function as it is: open it to change what it lights");
+    return QString();
+}
+
+bool Workbench::addFixturesToCurrentLayer(const QList<quint32> &fixtures)
+{
+    if (!addToLayerBlocker(fixtures).isEmpty())
+        return false;
+    const int layer = currentLayer();
+    const SelectionShape shape = SelectionShape::resolve(m_doc, fixtures);
+    if (!m_stack->addSelectionToLayer(layer, shape.groups, shape.fixtures))
+        return false;
+    layersChanged();
+    m_rows->rebuild();
+    selectLayer(layer);
+    return true;
+}
+
+void Workbench::writeProgrammerSelection(const QList<quint32> &fixtureIds)
+{
+    ProgrammerController *pc = m_doc->programmer();
+    if (pc == nullptr)
+        return;
+    m_writingSelection = true;
+    pc->setProgrammerSelection(fixtureIds);
+    m_writingSelection = false;
+}
+
 bool Workbench::sameFixtureType(const Fixture *a, const Fixture *b) const
 {
     if (a == nullptr || b == nullptr)
@@ -1973,11 +2082,9 @@ void Workbench::showFixtures(const QList<quint32> &fixtureIds)
         return;
     m_selectedFixtures = fixtureIds;
     m_selectedFixturesScene = m_currentScene;
-    // Highlight, Flash, Park and the followspot steer what is selected.
-    if (ProgrammerController *pc = m_doc->programmer())
-        pc->setProgrammerSelection(fixtureIds);
-    if (Monitor::instance() != nullptr)
-        Monitor::instance()->highlightFixtures(fixtureIds);
+    // Highlight, Flash, Park and the followspot steer what is selected; the
+    // 2D plot and the Studio ring it (they follow the programmer).
+    writeProgrammerSelection(fixtureIds);
     emit fixturesSelected(fixtureIds);
 
     Scene *s = qobject_cast<Scene *>(m_doc->function(m_currentScene));
@@ -2403,10 +2510,7 @@ void Workbench::showStackRow(const ProgrammingOutline::Row &row)
     const QList<quint32> fixtures = m_stack->layerFixtures(layer);
     m_selectedFixtures = fixtures;
     m_selectedFixturesScene = UINT_MAX;
-    if (ProgrammerController *pc = m_doc->programmer())
-        pc->setProgrammerSelection(fixtures);
-    if (Monitor::instance() != nullptr)
-        Monitor::instance()->highlightFixtures(fixtures);
+    writeProgrammerSelection(fixtures);
     emit fixturesSelected(fixtures);
 
     const WorkbenchStack::Layer &l = layers.at(layer);

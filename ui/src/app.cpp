@@ -85,6 +85,7 @@
 #include "speedmastersfooter.h"
 #include "updatemanager.h"
 #include "app.h"
+#include "selectionshape.h"
 #include "vcwidget.h"
 #include "blindeffects.h"
 #include "layoutdiagnostics.h"
@@ -8485,52 +8486,10 @@ void App::slotProgrammerSelectionChanged()
         return;
     }
 
-    // Find every fixture group whose entire fixture list is contained
-    // in the current selection — those are "fully selected" groups,
-    // worth naming explicitly. Fixtures not covered by any such group
-    // are tallied as "+ N more".
-    QSet<quint32> selectedSet;
-    for (quint32 fid : selection)
-        selectedSet.insert(fid);
-
-    QStringList groupNames;
-    QSet<quint32> coveredFixtures;
-    for (FixtureGroup *grp : m_doc->fixtureGroups())
-    {
-        if (grp == NULL)
-            continue;
-        const QList<quint32> grpFixtures = grp->fixtureList();
-        if (grpFixtures.isEmpty())
-            continue;
-        bool fullyContained = true;
-        for (quint32 fid : grpFixtures)
-        {
-            if (!selectedSet.contains(fid))
-            {
-                fullyContained = false;
-                break;
-            }
-        }
-        if (fullyContained)
-        {
-            groupNames << grp->name();
-            for (quint32 fid : grpFixtures)
-                coveredFixtures.insert(fid);
-        }
-    }
-
-    const int extra = selection.size() - coveredFixtures.size();
-    QString text;
-    if (groupNames.isEmpty())
-    {
-        text = tr("Selected: %n fixture(s)", "", selection.size());
-    }
-    else
-    {
-        text = tr("Selected: %1").arg(groupNames.join(QStringLiteral(", ")));
-        if (extra > 0)
-            text += tr(" + %n more fixture(s)", "", extra);
-    }
+    /* Whole groups picked are named as the groups (Q201, SelectionShape):
+       "Selected: Front Wash (6)", "SR Tower + SL Tower (12)", "SR Tower +
+       1 fixture" -- the same groups New Layer from Selection uses. */
+    const QString text = tr("Selected: %1").arg(SelectionShape::label(m_doc, selection));
     m_statusSelectionLabel->setText(text);
     m_statusSelectionLabel->show();
 }

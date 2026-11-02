@@ -133,6 +133,13 @@ public:
     /** Highlight the given fixtures (orange border) in the 2D graphics view.
      *  Passing an empty list clears all highlights. */
     void highlightFixtures(const QList<quint32> &ids);
+    /** Fixtures picked on the plot or in a Studio view (Q201): they become
+     *  the programmer selection (everything follows it) and
+     *  fixturesSelected() tells the Show Tree's Workbench. */
+    void pickFixtures(const QList<quint32> &ids);
+    /** Q201: the near-miss chip on the plot for the pick @a ids. */
+    void offerSelectionHint(const QList<quint32> &ids);
+    class SelectionHintChip *selectionHint() const { return m_selectionHint; }
 
     /** Set the active scene context for aim-line rendering.
      *  Pass Function::invalidId() to hide all aim lines. */
@@ -689,6 +696,7 @@ protected:
      *  fixtures/trusses at the cursor location. */
     QPointF m_pendingAddScenePos;
     MonitorGraphicsView* m_graphicsView;
+    class SelectionHintChip *m_selectionHint = nullptr;    ///< Q201's near-miss chip
     MonitorLayersPanel* m_layersPanel;
     MonitorInventoryPanel* m_inventoryPanel;
     QSpinBox* m_gridWSpin;

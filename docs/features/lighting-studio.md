@@ -1122,6 +1122,18 @@ of, and doesn't override, the real locks above.
   centres, **Left**, **Right**, **Upstage** and **Downstage** line up those
   edges, and **Distribute** spaces the centres evenly between the outer
   two. A fixture's hanging height is kept, and one Undo puts them back.
+- **What you pick is the programmer's selection.** A click or rubber band
+  on the plot, or a click in the Rig Overview or a structure's editor, is
+  what the Workbench edits and what Flash, Park and Highlight work on —
+  whichever tab is in front — and every other view rings it (orange on the
+  plot). All of a group picks the group; one or two short of a group, or a
+  member just outside the band you dragged (outlined blue), brings a chip
+  offering the rest: click it or press **Tab**, **Esc** to leave it. See
+  [One selection](build.md#one-selection).
+- **Selection ▸** on a fixture's right-click menu: **New Layer from
+  Selection**, **Add to Current Layer** and **Create Fixture Group from
+  Selection…**. **New Map Layer from Selection…** (in the layers part of
+  the menu) moves the selection onto a new layer of the plot.
 - **Select All** (Ctrl/⌘+A, or **More → Select All**) selects every
   visible, selectable object on the plot at once.
 - **Undo** (Ctrl/⌘+Z, or the toolbar's **Undo**) puts back the last move,

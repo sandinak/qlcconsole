@@ -135,6 +135,18 @@ public:
      *  @a after (-1: the end). One step. Its id, or invalid. */
     virtual quint32 addNew(Function::Type type, int after, const QList<GroupHead> &heads,
                            quint32 group);
+    /** Selection ▸ New Layer from Selection (SelectionShape): a layer per
+     *  group in @a groups, then one on the @a fixtures left over, after
+     *  layer @a after (-1: the end). One step. The first one's index, or
+     *  -1. */
+    virtual int addSelectionLayers(const QList<quint32> &groups, const QList<quint32> &fixtures,
+                                   int after);
+    /** Selection ▸ Add to Current Layer: whether layer @a layer takes
+     *  targets (a scene's, a cue's own layer), and add @a groups and
+     *  @a fixtures to it. One step. */
+    virtual bool canAddFixturesToLayer(int layer) const;
+    virtual bool addSelectionToLayer(int layer, const QList<quint32> &groups,
+                                     const QList<quint32> &fixtures);
 
     /************************************************************************
      * W3: what a Show Tree cue (TreeCueStack) needs from the Workbench. The
@@ -249,6 +261,11 @@ public:
     bool moveLayer(int from, int to) override;
     quint32 addNew(Function::Type type, int after, const QList<GroupHead> &heads,
                    quint32 group) override;
+    int addSelectionLayers(const QList<quint32> &groups, const QList<quint32> &fixtures,
+                           int after) override;
+    bool canAddFixturesToLayer(int layer) const override;
+    bool addSelectionToLayer(int layer, const QList<quint32> &groups,
+                             const QList<quint32> &fixtures) override;
 
     /** Where function @a fid is used, but here: "0.0.3-Announcer",
      *  "Full Show (step 2)" -- for the "also in" badge. */

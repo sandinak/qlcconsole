@@ -162,6 +162,8 @@
 #include "outputpatch.h"
 #include "qlccapability.h"
 #include "monitor.h"
+#include "selectionmenu.h"
+#include "selectionhintchip.h"
 #include "whyonpanel.h"
 #include "itemlock.h"
 #include "rigowner.h"
@@ -179,6 +181,8 @@
 #include "programmercontroller.h"
 #include "venuecorrections.h"
 #include "focussession.h"
+
+static QList<quint32> studioMenuFixtures(const StructureStudioView *view, quint32 fidUnder);
 
 #include <QTimer>
 #include "qlcfile.h"
@@ -293,6 +297,13 @@ Monitor::Monitor(QWidget* parent, Doc* doc, Qt::WindowFlags f)
             if (m_graphicsView != NULL && m_graphicsView->scene() != NULL)
                 m_graphicsView->scene()->update();
         });
+    // One selection (Q201): what the programmer has selected -- picked here,
+    // in the Studio, the Fixture Manager, the Workbench, a VC button -- is
+    // ringed on the plot, whichever tab is in front.
+    connect(m_doc, &Doc::programmerSelectionChanged, this, [this]() {
+        highlightFixtures(m_doc->programmerSelection());
+    });
+    highlightFixtures(m_doc->programmerSelection());
     // Re-render targets on Design/Operate switch so their drag-ability tracks the
     // mode (editable while designing, frozen in a show).
     connect(m_doc, &Doc::modeChanged, this, [this](Doc::Mode) {
@@ -3048,10 +3059,13 @@ void Monitor::showStageOverview()
     /* Read-only, but a fixture can still be looked into: its properties,
        and where each of its heads is (the LED layout). */
     connect(view, &StructureStudioView::canvasContextMenu, &dlg,
-            [this, ovDlg = &dlg](const QPoint &globalPos, quint32 fidUnder) {
+            [this, view, ovDlg = &dlg](const QPoint &globalPos, quint32 fidUnder) {
         if (m_doc->fixture(fidUnder) == nullptr)
             return;
         QMenu m(ovDlg);
+        // Selection ▸ (Q201): what is ringed, if this is one of them.
+        SelectionMenu::addTo(&m, m_doc, studioMenuFixtures(view, fidUnder));
+        m.addSeparator();
         m.addAction(tr("Fixture Properties…"), this, [this, fidUnder]() {
             editFixtureProperties(fidUnder);
         });
@@ -4394,6 +4408,14 @@ protected:
 };
 } // namespace
 
+/* What a Studio view's right-click is about (Q201): what is ringed when
+   the fixture under the pointer is one of them, else that fixture. */
+static QList<quint32> studioMenuFixtures(const StructureStudioView *view, quint32 fidUnder)
+{
+    const QList<quint32> ringed = view->highlighted();
+    return ringed.contains(fidUnder) ? ringed : QList<quint32>{ fidUnder };
+}
+
 QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
                                  QWidget *geometryForm, StructureStudioView **outView)
 {
@@ -5280,6 +5302,8 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
         {
             QAction *aEdit = m.addAction(tr("Edit fixture…"));
             QAction *aRem  = m.addAction(tr("Remove from %1").arg(objectNoun));
+            m.addSeparator();
+            SelectionMenu::addTo(&m, m_doc, studioMenuFixtures(view, fidUnder));   // Q201
             QAction *aBarF = addBarAction();
             QAction *aHangF = addHangerAction();
             QAction *ch = m.exec(globalPos);
@@ -10654,7 +10678,43 @@ void Monitor::slotViewClicked()
     QList<quint32> ids;
     for (MonitorFixtureItem *item : m_graphicsView->selectedFixtureItems())
         ids.append(item->fixtureID());
+    pickFixtures(ids);
+    offerSelectionHint(ids);
+}
+
+void Monitor::offerSelectionHint(const QList<quint32> &ids)
+{
+    if (m_graphicsView == NULL)
+        return;
+    if (m_selectionHint == NULL)
+    {
+        m_selectionHint = new SelectionHintChip(m_doc, m_graphicsView);
+        connect(m_selectionHint, &SelectionHintChip::offerChanged, this, [this]() {
+            const SelectionShape::Hint h = m_selectionHint->hint();
+            m_graphicsView->setHintedFixtures(m_selectionHint->isOffering()
+                                              && h.kind == SelectionShape::Hint::AddMissing
+                                              ? h.fixtures : QList<quint32>());
+        });
+    }
+    /* Q201: a group but for one or two (or one stray), or a member just
+       outside the band dragged: offered, never applied. */
+    const QHash<quint32, QPointF> centres = m_graphicsView->fixtureCentres();
+    const SelectionShape::Hint h = SelectionShape::hint(m_doc, ids, centres, m_graphicsView->lastRubberBand());
+    QRectF around;
+    for (quint32 fid : ids)
+        if (centres.contains(fid))
+            around |= QRectF(centres.value(fid), QSizeF(1, 1));
+    const QPoint anchor = around.isNull() ? QPoint()
+                                          : m_graphicsView->mapFromScene(around.bottomRight());
+    m_selectionHint->offer(h, anchor);
+}
+
+void Monitor::pickFixtures(const QList<quint32> &ids)
+{
     WhyOnPanel::noteSelection(ids);     // ⌘I opens on it
+    // One selection (Q201): the programmer's target, the Workbench's too.
+    m_doc->setProgrammerSelection(ids);
+    // The Show Tree's Workbench jumps to the fixture's layer.
     emit fixturesSelected(ids);
 }
 

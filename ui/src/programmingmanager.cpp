@@ -2534,10 +2534,8 @@ void ProgrammingManager::showEvent(QShowEvent *ev)
     // Pick up folder/path changes made in the Functions tab while away,
     // preserving the current scene selection.
     m_paletteTree->updateTree();
-    // Clicks in the 2D view pick fixtures for the Workbench.
-    if (Monitor *mon = Monitor::instance())
-        connect(mon, &Monitor::fixturesSelected,
-                this, &ProgrammingManager::slotFixturesSelected, Qt::UniqueConnection);
+    // Clicks in the 2D view pick fixtures for the Workbench: they are the
+    // programmer selection, which it follows in front or not (Q201).
     // Auto-bind joystick axes from I/O → Mapping → Joystick profile if not yet bound.
     if (ProgrammerController *pc = m_doc->programmer())
         pc->autoBindFromProfile();
@@ -2608,9 +2606,6 @@ void ProgrammingManager::hideEvent(QHideEvent *ev)
     // NOTE: Blind is intentionally left engaged across tab switches — it's a
     // global output mute with a persistent status-bar chip, so it stays visible
     // and safe even when this tab isn't shown. It's still forced off on →Operate.
-    if (Monitor *mon = Monitor::instance())
-        disconnect(mon, &Monitor::fixturesSelected,
-                   this, &ProgrammingManager::slotFixturesSelected);
     updatePowerEstimateActive(); // stops the timer
     returnLibrary();
     QWidget::hideEvent(ev);

@@ -156,6 +156,21 @@ public:
     /** Fixtures picked elsewhere (the 2D view, the sources): their channels. */
     void selectFixtures(const QList<quint32> &fixtureIds);
 
+    /** Selection ▸ New Layer from Selection (selectionmenu.h): a new scene
+     *  layer on @a fixtures after the selected one (a Show Tree cue: a
+     *  layer targeting them), selected, the fixtures its target. One undo
+     *  step. False: nothing made (newLayerBlocker() says why). */
+    bool newLayerFromFixtures(const QList<quint32> &fixtures);
+    /** Why newLayerFromFixtures() can't ("" it can). */
+    QString newLayerBlocker(const QList<quint32> &fixtures) const;
+    /** Selection ▸ Add to Current Layer: @a fixtures added to the selected
+     *  layer's targets (a scene loaded alone: the scene). One undo step. */
+    bool addFixturesToCurrentLayer(const QList<quint32> &fixtures);
+    /** Why addFixturesToCurrentLayer() can't ("" it can). */
+    QString addToLayerBlocker(const QList<quint32> &fixtures) const;
+    /** The layer Add to Current Layer adds to (-1: none). */
+    int currentLayer() const;
+
     /** Scene @a sceneIds changed elsewhere (the navigator): show them. */
     void scenesEdited(const QList<quint32> &sceneIds);
     /** The scene being edited was changed from outside (a snapshot, a
@@ -281,6 +296,11 @@ private:
     void clearEditors();
     /** Target rows / fixtures: their channels on the console. */
     void showFixtures(const QList<quint32> &fixtureIds);
+    /** The programmer selection changed (anywhere): show it (Q201). */
+    void followProgrammerSelection();
+    /** Set the programmer selection, without following our own write. */
+    void writeProgrammerSelection(const QList<quint32> &fixtureIds);
+    bool m_writingSelection = false;
     bool sameFixtureType(const class Fixture *a, const class Fixture *b) const;
 
     /** + Scene (an existing one, picked), + new scene / EFX / RGB Matrix on

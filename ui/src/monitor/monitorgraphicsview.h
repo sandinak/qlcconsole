@@ -742,7 +742,10 @@ public:
                        const MenuPlace &place, const QPointF &scenePos = QPointF());
 
     /** Section 3 on its own, for rows with no single item (a folder, a layer). */
-    void populateOrganiseMenu(class QMenu *menu, const QList<QPair<QString, quint32> > &objects);
+    /** @a selectionItems: the selection-shaped items go there instead
+     *  (the plot puts them under Selection ▸); null: on @a menu. */
+    void populateOrganiseMenu(class QMenu *menu, const QList<QPair<QString, quint32> > &objects,
+                              QList<class QAction *> *selectionItems = nullptr);
 
     /** What is selected on the plot, as kind/id pairs. */
     QList<QPair<QString, quint32> > selectedMapObjects() const;
@@ -840,6 +843,13 @@ public:
 
     /** Highlight (orange border) a set of fixtures by ID; clears previous highlights. */
     void highlightFixtures(const QList<quint32> &ids);
+    /** Q201: outline the fixtures the selection chip offers to add. */
+    void setHintedFixtures(const QList<quint32> &ids);
+    /** The last rubber band dragged, in scene coordinates (null: the last
+     *  press was a click). */
+    QRectF lastRubberBand() const { return m_lastBand; }
+    /** Each fixture's centre on the plot (scene coordinates). */
+    QHash<quint32, QPointF> fixtureCentres() const;
     /** Focus mode: mark the lights with unsaved changes (the rest unmarked). */
     void markUnsavedFixtures(const QList<quint32> &ids);
     /** Board Q133: badge the lights that need focus in this venue. */
@@ -1356,6 +1366,7 @@ private:
 
     /** Map of the rendered MonitorFixtureItem with their ID */
     QHash <quint32, MonitorFixtureItem*> m_fixtures;
+    QRectF m_lastBand;      ///< Q201: the last rubber band (scene)
 
     /** Interactive truss items keyed by truss ID. */
     QHash <quint32, TrussItem*> m_trussItems;

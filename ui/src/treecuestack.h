@@ -86,6 +86,12 @@ public:
     bool moveLayer(int from, int to) override;
     quint32 addNew(Function::Type type, int after, const QList<GroupHead> &heads,
                    quint32 group) override;
+    /** Layers of the cue's own on them (the tree's step: one batch). */
+    int addSelectionLayers(const QList<quint32> &groups, const QList<quint32> &fixtures,
+                           int after) override;
+    bool canAddFixturesToLayer(int layer) const override;
+    bool addSelectionToLayer(int layer, const QList<quint32> &groups,
+                             const QList<quint32> &fixtures) override;
 
     bool takesDrops() const override { return true; }
     QString dropPlanOn(int layer, const QMimeData *mime, bool separate) const override;

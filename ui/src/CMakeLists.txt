@@ -209,6 +209,8 @@ add_library(${module_name}
     splitterhandles.cpp splitterhandles.h
     workbench.cpp workbench.h workbenchencoders.cpp
     workbenchstack.cpp workbenchstack.h
+    selectionmenu.cpp selectionmenu.h
+    selectionhintchip.cpp selectionhintchip.h
     showtreeview.cpp showtreeview.h
     refinepanel.cpp refinepanel.h
     operatorvoice.cpp operatorvoice.h

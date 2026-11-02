@@ -375,6 +375,51 @@ tree's. While it is there, Build shows a note in its place; **↩ Show Tree**
 hands it back, loaded as it was. See [Working on a cue in the
 Workbench](show-tree.md#working-on-a-cue-in-the-workbench).
 
+### One selection
+
+**Why:** on a console you pick lights wherever you can see them — a magic
+sheet, the plot, a list — and they are what the next command works on.
+qlcconsole has one fixture selection, the programmer's, and everything
+reads it.
+
+- **Picking anywhere picks for the Workbench.** A click or rubber band on
+  the Lighting Studio plot, a click in the Rig Overview or a structure's
+  editor, a fixture row in the Fixture Manager (a group row picks its
+  fixtures), a target row here, a Fixtures & Groups row, a VC button or the
+  command line: that is the selection, and the Workbench shows those
+  fixtures' channels whichever tab is in front. The plot and every Studio
+  view ring it; the status bar names it.
+- **Whole groups are named as groups.** Pick every fixture of Front Wash
+  and the selection *is* Front Wash: the status bar says **Front Wash (6)**,
+  not "6 fixtures". Both towers: **SL Tower + SR Tower (12)** (a group that
+  is exactly both, such as Towers, wins over the two). Whole groups plus a
+  few more: **SR Tower + 1 fixture**. Only groups of two or more count;
+  when two groups fit equally, the one used most in the show wins, then
+  the name. Part of a group stays plain fixtures.
+- **Near misses are offered, never made.** A group but for one or two of
+  its fixtures shows a small chip beside the selection — *Front Wash is 6 —
+  select all 6?* — and a group plus one stray offers to drop it. On the plot,
+  a group member just outside the rubber band you dragged (within a third
+  of the group's spacing) is outlined in blue and offered the same way.
+  Click the chip or press **Tab** to take it; **Esc**, ✕ or simply picking
+  something else leaves the selection exactly as it is.
+- **Selection ▸** is on every right-click menu where fixtures are picked
+  (the plot, the Studio views, the Fixture Manager, Fixtures & Groups, the
+  Workbench's target rows). It names the selection, then:
+  - **New Layer from Selection** — a new scene layer in the collection
+    loaded (in a Show Tree cue, a layer of the cue's own), selected and
+    ready to edit. Whole groups get a layer each, on the group itself (so
+    it follows the group and uses its head layout); the fixtures left over
+    get one more. One Undo takes it back. A scene loaded on its own is one
+    layer, so this is greyed with the reason.
+  - **Add to Current Layer** — the selection added to the layer selected
+    in the Workbench (whole groups as groups). One Undo.
+  - then the menu's own selection items, such as **Create Fixture Group
+    from Selection…** on the plot and in Fixtures & Groups.
+
+  The plot's old **New Layer from Selection…**, which makes a layer of the
+  *plot*, is now **New Map Layer from Selection…**.
+
 ## The outline
 
 Build ▸ Scenes: one tree of your scene folders, so a scene doesn't have to be

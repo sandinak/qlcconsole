@@ -27,6 +27,7 @@
 #include "creategroupsdialog.h"
 #include "fixturemanager.h"
 #include "fixturegroupsource.h"
+#include "selectionmenu.h"
 #include "showtreecontroller.h"
 #include "showtreeview.h"
 #include "inputoutputmap.h"
@@ -374,11 +375,20 @@ void FixtureGroupSource::slotContextMenu(const QPoint &pos)
 
     /* Creating a group: of the fixtures, or of groups and fixtures (each
        group a block) -- filed in the folder the selection was made in. */
-    QAction *create = menu.addAction(groupIds.isEmpty()
+    QAction *create = new QAction(groupIds.isEmpty()
         ? (fixtureIds.size() > 1
             ? tr("Create fixture group from %1 fixtures…").arg(fixtureIds.size())
             : tr("Create fixture group from fixture…"))
-        : tr("Create fixture group from selection…"));
+        : tr("Create fixture group from selection…"), &menu);
+    /* Selection ▸ (Q201): New Layer from Selection, Add to Current Layer,
+       and creating a group of it -- what is picked, as one menu. */
+    QList<quint32> picked = fixtureIds;
+    for (quint32 gid : groupIds)
+        if (FixtureGroup *g = m_doc->fixtureGroup(gid))
+            for (quint32 fid : g->fixtureList())
+                if (!picked.contains(fid))
+                    picked << fid;
+    SelectionMenu::addTo(&menu, m_doc, picked, { create });
 
     // Relays, house and work lights (all of a group's members).
     QAction *rules = menu.addAction(OutputRulesDialog::actionText());
