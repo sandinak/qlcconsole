@@ -63,6 +63,10 @@ public:
     bool saveXlsx(const QString &path, QString *error = nullptr) const;
     bool savePdf(const QString &path, QString *error = nullptr) const;
 
+signals:
+    /** The Calling Script... button was clicked; the dialog closes (accepted). */
+    void callingScriptRequested();
+
 private slots:
     void slotShow();
     void slotSaveCsv();

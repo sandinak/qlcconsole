@@ -327,6 +327,8 @@ each "decided (can change)":
 - Decided (can change): it is a window of its own opened from the Show
   Tree's More menu, not a tab or a Run tab pane (no new top-level tab); the
   menu gains one item (Cue Sheet… and Calling Script… sit together).
+  Folded back (fold, Q200): Calling Script… is a button in the Cue Sheet…
+  dialog, so More has its four items again.
 - Decided (can change): the script and its anchors are part of the
   production (`<CallingScript>` in the Show Tree XML, an older build skips
   it). A cue is anchored by id, so renumbering and moving keep it; deleting

@@ -19,6 +19,7 @@
 
 #include <QTemporaryDir>
 #include <QTextBrowser>
+#include <QPushButton>
 #include <QToolButton>
 #include <QComboBox>
 #include <QMenu>
@@ -120,6 +121,18 @@ void CueSheetDialog_Test::savesWhatIsShown()
     QVERIFY(!error.isEmpty());
 }
 
+void CueSheetDialog_Test::itOffersTheCallingScript()
+{
+    CueSheetDialog dlg(m_doc, m_prod);
+    QPushButton *b = dlg.findChild<QPushButton *>("cueSheetCallingScript");
+    QVERIFY(b != nullptr);
+    QSignalSpy spy(&dlg, &CueSheetDialog::callingScriptRequested);
+    dlg.show();
+    b->click();
+    QCOMPARE(spy.count(), 1);
+    QVERIFY(!dlg.isVisible());
+}
+
 void CueSheetDialog_Test::theShowTreeMoreMenuOpensIt()
 {
     ShowTreeView view(nullptr, m_doc);
@@ -134,8 +147,8 @@ void CueSheetDialog_Test::theShowTreeMoreMenuOpensIt()
     // One production in the show: it is the one the sheet is of.
     more->menu()->aboutToShow();
     QVERIFY(sheets->isEnabled());
-    // The three it had, the cue sheet, and the calling script (0.5), in the same menu.
-    QCOMPARE(more->menu()->actions().count(), 5);
+    // The three it had and the cue sheet: the calling script is in the sheet's dialog.
+    QCOMPARE(more->menu()->actions().count(), 4);
 }
 
 QTEST_MAIN(CueSheetDialog_Test)

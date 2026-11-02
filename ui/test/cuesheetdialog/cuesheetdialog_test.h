@@ -15,6 +15,7 @@ private slots:
 
     void showsTheCueSheetAndTheTrackingSheet();
     void savesWhatIsShown();
+    void itOffersTheCallingScript();
     void theShowTreeMoreMenuOpensIt();
 
 private:

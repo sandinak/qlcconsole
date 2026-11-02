@@ -2254,13 +2254,16 @@ void Monitor::initGraphicsToolbar()
         QMenu *sceneryMenu = addMenu->addMenu(tr("Add Scenery"));
         foreach (int kind, Scenery::kinds())
             sceneryMenu->addAction(Scenery::kindName(kind), this, [this, kind]() { slotAddScenery(kind); });
+        /* A floor area that must stay dark is one more thing to place, so it
+           is a choice here, not an entry of its own on the Add menu. */
+        sceneryMenu->addSeparator();
+        QAction *zoneAct = sceneryMenu->addAction(tr("No-light Zone…"), this, [this]() { slotAddNoLightZone(); });
+        zoneAct->setObjectName(QStringLiteral("addNoLightZoneAction"));
         addMenu->addAction(tr("Add Fountain…"), this, [this]() { slotAddFountain(); });
         addMenu->addAction(QIcon(":/image.png"), tr("Add Image"),
                            this, SLOT(slotAddImage()));
         addMenu->addAction(tr("Add Network Node"),
                            this, SLOT(slotAddNetworkNode()));
-        addMenu->addAction(tr("Add No-light Zone"),
-                           this, SLOT(slotAddNoLightZone()));
         addMenu->addSeparator();
         addMenu->addAction(tr("Add Target Position"),
                            this, SLOT(slotAddTarget()));

@@ -84,6 +84,16 @@ CueSheetDialog::CueSheetDialog(Doc *doc, quint32 productionId, QWidget *parent)
         b->setToolTip(s.tip);
         connect(b, &QPushButton::clicked, this, s.slot);
     }
+    // The production's script or lyrics with its cues placed on the lines:
+    // a window of its own, opened by whoever opened this.
+    QPushButton *script = btns->addButton(tr("Calling Script..."), QDialogButtonBox::ActionRole);
+    script->setObjectName(QStringLiteral("cueSheetCallingScript"));
+    script->setToolTip(tr("The production's script or lyrics with its cues placed on the lines: "
+                          "standby and GO in the margin, following the show as it runs"));
+    connect(script, &QPushButton::clicked, this, [this]() {
+        emit callingScriptRequested();
+        accept();
+    });
     connect(btns, &QDialogButtonBox::rejected, this, &QDialog::reject);
     root->addWidget(btns);
 
