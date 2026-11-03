@@ -2472,7 +2472,7 @@ void App::initActions()
        Control Map, OSC, MSC -- asks ShowControl::run(), which comes here. */
     /* Q203: what Teaching's instructor flags held back from a GO, and why. */
     connect(m_doc->showControl(), &ShowControl::outHeld, this, [this](const QString &what) {
-        statusBar()->showMessage(tr("Show control %1").arg(what), 8000);
+        showViewNotice(tr("Show control %1").arg(what));
     });
     m_doc->showControl()->setRunHandler([this](const ShowControl::Request &r, ShowControl::Route route) {
         return runCommand(r, route);
