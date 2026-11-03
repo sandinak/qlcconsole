@@ -651,6 +651,8 @@ private:
     /** One frame of them, on the view's own clock. */
     void blindMotionTick();
     bool m_blindView = false;
+    /** The footer's sheet as last applied (updateBlindLook()). */
+    QString m_footerSheet;
     QTimer *m_blindViewTimer = nullptr;
     /** The cue in edit's effects, off the stage (engine/src/blindeffects.h). */
     BlindEffects *m_blindEffects = nullptr;

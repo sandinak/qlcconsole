@@ -1378,7 +1378,8 @@ void ShowTreeView_Test::selectingACuePreviewsItOnTheRig()
     QCOMPARE(st->previewedCue(), c1);           // shown: the selected cue plays
     QCOMPARE(int(st->previewState()), int(ShowTreeController::PreviewState::Playing));
     QCOMPARE(view.previewText(), QString("▶ On the rig: 1 One"));
-    QCOMPARE(view.findChild<QLabel *>("stPreview")->text(), view.previewText());
+    // The toolbar carries no "On the rig" line any more: the footer chip says it.
+    QVERIFY(view.findChild<QLabel *>("stPreview") == nullptr);
     QVERIFY(!st->previewFunctions().isEmpty());
 
     // A layer in another cue plays that cue.
@@ -1643,9 +1644,7 @@ void ShowTreeView_Test::theLatestActionWinsAndOperateIsBlind()
     // GO: the run's.
     goCue(0);
     QCOMPARE(lit(), (QList<int>{ 255, 0, 0 }));
-    QLabel *line = view.findChild<QLabel *>("stPreview");
-    QVERIFY(line != nullptr);
-    QVERIFY(!line->property("blind").toBool());
+    QVERIFY(!view.previewText().startsWith("Live"));
 
     // Operate: only the run is live. Selecting and editing a cue in the
     // tree changes nothing on stage, and the line says so in blue.
@@ -1656,8 +1655,7 @@ void ShowTreeView_Test::theLatestActionWinsAndOperateIsBlind()
     QVERIFY(st->setLayerLook(c3, layers.at(2), st->lookForPalette(d50)));
     clickCue(c3);
     QCOMPARE(lit(), (QList<int>{ 0, 255, 0 }));
-    QVERIFY(line->property("blind").toBool());
-    QVERIFY(line->styleSheet().contains(BlindStyle::colour()));
+    QVERIFY(view.previewText().startsWith("Live: editing is blind"));
     QCOMPARE(st->editedCue(), c3);
     // ...until GO plays it, as edited.
     goCue(2);

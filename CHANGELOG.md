@@ -67,6 +67,17 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Fixed
 
+- **Leaving Blind puts the footer back.** The status bar's blue is now
+  derived from the state on every change (Blind, the mute, Design/Operate),
+  and the bar and everything on it are re-polished when it goes, so no blue
+  or white-on-blue is left behind. Tested through every way in and out.
+- **The footer's stage chip names what is really on the rig.** In Design, the
+  cue selected in the Show Tree shows as *"Stage: 1 Verse (Show Tree)"*, with
+  *"· Act 1 running"* when a list plays underneath, instead of the last cue
+  the Run tab played. Click the chip to jump to that cue. This replaces the
+  Show Tree toolbar's "On the rig" line, which is gone: the footer is the one
+  place that says what is on stage.
+
 - **The rig view holds still under the mouse.** Hovering over the 3D/rig
   view while a show ran made the rig shimmer back and forth by a hair:
   the crosshair's frames were drawn at full quality between the running

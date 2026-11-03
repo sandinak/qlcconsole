@@ -49,6 +49,7 @@
 #include "showtreecontroller.h"
 #include "cuerunner.h"
 #include "showtreeview.h"
+#include <optional>
 #include "blindstyle.h"
 #include "workbench.h"
 #include "inputoutputmap.h"
@@ -2259,7 +2260,7 @@ void App::slotModeChanged(Doc::Mode mode)
 
     // The "under timeline control" chip + exit button are Operate-only.
     slotTimelineControlChanged();
-    updateStageIndicator();
+    updateBlindLook();      // the footer from the state, whichever way the mode changed
 }
 
 /*****************************************************************************
@@ -4493,10 +4494,27 @@ void App::updateBlindLook()
     // set their own colour (dirty/autosave) keep theirs (their inline
     // stylesheet wins over this ancestor rule), which still reads fine on blue.
     if (QStatusBar *sb = statusBar())
-        sb->setStyleSheet(on
+    {
+        const QString sheet = on
             ? QStringLiteral("QStatusBar { background: %1; } "
                              "QStatusBar QLabel { color: white; }").arg(BlindStyle::colour())
-            : QString());
+            : QString();
+        if (sheet != m_footerSheet || sb->styleSheet() != sheet)
+        {
+            m_footerSheet = sheet;
+            sb->setStyleSheet(sheet);
+            // Leaving Blind must not leave the blue behind in any child or
+            // cached style: re-polish the bar and everything on it.
+            sb->style()->unpolish(sb);
+            sb->style()->polish(sb);
+            for (QWidget *w : sb->findChildren<QWidget *>())
+            {
+                w->style()->unpolish(w);
+                w->style()->polish(w);
+            }
+            sb->update();
+        }
+    }
     updateStageIndicator();
 }
 
@@ -4545,6 +4563,13 @@ QString App::stageIndicatorText(Stage *stageOut, QString *tipOut) const
         ? tr("\nRunning: %1.").arg(running.join(QStringLiteral(", "))) : QString();
 
     const bool design = m_doc != NULL && m_doc->mode() == Doc::Design;
+    // The Show Tree's on-rig cue: the same state its toolbar line used to say.
+    std::optional<QString> onRigCue;
+    if (design && tree != nullptr
+        && (tree->previewState() == ShowTreeController::PreviewState::Playing
+            || tree->previewState() == ShowTreeController::PreviewState::Dark))
+        if (const ShowTree::CueList *pl = tree->listOfCue(tree->previewedCue()))
+            onRigCue = tree->cueLabel(*pl, pl->indexOf(tree->previewedCue()));
     const bool muted = m_doc != NULL && m_doc->inputOutputMap()->outputInhibited();
     const bool teachHold = m_doc != NULL && m_doc->teachingSettings() != nullptr
                            && m_doc->teachingSettings()->holdsOutput();
@@ -4588,6 +4613,24 @@ QString App::stageIndicatorText(Stage *stageOut, QString *tipOut) const
         text = tr("BLIND \u00b7 rig muted");
         tip = tr("Blind: the rig is muted, so nothing you do reaches the lights; the screens show "
                  "the edit. Turn Blind off to take it live. Click for the Run tab.");
+    }
+    else if (design && tree != nullptr && onRigCue.has_value())
+    {
+        // Design: the cue picked in the Show Tree is on the rig, over any
+        // list running for real, which goes on underneath (the old toolbar's
+        // "On the rig" line, now here and nowhere else).
+        stage = Stage::BuildLook;
+        const bool dark = tree->previewState() == ShowTreeController::PreviewState::Dark;
+        text = dark ? tr("Stage: %1 (plays nothing yet)").arg(onRigCue.value())
+                    : tr("Stage: %1 (Show Tree)").arg(onRigCue.value());
+        if (!dark && !running.isEmpty())
+            text += tr(" \u00b7 %1 running").arg(running.join(QStringLiteral(", ")));
+        tip = tr("The cue selected in the Show Tree is what the lights show now: it plays on the rig "
+                 "and its changes show at once.")
+              + (running.isEmpty() ? QString()
+                 : tr(" The cue list %1 keeps running underneath and comes back when you "
+                      "select nothing.").arg(running.join(QStringLiteral(", "))))
+              + tr(" Click to jump to the cue in the Show Tree.");
     }
     else if (buildLook)
     {
@@ -7688,8 +7731,13 @@ void App::initStatusBar()
     m_statusStage->setFixedHeight(m_statusStage->fontMetrics().height() + 4);   // the labels' height
     m_statusStage->setProperty("helpTopic", QStringLiteral("show-tree.md"));
     connect(m_statusStage, &QToolButton::clicked, this, [this]() {
-        showContext(m_stage == Stage::Live || m_stage == Stage::BlindView || m_stage == Stage::BlindMuted
-                    ? tr("Run") : tr("Show Tree"));
+        const bool run = m_stage == Stage::Live || m_stage == Stage::BlindView || m_stage == Stage::BlindMuted;
+        showContext(run ? tr("Run") : tr("Show Tree"));
+        // On the rig from the Show Tree: jump to that cue.
+        ShowTreeController *st = m_doc != NULL ? m_doc->showTree() : nullptr;
+        if (!run && st != nullptr && st->previewedCue() != ShowTree::invalidId()
+            && ShowTreeView::instance() != NULL)
+            ShowTreeView::instance()->selectNode(st->previewedCue());
     });
     sb->addPermanentWidget(m_statusStage);
     if (ShowTreeController *st = m_doc->showTree())
@@ -7697,6 +7745,8 @@ void App::initStatusBar()
         // A list starts, stops or steps; the Build look plays or lets go: all signals.
         connect(st, &ShowTreeController::hitArmingChanged, this, &App::updateStageIndicator);
         connect(st, &ShowTreeController::previewChanged, this, &App::updateStageIndicator);
+        connect(st, &ShowTreeController::editedCueChanged, this, &App::updateStageIndicator);
+        connect(st, &ShowTreeController::currentProductionChanged, this, &App::updateStageIndicator);
     }
     updateStageIndicator();
 

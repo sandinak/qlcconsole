@@ -1208,10 +1208,7 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         stretch->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
         bar->addWidget(stretch);
     }
-    // What the rig shows: the selected cue (Design), or nothing (Live).
-    m_previewLabel = new QLabel(this);
-    m_previewLabel->setObjectName("stPreview");
-    bar->addWidget(m_previewLabel);
+    // What the rig shows is said in one place, the footer's stage chip.
     m_previewPlay = new QToolButton(this);
     m_previewPlay->setObjectName("stPreviewPlay");
     m_previewPlay->setText(tr("Play"));
@@ -3803,26 +3800,12 @@ QString ShowTreeView::previewText() const
 
 void ShowTreeView::slotPreviewChanged()
 {
-    m_previewLabel->setText(previewText());
-    // Blind is blue (docs/design/LIVE_BLIND.md): an edit that doesn't reach
-    // the stage -- Operate, or Design with the rig muted. Live: the theme.
-    const bool blind = m_st->previewState() == ShowTreeController::PreviewState::NotDesign
-                    || (m_doc->inputOutputMap() != nullptr && m_doc->inputOutputMap()->outputInhibited()
-                        && !m_previewLabel->text().isEmpty());
-    m_previewLabel->setProperty("blind", blind);
-    m_previewLabel->setStyleSheet(blind ? BlindStyle::labelSheet() : QString());
     // Play, beside the line, while a run holds the preview -- the docked
     // Workbench has its own.
     if (m_previewPlayAction != nullptr)
         m_previewPlayAction->setVisible(m_st->previewState() == ShowTreeController::PreviewState::Held
                                     && !isWorkbenchDocked());
     updatePageRig();
-    m_previewLabel->setToolTip(m_st->previewState() == ShowTreeController::PreviewState::Playing
-                               ? tr("Design mode: the selected cue plays on the rig, and changes show at "
-                                    "once. GO holds it so the show plays alone; Play previews over a "
-                                    "running list (it keeps going underneath). Leaving the tab or "
-                                    "selecting no cue stops it.")
-                               : QString());
 }
 
 void ShowTreeView::updateButtons()

@@ -4436,9 +4436,12 @@ void AppViews_Test::theFooterSaysWhatLightsTheStage()
     prod = st->addProduction("Chip");
     const quint32 listId = st->addCueList(prod, "Act 1", ShowTree::ListMode::NonTracking);
     const quint32 c1 = st->addCue(listId, -1, "Verse");
+    const quint32 list2 = st->addCueList(prod, "Act 2", ShowTree::ListMode::NonTracking);
+    const quint32 c2 = st->addCue(list2, -1, "Chorus");
     ShowTree::Target t;
     t.groups << g->id();
     st->setLayerLook(c1, st->addLayer(c1, t), st->lookForPalette(full->id()));
+    st->setLayerLook(c2, st->addLayer(c2, t), st->lookForPalette(full->id()));
     st->setCurrentProduction(prod);
     Chaser *list = qobject_cast<Chaser *>(doc->function(st->cueList(listId)->chaser));
     QVERIFY(list != nullptr);
@@ -4483,8 +4486,19 @@ void AppViews_Test::theFooterSaysWhatLightsTheStage()
     // The Workbench / Show Tree preview is what is on: the Build look.
     st->previewCue(c1);
     QVERIFY(m_app->m_stage == App::Stage::BuildLook);
-    QVERIFY(chip->text() == QStringLiteral("Stage: Build look"));
+    QVERIFY2(chip->text().startsWith(QStringLiteral("Stage: 1 Verse")), qPrintable(chip->text()));
+    QVERIFY(chip->toolTip().startsWith(QStringLiteral("Stage: 1 Verse (Show Tree)")) || chip->text().endsWith(")"));
+    QVERIFY(chip->toolTip().contains("selected in the Show Tree"));
     shots("buildlook");
+    // The Show Tree page, toolbar and all, with that cue selected (the visual check).
+    if (!shotDir.isEmpty())
+    {
+        if (ShowTreeView *view = ShowTreeView::instance())
+            view->selectNode(c1);
+        m_app->showContext(QStringLiteral("Show Tree"));
+        shots("showtree");
+        m_app->showContext(QStringLiteral("Run"));
+    }
     st->stopPreview();
     QVERIFY(m_app->m_stage == App::Stage::NoList);
 
@@ -4496,14 +4510,45 @@ void AppViews_Test::theFooterSaysWhatLightsTheStage()
     QVERIFY(chip->toolTip().contains("lights the stage"));
     shots("live");
 
+    // The Show Tree's on-rig cue is what the chip names, not the Run tab's last cue: pick
+    // another cue and play it over the running list (the list goes on underneath)...
+    st->previewCue(c2);
+    st->resumePreview();
+    QTRY_VERIFY_WITH_TIMEOUT(chip->text().contains("Chorus"), 5000);
+    // (the text may be shortened to the room; the tooltip keeps all of it)
+    const QString whole = chip->text() + QStringLiteral("\n") + chip->toolTip();
+    QVERIFY2(whole.contains(QString::fromUtf8("(Show Tree) \xc2\xb7 Act 1 running")) && !chip->text().contains("Verse"),
+             qPrintable(whole));
+    shots("ontherig-over-run");
+    // ...the list stops: still the on-rig cue, now alone...
+    doc->masterTimer()->stopAllFunctions();
+    QTRY_VERIFY_WITH_TIMEOUT(!list->isRunning(), 5000);
+    st->previewCue(c2);
+    QTRY_VERIFY2_WITH_TIMEOUT(chip->text().contains("Chorus") && !chip->text().contains("running"),
+                              qPrintable(chip->text()), 5000);
+    // ...and picking a different cue moves the chip with it.
+    st->previewCue(c1);
+    QTRY_VERIFY2_WITH_TIMEOUT(chip->text().contains("Verse") && !chip->text().contains("Chorus"),
+                              qPrintable(chip->text()), 5000);
+    shots("ontherig");
+    st->stopPreview();
+    QTRY_VERIFY_WITH_TIMEOUT(m_app->m_stage == App::Stage::NoList, 5000);
+    m_app->m_cueGoAction->trigger();
+    QTRY_VERIFY_WITH_TIMEOUT(list->isRunning() && list->currentStepIndex() == 0, 5000);
+    QTRY_VERIFY_WITH_TIMEOUT(m_app->m_stage == App::Stage::Live, 5000);
+
     // Blind (Operate's Blind view): the stage holds the cue while the screens show the edit.
     doc->setMode(Doc::Operate);
     m_app->setBlindView(true);
     QVERIFY(m_app->m_stage == App::Stage::BlindView);
-    QVERIFY(chip->text() == QString::fromUtf8("BLIND \xc2\xb7 stage holds 1 Verse"));
+    m_app->resize(1280, 800);
+    QCoreApplication::processEvents();
+    m_app->updateStageIndicator();
+    QCOMPARE(chip->text(), QString::fromUtf8("BLIND \xc2\xb7 stage holds 1 Verse"));
     shots("blind");
     m_app->setBlindView(false);
     QVERIFY(m_app->m_stage == App::Stage::Live);
+    shots("blindoff");
 
     // The list stops: back to nothing.
     doc->masterTimer()->stopAllFunctions();
