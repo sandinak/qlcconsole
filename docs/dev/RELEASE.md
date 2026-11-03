@@ -61,6 +61,29 @@ this Mac; **`make beta`, `make release` and `make attach` are public**.
   window, at the cost of an AppleScript opening the volume on the screen.
   It ends with the pre-release check of the new DMG (below), and fails if
   that fails; `RELEASE_CHECK=0` skips it.
+  **Why it is fast now:** it builds only what ships (`-DQLC_NO_TESTS=ON`:
+  none of the ~245 test programs; the gate and `check-all.sh` still build
+  them), through ccache for both slices, in a build dir that lasts between
+  runs (`/Volumes/Ext/build/<checkout>-universal` while ender's work drive
+  is mounted, else `<repo>/build-universal`; `BUILD_DIR=` overrides). A
+  repeat run compiles what the commits since changed and re-links, then
+  signs and notarizes. It is still built from the committed HEAD (the
+  clean-tree check stands). `NO_CCACHE=1` turns ccache off.
+- `make dmg ARCH=native` — the same, arm64 only (no x86_64 slice), for
+  installing on our own Apple silicon Macs: about half the compile.
+  Signed and notarized, but named
+  `qlcconsole-<VERSION>-arm64-native-<date>-<rev>.dmg` (volume "qlcconsole
+  <VERSION> (arm64 only)"); the universal pre-release check is skipped, and
+  `publish.sh` refuses any DMG not named `-universal-`. Releases, `make beta`
+  and `make release` are always universal.
+- **ccache on ender** lives on the work drive, `/Volumes/Ext/ccache`
+  (`max_size = 100G`), while that drive is mounted, and falls back to the
+  internal `~/Library/Caches/ccache` (20 GB) when ender is undocked, so an
+  undocked build is colder, never broken. `platforms/macos/ccache-env.sh`
+  (sourced by `check-all.sh`, `dev-app.sh`/`make test` and `package-local.sh`)
+  picks it: the directory must exist and take a written file; an exported
+  `CCACHE_DIR` wins. Other Macs have no such directory and keep their own
+  caches (gate hosts included).
 - `make release-check` — the pre-release check of the newest `dist/*.dmg`
   (`DMG=…` for another, `HOST=<ssh-host>` to run it on another Mac,
   `WAIVE=id,…`); see [Pre-release checks](#pre-release-checks). `make dmg`

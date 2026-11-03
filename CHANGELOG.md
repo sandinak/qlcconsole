@@ -12,6 +12,15 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ## [Unreleased]
 
+### Tooling
+
+- **`make dmg` is much faster.** It builds only what ships (no test
+  programs), through ccache, in a build dir that lasts between runs;
+  `make dmg ARCH=native` makes an arm64-only DMG (named `-arm64-native-`,
+  never published) for our own Macs. ender's ccache moves to
+  `/Volumes/Ext/ccache` (100 GB) while that drive is mounted, internal 20 GB
+  otherwise; `make test` now uses ccache too.
+
 ### Fixed
 
 - **The rig view holds still under the mouse.** Hovering over the 3D/rig

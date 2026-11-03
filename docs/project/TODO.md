@@ -10,6 +10,13 @@ under `~/.claude/.../memory/`.
 
 ---
 
+## Faster packaging (tools/04-pkgfast, 2026-11-03) -- done
+
+`make dmg`: no tests (`QLC_NO_TESTS`, now also in ai/ and tools/artnetprobe), ccache for both slices, build
+dir kept on /Volumes/Ext/build; `make dmg ARCH=native` arm64-only; ender's
+ccache on /Volumes/Ext/ccache (`platforms/macos/ccache-env.sh`). Move to
+DONE.md when landed.
+
 ## Rig view hover jitter (fix/04-rig-hover-jitter, 2026-11-03) — done
 
 "The rig view moves a very small distance back and forth when the mouse
