@@ -6,7 +6,8 @@
   measurements as feet-and-inches (e.g. 5' 6") in addition to plain decimal
   feet (e.g. 5.5). The stored value is always in display-feet, so callers
   convert to metres exactly as they would with a plain spin box. In metric
-  mode it behaves as an ordinary " m" spin box.
+  mode it is a " m" spin box that also takes a length typed with its own
+  unit (5' 6", 66 in, 167 cm), converted to metres.
 
   Header-only and deliberately free of the Q_OBJECT macro (it adds no new
   signals/slots), so it needs no moc pass or CMake entry.
@@ -25,6 +26,8 @@
 #include <QRegularExpression>
 #include <QStringList>
 #include <QtMath>
+
+#include "measurementunits.h"
 
 /** \addtogroup ui_mon DMX Monitor
  * @{
@@ -64,7 +67,11 @@ public:
     double valueFromText(const QString &text) const override
     {
         if (!m_feetMode)
-            return QDoubleSpinBox::valueFromText(text);
+        {
+            bool ok = false;
+            const double mm = parseMetric(text, &ok);
+            return ok ? mm / 1000.0 : QDoubleSpinBox::valueFromText(text);
+        }
         return parseFeet(text);
     }
 
@@ -73,13 +80,38 @@ public:
     QValidator::State validate(QString &input, int &pos) const override
     {
         if (!m_feetMode)
-            return QDoubleSpinBox::validate(input, pos);
+        {
+            const QValidator::State st = QDoubleSpinBox::validate(input, pos);
+            if (st != QValidator::Invalid)
+                return st;
+            bool ok = false;
+            parseMetric(input, &ok);
+            return ok ? QValidator::Acceptable : QValidator::Intermediate;
+        }
         Q_UNUSED(input)
         Q_UNUSED(pos)
         return QValidator::Acceptable;
     }
 
 private:
+    // Metric mode: a length typed with its unit, in millimetres (a bare
+    // number is metres). The " m" suffix may still be on the end.
+    double parseMetric(QString text, bool *ok) const
+    {
+        text = text.trimmed();
+        if (!suffix().isEmpty() && text.endsWith(suffix().trimmed()) && text.size() > suffix().trimmed().size())
+        {
+            const QString cut = text.left(text.size() - suffix().trimmed().size()).trimmed();
+            // "5' 6\" m": the unit typed wins over the suffix left behind.
+            if (cut.contains(QRegularExpression(QStringLiteral("[a-z'\"\u2032\u2033]"),
+                                                QRegularExpression::CaseInsensitiveOption)))
+                text = cut;
+        }
+        text.replace(QChar(0x2032), QLatin1Char('\''));
+        text.replace(QChar(0x2033), QLatin1Char('"'));
+        return MeasurementUnits::parseLength(text, MeasurementUnits::Metres, ok);
+    }
+
     // Accepts: "5.5", "5", "5'", "5' 6\"", "5'6", "5 6", "6\"",
     // "5ft 6in", and Unicode prime variants (5′ 6″).
     double parseFeet(const QString &raw) const

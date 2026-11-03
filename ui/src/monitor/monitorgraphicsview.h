@@ -566,6 +566,15 @@ public:
     /** Rebuild the aim-line overlays for all selected TargetItems. */
     void updateAimLines();
 
+    /** The follow spot at a glance: a ring on the subject it follows and a
+     *  line from each of its heads, green while the stick moves it, amber
+     *  while it holds, red with no stick to move it; nothing when it is off.
+     *  Follows ProgrammerController::followSpotStatus(). */
+    void updateFollowSpotOverlay();
+    /** The overlay's items (a ring, a label, a line a head): for tests. */
+    QList<QGraphicsItem *> followSpotOverlayItems() const { return m_followItems; }
+    void clearFollowSpotOverlay();
+
     /** Rebuild the thin tether lines from a truss-bound fixture back to its
      *  anchor point on the truss centreline — shown only when the fixture is
      *  sitting off-centre (a cross offset) far enough that the binding isn't
@@ -1428,6 +1437,8 @@ private:
     QGraphicsLineItem       *m_fsPinH      = nullptr;
     QGraphicsLineItem       *m_fsPinV      = nullptr;
     QGraphicsSimpleTextItem *m_fsPinLabel  = nullptr;  ///< "no joystick" warning
+    /** The follow-spot overlay (updateFollowSpotOverlay()). */
+    QList<QGraphicsItem *> m_followItems;
 
     /** Scene whose palette→target links are shown as aim lines.
      *  invalidId() means no scene is active → no lines drawn. */

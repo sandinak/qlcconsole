@@ -789,6 +789,7 @@ private slots:
     void aFaceFixtureDrawsOverWhatIsInside();
     void onlyTheTargetsTheCueUsesAreDrawn();
     void aTargetSaysWhichHeadsCannotReachIt();
+    void theFollowSpotIsDrawnOnThePlot();
     void aBlockedBeamIsTracedToWhatBlocksIt();
     void theLineOfSightMenuSetsWhatBlocks();
     void theReachOverlayShadesWhereASpotCannotAim();

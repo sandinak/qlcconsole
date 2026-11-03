@@ -51,6 +51,8 @@
 #include "inputoutputmap.h"
 #include "genericfader.h"
 #include "fadechannel.h"
+#include "programmercontroller.h"
+#include "collection.h"
 #undef protected
 #undef private
 #include "monitorproperties.h"
@@ -1890,6 +1892,169 @@ void EffectInstance_Test::followSpotMovesEveryHeadToTheSamePoint()
 
     scene->stop(FunctionParent::master());
     timer.timerTick();
+}
+
+void EffectInstance_Test::followSpotInARunningCueMovesWithTheStick_data()
+{
+    QTest::addColumn<bool>("twoArms");
+    QTest::newRow("one head") << false;
+    QTest::newRow("two arms") << true;
+}
+
+void EffectInstance_Test::followSpotInARunningCueMovesWithTheStick()
+{
+    QFETCH(bool, twoArms);
+
+    // A mover with 16-bit pan and a tilt per arm (one arm, or two on a 1 m bar).
+    const int arms = twoArms ? 2 : 1;
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test"); def->setModel(twoArms ? "Two Arm Bar" : "Spot");
+    def->setType(QLCFixtureDef::MovingHead);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("ch");
+    for (int a = 0; a < arms; ++a)
+    {
+        QLCFixtureHead head;
+        for (int k = 0; k < 3; ++k)
+        {
+            QLCChannel *ch = new QLCChannel();
+            ch->setName(QString("%1 %2").arg(k == 2 ? "Tilt" : k == 1 ? "Pan fine" : "Pan").arg(a + 1));
+            ch->setGroup(k == 2 ? QLCChannel::Tilt : QLCChannel::Pan);
+            ch->setControlByte(k == 1 ? QLCChannel::LSB : QLCChannel::MSB);
+            def->addChannel(ch);
+            mode->insertChannel(ch, quint32(a * 3 + k));
+            head.addChannel(quint32(a * 3 + k));
+        }
+        mode->insertHead(-1, head);
+    }
+    QLCPhysical ph;
+    ph.setFocusPanMax(540);
+    ph.setFocusTiltMax(270);
+    if (twoArms)
+    {
+        ph.setWidth(1000);
+        ph.setLayoutSize(QSize(2, 1));
+    }
+    mode->setPhysical(ph);
+    def->addMode(mode);
+    Fixture *spot = new Fixture(m_doc);
+    spot->setName("Spot");
+    spot->setFixtureDefinition(def, mode);
+    spot->setUniverse(0);
+    spot->setAddress(400);
+    QVERIFY(m_doc->addFixture(spot));
+
+    // Hung 4 m up; the subject (a Person, standing still) in front of it.
+    MonitorProperties *props = m_doc->monitorProperties();
+    props->setFixturePosition(spot->id(), 0, 0, QVector3D(0, 0, 4));
+    FixtureRigProps rp;
+    rp.mountingType = Truss::TopHung;
+    props->setFixtureRigProps(spot->id(), rp);
+    StageTarget *who = props->addStageTarget();
+    who->setName("Witch");
+    who->setKind(StageTarget::Kind::Person);
+    const QVector3D home(0.0f, 3.0f, 0.0f);
+    who->setPosition(home);
+
+    // The cue: a group layer with an Aim look on the subject and the follow
+    // spot, played as the Show Tree plays a cue -- a collection.
+    FixtureGroup *grp = new FixtureGroup(m_doc);
+    grp->setName("Spots");
+    QVERIFY(m_doc->addFixtureGroup(grp));
+    grp->assignFixture(spot->id());
+    QLCPalette *aim = new QLCPalette(QLCPalette::Aim, m_doc);
+    aim->setStageTargetId(who->id());
+    QVERIFY(m_doc->addPalette(aim));
+    QLCPalette *follow = new QLCPalette(QLCPalette::Effect, m_doc);
+    follow->setScriptPath(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts/followspot.js");
+    QVERIFY(m_doc->addPalette(follow));
+    Scene *scene = new Scene(m_doc);
+    scene->setName("1.1.2 · Spots");
+    m_doc->addFunction(scene);
+    scene->addFixtureGroup(grp->id());
+    scene->addPalette(aim->id());
+    scene->addPalette(follow->id());
+    Collection *cue = new Collection(m_doc);
+    cue->setName("1.1.2");
+    m_doc->addFunction(cue);
+    QVERIFY(cue->addFunction(scene->id()));
+
+    /* Its own timer, as the other tests here: the Doc's would run the
+       effect runner on this thread (it is the main thread's in the app). The
+       programmer is told the cue started as the Doc's timer tells it. */
+    MasterTimer ownTimer(m_doc);
+    MasterTimer *timer = &ownTimer;
+    ProgrammerController *pc = m_doc->programmer();
+    QVERIFY(pc->m_focusedSceneId == Function::invalidId());     // nothing open in the Workbench
+    auto tick = [&]() {
+        pc->applyDesignJoystick();
+        timer->timerTick();
+        QList<Universe *> ua = m_doc->inputOutputMap()->claimUniverses();
+        ua.first()->processFaders();
+        m_doc->inputOutputMap()->releaseUniverses(false);
+    };
+    auto pans = [&]() {
+        QList<Universe *> ua = m_doc->inputOutputMap()->claimUniverses();
+        const QByteArray dmx = ua.first()->preGMValues();
+        m_doc->inputOutputMap()->releaseUniverses(false);
+        QList<int> out;
+        for (int a = 0; a < arms; ++a)
+            out << ((uchar(dmx.at(400 + a * 3)) << 8) | uchar(dmx.at(400 + a * 3 + 1)));
+        return out;
+    };
+
+    cue->start(timer, FunctionParent::master());
+    pc->slotProgrammerFunctionStarted(cue->id());
+    for (int i = 0; i < 10; ++i)
+        tick();
+    QVERIFY(scene->isRunning());
+
+    // No stick: on, following the subject, which nothing moves -- said so.
+    ProgrammerController::FollowSpotStatus st = pc->followSpotStatus();
+    QCOMPARE(int(st.state), int(ProgrammerController::FollowSpotStatus::NoStick));
+    QCOMPARE(st.sceneId, scene->id());
+    QCOMPARE(st.targetId, who->id());
+    QVERIFY(st.live);
+    QVERIFY2(pc->followSpotStatusText().contains("doesn't move"), qPrintable(pc->followSpotStatusText()));
+    const QList<int> still = pans();
+    for (int i = 0; i < 10; ++i)
+        tick();
+    QCOMPARE(pans(), still);
+
+    // A stick, held right: every arm's pan moves on every tick.
+    pc->bindPanAxis();
+    pc->slotControllerInputChanged(9, 0, 128, QString());
+    pc->bindTiltAxis();
+    pc->slotControllerInputChanged(9, 1, 128, QString());
+    tick();
+    QCOMPARE(int(pc->followSpotStatus().state), int(ProgrammerController::FollowSpotStatus::Holding));
+    pc->slotControllerInputChanged(9, 0, 230, QString());
+    tick();
+    tick();
+    QList<int> last = pans();
+    for (int i = 0; i < 20; ++i)
+    {
+        tick();
+        const QList<int> now = pans();
+        for (int a = 0; a < arms; ++a)
+            QVERIFY2(now.at(a) != last.at(a),
+                     qPrintable(QString("arm %1 did not move on tick %2 (%3)").arg(a + 1).arg(i).arg(now.at(a))));
+        last = now;
+    }
+    QVERIFY(who->position().x() > home.x() + 0.5f);
+    QCOMPARE(int(pc->followSpotStatus().state), int(ProgrammerController::FollowSpotStatus::Moving));
+    QVERIFY2(pc->followSpotStatusText().contains("Witch"), qPrintable(pc->followSpotStatusText()));
+
+    // The cue ends: the subject is back where the show has it -- flying a
+    // spot in a running cue never edits the show -- and the follow is off.
+    pc->slotControllerInputChanged(9, 0, 128, QString());
+    cue->stop(FunctionParent::master());
+    pc->slotProgrammerFunctionStopped(cue->id());
+    for (int i = 0; i < 12; ++i)
+        tick();
+    QCOMPARE(who->position(), home);
+    QCOMPARE(int(pc->followSpotStatus().state), int(ProgrammerController::FollowSpotStatus::Off));
+    pc->clearAxisBindings();
 }
 
 /* "is it possible to visualize w/o patching?": an effect on a look whose

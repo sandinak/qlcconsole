@@ -10045,6 +10045,91 @@ void Monitor_Test::onlyTheTargetsTheCueUsesAreDrawn()
     QSettings().remove("monitor/allTargets");
 }
 
+/* "visual indication ... in the rig view": while a follow spot is on, its
+   subject is ringed and every head has a line to it, coloured by what it is
+   doing; off, there is nothing. */
+void Monitor_Test::theFollowSpotIsDrawnOnThePlot()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    Fixture *a = makeMover(doc, 14.0, 0, "AT1", QVector3D(1.0f, 1.0f, 4.0f));
+    Fixture *b = makeMover(doc, 14.0, 8, "AT2", QVector3D(6.0f, 1.0f, 4.0f));
+    QVERIFY(a != nullptr && b != nullptr);
+    StageTarget *who = props->addStageTarget();
+    who->setName("ES-Witch");
+    who->setKind(StageTarget::Kind::Person);
+    who->setPosition(QVector3D(3.5f, 4.0f, 0.0f));
+    Scene *scene = new Scene(doc);
+    scene->addFixture(a->id());
+    scene->addFixture(b->id());
+    QVERIFY(doc->addFunction(scene));
+
+    MonitorGraphicsView view(doc);
+    view.resize(1000, 700);
+    view.setGridMetrics(1000.0);
+    view.setGridSize(QSize(10, 7));
+    view.addFixture(a->id(), QPointF(1000.0, 1000.0));
+    view.addFixture(b->id(), QPointF(6000.0, 1000.0));
+
+    using Status = ProgrammerController::FollowSpotStatus;
+    ProgrammerController *pc = doc->programmer();
+    auto set = [&](Status::State state) {
+        Status st;
+        st.state = state;
+        st.sceneId = scene->id();
+        st.paletteId = 7;
+        st.targetId = who->id();
+        st.live = true;
+        pc->m_followStatus = st;
+        emit pc->followSpotStatusChanged();
+    };
+    auto count = [&](const QString &what) {
+        int n = 0;
+        for (QGraphicsItem *it : view.followSpotOverlayItems())
+            if (it->data(0).toString() == what)
+                ++n;
+        return n;
+    };
+    QVERIFY(view.followSpotOverlayItems().isEmpty());
+
+    set(Status::Moving);
+    QCOMPARE(count("followRing"), 1);
+    QCOMPARE(count("followLine"), 2);
+    QCOMPARE(count("followLabel"), 1);
+    for (QGraphicsItem *it : view.followSpotOverlayItems())
+        if (QGraphicsLineItem *li = qgraphicsitem_cast<QGraphicsLineItem *>(it))
+        {
+            QCOMPARE(li->pen().color(), QColor(0x3e, 0xc4, 0x6d));
+            QVERIFY(li->toolTip().contains("ES-Witch"));
+        }
+    // The ring is on the subject, and follows it as the stick moves it.
+    QGraphicsEllipseItem *ring = nullptr;
+    for (QGraphicsItem *it : view.followSpotOverlayItems())
+        if (it->data(0).toString() == "followRing")
+            ring = qgraphicsitem_cast<QGraphicsEllipseItem *>(it);
+    QVERIFY(ring != nullptr);
+    const QPointF before = ring->rect().center();
+    QVERIFY((before - view.realPositionToPixels(3500.0, 4000.0)).manhattanLength() < 1.0);
+    who->setPosition(QVector3D(5.0f, 4.0f, 0.0f));
+    emit pc->followSpotPinChanged(true, 5.0f, 4.0f);
+    for (QGraphicsItem *it : view.followSpotOverlayItems())
+        if (it->data(0).toString() == "followRing")
+            ring = qgraphicsitem_cast<QGraphicsEllipseItem *>(it);
+    QVERIFY((ring->rect().center() - view.realPositionToPixels(5000.0, 4000.0)).manhattanLength() < 1.0);
+
+    set(Status::Holding);
+    for (QGraphicsItem *it : view.followSpotOverlayItems())
+        if (QGraphicsSimpleTextItem *t = qgraphicsitem_cast<QGraphicsSimpleTextItem *>(it))
+            QCOMPARE(t->text(), QString("following · holding"));
+    set(Status::NoStick);
+    for (QGraphicsItem *it : view.followSpotOverlayItems())
+        if (QGraphicsSimpleTextItem *t = qgraphicsitem_cast<QGraphicsSimpleTextItem *>(it))
+            QCOMPARE(t->text(), QString("following · no stick"));
+    set(Status::Off);
+    QVERIFY(view.followSpotOverlayItems().isEmpty());
+    pc->m_followStatus = Status();
+}
+
 void Monitor_Test::aTargetSaysWhichHeadsCannotReachIt()
 {
     /* A scene aims two spots at a vocalist half a metre in front of a tower:

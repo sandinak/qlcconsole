@@ -118,8 +118,16 @@ public:
         /** The flags column's badges drawn in the warning colour ("needs
          *  work", "⚠ cyc"); every other badge -- Mix, Track... -- keeps the
          *  row's own colour (flagPieces()). */
-        WarnPiecesRole = Qt::UserRole + 44
+        WarnPiecesRole = Qt::UserRole + 44,
+        /** The flags column's badges lit (drawn in litColour()): "follow"
+         *  while its follow spot is following. */
+        LitPiecesRole = Qt::UserRole + 45,
+        /** A cue's or layer's follow-spot effect looks (palette ids). */
+        FollowPalettesRole = Qt::UserRole + 46
     };
+
+    /** The colour of a lit badge ("follow" while it follows). */
+    static QColor litColour();
 
     /** The warning colour of a badge in the flags column. */
     static QColor warningColour();
@@ -157,6 +165,9 @@ public:
      *  that puts light on the cyc nobody meant -- "⚠ cyc" in its flags, the
      *  fixtures in the tooltip -- from Show Review's last result. */
     void applyBackwashMarks();
+    /** Light the "follow" badge of the cue (and layer) whose follow spot is
+     *  following now; warn on one with no stick to move it. */
+    void refreshFollowBadges();
     /** The open PWR-12 finding cue @a cueId is marked for: its key, or
      *  empty when it has none. */
     QString backwashFindingKey(quint32 cueId) const;

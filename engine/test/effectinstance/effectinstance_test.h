@@ -126,6 +126,12 @@ private slots:
      *  land on the follow-spot point, and moving the point moves both to
      *  the same new place (they converge; the effect leaves pan/tilt alone). */
     void followSpotMovesEveryHeadToTheSamePoint();
+    /** "1.1.2 has a follow spot ... and it doesn't move": a follow spot in a
+     *  running cue (a collection, nothing open in the Workbench) moves with
+     *  the stick, every tick, for a one-head mover and for each arm of a
+     *  two-arm one; its subject goes back where the show has it after. */
+    void followSpotInARunningCueMovesWithTheStick_data();
+    void followSpotInARunningCueMovesWithTheStick();
     /** A script that leaves out notes, lifecycle and the rest: empty and
      *  the defaults -- not the word "undefined" shown under the effect. */
     void aScriptsMissingTextIsEmptyNotUndefined();
