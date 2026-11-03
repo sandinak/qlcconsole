@@ -37,10 +37,26 @@
 #include "whyonpanel.h"
 #include "selectionmenu.h"
 #include "fixturegroup.h"
+#include "fixture.h"
 #include "monitor.h"
 #include "apputil.h"
 #include "patchinventorydialog.h"
+#include "ledlayouteditor.h"
+#include "gobowheelsdialog.h"
+#include "structurestudioview.h"
+#include "programmingmanager.h"
+#include "controllearndialog.h"
+#include "effectrunsmenu.h"
+#include "showtreeview.h"
+#include "paletteops.h"
+#include "qlcpalette.h"
+#include "collection.h"
+#include "usedby.h"
+#include "chaser.h"
+#include "app.h"
 #include "doc.h"
+
+#include <QApplication>
 
 /****************************************************************************
  * ContextMenu: the sections
@@ -95,6 +111,19 @@ QMenu *ContextMenu::addMenu(Section section, const QString &title, const QString
     return sub;
 }
 
+void ContextMenu::fileAsPlace(QMenu *menu)
+{
+    if (menu == nullptr)
+        return;
+    for (QAction *a : menu->actions())
+    {
+        if (a->isSeparator())
+            menu->removeAction(a);
+        else if (!a->property(sectionProperty()).isValid())
+            a->setProperty(sectionProperty(), int(Place));
+    }
+}
+
 bool ContextMenu::isEmpty() const
 {
     for (auto it = m_items.constBegin(); it != m_items.constEnd(); ++it)
@@ -132,7 +161,7 @@ QString ContextMenu::checkTitleCase(const QString &text)
 {
     static const QSet<QString> minor = {
         "a", "an", "the", "and", "or", "of", "to", "in", "on", "at", "by", "for",
-        "from", "with", "as", "vs"
+        "from", "with", "as", "vs", "into"
     };
     QString t = text;
     t.remove(QLatin1Char('&'));
@@ -206,6 +235,35 @@ QStringList ContextMenu::checkCanon(const QMenu *menu)
     return problems;
 }
 
+QStringList ContextMenu::kindBlock(const QMenu *menu)
+{
+    QStringList out;
+    if (menu == nullptr)
+        return out;
+    for (QAction *a : menu->actions())
+    {
+        const QVariant sv = a->property(sectionProperty());
+        if (a->isSeparator() || !sv.isValid() || sv.toInt() < Open)
+            continue;
+        out << (a->menu() != nullptr ? a->menu()->objectName() : a->objectName());
+    }
+    return out;
+}
+
+QStringList ContextMenu::contextItems(const QMenu *menu)
+{
+    QStringList out;
+    if (menu == nullptr)
+        return out;
+    for (QAction *a : menu->actions())
+    {
+        const QVariant sv = a->property(sectionProperty());
+        if (!a->isSeparator() && sv.isValid() && sv.toInt() < Open)
+            out << a->text();
+    }
+    return out;
+}
+
 /****************************************************************************
  * The words
  ****************************************************************************/
@@ -216,6 +274,27 @@ QString ContextMenus::locateText()                { return ContextMenu::tr("Loca
 QString ContextMenus::createGroupFromSelectionText() { return ContextMenu::tr("Create Fixture Group from Selection…"); }
 QString ContextMenus::splitByHeadTypeText()       { return ContextMenu::tr("Split by Head Type…"); }
 QString ContextMenus::layOutFromStageText()       { return ContextMenu::tr("Lay Out from the Stage…"); }
+QString ContextMenus::usedByText()                { return ContextMenu::tr("Used By"); }
+QString ContextMenus::duplicateText()             { return ContextMenu::tr("Duplicate"); }
+QString ContextMenus::openFunctionText()          { return ContextMenu::tr("Open in Workbench"); }
+
+QString ContextMenus::editPaletteText(bool effect)
+{
+    // It opens in the Workbench, not a dialog: no "…".
+    return effect ? ContextMenu::tr("Edit Effect") : ContextMenu::tr("Edit Palette");
+}
+
+QString ContextMenus::deletePalettesText(int count)
+{
+    return count > 1 ? ContextMenu::tr("Delete %1 Palettes…").arg(count)
+                     : ContextMenu::tr("Delete Palette…");
+}
+
+QString ContextMenus::deleteFunctionsText(int count)
+{
+    return count > 1 ? ContextMenu::tr("Delete %1 Functions…").arg(count)
+                     : ContextMenu::tr("Delete…");
+}
 
 QString ContextMenus::selectAllSimilarText(int count)
 {
@@ -417,12 +496,41 @@ void ContextMenus::rig(ContextMenu &menu, Doc *doc, const QList<quint32> &groupI
         pa->setToolTip(ContextMenu::tr("Give a universe and address, or move to another -- as a block "
                                        "keeping their spacing, or packed -- reviewed before it is applied"));
     }
+    /* One fixture: where each of its heads is, and its own glass. */
+    if (onlyFixtures && fixtures.size() == 1)
+    {
+        const quint32 fid = fixtures.first();
+        if (LedLayoutDialog::canEdit(doc, fid))
+            menu.add(ContextMenu::Kind, ContextMenu::tr("LED Layout…"), [doc, fid, parent]() {
+                LedLayoutDialog::edit(doc, fid, parent);
+            }, QStringLiteral("ledLayoutAction"));
+        if (GoboWheelsDialog::hasGoboWheels(doc->fixture(fid)))
+            menu.add(ContextMenu::Kind, ContextMenu::tr("Gobo Wheels…"), [doc, fid, parent, changed]() {
+                GoboWheelsDialog dlg(doc, fid, parent);
+                if (dlg.exec() != QDialog::Accepted)
+                    return;
+                // Every open rig view draws the new glass.
+                foreach (QWidget *w, QApplication::allWidgets())
+                    if (StructureStudioView *sv = qobject_cast<StructureStudioView *>(w))
+                        sv->update();
+                if (changed)
+                    changed();
+            }, QStringLiteral("ctxGoboWheels"));
+    }
     menu.add(ContextMenu::Kind, OutputRulesDialog::actionText(), [doc, groups, fixtures, parent, changed]() {
         if (OutputRulesDialog::edit(parent, doc, groups, fixtures) && changed)
             changed();
     }, QStringLiteral("outputRulesAction"))
         ->setToolTip(ContextMenu::tr("Power relays, house and work lights: ignore Blackout or the "
                                      "Grand Master, switch instead of fade, on when not in use"));
+    /* Fixtures of more than one kind of head (RGB and white rows): a
+       fixture group per kind. */
+    if (onlyFixtures && editable && HeadTypesDialog::anyMixed(doc, fixtures))
+        menu.add(ContextMenu::Kind, splitByHeadTypeText(), [doc, fixtures, parent, changed]() {
+            HeadTypesDialog dlg(doc, fixtures, HeadTypesDialog::suggestName(doc, fixtures), parent);
+            if (dlg.exec() == QDialog::Accepted && changed)
+                changed();
+        }, QStringLiteral("ctxSplitByHeadType"));
     if (one != nullptr && editable)
     {
         const quint32 gid = one->id();
@@ -521,10 +629,471 @@ void ContextMenus::rig(ContextMenu &menu, Doc *doc, const QList<quint32> &groupI
         }, QStringLiteral("ctxRename"));
     }
 
+    if (onlyFixtures && fixtures.size() == 1 && editable && place.offerRename)
+    {
+        const quint32 fid = fixtures.first();
+        const std::function<void(quint32)> inPlace = place.renameFixtureInPlace;
+        menu.add(ContextMenu::Edit, renameText(!inPlace), [doc, fid, inPlace, parent, changed]() {
+            if (inPlace)
+            {
+                inPlace(fid);
+                return;
+            }
+            Fixture *fxi = doc->fixture(fid);
+            if (fxi == nullptr)
+                return;
+            bool ok = false;
+            const QString name = QInputDialog::getText(parent, ContextMenu::tr("Rename Fixture"),
+                                                       ContextMenu::tr("Name:"), QLineEdit::Normal,
+                                                       fxi->name(), &ok).trimmed();
+            if (!ok || name.isEmpty() || name == fxi->name()
+                || AppUtil::refuseTakenFixtureName(parent, doc, fid, name))
+                return;
+            fxi->setName(name);
+            doc->setModified();
+            if (changed)
+                changed();
+        }, QStringLiteral("ctxRename"));
+    }
+
     /* ---- 8. Delete, last. A group's fixtures stay. ---- */
     if (editable && place.offerDelete && !groups.isEmpty())
         menu.add(ContextMenu::Remove, deleteGroupsText(groups.size()), [doc, groups, parent, changed]() {
             if (deleteGroups(doc, groups, parent) && changed)
                 changed();
         }, QStringLiteral("ctxDeleteGroup"));
+}
+
+/****************************************************************************
+ * Palettes
+ ****************************************************************************/
+
+/* Where a Used By ▸ entry leads when the place has no way of its own: a cue
+   or a look in the Show Tree, a scene in Build, an effect's slot to that
+   effect. */
+static void showPaletteUse(Doc *doc, int kind, quint32 owner, quint32 layer)
+{
+    if (kind == PaletteOps::Use::Cue || kind == PaletteOps::Use::Look)
+    {
+        ShowTreeView *tree = ShowTreeView::instance();
+        if (tree == nullptr)
+            return;
+        foreach (QWidget *w, QApplication::topLevelWidgets())
+            if (App *app = qobject_cast<App *>(w))
+                app->showContext(App::tr("Show Tree"));
+        if (layer != ShowTree::invalidId())
+            tree->selectNode(layer, owner);
+        else
+            tree->selectNode(owner);
+    }
+    else if (kind == PaletteOps::Use::Scene)
+        ProgrammingManager::openFunction(owner);
+    else if (kind == PaletteOps::Use::EffectSlot && doc->palette(owner) != nullptr)
+        ProgrammingManager::openPalette(owner);
+}
+
+void ContextMenus::palette(ContextMenu &menu, Doc *doc, const QList<quint32> &paletteIds,
+                           const PalettePlace &place)
+{
+    if (doc == nullptr)
+        return;
+    QList<quint32> pids;
+    for (quint32 id : paletteIds)
+        if (doc->palette(id) != nullptr && !pids.contains(id))
+            pids << id;
+    if (pids.isEmpty())
+        return;
+    const quint32 pid = pids.first();
+    QLCPalette *pal = doc->palette(pid);
+    PaletteOps *ops = doc->paletteOps();
+    QWidget *parent = place.parent;
+    const std::function<void()> changed = place.changed;
+    const bool effect = pal->type() == QLCPalette::Effect;
+    const bool managed = ops->isManaged(pid);
+    const bool editable = place.editable && managed;
+
+    /* ---- 1. Its own editor: the Look Editor or the effect designer, in
+       the Workbench ---- */
+    {
+        const std::function<void(quint32)> edit = place.edit;
+        QAction *a = menu.add(ContextMenu::Open, editPaletteText(effect), [pid, edit]() {
+            if (edit)
+                edit(pid);
+            else
+                ProgrammingManager::openPalette(pid);
+        }, QStringLiteral("ctxEditPalette"));
+        a->setToolTip(effect ? ContextMenu::tr("In the effect designer, in the Workbench")
+                             : ContextMenu::tr("In the Look Editor, in the Workbench"));
+        menu.menu()->setDefaultAction(a);
+    }
+
+    /* ---- 2. How an effect runs; where it is used ---- */
+    // A cue's one-off effect runs its own way too: not only a managed one.
+    if (effect && place.editable && menu.menu() != nullptr)
+    {
+        QMenu *staging = new QMenu(menu.menu());
+        if (QMenu *runs = EffectRunsMenu::add(staging, doc, pids, parent))
+            menu.add(ContextMenu::Kind, runs->menuAction());
+    }
+    {
+        QMenu *used = menu.addMenu(ContextMenu::Kind, usedByText(), QStringLiteral("ctxUsedBy"));
+        used->setToolTipsVisible(true);
+        const std::function<void(int, quint32, quint32)> show = place.showUse;
+        QSet<quint32> fns;
+        for (const PaletteOps::Use &u : ops->usage(pid))
+        {
+            QAction *a = used->addAction(u.label);
+            const int k = int(u.kind);
+            const quint32 owner = u.owner, layer = u.layer;
+            QObject::connect(a, &QAction::triggered, used, [doc, show, k, owner, layer]() {
+                if (show)
+                    show(k, owner, layer);
+                else
+                    showPaletteUse(doc, k, owner, layer);
+            });
+            if (u.function != 0xFFFFFFFF)
+                fns.insert(u.function);
+        }
+        for (const QString &vc : UsedBy::vcLines(fns))
+            used->addAction(vc)->setEnabled(false);
+        if (used->isEmpty())
+            used->addAction(ContextMenu::tr("(not used)"))->setEnabled(false);
+    }
+
+    /* ---- 4. A one-off value named; filed in a folder; a bundle of them ---- */
+    if (!managed && place.editable && place.makeReusable && pids.size() == 1)
+    {
+        const std::function<void(quint32)> make = place.makeReusable;
+        menu.add(ContextMenu::Organise, ContextMenu::tr("Make Reusable…"), [make, pid]() { make(pid); },
+                 QStringLiteral("ctxMakeReusable"))
+            ->setToolTip(ContextMenu::tr("A named palette in the Library, for any cue"));
+    }
+    if (editable)
+    {
+        QMenu *move = menu.addMenu(ContextMenu::Organise, pids.size() > 1
+                                       ? ContextMenu::tr("Move %1 Palettes to Folder").arg(pids.size())
+                                       : ContextMenu::tr("Move to Folder"),
+                                   QStringLiteral("ctxPaletteMoveToFolder"));
+        move->setIcon(QIcon(":/folder.png"));
+        const std::function<void(const QList<quint32> &, const QString &)> moveTo = place.moveTo;
+        auto to = [doc, pids, moveTo, changed](const QString &folder) {
+            if (moveTo)
+                moveTo(pids, folder);
+            else if (doc->paletteOps()->move(pids, folder) && changed)
+                changed();
+        };
+        const QString current = PaletteOps::folderOf(pal);
+        QAction *none = move->addAction(ContextMenu::tr("(no folder)"), move, [to]() { to(QString()); });
+        none->setEnabled(!current.isEmpty() || pids.size() > 1);
+        for (const QString &f : ops->folders())
+        {
+            QAction *a = move->addAction(f, move, [to, f]() { to(f); });
+            a->setEnabled(f != current || pids.size() > 1);
+        }
+        move->addSeparator();
+        move->addAction(ContextMenu::tr("New Folder…"), move, [to, parent]() {
+            bool ok = false;
+            const QString n = QInputDialog::getText(parent, ContextMenu::tr("Move to a New Folder"),
+                                                    ContextMenu::tr("Folder name:"), QLineEdit::Normal,
+                                                    QString(), &ok).trimmed();
+            if (ok && !n.isEmpty())
+                to(n);
+        });
+        if (ProgrammingManager::instance() != nullptr)
+            menu.add(ContextMenu::Organise, pids.size() > 1
+                         ? ContextMenu::tr("Save %1 Palettes as Bundle…").arg(pids.size())
+                         : ContextMenu::tr("Save as Bundle…"),
+                     [pids]() {
+                if (ProgrammingManager *pm = ProgrammingManager::instance())
+                    pm->saveBundleFromPalettes(pids);
+            }, QStringLiteral("ctxSaveBundle"));
+    }
+
+    /* ---- 7. A copy; its name ---- */
+    if (editable && pids.size() == 1)
+    {
+        const std::function<void(quint32)> edit = place.edit;
+        const std::function<void(quint32)> duplicated = place.duplicated;
+        menu.add(ContextMenu::Edit, duplicateText(), [doc, pid, edit, duplicated, changed]() {
+            const quint32 copy = doc->paletteOps()->duplicate(pid);
+            if (doc->palette(copy) == nullptr)
+                return;
+            if (changed)
+                changed();
+            if (duplicated)
+                duplicated(copy);
+            else if (edit)
+                edit(copy);
+            else
+                ProgrammingManager::openPalette(copy);
+        }, QStringLiteral("ctxDuplicate"));
+        const std::function<void(quint32)> inPlace = place.renameInPlace;
+        menu.add(ContextMenu::Edit, renameText(!inPlace), [doc, pid, inPlace, parent, changed]() {
+            if (inPlace)
+            {
+                inPlace(pid);
+                return;
+            }
+            QLCPalette *p = doc->palette(pid);
+            if (p == nullptr)
+                return;
+            bool ok = false;
+            const QString n = QInputDialog::getText(parent, ContextMenu::tr("Rename Palette"),
+                                                    ContextMenu::tr("Name:"), QLineEdit::Normal,
+                                                    p->name(), &ok).trimmed();
+            if (ok && !n.isEmpty() && n != p->name() && doc->paletteOps()->rename(pid, n) && changed)
+                changed();
+        }, QStringLiteral("ctxRename"));
+    }
+
+    /* ---- 8. Delete, last: it asks, naming every use ---- */
+    if (editable)
+    {
+        const std::function<void(const QList<quint32> &)> remove = place.remove;
+        menu.add(ContextMenu::Remove, deletePalettesText(pids.size()), [doc, pids, remove, parent, changed]() {
+            if (remove)
+            {
+                remove(pids);
+                return;
+            }
+            const QString q = UsedBy::deletePalettesQuestion(doc, pids);
+            if (q.isEmpty() || QMessageBox::question(parent, pids.size() > 1 ? ContextMenu::tr("Delete Palettes")
+                                                                             : ContextMenu::tr("Delete Palette"),
+                                                     q, QMessageBox::Yes | QMessageBox::No,
+                                                     QMessageBox::No) != QMessageBox::Yes)
+                return;
+            if (doc->paletteOps()->remove(pids) && changed)
+                changed();
+        }, QStringLiteral("ctxDeletePalette"));
+    }
+}
+
+/****************************************************************************
+ * Functions
+ ****************************************************************************/
+
+void ContextMenus::function(ContextMenu &menu, Doc *doc, const QList<quint32> &functionIds,
+                            const FunctionPlace &place)
+{
+    if (doc == nullptr)
+        return;
+    QList<quint32> fids;
+    for (quint32 id : functionIds)
+        if (doc->function(id) != nullptr && !fids.contains(id))
+            fids << id;
+    if (fids.isEmpty())
+        return;
+    const quint32 fid = fids.first();
+    Function *f = doc->function(fid);
+    QWidget *parent = place.parent;
+    const std::function<void()> changed = place.changed;
+    const bool editable = place.editable && doc->mode() == Doc::Design;
+
+    /* ---- 1. Its editor, in the Workbench ---- */
+    {
+        const std::function<void(quint32)> open = place.open;
+        QAction *a = menu.add(ContextMenu::Open, openFunctionText(), [fid, open]() {
+            if (open)
+                open(fid);
+            else
+                ProgrammingManager::openFunction(fid);
+        }, QStringLiteral("ctxOpenFunction"));
+        a->setToolTip(ContextMenu::tr("Load it in the Workbench, in its own editor"));
+        menu.menu()->setDefaultAction(a);
+    }
+
+    /* ---- 2. Fired from a control; how it runs; to the Show Tree; who uses it ---- */
+    if (fids.size() == 1 && menu.menu() != nullptr)
+    {
+        QMenu *staging = new QMenu(menu.menu());
+        if (QAction *learn = ControlLearnDialog::addTo(staging, doc, ControlMap::function(fid), parent))
+        {
+            learn->setObjectName(QStringLiteral("ctxLearnTrigger"));
+            menu.add(ContextMenu::Kind, learn);
+        }
+        if (editable)
+            if (QMenu *runs = EffectRunsMenu::addForFunction(staging, doc, f))
+                menu.add(ContextMenu::Kind, runs->menuAction());
+    }
+    if (fids.size() == 1 && f->type() == Function::ChaserType && ProgrammingManager::instance() != nullptr
+        && doc->showTree() != nullptr)
+    {
+        const QString why = doc->showTree()->whyNotSend(fid);
+        QAction *send = menu.add(ContextMenu::Kind, ContextMenu::tr("Send to Show Tree…"), [fid]() {
+            if (ProgrammingManager *pm = ProgrammingManager::instance())
+                pm->sendToShowTree(fid);
+        }, QStringLiteral("ctxSendToShowTree"));
+        send->setEnabled(editable && why.isEmpty());
+        send->setToolTip(why.isEmpty() ? ContextMenu::tr("Make this chaser a Show Tree cue list in place, "
+                                                         "checked to play the same; Restore original puts it back")
+                                       : why);
+    }
+    if (fids.size() == 1)
+    {
+        QMenu *used = menu.addMenu(ContextMenu::Kind, usedByText(), QStringLiteral("ctxUsedBy"));
+        for (Function *other : doc->functions())
+        {
+            bool uses = false;
+            if (Chaser *c = qobject_cast<Chaser *>(other))
+            {
+                for (const ChaserStep &st : c->steps())
+                    uses = uses || st.fid == fid;
+            }
+            else if (Collection *col = qobject_cast<Collection *>(other))
+                uses = col->functions().contains(fid);
+            if (!uses || other->id() == fid)
+                continue;
+            const quint32 oid = other->id();
+            used->addAction(other->name(), used, [oid]() { ProgrammingManager::openFunction(oid); });
+        }
+        for (const QString &vc : UsedBy::vcLines({ fid }))
+            used->addAction(vc)->setEnabled(false);
+        if (used->isEmpty())
+            used->addAction(ContextMenu::tr("(not used)"))->setEnabled(false);
+    }
+
+    /* ---- 4. Filed in a folder ---- */
+    if (editable)
+    {
+        QMenu *move = menu.addMenu(ContextMenu::Organise, fids.size() > 1
+                                       ? ContextMenu::tr("Move %1 Functions to Folder").arg(fids.size())
+                                       : ContextMenu::tr("Move to Folder"),
+                                   QStringLiteral("ctxFunctionMoveToFolder"));
+        move->setIcon(QIcon(":/folder.png"));
+        const std::function<void(const QList<quint32> &, const QString &)> moveTo = place.moveTo;
+        auto to = [doc, fids, moveTo, changed](const QString &folder) {
+            if (moveTo)
+            {
+                moveTo(fids, folder);
+                return;
+            }
+            doc->paletteOps()->functionStep(ContextMenu::tr("move to folder %1").arg(folder), fids,
+                                            [&](QList<quint32> &) {
+                for (quint32 id : fids)
+                    if (Function *fn = doc->function(id))
+                        fn->setPath(folder);
+                return true;
+            });
+            if (changed)
+                changed();
+        };
+        // The folders this type is filed in.
+        QStringList folders;
+        for (Function *other : doc->functions())
+            if (other->type() == f->type() && !other->path(true).isEmpty()
+                && !folders.contains(other->path(true)) && other->isVisible())
+                folders << other->path(true);
+        folders.sort(Qt::CaseInsensitive);
+        const QString current = f->path(true);
+        QAction *none = move->addAction(ContextMenu::tr("(no folder)"), move, [to]() { to(QString()); });
+        none->setEnabled(!current.isEmpty() || fids.size() > 1);
+        for (const QString &fo : folders)
+            move->addAction(fo, move, [to, fo]() { to(fo); })->setEnabled(fo != current || fids.size() > 1);
+        move->addSeparator();
+        move->addAction(ContextMenu::tr("New Folder…"), move, [to, parent]() {
+            bool ok = false;
+            const QString n = QInputDialog::getText(parent, ContextMenu::tr("Move to a New Folder"),
+                                                    ContextMenu::tr("Folder name:"), QLineEdit::Normal,
+                                                    QString(), &ok).trimmed();
+            if (ok && !n.isEmpty())
+                to(n);
+        });
+    }
+
+    /* ---- 7. Copies; its name ---- */
+    if (editable)
+    {
+        const std::function<void(const QList<quint32> &)> dup = place.duplicate;
+        menu.add(ContextMenu::Edit, fids.size() > 1 ? ContextMenu::tr("Duplicate %1").arg(fids.size())
+                                                    : duplicateText(),
+                 [doc, fids, dup, changed]() {
+            if (dup)
+            {
+                dup(fids);
+                return;
+            }
+            if (ProgrammingManager *pm = ProgrammingManager::instance())
+            {
+                pm->duplicateFunctions(fids);
+                if (changed)
+                    changed();
+                return;
+            }
+            // One step on the shared history, as Build's Duplicate.
+            doc->paletteOps()->functionStep(ContextMenu::tr("Duplicate"), QList<quint32>(),
+                                            [&](QList<quint32> &made) {
+                for (quint32 id : fids)
+                {
+                    Function *src = doc->function(id);
+                    Function *copy = src == nullptr ? nullptr : src->createCopy(doc);
+                    if (copy == nullptr)
+                        continue;
+                    copy->setName(doc->nextDuplicateName(src));
+                    made << copy->id();
+                }
+                return !made.isEmpty();
+            });
+            if (changed)
+                changed();
+        }, QStringLiteral("ctxDuplicate"));
+        if (fids.size() == 1)
+        {
+            const std::function<void(quint32)> inPlace = place.renameInPlace;
+            menu.add(ContextMenu::Edit, renameText(!inPlace), [doc, fid, inPlace, parent, changed]() {
+                if (inPlace)
+                {
+                    inPlace(fid);
+                    return;
+                }
+                Function *fn = doc->function(fid);
+                if (fn == nullptr)
+                    return;
+                bool ok = false;
+                const QString n = QInputDialog::getText(parent, ContextMenu::tr("Rename"), ContextMenu::tr("Name:"),
+                                                        QLineEdit::Normal, fn->name(), &ok).trimmed();
+                if (!ok || n.isEmpty() || n == fn->name())
+                    return;
+                doc->paletteOps()->functionStep(ContextMenu::tr("Rename"), { fid }, [&](QList<quint32> &) {
+                    fn->setName(n);
+                    return true;
+                });
+                if (changed)
+                    changed();
+            }, QStringLiteral("ctxRename"));
+        }
+    }
+
+    /* ---- 8. Delete, last ---- */
+    if (editable)
+    {
+        const std::function<void(const QList<quint32> &)> remove = place.remove;
+        menu.add(ContextMenu::Remove, deleteFunctionsText(fids.size()), [doc, fids, remove, parent, changed]() {
+            if (remove)
+            {
+                remove(fids);
+                return;
+            }
+            // Build's own: it asks naming every use, one undo step.
+            if (ProgrammingManager *pm = ProgrammingManager::instance())
+            {
+                pm->deleteFunctions(fids);
+                if (changed)
+                    changed();
+                return;
+            }
+            QStringList names;
+            for (quint32 id : fids)
+                if (Function *fn = doc->function(id))
+                    names << fn->name();
+            if (QMessageBox::question(parent, ContextMenu::tr("Delete"),
+                                      ContextMenu::tr("Delete %1?").arg(names.join(QStringLiteral(", "))),
+                                      QMessageBox::Yes | QMessageBox::No, QMessageBox::No) != QMessageBox::Yes)
+                return;
+            for (quint32 id : fids)
+                doc->deleteFunction(id);
+            doc->setModified();
+            if (changed)
+                changed();
+        }, QStringLiteral("ctxDeleteFunction"));
+    }
 }

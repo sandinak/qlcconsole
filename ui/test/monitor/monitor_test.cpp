@@ -132,6 +132,7 @@
 #undef private
 
 #include "monitor_test.h"
+#include "contextmenus.h"
 #include "fixturepower.h"
 #include "powerlimiter.h"
 #include "powerprofiledialog.h"
@@ -2360,7 +2361,7 @@ void Monitor_Test::aGroupDroppedOnATrussAllHang()
     rig.item->setSelected(true);
     second->setSelected(true);
     QMenu menu;
-    rig.gv->populateItemMenu(&menu, QStringLiteral("fixture"), rig.fxi->id(), QPointF(), false);
+    rig.gv->buildItemMenu(&menu, QStringLiteral("fixture"), rig.fxi->id(), MonitorGraphicsView::MenuPlace());
     QAction *mountOnSecond = nullptr;
     for (QAction *a : menu.findChildren<QAction *>())
         if (a->text() == QLatin1String("SecondBar"))
@@ -2460,7 +2461,7 @@ void Monitor_Test::mountOnABoomOrATowerTakesTheWholeSelection()
     second->setSelected(true);
     {
         QMenu menu;
-        rig.gv->populateItemMenu(&menu, QStringLiteral("fixture"), rig.fxi->id(), QPointF(), false);
+        rig.gv->buildItemMenu(&menu, QStringLiteral("fixture"), rig.fxi->id(), MonitorGraphicsView::MenuPlace());
         QMenu *boomMenu = subMenu(&menu, "Boom (2 fixtures)");
         QVERIFY2(boomMenu != nullptr, "the Boom menu does not say it moves 2 fixtures");
         QVERIFY(subMenu(&menu, "Tower (2 fixtures)") != nullptr);
@@ -2479,7 +2480,7 @@ void Monitor_Test::mountOnABoomOrATowerTakesTheWholeSelection()
     second->setSelected(true);
     {
         QMenu menu;
-        rig.gv->populateItemMenu(&menu, QStringLiteral("fixture"), other->id(), QPointF(), false);
+        rig.gv->buildItemMenu(&menu, QStringLiteral("fixture"), other->id(), MonitorGraphicsView::MenuPlace());
         QMenu *towerMenu = subMenu(&menu, "Tower (2 fixtures)");
         QVERIFY2(towerMenu != nullptr, "the Tower menu does not say it moves 2 fixtures");
         QAction *shelf2 = actionIn(subMenu(towerMenu, "Tower M"), "Shelf 2");
@@ -2500,7 +2501,7 @@ void Monitor_Test::mountOnABoomOrATowerTakesTheWholeSelection()
     second->setSelected(true);
     {
         QMenu menu;
-        rig.gv->populateItemMenu(&menu, QStringLiteral("fixture"), rig.fxi->id(), QPointF(), false);
+        rig.gv->buildItemMenu(&menu, QStringLiteral("fixture"), rig.fxi->id(), MonitorGraphicsView::MenuPlace());
         QVERIFY(subMenu(&menu, "Boom (2 fixtures)") == nullptr);
         QAction *toL = actionIn(subMenu(&menu, "Boom"), "Boom L");
         QVERIFY(toL != nullptr);
@@ -6830,6 +6831,8 @@ void Monitor_Test::theLayersListOffersEverythingThePlotDoes()
                action that says where you are swapped. */
             QStringList plotPaths = menuPaths(&plot);
             plotPaths.replaceInStrings(QStringLiteral("Show in Plot Layers"), QStringLiteral("Show on Map"));
+            // Rename is in place in the list, a dialog on the plot (the canon's words).
+            plotPaths.replaceInStrings(QRegularExpression(QStringLiteral("^Rename…$")), QStringLiteral("Rename"));
             QVERIFY2(!plotPaths.isEmpty(), qPrintable(kind + " has no menu at all"));
             QVERIFY2(plotPaths == menuPaths(&list),
                      qPrintable(QString("%1 %2: the plot offers\n  %3\nbut the Layers list offers\n  %4")
@@ -6870,24 +6873,32 @@ void Monitor_Test::theLayersListOffersEverythingThePlotDoes()
             QVERIFY(panel.m_tree->currentItem() == rowFor(QStringLiteral("fixture"), spot->id()));
         }
 
-        // Laid out the same way every time: the item's own action first.
+        // Laid out the same way every time (the canon, 2026-11-03): the
+        // plot's own on top, ending with Remove from View; then the fixture's
+        // own menu, its editor first.
+        auto kindStart = [](QMenu *m) {
+            const QList<QAction *> acts = m->actions();
+            for (int i = 0; i + 1 < acts.size(); ++i)
+                if (acts.at(i)->isSeparator())
+                    return acts.at(i + 1)->text();
+            return QString();
+        };
         {
             QMenu m;
             view.buildItemMenu(&m, QStringLiteral("fixture"), spot->id(), MonitorGraphicsView::MenuPlace());
-            const QStringList top = menuPaths(&m);
-            QCOMPARE(top.first(), QStringLiteral("Fixture Properties…"));
-            QCOMPARE(top.last(), QStringLiteral("Remove from View"));
+            QCOMPARE(kindStart(&m), QStringLiteral("Fixture Properties…"));
+            QVERIFY(ContextMenu::contextItems(&m).last() == QStringLiteral("Remove from View"));
         }
 
-        // ...and removing comes last in the list too, after its own sections.
+        // ...and deleting comes last in the list too, after its own sections.
         {
             QMenu m;
             panel.buildContextMenu(&m, rowFor(QStringLiteral("truss"), truss->id()));
             QCOMPARE(menuPaths(&m).last(), QStringLiteral("Delete Truss"));
             QMenu f;
             panel.buildContextMenu(&f, rowFor(QStringLiteral("fixture"), spot->id()));
-            QCOMPARE(menuPaths(&f).first(), QStringLiteral("Fixture Properties…"));
-            QCOMPARE(menuPaths(&f).last(), QStringLiteral("Remove from View"));
+            QCOMPARE(kindStart(&f), QStringLiteral("Fixture Properties…"));
+            QVERIFY(ContextMenu::contextItems(&f).last() == QStringLiteral("Remove from View"));
         }
 
         // Edit on a target, from the list, reaches its editor.
@@ -13369,7 +13380,7 @@ void Monitor_Test::aLightFootprintSaysWhoseItIs()
 
         // The fixture's own entry, with nothing selected.
         QMenu fixMenu;
-        view.populateItemMenu(&fixMenu, QStringLiteral("fixture"), spot->id(), QPointF(), false);
+        view.buildItemMenu(&fixMenu, QStringLiteral("fixture"), spot->id(), MonitorGraphicsView::MenuPlace());
         QAction *act = nullptr;
         foreach (QAction *a, fixMenu.actions())
             if (a->text().contains(QStringLiteral("Light Footprint")))
@@ -13401,7 +13412,7 @@ void Monitor_Test::aLightFootprintSaysWhoseItIs()
         act->trigger();                       // off again
         QCOMPARE(view.m_projectionItems.size(), 0);
         QMenu trussMenu;
-        view.populateItemMenu(&trussMenu, QStringLiteral("truss"), bar->id(), QPointF(), false);
+        view.buildItemMenu(&trussMenu, QStringLiteral("truss"), bar->id(), MonitorGraphicsView::MenuPlace());
         QAction *tact = nullptr;
         foreach (QAction *a, trussMenu.actions())
             if (a->text().contains(QStringLiteral("Light Footprint")))
@@ -14207,7 +14218,7 @@ void Monitor_Test::aPlatformOffersToPutSomethingOnIt()
     // On the riser, a metre in from its downstage-left corner.
     const QPointF where = gv->realPositionToPixels(2000.0, 2000.0);
     QMenu menu;
-    gv->populateItemMenu(&menu, QStringLiteral("platform"), deck->id(), where, false);
+    gv->buildItemMenu(&menu, QStringLiteral("platform"), deck->id(), MonitorGraphicsView::MenuPlace(), where);
 
     QMenu *addMenu = nullptr;
     foreach (QAction *a, menu.actions())
@@ -18532,7 +18543,7 @@ void Monitor_Test::theTrussEditorsMenusOfferAddBar()
         const QPoint oneMetre = view->w2s(t2->positionAt(1.0f)).toPoint();
         answerPopup(&seen, "Add Bar Here");
         emit view->canvasContextMenu(view->mapToGlobal(oneMetre), inside->id());
-        QVERIFY2(seen.contains("Edit fixture…") && seen.contains("Add Bar Here"),
+        QVERIFY2(seen.contains("Fixture Properties…") && seen.contains("Add Bar Here"),
                  qPrintable(seen.join(" | ")));
         QCOMPARE(bars().size(), 1);
         QVERIFY(qAbs(bars().first()->parentOffset() - 1.0f) < 0.05f);   // where it was clicked
@@ -22092,11 +22103,12 @@ void Monitor_Test::doubleClickingAFixtureOpensItWhereverItIs()
 
     // The riser is in the fixture's own menu.
     QMenu menu;
-    rig.gv->populateItemMenu(&menu, QStringLiteral("fixture"), fx->id(), QPointF(), false);
+    rig.gv->buildItemMenu(&menu, QStringLiteral("fixture"), fx->id(), MonitorGraphicsView::MenuPlace());
     QStringList texts;
     foreach (QAction *a, menu.actions())
         texts << a->text();
-    QVERIFY2(texts.contains("Fixture Properties…") && texts.contains("Edit Platform…"),
+    QVERIFY2(texts.contains("Fixture Properties…")
+             && std::any_of(texts.begin(), texts.end(), [](const QString &t) { return t.startsWith("Edit Platform"); }),
              qPrintable(texts.join(" | ")));
 
     props->removePlatform(pl->id());

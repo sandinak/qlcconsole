@@ -90,7 +90,7 @@ Switch roles after each part.
 ### The call: one side apart
 
 7. In the tree, right-click the **Truss Sides** layer under 1.0.5 →
-   **Add child layer** → **Trusses SR**.
+   **Add Child Layer** → **Trusses SR**.
    - *You should see:* **↳ Trusses SR** under Truss Sides, in the tree
      and on the cue's page. (A set stays one layer, so **Split** is grey
      on it: you change part of it with a child.)
@@ -130,7 +130,7 @@ Switch roles after each part.
 | **Make Set…** made a set of one group | ⌘-click the second group before you right-click, so both are selected. |
 | US became a layer of its own, not a child | Undo (⌘Z), and hold **⇧** all the way through the drop. |
 | The whole truss turned amber | You dropped Amber on Truss Sides. Undo and drop it on the **↳ Trusses SR** row. |
-| No **Add child layer** in the menu | Right-click the layer's row in the tree (under 1.0.5), not the cue. |
+| No **Add Child Layer** in the menu | Right-click the layer's row in the tree (under 1.0.5), not the cue. |
 | Something else went wrong | Undo (⌘Z) one step at a time. |
 
 ## Done early? (Extension)
@@ -141,7 +141,7 @@ Switch roles after each part.
    onto the Bridge's dashed box: one layer, **CS + DS**. Drop **Red** on
    its row. It's lower in the cue than Steps, so where they overlap it
    wins: the CS and DS rows turn red.
-2. Right-click **CS + DS** in the tree → **Split layer (one per group)**:
+2. Right-click **CS + DS** in the tree → **Split Layer (One per Group)**:
    a layer each, CS and DS, both still red. Nothing on stage changes.
 3. Click **CS**, ⌘-click **DS** in the tree, then **More ▾ → Merge**: one
    layer again.

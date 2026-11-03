@@ -40,6 +40,9 @@
 #include "monitorlayerspanel.h"
 #include "showtreeview.h"
 #include "functionstreewidget.h"
+#include "treecuestack.h"
+#include "workbench.h"
+#include "monitorgraphicsview.h"
 #undef private
 #undef protected
 
@@ -52,6 +55,10 @@
 #include "paletteops.h"
 #include "fixture.h"
 #include "monitorproperties.h"
+#include "showtreecontroller.h"
+#include "monitorproperties.h"
+#include "stagetarget.h"
+#include "collection.h"
 #include "scene.h"
 #include "efx.h"
 #include "doc.h"
@@ -60,7 +67,7 @@
    way in every place (ContextMenus::rig). */
 static const QStringList kCanonItems = {
     "ctxEditHeadLayout", "ctxFixtureProperties", "ctxLocate", "whyOnAction", "ctxPatch",
-    "outputRulesAction", "ctxSplitByHeadType", "ctxLayOutFromStage", "selectionMenu", "selectAllSimilar",
+    "ledLayoutAction", "ctxGoboWheels", "outputRulesAction", "ctxSplitByHeadType", "ctxLayOutFromStage", "selectionMenu", "selectAllSimilar",
     "ctxCreateGroupFromSelection", "ctxMoveToFolder", "ctxRename", "ctxDeleteGroup"
 };
 
@@ -94,7 +101,8 @@ static QString texts(const QMenu *menu)
     } while (0)
 
 /* A menu a widget opens with exec(): read when it pops up, then closed */
-static QStringList popupCheck(const std::function<void()> &open, QStringList *canon = nullptr)
+static QStringList popupCheck(const std::function<void()> &open, QStringList *canon = nullptr,
+                              QStringList *kind = nullptr)
 {
     QStringList problems;
     bool seen = false;
@@ -111,6 +119,8 @@ static QStringList popupCheck(const std::function<void()> &open, QStringList *ca
             problems << ("in: " + texts(m));
         if (canon != nullptr)
             *canon = canonItems(m);
+        if (kind != nullptr)
+            *kind = ContextMenu::kindBlock(m);
         m->close();
     });
     poll.start();
@@ -170,10 +180,30 @@ void ContextMenus_Test::sectionsLayOutInOrderWithOneSeparatorBetween()
         cm.add(ContextMenu::Edit, "Rename");
         cm.add(ContextMenu::Kind, "Locate");
         cm.add(ContextMenu::Edit, "Duplicate");
+        cm.add(ContextMenu::Place, "Remove from Truss");
         QVERIFY(cm.has(ContextMenu::Edit));
         QVERIFY(!cm.has(ContextMenu::View));
     }   // finished as it goes
-    QCOMPARE(texts(&menu), QString("Thing Properties… | --- | Locate | --- | Rename | Duplicate | --- | Delete Thing…"));
+    // Decided 2026-11-03 (user): what only this place offers on top, then
+    // the thing's own menu in the canon's order.
+    QCOMPARE(texts(&menu), QString("Remove from Truss | --- | Thing Properties… | --- | Locate | --- | Rename | "
+                                   "Duplicate | --- | Delete Thing…"));
+    QCOMPARE(ContextMenu::contextItems(&menu), QStringList({ "Remove from Truss" }));
+    QCOMPARE(ContextMenu::kindBlock(&menu).size(), 5);
+
+    // A place's own items built straight into the QMenu: filed as Place,
+    // their separators dropped, the kind block under them.
+    QMenu raw;
+    raw.addAction("Set to");
+    raw.addSeparator();
+    raw.addAction("None (off here)");
+    ContextMenu::fileAsPlace(&raw);
+    {
+        ContextMenu cm(&raw);
+        cm.add(ContextMenu::Open, "Edit Palette");
+    }
+    QCOMPARE(texts(&raw), QString("Set to | None (off here) | --- | Edit Palette"));
+    VERIFY_CANON(&raw);
     VERIFY_CANON(&menu);
 
     // An empty builder leaves the menu empty; finishing twice adds nothing.
@@ -389,7 +419,7 @@ void ContextMenus_Test::aFixtureGroupHasOneMenuEverywhere()
         VERIFY_CANON(&menu);
         QCOMPARE(canonItems(&menu), without({ "selectAllSimilar", "ctxMoveToFolder", "ctxDeleteGroup" }));
         QVERIFY(menu.findChild<QAction *>("outlineRemoveFromScene") != nullptr);
-        QCOMPARE(menu.actions().last()->objectName(), QString("outlineRemoveFromScene"));
+        QCOMPARE(menu.actions().first()->objectName(), QString("outlineRemoveFromScene"));
     }
 }
 
@@ -401,7 +431,7 @@ void ContextMenus_Test::aFixtureHasOneMenuEverywhere()
     /* Create Fixture Group from Selection… is inside Selection ▸ (Q201),
        where the place offers it. */
     const QStringList canon = { "ctxFixtureProperties", "ctxLocate", "whyOnAction", "ctxPatch",
-                                "outputRulesAction", "selectionMenu", "selectAllSimilar" };
+                                "outputRulesAction", "selectionMenu", "selectAllSimilar", "ctxRename" };
     auto without = [&canon](const QStringList &omit) {
         QStringList out = canon;
         for (const QString &o : omit)
@@ -643,8 +673,8 @@ void ContextMenus_Test::buildMenusFollowTheCanon()
     {
         QMenu *menu = pm.effectsContextMenu(circle, &pm);
         VERIFY_CANON(menu);
-        QCOMPARE(menu->actions().first()->objectName(), QString("effectsOpen"));
-        QCOMPARE(menu->actions().last()->objectName(), QString("effectsDelete"));
+        QCOMPARE(menu->actions().first()->objectName(), QString("ctxOpenFunction"));
+        QCOMPARE(menu->actions().last()->objectName(), QString("ctxDeleteFunction"));
         QVERIFY(menu->findChild<QAction *>("effectsNewEfx") == nullptr);
         delete menu;
     }
@@ -727,6 +757,426 @@ void ContextMenus_Test::theFunctionsTabFollowsTheCanon()
     QMenu probe;
     QVERIFY(fm.m_deleteAction->property(ContextMenu::sectionProperty()).toInt() == ContextMenu::Remove);
     QVERIFY(fm.m_addSequenceAction->property(ContextMenu::sectionProperty()).isValid());
+}
+
+/****************************************************************************
+ * Place items on top, then the kind's own menu -- the same everywhere
+ ****************************************************************************/
+
+/* A small show: production P, list L, cue One with a layer on group Front
+   set to palette @p pid (Dimmer). */
+struct TreeShow
+{
+    quint32 list = 0, cue = 0, layer = 0, cue2 = 0;
+    ShowTree::Target target;
+};
+
+static TreeShow makeTreeShow(Doc *doc, quint32 groupId, quint32 pid)
+{
+    TreeShow t;
+    ShowTreeController *st = doc->showTree();
+    t.list = st->addCueList(st->addProduction("P"), "L", ShowTree::ListMode::Tracking);
+    t.cue = st->addCue(t.list, -1, "One");
+    t.cue2 = st->addCue(t.list, 0, "Two");
+    t.target.groups << groupId;
+    t.layer = st->addLayer(t.cue, t.target);
+    st->setLayerLook(t.cue, t.layer, st->lookForPalette(pid));
+    st->clearUndo();
+    return t;
+}
+
+static quint32 halfPalette(Doc *doc)
+{
+    QLCPalette *pal = new QLCPalette(QLCPalette::Dimmer);
+    pal->setName("Half");
+    pal->setValue(128);
+    doc->addPalette(pal);
+    return pal->id();
+}
+
+void ContextMenus_Test::aPaletteHasOneMenuEverywhere()
+{
+    m_doc->setMode(Doc::Design);
+    const quint32 pid = halfPalette(m_doc);
+    const TreeShow show = makeTreeShow(m_doc, m_groupA, pid);
+    ProgrammingManager pm(nullptr, m_doc);      // Build (Save as Bundle…)
+    pm.resize(1500, 900);
+    pm.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&pm));
+
+    /* Everything Build offers for a palette, in the canon's order, wherever
+       it is right-clicked (ContextMenus::palette). */
+    const QStringList canon = { "ctxEditPalette", "ctxUsedBy", "ctxPaletteMoveToFolder", "ctxSaveBundle",
+                                "ctxDuplicate", "ctxRename", "ctxDeletePalette" };
+
+    // Build ▸ Palettes, opened as the user does.
+    pm.setSection(ProgrammingManager::PalettesSection);
+    pm.m_paletteTree->updateTree();
+    QTreeWidgetItem *palRow = nullptr;
+    QTRY_VERIFY((palRow = findRow(pm.m_paletteTree, [&pm, pid](QTreeWidgetItem *it) {
+        return pm.m_paletteTree->itemPaletteId(it) == pid;
+    })) != nullptr);
+    selectOnly(pm.m_paletteTree, palRow);
+    QStringList kind;
+    QStringList problems = popupCheck([&]() {
+        pm.slotPaletteTreeMenu(pm.m_paletteTree->visualItemRect(palRow).center());
+    }, nullptr, &kind);
+    QVERIFY2(problems.isEmpty(), qPrintable(problems.join("; ")));
+    QCOMPARE(kind, canon);
+
+    // The Show Tree: the Library, and a cue's look row (the same menu the
+    // Workbench's layer rows open, TreeCueStack::showMenu).
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1200, 800);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QTreeWidget *lib = view.library();
+    QTreeWidgetItem *row = findRow(lib, [pid](QTreeWidgetItem *it) {
+        return it->data(0, ShowTreeView::KindRole).toInt() == ShowTreeView::LibPalette
+               && it->data(0, ShowTreeView::IdRole).toUInt() == pid;
+    });
+    QVERIFY(row != nullptr);
+    selectOnly(lib, row);
+    {
+        QMenu menu;
+        view.fillLibraryMenu(&menu, row);
+        VERIFY_CANON(&menu);
+        QCOMPARE(ContextMenu::kindBlock(&menu), canon);
+        QVERIFY(ContextMenu::contextItems(&menu).contains("Pin"));     // the Library's own, on top
+    }
+    {
+        QMenu menu;
+        view.fillAttributeMenu(&menu, show.cue, show.layer, ShowTree::Target(), show.target,
+                               QStringLiteral("Dimmer"));
+        VERIFY_CANON(&menu);
+        QCOMPARE(ContextMenu::kindBlock(&menu), canon);
+        // Used By ▸ names the cue it is in.
+        QMenu *used = menu.findChild<QMenu *>("ctxUsedBy");
+        QVERIFY(used != nullptr && !used->actions().isEmpty());
+        QVERIFY2(used->actions().first()->isEnabled(), qPrintable(used->actions().first()->text()));
+    }
+
+    // Build ▸ Scenes: the palette row of a scene that holds it.
+    {
+        Scene *sc = new Scene(m_doc);
+        sc->setName("Warm");
+        m_doc->addFunction(sc);
+        sc->addFixtureGroup(m_groupA);
+        sc->addPalette(pid);
+        ProgrammingOutline outline(m_doc);
+        outline.resize(400, 400);
+        outline.show();
+        outline.rebuild();
+        outline.expandAll();
+        QTreeWidgetItem *prow = findRow(&outline, [pid](QTreeWidgetItem *it) {
+            return it->data(0, ProgrammingOutline::KindRole).toInt() == ProgrammingOutline::PaletteRow
+                   && it->data(0, ProgrammingOutline::IdRole).toUInt() == pid;
+        });
+        if (prow != nullptr)        // listed when the outline shows a scene's looks
+        {
+            selectOnly(&outline, prow);
+            QMenu menu;
+            outline.fillContextMenu(&menu, prow);
+            VERIFY_CANON(&menu);
+            QCOMPARE(ContextMenu::kindBlock(&menu), canon);
+            QCOMPARE(menu.actions().first()->text(), QString("Show in Palettes"));
+        }
+    }
+
+    // The items work: Rename… (a dialog where there is no row to edit).
+    {
+        QMenu menu;
+        view.fillAttributeMenu(&menu, show.cue, show.layer, ShowTree::Target(), show.target,
+                               QStringLiteral("Dimmer"));
+        QAction *rename = menu.findChild<QAction *>("ctxRename");
+        QVERIFY(rename != nullptr);
+        QCOMPARE(rename->text(), QString("Rename…"));
+        QTimer::singleShot(0, []() {
+            if (QInputDialog *d = qobject_cast<QInputDialog *>(QApplication::activeModalWidget()))
+            {
+                d->setTextValue("Halfway");
+                d->accept();
+            }
+        });
+        rename->trigger();
+        QCOMPARE(m_doc->palette(pid)->name(), QString("Halfway"));
+    }
+}
+
+void ContextMenus_Test::aLookRowPutsItsOwnItemsOnTop()
+{
+    m_doc->setMode(Doc::Design);
+    const quint32 pid = halfPalette(m_doc);
+    const TreeShow show = makeTreeShow(m_doc, m_groupA, pid);
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1200, 800);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QMenu menu;
+    view.fillAttributeMenu(&menu, show.cue, show.layer, ShowTree::Target(), show.target, QStringLiteral("Dimmer"));
+    VERIFY_CANON(&menu);
+    // The row's own (screenshot 133: Set to ▸, None (off here), Clear
+    // (inherit)) first, one separator, then Edit Palette and the rest.
+    const QStringList own = ContextMenu::contextItems(&menu);
+    QVERIFY2(own.first().startsWith("Set "), qPrintable(own.join(" | ")));
+    QVERIFY2(own.contains("None (off here)") && own.contains("Clear (inherit)"), qPrintable(own.join(" | ")));
+    const QList<QAction *> acts = menu.actions();
+    int sep = -1;
+    for (int i = 0; i < acts.size(); ++i)
+        if (acts.at(i)->isSeparator())
+        {
+            sep = i;
+            break;
+        }
+    QCOMPARE(sep, own.size());
+    QCOMPARE(acts.at(sep + 1)->objectName(), QString("ctxEditPalette"));
+    QCOMPARE(acts.at(sep + 1)->text(), QString("Edit Palette"));
+    QCOMPARE(acts.last()->text(), QString("Delete Palette…"));
+}
+
+void ContextMenus_Test::aFunctionHasOneMenuEverywhere()
+{
+    m_doc->setMode(Doc::Design);
+    Scene *s = new Scene(m_doc);
+    s->setName("Warm");
+    m_doc->addFunction(s);
+    EFX *efx = new EFX(m_doc);
+    efx->setName("Circle");
+    m_doc->addFunction(efx);
+    Collection *col = new Collection(m_doc);
+    col->setName("Both");
+    m_doc->addFunction(col);
+    col->addFunction(s->id());
+    col->addFunction(efx->id());
+
+    ProgrammingManager pm(nullptr, m_doc);
+    pm.resize(1500, 900);
+    pm.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&pm));
+
+    // Build ▸ Scenes: the scene's row.
+    ProgrammingOutline *outline = pm.m_outline;
+    outline->rebuild();
+    outline->expandAll();
+    QTreeWidgetItem *scene = outline->sceneItem(s->id());
+    QVERIFY(scene != nullptr);
+    selectOnly(outline, scene);
+    QStringList canon;
+    {
+        QMenu menu;
+        outline->fillContextMenu(&menu, scene);
+        VERIFY_CANON(&menu);
+        canon = ContextMenu::kindBlock(&menu);
+        QCOMPARE(canon.first(), QString("ctxOpenFunction"));
+        QCOMPARE(canon.last(), QString("ctxDeleteFunction"));
+        for (const char *n : { "ctxUsedBy", "ctxFunctionMoveToFolder", "ctxDuplicate", "ctxRename" })
+            QVERIFY2(canon.contains(n), n);
+        QVERIFY(ContextMenu::contextItems(&menu).contains("Chaser from Selection"));
+        // Used By ▸ names the collection it is in.
+        QMenu *used = menu.findChild<QMenu *>("ctxUsedBy");
+        QVERIFY(used != nullptr);
+        QCOMPARE(used->actions().first()->text(), QString("Both"));
+    }
+
+    // The Library's function row.
+    {
+        ShowTreeView view(nullptr, m_doc);
+        view.resize(1200, 800);
+        view.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&view));
+        QTreeWidgetItem *row = findRow(view.library(), [s](QTreeWidgetItem *it) {
+            return it->data(0, ShowTreeView::KindRole).toInt() == ShowTreeView::LibFunction
+                   && it->data(0, ShowTreeView::IdRole).toUInt() == s->id();
+        });
+        if (row != nullptr)
+        {
+            selectOnly(view.library(), row);
+            QMenu menu;
+            view.fillLibraryMenu(&menu, row);
+            VERIFY_CANON(&menu);
+            QCOMPARE(ContextMenu::kindBlock(&menu), canon);
+        }
+    }
+
+    // The Workbench: the scene as a layer of the collection loaded there.
+    {
+        Workbench *bench = pm.m_workbench;
+        bench->load(col->id());
+        ProgrammingOutline *rows = bench->m_rows;
+        rows->rebuild();
+        QTreeWidgetItem *layer = findRow(rows, [rows, s](QTreeWidgetItem *it) {
+            return it->parent() == nullptr && rows->layerOf(it) >= 0 && rows->rowOf(it).id == s->id();
+        });
+        QVERIFY(layer != nullptr);
+        selectOnly(rows, layer);
+        QMenu menu;
+        rows->fillContextMenu(&menu, layer);
+        VERIFY_CANON(&menu);
+        QCOMPARE(ContextMenu::kindBlock(&menu), canon);
+        // Its own on top: taking it out of what is loaded.
+        QVERIFY(menu.findChild<QAction *>("outlineRemoveLayer") != nullptr);
+    }
+
+    // An EFX: the same items, with how it runs.
+    pm.setSection(ProgrammingManager::EffectsSection);
+    QTreeWidget *list = pm.findChild<QTreeWidget *>("buildEffects");
+    QVERIFY(list != nullptr);
+    QTreeWidgetItem *circle = nullptr;
+    QTRY_VERIFY((circle = findRow(list, [](QTreeWidgetItem *it) { return it->text(0) == "Circle"; })) != nullptr);
+    QMenu *menu = pm.effectsContextMenu(circle, &pm);
+    VERIFY_CANON(menu);
+    QStringList efxKind = ContextMenu::kindBlock(menu);
+    efxKind.removeAll("effectRunsMenu");
+    QCOMPARE(efxKind, canon);
+    delete menu;
+}
+
+void ContextMenus_Test::aLayerHasOneMenuEverywhere()
+{
+    m_doc->setMode(Doc::Design);
+    const quint32 pid = halfPalette(m_doc);
+    const TreeShow show = makeTreeShow(m_doc, m_groupA, pid);
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1400, 800);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+
+    // The tree's layer row.
+    QVERIFY(view.selectNode(show.layer, show.cue));
+    QTreeWidgetItem *item = view.m_tree->currentItem();
+    QVERIFY(item != nullptr);
+    QStringList canon;
+    {
+        QMenu menu;
+        view.fillTreeMenu(&menu, item);
+        VERIFY_CANON(&menu);
+        canon = ContextMenu::kindBlock(&menu);
+        QCOMPARE(canon.first(), QString("ctxOpenLayer"));
+        QCOMPARE(canon.last(), QString("stDeleteLayer"));
+        QVERIFY(ContextMenu::contextItems(&menu).contains("+ Cue"));      // the tree's own, on top
+    }
+
+    // The same layer's row in the Workbench (docked in the Show Tree).
+    QVERIFY(view.openInWorkbench(show.cue));
+    Workbench *bench = view.dockedWorkbench();
+    QVERIFY(bench != nullptr);
+    TreeCueStack *stack = qobject_cast<TreeCueStack *>(bench->stack());
+    QVERIFY(stack != nullptr);
+    int at = -1;
+    const QList<WorkbenchStack::Layer> ls = stack->layers();
+    for (int i = 0; i < ls.size(); ++i)
+        if (ls.at(i).layerId == show.layer)
+            at = i;
+    QVERIFY(at >= 0);
+    QMenu menu;
+    stack->fillLayerMenu(&menu, at);
+    VERIFY_CANON(&menu);
+    QCOMPARE(ContextMenu::kindBlock(&menu), canon);
+    QVERIFY(ContextMenu::contextItems(&menu).contains("Solo This Layer"));
+    // Delete Layer takes it out, one step.
+    QAction *del = menu.findChild<QAction *>("stDeleteLayer");
+    QVERIFY(del != nullptr);
+    del->trigger();
+    QVERIFY(m_doc->showTree()->cue(show.cue)->layer(show.layer) == nullptr);
+    view.closeWorkbench();
+}
+
+void ContextMenus_Test::theShowTreeMenusFollowTheCanon()
+{
+    m_doc->setMode(Doc::Design);
+    const quint32 pid = halfPalette(m_doc);
+    makeTreeShow(m_doc, m_groupA, pid);
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1400, 800);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    view.m_tree->expandAll();
+    int checked = 0;
+    QSet<int> kinds;
+    for (QTreeWidgetItemIterator it(view.m_tree); *it; ++it)
+    {
+        QMenu menu;
+        view.fillTreeMenu(&menu, *it);
+        if (menu.isEmpty())
+            continue;
+        const QStringList p = ContextMenu::checkCanon(&menu);
+        QVERIFY2(p.isEmpty(), qPrintable((*it)->text(0) + ": " + p.join("; ") + "\n  in: " + texts(&menu)));
+        // + Cue, + Hit, ...: this place's own, always on top.
+        const QStringList own = ContextMenu::contextItems(&menu);
+        QVERIFY2(!own.isEmpty() && menu.actions().first()->text() == own.first(), qPrintable(texts(&menu)));
+        kinds.insert((*it)->data(0, ShowTreeView::KindRole).toInt());
+        ++checked;
+    }
+    QVERIFY(kinds.contains(ShowTreeView::ProductionNode));
+    QVERIFY(kinds.contains(ShowTreeView::ListNode));
+    QVERIFY(kinds.contains(ShowTreeView::CueNode));
+    QVERIFY(kinds.contains(ShowTreeView::LayerNode));
+    QVERIFY(checked >= 4);
+    // Empty space: + Production… and + Hit for Everywhere.
+    QMenu empty;
+    view.fillTreeMenu(&empty, nullptr);
+    VERIFY_CANON(&empty);
+    QVERIFY(texts(&empty).startsWith("+ Production…"));
+}
+
+void ContextMenus_Test::theRigViewFollowsTheCanon()
+{
+    m_doc->setMode(Doc::Design);
+    QWidget host;
+    Monitor mon(&host, m_doc);
+    MonitorGraphicsView *gv = mon.findChild<MonitorGraphicsView *>();
+    QVERIFY(gv != nullptr);
+
+    // A line target, with an Aim palette pointing at it.
+    StageTarget *line = m_doc->monitorProperties()->addStageTarget();
+    QVERIFY(line != nullptr);
+    line->setName("Line 1");
+    QLCPalette *aim = new QLCPalette(QLCPalette::Aim);
+    aim->setName("At the Line");
+    aim->setStageTargetId(line->id());
+    m_doc->addPalette(aim);
+    gv->updateTargets();
+
+    QStringList kind;
+    for (bool inList : { false, true })
+    {
+        MonitorGraphicsView::MenuPlace place;
+        place.inList = inList;
+        QMenu menu;
+        gv->buildItemMenu(&menu, QStringLiteral("target"), line->id(), place);
+        VERIFY_CANON(&menu);
+        // The plot's own on top (where it is, its lock); its own menu below:
+        // its editor, Used By ▸, Rename…, Delete Target… last.
+        QVERIFY2(ContextMenu::contextItems(&menu).contains(inList ? "Show on Map" : "Show in Plot Layers"),
+                 qPrintable(texts(&menu)));
+        const QStringList k = ContextMenu::kindBlock(&menu);
+        QCOMPARE(k.first(), QString("plotEditItem"));
+        QVERIFY(k.contains("ctxUsedBy"));
+        QCOMPARE(k.last(), QString("plotDeleteItem"));
+        QMenu *used = menu.findChild<QMenu *>("ctxUsedBy");
+        QVERIFY(used != nullptr);
+        QCOMPARE(used->actions().first()->text(), QString("At the Line"));
+        if (inList)
+            QCOMPARE(k, kind);      // the same from the Layers list
+        kind = k;
+    }
+
+    // A fixture on the plot: the canon's fixture menu under the plot's own.
+    const quint32 fid = m_fixtures.first();
+    MonitorGraphicsView::MenuPlace place;
+    QMenu menu;
+    gv->buildItemMenu(&menu, QStringLiteral("fixture"), fid, place);
+    VERIFY_CANON(&menu);
+    QCOMPARE(canonItems(&menu), QStringList({ "ctxFixtureProperties", "ctxLocate", "whyOnAction", "ctxPatch",
+                                              "outputRulesAction", "selectionMenu", "selectAllSimilar",
+                                              "ctxRename" }));
+    QVERIFY(ContextMenu::contextItems(&menu).contains("Remove from View"));
+
+    // A stage piece: the plot's own (shown, locked) on top, its editor below.
+    QMenu piece;
+    gv->buildItemMenu(&piece, QStringLiteral("stage"), MonitorProperties::CurtainPiece, place);
+    VERIFY_CANON(&piece);
+    QCOMPARE(ContextMenu::kindBlock(&piece), QStringList({ "stagePieceProperties" }));
 }
 
 QTEST_MAIN(ContextMenus_Test)

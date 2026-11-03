@@ -32,15 +32,16 @@ second, a level from 0 to 1); **Return** sets it and the slider follows.
 Open it from any of three places:
 
 - **On a Show Tree layer.** Right-click a layer and choose **Design
-  effect…**, or use **Design effect…** in the ⋯ menu of a layer's Effect
+  effect…**, or use **Design Effect…** in the ⋯ menu of a layer's Effect
   row. The designer plays on that layer's fixtures. The layer's own colour
   and dimmer play under the effect, so it looks as it will in the cue.
   **In context** keeps the rest of the cue playing; **Solo** plays only the
   effect.
 - **Build ▸ Effects.** **+ New**, or click an effect palette: the
   designer opens in the Workbench's editor pane, on the **bench**
-  described next. Right-click an effect for Duplicate, Rename, Move to
-  folder… and Delete. See [Making effects](build.md#making-effects).
+  described next. Right-click an effect for the palette menu it has everywhere:
+  Edit Effect, Runs ▸, Used By ▸, Move to Folder ▸, Duplicate, Rename and
+  Delete Palette…. See [Making effects](build.md#making-effects).
 - Build ▸ Effects is effects' one home: no window of their own any more.
   **Try on ▾** on the bench picks the groups it plays on, and it
   remembers them.
@@ -623,7 +624,7 @@ effect leaves the dimmer alone and a dimmer effect only scales the level,
 so neither covers the other.
 
 - **In the Show Tree**: on the layer, use the **Effect** row's **⋯ ▸ Set
-  to** (every effect palette is listed) or **Design a new effect…**. A
+  to** (every effect palette is listed) or **Design a New Effect…**. A
   layer holds one effect of each kind — Colour, Dimmer, Position, Beam,
   Other — each on its own row; another of the same kind replaces it.
   One effect palette on several layers, or an effect on the whole cue,

@@ -41,29 +41,35 @@ class Doc;
 /**
  * One layout for every right-click menu (docs/design/CONTEXT_MENUS.md).
  *
- * A menu is built in sections, always in the same order: the thing's own
- * editor, what its kind does, selecting more like it, organising it, what
- * only this place offers, the list's view, clipboard and name, and taking
- * it out or deleting it last. Empty sections are left out; one separator
- * stands between two sections. And one builder per kind -- a fixture group,
- * a fixture -- gives the same items with the same words wherever the thing
- * is right-clicked; a place adds its own items to the Place section.
+ * A menu is two blocks. On top, what only this place offers -- the
+ * context: Set to ▸ on a look row, Remove from Truss on the plot, Pin in
+ * the Library -- and the list's own view. Then one separator, and the
+ * object's own kind menu, in a fixed order and the same wherever the object
+ * is right-clicked: its editor (the default action), what its kind does,
+ * selecting more like it, organising it, clipboard and name, and deleting
+ * it last. Empty sections are left out; one separator stands between two
+ * sections. One builder per kind (ContextMenus below) fills the kind block,
+ * so a palette, a function, a fixture group or a fixture has the same items
+ * with the same words in every place.
  */
 class QLC_UI_EXPORT ContextMenu
 {
     Q_DECLARE_TR_FUNCTIONS(ContextMenu)
 
 public:
+    /** Decided 2026-11-03 (user): place-specific items on top, then the
+     *  kind menu. The two context sections come first; Open..Remove is the
+     *  kind block. */
     enum Section
     {
-        Open = 1,       ///< its own editor; first, the default action
+        Place = 1,      ///< what only this place offers -- first
+        View,           ///< the list itself (expand, collapse, group by)
+        Open,           ///< its own editor; the kind block's first, the default action
         Kind,           ///< what this kind of thing does
         Selection,      ///< picking out more like it
         Organise,       ///< making something from it, filing it
-        Place,          ///< what only this place offers
-        View,           ///< the list itself (expand, collapse, group by)
         Edit,           ///< cut, copy, paste, duplicate, rename
-        Remove          ///< out of a container, then delete -- always last
+        Remove          ///< deleting it -- always last
     };
 
     /** The dynamic property each top-level item carries: its Section */
@@ -84,6 +90,12 @@ public:
     /** A submenu in @p section */
     QMenu *addMenu(Section section, const QString &title, const QString &objectName = QString());
 
+    /** Everything already in @p menu is this place's own: each item is
+     *  filed in Place and the separators between them are dropped (a place
+     *  whose own items are built straight into the QMenu, before the kind
+     *  block goes under them). */
+    static void fileAsPlace(QMenu *menu);
+
     /** Nothing added yet */
     bool isEmpty() const;
     /** Anything in @p section */
@@ -99,6 +111,12 @@ public:
     static QStringList checkCanon(const QMenu *menu);
     /** Empty when @p text is Title Case by the canon's rule */
     static QString checkTitleCase(const QString &text);
+    /** The kind block of @p menu: the object names (a submenu's own) of its
+     *  top-level items in Open..Remove, in order -- what must be the same
+     *  wherever one kind of object is right-clicked */
+    static QStringList kindBlock(const QMenu *menu);
+    /** The texts of @p menu's top-level items in Place and View */
+    static QStringList contextItems(const QMenu *menu);
 
 private:
     QPointer<QMenu> m_menu;
@@ -125,6 +143,12 @@ namespace ContextMenus
     QLC_UI_EXPORT QString removeFromSceneText(int count);
     QLC_UI_EXPORT QString splitByHeadTypeText();
     QLC_UI_EXPORT QString layOutFromStageText();
+    QLC_UI_EXPORT QString usedByText();
+    QLC_UI_EXPORT QString duplicateText();
+    QLC_UI_EXPORT QString editPaletteText(bool effect);
+    QLC_UI_EXPORT QString openFunctionText();
+    QLC_UI_EXPORT QString deletePalettesText(int count);
+    QLC_UI_EXPORT QString deleteFunctionsText(int count);
 
     /** Where fixtures and fixture groups were right-clicked, and what that
      *  place does its own way. Every hook may be left empty: the builder
@@ -150,6 +174,8 @@ namespace ContextMenus
         std::function<void()> createGroup;
         /** Rename a group inline in the list; empty: "Rename…", a dialog */
         std::function<void(quint32)> renameInPlace;
+        /** Rename a fixture inline in the list; empty: "Rename…", a dialog */
+        std::function<void(quint32)> renameFixtureInPlace;
         /** After the builder changed the doc */
         std::function<void()> changed;
         /** Offer Selection ▸ (SelectionMenu: a layer from them, Create
@@ -172,6 +198,66 @@ namespace ContextMenus
     inline void fixture(ContextMenu &menu, Doc *doc, const QList<quint32> &fixtureIds,
                         const RigPlace &place)
     { rig(menu, doc, QList<quint32>(), fixtureIds, place); }
+
+    /** Where palettes were right-clicked, and what that place does its own
+     *  way. Every hook may be left empty: the builder then does it itself. */
+    struct QLC_UI_EXPORT PalettePlace
+    {
+        QWidget *parent = nullptr;
+        /** Design edits (move, duplicate, rename, delete) are allowed here */
+        bool editable = true;
+        /** Edit Palette / Edit Effect: default, in Build's Workbench
+         *  (ProgrammingManager::openPalette) */
+        std::function<void(quint32)> edit;
+        /** Rename inline in the list; empty: "Rename…", a dialog */
+        std::function<void(quint32)> renameInPlace;
+        /** After Duplicate made @p copy; default: edit it */
+        std::function<void(quint32 copy)> duplicated;
+        /** A Used By ▸ entry chosen (PaletteOps::Use kind, owner, layer);
+         *  default: the cue or look in the Show Tree, the scene in Build */
+        std::function<void(int kind, quint32 owner, quint32 layer)> showUse;
+        /** Move to Folder ▸ chose @p folder (empty: none); default
+         *  PaletteOps::move */
+        std::function<void(const QList<quint32> &, const QString &)> moveTo;
+        /** Delete Palette…; default: ask (naming every use), then
+         *  PaletteOps::remove */
+        std::function<void(const QList<quint32> &)> remove;
+        /** Make Reusable… on a palette the show does not manage (a cue's
+         *  one-off value); left out when empty */
+        std::function<void(quint32)> makeReusable;
+        /** After the builder changed the doc */
+        std::function<void()> changed;
+    };
+    /** The canon's palette menu for @p paletteIds (the first is the one
+     *  clicked) into @p menu: Edit Palette | Runs ▸ (effects), Used By ▸ |
+     *  Move to Folder ▸, Save as Bundle… | Duplicate, Rename | Delete
+     *  Palette…. Only Edit and Used By for a palette the show does not
+     *  manage (a cue's one-off value). */
+    QLC_UI_EXPORT void palette(ContextMenu &menu, Doc *doc, const QList<quint32> &paletteIds,
+                               const PalettePlace &place);
+
+    /** Where functions (scenes, chasers, EFX, ...) were right-clicked. */
+    struct QLC_UI_EXPORT FunctionPlace
+    {
+        QWidget *parent = nullptr;
+        bool editable = true;
+        /** Open in Workbench: default ProgrammingManager::openFunction */
+        std::function<void(quint32)> open;
+        /** Rename inline in the list; empty: "Rename…", a dialog */
+        std::function<void(quint32)> renameInPlace;
+        /** Duplicate; default: a copy each, one step on the shared history */
+        std::function<void(const QList<quint32> &)> duplicate;
+        /** Move to Folder ▸; default: their path, one step */
+        std::function<void(const QList<quint32> &, const QString &)> moveTo;
+        /** Delete…; default: ask, then delete them */
+        std::function<void(const QList<quint32> &)> remove;
+        std::function<void()> changed;
+    };
+    /** The canon's function menu for @p functionIds (the first is the one
+     *  clicked): Open in Workbench | Learn Trigger…, Runs ▸, Send to Show
+     *  Tree…, Used By ▸ | Move to Folder ▸ | Duplicate, Rename | Delete…. */
+    QLC_UI_EXPORT void function(ContextMenu &menu, Doc *doc, const QList<quint32> &functionIds,
+                                const FunctionPlace &place);
 
     /** The head-layout editor of @p groupId in a dialog */
     QLC_UI_EXPORT void editGroupLayout(Doc *doc, quint32 groupId, QWidget *parent);

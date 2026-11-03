@@ -160,5 +160,5 @@ what it changes, **(3)** **GO** (or **Space**), **(4)** **Back**, **(5)**
    4. **Undo** (⌘Z) puts it back at 1.0.2.5.
 
    On a list that nobody has written numbers down for yet, right-click a
-   cue → **Renumber this level…** numbers the cues 1, 2, 3… in one go. Once
+   cue → **Renumber This Level…** numbers the cues 1, 2, 3… in one go. Once
    the SM's script (or QLab) uses the numbers, add point cues instead.

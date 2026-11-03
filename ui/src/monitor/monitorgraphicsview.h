@@ -38,6 +38,7 @@
 #include "function.h"
 #include "structureduplicate.h"
 
+class ContextMenu;
 class MonitorProperties;
 class StageTarget;
 class MonitorFixtureItem;
@@ -707,15 +708,16 @@ public:
      *
      *  The plot's right-click and the Layers list both fill their menus here,
      *  so an action on a feature cannot exist in one and be missing from the
-     *  other. Every kind is laid out the same way: edit; what to build on it;
-     *  how it is mounted or positioned; its grouping; removing it last.
+     *  other. What only the plot does with it (footprints, mounting, locks)
+     *  goes straight into @p menu, on top; the item's own menu (edit, what to
+     *  build on it) into @p cm (docs/design/CONTEXT_MENUS.md).
      *  @p scenePos, when known, puts "here" actions at the click. */
-    void populateItemMenu(class QMenu *menu, const QString &kind, quint32 id,
-                          const QPointF &scenePos = QPointF(), bool withRemoval = true);
+    void populateItemMenu(class QMenu *menu, ContextMenu &cm, const QString &kind, quint32 id,
+                          const QPointF &scenePos = QPointF());
     /** The item's removing action on its own ("Delete Truss", "Remove from
      *  View"), for a menu that has more to add before it: removing always
      *  comes last. */
-    void addItemRemoval(class QMenu *menu, const QString &kind, quint32 id);
+    void addItemRemoval(ContextMenu &cm, const QString &kind, quint32 id);
 
     /** Where a menu was opened: the plot or the Layers list. The menu is the
      *  same in both; only these differ. */
@@ -732,12 +734,12 @@ public:
     };
 
     /** The WHOLE right-click menu for one item, identical in the plot and in
-     *  the Layers list apart from the one action that says where it is:
-     *    1. the thing (populateItemMenu);
-     *    2. where it is and its name -- Show in Layers / Show on Map, Rename,
-     *       and a truss or riser's fixture layout;
-     *    3. organising the selection -- folders, fixture groups, layers;
-     *    4. removing it, last. */
+     *  the Layers list apart from the one action that says where it is. By
+     *  the canon (docs/design/CONTEXT_MENUS.md): the plot's own on top --
+     *  footprints, mounting, locks, Show in Layers / Show on Map, folders,
+     *  fixture groups, layers; then the item's own menu -- a fixture's is
+     *  ContextMenus::rig, a structure's or mark's Edit X…, Add ▸, Used By ▸,
+     *  Rename…, Delete X last. */
     void buildItemMenu(class QMenu *menu, const QString &kind, quint32 id,
                        const MenuPlace &place, const QPointF &scenePos = QPointF());
 

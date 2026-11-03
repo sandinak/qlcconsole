@@ -560,15 +560,16 @@ void LedLayout_Test::theFixtureManagerOffersItForMultiHeadFixtures()
     };
     QVERIFY(row(bar->id()) != nullptr && row(par->id()) != nullptr);
 
-    // A single-head fixture: there, but not enabled.
-    bool seen = false, enabled = true;
+    // A single-head fixture: not offered (the canon's fixture menu offers
+    // it where it applies, the same in every place).
+    bool seen = true, enabled = true;
     onNextMenu([&](QMenu *m) {
         QAction *a = actionNamed(m, "ledLayoutAction");
         seen = a != nullptr;
         enabled = a != nullptr && a->isEnabled();
     });
     rightClick(row(par->id()));
-    QVERIFY(seen);
+    QVERIFY(!seen);
     QVERIFY(!enabled);
 
     // The XL-450: enabled, and it opens the editor for its model -- no group made.
@@ -610,7 +611,7 @@ void LedLayout_Test::thePlotAndStudioTreeOfferIt()
     // The plot's fixture menu...
     {
         QMenu menu;
-        gv->populateItemMenu(&menu, "fixture", bar->id(), QPointF(), false);
+        gv->buildItemMenu(&menu, "fixture", bar->id(), MonitorGraphicsView::MenuPlace());
         QAction *a = actionNamed(&menu, "ledLayoutAction");
         QVERIFY(a != nullptr && a->isEnabled());
         QCOMPARE(a->text(), QString("LED Layout…"));

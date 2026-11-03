@@ -208,7 +208,7 @@ with **Show in Show Tree**; it is changed there, not here.
 
 The scene of the row you clicked is the one a control surface addresses.
 
-**▣ Open** (the button, a double-click, or right-click → **Open**) loads
+**▣ Open** (the button, a double-click, or right-click → **Open in Workbench**) loads
 that layer in the Workbench on its own — a nested collection's layers, a
 scene by itself, a chaser's steps. **↩** in the header (it names where it
 goes) comes back to what was loaded before, with the row you opened
@@ -357,12 +357,15 @@ the tab.
   Show Tree's selected cue, another scene, or a new one. Each is one undo
   step, and the new layer is selected afterwards. See
   [Make a layer](effects.md#make-a-layer).
-- **Right-click** an effect: **Edit Effect** (an effect palette) or
-  **Open in Editor** (an EFX or RGB Matrix), then **Learn Trigger…** and
-  **Runs ▸**, **Move to Folder…**, **Duplicate**, **Rename** (or F2) and
-  **Delete…** last (⌫ too; it asks first, and says where the effect is
-  used). Right-click empty space for **New Effect**, **New EFX** and **New
-  RGB Matrix** (or **+ New**).
+- **Right-click** an effect for the same menu it has everywhere ([right-click
+  menus](fixture-manager.md#right-click-menus)): an effect palette is a
+  palette — **Edit Effect**, **Runs ▸**, **Used By ▸**, **Move to Folder ▸**,
+  **Save as Bundle…**, **Duplicate**, **Rename** (or F2), **Delete
+  Palette…** — and an EFX or RGB Matrix a function — **Open in Workbench**,
+  **Learn Trigger…**, **Runs ▸**, **Used By ▸**, **Move to Folder ▸**,
+  **Duplicate**, **Rename**, **Delete…**. Delete is last (⌫ too; it asks
+  first, and says where the effect is used). Right-click empty space for
+  **New Effect**, **New EFX** and **New RGB Matrix** (or **+ New**).
 
 Loading anything else in the Workbench puts the designer away, and an
 unsaved design with it; **Esc** asks first
@@ -572,9 +575,15 @@ before deleting them, naming where each is used.
 **Rename** with **F2** (or a slow second click): a scene, collection,
 chaser, a folder (what is filed in it follows) or a palette.
 
-**Right-click** a row for the same actions: remove, move a look up or down,
-show a palette in Build ▸ Palettes, rename, duplicate, delete, a new scene
-in that folder, open or close everything under it.
+**Right-click** a row for the same actions. On top, what the outline offers
+there: remove from the scene, move a look up or down, show a palette in
+Build ▸ Palettes, Chaser from Selection, a new scene in that folder, open or
+close everything under it. Under them, the row's own menu, the same as
+everywhere ([right-click menus](fixture-manager.md#right-click-menus)): a
+scene's **Open in Workbench**, **Learn Trigger…**, **Used By ▸** (the
+chasers and collections it is in), **Move to Folder ▸**, **Duplicate**,
+**Rename** and **Delete…**; a palette's **Edit Palette** to **Delete
+Palette…**.
 
 **+ Scene** (over the outline) makes a scene in the folder of the selected
 row; its menu also makes a **collection**, a **chaser**, or a scene in a new
@@ -625,7 +634,7 @@ with its id, in its place in every collection, chaser and show track, and on
 the VC buttons and cue lists that played it; **⇧⌘Z** deletes it again.
 **Duplicate** and **⌘C ⌘V** are one step too: ⌘Z takes the copies away.
 
-A palette: in Build ▸ Palettes, right-click → **Delete**, or select and press **⌫**.
+A palette: right-click it (in Build ▸ Palettes, the Library or a cue's look row) → **Delete Palette…**, or select and press **⌫**.
 The question lists every place the palette is used — each scene and which
 look row, each effect look whose slot uses it — and says what happens:
 scenes lose that look (their other looks and values stay), effect looks lose

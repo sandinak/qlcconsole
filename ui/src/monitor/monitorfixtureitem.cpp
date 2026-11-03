@@ -39,6 +39,7 @@
 #include <QtMath>
 #include "headlayout.h"
 #include "monitorfixtureitem.h"
+#include "contextmenus.h"
 #include <QGraphicsScene>
 #include "monitor.h"
 #include "whyonpanel.h"
@@ -1535,23 +1536,12 @@ void MonitorFixtureItem::contextMenuEvent(QGraphicsSceneContextMenuEvent *event)
     FixtureRigProps rp = props->fixtureRigProps(m_fid);
 
     QMenu menu;
-
-    /* Locate first, and available whether or not the rig is unlocked or the
-       app is in Operate: everything else in this menu edits the rig, while
-       Locate only asks "which physical light is this one" -- the question you
-       have while pointing at the canvas with the rig in front of you. Acts on
-       the whole selection when several fixtures are selected. */
-    QAction *locateAct = menu.addAction(tr("Locate"));
-    QAction *whyAct = menu.addAction(WhyOnPanel::actionText());
-    whyAct->setObjectName(QStringLiteral("whyOnAction"));
-    menu.addSeparator();
-
     // Facing (pan-zero direction) quick-set for moving heads — rig editing, so
     // only offered while unlocked.
     QAction *faceDS = NULL, *faceSR = NULL, *faceUS = NULL, *faceSL = NULL;
     if (m_hasPan && m_editable)
     {
-        QMenu *fm = menu.addMenu(tr("Facing (pan-zero)"));
+        QMenu *fm = menu.addMenu(tr("Facing (Pan Zero)"));
         faceDS = fm->addAction(tr("Downstage (0°)"));
         faceSR = fm->addAction(tr("Stage Right (90°)"));
         faceUS = fm->addAction(tr("Upstage (180°)"));
@@ -1567,7 +1557,7 @@ void MonitorFixtureItem::contextMenuEvent(QGraphicsSceneContextMenuEvent *event)
     {
         Truss *t = props->truss(rp.trussId);
         QString trussName = t ? t->name() : tr("truss");
-        removeAct = menu.addAction(tr("Remove from Truss \"%1\"").arg(trussName));
+        removeAct = menu.addAction(tr("Remove from Truss “%1”").arg(trussName));
     }
 
     // Mounting height (Z) — used by the elevation views.
@@ -1575,6 +1565,32 @@ void MonitorFixtureItem::contextMenuEvent(QGraphicsSceneContextMenuEvent *event)
     if (m_editable)
     {
         heightAct = menu.addAction(mountingHeightText(props, m_fid));
+    }
+
+    /* The canon (docs/design/CONTEXT_MENUS.md): this editor's own -- facing,
+       the truss, the height -- on top, then the fixture's own menu, as
+       everywhere (ContextMenus::rig): Locate and Why Is This On? whether or
+       not the rig is unlocked, for the whole selection. */
+    ContextMenu::fileAsPlace(&menu);
+    {
+        QList<quint32> ids;
+        if (scene() != NULL)
+        {
+            foreach (QGraphicsItem *gi, scene()->selectedItems())
+            {
+                MonitorFixtureItem *fi = dynamic_cast<MonitorFixtureItem *>(gi);
+                if (fi != NULL && !ids.contains(fi->fixtureID()))
+                    ids << fi->fixtureID();
+            }
+        }
+        if (!ids.contains(m_fid))
+            ids = { m_fid };
+        ContextMenu cm(&menu);
+        ContextMenus::RigPlace rig;
+        rig.editable = m_editable;
+        const quint32 fid = m_fid;
+        rig.changed = [this, fid]() { emit mountingChanged(fid); };
+        ContextMenus::rig(cm, m_doc, QList<quint32>(), ids, rig);
     }
 
     if (menu.isEmpty())
@@ -1586,37 +1602,6 @@ void MonitorFixtureItem::contextMenuEvent(QGraphicsSceneContextMenuEvent *event)
     QAction *chosen = menu.exec(event->screenPos());
     if (chosen == NULL)
     {
-        event->accept();
-        return;
-    }
-
-    if (chosen == whyAct)
-    {
-        WhyOnPanel::showFor(m_doc, m_fid, 0xFFFFFFFF, nullptr, event->screenPos());
-        event->accept();
-        return;
-    }
-    if (chosen == locateAct)
-    {
-        /* The whole selection, so selecting a truss-worth of heads and asking
-           where they are lights all of them. Falls back to this item when
-           nothing is selected -- right-clicking a fixture you have not clicked
-           first is the common case. */
-        QList<quint32> ids;
-        if (scene() != NULL)
-        {
-            foreach (QGraphicsItem *gi, scene()->selectedItems())
-            {
-                MonitorFixtureItem *fi = dynamic_cast<MonitorFixtureItem *>(gi);
-                if (fi != NULL && !ids.contains(fi->fixtureID()))
-                    ids << fi->fixtureID();
-            }
-        }
-        if (ids.isEmpty())
-            ids << m_fid;
-
-        if (Monitor::instance() != NULL)
-            Monitor::instance()->locateFixtures(ids);
         event->accept();
         return;
     }

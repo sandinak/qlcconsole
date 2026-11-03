@@ -108,7 +108,7 @@ from the Library lands in the tree right beside it.
     ([Cues at a timecode](shows.md#cues-at-a-timecode)) and, with song
     sections, its **Timecode** row ([Song sections on the
     timecode](#song-sections-on-the-timecode)), **Convert to
-    tracking…** and **Detach to plain chaser…**.
+    tracking…** and **Detach to Plain Chaser…**.
   - **A cue** shows its number, name, note, **Text colour**, mode, base
     check box, **Overlapping layers mix**, **Skip**, **Don't move in black
     into this cue**, **At timecode** with **Learn** (the time a list that
@@ -128,9 +128,9 @@ from the Library lands in the tree right beside it.
     puts the old time back.
   - **A layer** shows what it contains, then one row per attribute.
   - **A hit** shows its name, note, fade in / out, *Fired by* (the VC
-    buttons, **Make VC page**, **Move to folder…**), **When** (where it
+    buttons, **Make VC Page**, **Move to Folder…**), **When** (where it
     lives, so when it fires, and whether it is armed now), its looks and
-    layers; **Hits** or a hit folder lists its hits and has **Make VC page**.
+    layers; **Hits** or a hit folder lists its hits and has **Make VC Page**.
 - **Under the page: the Look Editor**, when **✎** opens a value or a
   palette is edited from the Library. Its **Used by** line says where the
   palette is used (*"Used by: 6 cue(s), 2 hit(s) · 1 VC button"*); click
@@ -296,7 +296,7 @@ Block and repeats what it has, as before. Where anything tracks, the list
 is **Tracking**; where nothing repeats, it stays Non-tracking. The sheet's
 **Plays the same** check runs on the result.
 
-**To go further:** select the list → **Convert to tracking…**
+**To go further:** select the list → **Convert to Tracking…**
 ([how](#convert-to-tracking)). It also tracks values that only repeat what
 is on stage (two scenes with the same looks) and makes cues Cue-only where
 that saves repeating. It shows what it will change, and every cue then
@@ -366,7 +366,7 @@ forward with the new list selected; close without upgrading and nothing
 changes. ⌘Z undoes the upgrade. A chaser the tree made, or one sent
 already, has the item greyed with the reason.
 
-The list's page says where it came from. **Restore original…** (on the
+The list's page says where it came from. **Restore Original…** (on the
 list's page or its right-click menu) undoes Import in place: the list
 leaves the tree, with any change made to it since; the chaser and its
 originals go back to their folders; and what fires the list fires the
@@ -386,7 +386,7 @@ changes the show. What the tree made itself keeps *Made by the Show Tree
 — edit it there*.
 
 **Raw scenes into palettes.** A ▣ row that plays a scene of raw channel
-values has **Capture into palettes…** (on its page and its right-click
+values has **Capture into Palettes…** (on its page and its right-click
 menu). It reads the scene fixture by fixture into Dimmer, Colour,
 Position and Gobo looks that put out exactly its values, reusing the
 show's palettes where one plays the same value and naming new ones as the
@@ -419,7 +419,7 @@ what would become of it:
   it, or *leave alone* (it plays as it is; drop it on a cue for a ▣
   layer). One already filed by an import says so;
 - a chaser already **upgraded in place**: greyed, with why (*Upgraded
-  already: cue list Haunted Variety Show*) and **Restore original…** on its
+  already: cue list Haunted Variety Show*) and **Restore Original…** on its
   row, which asks first and is one undo step.
 
 The chasers the Show Tree makes for its own cue lists aren't listed; a line
@@ -438,7 +438,7 @@ you. A scene that can't be captured says why (its own fades, say).
 chaser. **Upgrade** converts the ticked chasers, then captures the ticked
 scenes. A capture still keeps the scene in any cue that would come out
 different. The whole upgrade is **one undo step** (*Undo Upgrade this
-show*). **Restore original…** later puts one chaser back.
+show*). **Restore Original…** later puts one chaser back.
 
 ### From an Eos show
 
@@ -539,7 +539,7 @@ the tree) jumps to the Library's filter: type a few letters and press
 **Return** to add the first match (or what is selected); **↓** goes into the
 list, **Esc** back to the tree. Each add is one undo step.
 - To take a group out, right-click a layer on several groups →
-  **Remove &lt;group&gt; from layer** (never its last).
+  **Remove from Layer ▸** and the group (never its last).
 
 A layer stays **one layer** when its groups change. Added to in a cue it was
 tracked into, it takes the tracked layer's place and values. Added to where
@@ -547,12 +547,12 @@ it is set, the change carries on to the cues it tracks into.
 
 ### Split and merge layers
 
-- Right-click a layer on several groups → **Split layer (one per group)**.
+- Right-click a layer on several groups → **Split Layer (One per Group)**.
   You get a layer per group (and one on its fixtures), each with the same
   looks. Nothing on stage changes, and the pieces keep tracking as the layer
   did: where the same layer is set again in a later cue, it is split there
   too.
-- **Merge layers** makes one layer from several layers of one cue:
+- **Merge Layers** makes one layer from several layers of one cue:
   1. In the tree, click one layer, then **⌘-click** the others (or
      **⇧-click** to take the rows between).
   2. Click **More ▾ → Merge** in the header, or right-click one of them → **Merge N
@@ -630,7 +630,7 @@ Red* — US is Red and still at Base; the rest of Steps stays White.
 
 - **Make one:** hold **⇧** as you drop groups onto a layer (on its row in
   the tree, its row on the cue page, or its page). With **⌥⇧**, a child
-  each. Or right-click the layer → **Add child layer** (the groups inside
+  each. Or right-click the layer → **Add Child Layer** (the groups inside
   it, or the Library's selection), or type `US in Steps colour Red`.
 - A child must be **inside** its parent. If it isn't, the hint says so:
   *"Floor isn't part of Steps: a child layer is on part of its parent"*.
@@ -691,16 +691,16 @@ Each row shows its value, where it comes from, and four controls:
   named palette is shared, and the editor says so: changing it changes every
   cue and scene that uses it.
 - **⋯** opens a menu:
-  - **Set to** (or **Set in this cue**, for a grey value): any palette of
+  - **Set to** (or **Set in This Cue**, for a grey value): any palette of
     that kind, the ones you used recently first.
-  - **Update cue X**, for a tracked or included value: see
+  - **Update Cue X**, for a tracked or included value: see
     [Changing a tracked value](#changing-a-tracked-value).
   - **Level…** (Dimmer) or **Colour…** (Colour): a value you pick, in a
     strip that opens at the bottom of the Show Tree (inside the window,
     never behind it). **Apply** or Return sets it; **Cancel** or Esc leaves
     the row as it was. See
     [Values you pick or type](#values-you-pick-or-type).
-  - **Its own colour / dimmer** and **Fade in / out** (on an effect
+  - **Its Own Colour / Dimmer** and **Fade In / Out** (on an effect
     row): see [Effects](#effects).
   - **None (off here)**: the attribute is off in this layer, whatever it
     would inherit.
@@ -768,7 +768,7 @@ mixes, an included cue's layers play beside the cue's own instead of
 giving way to them (what it passes on to a tracking cue is the rule's).
 Its page has **Overlapping layers
 mix (as a chaser)** ticked and the tree's **F** (Flags) column says **mix**, with a tooltip.
-**Convert to tracking** puts every such cue on the rule where that plays
+**Convert to Tracking** puts every such cue on the rule where that plays
 exactly the same, and lists the ones where it would not, which keep mixing.
 Untick the box to put one on the rule anyway.
 
@@ -895,7 +895,7 @@ effect does fades: a dimmer pulse starts as a gentle wobble and grows to
 its full swing, while the layer's own level fades on the cue's time as
 usual. An effect that carries on into the next cue just keeps running. A
 cue with no fade times starts and stops its effects at once. On the
-effect's row, **⋯ → Fade in / out** chooses:
+effect's row, **⋯ → Fade In / Out** chooses:
 
 - **With the cue's fades**: the default for a new effect.
 - **At once**: the effect starts and stops at full, whatever the cue's
@@ -1051,16 +1051,16 @@ Each cue has a **mode** too, set on its page or by typing it:
 - **Mode from the menu.** Right-click a cue → **Mode ▸** List default /
   Track / Block / Cue-only; with several cues selected it sets them all,
   one undo step. In the Workbench, a layer's right-click menu has the
-  cue's **Cue mode ▸** too.
+  cue's **Cue Mode ▸** too.
 - **Release.** A layer with **Release** ticked leaves when its cue is left:
   tick it on the layer's page, or right-click the layer (in the tree or
-  the Workbench) → **Release (leaving this cue)**. It goes back to what
+  the Workbench) → **Release (Leaving This Cue)**. It goes back to what
   the **base cue** plays on that layer, else dark. Ticking it on a grey
   layer makes the layer this cue's own first.
 - **Stopping a scene played as it is.** A **▣** layer (+ Scene, or a
   function dropped on a cue) tracks like any other layer. To stop it, find
   the **last cue it should play in**, right-click its row there (grey if it
-  tracked in) → **Release (leaving this cue)**: the cue after plays without
+  tracked in) → **Release (Leaving This Cue)**: the cue after plays without
   it. To keep it in its own cue only, make that cue **Cue-only**; to start
   a cue without it, make that cue **Block**.
 - **Base cue.** Pick it on the list's page, or tick *"The list's base cue"*
@@ -1106,7 +1106,7 @@ A cue can be **skipped** without deleting it: a song cut from tonight's
 set, a cue you are not ready for in rehearsal. Put it back the same way.
 
 - **To skip a cue:**
-  - right-click it → **Skip cue** (on a skipped cue: **Unskip cue**);
+  - right-click it → **Skip Cue** (on a skipped cue: **Unskip Cue**);
   - select it and press **⌘/**;
   - tick **Skip: GO passes over it** on its page;
   - type `skip 0.0.3`, `skip 0.0.3 thru 0.0.5` or `skip 0.0.3, 0.0.7`
@@ -1148,7 +1148,7 @@ set, a cue you are not ready for in rehearsal. Put it back the same way.
   - A skipped **base cue** is still what Release goes back to.
   - Hits (busking) can't be skipped; they are fired, not GOne through.
 - **Import and Convert.** Importing a chaser keeps each step's skip flag,
-  and **Convert to tracking** keeps it.
+  and **Convert to Tracking** keeps it.
 
 ### Text colours
 
@@ -1204,15 +1204,15 @@ Not yet: a filter that shows only the tagged cues.
 A grey value came from an earlier cue. On its row, **⋯** offers two
 choices:
 
-- **Set in this cue**: the value changes here and from here on, and the
+- **Set in This Cue**: the value changes here and from here on, and the
   layer becomes this cue's own;
-- **Update cue 1.0.0 Preshow**: the value changes *where it was set*, so
+- **Update Cue 1.0.0 Preshow**: the value changes *where it was set*, so
   every cue it tracks into follows. Its **None (off from there on)** turns it
   off at the source.
 
 ### Record and duplicate
 
-**Record** (in the header, or right-click a cue → **Record as new cue**)
+**Record** (in the header, or right-click a cue → **Record as New Cue**)
 freezes what is on stage into a new **Block** cue right after the selected
 cue. Each layer becomes its own, with the looks it plays. "What is on stage"
 can mean three things:
@@ -1253,7 +1253,7 @@ A moved or pasted layer keeps its looks and, when it is a use of a reusable
 layer, stays that same reusable (the hint says so). A hit's layers have no
 Release, so a layer coming into a hit has it turned off. A layer that
 carried on from an earlier cue starts fresh in another cue. Also in the
-tree's right-click menu (**Cut**, **Copy**, **Paste after this layer** /
+tree's right-click menu (**Cut**, **Copy**, **Paste After This layer** /
 **Move into this cue**) and typed: `copy`, `copy cue 1.0.2 1.0.3`,
 `copy layer Towers`, then `paste`. The copies are the cue's own layers on the
 same groups, so they track as any cue's own do; includes come only within the
@@ -1277,7 +1277,7 @@ selected cue and counts up its last number when that is free (1.0.0 →
 1.0.1). Otherwise it makes a point cue: with 0.0.4 and 0.0.5 taken, you get
 0.0.4.5. **Adding a cue never renumbers the others**, because show control
 fires them by number. A cue's number changes only when you change it: type
-a new one, drag the cue to another place, or **Renumber this level…**
+a new one, drag the cue to another place, or **Renumber This Level…**
 ([Reordering and numbering](#reordering-and-numbering)).
 
 ## Reordering and numbering
@@ -1318,7 +1318,7 @@ other cue is renumbered:
 
 A number a sub-cue already answers to is skipped (with sub-cues 4.1 to 4.5,
 a cue dropped between 4 and 4.6 becomes 4.0.5). If nothing fits three levels
-down, the drop is refused and the hint says to use **Renumber this level…**
+down, the drop is refused and the hint says to use **Renumber This Level…**
 first. **Move up** and **Move down** on a cue's right-click menu renumber in
 the same way.
 
@@ -1328,7 +1328,7 @@ after 3, at the end: 4, 5, 6). They stay selected. Holding **⌥** still
 makes the cue you drop on include the dragged one; that takes one cue at a
 time.
 
-**Renumber this level…** (right-click a cue) renumbers the cues at that
+**Renumber This Level…** (right-click a cue) renumbers the cues at that
 cue's level: the ones with the same number of places and everything before
 the last place the same. With 1.0.0, 1.0.1, 1.0.1.5 and 1.0.4, the level of
 1.0.1 is 1.0.0, 1.0.1 and 1.0.4. They become 1, 2, 3… in the last place, in
@@ -1350,7 +1350,7 @@ A cue LOADed on standby by show control stays loaded when it moves. The show
 itself stores no cue number anywhere else. Anything **outside** the show
 that fires cues by number will fire whatever now has that number: a QLab
 cue, a desk's macros, a MIDI or OSC controller. If OSC or MSC is listening
-(Show control settings), **Renumber this level…** lists the numbers that
+(Show control settings), **Renumber This Level…** lists the numbers that
 change and asks before it renumbers.
 
 **Tracking follows the new order.** A cue tracks from the cue before it in
@@ -1490,7 +1490,7 @@ every cue.
   timecode out, and press the button (it reads **Tap at: 2 — Chorus**) as
   each section starts. Each tap sets that section's start, its cues follow,
   and the next section is up. Each tap is its own undo step.
-- **Ripple timecode…** (a cue's right-click menu, only in a list that
+- **Ripple Timecode…** (a cue's right-click menu, only in a list that
   follows timecode): **Insert time** or **Remove time** at the cue — it and
   everything after move later or earlier — or **Stretch** its section to a
   length, its cues spread in proportion and everything after moving by the
@@ -1649,7 +1649,7 @@ A layer plays one effect of each kind together — say a **Position** effect
 (a ballyhoo) and a **Dimmer** effect (a breathe) on the same movers:
 the movement keeps its pan and tilt, the breathe scales the level. On the
 layer's **Effect** row, **⋯ ▸ Set to** adds any effect palette beside the
-others, and **Design a new effect…** designs one there; each kind gets
+others, and **Design a New Effect…** designs one there; each kind gets
 its own row (*Position effect*, *Dimmer effect*…). Another of the same
 kind replaces that row's. See [Stack a movement and an intensity
 effect](effects.md#stack-a-movement-and-an-intensity-effect).
@@ -1733,15 +1733,15 @@ is always there and calls the same operations as the mouse.
 | `copy` · `copy cue 1.0.2` · `copy layer Towers` · `paste` | Copy and paste, as ⌘C / ⌘V |
 | `reusable` · `reusable "Back Wash"` | **Make reusable**: the selected layer (else the cue), named as given |
 | `use Back Wash` | A use of that reusable: a layer in the selected cue, or (a reusable cue) a cue after it |
-| `unlink` | **Unlink here**: the selected layer (else cue) keeps what it is, as its own |
+| `unlink` | **Unlink Here**: the selected layer (else cue) keeps what it is, as its own |
 | `detach` · `detach list` | The selected layer to a plain scene; the selected list to a plain chaser |
-| `convert` · `convert apply` | **Convert to tracking**: what would change, in the help pane; then do it |
+| `convert` · `convert apply` | **Convert to Tracking**: what would change, in the help pane; then do it |
 | `palette colour "Amber 2" #ffb000` · `palette dimmer "Half" 50 in "Levels"` | A **new palette** of that type (colour, dimmer, position, aim, beam, gobo, zoom, shutter, strobe, effect), valued and filed if you say so; it opens in the Look Editor |
 | `palette Amber rename "Amber 3"` · `move "01-Song"` · `move none` · `dup` · `edit` | Rename, file in a folder (or none), duplicate, open in the Look Editor |
 | `palette Amber delete` · `delete anyway` | Delete: refused while something uses it (it says what), unless `anyway` — then every use is cleared with it (Undo puts them back) |
 | `palette folder "01-Song"` · `rename "02-Song"` · `delete` | A palette folder: new, renamed, deleted (what is in it moves up) |
 | `hit "Stab"` · `hit "Stab" in "Stings"` | Selects that **hit** of the production, or makes it (and the Hits section); `in` files it. Then set its layers as on a cue (`look` still works) |
-| `vcpage` | **Make VC page** for the selected hit's folder (else every hit) |
+| `vcpage` | **Make VC Page** for the selected hit's folder (else every hit) |
 | `adopt "Old Busk"` | **Adopt as a Hit**: a scene becomes a hit |
 | `wb` · `wb 0.0.3` | The selected cue (or layer), or that cue, in the **Workbench** ([Working on a cue in the Workbench](#working-on-a-cue-in-the-workbench)) |
 | `dup` · `undo` · `redo` | As Duplicate (⌘D), Undo and Redo (one history with the palettes, [Undo](#undo)) |
@@ -1826,8 +1826,8 @@ In the command line, ⌘Z undoes your typing. Type `undo` to undo the tree
   dropped at once (several groups, an ⌥-drop, several functions, a colour
   and a dimmer together), every ⋯ choice, every command, Record, Split,
   Merge, a Delete of several rows, **Make reusable** (a value, a layer or
-  a cue), **Unlink here**, a reusable renamed or deleted, **Detach to plain
-  scene**, **Detach to plain chaser**, **Convert to tracking** and an
+  a cue), **Unlink Here**, a reusable renamed or deleted, **Detach to plain
+  scene**, **Detach to Plain Chaser**, **Convert to Tracking** and an
   import. Up to 200 steps.
 - Undo puts the tree back and rebuilds the scenes, collections and chaser
   from it, including the chaser's playback settings and any one-off values.
@@ -1847,7 +1847,7 @@ In the command line, ⌘Z undoes your typing. Type `undo` to undo the tree
 - **What undo doesn't cover:**
   - a palette a command made (`dimmer 30` with none at 30%): undo takes the
     value off the cue, and the palette stays, as an ordinary palette;
-  - a VC page made by **Make VC page** (delete the frame on the console).
+  - a VC page made by **Make VC Page** (delete the frame on the console).
 - **The Build tab is on the same history.** ⌘Z / ⇧⌘Z there take
   back whatever was done last: an edit in the Workbench, a
   Bundle stamp, or a step of this one history (a tree change or a palette
@@ -1941,29 +1941,47 @@ everything that acts on one row follow the row clicked last; several layers
 selected are edited together on the page ([Editing several
 layers](#editing-several-layers)), and Merge and Delete take them all.
 
-Right-click in the tree for:
+Right-click in the tree: what the tree makes on top, then the clicked
+node's own menu, the same as wherever else it appears ([right-click
+menus](fixture-manager.md#right-click-menus)):
 
-- **+ Cue list…**, **+ Hit** (**+ Hit for this cue** on a cue, **for this
-  list** on a list: [where it fires](#hits-busking)), **+ Cue** (and
-  **+ Production…** on a production or on empty space, with **+ Hit for
-  everywhere**);
-- on a cue: **Copy to a hit** (what it puts on stage, as a new hit);
-- on Hits or a hit folder: **New folder…**, **Rename folder**, **Delete
-  folder**, **Make VC page**; on a hit: **Move to folder**, **Make VC
-  page**;
-- on a cue: **Skip cue**, **Don't move in black into this cue**, **Record
-  as new cue**, **Colour ▸**, **Move up** / **Move down**, **Renumber this
-  level…** (its base cue, mode and includes are on its page) ([Reordering and numbering](#reordering-and-numbering));
-- on a cue: **Make cue reusable…** (or, on a use, **Unlink here**);
-- on a layer: **Rename…**, **Detach to plain scene**, **Make reusable…** (or
-  **Unlink here**), **Add child layer**, **Split layer**, **Merge layers**,
-  **Remove &lt;group&gt; from layer**;
-- on a cue list: **Convert to tracking…**, **Detach to plain chaser…**;
-- on a cue or layer: **Copy**, **Cut** (a layer), **Paste after this cue** /
-  **Paste into this cue** / **Paste after this layer** (a cut: **Move into
-  this cue** / **Move here, after this layer**), **Duplicate**;
-- **Rename…** on a production or cue list, and **Delete** on anything but a
-  grey row.
+- on top: **+ Cue List…**, **+ Hit** (**+ Hit for This Cue** on a cue,
+  **+ Hit for This List** on a list: [where it fires](#hits-busking)),
+  **+ Cue**, **+ Sub-cue** (and **+ Production…** on a production or on
+  empty space, with **+ Hit for Everywhere**); on a layer, **Merge Layers**
+  and, with several selected, **N Selected Layers ▸**;
+- a cue: **Open in Workbench** | **Learn Trigger…**, **Skip Cue**, **Don't
+  Move in Black into This Cue**, **Mode ▸**, **Colour ▸**, **Record as New
+  Cue**, **Copy to a Hit** (what it puts on stage, as a new hit),
+  **Renumber This Level…** ([Reordering and
+  numbering](#reordering-and-numbering)) | **Make Sub-cue of …** / **Make
+  Inline Cue**, **Make Cue Reusable…** (or, on a use, **Unlink Here**),
+  **Move Up** / **Move Down** | **Copy**, **Paste After This Cue** /
+  **Paste into This Cue**, **Duplicate** | **Delete Cue**. Its base cue,
+  mode and includes are on its page;
+- a hit: the same, with **Make VC Page** and **Move to Folder ▸**; Hits or
+  a hit folder: **New Folder…** on top, **Make VC Page**, **Rename
+  Folder**, **Delete Folder**;
+- a layer (the same on its row in the Workbench): **Open “…”…** (a
+  function played as it is), **Open in Workbench** | **Capture into
+  Palettes…**, **Release (Leaving This Cue)**, **Why is this on?**,
+  **Design Effect…**, **Focus This Cue…**, **Split Layer (One per Group)**,
+  **Add Child Layer ▸**, **Remove from Layer ▸** (never its last group),
+  **Detach to Plain Scene** | **Make Reusable…** (or **Unlink Here**) |
+  **Cut**, **Copy**, **Paste After This Layer** (a cut: **Move Here, After
+  This Layer**), **Duplicate**, **Rename…** | **Delete Layer**;
+- a cue list: **Learn Trigger…**, **Convert to Tracking…**, **Colour ▸**,
+  **Move in Black ▸**, **Make Main List**, **Play on GO**, **Detach to
+  Plain Chaser…**, **Restore Original…** | **Rename…** | **Delete Cue
+  List…**;
+- a production: **Make Current Production** | **Rename…** | **Delete
+  Production…**.
+
+A look row (its **⋯**, or a right-click on it in the Workbench) puts its own
+**Set to ▸**, **None (off here)** and **Clear (inherit)** on top, and the
+menu of the palette set there under them: **Edit Palette**, **Used By ▸**,
+**Move to Folder ▸**, **Save as Bundle…**, **Duplicate**, **Rename…**,
+**Delete Palette…** — the same as in the Library and Build.
 
 ### New here
 
@@ -2002,7 +2020,7 @@ undo step. A cue list or production asks first, and is deleted only on its
 own: with one in a multi-selection, Delete says so and does nothing. Undo
 brings any of them back.
 
-**Detach to plain scene** turns a layer into an ordinary, visible scene
+**Detach to Plain Scene** turns a layer into an ordinary, visible scene
 named after the cue and layer. The layer then plays that scene as it is, and
 the tree no longer edits its looks. It is one undo step.
 
@@ -2035,7 +2053,7 @@ reusables are reusable *arrangements*.
 - **Tracking.** A use is an ordinary layer on its groups: it tracks into
   the next cues as any layer does, and a tracked value set with *Update cue
   X* sets it in the use it came from — that is, in all of them.
-- **Unlink here** (the page's link, right-click, or `unlink`) makes this use
+- **Unlink Here** (the page's link, right-click, or `unlink`) makes this use
   a plain copy of its own, as it is now. The other uses stay linked. No
   badge stays on it; its tooltip says *"Unlinked from Back Wash"*. A
   reusable deleted while used leaves the same on each use.
@@ -2055,7 +2073,7 @@ reusables are reusable *arrangements*.
 An imported list tracks only what its steps repeated
 ([what repeats is set once](#what-repeats-is-set-once-and-tracks)); the
 rest of its cues are Block, repeating what stays on or including the cue
-before. **Convert to tracking…** (the list's page,
+before. **Convert to Tracking…** (the list's page,
 right-click the list, or `convert`) makes it a Tracking list that plays
 **exactly** as it did, cue by cue:
 
@@ -2089,7 +2107,7 @@ the rule would change, and reusable uses. A list that tracks already says
 
 ## Detach to plain chaser
 
-**Detach to plain chaser…** (the list's page, right-click the list, or
+**Detach to Plain Chaser…** (the list's page, right-click the list, or
 `detach list`) hands a cue list back as an ordinary chaser:
 
 - the list's **chaser** and its cues' **collections** become your own
@@ -2128,7 +2146,7 @@ called them looks; they open as they were.)
   its place ends — GO moves on, the list stops, another production is
   made current — lets go over its **Fade out**.
 - **Make one.** **+ Hit** makes it where you are: right-click a cue →
-  **+ Hit for this cue**, a cue list → **+ Hit for this list**, a
+  **+ Hit for This Cue**, a cue list → **+ Hit for This List**, a
   production or its Hits section → **+ Hit**, a **Hits** row → **+ Hit**
   (another for that place), empty space under the tree → **+ Hit for
   everywhere**. The header's **+ Hit** (with a hit or a Hits row
@@ -2161,8 +2179,8 @@ called them looks; they open as they were.)
   is still playing turns the hit off. To end the hit after its breath has
   finished, press again during the next breath. Flash and hits without a
   one-shot are unchanged (see [Effects](effects.md)).
-- **Folders.** **New folder…** on Hits or a folder; drag hits onto a
-  folder (or onto *Hits* for none), or **Move to folder**. **F2** renames
+- **Folders.** **New Folder…** on Hits or a folder; drag hits onto a
+  folder (or onto *Hits* for none), or **Move to Folder**. **F2** renames
   a folder; **Delete** moves what is in it up.
 - **Fire it from VC.** In a VC button's properties, **Attach a function**
   opens the picker with a **Hits** section: each production's hits, by
@@ -2176,7 +2194,7 @@ called them looks; they open as they were.)
   line reads *Hit Stab (DanceHysteria)*). Each hit plays as a
   **collection** of its own, named after it and filed under
   `Productions/<production>/Hits/<folder>` in other function pickers; a
-  button given that collection in an older show fires it as before. **Make VC page** (on Hits,
+  button given that collection in an older show fires it as before. **Make VC Page** (on Hits,
   a folder, a hit's page, or `vcpage`) puts a frame on the Virtual Console
   with one Toggle button per hit there, captioned with its name and
   coloured by its first colour. **Again**, it updates that frame: a button
@@ -2255,9 +2273,9 @@ called them looks; they open as they were.)
     plain hit.
 - **Seeing it.** Selected in Design, a hit plays on the rig, as a cue does
   (it wins over what runs); in Operate nothing previews — what runs owns the
-  stage. **Record as new cue → everything lit** records a hit a button
+  stage. **Record as New Cue → everything lit** records a hit a button
   fired as its layers.
-- **Copy to a hit** (right-click a cue) freezes what the cue puts on stage —
+- **Copy to a Hit** (right-click a cue) freezes what the cue puts on stage —
   tracked, included and its own — into a new hit. **Copy / Paste** copy
   layers and cues between lists and hits too; **Cut** and **Paste**, or a
   drag, move a layer there (a hit's layers have no Release).
@@ -2649,11 +2667,11 @@ and *MIB · n* counts the lights a list set **On** is moving.
 - **A hit has no fade, transition or speed master of its own** yet; a VC
   button's Flash and the hit's scenes' own settings are what there is. A
   hit's MIDI trigger is set on its VC button.
-- **Make VC page** isn't on Undo (the console has its own Delete).
+- **Make VC Page** isn't on Undo (the console has its own Delete).
 - **A Dimmer dims a colour it doesn't own** (no dimmer channel) only when
   the Dimmer's layer has no Colour of its own, and one colour look per
   layer; otherwise each layer's colour is scaled by its own Dimmer.
-- **Convert to tracking** leaves cue looks alone (taking one out could
+- **Convert to Tracking** leaves cue looks alone (taking one out could
   change which value wins where layers overlap).
 
 - **Effects in the cue don't take precedence in the Design preview.** Played

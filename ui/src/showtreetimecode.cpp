@@ -232,7 +232,7 @@ void ShowTreeView::timecodeMenu(QMenu *menu, quint32 cueId)
     const CueList *list = m_st->listOfCue(cueId);
     if (list == nullptr || !list->followTimecode || list->looks || list->isSubCues())
         return;
-    QAction *a = menu->addAction(tr("Ripple timecode…"), this, [this, cueId]() {
+    QAction *a = menu->addAction(tr("Ripple Timecode…"), this, [this, cueId]() {
         const CueList *l = m_st->listOfCue(cueId);
         if (l == nullptr)
             return;

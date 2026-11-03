@@ -685,11 +685,17 @@ static QTreeWidgetItem *effectsRow(QTreeWidget *list, const QString &name)
     return nullptr;
 }
 
+/* An item of the canon's menu by name; a submenu (Move to Folder ▸) by its
+   name gives its last item (New Folder…). */
 static QAction *menuAction(QMenu *menu, const QString &objectName)
 {
     for (QAction *a : menu->actions())
+    {
         if (a->objectName() == objectName)
             return a;
+        if (a->menu() != nullptr && a->menu()->objectName() == objectName && !a->menu()->actions().isEmpty())
+            return a->menu()->actions().last();
+    }
     return nullptr;
 }
 
@@ -902,13 +908,13 @@ void EffectDesigner_Test::buildEffectsMakesAndDesignsEffects()
     // The right-click menu on an effect palette.
     QCoreApplication::processEvents();          // a queued rebuild: rows are new
     QMenu *menu = pm.effectsContextMenu(effectsRow(list, "Phaser"), &pm);
-    for (const char *name : { "effectsDesign", "effectsDuplicate", "effectsRename", "effectsMove", "effectsDelete" })
+    for (const char *name : { "ctxEditPalette", "ctxDuplicate", "ctxRename", "ctxPaletteMoveToFolder", "ctxDeletePalette" })
         QVERIFY2(menuAction(menu, name) != nullptr, name);
     // New… is empty space's (and + New's), not a row's (the canon).
     QVERIFY(menuAction(menu, "effectsNewEfx") == nullptr);
-    QVERIFY(menuAction(menu, "effectsOpen") == nullptr);
+    QVERIFY(menuAction(menu, "ctxOpenFunction") == nullptr);
     const int before = m_doc->palettes().count();
-    menuAction(menu, "effectsDuplicate")->trigger();
+    menuAction(menu, "ctxDuplicate")->trigger();
     delete menu;
     QTRY_VERIFY(effectsRow(list, "Phaser (copy)") != nullptr);
     QVERIFY(m_doc->palettes().count() > before);
@@ -924,9 +930,9 @@ void EffectDesigner_Test::buildEffectsMakesAndDesignsEffects()
     // On an EFX: Open in editor loads it, the designer's draft goes.
     QCoreApplication::processEvents();
     menu = pm.effectsContextMenu(effectsRow(list, "Circle"), &pm);
-    QVERIFY(menuAction(menu, "effectsOpen") != nullptr);
-    QVERIFY(menuAction(menu, "effectsDesign") == nullptr);
-    menuAction(menu, "effectsOpen")->trigger();
+    QVERIFY(menuAction(menu, "ctxOpenFunction") != nullptr);
+    QVERIFY(menuAction(menu, "ctxEditPalette") == nullptr);
+    menuAction(menu, "ctxOpenFunction")->trigger();
     delete menu;
     QCOMPARE(pm.workbench()->loadedFunction(), efx->id());
     QVERIFY(pm.workbench()->effectPane() == nullptr);
@@ -939,7 +945,7 @@ void EffectDesigner_Test::buildEffectsMakesAndDesignsEffects()
     // Empty space: only the New items. New EFX / RGB Matrix land on the
     // Try on groups and load.
     menu = pm.effectsContextMenu(nullptr, &pm);
-    QVERIFY(menuAction(menu, "effectsDelete") == nullptr);
+    QVERIFY(menuAction(menu, "ctxDeletePalette") == nullptr && menuAction(menu, "ctxDeleteFunction") == nullptr);
     QVERIFY(menuAction(menu, "effectsNewPalette") != nullptr);
     delete menu;
     const quint32 newEfx = pm.newClassicEffect(Function::EFXType);
@@ -1486,7 +1492,7 @@ void EffectDesigner_Test::buildEffectsRightClickActionsChangeTheShow()
     };
     // Rename: its in-place editor, typed in and committed.
     auto rename = [&](const QString &row, const QString &name) {
-        if (!run(row, "effectsRename"))
+        if (!run(row, "ctxRename"))
             return false;
         QLineEdit *editor = nullptr;
         for (QLineEdit *e : list->viewport()->findChildren<QLineEdit *>())
@@ -1504,7 +1510,7 @@ void EffectDesigner_Test::buildEffectsRightClickActionsChangeTheShow()
 
     // Duplicate: a copy, one step; ⌘Z takes it away.
     QString undoBefore = pm.undoText();
-    QVERIFY(run("Phaser", "effectsDuplicate"));
+    QVERIFY(run("Phaser", "ctxDuplicate"));
     QTRY_VERIFY(namedPalette(m_doc, "Phaser (copy)") != nullptr);
     QVERIFY(pm.undoText() != undoBefore);
     QVERIFY(st->undoShared());
@@ -1523,7 +1529,7 @@ void EffectDesigner_Test::buildEffectsRightClickActionsChangeTheShow()
     // Move to folder…, one step.
     {
         ModalAnswerer folder("01-Song");
-        QVERIFY(run("Phaser", "effectsMove"));
+        QVERIFY(run("Phaser", "ctxPaletteMoveToFolder"));
         QCOMPARE(folder.seen.count(), 1);
     }
     QCOMPARE(PaletteOps::folderOf(m_doc->palette(phaserId)), QString("01-Song"));
@@ -1536,7 +1542,7 @@ void EffectDesigner_Test::buildEffectsRightClickActionsChangeTheShow()
     // back, in that scene.
     {
         ModalAnswerer yes;
-        QVERIFY(run("Phaser", "effectsDelete"));
+        QVERIFY(run("Phaser", "ctxDeletePalette"));
         QCOMPARE(yes.seen.count(), 1);
         QVERIFY2(yes.seen.first().contains("01-01.01-Towers"), qPrintable(yes.seen.first()));
     }
@@ -1563,7 +1569,7 @@ void EffectDesigner_Test::buildEffectsRightClickActionsChangeTheShow()
     // Move to folder…, one step.
     {
         ModalAnswerer folder("Act 1");
-        QVERIFY(run("Circle", "effectsMove"));
+        QVERIFY(run("Circle", "ctxFunctionMoveToFolder"));
         QCOMPARE(folder.seen.count(), 1);
     }
     QCOMPARE(m_doc->function(efxId)->path(true), QString("Act 1"));
@@ -1574,7 +1580,7 @@ void EffectDesigner_Test::buildEffectsRightClickActionsChangeTheShow()
 
     // Duplicate: a copy beside it, loaded.
     const int functions = m_doc->functions().count();
-    QVERIFY(run("Circle", "effectsDuplicate"));
+    QVERIFY(run("Circle", "ctxDuplicate"));
     QCOMPARE(m_doc->functions().count(), functions + 1);
     const quint32 copyId = pm.workbench()->loadedFunction();
     QVERIFY(copyId != efxId && qobject_cast<EFX *>(m_doc->function(copyId)) != nullptr);
@@ -1593,7 +1599,7 @@ void EffectDesigner_Test::buildEffectsRightClickActionsChangeTheShow()
     // Delete: the question names the collection using it.
     {
         ModalAnswerer yes;
-        QVERIFY(run("Circle", "effectsDelete"));
+        QVERIFY(run("Circle", "ctxDeleteFunction"));
         QCOMPARE(yes.seen.count(), 1);
         QVERIFY2(yes.seen.first().contains("0.0.4-SHOUT"), qPrintable(yes.seen.first()));
     }
@@ -1653,7 +1659,7 @@ void EffectDesigner_Test::buildEffectsRightClickOnAnRgbMatrix()
     // back with its id.
     QString undoBefore = pm.undoText();
     const int functions = m_doc->functions().count();
-    QVERIFY(run("Rainbow Wall", "effectsDuplicate"));
+    QVERIFY(run("Rainbow Wall", "ctxDuplicate"));
     QCOMPARE(m_doc->functions().count(), functions + 1);
     quint32 copyId = Function::invalidId();
     foreach (Function *f, m_doc->functions())
@@ -1677,7 +1683,7 @@ void EffectDesigner_Test::buildEffectsRightClickOnAnRgbMatrix()
     QTRY_VERIFY(effectsRow(list, "Rainbow Wall") != nullptr);
     {
         ModalAnswerer yes;
-        QVERIFY(run("Rainbow Wall", "effectsDelete"));
+        QVERIFY(run("Rainbow Wall", "ctxDeleteFunction"));
         QCOMPARE(yes.seen.count(), 1);
         QVERIFY2(yes.seen.first().contains("0.0.5-WALL"), qPrintable(yes.seen.first()));
     }

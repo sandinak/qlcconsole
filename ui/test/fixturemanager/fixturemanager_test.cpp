@@ -888,12 +888,13 @@ void FixtureManager_Test::returnToInventoryIsOfferedForPatchedFixturesOnly()
     QVERIFY2(!st.contains("Return to Inventory…"), qPrintable(st.join(" | ")));
     QVERIFY2(st.contains("Patch…"), qPrintable(st.join(" | ")));
 
-    /* "we should clean up that menu to organize it": the fixture, its
-       address, finding it, organising it (Group and Power are submenus),
-       deleting it -- in that order -- and Patch one name. */
+    /* "we should clean up that menu to organize it", and since 2026-11-03
+       the canon: this tab's own (inventory, testing, Group and Power
+       submenus) on top, then the fixture's own menu as everywhere --
+       Fixture Properties…, Patch… -- and deleting it last. */
     const QStringList rt = contextMenuTexts(mgr, realRow);
-    const QStringList order = { "Fixture Properties…", "Patch…", "Return to Inventory…",
-                                "Test Fixture…", "Group", "Power", "Delete…" };
+    const QStringList order = { "Return to Inventory…", "Test Fixture…", "Group", "Power",
+                                "Fixture Properties…", "Patch…", "Delete…" };
     int last = -1;
     foreach (const QString &t, order)
     {

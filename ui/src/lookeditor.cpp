@@ -50,6 +50,7 @@
 #include <QSignalBlocker>
 #include <cmath>
 #include "lookeditor.h"
+#include "contextmenus.h"
 #include "programmercontroller.h"
 #include "palettenaming.h"
 #include "paletteops.h"
@@ -157,9 +158,8 @@ public:
         setContextMenuPolicy(Qt::CustomContextMenu);
         connect(this, &QLabel::customContextMenuRequested, [this](const QPoint &pos) {
             QMenu menu(this);
-            QAction *clr = menu.addAction(tr("Clear"));
-            if (menu.exec(mapToGlobal(pos)) == clr)
-                setPaletteId(QLCPalette::invalidId());
+            fillMenu(&menu);
+            menu.exec(mapToGlobal(pos));
         });
         updateDisplay();
     }
@@ -178,6 +178,22 @@ public:
     }
 
     quint32 paletteId() const { return m_paletteId; }
+
+    /** The right-click (the canon, docs/design/CONTEXT_MENUS.md): this
+     *  slot's Clear on top, then the palette's own menu, as everywhere. */
+    void fillMenu(QMenu *out)
+    {
+        ContextMenu menu(out);
+        menu.add(ContextMenu::Place, tr("Clear"), [this]() { setPaletteId(QLCPalette::invalidId()); },
+                 QStringLiteral("dropZoneClear"))->setEnabled(m_paletteId != QLCPalette::invalidId());
+        if (m_doc != nullptr && m_doc->palette(m_paletteId) != nullptr)
+        {
+            ContextMenus::PalettePlace place;
+            place.parent = this;
+            place.changed = [this]() { updateDisplay(); };
+            ContextMenus::palette(menu, m_doc, { m_paletteId }, place);
+        }
+    }
 
 protected:
     void mousePressEvent(QMouseEvent *ev) override

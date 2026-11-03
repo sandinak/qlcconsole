@@ -122,7 +122,7 @@ void StructureDuplicateUi_Test::theMenuOffersItWhereThereIsSomewhereToCopyTo()
 
     auto has = [&](const QString &key) {
         QMenu menu;
-        view.populateItemMenu(&menu, key.section(':', 0, 0), key.section(':', 1, 1).toUInt(), QPointF(), false);
+        view.buildItemMenu(&menu, key.section(':', 0, 0), key.section(':', 1, 1).toUInt(), MonitorGraphicsView::MenuPlace());
         foreach (QAction *a, menu.actions())
             if (a->text().startsWith(QStringLiteral("Duplicate Setup to")))
                 return true;

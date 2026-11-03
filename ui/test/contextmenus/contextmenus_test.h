@@ -49,6 +49,13 @@ private slots:
     void thePlotMenusFollowTheCanon();
     void theFunctionsTabFollowsTheCanon();
 
+    void aPaletteHasOneMenuEverywhere();
+    void aLookRowPutsItsOwnItemsOnTop();
+    void aFunctionHasOneMenuEverywhere();
+    void aLayerHasOneMenuEverywhere();
+    void theShowTreeMenusFollowTheCanon();
+    void theRigViewFollowsTheCanon();
+
 private:
     Doc *m_doc = nullptr;
     QList<quint32> m_fixtures;

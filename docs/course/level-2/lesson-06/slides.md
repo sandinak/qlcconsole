@@ -37,7 +37,7 @@ teacher says. It can be turned into a deck as it is.*
 
 ## 5. A button each
 
-- **Make VC page**: a frame on the Virtual Console, a button per hit.
+- **Make VC Page**: a frame on the Virtual Console, a button per hit.
 - Toggle: on, then off.
 
 ## 6. Over the running list

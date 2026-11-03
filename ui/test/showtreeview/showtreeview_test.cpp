@@ -6025,7 +6025,7 @@ void ShowTreeView_Test::skipCuesInTheTree()
 
     // Right-click ▸ Skip cue: skipped, one undo step.
     QVERIFY(view.selectNode(c[1]));
-    QCOMPARE(contextAction(view, cueRow(tree, c[1]), "stSkipCue"), QString("Skip cue"));
+    QCOMPARE(contextAction(view, cueRow(tree, c[1]), "stSkipCue"), QString("Skip Cue"));
     QVERIFY(st->isCueSkipped(c[1]));
     QCOMPARE(st->undoText(), QString("Skip cue"));
     tree->expandAll();
@@ -6060,14 +6060,14 @@ void ShowTreeView_Test::skipCuesInTheTree()
     tree->clearSelection();
     cueRow(tree, c[1])->setSelected(true);
     cueRow(tree, c[2])->setSelected(true);
-    QCOMPARE(contextAction(view, cueRow(tree, c[2]), "stSkipCue"), QString("Skip cue (2 cues)"));
+    QCOMPARE(contextAction(view, cueRow(tree, c[2]), "stSkipCue"), QString("Skip Cue (2 Cues)"));
     QVERIFY(st->isCueSkipped(c[1]) && st->isCueSkipped(c[2]));
     QCOMPARE(st->undoText(), QString("Skip 2 cues"));
     // Every one skipped: the menu puts them back, one step.
     tree->clearSelection();
     cueRow(tree, c[1])->setSelected(true);
     cueRow(tree, c[2])->setSelected(true);
-    QCOMPARE(contextAction(view, cueRow(tree, c[1]), "stSkipCue"), QString("Unskip cue (2 cues)"));
+    QCOMPARE(contextAction(view, cueRow(tree, c[1]), "stSkipCue"), QString("Unskip Cue (2 Cues)"));
     QVERIFY(!st->isCueSkipped(c[1]) && !st->isCueSkipped(c[2]));
     QCOMPARE(st->undoText(), QString("Unskip 2 cues"));
     // One of them skipped: Skip (as ⌘/ does).
@@ -6075,7 +6075,7 @@ void ShowTreeView_Test::skipCuesInTheTree()
     tree->clearSelection();
     cueRow(tree, c[1])->setSelected(true);
     cueRow(tree, c[2])->setSelected(true);
-    QCOMPARE(contextAction(view, cueRow(tree, c[1]), "stSkipCue"), QString("Skip cue (2 cues)"));
+    QCOMPARE(contextAction(view, cueRow(tree, c[1]), "stSkipCue"), QString("Skip Cue (2 Cues)"));
     QVERIFY(st->isCueSkipped(c[1]) && st->isCueSkipped(c[2]));
 
     // ⌘/ on the selection: every one skipped already -- put back.
@@ -6107,7 +6107,7 @@ void ShowTreeView_Test::skipCuesInTheTree()
     {
         QVERIFY(view.selectNode(c[2]));
         QCOMPARE(contextAction(view, cueRow(tree, c[2]), "stSkipCue"),
-                 skipped ? QString("Unskip cue") : QString("Skip cue"));
+                 skipped ? QString("Unskip Cue") : QString("Skip Cue"));
         QCOMPARE(st->isCueSkipped(c[2]), !skipped);
     }
 
@@ -6242,7 +6242,7 @@ void ShowTreeView_Test::releaseAFunctionLayer()
     QTreeWidgetItem *carried = rowOf(tree, ShowTreeView::TrackedLayerNode, l1, c2);
     QVERIFY(carried != nullptr);
     bool checked = true;
-    QCOMPARE(contextAction(view, carried, "stLayerReleaseMenu", &checked), QString("Release (leaving this cue)"));
+    QCOMPARE(contextAction(view, carried, "stLayerReleaseMenu", &checked), QString("Release (Leaving This Cue)"));
     QVERIFY(!checked);
     QCOMPARE(st->cue(c2)->layers.count(), 1);
     QVERIFY(st->cue(c2)->layers.first().release);
@@ -6254,7 +6254,7 @@ void ShowTreeView_Test::releaseAFunctionLayer()
     tree->expandAll();
     const quint32 l2 = st->cue(c2)->layers.first().id;
     QCOMPARE(contextAction(view, rowOf(tree, ShowTreeView::LayerNode, l2, c2), "stLayerReleaseMenu", &checked),
-             QString("Release (leaving this cue)"));
+             QString("Release (Leaving This Cue)"));
     QVERIFY(checked);
     QVERIFY(!st->cue(c2)->layer(l2)->release);
     QVERIFY(onStage(2));
@@ -6277,7 +6277,7 @@ void ShowTreeView_Test::releaseAFunctionLayer()
             QMenu *m = qobject_cast<QMenu *>(w);
             if (m == nullptr)
                 return false;
-            QAction *a = m->findChild<QAction *>("cueStackRelease");
+            QAction *a = m->findChild<QAction *>("stLayerReleaseMenu");
             seen = a != nullptr ? a->text() : QString("(none)");
             m->close();
             if (a != nullptr)
@@ -6285,7 +6285,7 @@ void ShowTreeView_Test::releaseAFunctionLayer()
             return true;
         });
         QVERIFY(stack.showMenu(at, -1, QPoint(10, 10)));
-        QCOMPARE(seen, QString("Release (leaving this cue)"));
+        QCOMPARE(seen, QString("Release (Leaving This Cue)"));
         QVERIFY(st->cue(c1)->layer(l1)->release);
         QVERIFY(!onStage(1));
     }
@@ -6586,7 +6586,9 @@ void ShowTreeView_Test::openAnOpaqueLayer()
         view.tree()->scrollToItem(hazeRow);
         const QPoint pos = view.tree()->visualItemRect(hazeRow).center();
         QVERIFY(QMetaObject::invokeMethod(&view, "slotTreeContextMenu", Q_ARG(QPoint, pos)));
-        QVERIFY2(!actions.isEmpty() && actions.first() == QString("stOpenFunction|Open “Haze”…"),
+        // The tree's own (+ Cue, ...) on top; the layer's own menu opens with it.
+        const int sep = actions.indexOf(QString("|"));
+        QVERIFY2(sep > 0 && actions.value(sep + 1) == QString("stOpenFunction|Open “Haze”…"),
                  qPrintable(actions.join(", ")));
         QCOMPARE(opened, QList<quint32>({ haze->id() }));
     }
@@ -6883,7 +6885,7 @@ void ShowTreeView_Test::sendToShowTreeFromBuild()
         driver.stop();
         for (QAction *a : menu->actions())
             actions << a->objectName();
-        QAction *send = menu->findChild<QAction *>("outlineSendToTree");
+        QAction *send = menu->findChild<QAction *>("ctxSendToShowTree");
         menu->close();
         if (send != nullptr && send->isEnabled())
             send->trigger();
@@ -6891,7 +6893,7 @@ void ShowTreeView_Test::sendToShowTreeFromBuild()
     driver.start();
     emit nav->customContextMenuRequested(nav->visualItemRect(item).center());
     QTRY_VERIFY(closed);
-    QVERIFY2(actions.contains("outlineSendToTree"), qPrintable(actions.join(", ")));
+    QVERIFY2(actions.contains("ctxSendToShowTree"), qPrintable(actions.join(", ")));
     QVERIFY(st->productions().isEmpty());
     QCOMPARE(tabs.currentWidget(), mgr);
 
@@ -7562,8 +7564,10 @@ void ShowTreeView_Test::libraryGroupToolsSelectSimilarAndMove()
     QTRY_VERIFY(!driver.isActive());
     const int similarAt = names.indexOf("selectAllSimilar");
     QVERIFY2(similarAt >= 0, qPrintable(names.join(", ")));
-    QCOMPARE(names.value(similarAt + 1), QString("stMakeSet"));
-    QCOMPARE(names.value(similarAt + 2), QString("ctxMoveToFolder"));
+    // The Library's own Make Set… on top; the group's own menu below it.
+    QVERIFY2(names.indexOf("stMakeSet") >= 0 && names.indexOf("stMakeSet") < names.indexOf("ctxEditHeadLayout"),
+             qPrintable(names.join(", ")));
+    QCOMPARE(names.value(similarAt + 1), QString("ctxMoveToFolder"));
     // Output Rules… for the groups' members (relays, house lights).
     QVERIFY2(names.contains("outputRulesAction"), qPrintable(names.join(", ")));
     QTRY_COMPARE(selectedGroups(), QSet<quint32>({ sl->id(), sr->id() }));
@@ -8690,7 +8694,7 @@ void ShowTreeView_Test::theHitMenusSayHit()
     const QList<quint32> before = hits();
     const QString copy = viaMenu("slotTreeContextMenu", &view,
                                  view.tree()->visualItemRect(row).center(), "stCopyToLook");
-    QCOMPARE(copy, QString("Copy to a hit"));
+    QCOMPARE(copy, QString("Copy to a Hit"));
     QVERIFY(!copy.contains("look", Qt::CaseInsensitive));
     const QList<quint32> afterCopy = hits();
     QCOMPARE(afterCopy.count(), before.count() + 1);

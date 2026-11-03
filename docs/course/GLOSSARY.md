@@ -97,15 +97,16 @@ brackets.
 | **Section** | One song (or the preshow) inside the show's cue list, found by the cue numbers' first number: 0 the preshow, 1.0.0… song 1, 2.0.0… song 2. A header row folds its cues; **Block at section start** stops the song before carrying in. Shows built as a list per song: **Merge lists into one…** on the production's page. [1.1] |
 | **Cue** | A planned lighting change, tied to a moment in the song: a change the audience feels. [0.1] Numbered 1.0.0, 1.0.1…; a list plays its cues in number order. [1.1] |
 | **Point cue** | A cue numbered between two others, such as 1.0.2.5 between 1.0.2 and 1.0.3. It is how a cue is added late without changing any other cue's number. [1.5] |
-| **Renumber** | Give cues new numbers. Dragging a cue renumbers it for its new place; **Renumber this level…** numbers a whole level 1, 2, 3… Do it before anyone has written the numbers down. [1.5] |
+| **Renumber** | Give cues new numbers. Dragging a cue renumbers it for its new place; **Renumber This Level…** numbers a whole level 1, 2, 3… Do it before anyone has written the numbers down. [1.5] |
 | **Group** | A named set of lights that are always used together, like *Steps* or *TrussC-RGB*. [1.1] |
 | **Layer** | One part of a look doing one job [0.3]; in the Show Tree, one group (or several) doing one thing in a cue. [1.1] |
 | **Look** | Everything the lights are doing at one moment [0.1]; in the Show Tree, what a layer does, one value per attribute: colour, intensity, position… [1.1] |
 | **Palette** | A saved, named value — a colour, a level, a position — that you drag onto a layer. Change the palette and every cue using it changes. [1.1] Name it for its job (*Chorus Colour*), so it stays true after a note. [2.2] |
-| **Used by** | Right-click a palette in the Library: every cue and layer that uses it (and any VC button that fires it). Check it before changing a palette. [2.2] |
-| **Look Editor** | Opens under the Show Tree's page (**✎** on a layer's row, or **Edit** in the Library) to change a palette's value and name; it says *Used by* and that a shared palette changes everywhere. [2.2] |
+| **Used by** | Right-click a palette (in the Library, or on a cue's row) → **Used By ▸**: every cue and layer that uses it (and any VC button that fires it). Check it before changing a palette. [2.2] |
+| **Right-click menu** | Two parts. On top, what only that spot offers (on a look row: **Set to ▸**, **None (off here)**, **Clear (inherit)**); under a line, the thing's own menu, the same everywhere you meet it: its editor first, **Delete…** last. A palette right-clicked on a cue's row has the same **Edit Palette**, **Used By ▸** and **Rename** as in the Library. [2.2] |
+| **Look Editor** | Opens under the Show Tree's page (**✎** on a layer's row, or **Edit Palette** on its right-click) to change a palette's value and name; it says *Used by* and that a shared palette changes everywhere. [2.2] |
 | **Group set** | One name for several groups, used as one layer: *Truss Sides* = Trusses SR + Trusses SL (Library: select the groups, right-click → **Make Set…**; All → Group sets). A set's layer is one layer: it can't be split, but its parts can have child layers. [2.3] |
-| **Child layer** | A layer on part of its parent (one member of its set, or a group inside it), shown **↳** under it: it sets only what it sets, and the parent lights the rest. ⇧ as you drop, or right-click the layer → **Add child layer**. [2.3] |
+| **Child layer** | A layer on part of its parent (one member of its set, or a group inside it), shown **↳** under it: it sets only what it sets, and the parent lights the rest. ⇧ as you drop, or right-click the layer → **Add Child Layer**. [2.3] |
 | **Split / Merge** | Split: a layer on several groups becomes a layer per group, same looks. Merge (**More ▾ → Merge**): several layers of one cue become one. [2.3] |
 | **Symmetry** | Both sides of the stage lit the same: balanced. Breaking it draws the eye. [2.3] |
 | **Palette folder** | A folder in the Library's Palettes; a folder per song (*01-Everybody Scream*) keeps the song's own palettes together. **Duplicate** copies a palette into one. [2.2] |
@@ -141,12 +142,12 @@ brackets.
 | **Effect palette** | A palette that plays an effect: **+ Palette → Effect**, then the effect picked in the **effect browser** (search, click, **Done**). [2.4] |
 | **Based on** | The grey line under an effect's name: the effect it was made from. The effect browser filters by origin: **Built-in** (with qlcconsole), **Mine** (saved on this computer), **This show** (its own effect palettes). [2.4] |
 | **Sparkle / wave** | Pixels flash and fade at random, like glitter / brightness that travels across the lights. [2.4] |
-| **Its own colour** | A colour (or level) that belongs to an effect only, set with **⋯ → Its own colour / dimmer** on its row: *Step Sparkle in White*. [2.4] |
+| **Its own colour** | A colour (or level) that belongs to an effect only, set with **⋯ → Its Own Colour / Dimmer** on its row: *Step Sparkle in White*. [2.4] |
 | **Eye candy** | Light that looks good on its own (moving scenery, sparkle) but doesn't light the people. It goes on the scenery, never at the cost of light on the performers. [2.4] |
 | **Speed master** | A tempo effects can run on, so one tap or fader moves them together; an effect's **Speed** in the Look Editor. Used ones show in the footer (*Main Speed 120*). [2.4] |
 | **Hit** | A short, sharp change on a musical accent [0.6]; a look kept ready to fire by hand over the running list, for busking [0.7]: the Show Tree's **Hits** section (right-click the production → **+ Hit**). It plays on top of whatever runs, and never tracks. [2.6] |
 | **Override hit** | A hit that wins over everything the show is playing on its lights, dimmers too: a blackout or "house lights to full" for an emergency or a stop. Let go, the lights fade back to what the show plays now. Tick **Override** on the hit's page. [2.6] |
-| **Virtual Console (VC)** | qlcconsole's on-screen control desk of buttons, faders and frames (⇧⌘6). **Make VC page** (right-click Hits) puts a frame on it with a Toggle button per hit; buttons fire only in Operate. [2.6] |
+| **Virtual Console (VC)** | qlcconsole's on-screen control desk of buttons, faders and frames (⇧⌘6). **Make VC Page** (right-click Hits) puts a frame on it with a Toggle button per hit; buttons fire only in Operate. [2.6] |
 
 ## Hardware (Level 3)
 
