@@ -58,6 +58,7 @@
 #include "doc.h"
 #include "movespeed.h"
 #include "stagetarget.h"
+#include "gobolibrary.h"
 #include "nolightzone.h"
 #include "aimsolver.h"
 #include "righeads.h"
@@ -436,6 +437,76 @@ void ShowReview_Test::fix07()
          0, 0, 20);
     QVERIFY(fires("FIX-07"));
     QCOMPARE(findings("FIX-07").first().severity, ReviewFinding::Note);
+}
+
+void ShowReview_Test::fix16()
+{
+    par("Par 1", 0);
+    QVERIFY(quiet("FIX-16"));
+    QTemporaryDir pics;
+    QVERIFY(pics.isValid());
+    QFile pic(pics.filePath("g.svg"));
+    QVERIFY(pic.open(QIODevice::WriteOnly));
+    pic.write("<svg xmlns='http://www.w3.org/2000/svg'/>");
+    pic.close();
+    // "pictures": 1 = a real file, 2 = a bare folder, 0 = none.
+    auto goboDef = [&](const QString &model, int pictures) {
+        QLCFixtureDef *def = new QLCFixtureDef();
+        QLCChannel *g = new QLCChannel();
+        g->setName(QStringLiteral("Gobo"));
+        g->setGroup(QLCChannel::Gobo);
+        auto cap = [&](int lo, int hi, const QString &name) {
+            QLCCapability *c = new QLCCapability(uchar(lo), uchar(hi), name);
+            if (pictures && lo >= 10 && hi < 150)
+            {
+                c->setPreset(QLCCapability::GoboMacro);
+                c->setResource(0, pictures == 1 ? pics.filePath("g.svg") : pics.path() + QLatin1Char('/'));
+            }
+            g->addCapability(c);
+        };
+        cap(0, 9, QStringLiteral("White"));
+        cap(10, 19, QStringLiteral("3 Spots"));
+        cap(20, 29, QStringLiteral("3 Spots Shake"));
+        cap(30, 39, QStringLiteral("Zebra"));
+        cap(150, 255, QStringLiteral("Gobo Rotate Speed"));
+        def->addChannel(g);
+        return make(m_doc, model + " 1", model, QLCFixtureDef::MovingHead, def,
+                    { g, chan(def, "Dimmer", QLCChannel::IntensityMasterDimmer) }, 200, 0,
+                    model == QLatin1String("Bare") ? 100 : model == QLatin1String("Folder") ? 400 : 200);
+    };
+    Fixture *a = goboDef(QStringLiteral("Pictured"), 1);
+    QVERIFY(a != nullptr);
+    QVERIFY(quiet("FIX-16"));                       // it has its pictures
+    Fixture *b = goboDef(QStringLiteral("Bare"), 0);
+    QVERIFY(fires("FIX-16"));
+    QCOMPARE(findings("FIX-16").size(), 1);
+    ReviewFinding f = findings("FIX-16").first();
+    QCOMPARE(f.severity, ReviewFinding::Note);
+    QVERIFY2(f.message.contains("Test Bare") && f.message.contains("2 gobo slot"), qPrintable(f.message));
+    QCOMPARE(f.jump, QStringLiteral("gobowheels"));
+    QVERIFY2(f.message.contains("no picture"), qPrintable(f.message));
+    // A second unit of the same definition: still one finding.
+    QLCFixtureDef *defB = b->fixtureDef();
+    Fixture *c = new Fixture(m_doc);
+    c->setFixtureDefinition(defB, defB->modes().first());
+    c->setAddress(300);
+    QVERIFY(m_doc->addFixture(c));
+    QCOMPARE(findings("FIX-16").size(), 1);
+    QCOMPARE(findings("FIX-16").first().targets.size(), 2);
+    // Fitting every slot of both units clears it.
+    MonitorProperties *mp = m_doc->monitorProperties();
+    for (Fixture *fx : { b, c })
+        for (int min : { 10, 20, 30 })
+            mp->setGoboSwap(fx->id(), 0, uchar(min), QStringLiteral("Test/x.svg"));
+    QVERIFY(quiet("FIX-16"));
+    // Slots whose picture is a bare folder (a definition from another install)
+    // say so, once per definition.
+    Fixture *d = goboDef(QStringLiteral("Folder"), 2);
+    QVERIFY(d != nullptr);
+    f = findings("FIX-16").first();
+    QVERIFY2(f.message.contains("Test Folder") && f.message.contains("point at a folder"),
+             qPrintable(f.message));
+    QCOMPARE(findings("FIX-16").size(), 1);
 }
 
 namespace

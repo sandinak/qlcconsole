@@ -14,6 +14,18 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Added
 
+- **Gobos show in the rig view even when the definition has no pictures.**
+  A gobo channel that names its slots ("3 Spots", "Zebra", "Flower") but
+  has no usable picture -- none, a Res that is a bare folder (a definition
+  saved by another install), or a file that is not there -- now draws a
+  generated stand-in in the pool, matched by name, wobbling for a shake
+  slot and turning for a "Gobo Rotate Speed" range; "Open", "White" and
+  "No gobo" stay open. **Gobo Wheels…** lists those slots, suggests a
+  library picture by name and has **Fit suggested pictures**; Show Review
+  notes it as **FIX-16** once per definition, with Fix opening Gobo Wheels.
+  A definition's absolute path into another install's Gobos folder is now
+  found in this one's library when the same file is there.
+
 - **A light buried in a deck, riser or step is an error in the footer.**
   A fixture whose body (its Physical Dimensions box, as the rig view draws
   it) sits inside a deck with a solid top -- a floor light left at height 0

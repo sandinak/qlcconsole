@@ -1323,6 +1323,21 @@ the Rig Overview show what it's actually doing, not just where it sits:
   the cyc, and dims the haze by how much light the gobo passes. Your own gobo
   pictures go in a slot per fixture: right-click a fixture on the plot →
   **Gobo Wheels…**, optionally for every fixture of its type.
+  A definition that **names its gobo slots but has no picture for them**
+  (no Res, a bare folder, a file that isn't there) still shows a gobo: the
+  rig view draws a **stand-in** for each slot, from what its name says
+  ("3 Spots" = three dots, "Split Circle" = pie slices, "Concentric" =
+  broken rings, "Swirl"/"Spiral" = arms, "Zebra" = stripes, "Tetris" =
+  blocks, "Random Spots" = scatter, "Flower"/"Lotus"/"Rose" = petals,
+  "Triangles"), or a seeded breakup for any other name, the same every time
+  and different in every slot. "Open", "White" and "No gobo" stay open. A
+  shake slot (the name, or the shake preset) wobbles; a "Gobo Rotate Speed"
+  range turns the glass before it. Stand-ins are a guess at the shape, not
+  the real glass: **Gobo Wheels…** lists those slots with their stand-in,
+  suggests a library picture by name for each (the pictures stock
+  definitions give a slot of that name), and **Fit suggested pictures** fits
+  the first suggestion in every empty slot. Nothing is kept until you press
+  OK. Show Review notes it once per definition (**FIX-16**).
 - **Light footprint** (the Show menu / a structure or fixture's context
   menu) — toggles an overlay of **everywhere a selected moving head's
   pan/tilt range can possibly reach**, not just where it's currently

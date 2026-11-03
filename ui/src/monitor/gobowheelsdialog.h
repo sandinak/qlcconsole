@@ -46,6 +46,12 @@ public:
      *  its "shake" variants (same picture in the definition). */
     static QList<const QLCCapability *> sameGlass(const QLCChannel *ch, const QLCCapability *cap);
 
+    /** Library pictures that look like the slot called @p slotName, best first
+     *  (at most @p max): the pictures stock fixture definitions give slots of
+     *  the same name, ranked by how closely the names match and how many
+     *  definitions agree. Resource names GoboLibrary::resolve() reads. */
+    static QStringList suggestPictures(const Doc *doc, const QString &slotName, int max = 3);
+
     /** How Replace… asks for a picture; a test swaps it for a canned path. */
     std::function<QString(QWidget *)> pickImage;
 
@@ -55,11 +61,13 @@ public slots:
 private slots:
     void slotReplace();
     void slotRestore();
+    void slotFitSuggested();
     void slotOpenFolder();
     void refreshButtons();
 
 private:
     typedef QPair<quint32, int> SlotKey;   ///< (channel, slot min)
+    QStringList suggestionsFor(const QLCCapability *cap) const;
     void rebuild();
     QString effectiveImage(quint32 channel, const QLCCapability *cap) const;
     QTreeWidgetItem *currentSlot() const;
@@ -71,6 +79,7 @@ private:
     QTreeWidget *m_tree;
     QPushButton *m_replace;
     QPushButton *m_restore;
+    QPushButton *m_fitSuggested = nullptr;
     QCheckBox *m_allOfType;
 };
 

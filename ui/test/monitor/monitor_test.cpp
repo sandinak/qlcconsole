@@ -16749,6 +16749,250 @@ void Monitor_Test::aGoboPoolIsDrawnThroughItsMask()
     delete doc;
 }
 
+/* A spot like the user's LED SPOT: one Gobo channel that names every slot and
+   has no pictures, a Gobo Rotate Speed range at the top. */
+static QLCFixtureDef *standInDef(bool withPictures = false)
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test");
+    def->setModel(withPictures ? "Pictured" : "Bare Spot");
+    def->setType(QLCFixtureDef::MovingHead);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("2ch");
+    QLCChannel *g = new QLCChannel();
+    g->setName("Gobo");
+    g->setGroup(QLCChannel::Gobo);
+    g->setControlByte(QLCChannel::MSB);
+    auto cap = [&](int lo, int hi, const QString &name) {
+        QLCCapability *c = new QLCCapability(uchar(lo), uchar(hi), name);
+        if (withPictures && lo >= 10 && lo < 90)
+        {
+            c->setPreset(QLCCapability::GoboMacro);
+            c->setResource(0, QString("Chauvet/gobo%1.svg").arg(lo));
+        }
+        g->addCapability(c);
+    };
+    cap(0, 9, "White");
+    cap(10, 19, "3 Split Circle");
+    cap(20, 29, "Concentrentic Spots");
+    cap(30, 39, "3 Spots");
+    cap(40, 49, "Tetris");
+    cap(50, 59, "Random Spots");
+    cap(60, 69, "Swirl");
+    cap(70, 79, "Zebra");
+    cap(80, 89, "3 Split Circle Shake");
+    cap(150, 255, "Gobo Rotate Speed");
+    def->addChannel(g);
+    mode->insertChannel(g, 0);
+    QLCChannel *d = new QLCChannel();
+    d->setName("Dimmer");
+    d->setGroup(QLCChannel::Intensity);
+    d->setControlByte(QLCChannel::MSB);
+    def->addChannel(d);
+    mode->insertChannel(d, 1);
+    def->addMode(mode);
+    return def;
+}
+
+void Monitor_Test::aGoboWithNoPictureDrawsAStandIn()
+{
+    QLCFixtureDef *def = standInDef();
+    Doc doc(this);
+    Fixture *fx = new Fixture(&doc);
+    fx->setFixtureDefinition(def, def->modes().first());
+    QVERIFY(doc.addFixture(fx));
+    auto vals = [](int g) { QByteArray v(2, 0); v[0] = char(g); v[1] = char(255); return v; };
+
+    // White / open: a plain beam.
+    BeamOptics::Optics o = BeamOptics::opticsFor(fx, vals(5), 0.0);
+    QVERIFY(o.mask.isNull());
+    QVERIFY(!o.animated);
+    QVERIFY(BeamOptics::standInMask("Open", 0).isNull());
+    QVERIFY(BeamOptics::standInMask("No gobo", 0).isNull());
+
+    // Every named slot gets a pattern that blocks some light and passes some.
+    QList<QImage> masks;
+    for (int slot = 0; slot < 7; ++slot)
+    {
+        o = BeamOptics::opticsFor(fx, vals(10 + slot * 10 + 1), 0.0);
+        QVERIFY2(!o.mask.isNull(), qPrintable(QString("slot %1").arg(slot)));
+        QVERIFY2(o.coverage > 0.08 && o.coverage < 0.95,
+                 qPrintable(QString("slot %1 coverage %2").arg(slot).arg(o.coverage)));
+        QVERIFY(!o.animated);
+        // Stable: asked again, the same pixels.
+        QCOMPARE(BeamOptics::opticsFor(fx, vals(10 + slot * 10 + 1), 3.7).mask, o.mask);
+        masks << o.mask;
+    }
+    for (int a = 0; a < masks.size(); ++a)
+        for (int b = a + 1; b < masks.size(); ++b)
+            QVERIFY2(masks.at(a) != masks.at(b), qPrintable(QString("slots %1 and %2 alike").arg(a).arg(b)));
+
+    // The shake wobbles: the same glass as its base slot, moving.
+    const BeamOptics::Optics s0 = BeamOptics::opticsFor(fx, vals(85), 0.0);
+    const BeamOptics::Optics s1 = BeamOptics::opticsFor(fx, vals(85), 0.04);
+    QVERIFY(s0.animated && s1.animated);
+    QVERIFY(s0.mask != s1.mask);
+    // The rotate range turns the last glass before it, and keeps redrawing.
+    const BeamOptics::Optics r0 = BeamOptics::opticsFor(fx, vals(200), 0.0);
+    const BeamOptics::Optics r1 = BeamOptics::opticsFor(fx, vals(200), 0.5);
+    QVERIFY(!r0.mask.isNull() && r0.animated && r1.animated);
+    QVERIFY(r0.mask != r1.mask);
+
+    // A fitted picture wins over the stand-in.
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    QImage half(80, 80, QImage::Format_ARGB32);
+    half.fill(Qt::transparent);
+    {
+        QPainter hp(&half);
+        hp.fillRect(0, 0, 40, 80, Qt::black);
+    }
+    const QString halfPath = dir.filePath("half.png");
+    QVERIFY(half.save(halfPath));
+    MonitorProperties props;
+    props.setGoboSwap(fx->id(), 0, 10, halfPath);
+    o = BeamOptics::opticsFor(fx, vals(15), 0.0, &props);
+    QVERIFY(BeamOptics::sample(o.mask, -0.5, 0.0) < 0.05);
+    QVERIFY(BeamOptics::sample(o.mask, 0.5, 0.0) > 0.9);
+
+    // A definition WITH pictures is untouched by any of it.
+    QVERIFY(GoboLibrary::standInCaps(def->channels().at(0)).size() == 8);
+    GoboLibrary::setUserDirectoryOverride(dir.filePath("Gobos"));
+    auto cleanup = qScopeGuard([]() { GoboLibrary::setUserDirectoryOverride(QString()); });
+    QDir(dir.path()).mkpath("Gobos/Chauvet");
+    for (int lo = 10; lo < 90; lo += 10)
+        QVERIFY(half.save(dir.filePath(QString("Gobos/Chauvet/gobo%1.svg").arg(lo)), "PNG"));
+    QLCFixtureDef *pic = standInDef(true);
+    QVERIFY(GoboLibrary::standInCaps(pic->channels().at(0)).isEmpty());
+}
+
+/* Cue 1.1.1's T-Spots: Preset GoboMacro / GoboShakeMacro, but Res1 is a bare
+   folder (another install's Gobos/ with no file). Same as no picture. */
+void Monitor_Test::aGoboWhosePictureIsAFolderDrawsAStandIn()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString folder = dir.path() + "/";
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test");
+    def->setModel("T-Spot");
+    def->setType(QLCFixtureDef::MovingHead);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("2ch");
+    QLCChannel *g = new QLCChannel();
+    g->setName("Gobo");
+    g->setGroup(QLCChannel::Gobo);
+    g->setControlByte(QLCChannel::MSB);
+    auto cap = [&](int lo, int hi, const QString &name, QLCCapability::Preset p, bool res = true) {
+        QLCCapability *c = new QLCCapability(uchar(lo), uchar(hi), name);
+        if (p != QLCCapability::Custom)
+            c->setPreset(p);
+        if (res)
+            c->setResource(0, folder);
+        g->addCapability(c);
+    };
+    cap(0, 7, "No Gobo", QLCCapability::Custom, false);
+    cap(8, 15, "Flower", QLCCapability::GoboMacro);
+    cap(16, 23, "Spots", QLCCapability::GoboMacro);
+    cap(24, 31, "Lotus", QLCCapability::GoboShakeMacro);
+    cap(32, 39, "Triangles", QLCCapability::GoboMacro);
+    cap(64, 71, "No Gobo", QLCCapability::Custom, false);
+    cap(72, 79, "Shake Flower", QLCCapability::GoboShakeMacro);
+    cap(128, 255, "Change", QLCCapability::RotationClockwiseSlowToFast, false);
+    def->addChannel(g);
+    mode->insertChannel(g, 0);
+    QLCChannel *d = new QLCChannel();
+    d->setName("Dimmer");
+    d->setGroup(QLCChannel::Intensity);
+    d->setControlByte(QLCChannel::MSB);
+    def->addChannel(d);
+    mode->insertChannel(d, 1);
+    def->addMode(mode);
+
+    Doc doc(this);
+    Fixture *fx = new Fixture(&doc);
+    fx->setFixtureDefinition(def, def->modes().first());
+    QVERIFY(doc.addFixture(fx));
+    auto vals = [](int v) { QByteArray b(2, 0); b[0] = char(v); b[1] = char(255); return b; };
+
+    const QLCCapability *flower = g->searchCapability(10);
+    QVERIFY(!GoboLibrary::hasPicture(flower));
+    QCOMPARE(GoboLibrary::pictureProblem(flower), GoboLibrary::PointsAtFolder);
+    QVERIFY(GoboLibrary::resolve(folder).isEmpty());                    // a folder is not a picture
+    QVERIFY(GoboLibrary::resolve("/Applications/QLC+.app/Contents/MacOS/../Resources/Gobos/").isEmpty());
+    QCOMPARE(GoboLibrary::standInCaps(g).size(), 5);                    // not No Gobo, not Change
+    QCOMPARE(GoboLibrary::standInGlass(g).size(), 4);                   // Flower, Spots, Lotus, Triangles
+
+    QVERIFY(BeamOptics::opticsFor(fx, vals(3), 0.0).mask.isNull());     // No Gobo
+    QVERIFY(BeamOptics::opticsFor(fx, vals(66), 0.0).mask.isNull());    // the second No Gobo
+    QVERIFY(BeamOptics::opticsFor(fx, vals(200), 0.0).mask.isNull());   // Change: between slots
+    BeamOptics::Optics o = BeamOptics::opticsFor(fx, vals(10), 0.0);
+    QVERIFY(!o.mask.isNull() && !o.animated);
+    QVERIFY(o.coverage > 0.05 && o.coverage < 0.95);
+    QVERIFY(BeamOptics::opticsFor(fx, vals(18), 0.0).mask != o.mask);
+    // Lotus is a shake by its preset, not its name.
+    const BeamOptics::Optics l0 = BeamOptics::opticsFor(fx, vals(26), 0.0);
+    const BeamOptics::Optics l1 = BeamOptics::opticsFor(fx, vals(26), 0.04);
+    QVERIFY(l0.animated && l1.animated && l0.mask != l1.mask);
+    // "Shake Flower" is Flower's glass, wobbling.
+    const BeamOptics::Optics sf = BeamOptics::opticsFor(fx, vals(75), 0.0);
+    QVERIFY(sf.animated && !sf.mask.isNull());
+
+    // Gobo Wheels lists these slots, with the stand-in.
+    GoboLibrary::setUserDirectoryOverride(dir.filePath("Gobos"));
+    auto cleanup = qScopeGuard([]() { GoboLibrary::setUserDirectoryOverride(QString()); });
+    QVERIFY(GoboWheelsDialog::hasGoboWheels(fx));
+    GoboWheelsDialog dlg(&doc, fx->id());
+    QCOMPARE(dlg.m_tree->topLevelItem(0)->childCount(), 4);
+    QVERIFY(dlg.m_tree->topLevelItem(0)->child(0)->text(1).contains("stand-in"));
+}
+
+
+void Monitor_Test::goboWheelsSuggestsPicturesForBareSlots()
+{
+    // A stock-like definition names its pictures; a bare one gets them offered.
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    GoboLibrary::setUserDirectoryOverride(dir.filePath("Gobos"));
+    auto cleanup = qScopeGuard([]() { GoboLibrary::setUserDirectoryOverride(QString()); });
+    QDir(dir.path()).mkpath("Gobos/Chauvet");
+    QImage img(8, 8, QImage::Format_ARGB32);
+    img.fill(Qt::transparent);
+    for (int lo = 10; lo < 90; lo += 10)
+        QVERIFY(img.save(dir.filePath(QString("Gobos/Chauvet/gobo%1.svg").arg(lo)), "PNG"));
+    Doc doc(this);
+    QLCFixtureDef *stock = standInDef(true);
+    stock->setManufacturer("Stock");
+    stock->setModel("Named");
+    QVERIFY(doc.fixtureDefCache()->addFixtureDef(stock));
+    const QStringList three = GoboWheelsDialog::suggestPictures(&doc, "3 Spots");
+    QVERIFY(!three.isEmpty());
+    QVERIFY(three.first().endsWith("gobo30.svg"));
+    QCOMPARE(GoboWheelsDialog::suggestPictures(&doc, "3 Spots Shake").first(), three.first());
+    QVERIFY(GoboWheelsDialog::suggestPictures(&doc, "Concentric Spots").first().endsWith("gobo20.svg"));
+    QVERIFY(GoboWheelsDialog::suggestPictures(&doc, "Xyzzy").isEmpty());
+
+    QLCFixtureDef *bare = standInDef();
+    Fixture *fx = new Fixture(&doc);
+    fx->setFixtureDefinition(bare, bare->modes().first());
+    QVERIFY(doc.addFixture(fx));
+    GoboWheelsDialog dlg(&doc, fx->id());
+    QCOMPARE(dlg.m_tree->topLevelItemCount(), 1);
+    QTreeWidgetItem *w = dlg.m_tree->topLevelItem(0);
+    QCOMPARE(w->childCount(), 7);                     // the shake rides with its slot
+    QVERIFY(w->child(0)->text(1).contains("stand-in"));
+    QVERIFY(!w->child(0)->icon(0).isNull());
+    QVERIFY(dlg.m_fitSuggested->isEnabled());
+    dlg.slotFitSuggested();
+    // Fitted but not kept until OK.
+    QVERIFY(doc.monitorProperties()->goboSwap(fx->id(), 0, 30).isEmpty());
+    QVERIFY(dlg.m_tree->topLevelItem(0)->child(2)->text(1).contains("gobo30.svg"));
+    dlg.accept();
+    QVERIFY(doc.monitorProperties()->goboSwap(fx->id(), 0, 30).endsWith("gobo30.svg"));
+    // The shake is the same glass as its slot.
+    QVERIFY(doc.monitorProperties()->goboSwap(fx->id(), 0, 80).endsWith("gobo10.svg"));
+}
+
 void Monitor_Test::goboWheelsFitsYourOwnGlassInOneUnit()
 {
     QTemporaryDir dir;

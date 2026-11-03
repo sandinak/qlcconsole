@@ -75,6 +75,7 @@
 #include "livecapturedialog.h"
 #include "aboutbox.h"
 #include "monitor.h"
+#include "gobowheelsdialog.h"
 #include "monitorgraphicsview.h"
 #include "studiogroupeditor.h"
 #include "studioplaneview.h"
@@ -8897,6 +8898,15 @@ bool App::reviewJump(QWidget *parent, const QString &jump, const QVariantList &d
     if (jump == QLatin1String("showsettings"))
     {
         openShowSettings();
+        return true;
+    }
+    if (jump == QLatin1String("gobowheels"))
+    {
+        GoboWheelsDialog dlg(m_doc, id, parent != nullptr ? parent : this);
+        if (dlg.exec() == QDialog::Accepted)
+            foreach (QWidget *w, QApplication::allWidgets())
+                if (StructureStudioView *sv = qobject_cast<StructureStudioView *>(w))
+                    sv->update();
         return true;
     }
     if (jump == QLatin1String("fixtures") || jump == QLatin1String("power"))

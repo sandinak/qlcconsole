@@ -24,6 +24,10 @@
 #include <QUrl>
 #include <QIcon>
 #include <QSet>
+#include <QPixmap>
+#include <QRegularExpression>
+#include <QFile>
+#include <QHash>
 
 #include "gobowheelsdialog.h"
 #include "beamoptics.h"
@@ -33,11 +37,13 @@
 #include "qlcfixturemode.h"
 #include "qlccapability.h"
 #include "qlcchannel.h"
+#include "qlcfixturedefcache.h"
 #include "fixture.h"
 #include "doc.h"
 
 #define COL_SLOT  0
 #define COL_GLASS 1
+#define COL_SUGGEST 2
 #define ROLE_CHANNEL (Qt::UserRole)
 #define ROLE_MIN     (Qt::UserRole + 1)
 
@@ -45,13 +51,143 @@ namespace
 {
     bool isPicture(const QLCCapability *cap)
     {
-        return cap != nullptr && cap->presetType() == QLCCapability::Picture;
+        return GoboLibrary::hasPicture(cap);
     }
 
     QString pictureOf(const QLCCapability *cap)
     {
-        return isPicture(cap) ? const_cast<QLCCapability *>(cap)->resource(0).toString() : QString();
+        return isPicture(cap) ? GoboLibrary::resolve(const_cast<QLCCapability *>(cap)->resource(0).toString())
+                              : QString();
     }
+
+    /** Words of a slot name that matter for matching it: lower-case, "gobo"
+     *  and "shake" dropped, plurals folded, long words cut to five letters
+     *  so a misspelling ("Concentrentic") still meets the right one. */
+    QStringList tokensOf(const QString &name)
+    {
+        static const QRegularExpression split(QStringLiteral("[^\\p{L}\\p{N}]+"));
+        QStringList out;
+        foreach (QString t, GoboLibrary::slotBaseName(name).split(split, Qt::SkipEmptyParts))
+        {
+            if (t == QLatin1String("gobo") || t == QLatin1String("gobos") || t == QLatin1String("the"))
+                continue;
+            if (t.length() > 3 && t.endsWith(QLatin1Char('s')))
+                t.chop(1);
+            if (t.length() > 5)
+                t = t.left(5);
+            if (!out.contains(t))
+                out << t;
+        }
+        return out;
+    }
+
+    struct Named
+    {
+        QStringList tokens;
+        QString picture;
+    };
+
+    /** Every named picture slot in the stock definitions, built once. */
+    const QList<Named> &libraryIndex(const Doc *doc)
+    {
+        static QList<Named> index;
+        static const QLCFixtureDefCache *builtFor = nullptr;
+        static int builtCount = -1;
+        if (doc == nullptr || doc->fixtureDefCache() == nullptr)
+            return index;
+        // Once per cache (and again if definitions are added to it).
+        if (builtFor == doc->fixtureDefCache() && builtCount == doc->fixtureDefCache()->definitions().size())
+            return index;
+        builtFor = doc->fixtureDefCache();
+        builtCount = int(builtFor->definitions().size());
+        index.clear();
+        static const QRegularExpression capRx(
+            QStringLiteral("<Capability\\b[^>]*?\\bRes1=\"([^\"]+\\.(?:svg|png|jpe?g|gif|bmp))\"[^>]*>([^<]*)<"),
+            QRegularExpression::CaseInsensitiveOption);
+        const QString mapPath = doc->fixtureDefCache()->mapPath();
+        foreach (QLCFixtureDef *def, doc->fixtureDefCache()->definitions())
+        {
+            if (!def->channels().isEmpty())
+            {
+                // Loaded: its capabilities as they are.
+                foreach (QLCChannel *ch, def->channels())
+                {
+                    if (ch->group() != QLCChannel::Gobo)
+                        continue;
+                    foreach (QLCCapability *cap, ch->capabilities())
+                    {
+                        const QString pic = GoboLibrary::portableName(pictureOf(cap));
+                        if (pic.isEmpty() || GoboLibrary::isOpenSlotName(cap->name())
+                            || GoboLibrary::isRotationSlotName(cap->name()))
+                            continue;
+                        const QStringList tokens = tokensOf(cap->name());
+                        if (!tokens.isEmpty())
+                            index << Named{ tokens, pic };
+                    }
+                }
+                continue;
+            }
+            /* The library's own definitions are read as they are needed, and
+               there are a couple of thousand: read the file for its gobo
+               lines only, not the whole definition. */
+            QString file = def->definitionSourceFile();
+            if (file.isEmpty())
+                continue;
+            if (QFileInfo(file).isRelative())
+                file = mapPath + QLatin1Char('/') + file;
+            QFile f(file);
+            if (!f.open(QIODevice::ReadOnly))
+                continue;
+            const QByteArray bytes = f.readAll();
+            if (!bytes.contains("Res1=\""))
+                continue;
+            const QString text = QString::fromUtf8(bytes);
+            QRegularExpressionMatchIterator it = capRx.globalMatch(text);
+            while (it.hasNext())
+            {
+                const QRegularExpressionMatch m = it.next();
+                const QString name = m.captured(2).trimmed();
+                if (GoboLibrary::isOpenSlotName(name) || GoboLibrary::isRotationSlotName(name)
+                    || m.captured(1).contains(QLatin1String("/open."), Qt::CaseInsensitive))
+                    continue;
+                const QStringList tokens = tokensOf(name);
+                if (!tokens.isEmpty())
+                    index << Named{ tokens, m.captured(1) };
+            }
+        }
+        return index;
+    }
+}
+
+QStringList GoboWheelsDialog::suggestPictures(const Doc *doc, const QString &slotName, int max)
+{
+    const QStringList want = tokensOf(slotName);
+    QStringList out;
+    if (want.isEmpty())
+        return out;
+    QHash<QString, double> score;
+    foreach (const Named &n, libraryIndex(doc))
+    {
+        int shared = 0;
+        foreach (const QString &t, want)
+            if (n.tokens.contains(t))
+                ++shared;
+        if (shared == 0)
+            continue;
+        const double jac = double(shared) / (want.size() + n.tokens.size() - shared);
+        if (jac >= 0.5)
+            score[n.picture] += jac * jac;           // exact names count most
+    }
+    QList<QPair<double, QString>> ranked;
+    for (auto it = score.constBegin(); it != score.constEnd(); ++it)
+        ranked << qMakePair(it.value(), it.key());
+    std::sort(ranked.begin(), ranked.end(), [](const QPair<double, QString> &a, const QPair<double, QString> &b) {
+        return a.first != b.first ? a.first > b.first : a.second < b.second;
+    });
+    for (int i = 0; i < ranked.size() && out.size() < max; ++i)
+        if (!GoboLibrary::resolve(ranked.at(i).second).isEmpty())
+            out << ranked.at(i).second;
+    return out;
 }
 
 GoboWheelsDialog::GoboWheelsDialog(Doc *doc, quint32 fixtureId, QWidget *parent)
@@ -80,11 +216,13 @@ GoboWheelsDialog::GoboWheelsDialog(Doc *doc, quint32 fixtureId, QWidget *parent)
     root->addWidget(intro);
 
     m_tree = new QTreeWidget(this);
-    m_tree->setColumnCount(2);
-    m_tree->setHeaderLabels(QStringList() << tr("Slot") << tr("Glass"));
+    m_tree->setColumnCount(3);
+    m_tree->setHeaderLabels(QStringList() << tr("Slot") << tr("Glass") << tr("Suggested"));
     m_tree->setIconSize(QSize(32, 32));
     m_tree->setRootIsDecorated(true);
     m_tree->header()->setSectionResizeMode(COL_SLOT, QHeaderView::Stretch);
+    m_tree->header()->setSectionResizeMode(COL_GLASS, QHeaderView::ResizeToContents);
+    m_tree->header()->setSectionResizeMode(COL_SUGGEST, QHeaderView::ResizeToContents);
     root->addWidget(m_tree, 1);
 
     QHBoxLayout *row = new QHBoxLayout();
@@ -93,6 +231,10 @@ GoboWheelsDialog::GoboWheelsDialog(Doc *doc, quint32 fixtureId, QWidget *parent)
     QPushButton *folder = new QPushButton(tr("Open Gobo Folder"), this);
     row->addWidget(m_replace);
     row->addWidget(m_restore);
+    m_fitSuggested = new QPushButton(tr("Fit suggested pictures"), this);
+    m_fitSuggested->setToolTip(tr("Fit the first suggestion in every slot that has no picture of its "
+                                  "own. Nothing is kept until you press OK."));
+    row->addWidget(m_fitSuggested);
     row->addStretch(1);
     row->addWidget(folder);
     root->addLayout(row);
@@ -114,6 +256,7 @@ GoboWheelsDialog::GoboWheelsDialog(Doc *doc, quint32 fixtureId, QWidget *parent)
     connect(bb, &QDialogButtonBox::rejected, this, &GoboWheelsDialog::reject);
     connect(m_replace, &QPushButton::clicked, this, &GoboWheelsDialog::slotReplace);
     connect(m_restore, &QPushButton::clicked, this, &GoboWheelsDialog::slotRestore);
+    connect(m_fitSuggested, &QPushButton::clicked, this, &GoboWheelsDialog::slotFitSuggested);
     connect(folder, &QPushButton::clicked, this, &GoboWheelsDialog::slotOpenFolder);
     connect(m_tree, &QTreeWidget::currentItemChanged, this, &GoboWheelsDialog::refreshButtons);
     connect(m_tree, &QTreeWidget::itemDoubleClicked, this, [this](QTreeWidgetItem *item) {
@@ -137,6 +280,8 @@ bool GoboWheelsDialog::hasGoboWheels(const Fixture *fx)
         foreach (QLCCapability *cap, ch->capabilities())
             if (isPicture(cap))
                 return true;
+        if (!GoboLibrary::standInCaps(ch).isEmpty())
+            return true;
     }
     return false;
 }
@@ -149,7 +294,14 @@ QList<const QLCCapability *> GoboWheelsDialog::sameGlass(const QLCChannel *ch, c
     out << cap;
     const QString pic = pictureOf(cap);
     if (pic.isEmpty())
+    {
+        // No picture: a slot and its shake share a name.
+        const QString base = GoboLibrary::slotBaseName(cap->name());
+        foreach (QLCCapability *other, GoboLibrary::standInCaps(ch))
+            if (other != cap && GoboLibrary::slotBaseName(other->name()) == base)
+                out << other;
         return out;
+    }
     foreach (QLCCapability *other, ch->capabilities())
         if (other != cap && pictureOf(other) == pic)
             out << other;
@@ -181,9 +333,10 @@ void GoboWheelsDialog::rebuild()
             continue;
         QTreeWidgetItem *wheel = nullptr;
         QSet<const QLCCapability *> shown;
+        const QList<QLCCapability *> standIn = GoboLibrary::standInCaps(ch);
         foreach (QLCCapability *cap, ch->capabilities())
         {
-            if (!isPicture(cap) || shown.contains(cap))
+            if ((!isPicture(cap) && !standIn.contains(cap)) || shown.contains(cap))
                 continue;
             const QList<const QLCCapability *> glass = sameGlass(ch, cap);
             for (const QLCCapability *g : glass)
@@ -202,8 +355,29 @@ void GoboWheelsDialog::rebuild()
                                                      : cap->name());
             const QString swap = m_swaps.value(qMakePair(i, int(cap->min())));
             const QString img = effectiveImage(i, cap);
-            slot->setIcon(COL_SLOT, img.isEmpty() ? QIcon() : QIcon(img));
-            slot->setText(COL_GLASS, swap.isEmpty() ? tr("as built") : QFileInfo(swap).fileName());
+            if (img.isEmpty())
+            {
+                // The rig view's stand-in for it.
+                const QImage m = BeamOptics::standInMask(cap->name(),
+                    qMax(0, GoboLibrary::standInIndex(ch, cap)));
+                slot->setIcon(COL_SLOT, m.isNull() ? QIcon() : QIcon(QPixmap::fromImage(m)));
+                if (swap.isEmpty())
+                {
+                    const QStringList sug = suggestionsFor(cap);
+                    if (!sug.isEmpty())
+                    {
+                        slot->setText(COL_SUGGEST, QFileInfo(sug.first()).completeBaseName());
+                        slot->setToolTip(COL_SUGGEST, sug.join(QLatin1Char('\n')));
+                        const QString path = GoboLibrary::resolve(sug.first());
+                        if (!path.isEmpty())
+                            slot->setIcon(COL_SUGGEST, QIcon(path));
+                    }
+                }
+            }
+            else
+                slot->setIcon(COL_SLOT, QIcon(img));
+            slot->setText(COL_GLASS, swap.isEmpty() ? (img.isEmpty() ? tr("no picture (stand-in)") : tr("as built"))
+                                                    : QFileInfo(swap).fileName());
             if (!swap.isEmpty())
             {
                 QFont f = slot->font(COL_GLASS);
@@ -216,6 +390,33 @@ void GoboWheelsDialog::rebuild()
     }
 }
 
+QStringList GoboWheelsDialog::suggestionsFor(const QLCCapability *cap) const
+{
+    return cap != nullptr ? suggestPictures(m_doc, GoboLibrary::slotBaseName(cap->name())) : QStringList();
+}
+
+void GoboWheelsDialog::slotFitSuggested()
+{
+    Fixture *fx = m_doc->fixture(m_fid);
+    if (fx == nullptr)
+        return;
+    for (quint32 i = 0; i < fx->channels(); ++i)
+    {
+        const QLCChannel *ch = fx->channel(i);
+        foreach (QLCCapability *cap, GoboLibrary::standInCaps(ch))
+        {
+            if (m_swaps.contains(qMakePair(i, int(cap->min()))))
+                continue;
+            const QStringList sug = suggestionsFor(cap);
+            if (!sug.isEmpty())
+                for (const QLCCapability *g : sameGlass(ch, cap))
+                    m_swaps.insert(qMakePair(i, int(g->min())), sug.first());
+        }
+    }
+    rebuild();
+    refreshButtons();
+}
+
 QTreeWidgetItem *GoboWheelsDialog::currentSlot() const
 {
     QTreeWidgetItem *it = m_tree->currentItem();
@@ -226,6 +427,21 @@ void GoboWheelsDialog::refreshButtons()
 {
     QTreeWidgetItem *slot = currentSlot();
     m_replace->setEnabled(slot != nullptr);
+    if (m_fitSuggested != nullptr)
+    {
+        bool any = false, standIns = false;
+        Fixture *fx = m_doc->fixture(m_fid);
+        for (quint32 i = 0; fx != nullptr && i < fx->channels(); ++i)
+            foreach (QLCCapability *cap, GoboLibrary::standInCaps(fx->channel(i)))
+            {
+                standIns = true;
+                if (!any && !m_swaps.contains(qMakePair(i, int(cap->min()))) && !suggestionsFor(cap).isEmpty())
+                    any = true;
+            }
+        m_fitSuggested->setVisible(standIns);
+        m_fitSuggested->setEnabled(any);
+        m_tree->setColumnHidden(COL_SUGGEST, !standIns);
+    }
     m_restore->setEnabled(slot != nullptr
         && m_swaps.contains(qMakePair(slot->data(COL_SLOT, ROLE_CHANNEL).toUInt(),
                                       slot->data(COL_SLOT, ROLE_MIN).toInt())));

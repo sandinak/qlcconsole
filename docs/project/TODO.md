@@ -10,6 +10,18 @@ under `~/.claude/.../memory/`.
 
 ---
 
+## Gobos with no picture (feat/04-gobo-no-picture, 2026-11-03) -- done
+
+"gobo didn't render in the rigview .. thought we had that." Definitions
+that name gobo slots but have no usable picture (no Res, a folder Res,
+a missing file) drew a plain beam. Built: `BeamOptics::standInMask`
+(deterministic per slot, cached), `GoboLibrary::hasPicture/standInCaps`,
+Gobo Wheels suggestions + Fit suggested pictures, Show Review FIX-16.
+Tests: Monitor_Test::aGoboWithNoPictureDrawsAStandIn,
+aGoboWhosePictureIsAFolderDrawsAStandIn,
+goboWheelsSuggestsPicturesForBareSlots, ShowReview_Test::fix16.
+Move to DONE.md when landed.
+
 ## Rig view hover jitter (fix/04-rig-hover-jitter, 2026-11-03) — done
 
 "The rig view moves a very small distance back and forth when the mouse

@@ -803,6 +803,14 @@ have no unit number; the patch list will be blank there."* [Patch labels]
 Detects: two fixtures with one name (refused now; old shows have them).
 Says: *"Two fixtures are called 'Spot 1'."* [fixtures]
 
+**FIX-16 Gobo slots with no picture.** · N · cheap · v1 ✓
+Detects: a Gobo channel that names slots but has no usable picture for them
+(`GoboLibrary::standInCaps()`: no Res, a Res that is a folder, a missing
+file, not an image), not fitted in Gobo Wheels. One note per definition.
+Says: *"Branson LED SPOT: 7 gobo slots have no picture; the rig view draws a
+stand-in."* or *"... point at a folder, not a picture ..."*. Fix opens Gobo
+Wheels. [gobowheels]
+
 **FIX-15 A light buried in the stage.** · W (footer: error) · cheap · v1 ✓
 Detects: a fixture's body inside the solid volume of a deck, riser or flight
 of steps -- a floor light left at height 0 inside a riser the others stand

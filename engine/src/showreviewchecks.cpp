@@ -56,6 +56,7 @@
 #include "qlcpalette.h"
 #include "focuscalls.h"
 #include "collection.h"
+#include "gobolibrary.h"
 #include "fixture.h"
 #include "scene.h"
 #include "video.h"
@@ -361,6 +362,69 @@ static void fix14(ReviewContext &ctx, QList<ReviewFinding> &out)
                 it.value().count()).arg(it.key()),
             fixtureKeys(it.value()), it.key().toUtf8() + ':' + idBytes(it.value()),
             QStringLiteral("status:fixtures.duplicates"), QVariantList() << it.key());
+}
+
+/** Gobo slots a fixture's definition names but has no usable picture for, and
+ *  the show hasn't fitted one in either (Gobo Wheels); @p folders counts those
+ *  whose picture is a bare folder. */
+static int pictureLessSlots(const Fixture *fx, const MonitorProperties *mp, int *folders)
+{
+    int count = 0;
+    for (quint32 i = 0; i < fx->channels(); ++i)
+    {
+        const QLCChannel *ch = fx->channel(i);
+        QSet<QString> seen;
+        for (QLCCapability *cap : GoboLibrary::standInCaps(ch))
+        {
+            const QString base = GoboLibrary::slotBaseName(cap->name());
+            if (mp != nullptr && !mp->goboSwap(fx->id(), i, cap->min()).isEmpty())
+                continue;
+            if (seen.contains(base))
+                continue;
+            seen.insert(base);
+            ++count;
+            if (GoboLibrary::pictureProblem(cap) == GoboLibrary::PointsAtFolder)
+                ++*folders;
+        }
+    }
+    return count;
+}
+
+static void fix16(ReviewContext &ctx, QList<ReviewFinding> &out)
+{
+    // One finding per definition, however many fixtures use it.
+    QMap<QString, QList<quint32>> byDef;
+    QMap<QString, int> slotCount, folderCount;
+    for (Fixture *fx : ctx.doc()->fixtures())
+    {
+        if (fx == nullptr || fx->fixtureDef() == nullptr)
+            continue;
+        int folders = 0;
+        const int n = pictureLessSlots(fx, ctx.doc()->monitorProperties(), &folders);
+        if (n == 0)
+            continue;
+        const QString def = fx->fixtureDef()->manufacturer() + QLatin1Char(' ') + fx->fixtureDef()->model();
+        byDef[def] << fx->id();
+        if (n > slotCount.value(def))
+        {
+            slotCount[def] = n;
+            folderCount[def] = folders;
+        }
+    }
+    for (auto it = byDef.constBegin(); it != byDef.constEnd(); ++it)
+    {
+        const int n = slotCount.value(it.key());
+        const bool folder = folderCount.value(it.key()) == n;
+        const QString text = folder
+            ? trn("%1: %n gobo slot(s) point at a folder, not a picture; the rig view draws a stand-in "
+                  "(%2 fixture(s)). Fit pictures in Gobo Wheels.", n)
+            : trn("%1: %n gobo slot(s) have no picture; the rig view draws a stand-in "
+                  "(%2 fixture(s)). Fit pictures in Gobo Wheels.", n);
+        out << ReviewContext::make(QStringLiteral("FIX-16"), ReviewFinding::Note,
+            text.arg(it.key()).arg(it.value().count()),
+            fixtureKeys(it.value()), it.key().toUtf8() + ':' + QByteArray::number(n),
+            QStringLiteral("gobowheels"), QVariantList() << it.value().first());
+    }
 }
 
 static void fix15(ReviewContext &ctx, QList<ReviewFinding> &out)
@@ -1295,6 +1359,10 @@ QList<ShowReview::Check> ShowReviewChecks::showChecks()
         { QStringLiteral("FIX-15"), tr("A light buried in the stage"), S::Fixtures,
           tr("A light whose body is inside a deck, riser or step is sunk into the set: it can't be "
              "seen, and its beam starts inside it. Sit it on the top, or move it clear."), fix15 },
+        { QStringLiteral("FIX-16"), tr("Gobo slots with no picture"), S::Fixtures,
+          tr("A definition that names its gobo slots but draws no pictures shows a stand-in "
+             "pattern in the rig view. Fit real pictures in Gobo Wheels (Fixtures menu), once per "
+             "definition."), fix16 },
         { QStringLiteral("FX-07"), tr("Effect that won't load"), S::Effects,
           tr("An effect with no script chosen, or whose script isn't on this computer, does "
              "nothing on stage."), fx07 },

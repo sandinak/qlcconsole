@@ -63,6 +63,14 @@ namespace BeamOptics
     QString slotPicture(const Fixture *fx, quint32 channel, const QLCCapability *cap,
                         const MonitorProperties *props);
 
+    /** A generated mask for a gobo slot whose definition has no picture,
+     *  drawn from what its name says ("3 Spots", "Split Circle", "Concentric",
+     *  "Swirl", "Zebra", "Tetris", "Random Spots") or else a breakup seeded by
+     *  @p index, the slot's place on its wheel (GoboLibrary::standInGlass), so
+     *  different slots look different. Deterministic, and cached by name and
+     *  index. Null for an open slot ("Open", "White", "No gobo"). */
+    QImage standInMask(const QString &slotName, int index);
+
     /** How much light a gobo picture lets through, as a kMaskSize Grayscale8
      *  mask: clear or white passes, black blocks (how gobo images are drawn:
      *  the metal black, the holes clear). Cached by path; null if it can't be
