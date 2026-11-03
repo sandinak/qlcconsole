@@ -155,7 +155,8 @@ void LinePlanView::setPositions(const QList<QList<quint32>> &groups,
             if (t->isLine())
             {
                 QList<QPointF> pts;
-                for (const QVector3D &v : LineCurve(props->targetLinePoints(t)).samples())
+                const LineCurve curve(props->targetLinePoints(t));
+                for (const QVector3D &v : curve.samples())
                     pts << plan(v);
                 m_otherLines << pts;
             }
