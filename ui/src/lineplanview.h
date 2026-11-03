@@ -107,6 +107,10 @@ public:
     /** The points drawn at the last paint: how many lights each stands for
      *  (more than 1: points that landed together, drawn once "xN"; tests). */
     const QList<int> &pointMarks() const { return m_pointMarks; }
+    /** The arrowheads drawn at the last paint, one per beam long enough to
+     *  show a direction: each a triangle whose point is at the edge of the
+     *  light's landing dot (tests). */
+    const QList<QPolygonF> &arrows() const { return m_arrows; }
     /** The caption under the plan (what the colours and lines show). */
     QString caption() const { return m_form.caption(); }
 
@@ -133,6 +137,7 @@ private:
     LineFormation m_form;
     QList<QRectF> m_labelRects;
     QList<int> m_pointMarks;
+    QList<QPolygonF> m_arrows;
     QRectF m_stage;                             //!< stored position: the stage outline
     QList<QPair<QPointF, QString>> m_marks;     //!< stored position: point targets
     QList<QList<QPointF>> m_otherLines;         //!< stored position: line targets

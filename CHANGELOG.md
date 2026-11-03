@@ -39,6 +39,14 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   Steam's virtual pad (Valve 28DE:1205 / 28DE:11FF) are read in the Xbox
   layout. See [Steam Deck and gamepad remote](docs/features/gamepad-remote.md).
 
+### Changed
+
+- **Aim lines have arrowheads.** The line from each light to where its beam
+  lands (the order strip's connectors, the plan view in the Look Editor,
+  the Formation editor and the stored-position plan) now ends in a small
+  arrowhead at the landing dot, or at the ring for a beam that leaves the
+  stage, so source and destination read at a glance.
+
 ### Fixed
 
 - **The rig view holds still under the mouse.** Hovering over the 3D/rig

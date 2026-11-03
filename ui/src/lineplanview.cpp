@@ -335,32 +335,22 @@ void LinePlanView::paintEvent(QPaintEvent *)
         const QPointF was = toScreen(b.previous), is = toScreen(b.to);
         p.setPen(QPen(QColor(140, 170, 255, 170), s, Qt::DashLine));
         if (QLineF(was, is).length() > 1.0)
-            p.drawLine(was, is);
+        {
+            const double sz = 4.5 * s;
+            const QPointF tip = QLineF(was, is).length() > r + sz ? is - (is - was) / QLineF(was, is).length() * r : is;
+            const QPolygonF head = LineFormation::arrowhead(was, tip, sz);
+            p.drawLine(was, head.isEmpty() ? tip : LineFormation::arrowBase(was, tip, sz));
+            if (!head.isEmpty())
+            {
+                p.setPen(Qt::NoPen);
+                p.setBrush(QColor(140, 170, 255, 200));
+                p.drawPolygon(head);
+                p.setBrush(Qt::NoBrush);
+            }
+        }
         p.setPen(QPen(QColor(140, 170, 255), 1.5 * s));
         p.setBrush(Qt::NoBrush);
         p.drawEllipse(was, r + 2, r + 2);
-    }
-    // Beams first, so every square and point sits on top of them: each from
-    // where the light hangs to its point, in its group's colour -- lights
-    // that swap or flip are seen crossing.
-    const bool grouped = m_form.grouped();
-    for (const Beam &b : m_beams)
-    {
-        QColor c = grouped ? b.colour : QColor(255, 230, 160);
-        c.setAlpha(grouped ? 200 : 110);
-        p.setPen(QPen(c, (grouped ? 1.6 : 1.0) * s, b.lands ? Qt::SolidLine : Qt::DashLine));
-        p.drawLine(toScreen(b.from), toScreen(shown(b)));
-    }
-    // The lights where they hang.
-    QList<QRectF> lightRects;
-    for (const Beam &b : m_beams)
-    {
-        const QPointF from = toScreen(b.from);
-        p.setPen(QPen(QColor(20, 20, 24), s));
-        p.setBrush(grouped ? b.colour : QColor(170, 170, 180));
-        const QRectF sq(from - QPointF(3 * s, 3 * s), QSizeF(6 * s, 6 * s));
-        p.drawRect(sq);
-        lightRects << sq.adjusted(-2 * s, -2 * s, 2 * s, 2 * s);
     }
     /* Their points. Points that land on top of each other are drawn once,
        a little bigger, "x N" -- numbers piled on one spot can't be read. */
@@ -380,6 +370,51 @@ void LinePlanView::paintEvent(QPaintEvent *)
         }
         else
             clusters[found] << i;
+    }
+    // Beams first, so every square and point sits on top of them: each from
+    // where the light hangs to its point, in its group's colour -- lights
+    // that swap or flip are seen crossing. Each ends in an arrowhead at its
+    // point's edge (the ring, for a beam that leaves the stage), so which end
+    // is the light and which the landing is never in doubt.
+    const bool grouped = m_form.grouped();
+    m_arrows.clear();
+    for (int i = 0; i < m_beams.count(); ++i)
+    {
+        const Beam &b = m_beams.at(i);
+        QColor c = grouped ? b.colour : QColor(255, 230, 160);
+        c.setAlpha(grouped ? 200 : 110);
+        const double width = (grouped ? 1.6 : 1.0) * s;
+        p.setPen(QPen(c, width, b.lands ? Qt::SolidLine : Qt::DashLine));
+        const QPointF tail = toScreen(b.from), centre = toScreen(shown(b));
+        int k = 0;
+        while (k < clusters.count() && !clusters.at(k).contains(i))
+            ++k;
+        const double dot = k < clusters.count() && clusters.at(k).count() > 1 ? r * 1.35 : r;
+        const QLineF whole(tail, centre);
+        const QPointF tip = whole.length() > dot ? centre - (centre - tail) / whole.length() * dot : centre;
+        const double size = qMax(5.0 * s, 4.0 * width);
+        const QPolygonF head = LineFormation::arrowhead(tail, tip, size);
+        p.drawLine(tail, head.isEmpty() ? tip : LineFormation::arrowBase(tail, tip, size));
+        if (!head.isEmpty())
+        {
+            c.setAlpha(grouped ? 220 : 170);
+            p.setPen(Qt::NoPen);
+            p.setBrush(c);
+            p.drawPolygon(head);
+            p.setBrush(Qt::NoBrush);
+            m_arrows << head;
+        }
+    }
+    // The lights where they hang.
+    QList<QRectF> lightRects;
+    for (const Beam &b : m_beams)
+    {
+        const QPointF from = toScreen(b.from);
+        p.setPen(QPen(QColor(20, 20, 24), s));
+        p.setBrush(grouped ? b.colour : QColor(170, 170, 180));
+        const QRectF sq(from - QPointF(3 * s, 3 * s), QSizeF(6 * s, 6 * s));
+        p.drawRect(sq);
+        lightRects << sq.adjusted(-2 * s, -2 * s, 2 * s, 2 * s);
     }
     m_pointMarks.clear();
     for (int k = 0; k < clusters.count(); ++k)

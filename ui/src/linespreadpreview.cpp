@@ -164,6 +164,7 @@ void LineSpreadPreview::paintEvent(QPaintEvent *)
         centres << QPointF(x, base - r - 2.0 * s - level * (2 * r + s));
     }
 
+    m_arrows.clear();
     // Where each light hangs, in order, and a connector to its point.
     for (int i = 0; i < lights.count(); ++i)
     {
@@ -175,7 +176,21 @@ void LineSpreadPreview::paintEvent(QPaintEvent *)
         p.setPen(QPen(wire, 1.2 * s));
         const QPointF to = centres.at(i) - QPointF(0, r);
         if (to.y() > hang.y() + 3.0 * s)
-            p.drawLine(hang + QPointF(0, 3.0 * s), to);
+        {
+            // An arrowhead at the dot, so the light is the source and the point the destination.
+            const QPointF tail = hang + QPointF(0, 3.0 * s);
+            const double size = 5.0 * s;
+            const QPolygonF head = LineFormation::arrowhead(tail, to, size);
+            p.drawLine(tail, head.isEmpty() ? to : LineFormation::arrowBase(tail, to, size));
+            if (!head.isEmpty())
+            {
+                wire.setAlpha(230);
+                p.setPen(Qt::NoPen);
+                p.setBrush(wire);
+                p.drawPolygon(head);
+                m_arrows << head;
+            }
+        }
         p.setPen(QPen(QColor(20, 20, 24), s));
         p.setBrush(grouped ? c : QColor(170, 170, 180));
         p.drawRect(QRectF(hang - QPointF(3 * s, 3 * s), QSizeF(6 * s, 6 * s)));

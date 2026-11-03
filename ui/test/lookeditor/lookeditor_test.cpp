@@ -2359,6 +2359,26 @@ void LookEditor_Test::aLineFormationShowsGroupsAndCrossings()
     plan.resize(260, 170);
     QVERIFY(!plan.grab().isNull());
 
+    // Every beam and connector ends in an arrowhead, so source and
+    // destination read: a filled triangle whose point is at the landing end.
+    QVERIFY(!strip.arrows().isEmpty());
+    QVERIFY(!plan.arrows().isEmpty());
+    QVERIFY(plan.arrows().count() <= plan.beams().count());
+    for (const QPolygonF &a : plan.arrows())
+    {
+        QCOMPARE(a.count(), 3);
+        // Its base is behind the point, along the beam: the point is the apex.
+        const QPointF mid = (a.at(1) + a.at(2)) / 2.0;
+        QVERIFY(QLineF(mid, a.at(0)).length() > 3.0);
+    }
+    // The helper: the point at the tip, the base back along the line.
+    const QPolygonF head = LineFormation::arrowhead(QPointF(0, 0), QPointF(0, 20), 6.0);
+    QCOMPARE(head.count(), 3);
+    QCOMPARE(head.at(0), QPointF(0, 20));
+    QCOMPARE(head.at(1).y(), 14.0);
+    QCOMPARE(head.at(2).y(), 14.0);
+    QVERIFY(LineFormation::arrowhead(QPointF(0, 0), QPointF(0, 2), 6.0).isEmpty());
+
     // No scene: six stand-ins, grouped as the look says.
     const LineFormation stand = LineFormation::build(&doc, nullptr, swap.data());
     QCOMPARE(stand.lights().count(), 6);
@@ -2552,6 +2572,8 @@ void LookEditor_Test::aStoredPositionLandsWhereItAims()
     QList<int> marks = plan->pointMarks();
     std::sort(marks.begin(), marks.end());
     QCOMPARE(marks, QList<int>({ 1, 2 }));
+    // A stored position's beams point at where they land too.
+    QVERIFY(!plan->arrows().isEmpty());
     // No context: nothing to draw, so nothing shown.
     ed.setContextScene(nullptr);
     QVERIFY(!plan->isVisible());
