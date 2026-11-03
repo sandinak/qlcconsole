@@ -1107,6 +1107,10 @@ How it keeps the show safe:
 The page drives the show's main cue list, as the Run tab does when it
 follows the current production.
 
+A game controller works the page too (hold LB, then A for GO), and a Steam
+Deck can use it as a second screen; there is a focus remote beside it. See
+[Steam Deck and gamepad remote](gamepad-remote.md).
+
 ## Show timeline &amp; MTC follow
 
 The Show Manager tab and the Build tab's embedded timeline editor

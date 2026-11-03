@@ -40,6 +40,8 @@ else()
     list(APPEND WEBACCESS_SOURCES
         webaccess.cpp webaccess.h
         webaccessrun.cpp webaccessrun.h webaccessrunpage.cpp
+        webaccessfocus.cpp webaccessfocus.h webaccessfocuspage.cpp
+        webaccessgamepad.cpp webaccessgamepad.h
         webaccesscontroller.cpp webaccesscontroller.h
     )
 endif()

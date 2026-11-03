@@ -12,6 +12,22 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ## [Unreleased]
 
+### Added
+
+- **Steam Deck and gamepad remote.** A Steam Deck, phone or tablet works
+  the console over Wi-Fi in its browser, with nothing installed: a new
+  **focus remote** page (**/focus**) follows the Focus mode or Venue
+  focus running on the console (sticks pan and tilt, coarse and fine; the
+  buttons do what the console's controller scheme says; tap a call or a
+  light to go to it and see it blink), and the **Run page** reads a game
+  controller (hold LB, then A for GO, as the pad's Run role), lists Show
+  Status warnings and is laid out for a 1280×800 screen held sideways.
+  Both have a **controller test** panel. Same rules as the phone's GO:
+  Allow remote GO, the PIN, the account's level. Moves go as deltas, so a
+  dropped Wi-Fi leaves no stick held. A Steam Deck's own controller and
+  Steam's virtual pad (Valve 28DE:1205 / 28DE:11FF) are read in the Xbox
+  layout. See [Steam Deck and gamepad remote](docs/features/gamepad-remote.md).
+
 ### Fixed
 
 - **An aimed light is drawn where it points, to the step.** The rig views

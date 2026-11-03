@@ -44,6 +44,7 @@
 #include "vcxypad.h"
 #include "chaser.h"
 #include "webaccessrun.h"
+#include "webaccessfocus.h"
 #include "doc.h"
 #include "grandmaster.h"
 #include "qhttprequest.h"
@@ -62,6 +63,8 @@ WebAccess::WebAccess(Doc *doc, VirtualConsole *vcInstance, SimpleDesk *sdInstanc
 
     m_run = new WebAccessRun(m_doc, this);
     connect(m_run, &WebAccessRun::stateChanged, this, &WebAccess::slotRunState);
+    m_focus = new WebAccessFocus(m_doc, m_run, this);
+    connect(m_focus, &WebAccessFocus::stateChanged, this, &WebAccess::slotFocusState);
 }
 
 WebAccess::~WebAccess()
@@ -85,6 +88,15 @@ void WebAccess::slotHandleHTTPRequest(QHttpRequest *req, QHttpResponse *resp)
             sendForbidden(resp, tr("Log in to use the Run page."));
         else
             sendHtmlResponse(resp, WebAccessRun::html());
+        return;
+    }
+    // The focus remote (Steam Deck, phone): the same rules as the Run page
+    if (req->url().path() == QLatin1String("/focus") && req->method() == QHttpRequest::HTTP_GET)
+    {
+        if (!permits(&user, LOGGED_IN_LEVEL))
+            sendForbidden(resp, tr("Log in to use the focus remote."));
+        else
+            sendHtmlResponse(resp, WebAccessFocus::html());
         return;
     }
 
@@ -177,6 +189,11 @@ void WebAccess::slotHandleWebSocketRequest(QHttpConnection *conn, QString data)
     if (cmdList[0] == "QLC+RUN")
     {
         handleRunCommand(conn, user, cmdList);
+        return;
+    }
+    if (cmdList[0] == "QLC+FOCUS")
+    {
+        handleFocusCommand(conn, user, cmdList);
         return;
     }
     if (handleCommonWebSocketCommand(conn, user, cmdList, "[webaccess]", false))
@@ -675,6 +692,8 @@ void WebAccess::slotHandleWebSocketClose(QHttpConnection *conn)
     m_runUnlocked.remove(conn);
     if (m_runClients.remove(conn))
         m_run->setClients(m_runClients.count());
+    if (m_focusClients.remove(conn))
+        m_focus->setClients(m_focusClients.count());
 }
 
 void WebAccess::handleRunCommand(QHttpConnection *conn, WebAccessUser *user, const QStringList &cmdList)
@@ -796,6 +815,91 @@ void WebAccess::handleRunCommand(QHttpConnection *conn, WebAccessUser *user, con
         case WebAccessRun::Unknown:     return;
     }
     conn->webSocketWrite(QStringLiteral("RUN|ack|%1|%2").arg(what, answer));
+}
+
+void WebAccess::handleFocusCommand(QHttpConnection *conn, WebAccessUser *user, const QStringList &cmdList)
+{
+    // As the Run page: with accounts, one that may press VC buttons.
+    if (cmdList.count() < 2 || !permits(user, LOGGED_IN_LEVEL))
+        return;
+    if (m_auth != nullptr && !permits(user, VC_ONLY_LEVEL))
+        return;
+
+    const QString what = cmdList.at(1);
+    if (what == QLatin1String("hello"))
+    {
+        m_focusClients.insert(conn);
+        m_focus->setClients(m_focusClients.count());
+        conn->webSocketWrite(QStringLiteral("FOCUS|state|") + QString::fromUtf8(m_focus->stateJson()));
+        return;
+    }
+    if (what == QLatin1String("ping"))
+    {
+        // The page's round trip: its own clock, echoed (a number, nothing else).
+        bool ok = false;
+        cmdList.value(2).toDouble(&ok);
+        if (ok)
+            conn->webSocketWrite(QStringLiteral("FOCUS|pong|") + cmdList.value(2));
+        return;
+    }
+
+    const bool unlocked = m_runUnlocked.contains(conn);
+    WebAccessRun::Result result;
+    if (what == QLatin1String("nudge"))
+    {
+        // QLC+FOCUS|nudge|<pan degrees>|<tilt degrees>: a move, not a position
+        bool okPan = false, okTilt = false;
+        const double dPan = cmdList.value(2).toDouble(&okPan);
+        const double dTilt = cmdList.value(3).toDouble(&okTilt);
+        if (!okPan || !okTilt)
+            return;
+        result = m_focus->nudge(dPan, dTilt, unlocked);
+        // A stick sends 40 a second: only a refusal is answered.
+        if (result == WebAccessRun::Done)
+            return;
+    }
+    else if (what == QLatin1String("press"))
+    {
+        result = m_focus->press(cmdList.value(2), unlocked);
+    }
+    else if (what == QLatin1String("call"))
+    {
+        bool ok = false;
+        const int index = cmdList.value(2).toInt(&ok);
+        if (!ok)
+            return;
+        result = m_focus->selectCall(index, unlocked);
+    }
+    else if (what == QLatin1String("fixture"))
+    {
+        bool ok = false;
+        const quint32 fid = cmdList.value(2).toUInt(&ok);
+        if (!ok)
+            return;
+        result = m_focus->selectFixture(fid, unlocked);
+    }
+    else
+    {
+        return;
+    }
+    QString answer;
+    switch (result)
+    {
+        case WebAccessRun::Done:        answer = QStringLiteral("ok"); break;
+        case WebAccessRun::NothingToDo: answer = QStringLiteral("nothing"); break;
+        case WebAccessRun::Refused:     answer = QStringLiteral("refused"); break;
+        case WebAccessRun::NeedPin:     answer = QStringLiteral("needpin"); break;
+        case WebAccessRun::WrongMode:   answer = QStringLiteral("design"); break;
+        case WebAccessRun::Unknown:     return;
+    }
+    conn->webSocketWrite(QStringLiteral("FOCUS|ack|%1|%2").arg(what, answer));
+}
+
+void WebAccess::slotFocusState(const QByteArray &json)
+{
+    const QString message = QStringLiteral("FOCUS|state|") + QString::fromUtf8(json);
+    for (QHttpConnection *conn : m_focusClients)
+        conn->webSocketWrite(message);
 }
 
 void WebAccess::slotRunState(const QByteArray &json)

@@ -116,6 +116,16 @@ private slots:
     void companionWordsFollowRemoteGoPinAndMode();
     void aSpinIsOneNudge();
 
+    /* The focus remote and the gamepad (Steam Deck, phone) */
+    void theFocusPageIsServed();
+    void theGamepadTablesAreTheConsoles();
+    void theRunPageMapIsPadRun();
+    void theFocusRemoteWorksTheRunningSession();
+    void focusFollowsTheRemoteGoAndPinRules();
+    void aBurstOfNudgesIsOneMove();
+    void focusRoundTripOnLoopback();
+    void theRunStateCarriesShowStatusAndFocus();
+
     /* Many clients: a phone per crew member (make perf, "web") */
     void fiftyClientsGetEveryChange();
     void cpuPerBroadcast();

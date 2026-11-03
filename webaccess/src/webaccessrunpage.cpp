@@ -20,6 +20,7 @@
 */
 
 #include "webaccessrun.h"
+#include "webaccessgamepad.h"
 
 /* Split in three literals: a compiler limit on one string's length. */
 static const char kHead[] = R"HTML(<!doctype html>
@@ -68,18 +69,34 @@ button:disabled{opacity:.35}
 #lock input{font:inherit;font-size:32px;text-align:center;letter-spacing:.3em;padding:14px;border-radius:14px;border:1px solid var(--line);background:var(--card);color:var(--fg);width:100%}
 #lock p{margin:0;text-align:center;color:var(--dim)}
 #lock .err{color:var(--warn);min-height:1.3em}
+#status{display:none}
+#status div{font-size:15px;padding:2px 0}
+#status div.error{color:#ff8a80}
+#status div.warning{color:var(--warn)}
+#focuslink{display:none;color:var(--go2);font-weight:700;text-decoration:none}
+#armed{display:none;text-align:center;font-size:14px;font-weight:700;letter-spacing:.1em;color:#101214;background:var(--warn);border-radius:8px;padding:3px;margin-bottom:8px}
+#testbtn{width:auto;min-height:32px;font-size:14px;font-weight:400;padding:0 10px}
 @media (min-width:700px){body{max-width:640px;margin:0 auto}}
+@media (min-width:1000px) and (orientation:landscape){
+ body{max-width:none;display:grid;grid-template-columns:1.2fr 1fr;grid-template-rows:auto auto 1fr;column-gap:20px}
+ header,#section{grid-column:1 / span 2}
+ main{grid-column:1;overflow:auto}
+ #pad{grid-column:2;grid-row:3;margin-top:0;display:flex;flex-direction:column;justify-content:flex-end}
+ #go{min-height:40dvh}
+}
 </style></head><body>
-<header><span id="dot"></span><span id="where">Connecting&hellip;</span><span class="chip" id="mode">&nbsp;</span></header>
+<header><span id="dot"></span><span id="where">Connecting&hellip;</span><a id="focuslink" href="focus">Focus &rsaquo;</a><span class="chip" id="mode">&nbsp;</span><button id="testbtn" type="button">Controller</button></header>
 <div id="section"></div>
 <main>
 <div class="card" id="now"><small>On now</small><div class="num" id="nnum">&mdash;</div><div class="name" id="nname"></div></div>
 <div id="sub"></div>
 <div class="card" id="next"><small>Next</small><div class="num" id="xnum">&mdash;</div><div class="name" id="xname"></div></div>
+<div class="card" id="status"><small>Show status</small><div id="slist"></div></div>
 <div class="card" id="masters"><small>Masters</small><div id="mlist"></div></div>
 </main>
 <div id="pad">
 <div id="msg"></div>
+<div id="armed">LB HELD: GO ARMED</div>
 <button id="go" disabled>GO</button>
 <div class="row" id="subrow"><button id="subback" disabled>SUB BACK</button><button id="subgo" disabled>SUB GO</button></div>
 <div class="row"><button id="back" disabled>BACK</button><button id="hold" disabled>HOLD</button><button id="stop" disabled>STOP</button></div>
@@ -121,7 +138,8 @@ function paint(){
   if(st.remote===false)msg(off);
   else if($('msg').textContent===off)msg('');
   if(st.remote&&st.pin&&!unlocked&&$('lock').className!=='show')askPin('');
-  $('go').textContent=st.paused?'GO (paused)':'GO'}
+  $('go').textContent=st.paused?'GO (paused)':'GO';
+  statusList();padLabels()}
 var mrows={},touching={};
 function masters(ok){
   var list=st.masters||[],box=$('mlist'),seen={};
@@ -177,6 +195,25 @@ $('stop').onclick=function(){
   if(b.className==='armed'){b.className='';b.textContent='STOP';clearTimeout(armedTimer);cmd('stop');return}
   b.className='armed';b.textContent='TAP AGAIN TO STOP';
   armedTimer=setTimeout(function(){b.className='';b.textContent='STOP'},2000)};
+function statusList(){
+  var list=st.status||[],box=$('slist');while(box.firstChild)box.removeChild(box.firstChild);
+  list.forEach(function(e){var d=document.createElement('div');d.className=e.level;d.textContent=e.text;box.appendChild(d)});
+  $('status').style.display=list.length?'block':'none';
+  $('focuslink').style.display=st.focus?'inline':'none'}
+/* The controller: the pad's Run role (PadRun), from the state's map. */
+function padAction(r){return (st.pad||{})[r]}
+function padLabels(){var l={};for(var r in (st.pad||{}))l[r]=st.pad[r].label;QPad.labels(l)}
+QPad.on({
+  down:function(r){
+    if(r==='start'){QPad.toggle(true);return}
+    var a=padAction(r);if(!a)return;
+    if(a.do==='arm'){$('armed').style.display='block';return}
+    if(!QPad.down('lb')||!canSend())return;
+    if(a.do==='hit')send('QLC+RUN|hit');else cmd(a.do);
+    if(a.do==='go'&&navigator.vibrate)navigator.vibrate(30)},
+  up:function(r){var a=padAction(r);if(a&&a.do==='arm')$('armed').style.display='none'}});
+$('testbtn').onclick=function(){QPad.toggle(true)};
+$('qpadclose').onclick=function(){QPad.toggle(false)};
 if(navigator.wakeLock){var hold=function(){navigator.wakeLock.request('screen').then(function(l){wake=l}).catch(function(){})};
   hold();document.addEventListener('visibilitychange',function(){if(!document.hidden)hold()})}
 connect();
@@ -186,5 +223,7 @@ connect();
 
 QString WebAccessRun::html()
 {
-    return QString::fromUtf8(kHead) + QString::fromUtf8(kScript);
+    return QString::fromUtf8(kHead) + WebAccessGamepad::testPanelHtml()
+         + QStringLiteral("<script>") + WebAccessGamepad::script() + QStringLiteral("</script>")
+         + QString::fromUtf8(kScript);
 }

@@ -264,6 +264,11 @@ public:
     int callIndex() const { return m_callIndex; }
     /** The call being focused (an empty one without calls). */
     Call currentCall() const;
+    /** Call @p index as it runs (an empty one out of range), and its heads
+     *  in order: for a remote that lists them (the web focus page). */
+    Call callAt(int index) const { return index >= 0 && index < m_calls.size() ? m_calls.at(index).call : Call(); }
+    QList<quint32> callFixtures(int index) const
+        { return index >= 0 && index < m_calls.size() ? m_calls.at(index).order : QList<quint32>(); }
     void nextCall();
     void previousCall();
     void setCallIndex(int index);

@@ -2015,3 +2015,423 @@ void WebAccess_Test::aSliderTopLabelIsEscapedInThePage()
     QVERIFY2(!html.contains(QLatin1String("<img src=x")), "the slider's top label was emitted as live HTML");
     QVERIFY(html.contains(QLatin1String("&lt;img src=x onerror=alert(3)&gt;&amp;")));
 }
+
+/*****************************************************************************
+ * The focus remote and the gamepad (Steam Deck, phone)
+ *****************************************************************************/
+
+#include "webaccessfocus.h"
+#include "webaccessgamepad.h"
+#include "programmercontroller.h"
+#include "controllerscheme.h"
+#include "monitorproperties.h"
+#include "focussession.h"
+#include "focuscalls.h"
+#include "stagetarget.h"
+#include "qlcphysical.h"
+#include "qlcfixturehead.h"
+#include "showstatus.h"
+#include "padrun.h"
+
+namespace {
+/* A 540/270 spot: pan, tilt, dimmer, placed at (x, y) metres, hung at 5 m
+   (as focuscalls_test's). */
+Fixture *focusSpot(Doc *doc, const QString &name, float x, float y)
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test"); def->setModel("Web Spot " + name);
+    def->setType(QLCFixtureDef::MovingHead);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("3ch");
+    const QLCChannel::Group groups[] = { QLCChannel::Pan, QLCChannel::Tilt, QLCChannel::Intensity };
+    const char *names[] = { "Pan", "Tilt", "Dimmer" };
+    QLCFixtureHead head;
+    for (int k = 0; k < 3; ++k)
+    {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(names[k]);
+        ch->setGroup(groups[k]);
+        ch->setControlByte(QLCChannel::MSB);
+        def->addChannel(ch);
+        mode->insertChannel(ch, k);
+        head.addChannel(k);
+    }
+    QLCPhysical ph;
+    ph.setFocusPanMax(540);
+    ph.setFocusTiltMax(270);
+    mode->setPhysical(ph);
+    mode->insertHead(-1, head);
+    def->addMode(mode);
+    Fixture *fxi = new Fixture(doc);
+    fxi->setName(name);
+    fxi->setFixtureDefinition(def, mode);
+    fxi->setUniverse(0);
+    fxi->setAddress(quint32(doc->fixtures().size() * 3));
+    doc->addFixture(fxi);
+    doc->monitorProperties()->setFixturePosition(fxi->id(), 0, 0, QVector3D(x * 1000.0f, y * 1000.0f, 5.0f));
+    return fxi;
+}
+
+FixtureGroup *focusGroup(Doc *doc, const QString &name, const QList<Fixture *> &members)
+{
+    FixtureGroup *g = new FixtureGroup(doc);
+    g->setName(name);
+    g->setSize(QSize(int(members.size()), 1));
+    for (int i = 0; i < members.size(); ++i)
+        g->assignFixture(members.at(i)->id(), QLCPoint(i, 0));
+    doc->addFixtureGroup(g);
+    return g;
+}
+
+/* Two focus calls running on the console: "DH" (A, B -> DSC) and "AT"
+   (C -> Solo). Returns the three spots. */
+QList<Fixture *> startFocusCalls(Doc *doc)
+{
+    Fixture *a = focusSpot(doc, "Spot A", 2.0f, 2.0f);
+    Fixture *b = focusSpot(doc, "Spot B", 4.0f, 2.0f);
+    Fixture *c = focusSpot(doc, "Spot C", 6.0f, 2.0f);
+    FixtureGroup *dh = focusGroup(doc, "DH", { a, b });
+    FixtureGroup *at = focusGroup(doc, "AT", { c });
+    StageTarget *dsc = doc->monitorProperties()->addStageTarget();
+    dsc->setName("DSC");
+    dsc->setPosition(QVector3D(5.0f, 6.0f, 0.0f));
+    StageTarget *solo = doc->monitorProperties()->addStageTarget();
+    solo->setName("Solo");
+    solo->setPosition(QVector3D(1.0f, 7.0f, 0.0f));
+    FocusSession::Reference r1, r2;
+    r1.kind = r2.kind = FocusSession::Reference::Target;
+    r1.id = dsc->id();
+    r2.id = solo->id();
+    FocusCall c1, c2;
+    c1.groups << dh->id();
+    c1.target = r1;
+    c2.groups << at->id();
+    c2.target = r2;
+    FocusCalls *calls = doc->programmer()->focusCalls();
+    calls->setCalls({ c1, c2 });
+    FocusSession *s = doc->programmer()->focusSession();
+    s->setFlashEnabled(false);
+    FocusSession::Options o;
+    o.calls = calls->sessionCalls();
+    o.order = FocusSession::AsGiven;
+    QString why;
+    if (!s->start(o, &why))
+        qWarning() << "focus did not start:" << why;
+    return { a, b, c };
+}
+
+QJsonObject newestFocusState(const QStringList &h)
+{
+    for (int i = h.count() - 1; i >= 0; --i)
+        if (h.at(i).startsWith(QStringLiteral("FOCUS|state|")))
+            return QJsonDocument::fromJson(h.at(i).mid(12).toUtf8()).object();
+    return QJsonObject();
+}
+}
+
+void WebAccess_Test::theFocusPageIsServed()
+{
+    startWeb(false);
+    const QByteArray reply = http("GET /focus HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n");
+    QVERIFY2(reply.startsWith("HTTP/1.1 200"), reply.left(40).constData());
+    QVERIFY(reply.contains("QLC+FOCUS|hello"));
+    QVERIFY(reply.contains("width=device-width"));
+    QVERIFY(reply.contains("navigator.getGamepads"));
+    QVERIFY(reply.contains("id=\"qpadtest\""));
+    QVERIFY(!reply.contains("innerHTML"));
+    // The Run page reads the controller too, and has the same test panel.
+    const QByteArray run = http("GET /run HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n");
+    QVERIFY(run.contains("navigator.getGamepads"));
+    QVERIFY(run.contains("id=\"qpadtest\""));
+    QVERIFY(!run.contains("innerHTML"));
+}
+
+void WebAccess_Test::theGamepadTablesAreTheConsoles()
+{
+    using namespace GamepadRole;
+    // The W3C standard layout, index by index.
+    const QList<Role> std = WebAccessGamepad::standardButtons();
+    QCOMPARE(std.count(), 17);
+    QCOMPARE(std.at(0), A);
+    QCOMPARE(std.at(1), B);
+    QCOMPARE(std.at(4), LB);
+    QCOMPARE(std.at(6), LeftTrigger);
+    QCOMPARE(std.at(7), RightTrigger);
+    QCOMPARE(std.at(8), Back);
+    QCOMPARE(std.at(9), Start);
+    QCOMPARE(std.at(12), DpadUp);
+    QCOMPARE(std.at(15), DpadRight);
+    QCOMPARE(std.at(16), Guide);
+    QCOMPARE(WebAccessGamepad::standardAxes(), (QList<Role>{ LeftX, LeftY, RightX, RightY }));
+
+    // The keys a Steam Input layout binds the back grips to: the console's
+    // own Focus mode keys, doing what the console's controller does.
+    QHash<QString, Role> keys;
+    for (const WebAccessGamepad::Key &k : WebAccessGamepad::keys())
+        keys.insert(QLatin1String(k.key), k.role);
+    QCOMPARE(ControllerScheme::verbFor(keys.value("PageUp")), ControllerScheme::PreviousGroup);
+    QCOMPARE(ControllerScheme::verbFor(keys.value("PageDown")), ControllerScheme::NextGroup);
+    QCOMPARE(ControllerScheme::verbFor(keys.value("[")), ControllerScheme::PreviousItem);
+    QCOMPARE(ControllerScheme::verbFor(keys.value("]")), ControllerScheme::NextItem);
+    QCOMPARE(ControllerScheme::verbFor(keys.value("Enter")), ControllerScheme::Keep);
+    QCOMPARE(ControllerScheme::verbFor(keys.value("Backspace")), ControllerScheme::Revert);
+    // Every key and button the pages read is a role with a key word.
+    for (Role r : keys)
+        QVERIFY(!GamepadRole::key(r).isEmpty());
+
+    // The script is made from the tables, not typed again.
+    const QString js = WebAccessGamepad::script();
+    QVERIFY(js.contains(QLatin1String("[\"a\",\"b\",\"x\",\"y\",\"lb\",\"rb\",\"lt\",\"rt\",\"back\",\"start\",\"ls\",\"rs\","
+                                      "\"dpad_up\",\"dpad_down\",\"dpad_left\",\"dpad_right\",\"guide\"]")));
+    QVERIFY(js.contains(QLatin1String("\"PageDown\":\"rt\"")));
+    QVERIFY(js.contains(QLatin1String("\"]\":\"rb\"")));
+    QVERIFY(!js.contains(QLatin1Char('@')));
+}
+
+void WebAccess_Test::theRunPageMapIsPadRun()
+{
+    const QJsonObject map = WebAccessRun::padMap();
+    QCOMPARE(map.value("lb").toObject().value("do").toString(), QString("arm"));
+    QCOMPARE(map.value("a").toObject().value("do").toString(), QString("go"));
+    QCOMPARE(map.value("b").toObject().value("do").toString(), QString("back"));
+    QCOMPARE(map.value("y").toObject().value("do").toString(), QString("subgo"));
+    QCOMPARE(map.value("x").toObject().value("do").toString(), QString("stop"));
+    QCOMPARE(map.value("rb").toObject().value("do").toString(), QString("hit"));
+    // What the page cannot do (another list, the walk, the voice) is not mapped.
+    QVERIFY(!map.contains("rt"));
+    QVERIFY(!map.contains("start"));
+    QVERIFY(!map.contains("rs"));
+    // The console's words, its {LB} written out.
+    QVERIFY(map.value("a").toObject().value("label").toString().contains(QLatin1String("LB")));
+    QVERIFY(!map.value("a").toObject().value("label").toString().contains(QLatin1Char('{')));
+    for (const QString &role : map.keys())
+        QCOMPARE(PadRun::actionFor(GamepadRole::fromProfile(role, QString())) == PadRun::NoAction, false);
+}
+
+void WebAccess_Test::theFocusRemoteWorksTheRunningSession()
+{
+    m_doc->operateSettings()->setRemoteGo(true);
+    const QList<Fixture *> spots = startFocusCalls(m_doc);
+    FocusSession *s = m_doc->programmer()->focusSession();
+    QVERIFY(s->isActive());
+    startWeb(false);
+    QStringList heard;
+    QWebSocket *ws = runPage(&heard);
+    ws->sendTextMessage(QStringLiteral("QLC+FOCUS|hello"));
+    QTRY_VERIFY(heardAn(heard, QStringLiteral("FOCUS|state|")));
+    QJsonObject st = newestFocusState(heard);
+    QVERIFY(st.value("active").toBool());
+    QCOMPARE(st.value("calls").toArray().count(), 2);
+    QCOMPARE(st.value("call").toInt(), 0);
+    QCOMPARE(st.value("target").toString(), QString("DSC"));
+    QCOMPARE(st.value("fixture").toObject().value("name").toString(), QString("Spot A"));
+    QCOMPARE(st.value("fixture").toObject().value("count").toInt(), 2);
+    QCOMPARE(st.value("fixtures").toArray().count(), 2);
+    QCOMPARE(st.value("total").toInt(), 3);
+    // The console's words for each control; no Exit (that is the console's).
+    QCOMPARE(st.value("labels").toObject().value("a").toString(),
+             ControllerScheme::label(ControllerScheme::FocusCallsTool, ControllerScheme::Keep));
+    QVERIFY(!st.value("labels").toObject().contains("start"));
+
+    // A stick move: a nudge, through FocusSession::nudge().
+    const quint32 a = spots.at(0)->id();
+    ws->sendTextMessage(QStringLiteral("QLC+FOCUS|nudge|1.5|-0.25"));
+    QTRY_COMPARE(s->liveOffset(a).pan, 1.5f);
+    QCOMPARE(s->liveOffset(a).tilt, -0.25f);
+    QVERIFY(s->isDirty(a));
+    QTRY_VERIFY(newestFocusState(heard).value("fixture").toObject().value("unsaved").toBool());
+    // A: kept for this venue (the console's save).
+    ws->sendTextMessage(QStringLiteral("QLC+FOCUS|press|a"));
+    QTRY_VERIFY(s->isChecked(a));
+    QVERIFY(!s->isDirty(a));
+    QTRY_VERIFY(heardAn(heard, QStringLiteral("FOCUS|ack|press|ok")));
+    // RB: the next fixture; RT: the next call; LT back.
+    ws->sendTextMessage(QStringLiteral("QLC+FOCUS|press|rb"));
+    QTRY_COMPARE(s->currentFixture(), spots.at(1)->id());
+    ws->sendTextMessage(QStringLiteral("QLC+FOCUS|press|rt"));
+    QTRY_COMPARE(s->callIndex(), 1);
+    QCOMPARE(s->currentFixture(), spots.at(2)->id());
+    QTRY_COMPARE(newestFocusState(heard).value("target").toString(), QString("Solo"));
+    ws->sendTextMessage(QStringLiteral("QLC+FOCUS|press|lt"));
+    QTRY_COMPARE(s->callIndex(), 0);
+    // Picking from the lists: a call, then a fixture (Locate).
+    ws->sendTextMessage(QStringLiteral("QLC+FOCUS|call|1"));
+    QTRY_COMPARE(s->callIndex(), 1);
+    ws->sendTextMessage(QStringLiteral("QLC+FOCUS|fixture|%1").arg(spots.at(1)->id()));
+    QTRY_COMPARE(s->currentFixture(), spots.at(1)->id());
+    QCOMPARE(s->callIndex(), 0);
+    // B: back to its last save.
+    ws->sendTextMessage(QStringLiteral("QLC+FOCUS|nudge|2|0"));
+    QTRY_VERIFY(s->isDirty(spots.at(1)->id()));
+    ws->sendTextMessage(QStringLiteral("QLC+FOCUS|press|b"));
+    QTRY_VERIFY(!s->isDirty(spots.at(1)->id()));
+    // Menu (Exit), an unknown role, a call out of range: nothing.
+    heard.clear();
+    ws->sendTextMessage(QStringLiteral("QLC+FOCUS|press|start"));
+    ws->sendTextMessage(QStringLiteral("QLC+FOCUS|press|lx"));
+    ws->sendTextMessage(QStringLiteral("QLC+FOCUS|press|nonsense"));
+    ws->sendTextMessage(QStringLiteral("QLC+FOCUS|nudge|nan|1"));
+    ws->sendTextMessage(QStringLiteral("QLC+FOCUS|nudge|1"));
+    ws->sendTextMessage(QStringLiteral("QLC+FOCUS|call|7"));
+    QTRY_VERIFY(heardAn(heard, QStringLiteral("FOCUS|ack|call|nothing")));
+    QVERIFY(s->isActive());
+    QVERIFY(!heardAn(heard, QStringLiteral("FOCUS|ack|press")));
+    QCOMPARE(s->liveOffset(spots.at(1)->id()).pan, s->savedOffset(spots.at(1)->id()).pan);
+
+    // Stopped on the console: the page says so, and moves do nothing.
+    s->stop();
+    QTRY_VERIFY(!newestFocusState(heard).value("active").toBool());
+    ws->sendTextMessage(QStringLiteral("QLC+FOCUS|nudge|1|1"));
+    QTRY_VERIFY(heardAn(heard, QStringLiteral("FOCUS|ack|nudge|nothing")));
+    dropPage(ws);
+}
+
+void WebAccess_Test::focusFollowsTheRemoteGoAndPinRules()
+{
+    const QList<Fixture *> spots = startFocusCalls(m_doc);
+    FocusSession *s = m_doc->programmer()->focusSession();
+    const quint32 a = spots.at(0)->id();
+    startWeb(false);
+    QStringList heard;
+    QWebSocket *ws = runPage(&heard);
+    ws->sendTextMessage(QStringLiteral("QLC+FOCUS|hello"));
+    QTRY_VERIFY(heardAn(heard, QStringLiteral("FOCUS|state|")));
+    QVERIFY(!newestFocusState(heard).value("remote").toBool());
+
+    // Remote GO off (the default): refused, nothing moves.
+    ws->sendTextMessage(QStringLiteral("QLC+FOCUS|nudge|1|1"));
+    QTRY_VERIFY(heardAn(heard, QStringLiteral("FOCUS|ack|nudge|refused")));
+    ws->sendTextMessage(QStringLiteral("QLC+FOCUS|press|rb"));
+    QTRY_VERIFY(heardAn(heard, QStringLiteral("FOCUS|ack|press|refused")));
+    QCOMPARE(s->liveOffset(a).pan, 0.0f);
+    QCOMPARE(s->currentFixture(), a);
+
+    // On, with a PIN: not until this page gave it.
+    m_doc->operateSettings()->setRemoteGo(true);
+    QVERIFY(m_doc->operateSettings()->setPin(QStringLiteral("4321")));
+    QTRY_VERIFY(newestFocusState(heard).value("pin").toBool());
+    ws->sendTextMessage(QStringLiteral("QLC+FOCUS|nudge|1|1"));
+    QTRY_VERIFY(heardAn(heard, QStringLiteral("FOCUS|ack|nudge|needpin")));
+    ws->sendTextMessage(QStringLiteral("QLC+FOCUS|call|1"));
+    QTRY_VERIFY(heardAn(heard, QStringLiteral("FOCUS|ack|call|needpin")));
+    QCOMPARE(s->liveOffset(a).pan, 0.0f);
+    QCOMPARE(s->callIndex(), 0);
+    ws->sendTextMessage(QStringLiteral("QLC+RUN|pin|4321"));
+    QTRY_VERIFY(heardAn(heard, QStringLiteral("RUN|pin|ok")));
+    ws->sendTextMessage(QStringLiteral("QLC+FOCUS|nudge|1|1"));
+    QTRY_COMPARE(s->liveOffset(a).pan, 1.0f);
+
+    // Another page without the PIN still can't.
+    QStringList heard2;
+    QWebSocket *ws2 = runPage(&heard2);
+    ws2->sendTextMessage(QStringLiteral("QLC+FOCUS|press|rb"));
+    QTRY_VERIFY(heardAn(heard2, QStringLiteral("FOCUS|ack|press|needpin")));
+    QCOMPARE(s->currentFixture(), a);
+    dropPage(ws2);
+    dropPage(ws);
+    s->stop();
+}
+
+void WebAccess_Test::aBurstOfNudgesIsOneMove()
+{
+    m_doc->operateSettings()->setRemoteGo(true);
+    const QList<Fixture *> spots = startFocusCalls(m_doc);
+    FocusSession *s = m_doc->programmer()->focusSession();
+    const quint32 a = spots.at(0)->id();
+    WebAccessRun run(m_doc);
+    WebAccessFocus focus(m_doc, &run);
+
+    // Forty small moves at once (a Wi-Fi hiccup delivering a second of
+    // stick): they add up exactly, in a handful of moves, not forty.
+    for (int i = 0; i < 40; ++i)
+        QCOMPARE(focus.nudge(0.05, -0.025, true), WebAccessRun::Done);
+    QTRY_COMPARE(s->liveOffset(a).pan, 2.0f);
+    QCOMPARE(s->liveOffset(a).tilt, -1.0f);
+    QVERIFY2(focus.appliedMoves() <= 3, qPrintable(QString::number(focus.appliedMoves())));
+
+    // What rounds below a hundredth is carried, not lost.
+    const int before = focus.appliedMoves();
+    for (int i = 0; i < 10; ++i)
+    {
+        focus.nudge(0.003, 0.0, true);
+        QTest::qWait(WebAccessFocus::kApplyMs + 5);
+    }
+    QTRY_COMPARE(s->liveOffset(a).pan, 2.03f);
+    QVERIFY(focus.appliedMoves() > before);
+
+    // One message can't fling a light: each is held to kMaxStep.
+    focus.nudge(90.0, 0.0, true);
+    QTRY_COMPARE(s->liveOffset(a).pan, float(2.03 + WebAccessFocus::kMaxStep));
+    s->stop();
+}
+
+void WebAccess_Test::focusRoundTripOnLoopback()
+{
+    /* Not a pass mark for speed (the gate runs loaded): the numbers, for
+       docs/features/gamepad-remote.md, and a bound no working page misses. */
+    m_doc->operateSettings()->setRemoteGo(true);
+    const QList<Fixture *> spots = startFocusCalls(m_doc);
+    FocusSession *s = m_doc->programmer()->focusSession();
+    const quint32 a = spots.at(0)->id();
+    startWeb(false);
+    QStringList heard;
+    QWebSocket *ws = runPage(&heard);
+    ws->sendTextMessage(QStringLiteral("QLC+FOCUS|hello"));
+    QTRY_VERIFY(heardAn(heard, QStringLiteral("FOCUS|state|")));
+
+    QList<qint64> applied, seen;
+    for (int i = 1; i <= 10; ++i)
+    {
+        QTest::qWait(60);     // past the coalescing window: each one alone
+        heard.clear();
+        QElapsedTimer t;
+        t.start();
+        ws->sendTextMessage(QStringLiteral("QLC+FOCUS|nudge|0.1|0"));
+        while (qAbs(s->liveOffset(a).pan - 0.1f * i) > 0.001f && t.elapsed() < 2000)
+            QCoreApplication::processEvents(QEventLoop::AllEvents, 1);
+        applied << t.nsecsElapsed() / 1000;
+        while (!heardAn(heard, QStringLiteral("FOCUS|state|")) && t.elapsed() < 2000)
+            QCoreApplication::processEvents(QEventLoop::AllEvents, 1);
+        seen << t.nsecsElapsed() / 1000;
+    }
+    std::sort(applied.begin(), applied.end());
+    std::sort(seen.begin(), seen.end());
+    qInfo("focus remote on loopback: stick message -> light moved median %lld us (max %lld); "
+          "-> state back on the page median %lld us (max %lld)",
+          applied.at(5), applied.last(), seen.at(5), seen.last());
+    QVERIFY2(applied.at(5) < 500000, "a nudge took half a second to land");
+
+    // The page's own clock, echoed: its round trip readout.
+    heard.clear();
+    ws->sendTextMessage(QStringLiteral("QLC+FOCUS|ping|1234.5"));
+    QTRY_VERIFY(heard.contains(QStringLiteral("FOCUS|pong|1234.5")));
+    ws->sendTextMessage(QStringLiteral("QLC+FOCUS|ping|<b>"));
+    QTest::qWait(100);
+    QVERIFY(!heardAn(heard, QStringLiteral("FOCUS|pong|<")));
+    dropPage(ws);
+    s->stop();
+}
+
+void WebAccess_Test::theRunStateCarriesShowStatusAndFocus()
+{
+    runShow();
+    WebAccessRun run(m_doc);
+    ShowStatus::instance()->setStatus(QStringLiteral("test.deckremote"), ShowStatus::Warning,
+                                      QStringLiteral("Universe 2 has no output"),
+                                      QStringLiteral("detail stays on the console"));
+    QJsonObject st = QJsonDocument::fromJson(run.stateJson()).object();
+    bool found = false;
+    for (const QJsonValue &v : st.value("status").toArray())
+        if (v.toObject().value("text").toString() == QLatin1String("Universe 2 has no output"))
+            found = v.toObject().value("level").toString() == QLatin1String("warning");
+    QVERIFY(found);
+    QVERIFY(!run.stateJson().contains("detail stays"));
+    ShowStatus::instance()->clearStatus(QStringLiteral("test.deckremote"));
+    QVERIFY(!st.value("focus").toBool());
+    QVERIFY(st.contains("pad"));
+
+    startFocusCalls(m_doc);
+    st = QJsonDocument::fromJson(run.stateJson()).object();
+    QVERIFY(st.value("focus").toBool());
+    m_doc->programmer()->focusSession()->stop();
+}

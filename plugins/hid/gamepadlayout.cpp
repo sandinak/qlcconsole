@@ -83,8 +83,24 @@ const ModelEntry kSonyModels[] =
     { 0x0DF2, "DualSense Edge",              UnknownTransport, PlayStation },
 };
 
+/* Valve's (as SDL's table lists them): what Steam Input shows. Their own
+   element order (NotXbox) wherever a family is asked for; their kind is
+   the Xbox one (deviceKind()). */
+const ModelEntry kValveModels[] =
+{
+    { 0x1205, "Steam Deck",                  UnknownTransport, NotXbox },
+    { 0x11FF, "Steam Virtual Gamepad",       UnknownTransport, NotXbox },
+};
+
 const ModelEntry *findModel(quint16 vendorId, quint16 productId)
 {
+    if (vendorId == kValveVendorId)
+    {
+        for (const ModelEntry &m : kValveModels)
+            if (m.productId == productId)
+                return &m;
+        return nullptr;
+    }
     if (vendorId == kSonyVendorId)
     {
         for (const ModelEntry &m : kSonyModels)
@@ -164,6 +180,9 @@ QString deviceKind(quint16 vendorId, quint16 productId)
                                                              : QStringLiteral("dualshock4");
     }
     if (vendorId == kMicrosoftVendorId)
+        return QStringLiteral("xbox");
+    // A Steam Deck, or a pad behind Steam Input: the Xbox layout.
+    if (vendorId == kValveVendorId && findModel(vendorId, productId) != nullptr)
         return QStringLiteral("xbox");
     return QString();
 }
