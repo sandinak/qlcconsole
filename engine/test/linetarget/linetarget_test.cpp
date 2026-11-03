@@ -580,6 +580,27 @@ void LineTarget_Test::unevenGroupsStillWork()
     QVERIFY2(sameFractions(f, { 0.75, 1.0, 0.25, 0.5, 0.0 }), qPrintable(list(f)));
 }
 
+void LineTarget_Test::eachLightKnowsItsGroup()
+{
+    LineSpread::Settings s;
+    QCOMPARE(LineSpread::groupOf(4, s), QVector<int>({ 0, 1, 2, 3 }));
+    s.group = 2;
+    QCOMPARE(LineSpread::groupOf(5, s), QVector<int>({ 0, 0, 1, 1, 2 }));
+    s.group = LineSpread::Halves;
+    QCOMPARE(LineSpread::groupOf(5, s), QVector<int>({ 0, 0, 1, 2, 2 }));
+    QCOMPARE(LineSpread::groupOf(6, s), QVector<int>({ 0, 0, 0, 1, 1, 1 }));
+    QCOMPARE(LineSpread::groupOf(1, s), QVector<int>({ 0 }));
+    QVERIFY(LineSpread::groupOf(0, s).isEmpty());
+
+    // Swapping halves: the lights of a group stay together, in order.
+    s.spread = -5.0;
+    const QVector<double> f = LineSpread::fractions(6, s);
+    const QVector<int> g = LineSpread::groupOf(6, s);
+    for (int k = 1; k < 6; ++k)
+        if (g.at(k) == g.at(k - 1))
+            QVERIFY(f.at(k) > f.at(k - 1));
+}
+
 void LineTarget_Test::groupsCanShareAPoint()
 {
     LineSpread::Settings s;

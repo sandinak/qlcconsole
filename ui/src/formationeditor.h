@@ -71,6 +71,9 @@ public:
         quint32 line = 0xFFFFFFFF;
         QList<quint32> groups;      //!< fixture groups, as one formation
         QList<quint32> fixtures;    //!< fixtures picked one by one
+        /** Why these lights, when the editor chose them rather than the
+         *  user ("Showing AT-W-ALL -- aimed at Line 1 in cue 1.1.1 Verse"). */
+        QString note;
         bool isEmpty() const { return groups.isEmpty() && fixtures.isEmpty(); }
     };
     /** The preview of the palette being edited. */
@@ -80,8 +83,11 @@ public:
 
     /** The preview a palette starts with: the first line target, and the
      *  groups the show most often aims at it (a layer's, or a cue-wide
-     *  aim's layers' together); none: no groups. */
+     *  aim's layers' together), with a note naming them and the first cue
+     *  that does; none: no groups and no note. */
     static Pick defaultPick(Doc *doc);
+    /** Show no lights (the "Show none" link of a chosen pick). Not an edit. */
+    void clearPick();
 
     /** The views (tests). */
     LineSpreadPreview *strip() const { return m_strip; }

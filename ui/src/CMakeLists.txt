@@ -187,6 +187,7 @@ add_library(${module_name}
     speedmastersfooter.cpp speedmastersfooter.h
     speedmasterspanel.cpp speedmasterspanel.h
     spreadpreview.cpp spreadpreview.h
+    lineformation.cpp lineformation.h
     linespreadpreview.cpp linespreadpreview.h
     lineplanview.cpp lineplanview.h
     formationeditor.cpp formationeditor.h

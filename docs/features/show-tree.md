@@ -967,7 +967,9 @@ of its own.
   light where it hangs with its beam to its point (numbered as the strip),
   and, as **rings**, where the cue before put the same lights, with the
   sweep between them dashed. It follows Spread, Grouping and Cross as you
-  change them.
+  change them: each group in a colour of its own, and crossed lights seen
+  as crossing beams (see
+  [Reading the strip and the plan](stage-targets.md#reading-the-strip-and-the-plan)).
 - **In a window.** On a small screen, **⤢** on the plan (or right-click
   the strip or the plan ▸ **Open in a window**) opens both in a window of
   their own: resize it, put it on a second screen, and the dots, numbers
@@ -1012,6 +1014,29 @@ cue's formation, beside an Aim palette. Make and edit them in Build
   QLC+ 4) reads a Formation as a palette of unknown type: it loads, plays
   nothing, and the cues it was on play the Aim look's own spread. Saving
   the show from such a build keeps the palette but drops its settings.
+
+### Where a stored position lands
+
+A Position that is **stored** pan and tilt (a PanTilt look such as
+*UST-0*, not an aim at a target) is shown the same way. Under the layer's
+Position row:
+
+- **One line** says where the beams go: *"UST-0 · lands DS centre, 2
+  heads off stage"*. A beam that lands near a stage target is named for it
+  (*"≈ Announcer"*, *"≈ Line 1"*); otherwise by the stage area (US / CS /
+  DS, left / centre / right, stage left on the right of the plan), or *off
+  stage*, *into the audience* or *into the air*.
+- **The plan** (from above, downstage at the bottom) draws the stage's
+  outline, its targets, each light where it hangs and its beam to where it
+  lands, one colour per group. A beam that misses the stage is dashed and
+  ends in a hollow ring. **⤢** opens it in a window, as for a line aim.
+- It is worked out from the DMX the way the rig view reads it (the fine
+  channel too, and an indexed-pan head's pointing band), with the rig's
+  mounting, pan zero, invert and calibration, so it shows what the rig
+  will do.
+
+The Look Editor's **PanTilt** page shows the same plan beside the XY pad
+when it has lights in context.
 
 ## Renaming
 

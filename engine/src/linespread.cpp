@@ -50,6 +50,40 @@ void LineSpread::toParams(const Settings &s, QMap<QString, double> &params)
     put("Order", int(s.order), s.order == d.order);
 }
 
+QVector<QPair<int, int> > LineSpread::groupRanges(int count, const Settings &s)
+{
+    QVector<QPair<int, int> > groups;
+    if (count <= 0)
+        return groups;
+    if (s.group == Halves)
+    {
+        const int half = count / 2;
+        if (half > 0)
+            groups << qMakePair(0, half - 1);
+        if (count % 2 != 0)
+            groups << qMakePair(half, half);        // the middle light, on its own
+        if (half > 0)
+            groups << qMakePair(count - half, count - 1);
+    }
+    else
+    {
+        const int g = qMax(1, s.group);
+        for (int first = 0; first < count; first += g)
+            groups << qMakePair(first, qMin(count - 1, first + g - 1));
+    }
+    return groups;
+}
+
+QVector<int> LineSpread::groupOf(int count, const Settings &s)
+{
+    QVector<int> out(qMax(0, count), 0);
+    const QVector<QPair<int, int> > groups = groupRanges(count, s);
+    for (int gi = 0; gi < groups.size(); ++gi)
+        for (int k = groups.at(gi).first; k <= groups.at(gi).second; ++k)
+            out[k] = gi;
+    return out;
+}
+
 QVector<double> LineSpread::fractions(int count, const Settings &s)
 {
     QVector<double> out;
@@ -65,21 +99,7 @@ QVector<double> LineSpread::fractions(int count, const Settings &s)
         d[k] = double(k) / (count - 1) - 0.5;
 
     // The groups, as [first, last] index ranges in order.
-    QVector<QPair<int, int> > groups;
-    if (s.group == Halves)
-    {
-        const int half = count / 2;
-        groups << qMakePair(0, half - 1);
-        if (count % 2 != 0)
-            groups << qMakePair(half, half);        // the middle light, on its own
-        groups << qMakePair(count - half, count - 1);
-    }
-    else
-    {
-        const int g = qMax(1, s.group);
-        for (int first = 0; first < count; first += g)
-            groups << qMakePair(first, qMin(count - 1, first + g - 1));
-    }
+    const QVector<QPair<int, int> > groups = groupRanges(count, s);
 
     /* What crosses below 0. Groups of one cannot flip in place, and a single
        group has no other side to swap to: either way both choices mean the

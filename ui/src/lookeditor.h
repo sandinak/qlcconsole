@@ -35,6 +35,7 @@ class QSlider;
 class QCheckBox;
 class QDoubleSpinBox;
 class LineSpreadPreview;
+class LinePlanView;
 class QComboBox;
 class QPushButton;
 class QLabel;
@@ -311,6 +312,13 @@ private:
     QCheckBox *m_lineShareCheck = nullptr;
     QComboBox *m_lineOrderCombo = nullptr;       //!< data: LineSpread::Order
     LineSpreadPreview *m_linePreview = nullptr;
+    /** PanTilt page: where the position lands, with lights in context. */
+    LinePlanView *m_ptPlan = nullptr;
+    QLabel *m_ptLanding = nullptr;
+    void updatePanTiltPlan();
+    /** The stack's minimum width: the current page's, for the pages that
+     *  need theirs (Aim, PanTilt, Formation); 200 otherwise. */
+    void fitPageWidth();
     /** Show the line controls for the look's target, filled from the look. */
     void syncLineControls();
     QCheckBox   *m_aimDimBlocked;   //!< Aim: dim heads that can't see the target

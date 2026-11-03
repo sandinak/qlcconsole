@@ -106,6 +106,19 @@ private slots:
      *  give on a cue with those two layers; the default pick is the line's
      *  most-aimed groups. */
     void aFormationsPreviewMatchesTheCue();
+    /** The strip and plan's shared model: each light's group and colour,
+     *  its point (the engine's own), and whether beams cross for each
+     *  Cross (swap sides, mirror, nothing crossed at a positive Spread). */
+    void aLineFormationShowsGroupsAndCrossings();
+    /** Eight closely hung lights with long names: no two names overlap on
+     *  the plan. */
+    void planNamesNeverOverlap();
+    /** A stored position solved forward from its DMX: a hung head, a
+     *  standing one and an indexed-pan head each land within 10 cm of the
+     *  point an Aim at that target writes; the landing is named (target,
+     *  off stage, into the air); the PanTilt page draws it with lights in
+     *  context. */
+    void aStoredPositionLandsWhereItAims();
 };
 
 #endif

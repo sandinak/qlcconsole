@@ -85,6 +85,9 @@ private slots:
     void groupsCanShareAPoint();
     /** Look order puts the heads in the look's order, not where they hang. */
     void lookOrderIsTheLooksOrder();
+    /** groupOf() names the groups fractions() moves: pairs, halves with an
+     *  odd middle, a short last group. */
+    void eachLightKnowsItsGroup();
 };
 
 #endif

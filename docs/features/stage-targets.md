@@ -181,6 +181,38 @@ puts a group's lights on one point, the groups spread end to end (pairs at
 (the default — the head nearest the line's start takes the start) or **Look
 order** (the look's groups in their head order, then its own fixtures).
 
+### Reading the strip and the plan
+
+The order strip (and the plan view, where there is one: a Show Tree
+layer's Position rows, a Formation palette's preview) draw Grouping and
+Cross, not only the numbers. Both are worked out by the same rule the rig
+plays, so what they show is what the beams do.
+
+- **Colours are groups.** With Pairs, Threes, Fours or Halves, lights that
+  move together share a colour: the point on the line, the light's square
+  and its beam. The colours run blue, orange, aqua, violet, red, green,
+  magenta along the line, then round again; neighbouring groups never
+  share one. On the strip a bracket under the line spans each group's
+  points. With **Each light** there are no groups, and the points stay
+  amber.
+- **Lines show what crosses.** The small squares along the top of the
+  strip are the lights in the order they hang; a thin line runs from each
+  down to its point. In the plan each beam runs from where the light hangs
+  to its point. When nothing crosses, the lines fan out side by side.
+  **Groups swap sides** draws whole bundles of lines crossing over the
+  centre; **Each group flips** draws each group's lines crossing inside the
+  group.
+- **Cross needs Spread below 0.** At a Spread of 0 or more nothing crosses,
+  whatever Cross says: the strip says *"Cross acts below Spread 0"*, and
+  the plan's caption says the same.
+- **The caption** under the plan says what you are looking at: *"Pairs: 4
+  groups, a colour each. Groups swap sides: 24 beam crossings."* A crossing
+  is a pair of lights that land the other way round to how they hang.
+- **Names** show when the plan is big enough (open it in a window). Lights
+  hung close together get their names on a second or third row, with a
+  short line up to the light, so no two overlap; a name with no room left
+  is in the tooltip instead.
+
 ### Steps as aim surfaces
 
 A flight of **Steps** (Lighting Studio: Add > Add Steps, or a platform

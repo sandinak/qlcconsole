@@ -23,6 +23,8 @@
 #include <QWidget>
 #include <QList>
 
+#include "lineformation.h"
+
 class Doc;
 class Scene;
 class QLCPalette;
@@ -37,6 +39,12 @@ class QLCPalette;
  * nearest the line's start -- at its place along it for the look's Spread,
  * Group and Cross. Lights sharing a point stack. With no scene to say which
  * lights, six stand in.
+ *
+ * Grouping and Cross are drawn, not only listed: lights that move together
+ * share a colour and a bracket under the line, and a thin connector runs
+ * from each light's place in the order it hangs (the small squares along
+ * the top) down to its point, so what crosses is seen crossing. The model
+ * is LineFormation, the plan view's too.
  */
 class LineSpreadPreview final : public QWidget
 {
@@ -45,7 +53,7 @@ class LineSpreadPreview final : public QWidget
 public:
     explicit LineSpreadPreview(Doc *doc, QWidget *parent = nullptr);
 
-    QSize sizeHint() const override { return QSize(260, 64); }
+    QSize sizeHint() const override { return QSize(260, 84); }
 
     /** Show @p look's lights, the heads of @p scene (may be null). */
     void setLook(const Scene *scene, const QLCPalette *look);
@@ -55,9 +63,13 @@ public:
         int number;          ///< 1 = the light nearest the line's start
         double fraction;     ///< 0..1 along the line
         QString name;        ///< the fixture, when there is one
+        int group;           ///< 0 = the first group along the line
+        double slot;         ///< 0..1: where it hangs, evenly in order
     };
     /** What it shows, in light order (tests). */
     const QList<Dot> &dots() const { return m_dots; }
+    /** The model it draws (tests). */
+    const LineFormation &formation() const { return m_form; }
 
     /** Drawn dimmed: the plan it still shows is the last one, not the selection's. */
     void setDimmed(bool dimmed);
@@ -76,6 +88,7 @@ protected:
 
 private:
     Doc *m_doc;
+    LineFormation m_form;
     QList<Dot> m_dots;
     bool m_dimmed = false;
     bool m_poppable = true;

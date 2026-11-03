@@ -124,6 +124,8 @@ FormationEditor::FormationEditor(Doc *doc, QWidget *parent)
     m_hint = new QLabel(this);
     m_hint->setObjectName(QStringLiteral("formationPreviewHint"));
     m_hint->setWordWrap(true);
+    m_hint->setTextFormat(Qt::RichText);
+    connect(m_hint, &QLabel::linkActivated, this, [this](const QString &) { clearPick(); });
     col->addWidget(m_hint);
 
     m_strip = new LineSpreadPreview(m_doc, this);
@@ -323,10 +325,13 @@ FormationEditor::Pick FormationEditor::defaultPick(Doc *doc)
         const QLCPalette *p = doc->palette(look->palettes.first());
         return p != nullptr && p->type() == QLCPalette::Aim && p->stageTargetId() == pick.line;
     };
-    // How often each set of groups is aimed there, in the order first seen.
+    // How often each set of groups is aimed there, in the order first seen,
+    // and the cue that first does.
     QList<QList<quint32>> seen;
     QList<int> counts;
-    auto tally = [&seen, &counts](QList<quint32> groups) {
+    QStringList firstCue;
+    QString cueNow;
+    auto tally = [&seen, &counts, &firstCue, &cueNow](QList<quint32> groups) {
         if (groups.isEmpty())
             return;
         std::sort(groups.begin(), groups.end());
@@ -335,14 +340,17 @@ FormationEditor::Pick FormationEditor::defaultPick(Doc *doc)
         {
             seen << groups;
             counts << 1;
+            firstCue << cueNow;
         }
         else
             ++counts[at];
     };
     for (const Production &prod : st->productions())
         for (const CueList &list : prod.lists)
-            for (const Cue &cue : list.cues)
+            for (int ci = 0; ci < list.cues.count(); ++ci)
             {
+                const Cue &cue = list.cues.at(ci);
+                cueNow = st->cueLabel(list, ci);
                 const bool cueAim = aimsHere(cue.look(KeyPosition));
                 QList<quint32> together;
                 for (const Layer &layer : cue.layers)
@@ -364,8 +372,27 @@ FormationEditor::Pick FormationEditor::defaultPick(Doc *doc)
         if (best < 0 || counts.at(i) > counts.at(best))
             best = i;
     if (best >= 0)
+    {
         pick.groups = seen.at(best);
+        QStringList names;
+        for (quint32 gid : pick.groups)
+            if (const FixtureGroup *g = doc->fixtureGroup(gid))
+                names << g->name();
+        const MonitorProperties *mp = doc->monitorProperties();
+        const StageTarget *line = mp == nullptr ? nullptr : mp->stageTarget(pick.line);
+        pick.note = tr("Showing %1 (aimed at %2 in cue %3).")
+                        .arg(names.join(QStringLiteral(" + ")),
+                             line != nullptr ? line->name() : tr("this line"),
+                             firstCue.at(best).trimmed());
+    }
     return pick;
+}
+
+void FormationEditor::clearPick()
+{
+    Pick none;
+    none.line = m_pick.line;
+    setPick(none);
 }
 
 void FormationEditor::syncPicker()
@@ -487,7 +514,17 @@ void FormationEditor::updatePreview()
             m_planWindow->setNoAim();
         return;
     }
-    m_hint->hide();
+    if (!m_pick.note.isEmpty())
+    {
+        // The editor chose these lights: say which, why, and how to see none.
+        m_hint->setText(m_pick.note.toHtmlEscaped()
+                        + QStringLiteral(" <a href=\"none\">%1</a>").arg(tr("Show none")));
+        m_hint->setToolTip(tr("You haven't picked lights for this preview: these are the ones the show "
+                              "most often aims at this line. Tick others, or Show none."));
+        m_hint->show();
+    }
+    else
+        m_hint->hide();
     m_strip->setLook(&scene, &aim);
     m_plan->setFormation(&scene, &aim);
     if (m_planWindow != nullptr)

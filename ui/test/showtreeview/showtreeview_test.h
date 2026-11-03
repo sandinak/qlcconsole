@@ -101,6 +101,9 @@ private slots:
     void renameInPlace();
     void lineAimsInTheTab();
     void planViewOfALineAim();
+    /** A stored position (PanTilt) on a layer: a line saying where it lands
+     *  and a plan of each head's beam to its landing, in group colours. */
+    void planViewOfAStoredPosition();
     /** Q197: a Formation's rows say where their values came from; one on a
      *  layer not aimed at a line says on hover that it does nothing. */
     void formationRowsSayWhereTheyComeFrom();

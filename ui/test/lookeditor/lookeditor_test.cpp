@@ -81,6 +81,9 @@
 #include "paletteops.h"
 #include "formationeditor.h"
 #include "lineplanview.h"
+#include "lineformation.h"
+#include "beamlanding.h"
+#include "truss.h"
 #include "showtreecontroller.h"
 #include "showtreemodel.h"
 #include "fixturegroup.h"
@@ -2202,16 +2205,22 @@ void LookEditor_Test::aFormationsPreviewMatchesTheCue()
     QApplication::processEvents();
     FormationEditor *fe = ed.formationEditor();
     QCOMPARE(fe->pick().groups, both);
-    QVERIFY(fe->hint()->isHidden());
+    // decided: the editor's own pick is shown, labelled with where it came from.
+    QVERIFY(def.note.contains("Showing A + B"));
+    QVERIFY(def.note.contains("Edge"));
+    QVERIFY2(def.note.contains("One"), qPrintable(def.note));
+    QVERIFY(!fe->hint()->isHidden());
+    QVERIFY(fe->hint()->text().contains("Showing A + B"));
+    QVERIFY(fe->hint()->text().contains("Show none"));
     const QList<LinePlanView::Beam> &beams = fe->plan()->beams();
     QCOMPARE(beams.count(), 4);
     for (const LinePlanView::Beam &b : beams)
     {
         QVERIFY(onCue.contains(b.fixture));
         const QVector3D want = onCue.value(b.fixture);
-        QVERIFY2(qAbs(b.to.x() - want.x()) < 0.05 && qAbs(b.to.y() - want.z()) < 0.05,
+        QVERIFY2(qAbs(b.to.x() - want.x()) < 0.05 && qAbs(b.to.y() - want.y()) < 0.05,
                  qPrintable(QString("%1: preview %2,%3 cue %4,%5").arg(b.name).arg(b.to.x()).arg(b.to.y())
-                            .arg(want.x()).arg(want.z())));
+                            .arg(want.x()).arg(want.y())));
     }
     QCOMPARE(fe->strip()->dots().count(), 4);
     // The pop-out works from here too, fed by the same preview.
@@ -2219,6 +2228,20 @@ void LookEditor_Test::aFormationsPreviewMatchesTheCue()
     QVERIFY(fe->planWindow() != nullptr && fe->planWindow()->isVisible());
     QCOMPARE(fe->planWindow()->plan()->beams().count(), 4);
     fe->planWindow()->close();
+
+    // "Show none": no lights, the hint says how to pick, nothing is an edit.
+    fe->clearPick();
+    QVERIFY(fe->pick().isEmpty());
+    QCOMPARE(fe->pick().line, edge->id());
+    QVERIFY(fe->pick().note.isEmpty());
+    QVERIFY(fe->hint()->text().contains("Tick"));
+    QVERIFY(fe->plan()->beams().isEmpty());
+    // A pick of the user's own carries no note.
+    FormationEditor::Pick mine;
+    mine.line = edge->id();
+    mine.groups << ga->id();
+    fe->setPick(mine);
+    QVERIFY(fe->hint()->isHidden());
 
     // A show with no aims yet: the line, no groups, and a hint.
     Doc empty(this);
@@ -2235,3 +2258,301 @@ void LookEditor_Test::aFormationsPreviewMatchesTheCue()
     QVERIFY(ed2.formationEditor()->hint()->text().contains("Tick"));
 }
 
+
+namespace
+{
+QLCPalette *lineAim(Doc *doc, const StageTarget *line, double spread, int group, LineSpread::Cross cross)
+{
+    QLCPalette *aim = new QLCPalette(QLCPalette::Aim);
+    aim->setStageTargetId(line->id());
+    LineSpread::Settings s;
+    s.spread = spread;
+    s.group = group;
+    s.cross = cross;
+    QMap<QString, double> params;
+    LineSpread::toParams(s, params);
+    aim->setEffectParamValues(params);
+    Q_UNUSED(doc);
+    return aim;
+}
+}
+
+void LookEditor_Test::aLineFormationShowsGroupsAndCrossings()
+{
+    Doc doc(this);
+    StageTarget *edge = formationLine(&doc);
+    Scene scene(&doc);
+    for (int i = 0; i < 8; ++i)
+    {
+        Fixture *f = formationSpot(&doc, QString("S%1").arg(i + 1), -4.5 + i * 1.25);
+        QVERIFY(f != nullptr);
+        scene.addFixture(f->id());
+    }
+
+    // Pairs swapping sides, fully crossed.
+    QScopedPointer<QLCPalette> swap(lineAim(&doc, edge, -5.0, 2, LineSpread::SwapSides));
+    const LineFormation fs = LineFormation::build(&doc, &scene, swap.data());
+    QCOMPARE(fs.lights().count(), 8);
+    QCOMPARE(fs.groupCount(), 4);
+    QVERIFY(fs.grouped());
+    const QList<quint32> heads = AimSolver::aimHeads(&doc, &scene, swap->id());
+    const QHash<quint32, double> engine = AimSolver::lineFractions(&doc, edge, heads,
+                                                                   LineSpread::fromParams(swap->effectParamValues()));
+    const QHash<quint32, QVector3D> points = AimSolver::linePoints(&doc, swap.data(), edge, heads);
+    for (const LineFormation::Light &l : fs.lights())
+    {
+        QCOMPARE(l.group, (l.number - 1) / 2);
+        QCOMPARE(fs.colourFor(l), LineFormation::groupColour(l.group));
+        // The preview is the engine's assignment.
+        QVERIFY(engine.contains(l.fixture));
+        QCOMPARE(l.fraction, engine.value(l.fixture));
+        QVERIFY(l.placed);
+        QCOMPARE(l.to, QPointF(points.value(l.fixture).x(), points.value(l.fixture).y()));
+    }
+    // Groups swap sides: every pair from different groups lands the other way round.
+    QCOMPARE(fs.crossings(), 24);
+    QVERIFY(fs.caption().contains("Groups swap sides"));
+    QVERIFY(fs.caption().contains("Pairs: 4 groups"));
+    // Neighbouring groups never share a colour.
+    for (int g = 0; g < 7; ++g)
+        QVERIFY(LineFormation::groupColour(g) != LineFormation::groupColour(g + 1));
+    QVERIFY(LineFormation::groupColour(6) != LineFormation::groupColour(7));
+
+    // Each pair flips in place: one crossing per pair.
+    QScopedPointer<QLCPalette> mirror(lineAim(&doc, edge, -5.0, 2, LineSpread::Mirror));
+    const LineFormation fm = LineFormation::build(&doc, &scene, mirror.data());
+    QCOMPARE(fm.crossings(), 4);
+    QVERIFY(fm.caption().contains("Each group flips"));
+
+    // A positive spread crosses nothing, whatever Cross says -- and says so.
+    QScopedPointer<QLCPalette> open(lineAim(&doc, edge, 5.0, 2, LineSpread::SwapSides));
+    const LineFormation fo = LineFormation::build(&doc, &scene, open.data());
+    QCOMPARE(fo.crossings(), 0);
+    QVERIFY(fo.crossIdle());
+    QVERIFY(fo.caption().contains("Cross acts below 0"));
+
+    // Each light on its own is not grouped: no group colours.
+    QScopedPointer<QLCPalette> each(lineAim(&doc, edge, -5.0, 1, LineSpread::SwapSides));
+    const LineFormation fe = LineFormation::build(&doc, &scene, each.data());
+    QVERIFY(!fe.grouped());
+    QCOMPARE(fe.colourFor(fe.lights().first()), LineFormation::pointColour());
+    QCOMPARE(fe.crossings(), 28);
+
+    // The strip and the plan draw that model.
+    LineSpreadPreview strip(&doc);
+    strip.setLook(&scene, swap.data());
+    QCOMPARE(strip.dots().count(), 8);
+    for (int i = 0; i < 8; ++i)
+    {
+        QCOMPARE(strip.dots().at(i).group, fs.lights().at(i).group);
+        QCOMPARE(strip.dots().at(i).fraction, fs.lights().at(i).fraction);
+    }
+    LinePlanView plan(&doc);
+    plan.setFormation(&scene, swap.data());
+    QCOMPARE(plan.beams().count(), 8);
+    for (const LinePlanView::Beam &b : plan.beams())
+        QCOMPARE(b.colour, LineFormation::groupColour(b.group));
+    QCOMPARE(plan.caption(), fs.caption());
+    // Painting works offscreen, small and big.
+    strip.resize(300, 84);
+    QVERIFY(!strip.grab().isNull());
+    plan.resize(260, 170);
+    QVERIFY(!plan.grab().isNull());
+
+    // No scene: six stand-ins, grouped as the look says.
+    const LineFormation stand = LineFormation::build(&doc, nullptr, swap.data());
+    QCOMPARE(stand.lights().count(), 6);
+    QCOMPARE(stand.groupCount(), 3);
+}
+
+void LookEditor_Test::planNamesNeverOverlap()
+{
+    Doc doc(this);
+    StageTarget *edge = formationLine(&doc);
+    Scene scene(&doc);
+    // Four trusses, two spots on each, hung close together.
+    for (int t = 0; t < 4; ++t)
+        for (int k = 0; k < 2; ++k)
+        {
+            Fixture *f = formationSpot(&doc, QString("T%1-S%2").arg(t + 1).arg(k + 1),
+                                       -4.0 + t * 2.6 + k * 0.4);
+            QVERIFY(f != nullptr);
+            scene.addFixture(f->id());
+        }
+    QScopedPointer<QLCPalette> aim(lineAim(&doc, edge, -5.0, 2, LineSpread::SwapSides));
+    LinePlanView plan(&doc);
+    plan.resize(700, 500);
+    plan.setFormation(&scene, aim.data());
+    QVERIFY(plan.drawScale() >= 1.6);
+    QVERIFY(!plan.grab().isNull());
+    const QList<QRectF> rects = plan.labelRects();
+    QCOMPARE(rects.count(), 8);
+    for (int i = 0; i < rects.count(); ++i)
+    {
+        QVERIFY(QRectF(plan.rect()).contains(rects.at(i)));
+        for (int j = i + 1; j < rects.count(); ++j)
+            QVERIFY2(!rects.at(i).intersects(rects.at(j)),
+                     qPrintable(QString("names %1 and %2 overlap").arg(i).arg(j)));
+    }
+}
+
+namespace
+{
+/* A 16-bit mover hung (or standing) at @p at (metres); @p indexed: its pan
+   points with DMX 0-127 and spins above, as a two-arm beam's does. */
+Fixture *landingSpot(Doc *doc, const QString &name, const QVector3D &at, bool standing, bool indexed)
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test");
+    def->setModel("Landing " + name);
+    def->setType(QLCFixtureDef::MovingHead);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("4ch");
+    struct { const char *name; QLCChannel::Group group; QLCChannel::ControlByte byte; } chans[] = {
+        { "Pan", QLCChannel::Pan, QLCChannel::MSB }, { "Pan fine", QLCChannel::Pan, QLCChannel::LSB },
+        { "Tilt", QLCChannel::Tilt, QLCChannel::MSB }, { "Tilt fine", QLCChannel::Tilt, QLCChannel::LSB } };
+    QLCFixtureHead head;
+    for (int k = 0; k < 4; ++k)
+    {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(chans[k].name);
+        ch->setGroup(chans[k].group);
+        ch->setControlByte(chans[k].byte);
+        if (indexed && k == 0)
+        {
+            QLCCapability *point = new QLCCapability(0, 127, "Pan");
+            point->setPreset(QLCCapability::RotationIndexed);
+            ch->addCapability(point);
+            ch->addCapability(new QLCCapability(128, 255, "Spin"));
+        }
+        def->addChannel(ch);
+        mode->insertChannel(ch, k);
+        head.addChannel(k);
+    }
+    QLCPhysical ph;
+    ph.setFocusPanMax(540);
+    ph.setFocusTiltMax(270);
+    mode->setPhysical(ph);
+    mode->insertHead(-1, head);
+    def->addMode(mode);
+    Fixture *fxi = new Fixture(doc);
+    fxi->setName(name);
+    fxi->setFixtureDefinition(def, mode);
+    fxi->setUniverse(0);
+    fxi->setAddress(quint32(10 + doc->fixtures().size() * 4));
+    if (!doc->addFixture(fxi))
+        return nullptr;
+    MonitorProperties *mp = doc->monitorProperties();
+    mp->setFixturePosition(fxi->id(), 0, 0, QVector3D(at.x() * 1000.0f, at.y() * 1000.0f, at.z()));
+    if (standing)
+    {
+        FixtureRigProps rp = mp->fixtureRigProps(fxi->id());
+        rp.mountingType = Truss::FloorMounted;
+        mp->setFixtureRigProps(fxi->id(), rp);
+    }
+    return fxi;
+}
+
+StageTarget *pointTarget(Doc *doc, const QString &name, const QVector3D &at)
+{
+    StageTarget *t = doc->monitorProperties()->addStageTarget();
+    t->setName(name);
+    t->setPosition(at);
+    return t;
+}
+}
+
+void LookEditor_Test::aStoredPositionLandsWhereItAims()
+{
+    Doc doc(this);
+    MonitorProperties *mp = doc.monitorProperties();
+    mp->setGridUnits(MonitorProperties::Meters);
+    mp->setGridSize(QVector3D(10, 3, 8));       // 10 m wide, 8 m deep
+    Fixture *hung = landingSpot(&doc, "Hung", QVector3D(5, 1, 6), false, false);
+    Fixture *stand = landingSpot(&doc, "Stand", QVector3D(2, 6, 0.4f), true, false);
+    Fixture *index = landingSpot(&doc, "Index", QVector3D(8, 1, 5), false, true);
+    QVERIFY(hung != nullptr && stand != nullptr && index != nullptr);
+    StageTarget *mark = pointTarget(&doc, "Announcer", QVector3D(3.5f, 4.0f, 0.0f));
+
+    // What an Aim at the mark writes, read back the other way: on the mark.
+    QLCPalette aim(QLCPalette::Aim);
+    aim.setStageTargetId(mark->id());
+    for (Fixture *f : { hung, stand, index })
+    {
+        const QList<SceneValue> values = aim.valuesFromFixtures(&doc, { f->id() });
+        QVERIFY2(!values.isEmpty(), qPrintable(f->name()));
+        const BeamLanding::Result r = BeamLanding::land(&doc, f->id(), values);
+        QVERIFY2(r.kind == BeamLanding::OnStage, qPrintable(f->name()));
+        const QVector3D want = mp->targetAimPoint(mark);
+        const double miss = double((r.point - want).toVector2D().length());
+        QVERIFY2(miss < 0.10, qPrintable(QString("%1 lands %2 m off").arg(f->name()).arg(miss)));
+        QCOMPARE(r.target, mark->id());
+        QCOMPARE(BeamLanding::describe(&doc, r), QString::fromUtf8("\u2248 Announcer"));
+    }
+
+    // Move the mark away: the same values land on the stage, named by area.
+    const QList<SceneValue> onMark = aim.valuesFromFixtures(&doc, { hung->id() });
+    mark->setPosition(QVector3D(9.5f, 0.5f, 0.0f));
+    BeamLanding::Result r = BeamLanding::land(&doc, hung->id(), onMark);
+    QCOMPARE(r.target, StageTarget::invalidId());
+    QCOMPARE(BeamLanding::describe(&doc, r), QString("centre stage"));
+    QCOMPARE(BeamLanding::areaAt(&doc, QVector3D(9, 7.5f, 0)), QString("DS left"));
+    QCOMPARE(BeamLanding::areaAt(&doc, QVector3D(0.5f, 0.5f, 0)), QString("US right"));
+
+    // Aimed outside the stage: off stage, or into the audience.
+    StageTarget *wing = pointTarget(&doc, "Wing", QVector3D(-3.0f, 4.0f, 0.0f));
+    QLCPalette toWing(QLCPalette::Aim);
+    toWing.setStageTargetId(wing->id());
+    const QList<SceneValue> wingValues = toWing.valuesFromFixtures(&doc, { hung->id() });
+    StageTarget *house = pointTarget(&doc, "House", QVector3D(5.0f, 11.0f, 0.0f));
+    QLCPalette toHouse(QLCPalette::Aim);
+    toHouse.setStageTargetId(house->id());
+    const QList<SceneValue> houseValues = toHouse.valuesFromFixtures(&doc, { stand->id() });
+    wing->setPosition(QVector3D(50, 50, 0));
+    house->setPosition(QVector3D(50, 50, 0));
+    QCOMPARE(BeamLanding::land(&doc, hung->id(), wingValues).kind, BeamLanding::OffStage);
+    QCOMPARE(BeamLanding::land(&doc, stand->id(), houseValues).kind, BeamLanding::IntoAudience);
+
+    // Hung, tilted fully back: up into the air.
+    const quint32 tiltCh = hung->channelNumber(QLCChannel::Tilt, QLCChannel::MSB);
+    QList<SceneValue> up { SceneValue(hung->id(), tiltCh, 0) };
+    QCOMPARE(BeamLanding::land(&doc, hung->id(), up).kind, BeamLanding::IntoAir);
+
+    QList<BeamLanding::Result> all { BeamLanding::land(&doc, hung->id(), onMark),
+                                     BeamLanding::land(&doc, hung->id(), wingValues),
+                                     BeamLanding::land(&doc, stand->id(), houseValues),
+                                     BeamLanding::land(&doc, hung->id(), up) };
+    QCOMPARE(BeamLanding::summary(&doc, all),
+             QString("lands centre stage, 1 head off stage, 1 head into the audience, 1 head into the air"));
+
+    // The PanTilt page: with lights in context, the plan and the line.
+    const quint32 pid = doc.paletteOps()->create(QLCPalette::PanTilt, QString(), "UST-0", QVariantList(),
+                                                 [](QLCPalette *p) { p->setValue(270, 200); });
+    // A twin hung on the same spot lands on the same point as Hung.
+    Fixture *twin = landingSpot(&doc, "Twin", QVector3D(5, 1, 6), false, false);
+    Scene scene(&doc);
+    scene.addFixture(hung->id());
+    scene.addFixture(index->id());
+    scene.addFixture(twin->id());
+    LookEditor ed(&doc);
+    ed.resize(800, 400);
+    ed.show();
+    ed.setContextScene(&scene);
+    ed.setPalette(pid);
+    QApplication::processEvents();
+    LinePlanView *plan = ed.findChild<LinePlanView *>("lookPanTiltPlan");
+    QVERIFY(plan != nullptr && plan->isVisible());
+    QVERIFY(plan->formation().isRawPosition());
+    QCOMPARE(plan->beams().count(), 3);
+    QLabel *line = ed.findChild<QLabel *>("lookPanTiltLanding");
+    QVERIFY(line != nullptr && !line->text().isEmpty());
+    plan->resize(600, 300);
+    QVERIFY(!plan->grab().isNull());
+    // Hung and Twin's points are drawn once ("x2"), Index's on its own.
+    QList<int> marks = plan->pointMarks();
+    std::sort(marks.begin(), marks.end());
+    QCOMPARE(marks, QList<int>({ 1, 2 }));
+    // No context: nothing to draw, so nothing shown.
+    ed.setContextScene(nullptr);
+    QVERIFY(!plan->isVisible());
+}

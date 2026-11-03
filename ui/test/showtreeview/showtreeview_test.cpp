@@ -112,6 +112,7 @@
 #include "programmercontroller.h"
 #include "linespreadpreview.h"
 #include "lineplanview.h"
+#include "lineformation.h"
 #include "monitorproperties.h"
 #include "stagetarget.h"
 #include "qlcphysical.h"
@@ -3775,6 +3776,56 @@ void ShowTreeView_Test::formationRowsSayWhereTheyComeFrom()
     QVERIFY(formRow != nullptr);
     QVERIFY2(formRow->text().contains("does nothing here"), qPrintable(formRow->text()));
     QVERIFY(formRow->toolTip().contains("isn't aimed at a line"));
+}
+
+void ShowTreeView_Test::planViewOfAStoredPosition()
+{
+    QList<Fixture *> left { placedSpot(m_doc, "U1", 2), placedSpot(m_doc, "U2", 3) };
+    QList<Fixture *> right { placedSpot(m_doc, "U3", 6), placedSpot(m_doc, "U4", 7) };
+    FixtureGroup *gl = new FixtureGroup(m_doc), *gr = new FixtureGroup(m_doc);
+    gl->setName("USTs-L");
+    gr->setName("USTs-R");
+    m_doc->addFixtureGroup(gl);
+    m_doc->addFixtureGroup(gr);
+    for (Fixture *f : left)
+        gl->assignFixture(f->id());
+    for (Fixture *f : right)
+        gr->assignFixture(f->id());
+    const quint32 pid = m_doc->paletteOps()->create(QLCPalette::PanTilt, QString(), "UST-0", QVariantList(),
+                                                    [](QLCPalette *p) { p->setValue(270, 210); });
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L");
+    const quint32 c1 = st->addCue(list, -1, "Setup");
+    Target t;
+    t.groups << gl->id() << gr->id();
+    const quint32 l1 = st->addLayer(c1, t);
+    QVERIFY(st->setLayerLook(c1, l1, st->lookForPalette(pid)));
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1200, 900);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QVERIFY(view.selectNode(l1, c1));
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    LinePlanView *plan = qobject_cast<LinePlanView *>(view.linePlan());
+    QVERIFY(plan != nullptr);
+    QVERIFY(plan->formation().isRawPosition());
+    QCOMPARE(plan->beams().count(), 4);
+    // Two groups, two colours.
+    QCOMPARE(plan->beams().first().colour, LineFormation::groupColour(0));
+    QCOMPARE(plan->beams().last().colour, LineFormation::groupColour(1));
+    QLabel *lands = view.findChild<QLabel *>("stPositionLanding");
+    QVERIFY(lands != nullptr);
+    QVERIFY2(lands->text().startsWith("UST-0"), qPrintable(lands->text()));
+    QVERIFY2(lands->text().contains(plan->formation().landingSummary()), qPrintable(lands->text()));
+    QVERIFY(!plan->formation().landingSummary().isEmpty());
+    plan->resize(320, 200);
+    QVERIFY(!plan->grab().isNull());
+    // It pops out like a line aim's.
+    view.openLinePlanWindow();
+    QVERIFY(view.linePlanWindow() != nullptr);
+    QCOMPARE(view.linePlanWindow()->plan()->beams().count(), 4);
+    view.linePlanWindow()->close();
 }
 
 /* D19 / open 14: the plan view under a line aim's order strip -- the line
