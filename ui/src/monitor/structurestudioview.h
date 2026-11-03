@@ -1345,6 +1345,11 @@ private:
     bool     m_qualityFrame = false; ///< one full-quality frame after a light run
     bool     m_valueFrame = false;   ///< the next frame is value-driven (frame budget)
     bool     m_degraded = false;     ///< this frame is drawn without supersampling
+    /** The next frame is for the pointer alone (the crosshair moved): it keeps
+     *  the quality the last frame had, so hovering over a running show does
+     *  not flip the rig between light and full frames -- seen as the whole
+     *  picture shifting a hair back and forth under the mouse. */
+    bool     m_hoverFrame = false;
     QElapsedTimer m_lastFrameAt;     ///< when the last frame started
     class QTimer *m_degradeSettle = nullptr;  ///< the full-quality frame after values stop
     static qint64 processCpuNs();

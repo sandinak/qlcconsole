@@ -10114,12 +10114,21 @@ void StructureStudioView::paintEvent(QPaintEvent *)
        on the last one) the rig is drawn without supersampling -- a third of
        the work -- and one full-quality frame follows when they stop. Still
        values, edits and the settle frame draw at full quality as before. */
-    const bool fast = m_valueFrame && m_supersample > 1 && m_lastFrameAt.isValid()
+    /* A frame for the crosshair alone keeps the quality of the one before:
+       hovering over a running show used to interleave full frames (the
+       pointer's) with light ones (the values'), and the two rasterise every
+       edge a little differently, so the rig shimmered back and forth under
+       the mouse. It does not hold the settle frame back either. */
+    const bool hoverOnly = m_hoverFrame && !m_valueFrame && !m_qualityFrame
+                           && !m_liveDirty && !m_settleFrame;
+    m_hoverFrame = false;
+    const bool fast = (m_valueFrame || (hoverOnly && m_degraded))
+                      && m_supersample > 1 && m_lastFrameAt.isValid()
                       && m_lastFrameAt.elapsed() < 400;
     m_valueFrame = false;
     m_degraded = fast;
     m_qualityFrame = false;
-    if (fast)
+    if (fast && !hoverOnly)
     {
         if (m_degradeSettle == nullptr)
         {
@@ -10644,6 +10653,8 @@ void StructureStudioView::mouseMoveEvent(QMouseEvent *e)
         if (dragPipeBarTo(m_dragPipeBarId, e->pos()))
             m_dragged = true;
     }
+    if (e->buttons() == Qt::NoButton)
+        m_hoverFrame = true;   // only the pointer moved: see paintEvent()
     update();   // keep the ruler crosshair/readout live on hover
 }
 
@@ -10651,6 +10662,7 @@ void StructureStudioView::leaveEvent(QEvent *)
 {
     m_hasCursor = false;
     m_hoverKnob = false;
+    m_hoverFrame = true;   // the crosshair goes: nothing else changes
     update();
 }
 

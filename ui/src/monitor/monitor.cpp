@@ -1388,11 +1388,23 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
 
     // Live coordinate readout, right-aligned.
     m_readoutLabel = new QLabel(tr("—"));
-    m_readoutLabel->setMinimumWidth(160);
     m_readoutLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     QFont rf = m_readoutLabel->font();
     rf.setStyleHint(QFont::Monospace);
     m_readoutLabel->setFont(rf);
+    /* A fixed width, as wide as the longest reading. Sized to its text, the
+       label grew and shrank as the pointer moved; the bar's scroll bar came
+       and went with it, the canvas above changed height by its thickness and
+       the plot shifted back and forth under the mouse. */
+    {
+        const QFontMetrics fm(rf);
+        int w = 160;
+        foreach (const QString &widest, QStringList() << tr("%1   %2  %3").arg(tr("SL 888.88"), tr("DS 888.88"), "ft")
+                                                      << tr("%1   %2  %3").arg(tr("%1: %2").arg("X", "-888.88"),
+                                                                               tr("%1: %2").arg("Y", "-888.88"), "ft"))
+            w = qMax(w, fm.horizontalAdvance(widest) + 8);
+        m_readoutLabel->setFixedWidth(w);
+    }
     fl->addWidget(m_readoutLabel);
 
     /* In a ShrinkableBar: the row is ~780 px of controls, and as a plain row

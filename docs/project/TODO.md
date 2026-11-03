@@ -10,6 +10,15 @@ under `~/.claude/.../memory/`.
 
 ---
 
+## Rig view hover jitter (fix/04-rig-hover-jitter, 2026-11-03) — done
+
+"The rig view moves a very small distance back and forth when the mouse
+moves over it." Cause: pointer frames drawn full quality between a running
+show's light frames (`StructureStudioView::paintEvent`, `m_hoverFrame`);
+on the 2D plot the readout label's width moved the footer scroll bar.
+Tests: `RenderPerf_Test::hoveringARunningShowKeepsTheRigStill`,
+`Monitor_Test::hoveringThePlotKeepsItStill`. Move to DONE.md when landed.
+
 ## Aim round trip — leftovers (fix/04-ust-aim, 2026-11-03)
 
 "USTs still pointing SR" (cue 1.1.1, line aim, Spread +5). Built: one DMX

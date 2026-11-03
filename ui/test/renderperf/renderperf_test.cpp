@@ -19,6 +19,8 @@
 
 #include <QtTest>
 #include <QTimer>
+#include <QScopeGuard>
+#include <QMouseEvent>
 #include <QFile>
 #include <QTextStream>
 #include <functional>
@@ -267,6 +269,124 @@ void RenderPerf_Test::aRunningShowStaysUnderOneCore()
     QVERIFY(!v.m_degraded);
     QTest::qWait(500);
     QCOMPARE(v.paintCount(), settled);
+    v.setLiveValues(false);
+}
+
+/* "Visual artifacts in the rig view ... moving a very small distance back and
+   forth when the mouse moves over it." With a show running, the values'
+   frames are drawn light (no supersampling) and the crosshair's were drawn
+   full, so hovering interleaved the two -- every edge rasterised a little
+   differently, frame to frame. Pointer moves now keep the frame's quality and
+   change nothing about the camera: the rig under the crosshair is the same
+   picture, pixel for pixel. */
+void RenderPerf_Test::hoveringARunningShowKeepsTheRigStill()
+{
+    const bool moveSpeedWas = StructureStudioView::s_moveSpeed;
+    StructureStudioView::setMoveSpeed(false);   // heads snap: one value, one picture
+    auto restore = qScopeGuard([moveSpeedWas]() { StructureStudioView::setMoveSpeed(moveSpeedWas); });
+
+    StructureStudioView v(m_doc, StructureStudioView::StageKind, 0);
+    v.resize(800, 520);
+    v.reload();
+    v.setPlane(StructureStudioView::Angled);
+    v.setBeams(true);
+    v.m_supersample = 2;                    // "Smooth" (not saved: no QSettings write)
+    v.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&v));
+    v.setLiveValues(true);
+    v.m_liveTimer->stop();                  // frames by hand below
+    QTRY_VERIFY_WITH_TIMEOUT(!v.m_settlePending, 5000);
+    changeValues(700);
+    v.repaint();
+
+    const double scale = v.m_scale;
+    const QPointF origin = v.m_originPx;
+    const double az = v.m_azimuthDeg, el = v.m_elevationDeg;
+    const QRect geometry = v.geometry();
+
+    auto hover = [&v](const QPoint &at) {
+        QMouseEvent move(QEvent::MouseMove, QPointF(at), v.mapToGlobal(QPointF(at)),
+                         Qt::NoButton, Qt::NoButton, Qt::NoModifier);
+        QApplication::sendEvent(&v, &move);
+    };
+    auto cameraHeld = [&](const QString &where) {
+        QVERIFY2(v.m_scale == scale && v.m_originPx == origin && v.m_azimuthDeg == az
+                 && v.m_elevationDeg == el && v.geometry() == geometry,
+                 qPrintable(QString("%1: the view moved (scale %2 -> %3, origin %4,%5 -> %6,%7)")
+                            .arg(where).arg(scale).arg(v.m_scale).arg(origin.x()).arg(origin.y())
+                            .arg(v.m_originPx.x()).arg(v.m_originPx.y())));
+    };
+
+    // The show is running: a value frame, drawn light.
+    v.m_lastFrameAt.start();
+    v.m_valueFrame = true;
+    const QImage light = v.grab().toImage();
+    QVERIFY(v.m_degraded);
+
+    // The pointer sweeps across it; a frame for each move.
+    QString firstReading;
+    const QPoint last(560, 140);
+    for (int i = 0; i <= 8; ++i)
+    {
+        const QPoint at = (i < 8) ? QPoint(120 + i * 70, 400 - i * 30) : last;
+        v.m_lastFrameAt.start();            // frames keep coming, as in a running show
+        hover(at);
+        QCOMPARE(v.m_cursorPx, QPointF(at));
+        if (i < 8)
+            v.repaint();
+        const QString where = QString("move %1").arg(i);
+        cameraHeld(where);
+        if (i == 0)
+            firstReading = v.cursorReadoutText(v.m_cursorPx);
+        if (i < 8)
+            QVERIFY2(v.m_degraded, qPrintable(where + ": a pointer frame changed the quality"));
+    }
+    // The readout follows the pointer all the same.
+    QVERIFY(v.m_hasCursor);
+    QVERIFY(v.cursorReadoutText(v.m_cursorPx) != firstReading);
+
+    // The rig under the crosshair is the value frame's, pixel for pixel.
+    const QImage hovered = v.grab().toImage();
+    QVERIFY(v.m_degraded);
+    QCOMPARE(hovered.size(), light.size());
+    const qreal dpr = hovered.devicePixelRatio();
+    int differ = 0;
+    for (int y = 0; y < hovered.height(); ++y)
+    {
+        const double ly = y / dpr;
+        if (qAbs(ly - last.y()) <= 3 || (ly >= last.y() + 6 && ly <= last.y() + 32))
+            continue;                       // the crosshair's line and its readout
+        for (int x = 0; x < hovered.width(); ++x)
+        {
+            if (qAbs(x / dpr - last.x()) <= 3)
+                continue;
+            if (hovered.pixel(x, y) != light.pixel(x, y))
+                ++differ;
+        }
+    }
+    QVERIFY2(differ == 0, qPrintable(QString("%1 pixels of the rig changed under the pointer").arg(differ)));
+
+    // The values stop: the settle frame is still full quality, pointer or not.
+    v.m_qualityFrame = true;
+    v.m_lastFrameAt.start();
+    hover(QPoint(300, 300));
+    v.repaint();
+    QVERIFY(!v.m_degraded);
+    // ...and hovering a still show draws full quality, as before.
+    for (int i = 0; i < 3; ++i)
+    {
+        v.m_lastFrameAt.start();
+        hover(QPoint(200 + i * 40, 260));
+        v.repaint();
+        QVERIFY(!v.m_degraded);
+        cameraHeld(QString("still %1").arg(i));
+    }
+    // The pointer leaves: the crosshair goes, the view stays.
+    QEvent leave(QEvent::Leave);
+    QApplication::sendEvent(&v, &leave);
+    v.repaint();
+    QVERIFY(!v.m_hasCursor);
+    cameraHeld(QStringLiteral("leave"));
     v.setLiveValues(false);
 }
 
