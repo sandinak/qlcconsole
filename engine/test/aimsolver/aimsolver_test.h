@@ -47,6 +47,16 @@ private slots:
     void calibrationIsInTheDmxAndOutOfThePicture();
     /** No offset, no change: the inverse is the plain inverse. */
     void zeroOffsetsInverseIsUnchanged();
+    /** "When things are aimed, they go where they should": for each rig in
+     *  a table (hung, standing, on the floor with no height, turned, inverted,
+     *  calibrated, 8- and 16-bit, a two-arm beam with an indexed pan band; at
+     *  a point, a person and a line, with Spread), an Aim look's DMX turned
+     *  back into a beam with the rig views' own arithmetic passes through
+     *  each head's aim point, and that point is on the target. */
+    void aimedHeadsLandOnTheirTarget_data();
+    void aimedHeadsLandOnTheirTarget();
+    /** An indexed band's coarse-only pan lands on the nearest step. */
+    void anIndexedBandRoundsToTheNearestStep();
 };
 
 #endif

@@ -11376,7 +11376,7 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
                 // Over the indexed-position band when the channel has one.
                 uchar bandLo = 0, bandHi = 255;
                 if (Fixture::positionBand(fxi->channel(msbCh), bandLo, bandHi))
-                    deg = float(Fixture::positionFraction(fxi->channel(msbCh), msb + lsb / 256.0)) * maxDeg;
+                    deg = float(Fixture::positionFraction(fxi->channel(msbCh), msb + lsb / 256.0, hasFine)) * maxDeg;
 
                 QString txt;
                 if (hasFine)

@@ -12,3 +12,8 @@ target_link_libraries(aimsolver_test PRIVATE
     Qt6::Test
     qlcplusengine
 )
+
+# The two-arm beam a round-trip row aims (its indexed pan band, two heads).
+target_compile_definitions(aimsolver_test PRIVATE
+    AIMSOLVER_TEST_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+)

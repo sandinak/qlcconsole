@@ -10,6 +10,28 @@ active work in [TODO.md](docs/project/TODO.md).
 Versions here are independent of the QLC+ base version embedded in the
 in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relate).
 
+## [Unreleased]
+
+### Fixed
+
+- **An aimed light is drawn where it points, to the step.** The rig views
+  read a 16-bit head's fine byte back (read coarse only, a 540° head was
+  drawn up to 2° off its mark, 20 cm at a 6 m throw), and a two-arm beam's
+  indexed pan (DMX 0-127) is sent on the nearest step instead of the one
+  below it (up to 2.8° short). One readback, in the engine
+  (`AimSolver::headDirection()`), draws every mover's beam, and a
+  round-trip test (`AimSolver_Test::aimedHeadsLandOnTheirTarget`) aims
+  hung, standing, floor, turned, inverted and calibrated rigs, 8- and
+  16-bit heads and the two-arm beam at points, people and lines with
+  Spread, and checks each beam lands on its target.
+- **The Blind view shows the cue in edit on every fixture.** Only a
+  fixture at address 1 took the cue's levels; every other kept what the
+  stage had, so seven of eight USTs pointed where the last live cue left
+  them, not along the cue's line.
+- **A standing head aimed at a line traces to where it lights** (the
+  people on the line, the subject height above it) in the Lighting Studio
+  and Focus mode, as its DMX does, not to the deck below.
+
 ## [0.4.0] - 2026-11-02
 
 qlcconsole 0.4.0 carries the 0.3.1 polish, all of 0.4 ("Run the show") and

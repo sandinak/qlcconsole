@@ -384,13 +384,32 @@ bool Fixture::positionBand(const QLCChannel *ch, uchar &lo, uchar &hi)
     return lo != 0 || hi != 255;
 }
 
-double Fixture::positionFraction(const QLCChannel *ch, double dmx)
+double Fixture::positionFraction(const QLCChannel *ch, double dmx, bool fine)
 {
     uchar lo = 0, hi = 255;
     positionBand(ch, lo, hi);
     if (hi <= lo)
         return 0.0;
-    return qBound(0.0, (dmx - double(lo)) / double(hi - lo), 1.0);
+    /* With a fine byte the band runs to the top of its last coarse step
+       (positionToValues() spreads it over lo16..hi16, hi16 = hi:255): over
+       hi - lo alone, a 540 degree head read back up to 2 degrees long. */
+    const double span = double(hi - lo) + (fine ? 255.0 / 256.0 : 0.0);
+    return qBound(0.0, (dmx - double(lo)) / span, 1.0);
+}
+
+/* The 16-bit value @p frac (0..1) of the way across band [lo16, hi16]. A
+   coarse-only channel with an indexed band is placed on the NEAREST step, the
+   exact inverse of Fixture::positionFraction(): truncated, a two-arm beam's
+   128 steps for 360 degrees put every head up to 2.8 degrees short, about
+   30 cm at a 6 m throw. A full-range channel keeps stock QLC+'s mapping. */
+static quint16 bandValue(qreal frac, quint32 lo16, quint32 hi16, bool hasFine)
+{
+    if (!hasFine && (lo16 != 0 || hi16 != 65535))
+    {
+        const int lo = int(lo16 >> 8), hi = int(hi16 >> 8);
+        return quint16(qBound(lo, qRound(lo + frac * (hi - lo)), hi) << 8);
+    }
+    return static_cast<quint16>(lo16 + frac * (hi16 - lo16));
 }
 
 QList<SceneValue> Fixture::positionToValues(int type, float degrees, bool isRelative)
@@ -440,7 +459,7 @@ QList<SceneValue> Fixture::positionToValues(int type, float degrees, bool isRela
             // Clamp to the band so an out-of-range angle can never spill into
             // the rotation zone of a split channel.
             qreal frac = qBound(0.0, headDegrees / maxDegrees, 1.0);
-            quint16 degToDmx = static_cast<quint16>(lo16 + frac * (hi16 - lo16));
+            quint16 degToDmx = bandValue(frac, lo16, hi16, panLSB != QLCChannel::invalid());
             posList.append(SceneValue(id(), panMSB, static_cast<uchar>(degToDmx >> 8)));
 
             if (panLSB != QLCChannel::invalid())
@@ -486,7 +505,7 @@ QList<SceneValue> Fixture::positionToValues(int type, float degrees, bool isRela
             // Clamp to the band so an out-of-range angle can never spill into
             // the rotation zone of a split channel.
             qreal frac = qBound(0.0, headDegrees / maxDegrees, 1.0);
-            quint16 degToDmx = static_cast<quint16>(lo16 + frac * (hi16 - lo16));
+            quint16 degToDmx = bandValue(frac, lo16, hi16, tiltLSB != QLCChannel::invalid());
             posList.append(SceneValue(id(), tiltMSB, static_cast<uchar>(degToDmx >> 8)));
 
             if (tiltLSB != QLCChannel::invalid())
@@ -684,6 +703,27 @@ bool Fixture::setChannelValues(const QByteArray &values)
             changed = true;
             QMutexLocker locker(&m_channelsInfoMutex);
             m_values[i] = values.at(i + addr);
+            checkAlias(i, m_values[i]);
+        }
+    }
+
+    if (changed == true)
+        emit valuesChanged();
+
+    return changed;
+}
+
+bool Fixture::setOwnChannelValues(const QByteArray &values)
+{
+    const int chNum = qMin(int(values.size()), int(m_values.size()));
+    bool changed = false;
+    for (int i = 0; i < chNum; i++)
+    {
+        if (m_values.at(i) != values.at(i))
+        {
+            changed = true;
+            QMutexLocker locker(&m_channelsInfoMutex);
+            m_values[i] = values.at(i);
             checkAlias(i, m_values[i]);
         }
     }
