@@ -43,6 +43,11 @@ Roles: **Driver** (mouse), **Navigator** (reads each step aloud and checks *You 
      matters. Look for **CUE-02**, and for four **CUE-01** under it.
 
    ![Show Review's findings](../../images/lesson-3-9/show-review.png)
+
+   A warning also shows where it happens: a **⚠ cyc** mark on a cue in
+   the Show Tree. Hover it for the detail (which lights, how much, which
+   cues). Right-click it to answer there: **I Meant It**, **Not Meant:
+   Show Me the Layer**, or **Open in Show Review**.
 4. Select **CUE-02** and click **Fix ▸**. It takes you to the second song.
    Click the header **2 — Slow Dance** and tick **Block at section start**.
    Click **Re-check**.

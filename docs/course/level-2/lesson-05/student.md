@@ -56,8 +56,14 @@ A snap or a quick sweep for the button? Why?
 
 7. Click **1.0.7 Fan**, **+ Cue**, type `Button`, **Return**.
 8. Click the grey **Truss-Spots** row; **Spread ⋯ → −5**: the beams cross.
-   In the plan view each beam runs from its light to its point, so you see
-   them cross. With Grouping set, each group has a colour of its own.
+   In the plan view (from above, downstage at the bottom) each beam is a
+   line from where its light hangs to its point on the line, so a cross
+   shows as lines that cross. Read the caption under it. With Grouping set,
+   lights that move together share a colour, and it counts the crossings
+   (*Groups swap sides: 24 beam crossings*). **Cross** does something only
+   with Spread below 0; at +5 or 0 the plan says so.
+
+   ![The plan at Spread −5: the beams cross](../../images/lesson-2-5/line-cross.png)
 9. Click **1.0.8 Button**; drag **Red** onto the **Truss-Spots** row.
 10. Type `1` in **Fade in**, **Return**.
 

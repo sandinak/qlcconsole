@@ -4239,6 +4239,10 @@ static bool lessonTwoFiveByMouse(Doc *doc, ShowTreeView *view, const QString &sh
     settle(400);
     const QString fanPans = pans();
     qInfo().noquote() << "[2.5] fanned:" << fanPans;
+    // A Look Editor left open by the drop would hide the layer's own page.
+    if (QToolButton *back = view->findChild<QToolButton *>(QStringLiteral("lookBack")))
+        if (back->isVisible())
+            back->click();
     LESSON_STEP(clickCueRow(view, "Truss-Spots"), "click the layer");
     qInfo().noquote() << "[2.5] rows: Position" << rowText(view, KeyPosition) << "| Spread" << rowText(view, KeySpread)
                       << "| Grouping" << rowText(view, KeyGrouping) << "| Cross" << rowText(view, KeyCross)
@@ -4280,6 +4284,23 @@ static bool lessonTwoFiveByMouse(Doc *doc, ShowTreeView *view, const QString &sh
     settle(200);
     qInfo().noquote() << "[2.5] after -5: kind" << int(view->currentKind()) << "| Spread" << rowText(view, KeySpread)
                       << "| hint" << hintOf(view)->text();
+    if (!shots.isEmpty())
+    {
+        // The plan at Spread -5: each beam's line to its point, crossing.
+        QWidget *plan = view->findChild<QWidget *>(QStringLiteral("stLinePlan"));
+        QLabel *spread = stFind<QLabel>(view, QStringLiteral("stRow:%1").arg(KeySpread));
+        for (QWidget *w = spread; w != nullptr; w = w->parentWidget())
+            if (QScrollArea *area = qobject_cast<QScrollArea *>(w))
+            {
+                area->ensureWidgetVisible(plan != nullptr ? plan : spread, 0, 10);
+                break;
+            }
+        settle(100);
+        QList<HelpShots::Callout> marks;
+        if (plan != nullptr && plan->isVisible())
+            marks << mark(plan, 1, HelpShots::Above);
+        LESSON_STEP(ui(QStringLiteral("line-cross"), marks), "cross shot");
+    }
     LESSON_STEP(view->selectNode(button), "select the button");
     settle(50);
     {

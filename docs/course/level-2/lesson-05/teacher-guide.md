@@ -113,7 +113,8 @@ Two groups play it in the Run tab: click **1.0.7 Fan** to load it, **GO**,
 ## Extension (fast groups)
 
 From the handout: **Spread 0** (a single hot spot), **Grouping:
-Pairs**, and the eight USTs fanned on the same line.
+Pairs** (read the plan's caption: groups, and how many beams cross; Cross
+shows nothing at Spread 0 or above), and the eight USTs fanned on the same line.
 
 ## At home
 

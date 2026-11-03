@@ -38,6 +38,8 @@ app: true
    accident: a colour carried into the next song, two hits fighting over
    the same lights. Click **Review** in the footer. Fix each blocker and
    warning, or **Accept…** it with a note saying why it's on purpose.
+   A warning also marks its cue (**⚠ cyc**): hover for the detail,
+   right-click to answer it there.
    Your notes are part of the mark.
 7. **Run it live** while the song plays: one of you calls as SM, another
    is on the board, and you fire a hit at least once.

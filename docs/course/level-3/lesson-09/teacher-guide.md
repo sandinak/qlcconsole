@@ -55,7 +55,7 @@ Put the problem on the board with the clock: "7:20. The lanterns are dark in son
 
 ## 2. Teacher demo (10 min)
 
-1. Open the start file. Click **Review**: read two rows aloud, and hover for why it matters.
+1. Open the start file. Click **Review**: read two rows aloud, and hover for why it matters. Show that a warning answers where it shows: hover a **⚠ cyc** mark on a cue, right-click it (**I Meant It**, **Not Meant: Show Me the Layer**, **Open in Show Review**). A closed main curtain now stops its cyc light being flagged.
 2. CUE-02: **Fix ▸**, Block at section start, **Re-check**: five findings gone.
 3. VC-03: **Accept…**; show the note on the Accepted filter.
 4. Right-click a lantern → **Why is this on?** Read *Why it isn't on* top to bottom.
