@@ -39,13 +39,10 @@ class Doc;
  * of AimSolver::solve(), for a position that is stored values rather than an
  * aim (a PanTilt palette, a scene's own values).
  *
- * The math is the rig view's (MonitorFixtureItem / fixturevisualtraits):
- * MSB plus fine, read across the channel's pointing band
- * (Fixture::positionBand(), so an indexed-pan head's 0-127 is its whole
- * range; read at 16 bits, as positionToValues() writes it), centred on the
- * range, turned into a world direction by
- * AimSolver::beamDirection() with the rig props (mounting, pan zero, invert,
- * calibration). The beam starts where AimSolver::frameFor() puts the head,
+ * The math is the rig views' own, AimSolver::headDirection(): MSB plus
+ * fine across the channel's pointing band (an indexed-pan head's 0-127 is
+ * its whole range), centred, through beamDirection() with the rig props
+ * (mounting, pan zero, invert, calibration). The beam starts where AimSolver::frameFor() puts the head,
  * the same origin solve() aims from, and is followed to the deck (the floor,
  * or the top of a platform under it).
  *
@@ -81,15 +78,12 @@ namespace BeamLanding
         bool valid() const { return kind != NoGeometry; }
     };
 
-    /** The world direction of a head at pan / tilt @p panDmx / @p tiltDmx
-     *  (MSB 0..255, fine as the fraction). False without rig geometry. */
-    QLC_ENGINE_EXPORT bool direction(Doc *doc, quint32 fixtureId, double panDmx, double tiltDmx,
+    /** The world direction of @p fixtureId's beam for @p values (its first
+     *  head; a missing pan or tilt reads the middle of its range), by
+     *  AimSolver::headDirection() -- the rig views' own readback. False
+     *  without rig geometry, or when @p values set neither pan nor tilt. */
+    QLC_ENGINE_EXPORT bool direction(Doc *doc, quint32 fixtureId, const QList<SceneValue> &values,
                                      QVector3D &dir);
-
-    /** The pan and tilt DMX @p values set on @p fixtureId (MSB + LSB / 256),
-     *  either may be missing. */
-    QLC_ENGINE_EXPORT void dmxOf(Doc *doc, quint32 fixtureId, const QList<SceneValue> &values,
-                                 double &panDmx, double &tiltDmx, bool &hasPan, bool &hasTilt);
 
     /** Where @p fixtureId's beam lands for @p values, named. A missing axis is
      *  read at the centre of its range. */

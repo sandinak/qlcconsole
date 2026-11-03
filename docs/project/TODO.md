@@ -233,13 +233,10 @@ showing nothing until picked; with more than seven groups the colours go
 round again (brackets and numbers still tell neighbours apart). Also
 built (user ask on 138.png): stored positions (PanTilt, any non-Aim
 Position) solved forward from DMX -- `engine/src/beamlanding.*`
-(BeamLanding::land / describe / summary; the aim agent's round-trip test
-can share it) -- shown as a line + plan under the layer's Position row and
-on the Look Editor's PanTilt page. Fixed: the plan view drew (x, height),
-not (x, y). Found, not fixed (aim agent's file): `Fixture::positionFraction`
-ends an indexed band at MSB hi, not hi + 255/256, so the rig view reads an
-indexed-pan head ~0.4% of its range off (about 1 degree on 540);
-BeamLanding reads the band at 16 bits. Open: naming scenery a beam lands
+(BeamLanding::land / describe / summary) -- shown as a line + plan under the layer's Position row and
+on the Look Editor's PanTilt page; the direction is the aim agent's
+`AimSolver::headDirection()` readback, so it matches the rig views. Fixed:
+the plan view drew (x, height), not (x, y). Open: naming scenery a beam lands
 on (only targets and stage areas now); landing on a riser's side.
 
 ## Formation palettes — built, leftovers (0.4, form, Q197, 2026-11-01)

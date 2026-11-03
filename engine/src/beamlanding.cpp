@@ -82,81 +82,35 @@ double distanceToLine(const QVector<QVector3D> &pts, const QVector3D &p, double 
 }
 }
 
-bool BeamLanding::direction(Doc *doc, quint32 fixtureId, double panDmx, double tiltDmx, QVector3D &dir)
+bool BeamLanding::direction(Doc *doc, quint32 fixtureId, const QList<SceneValue> &values, QVector3D &dir)
 {
     Fixture *fx = doc != nullptr ? doc->fixture(fixtureId) : nullptr;
     MonitorProperties *mp = doc != nullptr ? doc->monitorProperties() : nullptr;
     if (fx == nullptr || mp == nullptr || fx->fixtureMode() == nullptr)
         return false;
+    // The head's channels as the values set them; pan and tilt not set sit
+    // in the middle of their range.
+    QByteArray bytes(int(fx->channels()), char(0));
     quint32 msb, lsb;
-    const QLCChannel *panCh = axisChannel(fx, QLCChannel::Pan, msb, lsb);
-    const QLCChannel *tiltCh = axisChannel(fx, QLCChannel::Tilt, msb, lsb);
-    const QLCPhysical &phy = fx->fixtureMode()->physical();
-    const double panMax = phy.focusPanMax() != 0 ? phy.focusPanMax() : 360.0;
-    const double tiltMax = phy.focusTiltMax() != 0 ? phy.focusTiltMax() : 270.0;
-    /* As the rig view: across the pointing band (Fixture::positionBand()),
-       centred on the range. The band is read at 16 bits, as
-       positionToValues() writes into it -- MSB lo .. hi plus a whole fine
-       byte at the top. Fixture::positionFraction() stops the band at MSB hi,
-       which reads an indexed head (0-127 of 255) about 0.4% of its range
-       wide: a degree on a 540 degree pan, ten centimetres at a six-metre
-       throw. Without a band the two agree. */
-    auto centred = [](const QLCChannel *ch, double dmx, double max) {
-        if (ch == nullptr)
-            return 0.0;
-        uchar lo = 0, hi = 255;
-        double f;
-        if (Fixture::positionBand(ch, lo, hi))
-        {
-            const double lo16 = double(lo) * 256.0, hi16 = double(hi) * 256.0 + 255.0;
-            f = qBound(0.0, (dmx * 65535.0 / 255.0 - lo16) / (hi16 - lo16), 1.0);
-        }
-        else
-            f = Fixture::positionFraction(ch, dmx);
-        return f * max - max / 2.0;
-    };
-    return AimSolver::beamDirection(mp->fixtureRigProps(fixtureId), centred(panCh, panDmx, panMax),
-                                    centred(tiltCh, tiltDmx, tiltMax), dir);
-}
-
-void BeamLanding::dmxOf(Doc *doc, quint32 fixtureId, const QList<SceneValue> &values,
-                        double &panDmx, double &tiltDmx, bool &hasPan, bool &hasTilt)
-{
-    hasPan = hasTilt = false;
-    panDmx = tiltDmx = 127.5;
-    Fixture *fx = doc != nullptr ? doc->fixture(fixtureId) : nullptr;
-    if (fx == nullptr)
-        return;
-    quint32 panMsb, panLsb, tiltMsb, tiltLsb;
-    axisChannel(fx, QLCChannel::Pan, panMsb, panLsb);
-    axisChannel(fx, QLCChannel::Tilt, tiltMsb, tiltLsb);
-    double panFine = 0.0, tiltFine = 0.0;
+    bool any = false;
+    for (QLCChannel::Group g : { QLCChannel::Pan, QLCChannel::Tilt })
+    {
+        axisChannel(fx, g, msb, lsb);
+        if (msb != QLCChannel::invalid() && msb < quint32(bytes.size()))
+            bytes[int(msb)] = char(128);
+    }
     for (const SceneValue &sv : values)
     {
-        if (sv.fxi != fixtureId)
+        if (sv.fxi != fixtureId || sv.channel >= quint32(bytes.size()))
             continue;
-        if (panMsb != QLCChannel::invalid() && sv.channel == panMsb)
-        {
-            panDmx = sv.value;
-            hasPan = true;
-        }
-        else if (tiltMsb != QLCChannel::invalid() && sv.channel == tiltMsb)
-        {
-            tiltDmx = sv.value;
-            hasTilt = true;
-        }
-        else if (panLsb != QLCChannel::invalid() && sv.channel == panLsb)
-            panFine = sv.value / 256.0;
-        else if (tiltLsb != QLCChannel::invalid() && sv.channel == tiltLsb)
-            tiltFine = sv.value / 256.0;
+        bytes[int(sv.channel)] = char(sv.value);
+        const QLCChannel *ch = fx->fixtureMode()->channel(sv.channel);
+        if (ch != nullptr && (ch->group() == QLCChannel::Pan || ch->group() == QLCChannel::Tilt))
+            any = true;
     }
-    /* 16-bit as the writer meant it: (MSB * 256 + LSB) of 65535, on the
-       MSB's 0..255 scale -- not MSB + LSB / 256, which reads a centred head
-       a tenth of a degree per step further out. */
-    if (hasPan && panFine > 0.0)
-        panDmx = (panDmx * 256.0 + panFine * 256.0) * 255.0 / 65535.0;
-    if (hasTilt && tiltFine > 0.0)
-        tiltDmx = (tiltDmx * 256.0 + tiltFine * 256.0) * 255.0 / 65535.0;
+    if (!any)
+        return false;
+    return AimSolver::headDirection(fx, bytes, 0, mp->fixtureRigProps(fixtureId), dir);
 }
 
 QString BeamLanding::areaAt(Doc *doc, const QVector3D &point)
@@ -186,13 +140,8 @@ BeamLanding::Result BeamLanding::land(Doc *doc, quint32 fixtureId, const QList<S
     AimSolver::Frame frame;
     if (mp == nullptr || !AimSolver::frameFor(doc, fixtureId, frame))
         return r;
-    double pan, tilt;
-    bool hasPan, hasTilt;
-    dmxOf(doc, fixtureId, values, pan, tilt, hasPan, hasTilt);
-    if (!hasPan && !hasTilt)
-        return r;
     QVector3D dir;
-    if (!direction(doc, fixtureId, pan, tilt, dir))
+    if (!direction(doc, fixtureId, values, dir))
         return r;
     r.origin = frame.position;
     r.direction = dir;
