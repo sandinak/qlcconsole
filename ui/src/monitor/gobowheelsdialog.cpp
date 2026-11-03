@@ -28,6 +28,9 @@
 #include <QRegularExpression>
 #include <QFile>
 #include <QHash>
+#include <QComboBox>
+#include <QPainter>
+#include <QPainterPath>
 
 #include "gobowheelsdialog.h"
 #include "beamoptics.h"
@@ -79,6 +82,59 @@ namespace
                 out << t;
         }
         return out;
+    }
+
+    /** A gobo as the beam shows it: light through a dark disc, so a
+     *  thumbnail reads on any theme (the pictures themselves are black metal
+     *  on clear, which vanishes on a dark background). */
+    QIcon lightIcon(const QImage &mask)
+    {
+        if (mask.isNull())
+            return QIcon();
+        const int n = 40;
+        QImage out(n, n, QImage::Format_ARGB32_Premultiplied);
+        out.fill(Qt::transparent);
+        QPainter p(&out);
+        p.setRenderHint(QPainter::Antialiasing);
+        p.setRenderHint(QPainter::SmoothPixmapTransform);
+        p.setPen(Qt::NoPen);
+        p.setBrush(QColor(18, 18, 22));
+        p.drawEllipse(QRectF(1, 1, n - 2, n - 2));
+        // The mask's light, clipped to the disc, in warm white.
+        QImage light(n, n, QImage::Format_ARGB32_Premultiplied);
+        light.fill(QColor(255, 244, 214));
+        QImage alpha = mask.scaled(n, n, Qt::IgnoreAspectRatio, Qt::SmoothTransformation)
+                           .convertToFormat(QImage::Format_Alpha8);
+        light.setAlphaChannel(alpha);
+        QPainterPath disc;
+        disc.addEllipse(QRectF(2, 2, n - 4, n - 4));
+        p.setClipPath(disc);
+        p.drawImage(0, 0, light);
+        p.setClipping(false);
+        p.setPen(QPen(QColor(120, 120, 130), 1.0));
+        p.setBrush(Qt::NoBrush);
+        p.drawEllipse(QRectF(1, 1, n - 2, n - 2));
+        return QIcon(QPixmap::fromImage(out));
+    }
+
+    /** Share of the beam's disc a mask lets through, 0..1. */
+    double maskCoverage(const QImage &mask)
+    {
+        if (mask.isNull())
+            return 0.0;
+        double sum = 0.0;
+        int inside = 0;
+        const int n = mask.width();
+        for (int y = 0; y < n; ++y)
+            for (int x = 0; x < n; ++x)
+            {
+                const double dx = (x + 0.5) / n * 2.0 - 1.0, dy = (y + 0.5) / n * 2.0 - 1.0;
+                if (dx * dx + dy * dy > 1.0)
+                    continue;
+                sum += mask.constScanLine(y)[x] / 255.0;
+                ++inside;
+            }
+        return inside > 0 ? sum / inside : 0.0;
     }
 
     struct Named
@@ -185,8 +241,12 @@ QStringList GoboWheelsDialog::suggestPictures(const Doc *doc, const QString &slo
         return a.first != b.first ? a.first > b.first : a.second < b.second;
     });
     for (int i = 0; i < ranked.size() && out.size() < max; ++i)
-        if (!GoboLibrary::resolve(ranked.at(i).second).isEmpty())
+    {
+        const QString path = GoboLibrary::resolve(ranked.at(i).second);
+        // Mostly metal (a thin ring for "Spots") is a poor stand-in: next.
+        if (!path.isEmpty() && maskCoverage(BeamOptics::goboMask(path)) >= 0.1)
             out << ranked.at(i).second;
+    }
     return out;
 }
 
@@ -360,22 +420,28 @@ void GoboWheelsDialog::rebuild()
                 // The rig view's stand-in for it.
                 const QImage m = BeamOptics::standInMask(cap->name(),
                     qMax(0, GoboLibrary::standInIndex(ch, cap)));
-                slot->setIcon(COL_SLOT, m.isNull() ? QIcon() : QIcon(QPixmap::fromImage(m)));
+                slot->setIcon(COL_SLOT, lightIcon(m));
                 if (swap.isEmpty())
                 {
                     const QStringList sug = suggestionsFor(cap);
                     if (!sug.isEmpty())
                     {
-                        slot->setText(COL_SUGGEST, QFileInfo(sug.first()).completeBaseName());
-                        slot->setToolTip(COL_SUGGEST, sug.join(QLatin1Char('\n')));
-                        const QString path = GoboLibrary::resolve(sug.first());
-                        if (!path.isEmpty())
-                            slot->setIcon(COL_SUGGEST, QIcon(path));
+                        // Up to three, best first; Fit takes the one chosen.
+                        QComboBox *box = new QComboBox(m_tree);
+                        box->setObjectName(QStringLiteral("suggestions"));
+                        box->setIconSize(QSize(28, 28));
+                        foreach (const QString &name, sug)
+                            box->addItem(lightIcon(BeamOptics::goboMask(GoboLibrary::resolve(name))),
+                                         QFileInfo(name).completeBaseName(), name);
+                        m_tree->setItemWidget(slot, COL_SUGGEST, box);
                     }
                 }
             }
             else
-                slot->setIcon(COL_SLOT, QIcon(img));
+            {
+                const QIcon lit = lightIcon(BeamOptics::goboMask(img));
+                slot->setIcon(COL_SLOT, lit.isNull() ? QIcon(img) : lit);
+            }
             slot->setText(COL_GLASS, swap.isEmpty() ? (img.isEmpty() ? tr("no picture (stand-in)") : tr("as built"))
                                                     : QFileInfo(swap).fileName());
             if (!swap.isEmpty())
@@ -400,19 +466,24 @@ void GoboWheelsDialog::slotFitSuggested()
     Fixture *fx = m_doc->fixture(m_fid);
     if (fx == nullptr)
         return;
-    for (quint32 i = 0; i < fx->channels(); ++i)
-    {
-        const QLCChannel *ch = fx->channel(i);
-        foreach (QLCCapability *cap, GoboLibrary::standInCaps(ch))
+    // Each empty slot's chosen suggestion (the one showing in its dropdown).
+    for (int w = 0; w < m_tree->topLevelItemCount(); ++w)
+        for (int k = 0; k < m_tree->topLevelItem(w)->childCount(); ++k)
         {
-            if (m_swaps.contains(qMakePair(i, int(cap->min()))))
+            QTreeWidgetItem *it = m_tree->topLevelItem(w)->child(k);
+            QComboBox *box = qobject_cast<QComboBox *>(m_tree->itemWidget(it, COL_SUGGEST));
+            if (box == nullptr || box->currentIndex() < 0)
                 continue;
-            const QStringList sug = suggestionsFor(cap);
-            if (!sug.isEmpty())
-                for (const QLCCapability *g : sameGlass(ch, cap))
-                    m_swaps.insert(qMakePair(i, int(g->min())), sug.first());
+            const quint32 chn = it->data(COL_SLOT, ROLE_CHANNEL).toUInt();
+            const QLCChannel *ch = fx->channel(chn);
+            const QLCCapability *cap = ch != nullptr
+                ? ch->searchCapability(uchar(it->data(COL_SLOT, ROLE_MIN).toInt())) : nullptr;
+            if (cap == nullptr || m_swaps.contains(qMakePair(chn, int(cap->min()))))
+                continue;
+            const QString name = box->currentData().toString();
+            for (const QLCCapability *g : sameGlass(ch, cap))
+                m_swaps.insert(qMakePair(chn, int(g->min())), name);
         }
-    }
     rebuild();
     refreshButtons();
 }

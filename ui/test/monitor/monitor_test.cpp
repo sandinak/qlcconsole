@@ -17056,6 +17056,29 @@ void Monitor_Test::goboWheelsSuggestsPicturesForBareSlots()
     QCOMPARE(GoboWheelsDialog::suggestPictures(&doc, "3 Spots Shake").first(), three.first());
     QVERIFY(GoboWheelsDialog::suggestPictures(&doc, "Concentric Spots").first().endsWith("gobo20.svg"));
     QVERIFY(GoboWheelsDialog::suggestPictures(&doc, "Xyzzy").isEmpty());
+    // A picture that is nearly all metal (a thin ring) is skipped.
+    {
+        QImage black(8, 8, QImage::Format_ARGB32);
+        black.fill(Qt::black);
+        QVERIFY(black.save(dir.filePath("Gobos/Chauvet/black.svg"), "PNG"));
+        QLCFixtureDef *ink = new QLCFixtureDef();
+        ink->setManufacturer("Stock");
+        ink->setModel("Ink");
+        QLCChannel *ic = new QLCChannel();
+        ic->setName("Gobo");
+        ic->setGroup(QLCChannel::Gobo);
+        QLCCapability *icap = new QLCCapability(0, 255, "Inkwell");
+        icap->setPreset(QLCCapability::GoboMacro);
+        icap->setResource(0, "Chauvet/black.svg");
+        ic->addCapability(icap);
+        ink->addChannel(ic);
+        QLCFixtureMode *im = new QLCFixtureMode(ink);
+        im->setName("1ch");
+        im->insertChannel(ic, 0);
+        ink->addMode(im);
+        QVERIFY(doc.fixtureDefCache()->addFixtureDef(ink));
+        QVERIFY(GoboWheelsDialog::suggestPictures(&doc, "Inkwell").isEmpty());
+    }
 
     QLCFixtureDef *bare = standInDef();
     Fixture *fx = new Fixture(&doc);
@@ -17068,6 +17091,9 @@ void Monitor_Test::goboWheelsSuggestsPicturesForBareSlots()
     QVERIFY(w->child(0)->text(1).contains("stand-in"));
     QVERIFY(!w->child(0)->icon(0).isNull());
     QVERIFY(dlg.m_fitSuggested->isEnabled());
+    QComboBox *box = qobject_cast<QComboBox *>(dlg.m_tree->itemWidget(w->child(2), 2));
+    QVERIFY(box != nullptr && box->count() >= 1 && box->count() <= 3);
+    QVERIFY(!box->itemIcon(0).isNull());
     dlg.slotFitSuggested();
     // Fitted but not kept until OK.
     QVERIFY(doc.monitorProperties()->goboSwap(fx->id(), 0, 30).isEmpty());
