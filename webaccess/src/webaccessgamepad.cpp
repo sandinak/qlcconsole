@@ -95,7 +95,7 @@ document.addEventListener('keyup',function(e){var r=KEYS[e.key];if(r){keyDown[r]
 window.addEventListener('blur',function(){for(var k in keyDown){keyDown[k]=false;set(k)}});
 function el(tag,cls,text){var e=document.createElement(tag);if(cls)e.className=cls;if(text!==undefined)e.textContent=text;return e}
 var cells={},bars=[],NAMES={back:'VIEW',start:'MENU',guide:'GUIDE / STEAM',dpad_up:'D-PAD UP',dpad_down:'D-PAD DOWN',dpad_left:'D-PAD LEFT',dpad_right:'D-PAD RIGHT'};
-function lab(r){return labels[r]||(r==='start'?'Opens and closes this test':'')}
+function lab(r){return labels[r]||(r==='start'?'Opens and closes this test':'Not used on this page')}
 function build(){
   var g=$q('qpadbtns');if(!g||g.childNodes.length)return;
   BTN.forEach(function(r){var c=el('div','qpb');c.appendChild(el('b','',NAMES[r]||r.toUpperCase()));
@@ -149,7 +149,7 @@ QString WebAccessGamepad::script()
 QString WebAccessGamepad::testPanelHtml()
 {
     return QStringLiteral(R"HTML(<style>
-#qpadtest{position:fixed;inset:0;z-index:20;display:none;overflow:auto;background:rgba(10,12,14,.97);color:#eceff1;padding:16px;font:15px/1.3 system-ui,sans-serif}
+#qpadtest{position:fixed;inset:0;z-index:20;display:none;overflow:auto;background:#101214;color:#eceff1;padding:16px;font:15px/1.3 system-ui,sans-serif}
 #qpadtest.show{display:block}
 #qpadtest h2{font-size:18px;margin:0 0 6px}
 #qpadtest p{margin:4px 0;color:#8d99a3}

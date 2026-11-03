@@ -73,9 +73,12 @@ button small{display:block;font-size:11px;font-weight:400;color:var(--dim)}
 #lock p{margin:0;text-align:center;color:var(--dim)}
 #lock .err{color:var(--warn);min-height:1.3em}
 #padhint{font-size:14px;color:var(--dim)}
+#testbtn{width:auto;min-height:32px;font-size:14px;font-weight:400;margin:10px auto;display:block;background:none;border:0;color:var(--dim);text-decoration:underline}
 main>section:nth-child(2){order:-1}
 @media (min-width:1000px) and (orientation:landscape){
  html,body{height:100%;overflow:hidden}
+ body{max-width:1600px;margin:0 auto}
+ #testbtn{margin:6px 0 6px auto}
  main{grid-template-columns:1fr 1.3fr 1fr;grid-template-rows:1fr;min-height:0}
  main>section{display:flex;flex-direction:column;gap:10px;min-height:0}
  main>section:nth-child(2){order:0}
@@ -84,7 +87,7 @@ main>section:nth-child(2){order:-1}
 }
 </style></head><body>
 <header><span id="dot"></span><span id="where">Connecting&hellip;</span><span class="chip" id="mode">&nbsp;</span>
-<a href="run">Run</a><button id="testbtn" type="button" style="width:auto;min-height:32px;font-size:14px">Controller test</button></header>
+<a href="run">Run</a></header>
 <div id="off" class="card">No focus is running on the console. Start <b>Focus mode</b> or <b>Venue focus</b> there (Lighting Studio &#9656; Focus); this page follows it.</div>
 <main id="main" style="display:none">
 <section>
@@ -117,6 +120,7 @@ main>section:nth-child(2){order:-1}
 </div>
 </section>
 </main>
+<button id="testbtn" type="button">Controller test</button>
 <div id="lock"><p>This show asks for its PIN before the page can work the lights.</p>
 <input id="pin" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="8" autocomplete="off" placeholder="PIN">
 <div class="err" id="pinerr"></div><button id="pinok">Unlock</button></div>

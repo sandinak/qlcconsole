@@ -47,6 +47,7 @@ header{display:flex;align-items:center;gap:10px;padding:12px 0 6px}
 #next .num{font-size:30px;color:var(--go2)}
 #next .name{font-size:19px}
 #sub{color:var(--warn);font-size:17px;min-height:1.3em;margin:-2px 0 6px}
+#sub:empty{display:none}
 main{flex:1;display:flex;flex-direction:column;justify-content:flex-start}
 #pad{margin-top:auto;padding:8px 0 14px}
 button{font:inherit;color:var(--fg);border:0;border-radius:18px;background:var(--card);border:1px solid var(--line);min-height:64px;width:100%;font-weight:700;letter-spacing:.04em}
@@ -75,18 +76,24 @@ button:disabled{opacity:.35}
 #status div.warning{color:var(--warn)}
 #focuslink{display:none;color:var(--go2);font-weight:700;text-decoration:none}
 #armed{display:none;text-align:center;font-size:14px;font-weight:700;letter-spacing:.1em;color:#101214;background:var(--warn);border-radius:8px;padding:3px;margin-bottom:8px}
-#testbtn{width:auto;min-height:32px;font-size:14px;font-weight:400;padding:0 10px}
+#testbtn{width:auto;min-height:32px;font-size:14px;font-weight:400;padding:0 10px;margin:0 auto 10px;display:block;background:none;border:0;color:var(--dim);text-decoration:underline}
+#statusline{display:none;flex-shrink:0;font-size:14px;color:var(--warn);padding:0 0 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#statusline.error{color:#ff8a80}
 @media (min-width:700px){body{max-width:640px;margin:0 auto}}
 @media (min-width:1000px) and (orientation:landscape){
- body{max-width:none;display:grid;grid-template-columns:1.2fr 1fr;grid-template-rows:auto auto 1fr;column-gap:20px}
+ body{max-width:1600px;margin:0 auto;display:grid;grid-template-columns:1.2fr 1fr;grid-template-rows:auto auto 1fr;column-gap:20px}
  header,#section{grid-column:1 / span 2}
  main{grid-column:1;overflow:auto}
  #pad{grid-column:2;grid-row:3;margin-top:0;display:flex;flex-direction:column;justify-content:flex-end}
  #go{min-height:40dvh}
+ #testbtn{margin:0 0 0 auto}
+ #statusline{display:none !important}
 }
+@media (max-width:999px),(orientation:portrait){#status{display:none !important}}
 </style></head><body>
-<header><span id="dot"></span><span id="where">Connecting&hellip;</span><a id="focuslink" href="focus">Focus &rsaquo;</a><span class="chip" id="mode">&nbsp;</span><button id="testbtn" type="button">Controller</button></header>
+<header><span id="dot"></span><span id="where">Connecting&hellip;</span><a id="focuslink" href="focus">Focus &rsaquo;</a><span class="chip" id="mode">&nbsp;</span></header>
 <div id="section"></div>
+<div id="statusline"></div>
 <main>
 <div class="card" id="now"><small>On now</small><div class="num" id="nnum">&mdash;</div><div class="name" id="nname"></div></div>
 <div id="sub"></div>
@@ -100,6 +107,7 @@ button:disabled{opacity:.35}
 <button id="go" disabled>GO</button>
 <div class="row" id="subrow"><button id="subback" disabled>SUB BACK</button><button id="subgo" disabled>SUB GO</button></div>
 <div class="row"><button id="back" disabled>BACK</button><button id="hold" disabled>HOLD</button><button id="stop" disabled>STOP</button></div>
+<button id="testbtn" type="button">Controller test</button>
 </div>
 <div id="lock"><p id="lockwhy">This show asks for its PIN before the page can send GO.</p>
 <input id="pin" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="8" autocomplete="off" placeholder="PIN">
@@ -199,6 +207,9 @@ function statusList(){
   var list=st.status||[],box=$('slist');while(box.firstChild)box.removeChild(box.firstChild);
   list.forEach(function(e){var d=document.createElement('div');d.className=e.level;d.textContent=e.text;box.appendChild(d)});
   $('status').style.display=list.length?'block':'none';
+  var sl=$('statusline');sl.style.display=list.length?'block':'none';
+  sl.textContent=list.length?list[0].text+(list.length>1?' (+'+(list.length-1)+' more)':''):'';
+  sl.className=list.length&&list[0].level==='error'?'error':'';
   $('focuslink').style.display=st.focus?'inline':'none'}
 /* The controller: the pad's Run role (PadRun), from the state's map. */
 function padAction(r){return (st.pad||{})[r]}
