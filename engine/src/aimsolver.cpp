@@ -30,6 +30,7 @@
 #include "qlcchannel.h"
 #include "scene.h"
 #include "qlcfixturemode.h"
+#include "qlcfixturehead.h"
 #include "qlcphysical.h"
 #include "fixture.h"
 #include "truss.h"
@@ -216,6 +217,54 @@ bool AimSolver::beamDirection(const FixtureRigProps &rp, double panCentredDeg,
     return true;
 }
 
+bool AimSolver::headDirection(const Fixture *fx, const QByteArray &values, int head,
+                              const FixtureRigProps &rp, QVector3D &dir,
+                              const double *panFrac, const double *tiltFrac)
+{
+    const QLCFixtureMode *mode = fx != nullptr ? fx->fixtureMode() : nullptr;
+    if (mode == nullptr || mode->heads().isEmpty())
+        return false;
+
+    const QLCFixtureHead *h = &mode->heads().at(
+        (head >= 0 && head < mode->heads().size()) ? head : 0);
+    if (h->channelNumber(QLCChannel::Pan,  QLCChannel::MSB) == QLCChannel::invalid()
+        && h->channelNumber(QLCChannel::Tilt, QLCChannel::MSB) == QLCChannel::invalid())
+        h = &mode->heads().first();
+    const quint32 panCh  = h->channelNumber(QLCChannel::Pan,  QLCChannel::MSB);
+    const quint32 tiltCh = h->channelNumber(QLCChannel::Tilt, QLCChannel::MSB);
+    if (panCh == QLCChannel::invalid() && tiltCh == QLCChannel::invalid())
+        return false;                       // not a mover: nothing to point
+
+    /* The centre of the pointing band is 0 degrees and the range is centred
+       on it. The band is the channel's indexed-position range when it has one
+       (Fixture::positionFraction()): read across the whole channel, a two-arm
+       beam pointing straight downstage (DMX 64 of 0-127) was drawn a quarter
+       turn off, at the wings. The fine byte counts: read coarse only, a
+       16-bit 540 degree head drew up to 2 degrees off its mark. */
+    auto degrees = [&](quint32 msb, quint32 lsb, double maxDeg, const double *frac) {
+        if (msb == QLCChannel::invalid() || msb >= quint32(values.size()))
+            return 0.0;
+        const bool fine = lsb != QLCChannel::invalid() && lsb < quint32(values.size());
+        double val = 0.0;
+        if (frac != nullptr)
+            val = *frac * 255.0;
+        else
+        {
+            val = double(uchar(values.at(int(msb))));
+            if (fine)
+                val += double(uchar(values.at(int(lsb)))) / 256.0;
+        }
+        return Fixture::positionFraction(mode->channel(msb), val, fine) * maxDeg - (maxDeg / 2.0);
+    };
+    const QLCPhysical &phy = mode->physical();
+    const double panMax  = phy.focusPanMax()  != 0 ? phy.focusPanMax()  : 360.0;
+    const double tiltMax = phy.focusTiltMax() != 0 ? phy.focusTiltMax() : 270.0;
+    return beamDirection(rp,
+                         degrees(panCh, h->channelNumber(QLCChannel::Pan, QLCChannel::LSB), panMax, panFrac),
+                         degrees(tiltCh, h->channelNumber(QLCChannel::Tilt, QLCChannel::LSB), tiltMax, tiltFrac),
+                         dir);
+}
+
 bool AimSolver::reach(Doc *doc, quint32 fixtureId, const QVector3D &targetWorld,
                       Solution &solution)
 {
@@ -361,6 +410,30 @@ QVector3D AimSolver::linePoint(Doc *doc, const StageTarget *target, double fract
     return LineCurve(mProps->targetLinePoints(target)).pointAt(fraction);
 }
 
+/* A head standing on the deck can't tilt below its own horizon: a point on
+   the line lower than it (the riser's top, from a beam on the floor beside
+   it) was out of reach, and the nearest it got was level, out over the house.
+   It lights the people standing on the line instead -- the subject height
+   above it. */
+static QVector3D standingLift(Doc *doc, MonitorProperties *mProps, quint32 fixtureId, QVector3D at)
+{
+    AimSolver::Frame frame;
+    if (AimSolver::frameFor(doc, fixtureId, frame) && frame.floorMounted
+        && at.z() < frame.position.z() && !AimSolver::solve(frame, at).reachable())
+        at.setZ(at.z() + mProps->aimSubjectHeight());
+    return at;
+}
+
+QVector3D AimSolver::linePointFor(Doc *doc, quint32 fixtureId, const StageTarget *target,
+                                  double fraction)
+{
+    MonitorProperties *mProps = (doc != NULL) ? doc->monitorProperties() : NULL;
+    if (mProps == NULL || target == NULL)
+        return QVector3D();
+    return standingLift(doc, mProps, fixtureId,
+                        LineCurve(mProps->targetLinePoints(target)).pointAt(fraction));
+}
+
 QHash<quint32, QVector3D> AimSolver::linePoints(Doc *doc, const QLCPalette *look,
                                                 const StageTarget *target,
                                                 const QList<quint32> &heads)
@@ -373,19 +446,7 @@ QHash<quint32, QVector3D> AimSolver::linePoints(Doc *doc, const QLCPalette *look
     const QHash<quint32, double> fr = lineFractions(doc, target, heads, settings);
     const LineCurve curve(mProps->targetLinePoints(target));
     for (auto it = fr.constBegin(); it != fr.constEnd(); ++it)
-    {
-        QVector3D at = curve.pointAt(it.value());
-        /* A head standing on the deck can't tilt below its own horizon: a
-           point on the line lower than it (the riser's top, from a beam on
-           the floor beside it) was out of reach, and the nearest it got was
-           level, out over the house. It lights the people standing on the
-           line instead -- the subject height above it. */
-        Frame frame;
-        if (frameFor(doc, it.key(), frame) && frame.floorMounted && at.z() < frame.position.z()
-            && !solve(frame, at).reachable())
-            at.setZ(at.z() + mProps->aimSubjectHeight());
-        out.insert(it.key(), at);
-    }
+        out.insert(it.key(), standingLift(doc, mProps, it.key(), curve.pointAt(it.value())));
     return out;
 }
 

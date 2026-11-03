@@ -4898,7 +4898,7 @@ bool StructureStudioView::aimPointFor(quint32 fid, QVector3D &out) const
        again. */
     if (t->isLine())
         out = it.value().lineFraction >= 0.0
-                ? AimSolver::linePoint(m_doc, t, it.value().lineFraction)
+                ? AimSolver::linePointFor(m_doc, fid, t, it.value().lineFraction)
                 : props->targetAimPoint(t);
     else
         out = AimSolver::aimPointFor(m_doc, fid, t, it.value().subjectHeight);

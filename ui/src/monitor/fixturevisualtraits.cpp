@@ -1351,32 +1351,11 @@ bool fixtureAimDirection(Fixture *fx, const FixtureRigProps &rp, QVector3D &dir,
         practiceViewProps(doc, fx->id(), viewRp);
     }
 
-    const QByteArray v = fx->channelValues();
-
-    /* Same mapping MonitorFixtureItem uses, so the plot and the rig view agree
-       about where a head is looking: the centre of the pointing band is 0
-       degrees and the range is centred on it. The band is the channel's
-       indexed-position range when it has one (Fixture::positionFraction()):
-       read across the whole channel, a two-arm beam pointing straight
-       downstage (DMX 64 of 0-127) was drawn a quarter turn off, at the wings. */
-    auto degrees = [&](quint32 ch, double maxDeg, const double *frac) {
-        if (ch == QLCChannel::invalid() || ch >= quint32(v.size()))
-            return 0.0;
-        // A move-speed follower (MoveSpeed::Follower) gives the position
-        // the head has reached, as a fraction of its DMX range.
-        const double val = frac != nullptr ? *frac * 255.0 : double(uchar(v.at(int(ch))));
-        return Fixture::positionFraction(mode->channel(ch), val) * maxDeg - (maxDeg / 2.0);
-    };
-    const double panMax  = (mode->physical().focusPanMax()  != 0)
-                         ? mode->physical().focusPanMax()  : 360.0;
-    const double tiltMax = (mode->physical().focusTiltMax() != 0)
-                         ? mode->physical().focusTiltMax() : 270.0;
-
-    /* The inverse of AimSolver::solve() lives beside it, with the calibration
-       offsets taken out, so every view draws the INTENDED aim: a head whose
-       offset corrects a yoke bolted a few degrees round still draws its beam
-       on its mark. */
-    return AimSolver::beamDirection(viewRp, degrees(panCh, panMax, panFrac), degrees(tiltCh, tiltMax, tiltFrac), dir);
+    /* The engine's readback (AimSolver::headDirection()): the inverse of
+       solve() + positionToValues(), pointing band and fine byte included, with
+       the calibration offsets taken out, so every view draws the INTENDED aim
+       -- and the aim round-trip tests check this very arithmetic. */
+    return AimSolver::headDirection(fx, fx->channelValues(), headIndex, viewRp, dir, panFrac, tiltFrac);
 }
 
 bool fixtureAimFractions(Fixture *fx, int headIndex, double &pan, double &tilt)
@@ -1396,8 +1375,17 @@ bool fixtureAimFractions(Fixture *fx, int headIndex, double &pan, double &tilt)
     if (panCh == QLCChannel::invalid() && tiltCh == QLCChannel::invalid())
         return false;
     const QByteArray v = fx->channelValues();
-    pan = (panCh != QLCChannel::invalid() && panCh < quint32(v.size())) ? uchar(v.at(int(panCh))) / 255.0 : 0.0;
-    tilt = (tiltCh != QLCChannel::invalid() && tiltCh < quint32(v.size())) ? uchar(v.at(int(tiltCh))) / 255.0 : 0.0;
+    // Coarse and fine, as AimSolver::headDirection() reads them.
+    auto frac = [&](quint32 msb, quint32 lsb) {
+        if (msb == QLCChannel::invalid() || msb >= quint32(v.size()))
+            return 0.0;
+        double val = uchar(v.at(int(msb)));
+        if (lsb != QLCChannel::invalid() && lsb < quint32(v.size()))
+            val += uchar(v.at(int(lsb))) / 256.0;
+        return val / 255.0;
+    };
+    pan = frac(panCh, head->channelNumber(QLCChannel::Pan, QLCChannel::LSB));
+    tilt = frac(tiltCh, head->channelNumber(QLCChannel::Tilt, QLCChannel::LSB));
     return true;
 }
 

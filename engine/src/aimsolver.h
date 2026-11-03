@@ -28,6 +28,7 @@
 #include "beamocclusion.h"
 
 class Doc;
+class Fixture;
 class Scene;
 class StageTarget;
 class QLCPalette;
@@ -121,6 +122,21 @@ namespace AimSolver
     bool beamDirection(const ::FixtureRigProps &rp, double panCentredDeg, double tiltCentredDeg,
                        QVector3D &dir);
 
+    /** Where head @p head of @p fx points, read back from @p values (its own
+     *  channels, as Fixture::channelValues() has them): pan and tilt, coarse
+     *  and fine, over each channel's pointing band (Fixture::positionFraction()),
+     *  centred, through beamDirection(). The inverse of an Aim look's
+     *  solve() + Fixture::positionToValues(), and the one every rig view draws
+     *  a mover's beam with, so a test can check a solved aim lands where it
+     *  should with the views' own arithmetic. @p panFrac / @p tiltFrac, when
+     *  given, replace the read (a fraction of the DMX range, as
+     *  MoveSpeed::Follower walks it). A head with no pan or tilt of its own
+     *  (a shared yoke) reads the first head. False for a fixture with nothing
+     *  to point. Allocation-free. */
+    bool headDirection(const Fixture *fx, const QByteArray &values, int head,
+                       const ::FixtureRigProps &rp, QVector3D &dir,
+                       const double *panFrac = nullptr, const double *tiltFrac = nullptr);
+
     /** Compute the fixture's pan/tilt (degrees) to aim its beam at @p targetWorld
      *  (metres, absolute — the caller bakes in platform/subject height). Honours
      *  the fixture's rig position, mounting (floor vs hung), pan-zero facing,
@@ -172,6 +188,13 @@ namespace AimSolver
 
     /** The world point @p fraction of the way along line target @p target. */
     QVector3D linePoint(Doc *doc, const StageTarget *target, double fraction);
+
+    /** Where head @p fixtureId aims at @p fraction along line @p target: the
+     *  point on the line, or -- for a head standing below the line that can't
+     *  tilt down to it -- the subject height above it (the people on the
+     *  line). The rule linePoints() and every rig view's aim trace share. */
+    QVector3D linePointFor(Doc *doc, quint32 fixtureId, const StageTarget *target,
+                           double fraction);
 
     /** Each head's aim point for Aim look @p look on line @p target, over
      *  @p heads (as lineFractions()). */
