@@ -122,9 +122,10 @@ void LookEditor_Test::colourPickerLayoutHoldsAtEveryWidth()
     ed.m_uvRow->setVisible(true);
     ed.show();
 
-    for (int w = 400; w <= 1600; w += 100)
+    // The editor's minimum, a laptop, full HD and very wide (Q207).
+    for (int w : { 200, 400, 500, 600, 700, 800, 900, 1000, 1100, 1280, 1600, 1920, 3000 })
     {
-        for (int h : { 420, 600, 900 })
+        for (int h : { 420, 500, 600, 800, 900, 1080 })
         {
             ed.resize(w, h);
             QCoreApplication::processEvents();
@@ -2233,3 +2234,4 @@ void LookEditor_Test::aFormationsPreviewMatchesTheCue()
     QVERIFY(!ed2.formationEditor()->hint()->isHidden());
     QVERIFY(ed2.formationEditor()->hint()->text().contains("Tick"));
 }
+
