@@ -430,7 +430,7 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     StageColourPicker::install(m_colorDialog);
     // The dialog keeps the size its own layout needs (squeezing it, as this
     // once did, left its swatches over its "Pick Screen Color" button).
-    cl->addWidget(m_colorDialog, 1);
+    cl->addWidget(m_colorDialog, 0, Qt::AlignTop | Qt::AlignLeft);
 
     // One vertical slider (numbered label above) per channel.
     auto makeColorCol = [&](int number, const QString &name, QSlider *&slider,
@@ -442,7 +442,7 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
                       0, Qt::AlignHCenter);
         slider = new QSlider(Qt::Vertical, col);
         slider->setRange(0, 255);
-        slider->setMinimumHeight(90);
+        slider->setMinimumHeight(230);   // a fader, as tall as the picker's field
         vl->addWidget(slider, 1, Qt::AlignHCenter);
         connect(slider, SIGNAL(valueChanged(int)), this, slotSignature);
         return col;
@@ -462,7 +462,11 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     xl->addWidget(m_whiteRow);
     xl->addWidget(m_amberRow);
     xl->addWidget(m_uvRow);
-    cl->addWidget(extras, 0);
+    // Sliders as tall as the picker, not as the page: on a big screen a
+    // 900 px slider is no fader. Anything left over is empty space at the end.
+    extras->setMaximumHeight(420);
+    cl->addWidget(extras, 0, Qt::AlignTop);
+    cl->addStretch(1);
 
     // A slot of the colour wheels / rings by name: a ring's chase is no
     // colour the picker can make.
