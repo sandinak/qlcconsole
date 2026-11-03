@@ -10,6 +10,20 @@ active work in [TODO.md](docs/project/TODO.md).
 Versions here are independent of the QLC+ base version embedded in the
 in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relate).
 
+## [Unreleased]
+
+### Colour picker
+
+- **The picker's swatch grid is stage colours.** Flesh and other skin tones,
+  Blacklight (drives UV where a fixture has it), Congo Blue, fluorescents,
+  Tungsten, Daylight, Candle, sodium and mercury vapour, Moonlight, Lavender,
+  Amber, Straw, Bastard Amber, Surprise Pink and the primaries replace Qt's
+  generic basics. Hover a swatch for its name and hex; hover the colour field
+  for the nearest named colour; a line under the picker names it too.
+- **Resizing the Look Editor no longer lays the sliders over the picker or the
+  "Pick Screen Color" button over the Wheel / ring row.** Narrow, the
+  sliders drop under the picker; smaller still, the page scrolls.
+
 ## [0.4.0] - 2026-11-02
 
 qlcconsole 0.4.0 carries the 0.3.1 polish, all of 0.4 ("Run the show") and

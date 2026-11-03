@@ -15,6 +15,7 @@
 #include <QPushButton>
 #include <QLabel>
 #include <QColorDialog>
+#include "stagecolourpicker.h"
 
 #include "paletteeditdialog.h"
 #include "qlcpalette.h"
@@ -165,7 +166,11 @@ void PaletteEditDialog::slotTypeChanged()
 
 void PaletteEditDialog::slotPickColor()
 {
-    const QColor c = QColorDialog::getColor(m_color, this, tr("Pick a color"));
+    QColorDialog dlg(m_color, this);
+    dlg.setWindowTitle(tr("Pick a color"));
+    dlg.setOption(QColorDialog::DontUseNativeDialog);
+    StageColourPicker::install(&dlg);
+    const QColor c = dlg.exec() == QDialog::Accepted ? dlg.selectedColor() : QColor();
     if (c.isValid())
     {
         m_color = c;

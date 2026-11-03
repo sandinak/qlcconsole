@@ -294,6 +294,90 @@ QString PaletteNaming::colourName(const QColor &rgb, const QColor &wauv)
     return name;
 }
 
+const QList<PaletteNaming::StageColour> &PaletteNaming::stageColours()
+{
+    // LED renditions of what a stage is lit with, by generic names (no
+    // gel-maker numbers). Eight to a row; the picker's grid is this list.
+    static const QList<StageColour> list = {
+        { "Red",              QColor(255,   0,   0), QColor() },
+        { "Orange",           QColor(255, 120,   0), QColor() },
+        { "Amber",            QColor(255, 176,   0), QColor() },
+        { "Yellow",           QColor(255, 255,   0), QColor() },
+        { "Lime",             QColor(150, 255,   0), QColor() },
+        { "Green",            QColor(  0, 255,   0), QColor() },
+        { "Cyan",             QColor(  0, 255, 255), QColor() },
+        { "Blue",             QColor(  0,   0, 255), QColor() },
+
+        { "Magenta",          QColor(255,   0, 255), QColor() },
+        { "Pink",             QColor(255,   0, 128), QColor() },
+        { "Surprise Pink",    QColor(255, 120, 170), QColor() },
+        { "Lavender",         QColor(190, 150, 255), QColor() },
+        { "Warm White",       QColor(255, 210, 150), QColor() },
+        { "Congo Blue",       QColor( 40,   0, 140), QColor() },
+        { "Sky Blue",         QColor(  0, 160, 255), QColor() },
+        { "Teal",             QColor(  0, 255, 150), QColor() },
+
+        { "White",            QColor(255, 255, 255), QColor() },
+        // Third row, second column: the lesson 2.2 "violet" swatch.
+        { "Violet",           QColor(170,   0, 255), QColor() },
+        { "Tungsten 3200K",   QColor(255, 190, 110), QColor() },
+        { "Candle",           QColor(255, 147,  41), QColor() },
+        { "Daylight 5600K",   QColor(255, 240, 225), QColor() },
+        { "Cool White",       QColor(210, 225, 255), QColor() },
+        { "Moonlight",        QColor(150, 175, 255), QColor() },
+        { "Sodium Vapour",    QColor(255, 160,  60), QColor() },
+
+        { "Cool Fluorescent", QColor(200, 255, 220), QColor() },
+        { "Warm Fluorescent", QColor(255, 225, 160), QColor() },
+        { "Mercury Vapour",   QColor(150, 220, 230), QColor() },
+        // Blacklight: the UV emitter where a fixture has one; the deep
+        // violet it looks like on an RGB fixture otherwise.
+        { "Blacklight",       QColor( 90,   0, 200), QColor(0, 0, 255) },
+        { "Pale Skin",        QColor(255, 224, 200), QColor() },
+        { "Flesh",            QColor(255, 205, 170), QColor() },
+        { "Warm Skin",        QColor(240, 175, 130), QColor() },
+        { "Deep Skin",        QColor(175, 110,  75), QColor() },
+
+        { "Bastard Amber",    QColor(255, 200, 110), QColor() },
+        { "Straw",            QColor(255, 230, 120), QColor() },
+        { "Gold",             QColor(255, 200,  50), QColor() },
+        { "Salmon",           QColor(255, 120, 100), QColor() },
+        { "Peach",            QColor(255, 170, 130), QColor() },
+        { "Deep Red",         QColor(160,   0,   0), QColor() },
+        { "Deep Blue",        QColor(  0,   0, 160), QColor() },
+        { "Primary Green",    QColor(  0, 150,  60), QColor() },
+
+        { "Steel Blue",       QColor(100, 150, 230), QColor() },
+        { "Ice Blue",         QColor(180, 230, 255), QColor() },
+        { "Light Rose",       QColor(255, 180, 200), QColor() },
+        { "Light Lavender",   QColor(215, 190, 255), QColor() },
+        { "Turquoise",        QColor(  0, 220, 200), QColor() },
+        { "Dark Green",       QColor(  0, 110,   0), QColor() },
+        { "Grey",             QColor(128, 128, 128), QColor() },
+        { "Black",            QColor(  0,   0,   0), QColor() },
+    };
+    return list;
+}
+
+QString PaletteNaming::stageColourName(const QColor &rgb, bool *exact)
+{
+    const QList<StageColour> &all = stageColours();
+    const StageColour *best = nullptr;
+    double bestD = 0;
+    for (const StageColour &c : all)
+    {
+        const double d = deltaE(rgb, c.rgb);
+        if (best == nullptr || d < bestD)
+        {
+            best = &c;
+            bestD = d;
+        }
+    }
+    if (exact != nullptr)
+        *exact = best != nullptr && best->rgb == rgb;
+    return best != nullptr ? best->name : QString();
+}
+
 QStringList PaletteNaming::colourNames()
 {
     static QStringList names;

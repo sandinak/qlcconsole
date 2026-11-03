@@ -10,6 +10,14 @@ under `~/.claude/.../memory/`.
 
 ---
 
+## Colour picker: stage swatches, hover names, resize layout (cpick, 2026-11-03) — built
+
+Done: 48 stage-colour swatches (`PaletteNaming::stageColours()`), hover names
+(swatch and field), Blacklight drives UV, Look Editor colour page scrolls /
+reflows (tests in lookeditor_test). Leftovers: native/Windows dialogs and the
+VC / Monitor / Show Manager `QColorDialog::getColor` call sites still use Qt's
+plain dialog; a user-editable swatch list.
+
 ## 0.4.0 coverage audit — leftovers (tcov, 2026-11-02)
 
 Map: docs/dev/TEST_MAP.md Part 1b. Decide or fix:

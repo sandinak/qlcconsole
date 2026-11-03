@@ -43,6 +43,7 @@ add_library(${module_name}
     chasereditor.cpp chasereditor.h chasereditor.ui
     chaserwalker.cpp chaserwalker.h
     colourswatchbutton.cpp colourswatchbutton.h
+    stagecolourpicker.cpp stagecolourpicker.h
     wledconfigcheck.cpp wledconfigcheck.h
     wleddevicesdialog.cpp wleddevicesdialog.h
     clickandgoslider.cpp clickandgoslider.h

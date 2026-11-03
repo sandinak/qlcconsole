@@ -70,6 +70,12 @@
 #include "linespread.h"
 #include "stagetarget.h"
 #include "lookeditor_test.h"
+#include "stagecolourpicker.h"
+#include "palettenaming.h"
+#include <QHelpEvent>
+#include <QLayout>
+#include <QScrollBar>
+#include <QToolTip>
 #include "qlcfixturedefcache.h"
 #include "qlcfile.h"
 #include "paletteops.h"
@@ -98,6 +104,205 @@ void LookEditor_Test::aColourDarkerThanAFifthIsCalledOut()
     QVERIFY(LookEditor::darkColourWarning(QColor(51, 0, 0), none).isEmpty());
     QVERIFY(LookEditor::darkColourWarning(QColor(255, 0, 0), none).isEmpty());
     QVERIFY(LookEditor::darkColourWarning(QColor(0, 0, 0), QColor(200, 0, 0)).isEmpty());
+}
+
+void LookEditor_Test::colourPickerLayoutHoldsAtEveryWidth()
+{
+    Doc doc(this);
+    QLCPalette *p = new QLCPalette(QLCPalette::Color, &doc);
+    p->setName("Flesh");
+    p->setValue("#ffcdaa000000");
+    QVERIFY(doc.addPalette(p));
+
+    LookEditor ed(&doc);
+    ed.setPalette(p->id());
+    ed.m_macroRow->setVisible(true);        // the row that collided with the button
+    ed.m_whiteRow->setVisible(true);
+    ed.m_amberRow->setVisible(true);
+    ed.m_uvRow->setVisible(true);
+    ed.show();
+
+    for (int w = 400; w <= 1600; w += 100)
+    {
+        for (int h : { 420, 600, 900 })
+        {
+            ed.resize(w, h);
+            QCoreApplication::processEvents();
+            ed.layout()->activate();
+            const QString at = QStringLiteral(" at %1x%2").arg(ed.width()).arg(ed.height());
+
+            // Everything is compared in the editor's coordinates.
+            auto rectOf = [&](QWidget *x) {
+                return QRect(x->mapTo(&ed, QPoint(0, 0)), x->size());
+            };
+            struct Item { QString name; QWidget *w; };
+            QList<Item> items;
+            auto add = [&](const QString &n, QWidget *x) {
+                QVERIFY2(x != nullptr && x->isVisibleTo(&ed), qPrintable(n + " visible" + at));
+                items << Item{ n, x };
+            };
+            add("dialog", ed.m_colorDialog);
+            for (QSlider *s : { ed.m_redSlider, ed.m_greenSlider, ed.m_blueSlider,
+                                ed.m_whiteSlider, ed.m_amberSlider, ed.m_uvSlider })
+            {
+                add("slider", s);
+                // A slider you can work: tall and not squeezed flat.
+                QVERIFY2(s->height() >= 60, qPrintable("slider height" + at));
+                QVERIFY2(s->width() >= 10, qPrintable("slider width" + at));
+                // The numbered label above it is part of its column.
+                add("column", s->parentWidget());
+            }
+            add("macro row", ed.m_macroRow);
+            add("name", ed.m_colourName);
+
+            // Too small for the page: it scrolls, rather than overlapping.
+            QScrollArea *sa = ed.m_colourScroll;
+            if (ed.m_colourBody->width() > sa->viewport()->width())
+                QVERIFY2(!sa->horizontalScrollBar()->isHidden(), qPrintable("h-scroll" + at));
+            if (ed.m_colourBody->height() > sa->viewport()->height())
+                QVERIFY2(!sa->verticalScrollBar()->isHidden(), qPrintable("v-scroll" + at));
+            // Narrow: the sliders are under the picker, wide: beside it.
+            if (sa->viewport()->width() >= 900)
+                QVERIFY2(ed.m_redSlider->mapTo(&ed, QPoint(0, 0)).x() >= rectOf(ed.m_colorDialog).right(),
+                         qPrintable("sliders beside the picker" + at));
+
+            // The sliders' columns sit beside the dialog, never over it.
+            for (int i = 0; i < items.size(); ++i)
+            {
+                QVERIFY2(rectOf(ed.m_colourBody).contains(rectOf(items[i].w)),
+                         qPrintable(items[i].name + " inside the page" + at));
+                for (int j = i + 1; j < items.size(); ++j)
+                {
+                    if (items[i].w->isAncestorOf(items[j].w) || items[j].w->isAncestorOf(items[i].w))
+                        continue;
+                    QVERIFY2(!rectOf(items[i].w).intersects(rectOf(items[j].w)),
+                             qPrintable(items[i].name + " overlaps " + items[j].name + at));
+                }
+            }
+
+            // Inside the dialog: grid, button, field and brightness bar each
+            // have their own room, all within the dialog.
+            QList<QWidget *> inner;
+            for (QWidget *k : ed.m_colorDialog->findChildren<QWidget *>())
+            {
+                const QByteArray cls = k->metaObject()->className();
+                if (cls.endsWith("QColorWell") || cls.endsWith("QColorPicker")
+                    || cls.endsWith("QColorLuminancePicker")
+                    || (cls == "QPushButton" && k->isVisibleTo(&ed)))
+                    inner << k;
+            }
+            QVERIFY2(inner.size() >= 4, qPrintable("dialog parts found" + at));
+            for (int i = 0; i < inner.size(); ++i)
+            {
+                QVERIFY2(rectOf(ed.m_colorDialog).contains(rectOf(inner[i])),
+                         qPrintable(QString(inner[i]->metaObject()->className())
+                                    + " inside the dialog" + at));
+                for (int j = i + 1; j < inner.size(); ++j)
+                    QVERIFY2(!rectOf(inner[i]).intersects(rectOf(inner[j])),
+                             qPrintable(QString(inner[i]->metaObject()->className()) + " overlaps "
+                                        + inner[j]->metaObject()->className() + at));
+            }
+        }
+    }
+}
+
+void LookEditor_Test::colourSwatchesAreTheStageColours()
+{
+    const QList<PaletteNaming::StageColour> &all = PaletteNaming::stageColours();
+    QCOMPARE(all.size(), PaletteNaming::StageColourCount);
+    QSet<QString> names;
+    for (const PaletteNaming::StageColour &c : all)
+    {
+        QVERIFY(c.rgb.isValid());
+        QVERIFY2(!names.contains(c.name), qPrintable(c.name));
+        names.insert(c.name);
+    }
+    for (const char *want : { "Flesh", "Pale Skin", "Warm Skin", "Deep Skin", "Blacklight",
+                              "Congo Blue", "Cool Fluorescent", "Warm Fluorescent",
+                              "Daylight 5600K", "Tungsten 3200K", "Candle", "Sodium Vapour",
+                              "Mercury Vapour", "Moonlight", "Lavender", "Amber", "Straw",
+                              "Bastard Amber", "Surprise Pink", "Red", "Green", "Blue" })
+        QVERIFY2(names.contains(QString::fromLatin1(want)), want);
+
+    // Course lesson 2.2 clicks the violet at row 3, column 2.
+    QCOMPARE(all.at(17).rgb, QColor(0xaa, 0x00, 0xff));
+
+    // The dialog's grid is this list, and hovering swatch N says its name.
+    QColorDialog dlg;
+    dlg.setOptions(QColorDialog::NoButtons | QColorDialog::DontUseNativeDialog);
+    StageColourPicker *pick = StageColourPicker::install(&dlg);
+    dlg.show();
+    QVERIFY(pick->swatchGrid() != nullptr);
+    for (int i = 0; i < all.size(); ++i)
+        QCOMPARE(QColorDialog::standardColor((i / 8) + (i % 8) * 6), all.at(i).rgb);
+
+    QWidget *grid = pick->swatchGrid();
+    // A click on a swatch picks it (lesson 2.2's click: column 2, row 3).
+    QTest::mouseClick(grid, Qt::LeftButton, Qt::NoModifier,
+                      QPoint(grid->width() * 3 / 16, grid->height() * 5 / 12));
+    QCOMPARE(dlg.currentColor(), QColor(0xaa, 0x00, 0xff));
+    for (int i = 0; i < all.size(); ++i)
+    {
+        const int col = i % 8, row = i / 8;
+        const QPoint at((col * 2 + 1) * grid->width() / 16, (row * 2 + 1) * grid->height() / 12);
+        QCOMPARE(pick->swatchAt(at), i);
+        QHelpEvent he(QEvent::ToolTip, at, grid->mapToGlobal(at));
+        QVERIFY(QCoreApplication::sendEvent(grid, &he));
+        QVERIFY2(QToolTip::isVisible(), qPrintable(all.at(i).name));
+        QVERIFY2(QToolTip::text().startsWith(all.at(i).name)
+                     && QToolTip::text().contains(all.at(i).rgb.name()),
+                 qPrintable(QToolTip::text()));
+    }
+}
+
+void LookEditor_Test::hoveringTheFieldNamesTheNearestColour()
+{
+    bool exact = false;
+    QCOMPARE(PaletteNaming::stageColourName(QColor(255, 205, 170), &exact), QString("Flesh"));
+    QVERIFY(exact);
+    QCOMPARE(PaletteNaming::stageColourName(QColor(252, 200, 168), &exact), QString("Flesh"));
+    QVERIFY(!exact);
+    QCOMPARE(PaletteNaming::stageColourName(QColor(0, 0, 4)), QString("Black"));
+    QCOMPARE(PaletteNaming::stageColourName(QColor(250, 10, 5)), QString("Red"));
+    QVERIFY(StageColourPicker::describe(QColor(252, 200, 168)).contains("Flesh"));
+    QVERIFY(StageColourPicker::describe(QColor(252, 200, 168)).contains("#fcc8a8"));
+
+    QColorDialog dlg;
+    dlg.setOptions(QColorDialog::NoButtons | QColorDialog::DontUseNativeDialog);
+    StageColourPicker *pick = StageColourPicker::install(&dlg);
+    dlg.show();
+    QWidget *field = pick->colourField();
+    QVERIFY(field != nullptr);
+    const QPoint at(field->width() / 2, field->height() / 2);
+    QHelpEvent he(QEvent::ToolTip, at, field->mapToGlobal(at));
+    QVERIFY(QCoreApplication::sendEvent(field, &he));
+    QVERIFY2(QToolTip::isVisible(), "the field names the colour under the pointer");
+    QVERIFY2(QToolTip::text().contains("#"), qPrintable(QToolTip::text()));
+}
+
+void LookEditor_Test::blacklightSwatchDrivesUv()
+{
+    Doc doc(this);
+    QLCPalette *p = new QLCPalette(QLCPalette::Color, &doc);
+    p->setName("Look");
+    p->setValue("#ffffff000000");
+    QVERIFY(doc.addPalette(p));
+    LookEditor ed(&doc);
+    ed.setPalette(p->id());
+
+    QColor bl;
+    for (const PaletteNaming::StageColour &c : PaletteNaming::stageColours())
+        if (c.name == "Blacklight")
+            bl = c.rgb;
+    QVERIFY(bl.isValid());
+    ed.m_colorDialog->setCurrentColor(bl);
+    QCOMPARE(ed.m_uvSlider->value(), 255);
+    QCOMPARE(p->wauvValue().blue(), 255);
+    QVERIFY(ed.m_colourName->text().startsWith("Blacklight"));
+
+    // Any other colour puts UV back to 0.
+    ed.m_colorDialog->setCurrentColor(QColor(255, 205, 170));
+    QCOMPARE(ed.m_uvSlider->value(), 0);
 }
 
 void LookEditor_Test::aDarkRedLookWarnsUntilItIsBrightened()

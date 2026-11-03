@@ -25,6 +25,8 @@
 
 class QStackedWidget;
 class QColorDialog;
+class QScrollArea;
+class QBoxLayout;
 class VCXYPadArea;
 class CapabilityBar;
 class PathDrawWidget;
@@ -281,6 +283,12 @@ private:
     QSlider *m_whiteSlider, *m_amberSlider, *m_uvSlider; //!< 4, 5, 6 — extra colour emitters
     QWidget *m_whiteRow, *m_amberRow, *m_uvRow;          //!< hidden when absent
     CapabilityBar *m_dimmerBar; //!< gradient + strobe region marks
+    QScrollArea *m_colourScroll = NULL; //!< the colour page: scrolls rather than overlaps
+    QWidget *m_colourBody = NULL;
+    QBoxLayout *m_colourFlow = NULL;    //!< picker + sliders, side by side or stacked
+    void colourFlow();
+    bool m_swatchEmitters = false; //!< W/A/UV set by a stage swatch (Blacklight)
+    QLabel *m_colourName;      //!< the stage colour nearest the picker's
     QLabel *m_colorWarning;    //!< "nearly dark" note under the colour page
     /* "Wheel / ring": a slot of the targets' colour wheels and rings by
        name -- a ring's chases are no colour, so only a name picks them. */
