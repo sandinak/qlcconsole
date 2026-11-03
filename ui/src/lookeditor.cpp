@@ -23,6 +23,7 @@
 #include <QLabel>
 #include <QTextDocument>
 #include <QFrame>
+#include <QStyle>
 #include <QPixmap>
 #include <QIcon>
 #include <QSet>
@@ -1062,7 +1063,15 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
 
     // Formation page (Q197): Spread / Grouping / Cross and a preview.
     m_formationEditor = new FormationEditor(m_doc, m_stack);
-    m_pageFormation = m_stack->addWidget(m_formationEditor);
+    /* In a scroll area: settings, the pick list, the strip and the plan are
+       taller than a short panel, and squeezed they overdrew each other. */
+    QScrollArea *formScroll = new QScrollArea(m_stack);
+    formScroll->setObjectName(QStringLiteral("formationScroll"));
+    formScroll->setFrameShape(QFrame::NoFrame);
+    formScroll->setWidgetResizable(true);
+    formScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    formScroll->setWidget(m_formationEditor);
+    m_pageFormation = m_stack->addWidget(formScroll);
     connect(m_formationEditor, &FormationEditor::edited, this, [this](quint32 pid) {
         m_shownSignature = valueSignature(m_doc->palette(pid));
         emit paletteChanged(pid);
@@ -2191,7 +2200,10 @@ void LookEditor::fitPageWidth()
        while they show. */
     const int i = m_stack->currentIndex();
     int w = 200;
-    if (i == m_pageAim || i == m_pagePanTilt || i == m_pageFormation)
+    if (i == m_pageFormation && m_formationEditor != nullptr)
+        w = qMax(200, m_formationEditor->minimumSizeHint().width()
+                      + style()->pixelMetric(QStyle::PM_ScrollBarExtent));
+    else if (i == m_pageAim || i == m_pagePanTilt)
         if (QWidget *page = m_stack->currentWidget())
             w = qMax(200, page->minimumSizeHint().width());
     m_stack->setMinimumWidth(w);
