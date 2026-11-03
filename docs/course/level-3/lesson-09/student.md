@@ -46,14 +46,14 @@ Roles: **Driver** (mouse), **Navigator** (reads each step aloud and checks *You 
 
    A warning also shows where it happens: a **⚠ cyc** mark on a cue in
    the Show Tree. Hover it for the detail (which lights, how much, which
-   cues). Right-click it to answer there: **I Meant It**, **Not Meant:
+   cues). Right-click it to answer there: **I Meant It** (it turns green, **cyc ✓**), **Not a Problem…**, **Not Meant:
    Show Me the Layer**, or **Open in Show Review**.
 4. Select **CUE-02** and click **Fix ▸**. It takes you to the second song.
    Click the header **2 — Slow Dance** and tick **Block at section start**.
    Click **Re-check**.
    - *You should see:* CUE-02 and the four CUE-01 gone. They were one
      fault: the Button's spread still on in Slow Dance.
-5. Select **VC-03**, a hit called *Spare* that no button fires. **Accept…**,
+5. Select **VC-03**, a hit called *Spare* that no button fires. **Not a Problem…**,
    write `Kept for the encore`, your name, **OK**. Show **Accepted**.
    - *You should see:* the finding moves to Accepted, with your note.
 6. Leave the two **MOV-08** warnings and the notes. They are about the
@@ -77,7 +77,7 @@ Roles: **Driver** (mouse), **Navigator** (reads each step aloud and checks *You 
 10. **File ▸ Save As** → `Lesson3-9-yourname.qlcc`.
 
 **Stuck?** No **Review** chip: it appears a couple of seconds after the show
-opens. **Fix ▸** greyed: select a finding first. **Accept…** needs a note.
+opens. **Fix ▸** greyed: select a finding first. **Not a Problem…** needs a note.
 The lanterns still dark: the Grand Master (**GM** in the footer) or Blackout.
 Ask the light again.
 

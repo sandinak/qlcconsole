@@ -2683,6 +2683,91 @@ void ShowReview_Test::pwr12Meant()
             QVERIFY(x.intended && !x.isOpen());
 }
 
+/* Three states for a warning: open, meant (who, when, the note: saved with
+   the show), not a problem (an acceptance). Each change is one answer. */
+void ShowReview_Test::pwr12WarnStates()
+{
+    MonitorProperties *mp = m_doc->monitorProperties();
+    mp->setGridSize(QVector3D(10, 3, 14));
+    addCyc(mp);
+    Fixture *front = par("Front 1", 0);
+    aimFront(mp, front, 5.0f, 20.0f);
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 lid = st->addCueList(st->addProduction("Show"), "Act 1");
+    const quint32 c1 = st->addCue(lid, -1, "One");
+    cueLit(m_doc, c1, front, 255);
+    const quint32 layer1 = st->cueList(lid)->cue(c1)->layers.last().id;
+
+    // Open.
+    ReviewFinding f = findings("PWR-12").first();
+    QVERIFY(f.isOpen() && !f.intended);
+
+    // Open -> Meant, with who, when and a note; one undo step.
+    QVERIFY(ShowReview::setLightMeant(m_doc, f, true, QStringLiteral("  the cyc wants it  "), QStringLiteral("Sam")));
+    QCOMPARE(st->undoText(), QStringLiteral("I meant it"));
+    const Layer *layer = st->cueList(lid)->cue(c1)->layer(layer1);
+    QCOMPARE(layer->meantBy, QStringLiteral("Sam"));
+    QCOMPARE(layer->meantNote, QStringLiteral("the cyc wants it"));
+    QVERIFY(QDateTime::fromString(layer->meantWhen, Qt::ISODate).isValid());
+    f = findings("PWR-12").first();
+    QVERIFY(f.intended && !f.isOpen());
+    QCOMPARE(f.acceptedBy, QStringLiteral("Sam"));
+    QCOMPARE(f.acceptedNote, QStringLiteral("the cyc wants it"));
+    QCOMPARE(f.acceptedWhen, layer->meantWhen);
+    QVERIFY(st->undo());                                // one step back to open
+    QVERIFY(findings("PWR-12").first().isOpen());
+    QVERIFY(st->cueList(lid)->cue(c1)->layer(layer1)->meantBy.isEmpty());
+    QVERIFY(st->redo());
+    QVERIFY(findings("PWR-12").first().intended);
+
+    // Saved with the show: who/when/note round-trip.
+    const QString when = findings("PWR-12").first().acceptedWhen;
+    editTree([](QString &xml) {
+        QVERIFY(xml.contains(QStringLiteral("MeantBy=\"Sam\"")));
+        QVERIFY(xml.contains(QStringLiteral("MeantNote=")));
+    });
+    f = findings("PWR-12").first();
+    QVERIFY(f.intended);
+    QCOMPARE(f.acceptedBy, QStringLiteral("Sam"));
+    QCOMPARE(f.acceptedNote, QStringLiteral("the cyc wants it"));
+    QCOMPARE(f.acceptedWhen, when);
+
+    // An older file (a mark with no name) loads as meant, nobody named.
+    editTree([](QString &xml) {
+        xml.remove(QRegularExpression(QStringLiteral(" Meant(By|When|Note)=\"[^\"]*\"")));
+        QVERIFY(!xml.contains(QStringLiteral("MeantBy=")));
+        QVERIFY(xml.contains(QStringLiteral("MeantOnScenery=")));
+    });
+    f = findings("PWR-12").first();
+    QVERIFY(f.intended && f.acceptedBy.isEmpty() && f.acceptedNote.isEmpty());
+
+    // Meant -> Open (Not Meant): the who/when go with the mark.
+    QVERIFY(ShowReview::setLightMeant(m_doc, f, false));
+    QVERIFY(findings("PWR-12").first().isOpen());
+    QVERIFY(st->cueList(lid)->cue(c1)->layer(layer1)->meantWhen.isEmpty());
+
+    // Open -> Not a Problem (an acceptance: Accepted, not intended).
+    f = findings("PWR-12").first();
+    QVERIFY(m_doc->showReview()->accept(f, QStringLiteral("a scrim there"), QStringLiteral("Kim")));
+    f = findings("PWR-12").first();
+    QVERIFY(f.state == ReviewFinding::Accepted && !f.intended);
+    QCOMPARE(f.acceptedBy, QStringLiteral("Kim"));
+    // Not a Problem -> Open (Reopen).
+    QVERIFY(m_doc->showReview()->reopen(f));
+    QVERIFY(findings("PWR-12").first().isOpen());
+
+    // Meant -> Not a Problem: the mark off, the acceptance on.
+    QVERIFY(ShowReview::setLightMeant(m_doc, findings("PWR-12").first(), true));
+    f = findings("PWR-12").first();
+    QVERIFY(f.intended);
+    QVERIFY(m_doc->showReview()->accept(f, QStringLiteral("not here"), QStringLiteral("Kim")));
+    QVERIFY(ShowReview::setLightMeant(m_doc, f, false));
+    m_doc->showReview()->run();
+    f = findings("PWR-12").first();
+    QVERIFY(f.state == ReviewFinding::Accepted && !f.intended);
+    QCOMPARE(f.acceptedNote, QStringLiteral("not here"));
+}
+
 void ShowReview_Test::pwr12AimAtCyc()
 {
     MonitorProperties *mp = m_doc->monitorProperties();

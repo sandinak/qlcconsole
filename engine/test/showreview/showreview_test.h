@@ -85,6 +85,7 @@ private slots:
     void pwr11BandedPan();
     void pwr12Backwash();
     void pwr12Meant();
+    void pwr12WarnStates();
     void pwr12AimAtCyc();
     void pwr12Curtain();
     void sceneryOnPurposeSaves();

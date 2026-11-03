@@ -35,6 +35,10 @@
 #include "stageplatform.h"
 #include "contextmenus.h"
 #include <QMenu>
+#include <QDir>
+#include <QToolTip>
+#include <QScrollBar>
+#include "app.h"
 #include "qlcfixturemode.h"
 #include "qlcfixturedef.h"
 #include "showstatus.h"
@@ -329,12 +333,12 @@ void ShowReviewPanel_Test::iMeantItFromTheRow()
     QVERIFY(m_doc->showTree()->cue(cues.first())->layers.first().meantOnScenery.isEmpty());
     panel.setFilter(ShowReviewPanel::OpenOnly);
     QVERIFY(rowOf(panel.tree(), "PWR-12") != nullptr);
-    // Other rows keep Accept… and Reopen.
+    // Other rows say Not a Problem… and Reopen.
     row = rowOf(panel.tree(), "PAT-01");
     QVERIFY(row != nullptr);
     panel.tree()->clearSelection();
     row->setSelected(true);
-    QCOMPARE(panel.acceptButton()->text(), QStringLiteral("Accept…"));
+    QCOMPARE(panel.acceptButton()->text(), QStringLiteral("Not a Problem…"));
     QCOMPARE(panel.fixButton()->text(), QStringLiteral("Fix ▸"));
 }
 
@@ -375,7 +379,11 @@ void ShowReviewPanel_Test::showTreeMarksBreachingCues()
         QTreeWidgetItem *item = rowOfCue(c);
         QVERIFY(item != nullptr);
         QVERIFY(!item->text(ShowTreeView::FlagsCol).contains(QStringLiteral("⚠ cyc")));
-        QVERIFY(view.backwashFindingKey(c).isEmpty());
+        // Meant: green "cyc ✓" in the cue it starts in, nothing in the cues it carries on into.
+        if (c == cues.first())
+            QVERIFY(item->text(ShowTreeView::FlagsCol).contains(QStringLiteral("cyc ✓")));
+        else
+            QVERIFY(view.backwashFindingKey(c).isEmpty());
     }
     // Taken back from the layer: marked again.
     QVERIFY(ShowReview::clearLayerMeant(m_doc, cues.first(),
@@ -463,7 +471,7 @@ void ShowReviewPanel_Test::warningMarksShareDetailAndAnswers()
     }
     QVERIFY(ContextMenu::checkCanon(&many).isEmpty());
     QVERIFY(many.findChild<QMenu *>("reviewFinding0") != nullptr);
-    // Any other check's mark offers Accept… (with a note) instead.
+    // Any other check's mark offers Not a Problem… (with a note), never I Meant It.
     for (const ReviewFinding &f : ShowReviewMarker::openFindings(m_doc))
     {
         if (f.check == "PWR-12")
@@ -478,6 +486,250 @@ void ShowReviewPanel_Test::warningMarksShareDetailAndAnswers()
         QVERIFY(ShowReviewMarker::meant(m_doc, f, nullptr, "on purpose"));
         break;
     }
+}
+
+/* Open (amber "⚠ cyc"), Meant (green "cyc ✓"), Not a Problem (no badge, listed
+   under Accepted): every change from the cue's badge, a Review row and the
+   footer chip's menu, one undo step each for the mark. */
+void ShowReviewPanel_Test::threeStatesEverywhere()
+{
+    Fixture *front = nullptr;
+    const QList<quint32> cues = backwashShow(m_doc, &front);
+    ShowTreeView view(nullptr, m_doc);
+    ShowReview *sr = m_doc->showReview();
+    sr->run();
+    auto rowOfCue = [&view](quint32 id) -> QTreeWidgetItem * {
+        for (QTreeWidgetItemIterator it(view.tree()); *it; ++it)
+            if ((*it)->data(0, ShowTreeView::KindRole).toInt() == ShowTreeView::CueNode
+                && (*it)->data(0, ShowTreeView::IdRole).toUInt() == id)
+                return *it;
+        return nullptr;
+    };
+    const QColor normal(Qt::gray);
+    auto pieces = [&](quint32 cue) {
+        QTreeWidget *tw = view.tree();
+        QTreeWidgetItem *item = rowOfCue(cue);
+        tw->setCurrentItem(item, ShowTreeView::FlagsCol);
+        return ShowTreeView::flagPieces(tw->currentIndex(), normal);
+    };
+    auto menuFor = [&](const QList<ReviewFinding> &fs) {
+        QMenu *m = new QMenu;
+        ContextMenu cm(m);
+        ShowReviewMarker::fillMenu(cm, m_doc, fs, nullptr);
+        return m;
+    };
+    auto only = [&]() {
+        for (const ReviewFinding &f : sr->lastResult().findings)
+            if (f.check == "PWR-12")
+                return f;
+        return ReviewFinding();
+    };
+    auto state = [&]() { return QString(only().intended ? "meant" : only().isOpen() ? "open" : "notaproblem"); };
+    const quint32 first = cues.first(), last = cues.last();
+
+    // Open: amber "⚠ cyc"; the chip counts it.
+    QCOMPARE(state(), QStringLiteral("open"));
+    QCOMPARE(pieces(last).first().first, QStringLiteral("⚠ cyc"));
+    QCOMPARE(pieces(last).first().second, ShowTreeView::warningColour());
+    const int others = sr->lastResult().open[ReviewFinding::Blocker] + sr->lastResult().open[ReviewFinding::Warning] - 1;
+    QVERIFY(others >= 0);
+    auto summary = [&](int open, int meant, int notAProblem) {
+        return QStringLiteral("%1 open · %2 meant · %3 not a problem").arg(open + others).arg(meant).arg(notAProblem);
+    };
+    QCOMPARE(ShowReviewMarker::stateSummary(m_doc), summary(1, 0, 0));
+    {
+        QScopedPointer<QMenu> m(menuFor(ShowReviewMarker::cueAll(m_doc, last)));
+        QVERIFY(m->findChild<QAction *>("reviewMeant") && m->findChild<QAction *>("reviewAccept"));
+        QVERIFY(!m->findChild<QAction *>("reviewNotMeant") && !m->findChild<QAction *>("reviewReopen"));
+        QVERIFY(ContextMenu::checkCanon(m.data()).isEmpty());
+        // Open -> Meant, from the cue's badge.
+        m->findChild<QAction *>("reviewMeant")->trigger();
+    }
+    // Meant: green "cyc ✓" on the cue it starts in, who/when on hover; not counted open.
+    QCOMPARE(state(), QStringLiteral("meant"));
+    QCOMPARE(m_doc->showTree()->undoText(), QStringLiteral("I meant it"));
+    QCOMPARE(pieces(first).first().first, QStringLiteral("cyc ✓"));
+    QCOMPARE(pieces(first).first().second, ShowTreeView::meantColour(normal));
+    QVERIFY(ShowTreeView::meantColour(normal) != ShowTreeView::warningColour());
+    QVERIFY(!rowOfCue(first)->text(ShowTreeView::FlagsCol).contains("⚠"));
+    const QString meantTip = rowOfCue(first)->toolTip(ShowTreeView::FlagsCol);
+    QVERIFY2(meantTip.contains("Meant") && meantTip.contains("Not Meant") && meantTip.contains("Not a Problem…"),
+             qPrintable(meantTip));
+    if (!ShowReview::defaultName().isEmpty())
+        QVERIFY(meantTip.contains(ShowReview::defaultName()));
+    QCOMPARE(ShowReviewMarker::stateSummary(m_doc), summary(0, 1, 0));
+    QCOMPARE(ShowReviewMarker::cueFindings(m_doc, first).count(), 0);
+    QCOMPARE(ShowReviewMarker::cueMeant(m_doc, first).count(), 1);
+
+    // Review panel: its own "Meant" group, I Meant It no longer on offer.
+    ShowReviewPanel panel(m_doc);
+    panel.setFilter(ShowReviewPanel::All);
+    panel.recheck();
+    auto group = [&panel](const QString &prefix) -> QTreeWidgetItem * {
+        for (int i = 0; i < panel.tree()->topLevelItemCount(); ++i)
+            if (panel.tree()->topLevelItem(i)->text(0).startsWith(prefix))
+                return panel.tree()->topLevelItem(i);
+        return nullptr;
+    };
+    QVERIFY(group("Meant (1)") != nullptr);
+    QVERIFY(group("Accepted") == nullptr);
+    panel.tree()->clearSelection();
+    rowOf(panel.tree(), "PWR-12")->setSelected(true);
+    QCOMPARE(panel.reopenButton()->text(), QStringLiteral("Not Meant"));
+    QVERIFY(panel.acceptButton()->isEnabled());
+
+    // Meant -> Open, from the Review row's button.
+    panel.reopenButton()->click();
+    QCOMPARE(state(), QStringLiteral("open"));
+    QVERIFY(rowOfCue(first)->text(ShowTreeView::FlagsCol).contains("⚠ cyc"));
+    QVERIFY(group("Meant") == nullptr);
+    // Open -> Meant, row button; then Meant -> Open from the cue badge's menu.
+    panel.tree()->clearSelection();
+    rowOf(panel.tree(), "PWR-12")->setSelected(true);
+    panel.acceptButton()->click();
+    QCOMPARE(state(), QStringLiteral("meant"));
+    {
+        QScopedPointer<QMenu> m(menuFor(ShowReviewMarker::cueAll(m_doc, first)));
+        QVERIFY(m->findChild<QAction *>("reviewNotMeant") && m->findChild<QAction *>("reviewAccept"));
+        QVERIFY(!m->findChild<QAction *>("reviewMeant"));
+        m->findChild<QAction *>("reviewNotMeant")->trigger();
+    }
+    QCOMPARE(state(), QStringLiteral("open"));
+
+    // Open -> Not a Problem, from the footer chip's menu (the open list): no badge anywhere.
+    {
+        QScopedPointer<QMenu> m(menuFor(ShowReviewMarker::openFindings(m_doc)));
+        QVERIFY(m->findChild<QAction *>("reviewAccept") != nullptr);
+    }
+    QVERIFY(ShowReviewMarker::notAProblem(m_doc, only(), nullptr, "a scrim hides it"));
+    QCOMPARE(state(), QStringLiteral("notaproblem"));
+    for (quint32 c : cues)
+    {
+        QVERIFY(!rowOfCue(c)->text(ShowTreeView::FlagsCol).contains("cyc"));
+        QVERIFY(view.backwashFindingKey(c).isEmpty());
+    }
+    QCOMPARE(ShowReviewMarker::stateSummary(m_doc), summary(0, 0, 1));
+    panel.recheck();
+    QVERIFY(group("Accepted (1)") != nullptr);
+    QVERIFY(group("Meant") == nullptr);
+    // Not a Problem -> Open (Reopen), from the Review row's right-click menu.
+    panel.tree()->clearSelection();
+    rowOf(panel.tree(), "PWR-12")->setSelected(true);
+    {
+        QScopedPointer<QMenu> m(menuFor(panel.selectedFindings()));
+        QVERIFY(m->findChild<QAction *>("reviewReopen") != nullptr);
+        QVERIFY(!m->findChild<QAction *>("reviewMeant") && !m->findChild<QAction *>("reviewAccept"));
+        m->findChild<QAction *>("reviewReopen")->trigger();
+    }
+    QCOMPARE(state(), QStringLiteral("open"));
+    QVERIFY(rowOfCue(last)->text(ShowTreeView::FlagsCol).contains("⚠ cyc"));
+
+    // Meant -> Not a Problem: the mark comes off, the acceptance stays, the cue is clean.
+    QVERIFY(ShowReviewMarker::meant(m_doc, only(), nullptr, "front light spills on purpose"));
+    QCOMPARE(state(), QStringLiteral("meant"));
+    QVERIFY(ShowReviewMarker::notAProblem(m_doc, only(), nullptr, "fine"));
+    QCOMPARE(state(), QStringLiteral("notaproblem"));
+    QVERIFY(m_doc->showTree()->cue(first)->layers.first().meantOnScenery.isEmpty());
+    QVERIFY(!rowOfCue(first)->text(ShowTreeView::FlagsCol).contains("cyc"));
+    QCOMPARE(only().acceptedNote, QStringLiteral("fine"));
+    // Not a Problem again from the row (Reopen), then Open -> Not a Problem via the panel button needs a note: skipped (dialog).
+    QVERIFY(ShowReviewMarker::notMeant(m_doc, only()));
+    QCOMPARE(state(), QStringLiteral("open"));
+    Q_UNUSED(front)
+}
+
+/* Pictures of the three states (Q207), only when QLC_WARN_SHOTS names a
+   folder: the cue rows, the hover, the right-click menus and the Review
+   panel, dark theme, at the widgets' minimum, 1280x800 and 1920x1080. */
+void ShowReviewPanel_Test::screenshots()
+{
+    const QString dir = qEnvironmentVariable("QLC_WARN_SHOTS");
+    if (dir.isEmpty())
+        QSKIP("QLC_WARN_SHOTS not set");
+    QDir().mkpath(dir);
+    const QString tag = qEnvironmentVariable("QLC_WARN_TAG", "after");
+    const QPalette was = qApp->palette();
+    qApp->setPalette(App::themePalette(App::ThemeVSCodeDark, was));
+    ShowReview::setDefaultName("Sam");
+    Fixture *front = nullptr;
+    const QList<quint32> cues = backwashShow(m_doc, &front);
+    ShowTreeView view(nullptr, m_doc);
+    ShowReview *sr = m_doc->showReview();
+    sr->run();
+    ShowReviewPanel panel(m_doc);
+    panel.setFilter(ShowReviewPanel::All);
+    const QList<QPair<QString, QSize>> sizes {
+        { "min", QSize() }, { "1280x800", QSize(1280, 800) }, { "1920x1080", QSize(1920, 1080) } };
+    auto only = [&]() {
+        for (const ReviewFinding &f : sr->lastResult().findings)
+            if (f.check == "PWR-12")
+                return f;
+        return ReviewFinding();
+    };
+    auto snapAll = [&](const QString &state) {
+        panel.recheck();
+        for (const auto &sz : sizes)
+        {
+            for (QWidget *w : { static_cast<QWidget *>(&view), static_cast<QWidget *>(&panel) })
+            {
+                w->resize(sz.second.isValid() ? sz.second : w->minimumSizeHint());
+                w->show();
+                QTest::qWait(30);
+            }
+            view.tree()->expandAll();
+            QTest::qWait(30);
+            QVERIFY(view.grab().save(QStringLiteral("%1/%2-cues-%3-%4.png").arg(dir, tag, state, sz.first)));
+            QVERIFY(panel.grab().save(QStringLiteral("%1/%2-review-%3-%4.png").arg(dir, tag, state, sz.first)));
+        }
+        // The tree scrolled to its flags column (the pane is narrow at 1280).
+        view.tree()->horizontalScrollBar()->setValue(view.tree()->horizontalScrollBar()->maximum());
+        QTest::qWait(30);
+        QVERIFY(view.tree()->grab().save(QStringLiteral("%1/%2-tree-%3.png").arg(dir, tag, state)));
+        view.tree()->horizontalScrollBar()->setValue(0);
+        // The hover on the cue badge: its rich text on a tooltip-styled label.
+        QTreeWidgetItem *item = nullptr;
+        for (QTreeWidgetItemIterator it(view.tree()); *it; ++it)
+            if ((*it)->data(0, ShowTreeView::IdRole).toUInt() == cues.first()
+                && (*it)->data(0, ShowTreeView::KindRole).toInt() == ShowTreeView::CueNode)
+                item = *it;
+        QVERIFY(item != nullptr);
+        QLabel tip(item->toolTip(ShowTreeView::FlagsCol));
+        tip.setTextFormat(Qt::RichText);
+        tip.setWordWrap(true);
+        tip.setMargin(6);
+        tip.setFrameShape(QFrame::Box);
+        tip.setAutoFillBackground(true);
+        tip.setPalette(QToolTip::palette());
+        tip.setFixedWidth(520);
+        tip.setFixedHeight(tip.heightForWidth(520));
+        tip.show();
+        QVERIFY(tip.grab().save(QStringLiteral("%1/%2-hover-%3.png").arg(dir, tag, state)));
+    };
+    auto snapMenu = [&](const QList<ReviewFinding> &fs, const QString &name) {
+        QMenu m;
+        m.setToolTipsVisible(true);
+        {
+            ContextMenu cm(&m);
+            ShowReviewMarker::fillMenu(cm, m_doc, fs, nullptr);
+        }
+        m.ensurePolished();
+        m.resize(m.sizeHint());
+        m.show();
+        QTest::qWait(30);
+        QVERIFY(m.grab().save(QStringLiteral("%1/%2-menu-%3.png").arg(dir, tag, name)));
+    };
+    snapAll("open");
+    snapMenu(ShowReviewMarker::cueAll(m_doc, cues.first()), "open");
+    QVERIFY(ShowReviewMarker::meant(m_doc, only(), nullptr, "cyc wash for the finale"));
+    snapAll("meant");
+    snapMenu(ShowReviewMarker::cueAll(m_doc, cues.first()), "meant");
+    QVERIFY(ShowReviewMarker::notAProblem(m_doc, only(), nullptr, "a scrim hides it"));
+    snapAll("notaproblem");
+    panel.tree()->clearSelection();
+    rowOf(panel.tree(), "PWR-12")->setSelected(true);
+    snapMenu(panel.selectedFindings(), "notaproblem");
+    qApp->setPalette(was);
+    Q_UNUSED(front)
 }
 
 /* "Why is mix in warning colour if the cyc warning is on the same line?" Only

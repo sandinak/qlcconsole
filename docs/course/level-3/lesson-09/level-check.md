@@ -12,7 +12,7 @@ nav_order: 6
 ## The task
 
 1. **Open the show** on the console. Run **Review** and read the **Not ready**
-   list. Fix what is wrong, or **Accept…** it with a note. A blocker open at
+   list. Fix what is wrong, or **Not a Problem…** it with a note. A blocker open at
    the end fails the check.
 2. **The preshow:** Stage Power and the house lights come up as in Lesson 3.7;
    a focus call for the song's spots; every group master at full; the pad or

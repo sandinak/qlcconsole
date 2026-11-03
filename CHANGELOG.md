@@ -14,6 +14,15 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Added
 
+- **Three states for a Show Review warning, visible on the cue.** Open is
+  the amber **⚠ cyc**; **I Meant It** turns it green (**cyc ✓**; hover says
+  who marked it, when, and the note); **Not a Problem…** (was Accept…)
+  hides it and lists it in Show Review under Accepted. Right-click the cue
+  mark, a Review row or the footer chip to move between them (Not Meant,
+  Reopen). The Review panel has a **Meant** group; the footer chip counts
+  open warnings only and its tooltip adds "2 open · 1 meant · 3 not a
+  problem". Who and when are saved with the show; older shows open as
+  before.
 - **A light buried in a deck, riser or step is an error in the footer.**
   A fixture whose body (its Physical Dimensions box, as the rig view draws
   it) sits inside a deck with a solid top -- a floor light left at height 0
