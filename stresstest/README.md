@@ -221,6 +221,19 @@ The tools behind [docs/performance.md](../docs/performance.md):
 - `perf_sweep.py`: sweeps of `qlcstress engine --mode realtime` (universes,
   fixtures per universe, one function type at a time) into one
   `results.csv`; `--only-first N` runs N steps per sweep as a smoke test.
+  `--refine` bisects each limit after the doubling ladder (to 5% or one
+  unit, both ends of the bracket run 3 times) into `edges.csv`: a
+  "jitter" edge (frame interval p99 > 30 ms) and a "break" edge (tick p99
+  > 20 ms or universe threads behind). Every run also records the jitter
+  split by cause (the timer's wake-up lateness against when its loop had
+  it due, time descheduled inside a tick, late frames counted as
+  scheduling or load). `--wrap "sudo -n prlimit --rtprio=95:95 setpriv
+  ..."` runs each configuration with SCHED_FIFO granted (the real-time A/B);
+  `--quiet-cmd CMD` waits for, and redoes runs that overlapped, other work
+  on the host; `--estimate` prints the runs and hours first;
+  `--self-test` checks the bisection (the gate runs it).
+  `tools/perf/extract.py precise HOST PRIORITY DIR` merges a run into
+  `docs/perf-data/edges.csv` and `jitter.csv`.
 - `wire/wire_sweep.py`, `wire/wire_stats.py`, `wire/sniff_lo.py`: Art-Net
   output on loopback, captured and checked per universe;
   `wire/run_netns.sh` runs a command in a loopback-only network namespace
@@ -229,7 +242,9 @@ The tools behind [docs/performance.md](../docs/performance.md):
 - `m2leak/`: open / Build edits / Run / close cycles of the real app under
   ASan/LSan (not built by default; see its CMakeLists.txt), and
   `lsan_parse.py` for bytes per cycle.
-- `rt_ab.sh`: SCHED_FIFO on and off at the same load (Linux).
+- `rt_ab.sh`: SCHED_FIFO on and off at a few fixed loads (Linux; the
+  first A/B, October 2026). `perf_sweep.py --refine --wrap ...` is the
+  current method: the whole a1p sweep, edges bisected, at each priority.
 - `chain_linux.sh`, `chain_mac.sh`, `daynice.sh`: the whole campaign on one
   host, in order, under `~/perf`.
 

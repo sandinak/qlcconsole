@@ -32,6 +32,28 @@ beams within 14 cm of their points.
   beside the USTs layer and drives the same pan/tilt (the layer wins only by
   order); UST-2 is not mounted on its riser (z 0, the others 0.61).
 
+## Performance page: precise limits and jitter — built, leftovers (perfprec, 2026-11-03)
+
+Built: `perf_sweep.py --refine` bisects every limit after the doubling
+ladder (to ~5%, each count decided by two runs of three, noisy band named), qlcstress
+splits jitter by cause (timer wake-up lateness against its own loop, stall
+inside a tick, late frames as scheduling or load), `extract.py precise`
+→ `docs/perf-data/edges.csv` + `jitter.csv`, jitter charts, the gate runs
+both self-tests. Pi 5 measured (normal and SCHED_FIFO), i7 container
+measured (normal only). Leftovers:
+- **M4 Max (ender) night run**: `~/perfprec-runs/night.sh`, waits for
+  22:00–08:00 and an idle machine; extract with `extract.py precise m4max
+  normal ~/perfprec-runs/normal`, redraw, replace the old M4 (RC8, dink)
+  column of the envelope.
+- **i7 container can't grant SCHED_FIFO** (unprivileged LXC: `prlimit
+  --rtprio` refused) — the RT A/B there needs a privileged container or
+  bare metal.
+- **Pi 5: `olad` spins a core** (110% CPU, 62 h of CPU in 12 days), left
+  running during the runs (stopping it was not ours to do). Rerun the Pi
+  after it is fixed or stopped; the numbers are a Pi with a busy daemon.
+- Other sweeps (`r`, `bp`) are not refined yet; the Art-Net wire limits are
+  still ladder-only.
+
 ## 0.4.0 coverage audit — leftovers (tcov, 2026-11-02)
 
 Map: docs/dev/TEST_MAP.md Part 1b. Decide or fix:

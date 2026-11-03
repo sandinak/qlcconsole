@@ -12,6 +12,16 @@ use are kept, under neutral host ids (pi, linux, m4); docs/perf-data/hosts.csv
 
 Stdlib only. Rows come out in a fixed order, so the same input gives the
 same files.
+
+  python3 -I tools/perf/extract.py precise HOST PRIORITY SWEEP_DIR [OUT_DIR]
+  python3 -I tools/perf/extract.py --self-test
+
+`precise` takes one perf_sweep.py --refine output folder (results.csv,
+edges.csv) of one host (pi, linux, m4max, ...) at one timer priority
+(normal, rt) and merges it into OUT_DIR/edges.csv (each limit as lo, hi,
+value +- half the bracket) and OUT_DIR/jitter.csv (every run: the frame
+interval distribution, late frames by cause, the timer's wake-up lateness).
+Rows of the same host, priority and sweep are replaced; the rest are kept.
 """
 import csv
 import os
@@ -59,7 +69,160 @@ def read(path):
         return list(csv.DictReader(f))
 
 
+EDGE_COLS = ["host", "priority", "sweep", "edge", "lo", "hi", "value", "pm", "pm_pct", "lower_bound",
+             "band_lo", "band_hi", "mixed", "runs", "timer_policy", "qt", "os", "rev", "date"]
+JITTER_COLS = ["host", "priority", "sweep", "n", "run", "tick_p99_ms", "frame_p50_ms", "frame_p99_ms",
+               "frame_p999_ms", "frame_max_ms", "late_pct", "late_sched", "late_load", "wake_p99_ms",
+               "wake_p999_ms", "wake_max_ms", "stall_p99_ms", "stall_max_ms", "cpu_pct", "broken",
+               "timer_policy"]
+
+
+def merge(path, cols, key, new_rows, sort_key):
+    """Replace the rows of path whose key() is among new_rows' keys; keep the
+    rest; sort; write."""
+    keys = {key(r) for r in new_rows}
+    kept = [r for r in read(path) if key(r) not in keys]
+    rows = kept + [{c: fmt(r.get(c)) for c in cols} for r in new_rows]
+    rows.sort(key=sort_key)
+    write(path, cols, rows)
+
+
+def num_sort(x):
+    v = fnum(x)
+    return v if v is not None else -1.0
+
+
+def precise(host, priority, sweep_dir, out):
+    results = read(os.path.join(sweep_dir, "results.csv"))
+    edges = read(os.path.join(sweep_dir, "edges.csv"))
+    if not results:
+        sys.exit("extract: no results.csv in %s" % sweep_dir)
+    first = {}
+    for r in results:
+        first.setdefault(r["sweep"], r)
+    # the last edge line of a sweep and kind wins (a resumed run appends)
+    last = {}
+    for e in edges:
+        last[(e["sweep"], e["edge"])] = e
+    erows = []
+    for (sweep, edge), e in sorted(last.items()):
+        r0 = first.get(sweep, {})
+        erows.append(dict(host=host, priority=priority, sweep=sweep, edge=edge,
+                          lo=e["lo"], hi=e["hi"], value=fnum(e["value"]), pm=fnum(e["pm"]),
+                          pm_pct=fnum(e["pm_pct"]), lower_bound=e["lower_bound"], mixed=e["mixed"],
+                          runs=e["runs"], timer_policy=e.get("timer_policy") or r0.get("timer_policy", ""),
+                          qt=r0.get("qt", ""), os=r0.get("os", ""), rev=e.get("rev", "") or r0.get("rev", ""),
+                          date=e.get("date", "")))
+    jrows = []
+    for r in results:
+        n = fnum(r.get("n"))
+        if n is None:           # an old run without the step's count: from the name
+            n = step(r["name"].split("-")[0])
+        if n is None or r.get("compute_p99") in (None, ""):
+            continue
+        jrows.append(dict(host=host, priority=priority, sweep=r["sweep"], n=int(n),
+                          run=int(fnum(r.get("run")) or 1),
+                          tick_p99_ms=fnum(r["compute_p99"]), frame_p50_ms=fnum(r["gap_p50"]),
+                          frame_p99_ms=fnum(r["gap_p99"]), frame_p999_ms=fnum(r.get("gap_p999")),
+                          frame_max_ms=fnum(r["gap_max"]), late_pct=fnum(r.get("late_pct")),
+                          late_sched=r.get("late_sched", ""), late_load=r.get("late_load", ""),
+                          wake_p99_ms=fnum(r.get("wake_p99")), wake_p999_ms=fnum(r.get("wake_p999")),
+                          wake_max_ms=fnum(r.get("wake_max")), stall_p99_ms=fnum(r.get("stall_p99")),
+                          stall_max_ms=fnum(r.get("stall_max")), cpu_pct=fnum(r["cpuPct"]),
+                          broken=r.get("brokenBy", ""), timer_policy=r.get("timer_policy", "")))
+    # the noisy band, from every run of the sweep: the smallest count that
+    # failed the edge's test in any run, the largest that passed in any
+    for er in erows:
+        if er["edge"] == "break":
+            bad = lambda j: any(w in j["broken"] for w in ("compute", "universes"))
+        else:
+            bad = lambda j: bool(j["broken"])
+        js = [j for j in jrows if j["sweep"] == er["sweep"]]
+        fails = [j["n"] for j in js if bad(j)]
+        oks = [j["n"] for j in js if not bad(j)]
+        er["band_lo"] = min(fails) if fails else None
+        er["band_hi"] = max((n for n in oks if fails and n > min(fails)), default=None)
+    hkey = lambda r: (r["host"], r["priority"], r["sweep"])
+    merge(os.path.join(out, "edges.csv"), EDGE_COLS, hkey, erows,
+          lambda r: (r["host"], r["priority"], r["sweep"], r["edge"]))
+    merge(os.path.join(out, "jitter.csv"), JITTER_COLS, hkey, jrows,
+          lambda r: (r["host"], r["priority"], r["sweep"], num_sort(r["n"]), num_sort(r["run"])))
+
+
+def self_test():
+    import tempfile
+    fails = []
+
+    def check(ok, what):
+        if not ok:
+            fails.append(what)
+            print("self-test FAILED:", what)
+    with tempfile.TemporaryDirectory() as d:
+        sd, out = os.path.join(d, "sweep"), os.path.join(d, "out")
+        os.makedirs(sd)
+        os.makedirs(out)
+        rc = ["sweep", "name", "n", "run", "compute_p99", "gap_p50", "gap_p99", "gap_p999", "gap_max",
+              "late_pct", "late_sched", "late_load", "wake_p99", "wake_p999", "wake_max", "stall_p99",
+              "stall_max", "cpuPct", "brokenBy", "timer_policy", "qt", "os", "rev"]
+        rows = [dict(sweep="c-efx", name="n0016", n=16, run=1, compute_p99=1.0, gap_p50=20, gap_p99=21,
+                     gap_p999=22.5, gap_max=30, late_pct=0, late_sched=0, late_load=0, wake_p99=0.1,
+                     wake_p999=0.2, wake_max=1.5, stall_p99=0.01, stall_max=0.3, cpuPct=50, brokenBy="",
+                     timer_policy="other", qt="6.8.2", os="Debian 13", rev="abc"),
+                dict(sweep="c-efx", name="n0100-r2", n=100, run=2, compute_p99=25, gap_p50=25, gap_p99=40,
+                     gap_p999="", gap_max=60, late_pct=12.5, late_sched=1, late_load=99, wake_p99="",
+                     wake_p999="", wake_max="", stall_p99="", stall_max="", cpuPct=300,
+                     brokenBy="compute+cadence", timer_policy="other", qt="6.8.2", os="Debian 13", rev="abc"),
+                # an old row: no n/run columns, the count from the name
+                dict(sweep="c-scenes", name="n0512", compute_p99=0.5, gap_p50=20, gap_p99=21, gap_max=25,
+                     cpuPct=20)]
+        write(os.path.join(sd, "results.csv"), rc, rows)
+        ec = ["sweep", "edge", "lo", "hi", "value", "pm", "pm_pct", "lower_bound", "mixed", "runs",
+              "timer_policy", "rev", "date"]
+        write(os.path.join(sd, "edges.csv"), ec, [
+            dict(sweep="c-efx", edge="break", lo=96, hi=100, value=98.0, pm=2.0, pm_pct=2.0,
+                 lower_bound=False, mixed="", runs=9, timer_policy="other", rev="abc", date="2026-11-03"),
+            dict(sweep="c-efx", edge="break", lo=97, hi=100, value=98.5, pm=1.5, pm_pct=1.5,
+                 lower_bound=False, mixed="98:2/3", runs=12, timer_policy="other", rev="abc", date="2026-11-03"),
+            dict(sweep="c-scenes", edge="jitter", lo=2048, hi="", value=2048, pm="", pm_pct="",
+                 lower_bound=True, mixed="", runs=8, rev="abc", date="2026-11-03")])
+        # an existing row of another host stays; one of this host and sweep is replaced
+        write(os.path.join(out, "edges.csv"), EDGE_COLS, [
+            dict(host="pi", priority="normal", sweep="c-efx", edge="break", lo=1, hi=2),
+            dict(host="linux", priority="normal", sweep="c-efx", edge="break", lo=5, hi=6)])
+        precise("linux", "normal", sd, out)
+        precise("linux", "normal", sd, out)          # idempotent
+        e = read(os.path.join(out, "edges.csv"))
+        check(len(e) == 3, "3 edge rows, got %d" % len(e))
+        lin = [r for r in e if r["host"] == "linux" and r["sweep"] == "c-efx"]
+        check(len(lin) == 1 and lin[0]["lo"] == "97" and lin[0]["mixed"] == "98:2/3", "last edge wins: %r" % lin)
+        check(lin[0]["qt"] == "6.8.2" and lin[0]["rev"] == "abc", "provenance carried")
+        check(any(r["host"] == "pi" for r in e), "other hosts kept")
+        sc = [r for r in e if r["sweep"] == "c-scenes"]
+        check(sc and sc[0]["lower_bound"] == "True" and sc[0]["hi"] == "", "lower bound: %r" % sc)
+        j = read(os.path.join(out, "jitter.csv"))
+        check(len(j) == 3, "3 jitter rows, got %d" % len(j))
+        check([(r["sweep"], r["n"], r["run"]) for r in j] ==
+              [("c-efx", "16", "1"), ("c-efx", "100", "2"), ("c-scenes", "512", "1")], "order: %r" %
+              [(r["sweep"], r["n"], r["run"]) for r in j])
+        check(j[0]["frame_p999_ms"] == "22.5" and j[0]["wake_max_ms"] == "1.5", "jitter fields")
+        lin = [r for r in read(os.path.join(out, "edges.csv")) if r["host"] == "linux" and r["sweep"] == "c-efx"]
+        check(lin[0]["band_lo"] == "100" and lin[0]["band_hi"] == "", "band from the runs: %r" % lin)
+        precise("linux", "rt", sd, out)
+        check(len(read(os.path.join(out, "edges.csv"))) == 5, "a second priority adds rows")
+    print("extract self-test:", "ok" if not fails else "FAILED (%d)" % len(fails))
+    return 0 if not fails else 1
+
+
 def main():
+    if sys.argv[1:2] == ["--self-test"]:
+        sys.exit(self_test())
+    if sys.argv[1:2] == ["precise"]:
+        if len(sys.argv) < 5:
+            sys.exit(__doc__)
+        here = os.path.dirname(os.path.abspath(__file__))
+        out = sys.argv[5] if len(sys.argv) > 5 else os.path.join(here, "..", "..", "docs", "perf-data")
+        precise(sys.argv[2], sys.argv[3], sys.argv[4], out)
+        return
     if len(sys.argv) < 2:
         sys.exit(__doc__)
     root = sys.argv[1]
