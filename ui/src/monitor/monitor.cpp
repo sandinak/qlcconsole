@@ -1860,9 +1860,13 @@ void Monitor::refreshBuried()
         return;
     QList<quint32> marks;
     foreach (const ShowStatus::Entry &e, ShowStatus::instance()->allEntries())
+    {
         if (e.key == QLatin1String("fixtures.buried"))
+        {
             foreach (const QVariant &v, e.itemData)
                 marks << v.toUInt();
+        }
+    }
     m_graphicsView->markBuriedFixtures(marks);
 }
 
