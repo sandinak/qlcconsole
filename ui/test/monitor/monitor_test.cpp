@@ -9696,6 +9696,91 @@ void Monitor_Test::aFollowSpotAimsAtTheSubjectNotTheFloor()
                         .arg(double(pt.z()))));
 }
 
+void Monitor_Test::eachArmOfABeamBarAimsFromItsOwnPlace()
+{
+    QScopedPointer<Doc> docOwner(new Doc(this));
+    Doc *doc = docOwner.data();
+    MonitorProperties *props = doc->monitorProperties();
+
+    // A 600 mm bar of two arms, each its own pan and tilt.
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test"); def->setModel("Two Arm Bar");
+    def->setType(QLCFixtureDef::MovingHead);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("4ch");
+    for (int a = 0; a < 2; ++a)
+    {
+        QLCFixtureHead hd;
+        for (int k = 0; k < 2; ++k)
+        {
+            QLCChannel *ch = new QLCChannel();
+            ch->setName(QString("%1 %2").arg(k == 0 ? "Pan" : "Tilt").arg(a + 1));
+            ch->setGroup(k == 0 ? QLCChannel::Pan : QLCChannel::Tilt);
+            ch->setControlByte(QLCChannel::MSB);
+            def->addChannel(ch);
+            mode->insertChannel(ch, quint32(a * 2 + k));
+            hd.addChannel(quint32(a * 2 + k));
+        }
+        mode->insertHead(-1, hd);
+    }
+    QLCPhysical ph;
+    ph.setWidth(600); ph.setHeight(200); ph.setDepth(150);
+    ph.setFocusPanMax(360); ph.setFocusTiltMax(180);
+    ph.setLayoutSize(QSize(2, 1));
+    mode->setPhysical(ph);
+    def->addMode(mode);
+    Fixture *bar = new Fixture(doc);
+    bar->setName("UST"); bar->setFixtureDefinition(def, mode);
+    QVERIFY(doc->addFixture(bar));
+    props->setFixturePosition(bar->id(), 0, 0, QVector3D(0.0f, 0.0f, 5.0f));
+    FixtureRigProps rp = props->fixtureRigProps(bar->id());
+    rp.mountingType = Truss::TopHung;
+    props->setFixtureRigProps(bar->id(), rp);
+
+    StageTarget *mark = props->addStageTarget();
+    mark->setName("Mark");
+    mark->setPosition(QVector3D(0.0f, 2.0f, 0.0f));   // dead ahead of the bar's middle
+    QLCPalette *aim = new QLCPalette(QLCPalette::Aim, doc);
+    aim->setName("At"); aim->setStageTargetId(mark->id());
+    QVERIFY(doc->addPalette(aim));
+    Scene *scene = new Scene(doc);
+    scene->setName("Aim");
+    scene->addFixture(bar->id());
+    scene->addPalette(aim->id());
+    QVERIFY(doc->addFunction(scene));
+
+    StructureStudioView v(doc, StructureStudioView::StageKind, 0);
+    v.resize(600, 460);
+    v.reload();
+    v.setPlane(StructureStudioView::Angled);
+    v.setActiveScene(scene->id());
+
+    // Each arm from its own place, 0.3 m apart along the bar...
+    QVector3D p0, p1, o0, o1;
+    QVERIFY(v.aimPointFor(bar->id(), 0, p0, &o0));
+    QVERIFY(v.aimPointFor(bar->id(), 1, p1, &o1));
+    QVERIFY2(qAbs((o1 - o0).x() - 0.3f) < 1e-3f && (o1 - o0).length() < 0.301f,
+             qPrintable(QString("arms %1 m apart").arg(double((o1 - o0).length()))));
+    // ...converging on the mark: each beam drawn from its arm to it, so
+    // the left arm turns further right than the right one does.
+    QVERIFY((p0 - mark->position()).length() < 0.01f && (p1 - mark->position()).length() < 0.01f);
+    const QVector3D d0 = v.moverAim(bar->id(), 0), d1 = v.moverAim(bar->id(), 1);
+    QVERIFY2((d0 - (p0 - o0).normalized()).length() < 1e-3f
+             && (d1 - (p1 - o1).normalized()).length() < 1e-3f && d0.x() - d1.x() > 0.04f,
+             qPrintable(QString("arm beams (%1,%2,%3) and (%4,%5,%6)")
+                        .arg(d0.x()).arg(d0.y()).arg(d0.z()).arg(d1.x()).arg(d1.y()).arg(d1.z())));
+
+    // On a line each arm has its own place: two lights, two points.
+    mark->setLinePoints({ QVector3D(-2.0f, 0.0f, 0.0f), QVector3D(2.0f, 0.0f, 0.0f) });
+    mark->makeLine();
+    v.setActiveScene(Function::invalidId());
+    v.setActiveScene(scene->id());
+    QVERIFY(v.aimPointFor(bar->id(), 0, p0));
+    QVERIFY(v.aimPointFor(bar->id(), 1, p1));
+    QVERIFY2(qAbs(p0.x() + 2.0f) < 0.02f && qAbs(p1.x() - 2.0f) < 0.02f,
+             qPrintable(QString("arms on the line at x %1 and %2").arg(p0.x()).arg(p1.x())));
+}
+
 void Monitor_Test::theReachOverlayShadesWhereASpotCannotAim()
 {
     /* "Can we predict the areas the spot WON'T be able to cover?" A 540/270

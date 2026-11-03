@@ -765,6 +765,10 @@ private slots:
      *  well apart don't. */
     void overlappingFixturesAreFlagged();
     void aFollowSpotAimsAtTheSubjectNotTheFloor();
+    /** "Multi-arm fixtures can and should be relative": each arm of a
+     *  two-arm beam is drawn aimed from its own place -- at a point the arms
+     *  converge, on a line each has its own place on it. */
+    void eachArmOfABeamBarAimsFromItsOwnPlace();
     /** A beam aimed at something ends there instead of sailing past it. */
     void aBeamCarriesOnPastWhatItIsAimedAt();
     void aBeamLandsAsAnOvalAtAnAngle();

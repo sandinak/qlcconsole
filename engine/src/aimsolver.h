@@ -26,9 +26,9 @@
 
 #include "linespread.h"
 #include "beamocclusion.h"
+#include "grouphead.h"
 
 class Doc;
-class Fixture;
 class Scene;
 class StageTarget;
 class QLCPalette;
@@ -84,8 +84,55 @@ namespace AimSolver
         bool reachable() const { return marginDeg >= 0.0f; }
     };
 
-    /** The fixture's aim geometry. False if it has no usable rig geometry. */
+    /** The fixture's aim geometry. False if it has no usable rig geometry.
+     *  A multi-arm fixture's frame is its body's: frameFor(GroupHead) gives
+     *  each arm its own. */
     bool frameFor(Doc *doc, quint32 fixtureId, Frame &frame);
+
+    /*************************************************************************
+     * Arms: the heads of one fixture that point on their own
+     *
+     * A two-arm beam bar has two yokes, each on its own pan and tilt
+     * channels, a body-width apart. Aimed as one, both arms took one angle
+     * and landed a body-width apart -- on a line, two lights on one place
+     * and half the line dark. So every arm is its own MEMBER of an aim: its
+     * own origin, its own angle at a point (they converge, at slightly
+     * different angles), its own place, number, group and side on a line.
+     *
+     * A member is a GroupHead: (fixture, head) for an arm, (fixture, -1) for
+     * a fixture that aims as one -- a single yoke, or a moving bar whose
+     * pixel heads ride one pan and tilt. The quint32 forms below are kept
+     * and are FIXTURE-level (a multi-arm fixture is one member there, aimed
+     * from its body's centre); everything that writes or draws an aim uses
+     * the GroupHead forms.
+     *************************************************************************/
+
+    /** The heads of @p fx that point on their own: each has a pan or tilt
+     *  channel no earlier head has. Empty unless there are at least two --
+     *  a fixture with one yoke, or none, aims as one. */
+    QVector<int> arms(const Fixture *fx);
+    /** True when head @p head of @p fx is one of arms(). Allocation-free. */
+    bool isArm(const Fixture *fx, int head);
+
+    /** Where arm @p head of fixture @p fixtureId sits from the fixture's own
+     *  aim origin (frameFor(quint32)), metres, in the world: the centre of
+     *  its share of the body, along the body's length (RigHeads::frame()'s
+     *  L) -- head i of n at (i - (n-1)/2) x width/n, the slices the rig view
+     *  draws each arm in. The definition's Width (Physical Dimensions)
+     *  sets the spacing (0.3 m when it declares none). Zero for -1, for a
+     *  head that is not an arm, and for a fixture that aims as one. */
+    QVector3D armOffset(Doc *doc, quint32 fixtureId, int head);
+
+    /** The aim members of @p fixtures (in their order): aimable() with each
+     *  multi-arm fixture opened up into its arms, in head order. */
+    QList<GroupHead> aimMembers(Doc *doc, const QList<quint32> &fixtures);
+    /** The members Aim look @p paletteId in @p scene lays out over: as
+     *  aimHeads(doc, scene, paletteId), arms opened up. */
+    QList<GroupHead> aimMembers(Doc *doc, const Scene *scene, quint32 paletteId);
+
+    /** The member's aim geometry: the fixture's, from the arm's own origin
+     *  (armOffset()). */
+    bool frameFor(Doc *doc, const GroupHead &member, Frame &frame);
 
     /** Solve @p frame for @p targetWorld.
      *
@@ -148,12 +195,20 @@ namespace AimSolver
     /** The same, keeping how much reach is left. False as aimDegrees(). */
     bool reach(Doc *doc, quint32 fixtureId, const QVector3D &targetWorld,
                Solution &solution);
+    /** aimDegrees() and reach() for one member: an arm from its own origin. */
+    bool aimDegrees(Doc *doc, const GroupHead &member, const QVector3D &targetWorld,
+                    float &panDeg, float &tiltDeg);
+    bool reach(Doc *doc, const GroupHead &member, const QVector3D &targetWorld,
+               Solution &solution);
 
     /** Where head @p fixtureId should point for target @p target: the shared
      *  rule (MonitorProperties::targetAimPointFor()) with this head's place
      *  and its beam as wide as its zoom and iris have it now -- a wider beam
      *  following a person aims lower, so it covers them without top wash. */
     QVector3D aimPointFor(Doc *doc, quint32 fixtureId, const StageTarget *target,
+                          bool subjectMode);
+    /** The same for one member, from its own origin. */
+    QVector3D aimPointFor(Doc *doc, const GroupHead &member, const StageTarget *target,
                           bool subjectMode);
 
     /** The heads an Aim look in @p scene points, in LOOK ORDER: each of the
@@ -179,12 +234,21 @@ namespace AimSolver
     QHash<quint32, double> lineFractions(Doc *doc, const StageTarget *target,
                                          const QList<quint32> &heads,
                                          const LineSpread::Settings &settings);
+    /** The same over members: every arm its own place, its own number in
+     *  the order and its own group (Grouping 2 pairs the two arms of a
+     *  two-arm beam when they hang side by side along the line). */
+    QHash<GroupHead, double> lineMemberFractions(Doc *doc, const StageTarget *target,
+                                           const QList<GroupHead> &members,
+                                           const LineSpread::Settings &settings);
 
     /** @p heads in the order they take places on line @p target: as given
      *  (LookOrder), or by where they hang measured from the line's first end
      *  towards its last (AlongLine). */
     QList<quint32> orderedLineHeads(Doc *doc, const StageTarget *target,
                                     const QList<quint32> &heads, LineSpread::Order order);
+    /** The same over members, each arm by where IT hangs. */
+    QList<GroupHead> orderedLineMembers(Doc *doc, const StageTarget *target,
+                                      const QList<GroupHead> &members, LineSpread::Order order);
 
     /** The world point @p fraction of the way along line target @p target. */
     QVector3D linePoint(Doc *doc, const StageTarget *target, double fraction);
@@ -195,12 +259,18 @@ namespace AimSolver
      *  line). The rule linePoints() and every rig view's aim trace share. */
     QVector3D linePointFor(Doc *doc, quint32 fixtureId, const StageTarget *target,
                            double fraction);
+    QVector3D linePointFor(Doc *doc, const GroupHead &member, const StageTarget *target,
+                           double fraction);
 
     /** Each head's aim point for Aim look @p look on line @p target, over
      *  @p heads (as lineFractions()). */
     QHash<quint32, QVector3D> linePoints(Doc *doc, const QLCPalette *look,
                                          const StageTarget *target,
                                          const QList<quint32> &heads);
+    /** The same over members (aimMembers()): what an Aim look writes. */
+    QHash<GroupHead, QVector3D> lineMemberPoints(Doc *doc, const QLCPalette *look,
+                                           const StageTarget *target,
+                                           const QList<GroupHead> &members);
 
     /** True if @p scene carries a follow-spot effect, which is what makes an
      *  Aim look in it track a SUBJECT (chest height above the deck) rather
@@ -223,6 +293,7 @@ namespace AimSolver
     struct SceneAim
     {
         quint32   fixtureId;
+        int       head = -1;     ///< the arm, or -1: the fixture aims as one
         quint32   targetId;
         quint32   paletteId;     ///< the Aim look pointing it
         QVector3D point;         ///< the aim point, as the palette resolves it
@@ -236,7 +307,8 @@ namespace AimSolver
     /** Every aimable head each Aim look in @p scene points at its target --
      *  the scene's fixtures and its groups' members, exactly the set the
      *  palette writes pan and tilt for -- solved against the same point the
-     *  palette uses. Heads with no rig geometry are left out: there is no
+     *  palette uses. A multi-arm fixture has one entry per arm (SceneAim::head),
+     *  each from the arm's own origin. Heads with no rig geometry are left out: there is no
      *  answer to give for them. */
     QList<SceneAim> sceneAims(Doc *doc, const Scene *scene);
     /** The heads an Aim look in @p scene that has "Dim lights that can't see

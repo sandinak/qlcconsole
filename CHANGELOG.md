@@ -12,6 +12,20 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ## [Unreleased]
 
+### Changed
+
+- **Each arm of a multi-arm fixture aims on its own.** A two-arm beam's
+  arms (each on its own pan and tilt) are two lights to an Aim look: at a
+  point each aims from where it hangs on the bar, so the two converge at
+  their own angles; on a line each takes its own place, number, group and
+  side, so eight two-arm beams are sixteen points and Pairs pairs a bar's
+  arms. A follow-spot or aiming effect solves each arm from its own place
+  too, and the Lighting Studio draws each arm's beam from that arm. A show
+  saved before this plays as it did except for its multi-arm fixtures,
+  whose arms now go to their own points instead of sharing one aim a
+  body-width apart. Fixtures with one pan and tilt -- a pixel bar on a
+  yoke included -- are unchanged.
+
 ### Fixed
 
 - **An aimed light is drawn where it points, to the step.** The rig views

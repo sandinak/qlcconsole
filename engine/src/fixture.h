@@ -386,8 +386,11 @@ public:
     QVector <quint32> cmyChannels(int head = 0) const;
 
     /** Return a list of DMX values based on the given position degrees
-     *  and the provided type (Pan or Tilt) */
-    QList<SceneValue> positionToValues(int type, float degrees, bool isRelative = false);
+     *  and the provided type (Pan or Tilt). @p head >= 0: only that head's
+     *  channel (an arm of a multi-arm fixture, aimed on its own --
+     *  AimSolver::arms()); -1, every head's, as stock QLC+ has it. */
+    QList<SceneValue> positionToValues(int type, float degrees, bool isRelative = false,
+                                       int head = -1);
 
     /** The DMX band (MSB, 0..255) of position channel @p ch that points the
      *  head: its RotationIndexed capability when it declares one (the rest of

@@ -125,6 +125,14 @@ line — the stage-left head takes the stage-left end — so a full spread never
 crosses beams by accident. The 2D plot's aim traces and the Rig Overview's
 beams each go to their own point.
 
+**A light with several arms** (a two-arm beam bar: each arm on its own pan
+and tilt) is that many lights on the line: each arm takes its own place,
+its own number in the order and its own group. Eight two-arm beams on a
+line are sixteen points; with **Pairs**, a bar's two arms are a pair, so
+**Each group flips** crosses each bar's arms and **Groups swap sides**
+moves the bars, each keeping its arms in order. A bar of pixels on one
+moving yoke is still one light.
+
 The target's own point — what a follow spot, an effect pointed at the
 target, or an older qlcconsole build sees — is the line's **centre**.
 
@@ -197,7 +205,7 @@ one box:
 ## The Aim Solver
 
 For each fixture, the solver starts from a cached **Frame**: its rigged
-world position, whether it's floor-mounted or hung (which flips which way
+world position (for each arm of a multi-arm fixture, the arm's own place), whether it's floor-mounted or hung (which flips which way
 "home" tilt points), its pan-zero facing direction, calibration offsets, and
 its physical pan/tilt range.
 
@@ -214,6 +222,16 @@ takes them out again when it turns DMX back into a direction, so a beam is
 drawn on the target it is aimed at whatever the offsets are. See
 [Calibration offsets](lighting-studio.md#calibration-offsets), and
 [Quick focus](lighting-studio.md#quick-focus) for setting them.
+
+**Arms aim from where they are.** A fixture whose heads each have their
+own pan or tilt (a two-arm beam) is aimed an arm at a time, each from its
+own place on the body. Definitions say only how wide the body is and how
+many heads it has (Layout 2 × 1 on a 510 mm bar), so each arm sits in the
+middle of its share of the width, along the body as it is turned on the
+plot — where the Lighting Studio draws it, 255 mm apart on that bar. At a
+point the arms converge, each at its own angle: a few degrees apart at a
+few metres. Heads that share one pan and tilt (a pixel bar on a yoke) are
+aimed as one fixture, as before.
 
 Reachability is a question of pan/tilt range against the fixture's own
 calibrated limits. Whether anything *stands in the way* is a separate

@@ -115,6 +115,10 @@ private slots:
     void followSpotFadesAHeadThatCannotReach();
     void followSpotFadesAHeadThatCannotSeeTheSubject();
     void aScriptIsToldWhatIsInTheWay();
+    /** A two-arm fixture's arms are each their own cell for an aim: the
+     *  scene target's pan and an aimX/aimY intent are solved from each arm's
+     *  own origin and written to that arm's own pan, not to both. */
+    void eachArmAimsFromWhereItIs();
     /** Size On Subject zooms a head so its beam is that wide where it lands,
      *  whatever the throw, within the lens's range. */
     void followSpotZoomsToHoldSizeOnSubject();

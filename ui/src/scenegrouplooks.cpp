@@ -680,12 +680,16 @@ QHash<quint32, QStringList> SceneGroupLooks::headsThatCannotReach(Doc *doc, Scen
         StageTarget *t = props->stageTarget(a.targetId);
         if (t == nullptr)
             continue;
+        // Once a fixture: each arm of a multi-arm fixture is its own entry.
+        QString what;
         if (!a.solution.reachable())
-            out[a.fixtureId] << t->name();
+            what = t->name();
         /* In range, but something solid on stage is in the way: it points
            there and its light stops short (line of sight). */
         else if (a.sight.blocked)
-            out[a.fixtureId] << tr("%1 (blocked by %2)").arg(t->name(), a.sight.name);
+            what = tr("%1 (blocked by %2)").arg(t->name(), a.sight.name);
+        if (!what.isEmpty() && !out.value(a.fixtureId).contains(what))
+            out[a.fixtureId] << what;
     }
     return out;
 }

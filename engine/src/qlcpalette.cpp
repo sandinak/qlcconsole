@@ -524,7 +524,7 @@ QList<SceneValue> QLCPalette::valuesFromFixtures(Doc *doc, QList<quint32> fixtur
 
     // Aim at a line target: each head's point, worked out on first use.
     bool lineReady = false;
-    QHash<quint32, QVector3D> linePts;
+    QHash<GroupHead, QVector3D> linePts;
 
     foreach (quint32 id, fixtures)
     {
@@ -846,37 +846,45 @@ QList<SceneValue> QLCPalette::valuesFromFixtures(Doc *doc, QList<quint32> fixtur
                    This used to be written out here AND again in the renderer,
                    and the two disagreed: a follow-spot aimed at chest height in
                    Edit while the rig view pointed at the target's own Z. */
-                QVector3D tgtPos;
-                if (tgt->isLine())
+                if (tgt->isLine() && !lineReady)
                 {
                     /* A line gives each head its own point, so where THIS head
                        goes depends on every head the look aims: the owning
                        scene's (groups and fixtures together, which this
                        palette is expanded for in two calls), else the list
                        this call was given. Worked out once per call. */
-                    if (!lineReady)
-                    {
-                        const QList<quint32> heads = (owner != nullptr)
-                                ? AimSolver::aimHeads(doc, owner, m_id)
-                                : AimSolver::aimable(doc, fixtures);
-                        linePts = AimSolver::linePoints(doc, this, tgt, heads);
-                        lineReady = true;
-                    }
-                    tgtPos = linePts.value(id, mProps->targetAimPoint(tgt));
+                    const QList<GroupHead> heads = (owner != nullptr)
+                            ? AimSolver::aimMembers(doc, owner, m_id)
+                            : AimSolver::aimMembers(doc, fixtures);
+                    linePts = AimSolver::lineMemberPoints(doc, this, tgt, heads);
+                    lineReady = true;
                 }
-                else
+
+                /* Every arm of a multi-arm fixture is aimed from where IT is,
+                   on its own channels: at a point they converge, each at its
+                   own angle; on a line each has its own place. A fixture with
+                   one yoke is one member (head -1) and sets every head. */
+                const QVector<int> arms = AimSolver::arms(fixture);
+                const int members = arms.isEmpty() ? 1 : arms.size();
+                bool aimedAny = false;
+                for (int ai = 0; ai < members; ++ai)
                 {
-                    tgtPos = AimSolver::aimPointFor(doc, id, tgt, subjectMode);
+                    const GroupHead member(id, arms.isEmpty() ? -1 : arms.at(ai));
+                    const QVector3D tgtPos = tgt->isLine()
+                            ? linePts.value(member, mProps->targetAimPoint(tgt))
+                            : AimSolver::aimPointFor(doc, member, tgt, subjectMode);
+
+                    // Shared aim geometry — identical to the follow-spot effect's, so
+                    // a fixture points the same way in Edit and Run.
+                    float panDeg = 0.0f, tiltDeg = 0.0f;
+                    if (!AimSolver::aimDegrees(doc, member, tgtPos, panDeg, tiltDeg))
+                        continue;
+                    aimedAny = true;
+                    list << fixture->positionToValues(QLCChannel::Pan,  panDeg, false, member.head);
+                    list << fixture->positionToValues(QLCChannel::Tilt, tiltDeg, false, member.head);
                 }
-
-                // Shared aim geometry — identical to the follow-spot effect's, so
-                // a fixture points the same way in Edit and Run.
-                float panDeg = 0.0f, tiltDeg = 0.0f;
-                if (!AimSolver::aimDegrees(doc, id, tgtPos, panDeg, tiltDeg))
+                if (!aimedAny)
                     break;
-
-                list << fixture->positionToValues(QLCChannel::Pan,  panDeg);
-                list << fixture->positionToValues(QLCChannel::Tilt, tiltDeg);
 
                 // Set pan/tilt speed to maximum (DMX 0 for FastSlow, 255 for SlowFast)
                 // so the fixture responds at full speed when following a target.

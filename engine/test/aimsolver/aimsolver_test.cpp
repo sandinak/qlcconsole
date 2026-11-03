@@ -482,7 +482,7 @@ QTEST_MAIN(AimSolver_Test)
 
 namespace
 {
-enum class Def { Spot16, Spot8, TwoArm };
+enum class Def { Spot16, Spot8, TwoArm, FourArm };
 enum class Mount { Hung, HungOnTruss, Floor, Deck, OnTrussTop };
 enum class Aim { Point, Person, Line };
 
@@ -502,6 +502,9 @@ struct AimRow
     QVector3D target;           // the point, the person's feet, the line's centre
     QVector3D lineEnd;          // a line: its last end from the centre (first = -this)
     double spread;              // a line: Spread (NaN = the look's default, +5)
+    int group = 1;              // a line: Grouping (lights per group)
+    int cross = LineSpread::SwapSides;
+    float yaw = 0.0f;           // the body turned in plan (studioYaw)
 };
 
 const double kDefault = qQNaN();
@@ -528,6 +531,13 @@ const AimRow kRows[] = {
     { "two-arm beams on a deck, Spread 2", Def::TwoArm, Mount::Deck,    { -3, 3.6f, 0 }, 4,  0,  0,  0, false, false, Aim::Line,   { 0, 9.6f, 0 },  { 4.3f, -1.2f, 0.37f }, 2 },
     { "two-arm beam on the floor, person", Def::TwoArm, Mount::Floor,   { 1, 0, 0 },     1,  0,  0,  0, false, false, Aim::Person, { -2, 5, 0 },    {}, kDefault },
     { "two-arm beams hung, point",      Def::TwoArm, Mount::Hung,       { -1, 0, 5 },    2,  0,  0,  0, false, false, Aim::Point,  { 2, 4, 0 },     {}, kDefault },
+    // Each arm is its own light: its own origin, angle and place.
+    { "two-arm beam at a near point",   Def::TwoArm, Mount::Hung,       { 0, 0, 3 },     1,  0,  0,  0, false, false, Aim::Point,  { 0.3f, 2, 0 },  {}, kDefault },
+    { "two-arm beam turned 90, point",  Def::TwoArm, Mount::Hung,       { 0, 0, 3 },     1, 90,  0,  0, false, false, Aim::Point,  { 2, 0.3f, 0 },  {}, kDefault, 1, LineSpread::SwapSides, 90 },
+    { "two-arm beams, line in pairs, mirrored", Def::TwoArm, Mount::Deck, { -5, 3.6f, 0 }, 8, 0, 0, 0, false, false, Aim::Line, { 0, 9.6f, 0 }, { 4.3f, -1.2f, 0.37f }, -5, 2, LineSpread::Mirror },
+    { "two-arm beams, line in pairs, swapped",  Def::TwoArm, Mount::Deck, { -5, 3.6f, 0 }, 8, 0, 0, 0, false, false, Aim::Line, { 0, 9.6f, 0 }, { 4.3f, -1.2f, 0.37f }, -5, 2, LineSpread::SwapSides },
+    { "four-arm bar hung, point",       Def::FourArm, Mount::Hung,      { 0, 0, 4 },     2,  0,  0,  0, false, false, Aim::Point,  { 1, 3, 0 },     {}, kDefault },
+    { "four-arm bars hung, line",       Def::FourArm, Mount::Hung,      { -3, 0, 4 },    3,  0,  0,  0, false, false, Aim::Line,   { 0, 5, 0 },     { 5, 0, 0 }, kDefault },
 };
 
 /* A pan/tilt spot, 540/270, coarse and fine (16-bit) or coarse only. */
@@ -590,6 +600,69 @@ Fixture *addTwoArm(Doc *doc, const QString &name, quint32 address)
     fxi->setFixtureDefinition(def, mode);
     fxi->setAddress(address);
     return doc->addFixture(fxi) ? fxi : nullptr;
+}
+
+/* A bar of @p arms independently aimed heads (each its own 16-bit pan and
+   8-bit tilt, 540/270), 1 m wide, Layout arms x 1 -- no such fixture in the
+   library yet, so made here. */
+Fixture *addMultiArm(Doc *doc, const QString &name, int arms, quint32 address)
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test");
+    def->setModel(QString("Bar %1 arms %2").arg(arms).arg(name));
+    def->setType(QLCFixtureDef::MovingHead);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("ch");
+    int n = 0;
+    for (int a = 0; a < arms; ++a)
+    {
+        QLCFixtureHead head;
+        const QPair<QLCChannel::Group, QLCChannel::ControlByte> chs[] = {
+            { QLCChannel::Pan, QLCChannel::MSB }, { QLCChannel::Pan, QLCChannel::LSB },
+            { QLCChannel::Tilt, QLCChannel::MSB } };
+        for (const auto &c : chs)
+        {
+            QLCChannel *ch = new QLCChannel();
+            ch->setName(QString("%1 %2%3").arg(c.first == QLCChannel::Pan ? "Pan" : "Tilt")
+                                          .arg(a + 1).arg(c.second == QLCChannel::LSB ? " fine" : ""));
+            ch->setGroup(c.first);
+            ch->setControlByte(c.second);
+            def->addChannel(ch);
+            mode->insertChannel(ch, quint32(n));
+            head.addChannel(quint32(n));
+            ++n;
+        }
+        mode->insertHead(-1, head);
+    }
+    QLCPhysical ph;
+    ph.setFocusPanMax(540);
+    ph.setFocusTiltMax(270);
+    ph.setWidth(1000);
+    ph.setHeight(200);
+    ph.setDepth(200);
+    ph.setLayoutSize(QSize(arms, 1));
+    mode->setPhysical(ph);
+    def->addMode(mode);
+
+    Fixture *fxi = new Fixture(doc);
+    fxi->setName(name);
+    fxi->setFixtureDefinition(def, mode);
+    fxi->setAddress(address);
+    return doc->addFixture(fxi) ? fxi : nullptr;
+}
+
+/* The pan of head @p head as its DMX reads back, degrees across its range. */
+double panDegrees(const Fixture *fx, const QByteArray &own, int head)
+{
+    const QLCFixtureMode *mode = fx->fixtureMode();
+    const QLCFixtureHead &h = mode->heads().at(head);
+    const quint32 msb = h.channelNumber(QLCChannel::Pan, QLCChannel::MSB);
+    const quint32 lsb = h.channelNumber(QLCChannel::Pan, QLCChannel::LSB);
+    double v = uchar(own.at(int(msb)));
+    if (lsb != QLCChannel::invalid())
+        v += uchar(own.at(int(lsb))) / 256.0;
+    return Fixture::positionFraction(mode->channel(msb), v, lsb != QLCChannel::invalid())
+           * mode->physical().focusPanMax();
 }
 
 /* How far, at most, a head's DMX can leave its beam from the solved angle:
@@ -665,7 +738,8 @@ void AimSolver_Test::aimedHeadsLandOnTheirTarget()
     {
         const QString name = QString("%1 %2").arg(r.name).arg(i + 1);
         Fixture *fx = r.def == Def::TwoArm ? addTwoArm(doc, name, address)
-                                           : addSpot(doc, name, r.def == Def::Spot16, address);
+                    : r.def == Def::FourArm ? addMultiArm(doc, name, 4, address)
+                                            : addSpot(doc, name, r.def == Def::Spot16, address);
         QVERIFY2(fx != nullptr, qPrintable(name));
         address += fx->channels();
         fixtures << fx;
@@ -677,6 +751,7 @@ void AimSolver_Test::aimedHeadsLandOnTheirTarget()
         rp.tiltOffsetDeg = r.tiltOffset;
         rp.panInvert = r.panInvert;
         rp.tiltInvert = r.tiltInvert;
+        rp.studioYaw = r.yaw;
         switch (r.mount)
         {
             case Mount::Hung:
@@ -723,6 +798,10 @@ void AimSolver_Test::aimedHeadsLandOnTheirTarget()
     aim->setStageTargetId(target->id());
     if (!qIsNaN(r.spread))
         aim->setEffectParamValue(LineSpread::paramName("Spread"), r.spread);
+    if (r.group != 1)
+        aim->setEffectParamValue(LineSpread::paramName("Group"), r.group);
+    if (r.cross != LineSpread::SwapSides)
+        aim->setEffectParamValue(LineSpread::paramName("Cross"), r.cross);
     QVERIFY(doc->addPalette(aim));
     Scene *scene = new Scene(doc);
     scene->setName(r.name);
@@ -735,26 +814,54 @@ void AimSolver_Test::aimedHeadsLandOnTheirTarget()
     scene->addPalette(aim->id());
     QVERIFY(doc->addFunction(scene));
 
-    // Where each head is meant to go, as the look resolves it...
-    QHash<quint32, QVector3D> intended;
+    /* The members: one per fixture, or one per ARM of a multi-arm fixture
+       -- each its own light, from its own origin. */
+    const QList<GroupHead> members = AimSolver::aimMembers(doc, ids);
+    const int expected = r.count * (r.def == Def::TwoArm ? 2 : r.def == Def::FourArm ? 4 : 1);
+    QCOMPARE(members.size(), expected);
+
+    // Where each is meant to go, as the look resolves it...
+    QHash<GroupHead, QVector3D> intended;
     for (const AimSolver::SceneAim &a : AimSolver::sceneAims(doc, scene))
-        intended.insert(a.fixtureId, a.point);
-    QCOMPARE(intended.size(), fixtures.size());
+        intended.insert(GroupHead(a.fixtureId, a.head), a.point);
+    QCOMPARE(intended.size(), members.size());
+
+    auto label = [&](const GroupHead &m) {
+        Fixture *fx = doc->fixture(m.fxi);
+        return m.head < 0 ? fx->name() : QString("%1 arm %2").arg(fx->name()).arg(m.head + 1);
+    };
+
+    // An arm's origin is its share of the body, along the body.
+    for (const GroupHead &m : members)
+    {
+        if (m.head < 0)
+            continue;
+        Fixture *fx = doc->fixture(m.fxi);
+        const int n = fx->heads();
+        const double w = fx->fixtureMode()->physical().width() / 1000.0;
+        const QVector3D off = AimSolver::armOffset(doc, m.fxi, m.head);
+        const double want = (m.head - (n - 1) * 0.5) * w / n;
+        const QVector3D along = r.yaw == 90.0f ? QVector3D(0, 1, 0) : QVector3D(1, 0, 0);
+        QVERIFY2((off - along * float(want)).length() < 1e-3f,
+                 qPrintable(QString("%1 sits (%2,%3,%4) from the body, not %5 along it")
+                            .arg(label(m)).arg(off.x()).arg(off.y()).arg(off.z()).arg(want)));
+    }
 
     // ...is on the target...
-    QList<QVector3D> along;           // a line's points, by where the heads stand
-    for (Fixture *fx : fixtures)
+    const QList<GroupHead> hang = AimSolver::orderedLineMembers(doc, target, members, LineSpread::AlongLine);
+    QList<QVector3D> along;           // a line's points, by where the lights hang
+    for (const GroupHead &m : (r.aim == Aim::Line ? hang : members))
     {
-        const QVector3D p = intended.value(fx->id());
+        const QVector3D p = intended.value(m);
         AimSolver::Frame frame;
-        QVERIFY(AimSolver::frameFor(doc, fx->id(), frame));
+        QVERIFY(AimSolver::frameFor(doc, m, frame));
         if (r.aim == Aim::Point)
             QVERIFY2((p - r.target).length() < 0.01f,
-                     qPrintable(QString("%1 aims at (%2,%3,%4)").arg(fx->name()).arg(p.x()).arg(p.y()).arg(p.z())));
+                     qPrintable(QString("%1 aims at (%2,%3,%4)").arg(label(m)).arg(p.x()).arg(p.y()).arg(p.z())));
         else if (r.aim == Aim::Person)
             QVERIFY2(qAbs(p.x() - r.target.x()) < 0.01f && qAbs(p.y() - r.target.y()) < 0.01f
                      && p.z() > 0.5f && p.z() < 1.9f,
-                     qPrintable(QString("%1 aims at (%2,%3,%4), not the person").arg(fx->name())
+                     qPrintable(QString("%1 aims at (%2,%3,%4), not the person").arg(label(m))
                                 .arg(p.x()).arg(p.y()).arg(p.z())));
         else
         {
@@ -768,26 +875,51 @@ void AimSolver_Test::aimedHeadsLandOnTheirTarget()
                 const float t = qBound(0.0f, QVector2D::dotProduct(q, d) / qMax(1e-9f, d.lengthSquared()), 1.0f);
                 off = qMin(off, (s + d * t - QVector2D(p)).length());
             }
-            QVERIFY2(off < 0.02f, qPrintable(QString("%1 aims %2 m off the line").arg(fx->name()).arg(off)));
+            QVERIFY2(off < 0.02f, qPrintable(QString("%1 aims %2 m off the line").arg(label(m)).arg(off)));
             along << p;
         }
     }
     if (r.aim == Aim::Line)
     {
+        // Hung along the line, in fixture order and each fixture's arms in head order.
+        QCOMPARE(hang, members);
         const QVector3D first = r.target + firstEnd(r), last = r.target + r.lineEnd;
         const double spread = qIsNaN(r.spread) ? LineSpread::maxSpread() : r.spread;
         if (spread == LineSpread::maxSpread())
         {
-            // End to end, in the order they stand: no crossed beams.
+            // End to end, in the order they stand: no crossed beams, and
+            // every light its own place (16 arms of 8 beams: 16 points).
             QVERIFY2(qAbs(along.first().x() - first.x()) < 0.02f && qAbs(along.last().x() - last.x()) < 0.02f,
                      qPrintable(QString("Spread +5 spans %1..%2, the line %3..%4")
                                 .arg(along.first().x()).arg(along.last().x()).arg(first.x()).arg(last.x())));
             for (int i = 1; i < along.size(); ++i)
-                QVERIFY(along.at(i).x() > along.at(i - 1).x());
+                QVERIFY2(along.at(i).x() > along.at(i - 1).x() + 0.05f,
+                         qPrintable(QString("%1 and %2 share a place").arg(label(hang.at(i - 1)), label(hang.at(i)))));
         }
         else if (spread == 0.0)
             for (const QVector3D &p : along)
                 QVERIFY(qAbs(p.x() - r.target.x()) < 0.02f && qAbs(p.y() - r.target.y()) < 0.02f);
+        else if (r.group == 2 && r.def == Def::TwoArm)
+        {
+            /* Grouping 2 pairs the two arms of each beam. Mirrored, each
+               pair crosses in place: arm 2 left of arm 1, the beams still in
+               order. Swapped, the pairs change sides, each keeping its arms'
+               order: the first beam's arms at the far end. */
+            for (int i = 0; i + 1 < along.size(); i += 2)
+            {
+                QCOMPARE(hang.at(i).fxi, hang.at(i + 1).fxi);
+                if (r.cross == LineSpread::Mirror)
+                    QVERIFY2(along.at(i).x() > along.at(i + 1).x(), qPrintable(label(hang.at(i)) + " not crossed"));
+                else
+                    QVERIFY2(along.at(i).x() < along.at(i + 1).x(), qPrintable(label(hang.at(i)) + " crossed"));
+                if (i + 2 < along.size())
+                {
+                    const float here = along.at(i).x() + along.at(i + 1).x();
+                    const float next = along.at(i + 2).x() + along.at(i + 3).x();
+                    QVERIFY(r.cross == LineSpread::Mirror ? next > here : next < here);
+                }
+            }
+        }
         else if (spread < 0.0)
             QVERIFY2(along.first().x() > along.last().x(), "a negative Spread crosses them");
         else
@@ -812,16 +944,19 @@ void AimSolver_Test::aimedHeadsLandOnTheirTarget()
                          .arg(fx->name()).arg(h).arg(uchar(own.at(int(pan))))));
         }
 
-        AimSolver::Frame frame;
-        QVERIFY(AimSolver::frameFor(doc, fx->id(), frame));
-        const QVector3D p = intended.value(fx->id());
-        const float throwM = (p - frame.position).length();
-        const double slack = dmxSlackDeg(fx, QLCChannel::Pan) + dmxSlackDeg(fx, QLCChannel::Tilt);
-        const double tol = qMax(0.10, double(throwM) * qTan(qDegreesToRadians(slack)) + 0.01);
         const FixtureRigProps rp = props->fixtureRigProps(fx->id());
-        // Every head: a two-arm beam's arms are aimed together.
+        const double slack = dmxSlackDeg(fx, QLCChannel::Pan) + dmxSlackDeg(fx, QLCChannel::Tilt);
+        // Every head: from its own origin to its own point when it is an
+        // arm, else the fixture's (a shared yoke: all of them).
         for (int h = 0; h < qMax(1, fx->heads()); ++h)
         {
+            const GroupHead m(fx->id(), AimSolver::isArm(fx, h) ? h : -1);
+            AimSolver::Frame frame;
+            QVERIFY(AimSolver::frameFor(doc, m, frame));
+            QVERIFY2(intended.contains(m), qPrintable(label(m)));
+            const QVector3D p = intended.value(m);
+            const float throwM = (p - frame.position).length();
+            const double tol = qMax(0.10, double(throwM) * qTan(qDegreesToRadians(slack)) + 0.01);
             QVector3D dir;
             QVERIFY(AimSolver::headDirection(fx, own, h, rp, dir));
             const double miss = missBy(frame.position, dir, p);
@@ -833,6 +968,27 @@ void AimSolver_Test::aimedHeadsLandOnTheirTarget()
                                 .arg(frame.position.x()).arg(frame.position.y()).arg(frame.position.z())
                                 .arg(dir.x()).arg(dir.y()).arg(dir.z())
                                 .arg(miss < 0.0 ? "points away" : "misses").arg(miss).arg(tol)));
+        }
+
+        /* At a point the arms converge: each pans by its own bearing to it,
+           so the two arms of a beam differ by the angle the body-width
+           between them makes there -- not 0, as when they shared an aim. */
+        if (r.aim == Aim::Point && r.def != Def::Spot16 && r.def != Def::Spot8)
+        {
+            AimSolver::Frame f0, f1;
+            QVERIFY(AimSolver::frameFor(doc, GroupHead(fx->id(), 0), f0));
+            QVERIFY(AimSolver::frameFor(doc, GroupHead(fx->id(), 1), f1));
+            auto bearing = [&](const QVector3D &from) {
+                return qRadiansToDegrees(qAtan2(double(-(r.target.x() - from.x())),
+                                                double(r.target.y() - from.y())));
+            };
+            const double want = bearing(f1.position) - bearing(f0.position);
+            const double got = panDegrees(fx, own, 1) - panDegrees(fx, own, 0);
+            const double step = dmxSlackDeg(fx, QLCChannel::Pan) * 2.0 + 0.01;
+            QVERIFY2(qAbs(want) > 1.0, qPrintable(QString("%1: arms only %2 degrees apart").arg(fx->name()).arg(want)));
+            QVERIFY2(qAbs(qAbs(got) - qAbs(want)) <= step && qAbs(got) > 0.0,
+                     qPrintable(QString("%1: arms pan %2 degrees apart, the geometry says %3")
+                                .arg(fx->name()).arg(got).arg(want)));
         }
     }
 
