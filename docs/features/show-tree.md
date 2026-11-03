@@ -980,8 +980,11 @@ of its own.
   closes it, and its size and place are remembered.
 - **Between cues** a Spread change fades over the cue's fade time, so the
   beams sweep.
-- **Where each light lands.** A light takes one place on the line: both
-  arms of a two-arm beam aim at it together, a beam-width apart. A light
+- **Where each light lands.** Every light takes its own place on the
+  line, and each arm of a two-arm beam is a light: eight beams are sixteen
+  places, the arms numbered, grouped and crossed one by one (Pairs pairs a
+  beam's two arms). At a point each arm aims from where it hangs, so the
+  two converge on it. A light
   standing below the line that can't tilt down to it (a beam on a riser
   aimed at the stage edge) lights the people on the line instead, at the
   show's subject height above it. Spread, Grouping and Cross reach only a
@@ -1675,6 +1678,25 @@ reach the stage on GO"*, in blue — blind is blue everywhere.
 - The footer's live **power estimate** counts the preview as anything else
   lit in Design (see
   [Power distribution](other-improvements.md#power-distribution)).
+
+**The stage chip.** One item in the footer, right of centre, always says
+what is lighting the stage, so a glance tells you whether the cue list is
+doing it:
+
+- **● LIVE · Act 1 · 1.2 Verse** (green): a cue list is running and its
+  output reaches the rig; the list and its cue.
+- **BLIND · stage holds 1.2 Verse** (white on the blue footer): Blind view.
+  What you edit shows on the screens and does not reach the lights; the
+  stage keeps the cue. **BLIND · rig muted** is Design's Blind.
+- **Stage: Build look**: the Workbench preview or the programmer is what is
+  on, over any list that runs underneath.
+- **Stage: no cue list**: nothing runs, nothing is being built.
+- **BLACKOUT · stage dark** (red) and **HELD · no output** (amber, Teaching
+  holding real output): nothing reaches the lights whatever plays.
+
+Hover it for the detail; click it for the Run tab while a list runs, else
+the Show Tree. It changes when a list starts, stops or steps and when Blind,
+Blackout, Teaching or the mode change, never per frame.
 
 ## Stack effects on a layer
 

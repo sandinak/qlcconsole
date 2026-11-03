@@ -281,9 +281,12 @@ private:
     QJSValue buildFixturesArray(const QList<EffectCell> &cells, int gridCols, int gridRows);
     struct FixtureFacts;
     void readFixtureFacts(const Fixture *fxi, FixtureFacts &f) const;
+    /** @p head: an arm of a multi-arm fixture (AimSolver::arms()), aimed
+     *  from its own origin; -1, the fixture as one. */
     QJSValue aimAtObject(quint32 fid, const QVector3D &pos, QLCPalette *effectPal,
-                         const BeamOcclusion::Model &sight);
-    QJSValue sceneTargetObject(quint32 fid, StageTarget *st, const BeamOcclusion::Model &sight);
+                         const BeamOcclusion::Model &sight, int head = -1);
+    QJSValue sceneTargetObject(quint32 fid, StageTarget *st, const BeamOcclusion::Model &sight,
+                               int head = -1);
     /** Line of sight onto a script's aim object: blocked, blockedBy,
      *  blockedKind, blockedAt, clearance (see docs/dev/EFFECTSCRIPT_API.md). */
     void setSight(QJSValue &obj, const BeamOcclusion::Hit &hit) const;
@@ -341,6 +344,7 @@ private:
         quint64 seen = 0;               //!< the tick it was last looked at
         bool sceneTargetSet = false;    //!< on its cells now
         bool lastSpotSet = false;
+        QVector<int> arms;              //!< AimSolver::arms(): each aimed on its own
     };
     QHash<quint32, FixtureFacts> m_facts;
     QVector<QJSValue> m_cellObjects;

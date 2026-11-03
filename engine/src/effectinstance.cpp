@@ -1525,7 +1525,11 @@ QJSValue EffectInstance::buildFixturesArray(const QList<EffectInstance::EffectCe
             }
         }
     }
-    QHash<quint32, QJSValue> aimAtOf, sceneTargetOf, lastSpotOf;
+    /* Keyed by member: (fixture << 32) | (arm + 1) -- every arm of a
+       multi-arm fixture is aimed from where it is (AimSolver::arms()). */
+    auto memberKey = [](quint32 fid, int head) { return (quint64(fid) << 32) | quint32(head + 1); };
+    QHash<quint64, QJSValue> aimAtOf, sceneTargetOf;
+    QHash<quint32, QJSValue> lastSpotOf;
     if (aiming || sceneTarget || !m_lastSpotIn.isEmpty())
     {
         // Line of sight: the stage's model, fetched once for every head.
@@ -1538,9 +1542,18 @@ QJSValue EffectInstance::buildFixturesArray(const QList<EffectInstance::EffectCe
             if (f.fixture == nullptr)
                 continue;
             if (aiming)
-                aimAtOf.insert(fid, aimAtObject(fid, f.pos, effectPal, *sight));
+                aimAtOf.insert(memberKey(fid, -1), aimAtObject(fid, f.pos, effectPal, *sight));
             if (sceneTarget)
-                sceneTargetOf.insert(fid, sceneTargetObject(fid, sceneTarget, *sight));
+                sceneTargetOf.insert(memberKey(fid, -1), sceneTargetObject(fid, sceneTarget, *sight));
+            for (int arm : f.arms)
+            {
+                if (aiming)
+                    aimAtOf.insert(memberKey(fid, arm),
+                                   aimAtObject(fid, f.pos, effectPal, *sight, arm));
+                if (sceneTarget)
+                    sceneTargetOf.insert(memberKey(fid, arm),
+                                         sceneTargetObject(fid, sceneTarget, *sight, arm));
+            }
             // lastSpot: pan/tilt (degrees) where this fixture's beam was left by the
             // previous Operate-mode tick (possibly from a different scene).  Lets a
             // followspot script seed followMode = "lastPosition" so the beam holds
@@ -1566,10 +1579,11 @@ QJSValue EffectInstance::buildFixturesArray(const QList<EffectInstance::EffectCe
             continue;
         const quint32 fid = cells.at(i).fixtureId;
         FixtureFacts &f = m_facts[fid];
+        const int arm = f.arms.contains(cells.at(i).head) ? cells.at(i).head : -1;
         if (aiming)
-            obj.setProperty("aimAt", aimAtOf.value(fid));
+            obj.setProperty("aimAt", aimAtOf.value(memberKey(fid, arm)));
         if (sceneTarget)
-            obj.setProperty("sceneTarget", sceneTargetOf.value(fid));
+            obj.setProperty("sceneTarget", sceneTargetOf.value(memberKey(fid, arm)));
         else if (f.sceneTargetSet)
         {
             obj.deleteProperty("sceneTarget");
@@ -1635,6 +1649,7 @@ void EffectInstance::readFixtureFacts(const Fixture *fxi, FixtureFacts &f) const
     f.lensMin = f.lensMax = 0.0f;
     f.hasPanTilt = f.hasRGB = f.hasColorWheel = f.hasDimmer = false;
     f.hasGobo = f.hasShutter = f.hasZoom = false;
+    f.arms = AimSolver::arms(fxi);
     const QLCFixtureMode *mode = fxi->fixtureMode();
     if (mode == nullptr)
         return;
@@ -1707,8 +1722,9 @@ void EffectInstance::setSight(QJSValue &obj, const BeamOcclusion::Hit &hit) cons
 }
 
 QJSValue EffectInstance::aimAtObject(quint32 fid, const QVector3D &pos, QLCPalette *effectPal,
-                                     const BeamOcclusion::Model &sight)
+                                     const BeamOcclusion::Model &sight, int head)
 {
+    const GroupHead member(fid, head);
     // aimAt: pre-computed pan/tilt for each bound target slot
     QJSValue aimAt = m_script.engine()->newObject();
     const MonitorProperties *mp = m_doc->monitorProperties();
@@ -1725,7 +1741,7 @@ QJSValue EffectInstance::aimAtObject(quint32 fid, const QVector3D &pos, QLCPalet
         // Follow spot: aim at the SUBJECT's body, not the target's
         // configured Z — through the shared rule, so a bound target
         // follows its structure and a Person is aimed at its own height.
-        const QVector3D tgtPos = AimSolver::aimPointFor(m_doc, fid, tgt, true);
+        const QVector3D tgtPos = AimSolver::aimPointFor(m_doc, member, tgt, true);
 
         // Use the SHARED aim solver — the exact same geometry the Aim
         // palette uses in Edit — so the beam doesn't jump on Edit→Run.
@@ -1733,7 +1749,7 @@ QJSValue EffectInstance::aimAtObject(quint32 fid, const QVector3D &pos, QLCPalet
         // positionToValues (see parseIntents).
         AimSolver::Frame frame;
         QJSValue aimObj = m_script.engine()->newObject();
-        if (AimSolver::frameFor(m_doc, fid, frame))
+        if (AimSolver::frameFor(m_doc, member, frame))
         {
             const AimSolver::Solution sol = AimSolver::solve(frame, tgtPos);
             aimObj.setProperty("pan",  (double)sol.panDeg);
@@ -1747,8 +1763,9 @@ QJSValue EffectInstance::aimAtObject(quint32 fid, const QVector3D &pos, QLCPalet
 }
 
 QJSValue EffectInstance::sceneTargetObject(quint32 fid, StageTarget *st,
-                                           const BeamOcclusion::Model &sight)
+                                           const BeamOcclusion::Model &sight, int head)
 {
+    const GroupHead member(fid, head);
     const MonitorProperties *mp = m_doc->monitorProperties();
     QVector3D raw = st->position();
 
@@ -1771,10 +1788,10 @@ QJSValue EffectInstance::sceneTargetObject(quint32 fid, StageTarget *st,
     // Pointed where its beam covers the subject best; sized
     // at the subject itself (its chest), so the size it asks
     // the zoom for does not move with the aim it gets.
-    const QVector3D tp = AimSolver::aimPointFor(m_doc, fid, st, true);
+    const QVector3D tp = AimSolver::aimPointFor(m_doc, member, st, true);
     const QVector3D subject = mp->targetAimPoint(st, true);
     AimSolver::Frame frame;
-    if (AimSolver::frameFor(m_doc, fid, frame))
+    if (AimSolver::frameFor(m_doc, member, frame))
     {
         const AimSolver::Solution sol = AimSolver::solve(frame, tp);
         so.setProperty("pan",  double(sol.panDeg));
@@ -2301,6 +2318,10 @@ EffectInstance::parseIntents(const QJSValue &intents,
         // Explicit angles win when both are present.
         bool  havePan = false, haveTilt = false;
         float panDeg  = 0.0f,  tiltDeg  = 0.0f;
+        /* An arm of a multi-arm fixture is its own cell and points on its
+           own: solved from where it is, written to its own pan and tilt.
+           Written to every head, the last arm's answer moved them all. */
+        const int armHead = AimSolver::isArm(fxi, head) ? head : -1;
 
         const QJSValue &axVal = iv("aimX");
         const QJSValue &ayVal = iv("aimY");
@@ -2310,7 +2331,7 @@ EffectInstance::parseIntents(const QJSValue &intents,
                        ? 0.0f : (float)iv("aimZ").toNumber();
             QVector3D world((float)axVal.toNumber(), (float)ayVal.toNumber(), az);
             float pd = 0.0f, td = 0.0f;
-            if (AimSolver::aimDegrees(m_doc, fid, world, pd, td))
+            if (AimSolver::aimDegrees(m_doc, GroupHead(fid, armHead), world, pd, td))
             {
                 panDeg = pd; tiltDeg = td;
                 havePan = true; haveTilt = true;
@@ -2326,7 +2347,7 @@ EffectInstance::parseIntents(const QJSValue &intents,
         if (havePan)
         {
             spotDeg.setX(panDeg); spotPan = true;
-            const QList<SceneValue> svs = fxi->positionToValues(QLCChannel::Pan, panDeg);
+            const QList<SceneValue> svs = fxi->positionToValues(QLCChannel::Pan, panDeg, false, armHead);
             for (const SceneValue &sv : svs)
                 writes.append({uniIdx, (int)fxi->address() + (int)sv.channel, sv.value, fxi->id(), sv.channel});
         }
@@ -2335,7 +2356,7 @@ EffectInstance::parseIntents(const QJSValue &intents,
         if (haveTilt)
         {
             spotDeg.setY(tiltDeg); spotTilt = true;
-            const QList<SceneValue> svs = fxi->positionToValues(QLCChannel::Tilt, tiltDeg);
+            const QList<SceneValue> svs = fxi->positionToValues(QLCChannel::Tilt, tiltDeg, false, armHead);
             for (const SceneValue &sv : svs)
                 writes.append({uniIdx, (int)fxi->address() + (int)sv.channel, sv.value, fxi->id(), sv.channel});
         }

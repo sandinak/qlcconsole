@@ -242,8 +242,12 @@ public:
     /** "I meant it" for @a finding's fixtures (on the layer that lights
      *  each in the cue it starts landing: Layer::meantOnScenery), or with
      *  @a meant false the marks it was intended by taken off. One Show Tree
-     *  undo step ("I meant it" / "Not meant"). False when nothing changed. */
-    static bool setLightMeant(Doc *doc, const ReviewFinding &finding, bool meant);
+     *  undo step ("I meant it" / "Not meant"). The layer keeps who, when
+     *  (now) and the optional @a note, and the finding carries them
+     *  (acceptedBy / acceptedWhen / acceptedNote); @a by defaults to
+     *  defaultName(). False when nothing changed. */
+    static bool setLightMeant(Doc *doc, const ReviewFinding &finding, bool meant,
+                              const QString &note = QString(), const QString &by = QString());
     /** Take every "I meant it" off layer @a layerId of cue @a cueId: one
      *  Show Tree undo step. False when it had none. */
     static bool clearLayerMeant(Doc *doc, quint32 cueId, quint32 layerId);

@@ -133,7 +133,8 @@ build/main/qlcconsole -o test-workspaces/surfacetesting.qxw
 - **`make dmg`** — `platforms/macos/make-release.sh`: the signed,
   notarized, stapled universal DMG of a committed HEAD into `dist/` (+
   `dist/SHA256SUMS`); replaces `~/qlcconsole.app` (old one →
-  `~/qlcconsole.app.prev`). Publishes nothing.
+  `~/qlcconsole.app.prev`). Publishes nothing. No tests, ccache, kept build dir;
+  `make dmg ARCH=native` = arm64-only DMG for our own Macs, never a release.
 - **`make beta` / `make release` / `make attach` are PUBLIC**
   (`platforms/macos/publish.sh`): gate + `make dmg` + push tag `v<VERSION>` +
   a GitHub pre-release ("Show Tree X (beta)") or full release, DMG +

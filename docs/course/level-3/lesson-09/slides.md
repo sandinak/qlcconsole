@@ -25,7 +25,7 @@ teacher says. It can be turned into a deck as it is.*
 ## 3. Show Review
 
 - Blocker · warning · note.
-- **Fix ▸** goes to it. **Accept…** with a note.
+- **Fix ▸** goes to it. **Not a Problem…** with a note.
 
 ## 4. Why is this on?
 

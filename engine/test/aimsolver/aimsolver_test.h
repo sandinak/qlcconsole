@@ -57,6 +57,14 @@ private slots:
     void aimedHeadsLandOnTheirTarget();
     /** An indexed band's coarse-only pan lands on the nearest step. */
     void anIndexedBandRoundsToTheNearestStep();
+
+    // An Aim at an Area covers it (AREA_COVER.md).
+    void areaZonesFollowWhereLightsHang();
+    void areaAimsAtSubjectHeightAboveTheRiser();
+    void areaCoverageFollowsBeamWidth();
+    void areaOfNoSizeIsAPoint();
+    void areaGivesEachArmItsOwnZone();
+    void areaCoversHisChorus();
 };
 
 #endif

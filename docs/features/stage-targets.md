@@ -19,7 +19,7 @@ look that aims at it re-solves automatically.
 | **None** (a plain mark) | A bare point | Amber crosshair |
 | **Person** | A standing subject of a given **Height** (5'9" unless set), drawn that tall and aimed at the chest — 80% of it | Crosshair over a lofted human silhouette |
 | **Drum Kit** | A low, wide subject | Crosshair over a footprint rectangle, aimed lower by default |
-| **Area** | A region of deck, not a point | A dashed-outline footprint rectangle |
+| **Area** | A region of deck, not a point: the lights aimed at it [cover it](#area-targets), each its own part | A dashed-outline footprint rectangle |
 | **Structure** | Bound to a truss/platform/steps/tower — its position *follows* whatever it's bound to | Crosshair, position always live |
 | **Line** | A curve in space — every light aimed at it gets its **own** point on it, evenly spaced | The curve, square handles at its ends, round ones at its mid points, and a crosshair at its centre |
 
@@ -79,6 +79,36 @@ A target you place stays drawn (you can't lose one you just put down), and
 so does a selected one. **Show ▸ All targets**, on the plot's or the Rig
 Overview's footer, draws them all, always; it is remembered.
 
+## Area targets
+
+An **Area** with a size (width across the stage, depth up and down it) is
+covered, not pointed at: an Aim look at it splits it into one zone per
+light and aims each light at its own zone. Every arm of a two-arm beam is a
+light of its own. Before 0.3.1 every light pointed at the area's centre,
+at the area's own height, and the corners stayed dark.
+
+- **Who takes which part.** The lights are matched to the zones by where
+  they hang: low and downstage lights take the downstage ranks, high and
+  upstage ones the ranks behind, stage right lights the stage right zones.
+  Two towers of three shelves either side of a chorus on risers: each
+  tower lights its own half, the bottom shelf the front rank and the top
+  shelf the back rank on the risers. For a regular rig no two beams cross.
+- **How high.** Each light aims at its zone's centre, at subject height
+  above whatever is under it there (the deck, a riser, a step's tread): a
+  person's chest, 1.4 m, or the area's aim height when you set one. Not the
+  area's own Z.
+- **How much it covers.** Under the layer's Position row in the Show Tree,
+  the plan shows the area, each light's zone (dotted), each beam's
+  footprint at subject height (as wide as its zoom has it now, else the
+  definition's lens, else 20°), and hatches in red what no beam reaches.
+  The line above it says how much is lit: *Covers 86% of Chorus · gap
+  upstage left*. Show Review notes a cue that leaves more than a tenth of
+  an area dark ([MOV-13](show-review.md)).
+- **When it's still a point.** An Area with no size, and every other kind,
+  aims every light at its one point, as before.
+
+The zoning rule, the coverage model and why: docs/design/AREA_COVER.md.
+
 ## Line targets
 
 A **Line** spreads lights out instead of converging them: every head an Aim
@@ -126,6 +156,14 @@ in the Look Editor when picked.
 line — the stage-left head takes the stage-left end — so a full spread never
 crosses beams by accident. The 2D plot's aim traces and the Rig Overview's
 beams each go to their own point.
+
+**A light with several arms** (a two-arm beam bar: each arm on its own pan
+and tilt) is that many lights on the line: each arm takes its own place,
+its own number in the order and its own group. Eight two-arm beams on a
+line are sixteen points; with **Pairs**, a bar's two arms are a pair, so
+**Each group flips** crosses each bar's arms and **Groups swap sides**
+moves the bars, each keeping its arms in order. A bar of pixels on one
+moving yoke is still one light.
 
 The target's own point — what a follow spot, an effect pointed at the
 target, or an older qlcconsole build sees — is the line's **centre**.
@@ -231,7 +269,7 @@ one box:
 ## The Aim Solver
 
 For each fixture, the solver starts from a cached **Frame**: its rigged
-world position, whether it's floor-mounted or hung (which flips which way
+world position (for each arm of a multi-arm fixture, the arm's own place), whether it's floor-mounted or hung (which flips which way
 "home" tilt points), its pan-zero facing direction, calibration offsets, and
 its physical pan/tilt range.
 
@@ -248,6 +286,16 @@ takes them out again when it turns DMX back into a direction, so a beam is
 drawn on the target it is aimed at whatever the offsets are. See
 [Calibration offsets](lighting-studio.md#calibration-offsets), and
 [Quick focus](lighting-studio.md#quick-focus) for setting them.
+
+**Arms aim from where they are.** A fixture whose heads each have their
+own pan or tilt (a two-arm beam) is aimed an arm at a time, each from its
+own place on the body. Definitions say only how wide the body is and how
+many heads it has (Layout 2 × 1 on a 510 mm bar), so each arm sits in the
+middle of its share of the width, along the body as it is turned on the
+plot — where the Lighting Studio draws it, 255 mm apart on that bar. At a
+point the arms converge, each at its own angle: a few degrees apart at a
+few metres. Heads that share one pan and tilt (a pixel bar on a yoke) are
+aimed as one fixture, as before.
 
 Reachability is a question of pan/tilt range against the fixture's own
 calibrated limits. Whether anything *stands in the way* is a separate

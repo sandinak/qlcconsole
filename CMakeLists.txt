@@ -323,7 +323,9 @@ add_subdirectory(platforms)
 
 # Bench instruments. Built so they cannot rot alongside the code they measure,
 # never installed.
-add_subdirectory(tools/artnetprobe)
+if(NOT QLC_NO_TESTS)
+    add_subdirectory(tools/artnetprobe)
+endif()
 
 # Qt Test compiles each test's main() with its build dir's ABSOLUTE path
 # (QT_TESTCASE_BUILDDIR, for QFINDTESTDATA), so every test program's main

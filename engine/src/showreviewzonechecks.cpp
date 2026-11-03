@@ -22,6 +22,7 @@
    fixed from where it throws. */
 
 #include <QCoreApplication>
+#include <QDateTime>
 #include <QHash>
 #include <QSet>
 #include <QtMath>
@@ -511,6 +512,25 @@ QHash<QPair<quint32, quint32>, QList<quint32>> meantMarks(Doc *doc)
     return marks;
 }
 
+/** Who marked a layer meant, when, and the note with it. */
+struct MeantWho
+{
+    QString by, when, note;
+};
+
+/** (cue, layer) -> who said I meant it. */
+QHash<QPair<quint32, quint32>, MeantWho> meantPeople(Doc *doc)
+{
+    QHash<QPair<quint32, quint32>, MeantWho> out;
+    for (const Production &p : doc->showTree()->productions())
+        for (const CueList &list : p.lists)
+            for (const Cue &cue : list.cues)
+                for (const Layer &layer : cue.layers)
+                    if (!layer.meantOnScenery.isEmpty())
+                        out.insert(qMakePair(cue.id, layer.id), { layer.meantBy, layer.meantWhen, layer.meantNote });
+    return out;
+}
+
 /** What one cue puts on the guarded scenery: (scenery, fixture) -> rays on
  *  it, split by how it is meant. */
 struct CueLanding
@@ -544,6 +564,7 @@ void pwr12(ReviewContext &ctx, QList<ReviewFinding> &out)
     // Curtains at their fixed state: the show's, never where one is now.
     const BeamOcclusion::ModelPtr sight = mp->occlusionModel(BeamOcclusion::Poses());
     const QHash<QPair<quint32, quint32>, QList<quint32>> marks = meantMarks(doc);
+    const QHash<QPair<quint32, quint32>, MeantWho> meantWho = meantPeople(doc);
     QHash<QPair<quint32, quint32>, QList<SceneValue>> cache;
     // (fixture, pan, tilt, curtains) -> where it lands: a look reused across cues is followed once.
     QHash<QString, Landing> landings;
@@ -739,7 +760,18 @@ void pwr12(ReviewContext &ctx, QList<ReviewFinding> &out)
                 {
                     f.state = ReviewFinding::Accepted;
                     f.intended = true;
-                    f.acceptedNote = tr("I meant it");
+                    // Who, when and the note: the latest mark on the layers that say it.
+                    for (quint32 fid : fids)
+                        for (const QPair<quint32, quint32> &l : cl.markedOn.value(fid))
+                        {
+                            const MeantWho who = meantWho.value(l);
+                            if (f.acceptedWhen.isEmpty() || who.when > f.acceptedWhen)
+                            {
+                                f.acceptedBy = who.by;
+                                f.acceptedWhen = who.when;
+                                f.acceptedNote = who.note;
+                            }
+                        }
                 }
                 out << f;
             };
@@ -806,15 +838,19 @@ Layer *findLayer(QList<Production> &tree, quint32 cueId, quint32 layerId)
 }
 }
 
-bool ShowReview::setLightMeant(Doc *doc, const ReviewFinding &finding, bool meant)
+bool ShowReview::setLightMeant(Doc *doc, const ReviewFinding &finding, bool meant, const QString &note,
+                               const QString &by)
 {
     if (doc == nullptr || !canMarkMeant(finding, meant))
         return false;
     const QVariantList marks = finding.jumpData.at(2).toList();
     if (marks.isEmpty())
         return false;
+    const QString who = by.trimmed().isEmpty() ? defaultName() : by.trimmed();
+    const QString when = QDateTime::currentDateTime().toString(Qt::ISODate);
+    const QString why = note.trimmed();
     return doc->showTree()->edit(meant ? tr("I meant it") : tr("Not meant"),
-                                 [&marks, meant](QList<Production> &tree) {
+                                 [&marks, meant, who, when, why](QList<Production> &tree) {
         bool any = false;
         for (const QVariant &v : marks)
         {
@@ -829,10 +865,17 @@ bool ShowReview::setLightMeant(Doc *doc, const ReviewFinding &finding, bool mean
             {
                 layer->meantOnScenery << fid;
                 std::sort(layer->meantOnScenery.begin(), layer->meantOnScenery.end());
+                layer->meantBy = who;
+                layer->meantWhen = when;
+                layer->meantNote = why;
                 any = true;
             }
             else if (!meant && layer->meantOnScenery.removeAll(fid) > 0)
+            {
+                if (layer->meantOnScenery.isEmpty())
+                    layer->meantBy = layer->meantWhen = layer->meantNote = QString();
                 any = true;
+            }
         }
         return any;
     });
@@ -847,6 +890,7 @@ bool ShowReview::clearLayerMeant(Doc *doc, quint32 cueId, quint32 layerId)
         if (layer == nullptr || layer->meantOnScenery.isEmpty())
             return false;
         layer->meantOnScenery.clear();
+        layer->meantBy = layer->meantWhen = layer->meantNote = QString();
         return true;
     });
 }

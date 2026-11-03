@@ -134,6 +134,7 @@ QString ShowReview::footerCheckId(const QString &statusKey)
         { QStringLiteral("fixtures.duplicates"), QStringLiteral("FIX-14") },
         { QStringLiteral("fixtures.output"), QStringLiteral("FIX-07") },
         { QStringLiteral("fixtures.buried"), QStringLiteral("FIX-15") },
+        { QStringLiteral("fixtures.offrow"), QStringLiteral("FIX-16") },
         { QStringLiteral("fixtures.nodefinition"), QStringLiteral("FIX-01") },
         { QStringLiteral("definitions.outofdate"), QStringLiteral("FIX-03") },
         { QStringLiteral("embedded.showonly"), QStringLiteral("FILE-03") },

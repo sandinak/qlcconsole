@@ -37,7 +37,7 @@ app: true
 6. **Review it.** A show reviewer catches what the audience would see by
    accident: a colour carried into the next song, two hits fighting over
    the same lights. Click **Review** in the footer. Fix each blocker and
-   warning, or **Accept…** it with a note saying why it's on purpose.
+   warning, or **Not a Problem…** it with a note saying why it's on purpose.
    A warning also marks its cue (**⚠ cyc**): hover for the detail,
    right-click to answer it there.
    Your notes are part of the mark.

@@ -936,9 +936,21 @@ QHash<quint32, QVector3D> FocusSession::resolve(const Reference &ref) const
             return out;
         // Each head's own point, as the scene's Aim look resolves it -- a line
         // target gives every head its own place on the line.
+        /* Focus works a fixture at a time (its calibration is the
+           fixture's): a multi-arm fixture's arms, one entry each, are
+           focused on the middle of their points. */
+        QHash<quint32, int> arms;
+        QHash<quint32, quint32> look;   // the first Aim look on it wins, as before
         for (const AimSolver::SceneAim &a : AimSolver::sceneAims(m_doc, scene))
-            if (!out.contains(a.fixtureId))
-                out.insert(a.fixtureId, a.point);
+        {
+            if (look.value(a.fixtureId, a.paletteId) != a.paletteId)
+                continue;
+            look.insert(a.fixtureId, a.paletteId);
+            const int n = arms.value(a.fixtureId, 0);
+            arms.insert(a.fixtureId, n + 1);
+            out.insert(a.fixtureId, n == 0 ? a.point
+                                           : (out.value(a.fixtureId) * float(n) + a.point) / float(n + 1));
+        }
     }
     else if (ref.kind == Reference::Target)
     {

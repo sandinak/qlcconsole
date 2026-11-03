@@ -51,6 +51,9 @@ help:
 	echo "                  REPLACES ~/qlcconsole.app (old one -> ~/qlcconsole.app.prev);"; \
 	echo "                  /Applications is never touched. Tags and publishes nothing."; \
 	echo "                  Ends with 'make release-check' on the new DMG (RELEASE_CHECK=0 skips)."; \
+	echo "  make dmg ARCH=native  The same for this Apple silicon Mac only: arm64, no x86_64 slice,"; \
+	echo "                  dist/qlcconsole-$$v-arm64-native-<date>-<rev>.dmg. Signed and notarized,"; \
+	echo "                  for installing on our own Macs; publish.sh refuses it."; \
 	echo "  make release-check [DMG=dist/...] [HOST=ssh-host]"; \
 	echo "                  platforms/macos/release-check.sh on the newest dist/*.dmg: signature,"; \
 	echo "                  notarization, Gatekeeper, SHA256SUMS, universal + relocatable Mach-O,"; \
@@ -111,7 +114,7 @@ translations:
 	./translate.sh update
 
 dmg:
-	@platforms/macos/make-release.sh
+	@QLC_ARCH="$(ARCH)" platforms/macos/make-release.sh
 
 release-check:
 	@dmg="$(DMG)"; [ -n "$$dmg" ] || dmg=$$(ls -t dist/*.dmg 2>/dev/null | head -1); \

@@ -118,15 +118,23 @@ public:
         /** The flags column's badges drawn in the warning colour ("needs
          *  work", "⚠ cyc"); every other badge -- Mix, Track... -- keeps the
          *  row's own colour (flagPieces()). */
-        WarnPiecesRole = Qt::UserRole + 44
+        WarnPiecesRole = Qt::UserRole + 44,
+        /** The badges that are an answered warning ("cyc ✓": meant), drawn
+         *  green (meantColour()). */
+        MeantPiecesRole = Qt::UserRole + 45
     };
 
     /** The warning colour of a badge in the flags column. */
     static QColor warningColour();
+    /** The colour of a badge for a warning marked meant: green, lighter
+     *  on a dark @a background. */
+    static QColor meantColour(const QColor &background);
     /** How a row's flags text is drawn: each ", "-separated badge with its
      *  colour -- warningColour() for one in WarnPiecesRole, the row's own
-     *  foreground for the rest. */
-    static QList<QPair<QString, QColor>> flagPieces(const QModelIndex &index, const QColor &normal);
+     *  foreground for the rest. @a background is what the badge is drawn on,
+     *  which decides how light the meant green is (default @a normal). */
+    static QList<QPair<QString, QColor>> flagPieces(const QModelIndex &index, const QColor &normal,
+                                                    const QColor &background = QColor());
 
     /** The tree's columns (Q104): the name; what a list, a production or a
      *  carried layer says (InfoCol); then a column each for what a cue sets,
@@ -632,8 +640,11 @@ public:
     QString layerContentsText() const;
     /** The order strip under a line aim's Position row (null: none). */
     QWidget *lineStrip() const;
-    /** The plan view under it (D19), a LinePlanView (tests). */
+    /** The plan view under it (D19), a LinePlanView (tests). An area
+     *  aim's Position has one too: its cover (AREA_COVER.md). */
     QWidget *linePlan() const;
+    /** The Aim palette of a Position look that covers an Area, else null. */
+    const QLCPalette *areaAimPalette(const ShowTree::Look &look) const;
     /** Open the order strip and plan in a window of their own (the pop-out;
      *  raises the one there is). */
     void openLinePlanWindow();

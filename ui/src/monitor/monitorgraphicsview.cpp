@@ -6666,16 +6666,37 @@ void MonitorGraphicsView::updateAimLines()
     QHash<QPair<quint32, quint32>, BeamOcclusion::Hit> sight;   // line of sight
     QHash<quint32, QPair<int, int> > shortfall;        // target -> (short, aimed)
     QHash<quint32, QStringList> shortNames;
+    /* One trace per fixture: the arms of a multi-arm fixture (one entry
+       each, from its own origin) meet in it -- their points' middle, the
+       one that reaches least, blocked if either is. */
+    QHash<QPair<quint32, quint32>, int> armsSeen;
+    QSet<QPair<quint32, quint32> > shortSeen;
     foreach (const AimSolver::SceneAim &a, AimSolver::sceneAims(m_doc, activeScene))
     {
-        reach.insert(qMakePair(a.fixtureId, a.targetId), a.solution);
-        aimedAt.insert(qMakePair(a.fixtureId, a.targetId), a.point);
-        if (a.sight.blocked)
-            sight.insert(qMakePair(a.fixtureId, a.targetId), a.sight);
-        QPair<int, int> &sf = shortfall[a.targetId];
-        sf.second += 1;
-        if (a.solution.reachable() == false)
+        const QPair<quint32, quint32> key = qMakePair(a.fixtureId, a.targetId);
+        const int seen = armsSeen.value(key, 0);
+        armsSeen.insert(key, seen + 1);
+        if (seen > 0)
         {
+            aimedAt[key] = (aimedAt.value(key) * float(seen) + a.point) / float(seen + 1);
+            if (a.solution.marginDeg < reach.value(key).marginDeg)
+                reach.insert(key, a.solution);
+            if (a.sight.blocked && !sight.contains(key))
+                sight.insert(key, a.sight);
+        }
+        else
+        {
+            reach.insert(key, a.solution);
+            aimedAt.insert(key, a.point);
+            if (a.sight.blocked)
+                sight.insert(key, a.sight);
+        }
+        QPair<int, int> &sf = shortfall[a.targetId];
+        if (seen == 0)
+            sf.second += 1;
+        if (a.solution.reachable() == false && !shortSeen.contains(key))
+        {
+            shortSeen.insert(key);
             sf.first += 1;
             if (Fixture *fx = m_doc->fixture(a.fixtureId))
                 shortNames[a.targetId] << fx->name();
@@ -7157,6 +7178,22 @@ QList<quint32> MonitorGraphicsView::buriedFixtures() const
     QList<quint32> out;
     for (auto it = m_fixtures.constBegin(); it != m_fixtures.constEnd(); ++it)
         if (it.value()->isBuried())
+            out << it.key();
+    return out;
+}
+
+void MonitorGraphicsView::markOffRowFixtures(const QList<quint32> &ids)
+{
+    const QSet<quint32> idSet(ids.begin(), ids.end());
+    for (auto it = m_fixtures.begin(); it != m_fixtures.end(); ++it)
+        it.value()->setOffRow(idSet.contains(it.key()));
+}
+
+QList<quint32> MonitorGraphicsView::offRowFixtures() const
+{
+    QList<quint32> out;
+    for (auto it = m_fixtures.constBegin(); it != m_fixtures.constEnd(); ++it)
+        if (it.value()->isOffRow())
             out << it.key();
     return out;
 }

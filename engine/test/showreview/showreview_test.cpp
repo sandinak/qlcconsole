@@ -439,10 +439,10 @@ void ShowReview_Test::fix07()
     QCOMPARE(findings("FIX-07").first().severity, ReviewFinding::Note);
 }
 
-void ShowReview_Test::fix16()
+void ShowReview_Test::fix17()
 {
     par("Par 1", 0);
-    QVERIFY(quiet("FIX-16"));
+    QVERIFY(quiet("FIX-17"));
     QTemporaryDir pics;
     QVERIFY(pics.isValid());
     QFile pic(pics.filePath("g.svg"));
@@ -476,11 +476,11 @@ void ShowReview_Test::fix16()
     };
     Fixture *a = goboDef(QStringLiteral("Pictured"), 1);
     QVERIFY(a != nullptr);
-    QVERIFY(quiet("FIX-16"));                       // it has its pictures
+    QVERIFY(quiet("FIX-17"));                       // it has its pictures
     Fixture *b = goboDef(QStringLiteral("Bare"), 0);
-    QVERIFY(fires("FIX-16"));
-    QCOMPARE(findings("FIX-16").size(), 1);
-    ReviewFinding f = findings("FIX-16").first();
+    QVERIFY(fires("FIX-17"));
+    QCOMPARE(findings("FIX-17").size(), 1);
+    ReviewFinding f = findings("FIX-17").first();
     QCOMPARE(f.severity, ReviewFinding::Note);
     QVERIFY2(f.message.contains("Test Bare") && f.message.contains("2 gobo slot"), qPrintable(f.message));
     QCOMPARE(f.jump, QStringLiteral("gobowheels"));
@@ -491,22 +491,22 @@ void ShowReview_Test::fix16()
     c->setFixtureDefinition(defB, defB->modes().first());
     c->setAddress(300);
     QVERIFY(m_doc->addFixture(c));
-    QCOMPARE(findings("FIX-16").size(), 1);
-    QCOMPARE(findings("FIX-16").first().targets.size(), 2);
+    QCOMPARE(findings("FIX-17").size(), 1);
+    QCOMPARE(findings("FIX-17").first().targets.size(), 2);
     // Fitting every slot of both units clears it.
     MonitorProperties *mp = m_doc->monitorProperties();
     for (Fixture *fx : { b, c })
         for (int min : { 10, 20, 30 })
             mp->setGoboSwap(fx->id(), 0, uchar(min), QStringLiteral("Test/x.svg"));
-    QVERIFY(quiet("FIX-16"));
+    QVERIFY(quiet("FIX-17"));
     // Slots whose picture is a bare folder (a definition from another install)
     // say so, once per definition.
     Fixture *d = goboDef(QStringLiteral("Folder"), 2);
     QVERIFY(d != nullptr);
-    f = findings("FIX-16").first();
+    f = findings("FIX-17").first();
     QVERIFY2(f.message.contains("Test Folder") && f.message.contains("point at a folder"),
              qPrintable(f.message));
-    QCOMPARE(findings("FIX-16").size(), 1);
+    QCOMPARE(findings("FIX-17").size(), 1);
 }
 
 namespace
@@ -642,6 +642,184 @@ void ShowReview_Test::fix15Geometry()
     turned->setRotation(0.0f);
     turned->setSteps(4, 0.1f, 0.15f, 3.0f, StagePlatform::ClimbDownstage);
     QVERIFY(PlacementCheck::buried(m_doc).count() >= 1);
+}
+
+namespace
+{
+/* A row of eight bars like the one the show came with: UST-1..8 two metres
+   upstage of the decks, all but @a floorOne standing on a deck mount. */
+QList<Fixture *> ustRow(Doc *doc, int floorOne, bool naming = true, bool allFloor = false)
+{
+    QList<Fixture *> row;
+    for (int i = 1; i <= 8; ++i)
+    {
+        const double x = 2.3 + 0.8 * (i - 1);
+        const QString name = naming ? QStringLiteral("UST-%1").arg(i) : QStringLiteral("Bar%1x").arg(char('a' + i));
+        Fixture *fx = bar(doc, name, quint32(i * 10), x, 1.78, 0.0f);
+        if (i != floorOne && !allFloor)
+        {
+            MonitorProperties *mp = doc->monitorProperties();
+            FixtureRigProps rp = mp->fixtureRigProps(fx->id());
+            // Two decks side by side: ids 0 (x 2..5.2) and 1 (x 5.2..8.4).
+            rp.deckPlatformId = x < 5.2 ? 0u : 1u;
+            mp->setFixtureRigProps(fx->id(), rp);
+        }
+        row << fx;
+    }
+    return row;
+}
+}
+
+void ShowReview_Test::fix16()
+{
+    MonitorProperties *mp = m_doc->monitorProperties();
+    StagePlatform *usp1 = deck(m_doc, QStringLiteral("USP1"), 2.0, 2.0, 3.2, 1.2, 0.61);
+    deck(m_doc, QStringLiteral("USP2"), 5.2, 2.0, 3.2, 1.2, 0.61);
+    QCOMPARE(usp1->id(), 0u);
+    const QList<Fixture *> row = ustRow(m_doc, 2);      // UST-2 is the one on the floor
+    Fixture *ust2 = row.at(1);
+    QVERIFY(PlacementCheck::buried(m_doc).isEmpty());   // FIX-15 has nothing to say
+
+    QVERIFY(fires("FIX-16"));
+    const QList<ReviewFinding> all = findings("FIX-16");
+    QCOMPARE(all.size(), 1);                            // UST-2 only
+    const ReviewFinding f = all.first();
+    QCOMPARE(f.severity, ReviewFinding::Warning);
+    QCOMPARE(f.targets, QStringList() << QStringLiteral("fx:%1").arg(ust2->id()));
+    QVERIFY2(f.message.startsWith(QStringLiteral("UST-2 is on the floor; UST-1, UST-3…UST-8 are on Deck USP1 (0.61 m)")),
+             qPrintable(f.message));
+    QVERIFY2(f.message.contains(QStringLiteral("Sit it on Deck USP1 (0.61 m)")), qPrintable(f.message));
+    QCOMPARE(f.jump, QStringLiteral("status:fixtures.offrow"));
+    QCOMPARE(ShowReview::footerCheckId(QStringLiteral("fixtures.offrow")), QStringLiteral("FIX-16"));
+
+    // Sit on Top: the deck mount FIX-15's fix makes; the warning clears.
+    const PlacementCheck::OffRow o = PlacementCheck::checkRow(m_doc, ust2->id());
+    QVERIFY(o.off);
+    QCOMPARE(o.sitId, usp1->id());
+    QCOMPARE(o.mates.size(), 7);
+    QCOMPARE(o.row, QStringLiteral("name UST-"));
+    QVERIFY(PlacementCheck::fix(m_doc, o));
+    QVERIFY(mp->fixtureRigProps(ust2->id()).onDeck());
+    QVERIFY(qAbs(mp->fixtureRigPosition(ust2->id()).z() - 0.61f) < 0.001f);
+    QVERIFY(quiet("FIX-16"));
+    QVERIFY(!PlacementCheck::checkRow(m_doc, ust2->id()).off);
+    QVERIFY(PlacementCheck::offRow(m_doc).isEmpty());
+}
+
+void ShowReview_Test::fix16Rows()
+{
+    MonitorProperties *mp = m_doc->monitorProperties();
+    // No deck at all: nothing to be beside.
+    QList<Fixture *> row = ustRow(m_doc, 0, true, true);
+    for (Fixture *fx : row)
+        QVERIFY(PlacementCheck::deckOf(m_doc, fx->id()) == UINT_MAX);
+    QVERIFY(PlacementCheck::offRow(m_doc).isEmpty());
+    deck(m_doc, QStringLiteral("USP1"), 2.0, 2.0, 3.2, 1.2, 0.61);
+    deck(m_doc, QStringLiteral("USP2"), 5.2, 2.0, 3.2, 1.2, 0.61);
+
+    // A deliberately floor-mounted row: all on the floor, nothing to compare.
+    QVERIFY(PlacementCheck::offRow(m_doc).isEmpty());
+
+    // One light off the row on a deck, the rest on the floor: not a majority.
+    auto mount = [&](Fixture *fx, bool on) {
+        FixtureRigProps rp = mp->fixtureRigProps(fx->id());
+        rp.deckPlatformId = on ? (mp->fixtureRigPosition(fx->id()).x() < 5.2f ? 0u : 1u) : UINT_MAX;
+        mp->setFixtureRigProps(fx->id(), rp);
+    };
+    mount(row.at(0), true);
+    mount(row.at(1), true);
+    QVERIFY(PlacementCheck::offRow(m_doc).isEmpty());       // 2 of 7 mates
+    for (int i = 2; i < 5; ++i)
+        mount(row.at(i), true);
+    // 5 on decks: each of the three on the floor has 5 of 7 mates up.
+    QCOMPARE(PlacementCheck::offRow(m_doc).size(), 3);
+    for (int i = 5; i < 8; ++i)
+        mount(row.at(i), true);
+    QVERIFY(PlacementCheck::offRow(m_doc).isEmpty());       // all up: nothing to say
+
+}
+
+void ShowReview_Test::fix16Single()
+{
+    // A single light beside a deck has no row-mates; two do not make a majority.
+    deck(m_doc, QStringLiteral("USP1"), 2.0, 2.0, 3.2, 1.2, 0.61);
+    Fixture *lone = bar(m_doc, QStringLiteral("Lone"), 200, 3.0, 1.78, 0.0f);
+    QVERIFY(!PlacementCheck::checkRow(m_doc, lone->id()).off);
+    Fixture *mate = bar(m_doc, QStringLiteral("Lone 2"), 210, 3.8, 1.78, 0.0f);
+    FixtureRigProps rp = m_doc->monitorProperties()->fixtureRigProps(mate->id());
+    rp.deckPlatformId = 0;
+    m_doc->monitorProperties()->setFixtureRigProps(mate->id(), rp);
+    QVERIFY(!PlacementCheck::checkRow(m_doc, lone->id()).off);      // one mate: needs two
+    QVERIFY(quiet("FIX-16"));
+}
+
+void ShowReview_Test::fix16Sources()
+{
+    MonitorProperties *mp = m_doc->monitorProperties();
+    deck(m_doc, QStringLiteral("Riser"), 2.0, 2.0, 6.0, 1.2, 0.4);
+    // Names that say nothing, no group: found as a line (same Y within 0.3 m).
+    QList<Fixture *> row = ustRow(m_doc, 3, false);
+    QVERIFY(row.at(0)->name() != row.at(1)->name());
+    // The decks above are ids 0 and 1; only one exists here.
+    for (Fixture *fx : row)
+    {
+        FixtureRigProps rp = mp->fixtureRigProps(fx->id());
+        if (rp.onDeck())
+            rp.deckPlatformId = 0;
+        mp->setFixtureRigProps(fx->id(), rp);
+    }
+    // Their names end in a letter ("Bara1x"...): no number, so no series.
+    const PlacementCheck::OffRow lineRow = PlacementCheck::checkRow(m_doc, row.at(2)->id());
+    QVERIFY(lineRow.off);
+    QCOMPARE(lineRow.row, QStringLiteral("line"));
+    // Far from the line, the same light is just a floor light.
+    mp->setFixturePosition(row.at(2)->id(), 0, 0, QVector3D(4700.0f, 5.0f * 1000.0f, 0.0f));
+    QVERIFY(!PlacementCheck::checkRow(m_doc, row.at(2)->id()).off);
+    mp->setFixturePosition(row.at(2)->id(), 0, 0, QVector3D(4700.0f, 1780.0f, 0.0f));
+    QVERIFY(PlacementCheck::checkRow(m_doc, row.at(2)->id()).off);
+    // A group is preferred over the line.
+    QList<Fixture *> members = row;
+    group("Upstage bars", members);
+    QCOMPARE(PlacementCheck::checkRow(m_doc, row.at(2)->id()).row, QStringLiteral("group Upstage bars"));
+
+    // Mixed types in the group: a par on the floor has no bar mates; and the
+    // bars' own row is not diluted by it.
+    Fixture *p = par("Par 1", 300);
+    mp->setFixturePosition(p->id(), 0, 0, QVector3D(4700.0f, 1780.0f, 0.0f));
+    FixtureGroup *mixed = group("Mixed", members << p);
+    Q_UNUSED(mixed);
+    QVERIFY(!PlacementCheck::checkRow(m_doc, p->id()).off);
+    QVERIFY(PlacementCheck::checkRow(m_doc, row.at(2)->id()).off);
+}
+
+void ShowReview_Test::fix16Save()
+{
+    MonitorProperties *mp = m_doc->monitorProperties();
+    deck(m_doc, QStringLiteral("USP1"), 2.0, 2.0, 3.2, 1.2, 0.61);
+    deck(m_doc, QStringLiteral("USP2"), 5.2, 2.0, 3.2, 1.2, 0.61);
+    const QList<Fixture *> row = ustRow(m_doc, 2);
+    auto dump = [&]() {
+        QString xml;
+        QXmlStreamWriter w(&xml);
+        mp->saveXML(&w, m_doc, true);
+        return xml;
+    };
+    const QString before = dump();
+    QVERIFY(PlacementCheck::checkRow(m_doc, row.at(1)->id()).off);
+    QVERIFY(!PlacementCheck::offRow(m_doc).isEmpty());
+    QCOMPARE(dump(), before);                               // reading it writes nothing
+    QVERIFY(!before.contains(QLatin1String("offrow"), Qt::CaseInsensitive));
+    QVERIFY(PlacementCheck::fix(m_doc, PlacementCheck::checkRow(m_doc, row.at(1)->id())));
+    const QString after = dump();
+    QVERIFY(!after.contains(QLatin1String("offrow"), Qt::CaseInsensitive));
+    // Saved and read back, the fixed show stays quiet (the deck mount is the whole fix).
+    MonitorProperties back;
+    QXmlStreamReader r(after);
+    while (!r.atEnd() && !(r.isStartElement() && r.name() == QLatin1String("Monitor")))
+        r.readNext();
+    QVERIFY(back.loadXML(r, m_doc));
+    QVERIFY(back.fixtureRigProps(row.at(1)->id()).onDeck());
+    QVERIFY(PlacementCheck::offRow(m_doc).isEmpty());
 }
 
 void ShowReview_Test::fix14()
@@ -2272,6 +2450,75 @@ void ShowReview_Test::mov08()
     QVERIFY(quiet("MOV-08"));
 }
 
+void ShowReview_Test::mov13()
+{
+    /* Two spots hung 6 m up over a 4 x 2 m area, aimed at it in a cue: each
+       its own half (AREA_COVER.md). Narrow, they leave most of it dark. */
+    MonitorProperties *mp = m_doc->monitorProperties();
+    auto spot = [&](const QString &name, quint32 address, double x, double lens) {
+        QLCFixtureDef *def = new QLCFixtureDef();
+        Fixture *fx = make(m_doc, name, QStringLiteral("Spot ") + name, QLCFixtureDef::MovingHead, def,
+                           { chan(def, "Pan", QLCChannel::PositionPan), chan(def, "Tilt", QLCChannel::PositionTilt),
+                             chan(def, "Dimmer", QLCChannel::IntensityMasterDimmer) },
+                           200, 0, address, QLCPhysical::BeamEmission, lens);
+        mp->setFixturePosition(fx->id(), 0, 0, QVector3D(float(x * 1000.0), 4000.0f, 6.0f));
+        FixtureRigProps rp = mp->fixtureRigProps(fx->id());
+        rp.mountingType = Truss::TopHung;
+        mp->setFixtureRigProps(fx->id(), rp);
+        return fx;
+    };
+    QList<Fixture *> narrow { spot("N1", 0, 1.0, 8.0), spot("N2", 10, 3.0, 8.0) };
+    StageTarget *area = mp->addStageTarget();
+    area->setName(QStringLiteral("Chorus"));
+    area->setKind(StageTarget::Kind::Area);
+    area->setPosition(QVector3D(2.0f, 4.0f, 0.0f));
+    area->setFootprint(QSizeF(4.0, 2.0));
+    QLCPalette *aim = new QLCPalette(QLCPalette::Aim, m_doc);
+    aim->setName(QStringLiteral("Chorus"));
+    aim->setStageTargetId(area->id());
+    QVERIFY(m_doc->addPalette(aim));
+    QLCPalette *level = new QLCPalette(QLCPalette::Dimmer, m_doc);
+    level->setValue(255);
+    QVERIFY(m_doc->addPalette(level));
+
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 lid = st->addCueList(st->addProduction("Show"), "Act 1");
+    const quint32 c1 = st->addCue(lid, -1, "Chorus up");
+    auto aimAt = [&](const QList<Fixture *> &who) {
+        Target t;
+        for (Fixture *fx : who)
+            t.fixtures << fx->id();
+        const quint32 layer = st->addLayer(c1, t);
+        Look look;
+        look.key = KeyPosition;
+        look.palettes = { aim->id() };
+        QVERIFY(st->setLayerLook(c1, layer, look));
+        Look d;
+        d.key = KeyDimmer;
+        d.palettes = { level->id() };
+        QVERIFY(st->setLayerLook(c1, layer, d));
+    };
+    aimAt(narrow);
+    QVERIFY(fires("MOV-13"));
+    const ReviewFinding f = findings("MOV-13").first();
+    QCOMPARE(f.severity, ReviewFinding::Note);
+    QVERIFY2(f.message.contains("Chorus") && f.message.contains("lights only")
+             && f.message.contains("2 light")
+             && f.message.contains("Zoom them wider"), qPrintable(f.message));
+    QVERIFY(f.targets.contains(QStringLiteral("target:%1").arg(area->id())));
+
+    // Wide enough to light it all: nothing to say.
+    st->removeLayer(c1, st->cueList(lid)->cue(c1)->layers.last().id);
+    aimAt({ spot("W1", 20, 1.0, 60.0), spot("W2", 30, 3.0, 60.0) });
+    QVERIFY(quiet("MOV-13"));
+
+    // An area of no size is a point: no cover to speak of.
+    st->removeLayer(c1, st->cueList(lid)->cue(c1)->layers.last().id);
+    aimAt(narrow);
+    area->setFootprint(QSizeF());
+    QVERIFY(quiet("MOV-13"));
+}
+
 namespace
 {
 /** A cue layer lighting fixture @a f at @a dim (no position). */
@@ -2683,6 +2930,91 @@ void ShowReview_Test::pwr12Meant()
     for (const ReviewFinding &x : m_doc->showReview()->lastResult().findings)
         if (x.check == QLatin1String("PWR-12"))
             QVERIFY(x.intended && !x.isOpen());
+}
+
+/* Three states for a warning: open, meant (who, when, the note: saved with
+   the show), not a problem (an acceptance). Each change is one answer. */
+void ShowReview_Test::pwr12WarnStates()
+{
+    MonitorProperties *mp = m_doc->monitorProperties();
+    mp->setGridSize(QVector3D(10, 3, 14));
+    addCyc(mp);
+    Fixture *front = par("Front 1", 0);
+    aimFront(mp, front, 5.0f, 20.0f);
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 lid = st->addCueList(st->addProduction("Show"), "Act 1");
+    const quint32 c1 = st->addCue(lid, -1, "One");
+    cueLit(m_doc, c1, front, 255);
+    const quint32 layer1 = st->cueList(lid)->cue(c1)->layers.last().id;
+
+    // Open.
+    ReviewFinding f = findings("PWR-12").first();
+    QVERIFY(f.isOpen() && !f.intended);
+
+    // Open -> Meant, with who, when and a note; one undo step.
+    QVERIFY(ShowReview::setLightMeant(m_doc, f, true, QStringLiteral("  the cyc wants it  "), QStringLiteral("Sam")));
+    QCOMPARE(st->undoText(), QStringLiteral("I meant it"));
+    const Layer *layer = st->cueList(lid)->cue(c1)->layer(layer1);
+    QCOMPARE(layer->meantBy, QStringLiteral("Sam"));
+    QCOMPARE(layer->meantNote, QStringLiteral("the cyc wants it"));
+    QVERIFY(QDateTime::fromString(layer->meantWhen, Qt::ISODate).isValid());
+    f = findings("PWR-12").first();
+    QVERIFY(f.intended && !f.isOpen());
+    QCOMPARE(f.acceptedBy, QStringLiteral("Sam"));
+    QCOMPARE(f.acceptedNote, QStringLiteral("the cyc wants it"));
+    QCOMPARE(f.acceptedWhen, layer->meantWhen);
+    QVERIFY(st->undo());                                // one step back to open
+    QVERIFY(findings("PWR-12").first().isOpen());
+    QVERIFY(st->cueList(lid)->cue(c1)->layer(layer1)->meantBy.isEmpty());
+    QVERIFY(st->redo());
+    QVERIFY(findings("PWR-12").first().intended);
+
+    // Saved with the show: who/when/note round-trip.
+    const QString when = findings("PWR-12").first().acceptedWhen;
+    editTree([](QString &xml) {
+        QVERIFY(xml.contains(QStringLiteral("MeantBy=\"Sam\"")));
+        QVERIFY(xml.contains(QStringLiteral("MeantNote=")));
+    });
+    f = findings("PWR-12").first();
+    QVERIFY(f.intended);
+    QCOMPARE(f.acceptedBy, QStringLiteral("Sam"));
+    QCOMPARE(f.acceptedNote, QStringLiteral("the cyc wants it"));
+    QCOMPARE(f.acceptedWhen, when);
+
+    // An older file (a mark with no name) loads as meant, nobody named.
+    editTree([](QString &xml) {
+        xml.remove(QRegularExpression(QStringLiteral(" Meant(By|When|Note)=\"[^\"]*\"")));
+        QVERIFY(!xml.contains(QStringLiteral("MeantBy=")));
+        QVERIFY(xml.contains(QStringLiteral("MeantOnScenery=")));
+    });
+    f = findings("PWR-12").first();
+    QVERIFY(f.intended && f.acceptedBy.isEmpty() && f.acceptedNote.isEmpty());
+
+    // Meant -> Open (Not Meant): the who/when go with the mark.
+    QVERIFY(ShowReview::setLightMeant(m_doc, f, false));
+    QVERIFY(findings("PWR-12").first().isOpen());
+    QVERIFY(st->cueList(lid)->cue(c1)->layer(layer1)->meantWhen.isEmpty());
+
+    // Open -> Not a Problem (an acceptance: Accepted, not intended).
+    f = findings("PWR-12").first();
+    QVERIFY(m_doc->showReview()->accept(f, QStringLiteral("a scrim there"), QStringLiteral("Kim")));
+    f = findings("PWR-12").first();
+    QVERIFY(f.state == ReviewFinding::Accepted && !f.intended);
+    QCOMPARE(f.acceptedBy, QStringLiteral("Kim"));
+    // Not a Problem -> Open (Reopen).
+    QVERIFY(m_doc->showReview()->reopen(f));
+    QVERIFY(findings("PWR-12").first().isOpen());
+
+    // Meant -> Not a Problem: the mark off, the acceptance on.
+    QVERIFY(ShowReview::setLightMeant(m_doc, findings("PWR-12").first(), true));
+    f = findings("PWR-12").first();
+    QVERIFY(f.intended);
+    QVERIFY(m_doc->showReview()->accept(f, QStringLiteral("not here"), QStringLiteral("Kim")));
+    QVERIFY(ShowReview::setLightMeant(m_doc, f, false));
+    m_doc->showReview()->run();
+    f = findings("PWR-12").first();
+    QVERIFY(f.state == ReviewFinding::Accepted && !f.intended);
+    QCOMPARE(f.acceptedNote, QStringLiteral("not here"));
 }
 
 void ShowReview_Test::pwr12AimAtCyc()

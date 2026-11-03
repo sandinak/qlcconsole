@@ -28,6 +28,7 @@
 #include <QRectF>
 
 #include "lineformation.h"
+#include "areacover.h"
 
 class Doc;
 class Scene;
@@ -111,8 +112,17 @@ public:
      *  show a direction: each a triangle whose point is at the edge of the
      *  light's landing dot (tests). */
     const QList<QPolygonF> &arrows() const { return m_arrows; }
-    /** The caption under the plan (what the colours and lines show). */
-    QString caption() const { return m_form.caption(); }
+    /** The caption under the plan (what the colours and lines show; for
+     *  an area, how much of it the beams cover and where the gap is). */
+    QString caption() const { return isArea() ? m_cover.caption() : m_form.caption(); }
+
+    /** An Aim at an Area it covers (AreaCover, docs/design/AREA_COVER.md):
+     *  the area, each light's zone and its beam's footprint at subject
+     *  height, the gaps hatched. */
+    bool isArea() const { return m_cover.valid(); }
+    const AreaCover::Coverage &coverage() const { return m_cover; }
+    /** The hatched gap rectangles drawn at the last paint (tests). */
+    int gapsDrawn() const { return m_gapsDrawn; }
 
     /** Drawn dimmed: what it shows is the last plan, not the selection's. */
     void setDimmed(bool dimmed);
@@ -131,6 +141,8 @@ protected:
     void contextMenuEvent(QContextMenuEvent *event) override;
 
 private:
+    void setArea(const Scene *scene, const QLCPalette *look, const class StageTarget *target);
+
     Doc *m_doc;
     QList<QPointF> m_line;
     QList<Beam> m_beams;
@@ -138,6 +150,8 @@ private:
     QList<QRectF> m_labelRects;
     QList<int> m_pointMarks;
     QList<QPolygonF> m_arrows;
+    AreaCover::Coverage m_cover;                //!< an area aim: its zones, beams and gaps
+    int m_gapsDrawn = 0;
     QRectF m_stage;                             //!< stored position: the stage outline
     QList<QPair<QPointF, QString>> m_marks;     //!< stored position: point targets
     QList<QList<QPointF>> m_otherLines;         //!< stored position: line targets

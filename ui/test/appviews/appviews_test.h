@@ -164,6 +164,8 @@ private slots:
      *  cue's values reach the universe -- says so, and Play brings it
      *  back; a busked scene (the VC, Simple Desk) keeps running. */
     void goHoldsThePreviewSoOnlyTheRunPlays();
+    /** The footer's stage chip: LIVE / Blind / Build look / nothing / holds. */
+    void theFooterSaysWhatLightsTheStage();
     /** The one GO path (docs/design/RUN_COMMANDS.md): the keys, the Run
      *  tab (button and Space), a VC Cue Runner, the pad's chaser step and
      *  OSC all end in App::runCommand(), each with its route; the footer

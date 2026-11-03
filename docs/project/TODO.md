@@ -16,11 +16,33 @@ under `~/.claude/.../memory/`.
 that name gobo slots but have no usable picture (no Res, a folder Res,
 a missing file) drew a plain beam. Built: `BeamOptics::standInMask`
 (deterministic per slot, cached), `GoboLibrary::hasPicture/standInCaps`,
-Gobo Wheels suggestions + Fit suggested pictures, Show Review FIX-16.
+Gobo Wheels suggestions + Fit suggested pictures, Show Review FIX-17.
 Tests: Monitor_Test::aGoboWithNoPictureDrawsAStandIn,
 aGoboWhosePictureIsAFolderDrawsAStandIn,
-goboWheelsSuggestsPicturesForBareSlots, ShowReview_Test::fix16.
+goboWheelsSuggestsPicturesForBareSlots, ShowReview_Test::fix17.
 Move to DONE.md when landed.
+
+## Area cover: an Aim at an Area covers it (Q209, areacover, 2026-11-03) — built
+
+Zones by where the lights hang (least-squares match of x and depth key to
+the cells), subject height above the surface under each zone, coverage at
+subject height, the plan under an area aim's Position row, MOV-13.
+docs/design/AREA_COVER.md. Changes the DMX of existing area aims
+(CHANGELOG ▸ Changed). Leftovers:
+- The Look Editor and the formation editor show no area plan yet (the Show
+  Tree layer page and its pop-out do).
+- Coverage reads the zoom from the scene's own values or the fixture's
+  current ones, not a Zoom look on another layer of the cue.
+- Coverage counts a low beam passing through subject height as lighting
+  everyone in its path: no shadowing by the people in front.
+- No "point at the centre" option: add one only if a show needs it.
+
+## Faster packaging (tools/04-pkgfast, 2026-11-03) -- done
+
+`make dmg`: no tests (`QLC_NO_TESTS`, now also in ai/ and tools/artnetprobe), ccache for both slices, build
+dir kept on /Volumes/Ext/build; `make dmg ARCH=native` arm64-only; ender's
+ccache on /Volumes/Ext/ccache (`platforms/macos/ccache-env.sh`). Move to
+DONE.md when landed.
 
 ## Rig view hover jitter (fix/04-rig-hover-jitter, 2026-11-03) — done
 
@@ -42,7 +64,13 @@ ring on the plot. Tests: ShowReview_Test::fix15 + fix15Geometry,
 ProgrammingManager_Test::aBuriedLightIsAFooterErrorUntilItIsFixed,
 Monitor_Test::aBuriedLightIsRingedOnThePlot.
 
-- On the user's show copy nothing is flagged: UST-2 (z 0) abuts USP1's
+- **FIX-16 built (Q208, 2026-11-03):** "not on its row's riser" as a
+  warning (`PlacementCheck::offRow()`, footer `fixtures.offrow`, amber ring,
+  Sit on Top); on his show copy it flags UST-2 only. Row-mates = same type in
+  a group, a name series or a line (docs/design/SHOW_REVIEW.md FIX-16).
+  Tests: ShowReview_Test::fix16*, ProgrammingManager_Test and Monitor_Test
+  below.
+- (Earlier note, now superseded:) On the user's show copy nothing is flagged: UST-2 (z 0) abuts USP1's
   upstage edge (its body ends at y 3.760, the deck starts there) instead of
   being inside it, and the other USTs are deck-mounted at 0.61. "Not on its
   row's riser" would be a different check (siblings deck-mounted, this one
@@ -114,8 +142,20 @@ round trip `AimSolver_Test::aimedHeadsLandOnTheirTarget` (a new rig is one
 row). On the user's show the DMX and the live rig view land all 16 UST
 beams within 14 cm of their points.
 
-- decided (can change): a two-arm beam's arms share one aim and one place on
-  a line (a beam-width apart), not a place each.
+- DONE (feat/04-arms, 2026-11-03): each arm of a multi-arm fixture aims on
+  its own (user: "multi arm fixtures can and should be relative ... when
+  grouping or crossing we def should take each arm individually"). Members
+  are `GroupHead`s (`AimSolver::aimMembers()`, `arms()`, `armOffset()`);
+  palette, effects, the studio and the scene-aim checks use them. Decided
+  (can change): an arm's origin is the middle of its share of the body's
+  Width along the body (the slice the rig view draws it in; definitions
+  have no per-head offsets); Focus mode still focuses a fixture as one
+  (calibration is per fixture), on its arms' middle point; the 2D plot
+  draws one trace per fixture to the arms' middle; line-of-sight dimming
+  dims the whole fixture when either arm is blocked. Left for the tvis
+  branch: `lineplanview` / `linespreadpreview` still number fixtures, not
+  arms -- switch them to `aimMembers()` / `orderedLineMembers()` /
+  `lineMemberPoints()`.
 - Ask: which app and view showed SR? `/Applications/qlcconsole.app` and
   `~/qlcconsole.app.prev` are build 2825, from before the band readback
   (2848); with the same bundle id, a .qlcc opened from Finder can start one,
@@ -204,6 +244,13 @@ student (and a tired LD) makes, before tech, at ~10 ms a review on
 DanceHysteria. Each "decided (can change)": scrim guarded by default; a
 target "on" the cyc is a mark / area / line within 0.5 m (never a person);
 meant carries on while the light keeps landing.
+Since (Q210, 2026-11-03): three visible states on the cue -- open amber
+"⚠ cyc", meant green "cyc ✓" (Layer::meantBy/When/Note, Review group
+"Meant"), Not a Problem (the old Accept…) hidden and under Accepted; one
+menu (ShowReviewMarker::fillMenu) in the cue badge, Review rows and the chip;
+chip tooltip "2 open · 1 meant · 3 not a problem". Only PWR-12 can be meant.
+Not a Problem is an acceptance and not a Show Tree undo step (as before);
+Meant → Not a Problem takes the mark off as the one undo step.
 Since (cyc2, 2026-11-03): curtains stand where each cue leaves them (a
 driven drape from the functions the cue plays; at rest = closed in a list
 that moves it, else its set state -- decided, can change); one hover detail

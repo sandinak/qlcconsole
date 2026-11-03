@@ -34,15 +34,36 @@ the check, what it found (which fixtures, how much, on what, in which cue),
 every cue it marks, and what you can do. **Right-click** it to answer it
 there, without opening the panel:
 
-- **I Meant It** — light on the cyc kept on the layer that lights it (any
-  other check: **Accept…**, with a note).
+- **I Meant It** — light on the cyc kept on the layer that lights it (only
+  PWR-12 can be meant).
+- **Not a Problem…** — it doesn't matter here: say why (a note is required).
+- **Not Meant** — a meant warning goes back to open.
+- **Reopen** — a Not a Problem goes back to open.
 - **Not Meant: Show Me the Layer** — the layer to aim off, shutter, zoom or
   darken (any other check: **Show Me**, where to fix it).
 - **Open in Show Review** — the panel, on that row.
 
 The chip's right-click lists every open warning, each in a submenu of its
 own. These are the panel's own answers, so a warning cleared from a mark is
-cleared everywhere, and one undo takes it back.
+cleared everywhere. I Meant It and Not Meant are one undo step each.
+
+#### Three states
+
+A warning is in one of three states, and the cue says which:
+
+| State | On the cue | In Show Review | Footer chip |
+|---|---|---|---|
+| **Open** | amber **⚠ cyc** | under Warnings | counted |
+| **Meant** | green **cyc ✓**; hover says who marked it, when and the note | under **Meant** | not counted |
+| **Not a Problem** | nothing | under **Accepted**, with the note | not counted |
+
+Only PWR-12 (light on the cyc) can be **Meant**: there the light is on
+purpose and stays in the show as such. Every other check is open or Not a
+Problem. Right-click any of them to move between states. The chip's tooltip
+sums them up ("2 open · 1 meant · 3 not a problem"); the chip itself counts
+open blockers and warnings only. Who and when come from your name on this
+computer; both are saved with the show, and an older show opens with its
+marks as before (meant, nobody named).
 
 The panel lists findings by severity:
 
@@ -60,8 +81,8 @@ show's own names. Hover a row for **why it matters**. Show **Open**,
 - **Fix ▸** (or double-click) goes to the place to fix it: the cue in the
   Show Tree, the function, the Patch dialog on the fixtures, Connections on
   the universe, the Lighting Studio.
-- **Accept…** says the finding is on purpose. Write a note (it is required)
-  and your name. See [Accepting a finding](#accepting-a-finding).
+- **Not a Problem…** (it was **Not a Problem…**) says the finding doesn't matter
+  here. Write a note (it is required) and your name. See [Accepting a finding](#accepting-a-finding).
 - **Reopen** takes an acceptance back.
 - **Why?** opens the check's paragraph.
 - **Turn Check Off…** turns a check off for this show, with a note ("No
@@ -106,6 +127,11 @@ in the design (docs/design/SHOW_REVIEW.md in the source).
 - **MOV-08** Not marked before its first cue: heads lit in the first cue of a
   list (or a Block cue that nothing positions them for) away from the middle
   of their range, with nothing before it to put them there.
+- **MOV-13** An area left partly dark: a cue whose Aim look at an
+  [area](stage-targets.md#area-targets) leaves more than a tenth of it unlit
+  at the width the lights' zoom has now. It names the cue, the area, how much
+  is lit and where the gap is ("lights only 72% of it (gap upstage
+  left)"). Zoom wider, add a light, or make the area smaller.
 
 How long a move takes comes from the head's type: a moving head turns 180°
 in 0.4 s, a scanner in 0.1 s, pan and tilt together (the slower of the two).
@@ -139,7 +165,7 @@ the same speed (see [Lighting Studio](lighting-studio.md#heads-travel-at-their-r
 - **FIX-08** A light marked dead at the applied venue that a cue, hit or
   scene still lights.
 - **FIX-14** Two fixtures with one name.
-- **FIX-16** Gobo slots with no picture: a definition names its gobo slots
+- **FIX-17** Gobo slots with no picture: a definition names its gobo slots
   but gives no picture (none, a bare folder, a file that is not there), so
   the rig view draws a stand-in. A note, once per definition, saying how
   many slots and whether they "have no picture" or "point at a folder, not
@@ -158,6 +184,19 @@ the same speed (see [Lighting Studio](lighting-studio.md#heads-travel-at-their-r
   bolted to that deck; a deck with a Clear or Open top (lights go inside
   those on purpose); and a body that only touches or sinks less than 3 cm.
   It re-reads a moment after any edit.
+- **FIX-16** A light on the floor whose row is on a deck: *"UST-2 is on the
+  floor; UST-1, UST-3…UST-8 are on Deck USP1 (0.61 m). Sit it on Deck USP1
+  (0.61 m)."* The row-mates are the other lights of the **same fixture type**
+  in a fixture group it belongs to (smallest group first), else with the
+  same name series ("UST-" for UST-2), else in the same line (Y within
+  0.3 m). It fires when more than half of them, and at least two, stand on a
+  deck (a deck mount, or a free light at a solid top's height) and this
+  light is within a body length (0.5 m at least) of the edge of one of those
+  decks. A **warning** in the footer (`fixtures.offrow`, **Sit on Top** /
+  **Show**) and an amber ring with a triangle on the plot, since a floor
+  light beside a riser can be deliberate: **Accept with a note** as for any
+  check. Sit on Top is FIX-15's deck mount on the nearest deck the row uses.
+  A light buried in a deck is FIX-15's, not this one's.
 
 **Palettes and looks**
 
@@ -296,12 +335,12 @@ both give the same answer.
   finding names the cue, the fixtures and roughly how much of each beam lands
   there, once, in the cue the light starts landing. Meant is only what the
   show says: a **Cyc / strip light** or **Uplight wash** fixture, a look aimed
-  at a target on the cyc, or **I Meant It**. On a PWR-12 row **Accept** reads
-  **I Meant It** (no note: the mark is kept on the layer that lights it, one
-  undo step, and the row moves to Accepted), **Fix** reads **Show Me** (the
-  layer in the Show Tree), and on a marked row **Reopen** reads **Not Meant**.
+  at a target on the cyc, or **I Meant It**. On a PWR-12 row **Not a Problem…** reads
+  **I Meant It** (no note needed: the mark is kept on the layer that lights it, with who and
+  when, one undo step, and the row moves to **Meant**; right-click for Not a Problem…), **Fix** reads **Show Me** (the
+  layer in the Show Tree), and on a meant row **Reopen** reads **Not Meant**.
   A closed curtain in front of the cyc (where that cue leaves it) takes the
-  light. Every cue it lands in is marked **⚠ cyc** in the Show Tree. See [Light on
+  light. Every cue it lands in is marked **⚠ cyc** in the Show Tree (**cyc ✓** in green on the cue where it is meant). See [Light on
   the cyc only on purpose](lighting-studio.md#light-on-the-cyc-only-on-purpose).
 
 **Files and names**

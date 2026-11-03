@@ -22,10 +22,20 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   slot and turning for a "Gobo Rotate Speed" range; "Open", "White" and
   "No gobo" stay open. **Gobo Wheels…** lists those slots, suggests a
   library picture by name and has **Fit suggested pictures**; Show Review
-  notes it as **FIX-16** once per definition, with Fix opening Gobo Wheels.
+  notes it as **FIX-17** once per definition, with Fix opening Gobo Wheels.
   A definition's absolute path into another install's Gobos folder is now
   found in this one's library when the same file is there.
 
+
+- **Three states for a Show Review warning, visible on the cue.** Open is
+  the amber **⚠ cyc**; **I Meant It** turns it green (**cyc ✓**; hover says
+  who marked it, when, and the note); **Not a Problem…** (was Accept…)
+  hides it and lists it in Show Review under Accepted. Right-click the cue
+  mark, a Review row or the footer chip to move between them (Not Meant,
+  Reopen). The Review panel has a **Meant** group; the footer chip counts
+  open warnings only and its tooltip adds "2 open · 1 meant · 3 not a
+  problem". Who and when are saved with the show; older shows open as
+  before.
 - **A light buried in a deck, riser or step is an error in the footer.**
   A fixture whose body (its Physical Dimensions box, as the rig view draws
   it) sits inside a deck with a solid top -- a floor light left at height 0
@@ -36,6 +46,18 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   truss, pipe, tower or hanger, standing on that deck, or in a Clear/Open
   topped step are not flagged, nor is a body that only touches or sinks
   under 3 cm. It re-reads a moment after any edit.
+
+- **A light left on the floor while its row is on a deck is a warning
+  (FIX-16).** In a row of lights the others stand on a deck -- UST-1 and
+  UST-3 to UST-8 at 0.61 m -- and UST-2 was left on the floor beside it
+  (touching the edge, so FIX-15 had nothing to say). Show Review and the
+  footer now say "UST-2 is on the floor; UST-1, UST-3…UST-8 are on Deck
+  USP1 (0.61 m)", with **Sit on Top** (the same deck mount as FIX-15) and
+  **Show**; the light gets an amber ring and triangle on the plot. A row is
+  the same fixture type in a group, a name series ("UST-1…8") or a line (Y
+  within 0.3 m); it fires when more than half (two at least) are on a deck
+  and the light is within a body length of one. A warning, since a floor
+  light by a riser can be deliberate: Accept with a note works as usual.
 
 - **Steam Deck and gamepad remote.** A Steam Deck, phone or tablet works
   the console over Wi-Fi in its browser, with nothing installed: a new
@@ -53,11 +75,44 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Changed
 
+- **An Aim at an Area covers the area** (board Q209). Every light aimed at
+  a sized Area used to point at its centre, at the area's own height, and
+  the corners stayed dark. Now the area is split into one zone per light
+  (each arm of a two-arm beam its own) by where they hang -- low and
+  downstage lights take the front ranks, high and upstage ones the back
+  ranks, stage right lights the stage right zones, no beams crossed on a
+  regular rig -- and each light aims at subject height (1.4 m, or the
+  area's aim height) above the deck, riser or step under its zone. The
+  Show Tree layer's Position row draws the area, the zones, each beam's
+  footprint and the gaps hatched, with "Covers 86% of Chorus · gap upstage
+  left"; Show Review notes a cue leaving more than a tenth of an area dark
+  (**MOV-13**). **Existing shows:** area aims now spread over their area,
+  so their pan and tilt change; an Area with no size still aims at its
+  point. No file change.
+
 - **Aim lines have arrowheads.** The line from each light to where its beam
   lands (the order strip's connectors, the plan view in the Look Editor,
   the Formation editor and the stored-position plan) now ends in a small
   arrowhead at the landing dot, or at the ring for a beam that leaves the
   stage, so source and destination read at a glance.
+
+- **A footer chip says what lights the stage.** `● LIVE · Act 1 · 1.2 Verse`
+  while a cue list runs for real, `BLIND · stage holds 1.2 Verse` (white on
+  the blue footer) in the Blind view so it is clear your edits are not
+  reaching the lights, `Stage: Build look`, `Stage: no cue list`, and the
+  holds (Blackout, Teaching's output hold). Hover for the detail; click for
+  the Run tab or the Show Tree. It replaces the long Blind text that
+  overlapped the OPERATE chip at the smallest window, and follows the
+  engine's signals, never a per-frame poll.
+
+### Tooling
+
+- **`make dmg` is much faster.** It builds only what ships (no test
+  programs), through ccache, in a build dir that lasts between runs;
+  `make dmg ARCH=native` makes an arm64-only DMG (named `-arm64-native-`,
+  never published) for our own Macs. ender's ccache moves to
+  `/Volumes/Ext/ccache` (100 GB) while that drive is mounted, internal 20 GB
+  otherwise; `make test` now uses ccache too.
 
 ### Fixed
 
@@ -107,6 +162,28 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 - **The universe output view's heading stays inside the view** at its
   narrowest (it was a fixed 600 px, past the view's edge).
+
+### Changed
+
+- **Each arm of a multi-arm fixture aims on its own.** A two-arm beam's
+  arms (each on its own pan and tilt) are two lights to an Aim look: at a
+  point each aims from where it hangs on the bar, so the two converge at
+  their own angles; on a line each takes its own place, number, group and
+  side, so eight two-arm beams are sixteen points and Pairs pairs a bar's
+  arms. A follow-spot or aiming effect solves each arm from its own place
+  too, and the Lighting Studio draws each arm's beam from that arm. A show
+  saved before this plays as it did except for its multi-arm fixtures,
+  whose arms now go to their own points instead of sharing one aim a
+  body-width apart. Fixtures with one pan and tilt -- a pixel bar on a
+  yoke included -- are unchanged.
+
+### Fixed
+
+- **A light on the deck or placed freely is aimed from the middle of its
+  body,** where the views draw it and its light leaves, not from the corner
+  of its plot icon: a two-arm beam on a riser drew each beam up to 0.3 m
+  wide of its point on the line (half the 510 mm bar), now within 7 cm
+  (one DMX step of its 128-step pan).
 - **An aimed light is drawn where it points, to the step.** The rig views
   read a 16-bit head's fine byte back (read coarse only, a 540° head was
   drawn up to 2° off its mark, 20 cm at a 6 m throw), and a two-arm beam's

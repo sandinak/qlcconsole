@@ -49,10 +49,15 @@ private slots:
     void fix01();
     void fix05();
     void fix07();
-    void fix16();
+    void fix17();
     void fix14();
     void fix15();
     void fix15Geometry();
+    void fix16();
+    void fix16Rows();
+    void fix16Single();
+    void fix16Sources();
+    void fix16Save();
     void fx07();
     void pwr01();
     void pwr03();
@@ -86,6 +91,7 @@ private slots:
     void pwr11BandedPan();
     void pwr12Backwash();
     void pwr12Meant();
+    void pwr12WarnStates();
     void pwr12AimAtCyc();
     void pwr12Curtain();
     void sceneryOnPurposeSaves();
@@ -102,6 +108,7 @@ private slots:
     void mov01();
     void mov02();
     void mov08();
+    void mov13();
     /** The VcIndex reads the Virtual Console without it */
     void vcIndexReads();
     void vc03();

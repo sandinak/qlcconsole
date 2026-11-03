@@ -22,6 +22,15 @@
 # the laid-out window with the background -- that runs an AppleScript that
 # opens the volume in Finder on the real screen.
 #
+# Fast, because it builds only what ships (-DQLC_NO_TESTS=ON: none of the ~245
+# test programs) through ccache, in a build dir that lasts between runs:
+# /Volumes/Ext/build/<checkout>-<flavour> while ender's work drive is mounted,
+# else <repo>/build-<flavour>. A second run re-compiles what the commits
+# since changed, and re-links. QLC_ARCH=native (`make dmg ARCH=native`)
+# builds arm64 only, for installing on our own Apple silicon Macs: the DMG is
+# named ...-arm64-native-... and publish.sh refuses it. BUILD_DIR= overrides
+# the build dir; NO_CCACHE=1 turns ccache off.
+#
 # UNIVERSAL=1 (the default) builds one app for Apple silicon AND Intel Macs:
 # against the official, universal Qt (aqt; QTDIR, default ~/Qt-aqt/6.9.3/macos)
 # and the plugins' libraries built universal by universal-deps.sh
@@ -35,6 +44,8 @@ REPO="${REPO:-$(cd "$SCRIPTDIR/../.." && pwd)}"
 APP="$HOME/qlcconsole.app"
 UNIVERSAL="${UNIVERSAL:-1}"
 UNIDEPS="${UNIDEPS:-$HOME/unideps}"
+QLC_ARCH="${QLC_ARCH:-}"
+case "$QLC_ARCH" in ""|native) ;; *) echo "ERROR: QLC_ARCH must be empty (universal) or native"; exit 1 ;; esac
 JOBS="$(sysctl -n hw.perflevel0.logicalcpu 2>/dev/null || sysctl -n hw.ncpu)"
 
 cd "$REPO"
@@ -43,8 +54,12 @@ step() { echo; echo "===========================================================
 
 if [ "$UNIVERSAL" = 1 ]; then
   export QTDIR="${QTDIR:-$HOME/Qt-aqt/6.9.3/macos}"
-  BUILD="$REPO/build-universal"
-  FLAVOUR=universal
+  OSXARCHS="arm64;x86_64"; FLAVOUR=universal
+  if [ "$QLC_ARCH" = native ]; then
+    [ "$(uname -m)" = arm64 ] || { echo "ERROR: ARCH=native is arm64 only; this Mac is $(uname -m)"; exit 1; }
+    OSXARCHS=arm64; FLAVOUR=arm64-native
+  fi
+  BUILD_NAME="build-$FLAVOUR"
   case "$(lipo -archs "$QTDIR/lib/QtCore.framework/QtCore" 2>/dev/null)" in
     *x86_64*arm64*|*arm64*x86_64*) ;;
     *) echo "ERROR: $QTDIR is not a universal Qt. Install one:"
@@ -58,15 +73,36 @@ if [ "$UNIVERSAL" = 1 ]; then
   # Homebrew's libraries are this Mac's arch only: kept out of sight, so a
   # plugin either finds the universal one or goes without (OLA does).
   export PKG_CONFIG_PATH="$UNIDEPS/lib/pkgconfig" PKG_CONFIG_LIBDIR="$UNIDEPS/lib/pkgconfig"
-  ARCHFLAGS=(-DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
+  ARCHFLAGS=(-DCMAKE_OSX_ARCHITECTURES="$OSXARCHS"
              -DCMAKE_PREFIX_PATH="$QTDIR/lib/cmake;$UNIDEPS"
              -DCMAKE_IGNORE_PREFIX_PATH="/opt/homebrew;/usr/local"
              -DCMAKE_IGNORE_PATH="/opt/homebrew/lib;/opt/homebrew/include;/usr/local/lib;/usr/local/include;/opt/local/lib;/opt/local/include")
 else
   export QTDIR="/opt/homebrew/opt/qt6"
-  BUILD="$REPO/build-package"
+  BUILD_NAME="build-package"
   FLAVOUR="$(uname -m)"
   ARCHFLAGS=(-DCMAKE_PREFIX_PATH="$QTDIR/lib/cmake")
+fi
+
+# A build dir that lasts: on the work drive when it is mounted (named for the
+# checkout, as a CMake build dir belongs to one source dir).
+if [ -n "${BUILD_DIR:-}" ]; then BUILD="$BUILD_DIR"
+elif [ -d /Volumes/Ext ] && [ -w /Volumes/Ext ] && mkdir -p /Volumes/Ext/build 2>/dev/null; then
+  BUILD="/Volumes/Ext/build/$(basename "$REPO")-${BUILD_NAME#build-}"
+else BUILD="$REPO/$BUILD_NAME"; fi
+
+# ccache for every slice (the compiler sees both -arch flags in one call).
+. "$SCRIPTDIR/ccache-env.sh"
+LAUNCHER=()
+if [ -z "${NO_CCACHE:-}" ] && command -v ccache >/dev/null 2>&1; then
+  LAUNCHER=(-DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+            -DCMAKE_AUTOMOC_PATH_PREFIX=ON)
+  # The same settings as check-all.sh: paths relative to the checkout, the
+  # build dir out of the hash, rcc's qrc timestamp fixed.
+  export CCACHE_BASEDIR="$REPO" CCACHE_NOHASHDIR=1 QT_RCC_SOURCE_DATE_OVERRIDE=1
+  CC_BEFORE="$(ccache --print-stats 2>/dev/null | awk -F'\t' '/^direct_cache_hit|^preprocessed_cache_hit|^cache_miss/{s[$1]=$2} END{print s["direct_cache_hit"]+s["preprocessed_cache_hit"], s["cache_miss"]+0}')"
+else
+  LAUNCHER=(-DCMAKE_C_COMPILER_LAUNCHER= -DCMAKE_CXX_COMPILER_LAUNCHER=)
 fi
 
 if pgrep -f "^$APP/Contents/MacOS/" >/dev/null; then
@@ -74,14 +110,19 @@ if pgrep -f "^$APP/Contents/MacOS/" >/dev/null; then
   exit 1
 fi
 
-step "1/7 Configure (Release, $FLAVOUR, separate build dir: $(basename "$BUILD"))"
-cmake -S . -B "$BUILD" "${ARCHFLAGS[@]}" \
-  -DCMAKE_BUILD_TYPE=Release \
+step "1/7 Configure (Release, $FLAVOUR, no tests, build dir: $BUILD)"
+cmake -S . -B "$BUILD" "${ARCHFLAGS[@]}" "${LAUNCHER[@]}" \
+  -DCMAKE_BUILD_TYPE=Release -DQLC_NO_TESTS=ON \
   -DQLC_MACOS_BUNDLE="$APP" \
   -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0   # what Qt 6.9 itself needs
 
 step "2/7 Build (parallel)"
 cmake --build "$BUILD" -j"$JOBS"
+if [ -n "${CC_BEFORE:-}" ]; then
+  read -r h0 m0 <<< "$CC_BEFORE"
+  read -r h1 m1 <<< "$(ccache --print-stats 2>/dev/null | awk -F'\t' '/^direct_cache_hit|^preprocessed_cache_hit|^cache_miss/{s[$1]=$2} END{print s["direct_cache_hit"]+s["preprocessed_cache_hit"], s["cache_miss"]+0}')"
+  echo "  ccache over this build: $((h1 - h0)) hits, $((m1 - m0)) misses (cache: ${CCACHE_DIR:-default})"
+fi
 
 step "3/7 Install into ~/qlcconsole.app (fresh; the old one -> qlcconsole.app.prev)"
 if [ -d "$APP" ]; then
@@ -137,7 +178,7 @@ python3 "$SCRIPTDIR/bundlefix.py" "$APP"
 missing=0
 while IFS= read -r f; do
   file "$f" | grep -q 'Mach-O' || continue
-  if [ "$UNIVERSAL" = 1 ]; then
+  if [ "$UNIVERSAL" = 1 ] && [ "$FLAVOUR" = universal ]; then
     a=$(lipo -archs "$f" 2>/dev/null)
     case "$a" in *x86_64*arm64*|*arm64*x86_64*) ;;
       *) echo "  NOT UNIVERSAL ($a): ${f#$APP/}"; missing=1 ;; esac
@@ -183,7 +224,8 @@ DMG="$DIST/qlcconsole-${RELEASE}-${FLAVOUR}-${BUILD_DATE}-${GIT_REV}.dmg"
 rm -f "$DMG"
 cd "$REPO/platforms/macos/dmg"
 DMG_STYLE=(--skip-jenkins); [ "${DMG_FINDER:-0}" = 1 ] && DMG_STYLE=()
-./create-dmg "${DMG_STYLE[@]}" --volname "qlcconsole ${RELEASE}" \
+VOLNAME="qlcconsole ${RELEASE}"; [ "$QLC_ARCH" = native ] && VOLNAME="$VOLNAME (arm64 only)"
+./create-dmg "${DMG_STYLE[@]}" --volname "$VOLNAME" \
   --volicon "$REPO/resources/icons/qlcconsole.icns" \
   --background background.png \
   --window-size 400 300 \

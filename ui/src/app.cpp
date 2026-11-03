@@ -282,7 +282,6 @@ App::App()
     , m_statusProgrammerLabel(NULL)
     , m_statusSelectionLabel(NULL)
     , m_statusPadModeLabel(NULL)
-    , m_statusBlackoutLabel(NULL)
     , m_statusTimecodeLabel(NULL)
     , m_statusLoadLabel(NULL)
     , m_statusTimelineLabel(NULL)
@@ -1407,6 +1406,24 @@ void App::initDoc()
                 Monitor::instance()->refreshBuried();
             AppUtil::updateFixtureReadiness(m_doc);
         });
+    /* A light on the floor, its row on a deck (FIX-16): the same fix. */
+    ShowStatus::instance()->setAction("fixtures.offrow", tr("Sit on Top"),
+        [this](QWidget *, const QVariantList &items) {
+            foreach (const QVariant &v, items)
+                PlacementCheck::fix(m_doc, PlacementCheck::checkRow(m_doc, v.toUInt()));
+            if (Monitor::instance() != NULL)
+                Monitor::instance()->refreshBuried();
+            AppUtil::updateFixtureReadiness(m_doc);
+        });
+    ShowStatus::instance()->addAction("fixtures.offrow", tr("Show"),
+        [this](QWidget *, const QVariantList &items) {
+            QList<quint32> ids;
+            foreach (const QVariant &v, items)
+                ids << v.toUInt();
+            showContext(tr("Lighting Studio"));
+            if (Monitor::instance() != NULL)
+                Monitor::instance()->highlightFixtures(ids);
+        });
     ShowStatus::instance()->addAction("fixtures.buried", tr("Show"),
         [this](QWidget *, const QVariantList &items) {
             QList<quint32> ids;
@@ -2261,6 +2278,7 @@ void App::slotModeChanged(Doc::Mode mode)
 
     // The "under timeline control" chip + exit button are Operate-only.
     slotTimelineControlChanged();
+    updateStageIndicator();
 }
 
 /*****************************************************************************
@@ -2665,8 +2683,6 @@ void App::applyShowControlsPlacement()
         // of room.
         if (m_statusModeChipLabel != NULL)
             m_statusModeChipLabel->hide();
-        if (m_statusBlackoutLabel != NULL)
-            m_statusBlackoutLabel->hide();
     }
     else
     {
@@ -2676,8 +2692,6 @@ void App::applyShowControlsPlacement()
         m_mainBar->setShowControls(m_showControls, m_showControls->modeSwitch());
         if (m_statusModeChipLabel != NULL)
             m_statusModeChipLabel->show();
-        if (m_statusBlackoutLabel != NULL)
-            m_statusBlackoutLabel->setVisible(m_doc->inputOutputMap()->blackout());
         m_mainBar->setHosting(true);
         m_mainBar->hostTabTools(m_tab != NULL ? m_tab->currentWidget() : NULL);
         m_toolbar->show();
@@ -4327,15 +4341,7 @@ void App::slotBlackoutChanged(bool state)
 {
     m_controlBlackoutAction->setChecked(state);
 
-    if (m_statusBlackoutLabel != NULL)
-    {
-        m_statusBlackoutLabel->setText(state ? tr("● BLACKOUT ") : QString());
-        // With the show controls in the status bar, their Blackout button
-        // is lit red right beside it: the chip would say it twice, in a
-        // footer short of room.
-        m_statusBlackoutLabel->setVisible(state
-                && m_showControlsPlacement != ShowControlsInStatusBar);
-    }
+    updateStageIndicator();
 }
 
 QString App::blindDesignTip()
@@ -4510,23 +4516,7 @@ void App::updateBlindLook()
             ? QStringLiteral("QStatusBar { background: %1; } "
                              "QStatusBar QLabel { color: white; }").arg(BlindStyle::colour())
             : QString());
-    if (m_statusBlindLabel == nullptr)
-        return;
-    QString text;
-    if (m_blindView)
-    {
-        ShowTreeController *st = m_doc->showTree();
-        const quint32 cueId = st != nullptr ? st->editedCue() : ShowTree::invalidId();
-        const ShowTree::CueList *list = cueId == ShowTree::invalidId() ? nullptr : st->listOfCue(cueId);
-        text = list != nullptr
-             ? tr("BLIND view: the screens show %1, the stage plays the run")
-                   .arg(st->cueLabel(*list, list->indexOf(cueId)))
-             : tr("BLIND view: pick a cue in the Show Tree; the stage plays the run");
-    }
-    else if (muted)
-        text = tr("BLIND: the rig is muted, the screens show the edit");
-    m_statusBlindLabel->setText(text);
-    m_statusBlindLabel->setVisible(on);
+    updateStageIndicator();
 }
 
 void App::slotOutputInhibitedChanged(bool state)
@@ -4537,6 +4527,176 @@ void App::slotOutputInhibitedChanged(bool state)
         && (m_doc == NULL || m_doc->mode() == Doc::Design))
         m_controlBlindAction->setChecked(state);
     updateBlindLook();
+}
+
+QString App::stageIndicatorText(Stage *stageOut, QString *tipOut) const
+{
+    Stage stage = Stage::NoList;
+    QString text;
+    QString tip;
+    ShowTreeController *tree = m_doc != NULL ? m_doc->showTree() : nullptr;
+
+    // What plays for real: the current production's running list and its cue, else
+    // any running list by name. The others go in the tooltip.
+    QString playing;
+    QString blindCue;      // the same, the cue alone: the footer is short of room
+    QStringList running;
+    if (tree != nullptr)
+    {
+        running = tree->listsRunning();
+        if (const ShowTree::Production *prod = tree->production(m_doc->currentProduction()))
+            for (const ShowTree::CueList &l : prod->lists)
+            {
+                if (l.isSubCues() || l.looks)
+                    continue;
+                const quint32 cueId = tree->runningCue(l.id);
+                if (cueId != ShowTree::invalidId())
+                {
+                    blindCue = tree->cueLabel(l, l.indexOf(cueId));
+                    playing = QStringLiteral("%1 \u00b7 %2").arg(l.name, blindCue);
+                    break;
+                }
+            }
+        if (playing.isEmpty() && !running.isEmpty())
+            playing = blindCue = running.first();
+    }
+    const QString runningTip = running.count() > 1
+        ? tr("\nRunning: %1.").arg(running.join(QStringLiteral(", "))) : QString();
+
+    const bool design = m_doc != NULL && m_doc->mode() == Doc::Design;
+    const bool muted = m_doc != NULL && m_doc->inputOutputMap()->outputInhibited();
+    const bool teachHold = m_doc != NULL && m_doc->teachingSettings() != nullptr
+                           && m_doc->teachingSettings()->holdsOutput();
+    const bool buildLook = design && m_doc != NULL
+        && ((tree != nullptr && (tree->previewState() == ShowTreeController::PreviewState::Playing
+                                 || tree->previewState() == ShowTreeController::PreviewState::Dark))
+            || m_doc->hasProgrammerValues());
+
+    if (teachHold)
+    {
+        stage = Stage::Held;
+        text = tr("HELD \u00b7 no output");
+        tip = tr("HELD: Teaching mode is holding real network output, so nothing reaches the lights. "
+                 "The screens show what the show would do. Click for the Show Tree.");
+    }
+    else if (m_doc != NULL && m_doc->inputOutputMap()->blackout())
+    {
+        stage = Stage::Blackout;
+        text = tr("BLACKOUT \u00b7 stage dark");
+        tip = tr("Blackout is on: every light is at zero whatever plays. Click for the Show Tree.");
+    }
+    else if (m_blindView)
+    {
+        stage = Stage::BlindView;
+        text = blindCue.isEmpty() ? tr("BLIND \u00b7 stage: no cue list")
+                                  : tr("BLIND \u00b7 stage holds %1").arg(blindCue);
+        QString editing;
+        {
+            const quint32 editId = tree != nullptr ? tree->editedCue() : ShowTree::invalidId();
+            const ShowTree::CueList *editList = editId == ShowTree::invalidId() ? nullptr : tree->listOfCue(editId);
+            if (editList != nullptr)
+                editing = tr(" The screens show %1.").arg(tree->cueLabel(*editList, editList->indexOf(editId)));
+        }
+        tip = tr("Blind view: what you edit shows on the screens and does not reach the lights. "
+                 "The stage keeps what the running cue list plays%1. Click for the Run tab.")
+                 .arg(playing.isEmpty() ? QString() : QStringLiteral(" (%1)").arg(playing)) + editing + runningTip;
+    }
+    else if (muted)
+    {
+        stage = Stage::BlindMuted;
+        text = tr("BLIND \u00b7 rig muted");
+        tip = tr("Blind: the rig is muted, so nothing you do reaches the lights; the screens show "
+                 "the edit. Turn Blind off to take it live. Click for the Run tab.");
+    }
+    else if (buildLook)
+    {
+        stage = Stage::BuildLook;
+        text = playing.isEmpty() ? tr("Stage: Build look") : tr("Stage: Build look \u00b7 over %1").arg(playing);
+        tip = tr("The look you are building (the Workbench preview or the programmer) is what the "
+                 "lights show now.") + (playing.isEmpty() ? QString()
+                 : tr(" A cue list keeps running underneath: %1.").arg(running.join(QStringLiteral(", "))))
+              + tr(" Click for the Show Tree.");
+    }
+    else if (!playing.isEmpty())
+    {
+        stage = Stage::Live;
+        text = tr("\u25cf LIVE \u00b7 %1").arg(playing);
+        tip = tr("A cue list is running and its output is what lights the stage now. "
+                 "Click for the Run tab.") + runningTip;
+    }
+    else
+    {
+        stage = Stage::NoList;
+        text = tr("Stage: no cue list");
+        tip = tr("No cue list is running and nothing is being built: the stage is not lit by "
+                 "the show. Click for the Show Tree.");
+    }
+    if (stageOut != nullptr)
+        *stageOut = stage;
+    if (tipOut != nullptr)
+        *tipOut = tip;
+    return text;
+}
+
+void App::updateStageIndicator()
+{
+    if (m_statusStage == nullptr || m_doc == NULL)
+        return;
+    Stage stage = Stage::NoList;
+    QString tip;
+    const QString full = stageIndicatorText(&stage, &tip);
+    m_stage = stage;
+
+    QString sheet;
+    switch (stage)
+    {
+        case Stage::Live:
+            sheet = QStringLiteral("QToolButton { background: #2e7d32; color: white; font-weight: bold;"
+                                   " border-radius: 3px; padding: 0 6px; }");
+            break;
+        case Stage::BlindView:
+        case Stage::BlindMuted:
+            sheet = QStringLiteral("QToolButton { background: white; color: %1; font-weight: bold;"
+                                   " border-radius: 3px; padding: 0 6px; }").arg(BlindStyle::colour());
+            break;
+        case Stage::Held:
+            sheet = QStringLiteral("QToolButton { background: #ef6c00; color: white; font-weight: bold;"
+                                   " border-radius: 3px; padding: 0 6px; }");
+            break;
+        case Stage::Blackout:
+            sheet = QStringLiteral("QToolButton { background: #c62828; color: white; font-weight: bold;"
+                                   " border-radius: 3px; padding: 0 6px; }");
+            break;
+        case Stage::BuildLook:
+            sheet = QStringLiteral("QToolButton { color: palette(text); font-weight: bold; padding: 0 6px; }");
+            break;
+        case Stage::NoList:
+            sheet = QStringLiteral("QToolButton { color: gray; padding: 0 6px; }");
+            break;
+    }
+    if (sheet != m_stageStyle)       // only on a change
+    {
+        m_stageStyle = sheet;
+        m_statusStage->setStyleSheet(sheet);
+    }
+
+    // The cue shortens to the room the footer has (a fifth of the window, at most);
+    // the tooltip keeps all of it.
+    QFont bold = m_statusStage->font();
+    bold.setBold(true);
+    const int room = qBound(150, width() / 5, 420);
+    const QString shown = QFontMetrics(bold).elidedText(full, Qt::ElideRight, room - 16);
+    if (m_statusStage->text() != shown)
+        m_statusStage->setText(shown);
+    const QString fullTip = shown == full ? tip : full + QStringLiteral("\n") + tip;
+    if (m_statusStage->toolTip() != fullTip)
+        m_statusStage->setToolTip(fullTip);
+}
+
+void App::resizeEvent(QResizeEvent *event)
+{
+    QMainWindow::resizeEvent(event);
+    updateStageIndicator();
 }
 
 void App::slotFooterGrandMasterMoved(int value)
@@ -7536,25 +7696,28 @@ void App::initStatusBar()
             "QLabel { font-weight: bold; color: palette(text); }");
     }
 
-    // Blackout indicator (global, same reasoning as Blind used to have its own
-    // label before the whole-footer-blue treatment made it redundant —
-    // Blackout doesn't own the whole footer, so it needs its own chip to be
-    // visible at all). Starts empty + hidden. Driven by
-    // InputOutputMap::blackoutChanged.
-    m_statusBlackoutLabel = new QLabel(this);
-    m_statusBlackoutLabel->setAlignment(Qt::AlignRight);
-    m_statusBlackoutLabel->setStyleSheet("QLabel { color: #e60000; font-weight: bold; }");
-    m_statusBlackoutLabel->hide();
-    sb->addPermanentWidget(m_statusBlackoutLabel);
-
-    // What Blind does now, in words, on the blue footer: the Design mute or
-    // the Operate view (which cue the screens show). Hidden while Live.
-    m_statusBlindLabel = new QLabel(this);
-    m_statusBlindLabel->setObjectName(QStringLiteral("statusBlind"));
-    m_statusBlindLabel->setAlignment(Qt::AlignRight);
-    m_statusBlindLabel->setStyleSheet(QStringLiteral("QLabel { color: white; font-weight: bold; }"));
-    m_statusBlindLabel->hide();
-    sb->addPermanentWidget(m_statusBlindLabel);
+    // What lights the stage, always (the "stage chip"): a cue list running (LIVE),
+    // Blind (the stage holds what it had while you edit, on the blue footer), the
+    // Build look, or nothing. Click: the Run tab while a list runs, else the Show Tree.
+    m_statusStage = new QToolButton(this);
+    m_statusStage->setObjectName(QStringLiteral("footerStage"));
+    m_statusStage->setToolButtonStyle(Qt::ToolButtonTextOnly);
+    m_statusStage->setAutoRaise(true);
+    m_statusStage->setCursor(Qt::PointingHandCursor);
+    m_statusStage->setFixedHeight(m_statusStage->fontMetrics().height() + 4);   // the labels' height
+    m_statusStage->setProperty("helpTopic", QStringLiteral("show-tree.md"));
+    connect(m_statusStage, &QToolButton::clicked, this, [this]() {
+        showContext(m_stage == Stage::Live || m_stage == Stage::BlindView || m_stage == Stage::BlindMuted
+                    ? tr("Run") : tr("Show Tree"));
+    });
+    sb->addPermanentWidget(m_statusStage);
+    if (ShowTreeController *st = m_doc->showTree())
+    {
+        // A list starts, stops or steps; the Build look plays or lets go: all signals.
+        connect(st, &ShowTreeController::hitArmingChanged, this, &App::updateStageIndicator);
+        connect(st, &ShowTreeController::previewChanged, this, &App::updateStageIndicator);
+    }
+    updateStageIndicator();
 
     // Programmer dirty indicator. Hidden when clean, red bullet + text
     // when dirty. Mirrors the in-frame SaveProgrammer button highlight.
@@ -8822,11 +8985,13 @@ void App::updateReviewStatus()
     }
     const QString summary = tr("Show Review: %1 blockers, %2 warnings, %3 notes open; %4 accepted. "
                                "Click for the Review panel.")
-                            .arg(blockers).arg(warnings).arg(r.open[ReviewFinding::Note]).arg(accepted);
+                            .arg(blockers).arg(warnings).arg(r.open[ReviewFinding::Note]).arg(accepted)
+                            + QStringLiteral("\n") + ShowReviewMarker::stateSummary(m_doc);
     // The detail of what is open, as on every warning's mark.
     QString detail = ShowReviewMarker::tooltip(m_doc, ShowReviewMarker::openFindings(m_doc), 4);
     if (!detail.isEmpty())
-        detail.replace(QStringLiteral("<qt>"), QStringLiteral("<qt>") + summary.toHtmlEscaped()
+        detail.replace(QStringLiteral("<qt>"), QStringLiteral("<qt>") + QString(summary.toHtmlEscaped())
+                                               .replace(QLatin1Char('\n'), QStringLiteral("<br>"))
                                                + QStringLiteral("<br><br>"));
     m_statusReviewLabel->setToolTip(detail.isEmpty() ? summary : detail);
     m_statusReviewLabel->show();
@@ -8925,6 +9090,7 @@ void App::updateTeachingStatus()
 {
     if (m_doc == NULL || m_doc->teachingSettings() == nullptr)
         return;
+    updateStageIndicator();
     const TeachingSettings *teach = m_doc->teachingSettings();
     if (m_statusTeachingLabel != nullptr)
     {

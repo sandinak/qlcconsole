@@ -1300,10 +1300,24 @@ private:
         /** On a line target: how far along it (0..1) this head lands; -1 =
          *  not a line. */
         double  lineFraction = -1.0;
+        /** A multi-arm fixture on a line: each arm's own place, by head
+         *  index (-1 = not one of its arms). */
+        QVector<double> armFractions;
+        /** On an area it covers (AreaCover): this head's zone, as its
+         *  centre's offset from the area's centre -- read back fresh, so a
+         *  dragged area is followed. */
+        bool hasArea = false;
+        QPointF areaOffset;
+        /** A multi-arm fixture: each arm's own zone, by head index. */
+        QHash<int, QPointF> armAreaOffsets;
     };
     /** The live world point a fixture is aimed at, or false if it aims at
      *  nothing. Resolved per frame from the target's CURRENT position. */
     bool aimPointFor(quint32 fid, QVector3D &out) const;
+    /** The same for unit (head) @p unit: an arm of a multi-arm fixture
+     *  (AimSolver::arms()) has its own point -- on a line its own place --
+     *  and @p origin, when given, gets where the arm aims from. */
+    bool aimPointFor(quint32 fid, int unit, QVector3D &out, QVector3D *origin = nullptr) const;
     /** fixture id -> the target it is aimed at, from the active scene's Aim
      *  palettes. Rebuilt when the scene or the rig changes, NOT per frame:
      *  resolving it per fixture per frame would be quadratic in the rig. */

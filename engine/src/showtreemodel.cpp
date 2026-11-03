@@ -1450,7 +1450,15 @@ static void saveLayer(QXmlStreamWriter *doc, const Layer &layer)
     if (!layer.unlinkedFrom.isEmpty())
         doc->writeAttribute(QStringLiteral("UnlinkedFrom"), layer.unlinkedFrom);
     if (!layer.meantOnScenery.isEmpty())
+    {
         doc->writeAttribute(QStringLiteral("MeantOnScenery"), idsToString(layer.meantOnScenery));
+        if (!layer.meantBy.isEmpty())
+            doc->writeAttribute(QStringLiteral("MeantBy"), layer.meantBy);
+        if (!layer.meantWhen.isEmpty())
+            doc->writeAttribute(QStringLiteral("MeantWhen"), layer.meantWhen);
+        if (!layer.meantNote.isEmpty())
+            doc->writeAttribute(QStringLiteral("MeantNote"), layer.meantNote);
+    }
     if (!layer.continues.groups.isEmpty())
         doc->writeAttribute(QStringLiteral("ContinuesGroups"), idsToString(layer.continues.groups));
     if (!layer.continues.fixtures.isEmpty())
@@ -1703,6 +1711,9 @@ static Layer loadLayer(QXmlStreamReader &root)
     layer.reusable = readId(a, QStringLiteral("Reusable"));
     layer.unlinkedFrom = a.value(QStringLiteral("UnlinkedFrom")).toString();
     layer.meantOnScenery = stringToIds(a.value(QStringLiteral("MeantOnScenery")).toString());
+    layer.meantBy = a.value(QStringLiteral("MeantBy")).toString();
+    layer.meantWhen = a.value(QStringLiteral("MeantWhen")).toString();
+    layer.meantNote = a.value(QStringLiteral("MeantNote")).toString();
     layer.continues.groups = stringToIds(a.value(QStringLiteral("ContinuesGroups")).toString());
     layer.continues.fixtures = stringToIds(a.value(QStringLiteral("ContinuesFixtures")).toString());
     layer.continues.sets = stringToIds(a.value(QStringLiteral("ContinuesSets")).toString());

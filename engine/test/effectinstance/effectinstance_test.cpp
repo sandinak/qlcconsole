@@ -1515,6 +1515,108 @@ void EffectInstance_Test::aScriptIsToldWhatIsInTheWay()
     timer.timerTick();
 }
 
+void EffectInstance_Test::eachArmAimsFromWhereItIs()
+{
+    // Two arms, each its own 16-bit pan and a tilt, on a 1 m bar.
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test"); def->setModel("Two Arm Bar");
+    def->setType(QLCFixtureDef::MovingHead);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("6ch");
+    for (int a = 0; a < 2; ++a)
+    {
+        QLCFixtureHead head;
+        for (int k = 0; k < 3; ++k)
+        {
+            QLCChannel *ch = new QLCChannel();
+            ch->setName(QString("%1 %2").arg(k == 2 ? "Tilt" : k == 1 ? "Pan fine" : "Pan").arg(a + 1));
+            ch->setGroup(k == 2 ? QLCChannel::Tilt : QLCChannel::Pan);
+            ch->setControlByte(k == 1 ? QLCChannel::LSB : QLCChannel::MSB);
+            def->addChannel(ch);
+            mode->insertChannel(ch, quint32(a * 3 + k));
+            head.addChannel(quint32(a * 3 + k));
+        }
+        mode->insertHead(-1, head);
+    }
+    QLCPhysical ph;
+    ph.setFocusPanMax(540);
+    ph.setFocusTiltMax(270);
+    ph.setWidth(1000);
+    ph.setLayoutSize(QSize(2, 1));
+    mode->setPhysical(ph);
+    def->addMode(mode);
+    Fixture *bar = new Fixture(m_doc);
+    bar->setName("Bar");
+    bar->setFixtureDefinition(def, mode);
+    bar->setAddress(400);
+    QVERIFY(m_doc->addFixture(bar));
+
+    // Hung 3 m up; the subject just in front of it, nearer the left arm.
+    MonitorProperties *props = m_doc->monitorProperties();
+    props->setFixturePosition(bar->id(), 0, 0, QVector3D(0, 0, 3));
+    FixtureRigProps rp;
+    rp.mountingType = Truss::TopHung;
+    props->setFixtureRigProps(bar->id(), rp);
+    StageTarget *who = props->addStageTarget();
+    who->setPosition(QVector3D(0.0f, 1.5f, 0.0f));
+    QCOMPARE(AimSolver::arms(bar), QVector<int>({ 0, 1 }));
+
+    // Each cell sends what it is told: the scene target's pan, then a point.
+    QTemporaryDir dir;
+    QFile js(dir.filePath("arms.js"));
+    QVERIFY(js.open(QIODevice::WriteOnly));
+    js.write("(function() { var e = {}; e.apiVersion = 1; e.name = 'Arms';"
+             " e.params = [ { name: 'point', type: 'float', default: 0, min: 0, max: 1 } ];"
+             " e.tick = function(fixtures, t, p) { return fixtures.map(function(f) {"
+             "   if (p.point > 0.5) return { aimX: 0.0, aimY: 1.5, aimZ: 0.0 };"
+             "   var s = f.sceneTarget; return s ? { pan: s.pan, tilt: s.tilt } : {}; }); };"
+             " return e; })()");
+    js.close();
+
+    QLCPalette *aim = new QLCPalette(QLCPalette::Aim, m_doc);
+    aim->setStageTargetId(who->id());
+    QVERIFY(m_doc->addPalette(aim));
+    QLCPalette *eff = new QLCPalette(QLCPalette::Effect, m_doc);
+    eff->setScriptPath(js.fileName());
+    QVERIFY(m_doc->addPalette(eff));
+    Scene *scene = new Scene(m_doc);
+    m_doc->addFunction(scene);
+    scene->addFixture(bar->id());
+    scene->addPalette(aim->id());
+    scene->addPalette(eff->id());
+
+    EffectInstance inst(m_doc, scene->id(), eff->id());
+    QVERIFY(inst.isValid());
+    auto pans = [&]() {
+        inst.runTick();
+        QHash<quint32, int> out;     // pan channel -> its 16-bit value
+        foreach (const EffectInstance::DmxWrite &w, inst.dmxWrites())
+            if (w.fixtureId == bar->id())
+                out[w.channel] = out.value(w.channel) + int(w.value);
+        return out;
+    };
+    for (double point : { 0.0, 1.0 })
+    {
+        inst.setParamValue("point", point);
+        const QHash<quint32, int> v = pans();
+        QVERIFY2(v.contains(0) && v.contains(3), "both arms' pans written");
+        const double pan1 = (v.value(0) * 256 + v.value(1)) / 65535.0 * 540.0;
+        const double pan2 = (v.value(3) * 256 + v.value(4)) / 65535.0 * 540.0;
+        // Each arm's bearing to the subject from where it is: 0.5 m apart.
+        AimSolver::Frame f1, f2;
+        QVERIFY(AimSolver::frameFor(m_doc, GroupHead(bar->id(), 0), f1));
+        QVERIFY(AimSolver::frameFor(m_doc, GroupHead(bar->id(), 1), f2));
+        QVERIFY(qAbs((f2.position - f1.position).length() - 0.5f) < 1e-3f);
+        auto bearing = [](const QVector3D &from) {
+            return qRadiansToDegrees(qAtan2(double(from.x()), 1.5 - double(from.y())));
+        };
+        const double want = qAbs(bearing(f1.position) - bearing(f2.position));
+        QVERIFY2(qAbs(qAbs(pan1 - pan2) - want) < 0.5,
+                 qPrintable(QString("point %1: arms at %2 and %3 degrees, want %4 apart")
+                            .arg(point).arg(pan1).arg(pan2).arg(want)));
+    }
+}
+
 void EffectInstance_Test::followSpotZoomsToHoldSizeOnSubject()
 {
     MonitorProperties *props = m_doc->monitorProperties();

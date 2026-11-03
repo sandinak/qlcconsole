@@ -91,6 +91,7 @@ add_library(${module_name} SHARED
     showtreemodel.cpp showtreemodel.h
     spreadlayer.cpp spreadlayer.h
     linecurve.cpp linecurve.h
+    areacover.cpp areacover.h
     linespread.cpp linespread.h
     networktopology.cpp networktopology.h
     powerdistribution.cpp powerdistribution.h

@@ -341,7 +341,9 @@ drapes):
   doesn't scramble the pile underneath it. A light whose body ends up
   inside a Solid-topped platform (a floor light at height 0 in a riser) is
   a footer **error** ringed red on the plot; **Sit on Top** stands it on the
-  deck (Show Review FIX-15, see [Show Review](show-review.md)).
+  deck (Show Review FIX-15, see [Show Review](show-review.md)). A floor light
+  beside a deck that the rest of its row stands on gets an amber ring and a
+  footer warning (FIX-16, same fix).
   - **Two colours.** **Colour** is the plot's: it tells decks apart on the
     2D plan and in the layers list. **Finish (rig)** is what it is painted —
     stage black unless you set it — and the Lighting Studio's planes and the
@@ -607,7 +609,7 @@ cyc and a scrim, by default) is checked by [Show Review](show-review.md)
   **mix** and the other flags beside it keep theirs. Hover it for the detail:
   which fixtures, about how much of each beam, on which cyc, every cue it
   lands in, and what you can do. A click opens the Show Review row; a
-  **right-click** answers it on the spot: **I Meant It**, **Not Meant: Show Me
+  **right-click** answers it on the spot: **I Meant It** (the mark turns green, **cyc ✓**), **Not a Problem…**, **Not Meant: Show Me
   the Layer** (to aim it off, shutter, zoom or darken it) or **Open in Show
   Review**. The cyc itself gets an amber outline in the rig views while a
   warning is open on it; its cloth keeps its own colour. The marks follow
@@ -1337,7 +1339,7 @@ the Rig Overview show what it's actually doing, not just where it sits:
   suggests a library picture by name for each (the pictures stock
   definitions give a slot of that name), and **Fit suggested pictures** fits
   the first suggestion in every empty slot. Nothing is kept until you press
-  OK. Show Review notes it once per definition (**FIX-16**).
+  OK. Show Review notes it once per definition (**FIX-17**).
 - **Light footprint** (the Show menu / a structure or fixture's context
   menu) — toggles an overlay of **everywhere a selected moving head's
   pan/tilt range can possibly reach**, not just where it's currently

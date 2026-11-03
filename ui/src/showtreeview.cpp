@@ -84,6 +84,7 @@
 #include "functionstreewidget.h"
 #include "linespreadpreview.h"
 #include "lineplanview.h"
+#include "areacover.h"
 #include "lineformation.h"
 #include "monitorproperties.h"
 #include "outputrulesdialog.h"
@@ -5163,6 +5164,38 @@ void ShowTreeView::showLayerPage(const CueList &list, int index, const Layer *ow
                 m_planFed = true;
             }
         }
+        /* Under an AREA aim's Position (AREA_COVER.md): the area from above,
+           each light's zone, its beam's footprint at subject height and the
+           gaps no beam reaches, with how much of the area that covers. */
+        else if (key == KeyPosition && rl->values.contains(KeyPosition) && areaAimPalette(rl->values.value(KeyPosition).look) != nullptr)
+        {
+            const QLCPalette *aimPal = areaAimPalette(rl->values.value(KeyPosition).look);
+            const Scene *sc = qobject_cast<const Scene *>(m_doc->function(m_st->layerScene(cue.id, rl->target)));
+            if (sc != nullptr)
+            {
+                LinePlanView *planView = new LinePlanView(m_doc, m_rowsHost);
+                planView->setObjectName("stLinePlan");
+                planView->setFormation(sc, aimPal);
+                QLabel *covers = new QLabel(m_rowsHost);
+                covers->setObjectName("stAreaCover");
+                covers->setWordWrap(true);
+                covers->setTextFormat(Qt::PlainText);
+                covers->setText(planView->caption());
+                covers->setToolTip(tr("Each light takes its own part of the area, by where it hangs, and "
+                                      "aims at subject height above the deck or riser there. Hatched: what "
+                                      "no beam reaches at the width its zoom has now."));
+                m_rows->addWidget(covers, row, 1, 1, 4);
+                ++row;
+                m_rows->addWidget(planView, row, 1, 1, 4);
+                ++row;
+                connect(planView, &LinePlanView::popOutRequested, this, &ShowTreeView::openLinePlanWindow);
+                if (m_planWindow != nullptr)
+                {
+                    m_planWindow->setFormation(sc, aimPal, nullptr, nullptr);
+                    m_planFed = true;
+                }
+            }
+        }
         // Under a STORED position (PanTilt and the like, not an aim): where
         // each head's beam lands, solved forward from its DMX, and what it hits.
         else if (key == KeyPosition && rl->values.contains(KeyPosition))
@@ -5204,6 +5237,17 @@ void ShowTreeView::showLayerPage(const CueList &list, int index, const Layer *ow
     }
     m_rows->setRowStretch(row, 1);
     m_pages->setCurrentWidget(m_layerPage);
+}
+
+const QLCPalette *ShowTreeView::areaAimPalette(const Look &look) const
+{
+    if (look.none || look.palettes.isEmpty())
+        return nullptr;
+    const QLCPalette *p = m_doc->palette(look.palettes.first());
+    const MonitorProperties *mp = m_doc->monitorProperties();
+    if (p == nullptr || p->type() != QLCPalette::Aim || mp == nullptr)
+        return nullptr;
+    return AreaCover::covers(mp->stageTarget(p->stageTargetId())) ? p : nullptr;
 }
 
 QStringList ShowTreeView::attributeRows() const

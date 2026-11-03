@@ -68,7 +68,9 @@ step "6 Rebuild the DMG from the stapled app"
 RELEASE=$(cat "$REPO/VERSION")
 case "$(lipo -archs "$APP/Contents/MacOS/qlcconsole")" in
   *x86_64*arm64*|*arm64*x86_64*) FLAVOUR=universal ;;
-  *) FLAVOUR=$(lipo -archs "$APP/Contents/MacOS/qlcconsole") ;;
+  *) FLAVOUR=$(lipo -archs "$APP/Contents/MacOS/qlcconsole")
+     # `make dmg ARCH=native`: named so nobody ships it by mistake.
+     [ "${QLC_ARCH:-}" = native ] && FLAVOUR="$FLAVOUR-native" ;;
 esac
 BUILD_DATE=$(date -u '+%Y%m%d'); GIT_REV=$(git -C "$REPO" rev-parse --short HEAD)
 DIST="$REPO/dist"; mkdir -p "$DIST"

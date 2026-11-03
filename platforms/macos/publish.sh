@@ -362,7 +362,7 @@ fi
 
 if [ -z "${DMG:-}" ]; then
   step "Build: make-release.sh"
-  platforms/macos/make-release.sh
+  QLC_ARCH= platforms/macos/make-release.sh
   DMG="$(ls -t dist/qlcconsole-"$VERSION"-universal-*-"$REV".dmg 2>/dev/null | head -1)"
   [ -n "$DMG" ] || die "no dist/qlcconsole-$VERSION-universal-*-$REV.dmg after make-release.sh"
 fi
