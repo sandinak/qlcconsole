@@ -109,6 +109,7 @@ quint64 ticksCount = 0;
 
 MasterTimer::MasterTimer(Doc* doc)
     : QObject(doc)
+    , m_scheduling(SchedulingUnknown)
     , d_ptr(new MasterTimerPrivate(this))
     , m_stopAllFunctions(false)
     , m_beatSourceType(None)
@@ -307,6 +308,25 @@ double MasterTimer::tickComputeMs() const
 double MasterTimer::tickCpuMs() const
 {
     return m_tickCpuUs.loadRelaxed() / 1000.0;
+}
+
+MasterTimer::TimerScheduling MasterTimer::timerScheduling() const
+{
+    QMutexLocker locker(&m_schedulingMutex);
+    return m_scheduling;
+}
+
+QString MasterTimer::timerSchedulingText() const
+{
+    QMutexLocker locker(&m_schedulingMutex);
+    return m_schedulingText;
+}
+
+void MasterTimer::setTimerScheduling(TimerScheduling scheduling, const QString &text)
+{
+    QMutexLocker locker(&m_schedulingMutex);
+    m_scheduling = scheduling;
+    m_schedulingText = text;
 }
 
 double MasterTimer::tickCpuPeakMs()

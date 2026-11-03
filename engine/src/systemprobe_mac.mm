@@ -1,0 +1,57 @@
+/*
+  Q Light Controller Plus - qlcconsole
+  systemprobe_mac.mm
+
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0.txt
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+*/
+
+
+// SystemProbe's macOS side. Built with ARC (engine/src/CMakeLists.txt).
+
+#import <Foundation/Foundation.h>
+
+#include <QString>
+
+namespace SystemProbeMac
+{
+
+int lowPowerMode()
+{
+    if (@available(macOS 12.0, *))
+        return [[NSProcessInfo processInfo] isLowPowerModeEnabled] ? 1 : 0;
+    return -1;
+}
+
+void *beginActivity(const QString &reason, bool keepDisplayAwake)
+{
+    /* UserInitiated: no App Nap (timers on time, full priority) and no idle
+       system sleep. LatencyCritical: timers -- the main thread's input
+       handling among them -- are not coalesced. Same options as
+       ControllerKeepAlive's. */
+    NSActivityOptions options = NSActivityUserInitiated | NSActivityLatencyCritical;
+    if (keepDisplayAwake)
+        options |= NSActivityIdleDisplaySleepDisabled;
+    id token = [[NSProcessInfo processInfo] beginActivityWithOptions:options
+                                                              reason:reason.toNSString()];
+    return (__bridge_retained void *)token;
+}
+
+void endActivity(void *token)
+{
+    if (token == nullptr)
+        return;
+    id activity = (__bridge_transfer id)token;
+    [[NSProcessInfo processInfo] endActivity:activity];
+}
+
+}

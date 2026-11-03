@@ -251,6 +251,8 @@ add_library(${module_name}
     showmanager/trackitem.cpp showmanager/trackitem.h
     showmanager/videoitem.cpp showmanager/videoitem.h
     showstatus.cpp showstatus.h
+    systemtuning.cpp systemtuning.h
+    systemtuningpage.cpp systemtuningpage.h
     showstatusdialog.cpp showstatusdialog.h
     showreviewpanel.cpp showreviewpanel.h showreviewmarker.cpp showreviewmarker.h
     showdifferencesdialog.cpp showdifferencesdialog.h

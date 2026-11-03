@@ -1242,6 +1242,7 @@ branches bring their tests. Rows are written from those branches.
 | M981 | Fixed: web access upload that isn't a show empties the console | Open show kept; web mark cleared when opening from file so Script runs again | Autosave_Test::aWebLoadThatIsNotAShowKeepsTheShow, aWebLoadReplacesTheShowAndIsMarkedFromTheWeb (ui/test/autosave) | covered | covered | high | - |
 | M982 | Fixed: importing from another show kept every collection member | Chained remaps keep every member in order | QxwImporter_Test::collectionMembersFollowChainedRemaps, chaserStepsAndEfxHeadsFollowRemaps (engine/test/qxwimporter) | covered | covered | med | - |
 | M983 | Code coverage campaign | coverage.sh, new tests | n/a | n/a | n/a | low | - |
+| M984 | Settings ▸ Performance: system check for a steady DMX timer | Per-OS items and status from a probe; important items in Show Status only in Operate; full speed held only in Operate; settings remembered; page copies the command; timer reports its scheduling | SystemTuning_Test (ui/test/systemtuning); MasterTimer_Test::theTimerSaysHowItIsScheduled (engine/test/mastertimer) | covered | covered | med | The macOS App Nap / Windows EcoQoS calls themselves are replaced by a recorder in the test; Windows unmeasured. |
 
 # Part 2: earlier features, by area
 

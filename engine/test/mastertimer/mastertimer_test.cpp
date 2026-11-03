@@ -979,4 +979,29 @@ void MasterTimer_Test::elapsedIsReadWhileTheTimerAdvancesIt()
     QVERIFY(last > 0);
 }
 
+void MasterTimer_Test::theTimerSaysHowItIsScheduled()
+{
+    Doc doc(this);
+    MasterTimer *mt = doc.masterTimer();
+    QCOMPARE(mt->timerScheduling(), MasterTimer::SchedulingUnknown);
+    QVERIFY(mt->timerSchedulingText().isEmpty());
+
+    mt->start();
+    QTRY_VERIFY(mt->timerScheduling() != MasterTimer::SchedulingUnknown);
+    QVERIFY(mt->timerSchedulingText().isEmpty() == false);
+#if defined(Q_OS_MACOS)
+    /* Any user process may have the time-constraint policy */
+    QCOMPARE(mt->timerScheduling(), MasterTimer::SchedulingRealtime);
+    QVERIFY(mt->timerSchedulingText().contains(QLatin1String("time-constraint")));
+#elif defined(Q_OS_LINUX)
+    /* Granted or refused, depending on this user's rtprio limit */
+    QVERIFY(mt->timerScheduling() == MasterTimer::SchedulingRealtime
+            || mt->timerScheduling() == MasterTimer::SchedulingRefused);
+    QVERIFY(mt->timerSchedulingText().contains(QLatin1String("SCHED_FIFO")));
+#elif defined(Q_OS_WIN)
+    QVERIFY(mt->timerSchedulingText().contains(QLatin1String("MMCSS")));
+#endif
+    mt->stop();
+}
+
 QTEST_MAIN(MasterTimer_Test)

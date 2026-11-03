@@ -20,6 +20,7 @@
     <file alias="help/teaching.md">../../docs/features/teaching.md</file>
     <file alias="help/show-review.md">../../docs/features/show-review.md</file>
     <file alias="help/ai-assist.md">../../docs/features/ai-assist.md</file>
+    <file alias="help/system-tuning.md">../../docs/features/system-tuning.md</file>
     <file alias="help/troubleshooting.md">../../docs/features/troubleshooting.md</file>
     <file alias="help/updates.md">../../docs/features/updates.md</file>
     <file alias="help/whats-new.md">../../docs/features/whats-new.md</file>

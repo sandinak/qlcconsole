@@ -37,6 +37,7 @@
 #include <pthread.h>
 #include <sched.h>
 #include <string.h>
+#include <sys/resource.h>
 #endif
 
 #include "mastertimer-unix.h"
@@ -71,12 +72,14 @@
  * Advisory: if the kernel declines, we warn and keep the ordinary priority
  * behaviour rather than failing to start.
  */
-static void setTimerThreadRealtime(int nsTickTime)
+static void setTimerThreadRealtime(int nsTickTime, MasterTimer::TimerScheduling &sched, QString &text)
 {
     mach_timebase_info_data_t tb;
     if (mach_timebase_info(&tb) != KERN_SUCCESS || tb.numer == 0)
     {
         qWarning() << "MasterTimer: no mach timebase; leaving thread priority alone";
+        sched = MasterTimer::SchedulingRefused;
+        text = QStringLiteral("no Mach timebase");
         return;
     }
 
@@ -98,11 +101,19 @@ static void setTimerThreadRealtime(int nsTickTime)
                                          reinterpret_cast<thread_policy_t>(&policy),
                                          THREAD_TIME_CONSTRAINT_POLICY_COUNT);
     if (kr != KERN_SUCCESS)
+    {
         qWarning() << "MasterTimer: real-time thread policy refused by the kernel"
                    << "(kern_return" << kr << ") - falling back to normal priority";
+        sched = MasterTimer::SchedulingRefused;
+        text = QStringLiteral("time-constraint policy refused (kern_return %1)").arg(kr);
+    }
     else
+    {
         qDebug() << "MasterTimer: real-time thread policy set - period"
                  << nsTickTime / 1000 << "us, computation 1000 us, constraint 2000 us";
+        sched = MasterTimer::SchedulingRealtime;
+        text = QStringLiteral("time-constraint policy, period %1 us").arg(nsTickTime / 1000);
+    }
 }
 #elif defined(Q_OS_LINUX)
 /**
@@ -126,7 +137,7 @@ static void setTimerThreadRealtime(int nsTickTime)
  * refusal we warn with the actual fix (grant the capability or an rtprio
  * limit) and fall back to normal scheduling, exactly like the mac path.
  */
-static void setTimerThreadRealtime(int nsTickTime)
+static void setTimerThreadRealtime(int nsTickTime, MasterTimer::TimerScheduling &sched, QString &text)
 {
     Q_UNUSED(nsTickTime)
 
@@ -135,22 +146,40 @@ static void setTimerThreadRealtime(int nsTickTime)
     const int maxPrio = sched_get_priority_max(SCHED_FIFO);
     sp.sched_priority = (maxPrio > 10) ? (maxPrio - 10) : maxPrio;
 
+    /* Within the user's rtprio limit, when there is one below our choice:
+       a limit of 50 (a common limits.d value) then still gets real-time
+       scheduling instead of a refusal. */
+    struct rlimit rl;
+    if (getrlimit(RLIMIT_RTPRIO, &rl) == 0 && rl.rlim_cur != RLIM_INFINITY
+        && rl.rlim_cur > 0 && rlim_t(sp.sched_priority) > rl.rlim_cur)
+        sp.sched_priority = int(rl.rlim_cur);
+
     int rc = pthread_setschedparam(pthread_self(), SCHED_FIFO, &sp);
     if (rc != 0)
+    {
         qWarning() << "MasterTimer: SCHED_FIFO real-time priority refused"
                    << "(" << strerror(rc) << ") - falling back to normal priority."
                    << "Usually needs CAP_SYS_NICE (setcap cap_sys_nice=eip on the"
                    << "binary) or an rtprio resource limit.";
+        sched = MasterTimer::SchedulingRefused;
+        text = QStringLiteral("SCHED_FIFO refused: %1").arg(QString::fromLocal8Bit(strerror(rc)));
+    }
     else
+    {
         qDebug() << "MasterTimer: SCHED_FIFO real-time priority set"
                  << "(priority" << sp.sched_priority << ")";
+        sched = MasterTimer::SchedulingRealtime;
+        text = QStringLiteral("SCHED_FIFO priority %1").arg(sp.sched_priority);
+    }
 }
 #else
 /* No known real-time scheduling mechanism on this platform -- ordinary
    thread priority is all we get. */
-static void setTimerThreadRealtime(int nsTickTime)
+static void setTimerThreadRealtime(int nsTickTime, MasterTimer::TimerScheduling &sched, QString &text)
 {
     Q_UNUSED(nsTickTime)
+    sched = MasterTimer::SchedulingNormal;
+    text = QStringLiteral("normal priority");
 }
 #endif
 
@@ -221,7 +250,10 @@ void MasterTimerPrivate::run()
     /* Must be done from inside the thread itself: the policy applies to the
        calling thread. setTimerThreadRealtime() is defined for every branch
        above (mac/Linux/other-unix no-op), so this call is unconditional. */
-    setTimerThreadRealtime(nsTickTime);
+    MasterTimer::TimerScheduling sched = MasterTimer::SchedulingNormal;
+    QString schedText;
+    setTimerThreadRealtime(nsTickTime, sched, schedText);
+    mt->setTimerScheduling(sched, schedText);
 
     /* Allocate this from stack here so that GCC doesn't have
        to do it every time implicitly when gettimeofday() is called */

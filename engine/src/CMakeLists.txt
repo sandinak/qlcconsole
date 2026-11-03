@@ -60,6 +60,7 @@ add_library(${module_name} SHARED
     ioplugincache.cpp ioplugincache.h
     keypadparser.cpp keypadparser.h
     mastertimer.cpp mastertimer.h
+    systemprobe.cpp systemprobe.h
     monitorproperties.cpp monitorproperties.h
     networkreport.cpp networkreport.h
     patchlabels.cpp patchlabels.h
@@ -266,6 +267,9 @@ if(APPLE)
     # ControllerKeepAlive's macOS side: App Nap, sleep/wake, Input Monitoring.
     target_sources(${module_name} PRIVATE controllerkeepalive_mac.mm)
     set_source_files_properties(controllerkeepalive_mac.mm PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
+    # SystemProbe's macOS side: Low Power Mode, the full-speed activity.
+    target_sources(${module_name} PRIVATE systemprobe_mac.mm)
+    set_source_files_properties(systemprobe_mac.mm PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
     target_link_libraries(${module_name} PUBLIC
         "-framework AudioToolbox"
         "-framework CoreAudio"

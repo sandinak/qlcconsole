@@ -74,6 +74,9 @@ private slots:
      *  and its output fades down over the time, to nothing. */
     void fadeAndStopAllFadesTheOutputThenStops();
 
+    /** The timer thread says how it is scheduled (Settings ▸ Performance) */
+    void theTimerSaysHowItIsScheduled();
+
 private:
     Doc* m_doc;
 };

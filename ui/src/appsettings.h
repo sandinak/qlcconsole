@@ -51,6 +51,9 @@ public:
     /** Open on the Advanced tab */
     void showAdvanced();
 
+    /** Open on the Performance tab (SystemTuningPage) */
+    void showPerformance();
+
 protected slots:
     void accept() override;
 
@@ -67,6 +70,8 @@ private:
     App *m_app;
     QTabWidget *m_tabs = nullptr;
     QWidget *m_advancedPage = nullptr;
+    /** Settings ▸ Performance (a SystemTuningPage) */
+    QWidget *m_performancePage = nullptr;
     /** Settings ▸ AI Assist (an AiSettingsPage; null without QLC_AI_ASSIST) */
     QWidget *m_aiPage = nullptr;
     // Advanced: the show's auto-open shutters (ShutterAutoOpen)

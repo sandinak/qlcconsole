@@ -227,6 +227,15 @@ the user an rtprio limit (for example `@audio - rtprio 95` in
 `/etc/security/limits.d/` and the user in `audio`), or the binary
 `cap_sys_nice`. The i7 container could not grant it at all.
 
+## Tuning your computer
+
+**Settings ▸ Performance** checks the computer a show runs on for what
+steadies the DMX timer (real-time scheduling, CPU governor, Wi-Fi power
+saving, Low Power Mode, the Windows power plan) and gives the command or
+steps for each; the app holds full speed itself during Operate (no App
+Nap / EcoQoS). The user guide is
+[docs/features/system-tuning.md](features/system-tuning.md).
+
 ## Keeping it fast
 
 The envelope above is a promise to anyone sizing a rig, so a measurable
