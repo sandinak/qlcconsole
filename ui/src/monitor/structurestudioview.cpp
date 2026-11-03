@@ -552,6 +552,43 @@ void StructureStudioView::setMaxFrameRate(int fps)
         m_liveTimer->setInterval(1000 / m_maxFps);
 }
 
+StructureStudioView::Camera StructureStudioView::camera() const
+{
+    Camera c;
+    c.plane = int(plane());
+    c.rotation = m_rotation;
+    c.azimuth = m_azimuthDeg;
+    c.elevation = m_elevationDeg;
+    c.zoomed = m_zoomed;
+    c.scale = m_scale;
+    c.origin = m_originPx;
+    c.width = width();
+    c.height = height();
+    return c;
+}
+
+void StructureStudioView::setCamera(const Camera &c)
+{
+    setPlane(Plane(qBound(0, c.plane, int(Back))));
+    setRotation(c.rotation);
+    setAngledView(c.azimuth, c.elevation);
+    if (c.zoomed && c.scale > 0.0)
+    {
+        // The zoom by hand: the same scale, and the same point in the middle.
+        m_zoomed = true;
+        m_scale = qBound(4.0, c.scale, 4000.0);
+        m_originPx = c.origin;
+        if (c.width > 0 && c.height > 0)
+            m_originPx += QPointF((width() - c.width) / 2.0, (height() - c.height) / 2.0);
+    }
+    else
+    {
+        m_zoomed = false;
+        refit();
+    }
+    update();
+}
+
 void StructureStudioView::setRotation(int quarterTurns)
 {
     const int r = ((quarterTurns % 4) + 4) % 4;

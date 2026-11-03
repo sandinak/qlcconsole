@@ -542,6 +542,7 @@ bool ShowTreeController::edit(const QString &label,
         normalizeLooks(work);
         resolveAllTimecodes(work);
         syncReusables(m_productions, work);
+        syncCueNotes(work);             // Q212: a cue's note is its first entry
         m_productions = work;
         m_batchChanged = true;
         return true;
@@ -556,12 +557,16 @@ bool ShowTreeController::edit(const QString &label,
 
     // A reusable's use edited: every use (P4).
     syncReusables(m_productions, work);
+    const int notesBefore = m_notes.count();
+    syncCueNotes(work);                 // Q212: a cue's note is its first entry
     m_productions = work;
     pushUndo(label, before);
 
     bake();
     m_doc->setModified();
     emit changed();
+    if (notesBefore != m_notes.count())
+        emit notesChanged();
     return true;
 }
 
@@ -591,6 +596,7 @@ void ShowTreeController::beginBatch(const QString &label)
     m_batchSets = m_groupSets;
     m_batchReusableLayers = m_reusableLayers;
     m_batchReusableCues = m_reusableCues;
+    m_batchNotes = m_notes;
     m_batchChanged = false;
 }
 
@@ -626,14 +632,17 @@ void ShowTreeController::endBatch(bool keep)
         m_groupSets = m_batchSets;
         m_reusableLayers = m_batchReusableLayers;
         m_reusableCues = m_batchReusableCues;
+        m_notes = m_batchNotes;
         bake();
         emit changed();
+        emit notesChanged();
         return;
     }
     pushUndo(m_batchLabel, m_batchBefore);
     bake();
     m_doc->setModified();
     emit changed();
+    emit notesChanged();
 }
 
 quint32 ShowTreeController::addProduction(const QString &name)
@@ -1212,6 +1221,11 @@ bool ShowTreeController::setCuesNeedsWork(const QList<quint32> &cueIds, bool on)
                 continue;
             c->needsWork = on;
             changed = true;
+            // Q212: an open note is what Needs work is; cleared, they are done.
+            if (!on)
+                for (Note &n : m_notes)
+                    if (n.kind == NoteKind::Cue && n.target == cueId)
+                        n.done = true;
         }
         return changed;
     });
@@ -4541,6 +4555,7 @@ void ShowTreeController::restoreSnapshot(const QByteArray &xml)
     }
     m_doc->setModified();
     emit changed();
+    emit notesChanged();
 }
 
 /****************************************************************************
@@ -5913,6 +5928,7 @@ void ShowTreeController::saveState(QXmlStreamWriter *doc, bool snapshot) const
         ShowTree::saveXML(doc, r);
     for (const Production &p : m_productions)
         ShowTree::saveXML(doc, p);
+    saveNotes(doc, snapshot);
 
     QList<quint32> inl = m_inlinePalettes.values();
     std::sort(inl.begin(), inl.end());
@@ -6004,6 +6020,7 @@ void ShowTreeController::loadState(QXmlStreamReader &root, bool snapshot)
     m_groupSets.clear();
     m_reusableLayers.clear();
     m_reusableCues.clear();
+    m_notes.clear();
     m_snapshotHasDetachedLists = false;
     m_snapshotDetachedLists.clear();
     const quint32 next = root.attributes().value(KXMLShowTreeNextId).toString().toUInt();
@@ -6041,6 +6058,17 @@ void ShowTreeController::loadState(QXmlStreamReader &root, bool snapshot)
             ReusableCue r;
             if (ShowTree::loadXML(root, r))
                 m_reusableCues << r;
+        }
+        else if (root.name() == QLatin1String("Notes"))
+        {
+            loadNotes(root);
+        }
+        else if (root.name() == QLatin1String("NoteImage"))
+        {
+            if (snapshot)
+                root.skipCurrentElement();
+            else
+                loadNoteImage(root);
         }
         else if (root.name() == QLatin1String("DetachedLists") && snapshot)
         {
@@ -6188,6 +6216,8 @@ void ShowTreeController::loadState(QXmlStreamReader &root, bool snapshot)
     }
 
     // Ids above anything in the tree, whatever the file said.
+    for (const Note &n : m_notes)
+        m_nextId = qMax(m_nextId, n.id + 1);
     for (const GroupSet &gs : m_groupSets)
         m_nextId = qMax(m_nextId, gs.id + 1);
     for (const ReusableLayer &r : m_reusableLayers)
@@ -6232,6 +6262,8 @@ bool ShowTreeController::loadXML(QXmlStreamReader &root)
     }
     reset();
     loadState(root, false);
+    // Q212: an older show's cue notes (and Needs work) become entries.
+    syncCueNotes(m_productions);
     if (production(m_current) == nullptr)
         m_current = invalidId();
     applyProductionTimecode();
@@ -6243,7 +6275,7 @@ void ShowTreeController::saveXML(QXmlStreamWriter *doc) const
 {
     if (m_productions.isEmpty() && m_generatedScenes.isEmpty() && m_generatedCollections.isEmpty()
         && m_generatedChasers.isEmpty() && m_inlinePalettes.isEmpty() && m_groupSets.isEmpty()
-        && m_reusableLayers.isEmpty() && m_reusableCues.isEmpty())
+        && m_reusableLayers.isEmpty() && m_reusableCues.isEmpty() && m_notes.isEmpty())
         return;     // a show without a tree saves as it always did
     saveState(doc, false);
 }
@@ -6303,6 +6335,9 @@ void ShowTreeController::reset()
     m_undo.clear();
     m_redo.clear();
     m_snapshotRemap.clear();
+    m_notes.clear();
+    m_batchNotes.clear();
+    m_noteImages.clear();
     m_nextId = 1;
     m_current = invalidId();
     applyProductionTimecode();

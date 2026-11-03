@@ -10,6 +10,22 @@ under `~/.claude/.../memory/`.
 
 ---
 
+## Notes beside the Show Tree (Q212, notes, 2026-11-03) — built, leftovers
+
+Notes pane under the cue page (follows the tree row or a Library palette),
+dated entries with author, open/done, Snapshot the view (Rig Overview
+camera + ~480 px JPEG + cue on stage) and Show me; ✎ marks on rows with the
+newest note on hover; All notes… with filters, jump, Print and Export
+(PDF / Markdown). Cue note = first entry; Needs work = an open note.
+docs/features/show-tree.md#notes. Leftovers:
+- Palettes in the Library carry no ✎ mark yet (their notes show in the
+  pane and the list).
+- No notes on a reusable layer or cue, a group set or a section row.
+- The cue sheet and the web remote still show only the cue's own note,
+  not the other entries.
+- Pictures are kept in memory for the session (undo can bring a snapshot
+  back); only those a note uses are saved.
+
 ## Area cover: an Aim at an Area covers it (Q209, areacover, 2026-11-03) — built
 
 Zones by where the lights hang (least-squares match of x and depth key to

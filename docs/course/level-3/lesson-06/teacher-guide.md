@@ -210,6 +210,10 @@ On the theatre's rig, with the real movers patched:
   fixes zoom or aim as in Focus this cue, and holds **Y** to tag a cue
   **Needs work** that the pad can't fix. Afterwards the laptop student
   finds the tagged cues in the Show Tree.
+  A tag says *that* a cue needs work; a tech note says *what*. Have the
+  laptop student write it in the notes pane under the cue page, with
+  **Snapshot the view** so the note keeps what the rig looked like, then
+  work through **All notes…** filtered to **Open**, ticking each one done.
   Two fixes need **LB held**. LB + LT / RT sets the level. LB + the
   sticks zeroes a light that misses its target in every cue, because it
   hangs twisted. Fixing the light once is better than fixing each cue:

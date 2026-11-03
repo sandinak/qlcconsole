@@ -116,6 +116,26 @@ public:
     double angledAzimuth() const { return m_azimuthDeg; }
     double angledElevation() const { return m_elevationDeg; }
 
+    /** Everything that says where the eye is (Q212, a note's "snapshot the
+     *  view"): the plane, the quarter turns, the angled camera, and the zoom
+     *  and pan when set by hand (else the view fits the rig). @a width /
+     *  @a height are the view's size then: restored into a view of another
+     *  size, the same point stays in the middle. */
+    struct Camera
+    {
+        int plane = Angled;
+        int rotation = 0;
+        double azimuth = 20.0;
+        double elevation = 30.0;
+        bool zoomed = false;
+        double scale = 60.0;
+        QPointF origin;
+        int width = 0;
+        int height = 0;
+    };
+    Camera camera() const;
+    void setCamera(const Camera &camera);
+
     /** True when the current plane cannot be edited in (see Plane::Angled). */
     bool isViewOnly() const { return m_plane == Angled; }
 
