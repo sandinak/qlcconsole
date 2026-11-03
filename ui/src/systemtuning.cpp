@@ -32,6 +32,7 @@ namespace
 {
 SystemTuning *s_instance = nullptr;
 
+#if defined(Q_OS_LINUX)
 QString readLine(const QString &path)
 {
     QFile f(path);
@@ -40,6 +41,7 @@ QString readLine(const QString &path)
     /* device-tree strings end in a NUL */
     return QString::fromUtf8(f.readAll()).remove(QChar(0)).trimmed();
 }
+#endif
 }
 
 /****************************************************************************
