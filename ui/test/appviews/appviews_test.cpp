@@ -18,6 +18,7 @@
 */
 
 #include <QDockWidget>
+#include <QStatusBar>
 #include <QListWidget>
 #include <QShortcut>
 #include <QtTest>
@@ -4382,4 +4383,162 @@ void AppViews_Test::aLoadedTeachingShowOpensInOperateWithoutAsking()
     m_app->slotLoadDocFromMemory(saved);
     QTest::qWait(60);
     QVERIFY(!boxed);
+}
+
+/* The footer's stage chip (CHANGELOG [Unreleased]): one item that always says what lights
+   the stage -- a cue list running (LIVE), Blind (the stage holds what it had), the Build
+   look, nothing, and the holds (Blackout, Teaching). Driven from the engine's signals:
+   a list started, stopped, Blind toggled. With QLC_SHOT_DIR set it also saves the footer
+   at the three sizes (QLC_SHOT_PREFIX before|after) for the visual check. */
+void AppViews_Test::theFooterSaysWhatLightsTheStage()
+{
+    Doc *doc = m_app->m_doc;
+    ShowTreeController *st = doc->showTree();
+    QList<quint32> fixtures, functions;
+    QList<quint32> groups, palettes;
+    quint32 prod = ShowTree::invalidId();
+    const int oldTheme = m_app->theme();
+    const QSize oldSize = m_app->size();
+    auto tidy = qScopeGuard([&]() {
+        doc->teachingSettings()->setEnabled(false);
+        doc->inputOutputMap()->setBlackout(false);
+        doc->inputOutputMap()->setOutputInhibited(false);
+        m_app->setBlindView(false);
+        st->stopPreview();
+        doc->setMode(Doc::Design);
+        doc->masterTimer()->stopAllFunctions();
+        if (prod != ShowTree::invalidId())
+            st->removeProduction(prod);
+        takeAway(doc, fixtures, functions);
+        for (quint32 g : groups)
+            doc->deleteFixtureGroup(g);
+        for (quint32 p : palettes)
+            doc->deletePalette(p);
+        m_app->hideViewNotice();
+        m_app->setTheme(oldTheme);
+        m_app->resize(oldSize);
+        QTRY_COMPARE_WITH_TIMEOUT(doc->masterTimer()->runningFunctions(), 0, 5000);
+        if (const QTimer *sweep = st->findChild<QTimer *>(QString(), Qt::FindDirectChildrenOnly))
+            QTRY_VERIFY_WITH_TIMEOUT(!sweep->isActive(), 5000);
+        QCoreApplication::processEvents();
+    });
+    QVERIFY(litScene(doc, 240, 1, &fixtures, &functions) != nullptr);
+    FixtureGroup *g = new FixtureGroup(doc);
+    g->setName("Stage");
+    doc->addFixtureGroup(g);
+    g->assignFixture(fixtures.first());
+    groups << g->id();
+    QLCPalette *full = new QLCPalette(QLCPalette::Dimmer, doc);
+    full->setName("Full");
+    full->setValue(255);
+    doc->addPalette(full);
+    palettes << full->id();
+    prod = st->addProduction("Chip");
+    const quint32 listId = st->addCueList(prod, "Act 1", ShowTree::ListMode::NonTracking);
+    const quint32 c1 = st->addCue(listId, -1, "Verse");
+    ShowTree::Target t;
+    t.groups << g->id();
+    st->setLayerLook(c1, st->addLayer(c1, t), st->lookForPalette(full->id()));
+    st->setCurrentProduction(prod);
+    Chaser *list = qobject_cast<Chaser *>(doc->function(st->cueList(listId)->chaser));
+    QVERIFY(list != nullptr);
+    doc->showControl()->setMainCueList(list->id());
+    doc->setMode(Doc::Design);
+    m_app->hideViewNotice();
+    m_app->m_operateOffered = true;
+
+    QToolButton *chip = m_app->findChild<QToolButton *>(QStringLiteral("footerStage"));
+    QVERIFY(chip != nullptr);
+    QCOMPARE(chip, m_app->m_statusStage);
+
+    // The sizes the visual check looks at (the window's minimum, a laptop, wide), dark theme.
+    const QByteArray shotDir = qgetenv("QLC_SHOT_DIR");
+    const QString prefix = qEnvironmentVariable("QLC_SHOT_PREFIX", QStringLiteral("after"));
+    m_app->setTheme(qEnvironmentVariableIsSet("QLC_SHOT_LIGHT") ? App::ThemeDefault : App::ThemeVSCodeDark);
+    m_app->show();
+    auto shots = [&](const QString &state) {
+        if (shotDir.isEmpty())
+            return;
+        QDir().mkpath(QString::fromLocal8Bit(shotDir));
+        const QList<QPair<QSize, QString> > sizes = { { QSize(1024, 640), "1024x640" },
+                                                      { QSize(1280, 800), "1280x800" },
+                                                      { QSize(1920, 1080), "1920x1080" } };
+        for (const auto &sz : sizes)
+        {
+            m_app->resize(sz.first);
+            for (int i = 0; i < 5; ++i)
+                QCoreApplication::processEvents();
+            const QString base = QString::fromLocal8Bit(shotDir) + QStringLiteral("/%1-%2-%3")
+                                     .arg(prefix, state, sz.second);
+            m_app->grab().save(base + QStringLiteral(".png"));
+            m_app->statusBar()->grab().save(base + QStringLiteral("-footer.png"));
+        }
+    };
+    // Nothing running, nothing built.
+    QVERIFY(!chip->isHidden());
+    QVERIFY(m_app->m_stage == App::Stage::NoList);
+    QVERIFY(chip->text() == QStringLiteral("Stage: no cue list"));
+    shots("nolist");
+
+    // The Workbench / Show Tree preview is what is on: the Build look.
+    st->previewCue(c1);
+    QVERIFY(m_app->m_stage == App::Stage::BuildLook);
+    QVERIFY(chip->text() == QStringLiteral("Stage: Build look"));
+    shots("buildlook");
+    st->stopPreview();
+    QVERIFY(m_app->m_stage == App::Stage::NoList);
+
+    // A cue list starts for real: LIVE, with the list and the cue.
+    m_app->m_cueGoAction->trigger();
+    QTRY_VERIFY_WITH_TIMEOUT(list->isRunning() && list->currentStepIndex() == 0, 5000);
+    QTRY_VERIFY_WITH_TIMEOUT(m_app->m_stage == App::Stage::Live, 5000);
+    QCOMPARE(chip->text(), QString::fromUtf8("\xe2\x97\x8f LIVE \xc2\xb7 Act 1 \xc2\xb7 1 Verse"));
+    QVERIFY(chip->toolTip().contains("lights the stage"));
+    shots("live");
+
+    // Blind (Operate's Blind view): the stage holds the cue while the screens show the edit.
+    doc->setMode(Doc::Operate);
+    m_app->setBlindView(true);
+    QVERIFY(m_app->m_stage == App::Stage::BlindView);
+    QVERIFY(chip->text() == QString::fromUtf8("BLIND \xc2\xb7 stage holds 1 Verse"));
+    shots("blind");
+    m_app->setBlindView(false);
+    QVERIFY(m_app->m_stage == App::Stage::Live);
+
+    // The list stops: back to nothing.
+    doc->masterTimer()->stopAllFunctions();
+    QTRY_VERIFY_WITH_TIMEOUT(!list->isRunning(), 5000);
+    QTRY_VERIFY_WITH_TIMEOUT(m_app->m_stage == App::Stage::NoList, 5000);
+    m_app->setBlindView(true);
+    QVERIFY(chip->text() == QString::fromUtf8("BLIND \xc2\xb7 stage: no cue list"));
+    m_app->setBlindView(false);
+    doc->setMode(Doc::Design);
+
+    // Design's Blind mutes the rig.
+    doc->inputOutputMap()->setOutputInhibited(true);
+    QVERIFY(m_app->m_stage == App::Stage::BlindMuted);
+    QVERIFY(chip->text() == QString::fromUtf8("BLIND \xc2\xb7 rig muted"));
+    shots("muted");
+    doc->inputOutputMap()->setOutputInhibited(false);
+
+    // Blackout and Teaching's output hold say so too.
+    doc->inputOutputMap()->setBlackout(true);
+    QVERIFY(m_app->m_stage == App::Stage::Blackout);
+    shots("blackout");
+    doc->inputOutputMap()->setBlackout(false);
+    doc->teachingSettings()->setEnabled(true);
+    QVERIFY(m_app->m_stage == App::Stage::Held);
+    QVERIFY(chip->text().startsWith(QStringLiteral("HELD")));
+    shots("held");
+    doc->teachingSettings()->setEnabled(false);
+    QVERIFY(m_app->m_stage == App::Stage::NoList);
+
+    // A long cue name shortens to the room, the tooltip keeps it whole.
+    m_app->resize(1024, 640);
+    QVERIFY(st->renameNode(c1, QString(120, 'x')));
+    m_app->m_cueGoAction->trigger();
+    QTRY_VERIFY_WITH_TIMEOUT(m_app->m_stage == App::Stage::Live, 5000);
+    QVERIFY(chip->text().endsWith(QString::fromUtf8("\xe2\x80\xa6")));
+    QVERIFY(chip->sizeHint().width() <= m_app->width() / 5 + 16);
+    QVERIFY(chip->toolTip().contains(QString(120, 'x')));
 }

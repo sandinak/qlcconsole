@@ -124,6 +124,8 @@ private:
 protected:
     /** Clicking the status-bar MTC chip opens the timecode-bind menu. */
     bool eventFilter(QObject *watched, QEvent *event) override;
+    /** The stage chip shortens its cue to the room the footer has. */
+    void resizeEvent(QResizeEvent *event) override;
 
 public slots:
     /** Help > Troubleshooting > Copy Layout Report (LayoutDiagnostics). */
@@ -656,7 +658,17 @@ private:
     QElapsedTimer m_blindMotionClock;
     /** The cue in edit's levels, without its effects, and any override hit live over them (blindLevels()). */
     QHash<quint32, QByteArray> m_blindLevels;
-    QLabel *m_statusBlindLabel = nullptr;
+    /** The footer's "what lights the stage" chip (docs/features/show-tree.md, Stage chip). */
+    QToolButton *m_statusStage = nullptr;
+    QString m_stageStyle;
+    /** The state the stage chip says now (updateStageIndicator()). */
+    enum class Stage { NoList, BuildLook, Live, BlindView, BlindMuted, Blackout, Held };
+    Stage m_stage = Stage::NoList;
+    /** The chip's full, unelided text, its tooltip and state, from the engine's state as it is
+     *  now; called when a list starts, stops or steps, on Blind, Blackout, Teaching and mode
+     *  changes -- never per frame. */
+    QString stageIndicatorText(Stage *stage = nullptr, QString *tip = nullptr) const;
+    void updateStageIndicator();
 public slots:
     /** Footer Grand Master fader moved by the user. */
     void slotFooterGrandMasterMoved(int value);
@@ -1076,7 +1088,6 @@ private:
     QLabel* m_statusProgrammerLabel;
     QLabel* m_statusSelectionLabel;
     QLabel* m_statusPadModeLabel;
-    QLabel* m_statusBlackoutLabel;
     /** Rig network transmit gate: red while network output is held because
      *  this machine is not on the show's rig network, amber when the show
      *  has none set or the check is off/lifted. Click opens the setting. */
