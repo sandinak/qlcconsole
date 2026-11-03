@@ -103,9 +103,17 @@ namespace
         // The mask's light, clipped to the disc, in warm white.
         QImage light(n, n, QImage::Format_ARGB32_Premultiplied);
         light.fill(QColor(255, 244, 214));
-        QImage alpha = mask.scaled(n, n, Qt::IgnoreAspectRatio, Qt::SmoothTransformation)
-                           .convertToFormat(QImage::Format_Alpha8);
-        light.setAlphaChannel(alpha);
+        const QImage gray = mask.scaled(n, n, Qt::IgnoreAspectRatio, Qt::SmoothTransformation)
+                                .convertToFormat(QImage::Format_Grayscale8);
+        for (int y = 0; y < n; ++y)
+        {
+            QRgb *row = reinterpret_cast<QRgb *>(light.scanLine(y));
+            for (int x = 0; x < n; ++x)
+            {
+                const int a = gray.constScanLine(y)[x];       // light through: 255
+                row[x] = qPremultiply(qRgba(255, 244, 214, a));
+            }
+        }
         QPainterPath disc;
         disc.addEllipse(QRectF(2, 2, n - 4, n - 4));
         p.setClipPath(disc);
