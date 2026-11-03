@@ -295,6 +295,10 @@ EffectDesigner::EffectDesigner(Doc *doc, QWidget *parent)
     m_hint->setObjectName(QStringLiteral("edHint"));
     m_hint->setWordWrap(true);
     m_hint->setStyleSheet(QStringLiteral("color: palette(mid);"));
+    // Two lines at the designer's narrowest: the window's minimum counts one
+    // (a wrapped label's minimum is its widest), and the second came out of
+    // the browser's list.
+    m_hint->setMinimumHeight(2 * m_hint->fontMetrics().lineSpacing());
     v->addWidget(m_hint);
 
     connect(m_cancelBtn, &QPushButton::clicked, this, &EffectDesigner::cancel);
