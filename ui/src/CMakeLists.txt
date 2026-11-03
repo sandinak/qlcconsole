@@ -256,6 +256,7 @@ add_library(${module_name}
     showstatusdialog.cpp showstatusdialog.h
     showreviewpanel.cpp showreviewpanel.h showreviewmarker.cpp showreviewmarker.h
     showdifferencesdialog.cpp showdifferencesdialog.h
+    unsavedchangesdialog.cpp unsavedchangesdialog.h
     showsettingsdialog.cpp showsettingsdialog.h
     definitionupdatesdialog.cpp definitionupdatesdialog.h
     simpledesk.cpp simpledesk.h

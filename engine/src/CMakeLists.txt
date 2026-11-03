@@ -64,6 +64,7 @@ add_library(${module_name} SHARED
     monitorproperties.cpp monitorproperties.h
     networkreport.cpp networkreport.h
     patchlabels.cpp patchlabels.h
+    changejournal.cpp changejournal.h
     paletteops.cpp paletteops.h
     palettenaming.cpp palettenaming.h
     patchlist.cpp patchlist.h

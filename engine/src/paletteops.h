@@ -166,6 +166,17 @@ public:
      * Undo: one palette stack, shared by both tabs (P-D14)
      ************************************************************************/
 public:
+    /** The undo steps, oldest first: what the footer's "Unsaved changes"
+     *  lists (ChangeJournal). The palette, function or scene a step was
+     *  about is invalid when it has none. */
+    struct StepInfo
+    {
+        quint64 stamp = 0;
+        QString label;
+        quint32 paletteId = 0xFFFFFFFF;
+        quint32 functionId = 0xFFFFFFFF;
+    };
+    QList<StepInfo> undoSteps() const;
     bool canUndo() const { return !m_undo.isEmpty(); }
     bool canRedo() const { return !m_redo.isEmpty(); }
     QString undoText() const;
