@@ -482,7 +482,8 @@ const QList<Known> &knownIssues()
         // L7: Create groups / Head types at their minimum: the preview / LED map cut
         // or over its caption.
         { "Create groups", "min", "GroupPreviewWidget", "TODO layoutsanity L7" },
-        { "Head types", "min", "ledMapGrid", "TODO layoutsanity L7" },
+        // (Linux fonts: the order strip below it cut instead.)
+        { "Head types", "min", "LedLayoutEditor#ledLayoutEditor", "TODO layoutsanity L7" },
         // L8: the scene's group looks panel at its own minimum: the Edge/Speed row
         // over the Targets/Looks captions.
         { "Scene group looks", "min", "overlap", "TODO layoutsanity L8" },

@@ -33,7 +33,8 @@ one, then delete its row there. At 1280x800 and 1920x1080 only L1 shows.
   (Lesson, Handout link) squeezed to 5 px; the word-wrapped PIN text takes
   their height. Needs a minimum width (or a heightForWidth-aware layout).
 - **L7** Create groups / Head types at their minimum: the group preview cut
-  off, the LED map over its "16 × RGB 16 × W" caption.
+  off, the LED map over its "16 × RGB 16 × W" caption (on Linux, its
+  order strip cut instead).
 - **L8** Scene group looks at its own minimum (~341x184): the Edge/Speed
   row over the Targets/Looks captions and the targets list.
 
