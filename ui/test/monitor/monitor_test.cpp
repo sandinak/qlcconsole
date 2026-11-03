@@ -65,6 +65,7 @@
 #include "../../../engine/test/common/stdprelude.h"
 #define protected public
 #define private public
+#include "showstatus.h"
 #include "monitor.h"
 #include "fixturefields.h"
 #include "righeads.h"
@@ -29370,4 +29371,39 @@ void Monitor_Test::aRigOffScreenIsNotRedrawn()
     u[0] = char(1);
     fx->setChannelValues(u);
     QVERIFY(!inner.liveTick());
+}
+
+void Monitor_Test::aBuriedLightIsRingedOnThePlot()
+{
+    Doc *doc = new Doc(this);
+    Fixture *fx = makeMover(doc, 14.0, 0, "UST-2", QVector3D(2.0f, 3.0f, 0.0f));
+    QVERIFY(fx != nullptr);
+    Fixture *other = makeMover(doc, 14.0, 20, "UST-3", QVector3D(4.0f, 3.0f, 0.0f));
+    QWidget parent;
+    Monitor *mon = new Monitor(&parent, doc);
+    MonitorGraphicsView *gv = mon->findChild<MonitorGraphicsView *>();
+    QVERIFY(gv != nullptr);
+    gv->addFixture(fx->id(), QPointF(2000.0, 3000.0));
+    gv->addFixture(other->id(), QPointF(4000.0, 3000.0));
+    MonitorFixtureItem *item = gv->fixtureItemForId(fx->id());
+    QVERIFY(item != nullptr);
+    QVERIFY(!item->isBuried());
+
+    // The footer entry is the single source: ringed when it names the light...
+    ShowStatus::instance()->setStatus("fixtures.buried", ShowStatus::Error, "UST-2 is inside Deck SR",
+                                      QString(), QStringList() << "UST-2", QVariantList() << fx->id());
+    QVERIFY(item->isBuried());
+    QVERIFY(!gv->fixtureItemForId(other->id())->isBuried());
+    QCOMPARE(gv->buriedFixtures(), QList<quint32>() << fx->id());
+    // ...and it paints (the ring is drawn without trouble).
+    QImage img(120, 120, QImage::Format_ARGB32);
+    img.fill(Qt::black);
+    QPainter painter(&img);
+    QStyleOptionGraphicsItem opt;
+    item->paint(&painter, &opt, nullptr);
+    painter.end();
+    // ...clean again when the footer entry clears.
+    ShowStatus::instance()->clearStatus("fixtures.buried");
+    QVERIFY(!item->isBuried());
+    delete doc;
 }

@@ -121,6 +121,19 @@ the same speed (see [Lighting Studio](lighting-studio.md#heads-travel-at-their-r
 - **FIX-08** A light marked dead at the applied venue that a cue, hit or
   scene still lights.
 - **FIX-14** Two fixtures with one name.
+- **FIX-15** A light buried in the stage: its body (the Physical Dimensions
+  box the rig view draws) is inside a deck, riser or step with a solid top.
+  Says *"UST-2 is inside Deck SR. Sit it on Deck SR (0.61 m)."* The same
+  problem is an **error in the footer** (`fixtures.buried`: "UST-2 is inside
+  Deck SR", with **Sit on Top** and **Show**), and the light is ringed red
+  with a "!" on the plot. Sit on Top makes it stand on the deck (a deck
+  mount, so it follows the deck when the deck moves or grows); a light that
+  overhangs an edge with its middle off the deck is told to move clear
+  instead. Not flagged: a light clamped to a truss, pipe, tower or hanger,
+  or in a studio group (the structure places it); a light standing on or
+  bolted to that deck; a deck with a Clear or Open top (lights go inside
+  those on purpose); and a body that only touches or sinks less than 3 cm.
+  It re-reads a moment after any edit.
 
 **Palettes and looks**
 

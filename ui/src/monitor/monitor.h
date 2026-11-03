@@ -252,6 +252,8 @@ public:
     void showFocusGhost(quint32 fid, const QVector3D &point, const QString &label, bool on = true);
     /** Badge the lights that need focus in the venue applied (Q133). */
     void refreshNeedsFocus();
+    /** Ring the lights the footer says are buried in the stage (FIX-15). */
+    void refreshBuried();
     /** Open Focus mode (FocusModePanel) on the selected scene and the heads
      *  selected on the plot or in the programmer. */
     void openFocusMode();

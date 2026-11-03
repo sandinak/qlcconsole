@@ -24,6 +24,9 @@
 #include "qlcfile.h"
 #include <QShortcut>
 #include "scenetransition.h"
+#include "placementcheck.h"
+#include "stageplatform.h"
+#include "monitorproperties.h"
 #include <QSpinBox>
 #include <QSlider>
 #include <QToolButton>
@@ -1715,6 +1718,82 @@ void ProgrammingManager_Test::theReadinessDialogFixesWhatIsSelected()
     status->clearStatus("test.fixable");
     status->clearStatus("test.unfixable");
     status->setAction("test.fixable", QString(), ShowStatus::Action());
+}
+
+/* FIX-15 in the footer: a light inside a deck is an ERROR that names it and
+   the deck; sitting it on the top, or the deck moving away, clears it. */
+void ProgrammingManager_Test::aBuriedLightIsAFooterErrorUntilItIsFixed()
+{
+    auto entry = [](const QString &key) {
+        foreach (const ShowStatus::Entry &e, ShowStatus::instance()->allEntries())
+            if (e.key == key)
+                return e;
+        return ShowStatus::Entry();
+    };
+    MonitorProperties *mp = m_doc->monitorProperties();
+    StagePlatform *pl = mp->addPlatform();
+    pl->setName("Deck SR");
+    pl->setOriginX(2.0f);
+    pl->setOriginY(2.0f);
+    pl->setWidth(2.4f);
+    pl->setDepth(1.2f);
+    pl->setHeight(0.61f);
+    Fixture *fx = new Fixture(m_doc);
+    fx->setName("UST-2");
+    fx->setChannels(1);
+    fx->setUniverse(0);
+    fx->setAddress(0);
+    fx->setPatched(true);
+    QVERIFY(m_doc->addFixture(fx));
+    mp->setFixturePosition(fx->id(), 0, 0, QVector3D(2300.0f, 2300.0f, 0.0f));
+    FixtureRigProps rp = mp->fixtureRigProps(fx->id());
+    rp.mountingType = Truss::FloorMounted;
+    rp.studioMount = 0;
+    mp->setFixtureRigProps(fx->id(), rp);
+
+    AppUtil::updatePlacementStatus(m_doc);
+    ShowStatus::Entry e = entry("fixtures.buried");
+    QCOMPARE(e.severity, ShowStatus::Error);
+    QCOMPARE(e.summary, QString("UST-2 is inside Deck SR"));
+    QCOMPARE(e.itemData, (QVariantList{ fx->id() }));
+    QVERIFY2(e.items.first().contains("Sit it on Deck SR (0.61 m)"), qPrintable(e.items.first()));
+    // The footer's worst entry is this error.
+    QCOMPARE(ShowStatus::instance()->worst().key, QString("fixtures.buried"));
+
+    // The deck moves away: gone.
+    pl->setOriginX(8.0f);
+    AppUtil::updatePlacementStatus(m_doc);
+    QVERIFY(entry("fixtures.buried").key.isEmpty());
+    // ...and back: there again; sit it on the top: gone.
+    pl->setOriginX(2.0f);
+    AppUtil::updatePlacementStatus(m_doc);
+    QCOMPARE(entry("fixtures.buried").severity, ShowStatus::Error);
+    QVERIFY(PlacementCheck::fix(m_doc, PlacementCheck::check(m_doc, fx->id())));
+    AppUtil::updatePlacementStatus(m_doc);
+    QVERIFY(entry("fixtures.buried").key.isEmpty());
+
+    // Two buried: a count, and both listed.
+    Fixture *b = new Fixture(m_doc);
+    b->setName("UST-5");
+    b->setChannels(1);
+    b->setUniverse(0);
+    b->setAddress(5);
+    b->setPatched(true);
+    QVERIFY(m_doc->addFixture(b));
+    mp->setFixturePosition(b->id(), 0, 0, QVector3D(3000.0f, 2300.0f, 0.0f));
+    FixtureRigProps rb = mp->fixtureRigProps(b->id());
+    rb.mountingType = Truss::FloorMounted;
+    rb.studioMount = 0;
+    mp->setFixtureRigProps(b->id(), rb);
+    mp->setFixturePosition(fx->id(), 0, 0, QVector3D(2300.0f, 2300.0f, 0.0f));
+    FixtureRigProps ra = mp->fixtureRigProps(fx->id());
+    ra.deckPlatformId = FixtureRigProps::invalidPlatformId();
+    mp->setFixtureRigProps(fx->id(), ra);
+    AppUtil::updatePlacementStatus(m_doc);
+    e = entry("fixtures.buried");
+    QCOMPARE(e.items.count(), 2);
+    QCOMPARE(e.summary, QString("2 light(s) are inside the stage"));
+    ShowStatus::instance()->clearStatus("fixtures.buried");
 }
 
 /* Address clashes, names used twice, and universes with fixtures but no

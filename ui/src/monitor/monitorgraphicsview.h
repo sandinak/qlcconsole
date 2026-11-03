@@ -854,6 +854,9 @@ public:
     void markUnsavedFixtures(const QList<quint32> &ids);
     /** Board Q133: badge the lights that need focus in this venue. */
     void markNeedsFocusFixtures(const QList<quint32> &ids);
+    /** FIX-15: the lights buried in the stage (a red ring and "!"). */
+    void markBuriedFixtures(const QList<quint32> &ids);
+    QList<quint32> buriedFixtures() const;
     /** The lights badged so (tests). */
     QList<quint32> needsFocusFixtures() const;
     /** Focus mode's ghost (Q126): a dashed ring where the head would land

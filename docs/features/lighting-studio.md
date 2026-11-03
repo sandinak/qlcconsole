@@ -338,7 +338,10 @@ drapes):
   (translucent, so fixtures mounted inside show through), or Open (no top
   face at all). Platforms can stack on top of each other, deriving their
   base height automatically, and collide realistically so dragging one
-  doesn't scramble the pile underneath it.
+  doesn't scramble the pile underneath it. A light whose body ends up
+  inside a Solid-topped platform (a floor light at height 0 in a riser) is
+  a footer **error** ringed red on the plot; **Sit on Top** stands it on the
+  deck (Show Review FIX-15, see [Show Review](show-review.md)).
   - **Steps** are a platform with a Steps shape: a staircase with a step
     count, rise, run, step width, and which way it climbs (upstage,
     downstage, stage left, stage right). **Add → Add Steps** gives two

@@ -47,7 +47,9 @@
 #include <lmcons.h>
 #endif
 
+#include "placementcheck.h"
 #include "apputil.h"
+#include "placementcheck.h"
 #include "showreview.h"
 #include <QSet>
 #include "qlcfile.h"
@@ -461,6 +463,35 @@ bool AppUtil::refuseTakenFixtureName(QWidget *parent, Doc *doc, quint32 fid, con
     return true;
 }
 
+void AppUtil::updatePlacementStatus(Doc *doc)
+{
+    if (doc == NULL)
+        return;
+    ShowStatus *status = ShowStatus::instance();
+    /* A light whose body is inside a deck, riser or step (FIX-15): an error,
+       since it is hidden and its beam starts in the set. */
+    QStringList items;
+    QVariantList ids;
+    QString first;
+    foreach (const PlacementCheck::Buried &b, PlacementCheck::buried(doc))
+    {
+        items << PlacementCheck::problemText(doc, b) + QStringLiteral(" — ") + PlacementCheck::fixText(doc, b);
+        ids << b.fixtureId;
+        if (first.isEmpty())
+            first = PlacementCheck::problemText(doc, b);
+    }
+    if (items.isEmpty())
+        status->clearStatus("fixtures.buried");
+    else
+        status->setStatus("fixtures.buried", ShowStatus::Error,
+            items.count() == 1 ? first
+                : QCoreApplication::translate("AppUtil", "%n light(s) are inside the stage", "", items.count()),
+            QCoreApplication::translate("AppUtil", "A light sunk into a deck, riser or step cannot "
+                                        "be seen and its beam starts inside it. Sit it on the top, "
+                                        "or move it clear."),
+            items, ids);
+}
+
 void AppUtil::updateFixtureReadiness(Doc *doc)
 {
     if (doc == NULL)
@@ -589,6 +620,8 @@ void AppUtil::updateFixtureReadiness(Doc *doc)
                                             "one and gives the others \"#2\", \"#3\"..."),
                 items, names);
     }
+
+    updatePlacementStatus(doc);
 
     /* Definition files that could not be read: missing from the library. */
     {

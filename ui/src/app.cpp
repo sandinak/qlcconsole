@@ -38,6 +38,7 @@
   #include <unistd.h>
 #endif
 
+#include "placementcheck.h"
 #include "functionliveeditdialog.h"
 #include "inputoutputmanager.h"
 #include "functionselection.h"
@@ -1258,6 +1259,19 @@ void App::initDoc()
     connect(m_doc, &Doc::fixtureRemoved, fixtureReadiness, recheckFixtures);
     connect(m_doc, &Doc::fixtureChanged, fixtureReadiness, recheckFixtures);
     connect(m_doc, &Doc::loaded, fixtureReadiness, recheckFixtures);
+
+    /* A light buried in the stage (FIX-15): re-read a moment after any edit
+       (a deck moved, a light dragged), never per frame. */
+    QTimer *placementCheck = new QTimer(this);
+    placementCheck->setObjectName(QStringLiteral("placementCheckTimer"));
+    placementCheck->setSingleShot(true);
+    placementCheck->setInterval(300);
+    connect(placementCheck, &QTimer::timeout, this, [this]() {
+        AppUtil::updatePlacementStatus(m_doc);
+    });
+    connect(m_doc, &Doc::modified, placementCheck, [placementCheck]() { placementCheck->start(); });
+    connect(m_doc->monitorProperties(), &MonitorProperties::rigPropsChanged, placementCheck,
+            [placementCheck]() { placementCheck->start(); });
     /* Definitions of the user's older than the current version of the same
        fixture: checked when a show has loaded (which of them it uses). */
     connect(m_doc, &Doc::loaded, this, [this]() {
@@ -1369,6 +1383,24 @@ void App::initDoc()
                 names << v.toString();
             m_doc->makeFixtureNamesUnique(names);
             AppUtil::updateFixtureReadiness(m_doc);
+        });
+    /* A light buried in the stage (FIX-15): sit it on the top, or look at it. */
+    ShowStatus::instance()->setAction("fixtures.buried", tr("Sit on Top"),
+        [this](QWidget *, const QVariantList &items) {
+            foreach (const QVariant &v, items)
+                PlacementCheck::fix(m_doc, PlacementCheck::check(m_doc, v.toUInt()));
+            if (Monitor::instance() != NULL)
+                Monitor::instance()->refreshBuried();
+            AppUtil::updateFixtureReadiness(m_doc);
+        });
+    ShowStatus::instance()->addAction("fixtures.buried", tr("Show"),
+        [this](QWidget *, const QVariantList &items) {
+            QList<quint32> ids;
+            foreach (const QVariant &v, items)
+                ids << v.toUInt();
+            showContext(tr("Lighting Studio"));
+            if (Monitor::instance() != NULL)
+                Monitor::instance()->highlightFixtures(ids);
         });
     /* Opened in the fixture editor, which says where the file breaks and
        offers repairs; saved there, it is watched and loads. */

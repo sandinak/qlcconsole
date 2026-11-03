@@ -10,6 +10,27 @@ under `~/.claude/.../memory/`.
 
 ---
 
+## A light buried in the stage (FIX-15, place, 2026-11-03)
+
+"UST-2 should throw an error in the footer if it's inside a stage feature."
+Built: `PlacementCheck` (engine/src/placementcheck.*; the body is the rig
+view's box, the volume each StagePlatform block, separating-axis overlap
+over 3 cm), Show Review **FIX-15**, the footer's `fixtures.buried` error
+(Sit on Top / Show; re-read 300 ms after any edit or rig change), the red
+ring on the plot. Tests: ShowReview_Test::fix15 + fix15Geometry,
+ProgrammingManager_Test::aBuriedLightIsAFooterErrorUntilItIsFixed,
+Monitor_Test::aBuriedLightIsRingedOnThePlot.
+
+- On the user's show copy nothing is flagged: UST-2 (z 0) abuts USP1's
+  upstage edge (its body ends at y 3.760, the deck starts there) instead of
+  being inside it, and the other USTs are deck-mounted at 0.61. "Not on its
+  row's riser" would be a different check (siblings deck-mounted, this one
+  not) -- not built; say if wanted.
+- Not yet: scenery (walls, bowed sheets) and tower bodies; a Fix for a
+  light that overhangs an edge (it only says "Move it clear").
+
+---
+
 ## Aim round trip — leftovers (fix/04-ust-aim, 2026-11-03)
 
 "USTs still pointing SR" (cue 1.1.1, line aim, Spread +5). Built: one DMX

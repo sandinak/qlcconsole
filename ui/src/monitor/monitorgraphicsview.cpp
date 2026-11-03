@@ -7143,6 +7143,22 @@ void MonitorGraphicsView::markNeedsFocusFixtures(const QList<quint32> &ids)
         it.value()->setNeedsFocus(idSet.contains(it.key()));
 }
 
+void MonitorGraphicsView::markBuriedFixtures(const QList<quint32> &ids)
+{
+    const QSet<quint32> idSet(ids.begin(), ids.end());
+    for (auto it = m_fixtures.begin(); it != m_fixtures.end(); ++it)
+        it.value()->setBuried(idSet.contains(it.key()));
+}
+
+QList<quint32> MonitorGraphicsView::buriedFixtures() const
+{
+    QList<quint32> out;
+    for (auto it = m_fixtures.constBegin(); it != m_fixtures.constEnd(); ++it)
+        if (it.value()->isBuried())
+            out << it.key();
+    return out;
+}
+
 QList<quint32> MonitorGraphicsView::needsFocusFixtures() const
 {
     QList<quint32> out;

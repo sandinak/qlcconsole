@@ -12,6 +12,19 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ## [Unreleased]
 
+### Added
+
+- **A light buried in a deck, riser or step is an error in the footer.**
+  A fixture whose body (its Physical Dimensions box, as the rig view draws
+  it) sits inside a deck with a solid top -- a floor light left at height 0
+  inside the riser the others stand on -- now shows "UST-2 is inside Deck
+  SR" as an error in the footer, with **Sit on Top** (stand it on the deck,
+  following it from then on) and **Show**; it is ringed red with a "!" on
+  the plot, and Show Review lists it as **FIX-15**. Lights clamped to a
+  truss, pipe, tower or hanger, standing on that deck, or in a Clear/Open
+  topped step are not flagged, nor is a body that only touches or sinks
+  under 3 cm. It re-reads a moment after any edit.
+
 ### Fixed
 
 - **An aimed light is drawn where it points, to the step.** The rig views

@@ -133,6 +133,7 @@ computer only (stays in the footer only).
 | `fixtures.unpatched` | fixtures not patched | D | PAT-03 (used ones W; unused N) |
 | `fixtures.clash` | fixtures loaded unpatched because their address overlapped (`Doc::addressClashes()`) | D | PAT-01 |
 | `fixtures.duplicates` | two fixtures with one name (`Doc::duplicateFixtureNames()`) | D | FIX-14 |
+| `fixtures.buried` | a light inside a deck, riser or step (`PlacementCheck::buried()`), an error | D | FIX-15 |
 | `fixtures.output` | a light whose mode has no lumens or power (`FixtureDefCheck::expectsLight()`) | D | FIX-07 |
 | `fixtures.nodefinition` | a fixture standing in as a dimmer: definition missing (`Fixture::definitionUnavailable`) | D | FIX-01 |
 | `definitions.failed` | a .qxf that won't read (`FixtureDefCheck::diagnose()`) | D (the show's) / R (this computer's library) | FIX-01 when the show uses it; else footer only |
@@ -182,7 +183,7 @@ over every cue and hit instead of what's up now.
 | `NetworkTopology::warnings()` / `NetworkReport` | `engine/src/networktopology.cpp` | a wireless port with no receiver, transport ≠ patch, a universe on two ports | D | PAT-09 |
 | Rig map address-clash tint | `Monitor::applyMapView()` | overlapping fixtures tinted red on the plot | D | PAT-01 |
 | Add Fixture, Patch dialog, universe patcher checks | `addfixture.cpp`, `patchinventorydialog.cpp` (`refreshConflicts`), `universepatcher.cpp` | address taken, not ours, past 512, name taken — refused or CONFLICT while editing | D (edit time) | PAT-01/02/04 |
-| `StructureStudioView::rebuildOverlapWarnings()` | Studio | fixtures overlapping on a structure | D | FIX-06's neighbour (a note, v3) |
+| `StructureStudioView::rebuildOverlapWarnings()` | Studio | fixtures overlapping on a structure | D | FIX-06's neighbour (a note, v3); a body inside a deck is FIX-15 |
 | `ShowManager::checkOverlapping()` | Shows timeline | refuses overlapping items on a track | D (edit time) | SC-03 |
 | WLED devices / LED layout problems | `wleddevicesdialog.cpp`, `ledlayouteditor.cpp` | device and layout config | D, in their dialogs | PAT-10, FIX-11 |
 | Monitor "Not on the plot", Inventory panel | `monitor.cpp`, `monitorinventorypanel.cpp` | the selected fixture has no plot position; unplaced fixtures listed | D, not a warning | FIX-05 |
@@ -802,6 +803,26 @@ have no unit number; the patch list will be blank there."* [Patch labels]
 Detects: two fixtures with one name (refused now; old shows have them).
 Says: *"Two fixtures are called 'Spot 1'."* [fixtures]
 
+**FIX-15 A light buried in the stage.** · W (footer: error) · cheap · v1 ✓
+Detects: a fixture's body inside the solid volume of a deck, riser or flight
+of steps -- a floor light left at height 0 inside a riser the others stand
+on, or a hung one dropped into a deck. The body is the box the rig view
+draws (`RigHeads::frame()`: Physical Dimensions along the fixture's face,
+roll, flip and yaw), standing on its position (floor) or hanging from it
+(hung); the volume is each `StagePlatform::blocks()` block from
+`platformBaseZ()` up (turned decks, steps, stacked decks); separating-axis
+overlap deeper than `PlacementCheck::tolerance()` (3 cm) counts, so touching
+surfaces don't. Not flagged: a fixture placed by a structure (truss, pipe,
+tower, hanger, riser mount, studio frame) or standing on that very deck
+(deck mount); decks with a Clear or Open top; non-solid decks. Not yet:
+scenery (walls, curved or bowed sheets) and tower bodies -- a tower is an
+open frame lights go inside. Data: `PlacementCheck::buried()` (engine),
+shared with the footer's `fixtures.buried` entry (an *error*, fixed by
+`PlacementCheck::fix()`: a deck mount at the highest solid top its middle is
+over, or "Move it clear" when none) and the plot's red ring
+(`MonitorFixtureItem::setBuried()`). Says: *"UST-2 is inside Deck SR. Sit it
+on Deck SR (0.61 m)."* [footer entry → Sit on Top / Show]
+
 ### 3.8 Venues and focus (VEN)
 
 **VEN-01 Focus calls with no target.** · W · cheap · v1 ✓
@@ -1100,13 +1121,13 @@ The full mapping, per footer entry, is in §2.
 | Hits and VC (VC) | 12 | 6 |
 | Show control and timecode (SC) | 3 | 0 |
 | Patch and outputs (PAT) | 11 | 6 |
-| Fixtures and definitions (FIX) | 14 | 4 |
+| Fixtures and definitions (FIX) | 15 | 5 |
 | Venues and focus (VEN) | 13 | 5 |
 | Effects and performance (FX) | 9 | 4 |
 | Power and safety (PWR) | 8 | 4 |
 | Files and portability (FILE) | 6 | 3 |
 | Naming and teaching (NAME) | 6 | 2 |
-| **Total** | **120** | **52** |
+| **Total** | **121** | **53** |
 
 Checks that need **new data** (everything else reads what the show
 already has):
@@ -1487,6 +1508,7 @@ Branson's review), after the freeze lifts.
 | FIX-02 | Definition problems (FixtureDefCheck) |
 | FIX-05 | Fixtures not on the plot (warning when focus, aim or power needs it) |
 | FIX-08 | Dead-marked lights still used |
+| FIX-15 | Lights buried in a deck, riser or step (footer error, Sit on Top) |
 | VEN-01 | Focus calls with no target or no lights |
 | VEN-02 | Unaimable lights in focus calls |
 | VEN-05 | Swapped fixtures needing focus |

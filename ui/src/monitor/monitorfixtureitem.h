@@ -276,6 +276,10 @@ public:
      *  badge on its lower corner. */
     void setNeedsFocus(bool n) { if (n != m_needsFocus) { m_needsFocus = n; update(); } }
     bool needsFocus() const { return m_needsFocus; }
+    /** FIX-15: its body is inside a deck, riser or step -- a red ring and a
+     *  red "!" on the upper corner. */
+    void setBuried(bool b) { if (b != m_buried) { m_buried = b; update(); } }
+    bool isBuried() const { return m_buried; }
 
     /** Set the fixture's pan-zero facing (degrees clockwise from downstage),
      *  i.e. FixtureRigProps::panZeroDir. Drives the facing arrow on the icon.
@@ -405,6 +409,7 @@ private:
     bool m_hinted        = false;
     bool m_unsaved       = false;
     bool m_needsFocus    = false;
+    bool m_buried        = false;
 
     /** True if any head has a Pan channel (i.e. a moving head): only these
      *  show a facing arrow and accept Alt-drag rotation. */
