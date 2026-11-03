@@ -100,6 +100,7 @@ private slots:
     void childLayersByMouse();
     void renameInPlace();
     void lineAimsInTheTab();
+    void theLibraryFollowsTargetsAddedInTheStudio();
     void planViewOfALineAim();
     /** A stored position (PanTilt) on a layer: a line saying where it lands
      *  and a plan of each head's beam to its landing, in group colours. */

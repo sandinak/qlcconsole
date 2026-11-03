@@ -49,6 +49,13 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Fixed
 
+- **A target added in the Lighting Studio shows up everywhere at once.**
+  A new point, person or line target did not appear in the Show Tree's
+  Library (All > Targets), the Look Editor's **Aim at:** list or the
+  formation editor's line picker until the show was reloaded. The Studio
+  now tells every list once the target is named and placed, and each list
+  follows adds, renames and deletes (a drag does not rebuild anything).
+
 - **The rig view holds still under the mouse.** Hovering over the 3D/rig
   view while a show ran made the rig shimmer back and forth by a hair:
   the crosshair's frames were drawn at full quality between the running

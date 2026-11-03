@@ -321,6 +321,7 @@ private:
     void fitPageWidth();
     /** Show the line controls for the look's target, filled from the look. */
     void syncLineControls();
+    bool fillAimTargets(quint32 selected);
     QCheckBox   *m_aimDimBlocked;   //!< Aim: dim heads that can't see the target
     QSlider *m_beamFocusSlider, *m_beamFrostSlider, *m_beamIrisSlider;
     QLabel *m_beamFocusValue, *m_beamFrostValue, *m_beamIrisValue;

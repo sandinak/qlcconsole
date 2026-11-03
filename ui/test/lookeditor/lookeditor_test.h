@@ -31,6 +31,7 @@ private slots:
      *  box move together, write the look's param, and the strip shows where
      *  the lights land. A point target hides them. */
     void aLineLooksSpreadIsSetOnTheAimPage();
+    void theAimPickerFollowsTargetsAddedInTheStudio();
     /** Group, Cross, Share and Order are set on the Aim page, each its own
      *  param, and the strip shows the crossing. */
     void aLineLooksGroupingIsSetOnTheAimPage();

@@ -2454,6 +2454,20 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
     connect(m_doc, &Doc::fixtureGroupChanged, m_libraryTimer, kickTimer);
     connect(m_doc, &Doc::paletteAdded, m_libraryTimer, kickTimer);
     connect(m_doc, &Doc::paletteRemoved, m_libraryTimer, kickTimer);
+    /* Targets come from the Lighting Studio (MonitorProperties): one signal for
+       add, remove, rename and kind. The Studio also fires it while a target is
+       dragged, so rebuild only when the Targets list itself changed. */
+    if (m_doc->monitorProperties() != nullptr)
+    {
+        m_targetSig = targetSignature();
+        connect(m_doc->monitorProperties(), &MonitorProperties::stageTargetsChanged, this, [this]() {
+            const QString sig = targetSignature();
+            if (sig == m_targetSig)
+                return;
+            m_targetSig = sig;
+            m_libraryTimer->start();
+        });
+    }
     /* A fixture's look or output rules changed (or one came or went): the
        Library's fixture and group icons, and the layers' -- the same icon as
        in every other list. Once per burst. */
@@ -9094,8 +9108,21 @@ void ShowTreeView::setPinned(int kind, quint32 id, bool pinned)
     reloadLibrary();
 }
 
+QString ShowTreeView::targetSignature() const
+{
+    const MonitorProperties *mp = m_doc->monitorProperties();
+    QString sig;
+    if (mp != nullptr)
+        for (const StageTarget *t : mp->stageTargets())
+            sig += QString::number(t->id()) + QLatin1Char('|') + t->name() + QLatin1Char('|')
+                   + QString::number(int(t->kind())) + QLatin1Char('|') + QString::number(t->isLine() ? 1 : 0)
+                   + QLatin1Char('\n');
+    return sig;
+}
+
 void ShowTreeView::reloadLibrary()
 {
+    m_targetSig = targetSignature();
     // Remembered: which folders were open (a group folder by its path, so
     // two "Front" folders in different places are told apart).
     auto openKey = [](const QTreeWidgetItem *item) {

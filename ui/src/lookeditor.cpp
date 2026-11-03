@@ -769,6 +769,14 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     m_pageAim = m_stack->addWidget(aim);
     connect(m_aimDimBlocked, SIGNAL(toggled(bool)),
             this, SLOT(slotAimDimWhenBlocked(bool)));
+    /* Targets added, renamed or removed in the Lighting Studio while this
+       look is open: the picker follows. */
+    if (m_doc->monitorProperties() != nullptr)
+        connect(m_doc->monitorProperties(), &MonitorProperties::stageTargetsChanged, this, [this]() {
+            const QLCPalette *cur = m_doc->palette(m_paletteId);
+            if (cur != nullptr && cur->type() == QLCPalette::Aim)
+                fillAimTargets(cur->stageTargetId());
+        });
     connect(m_aimTargetCombo, SIGNAL(currentIndexChanged(int)),
             this, SLOT(slotAimTargetChanged(int)));
 
@@ -1378,6 +1386,42 @@ void LookEditor::updateBasedOn()
     m_effectBasedOnLabel->setVisible(show);
 }
 
+/* The Aim at: picker, from the Studio's targets. Rebuilt only when the list
+   (or a name) differs, so a drag in the Studio does not touch the combo. */
+bool LookEditor::fillAimTargets(quint32 selected)
+{
+    QStringList names;
+    QList<quint32> ids;
+    names << tr("(none)");
+    ids << StageTarget::invalidId();
+    if (m_doc->monitorProperties())
+    {
+        for (StageTarget *t : PerformerFill::pickable(m_doc, selected))
+        {
+            names << (t->isLine() ? tr("Line: %1").arg(t->name()) : t->name());
+            ids << t->id();
+        }
+    }
+    bool same = m_aimTargetCombo->count() == names.count();
+    for (int i = 0; same && i < names.count(); ++i)
+        same = m_aimTargetCombo->itemText(i) == names.at(i) && m_aimTargetCombo->itemData(i).toUInt() == ids.at(i);
+    if (!same)
+    {
+        QSignalBlocker block(m_aimTargetCombo);
+        m_aimTargetCombo->clear();
+        for (int i = 0; i < names.count(); ++i)
+            m_aimTargetCombo->addItem(names.at(i), QVariant(ids.at(i)));
+    }
+    // Pre-select the palette's linked target
+    const int sel = qMax(0, m_aimTargetCombo->findData(QVariant(selected)));
+    if (m_aimTargetCombo->currentIndex() != sel)
+    {
+        QSignalBlocker block(m_aimTargetCombo);
+        m_aimTargetCombo->setCurrentIndex(sel);
+    }
+    return !same;
+}
+
 void LookEditor::setPalette(quint32 paletteId)
 {
     // Another look: the picker was for the one before -- it keeps its pick.
@@ -1501,25 +1545,7 @@ void LookEditor::setPalette(quint32 paletteId)
     }
     case QLCPalette::Aim:
     {
-        // Rebuild target combo from current MonitorProperties.
-        m_aimTargetCombo->blockSignals(true);
-        m_aimTargetCombo->clear();
-        m_aimTargetCombo->addItem(tr("(none)"), QVariant(StageTarget::invalidId()));
-        if (m_doc->monitorProperties())
-        {
-            for (StageTarget *t : PerformerFill::pickable(m_doc, p->stageTargetId()))
-                m_aimTargetCombo->addItem(t->isLine() ? tr("Line: %1").arg(t->name()) : t->name(),
-                                          QVariant(t->id()));
-        }
-        // Pre-select the palette's linked target
-        int sel = 0;
-        for (int i = 0; i < m_aimTargetCombo->count(); ++i)
-        {
-            if (m_aimTargetCombo->itemData(i).toUInt() == p->stageTargetId())
-            { sel = i; break; }
-        }
-        m_aimTargetCombo->setCurrentIndex(sel);
-        m_aimTargetCombo->blockSignals(false);
+        fillAimTargets(p->stageTargetId());
         syncLineControls();
         {
             QSignalBlocker block(m_aimDimBlocked);

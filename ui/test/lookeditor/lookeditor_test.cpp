@@ -1779,6 +1779,46 @@ void LookEditor_Test::theBrowsersListsAreAToZ()
     }
 }
 
+/* Aim at: lists the Studio's targets as they come and go, with the look
+   open (a target added, renamed or deleted while the editor is up). */
+void LookEditor_Test::theAimPickerFollowsTargetsAddedInTheStudio()
+{
+    Doc doc(this);
+    MonitorProperties *props = doc.monitorProperties();
+    QLCPalette *look = new QLCPalette(QLCPalette::Aim, &doc);
+    look->setName("Aim");
+    QVERIFY(doc.addPalette(look));
+    LookEditor ed(&doc);
+    ed.show();
+    ed.setPalette(look->id());
+    QCOMPARE(ed.m_aimTargetCombo->count(), 1);
+
+    StageTarget *mark = props->addStageTarget();   // as Monitor::addTarget()
+    mark->setName("Centre");
+    props->notifyStageTargetsChanged();
+    QCOMPARE(ed.m_aimTargetCombo->count(), 2);
+    QVERIFY(ed.m_aimTargetCombo->findData(mark->id()) >= 0);
+
+    StageTarget *edge = props->addStageTarget();
+    edge->makeLine();
+    edge->setName("Edge");
+    props->notifyStageTargetsChanged();
+    QVERIFY(ed.m_aimTargetCombo->itemText(ed.m_aimTargetCombo->findData(edge->id())).startsWith("Line:"));
+
+    mark->setName("Downstage");
+    props->notifyStageTargetsChanged();
+    QCOMPARE(ed.m_aimTargetCombo->itemText(ed.m_aimTargetCombo->findData(mark->id())), QString("Downstage"));
+
+    // The look's own pick survives a rebuild; deleting the picked target falls back to (none).
+    ed.m_aimTargetCombo->setCurrentIndex(ed.m_aimTargetCombo->findData(edge->id()));
+    QCOMPARE(look->stageTargetId(), edge->id());
+    props->removeStageTarget(mark->id());
+    QCOMPARE(ed.m_aimTargetCombo->count(), 2);
+    QCOMPARE(ed.m_aimTargetCombo->currentData().toUInt(), edge->id());
+    props->removeStageTarget(edge->id());
+    QCOMPARE(ed.m_aimTargetCombo->count(), 1);
+}
+
 void LookEditor_Test::aLineLooksSpreadIsSetOnTheAimPage()
 {
     Doc doc(this);

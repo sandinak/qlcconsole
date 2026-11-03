@@ -884,6 +884,7 @@ private slots:
     void slotFilterChanged(const QString &text);
     void slotTreeChanged();
     void reloadLibrary();
+    QString targetSignature() const;
 
 private:
     /** The groups selected in the Library, in order, each once. */
@@ -1139,6 +1140,7 @@ private:
     bool m_filtering = false;
 
     QTimer *m_libraryTimer = nullptr;
+    QString m_targetSig;   //!< ids, names and kinds of the Library's Targets: rebuild only when they change
     quint32 m_libraryList = 0xFFFFFFFF;    //!< the list "In this cue list" shows
 
     // Command line

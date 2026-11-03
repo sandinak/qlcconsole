@@ -123,6 +123,7 @@ private:
     void syncControls();
     /** Fill the picker (lines, groups, fixtures) for m_pick. */
     void syncPicker();
+    void syncLines();   //!< the line picker only, when the Studio's lines changed
     /** Draw the strip and the plan for m_pick and the palette. */
     void updatePreview();
     /** Write one setting through the Show Tree (undo step + bake). */
