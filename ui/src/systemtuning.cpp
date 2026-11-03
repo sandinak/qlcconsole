@@ -489,7 +489,6 @@ void SystemTuning::updateStatus()
         lines << QStringLiteral("%1: %2").arg(it.title, it.state);
     status->setStatus(statusKey(), ShowStatus::Warning,
                       tr("This computer isn't set up for steady DMX timing"),
-                      tr("Frames may leave late or unevenly. Settings ▸ Performance says what "
-                         "to change; this can be turned off there."),
+                      tr("DMX frames may leave late. See Settings ▸ Performance."),
                       lines);
 }
