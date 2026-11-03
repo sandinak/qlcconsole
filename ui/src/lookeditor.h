@@ -308,6 +308,9 @@ private:
     LinePlanView *m_ptPlan = nullptr;
     QLabel *m_ptLanding = nullptr;
     void updatePanTiltPlan();
+    /** The stack's minimum width: the current page's, for the pages that
+     *  need theirs (Aim, PanTilt, Formation); 200 otherwise. */
+    void fitPageWidth();
     /** Show the line controls for the look's target, filled from the look. */
     void syncLineControls();
     QCheckBox   *m_aimDimBlocked;   //!< Aim: dim heads that can't see the target

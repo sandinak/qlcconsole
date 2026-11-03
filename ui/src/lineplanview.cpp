@@ -239,21 +239,43 @@ void LinePlanView::paintEvent(QPaintEvent *)
     }
 
     // Fit everything, the same scale both ways, at least 2 m each way.
-    QRectF box(m_line.isEmpty() ? m_beams.first().to : m_line.first(), QSizeF(0, 0));
+    // A stored position is fitted to its lights and where they land, not
+    // to the whole stage: the stage is drawn for reference, clipped.
+    QRectF box(m_line.isEmpty() ? m_beams.first().from : m_line.first(), QSizeF(0, 0));
     auto grow = [&box](const QPointF &pt) {
         box = box.united(QRectF(pt, QSizeF(0.0001, 0.0001)));
     };
     for (const QPointF &pt : m_line)
         grow(pt);
-    if (m_stage.isValid())
+    /* A stored position can land far out in the house: drawn to scale, the
+       stage would shrink to a dot. Beams are drawn to where they leave a
+       frame of the stage and 4 m round it (ending in the hollow ring that
+       says they miss the stage). */
+    QRectF frame;
+    if (raw)
     {
-        grow(m_stage.topLeft());
-        grow(m_stage.bottomRight());
+        QRectF hung(m_beams.first().from, QSizeF(0.0001, 0.0001));
+        for (const Beam &b : m_beams)
+            hung = hung.united(QRectF(b.from, QSizeF(0.0001, 0.0001)));
+        frame = m_stage.isValid() ? m_stage.adjusted(-4.0, -4.0, 4.0, 4.0).united(hung)
+                                  : hung.adjusted(-10.0, -10.0, 10.0, 10.0);
     }
+    auto shown = [&frame](const Beam &b) {
+        if (!frame.isValid() || frame.contains(b.to))
+            return b.to;
+        // Where the segment from -> to leaves the frame.
+        const QPointF d = b.to - b.from;
+        double t = 1.0;
+        if (d.x() > 0) t = qMin(t, (frame.right() - b.from.x()) / d.x());
+        if (d.x() < 0) t = qMin(t, (frame.left() - b.from.x()) / d.x());
+        if (d.y() > 0) t = qMin(t, (frame.bottom() - b.from.y()) / d.y());
+        if (d.y() < 0) t = qMin(t, (frame.top() - b.from.y()) / d.y());
+        return b.from + d * qMax(0.0, t);
+    };
     for (const Beam &b : m_beams)
     {
         grow(b.from);
-        grow(b.to);
+        grow(shown(b));
         if (b.hasPrevious)
             grow(b.previous);
     }
@@ -261,7 +283,8 @@ void LinePlanView::paintEvent(QPaintEvent *)
     const double w = qMax(2.0, box.width()) * 1.15, h = qMax(2.0, box.height()) * 1.15;
     // Room at the foot for the caption, and for names when they show.
     const double foot = (s >= 1.6 ? 44.0 : 20.0) * s;
-    const QRectF area = QRectF(rect()).adjusted(12 * s, 16 * s, -12 * s, -foot);
+    const double head = (s >= 1.6 ? 40.0 : 16.0) * s;
+    const QRectF area = QRectF(rect()).adjusted(12 * s, head, -12 * s, -foot);
     const double scale = qMin(area.width() / w, area.height() / h);
     auto toScreen = [&](const QPointF &pt) {
         return QPointF(area.center().x() + (pt.x() - c.x()) * scale,
@@ -275,7 +298,8 @@ void LinePlanView::paintEvent(QPaintEvent *)
         {
             p.setPen(QPen(QColor(90, 92, 100), 1.0 * s, Qt::DashLine));
             p.setBrush(QColor(40, 42, 50));
-            p.drawRect(QRectF(toScreen(m_stage.topLeft()), toScreen(m_stage.bottomRight())));
+            p.drawRect(QRectF(toScreen(m_stage.topLeft()), toScreen(m_stage.bottomRight()))
+                       .intersected(QRectF(rect()).adjusted(-2, -2, 2, 2)));
         }
         p.setBrush(Qt::NoBrush);
         for (const QList<QPointF> &l : m_otherLines)
@@ -286,20 +310,6 @@ void LinePlanView::paintEvent(QPaintEvent *)
             p.setPen(QPen(QColor(255, 180, 0, 120), 1.5 * s));
             p.drawPolyline(poly);
         }
-        QFont mf = p.font();
-        mf.setPointSizeF(7.0 * s);
-        p.setFont(mf);
-        for (const auto &m : m_marks)
-        {
-            const QPointF at = toScreen(m.first);
-            p.setPen(QPen(QColor(255, 180, 0, 160), 1.2 * s));
-            p.drawLine(at - QPointF(4 * s, 0), at + QPointF(4 * s, 0));
-            p.drawLine(at - QPointF(0, 4 * s), at + QPointF(0, 4 * s));
-            p.setPen(QColor(150, 150, 160));
-            p.drawText(QRectF(at.x() + 5 * s, at.y() - 12 * s, 90 * s, 12 * s), Qt::AlignLeft | Qt::AlignVCenter,
-                       m.second);
-        }
-        p.setFont(f);
     }
 
     // The line, its ends A and B as the strip names them.
@@ -339,28 +349,109 @@ void LinePlanView::paintEvent(QPaintEvent *)
         QColor c = grouped ? b.colour : QColor(255, 230, 160);
         c.setAlpha(grouped ? 200 : 110);
         p.setPen(QPen(c, (grouped ? 1.6 : 1.0) * s, b.lands ? Qt::SolidLine : Qt::DashLine));
-        p.drawLine(toScreen(b.from), toScreen(b.to));
+        p.drawLine(toScreen(b.from), toScreen(shown(b)));
     }
+    // The lights where they hang.
+    QList<QRectF> lightRects;
     for (const Beam &b : m_beams)
     {
-        const QPointF from = toScreen(b.from), to = toScreen(b.to);
+        const QPointF from = toScreen(b.from);
         p.setPen(QPen(QColor(20, 20, 24), s));
         p.setBrush(grouped ? b.colour : QColor(170, 170, 180));
-        p.drawRect(QRectF(from - QPointF(3 * s, 3 * s), QSizeF(6 * s, 6 * s)));
+        const QRectF sq(from - QPointF(3 * s, 3 * s), QSizeF(6 * s, 6 * s));
+        p.drawRect(sq);
+        lightRects << sq.adjusted(-2 * s, -2 * s, 2 * s, 2 * s);
+    }
+    /* Their points. Points that land on top of each other are drawn once,
+       a little bigger, "x N" -- numbers piled on one spot can't be read. */
+    QList<QList<int>> clusters;
+    QList<QPointF> clusterAt;
+    for (int i = 0; i < m_beams.count(); ++i)
+    {
+        const QPointF at = toScreen(shown(m_beams.at(i)));
+        int found = -1;
+        for (int k = 0; k < clusters.count() && found < 0; ++k)
+            if (QLineF(clusterAt.at(k), at).length() < 1.6 * r)
+                found = k;
+        if (found < 0)
+        {
+            clusters << QList<int>({ i });
+            clusterAt << at;
+        }
+        else
+            clusters[found] << i;
+    }
+    m_pointMarks.clear();
+    for (int k = 0; k < clusters.count(); ++k)
+    {
+        const QList<int> &members = clusters.at(k);
+        const Beam &b = m_beams.at(members.first());
+        bool sameColour = true;
+        for (int i : members)
+            if (m_beams.at(i).colour != b.colour)
+                sameColour = false;
+        const QColor fill = sameColour && b.colour.isValid() ? b.colour : QColor(150, 150, 160);
+        const double rr = members.count() > 1 ? r * 1.35 : r;
+        const QPointF to = members.count() > 1 ? clusterAt.at(k) : toScreen(shown(b));
         // Off the stage or up in the air: a hollow ring where the beam goes.
         if (!b.lands)
         {
-            p.setPen(QPen(b.colour.isValid() ? b.colour : LineFormation::pointColour(), 1.5 * s));
+            p.setPen(QPen(fill, 1.5 * s));
             p.setBrush(QColor(30, 32, 38));
         }
         else
-            p.setBrush(b.colour.isValid() ? b.colour : LineFormation::pointColour());
-        p.drawEllipse(to, r, r);
+        {
+            p.setPen(QPen(QColor(20, 20, 24), s));
+            p.setBrush(fill);
+        }
+        p.drawEllipse(to, rr, rr);
         if (!b.lands)
             p.setPen(QColor(220, 220, 230));
         else
-            p.setPen(grouped ? LineFormation::groupInk() : LineFormation::pointInk());
-        p.drawText(QRectF(to.x() - r, to.y() - r, 2 * r, 2 * r), Qt::AlignCenter, QString::number(b.number));
+            p.setPen(grouped || !sameColour ? LineFormation::groupInk() : LineFormation::pointInk());
+        const QString text = members.count() > 1 ? QStringLiteral("\u00d7%1").arg(members.count())
+                                                 : QString::number(b.number);
+        p.drawText(QRectF(to.x() - rr, to.y() - rr, 2 * rr, 2 * rr), Qt::AlignCenter, text);
+        m_pointMarks << members.count();
+        lightRects << QRectF(to.x() - rr, to.y() - rr, 2 * rr, 2 * rr);
+    }
+
+    // A stored position's targets, for reference: a cross, and its name
+    // only where it is clear of every light and point.
+    if (raw)
+    {
+        QFont mf = p.font();
+        mf.setPointSizeF(7.0 * s);
+        p.setFont(mf);
+        const QFontMetricsF mfm(mf);
+        for (const auto &m : m_marks)
+        {
+            const QPointF at = toScreen(m.first);
+            if (!rect().contains(at.toPoint()))
+                continue;
+            p.setPen(QPen(QColor(255, 180, 0, 160), 1.2 * s));
+            p.drawLine(at - QPointF(4 * s, 0), at + QPointF(4 * s, 0));
+            p.drawLine(at - QPointF(0, 4 * s), at + QPointF(0, 4 * s));
+            const double tw = mfm.horizontalAdvance(m.second) + 2.0, th = mfm.height();
+            const QList<QRectF> tries { QRectF(at.x() + 5 * s, at.y() - th - 2 * s, tw, th),
+                                        QRectF(at.x() - 5 * s - tw, at.y() - th - 2 * s, tw, th),
+                                        QRectF(at.x() + 5 * s, at.y() + 2 * s, tw, th),
+                                        QRectF(at.x() - 5 * s - tw, at.y() + 2 * s, tw, th) };
+            for (const QRectF &t : tries)
+            {
+                bool clear = QRectF(rect()).contains(t);
+                for (const QRectF &o : lightRects)
+                    if (o.intersects(t))
+                        clear = false;
+                if (!clear)
+                    continue;
+                p.setPen(QColor(150, 150, 160));
+                p.drawText(t, Qt::AlignLeft | Qt::AlignVCenter, m.second);
+                lightRects << t;
+                break;
+            }
+        }
+        p.setFont(f);
     }
 
     // Big enough to read: each light's name where it hangs, laid out so no
@@ -382,15 +473,22 @@ void LinePlanView::paintEvent(QPaintEvent *)
         const QRectF room = QRectF(rect()).adjusted(2, 2, -2, -2);
         QList<QLineF> leaders;
         QStringList texts;
+        // The title is taken.
+        // The title, the lights, their points and the targets' names are taken.
+        QList<QRectF> taken = lightRects;
+        taken << QRectF(0, 0, 90.0 * s, 16.0 * s);
         for (int i : order)
         {
             const Beam &b = m_beams.at(i);
             const QPointF from = toScreen(b.from);
             const QString text = fm.elidedText(b.name, Qt::ElideMiddle, maxW);
             const double w = fm.horizontalAdvance(text) + 2.0 * s;
+            // On the side away from its beam, so the name never sits on it.
+            const bool up = toScreen(shown(b)).y() > from.y();
             for (int row = 0; row < 4; ++row)
             {
-                QRectF box(from.x() - w / 2, from.y() + 5.0 * s + row * rowH, w, rowH);
+                QRectF box(from.x() - w / 2, up ? from.y() - 6.0 * s - (row + 1) * rowH
+                                                : from.y() + 6.0 * s + row * rowH, w, rowH);
                 if (box.left() < room.left())
                     box.moveLeft(room.left());
                 if (box.right() > room.right())
@@ -398,6 +496,9 @@ void LinePlanView::paintEvent(QPaintEvent *)
                 if (!room.contains(box))
                     break;
                 bool clear = true;
+                for (const QRectF &o : taken)
+                    if (o.intersects(box))
+                        clear = false;
                 for (const QRectF &o : m_labelRects)
                     if (o.intersects(box))
                     {
@@ -407,7 +508,8 @@ void LinePlanView::paintEvent(QPaintEvent *)
                 if (!clear)
                     continue;
                 if (row > 0)
-                    leaders << QLineF(from + QPointF(0, 3.0 * s), QPointF(from.x(), box.top()));
+                    leaders << (up ? QLineF(from - QPointF(0, 3.0 * s), QPointF(from.x(), box.bottom()))
+                                   : QLineF(from + QPointF(0, 3.0 * s), QPointF(from.x(), box.top())));
                 m_labelRects << box;
                 texts << text;
                 break;

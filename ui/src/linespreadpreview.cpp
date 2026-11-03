@@ -97,7 +97,8 @@ void LineSpreadPreview::paintEvent(QPaintEvent *)
     p.fillRect(rect(), QColor(30, 32, 38));
     const double s = drawScale();
 
-    const double left = 18.0 * s, right = width() - 18.0 * s;
+    // Room for A and B outside the end dots.
+    const double left = 26.0 * s, right = width() - 26.0 * s;
     const double base = height() - 16.0 * s;
     const double hangY = 18.0 * s;
     QFont f = p.font();
@@ -120,7 +121,7 @@ void LineSpreadPreview::paintEvent(QPaintEvent *)
     p.drawLine(QPointF(left, base), QPointF(right, base));
     p.setPen(QColor(150, 150, 160));
     p.drawText(QRectF(2 * s, base - 8 * s, 14 * s, 16 * s), Qt::AlignCenter, QStringLiteral("A"));
-    p.drawText(QRectF(right + 2 * s, base - 8 * s, 14 * s, 16 * s), Qt::AlignCenter, QStringLiteral("B"));
+    p.drawText(QRectF(right + 10 * s, base - 8 * s, 14 * s, 16 * s), Qt::AlignCenter, QStringLiteral("B"));
     // The centre: where everything goes at spread 0.
     p.drawLine(QPointF((left + right) / 2, base - 4 * s), QPointF((left + right) / 2, base + 4 * s));
 

@@ -57,7 +57,7 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   T1-S2) get their names on separate rows with a leader to the light.
 - **A Formation's preview says what it picked.** Before you pick lights it
   shows the groups the show most often aims at the line and says so
-  ("Showing AT-W-ALL -- aimed at Line 1 in cue 1.1.1"), with **Show none**
+  ("Showing AT-W-ALL (aimed at Line 1 in cue 1.1.1 Verse)."), with **Show none**
   to clear it.
 
 ## [0.4.0] - 2026-11-02

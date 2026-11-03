@@ -380,6 +380,7 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     m_stack->setSizePolicy(QSizePolicy::Ignored, m_stack->sizePolicy().verticalPolicy());
     m_stack->setMinimumWidth(200);
     root->addWidget(m_stack);
+    connect(m_stack, &QStackedWidget::currentChanged, this, [this](int) { fitPageWidth(); });
 
     // Empty page
     QWidget *empty = new QWidget(this);
@@ -580,6 +581,10 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     m_ptPlan = new LinePlanView(m_doc, pantilt);
     m_ptPlan->setObjectName(QStringLiteral("lookPanTiltPlan"));
     m_ptPlan->setPoppable(false);
+    // The pad and its buttons first: the plan takes what width is left.
+    m_ptPlan->setMinimumSize(0, 140);
+    m_ptPlan->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Expanding);
+    m_ptLanding->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
     landCol->addWidget(m_ptPlan, 1);
     pl->addLayout(landCol, 1);
     ptv->addLayout(pl);
@@ -624,6 +629,7 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     m_lineSpreadSlider->setRange(-50, 50);
     m_lineSpreadSlider->setTickPosition(QSlider::TicksBelow);
     m_lineSpreadSlider->setTickInterval(10);
+    m_lineSpreadSlider->setMinimumWidth(90);
     m_lineSpreadSlider->setToolTip(tr("Right: the lights move out from the centre, to evenly "
                                       "end to end at +5. Left: they cross over the centre, "
                                       "fully crossed at -5. 0: all on the centre."));
@@ -653,10 +659,12 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     m_lineGroupCombo->setToolTip(tr("Lights that move together, in order along the line. "
                                     "Halves: the first half and the second (an odd middle "
                                     "light stays on the centre)."));
-    gl->addWidget(m_lineGroupCombo);
-    QLabel *crossWhat = new QLabel(tr("Cross:"), grow);
-    gl->addWidget(crossWhat);
-    m_lineCrossCombo = new QComboBox(grow);
+    gl->addWidget(m_lineGroupCombo, 1);
+    // Cross gets a row of its own: side by side, a narrow panel cut both combos.
+    QWidget *crow = new QWidget(m_lineBox);
+    QHBoxLayout *crossLay = new QHBoxLayout(crow);
+    crossLay->setContentsMargins(0, 0, 0, 0);
+    m_lineCrossCombo = new QComboBox(crow);
     m_lineCrossCombo->setObjectName(QStringLiteral("lineCross"));
     m_lineCrossCombo->addItem(tr("Groups swap sides"), int(LineSpread::SwapSides));
     m_lineCrossCombo->addItem(tr("Each group flips (mirror)"), int(LineSpread::Mirror));
@@ -664,7 +672,7 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
                                     "centre keeping their order (1 2 3 | 4 5 6 becomes "
                                     "4 5 6 | 1 2 3), or each group flips where it is "
                                     "(3 2 1 | 6 5 4)."));
-    gl->addWidget(m_lineCrossCombo, 1);
+    crossLay->addWidget(m_lineCrossCombo, 1);
     m_lineShareCheck = new QCheckBox(tr("Share a point"), grow);
     m_lineShareCheck->setObjectName(QStringLiteral("lineShare"));
     m_lineShareCheck->setToolTip(tr("A group's lights all land on one point, the groups "
@@ -673,6 +681,8 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     QLabel *groupLbl = new QLabel(tr("Group:"), m_lineBox);
     lg->addWidget(groupLbl, 1, 0);
     lg->addWidget(grow, 1, 1, 1, 4);
+    lg->addWidget(new QLabel(tr("Cross:"), m_lineBox), 2, 0);
+    lg->addWidget(crow, 2, 1, 1, 4);
     m_lineOrderCombo = new QComboBox(m_lineBox);
     m_lineOrderCombo->setObjectName(QStringLiteral("lineOrder"));
     m_lineOrderCombo->addItem(tr("Along the line, as they hang"), int(LineSpread::AlongLine));
@@ -681,14 +691,14 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
                                     "line's start takes the start, or the order the look "
                                     "lists them in (its groups' head order, then its "
                                     "fixtures)."));
-    lg->addWidget(new QLabel(tr("Order:"), m_lineBox), 3, 0);
-    lg->addWidget(m_lineOrderCombo, 3, 1, 1, 4);
+    lg->addWidget(new QLabel(tr("Order:"), m_lineBox), 4, 0);
+    lg->addWidget(m_lineOrderCombo, 4, 1, 1, 4);
     for (QComboBox *cb : { m_lineGroupCombo, m_lineCrossCombo, m_lineOrderCombo })
         connect(cb, QOverload<int>::of(&QComboBox::currentIndexChanged),
                 this, [this](int) { slotLineSettingsChanged(); });
     connect(m_lineShareCheck, &QCheckBox::toggled, this, [this](bool) { slotLineSettingsChanged(); });
     m_linePreview = new LineSpreadPreview(m_doc, m_lineBox);
-    lg->addWidget(m_linePreview, 2, 0, 1, 5);
+    lg->addWidget(m_linePreview, 3, 0, 1, 5);
     av->addWidget(m_lineBox);
     m_lineBox->hide();
     connect(m_lineSpreadSlider, &QSlider::valueChanged, this, [this](int v) {
@@ -2173,6 +2183,20 @@ void LookEditor::slotPanTiltChanged(const QPointF &pos)
     emit paletteChanged(m_paletteId);
 }
 
+void LookEditor::fitPageWidth()
+{
+    /* The stack ignores its pages' minimums (see above), so a page drawn
+       narrower than it needs is squeezed: combos cut, captions over the
+       slider. The pages with line and plan views ask for their own width
+       while they show. */
+    const int i = m_stack->currentIndex();
+    int w = 200;
+    if (i == m_pageAim || i == m_pagePanTilt || i == m_pageFormation)
+        if (QWidget *page = m_stack->currentWidget())
+            w = qMax(200, page->minimumSizeHint().width());
+    m_stack->setMinimumWidth(w);
+}
+
 void LookEditor::updatePanTiltPlan()
 {
     const QLCPalette *p = m_doc->palette(m_paletteId);
@@ -2237,6 +2261,7 @@ void LookEditor::syncLineControls()
             ? props->stageTarget(p->stageTargetId()) : nullptr;
     const bool line = (t != nullptr && t->isLine());
     m_lineBox->setVisible(line);
+    fitPageWidth();
     if (!line)
         return;
     const LineSpread::Settings s = LineSpread::fromParams(p->effectParamValues());

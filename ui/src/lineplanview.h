@@ -104,6 +104,9 @@ public:
     /** Where the names were drawn at the last paint, one per named light
      *  shown (tests). */
     const QList<QRectF> &labelRects() const { return m_labelRects; }
+    /** The points drawn at the last paint: how many lights each stands for
+     *  (more than 1: points that landed together, drawn once "xN"; tests). */
+    const QList<int> &pointMarks() const { return m_pointMarks; }
     /** The caption under the plan (what the colours and lines show). */
     QString caption() const { return m_form.caption(); }
 
@@ -129,6 +132,7 @@ private:
     QList<Beam> m_beams;
     LineFormation m_form;
     QList<QRectF> m_labelRects;
+    QList<int> m_pointMarks;
     QRectF m_stage;                             //!< stored position: the stage outline
     QList<QPair<QPointF, QString>> m_marks;     //!< stored position: point targets
     QList<QList<QPointF>> m_otherLines;         //!< stored position: line targets

@@ -801,7 +801,7 @@ every line target, stacked with whatever Aim palette a layer uses (see
   [Reading the strip and the plan](stage-targets.md#reading-the-strip-and-the-plan)).
 - **What it starts on.** Until you pick, it shows the show's first line
   target and the groups the show most often aims at it, and says so above
-  the strip: *"Showing AT-W-ALL — aimed at Line 1 in cue 1.1.1 …"*.
+  the strip: *"Showing AT-W-ALL (aimed at Line 1 in cue 1.1.1 Verse)."*.
   **Show none** clears it; tick anything and the note goes.
 - **The preview is only to look.** It is drawn on the page and nothing
   plays on stage, as in Blind. The pick is not saved in the palette, the

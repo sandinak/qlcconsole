@@ -227,8 +227,8 @@ plan surface) and a bracket on the strip; the strip has hang-order squares
 with connectors to the points, the plan colours beams; a caption says what
 crosses (and that Cross is idle at Spread >= 0); plan names never overlap
 (row stacking, leaders). Each "decided (can change)": **the Formation
-preview keeps its cue-derived default pick, labelled** ("Showing AT-W-ALL --
-aimed at Line 1 in cue 1.1.1 …") with a **Show none** link, rather than
+preview keeps its cue-derived default pick, labelled** ("Showing AT-W-ALL
+(aimed at Line 1 in cue 1.1.1 Verse).") with a **Show none** link, rather than
 showing nothing until picked; with more than seven groups the colours go
 round again (brackets and numbers still tell neighbours apart). Also
 built (user ask on 138.png): stored positions (PanTilt, any non-Aim

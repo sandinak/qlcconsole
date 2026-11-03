@@ -380,8 +380,7 @@ FormationEditor::Pick FormationEditor::defaultPick(Doc *doc)
                 names << g->name();
         const MonitorProperties *mp = doc->monitorProperties();
         const StageTarget *line = mp == nullptr ? nullptr : mp->stageTarget(pick.line);
-        pick.note = tr("Showing %1 -- aimed at %2 in cue %3. You picked nothing yet: "
-                       "these are the lights the show most often aims there.")
+        pick.note = tr("Showing %1 (aimed at %2 in cue %3).")
                         .arg(names.join(QStringLiteral(" + ")),
                              line != nullptr ? line->name() : tr("this line"),
                              firstCue.at(best).trimmed());
@@ -520,6 +519,8 @@ void FormationEditor::updatePreview()
         // The editor chose these lights: say which, why, and how to see none.
         m_hint->setText(m_pick.note.toHtmlEscaped()
                         + QStringLiteral(" <a href=\"none\">%1</a>").arg(tr("Show none")));
+        m_hint->setToolTip(tr("You haven't picked lights for this preview: these are the ones the show "
+                              "most often aims at this line. Tick others, or Show none."));
         m_hint->show();
     }
     else

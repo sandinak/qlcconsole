@@ -2321,9 +2321,12 @@ void LookEditor_Test::aStoredPositionLandsWhereItAims()
     // The PanTilt page: with lights in context, the plan and the line.
     const quint32 pid = doc.paletteOps()->create(QLCPalette::PanTilt, QString(), "UST-0", QVariantList(),
                                                  [](QLCPalette *p) { p->setValue(270, 200); });
+    // A twin hung on the same spot lands on the same point as Hung.
+    Fixture *twin = landingSpot(&doc, "Twin", QVector3D(5, 1, 6), false, false);
     Scene scene(&doc);
     scene.addFixture(hung->id());
     scene.addFixture(index->id());
+    scene.addFixture(twin->id());
     LookEditor ed(&doc);
     ed.resize(800, 400);
     ed.show();
@@ -2333,10 +2336,15 @@ void LookEditor_Test::aStoredPositionLandsWhereItAims()
     LinePlanView *plan = ed.findChild<LinePlanView *>("lookPanTiltPlan");
     QVERIFY(plan != nullptr && plan->isVisible());
     QVERIFY(plan->formation().isRawPosition());
-    QCOMPARE(plan->beams().count(), 2);
+    QCOMPARE(plan->beams().count(), 3);
     QLabel *line = ed.findChild<QLabel *>("lookPanTiltLanding");
     QVERIFY(line != nullptr && !line->text().isEmpty());
+    plan->resize(600, 300);
     QVERIFY(!plan->grab().isNull());
+    // Hung and Twin's points are drawn once ("x2"), Index's on its own.
+    QList<int> marks = plan->pointMarks();
+    std::sort(marks.begin(), marks.end());
+    QCOMPARE(marks, QList<int>({ 1, 2 }));
     // No context: nothing to draw, so nothing shown.
     ed.setContextScene(nullptr);
     QVERIFY(!plan->isVisible());
