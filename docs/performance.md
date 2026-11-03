@@ -2,7 +2,9 @@
 
 How much one computer running qlcconsole can drive, measured on three
 machines against the 0.3.0 release candidate (RC8, `849abc83d`) in October
-2026. The numbers are from synthetic loads built to be heavier than a real
+2026, and since November 2026 with every limit bisected to about 5% and
+jitter measured on its own ([Limits to ±5%](#limits-to-5-november-2026),
+[Jitter](#jitter-how-steady-the-frames-are)). The numbers are from synthetic loads built to be heavier than a real
 show (see [What "realistic load" means](#what-realistic-load-means)) and
 from long runs of a real show. The data behind every table and chart is in
 [`perf-data/`](perf-data/); [How to reproduce](#how-to-reproduce) has the
@@ -29,6 +31,86 @@ commands.
 - A real show is much lighter than this load: the 240-fixture show used
   for the long runs takes a quarter of a core or less on the i7 and the
   M4, and about half a core on the Pi 5.
+
+## Limits to ±5% (November 2026)
+
+The envelope above comes from a doubling ladder (1, 8, 16, 32, 64, 80,
+128, 192, 256 … universes): each limit there is a last pass and a first
+fail up to 2× apart, which is why its numbers sit on powers of two. Since
+November each limit is bisected between them, each count decided by two
+runs out of three ([Method](#method)). A limit is the middle of the final
+bracket ± half its width; the **noisy band** is where single runs went
+either way, so a rig sized inside it will sometimes see the problem.
+
+The realistic mixed load, source `ddb33495f` (0.4.0), Release, no I/O
+plugins, offscreen:
+
+| Computer | Timer priority | Smooth to (frame interval p99 ≤ 30 ms) | Noisy band | Breaks at (tick p99 > 20 ms) | Measured |
+|---|---|---|---|---|---|
+| Raspberry Pi 5 | normal (SCHED_OTHER) | **102 ± 2 universes** (101 held, 104 did not) | 92–110 | 188 ± 4 | 3 Nov 2026, Debian 13, kernel 6.18, Qt 6.8.2, 51 runs |
+| Raspberry Pi 5 | real-time (SCHED_FIFO) | **134 ± 2 universes** (132 held, 136 did not) | 128–148 | 134 ± 2 | 3 Nov 2026, as above, 22 runs |
+| Intel i7-9750H (Linux container) | normal | measuring: a gate host, its runs fit between gates | | | |
+| Apple M4 Max | normal | measuring at night, on an idle machine | | | |
+
+**What this means for sizing a rig:** size by the smooth limit, not the
+break: on a Pi 5 at normal priority, frames are already arriving late
+(a third of them past 30 ms at 176 universes) long before the tick time
+crosses its budget. Plan a Pi 5 for about 100 universes of this load, or
+about 130 with real-time priority granted, and stay below the noisy band
+for a show.
+
+Static looks alone (one 170-fixture look per universe, nothing else
+running), Pi 5 at normal priority: jitter from **142 ± 2 universes**
+(band 128–144), breaks at **276 ± 4** (October: smooth to 192).
+
+These are the same machines as the October envelope, on newer code: the
+October Pi 5 column says 80 smooth and 128 borderline, which the bisection
+puts at 102. The Pi 5 had a system daemon (`olad`) using about one core
+throughout (see [Caveats](#caveats)), and the runs were at nice 19.
+
+## Jitter: how steady the frames are
+
+The engine sends a frame every 20 ms. **Jitter** is how far the interval
+between frames strays from that, measured on every frame after warm-up:
+its median, 99th and 99.9th percentiles and maximum, and the share of
+**late frames** (more than 30 ms after the one before). Each late frame is
+put down to one of two causes ([Method](#method)): **waiting**, the timer
+thread ready but not running (woken late, or held up inside its tick),
+or **load**, the tick's own work taking too long.
+
+Raspberry Pi 5, realistic mixed load (median of the runs at each count):
+
+| Universes | Priority | Frame interval p50 / p99 / p99.9 / max (ms) | Late frames | Of them, waiting | Timer wake-up p99 / p99.9 (ms) | Tick p99 (ms) |
+|---|---|---|---|---|---|---|
+| 32 | normal | 20.0 / 22.5 / 23.4 / 24.0 | 0% | – | 1.5 / 2.0 | 2.9 |
+| 32 | real-time | 20.0 / 22.5 / 23.3 / 23.9 | 0% | – | 0.11 / 0.14 | 2.8 |
+| 64 | normal | 20.0 / 26.4 / 41.9 / 44.2 | 0.67% | all | 7.6 / 13.9 | 5.3 |
+| 64 | real-time | 20.0 / 23.7 / 27.4 / 29.1 | 0% | – | 0.22 / 0.33 | 5.0 |
+| 128 | normal | 19.8 / 32.1 / 41.9 / 47.5 | 3.0% | 43 of 44 | 12.2 / 23.3 | 8.8 |
+| 128 | real-time | 20.0 / 25.6 / 35.3 / 37.8 | 0.2% | 2 of 3 | 0.33 / 0.38 | 8.0 |
+| 192 | normal | 26.9 / 44.9 / 57.5 / 60.5 | 38% | all | 28.0 / 31.3 | 22.9 |
+| 192 | real-time | 24.2 / 46.3 / 70.7 / 80.7 | 6.0% | 70 of 73 | 0.51 / 0.55 | 39.3 |
+
+![Frame interval at the 99th percentile against universes, normal and real-time priority, Raspberry Pi 5, with the 30 ms line where jitter starts](images/perf/jitter-rt-pi.svg)
+
+- **At normal priority the Pi 5's jitter is scheduling, not work.** The
+  tick itself stays well inside its budget to past 128 universes, but the
+  timer thread wakes later and later as the cores fill (p99 from 0.01 ms
+  at 1 universe to 12 ms at 128), and nearly every late frame is that wait.
+- **Real-time priority takes the wake-up lateness away at every load**
+  (p99 under 1 ms even at 256 universes), and the frames stay steady to
+  about 134 universes instead of 102.
+- **Past that, with real-time priority, the tick waits inside itself**
+  (wall time minus CPU time: p99 16 ms at 140 universes, 34 ms at 192):
+  most likely blocked on something it shares with the universe threads,
+  which still run at normal priority on full cores (the measurement can
+  tell waiting from working, not what it waits for). That is why its tick
+  p99 crosses 20 ms sooner (134 against 188 universes), and why the two
+  edges coincide with real-time priority on.
+- **What it means for sizing:** below about 64 universes a Pi 5 is steady
+  either way (p99.9 under 42 ms, no late frames with real-time priority);
+  between 64 and 100, normal priority loses about one frame in 150 to
+  waiting; real-time priority is worth granting on a Pi from there up.
 
 ## What "realistic load" means
 
@@ -82,20 +164,32 @@ loss. Sequence gaps (dropped frames) appeared only on the overloaded i7, at
 
 ### Per-function limits
 
-One function type at a time, on 32 universes × 170 RGB fixtures. Each cell
-is the most of that function that ran smoothly, then the count that failed;
-"≥" means nothing failed up to the largest count tried. This is a table
-rather than a chart: several cells have no failure to plot, and one has no
-passing step.
+One function type at a time, on 32 universes × 170 RGB fixtures.
 
-| Function | Raspberry Pi 5 | Intel i7-9750H (Linux container) | Apple M4 Mac |
+The Raspberry Pi 5 column is bisected (November 2026, 0.4.0 `ddb33495f`,
+normal priority): the count where jitter starts (frame interval p99 over
+30 ms), then where it breaks (tick p99 over 20 ms), each ± half its final
+bracket; one number when the two coincide. The other two columns are
+still the October ladder: the most that ran smoothly, then the count that
+failed, up to 2× apart; "≥" means nothing failed up to the largest count
+tried. This is a table rather than a chart: several cells have no failure
+to plot.
+
+| Function | Raspberry Pi 5 (bisected) | Intel i7-9750H (Linux container, October ladder) | Apple M4 Mac (October ladder) |
 |---|---|---|---|
-| Static 170-fixture looks | 256 / 512 (output threads) | ≥ 2048 | ≥ 2048 |
-| Chasers, per-step timing (0.2–1 s holds, 0–0.5 s fades) | 256 / 512 | 512 / 1024 | 1024 / 2048 |
-| Chasers stepping every tick (a worst case) | fails at 8 | 16 / 32 | ≥ 1024 |
-| Scripted RGB matrices (64–256 heads) | 128 / 256 (jitter from 128) | 256 / 512 | 512 / 1024 (jitter from 128) |
-| EFX (4–19 heads) | 512 / 1024 | 1024 / 2048 | ≥ 4096 |
-| Cue lists (8 cues × 4 layers, 2 s crossfades, auto-follow) | 64 / 128 | ≥ 256 | ≥ 256 |
+| Static 170-fixture looks | **440 ± 8** (October: 256 / 512) | ≥ 2048 | ≥ 2048 |
+| Chasers, per-step timing (0.2–1 s holds, 0–0.5 s fades) | **260 ± 4** (256 / 512) | 512 / 1024 | 1024 / 2048 |
+| Chasers stepping every tick (a worst case) | **4.5 ± 0.5** (fails at 8) | 16 / 32 | ≥ 1024 |
+| Scripted RGB matrices (64–256 heads) | jitter from **102 ± 2**, breaks at **158 ± 2** (128 / 256) | 256 / 512 | 512 / 1024 (jitter from 128) |
+| EFX (4–19 heads) | **656 ± 16** (512 / 1024) | 1024 / 2048 | ≥ 4096 |
+| Cue lists (8 cues × 4 layers, 2 s crossfades, auto-follow) | jitter from **59 ± 1**, breaks at **79 ± 1** (64 / 128) | ≥ 256 | ≥ 256 |
+
+**What this means for sizing a rig:** each row is one function alone on
+top of 32 full universes; functions together add up, so a show that uses
+several of them heavily runs out before any one row says. Where one
+function dominates a Pi 5 show, its bisected row is the number to stay
+under, with some margin for the noisy band (in
+[`perf-data/edges.csv`](perf-data/edges.csv): `band_lo`, `band_hi`).
 
 Scripted RGB matrices are the most expensive function per instance; a
 chaser that steps every frame is the worst case of all, and not something
@@ -222,7 +316,27 @@ On the Pi 5, granting it (`prlimit --rtprio`) at the realistic load:
 | 256 | 28.8 ms, 52.6 ms | 45.7 ms, 55.1 ms |
 
 Real-time priority steadies the frame cadence below saturation (3 to 15
-times fewer late frames) but does not raise the ceiling. To grant it, give
+times fewer late frames) but does not raise the ceiling.
+
+**November 2026, with the edges bisected** (0.4.0, `ddb33495f`; the whole
+realistic-load sweep at each priority, [Jitter](#jitter-how-steady-the-frames-are)
+has the detail; data in [`perf-data/edges.csv`](perf-data/edges.csv) and
+[`perf-data/jitter.csv`](perf-data/jitter.csv), `priority` = `normal` or
+`rt`):
+
+| Raspberry Pi 5 | Normal priority | SCHED_FIFO |
+|---|---|---|
+| Smooth to (frame interval p99 ≤ 30 ms) | 102 ± 2 universes | **134 ± 2** (+31%) |
+| Timer wake-up lateness p99, at 64 / 128 / 192 universes | 7.6 / 12.2 / 28.0 ms | 0.22 / 0.33 / 0.51 ms |
+| Late frames at 128 universes | 3.0% | 0.2% |
+| Tick p99 over 20 ms from | 188 ± 4 universes | 134 ± 2 |
+
+Granting real-time priority is worth about a third more universes of
+steady output on a Pi 5 and removes the timer's wake-up lateness
+outright. It does not raise how much work fits in a tick: past about 134
+universes the real-time timer waits inside its tick instead. The i7
+container cannot grant SCHED_FIFO at all (an unprivileged LXC refuses
+`prlimit --rtprio`), so it has no real-time column. To grant it, give
 the user an rtprio limit (for example `@audio - rtprio 95` in
 `/etc/security/limits.d/` and the user in `audio`), or the binary
 `cap_sys_nice`. The i7 container could not grant it at all.
@@ -596,25 +710,52 @@ floats went into existing padding and the size is back to 96 (a
    when the tick p99 is over 20 ms or the universe threads are a frame
    behind in 5% or more of samples; it has **jitter** when the frame
    interval p99 is over 30 ms.
-2. **Art-Net on the wire.** `stresstest/wire/wire_sweep.py`: qlcstress
+2. **Finding the edges** (since November 2026, `perf_sweep.py --refine`).
+   The doubling ladder (1, 8, 16, 32, 64, 80, 128, 192, 256 … universes;
+   8, 16 … 4096 functions) only brackets a limit between its last pass
+   and first fail, up to 2× apart. After the ladder, each edge (where
+   jitter starts, where it breaks) is bisected between them until the
+   bracket is within 5% of its count or one unit. Every count the edge
+   rests on is decided by **two runs out of three** (the third only when
+   the first two disagree), so the edge is where a run fails as often as
+   not. Counts that passed some runs and failed others are **mixed**: they
+   show how wide the noisy band around the edge is. A limit is reported as
+   the middle of the bracket ± half its width, with the band beside it.
+   Near a noisy edge the band is wider than the 5% bracket: the machine
+   itself is not more repeatable than that, and the page says so.
+3. **Jitter, split by cause.** On every tick the harness also works out
+   when the tick was due, following the timer's own loop (deadlines a
+   period apart; after a tick that ends past the next deadline, a
+   catch-up tick at once, then a full period after its end). **Wake-up
+   lateness** is how long after that the tick started: the timer thread
+   waiting for a CPU. **Stall** is the tick's wall time minus its CPU
+   time: inside the tick, the thread was runnable but not running. A
+   **late frame** (more than 30 ms after the previous one) counts as
+   **scheduling** when wake-up lateness plus stall make up at least half
+   of its delay, else as **load** (the tick's own work ran long). Every
+   run also records the timer's scheduling class (SCHED_OTHER or
+   SCHED_FIFO), Qt, the OS and the source's SHA.
+4. **Art-Net on the wire.** `stresstest/wire/wire_sweep.py`: qlcstress
    sends to 127.0.0.1, the loopback is captured (Linux: AF_PACKET in a
    network namespace; macOS: tcpdump on lo0), and each universe is checked
    for frame rate, interval p99 and maximum, late frames and ArtDMX
    sequence gaps.
-3. **The full app under input load.** `stresstest/wire/io_load.py`, as in
+5. **The full app under input load.** `stresstest/wire/io_load.py`, as in
    [the table above](#art-net-osc-and-web-under-input-load).
-4. **Long runs.** `stresstest/soak24/run_soak.py`: the real show, then the
+6. **Long runs.** `stresstest/soak24/run_soak.py`: the real show, then the
    scaled show, sampled every 30 s.
-5. **Leaks.** `stresstest/m2leak` under ASan, LSan and UBSan, over 1, 10
+7. **Leaks.** `stresstest/m2leak` under ASan, LSan and UBSan, over 1, 10
    and 40 cycles; bytes per cycle are the slope between them
    (`m2leak/lsan_parse.py`).
-6. **SCHED_FIFO A/B.** `stresstest/rt_ab.sh`.
+8. **SCHED_FIFO A/B.** `stresstest/rt_ab.sh` (October); since November the
+   whole a1p sweep with its edges, at each priority:
+   `perf_sweep.py --refine --wrap "sudo -n prlimit --rtprio=95:95 setpriv ..."`.
 
 ### Hardware and versions
 
 | Computer | CPU | Memory | OS | Qt | Build |
 |---|---|---|---|---|---|
-| Raspberry Pi 5 | Cortex-A76, 4 cores at 2.4 GHz (ondemand governor, about 55 °C, not throttled) | 8 GB | Debian 13 | 6.8.2 (Debian) | Release, GCC 14.2, from a `git archive` of RC8 |
+| Raspberry Pi 5 | Cortex-A76, 4 cores at 2.4 GHz (ondemand governor, about 55 °C, not throttled) | 8 GB | Debian 13 (November: kernel 6.18.50+rpt) | 6.8.2 (Debian) | Release, GCC 14.2, from a `git archive` of RC8 (November: of `ddb33495f`) |
 | Intel i7-9750H (Linux container) | i7-9750H, 6 cores / 12 threads; an LXC container with 8 vCPU | 16 GB | Debian 13 in LXC on Proxmox | 6.8.2 (Debian) | Release, GCC 14.2, from a `git archive` of RC8 |
 | Apple M4 Mac | Apple M4, 4 performance + 6 efficiency cores | 32 GB | macOS 26.7 | 6.9.3 (bundled) | the RC8 DMG: qlcstress linked against the DMG's own engine library and Qt |
 
@@ -633,6 +774,14 @@ cmake --build stress-build
 QT_QPA_PLATFORM=offscreen python3 stresstest/perf_sweep.py \
     --qlcstress stress-build/qlcstress --resources resources \
     --out perf/sweep --sweeps a1p,bp,cp,c,a2
+
+# The same with every edge bisected to ~5% (three runs at each end of the
+# bracket); --estimate prints the runs and hours first. --quiet-cmd waits
+# for (and redoes runs that overlapped) other work on the host.
+QT_QPA_PLATFORM=offscreen python3 stresstest/perf_sweep.py \
+    --qlcstress stress-build/qlcstress --resources resources \
+    --out perf/precise --sweeps a1p,c,cp,a2 --refine --rev "$(git rev-parse --short HEAD)"
+python3 -I tools/perf/extract.py precise pi normal perf/precise  # -> perf-data/edges.csv, jitter.csv
 
 # The mixed rig: universes, pan/tilt EFX, matrices over stage groups
 QT_QPA_PLATFORM=offscreen python3 stresstest/perf_sweep.py \
@@ -683,3 +832,13 @@ same data gives byte-identical SVGs.
   from a `git archive`, without the git history the build number comes
   from).
 - Steps above 1024 universes (past the engine's maximum) are left out.
+- **The November runs** were at nice 19 (working-hours rule for the
+  shared hosts). On the Pi 5 a system daemon, `olad`, kept about one of
+  its four cores busy throughout; it was left running. The Pi 5 limits
+  are those of a Pi with one busy background process, and the normal-
+  priority column feels it more than the real-time one. The i7 container
+  is also a gate host: its runs wait for gates to finish, and a run that
+  overlapped one is discarded and run again (`--quiet-cmd`).
+- **A bisected limit is only as repeatable as the machine.** The noisy
+  band beside each limit is where single runs disagreed; the ± is the
+  bracket the majority of runs held to, not a confidence interval.

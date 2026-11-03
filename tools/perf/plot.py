@@ -415,6 +415,74 @@ def main():
     if os.path.exists(trend_path):
         trend_chart(read(trend_path), classes, os.path.join(out, "trend.svg"))
 
+    # g. jitter vs universes (perf_sweep --refine, extract.py precise)
+    jit_path = os.path.join(data, "jitter.csv")
+    if os.path.exists(jit_path):
+        jitter_charts(read(jit_path), out)
+
+
+def jitter_points(rows):
+    """[(universes, frame p99 median over runs, a row)] of a1p rows."""
+    by_n = {}
+    for r in rows:
+        if r["sweep"] == "a1p-universes-mixed-perstep" and num(r["frame_p99_ms"]) is not None:
+            by_n.setdefault(int(r["n"]), []).append(r)
+    pts = []
+    for n in sorted(by_n):
+        rs = sorted(by_n[n], key=lambda r: num(r["frame_p99_ms"]))
+        mid = rs[len(rs) // 2]
+        pts.append((n, num(mid["frame_p99_ms"]), dict(mid, runs=str(len(rs)))))
+    return pts
+
+
+def jitter_tip(h):
+    return lambda x, y, r: "%s, %d universes: frame interval p99 %s ms (median of %s run%s), p99.9 %s ms, " \
+        "late frames %s%%, timer wake-up p99 %s ms%s" % (
+            HOST_LABEL[h], x, label_num(round(y, 1)), r["runs"], "" if r["runs"] == "1" else "s",
+            r["frame_p999_ms"] or "-", r["late_pct"] or "0", r["wake_p99_ms"] or "-",
+            " (broken: %s)" % r["broken"] if r["broken"] else "")
+
+
+def jitter_charts(rows, out):
+    normal = [r for r in rows if r["priority"] == "normal"]
+    hosts = [h for h in TREND_HOSTS if any(r["host"] == h for r in normal)]
+    if hosts:
+        c = Chart("Frame jitter vs universes",
+                  "Realistic mixed load, normal priority. One output frame in a hundred comes at least this far apart.",
+                  "Universes (log scale)", "Frame interval, 99th percentile (ms)",
+                  Log2(1, 1024), Lin(0, 80, 10), hosts)
+        c.notes = ["Hollow marker: jitter or broken. Frames are due every 20 ms; median of the runs at each count."]
+        c.hline(30, "30 ms: where jitter starts")
+        for h in hosts:
+            pts = jitter_points([r for r in normal if r["host"] == h])
+            pts = [(x, min(y, 80), r) for x, y, r in pts]
+            c.series(h, pts, SHORT[h], jitter_tip(h), hollow=lambda p: bool(p[2]["broken"]))
+        c.render(os.path.join(out, "jitter-p99.svg"))
+    # the real-time A/B, per host that has both
+    for h in TREND_HOSTS:
+        rt = [r for r in rows if r["host"] == h and r["priority"] == "rt"]
+        nr = [r for r in normal if r["host"] == h]
+        if not rt or not nr:
+            continue
+        key = h + "-rt"
+        COLOR[key], SHAPE[key] = COLOR[h], "diamond" if SHAPE[h] != "diamond" else "square"
+        HOST_LABEL[key] = "%s, real-time (SCHED_FIFO)" % SHORT[h]
+        HOST_LABEL.setdefault(h, SHORT[h])
+        lab = HOST_LABEL[h]
+        HOST_LABEL[h] = "%s, normal priority" % SHORT[h]
+        c = Chart("%s: frame jitter, normal vs real-time priority" % SHORT[h],
+                  "Realistic mixed load. The same runs, with the timer thread granted SCHED_FIFO or not.",
+                  "Universes (log scale)", "Frame interval, 99th percentile (ms)",
+                  Log2(1, 512), Lin(0, 80, 10), [h, key])
+        c.notes = ["Hollow marker: jitter or broken. Frames are due every 20 ms; median of the runs at each count."]
+        c.hline(30, "30 ms: where jitter starts")
+        for hh, rs, dash in ((h, nr, None), (key, rt, "6 4")):
+            pts = [(x, min(y, 80), r) for x, y, r in jitter_points(rs)]
+            c.series(hh, pts, "normal" if hh == h else "real-time", jitter_tip(hh),
+                     hollow=lambda p: bool(p[2]["broken"]), dash=dash)
+        c.render(os.path.join(out, "jitter-rt-%s.svg" % h))
+        HOST_LABEL[h] = lab
+
 
 def trend_chart(rows, classes, path):
     """One point per guard run: the median, over every metric the guard

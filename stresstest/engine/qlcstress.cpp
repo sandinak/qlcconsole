@@ -68,6 +68,9 @@
 #include <QThread>
 #include <QJsonObject>
 #include <QJsonDocument>
+#include <QSysInfo>
+#include <pthread.h>
+#include <sched.h>
 
 static const double kTickBudgetMs = 20.0; // 50Hz default tick
 
@@ -355,6 +358,16 @@ static void churnTick(Doc *doc, QRandomGenerator &rng)
 //   running  functions in the MasterTimer's list
 // The universes' fader processing runs on their own threads and is not in
 // "compute"; the process CPU% (getrusage) covers it.
+// Jitter, split by cause (tickReady comes at the end of a tick, so the
+// frame interval "gap" is the interval between output frames):
+//   lateness = gap - period (>= 0): how late this frame came
+//   wake     = start - when the tick was due (>= 0), the due time following
+//              the timer loop (a catch-up tick after an overrun is due at
+//              once): the timer thread woke late -- scheduling
+//   stall    = compute wall - thread CPU: inside the tick, the thread was
+//              runnable but not running -- scheduling too
+// A late frame (gap > 1.5 x period) counts as "scheduling" when wake + stall
+// make up at least half of its lateness, else as "load".
 // Ticks in the first --warmup-seconds are left out of every statistic, and
 // the RSS slope (MB/h) is fitted to the samples after warm-up only.
 // Outputs (with --out PREFIX): PREFIX.timeline.csv (one row per sample
@@ -380,8 +393,11 @@ struct TickRecorder
     double warmupMs = 0;
     double budgetMs = 20.0;
     // whole run after warm-up
-    LatHist gapAll, compAll, cpuAll;
-    quint64 overAll = 0, lateAll = 0, ticksAll = 0;
+    LatHist gapAll, compAll, cpuAll, lateAllH, wakeAll, stallAll;
+    quint64 overAll = 0, lateAll = 0, ticksAll = 0, lateSched = 0, lateLoad = 0;
+    qint64 dueNs = 0, deadlineNs = 0;   // the timer loop's model: see the probe
+    bool catchUp = false;
+    int timerPolicy = -1, timerPrio = 0;
     // current sample interval (cleared by the sampler)
     LatHist compIv, gapIv;
     quint64 overIv = 0, lateIv = 0, ticksIv = 0;
@@ -424,6 +440,39 @@ static int runTimed(Doc *doc, const QList<Function*> &funcs, const ShowSpec &spe
         const double cpu = mt->m_tickCpuUs.loadRelaxed() / 1000.0;
         const int running = int(mt->m_functionList.size());   // timer thread: its own list
         const double tms = now / 1.0e6;
+        // This tick's start: its frame (now) minus its own compute. When it
+        // was due follows the timer's own loop (mastertimer-unix.cpp):
+        // deadlines a period apart; a tick that ends past the next deadline
+        // is followed at once by a catch-up tick, after which the deadline
+        // restarts a period after that tick's end. wake = start - due.
+        const qint64 startNs = now - qint64(comp * 1.0e6);
+        const qint64 periodNs = qint64(rec.budgetMs * 1.0e6);
+        double wake = -1.0;
+        if (rec.dueNs)
+        {
+            wake = qMax(0.0, (startNs - rec.dueNs) / 1.0e6);
+            if (!rec.catchUp)
+                rec.deadlineNs = rec.dueNs;
+        }
+        else
+        {
+            rec.deadlineNs = startNs;
+        }
+        const qint64 nextDeadline = rec.catchUp ? now + periodNs : rec.deadlineNs + periodNs;
+        rec.catchUp = now >= nextDeadline;
+        rec.dueNs = rec.catchUp ? now : nextDeadline;
+        rec.deadlineNs = nextDeadline;
+        const double stall = qMax(0.0, comp - cpu);
+        if (rec.timerPolicy < 0)
+        {
+            sched_param sp;
+            int pol = 0;
+            if (pthread_getschedparam(pthread_self(), &pol, &sp) == 0)
+            {
+                rec.timerPolicy = pol;
+                rec.timerPrio = sp.sched_priority;
+            }
+        }
         QMutexLocker l(&rec.lock);
         rec.running = running;
         rec.compIv.add(comp);
@@ -436,10 +485,21 @@ static int runTimed(Doc *doc, const QList<Function*> &funcs, const ShowSpec &spe
         if (tms >= rec.warmupMs)
         {
             rec.compAll.add(comp); rec.cpuAll.add(cpu);
-            if (gap >= 0) rec.gapAll.add(gap);
+            if (gap >= 0)
+            {
+                rec.gapAll.add(gap);
+                rec.lateAllH.add(qMax(0.0, gap - rec.budgetMs));
+            }
+            if (wake >= 0) rec.wakeAll.add(wake);
+            rec.stallAll.add(stall);
             rec.ticksAll++;
             if (over) rec.overAll++;
-            if (late) rec.lateAll++;
+            if (late)
+            {
+                rec.lateAll++;
+                if (qMax(0.0, wake) + stall >= 0.5 * (gap - rec.budgetMs)) rec.lateSched++;
+                else rec.lateLoad++;
+            }
             rec.runningSum += quint64(running);
             rec.runningMax = qMax(rec.runningMax, running);
         }
@@ -613,6 +673,18 @@ static int runTimed(Doc *doc, const QList<Function*> &funcs, const ShowSpec &spe
     r["compute"] = histMap(rec.compAll); r["gap"] = histMap(rec.gapAll); r["tickCpu"] = histMap(rec.cpuAll);
     r["overBudget"] = double(rec.overAll); r["overPerHour"] = rec.overAll / hours;
     r["late"] = double(rec.lateAll); r["latePerHour"] = rec.lateAll / hours;
+    r["latePct"] = rec.ticksAll ? 100.0 * double(rec.lateAll) / double(rec.ticksAll) : 0.0;
+    r["lateness"] = histMap(rec.lateAllH); r["wake"] = histMap(rec.wakeAll); r["stall"] = histMap(rec.stallAll);
+    r["lateSched"] = double(rec.lateSched); r["lateLoad"] = double(rec.lateLoad);
+    r["timerPolicy"] = rec.timerPolicy == SCHED_OTHER ? QString("other")
+                       : rec.timerPolicy == SCHED_FIFO ? QString("fifo")
+                       : rec.timerPolicy == SCHED_RR ? QString("rr")
+                       : QString::number(rec.timerPolicy);
+    r["timerPriority"] = rec.timerPrio;
+    r["qt"] = QString::fromLatin1(qVersion());
+    r["os"] = QSysInfo::prettyProductName();
+    r["kernel"] = QSysInfo::kernelVersion();
+    r["arch"] = QSysInfo::currentCpuArchitecture();
     r["runningMean"] = rec.ticksAll ? double(rec.runningSum) / rec.ticksAll : 0.0;
     r["runningMax"] = rec.runningMax; r["runningAtEnd"] = runningAtEnd;
     r["cpuPct"] = cpuPctMean;

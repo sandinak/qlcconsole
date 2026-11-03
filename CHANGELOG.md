@@ -139,6 +139,15 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   when something important is off. On Linux the timer now takes real-time
   priority within a smaller rtprio limit instead of being refused.
 
+### Performance page: limits to ±5%, and jitter measured
+- The limits on the [performance page](docs/performance.md) are bisected
+  now, not read off a doubling ladder: each is a number with its
+  uncertainty (to about 5%, each count decided by two runs out of three), how it was measured
+  (host, OS, Qt, timer priority) and when. Jitter is reported as a
+  measurement: frame-interval percentiles, late frames split into
+  scheduling and load, and where jitter starts, separately from where the
+  engine breaks; with real-time priority on and off on the Raspberry Pi 5.
+
 ## [0.4.0] - 2026-11-02
 
 qlcconsole 0.4.0 carries the 0.3.1 polish, all of 0.4 ("Run the show") and

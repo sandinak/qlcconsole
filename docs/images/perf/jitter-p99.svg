@@ -1,0 +1,80 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="450" viewBox="0 0 760 450" font-family="system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" role="img" aria-labelledby="t d">
+<title id="t">Frame jitter vs universes</title>
+<desc id="d">Realistic mixed load, normal priority. One output frame in a hundred comes at least this far apart.</desc>
+<rect x="0.5" y="0.5" width="759" height="449" rx="8" fill="#fcfcfb" stroke="#d9d8d2"/>
+<text x="20" y="30" font-size="16" font-weight="600" fill="#0b0b0b">Frame jitter vs universes</text>
+<text x="20" y="50" font-size="12.5" fill="#52514e">Realistic mixed load, normal priority. One output frame in a hundred comes at least this far apart.</text>
+<line x1="20" y1="70" x2="42" y2="70" stroke="#2a78d6" stroke-width="2"/>
+<circle cx="31" cy="70" r="4.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="1.5"></circle>
+<text x="50" y="74.5" font-size="12.5" fill="#0b0b0b">Raspberry Pi 5</text>
+<text x="20" y="93" font-size="11.5" fill="#6f6d68">Hollow marker: jitter or broken. Frames are due every 20 ms; median of the runs at each count.</text>
+<line x1="70" y1="388" x2="610" y2="388" stroke="#e9e8e2" stroke-width="1"/>
+<text x="62" y="392" font-size="12" fill="#52514e" text-anchor="end">0</text>
+<line x1="70" y1="353.5" x2="610" y2="353.5" stroke="#e9e8e2" stroke-width="1"/>
+<text x="62" y="357.5" font-size="12" fill="#52514e" text-anchor="end">10</text>
+<line x1="70" y1="319" x2="610" y2="319" stroke="#e9e8e2" stroke-width="1"/>
+<text x="62" y="323" font-size="12" fill="#52514e" text-anchor="end">20</text>
+<line x1="70" y1="284.5" x2="610" y2="284.5" stroke="#e9e8e2" stroke-width="1"/>
+<text x="62" y="288.5" font-size="12" fill="#52514e" text-anchor="end">30</text>
+<line x1="70" y1="250" x2="610" y2="250" stroke="#e9e8e2" stroke-width="1"/>
+<text x="62" y="254" font-size="12" fill="#52514e" text-anchor="end">40</text>
+<line x1="70" y1="215.5" x2="610" y2="215.5" stroke="#e9e8e2" stroke-width="1"/>
+<text x="62" y="219.5" font-size="12" fill="#52514e" text-anchor="end">50</text>
+<line x1="70" y1="181" x2="610" y2="181" stroke="#e9e8e2" stroke-width="1"/>
+<text x="62" y="185" font-size="12" fill="#52514e" text-anchor="end">60</text>
+<line x1="70" y1="146.5" x2="610" y2="146.5" stroke="#e9e8e2" stroke-width="1"/>
+<text x="62" y="150.5" font-size="12" fill="#52514e" text-anchor="end">70</text>
+<line x1="70" y1="112" x2="610" y2="112" stroke="#e9e8e2" stroke-width="1"/>
+<text x="62" y="116" font-size="12" fill="#52514e" text-anchor="end">80</text>
+<line x1="70" y1="388" x2="70" y2="393" stroke="#c3c2b7" stroke-width="1"/>
+<text x="70" y="408" font-size="12" fill="#52514e" text-anchor="middle">1</text>
+<line x1="124" y1="388" x2="124" y2="393" stroke="#c3c2b7" stroke-width="1"/>
+<text x="124" y="408" font-size="12" fill="#52514e" text-anchor="middle">2</text>
+<line x1="178" y1="388" x2="178" y2="393" stroke="#c3c2b7" stroke-width="1"/>
+<text x="178" y="408" font-size="12" fill="#52514e" text-anchor="middle">4</text>
+<line x1="232" y1="388" x2="232" y2="393" stroke="#c3c2b7" stroke-width="1"/>
+<text x="232" y="408" font-size="12" fill="#52514e" text-anchor="middle">8</text>
+<line x1="286" y1="388" x2="286" y2="393" stroke="#c3c2b7" stroke-width="1"/>
+<text x="286" y="408" font-size="12" fill="#52514e" text-anchor="middle">16</text>
+<line x1="340" y1="388" x2="340" y2="393" stroke="#c3c2b7" stroke-width="1"/>
+<text x="340" y="408" font-size="12" fill="#52514e" text-anchor="middle">32</text>
+<line x1="394" y1="388" x2="394" y2="393" stroke="#c3c2b7" stroke-width="1"/>
+<text x="394" y="408" font-size="12" fill="#52514e" text-anchor="middle">64</text>
+<line x1="448" y1="388" x2="448" y2="393" stroke="#c3c2b7" stroke-width="1"/>
+<text x="448" y="408" font-size="12" fill="#52514e" text-anchor="middle">128</text>
+<line x1="502" y1="388" x2="502" y2="393" stroke="#c3c2b7" stroke-width="1"/>
+<text x="502" y="408" font-size="12" fill="#52514e" text-anchor="middle">256</text>
+<line x1="556" y1="388" x2="556" y2="393" stroke="#c3c2b7" stroke-width="1"/>
+<text x="556" y="408" font-size="12" fill="#52514e" text-anchor="middle">512</text>
+<line x1="610" y1="388" x2="610" y2="393" stroke="#c3c2b7" stroke-width="1"/>
+<text x="610" y="408" font-size="12" fill="#52514e" text-anchor="middle">1,024</text>
+<line x1="70" y1="388" x2="610" y2="388" stroke="#c3c2b7" stroke-width="1"/>
+<text x="340" y="432" font-size="12.5" fill="#52514e" text-anchor="middle">Universes (log scale)</text>
+<text transform="translate(20 250) rotate(-90)" font-size="12.5" fill="#52514e" text-anchor="middle">Frame interval, 99th percentile (ms)</text>
+<line x1="70" y1="284.5" x2="610" y2="284.5" stroke="#52514e" stroke-width="1.25" stroke-dasharray="6 4"/>
+<text x="76" y="278.5" font-size="12" fill="#52514e" text-anchor="start">30 ms: where jitter starts</text>
+<path d="M70 317.7 L232 314.1 L286 310.6 L340 310.4 L394 297.1 L411.4 292.2 L422.3 294.9 L424.8 285.2 L427.2 292.3 L429.5 288.2 L431.8 280.7 L434 285.2 L436.2 288.2 L440.3 281.7 L448 277.3 L465.4 232.2 L472.8 205.3 L476.3 240.2 L479.6 233.2 L502 112" fill="none" stroke="#2a78d6" stroke-width="2" stroke-linejoin="round"/>
+<circle cx="70" cy="317.7" r="4.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="1.5"><title>Raspberry Pi 5, 1 universes: frame interval p99 20.4 ms (median of 1 run), p99.9 22.1 ms, late frames 0%, timer wake-up p99 0.01 ms</title></circle>
+<circle cx="232" cy="314.1" r="4.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="1.5"><title>Raspberry Pi 5, 8 universes: frame interval p99 21.4 ms (median of 1 run), p99.9 24.26 ms, late frames 0%, timer wake-up p99 0.15 ms</title></circle>
+<circle cx="286" cy="310.6" r="4.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="1.5"><title>Raspberry Pi 5, 16 universes: frame interval p99 22.4 ms (median of 1 run), p99.9 23.98 ms, late frames 0%, timer wake-up p99 0.38 ms</title></circle>
+<circle cx="340" cy="310.4" r="4.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="1.5"><title>Raspberry Pi 5, 32 universes: frame interval p99 22.5 ms (median of 1 run), p99.9 23.39 ms, late frames 0%, timer wake-up p99 1.45 ms</title></circle>
+<circle cx="394" cy="297.1" r="4.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="1.5"><title>Raspberry Pi 5, 64 universes: frame interval p99 26.4 ms (median of 1 run), p99.9 41.85 ms, late frames 0.67%, timer wake-up p99 7.6 ms</title></circle>
+<circle cx="411.4" cy="292.2" r="4.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="1.5"><title>Raspberry Pi 5, 80 universes: frame interval p99 27.8 ms (median of 2 runs), p99.9 38.25 ms, late frames 0.73%, timer wake-up p99 8.75 ms</title></circle>
+<circle cx="422.3" cy="294.9" r="4.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="1.5"><title>Raspberry Pi 5, 92 universes: frame interval p99 27 ms (median of 3 runs), p99.9 37.79 ms, late frames 0.2%, timer wake-up p99 7.2 ms</title></circle>
+<circle cx="424.8" cy="285.2" r="4.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="1.5"><title>Raspberry Pi 5, 95 universes: frame interval p99 29.8 ms (median of 3 runs), p99.9 38.68 ms, late frames 0.87%, timer wake-up p99 10.48 ms</title></circle>
+<circle cx="427.2" cy="292.3" r="4.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="1.5"><title>Raspberry Pi 5, 98 universes: frame interval p99 27.7 ms (median of 3 runs), p99.9 29.73 ms, late frames 0.07%, timer wake-up p99 8.2 ms</title></circle>
+<circle cx="429.5" cy="288.2" r="4.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="1.5"><title>Raspberry Pi 5, 101 universes: frame interval p99 28.9 ms (median of 3 runs), p99.9 33.28 ms, late frames 0.47%, timer wake-up p99 8.59 ms</title></circle>
+<circle cx="431.8" cy="280.7" r="4.5" fill="#fcfcfb" stroke="#2a78d6" stroke-width="2"><title>Raspberry Pi 5, 104 universes: frame interval p99 31.1 ms (median of 3 runs), p99.9 47.5 ms, late frames 1.34%, timer wake-up p99 13.37 ms (broken: cadence)</title></circle>
+<circle cx="434" cy="285.2" r="4.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="1.5"><title>Raspberry Pi 5, 107 universes: frame interval p99 29.8 ms (median of 3 runs), p99.9 33.58 ms, late frames 0.73%, timer wake-up p99 9.39 ms</title></circle>
+<circle cx="436.2" cy="288.2" r="4.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="1.5"><title>Raspberry Pi 5, 110 universes: frame interval p99 28.9 ms (median of 3 runs), p99.9 34.35 ms, late frames 0.4%, timer wake-up p99 9.51 ms</title></circle>
+<circle cx="440.3" cy="281.7" r="4.5" fill="#fcfcfb" stroke="#2a78d6" stroke-width="2"><title>Raspberry Pi 5, 116 universes: frame interval p99 30.8 ms (median of 1 run), p99.9 32.8 ms, late frames 1.4%, timer wake-up p99 9.96 ms (broken: cadence)</title></circle>
+<circle cx="448" cy="277.3" r="4.5" fill="#fcfcfb" stroke="#2a78d6" stroke-width="2"><title>Raspberry Pi 5, 128 universes: frame interval p99 32.1 ms (median of 2 runs), p99.9 41.86 ms, late frames 2.95%, timer wake-up p99 12.23 ms (broken: cadence)</title></circle>
+<circle cx="465.4" cy="232.2" r="4.5" fill="#fcfcfb" stroke="#2a78d6" stroke-width="2"><title>Raspberry Pi 5, 160 universes: frame interval p99 45.2 ms (median of 2 runs), p99.9 77.79 ms, late frames 14.78%, timer wake-up p99 23.67 ms (broken: cadence)</title></circle>
+<circle cx="472.8" cy="205.3" r="4.5" fill="#fcfcfb" stroke="#2a78d6" stroke-width="2"><title>Raspberry Pi 5, 176 universes: frame interval p99 53 ms (median of 3 runs), p99.9 73.8 ms, late frames 32.54%, timer wake-up p99 31.19 ms (broken: cadence)</title></circle>
+<circle cx="476.3" cy="240.2" r="4.5" fill="#fcfcfb" stroke="#2a78d6" stroke-width="2"><title>Raspberry Pi 5, 184 universes: frame interval p99 42.9 ms (median of 3 runs), p99.9 45.84 ms, late frames 33.19%, timer wake-up p99 23.81 ms (broken: cadence)</title></circle>
+<circle cx="479.6" cy="233.2" r="4.5" fill="#fcfcfb" stroke="#2a78d6" stroke-width="2"><title>Raspberry Pi 5, 192 universes: frame interval p99 44.9 ms (median of 3 runs), p99.9 57.52 ms, late frames 38.43%, timer wake-up p99 27.98 ms (broken: compute+cadence)</title></circle>
+<circle cx="502" cy="112" r="4.5" fill="#fcfcfb" stroke="#2a78d6" stroke-width="2"><title>Raspberry Pi 5, 256 universes: frame interval p99 80 ms (median of 1 run), p99.9 111.58 ms, late frames 74.49%, timer wake-up p99 46.01 ms (broken: compute+cadence)</title></circle>
+<line x1="509" y1="112" x2="621" y2="112" stroke="#c3c2b7" stroke-width="1"/>
+<circle cx="628" cy="112" r="4" fill="#2a78d6" stroke="#fcfcfb" stroke-width="1.5"></circle>
+<text x="637" y="116" font-size="12" fill="#0b0b0b">Pi 5</text>
+</svg>
