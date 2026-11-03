@@ -36,6 +36,7 @@ private slots:
     void offWritesNothing();
     /** On, allow output, lesson, link, hand-out time: saved and read back */
     void roundTrip();
+    void showControlFlagsSaveAndOldFilesLoadSafe();
     /** Attributes a newer build wrote are kept and written back */
     void unknownAttributesAreKept();
     /** A new show is off again; loading does not modify the show */

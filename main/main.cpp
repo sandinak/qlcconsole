@@ -511,7 +511,7 @@ int main(int argc, char** argv)
     WebAccessController *webAccess = new WebAccessController(app.doc(), VirtualConsole::instance(),
                                                              SimpleDesk::instance());
     QObject::connect(webAccess, SIGNAL(toggleDocMode()),
-            &app, SLOT(slotModeToggle()));
+            &app, SLOT(slotModeToggleFromWeb()));
     QObject::connect(webAccess, SIGNAL(loadProject(QString)),
             &app, SLOT(slotLoadDocFromMemory(QString)));
     QObject::connect(webAccess, SIGNAL(storeAutostartProject(QString)),

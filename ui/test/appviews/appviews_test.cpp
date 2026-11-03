@@ -3644,6 +3644,38 @@ void AppViews_Test::teachingModeIsGuardedByThePin()
     QVERIFY(doc->teachingSettings()->allowOutput());
     QVERIFY(!doc->inputOutputMap()->teachingHold());
 
+    // Q203: letting show control through (or sending it in Blind) asks too;
+    // holding more does not
+    QVERIFY(!doc->teachingSettings()->allowShowControl());
+    {
+        ShowSettingsDialog dlg(doc, m_app);
+        dlg.findChild<QCheckBox *>("showSettingsAllowShowControl")->setChecked(true);
+        ShowSettingsDialog::testAnswers() = { "9999" };
+        dlg.accept();
+        QVERIFY(!doc->teachingSettings()->allowShowControl());
+        ShowSettingsDialog::testAnswers() = { "2468" };
+        dlg.accept();
+    }
+    QVERIFY(doc->teachingSettings()->allowShowControl());
+    {
+        ShowSettingsDialog dlg(doc, m_app);
+        dlg.findChild<QCheckBox *>("showSettingsHoldBlindControl")->setChecked(true);
+        ShowSettingsDialog::testAnswers().clear();
+        dlg.accept();                                   // holding more: no PIN
+        QCOMPARE(dlg.result(), int(QDialog::Accepted));
+    }
+    QVERIFY(doc->teachingSettings()->holdShowControlInBlind());
+    {
+        ShowSettingsDialog dlg(doc, m_app);
+        dlg.findChild<QCheckBox *>("showSettingsHoldBlindControl")->setChecked(false);
+        ShowSettingsDialog::testAnswers() = { "9999" };
+        dlg.accept();                                   // sending in Blind again: PIN
+        QVERIFY(doc->teachingSettings()->holdShowControlInBlind());
+        ShowSettingsDialog::testAnswers() = { "2468" };
+        dlg.accept();
+    }
+    QVERIFY(!doc->teachingSettings()->holdShowControlInBlind());
+
     // The lock-Design box is only for a show with a PIN, and off keeps the
     // PIN for Teaching alone: a student can still leave Operate
     QVERIFY(doc->operateSettings()->hasPin());
@@ -3746,6 +3778,17 @@ void AppViews_Test::teachingOperateWarnsQuietlyThenAsksWhenItLooksReal()
     QCOMPARE(doc->mode(), Doc::Operate);
     QVERIFY(!boxed);
     m_app->slotModeDesign();
+
+    // Q204: the web page's toggle never puts the question on the console
+    // (it would look real here: output let through and patched)
+    boxed = false;
+    m_app->slotModeToggleFromWeb();
+    QTest::qWait(60);
+    QCOMPARE(doc->mode(), Doc::Operate);
+    QVERIFY(!boxed);
+    m_app->slotModeToggleFromWeb();
+    QCOMPARE(doc->mode(), Doc::Design);
+    QVERIFY(!boxed);
 
     // Cancel: stays in Design. Operate in Teaching Mode: goes, and asks once.
     probe.stop();

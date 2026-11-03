@@ -1031,6 +1031,21 @@ ShowTreeCommand::Result ShowTreeCommand::runParsed(const QString &line, const Co
     // W6: Build's command bar. The words that act on a cue, a list or the
     // run are the Show Tree's: said so, nothing changed.
     const bool buildMode = context.build != nullptr;
+    // Q202: an effect's fades are a Show Tree edit; Operate refuses it as
+    // it refuses a plan's (before the line has changed anything).
+    if (!buildMode && m_doc->mode() == Doc::Operate)
+    {
+        static const QRegularExpression quoted(QStringLiteral("\"[^\"]*\""));
+        static const QRegularExpression fadeWord(QStringLiteral("\\bfade\\b"), QRegularExpression::CaseInsensitiveOption);
+        static const QRegularExpression effectWord(QStringLiteral("\\beffect\\b"), QRegularExpression::CaseInsensitiveOption);
+        QString bare = line;
+        bare.remove(quoted);
+        if (fadeWord.match(bare).hasMatch() && effectWord.match(bare).hasMatch())
+        {
+            res.message = tr("Changes can't be made in Operate mode");
+            return res;
+        }
+    }
     if (buildMode && showTreeOnlyWord(w0))
     {
         res.message = tr("“%1” is Show Tree only: the Build tab edits the scene loaded in the Workbench. "

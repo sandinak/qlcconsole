@@ -161,6 +161,32 @@ void FixtureCreator_Test::ordinaryAddStillPatches()
     QCOMPARE(m_doc->fixtureForAddress(fxi->universeAddress()), fxi->id());
 }
 
+/* Q205 (answered 2026-11-03): a fixture the engine refuses past the last
+   universe is not added silently -- a message names the limit. */
+void FixtureCreator_Test::addPastTheUniverseLimitSaysSo()
+{
+    driveAddDialog([](AddFixture *dlg) { dlg->m_universeValue = InputOutputMap::maxUniverses(); });
+    QString text;
+    auto poll = std::make_shared<std::function<void()>>();
+    *poll = [&text, poll]() {
+        QMessageBox *box = qobject_cast<QMessageBox *>(QApplication::activeModalWidget());
+        if (box == nullptr || box->objectName() != QLatin1String("fixtureLimitBox"))
+        {
+            QTimer::singleShot(10, *poll);
+            return;
+        }
+        text = box->text();
+        box->accept();
+    };
+    QTimer::singleShot(0, *poll);
+    const QList<quint32> made = FixtureCreator::addFromDialog(nullptr, m_doc, false,
+                                                              InputOutputMap::invalidUniverse(), nullptr);
+    QVERIFY(made.isEmpty());
+    QCOMPARE(m_doc->fixturesCount(), 0);
+    QVERIFY2(text.contains(QString::number(InputOutputMap::maxUniverses())), qPrintable(text));
+    QVERIFY(text.contains("universe", Qt::CaseInsensitive));
+}
+
 void FixtureCreator_Test::networkFixtureKeepsItsIp()
 {
     driveAddDialog([](AddFixture *dlg) {

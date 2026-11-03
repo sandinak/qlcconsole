@@ -356,6 +356,9 @@ QGroupBox *ShowControlSyncPage::buildOutGroup()
     connect(m_doc->showControl(), &ShowControl::sentOut, this, [this](const QString &what, bool ok) {
         m_outLast->setText(ok ? what : tr("%1 -- failed (output not available)").arg(what));
     });
+    connect(m_doc->showControl(), &ShowControl::outHeld, this, [this](const QString &what) {
+        m_outLast->setText(what);
+    });
     auto changed = [this]() { applyOut(); };
     connect(m_outOscCheck, &QCheckBox::toggled, this, changed);
     connect(m_outHost, &QLineEdit::editingFinished, this, changed);

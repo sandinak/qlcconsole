@@ -44,7 +44,8 @@ class Doc;
  * teacher allows it, and warns when the show is run for real.
  *
  * Saved under the Engine as <Teaching Enabled="1" AllowOutput="1"
- * Lesson=".." Link=".." HandedOut=".."/>, only while Teaching is on, so a
+ * AllowShowControl="1" BlindShowControl="hold" Lesson=".." Link=".."
+ * HandedOut=".."/>, only while Teaching is on, so a
  * show without it is byte-for-byte what it was. QLC+ 4 and older builds skip
  * the element. The instructor PIN is the show's own (ShowOperate): one PIN
  * per show. Unknown attributes of a newer build are kept and written back.
@@ -64,6 +65,20 @@ public:
     void setAllowOutput(bool on);
     /** Teaching holds real network output now. */
     bool holdsOutput() const { return m_enabled && !m_allowOutput; }
+
+    /** Instructor flag (Q203): a GO's cue triggers out to QLab / OSC / MSC
+     *  are held in a Teaching show. Default held; AllowShowControl="1" lets
+     *  them through. */
+    bool allowShowControl() const { return m_allowShowControl; }
+    void setAllowShowControl(bool on);
+    /** Instructor flag (Q203): in a Teaching show, hold show control out
+     *  while Blind is on (default: send, as in any show). Saved as
+     *  BlindShowControl="hold". */
+    bool holdShowControlInBlind() const { return m_holdInBlind; }
+    void setHoldShowControlInBlind(bool on);
+    /** Why a GO's show control out is held now, or empty: "Teaching" or
+     *  "Blind (Teaching)". @a blind is the Blind state. */
+    QString showControlHeldBecause(bool blind) const;
 
     /** Lesson number ("3.6") and the page of its handout; both optional. */
     QString lesson() const { return m_lesson; }
@@ -121,6 +136,8 @@ private:
     Doc *m_doc;
     bool m_enabled = false;
     bool m_allowOutput = false;
+    bool m_allowShowControl = false;
+    bool m_holdInBlind = false;
     QString m_lesson;
     QString m_link;
     QString m_handedOut;

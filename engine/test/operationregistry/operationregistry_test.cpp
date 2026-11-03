@@ -1026,8 +1026,8 @@ void OperationRegistry_Test::overrideWordRefusals()
    plans can carry it": in Operate a plan of set_effect_fade or of another
    change (set_intensity) is refused with the tree and the undo history
    unchanged; back in Design the same plans change the cue, one undo step
-   each. (A single typed line in Operate is a blind tree edit, as every
-   tree edit there is -- docs/features/show-tree.md "Operate".) */
+   each. Q202 (answered 2026-11-03): a typed effect fade line is refused in
+   Operate too, with the same message, and changes nothing. */
 void OperationRegistry_Test::aChangeWordIsRefusedInOperateAndWorksInDesign()
 {
     const ShowTreeCommand::Context ctx = smallShow();
@@ -1061,6 +1061,13 @@ void OperationRegistry_Test::aChangeWordIsRefusedInOperateAndWorksInDesign()
         const R::Result r = reg.runPlan(plan, ctx, "t");
         QVERIFY(!r.ok);
         QVERIFY2(r.message.contains("Operate"), qPrintable(r.message));
+    }
+    for (const char *line : { "Towers effect Sinelon fade 2", "Towers effect Sinelon fade in 2 out 1",
+                              "Towers effect Sinelon colour Red fade atonce" })
+    {
+        const ShowTreeCommand::Result typed = cmd.run(line, ctx);
+        QVERIFY(!typed.ok);
+        QVERIFY2(typed.message.contains("Operate"), qPrintable(typed.message));
     }
     QCOMPARE(treeXml(), before);
     QCOMPARE(st->sharedUndoText(), undoBefore);

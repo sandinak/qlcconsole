@@ -394,7 +394,10 @@ show: **Connections → Devices → Show control & sync**, **QLab out**.
   every cue, its position is its number.
 
 Only a GO that actually puts a cue on stage sends: a GO that finds no such
-cue or list sends nothing, and neither does a preview or anything in blind.
+cue or list sends nothing, and neither does a preview or a Blind edit. A real
+GO while Blind is on does send: Blind hides edits from the stage, not a GO.
+(A Teaching show can hold show control out, or hold it in Blind; see
+[Teaching mode](teaching.md#instructor-settings).)
 A command that came in by OSC or MSC is not sent back out, so QLab and
 qlcconsole can't GO each other in a loop. **Last sent** on the page shows
 what went. Back, Stop and the like are not sent (decided: GO only, can

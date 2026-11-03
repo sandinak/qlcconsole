@@ -10,6 +10,23 @@ active work in [TODO.md](docs/project/TODO.md).
 Versions here are independent of the QLC+ base version embedded in the
 in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relate).
 
+## [Unreleased]
+
+### Four open questions, answered
+
+- **An effect fade typed in Operate is refused** ("Changes can't be made in
+  Operate mode"), like an AI plan; Design only, as the 0.4.0 notes said.
+- **A real GO sends in Blind.** Blind hides edits from the stage, not a GO:
+  QLab / OSC / MSC go out as in any show. **Teaching mode gets instructor
+  settings** (Show Settings, behind the show's PIN): show control out is held
+  in a Teaching show unless the instructor lets it through, and can be held
+  while Blind is on. The footer and **Last sent** say what was held and why;
+  a held trigger is not sent later. Shows saved before open with real output
+  as they were. See [Teaching mode](docs/features/teaching.md#instructor-settings).
+- **Switching to Operate from the phone page** no longer asks Teaching's
+  "Run this show for real?" on the console; the PIN still applies.
+- **Add Fixture says so past universe 1024** instead of adding nothing.
+
 ## [0.4.0] - 2026-11-02
 
 qlcconsole 0.4.0 carries the 0.3.1 polish, all of 0.4 ("Run the show") and

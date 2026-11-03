@@ -87,6 +87,8 @@ QList<quint32> FixtureCreator::addFromDialog(QWidget *parent, Doc *doc, bool inv
             QRegularExpression(QStringLiteral("#\\d+$")).match(name.trimmed()).hasMatch();
     }
 
+    bool pastLimit = false;
+
     /* Add the rest (if any) WITH address gap */
     for (int i = 0; i < af.amount(); i++)
     {
@@ -157,8 +159,23 @@ QList<quint32> FixtureCreator::addFromDialog(QWidget *parent, Doc *doc, bool inv
         }
         else
         {
+            /* Q205: past the most universes a show can have, the engine
+               refuses; say so (once) rather than adding nothing. */
+            if (!doc->fitsUniverseLimit(fxi))
+                pastLimit = true;
             delete fxi;
         }
+    }
+
+    if (pastLimit)
+    {
+        QMessageBox msg(QMessageBox::Warning, tr("Fixture not added"),
+                        tr("A show has at most %1 universes, and this fixture would end past universe %1. "
+                           "Pick a lower universe (or address) and add it again.")
+                            .arg(InputOutputMap::maxUniverses()),
+                        QMessageBox::Ok, parent);
+        msg.setObjectName(QStringLiteral("fixtureLimitBox"));
+        msg.exec();
     }
 
     return created;

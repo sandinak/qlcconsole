@@ -118,6 +118,43 @@ void Teaching_Test::roundTrip()
     QVERIFY(!off.teachingSettings()->enabled());
 }
 
+/* Q203: the instructor flags. A show saved before them (Enabled/AllowOutput
+   only) loads with real output as it was and show control held; the flags
+   survive a round trip, and a handout copy is written with the safe ones. */
+void Teaching_Test::showControlFlagsSaveAndOldFilesLoadSafe()
+{
+    Doc old(this);
+    loadTeaching(&old, "<Teaching Enabled=\"1\" AllowOutput=\"1\" Lesson=\"3.6\"/>");
+    TeachingSettings *o = old.teachingSettings();
+    QVERIFY(o->allowOutput());
+    QVERIFY(!o->allowShowControl());
+    QVERIFY(!o->holdShowControlInBlind());
+    QCOMPARE(o->showControlHeldBecause(false), QString("Teaching"));
+    QVERIFY(!saved(&old).contains("AllowShowControl"));
+
+    TeachingSettings *t = m_doc->teachingSettings();
+    t->setEnabled(true);
+    t->setAllowShowControl(true);
+    t->setHoldShowControlInBlind(true);
+    const QString xml = saved(m_doc);
+    QVERIFY2(xml.contains("AllowShowControl=\"1\""), qPrintable(xml));
+    QVERIFY2(xml.contains("BlindShowControl=\"hold\""), qPrintable(xml));
+    Doc other(this);
+    loadTeaching(&other, xml);
+    QVERIFY(other.teachingSettings()->allowShowControl());
+    QVERIFY(other.teachingSettings()->holdShowControlInBlind());
+    QVERIFY(!other.isModified());
+    QVERIFY(other.teachingSettings()->showControlHeldBecause(false).isEmpty());
+    QCOMPARE(other.teachingSettings()->showControlHeldBecause(true), QString("Blind (Teaching)"));
+
+    TeachingSettings::SaveOverride ov;
+    t->setSaveOverride(&ov);
+    const QString handout = saved(m_doc);
+    t->setSaveOverride(nullptr);
+    QVERIFY(!handout.contains("AllowShowControl"));
+    QVERIFY(!handout.contains("BlindShowControl"));
+}
+
 void Teaching_Test::unknownAttributesAreKept()
 {
     Doc other(this);
