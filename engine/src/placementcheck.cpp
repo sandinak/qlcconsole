@@ -17,6 +17,9 @@
 
 #include <QCoreApplication>
 #include <QtMath>
+#include <QCollator>
+#include <QHash>
+#include <QSet>
 #include <algorithm>
 
 #include "placementcheck.h"
@@ -24,6 +27,8 @@
 #include "stageplatform.h"
 #include "qlcfixturemode.h"
 #include "qlcphysical.h"
+#include "qlcfixturedef.h"
+#include "fixturegroup.h"
 #include "righeads.h"
 #include "fixture.h"
 #include "truss.h"
@@ -234,16 +239,341 @@ QString PlacementCheck::fixText(Doc *doc, const Buried &b)
     return tr("Move it clear of %1").arg(platformName(doc, b.platformId));
 }
 
+namespace
+{
+bool sitOn(Doc *doc, quint32 fid, quint32 platformId)
+{
+    MonitorProperties *mp = doc->monitorProperties();
+    FixtureRigProps rp = mp->fixtureRigProps(fid);
+    rp.deckPlatformId = platformId;
+    rp.deckHeightOffset = 0.0f;
+    rp.mountingType = Truss::FloorMounted;
+    mp->setFixtureRigProps(fid, rp);
+    doc->setModified();
+    return true;
+}
+}
+
 bool PlacementCheck::fix(Doc *doc, const Buried &b)
 {
     MonitorProperties *mp = doc != nullptr ? doc->monitorProperties() : nullptr;
     if (mp == nullptr || !b.canSit || mp->platform(b.sitId) == nullptr || !mp->containsFixture(b.fixtureId))
         return false;
-    FixtureRigProps rp = mp->fixtureRigProps(b.fixtureId);
-    rp.deckPlatformId = b.sitId;
-    rp.deckHeightOffset = 0.0f;
-    rp.mountingType = Truss::FloorMounted;
-    mp->setFixtureRigProps(b.fixtureId, rp);
-    doc->setModified();
-    return true;
+    return sitOn(doc, b.fixtureId, b.sitId);
+}
+
+
+/****************************************************************************
+ * FIX-16: on the floor beside the deck its row stands on
+ ****************************************************************************/
+
+namespace
+{
+const float kFloor = 0.05f;     // at or below this a light is "on the floor"
+
+struct Info
+{
+    QString type;               // fixture type (definition + mode)
+    QString stem;               // name without its trailing number; empty when it has none
+    quint32 deck = UINT_MAX;    // the deck it stands on
+    bool floor = false;         // placed by hand, on the floor, standing
+    QVector3D pos;
+};
+
+QString typeKey(const Fixture *fx)
+{
+    const QLCFixtureDef *def = fx->fixtureDef();
+    const QLCFixtureMode *mode = fx->fixtureMode();
+    if (def == nullptr || mode == nullptr)
+        return QStringLiteral("generic:%1").arg(fx->channels());
+    return def->manufacturer() + QLatin1Char('|') + def->model() + QLatin1Char('|') + mode->name();
+}
+
+QString stemOf(const QString &name)
+{
+    int n = name.size();
+    while (n > 0 && name.at(n - 1).isDigit())
+        --n;
+    if (n == name.size() || n == 0)
+        return QString();
+    return name.left(n);
+}
+
+/* Distance from a point to a deck's footprint (0 inside), metres. */
+float distanceToDeck(const StagePlatform *pl, float x, float y)
+{
+    if (pl->containsPoint(x, y))
+        return 0.0f;
+    float best = 1.0e9f;
+    for (const StagePlatform::Block &blk : pl->blocks())
+    {
+        const QList<QPointF> c = pl->corners(blk);
+        for (int i = 0; i < c.size(); ++i)
+        {
+            const QPointF a = c.at(i), b = c.at((i + 1) % c.size());
+            const QPointF ab = b - a, ap = QPointF(double(x), double(y)) - a;
+            const double len2 = ab.x() * ab.x() + ab.y() * ab.y();
+            double t = len2 > 0.0 ? (ap.x() * ab.x() + ap.y() * ab.y()) / len2 : 0.0;
+            t = qBound(0.0, t, 1.0);
+            const QPointF q = a + ab * t;
+            best = qMin(best, float(std::hypot(double(x) - q.x(), double(y) - q.y())));
+        }
+    }
+    return best;
+}
+
+QString deckLabel(const QString &name)
+{
+    return name.startsWith(QLatin1String("Deck"), Qt::CaseInsensitive) ? name : QStringLiteral("Deck ") + name;
+}
+
+QString joinNames(Doc *doc, const QList<quint32> &ids)
+{
+    QStringList names;
+    for (quint32 id : ids)
+        if (const Fixture *fx = doc->fixture(id))
+            names << fx->name();
+    if (names.size() > 3)
+        return names.at(0) + QStringLiteral(", ") + names.at(1) + QStringLiteral("…") + names.last();
+    return names.join(QStringLiteral(", "));
+}
+}
+
+quint32 PlacementCheck::deckOf(Doc *doc, quint32 fid)
+{
+    MonitorProperties *mp = doc != nullptr ? doc->monitorProperties() : nullptr;
+    if (mp == nullptr || !mp->containsFixture(fid))
+        return UINT_MAX;
+    const FixtureRigProps rp = mp->fixtureRigProps(fid);
+    if (rp.trussId != Truss::invalidId() || rp.onPipe() || rp.onTower() || rp.onHanger()
+        || rp.onRiser() || mp->fixtureFrameGroup(fid) != 0)
+        return UINT_MAX;
+    const QVector3D p = mp->fixtureRigPosition(fid);
+    if (rp.onDeck())
+    {
+        const StagePlatform *pl = mp->platform(rp.deckPlatformId);
+        return (pl != nullptr && p.z() > kFloor) ? rp.deckPlatformId : UINT_MAX;
+    }
+    if (p.z() <= kFloor)
+        return UINT_MAX;
+    // A free light whose height is a solid top under it.
+    for (StagePlatform *pl : mp->platforms())
+    {
+        if (pl == nullptr || !pl->solid() || pl->topMaterial() != StagePlatform::SolidTop
+            || !pl->containsPoint(p.x(), p.y()))
+            continue;
+        if (qAbs(mp->platformBaseZ(pl->id()) + pl->topAt(p.x(), p.y()) - p.z()) <= tolerance())
+            return pl->id();
+    }
+    return UINT_MAX;
+}
+
+namespace
+{
+struct Rows
+{
+    Doc *doc;
+    MonitorProperties *mp;
+    QHash<quint32, Info> info;
+    QList<quint32> ids;                         // every fixture on the plot, id order
+    QHash<QString, QList<quint32>> byType;
+    QHash<QString, QList<quint32>> byStem;      // type + stem
+    QHash<quint32, QList<const FixtureGroup *>> groups;
+};
+
+void build(Rows &r)
+{
+    r.ids = r.mp->fixtureItemsID();
+    std::sort(r.ids.begin(), r.ids.end());
+    for (quint32 fid : r.ids)
+    {
+        const Fixture *fx = r.doc->fixture(fid);
+        if (fx == nullptr)
+            continue;
+        Info i;
+        i.type = typeKey(fx);
+        i.stem = stemOf(fx->name());
+        i.deck = PlacementCheck::deckOf(r.doc, fid);
+        i.pos = r.mp->fixtureRigPosition(fid);
+        QVector3D c[8];
+        const FixtureRigProps rp = r.mp->fixtureRigProps(fid);
+        i.floor = i.deck == UINT_MAX && !rp.onDeck() && rp.mountingType != Truss::TopHung
+                  && i.pos.z() <= kFloor && PlacementCheck::body(r.doc, fid, c);
+        r.info.insert(fid, i);
+        r.byType[i.type] << fid;
+        if (!i.stem.isEmpty())
+            r.byStem[i.type + QLatin1Char('\n') + i.stem] << fid;
+    }
+    for (const FixtureGroup *g : r.doc->fixtureGroups())
+        for (quint32 fid : g->fixtureList())
+            if (r.info.contains(fid))
+                r.groups[fid] << g;
+}
+
+/* The row it is judged against: the first of the candidate sets in which more
+   than half the mates (two at least) stand on decks and one of those decks is
+   close. */
+PlacementCheck::OffRow judge(Rows &r, quint32 fid)
+{
+    PlacementCheck::OffRow out;
+    const Info &me = r.info.value(fid);
+    if (!me.floor)
+        return out;
+    QVector3D body[8];
+    PlacementCheck::body(r.doc, fid, body);
+    // "A body length": the longest edge of its box, 0.5 m at least.
+    float edge = 0.0f;
+    edge = qMax(edge, (body[1] - body[0]).length());
+    edge = qMax(edge, (body[3] - body[0]).length());
+    edge = qMax(edge, (body[4] - body[0]).length());
+    const float reach = qMax(0.5f, edge);
+
+    struct Cand { QString how; QList<quint32> mates; };
+    QList<Cand> cands;
+    QList<const FixtureGroup *> gs = r.groups.value(fid);
+    for (const FixtureGroup *g : gs)
+    {
+        Cand c;
+        c.how = QStringLiteral("group ") + g->name();
+        for (quint32 m : g->fixtureList())
+            if (m != fid && r.info.contains(m) && r.info.value(m).type == me.type && !c.mates.contains(m))
+                c.mates << m;
+        if (c.mates.size() >= 2)
+            cands << c;
+    }
+    std::stable_sort(cands.begin(), cands.end(), [](const Cand &a, const Cand &b) {
+        return a.mates.size() < b.mates.size();
+    });
+    if (!me.stem.isEmpty())
+    {
+        Cand c;
+        c.how = QStringLiteral("name ") + me.stem;
+        for (quint32 m : r.byStem.value(me.type + QLatin1Char('\n') + me.stem))
+            if (m != fid)
+                c.mates << m;
+        if (c.mates.size() >= 2)
+            cands << c;
+    }
+    {
+        Cand c;
+        c.how = QStringLiteral("line");
+        for (quint32 m : r.byType.value(me.type))
+            if (m != fid && qAbs(r.info.value(m).pos.y() - me.pos.y()) <= 0.3f)
+                c.mates << m;
+        if (c.mates.size() >= 2)
+            cands << c;
+    }
+
+    for (const Cand &c : cands)
+    {
+        QList<quint32> on;
+        QSet<quint32> decks;
+        for (quint32 m : c.mates)
+        {
+            const quint32 d = r.info.value(m).deck;
+            if (d == UINT_MAX)
+                continue;
+            on << m;
+            decks << d;
+        }
+        if (on.size() < 2 || on.size() * 2 <= c.mates.size())
+            continue;
+        // The nearest of those decks, if it is close enough to be "the same run".
+        quint32 best = UINT_MAX;
+        float bestD = 1.0e9f;
+        QList<quint32> sorted = decks.values();
+        std::sort(sorted.begin(), sorted.end());
+        for (quint32 d : sorted)
+        {
+            const StagePlatform *pl = r.mp->platform(d);
+            if (pl == nullptr)
+                continue;
+            const float dist = distanceToDeck(pl, me.pos.x(), me.pos.y());
+            if (dist < bestD)
+            {
+                bestD = dist;
+                best = d;
+            }
+        }
+        if (best == UINT_MAX || bestD > reach)
+            continue;
+        const StagePlatform *pl = r.mp->platform(best);
+        QCollator collator;
+        collator.setNumericMode(true);
+        std::sort(on.begin(), on.end(), [&](quint32 a, quint32 b) {
+            return collator.compare(r.doc->fixture(a)->name(), r.doc->fixture(b)->name()) < 0;
+        });
+        out.off = true;
+        out.fixtureId = fid;
+        out.sitId = best;
+        out.topZ = r.mp->platformBaseZ(best) + pl->topAt(me.pos.x(), me.pos.y());
+        out.distance = bestD;
+        out.mates = on;
+        out.rowSize = c.mates.size();
+        out.decks = sorted;
+        out.row = c.how;
+        return out;
+    }
+    return out;
+}
+}
+
+QList<PlacementCheck::OffRow> PlacementCheck::offRow(Doc *doc)
+{
+    QList<OffRow> out;
+    MonitorProperties *mp = doc != nullptr ? doc->monitorProperties() : nullptr;
+    if (mp == nullptr || mp->platforms().isEmpty())
+        return out;
+    Rows r{doc, mp, {}, {}, {}, {}, {}};
+    build(r);
+    for (quint32 fid : r.ids)
+    {
+        if (!r.info.contains(fid) || !r.info.value(fid).floor)
+            continue;
+        // A light inside the deck is FIX-15's, and sitting it on top fixes both.
+        if (check(doc, fid).buried)
+            continue;
+        const OffRow o = judge(r, fid);
+        if (o.off)
+            out << o;
+    }
+    return out;
+}
+
+PlacementCheck::OffRow PlacementCheck::checkRow(Doc *doc, quint32 fid)
+{
+    MonitorProperties *mp = doc != nullptr ? doc->monitorProperties() : nullptr;
+    if (mp == nullptr || mp->platforms().isEmpty() || check(doc, fid).buried)
+        return OffRow();
+    Rows r{doc, mp, {}, {}, {}, {}, {}};
+    build(r);
+    return judge(r, fid);
+}
+
+QString PlacementCheck::problemText(Doc *doc, const OffRow &o)
+{
+    const Fixture *fx = doc->fixture(o.fixtureId);
+    const QString name = fx != nullptr ? fx->name() : QString::number(o.fixtureId);
+    const StagePlatform *pl = doc->monitorProperties()->platform(o.sitId);
+    QString deck = deckLabel(pl != nullptr ? pl->name() : QString());
+    deck += QStringLiteral(" (%1 m)").arg(double(o.topZ), 0, 'f', 2);
+    if (o.decks.size() > 1)
+        deck += o.decks.size() == 2 ? tr(" and 1 more deck")
+                                    : tr(" and %1 more decks").arg(o.decks.size() - 1);
+    return tr("%1 is on the floor; %2 are on %3").arg(name, joinNames(doc, o.mates), deck);
+}
+
+QString PlacementCheck::fixText(Doc *doc, const OffRow &o)
+{
+    const StagePlatform *pl = doc->monitorProperties()->platform(o.sitId);
+    return tr("Sit it on %1 (%2 m)").arg(deckLabel(pl != nullptr ? pl->name() : QString()))
+                                    .arg(double(o.topZ), 0, 'f', 2);
+}
+
+bool PlacementCheck::fix(Doc *doc, const OffRow &o)
+{
+    MonitorProperties *mp = doc != nullptr ? doc->monitorProperties() : nullptr;
+    if (mp == nullptr || !o.off || mp->platform(o.sitId) == nullptr || !mp->containsFixture(o.fixtureId))
+        return false;
+    return sitOn(doc, o.fixtureId, o.sitId);
 }

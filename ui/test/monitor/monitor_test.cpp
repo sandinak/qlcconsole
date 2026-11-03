@@ -29477,6 +29477,42 @@ void Monitor_Test::aRigOffScreenIsNotRedrawn()
     QVERIFY(!inner.liveTick());
 }
 
+/* FIX-16: the amber ring follows the footer's "fixtures.offrow" warning, apart
+   from FIX-15's red one. */
+void Monitor_Test::aFloorLightBesideItsRowsDeckIsRingedAmber()
+{
+    Doc *doc = new Doc(this);
+    Fixture *fx = makeMover(doc, 14.0, 0, "UST-2", QVector3D(2.0f, 3.0f, 0.0f));
+    QVERIFY(fx != nullptr);
+    Fixture *other = makeMover(doc, 14.0, 20, "UST-3", QVector3D(4.0f, 3.0f, 0.0f));
+    QWidget parent;
+    Monitor *mon = new Monitor(&parent, doc);
+    MonitorGraphicsView *gv = mon->findChild<MonitorGraphicsView *>();
+    QVERIFY(gv != nullptr);
+    gv->addFixture(fx->id(), QPointF(2000.0, 3000.0));
+    gv->addFixture(other->id(), QPointF(4000.0, 3000.0));
+    MonitorFixtureItem *item = gv->fixtureItemForId(fx->id());
+    QVERIFY(item != nullptr);
+    QVERIFY(!item->isOffRow());
+
+    ShowStatus::instance()->setStatus("fixtures.offrow", ShowStatus::Warning,
+                                      "UST-2 is on the floor; UST-1, UST-3 are on Deck USP1 (0.61 m)",
+                                      QString(), QStringList() << "UST-2", QVariantList() << fx->id());
+    QVERIFY(item->isOffRow());
+    QVERIFY(!item->isBuried());                         // its own mark, not FIX-15's
+    QVERIFY(!gv->fixtureItemForId(other->id())->isOffRow());
+    QCOMPARE(gv->offRowFixtures(), QList<quint32>() << fx->id());
+    QImage img(120, 120, QImage::Format_ARGB32);
+    img.fill(Qt::black);
+    QPainter painter(&img);
+    QStyleOptionGraphicsItem opt;
+    item->paint(&painter, &opt, nullptr);
+    painter.end();
+    ShowStatus::instance()->clearStatus("fixtures.offrow");
+    QVERIFY(!item->isOffRow());
+    delete doc;
+}
+
 void Monitor_Test::aBuriedLightIsRingedOnThePlot()
 {
     Doc *doc = new Doc(this);

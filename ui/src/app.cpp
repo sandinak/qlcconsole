@@ -1406,6 +1406,24 @@ void App::initDoc()
                 Monitor::instance()->refreshBuried();
             AppUtil::updateFixtureReadiness(m_doc);
         });
+    /* A light on the floor, its row on a deck (FIX-16): the same fix. */
+    ShowStatus::instance()->setAction("fixtures.offrow", tr("Sit on Top"),
+        [this](QWidget *, const QVariantList &items) {
+            foreach (const QVariant &v, items)
+                PlacementCheck::fix(m_doc, PlacementCheck::checkRow(m_doc, v.toUInt()));
+            if (Monitor::instance() != NULL)
+                Monitor::instance()->refreshBuried();
+            AppUtil::updateFixtureReadiness(m_doc);
+        });
+    ShowStatus::instance()->addAction("fixtures.offrow", tr("Show"),
+        [this](QWidget *, const QVariantList &items) {
+            QList<quint32> ids;
+            foreach (const QVariant &v, items)
+                ids << v.toUInt();
+            showContext(tr("Lighting Studio"));
+            if (Monitor::instance() != NULL)
+                Monitor::instance()->highlightFixtures(ids);
+        });
     ShowStatus::instance()->addAction("fixtures.buried", tr("Show"),
         [this](QWidget *, const QVariantList &items) {
             QList<quint32> ids;

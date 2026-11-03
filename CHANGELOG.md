@@ -25,6 +25,18 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   topped step are not flagged, nor is a body that only touches or sinks
   under 3 cm. It re-reads a moment after any edit.
 
+- **A light left on the floor while its row is on a deck is a warning
+  (FIX-16).** In a row of lights the others stand on a deck -- UST-1 and
+  UST-3 to UST-8 at 0.61 m -- and UST-2 was left on the floor beside it
+  (touching the edge, so FIX-15 had nothing to say). Show Review and the
+  footer now say "UST-2 is on the floor; UST-1, UST-3…UST-8 are on Deck
+  USP1 (0.61 m)", with **Sit on Top** (the same deck mount as FIX-15) and
+  **Show**; the light gets an amber ring and triangle on the plot. A row is
+  the same fixture type in a group, a name series ("UST-1…8") or a line (Y
+  within 0.3 m); it fires when more than half (two at least) are on a deck
+  and the light is within a body length of one. A warning, since a floor
+  light by a riser can be deliberate: Accept with a note works as usual.
+
 - **Steam Deck and gamepad remote.** A Steam Deck, phone or tablet works
   the console over Wi-Fi in its browser, with nothing installed: a new
   **focus remote** page (**/focus**) follows the Focus mode or Venue

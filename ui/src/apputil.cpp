@@ -463,6 +463,35 @@ bool AppUtil::refuseTakenFixtureName(QWidget *parent, Doc *doc, quint32 fid, con
     return true;
 }
 
+static void updateRowStatus(Doc *doc)
+{
+    if (doc == NULL)
+        return;
+    ShowStatus *status = ShowStatus::instance();
+    /* A light on the floor whose row-mates stand on a deck (FIX-16): a
+       warning, since a floor light by a riser can be deliberate. */
+    QStringList items;
+    QVariantList ids;
+    QString first;
+    foreach (const PlacementCheck::OffRow &o, PlacementCheck::offRow(doc))
+    {
+        items << PlacementCheck::problemText(doc, o) + QStringLiteral(" — ") + PlacementCheck::fixText(doc, o);
+        ids << o.fixtureId;
+        if (first.isEmpty())
+            first = PlacementCheck::problemText(doc, o);
+    }
+    if (items.isEmpty())
+        status->clearStatus("fixtures.offrow");
+    else
+        status->setStatus("fixtures.offrow", ShowStatus::Warning,
+            items.count() == 1 ? first
+                : QCoreApplication::translate("AppUtil", "%n light(s) are on the floor, their row on a deck", "", items.count()),
+            QCoreApplication::translate("AppUtil", "These lights sit on the floor while the lights "
+                                        "they are in a row with stand on a deck. Sit them on the "
+                                        "deck, or leave them if the floor is deliberate."),
+            items, ids);
+}
+
 void AppUtil::updatePlacementStatus(Doc *doc)
 {
     if (doc == NULL)
@@ -490,6 +519,7 @@ void AppUtil::updatePlacementStatus(Doc *doc)
                                         "be seen and its beam starts inside it. Sit it on the top, "
                                         "or move it clear."),
             items, ids);
+    updateRowStatus(doc);
 }
 
 void AppUtil::updateFixtureReadiness(Doc *doc)

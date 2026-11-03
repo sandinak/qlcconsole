@@ -979,6 +979,9 @@ private slots:
     /** FIX-15: a light the footer says is buried in the stage is ringed on
      *  the plot, and clean again when the entry clears */
     void aBuriedLightIsRingedOnThePlot();
+    /** FIX-16: a floor light beside the deck its row stands on is ringed
+     *  amber from the footer's "fixtures.offrow" warning */
+    void aFloorLightBesideItsRowsDeckIsRingedAmber();
 
 private:
     Doc* m_doc;

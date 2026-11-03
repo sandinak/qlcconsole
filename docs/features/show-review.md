@@ -152,6 +152,19 @@ the same speed (see [Lighting Studio](lighting-studio.md#heads-travel-at-their-r
   bolted to that deck; a deck with a Clear or Open top (lights go inside
   those on purpose); and a body that only touches or sinks less than 3 cm.
   It re-reads a moment after any edit.
+- **FIX-16** A light on the floor whose row is on a deck: *"UST-2 is on the
+  floor; UST-1, UST-3…UST-8 are on Deck USP1 (0.61 m). Sit it on Deck USP1
+  (0.61 m)."* The row-mates are the other lights of the **same fixture type**
+  in a fixture group it belongs to (smallest group first), else with the
+  same name series ("UST-" for UST-2), else in the same line (Y within
+  0.3 m). It fires when more than half of them, and at least two, stand on a
+  deck (a deck mount, or a free light at a solid top's height) and this
+  light is within a body length (0.5 m at least) of the edge of one of those
+  decks. A **warning** in the footer (`fixtures.offrow`, **Sit on Top** /
+  **Show**) and an amber ring with a triangle on the plot, since a floor
+  light beside a riser can be deliberate: **Accept with a note** as for any
+  check. Sit on Top is FIX-15's deck mount on the nearest deck the row uses.
+  A light buried in a deck is FIX-15's, not this one's.
 
 **Palettes and looks**
 

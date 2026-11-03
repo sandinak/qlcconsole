@@ -52,6 +52,11 @@ private slots:
     void fix14();
     void fix15();
     void fix15Geometry();
+    void fix16();
+    void fix16Rows();
+    void fix16Single();
+    void fix16Sources();
+    void fix16Save();
     void fx07();
     void pwr01();
     void pwr03();

@@ -859,6 +859,10 @@ public:
     /** FIX-15: the lights buried in the stage (a red ring and "!"). */
     void markBuriedFixtures(const QList<quint32> &ids);
     QList<quint32> buriedFixtures() const;
+    /** FIX-16: the lights on the floor whose row stands on a deck (an amber
+     *  ring and a triangle). */
+    void markOffRowFixtures(const QList<quint32> &ids);
+    QList<quint32> offRowFixtures() const;
     /** The lights badged so (tests). */
     QList<quint32> needsFocusFixtures() const;
     /** Focus mode's ghost (Q126): a dashed ring where the head would land

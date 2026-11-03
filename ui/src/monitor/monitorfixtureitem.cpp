@@ -1236,6 +1236,32 @@ void MonitorFixtureItem::paint(QPainter *painter, const QStyleOptionGraphicsItem
         painter->setPen(keep);
     }
 
+    /* On the floor while its row is on a deck (FIX-16): an amber dashed ring
+       and an amber triangle on the upper corner -- a warning, so amber and
+       not FIX-15's red, and a triangle so it also reads without colour. */
+    if (m_offRow && !m_buried)
+    {
+        const QPen keep = painter->pen();
+        QPen ring(QColor(245, 180, 20), 3.0, Qt::DashLine);
+        ring.setCosmetic(true);
+        painter->setPen(ring);
+        painter->setBrush(Qt::NoBrush);
+        drawBody(painter, QRectF(-3.0, -3.0, m_width + 6.0, m_height + 6.0));
+        QPen edge(QColor(80, 50, 0), 1.0);
+        edge.setCosmetic(true);
+        painter->setPen(edge);
+        painter->setBrush(QColor(245, 180, 20));
+        const QPointF at(m_width, 0.0);
+        QPolygonF tri;
+        tri << QPointF(at.x(), at.y() - 7.0) << QPointF(at.x() + 7.0, at.y() + 5.0)
+            << QPointF(at.x() - 7.0, at.y() + 5.0);
+        painter->drawPolygon(tri);
+        painter->setPen(QPen(QColor(80, 50, 0), 1.6));
+        painter->drawLine(QPointF(at.x(), at.y() - 2.5), QPointF(at.x(), at.y() + 1.0));
+        painter->drawPoint(QPointF(at.x(), at.y() + 3.0));
+        painter->setPen(keep);
+    }
+
     /* Needs focus here (Q133): an orange "!" on the lower corner. Orange
        and a shape, so it reads without colour vision too. */
     if (m_needsFocus)
