@@ -186,7 +186,7 @@ void LookEditor_Test::colourPickerLayoutHoldsAtEveryWidth()
             for (QWidget *k : ed.m_colorDialog->findChildren<QWidget *>())
             {
                 const QByteArray cls = k->metaObject()->className();
-                if (cls.endsWith("QColorWell") || cls.endsWith("QColorPicker")
+                if (cls.endsWith("QColorWell") || cls.endsWith("QWellArray") || cls.endsWith("QColorPicker")
                     || cls.endsWith("QColorLuminancePicker")
                     || (cls == "QPushButton" && k->isVisibleTo(&ed)))
                     inner << k;

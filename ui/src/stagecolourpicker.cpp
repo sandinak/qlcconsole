@@ -44,8 +44,13 @@ StageColourPicker::StageColourPicker(QColorDialog *dialog)
     {
         // (QtPrivate::QColorPicker in newer Qt)
         const QByteArray cls = w->metaObject()->className();
-        if (cls.endsWith("QColorWell") && m_grid == nullptr)
-            m_grid = w;
+        // Qt 6.8 shows only the base, QtPrivate::QWellArray. The basic colours
+        // are the tall one (6 rows; the custom colours are 2).
+        if (cls.endsWith("QColorWell") || cls.endsWith("QWellArray"))
+        {
+            if (m_grid == nullptr || w->height() > m_grid->height())
+                m_grid = w;
+        }
         else if (cls.endsWith("::QColorPicker") || cls == "QColorPicker")
         {
             if (m_field == nullptr)
