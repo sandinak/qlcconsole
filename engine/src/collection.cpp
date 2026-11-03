@@ -28,6 +28,7 @@
 
 #include "mastertimer.h"
 #include "collection.h"
+#include "monitorproperties.h"
 #include "universe.h"
 #include "function.h"
 #include "doc.h"
@@ -299,6 +300,15 @@ void Collection::preRun(MasterTimer *timer)
 {
     Doc *doc = this->doc();
     Q_ASSERT(doc != NULL);
+    /* A cue with its blocking: before its members start, so they build
+       their aim at the new marks on their first frame; what stays up from
+       the cue before re-aims over this cue's fade in (Doc, queued). */
+    if (m_blocking != UINT_MAX)
+    {
+        const uint fade = overrideFadeInSpeed() == defaultSpeed() || overrideFadeInSpeed() == infiniteSpeed()
+                          ? 0 : overrideFadeInSpeed();
+        doc->monitorProperties()->setLiveBlocking(m_blocking, fade);
+    }
     {
         QMutexLocker locker(&m_functionListMutex);
         m_runningChildren.clear();

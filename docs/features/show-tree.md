@@ -1235,6 +1235,25 @@ later at the laptop. It is only a mark. Nothing plays differently.
 
 Not yet: a filter that shows only the tagged cues.
 
+### Blocking
+
+A cue's **Blocking** says where the stage targets stand from that cue on
+([Blocking](stage-targets.md#blocking)): the apron number moves the front
+rank downstage, and every look aimed at them follows, with no second look.
+
+- **On the cue page.** Pick **Tracks (…)**, **Default** or a set from the
+  **Blocking** row. **New…** makes a set from where the targets stand in
+  this cue now and uses it from this cue on; **Rename…** renames the one
+  the cue plays.
+- **It tracks.** An unset cue keeps the blocking of the cue before it; the
+  first cue starts from Default; a skipped cue passes nothing on. A cue
+  that changes blocking says **blocking: Apron number** among its flags.
+- **On stage.** When the cue goes, the heads it brings up aim at the new
+  marks. A look that stays up from the cue before moves to them over the
+  cue's fade in.
+- **Saved with the show.** An older build opens it with every target in
+  Default.
+
 ### Changing a tracked value
 
 A grey value came from an earlier cue. On its row, **⋯** offers two

@@ -9,6 +9,7 @@
       http://www.apache.org/licenses/LICENSE-2.0.txt
 */
 
+#include <algorithm>
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
 
@@ -37,6 +38,11 @@
 #define KXMLStageTargetW         QStringLiteral("W")
 #define KXMLStageTargetD         QStringLiteral("D")
 #define KXMLStageTargetLinePoint QStringLiteral("LinePoint")
+#define KXMLStageTargetBlocked   QStringLiteral("Blocked")
+#define KXMLStageTargetSet       QStringLiteral("Set")
+#define KXMLStageTargetDX        QStringLiteral("DX")
+#define KXMLStageTargetDY        QStringLiteral("DY")
+#define KXMLStageTargetDZ        QStringLiteral("DZ")
 
 StageTarget::StageTarget(quint32 id, QObject *parent)
     : QObject(parent)
@@ -92,6 +98,7 @@ bool StageTarget::loadXML(QXmlStreamReader &root)
        predates lines skips them (and reads Kind="line" as a plain mark), so
        it sees a point at the line's centre. */
     QVector<QVector3D> pts;
+    m_blocked.clear();
     while (root.readNextStartElement())
     {
         if (root.name() == KXMLStageTargetLinePoint)
@@ -100,6 +107,45 @@ bool StageTarget::loadXML(QXmlStreamReader &root)
             pts << QVector3D(pa.value(KXMLStageTargetX).toFloat(),
                              pa.value(KXMLStageTargetY).toFloat(),
                              pa.value(KXMLStageTargetZ).toFloat());
+        }
+        else if (root.name() == KXMLStageTargetBlocked)
+        {
+            /* Where it stands in a blocking set (docs/design/BLOCKING.md):
+               an older build skips it and sees Default. */
+            const QXmlStreamAttributes ba = root.attributes();
+            const quint32 set = ba.value(KXMLStageTargetSet).toUInt();
+            Blocked b;
+            if (ba.hasAttribute(KXMLStageTargetDX) || ba.hasAttribute(KXMLStageTargetDY)
+                || ba.hasAttribute(KXMLStageTargetDZ))
+            {
+                b.hasOffset = true;
+                b.offset = QVector3D(ba.value(KXMLStageTargetDX).toFloat(),
+                                     ba.value(KXMLStageTargetDY).toFloat(),
+                                     ba.value(KXMLStageTargetDZ).toFloat());
+            }
+            if (ba.hasAttribute(KXMLStageTargetW) || ba.hasAttribute(KXMLStageTargetD))
+            {
+                b.hasFootprint = true;
+                b.footprint = QSizeF(ba.value(KXMLStageTargetW).toDouble(),
+                                     ba.value(KXMLStageTargetD).toDouble());
+            }
+            while (root.readNextStartElement())
+            {
+                if (root.name() == KXMLStageTargetLinePoint)
+                {
+                    const QXmlStreamAttributes pa = root.attributes();
+                    b.linePoints << QVector3D(pa.value(KXMLStageTargetX).toFloat(),
+                                              pa.value(KXMLStageTargetY).toFloat(),
+                                              pa.value(KXMLStageTargetZ).toFloat());
+                }
+                root.skipCurrentElement();
+            }
+            b.hasLine = b.linePoints.size() >= 2;
+            if (!b.hasLine)
+                b.linePoints.clear();
+            if (set != 0 && !b.isEmpty())
+                m_blocked.insert(set, b);
+            continue;       // its end element is read
         }
         root.skipCurrentElement();
     }
@@ -213,8 +259,107 @@ bool StageTarget::saveXML(QXmlStreamWriter *doc) const
             doc->writeEndElement();
         }
     }
+    /* Blocking overrides, by set id: in id order, so a save is stable. */
+    QList<quint32> sets = blockedSets();
+    std::sort(sets.begin(), sets.end());
+    for (quint32 set : sets)
+    {
+        const Blocked b = blocked(set);
+        doc->writeStartElement(KXMLStageTargetBlocked);
+        doc->writeAttribute(KXMLStageTargetSet, QString::number(set));
+        if (b.hasOffset)
+        {
+            doc->writeAttribute(KXMLStageTargetDX, QString::number(double(b.offset.x()), 'f', 3));
+            doc->writeAttribute(KXMLStageTargetDY, QString::number(double(b.offset.y()), 'f', 3));
+            doc->writeAttribute(KXMLStageTargetDZ, QString::number(double(b.offset.z()), 'f', 3));
+        }
+        if (b.hasFootprint)
+        {
+            doc->writeAttribute(KXMLStageTargetW, QString::number(b.footprint.width(), 'f', 3));
+            doc->writeAttribute(KXMLStageTargetD, QString::number(b.footprint.height(), 'f', 3));
+        }
+        if (b.hasLine)
+            for (const QVector3D &p : b.linePoints)
+            {
+                doc->writeStartElement(KXMLStageTargetLinePoint);
+                doc->writeAttribute(KXMLStageTargetX, QString::number(double(p.x()), 'f', 3));
+                doc->writeAttribute(KXMLStageTargetY, QString::number(double(p.y()), 'f', 3));
+                doc->writeAttribute(KXMLStageTargetZ, QString::number(double(p.z()), 'f', 3));
+                doc->writeEndElement();
+            }
+        doc->writeEndElement();
+    }
     doc->writeEndElement();
     return true;
+}
+
+/****************************************************************************
+ * Blocking
+ ****************************************************************************/
+
+StageTarget::Blocked StageTarget::blocked(quint32 set) const
+{
+    QMutexLocker l(&m_positionMutex);
+    return m_blocked.value(set);
+}
+
+void StageTarget::setBlocked(quint32 set, const Blocked &b)
+{
+    if (set == 0)
+        return;     // Default is the target itself
+    QMutexLocker l(&m_positionMutex);
+    if (b.isEmpty())
+        m_blocked.remove(set);
+    else
+        m_blocked.insert(set, b);
+}
+
+bool StageTarget::isBlockedIn(quint32 set) const
+{
+    QMutexLocker l(&m_positionMutex);
+    return m_blocked.contains(set);
+}
+
+QList<quint32> StageTarget::blockedSets() const
+{
+    QMutexLocker l(&m_positionMutex);
+    return m_blocked.keys();
+}
+
+QVector3D StageTarget::positionIn(quint32 set) const
+{
+    QMutexLocker l(&m_positionMutex);
+    if (set != 0 && !m_blocked.isEmpty())
+    {
+        auto it = m_blocked.constFind(set);
+        if (it != m_blocked.constEnd() && it->hasOffset)
+            return m_position + it->offset;
+    }
+    return m_position;
+}
+
+QVector<QVector3D> StageTarget::linePointsIn(quint32 set) const
+{
+    QMutexLocker l(&m_positionMutex);
+    if (set != 0 && !m_blocked.isEmpty())
+    {
+        auto it = m_blocked.constFind(set);
+        if (it != m_blocked.constEnd() && it->hasLine)
+            return it->linePoints;
+    }
+    return m_linePoints;
+}
+
+QSizeF StageTarget::footprintIn(quint32 set) const
+{
+    QMutexLocker l(&m_positionMutex);
+    if (set != 0 && !m_blocked.isEmpty())
+    {
+        auto it = m_blocked.constFind(set);
+        if (it != m_blocked.constEnd() && it->hasFootprint)
+            return it->footprint;
+    }
+    return m_footprint;
 }
 
 QVector<QVector3D> StageTarget::linePointsAround(const QVector3D &origin) const

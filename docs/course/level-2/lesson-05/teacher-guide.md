@@ -137,6 +137,17 @@ they'd use; or, on paper, the three spreads drawn from above.
 
 Extension, Formation palettes: the course test (`lessonTwoFiveFormation`) types the palette, puts it on the Truss-Spots layer by the command line and opens the plan in its window.
 
+## Teacher note: spike marks and blocking
+
+Students who have done theatre know **spike marks**: tape on the deck
+where a performer stands for a number. The app's **blocking** is the same
+idea for stage targets. Why it matters: a look aimed at "Front Rank" keeps
+working when the front rank moves to the apron, because the cue moves the
+target, not the look. If a group asks how to light the same people in a
+different place, show the cue page's **Blocking** row and the Lighting
+Studio's **Blocking** picker (banner: *Moving targets in: …*). Not part of
+the hands-on; see the help's Stage Targets ▸ Blocking.
+
 ## How this lesson was checked
 
 Every step of the handout is run by the course test (`ui/test/courseshow`,

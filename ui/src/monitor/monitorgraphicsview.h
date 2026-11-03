@@ -37,6 +37,7 @@
 #include "scenery.h"
 #include "function.h"
 #include "structureduplicate.h"
+#include "stagetarget.h"
 
 class ContextMenu;
 class MonitorProperties;
@@ -515,6 +516,9 @@ public:
        deleting itself -- tearing down the item from inside its own context
        menu handler is not survivable. */
     Q_INVOKABLE void updateTargets();
+    /** The blocking the Studio shows changed: targets redrawn where they
+     *  stand in it. */
+    void blockingChanged();
     /** Stack target readouts that would print over each other (screen px). */
     void stackTargetReadouts();
 
@@ -561,7 +565,20 @@ public:
         QVector<QVector3D> pointsBefore;  ///< its points at the start
         QVector3D startWorld;             ///< the handle, metres
         QPointF startScene;
+        quint32 blocking = 0;             ///< the set it edits (0: the line itself)
+        StageTarget::Blocked blockedBefore;
     } m_lineDrag;
+
+    /** Blocking (docs/design/BLOCKING.md): the targets in the blocking the
+     *  Studio shows (BlockingView), a dashed ghost at Default for each one
+     *  moved in it, and a drag that writes the set, not Default. */
+    QList<QGraphicsItem *> m_blockingGhosts;
+    void updateBlockingGhosts();
+    /** Move @p moved to where their items were dropped, in set @p set. */
+    void moveTargetsInBlocking(const QList<class TargetItem *> &moved, quint32 set);
+    /** Change line @p t's points in set @p set with @p edit; one undo step. */
+    void editBlockedLine(StageTarget *t, quint32 set,
+                         const std::function<QVector<QVector3D>(QVector<QVector3D>)> &edit);
 
     /** Rebuild the aim-line overlays for all selected TargetItems. */
     void updateAimLines();
@@ -1485,7 +1502,10 @@ private:
                      *  rig as it was (rigBefore), put back by the Monitor. */
                     RigEdit,
                     /** "Duplicate Setup to...": dupUndo puts it all back. */
-                    DuplicateSetup } type;
+                    DuplicateSetup,
+                    /** Targets moved in a blocking set (BLOCKING.md): their
+                     *  override in blockingSet as it was. */
+                    TargetBlock } type;
         /** Entries recorded by ONE drag share a batch (0 = on its own), and
          *  one Ctrl+Z undoes the whole batch -- a Select All drag records one
          *  entry per kind it moved. */
@@ -1506,6 +1526,8 @@ private:
         QList<quint32> pastedFixtureIds;
         QByteArray rigBefore;                       ///< type == RigEdit
         StructureDuplicate::Undo dupUndo;           ///< type == DuplicateSetup
+        quint32 blockingSet = 0;                    ///< type == TargetBlock
+        QHash<quint32, StageTarget::Blocked> targetBlocked; ///< type == TargetBlock
     };
     std::function<void(const QByteArray &)> m_rigRestorer;
     std::function<QByteArray()> m_rigSnapshotter;

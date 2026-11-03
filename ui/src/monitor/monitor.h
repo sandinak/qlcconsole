@@ -716,6 +716,13 @@ protected:
     QComboBox *m_povCombo;   ///< Top / Front / Side point of view
     QComboBox *m_overlayCombo = nullptr;   ///< Normal / Power / DMX / Network / Stage
     QComboBox *m_dmxViewCombo = nullptr;   ///< View selector shown in the DMX-grid toolbar
+    /** Blocking (docs/design/BLOCKING.md): the footer's picker -- which
+     *  blocking the plot shows and a drag edits -- and the banner over the
+     *  plot that says so when it is not Default. */
+    QComboBox *m_blockingCombo = nullptr;
+    QLabel    *m_blockingBanner = nullptr;
+    void fillBlockingCombo();
+    void refreshBlocking();
 
     /* Footer measurement bar (built in initGraphicsFooter). */
     class MonitorRuler *m_hRuler = nullptr;  ///< top ruler

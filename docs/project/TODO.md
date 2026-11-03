@@ -10,6 +10,23 @@ under `~/.claude/.../memory/`.
 
 ---
 
+## Blocking: per-cue target places (Q211, blocking, 2026-11-03) — built
+
+Named blocking sets of target offsets (and line/area shapes) on the
+targets, a tracked Blocking on the cue, one reader
+(MonitorProperties::targetPosition) for every view and solver, the live
+blocking set by the cue's Collection as it starts, the Studio's picker,
+banner and Default ghosts, BLK-01. docs/design/BLOCKING.md. Course: a
+teacher note in level-2 lesson-05 (spike marks). Leftovers:
+- No editor for an area's footprint in a blocking (model, file and solver
+  have it); the target dialog edits Default only.
+- Focus nudges move the Default mark (the venue's), whatever the Studio
+  shows.
+- Hits leave the blocking alone; a hit with its own blocking is not built.
+- Two lists running: the last cue to GO sets the blocking for both.
+- Show Review's other checks read Default; only BLK-01 reads each blocking.
+- A course lesson on blocking (level 3?) if classes ask for it.
+
 ## Area cover: an Aim at an Area covers it (Q209, areacover, 2026-11-03) — built
 
 Zones by where the lights hang (least-squares match of x and depth key to

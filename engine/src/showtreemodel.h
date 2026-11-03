@@ -369,6 +369,13 @@ namespace ShowTree
          *  mark: nothing plays differently. This use's, like its number.
          *  Saved as NeedsWork="1", which an older build ignores. */
         bool needsWork = false;
+        /** Blocking (docs/design/BLOCKING.md, Q211): where the stage
+         *  targets stand from this cue on -- a MonitorProperties blocking set
+         *  id, 0 for Default. Invalid: unset, it tracks (the cue before's;
+         *  the first cue of a list starts from Default). This use's, like
+         *  its number. Saved as Blocking=, which an older build ignores
+         *  (there every cue is Default). Hits have none. */
+        quint32 blocking = 0xFFFFFFFF;
 
         const Look *look(const QString &key) const;
         void setLook(const Look &look);

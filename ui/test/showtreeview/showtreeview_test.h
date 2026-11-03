@@ -153,6 +153,7 @@ private slots:
     /** Needs work (Q192): the cue page's box, the row's flag and note. */
     void needsWorkInTheTree();
     void moveInBlackPerListAndCueInTheTree();
+    void theCuePagePicksTheBlocking();
     void cuesAtATimecodeAreSetOnTheCueAndListPages();
     /** A picture of a real show with cues skipped: QLC_SKIPCUE_SHOW (a
      *  .qlcc, read only) and QLC_SKIPCUE_SHOT (a .png). */

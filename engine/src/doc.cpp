@@ -42,6 +42,7 @@
 #include "showembedding.h"
 
 #include "monitorproperties.h"
+#include "blocking.h"
 #include "powerdistribution.h"
 #include "networktopology.h"
 #include "timecodesource.h"
@@ -2475,6 +2476,12 @@ MonitorProperties *Doc::monitorProperties()
         m_monitorProps = new MonitorProperties();
         connect(m_monitorProps, &MonitorProperties::autoStageLooksChanged,
                 this, [this](bool) { emit stageLooksChanged(); });
+        /* A cue went with another blocking (Collection::preRun(), on the
+           MasterTimer): the scenes that stay up re-aim, here. */
+        connect(m_monitorProps, &MonitorProperties::liveBlockingChanged,
+                this, [this](quint32 from, quint32 to, uint fadeMs) {
+                    Blocking::reaimRunning(this, from, to, fadeMs);
+                }, Qt::QueuedConnection);
     }
 
     return m_monitorProps;

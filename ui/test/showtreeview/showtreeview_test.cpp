@@ -7879,6 +7879,88 @@ void ShowTreeView_Test::needsWorkInTheTree()
     QVERIFY(!st->isCueNeedsWork(c0));
 }
 
+/* Blocking (Q211, docs/design/BLOCKING.md) on the cue page: Tracks (...),
+   Default and the show's sets; picking one sets the cue's, the cue after
+   tracks it, the tree flags where it changes; New... makes a set and uses
+   it from this cue on. */
+void ShowTreeView_Test::theCuePagePicksTheBlocking()
+{
+    MonitorProperties *mp = m_doc->monitorProperties();
+    const quint32 apron = mp->addBlockingSet("Apron number");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L", ListMode::Tracking);
+    QList<quint32> c;
+    for (int i = 0; i < 3; ++i)
+        c << st->addCue(list, i - 1, QString("C%1").arg(i + 1));
+    st->clearUndo();
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1280, 800);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QTreeWidget *tree = view.tree();
+    tree->expandAll();
+
+    QVERIFY(view.selectNode(c[1]));
+    QComboBox *combo = view.findChild<QComboBox *>("stCueBlocking");
+    QVERIFY(combo != nullptr && combo->isVisibleTo(&view));
+    QCOMPARE(combo->count(), 3);
+    QCOMPARE(combo->itemText(0), QString("Tracks (Default)"));
+    QCOMPARE(combo->itemText(1), QString("Default"));
+    QCOMPARE(combo->itemText(2), QString("Apron number"));
+    QCOMPARE(combo->currentIndex(), 0);
+
+    combo->setCurrentIndex(2);
+    QMetaObject::invokeMethod(combo, "activated", Q_ARG(int, 2));
+    QCOMPARE(st->cueOwnBlocking(c[1]), apron);
+    QCOMPARE(st->cueBlocking(c[2]), apron);
+    QCOMPARE(st->undoText(), QString("Set cue blocking"));
+    tree->expandAll();
+    QVERIFY2(cueRow(tree, c[1])->text(ShowTreeView::FlagsCol).contains("blocking: Apron number"),
+             qPrintable(cueRow(tree, c[1])->text(ShowTreeView::FlagsCol)));
+    QVERIFY(!cueRow(tree, c[2])->text(ShowTreeView::FlagsCol).contains("blocking"));
+    QVERIFY(!cueRow(tree, c[0])->text(ShowTreeView::FlagsCol).contains("blocking"));
+
+    // The cue after says what it tracks.
+    QVERIFY(view.selectNode(c[2]));
+    combo = view.findChild<QComboBox *>("stCueBlocking");
+    QCOMPARE(combo->itemText(0), QString("Tracks (Apron number)"));
+    QCOMPARE(combo->currentIndex(), 0);
+    QVERIFY(view.findChild<QPushButton *>("stCueBlockingRename")->isEnabled());
+
+    // A set renamed reads its new name.
+    QVERIFY(mp->renameBlockingSet(apron, "Apron"));
+    QCOMPARE(combo->itemText(0), QString("Tracks (Apron)"));
+
+    // New...: a set from where they stand now, used from this cue on.
+    StageTarget *rank = mp->addStageTarget();
+    StageTarget::Blocked b;
+    b.hasOffset = true;
+    b.offset = QVector3D(0, 1.5f, 0);
+    rank->setBlocked(apron, b);
+    {
+        ModalCloser closer([](QWidget *w) {
+            QInputDialog *d = qobject_cast<QInputDialog *>(w);
+            if (d == nullptr)
+                return false;
+            d->setTextValue("Finale");
+            d->accept();
+            return true;
+        });
+        QTest::mouseClick(view.findChild<QPushButton *>("stCueBlockingNew"), Qt::LeftButton);
+    }
+    const quint32 finale = st->cueOwnBlocking(c[2]);
+    QVERIFY(finale != apron && mp->hasBlockingSet(finale));
+    QCOMPARE(mp->blockingName(finale), QString("Finale"));
+    QVERIFY(rank->isBlockedIn(finale));             // a copy of Apron's places
+    QCOMPARE(view.findChild<QComboBox *>("stCueBlocking")->currentText(), QString("Finale"));
+
+    QVERIFY(st->undo());
+    QCOMPARE(st->cueBlocking(c[2]), apron);
+    QVERIFY(st->undo());
+    QCOMPARE(st->cueOwnBlocking(c[1]), ShowTree::invalidId());
+}
+
 void ShowTreeView_Test::moveInBlackPerListAndCueInTheTree()
 {
     FixtureGroup *towers = group("Towers", 0, 2);

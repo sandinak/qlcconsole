@@ -1408,12 +1408,13 @@ void StructureStudioView::drawStageFigures(QPainter &p) const
         /* An Area or a drum kit: its outline on the deck, in its colour, at
            its real size -- where a beam lands relative to it is the point. */
         if ((t->kind() == StageTarget::Kind::Area || t->kind() == StageTarget::Kind::DrumKit)
-            && t->footprint().isEmpty() == false)
+            && props->targetFootprint(t).isEmpty() == false)
         {
             const QVector3D at = props->targetAimPoint(t, true);
             const float ground = props->platformHeightAt(at.x(), at.y()) + 0.004f;
-            const float hw = float(t->footprint().width()) * 0.5f;
-            const float hd = float(t->footprint().height()) * 0.5f;
+            const QSizeF fp = props->targetFootprint(t);     // in the blocking shown
+            const float hw = float(fp.width()) * 0.5f;
+            const float hd = float(fp.height()) * 0.5f;
             const QColor mark = t->color().isValid() ? t->color() : QColor(255, 180, 0);
             const QVector3D c[4] = {
                 QVector3D(at.x() - hw, at.y() - hd, ground), QVector3D(at.x() + hw, at.y() - hd, ground),
@@ -2244,7 +2245,7 @@ QList<QPair<QString, QRectF> > StructureStudioView::targetReadouts(const QFont &
         const bool person = t->kind() == StageTarget::Kind::Person
                             && props->targetFigureHeight(t) > 0.0f;
         const bool area = (t->kind() == StageTarget::Kind::Area || t->kind() == StageTarget::Kind::DrumKit)
-                          && !t->footprint().isEmpty();
+                          && !props->targetFootprint(t).isEmpty();
         if (!person && !area && !t->isLine())
             continue;           // the overview draws nothing for it to label
         if (PerformerFill::isPerformer(props, t))

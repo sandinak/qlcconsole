@@ -192,6 +192,8 @@ static QList<quint32> studioMenuFixtures(const StructureStudioView *view, quint3
 #include "itemicons.h"
 #include "collection.h"
 #include "showtreecontroller.h"
+#include "blockingview.h"
+#include "monitorproperties.h"
 
 #define SETTINGS_VSPLITTER "monitor/vsplitter2"
 #define SETTINGS_LAYERS_PANEL "monitor/layerspanel3"
@@ -639,6 +641,15 @@ void Monitor::initGraphicsView()
     viewGrid->addWidget(m_graphicsView, 1, 1);
     viewGrid->setRowStretch(1, 1);
     viewGrid->setColumnStretch(1, 1);
+    /* Over the plot, when a drag edits a blocking set and not Default
+       (BLOCKING.md): nobody moves the Default marks by accident. */
+    m_blockingBanner = new QLabel(gcontainer);
+    m_blockingBanner->setObjectName(QStringLiteral("blockingBanner"));
+    m_blockingBanner->setAlignment(Qt::AlignCenter);
+    m_blockingBanner->setStyleSheet(QStringLiteral(
+        "QLabel { background: #2c5d8f; color: white; font-weight: bold; padding: 4px 8px; }"));
+    m_blockingBanner->setVisible(false);
+    gcLayout->addWidget(m_blockingBanner);
     gcLayout->addWidget(viewArea);
 
     // Layers side panel, docked on the LEFT (first splitter pane) as most apps
@@ -1291,6 +1302,41 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
     fl->addWidget(originBtn);
 
     fl->addStretch(1);
+
+    // ---- Blocking (BLOCKING.md): which marks the plot shows and moves ----
+    fl->addWidget(new QLabel(tr("Blocking:")));
+    m_blockingCombo = new QComboBox(footer);
+    m_blockingCombo->setObjectName(QStringLiteral("blockingCombo"));
+    m_blockingCombo->setSizeAdjustPolicy(QComboBox::AdjustToContents);
+    m_blockingCombo->setToolTip(tr("Where the stage targets stand on the plot, and what dragging one "
+                                   "changes: the blocking of the cue in edit, Default, or a set."));
+    fl->addWidget(m_blockingCombo);
+    fillBlockingCombo();
+    connect(m_blockingCombo, QOverload<int>::of(&QComboBox::activated), this, [this](int i) {
+        const QVariant d = m_blockingCombo->itemData(i);
+        BlockingView *bv = BlockingView::of(m_doc);
+        if (!d.isValid())
+        {
+            // New...: a set, picked straight away so the next drag goes into it.
+            bool ok = false;
+            const QString name = QInputDialog::getText(this, tr("New blocking"),
+                                                       tr("Name (where the people stand, e.g. \"Apron number\"):"),
+                                                       QLineEdit::Normal, QString(), &ok);
+            if (ok && !name.trimmed().isEmpty())
+            {
+                const quint32 id = m_doc->monitorProperties()->addBlockingSet(name);
+                m_doc->setModified();
+                bv->setPick(id);
+            }
+            fillBlockingCombo();
+            return;
+        }
+        bv->setPick(d.toUInt());
+    });
+    connect(BlockingView::of(m_doc), &BlockingView::changed, this, &Monitor::refreshBlocking);
+    connect(m_doc->monitorProperties(), &MonitorProperties::blockingSetsChanged, this, &Monitor::fillBlockingCombo);
+    QTimer::singleShot(0, this, &Monitor::refreshBlocking);   // once the banner and the plot are up
+    addSep();
 
     // ---- Overlay + View, RIGHT-justified ----  the single source of state.
     fl->addWidget(new QLabel(tr("Overlay:")));
@@ -12186,4 +12232,39 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
     flushSceneCaches();
     m_doc->setModified();
     edit.accept();
+}
+
+/*********************************************************************
+ * Blocking (docs/design/BLOCKING.md)
+ *********************************************************************/
+
+void Monitor::fillBlockingCombo()
+{
+    if (m_blockingCombo == nullptr)
+        return;
+    QSignalBlocker block(m_blockingCombo);
+    BlockingView *bv = BlockingView::of(m_doc);
+    MonitorProperties *mp = m_doc->monitorProperties();
+    m_blockingCombo->clear();
+    const quint32 cue = bv->pick() == BlockingView::followCue() ? bv->blocking() : 0;
+    m_blockingCombo->addItem(tr("Cue in edit (%1)").arg(mp->blockingName(cue)), BlockingView::followCue());
+    m_blockingCombo->addItem(mp->blockingName(MonitorProperties::defaultBlocking()),
+                             MonitorProperties::defaultBlocking());
+    for (const MonitorProperties::BlockingSet &b : mp->blockingSets())
+        m_blockingCombo->addItem(b.name, b.id);
+    m_blockingCombo->addItem(tr("New blocking..."));
+    m_blockingCombo->setCurrentIndex(qMax(0, m_blockingCombo->findData(bv->pick())));
+}
+
+void Monitor::refreshBlocking()
+{
+    fillBlockingCombo();
+    BlockingView *bv = BlockingView::of(m_doc);
+    if (m_blockingBanner != nullptr)
+    {
+        m_blockingBanner->setText(bv->bannerText());
+        m_blockingBanner->setVisible(bv->editsSet());
+    }
+    if (m_graphicsView != nullptr)
+        m_graphicsView->blockingChanged();
 }
