@@ -98,7 +98,13 @@ Switch roles after each part.
 8. Click the grey **Truss-Spots** row. On its **Spread** row, click **⋯ →
    −5**.
    - *You should see:* **Spread: −5**, the layer is the Button's own now,
-     and the top bar reads **Changed: 1.0.8 Button**. The beams cross.
+     and the top bar reads **Changed: 1.0.8 Button**. The beams cross. In
+     the plan view each beam is a line from its light to its point on the
+     line, so the cross is lines crossing; with Grouping set, lights that
+     move together share a colour and a caption counts the crossings.
+     **Cross** acts only below Spread 0, and the plan says when it doesn't.
+
+![The plan at Spread −5](../../images/lesson-2-5/line-cross.png)
 9. Click **1.0.8 Button** and drag **Red** onto the **Truss-Spots** row.
    - *You should see:* red beams. The spots have no colour mixing: their
      colour wheel and their colour ring each turn to the slot nearest

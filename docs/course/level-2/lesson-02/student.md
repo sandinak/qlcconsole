@@ -62,8 +62,10 @@ Which cues change when Chorus Colour changes?
    ![Chorus Colour on the steps and the cyc](../../images/lesson-2-2/chorus-colour.png)
 
 9. Click the **Steps** row, then **✎** on its **Colour** row.
-10. Under **Basic colors**, click the violet (third row, second column).
-    The top bar: **Changed: 1.0.2 Chorus, 1.0.2.5 Flash, 1.0.3 Scream**.
+10. Under **Basic colors**, click the violet (third row, second column). The
+    swatches are the stage's colours, not a generic palette: hover a swatch for
+    its name (Flesh, Congo Blue, Bastard Amber, Blacklight for UV), and the
+    line under the picker names the colour you are on. The top bar: **Changed: 1.0.2 Chorus, 1.0.2.5 Flash, 1.0.3 Scream**.
 
     ![One change in the Look Editor](../../images/lesson-2-2/look-editor.png)
 

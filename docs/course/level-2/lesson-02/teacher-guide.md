@@ -100,7 +100,7 @@ On the projector:
 | Magenta changed in the Library | They opened Magenta, not the copy | "Undo. Which palette is on the chorus now? Open that one." |
 | Only the steps changed | Chorus Colour was dropped on the Steps only | "Where else is the chorus colour? The cyc: drop it on the grey TrussC-RGB row." |
 | The copy is still *Magenta (copy)* | Return not pressed in Name | "Type the name and press Return." |
-| They can't find Basic colors | The Look Editor is small | "Drag the line above it up to give it room." |
+| They can't find Basic colors (the swatch grid) | The Look Editor is small | "Drag the line above it up to give it room." |
 
 ## 4. Check for understanding (while circulating)
 
@@ -152,7 +152,7 @@ Every step of the handout is run by the course test (`ui/test/courseshow`,
 offscreen: the Library's right-click menus (Used by and its click,
 Duplicate, Move to Folder → New Folder…, Group by Type), the Look
 Editor's Name box and its Used by line, the drops and the top bar's text,
-the click on the Basic colors swatch, and what the rig sends (the steps
+the click on the violet swatch, and what the rig sends (the steps
 and the cyc magenta, then both violet, and the scream's cyc violet too).
 The at-home steps (Verse Colour into the existing folder) are checked the
 same way. The finish file is what the steps make, and the pictures are

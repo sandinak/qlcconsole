@@ -112,7 +112,9 @@ right-click on a Mac trackpad, click with two fingers.
      palette: changing it changes every cue and scene that uses it*, and
      *Used by: 1 cue(s)*.
 10. Under **Basic colors**, click the violet: the **third row, second
-    column**.
+    column**. The swatches are stage colours, named as crews name them (Flesh,
+    Congo Blue, Bastard Amber, Straw, Blacklight for UV): hover a swatch
+    for its name, and a line under the picker names the colour you are on.
     - *You should see:* the top bar reads **Changed: 1.0.2 Chorus, 1.0.2.5
       Flash, 1.0.3 Scream**, and the steps and the cyc turn violet
       together. Magenta itself hasn't changed.

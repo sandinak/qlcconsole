@@ -45,7 +45,10 @@ Roles: **Driver** (mouse), **Navigator** (reads each step aloud and checks *You 
    show has no outputs, so one line there is expected. That list is about
    now, on this computer.
 3. Click **Review** in the footer.
-   - *You should see:* findings, worst first. Hover a row for why it
+   - *You should see:* findings, worst first. A warning also marks the cue
+     it is on (**⚠ cyc**): hover the mark for the detail, right-click it to
+     answer it there (**I Meant It**, **Not Meant: Show Me the Layer**,
+     **Open in Show Review**). Hover a row for why it
      matters. Look for **CUE-02**, and for four **CUE-01** under it.
 
    ![Show Review's findings](../../images/lesson-3-9/show-review.png)

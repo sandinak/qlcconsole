@@ -27,7 +27,10 @@ Students can:
 ## Before class
 
 - [ ] qlcconsole installed on the projector computer and every class laptop
-  ([Install](../../install.md)).
+  ([Install](../../install.md)). On Linux or Raspberry Pi lab machines,
+  check **Settings ▸ Performance**: the light timing is steadier when the
+  app may use real-time priority, which needs a real-time permission
+  (an rtprio limit) for the lab user.
 - [ ] `lesson-1-1-start.qlcc` and `lesson-1-1-finish.qlcc` from
   [`docs/course/shows/`](../../shows/) copied to each laptop (or a shared
   folder).
