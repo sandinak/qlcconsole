@@ -8904,9 +8904,13 @@ bool App::reviewJump(QWidget *parent, const QString &jump, const QVariantList &d
     {
         GoboWheelsDialog dlg(m_doc, id, parent != nullptr ? parent : this);
         if (dlg.exec() == QDialog::Accepted)
+        {
             foreach (QWidget *w, QApplication::allWidgets())
+            {
                 if (StructureStudioView *sv = qobject_cast<StructureStudioView *>(w))
                     sv->update();
+            }
+        }
         return true;
     }
     if (jump == QLatin1String("fixtures") || jump == QLatin1String("power"))
