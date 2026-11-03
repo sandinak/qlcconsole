@@ -32,6 +32,12 @@
 #include "function.h"
 #include "chaser.h"
 #include "doc.h"
+#include "padrun.h"
+#include "padnames.h"
+#include "showstatus.h"
+#include "focussession.h"
+#include "programmercontroller.h"
+#include "webaccessgamepad.h"
 
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -309,6 +315,34 @@ static QJsonObject cueObject(Doc *doc, Chaser *ch, quint32 listId, int step, int
     return o;
 }
 
+QJsonObject WebAccessRun::padMap()
+{
+    /* The pad's Run role (PadRun), as far as the page can do it: the arm,
+       GO, Back, Sub GO, Stop and the armed hit. The rest (another list, the
+       walk, the voice) are the console's. */
+    QJsonObject map;
+    for (GamepadRole::Role role : WebAccessGamepad::standardButtons())
+    {
+        const PadRun::Action a = PadRun::actionFor(role);
+        QString what;
+        switch (a)
+        {
+            case PadRun::Arm:     what = QStringLiteral("arm"); break;
+            case PadRun::Go:      what = QStringLiteral("go"); break;
+            case PadRun::Back:    what = QStringLiteral("back"); break;
+            case PadRun::SubGo:   what = QStringLiteral("subgo"); break;
+            case PadRun::Stop:    what = QStringLiteral("stop"); break;
+            case PadRun::FireHit: what = QStringLiteral("hit"); break;
+            default: continue;
+        }
+        QJsonObject e;
+        e[QStringLiteral("do")] = what;
+        e[QStringLiteral("label")] = PadNames::expand(PadRun::label(a), PadNames::Xbox);
+        map[GamepadRole::key(role)] = e;
+    }
+    return map;
+}
+
 QByteArray WebAccessRun::stateJson() const
 {
     ShowTreeController *st = m_doc->showTree();
@@ -324,6 +358,21 @@ QByteArray WebAccessRun::stateJson() const
     o[QStringLiteral("api")] = 1;
     o[QStringLiteral("blackout")] = m_doc->inputOutputMap()->blackout();
     o[QStringLiteral("grand")] = byteToPercent(m_doc->inputOutputMap()->grandMasterValue());
+    o[QStringLiteral("pad")] = padMap();
+    // Focus running on the console: the page offers the focus remote.
+    o[QStringLiteral("focus")] = m_doc->programmer() != nullptr && m_doc->programmer()->focusSession()->isActive();
+    // Show Status (the footer chip): one line each, never the detail or items.
+    QJsonArray status;
+    for (const ShowStatus::Entry &e : ShowStatus::instance()->allEntries())
+    {
+        if (e.severity == ShowStatus::Ok)
+            continue;
+        QJsonObject so;
+        so[QStringLiteral("level")] = e.severity == ShowStatus::Error ? QStringLiteral("error") : QStringLiteral("warning");
+        so[QStringLiteral("text")] = e.summary;
+        status.append(so);
+    }
+    o[QStringLiteral("status")] = status;
     const QList<quint32> hitIds = st->allHits();
     if (!hitIds.isEmpty())
     {

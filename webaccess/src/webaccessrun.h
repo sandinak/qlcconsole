@@ -19,6 +19,7 @@
 #define WEBACCESSRUN_H
 
 #include <QByteArray>
+#include <QJsonObject>
 #include <QElapsedTimer>
 #include <QObject>
 #include <QString>
@@ -57,9 +58,14 @@ public:
      *  {list, production, now:{num,name,sub}, next:{...}, subNext, section,
      *   running, paused, hasSub, mode, remote, pin, teaching,
      *   masters:[{id,name,level}] (percent; only when there are some),
-     *   grand (percent), blackout, api (1),
+     *   grand (percent), blackout, api (1), pad (padMap()), focus (a focus
+     *   session runs on the console), status:[{level,text}] (Show Status),
      *   hits:[{id,name,on,armed}] (only when the show has some)}. */
     QByteArray stateJson() const;
+
+    /** The pad's Run role as the page does it, by role key: {"lb":
+     *  {"do":"arm","label":..}, "a": {"do":"go",..}, ...} (PadRun::actionFor()). */
+    static QJsonObject padMap();
 
     /** Remote GO is on in Show Settings. */
     bool remoteAllowed() const;

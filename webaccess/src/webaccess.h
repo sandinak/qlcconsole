@@ -25,6 +25,7 @@
 #include "webaccessbase.h"
 
 class WebAccessRun;
+class WebAccessFocus;
 
 class VCAudioTriggers;
 class VirtualConsole;
@@ -110,6 +111,8 @@ protected slots:
 
     /** The Run page's state changed: to every Run page open. */
     void slotRunState(const QByteArray &json);
+    /** The focus remote's state changed: to every focus page open. */
+    void slotFocusState(const QByteArray &json);
 
 protected:
     /** QLC+RUN|hello, pin|<PIN>, go, back, stop, subgo, subback from the
@@ -117,7 +120,15 @@ protected:
      *  and RUN|ack|<command>|ok|refused|needpin|nothing */
     void handleRunCommand(QHttpConnection *conn, WebAccessUser *user, const QStringList &cmdList);
 
+    /** QLC+FOCUS|hello, nudge|<dPan>|<dTilt>, press|<role>, call|<index>,
+     *  fixture|<id>, ping|<t> from the focus remote (/focus); the PIN is
+     *  the Run page's (QLC+RUN|pin). Answered FOCUS|state|{json},
+     *  FOCUS|ack|<what>|ok|refused|needpin|nothing and FOCUS|pong|<t>. */
+    void handleFocusCommand(QHttpConnection *conn, WebAccessUser *user, const QStringList &cmdList);
+
     WebAccessRun *m_run = nullptr;
+    WebAccessFocus *m_focus = nullptr;
+    QSet<QHttpConnection *> m_focusClients;  ///< focus pages that said hello
     QSet<QHttpConnection *> m_runClients;    ///< connections that said hello
     QSet<QHttpConnection *> m_runUnlocked;   ///< ... and gave the show's PIN
     QString m_JScode;

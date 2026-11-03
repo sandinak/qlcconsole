@@ -54,6 +54,12 @@ namespace GamepadLayout
      *  the bumpers, Create (Share) View, Options Menu, PS the guide button,
      *  the touchpad click Share -- so every tool sees one pad. */
     const quint16 kSonyVendorId = 0x054C;
+    /** Valve: Steam Input presents a Steam Deck's own controls, and any pad
+     *  while Steam runs on Linux, as a Valve pad in the Xbox layout (A at the
+     *  bottom, View / Menu, the bumpers): the Steam Deck controller (0x1205)
+     *  and Steam's virtual gamepad (0x11FF). Read as "xbox", so a controller
+     *  slot, the pad's Run role and the Focus scheme line up with it. */
+    const quint16 kValveVendorId = 0x28DE;
 
     enum Axis { LeftX = 0, LeftY, LeftTrigger, RightX, RightY, RightTrigger, AxisCount };
 

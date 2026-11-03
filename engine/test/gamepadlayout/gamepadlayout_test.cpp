@@ -404,16 +404,39 @@ void GamepadLayout_Test::matchesTheXboxProfile()
     delete p;
 }
 
+void GamepadLayout_Test::deviceKinds_data()
+{
+    QTest::addColumn<int>("vid");
+    QTest::addColumn<int>("pid");
+    QTest::addColumn<QString>("kind");
+    QTest::addColumn<QString>("model");
+    QTest::newRow("DualShock 4") << int(kSonyVendorId) << 0x05C4 << QString("dualshock4") << QString("DualShock 4");
+    QTest::newRow("DualShock 4 v2") << int(kSonyVendorId) << 0x09CC << QString("dualshock4") << QString("DualShock 4 (second model)");
+    QTest::newRow("DS4 adaptor") << int(kSonyVendorId) << 0x0BA0 << QString("dualshock4") << QString("DualShock 4 USB Wireless Adaptor");
+    QTest::newRow("DualSense") << int(kSonyVendorId) << 0x0CE6 << QString("dualsense") << QString("DualSense");
+    QTest::newRow("DualSense Edge") << int(kSonyVendorId) << 0x0DF2 << QString("dualsense") << QString("DualSense Edge");
+    QTest::newRow("Xbox Series") << int(kMicrosoftVendorId) << 0x0B13 << QString("xbox") << QString("Xbox Series X|S Controller");
+    // Steam Input: the Deck's own controls and Steam's virtual pad
+    QTest::newRow("Steam Deck") << int(kValveVendorId) << 0x1205 << QString("xbox") << QString("Steam Deck");
+    QTest::newRow("Steam virtual pad") << int(kValveVendorId) << 0x11FF << QString("xbox") << QString("Steam Virtual Gamepad");
+    // a Valve ID we do not know (the old Steam Controller's own HID mode): not ours
+    QTest::newRow("Steam Controller") << int(kValveVendorId) << 0x1102 << QString("") << QString("");
+    QTest::newRow("PS3 pad") << int(kSonyVendorId) << 0x0268 << QString("") << QString("");
+    QTest::newRow("unknown") << 0x1234 << 0x5678 << QString("") << QString("");
+}
+
 void GamepadLayout_Test::deviceKinds()
 {
-    QCOMPARE(deviceKind(kSonyVendorId, 0x05C4), QString("dualshock4"));
-    QCOMPARE(deviceKind(kSonyVendorId, 0x09CC), QString("dualshock4"));
-    QCOMPARE(deviceKind(kSonyVendorId, 0x0BA0), QString("dualshock4"));
-    QCOMPARE(deviceKind(kSonyVendorId, 0x0CE6), QString("dualsense"));
-    QCOMPARE(deviceKind(kSonyVendorId, 0x0DF2), QString("dualsense"));
-    QCOMPARE(deviceKind(kMicrosoftVendorId, 0x0B13), QString("xbox"));
-    QVERIFY(deviceKind(kSonyVendorId, 0x0268).isEmpty());     // a PS3 pad: not ours
-    QVERIFY(deviceKind(0x1234, 0x5678).isEmpty());
+    QFETCH(int, vid);
+    QFETCH(int, pid);
+    QFETCH(QString, kind);
+    QFETCH(QString, model);
+    QCOMPARE(deviceKind(quint16(vid), quint16(pid)), kind);
+    QCOMPARE(modelName(quint16(vid), quint16(pid)), model);
+    // Their own element order wherever a family is asked (a Mac's HID path)
+    if (vid == kValveVendorId)
+        QCOMPARE(GamepadLayout::family(quint16(vid), quint16(pid), UnknownTransport, true, 16, false),
+                 GamepadLayout::NotXbox);
 }
 
 void GamepadLayout_Test::touchpadFingers()

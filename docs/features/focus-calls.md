@@ -163,6 +163,10 @@ their point, the first one lit and the rest of the call dimmed. The panel
 says the call ("Call 2 of 5: AT spots → Soloist DS") and its note, which
 fixture, the scope, and where saves go.
 
+**From the stage on a Steam Deck or phone:** the focus remote page works
+the running calls with the Deck's sticks and buttons, in the same scheme
+(see [Steam Deck and gamepad remote](gamepad-remote.md)).
+
 ![Venue focus running: the call and its note, the scope, the controller](../images/focus-calls-panel.png)
 
 1. The call being focused, and its note for the crew.

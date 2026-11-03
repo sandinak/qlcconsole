@@ -40,6 +40,29 @@ Monitor_Test::aBuriedLightIsRingedOnThePlot.
 
 ---
 
+## Steam Deck / gamepad remote — built, leftovers (deck, 2026-11-03)
+
+Built on feat/04-deck-remote: /focus page (WebAccessFocus), gamepad
+reading on /focus and /run (WebAccessGamepad, tables shared with the
+tests), Run page Show Status + Focus link + 1280×800 landscape layout,
+controller test panel, Valve IDs in GamepadLayout::deviceKind(). Docs:
+docs/features/gamepad-remote.md.
+
+- [ ] **Hardware check on the user's Deck** (checklist in
+  gamepad-remote.md "Hardware checklist"): controller test screenshot,
+  Wi-Fi round trip, back grips via Steam Input, Game Mode launch, and the
+  VID:PID the console's controller list shows for the Deck.
+- [ ] Blind / Solo from the remote: not built. decided: the remote may do
+  only what the phone Run page may (can change); Blind/Solo would be new
+  remote powers.
+- [ ] Teaching instructor flags (q20x): the remote reports `teaching` and
+  holds nothing extra; add the check once the flags land on main.
+- [ ] Starting a focus from the remote: decided no, the venue choice is
+  the console's (can change).
+- [ ] A JS test harness for the page scripts (none in the repo): the
+  mapping tables are C++ and tested; scripts are only syntax-checked by
+  hand (node --check).
+
 ## Aim round trip — leftovers (fix/04-ust-aim, 2026-11-03)
 
 "USTs still pointing SR" (cue 1.1.1, line aim, Spread +5). Built: one DMX
