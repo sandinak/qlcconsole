@@ -4528,9 +4528,16 @@ QString App::stageIndicatorText(Stage *stageOut, QString *tipOut) const
         stage = Stage::BlindView;
         text = blindCue.isEmpty() ? tr("BLIND \u00b7 stage: no cue list")
                                   : tr("BLIND \u00b7 stage holds %1").arg(blindCue);
+        QString editing;
+        {
+            const quint32 editId = tree != nullptr ? tree->editedCue() : ShowTree::invalidId();
+            const ShowTree::CueList *editList = editId == ShowTree::invalidId() ? nullptr : tree->listOfCue(editId);
+            if (editList != nullptr)
+                editing = tr(" The screens show %1.").arg(tree->cueLabel(*editList, editList->indexOf(editId)));
+        }
         tip = tr("Blind view: what you edit shows on the screens and does not reach the lights. "
                  "The stage keeps what the running cue list plays%1. Click for the Run tab.")
-                 .arg(playing.isEmpty() ? QString() : QStringLiteral(" (%1)").arg(playing)) + runningTip;
+                 .arg(playing.isEmpty() ? QString() : QStringLiteral(" (%1)").arg(playing)) + editing + runningTip;
     }
     else if (muted)
     {

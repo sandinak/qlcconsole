@@ -370,7 +370,7 @@ void MainBar_Test::operateClearsBlindAndMakesItAView()
     ShowControls *sc = m_app->m_showControls;
     QVERIFY(sc != nullptr);
     QCOMPARE(doc->mode(), Doc::Design);
-    QLabel *caption = m_app->statusBar()->findChild<QLabel *>("statusBlind");
+    QToolButton *caption = m_app->statusBar()->findChild<QToolButton *>("footerStage");
     QVERIFY(caption != nullptr);
     auto footerBlue = [this]() {
         return m_app->statusBar()->styleSheet().contains(BlindStyle::colour());
@@ -380,7 +380,7 @@ void MainBar_Test::operateClearsBlindAndMakesItAView()
     QVERIFY(io->outputInhibited());
     QVERIFY(footerBlue());
     QVERIFY(caption->isVisibleTo(m_app));
-    QVERIFY(caption->text().contains("muted"));
+    QVERIFY(caption->text().startsWith("BLIND") && caption->text().contains("muted"));
 
     // A cue in edit: a dimmer at 200 on a fixture of its own.
     quint32 fid = Fixture::invalidId();
@@ -422,7 +422,7 @@ void MainBar_Test::operateClearsBlindAndMakesItAView()
     QVERIFY(!sc->blindButton()->isChecked());           // starting Live
     QVERIFY(!m_app->blindView());
     QVERIFY(!footerBlue());
-    QVERIFY(!caption->isVisibleTo(m_app));
+    QVERIFY(!caption->text().startsWith("BLIND"));      // the chip is there, saying the stage is not Blind
 
     // Live: the fixture shows the stage.
     st->previewCue(cue);                                // the tree's selection, in Operate
@@ -440,7 +440,9 @@ void MainBar_Test::operateClearsBlindAndMakesItAView()
     QCOMPARE(uchar(second->channelValues().at(0)), uchar(200));
     QVERIFY(footerBlue());
     QVERIFY(caption->isVisibleTo(m_app));
-    QVERIFY2(caption->text().contains("Blind cue"), qPrintable(caption->text()));
+    QVERIFY2(caption->text().startsWith("BLIND"), qPrintable(caption->text()));
+    // The stage holds the run (none here); the tooltip names the cue the screens show.
+    QVERIFY2(caption->toolTip().contains("Blind cue"), qPrintable(caption->toolTip()));
     // The stage changing meanwhile doesn't reach the picture...
     m_app->slotUniverseWritten(uniIdx, QByteArray(512, char(255)));
     QCOMPARE(uchar(fx->channelValues().at(0)), uchar(200));
