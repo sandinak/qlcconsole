@@ -412,7 +412,7 @@ static quint16 bandValue(qreal frac, quint32 lo16, quint32 hi16, bool hasFine)
     return static_cast<quint16>(lo16 + frac * (hi16 - lo16));
 }
 
-QList<SceneValue> Fixture::positionToValues(int type, float degrees, bool isRelative)
+QList<SceneValue> Fixture::positionToValues(int type, float degrees, bool isRelative, int head)
 {
     QList<SceneValue> posList;
     // cache a list of channels processed, to avoid duplicates
@@ -431,6 +431,8 @@ QList<SceneValue> Fixture::positionToValues(int type, float degrees, bool isRela
 
         for (int i = 0; i < heads(); i++)
         {
+            if (head >= 0 && i != head)
+                continue;
             quint32 panMSB = channelNumber(QLCChannel::Pan, QLCChannel::MSB, i);
             if (panMSB == QLCChannel::invalid() || chDone.contains(panMSB))
                 continue;
@@ -477,6 +479,8 @@ QList<SceneValue> Fixture::positionToValues(int type, float degrees, bool isRela
 
         for (int i = 0; i < heads(); i++)
         {
+            if (head >= 0 && i != head)
+                continue;
             quint32 tiltMSB = channelNumber(QLCChannel::Tilt, QLCChannel::MSB, i);
             if (tiltMSB == QLCChannel::invalid() || chDone.contains(tiltMSB))
                 continue;

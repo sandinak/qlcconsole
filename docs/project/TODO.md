@@ -102,8 +102,20 @@ round trip `AimSolver_Test::aimedHeadsLandOnTheirTarget` (a new rig is one
 row). On the user's show the DMX and the live rig view land all 16 UST
 beams within 14 cm of their points.
 
-- decided (can change): a two-arm beam's arms share one aim and one place on
-  a line (a beam-width apart), not a place each.
+- DONE (feat/04-arms, 2026-11-03): each arm of a multi-arm fixture aims on
+  its own (user: "multi arm fixtures can and should be relative ... when
+  grouping or crossing we def should take each arm individually"). Members
+  are `GroupHead`s (`AimSolver::aimMembers()`, `arms()`, `armOffset()`);
+  palette, effects, the studio and the scene-aim checks use them. Decided
+  (can change): an arm's origin is the middle of its share of the body's
+  Width along the body (the slice the rig view draws it in; definitions
+  have no per-head offsets); Focus mode still focuses a fixture as one
+  (calibration is per fixture), on its arms' middle point; the 2D plot
+  draws one trace per fixture to the arms' middle; line-of-sight dimming
+  dims the whole fixture when either arm is blocked. Left for the tvis
+  branch: `lineplanview` / `linespreadpreview` still number fixtures, not
+  arms -- switch them to `aimMembers()` / `orderedLineMembers()` /
+  `lineMemberPoints()`.
 - Ask: which app and view showed SR? `/Applications/qlcconsole.app` and
   `~/qlcconsole.app.prev` are build 2825, from before the band readback
   (2848); with the same bundle id, a .qlcc opened from Finder can start one,

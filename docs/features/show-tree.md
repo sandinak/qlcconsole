@@ -980,8 +980,11 @@ of its own.
   closes it, and its size and place are remembered.
 - **Between cues** a Spread change fades over the cue's fade time, so the
   beams sweep.
-- **Where each light lands.** A light takes one place on the line: both
-  arms of a two-arm beam aim at it together, a beam-width apart. A light
+- **Where each light lands.** Every light takes its own place on the
+  line, and each arm of a two-arm beam is a light: eight beams are sixteen
+  places, the arms numbered, grouped and crossed one by one (Pairs pairs a
+  beam's two arms). At a point each arm aims from where it hangs, so the
+  two converge on it. A light
   standing below the line that can't tilt down to it (a beam on a riser
   aimed at the stage edge) lights the people on the line instead, at the
   show's subject height above it. Spread, Grouping and Cross reach only a

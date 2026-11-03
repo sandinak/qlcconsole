@@ -95,6 +95,28 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 - **The universe output view's heading stays inside the view** at its
   narrowest (it was a fixed 600 px, past the view's edge).
+
+### Changed
+
+- **Each arm of a multi-arm fixture aims on its own.** A two-arm beam's
+  arms (each on its own pan and tilt) are two lights to an Aim look: at a
+  point each aims from where it hangs on the bar, so the two converge at
+  their own angles; on a line each takes its own place, number, group and
+  side, so eight two-arm beams are sixteen points and Pairs pairs a bar's
+  arms. A follow-spot or aiming effect solves each arm from its own place
+  too, and the Lighting Studio draws each arm's beam from that arm. A show
+  saved before this plays as it did except for its multi-arm fixtures,
+  whose arms now go to their own points instead of sharing one aim a
+  body-width apart. Fixtures with one pan and tilt -- a pixel bar on a
+  yoke included -- are unchanged.
+
+### Fixed
+
+- **A light on the deck or placed freely is aimed from the middle of its
+  body,** where the views draw it and its light leaves, not from the corner
+  of its plot icon: a two-arm beam on a riser drew each beam up to 0.3 m
+  wide of its point on the line (half the 510 mm bar), now within 7 cm
+  (one DMX step of its 128-step pan).
 - **An aimed light is drawn where it points, to the step.** The rig views
   read a 16-bit head's fine byte back (read coarse only, a 540° head was
   drawn up to 2° off its mark, 20 cm at a 6 m throw), and a two-arm beam's

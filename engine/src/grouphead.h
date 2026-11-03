@@ -20,6 +20,8 @@
 #ifndef GROUPHEAD_H
 #define GROUPHEAD_H
 
+#include <QHashFunctions>
+
 #include "fixture.h"
 
 /** @addtogroup engine Engine
@@ -42,6 +44,13 @@ public:
     quint32 fxi;
     int head;
 };
+
+/** So a head can key a QHash (AimSolver: each arm of a multi-arm fixture
+ *  is its own member of a line). */
+inline size_t qHash(const GroupHead &h, size_t seed = 0) noexcept
+{
+    return qHashMulti(seed, h.fxi, h.head);
+}
 
 /** @} */
 
