@@ -14,6 +14,13 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Fixed
 
+- **The rig view holds still under the mouse.** Hovering over the 3D/rig
+  view while a show ran made the rig shimmer back and forth by a hair:
+  the crosshair's frames were drawn at full quality between the running
+  show's lighter frames, and the two draw every edge a little apart. A
+  pointer frame now keeps the quality of the frame before it. On the 2D
+  plot the position readout is a fixed width, so its footer's scroll bar
+  no longer comes and goes with the reading and moves the plot.
 - **An aimed light is drawn where it points, to the step.** The rig views
   read a 16-bit head's fine byte back (read coarse only, a 540° head was
   drawn up to 2° off its mark, 20 cm at a 6 m throw), and a two-arm beam's

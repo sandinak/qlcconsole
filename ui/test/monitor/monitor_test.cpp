@@ -1250,6 +1250,77 @@ void Monitor_Test::theApronIsDeckInTheRigOverview()
     QCOMPARE(props->platformHeightAt(3.0f, 6.0f), 1.0f);
 }
 
+/* The pointer moving over the 2D plot changes the readout and nothing else.
+   The readout label used to be as wide as its text, so the footer's scroll
+   bar could come and go with the reading, the canvas above it changed height
+   and the plot shifted a hair back and forth under the mouse. */
+void Monitor_Test::hoveringThePlotKeepsItStill()
+{
+    QScopedPointer<Doc> docOwner(new Doc(this));
+    Doc *doc = docOwner.data();
+    QWidget parent;
+    Monitor mon(&parent, doc);
+    mon.resize(1200, 760);
+    parent.resize(1200, 760);
+    parent.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&parent));
+    MonitorGraphicsView *gv = mon.m_graphicsView;
+    QLabel *readout = mon.m_readoutLabel;
+    QVERIFY(gv != nullptr && readout != nullptr);
+    ShrinkableBar *bar = nullptr;
+    for (QWidget *w = readout->parentWidget(); w != nullptr && bar == nullptr; w = w->parentWidget())
+        bar = dynamic_cast<ShrinkableBar *>(w);
+    QVERIFY(bar != nullptr);
+
+    // The label takes the same room whatever it reads.
+    const QString was = readout->text();
+    const int hint = readout->sizeHint().width(), minHint = readout->minimumSizeHint().width();
+    foreach (const QString &t, QStringList() << "CL   Y: 1.00  m" << "SR 123.45   DS 67.89  ft"
+                                             << "X: -88.88   Y: -88.88  ft")
+    {
+        readout->setText(t);
+        QCOMPARE(readout->sizeHint().width(), hint);
+        QCOMPARE(readout->minimumSizeHint().width(), minHint);
+    }
+    readout->setText(was);
+
+    // The bar exactly as wide as its row: one pixel more of row would bring
+    // its scroll bar in.
+    QApplication::processEvents();
+    mon.resize(mon.width() + bar->widget()->minimumSizeHint().width() - bar->width(), mon.height());
+    QApplication::processEvents();
+    QCOMPARE(bar->width(), bar->widget()->minimumSizeHint().width());
+
+    const QRect viewGeometry = gv->geometry(), barGeometry = bar->geometry();
+    const QTransform transform = gv->transform();
+    const QRectF sceneRect = gv->sceneRect();
+    const QPointF centre = gv->mapToScene(gv->viewport()->rect().center());
+    const int hScroll = gv->horizontalScrollBar()->value(), vScroll = gv->verticalScrollBar()->value();
+
+    QStringList readings;
+    const QRect vp = gv->viewport()->rect();
+    for (int i = 0; i < 12; ++i)
+    {
+        const QPoint at(vp.left() + 10 + (vp.width() - 20) * i / 11, vp.top() + 10 + (vp.height() - 20) * (i % 4) / 3);
+        QMouseEvent me(QEvent::MouseMove, QPointF(at), QPointF(gv->viewport()->mapToGlobal(at)),
+                       Qt::NoButton, Qt::NoButton, Qt::NoModifier);
+        QApplication::sendEvent(gv->viewport(), &me);
+        QApplication::processEvents();
+        readings << readout->text();
+        const QString where = QString("move %1 (%2)").arg(i).arg(readout->text());
+        QVERIFY2(gv->geometry() == viewGeometry && bar->geometry() == barGeometry,
+                 qPrintable(where + ": the canvas or its bar changed size"));
+        QVERIFY2(gv->transform() == transform && gv->sceneRect() == sceneRect,
+                 qPrintable(where + ": the view's transform or scene rect changed"));
+        QVERIFY2(gv->horizontalScrollBar()->value() == hScroll && gv->verticalScrollBar()->value() == vScroll
+                 && gv->mapToScene(gv->viewport()->rect().center()) == centre,
+                 qPrintable(where + ": the view scrolled"));
+    }
+    // The readout follows the pointer all the same.
+    readings.removeDuplicates();
+    QVERIFY2(readings.size() > 6, qPrintable(readings.join(" | ")));
+}
+
 /* Q145: the Rig Overview's controls are in a footer bar under the picture,
    as the Lighting Studio plot's are -- Show (with Target positions) and
    Plot layers on the left, View on the right -- the window's own title bar

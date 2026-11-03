@@ -52,6 +52,7 @@ private slots:
     void anIdlePlotDrawsNothing();
     void aRunningShowStaysUnderOneCore();
     void aGelFiltersTheLight();
+    void hoveringARunningShowKeepsTheRigStill();
 
     void cpuPerFrame();
 

@@ -86,6 +86,7 @@ private slots:
     void placingOnALockedLayerAsksWhere();
     /** Q145: the Rig Overview's controls are in a footer bar like the plot's. */
     void theRigOverviewHasAFooterBar();
+    void hoveringThePlotKeepsItStill();
     void initTestCase();
     void init();
     void cleanupTestCase();
