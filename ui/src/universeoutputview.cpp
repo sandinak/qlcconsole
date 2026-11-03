@@ -45,7 +45,8 @@ UniverseOutputView::UniverseOutputView(Doc *doc, QWidget *parent)
     setObjectName("universeOutputView");
     setMouseTracking(true);
     m_header = new QLabel(this);
-    m_header->setGeometry(6, 4, 600, 24);
+    // Within the grid's width: never past the view's own edge.
+    m_header->setGeometry(6, 4, LEFT + COLS * CELL_W - 4, 24);
     m_header->setStyleSheet("QLabel { color: #c8ccd6; font-weight: bold; }");
 
     /* Universes write up to the tick rate; the grid is repainted at most

@@ -763,6 +763,26 @@ CHANGELOG **[0.3.1] - Unreleased**, items (k), (k2) and (a0).
 | M601 | Held by its layer vs its own lock (a0) | An object locked on its own: 🔒; its layer locked: ↑🔒 on the others, own kept; NodeHoldRole flags and the tooltip name own / folder / layer / plot; the plot's lock in the tooltip and the plot's right-click menu, not as a badge; unlocked, as before | **Monitor_Test::anObjectHeldByItsLayerVsItsOwnLock** (new) | none | covered | low | Folder hold is computed (groupChainLocked) but not asserted here |
 | M602 | Structure editor Back view (a1) | Back = Front from upstage: the shared mapping round-trips at turns 0-3 (< 0.5 px), is Front mirrored and the angled camera at 180/0, ruler ticks and the H/V/Z readout sit on the drawn fixture (< 0.5 px); a back-face fixture draws last and is picked in Back (front-face in Front); Put on Face in Back sets FaceBack and pins the upstage edge, a drag keeps it there, Front puts it back; a Back drag moves toward SR, stores the corner, keeps the grab; labels not mirrored; every editor lists Back after Front with Ctrl+3 | **Monitor_Test::theBackViewIsTheFrontSeenFromBehind**, **::theBackFaceFixtureIsOnTopInTheBackView**, **::putOnFaceInTheBackViewSetsTheBackFace**, **::aBackViewDragKeepsTheGrabAndTheCorner**, **::theBackViewDoesNotMirrorText**, **::theEditorsOfferBackBesideFront** (new); Back added to ::studioTrussDragInEveryPlane, ::aStudioDragKeepsTheCornerAndTheGrab | none | covered | low | Other side (from SL) and Bottom views: board Q185 |
 
+## Layout sanity: every screen at three sizes (Q207, lay, 2026-11-03)
+
+| ID | Feature | Behaviour | Test(s) | Before | After | Risk | Gap / note |
+|---|---|---|---|---|---|---|---|
+| M984 | Nothing laid over anything | Every app tab (Connections, Fixtures, Lighting Studio, Functions, Build with and without a scene, Show Tree with a cue and with a layer, Shows, Virtual Console, Simple Desk, Run), the Workbench with every Look Editor page (colour, colour with a wheel + ring fixture, dimmer, aim, pan/tilt, shutter, strobe, gobo, zoom, beam, effect, formation) and a scene, the stock function editors, the panels and ~45 dialogs, each at its minimum, 1280x800 and 1920x1080, offscreen: no two visible controls overlap, none is cut off by its window outside a scroll area, no label or button is narrower or shorter than its text, none is squeezed to zero | **LayoutSanity_Test::everyScreenIsLaidOutCleanly** (data-driven, one row per screen), **::theCheckerFindsWhatItShould** (the checker on hand-made overlaps, cut-offs and a squeezed label; a stack's hidden page, a scroll area's content and a marked overlay pass) (ui/test/layoutsanity) (new) | none | covered | med | Known issues are listed in the test's `knownIssues()` with a TODO ref (docs/project/TODO.md "Layout sanity"), reported but not failed; a row no longer hit is warned about. Word-wrapped labels are not checked for height. The Virtual Console's own widgets may overlap (the user places them). The app window's "min" is 1024x640. |
+
+### Adding a screen to layoutsanity_test
+
+One row in `screens()` in `ui/test/layoutsanity/layoutsanity_test.cpp`:
+`screen("Name", [](App *app) -> QWidget * { return new MyDialog(docOf(app)); })`,
+built the way the app builds it, on the test's show (`lesson-3-9-finish.qlcc`,
+read-only; `docOf(app)`). A tab of the app window is `tab("Label")`, with an
+optional second lambda that puts it in a state (select a node, open a
+function). Return `nullptr` when the show has nothing to open it on (the row
+is skipped). A widget drawn over others on purpose gets
+`setProperty("layoutSanityOverlay", true)` with a one-line comment where it
+is made. Run with `LAYOUT_SANITY_SHOTS=<dir>` to save what the test saw, one
+PNG per screen and size, failures outlined in red. A failure you can't fix
+now goes in `knownIssues()` with a TODO line, never silently.
+
 ## 0.3.1: coverage campaign
 
 CHANGELOG **[0.3.1] - Unreleased**, Fixed: the bugs the campaign found and
