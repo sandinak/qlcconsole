@@ -33,6 +33,10 @@
 #include "stageplatform.h"
 #include "truss.h"
 #include "doc.h"
+#include "qlcfixturedefcache.h"
+#include "scenevalue.h"
+#include <QVector2D>
+#include "linecurve.h"
 
 /* The solver as it stood before reach was added, verbatim apart from reading
    a Frame and from the corrected bearing (it measured pan from upstage, 180
@@ -471,3 +475,400 @@ void AimSolver_Test::zeroOffsetsInverseIsUnchanged()
 }
 
 QTEST_MAIN(AimSolver_Test)
+
+/****************************************************************************
+ * Round trip: aim, DMX, and back to a beam
+ ****************************************************************************/
+
+namespace
+{
+enum class Def { Spot16, Spot8, TwoArm };
+enum class Mount { Hung, HungOnTruss, Floor, Deck, OnTrussTop };
+enum class Aim { Point, Person, Line };
+
+/* One rig and what it aims at. Fixtures stand @c spacing metres apart along
+   X from @c at; a target is absolute, a line's ends relative to its centre. */
+struct AimRow
+{
+    const char *name;
+    Def def;
+    Mount mount;
+    QVector3D at;               // metres (Z: height for Hung; ignored otherwise)
+    int count;
+    float panZero;
+    float panOffset, tiltOffset;
+    bool panInvert, tiltInvert;
+    Aim aim;
+    QVector3D target;           // the point, the person's feet, the line's centre
+    QVector3D lineEnd;          // a line: its last end from the centre (first = -this)
+    double spread;              // a line: Spread (NaN = the look's default, +5)
+};
+
+const double kDefault = qQNaN();
+
+QVector3D firstEnd(const AimRow &r)
+{
+    return QVector3D(-r.lineEnd.x(), r.lineEnd.y(), r.lineEnd.z());
+}
+const float kSpacing = 1.5f;
+
+/* Add a row here for a new fixture shape or rig: everything below runs on it. */
+const AimRow kRows[] = {
+    { "hung spot at a point",           Def::Spot16, Mount::Hung,       { 0, 0, 6 },     1,  0,  0,  0, false, false, Aim::Point,  { 1.5f, 4, 0 },  {}, kDefault },
+    { "hung on a truss, at a person",   Def::Spot16, Mount::HungOnTruss,{ -3, 1, 5.5f }, 3,  0,  0,  0, false, false, Aim::Person, { 0, 5, 0 },     {}, kDefault },
+    { "hung, turned, inverted, calibrated", Def::Spot16, Mount::Hung,   { 2, 1, 6 },     2, 90,  7, -4, true,  true,  Aim::Point,  { -2, 3, 0.5f }, {}, kDefault },
+    { "floor, no height, at a person",  Def::Spot16, Mount::Floor,      { -1, 0, 0 },    2,  0,  0,  0, false, false, Aim::Person, { 0, 6, 0 },     {}, kDefault },
+    { "deck, facing upstage",           Def::Spot16, Mount::Deck,       { 0, 3, 0 },     2, 180, 0,  0, false, false, Aim::Point,  { 1, -2, 2.5f }, {}, kDefault },
+    { "standing on a truss top",        Def::Spot16, Mount::OnTrussTop, { 0, 0, 2 },     1,  0,  0,  0, false, false, Aim::Person, { 2, 6, 0 },     {}, kDefault },
+    { "8-bit spot hung",                Def::Spot8,  Mount::Hung,       { -2, 0, 6 },    2,  0,  0,  0, false, false, Aim::Point,  { 3, 5, 0 },     {}, kDefault },
+    { "hung spots on a line, Spread +5",Def::Spot16, Mount::Hung,       { -4, 0, 6 },    4,  0,  0,  0, false, false, Aim::Line,   { 0, 6, 0 },     { 4, 0, 0 }, 5 },
+    { "hung spots on a line, Spread 0", Def::Spot16, Mount::Hung,       { -4, 0, 6 },    4,  0,  0,  0, false, false, Aim::Line,   { 0, 6, 0 },     { 4, 0, 0 }, 0 },
+    { "hung spots on a line, crossed",  Def::Spot16, Mount::Hung,       { -4, 0, 6 },    4,  0,  0,  0, false, false, Aim::Line,   { 0, 6, 0 },     { 4, 0, 0 }, -3 },
+    { "two-arm beams on a deck, line",  Def::TwoArm, Mount::Deck,       { -5, 3.6f, 0 }, 8,  0,  0,  0, false, false, Aim::Line,   { 0, 9.6f, 0 },  { 4.3f, -1.2f, 0.37f }, kDefault },
+    { "two-arm beams on a deck, Spread 2", Def::TwoArm, Mount::Deck,    { -3, 3.6f, 0 }, 4,  0,  0,  0, false, false, Aim::Line,   { 0, 9.6f, 0 },  { 4.3f, -1.2f, 0.37f }, 2 },
+    { "two-arm beam on the floor, person", Def::TwoArm, Mount::Floor,   { 1, 0, 0 },     1,  0,  0,  0, false, false, Aim::Person, { -2, 5, 0 },    {}, kDefault },
+    { "two-arm beams hung, point",      Def::TwoArm, Mount::Hung,       { -1, 0, 5 },    2,  0,  0,  0, false, false, Aim::Point,  { 2, 4, 0 },     {}, kDefault },
+};
+
+/* A pan/tilt spot, 540/270, coarse and fine (16-bit) or coarse only. */
+Fixture *addSpot(Doc *doc, const QString &name, bool fine, quint32 address)
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test");
+    def->setModel(QString("Spot %1 %2").arg(fine ? 16 : 8).arg(name));
+    def->setType(QLCFixtureDef::MovingHead);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("ch");
+    QLCFixtureHead head;
+    int n = 0;
+    for (QLCChannel::Group g : { QLCChannel::Pan, QLCChannel::Tilt })
+        for (QLCChannel::ControlByte b : { QLCChannel::MSB, QLCChannel::LSB })
+        {
+            if (b == QLCChannel::LSB && !fine)
+                continue;
+            QLCChannel *ch = new QLCChannel();
+            ch->setName(QString("%1 %2").arg(g == QLCChannel::Pan ? "Pan" : "Tilt")
+                                         .arg(b == QLCChannel::MSB ? "" : "fine"));
+            ch->setGroup(g);
+            ch->setControlByte(b);
+            def->addChannel(ch);
+            mode->insertChannel(ch, quint32(n));
+            head.addChannel(quint32(n));
+            ++n;
+        }
+    QLCPhysical ph;
+    ph.setFocusPanMax(540);
+    ph.setFocusTiltMax(270);
+    mode->setPhysical(ph);
+    mode->insertHead(-1, head);
+    def->addMode(mode);
+
+    Fixture *fxi = new Fixture(doc);
+    fxi->setName(name);
+    fxi->setFixtureDefinition(def, mode);
+    fxi->setAddress(address);
+    return doc->addFixture(fxi) ? fxi : nullptr;
+}
+
+/* The Junman two-arm LED beam (a copy of the user's definition): two heads,
+   each pan pointing with DMX 0-127 ("indexed, a single 360 CCW sweep") and
+   spinning above it; 360/180, coarse only. */
+Fixture *addTwoArm(Doc *doc, const QString &name, quint32 address)
+{
+    QLCFixtureDef *def = doc->fixtureDefCache()->fixtureDef("Junman", "Two Arm LED Beam");
+    if (def == nullptr)
+    {
+        if (!doc->fixtureDefCache()->loadQXF(QString(AIMSOLVER_TEST_DIR) + "/Junman-Two-Arm-LED-Beam.qxf"))
+            return nullptr;
+        def = doc->fixtureDefCache()->fixtureDef("Junman", "Two Arm LED Beam");
+    }
+    QLCFixtureMode *mode = def != nullptr ? def->mode("15 Channel") : nullptr;
+    if (mode == nullptr)
+        return nullptr;
+    Fixture *fxi = new Fixture(doc);
+    fxi->setName(name);
+    fxi->setFixtureDefinition(def, mode);
+    fxi->setAddress(address);
+    return doc->addFixture(fxi) ? fxi : nullptr;
+}
+
+/* How far, at most, a head's DMX can leave its beam from the solved angle:
+   per axis, nothing worth the name with a fine byte, half a step where the
+   coarse byte is rounded (an indexed band), else a whole step (stock QLC+
+   truncates). */
+double dmxSlackDeg(const Fixture *fx, QLCChannel::Group group)
+{
+    const QLCFixtureMode *mode = fx->fixtureMode();
+    const QLCFixtureHead &h = mode->heads().first();
+    const quint32 msb = h.channelNumber(group, QLCChannel::MSB);
+    if (msb == QLCChannel::invalid())
+        return 0.0;
+    const double span = group == QLCChannel::Pan ? mode->physical().focusPanMax()
+                                                 : mode->physical().focusTiltMax();
+    if (h.channelNumber(group, QLCChannel::LSB) != QLCChannel::invalid())
+        return span / 65535.0;
+    uchar lo = 0, hi = 255;
+    const bool band = Fixture::positionBand(mode->channel(msb), lo, hi);
+    const double step = span / double(hi - lo);
+    return band ? step / 2.0 : step;
+}
+
+/* The closest the ray from @p from along @p dir comes to @p p, metres; -1
+   when @p p is behind it. */
+double missBy(const QVector3D &from, const QVector3D &dir, const QVector3D &p)
+{
+    const float along = QVector3D::dotProduct(p - from, dir);
+    if (along <= 0.0f)
+        return -1.0;
+    return double((from + dir * along - p).length());
+}
+}
+
+void AimSolver_Test::aimedHeadsLandOnTheirTarget_data()
+{
+    QTest::addColumn<int>("row");
+    for (int i = 0; i < int(sizeof(kRows) / sizeof(kRows[0])); ++i)
+        QTest::newRow(kRows[i].name) << i;
+}
+
+void AimSolver_Test::aimedHeadsLandOnTheirTarget()
+{
+    QFETCH(int, row);
+    const AimRow &r = kRows[row];
+
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+
+    Truss *truss = nullptr;
+    if (r.mount == Mount::HungOnTruss || r.mount == Mount::OnTrussTop)
+    {
+        truss = props->addTruss();
+        truss->setType(Truss::Horizontal);
+        truss->setOrigin(r.at);
+        truss->setLength(12.0f);
+        truss->setWidth(0.29f);
+    }
+    StagePlatform *deck = nullptr;
+    if (r.mount == Mount::Deck)
+    {
+        deck = props->addPlatform();
+        deck->setOriginX(r.at.x() - 1.0f);
+        deck->setOriginY(r.at.y() - 0.6f);
+        deck->setWidth(kSpacing * float(r.count) + 2.0f);
+        deck->setDepth(1.2f);
+        deck->setHeight(0.61f);
+    }
+
+    QList<Fixture *> fixtures;
+    quint32 address = 0;
+    for (int i = 0; i < r.count; ++i)
+    {
+        const QString name = QString("%1 %2").arg(r.name).arg(i + 1);
+        Fixture *fx = r.def == Def::TwoArm ? addTwoArm(doc, name, address)
+                                           : addSpot(doc, name, r.def == Def::Spot16, address);
+        QVERIFY2(fx != nullptr, qPrintable(name));
+        address += fx->channels();
+        fixtures << fx;
+
+        const QVector3D at = r.at + QVector3D(kSpacing * float(i), 0, 0);
+        FixtureRigProps rp;
+        rp.panZeroDir = r.panZero;
+        rp.panOffsetDeg = r.panOffset;
+        rp.tiltOffsetDeg = r.tiltOffset;
+        rp.panInvert = r.panInvert;
+        rp.tiltInvert = r.tiltInvert;
+        switch (r.mount)
+        {
+            case Mount::Hung:
+                props->setFixturePosition(fx->id(), 0, 0, QVector3D(at.x() * 1000, at.y() * 1000, at.z()));
+                rp.mountingType = Truss::TopHung;
+            break;
+            case Mount::HungOnTruss:
+            case Mount::OnTrussTop:
+                rp.trussId = truss->id();
+                rp.trussOffset = kSpacing * float(i) + 1.0f;
+                rp.mountingType = r.mount == Mount::OnTrussTop ? Truss::FloorMounted : Truss::TopHung;
+                if (r.mount == Mount::OnTrussTop)
+                    rp.trussMountSide = FixtureRigProps::TopMounted;
+            break;
+            case Mount::Floor:
+                // Placed on the plot with no height at all: the floor.
+                props->setFixturePosition(fx->id(), 0, 0, QVector3D(at.x() * 1000, at.y() * 1000, 0));
+                rp.mountingType = Truss::FloorMounted;
+            break;
+            case Mount::Deck:
+                props->setFixturePosition(fx->id(), 0, 0, QVector3D(at.x() * 1000, at.y() * 1000, 0));
+                rp.mountingType = Truss::FloorMounted;
+                rp.deckPlatformId = deck->id();
+            break;
+        }
+        props->setFixtureRigProps(fx->id(), rp);
+    }
+
+    StageTarget *target = props->addStageTarget();
+    target->setName(r.name);
+    target->setPosition(r.target);
+    if (r.aim == Aim::Person)
+        target->setKind(StageTarget::Kind::Person);
+    if (r.aim == Aim::Line)
+    {
+        // Bowed as a line drawn round a stage edge is: both ends the same way.
+        target->setLinePoints({ firstEnd(r), QVector3D(0, 0, 0), r.lineEnd });
+        target->makeLine();
+        QVERIFY(target->isLine());
+    }
+
+    QLCPalette *aim = new QLCPalette(QLCPalette::Aim, doc);
+    aim->setName("Aim");
+    aim->setStageTargetId(target->id());
+    if (!qIsNaN(r.spread))
+        aim->setEffectParamValue(LineSpread::paramName("Spread"), r.spread);
+    QVERIFY(doc->addPalette(aim));
+    Scene *scene = new Scene(doc);
+    scene->setName(r.name);
+    QList<quint32> ids;
+    for (Fixture *fx : fixtures)
+    {
+        scene->addFixture(fx->id());
+        ids << fx->id();
+    }
+    scene->addPalette(aim->id());
+    QVERIFY(doc->addFunction(scene));
+
+    // Where each head is meant to go, as the look resolves it...
+    QHash<quint32, QVector3D> intended;
+    for (const AimSolver::SceneAim &a : AimSolver::sceneAims(doc, scene))
+        intended.insert(a.fixtureId, a.point);
+    QCOMPARE(intended.size(), fixtures.size());
+
+    // ...is on the target...
+    QList<QVector3D> along;           // a line's points, by where the heads stand
+    for (Fixture *fx : fixtures)
+    {
+        const QVector3D p = intended.value(fx->id());
+        AimSolver::Frame frame;
+        QVERIFY(AimSolver::frameFor(doc, fx->id(), frame));
+        if (r.aim == Aim::Point)
+            QVERIFY2((p - r.target).length() < 0.01f,
+                     qPrintable(QString("%1 aims at (%2,%3,%4)").arg(fx->name()).arg(p.x()).arg(p.y()).arg(p.z())));
+        else if (r.aim == Aim::Person)
+            QVERIFY2(qAbs(p.x() - r.target.x()) < 0.01f && qAbs(p.y() - r.target.y()) < 0.01f
+                     && p.z() > 0.5f && p.z() < 1.9f,
+                     qPrintable(QString("%1 aims at (%2,%3,%4), not the person").arg(fx->name())
+                                .arg(p.x()).arg(p.y()).arg(p.z())));
+        else
+        {
+            /* On the line in plan (at its height or -- a head standing above
+               it that can't tilt down to it -- the people on it). */
+            const QVector<QVector3D> curve = LineCurve(props->targetLinePoints(target)).samples();
+            float off = 1e9f;
+            for (int k = 1; k < curve.size(); ++k)
+            {
+                const QVector2D s(curve.at(k - 1)), d = QVector2D(curve.at(k)) - s, q = QVector2D(p) - s;
+                const float t = qBound(0.0f, QVector2D::dotProduct(q, d) / qMax(1e-9f, d.lengthSquared()), 1.0f);
+                off = qMin(off, (s + d * t - QVector2D(p)).length());
+            }
+            QVERIFY2(off < 0.02f, qPrintable(QString("%1 aims %2 m off the line").arg(fx->name()).arg(off)));
+            along << p;
+        }
+    }
+    if (r.aim == Aim::Line)
+    {
+        const QVector3D first = r.target + firstEnd(r), last = r.target + r.lineEnd;
+        const double spread = qIsNaN(r.spread) ? LineSpread::maxSpread() : r.spread;
+        if (spread == LineSpread::maxSpread())
+        {
+            // End to end, in the order they stand: no crossed beams.
+            QVERIFY2(qAbs(along.first().x() - first.x()) < 0.02f && qAbs(along.last().x() - last.x()) < 0.02f,
+                     qPrintable(QString("Spread +5 spans %1..%2, the line %3..%4")
+                                .arg(along.first().x()).arg(along.last().x()).arg(first.x()).arg(last.x())));
+            for (int i = 1; i < along.size(); ++i)
+                QVERIFY(along.at(i).x() > along.at(i - 1).x());
+        }
+        else if (spread == 0.0)
+            for (const QVector3D &p : along)
+                QVERIFY(qAbs(p.x() - r.target.x()) < 0.02f && qAbs(p.y() - r.target.y()) < 0.02f);
+        else if (spread < 0.0)
+            QVERIFY2(along.first().x() > along.last().x(), "a negative Spread crosses them");
+        else
+            QVERIFY(along.first().x() > first.x() + 0.1f && along.last().x() < last.x() - 0.1f);
+    }
+
+    // ...and the DMX the look sends, read back as the rig views draw it, lands there.
+    const QList<SceneValue> dmx = aim->valuesFromFixtures(doc, ids, scene);
+    for (Fixture *fx : fixtures)
+    {
+        QByteArray own(int(fx->channels()), char(0));
+        for (const SceneValue &sv : dmx)
+            if (sv.fxi == fx->id() && sv.channel < fx->channels())
+                own[int(sv.channel)] = char(sv.value);
+        // Never into a two-arm beam's spin zone.
+        uchar lo = 0, hi = 255;
+        for (int h = 0; h < fx->heads(); ++h)
+        {
+            const quint32 pan = fx->channelNumber(QLCChannel::Pan, QLCChannel::MSB, h);
+            if (pan != QLCChannel::invalid() && Fixture::positionBand(fx->channel(pan), lo, hi))
+                QVERIFY2(uchar(own.at(int(pan))) <= hi, qPrintable(QString("%1 head %2 pan %3 spins")
+                         .arg(fx->name()).arg(h).arg(uchar(own.at(int(pan))))));
+        }
+
+        AimSolver::Frame frame;
+        QVERIFY(AimSolver::frameFor(doc, fx->id(), frame));
+        const QVector3D p = intended.value(fx->id());
+        const float throwM = (p - frame.position).length();
+        const double slack = dmxSlackDeg(fx, QLCChannel::Pan) + dmxSlackDeg(fx, QLCChannel::Tilt);
+        const double tol = qMax(0.10, double(throwM) * qTan(qDegreesToRadians(slack)) + 0.01);
+        const FixtureRigProps rp = props->fixtureRigProps(fx->id());
+        // Every head: a two-arm beam's arms are aimed together.
+        for (int h = 0; h < qMax(1, fx->heads()); ++h)
+        {
+            QVector3D dir;
+            QVERIFY(AimSolver::headDirection(fx, own, h, rp, dir));
+            const double miss = missBy(frame.position, dir, p);
+            QVERIFY2(miss >= 0.0 && miss <= tol,
+                     qPrintable(QString("%1 head %2: aimed at (%3,%4,%5) from (%6,%7,%8), the beam "
+                                        "(%9,%10,%11) %12 by %13 m (allowed %14 m)")
+                                .arg(fx->name()).arg(h)
+                                .arg(p.x()).arg(p.y()).arg(p.z())
+                                .arg(frame.position.x()).arg(frame.position.y()).arg(frame.position.z())
+                                .arg(dir.x()).arg(dir.y()).arg(dir.z())
+                                .arg(miss < 0.0 ? "points away" : "misses").arg(miss).arg(tol)));
+        }
+    }
+
+    delete doc;
+}
+
+void AimSolver_Test::anIndexedBandRoundsToTheNearestStep()
+{
+    Doc *doc = new Doc(this);
+    Fixture *fx = addTwoArm(doc, "UST", 0);
+    QVERIFY(fx != nullptr);
+    auto panAt = [&](float deg) {
+        const QList<SceneValue> v = fx->positionToValues(QLCChannel::Pan, deg);
+        return v.isEmpty() ? -1 : int(v.first().value);
+    };
+    // 0-127 over 360 degrees: the middle is 63.5, which rounds up; a step is
+    // 2.83 degrees and anything within half of one lands on it.
+    QCOMPARE(panAt(0.0f), 0);
+    QCOMPARE(panAt(180.0f), 64);
+    QCOMPARE(panAt(360.0f), 127);
+    QCOMPARE(panAt(178.0f), 63);
+    QCOMPARE(panAt(1.3f), 0);
+    QCOMPARE(panAt(1.5f), 1);
+    // Past the end it holds the end, never the spin zone.
+    QCOMPARE(panAt(400.0f), 127);
+    // Every head's pan, the same value (the arms are aimed together).
+    const QList<SceneValue> both = fx->positionToValues(QLCChannel::Pan, 90.0f);
+    QCOMPARE(both.size(), 2);
+    QCOMPARE(both.at(0).value, both.at(1).value);
+    // And back: the fraction is the one positionToValues() was given.
+    for (int d = 0; d <= 360; d += 15)
+    {
+        const int dmx = panAt(float(d));
+        const double back = Fixture::positionFraction(fx->channel(fx->channelNumber(QLCChannel::Pan, QLCChannel::MSB)), dmx) * 360.0;
+        QVERIFY2(qAbs(back - d) <= 360.0 / 127.0 / 2.0 + 1e-6,
+                 qPrintable(QString("%1 degrees -> DMX %2 -> %3 degrees").arg(d).arg(dmx).arg(back)));
+    }
+    delete doc;
+}

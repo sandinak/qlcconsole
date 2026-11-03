@@ -391,6 +391,18 @@ void MainBar_Test::operateClearsBlindAndMakesItAView()
     grp->setName("Blind test");
     doc->addFixtureGroup(grp);
     grp->assignFixture(fid);
+    /* And one further up the universe: the view used to read a cue's levels
+       (each fixture's own channels) from the fixture's address on, so every
+       fixture not at address 1 kept what it showed before -- seven of eight
+       USTs drawn where the stage had them, not where the cue aims them. */
+    Fixture *second = new Fixture(doc);
+    second->setName("Blind second");
+    second->setChannels(1);
+    second->setUniverse(fx->universe());
+    second->setAddress(37);
+    QVERIFY(doc->addFixture(second));
+    m_addedFixtures << second->id();
+    grp->assignFixture(second->id());
     QLCPalette *dim = new QLCPalette(QLCPalette::Dimmer, doc);
     dim->setName("Blind 200");
     dim->setValue(200);
@@ -425,6 +437,7 @@ void MainBar_Test::operateClearsBlindAndMakesItAView()
     QVERIFY(sc->blindButton()->isChecked());
     QVERIFY(!io->outputInhibited());
     QCOMPARE(uchar(fx->channelValues().at(0)), uchar(200));
+    QCOMPARE(uchar(second->channelValues().at(0)), uchar(200));
     QVERIFY(footerBlue());
     QVERIFY(caption->isVisibleTo(m_app));
     QVERIFY2(caption->text().contains("Blind cue"), qPrintable(caption->text()));
@@ -438,6 +451,7 @@ void MainBar_Test::operateClearsBlindAndMakesItAView()
     dim->setValue(90);
     m_app->refreshBlindView();
     QCOMPARE(uchar(fx->channelValues().at(0)), uchar(90));
+    QCOMPARE(uchar(second->channelValues().at(0)), uchar(90));
     // A group master holds the picture back as it holds the stage back
     // (docs/features/show-tree.md "Group masters"); full again, it is the cue.
     grp->setMaster(true);

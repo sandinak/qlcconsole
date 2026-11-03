@@ -980,6 +980,14 @@ of its own.
   closes it, and its size and place are remembered.
 - **Between cues** a Spread change fades over the cue's fade time, so the
   beams sweep.
+- **Where each light lands.** A light takes one place on the line: both
+  arms of a two-arm beam aim at it together, a beam-width apart. A light
+  standing below the line that can't tilt down to it (a beam on a riser
+  aimed at the stage edge) lights the people on the line instead, at the
+  show's subject height above it. Spread, Grouping and Cross reach only a
+  line; at a point or a person every light aims at the target itself. The
+  rig views draw each beam from the DMX the light is sent, so a beam that
+  lands off its point there is off on stage too.
 
 ### Formation palettes
 

@@ -4405,7 +4405,7 @@ void App::pushBlindLevels()
                 if ((mask & Universe::Intensity) && (mask & (Universe::GMExempt | Universe::SwitchOutput)) == 0)
                     v[c] = char((uint(uchar(v.at(c))) * group + 127) / 255);
             }
-        fixture->setChannelValues(v);
+        fixture->setOwnChannelValues(v);   // its own channels, not a universe
     }
 }
 

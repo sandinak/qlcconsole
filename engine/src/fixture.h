@@ -400,8 +400,10 @@ public:
      *  channel @p ch lies in the head's range, 0..1 -- the inverse of
      *  positionToValues(): across positionBand(), so a view reading the
      *  channel back draws the head where it really points. With no band it
-     *  is dmx / 255, as stock QLC+ has it. */
-    static double positionFraction(const QLCChannel *ch, double dmx);
+     *  is dmx / 255, as stock QLC+ has it. @p fine: @p dmx carries the
+     *  channel's fine byte too (coarse + fine / 256), which reaches the top of
+     *  the band's last step. */
+    static double positionFraction(const QLCChannel *ch, double dmx, bool fine = false);
 
     /** Return a list of DMX values based on the given zoom degrees */
     QList<SceneValue> zoomToValues(float degrees, bool isRelative);
@@ -485,6 +487,12 @@ public:
     /** Store DMX values for this fixture. If values have changed,
      * it returns true, otherwise false */
     bool setChannelValues(const QByteArray &values);
+
+    /** The same from this fixture's OWN channels (@p values[0] is its first
+     *  channel), as a cue's levels are kept, not a whole universe. Handing
+     *  those to setChannelValues() lost every fixture not at address 1: it
+     *  read them from the fixture's address on, past their end. */
+    bool setOwnChannelValues(const QByteArray &values);
 
     /** What an UNPATCHED fixture would show: a value for channel @p channel,
      *  for display only (the rig view, the plot) -- it has no address, so

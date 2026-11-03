@@ -951,7 +951,7 @@ QHash<quint32, QVector3D> FocusSession::resolve(const Reference &ref) const
             const QHash<quint32, double> fr =
                 AimSolver::lineFractions(m_doc, t, m_order, LineSpread::Settings());
             for (auto it = fr.constBegin(); it != fr.constEnd(); ++it)
-                out.insert(it.key(), AimSolver::linePoint(m_doc, t, it.value()));
+                out.insert(it.key(), AimSolver::linePointFor(m_doc, it.key(), t, it.value()));
         }
         else
         {

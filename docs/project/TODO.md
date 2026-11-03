@@ -10,6 +10,28 @@ under `~/.claude/.../memory/`.
 
 ---
 
+## Aim round trip — leftovers (fix/04-ust-aim, 2026-11-03)
+
+"USTs still pointing SR" (cue 1.1.1, line aim, Spread +5). Built: one DMX
+-> beam readback in the engine (`AimSolver::headDirection()`, fine byte
+read), band rounding in `Fixture::positionToValues()`, the Blind view's
+levels on every fixture (`Fixture::setOwnChannelValues()`), the studio and
+Focus line trace through `AimSolver::linePointFor()`, and the table-driven
+round trip `AimSolver_Test::aimedHeadsLandOnTheirTarget` (a new rig is one
+row). On the user's show the DMX and the live rig view land all 16 UST
+beams within 14 cm of their points.
+
+- decided (can change): a two-arm beam's arms share one aim and one place on
+  a line (a beam-width apart), not a place each.
+- Ask: which app and view showed SR? `/Applications/qlcconsole.app` and
+  `~/qlcconsole.app.prev` are build 2825, from before the band readback
+  (2848); with the same bundle id, a .qlcc opened from Finder can start one,
+  and it draws exactly this (band middle read as a quarter turn, stage right).
+- Show notes for the user: cue 0.0.11's function layer "USTs-Opening"
+  (scene Opening, PanTilt "45" = pan 375 on a 360 head) tracks into 1.1.1
+  beside the USTs layer and drives the same pan/tilt (the layer wins only by
+  order); UST-2 is not mounted on its riser (z 0, the others 0.61).
+
 ## 0.4.0 coverage audit — leftovers (tcov, 2026-11-02)
 
 Map: docs/dev/TEST_MAP.md Part 1b. Decide or fix:
