@@ -403,28 +403,31 @@ void LinePlanView::paintEvent(QPaintEvent *)
         p.setPen(QPen(QColor(255, 180, 0), 1.5 * s, Qt::DashLine));
         p.drawRect(a);
 
-        // Legend: only the hatches that are on the plan.
+        // Legend: only the hatches that are on the plan, on the title's row.
         if (m_legendDeck || m_legendHead)
         {
-            QFont lf = p.font();
-            lf.setPointSizeF(8.0 * s);
-            p.setFont(lf);
-            const QFontMetricsF fm(lf);
-            const double sw = 14.0 * s, gap = 6.0 * s, rowH = fm.height() + 2.0 * s;
-            double y = height() - 4.0 * s - rowH * ((m_legendDeck ? 1 : 0) + (m_legendHead ? 1 : 0));
+            const QFontMetricsF fm(p.font());
+            const double sw = 14.0 * s, sh = sw * 0.6, gap = 5.0 * s, rowH = fm.height();
+            double x = 6.0 + fm.horizontalAdvance(tr("Plan (top)")) + 16.0 * s;
+            double y = 4.0;
             auto entry = [&](Qt::BrushStyle style, const QColor &col, const QString &text) {
-                const QRectF sq(6.0 * s, y + (rowH - sw * 0.6) / 2.0, sw, sw * 0.6);
+                // Too narrow for another entry on the title's row: the next row.
+                if (x + sw + gap + fm.horizontalAdvance(text) > double(width()) - 6.0)
+                {
+                    x = 6.0;
+                    y += rowH + 2.0 * s;
+                }
+                const QRectF sq(x, y + (rowH - sh) / 2.0, sw, sh);
                 QBrush b(QColor(col.red(), col.green(), col.blue(), 230), style);
                 b.setTransform(QTransform::fromScale(s, s));
-                p.setPen(QPen(col, 0.8 * s));
                 p.fillRect(sq, QColor(col.red(), col.green(), col.blue(), 40));
                 p.fillRect(sq, b);
                 p.setBrush(Qt::NoBrush);
+                p.setPen(QPen(col, 0.8 * s));
                 p.drawRect(sq);
                 p.setPen(QColor(150, 150, 160));
-                p.drawText(QRectF(sq.right() + gap, y, width() - sq.right() - gap, rowH),
-                           Qt::AlignVCenter | Qt::AlignLeft, text);
-                y += rowH;
+                p.drawText(QPointF(sq.right() + gap, y + fm.ascent()), text);
+                x = sq.right() + gap + fm.horizontalAdvance(text) + 14.0 * s;
             };
             if (m_legendDeck)
                 entry(Qt::BDiagPattern, deckCol, tr("deck dark"));
