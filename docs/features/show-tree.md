@@ -1676,6 +1676,25 @@ reach the stage on GO"*, in blue — blind is blue everywhere.
   lit in Design (see
   [Power distribution](other-improvements.md#power-distribution)).
 
+**The stage chip.** One item in the footer, right of centre, always says
+what is lighting the stage, so a glance tells you whether the cue list is
+doing it:
+
+- **● LIVE · Act 1 · 1.2 Verse** (green): a cue list is running and its
+  output reaches the rig; the list and its cue.
+- **BLIND · stage holds 1.2 Verse** (white on the blue footer): Blind view.
+  What you edit shows on the screens and does not reach the lights; the
+  stage keeps the cue. **BLIND · rig muted** is Design's Blind.
+- **Stage: Build look**: the Workbench preview or the programmer is what is
+  on, over any list that runs underneath.
+- **Stage: no cue list**: nothing runs, nothing is being built.
+- **BLACKOUT · stage dark** (red) and **HELD · no output** (amber, Teaching
+  holding real output): nothing reaches the lights whatever plays.
+
+Hover it for the detail; click it for the Run tab while a list runs, else
+the Show Tree. It changes when a list starts, stops or steps and when Blind,
+Blackout, Teaching or the mode change, never per frame.
+
 ## Stack effects on a layer
 
 A layer plays one effect of each kind together — say a **Position** effect

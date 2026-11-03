@@ -12,6 +12,17 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ## [Unreleased]
 
+### Added
+
+- **A footer chip says what lights the stage.** `● LIVE · Act 1 · 1.2 Verse`
+  while a cue list runs for real, `BLIND · stage holds 1.2 Verse` (white on
+  the blue footer) in the Blind view so it is clear your edits are not
+  reaching the lights, `Stage: Build look`, `Stage: no cue list`, and the
+  holds (Blackout, Teaching's output hold). Hover for the detail; click for
+  the Run tab or the Show Tree. It replaces the long Blind text that
+  overlapped the OPERATE chip at the smallest window, and follows the
+  engine's signals, never a per-frame poll.
+
 ### Fixed
 
 - **The rig view holds still under the mouse.** Hovering over the 3D/rig
