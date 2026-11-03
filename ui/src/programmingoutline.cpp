@@ -2267,8 +2267,13 @@ void ProgrammingOutline::fillContextMenu(QMenu *out, QTreeWidgetItem *clicked)
                 menu.add(ContextMenu::Kind, a);
     }
     subtreeItems();
-    menu.add(ContextMenu::View, tr("Expand All"), [this]() { expandEverything(); });
-    menu.add(ContextMenu::View, tr("Collapse All"), [this]() { collapseEverything(); });
+    // The whole list's: on a folder or empty space, not over a thing's own
+    // menu (its rows have Expand / Collapse All Under This).
+    if (clicked == nullptr || at.kind == FolderRow)
+    {
+        menu.add(ContextMenu::View, tr("Expand All"), [this]() { expandEverything(); });
+        menu.add(ContextMenu::View, tr("Collapse All"), [this]() { collapseEverything(); });
+    }
 }
 
 /****************************************************************************
