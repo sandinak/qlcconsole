@@ -118,7 +118,9 @@ a locked layer (see [Locks](lighting-studio.md#locks)).
 From above, a handle keeps its height above whatever is under it; the
 **Front** and **Side** views drag it up and down — so between the views a
 line can curve in any direction. Double-click the centre diamond (or
-right-click > Edit) for the target's dialog.
+right-click > **Edit Target…**) for the target's dialog. The same
+right-click has **Used By ▸**: the Aim palettes pointing at it, each opened
+in the Look Editor when picked.
 
 **Which light goes where:** by where the lights hang, measured along the
 line — the stage-left head takes the stage-left end — so a full spread never

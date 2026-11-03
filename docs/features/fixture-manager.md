@@ -662,51 +662,54 @@ without them is unchanged; QLC+ and older qlcconsole builds skip them.
 
 ### Right-click menus
 
-A fixture group has one right-click menu wherever you right-click it: here,
-in Build's **Groups & fixtures**, in a Build scene, in **Plot Layers** and
-in the Show Tree's **Library**. A fixture has one too. The items keep the
-same names in the same order. A place adds only what is its own, and drops
-only what makes no sense there; each such case is listed below.
+Every right-click menu has two parts:
 
-Every menu in the app is laid out in the same order:
+1. **On top: what only this place offers.** On a cue's look row that is
+   **Set to ▸**, **None (off here)** and **Clear (inherit)**; on the plot,
+   **Remove from Truss**, the mount and the locks; in the Library, **Pin**.
+   The list's own view (**Expand All**, **Group by Type**) is here too.
+2. **Under one separator: the thing's own menu.** It is the same, in the
+   same order and with the same words, wherever the thing is right-clicked.
+   Its order is always:
+   - its editor (the default, as a double-click);
+   - what it does;
+   - selecting more like it;
+   - making something from it and filing it;
+   - Copy, Paste, Duplicate and Rename;
+   - **Delete…**, always last.
 
-1. the thing's own editor;
-2. what it does;
-3. selecting more like it;
-4. making something from it and filing it;
-5. what only this place offers;
-6. the list's view;
-7. Copy, Paste, Duplicate and Rename;
-8. taking it out (**Remove from…**) and **Delete…**, always last.
+So a palette right-clicked in Build, in the Library, on a cue's look row or
+in the Workbench offers the same **Edit Palette**, **Used By ▸**, **Move to
+Folder ▸**, **Save as Bundle…**, **Duplicate**, **Rename** and **Delete
+Palette…**. A fixture group, a fixture, a function, a Show Tree layer and a
+stage target or structure each have one menu of their own the same way.
 
 | | A fixture group | A fixture |
 |---|---|---|
-| 1 | **Edit Head Layout…** | **Fixture Properties…** (several at once too) |
-| 2 | **Locate**, **Why is this on?** (its first light), **Output Rules…**, [Split by Head Type…](#split-by-head-type), [Lay Out from the Stage…](#lay-out-from-the-stage) | **Locate**, **Why is this on?**, **Patch…** ("Patch N Fixtures…"), **Output Rules…** |
-| 3 | **Select All Similar** | **Select All Similar** |
-| 4 | **Create Fixture Group from Selection…** (several groups, each a block), **Move to Folder ▸** | **Create Fixture Group from Selection…** |
-| 7 | **Rename** (in place) or **Rename…** | |
-| 8 | **Delete Fixture Group…**: it asks first, and the fixtures stay | |
+| Editor | **Edit Head Layout…** | **Fixture Properties…** (several at once too) |
+| What it does | **Locate**, **Why is this on?** (its first light), **Output Rules…**, [Split by Head Type…](#split-by-head-type), [Lay Out from the Stage…](#lay-out-from-the-stage) | **Locate**, **Why is this on?**, **Patch…** ("Patch N Fixtures…"), [LED Layout…](#led-layout), **Gobo Wheels…**, **Output Rules…**, **Split by Head Type…** |
+| More like it | **Select All Similar** | **Select All Similar** |
+| Filing | **Create Fixture Group from Selection…** (several groups, each a block), **Move to Folder ▸** | **Create Fixture Group from Selection…** |
+| Name | **Rename** (in place) or **Rename…** | **Rename** (in place) or **Rename…** |
+| Last | **Delete Fixture Group…**: it asks first, and the fixtures stay | |
 
-What a place adds or leaves out:
+A place leaves out only what makes no sense there:
 
-- **The Fixtures tab** adds:
-  - in 1: Definition & Mode…, Change Definition…, Edit Fixture Definition…;
-  - in 2: Plot Symbol ▸ (below), [LED Layout…](#led-layout), Return to
-    Inventory…, Test Fixture…, Reset, Channel Behaviour & Modifiers…;
-  - in 4: a **Group** submenu (Add to Group ▸, Remove from Group, Rebuild
-    Composite from Members) and a **Power** submenu (Add to Circuit ▸,
-    Remove from Circuit);
-  - in 8: **Delete…** for fixtures.
+- **The Fixtures tab** adds on top: Definition & Mode…, Change
+  Definition…, Edit Fixture Definition…, Plot Symbol ▸ (below), Return to
+  Inventory…, Test Fixture…, Reset, a **Group** submenu (Add to Group ▸,
+  Remove from Group, Rebuild Composite from Members), a **Power** submenu
+  (Add to Circuit ▸, Remove from Circuit) and Channel Behaviour &
+  Modifiers…. **Delete…** for fixtures is last.
 - **A Build scene** lists a group or fixture as part of that scene. It
-  offers **Remove from Scene** and **Focus This Look…**, and has no Delete,
-  Move to Folder or Select All Similar.
-- **Plot Layers** files groups in the Plot's own folders and layers (Move
-  to Layer ▸, New Folder from Selection…), so it has no Move to Folder ▸.
-  It adds **Remove from “Truss”** for a group listed under a truss, tower
-  or boom.
-- **The Library** adds Pin and **Make Set…**, its own way of grouping, so
-  it has no Create Fixture Group.
+  adds **Remove from Scene** and **Focus This Look…** on top, and has no
+  Delete, Move to Folder or Select All Similar.
+- **Plot Layers** adds the Plot's own folders and layers (Move to Layer ▸,
+  New Folder from Selection…) on top, so it has no Move to Folder ▸. It
+  adds **Remove from “Truss”** for a group listed under a truss, tower or
+  boom.
+- **The Library** adds Pin and **Make Set…** on top, its own way of
+  grouping, so it has no Create Fixture Group.
 
 The rest of what the Fixtures tab offers depends on the row clicked:
 
@@ -717,12 +720,12 @@ The rest of what the Fixtures tab offers depends on the row clicked:
 - their roots: Number the Duplicates, Patch the Clashing Fixtures…;
 - the inventory: Add … to Inventory / Patch Inventory….
 
-Expand All / Collapse All come last on every row.
+Expand All / Collapse All are on top of every row's menu, with this tab's own.
 
 Patch is offered whenever none of the fixtures has an address yet; moving
 patched ones is Design mode's — the same rule everywhere.
 
-**Selection ▸** (in *Organising it*) works on what the rows pick: **New
+**Selection ▸** (in *More like it*) works on what the rows pick: **New
 Layer from Selection** and **Add to Current Layer** put them in the
 Workbench or the Show Tree cue open now. Picking rows here is the
 programmer's selection too — a fixture or head row its fixture, a group row

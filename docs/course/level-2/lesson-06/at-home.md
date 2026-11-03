@@ -15,7 +15,7 @@ Do **one** of these.
    (on GitHub, open it and click **Download raw file**) and open it.
 2. Add a fourth hit for an encore: right-click **Hits** → **+ Hit**,
    name it, and build it as you would a cue (a group, a colour, a level).
-3. Right-click **Hits** → **Make VC page** again: the page gets a button
+3. Right-click **Hits** → **Make VC Page** again: the page gets a button
    for the new hit, and the three you had stay where they are.
 4. Click **Operate**, play the song in the **Run** tab, and fire your
    hits from the **Virtual Console** while it runs.

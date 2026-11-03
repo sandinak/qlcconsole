@@ -342,7 +342,7 @@ their house lights, relays and subs.
   chasers to cue lists: File menu, the Show Tree's header (it replaces
   Import chaser…), the Run tab's empty state, and Build's **Send to Show
   Tree…**, which opens it with just that chaser ticked. A chaser upgraded
-  already shows greyed, with why and **Restore original…** on its row, and
+  already shows greyed, with why and **Restore Original…** on its row, and
   with nothing left to upgrade the File menu's entry still opens and says
   so. See [Send to Show Tree, from Build](show-tree.md#send-to-show-tree-from-build)
   and [Upgrade this show](show-tree.md#upgrade-this-show).
@@ -466,7 +466,7 @@ their house lights, relays and subs.
   field, or **F2** on its row) and the cue moves to its place; a number
   already taken is refused. Drag one cue or several and each dropped cue
   is numbered for its new place (between 2 and 3 → 2.5); no other cue is
-  renumbered. Right-click a cue → **Renumber this level…** numbers its
+  renumbered. Right-click a cue → **Renumber This Level…** numbers its
   level 1, 2, 3… (or from a start, in steps), point cues and sub-cues
   following. Each is one undo step. See
   [Reordering and numbering](show-tree.md#reordering-and-numbering).
@@ -499,14 +499,14 @@ their house lights, relays and subs.
   steps, up to six lines; **Return** applies, **Shift+Return** starts a
   new line.
 - **Group tools in the Library.** Right-click groups for **Select all
-  similar**, **Make set…**, **Move to folder ▸** and **Output Rules…**. See
+  similar**, **Make Set…**, **Move to Folder ▸** and **Output Rules…**. See
   [The Library](show-tree.md#the-library).
 - **The Cue Runner widget** takes a controller input and a key for each
   action in a new **External Input** tab, and gives the cue information
   the room as it grows. See [The cue runner](show-tree.md#the-cue-runner).
 
 - **Hits.** The busking states beside the cue lists are **Hits** now
-  (**+ Hit**, the **Hits** section, **Adopt as a hit**, **Copy to a hit**,
+  (**+ Hit**, the **Hits** section, **Adopt as a Hit**, **Copy to a Hit**,
   `hit "name"`; `look` still works). A layer's looks are still looks. See
   [Hits (busking)](show-tree.md#hits-busking).
 - **A column per flag.** **S**, **T**, **R** (sets, tracks in, releases),
@@ -538,7 +538,7 @@ their house lights, relays and subs.
   would become of it — a cue list, checked to play the same; an effect
   kept as a function; or left alone — and offers to capture raw scenes
   into palettes. **Upgrade** does the ticked parts as one undo step;
-  **Restore original…** puts a chaser back. Nothing happens on its own.
+  **Restore Original…** puts a chaser back. Nothing happens on its own.
   After an upgrade, a Classic QLC+ show is offered the qlcconsole view.
 - **Classic QLC+ says when a show uses the Show Tree.** A show whose
   Virtual Console has a **Cue Runner**, or buttons that fire Show Tree
@@ -943,7 +943,7 @@ their house lights, relays and subs.
 - **Looks (busking) and palettes in the Library.** A production now has a
   **Looks** section beside its cue lists: looks built with the same layers
   and rows as cues, which never track and play from VC buttons over
-  whatever runs. **Make VC page** puts a button for each on the Virtual
+  whatever runs. **Make VC Page** puts a button for each on the Virtual
   Console; **Adopt as look** turns an existing scene into one; **Copy to
   look** freezes a cue. The Library's **Palettes** gain the everyday work —
   **+ Palette** by type, rename with **F2**, folders that hold any type,
@@ -952,15 +952,15 @@ their house lights, relays and subs.
   palette list). Typed: `palette …`, `look …`, `vcpage`, `adopt`. See
   [Looks](show-tree.md#hits-busking) and
   [Palettes in the Library](show-tree.md#palettes-in-the-library).
-- **Show Tree P4: reusable layers and cues, Convert to tracking, Detach a
-  list.** Right-click a layer or a cue → **Make reusable…**: it goes into
+- **Show Tree P4: reusable layers and cues, Convert to Tracking, Detach a
+  list.** Right-click a layer or a cue → **Make Reusable…**: it goes into
   the Library (All → Reusable) and can be dropped into any cue of any list
   — a "BackStage" wash in ten cues, a "Walk-in" state in every song. Every
-  use stays linked: change one and they all change; **Unlink here** makes a
-  copy of its own. **Convert to tracking…** on an imported list takes out
+  use stays linked: change one and they all change; **Unlink Here** makes a
+  copy of its own. **Convert to Tracking…** on an imported list takes out
   what only repeats the cue before, turns "includes the cue before" into
   tracking and shows you the changes first — every cue plays exactly as
-  before. **Detach to plain chaser…** hands a list back as an ordinary
+  before. **Detach to Plain Chaser…** hands a list back as an ordinary
   chaser. See [Reusable layers and cues](show-tree.md#reusable-layers-and-cues),
   [Convert to tracking](show-tree.md#convert-to-tracking) and
   [Detach to plain chaser](show-tree.md#detach-to-plain-chaser).

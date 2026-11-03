@@ -78,7 +78,7 @@ Switch roles after each part.
 
 ### A button each
 
-8. Right-click **Hits** → **Make VC page**.
+8. Right-click **Hits** → **Make VC Page**.
    - *You should see:* the top bar reads **VC page "Hits — Spring
      Show": 3 button(s), one per hit**; each hit shows **VC ×1** in the
      tree, and Red Stab's page says **Fired by: VC button "Red Stab"**.

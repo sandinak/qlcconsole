@@ -14,9 +14,9 @@ Do **one** of these.
 1. Download [`lesson-2-4-finish.qlcc`](../../shows/lesson-2-4-finish.qlcc)
    (on GitHub, open it and click **Download raw file**) and open it.
 2. Click **1.0.6 Dance Break**, then its **Steps** row.
-3. On the **Dimmer effect** row, click **⋯ → Its own colour / dimmer →
+3. On the **Dimmer effect** row, click **⋯ → Its Own Colour / Dimmer →
    Amber**. Watch the steps in the Rig Overview.
-4. Then **⋯ → Its own colour / dimmer → None of its own**: the sparkle
+4. Then **⋯ → Its Own Colour / Dimmer → None of its own**: the sparkle
    in the steps' own colour.
 5. Which of the three (white, amber, none) suits the dance break best,
    and why? Set it back to that one, save as

@@ -2407,10 +2407,10 @@ void MonitorLayersPanel::buildContextMenu(QMenu *out, QTreeWidgetItem *item)
     m_view->populateOrganiseMenu(&menu, place.selection);
 }
 
-/* A fixture group's row: the canon's fixture-group menu (ContextMenus::rig),
-   the same as in the Fixtures tab, Build and the Show Tree, with what only
-   the Plot offers in its Place section -- out of the truss it is listed
-   under -- and the Plot's organising (layers, folders) in Organise. */
+/* A fixture group's row: what only the Plot offers on top -- out of the
+   truss it is listed under, its layers and folders -- then the canon's
+   fixture-group menu (ContextMenus::rig), the same as in the Fixtures tab,
+   Build and the Show Tree. */
 void MonitorLayersPanel::buildFixtureGroupMenu(QMenu *out, QTreeWidgetItem *item,
                                                const QList<QPair<QString, quint32> > &selection)
 {
@@ -2450,7 +2450,7 @@ void MonitorLayersPanel::buildFixtureGroupMenu(QMenu *out, QTreeWidgetItem *item
     place.offerMoveToFolder = false;    // the Plot's folders are its own (Organise, below)
     ContextMenus::rig(menu, m_doc, groups, QList<quint32>(), place);
     if (sameFixtures.size() > same.size())
-        menu.add(ContextMenu::Selection,
+        menu.add(ContextMenu::Place,
                  tr("Select All with the Same Fixtures (%1)").arg(sameFixtures.size()),
                  [this, ids = idsOf(sameFixtures)]() { selectFixtureGroups(ids); });
 
@@ -2470,7 +2470,7 @@ void MonitorLayersPanel::buildFixtureGroupMenu(QMenu *out, QTreeWidgetItem *item
             const QString kind = host.anchorKind;
             const quint32 anchor = host.anchorId;
             const QList<quint32> members = fg->fixtureList();
-            menu.add(ContextMenu::Remove,
+            menu.add(ContextMenu::Place,
                      tr("Remove from “%1”").arg(up->text(0).section(QStringLiteral("  "), 0, 0)),
                      [this, members, kind, anchor]() {
                 if (m_view) m_view->takeOutOfStructure(members, kind, anchor);
@@ -2486,7 +2486,7 @@ void MonitorLayersPanel::buildFixtureGroupMenu(QMenu *out, QTreeWidgetItem *item
             m_view->populateOrganiseMenu(staging, selection);
             for (QAction *a : staging->actions())
                 if (!a->isSeparator())
-                    menu.add(ContextMenu::Organise, a);
+                    menu.add(ContextMenu::Place, a);
         }
     }
 }

@@ -385,7 +385,7 @@ void ShowTreeWorkbench_Test::theDockedLayerMenuReleasesAndSetsTheCueMode()
 
     // Release (leaving this cue): ticked, the layer's flag is set, in one step.
     QVERIFY(menuDo([](QMenu *menu) {
-        QAction *release = menu->findChild<QAction *>("cueStackRelease");
+        QAction *release = menu->findChild<QAction *>("stLayerReleaseMenu");
         QVERIFY(release != nullptr && release->isCheckable() && !release->isChecked());
         release->trigger();
     }));
@@ -1719,7 +1719,7 @@ void ShowTreeWorkbench_Test::aFunctionLayerCanBeReleasedFromTheDockedWorkbench()
             QTimer::singleShot(10, bench, poll);
             return;
         }
-        QAction *release = menu->findChild<QAction *>("cueStackRelease");
+        QAction *release = menu->findChild<QAction *>("stLayerReleaseMenu");
         QVERIFY(release != nullptr && release->isCheckable() && !release->isChecked());
         release->trigger();
         done = true;

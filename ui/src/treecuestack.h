@@ -106,6 +106,8 @@ public:
     QString layerDropPlan(int layer, const QMimeData *mime) const;
     bool dropLayerRows(int layer, const QMimeData *mime);
     bool showMenu(int layer, int attribute, const QPoint &globalPos) override;
+    /** Layer @p layer's menu into @p menu (showMenu's, before it shows) */
+    void fillLayerMenu(QMenu *menu, int layer);
     bool clearAttribute(int layer, int attribute) override;
     QWidget *lendPane(int layer, int attribute) override;
     void returnPane(QWidget *pane) override;

@@ -204,7 +204,7 @@ show, so there's nothing to choose.
 
 1. Make the **cyc go magenta in the chorus** as well. Click **1.0.2
    Chorus**, click the grey **TrussC-RGB** row, and on its Colour row use
-   **⋯ → Set in this cue → Magenta**. In the tree, TrussC-RGB is now a
+   **⋯ → Set in This Cue → Magenta**. In the tree, TrussC-RGB is now a
    layer of the chorus itself rather than a tracked one.
 2. **Type it.** Open `lesson-1-1-start.qlcc` again and build the same
    three cues from the **Command** line at the bottom (click it, type a

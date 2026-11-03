@@ -24,6 +24,8 @@
 #include <QPointer>
 #include <QColor>
 #include <QWidget>
+
+#include "contextmenus.h"
 #include <QPair>
 #include <QList>
 #include <QSet>
@@ -161,6 +163,26 @@ public:
     /** The Library's right-click menu for @p item (and the selection) into
      *  @p menu: the canon's layout (ContextMenu) */
     void fillLibraryMenu(QMenu *menu, QTreeWidgetItem *item);
+    /** The tree's right-click into @p menu (the canon: this place's + Cue,
+     *  + Hit, ... on top, then the node's own menu) */
+    void fillTreeMenu(QMenu *menu, QTreeWidgetItem *item);
+    /** What a place does its own way in a layer's menu; an empty hook
+     *  leaves its item out */
+    struct LayerMenuPlace
+    {
+        std::function<void()> open;         ///< Open in Workbench
+        std::function<void()> cut, copy, paste, duplicate;
+        std::function<void()> remove;       ///< Delete Layer
+    };
+    /** A layer's own menu (the canon's kind block), the same in the tree and
+     *  on the Workbench's layer row; @p layerId invalid: carried in, @p
+     *  tracked its target */
+    void fillLayerMenu(ContextMenu &menu, quint32 cueId, quint32 layerId, const ShowTree::Target &tracked,
+                       const LayerMenuPlace &place);
+    /** The Show Tree's hooks for the canon's palette menu (ContextMenus::palette) */
+    ContextMenus::PalettePlace paletteMenuPlace();
+    /** A cue's one-off value made a named palette (asks the name) */
+    void makePaletteReusable(quint32 paletteId);
 
     /** Groups / fixtures / group sets dropped on a cue: one layer on all
      *  of them, or (@a separate, ⌥ held) one layer per group -- a set's
@@ -870,6 +892,11 @@ private:
      *  @a rowTarget: the row's layer, own or not (for "Update cue X"). */
     void attributeMenu(quint32 cueId, quint32 layerId, const ShowTree::Target &target,
                        const ShowTree::Target &rowTarget, const QString &key, const QPoint &globalPos);
+    /** The look row's menu into @p menu: this row's own items (Set to ▸,
+     *  None (off here), Clear (inherit), ...) on top, then the canon's menu
+     *  for the palette set there (ContextMenus::palette) */
+    void fillAttributeMenu(QMenu *menu, quint32 cueId, quint32 layerId, const ShowTree::Target &target,
+                           const ShowTree::Target &rowTarget, const QString &key);
     void includesMenu(QMenu *menu, quint32 cueId);
     /** A line's Spread / Grouping / Cross (D16): submenus that set them on
      *  the layer (or the carried-in @a target, or the cue). */

@@ -145,7 +145,7 @@ floor, and its **Length** is that one breath.
 |---|---|
 | The browser shows nothing for your search | Clear the search box first: it keeps what you typed last time. |
 | The new palette isn't in the song's folder | Click the folder in the Library before **+ Palette**. Or right-click it → **Move to Folder**. |
-| No **Its own colour / dimmer** in the menu | Use the ⋯ on the **Dimmer effect** row, not the Colour row. |
+| No **Its Own Colour / Dimmer** in the menu | Use the ⋯ on the **Dimmer effect** row, not the Colour row. |
 | The steps don't twinkle | Drop Step Sparkle on the **Steps** row, not on the dashed box. |
 | Something else went wrong | Undo (⌘Z) one step at a time. |
 
@@ -173,7 +173,7 @@ is lit, not only its RGB pixels.
 **On the beat: a speed master.** An effect can run on a **speed
 master**, so one tap moves everything on it together.
 
-1. In the Library, right-click **Truss Wave** → **Edit**.
+1. In the Library, right-click **Truss Wave** → **Edit Effect**.
 2. In the Look Editor, set **Speed** to **Main Speed**.
 3. Look at the footer: a **Main Speed 120** button appears, beside the
    Grand Master. The wave now counts in beats of that master.
@@ -188,6 +188,6 @@ usual.
    sparkle starts and stops at full, whatever the cue's fades are.
 2. Now `Steps effect Step Sparkle fade in 2 out 0.5`: its own times.
 3. Back with `Steps effect Step Sparkle fade cue`. (The same three choices
-   are in the effect row's **⋯ → Fade in / out**.)
+   are in the effect row's **⋯ → Fade In / Out**.)
 4. When would a sparkle that snaps on be right, and when would it be
    wrong? Think about the cue's fade.

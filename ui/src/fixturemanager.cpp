@@ -3055,14 +3055,14 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
         ContextMenus::rig(cm, m_doc, selGroups, selFixtures, place);
         // A mix of groups and fixtures: Fixture Properties for the fixtures.
         if (!selGroups.isEmpty() && !selFixtures.isEmpty())
-            cm.add(ContextMenu::Open, m_propertiesAction);
+            cm.add(ContextMenu::Place, m_propertiesAction);
 
         // Its definition and mode: the stock dialog, kept for what Fixture
         // Properties does not change.
         if (selFixtures.size() == 1 && m_doc->mode() != Doc::Operate)
         {
             const quint32 fid = selFixtures.first();
-            cm.add(ContextMenu::Open, tr("Definition && Mode…"), [this, fid]() {
+            cm.add(ContextMenu::Place, tr("Definition && Mode…"), [this, fid]() {
                 editDefinitionAndMode(this, m_doc, fid);
             });
         }
@@ -3075,7 +3075,7 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
             if (!dropIns.isEmpty())
             {
                 const QList<quint32> fids = selFixtures;
-                cm.add(ContextMenu::Open, tr("Change Definition…"), [this, fids, dropIns]() {
+                cm.add(ContextMenu::Place, tr("Change Definition…"), [this, fids, dropIns]() {
                     QStringList names;
                     for (QLCFixtureDef *d : dropIns)
                         names << d->model();
@@ -3107,12 +3107,12 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
             editDefinitionPath = sharedDefinitionSourceFile(m_doc, defFids, &defCount);
             if (editDefinitionPath.isEmpty() == false)
             {
-                editDefinition = cm.add(ContextMenu::Open, tr("Edit Fixture Definition…"));
+                editDefinition = cm.add(ContextMenu::Place, tr("Edit Fixture Definition…"));
                 editDefinition->setObjectName(QStringLiteral("editFixtureDefinitionAction"));
             }
             else if (defCount > 1)
             {
-                cm.add(ContextMenu::Open, tr("Edit Fixture Definition… (several definitions)"))
+                cm.add(ContextMenu::Place, tr("Edit Fixture Definition… (several definitions)"))
                     ->setEnabled(false);
             }
         }
@@ -3134,26 +3134,12 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
             }
             if (!lookFids.isEmpty())
             {
-                QMenu *lookMenu = cm.addMenu(ContextMenu::Kind, tr("Plot Symbol"),
+                QMenu *lookMenu = cm.addMenu(ContextMenu::Place, tr("Plot Symbol"),
                                              QStringLiteral("stageLookMenu"));
                 fillStageLookMenu(lookMenu, m_doc, lookFids);
             }
         }
-        /* Where each head of its model really is (an XL-450's rows of RGB
-           and white): the LED Layout editor, for one fixture of more than
-           one head. */
-        if (selFixtures.size() == 1 && selGroups.isEmpty())
-        {
-            const quint32 fid = selFixtures.first();
-            QAction *led = cm.add(ContextMenu::Kind, tr("LED Layout…"), [this, fid]() {
-                if (LedLayoutDialog::edit(m_doc, fid, this))
-                    slotSelectionChanged();
-            });
-            led->setObjectName(QStringLiteral("ledLayoutAction"));
-            led->setEnabled(LedLayoutDialog::canEdit(m_doc, fid));
-            if (!led->isEnabled())
-                led->setToolTip(tr("Only for a fixture with more than one head"));
-        }
+        // LED Layout… is the canon's (ContextMenus::rig), as everywhere.
     }
 
     // Inventory: staged fixtures (no universe/address yet). The root offers
@@ -3215,7 +3201,7 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
     }
     if (!patchedSel.isEmpty())
     {
-        returnToInv = cm.add(ContextMenu::Kind, patchedSel.size() > 1
+        returnToInv = cm.add(ContextMenu::Place, patchedSel.size() > 1
                                          ? tr("Return %1 Fixtures to Inventory…").arg(patchedSel.size())
                                          : tr("Return to Inventory…"));
         returnToInv->setEnabled(m_doc->mode() == Doc::Design);
@@ -3226,8 +3212,8 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
     // ---- Finding it on the rig ----
     if (haveFixtureOrGroupSelection)
     {
-        cm.add(ContextMenu::Kind, m_testAction);
-        cm.add(ContextMenu::Kind, m_resetAction);
+        cm.add(ContextMenu::Place, m_testAction);
+        cm.add(ContextMenu::Place, m_resetAction);
     }
     QAction *whyOn = NULL;     // ContextMenus::rig offers it
 
@@ -3246,7 +3232,7 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
         auto groups_ = [&]() -> QMenu * {
             if (groupMenu == NULL)
             {
-                groupMenu = cm.addMenu(ContextMenu::Organise, tr("Group"));
+                groupMenu = cm.addMenu(ContextMenu::Place, tr("Group"));
                 groupMenu->setIcon(QIcon(":/group.png"));
             }
             return groupMenu;
@@ -3282,7 +3268,7 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
         // Power circuits live in the power-distribution pane on the right.
         if (selFixtures.isEmpty() == false)
         {
-            QMenu *powerMenu = cm.addMenu(ContextMenu::Organise, tr("Power"));
+            QMenu *powerMenu = cm.addMenu(ContextMenu::Place, tr("Power"));
             PowerDistribution *pd = m_doc->powerDistribution();
             circuitMenu = powerMenu->addMenu(selFixtures.size() > 1
                 ? tr("Add %1 Fixtures to Circuit").arg(selFixtures.size())
@@ -3316,7 +3302,7 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
             }
             removeFromCircuit = powerMenu->addAction(tr("Remove from Circuit"));
         }
-        cm.add(ContextMenu::Kind, m_fadeConfigAction);
+        cm.add(ContextMenu::Place, m_fadeConfigAction);
 
         // ---- Deleting it: fixtures (a group alone: Delete Fixture Group…) ----
         if (selFixtures.isEmpty() == false)

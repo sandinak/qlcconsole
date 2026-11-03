@@ -56,6 +56,8 @@
 #include <cmath>
 #include "monitorgraphicsview.h"
 #include "selectionmenu.h"
+#include "programmingmanager.h"
+#include "contextmenus.h"
 #include "itemlock.h"
 #include "stagemarklabel.h"
 #include "stagepieceitem.h"
@@ -8545,8 +8547,13 @@ void MonitorGraphicsView::contextMenuEvent(QContextMenuEvent *event)
         if (zid != UINT_MAX)
         {
             QMenu zm(this);
-            zm.addAction(tr("Edit No-light Zone…"), this, [this, zid]() { emit zoneDoubleClicked(zid); });
-            zm.addAction(tr("Delete No-light Zone"), this, [this, zid]() { emit zoneRemoveRequested(zid); });
+            {
+                ContextMenu cm(&zm);
+                cm.add(ContextMenu::Open, tr("Edit No-light Zone…"), [this, zid]() { emit zoneDoubleClicked(zid); },
+                       QStringLiteral("plotEditZone"));
+                cm.add(ContextMenu::Remove, tr("Delete No-light Zone"), [this, zid]() { emit zoneRemoveRequested(zid); },
+                       QStringLiteral("plotDeleteZone"));
+            }
             zm.exec(event->globalPos());
             return;
         }
@@ -8619,10 +8626,16 @@ void MonitorGraphicsView::buildStagePieceMenu(QMenu *menu, int piece, bool inLis
     typedef MonitorProperties MP;
     const MP::StagePiece sp = MP::StagePiece(piece);
     const bool design = (m_doc->mode() == Doc::Design);
-    QAction *edit = menu->addAction(tr("Edit %1…").arg(MP::stagePieceName(sp)), this,
-                                    [this, piece]() { emit stagePieceDoubleClicked(piece); });
-    edit->setObjectName(QStringLiteral("stagePieceProperties"));
-    menu->addSeparator();
+    // The canon: the plot's own (where it is, shown, locked, auto) on top,
+    // its editor below.
+    ContextMenu cm(menu);
+    // Its name in Title Case, as menus are ("Curtain line" → "Curtain Line").
+    QStringList words = MP::stagePieceName(sp).split(QLatin1Char(' '));
+    for (QString &w : words)
+        if (!w.isEmpty())
+            w[0] = w.at(0).toUpper();
+    cm.add(ContextMenu::Open, tr("Edit %1…").arg(words.join(QLatin1Char(' '))),
+           [this, piece]() { emit stagePieceDoubleClicked(piece); }, QStringLiteral("stagePieceProperties"));
     if (inList)
         menu->addAction(tr("Show on Map"), this, [this, piece]() { selectMapItem(QStringLiteral("stage"), quint32(piece)); });
     else
@@ -8679,6 +8692,8 @@ void MonitorGraphicsView::buildStagePieceMenu(QMenu *menu, int piece, bool inLis
             changed();
         });
     }
+    ContextMenu::fileAsPlace(menu);
+    cm.finish();
 }
 
 void MonitorGraphicsView::buildItemMenu(QMenu *menu, const QString &kind, quint32 id,
@@ -8695,14 +8710,16 @@ void MonitorGraphicsView::buildItemMenu(QMenu *menu, const QString &kind, quint3
         return;
     }
 
-    // 1. The thing.
+    /* Laid out by the canon (docs/design/CONTEXT_MENUS.md): what only the
+       plot does with it on top -- where it is, its mount, its locks, its
+       folder and layer -- then the thing's own menu, the same wherever it
+       is right-clicked: a fixture's is ContextMenus::rig, as in the
+       Fixtures tab, Build and the Show Tree. */
+    ContextMenu cm(menu);
     m_menuSelection = place.selection;
-    populateItemMenu(menu, kind, id, scenePos, false);
+    populateItemMenu(menu, cm, kind, id, scenePos);
     m_menuSelection.clear();
 
-    // 2. Where it is, and its name.
-    if (!menu->isEmpty())
-        menu->addSeparator();
     if (place.inList)
         menu->addAction(tr("Show on Map"), this, [this, kind, id]() {
             selectMapItem(kind, id);
@@ -8711,29 +8728,102 @@ void MonitorGraphicsView::buildItemMenu(QMenu *menu, const QString &kind, quint3
         menu->addAction(tr("Show in Plot Layers"), this, [this, kind, id]() {
             emit revealInLayersRequested(kind, id);
         });
+
+    // Organising: the selection where the menu was opened, and this item.
+    QList<QPair<QString, quint32> > objects = place.selection;
+    if (!objects.contains(qMakePair(kind, id)))
+        objects.prepend(qMakePair(kind, id));
+    QList<QAction *> selectionItems;    // Create Fixture Group…: the canon's, under Selection ▸
+    populateOrganiseMenu(menu, objects, &selectionItems);
+    QList<quint32> fixtures;
+    for (const auto &o : objects)
+        if (o.first == QLatin1String("fixture") && !fixtures.contains(o.second))
+            fixtures << o.second;
+
+    if (kind == QLatin1String("fixture"))
+    {
+        // Taking it off the plot (it stays in the show): this place's own.
+        menu->addAction(tr("Remove from View"), this, [this, id]() {
+            requestDeleteItem(QStringLiteral("fixture"), id);
+        })->setObjectName(QStringLiteral("plotRemoveFromView"));
+        ContextMenu::fileAsPlace(menu);
+
+        // ---- The fixture's own menu: the canon's (ContextMenus::rig) ----
+        if (!fixtures.contains(id))
+            fixtures = { id };
+        ContextMenus::RigPlace rig;
+        rig.parent = this;
+        rig.editable = design;
+        rig.properties = [this](const QList<quint32> &ids) {
+            if (ids.size() == 1)
+                emit fixtureDoubleClicked(ids.first());
+            else if (Monitor *mon = Monitor::instance())
+                mon->editFixturesProperties(ids);
+        };
+        // Every fixture of the same model and mode on the plot -- all the
+        // step bars, all the XL-450s -- to patch, move or group together.
+        {
+            const QString key = CreateFixtureGroup::fixtureModelKey(m_doc->fixture(id));
+            QList<QPair<QString, quint32> > same;
+            for (auto it = m_fixtures.constBegin(); it != m_fixtures.constEnd(); ++it)
+                if (CreateFixtureGroup::fixtureModelKey(m_doc->fixture(it.key())) == key)
+                    same << qMakePair(QStringLiteral("fixture"), it.key());
+            rig.similarCount = qMax(1, int(same.size()));
+            rig.selectSimilar = [this, same]() {
+                selectMapItems(same);
+                emit selectInLayersRequested(same);     // the ones buried on a truss too
+            };
+        }
+        rig.patch = [this](const QList<quint32> &ids) {
+            PatchInventoryDialog dlg(m_doc, ids, this);
+            if (dlg.exec() != QDialog::Accepted)
+                return;
+            foreach (quint32 f, ids)
+                updateFixture(f);
+            emit mapStructureChanged();
+        };
+        rig.createGroup = [this, fixtures]() {
+            if (CreateFixtureGroup::createFromFixtures(m_doc, fixtures, this) != nullptr)
+                emit mapStructureChanged();
+        };
+        if (place.renameInPlace)
+        {
+            const std::function<void()> inPlace = place.renameInPlace;
+            rig.renameFixtureInPlace = [inPlace](quint32) { inPlace(); };
+        }
+        rig.changed = [this, fixtures]() {
+            for (quint32 f : fixtures)
+                updateFixture(f);
+            emit mapStructureChanged();
+        };
+        ContextMenus::rig(cm, m_doc, QList<quint32>(), fixtures, rig);
+        return;
+    }
+
+    // ---- A structure or a mark: its own menu ----
+    ContextMenu::fileAsPlace(menu);
+    if (selectionItems.size() > 0)
+        for (QAction *a : selectionItems)
+            cm.add(ContextMenu::Selection, a);
+    if (kind == QLatin1String("target"))
+    {
+        // The Aim palettes pointing at it, each to edit.
+        QMenu *used = cm.addMenu(ContextMenu::Kind, ContextMenus::usedByText(), QStringLiteral("ctxUsedBy"));
+        for (QLCPalette *pal : m_doc->palettes())
+            if (pal != nullptr && pal->stageTargetId() == id)
+            {
+                const quint32 pid = pal->id();
+                used->addAction(pal->name(), this, [pid]() { ProgrammingManager::openPalette(pid); });
+            }
+        if (used->isEmpty())
+            used->addAction(tr("(not used)"))->setEnabled(false);
+    }
     if (design)
     {
-        const std::function<void()> inPlace = place.renameInPlace;
-        menu->addAction(tr("Rename…"), this, [this, kind, id, inPlace]() {
-            if (inPlace)
-            {
-                inPlace();
-                return;
-            }
-            bool ok = false;
-            const QString name = QInputDialog::getText(this, tr("Rename"), tr("Name:"),
-                                                       QLineEdit::Normal, itemNameOf(m_doc, kind, id), &ok).trimmed();
-            if (ok && !name.isEmpty() && renameItem(kind, id, name))
-            {
-                m_doc->setModified();
-                emit mapStructureChanged();
-            }
-        });
-
         /* A network node set up by hand can become a model to place the next
            one from (Add Network Node > Model). */
         if (kind == QLatin1String("network"))
-            menu->addAction(tr("Save as Gear Model…"), this, [this, id]() {
+            cm.add(ContextMenu::Kind, tr("Save as Gear Model…"), [this, id]() {
                 NetworkTopology *nt = m_doc->networkTopology();
                 if (int(id) >= nt->nodes().size())
                     return;
@@ -8757,7 +8847,7 @@ void MonitorGraphicsView::buildItemMenu(QMenu *menu, const QString &kind, quint3
                 if (saveNetworkNodeAsModel(id, make->text(), model->text()).isEmpty())
                     QMessageBox::warning(this, tr("Save as Gear Model"),
                                          tr("The model could not be saved: it needs a name and at least one port."));
-            });
+            }, QStringLiteral("plotSaveGearModel"));
 
         /* A truss or riser carrying fixtures has an auto-group, and with it a
            fixture layout and the option to break the group up. */
@@ -8771,37 +8861,36 @@ void MonitorGraphicsView::buildItemMenu(QMenu *menu, const QString &kind, quint3
         if (anchorGroup != 0)
         {
             const bool framed = props->group(anchorGroup).hasFrame;
-            menu->addAction(framed ? tr("Fixture Layout…") : tr("Create Fixture Layout…"),
-                            this, [this, anchorGroup]() {
+            cm.add(ContextMenu::Kind, framed ? tr("Fixture Layout…") : tr("Create Fixture Layout…"),
+                   [this, anchorGroup]() {
                 openStudioGroupForGroup(anchorGroup);
                 emit mapStructureChanged();
-            });
-            menu->addAction(tr("Ungroup"), this, [this, anchorGroup]() {
-                ungroupById(anchorGroup);
-            });
+            }, QStringLiteral("plotFixtureLayout"));
+            cm.add(ContextMenu::Kind, tr("Ungroup"), [this, anchorGroup]() { ungroupById(anchorGroup); },
+                   QStringLiteral("plotUngroup"));
         }
+
+        const std::function<void()> inPlace = place.renameInPlace;
+        // Inline in the list ("Rename"), a dialog on the plot ("Rename…").
+        cm.add(ContextMenu::Edit, ContextMenus::renameText(!inPlace), [this, kind, id, inPlace]() {
+            if (inPlace)
+            {
+                inPlace();
+                return;
+            }
+            bool ok = false;
+            const QString name = QInputDialog::getText(this, tr("Rename"), tr("Name:"),
+                                                       QLineEdit::Normal, itemNameOf(m_doc, kind, id), &ok).trimmed();
+            if (ok && !name.isEmpty() && renameItem(kind, id, name))
+            {
+                m_doc->setModified();
+                emit mapStructureChanged();
+            }
+        }, QStringLiteral("plotRename"));
     }
 
-    // 3. Organising: the selection where the menu was opened, and this item.
-    QList<QPair<QString, quint32> > objects = place.selection;
-    if (!objects.contains(qMakePair(kind, id)))
-        objects.prepend(qMakePair(kind, id));
-    QList<QAction *> selectionItems;
-    populateOrganiseMenu(menu, objects, &selectionItems);
-
-    /* Selection ▸ (Q201): the fixtures picked, as a layer of the Workbench
-       or the Show Tree cue -- and the plot's own selection items. */
-    QList<quint32> fixtures;
-    for (const auto &o : objects)
-        if (o.first == QLatin1String("fixture") && !fixtures.contains(o.second))
-            fixtures << o.second;
-    if (!fixtures.isEmpty())
-        SelectionMenu::addTo(menu, m_doc, fixtures, selectionItems);
-    else
-        menu->addActions(selectionItems);
-
-    // 4. Removing, last.
-    addItemRemoval(menu, kind, id);
+    // Deleting it, last.
+    addItemRemoval(cm, kind, id);
 }
 
 /* An item's name, for prefilling Rename. */
@@ -9147,30 +9236,18 @@ static QString itemNoun(const QString &kind)
     return MonitorGraphicsView::tr("Fixture");
 }
 
-void MonitorGraphicsView::addItemRemoval(QMenu *menu, const QString &kind, quint32 id)
+void MonitorGraphicsView::addItemRemoval(ContextMenu &cm, const QString &kind, quint32 id)
 {
-    if (menu == nullptr || kind == QLatin1String("power"))
+    if (kind == QLatin1String("power") || kind == QLatin1String("fixture"))
         return;
-    if (!menu->isEmpty())
-        menu->addSeparator();
-    if (kind == QLatin1String("fixture"))
-    {
-        menu->addAction(tr("Remove from View"), this, [this, id]() {
-            requestDeleteItem(QStringLiteral("fixture"), id);
-        });
-        return;
-    }
     const QString noun = itemNoun(kind);
     // A target asks first: aim palettes and scenes may depend on it.
-    menu->addAction(kind == QLatin1String("target")
-                        ? tr("Delete %1…").arg(noun) : tr("Delete %1").arg(noun),
-                    this, [this, kind, id]() {
-        requestDeleteItem(kind, id);
-    });
+    cm.add(ContextMenu::Remove, kind == QLatin1String("target") ? tr("Delete %1…").arg(noun) : tr("Delete %1").arg(noun),
+           [this, kind, id]() { requestDeleteItem(kind, id); }, QStringLiteral("plotDeleteItem"));
 }
 
-void MonitorGraphicsView::populateItemMenu(QMenu *menu, const QString &kind, quint32 id,
-                                           const QPointF &scenePos, bool withRemoval)
+void MonitorGraphicsView::populateItemMenu(QMenu *menu, ContextMenu &cm, const QString &kind, quint32 id,
+                                           const QPointF &scenePos)
 {
     MonitorProperties *props = m_doc->monitorProperties();
     if (menu == nullptr || props == nullptr)
@@ -9181,9 +9258,9 @@ void MonitorGraphicsView::populateItemMenu(QMenu *menu, const QString &kind, qui
         /* A structure or a mark: edit it, build on it, hold it in place,
            delete it. */
         const QString noun = itemNoun(kind);
-        menu->addAction(tr("Edit %1…").arg(noun), this, [this, kind, id]() {
+        cm.add(ContextMenu::Open, tr("Edit %1…").arg(noun), [this, kind, id]() {
             requestEditItem(kind, id);
-        });
+        }, QStringLiteral("plotEditItem"));
 
         /* Its like -- the other towers, the other step trusses, carrying the
            same fixtures -- patched as this one is ("the lights on T1, 2, 3, 4
@@ -9193,15 +9270,15 @@ void MonitorGraphicsView::populateItemMenu(QMenu *menu, const QString &kind, qui
         const QStringList like = PatchPlanner::likeStructures(m_doc, key);
         if (!like.isEmpty())
         {
-            menu->addAction(tr("Patch Others Like This (%1)…").arg(like.size()), this,
-                            [this, key, like]() { patchOthersLike(key, like); });
+            cm.add(ContextMenu::Kind, tr("Patch Others Like This (%1)…").arg(like.size()),
+                   [this, key, like]() { patchOthersLike(key, like); }, QStringLiteral("plotPatchOthersLike"));
         }
         /* Its whole setup onto the others of its kind (T1 to T2, T3): the
            fixtures, hung the same way, named, addressed and grouped. */
         if (!StructureDuplicate::targetsFor(m_doc, key).isEmpty())
         {
-            menu->addAction(tr("Duplicate Setup to…"), this,
-                            [this, key]() { duplicateSetupDialog(key); });
+            cm.add(ContextMenu::Kind, tr("Duplicate Setup to…"), [this, key]() { duplicateSetupDialog(key); },
+                   QStringLiteral("plotDuplicateSetup"));
         }
 
         /* One "Add" submenu per structure, rather than a handful of loose
@@ -9211,10 +9288,7 @@ void MonitorGraphicsView::populateItemMenu(QMenu *menu, const QString &kind, qui
         QMenu *addMenu = nullptr;
         auto adds = [&]() -> QMenu * {
             if (addMenu == nullptr)
-            {
-                menu->addSeparator();
-                addMenu = menu->addMenu(tr("Add"));
-            }
+                addMenu = cm.addMenu(ContextMenu::Kind, tr("Add"), QStringLiteral("plotAddMenu"));
             return addMenu;
         };
 
@@ -9340,13 +9414,11 @@ void MonitorGraphicsView::populateItemMenu(QMenu *menu, const QString &kind, qui
            object stays put until the plot is unlocked. */
         if (m_layoutLocked)
         {
-            QAction *held = menu->addAction(tr("Held by the plot lock — Edit Plot to move"));
+            QAction *held = menu->addAction(tr("Held by the Plot Lock — Edit Plot to Move"));
             held->setObjectName(QStringLiteral("itemHeldByPlot"));
             held->setEnabled(false);
         }
 
-        if (withRemoval)
-            addItemRemoval(menu, kind, id);
         return;
     }
 
@@ -9356,144 +9428,10 @@ void MonitorGraphicsView::populateItemMenu(QMenu *menu, const QString &kind, qui
     const FixtureRigProps rp = props->fixtureRigProps(fid);
     Fixture *fxi = m_doc->fixture(fid);
 
-    menu->addAction(tr("Fixture Properties…"), this, [this, fid]() {
-        emit fixtureDoubleClicked(fid);
-    });
-    // Where each of its heads really is: the model's LED layout.
-    if (LedLayoutDialog::canEdit(m_doc, fid))
-    {
-        QAction *led = menu->addAction(tr("LED Layout…"), this, [this, fid]() {
-            LedLayoutDialog::edit(m_doc, fid, this);
-        });
-        led->setObjectName(QStringLiteral("ledLayoutAction"));
-    }
-    /* What it is mounted on: its editor, here -- double-clicking a fixture
-       opens the fixture, wherever it is (a covered riser used to open
-       instead). */
-    {
-        QString what;
-        std::function<void()> open;
-        switch (rp.primaryMount())
-        {
-        case FixtureRigProps::TrussMount:
-            what = tr("Edit Truss…");
-            open = [this, rp]() { emit trussDoubleClicked(rp.trussId); };
-            break;
-        case FixtureRigProps::PipeMount:
-            what = tr("Edit Pipe…");
-            open = [this, rp]() { emit pipeDoubleClicked(rp.pipeId); };
-            break;
-        case FixtureRigProps::TowerMount:
-            what = tr("Edit Tower…");
-            open = [this, rp]() { emit towerDoubleClicked(rp.towerId); };
-            break;
-        case FixtureRigProps::RiserMount:
-            what = tr("Edit Platform…");
-            open = [this, rp]() { emit platformDoubleClicked(rp.riserPlatformId); };
-            break;
-        case FixtureRigProps::DeckMount:
-            what = tr("Edit Platform…");
-            open = [this, rp]() { emit platformDoubleClicked(rp.deckPlatformId); };
-            break;
-        case FixtureRigProps::HangerMount:
-            what = tr("Edit Hanger…");
-            open = [this, rp]() { emit hangerDoubleClicked(rp.hangerId); };
-            break;
-        default:
-            break;
-        }
-        if (open)
-            menu->addAction(what, this, open);
-    }
-    menu->addAction(tr("Locate"), this, [this, fid]() {
-        /* The selected fixtures on the plot and this one: selecting a truss's
-           worth of heads and asking where they are lights all of them. */
-        QList<quint32> ids;
-        foreach (QGraphicsItem *gi, m_scene->selectedItems())
-            if (MonitorFixtureItem *mfi = dynamic_cast<MonitorFixtureItem *>(gi))
-                if (!ids.contains(mfi->fixtureID()))
-                    ids << mfi->fixtureID();
-        if (!ids.contains(fid))
-            ids << fid;
-        if (Monitor::instance() != nullptr)
-            Monitor::instance()->locateFixtures(ids);
-    });
-    menu->addAction(WhyOnPanel::actionText(), this, [this, fid]() {
-        WhyOnPanel::showFor(m_doc, fid, 0xFFFFFFFF, this, QCursor::pos());
-    })->setObjectName(QStringLiteral("whyOnAction"));
-    /* Its universe and address, with the rest of the selection: patched or
-       not, they are placed as a block in the Patch dialog and applied at
-       once. Moving a patched one is a Design-mode edit. */
-    {
-        /* The selection where the menu was opened. From the Layers list that
-           is the LIST's selection: fixtures stacked in a tower cannot be
-           selected on the plot at all, so the plot's selection held only the
-           one right-clicked ("selected 4 and got 1"). */
-        QList<quint32> ids;
-        for (const QPair<QString, quint32> &o : m_menuSelection)
-            if (o.first == QLatin1String("fixture") && !ids.contains(o.second))
-                ids << o.second;
-        if (!ids.contains(fid))
-            ids.clear();            // clicked outside the selection: just this one
-        if (ids.isEmpty())
-        {
-            foreach (QGraphicsItem *gi, m_scene->selectedItems())
-            {
-                MonitorFixtureItem *mfi = dynamic_cast<MonitorFixtureItem *>(gi);
-                if (mfi != nullptr && !ids.contains(mfi->fixtureID()))
-                    ids << mfi->fixtureID();
-            }
-        }
-        if (!ids.contains(fid))
-            ids << fid;
-        // One name and one rule for Patch everywhere (AppUtil).
-        QAction *pa = menu->addAction(AppUtil::patchActionText(ids.size()), this, [this, ids]() {
-            PatchInventoryDialog dlg(m_doc, ids, this);
-            if (dlg.exec() != QDialog::Accepted)
-                return;
-            foreach (quint32 f, ids)
-                updateFixture(f);
-            emit mapStructureChanged();
-        });
-        pa->setEnabled(AppUtil::patchAllowed(m_doc, ids));
-
-        /* More than one kind of head (RGB and white rows): its LED map, and
-           a fixture group per kind. */
-        if (HeadTypesDialog::anyMixed(m_doc, ids))
-            menu->addAction(tr("Split by Head Type…"), this, [this, ids]() {
-                HeadTypesDialog dlg(m_doc, ids, HeadTypesDialog::suggestName(m_doc, ids), this);
-                if (dlg.exec() == QDialog::Accepted)
-                    emit mapStructureChanged();
-            });
-    }
-    /* Every fixture of the same model and mode on the plot -- all the step
-       bars, all the XL-450s -- to patch, move or group together. */
-    {
-        const QString key = CreateFixtureGroup::fixtureModelKey(fxi);
-        QList<QPair<QString, quint32> > same;
-        for (auto it = m_fixtures.constBegin(); it != m_fixtures.constEnd(); ++it)
-            if (CreateFixtureGroup::fixtureModelKey(m_doc->fixture(it.key())) == key)
-                same << qMakePair(QStringLiteral("fixture"), it.key());
-        QAction *sa = menu->addAction(same.size() > 1 ? tr("Select All Similar (%1)").arg(same.size())
-                                                      : tr("Select All Similar"),
-                                      this, [this, same]() {
-            selectMapItems(same);
-            emit selectInLayersRequested(same);     // the ones buried on a truss too
-        });
-        sa->setEnabled(fxi != nullptr && same.size() > 1);
-    }
-    // Its own glass in the gobo wheels (a logo, a custom gobo).
-    if (GoboWheelsDialog::hasGoboWheels(fxi))
-        menu->addAction(tr("Gobo Wheels…"), this, [this, fid]() {
-            GoboWheelsDialog dlg(m_doc, fid, this);
-            if (dlg.exec() != QDialog::Accepted)
-                return;
-            // Every open rig view draws the new glass.
-            foreach (QWidget *w, QApplication::allWidgets())
-                if (StructureStudioView *sv = qobject_cast<StructureStudioView *>(w))
-                    sv->update();
-            emit mapStructureChanged();
-        });
+    /* What a fixture is and does -- Fixture Properties…, LED Layout…,
+       Locate, Patch…, Select All Similar, Gobo Wheels… -- is the canon's
+       fixture menu (ContextMenus::rig), added by buildItemMenu() under
+       these: what only the plot does with it. */
     /* Where this one lands, on its own -- no need to select it first, and it
        stays drawn while you look at something else. */
     {
@@ -9659,6 +9597,11 @@ void MonitorGraphicsView::populateItemMenu(QMenu *menu, const QString &kind, qui
     { mountKind = QStringLiteral("pipe"); mountId = b->id(); mountName = b->name(); }
     else if (Tower *tw = (rp.towerId != Tower::invalidId()) ? props->tower(rp.towerId) : nullptr)
     { mountKind = QStringLiteral("tower"); mountId = tw->id(); mountName = tw->name(); }
+    else if (StagePlatform *pl = rp.riserPlatformId != FixtureRigProps::invalidPlatformId()
+                                     ? props->platform(rp.riserPlatformId)
+                                 : rp.deckPlatformId != FixtureRigProps::invalidPlatformId()
+                                     ? props->platform(rp.deckPlatformId) : nullptr)
+    { mountKind = QStringLiteral("platform"); mountId = pl->id(); mountName = pl->name(); }
     if (!mountKind.isEmpty())
     {
         const QString label = mountName.isEmpty() ? itemNoun(mountKind) : mountName;
@@ -9735,9 +9678,6 @@ void MonitorGraphicsView::populateItemMenu(QMenu *menu, const QString &kind, qui
         });
     }
 
-    // Removing, last.
-    if (withRemoval)
-        addItemRemoval(menu, kind, fid);
 }
 
 quint32 MonitorGraphicsView::objectLayerId(const QString &kind, quint32 id, bool *found) const

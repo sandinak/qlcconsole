@@ -92,6 +92,11 @@ public:
      *  lists it, and loaded. False: no Build tab or no such
      *  function. */
     static bool openFunction(quint32 fid);
+    /** Open palette @a paletteId the same way: in the Look Editor, or an
+     *  effect in the effect designer, in Build's Workbench (the canon's Edit
+     *  Palette where a place has no editor of its own). False: no Build tab
+     *  or no such palette. */
+    static bool openPalette(quint32 paletteId);
 
     /** The Function Manager's tools, at home in Build ▸ Scenes: New
      *  function ▸ every type (⌘1…⌘9 as there), Function Wizard…, Startup
@@ -327,12 +332,16 @@ private:
      *  row is in it, otherwise the clicked row alone. */
     QList<quint32> paletteTreeTargetIds(QTreeWidgetItem *clicked) const;
     /** Open the Bundle editor pre-filled with @p paletteIds and save the result. */
+public:     // the canon's builders (contextmenus.cpp) use it
     void saveBundleFromPalettes(const QList<quint32> &paletteIds, Scene *sourceScene = nullptr);
+private:
     /** Chaser from selection: a new chaser of @a functionIds, loaded. */
     void makeChaserFrom(const QList<quint32> &functionIds, const QString &folder);
 
     /** Duplicate each function (smart-incremented name), select the last copy. */
+public:     // the canon's builders (contextmenus.cpp) use it
     void duplicateFunctions(const QList<quint32> &fids);
+private:
 
     /** The confirmation text for deleting palettes $pids: where each is used
      *  (scene looks, effect-look slots) and what deleting does to them. */
@@ -350,7 +359,9 @@ private:
     QString deleteFunctionsMessage(const QList<quint32> &fids) const;
     /** Delete each function after confirmation. Collects by id first, since the
      *  first deletion rebuilds the outline and invalidates every item pointer. */
+public:     // the canon's builders (contextmenus.cpp) use it
     void deleteFunctions(const QList<quint32> &fids);
+private:
     /** Delete $fids (no question) as one step on the shared history: Undo
      *  brings them back with their ids, in every collection, chaser, show,
      *  VC button and cue list that had them. */

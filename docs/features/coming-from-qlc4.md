@@ -131,7 +131,7 @@ shows in the Classic view**.
   Tree cue lists. It shows the plan first, checks that each cue puts out
   what its step did (**Plays the same**), moves what fired the chaser
   (VC buttons, cue lists, the main cue list) to the new list, and keeps
-  the original for **Restore original…**. One undo step. See
+  the original for **Restore Original…**. One undo step. See
   [Upgrade this show](show-tree.md#upgrade-this-show).
 - The course's Level 1 is a self-study path through the Show Tree, on a
   practice show that is never connected to lights:
@@ -245,7 +245,7 @@ what made them: the Simple Desk, a fader or a cue. In the dialog:
 - **Add to**: also put the new scene on a chaser, or on a new VC button
   or slider.
 
-In the Show Tree, **Record as new cue** does the same into a cue list,
+In the Show Tree, **Record as New Cue** does the same into a cue list,
 as palettes and layers rather than raw values. Dump is for when you've
 set the stage by hand and want to keep it as it is.
 

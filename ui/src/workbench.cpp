@@ -192,6 +192,7 @@ Workbench::Workbench(Doc *doc, QWidget *parent)
     connect(m_rows, &ProgrammingOutline::refineRequested, this,
             [this](quint32 scene, quint32 group, quint32 fixture) { openRefine(scene, group, fixture); });
     connect(m_rows, &ProgrammingOutline::revealPaletteRequested, this, &Workbench::revealPaletteRequested);
+    connect(m_rows, &ProgrammingOutline::editPaletteRequested, this, &Workbench::editPalette);
     connect(m_rows, &ProgrammingOutline::hintChanged, this, [this, rowsWhat](const QString &text) {
         m_rowsHint->setText(text.isEmpty() ? rowsWhat : text);
         m_rowsHint->setStyleSheet(text.isEmpty() ? QStringLiteral("QLabel { font-style: italic; }")

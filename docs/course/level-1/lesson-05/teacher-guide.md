@@ -138,7 +138,7 @@ keep their numbers. Dragged onto the lower half of 1.0.4 Solo it becomes
 **1.0.5**: a list plays in number order, so a cue's place and its number
 move together. Worth saying out loud: real shows are full of point cues,
 because once the SM's script or QLab has the numbers, nobody renumbers.
-**Renumber this level…** (right-click a cue) is for tidying a list before
+**Renumber This Level…** (right-click a cue) is for tidying a list before
 that. It lists every number that changes before you press OK; *Start* is
 where the count begins (Start 1 makes 1.0.0 into 1.0.1).
 

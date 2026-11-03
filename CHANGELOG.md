@@ -51,6 +51,18 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   "Pick Screen Color" button over the Wheel / ring row.** Narrow, the
   sliders drop under the picker; smaller still, the page scrolls.
 
+### Changed
+
+- **Right-click menus: this place's own on top, then the thing's own
+  menu, the same everywhere.** A palette right-clicked on a cue's look row
+  or in the Workbench now offers everything Build and the Library do (Edit
+  Palette, Used By ▸, Move to Folder ▸, Save as Bundle…, Duplicate, Rename,
+  Delete Palette…) under its row's Set to ▸ / None / Clear. Functions, Show
+  Tree cues, lists and layers, fixtures on the plot and in the studio
+  editors, and stage targets and structures (Used By ▸ for a target) each
+  have one menu in one order, in Title Case
+  ([CONTEXT_MENUS.md](docs/design/CONTEXT_MENUS.md)).
+
 ## [0.4.0] - 2026-11-02
 
 qlcconsole 0.4.0 carries the 0.3.1 polish, all of 0.4 ("Run the show") and

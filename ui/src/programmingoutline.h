@@ -202,6 +202,8 @@ signals:
      *  (Stack mode): the scene, and the group or fixture (invalid: none). */
     void refineRequested(quint32 sceneId, quint32 groupId, quint32 fixtureId);
     void revealPaletteRequested(quint32 paletteId);
+    /** Edit Palette on a look row (Stack mode): in the Workbench's Look Editor. */
+    void editPaletteRequested(quint32 paletteId);
     /** Chaser from selection: @a functionIds as its steps, in @a folder. */
     void chaserRequested(const QList<quint32> &functionIds, const QString &folder);
     /** Send to Show Tree… on a chaser row. */

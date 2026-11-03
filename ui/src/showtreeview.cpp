@@ -5305,12 +5305,20 @@ void ShowTreeView::attributeMenu(quint32 cueId, quint32 layerId, const Target &t
                                  const Target &rowTarget, const QString &key, const QPoint &globalPos)
 {
     QMenu menu(this);
+    fillAttributeMenu(&menu, cueId, layerId, target, rowTarget, key);
+    menu.exec(globalPos);
+}
+
+void ShowTreeView::fillAttributeMenu(QMenu *out, quint32 cueId, quint32 layerId, const Target &target,
+                                     const Target &rowTarget, const QString &key)
+{
+    QMenu &menu = *out;
     // A value set in an earlier cue (tracked, included, the base): D22 --
     // set it here, or update it where it was set so the change tracks on.
     const QString source = (key == QLatin1String("Effect.") || rowTarget.isEmpty())
                            ? QString() : updateSourceLabel(cueId, rowTarget, key);
     // Set to: the palettes of this kind, recent ones first.
-    QMenu *set = menu.addMenu(source.isEmpty() ? tr("Set to") : tr("Set in this cue"));
+    QMenu *set = menu.addMenu(source.isEmpty() ? tr("Set to") : tr("Set in This Cue"));
     QList<QLCPalette *> pals;
     for (QLCPalette *p : m_doc->palettes())
     {
@@ -5339,7 +5347,7 @@ void ShowTreeView::attributeMenu(quint32 cueId, quint32 layerId, const Target &t
     set->setEnabled(!pals.isEmpty());
     if (!source.isEmpty())
     {
-        QMenu *upd = menu.addMenu(tr("Update cue %1").arg(source));
+        QMenu *upd = menu.addMenu(tr("Update Cue %1").arg(source));
         upd->setObjectName("stUpdateSource");
         upd->setToolTipsVisible(true);
         for (QLCPalette *p : pals)
@@ -5365,21 +5373,11 @@ void ShowTreeView::attributeMenu(quint32 cueId, quint32 layerId, const Target &t
         // In detail, on just this layer's heads (W4).
         // On the Effect row: a new one, beside the effects there (a movement
         // and an intensity effect together); on an effect's row: that one.
-        menu.addAction(key == QLatin1String("Effect.") ? tr("Design a new effect…") : tr("Design effect…"),
+        menu.addAction(key == QLatin1String("Effect.") ? tr("Design a New Effect…") : tr("Design Effect…"),
                        this, [this, cueId, layerId, rowTarget, key]() {
             EffectLayerDialog::design(m_doc, this, cueId, layerId, rowTarget, key);
         })->setObjectName("stDesignEffect");
-        // How that effect runs: Loop | Once | N times, Hold | Release.
-        if (key != QLatin1String("Effect."))
-            if (const CueList *list = m_st->listOfCue(cueId))
-            {
-                const QList<ResolvedCue> r = m_st->resolved(*list);
-                const int at = list->indexOf(cueId);
-                const ResolvedLayer *rl = at >= 0 && at < r.size() ? r.at(at).layer(rowTarget) : nullptr;
-                if (rl != nullptr && rl->values.contains(key))
-                    EffectRunsMenu::add(&menu, m_doc, rl->values.value(key).look.palettes, this);
-            }
-        menu.addSeparator();
+        // How that effect runs (Runs ▸) is the effect palette's own, below.
     }
     if (key == KeyDimmer)
     {
@@ -5431,7 +5429,7 @@ void ShowTreeView::attributeMenu(quint32 cueId, quint32 layerId, const Target &t
     if (isEffectKey(key) && key != QLatin1String("Effect."))
     {
         // The effect's own Colour/Dimmer (inside that effect only, §2).
-        QMenu *own = menu.addMenu(tr("Its own colour / dimmer"));
+        QMenu *own = menu.addMenu(tr("Its Own Colour / Dimmer"));
         QList<QLCPalette *> owners;
         for (QLCPalette *p : m_doc->palettes())
             if ((p->type() == QLCPalette::Color || p->type() == QLCPalette::Dimmer)
@@ -5458,7 +5456,7 @@ void ShowTreeView::attributeMenu(quint32 cueId, quint32 layerId, const Target &t
         Look here;
         if (effectLookHere(cueId, layerId, key, target, &here))
         {
-            QMenu *fades = menu.addMenu(tr("Fade in / out"));
+            QMenu *fades = menu.addMenu(tr("Fade In / Out"));
             fades->setObjectName("stEffectFades");
             fades->setToolTipsVisible(true);
             const bool follow = here.fadeIn == Look::FadeFollowCue && here.fadeOut == Look::FadeFollowCue;
@@ -5520,7 +5518,21 @@ void ShowTreeView::attributeMenu(quint32 cueId, quint32 layerId, const Target &t
                 clearAttribute(cueId, layerId, key);
             });
     }
-    menu.exec(globalPos);
+    // This place's own on top; then the menu of the palette set here, as in
+    // Build, the Library and the Workbench (ContextMenus::palette).
+    ContextMenu::fileAsPlace(&menu);
+    ContextMenu cm(&menu);
+    if (!rowTarget.isEmpty() && key != QLatin1String("Effect."))
+        if (const CueList *list = m_st->listOfCue(cueId))
+        {
+            const QList<ResolvedCue> r = m_st->resolved(*list);
+            const int at = list->indexOf(cueId);
+            const ResolvedLayer *rl = at >= 0 && at < r.size() ? r.at(at).layer(rowTarget) : nullptr;
+            if (rl != nullptr && rl->values.contains(key))
+                ContextMenus::palette(cm, m_doc, rl->values.value(key).look.palettes, paletteMenuPlace());
+        }
+    cm.finish();
+    menu.setToolTipsVisible(true);
 }
 
 bool ShowTreeView::isMulti(quint32 cueId, quint32 layerId) const
@@ -7676,84 +7688,465 @@ void ShowTreeView::slotTreeContextMenu(const QPoint &pos)
 {
     QTreeWidgetItem *item = m_tree->itemAt(pos);
     QMenu menu(this);
-    // + Production where it applies: on a production, or on empty space (Q93).
-    if (item == nullptr || item->data(0, KindRole).toInt() == ProductionNode)
-        menu.addAction(tr("+ Production…"), this, &ShowTreeView::slotNewProduction);
-    // Q154: a hit for everywhere lives at the top of the tree.
-    if (item == nullptr && !m_st->productions().isEmpty())
-        menu.addAction(tr("+ Hit for everywhere"), this, [this]() { newHit(true); })
-            ->setObjectName("stNewGlobalHit");
-    if (item != nullptr)
+    fillTreeMenu(&menu, item);
+    if (!menu.isEmpty())
+        menu.exec(m_tree->viewport()->mapToGlobal(pos));
+}
+
+/* A layer's own menu (the canon's kind block, docs/design/CONTEXT_MENUS.md):
+   the same in the tree and on the Workbench's layer row. @a layerId invalid:
+   a layer carried into the cue (@a tracked its target). */
+void ShowTreeView::fillLayerMenu(ContextMenu &menu, quint32 cueId, quint32 layerId, const Target &tracked,
+                                 const LayerMenuPlace &place)
+{
+    const Cue *cue = m_st->cue(cueId);
+    const CueList *list = m_st->listOfCue(cueId);
+    const Layer *own = (cue != nullptr && layerId != invalidId()) ? cue->layer(layerId) : nullptr;
+    if (cue == nullptr || (own == nullptr && tracked.isEmpty()))
+        return;
+    const Target t = own != nullptr ? own->target : tracked;
+    const bool design = m_doc->mode() == Doc::Design;
+
+    /* ---- 1. Open: a function played as it is in its own editor (W0: first),
+       the layer in the Workbench ---- */
+    const quint32 fid = t.isOpaque() ? t.function : invalidId();
+    const Function *f = m_doc->function(fid);
+    if (f != nullptr)
+        menu.add(ContextMenu::Open, tr("Open “%1”…").arg(f->name()), [this, fid]() { openFunction(fid); },
+                 QStringLiteral("stOpenFunction"))
+            ->setToolTip(tr("In the Workbench, in its own editor (↩ comes back)"));
+    if (place.open)
+        menu.add(ContextMenu::Open, tr("Open in Workbench"), place.open, QStringLiteral("ctxOpenLayer"))
+            ->setToolTip(tr("The cue in the Workbench, on this layer"));
+    if (f != nullptr)
     {
-        // A right-click in a selection keeps it (Merge works on it).
-        if (item->isSelected())
-            m_tree->setCurrentItem(item, 0, QItemSelectionModel::NoUpdate);
-        else
-            m_tree->setCurrentItem(item, 0, kSelectOnly);
-        const int kind = item->data(0, KindRole).toInt();
-        const bool inLooks = selectionInLooks();
-        menu.addAction(tr("+ Cue list…"), this, &ShowTreeView::slotNewCueList);
-        // R3: busking looks, beside the cue lists; Q154: made where it is
-        // to fire -- for this cue, this list, the production.
+        // W5: a raw scene can become palettes.
+        const Scene *raw = qobject_cast<const Scene *>(f);
+        if (raw != nullptr && !raw->values().isEmpty())
         {
-            const bool onCue = (kind == CueNode || kind == LayerNode || kind == TrackedLayerNode) && !inLooks;
-            const bool onList = (kind == ListNode || kind == SectionNode) && !inLooks;
-            menu.addAction(onCue ? tr("+ Hit for this cue") : onList ? tr("+ Hit for this list") : tr("+ Hit"),
-                           this, [this]() { newHit(); })->setObjectName("stNewLook");
+            const ShowTreeController::CapturePlan plan = m_st->planCapture(fid);
+            QAction *cap = menu.add(ContextMenu::Kind, tr("Capture into Palettes…"),
+                                    [this, fid]() { captureIntoPalettes(fid); }, QStringLiteral("stCaptureLayer"));
+            cap->setEnabled(plan.ok && design);
+            cap->setToolTip(plan.ok ? tr("Its values as layers of palettes, checked channel for channel; the "
+                                         "scene is kept")
+                                    : plan.why);
         }
-        if (kind != ProductionNode && !inLooks)
-            menu.addAction(tr("+ Cue"), this, &ShowTreeView::slotNewCue);
-        if ((kind == CueNode || kind == LayerNode || kind == TrackedLayerNode) && !inLooks)
-            menu.addAction(tr("+ Sub-cue"), this, [this]() { newSubCue(); })->setObjectName("stNewSubCueMenu");
-        // 0.4: a sub-cue becomes a cue of the list, a cue a sub-cue of the
-        // one before; every step plays as before. Design mode only.
-        if (kind == CueNode && !inLooks)
+    }
+
+    /* ---- 2. What a layer does ---- */
+    if (list != nullptr && !list->looks)
+    {
+        QAction *rel = menu.add(ContextMenu::Kind, tr("Release (Leaving This Cue)"), std::function<void()>(),
+                                QStringLiteral("stLayerReleaseMenu"));
+        rel->setCheckable(true);
+        rel->setChecked(own != nullptr && own->release);
+        rel->setToolTip(tr("Leaving this cue, the layer goes back to the base cue (else dark): set it "
+                           "on the last cue it should play in"));
+        connect(rel, &QAction::toggled, this, [this, cueId, layerId, t](bool on) {
+            setLayerReleaseIn(cueId, layerId, layerId == invalidId() ? t : Target(), on);
+        });
+    }
+    // "Why is this on?" about the layer's first light.
+    const QList<quint32> lit = t.isEmpty() || t.isOpaque() ? QList<quint32>() : m_st->targetFixtures(t);
+    if (!lit.isEmpty())
+    {
+        const quint32 first = lit.first();
+        menu.add(ContextMenu::Kind, WhyOnPanel::actionText(), [this, first]() {
+            WhyOnPanel::showFor(m_doc, first, 0xFFFFFFFF, this, QCursor::pos());
+        }, QStringLiteral("stWhyOn"));
+    }
+    if (own != nullptr)
+    {
+        if (!own->target.isOpaque())
         {
-            const quint32 cueId = item->data(0, IdRole).toUInt();
-            const CueList *l = m_st->listOfCue(cueId);
-            QAction *convert = nullptr;
-            if (m_st->isSubCue(cueId))
-                convert = menu.addAction(tr("Make Inline Cue"), this, [this]() { convertSelectedCues(true); });
-            else if (l != nullptr && l->indexOf(cueId) > 0)
-                convert = menu.addAction(tr("Make Sub-cue of %1").arg(m_st->cueNumber(*l, l->indexOf(cueId) - 1)),
-                                         this, [this]() { convertSelectedCues(false); });
-            if (convert != nullptr)
+            const Target dt = own->target;
+            menu.add(ContextMenu::Kind, tr("Design Effect…"), [this, cueId, layerId, dt]() {
+                EffectLayerDialog::design(m_doc, this, cueId, layerId, dt);
+            }, QStringLiteral("stDesignEffectLayer"));
+        }
+        /* Focus this cue (docs/design/FOCUS_REFINE_DESIGN.md): this cue's own
+           values from the stage, on the controller, starting on this layer. */
+        QAction *refine = menu.add(ContextMenu::Kind, tr("Focus This Cue…"), [this, cueId, layerId]() {
+            RefinePanel::open(m_doc, window(), cueId, layerId);
+        }, QStringLiteral("stRefineLayer"));
+        FocusMenu::setAvailable(refine, FocusMenu::focusCueBlocked(m_doc),
+                                tr("Move, zoom, focus and recolour this cue from the stage with the "
+                                   "controller: the layer as a whole, or one fixture as an exception"));
+        QAction *split = menu.add(ContextMenu::Kind, tr("Split Layer (One per Group)"), [this, cueId, layerId]() {
+            QString why;
+            if (!splitLayer(cueId, layerId, &why))
+                QMessageBox::information(this, tr("Split layer"), why);
+        }, QStringLiteral("stSplitLayer"));
+        split->setEnabled(own->pieces().count() > 1);
+        split->setToolTip(tr("One layer per group (and one on its fixtures), each with these looks; "
+                             "it keeps tracking as before"));
+        // A child layer (§3.5) on part of it: a member of its set, a group
+        // inside it, or what the Library has selected.
+        if (!own->target.isOpaque())
+        {
+            QMenu *childMenu = menu.addMenu(ContextMenu::Kind, tr("Add Child Layer"), QStringLiteral("stAddChild"));
+            QList<FixtureGroup *> inside;
+            for (FixtureGroup *g : m_doc->fixtureGroups())
             {
-                convert->setObjectName(m_st->isSubCue(cueId) ? "stMakeInlineCueMenu" : "stMakeSubCueMenu");
-                convert->setEnabled(m_doc->mode() == Doc::Design);
+                Target gt;
+                gt.groups << g->id();
+                if (!(gt == own->target) && m_st->targetContains(own->target, gt))
+                    inside << g;
             }
-        }
-        if (kind == CueNode || kind == LayerNode || kind == TrackedLayerNode)
-            menu.addAction(tr("Open in Workbench"), this, [this]() { openSelectionInWorkbench(); })
-                ->setObjectName("stOpenWorkbenchMenu");
-        if (inLooks && kind != CueNode && kind != LayerNode)
-        {
-            const quint32 listId = currentListId();
-            const QString folder = currentLookFolder();
-            menu.addAction(tr("New folder…"), this, [this, listId, folder]() {
-                bool ok = false;
-                const QString n = QInputDialog::getText(this, tr("New folder"), tr("Folder name"), QLineEdit::Normal,
-                                                        QString(), &ok);
-                if (ok && !n.trimmed().isEmpty())
-                    m_st->addLookFolder(listId, folder.isEmpty() ? n.trimmed() : folder + QLatin1Char('/') + n.trimmed());
-            })->setObjectName("stNewLookFolder");
-            if (kind == LookFolderNode)
+            std::sort(inside.begin(), inside.end(), [](const FixtureGroup *a, const FixtureGroup *b) {
+                return a->name().compare(b->name(), Qt::CaseInsensitive) < 0;
+            });
+            for (FixtureGroup *g : inside)
             {
-                menu.addAction(tr("Rename folder"), this, [this]() { startRename(); });
-                menu.addAction(tr("Delete folder (its hits move up)"), this, [this, listId, folder]() {
-                    m_st->removeLookFolder(listId, folder);
+                const quint32 gid = g->id();
+                childMenu->addAction(g->name(), this, [this, cueId, layerId, gid]() {
+                    QString why;
+                    if (!dropChildLayers(cueId, layerId, { gid }, {}, {}, false, &why))
+                        QMessageBox::information(this, tr("Add child layer"), why);
                 });
             }
-            menu.addAction(tr("Make VC page"), this, [this, listId, folder]() {
+            childMenu->addSeparator();
+            childMenu->addAction(tr("The Library's selection"), this, [this, cueId, layerId]() {
+                QList<quint32> groups, fixtures, sets;
+                for (QTreeWidgetItem *it : m_library->selectedItems())
+                {
+                    const int k = it->data(0, KindRole).toInt();
+                    const quint32 id = it->data(0, IdRole).toUInt();
+                    if (k == LibGroup && !groups.contains(id))
+                        groups << id;
+                    else if (k == LibFixture && !fixtures.contains(id))
+                        fixtures << id;
+                    else if (k == LibSet && !sets.contains(id))
+                        sets << id;
+                }
+                QString why = tr("Select groups in the Library first.");
+                if (!dropChildLayers(cueId, layerId, groups, fixtures, sets, false, &why))
+                    QMessageBox::information(this, tr("Add child layer"), why);
+            });
+        }
+        // A layer on several groups can lose one (never its last).
+        if (!own->target.isOpaque() && own->target.groups.count() + own->target.fixtures.count() > 1)
+        {
+            QMenu *from = menu.addMenu(ContextMenu::Kind, tr("Remove from Layer"), QStringLiteral("stRemoveFromLayer"));
+            for (quint32 g : own->target.groups)
+            {
+                Target one;
+                one.groups << g;
+                from->addAction(m_st->targetLabel(one), this, [this, cueId, layerId, g]() {
+                    m_st->removeGroupFromLayer(cueId, layerId, g);
+                });
+            }
+            for (quint32 f : own->target.fixtures)
+            {
+                Target one;
+                one.fixtures << f;
+                from->addAction(m_st->targetLabel(one), this, [this, cueId, layerId, f]() {
+                    m_st->removeFixtureFromLayer(cueId, layerId, f);
+                });
+            }
+        }
+        menu.add(ContextMenu::Kind, tr("Detach to Plain Scene"), [this, cueId, layerId]() {
+            m_st->detachLayer(cueId, layerId);
+        }, QStringLiteral("stDetachLayer"));
+        {
+            // PWR-12: I meant it, taken back.
+            QMenu *staging = new QMenu(menu.menu());
+            backwashLayerMenu(staging, cueId, layerId);
+            for (QAction *a : staging->actions())
+                menu.add(ContextMenu::Kind, a);
+        }
+
+        /* ---- 4. Reusable, or this use unlinked (P4) ---- */
+        if (own->reusable != invalidId())
+            menu.add(ContextMenu::Organise, tr("Unlink Here (a Copy of Its Own)"), [this, cueId, layerId]() {
+                m_st->unlinkLayer(cueId, layerId);
+            }, QStringLiteral("stUnlinkLayer"));
+        else if (own->parent == invalidId() && cue->reusable == invalidId())
+            menu.add(ContextMenu::Organise, tr("Make Reusable…"), [this, cueId, layerId]() {
+                selectNode(layerId, cueId);
+                reuseLinkActivated(QStringLiteral("make"));
+            }, QStringLiteral("stMakeLayerReusable"));
+
+        /* ---- 7. Clipboard, a copy, its name ---- */
+        if (place.cut)
+            menu.add(ContextMenu::Edit, tr("Cut"), place.cut, QStringLiteral("stCutLayer"))
+                ->setShortcut(QKeySequence::Cut);
+        if (place.copy)
+            menu.add(ContextMenu::Edit, tr("Copy"), place.copy, QStringLiteral("stCopyLayer"))
+                ->setShortcut(QKeySequence::Copy);
+        if (place.paste)
+        {
+            const bool cueClip = !m_commander->clipboard.cues.isEmpty();
+            QAction *paste = menu.add(ContextMenu::Edit,
+                                      cueClip ? tr("Paste After This Cue")
+                                              : (m_commander->clipboard.cut ? tr("Move Here, After This Layer")
+                                                                            : tr("Paste After This Layer")),
+                                      place.paste, QStringLiteral("stPasteHere"));
+            paste->setShortcut(QKeySequence::Paste);
+            paste->setEnabled(!m_commander->clipboard.isEmpty());
+        }
+        if (place.duplicate)
+            menu.add(ContextMenu::Edit, tr("Duplicate"), place.duplicate, QStringLiteral("stDuplicateLayer"))
+                ->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_D));
+        const QString name = own->name;
+        menu.add(ContextMenu::Edit, tr("Rename…"), [this, layerId, name]() {
+            bool ok = false;
+            const QString n = QInputDialog::getText(this, tr("Rename layer"), tr("Name"),
+                                                    QLineEdit::Normal, name, &ok);
+            if (ok)
+                m_st->renameNode(layerId, n.trimmed());
+        }, QStringLiteral("stRenameLayer"));
+
+        /* ---- 8. Delete, last ---- */
+        if (place.remove)
+            menu.add(ContextMenu::Remove, tr("Delete Layer"), place.remove, QStringLiteral("stDeleteLayer"))
+                ->setToolTip(tr("Take it out of this cue (one undo step)"));
+    }
+}
+
+/* The tree's right-click (laid out by the canon, docs/design/CONTEXT_MENUS.md):
+   what this place makes -- + Cue, + Hit, + Sub-cue -- on top, then the
+   clicked node's own menu: a cue, a hit, a layer, a cue list, a production. */
+void ShowTreeView::fillTreeMenu(QMenu *out, QTreeWidgetItem *item)
+{
+    ContextMenu menu(out);
+    out->setToolTipsVisible(true);
+    // + Production where it applies: on a production, or on empty space (Q93).
+    if (item == nullptr || item->data(0, KindRole).toInt() == ProductionNode)
+        menu.add(ContextMenu::Place, tr("+ Production…"), [this]() { slotNewProduction(); });
+    // Q154: a hit for everywhere lives at the top of the tree.
+    if (item == nullptr && !m_st->productions().isEmpty())
+        menu.add(ContextMenu::Place, tr("+ Hit for Everywhere"), [this]() { newHit(true); },
+                 QStringLiteral("stNewGlobalHit"));
+    if (item == nullptr)
+        return;
+
+    // A right-click in a selection keeps it (Merge works on it).
+    if (item->isSelected())
+        m_tree->setCurrentItem(item, 0, QItemSelectionModel::NoUpdate);
+    else
+        m_tree->setCurrentItem(item, 0, kSelectOnly);
+    const int kind = item->data(0, KindRole).toInt();
+    const bool inLooks = selectionInLooks();
+    const quint32 id = item->data(0, IdRole).toUInt();
+    const bool design = m_doc->mode() == Doc::Design;
+
+    /* ---- This place: what can be made here ---- */
+    menu.add(ContextMenu::Place, tr("+ Cue List…"), [this]() { slotNewCueList(); });
+    {
+        // R3: busking hits, beside the cue lists; Q154: made where it is to
+        // fire -- for this cue, this list, the production.
+        const bool onCue = (kind == CueNode || kind == LayerNode || kind == TrackedLayerNode) && !inLooks;
+        const bool onList = (kind == ListNode || kind == SectionNode) && !inLooks;
+        menu.add(ContextMenu::Place, onCue ? tr("+ Hit for This Cue") : onList ? tr("+ Hit for This List")
+                                                                               : tr("+ Hit"),
+                 [this]() { newHit(); }, QStringLiteral("stNewLook"));
+    }
+    if (kind != ProductionNode && !inLooks)
+        menu.add(ContextMenu::Place, tr("+ Cue"), [this]() { slotNewCue(); });
+    if ((kind == CueNode || kind == LayerNode || kind == TrackedLayerNode) && !inLooks)
+        menu.add(ContextMenu::Place, tr("+ Sub-cue"), [this]() { newSubCue(); }, QStringLiteral("stNewSubCueMenu"));
+    if (inLooks && kind != CueNode && kind != LayerNode)
+    {
+        const quint32 listId = currentListId();
+        const QString folder = currentLookFolder();
+        menu.add(ContextMenu::Place, tr("New Folder…"), [this, listId, folder]() {
+            bool ok = false;
+            const QString n = QInputDialog::getText(this, tr("New folder"), tr("Folder name"), QLineEdit::Normal,
+                                                    QString(), &ok);
+            if (ok && !n.trimmed().isEmpty())
+                m_st->addLookFolder(listId, folder.isEmpty() ? n.trimmed() : folder + QLatin1Char('/') + n.trimmed());
+        }, QStringLiteral("stNewLookFolder"));
+    }
+    // Several layers: the edits act on all of them, one step each.
+    const QList<QPair<quint32, quint32>> selRefs = selectedLayerRefs();
+    if (kind == LayerNode && selRefs.count() > 1 && item->isSelected())
+    {
+        QMenu *several = menu.addMenu(ContextMenu::Place, tr("%1 Selected Layers").arg(selRefs.count()),
+                                      QStringLiteral("stSeveralLayers"));
+        several->addAction(tr("Release on"), this, [this]() { setReleaseOnSelected(true); });
+        several->addAction(tr("Release off"), this, [this]() { setReleaseOnSelected(false); });
+        QMenu *set = several->addMenu(tr("Set look"));
+        QMenu *clear = several->addMenu(tr("Clear look"));
+        const QPair<quint32, quint32> cur(item->data(0, CueRole).toUInt(), id);
+        QHash<QString, QMenu *> kinds;
+        QList<QLCPalette *> pals = m_doc->palettes();
+        std::sort(pals.begin(), pals.end(), [](const QLCPalette *a, const QLCPalette *b) {
+            return a->name().compare(b->name(), Qt::CaseInsensitive) < 0;
+        });
+        for (const QString &k : attributeKeys())
+        {
+            kinds.insert(k, set->addMenu(keyLabel(k)));
+            clear->addAction(keyLabel(k), this, [this, cur, k]() {
+                m_multi = selectedLayerRefs();
+                clearAttribute(cur.first, cur.second, k);
+            });
+        }
+        for (QLCPalette *p : pals)
+        {
+            if (m_st->isInlinePalette(p->id()))
+                continue;
+            QMenu *m = kinds.value(m_st->keyForPalette(p->id()));
+            if (m == nullptr)
+                continue;
+            const quint32 pid = p->id();
+            m->addAction(p->name(), this, [this, cur, pid]() {
+                m_multi = selectedLayerRefs();
+                dropPalettes(cur.first, cur.second, { pid });
+            });
+        }
+        several->addAction(tr("Split each (one layer per group)"), this, [this, selRefs]() {
+            m_st->beginBatch(tr("Split %1 layers").arg(selRefs.count()));
+            bool any = false;
+            for (const QPair<quint32, quint32> &ref : selRefs)
+                any |= m_st->splitLayer(ref.first, ref.second);
+            m_st->endBatch(any);
+        });
+    }
+    if (kind == LayerNode)
+    {
+        // Merge works on the layers selected in the tree.
+        quint32 selCue = invalidId();
+        const QList<quint32> sel = selectedLayers(&selCue);
+        QAction *merge = menu.add(ContextMenu::Place, sel.count() > 1 ? tr("Merge %1 Layers").arg(sel.count())
+                                                                      : tr("Merge Layers (Select Several)"),
+                                  [this, selCue, sel]() {
+            QString why;
+            if (mergeLayers(selCue, sel, &why) == invalidId())
+                QMessageBox::information(this, tr("Merge layers"), why);
+        }, QStringLiteral("stMergeLayers"));
+        merge->setEnabled(sel.count() > 1);
+    }
+
+    /* ---- The node's own menu ---- */
+    // Fire it from a MIDI or OSC control (the Control Map): GO on a list, a
+    // jump to a cue, a hit. Not on a sub-cue: its cue's GO plays it.
+    auto learn = [this, &menu](const ControlMap::Target &target) {
+        QMenu *staging = new QMenu(menu.menu());
+        if (QAction *a = ControlLearnDialog::addTo(staging, m_doc, target, this))
+            menu.add(ContextMenu::Kind, a);
+    };
+    if (kind == LayerNode || kind == TrackedLayerNode)
+    {
+        const quint32 cueId = item->data(0, CueRole).toUInt();
+        const Target tracked = kind == TrackedLayerNode
+                               ? carriedTarget(cueId, item->data(0, TargetRole).toString()) : Target();
+        LayerMenuPlace place;
+        place.open = [this]() { openSelectionInWorkbench(); };
+        if (kind == LayerNode)
+        {
+            place.cut = [this]() { cutSelection(); };
+            place.copy = [this]() { copySelection(); };
+            place.paste = [this]() { pasteClipboard(); };
+            place.duplicate = [this]() { duplicateSelection(); };
+            place.remove = [this]() { slotDelete(); };
+        }
+        fillLayerMenu(menu, cueId, kind == LayerNode ? id : invalidId(), tracked, place);
+        return;
+    }
+    if (kind == CueNode)
+    {
+        const quint32 cueId = id;
+        const CueList *list = m_st->listOfCue(cueId);
+        const int at = list == nullptr ? -1 : list->indexOf(cueId);
+        QList<quint32> cues = item->isSelected() ? selectedCues() : QList<quint32>();
+        if (!cues.contains(cueId))
+            cues = { cueId };
+        const QString what = cues.count() == 1 ? QString() : tr(" (%1 Cues)").arg(cues.count());
+        const bool hit = inLooks;
+        const bool sub = m_st->isSubCue(cueId);
+
+        menu.add(ContextMenu::Open, tr("Open in Workbench"), [this]() { openSelectionInWorkbench(); },
+                 QStringLiteral("stOpenWorkbenchMenu"));
+        if (list != nullptr && !list->isSubCues())
+            learn(list->looks ? ControlMap::hit(cueId) : ControlMap::cue(cueId));
+        if (!hit && list != nullptr)
+        {
+            // Skip cue / Unskip cue: the selected cues (all skipped: Unskip).
+            bool skipped = true;
+            for (quint32 c : cues)
+                skipped = skipped && m_st->isCueSkipped(c);
+            QAction *sk = menu.add(ContextMenu::Kind, (skipped ? tr("Unskip Cue") : tr("Skip Cue")) + what,
+                                   [this, cues, skipped]() { setCuesSkipped(cues, !skipped); },
+                                   QStringLiteral("stSkipCue"));
+            sk->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Slash));
+            sk->setToolTip(skipped ? tr("GO plays it again")
+                                   : tr("GO, auto-follow and Back pass over it; a jump still plays it"));
+            // Q38: Don't move in black into this cue (the selected cues).
+            const bool no = list->cue(cueId)->noMoveInBlack;
+            QAction *nm = menu.add(ContextMenu::Kind, tr("Don't Move in Black into This Cue") + what,
+                                   [this, cues, no]() { m_st->setCuesNoMoveInBlack(cues, !no); },
+                                   QStringLiteral("stCueNoMib"));
+            nm->setCheckable(true);
+            nm->setChecked(no);
+            // Mode ▸ Track / Block / Cue-only (the selected cues).
+            if (!list->isSubCues())
+                cueModeMenu(menu.addMenu(ContextMenu::Kind, cues.count() == 1 ? tr("Mode")
+                                                                              : tr("Mode (%1 Cues)").arg(cues.count()),
+                                         QStringLiteral("stCueModeMenu")), cues);
+        }
+        // Colour ▸: the selected cues' text.
+        colourMenu(menu.addMenu(ContextMenu::Kind, cues.count() == 1 ? tr("Colour")
+                                                                     : tr("Colour (%1 Cues)").arg(cues.count()),
+                                QStringLiteral("stColourMenu")), cues);
+        if (!hit && list != nullptr)
+        {
+            menu.add(ContextMenu::Kind, tr("Record as New Cue"), [this, cueId]() { recordFrom(cueId); },
+                     QStringLiteral("stRecordAsNew"));
+            menu.add(ContextMenu::Kind, tr("Copy to a Hit"), [this, cueId]() {
+                const quint32 made = m_st->copyCueToLook(cueId);
+                if (made != invalidId())
+                    selectNode(made);
+            }, QStringLiteral("stCopyToLook"));
+            menu.add(ContextMenu::Kind, tr("Renumber This Level…"), [this, cueId]() { renumberLevel(cueId); },
+                     QStringLiteral("stRenumberLevel"));
+            QMenu *staging = new QMenu(menu.menu());
+            timecodeMenu(staging, cueId);     // Q198: only on a list that follows timecode
+            for (QAction *a : staging->actions())
+                menu.add(ContextMenu::Kind, a);
+        }
+        if (hit && list != nullptr)
+        {
+            const QString folder = m_st->cue(cueId) == nullptr ? QString() : m_st->cue(cueId)->folder;
+            const quint32 listId = list->id;
+            menu.add(ContextMenu::Kind, tr("Make VC Page"), [this, listId, folder]() {
                 QString msg;
                 makeVcPage(listId, folder, &msg);
                 m_hint->setText(msg);
-            })->setObjectName("stMakeVcPageMenu");
+            }, QStringLiteral("stMakeVcPageMenu"));
         }
-        if (kind == CueNode && inLooks)
+
+        /* ---- 4. Where it sits, what it is made of ---- */
+        if (!hit)
         {
-            const quint32 cueId = item->data(0, IdRole).toUInt();
-            const CueList *list = m_st->listOfCue(cueId);
+            // 0.4: a sub-cue becomes a cue of the list, a cue a sub-cue of the
+            // one before; every step plays as before. Design mode only.
+            QAction *convert = nullptr;
+            if (sub)
+                convert = menu.add(ContextMenu::Organise, tr("Make Inline Cue"),
+                                   [this]() { convertSelectedCues(true); }, QStringLiteral("stMakeInlineCueMenu"));
+            else if (list != nullptr && at > 0)
+                convert = menu.add(ContextMenu::Organise,
+                                   tr("Make Sub-cue of %1").arg(m_st->cueNumber(*list, at - 1)),
+                                   [this]() { convertSelectedCues(false); }, QStringLiteral("stMakeSubCueMenu"));
+            if (convert != nullptr)
+                convert->setEnabled(design);
+            if (list != nullptr)
+            {
+                // P4: a reusable cue, or this use unlinked.
+                if (list->cue(cueId)->reusable == invalidId())
+                    menu.add(ContextMenu::Organise, tr("Make Cue Reusable…"),
+                             [this]() { reuseLinkActivated(QStringLiteral("make")); },
+                             QStringLiteral("stMakeCueReusable"));
+                else
+                    menu.add(ContextMenu::Organise, tr("Unlink Here (%1 Becomes a Cue of Its Own)")
+                                                    .arg(m_st->reusableName(list->cue(cueId)->reusable)),
+                             [this, cueId]() { m_st->unlinkCue(cueId); }, QStringLiteral("stUnlinkCue"));
+            }
+        }
+        else
+        {
             QList<quint32> looks;
             for (QTreeWidgetItem *sel : m_tree->selectedItems())
                 if (sel->data(0, KindRole).toInt() == CueNode && m_st->isLook(sel->data(0, IdRole).toUInt()))
@@ -7761,484 +8154,115 @@ void ShowTreeView::slotTreeContextMenu(const QPoint &pos)
             if (!looks.contains(cueId))
                 looks = { cueId };
             if (list != nullptr)
-                lookFolderMenu(menu.addMenu(tr("Move to folder")), list->id, looks);
-            const QString folder = m_st->cue(cueId) == nullptr ? QString() : m_st->cue(cueId)->folder;
-            menu.addAction(tr("Make VC page"), this, [this, list, folder]() {
-                QString msg;
-                if (list != nullptr)
-                    makeVcPage(list->id, folder, &msg);
-                m_hint->setText(msg);
-            });
+                lookFolderMenu(menu.addMenu(ContextMenu::Organise, tr("Move to Folder"),
+                                            QStringLiteral("stLookMoveToFolder")), list->id, looks);
         }
-        // Fire it from a MIDI or OSC control (the Control Map): GO on a
-        // list, a jump to a cue, a hit. Not on a sub-cue: its cue's GO plays it.
-        if (kind == ListNode || kind == CueNode)
-        {
-            const quint32 id = item->data(0, IdRole).toUInt();
-            const CueList *l = kind == ListNode ? m_st->cueList(id) : m_st->listOfCue(id);
-            ControlMap::Target target;
-            if (l != nullptr && !l->isSubCues() && kind == ListNode && !l->looks)
-                target = ControlMap::cueList(id);
-            else if (l != nullptr && !l->isSubCues() && kind == CueNode)
-                target = l->looks ? ControlMap::hit(id) : ControlMap::cue(id);
-            ControlLearnDialog::addTo(&menu, m_doc, target, this);
-        }
-        if (kind == CueNode && !inLooks)
-        {
-            const quint32 cueId = item->data(0, IdRole).toUInt();
-            menu.addAction(tr("Copy to a hit"), this, [this, cueId]() {
-                const quint32 id = m_st->copyCueToLook(cueId);
-                if (id != invalidId())
-                    selectNode(id);
-            })->setObjectName("stCopyToLook");
-        }
-        if (kind == CueNode && !inLooks)
-        {
-            const quint32 cueId = item->data(0, IdRole).toUInt();
-            const CueList *list = m_st->listOfCue(cueId);
-            if (list != nullptr)
-            {
-                /* Base cue and Includes are set on the cue's page, not here
-                   (Q93): the menu keeps what acts on a selection -- Mode ▸
-                   too (2026-10-29: "I don't seem to be able to make it non
-                   tracking"). */
-                // Skip cue / Unskip cue: the selected cues, when this is one.
-                {
-                    QList<quint32> cues = item->isSelected() ? selectedCues() : QList<quint32>();
-                    if (!cues.contains(cueId))
-                        cues = { cueId };
-                    // All of them skipped: Unskip; else Skip (as ⌘/ does).
-                    bool skipped = true;
-                    for (quint32 id : cues)
-                        skipped = skipped && m_st->isCueSkipped(id);
-                    const QString what = cues.count() == 1 ? QString() : tr(" (%1 cues)").arg(cues.count());
-                    QAction *sk = menu.addAction((skipped ? tr("Unskip cue") : tr("Skip cue")) + what, this,
-                                                 [this, cues, skipped]() { setCuesSkipped(cues, !skipped); });
-                    sk->setObjectName("stSkipCue");
-                    sk->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Slash));
-                    sk->setToolTip(skipped ? tr("GO plays it again")
-                                           : tr("GO, auto-follow and Back pass over it; a jump still plays it"));
-                }
-                // Q38: Don't move in black into this cue (the selected cues).
-                {
-                    QList<quint32> cues = item->isSelected() ? selectedCues() : QList<quint32>();
-                    if (!cues.contains(cueId))
-                        cues = { cueId };
-                    const bool no = list->cue(cueId)->noMoveInBlack;
-                    const QString what = cues.count() == 1 ? QString() : tr(" (%1 cues)").arg(cues.count());
-                    QAction *nm = menu.addAction(tr("Don't move in black into this cue") + what, this,
-                                                 [this, cues, no]() { m_st->setCuesNoMoveInBlack(cues, !no); });
-                    nm->setObjectName("stCueNoMib");
-                    nm->setCheckable(true);
-                    nm->setChecked(no);
-                }
-                // Mode ▸ Track / Block / Cue-only (the selected cues).
-                if (!list->isSubCues())
-                {
-                    QList<quint32> cues = item->isSelected() ? selectedCues() : QList<quint32>();
-                    if (!cues.contains(cueId))
-                        cues = { cueId };
-                    QMenu *mode = menu.addMenu(cues.count() == 1 ? tr("Mode") : tr("Mode (%1 cues)").arg(cues.count()));
-                    mode->setObjectName("stCueModeMenu");
-                    cueModeMenu(mode, cues);
-                }
-                menu.addSeparator();
-                menu.addAction(tr("Record as new cue"), this, [this, cueId]() {
-                    recordFrom(cueId);
-                });
-                // Duplicate (⌘D) is further down, for any selection (Q93).
-                // P4: a reusable cue, or this use unlinked.
-                if (list->cue(cueId)->reusable == invalidId())
-                    menu.addAction(tr("Make cue reusable…"), this, [this]() { reuseLinkActivated(QStringLiteral("make")); })
-                        ->setObjectName("stMakeCueReusable");
-                else
-                    menu.addAction(tr("Unlink here (%1 becomes a cue of its own)")
-                                   .arg(m_st->reusableName(list->cue(cueId)->reusable)), this,
-                                   [this, cueId]() { m_st->unlinkCue(cueId); })->setObjectName("stUnlinkCue");
-            }
-        }
-        if (kind == CueNode)
-        {
-            // Colour ▸: the selected cues' text, when this is one.
-            const quint32 cueId = item->data(0, IdRole).toUInt();
-            QList<quint32> cues = item->isSelected() ? selectedCues() : QList<quint32>();
-            if (!cues.contains(cueId))
-                cues = { cueId };
-            QMenu *colour = menu.addMenu(cues.count() == 1 ? tr("Colour") : tr("Colour (%1 cues)").arg(cues.count()));
-            colour->setObjectName("stColourMenu");
-            colourMenu(colour, cues);
-        }
-        if (kind == CueNode)
-        {
-            const quint32 cueId = item->data(0, IdRole).toUInt();
-            const CueList *list = m_st->listOfCue(cueId);
-            const int at = list == nullptr ? -1 : list->indexOf(cueId);
-            // Up / down: renumbered for the new place, as a drag is.
-            QAction *up = menu.addAction(tr("Move up"), this, [this, list, cueId, at]() {
-                dropCues({ cueId }, list->cues.at(at - 1).id, false);
-            });
-            up->setEnabled(at > 0);
-            QAction *down = menu.addAction(tr("Move down"), this, [this, list, cueId, at]() {
-                dropCues({ cueId }, list->cues.at(at + 1).id, true);
-            });
-            down->setEnabled(list != nullptr && at + 1 < list->cues.count());
-            if (list != nullptr && !list->looks)
-            {
-                menu.addAction(tr("Renumber this level…"), this, [this, cueId]() { renumberLevel(cueId); })
-                    ->setObjectName("stRenumberLevel");
-                timecodeMenu(&menu, cueId);     // Q198: only on a list that follows timecode
-            }
-        }
-        const QList<QPair<quint32, quint32>> sel = selectedLayerRefs();
-        if (kind == LayerNode && sel.count() > 1 && item->isSelected())
-        {
-            // Several layers: the edits act on all of them, one step each.
-            QMenu *several = menu.addMenu(tr("%1 selected layers").arg(sel.count()));
-            several->setObjectName("stSeveralLayers");
-            several->addAction(tr("Release on"), this, [this]() { setReleaseOnSelected(true); });
-            several->addAction(tr("Release off"), this, [this]() { setReleaseOnSelected(false); });
-            QMenu *set = several->addMenu(tr("Set look"));
-            QMenu *clear = several->addMenu(tr("Clear look"));
-            const QPair<quint32, quint32> cur(item->data(0, CueRole).toUInt(), item->data(0, IdRole).toUInt());
-            QHash<QString, QMenu *> kinds;
-            QList<QLCPalette *> pals = m_doc->palettes();
-            std::sort(pals.begin(), pals.end(), [](const QLCPalette *a, const QLCPalette *b) {
-                return a->name().compare(b->name(), Qt::CaseInsensitive) < 0;
-            });
-            const QStringList keys = attributeKeys();
-            for (const QString &k : keys)
-            {
-                kinds.insert(k, set->addMenu(keyLabel(k)));
-                clear->addAction(keyLabel(k), this, [this, cur, k]() {
-                    m_multi = selectedLayerRefs();
-                    clearAttribute(cur.first, cur.second, k);
-                });
-            }
-            for (QLCPalette *p : pals)
-            {
-                if (m_st->isInlinePalette(p->id()))
-                    continue;
-                QMenu *m = kinds.value(m_st->keyForPalette(p->id()));
-                if (m == nullptr)
-                    continue;
-                const quint32 pid = p->id();
-                m->addAction(p->name(), this, [this, cur, pid]() {
-                    m_multi = selectedLayerRefs();
-                    dropPalettes(cur.first, cur.second, { pid });
-                });
-            }
-            several->addAction(tr("Split each (one layer per group)"), this, [this, sel]() {
-                m_st->beginBatch(tr("Split %1 layers").arg(sel.count()));
-                bool any = false;
-                for (const QPair<quint32, quint32> &ref : sel)
-                    any |= m_st->splitLayer(ref.first, ref.second);
-                m_st->endBatch(any);
-            });
-            menu.addSeparator();
-        }
-        // Release (leaving this cue): one layer, its own or carried in --
-        // a function played as it is too (several: the submenu above).
-        if ((kind == LayerNode && !(sel.count() > 1 && item->isSelected())) || kind == TrackedLayerNode)
-        {
-            const quint32 cueId = item->data(0, CueRole).toUInt();
-            const CueList *rlist = m_st->listOfCue(cueId);
-            const Cue *rcue = m_st->cue(cueId);
-            const Layer *own = (kind == LayerNode && rcue != nullptr) ? rcue->layer(item->data(0, IdRole).toUInt())
-                                                                      : nullptr;
-            Target t;
-            if (kind == TrackedLayerNode && rlist != nullptr)
-            {
-                const QList<ResolvedCue> rcs = m_st->resolved(*rlist);
-                const int at = rlist->indexOf(cueId);
-                if (at >= 0 && at < rcs.count())
-                    for (const ResolvedLayer &rl : rcs.at(at).layers)
-                        if (rl.target.signature() == item->data(0, TargetRole).toString())
-                            t = rl.target;
-            }
-            if (rlist != nullptr && !rlist->looks && (own != nullptr || !t.isEmpty()))
-            {
-                const quint32 lid = own != nullptr ? own->id : invalidId();
-                QAction *rel = menu.addAction(tr("Release (leaving this cue)"));
-                rel->setObjectName("stLayerReleaseMenu");
-                rel->setCheckable(true);
-                rel->setChecked(own != nullptr && own->release);
-                rel->setToolTip(tr("Leaving this cue, the layer goes back to the base cue (else dark): set it "
-                                   "on the last cue it should play in"));
-                connect(rel, &QAction::toggled, this, [this, cueId, lid, t](bool on) {
-                    setLayerReleaseIn(cueId, lid, t, on);
-                });
-                menu.setToolTipsVisible(true);
-            }
-            // "Why is this on?" about the layer's first light.
-            Target lt = own != nullptr ? own->target : t;
-            const QList<quint32> lit = lt.isEmpty() || lt.isOpaque() ? QList<quint32>() : m_st->targetFixtures(lt);
-            if (!lit.isEmpty())
-            {
-                const quint32 fid = lit.first();
-                menu.addAction(WhyOnPanel::actionText(), this, [this, fid]() {
-                    WhyOnPanel::showFor(m_doc, fid, 0xFFFFFFFF, this, QCursor::pos());
-                })->setObjectName("stWhyOn");
-            }
-        }
-        if (kind == LayerNode)
-        {
-            const quint32 cueId = item->data(0, CueRole).toUInt();
-            const quint32 layerId = item->data(0, IdRole).toUInt();
-            menu.addAction(tr("Rename…"), this, [this, layerId]() {
-                bool ok = false;
-                const QString n = QInputDialog::getText(this, tr("Rename layer"), tr("Name"),
-                                                        QLineEdit::Normal, QString(), &ok);
-                if (ok)
-                    m_st->renameNode(layerId, n.trimmed());
-            });
-            if (const Cue *dc = m_st->cue(cueId))
-                if (const Layer *dl = dc->layer(layerId))
-                    if (!dl->target.isOpaque())
-                    {
-                        const Target dt = dl->target;
-                        menu.addAction(tr("Design effect…"), this, [this, cueId, layerId, dt]() {
-                            EffectLayerDialog::design(m_doc, this, cueId, layerId, dt);
-                        })->setObjectName("stDesignEffectLayer");
-                    }
-            menu.addAction(tr("Detach to plain scene"), this, [this, cueId, layerId]() {
-                m_st->detachLayer(cueId, layerId);
-            });
-            backwashLayerMenu(&menu, cueId, layerId);     // PWR-12: I meant it, taken back
-            // P4: a reusable layer, or this use unlinked.
-            if (const Cue *rc = m_st->cue(cueId))
-                if (const Layer *rl = rc->layer(layerId))
-                {
-                    if (rl->reusable != invalidId())
-                        menu.addAction(tr("Unlink here (a copy of its own)"), this, [this, cueId, layerId]() {
-                            m_st->unlinkLayer(cueId, layerId);
-                        })->setObjectName("stUnlinkLayer");
-                    else if (rl->parent == invalidId() && rc->reusable == invalidId())
-                        menu.addAction(tr("Make reusable…"), this, [this]() {
-                            reuseLinkActivated(QStringLiteral("make"));
-                        })->setObjectName("stMakeLayerReusable");
-                }
-            // A child layer (§3.5) on part of it: a member of its set, a
-            // group inside it, or what the Library has selected.
-            {
-                const Cue *c = m_st->cue(cueId);
-                const Layer *l = c == nullptr ? nullptr : c->layer(layerId);
-                if (l != nullptr && !l->target.isOpaque())
-                {
-                    QMenu *childMenu = menu.addMenu(tr("Add child layer"));
-                    childMenu->setObjectName("stAddChild");
-                    QList<FixtureGroup *> inside;
-                    for (FixtureGroup *g : m_doc->fixtureGroups())
-                    {
-                        Target t;
-                        t.groups << g->id();
-                        if (!(t == l->target) && m_st->targetContains(l->target, t))
-                            inside << g;
-                    }
-                    std::sort(inside.begin(), inside.end(), [](const FixtureGroup *a, const FixtureGroup *b) {
-                        return a->name().compare(b->name(), Qt::CaseInsensitive) < 0;
-                    });
-                    for (FixtureGroup *g : inside)
-                    {
-                        const quint32 gid = g->id();
-                        childMenu->addAction(g->name(), this, [this, cueId, layerId, gid]() {
-                            QString why;
-                            if (!dropChildLayers(cueId, layerId, { gid }, {}, {}, false, &why))
-                                QMessageBox::information(this, tr("Add child layer"), why);
-                        });
-                    }
-                    childMenu->addSeparator();
-                    childMenu->addAction(tr("The Library's selection"), this, [this, cueId, layerId]() {
-                        QList<quint32> groups, fixtures, sets;
-                        for (QTreeWidgetItem *it : m_library->selectedItems())
-                        {
-                            const int k = it->data(0, KindRole).toInt();
-                            const quint32 id = it->data(0, IdRole).toUInt();
-                            if (k == LibGroup && !groups.contains(id))
-                                groups << id;
-                            else if (k == LibFixture && !fixtures.contains(id))
-                                fixtures << id;
-                            else if (k == LibSet && !sets.contains(id))
-                                sets << id;
-                        }
-                        QString why = tr("Select groups in the Library first.");
-                        if (!dropChildLayers(cueId, layerId, groups, fixtures, sets, false, &why))
-                            QMessageBox::information(this, tr("Add child layer"), why);
-                    });
-                    childMenu->setEnabled(true);
-                }
-            }
-            // Split (one per group) and Merge (the layers selected).
-            {
-                const Cue *c = m_st->cue(cueId);
-                const Layer *l = c == nullptr ? nullptr : c->layer(layerId);
-                QAction *split = menu.addAction(tr("Split layer (one per group)"), this, [this, cueId, layerId]() {
-                    QString why;
-                    if (!splitLayer(cueId, layerId, &why))
-                        QMessageBox::information(this, tr("Split layer"), why);
-                });
-                split->setObjectName("stSplitLayer");
-                split->setEnabled(l != nullptr && l->pieces().count() > 1);
-                split->setToolTip(tr("One layer per group (and one on its fixtures), each with these looks; "
-                                     "it keeps tracking as before"));
-                /* Focus this cue (docs/design/FOCUS_REFINE_DESIGN.md): this cue's own values
-                   from the stage, on the controller, starting on this layer. */
-                QAction *refine = menu.addAction(tr("Focus this cue\342\200\246"), this,
-                                                 [this, cueId, layerId]() {
-                    RefinePanel::open(m_doc, window(), cueId, layerId);
-                });
-                refine->setObjectName("stRefineLayer");
-                FocusMenu::setAvailable(refine, FocusMenu::focusCueBlocked(m_doc),
-                                        tr("Move, zoom, focus and recolour this cue from the stage with the "
-                                           "controller: the layer as a whole, or one fixture as an exception"));
-                quint32 selCue = invalidId();
-                const QList<quint32> sel = selectedLayers(&selCue);
-                QAction *merge = menu.addAction(sel.count() > 1 ? tr("Merge %1 layers").arg(sel.count())
-                                                                : tr("Merge layers (select several)"),
-                                                this, [this, selCue, sel]() {
-                    QString why;
-                    if (mergeLayers(selCue, sel, &why) == invalidId())
-                        QMessageBox::information(this, tr("Merge layers"), why);
-                });
-                merge->setObjectName("stMergeLayers");
-                merge->setEnabled(sel.count() > 1);
-            }
-            // A layer on several groups can lose one (never its last).
-            const Cue *cue = m_st->cue(cueId);
-            const Layer *layer = cue == nullptr ? nullptr : cue->layer(layerId);
-            if (layer != nullptr && !layer->target.isOpaque()
-                && layer->target.groups.count() + layer->target.fixtures.count() > 1)
-            {
-                menu.addSeparator();
-                for (quint32 g : layer->target.groups)
-                {
-                    Target one;
-                    one.groups << g;
-                    menu.addAction(tr("Remove %1 from layer").arg(m_st->targetLabel(one)), this,
-                                   [this, cueId, layerId, g]() {
-                        m_st->removeGroupFromLayer(cueId, layerId, g);
-                    });
-                }
-                for (quint32 f : layer->target.fixtures)
-                {
-                    Target one;
-                    one.fixtures << f;
-                    menu.addAction(tr("Remove %1 from layer").arg(m_st->targetLabel(one)), this,
-                                   [this, cueId, layerId, f]() {
-                        m_st->removeFixtureFromLayer(cueId, layerId, f);
-                    });
-                }
-            }
-        }
-        if (kind == ListNode && !inLooks)
-        {
-            const quint32 id = item->data(0, IdRole).toUInt();
-            QAction *conv = menu.addAction(tr("Convert to tracking…"), this, [this, id]() { convertListToTracking(id); });
-            conv->setObjectName("stConvertList");
-            conv->setEnabled(mayConvert(m_st->cueList(id)));
-            QMenu *colour = menu.addMenu(tr("Colour"));
-            colour->setObjectName("stColourMenu");
-            colourMenu(colour, {}, id);
-            QMenu *mib = menu.addMenu(tr("Move in black"));
-            mib->setObjectName("stListMibMenu");
-            listMibMenu(mib, id);
-            menu.addAction(tr("Detach to plain chaser…"), this, [this, id]() { detachListToChaser(id); })
-                ->setObjectName("stDetachList");
-            if (m_st->canRestoreOriginal(id))
-                menu.addAction(tr("Restore original…"), this, [this, id]() { restoreOriginal(id); })
-                    ->setObjectName("stRestoreOriginal");
-        }
-        if (kind == ProductionNode && !singleProduction())
-        {
-            const quint32 id = item->data(0, IdRole).toUInt();
-            const bool cur = m_st->currentProduction() == id;
-            menu.addAction(cur ? tr("Unset current production") : tr("Make current production"), this,
-                           [this, id, cur]() { m_st->setCurrentProduction(cur ? invalidId() : id); })
-                ->setObjectName("stMakeCurrent");
-        }
-        if (kind == ListNode && !inLooks)
-        {
-            const quint32 id = item->data(0, IdRole).toUInt();
-            quint32 pid = invalidId();
-            m_st->cueList(id, &pid);
-            if (m_st->mainList(pid) != id)
-                menu.addAction(tr("Make main list"), this, [this, id]() { m_st->setMainList(id); })
-                    ->setObjectName("stMakeMainList");
-            if ((m_st->currentProduction() != pid && !singleProduction()) || m_st->mainList(pid) != id)
-                menu.addAction(tr("Play on GO (make current, main list)"), this, [this, id, pid]() {
-                    m_st->setMainList(id);
-                    m_st->setCurrentProduction(pid);
-                })->setObjectName("stPlayOnGo");
-        }
-        if (kind == ProductionNode || (kind == ListNode && !inLooks))
-        {
-            const quint32 id = item->data(0, IdRole).toUInt();
-            menu.addAction(tr("Rename…"), this, [this, id, item]() {
-                bool ok = false;
-                const QString n = QInputDialog::getText(this, tr("Rename"), tr("Name"),
-                                                        QLineEdit::Normal, item->text(0), &ok);
-                if (ok && !n.trimmed().isEmpty())
-                    m_st->renameNode(id, n.trimmed());
-            });
-        }
-        if (kind == CueNode || kind == LayerNode)
-        {
-            menu.addSeparator();
-            QAction *copy = menu.addAction(tr("Copy"), this, [this]() { copySelection(); });
-            copy->setShortcut(QKeySequence::Copy);
-            if (kind == LayerNode)
-            {
-                QAction *cut = menu.addAction(tr("Cut"), this, [this]() { cutSelection(); });
-                cut->setShortcut(QKeySequence::Cut);
-                cut->setObjectName("stCutLayer");
-            }
-            const bool onLayer = kind == LayerNode && m_commander->clipboard.cues.isEmpty();
-            const QString pasteText = !m_commander->clipboard.cues.isEmpty() ? tr("Paste after this cue")
-                                      : onLayer ? (m_commander->clipboard.cut ? tr("Move here, after this layer")
-                                                                              : tr("Paste after this layer"))
-                                                : (m_commander->clipboard.cut ? tr("Move into this cue")
-                                                                              : tr("Paste into this cue"));
-            QAction *paste = menu.addAction(pasteText, this, [this]() { pasteClipboard(); });
-            paste->setObjectName("stPasteHere");
-            paste->setShortcut(QKeySequence::Paste);
-            paste->setEnabled(!m_commander->clipboard.isEmpty());
-            QAction *dup = menu.addAction(tr("Duplicate"), this, [this]() { duplicateSelection(); });
-            dup->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_D));
-        }
-        if (kind != TrackedLayerNode)
-        {
-            menu.addSeparator();
-            menu.addAction(tr("Delete"), this, &ShowTreeView::slotDelete);
-        }
+        // Up / down: renumbered for the new place, as a drag is.
+        QAction *up = menu.add(ContextMenu::Organise, tr("Move Up"), [this, list, cueId, at]() {
+            dropCues({ cueId }, list->cues.at(at - 1).id, false);
+        }, QStringLiteral("stMoveCueUp"));
+        up->setEnabled(at > 0);
+        QAction *down = menu.add(ContextMenu::Organise, tr("Move Down"), [this, list, cueId, at]() {
+            dropCues({ cueId }, list->cues.at(at + 1).id, true);
+        }, QStringLiteral("stMoveCueDown"));
+        down->setEnabled(list != nullptr && at + 1 < list->cues.count());
+
+        /* ---- 7. Clipboard and a copy ---- */
+        menu.add(ContextMenu::Edit, tr("Copy"), [this]() { copySelection(); }, QStringLiteral("stCopyCue"))
+            ->setShortcut(QKeySequence::Copy);
+        QAction *paste = menu.add(ContextMenu::Edit,
+                                  !m_commander->clipboard.cues.isEmpty() ? tr("Paste After This Cue")
+                                  : (m_commander->clipboard.cut ? tr("Move into This Cue")
+                                                                : tr("Paste into This Cue")),
+                                  [this]() { pasteClipboard(); }, QStringLiteral("stPasteHere"));
+        paste->setShortcut(QKeySequence::Paste);
+        paste->setEnabled(!m_commander->clipboard.isEmpty());
+        menu.add(ContextMenu::Edit, tr("Duplicate"), [this]() { duplicateSelection(); }, QStringLiteral("stDuplicateCue"))
+            ->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_D));
+
+        /* ---- 8. Delete, last ---- */
+        menu.add(ContextMenu::Remove, hit ? tr("Delete Hit") : sub ? tr("Delete Sub-cue") : tr("Delete Cue"),
+                 [this]() { slotDelete(); }, QStringLiteral("stDeleteCue"));
+        return;
     }
-    // W0: a layer that plays a function as it is opens it, first.
+    if (kind == ListNode && !inLooks)
     {
-        const quint32 fid = openableFunction(item);
-        if (const Function *f = m_doc->function(fid))
-        {
-            QAction *open = new QAction(tr("Open “%1”…").arg(f->name()), &menu);
-            open->setObjectName(QStringLiteral("stOpenFunction"));
-            open->setToolTip(tr("In the Workbench, in its own editor (↩ comes back)"));
-            connect(open, &QAction::triggered, this, [this, fid]() { openFunction(fid); });
-            QAction *first = menu.actions().value(0);
-            menu.insertAction(first, open);
-            // W5: a raw scene can become palettes.
-            const Scene *raw = qobject_cast<const Scene *>(f);
-            if (raw != nullptr && !raw->values().isEmpty())
-            {
-                const ShowTreeController::CapturePlan plan = m_st->planCapture(fid);
-                QAction *cap = new QAction(tr("Capture into palettes…"), &menu);
-                cap->setObjectName(QStringLiteral("stCaptureLayer"));
-                cap->setEnabled(plan.ok);
-                cap->setToolTip(plan.ok ? tr("Its values as layers of palettes, checked channel for channel; the "
-                                             "scene is kept")
-                                        : plan.why);
-                connect(cap, &QAction::triggered, this, [this, fid]() { captureIntoPalettes(fid); });
-                menu.insertAction(first, cap);
-            }
-            menu.insertSeparator(first);
-        }
+        const CueList *l = m_st->cueList(id);
+        if (l != nullptr && !l->isSubCues())
+            learn(ControlMap::cueList(id));
+        QAction *conv = menu.add(ContextMenu::Kind, tr("Convert to Tracking…"),
+                                 [this, id]() { convertListToTracking(id); }, QStringLiteral("stConvertList"));
+        conv->setEnabled(mayConvert(l));
+        colourMenu(menu.addMenu(ContextMenu::Kind, tr("Colour"), QStringLiteral("stColourMenu")), {}, id);
+        listMibMenu(menu.addMenu(ContextMenu::Kind, tr("Move in Black"), QStringLiteral("stListMibMenu")), id);
+        quint32 pid = invalidId();
+        m_st->cueList(id, &pid);
+        if (m_st->mainList(pid) != id)
+            menu.add(ContextMenu::Kind, tr("Make Main List"), [this, id]() { m_st->setMainList(id); },
+                     QStringLiteral("stMakeMainList"));
+        if ((m_st->currentProduction() != pid && !singleProduction()) || m_st->mainList(pid) != id)
+            menu.add(ContextMenu::Kind, tr("Play on GO (Make Current, Main List)"), [this, id, pid]() {
+                m_st->setMainList(id);
+                m_st->setCurrentProduction(pid);
+            }, QStringLiteral("stPlayOnGo"));
+        menu.add(ContextMenu::Kind, tr("Detach to Plain Chaser…"), [this, id]() { detachListToChaser(id); },
+                 QStringLiteral("stDetachList"));
+        if (m_st->canRestoreOriginal(id))
+            menu.add(ContextMenu::Kind, tr("Restore Original…"), [this, id]() { restoreOriginal(id); },
+                     QStringLiteral("stRestoreOriginal"));
+        menu.add(ContextMenu::Edit, tr("Rename…"), [this, id, item]() {
+            bool ok = false;
+            const QString n = QInputDialog::getText(this, tr("Rename"), tr("Name"),
+                                                    QLineEdit::Normal, item->text(0), &ok);
+            if (ok && !n.trimmed().isEmpty())
+                m_st->renameNode(id, n.trimmed());
+        }, QStringLiteral("stRenameList"));
+        menu.add(ContextMenu::Remove, tr("Delete Cue List…"), [this]() { slotDelete(); },
+                 QStringLiteral("stDeleteList"));
+        return;
     }
-    menu.exec(m_tree->viewport()->mapToGlobal(pos));
+    if (kind == ListNode || kind == LookFolderNode || (inLooks && kind == HitsNode))
+    {
+        // A Hits section or a folder of hits.
+        const quint32 listId = currentListId();
+        const QString folder = currentLookFolder();
+        menu.add(ContextMenu::Kind, tr("Make VC Page"), [this, listId, folder]() {
+            QString msg;
+            makeVcPage(listId, folder, &msg);
+            m_hint->setText(msg);
+        }, QStringLiteral("stMakeVcPageMenu"));
+        if (kind == LookFolderNode)
+        {
+            menu.add(ContextMenu::Edit, tr("Rename Folder"), [this]() { startRename(); });
+            menu.add(ContextMenu::Remove, tr("Delete Folder"), [this, listId, folder]() {
+                m_st->removeLookFolder(listId, folder);
+            })->setToolTip(tr("Its hits move up a level; none is deleted"));
+        }
+        else if (kind == ListNode)
+            menu.add(ContextMenu::Remove, tr("Delete Hits Section…"), [this]() { slotDelete(); });
+        return;
+    }
+    if (kind == ProductionNode)
+    {
+        if (!singleProduction())
+        {
+            const bool cur = m_st->currentProduction() == id;
+            menu.add(ContextMenu::Kind, cur ? tr("Unset Current Production") : tr("Make Current Production"),
+                     [this, id, cur]() { m_st->setCurrentProduction(cur ? invalidId() : id); },
+                     QStringLiteral("stMakeCurrent"));
+        }
+        menu.add(ContextMenu::Edit, tr("Rename…"), [this, id, item]() {
+            bool ok = false;
+            const QString n = QInputDialog::getText(this, tr("Rename"), tr("Name"),
+                                                    QLineEdit::Normal, item->text(0), &ok);
+            if (ok && !n.trimmed().isEmpty())
+                m_st->renameNode(id, n.trimmed());
+        }, QStringLiteral("stRenameProduction"));
+        menu.add(ContextMenu::Remove, tr("Delete Production…"), [this]() { slotDelete(); },
+                 QStringLiteral("stDeleteProduction"));
+        return;
+    }
+    menu.add(ContextMenu::Remove, tr("Delete"), [this]() { slotDelete(); });
 }
 
 void ShowTreeView::importChaser(quint32 chaserId, bool showReport)
@@ -9444,14 +9468,14 @@ void ShowTreeView::fillLibraryMenu(QMenu *out, QTreeWidgetItem *item)
     {
         // P4: put it in, who uses it, rename, delete.
         const QString name = m_st->reusableName(id);
-        menu.add(ContextMenu::Kind, tr("Use in the Selected Cue"), [this, id]() {
+        menu.add(ContextMenu::Place, tr("Use in the Selected Cue"), [this, id]() {
             const quint32 cue = currentCueId();
             if (cue == invalidId())
                 m_hint->setText(tr("Select a cue in the tree first"));
             else
                 dropReusables(cue, { id });
         });
-        QMenu *usedBy = menu.addMenu(ContextMenu::Place, tr("Used By"), QStringLiteral("stReusableUsedBy"));
+        QMenu *usedBy = menu.addMenu(ContextMenu::Kind, ContextMenus::usedByText(), QStringLiteral("ctxUsedBy"));
         const QList<ShowTreeController::ReusableUse> uses = m_st->reusableUses(id);
         for (const ShowTreeController::ReusableUse &u : uses)
             usedBy->addAction(u.label, this, [this, u]() {
@@ -9494,7 +9518,7 @@ void ShowTreeView::fillLibraryMenu(QMenu *out, QTreeWidgetItem *item)
     // Make set (§1): the groups (and fixtures) selected, as one named set.
     if (kind == LibGroup || kind == LibFixture || kind == LibSet)
     {
-        QAction *make = menu.add(ContextMenu::Organise, tr("Make Set…"), [this]() {
+        QAction *make = menu.add(ContextMenu::Place, tr("Make Set…"), [this]() {
             bool ok = false;
             const QString n = QInputDialog::getText(this, tr("Make Set"),
                                                     tr("Name of the set (e.g. Towers):"), QLineEdit::Normal,
@@ -9529,7 +9553,7 @@ void ShowTreeView::fillLibraryMenu(QMenu *out, QTreeWidgetItem *item)
 
     // ---- The Library's own: pinning, sets ----
     const bool pinned = isPinned(kind, id);
-    menu.add(ContextMenu::Organise, pinned ? tr("Unpin") : tr("Pin"), [this, kind, id, pinned]() {
+    menu.add(ContextMenu::Place, pinned ? tr("Unpin") : tr("Pin"), [this, kind, id, pinned]() {
         setPinned(kind, id, !pinned);
     });
     if (kind == LibSet)
@@ -9557,91 +9581,85 @@ void ShowTreeView::fillLibraryMenu(QMenu *out, QTreeWidgetItem *item)
                 QMessageBox::information(this, tr("Delete Set"), why);
         });
     }
-    if (kind == LibPalette && m_doc->paletteOps()->isManaged(id))
+    if (kind == LibPalette && m_doc->palette(id) != nullptr)
     {
-        // R2 (P-D8): the everyday operations, as in Build.
-        menu.add(ContextMenu::Open, tr("Edit Palette"), [this, id]() { editPalette(id); },
-                 QStringLiteral("stEditPalette"));
+        // R2 (P-D8): the canon's palette menu, as in Build, a cue's look
+        // rows and the Workbench (ContextMenus::palette).
         QList<quint32> pids;
         for (QTreeWidgetItem *sel : m_library->selectedItems())
             if (sel->data(0, KindRole).toInt() == LibPalette && !pids.contains(sel->data(0, IdRole).toUInt()))
                 pids << sel->data(0, IdRole).toUInt();
         if (!pids.contains(id))
             pids = { id };
-        QMenu *moveMenu = menu.addMenu(ContextMenu::Organise, pids.count() > 1
-                                           ? tr("Move %1 Palettes to Folder").arg(pids.count())
-                                           : tr("Move to Folder"));
-        moveMenu->addAction(tr("(no folder)"), this, [this, pids]() { dropPalettesOnFolder(pids, QString()); });
-        for (const QString &f : m_doc->paletteOps()->folders())
-            moveMenu->addAction(f, this, [this, pids, f]() { dropPalettesOnFolder(pids, f); });
-        moveMenu->addSeparator();
-        moveMenu->addAction(tr("New Folder…"), this, [this, pids]() {
-            bool ok = false;
-            const QString n = QInputDialog::getText(this, tr("Move to a New Folder"), tr("Folder name"),
-                                                    QLineEdit::Normal, QString(), &ok);
-            if (ok && !n.trimmed().isEmpty())
-                dropPalettesOnFolder(pids, n.trimmed());
-        });
-        QMenu *used = menu.addMenu(ContextMenu::Place, tr("Used By"), QStringLiteral("stPaletteUsedBy"));
-        for (const PaletteOps::Use &u : m_doc->paletteOps()->usage(id))
-        {
-            QAction *a = used->addAction(u.label);
-            if (u.kind == PaletteOps::Use::Cue || u.kind == PaletteOps::Use::Look)
-                connect(a, &QAction::triggered, this, [this, u]() {
-                    if (u.layer != invalidId())
-                        selectNode(u.layer, u.owner);
-                    else
-                        selectNode(u.owner);
-                });
-            else
-                a->setEnabled(false);
-        }
-        QSet<quint32> fns;
-        for (const PaletteOps::Use &u : m_doc->paletteOps()->usage(id))
-            if (u.function != invalidId())
-                fns.insert(u.function);
-        for (const QString &vc : UsedBy::vcLines(fns))
-            used->addAction(vc)->setEnabled(false);
-        if (used->isEmpty())
-            used->addAction(tr("(not used)"))->setEnabled(false);
-        menu.add(ContextMenu::Edit, tr("Duplicate"), [this, id]() {
-            const quint32 copy = m_doc->paletteOps()->duplicate(id);
-            if (copy != QLCPalette::invalidId())
-            {
-                reloadLibrary();
-                selectLibraryPalette(copy);
-                editPalette(copy);
-            }
-        });
-        menu.add(ContextMenu::Edit, tr("Rename"), [this]() { startLibraryRename(); });
-        menu.add(ContextMenu::Remove, pids.count() > 1 ? tr("Delete %1 Palettes…").arg(pids.count())
-                                                       : tr("Delete Palette…"),
-                 [this]() { deleteLibrarySelection(); }, QStringLiteral("stDeletePalette"));
+        pids.removeAll(id);
+        pids.prepend(id);
+        ContextMenus::PalettePlace place = paletteMenuPlace();
+        place.renameInPlace = [this](quint32) { startLibraryRename(); };
+        place.duplicated = [this](quint32 copy) {
+            reloadLibrary();
+            selectLibraryPalette(copy);
+            editPalette(copy);
+        };
+        place.moveTo = [this](const QList<quint32> &ids, const QString &folder) { dropPalettesOnFolder(ids, folder); };
+        place.remove = [this](const QList<quint32> &) { deleteLibrarySelection(); };
+        ContextMenus::palette(menu, m_doc, pids, place);
     }
     if (kind == LibFunction)
     {
         const Function *f = m_doc->function(id);
         if (f != nullptr && f->type() == Function::SceneType)
-            menu.add(ContextMenu::Kind, tr("Adopt as a Hit"), [this, id]() { adoptAsLook(id); },
+            menu.add(ContextMenu::Place, tr("Adopt as a Hit"), [this, id]() { adoptAsLook(id); },
                      QStringLiteral("stAdoptAsLook"));
+        // Then the function's own menu, as in Build (ContextMenus::function).
+        ContextMenus::FunctionPlace place;
+        place.parent = this;
+        place.changed = [this]() { reloadLibrary(); };
+        ContextMenus::function(menu, m_doc, { id }, place);
     }
-    if (kind == LibPalette && m_st->isInlinePalette(id))
-    {
-        menu.add(ContextMenu::Organise, tr("Make Reusable…"), [this, id]() {
-            bool ok = false;
-            const QLCPalette *p = m_doc->palette(id);
-            if (p == nullptr)
-                return;
-            // Named as the show's palettes of that type are, to start with.
-            const QString n = QInputDialog::getText(this, tr("Make Reusable"), tr("Name"), QLineEdit::Normal,
-                                                    m_st->suggestPaletteName(p->type(), p->values()), &ok);
-            if (!ok || n.trimmed().isEmpty())
-                return;
-            const QString folder = m_st->suggestPaletteFolder(p->type());
-            m_st->makeReusable(id, n.trimmed(), folder);
-            reloadLibrary();
-        });
-    }
+}
+
+/* The Show Tree's way with a palette in the canon's palette menu
+   (ContextMenus::palette): edit it in the Look Editor here (or the docked
+   Workbench), Used By ▸ goes to the cue or look, a cue's one-off value can
+   be made reusable. The Library, the look rows and the Workbench's layer
+   rows all use it, so the palette's menu is the same in each. */
+ContextMenus::PalettePlace ShowTreeView::paletteMenuPlace()
+{
+    ContextMenus::PalettePlace place;
+    place.parent = this;
+    place.edit = [this](quint32 pid) { editPalette(pid); };
+    place.showUse = [this](int kind, quint32 owner, quint32 layer) {
+        if (kind == PaletteOps::Use::Cue || kind == PaletteOps::Use::Look)
+        {
+            if (layer != invalidId())
+                selectNode(layer, owner);
+            else
+                selectNode(owner);
+        }
+        else if (kind == PaletteOps::Use::Scene)
+            ProgrammingManager::openFunction(owner);
+        else if (kind == PaletteOps::Use::EffectSlot)
+            editPalette(owner);
+    };
+    place.makeReusable = [this](quint32 id) { makePaletteReusable(id); };
+    place.changed = [this]() { reloadLibrary(); };
+    return place;
+}
+
+void ShowTreeView::makePaletteReusable(quint32 id)
+{
+    const QLCPalette *p = m_doc->palette(id);
+    if (p == nullptr || !m_st->isInlinePalette(id))
+        return;
+    bool ok = false;
+    // Named as the show's palettes of that type are, to start with.
+    const QString n = QInputDialog::getText(this, tr("Make Reusable"), tr("Name"), QLineEdit::Normal,
+                                            m_st->suggestPaletteName(p->type(), p->values()), &ok);
+    if (!ok || n.trimmed().isEmpty())
+        return;
+    const QString folder = m_st->suggestPaletteFolder(p->type());
+    m_st->makeReusable(id, n.trimmed(), folder);
+    reloadLibrary();
 }
 
 /****************************************************************************

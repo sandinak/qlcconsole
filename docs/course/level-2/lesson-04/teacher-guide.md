@@ -171,7 +171,7 @@ offscreen, with the effect scripts the app ships with: the drops and
 their hints, **+ Palette → Effect** with the song folder selected (the
 palette is filed there), the effect browser (it opens on its own; the
 search, the click on *Sparkle · Dimmer* and *Rainbow*, **Done**), the
-Look Editor's Name, **⋯ → Its own colour / dimmer**, and what the rig
+Look Editor's Name, **⋯ → Its Own Colour / Dimmer**, and what the rig
 sends: the steps still, then twinkling, with white pixels among them;
 the truss boxes still, then a moving wave; the step tops still
 throughout. The extension's Speed and the footer's **Main Speed 120**,

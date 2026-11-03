@@ -48,7 +48,7 @@ When would you fire each one?
 5. **+ Hit** again: `Glow`, **Lanterns**, **Amber**, **Full**.
 6. Again: `Faces`, **AT-W-ALL**, **White**, **Full**, then **Center** on
    its row.
-7. Right-click **Hits** → **Make VC page**: a button per hit.
+7. Right-click **Hits** → **Make VC Page**: a button per hit.
 
    ![The Hits section](../../images/lesson-2-6/hits.png)
 
@@ -70,7 +70,7 @@ go back to **Design**. No **+ Hit**: right-click a row in the tree.
 
 A sting that only makes sense in the chorus shouldn't fire in the
 ballad. A hit lives where it belongs in the tree, and fires only there:
-right-click the Verse cue → **+ Hit for this cue**, or drag **Red Stab**
+right-click the Verse cue → **+ Hit for This Cue**, or drag **Red Stab**
 onto the cue. Outside that cue its button dims and does nothing. Drag
 a second hit onto the same button and it fires whichever belongs to the
 cue that's live: one **HIT 1** button, a different stab in each song.
@@ -89,7 +89,7 @@ Do one:
 
 - **App:** download [`lesson-2-6-finish.qlcc`](../../shows/lesson-2-6-finish.qlcc).
   Right-click **Hits** → **+ Hit** for an encore look, then **Make VC
-  page** again: a new button, the others stay. A glow eases in where a
+  Page** again: a new button, the others stay. A glow eases in where a
   stab snaps: on Glow's page set **Fade in** and **Fade out** to `2`.
   Fire your hits over the song in Operate. Bring in
   `Lesson2-6-Home-yourname.qlcc` (save in Design).

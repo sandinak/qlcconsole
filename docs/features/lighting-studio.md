@@ -482,7 +482,7 @@ dropping to one hook. One fixture hangs below the hook.
   (Downstage, Stage left, Upstage right, …), the **arm** length, the
   **drop** of the chain, and what **hangs** on it. **Copy to Every Tower**
   puts the same hanger on every tower that doesn't already have one there.
-- **Remove it:** right-click → **Remove Hanger**. What hung on it stays in
+- **Remove it:** right-click → **Delete Hanger…**. What hung on it stays in
   the show, just unmounted. Removing the truss or tower removes its hangers
   too.
 - **Plot layers** lists each hanger with its tower (rename, edit, delete there).
@@ -783,8 +783,15 @@ field as you change it.
 **Right-click a fixture** on the plot for **Facing (pan zero) ▸**
 (Downstage, Stage Right, Upstage, Stage Left), **Set Mounting Height…**
 (its height above the floor, in the show's units: feet on a feet show,
-metres on a metric one) and **Unmount from "…"**, as well as Mount on,
-Patch and the rest.
+metres on a metric one), **Unmount from "…"** and **Mount on ▸**. These are
+the plot's own and come first. Under them is the fixture's own menu —
+**Fixture Properties…**, **Locate**, **Why is this on?**, **Patch…**, **LED
+Layout…**, **Output Rules…**, **Selection ▸**, **Rename…** — the same as in
+the Fixtures tab, Build and the Show Tree ([right-click
+menus](fixture-manager.md#right-click-menus)). A truss, deck, target or
+other piece works the same way: where it is, its locks and layers on top;
+its own **Edit …**, **Add ▸**, **Used By ▸** (a target: the Aim palettes
+pointing at it), **Rename** and **Delete …** below.
 
 **Working on several fixtures at once.** Every row applies to every
 selected fixture (select a folder row — a group or "Ungrouped" — to take

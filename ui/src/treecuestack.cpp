@@ -29,6 +29,7 @@
 #include "refinepanel.h"
 #include "focusmenu.h"
 #include "treecuestack.h"
+#include "contextmenus.h"
 #include "showtreecontroller.h"
 #include "functionparent.h"
 #include "showtreeview.h"
@@ -839,21 +840,26 @@ bool TreeCueStack::showMenu(int layer, int attribute, const QPoint &globalPos)
     }
 
     QMenu menu(m_view);
-    menu.setToolTipsVisible(true);
-    // Focus this cue (docs/design/FOCUS_REFINE_DESIGN.md): this layer from the stage.
-    {
-        const quint32 cue = m_cue;
-        QAction *refine = menu.addAction(tr("Focus this cue\342\200\246"), &menu,
-                                         [this, cue, lid]() {
-            RefinePanel::open(m_doc, m_view->window(), cue, lid);
-        });
-        refine->setObjectName(QStringLiteral("cueStackRefine"));
-        FocusMenu::setAvailable(refine, FocusMenu::focusCueBlocked(m_doc),
-                                tr("Move, zoom, focus and recolour this cue from the stage with the controller, "
-                                   "starting on this layer"));
-        menu.addSeparator();
-    }
-    QAction *solo = menu.addAction(tr("Solo this layer"));
+    fillLayerMenu(&menu, layer);
+    menu.exec(globalPos);
+    return true;
+}
+
+/* A layer row's menu, laid out by the canon (docs/design/CONTEXT_MENUS.md):
+   the Workbench's own -- Solo, the cue's Mode, Show in Tree -- on top, then
+   the layer's own menu, the same as on its row in the tree
+   (ShowTreeView::fillLayerMenu). */
+void TreeCueStack::fillLayerMenu(QMenu *out, int layer)
+{
+    const QList<Layer> ls = layers();
+    if (m_view.isNull() || out == nullptr || layer < 0 || layer >= ls.size())
+        return;
+    const quint32 lid = ls.at(layer).layerId;
+    const Target t = targetAt(layer);
+    out->setToolTipsVisible(true);
+    ContextMenu menu(out);
+    QAction *solo = menu.add(ContextMenu::Place, tr("Solo This Layer"), std::function<void()>(),
+                             QStringLiteral("cueStackSolo"));
     solo->setCheckable(true);
     solo->setChecked(m_solo && focusIndex() == layer);
     solo->setToolTip(tr("Only this layer plays; off, the whole cue plays in context"));
@@ -862,49 +868,44 @@ bool TreeCueStack::showMenu(int layer, int attribute, const QPoint &globalPos)
         setSolo(on);
         emit changed();
     });
-    // Release: a layer that plays a function as it is, too (2026-10-29).
-    if (const CueList *l = list(); l != nullptr && !l->looks)
-    {
-        QAction *release = menu.addAction(tr("Release (leaving this cue)"));
-        release->setObjectName(QStringLiteral("cueStackRelease"));
-        release->setCheckable(true);
-        bool on = false;
-        if (const Cue *c = cue())
-            if (const ShowTree::Layer *own = c->layer(lid))
-                on = own->release;
-        release->setChecked(on);
-        release->setToolTip(tr("Leaving this cue, the layer goes back to the base cue (else dark)"));
-        connect(release, &QAction::toggled, this, [this, lid, t](bool r) {
-            if (lid != ShowTree::invalidId())
-                st()->setLayerRelease(m_cue, lid, r);
-            else
-                st()->setTargetRelease(m_cue, t, r);
-        });
-    }
     // The cue's Mode ▸, as the tree's cue menu has it.
     if (const CueList *l = list(); l != nullptr && !l->looks && !l->isSubCues())
-    {
-        QMenu *mode = menu.addMenu(tr("Cue mode"));
-        mode->setObjectName(QStringLiteral("cueStackMode"));
-        m_view->cueModeMenu(mode, { m_cue });
-    }
-    if (lid != ShowTree::invalidId())
-    {
-        menu.addSeparator();
-        menu.addAction(tr("Remove the layer"), this, [this, layer]() { removeLayers({ layer }); })
-            ->setToolTip(tr("Take it out of this cue (one undo step)"));
-    }
-    menu.addSeparator();
-    menu.addAction(tr("Show in the tree"), this, [this, lid, t]() {
+        m_view->cueModeMenu(menu.addMenu(ContextMenu::Place, tr("Cue Mode"), QStringLiteral("cueStackMode")),
+                            { m_cue });
+    menu.add(ContextMenu::Place, tr("Show in Tree"), [this, lid, t]() {
         if (m_view.isNull())
             return;
         if (lid != ShowTree::invalidId())
             m_view->selectNode(lid, m_cue);
         else
             m_view->selectTracked(m_cue, t.signature());
-    });
-    menu.exec(globalPos);
-    return true;
+    }, QStringLiteral("cueStackShowInTree"));
+
+    // The layer's own menu: the clipboard items act on it as the tree's do,
+    // picked there first.
+    ShowTreeView::LayerMenuPlace place;
+    place.open = [this, layer]() {
+        setFocusLayer(layer);
+        emit changed();
+    };
+    if (lid != ShowTree::invalidId())
+    {
+        const QPointer<ShowTreeView> view = m_view;
+        const quint32 cue = m_cue;
+        auto inTree = [view, cue, lid](bool (ShowTreeView::*act)()) {
+            return [view, cue, lid, act]() {
+                if (view.isNull() || !view->selectNode(lid, cue))
+                    return;
+                (view.data()->*act)();
+            };
+        };
+        place.cut = inTree(&ShowTreeView::cutSelection);
+        place.copy = inTree(&ShowTreeView::copySelection);
+        place.paste = inTree(&ShowTreeView::pasteClipboard);
+        place.duplicate = inTree(&ShowTreeView::duplicateSelection);
+        place.remove = [this, layer]() { removeLayers({ layer }); };
+    }
+    m_view->fillLayerMenu(menu, m_cue, lid, lid == ShowTree::invalidId() ? t : Target(), place);
 }
 
 bool TreeCueStack::clearAttribute(int layer, int attribute)

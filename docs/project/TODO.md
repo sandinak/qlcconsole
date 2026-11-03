@@ -129,25 +129,30 @@ Palette and effect menus in Build and the Library are migrated, and so are
 Build ▸ Scenes, the Functions tab and the empty plot. Stage pieces and
 no-light zones are renamed, and the dead item menus are deleted.
 
+2026-11-03 (ctx2, the user: "context is a top line, then consistent
+options below"): the canon now puts **this place's own items on top**, then
+the kind's own menu in a fixed order, the same wherever the thing appears.
+One builder per kind: `ContextMenus::rig` (fixture group, fixture — now
+with LED Layout…, Gobo Wheels…, Split by Head Type…, Rename…),
+`ContextMenus::palette` (Build ▸ Palettes and Effects, the Library, a cue's
+look row and the Workbench's, Build scene look rows, the Look Editor's
+slots), `ContextMenus::function` (Build ▸ Scenes, Effects, the Library, the
+Workbench's layer rows), `ShowTreeView::fillLayerMenu` (tree and docked
+Workbench), the tree's cue / hit / list / production menus, the plot's item
+menu (fixtures via `rig`, structures and targets with Used By ▸), Structure
+Studio and the riser-face editor.
+
 Left:
-- [ ] **Show Tree tree menus** (production / list / cue / sub-cue / hit /
-  layer, `slotTreeContextMenu`) and the cue stack's layer row, onto
-  sections. Name the same act the same way: "Remove the layer" vs
-  "Delete", and "Cue mode ▸" vs "Mode ▸". Put creation (+ Cue…) in Kind.
-  Make Inline Cue / Make Sub-cue (subx) go in Organise.
-- [ ] **The Plot's item menu** (`buildItemMenu` / `populateItemMenu`) onto
-  ContextMenu. It already has one builder for the map and the list, but
-  it still adds its own separators. A Plot fixture should call
-  `ContextMenus::rig` for its common items. Selection ▸ (xsel) goes in
-  section 3.
 - [ ] **Virtual Console**: its right-click menu is the menu bar's Edit menu,
   so Delete is fourth and "Widget Properties" has no "…". Give it its own
-  menu.
+  menu (§3.4).
 - [ ] **Connections, power widget, show timeline**: title case,
   Delete last ("Delete universe entirely…" is followed by Add Universe),
   one word for remove ("Unassign", "Forget").
-- [ ] **Structure Studio's fixture menu** ("Edit fixture…", "Remove from
-  Truss") and the riser-face editor's onto `ContextMenus::rig`.
+- [ ] **Line-param rows** (Spread / Grouping / Cross ⋯) and the Look
+  Editor's pick menus: no kind block yet (a value, not an object), §3.4.
+- [ ] **Functions tab**: QLC+'s own window, hidden by default (Q32); on the
+  canon's words but not the function builder.
 
 ## Course: Level 3's remaining lessons (0.5 item 9, crs3, 2026-11-01)
 

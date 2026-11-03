@@ -3076,21 +3076,24 @@ void Monitor::showStageOverview()
         if (m_doc->fixture(fidUnder) == nullptr)
             return;
         QMenu m(ovDlg);
-        // Selection ▸ (Q201): what is ringed, if this is one of them.
-        SelectionMenu::addTo(&m, m_doc, studioMenuFixtures(view, fidUnder));
-        m.addSeparator();
-        m.addAction(tr("Fixture Properties…"), this, [this, fidUnder]() {
-            editFixtureProperties(fidUnder);
-        });
-        QAction *led = m.addAction(tr("LED Layout…"), this, [this, fidUnder, ovDlg]() {
-            LedLayoutDialog::edit(m_doc, fidUnder, ovDlg);
-        });
-        led->setObjectName(QStringLiteral("ledLayoutAction"));
-        led->setEnabled(LedLayoutDialog::canEdit(m_doc, fidUnder));
-        m.addSeparator();
-        m.addAction(WhyOnPanel::actionText(), this, [this, fidUnder, ovDlg, globalPos]() {
-            WhyOnPanel::showFor(m_doc, fidUnder, 0xFFFFFFFF, ovDlg, globalPos);
-        })->setObjectName(QStringLiteral("whyOnAction"));
+        {
+            // The fixture's own menu, as everywhere (ContextMenus::rig); the
+            // overview edits nothing of the rig, so only what looks into it.
+            ContextMenu cm(&m);
+            ContextMenus::RigPlace rig;
+            rig.parent = ovDlg;
+            rig.editable = false;
+            rig.properties = [this](const QList<quint32> &ids) {
+                if (ids.size() == 1)
+                    editFixtureProperties(ids.first());
+                else
+                    editFixturesProperties(ids);
+            };
+            QList<quint32> ringed = studioMenuFixtures(view, fidUnder);
+            ringed.removeAll(fidUnder);
+            ringed.prepend(fidUnder);
+            ContextMenus::rig(cm, m_doc, QList<quint32>(), ringed, rig);
+        }
         m.exec(globalPos);
     });
 
@@ -5298,8 +5301,13 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
             ? view->hitTestHanger(view->mapFromGlobal(globalPos)) : UINT_MAX;
         if (hangerUnder != UINT_MAX)
         {
-            QAction *aEditH = m.addAction(tr("Edit Hanger…"));
-            QAction *aRemH  = m.addAction(tr("Remove Hanger"));
+            // The canon (docs/design/CONTEXT_MENUS.md): its editor, deleting it last.
+            QAction *aEditH = nullptr, *aRemH = nullptr;
+            {
+                ContextMenu cm(&m);
+                aEditH = cm.add(ContextMenu::Open, tr("Edit Hanger…"));
+                aRemH = cm.add(ContextMenu::Remove, tr("Delete Hanger…"));
+            }
             QAction *ch = m.exec(globalPos);
             if (ch == aEditH)
                 slotEditHanger(hangerUnder);
@@ -5313,16 +5321,31 @@ QWidget *Monitor::makeStudioPane(QDialog *dlg, int kind, quint32 id,
         }
         if (fidUnder != Fixture::invalidId())
         {
-            QAction *aEdit = m.addAction(tr("Edit fixture…"));
+            /* The canon (docs/design/CONTEXT_MENUS.md): what only this
+               structure offers on top -- off it, a bar or hanger here -- then
+               the fixture's own menu, as everywhere (ContextMenus::rig). */
             QAction *aRem  = m.addAction(tr("Remove from %1").arg(objectNoun));
-            m.addSeparator();
-            SelectionMenu::addTo(&m, m_doc, studioMenuFixtures(view, fidUnder));   // Q201
             QAction *aBarF = addBarAction();
             QAction *aHangF = addHangerAction();
+            ContextMenu::fileAsPlace(&m);
+            {
+                ContextMenu cm(&m);
+                ContextMenus::RigPlace rig;
+                rig.parent = view;
+                rig.properties = [this](const QList<quint32> &ids) {
+                    if (ids.size() == 1)
+                        editFixtureProperties(ids.first());
+                    else
+                        editFixturesProperties(ids);
+                };
+                rig.changed = [view, rebuildTree, rebuildSource, refreshMap]() {
+                    view->reload(); rebuildTree(); rebuildSource(); refreshMap();
+                };
+                ContextMenus::rig(cm, m_doc, QList<quint32>(), studioMenuFixtures(view, fidUnder), rig);
+            }
             QAction *ch = m.exec(globalPos);
             if (aHangF && ch == aHangF) { studioAddHanger(kind, id, view, barAt); rebuildTree(); rebuildSource(); }
             else if (aBarF && ch == aBarF) { studioAddBar(kind, id, view, barAt); rebuildTree(); rebuildSource(); }
-            else if (ch == aEdit) editFixtureProperties(fidUnder);
             else if (ch == aRem)
             {
                 pushUndo();

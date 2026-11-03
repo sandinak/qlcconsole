@@ -21,7 +21,7 @@ Students can:
 
 1. say when a board op busks and why hits are built before the show;
 2. build **hits** in the production's Hits section and put them on a
-   **Virtual Console** page (**Make VC page**);
+   **Virtual Console** page (**Make VC Page**);
 3. fire a hit over a running cue list in Operate and let it go.
 
 ## Before class
@@ -71,7 +71,7 @@ On the projector:
 
 1. Right-click **Spring Show → + Hit**, name it `Red Stab`, TrussW-RGB
    Red, Full.
-2. Right-click **Hits → Make VC page**; show the Virtual Console tab and
+2. Right-click **Hits → Make VC Page**; show the Virtual Console tab and
    the button. Point out: in Design, clicking it does nothing.
 3. Leave the other hits and the live part for the students.
 
@@ -115,7 +115,7 @@ the solo's focus).
 
 ## At home
 
-[At home](at-home.md): a fourth hit for an encore, **Make VC page** again
+[At home](at-home.md): a fourth hit for an encore, **Make VC Page** again
 (the page gains a button, the others stay), fired over the song; or, on
 paper, four hit cards over a vamp.
 
@@ -139,10 +139,10 @@ paper, four hit cards over a vamp.
 Every step of the handout is run by the course test (`ui/test/courseshow`,
 `levelTwoWithTheMouse`, `lessonTwoSixFiresAHit`) on the real app,
 offscreen: **+ Hit** from the tree's right-click menu, the Name box, the
-drops and the Center aim, **Make VC page** from the Hits row and its
+drops and the Center aim, **Make VC Page** from the Hits row and its
 top-bar message, the frame and its three buttons on the Virtual Console,
 *Fired by* on the hit's page; then live, in Operate: GO to the Verse in
 the Run tab, a click on **Red Stab** (the truss boxes red, the verse's
 step tops still lit), a second click (the boxes dark again), Stop and
-Design. The at-home fourth hit and **Make VC page** again (four buttons)
+Design. The at-home fourth hit and **Make VC Page** again (four buttons)
 are checked the same way.

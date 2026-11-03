@@ -6,8 +6,9 @@ matter where should have consistency .. or a fixture .. or a stage
 feature".*
 
 This page does three things. It lists every right-click menu by the kind of
-object you click and the place you click it. It names what disagrees. It
-sets the canon that every menu follows. The canon lives in code in
+object you click and the place you click it (§1, as it was on 2026-11-02).
+It names what disagrees. It sets the canon that every menu follows (§3,
+revised 2026-11-03: the place's own items on top, then the kind's menu). The canon lives in code in
 `ui/src/contextmenus.{h,cpp}`, and `ui/test/contextmenus` checks each
 migrated menu against it, so new drift fails the gate.
 
@@ -140,20 +141,45 @@ marker. "Delete cue" comes first in a sequence item's menu.
 
 ### 3.1 Sections
 
+**Decided 2026-11-03 (user): place-specific items on top, then the kind
+menu.** The ask, with the Show Tree's look row (Set to ▸ / None (off here) /
+Clear (inherit), and nothing else) beside Build's palette menu: *"a line on
+rig view or in tree .. should still have the same paradigm where the right
+click can edit all the things that I can in the build .. consistency will be
+the right thing. … context is a top .. line .. and then consistent options
+below that are consistently ordered for any menu we have."* Why: the first
+version (2026-11-02) filed a place's own items in a *Place* section in the
+middle (5 of 8), so the object's own items were split around them, and the
+same palette had a different-looking menu in every place. Now a menu is two
+blocks: what only this place offers, at the top where the eye starts; one
+separator; then the object's own menu, built by one builder per kind and so
+identical wherever the object is right-clicked.
+
 Every context menu is built from sections in this fixed order. A section
 with nothing in it is left out. A separator stands between two sections
 that are both present, and nowhere else at the top level.
 
 | # | Section | What goes in it | Examples |
 |---|---|---|---|
-| 1 | **Open** | The thing's own editor. It is first and, where the place has one, the default action. | Fixture Properties… · Edit Head Layout… · Edit Truss… · Edit Palette… · Open in Workbench |
-| 2 | **Kind** | What this kind of thing does | Locate · Why Is This On? · Patch… · Output Rules… · Split by Head Type… · Add ▸ |
-| 3 | **Selection** | Picking out more like it | Select All Similar · (the shared *Selection ▸* submenu, see 3.5) |
-| 4 | **Organise** | Making something from it, and filing it | Create Fixture Group from Selection… · Move to Folder ▸ · Move to Layer ▸ · Make Set… · Pin |
-| 5 | **Place** | What only this place offers, in a fixed slot | Show on Map · Remove from Truss · Lock Position · Focus This Look… |
-| 6 | **View** | The list itself, not the object | Expand All · Collapse All · [x] Group by Type |
+| 1 | **Place** | What only this place offers: the context. First. | Set to ▸ · None (off here) · Clear (inherit) · Remove from Truss · Remove from Scene · Pin · Make Set… · Solo This Layer · + Cue · Show on Map |
+| 2 | **View** | The list itself, not the object | Expand All · Collapse All · [x] Group by Type |
+| 3 | **Open** | The kind block starts: its own editor, the default action (a double-click does the same) | Fixture Properties… · Edit Head Layout… · Edit Palette · Open in Workbench · Edit Truss… |
+| 4 | **Kind** | What this kind of thing does | Locate · Why is this on? · Patch… · Output Rules… · Used By ▸ · Runs ▸ · Learn Trigger… · Add ▸ |
+| 5 | **Selection** | Picking out more like it | Selection ▸ · Select All Similar |
+| 6 | **Organise** | Making something from it, and filing it | Create Fixture Group from Selection… · Move to Folder ▸ · Save as Bundle… · Make Reusable… |
 | 7 | **Edit** | Clipboard and name | Cut · Copy · Paste · Duplicate · Rename |
-| 8 | **Remove** | Taking it out, then destroying it, always last | Remove from Scene · Delete Fixture Group… |
+| 8 | **Remove** | Deleting it, always last | Delete Fixture Group… · Delete Palette… · Delete Layer |
+
+Sections 1–2 are the context; 3–8 the **kind block**. `ContextMenu::kindBlock()`
+returns the kind block's item names and `ContextMenu::contextItems()` the
+context's texts; the canon test compares kind blocks across places. A place
+whose own items are built straight into the `QMenu` (the look row, the plot)
+calls `ContextMenu::fileAsPlace()`: its items are filed in Place and its
+separators dropped, and the kind block goes under them.
+
+"Remove from …" (out of a container: a scene, a truss, a layer) is the
+place's, so it is on top now; only Delete (destroying the thing) is in
+section 8.
 
 ### 3.2 Words
 
@@ -196,106 +222,157 @@ that are both present, and nowhere else at the top level.
 
 ### 3.3 Per kind
 
-**Fixture group.** Every place calls `ContextMenus::rig()` (or its
-`fixtureGroup()` wrapper).
-- **Open:** Edit Head Layout…
-- **Kind:**
-  - Locate
-  - Why is this on? (its first light)
-  - Output Rules…
-  - Split by Head Type… (if mixed)
-  - Lay Out from the Stage… (if on the plot)
-- **Selection:** Select All Similar
-- **Organise:**
-  - Create Fixture Group from Selection… (if several are selected)
-  - Move to Folder ▸
-- **Place** items, by place:
-  - Fixture Manager: Plot Symbol ▸, Test Fixture…, Group ▸ extras
-  - Build outline: Remove from Scene, Focus This Look…
-  - Plot Layers: Remove from Truss, Move to Layer ▸
-  - Library: Pin, Make Set…
-- **Edit:** Rename
-- **Remove:** Delete Fixture Group…
+One builder per kind fills the kind block. A place passes hooks for what it
+does its own way (rename in place, edit in its own editor); an empty hook
+means the builder does it itself (a dialog), so the item is there in every
+place. Object names are the same everywhere (`ctx…`); the canon test checks
+them.
 
-What each place supplies:
-- Edit Head Layout opens wherever the place edits a layout: the Fixture
-  Manager pane, the Workbench, or a dialog everywhere else.
-- Rename is inline where the list can edit the row in place, and a dialog
-  otherwise.
+**Fixture group** — `ContextMenus::rig()` / `fixtureGroup()`.
+- Open: Edit Head Layout…
+- Kind: Locate, Why is this on? (its first light), Output Rules…, Split by
+  Head Type… (if mixed), Lay Out from the Stage… (if on the plot)
+- Selection: Selection ▸, Select All Similar
+- Organise: Create Fixture Group from Selection… (several), Move to Folder ▸
+- Edit: Rename (in place) / Rename…
+- Remove: Delete Fixture Group…
+- Places on top: Fixture Manager (Plot Symbol ▸, Test Fixture…, Group ▸,
+  Power ▸, …), Build scene (Remove from Scene, Focus This Look…), Plot
+  Layers (Remove from “Truss”, the plot's folders and layers), Library
+  (Pin, Make Set…).
 
-**Fixture.** Every place calls `ContextMenus::rig()` (or `fixture()`); a
-mixed selection of groups and fixtures gets one menu for both.
-- **Open:** Fixture Properties…
-- **Kind:**
-  - Locate
-  - Why is this on? (one fixture)
-  - Patch… / Patch %n Fixtures…
-  - Output Rules…
-- **Selection:** Select All Similar, or the *Selection ▸* submenu from
-  `selectionmenu.*` once it lands (3.5)
-- **Organise:** Create Fixture Group from Selection…
-- **Place** items, by place:
-  - Fixture Manager: definition, power, inventory
-  - Plot: Mount on ▸, footprints, layers
-  - Build outline: Remove from Scene, Focus This Look…
-- **Remove:** Remove from Scene / Remove from Truss / Delete Fixture…
+**Fixture** — `ContextMenus::rig()` / `fixture()`; a mixed selection of
+groups and fixtures gets one menu for both.
+- Open: Fixture Properties…
+- Kind: Locate, Why is this on?, Patch… / Patch %n Fixtures…, LED Layout…
+  (several heads), Gobo Wheels… (its own glass), Output Rules…, Split by
+  Head Type… (mixed)
+- Selection: Selection ▸ (Create Fixture Group from Selection… inside),
+  Select All Similar
+- Edit: Rename / Rename… (one fixture)
+- Places on top: Fixture Manager (definition, inventory, test, Group ▸,
+  Power ▸; Delete… last), the plot and Plot Layers (Mount on ▸, the mount's
+  editor, Unmount, Facing ▸, height, studio group, footprint, folders,
+  layers, Remove from Fixture Group, Remove from View), Structure Studio
+  (Remove from Truss, Add Bar/Hanger Here), the riser-face editor (Facing
+  ▸, Remove from Truss, Set Mounting Height…), the Rig Overview (nothing:
+  read-only, so only what looks into it), Build scene, Library.
+
+**Palette** (any type; an effect palette too) — `ContextMenus::palette()`.
+- Open: Edit Palette / Edit Effect (in the Workbench: no "…")
+- Kind: Runs ▸ (effects), Used By ▸ (the cues, hits, scenes and effect
+  slots using it, each a jump; VC buttons listed)
+- Organise: Make Reusable… (a cue's one-off value), Move to Folder ▸,
+  Save as Bundle…
+- Edit: Duplicate, Rename / Rename…
+- Remove: Delete Palette… / Delete %n Palettes…
+- Places: Build ▸ Palettes, Build ▸ Effects, the Library (Pin on top), a
+  cue's look row in the Show Tree and in the docked Workbench (Set to ▸ /
+  Set in This Cue ▸, Update Cue ▸, Design Effect…, Level…, Colour…, Its Own
+  Colour / Dimmer ▸, Fade In / Out ▸, None (off here), Clear (inherit) on
+  top), a Build scene's look row (Show in Palettes, Move Up / Down, Remove
+  from Scene on top), the Look Editor's palette slots (Clear on top).
+
+**Function** (scene, chaser, EFX, collection, RGB Matrix, …) —
+`ContextMenus::function()`.
+- Open: Open in Workbench
+- Kind: Learn Trigger…, Runs ▸ (EFX, RGB Matrix), Send to Show Tree…
+  (chaser), Used By ▸ (the chasers and collections it is in; VC buttons)
+- Organise: Move to Folder ▸
+- Edit: Duplicate, Rename / Rename…
+- Remove: Delete… / Delete %n Functions…
+- Places: Build ▸ Scenes (Chaser from Selection on top), Build ▸ Effects,
+  the Library (Adopt as a Hit, Pin on top), the Workbench's layer rows
+  (Make Own Copy, Move Layer Up / Down, Remove Layer on top).
+
+**Show Tree layer** — `ShowTreeView::fillLayerMenu()`, the tree's layer row
+and the Workbench's (docked) layer row.
+- Open: Open “function”… (a function played as it is: W0, first), Open in
+  Workbench
+- Kind: Capture into Palettes…, Release (Leaving This Cue), Why is this
+  on?, Design Effect…, Focus This Cue…, Split Layer (One per Group), Add
+  Child Layer ▸, Remove from Layer ▸, Detach to Plain Scene, Light on the
+  Cyc: Not Meant
+- Organise: Make Reusable… / Unlink Here (a Copy of Its Own)
+- Edit: Cut, Copy, Paste After This Layer, Duplicate, Rename…
+- Remove: Delete Layer
+- Places on top: the tree (+ Cue List…, + Hit for This Cue, + Cue, +
+  Sub-cue, Merge Layers, N Selected Layers ▸), the Workbench (Solo This
+  Layer, Cue Mode ▸, Show in Tree). A layer carried into the cue has only
+  Open, Release and Why is this on?.
+
+**Cue / sub-cue / hit** — the tree's cue rows.
+- Open: Open in Workbench
+- Kind: Learn Trigger…, Skip Cue, Don't Move in Black into This Cue, Mode
+  ▸, Colour ▸, Record as New Cue, Copy to a Hit, Renumber This Level…,
+  Ripple Timecode…; a hit: Colour ▸, Make VC Page
+- Organise: Make Sub-cue of … / Make Inline Cue, Make Cue Reusable… /
+  Unlink Here, Move to Folder ▸ (a hit), Move Up, Move Down
+- Edit: Copy, Paste After This Cue / Paste into This Cue, Duplicate
+- Remove: Delete Cue / Delete Sub-cue / Delete Hit
+
+**Cue list** — Learn Trigger…, Convert to Tracking…, Colour ▸, Move in
+Black ▸, Make Main List, Play on GO, Detach to Plain Chaser…, Restore
+Original… | Rename… | Delete Cue List…. **Production** — Make Current
+Production | Rename… | Delete Production…. **Hits / hit folder** — Make VC
+Page | Rename Folder | Delete Folder (New Folder… on top).
 
 **Stage feature** (truss, platform, boom, stand, tower, hanger, scenery,
-target, image, power source, network node, stage piece, no-light zone).
-These keep the one Plot builder (`buildItemMenu`), with three changes:
-- Stage pieces say "Edit X…" like everything else, not "X Properties…".
-- A no-light zone's destroy item is "Delete No-light Zone".
-- The dead item `contextMenuEvent`s are gone.
-
-**Palette.** Build ▸ Palettes, Build ▸ Effects and the Library build it in
-the canon's sections with the same names (no shared builder yet: the three
-lists act on different models).
-- **Open:** Edit Palette (it opens in the Workbench, not a dialog) / Edit
-  Effect / Open in Editor
-- **Kind:** Runs ▸ (effects)
-- **Organise:** Move to Folder…, Save as Bundle…
-- **Place:** Used By ▸ in the Library
-- **Edit:** Duplicate, Rename
-- **Remove:** Delete Palette… / Delete %n Palettes…
-- "New …" items belong to empty space and folders. They are not in an
-  object's menu.
-
-**Function** (scene, chaser, EFX, collection, RGB matrix).
-- **Open:** Open in Workbench / Open in Editor
-- **Kind:** Learn Trigger…, Runs ▸, Send to Show Tree…
-- **Organise:** Chaser from Selection
-- **Edit:** Duplicate, Rename
-- **Remove:** Delete…
-- "New …" items go to empty space and folders.
+target, image, power source, network node) — the plot's one builder
+(`MonitorGraphicsView::buildItemMenu`), the same for the map and Plot
+Layers.
+- Open: Edit X…
+- Kind: Patch Others Like This…, Duplicate Setup to…, Add ▸, Used By ▸ (a
+  target: the Aim palettes pointing at it, each opened to edit), Save as
+  Gear Model… (network node), Fixture Layout…, Ungroup
+- Edit: Rename (in place in the list) / Rename… (the map)
+- Remove: Delete X / Delete Target…
+- On top: Show Light Footprints, Lock Position, Lock Layer, Show on Map /
+  Show in Plot Layers, the plot's folders and layers.
+- A stage piece: Edit X… under Show on Map, Shown, Locked, Auto. A no-light
+  zone: Edit No-light Zone… | Delete No-light Zone. A Structure Studio
+  hanger: Edit Hanger… | Delete Hanger….
 
 ### 3.4 What is not migrated yet
 
-These menus follow the words rule only where they share a text with a
-migrated menu, and are listed for a follow-up.
+These follow the words rule only where they share a text with a migrated
+menu, and are listed for a follow-up.
 
-**Show Tree cue/list/layer menus** (`slotTreeContextMenu`). Another change
-(Make Inline Cue / Make Sub-cue) was landing in the same function. Their
-slots in the canon:
-- Open: Open in Workbench
-- Kind: Release, Skip, Mode ▸
-- Organise: Make Reusable…, Make Inline Cue, Make Sub-cue of…
-- Edit: Copy / Cut / Paste / Duplicate / Rename
-- Remove: Delete
+**Virtual Console.** Its right-click menu *is* the menu bar's Edit menu
+(Cut, Copy, Paste, Delete, Widget Properties, …, the widget's own ▸), so
+the same `QAction`s serve both. Putting the widget's own items on top and
+Delete last would reorder the menu bar's Edit menu too, which is QLC+'s
+documented layout; it needs a menu of its own built for the right-click.
+Not trivially compatible, so left (TODO.md).
 
-**Virtual Console.** Its right-click menu *is* the menu bar's Edit menu, so
-reordering it moves the menu bar too.
+**Line-param rows** (Spread / Grouping / Cross ⋯ on a line aim) and the
+Look Editor's palette pick menus (a left-click on a slot): they pick a
+value, not an object, so there is no kind block to add.
 
-**Connections, power widget and show timeline.** No overlap with the three
-kinds asked about.
+**Functions tab** (QLC+'s Function Manager, hidden by default since Q32):
+on the canon's sections and words, not on the function builder.
+
+**Connections, power widget and show timeline.** No overlap with the kinds
+above.
+
+**Counts.** Distinct menu texts in `ui/src` went from 505 to 496, and the
+places in the code that add a menu item from 599 to 581 (`tr("…")` texts on
+lines that add a menu item, before and after 2026-11-03): the shared
+builders replaced per-place copies (palette menus in Build, Effects and the
+Library; function menus in Build ▸ Scenes, Effects and the Workbench; the
+two layer menus; the fixture menus of the plot, Structure Studio, the Rig
+Overview and the riser-face editor). Several places' menus are longer
+(a look row now carries its palette's menu): that is the ask.
 
 ### 3.5 Reserved slots for work landing alongside
 
+(Section names, not the old numbers: the order changed on 2026-11-03.)
+
 - *Selection ▸*, shared by fixture and head menus (`ui/src/selectionmenu.*`),
-  goes in section 3.
-- The Plot's "New Layer from Selection…" becomes "New Map Layer from
-  Selection…" in section 4. That separates the drawing layer from the
-  Workbench layer (2, point 5).
+  goes in Selection.
+- The Plot's "New Map Layer from Selection…" is the plot's own (on top).
+  That separates the drawing layer from the Workbench layer (2, point 5).
 - The Show Tree's "Make Inline Cue" / "Make Sub-cue of …" on cue and sub-cue
-  rows go in section 4 (Organise).
+  rows are in Organise.
 - Show Review's "I meant it" is a review-row action, not an object menu.
-  The cyc-backwash layer item goes in section 2 of a cue layer.
+  The cyc-backwash layer item is in Kind of a cue layer.
