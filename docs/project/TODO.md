@@ -64,8 +64,17 @@ geometry PWR-11 already follows; catches the commonest plot mistake a
 student (and a tired LD) makes, before tech, at ~10 ms a review on
 DanceHysteria. Each "decided (can change)": scrim guarded by default; a
 target "on" the cyc is a mark / area / line within 0.5 m (never a person);
-meant carries on while the light keeps landing; curtains read at their set
-state. Leftovers, not built:
+meant carries on while the light keeps landing.
+Since (cyc2, 2026-11-03): curtains stand where each cue leaves them (a
+driven drape from the functions the cue plays; at rest = closed in a list
+that moves it, else its set state -- decided, can change); one hover detail
+and one right-click menu for every warning mark (ui/src/showreviewmarker.*:
+cue mark, footer chip, Review rows); only the warning word in the warning
+colour; platforms' Finish (rig) colour, stage black by default, drawn by the
+rig views, a warned cyc outlined. Leftovers, not built:
+- A driven curtain moved by a look (a dimmer palette on the curtain fixture)
+  or a chaser step: only scenes and collections a cue plays are read.
+- The 2D plot keeps the plot colour; the Finish is not shown there.
 - The Lighting Studio drawing an unmeant beam's pool on the cyc in the
   warning colour (needs the cue the Studio is showing; the Studio draws live
   output, not a cue).

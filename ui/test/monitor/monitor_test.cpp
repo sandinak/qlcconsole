@@ -1205,6 +1205,7 @@ void Monitor_Test::theApronIsDeckInTheRigOverview()
     deck->setWidth(8.0f); deck->setDepth(4.5f);           // front at 5: the curtain line
     deck->setHeight(1.0f);
     deck->setColor(QColor(150, 90, 40));
+    deck->setFinish(QColor(150, 90, 40));  // the rig draws its finish
     props->setCurtainLineY(5.0f);
     QVERIFY(props->setApronDepth(2.0f));                  // out to 7, beyond the deck
     QVERIFY(!props->stageMarkVisible(MonitorProperties::CurtainLineFlag));
@@ -4506,11 +4507,13 @@ void Monitor_Test::angledOverviewDrawsNearThingsInFront()
     far_->setName("Far"); far_->setOriginX(0.0f); far_->setOriginY(0.0f);
     far_->setWidth(6.0f); far_->setDepth(2.0f); far_->setHeight(2.0f);
     far_->setColor(QColor(60, 110, 230));                // saturated blue
+    far_->setFinish(QColor(60, 110, 230));  // the rig draws its finish
 
     StagePlatform *near_ = props->addPlatform();
     near_->setName("Near"); near_->setOriginX(1.0f); near_->setOriginY(3.0f);
     near_->setWidth(4.0f); near_->setDepth(1.5f); near_->setHeight(2.0f);
     near_->setColor(QColor(235, 235, 235));              // near-white, unsaturated
+    near_->setFinish(QColor(235, 235, 235));  // the rig draws its finish
 
     StructureStudioView ov(m_doc, StructureStudioView::StageKind, 0);
     ov.resize(800, 560);
@@ -4546,6 +4549,7 @@ void Monitor_Test::ambientLevelDimsTheWholeView()
     pl->setName("Bright Deck"); pl->setOriginX(0.0f); pl->setOriginY(0.0f);
     pl->setWidth(5.0f); pl->setDepth(3.0f); pl->setHeight(0.6f);
     pl->setColor(QColor(230, 40, 40));
+    pl->setFinish(QColor(230, 40, 40));  // the rig draws its finish
 
     StructureStudioView v(m_doc, StructureStudioView::StageKind, 0);
     v.resize(700, 500);
@@ -4615,6 +4619,7 @@ void Monitor_Test::litFixturesKeepTheirBrightnessInABlackout()
     pl->setName("Blackout Deck"); pl->setOriginX(0.0f); pl->setOriginY(0.0f);
     pl->setWidth(5.0f); pl->setDepth(3.0f); pl->setHeight(1.5f);
     pl->setColor(QColor(60, 60, 60));
+    pl->setFinish(QColor(60, 60, 60));  // the rig draws its finish
 
     props->setFixturePosition(fxi->id(), 0, 0, QVector3D(0, 0, 0));
     FixtureRigProps rp;
@@ -4684,6 +4689,7 @@ void Monitor_Test::clearTopAndInsidePlacement()
     pl->setName("Step"); pl->setOriginX(0.0f); pl->setOriginY(0.0f);
     pl->setWidth(4.0f); pl->setDepth(2.0f); pl->setHeight(0.8f);
     pl->setColor(QColor(220, 30, 30));
+    pl->setFinish(QColor(220, 30, 30));  // the rig draws its finish
 
     StructureStudioView v(m_doc, StructureStudioView::StageKind, 0);
     v.resize(700, 500);
@@ -5572,6 +5578,7 @@ void Monitor_Test::unlitFixturesAreStillObjectsInTheRoom()
     pl->setName("Dark Deck"); pl->setOriginX(0.0f); pl->setOriginY(0.0f);
     pl->setWidth(5.0f); pl->setDepth(3.0f); pl->setHeight(1.5f);
     pl->setColor(QColor(0, 0, 0));      // contributes nothing to what we sample
+    pl->setFinish(QColor(0, 0, 0));  // the rig draws its finish
 
     QLCFixtureDef *def = new QLCFixtureDef();
     def->setManufacturer("Test"); def->setModel("Idle Par");
@@ -10169,6 +10176,7 @@ void Monitor_Test::aFrameFilledAcrossCoresIsTheSameFrame()
     clear->setOriginX(2.0f); clear->setOriginY(4.2f);
     clear->setWidth(4.0f); clear->setDepth(1.0f); clear->setHeight(0.4f);
     clear->setColor(QColor(80, 120, 200, 140));             // see-through
+    clear->setFinish(QColor(80, 120, 200, 140));  // the rig draws its finish
 
     StageTarget *who = props->addStageTarget();
     who->setKind(StageTarget::Kind::Person);
@@ -10902,6 +10910,7 @@ void Monitor_Test::aBeamFadesAlongItsLengthWhicheverWayItPoints()
     // Opaque, like a real deck: a see-through one is a translucent shape of its
     // own, and ordering two of those is a different question from this one.
     stage->setColor(QColor(60, 60, 70));
+    stage->setFinish(QColor(60, 60, 70));  // the rig draws its finish
 
     const QVector3D apexAt(5.30f, 0.93f, 0.02f);
     const QVector3D dir = QVector3D(0.22f, 0.84f, 0.50f).normalized();
@@ -11336,6 +11345,7 @@ void Monitor_Test::anUndrivenHeadPointsAtTheScenesTarget()
         wall->setOriginX(2.0f); wall->setOriginY(0.0f);
         wall->setWidth(2.5f); wall->setDepth(2.5f); wall->setHeight(3.0f);
         wall->setColor(QColor(30, 30, 30));
+        wall->setFinish(QColor(30, 30, 30));  // the rig draws its finish
 
         tgt->setColor(QColor(255, 0, 255));      // unmistakable
         v.setActiveScene(Function::invalidId());
@@ -12039,6 +12049,7 @@ void Monitor_Test::aStripStaysLitFromEitherSideOfTheHouse()
     pl->setName("Step"); pl->setOriginX(0.0f); pl->setOriginY(0.0f);
     pl->setWidth(2.438f); pl->setDepth(0.204f); pl->setHeight(0.4f);
     pl->setColor(QColor(40, 40, 44));
+    pl->setFinish(QColor(40, 40, 44));  // the rig draws its finish
 
     Fixture *tape = makeStepTape(doc, pl, 64, 0, "Tape", 0.20f);
     QVERIFY(tape != nullptr);
@@ -12099,6 +12110,7 @@ void Monitor_Test::aStepsOwnTapeSitsInFrontOfWhatIsInsideIt()
     pl->setName("Step"); pl->setOriginX(0.0f); pl->setOriginY(0.0f);
     pl->setWidth(6.0f); pl->setDepth(0.6f); pl->setHeight(0.5f);
     pl->setColor(QColor(40, 40, 44));
+    pl->setFinish(QColor(40, 40, 44));  // the rig draws its finish
     pl->setTopMaterial(StagePlatform::ClearTop);
 
     /* Near one END of a long step. Dead centre, a surface-mounted fixture is
@@ -12178,6 +12190,7 @@ void Monitor_Test::fixturesInsideAStepAreAllVisible()
     pl->setName("Clear Step"); pl->setOriginX(0.0f); pl->setOriginY(0.0f);
     pl->setWidth(4.0f); pl->setDepth(1.0f); pl->setHeight(0.6f);
     pl->setColor(QColor(40, 40, 44));
+    pl->setFinish(QColor(40, 40, 44));  // the rig draws its finish
     pl->setTopMaterial(StagePlatform::ClearTop);
 
     QLCFixtureDef *def = new QLCFixtureDef();
@@ -12286,6 +12299,7 @@ void Monitor_Test::pixelsSurviveOffAxisOnTheirOwnHousing()
     pl->setName("Off-axis Step"); pl->setOriginX(0.0f); pl->setOriginY(0.0f);
     pl->setWidth(2.438f); pl->setDepth(0.204f); pl->setHeight(0.204f);
     pl->setColor(QColor(40, 40, 44));       // neutral: never counted as lit
+    pl->setFinish(QColor(40, 40, 44));  // the rig draws its finish
 
     const int PIX = 64;
     QLCFixtureDef *def = new QLCFixtureDef();
@@ -12561,6 +12575,7 @@ void Monitor_Test::aSolidBoxHidesItsOwnFarEdges()
     pl->setName("Solid"); pl->setOriginX(0.0f); pl->setOriginY(0.0f);
     pl->setWidth(3.0f); pl->setDepth(1.6f); pl->setHeight(1.0f);
     pl->setColor(QColor(190, 40, 40));
+    pl->setFinish(QColor(190, 40, 40));  // the rig draws its finish
     pl->setTopMaterial(StagePlatform::SolidTop);
 
     StructureStudioView v(doc, StructureStudioView::PlatformKind, pl->id());
@@ -12624,11 +12639,13 @@ void Monitor_Test::bothRenderersAgreeOnPlainOcclusion()
     back->setName("Back"); back->setOriginX(0.0f); back->setOriginY(4.0f);
     back->setWidth(3.0f); back->setDepth(1.0f); back->setHeight(2.0f);
     back->setColor(QColor(200, 60, 60));
+    back->setFinish(QColor(200, 60, 60));  // the rig draws its finish
 
     StagePlatform *front = props->addPlatform();
     front->setName("Front"); front->setOriginX(0.5f); front->setOriginY(0.0f);
     front->setWidth(2.0f); front->setDepth(1.0f); front->setHeight(1.2f);
     front->setColor(QColor(60, 200, 60));
+    front->setFinish(QColor(60, 200, 60));  // the rig draws its finish
 
     StructureStudioView v(doc, StructureStudioView::StageKind, 0);
     v.resize(600, 420);
@@ -16361,6 +16378,7 @@ void Monitor_Test::aPoolOnADeckIsDrawn()
     deck->setName("Deck"); deck->setOriginX(0.0f); deck->setOriginY(0.0f);
     deck->setWidth(6.0f); deck->setDepth(6.0f); deck->setHeight(1.0f);
     deck->setColor(QColor(60, 60, 60));
+    deck->setFinish(QColor(60, 60, 60));  // the rig draws its finish
     Truss *t = props->addTruss();
     t->setName("T"); t->setType(Truss::Horizontal);
     t->setOrigin(QVector3D(1.0f, 3.0f, 5.0f)); t->setDirection(QPointF(1.0, 0.0));
@@ -16476,6 +16494,7 @@ void Monitor_Test::theGpuDrawsWhatTheCpuDraws()
     deck->setName("Deck"); deck->setOriginX(0.0f); deck->setOriginY(0.0f);
     deck->setWidth(6.0f); deck->setDepth(4.0f); deck->setHeight(1.0f);
     deck->setColor(QColor(90, 70, 60));
+    deck->setFinish(QColor(90, 70, 60));  // the rig draws its finish
     Truss *t = props->addTruss();
     t->setName("T"); t->setType(Truss::Horizontal);
     t->setOrigin(QVector3D(0.5f, 2.0f, 5.0f)); t->setDirection(QPointF(1.0, 0.0));
@@ -21420,6 +21439,7 @@ void Monitor_Test::ledsGlowInTheHaze()
     pl->setWidth(2.438f); pl->setDepth(0.6f); pl->setHeight(0.4f);
     pl->setTopMaterial(StagePlatform::ClearTop);
     pl->setColor(QColor(40, 40, 44));
+    pl->setFinish(QColor(40, 40, 44));  // the rig draws its finish
     Fixture *tape = makeStepTape(doc, pl, 32, 0, "Step tape", 0.2f);
     QVERIFY(tape != nullptr);
     FixtureRigProps rp = props->fixtureRigProps(tape->id());
@@ -21504,6 +21524,7 @@ void Monitor_Test::hazeGlowStaysBehindAClosedDrape()
     pl->setName("Step"); pl->setOriginX(-1.2f); pl->setOriginY(0.0f);
     pl->setWidth(2.438f); pl->setDepth(0.6f); pl->setHeight(0.4f);
     pl->setColor(QColor(40, 40, 44));
+    pl->setFinish(QColor(40, 40, 44));  // the rig draws its finish
     Fixture *tape = makeStepTape(&doc, pl, 32, 0, "Steps", 0.2f);
     QVERIFY(tape != nullptr);
     QByteArray u(512, char(0));

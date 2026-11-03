@@ -10,6 +10,7 @@ target_include_directories(${module_name} PRIVATE
     ../../../engine/src
     ../../../plugins/interfaces
     ../../src
+    ../../src/monitor
 )
 
 include_ui_header(${module_name})

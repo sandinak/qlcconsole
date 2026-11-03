@@ -150,6 +150,8 @@
 #include "showoperate.h"
 #include "teachingsettings.h"
 #include "showreviewpanel.h"
+#include "showreviewmarker.h"
+#include "contextmenus.h"
 #include "showreview.h"
 #include "qlcfixturedef.h"
 #include "definitionupdatesdialog.h"
@@ -7830,9 +7832,16 @@ bool App::eventFilter(QObject *watched, QEvent *event)
         return true;
     }
 
+    if (watched == m_statusReviewLabel && event->type() == QEvent::ContextMenu)
+    {
+        // Right-click the chip: answer a warning here (ShowReviewMarker).
+        showReviewChipMenu(static_cast<QContextMenuEvent *>(event)->globalPos());
+        return true;
+    }
     if (watched == m_statusReviewLabel && event->type() == QEvent::MouseButtonPress)
     {
-        ShowReviewPanel::openShared();
+        if (static_cast<QMouseEvent *>(event)->button() == Qt::LeftButton)
+            ShowReviewPanel::openShared();
         return true;
     }
 
@@ -8767,10 +8776,36 @@ void App::updateReviewStatus()
         m_statusReviewLabel->setStyleSheet(blockers > 0 ? QStringLiteral("QLabel { color: #c0392b; font-weight: bold; }")
                                                         : QStringLiteral("QLabel { color: #b9770e; }"));
     }
-    m_statusReviewLabel->setToolTip(tr("Show Review: %1 blockers, %2 warnings, %3 notes open; %4 accepted. "
-                                       "Click for the Review panel.")
-                                    .arg(blockers).arg(warnings).arg(r.open[ReviewFinding::Note]).arg(accepted));
+    const QString summary = tr("Show Review: %1 blockers, %2 warnings, %3 notes open; %4 accepted. "
+                               "Click for the Review panel.")
+                            .arg(blockers).arg(warnings).arg(r.open[ReviewFinding::Note]).arg(accepted);
+    // The detail of what is open, as on every warning's mark.
+    QString detail = ShowReviewMarker::tooltip(m_doc, ShowReviewMarker::openFindings(m_doc), 4);
+    if (!detail.isEmpty())
+        detail.replace(QStringLiteral("<qt>"), QStringLiteral("<qt>") + summary.toHtmlEscaped()
+                                               + QStringLiteral("<br><br>"));
+    m_statusReviewLabel->setToolTip(detail.isEmpty() ? summary : detail);
     m_statusReviewLabel->show();
+}
+
+QMenu *App::showReviewChipMenu(const QPoint &globalPos, bool exec)
+{
+    const QList<ReviewFinding> open = ShowReviewMarker::openFindings(m_doc);
+    QMenu *menu = new QMenu(this);
+    menu->setAttribute(Qt::WA_DeleteOnClose);
+    menu->setObjectName(QStringLiteral("footerReviewMenu"));
+    menu->setToolTipsVisible(true);
+    {
+        ContextMenu cm(menu);
+        if (open.isEmpty())
+            cm.add(ContextMenu::Open, tr("Open in Show Review"), []() { ShowReviewPanel::openShared(); },
+                   QStringLiteral("reviewOpen"));
+        else
+            ShowReviewMarker::fillMenu(cm, m_doc, open, this);
+    }
+    if (exec)
+        menu->popup(globalPos);
+    return menu;
 }
 
 bool App::reviewJump(QWidget *parent, const QString &jump, const QVariantList &data)

@@ -56,6 +56,7 @@
 #include "tower.h"
 #include "truss.h"
 #include "stageplatform.h"
+#include "showreview.h"
 #include "fixture.h"
 #include "qlcfixturedef.h"
 #include "qlcfixturemode.h"
@@ -3247,6 +3248,45 @@ void StructureStudioView::drawHangersOn(QPainter &p, Kind kind, quint32 id) cons
     }
 }
 
+StructureStudioView::PropPaint StructureStudioView::platformPaint(const StagePlatform *pl, bool warned)
+{
+    PropPaint out;
+    out.fill = pl != nullptr ? pl->finish() : StagePlatform::defaultFinish();
+    // A black deck's own lighter shade is lost on the dark canvas: a grey edge.
+    out.edge = out.fill.lightness() < 70 ? QColor(96, 98, 106) : out.fill.lighter(165);
+    if (warned)
+    {
+        out.outline = true;
+        out.edge = QColor(0xd0, 0x8a, 0x1c);
+    }
+    return out;
+}
+
+StructureStudioView::PropPaint StructureStudioView::sceneryPaint(const Scenery *sc, bool warned)
+{
+    PropPaint out;
+    out.fill = sc == nullptr ? QColor(Qt::black)
+             : sc->color().isValid() ? sc->color() : Scenery::defaultColor(sc->kind());
+    out.edge = out.fill.darker(118);
+    if (warned)
+    {
+        out.outline = true;
+        out.edge = QColor(0xd0, 0x8a, 0x1c);
+    }
+    return out;
+}
+
+bool StructureStudioView::sceneryWarned(quint32 id) const
+{
+    if (m_doc == nullptr || m_doc->showReview() == nullptr)
+        return false;
+    const QString key = QStringLiteral("scenery:%1").arg(id);
+    for (const ReviewFinding &f : m_doc->showReview()->lastResult().findings)
+        if (f.isOpen() && f.targets.contains(key))
+            return true;
+    return false;
+}
+
 void StructureStudioView::drawOneStructure(QPainter &p, Kind kind, quint32 id) const
 {
     drawHangersOn(p, kind, id);
@@ -3594,8 +3634,11 @@ void StructureStudioView::drawOneStructure(QPainter &p, Kind kind, quint32 id) c
         if (pl == nullptr) return;
         const float x0 = pl->originX(), y0 = pl->originY();
         const float x1 = x0 + pl->width(), y1 = y0 + pl->depth(), h = pl->height();
-        // Use the platform's own colour (its colour-picker value), like the 2D map.
-        QColor pc = pl->color().isValid() ? pl->color() : QColor(110, 120, 140);
+        /* Its real paint (finish(): stage black unless set), not the plot's
+           colour that tells decks apart on the plan -- "on the rig .. they
+           should be their correct color (black for risers)". */
+        const PropPaint paint = platformPaint(pl);
+        QColor pc = paint.fill;
         /* Solid. These were alpha 70, so decks read as panes of glass: stacked
            steps showed through each other and you could see the floor through a
            riser. Fixtures are painted after the structures, so they still show
@@ -3604,7 +3647,7 @@ void StructureStudioView::drawOneStructure(QPainter &p, Kind kind, quint32 id) c
         // Crisp edge: a dark halo under a bright outline so the outline reads on
         // the dark canvas AND where platforms overlap (stacked steps).
         const QColor halo = pc.darker(230);
-        const QColor edge = pc.lighter(165);
+        const QColor edge = paint.edge;
         // Two-pass outline helper (halo first, bright edge on top).
         auto outline = [&](const QRectF &r) {
             p.setBrush(fill);
@@ -3775,12 +3818,15 @@ void StructureStudioView::drawOneStructure(QPainter &p, Kind kind, quint32 id) c
            seen through. */
         Scenery *sc = props->scenery(id);
         if (sc == nullptr) return;
-        QColor cloth = sc->color().isValid() ? sc->color() : Scenery::defaultColor(sc->kind());
+        const PropPaint paint = sceneryPaint(sc, sceneryWarned(sc->id()));
+        QColor cloth = paint.fill;
         const double af = 0.18 + 0.82 * m_ambient;
         cloth = QColor(qRound(cloth.red() * af), qRound(cloth.green() * af), qRound(cloth.blue() * af));
         if (sc->isSeeThrough())
             cloth.setAlpha(70);
-        const QColor seam = sc->isSeeThrough() ? QColor() : cloth.darker(118);
+        // A warning is the outline, the cloth keeps its colour.
+        const QColor seam = paint.outline ? paint.edge : sc->isSeeThrough() ? QColor() : cloth.darker(118);
+        const double seamWidth = paint.outline ? 1.8 : 0.6;
         const bool folds = sc->isCloth() && sc->kind() != Scenery::Cyclorama && !sc->isSeeThrough();
         const double half = double(sc->thickness()) / 2.0;
         // About how long the line is, for how finely folds are drawn.
@@ -3799,7 +3845,7 @@ void StructureStudioView::drawOneStructure(QPainter &p, Kind kind, quint32 id) c
                 vz << viewDepth(w);
                 dsum += vz.last();
             }
-            emitPoly(poly, dsum / 4.0, fill, seam, 0.6, p, vz);
+            emitPoly(poly, dsum / 4.0, fill, seam, seamWidth, p, vz);
         };
         const QList<Scenery::Piece> pieces = sc->pieces(drapePose(sc));
         const bool gathered = sc->hasState() && (pieces.size() > 1);

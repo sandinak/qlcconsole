@@ -44,7 +44,9 @@
 #include "righeads.h"
 #include "movespeed.h"
 #include "function.h"
+#include "collection.h"
 #include "fixture.h"
+#include "scene.h"
 #include "doc.h"
 
 using namespace ShowTree;
@@ -314,8 +316,9 @@ void pwr11(ReviewContext &ctx, QList<ReviewFinding> &out)
    reproducible from the show: a lit beam's sampled rays (LightRays::cone,
    the axis and three rings of sixteen) are followed from the light until
    they meet the stage floor, anything solid the stage counts
-   (BeamOcclusion), or a piece of scenery -- a scrim lets them on through.
-   Any ray that ends on a guarded piece is light on it. Meant comes only
+   (BeamOcclusion), or a piece of scenery -- a scrim lets them on through,
+   a curtain stops them where it hangs in that cue (curtainPoses()). Any ray
+   that ends on a guarded piece is light on it. Meant comes only
    from the show: the fixture's stage look (Cyc / strip light, Uplight
    wash), a look aiming it at a target standing on that piece, or "I meant
    it" on a layer that lights it (Layer::meantOnScenery). */
@@ -371,8 +374,72 @@ bool targetOn(MonitorProperties *mp, quint32 tid, const Scenery *sc)
     return standsOn(sc, mp->targetAimPoint(t));
 }
 
+/* A curtain moved by a fixture (Scenery::isDriven(): the main drape on a
+   Stage Curtain fixture) is where the cue puts it: the functions the cue
+   plays (its function layers, carried in or its own) set the curtain
+   fixture's channels, and Scenery::poseFromValues() reads them the way the
+   rig views do. A list that moves the curtain somewhere leaves it at rest
+   (closed: every channel 0) in a cue that plays nothing on it; a list that
+   never moves it leaves it as plotted (its state()). Decided, can change. */
+
+/** What function @a fid (a scene, or a collection of them) sets on fixture
+ *  @a fxId, into @a values. False when it sets nothing there. */
+bool curtainValues(Doc *doc, quint32 fid, quint32 fxId, QByteArray &values, int depth = 0)
+{
+    Function *f = doc->function(fid);
+    if (f == nullptr || depth > 4)
+        return false;
+    bool any = false;
+    if (Scene *scene = qobject_cast<Scene *>(f))
+    {
+        for (const SceneValue &sv : scene->values())
+            if (sv.fxi == fxId && int(sv.channel) < values.size())
+            {
+                values[int(sv.channel)] = char(sv.value);
+                any = true;
+            }
+    }
+    else if (Collection *coll = qobject_cast<Collection *>(f))
+    {
+        for (quint32 child : coll->functions())
+            any = curtainValues(doc, child, fxId, values, depth + 1) || any;
+    }
+    return any;
+}
+
+/** Where each driven curtain is in @a cue; @a moved: the curtains the cue set. */
+BeamOcclusion::Poses curtainPoses(Doc *doc, const QList<const Scenery *> &driven, const ResolvedCue &cue,
+                                  QSet<quint32> *moved = nullptr)
+{
+    BeamOcclusion::Poses poses;
+    for (const Scenery *sc : driven)
+    {
+        const Fixture *fx = doc->fixture(sc->driverFixture());
+        QByteArray values(int(fx->channels()), char(0));
+        bool set = false;
+        for (const ResolvedLayer &layer : cue.layers)
+            if (layer.target.isOpaque() && !layer.release)
+                set = curtainValues(doc, layer.target.function, fx->id(), values) || set;
+        if (set && moved != nullptr)
+            moved->insert(sc->id());
+        poses.insert(sc->id(), Scenery::poseFromValues(fx->fixtureMode(), values));
+    }
+    return poses;
+}
+
+QString posesKey(const BeamOcclusion::Poses &poses)
+{
+    QList<quint32> ids = poses.keys();
+    std::sort(ids.begin(), ids.end());
+    QString key;
+    for (quint32 id : ids)
+        key += QStringLiteral("%1:%2:%3;").arg(id).arg(poses.value(id).open, 0, 'g', 6)
+                                          .arg(poses.value(id).fly, 0, 'g', 6);
+    return key;
+}
+
 Landing landingOf(Doc *doc, Fixture *fx, const Beam &b, const QList<Scenery *> &all,
-                  const BeamOcclusion::ModelPtr &sight)
+                  const BeamOcclusion::ModelPtr &sight, const BeamOcclusion::Poses &poses)
 {
     Landing out;
     QVector3D apex;
@@ -404,7 +471,9 @@ Landing landingOf(Doc *doc, Fixture *fx, const Beam &b, const QList<Scenery *> &
         for (const Scenery *sc : all)
         {
             double t = 0.0;
-            if (sc->rayHit(apex, d, t, best) && t > 0.05)
+            const auto pose = poses.constFind(sc->id());
+            if (sc->rayHit(apex, d, t, best, 16, nullptr, pose != poses.constEnd() ? &pose.value() : nullptr)
+                && t > 0.05)
                 hits << qMakePair(t, sc);
         }
         std::sort(hits.begin(), hits.end(), [](const QPair<double, const Scenery *> &x,
@@ -476,8 +545,15 @@ void pwr12(ReviewContext &ctx, QList<ReviewFinding> &out)
     const BeamOcclusion::ModelPtr sight = mp->occlusionModel(BeamOcclusion::Poses());
     const QHash<QPair<quint32, quint32>, QList<quint32>> marks = meantMarks(doc);
     QHash<QPair<quint32, quint32>, QList<SceneValue>> cache;
-    // (fixture, pan, tilt) -> where it lands: a look reused across cues is followed once.
+    // (fixture, pan, tilt, curtains) -> where it lands: a look reused across cues is followed once.
     QHash<QString, Landing> landings;
+    QList<const Scenery *> driven;
+    for (const Scenery *sc : all)
+    {
+        const Fixture *dfx = sc->isDriven() ? doc->fixture(sc->driverFixture()) : nullptr;
+        if (dfx != nullptr && dfx->fixtureMode() != nullptr)
+            driven << sc;
+    }
 
     for (const Production &p : doc->showTree()->productions())
     {
@@ -488,12 +564,26 @@ void pwr12(ReviewContext &ctx, QList<ReviewFinding> &out)
             const QList<ResolvedCue> &res = ctx.resolved(list);
             if (res.count() != list.cues.count())
                 continue;
+            // The curtains this list moves somewhere; the others stay as plotted.
+            QSet<quint32> listMoves;
+            if (!driven.isEmpty())
+                for (const ResolvedCue &rc : res)
+                    curtainPoses(doc, driven, rc, &listMoves);
             QHash<int, CueLanding> done;
             auto landingAt = [&](int i) -> CueLanding {
                 auto it = done.find(i);
                 if (it != done.end())
                     return it.value();
                 CueLanding cl;
+                BeamOcclusion::Poses poses;
+                if (!listMoves.isEmpty())
+                {
+                    const BeamOcclusion::Poses at = curtainPoses(doc, driven, res.at(i));
+                    for (auto p = at.constBegin(); p != at.constEnd(); ++p)
+                        if (listMoves.contains(p.key()))
+                            poses.insert(p.key(), p.value());
+                }
+                const QString curtains = posesKey(poses);
                 const QHash<quint32, Beam> beams = beamsOf(ctx, res.at(i), cache);
                 QList<quint32> ids = beams.keys();
                 std::sort(ids.begin(), ids.end());
@@ -503,11 +593,11 @@ void pwr12(ReviewContext &ctx, QList<ReviewFinding> &out)
                     if (!b.lit)
                         continue;
                     Fixture *fx = doc->fixture(fid);
-                    const QString key = QStringLiteral("%1/%2/%3/%4").arg(fid).arg(b.hasPos)
-                                        .arg(b.pan, 0, 'g', 17).arg(b.tilt, 0, 'g', 17);
+                    const QString key = QStringLiteral("%1/%2/%3/%4/%5").arg(fid).arg(b.hasPos)
+                                        .arg(b.pan, 0, 'g', 17).arg(b.tilt, 0, 'g', 17).arg(curtains);
                     auto lit = landings.find(key);
                     if (lit == landings.end())
-                        lit = landings.insert(key, landingOf(doc, fx, b, all, sight));
+                        lit = landings.insert(key, landingOf(doc, fx, b, all, sight, poses));
                     const Landing &land = lit.value();
                     if (land.on.isEmpty())
                         continue;
@@ -676,7 +766,8 @@ QList<ShowReview::Check> ShowReviewChecks::zoneChecks()
           tr("Light that lands on a cyc or a scrim (or any scenery set to take light only on "
              "purpose) by accident: a front light or a special at a performer that carries on and "
              "splashes the cyc behind them. Any part of a lit beam's cone that reaches it counts, "
-             "followed from the plot. It is meant when the fixture is a Cyc / strip light or an "
+             "followed from the plot; a closed curtain in front of it (as that cue leaves it) "
+             "stops the light. It is meant when the fixture is a Cyc / strip light or an "
              "Uplight wash, when its look aims it at a target on the cyc, or when you said so: "
              "I meant it, kept on the layer that lights it. Named once, in the cue it starts to "
              "land; the Show Tree marks every cue it lands in."), pwr12 },

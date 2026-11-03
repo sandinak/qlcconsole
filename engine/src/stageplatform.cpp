@@ -27,6 +27,7 @@
 #define KXMLPlatformHeight  QStringLiteral("Height")
 #define KXMLPlatformTopMat  QStringLiteral("TopMaterial")
 #define KXMLPlatformColor   QStringLiteral("Color")
+#define KXMLPlatformFinish  QStringLiteral("Finish")
 #define KXMLPlatformLocked  QStringLiteral("Locked")
 #define KXMLPlatformSolid     QStringLiteral("Solid")
 #define KXMLPlatformStackable QStringLiteral("Stackable")
@@ -240,6 +241,7 @@ bool StagePlatform::loadXML(QXmlStreamReader &root)
     if (a.hasAttribute(KXMLPlatformTopMat))
         setTopMaterial(TopMaterial(a.value(KXMLPlatformTopMat).toInt()));
     if (a.hasAttribute(KXMLPlatformColor))   m_color = QColor(a.value(KXMLPlatformColor).toString());
+    if (a.hasAttribute(KXMLPlatformFinish))  m_finish = QColor(a.value(KXMLPlatformFinish).toString());
     if (a.hasAttribute(KXMLPlatformLocked))  m_locked = (a.value(KXMLPlatformLocked).toString() == "true");
     // Solid defaults ON (legacy platforms without the attribute are solid).
     if (a.hasAttribute(KXMLPlatformSolid))     m_solid = (a.value(KXMLPlatformSolid).toString() == "true");
@@ -279,6 +281,8 @@ bool StagePlatform::saveXML(QXmlStreamWriter *doc) const
         doc->writeAttribute(KXMLPlatformTopMat, QString::number(int(m_topMaterial)));
     if (m_color.isValid())
         doc->writeAttribute(KXMLPlatformColor, m_color.name());
+    if (m_finish.isValid())
+        doc->writeAttribute(KXMLPlatformFinish, m_finish.name());
     if (m_locked)
         doc->writeAttribute(KXMLPlatformLocked, "true");
     if (!m_solid)                                    // solid is the default

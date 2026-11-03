@@ -57,6 +57,13 @@ public:
      *  views (Show Tree cue, Fixtures, Functions...). True when it went. */
     typedef std::function<bool(QWidget *parent, const QString &jump, const QVariantList &data)> Jumper;
     static void setJumper(const Jumper &jumper);
+    /** Go where @a jump points (a finding's jump, or "status:<footer key>":
+     *  the footer's own fix). True when it went. */
+    static bool runJump(QWidget *parent, const QString &jump, const QVariantList &data);
+    /** Ask why @a findings are on purpose (the Accept dialog): the note and
+     *  who. False when cancelled. */
+    static bool askAcceptNote(QWidget *parent, const QList<ReviewFinding> &findings,
+                              QString *note, QString *by);
 
     /** The app's one panel: set once, opened from anywhere (the footer
      *  chip, the Show readiness dialog). */
@@ -105,6 +112,7 @@ private slots:
     void slotAccept();
     void slotWhy();
     void slotTurnOff();
+    void slotContextMenu(const QPoint &pos);
     void updateButtons();
 
 private:

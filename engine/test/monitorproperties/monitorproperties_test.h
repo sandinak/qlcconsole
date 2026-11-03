@@ -215,6 +215,8 @@ private slots:
     /** Face aims a fixed light; the truss chord it sits on names its face;
      *  the nearest face of a throw (Q172 A). */
     void aFaceAimsAFixedLight();
+    /** A platform's finish (its paint on the rig) apart from its plot colour. */
+    void aPlatformKeepsItsFinish();
 };
 
 #endif

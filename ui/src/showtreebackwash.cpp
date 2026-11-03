@@ -20,8 +20,9 @@
 /* Backwash in the Show Tree (Show Review PWR-12): each cue that puts light
    on the cyc (or a scrim, or any scenery kept for light on purpose) that
    nobody meant is marked where you work -- "⚠ cyc" in its flags, the
-   fixtures in the tooltip -- and a click on the mark opens the Show Review
-   row, with I Meant It and Show Me. A layer marked meant offers to take it
+   detail on hover (ShowReviewMarker::tooltip()) -- and a click on the mark
+   opens the Show Review row; a right-click answers it there (I Meant It,
+   Not Meant: Show Me the Layer, Open in Show Review). A layer marked meant offers to take it
    back from its right-click.
 
    The marks are read from Show Review's last result: it runs a moment after
@@ -29,6 +30,9 @@
 
 #include <QTreeWidgetItemIterator>
 #include <QTreeWidget>
+#include <QStyledItemDelegate>
+#include <QApplication>
+#include <QPainter>
 #include <QAction>
 #include <QMenu>
 #include <QBrush>
@@ -36,6 +40,8 @@
 
 #include "showtreeview.h"
 #include "showreviewpanel.h"
+#include "showreviewmarker.h"
+#include "contextmenus.h"
 #include "showreview.h"
 #include "monitorproperties.h"
 #include "scenery.h"
@@ -51,11 +57,77 @@ namespace
 const int BaseFlagsRole = Qt::UserRole + 40;
 const int BaseTipRole = Qt::UserRole + 41;
 const int BackwashKeyRole = Qt::UserRole + 42;
-const int BaseColourRole = Qt::UserRole + 43;
+
+/* The flags column, badge by badge: a warning's badge in the warning colour,
+   the others (Mix, Track, skip...) in the row's own. One colour for the
+   whole cell painted "Mix" orange beside "⚠ cyc". */
+class FlagsDelegate final : public QStyledItemDelegate
+{
+public:
+    using QStyledItemDelegate::QStyledItemDelegate;
+
+    void paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const override
+    {
+        const QStringList warn = index.data(ShowTreeView::WarnPiecesRole).toStringList();
+        if (warn.isEmpty())
+        {
+            QStyledItemDelegate::paint(painter, option, index);
+            return;
+        }
+        QStyleOptionViewItem opt(option);
+        initStyleOption(&opt, index);
+        const QString text = opt.text;
+        opt.text.clear();
+        QStyle *style = opt.widget != nullptr ? opt.widget->style() : QApplication::style();
+        style->drawControl(QStyle::CE_ItemViewItem, &opt, painter, opt.widget);
+        const QRect r = style->subElementRect(QStyle::SE_ItemViewItemText, &opt, opt.widget).adjusted(2, 0, -2, 0);
+        const QColor normal = (opt.state & QStyle::State_Selected)
+                              ? opt.palette.color(QPalette::HighlightedText)
+                              : opt.palette.color(QPalette::Text);
+        const QColor fg = index.data(Qt::ForegroundRole).canConvert<QBrush>()
+                          && !(opt.state & QStyle::State_Selected)
+                          ? index.data(Qt::ForegroundRole).value<QBrush>().color() : normal;
+        painter->save();
+        painter->setFont(opt.font);
+        const QFontMetrics fm(opt.font);
+        int x = r.left();
+        const QList<QPair<QString, QColor>> pieces = ShowTreeView::flagPieces(index, fg);
+        for (int i = 0; i < pieces.count(); ++i)
+        {
+            const QString piece = pieces.at(i).first + (i + 1 < pieces.count() ? QStringLiteral(", ") : QString());
+            const int w = fm.horizontalAdvance(piece);
+            const QString shown = (x + w > r.right()) ? fm.elidedText(piece, Qt::ElideRight, r.right() - x) : piece;
+            painter->setPen(pieces.at(i).second);
+            painter->drawText(QRect(x, r.top(), r.right() - x, r.height()),
+                              Qt::AlignVCenter | Qt::AlignLeft | Qt::TextSingleLine, shown);
+            x += w;
+            if (x >= r.right())
+                break;
+        }
+        painter->restore();
+        Q_UNUSED(text)
+    }
+};
+}
+
+QColor ShowTreeView::warningColour()
+{
+    return QColor(0xd0, 0x8a, 0x1c);
+}
+
+QList<QPair<QString, QColor>> ShowTreeView::flagPieces(const QModelIndex &index, const QColor &normal)
+{
+    QList<QPair<QString, QColor>> out;
+    const QStringList warn = index.data(WarnPiecesRole).toStringList();
+    for (const QString &piece : index.data(Qt::DisplayRole).toString().split(QStringLiteral(", "), Qt::SkipEmptyParts))
+        out << qMakePair(piece, warn.contains(piece) ? warningColour() : normal);
+    return out;
 }
 
 void ShowTreeView::setupBackwashMarks()
 {
+    if (m_tree != nullptr)
+        m_tree->setItemDelegateForColumn(FlagsCol, new FlagsDelegate(m_tree));
     if (m_doc == nullptr || m_doc->showReview() == nullptr)
         return;
     connect(m_doc->showReview(), &ShowReview::reviewed, this, &ShowTreeView::applyBackwashMarks);
@@ -82,7 +154,6 @@ void ShowTreeView::applyBackwashMarks()
         for (quint32 cue : ShowReview::findingCues(f))
             byCue[cue] << i;
     }
-    MonitorProperties *mp = m_doc->monitorProperties();
     for (QTreeWidgetItemIterator it(m_tree); *it; ++it)
     {
         QTreeWidgetItem *item = *it;
@@ -92,8 +163,9 @@ void ShowTreeView::applyBackwashMarks()
         {
             item->setData(FlagsCol, BaseFlagsRole, item->text(FlagsCol));
             item->setData(FlagsCol, BaseTipRole, item->toolTip(FlagsCol));
-            item->setData(FlagsCol, BaseColourRole, item->foreground(FlagsCol));
         }
+        const QString mark = tr("⚠ cyc");
+        QStringList warn = item->data(FlagsCol, WarnPiecesRole).toStringList();
         const QString base = item->data(FlagsCol, BaseFlagsRole).toString();
         const QString baseTip = item->data(FlagsCol, BaseTipRole).toString();
         const QList<int> hits = byCue.value(item->data(0, IdRole).toUInt());
@@ -104,40 +176,26 @@ void ShowTreeView::applyBackwashMarks()
                 item->setText(FlagsCol, base);
                 item->setToolTip(FlagsCol, baseTip);
                 item->setData(FlagsCol, BackwashKeyRole, QString());
-                item->setForeground(FlagsCol, item->data(FlagsCol, BaseColourRole).value<QBrush>());
+                warn.removeAll(mark);
+                item->setData(FlagsCol, WarnPiecesRole, warn);
             }
             continue;
         }
-        // Which fixtures, on what: from the findings' targets.
-        QStringList fixtures, surfaces;
+        // The detail -- which fixtures, how much, on what, the cues, the
+        // answers -- from the one builder every warning's mark shares.
+        QList<ReviewFinding> marked;
         for (int i : hits)
-        {
-            for (const QString &t : found.at(i).targets)
-            {
-                const quint32 id = t.mid(t.indexOf(QLatin1Char(':')) + 1).toUInt();
-                if (t.startsWith(QLatin1String("fx:")))
-                {
-                    const Fixture *fx = m_doc->fixture(id);
-                    const QString n = fx != nullptr ? fx->name() : t;
-                    if (!fixtures.contains(n))
-                        fixtures << n;
-                }
-                else if (t.startsWith(QLatin1String("scenery:")) && mp != nullptr)
-                {
-                    const Scenery *sc = mp->scenery(id);
-                    const QString n = sc != nullptr ? sc->name() : t;
-                    if (!surfaces.contains(n))
-                        surfaces << n;
-                }
-            }
-        }
-        const QString mark = tr("⚠ cyc");
+            marked << found.at(i);
         item->setText(FlagsCol, base.isEmpty() ? mark : base + QStringLiteral(", ") + mark);
-        item->setForeground(FlagsCol, QColor(0xd0, 0x8a, 0x1c));
-        const QString tip = tr("Lands on the cyc — not marked as meant: %1 (on %2). Click to open it in "
-                               "Show Review: I Meant It, or Show Me.")
-                            .arg(fixtures.join(QStringLiteral(", ")), surfaces.join(QStringLiteral(", ")));
-        item->setToolTip(FlagsCol, baseTip.isEmpty() ? tip : baseTip + QStringLiteral("\n\n") + tip);
+        if (!warn.contains(mark))
+            warn << mark;
+        item->setData(FlagsCol, WarnPiecesRole, warn);      // the mark alone, not Mix beside it
+        QString tip = ShowReviewMarker::tooltip(m_doc, marked);
+        if (!baseTip.isEmpty())
+            tip.replace(QStringLiteral("<qt>"), QStringLiteral("<qt>") + baseTip.toHtmlEscaped()
+                                                .replace(QLatin1Char('\n'), QStringLiteral("<br>"))
+                                                + QStringLiteral("<br><br>"));
+        item->setToolTip(FlagsCol, tip);
         item->setData(FlagsCol, BackwashKeyRole, found.at(hits.first()).key());
     }
 }
@@ -161,6 +219,29 @@ bool ShowTreeView::openBackwashFinding(quint32 cueId)
     panel->setFilter(ShowReviewPanel::OpenOnly);
     panel->setSearch(QString());
     return panel->selectFinding(key);
+}
+
+bool ShowTreeView::backwashMarkMenu(const QPoint &pos)
+{
+    QTreeWidgetItem *item = m_tree->itemAt(pos);
+    if (item == nullptr || m_tree->columnAt(pos.x()) != FlagsCol
+        || item->data(0, KindRole).toInt() != CueNode
+        || item->data(FlagsCol, BackwashKeyRole).toString().isEmpty())
+        return false;
+    const QList<ReviewFinding> marked = ShowReviewMarker::cueFindings(m_doc, item->data(0, IdRole).toUInt());
+    if (marked.isEmpty())
+        return false;
+    QMenu menu(this);
+    menu.setObjectName(QStringLiteral("stWarningMenu"));
+    menu.setToolTipsVisible(true);
+    {
+        ContextMenu cm(&menu);
+        ShowReviewMarker::fillMenu(cm, m_doc, marked, this);
+    }
+    m_lastWarningMenu = &menu;
+    menu.exec(m_tree->viewport()->mapToGlobal(pos));
+    m_lastWarningMenu = nullptr;
+    return true;
 }
 
 void ShowTreeView::backwashLayerMenu(QMenu *menu, quint32 cueId, quint32 layerId)

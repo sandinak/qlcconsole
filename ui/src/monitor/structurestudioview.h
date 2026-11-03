@@ -211,6 +211,22 @@ public:
     bool headsTravelling() const { return m_followersMoving; }
     static bool lineOfSightBeams();
 
+    /** How a prop -- a deck, a riser, a piece of scenery -- is painted in the
+     *  rig views: in its own colour (a platform's finish(), stage black by
+     *  default; scenery's colour, else its kind's), never a plot or warning
+     *  tint. A warning on it (Show Review PWR-12: unmeant light on the cyc)
+     *  is an outline in the warning colour, never a fill. */
+    struct PropPaint
+    {
+        QColor fill;            ///< its real colour, before the room's light
+        QColor edge;            ///< its outline: a readable edge, or the warning
+        bool outline = false;   ///< a warning outline (edge is the warning colour)
+    };
+    static PropPaint platformPaint(const class StagePlatform *pl, bool warned = false);
+    static PropPaint sceneryPaint(const class Scenery *sc, bool warned = false);
+    /** Whether Show Review's last run has an open warning on scenery @p id. */
+    bool sceneryWarned(quint32 id) const;
+
     /** Metres along truss @p trussId to the point nearest @p viewPos as it
      *  is drawn in this view (0 at its origin, clamped to its length); -1 when
      *  it is seen end-on here (no length on screen to pick a point along). */

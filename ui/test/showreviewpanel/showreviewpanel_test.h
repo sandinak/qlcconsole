@@ -46,6 +46,9 @@ private slots:
     void iMeantItFromTheRow();
     /** PWR-12: each breaching cue is marked in the Show Tree; a click opens its row */
     void showTreeMarksBreachingCues();
+    void warningMarksShareDetailAndAnswers();
+    void onlyTheWarningBadgeIsColoured();
+    void propsKeepTheirOwnColourOnTheRig();
 
 private:
     Doc *m_doc = nullptr;
