@@ -976,6 +976,9 @@ private slots:
     void aTurningGoboKeepsTheRigRedrawing();
     /** (idle) Hidden or minimised: no frames, whatever changes. */
     void aRigOffScreenIsNotRedrawn();
+    /** FIX-15: a light the footer says is buried in the stage is ringed on
+     *  the plot, and clean again when the entry clears */
+    void aBuriedLightIsRingedOnThePlot();
 
 private:
     Doc* m_doc;

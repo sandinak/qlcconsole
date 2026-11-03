@@ -50,6 +50,8 @@ private slots:
     void fix05();
     void fix07();
     void fix14();
+    void fix15();
+    void fix15Geometry();
     void fx07();
     void pwr01();
     void pwr03();

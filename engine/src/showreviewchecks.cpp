@@ -44,6 +44,7 @@
 #include "qlcphysical.h"
 #include "rgbmatrix.h"
 #include "righeads.h"
+#include "placementcheck.h"
 #include "nolightzone.h"
 #include "efx.h"
 #include "monitorproperties.h"
@@ -360,6 +361,18 @@ static void fix14(ReviewContext &ctx, QList<ReviewFinding> &out)
                 it.value().count()).arg(it.key()),
             fixtureKeys(it.value()), it.key().toUtf8() + ':' + idBytes(it.value()),
             QStringLiteral("status:fixtures.duplicates"), QVariantList() << it.key());
+}
+
+static void fix15(ReviewContext &ctx, QList<ReviewFinding> &out)
+{
+    for (const PlacementCheck::Buried &b : PlacementCheck::buried(ctx.doc()))
+        out << ReviewContext::make(QStringLiteral("FIX-15"), ReviewFinding::Warning,
+            PlacementCheck::problemText(ctx.doc(), b) + QStringLiteral(". ")
+                + PlacementCheck::fixText(ctx.doc(), b) + QStringLiteral("."),
+            fixtureKeys(QList<quint32>() << b.fixtureId),
+            QByteArray::number(b.fixtureId) + ':' + QByteArray::number(b.platformId) + ':'
+                + QByteArray::number(qRound(b.depth * 100.0f)),
+            QStringLiteral("status:fixtures.buried"), QVariantList() << b.fixtureId);
 }
 
 /****************************************************************************
@@ -1279,6 +1292,9 @@ QList<ShowReview::Check> ShowReviewChecks::showChecks()
         { QStringLiteral("FIX-14"), tr("Duplicate fixture names"), S::Fixtures,
           tr("Where a fixture is picked by name, two with one name can't be told apart. Number "
              "them."), fix14 },
+        { QStringLiteral("FIX-15"), tr("A light buried in the stage"), S::Fixtures,
+          tr("A light whose body is inside a deck, riser or step is sunk into the set: it can't be "
+             "seen, and its beam starts inside it. Sit it on the top, or move it clear."), fix15 },
         { QStringLiteral("FX-07"), tr("Effect that won't load"), S::Effects,
           tr("An effect with no script chosen, or whose script isn't on this computer, does "
              "nothing on stage."), fx07 },

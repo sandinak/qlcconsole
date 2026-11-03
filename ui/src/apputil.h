@@ -196,7 +196,8 @@ namespace AppUtil
      * output (QLCPhysical::declaresOutput()), drawn at a guess (files);
      * "fixtures.clash" -- fixtures that loaded unpatched because their
      * address was taken (fixture ids); "fixtures.duplicates" -- names more
-     * than one fixture has (names); "definitions.failed" -- definition files
+     * than one fixture has (names); "fixtures.buried" (an error) -- lights whose
+     * body is inside a deck, riser or step (PlacementCheck, fixture ids); "definitions.failed" -- definition files
      * that could not be read (files); "universes.nooutput" -- universes
      * fixtures are patched on with no output (universe indexes);
      * "outputs.problems" -- network outputs their plugins report in trouble
@@ -204,6 +205,11 @@ namespace AppUtil
      * each hits).
      */
     void updateFixtureReadiness(Doc *doc);
+
+    /** Just "fixtures.buried" (also part of updateFixtureReadiness()): cheap
+     *  enough to run a moment after any edit, so a deck that moves or a light
+     *  that is dragged into one is said at once. */
+    void updatePlacementStatus(Doc *doc);
 
     /** The one name for giving fixtures a universe and address, or moving
      *  them to another: "Patch…" for one, "Patch 4 Fixtures…" for several --

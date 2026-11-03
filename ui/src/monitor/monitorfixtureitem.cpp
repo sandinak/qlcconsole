@@ -1209,6 +1209,33 @@ void MonitorFixtureItem::paint(QPainter *painter, const QStyleOptionGraphicsItem
         painter->setPen(keep);
     }
 
+    /* Buried in the stage (FIX-15): a red ring and a red "!" on the upper
+       corner -- a ring and a shape, so it reads without colour vision. */
+    if (m_buried)
+    {
+        const QPen keep = painter->pen();
+        const QFont keepFont = painter->font();
+        QPen ring(QColor(230, 40, 40), 3.0, Qt::DashLine);
+        ring.setCosmetic(true);
+        painter->setPen(ring);
+        painter->setBrush(Qt::NoBrush);
+        drawBody(painter, QRectF(-3.0, -3.0, m_width + 6.0, m_height + 6.0));
+        QPen edge(QColor(70, 0, 0), 1.0);
+        edge.setCosmetic(true);
+        painter->setPen(edge);
+        painter->setBrush(QColor(230, 40, 40));
+        const QPointF at(m_width, 0.0);
+        painter->drawEllipse(at, 6.0, 6.0);
+        QFont f = keepFont;
+        f.setPixelSize(10);
+        f.setBold(true);
+        painter->setFont(f);
+        painter->setPen(QColor(255, 255, 255));
+        painter->drawText(QRectF(at.x() - 6.0, at.y() - 6.0, 12.0, 12.0), Qt::AlignCenter, QStringLiteral("!"));
+        painter->setFont(keepFont);
+        painter->setPen(keep);
+    }
+
     /* Needs focus here (Q133): an orange "!" on the lower corner. Orange
        and a shape, so it reads without colour vision too. */
     if (m_needsFocus)

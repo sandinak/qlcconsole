@@ -38,6 +38,7 @@ add_library(${module_name} SHARED
     showreview.cpp showreview.h showreviewcontext.h
     showreviewchecks.cpp showreviewcuechecks.cpp showreviewmovechecks.cpp showreviewzonechecks.cpp
     showreviewvcchecks.cpp showreviewvenuechecks.cpp
+    placementcheck.cpp placementcheck.h
     vcindex.cpp vcindex.h
     showreviewcli.cpp showreviewcli.h
     operationregistry.cpp operationregistry.h

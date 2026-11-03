@@ -62,6 +62,9 @@
 #include "aimsolver.h"
 #include "righeads.h"
 #include "scenery.h"
+#include "placementcheck.h"
+#include "stageplatform.h"
+#include "truss.h"
 
 using namespace ShowTree;
 
@@ -433,6 +436,141 @@ void ShowReview_Test::fix07()
          0, 0, 20);
     QVERIFY(fires("FIX-07"));
     QCOMPARE(findings("FIX-07").first().severity, ReviewFinding::Note);
+}
+
+namespace
+{
+/* A 510 x 205 x 102 mm bar lying flat on the floor (the UST-2 of the show this
+   check came from), on the plot at (xm, ym) metres, at height z. */
+Fixture *bar(Doc *doc, const QString &name, quint32 address, double xm, double ym, float z,
+             bool hung = false)
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    Fixture *fx = make(doc, name, QStringLiteral("Bar"), QLCFixtureDef::LEDBarBeams, def,
+                       { chan(def, "Dimmer", QLCChannel::IntensityMasterDimmer) }, 50, 0, address);
+    QLCFixtureMode *mode = fx->fixtureMode();
+    QLCPhysical phy = mode->physical();
+    phy.setWidth(510);
+    phy.setHeight(205);
+    phy.setDepth(102);
+    mode->setPhysical(phy);
+    MonitorProperties *mp = doc->monitorProperties();
+    mp->setFixturePosition(fx->id(), 0, 0, QVector3D(float(xm * 1000.0), float(ym * 1000.0), z));
+    FixtureRigProps rp = mp->fixtureRigProps(fx->id());
+    rp.mountingType = hung ? Truss::TopHung : Truss::FloorMounted;
+    rp.studioMount = 0;                     // lying flat
+    mp->setFixtureRigProps(fx->id(), rp);
+    return fx;
+}
+
+StagePlatform *deck(Doc *doc, const QString &name, double x, double y, double w, double d, double h)
+{
+    StagePlatform *pl = doc->monitorProperties()->addPlatform();
+    pl->setName(name);
+    pl->setOriginX(float(x));
+    pl->setOriginY(float(y));
+    pl->setWidth(float(w));
+    pl->setDepth(float(d));
+    pl->setHeight(float(h));
+    return pl;
+}
+}
+
+void ShowReview_Test::fix15()
+{
+    MonitorProperties *mp = m_doc->monitorProperties();
+    StagePlatform *sr = deck(m_doc, QStringLiteral("Deck SR"), 2.0, 2.0, 2.4, 1.2, 0.61);
+    Fixture *ust = bar(m_doc, QStringLiteral("UST-2"), 0, 2.2, 2.3, 0.0f);   // on the floor, in the deck
+    QVERIFY(fires("FIX-15"));
+    const ReviewFinding f = findings("FIX-15").first();
+    QCOMPARE(f.severity, ReviewFinding::Warning);
+    QCOMPARE(f.targets, QStringList() << QStringLiteral("fx:%1").arg(ust->id()));
+    QVERIFY2(f.message.startsWith(QStringLiteral("UST-2 is inside Deck SR")), qPrintable(f.message));
+    QVERIFY2(f.message.contains(QStringLiteral("Sit it on Deck SR (0.61 m)")), qPrintable(f.message));
+    QCOMPARE(f.jump, QStringLiteral("status:fixtures.buried"));
+    QCOMPARE(ShowReview::footerCheckId(QStringLiteral("fixtures.buried")), QStringLiteral("FIX-15"));
+
+    // The fix: standing on the deck, following it.
+    const PlacementCheck::Buried b = PlacementCheck::check(m_doc, ust->id());
+    QVERIFY(b.buried && b.canSit);
+    QCOMPARE(b.sitId, sr->id());
+    QVERIFY(PlacementCheck::fix(m_doc, b));
+    QVERIFY(mp->fixtureRigProps(ust->id()).onDeck());
+    QVERIFY(qAbs(mp->fixtureRigPosition(ust->id()).z() - 0.61f) < 0.001f);
+    QVERIFY(quiet("FIX-15"));
+    sr->setHeight(1.0f);                    // the deck grows: it still stands on it
+    QVERIFY(quiet("FIX-15"));
+    QVERIFY(qAbs(mp->fixtureRigPosition(ust->id()).z() - 1.0f) < 0.001f);
+}
+
+void ShowReview_Test::fix15Geometry()
+{
+    MonitorProperties *mp = m_doc->monitorProperties();
+    // No platforms at all: nothing to be inside.
+    Fixture *a = bar(m_doc, QStringLiteral("A"), 0, 2.2, 2.3, 0.0f);
+    QVERIFY(PlacementCheck::buried(m_doc).isEmpty());
+
+    StagePlatform *pl = deck(m_doc, QStringLiteral("Deck"), 2.0, 2.0, 2.4, 1.2, 0.61);
+    const quint32 id = a->id();
+    QVERIFY(PlacementCheck::check(m_doc, id).buried);                       // in the deck
+    mp->setFixturePosition(id, 0, 0, QVector3D(2200.0f, 2300.0f, 0.61f));   // on top
+    QVERIFY(!PlacementCheck::check(m_doc, id).buried);
+    mp->setFixturePosition(id, 0, 0, QVector3D(2200.0f, 2300.0f, 0.59f));   // 2 cm in: touching
+    QVERIFY(!PlacementCheck::check(m_doc, id).buried);
+    mp->setFixturePosition(id, 0, 0, QVector3D(2200.0f, 2300.0f, 0.50f));   // 11 cm in
+    QVERIFY(PlacementCheck::check(m_doc, id).buried);
+    QVERIFY(PlacementCheck::check(m_doc, id).depth > 0.05f);
+
+    // Beside it: the body's far edge 2 cm into the deck's edge is touching,
+    // 10 cm in is not. (Footprint is the 510 x 205 plan box from its corner.)
+    mp->setFixturePosition(id, 0, 0, QVector3D(1400.0f, 2300.0f, 0.0f));   // right edge at 1.91 m
+    QVERIFY(!PlacementCheck::check(m_doc, id).buried);
+    mp->setFixturePosition(id, 0, 0, QVector3D(1510.0f, 2300.0f, 0.0f));   // right edge 2.02 m: 2 cm in
+    QVERIFY(!PlacementCheck::check(m_doc, id).buried);
+    mp->setFixturePosition(id, 0, 0, QVector3D(1600.0f, 2300.0f, 0.0f));   // 10 cm in
+    QVERIFY(PlacementCheck::check(m_doc, id).buried);
+
+    // A body of a hung light hangs below its position: at the deck top it
+    // is inside; high above it, clear.
+    Fixture *h = bar(m_doc, QStringLiteral("Hung"), 10, 3.2, 2.6, 0.65f, true);
+    QVERIFY(PlacementCheck::check(m_doc, h->id()).buried);
+    mp->setFixturePosition(h->id(), 0, 0, QVector3D(3200.0f, 2600.0f, 1.2f));
+    QVERIFY(!PlacementCheck::check(m_doc, h->id()).buried);
+
+    // Hung on a truss that runs through the deck's volume: placed by the truss.
+    mp->setFixturePosition(h->id(), 0, 0, QVector3D(3200.0f, 2600.0f, 0.3f));
+    QVERIFY(PlacementCheck::check(m_doc, h->id()).buried);
+    Truss *t = mp->addTruss();
+    t->setOrigin(QVector3D(2.5f, 2.6f, 0.4f));
+    t->setLength(1.5f);
+    FixtureRigProps rp = mp->fixtureRigProps(h->id());
+    rp.trussId = t->id();
+    rp.trussOffset = 0.5f;
+    mp->setFixtureRigProps(h->id(), rp);
+    QVERIFY(!PlacementCheck::check(m_doc, h->id()).buried);
+
+    // A clear-topped step is meant to hold lights.
+    mp->setFixturePosition(id, 0, 0, QVector3D(2200.0f, 2300.0f, 0.0f));
+    QVERIFY(PlacementCheck::check(m_doc, id).buried);
+    pl->setTopMaterial(StagePlatform::ClearTop);
+    QVERIFY(!PlacementCheck::check(m_doc, id).buried);
+    pl->setTopMaterial(StagePlatform::SolidTop);
+    QVERIFY(PlacementCheck::check(m_doc, id).buried);
+
+    // A turned deck: 3 m x 0.6 m turned a quarter, so it runs upstage-downstage
+    // through (5, 3). The bar at (5.0 - 0.255, 3.4) is on it; the same spot is
+    // clear of the deck unturned.
+    StagePlatform *turned = deck(m_doc, QStringLiteral("Turned"), 3.5, 2.7, 3.0, 0.6, 0.4);
+    Fixture *r = bar(m_doc, QStringLiteral("R"), 20, 4.745, 3.4, 0.0f);
+    QVERIFY(!PlacementCheck::check(m_doc, r->id()).buried);                  // unturned: 3.4 is off the 2.7..3.3 deck
+    turned->setRotation(90.0f);
+    const PlacementCheck::Buried tb = PlacementCheck::check(m_doc, r->id());
+    QVERIFY(tb.buried);
+    QCOMPARE(tb.platformId, turned->id());
+    // A flight of steps: the tread under the body counts, not the top of the flight.
+    turned->setRotation(0.0f);
+    turned->setSteps(4, 0.1f, 0.15f, 3.0f, StagePlatform::ClimbDownstage);
+    QVERIFY(PlacementCheck::buried(m_doc).count() >= 1);
 }
 
 void ShowReview_Test::fix14()

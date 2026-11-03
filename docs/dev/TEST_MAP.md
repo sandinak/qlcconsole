@@ -1610,4 +1610,4 @@ to B9, are all fixed. Their tests no longer use QEXPECT_FAIL.
   rows marked *none* or *partial* with risk *low* above: the grid editor's
   marquee and arrow picker, Library pins, ⌘A in the outline, Look Editor
   sub-pages, outline contrast, and the Rig Overview camera mouse controls.
-
+| M984 | A light buried in a deck, riser or step | FIX-15 flags a floor light inside a deck, not one on top / touching (< 3 cm) / hung on a truss / in a clear-topped step; turned deck; the Fix stands it on the top and follows the deck; footer error appears and clears; plot ring follows the footer entry | ShowReview_Test::fix15, fix15Geometry (engine/test/showreview); ProgrammingManager_Test::aBuriedLightIsAFooterErrorUntilItIsFixed; Monitor_Test::aBuriedLightIsRingedOnThePlot | covered | covered | med | The App's 300 ms debounce timer and the Sit on Top / Show button wiring are not asserted; steps are only smoke-tested. |

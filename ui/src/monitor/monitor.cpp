@@ -59,6 +59,7 @@
 #include <QInputDialog>
 #include <QXmlStreamWriter>
 #include <QXmlStreamReader>
+#include "showstatus.h"
 #include "studiotemplate.h"
 #include "showsettingsdialog.h"
 #include "mainbar.h"
@@ -590,6 +591,8 @@ void Monitor::initGraphicsView()
     m_graphicsView = new MonitorGraphicsView(m_doc, this);
     if (m_targetsAdjustableAction != NULL)
         m_graphicsView->setTargetsAdjustableWhenLocked(m_targetsAdjustableAction->isChecked());
+    // Lights buried in the stage (FIX-15): ringed whenever the footer's entry changes.
+    connect(ShowStatus::instance(), &ShowStatus::changed, this, &Monitor::refreshBuried);
     // Lights whose venue correction was skipped: badged on the plot (Q133).
     if (ProgrammerController *pc = m_doc->programmer())
     {
@@ -1860,6 +1863,23 @@ void Monitor::updateView()
     fillGraphicsView();
     showCurrentView();
     refreshNeedsFocus();
+    refreshBuried();
+}
+
+void Monitor::refreshBuried()
+{
+    if (m_graphicsView == NULL)
+        return;
+    QList<quint32> marks;
+    foreach (const ShowStatus::Entry &e, ShowStatus::instance()->allEntries())
+    {
+        if (e.key == QLatin1String("fixtures.buried"))
+        {
+            foreach (const QVariant &v, e.itemData)
+                marks << v.toUInt();
+        }
+    }
+    m_graphicsView->markBuriedFixtures(marks);
 }
 
 void Monitor::refreshNeedsFocus()
