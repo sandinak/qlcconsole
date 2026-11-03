@@ -12,6 +12,7 @@
 #include <QLineEdit>
 #include <QStackedWidget>
 #include <QColorDialog>
+#include "stagecolourpicker.h"
 #include <QCheckBox>
 #include <QSignalBlocker>
 #include <QScrollArea>
@@ -395,10 +396,25 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     // or below it. Numbered 1-6 to match PMJOverlay::slotRoleActivated's
     // Level-role fader mapping (fader N controls the Nth slider here), so
     // it's visible on screen which physical fader does what.
-    QWidget *colorPage = new QWidget(this);
+    //
+    // The page is a scroll area over a body that never shrinks below what
+    // its layouts need: too narrow or short, it scrolls -- it never lays
+    // the sliders over the picker or the button over the wheel row. Narrow
+    // (the picker's own width + the sliders' don't fit side by side), the
+    // sliders go in a row under the picker (colourFlow()).
+    m_colourScroll = new QScrollArea(this);
+    m_colourScroll->setObjectName("lookColourScroll");
+    m_colourScroll->setFrameShape(QFrame::NoFrame);
+    m_colourScroll->setWidgetResizable(true);
+    QWidget *colorPage = new QWidget();
+    colorPage->setObjectName("lookColourBody");
+    m_colourScroll->setWidget(colorPage);
+    m_colourScroll->viewport()->installEventFilter(this);
+    m_colourBody = colorPage;
     QVBoxLayout *cv = new QVBoxLayout(colorPage);
     cv->setContentsMargins(0, 0, 0, 0);
-    QHBoxLayout *cl = new QHBoxLayout();
+    QBoxLayout *cl = new QBoxLayout(QBoxLayout::LeftToRight);
+    m_colourFlow = cl;
     cl->setContentsMargins(0, 0, 0, 0);
     cv->addLayout(cl, 1);
 
@@ -410,11 +426,11 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     // Embedded, a QDialog would take Esc to hide itself (reject()): the
     // picker gone, nothing to bring it back. Esc goes on to the host.
     m_colorDialog->installEventFilter(this);
-    // Keep the picker compact so the look panel doesn't force the tab (and the
-    // window) taller than short screens; it scrolls if the panel is short.
-    m_colorDialog->setMinimumHeight(0);
-    m_colorDialog->setMaximumHeight(300);
-    cl->addWidget(m_colorDialog, 1);
+    // The swatch grid is the stage colours, hover says which; see StageColourPicker.
+    StageColourPicker::install(m_colorDialog);
+    // The dialog keeps the size its own layout needs (squeezing it, as this
+    // once did, left its swatches over its "Pick Screen Color" button).
+    cl->addWidget(m_colorDialog, 0, Qt::AlignTop | Qt::AlignLeft);
 
     // One vertical slider (numbered label above) per channel.
     auto makeColorCol = [&](int number, const QString &name, QSlider *&slider,
@@ -426,6 +442,7 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
                       0, Qt::AlignHCenter);
         slider = new QSlider(Qt::Vertical, col);
         slider->setRange(0, 255);
+        slider->setMinimumHeight(230);   // a fader, as tall as the picker's field
         vl->addWidget(slider, 1, Qt::AlignHCenter);
         connect(slider, SIGNAL(valueChanged(int)), this, slotSignature);
         return col;
@@ -445,7 +462,11 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     xl->addWidget(m_whiteRow);
     xl->addWidget(m_amberRow);
     xl->addWidget(m_uvRow);
-    cl->addWidget(extras, 0);
+    // Sliders as tall as the picker, not as the page: on a big screen a
+    // 900 px slider is no fader. Anything left over is empty space at the end.
+    extras->setMaximumHeight(420);
+    cl->addWidget(extras, 0, Qt::AlignTop);
+    cl->addStretch(1);
 
     // A slot of the colour wheels / rings by name: a ring's chase is no
     // colour the picker can make.
@@ -466,13 +487,19 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     m_macroRow->setVisible(false);
     connect(m_macroCombo, SIGNAL(activated(int)), this, SLOT(slotColourMacroChanged(int)));
 
+    // The named colour nearest the picker's ("~ Flesh  #ffcdaa").
+    m_colourName = new QLabel(colorPage);
+    m_colourName->setObjectName("lookColourName");
+    m_colourName->setToolTip(tr("The stage colour nearest this one."));
+    cv->addWidget(m_colourName, 0);
+
     m_colorWarning = new QLabel(colorPage);
     m_colorWarning->setWordWrap(true);
     m_colorWarning->setStyleSheet(QStringLiteral("color: #e0a030;"));
     m_colorWarning->setVisible(false);
     cv->addWidget(m_colorWarning, 0);
 
-    m_pageColor = m_stack->addWidget(colorPage);
+    m_pageColor = m_stack->addWidget(m_colourScroll);
     connect(m_colorDialog, SIGNAL(currentColorChanged(QColor)),
             this, SLOT(slotColorChanged(QColor)));
 
@@ -1220,8 +1247,22 @@ void LookEditor::showEffectDetails()
     m_effectDetails->raise();
 }
 
+void LookEditor::colourFlow()
+{
+    // Beside the picker when both fit, else under it.
+    QWidget *extras = m_redSlider->parentWidget()->parentWidget();
+    const int need = m_colorDialog->minimumSizeHint().width()
+                     + extras->minimumSizeHint().width() + m_colourFlow->spacing();
+    const QBoxLayout::Direction d = m_colourScroll->viewport()->width() >= need
+        ? QBoxLayout::LeftToRight : QBoxLayout::TopToBottom;
+    if (m_colourFlow->direction() != d)
+        m_colourFlow->setDirection(d);
+}
+
 bool LookEditor::eventFilter(QObject *obj, QEvent *ev)
 {
+    if (m_colourScroll != NULL && obj == m_colourScroll->viewport() && ev->type() == QEvent::Resize)
+        colourFlow();
     // Esc in the embedded colour picker: not its reject(); on up, ignored,
     // to whoever backs out (the Workbench, the Show Tree).
     if (obj == m_colorDialog && ev->type() == QEvent::KeyPress
@@ -1374,7 +1415,8 @@ void LookEditor::setPalette(quint32 paletteId)
         fillColourMacros(p);
 
         m_stack->setCurrentIndex(m_pageColor);
-        setMaximumHeight(340);
+        setMaximumHeight(QWIDGETSIZE_MAX);
+        colourFlow();
         break;
     }
     case QLCPalette::Dimmer:
@@ -1885,6 +1927,18 @@ void LookEditor::slotColorChanged(const QColor &c)
     m_whiteSlider->blockSignals(true);
     m_whiteSlider->setValue(autoW);
     m_whiteSlider->blockSignals(false);
+    // A swatch that needs the extra emitters (Blacklight: UV) sets them.
+    const QColor emitters = StageColourPicker::emittersFor(c);
+    if (emitters.isValid() || m_swatchEmitters)
+    {
+        // ... and leaving that swatch puts them back.
+        const QColor set = emitters.isValid() ? emitters : QColor(autoW, 0, 0);
+        m_swatchEmitters = emitters.isValid();
+        const QSignalBlocker bw(m_whiteSlider), ba(m_amberSlider), bu(m_uvSlider);
+        m_whiteSlider->setValue(set.red());
+        m_amberSlider->setValue(set.green());
+        m_uvSlider->setValue(set.blue());
+    }
     commitColor();
 }
 
@@ -1944,6 +1998,8 @@ QString LookEditor::darkColourWarning(const QColor &rgb, const QColor &wauv)
 
 void LookEditor::updateColorWarning()
 {
+    m_colourName->setText(StageColourPicker::describe(
+        QColor(m_redSlider->value(), m_greenSlider->value(), m_blueSlider->value())));
     const QString text = darkColourWarning(
         QColor(m_redSlider->value(), m_greenSlider->value(), m_blueSlider->value()),
         QColor(m_whiteSlider->value(), m_amberSlider->value(), m_uvSlider->value()));

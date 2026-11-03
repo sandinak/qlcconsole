@@ -15,6 +15,7 @@
 #include <QToolButton>
 
 #include "colourswatchbutton.h"
+#include "stagecolourpicker.h"
 
 ColourSwatchButton::ColourSwatchButton(const QColor &colour, const QString &pickerTitle,
                                        QWidget *parent)
@@ -66,10 +67,12 @@ void ColourSwatchButton::setResetColour(const QColor &colour)
 
 void ColourSwatchButton::pick()
 {
-    const QColor c = QColorDialog::getColor(m_colour.isValid() ? m_colour : QColor(Qt::white),
-                                            this, m_title);
-    if (c.isValid())
-        change(c);
+    QColorDialog dlg(m_colour.isValid() ? m_colour : QColor(Qt::white), this);
+    dlg.setWindowTitle(m_title);
+    dlg.setOption(QColorDialog::DontUseNativeDialog);
+    StageColourPicker::install(&dlg);
+    if (dlg.exec() == QDialog::Accepted && dlg.selectedColor().isValid())
+        change(dlg.selectedColor());
 }
 
 void ColourSwatchButton::change(const QColor &colour)

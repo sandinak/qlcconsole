@@ -763,7 +763,7 @@ The editor shown depends on the selected look's palette type:
 
 | Type | What you get |
 |---|---|
-| **Color** | A color-wheel picker, a grid of basic-color swatches, and six numbered sliders (1 R · 2 G · 3 B · 4 White · 5 Amber · 6 UV — matching a physical-fader numbering convention). Amber/UV only appear if your target fixtures actually have those emitters. Fixtures with a colour wheel or a colour ring add a **Wheel / ring** list: *Nearest to the colour* (each wheel and ring takes its slot nearest the colour), or a slot by name — a ring's chase, which no colour can pick. See [Colour rings](show-tree.md#colour-rings). |
+| **Color** | A color-wheel picker, a grid of **stage-colour swatches** (below), and six numbered sliders (1 R · 2 G · 3 B · 4 White · 5 Amber · 6 UV — matching a physical-fader numbering convention). Amber/UV only appear if your target fixtures actually have those emitters. Fixtures with a colour wheel or a colour ring add a **Wheel / ring** list: *Nearest to the colour* (each wheel and ring takes its slot nearest the colour), or a slot by name — a ring's chase, which no colour can pick. See [Colour rings](show-tree.md#colour-rings). |
 | **Dimmer** | A gradient bar marked with the fixture's actual intensity capability regions (e.g. strobe bands), with a live capability-name readout. |
 | **Pan/Tilt** | An XY pad plus Home/Down/Front/Left/Right preset buttons — the same raw pan/tilt pair applied to every target, regardless of where it's physically rigged. |
 | **Aim** | A combo box listing your **Stage Targets** instead of raw angles — each fixture's actual pan/tilt is computed from its rig position, so fixtures in different spots converge on the same point. Needs fixtures placed in Lighting Studio first. See [Stage Targets](stage-targets.md). |
@@ -772,6 +772,22 @@ The editor shown depends on the selected look's palette type:
 | **Strobe** | A single rate slider (0–100%). |
 | **Effect** | The **effect browser** (below), a dynamically-built parameter panel, and Save/Export/Import for sharing `.qxfx` effect files. |
 | **Formation** | A line aim's **Spread**, **Grouping** and **Cross**, each ticked to set it or left unticked so it comes from elsewhere, and a **preview**: the order strip and the plan view on a line and lights you pick there. See [Formation palettes](#formation-palettes). |
+
+**The swatch grid is the stage colours, not Qt's generic basics.** Forty-eight
+of them, by their common names: Flesh and three more skin tones (Pale, Warm,
+Deep), Blacklight, Congo Blue, Cool and Warm Fluorescent, Tungsten 3200K,
+Daylight 5600K, Candle, Sodium and Mercury Vapour, Moonlight, Lavender,
+Amber, Straw, Bastard Amber, Surprise Pink, the primaries, and more. They are
+LED renditions, so judge by eye on the rig. **Hover a swatch** for its name and
+hex; **hover the colour field** for the nearest named colour (*≈ Flesh*). A
+line under the picker always names the nearest colour to the one chosen.
+**Blacklight** also sets the **UV** slider where the fixtures have a UV emitter
+(on RGB-only fixtures it plays as a deep violet). The same grid opens from
+every colour button elsewhere (palette editor, swatch buttons).
+
+The colour page never overlaps itself: if the panel is too narrow to hold the
+picker and sliders side by side, the sliders move under the picker, and if it
+is still too small the page scrolls.
 
 Every type except Effect also shows a per-look **Fade in / Fade out**
 override (leave at "step" to inherit the scene or chaser's own timing). A

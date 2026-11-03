@@ -36,6 +36,10 @@ private slots:
     void aLineLooksGroupingIsSetOnTheAimPage();
     void aColourDarkerThanAFifthIsCalledOut();
     void aDarkRedLookWarnsUntilItIsBrightened();
+    void colourPickerLayoutHoldsAtEveryWidth();
+    void colourSwatchesAreTheStageColours();
+    void hoveringTheFieldNamesTheNearestColour();
+    void blacklightSwatchDrivesUv();
     /** A colour look offers the colour ring's slots by name (Wheel /
      *  ring): picking a chase makes the look name it; a colour slot sets the
      *  picker too; "Nearest to the colour" goes back. */

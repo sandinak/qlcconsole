@@ -20,6 +20,7 @@
 #ifndef PALETTENAMING_H
 #define PALETTENAMING_H
 
+#include <QList>
 #include <QStringList>
 #include <QColor>
 
@@ -53,6 +54,29 @@ namespace PaletteNaming
      *  @a wauv (White=red, Amber=green, UV=blue) name it ("White", "Amber",
      *  "UV"). */
     QLC_ENGINE_EXPORT QString colourName(const QColor &rgb, const QColor &wauv = QColor());
+
+    /** A swatch of the colour picker's grid: the colours a stage is lit
+     *  with, by their common (generic) names. @a wauv is the extra
+     *  emitters' share where the colour needs them (Blacklight drives UV),
+     *  invalid otherwise. */
+    struct StageColour
+    {
+        QString name;
+        QColor rgb;
+        QColor wauv;    //!< White=red, Amber=green, UV=blue; invalid: none
+    };
+
+    /** The picker's swatches, row by row, always StageColourCount of them
+     *  (8 columns x 6 rows): Flesh and the skin tones, Blacklight, Congo
+     *  Blue, the fluorescents, Tungsten 3200K, Daylight 5600K, Candle,
+     *  Sodium and Mercury vapour, Moonlight, Lavender, Amber, Straw,
+     *  Bastard Amber, Surprise Pink, the primaries... Names are unique. */
+    QLC_ENGINE_EXPORT const QList<StageColour> &stageColours();
+    static const int StageColourCount = 48;
+
+    /** The name of the stage colour nearest @a rgb (CIE Lab). @a exact says
+     *  whether it is that colour itself. */
+    QLC_ENGINE_EXPORT QString stageColourName(const QColor &rgb, bool *exact = nullptr);
 
     /** Every name colourName() can give, longest first. */
     QLC_ENGINE_EXPORT QStringList colourNames();
