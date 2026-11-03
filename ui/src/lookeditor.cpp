@@ -71,6 +71,8 @@
 #include "stagetarget.h"
 #include "linespread.h"
 #include "linespreadpreview.h"
+#include "aimsolver.h"
+#include "lineplanview.h"
 #include "qlccapability.h"
 #include "qlcchannel.h"
 #include "fixturegroup.h"
@@ -565,7 +567,21 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     }
     presetCol->addStretch(1);
     pl->addLayout(presetCol);
-    pl->addStretch(1);
+    /* Where it lands: with lights in context, each head's beam solved
+       forward from this position's DMX (as the rig view draws it), on a plan
+       of the stage, and a line naming what it hits. */
+    QVBoxLayout *landCol = new QVBoxLayout();
+    landCol->setSpacing(2);
+    m_ptLanding = new QLabel(pantilt);
+    m_ptLanding->setObjectName(QStringLiteral("lookPanTiltLanding"));
+    m_ptLanding->setWordWrap(true);
+    m_ptLanding->setTextFormat(Qt::PlainText);
+    landCol->addWidget(m_ptLanding);
+    m_ptPlan = new LinePlanView(m_doc, pantilt);
+    m_ptPlan->setObjectName(QStringLiteral("lookPanTiltPlan"));
+    m_ptPlan->setPoppable(false);
+    landCol->addWidget(m_ptPlan, 1);
+    pl->addLayout(landCol, 1);
     ptv->addLayout(pl);
 
     ptv->addStretch(1);
@@ -1403,6 +1419,7 @@ void LookEditor::setPalette(quint32 paletteId)
         m_xyPad->update();
         m_stack->setCurrentIndex(m_pagePanTilt);
         setMaximumHeight(340);
+        updatePanTiltPlan();
         break;
     }
     case QLCPalette::Aim:
@@ -2152,7 +2169,51 @@ void LookEditor::slotPanTiltChanged(const QPointF &pos)
     // One undo step for a drag (and for an encoder's turn), as every other look value.
     editValue([pan, tilt](QLCPalette *pal) { pal->setValue(pan, tilt); });
     m_doc->setModified();
+    updatePanTiltPlan();
     emit paletteChanged(m_paletteId);
+}
+
+void LookEditor::updatePanTiltPlan()
+{
+    const QLCPalette *p = m_doc->palette(m_paletteId);
+    QList<QList<quint32>> heads;
+    if (m_contextScene != nullptr)
+    {
+        // The context's groups, each a colour, then its own fixtures.
+        QList<quint32> seen;
+        for (quint32 gid : m_contextScene->fixtureGroups())
+            if (const FixtureGroup *g = m_doc->fixtureGroup(gid))
+            {
+                QList<quint32> h;
+                for (quint32 fid : AimSolver::aimable(m_doc, g->fixtureList()))
+                    if (!seen.contains(fid))
+                    {
+                        seen << fid;
+                        h << fid;
+                    }
+                if (!h.isEmpty())
+                    heads << h;
+            }
+        QList<quint32> own;
+        for (quint32 fid : AimSolver::aimable(m_doc, m_contextScene->fixtures()))
+            if (!seen.contains(fid))
+            {
+                seen << fid;
+                own << fid;
+            }
+        if (!own.isEmpty())
+            heads << own;
+    }
+    if (p == nullptr || heads.isEmpty())
+    {
+        m_ptPlan->hide();
+        m_ptLanding->hide();
+        return;
+    }
+    m_ptPlan->setPositions(heads, { p });
+    m_ptLanding->setText(m_ptPlan->formation().landingSummary());
+    m_ptPlan->show();
+    m_ptLanding->show();
 }
 
 void LookEditor::slotAimTargetChanged(int index)

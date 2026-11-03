@@ -45,14 +45,16 @@
 #include "aimsolver.h"
 #include "qlcpalette.h"
 #include "fixture.h"
+#include "beamlanding.h"
 #include "scene.h"
 #include "doc.h"
 
 namespace
 {
+// From above, as LineFormation's: x across, y up / downstage (downstage at the bottom).
 QPointF plan(const QVector3D &v)
 {
-    return QPointF(v.x(), v.z());
+    return QPointF(v.x(), v.y());
 }
 }
 
@@ -80,6 +82,9 @@ void LinePlanView::setFormation(const Scene *scene, const QLCPalette *look,
     m_line.clear();
     m_beams.clear();
     m_form = LineFormation();
+    m_stage = QRectF();
+    m_marks.clear();
+    m_otherLines.clear();
     MonitorProperties *props = m_doc != nullptr ? m_doc->monitorProperties() : nullptr;
     const StageTarget *target = (props != nullptr && look != nullptr)
             ? props->stageTarget(look->stageTargetId()) : nullptr;
@@ -122,6 +127,54 @@ void LinePlanView::setFormation(const Scene *scene, const QLCPalette *look,
             b.hasPrevious = true;
             b.previous = plan(before.value(l.fixture));
         }
+        m_beams << b;
+    }
+    update();
+}
+
+void LinePlanView::setPositions(const QList<QList<quint32>> &groups,
+                                const QList<const QLCPalette *> &palettes)
+{
+    m_line.clear();
+    m_beams.clear();
+    m_marks.clear();
+    m_otherLines.clear();
+    m_stage = QRectF();
+    m_form = LineFormation::positions(m_doc, groups, palettes);
+    MonitorProperties *props = m_doc != nullptr ? m_doc->monitorProperties() : nullptr;
+    if (props != nullptr)
+    {
+        const double width = double(props->gridSize().x() * props->gridUnitMetres());
+        const double front = double(props->downstageEdgeY());
+        if (width > 0.0 && front > 0.0)
+            m_stage = QRectF(0.0, 0.0, width, front);
+        for (const StageTarget *t : props->stageTargets())
+        {
+            if (t == nullptr)
+                continue;
+            if (t->isLine())
+            {
+                QList<QPointF> pts;
+                for (const QVector3D &v : LineCurve(props->targetLinePoints(t)).samples())
+                    pts << plan(v);
+                m_otherLines << pts;
+            }
+            else
+                m_marks << qMakePair(plan(props->targetAimPoint(t)), t->name());
+        }
+    }
+    for (const LineFormation::Light &l : m_form.lights())
+    {
+        Beam b;
+        b.fixture = l.fixture;
+        b.number = l.number;
+        b.name = l.name;
+        b.from = l.from;
+        b.to = l.to;
+        b.group = l.group;
+        b.colour = m_form.colourFor(l);
+        b.lands = l.landing == BeamLanding::OnStage;
+        b.hits = l.hits;
         m_beams << b;
     }
     update();
@@ -172,19 +225,30 @@ void LinePlanView::paintEvent(QPaintEvent *)
     p.setFont(f);
     p.setPen(QColor(120, 120, 130));
     p.drawText(rect().adjusted(6, 4, -6, -4), Qt::AlignTop | Qt::AlignLeft, tr("Plan (top)"));
-    if (m_line.isEmpty())
+    const bool raw = m_form.isRawPosition();
+    if (m_line.isEmpty() && !raw)
     {
         p.drawText(rect(), Qt::AlignCenter, tr("Not aimed at a line"));
         return;
     }
+    if (raw && m_beams.isEmpty())
+    {
+        p.drawText(rect(), Qt::AlignCenter, tr("No light here has a stored pan or tilt to show"));
+        return;
+    }
 
     // Fit everything, the same scale both ways, at least 2 m each way.
-    QRectF box(m_line.first(), QSizeF(0, 0));
+    QRectF box(m_line.isEmpty() ? m_beams.first().to : m_line.first(), QSizeF(0, 0));
     auto grow = [&box](const QPointF &pt) {
         box = box.united(QRectF(pt, QSizeF(0.0001, 0.0001)));
     };
     for (const QPointF &pt : m_line)
         grow(pt);
+    if (m_stage.isValid())
+    {
+        grow(m_stage.topLeft());
+        grow(m_stage.bottomRight());
+    }
     for (const Beam &b : m_beams)
     {
         grow(b.from);
@@ -203,16 +267,53 @@ void LinePlanView::paintEvent(QPaintEvent *)
                        area.center().y() + (pt.y() - c.y()) * scale);
     };
 
+    // A stored position: the stage, its targets and lines, for reference.
+    if (raw)
+    {
+        if (m_stage.isValid())
+        {
+            p.setPen(QPen(QColor(90, 92, 100), 1.0 * s, Qt::DashLine));
+            p.setBrush(QColor(40, 42, 50));
+            p.drawRect(QRectF(toScreen(m_stage.topLeft()), toScreen(m_stage.bottomRight())));
+        }
+        p.setBrush(Qt::NoBrush);
+        for (const QList<QPointF> &l : m_otherLines)
+        {
+            QPolygonF poly;
+            for (const QPointF &pt : l)
+                poly << toScreen(pt);
+            p.setPen(QPen(QColor(255, 180, 0, 120), 1.5 * s));
+            p.drawPolyline(poly);
+        }
+        QFont mf = p.font();
+        mf.setPointSizeF(7.0 * s);
+        p.setFont(mf);
+        for (const auto &m : m_marks)
+        {
+            const QPointF at = toScreen(m.first);
+            p.setPen(QPen(QColor(255, 180, 0, 160), 1.2 * s));
+            p.drawLine(at - QPointF(4 * s, 0), at + QPointF(4 * s, 0));
+            p.drawLine(at - QPointF(0, 4 * s), at + QPointF(0, 4 * s));
+            p.setPen(QColor(150, 150, 160));
+            p.drawText(QRectF(at.x() + 5 * s, at.y() - 12 * s, 90 * s, 12 * s), Qt::AlignLeft | Qt::AlignVCenter,
+                       m.second);
+        }
+        p.setFont(f);
+    }
+
     // The line, its ends A and B as the strip names them.
-    QPolygonF poly;
-    for (const QPointF &pt : m_line)
-        poly << toScreen(pt);
-    p.setPen(QPen(QColor(255, 180, 0), 2.0 * s));
-    p.setBrush(Qt::NoBrush);
-    p.drawPolyline(poly);
-    p.setPen(QColor(150, 150, 160));
-    p.drawText(QRectF(poly.first() - QPointF(14 * s, 14 * s), QSizeF(12 * s, 12 * s)), Qt::AlignCenter, QStringLiteral("A"));
-    p.drawText(QRectF(poly.last() + QPointF(2 * s, -14 * s), QSizeF(12 * s, 12 * s)), Qt::AlignCenter, QStringLiteral("B"));
+    if (!m_line.isEmpty())
+    {
+        QPolygonF poly;
+        for (const QPointF &pt : m_line)
+            poly << toScreen(pt);
+        p.setPen(QPen(QColor(255, 180, 0), 2.0 * s));
+        p.setBrush(Qt::NoBrush);
+        p.drawPolyline(poly);
+        p.setPen(QColor(150, 150, 160));
+        p.drawText(QRectF(poly.first() - QPointF(14 * s, 14 * s), QSizeF(12 * s, 12 * s)), Qt::AlignCenter, QStringLiteral("A"));
+        p.drawText(QRectF(poly.last() + QPointF(2 * s, -14 * s), QSizeF(12 * s, 12 * s)), Qt::AlignCenter, QStringLiteral("B"));
+    }
 
     const double r = 6.0 * s;
     // The previous cue's points: rings, and the way each beam sweeps.
@@ -236,7 +337,7 @@ void LinePlanView::paintEvent(QPaintEvent *)
     {
         QColor c = grouped ? b.colour : QColor(255, 230, 160);
         c.setAlpha(grouped ? 200 : 110);
-        p.setPen(QPen(c, (grouped ? 1.6 : 1.0) * s));
+        p.setPen(QPen(c, (grouped ? 1.6 : 1.0) * s, b.lands ? Qt::SolidLine : Qt::DashLine));
         p.drawLine(toScreen(b.from), toScreen(b.to));
     }
     for (const Beam &b : m_beams)
@@ -245,9 +346,19 @@ void LinePlanView::paintEvent(QPaintEvent *)
         p.setPen(QPen(QColor(20, 20, 24), s));
         p.setBrush(grouped ? b.colour : QColor(170, 170, 180));
         p.drawRect(QRectF(from - QPointF(3 * s, 3 * s), QSizeF(6 * s, 6 * s)));
-        p.setBrush(b.colour.isValid() ? b.colour : LineFormation::pointColour());
+        // Off the stage or up in the air: a hollow ring where the beam goes.
+        if (!b.lands)
+        {
+            p.setPen(QPen(b.colour.isValid() ? b.colour : LineFormation::pointColour(), 1.5 * s));
+            p.setBrush(QColor(30, 32, 38));
+        }
+        else
+            p.setBrush(b.colour.isValid() ? b.colour : LineFormation::pointColour());
         p.drawEllipse(to, r, r);
-        p.setPen(grouped ? LineFormation::groupInk() : LineFormation::pointInk());
+        if (!b.lands)
+            p.setPen(QColor(220, 220, 230));
+        else
+            p.setPen(grouped ? LineFormation::groupInk() : LineFormation::pointInk());
         p.drawText(QRectF(to.x() - r, to.y() - r, 2 * r, 2 * r), Qt::AlignCenter, QString::number(b.number));
     }
 
@@ -377,8 +488,17 @@ void LinePlanWindow::setFormation(const Scene *scene, const QLCPalette *look,
                                   const Scene *prevScene, const QLCPalette *prevLook)
 {
     m_strip->setLook(scene, look);
+    m_strip->show();
     m_plan->setFormation(scene, look, prevScene, prevLook);
     m_strip->setDimmed(false);
+    m_plan->setDimmed(false);
+    m_note->hide();
+}
+
+void LinePlanWindow::setPositions(const QList<QList<quint32>> &groups, const QList<const QLCPalette *> &palettes)
+{
+    m_strip->hide();
+    m_plan->setPositions(groups, palettes);
     m_plan->setDimmed(false);
     m_note->hide();
 }
@@ -387,7 +507,7 @@ void LinePlanWindow::setNoAim()
 {
     m_strip->setDimmed(true);
     m_plan->setDimmed(true);
-    m_note->setText(tr("The selection has no line aim. Showing the last plan."));
+    m_note->setText(tr("The selection has no line aim or stored position. Showing the last plan."));
     m_note->show();
 }
 

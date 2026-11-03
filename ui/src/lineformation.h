@@ -26,11 +26,14 @@
 #include <QList>
 
 #include "linespread.h"
+#include "beamlanding.h"
+#include "showtreemodel.h"
 #include "qlcui_export.h"
 
 class Doc;
 class Scene;
 class QLCPalette;
+class ShowTreeController;
 
 /** @addtogroup ui UI
  * @{
@@ -68,11 +71,30 @@ public:
         bool placed = false;        ///< from/to are known (a plan to draw)
         QPointF from;               ///< plan: where it hangs (metres, x / z)
         QPointF to;                 ///< plan: its point on the line
+        /** A raw position (positions()): where the beam lands and what it
+         *  hits ("\u2248 Line 1", "off stage"). */
+        BeamLanding::Kind landing = BeamLanding::NoGeometry;
+        QString hits;
     };
 
     /** @p look's lights as @p scene plays it. No scene (or no line): six
      *  stand-ins, numbered, grouped and spread as the look says. */
     static LineFormation build(Doc *doc, const Scene *scene, const QLCPalette *look);
+
+    /** A RAW position -- stored pan / tilt, not an aim: where each head's
+     *  beam lands for @p palettes (later ones win per channel), solved
+     *  forward from its DMX (BeamLanding::land, the rig view's math).
+     *  @p groups are the heads by group: one colour each when there are
+     *  several. Heads with no rig geometry or no pan / tilt are left out. */
+    static LineFormation positions(Doc *doc, const QList<QList<quint32>> &groups,
+                                   const QList<const QLCPalette *> &palettes);
+    /** A Show Tree layer target's heads that can point, by group: each of
+     *  its groups (a set as its groups) in order, then its own fixtures. */
+    static QList<QList<quint32>> targetHeads(Doc *doc, ShowTreeController *st, const ShowTree::Target &target);
+    /** Built by positions(). */
+    bool isRawPosition() const { return m_raw; }
+    /** positions(): one line for the lot ("lands DS centre, 2 heads off stage"). */
+    QString landingSummary() const { return m_landingSummary; }
 
     const QList<Light> &lights() const { return m_lights; }
     const LineSpread::Settings &settings() const { return m_settings; }
@@ -105,6 +127,8 @@ private:
     QList<Light> m_lights;
     LineSpread::Settings m_settings;
     int m_groupCount = 0;
+    bool m_raw = false;
+    QString m_landingSummary;
 };
 
 /** @} */

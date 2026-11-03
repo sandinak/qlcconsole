@@ -84,6 +84,7 @@
 #include "functionstreewidget.h"
 #include "linespreadpreview.h"
 #include "lineplanview.h"
+#include "lineformation.h"
 #include "monitorproperties.h"
 #include "outputrulesdialog.h"
 #include "stagetarget.h"
@@ -5159,6 +5160,44 @@ void ShowTreeView::showLayerPage(const CueList &list, int index, const Layer *ow
             {
                 m_planWindow->setFormation(sc, aimPal, prevSc, prevPal);
                 m_planFed = true;
+            }
+        }
+        // Under a STORED position (PanTilt and the like, not an aim): where
+        // each head's beam lands, solved forward from its DMX, and what it hits.
+        else if (key == KeyPosition && rl->values.contains(KeyPosition))
+        {
+            QList<const QLCPalette *> pals;
+            bool aims = false;
+            for (quint32 pid : rl->values.value(KeyPosition).look.palettes)
+                if (const QLCPalette *pp = m_doc->palette(pid))
+                {
+                    aims = aims || pp->type() == QLCPalette::Aim || pp->type() == QLCPalette::Formation;
+                    pals << pp;
+                }
+            const QList<QList<quint32>> heads = LineFormation::targetHeads(m_doc, m_st, rl->target);
+            if (!aims && !pals.isEmpty() && !heads.isEmpty())
+            {
+                LinePlanView *planView = new LinePlanView(m_doc, m_rowsHost);
+                planView->setObjectName("stLinePlan");
+                planView->setPositions(heads, pals);
+                QLabel *lands = new QLabel(m_rowsHost);
+                lands->setObjectName("stPositionLanding");
+                lands->setWordWrap(true);
+                lands->setTextFormat(Qt::PlainText);
+                lands->setText(QStringLiteral("%1 \u00b7 %2").arg(text, planView->formation().landingSummary()));
+                lands->setToolTip(tr("Where these lights' stored pan and tilt put their beams, worked "
+                                     "out from the DMX as the rig view does: on the stage, at a target, "
+                                     "off stage, into the audience or into the air."));
+                m_rows->addWidget(lands, row, 1, 1, 4);
+                ++row;
+                m_rows->addWidget(planView, row, 1, 1, 4);
+                ++row;
+                connect(planView, &LinePlanView::popOutRequested, this, &ShowTreeView::openLinePlanWindow);
+                if (m_planWindow != nullptr)
+                {
+                    m_planWindow->setPositions(heads, pals);
+                    m_planFed = true;
+                }
             }
         }
     }

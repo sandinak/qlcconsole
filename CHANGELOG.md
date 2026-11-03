@@ -24,6 +24,15 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   and both say when Cross does nothing because Spread isn't below 0. The
   drawing comes from the engine's own line rule, so it can't disagree with
   the stage.
+- **A stored position shows where it lands.** Under a layer's Position
+  row, a PanTilt (or any stored pan / tilt) look gets a line and a plan:
+  each head's beam solved forward from its DMX, as the rig view reads it,
+  to where it lands, named for the nearest target ("≈ Announcer") or stage
+  area, or off stage / into the audience / into the air. The PanTilt page
+  of the Look Editor shows it too, with lights in context.
+- **The line-aim plan is really from above.** It drew across and height (a
+  front view upside down), so hung lights showed below a line on the deck;
+  it now draws across and up/downstage, downstage at the bottom.
 - **Plan names no longer overlap.** Lights hung close together (T1-S1,
   T1-S2) get their names on separate rows with a leader to the light.
 - **A Formation's preview says what it picked.** Before you pick lights it

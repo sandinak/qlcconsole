@@ -26,15 +26,22 @@
 #include "stagetarget.h"
 #include "aimsolver.h"
 #include "qlcpalette.h"
+#include "showtreecontroller.h"
+#include "showtreemodel.h"
+#include "fixturegroup.h"
 #include "fixture.h"
 #include "scene.h"
 #include "doc.h"
 
 namespace
 {
+/* From above: x across (stage left is +X), y up / downstage (+Y is
+   downstage, drawn towards the bottom, the audience's side). It was (x, z) --
+   across and HEIGHT, a front elevation upside down -- so a hung truss drew
+   below a line on the deck and every plan was a side-on picture. */
 QPointF plan(const QVector3D &v)
 {
-    return QPointF(v.x(), v.z());
+    return QPointF(v.x(), v.y());
 }
 
 /* The dataviz reference categorical hues, dark steps, yellow left out (the
@@ -99,8 +106,106 @@ LineFormation LineFormation::build(Doc *doc, const Scene *scene, const QLCPalett
     return out;
 }
 
+LineFormation LineFormation::positions(Doc *doc, const QList<QList<quint32>> &groups,
+                                       const QList<const QLCPalette *> &palettes)
+{
+    LineFormation out;
+    out.m_raw = true;
+    if (doc == nullptr)
+        return out;
+    QList<BeamLanding::Result> results;
+    QList<quint32> seen;
+    int number = 0;
+    for (int gi = 0; gi < groups.count(); ++gi)
+    {
+        for (quint32 fid : groups.at(gi))
+        {
+            if (seen.contains(fid))
+                continue;
+            seen << fid;
+            QList<SceneValue> values;
+            for (const QLCPalette *p : palettes)
+                if (p != nullptr)
+                    values << const_cast<QLCPalette *>(p)->valuesFromFixtures(doc, { fid });
+            // Later palettes win: keep the last value per channel.
+            QList<SceneValue> last;
+            for (int i = values.count() - 1; i >= 0; --i)
+            {
+                bool dup = false;
+                for (const SceneValue &v : last)
+                    if (v.fxi == values.at(i).fxi && v.channel == values.at(i).channel)
+                        dup = true;
+                if (!dup)
+                    last << values.at(i);
+            }
+            const BeamLanding::Result r = BeamLanding::land(doc, fid, last);
+            if (!r.valid())
+                continue;
+            results << r;
+            Light l;
+            l.fixture = fid;
+            l.number = ++number;
+            l.group = gi;
+            l.placed = true;
+            l.from = QPointF(r.origin.x(), r.origin.y());
+            l.to = QPointF(r.point.x(), r.point.y());
+            l.landing = r.kind;
+            l.hits = BeamLanding::describe(doc, r);
+            if (const Fixture *fx = doc->fixture(fid))
+                l.name = fx->name();
+            out.m_groupCount = qMax(out.m_groupCount, gi + 1);
+            out.m_lights << l;
+        }
+    }
+    out.m_landingSummary = BeamLanding::summary(doc, results);
+    return out;
+}
+
+QList<QList<quint32>> LineFormation::targetHeads(Doc *doc, ShowTreeController *st, const ShowTree::Target &target)
+{
+    QList<QList<quint32>> out;
+    if (doc == nullptr)
+        return out;
+    QList<quint32> groups = target.groups;
+    if (st != nullptr)
+        for (quint32 sid : target.sets)
+            for (const ShowTree::GroupSet &gs : st->groupSets())
+                if (gs.id == sid)
+                    for (quint32 g : gs.groups)
+                        if (!groups.contains(g))
+                            groups << g;
+    QList<quint32> seen;
+    for (quint32 gid : groups)
+    {
+        const FixtureGroup *g = doc->fixtureGroup(gid);
+        if (g == nullptr)
+            continue;
+        QList<quint32> heads;
+        for (quint32 fid : AimSolver::aimable(doc, g->fixtureList()))
+            if (!seen.contains(fid))
+            {
+                seen << fid;
+                heads << fid;
+            }
+        if (!heads.isEmpty())
+            out << heads;
+    }
+    QList<quint32> own;
+    for (quint32 fid : AimSolver::aimable(doc, target.fixtures))
+        if (!seen.contains(fid))
+        {
+            seen << fid;
+            own << fid;
+        }
+    if (!own.isEmpty())
+        out << own;
+    return out;
+}
+
 bool LineFormation::grouped() const
 {
+    if (m_raw)
+        return m_groupCount > 1;
     return m_groupCount > 1 && m_groupCount < m_lights.count();
 }
 
@@ -117,7 +222,7 @@ int LineFormation::crossings() const
 
 bool LineFormation::crossIdle() const
 {
-    return m_settings.spread >= 0.0 && m_lights.count() > 1;
+    return !m_raw && m_settings.spread >= 0.0 && m_lights.count() > 1;
 }
 
 QColor LineFormation::colourFor(const Light &light) const
@@ -129,6 +234,10 @@ QString LineFormation::caption() const
 {
     if (m_lights.isEmpty())
         return QString();
+    if (m_raw)
+        return grouped() ? QCoreApplication::translate("LineFormation", "Stored position: %1. A colour per group.")
+                                   .arg(m_landingSummary)
+                         : QCoreApplication::translate("LineFormation", "Stored position: %1.").arg(m_landingSummary);
     QString what;
     if (grouped())
     {

@@ -75,6 +75,12 @@ public:
     void setFormation(const Scene *scene, const QLCPalette *look,
                       const Scene *prevScene = nullptr, const QLCPalette *prevLook = nullptr);
 
+    /** A STORED position instead (a PanTilt palette, any non-Aim position):
+     *  each head of @p groups where it hangs, its beam to where it lands for
+     *  @p palettes (solved forward from the DMX), the stage's outline and the
+     *  stage targets for reference. The caption names what it hits. */
+    void setPositions(const QList<QList<quint32>> &groups, const QList<const QLCPalette *> &palettes);
+
     /** One light, in plan coordinates (metres: x across, z up/downstage). */
     struct Beam
     {
@@ -87,6 +93,8 @@ public:
         QPointF previous;           ///< its point in the previous cue
         int group = 0;              ///< 0 = the first group along the line
         QColor colour;              ///< its group's colour (or the plain point colour)
+        bool lands = true;          ///< a stored position: on the stage (else off it / in the air)
+        QString hits;               ///< a stored position: what it hits
     };
     /** What it shows (tests). */
     const QList<Beam> &beams() const { return m_beams; }
@@ -121,6 +129,9 @@ private:
     QList<Beam> m_beams;
     LineFormation m_form;
     QList<QRectF> m_labelRects;
+    QRectF m_stage;                             //!< stored position: the stage outline
+    QList<QPair<QPointF, QString>> m_marks;     //!< stored position: point targets
+    QList<QList<QPointF>> m_otherLines;         //!< stored position: line targets
     bool m_dimmed = false;
     bool m_poppable = true;
     QToolButton *m_popOut = nullptr;
@@ -145,6 +156,8 @@ public:
     /** The same arguments the embedded views take. */
     void setFormation(const Scene *scene, const QLCPalette *look,
                       const Scene *prevScene, const QLCPalette *prevLook);
+    /** A stored position (LinePlanView::setPositions()): the plan alone. */
+    void setPositions(const QList<QList<quint32>> &groups, const QList<const QLCPalette *> &palettes);
     /** The selection has no line aim: keep the last plan, dimmed, and say so. */
     void setNoAim();
 

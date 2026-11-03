@@ -94,6 +94,7 @@ add_library(${module_name} SHARED
     powerdistribution.cpp powerdistribution.h
     venue.cpp venue.h
     aimsolver.cpp aimsolver.h
+    beamlanding.cpp beamlanding.h
     beamocclusion.cpp beamocclusion.h
     stageplatform.cpp stageplatform.h
     nolightzone.cpp nolightzone.h

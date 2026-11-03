@@ -33,6 +33,7 @@ class QSlider;
 class QCheckBox;
 class QDoubleSpinBox;
 class LineSpreadPreview;
+class LinePlanView;
 class QComboBox;
 class QPushButton;
 class QLabel;
@@ -303,6 +304,10 @@ private:
     QCheckBox *m_lineShareCheck = nullptr;
     QComboBox *m_lineOrderCombo = nullptr;       //!< data: LineSpread::Order
     LineSpreadPreview *m_linePreview = nullptr;
+    /** PanTilt page: where the position lands, with lights in context. */
+    LinePlanView *m_ptPlan = nullptr;
+    QLabel *m_ptLanding = nullptr;
+    void updatePanTiltPlan();
     /** Show the line controls for the look's target, filled from the look. */
     void syncLineControls();
     QCheckBox   *m_aimDimBlocked;   //!< Aim: dim heads that can't see the target
