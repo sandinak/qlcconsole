@@ -76,6 +76,16 @@ bool AimSolver::frameFor(Doc *doc, quint32 fixtureId, Frame &frame)
     // Fixture world position in metres; a free-placed fixture on a platform sits
     // at the deck height (mirror the target's platform handling).
     frame.position = mProps->fixtureRigPosition(fixtureId);
+    /* From the middle of the body, where the views draw it and its light
+       leaves: a free-placed or deck-mounted fixture's stored X/Y is the
+       top-left of its plot icon (RigHeads::fixtureCentre()), and aimed from
+       there every beam was drawn up to a third of a metre off its point --
+       half a 510 mm two-arm bar's width, sideways. */
+    {
+        const QVector3D c = RigHeads::fixtureCentre(doc, fixtureId);
+        frame.position.setX(c.x());
+        frame.position.setY(c.y());
+    }
     // Only a free-placed head gets the height of whatever platform it stands
     // over: every mount (truss, pipe, tower, deck, riser) already puts the
     // head at its real height, and adding the platform again lifted a

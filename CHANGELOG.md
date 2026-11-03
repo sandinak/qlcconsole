@@ -28,6 +28,11 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Fixed
 
+- **A light on the deck or placed freely is aimed from the middle of its
+  body,** where the views draw it and its light leaves, not from the corner
+  of its plot icon: a two-arm beam on a riser drew each beam up to 0.3 m
+  wide of its point on the line (half the 510 mm bar), now within 7 cm
+  (one DMX step of its 128-step pan).
 - **An aimed light is drawn where it points, to the step.** The rig views
   read a 16-bit head's fine byte back (read coarse only, a 540° head was
   drawn up to 2° off its mark, 20 cm at a 6 m throw), and a two-arm beam's

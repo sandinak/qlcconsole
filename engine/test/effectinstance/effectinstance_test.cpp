@@ -1602,8 +1602,15 @@ void EffectInstance_Test::eachArmAimsFromWhereItIs()
         QVERIFY2(v.contains(0) && v.contains(3), "both arms' pans written");
         const double pan1 = (v.value(0) * 256 + v.value(1)) / 65535.0 * 540.0;
         const double pan2 = (v.value(3) * 256 + v.value(4)) / 65535.0 * 540.0;
-        // From x = -0.25 and +0.25 to a point 1.5 m out: 9.5 degrees each way.
-        const double want = 2.0 * qRadiansToDegrees(qAtan2(0.25, 1.5));
+        // Each arm's bearing to the subject from where it is: 0.5 m apart.
+        AimSolver::Frame f1, f2;
+        QVERIFY(AimSolver::frameFor(m_doc, GroupHead(bar->id(), 0), f1));
+        QVERIFY(AimSolver::frameFor(m_doc, GroupHead(bar->id(), 1), f2));
+        QVERIFY(qAbs((f2.position - f1.position).length() - 0.5f) < 1e-3f);
+        auto bearing = [](const QVector3D &from) {
+            return qRadiansToDegrees(qAtan2(double(from.x()), 1.5 - double(from.y())));
+        };
+        const double want = qAbs(bearing(f1.position) - bearing(f2.position));
         QVERIFY2(qAbs(qAbs(pan1 - pan2) - want) < 0.5,
                  qPrintable(QString("point %1: arms at %2 and %3 degrees, want %4 apart")
                             .arg(point).arg(pan1).arg(pan2).arg(want)));

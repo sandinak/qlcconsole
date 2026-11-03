@@ -37,6 +37,7 @@
 #include "scenevalue.h"
 #include <QVector2D>
 #include "linecurve.h"
+#include "righeads.h"
 
 /* The solver as it stood before reach was added, verbatim apart from reading
    a Frame and from the corrected bearing (it measured pan from upstage, 180
@@ -830,6 +831,19 @@ void AimSolver_Test::aimedHeadsLandOnTheirTarget()
         Fixture *fx = doc->fixture(m.fxi);
         return m.head < 0 ? fx->name() : QString("%1 arm %2").arg(fx->name()).arg(m.head + 1);
     };
+
+    /* Aimed from the middle of the body, where the views draw it: a
+       free-placed or deck fixture's stored X/Y is the corner of its plot
+       icon, and aimed from there a beam was drawn up to 0.3 m off its point. */
+    for (Fixture *fx : fixtures)
+    {
+        AimSolver::Frame frame;
+        QVERIFY(AimSolver::frameFor(doc, fx->id(), frame));
+        const QVector3D c = RigHeads::fixtureCentre(doc, fx->id());
+        QVERIFY2(qAbs(frame.position.x() - c.x()) < 1e-4f && qAbs(frame.position.y() - c.y()) < 1e-4f,
+                 qPrintable(QString("%1 aimed from (%2,%3), drawn at (%4,%5)").arg(fx->name())
+                            .arg(frame.position.x()).arg(frame.position.y()).arg(c.x()).arg(c.y())));
+    }
 
     // An arm's origin is its share of the body, along the body.
     for (const GroupHead &m : members)
