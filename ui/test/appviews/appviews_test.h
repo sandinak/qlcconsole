@@ -238,6 +238,7 @@ private slots:
     /** Turning it off, or letting real output through, asks for the show's
      *  PIN; a wrong one leaves it on; no undo step */
     void teachingModeIsGuardedByThePin();
+    void theViewNoticePushesThePageDown();
     /** Operate in a teaching show: a quiet notice and a Show Status entry,
      *  no dialog; the dialog only when real output is let through and patched */
     void teachingOperateWarnsQuietlyThenAsksWhenItLooksReal();

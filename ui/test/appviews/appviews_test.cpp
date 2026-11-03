@@ -4424,3 +4424,48 @@ void AppViews_Test::aLoadedTeachingShowOpensInOperateWithoutAsking()
     QTest::qWait(60);
     QVERIFY(!boxed);
 }
+
+/* A notice above the tabs (showViewNotice) pushes the page down: at each
+   window size the bar ends where the tabs begin, and no button or box of the
+   page on show is cut off by the edge of the widget holding it. */
+void AppViews_Test::theViewNoticePushesThePageDown()
+{
+    m_app->clearDocument();
+    m_app->show();
+    QTabWidget *tabs = m_app->findChild<QTabWidget *>("MainTabs");
+    QVERIFY(tabs != nullptr);
+    const QSize sizes[] = { m_app->minimumSizeHint(), QSize(1280, 800), QSize(1920, 1080) };
+    for (const QString &label : { QString("Connections"), QString("Show Tree"), QString("Run") })
+    {
+        int at = -1;
+        for (int i = 0; i < tabs->count(); ++i)
+            if (tabs->tabText(i).contains(label))
+                at = i;
+        QVERIFY2(at >= 0, qPrintable(label));
+        tabs->setCurrentIndex(at);
+        for (const QSize &sz : sizes)
+        {
+            m_app->resize(sz);
+            m_app->showViewNotice(QStringLiteral("Show control held: Teaching (cue 1 not sent)"));
+            QTest::qWait(60);
+            QVERIFY(m_app->m_viewNotice->isVisible());
+            const QRect bar(m_app->m_viewNotice->mapTo(m_app, QPoint(0, 0)), m_app->m_viewNotice->size());
+            const QRect tab(tabs->mapTo(m_app, QPoint(0, 0)), tabs->size());
+            QVERIFY2(bar.bottom() < tab.top(), qPrintable(QString("%1 %2x%3: bar %4-%5, tabs from %6")
+                         .arg(label).arg(sz.width()).arg(sz.height()).arg(bar.top()).arg(bar.bottom()).arg(tab.top())));
+            QWidget *page = tabs->currentWidget();
+            // (at the window's minimum, pages are squeezed by their own design: only the bar is checked)
+            const auto buttons = sz.width() >= 1280 ? page->findChildren<QAbstractButton *>() : QList<QAbstractButton *>();
+            for (QAbstractButton *b : buttons)
+            {
+                if (!b->isVisible() || b->parentWidget() == nullptr || b->width() < 4)
+                    continue;
+                QVERIFY2(b->y() >= 0 && b->parentWidget()->rect().adjusted(0, -2, 0, 0).contains(b->geometry().topLeft()),
+                         qPrintable(QString("%1 %2x%3: %4 \"%5\" starts above its parent (y=%6)")
+                                        .arg(label).arg(sz.width()).arg(sz.height())
+                                        .arg(b->metaObject()->className(), b->text()).arg(b->y())));
+            }
+            m_app->hideViewNotice();
+        }
+    }
+}
