@@ -68,6 +68,9 @@ public:
     };
     /** What it shows, in light order (tests). */
     const QList<Dot> &dots() const { return m_dots; }
+    /** The arrowheads drawn at the last paint, one per connector, pointing
+     *  from the light's place toward its dot (tests). */
+    const QList<QPolygonF> &arrows() const { return m_arrows; }
     /** The model it draws (tests). */
     const LineFormation &formation() const { return m_form; }
 
@@ -90,6 +93,7 @@ private:
     Doc *m_doc;
     LineFormation m_form;
     QList<Dot> m_dots;
+    QList<QPolygonF> m_arrows;
     bool m_dimmed = false;
     bool m_poppable = true;
 };

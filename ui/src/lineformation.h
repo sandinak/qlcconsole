@@ -21,6 +21,7 @@
 #define LINEFORMATION_H
 
 #include <QPointF>
+#include <QPolygonF>
 #include <QString>
 #include <QColor>
 #include <QList>
@@ -117,6 +118,13 @@ public:
     static QColor groupColour(int group);
     /** The ink for a number on groupColour(). */
     static QColor groupInk() { return QColor(255, 255, 255); }
+    /** A filled arrowhead for a line running from @p tail to @p tip: a
+     *  triangle with its point at @p tip, @p size long. Empty when the two
+     *  are closer than @p size (no direction to show). */
+    static QPolygonF arrowhead(const QPointF &tail, const QPointF &tip, double size);
+    /** Where a line to @p tip, drawn with an arrowhead of @p size, should
+     *  end so the line does not poke out of the arrowhead's point. */
+    static QPointF arrowBase(const QPointF &tail, const QPointF &tip, double size);
     /** Point fill and ink when lights are not grouped. */
     static QColor pointColour() { return QColor(255, 210, 120); }
     static QColor pointInk() { return QColor(20, 20, 24); }

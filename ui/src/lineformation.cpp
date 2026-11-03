@@ -276,3 +276,22 @@ QString LineFormation::caption() const
     }
     return what.isEmpty() ? cross : what + QLatin1Char(' ') + cross;
 }
+
+QPolygonF LineFormation::arrowhead(const QPointF &tail, const QPointF &tip, double size)
+{
+    const QLineF l(tail, tip);
+    if (l.length() < size)
+        return QPolygonF();
+    const QPointF d = (tip - tail) / l.length();
+    const QPointF base = tip - d * size;
+    const QPointF n(-d.y(), d.x());
+    return QPolygonF({ tip, base + n * (size * 0.4), base - n * (size * 0.4) });
+}
+
+QPointF LineFormation::arrowBase(const QPointF &tail, const QPointF &tip, double size)
+{
+    const QLineF l(tail, tip);
+    if (l.length() < size)
+        return tip;
+    return tip - (tip - tail) / l.length() * (size * 0.8);
+}
