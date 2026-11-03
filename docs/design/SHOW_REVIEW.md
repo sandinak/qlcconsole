@@ -134,6 +134,7 @@ computer only (stays in the footer only).
 | `fixtures.clash` | fixtures loaded unpatched because their address overlapped (`Doc::addressClashes()`) | D | PAT-01 |
 | `fixtures.duplicates` | two fixtures with one name (`Doc::duplicateFixtureNames()`) | D | FIX-14 |
 | `fixtures.buried` | a light inside a deck, riser or step (`PlacementCheck::buried()`), an error | D | FIX-15 |
+| `fixtures.offrow` | a floor light whose row stands on a deck (`PlacementCheck::offRow()`), a warning | D | FIX-16 |
 | `fixtures.output` | a light whose mode has no lumens or power (`FixtureDefCheck::expectsLight()`) | D | FIX-07 |
 | `fixtures.nodefinition` | a fixture standing in as a dimmer: definition missing (`Fixture::definitionUnavailable`) | D | FIX-01 |
 | `definitions.failed` | a .qxf that won't read (`FixtureDefCheck::diagnose()`) | D (the show's) / R (this computer's library) | FIX-01 when the show uses it; else footer only |
@@ -832,6 +833,31 @@ over, or "Move it clear" when none) and the plot's red ring
 (`MonitorFixtureItem::setBuried()`). Says: *"UST-2 is inside Deck SR. Sit it
 on Deck SR (0.61 m)."* [footer entry → Sit on Top / Show]
 
+**FIX-16 On the floor, its row on a deck.** · W (footer: warning) · cheap · v1 ✓
+Detects: a light at floor height whose row-mates stand on a deck -- UST-2
+left at z 0 beside Deck USP1 while UST-1 and UST-3..8 are deck-mounted at
+0.61 m (its body only touches the deck's edge, so FIX-15 is silent). A
+**row-mate** is another fixture on the plot of the *same type* (definition,
+mode), found in this order, the first that qualifies deciding: (1) a fixture
+group it belongs to, the smallest first (group membership is the user's own
+statement of a row); (2) the same name stem -- the name minus its trailing
+number ("UST-" for UST-2, "Par " for Par 7); (3) a line -- within 0.3 m of
+its Y. Mixed types never count (a par in a group of bars is nobody's
+mate). A mate is *on a deck* when it has a deck mount, or is a free light
+whose height is a solid top under it (3 cm). It fires when more than half
+of the mates (and at least two) are on a deck, the light is placed by hand
+at floor height (<= 5 cm, not hung, not on a structure) and is within a body
+length (the longest edge of its box, 0.5 m at least) of the edge of one of
+those decks. Not when it is buried (FIX-15, which Sit on Top also fixes).
+Data: `PlacementCheck::offRow()` (engine), shared with the footer's
+`fixtures.offrow` entry (a *warning*) and the plot's amber ring and triangle
+(`MonitorFixtureItem::setOffRow()`); the fix is `PlacementCheck::fix(OffRow)`,
+FIX-15's deck mount on the nearest deck the mates use, XY kept. Says:
+*"UST-2 is on the floor; UST-1, UST-3…UST-8 are on Deck USP1 (0.61 m) and 3
+more decks. Sit it on Deck USP1 (0.61 m)."* [footer entry → Sit on Top /
+Show]. A floor light by a riser can be deliberate, so it is a warning and
+Accept with a note applies. Reads nothing new into the file.
+
 ### 3.8 Venues and focus (VEN)
 
 **VEN-01 Focus calls with no target.** · W · cheap · v1 ✓
@@ -1518,6 +1544,7 @@ Branson's review), after the freeze lifts.
 | FIX-05 | Fixtures not on the plot (warning when focus, aim or power needs it) |
 | FIX-08 | Dead-marked lights still used |
 | FIX-15 | Lights buried in a deck, riser or step (footer error, Sit on Top) |
+| FIX-16 | Light on the floor, its row on a deck (footer warning, Sit on Top) |
 | VEN-01 | Focus calls with no target or no lights |
 | VEN-02 | Unaimable lights in focus calls |
 | VEN-05 | Swapped fixtures needing focus |

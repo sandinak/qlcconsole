@@ -375,6 +375,17 @@ static void fix15(ReviewContext &ctx, QList<ReviewFinding> &out)
             QStringLiteral("status:fixtures.buried"), QVariantList() << b.fixtureId);
 }
 
+static void fix16(ReviewContext &ctx, QList<ReviewFinding> &out)
+{
+    for (const PlacementCheck::OffRow &o : PlacementCheck::offRow(ctx.doc()))
+        out << ReviewContext::make(QStringLiteral("FIX-16"), ReviewFinding::Warning,
+            PlacementCheck::problemText(ctx.doc(), o) + QStringLiteral(". ")
+                + PlacementCheck::fixText(ctx.doc(), o) + QStringLiteral("."),
+            fixtureKeys(QList<quint32>() << o.fixtureId),
+            QByteArray::number(o.fixtureId) + ':' + QByteArray::number(o.sitId),
+            QStringLiteral("status:fixtures.offrow"), QVariantList() << o.fixtureId);
+}
+
 /****************************************************************************
  * Effects (FX)
  ****************************************************************************/
@@ -1295,6 +1306,10 @@ QList<ShowReview::Check> ShowReviewChecks::showChecks()
         { QStringLiteral("FIX-15"), tr("A light buried in the stage"), S::Fixtures,
           tr("A light whose body is inside a deck, riser or step is sunk into the set: it can't be "
              "seen, and its beam starts inside it. Sit it on the top, or move it clear."), fix15 },
+        { QStringLiteral("FIX-16"), tr("On the floor, its row on a deck"), S::Fixtures,
+          tr("A light on the floor beside a deck whose row-mates (the same fixture type in its group, "
+             "its name series or its line) stand on it is probably one left behind. Sit it on the "
+             "deck, or accept the warning if the floor is deliberate."), fix16 },
         { QStringLiteral("FX-07"), tr("Effect that won't load"), S::Effects,
           tr("An effect with no script chosen, or whose script isn't on this computer, does "
              "nothing on stage."), fx07 },

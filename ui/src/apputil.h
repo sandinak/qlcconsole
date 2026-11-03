@@ -206,7 +206,8 @@ namespace AppUtil
      */
     void updateFixtureReadiness(Doc *doc);
 
-    /** Just "fixtures.buried" (also part of updateFixtureReadiness()): cheap
+    /** Just "fixtures.buried" and "fixtures.offrow" (a warning: a light on the
+     *  floor whose row stands on a deck, FIX-16; also part of updateFixtureReadiness()): cheap
      *  enough to run a moment after any edit, so a deck that moves or a light
      *  that is dragged into one is said at once. */
     void updatePlacementStatus(Doc *doc);

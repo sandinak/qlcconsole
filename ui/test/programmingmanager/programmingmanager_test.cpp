@@ -1796,6 +1796,57 @@ void ProgrammingManager_Test::aBuriedLightIsAFooterErrorUntilItIsFixed()
     ShowStatus::instance()->clearStatus("fixtures.buried");
 }
 
+/* FIX-16 in the footer: a light left on the floor while its row stands on a
+   deck is a WARNING (not FIX-15's error) that names it and the deck; Sit on
+   Top clears it. */
+void ProgrammingManager_Test::aFloorLightBesideItsRowsDeckIsAFooterWarning()
+{
+    auto entry = [](const QString &key) {
+        foreach (const ShowStatus::Entry &e, ShowStatus::instance()->allEntries())
+            if (e.key == key)
+                return e;
+        return ShowStatus::Entry();
+    };
+    MonitorProperties *mp = m_doc->monitorProperties();
+    StagePlatform *pl = mp->addPlatform();
+    pl->setName("USP1");
+    pl->setOriginX(2.0f);
+    pl->setOriginY(2.0f);
+    pl->setWidth(4.0f);
+    pl->setDepth(1.2f);
+    pl->setHeight(0.61f);
+    QList<Fixture *> row;
+    for (int i = 1; i <= 4; ++i)
+    {
+        Fixture *fx = new Fixture(m_doc);
+        fx->setName(QString("UST-%1").arg(i));
+        fx->setChannels(1);
+        fx->setUniverse(0);
+        fx->setAddress(quint32(i * 4));
+        fx->setPatched(true);
+        QVERIFY(m_doc->addFixture(fx));
+        mp->setFixturePosition(fx->id(), 0, 0, QVector3D(float(2300 + 800 * i), 1500.0f, 0.0f));
+        FixtureRigProps rp = mp->fixtureRigProps(fx->id());
+        rp.mountingType = Truss::FloorMounted;
+        rp.studioMount = 0;
+        if (i != 2)
+            rp.deckPlatformId = pl->id();
+        mp->setFixtureRigProps(fx->id(), rp);
+        row << fx;
+    }
+    AppUtil::updatePlacementStatus(m_doc);
+    ShowStatus::Entry e = entry("fixtures.offrow");
+    QCOMPARE(e.severity, ShowStatus::Warning);
+    QCOMPARE(e.summary, QString("UST-2 is on the floor; UST-1, UST-3, UST-4 are on Deck USP1 (0.61 m)"));
+    QCOMPARE(e.itemData, (QVariantList{ row.at(1)->id() }));
+    QVERIFY2(e.items.first().contains("Sit it on Deck USP1 (0.61 m)"), qPrintable(e.items.first()));
+    QVERIFY(entry("fixtures.buried").key.isEmpty());        // not a buried light
+
+    QVERIFY(PlacementCheck::fix(m_doc, PlacementCheck::checkRow(m_doc, row.at(1)->id())));
+    AppUtil::updatePlacementStatus(m_doc);
+    QVERIFY(entry("fixtures.offrow").key.isEmpty());
+}
+
 /* Address clashes, names used twice, and universes with fixtures but no
    output are in the footer too, each item carrying what its fix needs. */
 void ProgrammingManager_Test::otherRigProblemsAreInTheFooter()

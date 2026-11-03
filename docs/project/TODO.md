@@ -52,7 +52,13 @@ ring on the plot. Tests: ShowReview_Test::fix15 + fix15Geometry,
 ProgrammingManager_Test::aBuriedLightIsAFooterErrorUntilItIsFixed,
 Monitor_Test::aBuriedLightIsRingedOnThePlot.
 
-- On the user's show copy nothing is flagged: UST-2 (z 0) abuts USP1's
+- **FIX-16 built (Q208, 2026-11-03):** "not on its row's riser" as a
+  warning (`PlacementCheck::offRow()`, footer `fixtures.offrow`, amber ring,
+  Sit on Top); on his show copy it flags UST-2 only. Row-mates = same type in
+  a group, a name series or a line (docs/design/SHOW_REVIEW.md FIX-16).
+  Tests: ShowReview_Test::fix16*, ProgrammingManager_Test and Monitor_Test
+  below.
+- (Earlier note, now superseded:) On the user's show copy nothing is flagged: UST-2 (z 0) abuts USP1's
   upstage edge (its body ends at y 3.760, the deck starts there) instead of
   being inside it, and the other USTs are deck-mounted at 0.61. "Not on its
   row's riser" would be a different check (siblings deck-mounted, this one

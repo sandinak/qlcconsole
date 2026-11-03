@@ -1870,7 +1870,7 @@ void Monitor::refreshBuried()
 {
     if (m_graphicsView == NULL)
         return;
-    QList<quint32> marks;
+    QList<quint32> marks, rowMarks;
     foreach (const ShowStatus::Entry &e, ShowStatus::instance()->allEntries())
     {
         if (e.key == QLatin1String("fixtures.buried"))
@@ -1878,8 +1878,14 @@ void Monitor::refreshBuried()
             foreach (const QVariant &v, e.itemData)
                 marks << v.toUInt();
         }
+        else if (e.key == QLatin1String("fixtures.offrow"))
+        {
+            foreach (const QVariant &v, e.itemData)
+                rowMarks << v.toUInt();
+        }
     }
     m_graphicsView->markBuriedFixtures(marks);
+    m_graphicsView->markOffRowFixtures(rowMarks);
 }
 
 void Monitor::refreshNeedsFocus()

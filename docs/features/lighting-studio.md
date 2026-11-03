@@ -341,7 +341,9 @@ drapes):
   doesn't scramble the pile underneath it. A light whose body ends up
   inside a Solid-topped platform (a floor light at height 0 in a riser) is
   a footer **error** ringed red on the plot; **Sit on Top** stands it on the
-  deck (Show Review FIX-15, see [Show Review](show-review.md)).
+  deck (Show Review FIX-15, see [Show Review](show-review.md)). A floor light
+  beside a deck that the rest of its row stands on gets an amber ring and a
+  footer warning (FIX-16, same fix).
   - **Two colours.** **Colour** is the plot's: it tells decks apart on the
     2D plan and in the layers list. **Finish (rig)** is what it is painted —
     stage black unless you set it — and the Lighting Studio's planes and the

@@ -280,6 +280,10 @@ public:
      *  red "!" on the upper corner. */
     void setBuried(bool b) { if (b != m_buried) { m_buried = b; update(); } }
     bool isBuried() const { return m_buried; }
+    /** FIX-16: on the floor while its row is on a deck -- an amber ring and a
+     *  triangle (a warning, not FIX-15's red error). */
+    void setOffRow(bool b) { if (b != m_offRow) { m_offRow = b; update(); } }
+    bool isOffRow() const { return m_offRow; }
 
     /** Set the fixture's pan-zero facing (degrees clockwise from downstage),
      *  i.e. FixtureRigProps::panZeroDir. Drives the facing arrow on the icon.
@@ -410,6 +414,7 @@ private:
     bool m_unsaved       = false;
     bool m_needsFocus    = false;
     bool m_buried        = false;
+    bool m_offRow        = false;
 
     /** True if any head has a Pan channel (i.e. a moving head): only these
      *  show a facing arrow and accept Alt-drag rotation. */

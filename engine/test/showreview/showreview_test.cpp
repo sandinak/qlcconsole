@@ -573,6 +573,184 @@ void ShowReview_Test::fix15Geometry()
     QVERIFY(PlacementCheck::buried(m_doc).count() >= 1);
 }
 
+namespace
+{
+/* A row of eight bars like the one the show came with: UST-1..8 two metres
+   upstage of the decks, all but @a floorOne standing on a deck mount. */
+QList<Fixture *> ustRow(Doc *doc, int floorOne, bool naming = true, bool allFloor = false)
+{
+    QList<Fixture *> row;
+    for (int i = 1; i <= 8; ++i)
+    {
+        const double x = 2.3 + 0.8 * (i - 1);
+        const QString name = naming ? QStringLiteral("UST-%1").arg(i) : QStringLiteral("Bar%1x").arg(char('a' + i));
+        Fixture *fx = bar(doc, name, quint32(i * 10), x, 1.78, 0.0f);
+        if (i != floorOne && !allFloor)
+        {
+            MonitorProperties *mp = doc->monitorProperties();
+            FixtureRigProps rp = mp->fixtureRigProps(fx->id());
+            // Two decks side by side: ids 0 (x 2..5.2) and 1 (x 5.2..8.4).
+            rp.deckPlatformId = x < 5.2 ? 0u : 1u;
+            mp->setFixtureRigProps(fx->id(), rp);
+        }
+        row << fx;
+    }
+    return row;
+}
+}
+
+void ShowReview_Test::fix16()
+{
+    MonitorProperties *mp = m_doc->monitorProperties();
+    StagePlatform *usp1 = deck(m_doc, QStringLiteral("USP1"), 2.0, 2.0, 3.2, 1.2, 0.61);
+    deck(m_doc, QStringLiteral("USP2"), 5.2, 2.0, 3.2, 1.2, 0.61);
+    QCOMPARE(usp1->id(), 0u);
+    const QList<Fixture *> row = ustRow(m_doc, 2);      // UST-2 is the one on the floor
+    Fixture *ust2 = row.at(1);
+    QVERIFY(PlacementCheck::buried(m_doc).isEmpty());   // FIX-15 has nothing to say
+
+    QVERIFY(fires("FIX-16"));
+    const QList<ReviewFinding> all = findings("FIX-16");
+    QCOMPARE(all.size(), 1);                            // UST-2 only
+    const ReviewFinding f = all.first();
+    QCOMPARE(f.severity, ReviewFinding::Warning);
+    QCOMPARE(f.targets, QStringList() << QStringLiteral("fx:%1").arg(ust2->id()));
+    QVERIFY2(f.message.startsWith(QStringLiteral("UST-2 is on the floor; UST-1, UST-3…UST-8 are on Deck USP1 (0.61 m)")),
+             qPrintable(f.message));
+    QVERIFY2(f.message.contains(QStringLiteral("Sit it on Deck USP1 (0.61 m)")), qPrintable(f.message));
+    QCOMPARE(f.jump, QStringLiteral("status:fixtures.offrow"));
+    QCOMPARE(ShowReview::footerCheckId(QStringLiteral("fixtures.offrow")), QStringLiteral("FIX-16"));
+
+    // Sit on Top: the deck mount FIX-15's fix makes; the warning clears.
+    const PlacementCheck::OffRow o = PlacementCheck::checkRow(m_doc, ust2->id());
+    QVERIFY(o.off);
+    QCOMPARE(o.sitId, usp1->id());
+    QCOMPARE(o.mates.size(), 7);
+    QCOMPARE(o.row, QStringLiteral("name UST-"));
+    QVERIFY(PlacementCheck::fix(m_doc, o));
+    QVERIFY(mp->fixtureRigProps(ust2->id()).onDeck());
+    QVERIFY(qAbs(mp->fixtureRigPosition(ust2->id()).z() - 0.61f) < 0.001f);
+    QVERIFY(quiet("FIX-16"));
+    QVERIFY(!PlacementCheck::checkRow(m_doc, ust2->id()).off);
+    QVERIFY(PlacementCheck::offRow(m_doc).isEmpty());
+}
+
+void ShowReview_Test::fix16Rows()
+{
+    MonitorProperties *mp = m_doc->monitorProperties();
+    // No deck at all: nothing to be beside.
+    QList<Fixture *> row = ustRow(m_doc, 0, true, true);
+    for (Fixture *fx : row)
+        QVERIFY(PlacementCheck::deckOf(m_doc, fx->id()) == UINT_MAX);
+    QVERIFY(PlacementCheck::offRow(m_doc).isEmpty());
+    deck(m_doc, QStringLiteral("USP1"), 2.0, 2.0, 3.2, 1.2, 0.61);
+    deck(m_doc, QStringLiteral("USP2"), 5.2, 2.0, 3.2, 1.2, 0.61);
+
+    // A deliberately floor-mounted row: all on the floor, nothing to compare.
+    QVERIFY(PlacementCheck::offRow(m_doc).isEmpty());
+
+    // One light off the row on a deck, the rest on the floor: not a majority.
+    auto mount = [&](Fixture *fx, bool on) {
+        FixtureRigProps rp = mp->fixtureRigProps(fx->id());
+        rp.deckPlatformId = on ? (mp->fixtureRigPosition(fx->id()).x() < 5.2f ? 0u : 1u) : UINT_MAX;
+        mp->setFixtureRigProps(fx->id(), rp);
+    };
+    mount(row.at(0), true);
+    mount(row.at(1), true);
+    QVERIFY(PlacementCheck::offRow(m_doc).isEmpty());       // 2 of 7 mates
+    for (int i = 2; i < 5; ++i)
+        mount(row.at(i), true);
+    // 5 on decks: each of the three on the floor has 5 of 7 mates up.
+    QCOMPARE(PlacementCheck::offRow(m_doc).size(), 3);
+    for (int i = 5; i < 8; ++i)
+        mount(row.at(i), true);
+    QVERIFY(PlacementCheck::offRow(m_doc).isEmpty());       // all up: nothing to say
+
+}
+
+void ShowReview_Test::fix16Single()
+{
+    // A single light beside a deck has no row-mates; two do not make a majority.
+    deck(m_doc, QStringLiteral("USP1"), 2.0, 2.0, 3.2, 1.2, 0.61);
+    Fixture *lone = bar(m_doc, QStringLiteral("Lone"), 200, 3.0, 1.78, 0.0f);
+    QVERIFY(!PlacementCheck::checkRow(m_doc, lone->id()).off);
+    Fixture *mate = bar(m_doc, QStringLiteral("Lone 2"), 210, 3.8, 1.78, 0.0f);
+    FixtureRigProps rp = m_doc->monitorProperties()->fixtureRigProps(mate->id());
+    rp.deckPlatformId = 0;
+    m_doc->monitorProperties()->setFixtureRigProps(mate->id(), rp);
+    QVERIFY(!PlacementCheck::checkRow(m_doc, lone->id()).off);      // one mate: needs two
+    QVERIFY(quiet("FIX-16"));
+}
+
+void ShowReview_Test::fix16Sources()
+{
+    MonitorProperties *mp = m_doc->monitorProperties();
+    deck(m_doc, QStringLiteral("Riser"), 2.0, 2.0, 6.0, 1.2, 0.4);
+    // Names that say nothing, no group: found as a line (same Y within 0.3 m).
+    QList<Fixture *> row = ustRow(m_doc, 3, false);
+    QVERIFY(row.at(0)->name() != row.at(1)->name());
+    // The decks above are ids 0 and 1; only one exists here.
+    for (Fixture *fx : row)
+    {
+        FixtureRigProps rp = mp->fixtureRigProps(fx->id());
+        if (rp.onDeck())
+            rp.deckPlatformId = 0;
+        mp->setFixtureRigProps(fx->id(), rp);
+    }
+    // Their names end in a letter ("Bara1x"...): no number, so no series.
+    const PlacementCheck::OffRow lineRow = PlacementCheck::checkRow(m_doc, row.at(2)->id());
+    QVERIFY(lineRow.off);
+    QCOMPARE(lineRow.row, QStringLiteral("line"));
+    // Far from the line, the same light is just a floor light.
+    mp->setFixturePosition(row.at(2)->id(), 0, 0, QVector3D(4700.0f, 5.0f * 1000.0f, 0.0f));
+    QVERIFY(!PlacementCheck::checkRow(m_doc, row.at(2)->id()).off);
+    mp->setFixturePosition(row.at(2)->id(), 0, 0, QVector3D(4700.0f, 1780.0f, 0.0f));
+    QVERIFY(PlacementCheck::checkRow(m_doc, row.at(2)->id()).off);
+    // A group is preferred over the line.
+    QList<Fixture *> members = row;
+    group("Upstage bars", members);
+    QCOMPARE(PlacementCheck::checkRow(m_doc, row.at(2)->id()).row, QStringLiteral("group Upstage bars"));
+
+    // Mixed types in the group: a par on the floor has no bar mates; and the
+    // bars' own row is not diluted by it.
+    Fixture *p = par("Par 1", 300);
+    mp->setFixturePosition(p->id(), 0, 0, QVector3D(4700.0f, 1780.0f, 0.0f));
+    FixtureGroup *mixed = group("Mixed", members << p);
+    Q_UNUSED(mixed);
+    QVERIFY(!PlacementCheck::checkRow(m_doc, p->id()).off);
+    QVERIFY(PlacementCheck::checkRow(m_doc, row.at(2)->id()).off);
+}
+
+void ShowReview_Test::fix16Save()
+{
+    MonitorProperties *mp = m_doc->monitorProperties();
+    deck(m_doc, QStringLiteral("USP1"), 2.0, 2.0, 3.2, 1.2, 0.61);
+    deck(m_doc, QStringLiteral("USP2"), 5.2, 2.0, 3.2, 1.2, 0.61);
+    const QList<Fixture *> row = ustRow(m_doc, 2);
+    auto dump = [&]() {
+        QString xml;
+        QXmlStreamWriter w(&xml);
+        mp->saveXML(&w, m_doc, true);
+        return xml;
+    };
+    const QString before = dump();
+    QVERIFY(PlacementCheck::checkRow(m_doc, row.at(1)->id()).off);
+    QVERIFY(!PlacementCheck::offRow(m_doc).isEmpty());
+    QCOMPARE(dump(), before);                               // reading it writes nothing
+    QVERIFY(!before.contains(QLatin1String("offrow"), Qt::CaseInsensitive));
+    QVERIFY(PlacementCheck::fix(m_doc, PlacementCheck::checkRow(m_doc, row.at(1)->id())));
+    const QString after = dump();
+    QVERIFY(!after.contains(QLatin1String("offrow"), Qt::CaseInsensitive));
+    // Saved and read back, the fixed show stays quiet (the deck mount is the whole fix).
+    MonitorProperties back;
+    QXmlStreamReader r(after);
+    while (!r.atEnd() && !(r.isStartElement() && r.name() == QLatin1String("Monitor")))
+        r.readNext();
+    QVERIFY(back.loadXML(r, m_doc));
+    QVERIFY(back.fixtureRigProps(row.at(1)->id()).onDeck());
+    QVERIFY(PlacementCheck::offRow(m_doc).isEmpty());
+}
+
 void ShowReview_Test::fix14()
 {
     par("Par 1", 0);

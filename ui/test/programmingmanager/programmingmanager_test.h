@@ -71,6 +71,7 @@ private slots:
     void otherRigProblemsAreInTheFooter();
     void readinessItemsSitUnderHeadingsWithMoreThanOneFix();
     void aBuriedLightIsAFooterErrorUntilItIsFixed();
+    void aFloorLightBesideItsRowsDeckIsAFooterWarning();
     void duplicateDefinitionsAreListedWithWhatIsUsed();
     /** Integration test for the Programming tab's own drag-construction
      *  gestures: drag a palette onto the Looks list, a group and a fixture
