@@ -1303,6 +1303,13 @@ private:
         /** A multi-arm fixture on a line: each arm's own place, by head
          *  index (-1 = not one of its arms). */
         QVector<double> armFractions;
+        /** On an area it covers (AreaCover): this head's zone, as its
+         *  centre's offset from the area's centre -- read back fresh, so a
+         *  dragged area is followed. */
+        bool hasArea = false;
+        QPointF areaOffset;
+        /** A multi-arm fixture: each arm's own zone, by head index. */
+        QHash<int, QPointF> armAreaOffsets;
     };
     /** The live world point a fixture is aimed at, or false if it aims at
      *  nothing. Resolved per frame from the target's CURRENT position. */

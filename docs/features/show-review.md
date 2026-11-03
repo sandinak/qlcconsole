@@ -106,6 +106,11 @@ in the design (docs/design/SHOW_REVIEW.md in the source).
 - **MOV-08** Not marked before its first cue: heads lit in the first cue of a
   list (or a Block cue that nothing positions them for) away from the middle
   of their range, with nothing before it to put them there.
+- **MOV-13** An area left partly dark: a cue whose Aim look at an
+  [area](stage-targets.md#area-targets) leaves more than a tenth of it unlit
+  at the width the lights' zoom has now. It names the cue, the area, how much
+  is lit and where the gap is ("lights only 72% of it (gap upstage
+  left)"). Zoom wider, add a light, or make the area smaller.
 
 How long a move takes comes from the head's type: a moving head turns 180°
 in 0.4 s, a scanner in 0.1 s, pan and tilt together (the slower of the two).

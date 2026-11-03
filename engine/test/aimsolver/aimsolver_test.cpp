@@ -38,6 +38,7 @@
 #include <QVector2D>
 #include "linecurve.h"
 #include "righeads.h"
+#include "areacover.h"
 
 /* The solver as it stood before reach was added, verbatim apart from reading
    a Frame and from the corrected bearing (it measured pan from upstage, 180
@@ -485,7 +486,7 @@ namespace
 {
 enum class Def { Spot16, Spot8, TwoArm, FourArm };
 enum class Mount { Hung, HungOnTruss, Floor, Deck, OnTrussTop };
-enum class Aim { Point, Person, Line };
+enum class Aim { Point, Person, Line, Area };
 
 /* One rig and what it aims at. Fixtures stand @c spacing metres apart along
    X from @c at; a target is absolute, a line's ends relative to its centre. */
@@ -501,7 +502,7 @@ struct AimRow
     bool panInvert, tiltInvert;
     Aim aim;
     QVector3D target;           // the point, the person's feet, the line's centre
-    QVector3D lineEnd;          // a line: its last end from the centre (first = -this)
+    QVector3D lineEnd;          // a line: its last end from the centre (first = -this); an area: its size (x, y)
     double spread;              // a line: Spread (NaN = the look's default, +5)
     int group = 1;              // a line: Grouping (lights per group)
     int cross = LineSpread::SwapSides;
@@ -539,6 +540,10 @@ const AimRow kRows[] = {
     { "two-arm beams, line in pairs, swapped",  Def::TwoArm, Mount::Deck, { -5, 3.6f, 0 }, 8, 0, 0, 0, false, false, Aim::Line, { 0, 9.6f, 0 }, { 4.3f, -1.2f, 0.37f }, -5, 2, LineSpread::SwapSides },
     { "four-arm bar hung, point",       Def::FourArm, Mount::Hung,      { 0, 0, 4 },     2,  0,  0,  0, false, false, Aim::Point,  { 1, 3, 0 },     {}, kDefault },
     { "four-arm bars hung, line",       Def::FourArm, Mount::Hung,      { -3, 0, 4 },    3,  0,  0,  0, false, false, Aim::Line,   { 0, 5, 0 },     { 5, 0, 0 }, kDefault },
+    // An area: each light (each arm) its own zone, at subject height (AREA_COVER.md).
+    { "hung spots over an area",        Def::Spot16, Mount::Hung,       { -3, 1, 6 },    4,  0,  0,  0, false, false, Aim::Area,   { 0, 5, 0 },     { 6, 3, 0 }, kDefault },
+    { "two-arm beams on a deck, area",  Def::TwoArm, Mount::Deck,       { -5, 3.6f, 0 }, 8,  0,  0,  0, false, false, Aim::Area,   { 0, 6.5f, 0 },  { 9.75f, 3.66f, 0 }, kDefault },
+    { "four-arm bars hung, area",       Def::FourArm, Mount::Hung,      { -2, 0, 5 },    2,  0,  0,  0, false, false, Aim::Area,   { 0, 4, 0 },     { 4, 2, 0 }, kDefault },
 };
 
 /* A pan/tilt spot, 540/270, coarse and fine (16-bit) or coarse only. */
@@ -786,6 +791,12 @@ void AimSolver_Test::aimedHeadsLandOnTheirTarget()
     target->setPosition(r.target);
     if (r.aim == Aim::Person)
         target->setKind(StageTarget::Kind::Person);
+    if (r.aim == Aim::Area)
+    {
+        target->setKind(StageTarget::Kind::Area);
+        target->setFootprint(QSizeF(r.lineEnd.x(), r.lineEnd.y()));
+        QVERIFY(AreaCover::covers(target));
+    }
     if (r.aim == Aim::Line)
     {
         // Bowed as a line drawn round a stage edge is: both ends the same way.
@@ -877,6 +888,18 @@ void AimSolver_Test::aimedHeadsLandOnTheirTarget()
                      && p.z() > 0.5f && p.z() < 1.9f,
                      qPrintable(QString("%1 aims at (%2,%3,%4), not the person").arg(label(m))
                                 .arg(p.x()).arg(p.y()).arg(p.z())));
+        else if (r.aim == Aim::Area)
+        {
+            // Inside the area, at subject height above what is under it,
+            // and no two lights on one zone.
+            const QRectF a = AreaCover::areaRect(props, target);
+            QVERIFY2(a.contains(QPointF(p.x(), p.y())),
+                     qPrintable(QString("%1 aims at (%2,%3), outside the area").arg(label(m)).arg(p.x()).arg(p.y())));
+            QVERIFY(qAbs(p.z() - (props->platformHeightAt(p.x(), p.y()) + 1.4f)) < 1e-3f);
+            for (const QVector3D &q : along)
+                QVERIFY2((q - p).length() > 0.05f, qPrintable(label(m) + " shares a zone"));
+            along << p;
+        }
         else
         {
             /* On the line in plan (at its height or -- a head standing above
@@ -1040,5 +1063,394 @@ void AimSolver_Test::anIndexedBandRoundsToTheNearestStep()
         QVERIFY2(qAbs(back - d) <= 360.0 / 127.0 / 2.0 + 1e-6,
                  qPrintable(QString("%1 degrees -> DMX %2 -> %3 degrees").arg(d).arg(dmx).arg(back)));
     }
+    delete doc;
+}
+
+/****************************************************************************
+ * Area cover: an Aim at an Area covers it (docs/design/AREA_COVER.md, Q209)
+ ****************************************************************************/
+
+namespace
+{
+/* A spot hung (or standing, @p standing) at @p at metres, its lens @p lensDeg
+   wide (0: none declared). */
+Fixture *placeSpot(Doc *doc, const QString &name, const QVector3D &at, double lensDeg,
+                   bool standing = false)
+{
+    static quint32 address = 0;
+    Fixture *fx = addSpot(doc, name, true, address % 500);
+    if (fx == nullptr)
+        return nullptr;
+    address += fx->channels();
+    if (lensDeg > 0.0)
+    {
+        QLCPhysical ph = fx->fixtureMode()->physical();
+        ph.setLensDegreesMin(lensDeg);
+        ph.setLensDegreesMax(lensDeg);
+        fx->fixtureMode()->setPhysical(ph);
+    }
+    MonitorProperties *props = doc->monitorProperties();
+    props->setFixturePosition(fx->id(), 0, 0, QVector3D(at.x() * 1000, at.y() * 1000, at.z()));
+    FixtureRigProps rp;
+    rp.mountingType = standing ? Truss::FloorMounted : Truss::TopHung;
+    props->setFixtureRigProps(fx->id(), rp);
+    return fx;
+}
+
+StageTarget *addArea(Doc *doc, const QString &name, const QVector3D &centre, const QSizeF &size)
+{
+    StageTarget *t = doc->monitorProperties()->addStageTarget();
+    t->setName(name);
+    t->setKind(StageTarget::Kind::Area);
+    t->setPosition(centre);
+    t->setFootprint(size);
+    return t;
+}
+
+/* Whether plan segments a-b and c-d cross (touching ends do not count). */
+bool crosses(const QPointF &a, const QPointF &b, const QPointF &c, const QPointF &d)
+{
+    auto side = [](const QPointF &p, const QPointF &q, const QPointF &r) {
+        return (q.x() - p.x()) * (r.y() - p.y()) - (q.y() - p.y()) * (r.x() - p.x());
+    };
+    const double d1 = side(c, d, a), d2 = side(c, d, b), d3 = side(a, b, c), d4 = side(a, b, d);
+    return ((d1 > 1e-9 && d2 < -1e-9) || (d1 < -1e-9 && d2 > 1e-9))
+           && ((d3 > 1e-9 && d4 < -1e-9) || (d3 < -1e-9 && d4 > 1e-9));
+}
+
+QPointF planOf(const QVector3D &v)
+{
+    return QPointF(v.x(), v.y());
+}
+}
+
+void AimSolver_Test::areaZonesFollowWhereLightsHang()
+{
+    Doc *doc = new Doc(this);
+    // Three across on a front truss (downstage, y 9) and three on a back one
+    // (upstage, y 1), over a 6 x 3 m area from x 0..6, y 3..6.
+    QList<Fixture *> front, back;
+    QList<quint32> ids;
+    for (int i = 0; i < 3; ++i)
+    {
+        front << placeSpot(doc, QString("Front %1").arg(i + 1), QVector3D(1.0f + 2.0f * i, 9.0f, 5.0f), 20);
+        back << placeSpot(doc, QString("Back %1").arg(i + 1), QVector3D(1.0f + 2.0f * i, 1.0f, 6.0f), 20);
+    }
+    // In a mixed order: who takes what must not depend on it.
+    ids << back.at(2)->id() << front.at(0)->id() << back.at(0)->id()
+        << front.at(2)->id() << back.at(1)->id() << front.at(1)->id();
+    StageTarget *area = addArea(doc, "Chorus", QVector3D(3, 4.5f, 0), QSizeF(6, 3));
+    const QList<GroupHead> members = AimSolver::aimMembers(doc, ids);
+    QCOMPARE(members.size(), 6);
+
+    int rows = 0;
+    QVector<QVector3D> where;
+    for (const GroupHead &m : members)
+    {
+        AimSolver::Frame f;
+        QVERIFY(AimSolver::frameFor(doc, m, f));
+        where << f.position;
+    }
+    AreaCover::cells(QRectF(0, 3, 6, 3), where, &rows);
+    QCOMPARE(rows, 2);                                  // a 3 x 2 rig, a 3 x 2 grid
+
+    const QList<AreaCover::Zone> zones = AreaCover::zones(doc, area, members);
+    QCOMPARE(zones.size(), 6);
+    QHash<quint32, QVector3D> at;
+    for (const AreaCover::Zone &z : zones)
+    {
+        for (const QVector3D &other : at)
+            QVERIFY2((other - z.aim).length() > 0.5f, "two zones share a centre");
+        at.insert(z.member.fxi, z.aim);
+        QVERIFY(QRectF(0, 3, 6, 3).contains(planOf(z.aim)));
+        QVERIFY(qAbs(z.cell.width() - 2.0) < 1e-6 && qAbs(z.cell.height() - 1.5) < 1e-6);
+    }
+    for (int i = 0; i < 3; ++i)
+    {
+        // Front lights on the downstage row, back lights on the upstage one...
+        QVERIFY2(at.value(front.at(i)->id()).y() > 4.5f, qPrintable(front.at(i)->name()));
+        QVERIFY2(at.value(back.at(i)->id()).y() < 4.5f, qPrintable(back.at(i)->name()));
+        // ...each in its own column: stage right light, stage right zone.
+        QVERIFY(qAbs(at.value(front.at(i)->id()).x() - (1.0f + 2.0f * i)) < 1e-3f);
+        QVERIFY(qAbs(at.value(back.at(i)->id()).x() - (1.0f + 2.0f * i)) < 1e-3f);
+    }
+    // No two beams cross in plan.
+    for (int i = 0; i < zones.size(); ++i)
+        for (int j = i + 1; j < zones.size(); ++j)
+        {
+            AimSolver::Frame fi, fj;
+            QVERIFY(AimSolver::frameFor(doc, zones.at(i).member, fi));
+            QVERIFY(AimSolver::frameFor(doc, zones.at(j).member, fj));
+            QVERIFY(!crosses(planOf(fi.position), planOf(zones.at(i).aim),
+                             planOf(fj.position), planOf(zones.at(j).aim)));
+        }
+
+    /* Two towers of three shelves (his AT-W-ALL): low shelves take the front
+       rank, top shelves the back one, each tower its own side. */
+    QVector<QVector3D> towers;
+    for (float z : { 0.2f, 1.2f, 2.2f })
+        towers << QVector3D(0.25f, 8.4f, z) << QVector3D(11.65f, 8.4f, z);
+    const QRectF chorus(2.68, 3.9, 9.754, 3.658);
+    const QVector<QRectF> c = AreaCover::cells(chorus, towers, &rows);
+    QCOMPARE(rows, 3);
+    for (int i = 0; i < towers.size(); ++i)
+    {
+        const int shelf = i / 2;                        // 0 low .. 2 high
+        const bool sr = (i % 2) == 0;
+        QVERIFY2(sr ? c.at(i).center().x() < chorus.center().x() : c.at(i).center().x() > chorus.center().x(),
+                 qPrintable(QString("tower %1 shelf %2 on the wrong side").arg(i % 2).arg(shelf)));
+        const double rank = (chorus.bottom() - c.at(i).center().y()) / chorus.height();   // 0 front .. 1 back
+        QVERIFY2(qAbs(rank - (shelf + 0.5) / 3.0) < 1e-6,
+                 qPrintable(QString("shelf %1 at rank %2").arg(shelf).arg(rank)));
+    }
+    delete doc;
+}
+
+void AimSolver_Test::areaAimsAtSubjectHeightAboveTheRiser()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    // A 0.61 m riser under the upstage half of the area (y 3..4.5).
+    StagePlatform *riser = props->addPlatform();
+    riser->setOriginX(-1.0f);
+    riser->setOriginY(3.0f);
+    riser->setWidth(8.0f);
+    riser->setDepth(1.5f);
+    riser->setHeight(0.61f);
+    QList<quint32> ids;
+    for (int i = 0; i < 3; ++i)
+    {
+        ids << placeSpot(doc, QString("F%1").arg(i), QVector3D(1.0f + 2.0f * i, 9.0f, 5.0f), 20)->id();
+        ids << placeSpot(doc, QString("B%1").arg(i), QVector3D(1.0f + 2.0f * i, 1.0f, 6.0f), 20)->id();
+    }
+    // The area's own Z says nothing: what is under each zone does.
+    StageTarget *area = addArea(doc, "Chorus", QVector3D(3, 4.5f, 0.396f), QSizeF(6, 3));
+    const QList<AreaCover::Zone> zones = AreaCover::zones(doc, area, AimSolver::aimMembers(doc, ids));
+    QCOMPARE(zones.size(), 6);
+    for (const AreaCover::Zone &z : zones)
+    {
+        const float want = z.aim.y() < 4.5f ? 0.61f + 1.4f : 1.4f;
+        QVERIFY2(qAbs(z.aim.z() - want) < 1e-4f,
+                 qPrintable(QString("zone at y %1 aims at z %2, not %3").arg(z.aim.y()).arg(z.aim.z()).arg(want)));
+    }
+    // An aim-height override is the subject height.
+    area->setAimHeightOverride(1.0f);
+    for (const AreaCover::Zone &z : AreaCover::zones(doc, area, AimSolver::aimMembers(doc, ids)))
+        QVERIFY(qAbs(z.aim.z() - (z.aim.y() < 4.5f ? 1.61f : 1.0f)) < 1e-4f);
+    delete doc;
+}
+
+void AimSolver_Test::areaCoverageFollowsBeamWidth()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    StageTarget *area = addArea(doc, "Chorus", QVector3D(3, 4.5f, 0), QSizeF(6, 3));
+    // Six lights, each straight above its 2 x 1.5 m zone, 4.6 m over subject height.
+    auto beams = [&](double deg, int leaveOut) {
+        QList<AreaCover::Beam> out;
+        for (int r = 0; r < 2; ++r)
+            for (int c = 0; c < 3; ++c)
+            {
+                if (r * 3 + c == leaveOut)
+                    continue;
+                AreaCover::Beam b;
+                b.aim = QVector3D(1.0f + 2.0f * c, 3.75f + 1.5f * r, 1.4f);
+                b.origin = b.aim + QVector3D(0, 0, 4.6f);
+                b.degrees = deg;
+                out << b;
+            }
+        return out;
+    };
+    // Narrow: six circles of radius 4.6 tan 5 deg on 18 square metres.
+    const AreaCover::Coverage narrow = AreaCover::coverage(props, area, beams(10.0, -1), 96);
+    const double radius = 4.6 * qTan(qDegreesToRadians(5.0));
+    const double want = 6.0 * M_PI * radius * radius / 18.0;
+    QVERIFY2(qAbs(narrow.fraction - want) < 0.02,
+             qPrintable(QString("narrow covers %1, should be %2").arg(narrow.fraction).arg(want)));
+    QVERIFY(!narrow.gap.isEmpty());
+    QVERIFY(!narrow.gapRects().isEmpty());
+    QVERIFY(narrow.caption().startsWith(QString("Covers %1% of Chorus").arg(qRound(narrow.fraction * 100))));
+    // Wide enough to reach each zone's corners (half-diagonal 1.25 m: 30.4 deg).
+    const AreaCover::Coverage wide = AreaCover::coverage(props, area, beams(32.0, -1));
+    QCOMPARE(wide.fraction, 1.0);
+    QVERIFY(wide.gap.isEmpty());
+    QVERIFY(wide.gapRects().isEmpty());
+    QCOMPARE(wide.caption(), QString("Covers all of Chorus"));
+    // Without the upstage, stage-left light (the back row, the largest x):
+    // its zone is the gap, and it is named so.
+    const AreaCover::Coverage missing = AreaCover::coverage(props, area, beams(32.0, 2));
+    QVERIFY(missing.fraction < 0.9 && missing.fraction > 0.75);
+    QCOMPARE(missing.gap, QString("upstage left"));
+    QVERIFY(missing.caption().endsWith(QString("gap upstage left")));
+
+    // A footprint straight down is a circle of the cone's radius at that depth.
+    const QVector<QPointF> fp = AreaCover::footprint(QVector3D(0, 0, 5), QVector3D(0, 0, 1), 20.0);
+    QCOMPARE(fp.size(), 48);
+    for (const QPointF &pt : fp)
+        QVERIFY(qAbs(std::hypot(pt.x(), pt.y()) - 4.0 * qTan(qDegreesToRadians(10.0))) < 1e-3);
+
+    // From fixtures: the lens is read from the definition, else 20 degrees.
+    QList<quint32> ids;
+    for (int r = 0; r < 2; ++r)
+        for (int c = 0; c < 3; ++c)
+            ids << placeSpot(doc, QString("S%1%2").arg(r).arg(c),
+                             QVector3D(1.0f + 2.0f * c, r == 0 ? 9.0f : 1.0f, 6.0f), 50)->id();
+    const AreaCover::Coverage fromRig = AreaCover::coverage(doc, area, AimSolver::aimMembers(doc, ids));
+    QCOMPARE(fromRig.beams.size(), 6);
+    for (const AreaCover::Beam &b : fromRig.beams)
+        QCOMPARE(b.degrees, 50.0);
+    QCOMPARE(fromRig.fraction, 1.0);
+    delete doc;
+}
+
+void AimSolver_Test::areaOfNoSizeIsAPoint()
+{
+    Doc *doc = new Doc(this);
+    QList<quint32> ids;
+    ids << placeSpot(doc, "A", QVector3D(0, 0, 6), 20)->id() << placeSpot(doc, "B", QVector3D(4, 0, 6), 20)->id();
+    StageTarget *area = addArea(doc, "Spot", QVector3D(2, 4, 0.5f), QSizeF());
+    QVERIFY(!AreaCover::covers(area));
+    QVERIFY(AreaCover::zones(doc, area, AimSolver::aimMembers(doc, ids)).isEmpty());
+    QLCPalette *aim = new QLCPalette(QLCPalette::Aim, doc);
+    aim->setStageTargetId(area->id());
+    QVERIFY(doc->addPalette(aim));
+    Scene *scene = new Scene(doc);
+    for (quint32 id : ids)
+        scene->addFixture(id);
+    scene->addPalette(aim->id());
+    QVERIFY(doc->addFunction(scene));
+    // Both at the point, at the area's own Z, as before.
+    const QList<AimSolver::SceneAim> aims = AimSolver::sceneAims(doc, scene);
+    QCOMPARE(aims.size(), 2);
+    for (const AimSolver::SceneAim &a : aims)
+        QVERIFY((a.point - QVector3D(2, 4, 0.5f)).length() < 1e-4f);
+    // Given a size, they spread over it.
+    area->setFootprint(QSizeF(4, 2));
+    const QList<AimSolver::SceneAim> spread = AimSolver::sceneAims(doc, scene);
+    QCOMPARE(spread.size(), 2);
+    QVERIFY((spread.at(0).point - spread.at(1).point).length() > 1.0f);
+    delete doc;
+}
+
+void AimSolver_Test::areaGivesEachArmItsOwnZone()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    Fixture *bar = addTwoArm(doc, "UST", 0);
+    QVERIFY(bar != nullptr);
+    props->setFixturePosition(bar->id(), 0, 0, QVector3D(2000, 1000, 5));
+    FixtureRigProps rp;
+    rp.mountingType = Truss::TopHung;
+    props->setFixtureRigProps(bar->id(), rp);
+    StageTarget *area = addArea(doc, "Pair", QVector3D(2.25f, 4, 0), QSizeF(4, 2));
+    const QList<GroupHead> members = AimSolver::aimMembers(doc, QList<quint32>() << bar->id());
+    QCOMPARE(members.size(), 2);
+    const QList<AreaCover::Zone> zones = AreaCover::zones(doc, area, members);
+    QCOMPARE(zones.size(), 2);
+    QVERIFY(zones.at(0).member.head != zones.at(1).member.head);
+    // Side by side across the stage: each arm the half on its own side.
+    AimSolver::Frame f0, f1;
+    QVERIFY(AimSolver::frameFor(doc, zones.at(0).member, f0));
+    QVERIFY(AimSolver::frameFor(doc, zones.at(1).member, f1));
+    QVERIFY((f0.position.x() < f1.position.x()) == (zones.at(0).aim.x() < zones.at(1).aim.x()));
+    QVERIFY(qAbs(zones.at(0).aim.x() - zones.at(1).aim.x()) > 1.5f);
+    delete doc;
+}
+
+void AimSolver_Test::areaCoversHisChorus()
+{
+    /* His show, modelled: three ranks of risers (0.183, 0.396, 0.61 m) under
+       the Chorus area (9.754 x 3.658 m), eight two-arm USTs standing on the
+       top riser, and six front washes on two towers either side, three
+       shelves each (AT-W-ALL). */
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    const float ranks[3][2] = { { 3.760f, 0.610f }, { 4.979f, 0.396f }, { 6.198f, 0.183f } };
+    QList<StagePlatform *> risers;
+    for (const auto &rk : ranks)
+    {
+        StagePlatform *p = props->addPlatform();
+        p->setOriginX(2.744f);
+        p->setOriginY(rk[0]);
+        p->setWidth(9.752f);
+        p->setDepth(1.219f);
+        p->setHeight(rk[1]);
+        risers << p;
+    }
+    QList<quint32> ids;
+    for (int i = 0; i < 8; ++i)
+    {
+        Fixture *ust = addTwoArm(doc, QString("UST %1").arg(i + 1), quint32(340 + 20 * i));
+        QVERIFY(ust != nullptr);
+        props->setFixturePosition(ust->id(), 0, 0, QVector3D((3.2f + 1.2f * i) * 1000, 4.2f * 1000, 0));
+        FixtureRigProps rp;
+        rp.mountingType = Truss::FloorMounted;
+        rp.deckPlatformId = risers.first()->id();
+        props->setFixtureRigProps(ust->id(), rp);
+        ids << ust->id();
+    }
+    QList<quint32> washes;
+    for (float z : { 0.2f, 1.2f, 2.2f })
+        for (float x : { 0.25f, 11.65f })
+            washes << placeSpot(doc, QString("Wash %1 %2").arg(x < 5 ? "SR" : "SL").arg(z), QVector3D(x, 8.43f, z), 25.0,
+                                true)->id();
+    ids << washes;
+    StageTarget *chorus = addArea(doc, "Chorus", QVector3D(7.556f, 5.724f, 0.396f), QSizeF(9.754, 3.658));
+    const QList<GroupHead> members = AimSolver::aimMembers(doc, ids);
+    QCOMPARE(members.size(), 22);
+
+    const QList<AreaCover::Zone> zones = AreaCover::zones(doc, chorus, members);
+    QCOMPARE(zones.size(), 22);
+    const QRectF a = AreaCover::areaRect(props, chorus);
+    QHash<GroupHead, AreaCover::Zone> of;
+    for (const AreaCover::Zone &z : zones)
+    {
+        for (const AreaCover::Zone &o : of)
+            QVERIFY2(!o.cell.intersects(z.cell.adjusted(0.01, 0.01, -0.01, -0.01)), "two zones overlap");
+        of.insert(z.member, z);
+        // Subject height above the riser actually under the zone's centre.
+        QVERIFY(qAbs(z.aim.z() - (props->platformHeightAt(z.aim.x(), z.aim.y()) + 1.4f)) < 1e-4f);
+    }
+    // The washes take the front, the USTs on the top riser the back.
+    double washY = 0.0, ustY = 0.0;
+    for (const AreaCover::Zone &z : zones)
+        (washes.contains(z.member.fxi) ? washY : ustY) += z.aim.y();
+    washY /= 6.0;
+    ustY /= 16.0;
+    QVERIFY2(washY > a.center().y() && ustY < washY,
+             qPrintable(QString("washes at y %1, USTs at y %2").arg(washY).arg(ustY)));
+    // Each tower lights its own side.
+    for (quint32 w : washes)
+    {
+        AimSolver::Frame f;
+        QVERIFY(AimSolver::frameFor(doc, GroupHead(w, -1), f));
+        const float zx = of.value(GroupHead(w, -1)).aim.x();
+        QVERIFY(f.position.x() < 5.0f ? zx < a.center().x() : zx > a.center().x());
+    }
+
+    /* Coverage, before and after: every light at the centre (as it was) and
+       spread over the zones. */
+    QList<AreaCover::Beam> before;
+    const QVector3D centre = props->targetAimPoint(chorus);
+    for (const GroupHead &m : members)
+    {
+        AimSolver::Frame f;
+        QVERIFY(AimSolver::frameFor(doc, m, f));
+        AreaCover::Beam b;
+        b.member = m;
+        b.origin = f.position;
+        b.aim = centre;
+        Fixture *fx = doc->fixture(m.fxi);
+        b.degrees = RigHeads::beamAngle(fx, QByteArray(int(fx->channels()), char(0)));
+        if (b.degrees <= 0.0)
+            b.degrees = AreaCover::defaultBeamDegrees();
+        before << b;
+    }
+    const AreaCover::Coverage was = AreaCover::coverage(props, chorus, before);
+    const AreaCover::Coverage now = AreaCover::coverage(doc, chorus, members);
+    qDebug().noquote() << QString("Chorus: %1% at the centre, %2% covered (%3)")
+                          .arg(qRound(was.fraction * 100)).arg(qRound(now.fraction * 100)).arg(now.caption());
+    QVERIFY2(now.fraction > was.fraction + 0.1 && now.fraction > 0.85,
+             qPrintable(QString("covered %1 now, %2 before").arg(now.fraction).arg(was.fraction)));
     delete doc;
 }

@@ -82,12 +82,18 @@ void LinePlanView::setFormation(const Scene *scene, const QLCPalette *look,
     m_line.clear();
     m_beams.clear();
     m_form = LineFormation();
+    m_cover = AreaCover::Coverage();
     m_stage = QRectF();
     m_marks.clear();
     m_otherLines.clear();
     MonitorProperties *props = m_doc != nullptr ? m_doc->monitorProperties() : nullptr;
     const StageTarget *target = (props != nullptr && look != nullptr)
             ? props->stageTarget(look->stageTargetId()) : nullptr;
+    if (target != nullptr && scene != nullptr && AreaCover::covers(target))
+    {
+        setArea(scene, look, target);
+        return;
+    }
     if (target == nullptr || !target->isLine() || scene == nullptr)
     {
         update();
@@ -132,9 +138,33 @@ void LinePlanView::setFormation(const Scene *scene, const QLCPalette *look,
     update();
 }
 
+void LinePlanView::setArea(const Scene *scene, const QLCPalette *look, const StageTarget *target)
+{
+    const QList<GroupHead> members = AimSolver::aimMembers(m_doc, scene, look->id());
+    m_cover = AreaCover::coverage(m_doc, target, members, scene);
+    // Each light from where it hangs to its zone, numbered in the members' order.
+    int number = 0;
+    for (const AreaCover::Beam &ab : m_cover.beams)
+    {
+        const Fixture *fx = m_doc->fixture(ab.member.fxi);
+        Beam b;
+        b.fixture = ab.member.fxi;
+        b.number = ++number;
+        b.name = fx == nullptr ? QString()
+               : ab.member.head < 0 ? fx->name()
+                                    : tr("%1 arm %2").arg(fx->name()).arg(ab.member.head + 1);
+        b.from = plan(ab.origin);
+        b.to = plan(ab.aim);
+        b.colour = LineFormation::pointColour();
+        m_beams << b;
+    }
+    update();
+}
+
 void LinePlanView::setPositions(const QList<QList<quint32>> &groups,
                                 const QList<const QLCPalette *> &palettes)
 {
+    m_cover = AreaCover::Coverage();
     m_line.clear();
     m_beams.clear();
     m_marks.clear();
@@ -227,7 +257,9 @@ void LinePlanView::paintEvent(QPaintEvent *)
     p.setPen(QColor(120, 120, 130));
     p.drawText(rect().adjusted(6, 4, -6, -4), Qt::AlignTop | Qt::AlignLeft, tr("Plan (top)"));
     const bool raw = m_form.isRawPosition();
-    if (m_line.isEmpty() && !raw)
+    const bool areaAim = isArea();
+    m_gapsDrawn = 0;
+    if (m_line.isEmpty() && !raw && !areaAim)
     {
         p.drawText(rect(), Qt::AlignCenter, tr("Not aimed at a line"));
         return;
@@ -241,7 +273,10 @@ void LinePlanView::paintEvent(QPaintEvent *)
     // Fit everything, the same scale both ways, at least 2 m each way.
     // A stored position is fitted to its lights and where they land, not
     // to the whole stage: the stage is drawn for reference, clipped.
-    QRectF box(m_line.isEmpty() ? m_beams.first().from : m_line.first(), QSizeF(0, 0));
+    QRectF box(!m_line.isEmpty() ? m_line.first()
+               : areaAim ? m_cover.area.topLeft() : m_beams.first().from, QSizeF(0, 0));
+    if (areaAim)
+        box = box.united(m_cover.area);
     auto grow = [&box](const QPointF &pt) {
         box = box.united(QRectF(pt, QSizeF(0.0001, 0.0001)));
     };
@@ -310,6 +345,48 @@ void LinePlanView::paintEvent(QPaintEvent *)
             p.setPen(QPen(QColor(255, 180, 0, 120), 1.5 * s));
             p.drawPolyline(poly);
         }
+    }
+
+    /* An area it covers: the area, each beam's footprint at subject
+       height, the gaps hatched, then each light's zone, outlined. */
+    if (areaAim)
+    {
+        const QRectF a(toScreen(m_cover.area.topLeft()), toScreen(m_cover.area.bottomRight()));
+        p.setPen(Qt::NoPen);
+        p.setBrush(QColor(255, 180, 0, 22));
+        p.drawRect(a);
+        /* Each beam's footprint inside the area: what it lights there. A
+           low beam's cut through subject height runs far past the area,
+           and drawn whole the fans hid everything. */
+        p.save();
+        p.setClipRect(a.adjusted(-1, -1, 1, 1));
+        for (const AreaCover::Beam &b : m_cover.beams)
+        {
+            QPolygonF poly;
+            for (const QPointF &pt : b.patch)
+                poly << toScreen(pt);
+            p.setPen(QPen(QColor(255, 230, 160, 120), 1.0 * s));
+            p.setBrush(QColor(255, 230, 160, 40));
+            p.drawPolygon(poly);
+        }
+        p.restore();
+        // The gaps: what no beam reaches, hatched.
+        QBrush hatch(QColor(255, 90, 80, 200), Qt::BDiagPattern);
+        hatch.setTransform(QTransform::fromScale(s, s));
+        p.setPen(Qt::NoPen);
+        for (const QRectF &g : m_cover.gapRects())
+        {
+            const QRectF r(toScreen(g.topLeft()), toScreen(g.bottomRight()));
+            p.fillRect(r, QColor(255, 90, 80, 45));
+            p.fillRect(r, hatch);
+            ++m_gapsDrawn;
+        }
+        p.setBrush(Qt::NoBrush);
+        p.setPen(QPen(QColor(255, 180, 0, 90), 0.8 * s, Qt::DotLine));
+        for (const AreaCover::Zone &z : m_cover.zones)
+            p.drawRect(QRectF(toScreen(z.cell.topLeft()), toScreen(z.cell.bottomRight())));
+        p.setPen(QPen(QColor(255, 180, 0), 1.5 * s, Qt::DashLine));
+        p.drawRect(a);
     }
 
     // The line, its ends A and B as the strip names them.
@@ -563,8 +640,8 @@ void LinePlanView::paintEvent(QPaintEvent *)
         }
     }
 
-    // What the colours and lines show.
-    const QString cap = m_form.caption();
+    // What the colours and lines show (an area: how much of it is lit).
+    const QString cap = caption();
     if (!cap.isEmpty())
     {
         QFont cf = p.font();
@@ -625,9 +702,10 @@ LinePlanWindow::~LinePlanWindow()
 void LinePlanWindow::setFormation(const Scene *scene, const QLCPalette *look,
                                   const Scene *prevScene, const QLCPalette *prevLook)
 {
-    m_strip->setLook(scene, look);
-    m_strip->show();
     m_plan->setFormation(scene, look, prevScene, prevLook);
+    // An area has no order to strip: the plan alone.
+    m_strip->setLook(scene, look);
+    m_strip->setVisible(!m_plan->isArea());
     m_strip->setDimmed(false);
     m_plan->setDimmed(false);
     m_note->hide();
@@ -645,7 +723,7 @@ void LinePlanWindow::setNoAim()
 {
     m_strip->setDimmed(true);
     m_plan->setDimmed(true);
-    m_note->setText(tr("The selection has no line aim or stored position. Showing the last plan."));
+    m_note->setText(tr("The selection has no line or area aim or stored position. Showing the last plan."));
     m_note->show();
 }
 

@@ -3778,6 +3778,56 @@ void ShowTreeView_Test::formationRowsSayWhereTheyComeFrom()
     QVERIFY(formRow->toolTip().contains("isn't aimed at a line"));
 }
 
+void ShowTreeView_Test::planViewOfAnAreaAim()
+{
+    // Three spots over a 6 x 3 m area (AREA_COVER.md): a zone each, a gap left.
+    QList<Fixture *> spots { placedSpot(m_doc, "W1", 1.5), placedSpot(m_doc, "W2", 3.5),
+                             placedSpot(m_doc, "W3", 5.5) };
+    StageTarget *area = m_doc->monitorProperties()->addStageTarget();
+    area->setName("Chorus");
+    area->setKind(StageTarget::Kind::Area);
+    area->setPosition(QVector3D(3.5f, 4.0f, 0.0f));
+    area->setFootprint(QSizeF(6.0, 3.0));
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L");
+    const quint32 c1 = st->addCue(list, -1, "Chorus");
+    Target t;
+    for (Fixture *f : spots)
+        t.fixtures << f->id();
+    const quint32 l1 = st->addLayer(c1, t);
+    QVERIFY(st->setLayerLook(c1, l1, st->lookForPalette(st->aimPaletteFor(area->id()))));
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1200, 900);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QVERIFY(view.selectNode(l1, c1));
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    LinePlanView *plan = qobject_cast<LinePlanView *>(view.linePlan());
+    QVERIFY(plan != nullptr);
+    QVERIFY(plan->isArea());
+    QCOMPARE(plan->beams().count(), 3);
+    QCOMPARE(plan->coverage().zones.count(), 3);
+    // Stage right light, stage right zone.
+    QVERIFY(plan->beams().at(0).to.x() < plan->beams().at(1).to.x());
+    QVERIFY(plan->beams().at(1).to.x() < plan->beams().at(2).to.x());
+    QVERIFY(plan->coverage().fraction < 0.9);
+    QVERIFY2(plan->caption().startsWith("Covers ") && plan->caption().contains("of Chorus")
+             && plan->caption().contains("gap"), qPrintable(plan->caption()));
+    QLabel *covers = view.findChild<QLabel *>("stAreaCover");
+    QVERIFY(covers != nullptr);
+    QCOMPARE(covers->text(), plan->caption());
+    plan->resize(420, 260);
+    QVERIFY(!plan->grab().isNull());
+    QVERIFY(plan->gapsDrawn() > 0);
+    // The pop-out shows the plan alone: an area has no order strip.
+    view.openLinePlanWindow();
+    QVERIFY(view.linePlanWindow() != nullptr);
+    QVERIFY(view.linePlanWindow()->plan()->isArea());
+    QVERIFY(!view.linePlanWindow()->strip()->isVisible());
+    view.linePlanWindow()->close();
+}
+
 void ShowTreeView_Test::planViewOfAStoredPosition()
 {
     QList<Fixture *> left { placedSpot(m_doc, "U1", 2), placedSpot(m_doc, "U2", 3) };

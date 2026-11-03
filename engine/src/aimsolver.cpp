@@ -21,6 +21,7 @@
 #include <QDebug>
 
 #include "aimsolver.h"
+#include "areacover.h"
 #include "linecurve.h"
 #include "righeads.h"
 #include "monitorproperties.h"
@@ -743,6 +744,8 @@ static QList<AimSolver::SceneAim> collectAims(Doc *doc, const Scene *scene, bool
         const QList<GroupHead> written = AimSolver::aimMembers(doc, scene->writtenFixtures(pid));
         // A line gives each head its own point on it.
         const QHash<GroupHead, QVector3D> onLine = AimSolver::lineMemberPoints(doc, pal, tgt, heads);
+        // An area gives each head its own zone of it.
+        const QHash<GroupHead, QVector3D> onArea = AreaCover::memberPoints(doc, tgt, heads);
         foreach (const GroupHead &m, written)
         {
             const quint32 fid = m.fxi;
@@ -753,7 +756,8 @@ static QList<AimSolver::SceneAim> collectAims(Doc *doc, const Scene *scene, bool
             // aims at, so that is the point whose sight is checked.
             const QVector3D point = tgt->isLine()
                     ? onLine.value(m, mProps->targetAimPoint(tgt))
-                    : AimSolver::aimPointFor(doc, m, tgt, subject);
+                    : onArea.contains(m) ? onArea.value(m)
+                                         : AimSolver::aimPointFor(doc, m, tgt, subject);
             AimSolver::SceneAim aim;
             aim.fixtureId = fid;
             aim.head = m.head;

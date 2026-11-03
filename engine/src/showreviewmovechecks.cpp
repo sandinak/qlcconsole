@@ -28,6 +28,12 @@
 #include "showtreecontroller.h"
 #include "programmercontroller.h"
 #include "qlcpalette.h"
+#include "monitorproperties.h"
+#include "stagetarget.h"
+#include "areacover.h"
+#include "aimsolver.h"
+#include "scene.h"
+#include "fixturegroup.h"
 #include "movespeed.h"
 #include "function.h"
 #include "fixture.h"
@@ -332,6 +338,79 @@ void walk(ReviewContext &ctx, QList<ReviewFinding> &out, int which)
     }
 }
 
+/* MOV-13: an Aim look at an area that leaves part of it dark. Said in the
+   cue that sets the aim (not every cue it tracks through), once per layer. */
+void mov13(ReviewContext &ctx, QList<ReviewFinding> &out)
+{
+    Doc *doc = ctx.doc();
+    MonitorProperties *mp = doc->monitorProperties();
+    ShowTreeController *st = doc->showTree();
+    if (mp == nullptr || st == nullptr)
+        return;
+    bool anyArea = false;
+    for (const StageTarget *t : mp->stageTargets())
+        anyArea = anyArea || AreaCover::covers(t);
+    if (!anyArea)
+        return;                                 // the cheap answer for most shows
+    for (const auto &pl : plainLists(doc))
+    {
+        const CueList &list = *pl.second;
+        const QList<ResolvedCue> &res = ctx.resolved(list);
+        if (res.count() != list.cues.count())
+            continue;
+        for (int i = 0; i < list.cues.count(); ++i)
+        {
+            const Cue &cue = list.cues.at(i);
+            if (cue.skip)
+                continue;
+            for (const ResolvedLayer &layer : res.at(i).layers)
+            {
+                if (layer.release)
+                    continue;
+                const auto posIt = layer.values.constFind(KeyPosition);
+                if (posIt == layer.values.constEnd() || posIt.value().look.none
+                    || posIt.value().fromCue != cue.id || posIt.value().look.palettes.isEmpty())
+                    continue;
+                const QLCPalette *pal = doc->palette(posIt.value().look.palettes.first());
+                if (pal == nullptr || pal->type() != QLCPalette::Aim)
+                    continue;
+                const StageTarget *tgt = mp->stageTarget(pal->stageTargetId());
+                if (!AreaCover::covers(tgt))
+                    continue;
+                const QList<GroupHead> members =
+                        AimSolver::aimMembers(doc, ctx.targetFixtures(layer.target));
+                if (members.isEmpty())
+                    continue;
+                const Scene *scene = qobject_cast<const Scene *>(
+                        doc->function(st->layerScene(cue.id, layer.target)));
+                const AreaCover::Coverage cov = AreaCover::coverage(doc, tgt, members, scene);
+                if (!cov.valid() || 1.0 - cov.fraction <= AreaCover::gapThreshold())
+                    continue;
+                const int pct = int(cov.fraction * 100.0 + 0.5);
+                // Who: the layer's name, else its groups, else how many.
+                QString who = layer.name;
+                if (who.isEmpty())
+                {
+                    QStringList groups;
+                    for (quint32 gid : layer.target.groups)
+                        if (const FixtureGroup *g = doc->fixtureGroup(gid))
+                            groups << g->name();
+                    who = !groups.isEmpty() ? groups.join(QStringLiteral(", "))
+                                            : trn("%n light(s)", int(layer.target.fixtures.size()));
+                }
+                QStringList keys { QStringLiteral("list:%1/cue:%2").arg(list.id).arg(cue.id),
+                                   QStringLiteral("target:%1").arg(tgt->id()) };
+                out << ReviewContext::make(QStringLiteral("MOV-13"), ReviewFinding::Note,
+                    tr("%1 aims %2 at %3 but lights only %4% of it (%5). Zoom them wider, "
+                       "add a light, or make the area smaller.")
+                        .arg(ctx.cueText(list, i), who, tgt->name()).arg(pct).arg(cov.gapPhrase()),
+                    keys, QByteArray::number(pct) + ',' + cov.gap.toUtf8(), QStringLiteral("cue"),
+                    QVariantList() << cue.id);
+            }
+        }
+    }
+}
+
 void mov01(ReviewContext &ctx, QList<ReviewFinding> &out) { walk(ctx, out, 1); }
 void mov02(ReviewContext &ctx, QList<ReviewFinding> &out) { walk(ctx, out, 2); }
 void mov08(ReviewContext &ctx, QList<ReviewFinding> &out) { walk(ctx, out, 8); }
@@ -354,5 +433,10 @@ QList<ShowReview::Check> ShowReviewChecks::moveChecks()
           tr("Heads lit in the first cue of a list, or in a Block cue the cue before doesn't "
              "position them for, swing in from where they are, in the light. A preset cue "
              "before it puts them there in the dark."), mov08 },
+        { QStringLiteral("MOV-13"), tr("An area left partly dark"), S::Movement,
+          tr("An Aim look at an area gives each light its own part of it and aims it at subject "
+             "height there. When the beams, as wide as their zoom has them, leave more than a "
+             "tenth of the area unlit, someone stands in the dark. Zoom wider, add a light, or "
+             "make the area smaller."), mov13 },
     };
 }

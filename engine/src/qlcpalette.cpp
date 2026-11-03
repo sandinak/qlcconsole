@@ -28,6 +28,7 @@
 #include "monitorproperties.h"
 #include "effectscriptrunner.h"
 #include "aimsolver.h"
+#include "areacover.h"
 #include <QMutex>
 #include <QFile>
 #include <QHash>
@@ -846,7 +847,7 @@ QList<SceneValue> QLCPalette::valuesFromFixtures(Doc *doc, QList<quint32> fixtur
                    This used to be written out here AND again in the renderer,
                    and the two disagreed: a follow-spot aimed at chest height in
                    Edit while the rig view pointed at the target's own Z. */
-                if (tgt->isLine() && !lineReady)
+                if ((tgt->isLine() || AreaCover::covers(tgt)) && !lineReady)
                 {
                     /* A line gives each head its own point, so where THIS head
                        goes depends on every head the look aims: the owning
@@ -856,7 +857,10 @@ QList<SceneValue> QLCPalette::valuesFromFixtures(Doc *doc, QList<quint32> fixtur
                     const QList<GroupHead> heads = (owner != nullptr)
                             ? AimSolver::aimMembers(doc, owner, m_id)
                             : AimSolver::aimMembers(doc, fixtures);
-                    linePts = AimSolver::lineMemberPoints(doc, this, tgt, heads);
+                    /* An area is covered the same way (AREA_COVER.md):
+                       each head its own zone of it, by where they all hang. */
+                    linePts = tgt->isLine() ? AimSolver::lineMemberPoints(doc, this, tgt, heads)
+                                            : AreaCover::memberPoints(doc, tgt, heads);
                     lineReady = true;
                 }
 
@@ -870,7 +874,7 @@ QList<SceneValue> QLCPalette::valuesFromFixtures(Doc *doc, QList<quint32> fixtur
                 for (int ai = 0; ai < members; ++ai)
                 {
                     const GroupHead member(id, arms.isEmpty() ? -1 : arms.at(ai));
-                    const QVector3D tgtPos = tgt->isLine()
+                    const QVector3D tgtPos = tgt->isLine() || linePts.contains(member)
                             ? linePts.value(member, mProps->targetAimPoint(tgt))
                             : AimSolver::aimPointFor(doc, member, tgt, subjectMode);
 
