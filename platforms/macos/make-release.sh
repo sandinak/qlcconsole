@@ -30,6 +30,15 @@ REV="$(git rev-parse --short HEAD)"
 SIGN_ID="${SIGN_ID:-Developer ID Application: Branson Matheson (B4N7HJ7VZ6)}"
 NOTARY_PROFILE="${NOTARY_PROFILE:-qlc-notary}"
 APP="$HOME/qlcconsole.app"
+# `make dmg ARCH=native`: an arm64-only DMG for our own Apple silicon Macs (named
+# ...-arm64-native-...; publish.sh refuses it). The default is universal.
+case "${QLC_ARCH:-}" in
+  "") DMGKIND=universal ;;
+  native) DMGKIND=arm64-native
+          echo "NOTE: ARCH=native -- arm64 only, not a release; the pre-release check (universal) is skipped." ;;
+  *) echo "ERROR: ARCH must be empty (universal) or native"; exit 1 ;;
+esac
+export QLC_ARCH="${QLC_ARCH:-}"
 
 step() { echo; echo "######## $* ########"; }
 
@@ -66,8 +75,8 @@ step "Sign + notarize + staple (sign-notarize.sh)"
 REPO="$REPO" APP="$APP" SIGN_ID="$SIGN_ID" NOTARY_PROFILE="$NOTARY_PROFILE" \
   "$REPO/platforms/macos/sign-notarize.sh"
 
-DMG="$(ls -t "$REPO"/dist/qlcconsole-"$VERSION"-universal-*-"$REV".dmg 2>/dev/null | head -1)"
-[ -n "$DMG" ] || { echo "ERROR: no dist/qlcconsole-$VERSION-universal-*-$REV.dmg after signing."; exit 1; }
+DMG="$(ls -t "$REPO"/dist/qlcconsole-"$VERSION"-"$DMGKIND"-*-"$REV".dmg 2>/dev/null | head -1)"
+[ -n "$DMG" ] || { echo "ERROR: no dist/qlcconsole-$VERSION-$DMGKIND-*-$REV.dmg after signing."; exit 1; }
 
 step "Checksums + verification"
 # The format publish.sh uploads, and the in-app updater checks against.
@@ -77,7 +86,7 @@ xcrun stapler validate "$DMG"
 spctl -a -t open --context context:primary-signature -v "$DMG"
 spctl -a -t exec -v "$APP"
 
-if [ "${RELEASE_CHECK:-1}" = 1 ]; then
+if [ "${RELEASE_CHECK:-1}" = 1 ] && [ "$DMGKIND" = universal ]; then
   step "Pre-release check (release-check.sh; RELEASE_CHECK=0 skips)"
   # It runs the app headless itself (an offscreen copy with the bundle's own
   # offscreen platform plugin); a bare --version would open a window.
@@ -89,6 +98,8 @@ if [ "${RELEASE_CHECK:-1}" = 1 ]; then
     "$REPO/platforms/macos/release-check.sh" "$DMG" --host "$RELEASE_CHECK_HOST" ||
       { echo "ERROR: the release check failed on $RELEASE_CHECK_HOST."; exit 1; }
   fi
+elif [ "$DMGKIND" != universal ]; then
+  echo; echo "NOTE: arm64-native DMG -- release-check.sh (universal Mach-O) not run."
 else
   echo; echo "WARNING: RELEASE_CHECK=0 -- the pre-release check was skipped."
 fi
