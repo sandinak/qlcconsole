@@ -12,8 +12,21 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ## [Unreleased]
 
+### Tests
+
+- **Every screen is checked for overlapping and cut-off controls**
+  (`layoutsanity_test`, in the gate, board Q207). The app's tabs, the
+  Workbench with each Look Editor page, the editors, panels and dialogs
+  open offscreen at their minimum, 1280x800 and 1920x1080; two controls in
+  the same place, one cut off by its window, text cut short or a control
+  squeezed to nothing fails it. It finds the colour look's "Wheel / ring"
+  row under the picker; that and the minimum-size problems it found are
+  listed in TODO.md ("Layout sanity").
+
 ### Fixed
 
+- **The universe output view's heading stays inside the view** at its
+  narrowest (it was a fixed 600 px, past the view's edge).
 - **An aimed light is drawn where it points, to the step.** The rig views
   read a 16-bit head's fine byte back (read coarse only, a 540° head was
   drawn up to 2° off its mark, 20 cm at a 6 m throw), and a two-arm beam's
