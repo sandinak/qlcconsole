@@ -192,6 +192,13 @@ student (and a tired LD) makes, before tech, at ~10 ms a review on
 DanceHysteria. Each "decided (can change)": scrim guarded by default; a
 target "on" the cyc is a mark / area / line within 0.5 m (never a person);
 meant carries on while the light keeps landing.
+Since (Q210, 2026-11-03): three visible states on the cue -- open amber
+"⚠ cyc", meant green "cyc ✓" (Layer::meantBy/When/Note, Review group
+"Meant"), Not a Problem (the old Accept…) hidden and under Accepted; one
+menu (ShowReviewMarker::fillMenu) in the cue badge, Review rows and the chip;
+chip tooltip "2 open · 1 meant · 3 not a problem". Only PWR-12 can be meant.
+Not a Problem is an acceptance and not a Show Tree undo step (as before);
+Meant → Not a Problem takes the mark off as the one undo step.
 Since (cyc2, 2026-11-03): curtains stand where each cue leaves them (a
 driven drape from the functions the cue plays; at rest = closed in a list
 that moves it, else its set state -- decided, can change); one hover detail

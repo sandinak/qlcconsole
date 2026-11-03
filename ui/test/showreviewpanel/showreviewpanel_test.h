@@ -47,6 +47,8 @@ private slots:
     /** PWR-12: each breaching cue is marked in the Show Tree; a click opens its row */
     void showTreeMarksBreachingCues();
     void warningMarksShareDetailAndAnswers();
+    void threeStatesEverywhere();
+    void screenshots();
     void onlyTheWarningBadgeIsColoured();
     void propsKeepTheirOwnColourOnTheRig();
 

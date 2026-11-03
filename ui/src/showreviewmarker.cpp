@@ -18,6 +18,7 @@
 */
 
 #include <QAction>
+#include <QDateTime>
 #include <QMenu>
 #include <algorithm>
 
@@ -80,6 +81,39 @@ QList<ReviewFinding> ShowReviewMarker::openFindings(Doc *doc)
     return out;
 }
 
+QList<ReviewFinding> ShowReviewMarker::cueMeant(Doc *doc, quint32 cueId)
+{
+    QList<ReviewFinding> out;
+    if (doc == nullptr || doc->showReview() == nullptr)
+        return out;
+    for (const ReviewFinding &f : doc->showReview()->lastResult().findings)
+        if (f.intended && ShowReview::findingCues(f).contains(cueId))
+            out << f;
+    return out;
+}
+
+QList<ReviewFinding> ShowReviewMarker::cueAll(Doc *doc, quint32 cueId)
+{
+    return cueFindings(doc, cueId) + cueMeant(doc, cueId);
+}
+
+QString ShowReviewMarker::stateSummary(Doc *doc)
+{
+    if (doc == nullptr || doc->showReview() == nullptr)
+        return QString();
+    const ShowReview::Result &r = doc->showReview()->lastResult();
+    int meant = 0, notAProblem = 0;
+    for (const ReviewFinding &f : r.findings)
+    {
+        if (f.intended)
+            ++meant;
+        else if (f.state == ReviewFinding::Accepted)
+            ++notAProblem;
+    }
+    const int open = r.open[ReviewFinding::Blocker] + r.open[ReviewFinding::Warning];
+    return tr("%1 open · %2 meant · %3 not a problem").arg(open).arg(meant).arg(notAProblem);
+}
+
 QList<ReviewFinding> ShowReviewMarker::cueFindings(Doc *doc, quint32 cueId)
 {
     QList<ReviewFinding> out;
@@ -96,17 +130,33 @@ QString ShowReviewMarker::tooltip(Doc *doc, const QList<ReviewFinding> &findings
     if (doc == nullptr || findings.isEmpty())
         return QString();
     QStringList parts;
-    bool anyBackwash = false, anyOther = false;
+    bool anyBackwash = false, anyOther = false, anyMeant = false, anyOpen = false, anyDismissed = false;
     for (int i = 0; i < findings.count() && i < max; ++i)
     {
         const ReviewFinding &f = findings.at(i);
         anyBackwash = anyBackwash || isBackwash(f);
         anyOther = anyOther || !isBackwash(f);
         const ShowReview::Check *c = ShowReview::check(f.check);
+        const bool meantNow = f.intended;
+        const bool dismissed = !meantNow && f.state == ReviewFinding::Accepted;
+        anyMeant = anyMeant || meantNow;
+        anyOpen = anyOpen || (!meantNow && !dismissed);
+        anyDismissed = anyDismissed || dismissed;
         QString block = QStringLiteral("<b>%1 %2 %3</b><br>%4")
-                        .arg(severityMark(f.severity), f.check,
+                        .arg(meantNow ? QStringLiteral("✓") : severityMark(f.severity), f.check,
                              c != nullptr ? c->title.toHtmlEscaped() : QString(),
                              f.message.toHtmlEscaped());
+        if (meantNow)
+        {
+            QString who = f.acceptedBy.isEmpty() ? tr("Meant: this light is on purpose.")
+                                                 : tr("Meant: marked by %1").arg(f.acceptedBy);
+            if (!f.acceptedWhen.isEmpty())
+                who += QStringLiteral(", ") + QDateTime::fromString(f.acceptedWhen, Qt::ISODate)
+                       .toString(QStringLiteral("d MMM yyyy HH:mm"));
+            block += QStringLiteral("<br><i>%1</i>").arg(who.toHtmlEscaped());
+            if (!f.acceptedNote.trimmed().isEmpty())
+                block += QStringLiteral("<br><i>“%1”</i>").arg(f.acceptedNote.toHtmlEscaped());
+        }
         const QList<quint32> cues = ShowReview::findingCues(f);
         if (cues.count() > 1)
         {
@@ -122,13 +172,18 @@ QString ShowReviewMarker::tooltip(Doc *doc, const QList<ReviewFinding> &findings
     }
     if (findings.count() > max)
         parts << tr("…and %n more", "", findings.count() - max);
-    QString actions;
-    if (anyBackwash && !anyOther)
-        actions = tr("Right-click: I Meant It · Not Meant: Show Me the Layer · Open in Show Review");
-    else if (anyBackwash)
-        actions = tr("Right-click: I Meant It or Accept… · Show Me · Open in Show Review");
-    else
-        actions = tr("Right-click: Accept… · Show Me · Open in Show Review");
+    QStringList answers;
+    if (anyOpen && anyBackwash)
+        answers << tr("I Meant It");
+    if (anyMeant)
+        answers << tr("Not Meant");
+    if (anyOpen || anyMeant)
+        answers << tr("Not a Problem…");
+    if (anyDismissed)
+        answers << tr("Reopen");
+    answers << (anyOpen && anyBackwash && !anyOther ? tr("Not Meant: Show Me the Layer") : tr("Show Me"))
+            << tr("Open in Show Review");
+    const QString actions = tr("Right-click: %1").arg(answers.join(QStringLiteral(" · ")));
     parts << QStringLiteral("<span style=\"color:gray\">%1</span>").arg(actions.toHtmlEscaped());
     return QStringLiteral("<qt>") + parts.join(QStringLiteral("<br><br>")) + QStringLiteral("</qt>");
 }
@@ -139,7 +194,7 @@ bool ShowReviewMarker::meant(Doc *doc, const ReviewFinding &finding, QWidget *pa
         return false;
     if (ShowReview::canMarkMeant(finding, true))
     {
-        if (!ShowReview::setLightMeant(doc, finding, true))
+        if (!ShowReview::setLightMeant(doc, finding, true, note))
             return false;
         doc->showReview()->run();
         return true;
@@ -151,6 +206,30 @@ bool ShowReviewMarker::meant(Doc *doc, const ReviewFinding &finding, QWidget *pa
             return false;
     }
     return doc->showReview()->accept(finding, n, by);
+}
+
+bool ShowReviewMarker::notAProblem(Doc *doc, const ReviewFinding &finding, QWidget *parent,
+                                   const QString &note, const QString &byName)
+{
+    if (doc == nullptr || finding.check.isEmpty() || finding.checkOff
+        || (finding.state == ReviewFinding::Accepted && !finding.intended))
+        return false;
+    QString n = note, by = byName.isEmpty() ? ShowReview::defaultName() : byName;
+    if (n.trimmed().isEmpty())
+    {
+        if (parent == nullptr || !ShowReviewPanel::askAcceptNote(parent, { finding }, &n, &by))
+            return false;
+    }
+    if (!doc->showReview()->accept(finding, n, by))
+        return false;
+    if (finding.intended && ShowReview::canMarkMeant(finding, false))
+    {
+        // Meant and not a problem are different answers: the mark comes off
+        // (one undo step) and the acceptance stays.
+        ShowReview::setLightMeant(doc, finding, false);
+        doc->showReview()->run();
+    }
+    return true;
 }
 
 bool ShowReviewMarker::notMeant(Doc *doc, const ReviewFinding &finding)
@@ -207,24 +286,28 @@ void ShowReviewMarker::fillMenu(ContextMenu &menu, Doc *doc, const QList<ReviewF
             a->setStatusTip(tip);
         };
         const bool backwash = isBackwash(f);
-        if (f.isOpen())
+        const bool meantNow = f.intended;
+        if (f.isOpen() || meantNow)
         {
             if (ShowReview::canMarkMeant(f, true))
                 add(tr("I Meant It"), [doc, f]() { meant(doc, f); }, QStringLiteral("reviewMeant"),
-                    tr("This light on the cyc is on purpose: kept on the layer that lights it (one "
-                       "undo step), so the warning goes away and stays away"));
-            else
-                add(tr("Accept…"), [doc, f, parent]() { meant(doc, f, parent); }, QStringLiteral("reviewAccept"),
-                    tr("It's on purpose: say why. The note is saved with the show, and the finding "
-                       "comes back if what it's about changes."));
+                    tr("This light on the cyc is on purpose: it shows green on the cue (\"cyc ✓\") and "
+                       "is kept on the layer that lights it (one undo step)"));
+            if (meantNow)
+                add(tr("Not Meant"), [doc, f]() { notMeant(doc, f); }, QStringLiteral("reviewNotMeant"),
+                    tr("Take it back: Show Review warns about it again"));
+            add(tr("Not a Problem…"), [doc, f, parent]() { notAProblem(doc, f, parent); },
+                QStringLiteral("reviewAccept"),
+                tr("It doesn't matter here: say why. The warning is hidden on the cue and listed in Show "
+                   "Review under Accepted; the note is saved with the show, and the finding comes back "
+                   "if what it's about changes."));
         }
-        else if (ShowReview::canMarkMeant(f, false) || (!f.checkOff && !f.isOpen()))
-            add(backwash ? tr("Not Meant") : tr("Reopen"), [doc, f]() { notMeant(doc, f); },
-                QStringLiteral("reviewNotMeant"),
+        else if (!f.checkOff)
+            add(tr("Reopen"), [doc, f]() { notMeant(doc, f); }, QStringLiteral("reviewReopen"),
                 tr("Take it back: Show Review warns about it again"));
         if (!f.jump.isEmpty())
         {
-            if (backwash && f.isOpen())
+            if (backwash && f.isOpen() && !meantNow)
                 add(tr("Not Meant: Show Me the Layer"), [f, parent]() { showMe(f, parent); },
                     QStringLiteral("reviewShowMe"),
                     tr("Opens the layer that lights it: aim it off, shutter or zoom it, or darken it "

@@ -607,7 +607,7 @@ cyc and a scrim, by default) is checked by [Show Review](show-review.md)
   **mix** and the other flags beside it keep theirs. Hover it for the detail:
   which fixtures, about how much of each beam, on which cyc, every cue it
   lands in, and what you can do. A click opens the Show Review row; a
-  **right-click** answers it on the spot: **I Meant It**, **Not Meant: Show Me
+  **right-click** answers it on the spot: **I Meant It** (the mark turns green, **cyc ✓**), **Not a Problem…**, **Not Meant: Show Me
   the Layer** (to aim it off, shutter, zoom or darken it) or **Open in Show
   Review**. The cyc itself gets an amber outline in the rig views while a
   warning is open on it; its cloth keeps its own colour. The marks follow

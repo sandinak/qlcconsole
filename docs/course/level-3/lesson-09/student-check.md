@@ -13,7 +13,7 @@ app: true
 ## The task
 
 1. **Open the show** and run **Review**. Read the **Not ready** list in the
-   footer. Fix what is wrong, or **Accept…** it with a note. An open blocker
+   footer. Fix what is wrong, or **Not a Problem…** it with a note. An open blocker
    fails the check.
 2. **The preshow:** Stage Power and the house lights as in
    [Lesson 3.7](../3-7/); the focus call for the song's spots

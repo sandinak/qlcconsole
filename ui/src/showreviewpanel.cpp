@@ -31,6 +31,7 @@
 
 #include "showreviewpanel.h"
 #include "showreviewmarker.h"
+#include "showtreeview.h"
 #include "contextmenus.h"
 #include "showstatus.h"
 #include "doc.h"
@@ -106,10 +107,10 @@ ShowReviewPanel::ShowReviewPanel(Doc *doc, QWidget *parent)
     m_fix->setObjectName(QStringLiteral("showReviewFix"));
     m_fix->setToolTip(tr("Go to the place to fix it (or double-click the row)"));
     connect(m_fix, &QPushButton::clicked, this, [this]() { fixSelected(); });
-    m_accept = new QPushButton(tr("Accept…"), this);
+    m_accept = new QPushButton(tr("Not a Problem…"), this);
     m_accept->setObjectName(QStringLiteral("showReviewAccept"));
-    m_accept->setToolTip(tr("It's on purpose: say why. The note is saved with the show, and the "
-                            "finding comes back if what it's about changes."));
+    m_accept->setToolTip(tr("It doesn't matter here: say why. It is listed under Accepted; the note is "
+                            "saved with the show, and the finding comes back if what it's about changes."));
     connect(m_accept, &QPushButton::clicked, this, &ShowReviewPanel::slotAccept);
     m_reopen = new QPushButton(tr("Reopen"), this);
     m_reopen->setObjectName(QStringLiteral("showReviewReopen"));
@@ -244,8 +245,8 @@ void ShowReviewPanel::rebuild()
     m_tree->blockSignals(true);
     m_tree->clear();
     QTreeWidgetItem *groups[3] = { nullptr, nullptr, nullptr };
-    QTreeWidgetItem *accepted = nullptr;
-    int counts[3] = { 0, 0, 0 }, acceptedCount = 0;
+    QTreeWidgetItem *accepted = nullptr, *meantGroup = nullptr;
+    int counts[3] = { 0, 0, 0 }, acceptedCount = 0, meantCount = 0;
     auto groupFor = [&](ReviewFinding::Severity s) {
         if (groups[s] == nullptr)
         {
@@ -271,7 +272,22 @@ void ShowReviewPanel::rebuild()
         if (!matches(f.check, f.message))
             continue;
         QTreeWidgetItem *parentItem;
-        if (isAccepted)
+        if (f.intended)
+        {
+            if (meantGroup == nullptr)
+            {
+                meantGroup = new QTreeWidgetItem();
+                meantGroup->setData(0, IndexRole, -1);
+                meantGroup->setFlags(meantGroup->flags() & ~Qt::ItemIsSelectable);
+                QFont font = meantGroup->font(0);
+                font.setBold(true);
+                meantGroup->setFont(0, font);
+                meantGroup->setForeground(0, ShowTreeView::meantColour(palette().color(QPalette::Base)));
+            }
+            parentItem = meantGroup;
+            ++meantCount;
+        }
+        else if (isAccepted)
         {
             if (accepted == nullptr)
             {
@@ -296,7 +312,14 @@ void ShowReviewPanel::rebuild()
         if (f.state == ReviewFinding::Changed)
             text = tr("↺ Changed since accepted: %1").arg(text);
         if (f.intended)
-            text += QStringLiteral("\n— ") + tr("“%1”, kept on its layer in the Show Tree").arg(f.acceptedNote);
+        {
+            QString who = f.acceptedBy.isEmpty() ? tr("Meant") : tr("Meant by %1").arg(f.acceptedBy);
+            if (!f.acceptedWhen.isEmpty())
+                who += QStringLiteral(" · ") + f.acceptedWhen.left(10);
+            if (!f.acceptedNote.trimmed().isEmpty())
+                who += QStringLiteral(" · “%1”").arg(f.acceptedNote);
+            text += QStringLiteral("\n— ") + who + QStringLiteral(" · ") + tr("kept on its layer in the Show Tree");
+        }
         else if (f.state != ReviewFinding::Open)
             text += QStringLiteral("\n— “%1” · %2 · %3").arg(f.acceptedNote, f.acceptedBy, f.acceptedWhen.left(10));
         item->setText(1, text);
@@ -337,6 +360,13 @@ void ShowReviewPanel::rebuild()
         groups[s]->setFirstColumnSpanned(true);
         groups[s]->setExpanded(true);
     }
+    if (meantGroup != nullptr)
+    {
+        meantGroup->setText(0, tr("Meant (%1)").arg(meantCount));
+        m_tree->addTopLevelItem(meantGroup);
+        meantGroup->setFirstColumnSpanned(true);
+        meantGroup->setExpanded(true);
+    }
     if (accepted != nullptr)
     {
         accepted->setText(0, tr("Accepted (%1)").arg(acceptedCount));
@@ -359,10 +389,15 @@ void ShowReviewPanel::rebuild()
         m_summary->setText(tr("Not checked yet."));
     else
     {
-        const int accepts = r.accepted[0] + r.accepted[1] + r.accepted[2];
+        int meants = 0;
+        for (const ReviewFinding &f : r.findings)
+            meants += f.intended ? 1 : 0;
+        const int accepts = r.accepted[0] + r.accepted[1] + r.accepted[2] - meants;
         QString s = tr("%1 blockers · %2 warnings · %3 notes open")
                         .arg(r.open[ReviewFinding::Blocker]).arg(r.open[ReviewFinding::Warning])
                         .arg(r.open[ReviewFinding::Note]);
+        if (meants > 0)
+            s += QStringLiteral(" · ") + tr("%1 meant").arg(meants);
         if (accepts > 0)
             s += QStringLiteral(" · ") + tr("%1 accepted").arg(accepts);
         s += QStringLiteral(" — ") + tr("checked %1 (%2 ms)").arg(r.when.toString(QStringLiteral("HH:mm"))).arg(r.ms);
@@ -408,8 +443,8 @@ void ShowReviewPanel::updateButtons()
     {
         if (f.state == ReviewFinding::Accepted && !f.checkOff)
             anyAccepted = true;
-        if (f.state != ReviewFinding::Accepted)
-            anyOpen = true;
+        if (f.state != ReviewFinding::Accepted || f.intended)
+            anyOpen = true;     // open, or meant (not a problem is still an answer)
     }
     bool footerRow = false;
     for (QTreeWidgetItem *item : m_tree->selectedItems())
@@ -424,11 +459,12 @@ void ShowReviewPanel::updateButtons()
     for (const ReviewFinding &f : sel)
         backwash = backwash && f.check == QLatin1String("PWR-12");
     m_fix->setText(backwash ? tr("Show Me ▸") : tr("Fix ▸"));
-    m_accept->setText(meantRows ? tr("I Meant It") : tr("Accept…"));
+    m_accept->setText(meantRows ? tr("I Meant It") : tr("Not a Problem…"));
     m_accept->setToolTip(meantRows ? tr("This light on the cyc is on purpose: kept on the layer that lights "
                                         "it (one undo step), so the warning goes away and stays away")
-                                   : tr("It's on purpose: say why. The note is saved with the show, and the "
-                                        "finding comes back if what it's about changes."));
+                                   : tr("It doesn't matter here: say why. It is listed under Accepted; the "
+                                        "note is saved with the show, and the finding comes back if what "
+                                        "it's about changes."));
     m_reopen->setText(unmeantRows ? tr("Not Meant") : tr("Reopen"));
     m_reopen->setEnabled(anyAccepted || (sel.count() == 1 && sel.first().checkOff));
     m_why->setEnabled(sel.count() == 1);
@@ -483,8 +519,8 @@ bool ShowReviewPanel::acceptSelected(const QString &note, const QString &by)
         return false;
     bool any = false;
     for (const ReviewFinding &f : selectedFindings())
-        if (f.state != ReviewFinding::Accepted)
-            any = m_doc->showReview()->accept(f, note, by) || any;
+        if (f.state != ReviewFinding::Accepted || f.intended)
+            any = ShowReviewMarker::notAProblem(m_doc, f, nullptr, note, by) || any;
     return any;
 }
 
@@ -571,7 +607,7 @@ bool ShowReviewPanel::askAcceptNote(QWidget *parent, const QList<ReviewFinding> 
     if (sel.isEmpty())
         return false;
     QDialog dlg(parent);
-    dlg.setWindowTitle(tr("Accept"));
+    dlg.setWindowTitle(tr("Not a Problem"));
     QFormLayout *form = new QFormLayout(&dlg);
     QLabel *what = new QLabel(sel.count() == 1 ? sel.first().message
                                                : tr("%n finding(s)", "", sel.count()), &dlg);
@@ -579,7 +615,7 @@ bool ShowReviewPanel::askAcceptNote(QWidget *parent, const QList<ReviewFinding> 
     form->addRow(what);
     QLineEdit *note = new QLineEdit(&dlg);
     note->setObjectName(QStringLiteral("showReviewNote"));
-    note->setPlaceholderText(tr("Why it's on purpose (saved with the show)"));
+    note->setPlaceholderText(tr("Why it isn't a problem here (saved with the show)"));
     if (sel.count() == 1 && sel.first().state == ReviewFinding::Changed)
         note->setText(sel.first().acceptedNote);
     form->addRow(tr("Note:"), note);
@@ -587,7 +623,7 @@ bool ShowReviewPanel::askAcceptNote(QWidget *parent, const QList<ReviewFinding> 
     by->setObjectName(QStringLiteral("showReviewBy"));
     form->addRow(tr("Your name:"), by);
     QDialogButtonBox *box = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);
-    box->button(QDialogButtonBox::Ok)->setText(tr("Accept"));
+    box->button(QDialogButtonBox::Ok)->setText(tr("Not a Problem"));
     box->button(QDialogButtonBox::Ok)->setEnabled(!note->text().trimmed().isEmpty());
     connect(note, &QLineEdit::textChanged, box, [box](const QString &t) {
         box->button(QDialogButtonBox::Ok)->setEnabled(!t.trimmed().isEmpty());

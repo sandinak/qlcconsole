@@ -250,6 +250,13 @@ namespace ShowTree
          *  cyc, a scrim) is meant, so it is not reported. This use's, like
          *  release. Saved as MeantOnScenery=, which an older build ignores. */
         QList<quint32> meantOnScenery;
+        /** Who said I meant it, when (ISO date time) and the optional note
+         *  with it: set with meantOnScenery, shown on the cue's green mark.
+         *  Saved as MeantBy= / MeantWhen= / MeantNote=; an older file has
+         *  none and still loads (the mark just has no name). */
+        QString meantBy;
+        QString meantWhen;
+        QString meantNote;
 
         /** The pieces a split makes: one per group, per set, and one on the
          *  fixtures. */

@@ -42,7 +42,7 @@ Students can:
 | Min | Part | What happens |
 |---|---|---|
 | 0–10 | **Design idea** (no computers) | 7:20, a dark light: what do you check, in what order? |
-| 10–20 | **Teacher demo** (projector) | Review chip, Fix ▸, Accept…; Why isn't it on?; Solo |
+| 10–20 | **Teacher demo** (projector) | Review chip, Fix ▸, Not a Problem…; Why isn't it on?; Solo |
 | 20–40 | **Hands-on** (pairs/triads, roles) | Handout Part 2 |
 | 40–45 | **Check / share** | Swap laptops: each pair names the three faults the other pair's file has |
 | 45–50 | **Exit ticket** | On paper |
@@ -55,9 +55,9 @@ Put the problem on the board with the clock: "7:20. The lanterns are dark in son
 
 ## 2. Teacher demo (10 min)
 
-1. Open the start file. Click **Review**: read two rows aloud, and hover for why it matters. Show that a warning answers where it shows: hover a **⚠ cyc** mark on a cue, right-click it (**I Meant It**, **Not Meant: Show Me the Layer**, **Open in Show Review**). A closed main curtain now stops its cyc light being flagged.
+1. Open the start file. Click **Review**: read two rows aloud, and hover for why it matters. Show that a warning answers where it shows: hover a **⚠ cyc** mark on a cue, right-click it (**I Meant It** turns it green **cyc ✓**, **Not a Problem…** hides it, **Not Meant: Show Me the Layer**, **Open in Show Review**). A closed main curtain now stops its cyc light being flagged.
 2. CUE-02: **Fix ▸**, Block at section start, **Re-check**: five findings gone.
-3. VC-03: **Accept…**; show the note on the Accepted filter.
+3. VC-03: **Not a Problem…**; show the note on the Accepted filter.
 4. Right-click a lantern → **Why is this on?** Read *Why it isn't on* top to bottom.
 5. The Run tab's fader name, double-click: full. Then Solo on a layer.
 
@@ -71,7 +71,7 @@ Put the problem on the board with the clock: "7:20. The lanterns are dark in son
 | You see | Likely cause | Say |
 |---|---|---|
 | No Review chip | The show only just opened | "Wait two seconds; it checks after a change." |
-| **Accept…** won't go | No note | "The note is required: it is the point." |
+| **Not a Problem…** won't go | No note | "The note is required: it is the point." |
 | "It's still dark" | Blackout or the GM is down | "Ask the light again: it names them." |
 | They fix every note | Notes are not faults | "Notes never block anything. Choose what matters tonight." |
 

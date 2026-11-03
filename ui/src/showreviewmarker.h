@@ -42,9 +42,17 @@ class Doc;
  * same answers on a right-click -- the panel's own engine calls, so a
  * warning cleared here is cleared everywhere:
  *
- *   I Meant It        (PWR-12: kept on the layer that lights it; any other
- *                      check: Accept…, with a note)
- *   Not Meant         (PWR-12 marked meant: taken back)
+ * Three states, one wording everywhere:
+ *   Open          amber "⚠ cyc" on the cue; counted in the footer chip
+ *   Meant         green "cyc ✓" on the cue (PWR-12 only: the light on the
+ *                 cyc is intended); who, when and the note on hover
+ *   Not a Problem hidden on the cue; listed in Show Review under Accepted
+ *                 (the panel's Accept, with a note)
+ * and the answers that move between them:
+ *   I Meant It        Open -> Meant (PWR-12: kept on the layer that lights it)
+ *   Not a Problem…    Open or Meant -> Not a Problem (asks for a note)
+ *   Not Meant         Meant -> Open
+ *   Reopen            Not a Problem -> Open
  *   Show Me           (where to fix it: the layer, the fixture, the function)
  *   Open in Show Review
  */
@@ -57,6 +65,13 @@ namespace ShowReviewMarker
 
     /** The open findings marked on cue @p cueId (PWR-12's runs). */
     QLC_UI_EXPORT QList<ReviewFinding> cueFindings(Doc *doc, quint32 cueId);
+    /** The findings marked meant (I Meant It) on cue @p cueId. */
+    QLC_UI_EXPORT QList<ReviewFinding> cueMeant(Doc *doc, quint32 cueId);
+    /** Open and meant on cue @p cueId, open first: what its badges answer for. */
+    QLC_UI_EXPORT QList<ReviewFinding> cueAll(Doc *doc, quint32 cueId);
+    /** "2 open · 1 meant · 3 not a problem" for the footer chip's tooltip.
+     *  Open counts blockers and warnings, as the chip does. */
+    QLC_UI_EXPORT QString stateSummary(Doc *doc);
     /** Every open warning and blocker of the last run, worst first. */
     QLC_UI_EXPORT QList<ReviewFinding> openFindings(Doc *doc);
 
@@ -70,6 +85,11 @@ namespace ShowReviewMarker
      *  @p note (asked for when empty and @p parent is set). Then re-check. */
     QLC_UI_EXPORT bool meant(Doc *doc, const ReviewFinding &finding, QWidget *parent = nullptr,
                              const QString &note = QString());
+    /** Not a Problem: accepted with @p note (asked for when empty and
+     *  @p parent is set). A meant finding has its mark taken off first (the
+     *  one undo step), so the acceptance is all that is left. */
+    QLC_UI_EXPORT bool notAProblem(Doc *doc, const ReviewFinding &finding, QWidget *parent = nullptr,
+                                   const QString &note = QString(), const QString &by = QString());
     /** Not Meant: PWR-12's mark taken back; another accepted finding reopened. */
     QLC_UI_EXPORT bool notMeant(Doc *doc, const ReviewFinding &finding);
     /** Show Me: the finding's jump (the panel's Fix). */

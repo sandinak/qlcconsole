@@ -8821,11 +8821,13 @@ void App::updateReviewStatus()
     }
     const QString summary = tr("Show Review: %1 blockers, %2 warnings, %3 notes open; %4 accepted. "
                                "Click for the Review panel.")
-                            .arg(blockers).arg(warnings).arg(r.open[ReviewFinding::Note]).arg(accepted);
+                            .arg(blockers).arg(warnings).arg(r.open[ReviewFinding::Note]).arg(accepted)
+                            + QStringLiteral("\n") + ShowReviewMarker::stateSummary(m_doc);
     // The detail of what is open, as on every warning's mark.
     QString detail = ShowReviewMarker::tooltip(m_doc, ShowReviewMarker::openFindings(m_doc), 4);
     if (!detail.isEmpty())
-        detail.replace(QStringLiteral("<qt>"), QStringLiteral("<qt>") + summary.toHtmlEscaped()
+        detail.replace(QStringLiteral("<qt>"), QStringLiteral("<qt>") + QString(summary.toHtmlEscaped())
+                                               .replace(QLatin1Char('\n'), QStringLiteral("<br>"))
                                                + QStringLiteral("<br><br>"));
     m_statusReviewLabel->setToolTip(detail.isEmpty() ? summary : detail);
     m_statusReviewLabel->show();
