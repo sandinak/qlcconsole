@@ -195,6 +195,22 @@ must be showing. Open:
 - Hue wraps; everything else clamps. No acceleration beyond the speed the
   controller sends (a fast spin is several detents in one message).
 
+## Line aim visuals: groups in colour, crossings as lines — built, leftovers (tvis, 2026-11-03)
+
+Built: `LineFormation` (ui/src/lineformation.*), one model behind the order
+strip and the plan view, from the engine's own rule (orderedLineHeads +
+`LineSpread::fractions` / new `LineSpread::groupOf` + `AimSolver::linePoints`).
+Groups wear a colour each (7 dataviz hues, validated adjacent + wrap on the
+plan surface) and a bracket on the strip; the strip has hang-order squares
+with connectors to the points, the plan colours beams; a caption says what
+crosses (and that Cross is idle at Spread >= 0); plan names never overlap
+(row stacking, leaders). Each "decided (can change)": **the Formation
+preview keeps its cue-derived default pick, labelled** ("Showing AT-W-ALL --
+aimed at Line 1 in cue 1.1.1 …") with a **Show none** link, rather than
+showing nothing until picked; with more than seven groups the colours go
+round again (brackets and numbers still tell neighbours apart). Open: a
+course note in Level 2 lesson 5 once the course agent's pages settle.
+
 ## Formation palettes — built, leftovers (0.4, form, Q197, 2026-11-01)
 
 Built: `QLCPalette::Formation` (Spread / Grouping / Cross, any subset, as

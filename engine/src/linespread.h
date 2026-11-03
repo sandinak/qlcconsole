@@ -22,6 +22,7 @@
 
 #include <QVector3D>
 #include <QVector>
+#include <QPair>
 #include <QString>
 #include <QMap>
 
@@ -92,6 +93,12 @@ public:
      *  order. One light: the centre. */
     static QVector<double> fractions(int count, const Settings &s);
 
+    /** Which group (0 = the first along the line) each of @p count lights,
+     *  in their order, moves with for @p s's Grouping -- the same groups
+     *  fractions() moves. Halves with an odd count: the middle light is a
+     *  group of its own, between the two. */
+    static QVector<int> groupOf(int count, const Settings &s);
+
     /** The order to give lights at @p positions so the one nearest the
      *  line's start (@p from) gets the start: indices into @p positions,
      *  sorted by how far along from -> to each one is. Lights level with each
@@ -99,6 +106,10 @@ public:
      *  no length keeps the order as given. */
     static QVector<int> orderAlong(const QVector<QVector3D> &positions,
                                    const QVector3D &from, const QVector3D &to);
+
+private:
+    /** The groups of @p count lights, as [first, last] index ranges in order. */
+    static QVector<QPair<int, int> > groupRanges(int count, const Settings &s);
 };
 
 /** @} */

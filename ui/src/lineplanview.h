@@ -25,6 +25,9 @@
 #include <QList>
 #include <QHash>
 #include <QPointer>
+#include <QRectF>
+
+#include "lineformation.h"
 
 class Doc;
 class Scene;
@@ -45,7 +48,17 @@ class QLabel;
  * Spread / Grouping / Cross change shows what the beams will sweep across
  * over the cue's fade. The geometry is the aim solver's own
  * (AimSolver::linePoints over the scene's heads, MonitorProperties'
- * targetLinePoints), the same the rig plays.
+ * targetLinePoints), the same the rig plays -- through LineFormation, the
+ * order strip's model too.
+ *
+ * Grouping and Cross show as colour and lines: each light (its square, its
+ * beam, its point) wears its group's colour when lights move together, and
+ * since every beam is drawn from where the light hangs to its point, groups
+ * swapping sides -- or flipping -- are seen as beams crossing. A caption
+ * along the bottom says what the colours and lines show. Names, when the
+ * view is big enough for them, are laid out so they never overlap: a name
+ * that would sit on another drops a row (with a leader to its light), and
+ * one with no room is left to the tooltip.
  */
 class LinePlanView final : public QWidget
 {
@@ -72,10 +85,19 @@ public:
         QPointF to;                 ///< its point on the line now
         bool hasPrevious = false;
         QPointF previous;           ///< its point in the previous cue
+        int group = 0;              ///< 0 = the first group along the line
+        QColor colour;              ///< its group's colour (or the plain point colour)
     };
     /** What it shows (tests). */
     const QList<Beam> &beams() const { return m_beams; }
     const QList<QPointF> &line() const { return m_line; }
+    /** The model it draws (tests). */
+    const LineFormation &formation() const { return m_form; }
+    /** Where the names were drawn at the last paint, one per named light
+     *  shown (tests). */
+    const QList<QRectF> &labelRects() const { return m_labelRects; }
+    /** The caption under the plan (what the colours and lines show). */
+    QString caption() const { return m_form.caption(); }
 
     /** Drawn dimmed: what it shows is the last plan, not the selection's. */
     void setDimmed(bool dimmed);
@@ -97,6 +119,8 @@ private:
     Doc *m_doc;
     QList<QPointF> m_line;
     QList<Beam> m_beams;
+    LineFormation m_form;
+    QList<QRectF> m_labelRects;
     bool m_dimmed = false;
     bool m_poppable = true;
     QToolButton *m_popOut = nullptr;

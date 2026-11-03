@@ -102,6 +102,13 @@ private slots:
      *  give on a cue with those two layers; the default pick is the line's
      *  most-aimed groups. */
     void aFormationsPreviewMatchesTheCue();
+    /** The strip and plan's shared model: each light's group and colour,
+     *  its point (the engine's own), and whether beams cross for each
+     *  Cross (swap sides, mirror, nothing crossed at a positive Spread). */
+    void aLineFormationShowsGroupsAndCrossings();
+    /** Eight closely hung lights with long names: no two names overlap on
+     *  the plan. */
+    void planNamesNeverOverlap();
 };
 
 #endif

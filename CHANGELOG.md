@@ -10,6 +10,27 @@ active work in [TODO.md](docs/project/TODO.md).
 Versions here are independent of the QLC+ base version embedded in the
 in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relate).
 
+## [Unreleased]
+
+### Line aims you can see
+
+- **Grouping and Cross are drawn, not just listed.** On a line aim's order
+  strip (Look Editor, a Show Tree layer's Position rows) and a Formation
+  palette's preview, lights that move together share a colour (point,
+  square and beam, plus a bracket per group on the strip; colour-blind
+  checked), and a line runs from where each light hangs to its point, so
+  groups swapping sides or flipping are seen crossing. The plan says it in
+  a caption ("Pairs: 4 groups … Groups swap sides: 24 beam crossings"),
+  and both say when Cross does nothing because Spread isn't below 0. The
+  drawing comes from the engine's own line rule, so it can't disagree with
+  the stage.
+- **Plan names no longer overlap.** Lights hung close together (T1-S1,
+  T1-S2) get their names on separate rows with a leader to the light.
+- **A Formation's preview says what it picked.** Before you pick lights it
+  shows the groups the show most often aims at the line and says so
+  ("Showing AT-W-ALL -- aimed at Line 1 in cue 1.1.1"), with **Show none**
+  to clear it.
+
 ## [0.4.0] - 2026-11-02
 
 qlcconsole 0.4.0 carries the 0.3.1 polish, all of 0.4 ("Run the show") and

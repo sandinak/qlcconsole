@@ -29,6 +29,9 @@
 #include <QLabel>
 #include <QMenu>
 #include <QRectF>
+#include <QFontMetricsF>
+#include <QLineF>
+#include <algorithm>
 #include <QtGlobal>
 #include <climits>
 #include <cmath>
@@ -76,6 +79,7 @@ void LinePlanView::setFormation(const Scene *scene, const QLCPalette *look,
 {
     m_line.clear();
     m_beams.clear();
+    m_form = LineFormation();
     MonitorProperties *props = m_doc != nullptr ? m_doc->monitorProperties() : nullptr;
     const StageTarget *target = (props != nullptr && look != nullptr)
             ? props->stageTarget(look->stageTargetId()) : nullptr;
@@ -88,10 +92,7 @@ void LinePlanView::setFormation(const Scene *scene, const QLCPalette *look,
     for (const QVector3D &s : curve.samples())
         m_line << plan(s);
 
-    const QList<quint32> heads = AimSolver::aimHeads(m_doc, scene, look->id());
-    const LineSpread::Settings settings = LineSpread::fromParams(look->effectParamValues());
-    const QList<quint32> ordered = AimSolver::orderedLineHeads(m_doc, target, heads, settings.order);
-    const QHash<quint32, QVector3D> now = AimSolver::linePoints(m_doc, look, target, heads);
+    m_form = LineFormation::build(m_doc, scene, look);
 
     // The previous cue's points for the same lights, when it aimed them at
     // a line too.
@@ -104,23 +105,22 @@ void LinePlanView::setFormation(const Scene *scene, const QLCPalette *look,
                                            AimSolver::aimHeads(m_doc, prevScene, prevLook->id()));
     }
 
-    for (int i = 0; i < ordered.count(); ++i)
+    for (const LineFormation::Light &l : m_form.lights())
     {
-        const quint32 fid = ordered.at(i);
-        if (!now.contains(fid))
+        if (!l.placed)
             continue;
         Beam b;
-        b.fixture = fid;
-        b.number = i + 1;
-        if (const Fixture *fx = m_doc->fixture(fid))
-            b.name = fx->name();
-        AimSolver::Frame frame;
-        b.from = AimSolver::frameFor(m_doc, fid, frame) ? plan(frame.position) : plan(now.value(fid));
-        b.to = plan(now.value(fid));
-        if (before.contains(fid))
+        b.fixture = l.fixture;
+        b.number = l.number;
+        b.name = l.name;
+        b.from = l.from;
+        b.to = l.to;
+        b.group = l.group;
+        b.colour = m_form.colourFor(l);
+        if (before.contains(l.fixture))
         {
             b.hasPrevious = true;
-            b.previous = plan(before.value(fid));
+            b.previous = plan(before.value(l.fixture));
         }
         m_beams << b;
     }
@@ -194,7 +194,9 @@ void LinePlanView::paintEvent(QPaintEvent *)
     }
     const QPointF c = box.center();
     const double w = qMax(2.0, box.width()) * 1.15, h = qMax(2.0, box.height()) * 1.15;
-    const QRectF area = QRectF(rect()).adjusted(12 * s, 16 * s, -12 * s, -10 * s);
+    // Room at the foot for the caption, and for names when they show.
+    const double foot = (s >= 1.6 ? 44.0 : 20.0) * s;
+    const QRectF area = QRectF(rect()).adjusted(12 * s, 16 * s, -12 * s, -foot);
     const double scale = qMin(area.width() / w, area.height() / h);
     auto toScreen = [&](const QPointF &pt) {
         return QPointF(area.center().x() + (pt.x() - c.x()) * scale,
@@ -226,26 +228,101 @@ void LinePlanView::paintEvent(QPaintEvent *)
         p.setBrush(Qt::NoBrush);
         p.drawEllipse(was, r + 2, r + 2);
     }
-    // Lights, beams, points.
+    // Beams first, so every square and point sits on top of them: each from
+    // where the light hangs to its point, in its group's colour -- lights
+    // that swap or flip are seen crossing.
+    const bool grouped = m_form.grouped();
+    for (const Beam &b : m_beams)
+    {
+        QColor c = grouped ? b.colour : QColor(255, 230, 160);
+        c.setAlpha(grouped ? 200 : 110);
+        p.setPen(QPen(c, (grouped ? 1.6 : 1.0) * s));
+        p.drawLine(toScreen(b.from), toScreen(b.to));
+    }
     for (const Beam &b : m_beams)
     {
         const QPointF from = toScreen(b.from), to = toScreen(b.to);
-        p.setPen(QPen(QColor(255, 230, 160, 90), s));
-        p.drawLine(from, to);
         p.setPen(QPen(QColor(20, 20, 24), s));
-        p.setBrush(QColor(170, 170, 180));
+        p.setBrush(grouped ? b.colour : QColor(170, 170, 180));
         p.drawRect(QRectF(from - QPointF(3 * s, 3 * s), QSizeF(6 * s, 6 * s)));
-        p.setBrush(QColor(255, 210, 120));
+        p.setBrush(b.colour.isValid() ? b.colour : LineFormation::pointColour());
         p.drawEllipse(to, r, r);
-        p.setPen(QColor(20, 20, 24));
+        p.setPen(grouped ? LineFormation::groupInk() : LineFormation::pointInk());
         p.drawText(QRectF(to.x() - r, to.y() - r, 2 * r, 2 * r), Qt::AlignCenter, QString::number(b.number));
-        // Big enough to read: the light's name where it hangs.
-        if (s >= 1.6 && !b.name.isEmpty())
+    }
+
+    // Big enough to read: each light's name where it hangs, laid out so no
+    // two overlap -- a name that would sit on another drops a row, with a
+    // leader to its light; one with no room is left out (the tooltip has it).
+    m_labelRects.clear();
+    if (s >= 1.6)
+    {
+        const QFontMetricsF fm(p.font());
+        const double rowH = fm.height() + 1.0 * s;
+        const double maxW = 110.0 * s;
+        QList<int> order;
+        for (int i = 0; i < m_beams.count(); ++i)
+            if (!m_beams.at(i).name.isEmpty())
+                order << i;
+        std::sort(order.begin(), order.end(), [this](int a, int b) {
+            return m_beams.at(a).from.x() < m_beams.at(b).from.x();
+        });
+        const QRectF room = QRectF(rect()).adjusted(2, 2, -2, -2);
+        QList<QLineF> leaders;
+        QStringList texts;
+        for (int i : order)
         {
-            p.setPen(QColor(190, 190, 200));
-            p.drawText(QRectF(from.x() - 40 * s, from.y() + 4 * s, 80 * s, 12 * s),
-                       Qt::AlignHCenter | Qt::AlignTop, b.name);
+            const Beam &b = m_beams.at(i);
+            const QPointF from = toScreen(b.from);
+            const QString text = fm.elidedText(b.name, Qt::ElideMiddle, maxW);
+            const double w = fm.horizontalAdvance(text) + 2.0 * s;
+            for (int row = 0; row < 4; ++row)
+            {
+                QRectF box(from.x() - w / 2, from.y() + 5.0 * s + row * rowH, w, rowH);
+                if (box.left() < room.left())
+                    box.moveLeft(room.left());
+                if (box.right() > room.right())
+                    box.moveRight(room.right());
+                if (!room.contains(box))
+                    break;
+                bool clear = true;
+                for (const QRectF &o : m_labelRects)
+                    if (o.intersects(box))
+                    {
+                        clear = false;
+                        break;
+                    }
+                if (!clear)
+                    continue;
+                if (row > 0)
+                    leaders << QLineF(from + QPointF(0, 3.0 * s), QPointF(from.x(), box.top()));
+                m_labelRects << box;
+                texts << text;
+                break;
+            }
         }
+        // Leaders first, then each name on its own patch of background, so
+        // a leader passing a name on the row above never runs through it.
+        p.setPen(QPen(QColor(110, 110, 120), 0.8 * s));
+        for (const QLineF &l : leaders)
+            p.drawLine(l);
+        for (int i = 0; i < m_labelRects.count(); ++i)
+        {
+            p.fillRect(m_labelRects.at(i), QColor(30, 32, 38));
+            p.setPen(QColor(190, 190, 200));
+            p.drawText(m_labelRects.at(i), Qt::AlignCenter, texts.at(i));
+        }
+    }
+
+    // What the colours and lines show.
+    const QString cap = m_form.caption();
+    if (!cap.isEmpty())
+    {
+        QFont cf = p.font();
+        cf.setPointSizeF(7.0 * s);
+        p.setFont(cf);
+        p.setPen(QColor(150, 150, 160));
+        p.drawText(rect().adjusted(6, 4, -6, -3), Qt::AlignBottom | Qt::AlignLeft | Qt::TextWordWrap, cap);
     }
     if (m_dimmed)
         p.fillRect(rect(), QColor(30, 32, 38, 150));

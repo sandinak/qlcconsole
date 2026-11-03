@@ -56,6 +56,8 @@ A snap or a quick sweep for the button? Why?
 
 7. Click **1.0.7 Fan**, **+ Cue**, type `Button`, **Return**.
 8. Click the grey **Truss-Spots** row; **Spread ⋯ → −5**: the beams cross.
+   In the plan view each beam runs from its light to its point, so you see
+   them cross. With Grouping set, each group has a colour of its own.
 9. Click **1.0.8 Button**; drag **Red** onto the **Truss-Spots** row.
 10. Type `1` in **Fade in**, **Return**.
 

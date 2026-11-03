@@ -967,7 +967,9 @@ of its own.
   light where it hangs with its beam to its point (numbered as the strip),
   and, as **rings**, where the cue before put the same lights, with the
   sweep between them dashed. It follows Spread, Grouping and Cross as you
-  change them.
+  change them: each group in a colour of its own, and crossed lights seen
+  as crossing beams (see
+  [Reading the strip and the plan](stage-targets.md#reading-the-strip-and-the-plan)).
 - **In a window.** On a small screen, **⤢** on the plan (or right-click
   the strip or the plan ▸ **Open in a window**) opens both in a window of
   their own: resize it, put it on a second screen, and the dots, numbers
