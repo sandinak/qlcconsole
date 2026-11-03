@@ -3295,9 +3295,10 @@ void ShowTreeView::buildTree()
                         ci->setTextAlignment(c, Qt::AlignCenter);
                     ci->setToolTip(c, QStringList({ trackingTip, badgeTip }).join(QStringLiteral("\n\n")).trimmed());
                 }
-                // Needs work stands out among the grey flags (Q192).
+                // Needs work stands out among the grey flags (Q192): that
+                // badge alone, not the rest of the row's flags.
                 if (cue.needsWork)
-                    ci->setForeground(FlagsCol, QColor(0xd0, 0x8a, 0x1c));
+                    ci->setData(FlagsCol, WarnPiecesRole, QStringList { tr("needs work") });
                 const QString nameTip = cue.reusable == invalidId()
                                ? (cue.unlinkedFrom.isEmpty() ? cue.note
                                   : tr("Unlinked from %1. %2").arg(cue.unlinkedFrom, cue.note).trimmed())
@@ -7686,6 +7687,8 @@ void ShowTreeView::showMultiLayerPage(const QList<QPair<quint32, quint32>> &laye
 
 void ShowTreeView::slotTreeContextMenu(const QPoint &pos)
 {
+    if (backwashMarkMenu(pos))      // a warning's mark: its own answers
+        return;
     QTreeWidgetItem *item = m_tree->itemAt(pos);
     QMenu menu(this);
     fillTreeMenu(&menu, item);

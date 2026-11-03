@@ -251,7 +251,7 @@ add_library(${module_name}
     showmanager/videoitem.cpp showmanager/videoitem.h
     showstatus.cpp showstatus.h
     showstatusdialog.cpp showstatusdialog.h
-    showreviewpanel.cpp showreviewpanel.h
+    showreviewpanel.cpp showreviewpanel.h showreviewmarker.cpp showreviewmarker.h
     showdifferencesdialog.cpp showdifferencesdialog.h
     showsettingsdialog.cpp showsettingsdialog.h
     definitionupdatesdialog.cpp definitionupdatesdialog.h

@@ -3907,6 +3907,7 @@ void Monitor::slotCopySelected()
             c.width = p->width(); c.depth = p->depth(); c.height = p->height();
             c.rotation = p->rotation(); c.frontCurve = p->frontCurve();
             c.color = p->color();
+            c.finish = p->hasFinish() ? p->finish() : QColor();
             platforms.append(c);
         }
         else if (TargetItem *tg = dynamic_cast<TargetItem *>(gi))
@@ -4084,6 +4085,7 @@ bool Monitor::pasteClipboard(float dxM, float dyM)
         p->setRotation(c.rotation);
         p->setFrontCurve(c.frontCurve);
         p->setColor(c.color);
+        p->setFinish(c.finish);
         p->setLayerId(layer);
         newPlatformIds.append(p->id());
     }
@@ -8829,6 +8831,20 @@ void Monitor::slotEditPlatform(quint32 pid)
         m_doc->setModified();
     });
     form->addRow(tr("Colour:"), colorBtn);
+    /* What it really looks like on the rig: the plot colour above tells
+       decks apart on the plan; the rig views draw its paint (stage black
+       unless set). */
+    ColourSwatchButton *finishBtn = new ColourSwatchButton(p->finish(), tr("Finish on the rig"), &dlg);
+    finishBtn->setObjectName(QStringLiteral("platformFinish"));
+    finishBtn->setResetColour(StagePlatform::defaultFinish());
+    finishBtn->setToolTip(tr("What it is painted: the Lighting Studio's planes and the Rig Overview draw it "
+                             "in this, lit by the rig. Colour above is only the plot's, to tell decks apart. "
+                             "Stage black unless set"));
+    connect(finishBtn, &ColourSwatchButton::colourChanged, &dlg, [&](const QColor &c) {
+        p->setFinish(c == StagePlatform::defaultFinish() ? QColor() : c);
+        m_doc->setModified();
+    });
+    form->addRow(tr("Finish (rig):"), finishBtn);
 
     /* What the deck is made of. A clear top is why you would rig fixtures
        INSIDE a step at all: they show through it and their light goes up. */

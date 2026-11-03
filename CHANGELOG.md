@@ -21,6 +21,29 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   pointer frame now keeps the quality of the frame before it. On the 2D
   plot the position readout is a fixed width, so its footer's scroll bar
   no longer comes and goes with the reading and moves the plot.
+
+- **The cyc check sees the curtain.** Show Review PWR-12 (light on the cyc
+  nobody meant) no longer names light that lands on a closed main drape or
+  traveler in front of the cyc. A curtain moved by a fixture stands where
+  each cue leaves it (a "Curtain Open" scene the cue plays opens it, part
+  open is part open); one no cue moves is read at its set state. On a real
+  show the preshow's announcer specials, behind the closed drape, are no
+  longer flagged; the same lights after the curtain opens still are.
+- **A warning reads and answers where it shows.** Hover a "⚠ cyc" mark on a
+  Show Tree cue, the footer Review chip, or a Review row's check id for the
+  detail (fixtures, how much, on what, every cue it marks, what you can do);
+  right-click it for I Meant It / Accept…, Not Meant: Show Me the Layer /
+  Show Me, and Open in Show Review -- cleared there, no panel needed. One
+  tooltip and one menu builder (`ShowReviewMarker`) for every place.
+- **Only the warning is in the warning colour.** A cue's flags painted
+  "mix" (and every other flag) amber beside "⚠ cyc" or "needs work"; now
+  only the warning's own word is.
+- **Props are their real colour on the rig.** Risers and decks have a
+  **Finish (rig)** colour, stage black unless set, apart from the plot colour
+  that tells them apart on the plan; the Lighting Studio's planes and the Rig
+  Overview draw the finish (lit by the room and the rig), scenery its own
+  colour, and a warning on the cyc is an amber outline, never a fill.
+
 - **An aimed light is drawn where it points, to the step.** The rig views
   read a 16-bit head's fine byte back (read coarse only, a 540° head was
   drawn up to 2° off its mark, 20 cm at a 6 m throw), and a two-arm beam's

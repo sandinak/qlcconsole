@@ -30,6 +30,11 @@
 #include "showtreeview.h"
 #include "qlcpalette.h"
 #include "scenery.h"
+#include "showreviewmarker.h"
+#include "structurestudioview.h"
+#include "stageplatform.h"
+#include "contextmenus.h"
+#include <QMenu>
 #include "qlcfixturemode.h"
 #include "qlcfixturedef.h"
 #include "showstatus.h"
@@ -382,3 +387,214 @@ void ShowReviewPanel_Test::showTreeMarksBreachingCues()
 }
 
 QTEST_MAIN(ShowReviewPanel_Test)
+
+/* One tooltip and one set of answers for a warning wherever it shows: the
+   "⚠ cyc" mark on a cue, the footer chip, a Review row. A right-click clears
+   it without the Review panel. */
+void ShowReviewPanel_Test::warningMarksShareDetailAndAnswers()
+{
+    Fixture *front = nullptr;
+    const QList<quint32> cues = backwashShow(m_doc, &front);
+    ShowTreeView view(nullptr, m_doc);
+    m_doc->showReview()->run();
+    auto rowOfCue = [&view](quint32 id) -> QTreeWidgetItem * {
+        for (QTreeWidgetItemIterator it(view.tree()); *it; ++it)
+            if ((*it)->data(0, ShowTreeView::KindRole).toInt() == ShowTreeView::CueNode
+                && (*it)->data(0, ShowTreeView::IdRole).toUInt() == id)
+                return *it;
+        return nullptr;
+    };
+    const QList<ReviewFinding> onCue = ShowReviewMarker::cueFindings(m_doc, cues.last());
+    QCOMPARE(onCue.count(), 1);
+    // The detail: which fixture, how much, on what, the cues, the answers.
+    const QString tip = ShowReviewMarker::tooltip(m_doc, onCue);
+    QVERIFY2(tip.contains("Front 1") && tip.contains("about") && tip.contains("Cyc"), qPrintable(tip));
+    QVERIFY(tip.contains("PWR-12"));
+    QVERIFY(tip.contains("One") && tip.contains("Two"));         // lands in both cues
+    QVERIFY(tip.contains("I Meant It") && tip.contains("Open in Show Review"));
+    // The same builder on the cue's mark, a Review row's badge and the footer.
+    QVERIFY(rowOfCue(cues.last())->toolTip(ShowTreeView::FlagsCol).contains(tip.mid(4, tip.size() - 9)));
+    ShowReviewPanel panel(m_doc);
+    panel.recheck();
+    QTreeWidgetItem *row = rowOf(panel.tree(), "PWR-12");
+    QVERIFY(row != nullptr);
+    QCOMPARE(row->toolTip(0), tip);
+    QVERIFY(ShowReviewMarker::tooltip(m_doc, ShowReviewMarker::openFindings(m_doc)).contains("Front 1"));
+
+    // The mark's menu: the canon, the backwash answers.
+    QMenu menu;
+    {
+        ContextMenu cm(&menu);
+        ShowReviewMarker::fillMenu(cm, m_doc, onCue, nullptr);
+    }
+    QVERIFY2(ContextMenu::checkCanon(&menu).isEmpty(), qPrintable(ContextMenu::checkCanon(&menu).join("; ")));
+    QAction *meantAct = menu.findChild<QAction *>("reviewMeant");
+    QVERIFY(meantAct != nullptr);
+    QVERIFY(menu.findChild<QAction *>("reviewShowMe") != nullptr);
+    QVERIFY(menu.findChild<QAction *>("reviewOpen") != nullptr);
+    QCOMPARE(menu.actions().first()->objectName(), QStringLiteral("reviewOpen"));
+    // Show Me: the layer that lights it.
+    QString jump;
+    ShowReviewPanel::setJumper([&](QWidget *, const QString &j, const QVariantList &) { jump = j; return true; });
+    menu.findChild<QAction *>("reviewShowMe")->trigger();
+    QCOMPARE(jump, QStringLiteral("cue"));
+    ShowReviewPanel::setJumper(ShowReviewPanel::Jumper());
+    // I Meant It from the mark: kept on the layer, the marks go, no panel.
+    QVERIFY(ShowReviewPanel::shared() == nullptr);
+    meantAct->trigger();
+    QCOMPARE(m_doc->showTree()->cue(cues.first())->layers.first().meantOnScenery, QList<quint32>() << front->id());
+    QVERIFY(!rowOfCue(cues.last())->text(ShowTreeView::FlagsCol).contains(QStringLiteral("⚠ cyc")));
+    QVERIFY(ShowReviewMarker::cueFindings(m_doc, cues.last()).isEmpty());
+    QVERIFY(ShowReviewPanel::shared() == nullptr);
+    // Not Meant takes it back, the same engine call as the panel's.
+    ReviewFinding intended;
+    for (const ReviewFinding &f : m_doc->showReview()->lastResult().findings)
+        if (f.check == "PWR-12")
+            intended = f;
+    QVERIFY(intended.intended);
+    QVERIFY(ShowReviewMarker::notMeant(m_doc, intended));
+    QVERIFY(rowOfCue(cues.last())->text(ShowTreeView::FlagsCol).contains(QStringLiteral("⚠ cyc")));
+
+    // Several open warnings (the footer chip): one submenu each, canon kept.
+    QMenu many;
+    {
+        ContextMenu cm(&many);
+        ShowReviewMarker::fillMenu(cm, m_doc, ShowReviewMarker::openFindings(m_doc), nullptr);
+    }
+    QVERIFY(ContextMenu::checkCanon(&many).isEmpty());
+    QVERIFY(many.findChild<QMenu *>("reviewFinding0") != nullptr);
+    // Any other check's mark offers Accept… (with a note) instead.
+    for (const ReviewFinding &f : ShowReviewMarker::openFindings(m_doc))
+    {
+        if (f.check == "PWR-12")
+            continue;
+        QMenu other;
+        {
+            ContextMenu cm(&other);
+            ShowReviewMarker::fillMenu(cm, m_doc, { f }, nullptr);
+        }
+        QVERIFY(other.findChild<QAction *>("reviewAccept") != nullptr);
+        QVERIFY(other.findChild<QAction *>("reviewMeant") == nullptr);
+        QVERIFY(ShowReviewMarker::meant(m_doc, f, nullptr, "on purpose"));
+        break;
+    }
+}
+
+/* "Why is mix in warning colour if the cyc warning is on the same line?" Only
+   a warning's badge takes the warning colour; Mix and the rest keep the row's. */
+void ShowReviewPanel_Test::onlyTheWarningBadgeIsColoured()
+{
+    const QList<quint32> cues = backwashShow(m_doc, nullptr);
+    ShowTreeController *st = m_doc->showTree();
+    QVERIFY(st->edit("mix", [&cues](QList<ShowTree::Production> &tree) {
+        for (ShowTree::Production &p : tree)
+            for (ShowTree::CueList &l : p.lists)
+                for (ShowTree::Cue &c : l.cues)
+                    c.mixOverlap = true;
+        return true;
+    }));
+    ShowTreeView view(nullptr, m_doc);
+    m_doc->showReview()->run();
+    auto rowOfCue = [&view](quint32 id) -> QTreeWidgetItem * {
+        for (QTreeWidgetItemIterator it(view.tree()); *it; ++it)
+            if ((*it)->data(0, ShowTreeView::KindRole).toInt() == ShowTreeView::CueNode
+                && (*it)->data(0, ShowTreeView::IdRole).toUInt() == id)
+                return *it;
+        return nullptr;
+    };
+    const QColor normal(Qt::gray);
+    auto pieces = [&](quint32 cue) {
+        QTreeWidgetItem *item = rowOfCue(cue);
+        const QModelIndex idx = view.tree()->model()->index(view.tree()->indexOfTopLevelItem(item), 0);
+        Q_UNUSED(idx)
+        // The item's own index in the flags column.
+        QTreeWidget *tw = view.tree();
+        QModelIndex at;
+        for (QTreeWidgetItemIterator it(tw); *it; ++it)
+            if (*it == item)
+            {
+                tw->setCurrentItem(item, ShowTreeView::FlagsCol);
+                at = tw->currentIndex();
+            }
+        return ShowTreeView::flagPieces(at, normal);
+    };
+    // With a warning: "mix" in the row's colour, "⚠ cyc" in the warning colour.
+    QList<QPair<QString, QColor>> p = pieces(cues.first());
+    QCOMPARE(p.count(), 2);
+    QCOMPARE(p.at(0).first, QStringLiteral("mix"));
+    QCOMPARE(p.at(0).second, normal);
+    QCOMPARE(p.at(1).first, QStringLiteral("⚠ cyc"));
+    QCOMPARE(p.at(1).second, ShowTreeView::warningColour());
+    // The cell itself is not one colour any more.
+    QVERIFY(rowOfCue(cues.first())->foreground(ShowTreeView::FlagsCol).color() != ShowTreeView::warningColour());
+    // Without a warning (the light dark in cue two): everything normal.
+    QVERIFY(st->edit("dark", [&cues](QList<ShowTree::Production> &tree) {
+        for (ShowTree::Production &pr : tree)
+            for (ShowTree::CueList &l : pr.lists)
+                for (ShowTree::Cue &c : l.cues)
+                    if (c.id == cues.last())
+                        c.layers.clear();
+        return true;
+    }));
+    QVERIFY(st->edit("first only", [&cues](QList<ShowTree::Production> &tree) {
+        for (ShowTree::Production &pr : tree)
+            for (ShowTree::CueList &l : pr.lists)
+                for (ShowTree::Cue &c : l.cues)
+                    if (c.id == cues.first())
+                        c.layers.clear();
+        return true;
+    }));
+    m_doc->showReview()->run();
+    p = pieces(cues.first());
+    QCOMPARE(p.count(), 1);
+    QCOMPARE(p.at(0).first, QStringLiteral("mix"));
+    QCOMPARE(p.at(0).second, normal);
+    // Needs work, the other warning badge: that word alone.
+    QVERIFY(st->edit("needs work", [&cues](QList<ShowTree::Production> &tree) {
+        for (ShowTree::Production &pr : tree)
+            for (ShowTree::CueList &l : pr.lists)
+                for (ShowTree::Cue &c : l.cues)
+                    if (c.id == cues.first())
+                        c.needsWork = true;
+        return true;
+    }));
+    p = pieces(cues.first());
+    QCOMPARE(p.count(), 2);
+    QCOMPARE(p.at(0).second, normal);           // mix
+    QCOMPARE(p.at(1).first, QStringLiteral("needs work"));
+    QCOMPARE(p.at(1).second, ShowTreeView::warningColour());
+}
+
+/* "On the rig .. we shouldn't show colorization of the props .. they should be
+   their correct color (black for risers)": a riser is drawn in its finish, not
+   its plot colour; a warning on a cyc is an outline, its cloth keeps its colour. */
+void ShowReviewPanel_Test::propsKeepTheirOwnColourOnTheRig()
+{
+    StagePlatform riser(0);
+    riser.setColor(QColor("#dd4f18"));          // orange on the plot
+    StructureStudioView::PropPaint pp = StructureStudioView::platformPaint(&riser);
+    QCOMPARE(pp.fill, StagePlatform::defaultFinish());
+    QVERIFY(pp.fill != riser.color());
+    QVERIFY(!pp.outline);
+    QVERIFY(pp.edge.lightness() > pp.fill.lightness());     // its edge still reads on the dark canvas
+    riser.setFinish(QColor("#5a3a22"));
+    QCOMPARE(StructureStudioView::platformPaint(&riser).fill, QColor("#5a3a22"));
+    pp = StructureStudioView::platformPaint(&riser, true);
+    QCOMPARE(pp.fill, QColor("#5a3a22"));                    // a warning never fills
+    QVERIFY(pp.outline);
+
+    // The cyc in its own colour; with PWR-12 open on it, the outline flag.
+    backwashShow(m_doc, nullptr);
+    Scenery *cyc = m_doc->monitorProperties()->sceneries().first();
+    StructureStudioView view(m_doc, StructureStudioView::StageKind, 0);
+    QVERIFY(!view.sceneryWarned(cyc->id()));                 // not reviewed yet
+    m_doc->showReview()->run();
+    QVERIFY(view.sceneryWarned(cyc->id()));
+    const StructureStudioView::PropPaint cp = StructureStudioView::sceneryPaint(cyc, view.sceneryWarned(cyc->id()));
+    QCOMPARE(cp.fill, Scenery::defaultColor(cyc->kind()));
+    QVERIFY(cp.outline);
+    QCOMPARE(StructureStudioView::sceneryPaint(cyc).fill, cp.fill);
+    QVERIFY(!StructureStudioView::sceneryPaint(cyc).outline);
+    cyc->setColor(QColor("#e2e4ec"));
+    QCOMPARE(StructureStudioView::sceneryPaint(cyc).fill, QColor("#e2e4ec"));
+}

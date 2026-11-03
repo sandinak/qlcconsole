@@ -181,8 +181,20 @@ public:
     /********************************************************************
      * Appearance
      ********************************************************************/
+    /** The plot's colour: how this deck is told apart from the others on
+     *  the 2-D plan (and its layers list). Not what it looks like. */
     QColor color() const { return m_color; }
     void   setColor(const QColor &c) { m_color = c; }
+
+    /** What it really looks like -- its paint -- the colour the rig views
+     *  (the Lighting Studio's planes, the Rig Overview) draw it in, lit by
+     *  the room and the rig. Stage black unless set: a riser or a deck is
+     *  painted black, whatever colour it is on the plan. */
+    QColor finish() const { return m_finish.isValid() ? m_finish : defaultFinish(); }
+    bool   hasFinish() const { return m_finish.isValid(); }
+    /** An invalid colour goes back to the default. */
+    void   setFinish(const QColor &c) { m_finish = c; }
+    static QColor defaultFinish() { return QColor(0x1c, 0x1c, 0x1e); }
 
     /** When locked, the 2-D Monitor will not let the user drag this platform. */
     bool locked() const { return m_locked; }
@@ -230,6 +242,7 @@ private:
     float   m_stepRise = 0.2032f;   ///< 8"
     float   m_stepRun  = 0.2032f;   ///< 8"
     QColor  m_color;
+    QColor  m_finish;        ///< invalid: defaultFinish()
     bool    m_locked  = false;
     bool    m_solid     = true;    ///< occupies space: no-overlap with other solids
     bool    m_stackable = false;   ///< may sit on top of solids (step/riser)

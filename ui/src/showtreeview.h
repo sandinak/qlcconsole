@@ -114,8 +114,19 @@ public:
         FolderRole = Qt::UserRole + 5,  //!< a look folder's / palette folder's own path ("Hits")
         SectionRole = Qt::UserRole + 6, //!< a section row's key ("1"), or "#<cue>" for a hand-made one
         ScopeRole = Qt::UserRole + 7,   //!< a Hits row's HitScope (int)
-        PlaceRole = Qt::UserRole + 8    //!< a Hits row's cue, list or production
+        PlaceRole = Qt::UserRole + 8,   //!< a Hits row's cue, list or production
+        /** The flags column's badges drawn in the warning colour ("needs
+         *  work", "⚠ cyc"); every other badge -- Mix, Track... -- keeps the
+         *  row's own colour (flagPieces()). */
+        WarnPiecesRole = Qt::UserRole + 44
     };
+
+    /** The warning colour of a badge in the flags column. */
+    static QColor warningColour();
+    /** How a row's flags text is drawn: each ", "-separated badge with its
+     *  colour -- warningColour() for one in WarnPiecesRole, the row's own
+     *  foreground for the rest. */
+    static QList<QPair<QString, QColor>> flagPieces(const QModelIndex &index, const QColor &normal);
 
     /** The tree's columns (Q104): the name; what a list, a production or a
      *  carried layer says (InfoCol); then a column each for what a cue sets,
@@ -151,7 +162,13 @@ public:
     QString backwashFindingKey(quint32 cueId) const;
     /** Open Show Review on that finding (a click on the mark). */
     bool openBackwashFinding(quint32 cueId);
+    /** A right-click on a cue's warning mark (its flags): the mark's
+     *  answers (ShowReviewMarker). False when @a pos is not on a mark. */
+    bool backwashMarkMenu(const QPoint &pos);
+    /** The warning menu while it is open (tests). */
+    QMenu *lastWarningMenu() const { return m_lastWarningMenu; }
 private:
+    QMenu *m_lastWarningMenu = nullptr;
     void setupBackwashMarks();
     void backwashLayerMenu(QMenu *menu, quint32 cueId, quint32 layerId);
 public:

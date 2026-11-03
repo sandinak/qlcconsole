@@ -339,6 +339,14 @@ drapes):
   face at all). Platforms can stack on top of each other, deriving their
   base height automatically, and collide realistically so dragging one
   doesn't scramble the pile underneath it.
+  - **Two colours.** **Colour** is the plot's: it tells decks apart on the
+    2D plan and in the layers list. **Finish (rig)** is what it is painted —
+    stage black unless you set it — and the Lighting Studio's planes and the
+    Rig Overview draw it in that, lit by the room and the rig, so an orange
+    riser on the plot is the black riser it really is on the rig. Scenery
+    has one colour, its real one (a cyc's white, a drape's velour). A warning
+    on a prop (light on the cyc nobody meant) is an amber outline, never a
+    fill.
   - **Steps** are a platform with a Steps shape: a staircase with a step
     count, rise, run, step width, and which way it climbs (upstage,
     downstage, stage left, stage right). **Add → Add Steps** gives two
@@ -570,9 +578,16 @@ cyc and a scrim, by default) is checked by [Show Review](show-review.md)
   cone. A ray stops at the stage floor, at anything solid the stage counts
   (a riser, a tower), or at scenery; a scrim lets it on through. **Any ray**
   that ends on the cyc is light on the cyc, and the finding says roughly how
-  much of the beam (the share of rays). Curtains are read at their set state,
-  never where a driven one is now, so the same show always gives the same
-  warnings.
+  much of the beam (the share of rays).
+- **Curtains.** A closed main drape or traveler between a light and the cyc
+  takes the light: what lands on the curtain is not on the cyc. A curtain
+  stands where **that cue** leaves it, never where it is right now, so the
+  same show always gives the same warnings. A curtain moved by a fixture
+  ([Curtains that move](#curtains-that-move)) is where the cue's functions
+  put it — a "Curtain Open" scene the cue plays, carried in or its own, opens
+  it; part open is part open. In a list that moves it somewhere, a cue that
+  plays nothing on it has it at rest (closed). A curtain no cue moves is read
+  at its set state (Open, Closed, Flown).
 - **What counts as meant.** Only something the show says: the fixture's plot
   symbol is **Cyc / strip light** or **Uplight wash**; or its look aims it at
   a target standing on that cyc (a mark, an area or a line within 0.5 m of
@@ -585,8 +600,14 @@ cyc and a scrim, by default) is checked by [Show Review](show-review.md)
   (Show Review's Accepted list) or **Light on the Cyc: Not Meant** on the
   layer's right-click in the Show Tree.
 - **Where you work.** Each cue that puts unmeant light on the cyc reads
-  **⚠ cyc** in its Show Tree flags; the tooltip names the fixtures, and a click
-  opens the Show Review row (**I Meant It**, **Show Me**). The marks follow
+  **⚠ cyc** in its Show Tree flags — only the mark is in the warning colour,
+  **mix** and the other flags beside it keep theirs. Hover it for the detail:
+  which fixtures, about how much of each beam, on which cyc, every cue it
+  lands in, and what you can do. A click opens the Show Review row; a
+  **right-click** answers it on the spot: **I Meant It**, **Not Meant: Show Me
+  the Layer** (to aim it off, shutter, zoom or darken it) or **Open in Show
+  Review**. The cyc itself gets an amber outline in the rig views while a
+  warning is open on it; its cloth keeps its own colour. The marks follow
   Show Review's own re-check, a moment after an edit in Design — never while
   the show is running.
 

@@ -84,6 +84,7 @@ private slots:
     void pwr12Backwash();
     void pwr12Meant();
     void pwr12AimAtCyc();
+    void pwr12Curtain();
     void sceneryOnPurposeSaves();
     void cue03();
     void cue12();

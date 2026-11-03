@@ -578,6 +578,10 @@ public:
     /** The Review chip (docs/features/show-review.md): "Review · 2 ⛔ 5 ⚠"
      *  from Show Review's last run, grey "Reviewed" when nothing is open. */
     void updateReviewStatus();
+    /** The footer Review chip's right-click: the open warnings' answers
+     *  (ShowReviewMarker). Shown at @a globalPos when @a exec; the menu
+     *  deletes itself on close. */
+    QMenu *showReviewChipMenu(const QPoint &globalPos, bool exec = true);
     QLabel *reviewChip() const { return m_statusReviewLabel; }
     /** Show Review's Fix: a finding's jump kind and ids to the view it is
      *  fixed in (a Show Tree cue, Functions, Fixtures, the plot, Build). */

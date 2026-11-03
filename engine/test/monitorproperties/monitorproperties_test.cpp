@@ -3716,3 +3716,39 @@ void MonitorProperties_Test::stagePiecesAreShownAndLockedOnTheirOwnAndByLayer()
     QVERIFY(back.stageMarkVisible(MP::CentreLineFlag));
     QCOMPARE(back.stageLayerId(), stage);
 }
+
+void MonitorProperties_Test::aPlatformKeepsItsFinish()
+{
+    StagePlatform riser(0);
+    riser.setColor(QColor("#dd4f18"));                       // the plot's orange
+    QVERIFY(!riser.hasFinish());
+    QCOMPARE(riser.finish(), StagePlatform::defaultFinish());  // stage black on the rig
+    auto roundTrip = [](const StagePlatform &pl) {
+        QBuffer buf;
+        buf.open(QIODevice::WriteOnly);
+        {
+            QXmlStreamWriter w(&buf);
+            w.writeStartDocument();
+            pl.saveXML(&w);
+            w.writeEndDocument();
+        }
+        StagePlatform *back = new StagePlatform(1);
+        QXmlStreamReader r(buf.data());
+        while (!r.atEnd() && !r.isStartElement())
+            r.readNext();
+        back->loadXML(r);
+        return std::make_pair(back, QString::fromUtf8(buf.data()));
+    };
+    auto plain = roundTrip(riser);
+    QVERIFY(!plain.second.contains("Finish="));                 // no churn in old files
+    QVERIFY(!plain.first->hasFinish());
+    QCOMPARE(plain.first->color(), QColor("#dd4f18"));
+    delete plain.first;
+    riser.setFinish(QColor("#5a3a22"));                        // a stained wood deck
+    auto wood = roundTrip(riser);
+    QCOMPARE(wood.first->finish(), QColor("#5a3a22"));
+    QCOMPARE(wood.first->color(), QColor("#dd4f18"));
+    delete wood.first;
+    riser.setFinish(QColor());
+    QCOMPARE(riser.finish(), StagePlatform::defaultFinish());
+}

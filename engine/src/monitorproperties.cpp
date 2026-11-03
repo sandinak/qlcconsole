@@ -663,6 +663,7 @@ bool MonitorProperties::syncApron()
     const float width = (deck != nullptr) ? deck->width() : m_gridSize.x() * unit;
     const float height = apronHeight();
     const QColor colour = (deck != nullptr && deck->color().isValid()) ? deck->color() : QColor(70, 74, 84);
+    const QColor finish = (deck != nullptr && deck->hasFinish()) ? deck->finish() : QColor();
     const float curve = apronFrontCurve();
     const float y0 = curtainLineY();
 
@@ -684,7 +685,8 @@ bool MonitorProperties::syncApron()
     if (differs(apron->originX(), x0) || differs(apron->originY(), y0) || differs(apron->width(), width)
         || differs(apron->depth(), depth) || differs(apron->height(), height)
         || differs(apron->frontCurve(), qMin(curve, qMin(width / 2.0f, depth)))
-        || apron->color() != colour || apron->layerId() != m_stageLayerId
+        || apron->color() != colour || apron->hasFinish() != (finish.isValid())
+        || (finish.isValid() && apron->finish() != finish) || apron->layerId() != m_stageLayerId
         || differs(apron->rotation(), 0.0f))
     {
         apron->setOriginX(x0);
@@ -694,6 +696,7 @@ bool MonitorProperties::syncApron()
         apron->setHeight(height);
         apron->setFrontCurve(curve);
         apron->setColor(colour);
+        apron->setFinish(finish);       // painted as the deck it extends
         apron->setRotation(0.0f);
         apron->setLayerId(m_stageLayerId);
         changed = true;

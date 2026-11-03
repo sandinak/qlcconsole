@@ -804,6 +804,7 @@ private:
         float   width, depth, height;
         float   rotation, frontCurve;
         QColor  color;
+        QColor  finish;             ///< invalid: stage black
     };
     struct TargetClip
     {

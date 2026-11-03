@@ -27,8 +27,11 @@
 #include <QComboBox>
 #include <QLineEdit>
 #include <QLabel>
+#include <QMenu>
 
 #include "showreviewpanel.h"
+#include "showreviewmarker.h"
+#include "contextmenus.h"
 #include "showstatus.h"
 #include "doc.h"
 
@@ -94,6 +97,9 @@ ShowReviewPanel::ShowReviewPanel(Doc *doc, QWidget *parent)
     lay->addWidget(m_tree, 1);
     connect(m_tree, &QTreeWidget::itemSelectionChanged, this, &ShowReviewPanel::updateButtons);
     connect(m_tree, &QTreeWidget::itemDoubleClicked, this, [this](QTreeWidgetItem *, int) { fixSelected(); });
+    // Right-click a row: the same answers as a warning's mark (ShowReviewMarker).
+    m_tree->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(m_tree, &QTreeWidget::customContextMenuRequested, this, &ShowReviewPanel::slotContextMenu);
 
     QHBoxLayout *actions = new QHBoxLayout;
     m_fix = new QPushButton(tr("Fix ▸"), this);
@@ -296,9 +302,10 @@ void ShowReviewPanel::rebuild()
         item->setText(1, text);
         item->setData(0, IndexRole, i);
         const ShowReview::Check *c = ShowReview::check(f.check);
+        // The check's id is the compact badge: its detail, as on every mark.
+        item->setToolTip(0, ShowReviewMarker::tooltip(m_doc, { f }));
         if (c != nullptr)
         {
-            item->setToolTip(0, c->title);
             item->setToolTip(1, QStringLiteral("<p><b>%1</b></p><p>%2</p>").arg(c->title.toHtmlEscaped(),
                                                                                 c->why.toHtmlEscaped()));
         }
@@ -526,15 +533,21 @@ bool ShowReviewPanel::fixSelected()
         jump = m_findings.at(idx).jump;
         data = m_findings.at(idx).jumpData;
     }
+    return runJump(this, jump, data);
+}
+
+bool ShowReviewPanel::runJump(QWidget *parent, const QString &jumpTo, const QVariantList &data)
+{
+    QString jump = jumpTo;
     if (jump.startsWith(QStringLiteral("status:")))
     {
         // The footer's own fix for it (Patch…, Re-patch…, Open Connections).
         const QString key = jump.mid(7);
         if (!ShowStatus::instance()->actionLabel(key).isEmpty())
-            return ShowStatus::instance()->runAction(key, this, data);
+            return ShowStatus::instance()->runAction(key, parent, data);
         jump = QStringLiteral("fixtures");
     }
-    return s_jumper ? s_jumper(this, jump, data) : false;
+    return s_jumper ? s_jumper(parent, jump, data) : false;
 }
 
 void ShowReviewPanel::slotAccept()
@@ -547,7 +560,17 @@ void ShowReviewPanel::slotAccept()
         markMeantSelected(true);        // no note: the mark is the answer
         return;
     }
-    QDialog dlg(this);
+    QString note, by;
+    if (askAcceptNote(this, sel, &note, &by))
+        acceptSelected(note, by);
+}
+
+bool ShowReviewPanel::askAcceptNote(QWidget *parent, const QList<ReviewFinding> &sel,
+                                    QString *noteOut, QString *byOut)
+{
+    if (sel.isEmpty())
+        return false;
+    QDialog dlg(parent);
     dlg.setWindowTitle(tr("Accept"));
     QFormLayout *form = new QFormLayout(&dlg);
     QLabel *what = new QLabel(sel.count() == 1 ? sel.first().message
@@ -574,10 +597,38 @@ void ShowReviewPanel::slotAccept()
     form->addRow(box);
     dlg.resize(480, dlg.sizeHint().height());
     if (dlg.exec() != QDialog::Accepted)
-        return;
+        return false;
     if (by->text().trimmed() != ShowReview::defaultName())
         ShowReview::setDefaultName(by->text());
-    acceptSelected(note->text(), by->text());
+    if (noteOut != nullptr)
+        *noteOut = note->text();
+    if (byOut != nullptr)
+        *byOut = by->text();
+    return true;
+}
+
+void ShowReviewPanel::slotContextMenu(const QPoint &pos)
+{
+    QTreeWidgetItem *item = m_tree->itemAt(pos);
+    if (item == nullptr || m_doc == nullptr)
+        return;
+    if (!item->isSelected())
+    {
+        m_tree->clearSelection();
+        item->setSelected(true);
+    }
+    const QList<ReviewFinding> sel = selectedFindings();
+    if (sel.isEmpty())
+        return;
+    QMenu menu(this);
+    menu.setObjectName(QStringLiteral("showReviewRowMenu"));
+    menu.setToolTipsVisible(true);
+    {
+        ContextMenu cm(&menu);
+        ShowReviewMarker::fillMenu(cm, m_doc, sel, this, 10, false);
+    }
+    if (!menu.isEmpty())
+        menu.exec(m_tree->viewport()->mapToGlobal(pos));
 }
 
 void ShowReviewPanel::slotWhy()

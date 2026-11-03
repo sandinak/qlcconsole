@@ -2527,6 +2527,107 @@ void ShowReview_Test::pwr12AimAtCyc()
     QVERIFY(findings("PWR-12").first().message.contains("Spot 1"));
 }
 
+/* The curtain (the user's show: "the cyc checker didn't take into account the
+   curtain"): a closed drape between a front light and the cyc takes the light;
+   a curtain driven by a fixture is where the cue's functions put it. */
+void ShowReview_Test::pwr12Curtain()
+{
+    MonitorProperties *mp = m_doc->monitorProperties();
+    mp->setGridSize(QVector3D(10, 3, 14));
+    Scenery *cyc = addCyc(mp);
+    Fixture *front = par("Front 1", 0);
+    aimFront(mp, front, 5.0f, 20.0f);
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 lid = st->addCueList(st->addProduction("Show"), "Act 1");
+    const quint32 c1 = st->addCue(lid, -1, "Preshow");
+    const quint32 c2 = st->addCue(lid, 0, "Curtain");
+    cueLit(m_doc, c1, front, 255);
+    cueLit(m_doc, c2, front, 255);
+    QVERIFY2(fires("PWR-12"), "no curtain: light on the cyc");
+
+    // A main drape between them, 4 m in front of the light, plotted closed: quiet.
+    Scenery *drape = mp->addScenery();
+    drape->setKind(Scenery::MainDrape);
+    drape->setName(QStringLiteral("Main drape"));
+    drape->setOriginX(5.0f);
+    drape->setOriginY(8.0f);
+    drape->setWidth(12.0f);
+    drape->setHeight(6.0f);
+    drape->setOpeningWidth(8.0f);
+    QVERIFY(!drape->lightOnPurposeOnly());
+    drape->setState(Scenery::Closed);
+    QVERIFY2(quiet("PWR-12"), "a closed curtain takes the light");
+    drape->setState(Scenery::Open);
+    QVERIFY2(fires("PWR-12"), "through the open curtain");
+    drape->setState(Scenery::Flown);
+    QVERIFY(fires("PWR-12"));
+
+    // Driven by a curtain fixture (0 closed, 255 open), never moved by the
+    // list: as plotted.
+    Fixture *rail = new Fixture(m_doc);
+    rail->setName(QStringLiteral("Curtain"));
+    rail->setChannels(1);
+    rail->setAddress(400);
+    QVERIFY(m_doc->addFixture(rail));
+    rail->setStageLook(Fixture::CurtainLook);
+    drape->setDriverFixture(rail->id());
+    QVERIFY(drape->isDriven());
+    drape->setState(Scenery::Closed);
+    QVERIFY(quiet("PWR-12"));
+    drape->setState(Scenery::Open);
+    QVERIFY(fires("PWR-12"));
+
+    // Moved by the cues: closed in the preshow (at rest: nothing plays on it),
+    // opened in cue two by a function layer. Named in cue two only.
+    Scene *open = new Scene(m_doc);
+    open->setName(QStringLiteral("Curtain Open"));
+    open->setValue(rail->id(), 0, 255);
+    QVERIFY(m_doc->addFunction(open));
+    Scene *closed = new Scene(m_doc);
+    closed->setName(QStringLiteral("Curtain Closed"));
+    closed->setValue(rail->id(), 0, 0);
+    QVERIFY(m_doc->addFunction(closed));
+    Target ot;
+    ot.function = open->id();
+    QVERIFY(st->addLayer(c2, ot) != invalidId());
+    QVERIFY2(fires("PWR-12"), "the curtain opens in cue two");
+    QCOMPARE(findings("PWR-12").count(), 1);
+    ReviewFinding f = findings("PWR-12").first();
+    QVERIFY2(f.message.contains("Curtain"), qPrintable(f.message));
+    QCOMPARE(ShowReview::findingCues(f), QList<quint32>() << c2);
+    QVERIFY(f.targets.contains(QStringLiteral("scenery:%1").arg(cyc->id())));
+
+    // Closed by a scene in the preshow: still quiet there, named in cue two.
+    Target ct;
+    ct.function = closed->id();
+    QVERIFY(st->addLayer(c1, ct) != invalidId());
+    QCOMPARE(findings("PWR-12").count(), 1);
+    QCOMPARE(ShowReview::findingCues(findings("PWR-12").first()), QList<quint32>() << c2);
+
+    // Inside a collection the cue plays: the same.
+    st->removeLayer(c2, st->cueList(lid)->cue(c2)->layers.last().id);
+    QVERIFY(quiet("PWR-12"));
+    Collection *coll = new Collection(m_doc);
+    coll->setName(QStringLiteral("Open it"));
+    QVERIFY(m_doc->addFunction(coll));
+    QVERIFY(coll->addFunction(open->id()));
+    Target colT;
+    colT.function = coll->id();
+    QVERIFY(st->addLayer(c2, colT) != invalidId());
+    QCOMPARE(ShowReview::findingCues(findings("PWR-12").first()), QList<quint32>() << c2);
+
+    // Half open: the 8 m opening is 4 m across, the beam (at x = 5) goes
+    // through the middle of it.
+    open->setValue(rail->id(), 0, 128);
+    QVERIFY(fires("PWR-12"));
+    // Barely open (0.4 m): most of the cone lands on the curtain, not the cyc.
+    open->setValue(rail->id(), 0, 13);
+    const ReviewFinding narrow = findings("PWR-12").isEmpty() ? ReviewFinding() : findings("PWR-12").first();
+    open->setValue(rail->id(), 0, 255);
+    const ReviewFinding wide = findings("PWR-12").first();
+    QVERIFY2(narrow.message != wide.message, "less of the beam reaches the cyc through a narrow gap");
+}
+
 void ShowReview_Test::sceneryOnPurposeSaves()
 {
     Scenery cyc(0);

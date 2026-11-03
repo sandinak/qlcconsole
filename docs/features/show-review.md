@@ -26,6 +26,24 @@ in Design. Click the chip to open the **Show Review** panel. The **Show
 readiness** dialog (click the readiness chip) also has a **Show Review…**
 button.
 
+### Answering a warning where it shows
+
+A warning reads the same wherever it shows — the chip, a **⚠ cyc** mark on
+a Show Tree cue, a row's check id in the panel. **Hover** it for the detail:
+the check, what it found (which fixtures, how much, on what, in which cue),
+every cue it marks, and what you can do. **Right-click** it to answer it
+there, without opening the panel:
+
+- **I Meant It** — light on the cyc kept on the layer that lights it (any
+  other check: **Accept…**, with a note).
+- **Not Meant: Show Me the Layer** — the layer to aim off, shutter, zoom or
+  darken (any other check: **Show Me**, where to fix it).
+- **Open in Show Review** — the panel, on that row.
+
+The chip's right-click lists every open warning, each in a submenu of its
+own. These are the panel's own answers, so a warning cleared from a mark is
+cleared everywhere, and one undo takes it back.
+
 The panel lists findings by severity:
 
 | Severity | Means |
@@ -263,7 +281,8 @@ both give the same answer.
   **I Meant It** (no note: the mark is kept on the layer that lights it, one
   undo step, and the row moves to Accepted), **Fix** reads **Show Me** (the
   layer in the Show Tree), and on a marked row **Reopen** reads **Not Meant**.
-  Every cue it lands in is marked **⚠ cyc** in the Show Tree. See [Light on
+  A closed curtain in front of the cyc (where that cue leaves it) takes the
+  light. Every cue it lands in is marked **⚠ cyc** in the Show Tree. See [Light on
   the cyc only on purpose](lighting-studio.md#light-on-the-cyc-only-on-purpose).
 
 **Files and names**
