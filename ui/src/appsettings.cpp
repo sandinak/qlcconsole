@@ -50,6 +50,7 @@
 #include "app.h"
 #include "speedmastersfooter.h"
 #include "legacysettings.h"
+#include "systemtuningpage.h"
 #ifdef QLC_AI_ASSIST
 #include "aisettingspage.h"
 #endif
@@ -85,6 +86,10 @@ AppSettings::AppSettings(App *app, QWidget *parent)
     advancedPage->setProperty("helpTopic", QStringLiteral("other-improvements.md#advanced-settings"));
     QVBoxLayout *advLayout = new QVBoxLayout(advancedPage);
     m_tabs->addTab(advancedPage, tr("Advanced"));
+    // Performance: this computer's check for a steady DMX timer
+    // (SystemTuning, docs/features/system-tuning.md)
+    m_performancePage = new SystemTuningPage(app->doc(), m_tabs);
+    m_tabs->addTab(m_performancePage, tr("Performance"));
 #ifdef QLC_AI_ASSIST
     // AI Assist (docs/design/AI_ASSIST.md section 5): this computer's.
     m_aiPage = new AiSettingsPage(m_tabs);
@@ -560,6 +565,11 @@ void AppSettings::showAdvanced()
     m_tabs->setCurrentWidget(m_advancedPage);
 }
 
+void AppSettings::showPerformance()
+{
+    m_tabs->setCurrentWidget(m_performancePage);
+}
+
 void AppSettings::focusRigNetworks()
 {
     m_tabs->setCurrentIndex(0);
@@ -716,6 +726,7 @@ void AppSettings::accept()
         UpdateChecker::setAutoInstall(m_updateAuto->isChecked());
     }
 
+    static_cast<SystemTuningPage *>(m_performancePage)->apply();
 #ifdef QLC_AI_ASSIST
     static_cast<AiSettingsPage *>(m_aiPage)->apply();
 #endif

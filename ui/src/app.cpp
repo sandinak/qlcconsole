@@ -54,6 +54,7 @@
 #include "universe.h"
 #include <climits>
 #include "inputdevicenotices.h"
+#include "systemtuning.h"
 #include "ioplugincache.h"
 #include "patchundo.h"
 #include "inputpatch.h"
@@ -891,6 +892,16 @@ void App::init()
     /* A controller (or MIDI surface) patched as an input coming and going:
        said in the notice line, and in the footer while it is away. */
     m_inputNotices = new InputDeviceNotices(m_doc, this);
+    /* Settings ▸ Performance: full speed during Operate (no App Nap / power
+       throttling), and a footer entry when this computer isn't set up for
+       steady DMX timing then */
+    new SystemTuning(m_doc, this);
+    ShowStatus::instance()->setAction(SystemTuning::statusKey(), tr("Open Settings ▸ Performance"),
+        [this](QWidget *, const QVariantList &) {
+            AppSettings settings(this, this);
+            settings.showPerformance();
+            settings.exec();
+        });
     connect(m_inputNotices, &InputDeviceNotices::notice,
             this, &App::showInputDeviceNotice);
     /* Another pad where the show's is missing: one click uses it here and

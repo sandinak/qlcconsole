@@ -32,6 +32,18 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   people on the line, the subject height above it) in the Lighting Studio
   and Focus mode, as its DMX does, not to the deck below.
 
+### Settings ▸ Performance
+
+- **Settings ▸ Performance checks this computer for steady 50 Hz DMX.** Per
+  system (Linux and Raspberry Pi, macOS, Windows) it lists what helps the
+  DMX timer — real-time scheduling, CPU governor, Wi-Fi power saving, Low
+  Power Mode, the power plan — with its status and the command to copy or
+  the steps; the app never runs anything that needs an administrator.
+  During Operate the app now runs at full speed (macOS: no App Nap or idle
+  sleep; Windows: no EcoQoS throttling or idle sleep), and the footer says
+  when something important is off. On Linux the timer now takes real-time
+  priority within a smaller rtprio limit instead of being refused.
+
 ## [0.4.0] - 2026-11-02
 
 qlcconsole 0.4.0 carries the 0.3.1 polish, all of 0.4 ("Run the show") and

@@ -243,6 +243,19 @@ void MasterTimerPrivate::timerTick()
 void MasterTimerPrivate::run()
 {
     HANDLE mmcss = setTimerThreadRealtime();
+    {
+        /* For the system check (MasterTimer::timerSchedulingText()); once per
+           start, not per tick */
+        const QString wake = (m_systemTimerResolution == 0)
+                ? QStringLiteral("high-resolution timer")
+                : QStringLiteral("%1 ms system timer").arg(m_systemTimerResolution);
+        if (mmcss != NULL)
+            m_masterTimer->setTimerScheduling(MasterTimer::SchedulingRealtime,
+                QStringLiteral("MMCSS Pro Audio, %1").arg(wake));
+        else
+            m_masterTimer->setTimerScheduling(MasterTimer::SchedulingRefused,
+                QStringLiteral("MMCSS refused, high priority, %1").arg(wake));
+    }
 
     LARGE_INTEGER qpf;
     QueryPerformanceFrequency(&qpf);

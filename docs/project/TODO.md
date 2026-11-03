@@ -32,6 +32,22 @@ beams within 14 cm of their points.
   beside the USTs layer and drives the same pan/tilt (the layer wins only by
   order); UST-2 is not mounted on its riser (z 0, the others 0.61).
 
+## Settings ▸ Performance — built, leftovers (rttune, 2026-11-03)
+
+Built: per-OS system check (SystemTuning, ui/src/systemtuning*), full speed
+during Operate (macOS App Nap activity / Windows EcoQoS opt-out + no idle
+sleep), Show Status entry "system.tuning" in Operate, MasterTimer reports
+its scheduling (all three platforms; Linux SCHED_FIFO path verified on the
+Pi 5 by the perf runs). Help: docs/features/system-tuning.md.
+
+- Windows side unmeasured (VM down): EcoQoS opt-out, power-plan probe,
+  SetThreadExecutionState. Measure on the Windows host when it is back.
+- macOS App Nap hold not measured in the harness (qlcstress is not an app
+  bundle, App Nap never applies to it); relies on Apple's documented
+  behaviour, as ControllerKeepAlive does.
+- Timer slack (PR_SET_TIMERSLACK) measured on Linux: no effect within the
+  run-to-run noise, not added.
+
 ## 0.4.0 coverage audit — leftovers (tcov, 2026-11-02)
 
 Map: docs/dev/TEST_MAP.md Part 1b. Decide or fix:
@@ -1903,7 +1919,10 @@ rig edits, bulk repatching, cross-show consistency checks.
   open item ("Platforms and soak findings" above).
 
 - **Linux: package a way to actually grant SCHED_FIFO (2026-09-02, follow-on
-  to the item above, not started)** — the DMX timer thread's real-time
+  to the item above; 2026-11-03: Settings ▸ Performance now shows the
+  limits.d / setcap commands and the timer reports its policy; the timer
+  also takes priority within a smaller rtprio limit. Packaging (postinst
+  setcap / bundled limits.d rule) still undecided)** — the DMX timer thread's real-time
   priority request will silently fall back to normal scheduling on a stock
   Linux install (no `CAP_SYS_NICE`, no rtprio limit). Options to weigh:
   `setcap cap_sys_nice=eip` on the installed binary from a `.deb`

@@ -103,10 +103,30 @@ public:
      *  peak. This is what a load indicator should display. */
     double tickCpuPeakMs();
 
+    /** How the operating system schedules the timer thread. Set once each
+     *  time the thread starts -- never per tick. */
+    enum TimerScheduling
+    {
+        SchedulingUnknown = 0,  ///< the thread has not started yet
+        SchedulingNormal,       ///< ordinary priority: no real-time mechanism here
+        SchedulingRefused,      ///< real-time asked for, refused by the system
+        SchedulingRealtime      ///< real-time granted
+    };
+
+    /** The timer thread's scheduling, as of its last start. */
+    TimerScheduling timerScheduling() const;
+    /** In words, for a status line: which policy, which priority, why it was
+     *  refused ("SCHED_FIFO priority 89", "refused: Operation not
+     *  permitted"). Empty before the thread has started. */
+    QString timerSchedulingText() const;
+
 signals:
     void tickReady();
 
 private:
+    /** Called once by the timer thread as it starts (never per tick) */
+    void setTimerScheduling(TimerScheduling scheduling, const QString &text);
+
     /** Execute one timer tick. MasterTimerPrivate's thread passes
      *  @a wakeUniverses: each universe computes its frame on its own
      *  thread, woken from here. A tick called by hand (the tests) leaves
@@ -139,6 +159,12 @@ private:
      *  it (read = reset). Same threading contract as the wall-clock pair. */
     QAtomicInteger<quint32> m_tickCpuUs;
     QAtomicInteger<quint32> m_tickCpuPeakUs;
+
+    /** setTimerScheduling(): written by the timer thread as it starts, read
+     *  by the UI whenever it asks */
+    mutable QMutex m_schedulingMutex;
+    TimerScheduling m_scheduling;
+    QString m_schedulingText;
 
     /** The private reference to a MasterTimer platform dependent implementation */
     MasterTimerPrivate* d_ptr;
