@@ -119,6 +119,9 @@ fi
 GATE_REV=$(echo "${GATE_REV:-unknown}" | sed -E 's/^([0-9a-f]{12})[0-9a-f]*/\1/')
 
 LAUNCHER=()
+# ender's cache is on /Volumes/Ext while that drive is mounted (else the
+# internal one); other Macs keep theirs.
+. "$REPO/platforms/macos/ccache-env.sh"
 if [ -z "${NO_CCACHE:-}" ] && command -v ccache >/dev/null 2>&1; then
     # AUTOMOC_PATH_PREFIX: moc output #includes its header by include-dir
     # relative path, not absolute, so a moc file compiled in another copy

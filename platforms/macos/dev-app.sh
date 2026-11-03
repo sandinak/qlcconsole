@@ -28,6 +28,13 @@ JOBS="$(sysctl -n hw.perflevel0.logicalcpu 2>/dev/null || sysctl -n hw.ncpu)"
 PB=/usr/libexec/PlistBuddy
 LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
 
+# ccache on /Volumes/Ext when it is mounted (platforms/macos/ccache-env.sh).
+. "$REPO/platforms/macos/ccache-env.sh"
+LAUNCH=()
+if [ -z "${NO_CCACHE:-}" ] && command -v ccache >/dev/null 2>&1; then
+  LAUNCH=(-DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache)
+fi
+
 step() { echo; echo ">>> $*"; }
 
 QTPLUGINS="$QTDIR/share/qt/plugins"            # Homebrew's Qt6
@@ -42,12 +49,12 @@ if ! grep -qxF "QLC_MACOS_BUNDLE:PATH=$APP" "$BUILD/CMakeCache.txt" 2>/dev/null;
     -DCMAKE_BUILD_TYPE=RelWithDebInfo \
     -DCMAKE_PREFIX_PATH="$QTDIR/lib/cmake" \
     -DQLC_MACOS_BUNDLE="$APP" \
-    -DQLC_MACOS_DEV_BUNDLE=ON
+    -DQLC_MACOS_DEV_BUNDLE=ON ${LAUNCH[@]+"${LAUNCH[@]}"}
 else
   # Configured already: refresh it anyway (a couple of seconds), so the build
   # number and commit in the app's version are this commit's, not the last
   # configure's. QTDIR is exported above, so the Qt plugin paths stay right.
-  cmake "$BUILD" >/dev/null
+  cmake ${LAUNCH[@]+"${LAUNCH[@]}"} "$BUILD" >/dev/null
 fi
 
 step "Build (-j$JOBS)"
