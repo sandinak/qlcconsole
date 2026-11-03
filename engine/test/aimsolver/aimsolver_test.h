@@ -65,6 +65,7 @@ private slots:
     void areaOfNoSizeIsAPoint();
     void areaGivesEachArmItsOwnZone();
     void areaCoversHisChorus();
+    void areaCoverNeedsHeadAndDeck();
 };
 
 #endif

@@ -1281,7 +1281,7 @@ void AimSolver_Test::areaCoverageFollowsBeamWidth()
     const AreaCover::Coverage missing = AreaCover::coverage(props, area, beams(32.0, 2));
     QVERIFY(missing.fraction < 0.9 && missing.fraction > 0.75);
     QCOMPARE(missing.gap, QString("upstage left"));
-    QVERIFY(missing.caption().endsWith(QString("gap upstage left")));
+    QVERIFY(missing.caption().contains(QString("upstage left")));
 
     // A footprint straight down is a circle of the cone's radius at that depth.
     const QVector<QPointF> fp = AreaCover::footprint(QVector3D(0, 0, 5), QVector3D(0, 0, 1), 20.0);
@@ -1354,6 +1354,63 @@ void AimSolver_Test::areaGivesEachArmItsOwnZone()
     QVERIFY(AimSolver::frameFor(doc, zones.at(1).member, f1));
     QVERIFY((f0.position.x() < f1.position.x()) == (zones.at(0).aim.x() < zones.at(1).aim.x()));
     QVERIFY(qAbs(zones.at(0).aim.x() - zones.at(1).aim.x()) > 1.5f);
+    delete doc;
+}
+
+void AimSolver_Test::areaCoverNeedsHeadAndDeck()
+{
+    /* Q213: a spot counts as lit only if it is lit at head height AND on the
+       deck; the three fractions say which is missing. */
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    StageTarget *area = addArea(doc, "Chorus", QVector3D(3, 4.5f, 0), QSizeF(6, 3));
+
+    // A near-horizontal, wide beam from downstage at chest height
+    // (6 lights across): heads are lit all through, but the deck close to the
+    // lights is steeper than the beam reaches, so the deck near them is dark,
+    // and coverage drops from what head height alone would say.
+    QList<AreaCover::Beam> flat;
+    for (int c = 0; c < 6; ++c)
+    {
+        AreaCover::Beam b;
+        b.origin = QVector3D(0.5f + float(c), 8.0f, 1.6f);
+        b.aim = QVector3D(0.5f + float(c), 4.5f, 1.4f);
+        b.degrees = 60.0;
+        flat << b;
+    }
+    const AreaCover::Coverage low = AreaCover::coverage(props, area, flat, 96);
+    QVERIFY2(low.headOnly > 0.1, qPrintable(QString("head-only %1").arg(low.headOnly)));
+    QCOMPARE(low.deckOnly, 0.0);
+    // Both heights are what counts: less than the head-height reading alone.
+        QVERIFY(low.fraction < 0.9);
+    QVERIFY2(low.deckGap.contains("downstage"), qPrintable(low.deckGap));
+    QVERIFY(low.headGap.isEmpty() || !low.headGap.contains("downstage"));
+    QVERIFY(!low.deckGapRects().isEmpty());
+    QVERIFY(low.caption().contains("deck dark downstage"));
+    QVERIFY(!low.caption().contains("heads dark downstage"));
+
+    // A steep narrow beam is the other way round: its circle is wider at the
+    // deck than at head height, so a ring of deck is lit with heads dark.
+    QList<AreaCover::Beam> steep;
+    for (int r = 0; r < 2; ++r)
+        for (int c = 0; c < 3; ++c)
+        {
+            AreaCover::Beam b;
+            b.aim = QVector3D(1.0f + 2.0f * c, 3.75f + 1.5f * r, 1.4f);
+            b.origin = b.aim + QVector3D(0, 0, 4.6f);
+            b.degrees = 12.0;
+            steep << b;
+        }
+    const AreaCover::Coverage down = AreaCover::coverage(props, area, steep, 96);
+    QVERIFY2(down.deckOnly > 0.02, qPrintable(QString("deck-only %1").arg(down.deckOnly)));
+    QCOMPARE(down.headOnly, 0.0);
+    QVERIFY(!down.headGapRects().isEmpty());
+    QVERIFY(down.deckLit.count(true) > down.headLit.count(true));
+    // Where both are dark in the same places it is one gap, not two.
+    const AreaCover::Coverage dark = AreaCover::coverage(props, area, QList<AreaCover::Beam>(), 48);
+    QCOMPARE(dark.fraction, 0.0);
+    QVERIFY(!dark.caption().contains("deck dark"));
+
     delete doc;
 }
 
@@ -1450,7 +1507,20 @@ void AimSolver_Test::areaCoversHisChorus()
     const AreaCover::Coverage now = AreaCover::coverage(doc, chorus, members);
     qDebug().noquote() << QString("Chorus: %1% at the centre, %2% covered (%3)")
                           .arg(qRound(was.fraction * 100)).arg(qRound(now.fraction * 100)).arg(now.caption());
-    QVERIFY2(now.fraction > was.fraction + 0.1 && now.fraction > 0.85,
-             qPrintable(QString("covered %1 now, %2 before").arg(now.fraction).arg(was.fraction)));
+    qDebug().noquote() << QString("Chorus both %1% head-only %2% deck-only %3% (head height alone %4%, deck alone %5%): %6")
+                          .arg(now.fraction * 100, 0, 'f', 1).arg(now.headOnly * 100, 0, 'f', 1)
+                          .arg(now.deckOnly * 100, 0, 'f', 1).arg((now.fraction + now.headOnly) * 100, 0, 'f', 1)
+                          .arg((now.fraction + now.deckOnly) * 100, 0, 'f', 1).arg(now.caption());
+    // Q213: at head height alone it still reads as before (spread over the
+    // zones beats everything at the centre, and well over 85%); with the deck
+    // counted too it is lower, and the deck corners are what is dark.
+    const double headAlone = now.fraction + now.headOnly;
+    QVERIFY2(headAlone > was.fraction + was.headOnly + 0.1 && headAlone > 0.85,
+             qPrintable(QString("head height covers %1 now, %2 before")
+                        .arg(headAlone).arg(was.fraction + was.headOnly)));
+    QVERIFY2(now.fraction > 0.7 && now.fraction < headAlone - 0.05 && now.headOnly > 0.05,
+             qPrintable(QString("both %1, head only %2").arg(now.fraction).arg(now.headOnly)));
+    QVERIFY(!now.deckGap.isEmpty());
+    QVERIFY(now.caption().contains("deck dark"));
     delete doc;
 }

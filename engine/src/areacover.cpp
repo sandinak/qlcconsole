@@ -323,7 +323,7 @@ QVector<QPointF> AreaCover::footprint(const QVector3D &origin, const QVector3D &
     return out;
 }
 
-QList<QRectF> AreaCover::Coverage::gapRects() const
+static QList<QRectF> darkRuns(const QRectF &area, int cols, int rows, const QVector<bool> &lit)
 {
     QList<QRectF> out;
     if (cols <= 0 || rows <= 0 || lit.size() != cols * rows)
@@ -349,6 +349,10 @@ QList<QRectF> AreaCover::Coverage::gapRects() const
     return out;
 }
 
+QList<QRectF> AreaCover::Coverage::gapRects() const { return darkRuns(area, cols, rows, lit); }
+QList<QRectF> AreaCover::Coverage::deckGapRects() const { return darkRuns(area, cols, rows, deckLit); }
+QList<QRectF> AreaCover::Coverage::headGapRects() const { return darkRuns(area, cols, rows, headLit); }
+
 QString AreaCover::Coverage::caption() const
 {
     if (!valid())
@@ -356,7 +360,22 @@ QString AreaCover::Coverage::caption() const
     const int pct = int(std::floor(fraction * 100.0 + 0.5));
     if (gap.isEmpty() || pct >= 100)
         return tr("Covers all of %1").arg(name);
-    return tr("Covers %1% of %2 \u00b7 %3").arg(pct).arg(name, gapPhrase());
+    return tr("Covers %1% of %2 \u00b7 %3").arg(pct).arg(name, missingPhrase());
+}
+
+QString AreaCover::Coverage::missingPhrase() const
+{
+    if (gap.isEmpty())
+        return QString();
+    // Dark in the same places at both heights: one gap, no need to split it.
+    if (deckLit == headLit)
+        return gapPhrase();
+    QStringList parts;
+    if (!deckGap.isEmpty())
+        parts << (deckGap == tr("all over") ? tr("deck dark all over") : tr("deck dark %1").arg(deckGap));
+    if (!headGap.isEmpty())
+        parts << (headGap == tr("all over") ? tr("heads dark all over") : tr("heads dark %1").arg(headGap));
+    return parts.join(QStringLiteral(" \u00b7 "));
 }
 
 QString AreaCover::Coverage::gapPhrase() const
@@ -435,6 +454,8 @@ AreaCover::Coverage AreaCover::coverage(const MonitorProperties *props, const St
     cov.cols = qBound(4, samplesAcross, 200);
     cov.rows = qBound(3, int(std::lround(double(cov.cols) * cov.area.height() / cov.area.width())), 200);
     cov.lit.fill(false, cov.cols * cov.rows);
+    cov.headLit.fill(false, cov.cols * cov.rows);
+    cov.deckLit.fill(false, cov.cols * cov.rows);
 
     struct Cone { QVector3D o, a; float cosHalf; };
     QVector<Cone> cones;
@@ -451,28 +472,41 @@ AreaCover::Coverage AreaCover::coverage(const MonitorProperties *props, const St
     }
     const float subject = subjectHeight(target);
     const double w = cov.area.width() / double(cov.cols), h = cov.area.height() / double(cov.rows);
-    int litCount = 0;
+    auto inBeam = [&cones](const QVector3D &pt) {
+        for (const Cone &k : cones)
+        {
+            const QVector3D d = pt - k.o;
+            const float len = d.length();
+            if (len > 1e-4f && QVector3D::dotProduct(d, k.a) >= k.cosHalf * len)
+                return true;
+        }
+        return false;
+    };
+    int bothCount = 0, headOnlyCount = 0, deckOnlyCount = 0;
     for (int r = 0; r < cov.rows; ++r)
         for (int c = 0; c < cov.cols; ++c)
         {
             const float x = float(cov.area.left() + (double(c) + 0.5) * w);
             const float y = float(cov.area.top() + (double(r) + 0.5) * h);
-            const QVector3D pt(x, y, props->platformHeightAt(x, y) + subject);
-            bool lit = false;
-            for (const Cone &k : cones)
-            {
-                const QVector3D d = pt - k.o;
-                const float len = d.length();
-                if (len > 1e-4f && QVector3D::dotProduct(d, k.a) >= k.cosHalf * len)
-                {
-                    lit = true;
-                    break;
-                }
-            }
-            cov.lit[r * cov.cols + c] = lit;
-            litCount += lit ? 1 : 0;
+            // A spot is lit only if it is lit at head height AND on the
+            // deck, riser or step top under it (Q213).
+            const float surface = props->platformHeightAt(x, y);
+            const bool head = inBeam(QVector3D(x, y, surface + subject));
+            const bool deck = inBeam(QVector3D(x, y, surface));
+            const int at = r * cov.cols + c;
+            cov.headLit[at] = head;
+            cov.deckLit[at] = deck;
+            cov.lit[at] = head && deck;
+            bothCount += head && deck ? 1 : 0;
+            headOnlyCount += head && !deck ? 1 : 0;
+            deckOnlyCount += deck && !head ? 1 : 0;
         }
-    cov.fraction = double(litCount) / double(cov.cols * cov.rows);
+    const double all = double(cov.cols * cov.rows);
+    cov.fraction = double(bothCount) / all;
+    cov.headOnly = double(headOnlyCount) / all;
+    cov.deckOnly = double(deckOnlyCount) / all;
+    cov.deckGap = gapName(cov.deckLit, cov.cols, cov.rows);
+    cov.headGap = gapName(cov.headLit, cov.cols, cov.rows);
     cov.gap = gapName(cov.lit, cov.cols, cov.rows);
     return cov;
 }

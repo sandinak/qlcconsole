@@ -347,12 +347,14 @@ pan fine."* [scene]
 
 **MOV-13 An area left partly dark.** · N · moderate · v1 ✓
 Detects: a cue whose Aim look at an Area (with a size) leaves more than
-10% of it unlit at subject height, the beams as wide as their zoom has them
+10% of it unlit (lit means at subject height and on the deck, riser or step
+under it, Q213), the beams as wide as their zoom has them
 (docs/design/AREA_COVER.md). Said in the cue that sets the aim, not every
 cue it tracks through. Why: an area aim is meant to light everyone on it.
 Data: `AreaCover::coverage()`. Says: *"cue 2 Chorus beams aims UST-ALL at
-Chorus but lights only 9% of it (gaps all over). Zoom them wider, add a
-light, or make the area smaller."* [cue]
+Chorus but lights only 9% of it, at head height and on the deck (gaps all over).
+Zoom them wider, add a light, tilt some in so the beams reach the deck, or
+make the area smaller."* [cue]
 
 ### 3.2 Palettes and looks (PAL)
 
