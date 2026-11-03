@@ -41,6 +41,21 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Changed
 
+- **An Aim at an Area covers the area** (board Q209). Every light aimed at
+  a sized Area used to point at its centre, at the area's own height, and
+  the corners stayed dark. Now the area is split into one zone per light
+  (each arm of a two-arm beam its own) by where they hang -- low and
+  downstage lights take the front ranks, high and upstage ones the back
+  ranks, stage right lights the stage right zones, no beams crossed on a
+  regular rig -- and each light aims at subject height (1.4 m, or the
+  area's aim height) above the deck, riser or step under its zone. The
+  Show Tree layer's Position row draws the area, the zones, each beam's
+  footprint and the gaps hatched, with "Covers 86% of Chorus · gap upstage
+  left"; Show Review notes a cue leaving more than a tenth of an area dark
+  (**MOV-13**). **Existing shows:** area aims now spread over their area,
+  so their pan and tilt change; an Area with no size still aims at its
+  point. No file change.
+
 - **Aim lines have arrowheads.** The line from each light to where its beam
   lands (the order strip's connectors, the plan view in the Look Editor,
   the Formation editor and the stored-position plan) now ends in a small

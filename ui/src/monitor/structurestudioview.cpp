@@ -72,6 +72,7 @@
 #include "zraster.h"
 #include "rhiraster.h"
 #include "aimsolver.h"
+#include "areacover.h"
 #include "linecurve.h"
 #include "apputil.h"
 #include <QScopedValueRollback>
@@ -4798,6 +4799,15 @@ void StructureStudioView::rebuildAimTargets()
             lineFraction = AimSolver::lineMemberFractions(m_doc, lt, AimSolver::aimMembers(m_doc, scene, aimPal->id()),
                                                     LineSpread::fromParams(aimPal->effectParamValues()));
 
+    /* An area it covers: each head its own zone (AreaCover), by where they
+       all hang -- worked out once, read fresh per frame from its offset. */
+    QHash<GroupHead, QPointF> areaOffset;
+    if (StageTarget *at = props->stageTarget(aimTargetId))
+        if (AreaCover::covers(at) && aimPal != nullptr)
+            for (const AreaCover::Zone &z :
+                 AreaCover::zones(m_doc, at, AimSolver::aimMembers(m_doc, scene, aimPal->id())))
+                areaOffset.insert(z.member, z.offset);
+
     // Everything the scene touches, directly or through a group.
     QSet<quint32> candidates;
     foreach (quint32 fid, scene->fixtures())
@@ -4829,8 +4839,19 @@ void StructureStudioView::rebuildAimTargets()
             spec.colour = aimColour;
             spec.subjectHeight = subjectMode;
             spec.lineFraction = lineFraction.value(GroupHead(fid, -1), -1.0);
+            if (areaOffset.contains(GroupHead(fid, -1)))
+            {
+                spec.hasArea = true;
+                spec.areaOffset = areaOffset.value(GroupHead(fid, -1));
+            }
+            QPointF armSum;
             for (int arm : AimSolver::arms(fx))
             {
+                if (areaOffset.contains(GroupHead(fid, arm)))
+                {
+                    spec.armAreaOffsets.insert(arm, areaOffset.value(GroupHead(fid, arm)));
+                    armSum += areaOffset.value(GroupHead(fid, arm));
+                }
                 if (spec.armFractions.size() <= arm)
                     spec.armFractions.resize(arm + 1, -1.0);
                 spec.armFractions[arm] = lineFraction.value(GroupHead(fid, arm), -1.0);
@@ -4839,6 +4860,12 @@ void StructureStudioView::rebuildAimTargets()
                     spec.lineFraction = spec.armFractions.at(arm);
                 else if (spec.armFractions.at(arm) >= 0.0)
                     spec.lineFraction = (spec.lineFraction + spec.armFractions.at(arm)) / 2.0;
+            }
+            // The body's own trace on an area: its arms' zones' middle.
+            if (!spec.hasArea && !spec.armAreaOffsets.isEmpty())
+            {
+                spec.hasArea = true;
+                spec.areaOffset = armSum / double(spec.armAreaOffsets.size());
             }
             m_aimTarget.insert(fid, spec);
         }
@@ -4964,6 +4991,8 @@ bool StructureStudioView::aimPointFor(quint32 fid, int unit, QVector3D &out,
         out = spec.armFractions.at(unit) >= 0.0
                 ? AimSolver::linePointFor(m_doc, member, t, spec.armFractions.at(unit))
                 : props->targetAimPoint(t);
+    else if (spec.armAreaOffsets.contains(unit) && AreaCover::covers(t))
+        out = AreaCover::pointAt(props, t, spec.armAreaOffsets.value(unit));
     else
         out = AimSolver::aimPointFor(m_doc, member, t, spec.subjectHeight);
     return true;
@@ -4987,6 +5016,8 @@ bool StructureStudioView::aimPointFor(quint32 fid, QVector3D &out) const
         out = it.value().lineFraction >= 0.0
                 ? AimSolver::linePointFor(m_doc, fid, t, it.value().lineFraction)
                 : props->targetAimPoint(t);
+    else if (it.value().hasArea && AreaCover::covers(t))
+        out = AreaCover::pointAt(props, t, it.value().areaOffset);
     else
         out = AimSolver::aimPointFor(m_doc, fid, t, it.value().subjectHeight);
     return true;

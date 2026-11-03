@@ -19,7 +19,7 @@ look that aims at it re-solves automatically.
 | **None** (a plain mark) | A bare point | Amber crosshair |
 | **Person** | A standing subject of a given **Height** (5'9" unless set), drawn that tall and aimed at the chest — 80% of it | Crosshair over a lofted human silhouette |
 | **Drum Kit** | A low, wide subject | Crosshair over a footprint rectangle, aimed lower by default |
-| **Area** | A region of deck, not a point | A dashed-outline footprint rectangle |
+| **Area** | A region of deck, not a point: the lights aimed at it [cover it](#area-targets), each its own part | A dashed-outline footprint rectangle |
 | **Structure** | Bound to a truss/platform/steps/tower — its position *follows* whatever it's bound to | Crosshair, position always live |
 | **Line** | A curve in space — every light aimed at it gets its **own** point on it, evenly spaced | The curve, square handles at its ends, round ones at its mid points, and a crosshair at its centre |
 
@@ -78,6 +78,36 @@ and effects centred on a target. On show means:
 A target you place stays drawn (you can't lose one you just put down), and
 so does a selected one. **Show ▸ All targets**, on the plot's or the Rig
 Overview's footer, draws them all, always; it is remembered.
+
+## Area targets
+
+An **Area** with a size (width across the stage, depth up and down it) is
+covered, not pointed at: an Aim look at it splits it into one zone per
+light and aims each light at its own zone. Every arm of a two-arm beam is a
+light of its own. Before 0.3.1 every light pointed at the area's centre,
+at the area's own height, and the corners stayed dark.
+
+- **Who takes which part.** The lights are matched to the zones by where
+  they hang: low and downstage lights take the downstage ranks, high and
+  upstage ones the ranks behind, stage right lights the stage right zones.
+  Two towers of three shelves either side of a chorus on risers: each
+  tower lights its own half, the bottom shelf the front rank and the top
+  shelf the back rank on the risers. For a regular rig no two beams cross.
+- **How high.** Each light aims at its zone's centre, at subject height
+  above whatever is under it there (the deck, a riser, a step's tread): a
+  person's chest, 1.4 m, or the area's aim height when you set one. Not the
+  area's own Z.
+- **How much it covers.** Under the layer's Position row in the Show Tree,
+  the plan shows the area, each light's zone (dotted), each beam's
+  footprint at subject height (as wide as its zoom has it now, else the
+  definition's lens, else 20°), and hatches in red what no beam reaches.
+  The line above it says how much is lit: *Covers 86% of Chorus · gap
+  upstage left*. Show Review notes a cue that leaves more than a tenth of
+  an area dark ([MOV-13](show-review.md)).
+- **When it's still a point.** An Area with no size, and every other kind,
+  aims every light at its one point, as before.
+
+The zoning rule, the coverage model and why: docs/design/AREA_COVER.md.
 
 ## Line targets
 

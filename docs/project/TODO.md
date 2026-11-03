@@ -10,6 +10,21 @@ under `~/.claude/.../memory/`.
 
 ---
 
+## Area cover: an Aim at an Area covers it (Q209, areacover, 2026-11-03) — built
+
+Zones by where the lights hang (least-squares match of x and depth key to
+the cells), subject height above the surface under each zone, coverage at
+subject height, the plan under an area aim's Position row, MOV-13.
+docs/design/AREA_COVER.md. Changes the DMX of existing area aims
+(CHANGELOG ▸ Changed). Leftovers:
+- The Look Editor and the formation editor show no area plan yet (the Show
+  Tree layer page and its pop-out do).
+- Coverage reads the zoom from the scene's own values or the fixture's
+  current ones, not a Zoom look on another layer of the cue.
+- Coverage counts a low beam passing through subject height as lighting
+  everyone in its path: no shadowing by the people in front.
+- No "point at the centre" option: add one only if a show needs it.
+
 ## Faster packaging (tools/04-pkgfast, 2026-11-03) -- done
 
 `make dmg`: no tests (`QLC_NO_TESTS`, now also in ai/ and tools/artnetprobe), ccache for both slices, build

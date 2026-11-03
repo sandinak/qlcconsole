@@ -2201,6 +2201,75 @@ void ShowReview_Test::mov08()
     QVERIFY(quiet("MOV-08"));
 }
 
+void ShowReview_Test::mov13()
+{
+    /* Two spots hung 6 m up over a 4 x 2 m area, aimed at it in a cue: each
+       its own half (AREA_COVER.md). Narrow, they leave most of it dark. */
+    MonitorProperties *mp = m_doc->monitorProperties();
+    auto spot = [&](const QString &name, quint32 address, double x, double lens) {
+        QLCFixtureDef *def = new QLCFixtureDef();
+        Fixture *fx = make(m_doc, name, QStringLiteral("Spot ") + name, QLCFixtureDef::MovingHead, def,
+                           { chan(def, "Pan", QLCChannel::PositionPan), chan(def, "Tilt", QLCChannel::PositionTilt),
+                             chan(def, "Dimmer", QLCChannel::IntensityMasterDimmer) },
+                           200, 0, address, QLCPhysical::BeamEmission, lens);
+        mp->setFixturePosition(fx->id(), 0, 0, QVector3D(float(x * 1000.0), 4000.0f, 6.0f));
+        FixtureRigProps rp = mp->fixtureRigProps(fx->id());
+        rp.mountingType = Truss::TopHung;
+        mp->setFixtureRigProps(fx->id(), rp);
+        return fx;
+    };
+    QList<Fixture *> narrow { spot("N1", 0, 1.0, 8.0), spot("N2", 10, 3.0, 8.0) };
+    StageTarget *area = mp->addStageTarget();
+    area->setName(QStringLiteral("Chorus"));
+    area->setKind(StageTarget::Kind::Area);
+    area->setPosition(QVector3D(2.0f, 4.0f, 0.0f));
+    area->setFootprint(QSizeF(4.0, 2.0));
+    QLCPalette *aim = new QLCPalette(QLCPalette::Aim, m_doc);
+    aim->setName(QStringLiteral("Chorus"));
+    aim->setStageTargetId(area->id());
+    QVERIFY(m_doc->addPalette(aim));
+    QLCPalette *level = new QLCPalette(QLCPalette::Dimmer, m_doc);
+    level->setValue(255);
+    QVERIFY(m_doc->addPalette(level));
+
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 lid = st->addCueList(st->addProduction("Show"), "Act 1");
+    const quint32 c1 = st->addCue(lid, -1, "Chorus up");
+    auto aimAt = [&](const QList<Fixture *> &who) {
+        Target t;
+        for (Fixture *fx : who)
+            t.fixtures << fx->id();
+        const quint32 layer = st->addLayer(c1, t);
+        Look look;
+        look.key = KeyPosition;
+        look.palettes = { aim->id() };
+        QVERIFY(st->setLayerLook(c1, layer, look));
+        Look d;
+        d.key = KeyDimmer;
+        d.palettes = { level->id() };
+        QVERIFY(st->setLayerLook(c1, layer, d));
+    };
+    aimAt(narrow);
+    QVERIFY(fires("MOV-13"));
+    const ReviewFinding f = findings("MOV-13").first();
+    QCOMPARE(f.severity, ReviewFinding::Note);
+    QVERIFY2(f.message.contains("Chorus") && f.message.contains("lights only")
+             && f.message.contains("2 light")
+             && f.message.contains("Zoom them wider"), qPrintable(f.message));
+    QVERIFY(f.targets.contains(QStringLiteral("target:%1").arg(area->id())));
+
+    // Wide enough to light it all: nothing to say.
+    st->removeLayer(c1, st->cueList(lid)->cue(c1)->layers.last().id);
+    aimAt({ spot("W1", 20, 1.0, 60.0), spot("W2", 30, 3.0, 60.0) });
+    QVERIFY(quiet("MOV-13"));
+
+    // An area of no size is a point: no cover to speak of.
+    st->removeLayer(c1, st->cueList(lid)->cue(c1)->layers.last().id);
+    aimAt(narrow);
+    area->setFootprint(QSizeF());
+    QVERIFY(quiet("MOV-13"));
+}
+
 namespace
 {
 /** A cue layer lighting fixture @a f at @a dim (no position). */

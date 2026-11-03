@@ -632,8 +632,11 @@ public:
     QString layerContentsText() const;
     /** The order strip under a line aim's Position row (null: none). */
     QWidget *lineStrip() const;
-    /** The plan view under it (D19), a LinePlanView (tests). */
+    /** The plan view under it (D19), a LinePlanView (tests). An area
+     *  aim's Position has one too: its cover (AREA_COVER.md). */
     QWidget *linePlan() const;
+    /** The Aim palette of a Position look that covers an Area, else null. */
+    const QLCPalette *areaAimPalette(const ShowTree::Look &look) const;
     /** Open the order strip and plan in a window of their own (the pop-out;
      *  raises the one there is). */
     void openLinePlanWindow();

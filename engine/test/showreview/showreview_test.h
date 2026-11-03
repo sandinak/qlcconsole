@@ -101,6 +101,7 @@ private slots:
     void mov01();
     void mov02();
     void mov08();
+    void mov13();
     /** The VcIndex reads the Virtual Console without it */
     void vcIndexReads();
     void vc03();
