@@ -173,7 +173,7 @@ is lit, not only its RGB pixels.
 **On the beat: a speed master.** An effect can run on a **speed
 master**, so one tap moves everything on it together.
 
-1. In the Library, right-click **Truss Wave** → **Edit**.
+1. In the Library, right-click **Truss Wave** → **Edit Effect**.
 2. In the Look Editor, set **Speed** to **Main Speed**.
 3. Look at the footer: a **Main Speed 120** button appears, beside the
    Grand Master. The wave now counts in beats of that master.

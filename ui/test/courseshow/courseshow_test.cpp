@@ -1044,7 +1044,7 @@ void CourseShow_Test::lessonOneSetInThisCue()
             if (QMenu *m = qobject_cast<QMenu *>(w))
                 if (m->isVisible())
                     for (QAction *a : m->actions())
-                        if (a->menu() != nullptr && a->text() == QStringLiteral("Set in this cue"))
+                        if (a->menu() != nullptr && a->text() == QStringLiteral("Set in This Cue"))
                             for (QAction *p : a->menu()->actions())
                                 if (p->text() == QStringLiteral("Magenta"))
                                 {
@@ -3917,10 +3917,10 @@ static bool lessonTwoThreeByMouse(Doc *doc, ShowTreeView *view, const QString &s
     for (QTreeWidgetItemIterator it(view->tree()); *it; ++it)
         (*it)->setExpanded(true);
     // Split is there, greyed: the set is one layer.
-    LESSON_STEP(!treeMenu(view, treeLayer(view, "1.0.5", "Truss Sides"), { QStringLiteral("Split layer (one per group)") }),
+    LESSON_STEP(!treeMenu(view, treeLayer(view, "1.0.5", "Truss Sides"), { QStringLiteral("Split Layer (One per Group)") }),
                 "Split isn't greyed on a set's layer");
     LESSON_STEP(treeMenu(view, treeLayer(view, "1.0.5", "Truss Sides"),
-                         { QStringLiteral("Add child layer"), QStringLiteral("Trusses SR") }), "Add child layer → Trusses SR");
+                         { QStringLiteral("Add Child Layer"), QStringLiteral("Trusses SR") }), "Add child layer → Trusses SR");
     settle(100);
     for (QTreeWidgetItemIterator it(view->tree()); *it; ++it)
         (*it)->setExpanded(true);
@@ -4107,7 +4107,7 @@ static bool lessonTwoFourByMouse(Doc *doc, ShowTreeView *view, const QString &sh
     LESSON_STEP(clickCueRow(view, "Steps"), "click Steps");
     const QString key = st->keyForPalette(sparkle->id());
     qInfo().noquote() << "[2.4] sparkle key" << key << "| row" << rowText(view, key);
-    LESSON_STEP(rowMenu(view, key, "Its own colour / dimmer", "White"), "Its own colour → White");
+    LESSON_STEP(rowMenu(view, key, "Its Own Colour / Dimmer", "White"), "Its own colour → White");
     settle(100);
     qInfo().noquote() << "[2.4] after own colour:" << rowText(view, key);
     LESSON_STEP(rowText(view, key).startsWith(QStringLiteral("Step Sparkle in White")), rowText(view, key));
@@ -4378,7 +4378,7 @@ static bool lessonTwoSixByMouse(App *app, Doc *doc, ShowTreeView *view, const QS
         if ((*it)->text(0).startsWith(QStringLiteral("Hits")))
             hitsRow = *it;
     LESSON_STEP(hitsRow != nullptr, "no Hits row");
-    LESSON_STEP(treeMenu(view, hitsRow, { QStringLiteral("Make VC page") }), "Make VC page");
+    LESSON_STEP(treeMenu(view, hitsRow, { QStringLiteral("Make VC Page") }), "Make VC page");
     settle(200);
     qInfo().noquote() << "[2.6] after Make VC page:" << hintOf(view)->text();
     VCFrame *frame = nullptr;
@@ -4649,7 +4649,7 @@ void CourseShow_Test::lessonTwoThreeExtension()
     QTRY_VERIFY_WITH_TIMEOUT(uchar(sends(doc, "DS Step 1").at(0)) > 0 && uchar(sends(doc, "DS Step 1").at(2)) == 0, kRigWait);
     for (QTreeWidgetItemIterator it(view->tree()); *it; ++it)
         (*it)->setExpanded(true);
-    QVERIFY(treeMenu(view, treeLayer(view, "1.0.5", "CS + DS"), { QStringLiteral("Split layer (one per group)") }));
+    QVERIFY(treeMenu(view, treeLayer(view, "1.0.5", "CS + DS"), { QStringLiteral("Split Layer (One per Group)") }));
     QVERIFY(view->selectNode(bridge));
     settle(50);
     qInfo().noquote() << "[2.3x] after Split:" << view->cueLayerItems().join(" | ");
@@ -4689,7 +4689,7 @@ void CourseShow_Test::lessonTwoThreeExtension()
         QVERIFY(dropPaletteOnRow(doc, view, "Truss Sides", pal).startsWith(pal + " → layer Truss Sides in 1.0.6"));
     for (QTreeWidgetItemIterator it(view->tree()); *it; ++it)
         (*it)->setExpanded(true);
-    QVERIFY(treeMenu(view, treeLayer(view, "1.0.6", "Truss Sides"), { QStringLiteral("Add child layer"), QStringLiteral("Trusses SL") }));
+    QVERIFY(treeMenu(view, treeLayer(view, "1.0.6", "Truss Sides"), { QStringLiteral("Add Child Layer"), QStringLiteral("Trusses SL") }));
     QVERIFY(view->selectNode(cueNumbered(doc, "1.0.6")));
     settle(50);
     QVERIFY(dropPaletteOnRow(doc, view, "Trusses SL", "Amber").startsWith("Amber → layer Trusses SL in 1.0.6"));
@@ -4720,7 +4720,7 @@ void CourseShow_Test::lessonTwoFourExtension()
     QVERIFY(open(levelTwoFinish(4)));
     Doc *doc = m_app->doc();
     ShowTreeView *view = showTree();
-    QVERIFY(libraryMenu(view, "Truss Wave", { QStringLiteral("Edit Palette") }));
+    QVERIFY(libraryMenu(view, "Truss Wave", { QStringLiteral("Edit Effect") }));   // an effect palette
     settle(200);
     QComboBox *speed = view->findChild<QComboBox *>(QStringLiteral("effectSpeedMaster"));
     QVERIFY(speed != nullptr && speed->isVisible());
@@ -4749,9 +4749,9 @@ void CourseShow_Test::lessonTwoFourExtension()
     settle(50);
     QVERIFY(clickCueRow(view, "Steps"));
     const QString key = doc->showTree()->keyForPalette(paletteNamed(doc, "Step Sparkle")->id());
-    QVERIFY(rowMenu(view, key, "Its own colour / dimmer", "Amber"));
+    QVERIFY(rowMenu(view, key, "Its Own Colour / Dimmer", "Amber"));
     QVERIFY2(rowText(view, key).startsWith(QStringLiteral("Step Sparkle in Amber")), qPrintable(rowText(view, key)));
-    QVERIFY(rowMenu(view, key, "Its own colour / dimmer", "None of its own"));
+    QVERIFY(rowMenu(view, key, "Its Own Colour / Dimmer", "None of its own"));
     QCOMPARE(rowText(view, key), QStringLiteral("Step Sparkle"));
     doc->resetModified();
 }
@@ -4988,7 +4988,7 @@ void CourseShow_Test::lessonTwoSixFiresAHit()
     for (QTreeWidgetItemIterator it(view->tree()); *it; ++it)
         if ((*it)->text(0).startsWith(QStringLiteral("Hits")))
             hits = *it;
-    QVERIFY(treeMenu(view, hits, { QStringLiteral("Make VC page") }));
+    QVERIFY(treeMenu(view, hits, { QStringLiteral("Make VC Page") }));
     QStringList captions;
     for (VCButton *b : vc->contents()->findChildren<VCButton *>())
         captions << b->caption();

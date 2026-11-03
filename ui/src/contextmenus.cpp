@@ -906,11 +906,9 @@ void ContextMenus::function(ContextMenu &menu, Doc *doc, const QList<quint32> &f
     if (fids.size() == 1 && menu.menu() != nullptr)
     {
         QMenu *staging = new QMenu(menu.menu());
+        // Its own name (learnTrigger), the same on every menu that offers it.
         if (QAction *learn = ControlLearnDialog::addTo(staging, doc, ControlMap::function(fid), parent))
-        {
-            learn->setObjectName(QStringLiteral("ctxLearnTrigger"));
             menu.add(ContextMenu::Kind, learn);
-        }
         if (editable)
             if (QMenu *runs = EffectRunsMenu::addForFunction(staging, doc, f))
                 menu.add(ContextMenu::Kind, runs->menuAction());
