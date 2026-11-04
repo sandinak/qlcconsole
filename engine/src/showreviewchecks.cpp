@@ -415,9 +415,18 @@ static void fix18(ReviewContext &ctx, QList<ReviewFinding> &out)
     QHash<QString, int> nameCount;
     for (auto it = byDef.constBegin(); it != byDef.constEnd(); ++it)
         nameCount[QStringLiteral("%1 %2").arg(it.key()->manufacturer(), it.key()->model()).trimmed()]++;
+    /* In a stable order (name, then first fixture): the map is keyed by pointer,
+       whose order changes from load to load -- and so would the labels. */
+    QList<const QLCFixtureDef *> order = byDef.keys();
+    std::sort(order.begin(), order.end(), [&](const QLCFixtureDef *x, const QLCFixtureDef *y) {
+        const QString nx = QStringLiteral("%1 %2").arg(x->manufacturer(), x->model());
+        const QString ny = QStringLiteral("%1 %2").arg(y->manufacturer(), y->model());
+        return nx != ny ? nx < ny : byDef.value(x).first() < byDef.value(y).first();
+    });
     QSet<QString> usedLabels;
-    for (auto it = byDef.constBegin(); it != byDef.constEnd(); ++it)
+    for (const QLCFixtureDef *def : order)
     {
+        const auto it = byDef.constFind(def);
         const Fixture::EffectiveBeam &e = shown.value(it.key());
         const bool pt = e.panAssumed || e.tiltAssumed;
         QString what, assume;
