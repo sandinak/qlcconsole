@@ -984,6 +984,9 @@ private:
     /** Esc that nothing took: the docked Workbench backs out (to the page:
      *  ↩ Show Tree), else the Look Editor under the page closes. */
     void keyPressEvent(QKeyEvent *ev) override;
+    /** Esc's first job: the docked Workbench backs out a level, else the
+     *  Look Editor closes. False: nothing to back out of. */
+    bool backOutOneLevel();
     /** Set @a look on the layer, on the carried-in @a target, or the cue. */
     bool applyLook(quint32 cueId, quint32 layerId, const ShowTree::Target &target,
                    const ShowTree::Look &look);

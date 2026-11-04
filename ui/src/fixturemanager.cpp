@@ -98,6 +98,7 @@
 #include "showstatus.h"
 #include "itemicons.h"
 #include "scenery.h"
+#include "editkeys.h"
 
 // Bumped when the power pane was added as a third section: an older 2-section
 // saved state would collapse the new pane to zero width and hide it.
@@ -570,6 +571,18 @@ void FixtureManager::initDataView()
             if (m_removeAction != NULL && m_removeAction->isEnabled())
                 QMetaObject::invokeMethod(this, &FixtureManager::slotRemove, Qt::QueuedConnection);
         });
+    }
+    /* The edit keys every list has (EditKeys): ⌘D duplicates -- a fixture
+       as a new one in the Inventory, a group as a copy beside it -- ⌘C ⌘V
+       the same from what was copied, Esc clears the selection. ⌘D is the
+       tree's while it has the focus and a selection; Control ▸ Dump DMX
+       keeps it otherwise. */
+    {
+        EditKeys::Verbs keys;
+        keys.duplicate = [this]() { duplicateSelection(); };
+        keys.copy = [this]() { copySelection(); };
+        keys.paste = [this]() { pasteCopied(); };
+        EditKeys::install(m_fixtures_tree, keys);
     }
     m_fixtures_tree->setIconSize(QSize(32, 32));
     m_fixtures_tree->setContextMenuPolicy(Qt::CustomContextMenu);
@@ -1204,6 +1217,126 @@ bool FixtureManager::selectFixture(quint32 id)
     m_fixtures_tree->setCurrentItem(item);
     m_fixtures_tree->scrollToItem(item);
     return true;
+}
+
+void FixtureManager::selectedRows(QList<quint32> &fixtures, QList<quint32> &groups) const
+{
+    fixtures.clear();
+    groups.clear();
+    for (QTreeWidgetItem *item : m_fixtures_tree->selectedItems())
+    {
+        const QVariant gv = item->data(KColumnName, PROP_GROUP);
+        if (gv.isValid())
+        {
+            if (m_doc->fixtureGroup(gv.toUInt()) != NULL && !groups.contains(gv.toUInt()))
+                groups << gv.toUInt();
+            continue;
+        }
+        // A fixture row (a head row is its fixture's).
+        const QVariant fv = item->data(KColumnName, PROP_ID);
+        if (fv.isValid() && m_doc->fixture(fv.toUInt()) != NULL && !fixtures.contains(fv.toUInt()))
+            fixtures << fv.toUInt();
+    }
+}
+
+QList<quint32> FixtureManager::duplicate(const QList<quint32> &fixtures, const QList<quint32> &groups)
+{
+    if (m_doc->mode() != Doc::Design)
+        return QList<quint32>();
+    QList<quint32> made;
+    /* A fixture: a new one like it -- definition, mode, power, rules --
+       unpatched, in the Inventory, named on ("Spot #2"). Patch it from
+       there. */
+    for (quint32 fid : fixtures)
+    {
+        Fixture *src = m_doc->fixture(fid);
+        if (src == NULL)
+            continue;
+        QByteArray xml;
+        {
+            QXmlStreamWriter w(&xml);
+            w.writeStartDocument();
+            src->saveXML(&w);
+            w.writeEndDocument();
+        }
+        QXmlStreamReader r(xml);
+        while (!r.atEnd() && !r.isStartElement())
+            r.readNext();
+        Fixture *fx = new Fixture(m_doc);
+        if (!r.isStartElement() || !fx->loadXML(r, m_doc, m_doc->fixtureDefCache()))
+        {
+            delete fx;
+            continue;
+        }
+        fx->setPatched(false);
+        fx->setAddressClash(false);
+        fx->setUniverse(0);
+        fx->setAddress(0);
+        fx->setName(m_doc->uniqueFixtureName(src->name()));
+        if (!m_doc->addFixture(fx))
+        {
+            delete fx;
+            continue;
+        }
+        made << fx->id();
+    }
+    // A group: the same fixtures, laid out the same, in the same folder.
+    for (quint32 gid : groups)
+    {
+        FixtureGroup *src = m_doc->fixtureGroup(gid);
+        if (src == NULL)
+            continue;
+        FixtureGroup *grp = new FixtureGroup(m_doc);
+        grp->copyFrom(src);
+        grp->setPath(src->path());
+        grp->setName(Doc::nextUniqueName(src->name(), [this](const QString &n) {
+            foreach (FixtureGroup *g, m_doc->fixtureGroups())
+                if (g->name() == n)
+                    return true;
+            return false;
+        }));
+        if (!m_doc->addFixtureGroup(grp))
+        {
+            delete grp;
+            continue;
+        }
+    }
+    if (!made.isEmpty() || !groups.isEmpty())
+    {
+        m_fixtures_tree->updateTree();
+        m_doc->setModified();
+    }
+    // The new fixtures selected, to patch or rename next.
+    if (!made.isEmpty())
+    {
+        m_fixtures_tree->clearSelection();
+        for (quint32 id : made)
+            if (QTreeWidgetItem *item = m_fixtures_tree->fixtureItem(id))
+            {
+                for (QTreeWidgetItem *p = item->parent(); p != NULL; p = p->parent())
+                    p->setExpanded(true);
+                item->setSelected(true);
+                m_fixtures_tree->setCurrentItem(item, 0, QItemSelectionModel::NoUpdate);
+            }
+    }
+    return made;
+}
+
+void FixtureManager::duplicateSelection()
+{
+    QList<quint32> fixtures, groups;
+    selectedRows(fixtures, groups);
+    duplicate(fixtures, groups);
+}
+
+void FixtureManager::copySelection()
+{
+    selectedRows(m_copiedFixtures, m_copiedGroups);
+}
+
+void FixtureManager::pasteCopied()
+{
+    duplicate(m_copiedFixtures, m_copiedGroups);
 }
 
 void FixtureManager::slotFixturesSearchChanged(const QString &text)

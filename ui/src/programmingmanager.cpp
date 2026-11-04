@@ -46,6 +46,7 @@
 #include "mainbar.h"
 #include "speedmasterspanel.h"
 #include "programmingmanager.h"
+#include "editkeys.h"
 #include "contextmenus.h"
 #include "effectrunsmenu.h"
 #include "effectorigin.h"
@@ -749,6 +750,55 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
         // inline rename editor stays a text edit.
         sc->setContext(Qt::WidgetShortcut);
         connect(sc, &QShortcut::activated, this, [this]() { deleteTreeSelection(m_paletteTree); });
+    }
+
+    /* The edit keys every list has (EditKeys): ⌘D duplicates what is
+       selected -- the list's while it has the focus and a selection, Control
+       ▸ Dump DMX keeps ⌘D otherwise -- and Esc backs the Workbench out, else
+       clears the selection. */
+    const auto backOut = [this]() {
+        return !isWorkbenchLent() && m_workbench->backOut();
+    };
+    {
+        EditKeys::Verbs keys;
+        keys.duplicate = [this]() {
+            QList<quint32> pals;
+            for (QTreeWidgetItem *it : m_paletteTree->selectedItems())
+            {
+                const quint32 pid = m_paletteTree->itemPaletteId(it);
+                if (pid != QLCPalette::invalidId())
+                    pals << pid;
+            }
+            duplicatePalettes(pals);
+        };
+        keys.backOut = backOut;
+        EditKeys::install(m_paletteTree, keys);
+    }
+    {
+        EditKeys::Verbs keys;
+        keys.duplicate = [this]() {
+            QList<quint32> pals, fns;
+            effectTargets(m_effectsList->currentItem(), pals, fns);
+            duplicatePalettes(pals);
+            if (!fns.isEmpty())
+                duplicateFunctions(fns);
+        };
+        keys.backOut = backOut;
+        EditKeys::install(m_effectsList, keys);
+    }
+    {
+        EditKeys::Verbs keys;
+        keys.duplicate = [this]() {
+            QList<quint32> fids;
+            for (const ProgrammingOutline::Row &r : m_outline->selectedRows())
+                if ((r.kind == ProgrammingOutline::SceneRow || r.kind == ProgrammingOutline::FunctionRow)
+                    && !fids.contains(r.id))
+                    fids << r.id;
+            if (!fids.isEmpty())
+                duplicateFunctions(fids);
+        };
+        keys.backOut = backOut;
+        EditKeys::install(m_outline, keys);
     }
 
     // The section last left open (Scenes the first time).
@@ -2202,6 +2252,25 @@ void ProgrammingManager::slotCopy()
         }
     }
 
+    // Effects: an effect palette, an EFX or an RGB Matrix (it copied the
+    // outline's scene before).
+    if (m_effectsList != nullptr && m_effectsList->hasFocus())
+    {
+        QList<quint32> pals, fns;
+        effectTargets(m_effectsList->currentItem(), pals, fns);
+        if (!pals.isEmpty())
+        {
+            m_clipboardPalette = pals.first();
+            m_clipboardFunction = Function::invalidId();
+        }
+        else if (!fns.isEmpty())
+        {
+            m_clipboardFunction = fns.first();
+            m_clipboardPalette = QLCPalette::invalidId();
+        }
+        return;
+    }
+
     for (const ProgrammingOutline::Row &r : m_outline->selectedRows())
         if (r.kind == ProgrammingOutline::SceneRow || r.kind == ProgrammingOutline::FunctionRow)
         {
@@ -2212,13 +2281,36 @@ void ProgrammingManager::slotCopy()
 
 void ProgrammingManager::slotPaste()
 {
-    if (m_paletteTree->hasFocus() && m_clipboardPalette != QLCPalette::invalidId())
+    const bool effects = m_effectsList != nullptr && m_effectsList->hasFocus();
+    if ((m_paletteTree->hasFocus() || effects) && m_clipboardPalette != QLCPalette::invalidId())
     {
         duplicatePalette(m_clipboardPalette);
         return;
     }
     if (m_doc->function(m_clipboardFunction) != NULL)
         duplicateFunctions({ m_clipboardFunction });
+}
+
+void ProgrammingManager::duplicatePalettes(const QList<quint32> &pids)
+{
+    // One: the copy opens to edit, as ⌘C ⌘V does. Several: copied, the
+    // last one shown.
+    if (pids.size() == 1)
+    {
+        duplicatePalette(pids.first());
+        return;
+    }
+    quint32 last = QLCPalette::invalidId();
+    for (quint32 pid : pids)
+    {
+        const quint32 copyId = m_doc->paletteOps()->duplicate(pid);
+        if (m_doc->palette(copyId) != NULL)
+            last = copyId;
+    }
+    if (last == QLCPalette::invalidId())
+        return;
+    m_paletteTree->updateTree();
+    revealPalette(last);
 }
 
 void ProgrammingManager::duplicatePalette(quint32 pid)

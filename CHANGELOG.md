@@ -14,6 +14,22 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Added
 
+- **The same edit keys in every list** (board WF1-A, W2-Q2). **⌫**,
+  **F2**, **⌘C / ⌘V**, **⌘D** and **⌘F** now do the same thing in the Show
+  Tree, Build's Palettes, Effects and Scenes, the Fixtures tab, Plot layers
+  and the plot, with no new menu items. New here: **⌫ on the plot** takes
+  the selection off it, every selected fixture back to the Inventory (still
+  in the show), a structure asking first, one ⌘Z for all of it; **⌘D in
+  the Fixtures tab** makes a new fixture like the selected one, unpatched in
+  the Inventory ("Front #2"), or a copy of a group (⌘C ⌘V the same); **⌘D
+  in Build** duplicates palettes, scenes and effects, and ⌘C ⌘V in Effects
+  copies the effect (it copied the selected scene); **F2 on the plot**
+  renames in Plot layers; **⌘F** on the plot or in Plot layers goes to its
+  search; **⌫ / ⌘D in Plot layers** act as on the plot. **Esc** still backs
+  out of the Workbench, the Look Editor or a plot assembly first; with
+  nothing to back out of, it now lets go of the selection, in every list
+  and on the plot. One table: [Edit keys](docs/features/shortcuts.md#edit-keys-the-same-in-every-list).
+
 - **Notes beside the Show Tree.** A notes pane under the cue page follows
   the selection (a cue, layer, list, production or Library palette) and
   lists its notes newest first, each dated, signed with Your name, and
@@ -227,6 +243,12 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   otherwise; `make test` now uses ccache too.
 
 ### Fixed
+
+- **⌘D on a Show Tree cue duplicates again** (W1-27). In the full app the
+  Show Tree's ⌘D and Control ▸ Dump DMX's Ctrl+D were the same key, so
+  neither fired: a selected cue was not duplicated and no dump opened.
+  Now the tree takes ⌘D while it has the focus and a selection; everywhere
+  else ⌘D is still Dump DMX.
 
 - **A target added in the Lighting Studio shows up everywhere at once.**
   A new point, person or line target did not appear in the Show Tree's

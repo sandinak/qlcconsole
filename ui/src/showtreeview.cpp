@@ -96,6 +96,7 @@
 #include "focuscallsdialog.h"
 #include "focusmenu.h"
 #include "showtreeview.h"
+#include "editkeys.h"
 #include "changejournal.h"
 #include "contextmenus.h"
 #include "whyonpanel.h"
@@ -1482,9 +1483,16 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         QShortcut *pasteSc = new QShortcut(QKeySequence::Paste, m_tree);
         pasteSc->setContext(Qt::WidgetShortcut);
         connect(pasteSc, &QShortcut::activated, this, [this]() { pasteClipboard(); });
-        QShortcut *dupSc = new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_D), m_tree);
-        dupSc->setContext(Qt::WidgetShortcut);
-        connect(dupSc, &QShortcut::activated, this, [this]() { duplicateSelection(); });
+    }
+    /* ⌘D duplicates, Esc backs out then clears the selection: the edit keys
+       every list has (EditKeys). ⌘D is the tree's only while it has the
+       focus and a selection -- Control ▸ Dump DMX keeps it otherwise (a
+       QShortcut here was ambiguous with it, and neither fired). */
+    {
+        EditKeys::Verbs keys;
+        keys.duplicate = [this]() { duplicateSelection(); };
+        keys.backOut = [this]() { return backOutOneLevel(); };
+        EditKeys::install(m_tree, keys);
     }
     // ⌘F (or / in the tree): to the Library's filter -- type, Return adds.
     {
@@ -2349,6 +2357,12 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         static_cast<LibraryWidget *>(m_library)->onReturn = [this](bool alt) { applyLibrarySelection(alt); };
         static_cast<LibraryWidget *>(m_library)->onRename = [this]() { startLibraryRename(); };
         static_cast<LibraryWidget *>(m_library)->onDelete = [this]() { deleteLibrarySelection(); };
+        {
+            // Esc: back out first, then the Library's selection goes.
+            EditKeys::Verbs keys;
+            keys.backOut = [this]() { return backOutOneLevel(); };
+            EditKeys::install(m_library, keys);
+        }
         static_cast<LibraryWidget *>(m_library)->onPaletteDrop = [this](const QList<quint32> &ids, const QString &f) {
             return dropPalettesOnFolder(ids, f);
         };
@@ -7304,24 +7318,25 @@ void ShowTreeView::keyPressEvent(QKeyEvent *ev)
        their own): back out one level. The docked Workbench first -- a
        palette opened over its page, then ↩ Show Tree -- else the Look
        Editor under the page closes. Edits stay: they are made already. */
-    if (ev->key() == Qt::Key_Escape && ev->modifiers() == Qt::NoModifier)
+    if (ev->key() == Qt::Key_Escape && ev->modifiers() == Qt::NoModifier && backOutOneLevel())
     {
-        bool done = false;
-        if (Workbench *bench = dockedWorkbench())
-            done = bench->backOut();
-        else if (m_lookEditor->isVisible())
-        {
-            editPalette(QLCPalette::invalidId());
-            m_tree->setFocus(Qt::OtherFocusReason);
-            done = true;
-        }
-        if (done)
-        {
-            ev->accept();
-            return;
-        }
+        ev->accept();
+        return;
     }
     QWidget::keyPressEvent(ev);
+}
+
+bool ShowTreeView::backOutOneLevel()
+{
+    if (Workbench *bench = dockedWorkbench())
+        return bench->backOut();
+    if (m_lookEditor->isVisible())
+    {
+        editPalette(QLCPalette::invalidId());
+        m_tree->setFocus(Qt::OtherFocusReason);
+        return true;
+    }
+    return false;
 }
 
 quint32 ShowTreeView::editedPalette() const

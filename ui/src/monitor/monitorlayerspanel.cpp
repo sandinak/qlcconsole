@@ -93,6 +93,8 @@ static QIcon glyphIcon(const QString &glyph, const QColor &c)
 #include "fixture.h"
 #include "doc.h"
 #include "itemicons.h"
+#include "editkeys.h"
+#include "monitor.h"
 
 // A funnel, for "Selected only" (no font has one everywhere).
 static QIcon funnelIcon(const QColor &c)
@@ -405,6 +407,43 @@ MonitorLayersPanel::MonitorLayersPanel(Doc *doc, MonitorGraphicsView *view, QWid
         });
     });
     m_tree->installEventFilter(this);   // Enter-to-rename only
+    /* The edit keys every list has (EditKeys): ⌫ takes what is selected
+       off the plot (as the plot's ⌫, one undo step), or a layer row's layer
+       away (its items move to Default); ⌘D duplicates as the plot does
+       (the list's while it has the focus and a selection; Control ▸ Dump
+       DMX keeps ⌘D otherwise); ⌘F to the search; Esc lets go of the
+       selection, here and on the plot. F2 and ⌘C / ⌘V were here already. */
+    {
+        EditKeys::Verbs keys;
+        keys.remove = [this]() {
+            if (!m_editable)
+                return;
+            if (!selectedObjects().isEmpty())
+            {
+                if (Monitor *mon = Monitor::instance())
+                    QMetaObject::invokeMethod(mon, [mon]() { mon->removeSelectionWithUndo(); },
+                                              Qt::QueuedConnection);
+            }
+            else if (QTreeWidgetItem *cur = m_tree->currentItem())
+            {
+                if (cur->data(0, NodeTypeRole).toInt() == NodeLayer)
+                    QMetaObject::invokeMethod(this, &MonitorLayersPanel::slotRemoveLayer,
+                                              Qt::QueuedConnection);
+            }
+        };
+        keys.duplicate = [this]() {
+            if (Monitor *mon = Monitor::instance())
+                if (m_editable)
+                    mon->duplicateSelected();
+        };
+        keys.find = [this]() { focusSearch(); };
+        keys.clearSelection = [this]() {
+            m_tree->clearSelection();
+            if (m_view != nullptr && m_view->scene() != nullptr)
+                m_view->scene()->clearSelection();
+        };
+        EditKeys::install(m_tree, keys);
+    }
     m_tree->viewport()->installEventFilter(this);   // the selection a double-click starts from
     LayersNameDelegate *names = new LayersNameDelegate(m_tree);
     m_tree->setItemDelegate(names);
@@ -2517,6 +2556,23 @@ bool MonitorLayersPanel::revealItem(const QString &kind, quint32 id)
         return true;
     }
     return false;
+}
+
+bool MonitorLayersPanel::renameObject(const QString &kind, quint32 id)
+{
+    if (!m_editable || !revealItem(kind, id))
+        return false;
+    m_tree->setFocus(Qt::ShortcutFocusReason);
+    beginRenameCurrent();
+    return true;
+}
+
+void MonitorLayersPanel::focusSearch()
+{
+    if (m_search == nullptr)
+        return;
+    m_search->setFocus(Qt::ShortcutFocusReason);
+    m_search->selectAll();
 }
 
 void MonitorLayersPanel::selectFixtureGroups(const QList<quint32> &ids)

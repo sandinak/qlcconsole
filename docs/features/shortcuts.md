@@ -13,7 +13,7 @@
 | ⌘F12 | Switch between **Design** and **Operate** |
 | **Esc** | **Back out** of an editor to what was showing before: a palette opened from a list, a group's layout, the effect bench, a ▣ layer, the Workbench docked in the Show Tree, the Show Tree's Look Editor. What you changed stays changed. In a rename or another inline edit, Esc cancels just that edit; in a dialog it closes the dialog. Plain Esc stops nothing |
 | ⌘⇧Esc | **Stop ALL Functions** (its arrow: fade 1/5/10/30 s and stop) |
-| ⌘D | Dump the current DMX values into a function |
+| ⌘D | Dump the current DMX values into a function — except in a list (or on the plot) with something selected, where ⌘D is **Duplicate** ([Edit keys](#edit-keys-the-same-in-every-list)) |
 | ⇧⌘N | **New here**: the next thing for where you are. In the Show Tree a production, a cue list, the next cue, a layer or a hit; in Build a scene in the folder, a step or a scene layer in the Workbench, an effect; in Fixtures a group in the folder. **Edit** names it first ([Show Tree](show-tree.md#new-here), [Build](build.md#new-here)). The Virtual Console keeps ⇧⌘N for an animation widget |
 | ⌘↩ / ⌘⇧↩ | **GO** / **Back** on the main cue list ([Show control](show-control.md#whats-next-and-go-from-anywhere)); with a [venue focus cue](focus-calls.md#a-venue-focus-cue-pre-show) waiting, ⌘↩ begins its calls instead |
 | ⌥⌘↩ / ⌥⌘⇧↩ | **Sub GO** / **Sub Back**: the next / previous [sub-cue](show-control.md#sub-cues) of the cue playing |
@@ -37,6 +37,26 @@ either way; **Window ▸ Put Back in Main Window** returns
 it. **Window ▸ Shift-Click a Tab to Open It in a Window** turns the
 Shift-click off, if it gets in the way.
 
+## Edit keys: the same in every list
+
+The same keys do the same thing in the Show Tree, Build's Palettes,
+Effects and Scenes, the Fixtures tab, Plot layers and the plot. The
+menus are unchanged; the right-click menu has each one too.
+
+| Keys | Does | Show Tree | Build (Palettes, Effects, Scenes) | Fixtures | Plot layers | The plot |
+|---|---|---|---|---|---|---|
+| ⌫ / Delete | Delete what's selected; asks first where it deletes for good | cue, layer (a list or production asks) | asks, naming where it's used | asks (the toolbar's **Delete…**) | off the plot, as the plot; a layer row: the layer (its items go to Default) | **off the plot**: fixtures back to the Inventory (they stay in the show), a structure asks first; one ⌘Z puts it all back |
+| F2 | Rename in place (Return too in the lists) | ✓ | ✓ | ✓ | ✓ | the selected item's row in Plot layers |
+| ⌘C / ⌘V | Copy, then paste | cues, layers | palettes, scenes, effects (an effect palette, EFX or RGB Matrix) | a new fixture like each copied, in the Inventory; a group's copy | as the plot | trusses, decks, targets, scenery… |
+| ⌘D | Duplicate | cues, layers | palettes, scenes, effects | a new fixture like it, unpatched in the **Inventory**, named on (Front → Front #2); a group: a copy beside it | as the plot | half a metre on |
+| ⌘F | To the search | the Library's filter | Build's search | the fixture search | the tree's search | Plot layers' search |
+| Esc | Back out first (the Workbench, the Look Editor, an assembly on the plot); with nothing to back out of, **let go of the selection** | ✓ | ✓ | ✓ | ✓ (the plot too) | ✓ |
+
+**⌘D** is a list's only while it has the focus and something is selected
+in it; everywhere else ⌘D is still **Control ▸ Dump DMX Values to a
+Function**. In Connections' Universes tab ⌘D still deletes the selected
+universe (QLC+'s key).
+
 ## Lighting Studio (the plot)
 
 | Keys / mouse | Does |
@@ -52,6 +72,10 @@ Shift-click off, if it gets in the way.
 | ⌘A | Select all |
 | ⌘C / ⌘V | Copy / paste trusses, decks, targets, scenery, towers, booms and stands; a truss brings its fixtures as new copies, and the paste asks: **Patch at next free addresses** (after the originals), **Leave unpatched** (**Patch Others Like This** addresses them later), **Truss only** or **Cancel**. The status line says what happened |
 | ⌘D (on the plot, something selected) | Duplicate the selection half a metre on (a target keeps its kind, size and heights, numbered on: "Soloist 2"); the Dump DMX ⌘D elsewhere |
+| ⌫ / Delete | Take the selection off the plot: fixtures back to the Inventory (still in the show), a structure or target asks first; one ⌘Z undoes it |
+| F2 | Rename the selected item (its row in Plot layers) |
+| ⌘F | To Plot layers' search |
+| Esc | Out of an assembly first; then let go of the selection |
 | ⌘Z | Undo the last move, paste or edit |
 | ] / [ | Turn the selection 15° clockwise / anticlockwise |
 | } / { | Turn it 1° |
@@ -68,7 +92,10 @@ F2 renames a folder in its list. **⌘W closes it as Cancel**, putting back
 everything it did.
 
 **In Plot layers:** Return or F2 renames a row, Esc cancels; drag a
-fixture's row onto a hanger, bar, tower or boom to hang it there.
+fixture's row onto a hanger, bar, tower or boom to hang it there. ⌫ takes
+the selected items off the plot (a layer row: the layer goes, its items to
+Default), ⌘D duplicates them, ⌘F goes to the search, Esc lets go of the
+selection here and on the plot.
 
 **In the Rig Overview / Angled view:** drag to swing, ⇧-drag to pan, scroll
 or pinch to zoom, right-click a fixture for **Fixture Properties…** or
@@ -112,6 +139,8 @@ W say the light (⇧W feedback), H hold, ⌘Z undo, Esc leave. See
 | **Return** (navigator / Workbench rows) | To the Workbench's layers / to the editor pane |
 | **Return** / **F2** (Palettes, Effects, Groups &amp; fixtures) | Rename in place |
 | ⌫ (Palettes, Effects) | Delete what's selected, asking first and saying where it's used |
+| ⌘D (Palettes, Effects, Scenes) | Duplicate what's selected (with nothing selected, ⌘D is Dump DMX) |
+| ⌘C then ⌘V (Effects) | Copy the effect palette, EFX or RGB Matrix, then paste a copy |
 | ⌫ (a look or target row) | Take it out of the scene; on a cue's value row in the Workbench, clear it |
 | ⌥→ / ⌥← · ⌥-click a triangle | Open / close the row and everything under it |
 | **⌥ held as you drop** rows | Copy instead of move |
@@ -131,13 +160,13 @@ W say the light (⇧W feedback), H hold, ⌘Z undo, Esc leave. See
 | **⌘F**, or **/** in the tree | To the Library's filter; type, then Return adds the first match |
 | **Return** / **F2** (in the tree) | Rename the row in place ([Renaming](show-tree.md#renaming)) |
 | **⇧⌘N** | New here: a production, a cue list, the next cue after the selected one, a layer on the Library's groups, a hit ([New here](show-tree.md#new-here)) |
-| **⌘C** / **⌘V** / **⌘D** (in the tree) | Copy cues or layers / paste after (into) the selected cue / duplicate |
+| **⌘C** / **⌘V** / **⌘D** (in the tree) | Copy cues or layers / paste after (into) the selected cue / duplicate (⌘D with nothing selected is Dump DMX) |
 | ⌥-click **+ Layer** | A layer for each group selected in the Library |
 | Drag cues up or down (before / after a row) | Move them there, renumbered for their place; with **⌥**, include it ([Reordering and numbering](show-tree.md#reordering-and-numbering)) |
 | Delete / Backspace (in the tree) | Delete the selected cue or layer (a list or production asks first) |
 | **:** (in the tree) | To the command line at the bottom ([The command line](show-tree.md#the-command-line)) |
 | **Esc** (in the command line) | Close the help, then back to the tree |
-| **Esc** (anywhere else in the tab) | The Workbench docked: back out a level, then **↩ Show Tree**. Otherwise the Look Editor under the page closes (**↩ Back** on it does the same) |
+| **Esc** (anywhere else in the tab) | The Workbench docked: back out a level, then **↩ Show Tree**. Otherwise the Look Editor under the page closes (**↩ Back** on it does the same). Nothing to back out of: the tree (or the Library) lets go of its selection |
 | **Tab** (in the command line) | Complete the word; again, the next match |
 | `help` / `?` (in the command line) | Every word, or `help <word>` with examples |
 | ↑ / ↓ (in the command line) | Earlier / later commands |
@@ -168,6 +197,9 @@ W say the light (⇧W feedback), H hold, ⌘Z undo, Esc leave. See
 | **Return** / **F2** | Rename the selected fixture, group, group folder or universe in place; Esc cancels ([Layout](fixture-manager.md#layout)) |
 | Double-click | A group opens its grid editor, a fixture its properties, a folder renames |
 | ⌫ / Delete | Delete the selected fixtures or groups, asking first (as the toolbar's **Delete…**) |
+| ⌘D | Duplicate: a new fixture like each selected one, unpatched in the **Inventory**, named on (Front → Front #2); a group, a copy of it in the same folder |
+| ⌘C then ⌘V | The same, from what was copied |
+| Esc | Let go of the selection |
 | ⌘Z | Undo the rig's last change: a Patch dialog **Apply**, properties, renames, plot symbols, output rules |
 | Drag fixtures or a group onto a universe | The **Patch** dialog, packed into that universe, to review and apply |
 
@@ -176,9 +208,10 @@ W say the light (⇧W feedback), H hold, ⌘Z undo, Esc leave. See
 | Keys | Does |
 |---|---|
 | ⌘1 … ⌘9 | New scene, chaser, sequence, EFX, collection, RGB matrix, script, audio, video (with the Scenes section focused) |
-| ⌘C then ⌘V | Duplicate (the Functions window's Clone) |
+| ⌘C then ⌘V, or ⌘D | Duplicate (the Functions window's Clone) |
 | ⌫ / Delete | Delete |
 | F2 | Rename |
+| Esc | Let go of the selection (after the Workbench has backed out) |
 | ⌥→ / ⌥← | Next / previous fixture tab in a scene editor |
 
 The Function Wizard and the startup function are on **+ Scene ▾**; a new

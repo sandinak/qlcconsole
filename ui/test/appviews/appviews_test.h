@@ -270,6 +270,29 @@ private slots:
      *  selection, and neither stalls on an ambiguous shortcut nor dumps. */
     void ctrlDOnThePlotDuplicates();
 
+    /** W1-27: Cmd/Ctrl+D on a selected Show Tree cue, in the whole main
+     *  window: it duplicates the cue (Dump DMX's Ctrl+D made it ambiguous,
+     *  and neither fired). Nothing selected: Dump DMX has the key. */
+    void ctrlDOnTheShowTreeDuplicates();
+    /** WF1-A: Cmd/Ctrl+D in Build's Palettes, Effects and Scenes lists
+     *  duplicates the selection; Cmd/Ctrl+C then V in Effects copies the
+     *  effect (it copied the outline's scene). */
+    void ctrlDInBuildListsDuplicates();
+    /** WF1-A: the Fixtures tab: Cmd/Ctrl+D a fixture -> a new one like it,
+     *  unpatched in the Inventory; a group -> a copy; C then V the same;
+     *  W2-Q2: Esc clears the selection. */
+    void editKeysInTheFixturesTab();
+    /** W1-10 / WF1-A: on the plot, Backspace takes every selected fixture off
+     *  (they stay in the show), one undo step; F2 renames in Plot layers;
+     *  Cmd/Ctrl+F to Plot layers' search; Esc lets go of the selection. */
+    void editKeysOnThePlot();
+    /** WF1-A: Plot layers: Cmd/Ctrl+D duplicates, Backspace takes it off the
+     *  plot, Cmd/Ctrl+F to the search, Esc clears the list and the plot. */
+    void editKeysInPlotLayers();
+    /** W2-Q2: Esc backs out first (the Show Tree's Look Editor), and only
+     *  then clears the selection; in Build the same. */
+    void escBacksOutThenClearsTheSelection();
+
     /** Quitting with the window still up and the Show Tree in front: the
      *  tab goes before the Doc, so its hide event (which stops its preview)
      *  doesn't land on a freed Doc. Last: it deletes the app. */

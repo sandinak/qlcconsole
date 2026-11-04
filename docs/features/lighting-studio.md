@@ -1271,6 +1271,13 @@ props, images and nodes:
   person heights, a line its points and people, and is numbered on
   ("Soloist" → "Soloist 2"). **Cmd/Ctrl+C** / **Cmd/Ctrl+V** copy and paste
   targets the same way, several at once, with trusses, decks and scenery.
+- **⌫ / Delete** takes the selection off the plot, as **Remove Selected**:
+  every selected fixture goes back to the Inventory (it stays in the show,
+  its cues keep it), a structure or a target asks first; one **⌘Z** puts
+  it all back. **F2** renames the selected item (its row in Plot layers),
+  **⌘F** goes to Plot layers' search, and **Esc** lets go of the selection
+  (out of an assembly first). Plot layers takes the same keys
+  ([Edit keys](shortcuts.md#edit-keys-the-same-in-every-list)).
 - **Right-click ▸ Select All Similar** picks every one of the same kind:
   fixtures of the same model and mode; targets of the same kind (people:
   every person; a performer line: the lines of its set); trusses of the same

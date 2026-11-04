@@ -308,6 +308,21 @@ public:
     /** Select fixture @a id in the tree (the unsaved-changes list's jump). */
     bool selectFixture(quint32 id);
 
+    /** ⌘D: a new fixture like each of @a fixtures, unpatched in the
+     *  Inventory, and a copy of each of @a groups beside it. The new
+     *  fixtures' IDs (selected in the tree). Design only. */
+    QList<quint32> duplicate(const QList<quint32> &fixtures, const QList<quint32> &groups);
+    void duplicateSelection();
+    /** ⌘C / ⌘V: remember the selection, then duplicate it. */
+    void copySelection();
+    void pasteCopied();
+
+private:
+    /** The selected fixture rows and group rows. */
+    void selectedRows(QList<quint32> &fixtures, QList<quint32> &groups) const;
+    QList<quint32> m_copiedFixtures;
+    QList<quint32> m_copiedGroups;
+
 private:
     /** Select a fixture group */
     void selectGroup(quint32 id);
