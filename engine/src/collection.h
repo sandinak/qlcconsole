@@ -22,6 +22,7 @@
 #define COLLECTION_H
 
 #include <QMutex>
+#include <climits>
 #include <QList>
 #include <QHash>
 #include <QSet>
@@ -211,6 +212,14 @@ public:
     void setHitOverride(bool on) { m_hitOverride = on; }
     bool hitOverride() const { return m_hitOverride; }
 
+    /** A Show Tree cue's blocking (docs/design/BLOCKING.md): when it starts,
+     *  the live blocking becomes this before its members start, so they aim
+     *  at where the people stand in this cue. Invalid (the default): it
+     *  leaves the blocking alone (a plain Collection, a hit without one).
+     *  Set by ShowTreeController as it bakes the cue; not saved here. */
+    void setBlocking(quint32 set) { m_blocking = set; }
+    quint32 blocking() const { return m_blocking; }
+
     /** @reimp */
     void flash(MasterTimer *timer, bool shouldOverride, bool forceLTP) override;
     /** @reimp */
@@ -221,6 +230,7 @@ private:
     uint m_hitFadeIn = 0;
     uint m_hitFadeOut = 0;
     bool m_hitOverride = false;
+    quint32 m_blocking = UINT_MAX;
     bool m_flashStarted = false;    ///< flash() started the run unFlash() stops
 };
 

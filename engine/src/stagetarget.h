@@ -38,6 +38,8 @@
 #include <QString>
 #include <QMutex>
 #include <QVector>
+#include <QHash>
+#include <QList>
 #include <climits>
 
 class QXmlStreamReader;
@@ -272,6 +274,42 @@ public:
     void setGroupId(quint32 id) { m_groupId = id; }
 
     /********************************************************************
+     * Blocking (docs/design/BLOCKING.md, board Q211)
+     ********************************************************************/
+public:
+    /** Where this target stands in one blocking set: an OFFSET from its
+     *  Default position (so a venue moving the Default mark moves the
+     *  blocked one with it), and, for a line or an area, its own shape.
+     *  Anything not set is Default's. */
+    struct Blocked
+    {
+        bool hasOffset = false;
+        QVector3D offset;
+        bool hasLine = false;
+        QVector<QVector3D> linePoints;   ///< relative to the centre, as linePoints()
+        bool hasFootprint = false;
+        QSizeF footprint;
+        bool isEmpty() const { return !hasOffset && !hasLine && !hasFootprint; }
+    };
+
+    /** The override for blocking @p set; an empty one when it has none. */
+    Blocked blocked(quint32 set) const;
+    /** Replace the override for @p set; an empty one removes it. */
+    void setBlocked(quint32 set, const Blocked &b);
+    void clearBlocked(quint32 set) { setBlocked(set, Blocked()); }
+    bool isBlockedIn(quint32 set) const;
+    /** The sets this target has an override in. */
+    QList<quint32> blockedSets() const;
+
+    /** Its position, line points and footprint in blocking @p set (0 or a
+     *  set it has no override in: Default). Read through
+     *  MonitorProperties::targetPosition() and friends, which also follow a
+     *  structure binding. No allocation: a lookup under the position mutex. */
+    QVector3D positionIn(quint32 set) const;
+    QVector<QVector3D> linePointsIn(quint32 set) const;
+    QSizeF footprintIn(quint32 set) const;
+
+    /********************************************************************
      * Load & Save
      ********************************************************************/
     bool loadXML(QXmlStreamReader &root);
@@ -308,6 +346,7 @@ private:
     bool      m_locked = false;
     quint32   m_layerId = 0;   ///< 2D-map organizational layer (0 = Default)
     quint32   m_groupId = 0;   ///< 2D-map group (0 = ungrouped)
+    QHash<quint32, Blocked> m_blocked;   ///< by blocking set; guarded by m_positionMutex
 };
 
 /** @} */

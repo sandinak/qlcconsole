@@ -500,6 +500,7 @@ private slots:
      *  empty canvas. */
     void theTrussEditorsMenusOfferAddBar();
     void draggingATargetAnnouncesTheMove();
+    void draggingATargetInABlockingLeavesDefault();
     void aMoverOnATopFaceStandsUpOrHangsDown();
     void aFixtureCanBeRaisedOntoATowersTopCap();
     void fixturesAndBarsAreRenamedInTheStructureEditorsList();

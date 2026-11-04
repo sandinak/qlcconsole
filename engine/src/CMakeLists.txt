@@ -37,7 +37,7 @@ add_library(${module_name} SHARED
     teachingsettings.cpp teachingsettings.h
     showreview.cpp showreview.h showreviewcontext.h
     showreviewchecks.cpp showreviewcuechecks.cpp showreviewmovechecks.cpp showreviewzonechecks.cpp
-    showreviewvcchecks.cpp showreviewvenuechecks.cpp
+    showreviewvcchecks.cpp showreviewvenuechecks.cpp showreviewblockingchecks.cpp
     placementcheck.cpp placementcheck.h
     vcindex.cpp vcindex.h
     showreviewcli.cpp showreviewcli.h
@@ -79,6 +79,7 @@ add_library(${module_name} SHARED
     showtreeconvert.cpp
     showtreelooks.cpp
     showtreehits.cpp
+    showtreeblocking.cpp
     showtreeproductions.cpp
     showtreesubcues.cpp
     showtreesubcueconvert.cpp
@@ -121,6 +122,7 @@ add_library(${module_name} SHARED
     tower.cpp tower.h
     performerfill.cpp performerfill.h
     stagetarget.cpp stagetarget.h
+    blocking.cpp blocking.h
     truss.cpp truss.h
     networkroute.cpp networkroute.h
     rignetwork.cpp rignetwork.h

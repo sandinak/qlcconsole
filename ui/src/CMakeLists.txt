@@ -217,6 +217,7 @@ add_library(${module_name}
     selectionmenu.cpp selectionmenu.h
     selectionhintchip.cpp selectionhintchip.h
     showtreeview.cpp showtreeview.h
+    blockingview.cpp blockingview.h
     refinepanel.cpp refinepanel.h
     operatorvoice.cpp operatorvoice.h
     showtreeworkbench.cpp showtreeplay.cpp showtreenewhere.cpp showtreesections.cpp showtreetimecode.cpp showtreebackwash.cpp showtreenotemarks.cpp treecuestack.cpp treecuestack.h

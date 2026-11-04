@@ -30,6 +30,7 @@
 #include <algorithm>
 
 #include "showtreecontroller.h"
+#include "blocking.h"
 #include "showcontrol.h"
 #include "paletteops.h"
 #include "monitorproperties.h"
@@ -4833,6 +4834,7 @@ void ShowTreeController::bake()
             const QString folder = QStringLiteral("%1/%2/%3").arg(kProductionsFolder, prod.name,
                                                                   parentList != nullptr ? parentList->name : list.name);
             const QList<ResolvedCue> resolved = this->resolved(list);
+            const QVector<quint32> blockings = listBlockings(list);    // BLOCKING.md
             QHash<quint32, int> order;
             order.reserve(list.cues.count());
             for (int i = 0; i < list.cues.count(); ++i)
@@ -5017,6 +5019,8 @@ void ShowTreeController::bake()
                 else
                     coll->setHitFades(0, 0);
                 coll->setHitOverride(list.looks && cue.override);
+                // Where the targets stand when this cue goes (BLOCKING.md).
+                coll->setBlocking(list.looks ? invalidId() : blockings.value(i, 0));
                 if (coll->functions() != members)
                 {
                     m_lastChanged << cue.id;
@@ -6243,8 +6247,11 @@ void ShowTreeController::loadState(QXmlStreamReader &root, bool snapshot)
         for (const CueList &l : p.lists)
         {
             m_nextId = qMax(m_nextId, l.id + 1);
+            const QVector<quint32> blockings = listBlockings(l);
+            int ci = 0;
             for (const Cue &c : l.cues)
             {
+                const quint32 cueBlocking = blockings.value(ci++, 0);
                 m_nextId = qMax(m_nextId, c.id + 1);
                 for (const Layer &layer : c.layers)
                     m_nextId = qMax(m_nextId, layer.id + 1);
@@ -6257,6 +6264,10 @@ void ShowTreeController::loadState(QXmlStreamReader &root, bool snapshot)
                         coll->setHitFades(c.fadeIn, c.fadeOut);
                         coll->setHitOverride(c.override);
                     }
+                // A cue's Collection, as the file left it: its blocking.
+                if (!l.looks)
+                    if (Collection *coll = qobject_cast<Collection *>(m_doc->function(c.collection)))
+                        coll->setBlocking(cueBlocking);
             }
         }
     }
@@ -6488,6 +6499,9 @@ static void addCollectionLevels(Doc *doc, const Collection *coll, QHash<quint32,
 
 QHash<quint32, QByteArray> ShowTreeController::cueLevels(quint32 cueId) const
 {
+    // Blind draws the cue where its blocking stands the targets.
+    const quint32 blocking = cueBlocking(cueId);
+    BlockingScope scope(blocking == invalidId() ? 0 : blocking);
     QHash<quint32, QByteArray> levels;
     const Cue *c = cue(cueId);
     const Collection *coll = c == nullptr ? nullptr
@@ -6653,6 +6667,11 @@ void ShowTreeController::syncPreview()
         m_previewState = PreviewState::Off;
         return;
     }
+    /* The preview is what is on stage: its cue's blocking is the live one
+       (BLOCKING.md), set before its scenes start so they aim there. */
+    if (state == PreviewState::Playing && c != nullptr)
+        if (MonitorProperties *mp = m_doc->monitorProperties())
+            mp->setLiveBlocking(cueBlocking(c->id));
     for (quint32 fid : want)
     {
         // start() is a no-op for a parent the function already has, and

@@ -167,8 +167,10 @@ public:
     /** Re-resolve ONLY the position palettes (Aim/PanTilt) into the EXISTING
      *  fader map on the next write(), replacing pan/tilt channels in place.
      *  Unlike resetRuntime() this does NOT tear down dimmer/colour faders, so a
-     *  live target move (joystick, 50 Hz) re-aims without flashing the LEDs. */
-    void requestReaim();
+     *  live target move (joystick, 50 Hz) re-aims without flashing the LEDs.
+     *  @p fadeMs: the heads move there over that time (a cue that changes
+     *  the blocking, docs/design/BLOCKING.md); 0 = at once. */
+    void requestReaim(uint fadeMs = 0);
 
     /** Re-resolve ALL (non-Effect) palettes into the EXISTING fader map on the
      *  next write(), replacing their channels in place at 0-time.
@@ -188,6 +190,7 @@ protected:
     // Guards BOTH m_values and m_fadersMap against the MasterTimer thread.
     mutable QMutex m_valueListMutex;
     bool m_reaimRequested = false;
+    uint m_reaimFade = 0;           ///< requestReaim(fadeMs); guarded by m_valueListMutex
     bool m_repaletteRequested = false;
 
     /** A group the scene plays on changed its members (any group: the

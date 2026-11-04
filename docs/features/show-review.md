@@ -283,6 +283,8 @@ both give the same answer.
   file is read, never applied.
 - **VEN-10** A scramble-practice venue still applied (a warning: the lights
   are off on purpose), or practice venues and no real one (a note).
+- **BLK-01** A [blocking](stage-targets.md#blocking) puts a target where a
+  light aimed at it reaches in Default but can't reach there.
 
 **Effects, power and safety**
 

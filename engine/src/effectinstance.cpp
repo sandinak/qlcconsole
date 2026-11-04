@@ -1274,7 +1274,7 @@ bool EffectInstance::aimCentre(QVector3D *centre) const
             continue;
         if (StageTarget *st = mp->stageTarget(ap->stageTargetId()))
         {
-            *centre = st->position();
+            *centre = mp->targetPosition(st);   // where it stands in this blocking
             return true;                // first Aim look wins, as for Stage Shape
         }
     }
@@ -1767,7 +1767,7 @@ QJSValue EffectInstance::sceneTargetObject(quint32 fid, StageTarget *st,
 {
     const GroupHead member(fid, head);
     const MonitorProperties *mp = m_doc->monitorProperties();
-    QVector3D raw = st->position();
+    QVector3D raw = mp->targetPosition(st);    // the blocked position (BLOCKING.md)
 
     QJSValue so = m_script.engine()->newObject();
     // Raw target world location (metres) — the anchor a shape /

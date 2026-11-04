@@ -56,6 +56,7 @@
 #include "monitorproperties.h"
 #include <cmath>
 #include "monitorgraphicsview.h"
+#include "blockingview.h"
 #include "selectionmenu.h"
 #include "programmingmanager.h"
 #include "contextmenus.h"
@@ -6482,7 +6483,7 @@ void MonitorGraphicsView::repositionTargetItems()
         StageTarget *t = ti->target();
         if (t == nullptr)
             continue;
-        const QVector3D p = t->position();
+        const QVector3D p = m_doc->monitorProperties()->targetPosition(t);   // in the blocking shown
         // realPositionToPixels expects millimetres (StageTarget is in metres).
         const QPointF px = realPositionToPixels(p.x() * 1000.0, p.y() * 1000.0);
         ti->setScenePos(float(px.x()), float(px.y()));
@@ -6490,6 +6491,7 @@ void MonitorGraphicsView::repositionTargetItems()
             refreshLineItem(ti);
     }
     updateAimLines();   // keep aim lines tracking the moved target
+    updateBlockingGhosts();
 }
 
 void MonitorGraphicsView::dropTargetItems()
@@ -6501,6 +6503,12 @@ void MonitorGraphicsView::dropTargetItems()
         delete ti;
     }
     m_targetItems.clear();
+    foreach (QGraphicsItem *g, m_blockingGhosts)
+    {
+        m_scene->removeItem(g);
+        delete g;
+    }
+    m_blockingGhosts.clear();
 
     // Aim lines are tied to target selection; they go with the targets.
     foreach (QGraphicsLineItem *li, m_aimLines)
@@ -6548,7 +6556,8 @@ void MonitorGraphicsView::updateTargets()
     {
         // projectMm places the target at its 3-D position for Top or elevation.
         // A line sits on its centre as the aim rule resolves it.
-        const QVector3D at = t->isLine() ? props->targetAimPoint(t) : t->position();
+        // Where it stands in the blocking the Studio shows (BLOCKING.md).
+        const QVector3D at = t->isLine() ? props->targetAimPoint(t) : props->targetPosition(t);
         const QPointF tp = projectMm(at.x() * 1000.0, at.y() * 1000.0, at.z() * 1000.0);
         float pxX = float(tp.x());
         float pxY = float(tp.y());
@@ -6583,10 +6592,10 @@ void MonitorGraphicsView::updateTargets()
            depth up and down it. From the front only the width shows, from the
            side only the depth. */
         if (StageTarget::hasFootprintKind(t->kind())
-            && t->footprint().isEmpty() == false)
+            && props->targetFootprint(t).isEmpty() == false)
         {
             const double ppm = 1000.0 * m_cellPixels / m_unitValue;
-            const QSizeF fp = t->footprint();
+            const QSizeF fp = props->targetFootprint(t);
             /* Movable gear turned on the deck: the glyph turns with it, seen
                through the plot's own turn (the house is at +y, drawn down). */
             double wide = (m_pov == PovSide) ? fp.height() : fp.width();
@@ -6604,9 +6613,10 @@ void MonitorGraphicsView::updateTargets()
                 }
                 else
                 {
-                    const QPointF a = projectMm(t->x() * 1000.0, t->y() * 1000.0, 0.0);
+                    const QVector3D here = props->targetPosition(t);   // in the blocking shown
+                    const QPointF a = projectMm(here.x() * 1000.0, here.y() * 1000.0, 0.0);
                     const double dx = -std::sin(th), dy = std::cos(th);
-                    const QPointF b = projectMm((t->x() + dx) * 1000.0, (t->y() + dy) * 1000.0, 0.0);
+                    const QPointF b = projectMm((here.x() + dx) * 1000.0, (here.y() + dy) * 1000.0, 0.0);
                     ti->setBandAngle(qRadiansToDegrees(std::atan2(b.y() - a.y(), b.x() - a.x())) - 90.0);
                 }
             }
@@ -6677,7 +6687,120 @@ void MonitorGraphicsView::updateTargets()
 
     refreshItemLayerState();
     updateAimLines();
+    updateBlockingGhosts();
     stackTargetReadouts();
+}
+
+void MonitorGraphicsView::blockingChanged()
+{
+    updateTargets();
+}
+
+void MonitorGraphicsView::updateBlockingGhosts()
+{
+    foreach (QGraphicsItem *g, m_blockingGhosts)
+    {
+        m_scene->removeItem(g);
+        delete g;
+    }
+    m_blockingGhosts.clear();
+    MonitorProperties *props = m_doc->monitorProperties();
+    BlockingView *bv = BlockingView::of(m_doc);
+    if (props == nullptr || bv == nullptr || !bv->editsSet() || m_cellPixels == 0)
+        return;
+    const quint32 set = bv->blocking();
+    /* Where Default stands each target moved in this blocking: a dashed
+       ring and a line to where it is now, so the move reads at a glance. */
+    QPen pen(QColor(170, 200, 255, 200), 1.5, Qt::DashLine);
+    pen.setCosmetic(true);
+    foreach (TargetItem *ti, m_targetItems)
+    {
+        StageTarget *t = ti != nullptr ? ti->target() : nullptr;
+        if (t == nullptr || !ti->isVisible() || !t->isBlockedIn(set))
+            continue;
+        const QVector3D def = props->targetPosition(t, MonitorProperties::defaultBlocking());
+        const QVector3D now = props->targetPosition(t, set);
+        if ((def - now).length() < 0.005f)
+            continue;
+        const QPointF a = projectMm(def.x() * 1000.0, def.y() * 1000.0, def.z() * 1000.0);
+        const QPointF b = projectMm(now.x() * 1000.0, now.y() * 1000.0, now.z() * 1000.0);
+        const double r = qMax(6.0, 0.25 * 1000.0 * m_cellPixels / m_unitValue);
+        QGraphicsEllipseItem *ring = m_scene->addEllipse(QRectF(a.x() - r, a.y() - r, 2 * r, 2 * r), pen);
+        ring->setZValue(ti->zValue() - 1);
+        ring->setToolTip(tr("%1 in Default").arg(t->name()));
+        QGraphicsLineItem *link = m_scene->addLine(QLineF(a, b), pen);
+        link->setZValue(ti->zValue() - 1);
+        QGraphicsSimpleTextItem *label = m_scene->addSimpleText(tr("%1 (Default)").arg(t->name()));
+        label->setBrush(QColor(170, 200, 255, 220));
+        label->setFlag(QGraphicsItem::ItemIgnoresTransformations);
+        label->setPos(a.x() + r, a.y() + r);
+        label->setZValue(ti->zValue() - 1);
+        m_blockingGhosts << ring << link << label;
+    }
+}
+
+void MonitorGraphicsView::moveTargetsInBlocking(const QList<TargetItem *> &moved, quint32 set)
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    UndoEntry e;
+    e.type = UndoEntry::TargetBlock;
+    e.blockingSet = set;
+    foreach (TargetItem *ti, moved)
+    {
+        StageTarget *t = ti->target();
+        if (t == nullptr)
+            continue;
+        const QVector3D cur = props->targetPosition(t, set);
+        const QVector3D newMm = unprojectMm(ti->pos(), cur * 1000.0f);
+        QVector3D now = newMm / 1000.0f;
+        // From above, it keeps its height over whatever it now stands on.
+        if (m_pov == PovTop && t->isLine())
+            now.setZ(cur.z());
+        else if (m_pov == PovTop)
+            now.setZ(floorHeightAt(now.x(), now.y())
+                     + qMax(0.0f, cur.z() - floorHeightAt(cur.x(), cur.y())));
+        if ((now - cur).length() < 1e-4f)
+            continue;
+        StageTarget::Blocked b = t->blocked(set);
+        e.targetBlocked.insert(t->id(), b);
+        b.offset = (b.hasOffset ? b.offset : QVector3D()) + (now - cur);
+        b.hasOffset = true;
+        t->setBlocked(set, b);
+        reaimScenesAimingAt(t->id());
+        emit targetMoved(ti->targetId(), QPointF(double(now.x()), double(now.y())));
+    }
+    if (!e.targetBlocked.isEmpty())
+    {
+        pushUndo(e);
+        m_doc->setModified();
+        props->notifyStageTargetsChanged();
+    }
+    repositionTargetItems();
+    stackTargetReadouts();
+}
+
+void MonitorGraphicsView::editBlockedLine(StageTarget *t, quint32 set,
+                                          const std::function<QVector<QVector3D>(QVector<QVector3D>)> &edit)
+{
+    const StageTarget::Blocked before = t->blocked(set);
+    const QVector<QVector3D> pts = edit(t->linePointsIn(set));
+    if (pts.size() < 2 || pts == t->linePointsIn(set))
+        return;
+    StageTarget::Blocked b = before;
+    b.hasLine = true;
+    b.linePoints = pts;
+    t->setBlocked(set, b);
+    UndoEntry e;
+    e.type = UndoEntry::TargetBlock;
+    e.blockingSet = set;
+    e.targetBlocked.insert(t->id(), before);
+    pushUndo(e);
+    m_doc->setModified();
+    m_doc->monitorProperties()->notifyStageTargetsChanged();
+    reaimScenesAimingAt(t->id());
+    if (TargetItem *ti = m_targetItems.value(t->id(), nullptr))
+        refreshLineItem(ti);
+    updateAimLines();
 }
 
 void MonitorGraphicsView::stackTargetReadouts()
@@ -6743,7 +6866,7 @@ void MonitorGraphicsView::slotTargetMoved(TargetItem *item)
         MonitorProperties *mp = m_doc->monitorProperties();
         StageTarget *t = ti->target();
         const QVector3D at = (t != nullptr && t->isLine()) ? mp->targetAimPoint(t)
-                                                          : (t != nullptr ? t->position() : QVector3D());
+                                                          : (t != nullptr ? mp->targetPosition(t) : QVector3D());
         return projectMm(at.x() * 1000.0, at.y() * 1000.0, at.z() * 1000.0);
     };
     if (m_snapDivisions > 0 && m_cellPixels > 0 && item != nullptr && item->target() != nullptr
@@ -6755,6 +6878,14 @@ void MonitorGraphicsView::slotTargetMoved(TargetItem *item)
             foreach (TargetItem *ti, moved)
                 ti->setPos(ti->pos() + delta);
         }
+    }
+
+    /* The Studio shows a blocking set: the drag moves the targets in it,
+       never Default (BLOCKING.md; the banner over the plot says which). */
+    if (BlockingView *bv = BlockingView::of(m_doc); bv != nullptr && bv->editsSet())
+    {
+        moveTargetsInBlocking(moved, bv->blocking());
+        return;
     }
 
     UndoEntry e; e.type = UndoEntry::TargetMove;
@@ -6929,7 +7060,9 @@ void MonitorGraphicsView::slotLineHandleMoved(TargetItem *item, int index, QPoin
     StageTarget *t = item != nullptr ? item->target() : nullptr;
     if (props == nullptr || t == nullptr || !t->isLine() || t->locked())
         return;
-    QVector<QVector3D> rel = t->linePoints();
+    BlockingView *bv = BlockingView::of(m_doc);
+    const quint32 set = bv != nullptr && bv->editsSet() ? bv->blocking() : 0;
+    QVector<QVector3D> rel = set != 0 ? t->linePointsIn(set) : t->linePoints();
     if (index < 0 || index >= rel.size())
         return;
     const QVector3D origin = props->targetAimPoint(t);
@@ -6938,6 +7071,8 @@ void MonitorGraphicsView::slotLineHandleMoved(TargetItem *item, int index, QPoin
     {
         m_lineDrag.targetId = t->id();
         m_lineDrag.index = index;
+        m_lineDrag.blocking = set;
+        m_lineDrag.blockedBefore = t->blocked(set);
         m_lineDrag.posBefore = t->position();
         m_lineDrag.pointsBefore = rel;
         m_lineDrag.startWorld = origin + rel.at(index);
@@ -6977,7 +7112,16 @@ void MonitorGraphicsView::slotLineHandleMoved(TargetItem *item, int index, QPoin
     }
 
     rel[index] = w - origin;
-    t->setLinePoints(rel);
+    if (set != 0)
+    {
+        // The line's shape in this blocking (BLOCKING.md); Default keeps its own.
+        StageTarget::Blocked b = t->blocked(set);
+        b.hasLine = true;
+        b.linePoints = rel;
+        t->setBlocked(set, b);
+    }
+    else
+        t->setLinePoints(rel);
     refreshLineItem(item);
     reaimScenesAimingAt(t->id());
     updateAimLines();
@@ -6991,6 +7135,19 @@ void MonitorGraphicsView::slotLineHandleReleased(TargetItem *item, int index)
     m_lineDrag = LineDrag();
     if (t == nullptr || drag.targetId != t->id())
         return;                         // pressed and let go: nothing moved
+    if (drag.blocking != 0)
+    {
+        if (t->linePointsIn(drag.blocking) == drag.pointsBefore)
+            return;
+        UndoEntry e;
+        e.type = UndoEntry::TargetBlock;
+        e.blockingSet = drag.blocking;
+        e.targetBlocked.insert(t->id(), drag.blockedBefore);
+        pushUndo(e);
+        m_doc->setModified();
+        m_doc->monitorProperties()->notifyStageTargetsChanged();
+        return;
+    }
     if (t->linePoints() == drag.pointsBefore)
         return;
     commitLineEdit(t, drag.posBefore, drag.pointsBefore);
@@ -7002,6 +7159,15 @@ void MonitorGraphicsView::slotLineInsertPoint(TargetItem *item, double fraction)
     StageTarget *t = item != nullptr ? item->target() : nullptr;
     if (props == nullptr || t == nullptr || !t->isLine() || t->locked())
         return;
+    if (BlockingView *bv = BlockingView::of(m_doc); bv != nullptr && bv->editsSet())
+    {
+        editBlockedLine(t, bv->blocking(), [fraction](QVector<QVector3D> pts) {
+            const LineCurve curve(pts);
+            pts.insert(curve.spanAt(fraction) + 1, curve.pointAt(fraction));
+            return pts;
+        });
+        return;
+    }
     const QVector3D posBefore = t->position();
     const QVector<QVector3D> before = t->linePoints();
     if (before.size() < 2)
@@ -7019,6 +7185,15 @@ void MonitorGraphicsView::slotLineRemovePoint(TargetItem *item, int index)
     StageTarget *t = item != nullptr ? item->target() : nullptr;
     if (t == nullptr || !t->isLine() || t->locked())
         return;
+    if (BlockingView *bv = BlockingView::of(m_doc); bv != nullptr && bv->editsSet())
+    {
+        editBlockedLine(t, bv->blocking(), [index](QVector<QVector3D> pts) {
+            if (index > 0 && index < pts.size() - 1)
+                pts.removeAt(index);
+            return pts;
+        });
+        return;
+    }
     const QVector3D posBefore = t->position();
     const QVector<QVector3D> before = t->linePoints();
     // The ends stay: a line has two.
@@ -12417,6 +12592,24 @@ void MonitorGraphicsView::undoOne(const UndoEntry &entry)
         updatePlatforms();
         updatePowerSources();
         updateNetworkNodes();
+        m_doc->setModified();
+        return;
+    }
+
+    if (entry.type == UndoEntry::TargetBlock)
+    {
+        MonitorProperties *props = m_doc->monitorProperties();
+        for (auto it = entry.targetBlocked.constBegin(); it != entry.targetBlocked.constEnd(); ++it)
+        {
+            StageTarget *t = props ? props->stageTarget(it.key()) : nullptr;
+            if (t == nullptr)
+                continue;
+            t->setBlocked(entry.blockingSet, it.value());
+            reaimScenesAimingAt(t->id());
+        }
+        updateTargets();
+        if (props != nullptr)
+            props->notifyStageTargetsChanged();
         m_doc->setModified();
         return;
     }

@@ -74,6 +74,17 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   [Fountains](docs/features/lighting-studio.md#fountains),
   [Pixel paths](docs/features/lighting-studio.md#pixel-paths) and
   [Wand](docs/features/lighting-studio.md#wand).
+- **Blocking: one look, wherever the people stand.** A cue's new
+  **Blocking** (its page in the Show Tree) picks a named set of stage
+  target places — "Apron number" puts the front rank downstage — and
+  tracks to the cues after it. Every look aimed at a target follows: the
+  Aim looks on stage, area cover, line spreads, the follow spot, the plan
+  views, the rig view, Blind and Focus. In the Lighting Studio a
+  **Blocking ▾** button and a banner (*Moving targets in: Apron number*)
+  say which blocking a drag moves, with a dashed ghost at the Default
+  place. A blocking is an offset from Default, so a venue's corrections
+  carry it. Show Review **BLK-01** says when a blocking puts a target out
+  of reach. Older shows open with Default only and play exactly as before.
 
 - **Three states for a Show Review warning, visible on the cue.** Open is
   the amber **⚠ cyc**; **I Meant It** turns it green (**cyc ✓**; hover says

@@ -1103,6 +1103,12 @@ private:
     QCheckBox *m_hitOverride = nullptr;
     /** Q38: "Don't move in black into this cue"; the list's Move in black. */
     QCheckBox *m_cueNoMib = nullptr;
+    /** Q211: the cue's blocking (docs/design/BLOCKING.md): tracks, Default
+     *  or a set, with New... and Rename... beside it. */
+    QWidget *m_cueBlockingRow = nullptr;
+    QComboBox *m_cueBlocking = nullptr;
+    QPushButton *m_cueBlockingRename = nullptr;
+    void fillCueBlocking();
     QWidget *m_cueTcRow = nullptr;          //!< "At timecode": the field and Learn
     QLineEdit *m_cueTc = nullptr;
     QPushButton *m_cueTcLearn = nullptr;

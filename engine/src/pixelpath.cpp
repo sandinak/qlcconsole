@@ -114,12 +114,15 @@ double PixelPath::autoSpiralTurns(int n, double height)
     return qMax(2.0, height / 0.3);
 }
 
-QVector3D PixelPath::heldCentre(const StageTarget *person, const FixtureRigProps &rp)
+QVector3D PixelPath::heldCentre(const MonitorProperties *props, const StageTarget *person,
+                                const FixtureRigProps &rp)
 {
-    if (person == nullptr)
+    if (person == nullptr || props == nullptr)
         return QVector3D();
+    // Where the person stands in the blocking read (BLOCKING.md).
+    const QVector3D at = props->targetPosition(person);
     // Facing the audience (+Y downstage); the hand a forearm in front.
-    return QVector3D(person->x(), person->y() + 0.25f, person->z() + rp.holdHeight);
+    return QVector3D(at.x(), at.y() + 0.25f, at.z() + rp.holdHeight);
 }
 
 bool PixelPath::wandEnds(MonitorProperties *props, quint32 fid, QVector3D &bottom, QVector3D &top)
@@ -131,7 +134,7 @@ bool PixelPath::wandEnds(MonitorProperties *props, quint32 fid, QVector3D &botto
     const StageTarget *t = rp.isHeld() ? props->stageTarget(rp.heldBy) : nullptr;
     if (t != nullptr)
     {
-        const QVector3D c = heldCentre(t, rp);
+        const QVector3D c = heldCentre(props, t, rp);
         const double tilt = qDegreesToRadians(double(rp.holdTilt));
         const QVector3D axis(0.0f, float(qSin(tilt)), float(qCos(tilt)));
         bottom = c - axis * (len / 2.0f);

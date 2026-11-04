@@ -132,6 +132,18 @@ void GenericFader::replace(const FadeChannel &ch)
     m_channels.insert(hash, ch);
 }
 
+bool GenericFader::currentValue(quint32 fixtureID, quint32 channel, quint32 *out) const
+{
+    const quint32 hash = channelHash(fixtureID, channel);
+    std::lock_guard<ChannelsLock> l(m_channelsLock);
+    auto it = m_channels.constFind(hash);
+    if (it == m_channels.constEnd())
+        return false;
+    if (out != nullptr)
+        *out = it.value().current();
+    return true;
+}
+
 void GenericFader::remove(FadeChannel *ch)
 {
     if (ch == NULL)
