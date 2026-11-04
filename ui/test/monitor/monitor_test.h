@@ -999,6 +999,19 @@ private slots:
     /** FIX-16: a floor light beside the deck its row stands on is ringed
      *  amber from the footer's "fixtures.offrow" warning */
     void aFloorLightBesideItsRowsDeckIsRingedAmber();
+    /** One selection rule on the plot (2026-11-03): a click selects the
+     *  item; Select All Similar for every kind; a group from Plot layers or
+     *  Select Group; built assemblies (a fountain) select whole; a
+     *  right-click acts on the whole selection; targets duplicate. */
+    void aClickOnAGroupedPersonSelectsJustThem();
+    void aClickOnAPairsEndSelectsThePair();
+    void selectSimilarPicksEveryOneOfAKind();
+    void aGroupIsSelectedFromItsLayersRowOrSelectGroup();
+    void shiftAddsAndALockHoldsInTheOneRule();
+    void groupingOrLayeringOneMemberLeavesItsGroup();
+    void aBuiltAssemblySelectsAndMovesWhole();
+    void aRightClickActsOnTheWholeSelection();
+    void targetsDuplicateAndCopyPaste();
 
     /** A performer line's people keep their fractions along it as its
      *  handles, middle, place and undo change it */

@@ -351,11 +351,11 @@ void ShowNotesPane::entryMenu(quint32 noteId, QToolButton *button)
         return;
     QMenu menu(this);
     QAction *edit = menu.addAction(tr("Edit…"));
-    QAction *snap = menu.addAction(n->view.valid ? tr("Snapshot the view again") : tr("Snapshot the view"));
-    QAction *unsnap = menu.addAction(tr("Remove snapshot"));
+    QAction *snap = menu.addAction(n->view.valid ? tr("Snapshot the View Again") : tr("Snapshot the View"));
+    QAction *unsnap = menu.addAction(tr("Remove Snapshot"));
     unsnap->setEnabled(n->view.valid);
     menu.addSeparator();
-    QAction *del = menu.addAction(tr("Delete note"));
+    QAction *del = menu.addAction(tr("Delete Note"));
     QAction *picked = menu.exec(button->mapToGlobal(QPoint(0, button->height())));
     if (picked == edit)
     {

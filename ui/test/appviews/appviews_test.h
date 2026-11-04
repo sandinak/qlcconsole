@@ -265,6 +265,11 @@ private slots:
      *  each with a jump; Save clears it; Undo takes an entry away. */
     void unsavedChangesListsWhatChanged();
 
+    /** Cmd/Ctrl+D on the Lighting Studio's plot, in the whole main window
+     *  (where Control > Dump DMX has Ctrl+D too): it duplicates the
+     *  selection, and neither stalls on an ambiguous shortcut nor dumps. */
+    void ctrlDOnThePlotDuplicates();
+
     /** Quitting with the window still up and the Show Tree in front: the
      *  tab goes before the Doc, so its hide event (which stops its preview)
      *  doesn't land on a freed Doc. Last: it deletes the app. */

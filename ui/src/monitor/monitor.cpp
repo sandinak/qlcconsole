@@ -3791,7 +3791,7 @@ void Monitor::slotRemoveSelected()
 
     // Gather EVERY selected structural feature, by type (was: truss/platform/
     // target only — booms, stands and towers fell through and silently no-op'd).
-    QList<quint32> trussIds, platIds, pipeIds, standIds, towerIds, targetIds, imageIds;
+    QList<quint32> trussIds, platIds, pipeIds, standIds, towerIds, targetIds, imageIds, sceneryIds;
     foreach (QGraphicsItem *gi, m_graphicsView->scene()->selectedItems())
     {
         if (auto *ti  = dynamic_cast<TrussItem *>(gi))        trussIds  << ti->trussId();
@@ -3801,9 +3801,11 @@ void Monitor::slotRemoveSelected()
         else if (auto *twi = dynamic_cast<TowerItem *>(gi))    towerIds << twi->towerId();
         else if (auto *tgi = dynamic_cast<TargetItem *>(gi))   targetIds << tgi->targetId();
         else if (auto *ii  = dynamic_cast<MonitorImageItem *>(gi)) imageIds << ii->imageId();
+        else if (auto *sc  = dynamic_cast<SceneryItem *>(gi))  sceneryIds << sc->sceneryId();
     }
     const int nFeat = trussIds.size() + platIds.size() + pipeIds.size()
-                    + standIds.size() + towerIds.size() + targetIds.size() + imageIds.size();
+                    + standIds.size() + towerIds.size() + targetIds.size() + imageIds.size()
+                    + sceneryIds.size();
 
     // Nothing structural selected → fall back to fixture remove (unchanged).
     if (nFeat == 0)
@@ -3824,6 +3826,7 @@ void Monitor::slotRemoveSelected()
         else if (!standIds.isEmpty())  slotStandRemoveRequested(standIds.first());
         else if (!towerIds.isEmpty())  slotTowerRemoveRequested(towerIds.first());
         else if (!imageIds.isEmpty())  slotImageRemoveRequested(imageIds.first());
+        else if (!sceneryIds.isEmpty()) slotSceneryRemoveRequested(sceneryIds.first());
         else if (!targetIds.isEmpty())
         {
             const quint32 tid = targetIds.first();
@@ -3863,6 +3866,7 @@ void Monitor::slotRemoveSelected()
     foreach (quint32 id, towerIds)  m_props->removeTower(id);
     foreach (quint32 id, targetIds) m_props->removeStageTarget(id);
     foreach (quint32 id, imageIds)  m_props->removeImage(id);
+    foreach (quint32 id, sceneryIds) m_props->removeScenery(id);
 
     m_props->recomputeStandMounts();
     m_graphicsView->updateTrusses();
@@ -3872,6 +3876,52 @@ void Monitor::slotRemoveSelected()
     m_graphicsView->refreshFixtureBindings();
     if (m_layersPanel) m_layersPanel->reload();
     m_doc->setModified();
+}
+
+bool Monitor::duplicateSelected()
+{
+    /* The clipboard is the paste's source, so a duplicate leaves what was
+       copied before where it was. */
+    const QList<TrussClip> trusses = m_trussClipboard;
+    const QList<FixtureClip> fixtures = m_fixtureClipboard;
+    const QList<PlatformClip> platforms = m_platformClipboard;
+    const QList<TargetClip> targets = m_targetClipboard;
+    const QList<StructureClip> structures = m_structureClipboard;
+    const int pasted = m_pasteCount;
+    m_trussClipboard.clear(); m_fixtureClipboard.clear(); m_platformClipboard.clear();
+    m_targetClipboard.clear(); m_structureClipboard.clear();
+    slotCopySelected();
+    const bool done = clipboardHasFeatures() && pasteClipboard(0.5f, 0.5f);
+    m_trussClipboard = trusses; m_fixtureClipboard = fixtures; m_platformClipboard = platforms;
+    m_targetClipboard = targets; m_structureClipboard = structures;
+    m_pasteCount = pasted;
+    if (m_pasteAction)
+        m_pasteAction->setEnabled(clipboardHasFeatures());
+    return done;
+}
+
+QString Monitor::nextTargetName(const QString &name) const
+{
+    static const QRegularExpression numbered(QStringLiteral("^(.*\\S)\\s+(\\d+)$"));
+    QString base = name.trimmed();
+    const QRegularExpressionMatch m = numbered.match(base);
+    if (m.hasMatch())
+        base = m.captured(1);
+    if (base.isEmpty())
+        base = tr("Target");
+    int highest = 1;
+    foreach (StageTarget *t, m_props->stageTargets())
+    {
+        if (t == nullptr)
+            continue;
+        const QString n = t->name().trimmed();
+        if (n == base)
+            continue;
+        const QRegularExpressionMatch tm = numbered.match(n);
+        if (tm.hasMatch() && tm.captured(1) == base)
+            highest = qMax(highest, tm.captured(2).toInt());
+    }
+    return QStringLiteral("%1 %2").arg(base).arg(highest + 1);
 }
 
 bool Monitor::clipboardHasFeatures() const
@@ -3962,6 +4012,9 @@ void Monitor::slotCopySelected()
             c.color = t->color();
             c.kind = int(t->kind());
             c.linePoints = t->linePoints();
+            // All of it, as saved: what kind, how big, how tall, its line.
+            c.xml = clipOf(StructureClip::SceneryKind,
+                           [t](QXmlStreamWriter *w) { t->saveXML(w); }).xml;
             targets.append(c);
         }
     }
@@ -4136,17 +4189,29 @@ bool Monitor::pasteClipboard(float dxM, float dyM)
     foreach (const TargetClip &c, m_targetClipboard)
     {
         StageTarget *t = m_props->addStageTarget();
-        t->setName(c.name + tr(" copy"));
+        QXmlStreamReader r(c.xml);
+        if (!c.xml.isEmpty() && r.readNextStartElement())
+        {
+            /* The same target -- kind, colour, footprint, aim and person
+               heights, a line's points and its people -- as a new one,
+               out of any group (a copy is its own object). */
+            t->loadXML(r);           // no ID in the clip: it keeps its new one
+            t->setGroupId(0);
+        }
+        else
+        {
+            t->setZ(c.z);
+            t->setColor(c.color);
+            // A pasted line is the same line, not a point at its centre.
+            if (StageTarget::Kind(c.kind) == StageTarget::Kind::Line)
+            {
+                t->setLinePoints(c.linePoints);
+                t->makeLine();
+            }
+        }
+        t->setName(nextTargetName(c.name));
         t->setX(c.x + dxM);
         t->setY(c.y + dyM);
-        t->setZ(c.z);
-        t->setColor(c.color);
-        // A pasted line is the same line, not a point at its centre.
-        if (StageTarget::Kind(c.kind) == StageTarget::Kind::Line)
-        {
-            t->setLinePoints(c.linePoints);
-            t->makeLine();
-        }
         newTargetIds.append(t->id());
         m_props->notifyStageTargetsChanged();   // named and placed now: the lists were told too early
 
@@ -9220,11 +9285,8 @@ void Monitor::fillCanvasMenu(QMenu *out, QPointF scenePos)
     // one step. Works for everything copy does (slotCopySelected()).
     if (!m_graphicsView->scene()->selectedItems().isEmpty())
     {
-        cm.add(ContextMenu::Edit, tr("Duplicate Selected"), [this]() {
-            slotCopySelected();
-            if (clipboardHasFeatures())
-                pasteClipboard(0.5f, 0.5f);   // small offset so the copy is visible
-        })->setIcon(QIcon(":/editcopy.png"));
+        cm.add(ContextMenu::Edit, tr("Duplicate Selected"), [this]() { duplicateSelected(); })
+            ->setIcon(QIcon(":/editcopy.png"));
     }
 }
 

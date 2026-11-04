@@ -65,6 +65,28 @@ on the base. Leftovers:
   Side views do.
 - Path LEDs light nothing (by design); a hand-held wand's glow in haze is
   not drawn.
+## Studio selection: one rule for every item (studiosel, 2026-11-03) — built
+
+A click on the plot selects exactly the item clicked (a line with its
+people, a truss with its own parts); Select All Similar on every kind;
+Select Group on a member and the Plot layers row select a group. Groups
+stay as data. Built assemblies (MonitorGroup::assembly, set by Add Fountain and
+component stamps; older fountains marked on load by Fountain::repair)
+select whole; a
+double-click enters one. A right-click inside the selection acts on all of
+it (Lock/Unlock N Items, Move to Layer, Duplicate, Delete), one undo step.
+Targets duplicate (Cmd/Ctrl+D) and copy-paste whole. Decided (can change):
+Ctrl+G and Move selection here take a user group along only when all of it
+is selected; a fixture has no own lock, so Lock N Items counts the rest;
+a duplicate goes half a metre on, as Duplicate Selected always did.
+Leftovers:
+- The Rig Overview picks fixtures only: no targets or structures to select
+  there yet, so nothing to change.
+- Select All Similar for a stage piece (centre line, apron) is not offered.
+- No per-item Hide on the plot (a layer's eye hides): nothing to apply to a
+  selection there.
+- Free fixtures are not in the plot's clipboard (a truss's are): Duplicate
+  and Cmd/Ctrl+C skip them.
 
 ## Area cover: an Aim at an Area covers it (Q209, areacover, 2026-11-03) — built
 
