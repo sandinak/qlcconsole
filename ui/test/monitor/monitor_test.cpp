@@ -30376,6 +30376,8 @@ void Monitor_Test::peopleFollowTheirLine()
     expectCrowdOnLine(gv, line, "undone shrink");
     QVERIFY(qAbs((line->linePoints().last() - line->linePoints().first()).length() - lenBefore) < 1e-3f);
     delete doc;
+}
+
 /* One selection rule for everything on the plot (2026-11-03): "if you grab a
    pair with a line, just that pair .. if you grab an individual, just that
    individual .. if you grab one and right click select similar they should
