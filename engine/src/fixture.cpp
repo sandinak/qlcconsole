@@ -23,8 +23,10 @@
 #include <QString>
 #include <QtMath>
 #include <QDebug>
+#include <QCoreApplication>
 
 #include "qlcfixturedefcache.h"
+#include "fixturedefcheck.h"
 #include "channelmodifier.h"
 #include "qlcfixturemode.h"
 #include "qlcfixturehead.h"
@@ -426,8 +428,8 @@ QList<SceneValue> Fixture::positionToValues(int type, float degrees, bool isRela
 
     if (type == QLCChannel::Pan)
     {
-        maxDegrees = phy.focusPanMax();
-        if (maxDegrees == 0) maxDegrees = 360;
+        maxDegrees = effectiveBeam().panMax;
+        if (maxDegrees <= 0) maxDegrees = 360;      // no pan channel: nothing below uses it
 
         for (int i = 0; i < heads(); i++)
         {
@@ -474,8 +476,8 @@ QList<SceneValue> Fixture::positionToValues(int type, float degrees, bool isRela
     }
     else if (type == QLCChannel::Tilt)
     {
-        maxDegrees = phy.focusTiltMax();
-        if (maxDegrees == 0) maxDegrees = 270;
+        maxDegrees = effectiveBeam().tiltMax;
+        if (maxDegrees <= 0) maxDegrees = 270;
 
         for (int i = 0; i < heads(); i++)
         {
@@ -1164,15 +1166,103 @@ QIcon Fixture::getIconFromType() const
     return QIcon(iconResource());
 }
 
+double Fixture::defaultLensDegrees(QLCFixtureDef::FixtureType type)
+{
+    switch (type)
+    {
+        case QLCFixtureDef::MovingHead:
+        case QLCFixtureDef::Scanner:
+            return 15.0;
+        case QLCFixtureDef::ColorChanger:
+            return 25.0;
+        case QLCFixtureDef::Effect:
+            return 6.0;
+        case QLCFixtureDef::LEDBarBeams:
+        case QLCFixtureDef::LEDBarPixels:
+            return 40.0;
+        case QLCFixtureDef::Fan:
+        case QLCFixtureDef::Flower:
+        case QLCFixtureDef::Hazer:
+        case QLCFixtureDef::Smoke:
+        case QLCFixtureDef::Laser:
+            return 0.0;                 // not a lens
+        default:
+            return 20.0;
+    }
+}
+
+Fixture::EffectiveBeam Fixture::effectiveLens() const
+{
+    EffectiveBeam e;
+    if (m_fixtureMode == NULL)
+        return e;
+    const QLCPhysical &phy = m_fixtureMode->physical();
+    e.lensMin = qMin(phy.lensDegreesMin(), phy.lensDegreesMax());
+    e.lensMax = qMax(phy.lensDegreesMin(), phy.lensDegreesMax());
+    if (e.lensMax > 0.0 || m_fixtureDef == NULL
+        || phy.emission() != QLCPhysical::BeamEmission
+        || !FixtureDefCheck::expectsLight(m_fixtureMode))
+        return e;
+    const double d = defaultLensDegrees(m_fixtureDef->type());
+    if (d > 0.0)
+    {
+        e.lensMin = e.lensMax = d;
+        e.lensAssumed = true;
+    }
+    return e;
+}
+
+Fixture::EffectiveBeam Fixture::effectiveBeam() const
+{
+    EffectiveBeam e = effectiveLens();
+    if (m_fixtureMode == NULL)
+        return e;
+    const QLCPhysical &phy = m_fixtureMode->physical();
+    e.panMax = phy.focusPanMax();
+    e.tiltMax = phy.focusTiltMax();
+    /* One pass over the mode's channels (a pixel bar has hundreds of heads;
+       asking each for its pan was a scan per head). */
+    bool hasPan = false, hasTilt = false;
+    const QList<QLCChannel *> chans = m_fixtureMode->channels();
+    for (const QLCChannel *ch : chans)
+    {
+        if (ch == NULL)
+            continue;
+        hasPan = hasPan || ch->group() == QLCChannel::Pan;
+        hasTilt = hasTilt || ch->group() == QLCChannel::Tilt;
+        if (hasPan && hasTilt)
+            break;
+    }
+    const bool head = (type() == QLCFixtureDef::MovingHead);
+    if (e.panMax <= 0.0)
+    {
+        e.panMax = hasPan ? (head ? 540.0 : 360.0) : 0.0;
+        e.panAssumed = hasPan;
+    }
+    if (e.tiltMax <= 0.0)
+    {
+        e.tiltMax = hasTilt ? 270.0 : 0.0;
+        e.tiltAssumed = hasTilt;
+    }
+    return e;
+}
+
+QString Fixture::assumedText(double degrees, bool assumed)
+{
+    const QString v = QString::number(degrees, 'g', 4);
+    return assumed ? QCoreApplication::translate("Fixture", "%1° (assumed: the definition says 0)").arg(v)
+                   : QCoreApplication::translate("Fixture", "%1°").arg(v);
+}
+
 QRectF Fixture::degreesRange(int head) const
 {
     // TODO: handle fixtures with only pan or tilt
 
     if (m_fixtureMode != NULL && head < m_fixtureMode->heads().size())
     {
-        QLCPhysical physical(m_fixtureMode->physical());
-        qreal pan = physical.focusPanMax();
-        qreal tilt = physical.focusTiltMax();
+        const EffectiveBeam eb = effectiveBeam();
+        qreal pan = eb.panMax;
+        qreal tilt = eb.tiltMax;
 
         if (pan != 0 && tilt != 0)
         {

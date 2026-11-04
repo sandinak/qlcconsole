@@ -11442,9 +11442,8 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
                     m_doc->inputOutputMap()->releaseUniverses(false);
                 }
 
-                float maxDeg = (chType == QLCChannel::Pan)
-                    ? (fxi->fixtureMode() ? fxi->fixtureMode()->physical().focusPanMax()  : 0.0f)
-                    : (fxi->fixtureMode() ? fxi->fixtureMode()->physical().focusTiltMax() : 0.0f);
+                const Fixture::EffectiveBeam ebm = fxi->effectiveBeam();
+                float maxDeg = float((chType == QLCChannel::Pan) ? ebm.panMax : ebm.tiltMax);
                 if (maxDeg <= 0) maxDeg = (chType == QLCChannel::Pan) ? 360.0f : 270.0f;
 
                 bool hasFine = (lsbCh != QLCChannel::invalid());
@@ -11699,8 +11698,9 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
     auto makeTestDegrees = [&](float &outPan, float &outTilt) {
         float panMax = 360.0f, tiltMax = 270.0f;
         if (fxi && fxi->fixtureMode()) {
-            float pm = float(fxi->fixtureMode()->physical().focusPanMax());
-            float tm = float(fxi->fixtureMode()->physical().focusTiltMax());
+            const Fixture::EffectiveBeam ebt = fxi->effectiveBeam();
+            float pm = float(ebt.panMax);
+            float tm = float(ebt.tiltMax);
             if (pm > 0.0f) panMax  = pm;
             if (tm > 0.0f) tiltMax = tm;
         }
@@ -11963,8 +11963,8 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
         const bool hasPanFx = fxi &&
             fxi->channelNumber(QLCChannel::Pan, QLCChannel::MSB, 0) != QLCChannel::invalid();
         float panMaxFx = 360.0f;
-        if (fxi && fxi->fixtureMode() && fxi->fixtureMode()->physical().focusPanMax() > 0)
-            panMaxFx = float(fxi->fixtureMode()->physical().focusPanMax());
+        if (fxi && fxi->fixtureMode() && fxi->effectiveBeam().panMax > 0)
+            panMaxFx = float(fxi->effectiveBeam().panMax);
 
         FacingPreviewWidget *preview = new FacingPreviewWidget(posBox);
         preview->setObjectName(QStringLiteral("fixtureFacingPreview"));

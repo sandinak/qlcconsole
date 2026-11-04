@@ -55,6 +55,10 @@ private slots:
      *  each head's aim point, and that point is on the target. */
     void aimedHeadsLandOnTheirTarget_data();
     void aimedHeadsLandOnTheirTarget();
+    /** A definition with pan/tilt 0 aims over the default 540 x 270, and the
+     *  DMX it writes lands the beam on the mark; one without pan/tilt
+     *  channels cannot be aimed. */
+    void zeroRangeDefinitionsStillAim();
     /** An indexed band's coarse-only pan lands on the nearest step. */
     void anIndexedBandRoundsToTheNearestStep();
 

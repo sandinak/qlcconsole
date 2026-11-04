@@ -29,6 +29,9 @@
 #include "qlcfixturedefcache.h"
 #include "qlcfixturemode.h"
 #include "qlcfixturedef.h"
+#include "qlcfixturehead.h"
+#include "qlcphysical.h"
+#include "qlcchannel.h"
 #include "qlccapability.h"
 #include "qlcconfig.h"
 #include "qlcfile.h"
@@ -572,6 +575,111 @@ void Fixture_Test::channels()
     QCOMPARE(chs, fxi.channels(QLCChannel::Intensity, QLCChannel::Blue));
     chs.clear();
     QCOMPARE(chs, fxi.channels(QLCChannel::Colour, QLCChannel::Blue));
+}
+
+/* A one-head fixture of @p type with pan/tilt channels if @p moves, its
+   physical as given. Owned by the Doc's definition (leaked with the test). */
+static Fixture *zeroFixture(Doc *doc, QLCFixtureDef::FixtureType type, bool moves,
+                            double lens, int pan, int tilt)
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test");
+    def->setModel(QString("Zero %1 %2").arg(int(type)).arg(moves));
+    def->setType(type);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("m");
+    QLCFixtureHead head;
+    quint32 n = 0;
+    QList<QLCChannel::Group> groups;
+    if (moves)
+        groups << QLCChannel::Pan << QLCChannel::Tilt;
+    groups << QLCChannel::Intensity;
+    for (QLCChannel::Group g : groups)
+    {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(QString::number(n));
+        ch->setGroup(g);
+        if (g != QLCChannel::Intensity)
+            ch->setControlByte(QLCChannel::MSB);
+        def->addChannel(ch);
+        mode->insertChannel(ch, n);
+        head.addChannel(n);
+        ++n;
+    }
+    QLCPhysical ph;
+    ph.setLensDegreesMin(lens);
+    ph.setLensDegreesMax(lens);
+    ph.setFocusPanMax(pan);
+    ph.setFocusTiltMax(tilt);
+    mode->setPhysical(ph);
+    mode->insertHead(-1, head);
+    def->addMode(mode);
+    Fixture *fx = new Fixture(doc);
+    fx->setFixtureDefinition(def, mode);
+    static quint32 next = 0;
+    fx->setAddress(next);
+    next += 4;
+    return doc->addFixture(fx) ? fx : nullptr;
+}
+
+void Fixture_Test::zeroLensAndRangeGetDefaults()
+{
+    // A moving head that says 0 for everything: 15 degrees, 540 x 270, all assumed.
+    Fixture *mh = zeroFixture(m_doc, QLCFixtureDef::MovingHead, true, 0, 0, 0);
+    QVERIFY(mh != nullptr);
+    Fixture::EffectiveBeam e = mh->effectiveBeam();
+    QVERIFY(e.lensAssumed && e.panAssumed && e.tiltAssumed);
+    QCOMPARE(e.lensMax, 15.0);
+    QCOMPARE(e.panMax, 540.0);
+    QCOMPARE(e.tiltMax, 270.0);
+    QCOMPARE(mh->degreesRange(0).width(), 540.0);
+
+    // The defaults by type.
+    const QList<QPair<QLCFixtureDef::FixtureType, double>> byType = {
+        { QLCFixtureDef::Scanner, 15.0 }, { QLCFixtureDef::ColorChanger, 25.0 },
+        { QLCFixtureDef::Effect, 6.0 }, { QLCFixtureDef::LEDBarBeams, 40.0 },
+        { QLCFixtureDef::LEDBarPixels, 40.0 }, { QLCFixtureDef::Dimmer, 20.0 },
+    };
+    for (const auto &t : byType)
+    {
+        Fixture *f = zeroFixture(m_doc, t.first, false, 0, 0, 0);
+        QVERIFY(f != nullptr);
+        e = f->effectiveBeam();
+        QVERIFY(e.lensAssumed);
+        QCOMPARE(e.lensMax, t.second);
+        // No pan/tilt channels: no range, nothing assumed.
+        QCOMPARE(e.panMax, 0.0);
+        QVERIFY(!e.panAssumed && !e.tiltAssumed);
+    }
+
+    // A declared definition is untouched.
+    Fixture *real = zeroFixture(m_doc, QLCFixtureDef::MovingHead, true, 12, 630, 200);
+    QVERIFY(real != nullptr);
+    e = real->effectiveBeam();
+    QVERIFY(!e.lensAssumed && !e.panAssumed && !e.tiltAssumed);
+    QCOMPARE(e.lensMax, 12.0);
+    QCOMPARE(e.panMax, 630.0);
+    QCOMPARE(e.tiltMax, 200.0);
+
+    // Half declared: only the missing half is assumed.
+    Fixture *half = zeroFixture(m_doc, QLCFixtureDef::MovingHead, true, 8, 0, 270);
+    QVERIFY(half != nullptr);
+    e = half->effectiveBeam();
+    QVERIFY(!e.lensAssumed && e.panAssumed && !e.tiltAssumed);
+    QCOMPARE(e.panMax, 540.0);
+
+    // positionToValues() now has a range to turn pan over: half of 540 is mid-travel.
+    const QList<SceneValue> pos = mh->positionToValues(QLCChannel::Pan, 270);
+    QCOMPARE(pos.count(), 1);
+    QVERIFY(qAbs(int(pos.at(0).value) - 128) <= 1);
+
+    QVERIFY(Fixture::assumedText(15, true).contains(QStringLiteral("assumed")));
+    QVERIFY(!Fixture::assumedText(15, false).contains(QStringLiteral("assumed")));
+
+    // Leave the shared Doc as found for the next test.
+    const QList<Fixture *> mine = m_doc->fixtures();
+    for (Fixture *f : mine)
+        m_doc->deleteFixture(f->id());
 }
 
 void Fixture_Test::degrees()
