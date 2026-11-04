@@ -451,7 +451,8 @@ void ShowTreeView_Test::trackedLayersShowGreyWithWhereTheyCameFrom()
     ShowTreeView view(nullptr, m_doc);
     const QStringList text = treeText(view.tree());
     // The row says where by the cue's number; the tooltip says the rest.
-    QVERIFY2(text.contains("      ⤳ Towers [1, T ●]"), qPrintable(text.join("\n")));
+    // T: how long it has tracked (Q222), the first cue since 1.
+    QVERIFY2(text.contains("      ⤳ Towers [1, T ⤳ 1]"), qPrintable(text.join("\n")));
     QVERIFY2(text.contains("    2 Two [S 1, T 1]"), qPrintable(text.join("\n")));
 
     // Selecting the tracked row shows it, read from where it was set.
@@ -6756,7 +6757,7 @@ void ShowTreeView_Test::releaseAFunctionLayer()
     QTreeWidgetItem *carried = rowOf(tree, ShowTreeView::TrackedLayerNode, l1, c2);
     QVERIFY(carried != nullptr);
     bool checked = true;
-    QCOMPARE(contextAction(view, carried, "stLayerReleaseMenu", &checked), QString("Release (Leaving This Cue)"));
+    QCOMPARE(contextAction(view, carried, "stLayerReleaseMenu", &checked), QString("Release After This Cue"));
     QVERIFY(!checked);
     QCOMPARE(st->cue(c2)->layers.count(), 1);
     QVERIFY(st->cue(c2)->layers.first().release);
@@ -6768,7 +6769,7 @@ void ShowTreeView_Test::releaseAFunctionLayer()
     tree->expandAll();
     const quint32 l2 = st->cue(c2)->layers.first().id;
     QCOMPARE(contextAction(view, rowOf(tree, ShowTreeView::LayerNode, l2, c2), "stLayerReleaseMenu", &checked),
-             QString("Release (Leaving This Cue)"));
+             QString("Release After This Cue"));
     QVERIFY(checked);
     QVERIFY(!st->cue(c2)->layer(l2)->release);
     QVERIFY(onStage(2));
@@ -6799,7 +6800,7 @@ void ShowTreeView_Test::releaseAFunctionLayer()
             return true;
         });
         QVERIFY(stack.showMenu(at, -1, QPoint(10, 10)));
-        QCOMPARE(seen, QString("Release (Leaving This Cue)"));
+        QCOMPARE(seen, QString("Release After This Cue"));
         QVERIFY(st->cue(c1)->layer(l1)->release);
         QVERIFY(!onStage(1));
     }
@@ -10307,4 +10308,122 @@ void ShowTreeView_Test::listsProductionsAndReusableCuesDuplicateCopyAndPaste()
     QVERIFY(st->undo());
     QVERIFY(st->undo());
     QCOMPARE(st->reusableCues().count(), 1);
+}
+
+/* Q222: a grey row's menu ends the layer two ways -- Release After This Cue
+   (it plays here, then lets go) and Untrack From This Cue (the cue it comes
+   from gets the Release) -- with Go to its cue; T says how long it has
+   tracked. A layer's own row has Release only. */
+void ShowTreeView_Test::releaseAndUntrackOnTheGreyRow()
+{
+    FixtureGroup *towers = group("Towers", 0, 2);
+    FixtureGroup *usts = group("USTs", 2, 2);
+    const quint32 full = dimmer(255, "Full");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L", ListMode::Tracking);
+    const quint32 c1 = st->addCue(list, -1, "Verse");
+    const quint32 c2 = st->addCue(list, 0, "Chorus");
+    const quint32 c3 = st->addCue(list, 1, "Bridge");
+    const quint32 c4 = st->addCue(list, 2, "Out");
+    Target tt;
+    tt.groups << towers->id();
+    Target tu;
+    tu.groups << usts->id();
+    const quint32 l1 = st->addLayer(c1, tt);
+    QVERIFY(st->setLayerLook(c1, l1, st->lookForPalette(full)));
+    const quint32 lu = st->addLayer(c1, tu);
+    QVERIFY(st->setLayerLook(c1, lu, st->lookForPalette(full)));
+    st->clearUndo();
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1280, 700);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QTreeWidget *tree = view.tree();
+    auto greyRow = [&](quint32 cue, const Target &t) -> QTreeWidgetItem * {
+        tree->expandAll();
+        for (QTreeWidgetItemIterator it(tree); *it; ++it)
+            if ((*it)->data(0, ShowTreeView::KindRole).toInt() == ShowTreeView::TrackedLayerNode
+                && (*it)->data(0, ShowTreeView::CueRole).toUInt() == cue
+                && (*it)->data(0, ShowTreeView::TargetRole).toString() == t.signature())
+                return *it;
+        return nullptr;
+    };
+
+    // T: "⤳ 2" in the third cue, the span on hover.
+    QTreeWidgetItem *grey = greyRow(c3, tt);
+    QVERIFY(grey != nullptr);
+    QCOMPARE(grey->text(ShowTreeView::TracksCol), QString("⤳ 2"));
+    QCOMPARE(grey->toolTip(ShowTreeView::TracksCol), QString("Set in 1 Verse · tracking 2 cues"));
+    QCOMPARE(greyRow(c4, tt)->text(ShowTreeView::TracksCol), QString("⤳ 3"));
+
+    // The menu: Release, Untrack and Go to on top, in that order.
+    {
+        QMenu menu;
+        view.fillTreeMenu(&menu, grey);
+        QAction *rel = menu.findChild<QAction *>("stLayerReleaseMenu");
+        QAction *un = menu.findChild<QAction *>("stUntrackLayer");
+        QAction *go = menu.findChild<QAction *>("stGoToOrigin");
+        QVERIFY(rel != nullptr && un != nullptr && go != nullptr);
+        QCOMPARE(rel->text(), QString("Release After This Cue"));
+        QCOMPARE(un->text(), QString("Untrack From This Cue"));
+        QCOMPARE(go->text(), QString("Go to 1"));
+        QVERIFY(un->isEnabled());
+        QVERIFY2(un->toolTip().contains("2 Chorus gets the Release"), qPrintable(un->toolTip()));
+        const QList<QAction *> acts = menu.actions();
+        QVERIFY(acts.indexOf(rel) < acts.indexOf(un) && acts.indexOf(un) < acts.indexOf(go));
+        QVERIFY(acts.indexOf(go) < acts.indexOf(menu.findChild<QAction *>("stBringIntoCue")));
+        // Go to: the cue that set it, selected.
+        go->trigger();
+        QCOMPARE(view.currentKind(), ShowTreeView::CueNode);
+        QCOMPARE(view.currentId(), c1);
+    }
+    // Untrack: 2 gets the Release; 3 and 4 start without Towers. One step.
+    QCOMPARE(contextAction(view, greyRow(c3, tt), "stUntrackLayer"), QString("Untrack From This Cue"));
+    QVERIFY(st->cue(c2)->layers.count() == 1 && st->cue(c2)->layers.first().release);
+    QVERIFY(greyRow(c3, tt) == nullptr && greyRow(c4, tt) == nullptr);
+    QVERIFY(greyRow(c2, tt) == nullptr);               // 2's own now, with the R dot
+    {
+        QTreeWidgetItem *own = rowOf(tree, ShowTreeView::LayerNode, st->cue(c2)->layers.first().id, c2);
+        QVERIFY(own != nullptr);
+        QCOMPARE(own->toolTip(ShowTreeView::ReleasesCol),
+                 QString("Release: it ends after 2 (released before 3)"));
+        // The layer's own row: Release only, no Untrack, no Go to.
+        QMenu menu;
+        view.fillTreeMenu(&menu, own);
+        QVERIFY(menu.findChild<QAction *>("stLayerReleaseMenu") != nullptr);
+        QVERIFY(menu.findChild<QAction *>("stUntrackLayer") == nullptr);
+        QVERIFY(menu.findChild<QAction *>("stGoToOrigin") == nullptr);
+    }
+    QVERIFY(st->undo());
+    QVERIFY(!st->canUndo());
+    // Release ahead: the span says where it ends.
+    QVERIFY(st->setTargetRelease(c4, tt, true));
+    QCOMPARE(greyRow(c3, tt)->toolTip(ShowTreeView::TracksCol),
+             QString("Set in 1 Verse · tracking 2 cues · ends after 4"));
+    QVERIFY(st->undo());
+
+    // Two grey rows selected (Towers and USTs in 3): both, one step.
+    tree->clearSelection();
+    greyRow(c3, tt)->setSelected(true);
+    greyRow(c3, tu)->setSelected(true);
+    {
+        QMenu menu;
+        view.fillTreeMenu(&menu, greyRow(c3, tu));
+        QAction *un = menu.findChild<QAction *>("stUntrackLayer");
+        QVERIFY(un != nullptr);
+        QCOMPARE(un->text(), QString("Untrack From This Cue (2 Layers)"));
+        un->trigger();
+    }
+    QCOMPARE(st->cue(c2)->layers.count(), 2);
+    QVERIFY(greyRow(c3, tt) == nullptr && greyRow(c3, tu) == nullptr);
+    QVERIFY(st->undo());
+    QVERIFY(!st->canUndo());
+
+    // In the first cue after the one that set it, Untrack has nowhere to
+    // go but the setting cue: 1 gets the Release, 2 starts without it.
+    QCOMPARE(contextAction(view, greyRow(c2, tt), "stUntrackLayer"), QString("Untrack From This Cue"));
+    QVERIFY(st->cue(c1)->layer(l1)->release);
+    QVERIFY(st->undo());
+    view.hide();
 }

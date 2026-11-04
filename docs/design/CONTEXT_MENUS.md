@@ -290,7 +290,9 @@ groups and fixtures gets one menu for both.
 and the Workbench's (docked) layer row.
 - Open: Open “function”… (a function played as it is: W0, first), Open in
   Workbench
-- Kind: Capture into Palettes…, Release (Leaving This Cue), Why is this
+- Place (Q222, the layer's own place in this cue): Release After This
+  Cue; on a carried-in row also Untrack From This Cue and Go to <cue>
+- Kind: Capture into Palettes…, Why is this
   on?, Design Effect…, Focus This Cue…, Split Layer (One per Group), Add
   Child Layer ▸, Remove from Layer ▸, Detach to Plain Scene, Light on the
   Cyc: Not Meant
@@ -300,7 +302,8 @@ and the Workbench's (docked) layer row.
 - Places on top: the tree (+ Cue List…, + Hit for This Cue, + Cue, +
   Sub-cue, Merge Layers, N Selected Layers ▸), the Workbench (Solo This
   Layer, Cue Mode ▸, Show in Tree). A layer carried into the cue has only
-  Open, Release and Why is this on?, and two more Places on top, in the tree
+  Open and Why is this on? below, and on top Release After This Cue,
+  Untrack From This Cue, Go to <cue> and two more Places, in the tree
   and the Workbench alike: Bring Into This Cue and Start Here Instead (the
   second names the cues that lose the layer in its tooltip and a confirm;
   both are greyed with the reason when they could not keep the show the

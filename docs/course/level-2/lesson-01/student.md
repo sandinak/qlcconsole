@@ -51,7 +51,7 @@ Should the scream still have the white flash? Why?
 5. Look at **1.0.4 Solo**: **B** under **M**, nothing under **T**. Block:
    a hard start.
 6. Click **1.0.1 Verse**, then its **StepTops** row.
-7. Tick **Release when the cue is left**. The verse reads **1** under
+7. Tick **Release after this cue**. The verse reads **1** under
    **S**, **T** and **R**.
 
    ![Release](../../images/lesson-2-1/release.png)
@@ -75,8 +75,10 @@ Should the scream still have the white flash? Why?
 **Stuck?** No Release box: click the verse's own StepTops row, not a grey
 one. The new cue is 1.0.3.5: undo, select the chorus, **+ Cue** again.
 White step tops in the scream: set the Flash to **Cue-only**.
-Both are on the right-click menu too: a layer's **Release (leaving this
-cue)**, a cue's **Mode ▸**. They work on a ▣ scene layer the same way.
+Both are on the right-click menu too: a layer's **Release After This
+Cue**, a cue's **Mode ▸**. They work on a ▣ scene layer the same way.
+Noticed it one cue late? Right-click the grey row in the chorus →
+**Untrack From This Cue**: the verse gets the Release, the same result.
 A grey row's right-click also has **Bring Into This Cue** (make it this cue's own, nothing changes) and **Start Here Instead** (the layer begins in this cue, not the earlier one).
 
 ## Exit ticket

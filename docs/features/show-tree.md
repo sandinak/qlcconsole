@@ -1094,16 +1094,41 @@ Each cue has a **mode** too, set on its page or by typing it:
   Track / Block / Cue-only; with several cues selected it sets them all,
   one undo step. In the Workbench, a layer's right-click menu has the
   cue's **Cue Mode ▸** too.
-- **Release.** A layer with **Release** ticked leaves when its cue is left:
-  tick it on the layer's page, or right-click the layer (in the tree or
-  the Workbench) → **Release (Leaving This Cue)**. It goes back to what
-  the **base cue** plays on that layer, else dark. Ticking it on a grey
-  layer makes the layer this cue's own first.
+- **Release and Untrack.** Two words end a tracked layer, and they mean
+  the same everywhere (menus, tooltips, the command line):
+  - **Release** -- the layer plays in *this* cue, then lets go. Tick
+    *Release after this cue* on the layer's page, or right-click the layer
+    (in the tree or the Workbench) → **Release After This Cue**; `release
+    Towers` on the command line. On a grey row it makes the layer this
+    cue's own first.
+  - **Untrack** -- the layer never reaches *this* cue. Right-click a grey
+    (carried-in) row → **Untrack From This Cue**; `untrack Towers` on the
+    command line. The Release goes on the cue it is carried from (the cue
+    played before this one), so that cue still plays it and this cue and
+    the ones after start without it. Use it from the cue where you notice
+    the layer shouldn't be there.
+
+  Either way the layer goes back to what the **base cue** plays on it,
+  else dark. Each is one undo step; with several grey rows selected, both
+  act on all of them (*Untrack From This Cue (3 Layers)*). Untrack is only
+  on a grey row, and greyed with the reason when it can't work: the layer
+  comes from an include or is already back at the base cue, the cue before
+  is **Cue-only** (a Release there doesn't pass on) or a use of a
+  **reusable cue** (a Release there would change every use), or this is
+  the first sub-cue (it starts from its cue's look: release it in the cue
+  or before).
+- **How long it has tracked.** A grey row's **T** reads **⤳ 3**: the third
+  cue since the one that set it. Its tooltip says *Set in 1.1.1 Setup ·
+  tracking 3 cues*, and *· ends after 1.1.5* when a later cue releases it.
+  A released layer's **R** dot says *Release: it ends after 1.1.3
+  (released before 1.1.4)*. Right-click a grey row → **Go to 1.1.1**
+  selects the cue that set it.
 - **Stopping a scene played as it is.** A **▣** layer (+ Scene, or a
   function dropped on a cue) tracks like any other layer. To stop it, find
   the **last cue it should play in**, right-click its row there (grey if it
-  tracked in) → **Release (Leaving This Cue)**: the cue after plays without
-  it. To keep it in its own cue only, make that cue **Cue-only**; to start
+  tracked in) → **Release After This Cue**: the cue after plays without
+  it. Or right-click its grey row in the first cue that shouldn't have it →
+  **Untrack From This Cue**. To keep it in its own cue only, make that cue **Cue-only**; to start
   a cue without it, make that cue **Block**.
 - **Base cue.** Pick it on the list's page, or tick *"The list's base cue"*
   on a cue. It is marked ■ base.
@@ -2139,7 +2164,10 @@ menus](fixture-manager.md#right-click-menus)):
   **+ Hit for This List** on a list: [where it fires](#hits-busking)),
   **+ Cue**, **+ Sub-cue** (and **+ Production…** on a production or on
   empty space, with **+ Hit for Everywhere**); on a layer, **Merge Layers**
-  and, with several selected, **N Selected Layers ▸**;
+  and, with several selected, **N Selected Layers ▸**; on a layer,
+  **Release After This Cue**, and on a grey (carried-in) row also
+  **Untrack From This Cue** and **Go to 1.1.1** (the cue that set it), then
+  **Bring Into This Cue** and **Start Here Instead**;
 - **several selected:** the menu offers only what acts on all of them, and
   says how many: **Copy 2 Layers**, **Duplicate 3 Cues**, **Move 2 Cues
   Down** (they move as a block), **Delete 3 Cues**. Items that work on one
@@ -2159,7 +2187,7 @@ menus](fixture-manager.md#right-click-menus)):
   Folder**, **Delete Folder**;
 - a layer (the same on its row in the Workbench): **Open “…”…** (a
   function played as it is), **Open in Workbench** | **Capture into
-  Palettes…**, **Release (Leaving This Cue)**, **Why is this on?**,
+  Palettes…**, **Why is this on?**,
   **Design Effect…**, **Focus This Cue…**, **Split Layer (One per Group)**,
   **Add Child Layer ▸**, **Remove from Layer ▸** (never its last group),
   **Detach to Plain Scene** | **Make Reusable…** (or **Unlink Here**) |

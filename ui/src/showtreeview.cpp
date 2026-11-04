@@ -2424,7 +2424,7 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         m_layerReuse->setTextFormat(Qt::RichText);
         connect(m_layerReuse, &QLabel::linkActivated, this, &ShowTreeView::reuseLinkActivated);
         v->addWidget(m_layerReuse);
-        m_layerRelease = new QCheckBox(tr("Release when the cue is left (back to the base cue, else dark)"),
+        m_layerRelease = new QCheckBox(tr("Release after this cue (back to the base cue, else dark)"),
                                        m_layerPage);
         m_layerRelease->setObjectName("stLayerRelease");
         connect(m_layerRelease, &QCheckBox::toggled, this, &ShowTreeView::slotLayerReleaseToggled);
@@ -3599,7 +3599,16 @@ void ShowTreeView::buildTree()
                         looks << lookText(l);
                     // Sets or Releases (Q104): a dot in its column.
                     if (layer.release)
+                    {
                         yi->setText(ReleasesCol, dot);
+                        // Q222: Release ends it after this cue; the next is
+                        // the first without it.
+                        const int next = list.looks ? -1 : playedAfter(list, i);
+                        yi->setToolTip(ReleasesCol, next < 0
+                                       ? tr("Release: it ends after %1").arg(m_st->cueNumber(list, i))
+                                       : tr("Release: it ends after %1 (released before %2)")
+                                         .arg(m_st->cueNumber(list, i), m_st->cueNumber(list, next)));
+                    }
                     else if (list.mode == ListMode::Tracking && !list.looks)
                         yi->setText(SetsCol, dot);
                     if (layer.reusable != invalidId())
@@ -3660,7 +3669,20 @@ void ShowTreeView::buildTree()
                                             + tr("Select it and set a value to make it this cue's own.");
                         ti->setToolTip(0, tip);
                         ti->setToolTip(1, tip);
-                        ti->setText(TracksCol, dot);
+                        // How long it has tracked (Q222): "⤳ 3", the third cue
+                        // since the one that set it -- from the resolution
+                        // this build already has.
+                        const ShowTreeController::TrackSpan span = rl.origin == Origin::Tracked
+                            ? m_st->trackSpan(cue.id, rl.target, resolved) : ShowTreeController::TrackSpan();
+                        if (span.cues > 0)
+                        {
+                            ti->setText(TracksCol, tr("⤳ %1").arg(span.cues));
+                            ti->setToolTip(TracksCol, trackSpanText(span));
+                            for (int c : { int(NameCol), int(InfoCol) })
+                                ti->setToolTip(c, ti->toolTip(c) + QStringLiteral("\n") + trackSpanText(span));
+                        }
+                        else
+                            ti->setText(TracksCol, dot);
                         ti->setTextAlignment(TracksCol, Qt::AlignCenter);
                         for (int c = NameCol; c < TreeColumnCount; ++c)
                             ti->setForeground(c, grey);
@@ -4777,6 +4799,20 @@ QString ShowTreeView::carriedOrigin(Origin origin, quint32 fromCue) const
     return QString();
 }
 
+QString ShowTreeView::trackSpanText(const ShowTreeController::TrackSpan &span) const
+{
+    // "Set in 1.1.1 Setup · tracking 3 cues · ends after 1.1.5"
+    const CueList *from = m_st->listOfCue(span.setIn);
+    if (from == nullptr || span.cues <= 0)
+        return QString();
+    QStringList parts;
+    parts << tr("Set in %1").arg(m_st->cueLabel(*from, from->indexOf(span.setIn)));
+    parts << (span.cues == 1 ? tr("tracking 1 cue") : tr("tracking %1 cues").arg(span.cues));
+    if (const CueList *end = m_st->listOfCue(span.endsAfter))
+        parts << tr("ends after %1").arg(m_st->cueNumber(*end, end->indexOf(span.endsAfter)));
+    return parts.join(QStringLiteral(" · "));
+}
+
 QString ShowTreeView::carriedDetail(const ResolvedLayer &rl) const
 {
     QString name = rl.name.isEmpty() ? m_st->targetLabel(rl.target) : rl.name;
@@ -4881,7 +4917,10 @@ void ShowTreeView::fitTreeColumns()
             m_tree->header()->hideSection(c);
         else
         {
-            const int w = (c == FlagsCol) ? 80 : qMax(24, fm.horizontalAdvance(QStringLiteral("99")) + 12);
+            // T holds "⤳ 12" on a carried row (Q222).
+            const int w = (c == FlagsCol) ? 80
+                          : qMax(24, fm.horizontalAdvance(c == TracksCol ? QStringLiteral("⤳ 99")
+                                                                         : QStringLiteral("99")) + 12);
             want.insert(c, w);
             total += w;
         }
@@ -8250,6 +8289,83 @@ void ShowTreeView::fillLayerMenu(ContextMenu &menu, quint32 cueId, quint32 layer
         return;
     }
 
+    /* ---- This place: how the layer ends (Q222). Release After This Cue:
+       it plays here, then lets go. Untrack From This Cue (a carried-in row
+       only): it never reaches this cue -- the cue it comes from gets the
+       Release. Several grey rows selected: both act on all of them. ---- */
+    if (list != nullptr && !list->looks)
+    {
+        const QList<QPair<quint32, Target>> carried = own == nullptr && place.carried.count() > 1
+                                                      ? place.carried : QList<QPair<quint32, Target>>();
+        const QString what = carried.isEmpty() ? QString() : tr(" (%1 Layers)").arg(carried.count());
+        QAction *rel = menu.add(ContextMenu::Place, tr("Release After This Cue") + what, std::function<void()>(),
+                                QStringLiteral("stLayerReleaseMenu"));
+        rel->setToolTip(tr("The layer plays in this cue, then lets go: the next cue starts without it "
+                           "(back to the base cue, else dark)"));
+        if (own != nullptr)
+        {
+            // The layer's own row: a tick, on or off again.
+            rel->setCheckable(true);
+            rel->setChecked(own->release);
+            connect(rel, &QAction::toggled, this, [this, cueId, layerId](bool on) {
+                setLayerReleaseIn(cueId, layerId, Target(), on);
+            });
+        }
+        else if (carried.isEmpty())
+        {
+            // A grey row: made this cue's own, with Release.
+            connect(rel, &QAction::triggered, this, [this, cueId, t]() {
+                setLayerReleaseIn(cueId, invalidId(), t, true);
+            });
+        }
+        else
+        {
+            connect(rel, &QAction::triggered, this, [this, carried]() {
+                m_st->beginBatch(tr("Release %1 layers").arg(carried.count()));
+                bool any = false;
+                for (const QPair<quint32, Target> &c : carried)
+                    any |= m_st->setTargetRelease(c.first, c.second, true);
+                m_st->endBatch(any);
+            });
+        }
+        if (own == nullptr)
+        {
+            ShowTreeController::UntrackPlan plan;
+            for (const QPair<quint32, Target> &c : carried.isEmpty() ? QList<QPair<quint32, Target>>({ qMakePair(cueId, t) })
+                                                                       : carried)
+            {
+                plan = m_st->untrackPlan(c.first, c.second);
+                if (plan.ok)
+                    break;
+            }
+            const QList<QPair<quint32, Target>> refs = carried.isEmpty()
+                                                       ? QList<QPair<quint32, Target>>({ qMakePair(cueId, t) }) : carried;
+            QAction *un = menu.add(ContextMenu::Place, tr("Untrack From This Cue") + what, [this, refs]() {
+                QString why;
+                if (!m_st->untrackLayers(refs, &why))
+                    QMessageBox::information(this, tr("Untrack from this cue"), why);
+            }, QStringLiteral("stUntrackLayer"));
+            un->setEnabled(plan.ok);
+            QString carrier;
+            if (plan.ok)
+                if (const CueList *cl = m_st->listOfCue(plan.carrier))
+                    carrier = m_st->cueLabel(*cl, cl->indexOf(plan.carrier));
+            un->setToolTip(plan.ok ? tr("The layer never reaches this cue: %1 gets the Release, so this cue and "
+                                        "the ones after start without it").arg(carrier)
+                                   : plan.why);
+            // Back to where it was set.
+            const ShowTreeController::TrackSpan span = m_st->trackSpan(cueId, t);
+            if (span.setIn != invalidId())
+                if (const CueList *sl = m_st->listOfCue(span.setIn))
+                {
+                    const quint32 origin = span.setIn;
+                    menu.add(ContextMenu::Place, tr("Go to %1").arg(m_st->cueNumber(*sl, sl->indexOf(origin))),
+                             [this, origin]() { selectNode(origin); }, QStringLiteral("stGoToOrigin"))
+                        ->setToolTip(tr("The cue that sets this layer: %1").arg(m_st->cueLabel(*sl, sl->indexOf(origin))));
+                }
+        }
+    }
+
     /* ---- This place: a layer carried in can be brought into the cue as it
        is, or start here instead of in the cue that sets it ---- */
     if (own == nullptr && list != nullptr && !list->looks && !list->isSubCues())
@@ -8302,18 +8418,6 @@ void ShowTreeView::fillLayerMenu(ContextMenu &menu, quint32 cueId, quint32 layer
     }
 
     /* ---- 2. What a layer does ---- */
-    if (list != nullptr && !list->looks)
-    {
-        QAction *rel = menu.add(ContextMenu::Kind, tr("Release (Leaving This Cue)"), std::function<void()>(),
-                                QStringLiteral("stLayerReleaseMenu"));
-        rel->setCheckable(true);
-        rel->setChecked(own != nullptr && own->release);
-        rel->setToolTip(tr("Leaving this cue, the layer goes back to the base cue (else dark): set it "
-                           "on the last cue it should play in"));
-        connect(rel, &QAction::toggled, this, [this, cueId, layerId, t](bool on) {
-            setLayerReleaseIn(cueId, layerId, layerId == invalidId() ? t : Target(), on);
-        });
-    }
     // "Why is this on?" about the layer's first light.
     const QList<quint32> lit = t.isEmpty() || t.isOpaque() ? QList<quint32>() : m_st->targetFixtures(t);
     if (!lit.isEmpty())
@@ -8532,8 +8636,8 @@ void ShowTreeView::fillTreeMenu(QMenu *out, QTreeWidgetItem *item)
     {
         QMenu *several = menu.addMenu(ContextMenu::Place, tr("%1 Selected Layers").arg(selRefs.count()),
                                       QStringLiteral("stSeveralLayers"));
-        several->addAction(tr("Release on"), this, [this]() { setReleaseOnSelected(true); });
-        several->addAction(tr("Release Off"), this, [this]() { setReleaseOnSelected(false); });
+        several->addAction(tr("Release After This Cue"), this, [this]() { setReleaseOnSelected(true); });
+        several->addAction(tr("Clear Release"), this, [this]() { setReleaseOnSelected(false); });
         QMenu *set = several->addMenu(tr("Set Look"));
         QMenu *clear = several->addMenu(tr("Clear Look"));
         const QPair<quint32, quint32> cur(item->data(0, CueRole).toUInt(), id);
@@ -8610,6 +8714,18 @@ void ShowTreeView::fillTreeMenu(QMenu *out, QTreeWidgetItem *item)
             place.remove = [this]() { slotDelete(); };
             if (item->isSelected())
                 place.count = qMax(1, int(selectedLayerRefs().count()));
+        }
+        else if (item->isSelected())
+        {
+            // Several grey rows selected: Release / Untrack on all of them.
+            for (QTreeWidgetItemIterator it(m_tree); *it; ++it)
+                if ((*it)->isSelected() && (*it)->data(0, KindRole).toInt() == TrackedLayerNode)
+                {
+                    const quint32 c = (*it)->data(0, CueRole).toUInt();
+                    const Target ct = carriedTarget(c, (*it)->data(0, TargetRole).toString());
+                    if (!ct.isEmpty())
+                        place.carried << qMakePair(c, ct);
+                }
         }
         fillLayerMenu(menu, cueId, kind == LayerNode ? id : invalidId(), tracked, place);
         return;
