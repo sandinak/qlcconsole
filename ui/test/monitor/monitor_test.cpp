@@ -30910,8 +30910,10 @@ void Monitor_Test::aRightClickActsOnTheWholeSelection()
     QCOMPARE(props->truss(trussId)->layerId(), layer);
     QCOMPARE(props->group(gid).layerId, layer);
     foreach (Scenery *sc, props->sceneries())
+    {
         if (sc->id() != flatId)
             QCOMPARE(sc->groupId(), gid);              // not taken apart
+    }
     gv->undoLastMove();                                  // one step: all back
     QVERIFY(props->stageTarget(personId)->layerId() != layer);
     QVERIFY(props->truss(trussId)->layerId() != layer);
