@@ -1545,6 +1545,7 @@ Branson's review), after the freeze lifts.
 | FIX-08 | Dead-marked lights still used |
 | FIX-15 | Lights buried in a deck, riser or step (footer error, Sit on Top) |
 | FIX-16 | Light on the floor, its row on a deck (footer warning, Sit on Top) |
+| FIX-18 | Definition with no beam angle / pan-tilt range (note, once per definition; Edit Definition…) |
 | VEN-01 | Focus calls with no target or no lights |
 | VEN-02 | Unaimable lights in focus calls |
 | VEN-05 | Swapped fixtures needing focus |

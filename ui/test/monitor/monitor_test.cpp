@@ -11960,7 +11960,9 @@ void Monitor_Test::aFixedConeHeadDimsWhenAimedAway()
     const FixtureVisualTraits tn = classifyFixture(narrow);
     const FixtureVisualTraits tu = classifyFixture(undeclared);
     QCOMPARE(int(tn.beamMaxDeg), 12);
-    QCOMPARE(int(tu.beamMaxDeg), 0);
+    // A 0 lens gets the default for its type (a moving head: 15), flagged as assumed.
+    QCOMPARE(int(tu.beamMaxDeg), 15);
+    QVERIFY(tu.beamAssumed && !tn.beamAssumed);
 
     // At the camera.
     drive(narrow, 128, 255);
@@ -11977,10 +11979,107 @@ void Monitor_Test::aFixedConeHeadDimsWhenAimedAway()
              qPrintable(QString("a 12-degree head aimed straight away still read "
                                 "at %1 of full").arg(away)));
 
-    // An undeclared lens is never dimmed, whichever way it is turned.
+    // An undeclared lens is never dimmed, whichever way it is turned (its
+    // default cone is drawn, but only a guess).
     QCOMPARE(v.beamVisibility(undeclared, rp, tu, double(tu.beamMaxDeg)), 1.0);
     FixtureRigProps rp2;
     QCOMPARE(v.beamVisibility(undeclared, rp2, tu, double(tu.beamMaxDeg)), 1.0);
+}
+
+void Monitor_Test::aZeroLensFixtureDrawsABeam()
+{
+    QScopedPointer<Doc> docOwner(new Doc(this));
+    Doc *doc = docOwner.data();
+    MonitorProperties *props = doc->monitorProperties();
+
+    auto makeHead = [&](double beamDeg, int panMax, int tiltMax, quint32 addr,
+                        const char *name, float x) -> Fixture * {
+        QLCFixtureDef *def = new QLCFixtureDef();
+        def->setManufacturer("Test"); def->setModel(QString("Zero %1 %2").arg(beamDeg).arg(panMax));
+        def->setType(QLCFixtureDef::MovingHead);
+        const char *nm[] = { "Pan", "Tilt", "Dimmer" };
+        const QLCChannel::Group gp[] = { QLCChannel::Pan, QLCChannel::Tilt,
+                                         QLCChannel::Intensity };
+        QLCFixtureMode *mode = new QLCFixtureMode(def);
+        mode->setName("3ch");
+        for (int k = 0; k < 3; ++k)
+        {
+            QLCChannel *ch = new QLCChannel();
+            ch->setName(nm[k]); ch->setGroup(gp[k]);
+            if (k < 2) ch->setControlByte(QLCChannel::MSB);
+            def->addChannel(ch); mode->insertChannel(ch, k);
+        }
+        QLCPhysical ph;
+        ph.setWidth(300); ph.setHeight(400); ph.setDepth(300);
+        ph.setFocusPanMax(panMax); ph.setFocusTiltMax(tiltMax);
+        ph.setLensDegreesMin(beamDeg); ph.setLensDegreesMax(beamDeg);
+        mode->setPhysical(ph);
+        QLCFixtureHead hd;
+        for (int k = 0; k < 3; ++k) hd.addChannel(quint32(k));
+        mode->insertHead(-1, hd);
+        def->addMode(mode);
+        Fixture *f = new Fixture(doc);
+        f->setName(name); f->setFixtureDefinition(def, mode);
+        f->setUniverse(3); f->setAddress(addr);
+        if (doc->addFixture(f) == false)
+            return nullptr;
+        props->setFixturePosition(f->id(), 0, 0, QVector3D(x, 2000, 3.0f));
+        return f;
+    };
+    Fixture *zero = makeHead(0.0, 0, 0, 0, "Zero lens", 1500);
+    Fixture *real = makeHead(20.0, 540, 270, 10, "Declared", 3500);
+    QVERIFY(zero != nullptr && real != nullptr);
+
+    // Same traits as a declared one, but flagged: 15 degrees, assumed.
+    const FixtureVisualTraits tz = classifyFixture(zero);
+    QCOMPARE(int(tz.beamMaxDeg), 15);
+    QVERIFY(tz.beamAssumed);
+    QVERIFY(!classifyFixture(real).beamAssumed);
+
+    auto drive = [&](Fixture *f, int pan, int tilt, int dim) {
+        QByteArray u(512, char(0));
+        u[int(f->address()) + 0] = char(pan);
+        u[int(f->address()) + 1] = char(tilt);
+        u[int(f->address()) + 2] = char(dim);
+        f->setChannelValues(u);
+    };
+    const QString shots = qEnvironmentVariable("QLC_ZEROLENS_SHOTS");
+    const QString tag = qEnvironmentVariable("QLC_ZEROLENS_TAG", QStringLiteral("after"));
+    const QList<QSize> sizes = { QSize(1024, 640), QSize(1280, 800), QSize(1920, 1080) };
+    for (const QSize &sz : sizes)
+    {
+        StructureStudioView v(doc, StructureStudioView::StageKind, 0);
+        v.resize(sz);
+        v.reload();
+        v.setPlane(StructureStudioView::Angled);
+        v.setLiveValues(true);
+        v.setBeams(true);
+        v.setHaze(1.0);
+        v.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&v));
+
+        /* Dark fixture, then lit; same pan/tilt. The zero-lens one throws a beam
+           only if the lit frame differs from the dark one around it. */
+        drive(zero, 128, 128, 0); drive(real, 128, 128, 0);
+        v.repaint();
+        const QImage dark = v.grab().toImage();
+        drive(zero, 128, 128, 255); drive(real, 128, 128, 255);
+        v.repaint();
+        const QImage lit = v.grab().toImage();
+        if (!shots.isEmpty())
+        {
+            QDir().mkpath(shots);
+            lit.save(QString("%1/%2-rigview-%3x%4.png").arg(shots, tag).arg(sz.width()).arg(sz.height()));
+        }
+        int changed = 0;
+        for (int y = 0; y < lit.height(); ++y)
+            for (int x = 0; x < lit.width() / 2; ++x)      // the half holding the zero-lens head
+                if (lit.pixel(x, y) != dark.pixel(x, y))
+                    ++changed;
+        if (tag != QLatin1String("before"))      // the before-shot run is the old code, on purpose
+        QVERIFY2(changed > 300, qPrintable(QString("a zero-lens head drew %1 changed pixels "
+                                                   "at %2x%3").arg(changed).arg(sz.width()).arg(sz.height())));
+    }
 }
 
 void Monitor_Test::aFrameIsDrawnFromOneInstant()

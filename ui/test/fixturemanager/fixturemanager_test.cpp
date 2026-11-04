@@ -48,6 +48,10 @@
 #define protected public
 #define private public
 #include "fixturemanager.h"
+#include "../common/shotdark.h"
+#include "qlcchannel.h"
+#include "qlcphysical.h"
+#include "qlcfixturehead.h"
 #include "fixturetreewidget.h"
 #include "fixture.h"
 #include "inputoutputmap.h"
@@ -1022,6 +1026,42 @@ Fixture *stagedDimmer(Doc *doc, const QString &name)
         return nullptr;
     return f;
 }
+
+/* A moving head whose definition says 0 for its lens and its pan/tilt range
+   (what the Fixture Editor's defaults give). */
+static Fixture *zeroLensMover(Doc *doc, const QString &name, quint32 address)
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Cheapo");
+    def->setModel("Mini Spot 10W");
+    def->setType(QLCFixtureDef::MovingHead);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("3ch");
+    const char *nm[] = { "Pan", "Tilt", "Dimmer" };
+    const QLCChannel::Group gp[] = { QLCChannel::Pan, QLCChannel::Tilt, QLCChannel::Intensity };
+    QLCFixtureHead hd;
+    for (int k = 0; k < 3; ++k)
+    {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(nm[k]);
+        ch->setGroup(gp[k]);
+        if (k < 2)
+            ch->setControlByte(QLCChannel::MSB);
+        def->addChannel(ch);
+        mode->insertChannel(ch, quint32(k));
+        hd.addChannel(quint32(k));
+    }
+    QLCPhysical ph;
+    ph.setWidth(200); ph.setHeight(300); ph.setDepth(200);
+    mode->setPhysical(ph);
+    mode->insertHead(-1, hd);
+    def->addMode(mode);
+    Fixture *f = new Fixture(doc);
+    f->setName(name);
+    f->setFixtureDefinition(def, mode);
+    f->setAddress(address);
+    return doc->addFixture(f) ? f : nullptr;
+}
 } // namespace
 
 void FixtureManager_Test::choosingReturnToInventoryFromTheMenuReleasesIt()
@@ -1089,6 +1129,36 @@ void FixtureManager_Test::choosingPatchFromTheMenuPatchesThoseFixtures()
         QVERIFY(chooseFromContextMenu(mgr, rowWithRole(mgr, PROP_INVENTORY), "Patch Inventory…"));
         QCOMPARE(rows, 2);                               // B and C
         QVERIFY(!b->isPatched() && !c->isPatched());     // cancelled
+    }
+}
+
+void FixtureManager_Test::aZeroLensDefinitionSaysItsFigureIsAssumed()
+{
+    Fixture *f = zeroLensMover(m_doc, "Mini 1", 0);
+    QVERIFY(f != nullptr);
+    if (!qEnvironmentVariable("QLC_ZEROLENS_SHOTS").isEmpty())
+        shotUseDarkTheme();
+    FixtureManager mgr(nullptr, m_doc);
+    mgr.m_fixtures_tree->setCurrentItem(fixtureRow(mgr, f->id()));
+    const QString text = mgr.m_info->toPlainText();
+    QVERIFY2(text.contains("15° (assumed: the definition says 0)"), qPrintable(text));
+    QVERIFY2(text.contains("540° (assumed: the definition says 0)"), qPrintable(text));
+    QVERIFY2(text.contains("270° (assumed: the definition says 0)"), qPrintable(text));
+
+    const QString dir = qEnvironmentVariable("QLC_ZEROLENS_SHOTS");
+    if (!dir.isEmpty())
+    {
+        QDir().mkpath(dir);
+        const QList<QPair<QString, QSize>> sizes = {
+            { "1024x640", QSize(1024, 640) }, { "1280x800", QSize(1280, 800) },
+            { "1920x1080", QSize(1920, 1080) } };
+        for (const auto &sz : sizes)
+        {
+            mgr.resize(sz.second);
+            mgr.show();
+            QTest::qWait(60);
+            QVERIFY(mgr.grab().save(QStringLiteral("%1/after-properties-%2.png").arg(dir, sz.first)));
+        }
     }
 }
 

@@ -54,6 +54,7 @@ private slots:
     void fix15Geometry();
     void fix16();
     void fix16Rows();
+    void fix18();
     void fix16Single();
     void fix16Sources();
     void fix16Save();

@@ -101,9 +101,9 @@ bool AimSolver::frameFor(Doc *doc, quint32 fixtureId, Frame &frame)
     frame.panInvert     = rp.panInvert;
     frame.tiltInvert    = rp.tiltInvert;
 
-    const QLCPhysical phy = fixture->fixtureMode()->physical();
-    frame.panMax  = float(phy.focusPanMax());  if (frame.panMax  == 0.0f) frame.panMax  = 360.0f;
-    frame.tiltMax = float(phy.focusTiltMax()); if (frame.tiltMax == 0.0f) frame.tiltMax = 270.0f;
+    const Fixture::EffectiveBeam eb = fixture->effectiveBeam();
+    frame.panMax  = float(eb.panMax);  if (frame.panMax  <= 0.0f) frame.panMax  = 360.0f;
+    frame.tiltMax = float(eb.tiltMax); if (frame.tiltMax <= 0.0f) frame.tiltMax = 270.0f;
     return true;
 }
 
@@ -384,9 +384,15 @@ bool AimSolver::headDirection(const Fixture *fx, const QByteArray &values, int h
         }
         return Fixture::positionFraction(mode->channel(msb), val, fine) * maxDeg - (maxDeg / 2.0);
     };
-    const QLCPhysical &phy = mode->physical();
-    const double panMax  = phy.focusPanMax()  != 0 ? phy.focusPanMax()  : 360.0;
-    const double tiltMax = phy.focusTiltMax() != 0 ? phy.focusTiltMax() : 270.0;
+    /* The definition's range; only a 0 pays for the default lookup. */
+    double panMax  = mode->physical().focusPanMax();
+    double tiltMax = mode->physical().focusTiltMax();
+    if (panMax <= 0 || tiltMax <= 0)
+    {
+        const Fixture::EffectiveBeam eb = fx->effectiveBeam();
+        if (panMax <= 0)  panMax  = eb.panMax  > 0 ? eb.panMax  : 360.0;
+        if (tiltMax <= 0) tiltMax = eb.tiltMax > 0 ? eb.tiltMax : 270.0;
+    }
     return beamDirection(rp,
                          degrees(panCh, h->channelNumber(QLCChannel::Pan, QLCChannel::LSB), panMax, panFrac),
                          degrees(tiltCh, h->channelNumber(QLCChannel::Tilt, QLCChannel::LSB), tiltMax, tiltFrac),

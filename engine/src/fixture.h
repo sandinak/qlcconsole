@@ -685,6 +685,32 @@ protected:
 public:
     QRectF degreesRange(int head) const;
 
+    /** What the rig view and the aim solver use for this fixture's beam angle
+     *  and pan/tilt range: the definition's value where it declares one, else
+     *  a default by fixture type (see beamDefaults() in fixture.cpp). The
+     *  *Assumed flags say the number is ours, not the definition's, so a
+     *  screen can say so. A range of 0 means "none": the fixture has no such
+     *  channel or isn't a beam. Cheap, but resolve it once per fixture when
+     *  building traits, not per frame. */
+    struct EffectiveBeam
+    {
+        double lensMin = 0.0;
+        double lensMax = 0.0;
+        double panMax = 0.0;
+        double tiltMax = 0.0;
+        bool lensAssumed = false;
+        bool panAssumed = false;
+        bool tiltAssumed = false;
+    };
+    /** Lens only (no channel scan): safe for per-frame callers. */
+    EffectiveBeam effectiveLens() const;
+    /** Lens and pan/tilt. */
+    EffectiveBeam effectiveBeam() const;
+    /** The default beam angle for a type (degrees; 0 = none assumed). */
+    static double defaultLensDegrees(QLCFixtureDef::FixtureType type);
+    /** "15&deg; (assumed: the definition says 0)" style text for a value. */
+    static QString assumedText(double degrees, bool assumed);
+
     /** Its definition could not be found when the show loaded -- in cloud
      *  storage and not on this computer, or simply missing -- so it stands
      *  in as a generic dimmer of the same channel count. It REMEMBERS what it
