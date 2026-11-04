@@ -69,6 +69,16 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Changed
 
+- **Area cover counts the deck as well as head height** (board Q213). A
+  spot of an Area now counts as lit only if it is lit at head height **and**
+  on the deck, riser or step top under it. Before, only head height was
+  measured, so 50° tower washes read 100% while the deck corners stayed
+  dark. The plan hatches "deck dark" (red) and "heads dark" (violet)
+  differently, with a legend, and the caption says which: "Covers 82% of
+  Chorus · deck dark upstage left · heads dark downstage centre". MOV-13
+  uses the combined figure and names which is missing. Aim points are
+  unchanged. No file change.
+
 - **An Aim at an Area covers the area** (board Q209). Every light aimed at
   a sized Area used to point at its centre, at the area's own height, and
   the corners stayed dark. Now the area is split into one zone per light

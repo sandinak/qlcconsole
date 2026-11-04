@@ -370,23 +370,70 @@ void LinePlanView::paintEvent(QPaintEvent *)
             p.drawPolygon(poly);
         }
         p.restore();
-        // The gaps: what no beam reaches, hatched.
-        QBrush hatch(QColor(255, 90, 80, 200), Qt::BDiagPattern);
-        hatch.setTransform(QTransform::fromScale(s, s));
+        /* The gaps, hatched two ways (Q213): the deck dark (what no beam
+           reaches on the deck, riser or step) slants one way in red; head
+           height dark slants the other in violet. Dark at both is crossed. */
+        const QColor deckCol(255, 90, 80), headCol(190, 120, 255);
+        QBrush deckHatch(QColor(deckCol.red(), deckCol.green(), deckCol.blue(), 210), Qt::BDiagPattern);
+        QBrush headHatch(QColor(headCol.red(), headCol.green(), headCol.blue(), 210), Qt::FDiagPattern);
+        deckHatch.setTransform(QTransform::fromScale(s, s));
+        headHatch.setTransform(QTransform::fromScale(s, s));
         p.setPen(Qt::NoPen);
-        for (const QRectF &g : m_cover.gapRects())
+        const QList<QRectF> deckGaps = m_cover.deckGapRects(), headGaps = m_cover.headGapRects();
+        for (const QRectF &g : deckGaps)
         {
             const QRectF r(toScreen(g.topLeft()), toScreen(g.bottomRight()));
-            p.fillRect(r, QColor(255, 90, 80, 45));
-            p.fillRect(r, hatch);
+            p.fillRect(r, QColor(deckCol.red(), deckCol.green(), deckCol.blue(), 40));
+            p.fillRect(r, deckHatch);
             ++m_gapsDrawn;
         }
+        for (const QRectF &g : headGaps)
+        {
+            const QRectF r(toScreen(g.topLeft()), toScreen(g.bottomRight()));
+            p.fillRect(r, QColor(headCol.red(), headCol.green(), headCol.blue(), 40));
+            p.fillRect(r, headHatch);
+            ++m_gapsDrawn;
+        }
+        m_legendDeck = !deckGaps.isEmpty();
+        m_legendHead = !headGaps.isEmpty();
         p.setBrush(Qt::NoBrush);
         p.setPen(QPen(QColor(255, 180, 0, 90), 0.8 * s, Qt::DotLine));
         for (const AreaCover::Zone &z : m_cover.zones)
             p.drawRect(QRectF(toScreen(z.cell.topLeft()), toScreen(z.cell.bottomRight())));
         p.setPen(QPen(QColor(255, 180, 0), 1.5 * s, Qt::DashLine));
         p.drawRect(a);
+
+        // Legend: only the hatches that are on the plan, on the title's row.
+        if (m_legendDeck || m_legendHead)
+        {
+            const QFontMetricsF fm(p.font());
+            const double sw = 14.0 * s, sh = sw * 0.6, gap = 5.0 * s, rowH = fm.height();
+            double x = 6.0 + fm.horizontalAdvance(tr("Plan (top)")) + 16.0 * s;
+            double y = 4.0;
+            auto entry = [&](Qt::BrushStyle style, const QColor &col, const QString &text) {
+                // Too narrow for another entry on the title's row: the next row.
+                if (x + sw + gap + fm.horizontalAdvance(text) > double(width()) - 6.0)
+                {
+                    x = 6.0;
+                    y += rowH + 2.0 * s;
+                }
+                const QRectF sq(x, y + (rowH - sh) / 2.0, sw, sh);
+                QBrush b(QColor(col.red(), col.green(), col.blue(), 230), style);
+                b.setTransform(QTransform::fromScale(s, s));
+                p.fillRect(sq, QColor(col.red(), col.green(), col.blue(), 40));
+                p.fillRect(sq, b);
+                p.setBrush(Qt::NoBrush);
+                p.setPen(QPen(col, 0.8 * s));
+                p.drawRect(sq);
+                p.setPen(QColor(150, 150, 160));
+                p.drawText(QPointF(sq.right() + gap, y + fm.ascent()), text);
+                x = sq.right() + gap + fm.horizontalAdvance(text) + 14.0 * s;
+            };
+            if (m_legendDeck)
+                entry(Qt::BDiagPattern, deckCol, tr("deck dark"));
+            if (m_legendHead)
+                entry(Qt::FDiagPattern, headCol, tr("heads dark"));
+        }
     }
 
     // The line, its ends A and B as the strip names them.

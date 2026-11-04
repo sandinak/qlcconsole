@@ -100,10 +100,18 @@ at the area's own height, and the corners stayed dark.
 - **How much it covers.** Under the layer's Position row in the Show Tree,
   the plan shows the area, each light's zone (dotted), each beam's
   footprint at subject height (as wide as its zoom has it now, else the
-  definition's lens, else 20°), and hatches in red what no beam reaches.
-  The line above it says how much is lit: *Covers 86% of Chorus · gap
-  upstage left*. Show Review notes a cue that leaves more than a tenth of
-  an area dark ([MOV-13](show-review.md)).
+  definition's lens, else 20°), and hatches what no beam reaches. A spot
+  counts as lit only if it is lit **at head height and on the deck** (the
+  deck, riser or step top under it): a wash that reads 100% at head height
+  can still leave the deck corners dark. The plan hatches the two kinds of
+  miss differently, with a small legend: red slanting one way where the
+  **deck is dark**, violet slanting the other where **head height is dark**
+  (crossed where both are). The line above it says how much is lit at
+  both: *Covers 82% of Chorus · deck dark upstage left · heads dark
+  downstage centre*. Show Review notes a cue that leaves more than a tenth
+  of an area dark ([MOV-13](show-review.md)). Where the dark is, fix it with
+  a wider zoom, a light more, or a steeper tilt for a beam that only grazes
+  the deck. The aim points do not change: lights still aim at head height.
 - **When it's still a point.** An Area with no size, and every other kind,
   aims every light at its one point, as before.
 

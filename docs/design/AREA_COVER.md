@@ -58,22 +58,37 @@ Each member's beam is a cone from its origin (the arm's own) along its aim
 with the angle `RigHeads::beamAngle()` reads: the zoom channel's value from
 the scene (else the fixture's), else the definition's lens degrees, else
 **20°** when the definition gives no lens. The area is sampled on a grid
-(about 48 across) at subject height above the surface under each sample; a
-sample is lit when it lies inside any cone. The covered fraction is lit
-samples over all samples. The gap is named by where most of its samples
-fall on a 3 × 3 split (upstage / centre / downstage × stage right / centre
-/ stage left; +X is stage left).
+(about 48 across) twice (board Q213, 2026-11-03: "a spot counts as lit only
+if it is lit at head height AND on the deck/riser surface; the plan shows
+which one is missing"): at subject height above the surface under each
+sample, and on the surface itself (`platformHeightAt`: deck, riser or step
+top). A sample is lit at a height when it lies inside any cone there, and
+**lit** when it is lit at both. The covered fraction is lit samples over all
+samples. Two more fractions say what is missing: `headOnly` (lit at head
+height, deck dark) and `deckOnly` (lit on the deck, head height dark). A
+50° tower wash can read 100% at head height and leave the deck corners
+dark; a near-horizontal beam does not reach the deck near the light at all;
+a steep narrow beam is the other way, its circle wider on the deck than at
+head height. The aim points are unchanged (head height); only the measuring
+and the display are. Each gap is named by where most of its samples fall on
+a 3 × 3 split (upstage / centre / downstage × stage right / centre / stage
+left; +X is stage left): the deck-dark samples and the head-dark samples
+are named separately.
 
 The plan view (the Show Tree layer's Position rows, the formation editor)
 draws the area outline, each zone, each beam's footprint at subject height
 (the cone cut by the horizontal plane at its aim point), and hatches the
-gaps. Caption: "Covers 86% of Chorus · gap upstage left".
+gaps two ways with a small legend: the deck dark in red slanting one way,
+head height dark in violet slanting the other, crossed where both. Caption:
+"Covers 82% of Chorus · deck dark upstage left · heads dark downstage
+centre" ("gap upstage left" when both are dark in the same places).
 
 ## Show Review: MOV-13
 
 "An area left partly dark" (Movement, Note): a cue whose Aim look at an area
-leaves more than 10% of it unlit. It names the cue, the area, how much is
-covered and where the gap is, and says what fixes it: zoom wider, add a
+leaves more than 10% of it unlit (lit = at head height and on the deck). It
+names the cue, the area, how much is covered and which is missing where
+("deck dark upstage left"), and says what fixes it: zoom wider, add a
 light, or make the area smaller.
 
 ## Old shows

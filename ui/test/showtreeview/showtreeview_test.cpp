@@ -3812,13 +3812,18 @@ void ShowTreeView_Test::planViewOfAnAreaAim()
     QVERIFY(plan->beams().at(1).to.x() < plan->beams().at(2).to.x());
     QVERIFY(plan->coverage().fraction < 0.9);
     QVERIFY2(plan->caption().startsWith("Covers ") && plan->caption().contains("of Chorus")
-             && plan->caption().contains("gap"), qPrintable(plan->caption()));
+             && (plan->caption().contains("gap") || plan->caption().contains("dark")),
+             qPrintable(plan->caption()));
     QLabel *covers = view.findChild<QLabel *>("stAreaCover");
     QVERIFY(covers != nullptr);
     QCOMPARE(covers->text(), plan->caption());
     plan->resize(420, 260);
     QVERIFY(!plan->grab().isNull());
     QVERIFY(plan->gapsDrawn() > 0);
+    // Q213: the legend names the hatches that are on the plan.
+    QVERIFY(plan->legendShowsDeck() || plan->legendShowsHeads());
+    QCOMPARE(plan->legendShowsDeck(), !plan->coverage().deckGapRects().isEmpty());
+    QCOMPARE(plan->legendShowsHeads(), !plan->coverage().headGapRects().isEmpty());
     // The pop-out shows the plan alone: an area has no order strip.
     view.openLinePlanWindow();
     QVERIFY(view.linePlanWindow() != nullptr);

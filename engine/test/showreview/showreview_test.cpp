@@ -2433,7 +2433,7 @@ void ShowReview_Test::mov13()
     QCOMPARE(f.severity, ReviewFinding::Note);
     QVERIFY2(f.message.contains("Chorus") && f.message.contains("lights only")
              && f.message.contains("2 light")
-             && f.message.contains("Zoom them wider"), qPrintable(f.message));
+             && f.message.contains("on the deck") && f.message.contains("Zoom them wider"), qPrintable(f.message));
     QVERIFY(f.targets.contains(QStringLiteral("target:%1").arg(area->id())));
 
     // Wide enough to light it all: nothing to say.

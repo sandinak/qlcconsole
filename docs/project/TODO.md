@@ -42,6 +42,12 @@ head, two arms), `followSpotKeepsItsSubjectAcrossCues`, `LookEditor_Test::aLengt
 `Monitor_Test::theFollowSpotIsDrawnOnThePlot`. Open: line-of-sight "lost"
 state in the indicators. Move to DONE.md when landed.
 
+## Area cover counts the deck too (Q213, feat/04-area-cover-both, 2026-11-03) -- built
+
+A spot is lit only if lit at head height AND on the deck/riser/step under
+it; plan hatches deck dark and heads dark differently with a legend; MOV-13
+names which is missing. docs/design/AREA_COVER.md. Aim points unchanged.
+
 ## Faster packaging (tools/04-pkgfast, 2026-11-03) -- done
 
 `make dmg`: no tests (`QLC_NO_TESTS`, now also in ai/ and tools/artnetprobe), ccache for both slices, build
