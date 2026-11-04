@@ -53,10 +53,10 @@
     //       every transition (ignores the last spot position).
     effect.parameters = [
         { name: "followMode",   description: "On scene change: hold the last beam position, or snap to the bound followTarget", values: ["lastPosition", "snapToTarget"], defaultValue: 0 },
-        { name: "personHeight", description: "Height of person being followed (cm) — adjusts tilt centre", min: 50, max: 250, defaultValue: 170 },
+        { name: "personHeight", description: "Height of the person being followed (free-fly only) -- adjusts the tilt centre", unit: "cm", min: 50, max: 250, defaultValue: 170 },
         { name: "fadeNearLimit", description: "Fade a head out over this many degrees before its pan/tilt limit, dark where it cannot reach the target (0 = off)", min: 0, max: 45, defaultValue: 0 },
         { name: "fadeWhenBlocked", description: "Fade a head out over this many milliseconds while a drape, wall, riser or tower stands between it and the subject, back when clear (0 = off)", min: 0, max: 5000, defaultValue: 0 },
-        { name: "sizeOnSubject", description: "Zoom each head so its beam is this wide on the subject (cm), whatever its distance (0 = off)", min: 0, max: 800, defaultValue: 0 }
+        { name: "sizeOnSubject", description: "Zoom each head so its beam is this wide on the subject, whatever its distance (0 = off)", unit: "cm", min: 0, max: 800, defaultValue: 0 }
     ];
 
     effect.tick = function(fixtures, inputs, palettes, params, state, data) {

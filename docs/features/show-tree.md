@@ -79,7 +79,10 @@ from the Library lands in the tree right beside it.
     when it tracks. On a cue list, **⇢** for Tracking, **B** for
     Non-tracking (hover it, or the list's name, for the words).
   - **F** (Flags) — the rest, in words: **base**, **skip**, **no MIB**, **focus** (a [venue focus cue](focus-calls.md#a-venue-focus-cue-pre-show)),
-    **⊕ N** (includes N), **×N** (reusable, N uses), **mix**, **VC ×N**.
+    **⊕ N** (includes N), **×N** (reusable, N uses), **mix**, **VC ×N**,
+    **follow** (a [follow spot](stage-targets.md#moving-a-follow-spot) in
+    the cue and on its layer: green while it follows, orange when no stick
+    is bound to move it).
 
   Right-click the header to hide a column you don't need; it stays hidden.
   In a narrow pane the columns shrink, and fold away before the names do.

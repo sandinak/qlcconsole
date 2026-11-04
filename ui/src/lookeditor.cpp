@@ -54,6 +54,8 @@
 #include "lookeditor.h"
 #include "contextmenus.h"
 #include "programmercontroller.h"
+#include "lengthspinbox.h"
+#include "measurementunits.h"
 #include "palettenaming.h"
 #include "paletteops.h"
 #include "effectorigin.h"
@@ -1067,7 +1069,8 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
         tr("Keep this effect running where it left off when the scene using it stops "
            "and another scene with the SAME look starts, instead of restarting it from "
            "its first frame. Use for long, slowly-evolving effects that must survive a "
-           "scene change."));
+           "scene change. On a follow spot: the subject stays where the stick left it "
+           "when the cue ends, instead of going back."));
     efv->addWidget(m_effectPersistentCb);
     connect(m_effectPersistentCb, &QCheckBox::clicked, this, [this](bool checked) {
         QLCPalette *p = m_doc->palette(m_paletteId);
@@ -3110,6 +3113,43 @@ void LookEditor::rebuildEffectDynWidget()
         dv->addLayout(pform);
     }
 
+    // --- Follow spot: is it on, and is it following? ---
+    if (ProgrammerController::isFollowSpotPalette(p) && m_doc->programmer() != nullptr)
+    {
+        QWidget *fsRow = new QWidget(m_effectDynWidget);
+        fsRow->setObjectName(QStringLiteral("followSpotStatus"));
+        QHBoxLayout *fsl = new QHBoxLayout(fsRow);
+        fsl->setContentsMargins(0, 2, 0, 2);
+        QLabel *dot = new QLabel(QStringLiteral("●"), fsRow);
+        dot->setObjectName(QStringLiteral("followSpotLight"));
+        QLabel *say = new QLabel(fsRow);
+        say->setObjectName(QStringLiteral("followSpotText"));
+        say->setWordWrap(true);
+        fsl->addWidget(dot, 0, Qt::AlignTop);
+        fsl->addWidget(say, 1);
+        dv->addWidget(fsRow);
+        ProgrammerController *pc = m_doc->programmer();
+        const quint32 me = p->id();
+        auto show = [pc, me, dot, say]() {
+            const ProgrammerController::FollowSpotStatus st = pc->followSpotStatus();
+            const bool mine = st.paletteId == me && st.state != ProgrammerController::FollowSpotStatus::Off;
+            QString colour = QStringLiteral("#777");
+            if (mine && st.state == ProgrammerController::FollowSpotStatus::Moving)
+                colour = QStringLiteral("#3ec46d");
+            else if (mine && st.state == ProgrammerController::FollowSpotStatus::Holding)
+                colour = QStringLiteral("#e0a820");
+            else if (mine)
+                colour = QStringLiteral("#d9534f");
+            dot->setStyleSheet(QStringLiteral("color: %1;").arg(colour));
+            dot->setProperty("state", mine ? int(st.state) : int(ProgrammerController::FollowSpotStatus::Off));
+            say->setText(mine ? pc->followSpotStatusText()
+                              : LookEditor::tr("Not playing. Play this look, or the cue it is in, and move "
+                                               "the stick to follow."));
+        };
+        show();
+        connect(pc, &ProgrammerController::followSpotStatusChanged, say, show);
+    }
+
     // --- Target bindings ---
     const QList<EffectScript::TargetDef> &tgtdefs = tmpScript.targetDefs();
     if (!tgtdefs.isEmpty())
@@ -3411,22 +3451,35 @@ void LookEditor::rebuildEffectDynWidget()
                    -> "11.30"); with only a minimum width that relayouts the
                    row's QFormLayout every tick and repaints the sibling
                    sliders -- on macOS those then render a stale handle. */
-                QDoubleSpinBox *val = new QDoubleSpinBox(row);
+                /* A length ("unit": "cm") shows and takes the unit Settings ->
+                   Units picks -- 5' 7" with feet -- and is kept in cm. */
+                const bool isLength = pd.unit == QLatin1String("cm");
+                QDoubleSpinBox *val = isLength ? new LengthSpinBox(10.0, row) : new QDoubleSpinBox(row);
                 val->setObjectName(QStringLiteral("effectParam_") + pd.name);
                 val->setButtonSymbols(QAbstractSpinBox::NoButtons);
                 val->setKeyboardTracking(false);     // on Enter / leaving it, not per key
-                val->setDecimals(pd.max - pd.min <= 2.0 ? 3 : 2);
+                val->setDecimals(isLength ? 2 : pd.max - pd.min <= 2.0 ? 3 : 2);
                 if (pd.max > pd.min)
                     val->setRange(pd.min, pd.max);
                 else
                     val->setRange(-1.0e6, 1.0e6);
                 val->setValue(cur);
-                val->setFixedWidth(64);
+                val->setFixedWidth(isLength ? 78 : 64);
                 val->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-                val->setToolTip(pd.max > pd.min
-                                ? tr("%1 -- type a value from %2 to %3")
-                                      .arg(pd.description, QString::number(pd.min), QString::number(pd.max))
-                                : pd.description);
+                if (isLength)
+                {
+                    const MeasurementUnits::LengthUnit u = static_cast<LengthSpinBox *>(val)->unit();
+                    val->setToolTip(tr("%1 -- from %2 to %3. %4")
+                                        .arg(pd.description,
+                                             MeasurementUnits::formatLength(pd.min * 10.0, u),
+                                             MeasurementUnits::formatLength(pd.max * 10.0, u),
+                                             MeasurementUnits::lengthHelp(u)));
+                }
+                else
+                    val->setToolTip(pd.max > pd.min
+                                    ? tr("%1 -- type a value from %2 to %3")
+                                          .arg(pd.description, QString::number(pd.min), QString::number(pd.max))
+                                    : pd.description);
                 sl->setProperty("valueLabel", QVariant::fromValue((QObject*)val));
                 rl->addWidget(val);
                 const QString valName = pd.name;

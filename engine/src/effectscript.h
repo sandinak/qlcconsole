@@ -186,6 +186,8 @@ public:
                                 // "path", "text" and "image" params ignore min/max
         float min = 0.0f, max = 1.0f, defaultValue = 0.5f;
         QString defaultText;    // a "text" param's defaultValue
+        QString unit;           // "cm": a length, kept in centimetres and shown and
+                                // typed in the unit Settings -> Units picks
         QStringList enumValues; // non-empty → render as dropdown; value is integer index
         QStringList aliases;    // former names; stored values under an alias map to this param
     };

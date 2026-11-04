@@ -51,6 +51,7 @@
 #define private public
 #define protected public
 #include "mastertimer.h"
+#include "programmercontroller.h"
 #include "universe.h"
 #include "programmingmanager.h"
 #include "workbench.h"
@@ -7916,6 +7917,88 @@ void ShowTreeView_Test::needsWorkInTheTree()
     QVERIFY(view.findChild<QCheckBox *>("stCueNeedsWork")->isChecked());
     QVERIFY(st->undo());
     QVERIFY(!st->isCueNeedsWork(c0));
+}
+
+/* "visual indication somewhere ... of followspot enable and activity": a cue
+   (and its layer) with a follow spot says "follow" under Flags, lit while it
+   follows, in the warning colour when no stick can move it. */
+void ShowTreeView_Test::followSpotFlagInTheTree()
+{
+    FixtureGroup *spots = group("AT-Spots", 0, 2);
+    QLCPalette *follow = new QLCPalette(QLCPalette::Effect, m_doc);
+    follow->setName("Follow SPot");
+    follow->setScriptPath(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts/followspot.js");
+    QVERIFY(m_doc->addPalette(follow));
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "Main");
+    const quint32 c0 = st->addCue(list, -1, "Music Start");
+    const quint32 c1 = st->addCue(list, 0, "Solo Start");
+    Target t;
+    t.groups << spots->id();
+    const quint32 layer = st->addLayer(c1, t);
+    QVERIFY(st->setLayerLook(c1, layer, st->lookForPalette(follow->id())));
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1200, 700);
+    QTreeWidget *tree = view.tree();
+    tree->expandAll();
+    QTreeWidgetItem *cue = cueRow(tree, c1);
+    QVERIFY(cue != nullptr);
+    QVERIFY(cue->text(ShowTreeView::FlagsCol).split(", ").contains("follow"));
+    QVERIFY(cue->toolTip(ShowTreeView::FlagsCol).contains("Follow spot"));
+    QVERIFY(!cueRow(tree, c0)->text(ShowTreeView::FlagsCol).contains("follow"));
+    QTreeWidgetItem *layerRow = nullptr;
+    for (QTreeWidgetItemIterator it(tree); *it; ++it)
+        if ((*it)->data(0, ShowTreeView::KindRole).toInt() == ShowTreeView::LayerNode
+            && (*it)->data(0, ShowTreeView::IdRole).toUInt() == layer)
+            layerRow = *it;
+    QVERIFY(layerRow != nullptr);
+    QVERIFY(layerRow->text(ShowTreeView::FlagsCol).contains("follow"));
+
+    // Not following: plain.
+    auto lit = [](QTreeWidgetItem *row) {
+        return row->data(ShowTreeView::FlagsCol, ShowTreeView::LitPiecesRole).toStringList().contains("follow");
+    };
+    auto warned = [](QTreeWidgetItem *row) {
+        return row->data(ShowTreeView::FlagsCol, ShowTreeView::WarnPiecesRole).toStringList().contains("follow");
+    };
+    QVERIFY(!lit(cue) && !warned(cue));
+
+    // The cue open (picked): its follow spot following lights the badge.
+    st->pickCue(c1);
+    QCOMPARE(st->editedCue(), c1);
+    using Status = ProgrammerController::FollowSpotStatus;
+    ProgrammerController *pc = m_doc->programmer();
+    auto set = [&](Status::State state) {
+        Status s;
+        s.state = state;
+        s.paletteId = follow->id();
+        s.sceneId = 1;
+        pc->m_followStatus = s;
+        emit pc->followSpotStatusChanged();
+        cue = cueRow(tree, c1);
+    };
+    set(Status::Moving);
+    QVERIFY(lit(cue) && !warned(cue));
+    set(Status::Holding);
+    QVERIFY(lit(cue));
+    // No stick: nothing can move it -- the warning colour.
+    set(Status::NoStick);
+    QVERIFY(!lit(cue) && warned(cue));
+    // Another follow spot, or none: plain again.
+    set(Status::Off);
+    QVERIFY(!lit(cue) && !warned(cue));
+    const QList<QPair<QString, QColor>> pieces = ShowTreeView::flagPieces(
+        tree->indexFromItem(cue, ShowTreeView::FlagsCol), Qt::gray);
+    QVERIFY(!pieces.isEmpty());
+    set(Status::Moving);
+    bool green = false;
+    for (const auto &p : ShowTreeView::flagPieces(tree->indexFromItem(cue, ShowTreeView::FlagsCol), Qt::gray))
+        if (p.first == "follow")
+            green = p.second == ShowTreeView::litColour();
+    QVERIFY(green);
+    pc->m_followStatus = Status();
+    st->stopPreview();
 }
 
 void ShowTreeView_Test::moveInBlackPerListAndCueInTheTree()

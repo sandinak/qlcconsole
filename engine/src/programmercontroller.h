@@ -462,6 +462,43 @@ public:
     /** True if a joystick axis is bound AND a controller is connected, i.e. the
      *  follow-spot can actually be driven. False = "nothing plugged in". */
     bool hasFollowSpotInput() const;
+
+    /** What the follow spot is doing, for the indicators (the effect
+     *  editor's status line, the rig view's lines to the subject, the Show
+     *  Tree's "follow" flag). Main thread. */
+    struct FollowSpotStatus
+    {
+        enum State
+        {
+            Off,        //!< no follow spot in the Workbench scene or in a running cue
+            NoStick,    //!< one is on, but no stick is bound: nothing moves its subject
+            Holding,    //!< the stick is bound and centred: the spot holds the subject
+            Moving      //!< the stick is moving the subject now
+        };
+        State state = Off;
+        quint32 sceneId = UINT_MAX;     //!< the scene with the follow-spot look
+        quint32 paletteId = UINT_MAX;   //!< its follow-spot effect look
+        quint32 targetId = UINT_MAX;    //!< the stage target it follows (UINT_MAX: free-fly)
+        bool live = false;              //!< from a running cue, not the Workbench
+
+        bool operator==(const FollowSpotStatus &o) const
+        {
+            return state == o.state && sceneId == o.sceneId && paletteId == o.paletteId
+                   && targetId == o.targetId && live == o.live;
+        }
+        bool operator!=(const FollowSpotStatus &o) const { return !(*this == o); }
+    };
+    FollowSpotStatus followSpotStatus() const { return m_followStatus; }
+    /** "Following ES-Witch · moving" and so on: the status in words. */
+    QString followSpotStatusText() const;
+    /** True if @p palette is a follow-spot effect look. */
+    static bool isFollowSpotPalette(const QLCPalette *palette);
+    /** The newest scene playing right now (on its own, a chaser's step or a
+     *  collection's member -- a Show Tree cue) that carries a follow-spot
+     *  effect look; invalid if none. What the stick drives when nothing is
+     *  open in the Workbench. */
+    quint32 liveFollowSpotScene() const;
+
     bool isCapturingPan()     const { return m_capturingPan; }
     bool isCapturingTilt()    const { return m_capturingTilt; }
     bool isBoundFromProfile() const { return m_boundFromProfile; }
@@ -589,6 +626,9 @@ signals:
      *  @p visible is false when no floor position is computable (hide pin).
      *  @p xMeters, @p yMeters give the floor XY in metres (stage space). */
     void followSpotPinChanged(bool visible, float xMeters, float yMeters);
+
+    /** The follow spot's status changed (see followSpotStatus()). */
+    void followSpotStatusChanged();
 
     /** Emitted when joystick sensitivity changes. */
     void joystickSensitivityChanged(float s);
@@ -832,6 +872,52 @@ private:
     bool      m_aimRestoreValid = false;
     /** Restore the transiently-moved Operate aim target to its authored position. */
     void restoreAim();
+    /** Seed the stage aim from @p sceneId's Aim target; @p transient: the
+     *  target is put back when the follow ends (Run, or a live cue). */
+    void seedStageAim(quint32 sceneId, bool transient);
+
+    /** The scene the stick drives: the Workbench's, or else the running
+     *  cue's follow spot (seeding / restoring its target as that changes). */
+    Scene *joystickScene();
+    /** The running cue's follow-spot scene the stick drives while nothing is
+     *  open in the Workbench (invalid: none). Its target moves transiently. */
+    quint32 m_liveFollowSceneId = UINT_MAX;
+    /** Its follow-spot look and the target it follows. */
+    quint32 m_liveFollowPalette = UINT_MAX;
+    quint32 m_liveFollowTarget = UINT_MAX;
+    /** The running cue's follow spot ends (or the stick goes to the
+     *  Workbench, @p next invalid): it carries on into @p next when that
+     *  follows the same target (the layer tracks), and nothing moves; else
+     *  a Persist look keeps its subject where it was driven, and any other
+     *  glides it back (startRestoreGlide()). True when it carried on. */
+    bool endLiveFollow(quint32 next);
+    /** The follow-spot look and the target of @p scene (UINT_MAX: none). */
+    void followOf(const Scene *scene, quint32 &palette, quint32 &target) const;
+    /** The scenes playing now, newest first (as routeProgrammerEdit() reads them). */
+    QList<Scene *> liveScenes() const;
+    /** A subject going back where the show has it: over the cue's fade,
+     *  never in one step. Advanced one stick tick (20 ms) at a time. */
+    struct RestoreGlide
+    {
+        bool active = false;
+        quint32 targetId = UINT_MAX;
+        QVector3D from, to;
+        int ms = 0;
+        int elapsedMs = 0;
+    } m_glide;
+    void startRestoreGlide();
+    void advanceRestoreGlide();
+    /** The fade of the cue going on now (its chaser step's fade in), at
+     *  least 500 ms, so no subject jumps. */
+    int liveCueFadeMs() const;
+    /** Ticks since the running scenes were last searched (10 Hz scan). */
+    int m_liveFollowScanTicks = 0;
+    quint32 m_liveFollowScanResult = UINT_MAX;
+    /** When the stick last moved the follow spot (Moving, for a moment after). */
+    QElapsedTimer m_followMovedClock;
+    FollowSpotStatus m_followStatus;
+    /** Work out m_followStatus for @p scene; emit followSpotStatusChanged on a change. */
+    void updateFollowSpotStatus(Scene *scene);
 
     // followMode = lastPosition: the beam's last floor position persists across
     // scene transitions (unlike m_stageAimValid, reset by setFocusedScene) so a

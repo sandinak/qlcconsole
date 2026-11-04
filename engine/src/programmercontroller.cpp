@@ -2881,9 +2881,13 @@ void ProgrammerController::applyDesignJoystick()
     // (the scene re-resolves per-fixture pan/tilt from the moved target).  A
     // Standard Pan/Tilt look is fixed; a followspot.js effect, when present,
     // owns the joystick instead (this path yields to it below).
-    if (m_focusedSceneId == Function::invalidId())
-        return;
-    Scene *scene = qobject_cast<Scene*>(m_doc->function(m_focusedSceneId));
+    //
+    // The scene is the Workbench's, or -- nothing open there, as while a
+    // Show Tree cue runs -- the running cue's follow spot. Before 0.4 only
+    // the Workbench's counted, so a follow spot in a cue never moved.
+    advanceRestoreGlide();
+    Scene *scene = joystickScene();
+    updateFollowSpotStatus(scene);
     if (!scene)
         return;
     if (!m_panBound && !m_tiltBound)
@@ -2914,7 +2918,12 @@ void ProgrammerController::applyDesignJoystick()
                 hasAimTarget = true;
         }
         if (hasFollowspot && !hasAimTarget)
+        {
+            // Free-fly: the effect flies the heads from the stick itself.
+            if (qAbs(m_panNorm - 0.5f) * 2.0f >= 0.12f || qAbs(m_tiltNorm - 0.5f) * 2.0f >= 0.12f)
+                m_followMovedClock.restart();
             return;
+        }
     }
 
     // Working selection: programmer selection first, then all scene fixtures.
@@ -2996,6 +3005,7 @@ void ProgrammerController::applyDesignJoystick()
             m_stageAimX = qBound(-50.0f, m_stageAimX + xVel * speed * dt, 50.0f);
             m_stageAimY = qBound(-50.0f, m_stageAimY + yVel * speed * dt, 50.0f);
             m_beamHeldValid = true;   // a real beam position now exists (lastPosition)
+            m_followMovedClock.restart();
 
             tgt->setPosition(QVector3D(m_stageAimX, m_stageAimY, 0.0f));
 
@@ -3751,12 +3761,28 @@ void ProgrammerController::setFocusedScene(quint32 sceneId)
     }
     m_stageAimValid = false;
 
+    // A scene opened in the Workbench takes the stick from a running cue's
+    // follow spot (Persist keeps its subject where it is; else it glides
+    // back). Nothing opened (the Show Tree's rows) leaves it alone.
+    if (sceneId != Function::invalidId())
+        endLiveFollow(Function::invalidId());
+
     // Entering a follow-spot scene that aims at an existing target: start the
     // beam pin AT the target so it never begins from a stale/centre position.
     seedStageAimFromScene(sceneId);
+    m_liveFollowScanTicks = 0;
 }
 
 void ProgrammerController::seedStageAimFromScene(quint32 sceneId)
+{
+    // Nothing open, while a running cue's follow spot has the stick: its
+    // subject stays where it is (endLiveFollow() decides when it goes back).
+    if (sceneId == Function::invalidId() && m_liveFollowSceneId != Function::invalidId())
+        return;
+    seedStageAim(sceneId, m_doc->mode() == Doc::Operate);
+}
+
+void ProgrammerController::seedStageAim(quint32 sceneId, bool transient)
 {
     // Restore any target a previous Operate run moved transiently, so the saved
     // target returns to its authored position before we (re)seed.
@@ -3775,7 +3801,7 @@ void ProgrammerController::seedStageAimFromScene(quint32 sceneId)
             if (tgt == NULL)
                 continue;
 
-            const bool operate = (m_doc->mode() == Doc::Operate);
+            const bool operate = transient;
             // lastPosition (default): in Run, HOLD the beam where the previous
             // scene left it — move the new scene's target (transiently) to the
             // held floor position so the heads don't jump on transition.
@@ -3845,8 +3871,260 @@ void ProgrammerController::restoreAim()
         // without flashing the LEDs.
         if (Scene *scene = qobject_cast<Scene*>(m_doc->function(m_focusedSceneId)))
             scene->requestReaim();
+        if (m_liveFollowSceneId != m_focusedSceneId)
+            if (Scene *scene = qobject_cast<Scene*>(m_doc->function(m_liveFollowSceneId)))
+                scene->requestReaim();
     }
     m_aimRestoreValid = false;
+}
+
+bool ProgrammerController::isFollowSpotPalette(const QLCPalette *palette)
+{
+    return palette != nullptr && palette->type() == QLCPalette::Effect
+           && palette->scriptPath().contains(QLatin1String("followspot"), Qt::CaseInsensitive);
+}
+
+QList<Scene *> ProgrammerController::liveScenes() const
+{
+    QList<quint32> scenes, chasers, collections;
+    {
+        QMutexLocker locker(&m_stateMutex);
+        scenes = m_runningScenes;
+        chasers = m_runningChasers;
+        collections = m_runningCollections;
+    }
+    // Newest first, as routeProgrammerEdit() reads them.
+    QList<Scene*> candidates;
+    for (int i = scenes.size() - 1; i >= 0; --i)
+        collectActiveScenes(m_doc, m_doc->function(scenes.at(i)), candidates);
+    for (int i = chasers.size() - 1; i >= 0; --i)
+        collectActiveScenes(m_doc, m_doc->function(chasers.at(i)), candidates);
+    for (int i = collections.size() - 1; i >= 0; --i)
+        collectActiveScenes(m_doc, m_doc->function(collections.at(i)), candidates);
+    QList<Scene *> out;
+    for (Scene *s : std::as_const(candidates))
+        if (s->isRunning())
+            out << s;
+    return out;
+}
+
+void ProgrammerController::followOf(const Scene *scene, quint32 &palette, quint32 &target) const
+{
+    palette = UINT_MAX;
+    target = UINT_MAX;
+    if (scene == nullptr)
+        return;
+    for (quint32 pid : scene->palettes())
+    {
+        QLCPalette *p = m_doc->palette(pid);
+        if (isFollowSpotPalette(p) && palette == UINT_MAX)
+            palette = pid;
+        else if (p != nullptr && p->type() == QLCPalette::Aim)
+            target = p->stageTargetId();
+    }
+    if (palette == UINT_MAX)
+        target = UINT_MAX;
+}
+
+quint32 ProgrammerController::liveFollowSpotScene() const
+{
+    for (Scene *s : liveScenes())
+        for (quint32 pid : s->palettes())
+            if (isFollowSpotPalette(m_doc->palette(pid)))
+                return s->id();
+    return Function::invalidId();
+}
+
+int ProgrammerController::liveCueFadeMs() const
+{
+    QList<quint32> chasers;
+    {
+        QMutexLocker locker(&m_stateMutex);
+        chasers = m_runningChasers;
+    }
+    int ms = 1000;
+    for (int i = chasers.size() - 1; i >= 0; --i)
+        if (Chaser *c = qobject_cast<Chaser *>(m_doc->function(chasers.at(i))))
+        {
+            const ChaserRunnerStep step = c->currentRunningStep();
+            if (step.m_function != nullptr)
+            {
+                ms = step.m_fadeIn > 600000 ? 1000 : int(step.m_fadeIn);
+                break;
+            }
+        }
+    return qMax(500, ms);
+}
+
+void ProgrammerController::startRestoreGlide()
+{
+    if (!m_aimRestoreValid)
+        return;
+    m_aimRestoreValid = false;
+    MonitorProperties *mProps = m_doc->monitorProperties();
+    StageTarget *tgt = mProps ? mProps->stageTarget(m_aimRestoreTgtId) : nullptr;
+    if (tgt == nullptr || (tgt->position() - m_aimRestoreOrig).length() < 1e-4f)
+        return;
+    m_glide.active = true;
+    m_glide.targetId = m_aimRestoreTgtId;
+    m_glide.from = tgt->position();
+    m_glide.to = m_aimRestoreOrig;
+    m_glide.ms = liveCueFadeMs();
+    m_glide.elapsedMs = 0;
+}
+
+void ProgrammerController::advanceRestoreGlide()
+{
+    if (!m_glide.active)
+        return;
+    MonitorProperties *mProps = m_doc->monitorProperties();
+    StageTarget *tgt = mProps ? mProps->stageTarget(m_glide.targetId) : nullptr;
+    if (tgt == nullptr)
+    {
+        m_glide.active = false;
+        return;
+    }
+    m_glide.elapsedMs += m_designJoyTimer != nullptr ? m_designJoyTimer->interval() : 20;
+    const double t = qMin(1.0, double(m_glide.elapsedMs) / double(qMax(1, m_glide.ms)));
+    const double e = t * t * (3.0 - 2.0 * t);          // eased in and out
+    tgt->setPosition(m_glide.from + (m_glide.to - m_glide.from) * float(e));
+    // Whatever still aims at it follows it back.
+    for (Scene *sc : liveScenes())
+        for (quint32 pid : sc->palettes())
+        {
+            QLCPalette *p = m_doc->palette(pid);
+            if (p != nullptr && p->type() == QLCPalette::Aim && p->stageTargetId() == m_glide.targetId)
+            {
+                sc->requestReaim();
+                break;
+            }
+        }
+    if (t >= 1.0)
+        m_glide.active = false;
+}
+
+bool ProgrammerController::endLiveFollow(quint32 next)
+{
+    if (m_liveFollowSceneId == Function::invalidId())
+        return false;
+    quint32 nextPalette = UINT_MAX, nextTarget = UINT_MAX;
+    followOf(qobject_cast<Scene *>(m_doc->function(next)), nextPalette, nextTarget);
+    if (nextPalette != UINT_MAX && nextTarget != UINT_MAX && nextTarget == m_liveFollowTarget)
+    {
+        // It tracks into the next cue (the same subject followed): it carries
+        // on from where it is -- nothing moves, nothing is put back.
+        m_liveFollowSceneId = next;
+        m_liveFollowPalette = nextPalette;
+        return true;
+    }
+    QLCPalette *look = m_doc->palette(m_liveFollowPalette);
+    if (look != nullptr && look->persistent())
+        m_aimRestoreValid = false;      // Persist: the subject stays where it was driven
+    else
+        startRestoreGlide();            // back where the show has it, over the cue's fade
+    m_liveFollowSceneId = Function::invalidId();
+    m_liveFollowPalette = UINT_MAX;
+    m_liveFollowTarget = UINT_MAX;
+    m_stageAimValid = false;
+    return false;
+}
+
+Scene *ProgrammerController::joystickScene()
+{
+    quint32 live = Function::invalidId();
+    if (m_focusedSceneId == Function::invalidId())
+    {
+        // Look the running cues over ten times a second, not on every tick.
+        if (m_liveFollowScanTicks <= 0)
+        {
+            m_liveFollowScanResult = liveFollowSpotScene();
+            m_liveFollowScanTicks = 5;
+        }
+        --m_liveFollowScanTicks;
+        live = m_liveFollowScanResult;
+    }
+
+    if (live != m_liveFollowSceneId)
+    {
+        /* The cue's follow spot went, or another came. Following the same
+           subject on (the layer tracks), it carries on untouched. Else a
+           Persist look leaves its subject where it was driven, and any other
+           glides back over the cue's fade -- the show is not edited by flying
+           a spot in it, and no cue change makes the beam jump. */
+        if (!endLiveFollow(live) && live != Function::invalidId())
+        {
+            m_liveFollowSceneId = live;
+            followOf(qobject_cast<Scene *>(m_doc->function(live)), m_liveFollowPalette, m_liveFollowTarget);
+            if (m_glide.active && m_glide.targetId == m_liveFollowTarget)
+                m_glide.active = false;         // followed again: it stays where it is
+            seedStageAim(live, true);
+        }
+    }
+
+    const quint32 id = m_focusedSceneId != Function::invalidId() ? m_focusedSceneId : live;
+    return id == Function::invalidId() ? nullptr : qobject_cast<Scene*>(m_doc->function(id));
+}
+
+void ProgrammerController::updateFollowSpotStatus(Scene *scene)
+{
+    FollowSpotStatus st;
+    if (scene != nullptr)
+    {
+        for (quint32 pid : scene->palettes())
+        {
+            QLCPalette *p = m_doc->palette(pid);
+            if (isFollowSpotPalette(p) && st.paletteId == UINT_MAX)
+                st.paletteId = pid;
+            else if (p != nullptr && p->type() == QLCPalette::Aim)
+                st.targetId = p->stageTargetId();
+        }
+        if (st.paletteId != UINT_MAX)
+        {
+            st.sceneId = scene->id();
+            st.live = scene->id() == m_liveFollowSceneId && m_focusedSceneId == Function::invalidId();
+            if (!m_panBound && !m_tiltBound)
+                st.state = FollowSpotStatus::NoStick;
+            else if (m_followMovedClock.isValid() && m_followMovedClock.elapsed() < 400)
+                st.state = FollowSpotStatus::Moving;
+            else
+                st.state = FollowSpotStatus::Holding;
+        }
+        else
+            st.targetId = UINT_MAX;
+    }
+    if (st != m_followStatus)
+    {
+        m_followStatus = st;
+        emit followSpotStatusChanged();
+    }
+}
+
+QString ProgrammerController::followSpotStatusText() const
+{
+    const FollowSpotStatus &st = m_followStatus;
+    if (st.state == FollowSpotStatus::Off)
+        return tr("Follow spot off");
+    // Persist: where it is driven is where it stays, after the cue too.
+    const QLCPalette *look = m_doc->palette(st.paletteId);
+    const QString persists = look != nullptr && look->persistent() ? tr(" · persists") : QString();
+    QString who;
+    if (st.targetId != UINT_MAX)
+        if (MonitorProperties *mp = m_doc->monitorProperties())
+            if (StageTarget *t = mp->stageTarget(st.targetId))
+                who = t->name();
+    switch (st.state)
+    {
+    case FollowSpotStatus::NoStick:
+        return who.isEmpty()
+            ? tr("Follow spot on, flown by hand -- but no stick is bound, so it doesn't move")
+            : tr("Following %1, which doesn't move -- bind a stick to move it").arg(who);
+    case FollowSpotStatus::Moving:
+        return (who.isEmpty() ? tr("Follow spot · flying") : tr("Following %1 · moving").arg(who)) + persists;
+    case FollowSpotStatus::Holding:
+    default:
+        return who.isEmpty() ? tr("Follow spot · holding%1 (move the stick to fly it)").arg(persists)
+                             : tr("Following %1 · holding%2 (move the stick to move it)").arg(who, persists);
+    }
 }
 
 bool ProgrammerController::hasFollowSpotInput() const

@@ -1577,6 +1577,9 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
     connect(m_tree, &QTreeWidget::itemSelectionChanged, this, &ShowTreeView::slotTreeSelectionChanged);
     connect(m_tree, &QTreeWidget::customContextMenuRequested, this, &ShowTreeView::slotTreeContextMenu);
     setupBackwashMarks();     // PWR-12: "⚠ cyc" on a cue (showtreebackwash.cpp)
+    if (m_doc != nullptr && m_doc->programmer() != nullptr)
+        connect(m_doc->programmer(), &ProgrammerController::followSpotStatusChanged,
+                this, &ShowTreeView::refreshFollowBadges);
     // W3: double-click a cue, a look or a layer: it opens in the Workbench,
     // docked here (a layer that plays a function as it is, W0's Open, too:
     // its editor is the Workbench's, and ▣ Open loads it there).
@@ -3297,6 +3300,23 @@ void ShowTreeView::buildTree()
                     if (carried > 0)
                         ci->setText(TracksCol, QString::number(carried));
                 }
+                // A follow spot in it: "follow", lit while it follows.
+                QVariantList followPals;
+                for (const Layer &layer : cue.layers)
+                    for (const Look &l : layer.looks)
+                        for (quint32 pid : l.palettes)
+                            if (ProgrammerController::isFollowSpotPalette(m_doc->palette(pid))
+                                && !followPals.contains(pid))
+                                followPals << pid;
+                if (!followPals.isEmpty())
+                {
+                    badges << tr("follow");
+                    badgeTip = QStringList({ badgeTip, tr("Follow spot: while this cue plays, the stick moves "
+                                                          "the subject it follows and every head follows it. "
+                                                          "\"follow\" lights while it does.") })
+                               .join(QStringLiteral("\n\n")).trimmed();
+                    ci->setData(FlagsCol, FollowPalettesRole, followPals);
+                }
                 if (!list.looks && cue.skip)
                     badges.prepend(tr("skip"));
                 ci->setText(FlagsCol, badges.join(QStringLiteral(", ")));
@@ -3368,6 +3388,20 @@ void ShowTreeView::buildTree()
                         yi->setText(SetsCol, dot);
                     if (layer.reusable != invalidId())
                         yi->setText(FlagsCol, tr("×%1").arg(m_st->reusableUses(layer.reusable).count()));
+                    {
+                        QVariantList layerFollow;
+                        for (const Look &l : layer.looks)
+                            for (quint32 pid : l.palettes)
+                                if (ProgrammerController::isFollowSpotPalette(m_doc->palette(pid))
+                                    && !layerFollow.contains(pid))
+                                    layerFollow << pid;
+                        if (!layerFollow.isEmpty())
+                        {
+                            yi->setText(FlagsCol, yi->text(FlagsCol).isEmpty() ? tr("follow")
+                                        : yi->text(FlagsCol) + QStringLiteral(", ") + tr("follow"));
+                            yi->setData(FlagsCol, FollowPalettesRole, layerFollow);
+                        }
+                    }
                     for (int c = SetsCol; c < FlagsCol; ++c)
                         yi->setTextAlignment(c, Qt::AlignCenter);
                     QString tip = QStringLiteral("%1\n%2").arg(m_st->targetContents(layer.target),
@@ -3588,6 +3622,7 @@ void ShowTreeView::buildTree()
         if (QTreeWidgetItem *item = findItem(sel.first, sel.second))
             item->setSelected(true);
     applyBackwashMarks();
+    refreshFollowBadges();
     m_reloading = false;
 }
 

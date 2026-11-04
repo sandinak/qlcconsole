@@ -84,6 +84,8 @@ private slots:
      *  on every effect, kept on the look. */
     void anyEffectRunsOnceOrNTimes();
     void anEffectSettingTakesATypedValue();
+    void aLengthShowsAndTakesTheChosenUnit();
+    void theFollowSpotEditorSaysWhatItIsDoing();
     void aWavesLengthIsOneCycle();
     /** "if we go from Red to Dark Red .. we should auto update the title ..
      *  only update the color part .. the folder should stay consistent."

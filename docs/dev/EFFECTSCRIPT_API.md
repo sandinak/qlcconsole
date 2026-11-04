@@ -124,6 +124,9 @@ effect.parameters = [
     // animated GIF, up to 2 MB) is kept IN the look as a data URI and arrives
     // decoded (see params below):
     { name: "image", description: "The picture or GIF", type: "image" },
+    // unit:"cm" → a length, kept (and handed to tick) in centimetres; the look
+    // editor shows and takes it in the unit Settings → Units picks (5' 7"):
+    { name: "personHeight", description: "Height", unit: "cm", min: 50, max: 250, defaultValue: 170 },
     // 'aliases' = former names for this param. A stored value under an old name
     // maps to this one, so renaming a param doesn't break saved looks/Effects:
     { name: "rate", description: "Cycles/sec", aliases: ["speed"], min: 0, max: 20, defaultValue: 1 }

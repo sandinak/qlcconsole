@@ -404,6 +404,47 @@ with an Aim look:
   rig positions). Per-fixture "free-fly" from a joystick is only used when
   no Aim look is present at all.
 
+### Moving a follow spot
+
+A follow spot doesn't move by itself. It follows its subject -- the
+target its look's **Aim** points at -- and a target stays where it is put
+until something moves it. That something is the **stick**: a game
+controller or joystick whose pan and tilt axes are bound (a controller's
+profile binds them for you; Settings → Advanced → Game controllers). Push
+the stick and the subject walks across the floor; every head on it
+re-aims, so they stay together on the one spot. Let go and it holds.
+
+- **In a running cue.** Fire the cue (GO, the Run tab, the pad) and the
+  stick moves its follow spot -- nothing needs to be open in the
+  Workbench. (Open in Build, the stick moves the Workbench's scene
+  instead, and Save Positions keeps it.)
+- **Across cues nothing jumps.** A layer that tracks into the next cue
+  (the same subject followed there) carries on from where the stick left
+  it. With **Persist across restarts** ticked on the follow-spot look, the
+  subject stays where you drove it after the cue ends too, and the next
+  cue that follows it starts from there -- the line then says *·
+  persists*. Otherwise, when the follow spot is released, the subject
+  glides back to where the show has it over the cue's fade (half a second
+  at the least), never in one step. Flying a spot in a cue never changes
+  the saved show.
+- **No stick bound**, it holds the subject where it stands, and says so.
+- **With no Aim look** it flies each head's angle from the stick itself
+  (free-fly); good for one head, not for several.
+
+Where you can see it:
+
+- **The Followspot effect's editor**: a light and a line --
+  *Following ES-Witch · moving* (green), *· holding* (amber), or *which
+  doesn't move -- bind a stick* (red); *Not playing* when it isn't on.
+- **The rig view**: the subject ringed, with a line from each head to it,
+  in the same colours.
+- **The Show Tree**: **follow** under Flags on the cue and its layer, lit
+  green while it follows.
+
+Person Height and Size On Subject show in the unit **Settings → Units**
+picks (5' 7" in feet), and take a length typed in any unit: 5' 6", 5.5 ft,
+66 in, 1.676 m. So do the target editor's heights.
+
 The follow spot's stick is also the stick [Quick focus](lighting-studio.md#quick-focus)
 uses: while Quick focus is on it nudges calibration offsets instead, with the
 same deadzone and sensitivity.
