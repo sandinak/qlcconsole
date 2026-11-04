@@ -9537,8 +9537,10 @@ void Monitor_Test::aZoomHeadsConeFollowsItsZoomChannel()
                                      classifyFixture(fixed))), 15);
     Fixture *none = build(QLCChannel::Custom, 0.0, 0.0, 24, "No Lens");
     QVERIFY(none != nullptr);
+    // No lens declared: the default for its type (a moving head's 15), assumed.
     QCOMPARE(fixtureBeamAngle(none, QByteArray(512, char(0)),
-                              classifyFixture(none)), 0.0);
+                              classifyFixture(none)), 15.0);
+    QVERIFY(classifyFixture(none).beamAssumed);
 
     delete doc;
 }

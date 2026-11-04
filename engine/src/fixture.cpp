@@ -1220,11 +1220,18 @@ Fixture::EffectiveBeam Fixture::effectiveBeam() const
     const QLCPhysical &phy = m_fixtureMode->physical();
     e.panMax = phy.focusPanMax();
     e.tiltMax = phy.focusTiltMax();
+    /* One pass over the mode's channels (a pixel bar has hundreds of heads;
+       asking each for its pan was a scan per head). */
     bool hasPan = false, hasTilt = false;
-    for (int h = 0; h < heads(); ++h)
+    const QList<QLCChannel *> chans = m_fixtureMode->channels();
+    for (const QLCChannel *ch : chans)
     {
-        hasPan = hasPan || channelNumber(QLCChannel::Pan, QLCChannel::MSB, h) != QLCChannel::invalid();
-        hasTilt = hasTilt || channelNumber(QLCChannel::Tilt, QLCChannel::MSB, h) != QLCChannel::invalid();
+        if (ch == NULL)
+            continue;
+        hasPan = hasPan || ch->group() == QLCChannel::Pan;
+        hasTilt = hasTilt || ch->group() == QLCChannel::Tilt;
+        if (hasPan && hasTilt)
+            break;
     }
     const bool head = (type() == QLCFixtureDef::MovingHead);
     if (e.panMax <= 0.0)
