@@ -52,7 +52,9 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   footer (Grid, Snap, Overlay, View and the notice) was squashed to a
   sliver under the scroll bar. It now grows to hold the scroll bar (any
   bar that scrolls sideways does).
-
+- **Show Review's Fix ▸ says when it can't go there.** A finding whose
+  cue, layer or fixture has since changed or gone used to do nothing on Fix
+  ▸ or a double-click; the summary line now says so and to Re-check.
 - **Three states for a Show Review warning, visible on the cue.** Open is
   the amber **⚠ cyc**; **I Meant It** turns it green (**cyc ✓**; hover says
   who marked it, when, and the note); **Not a Problem…** (was Accept…)

@@ -80,7 +80,8 @@ show's own names. Hover a row for **why it matters**. Show **Open**,
 
 - **Fix ▸** (or double-click) goes to the place to fix it: the cue in the
   Show Tree, the function, the Patch dialog on the fixtures, Connections on
-  the universe, the Lighting Studio.
+  the universe, the Lighting Studio. If that place has changed or gone
+  since the last check, the summary line says so: **Re-check**.
 - **Not a Problem…** (it was **Not a Problem…**) says the finding doesn't matter
   here. Write a note (it is required) and your name. See [Accepting a finding](#accepting-a-finding).
 - **Reopen** takes an acceptance back.

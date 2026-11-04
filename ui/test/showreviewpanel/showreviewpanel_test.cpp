@@ -185,6 +185,13 @@ void ShowReviewPanel_Test::fixGoesToThePlace()
     QVERIFY(panel.fixButton()->isEnabled());
     QVERIFY(panel.fixSelected());
     QCOMPARE(ran, QStringList() << "Lamp 1");              // the footer's own fix
+
+    // A place that is gone (wfaudit 2026-11-03): Fix ▸ says so, never nothing.
+    ShowReviewPanel::setJumper([](QWidget *, const QString &, const QVariantList &) { return false; });
+    QVERIFY(panel.selectCheck("PAT-01"));
+    QVERIFY(!panel.fixSelected());
+    panel.fixButton()->click();
+    QVERIFY2(panel.summary()->text().contains("Couldn't go there"), qPrintable(panel.summary()->text()));
     ShowReviewPanel::setJumper(ShowReviewPanel::Jumper());
 }
 
