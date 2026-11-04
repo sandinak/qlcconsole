@@ -6155,8 +6155,10 @@ QString ShowTreeView::startHereSentence(quint32 cueId, const Target &target) con
         names = names.mid(0, 3);
         names << tr("%n more", "", more);
     }
-    return tr("%1 will no longer have %2")
-        .arg(QLocale().createSeparatedList(names), m_st->targetLabel(target));
+    // "A", "A and B", "A, B and C" -- the same in every locale's list style.
+    const QString last = names.takeLast();
+    const QString joined = names.isEmpty() ? last : tr("%1 and %2").arg(names.join(QStringLiteral(", ")), last);
+    return tr("%1 will no longer have %2").arg(joined, m_st->targetLabel(target));
 }
 
 QMessageBox *ShowTreeView::startHereBox(quint32 cueId, const Target &target)
