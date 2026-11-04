@@ -660,6 +660,20 @@ QIcon runIcon()
     });
 }
 
+QIcon hitIcon()
+{
+    return cached(QStringLiteral("row:hit"), [](QPainter &p, const QColor &) {
+        // A lightning bolt, yellow with an amber edge so it reads on a light
+        // or a dark theme: a one-shot strike.
+        QPolygonF bolt;
+        bolt << QPointF(19.5, 2) << QPointF(7, 18) << QPointF(14, 18) << QPointF(11.5, 30)
+             << QPointF(25, 12.5) << QPointF(17.5, 12.5);
+        p.setPen(QPen(kAmber, 1.6, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+        p.setBrush(kLight);
+        p.drawPolygon(bolt);
+    });
+}
+
 QIcon swatchIcon(const QColor &color)
 {
     return cached(QStringLiteral("swatch:%1").arg(color.name(QColor::HexArgb)),

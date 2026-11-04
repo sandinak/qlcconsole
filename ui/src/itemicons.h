@@ -84,6 +84,9 @@ namespace ItemIcons
     QIcon showTreeIcon();
     /** A green GO button: the Run tab. */
     QIcon runIcon();
+    /** A lightning bolt: a hit (a busking one-shot) wherever hits are listed
+     *  -- the Show Tree's Hits rows and their cues. Nothing else uses a bolt. */
+    QIcon hitIcon();
     QIcon swatchIcon(const QColor &color);
     QIcon kindIcon(FixtureKind kind, bool group = false);
 

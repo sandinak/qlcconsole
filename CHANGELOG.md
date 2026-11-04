@@ -14,6 +14,10 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Added
 
+- **A hit has its own icon** (0.4.0): a yellow lightning bolt on every hit
+  row in the Show Tree and on the **Hits** rows over them, so a hit is told
+  from a layer (what it lights) and a cue (no picture) at a glance, in the
+  dark and light themes.
 - **The same edit keys in every list** (board WF1-A, W2-Q2). **⌫**,
   **F2**, **⌘C / ⌘V**, **⌘D** and **⌘F** now do the same thing in the Show
   Tree, Build's Palettes, Effects and Scenes, the Fixtures tab, Plot layers

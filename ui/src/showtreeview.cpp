@@ -3232,7 +3232,7 @@ void ShowTreeView::buildTree()
                 globalHits->setText(0, tr("Hits"));
                 globalHits->setText(1, tr("everywhere"));
                 globalHits->setFont(0, boldFont);
-                globalHits->setIcon(0, QIcon(":/collection.png"));
+                globalHits->setIcon(0, ItemIcons::hitIcon());
                 globalHits->setData(0, KindRole, HitsNode);
                 globalHits->setData(0, IdRole, sectionId);
                 globalHits->setData(0, ScopeRole, int(HitScope::Global));
@@ -3249,7 +3249,7 @@ void ShowTreeView::buildTree()
             return nullptr;
         QTreeWidgetItem *g = new QTreeWidgetItem(place);
         g->setText(0, tr("Hits"));
-        g->setIcon(0, QIcon(":/collection.png"));
+        g->setIcon(0, ItemIcons::hitIcon());
         g->setData(0, KindRole, HitsNode);
         g->setData(0, IdRole, sectionId);
         g->setData(0, ScopeRole, int(hit.scope));
@@ -3359,7 +3359,7 @@ void ShowTreeView::buildTree()
                 li->setText(0, tr("Hits"));
                 li->setText(1, tr("busking"));
                 li->setData(0, FolderRole, QStringLiteral("/"));
-                li->setIcon(0, QIcon(":/collection.png"));
+                li->setIcon(0, ItemIcons::hitIcon());
                 li->setToolTip(0, tr("Hits, for busking: built with layers like cues, never tracking; each plays from a "
                                      "VC button (Make VC Page), over whatever runs."));
                 for (const QString &path : m_st->lookFolders(list.id))
@@ -3388,6 +3388,8 @@ void ShowTreeView::buildTree()
                 QTreeWidgetItem *ci = new QTreeWidgetItem(parentItem != nullptr ? parentItem
                                                           : list.looks ? folderItem(cue.folder) : li);
                 ci->setText(0, m_st->cueLabel(list, i));
+                if (list.looks)
+                    ci->setIcon(0, ItemIcons::hitIcon());   // a hit: its own bolt, not a layer's or a cue's
                 /* Its flags, a column each (Q104): a dot where it has one,
                    counts for what it sets, tracks and releases; the rest
                    under Also. */

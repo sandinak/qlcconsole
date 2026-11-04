@@ -107,6 +107,7 @@
 #include "qlcfixturehead.h"
 #include "qlcchannel.h"
 #include "qlcfixturemode.h"
+#include "itemicons.h"
 #include "showtreeview.h"
 #include "showcontrollistener.h"
 #include "moveinblackbutton.h"
@@ -5897,6 +5898,56 @@ void ShowTreeView_Test::theProductionSwitcherAndPage()
    mode; + Sub-cue (header, context menu, the cue page's link) is one undo
    step each; what tracks from a sub-cue says "from sub-cue 2.1"; Design
    previews the selected sub-cue's full state. */
+/* A hit has its own icon -- a bolt -- on its row and on the Hits rows over
+   it: not a layer's (what it lights), not a cue's or a sub-cue's. */
+void ShowTreeView_Test::eachRowKindHasItsOwnIcon()
+{
+    FixtureGroup *a = group("A", 0, 1);
+    const quint32 half = dimmer(127, "Half");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("Dance");
+    const quint32 list = st->addCueList(prod, "Song");
+    const quint32 c1 = st->addCue(list, -1, "One");
+    const quint32 sub = st->addSubCue(c1, "Flash");
+    const quint32 hit = st->addLook(prod, "Strike", "Hits");
+    Target ta;
+    ta.groups << a->id();
+    st->setTargetLook(c1, ta, st->lookForPalette(half));
+    QVERIFY(sub != invalidId() && hit != invalidId());
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1200, 700);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+
+    auto image = [](const QTreeWidgetItem *item) {
+        return item == nullptr ? QImage() : item->icon(0).pixmap(16, 16).toImage();
+    };
+    const QImage bolt = ItemIcons::hitIcon().pixmap(16, 16).toImage();
+    QVERIFY(!bolt.isNull());
+    QTreeWidgetItem *hitRow = rowOf(view.tree(), ShowTreeView::CueNode, hit);
+    QTreeWidgetItem *cueRow = rowOf(view.tree(), ShowTreeView::CueNode, c1);
+    QTreeWidgetItem *subRow = rowOf(view.tree(), ShowTreeView::CueNode, sub);
+    QTreeWidgetItem *layerRow = nullptr;
+    for (QTreeWidgetItemIterator it(view.tree()); *it; ++it)
+        if ((*it)->data(0, ShowTreeView::KindRole).toInt() == ShowTreeView::LayerNode)
+            layerRow = *it;
+    QVERIFY(hitRow != nullptr && cueRow != nullptr && subRow != nullptr && layerRow != nullptr);
+    QCOMPARE(image(hitRow), bolt);
+    QVERIFY(!layerRow->icon(0).isNull());
+    QVERIFY(image(layerRow) != image(hitRow));
+    QVERIFY(image(cueRow) != image(hitRow));
+    QVERIFY(image(subRow) != image(hitRow));
+    QVERIFY(image(layerRow) != image(cueRow));
+    // The Hits row over it wears the same bolt.
+    QTreeWidgetItem *hitsNode = nullptr;
+    for (QTreeWidgetItemIterator it(view.tree()); *it; ++it)
+        if ((*it)->data(0, ShowTreeView::KindRole).toInt() == ShowTreeView::HitsNode)
+            hitsNode = *it;
+    if (hitsNode != nullptr)
+        QCOMPARE(image(hitsNode), bolt);
+}
+
 void ShowTreeView_Test::subCuesInTheTree()
 {
     FixtureGroup *a = group("A", 0, 1);
