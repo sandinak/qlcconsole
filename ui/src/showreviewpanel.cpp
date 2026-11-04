@@ -97,7 +97,7 @@ ShowReviewPanel::ShowReviewPanel(Doc *doc, QWidget *parent)
     m_tree->setColumnWidth(0, 110);
     lay->addWidget(m_tree, 1);
     connect(m_tree, &QTreeWidget::itemSelectionChanged, this, &ShowReviewPanel::updateButtons);
-    connect(m_tree, &QTreeWidget::itemDoubleClicked, this, [this](QTreeWidgetItem *, int) { fixSelected(); });
+    connect(m_tree, &QTreeWidget::itemDoubleClicked, this, [this](QTreeWidgetItem *, int) { fixOrSay(); });
     // Right-click a row: the same answers as a warning's mark (ShowReviewMarker).
     m_tree->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(m_tree, &QTreeWidget::customContextMenuRequested, this, &ShowReviewPanel::slotContextMenu);
@@ -106,7 +106,7 @@ ShowReviewPanel::ShowReviewPanel(Doc *doc, QWidget *parent)
     m_fix = new QPushButton(tr("Fix ▸"), this);
     m_fix->setObjectName(QStringLiteral("showReviewFix"));
     m_fix->setToolTip(tr("Go to the place to fix it (or double-click the row)"));
-    connect(m_fix, &QPushButton::clicked, this, [this]() { fixSelected(); });
+    connect(m_fix, &QPushButton::clicked, this, [this]() { fixOrSay(); });
     m_accept = new QPushButton(tr("Not a Problem…"), this);
     m_accept->setObjectName(QStringLiteral("showReviewAccept"));
     m_accept->setToolTip(tr("It doesn't matter here: say why. It is listed under Accepted; the note is "
@@ -570,6 +570,13 @@ bool ShowReviewPanel::fixSelected()
         data = m_findings.at(idx).jumpData;
     }
     return runJump(this, jump, data);
+}
+
+void ShowReviewPanel::fixOrSay()
+{
+    // Never a click that does nothing: the finding's place may be gone.
+    if (m_tree->selectedItems().count() == 1 && !fixSelected())
+        m_summary->setText(tr("⚠ Couldn't go there: it changed or is gone. Re-check."));
 }
 
 bool ShowReviewPanel::runJump(QWidget *parent, const QString &jumpTo, const QVariantList &data)

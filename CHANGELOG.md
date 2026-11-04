@@ -14,6 +14,9 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Added
 
+- **Show Review's Fix ▸ says when it can't go there.** A finding whose
+  cue, layer or fixture has since changed or gone used to do nothing on Fix
+  ▸ or a double-click; the summary line now says so and to Re-check.
 - **Three states for a Show Review warning, visible on the cue.** Open is
   the amber **⚠ cyc**; **I Meant It** turns it green (**cyc ✓**; hover says
   who marked it, when, and the note); **Not a Problem…** (was Accept…)
