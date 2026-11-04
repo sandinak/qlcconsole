@@ -107,6 +107,7 @@
 #include "qlcfixturehead.h"
 #include "qlcchannel.h"
 #include "qlcfixturemode.h"
+#include "itemicons.h"
 #include "showtreeview.h"
 #include "showcontrollistener.h"
 #include "moveinblackbutton.h"
@@ -5897,6 +5898,113 @@ void ShowTreeView_Test::theProductionSwitcherAndPage()
    mode; + Sub-cue (header, context menu, the cue page's link) is one undo
    step each; what tracks from a sub-cue says "from sub-cue 2.1"; Design
    previews the selected sub-cue's full state. */
+/* A hit has its own icon -- a bolt -- on its row and on the Hits rows over
+   it: not a layer's (what it lights), not a cue's or a sub-cue's. */
+void ShowTreeView_Test::eachRowKindHasItsOwnIcon()
+{
+    FixtureGroup *a = group("A", 0, 1);
+    const quint32 half = dimmer(127, "Half");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("Dance");
+    const quint32 list = st->addCueList(prod, "Song");
+    const quint32 c1 = st->addCue(list, -1, "One");
+    const quint32 sub = st->addSubCue(c1, "Flash");
+    const quint32 hit = st->addLook(prod, "Strike", "Hits");
+    Target ta;
+    ta.groups << a->id();
+    st->setTargetLook(c1, ta, st->lookForPalette(half));
+    QVERIFY(sub != invalidId() && hit != invalidId());
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1200, 700);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+
+    auto image = [](const QTreeWidgetItem *item) {
+        return item == nullptr ? QImage() : item->icon(0).pixmap(16, 16).toImage();
+    };
+    const QImage bolt = ItemIcons::hitIcon().pixmap(16, 16).toImage();
+    QVERIFY(!bolt.isNull());
+    QTreeWidgetItem *hitRow = rowOf(view.tree(), ShowTreeView::CueNode, hit);
+    QTreeWidgetItem *cueRow = rowOf(view.tree(), ShowTreeView::CueNode, c1);
+    QTreeWidgetItem *subRow = rowOf(view.tree(), ShowTreeView::CueNode, sub);
+    QTreeWidgetItem *layerRow = nullptr;
+    for (QTreeWidgetItemIterator it(view.tree()); *it; ++it)
+        if ((*it)->data(0, ShowTreeView::KindRole).toInt() == ShowTreeView::LayerNode)
+            layerRow = *it;
+    QVERIFY(hitRow != nullptr && cueRow != nullptr && subRow != nullptr && layerRow != nullptr);
+    QCOMPARE(image(hitRow), bolt);
+    QVERIFY(!layerRow->icon(0).isNull());
+    QVERIFY(image(layerRow) != image(hitRow));
+    QVERIFY(image(cueRow) != image(hitRow));
+    QVERIFY(image(subRow) != image(hitRow));
+    QVERIFY(image(layerRow) != image(cueRow));
+    // The Hits row over it wears the same bolt.
+    QTreeWidgetItem *hitsNode = nullptr;
+    for (QTreeWidgetItemIterator it(view.tree()); *it; ++it)
+        if ((*it)->data(0, ShowTreeView::KindRole).toInt() == ShowTreeView::HitsNode)
+            hitsNode = *it;
+    if (hitsNode != nullptr)
+        QCOMPARE(image(hitsNode), bolt);
+}
+
+/* A hit's right-click menu, undo texts: it says Hit, never Layer or Cue. */
+void ShowTreeView_Test::aHitsMenuNamesAHit()
+{
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("Dance");
+    const quint32 hit = st->addLook(prod, "Strike", "Hits");
+    const quint32 hit2 = st->addLook(prod, "Blinder", "Hits");
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1200, 700);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    auto menuTexts = [&](bool two) {
+        QStringList texts;
+        ModalCloser closer([&](QWidget *w) {
+            QMenu *m = qobject_cast<QMenu *>(w);
+            if (m == nullptr)
+                return false;
+            for (QAction *act : m->actions())
+                texts << act->text();
+            const QString dir = qEnvironmentVariable("QLC_HIT_SHOTS");
+            if (!dir.isEmpty())
+                m->grab().save(QString("%1/after-hit-menu%2.png").arg(dir, two ? "-2" : ""));
+            m->close();
+            return true;
+        });
+        view.tree()->expandAll();
+        QTreeWidgetItem *row = rowOf(view.tree(), ShowTreeView::CueNode, hit);
+        view.tree()->clearSelection();
+        clickRow(view.tree(), row);
+        if (two)
+            clickRow(view.tree(), rowOf(view.tree(), ShowTreeView::CueNode, hit2), Qt::ControlModifier);
+        QMetaObject::invokeMethod(&view, "slotTreeContextMenu",
+                                  Q_ARG(QPoint, view.tree()->visualItemRect(row).center()));
+        return texts;
+    };
+    for (bool two : { false })
+    {
+        const QStringList texts = menuTexts(two);
+        QVERIFY(!texts.isEmpty());
+        QStringList named;          // the "+ New" entries are the tree's own, not the hit's
+        for (const QString &t : texts)
+            if (!t.startsWith("+"))
+                named << t;
+        const QString all = named.join(" | ");
+        QVERIFY2(all.contains("Hit"), qPrintable(all));
+        QVERIFY2(!all.contains("Layer", Qt::CaseInsensitive), qPrintable(all));
+        QVERIFY2(!all.contains("Cue", Qt::CaseInsensitive), qPrintable(all));
+        QVERIFY2(all.contains(two ? "Delete 2 Hits" : "Delete Hit"), qPrintable(all));
+        QVERIFY2(all.contains(two ? "Duplicate 2 Hits" : "Duplicate Hit"), qPrintable(all));
+        if (!two)
+            QVERIFY2(all.contains("Rename Hit"), qPrintable(all));
+    }
+    // The undo steps name a hit too.
+    QVERIFY(st->removeCue(hit2));
+    QCOMPARE(st->undoText(), QString("Delete hit"));
+}
+
 void ShowTreeView_Test::subCuesInTheTree()
 {
     FixtureGroup *a = group("A", 0, 1);

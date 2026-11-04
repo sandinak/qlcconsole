@@ -102,8 +102,10 @@ from the Library lands in the tree right beside it.
   how many uses there are. Under the cue lists, **Hits** holds the
   production's busking hits, in their folders; a hit that lives under a
   cue or a cue list is in a **Hits** row under it, and one for everywhere
-  in a **Hits** row at the bottom of the tree ([Hits](#hits-busking)). A hit a
-  VC button fires shows **VC ×1**.
+  in a **Hits** row at the bottom of the tree ([Hits](#hits-busking)). A hit,
+  and the **Hits** row over it, wears a yellow **lightning bolt**; a layer
+  wears what it lights (a fixture, a group), and a cue has no picture, so a
+  hit is never taken for either. A hit a VC button fires shows **VC ×1**.
 - **Right: the page** for what is selected:
   - **A production** shows whether it is **current**, its **main list**
     and its **timecode** source ([Productions](#productions)).

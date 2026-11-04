@@ -140,6 +140,8 @@ private slots:
 
     // P6: sub-cues in the tree
     void subCuesInTheTree();
+    void eachRowKindHasItsOwnIcon();
+    void aHitsMenuNamesAHit();
 
     // Tracking in the tree: a badge, details on hover (2026-10-21)
     void trackingIsABadgeWithDetailsOnHover();

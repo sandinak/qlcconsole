@@ -3232,7 +3232,7 @@ void ShowTreeView::buildTree()
                 globalHits->setText(0, tr("Hits"));
                 globalHits->setText(1, tr("everywhere"));
                 globalHits->setFont(0, boldFont);
-                globalHits->setIcon(0, QIcon(":/collection.png"));
+                globalHits->setIcon(0, ItemIcons::hitIcon());
                 globalHits->setData(0, KindRole, HitsNode);
                 globalHits->setData(0, IdRole, sectionId);
                 globalHits->setData(0, ScopeRole, int(HitScope::Global));
@@ -3249,7 +3249,7 @@ void ShowTreeView::buildTree()
             return nullptr;
         QTreeWidgetItem *g = new QTreeWidgetItem(place);
         g->setText(0, tr("Hits"));
-        g->setIcon(0, QIcon(":/collection.png"));
+        g->setIcon(0, ItemIcons::hitIcon());
         g->setData(0, KindRole, HitsNode);
         g->setData(0, IdRole, sectionId);
         g->setData(0, ScopeRole, int(hit.scope));
@@ -3359,7 +3359,7 @@ void ShowTreeView::buildTree()
                 li->setText(0, tr("Hits"));
                 li->setText(1, tr("busking"));
                 li->setData(0, FolderRole, QStringLiteral("/"));
-                li->setIcon(0, QIcon(":/collection.png"));
+                li->setIcon(0, ItemIcons::hitIcon());
                 li->setToolTip(0, tr("Hits, for busking: built with layers like cues, never tracking; each plays from a "
                                      "VC button (Make VC Page), over whatever runs."));
                 for (const QString &path : m_st->lookFolders(list.id))
@@ -3388,6 +3388,8 @@ void ShowTreeView::buildTree()
                 QTreeWidgetItem *ci = new QTreeWidgetItem(parentItem != nullptr ? parentItem
                                                           : list.looks ? folderItem(cue.folder) : li);
                 ci->setText(0, m_st->cueLabel(list, i));
+                if (list.looks)
+                    ci->setIcon(0, ItemIcons::hitIcon());   // a hit: its own bolt, not a layer's or a cue's
                 /* Its flags, a column each (Q104): a dot where it has one,
                    counts for what it sets, tracks and releases; the rest
                    under Also. */
@@ -6862,7 +6864,11 @@ bool ShowTreeView::deleteSelected()
     }
     if (cues.count() + layers.count() < 2)
         return false;
-    m_st->beginBatch(tr("Delete %1 items").arg(cues.count() + layers.count()));
+    bool allHits = layers.isEmpty();
+    for (quint32 c : cues)
+        allHits = allHits && m_st->isLook(c);
+    m_st->beginBatch(allHits ? tr("Delete %1 hits").arg(cues.count())
+                             : tr("Delete %1 items").arg(cues.count() + layers.count()));
     bool ok = true;
     for (const QPair<quint32, quint32> &l : layers)
         if (!cues.contains(l.first))
@@ -8607,8 +8613,10 @@ void ShowTreeView::fillTreeMenu(QMenu *out, QTreeWidgetItem *item)
         QList<quint32> cues = item->isSelected() ? selectedCues() : QList<quint32>();
         if (!cues.contains(cueId))
             cues = { cueId };
-        const QString what = cues.count() == 1 ? QString() : tr(" (%1 Cues)").arg(cues.count());
         const bool hit = inLooks;
+        const QString what = cues.count() == 1 ? QString()
+                                               : hit ? tr(" (%1 Hits)").arg(cues.count())
+                                                     : tr(" (%1 Cues)").arg(cues.count());
         const bool sub = m_st->isSubCue(cueId);
 
         menu.add(ContextMenu::Open, tr("Open in Workbench"), [this]() { openSelectionInWorkbench(); },
@@ -8642,7 +8650,8 @@ void ShowTreeView::fillTreeMenu(QMenu *out, QTreeWidgetItem *item)
         }
         // Colour ▸: the selected cues' text.
         colourMenu(menu.addMenu(ContextMenu::Kind, cues.count() == 1 ? tr("Colour")
-                                                                     : tr("Colour (%1 Cues)").arg(cues.count()),
+                                                                     : hit ? tr("Colour (%1 Hits)").arg(cues.count())
+                                                                           : tr("Colour (%1 Cues)").arg(cues.count()),
                                 QStringLiteral("stColourMenu")), cues);
         // Several cues: only items that act on all of them (no item that
         // quietly does just the clicked one).
@@ -8727,29 +8736,33 @@ void ShowTreeView::fillTreeMenu(QMenu *out, QTreeWidgetItem *item)
         }
         if (oneList)
         {
-            QAction *up = menu.add(ContextMenu::Organise, single ? tr("Move Up") : tr("Move %1 Cues Up").arg(cues.count()), [this, list, cues, first]() {
+            QAction *up = menu.add(ContextMenu::Organise, single ? tr("Move Up") : (hit ? tr("Move %1 Hits Up") : tr("Move %1 Cues Up")).arg(cues.count()), [this, list, cues, first]() {
                 dropCues(cues, list->cues.at(first - 1).id, false);
             }, QStringLiteral("stMoveCueUp"));
             up->setEnabled(first > 0);
-            QAction *down = menu.add(ContextMenu::Organise, single ? tr("Move Down") : tr("Move %1 Cues Down").arg(cues.count()), [this, list, cues, last]() {
+            QAction *down = menu.add(ContextMenu::Organise, single ? tr("Move Down") : (hit ? tr("Move %1 Hits Down") : tr("Move %1 Cues Down")).arg(cues.count()), [this, list, cues, last]() {
                 dropCues(cues, list->cues.at(last + 1).id, true);
             }, QStringLiteral("stMoveCueDown"));
             down->setEnabled(last + 1 < list->cues.count());
         }
 
         /* ---- 7. Clipboard and a copy ---- */
-        menu.add(ContextMenu::Edit, single ? tr("Copy") : tr("Copy %1 Cues").arg(cues.count()), [this]() { copySelection(); }, QStringLiteral("stCopyCue"))
+        menu.add(ContextMenu::Edit, single ? (hit ? tr("Copy Hit") : tr("Copy"))
+                                           : (hit ? tr("Copy %1 Hits") : tr("Copy %1 Cues")).arg(cues.count()), [this]() { copySelection(); }, QStringLiteral("stCopyCue"))
             ->setShortcut(QKeySequence::Copy);
         QAction *paste = menu.add(ContextMenu::Edit,
-                                  !m_commander->clipboard.cues.isEmpty() ? tr("Paste After This Cue")
-                                  : (m_commander->clipboard.cut ? tr("Move into This Cue")
-                                                                : tr("Paste into This Cue")),
+                                  !m_commander->clipboard.cues.isEmpty() ? (hit ? tr("Paste After This Hit") : tr("Paste After This Cue"))
+                                  : (m_commander->clipboard.cut ? (hit ? tr("Move into This Hit") : tr("Move into This Cue"))
+                                                                : (hit ? tr("Paste into This Hit") : tr("Paste into This Cue"))),
                                   [this]() { pasteClipboard(); }, QStringLiteral("stPasteHere"));
         paste->setShortcut(QKeySequence::Paste);
         paste->setEnabled(!m_commander->clipboard.isEmpty());
-        menu.add(ContextMenu::Edit, single ? tr("Duplicate") : tr("Duplicate %1 Cues").arg(cues.count()), [this]() { duplicateSelection(); },
-                 QStringLiteral("stDuplicateCue"))
+        menu.add(ContextMenu::Edit, single ? (hit ? tr("Duplicate Hit") : tr("Duplicate"))
+                                           : (hit ? tr("Duplicate %1 Hits") : tr("Duplicate %1 Cues")).arg(cues.count()),
+                 [this]() { duplicateSelection(); }, QStringLiteral("stDuplicateCue"))
             ->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_D));
+        if (hit && single)
+            menu.add(ContextMenu::Edit, tr("Rename Hit"), [this]() { startRename(); }, QStringLiteral("stRenameHit"));
 
         /* ---- 8. Delete, last ---- */
         menu.add(ContextMenu::Remove, !single ? (hit ? tr("Delete %1 Hits").arg(cues.count())
