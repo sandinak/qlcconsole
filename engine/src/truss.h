@@ -26,6 +26,7 @@
 #ifndef TRUSS_H
 #define TRUSS_H
 
+#include "nolightzone.h"
 #include <QObject>
 #include <QVector3D>
 #include <QtMath>
@@ -294,6 +295,19 @@ struct FixtureRigProps
      *  wash zoomed by hand) is set to, degrees; 0 = not set (its widest).
      *  Held to the definition's lens range (RigHeads::beamAngle()). */
     float            lensDeg  = 0.0f;
+    /** Tape over the front of the light, degrees cut off its beam or scan
+     *  window at the top, bottom, left and right (see LightMask). A unit
+     *  setting kept with the show. */
+    float            maskTop = 0.0f, maskBottom = 0.0f, maskLeft = 0.0f, maskRight = 0.0f;
+    /** A laser's power class when the unit says one: 0 = unknown (treated
+     *  as before), else 1, 2, 3 (3R), 4 (3B) or 5 (class 4). */
+    int              laserClass = 0;
+    LightMask mask() const
+    {
+        LightMask m;
+        m.top = maskTop; m.bottom = maskBottom; m.left = maskLeft; m.right = maskRight;
+        return m;
+    }
     /** The beam of an aimed fixed light, a unit vector (+Y downstage, +Z up).
      *  False when it isn't aimed. */
     bool fixedAimDirection(QVector3D &dir) const

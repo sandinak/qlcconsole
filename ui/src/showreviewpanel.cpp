@@ -30,6 +30,7 @@
 #include <QMenu>
 
 #include "showreviewpanel.h"
+#include "monitorproperties.h"
 #include "showreviewmarker.h"
 #include "showtreeview.h"
 #include "contextmenus.h"
@@ -115,6 +116,11 @@ ShowReviewPanel::ShowReviewPanel(Doc *doc, QWidget *parent)
     m_reopen = new QPushButton(tr("Reopen"), this);
     m_reopen->setObjectName(QStringLiteral("showReviewReopen"));
     connect(m_reopen, &QPushButton::clicked, this, [this]() { reopenSelected(); });
+    m_cut = new QPushButton(tr("Apply This Cut"), this);
+    m_cut->setObjectName(QStringLiteral("showReviewApplyCut"));
+    m_cut->setToolTip(tr("Tape the bottom of the beam or scan window by the degrees suggested: it "
+                         "goes in the fixture's Masking, and the finding is checked again"));
+    connect(m_cut, &QPushButton::clicked, this, [this]() { applySuggestedCut(); });
     m_why = new QPushButton(tr("Why?"), this);
     m_why->setObjectName(QStringLiteral("showReviewWhy"));
     connect(m_why, &QPushButton::clicked, this, &ShowReviewPanel::slotWhy);
@@ -124,6 +130,7 @@ ShowReviewPanel::ShowReviewPanel(Doc *doc, QWidget *parent)
     connect(m_off, &QPushButton::clicked, this, &ShowReviewPanel::slotTurnOff);
     actions->addWidget(m_fix);
     actions->addWidget(m_accept);
+    actions->addWidget(m_cut);
     actions->addWidget(m_reopen);
     actions->addWidget(m_why);
     actions->addWidget(m_off);
@@ -467,6 +474,7 @@ void ShowReviewPanel::updateButtons()
                                         "it's about changes."));
     m_reopen->setText(unmeantRows ? tr("Not Meant") : tr("Reopen"));
     m_reopen->setEnabled(anyAccepted || (sel.count() == 1 && sel.first().checkOff));
+    m_cut->setVisible(sel.count() == 1 && !sel.first().fixMask.isEmpty());
     m_why->setEnabled(sel.count() == 1);
     m_off->setEnabled(sel.count() == 1);
 }
@@ -584,6 +592,24 @@ bool ShowReviewPanel::runJump(QWidget *parent, const QString &jumpTo, const QVar
         jump = QStringLiteral("fixtures");
     }
     return s_jumper ? s_jumper(parent, jump, data) : false;
+}
+
+void ShowReviewPanel::applySuggestedCut()
+{
+    const QList<ReviewFinding> sel = selectedFindings();
+    MonitorProperties *mp = m_doc != nullptr ? m_doc->monitorProperties() : nullptr;
+    if (sel.count() != 1 || mp == nullptr)
+        return;
+    const QVariantList &fix = sel.first().fixMask;
+    for (int i = 0; i + 1 < fix.size(); i += 2)
+    {
+        const quint32 fid = fix.at(i).toUInt();
+        FixtureRigProps rp = mp->fixtureRigProps(fid);
+        rp.maskBottom += fix.at(i + 1).toFloat();
+        mp->setFixtureRigProps(fid, rp);
+    }
+    m_doc->setModified();
+    recheck();
 }
 
 void ShowReviewPanel::slotAccept()

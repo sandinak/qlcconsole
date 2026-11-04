@@ -71,7 +71,10 @@ struct QLC_ENGINE_EXPORT NoLightZone
     /** Whether the ray from @a p along unit @a d enters it within @a range
      *  metres (it stops at the stage floor, z = 0, when it comes down, so
      *  a pit zone has to reach up to it). */
-    bool hitByRay(const QVector3D &p, const QVector3D &d, double range) const;
+    bool hitByRay(const QVector3D &p, const QVector3D &d, double range, double *entryZ = nullptr) const;
+    /** Where the ray from @a p along @a d is inside the zone: distances @a t0 .. @a t1
+     *  (within @a range); false when it never is. */
+    bool raySpan(const QVector3D &p, const QVector3D &d, double range, double &t0, double &t1) const;
     /** Whether any of @a rays from @a p crosses it. */
     bool hitByRays(const QVector3D &p, const QVector<QVector3D> &rays, double range) const;
 
@@ -80,9 +83,38 @@ struct QLC_ENGINE_EXPORT NoLightZone
     static bool loadXML(QXmlStreamReader &r, NoLightZone &z);
 };
 
+/**
+ * Tape over the front of a light: how many degrees of its beam (or of a
+ * laser's scan window) are cut off at the top, bottom, left and right, seen
+ * from behind the light looking down its throw. "Tape off the bottom 15
+ * degrees." A unit setting (FixtureRigProps), not the definition's. All zero
+ * is no mask, and every consumer then behaves exactly as before.
+ */
+struct LightMask
+{
+    float top = 0.0f, bottom = 0.0f, left = 0.0f, right = 0.0f;
+    bool isNone() const { return top <= 0.0f && bottom <= 0.0f && left <= 0.0f && right <= 0.0f; }
+    bool operator==(const LightMask &o) const
+    {
+        return top == o.top && bottom == o.bottom && left == o.left && right == o.right;
+    }
+    bool operator!=(const LightMask &o) const { return !(*this == o); }
+};
+
 /** The rays Show Review follows for a beam (PWR-09's sampling, shared). */
 namespace LightRays
 {
+    /** A ray's angles off the throw @a dir, degrees: @a ax across it (+ right,
+     *  as seen from behind the light), @a ay up/down it (+ down). */
+    QLC_ENGINE_EXPORT void angles(const QVector3D &dir, const QVector3D &ray, double &ax, double &ay);
+    /** The cone rays that clear @a mask: those within @a halfRad of @a dir
+     *  and not cut off at its sides. */
+    QLC_ENGINE_EXPORT QVector<QVector3D> cone(const QVector3D &dir, double halfRad, const LightMask &mask);
+    /** The window with @a mask cut off its edges: the same 9 x 9 grid
+     *  (i-major) over what is left, so the plot's outline walk still works;
+     *  empty when the tape covers it all. */
+    QLC_ENGINE_EXPORT QVector<QVector3D> window(const QVector3D &dir, double hDeg, double vDeg,
+                                                const LightMask &mask);
     /** The axis plus three rings of sixteen rays across a cone of half
      *  angle @a halfRad: the rays that matter are often between the axis
      *  and the edge. */

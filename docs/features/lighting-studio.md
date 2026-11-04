@@ -1485,6 +1485,20 @@ lasers:
   where its ray meets the floor or a structure, with faint rays in haze. A
   prism-rotation channel (or a Prism capability with a speed) turns the field.
 
+- **Where a laser's window lands (2D Top).** A fixed laser's scan window is
+  drawn as a dashed amber outline where it lands. It stops at the cyc, a
+  closed drape or a flat in its way: the pool on the cyc is a heavy amber
+  span along its line, not a shape on the empty floor behind it, and any
+  floor part is clipped to the plot's floor. Where the window crosses a
+  no-light zone that keeps lasers out (the showband between the cyc and the
+  risers), the part inside it is drawn in red.
+- **Masking.** Tape over the front of any light: **Fixture Properties ▸
+  Masking (tape)** or right-click ▸ **Masking…**. Top, bottom, left and
+  right are degrees cut off the beam (or a laser's scan window), seen from
+  behind the light. "Tape off the bottom 15°" is 15 in Bottom. The plot,
+  Show Review (PWR-09 to 12) and area coverage all use it; it is the unit's
+  setting, saved with the show, not the definition's. The same panel holds
+  a laser's **power class** (1, 2, 3R, 3B, 4).
 - **What a laser looks like.** In the Rig Overview a laser is a box in a
   **U yoke**, the way a sky laser hangs from its bracket: the yoke's clamp
   at the truss (or on the deck it stands on), its two side plates, and the

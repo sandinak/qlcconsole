@@ -3203,4 +3203,197 @@ void ShowReview_Test::everyCheckIsTested()
     }
 }
 
+
+/* Masking: tape over the front of a light. */
+void ShowReview_Test::maskCutsTheWindow()
+{
+    const QVector3D dir(0, -1, 0);
+    const QVector<QVector3D> full = LightRays::window(dir, 40, 40);
+    QCOMPARE(full.size(), 81);
+    LightMask m;
+    m.bottom = 15.0f;
+    const QVector<QVector3D> cut = LightRays::window(dir, 40, 40, m);
+    QCOMPARE(cut.size(), 81);               // the same grid, over what is left
+    double lowest = -1e9, lowestFull = -1e9;
+    for (const QVector3D &r : cut)
+        lowest = qMax(lowest, -double(r.z()));
+    for (const QVector3D &r : full)
+        lowestFull = qMax(lowestFull, -double(r.z()));
+    QVERIFY(lowestFull > 0.3 && lowest < lowestFull - 0.15);
+    // Everything taped: nothing leaves it. A cone loses its taped side.
+    LightMask all;
+    all.top = 25.0f;
+    all.bottom = 25.0f;
+    QVERIFY(LightRays::window(dir, 40, 40, all).isEmpty());
+    LightMask side;
+    side.left = 10.0f;
+    const QVector<QVector3D> cone = LightRays::cone(dir, qDegreesToRadians(20.0), side);
+    QVERIFY(cone.size() > 10 && cone.size() < LightRays::cone(dir, qDegreesToRadians(20.0)).size());
+    for (const QVector3D &r : cone)
+    {
+        double ax, ay;
+        LightRays::angles(dir, r, ax, ay);
+        QVERIFY(ax > -10.0 + 1e-3 - 0.01);
+    }
+
+    // Saved with the show, and back.
+    MonitorProperties *mp = m_doc->monitorProperties();
+    Fixture *l = laser("Taped", 0, QLCPhysical::LaserEmission, 40, QVector3D(5000, 2000, 5), 20);
+    FixtureRigProps rp = mp->fixtureRigProps(l->id());
+    rp.maskTop = 1.5f; rp.maskBottom = 15.0f; rp.maskLeft = 2.5f; rp.maskRight = 3.0f; rp.laserClass = 3;
+    mp->setFixtureRigProps(l->id(), rp);
+    QBuffer buf;
+    buf.open(QIODevice::WriteOnly);
+    {
+        QXmlStreamWriter w(&buf);
+        w.writeStartDocument();
+        mp->saveXML(&w, m_doc);
+        w.writeEndDocument();
+    }
+    MonitorProperties back;
+    QXmlStreamReader r(buf.data());
+    while (!r.atEnd() && !(r.isStartElement() && r.name() == QLatin1String("Monitor")))
+        r.readNext();
+    QVERIFY(back.loadXML(r, m_doc));
+    const FixtureRigProps b = back.fixtureRigProps(l->id());
+    QCOMPARE(b.maskTop, 1.5f);
+    QCOMPARE(b.maskBottom, 15.0f);
+    QCOMPARE(b.maskLeft, 2.5f);
+    QCOMPARE(b.maskRight, 3.0f);
+    QCOMPARE(b.laserClass, 3);
+}
+
+/* Power class: low-power lasers reaching the house are a note, 3B and 4 a warning. */
+void ShowReview_Test::laserClassPwr09()
+{
+    MonitorProperties *mp = m_doc->monitorProperties();
+    mp->setGridSize(QVector3D(10, 3, 8));
+    Fixture *l = laser("Sky", 0, QLCPhysical::LaserEmission, 40, QVector3D(5000, 2000, 5), 20);
+    QVERIFY(fires("PWR-09"));
+    QCOMPARE(findings("PWR-09").first().severity, ReviewFinding::Warning);     // unknown: as before
+    auto setClass = [&](int c) {
+        FixtureRigProps rp = mp->fixtureRigProps(l->id());
+        rp.laserClass = c;
+        mp->setFixtureRigProps(l->id(), rp);
+    };
+    setClass(2);
+    ReviewFinding f = findings("PWR-09").first();
+    QCOMPARE(f.severity, ReviewFinding::Note);
+    QVERIFY(f.message.contains("class 2"));
+    setClass(3);
+    QCOMPARE(findings("PWR-09").first().severity, ReviewFinding::Note);
+    QVERIFY(findings("PWR-09").first().message.contains("3R"));
+    setClass(4);
+    QCOMPARE(findings("PWR-09").first().severity, ReviewFinding::Warning);
+    setClass(5);
+    f = findings("PWR-09").first();
+    QCOMPARE(f.severity, ReviewFinding::Warning);
+    QVERIFY(f.message.contains("class 4"));
+    // Taped off so it cannot reach the house at all: quiet.
+    FixtureRigProps rp = mp->fixtureRigProps(l->id());
+    rp.maskBottom = 38.0f;                  // only the level-to-up sliver is left
+    mp->setFixtureRigProps(l->id(), rp);
+    QVERIFY(quiet("PWR-09"));
+}
+
+/* The showband sits between the cyc and the risers (his show: the cyc at Y 1.355,
+   11.19 m wide, 6 m high; the lasers upstage-aimed from the truss). The lower
+   part of the window crosses the band; Show Review says how much tape clears it. */
+void ShowReview_Test::pwr11Band()
+{
+    MonitorProperties *mp = m_doc->monitorProperties();
+    mp->setGridSize(QVector3D(16, 3, 12));
+    Scenery *cyc = mp->addScenery();
+    cyc->setKind(Scenery::Cyclorama);
+    cyc->setName("Cyclorama 1");
+    cyc->setOriginX(7.555f);
+    cyc->setOriginY(1.355f);
+    cyc->setWidth(11.192f);
+    cyc->setHeight(6.002f);
+    Fixture *l = laser("SL-LASER", 0, QLCPhysical::LaserEmission, 40, QVector3D(8000, 8000, 4), 20);
+    FixtureRigProps rp = mp->fixtureRigProps(l->id());
+    rp.panZeroDir = 180;                    // upstage, at the cyc
+    mp->setFixtureRigProps(l->id(), rp);
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 lid = st->addCueList(st->addProduction("Show"), "Act 1");
+    const quint32 c1 = st->addCue(lid, -1, "One");
+    cueLit(m_doc, c1, l, 255);
+    // No zone: quiet. Fully on the cyc is the point of the laser.
+    QVERIFY(quiet("PWR-11"));
+    // The band: from the cyc to the risers' upstage edge (Y 3.76), 2.2 m high.
+    const quint32 zid = mp->addNoLightZone(2.5f, 1.4f);
+    NoLightZone z = mp->noLightZone(zid);
+    z.name = QStringLiteral("Showband");
+    z.width = 10.0f;
+    z.depth = 2.36f;
+    z.height = 2.2f;
+    z.kind = NoLightZone::NoLasers;
+    mp->setNoLightZone(z);
+    QVERIFY2(fires("PWR-11"), "the lower window passes through the band");
+    ReviewFinding f = findings("PWR-11").first();
+    QVERIFY2(f.message.contains("Showband") && f.message.contains("2.2 m") && f.message.contains("tape off about"),
+             qPrintable(f.message));
+    QCOMPARE(f.fixMask.size(), 2);
+    QCOMPARE(f.fixMask.at(0).toUInt(), l->id());
+    const double cut = f.fixMask.at(1).toDouble();
+    QVERIFY2(cut > 5.0 && cut < 30.0, qPrintable(QString::number(cut)));
+    // A little less does not clear it; the suggested cut does.
+    rp = mp->fixtureRigProps(l->id());
+    rp.maskBottom = float(cut - 1.0);
+    mp->setFixtureRigProps(l->id(), rp);
+    QVERIFY(fires("PWR-11"));
+    rp.maskBottom = float(cut);
+    mp->setFixtureRigProps(l->id(), rp);
+    QVERIFY2(quiet("PWR-11"), "masked by the suggested cut");
+    // Tape the other end instead: the top off does not help.
+    rp.maskBottom = 0.0f;
+    rp.maskTop = 10.0f;
+    mp->setFixtureRigProps(l->id(), rp);
+    QVERIFY(fires("PWR-11"));
+}
+
+/* A zone BEHIND the cyc is reached only past its edge or over its top. */
+void ShowReview_Test::pwr11BehindCyc()
+{
+    MonitorProperties *mp = m_doc->monitorProperties();
+    mp->setGridSize(QVector3D(20, 3, 12));
+    Scenery *cyc = mp->addScenery();
+    cyc->setKind(Scenery::Cyclorama);
+    cyc->setOriginX(5.0f);
+    cyc->setOriginY(2.0f);
+    cyc->setWidth(10.0f);
+    cyc->setHeight(6.0f);
+    const quint32 zid = mp->addNoLightZone(0.0f, -3.0f);
+    NoLightZone z = mp->noLightZone(zid);
+    z.name = QStringLiteral("Behind");
+    z.width = 16.0f;
+    z.depth = 3.0f;
+    z.height = 2.2f;
+    z.kind = NoLightZone::NoLasers;
+    mp->setNoLightZone(z);
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 lid = st->addCueList(st->addProduction("Show"), "Act 1");
+    const quint32 c1 = st->addCue(lid, -1, "One");
+    // Wholly on the cyc: nothing gets through it to the zone behind.
+    Fixture *a = laser("Centre", 0, QLCPhysical::LaserEmission, 40, QVector3D(5000, 12000, 4), 10);
+    FixtureRigProps rp = mp->fixtureRigProps(a->id());
+    rp.panZeroDir = 180;
+    mp->setFixtureRigProps(a->id(), rp);
+    cueLit(m_doc, c1, a, 255);
+    QVERIFY2(quiet("PWR-11"), "the cyc stops it");
+    // Off to one side its window passes the cyc's edge into the zone.
+    Fixture *b = laser("Wide", 10, QLCPhysical::LaserEmission, 80, QVector3D(9500, 12000, 4), 10);
+    rp = mp->fixtureRigProps(b->id());
+    rp.panZeroDir = 180;
+    mp->setFixtureRigProps(b->id(), rp);
+    cueLit(m_doc, c1, b, 255);
+    QVERIFY2(fires("PWR-11"), "past the cyc's edge");
+    QVERIFY(findings("PWR-11").first().message.contains("Wide"));
+    // Taped off at that side: clear.
+    rp = mp->fixtureRigProps(b->id());
+    rp.maskLeft = 38.0f;                    // facing upstage, +X is on the left
+    mp->setFixtureRigProps(b->id(), rp);
+    QVERIFY2(quiet("PWR-11"), "masked");
+}
+
 QTEST_MAIN(ShowReview_Test)

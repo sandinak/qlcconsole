@@ -69,11 +69,10 @@ bool NoLightZone::contains(const QVector3D &p) const
            && p.z() >= floorZ && p.z() <= floorZ + height;
 }
 
-bool NoLightZone::hitByRay(const QVector3D &p, const QVector3D &d, double range) const
+bool NoLightZone::raySpan(const QVector3D &p, const QVector3D &d, double range, double &t0, double &t1) const
 {
-    if (contains(p))
-        return true;
-    double t0 = 0.0, t1 = range;
+    t0 = 0.0;
+    t1 = range;
     // The ray comes down to the floor and stops there.
     if (d.z() < -1e-6f && p.z() > 0.0f)
         t1 = qMin(t1, double(p.z()) / -double(d.z()));
@@ -99,6 +98,22 @@ bool NoLightZone::hitByRay(const QVector3D &p, const QVector3D &d, double range)
         if (t0 > t1)
             return false;
     }
+    return true;
+}
+
+bool NoLightZone::hitByRay(const QVector3D &p, const QVector3D &d, double range, double *entryZ) const
+{
+    double t0, t1;
+    if (contains(p))
+    {
+        if (entryZ != nullptr)
+            *entryZ = double(p.z());
+        return true;
+    }
+    if (!raySpan(p, d, range, t0, t1))
+        return false;
+    if (entryZ != nullptr)
+        *entryZ = double(p.z()) + double(d.z()) * t0;
     return true;
 }
 
@@ -199,4 +214,57 @@ void LightRays::laserWindow(const QLCPhysical &phy, double &hDeg, double &vDeg)
     const double mn = qMin(phy.lensDegreesMin(), phy.lensDegreesMax());
     hDeg = mx > 0.0 ? mx : 40.0;
     vDeg = (mn > 0.0 && mn < mx) ? mn : hDeg;
+}
+
+void LightRays::angles(const QVector3D &dir, const QVector3D &ray, double &ax, double &ay)
+{
+    QVector3D u, v;
+    frameOf(dir, u, v);
+    const double f = double(QVector3D::dotProduct(ray, dir));
+    ax = qRadiansToDegrees(qAtan2(double(QVector3D::dotProduct(ray, u)), f));
+    ay = qRadiansToDegrees(qAtan2(double(QVector3D::dotProduct(ray, v)), f));
+}
+
+QVector<QVector3D> LightRays::cone(const QVector3D &dir, double halfRad, const LightMask &mask)
+{
+    QVector<QVector3D> rays = cone(dir, halfRad);
+    if (mask.isNone())
+        return rays;
+    const double half = qRadiansToDegrees(halfRad);
+    QVector<QVector3D> kept;
+    for (const QVector3D &r : rays)
+    {
+        double ax, ay;
+        angles(dir, r, ax, ay);
+        if (ax < -half + double(mask.left) - 1e-6 || ax > half - double(mask.right) + 1e-6
+            || ay < -half + double(mask.top) - 1e-6 || ay > half - double(mask.bottom) + 1e-6)
+            continue;
+        kept << r;
+    }
+    return kept;
+}
+
+QVector<QVector3D> LightRays::window(const QVector3D &dir, double hDeg, double vDeg,
+                                     const LightMask &mask)
+{
+    if (mask.isNone())
+        return window(dir, hDeg, vDeg);
+    QVector3D u, v;
+    frameOf(dir, u, v);
+    const double h = qMin(hDeg, 160.0) / 2.0, vv = qMin(vDeg, 160.0) / 2.0;
+    const double x0 = -h + double(mask.left), x1 = h - double(mask.right);
+    const double y0 = -vv + double(mask.top), y1 = vv - double(mask.bottom);
+    QVector<QVector3D> rays;
+    if (x1 <= x0 || y1 <= y0)
+        return rays;
+    const double tx0 = qTan(qDegreesToRadians(x0)), tx1 = qTan(qDegreesToRadians(x1));
+    const double ty0 = qTan(qDegreesToRadians(y0)), ty1 = qTan(qDegreesToRadians(y1));
+    const int n = 4;
+    for (int i = -n; i <= n; ++i)
+        for (int j = -n; j <= n; ++j)
+        {
+            const double fx = (i + n) / double(2 * n), fy = (j + n) / double(2 * n);
+            rays << (dir + u * float(tx0 + (tx1 - tx0) * fx) + v * float(ty0 + (ty1 - ty0) * fy)).normalized();
+        }
+    return rays;
 }

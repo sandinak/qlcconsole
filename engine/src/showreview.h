@@ -66,6 +66,9 @@ struct QLC_ENGINE_EXPORT ReviewFinding
      *  "palette", "plot", "power", "status:<footer key>") and its ids. */
     QString jump;
     QVariantList jumpData;
+    /** A suggested cut of tape that clears the finding (PWR-11): pairs of
+     *  fixture id and more degrees on the bottom of its beam or window. */
+    QVariantList fixMask;
 
     State state = Open;
     QString acceptedBy;         //!< Accepted / Changed: who, when and why

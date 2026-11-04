@@ -1148,6 +1148,15 @@ static bool rayReachesHouse(const QVector3D &p, const QVector3D &d, double edgeY
     return d.z() < 0.0f && (limitZ - p.z()) / d.z() <= range;
 }
 
+/** A laser's power class as crew say it: 1, 2, 3R, 3B, 4 (FixtureRigProps::laserClass 1..5). */
+static QString laserClassName(int c)
+{
+    static const char *const names[] = { "", "1", "2", "3R", "3B", "4" };
+    return c >= 1 && c <= 5 ? QString::fromLatin1(names[c]) : QString();
+}
+/** Class 1, 2 and 3R are low power: a note, not a warning, where they reach people. */
+static bool laserClassLow(int c) { return c >= 1 && c <= 3; }
+
 static void pwr09(ReviewContext &ctx, QList<ReviewFinding> &out)
 {
     // decided (can change): no audience area is modelled, so the house is
@@ -1187,8 +1196,9 @@ static void pwr09(ReviewContext &ctx, QList<ReviewFinding> &out)
         double hDeg = deg, vDeg = deg;
         if (!stars)
             LightRays::laserWindow(phy, hDeg, vDeg);
-        const QVector<QVector3D> rays = stars ? LightRays::cone(dir, qDegreesToRadians(qMin(deg, 160.0) / 2.0))
-                                              : LightRays::window(dir, hDeg, vDeg);
+        const LightMask mask = mp->fixtureRigProps(fx->id()).mask();
+        const QVector<QVector3D> rays = stars ? LightRays::cone(dir, qDegreesToRadians(qMin(deg, 160.0) / 2.0), mask)
+                                              : LightRays::window(dir, hDeg, vDeg, mask);
         // The axis and rings across the cone, not only its rim: the rays
         // that matter are often between the axis and the edge.
         bool reaches = false;
@@ -1197,11 +1207,19 @@ static void pwr09(ReviewContext &ctx, QList<ReviewFinding> &out)
                 break;
         if (!reaches)
             continue;
-        out << ReviewContext::make(QStringLiteral("PWR-09"), ReviewFinding::Warning,
-            stars ? tr("%1's star field can reach the audience: it spreads over the space past the stage "
-                       "edge below 3 m (eye height).").arg(fx->name())
-                  : tr("%1's beam can reach the audience: it enters the space past the stage edge "
-                       "below 3 m (eye height).").arg(fx->name()),
+        const int lclass = laser ? mp->fixtureRigProps(fx->id()).laserClass : 0;
+        const bool low = laser && laserClassLow(lclass);
+        QString text = stars ? tr("%1's star field can reach the audience: it spreads over the space past the "
+                                  "stage edge below 3 m (eye height).").arg(fx->name())
+                             : tr("%1's beam can reach the audience: it enters the space past the stage edge "
+                                  "below 3 m (eye height).").arg(fx->name());
+        if (low)
+            text += tr(" It is class %1, low power: check the scan and the audience distance, and tape it "
+                       "off if it needs to.").arg(laserClassName(lclass));
+        else if (laser && lclass > 0)
+            text += tr(" It is class %1.").arg(laserClassName(lclass));
+        out << ReviewContext::make(QStringLiteral("PWR-09"),
+            low ? ReviewFinding::Note : ReviewFinding::Warning, text,
             { QStringLiteral("fx:%1").arg(fx->id()) },
             QByteArray::number(qRound(apex.x() * 100)) + ',' + QByteArray::number(qRound(apex.y() * 100)) + ','
                 + QByteArray::number(qRound(apex.z() * 100)) + ',' + QByteArray::number(qRound(dir.x() * 100)) + ','
@@ -1245,7 +1263,7 @@ static void pwr10(ReviewContext &ctx, QList<ReviewFinding> &out)
         {
             dir.normalize();
             const QVector3D apex = RigHeads::fixtureCentre(doc, fx->id());
-            const QVector<QVector3D> rays = LightRays::window(dir, h, v);
+            const QVector<QVector3D> rays = LightRays::window(dir, h, v, mp->fixtureRigProps(fx->id()).mask());
             const double edge = mp->downstageEdgeY();
             for (const QVector3D &r : rays)
                 if ((reaches = rayReachesHouse(apex, r, edge, kEyeLimit, kRange)))
@@ -1255,14 +1273,17 @@ static void pwr10(ReviewContext &ctx, QList<ReviewFinding> &out)
                     reaches = true;
         }
         const QString size = tr("%1 by %2 degrees").arg(qRound(h)).arg(qRound(v));
+        const int lclass = mp != nullptr ? mp->fixtureRigProps(fx->id()).laserClass : 0;
+        const bool low = laserClassLow(lclass);
         out << ReviewContext::make(QStringLiteral("PWR-10"),
-            reaches ? ReviewFinding::Warning : ReviewFinding::Note,
+            (reaches && !low) ? ReviewFinding::Warning : ReviewFinding::Note,
             (isStatic ? tr("%1 is a static pencil (%2): all its power stays on one spot.")
                       : tr("%1 has a tight scan window (%2): its power is packed into a few spots."))
                 .arg(fx->name(), size)
-                + (reaches ? tr(" Its window also reaches the audience or a no-light zone.") : QString()),
+                + (reaches ? tr(" Its window also reaches the audience or a no-light zone.") : QString())
+                + (reaches && low ? tr(" It is class %1, low power.").arg(laserClassName(lclass)) : QString()),
             { QStringLiteral("fx:%1").arg(fx->id()) },
-            QByteArray::number(qRound(h * 10)) + ',' + QByteArray::number(qRound(v * 10)) + (reaches ? ",r" : ""),
+            QByteArray::number(qRound(h * 10)) + ',' + QByteArray::number(qRound(v * 10)) + (reaches ? ",r" : "") + ',' + QByteArray::number(lclass),
             QStringLiteral("plot"), QVariantList() << fx->id());
     }
 }
