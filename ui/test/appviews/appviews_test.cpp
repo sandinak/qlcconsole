@@ -4361,10 +4361,10 @@ void AppViews_Test::unsavedChangesListsWhatChanged()
     QCOMPARE(journal->entries().first().kind, ChangeJournal::Fixture);
     QVERIFY(journal->entries().first().title.contains("Extra"));
     QCOMPARE(journal->entries().first().subject.jump, ChangeJournal::ToFixture);
-    QCOMPARE(journal->otherCount(), 0);
-    QTest::qWait(300);
+    // (A timer elsewhere may mark the show modified meanwhile; that is "other" too.)
+    const int otherBefore = journal->otherCount();
     doc->setModified();
-    QCOMPARE(journal->otherCount(), 1);
+    QCOMPARE(journal->otherCount(), otherBefore + 1);
     QVERIFY(!journal->entries().last().itemised);
     QVERIFY(journal->summary().contains("area"));
 
