@@ -151,6 +151,17 @@ A spot is lit only if lit at head height AND on the deck/riser/step under
 it; plan hatches deck dark and heads dark differently with a legend; MOV-13
 names which is missing. docs/design/AREA_COVER.md. Aim points unchanged.
 
+## Area cover: ties go to coverage (fix/04-area-tie, 2026-11-04) -- built
+
+Exact least-squares ties (UST arms, mirrored tower washes) are settled by
+coverage at both heights: integer costs, tight pairs from the Hungarian
+potentials, coarse bitset grid, second assignment + bounded swap search.
+His Chorus 57.5% -> 74.9% (best of 384 ties). docs/design/AREA_COVER.md.
+Tests: `AimSolver_Test::areaTiesGoToTheBestCover`, Chorus floor back to 0.7.
+Zones are cached by their inputs (dim-when-blocked asks every tick):
+`HotPath_Test::anAreaAimThatDimsWorksOutItsZonesOnce`.
+Move to DONE.md when landed.
+
 ## Faster packaging (tools/04-pkgfast, 2026-11-03) -- done
 
 `make dmg`: no tests (`QLC_NO_TESTS`, now also in ai/ and tools/artnetprobe), ccache for both slices, build

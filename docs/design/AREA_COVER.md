@@ -45,6 +45,35 @@ in rows from downstage to upstage, each row split evenly across the stage.
   front washes take the back two ranks column by column, the two arms of a
   bar one in front of the other, where a sort would have dealt them out
   stage right first and crossed half of them over.
+- **Exact ties go to coverage** (fix/04-area-tie, 2026-11-04). The squared
+  distances are counted in whole units of 1e-9, so a tie is exact on every
+  platform (arm64 fused multiply-adds and x86-64 plain ones once picked
+  different ties). Real rigs tie a lot: a UST's two arms sit alike, and the
+  washes mirrored on two towers swap without changing the total. On his
+  Chorus 384 matches tie and light 53% to 76% at both heights. Among them
+  `AreaCover::zones()` takes the one that lights the most: the pairs some
+  least-cost match can use are the zero-reduced-cost ones under the
+  Hungarian potentials; each such pair's beam is sampled on a coarse grid
+  (32 across, head height and surface, as bitsets); a second assignment on
+  cost × K + "samples of its own cell this light leaves dark" and the plain
+  pick are scored on the whole area, the better one is improved by swapping
+  two lights while both new pairs stay tight and the count gains. The beams
+  are each light's lens as declared or set by hand, not its zoom now (a
+  zone must not move with what is playing). Bounded: skipped past 96
+  lights or 3000 tight pairs, at most 4000 swaps tried. The Chorus's
+  zones take 0.2 ms (27 µs before; Release, M4 Max), its coverage 0.33 ms
+  (0.14). `AreaCover::cells()` itself stays the pure rule (no beams, plain
+  pick).
+- **Never on the tick.** An Aim look that dims blocked heads asks for the
+  zones every playback tick (`Scene::write` → `updateSightDim` →
+  `AimSolver::blockedDimmedHeads` → `memberPoints`). `zones()` and
+  `memberPoints()` keep the last 8 results by their inputs (area, subject
+  height, each member's position, lens and tape, the surface under the
+  sample grid; each kept aim is re-checked against the surface under it)
+  and hand them back shared, without allocating. Anything that changes
+  an input is a new entry, worked out once. `hotpath_test`
+  (`anAreaAimThatDimsWorksOutItsZonesOnce`) holds it: once in 100 ticks,
+  0 allocations per lookup, no more allocations per tick than a point aim.
 - **Height.** Each member aims at its cell's centre, at **subject height**
   above whatever is under that point: `platformHeightAt(x, y)` (deck,
   riser, step tread) plus the target's aim-height override if it has one,

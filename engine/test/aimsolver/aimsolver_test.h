@@ -70,6 +70,7 @@ private slots:
     void areaGivesEachArmItsOwnZone();
     void areaCoversHisChorus();
     void areaCoverNeedsHeadAndDeck();
+    void areaTiesGoToTheBestCover();
 };
 
 #endif
