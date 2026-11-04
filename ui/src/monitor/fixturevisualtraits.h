@@ -66,6 +66,8 @@ struct FixtureVisualTraits
      *  in it is a live DMX question -- see fixtureBeamAngle(). */
     float beamMinDeg = 0.0f;
     float beamMaxDeg = 0.0f;
+    /** The lens range is a default for the fixture's type, not the definition's. */
+    bool beamAssumed = false;
     /** Separate beams each head throws (the definition's Lens BeamsPerHead).
      *  A two-arm beam fixture is two heads of three beams: the channels only
      *  ever say "two things are controlled", never how many emitters each

@@ -386,6 +386,80 @@ static void fix16(ReviewContext &ctx, QList<ReviewFinding> &out)
             QStringLiteral("status:fixtures.offrow"), QVariantList() << o.fixtureId);
 }
 
+static void fix18(ReviewContext &ctx, QList<ReviewFinding> &out)
+{
+    /* Once per definition used in the show: it says 0 for its beam angle or
+       (with pan/tilt channels) its pan/tilt range, so the rig view and aims
+       use Fixture::effectiveBeam()'s defaults. */
+    QMap<const QLCFixtureDef *, QList<quint32>> byDef;
+    QMap<const QLCFixtureDef *, Fixture::EffectiveBeam> shown;
+    for (Fixture *fx : ctx.doc()->fixtures())
+    {
+        if (fx == nullptr || fx->fixtureDef() == nullptr || fx->fixtureMode() == nullptr)
+            continue;
+        const Fixture::EffectiveBeam eb = fx->effectiveBeam();
+        if (!eb.lensAssumed && !eb.panAssumed && !eb.tiltAssumed)
+            continue;
+        byDef[fx->fixtureDef()] << fx->id();
+        Fixture::EffectiveBeam &acc = shown[fx->fixtureDef()];
+        if (eb.lensAssumed) { acc.lensAssumed = true; acc.lensMax = eb.lensMax; }
+        if (eb.panAssumed || eb.tiltAssumed)
+        {
+            acc.panAssumed = acc.panAssumed || eb.panAssumed;
+            acc.tiltAssumed = acc.tiltAssumed || eb.tiltAssumed;
+            acc.panMax = eb.panMax;
+            acc.tiltMax = eb.tiltMax;
+        }
+    }
+    // Two definitions can share a name (a copy, a second file): tell them apart.
+    QHash<QString, int> nameCount;
+    for (auto it = byDef.constBegin(); it != byDef.constEnd(); ++it)
+        nameCount[QStringLiteral("%1 %2").arg(it.key()->manufacturer(), it.key()->model()).trimmed()]++;
+    /* In a stable order (name, then first fixture): the map is keyed by pointer,
+       whose order changes from load to load -- and so would the labels. */
+    QList<const QLCFixtureDef *> order = byDef.keys();
+    std::sort(order.begin(), order.end(), [&](const QLCFixtureDef *x, const QLCFixtureDef *y) {
+        const QString nx = QStringLiteral("%1 %2").arg(x->manufacturer(), x->model());
+        const QString ny = QStringLiteral("%1 %2").arg(y->manufacturer(), y->model());
+        return nx != ny ? nx < ny : byDef.value(x).first() < byDef.value(y).first();
+    });
+    QSet<QString> usedLabels;
+    for (const QLCFixtureDef *def : order)
+    {
+        const auto it = byDef.constFind(def);
+        const Fixture::EffectiveBeam &e = shown.value(it.key());
+        const bool pt = e.panAssumed || e.tiltAssumed;
+        QString what, assume;
+        if (e.lensAssumed && pt)
+            what = QCoreApplication::translate("ShowReview", "no beam angle and no pan/tilt range");
+        else if (e.lensAssumed)
+            what = QCoreApplication::translate("ShowReview", "no beam angle");
+        else
+            what = QCoreApplication::translate("ShowReview", "no pan/tilt range");
+        if (e.lensAssumed)
+            assume = QStringLiteral("%1\u00B0").arg(e.lensMax);
+        if (pt)
+            assume += QString(assume.isEmpty() ? QString() : QStringLiteral(" / "))
+                + QStringLiteral("%1\u00B0\u00D7%2\u00B0").arg(e.panMax).arg(e.tiltMax);
+        QString name = QStringLiteral("%1 %2").arg(it.key()->manufacturer(), it.key()->model()).trimmed();
+        if (nameCount.value(name) > 1)
+        {
+            // By its first fixture (a source file path is not stable across a reload).
+            Fixture *first = ctx.doc()->fixture(it.value().first());
+            name += QStringLiteral(" (%1)").arg(first != nullptr ? first->name() : QString::number(it.value().first()));
+            if (usedLabels.contains(name))      // even its first fixture's name is shared
+                name += QStringLiteral(" #%1").arg(it.value().first());
+            usedLabels.insert(name);
+        }
+        out << ReviewContext::make(QStringLiteral("FIX-18"), ReviewFinding::Note,
+            trn("%1: %2 in its definition (%n fixture(s)); the rig view and aims assume %3. "
+                "Fix the definition so they use the real figures.",
+                it.value().count()).arg(name, what, assume),
+            fixtureKeys(it.value()), name.toUtf8() + ':' + idBytes(it.value()),
+            QStringLiteral("status:fixtures.output"), QVariantList() << it.key()->definitionSourceFile());
+    }
+}
+
 /****************************************************************************
  * Effects (FX)
  ****************************************************************************/
@@ -1331,6 +1405,11 @@ QList<ShowReview::Check> ShowReviewChecks::showChecks()
           tr("A light on the floor beside a deck whose row-mates (the same fixture type in its group, "
              "its name series or its line) stand on it is probably one left behind. Sit it on the "
              "deck, or accept the warning if the floor is deliberate."), fix16 },
+        { QStringLiteral("FIX-18"), tr("No beam angle or pan/tilt range"), S::Fixtures,
+          tr("A definition that says 0 for its lens or its pan/tilt range gives the rig view nothing to "
+             "draw and the aim solver nothing to turn. They assume a default by fixture type (a moving "
+             "head: 15\u00B0, 540\u00B0\u00D7270\u00B0) so it still shows and aims. Set the real figures "
+             "on the definition's Physical tab."), fix18 },
         { QStringLiteral("FX-07"), tr("Effect that won't load"), S::Effects,
           tr("An effect with no script chosen, or whose script isn't on this computer, does "
              "nothing on stage."), fx07 },

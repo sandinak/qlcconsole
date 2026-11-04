@@ -56,6 +56,8 @@ private slots:
     void choosingAddToInventoryFromTheMenuStagesAFixture();
     void choosingPatchFromTheMenuPatchesThoseFixtures();
     void aNetworkFixturesInfoStatesItsConnection();
+    /** A 0 lens / 0 pan-tilt definition shows the default, marked assumed. */
+    void aZeroLensDefinitionSaysItsFigureIsAssumed();
     void theInventoryActionsFollowTheAddAction();
     void editingAStagedFixtureKeepsItStaged();
     void deletingInventoryFixturesUpdatesTheFolderCounts();

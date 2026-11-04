@@ -508,9 +508,9 @@ bool RigHeads::lensRange(const Fixture *fx, double &lo, double &hi)
     const QLCFixtureMode *mode = (fx != nullptr) ? fx->fixtureMode() : nullptr;
     if (mode == nullptr)
         return false;
-    const QLCPhysical &phys = mode->physical();
-    lo = qMin(phys.lensDegreesMin(), phys.lensDegreesMax());
-    hi = qMax(phys.lensDegreesMin(), phys.lensDegreesMax());
+    const Fixture::EffectiveBeam eb = fx->effectiveLens();
+    lo = eb.lensMin;
+    hi = eb.lensMax;
     return lo > 0.0 && hi - lo >= 0.51;
 }
 
@@ -530,9 +530,9 @@ double RigHeads::beamAngle(const Fixture *fx, const QByteArray &values)
     const QLCFixtureMode *mode = (fx != nullptr) ? fx->fixtureMode() : nullptr;
     if (mode == nullptr)
         return 0.0;
-    const QLCPhysical &phys = mode->physical();
-    const double lo = qMin(phys.lensDegreesMin(), phys.lensDegreesMax());
-    const double hi = qMax(phys.lensDegreesMin(), phys.lensDegreesMax());
+    const Fixture::EffectiveBeam eb = fx->effectiveLens();
+    const double lo = eb.lensMin;
+    const double hi = eb.lensMax;
     if (hi <= 0.0)
         return 0.0;                       // no lens declared at all
 

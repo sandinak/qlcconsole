@@ -810,6 +810,10 @@ private slots:
     void aLitMoverThrowsAVisibleBeam();
     void aTwoArmHeadDrawsEachArmOnItsOwn();
     void aFixedConeHeadDimsWhenAimedAway();
+    /** A definition that says 0 for its lens still throws a beam in the rig
+     *  view (a default by type), and the same scene is the Q207 before/after
+     *  shot set when QLC_ZEROLENS_SHOTS names a folder. */
+    void aZeroLensFixtureDrawsABeam();
     void aFrameIsDrawnFromOneInstant();
     /** House left and house right are the same room: a lit strip reads the
      *  same from either side, and does not go dark at whole-rig zoom. */

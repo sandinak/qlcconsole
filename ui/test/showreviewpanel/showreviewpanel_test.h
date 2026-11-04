@@ -32,6 +32,8 @@ private slots:
 
     /** Findings by severity; the summary counts them */
     void listsBySeverity();
+    /** A definition that says 0 for its lens / range is one FIX-18 note */
+    void aZeroLensDefinitionIsOneNote();
     /** Accept stores the note and moves it to Accepted; Reopen puts it back */
     void acceptAndReopen();
     /** Open / Accepted / All and the search */

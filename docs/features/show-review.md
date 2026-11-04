@@ -181,6 +181,16 @@ the same speed (see [Lighting Studio](lighting-studio.md#heads-travel-at-their-r
   bolted to that deck; a deck with a Clear or Open top (lights go inside
   those on purpose); and a body that only touches or sinks less than 3 cm.
   It re-reads a moment after any edit.
+- **FIX-18** A definition with no beam angle or no pan/tilt range: *"Test
+  Spot: no beam angle and no pan/tilt range in its definition (3
+  fixture(s)); the rig view and aims assume 15° / 540°×270°. Fix the
+  definition so they use the real figures."* One note per definition used in
+  the show, however many fixtures share it. The rig view and the aim solver
+  carry on with a default by type (see
+  [Lighting Studio](lighting-studio.md)) so the light still draws and aims;
+  this note says the figure is a guess. A **note**; **Edit Definition…**
+  opens the definition in the Fixture Editor (Physical tab). Quiet once the
+  definition declares them.
 - **FIX-16** A light on the floor whose row is on a deck: *"UST-2 is on the
   floor; UST-1, UST-3…UST-8 are on Deck USP1 (0.61 m). Sit it on Deck USP1
   (0.61 m)."* The row-mates are the other lights of the **same fixture type**
