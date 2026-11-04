@@ -30,6 +30,11 @@ private slots:
     void init();
     void cleanup();
 
+    /** ⌫ / Delete on the fixtures list deletes the selection, asking first
+     *  (wfaudit2: as in the Show Tree, Build and the Library); No keeps it,
+     *  and a key in a rename's editor is the editor's. */
+    void theDeleteKeyDeletesTheSelectionAskingFirst();
+
     /** Right-clicking the Inventory root must offer inventory actions, and NOT
      *  the generic "Add fixture..." (which patches, and asks for a universe). */
     void rightClickOnInventoryOffersInventoryActionsNotAGenericAdd();

@@ -166,6 +166,7 @@ W say the light (⇧W feedback), H hold, ⌘Z undo, Esc leave. See
 |---|---|
 | **Return** / **F2** | Rename the selected fixture, group, group folder or universe in place; Esc cancels ([Layout](fixture-manager.md#layout)) |
 | Double-click | A group opens its grid editor, a fixture its properties, a folder renames |
+| ⌫ / Delete | Delete the selected fixtures or groups, asking first (as the toolbar's **Delete…**) |
 | ⌘Z | Undo the rig's last change: a Patch dialog **Apply**, properties, renames, plot symbols, output rules |
 | Drag fixtures or a group onto a universe | The **Patch** dialog, packed into that universe, to review and apply |
 

@@ -556,6 +556,21 @@ void FixtureManager::initDataView()
                         FixtureTreeWidget::ShowPower;
 
     m_fixtures_tree = new FixtureTreeWidget(m_doc, treeFlags, this);
+    /* ⌫ / Delete on the list: the toolbar's Delete… (it asks first), as in
+       the Show Tree, Build and the Library. On the tree only, so a rename's
+       editor keeps its keys. */
+    for (const QKeySequence &key : { QKeySequence(Qt::Key_Delete), QKeySequence(Qt::Key_Backspace) })
+    {
+        QShortcut *del = new QShortcut(key, m_fixtures_tree);
+        del->setObjectName(QStringLiteral("fmDeleteKey"));
+        del->setContext(Qt::WidgetShortcut);
+        // Queued: the question opens after the key is done, not inside the
+        // shortcut's dispatch (a modal there loses its answer).
+        connect(del, &QShortcut::activated, this, [this]() {
+            if (m_removeAction != NULL && m_removeAction->isEnabled())
+                QMetaObject::invokeMethod(this, &FixtureManager::slotRemove, Qt::QueuedConnection);
+        });
+    }
     m_fixtures_tree->setIconSize(QSize(32, 32));
     m_fixtures_tree->setContextMenuPolicy(Qt::CustomContextMenu);
     m_fixtures_tree->setSelectionMode(QAbstractItemView::ExtendedSelection);

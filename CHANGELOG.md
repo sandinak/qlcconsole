@@ -73,6 +73,9 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   **+ Effect** menu starts with **Effect Palette…** (was "Effect look…"), as
   Build ▸ Effects' **+ New** does. A new test reads every menu label in the
   UI's sources and fails on one off the canon.
+- **⌫ deletes in the Fixtures tab too.** ⌫ / Delete on the fixtures list
+  deletes the selected fixtures or groups, asking first, as it does in the
+  Show Tree, Build and the Library (it did nothing there).
 - **Lengths in feet where the show is in feet.** The plot's group frame
   editor (origin, cell pitch, a member's position), the patch plan's cable
   distance, the line-of-sight tooltip and Focus mode's step now follow
