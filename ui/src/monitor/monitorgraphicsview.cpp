@@ -991,6 +991,10 @@ void MonitorGraphicsView::setMountedFixturesVisible(bool on)
 
 void MonitorGraphicsView::refreshAllItems()
 {
+    // Rebuilt items come back as selected as they were (keepMapSelection()).
+    const QList<QPair<QString, quint32> > selected = selectedMapObjects();
+    auto keep = qScopeGuard([this, &selected]() { keepMapSelection(selected); });
+
     // Items rebuilt here bring fresh child text items with them, so re-pin the
     // labels upright before anything is drawn.
     refreshLabelRotations();
@@ -1012,6 +1016,29 @@ void MonitorGraphicsView::refreshAllItems()
     updateTrussAnchorLines();
     // cell pixels / offsets may have changed: refresh snapping
     applySnapToAllItems();
+}
+
+void MonitorGraphicsView::keepMapSelection(const QList<QPair<QString, quint32> > &selected)
+{
+    /* The structures, power sources and images are rebuilt as new items,
+       which are not selected: a resize (the window, or the footer's scroll
+       bar coming in) or a new scale dropped a selected fountain's base and
+       walls and kept only its fixtures, and a turn after it left the
+       structure behind. The same set again: no select-together pass, no
+       scrolling to it. */
+    if (selected.isEmpty())
+        return;
+    QScopedValueRollback<bool> ext(m_extendingSelection, true);
+    for (const QPair<QString, quint32> &key : selected)
+    {
+        QGraphicsItem *gi = itemFor(key.first, key.second);
+        if (gi == nullptr || gi->isSelected())
+            continue;
+        if (StagePieceItem *spi = dynamic_cast<StagePieceItem *>(gi))
+            spi->selectNow(true);
+        else
+            gi->setSelected(true);
+    }
 }
 
 void MonitorGraphicsView::resetViewZoom()
@@ -8530,6 +8557,10 @@ void MonitorGraphicsView::stagePieceDragFinished(int, bool moved)
 
 void MonitorGraphicsView::updateGrid()
 {
+    // It rebuilds the structures too: what was selected stays selected.
+    const QList<QPair<QString, quint32> > selected = selectedMapObjects();
+    auto keep = qScopeGuard([this, &selected]() { keepMapSelection(selected); });
+
     // removeItem() hands ownership of the item back to the caller, so it has
     // to be deleted here — otherwise every grid line is leaked, and updateGrid()
     // runs on each resizeEvent (dozens per window drag, and each rebuild now

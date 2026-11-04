@@ -527,6 +527,7 @@ private slots:
     void aFountainsFlameStartsAtItsInnerWallTop();
     void anOldFountainsFlameKeepsItsTopAndJoinsIt();
     void aFixtureInTheFountainMovesAndTurnsWithIt();
+    void aResizedPlotKeepsTheFountainSelected();
     void aFountainsFlameUnlocksWhereItShowsLocked();
     void aWledRingLaysItsPixelsOnTheWallTop();
     void aHeldWandGoesWithItsPerformer();

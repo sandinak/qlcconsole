@@ -793,6 +793,9 @@ public:
     /** What is selected on the plot, as kind/id pairs. */
     QList<QPair<QString, quint32> > selectedMapObjects() const;
 
+    /** Select again what selectedMapObjects() gave before items were rebuilt. */
+    void keepMapSelection(const QList<QPair<QString, quint32> > &selected);
+
     /** False when the rename was refused (a fixture name another fixture has). */
     bool renameItem(const QString &kind, quint32 id, const QString &name);
     /** Save network node @p nodeIndex's transport and port count as a gear
