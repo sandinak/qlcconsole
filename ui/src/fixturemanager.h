@@ -304,6 +304,10 @@ private slots:
      *  something inside it matches. */
     void slotFixturesSearchChanged(const QString &text);
 
+public:
+    /** Select fixture @a id in the tree (the unsaved-changes list's jump). */
+    bool selectFixture(quint32 id);
+
 private:
     /** Select a fixture group */
     void selectGroup(quint32 id);

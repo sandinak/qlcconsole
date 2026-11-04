@@ -47,6 +47,8 @@
 #include "functionmanager.h"
 #include "programmingmanager.h"
 #include "showtreecontroller.h"
+#include "unsavedchangesdialog.h"
+#include "changejournal.h"
 #include "cuerunner.h"
 #include "showtreeview.h"
 #include <optional>
@@ -1829,12 +1831,65 @@ void App::slotDocModified(bool state)
         {
             m_statusDirtyLabel->setText(tr("● Unsaved changes"));
             m_statusDirtyLabel->setStyleSheet("QLabel { color: #d08020; font-weight: bold; }");
+            m_statusDirtyLabel->setCursor(Qt::PointingHandCursor);
         }
         else
         {
             m_statusDirtyLabel->setText(tr("✓ Saved"));
             m_statusDirtyLabel->setStyleSheet("QLabel { color: gray; }");
+            m_statusDirtyLabel->unsetCursor();
+            m_statusDirtyLabel->setToolTip(QString());
         }
+    }
+}
+
+void App::slotShowUnsavedChanges()
+{
+    if (m_unsavedDialog != nullptr)
+    {
+        m_unsavedDialog->raise();
+        m_unsavedDialog->activateWindow();
+        return;
+    }
+    UnsavedChangesDialog *dlg = new UnsavedChangesDialog(m_doc, this);
+    dlg->setAttribute(Qt::WA_DeleteOnClose);
+    connect(dlg, &UnsavedChangesDialog::jumpRequested, this, &App::slotUnsavedJump);
+    connect(dlg, &UnsavedChangesDialog::saveRequested, this, &App::slotFileSave);
+    m_unsavedDialog = dlg;
+    dlg->show();
+}
+
+/* A row of the unsaved-changes list: bring up the thing and select it. */
+void App::slotUnsavedJump(const ChangeJournal::Subject &subject)
+{
+    ShowTreeView *tree = ShowTreeView::instance();
+    switch (subject.jump)
+    {
+    case ChangeJournal::ToCue:
+        showContext(tr("Show Tree"));
+        if (tree != NULL)
+            subject.id2 != ShowTree::invalidId() ? tree->selectNode(subject.id2, subject.id)
+                                                 : tree->selectNode(subject.id);
+        break;
+    case ChangeJournal::ToPalette:
+        showContext(tr("Show Tree"));
+        if (tree != NULL)
+            tree->showPalette(subject.id);
+        break;
+    case ChangeJournal::ToFunction:
+        if (FunctionManager::instance() != NULL)
+        {
+            showContext(tr("Functions"));
+            FunctionManager::instance()->selectFunction(subject.id);
+        }
+        break;
+    case ChangeJournal::ToFixture:
+        showContext(tr("Fixtures"));
+        if (FixtureManager::instance() != NULL)
+            FixtureManager::instance()->selectFixture(subject.id);
+        break;
+    default:
+        break;
     }
 }
 
@@ -7803,6 +7858,7 @@ void App::initStatusBar()
     m_statusDirtyLabel = new QLabel(this);
     m_statusDirtyLabel->setAlignment(Qt::AlignRight);
     sb->addPermanentWidget(m_statusDirtyLabel);
+    m_statusDirtyLabel->installEventFilter(this);       // a click lists the changes
     slotDocModified(m_doc != NULL ? m_doc->isModified() : false);
 
     if (m_doc != NULL)
@@ -7868,6 +7924,15 @@ QMenu *App::tabContextMenu(int index)
 
 bool App::eventFilter(QObject *watched, QEvent *event)
 {
+    /* The footer's "Unsaved changes": hover says how many, a click lists them. */
+    if (watched == m_statusDirtyLabel && m_statusDirtyLabel != NULL && m_doc != NULL && m_doc->isModified())
+    {
+        if (event->type() == QEvent::ToolTip)
+            m_statusDirtyLabel->setToolTip(m_doc->changeJournal()->tooltip());
+        else if (event->type() == QEvent::MouseButtonRelease
+                 && static_cast<QMouseEvent *>(event)->button() == Qt::LeftButton)
+            slotShowUnsavedChanges();
+    }
     /* Right-click a tab: Open in Its Own Window. A Shift-click does the same,
        but on a Mac the first click on a window that isn't in front only
        brings it forward -- the Shift-click is lost. */

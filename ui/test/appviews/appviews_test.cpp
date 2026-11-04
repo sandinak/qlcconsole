@@ -18,6 +18,8 @@
 */
 
 #include <QDockWidget>
+#include <QToolTip>
+#include <QPainter>
 #include <QStatusBar>
 #include <QListWidget>
 #include <QShortcut>
@@ -123,6 +125,8 @@
 #include "chaserstep.h"
 #include "paletteops.h"
 #include "itemicons.h"
+#include "unsavedchangesdialog.h"
+#include "changejournal.h"
 #include "universe.h"
 #include "chaser.h"
 #include "fixturegroup.h"
@@ -4176,6 +4180,203 @@ void AppViews_Test::aQxwSaveSaysWhatQlcPlus4Leaves()
     QVERIFY(!App::stockNoticeOff(quiet));
     m_app->hideViewNotice();
     m_app->clearDocument();
+}
+
+void AppViews_Test::unsavedChangesListsWhatChanged()
+{
+    Doc *doc = m_app->m_doc;
+    ShowTreeController *st = doc->showTree();
+    ShowTreeView *view = ShowTreeView::instance();
+    QVERIFY(view != nullptr);
+    QList<quint32> fixtures, functions, groups, palettes;
+    quint32 prod = ShowTree::invalidId();
+    const int oldTheme = m_app->theme();
+    const QSize oldSize = m_app->size();
+    auto tidy = qScopeGuard([&]() {
+        if (m_app->m_unsavedDialog != nullptr)
+            m_app->m_unsavedDialog->close();
+        doc->setMode(Doc::Design);
+        if (prod != ShowTree::invalidId())
+            st->removeProduction(prod);
+        takeAway(doc, fixtures, functions);
+        for (quint32 g : groups)
+            doc->deleteFixtureGroup(g);
+        for (quint32 p : palettes)
+            doc->deletePalette(p);
+        m_app->setTheme(oldTheme);
+        m_app->resize(oldSize);
+        doc->resetModified();
+        QCoreApplication::processEvents();
+    });
+    QVERIFY(litScene(doc, 240, 1, &fixtures, &functions) != nullptr);
+    QVERIFY(litScene(doc, 241, 1, &fixtures, &functions) != nullptr);
+    FixtureGroup *g = new FixtureGroup(doc);
+    g->setName("Stage");
+    doc->addFixtureGroup(g);
+    g->assignFixture(fixtures.first());
+    groups << g->id();
+    FixtureGroup *g2 = new FixtureGroup(doc);
+    g2->setName("Back");
+    doc->addFixtureGroup(g2);
+    g2->assignFixture(fixtures.last());
+    groups << g2->id();
+    QLCPalette *full = new QLCPalette(QLCPalette::Dimmer, doc);
+    full->setName("Full");
+    full->setValue(255);
+    doc->addPalette(full);
+    palettes << full->id();
+    QLCPalette *red = new QLCPalette(QLCPalette::Color, doc);
+    red->setName("Red");
+    red->setValue(QColor(Qt::red));
+    doc->addPalette(red);
+    palettes << red->id();
+    prod = st->addProduction("Unsaved");
+    const quint32 listId = st->addCueList(prod, "Act 1", ShowTree::ListMode::NonTracking);
+    const quint32 c1 = st->addCue(listId, -1, "Verse");
+    const quint32 c2 = st->addCue(listId, 0, "Chorus");
+    const quint32 c3 = st->addCue(listId, 1, "Bridge");
+    ShowTree::Target t;
+    t.groups << g->id();
+    const quint32 l2 = st->addLayer(c2, t);
+    const quint32 l3 = st->addLayer(c3, t);
+    st->setCurrentProduction(prod);
+    m_app->show();
+    m_app->setTheme(App::ThemeVSCodeDark);
+    m_app->showContext(QStringLiteral("Show Tree"));
+    QTRY_VERIFY_WITH_TIMEOUT(view->selectNode(c1), 3000);
+
+    // Saved: nothing to list.
+    doc->resetModified();
+    ChangeJournal *journal = doc->changeJournal();
+    QVERIFY(journal->entries().isEmpty());
+    QVERIFY(!m_app->m_statusDirtyLabel->text().contains(QStringLiteral("Unsaved")));
+
+    // Three different edits, each on the cue it is selected on.
+    QVERIFY(view->selectNode(c1));
+    QVERIFY(st->renameNode(c1, "Verse 1"));
+    QVERIFY(view->selectNode(c2));
+    QVERIFY(st->setLayerLook(c2, l2, st->lookForPalette(red->id())));
+    QVERIFY(st->setLayerLook(c2, l2, st->lookForPalette(full->id())));
+    QVERIFY(view->selectNode(c3));
+    QVERIFY(st->addToLayer(c3, l3, QList<quint32>() << g2->id(), QList<quint32>()));
+
+    QCOMPARE(m_app->m_statusDirtyLabel->text(), QString::fromUtf8("\xe2\x97\x8f Unsaved changes"));
+    QVERIFY(m_app->m_statusDirtyLabel->cursor().shape() == Qt::PointingHandCursor);
+
+    const QList<ChangeJournal::Entry> es = journal->entries();
+    QVERIFY(es.count() >= 3);
+    // Newest first: the target (Bridge), the colour and dimmer (Chorus, grouped), the rename (Verse).
+    QCOMPARE(es.at(0).kind, ChangeJournal::Target);
+    QVERIFY2(es.at(0).title.contains("Bridge"), qPrintable(es.at(0).title));
+    QCOMPARE(es.at(0).subject.jump, ChangeJournal::ToCue);
+    QCOMPARE(es.at(0).subject.id, c3);
+    QCOMPARE(es.at(0).subject.id2, ShowTree::invalidId());
+    QCOMPARE(es.at(1).kind, ChangeJournal::Look);
+    QVERIFY2(es.at(1).title.contains("Chorus"), qPrintable(es.at(1).title));
+    QCOMPARE(es.at(1).edits, 2);
+    QCOMPARE(es.at(1).subject.id, c2);
+    QCOMPARE(es.at(2).kind, ChangeJournal::Cue);
+    QVERIFY2(es.at(2).title.contains("Verse 1"), qPrintable(es.at(2).title));
+    QCOMPARE(es.at(2).what, QStringLiteral("Rename"));
+    QCOMPARE(es.at(2).subject.id, c1);
+    QCOMPARE(journal->stepCount(), 4);
+    QVERIFY(es.at(0).when > 0);
+
+    // The footer's tooltip says how many; a click opens the list.
+    QVERIFY2(journal->tooltip().contains("unsaved change"), qPrintable(journal->tooltip()));
+    QTest::mouseClick(m_app->m_statusDirtyLabel, Qt::LeftButton);
+    UnsavedChangesDialog *dlg = qobject_cast<UnsavedChangesDialog *>(m_app->m_unsavedDialog.data());
+    QVERIFY(dlg != nullptr);
+    QStringList rows = dlg->rows();
+    QVERIFY(rows.count() >= 3);
+    QVERIFY2(rows.at(1).contains("Chorus") && rows.at(1).endsWith("|2"), qPrintable(rows.at(1)));
+
+    // A row takes you to its thing.
+    m_app->showContext(QStringLiteral("Fixtures"));
+    dlg->activateRow(0);
+    QCOMPARE(m_app->m_tab->tabBar()->tabData(m_app->m_tab->currentIndex()).toString(), QStringLiteral("Show Tree"));
+    QCOMPARE(view->currentCueId(), c3);
+    dlg->activateRow(2);
+    QCOMPARE(view->currentCueId(), c1);
+
+    const QByteArray shotDir = qgetenv("QLC_SHOT_DIR");
+    auto shots = [&](const QString &state) {
+        if (shotDir.isEmpty())
+            return;
+        QDir().mkpath(QString::fromLocal8Bit(shotDir));
+        const QList<QPair<QSize, QString> > sizes = { { QSize(1024, 640), "1024x640" },
+                                                      { QSize(1280, 800), "1280x800" },
+                                                      { QSize(1920, 1080), "1920x1080" } };
+        for (const auto &sz : sizes)
+        {
+            m_app->resize(sz.first);
+            for (int i = 0; i < 5; ++i)
+                QCoreApplication::processEvents();
+            QPixmap shot = m_app->grab();
+            if (state == QLatin1String("list") && m_app->m_unsavedDialog != nullptr)
+            {
+                dlg->move(m_app->mapToGlobal(QPoint(shot.width() - dlg->width() - 20,
+                                                    shot.height() - dlg->height() - 40)));
+                for (int i = 0; i < 5; ++i)
+                    QCoreApplication::processEvents();
+                QPainter p(&shot);
+                p.drawPixmap(m_app->mapFromGlobal(dlg->pos()), dlg->grab());
+            }
+            else if (state == QLatin1String("hover"))
+            {
+                QToolTip::showText(m_app->m_statusDirtyLabel->mapToGlobal(QPoint(0, -30)), journal->tooltip(),
+                                   m_app->m_statusDirtyLabel);
+                QCoreApplication::processEvents();
+                QPainter p(&shot);
+                for (QWidget *w : QApplication::topLevelWidgets())
+                    if (w->inherits("QTipLabel") && w->isVisible())
+                        p.drawPixmap(m_app->mapFromGlobal(w->pos()), w->grab());
+            }
+            const QString base = QString::fromLocal8Bit(shotDir) + QStringLiteral("/%1-%2-%3")
+                                     .arg(qEnvironmentVariable("QLC_SHOT_PREFIX", QStringLiteral("after")), state, sz.second);
+            shot.save(base + QStringLiteral(".png"));
+        }
+    };
+    shots("hover");
+    shots("list");
+    QToolTip::hideText();
+
+    // Undo takes its entry away (the newest step: the target); the rest stay.
+    QVERIFY(st->undoShared());
+    QCOMPARE(journal->stepCount(), 3);
+    QCOMPARE(journal->entries().first().subject.id, c2);
+    QTest::mouseClick(dlg->findChild<QPushButton *>("unsavedUndo"), Qt::LeftButton);
+    QCOMPARE(journal->stepCount(), 2);
+    QCOMPARE(journal->entries().first().subject.id, c2);
+    QCOMPARE(journal->entries().first().edits, 1);
+
+    // A fixture added is listed by area; a change nobody tells the journal about is counted only.
+    Fixture *fx = new Fixture(doc);
+    fx->setName("Extra");
+    fx->setChannels(1);
+    fx->setUniverse(0);
+    fx->setAddress(300);
+    QVERIFY(doc->addFixture(fx));
+    fixtures << fx->id();
+    QCOMPARE(journal->entries().first().kind, ChangeJournal::Fixture);
+    QVERIFY(journal->entries().first().title.contains("Extra"));
+    QCOMPARE(journal->entries().first().subject.jump, ChangeJournal::ToFixture);
+    // (A timer elsewhere may mark the show modified meanwhile; that is "other" too.)
+    const int otherBefore = journal->otherCount();
+    doc->setModified();
+    QCOMPARE(journal->otherCount(), otherBefore + 1);
+    QVERIFY(!journal->entries().last().itemised);
+    QVERIFY(journal->summary().contains("area"));
+
+    // Save clears the list.
+    doc->resetModified();
+    QVERIFY(journal->entries().isEmpty());
+    QCOMPARE(journal->stepCount(), 0);
+    QCOMPARE(journal->otherCount(), 0);
+    QVERIFY(dlg->rows().isEmpty() || !dlg->summaryText().isEmpty());
+    // ...and an Undo past the save is not a change since it.
+    QVERIFY(st->undoShared());
+    QCOMPARE(journal->stepCount(), 0);
 }
 
 void AppViews_Test::quittingWithTheShowTreeShowing()

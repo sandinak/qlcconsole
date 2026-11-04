@@ -33,12 +33,14 @@
 #include <QIcon>
 #include <QPair>
 #include <QPalette>
+#include <QPointer>
 #include <functional>
 
 #include "dmxdumpfactoryproperties.h"
 #include "qlcfixturedefcache.h"
 #include "doc.h"
 #include "showcontrol.h"
+#include "changejournal.h"
 #include "qlcui_export.h"
 
 class QProgressDialog;
@@ -621,6 +623,9 @@ public slots:
     void slotRigOverview();
     /** Focus mode: Monitor::openFocusMode(). */
     void slotFocusMode();
+    /** The footer's "Unsaved changes": what changed since the last save. */
+    void slotShowUnsavedChanges();
+    void slotUnsavedJump(const ChangeJournal::Subject &subject);
     void slotAddressTool();
     void slotControlBlackout();
     /** Toggle global Blind (output inhibit) from the main toolbar. */
@@ -1087,6 +1092,7 @@ private:
      *  completion point (autosaved) — see slotDocModified() and the
      *  autosave path in saveXML(). */
     QLabel* m_statusDirtyLabel;
+    QPointer<QDialog> m_unsavedDialog;
     QLabel* m_statusProgrammerLabel;
     QLabel* m_statusSelectionLabel;
     QLabel* m_statusPadModeLabel;

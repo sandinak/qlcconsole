@@ -245,6 +245,7 @@ private:
     class ShowControl *m_showControl;
     class ShowTreeController *m_showTree = nullptr;
     class PaletteOps *m_paletteOps = nullptr;
+    class ChangeJournal *m_changeJournal = nullptr;
     class PowerLimiter *m_powerLimiter = nullptr;
     class GroupMasters *m_groupMasters = nullptr;
     class ShutterAutoOpen *m_shutterAutoOpen = nullptr;
@@ -1235,6 +1236,8 @@ public:
     /** The everyday palette operations and their one undo stack, shared
      *  by the Show Tree and the Programming tab (PaletteOps). Never null. */
     class PaletteOps *paletteOps() const { return m_paletteOps; }
+    /** What changed since the last save (the footer's "Unsaved changes"). */
+    class ChangeJournal *changeJournal() const { return m_changeJournal; }
     /** Holds fixtures to their maximum draw (PowerLimiter) */
     class PowerLimiter *powerLimiter() const { return m_powerLimiter; }
     /** The fixture groups' intensity masters (GroupMasters). Never null. */

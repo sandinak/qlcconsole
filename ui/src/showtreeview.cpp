@@ -96,6 +96,7 @@
 #include "focuscallsdialog.h"
 #include "focusmenu.h"
 #include "showtreeview.h"
+#include "changejournal.h"
 #include "contextmenus.h"
 #include "whyonpanel.h"
 #include "effectrunsmenu.h"
@@ -1059,6 +1060,24 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
     setObjectName("ShowTreeView");
     setProperty("helpTopic", QStringLiteral("show-tree.md"));
     s_instance = this;
+
+    // The footer's unsaved-changes list asks what a step was about: the cue
+    // or layer selected here, as the step is taken.
+    if (m_doc->changeJournal() != nullptr)
+        m_doc->changeJournal()->setSubjectHint([this]() {
+            ChangeJournal::Subject s;
+            const quint32 cueId = currentCueId();
+            const Cue *c = m_st->cue(cueId);
+            const CueList *l = m_st->listOfCue(cueId);
+            if (c == nullptr || l == nullptr)
+                return s;
+            s.jump = ChangeJournal::ToCue;
+            s.id = cueId;
+            if (currentKind() == LayerNode)
+                s.id2 = currentId();
+            s.text = m_st->cueLabel(*l, l->indexOf(cueId));
+            return s;
+        });
 
     QVBoxLayout *main = new QVBoxLayout(this);
     main->setContentsMargins(4, 4, 4, 4);
@@ -2536,6 +2555,8 @@ ShowTreeView::~ShowTreeView()
     // widgets go: its editingFinished must not reach a half-gone view.
     for (QObject *child : findChildren<QObject *>())
         disconnect(child, nullptr, this, nullptr);
+    if (m_doc->changeJournal() != nullptr)
+        m_doc->changeJournal()->setSubjectHint(nullptr);
     if (s_instance == this)
         s_instance = nullptr;
     delete m_operations;

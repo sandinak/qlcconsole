@@ -260,6 +260,11 @@ private slots:
      *  patched, without the "Run this show for real?" question */
     void aLoadedTeachingShowOpensInOperateWithoutAsking();
 
+    /** The footer's "Unsaved changes": a click lists what changed since the
+     *  last save (cue rename, a look colour, a target), grouped by thing,
+     *  each with a jump; Save clears it; Undo takes an entry away. */
+    void unsavedChangesListsWhatChanged();
+
     /** Quitting with the window still up and the Show Tree in front: the
      *  tab goes before the Doc, so its hide event (which stops its preview)
      *  doesn't land on a freed Doc. Last: it deletes the app. */

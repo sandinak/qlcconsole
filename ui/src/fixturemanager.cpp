@@ -1178,6 +1178,19 @@ void FixtureManager::slotDisplayFixtureInfo(QString &info)
     m_info->setText(info);
 }
 
+bool FixtureManager::selectFixture(quint32 id)
+{
+    QTreeWidgetItem *item = m_fixtures_tree->fixtureItem(id);
+    if (item == NULL)
+        return false;
+    for (QTreeWidgetItem *p = item->parent(); p != NULL; p = p->parent())
+        p->setExpanded(true);
+    m_fixtures_tree->clearSelection();
+    m_fixtures_tree->setCurrentItem(item);
+    m_fixtures_tree->scrollToItem(item);
+    return true;
+}
+
 void FixtureManager::slotFixturesSearchChanged(const QString &text)
 {
     m_fixtures_tree->setTextFilter(text);

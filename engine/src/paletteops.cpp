@@ -528,6 +528,26 @@ quint64 PaletteOps::redoStamp() const
     return m_redo.isEmpty() ? 0 : m_redo.last().stamp;
 }
 
+QList<PaletteOps::StepInfo> PaletteOps::undoSteps() const
+{
+    QList<StepInfo> out;
+    out.reserve(m_undo.count());
+    for (const Step &s : m_undo)
+    {
+        StepInfo i;
+        i.stamp = s.stamp;
+        i.label = s.label;
+        if (!s.functionsAfter.isEmpty())
+            i.functionId = s.functionsAfter.first().first;
+        else if (!s.scenesAfter.isEmpty())
+            i.functionId = s.scenesAfter.first().first;
+        else if (!s.after.isEmpty())
+            i.paletteId = s.after.first().id;
+        out << i;
+    }
+    return out;
+}
+
 QString PaletteOps::undoText() const
 {
     return m_undo.isEmpty() ? QString() : m_undo.last().label;

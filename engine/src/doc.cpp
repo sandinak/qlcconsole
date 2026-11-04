@@ -65,6 +65,7 @@
 #include "showcontrol.h"
 #include "showtreecontroller.h"
 #include "paletteops.h"
+#include "changejournal.h"
 #include "doc.h"
 #include "powerlimiter.h"
 #include "groupmasters.h"
@@ -145,6 +146,9 @@ Doc::Doc(QObject* parent, int universes)
     m_showControl = new ShowControl(this, this);
     m_paletteOps = new PaletteOps(this);
     m_showTree = new ShowTreeController(this);
+    m_changeJournal = new ChangeJournal(this);
+    connect(m_paletteOps, &PaletteOps::changed, m_changeJournal, &ChangeJournal::stepsChanged);
+    connect(m_showTree, &ShowTreeController::changed, m_changeJournal, &ChangeJournal::stepsChanged);
     connect(m_ioMap, &InputOutputMap::inputSysExReceived,
             m_showControl, &ShowControl::handleSysEx);
     // Which masters are used changes only with an edit: let them know.
@@ -1000,6 +1004,8 @@ bool Doc::isModified() const
 void Doc::setModified()
 {
     m_modified = true;
+    if (m_changeJournal != nullptr)
+        m_changeJournal->noteModified();
 
     // setModified() is reached from the MasterTimer (DMX) thread via the
     // programmer edit routing (VCSlider::writeDMXParameter -> markSceneEdited).
@@ -1018,6 +1024,8 @@ void Doc::setModified()
 void Doc::resetModified()
 {
     m_modified = false;
+    if (m_changeJournal != nullptr)
+        m_changeJournal->markSaved();
     m_autosaveTimer.stop();
     emit modified(false);
 }
@@ -1331,6 +1339,7 @@ bool Doc::addFixture(Fixture* fixture, quint32 id, bool crossUniverse)
     }
 
     emit fixtureAdded(id);
+    m_changeJournal->noteArea(ChangeJournal::Fixture, tr("Added fixture %1").arg(fixture->name()), ChangeJournal::ToFixture, id);
     setModified();
 
     return true;
@@ -1530,6 +1539,7 @@ bool Doc::patchFixtures(const QList<FixturePatch> &patches, QString *why)
         applyFixtureToUniverses(fxi, false);
     }
 
+    m_changeJournal->noteArea(ChangeJournal::Fixture, tr("Patched fixtures (%1)").arg(patches.count()));
     setModified();
     foreach (const FixturePatch &p, patches)
         emit fixtureChanged(p.fixtureId);
@@ -1585,6 +1595,7 @@ bool Doc::unpatchFixture(quint32 id)
     fxi->setAddress(0);
     fxi->blockSignals(false);
 
+    m_changeJournal->noteArea(ChangeJournal::Fixture, tr("Unpatched %1").arg(fxi->name()), ChangeJournal::ToFixture, id);
     setModified();
     emit fixtureChanged(id);
     return true;
@@ -1671,6 +1682,7 @@ bool Doc::deleteFixture(quint32 id)
         m_programmer->unparkFixtures(QList<quint32>() << id);
 
         emit fixtureRemoved(id);
+        m_changeJournal->noteArea(ChangeJournal::Fixture, tr("Removed fixture %1").arg(fxi->name()));
         setModified();
         delete fxi;
 
@@ -1979,6 +1991,7 @@ bool Doc::addFixtureGroup(FixtureGroup* grp, quint32 id)
                 this, SLOT(slotFixtureGroupChanged(quint32)));
 
         emit fixtureGroupAdded(id);
+        m_changeJournal->noteArea(ChangeJournal::Fixture, tr("Added fixture group %1").arg(grp->name()));
         setModified();
 
         return true;
@@ -1993,6 +2006,7 @@ bool Doc::deleteFixtureGroup(quint32 id)
         Q_ASSERT(grp != NULL);
 
         emit fixtureGroupRemoved(id);
+        m_changeJournal->noteArea(ChangeJournal::Fixture, tr("Removed a fixture group"));
         setModified();
         delete grp;
 
