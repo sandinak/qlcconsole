@@ -280,18 +280,18 @@ wherever they are. Theatre calls the places *spike marks*.
 - **Each cue picks one** on its page in the Show Tree
   ([Blocking](show-tree.md#blocking)). It tracks: an unset cue keeps the
   one before.
-- **Moving targets in a blocking.** In the Lighting Studio, the footer's
-  **Blocking** picker says which blocking the plot shows: the cue in edit
-  (the default), Default, or a set.
-- **Storing a formation.** **Save Positions as Blocking…** (in the picker,
-  on the plot's right-click on empty space, and on the cue page) keeps
-  where the targets stand now as a new blocking and switches the plot to
-  it, so the next drags change only it. When it is
-  not Default, a blue banner over the plot reads **Moving targets in:
-  Apron number**, and a drag moves the selected targets (one, a pair, a
-  whole line of performers) in that blocking only. A
-  dashed ring and line show where Default puts each moved target. Dragging
-  a line's handles reshapes it in the blocking. Undo puts it back.
+- **Moving targets in a blocking.** In the Lighting Studio, the toolbar's
+  **Blocking ▾** button says which blocking the plot shows: the cue in edit
+  (the default), Default, or a set. When it is not Default, a blue banner
+  over the plot reads **Moving targets in: Apron number**, and a drag moves
+  the selected targets (one, a pair, a whole line of performers) in that
+  blocking only. A dashed ring and line show where Default puts each moved
+  target. Dragging a line's handles reshapes it in the blocking. Undo puts
+  it back.
+- **Storing a formation.** **Save Positions as Blocking…** (in the
+  Blocking menu, on the plot's right-click on empty space, and on the cue
+  page) keeps where the targets stand now as a new blocking and switches
+  the plot to it, so the next drags change only it.
 - **What follows it.** Everything that reads where a target is: the Aim
   looks on stage, area cover, line spreads, the follow spot, the plan
   views, the rig view, Blind and Focus. Live output uses the cue that went;

@@ -84,10 +84,11 @@ blocking stores them as they are (a shape, not a place).
   number)` for an unset cue, `Default`, each set), *Save Positions as
   Blocking…* (a copy of where they stand in this cue, used from it on) and
   *Rename…*. The same *Save Positions as Blocking…* is in the Studio's
-  picker and on its empty-plot right-click: the crew's "store a formation".
+  Blocking menu and on its empty-plot right-click: the crew's "store a formation".
   A cue that changes blocking shows a small flag in the tree's flags column,
   with the set's name in the tooltip.
-- **Lighting Studio plot**: a *Blocking* picker in the toolbar (`Default`,
+- **Lighting Studio plot**: a *Blocking ▾* button in the toolbar (not the
+  footer: it is full, and widening it moved the plot) (`Default`,
   `Cue in edit (…)`, each set, *Save Positions as Blocking…*). Dragging
   writes the picked blocking for whatever is selected (one target or many);
   how the plot selects and groups is the Studio's own rule. When it is not Default a banner over the plot reads

@@ -719,8 +719,10 @@ protected:
     /** Blocking (docs/design/BLOCKING.md): the footer's picker -- which
      *  blocking the plot shows and a drag edits -- and the banner over the
      *  plot that says so when it is not Default. */
-    QComboBox *m_blockingCombo = nullptr;
+    class QToolButton *m_blockingBtn = nullptr;
+    void fillBlockingMenu(class QMenu *menu);
     QLabel    *m_blockingBanner = nullptr;
+    quint32    m_shownBlocking = 0;     ///< the blocking the plot last drew
     void fillBlockingCombo();
     void refreshBlocking();
     /** "Save Positions as Blocking...": the targets where the plot shows

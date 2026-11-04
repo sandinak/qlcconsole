@@ -20,7 +20,7 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   tracks to the cues after it. Every look aimed at a target follows: the
   Aim looks on stage, area cover, line spreads, the follow spot, the plan
   views, the rig view, Blind and Focus. In the Lighting Studio a
-  **Blocking** picker and a banner (*Moving targets in: Apron number*)
+  **Blocking ▾** button and a banner (*Moving targets in: Apron number*)
   say which blocking a drag moves, with a dashed ghost at the Default
   place. A blocking is an offset from Default, so a venue's corrections
   carry it. Show Review **BLK-01** says when a blocking puts a target out

@@ -145,7 +145,7 @@ idea for stage targets. Why it matters: a look aimed at "Front Rank" keeps
 working when the front rank moves to the apron, because the cue moves the
 target, not the look. If a group asks how to light the same people in a
 different place, show the cue page's **Blocking** row and the Lighting
-Studio's **Blocking** picker (banner: *Moving targets in: …*). Not part of
+Studio's **Blocking ▾** button (banner: *Moving targets in: …*). Not part of
 the hands-on; see the help's Stage Targets ▸ Blocking.
 
 ## How this lesson was checked
