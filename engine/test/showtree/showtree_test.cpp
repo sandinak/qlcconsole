@@ -10892,3 +10892,331 @@ void ShowTree_Test::duplicateAndPasteListProductionReusableCue()
     QVERIFY(st->undo());
     QCOMPARE(st->reusableCues().count(), 1);
 }
+
+/****************************************************************************
+ * Release / Untrack (Q222)
+ ****************************************************************************/
+
+/* Untrack on the grey row of cue 3: the cue it is carried from (2) gets the
+   Release, so 2 still plays it and 3 and 4 don't. Release on 3 instead:
+   3 plays it, 4 doesn't. One undo step each; saved and loaded. */
+void ShowTree_Test::untrackEndsTheLayerBeforeThisCue()
+{
+    FixtureGroup *a = group("A", { m_fixtures[0] });
+    const quint32 full = dimmer(255, "Full");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 listId = st->addCueList(st->addProduction("P"), "L", ListMode::Tracking);
+    const quint32 c1 = st->addCue(listId, -1, "One");
+    const quint32 c2 = st->addCue(listId, 0, "Two");
+    const quint32 c3 = st->addCue(listId, 1, "Three");
+    const quint32 c4 = st->addCue(listId, 2, "Four");
+    const Target ta = groupTarget(a->id());
+    const quint32 la = st->addLayer(c1, ta);
+    QVERIFY(st->setLayerLook(c1, la, st->lookForPalette(full)));
+
+    const QList<quint32> cues { c1, c2, c3, c4 };
+    auto play = [&]() {
+        QList<int> out;
+        for (quint32 id : cues)
+        {
+            st->previewCue(id);
+            out << int(settle(6).value(0));
+        }
+        st->stopPreview();
+        return out;
+    };
+    QCOMPARE(play(), QList<int>({ 255, 255, 255, 255 }));
+    const QByteArray xmlBefore = treeXml(st);
+
+    // Not on the layer's own cue, nor on the first: nothing carries it in.
+    QVERIFY(!st->untrackPlan(c1, ta).ok);
+    QVERIFY2(st->untrackPlan(c1, ta).why.contains("Release After This Cue"), qPrintable(st->untrackPlan(c1, ta).why));
+
+    const ShowTreeController::UntrackPlan plan = st->untrackPlan(c3, ta);
+    QVERIFY2(plan.ok, qPrintable(plan.why));
+    QCOMPARE(plan.carrier, c2);
+    QString why;
+    QVERIFY2(st->untrackLayer(c3, ta, &why), qPrintable(why));
+    QVERIFY(st->undoText().contains("Untrack"));
+    QCOMPARE(play(), QList<int>({ 255, 255, 0, 0 }));
+    // 2 holds the Release, with nothing set: it plays the carried values.
+    {
+        const QList<ResolvedCue> r = resolve(*st->cueList(listId));
+        QVERIFY(r[1].layer(ta) != nullptr && r[1].layer(ta)->own && r[1].layer(ta)->release);
+        CHECK_VALUE(r[1], a->id(), KeyDimmer, full, Origin::Tracked, c1);
+        QVERIFY(r[2].layer(ta) == nullptr);
+        QVERIFY(r[3].layer(ta) == nullptr);
+    }
+    // Saved and loaded: the same.
+    {
+        const QByteArray xml = engineXml(m_doc);
+        Doc *other = new Doc(this);
+        QXmlStreamReader r(xml);
+        r.readNextStartElement();
+        QVERIFY(other->loadXML(r, false));
+        const CueList *back = other->showTree()->cueList(listId);
+        QVERIFY(back != nullptr);
+        const QList<ResolvedCue> rb = resolve(*back);
+        QVERIFY(rb[1].layer(ta) != nullptr && rb[1].layer(ta)->release);
+        QVERIFY(rb[2].layer(ta) == nullptr);
+        delete other;
+    }
+    // One undo step; redo puts it back.
+    QVERIFY(st->undo());
+    QCOMPARE(treeXml(st), xmlBefore);
+    QCOMPARE(play(), QList<int>({ 255, 255, 255, 255 }));
+    QVERIFY(st->redo());
+    QCOMPARE(play(), QList<int>({ 255, 255, 0, 0 }));
+    QVERIFY(st->undo());
+
+    // Release After This Cue on 3's grey row: 3 keeps it, 4 doesn't.
+    QVERIFY(st->setTargetRelease(c3, ta, true));
+    QCOMPARE(play(), QList<int>({ 255, 255, 255, 0 }));
+    QVERIFY(st->undo());
+    QCOMPARE(treeXml(st), xmlBefore);
+
+    // Several at once (one per cue list position): one step.
+    FixtureGroup *b = group("B", { m_fixtures[1] });
+    const Target tb = groupTarget(b->id());
+    const quint32 lb = st->addLayer(c1, tb);
+    QVERIFY(st->setLayerLook(c1, lb, st->lookForPalette(full)));
+    const QByteArray xmlTwo = treeXml(st);
+    // 3 and 4 both untracked from: the one Release (on 2) does both.
+    QVERIFY(st->untrackLayers({ qMakePair(c3, ta), qMakePair(c4, ta), qMakePair(c2, tb) }, &why));
+    QCOMPARE(layersOn(st, c3, ta).count(), 0);             // no Release on 3: 2 covers it
+    QCOMPARE(layersOn(st, c2, ta).count(), 1);
+    QCOMPARE(layersOn(st, c1, tb).count(), 1);
+    QVERIFY(st->cue(c1)->layer(lb)->release);              // B released on 1, its own layer
+    QVERIFY(st->undo());
+    QCOMPARE(treeXml(st), xmlTwo);
+}
+
+/* What Untrack refuses, with the reason: an include, the base, a Cue-only
+   or reusable carrier, the first sub-cue; what it handles: a sub-cue after
+   the first, a skipped cue between. */
+void ShowTree_Test::untrackEdgeCases()
+{
+    FixtureGroup *a = group("A", { m_fixtures[0] });
+    FixtureGroup *b = group("B", { m_fixtures[1] });
+    const quint32 full = dimmer(255, "Full");
+    const quint32 half = dimmer(127, "Half");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("P");
+    const Target ta = groupTarget(a->id()), tb = groupTarget(b->id());
+    QString why;
+
+    // --- a Cue-only cue before: a Release there wouldn't pass on.
+    {
+        const quint32 listId = st->addCueList(prod, "Only", ListMode::Tracking);
+        const quint32 c1 = st->addCue(listId, -1, "One");
+        const quint32 c2 = st->addCue(listId, 0, "Two");
+        const quint32 c3 = st->addCue(listId, 1, "Three");
+        const quint32 l1 = st->addLayer(c1, ta);
+        QVERIFY(st->setLayerLook(c1, l1, st->lookForPalette(full)));
+        QVERIFY(st->setCueMode(c2, CueMode::CueOnly));
+        const ShowTreeController::UntrackPlan p = st->untrackPlan(c3, ta);
+        QVERIFY(!p.ok);
+        QVERIFY2(p.why.contains("Cue-only"), qPrintable(p.why));
+        const QByteArray xml = treeXml(st);
+        QVERIFY(!st->untrackLayer(c3, ta, &why));
+        QCOMPARE(why, p.why);
+        QCOMPARE(treeXml(st), xml);
+        // 2 itself (Cue-only) can be untracked: 1 gets the Release.
+        QVERIFY2(st->untrackLayer(c2, ta, &why), qPrintable(why));
+        const QList<ResolvedCue> r = resolve(*st->cueList(listId));
+        QVERIFY(r[0].layer(ta) != nullptr);
+        QVERIFY(r[1].layer(ta) == nullptr && r[2].layer(ta) == nullptr);
+    }
+    // --- an include, and a layer released to the base cue.
+    {
+        const quint32 listId = st->addCueList(prod, "Inc", ListMode::Tracking);
+        const quint32 c1 = st->addCue(listId, -1, "One");
+        const quint32 c2 = st->addCue(listId, 0, "Two");
+        const quint32 c3 = st->addCue(listId, 1, "Three");
+        const quint32 c4 = st->addCue(listId, 2, "Four");
+        const quint32 l1 = st->addLayer(c1, ta);
+        QVERIFY(st->setLayerLook(c1, l1, st->lookForPalette(full)));
+        QVERIFY(st->setCueMode(c3, CueMode::Block));
+        QVERIFY(st->addInclude(c3, c1, &why));
+        ShowTreeController::UntrackPlan p = st->untrackPlan(c3, ta);
+        QVERIFY(!p.ok);
+        QVERIFY2(p.why.contains("include"), qPrintable(p.why));
+        // A layer released already: back at the base cue's value.
+        const quint32 l2 = st->addLayer(c2, tb);
+        QVERIFY(st->setLayerLook(c2, l2, st->lookForPalette(half)));
+        QVERIFY(st->setCueMode(c3, CueMode::Track));
+        QVERIFY(st->setBaseCue(listId, c1));
+        const quint32 lb1 = st->addLayer(c1, tb);
+        QVERIFY(st->setLayerLook(c1, lb1, st->lookForPalette(full)));
+        QVERIFY(st->setLayerRelease(c2, l2, true));
+        p = st->untrackPlan(c3, tb);
+        QVERIFY(!p.ok);
+        QVERIFY2(p.why.contains("base cue"), qPrintable(p.why));
+        (void)c4;
+    }
+    // --- a reusable cue carries it: a Release there would change every use.
+    {
+        const quint32 listId = st->addCueList(prod, "Reuse", ListMode::Tracking);
+        const quint32 c1 = st->addCue(listId, -1, "One");
+        const quint32 c2 = st->addCue(listId, 0, "Two");
+        const quint32 c3 = st->addCue(listId, 1, "Three");
+        const quint32 l1 = st->addLayer(c1, ta);
+        QVERIFY(st->setLayerLook(c1, l1, st->lookForPalette(full)));
+        QVERIFY(st->setTargetLook(c2, tb, st->lookForPalette(half)));
+        QVERIFY(st->makeCueReusable(c2, "Blue wash") != invalidId());
+        const ShowTreeController::UntrackPlan p = st->untrackPlan(c3, ta);
+        QVERIFY(!p.ok);
+        QVERIFY2(p.why.contains("reusable"), qPrintable(p.why));
+    }
+    // --- a skipped cue between: the Release goes on the cue played before.
+    {
+        const quint32 listId = st->addCueList(prod, "Skip", ListMode::Tracking);
+        const quint32 c1 = st->addCue(listId, -1, "One");
+        const quint32 c2 = st->addCue(listId, 0, "Two");
+        const quint32 c3 = st->addCue(listId, 1, "Three");
+        const quint32 c4 = st->addCue(listId, 2, "Four");
+        const quint32 l1 = st->addLayer(c1, ta);
+        QVERIFY(st->setLayerLook(c1, l1, st->lookForPalette(full)));
+        QVERIFY(st->setCuesSkipped({ c3 }, true));
+        const ShowTreeController::UntrackPlan p = st->untrackPlan(c4, ta);
+        QVERIFY2(p.ok, qPrintable(p.why));
+        QCOMPARE(p.carrier, c2);
+    }
+    // --- sub-cues: the first starts from its cue (refused); a later one
+    // gets the Release on the sub-cue before it.
+    {
+        const quint32 listId = st->addCueList(prod, "Subs", ListMode::Tracking);
+        const quint32 c1 = st->addCue(listId, -1, "One");
+        const quint32 l1 = st->addLayer(c1, ta);
+        QVERIFY(st->setLayerLook(c1, l1, st->lookForPalette(full)));
+        const quint32 s1 = st->addSubCue(c1, "Hit");
+        const quint32 s2 = st->addSubCue(c1, "Hit 2");
+        const quint32 s3 = st->addSubCue(c1, "Hit 3");
+        QVERIFY(s1 != invalidId() && s2 != invalidId() && s3 != invalidId());
+        ShowTreeController::UntrackPlan p = st->untrackPlan(s1, ta);
+        QVERIFY(!p.ok);
+        QVERIFY2(p.why.contains("sub-cue"), qPrintable(p.why));
+        p = st->untrackPlan(s3, ta);
+        QVERIFY2(p.ok, qPrintable(p.why));
+        QCOMPARE(p.carrier, s2);
+        QVERIFY(st->untrackLayer(s3, ta, &why));
+        const CueList *subs = st->listOfCue(s1);
+        const QList<ResolvedCue> r = st->resolved(*subs);
+        QVERIFY(r[1].layer(ta) != nullptr);
+        QVERIFY(r[2].layer(ta) == nullptr);
+    }
+}
+
+/* How long a carried layer has tracked: cues since the one that set it
+   (this one counted), the cue that set it, and a Release set ahead -- in a
+   list, through a skipped cue, into sub-cues, and after Make Inline Cue. */
+void ShowTree_Test::trackSpanCountsTheCuesSinceItWasSet()
+{
+    FixtureGroup *a = group("A", { m_fixtures[0] });
+    const quint32 full = dimmer(255, "Full");
+    const quint32 half = dimmer(127, "Half");
+    ShowTreeController *st = m_doc->showTree();
+    m_doc->setMode(Doc::Design);
+    const Target ta = groupTarget(a->id());
+    const quint32 listId = st->addCueList(st->addProduction("P"), "L", ListMode::Tracking);
+    QList<quint32> c;
+    for (int i = 0; i < 6; ++i)
+        c << st->addCue(listId, i - 1, QString("C%1").arg(i + 1));
+    const quint32 l1 = st->addLayer(c[0], ta);
+    QVERIFY(st->setLayerLook(c[0], l1, st->lookForPalette(full)));
+
+    ShowTreeController::TrackSpan s = st->trackSpan(c[0], ta);
+    QCOMPARE(s.cues, 0);                                    // its own cue: not tracked
+    s = st->trackSpan(c[3], ta);
+    QCOMPARE(s.cues, 3);
+    QCOMPARE(s.setIn, c[0]);
+    QCOMPARE(s.endsAfter, invalidId());
+    // A Release ahead (on 5): "ends after" it.
+    QVERIFY(st->setTargetRelease(c[4], ta, true));
+    s = st->trackSpan(c[2], ta);
+    QCOMPARE(s.cues, 2);
+    QCOMPARE(s.endsAfter, c[4]);
+    QCOMPARE(st->trackSpan(c[5], ta).cues, 0);              // released: gone
+    QVERIFY(st->undo());
+    // Set again in 3: counted from there.
+    QVERIFY(st->setTargetLook(c[2], ta, st->lookForPalette(half)));
+    s = st->trackSpan(c[4], ta);
+    QCOMPARE(s.setIn, c[2]);
+    QCOMPARE(s.cues, 2);
+    QVERIFY(st->undo());
+    // A skipped cue between isn't counted; the given resolution is used.
+    QVERIFY(st->setCuesSkipped({ c[1] }, true));
+    const QList<ResolvedCue> res = st->resolved(*st->cueList(listId));
+    s = st->trackSpan(c[3], ta, res);
+    QCOMPARE(s.cues, 2);
+    QVERIFY(st->undo());
+
+    // Sub-cues of 3: the first is one cue on from 3, so 3 cues since 1.
+    const quint32 s1 = st->addSubCue(c[2], "Hit");
+    const quint32 s2 = st->addSubCue(c[2], "Hit 2");
+    s = st->trackSpan(s1, ta);
+    QCOMPARE(s.setIn, c[0]);
+    QCOMPARE(s.cues, 3);
+    QCOMPARE(st->trackSpan(s2, ta).cues, 4);
+    // Sub-cues don't pass on: 4 is still the third main cue since 1.
+    QCOMPARE(st->trackSpan(c[3], ta).cues, 3);
+    // Made inline cues, they count in the list.
+    QString msg;
+    QVERIFY2(st->makeInlineCues({ s1 }, &msg), qPrintable(msg));
+    const CueList *list = st->cueList(listId);
+    QCOMPARE(list->indexOf(s1), 3);
+    QCOMPARE(list->indexOf(s2), 4);
+    const QList<ResolvedCue> r = st->resolved(*list);
+    if (r[4].layer(ta) != nullptr && !r[4].layer(ta)->own && r[4].layer(ta)->origin == Origin::Tracked)
+    {
+        s = st->trackSpan(s2, ta);
+        QCOMPARE(s.setIn, r[4].layer(ta)->fromCue);
+        QVERIFY(s.cues >= 1);
+    }
+    QCOMPARE(st->trackSpan(c[5], ta).cues, list->indexOf(c[5]));
+}
+
+/* The command line: release (After This Cue) and untrack (From This Cue). */
+void ShowTree_Test::releaseAndUntrackCommands()
+{
+    FixtureGroup *a = group("Towers", { m_fixtures[0] });
+    const quint32 full = dimmer(255, "Full");
+    ShowTreeController *st = m_doc->showTree();
+    const Target ta = groupTarget(a->id());
+    const quint32 listId = st->addCueList(st->addProduction("P"), "L", ListMode::Tracking);
+    const quint32 c1 = st->addCue(listId, -1, "One");
+    const quint32 c2 = st->addCue(listId, 0, "Two");
+    const quint32 c3 = st->addCue(listId, 1, "Three");
+    const quint32 l1 = st->addLayer(c1, ta);
+    QVERIFY(st->setLayerLook(c1, l1, st->lookForPalette(full)));
+
+    ShowTreeCommand cmd(m_doc, st);
+    ShowTreeCommand::Context ctx;
+    ctx.production = st->productions().first().id;
+    ctx.list = listId;
+    ctx.cue = c3;
+    ShowTreeCommand::Result r = cmd.run("untrack Towers", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    QVERIFY(st->cue(c2)->layers.count() == 1 && st->cue(c2)->layers.first().release);
+    QVERIFY2(st->undoText().contains("untrack", Qt::CaseInsensitive), qPrintable(st->undoText()));
+    QVERIFY(st->undo());
+    // On the layer's own cue: refused, with Release named.
+    ctx.cue = c1;
+    r = cmd.run("untrack Towers", ctx);
+    QVERIFY(!r.ok);
+    QVERIFY2(r.message.contains("Release After This Cue"), qPrintable(r.message));
+    // release Towers on 2 (carried in): 2 keeps it, 3 doesn't.
+    ctx.cue = c2;
+    r = cmd.run("release Towers", ctx);
+    QVERIFY2(r.ok, qPrintable(r.message));
+    const QList<ResolvedCue> res = resolve(*st->cueList(listId));
+    QVERIFY(res[1].layer(ta) != nullptr && res[2].layer(ta) == nullptr);
+    // Tab completes it; a typo is put right; help knows it.
+    QStringList options;
+    QVERIFY(cmd.candidates("untrack", ctx, &options));
+    QVERIFY2(options.contains("Towers"), qPrintable(options.join(",")));
+    QCOMPARE(cmd.suggest("untrak Towers", ctx), QString("untrack Towers"));
+    r = cmd.run("help untrack", ctx);
+    QVERIFY2(r.help.contains("Untrack From This Cue"), qPrintable(r.help));
+    QVERIFY(ShowTreeCommand::showTreeOnlyWord("untrack"));
+}

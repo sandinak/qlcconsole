@@ -664,6 +664,40 @@ public:
      *  cue's own first if it is only carried in: one undo step. */
     bool setTargetRelease(quint32 cueId, const ShowTree::Target &target, bool release);
 
+    /** Untrack From This Cue (Q222): the layer on @a target carried into
+     *  cue @a cueId (the grey row) never reaches it -- Release is set on the
+     *  cue it is carried from (the nearest played cue before it), so that
+     *  cue still plays it and this cue and the ones after start without it.
+     *  The plan says whether it can, why not, and which cue gets the
+     *  Release. Release After This Cue is setTargetRelease on @a cueId. */
+    struct UntrackPlan
+    {
+        bool ok = false;
+        QString why;                        //!< not ok: the reason, one line
+        quint32 carrier = 0xFFFFFFFF;       //!< the cue that gets the Release
+    };
+    UntrackPlan untrackPlan(quint32 cueId, const ShowTree::Target &target) const;
+    /** Untrack the layers (cue, target) -- one undo step for all of them.
+     *  False (@a why: the first refusal) when none could be untracked. */
+    bool untrackLayers(const QList<QPair<quint32, ShowTree::Target>> &layers, QString *why = nullptr);
+    bool untrackLayer(quint32 cueId, const ShowTree::Target &target, QString *why = nullptr)
+    {
+        return untrackLayers({ qMakePair(cueId, target) }, why);
+    }
+
+    /** How long a layer carried into a cue has been tracking (Q222), from
+     *  what the list resolves to (nothing per frame: the tree passes the
+     *  resolution it already built). */
+    struct TrackSpan
+    {
+        quint32 setIn = 0xFFFFFFFF;         //!< the cue that last set it
+        int cues = 0;                       //!< cues since then, this one counted (0: not tracked)
+        quint32 endsAfter = 0xFFFFFFFF;     //!< a later cue that releases it, else invalid
+    };
+    /** @a resolved: the resolution of @a cueId's list (empty: resolved here). */
+    TrackSpan trackSpan(quint32 cueId, const ShowTree::Target &target,
+                        const QList<ShowTree::ResolvedCue> &resolved = QList<ShowTree::ResolvedCue>()) const;
+
     /** What Bring Into This Cue / Start Here Instead would do with the
      *  layer on @a target carried into cue @a cueId (the grey row): whether
      *  it can, why not, and what it takes (docs/features/show-tree.md,

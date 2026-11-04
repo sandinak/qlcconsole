@@ -56,7 +56,8 @@ class Doc;
  *   T1-CW colour Red             a fixture by name works as a group does;
  *   Movers/Front/Spots …         a group also by its folder path
  *   function Haze look           a function played as it is (opaque layer)
- *   release Towers               toggle Release on the cue's Towers layer
+ *   release Towers               toggle Release on the cue's Towers layer (ends after it)
+ *   untrack Towers               a carried-in Towers ends before the cue (Q222)
  *   include 0.0.3                include a cue (again: take it out)
  *   skip 0.0.3 [thru 0.0.5] [, 0.0.7]   skip cues (none named: the selected
  *                                one): GO passes over; unskip puts back

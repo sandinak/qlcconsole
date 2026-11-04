@@ -421,3 +421,236 @@ bool ShowTreeController::startLayerHere(quint32 cueId, const Target &target, QSt
         *lost = op.lose;
     return ok;
 }
+
+/****************************************************************************
+ * Release / Untrack (Q222)
+ ****************************************************************************/
+
+/* Release ends a layer after the cue it is set on; Untrack ends a layer
+   carried into a cue before it: the Release goes on the cue it is carried
+   from, so that cue still plays it and this one starts without it. */
+
+ShowTreeController::UntrackPlan ShowTreeController::untrackPlan(quint32 cueId, const Target &target) const
+{
+    UntrackPlan plan;
+    const CueList *list = listOfCue(cueId);
+    const QString label = targetLabel(target);
+    auto no = [&plan](const QString &why) {
+        plan.why = why;
+        return plan;
+    };
+    if (list == nullptr || target.isEmpty())
+        return no(tr("No such layer."));
+    if (list->looks)
+        return no(tr("A hit plays only what it has: nothing tracks into it."));
+    const int at = list->indexOf(cueId);
+    const QList<ResolvedCue> res = resolved(*list);
+    const ResolvedLayer *rl = at >= 0 && at < res.count() ? res.at(at).layer(target) : nullptr;
+    if (rl == nullptr)
+        return no(tr("%1 isn't on stage in this cue.").arg(label));
+    if (rl->own)
+        return no(tr("This cue sets %1: Release After This Cue ends it after this cue.").arg(label));
+    if (rl->origin == Origin::Included)
+        return no(tr("%1 comes from an include, not tracked: take the include out instead.").arg(label));
+    if (rl->origin == Origin::Base)
+        return no(tr("%1 is released already: here it is back at the base cue's value.").arg(label));
+    const int before = playedBefore(*list, at);
+    if (before < 0)
+    {
+        if (list->isSubCues())
+        {
+            const CueList *up = listOfCue(list->subOf);
+            const QString cue = up == nullptr ? QString() : cueLabel(*up, up->indexOf(list->subOf));
+            return no(tr("%1 comes in with %2 (a sub-cue starts from its cue's look): release it in %2 or "
+                         "before.").arg(label, cue));
+        }
+        return no(tr("No cue before this one carries %1.").arg(label));
+    }
+    const Cue &pc = list->cues.at(before);
+    const QString carrier = cueLabel(*list, before);
+    if (res.at(before).layer(target) == nullptr)
+        return no(tr("%1 isn't on stage in %2.").arg(label, carrier));
+    if (effectiveMode(*list, pc) == CueMode::CueOnly)
+        return no(tr("%1 is Cue-only: its changes don't pass on, so a Release there can't end %2. Release it "
+                     "in the cue before %1, or make %1 track.").arg(carrier, label));
+    if (pc.reusable != invalidId())
+        return no(tr("%1 is a use of a reusable cue: a Release there would change every use. Unlink it "
+                     "first.").arg(carrier));
+    plan.ok = true;
+    plan.carrier = pc.id;
+    return plan;
+}
+
+bool ShowTreeController::untrackLayers(const QList<QPair<quint32, Target>> &layers, QString *why)
+{
+    // Planned against the tree as it is; a layer untracked from a cue that
+    // another of them already untracks it from is left out (one Release).
+    struct Step
+    {
+        quint32 cue;
+        Target target;
+        Layer layer;            // a fresh layer when the cue only carries it in
+        bool fresh = false;
+        bool front = false;
+    };
+    QList<Step> steps;
+    QString first;
+    for (const QPair<quint32, Target> &ref : layers)
+    {
+        const UntrackPlan plan = untrackPlan(ref.first, ref.second);
+        if (!plan.ok)
+        {
+            if (first.isEmpty())
+                first = plan.why;
+            continue;
+        }
+        bool covered = false;
+        for (const QPair<quint32, Target> &other : layers)
+            covered |= other.first == plan.carrier && other.second == ref.second;
+        for (const Step &s : steps)
+            covered |= s.cue == plan.carrier && s.target == ref.second;
+        if (covered)
+            continue;
+        Step s;
+        s.cue = plan.carrier;
+        s.target = ref.second;
+        const CueList *list = listOfCue(plan.carrier);
+        const int at = list->indexOf(plan.carrier);
+        const QList<ResolvedCue> res = resolved(*list);
+        const ResolvedLayer *rl = res.at(at).layer(ref.second);
+        if (!rl->own)
+        {
+            // The carrier only carries it in: a layer of its own there, with
+            // Release, that plays as the carried one did -- empty (it takes
+            // the carried values), at the end or the front, else holding the
+            // carried values as looks; the first that leaves the cue as it was.
+            s.fresh = true;
+            const Stage was = stageOf(res.at(at));
+            QList<QPair<Layer, bool>> tries;
+            Layer empty;
+            empty.target = ref.second;
+            empty.name = rl->name;
+            empty.release = true;
+            tries << qMakePair(empty, false) << qMakePair(empty, true);
+            Layer held = empty;
+            for (auto it = rl->values.constBegin(); it != rl->values.constEnd(); ++it)
+                held.setLook(it.value().look);
+            tries << qMakePair(held, false) << qMakePair(held, true);
+            s.layer = empty;
+            for (const QPair<Layer, bool> &t : tries)
+            {
+                CueList trial = *list;
+                if (t.second)
+                    trial.cues[at].layers.prepend(t.first);
+                else
+                    trial.cues[at].layers.append(t.first);
+                const QList<ResolvedCue> after = resolved(trial);
+                if (at < after.count() && stageOf(after.at(at)) == was)
+                {
+                    s.layer = t.first;
+                    s.front = t.second;
+                    break;
+                }
+            }
+        }
+        steps << s;
+    }
+    if (steps.isEmpty())
+    {
+        if (why != nullptr)
+            *why = first.isEmpty() ? tr("Nothing to untrack.") : first;
+        return false;
+    }
+    for (Step &s : steps)
+        if (s.fresh)
+            s.layer.id = newId();
+    const QString label = steps.count() == 1 ? tr("Untrack %1").arg(targetLabel(steps.first().target))
+                                             : tr("Untrack %1 layers").arg(steps.count());
+    return edit(label, [&](QList<Production> &ps) {
+        bool any = false;
+        for (const Step &s : steps)
+            for (Production &p : ps)
+                for (CueList &l : p.lists)
+                {
+                    Cue *c = l.cue(s.cue);
+                    if (c == nullptr)
+                        continue;
+                    if (s.fresh)
+                    {
+                        if (s.front)
+                            c->layers.prepend(s.layer);
+                        else
+                            c->layers.append(s.layer);
+                        any = true;
+                        continue;
+                    }
+                    for (Layer &have : c->layers)
+                        if (have.target == s.target && !have.release)
+                        {
+                            have.release = true;
+                            any = true;
+                        }
+                }
+        return any;
+    });
+}
+
+ShowTreeController::TrackSpan ShowTreeController::trackSpan(quint32 cueId, const Target &target,
+                                                            const QList<ResolvedCue> &given) const
+{
+    TrackSpan span;
+    const CueList *list = listOfCue(cueId);
+    if (list == nullptr || list->looks)
+        return span;
+    const QList<ResolvedCue> res = given.isEmpty() ? resolved(*list) : given;
+    const int at = list->indexOf(cueId);
+    if (at < 0 || at >= res.count())
+        return span;
+    const ResolvedLayer *rl = res.at(at).layer(target);
+    if (rl == nullptr || rl->own || rl->origin != Origin::Tracked)
+        return span;
+    span.setIn = rl->fromCue;
+
+    // Cues since the one that set it: this one, and the played cues back
+    // to it; in a sub-cue, back through its cue to the main cue that set it.
+    auto countBack = [](const CueList &l, int from, int to) {
+        // played cues in (from, to], @a to counted even when skipped
+        int n = 1;
+        for (int k = playedBefore(l, to); k > from; k = playedBefore(l, k))
+            ++n;
+        return n;
+    };
+    const int from = list->indexOf(rl->fromCue);
+    if (from >= 0 && from < at)
+        span.cues = countBack(*list, from, at);
+    else if (list->isSubCues())
+    {
+        span.cues = countBack(*list, -1, at);
+        if (rl->fromCue != list->subOf)
+            if (const CueList *up = listOfCue(list->subOf))
+            {
+                const int upFrom = up->indexOf(rl->fromCue), upAt = up->indexOf(list->subOf);
+                if (upFrom >= 0 && upFrom < upAt)
+                    span.cues += countBack(*up, upFrom, upAt);
+            }
+    }
+    if (span.cues == 0)
+    {
+        span.setIn = invalidId();
+        return span;
+    }
+
+    // Where a Release set ahead ends it.
+    for (int k = at + 1; k < res.count(); ++k)
+    {
+        const ResolvedLayer *next = res.at(k).layer(target);
+        if (next == nullptr)
+            break;
+        if (!next->own)
+            continue;
+        if (next->release)
+            span.endsAfter = list->cues.at(k).id;
+        break;
+    }
+    return span;
+}

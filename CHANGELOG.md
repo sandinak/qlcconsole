@@ -14,6 +14,18 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Added
 
+- **Release and Untrack: two words for ending a tracked layer** (board
+  Q222), the same in menus, tooltips, the T and R columns, help, the
+  course glossary and the command line. **Release After This Cue**: the
+  layer plays in this cue, then lets go. **Untrack From This Cue** (on a
+  grey, carried-in row): the layer never reaches this cue -- the cue it is
+  carried from gets the Release. One undo step each; with several grey rows
+  selected they act on all of them; `untrack Towers` on the command line
+  beside `release Towers`. A grey row's **T** now says how long it has
+  tracked (**⤳ 3**, *Set in 1.1.1 Setup · tracking 3 cues · ends after
+  1.1.5* on hover), and its right-click **Go to 1.1.1** selects the cue
+  that set it.
+
 - **A hit has its own icon** (0.4.0): a yellow lightning bolt on every hit
   row in the Show Tree and on the **Hits** rows over them, so a hit is told
   from a layer (what it lights) and a cue (no picture) at a glance, in the

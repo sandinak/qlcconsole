@@ -57,7 +57,7 @@ QString ShowTreeCommand::grammar()
               "Towers colour Blue dimmer 45 · Towers USTs … = one layer · Towers, USTs … = a layer each · "
               "US in Steps colour Red (a child layer) · set \"Towers\" SL SR · "
               "Towers aim DS-Edge spread 0 group pairs cross mirror · cue look spread +5 · "
-              "cue look colour Red · Steps effect Sinelon colour Red · gobo none · release Towers · "
+              "cue look colour Red · Steps effect Sinelon colour Red · gobo none · release Towers · untrack Towers · "
               "name \"Hero\" · T1-CW … (a fixture) · function Haze · include 0.0.3 · skip 0.0.3 [thru 0.0.5] · unskip · "
               "mib on|off|show list · nomib 0.0.3 · allowmib · textcolour red [list | 0.0.3] · "
               "record [selected|running|lit] · list \"name\" · dup · reusable · use BackStage · unlink · "
@@ -219,8 +219,13 @@ const QList<ShowTreeCommand::Word> &ShowTreeCommand::words()
         add("base", "tracking", "base", "Makes the selected cue the list's base cue: released layers go "
             "back to it.", { "base" }, { "release" });
         add("release", "tracking", "release <groups or function> [, <groups>…]",
-            "Turns Release on the cue's layer on, or off again: leaving the cue it goes back to the "
-            "base cue, else dark. A ▣ layer is named by its function.", { "release Towers" }, { "base" });
+            "Release After This Cue: the layer plays in the selected cue, then lets go (back to the "
+            "base cue, else dark); again turns it off. A ▣ layer is named by its function.",
+            { "release Towers" }, { "untrack", "base" });
+        add("untrack", "tracking", "untrack <groups> [, <groups>…]",
+            "Untrack From This Cue: a layer carried into the selected cue never reaches it -- the "
+            "cue it is carried from gets the Release, so this cue and the ones after start without "
+            "it.", { "untrack Towers" }, { "release" });
         add("skip", "tracking", "skip [<cue> [thru <cue>]] [, <cue>…]",
             "Skips cues (the selected one when none is named): GO, auto-follow and Back pass over them, and "
             "they track as if they weren't in the list. A jump straight to one still plays it. Greyed and "
@@ -451,7 +456,7 @@ bool ShowTreeCommand::showTreeOnlyWord(const QString &word)
     // not here: they mean something in Build.
     static const QStringList only {
         "production", "main", "sub", "inline", "follow", "subgo", "list", "cue", "track", "block", "cueonly", "cue-only",
-        "default", "base", "release", "skip", "unskip", "mib", "nomib", "allowmib", "textcolour", "textcolor", "include",
+        "default", "base", "release", "untrack", "skip", "unskip", "mib", "nomib", "allowmib", "textcolour", "textcolor", "include",
         "record", "dup", "copy", "paste", "cut", "reusable", "use", "unlink", "detach", "convert", "hit", "look",
         "vcpage", "adopt", "wb", "workbench", "name", "function", "fn", "new", "go" };
     return only.contains(word.toLower());
@@ -2499,6 +2504,24 @@ ShowTreeCommand::Result ShowTreeCommand::runParsed(const QString &line, const Co
             m_st->setTargetRelease(ctx.cue, t, !now);
         }
     }
+    else if (w0 == QLatin1String("untrack"))
+    {
+        // Untrack From This Cue: each layer named, carried into the cue,
+        // gets its Release on the cue it is carried from -- one step.
+        r.word();
+        const QList<Target> ts = targets();
+        if (ts.isEmpty())
+            error = tr("untrack <groups>: a layer carried into the cue (a grey row)");
+        else
+        {
+            QList<QPair<quint32, Target>> refs;
+            for (const Target &t : ts)
+                refs << qMakePair(ctx.cue, t);
+            QString why;
+            if (!m_st->untrackLayers(refs, &why))
+                error = why;
+        }
+    }
     else
     {
         if (w0 == QLatin1String("layer"))
@@ -2507,7 +2530,7 @@ ShowTreeCommand::Result ShowTreeCommand::runParsed(const QString &line, const Co
         if (ts.isEmpty())
         {
             const QString closest = nearestWord(r.peek());
-            error = tr("Don't know “%1”.%2 Start with cue, a group or fixture, a mode, base, release, include, skip, mib, "
+            error = tr("Don't know “%1”.%2 Start with cue, a group or fixture, a mode, base, release, untrack, include, skip, mib, "
                        "function, record, list, set, name, copy, paste, dup, reusable, use, unlink, detach, "
                        "convert, undo — type help.")
                     .arg(r.peek(), closest.isEmpty() ? QString() : tr(" Did you mean “%1”? (help %1)").arg(closest));
@@ -3439,7 +3462,7 @@ bool ShowTreeCommand::candidates(const QString &head, const Context &context, QS
         r.word();
         return names(functionNames(), false);
     }
-    if (w0 == QLatin1String("release"))
+    if (w0 == QLatin1String("release") || w0 == QLatin1String("untrack"))
     {
         r.word();
         return names(targets, false);

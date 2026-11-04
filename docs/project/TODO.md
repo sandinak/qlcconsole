@@ -33,6 +33,17 @@ playhead is a clock the Show Tree chases (GO by position).
 - About 11.5 days in all. Starts after the board answers.
 
 
+## Release / Untrack wording and the tracking span (Q222, untrack, 2026-11-04) -- built
+
+ShowTreeController::untrackPlan / untrackLayers / trackSpan
+(showtreetrackops.cpp); grey-row menu (Release After This Cue, Untrack From
+This Cue, Go to <cue>) in ShowTreeView::fillLayerMenu; T column "⤳ N" with
+the span tooltip; `untrack` command word; glossary + show-tree.md + course.
+Decided (can change): Untrack is hidden on a layer's own row (not disabled);
+it is refused with the reason when the cue before is Cue-only or a reusable
+cue's use, the layer is included or back at the base, or it's the first
+sub-cue. The grey row's menu grows by two items (Untrack, Go to), by the ask.
+
 ## Duplicate / Copy / Paste on lists, productions, reusable cues (Q215, dup-lists, 2026-11-04) -- built
 
 ShowTreeController::pasteCueList / duplicateCueList / pasteProduction /

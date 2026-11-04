@@ -233,6 +233,9 @@ public:
          *  on all of them): above 1, the one-layer items are left out and
          *  the labels say how many. */
         int count = 1;
+        /** Several carried-in (grey) rows selected, (cue, target): Release
+         *  After This Cue and Untrack From This Cue act on all of them. */
+        QList<QPair<quint32, ShowTree::Target>> carried;
     };
     /** A layer's own menu (the canon's kind block), the same in the tree and
      *  on the Workbench's layer row; @p layerId invalid: carried in, @p
@@ -1025,6 +1028,8 @@ private:
     /** A carried-in layer, for a tooltip or the cue page: its name and
      *  where it came from, then each value ("    Colour: Blue"), with its
      *  own origin when that is another cue. */
+    /** A carried layer's span (Q222): "Set in 1.1.1 Setup · tracking 3 cues · ends after 1.1.5". */
+    QString trackSpanText(const ShowTreeController::TrackSpan &span) const;
     QString carriedDetail(const ShowTree::ResolvedLayer &layer) const;
     /** The tree's columns: the names get all but the badge column. */
     void fitTreeColumns();

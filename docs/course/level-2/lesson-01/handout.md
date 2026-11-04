@@ -112,8 +112,7 @@ the lines under it.
 
 6. Click **1.0.1 Verse**, then its **StepTops** row (the white one, not
    grey).
-7. Tick **Release when the cue is left (back to the base cue, else
-   dark)**.
+7. Tick **Release after this cue (back to the base cue, else dark)**.
    - *You should see:* the top bar reads **Changed: 1.0.2 Chorus, 1.0.3
      Scream**, and the verse's row reads **1** under **S**, **T** and
      **R**: it sets AT-W-ALL, the cyc tracks in, and it releases the step

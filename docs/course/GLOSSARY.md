@@ -129,7 +129,8 @@ brackets.
 | **Fade** | How long a change takes. **Fade in**: how long a cue takes to arrive; **fade out**: how long its lights take to go when the next cue takes over. [1.4] |
 | **Hold / follow** | How long a cue waits before the next one plays by itself (∞: waits for GO). A cue that plays by itself **follows**. [1.4] |
 | **Tracked in / Next cue receives** | On a cue's page: each layer tracking into the cue, where from and its values / what the cue after it starts from. [2.1] |
-| **Release** | Ticked on a layer: it leaves when its cue is left, back to what the base cue plays on it, else dark. The cue's **R** column counts them. [2.1] |
+| **Release** | Ends a layer *after* a cue: it plays in that cue, then lets go, back to what the base cue plays on it, else dark. Set it on the last cue the layer should play in (right-click → **Release After This Cue**, or tick it on the layer). The cue's **R** column counts them. [2.1] |
+| **Untrack** | Ends a layer *before* a cue: a layer carried in (a grey row) never reaches this cue. The cue before it gets the Release, so you can fix it from the cue where you noticed it (right-click the grey row → **Untrack From This Cue**). [2.1] |
 | **Cue-only cue** | A cue that starts from the one before but whose changes don't pass on (Mode: Cue-only; **C** in the **M** column): a flash or sting that's there and gone. [2.1] |
 | **Hard start** | A cue that starts from a known state whatever came before: a Block cue, for a solo or a new section. [2.1] |
 | **Base cue** | The cue a list's released layers go back to (tick *The list's base cue* on its page; **base** in the **F** column). [2.1] |

@@ -38,7 +38,8 @@ const Entry kEntries[] = {
     { "track", QT_TRANSLATE_NOOP("TeachingGlossary", "A light holds its state into the following cues until a cue changes it. Grey text means tracked.") },
     { "tracking", QT_TRANSLATE_NOOP("TeachingGlossary", "A light holds its state into the following cues until a cue changes it. Grey text means tracked.") },
     { "tracked", QT_TRANSLATE_NOOP("TeachingGlossary", "Carried in from an earlier cue and unchanged here, so the cue does not set it again.") },
-    { "release", QT_TRANSLATE_NOOP("TeachingGlossary", "A released layer lets go when its cue is left, back to the base cue's value, else dark.") },
+    { "release", QT_TRANSLATE_NOOP("TeachingGlossary", "Release: the layer plays in this cue, then lets go -- back to the base cue's value, else dark.") },
+    { "untrack", QT_TRANSLATE_NOOP("TeachingGlossary", "Untrack: a layer carried in from an earlier cue never reaches this one -- the cue before releases it.") },
     { "block", QT_TRANSLATE_NOOP("TeachingGlossary", "A cue that starts from a dark stage, with nothing tracking into it (Mode B).") },
     { "cue-only", QT_TRANSLATE_NOOP("TeachingGlossary", "A cue that starts from the one before but whose changes do not pass on: a flash that is there and gone (Mode C).") },
     { "palette", QT_TRANSLATE_NOOP("TeachingGlossary", "A saved, named value (a colour, a level, a position) you drop on a layer. Change the palette and every cue using it changes.") },
@@ -58,7 +59,7 @@ const Entry kEntries[] = {
     { "group", QT_TRANSLATE_NOOP("TeachingGlossary", "A named set of lights that are always used together, like Steps or Trusses.") },
     { "target", QT_TRANSLATE_NOOP("TeachingGlossary", "A named place on stage that moving lights can aim at.") },
     { "sets", QT_TRANSLATE_NOOP("TeachingGlossary", "S: how many layers the cue sets itself.") },
-    { "tracks in", QT_TRANSLATE_NOOP("TeachingGlossary", "T: how many layers track into the cue from earlier cues.") },
+    { "tracks in", QT_TRANSLATE_NOOP("TeachingGlossary", "T: how many layers track into the cue from earlier cues. On a grey row, ⤳ 3: the third cue since it was set.") },
     { "mode", QT_TRANSLATE_NOOP("TeachingGlossary", "M: B Block (starts from nothing), C Cue-only (its changes do not pass on), blank: it tracks.") },
     { "flags", QT_TRANSLATE_NOOP("TeachingGlossary", "F: base cue, skip, no move in black, and the like.") },
 };

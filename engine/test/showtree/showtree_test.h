@@ -171,6 +171,10 @@ private slots:
     void bringIntoKeepsEveryCueTheSame();
     void startHereMovesTheStartForward();
     void trackOpsEdgeCases();
+    void untrackEndsTheLayerBeforeThisCue();
+    void untrackEdgeCases();
+    void trackSpanCountsTheCuesSinceItWasSet();
+    void releaseAndUntrackCommands();
     void mergeLayersKeepsTracking();
     void aTypedValueReusesAPalette();
     void aNewPaletteIsNamedAsTheShowsAre();
