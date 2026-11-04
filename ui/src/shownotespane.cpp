@@ -135,10 +135,10 @@ ShowNotesPane::ShowNotesPane(Doc *doc, QWidget *parent)
 
     QHBoxLayout *buttons = new QHBoxLayout();
     buttons->setContentsMargins(0, 0, 0, 0);
-    m_snapshot = new QPushButton(tr("Snapshot the view"), this);
+    m_snapshot = new QPushButton(tr("Snapshot the View"), this);
     m_snapshot->setObjectName(QStringLiteral("stNoteSnapshot"));
     m_snapshot->setToolTip(tr("Adds the note with a snapshot of the view: the rig view's camera, a small "
-                              "picture of it and the cue on stage. Show me on the note puts it back."));
+                              "picture of it and the cue on stage. Show Me on the note puts it back."));
     connect(m_snapshot, &QPushButton::clicked, this, [this]() { submit(true); });
     m_add = new QPushButton(tr("Add"), this);
     m_add->setObjectName(QStringLiteral("stNoteAdd"));
@@ -327,7 +327,7 @@ QWidget *ShowNotesPane::entryWidget(const Note &n)
         stage->setWordWrap(true);
         stage->setEnabled(false);
         side->addWidget(stage);
-        QPushButton *show = new QPushButton(tr("Show me"), box);
+        QPushButton *show = new QPushButton(tr("Show Me"), box);
         show->setObjectName(QStringLiteral("stNoteShowMe"));
         const bool operate = m_doc != nullptr && m_doc->mode() == Doc::Operate;
         show->setToolTip(operate ? tr("Puts the rig view back as it was (Operate: the camera only; nothing "

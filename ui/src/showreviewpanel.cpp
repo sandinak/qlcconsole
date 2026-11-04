@@ -76,7 +76,7 @@ ShowReviewPanel::ShowReviewPanel(Doc *doc, QWidget *parent)
     m_filter = new QComboBox(this);
     m_filter->setObjectName(QStringLiteral("showReviewFilter"));
     m_filter->addItem(tr("Open"), OpenOnly);
-    m_filter->addItem(tr("Accepted"), AcceptedOnly);
+    m_filter->addItem(tr("Not a Problem"), AcceptedOnly);
     m_filter->addItem(tr("All"), All);
     filters->addWidget(m_filter);
     m_search = new QLineEdit(this);
@@ -110,7 +110,7 @@ ShowReviewPanel::ShowReviewPanel(Doc *doc, QWidget *parent)
     connect(m_fix, &QPushButton::clicked, this, [this]() { fixSelected(); });
     m_accept = new QPushButton(tr("Not a Problem…"), this);
     m_accept->setObjectName(QStringLiteral("showReviewAccept"));
-    m_accept->setToolTip(tr("It doesn't matter here: say why. It is listed under Accepted; the note is "
+    m_accept->setToolTip(tr("It doesn't matter here: say why. It is listed under Not a Problem; the note is "
                             "saved with the show, and the finding comes back if what it's about changes."));
     connect(m_accept, &QPushButton::clicked, this, &ShowReviewPanel::slotAccept);
     m_reopen = new QPushButton(tr("Reopen"), this);
@@ -317,7 +317,7 @@ void ShowReviewPanel::rebuild()
         item->setText(0, f.check);
         QString text = f.message;
         if (f.state == ReviewFinding::Changed)
-            text = tr("↺ Changed since accepted: %1").arg(text);
+            text = tr("↺ Changed since marked Not a Problem: %1").arg(text);
         if (f.intended)
         {
             QString who = f.acceptedBy.isEmpty() ? tr("Meant") : tr("Meant by %1").arg(f.acceptedBy);
@@ -376,7 +376,7 @@ void ShowReviewPanel::rebuild()
     }
     if (accepted != nullptr)
     {
-        accepted->setText(0, tr("Accepted (%1)").arg(acceptedCount));
+        accepted->setText(0, tr("Not a Problem (%1)").arg(acceptedCount));
         m_tree->addTopLevelItem(accepted);
         accepted->setFirstColumnSpanned(true);
         accepted->setExpanded(true);
@@ -406,7 +406,7 @@ void ShowReviewPanel::rebuild()
         if (meants > 0)
             s += QStringLiteral(" · ") + tr("%1 meant").arg(meants);
         if (accepts > 0)
-            s += QStringLiteral(" · ") + tr("%1 accepted").arg(accepts);
+            s += QStringLiteral(" · ") + tr("%1 marked Not a Problem").arg(accepts);
         s += QStringLiteral(" — ") + tr("checked %1 (%2 ms)").arg(r.when.toString(QStringLiteral("HH:mm"))).arg(r.ms);
         m_summary->setText(s);
     }
@@ -469,7 +469,7 @@ void ShowReviewPanel::updateButtons()
     m_accept->setText(meantRows ? tr("I Meant It") : tr("Not a Problem…"));
     m_accept->setToolTip(meantRows ? tr("This light on the cyc is on purpose: kept on the layer that lights "
                                         "it (one undo step), so the warning goes away and stays away")
-                                   : tr("It doesn't matter here: say why. It is listed under Accepted; the "
+                                   : tr("It doesn't matter here: say why. It is listed under Not a Problem; the "
                                         "note is saved with the show, and the finding comes back if what "
                                         "it's about changes."));
     m_reopen->setText(unmeantRows ? tr("Not Meant") : tr("Reopen"));

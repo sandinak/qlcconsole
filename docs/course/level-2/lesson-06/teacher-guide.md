@@ -44,7 +44,7 @@ Each is in the handout's word table and the [Glossary](../../GLOSSARY.md).
 | Min | Part | What happens |
 |---|---|---|
 | 0–10 | **Design idea** (no computers) | Lesson 0.7's hit cards, again: why ready beforehand |
-| 10–20 | **Teacher demo** (projector) | One hit; Make VC page |
+| 10–20 | **Teacher demo** (projector) | One hit; Make VC Page |
 | 20–40 | **Hands-on** (pairs/triads, roles) | Handout Part 2, steps 1–13 |
 | 40–45 | **Check / share** | One group busks the loop on the projector |
 | 45–50 | **Exit ticket** | On paper |

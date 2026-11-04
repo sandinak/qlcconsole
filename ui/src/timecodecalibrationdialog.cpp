@@ -402,7 +402,7 @@ void TimecodeCalibrationDialog::slotListenToggled(bool on)
         m_latencySpin->setValue(qRound(blockMs * 1.5));
     connect(io, SIGNAL(beat()), this, SLOT(onAudioBeat()), Qt::UniqueConnection);
 
-    m_listenBtn->setText(tr("■ Stop listening"));
+    m_listenBtn->setText(tr("■ Stop Listening"));
     m_listenInfo->setText(tr("Listening — patch a click bus to QLC's audio input. Each "
                              "detected beat adds a sample; coarse offset %1 ms resolves "
                              "which beat%2. Restores the previous beat source when stopped.")

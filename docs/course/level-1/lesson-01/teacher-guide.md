@@ -85,7 +85,7 @@ because we can.
 On the projector, with the class telling you what to click next (have the
 handout up so they can read ahead):
 
-1. **+ Production** → `Spring Show`; **+ Cue list** → `01-Everybody Scream`. Point
+1. **+ Production** → `Spring Show`; **+ Cue List** → `01-Everybody Scream`. Point
    out the **⇢** under **M** beside it (hover: a tracking list) and that the `01` numbers the cues 1.0.0, 1.0.1…
 2. **+ Cue** → type `Pose`, Return.
 3. Library → **All → Groups → Trusses → TrussC-RGB**: drag it onto the
@@ -119,7 +119,7 @@ Stop there; the students build the rest.
 
 | You see | Likely cause | Say |
 |---|---|---|
-| **+ Cue list** asks nothing / does nothing | The production isn't selected | "Click Spring Show first." |
+| **+ Cue List** asks nothing / does nothing | The production isn't selected | "Click Spring Show first." |
 | A layer in the wrong cue | Dropped while another cue was selected | "Undo, click the right cue, drop again." |
 | Stage stays dark | No cue selected (the stage shows the selected cue in Design), or the Rig Overview's **Live** is off | "Click your cue in the tree." |
 | Cue numbers 1.0.0.5 or similar | + Cue pressed with an earlier cue selected: the new cue goes in after it, as a **point cue** | "Drag it below the last cue: it takes the next number." (Lesson 1.5's extension covers point cues and renumbering.) |

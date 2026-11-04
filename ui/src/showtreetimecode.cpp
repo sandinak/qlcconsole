@@ -135,12 +135,12 @@ void ShowTreeView::buildTimecodeRows()
         m_listTcRow = new QWidget(m_listPage);
         QVBoxLayout *h = new QVBoxLayout(m_listTcRow);
         h->setContentsMargins(0, 0, 0, 0);
-        m_listTcConvert = new QPushButton(tr("Section times…"), m_listTcRow);
+        m_listTcConvert = new QPushButton(tr("Section Times…"), m_listTcRow);
         m_listTcConvert->setObjectName("stListTcConvert");
         m_listTcConvert->setToolTip(tr("Time its cues from their sections' starts: each section starts at its first "
                                        "cue, every cue stays where it is. Then moving a section moves its cues. "
                                        "One undo step."));
-        m_listTcMarkers = new QPushButton(tr("Import Logic markers…"), m_listTcRow);
+        m_listTcMarkers = new QPushButton(tr("Import Logic Markers…"), m_listTcRow);
         m_listTcMarkers->setObjectName("stListTcMarkers");
         m_listTcMarkers->setToolTip(tr("The markers of a MIDI file exported from Logic set the starts of the "
                                        "sections they are named for; you see what moves first. One undo step."));

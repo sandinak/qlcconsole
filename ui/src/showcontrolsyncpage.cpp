@@ -250,7 +250,7 @@ QGroupBox *ShowControlSyncPage::buildMscGroup()
     m_mscInputs->setWordWrap(true);
     m_mscInputs->setToolTip(tr("Where MSC can come in: the universes with that MIDI input "
                                "patched (the same inputs MIDI timecode can come in on)."));
-    m_patchMidiButton = new QPushButton(tr("Patch a MIDI input…"), box);
+    m_patchMidiButton = new QPushButton(tr("Patch a MIDI Input…"), box);
     m_patchMidiButton->setObjectName(QStringLiteral("scPatchMidi"));
     connect(m_patchMidiButton, &QPushButton::clicked,
             this, &ShowControlSyncPage::patchMidiInputRequested);

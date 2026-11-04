@@ -230,11 +230,11 @@ PatchInventoryDialog::PatchInventoryDialog(Doc *doc, const QList<quint32> &fixtu
     m_fitText->setWordWrap(true);
     m_fitText->setStyleSheet(QStringLiteral("QLabel { color: #d08a2a; }"));
     fitLay->addWidget(m_fitText, 1);
-    QPushButton *carryOn = new QPushButton(tr("Carry on into the next universe"), m_fitBar);
+    QPushButton *carryOn = new QPushButton(tr("Carry on into the Next Universe"), m_fitBar);
     carryOn->setObjectName(QStringLiteral("fitCarryOn"));
     carryOn->setToolTip(tr("Put the ones without room in the next universe(s), packed"));
     fitLay->addWidget(carryOn);
-    m_fitModes = new QPushButton(tr("Fit by changing modes"), m_fitBar);
+    m_fitModes = new QPushButton(tr("Fit by Changing Modes"), m_fitBar);
     m_fitModes->setObjectName(QStringLiteral("fitByModes"));
     m_fitModes->setToolTip(tr("Step the biggest fixtures down to smaller modes, one at a time, "
                               "until they all fit -- only to modes they can take. Apply changes "

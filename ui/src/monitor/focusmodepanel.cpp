@@ -313,7 +313,7 @@ FocusModeSetupDialog::FocusModeSetupDialog(Doc *doc, quint32 sceneId,
     fillReferences(m_firstCombo, false);
     /* No stage target (board Q146): the combo says so rather than standing
        blank, and Add a target makes one in the Lighting Studio. */
-    m_addTargetBtn = new QPushButton(tr("Add a target\342\200\246"), this);
+    m_addTargetBtn = new QPushButton(tr("Add a Target\342\200\246"), this);
     m_addTargetBtn->setObjectName(QStringLiteral("focusAddTarget"));
     m_addTargetBtn->setAutoDefault(false);
     m_addTargetBtn->setToolTip(tr("Place a stage target in the Lighting Studio for the heads to aim at"));
@@ -379,7 +379,7 @@ FocusModeSetupDialog::FocusModeSetupDialog(Doc *doc, quint32 sceneId,
     useRow->addWidget(m_inputCombo, 1);
     /* What the controller actually sends, and what each input does here:
        press everything once and send the log. */
-    QPushButton *testBtn = new QPushButton(tr("Controller test\342\200\246"), this);
+    QPushButton *testBtn = new QPushButton(tr("Controller Test\342\200\246"), this);
     testBtn->setObjectName(QStringLiteral("focusControllerTest"));
     testBtn->setAutoDefault(false);
     testBtn->setToolTip(tr("List every input the controller sends as you press it, with what "
@@ -864,7 +864,7 @@ FocusModePanel::FocusModePanel(Doc *doc, QWidget *parent)
     reserveLines(m_noteLabel, 2);
     m_noteLabel->hide();
     note->addWidget(m_noteLabel, 1);
-    m_backButton = new QPushButton(tr("Use the controller"), this);
+    m_backButton = new QPushButton(tr("Use the Controller"), this);
     m_backButton->setObjectName(QStringLiteral("focusControllerBack"));
     m_backButton->setFocusPolicy(Qt::NoFocus);
     {
@@ -1243,12 +1243,12 @@ void FocusModePanel::refreshController()
         /* The keyboard was chosen: the controller is not forced on anyone.
            Said what to press to use it. */
         const QString text = tr("Controller connected: %1. The keyboard is in use, as chosen; "
-                                "click Use the controller to nudge with it.").arg(pad.name);
+                                "click Use the Controller to nudge with it.").arg(pad.name);
         m_noteLabel->setText(text);
         m_noteLabel->show();
         m_backButton->show();
         emit m_doc->programmer()->operatorAnnounce(
-            tr("Keyboard in use. Click Use the controller to switch."),
+            tr("Keyboard in use. Click Use the Controller to switch."),
             ControllerScheme::ImportantPriority);
     }
     refreshPaused();
@@ -1279,11 +1279,11 @@ void FocusModePanel::takeOverIfFree()
     if (owner != 0xFFFFFFFF && owner != pad.universe)
     {
         m_noteLabel->setText(tr("Controller connected: %1, but %2 has the tools. "
-                                "Click Use the controller to nudge with %1.")
+                                "Click Use the Controller to nudge with %1.")
                              .arg(pad.name, pc->controllerOwnerName()));
         m_noteLabel->show();
         m_backButton->show();
-        emit pc->operatorAnnounce(tr("Another controller has the tools. Click Use the controller to switch."),
+        emit pc->operatorAnnounce(tr("Another controller has the tools. Click Use the Controller to switch."),
                                   ControllerScheme::ImportantPriority);
         return;
     }
@@ -1294,7 +1294,7 @@ void FocusModePanel::takeOverIfFree()
     if (m_lastKey.isValid() && m_lastKey.elapsed() < quietMs)
     {
         m_noteLabel->setText(tr("Controller back: %1 takes over when the keys stop. "
-                                "Click Use the controller to switch now.").arg(pad.name));
+                                "Click Use the Controller to switch now.").arg(pad.name));
         m_noteLabel->show();
         m_backButton->show();
         m_takeoverTimer->start(int(quietMs - m_lastKey.elapsed()) + 50);

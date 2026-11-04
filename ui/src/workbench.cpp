@@ -562,7 +562,7 @@ void Workbench::buildAddBar(QWidget *column)
     m_removeBtn = tool(tr("Remove"), QStringLiteral("workbenchRemove"),
                        tr("Take the layer out (⌫); the function itself stays in the show"));
     connect(m_removeBtn, &QToolButton::clicked, this, &Workbench::removeSelectedLayers);
-    m_ownCopyBtn = tool(tr("Own copy"), QStringLiteral("workbenchOwnCopy"),
+    m_ownCopyBtn = tool(tr("Own Copy"), QStringLiteral("workbenchOwnCopy"),
                         tr("The layer is shared (also in…): split it off as a copy of its own here, so "
                            "an edit changes only this one"));
     connect(m_ownCopyBtn, &QToolButton::clicked, this, &Workbench::makeOwnCopySelected);
@@ -592,7 +592,7 @@ void Workbench::buildEditorPane()
         l->addWidget(m_emptyHint);
         QHBoxLayout *bl = new QHBoxLayout;
         bl->addStretch();
-        QPushButton *guide = new QPushButton(tr("How this works"), m_emptyPage);
+        QPushButton *guide = new QPushButton(tr("How This Works"), m_emptyPage);
         guide->setFlat(true);
         guide->setCursor(Qt::PointingHandCursor);
         connect(guide, &QPushButton::clicked, this, &Workbench::guideRequested);
@@ -684,7 +684,7 @@ void Workbench::buildEditorPane()
         m_targetHeading->setObjectName(QStringLiteral("targetHeading"));
         m_targetHeading->setWordWrap(true);
         hl->addWidget(m_targetHeading, 1);
-        m_targetLayoutBtn = new QPushButton(tr("Edit layout"), m_targetPage);
+        m_targetLayoutBtn = new QPushButton(tr("Edit Layout"), m_targetPage);
         m_targetLayoutBtn->setToolTip(tr("The group's head layout (as in the Fixture Manager)"));
         connect(m_targetLayoutBtn, &QPushButton::clicked, this, [this]() { showGroupLayout(m_targetGroup); });
         hl->addWidget(m_targetLayoutBtn);

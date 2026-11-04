@@ -145,7 +145,7 @@ void ShowReviewPanel_Test::acceptAndReopen()
     QVERIFY(row != nullptr);
     QVERIFY(row->text(1).contains("Doubled lamp on purpose"));
     QVERIFY(row->text(1).contains("Ava R."));
-    QVERIFY(panel.summary()->text().contains("1 accepted"));
+    QVERIFY(panel.summary()->text().contains("1 marked Not a Problem"));
     QVERIFY(panel.selectCheck("PAT-01"));
     QVERIFY(panel.reopenButton()->isEnabled());
     QVERIFY(panel.reopenSelected());

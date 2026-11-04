@@ -134,11 +134,11 @@ VenueRigDialog::VenueRigDialog(Doc *doc, const QString &venue, QWidget *parent)
             commitNotOurs(it->row());
     });
     QHBoxLayout *pl = new QHBoxLayout;
-    m_keepPatch = new QPushButton(tr("Keep this patch for %1").arg(venue), unis);
+    m_keepPatch = new QPushButton(tr("Keep This Patch for %1").arg(venue), unis);
     m_keepPatch->setObjectName(QStringLiteral("vrKeepPatch"));
     m_keepPatch->setToolTip(tr("The outputs on the Connections tab now become this venue's, for every "
                                "universe. The show keeps its own."));
-    m_forgetPatch = new QPushButton(tr("Use the show's patch"), unis);
+    m_forgetPatch = new QPushButton(tr("Use the Show's Patch"), unis);
     m_forgetPatch->setObjectName(QStringLiteral("vrForgetPatch"));
     m_forgetPatch->setToolTip(tr("Forget this venue's outputs: the show's own go back on"));
     pl->addWidget(m_keepPatch);
@@ -192,7 +192,7 @@ VenueRigDialog *VenueRigDialog::open(Doc *doc, QWidget *parent, const QString &v
     if (venue.isEmpty() || !venuesOf(doc)->hasVenue(venue))
     {
         QMessageBox::information(parent, tr("Rig and universes"),
-                                 tr("Choose a venue first (or make one with Apply now): a house rig, "
+                                 tr("Choose a venue first (or make one with Apply Now): a house rig, "
                                     "a patch and what is not ours belong to a venue."));
         return nullptr;
     }
@@ -239,7 +239,7 @@ void VenueRigDialog::refresh()
         ? tr("<b>%1</b> is applied. Set a fixture or a fixture group to House (Fixture Manager, Fixture "
              "Properties) and it goes into this venue's file, not the show's; change an output on the "
              "Connections tab and it is this venue's patch.").arg(m_venue.toHtmlEscaped())
-        : tr("<b>%1</b> is not applied. Apply it (Apply now) to change its house rig or its patch; "
+        : tr("<b>%1</b> is not applied. Apply it (Apply Now) to change its house rig or its patch; "
              "what is not ours and the clash check work either way.").arg(m_venue.toHtmlEscaped()));
 
     // The house rig, as the venue keeps it (written as it changes).

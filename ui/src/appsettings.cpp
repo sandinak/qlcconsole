@@ -219,7 +219,7 @@ AppSettings::AppSettings(App *app, QWidget *parent)
                                  padGroup);
     padInfo->setWordWrap(true);
     padLayout->addWidget(padInfo, 1);
-    QPushButton *padTest = new QPushButton(tr("Controller test\342\200\246"), padGroup);
+    QPushButton *padTest = new QPushButton(tr("Controller Test\342\200\246"), padGroup);
     padTest->setObjectName(QStringLiteral("settingsControllerTest"));
     padTest->setAutoDefault(false);
     connect(padTest, &QPushButton::clicked, this, [this]() {
@@ -320,7 +320,7 @@ AppSettings::AppSettings(App *app, QWidget *parent)
             m_qlcPlusLabel = new QLabel(legacyGroup);
             m_qlcPlusLabel->setWordWrap(true);
             legacyLayout->addWidget(m_qlcPlusLabel, 1);
-            m_qlcPlusButton = new QPushButton(tr("Bring over\342\200\246"), legacyGroup);
+            m_qlcPlusButton = new QPushButton(tr("Bring Over\342\200\246"), legacyGroup);
             m_qlcPlusButton->setObjectName(QStringLiteral("settingsBringOverQlcPlus"));
             m_qlcPlusButton->setToolTip(tr("Copy QLC+ 4's recent shows, I/O and plugin preferences and "
                                            "interface preferences into qlcconsole. QLC+ itself is not "
@@ -454,7 +454,7 @@ AppSettings::AppSettings(App *app, QWidget *parent)
     if (ioMap->rigNetworks().isEmpty() && suggested.isEmpty() == false)
     {
         // Offered, never written by itself: the operator says yes.
-        QPushButton *useSuggested = new QPushButton(tr("Use these"), netGroup);
+        QPushButton *useSuggested = new QPushButton(tr("Use These"), netGroup);
         useSuggested->setObjectName(QStringLiteral("settingsRigUseSuggested"));
         useSuggested->setToolTip(tr("Fill in the networks this show's patches were saved "
                                     "with: %1").arg(suggested.join(QStringLiteral(", "))));
@@ -595,14 +595,14 @@ void AppSettings::updateTransmitAnywayButton()
     InputOutputMap *ioMap = m_app->doc()->inputOutputMap();
     if (ioMap->transmitOverride())
     {
-        m_transmitAnywayButton->setText(tr("Check the rig network again"));
+        m_transmitAnywayButton->setText(tr("Check the Rig Network Again"));
         m_transmitAnywayButton->setToolTip(tr("End \"Transmit anyway\": hold network output "
                                               "that is not on a rig network again."));
         m_transmitAnywayButton->setEnabled(true);
     }
     else
     {
-        m_transmitAnywayButton->setText(tr("Transmit anyway, this session…"));
+        m_transmitAnywayButton->setText(tr("Transmit Anyway, This Session…"));
         m_transmitAnywayButton->setToolTip(tr("Send network output wherever this machine is "
                                               "connected, until it quits or another show is "
                                               "opened. Asks first; never saved."));

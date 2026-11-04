@@ -55,7 +55,7 @@ A warning is in one of three states, and the cue says which:
 |---|---|---|---|
 | **Open** | amber **⚠ cyc** | under Warnings | counted |
 | **Meant** | green **cyc ✓**; hover says who marked it, when and the note | under **Meant** | not counted |
-| **Not a Problem** | nothing | under **Accepted**, with the note | not counted |
+| **Not a Problem** | nothing | under **Not a Problem**, with the note | not counted |
 
 Only PWR-12 (light on the cyc) can be **Meant**: there the light is on
 purpose and stays in the show as such. Every other check is open or Not a
@@ -75,7 +75,7 @@ The panel lists findings by severity:
 
 Each row shows its check's id (PAT-01, CUE-07...) and what it found, in the
 show's own names. Hover a row for **why it matters**. Show **Open**,
-**Accepted** or **All**, and type in **Search** to narrow the list.
+**Not a Problem** or **All**, and type in **Search** to narrow the list.
 **Re-check** runs every check again.
 
 - **Fix ▸** (or double-click) goes to the place to fix it: the cue in the
@@ -97,16 +97,16 @@ decision, not a fresh warning.
 
 An acceptance is tied to what the check looked at. When that changes (the
 fixture moves, the cue's strobe gets faster), the finding comes back
-marked **↺ Changed since accepted**, with the old note, because the decision
+marked **↺ Changed since marked Not a Problem**, with the old note, because the decision
 was about something that is no longer there. A change elsewhere in the show
 doesn't reopen it. When the thing it was about is deleted, the acceptance is
 dropped at the next save.
 
-Your name comes from the Accept dialog; it remembers the last one typed on
+Your name comes from the Not a Problem dialog; it remembers the last one typed on
 this computer and starts from your account name.
 
-An accepted blocker still counts in the summary as accepted ("0 blockers
-open · 1 accepted").
+A blocker marked Not a Problem still counts in the summary as such ("0 blockers
+open · 1 marked Not a Problem").
 
 ## What it checks
 

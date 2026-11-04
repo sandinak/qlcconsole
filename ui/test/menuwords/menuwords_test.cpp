@@ -136,6 +136,32 @@ QList<Label> menuLabels()
     return out;
 }
 
+/* Every text given to a push or tool button in code in ui/src: a new
+   QPushButton(tr("…")) or QToolButton, the button factories' (dropDown(),
+   tool(), button(), makeButton()) and setText(tr("…")) on a variable named
+   ...Btn / ...Button / ...btn. The stock .ui files are not read: they are
+   QLC+'s untouched dialogs (docs/dev/UPSTREAM.md takes upstream's .ui as
+   they are), so their words stay upstream's until a dialog is reworked here. */
+QList<Label> buttonLabels()
+{
+    static const QRegularExpression call(QStringLiteral(
+        "(new (QPushButton|QToolButton)\\(\\s*|\\b(dropDown|tool|button|makeButton)\\(\\s*|"
+        "\\b\\w*([bB]tn|[bB]utton)\\w*(->|\\.)setText\\(\\s*)"
+        "tr\\(\"((?:[^\"\\\\]|\\\\.)*)\""));
+    QList<Label> out;
+    for (const auto &src : sources())
+    {
+        const QStringList &lines = src.second;
+        for (int i = 0; i < lines.size(); ++i)
+        {
+            QRegularExpressionMatchIterator t = call.globalMatch(lines.at(i));
+            while (t.hasNext())
+                out << Label{ src.first, i + 1, unescape(t.next().captured(6)) };
+        }
+    }
+    return out;
+}
+
 /* What is wrong with @p text as a menu label, by the canon's words */
 QStringList problemsOf(const QString &text)
 {
@@ -152,6 +178,8 @@ QStringList problemsOf(const QString &text)
     // The app's own name is written as it is.
     QString words = text;
     words.remove(QStringLiteral("qlcconsole"));
+    words.remove(QStringLiteral("macOS"));
+    words.remove(QRegularExpression(QStringLiteral("\\d+ ms\\b")));    // a unit stays lower case
     const QString tc = ContextMenu::checkTitleCase(words);
     if (!tc.isEmpty())
         p << tc;
@@ -178,6 +206,14 @@ void MenuWords_Test::theReaderFindsLabels()
     QVERIFY(add);
     QVERIFY(edit);
 
+    // And the buttons' reader.
+    bool addSource = false;
+    for (const Label &l : buttonLabels())
+        addSource = addSource || l.text == QStringLiteral("Add Source");
+    QVERIFY(addSource);
+    QVERIFY(!problemsOf(QStringLiteral("Remove selected")).isEmpty());
+    QVERIFY(problemsOf(QStringLiteral("Focus This Cue…")).isEmpty());
+
     // And the words it holds them to.
     QVERIFY(!problemsOf(QStringLiteral("Delete universe entirely…")).isEmpty());
     QVERIFY(!problemsOf(QStringLiteral("Fixture Editor...")).isEmpty());
@@ -198,6 +234,23 @@ void MenuWords_Test::everyMenuLabelIsTitleCase()
     }
     QVERIFY2(bad.isEmpty(), qPrintable(QStringLiteral("\n%1 menu label(s) off the canon "
                                                       "(docs/design/CONTEXT_MENUS.md §3.2):\n  ")
+                                           .arg(bad.size()) + bad.join(QStringLiteral("\n  "))));
+}
+
+void MenuWords_Test::everyButtonLabelIsTitleCase()
+{
+    const QList<Label> labels = buttonLabels();
+    // A few hundred in code: if the reader broke it would find none.
+    QVERIFY2(labels.size() > 150, qPrintable(QString::number(labels.size())));
+    QStringList bad;
+    for (const Label &l : labels)
+    {
+        const QStringList p = problemsOf(l.text);
+        if (!p.isEmpty())
+            bad << QStringLiteral("%1:%2  \"%3\"  %4").arg(l.file).arg(l.line).arg(l.text, p.join(QStringLiteral("; ")));
+    }
+    QVERIFY2(bad.isEmpty(), qPrintable(QStringLiteral("\n%1 button text(s) off the canon "
+                                                      "(Title Case like menus, \"…\" for a dialog):\n  ")
                                            .arg(bad.size()) + bad.join(QStringLiteral("\n  "))));
 }
 

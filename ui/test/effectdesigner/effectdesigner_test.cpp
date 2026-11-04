@@ -182,7 +182,7 @@ void EffectDesigner_Test::theDesignerSetsHowAnEffectRuns()
     EffectDesigner ed(m_doc);
     ed.setTryOnGroups({ towers->id() });
     ed.setEffect(QLCPalette::invalidId());
-    QCOMPARE(ed.findChild<QPushButton *>("edSavePalette")->text(), QString("Save in this show…"));
+    QCOMPARE(ed.findChild<QPushButton *>("edSavePalette")->text(), QString("Save in This Show…"));
     QVERIFY(ed.pickEffect("Dimmer Phaser"));
     QComboBox *runs = ed.findChild<QComboBox *>("effectRuns");
     QVERIFY(runs != nullptr);

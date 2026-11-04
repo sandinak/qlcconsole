@@ -145,7 +145,7 @@ EffectDesigner::EffectDesigner(Doc *doc, QWidget *parent)
         QHBoxLayout *c = new QHBoxLayout(m_contextRow);
         c->setContentsMargins(0, 0, 0, 0);
         c->setSpacing(0);
-        m_contextBtn = new QPushButton(tr("In context"), m_contextRow);
+        m_contextBtn = new QPushButton(tr("In Context"), m_contextRow);
         m_contextBtn->setObjectName(QStringLiteral("edInContext"));
         m_contextBtn->setToolTip(tr("The rest of the cue plays too, with this layer's effect over it"));
         m_soloBtn = new QPushButton(tr("Solo"), m_contextRow);
@@ -258,11 +258,11 @@ EffectDesigner::EffectDesigner(Doc *doc, QWidget *parent)
     m_updateBtn = new QPushButton(this);
     m_updateBtn->setObjectName(QStringLiteral("edUpdate"));
     btns->addWidget(m_updateBtn);
-    m_savePalBtn = new QPushButton(tr("Save in this show…"), this);
+    m_savePalBtn = new QPushButton(tr("Save in This Show…"), this);
     m_savePalBtn->setObjectName(QStringLiteral("edSavePalette"));
     m_savePalBtn->setToolTip(tr("Keep it in this show, with its effect palettes, to use anywhere in it"));
     btns->addWidget(m_savePalBtn);
-    m_keepBtn = new QPushButton(tr("Keep on this layer"), this);
+    m_keepBtn = new QPushButton(tr("Keep on This Layer"), this);
     m_keepBtn->setObjectName(QStringLiteral("edKeep"));
     m_keepBtn->setToolTip(tr("A one-off for this layer, as a picked value is. "
                              "Make reusable later from its row if you want it elsewhere."));
@@ -273,7 +273,7 @@ EffectDesigner::EffectDesigner(Doc *doc, QWidget *parent)
     // scene -- where you came from, else picked.
     m_makeLayerBtn = new QToolButton(this);
     m_makeLayerBtn->setObjectName(QStringLiteral("edMakeLayer"));
-    m_makeLayerBtn->setText(tr("Make a layer ▾"));
+    m_makeLayerBtn->setText(tr("Make a Layer ▾"));
     m_makeLayerBtn->setToolButtonStyle(Qt::ToolButtonTextOnly);
     m_makeLayerBtn->setPopupMode(QToolButton::InstantPopup);
     QMenu *layerMenu = new QMenu(m_makeLayerBtn);
@@ -1160,7 +1160,7 @@ void EffectDesigner::fillMakeLayerMenu()
     const quint32 saved = savedPaletteForLayer();
     const QString plays = saved != QLCPalette::invalidId()
                               ? tr("It plays “%1”, the palette.").arg(m_doc->palette(saved)->name())
-                              : tr("It plays a one-off of this design (Save in this show first to use it "
+                              : tr("It plays a one-off of this design (Save in This Show first to use it "
                                    "by name).");
     auto cueText = [st](quint32 cueId) {
         const CueList *list = st->listOfCue(cueId);
@@ -1246,7 +1246,7 @@ void EffectDesigner::updateMakeLayerButton()
     if (from.isEmpty())
     {
         m_makeLayerBtn->setPopupMode(QToolButton::InstantPopup);
-        m_makeLayerBtn->setText(tr("Make a layer ▾"));
+        m_makeLayerBtn->setText(tr("Make a Layer ▾"));
         m_makeLayerBtn->setToolTip(why.isEmpty()
                                        ? tr("The Try on groups and this effect as a new layer: in a Show Tree "
                                             "cue, a scene in Build, or a new scene")
@@ -1255,7 +1255,7 @@ void EffectDesigner::updateMakeLayerButton()
     else
     {
         m_makeLayerBtn->setPopupMode(QToolButton::MenuButtonPopup);
-        m_makeLayerBtn->setText(tr("Make a layer in %1").arg(from));
+        m_makeLayerBtn->setText(tr("Make a Layer in %1").arg(from));
         m_makeLayerBtn->setToolTip(why.isEmpty()
                                        ? tr("The Try on groups and this effect as a new layer in %1, where you "
                                             "came from (the arrow: somewhere else)").arg(from)
@@ -1547,13 +1547,13 @@ void EffectDesigner::updateButtons()
         m_updateBtn->setToolTip(tr("Change the palette itself: everywhere it plays plays this"));
     }
     if (m_oneOffAllowed)
-        m_hint->setText(tr("Keep on this layer makes a one-off, as a picked value is. Save in this show names it "
+        m_hint->setText(tr("Keep on This Layer makes a one-off, as a picked value is. Save in This Show names it "
                            "and files it for the whole show. Nothing changes until you choose."));
     else if (named)
         m_hint->setText(tr("A copy is being designed: Update changes “%1” everywhere it plays; "
-                           "Save in this show makes a new one beside it.").arg(o->name()));
+                           "Save in This Show makes a new one beside it.").arg(o->name()));
     else
-        m_hint->setText(tr("Pick an effect and shape it on the bench. Save in this show keeps it for the show; "
+        m_hint->setText(tr("Pick an effect and shape it on the bench. Save in This Show keeps it for the show; "
                            "Make a layer puts it on the Try on groups in a cue or a scene; "
                            "Export… takes it to another show."));
 }

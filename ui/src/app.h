@@ -1041,6 +1041,14 @@ public:
 private:
     /** Initialize the status bar */
     void initStatusBar();
+    /** The footer's chips, when the window is too narrow for all of them:
+     *  the least important ones give up their room (a chip squeezed to no
+     *  width is not drawn, and gets its place back when there is room), the
+     *  stage chip, Unsaved and Design/Operate last. Re-run on every resize
+     *  and every change of a chip's size (a timer: once per burst). */
+    void fitStatusBar();
+    /** The footer's chips, most important first. */
+    QList<QWidget *> statusChipsByPriority() const;
 
     /** Update the status bar display */
     void updateStatusBar();
@@ -1183,6 +1191,7 @@ private:
     /** "Under timeline control" / "Timeline suspended" chip (Operate mode). */
     QLabel* m_statusTimelineLabel;
     QTimer* m_healthTimer;
+    QTimer* m_statusFitTimer = nullptr;   ///< coalesces fitStatusBar()
     QString m_statusMessage;
 };
 

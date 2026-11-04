@@ -54,8 +54,8 @@ Roles: **Driver** (mouse), **Navigator** (reads each step aloud and checks *You 
    - *You should see:* CUE-02 and the four CUE-01 gone. They were one
      fault: the Button's spread still on in Slow Dance.
 5. Select **VC-03**, a hit called *Spare* that no button fires. **Not a Problem…**,
-   write `Kept for the encore`, your name, **OK**. Show **Accepted**.
-   - *You should see:* the finding moves to Accepted, with your note.
+   write `Kept for the encore`, your name, **OK**. Show **Not a Problem**.
+   - *You should see:* the finding moves to Not a Problem, with your note.
 6. Leave the two **MOV-08** warnings and the notes. They are about the
    real rig's moving lights, and about the classroom having no outputs.
    Tell your partner which you would fix first on the real rig, and why.

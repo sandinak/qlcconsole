@@ -58,7 +58,7 @@ the show from it. The controller has two **roles**:
 Switch with the **Pad:** button in the **Run** tab's header (**Pad: Tools**
 / **Pad: Run**). The choice belongs to this computer and is kept for next
 time. Its tooltip shows the button map in the words of the pad you're
-holding, and **Settings → Advanced → Game controllers → Controller test…** lists what each
+holding, and **Settings → Advanced → Game controllers → Controller Test…** lists what each
 button does in the Run role (**Run: GO (LB held)**).
 
 **Nothing moves the show unless LB (L1) is held.** Holding it arms the

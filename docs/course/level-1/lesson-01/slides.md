@@ -59,7 +59,7 @@ teacher says. It can be turned into a deck as it is.*
 ## 8. Make a cue
 
 - Picture: `images/lesson-1-1/new-cue.png`
-- + Production → + Cue list → + Cue → type the name.
+- + Production → + Cue List → + Cue → type the name.
 
 ## 9. Drag a group, then a colour and a level
 

@@ -20,7 +20,7 @@
 | ⇧⌘1 … ⇧⌘9, ⇧⌘0 | Bring forward the view's tabs, numbered as they are on screen (⇧⌘0 the tenth). qlcconsole: Connections, Fixtures, Lighting Studio, Build, Show Tree, Virtual Console, Simple Desk, **Run** ([the cue runner](show-tree.md#the-cue-runner)). Classic QLC+: Fixtures, Functions, Shows, Virtual Console, Simple Desk, Inputs/Outputs. Everything: Connections, Fixtures, Lighting Studio, Functions, Build, Show Tree, Shows, Virtual Console, Simple Desk, Run. They renumber when the [view](getting-started.md#views) changes; a tab the view hides has no number in the Window menu, and choosing it switches to Everything |
 | Space (in the Run tab) | **GO** for the list the Run tab plays |
 | ⇧⌘M | Lighting Studio |
-| ⌥⌘F | **Quick focus** (View ▸ Quick Focus…) |
+| ⌥⌘F | **Quick Focus** (View ▸ Quick Focus…) |
 | ⇧⌘R | **Rig Overview** — and again to close it when it's in front |
 | ⌘I | **Why is this on?** for the light selected last (in the plot, the Rig Overview, the Fixture Manager or the Workbench): what sets it, or why it isn't on ([Troubleshooting](troubleshooting.md#why-is-this-light-on)) |
 | ⌘W | Close the window in front: the Rig Overview, a structure's editor (as Cancel), a dialog. In the Classic Functions tab ⌘W is the Function Wizard |
@@ -74,7 +74,7 @@ fixture's row onto a hanger, bar, tower or boom to hang it there.
 or pinch to zoom, right-click a fixture for **Fixture Properties…** or
 **LED Layout…**, ⇧⌘R or ⌘W to close.
 
-**Quick focus** (⌘⌥F, or View + Menu on the controller) and **Venue
+**Quick Focus** (⌘⌥F, or View + Menu on the controller) and **Venue
 focus**: ] / [ (or Tab / ⇧Tab) next and previous light, arrows nudge 0.1°
 (⇧ for 1°), + / − step size, , / . spot down / flood out (⇧ 5°), ; / '
 softer / sharper, G one light or all, Return save (⇧Return save all),

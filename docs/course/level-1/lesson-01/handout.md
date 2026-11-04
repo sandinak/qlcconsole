@@ -92,7 +92,7 @@ later), and **(6)** the tabs.
 
 5. Click **+ Production**, type `Spring Show` and click **OK**.
    - *You should see:* **Spring Show** in the tree, selected.
-6. Click **+ Cue list**, type `01-Everybody Scream` and click **OK**.
+6. Click **+ Cue List**, type `01-Everybody Scream` and click **OK**.
    - *You should see:* **01-Everybody Scream** under Spring Show, marked
      *Tracking*. The `01` sets its cue numbers to start at **1.0.0**.
 
@@ -194,7 +194,7 @@ show, so there's nothing to choose.
 
 | Problem | Try |
 |---|---|
-| A dialog asked something unexpected | Cancel it, select the right row in the tree first (the production, for + Cue list), and try again. |
+| A dialog asked something unexpected | Cancel it, select the right row in the tree first (the production, for + Cue List), and try again. |
 | The group landed in the wrong cue | **Undo** (⌘Z), click the right cue, and drag again. |
 | GO does nothing | Check that the cue list has cues, then click the **Run** tab again. |
 | Nothing lights in the Rig Overview | The stage shows the selected cue, so make sure a **cue** is selected in the tree, and that **Live** is on in the Rig Overview. |

@@ -22,7 +22,7 @@ app: true
    | | | | | |
 
 3. **Program it** from `lesson-1-1-start.qlcc` (the empty classroom show):
-   **+ Production** named for your group, **+ Cue list**, then your cues
+   **+ Production** named for your group, **+ Cue List**, then your cues
    with their layers, looks and times.
 4. **Save** as `Level1-check-group.qlcc`: **File ▸ Save As** first, then
    **⌘S** (Ctrl+S) as you work.

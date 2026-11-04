@@ -120,7 +120,7 @@ MonitorInventoryPanel::MonitorInventoryPanel(Doc *doc, MonitorGraphicsView *view
     m_count->setWordWrap(true);
     root->addWidget(m_count);
 
-    QPushButton *add = new QPushButton(tr("Add to inventory..."), this);
+    QPushButton *add = new QPushButton(tr("Add to Inventory…"), this);
     root->addWidget(add);
 
     connect(close, &QToolButton::clicked, this, &MonitorInventoryPanel::closeRequested);

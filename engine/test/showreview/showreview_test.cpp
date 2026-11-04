@@ -2813,7 +2813,7 @@ void ShowReview_Test::pwr12Meant()
     const quint32 layer1 = st->cueList(lid)->cue(c1)->layers.last().id;
     ReviewFinding f = findings("PWR-12").first();
     QVERIFY(f.isOpen());
-    // "Show me" goes to the layer that lights it.
+    // "Show Me" goes to the layer that lights it.
     QCOMPARE(f.jump, QStringLiteral("cue"));
     QCOMPARE(f.jumpData.first().toUInt(), layer1);
 

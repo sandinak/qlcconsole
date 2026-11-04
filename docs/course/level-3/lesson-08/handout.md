@@ -118,4 +118,4 @@ as the plan says; a hand on **Blackout** (top right) and **Stop all**
 
 ## Done early? (Extension)
 
-**Running order…** (on the production): drag the songs into tonight's order, or untick one to leave it out; GO passes over it. Then ask why the song you moved should be Block. (*It tracks from the song before it by number, not by running order.*) And the **phone Run page** has a slider for each group master, under the cues; ask who should be allowed to touch it.
+**Running Order…** (on the production): drag the songs into tonight's order, or untick one to leave it out; GO passes over it. Then ask why the song you moved should be Block. (*It tracks from the song before it by number, not by running order.*) And the **phone Run page** has a slider for each group master, under the cues; ask who should be allowed to touch it.

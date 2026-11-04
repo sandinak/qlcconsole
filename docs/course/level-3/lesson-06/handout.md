@@ -93,7 +93,7 @@ controller?** Every step gives the keys too.
 
 ### A. Read the stage marks
 
-4. In the **Plot layers** panel on the left of the plot, find the **Stage**
+4. In the **Plot Layers** panel on the left of the plot, find the **Stage**
    layer. Click the eye on **Centre line / DSC mark**, **Curtain line** and
    **Number line** to show them. (**Show ▸ Target positions**, on the plot's
    bar, is ticked already.)
@@ -245,7 +245,7 @@ press **OK**.
 | The keys do nothing | Click the Focus panel first so it has the keyboard. |
 | A light won't spot down | It has no zoom: the truss spots don't, the AT spots do. |
 | Focus this cue says it can't move the layer | It's aimed at a target. Pick one spot (**G** until **Fixture**) or move the target. |
-| The score dialog closed | **Focus ▸ Edit focus calls…**, pick the practice venue, **Export focus report…**. |
+| The score dialog closed | **Focus ▸ Edit focus calls…**, pick the practice venue, **Export Focus Report…**. |
 
 ## Done early? (Extension)
 
@@ -257,7 +257,7 @@ press **OK**.
    a rehearsal?
 2. **Medium.** Run the scramble again on **Medium: 2–6° off**. Compare
    the two reports: where did the time go?
-3. **Touring.** Click **Focus ▸ Venues ▸ Rig and universes…** (with
+3. **Touring.** Click **Focus ▸ Venues ▸ Rig and Universes…** (with
    Classroom applied). Read the page. If the show moved to the high school
    auditorium next week, what would change in this file, and what would
    stay in the show?

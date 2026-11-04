@@ -1187,6 +1187,7 @@ private:
     QTreeWidget *m_library;
     QWidget *m_libraryPane = nullptr;       //!< filter, + Palette and m_library
     QSplitter *m_mainSplit = nullptr; //!< Library | tree | page
+    bool m_defaultSplitPending = false; //!< fresh settings: size the panes at the first real width
     QByteArray m_splitBeforeLend;
     LibraryHost *m_libraryHost = nullptr;   //!< non-null while Build has the pane
     QList<QPair<int, quint32>> m_recent;

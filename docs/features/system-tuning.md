@@ -26,7 +26,7 @@ what to change.
 - **Worth knowing**: nothing to detect, just good to know.
 
 An item marked **●** is important: the footer says so during Operate.
-**Check again** looks again after you change something.
+**Check Again** looks again after you change something.
 
 The app never changes a system setting that needs an administrator, and
 never asks for a password. Those are yours to do, with the command shown.

@@ -4398,7 +4398,7 @@ static bool lessonTwoSixByMouse(App *app, Doc *doc, ShowTreeView *view, const QS
         if ((*it)->text(0).startsWith(QStringLiteral("Hits")))
             hitsRow = *it;
     LESSON_STEP(hitsRow != nullptr, "no Hits row");
-    LESSON_STEP(treeMenu(view, hitsRow, { QStringLiteral("Make VC Page") }), "Make VC page");
+    LESSON_STEP(treeMenu(view, hitsRow, { QStringLiteral("Make VC Page") }), "Make VC Page");
     settle(200);
     qInfo().noquote() << "[2.6] after Make VC page:" << hintOf(view)->text();
     VCFrame *frame = nullptr;

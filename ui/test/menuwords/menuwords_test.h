@@ -40,6 +40,7 @@ class MenuWords_Test final : public QObject
 private slots:
     void theReaderFindsLabels();
     void everyMenuLabelIsTitleCase();
+    void everyButtonLabelIsTitleCase();
     void noLengthIsMetresOnly();
     void theTabsHaveTheirNames();
 };

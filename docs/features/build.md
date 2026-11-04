@@ -89,8 +89,8 @@ Two panes, left to right:
   the tab, with the show controls in the status bar, or the tab in a
   window of its own): **Highlight**, **Flash**, **Tap** and
   **Save Positions** as buttons; **Park** (park selected, unpark all),
-  **Move in black** (mark, unmark, auto move-in-black and its lead time;
-  while Auto is on the drop-down is lit and reads **Move in black · Auto**,
+  **Move in Black** (mark, unmark, auto move-in-black and its lead time;
+  while Auto is on the drop-down is lit and reads **Move in Black · Auto**,
   or **MIB · n** while it pre-positions *n* heads — the same switch as the
   Show Tree's **MIB** button; see
   [Move in black](show-tree.md#move-in-black) for a cue list or cue that
@@ -201,7 +201,7 @@ with **Show in Show Tree**; it is changed there, not here.
 |---|---|
 | a scene layer | its name, folder, what it holds, its warnings in full, where it's used, what fires it, and its **Timing**: fades, [transitions](#transitions), speed master |
 | a look | the [Look Editor](#the-inline-look-editor) |
-| a group or fixture | its fixtures' channels, as the scene sets them (several fixtures of one type together); a group has **Edit layout** |
+| a group or fixture | its fixtures' channels, as the scene sets them (several fixtures of one type together); a group has **Edit Layout** |
 | an EFX or RGB Matrix layer | its stock editor (EFX editor, RGB Matrix editor) |
 | a chaser layer (in a collection) | its own Chaser editor; **▣ Open** it to walk it |
 | a nested collection | **▣ Open** it |
@@ -243,7 +243,7 @@ layers — move, or copy with **⌥**.
 **Shared members.** A scene in more than one collection or chaser step
 carries a badge, **also in 2**; hover for where (*0.0.4-SHOUT, Full Show
 (step 3)*). An edit here changes it everywhere it is used. To change it here
-only, select it and press **Own copy** (or right-click → **Make Own Copy**):
+only, select it and press **Own Copy** (or right-click → **Make Own Copy**):
 the layer becomes a copy of its own (named as a duplicate is, filed beside
 the original) in the same place, and the other collections keep the
 original. It is one step: ⌘Z puts the shared one back and the copy goes.
@@ -274,7 +274,7 @@ editor lists it, one step at a time, each step opened up. Under the header:
   rows below), the Chaser editor's **Notes** column and a Show Tree cue's
   **Note**. In a one-line list a new line shows as ⏎.
 - **also in …** when the step's function plays somewhere else too (another
-  chaser, another step of this one), with **Make this step's own copy**.
+  chaser, another step of this one), with **Make This Step's Own Copy**.
   **▣ Open** loads the step's function on its own; **↩** comes back to the
   same step.
 - **The step table** — the Chaser editor's columns (#, Function, Fade In,
@@ -282,7 +282,7 @@ editor lists it, one step at a time, each step opened up. Under the header:
   double-click to open it (double-click its **note** to edit the note). **+ Step…** adds functions from the show after
   the step you're on; **drag scenes** from the navigator onto the table to
   insert them before the row you drop on (at the end on empty space). ▲ ▼
-  move the step, **Remove step** takes it out (its function stays).
+  move the step, **Remove Step** takes it out (its function stays).
 
 Under the walker are **the step's layers**. A collection step works exactly
 like a collection loaded on its own: + Scene, + Effect ▾, ⌫, ▲ ▼,
@@ -343,7 +343,7 @@ the tab.
   [effect designer](effects.md#the-effect-designer) opens in the
   Workbench's editor pane, at full height, with the layers column put
   away to give it the width. It plays on the **Try on ▾** groups. Pick an
-  effect, shape it, then **Save in this show…**; the new palette appears in
+  effect, shape it, then **Save in This Show…**; the new palette appears in
   the list, and is back on the bench to keep working on.
 - **+ New ▾** (the arrow) also makes a classic **EFX** (on the Try on
   groups' heads) or **RGB Matrix** (on the first Try on group). It loads
@@ -619,7 +619,7 @@ shows. Filing and renaming are steps on the history.
 
 A collection's members are its layers in the [Workbench](#the-workbench):
 select one and press **⌫** (or **Remove**). The function stays in the
-show. A chaser's steps come out with **Remove step** under its
+show. A chaser's steps come out with **Remove Step** under its
 [step table](#walking-a-chaser); a show's tracks in **Shows**. The stock
 editors are the Workbench's editor pane.
 
@@ -872,7 +872,7 @@ palette onto the look to keep it. With no look open it says "Not in a look".
 
 ![The Look Editor on an Effect look](../images/programming-tab-look-editor-effect.png)
 
-1. **Change effect…** opens the effect browser (below).
+1. **Change Effect…** opens the effect browser (below).
 2. **Spread** — how the effect is spread across the heads
    ([Spread](effects.md#spread)).
 3. **Speed** — the speed master it runs on
@@ -891,7 +891,7 @@ palette onto the look to keep it. With no look open it says "Not in a look".
 An Effect look picks its effect from a browser rather than a dropdown. The
 browser is a **window of its own**, so once an effect is picked its
 settings have the look editor's whole width. Over the settings, one line
-names the effect, with **Change effect…** to open the browser again:
+names the effect, with **Change Effect…** to open the browser again:
 
 - **Every effect you pick plays at once**, with its own settings, so the
   rig shows it while you browse; the **arrow keys** step through the list,
@@ -1043,8 +1043,8 @@ of eight encoders reaches five **banks** of attributes:
 - **Set it up** in **Connections ▸ Devices ▸ Show control & sync ▸ Control
   Map ▸ Encoder bank**: pick the controller (or a generic one by how it
   counts: two's complement, binary offset, sign-magnitude), its input
-  universe, and **Learn encoder 1…** for a controller that is not listed.
-  **Learn more…** learns the rest the same way: press or turn the control
+  universe, and **Learn Encoder 1…** for a controller that is not listed.
+  **Learn More…** learns the rest the same way: press or turn the control
   and it is set as the pushes (encoder 1's), the next-bank or previous-bank
   button, the first of the bank buttons (the next four follow it, and their
   lamps share the same numbers), or the rings (turn encoder 1: its ring is

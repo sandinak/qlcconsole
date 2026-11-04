@@ -223,10 +223,10 @@ their house lights, relays and subs.
   (**Connections ▸ Universes**, on the toolbar beside its name). A venue keeps the room's outputs for
   every universe (an output changed while it is applied is the venue's),
   and can mark universes or ranges **not ours**: nothing is sent there.
-- **The clash check.** Apply now lists a house fixture on a tour
+- **The clash check.** Apply Now lists a house fixture on a tour
   fixture's addresses, anything on channels that are not ours, and
   fixtures in the other kind's slot, before the venue goes live. The
-  venue page (**Rig and universes…** in the venue menu) has it all; the plot
+  venue page (**Rig and Universes…** in the venue menu) has it all; the plot
   has an **Owner** overlay. See [House rig and tour package](venues.md).
 
 ### Quick focus, Venue focus and Focus this cue: the controller on stage
@@ -236,7 +236,7 @@ their house lights, relays and subs.
   Practice (scramble) and the Focus report. What cannot be used yet is
   greyed with the reason — no lights on the plot, no focus calls, no
   venue — there, on the Run tab and in the Show Tree. Quick focus says
-  why its Start is greyed, and offers **Add a target…** when the show has
+  why its Start is greyed, and offers **Add a Target…** when the show has
   none to aim at. See [The Focus menu](lighting-studio.md#the-focus-menu).
 - **Venue focus.** The show keeps its focus in order — "DH Tspots →
   DSC", then "AT spots → Soloist DS" — and runs it on the controller:
@@ -280,7 +280,7 @@ their house lights, relays and subs.
   [Telling the operator](focus-calls.md#telling-the-operator-where-they-are).
 - **Venue files travel.** Collect for Transfer copies the venues, and a
   show saved under a new version offers the earlier version's venues.
-- **The focus report.** **Export focus report…** writes a venue's focus
+- **The focus report.** **Export Focus Report…** writes a venue's focus
   light by light — the call, the target and its place from the stage
   marks, the correction, the lens, who checked it and when, and the
   dead, swapped and needs-focus flags — as a PDF or web page to print, or
@@ -312,7 +312,7 @@ their house lights, relays and subs.
   (EFX, RGB Matrix) add one; ▲ ▼ reorder, ⌫ takes a layer out (the scene stays
   in the show), and scenes drag in from the left. **▣ Open** loads a layer
   on its own and **↩** comes back. A scene used elsewhere says **also in
-  2**; **Own copy** splits it off. What is loaded plays on the rig as you
+  2**; **Own Copy** splits it off. What is loaded plays on the rig as you
   work (Design mode), and every change is one ⌘Z. See
   [The Workbench](build.md#the-workbench).
 - **Every scene in one tree.** Build ▸ Scenes is an outline of folders,
@@ -364,7 +364,7 @@ their house lights, relays and subs.
 - **One word per idea.** **Plot Symbol** is what *Stage Look* was
   (what a fixture is drawn as: Fixtures right-click, Fixture Properties,
   the plot's **Show** menu); the Lighting Studio's *Layers* panel is
-  **Plot layers**; **Operate** replaces *Perform (Operate)*; and the
+  **Plot Layers**; **Operate** replaces *Perform (Operate)*; and the
   Control menu's *Hold Last Look* is **Hold at End**, with **Clear Hold
   at End** (and a Shows track's **Hold at end**). Only the names changed:
   shows and settings are as they were. See
@@ -671,7 +671,7 @@ their house lights, relays and subs.
   on numbered places; trusses and pipes over the audience say how far out
   they hang (**FOH · 4.2 m DS of curtain line**). The full centre line
   replaces the teal centre cross's line along it. The Rig Overview draws
-  the lines on its floor and lists the pieces in its **Plot layers** menu,
+  the lines on its floor and lists the pieces in its **Plot Layers** menu,
   and they're saved with the show. See [Stage marks](lighting-studio.md#stage-marks-centre-line-curtain-line-number-line).
 - **The apron is its own deck.** It starts at the curtain line and runs
   downstage by its depth, with its rounded front right at its front edge,
@@ -1075,7 +1075,7 @@ their house lights, relays and subs.
   a riser or below the floor, in the Studio and the Rig Overview alike. See
   [Beams](lighting-studio.md#beams-footprint-and-coverage).
 - **Curtains that open in the show.** A main drape or traveler can be
-  **Driven by** a curtain fixture (**Add curtain fixture** in its editor):
+  **Driven by** a curtain fixture (**Add Curtain Fixture** in its editor):
   as the fixture's **Open** channel goes from 0 to 255 the drape opens, and
   **Fly** takes a main drape up and out. The plot and the Rig Overview follow
   it while it fades. Use it in scenes, chasers and the Show Tree like any
@@ -1124,7 +1124,7 @@ their house lights, relays and subs.
   network — a laptop at school — is held, kept and sent nothing, and
   resumes by itself on the rig network. The footer says it in red: "Output
   held — not on the rig network (172.18.0.0/20). Connected: en0
-  10.4.12.7"; click it for the setting. **Transmit anyway, this session…**
+  10.4.12.7"; click it for the setting. **Transmit Anyway, This Session…**
   asks first and is never saved. See
   [Only transmit on the rig network](other-improvements.md#only-transmit-on-the-rig-network).
 - **Backup WLED lanterns.** A WLED universe can drive several devices: a
@@ -1320,7 +1320,7 @@ their house lights, relays and subs.
   to 15 (from a stutter to smooth). The **GPU** box in its toolbar turns it off
   if a driver draws it wrongly. See
   [Angled — the free 3D view](lighting-studio.md#angled--the-free-3d-view).
-- **Show or hide layers from the Rig Overview** — its **Plot layers** menu, the
+- **Show or hide layers from the Rig Overview** — its **Plot Layers** menu, the
   same switch as the Studio's eye. The eye and the labels toggle now work in
   Operate mode as well.
 - **Pools show on decks and steps.** A beam landing on a platform was drawn
@@ -1384,7 +1384,7 @@ their house lights, relays and subs.
   first then by kind, or as they hang. The same group always lands the
   same way. Any
   with no room are flagged and left where they were, with **Carry on into
-  the next universe** or **Fit by changing modes** to finish the patch.
+  the next universe** or **Fit by Changing Modes** to finish the patch.
   ([Patching](fixture-manager.md#patching-the-patch-dialog))
 - **Change a mode in the Patch dialog**, patched fixture or not; Apply
   changes it, and ⌘Z puts it back. A different head count is allowed
@@ -1421,7 +1421,7 @@ their house lights, relays and subs.
   Positions stay buttons; Park, Move in black, Beat (it reads the tempo)
   and More are drop-downs — one row, no scrolling.
 - **The effect browser is a window of its own.** Once an effect is picked,
-  its settings have the look editor's full width; **Change effect…** opens
+  its settings have the look editor's full width; **Change Effect…** opens
   the browser, where every pick (and every arrow-key step) plays at once,
   and **Cancel** or Esc puts back the effect you had.
   ([The effect browser](build.md#the-effect-browser))

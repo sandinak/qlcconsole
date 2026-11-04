@@ -1631,7 +1631,7 @@ void MainBar_Test::moveInBlackIsOneSettingInThreePlaces()
     QToolButton *markMenu = pm->findChild<QToolButton *>(QStringLiteral("markMenu"));
     QVERIFY(markMenu != nullptr);
     QVERIFY(m_app->findChild<QAction *>(QStringLiteral("autoMoveInBlackAction")) == nullptr);
-    QCOMPARE(markMenu->text(), QStringLiteral("Move in black"));
+    QCOMPARE(markMenu->text(), QStringLiteral("Move in Black"));
     QVERIFY(!markMenu->property("mibAuto").toBool());
 
     // 1. The Show Tree's MIB -> the show, Programming
@@ -1640,7 +1640,7 @@ void MainBar_Test::moveInBlackIsOneSettingInThreePlaces()
     QVERIFY(mib->isChecked());
     QVERIFY(mib->autoAction()->isChecked());
     QVERIFY(pm->m_autoMibBtn->isChecked());
-    QCOMPARE(markMenu->text(), QString::fromUtf8("Move in black \u00b7 Auto"));
+    QCOMPARE(markMenu->text(), QString::fromUtf8("Move in Black \u00b7 Auto"));
     QVERIFY(markMenu->property("mibAuto").toBool());
     // Lit: painted in the theme's highlight, not the bar's background
     {

@@ -94,7 +94,7 @@ brackets.
 |---|---|
 | **Production** | The whole show: every cue list in it. With one production, GO plays it; with more than one, the **current** production is the one GO plays. [1.1] |
 | **Cue list** | The show's cues, numbered and in order, run the same way every performance. GO plays one list, so a show is one list and each song is a section of it. [0.7, 1.1] |
-| **Section** | One song (or the preshow) inside the show's cue list, found by the cue numbers' first number: 0 the preshow, 1.0.0… song 1, 2.0.0… song 2. A header row folds its cues; **Block at section start** stops the song before carrying in. Shows built as a list per song: **Merge lists into one…** on the production's page. [1.1] |
+| **Section** | One song (or the preshow) inside the show's cue list, found by the cue numbers' first number: 0 the preshow, 1.0.0… song 1, 2.0.0… song 2. A header row folds its cues; **Block at section start** stops the song before carrying in. Shows built as a list per song: **Merge Lists into One…** on the production's page. [1.1] |
 | **Cue** | A planned lighting change, tied to a moment in the song: a change the audience feels. [0.1] Numbered 1.0.0, 1.0.1…; a list plays its cues in number order. [1.1] |
 | **Point cue** | A cue numbered between two others, such as 1.0.2.5 between 1.0.2 and 1.0.3. It is how a cue is added late without changing any other cue's number. [1.5] |
 | **Renumber** | Give cues new numbers. Dragging a cue renumbers it for its new place; **Renumber This Level…** numbers a whole level 1, 2, 3… Do it before anyone has written the numbers down. [1.5] |
@@ -178,7 +178,7 @@ brackets.
 | **Focus report** | The record of a focus: every light, its point, its correction, who checked it and when, and any dead lamp. [3.6] |
 | **Scramble** | A practice: every moving light is knocked off its target by a random amount, and you focus them back, scored on degrees off, time and saves. Your real venues are never touched. [3.6] |
 | **Focus this cue** | Changing a cue's own values (position, zoom, focus, colour, gobo) from the stage with the controller (on a Build scene: Focus this look). Venue focus fixes the rig for a room; Focus this cue changes the cue for every room. [3.6] |
-| **Quick focus** | Setting the rig's own calibration, a head at a time, into the show. [3.6] |
+| **Quick Focus** | Setting the rig's own calibration, a head at a time, into the show. [3.6] |
 | **Venue focus** | Running the show's focus calls in a new room, the corrections kept for that venue. [3.6] |
 | **Special circuit** | On an Eos desk, a channel that isn't a stage light: a relay, house lights, work lights, backstage blues. [3.10] |
 | **Sub (submaster)** | On an Eos desk, a fader that brings up a set of levels by hand. An imported sub becomes a Virtual Console fader. [3.10] |

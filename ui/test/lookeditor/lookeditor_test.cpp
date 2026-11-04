@@ -1366,7 +1366,7 @@ void LookEditor_Test::theEffectPickerIsAWindowOfItsOwn()
     QVERIFY2(details->width() > ed.width() * 0.8,
              qPrintable(QString("settings %1 wide of %2").arg(details->width()).arg(ed.width())));
     QCOMPARE(ed.m_effectPickedLabel->text(), QString("Dimmer Phaser"));
-    QCOMPARE(ed.m_effectChangeButton->text(), QString("Change effect…"));
+    QCOMPARE(ed.m_effectChangeButton->text(), QString("Change Effect…"));
 
     // What it is lives behind "?" and in the picker, not over the settings.
     QVERIFY(!details->isAncestorOf(ed.m_effectDescLabel) || !ed.m_effectDescLabel->isVisible());
@@ -1609,7 +1609,7 @@ void LookEditor_Test::anEffectSaysWhereItCameFrom()
     // The save buttons say where it goes.
     QPushButton *saveMine = ed.findChild<QPushButton *>("effectSaveAs");
     QVERIFY(saveMine != nullptr);
-    QCOMPARE(saveMine->text(), QString("Save to My effects…"));
+    QCOMPARE(saveMine->text(), QString("Save to My Effects…"));
 }
 
 void LookEditor_Test::anyEffectRunsOnceOrNTimes()

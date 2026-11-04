@@ -18,7 +18,7 @@ touchpad nudges, zooms and focuses here too).
 
 In the [Show Tree](show-tree.md), in Design or Operate:
 
-- a cue's page: **Focus ▾ Focus this cue…** in its header, or **Focus
+- a cue's page: **Focus ▾ Focus This Cue…** in its header, or **Focus
   this cue…** on the page, or
 - right-click a layer: **Focus This Cue…** (it starts on that layer).
 
@@ -119,7 +119,7 @@ answers a warning (below): only a fresh press does.
 **A reusable layer** changes in every cue that uses it. The first **A**
 only says so ("Specials is reusable: it is also used in Main 4. Press A
 again to change it there too.") and the panel lists the other uses with
-**Change them all**; **A** again goes on, **B** drops it.
+**Change Them All**; **A** again goes on, **B** drops it.
 
 The panel has Quick focus's lamp: blue with a tick, all kept; yellow, a
 change pending here; orange, pending elsewhere; with the count.
@@ -177,7 +177,7 @@ thing to each part of a cue:
   or focus palette has its value moved in place, as the Look Editor does.
   If other scenes or cues use that palette, the first **A** only says who
   ("Centre is also used by 1-Ballad. Press A again to change it there
-  too.") and the panel lists them with **Change them all**; **A** again
+  too.") and the panel lists them with **Change Them All**; **A** again
   applies it everywhere, **B** drops it. With no palette for it,
   the scene's own values on every fixture. On the colour or gobo page, the
   palette picked takes the place of the scene's.

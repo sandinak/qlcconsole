@@ -210,7 +210,7 @@ RefinePanel::RefinePanel(Doc *doc, QWidget *parent)
         m_sharedLabel->setStyleSheet(QStringLiteral("color: #d08a1c; font-weight: bold;"));
         reserveLines(m_sharedLabel, 2);     // the warning, and who else uses it
         sh->addWidget(m_sharedLabel, 1);
-        QPushButton *all = new QPushButton(tr("Change them all"), m_shared);
+        QPushButton *all = new QPushButton(tr("Change Them All"), m_shared);
         all->setObjectName(QStringLiteral("refineSharedConfirm"));
         all->setFocusPolicy(Qt::NoFocus);
         connect(all, &QPushButton::clicked, this, [this]() { m_session->confirmShared(); });

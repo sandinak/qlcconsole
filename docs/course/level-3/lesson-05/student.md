@@ -83,7 +83,7 @@ Cut a verse for time and every cue after it goes late. So a song section can
 start at a time of its own, and its cues count from that start. Click the
 section's header row (**1 — …**) and set **Starts at**: change that one
 number and every cue in the song follows. When the music comes from a Logic
-session, its markers can set the starts (**Import Logic markers…** on the
+session, its markers can set the starts (**Import Logic Markers…** on the
 list's page), or you tap **Learn section starts** as each section plays.
 
 ## One GO

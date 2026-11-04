@@ -242,7 +242,7 @@ offers the **qlcconsole** view, once.
 A show whose Virtual Console plays Show Tree content (a **Cue Runner**, or
 a button, Cue List or slider on a Show Tree cue list or hit) says so in the
 Classic QLC+ footer: *This show uses the Show Tree. Open the qlcconsole
-view to edit it.* Its **Switch to the qlcconsole view** button changes the
+view to edit it.* Its **Switch to the qlcconsole View** button changes the
 view; nothing changes it for you. **×** puts the line away until the show
 is next opened. In Classic QLC+ that content still plays (GO on a Cue
 Runner, a hit's button); only editing it needs the qlcconsole view, where

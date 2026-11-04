@@ -90,7 +90,7 @@ A group's SM calls the end of song 1 and the start of song 2; the op uses the La
 
 ## Extension (fast groups)
 
-**Running order…** (on the production): drag the songs into tonight's order, or untick one to leave it out; GO passes over it. Then ask why the song you moved should be Block. (*It tracks from the song before it by number, not by running order.*) And the **phone Run page** has a slider for each group master, under the cues; ask who should be allowed to touch it.
+**Running Order…** (on the production): drag the songs into tonight's order, or untick one to leave it out; GO passes over it. Then ask why the song you moved should be Block. (*It tracks from the song before it by number, not by running order.*) And the **phone Run page** has a slider for each group master, under the cues; ask who should be allowed to touch it.
 
 ## Part 3 — On the real rig (with Branson)
 

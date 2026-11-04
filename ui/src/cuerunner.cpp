@@ -488,7 +488,7 @@ void CueRunner::buildFullLayout()
        with why, while there is nothing to focus (board Q146). */
     m_focusCallsBtn = new QToolButton(this);
     m_focusCallsBtn->setObjectName(QStringLiteral("crFocusCalls"));
-    m_focusCallsBtn->setText(tr("Venue focus\342\200\246"));
+    m_focusCallsBtn->setText(tr("Venue Focus\342\200\246"));
     connect(m_focusCallsBtn, &QToolButton::clicked, this, [this]() {
         FocusCallsDialog::startVenueFocus(m_doc, window());
     });

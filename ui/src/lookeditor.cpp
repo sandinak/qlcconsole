@@ -951,7 +951,7 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     connect(m_effectInfoButton, &QToolButton::clicked, this, &LookEditor::showEffectDetails);
     pickedRow->addWidget(m_effectInfoButton);
     pickedRow->addStretch(1);
-    m_effectChangeButton = new QPushButton(tr("Change effect…"), effectPage);
+    m_effectChangeButton = new QPushButton(tr("Change Effect…"), effectPage);
     m_effectChangeButton->setObjectName(QStringLiteral("effectChange"));
     m_effectChangeButton->setToolTip(tr("Open the effect picker: every one you pick plays at "
                                         "once with its own settings; Cancel puts this one back."));
@@ -1095,7 +1095,7 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     efSaveRow->addWidget(m_exportEffectButton);
     connect(m_exportEffectButton, &QPushButton::clicked, this, &LookEditor::slotExportEffect);
 
-    m_saveAsEffectButton = new QPushButton(tr("Save to My effects…"), effectPage);
+    m_saveAsEffectButton = new QPushButton(tr("Save to My Effects…"), effectPage);
     m_saveAsEffectButton->setObjectName(QStringLiteral("effectSaveAs"));
     m_saveAsEffectButton->setToolTip(
         tr("Keep this effect and its settings in My effects on this computer, for any show"));
@@ -1363,7 +1363,7 @@ void LookEditor::updateEffectHeader()
                       || (p->scriptPath().isEmpty() && p->wledEffect().isEmpty());
     m_effectPickedLabel->setText(none ? tr("No effect yet")
                                       : m_effectScriptCombo->currentText().trimmed());
-    m_effectChangeButton->setText(none ? tr("Pick an effect…") : tr("Change effect…"));
+    m_effectChangeButton->setText(none ? tr("Pick an effect…") : tr("Change Effect…"));
     updateBasedOn();
     if (none)
     {
@@ -3525,7 +3525,7 @@ void LookEditor::rebuildEffectDynWidget()
             QWidget *lrow = new QWidget(m_effectDynWidget);
             QHBoxLayout *ll = new QHBoxLayout(lrow);
             ll->setContentsMargins(0, 2, 0, 0);
-            m_learnRangeButton = new QPushButton(tr("Learn range…"), lrow);
+            m_learnRangeButton = new QPushButton(tr("Learn Range…"), lrow);
             m_learnRangeButton->setToolTip(
                 tr("Click, then play your lowest and highest key on the controller; "
                    "click again to lock the range in. Uses the selected MIDI source."));
@@ -4855,7 +4855,7 @@ void LookEditor::startLearnRange()
                 this, SLOT(slotLearnMidiInput(quint32,quint32,uchar,const QString&)),
                 Qt::UniqueConnection);
     if (m_learnRangeButton)
-        m_learnRangeButton->setText(tr("Stop && lock"));
+        m_learnRangeButton->setText(tr("Stop && Lock"));
     if (m_learnRangeStatus)
         m_learnRangeStatus->setText(tr("Play your lowest, then highest key…"));
 }
@@ -4869,7 +4869,7 @@ void LookEditor::stopLearnRange(bool commit)
     m_learning = false;
 
     if (m_learnRangeButton)
-        m_learnRangeButton->setText(tr("Learn range…"));
+        m_learnRangeButton->setText(tr("Learn Range…"));
 
     if (!commit || m_learnHi <= m_learnLo)
     {

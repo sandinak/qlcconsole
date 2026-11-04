@@ -105,7 +105,7 @@ SystemTuningPage::SystemTuningPage(Doc *doc, QWidget *parent)
     cmdRow->addWidget(m_copy, 0, Qt::AlignTop);
     checkLayout->addLayout(cmdRow);
 
-    QPushButton *again = new QPushButton(tr("Check again"), check);
+    QPushButton *again = new QPushButton(tr("Check Again"), check);
     again->setObjectName(QStringLiteral("tuningCheckAgain"));
     checkLayout->addWidget(again, 0, Qt::AlignLeft);
     layout->addWidget(check, 1);

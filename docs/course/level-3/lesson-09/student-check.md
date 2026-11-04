@@ -31,7 +31,7 @@ Everything you need is in Lessons 3.1–3.9, on top of Level 2.
 
 | | 1 | 2 | 3 | 4 |
 |---|---|---|---|---|
-| **Checks** | Skipped the Review or Not ready | Read them; fixed some | Every blocker and warning fixed or accepted with a note | Notes that would help the next person; fixed the cheap things first |
+| **Checks** | Skipped the Review or Not ready | Read them; fixed some | Every blocker and warning fixed or marked Not a Problem with a note | Notes that would help the next person; fixed the cheap things first |
 | **Preshow** | Items missed | Done out of order | Complete and in order | Complete, in order, and each item said aloud |
 | **Operation** | Cues missed or very late | Some early or late | Every cue on its call; the hit on the music | Clean calls; a fault found and fixed calmly |
 | **Teamwork** | One person did it | Roles shared unevenly | Everyone had a role | Everyone can explain every step and why |

@@ -30,7 +30,7 @@ first note to the button.
 4. **Program it** in qlcconsole from
    [`lesson-1-1-start.qlcc`](../../shows/lesson-1-1-start.qlcc) (the
    empty classroom show): **+ Production** (in the header, or under **More ▾**) named for your
-   group, **+ Cue list** named for the song, then the cues (a second song is a **+ Section**
+   group, **+ Cue List** named for the song, then the cues (a second song is a **+ Section**
    of that list, not another list). It must use:
    - **tracking on purpose**: at least one **Block** cue (a hard start),
      and **Release** or **Cue-only** where something must not carry on
@@ -44,7 +44,7 @@ first note to the button.
    score higher where the song calls for them. Save as
    `Level2-check-group.qlcc`.
 5. **Review it** (the footer's **Review** chip): every blocker and warning
-   fixed, or accepted with a note saying why it's on purpose.
+   fixed, or marked Not a Problem with a note saying why it's on purpose.
 6. **Run it live** while the song plays, one of you calling as SM and
    another on the board, with a hit fired at least once.
 7. **A two-minute talk:** what you wanted the audience to feel, and how

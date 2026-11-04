@@ -1369,7 +1369,7 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
         if (m_offStageBtn == NULL)
             return;
         m_offStageBtn->setVisible(n > 0);
-        m_offStageBtn->setText(tr("%n fixture(s) off stage", "", n));
+        m_offStageBtn->setText(tr("%n Fixture(s) Off Stage", "", n));
         m_offStageBtn->setToolTip(tr("%n fixture(s) sit outside the stage grid, so "
                                      "they are not where the plan normally shows "
                                      "anything and they stretch the rig view's "
@@ -3240,7 +3240,7 @@ void Monitor::showStageOverview()
        the Stage layer lists its pieces under it, each with its own tick. */
     QToolButton *layersBtn = new QToolButton(footer);
     layersBtn->setObjectName(QStringLiteral("rigLayers"));
-    layersBtn->setText(tr("Plot layers"));
+    layersBtn->setText(tr("Plot Layers"));
     layersBtn->setToolTip(tr("Show or hide a plot layer (the same as its eye in the Studio)"));
     layersBtn->setPopupMode(QToolButton::InstantPopup);
     QMenu *layersMenu = new QMenu(layersBtn);
@@ -3337,7 +3337,7 @@ void Monitor::showStageOverview()
        view, on by default, remembered. */
     QToolButton *moveBtn = new QToolButton(footer);
     moveBtn->setObjectName(QStringLiteral("rigMoveSpeed"));
-    moveBtn->setText(tr("Real move speed"));
+    moveBtn->setText(tr("Real Move Speed"));
     moveBtn->setCheckable(true);
     moveBtn->setStyleSheet(toggleStyle);
     moveBtn->setToolTip(tr("Moving heads take the time they really need to get there (about "
@@ -3451,7 +3451,7 @@ void Monitor::showStageOverview()
        land while you align them. Greyed, with why, with no light placed. */
     QToolButton *focusBtn = new QToolButton(footer);
     focusBtn->setObjectName(QStringLiteral("rigFocus"));
-    focusBtn->setText(tr("Quick focus"));
+    focusBtn->setText(tr("Quick Focus"));
     FocusMenu::setAvailable(focusBtn, FocusMenu::quickFocusBlocked(m_doc),
                             tr("Quick focus: aim each light at its reference in turn and nudge its "
                                "calibration until it lands there"));
@@ -5660,11 +5660,11 @@ void Monitor::openGroupStudio(quint32 gid)
         else
             QMessageBox::information(&dlg, tr("Save as Component"),
                 tr("Saved “%1”.\n\nSelect another set of fixtures on the canvas, "
-                   "then right-click → Studio Components → Stamp onto selection.")
+                   "then right-click → Studio Components → Stamp Onto Selection.")
                     .arg(name.trimmed()));
     });
 
-    QPushButton *setBtn = new QPushButton(tr("Group settings… (bind · seed · component)"), geomW);
+    QPushButton *setBtn = new QPushButton(tr("Group Settings… (bind · seed · component)"), geomW);
     vl->addWidget(setBtn);
     vl->addStretch();
 
@@ -5843,7 +5843,7 @@ void Monitor::studioAddBar(int kind, quint32 id, StructureStudioView *view, floa
     if (kind == 1)   // tower
     {
         QMessageBox::information(this, tr("Add Bar"),
-            tr("Towers use shelves — use 'Add shelf' in the tower fields."));
+            tr("Towers use shelves — use 'Add Shelf' in the tower fields."));
         return;
     }
 
@@ -8009,7 +8009,7 @@ void Monitor::slotEditScenery(quint32 sid)
         driveCombo->setCurrentIndex(qMax(0, driveCombo->findData(uint(select))));
     };
     fillDrivers(s->driverFixture());
-    QPushButton *newCurtainBtn = new QPushButton(tr("Add curtain fixture"), &dlg);
+    QPushButton *newCurtainBtn = new QPushButton(tr("Add Curtain Fixture"), &dlg);
     newCurtainBtn->setObjectName("sceneryAddCurtain");
     newCurtainBtn->setToolTip(tr("Add a Generic > Stage Curtain fixture for it and drive it by that: "
                                  "use it in scenes, chasers and cues like any fixture -- the fade "
@@ -8406,8 +8406,8 @@ void Monitor::slotEditTower(quint32 tid)
     QDoubleSpinBox *newShelf = new FeetInchesSpinBox(isFeet, &dlg);
     newShelf->setRange(0.0, hMax); newShelf->setDecimals(2);
     newShelf->setValue(1.0 * toDisp);
-    QPushButton *addShelfBtn = new QPushButton(tr("Add shelf"), &dlg);
-    QPushButton *delShelfBtn = new QPushButton(tr("Remove selected"), &dlg);
+    QPushButton *addShelfBtn = new QPushButton(tr("Add Shelf"), &dlg);
+    QPushButton *delShelfBtn = new QPushButton(tr("Remove Selected"), &dlg);
     shelfBtns->addWidget(newShelf);
     shelfBtns->addWidget(addShelfBtn);
     shelfBtns->addWidget(delShelfBtn);

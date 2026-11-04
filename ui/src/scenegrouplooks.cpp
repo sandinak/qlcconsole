@@ -303,7 +303,7 @@ SceneGroupLooks::SceneGroupLooks(Scene *scene, Doc *doc, QWidget *parent,
         });
         helpRow->addWidget(group({ new QLabel(tr("Speed:"), this), speed }));
     }
-    QPushButton *guideBtn = new QPushButton(tr("How this works"), this);
+    QPushButton *guideBtn = new QPushButton(tr("How This Works"), this);
     guideBtn->setFlat(true);
     guideBtn->setCursor(Qt::PointingHandCursor);
     connect(guideBtn, &QPushButton::clicked, this,

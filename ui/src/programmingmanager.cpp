@@ -243,7 +243,7 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
                                  "output, until unparked (saved with the workspace)"));
         m_parkBtn->setEnabled(false);
 
-        m_unparkBtn = new QPushButton(tr("Unpark all"), this);
+        m_unparkBtn = new QPushButton(tr("Unpark All"), this);
         m_unparkBtn->setToolTip(tr("Release every parked fixture"));
         m_unparkBtn->setEnabled(false);
 
@@ -254,7 +254,7 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
                                  "saved with the workspace."));
         m_markBtn->setEnabled(false);
 
-        m_unmarkBtn = new QPushButton(tr("Unmark all"), this);
+        m_unmarkBtn = new QPushButton(tr("Unmark All"), this);
         m_unmarkBtn->setToolTip(tr("Release every marked fixture"));
         m_unmarkBtn->setEnabled(false);
 
@@ -367,11 +367,11 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
 
         QToolButton *parkMenu = dropDown(tr("Park"), QStringLiteral("parkMenu"));
         mirror(parkMenu->menu(), m_parkBtn, tr("Park selected fixtures"));
-        mirror(parkMenu->menu(), m_unparkBtn, tr("Unpark all"));
+        mirror(parkMenu->menu(), m_unparkBtn, tr("Unpark All"));
 
-        QToolButton *markMenu = dropDown(tr("Move in black"), QStringLiteral("markMenu"));
+        QToolButton *markMenu = dropDown(tr("Move in Black"), QStringLiteral("markMenu"));
         mirror(markMenu->menu(), m_markBtn, tr("Mark selected (pre-position in black)"));
-        mirror(markMenu->menu(), m_unmarkBtn, tr("Unmark all"));
+        mirror(markMenu->menu(), m_unmarkBtn, tr("Unmark All"));
         markMenu->menu()->addSeparator();
         mirror(markMenu->menu(), m_autoMibBtn, tr("Auto move-in-black"));
         fieldAction(markMenu->menu(), tr("Lead time"), m_mibGapSpin);
@@ -388,9 +388,9 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
             const bool on = pc != nullptr && pc->isAutoMoveInBlack();
             const int presets = pc != nullptr ? pc->moveInBlackPresetCount() : 0;
             // MIDDLE DOT, as the Show Tree's button.
-            markMenu->setText(!on ? tr("Move in black")
+            markMenu->setText(!on ? tr("Move in Black")
                               : presets > 0 ? tr("MIB \302\267 %1").arg(presets)
-                                            : tr("Move in black \302\267 Auto"));
+                                            : tr("Move in Black \302\267 Auto"));
             markMenu->setToolTip(!on ? tr("Mark, unmark and auto move-in-black (off)")
                                  : presets > 0
                                      ? tr("Auto move-in-black is on: pre-positioning %n head(s) "
@@ -530,7 +530,7 @@ ProgrammingManager::ProgrammingManager(QWidget *parent, Doc *doc)
         inputNote->setWordWrap(true);
         form->addRow(inputNote);
 
-        m_fsClearBtn = new QPushButton(tr("Clear bindings"), this);
+        m_fsClearBtn = new QPushButton(tr("Clear Bindings"), this);
         form->addRow(QString(), m_fsClearBtn);
 
         m_fsJoyLabel = new QLabel(tr("—"), this);
@@ -3308,7 +3308,7 @@ void ProgrammingManager::slotFollowSpotBindX()
 {
     ProgrammerController *pc = m_doc->programmer();
     if (!pc) return;
-    m_fsBindXBtn->setText(tr("Move X axis…"));
+    m_fsBindXBtn->setText(tr("Move X Axis…"));
     m_fsBindYBtn->setEnabled(false);
     pc->bindPanAxis();
 }
@@ -3317,7 +3317,7 @@ void ProgrammingManager::slotFollowSpotBindY()
 {
     ProgrammerController *pc = m_doc->programmer();
     if (!pc) return;
-    m_fsBindYBtn->setText(tr("Move Y axis…"));
+    m_fsBindYBtn->setText(tr("Move Y Axis…"));
     m_fsBindXBtn->setEnabled(false);
     pc->bindTiltAxis();
 }
@@ -3535,7 +3535,7 @@ void ProgrammingManager::showGuide(QWidget *parent)
         "from the centre, a dissolve, along each bar — instead of the scene's "
         "fade. <i>Edge</i> is how soft the line is.</p>"
         "<p>Every edit is one step on the history the Show Tree shares (⌘Z). "
-        "Reopen this any time from <i>How this works</i>, or press F1 for "
+        "Reopen this any time from <i>How This Works</i>, or press F1 for "
         "the whole guide.</p>"));
     QPushButton *more = box.addButton(tr("Open the Full Guide"), QMessageBox::HelpRole);
     box.addButton(QMessageBox::Ok);

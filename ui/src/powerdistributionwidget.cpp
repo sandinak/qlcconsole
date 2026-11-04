@@ -425,8 +425,8 @@ PowerDistributionWidget::PowerDistributionWidget(Doc *doc, bool withFixtureList,
     lv->addWidget(m_tree, 1);
 
     QHBoxLayout *lb = new QHBoxLayout();
-    m_addSourceBtn = new QPushButton(tr("Add source"), left);
-    m_addCircuitBtn = new QPushButton(tr("Add circuit"), left);
+    m_addSourceBtn = new QPushButton(tr("Add Source"), left);
+    m_addCircuitBtn = new QPushButton(tr("Add Circuit"), left);
     m_removeBtn = new QPushButton(tr("Remove"), left);
     m_autoBtn = new QPushButton(tr("Auto-assign…"), left);
     m_autoBtn->setToolTip(tr("Distribute all fixtures across circuits, heaviest "
@@ -521,7 +521,7 @@ PowerDistributionWidget::PowerDistributionWidget(Doc *doc, bool withFixtureList,
         rv->addWidget(m_fixtureList, 1);
 
         QHBoxLayout *rb = new QHBoxLayout();
-        m_assignBtn = new QPushButton(tr("Assign to selected circuit"), right);
+        m_assignBtn = new QPushButton(tr("Assign to Selected Circuit"), right);
         m_unassignBtn = new QPushButton(tr("Unassign"), right);
         rb->addWidget(m_assignBtn);
         rb->addWidget(m_unassignBtn);

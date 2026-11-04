@@ -347,7 +347,7 @@ They are checked as you type — an address without its /size, or anything
 that isn't an IPv4 network, is pointed out in red and OK waits until it
 reads right — and they are saved with the show. A show that has none but
 already has network patches offers the networks its patches were saved
-with (the grey example in the box, and **Use these**); nothing is filled in
+with (the grey example in the box, and **Use These**); nothing is filled in
 until you say so.
 
 While **Only transmit on rig networks** is on (it is unless you turn it
@@ -373,7 +373,7 @@ show's networks and where this computer actually is. Hover it for each
 universe and why; click it to open the setting. In Devices a held patch
 reads "held: … — kept, resumes on the rig network".
 
-**Transmit anyway, this session…** (in the same place) lets output go out
+**Transmit Anyway, This Session…** (in the same place) lets output go out
 wherever this computer is, after asking. It lasts until qlcconsole quits or
 another show is opened, is never saved, and the footer says "Transmitting
 anyway" the whole time; the same button then reads **Check the rig network
@@ -890,7 +890,7 @@ users and the show's output behaviour:
   given a level** (below), and when **"On when not in use" fixtures come
   on**: **When you switch to Operate** or **When the show opens** (see
   [Output rules](fixture-manager.md#output-rules)).
-- **Game controllers**: **Controller test…**, every input a controller
+- **Game controllers**: **Controller Test…**, every input a controller
   sends and what it maps to
   ([Controller test](lighting-studio.md#controller-test)).
 - **Effects**: which editor opens an effect script (the in-app editor, or
@@ -1153,7 +1153,7 @@ list (GO), one cue of a list (a jump to it) or a hit.
   every light is sent again.
 - **See them all.** **Connections ▸ Devices ▸ Show control & sync ▸
   Control Map** lists every trigger: the control, what it fires and how
-  (changed from the table), **Remove** and **Remove all…**, and the last
+  (changed from the table), **Remove** and **Remove All…**, and the last
   one fired, which is a quick way to check a controller.
 - **Saved with the show.** A show without triggers saves as before; QLC+
   4 opens a show with them and skips the Control Map (the save check says
