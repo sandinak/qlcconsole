@@ -480,10 +480,15 @@ profile binds them for you; Settings → Advanced → Game controllers). Push
 the stick and the subject walks across the floor; every head on it
 re-aims, so they stay together on the one spot. Let go and it holds.
 
-- **In a running cue.** Fire the cue (GO, the Run tab, the pad) and the
-  stick moves its follow spot -- nothing needs to be open in the
-  Workbench. (Open in Build, the stick moves the Workbench's scene
-  instead, and Save Positions keeps it.)
+- **In a running cue.** Select the cue in the Show Tree, or fire it (GO,
+  the Run tab, the pad, Operate), and the stick moves its follow spot,
+  whatever is open in the Workbench. Only a follow spot open in the
+  Workbench itself takes the stick from the cue's: that is programming
+  it, and Save Positions keeps where you put it. With no follow spot
+  playing, the stick drags the Aim target of the Workbench's scene, as
+  before.
+- **The subject keeps its height.** A person standing on a riser stays on
+  it while you walk them across the floor.
 - **Across cues nothing jumps.** A layer that tracks into the next cue
   (the same subject followed there) carries on from where the stick left
   it. With **Persist across restarts** ticked on the follow-spot look, the
@@ -498,6 +503,12 @@ re-aims, so they stay together on the one spot. Let go and it holds.
   (free-fly); good for one head, not for several.
 
 Where you can see it:
+
+- **The footer**, on every tab (Show Tree, Run, Operate): **◎ Follow:
+  AT-Spots ← ES-Witch · stick moving** while one is on -- which lights
+  follow whom, green while the stick moves them, amber (*· stick*) while
+  it holds, red (*· no stick*) with no stick bound. Gone when no follow
+  spot plays. Hover it for the whole sentence.
 
 - **The Followspot effect's editor**: a light and a line --
   *Following ES-Witch · moving* (green), *· holding* (amber), or *which

@@ -260,6 +260,38 @@ uchar Universe::groupMaster(int channel) const
  * Faders
  ************************************************************************/
 
+int Universe::faderInsertPosition(int priority, bool onTop) const
+{
+    for (int i = m_faders.count() - 1; i >= 0; i--)
+    {
+        const QSharedPointer<GenericFader> &f = m_faders.at(i);
+        if (f.isNull() || f->priority() > priority)
+            continue;
+        /* One kept on top of this priority stays above a newcomer: the
+           effect scripts' fader over a scene started after it. Until
+           0.4.0 the later scene went above, and a Show Tree preview
+           (Override) hid its effects from the second cue selected on. */
+        if (f->priority() == priority && f->onTopOfPriority() && !onTop)
+            continue;
+        return i + 1;
+    }
+    return 0;
+}
+
+QSharedPointer<GenericFader> Universe::requestTopFader(Universe::FaderPriority priority)
+{
+    QSharedPointer<GenericFader> fader = requestFader(priority);
+    QMutexLocker fadersLocker(&m_fadersMutex);
+    fader->setOnTopOfPriority(true);
+    const int pos = m_faders.indexOf(fader);
+    if (pos >= 0)
+    {
+        m_faders.removeAt(pos);
+        m_faders.insert(faderInsertPosition(int(priority), true), fader);
+    }
+    return fader;
+}
+
 QSharedPointer<GenericFader> Universe::requestFader(Universe::FaderPriority priority)
 {
     int insertPos = 0;
@@ -272,17 +304,7 @@ QSharedPointer<GenericFader> Universe::requestFader(Universe::FaderPriority prio
         if (++m_nextFaderToken == 0)
             ++m_nextFaderToken;
         fader->setToken(m_nextFaderToken);
-        {
-            for (int i = m_faders.count() - 1; i >= 0; i--)
-            {
-                const QSharedPointer<GenericFader>& f = m_faders.at(i);
-                if (!f.isNull() && f->priority() <= fader->priority())
-                {
-                    insertPos = i + 1;
-                    break;
-                }
-            }
-        }
+        insertPos = faderInsertPosition(int(priority), false);
 
         m_faders.insert(insertPos, fader);
 
@@ -371,16 +393,7 @@ void Universe::requestFaderPriority(QSharedPointer<GenericFader> fader, Universe
        a place and was not set.) */
     m_faders.removeAt(pos);
     fader->setPriority(priority);
-    int newPos = 0;
-    for (int i = m_faders.count() - 1; i >= 0; i--)
-    {
-        const QSharedPointer<GenericFader> &f = m_faders.at(i);
-        if (!f.isNull() && f->priority() <= priority)
-        {
-            newPos = i + 1;
-            break;
-        }
-    }
+    const int newPos = faderInsertPosition(int(priority), fader->onTopOfPriority());
     m_faders.insert(newPos, fader);
 
     if (newPos != pos)

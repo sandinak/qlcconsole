@@ -996,7 +996,10 @@ void EffectScriptRunner::writeDMX(MasterTimer *timer, QList<Universe*> universes
         QSharedPointer<GenericFader> &fader = m_faders[w.universeId];
         if (fader.isNull())
         {
-            fader = uni->requestFader(Universe::Override);
+            // On top of the Override faders too: a Show Tree preview's
+            // scenes are Override, and one started after this fader was
+            // made used to cover its effects (Universe::requestTopFader()).
+            fader = uni->requestTopFader(Universe::Override);
             fader->setName(QStringLiteral("EffectScript"));
             fader->setDoc(m_doc);        // unpatched fixtures: shown, not sent
         }

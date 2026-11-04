@@ -607,6 +607,10 @@ public:
      *  deletes itself on close. */
     QMenu *showReviewChipMenu(const QPoint &globalPos, bool exec = true);
     QLabel *reviewChip() const { return m_statusReviewLabel; }
+    /** The follow spot's chip: "Follow: AT-Spots ← ES-Witch · moving"
+     *  while one is on (a cue playing it or the Workbench's), hidden
+     *  otherwise (docs/features/stage-targets.md). */
+    QLabel *followChip() const { return m_statusFollowLabel; }
     /** Show Review's Fix: a finding's jump kind and ids to the view it is
      *  fixed in (a Show Tree cue, Functions, Fixtures, the plot, Build). */
     bool reviewJump(QWidget *parent, const QString &jump, const QVariantList &data);
@@ -1093,6 +1097,8 @@ private slots:
 
     /** Pad-grid mode changed — refresh the "Pad: ..." label. */
     void slotPadModeChanged(Doc::PadMode mode);
+    /** The follow spot's chip, from ProgrammerController::followSpotStatus(). */
+    void updateFollowChip();
 
     /** Refresh the global timecode chip (position/state colour). */
     /** The footer's "Next:" -- the main cue list's standby cue. */
@@ -1130,6 +1136,7 @@ private:
     QLabel* m_statusProgrammerLabel;
     QLabel* m_statusSelectionLabel;
     QLabel* m_statusPadModeLabel;
+    QLabel *m_statusFollowLabel = nullptr;
     /** Rig network transmit gate: red while network output is held because
      *  this machine is not on the show's rig network, amber when the show
      *  has none set or the check is off/lifted. Click opens the setting. */

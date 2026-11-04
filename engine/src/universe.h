@@ -475,6 +475,11 @@ public:
     /** Request a new priority for a fader with the provided intance */
     void requestFaderPriority(QSharedPointer<GenericFader> fader, FaderPriority priority);
 
+    /** Request a new fader (as requestFader()) that stays after every
+     *  other fader of @p priority, even one requested later
+     *  (GenericFader::onTopOfPriority()). */
+    QSharedPointer<GenericFader> requestTopFader(FaderPriority priority);
+
     /** Retrieve a modifiable list of the currently active faders */
     QList<QSharedPointer<GenericFader> > faders();
 
@@ -668,6 +673,10 @@ private:
      *  go of it last, and the frame it did */
     std::unique_ptr<std::atomic<quint32>[]> m_letGoBy;
     std::unique_ptr<std::atomic<quint32>[]> m_letGoFrame;
+    /** Where a fader of @p priority goes in m_faders: after the last one at
+     *  or below it, but under any kept on top of its priority unless it is
+     *  one itself (@p onTop). Under m_fadersMutex. */
+    int faderInsertPosition(int priority, bool onTop) const;
     /** The next fader's token (requestFader()); under m_fadersMutex */
     quint32 m_nextFaderToken = 0;
     /** The last faders that left, who they were: a fixed ring, so a fader

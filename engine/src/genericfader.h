@@ -76,6 +76,13 @@ public:
     int priority() const;
     void setPriority(int priority);
 
+    /** On top of its priority: the Universe keeps it after every other
+     *  fader of the same priority, whenever they arrive -- the effect
+     *  scripts' fader, which layers on the scenes it plays over (a Show
+     *  Tree preview's are Override too). */
+    bool onTopOfPriority() const { return m_onTopOfPriority; }
+    void setOnTopOfPriority(bool on) { m_onTopOfPriority = on; }
+
     /** Get/Set if this fader should handle primary/secondary channels
      *  when a caller requests a FadeChannel */
     bool handleSecondary();
@@ -300,6 +307,7 @@ private:
     quint32 m_fid;
     quint32 m_token = 0;
     int m_priority;
+    bool m_onTopOfPriority = false;
     bool m_handleSecondary;
     QHash <quint32,FadeChannel> m_channels;
     /** Guards m_channels and the FadeChannels in it. Recursive: a caller
