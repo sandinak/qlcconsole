@@ -155,6 +155,8 @@ public:
 
     /** Select the tree row of node @a id (a layer: in cue @a cueId). */
     bool selectNode(quint32 id, quint32 cueId = ShowTree::invalidId());
+    /** Select palette @a paletteId in the Library (the unsaved-changes list's jump). */
+    void showPalette(quint32 paletteId) { selectLibraryPalette(paletteId); }
     NodeKind currentKind() const;
     quint32 currentId() const;
     quint32 currentCueId() const;

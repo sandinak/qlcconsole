@@ -4165,6 +4165,15 @@ QString ShowTreeController::cueLabel(const CueList &list, int index) const
  * Undo
  ****************************************************************************/
 
+QList<ShowTreeController::StepInfo> ShowTreeController::undoSteps() const
+{
+    QList<StepInfo> out;
+    out.reserve(m_undo.count());
+    for (const Snapshot &s : m_undo)
+        out << StepInfo { s.stamp, s.label };
+    return out;
+}
+
 QString ShowTreeController::undoText() const
 {
     return m_undo.isEmpty() ? QString() : m_undo.last().label;

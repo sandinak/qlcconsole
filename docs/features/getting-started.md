@@ -71,6 +71,19 @@ tablet and setting up users.
   the unsaved work**. For a saved show the copy is *Show*.qlcc.autosave
   beside it (see [Troubleshooting](troubleshooting.md#files-and-fixtures)).
   Saving, or a clean quit, removes it.
+- **What changed since the save?** Click **● Unsaved changes** in the
+  footer (hover says how many). A list opens, newest first: the time, what
+  sort of thing (cue, layer, look, target, fixture, settings) and what was
+  done. Edits of the same cue or palette are joined: "2 Chorus — Colour,
+  Dimmer (2 edits)". Double-click a row (or **Go to**) to select it in the
+  Show Tree, the Library or Fixtures. **Save** saves the show, **Undo
+  last** takes back the newest change, **Close** puts the list away; it
+  stays up beside your work and follows it. The list is Undo's own
+  history since the last save, plus fixtures added, patched or removed.
+  Other edits (settings, values held in the programmer) are only counted
+  as "Other changes", so the list says "some may be listed by area only":
+  it is a guide to what you did, not a complete diff. Undoing a change
+  removes its row; a change undone past the save is not listed.
 - A .qlcc **carries its own copies** of every fixture definition, effect
   script and RGB script it uses that isn't part of the app, so it opens
   complete on another computer; where that computer's copy differs, the

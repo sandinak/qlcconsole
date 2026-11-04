@@ -23,6 +23,17 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   open warnings only and its tooltip adds "2 open · 1 meant · 3 not a
   problem". Who and when are saved with the show; older shows open as
   before.
+
+- **Click "Unsaved changes" in the footer to see what changed.** It opens
+  a list of the changes since the last save, newest first: when, what sort
+  of thing (cue, layer, look, target, fixture, settings) and what was done,
+  with every edit of one cue or palette joined ("2 Chorus -- Colour, Dimmer
+  (2 edits)"). A double-click goes to it (Show Tree, Library, Fixtures);
+  **Save** and **Undo last** are in the dialog; hovering the footer says
+  how many. The list is the undo history's own steps taken since the save,
+  plus fixtures added, patched or removed; other edits (settings,
+  programmer values) are counted as "Other changes", not itemised.
+
 - **A light buried in a deck, riser or step is an error in the footer.**
   A fixture whose body (its Physical Dimensions box, as the rig view draws
   it) sits inside a deck with a solid top -- a floor light left at height 0

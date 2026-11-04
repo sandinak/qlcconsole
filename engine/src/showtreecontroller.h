@@ -1098,6 +1098,13 @@ public:
      * Undo
      ************************************************************************/
 public:
+    /** The undo steps, oldest first (ChangeJournal). */
+    struct StepInfo
+    {
+        quint64 stamp = 0;
+        QString label;
+    };
+    QList<StepInfo> undoSteps() const;
     bool canUndo() const { return !m_undo.isEmpty(); }
     bool canRedo() const { return !m_redo.isEmpty(); }
     QString undoText() const;
