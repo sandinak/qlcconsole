@@ -44,16 +44,14 @@ double degreesPerSecond(const Fixture *fx)
 
 double panSpanDeg(const Fixture *fx)
 {
-    const QLCFixtureMode *mode = fx != nullptr ? fx->fixtureMode() : nullptr;
-    const int max = mode != nullptr ? mode->physical().focusPanMax() : 0;
-    return max != 0 ? max : 360.0;
+    const double max = fx != nullptr ? fx->effectiveBeam().panMax : 0.0;
+    return max > 0.0 ? max : 360.0;
 }
 
 double tiltSpanDeg(const Fixture *fx)
 {
-    const QLCFixtureMode *mode = fx != nullptr ? fx->fixtureMode() : nullptr;
-    const int max = mode != nullptr ? mode->physical().focusTiltMax() : 0;
-    return max != 0 ? max : 270.0;
+    const double max = fx != nullptr ? fx->effectiveBeam().tiltMax : 0.0;
+    return max > 0.0 ? max : 270.0;
 }
 
 /* The axis's pointing band (Fixture::positionBand()): a head that points with

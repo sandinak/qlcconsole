@@ -809,6 +809,7 @@ void Fixture::setFixtureDefinition(QLCFixtureDef* fixtureDef,
     m_unavailableManufacturer.clear();
     m_unavailableModel.clear();
     m_unavailableMode.clear();
+    m_movesCache = -1;
 
     if (fixtureDef != NULL && fixtureMode != NULL)
     {
@@ -1220,19 +1221,27 @@ Fixture::EffectiveBeam Fixture::effectiveBeam() const
     const QLCPhysical &phy = m_fixtureMode->physical();
     e.panMax = phy.focusPanMax();
     e.tiltMax = phy.focusTiltMax();
-    /* One pass over the mode's channels (a pixel bar has hundreds of heads;
-       asking each for its pan was a scan per head). */
-    bool hasPan = false, hasTilt = false;
-    const QList<QLCChannel *> chans = m_fixtureMode->channels();
-    for (const QLCChannel *ch : chans)
+    /* One pass over the mode's channels, once (a pixel bar has hundreds of
+       heads; the per-frame callers must not scan). */
+    if (m_movesCache < 0)
     {
-        if (ch == NULL)
-            continue;
-        hasPan = hasPan || ch->group() == QLCChannel::Pan;
-        hasTilt = hasTilt || ch->group() == QLCChannel::Tilt;
-        if (hasPan && hasTilt)
-            break;
+        int bits = 0;
+        const QList<QLCChannel *> chans = m_fixtureMode->channels();
+        for (const QLCChannel *ch : chans)
+        {
+            if (ch == NULL)
+                continue;
+            if (ch->group() == QLCChannel::Pan)
+                bits |= 1;
+            if (ch->group() == QLCChannel::Tilt)
+                bits |= 2;
+            if (bits == 3)
+                break;
+        }
+        m_movesCache = bits;
     }
+    const bool hasPan = (m_movesCache & 1) != 0;
+    const bool hasTilt = (m_movesCache & 2) != 0;
     const bool head = (type() == QLCFixtureDef::MovingHead);
     if (e.panMax <= 0.0)
     {

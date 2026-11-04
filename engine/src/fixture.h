@@ -730,6 +730,9 @@ protected:
 
     /** The mode within the fixture definition that this instance uses */
     QLCFixtureMode* m_fixtureMode;
+    /** Whether the mode has Pan / Tilt channels (bit 0 / 1); -1 = not read yet.
+     *  Kept so effectiveBeam() is O(1) for the callers that run every frame. */
+    mutable int m_movesCache = -1;
 
     /** m_fixtureDef is this fixture's own generic dimmer definition
      *  (genericDimmerDef()), deleted with it or when replaced. Noted when
