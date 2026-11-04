@@ -69,6 +69,9 @@
 #include "programmercontroller.h"
 #include "rigowner.h"
 #include "universe.h"
+#include "fixturegroup.h"
+#include "qlcpalette.h"
+#include "scene.h"
 
 #define private public
 #include "qlcfixturedefcache.h"
@@ -84,9 +87,6 @@
 #include "monitorlayerspanel.h"
 #include "monitorfixtureitem.h"
 #include "functionstreewidget.h"
-#include "fixturegroup.h"
-#include "qlcpalette.h"
-#include "scene.h"
 #define protected public
 #include "app.h"
 #include "dmxmonitorwindow.h"
