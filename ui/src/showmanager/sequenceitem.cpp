@@ -33,6 +33,7 @@
 #include "chaserstep.h"
 #include "trackitem.h"
 #include "function.h"
+#include "showtreecontroller.h"
 #include "doc.h"
 
 /** Format a millisecond span compactly for the drag readout. */
@@ -287,6 +288,24 @@ QRectF SequenceItem::nameRect() const
     return QRectF(4, 0, qMax(10, m_width - 24), SEQ_TITLE_STRIP_H);
 }
 
+bool SequenceItem::stepsLocked() const
+{
+    return m_chaser != NULL && m_chaser->doc() != NULL
+           && m_chaser->doc()->showTree() != NULL
+           && m_chaser->doc()->showTree()->isGenerated(m_chaser->id());
+}
+
+bool SequenceItem::refuseLockedEdit()
+{
+    if (!stepsLocked())
+        return false;
+    m_lastRefusal = tr("This is the cue list \u2018%1\u2019 from the Show Tree \u2014 "
+                       "edit its cues there. The block can still be moved or removed.")
+                        .arg(m_chaser->name());
+    QToolTip::showText(QCursor::pos(), m_lastRefusal);
+    return true;
+}
+
 void SequenceItem::setTimeScale(int val)
 {
     ShowItem::setTimeScale(val);
@@ -300,7 +319,7 @@ void SequenceItem::setDuration(quint32 msec, bool stretch)
     // LAST cue — every other cue keeps the timing you set. (The old behaviour
     // scaled all steps proportionally, which lost per-cue timings.)
     const int count = m_chaser->stepsCount();
-    if (count == 0)
+    if (count == 0 || refuseLockedEdit())
         return;
 
     ensurePerStepDurations();
@@ -428,6 +447,8 @@ QString SequenceItem::cueTooltip(int idx) const
 
 void SequenceItem::ensurePerStepDurations()
 {
+    if (stepsLocked())
+        return;
     if (m_chaser->durationMode() == Chaser::PerStep)
         return;
     // Stamp each step with its current effective hold, then switch mode so
@@ -444,6 +465,8 @@ void SequenceItem::ensurePerStepDurations()
 
 void SequenceItem::ensurePerStepFades()
 {
+    if (stepsLocked())
+        return;
     if (m_chaser->fadeInMode() != Chaser::PerStep)
     {
         const quint32 common = m_chaser->fadeInSpeed();
@@ -492,7 +515,7 @@ void SequenceItem::snapshotDurations()
 
 void SequenceItem::setStepDuration(int idx, qint64 ms)
 {
-    if (idx < 0 || idx >= m_chaser->stepsCount())
+    if (idx < 0 || idx >= m_chaser->stepsCount() || stepsLocked())
         return;
     if (ms < SEQ_MIN_STEP_MS)
         ms = SEQ_MIN_STEP_MS;
@@ -572,6 +595,11 @@ void SequenceItem::mousePressEvent(QGraphicsSceneMouseEvent *event)
     //    stolen by the resize grab. Grab the edge lower down (timing band).
     if (m_locked == false && inFadeBand == false && edgeAt(x) != NoEdge)
     {
+        if (refuseLockedEdit())
+        {
+            event->accept();
+            return;
+        }
         ShowItem::mousePressEvent(event);
         return;
     }
@@ -581,6 +609,16 @@ void SequenceItem::mousePressEvent(QGraphicsSceneMouseEvent *event)
     if (m_editable && event->button() == Qt::LeftButton)
     {
         int cue = cueAt(x);
+
+        // A generated cue list's steps are the tree's: a press that would
+        // start a step edit says so instead of doing nothing.
+        if (stepsLocked() && cue >= 0 && (inFadeBand || edgeAt(x) == NoEdge)
+            && !(event->modifiers() & (Qt::ShiftModifier | Qt::ControlModifier | Qt::MetaModifier)))
+        {
+            refuseLockedEdit();
+            event->accept();
+            return;
+        }
 
         // Multi-select: a Shift / Ctrl / Cmd click on a cue changes the SELECTION
         // (build a group to delete / move / scale) and does NOT start a drag.
@@ -831,7 +869,7 @@ void SequenceItem::contextMenuEvent(QGraphicsSceneContextMenuEvent *event)
     }
 
     // Cue (multi-)selection actions.
-    if (m_editable && m_selectedSteps.isEmpty() == false)
+    if (m_editable && m_selectedSteps.isEmpty() == false && !stepsLocked())
     {
         const int n = m_selectedSteps.count();
         QAction *del = menu.addAction(n > 1 ? tr("Delete %1 Selected Cues").arg(n)
@@ -906,7 +944,7 @@ bool SequenceItem::isCueSelected(int idx) const
 
 void SequenceItem::deleteSelectedCues()
 {
-    if (m_chaser == NULL || m_selectedSteps.isEmpty())
+    if (m_chaser == NULL || m_selectedSteps.isEmpty() || refuseLockedEdit())
         return;
 
     QList<int> idxs = m_selectedSteps.values();
@@ -954,7 +992,7 @@ bool SequenceItem::selectionContiguousInterior(int &lo, int &hi) const
 
 void SequenceItem::scaleSelectedCues(double factor)
 {
-    if (m_chaser == NULL || m_selectedSteps.isEmpty() || factor <= 0.0)
+    if (m_chaser == NULL || m_selectedSteps.isEmpty() || factor <= 0.0 || refuseLockedEdit())
         return;
 
     ensurePerStepDurations();

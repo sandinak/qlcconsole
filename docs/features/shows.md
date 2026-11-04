@@ -82,8 +82,18 @@ screen, so a 5-minute song stays smooth.
   item snaps: with **Snap to grid** on (⌘G), an item dropped within about 8
   pixels of a section's start or end lands exactly on it, ahead of the grid.
 
-Section anchors (a start timecode per section, cues timed from it) and DAW marker import are
-a separate piece of work; the markers drawn here are what they build on.
+Markers are the timeline's own sections. The Show Tree has its own: a cue
+list's section starts and **Follow timecode** (see below) are what time cues
+from a clock, and a DAW's markers reach the Show Tree through MIDI import.
+Joining the two, so a marker here is a section there, is planned.
+
+**A Show Tree cue list on a track.** A cue list's generated chaser can be
+placed on a track like any chaser. There it plays as a chaser by step length
+and ignores the cue times, until the planned cue-list clip arrives. Its steps
+belong to the tree (the next bake would throw an edit away), so the timeline
+refuses a cue drag, fade drag, stretch, delete or scale on it and says "This
+is the cue list ‘X’ from the Show Tree — edit its cues there". The block
+itself still moves and can be removed.
 
 ## Following timecode
 

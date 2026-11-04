@@ -28,6 +28,8 @@
 #include <QComboBox>
 #include <QGraphicsSceneMouseEvent>
 #include "show.h"
+#include "showtreecontroller.h"
+#include "chaser.h"
 #include "doc.h"
 #include "audio.h"
 #include <QBuffer>
@@ -284,6 +286,90 @@ void ShowManager_Test::aClickOnAChaseBlockDoesntMoveIt()
 
     QCOMPARE(sf->startTime(), quint32(1000));
     QVERIFY(!m_doc->isModified());
+}
+
+void ShowManager_Test::aGeneratedCueListKeepsItsStepsOnATrack()
+{
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("Spring Show");
+    const quint32 list = st->addCueList(prod, "Act 1");
+    st->addCue(list, -1, "Preset");
+    st->addCue(list, 0, "Lights up");
+    st->addCue(list, 1, "Blackout");
+    const quint32 cid = st->cueList(list)->chaser;
+    QVERIFY(st->isGenerated(cid));
+    Chaser *ch = qobject_cast<Chaser *>(m_doc->function(cid));
+    QVERIFY(ch != nullptr);
+    QVERIFY(ch->stepsCount() >= 2);
+
+    Track *t = new Track(m_sceneB);
+    t->setName("Chase");
+    m_show->addTrack(t);
+    ShowFunction *sf = t->createShowFunction(cid);
+    sf->setStartTime(1000);
+    sf->setDuration(4000);
+    m_manager->updateMultiTrackView();
+
+    SequenceItem *item = nullptr;
+    foreach (ShowItem *i, m_manager->m_showview->m_items)
+        if (SequenceItem *s = qobject_cast<SequenceItem *>(i))
+            if (s->getChaser() == ch)
+                item = s;
+    QVERIFY(item != nullptr);
+    QVERIFY(item->stepsLocked());
+
+    // A snapshot of every step and the modes.
+    const auto snap = [ch]() {
+        QString out;
+        for (int i = 0; i < ch->stepsCount(); i++)
+        {
+            const ChaserStep s = ch->steps().at(i);
+            out += QString("%1:%2:%3:%4;").arg(s.fid).arg(s.duration).arg(s.fadeIn).arg(s.fadeOut);
+        }
+        return out + QString::number(ch->durationMode()) + QString::number(ch->fadeInMode());
+    };
+    const QString before = snap();
+    const int undoDepth = m_manager->m_undoStack.size();
+
+    const auto press = [item](const QPointF &at) {
+        QGraphicsSceneMouseEvent e(QEvent::GraphicsSceneMousePress);
+        e.setButton(Qt::LeftButton);
+        e.setButtons(Qt::LeftButton);
+        e.setPos(at);
+        e.setScenePos(item->mapToScene(at));
+        item->mousePressEvent(&e);
+        QGraphicsSceneMouseEvent r(QEvent::GraphicsSceneMouseRelease);
+        r.setButton(Qt::LeftButton);
+        r.setPos(at);
+        r.setScenePos(item->mapToScene(at));
+        item->mouseReleaseEvent(&r);
+    };
+    const qreal w = item->boundingRect().width();
+
+    // The fade band, a cue body, the right-edge stretch: each is refused,
+    // names the cue list, and changes nothing.
+    const QList<QPointF> hits = {QPointF(w / 3, TRACK_HEIGHT * 0.8), QPointF(w / 2, 30),
+                                 QPointF(w - 1, 30)};
+    for (const QPointF &at : hits)
+    {
+        press(at);
+        QVERIFY2(item->lastRefusal().contains("Act 1"), qPrintable(item->lastRefusal()));
+        QVERIFY(item->lastRefusal().contains("Show Tree"));
+        QCOMPARE(snap(), before);
+    }
+    item->setDuration(9000, false);
+    item->deleteSelectedCues();
+    item->scaleSelectedCues(2.0);
+    QCOMPARE(snap(), before);
+    QCOMPARE(m_manager->m_undoStack.size(), undoDepth);
+
+    // Moving the clip is still the user's: the title strip is the plain
+    // block-move grab, and the clip's start follows.
+    press(QPointF(w / 2, 5));
+    item->setPos(item->pos() + QPointF(50, 0));
+    sf->setStartTime(2000);
+    QCOMPARE(sf->startTime(), quint32(2000));
+    QCOMPARE(snap(), before);
 }
 
 QTEST_MAIN(ShowManager_Test)

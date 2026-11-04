@@ -10,6 +10,14 @@ under `~/.claude/.../memory/`.
 
 ---
 
+## Timeline guard for a generated cue list (tlguard, 2026-11-04) -- P0 built
+
+A Show Tree cue list's chaser on a Shows track refuses step edits
+(SequenceItem::stepsLocked; test showmanager_test). Function Manager, Build
+and the live-edit dialog were already locked. Open (design note
+TIMELINE_SHOWTREE.md, board Q216-Q221): P1 cue-list clip, P2 timeline clock
+for clipped lists, P3 markers and sections, P4 timecode ruler.
+
 ## Edit keys the same in every list (WF1-A, W1-27, W2-Q2; wfkeys, 2026-11-04) — built, leftovers
 
 ⌫ / F2 / ⌘C ⌘V / ⌘D / ⌘F / Esc in the Show Tree, Build (Palettes,
