@@ -6251,19 +6251,6 @@ void MonitorGraphicsView::updateTargets()
             ti->setFigure(feet, crown, 1000.0 * m_cellPixels / m_unitValue,
                           m_pov == PovSide);
         }
-        /* A performer line: each person on the deck under them, their own
-           height tall. */
-        if (t->isPerformerLine())
-        {
-            QVector<QPair<QPointF, QPointF> > crowd;
-            foreach (const PerformerFill::Performer &pf, PerformerFill::people(props, t))
-            {
-                const QVector3D f = pf.feet * 1000.0f;
-                crowd << qMakePair(projectMm(f.x(), f.y(), f.z()) - tp,
-                                   projectMm(f.x(), f.y(), f.z() + pf.height * 1000.0f) - tp);
-            }
-            ti->setPerformers(crowd, 1000.0 * m_cellPixels / m_unitValue, m_pov == PovSide);
-        }
         // Targets are a DESIGN-time aim point: draggable while editing (even when
         // the rig layout is locked), but frozen in Run/Operate — in a show the
         // operator drives the follow-spot pin, not the target.
@@ -6487,6 +6474,21 @@ void MonitorGraphicsView::refreshLineItem(TargetItem *item)
     foreach (const QVector3D &w, world)
         handles << px(w) - centre;
     item->setLineGeometry(poly, curve.sampleFractions(), handles);
+
+    /* A performer line: each person on the deck under them, their own height
+       tall -- re-laid by the same fractions along the line as it is now, so
+       every edit of the line (a handle, a move, undo) carries them with it. */
+    if (t->isPerformerLine())
+    {
+        QVector<QPair<QPointF, QPointF> > crowd;
+        foreach (const PerformerFill::Performer &pf, PerformerFill::people(props, t))
+        {
+            const QVector3D f = pf.feet * 1000.0f;
+            crowd << qMakePair(projectMm(f.x(), f.y(), f.z()) - centre,
+                               projectMm(f.x(), f.y(), f.z() + pf.height * 1000.0f) - centre);
+        }
+        item->setPerformers(crowd, 1000.0 * m_cellPixels / m_unitValue, m_pov == PovSide);
+    }
 }
 
 void MonitorGraphicsView::reaimScenesAimingAt(quint32 targetId)

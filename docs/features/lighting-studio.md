@@ -392,7 +392,9 @@ to the people in it before anyone stands there. People go on a
 count of people spread evenly along it, one on each end, each with their
 feet on the highest stage surface under them — a step's tread, a riser,
 the apron, the deck. A line drawn up a flight of steps stands people at
-every height it crosses.
+every height it crosses. The people belong to the line: drag an end handle
+to shorten it, bend it, move it or Undo, and they stand along it again at
+the same fractions of its length.
 
 The usual setup is a line a row: three riser rows and the apron make four
 lines, each with its own count.
