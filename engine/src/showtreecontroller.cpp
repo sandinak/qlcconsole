@@ -6275,7 +6275,7 @@ void ShowTreeController::saveXML(QXmlStreamWriter *doc) const
 {
     if (m_productions.isEmpty() && m_generatedScenes.isEmpty() && m_generatedCollections.isEmpty()
         && m_generatedChasers.isEmpty() && m_inlinePalettes.isEmpty() && m_groupSets.isEmpty()
-        && m_reusableLayers.isEmpty() && m_reusableCues.isEmpty() && m_notes.isEmpty())
+        && m_reusableLayers.isEmpty() && m_reusableCues.isEmpty() && allNotes().isEmpty())
         return;     // a show without a tree saves as it always did
     saveState(doc, false);
 }
