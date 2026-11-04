@@ -930,6 +930,8 @@ void MonitorFixtureItem::slotUpdateValues()
             needUpdate = true;
         }
     }
+    if (!m_pathPixels.isEmpty())
+        needUpdate = true;     // its path's LEDs show the heads' colours
     if (needUpdate)
         update();
 }
@@ -1043,6 +1045,17 @@ QRectF MonitorFixtureItem::boundingRect() const
         rect |= labelPolygon().boundingRect().adjusted(-1, -1, 1, 1);
     }
 
+    // Its pixels along a path, a wand's staff, a flame's outline.
+    if (!m_pathPixels.isEmpty() || !m_staffLine.isNull() || !m_flameOutline.isEmpty())
+    {
+        QRectF r = m_flameOutline.boundingRect();
+        foreach (const QPointF &p, m_pathPixels)
+            r |= QRectF(p.x() - 8, p.y() - 8, 16, 16);
+        if (!m_staffLine.isNull())
+            r |= QRectF(m_staffLine.p1(), m_staffLine.p2()).normalized().adjusted(-4, -4, 4, 4);
+        rect |= r.adjusted(-2, -2, 2, 2);
+    }
+
     // The facing arrow sweeps a circle of facingReach() around the centre at any
     // facing angle; union that in so rotating it never clips.
     if (m_hasPan)
@@ -1117,6 +1130,79 @@ void MonitorFixtureItem::drawBody(QPainter *painter, const QRectF &r) const
             // this classifier doesn't have a dedicated silhouette for.
             painter->drawRect(r);
             break;
+    }
+}
+
+void MonitorFixtureItem::setPathDecor(const QVector<QPointF> &pixels, const QLineF &staff,
+                                      const QPainterPath &flame)
+{
+    if (pixels == m_pathPixels && staff == m_staffLine && flame == m_flameOutline)
+        return;
+    prepareGeometryChange();
+    m_pathPixels = pixels;
+    m_staffLine = staff;
+    m_flameOutline = flame;
+    // Its LEDs are along the path: the strip on its body is not drawn too.
+    foreach (FixtureHead *h, m_heads)
+    {
+        h->m_item->setVisible(pixels.isEmpty());
+        if (h->m_back != nullptr)
+            h->m_back->setVisible(pixels.isEmpty());
+    }
+    update();
+}
+
+QColor MonitorFixtureItem::pathPixelColour(int i) const
+{
+    if (m_heads.isEmpty())
+        return QColor(0, 0, 0, 0);
+    const FixtureHead *h = (m_heads.size() > 1 && i < m_heads.size()) ? m_heads.at(i) : m_heads.first();
+    return h->m_item->brush().color();
+}
+
+void MonitorFixtureItem::paintPathDecor(QPainter *painter)
+{
+    if (!m_flameOutline.isEmpty())
+    {
+        painter->setPen(QPen(QColor(255, 150, 60), 1.2, Qt::DashLine));
+        painter->setBrush(Qt::NoBrush);
+        painter->drawPath(m_flameOutline);
+    }
+    if (!m_staffLine.isNull())
+    {
+        painter->setPen(QPen(QColor(70, 66, 60), 3.0, Qt::SolidLine, Qt::RoundCap));
+        painter->drawLine(m_staffLine);
+    }
+    if (m_pathPixels.isEmpty())
+        return;
+    /* Each LED: a dark point when off; lit, its colour with a glow as big
+       as it is bright. */
+    painter->setPen(Qt::NoPen);
+    const qreal dot = m_pathPixels.size() > 60 ? 1.0 : 1.5;
+    for (int i = 0; i < m_pathPixels.size(); ++i)
+    {
+        const QPointF p = m_pathPixels.at(i);
+        QColor c = pathPixelColour(i);
+        const qreal level = (qMax(c.redF(), qMax(c.greenF(), c.blueF()))) * c.alphaF();
+        if (level > 0.02)
+        {
+            QColor in = c;
+            in.setAlpha(255);
+            const qreal r = dot * (1.5 + 2.0 * level);
+            QRadialGradient g(p, r);
+            QColor gi = in;
+            gi.setAlphaF(float(0.55 * level));
+            QColor go = in;
+            go.setAlpha(0);
+            g.setColorAt(0.0, gi);
+            g.setColorAt(1.0, go);
+            painter->setBrush(g);
+            painter->drawEllipse(p, r, r);
+            painter->setBrush(in);
+        }
+        else
+            painter->setBrush(QColor(40, 40, 44));
+        painter->drawEllipse(p, dot, dot);
     }
 }
 
@@ -1287,6 +1373,7 @@ void MonitorFixtureItem::paint(QPainter *painter, const QStyleOptionGraphicsItem
     // draw item background
     painter->setBrush(QBrush(QColor(33, 33, 33)));
     drawBody(painter, QRectF(0, 0, m_width, m_height));
+    paintPathDecor(painter);
 
     /* A practical lantern lights all round, not in a beam: a soft glow in
        its colour over its body, centred on its glass, as bright as it is. */

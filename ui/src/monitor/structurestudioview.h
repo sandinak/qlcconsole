@@ -838,7 +838,16 @@ private:
      *  @p width across and up to @p height tall, wavering with time (@p seed
      *  keeps two flames from moving together). As light, so it glows. */
     void drawSilkFlame(QPainter &p, const QVector3D &base, double width, double height,
-                       double level, double seed) const;
+                       double level, double seed, const QColor &lit = QColor(),
+                       double litLevel = 0.0) const;
+    /** What lights a fountain's flame: its fountain's lights added up (an
+     *  invalid colour when none is on); @p level how strongly. */
+    QColor fountainUplight(quint32 flameFid, double *level) const;
+    /** A fixture on a pixel path (a ring in a fountain, a wand): its LEDs as
+     *  points of light where the path puts them, a wand's staff. False when
+     *  it has none (structurestudioview_pixels.cpp). */
+    bool drawPixelPath(QPainter &p, quint32 fid, class Fixture *fx, const QByteArray &vals,
+                       bool valsComplete) const;
     void drawStarField(QPainter &p, quint32 fid, const Fixture *fx, const QByteArray &vals,
                        const QVector3D &apex, const QVector3D &dir, double halfAngleRad,
                        const QColor &colour, double level) const;

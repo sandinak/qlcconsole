@@ -48,6 +48,7 @@
 #include "rigowner.h"
 #include "fixturevisualtraits.h"
 #include "lanternpixels.h"
+#include "fountain.h"
 #include "monitorproperties.h"
 #include "monitor.h"
 #include "selectionhintchip.h"
@@ -5262,7 +5263,8 @@ void StructureStudioView::drawLaserBeam(QPainter &p, const QVector3D &apex, cons
 }
 
 void StructureStudioView::drawSilkFlame(QPainter &p, const QVector3D &base, double width,
-                                        double height, double level, double seed) const
+                                        double height, double level, double seed,
+                                        const QColor &lit, double litLevel) const
 {
     /* Seven tongues across the silk, each a ribbon from a wide foot to a
        point, its tip swaying and its height breathing with time; drawn in
@@ -5293,6 +5295,15 @@ void StructureStudioView::drawSilkFlame(QPainter &p, const QVector3D &base, doub
                 const double hh = core ? tall * 0.6 : tall;
                 const double ww = core ? foot * 0.55 : foot;
                 QColor c = core ? QColor(255, 215, 70) : QColor(255, 110, 25);
+                /* The silk takes the colour of what lights it: the fountain's
+                   uplights, by how bright they are. */
+                if (lit.isValid() && litLevel > 0.0)
+                {
+                    const double m = qBound(0.0, litLevel * (core ? 0.55 : 0.85), 0.9);
+                    c = QColor::fromRgbF(float(c.redF() * (1 - m) + lit.redF() * m),
+                                         float(c.greenF() * (1 - m) + lit.greenF() * m),
+                                         float(c.blueF() * (1 - m) + lit.blueF() * m));
+                }
                 c.setAlpha(qBound(0, int((core ? 230.0 : 200.0) * level), 255));
                 const QVector3D root = base + across * float(u * half * 0.85);
                 // The ribbon's two edges, row by row, narrowing to the tip.
@@ -7928,6 +7939,10 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
     // base flush with the shelf, body hanging below — when TopHung. The
     // mirroring is what makes "hung" actually look inverted rather than
     // just "the same icon, slightly lower."
+    /* On a pixel path (a ring in a fountain, a wand): its LEDs where the
+       path puts them, and nothing else -- no body, no beam. */
+    if (m_plane == Angled && rp.pixelPath != 0 && drawPixelPath(p, fid, fx, vals, valsComplete))
+        return;
     if (m_plane == Angled)
     {
         /* One rule for every fixture kind here: a solid box in its own
@@ -8186,11 +8201,17 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
                 const QLCPhysical phys = (fx->fixtureMode() != nullptr) ? fx->fixtureMode()->physical()
                                                                         : QLCPhysical();
                 const double w = (phys.width() > 0) ? phys.width() / 1000.0 : 0.3;
-                const double h = (phys.height() > 0) ? phys.height() / 1000.0 : 0.15;
+                /* The silk starts at the fountain's inner wall top (its own
+                   top when it is not in one) and rises its fire height. */
                 const QVector3D c = fixtureCentre(fid);
-                drawSilkFlame(p, c + QVector3D(0.0f, 0.0f, float(h / 2.0)), w,
-                              qMax(0.45, 2.0 * w), 1.0, double(fid) * 1.618);
-                FrameBeam fb{ c + QVector3D(0.0f, 0.0f, float(h)), QVector3D(0, 0, -1), M_PI, 6.0,
+                MonitorProperties *mp = m_doc->monitorProperties();
+                const float z0 = Fountain::flameBottom(m_doc, mp, fid);
+                const float fh = Fountain::flameHeight(m_doc, mp, fid);
+                double litLevel = 0.0;
+                const QColor lit = fountainUplight(fid, &litLevel);
+                drawSilkFlame(p, QVector3D(c.x(), c.y(), z0), w, fh, 1.0, double(fid) * 1.618,
+                              lit, litLevel);
+                FrameBeam fb{ QVector3D(c.x(), c.y(), z0 + fh * 0.3f), QVector3D(0, 0, -1), M_PI, 6.0,
                               QColor(255, 130, 35), 0.6 * fixtureOutput(fx) };
                 fb.omni = true;
                 beamsOut() << fb;

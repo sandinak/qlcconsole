@@ -36,6 +36,8 @@
 #include <QScopedValueRollback>
 #include "monitorproperties.h"
 #include "righeads.h"
+#include "fountain.h"
+#include "pixelpath.h"
 #include "powerdistribution.h"
 #include "networktopology.h"
 #include "truss.h"
@@ -1745,6 +1747,12 @@ QList<MonitorProperties::MonitorGroup> MonitorProperties::childGroups(quint32 pa
     return out;
 }
 
+void MonitorProperties::setGroupAssembly(quint32 gid, bool on)
+{
+    if (m_groups.contains(gid))
+        m_groups[gid].assembly = on;
+}
+
 void MonitorProperties::setGroupLocked(quint32 gid, bool locked)
 {
     if (m_groups.contains(gid))
@@ -3112,6 +3120,10 @@ QVector3D MonitorProperties::fixtureRigPosition(quint32 fid) const
     if (rp.onHanger())
         if (const Hanger *h = m_hangers.value(rp.hangerId, nullptr))
             return h->hook();
+    /* A wand held by a person: in their hand, wherever they are. */
+    if (rp.isHeld())
+        if (const StageTarget *t = m_stageTargets.value(rp.heldBy, nullptr))
+            return PixelPath::heldCentre(t, rp);
     return fixtureBasePosition(fid);
 }
 
@@ -3651,6 +3663,7 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
                 g.anchorKind    = a.value(QStringLiteral("AnchorKind")).toString();
                 g.anchorId      = a.value(QStringLiteral("AnchorId")).toUInt();
                 g.locked        = a.value(QStringLiteral("Locked")).toInt() != 0;
+                g.assembly      = a.value(QStringLiteral("Assembly")).toInt() != 0;
                 g.hasFrame      = a.value(QStringLiteral("Frame")).toInt() != 0;
                 if (g.hasFrame)
                 {
@@ -3906,6 +3919,20 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
                 rp.lightLayout = qBound(-1, a.value("LEDLayout").toInt(), 1);
             if (a.hasAttribute("Glass"))
                 rp.lightGlass = qBound(-1, a.value("Glass").toInt(), 1);
+            if (a.hasAttribute("Flame"))
+                rp.flameHeight = a.value("Flame").toFloat();
+            if (a.hasAttribute("PixPath"))
+                rp.pixelPath = qMax(0, a.value("PixPath").toInt());
+            if (a.hasAttribute("PixTurns"))
+                rp.pixelTurns = qMax(0.0f, a.value("PixTurns").toFloat());
+            if (a.hasAttribute("WandLen"))
+                rp.wandLength = qMax(0.1f, a.value("WandLen").toFloat());
+            if (a.hasAttribute("HeldBy"))
+                rp.heldBy = a.value("HeldBy").toUInt();
+            if (a.hasAttribute("HoldH"))
+                rp.holdHeight = a.value("HoldH").toFloat();
+            if (a.hasAttribute("HoldTilt"))
+                rp.holdTilt = a.value("HoldTilt").toFloat();
             if (a.hasAttribute("Deck"))
             {
                 rp.deckPlatformId   = a.value("Deck").toUInt();
@@ -4007,6 +4034,8 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
     repairOrphanedMounts();
     // Re-agree riser faces with the planes their fixtures are drawn on.
     repairMountPlanes();
+    // Fountains: what stands in one is in its group; flames get a fire height.
+    Fountain::repair(mainDocument, this);
 
     return true;
 }
@@ -4615,6 +4644,8 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument, 
         }
         if (g.locked)
             doc->writeAttribute(QStringLiteral("Locked"), QStringLiteral("1"));
+        if (g.assembly)
+            doc->writeAttribute(QStringLiteral("Assembly"), QStringLiteral("1"));
         if (g.hasFrame)
         {
             doc->writeAttribute(QStringLiteral("Frame"), QStringLiteral("1"));
@@ -4814,6 +4845,20 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument, 
             doc->writeAttribute(QStringLiteral("LEDLayout"), QString::number(rp.lightLayout));
         if (rp.lightGlass >= 0)
             doc->writeAttribute(QStringLiteral("Glass"), QString::number(rp.lightGlass));
+        if (rp.flameHeight >= 0.0f)
+            doc->writeAttribute(QStringLiteral("Flame"), QString::number(double(rp.flameHeight), 'f', 3));
+        if (rp.pixelPath != 0)
+            doc->writeAttribute(QStringLiteral("PixPath"), QString::number(rp.pixelPath));
+        if (rp.pixelTurns > 0.0f)
+            doc->writeAttribute(QStringLiteral("PixTurns"), QString::number(double(rp.pixelTurns), 'f', 2));
+        if (rp.wandLength != 1.2f)
+            doc->writeAttribute(QStringLiteral("WandLen"), QString::number(double(rp.wandLength), 'f', 3));
+        if (rp.isHeld())
+            doc->writeAttribute(QStringLiteral("HeldBy"), QString::number(rp.heldBy));
+        if (rp.holdHeight != 1.0f)
+            doc->writeAttribute(QStringLiteral("HoldH"), QString::number(double(rp.holdHeight), 'f', 3));
+        if (rp.holdTilt != 20.0f)
+            doc->writeAttribute(QStringLiteral("HoldTilt"), QString::number(double(rp.holdTilt), 'f', 1));
         if (rp.onDeck())
         {
             doc->writeAttribute(QStringLiteral("Deck"),  QString::number(rp.deckPlatformId));

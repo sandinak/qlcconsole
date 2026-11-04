@@ -47,6 +47,25 @@ Mic / Vocalist stand and a Guitar / Bass amp (a Person plus a Speaker covers
 both for now); a facing field in Edit Target (the keys turn it); the Drum Kit
 itself still draws as a rectangle, not a kit.
 
+## Fountain fire height, fixtures and WLED in it, wands (fountainwand, 2026-11-03) — built
+
+Fire height (silk from the inner wall's top; old shows keep the flame's
+top), fixtures dropped in a fountain mount in it (pars aim up at the
+flame), Pixel path (wall top rings, base ring, up the flame, wand), the
+wand held by a Person. docs/design/FOUNTAIN_WAND.md. Fixed: the flame on
+another layer than its fountain (locked, left behind on a move). Decided
+(can change): a wand is a pixel path, not a stage look; the fan unit stays
+on the base. Leftovers:
+- A held wand follows its performer's plot position; per-cue blocking
+  positions, when they land, should feed PixelPath::heldCentre().
+- The silk is drawn only while its relay is on (a fan blowing it); off,
+  nothing shows above the wall.
+- The structure editors' own flat planes (Front/Side in a Lighting Studio
+  Editor) draw no flame outline or pixel path yet; the plot's Front and
+  Side views do.
+- Path LEDs light nothing (by design); a hand-held wand's glow in haze is
+  not drawn.
+
 ## Area cover: an Aim at an Area covers it (Q209, areacover, 2026-11-03) — built
 
 Zones by where the lights hang (least-squares match of x and depth key to

@@ -82,6 +82,9 @@
 #include "rhiraster.h"
 #include "mastertimer.h"
 #include "lanternpixels.h"
+#include "itemlock.h"
+#include "pixelpath.h"
+#include "fountain.h"
 #include "effectscriptrunner.h"
 #include "effectscriptcache.h"
 #include "monitorlayerspanel.h"
@@ -17970,6 +17973,425 @@ void Monitor_Test::addFountainBuildsItAsOneGroup()
     delete doc;
 }
 
+/* Fountains and wands (docs/design/FOUNTAIN_WAND.md). */
+
+static void dragOnPlot(MonitorGraphicsView *gv, QGraphicsItem *item, const QPoint &delta);
+
+// Add Fountain, as built (3 ft x 4 ft, a 5" base, 8" and 14" walls), in feet.
+static quint32 addTestFountain(Monitor &mon, Doc *doc, QLCFixtureDef *def, Fixture **flameOut)
+{
+    driveDialog([](QWidget *) { return true; });
+    mon.slotAddFountain();
+    MonitorProperties *props = doc->monitorProperties();
+    Fixture *flame = nullptr;
+    foreach (Fixture *fx, doc->fixtures())
+        if (fx->fixtureDef() == def)
+            flame = fx;
+    if (flameOut != nullptr)
+        *flameOut = flame;
+    return props->platforms().isEmpty() ? 0 : props->platforms().first()->groupId();
+}
+
+// A WLED-style RGB string: one head per LED.
+static Fixture *makeLedString(Doc *doc, int pix, const char *name, quint32 addr)
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test"); def->setModel(QString("String %1").arg(name));
+    def->setType(QLCFixtureDef::LEDBarPixels);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("RGB");
+    for (int h = 0; h < pix; ++h)
+    {
+        const QLCChannel::PrimaryColour pc[] = { QLCChannel::Red, QLCChannel::Green, QLCChannel::Blue };
+        for (int k = 0; k < 3; ++k)
+        {
+            QLCChannel *ch = new QLCChannel();
+            ch->setName(QString("%1-%2").arg(h).arg(k));
+            ch->setGroup(QLCChannel::Intensity); ch->setColour(pc[k]);
+            def->addChannel(ch); mode->insertChannel(ch, h * 3 + k);
+        }
+        QLCFixtureHead hd;
+        hd.addChannel(quint32(h * 3)); hd.addChannel(quint32(h * 3 + 1)); hd.addChannel(quint32(h * 3 + 2));
+        mode->insertHead(-1, hd);
+    }
+    QLCPhysical ph;
+    ph.setWidth(pix * 17); ph.setHeight(12); ph.setDepth(5);
+    ph.setLayoutSize(QSize(pix, 1));
+    mode->setPhysical(ph);
+    def->addMode(mode);
+    Fixture *f = new Fixture(doc);
+    f->setName(name);
+    f->setFixtureDefinition(def, mode);
+    f->setAddress(addr);
+    if (!doc->addFixture(f))
+        return nullptr;
+    return f;
+}
+
+void Monitor_Test::aFountainsFlameStartsAtItsInnerWallTop()
+{
+    Doc *doc = new Doc(this);
+    QLCFixtureDef *def = silkFlameDef();
+    QVERIFY(def != nullptr);
+    QVERIFY(doc->fixtureDefCache()->addFixtureDef(def));
+    MonitorProperties *props = doc->monitorProperties();
+    props->setGridUnits(MonitorProperties::Feet);
+    props->setGridSize(QVector3D(40, 20, 24));
+    {
+        QWidget parent;
+        Monitor mon(&parent, doc);
+        bool fireShown = false;
+        driveDialog([&fireShown](QWidget *dlg) {
+            // Fire height, in feet: 3 ft by default.
+            QDoubleSpinBox *fire = dlg->findChild<QDoubleSpinBox *>("fountainFire");
+            fireShown = fire != nullptr && qAbs(fire->value() - 3.0) < 0.01;
+            return true;
+        });
+        mon.slotAddFountain();
+        QVERIFY(fireShown);
+        Fixture *flame = nullptr;
+        foreach (Fixture *fx, doc->fixtures())
+            if (fx->fixtureDef() == def)
+                flame = fx;
+        QVERIFY(flame != nullptr);
+        StagePlatform *base = props->platforms().first();
+        const Fountain::Parts f = Fountain::ofBase(props, base->id());
+        QVERIFY(f.isValid());
+        QVERIFY(props->groupIsAssembly(f.groupId));
+        QCOMPARE(props->fixtureLayer(flame->id()), base->layerId());
+
+        // The silk starts at the inner wall's top and rises its fire height.
+        const float bottom = Fountain::flameBottom(doc, props, flame->id());
+        QVERIFY2(qAbs(bottom - (0.127f + 0.3556f)) < 1e-3f, qPrintable(QString::number(bottom)));
+        QVERIFY(qAbs(Fountain::flameHeight(doc, props, flame->id()) - 0.9144f) < 1e-3f);
+        // The unit itself still stands on the base, behind the walls.
+        QVERIFY(qAbs(props->fixtureRigPosition(flame->id()).z() - 0.127f) < 1e-3f);
+
+        // The fountain's editor (its base's) sets it.
+        QString title;
+        bool found = false;
+        driveDialog([&](QWidget *dlg) {
+            title = dlg->windowTitle();
+            QDoubleSpinBox *sp = dlg->findChild<QDoubleSpinBox *>("fountainFireHeight");
+            found = sp != nullptr && qAbs(sp->value() - 3.0) < 0.01;
+            if (sp != nullptr)
+                sp->setValue(4.0);
+            return true;
+        });
+        mon.slotEditPlatform(base->id());
+        QVERIFY(found);
+        QVERIFY2(title.contains("Fountain"), qPrintable(title));
+        QVERIFY(qAbs(Fountain::flameHeight(doc, props, flame->id()) - 4.0f * 0.3048f) < 1e-3f);
+        QVERIFY(qAbs(Fountain::flameBottom(doc, props, flame->id()) - bottom) < 1e-4f);
+
+        // The plot draws its silk's outline from above.
+        MonitorFixtureItem *fi = mon.m_graphicsView->m_fixtures.value(flame->id());
+        QVERIFY(fi != nullptr && !fi->m_flameOutline.isEmpty());
+    }
+    delete doc;
+}
+
+void Monitor_Test::anOldFountainsFlameKeepsItsTopAndJoinsIt()
+{
+    Doc *doc = new Doc(this);
+    QLCFixtureDef *def = silkFlameDef();
+    QVERIFY(def != nullptr);
+    QVERIFY(doc->fixtureDefCache()->addFixtureDef(def));
+    MonitorProperties *props = doc->monitorProperties();
+    props->setGridUnits(MonitorProperties::Feet);
+    props->setGridSize(QVector3D(40, 20, 24));
+    QWidget parent;
+    Monitor *mon = new Monitor(&parent, doc);
+    Fixture *flame = nullptr;
+    const quint32 gid = addTestFountain(*mon, doc, def, &flame);
+    QVERIFY(gid != 0 && flame != nullptr);
+    delete mon;
+
+    /* As a show from before: no fire height, the flame left out of the
+       fountain's group and on another layer, the group no assembly. */
+    const quint32 other = props->addLayer("Lights");
+    FixtureRigProps rp = props->fixtureRigProps(flame->id());
+    rp.flameHeight = -1.0f;
+    props->setFixtureRigProps(flame->id(), rp);
+    props->setFixtureGroup(flame->id(), 0);
+    props->setFixtureLayer(flame->id(), other);
+    props->setGroupAssembly(gid, false);
+    // Where its silk was drawn: the unit's top plus max(0.45 m, 2 x its width).
+    const QPointF unit = Fountain::flameUnitSize(flame);
+    const float oldTop = props->fixtureRigPosition(flame->id()).z() + float(unit.y())
+                         + float(qMax(0.45, 2.0 * unit.x()));
+
+    QByteArray buf;
+    QXmlStreamWriter w(&buf);
+    w.writeStartDocument();
+    props->saveXML(&w, doc);
+    w.writeEndDocument();
+    MonitorProperties mp2;
+    QXmlStreamReader r(buf);
+    while (r.readNextStartElement())
+        if (r.name() == QStringLiteral("Monitor"))
+            QVERIFY(mp2.loadXML(r, doc));
+
+    QCOMPARE(mp2.fixtureGroup(flame->id()), gid);
+    QCOMPARE(mp2.fixtureLayer(flame->id()), mp2.group(gid).layerId);
+    QVERIFY(mp2.groupIsAssembly(gid));
+    const FixtureRigProps r2 = mp2.fixtureRigProps(flame->id());
+    QVERIFY(r2.flameHeight > 0.0f);
+    const float bottom = Fountain::flameBottom(doc, &mp2, flame->id());
+    QVERIFY(qAbs(bottom - (0.127f + 0.3556f)) < 1e-3f);
+    QVERIFY2(qAbs(bottom + r2.flameHeight - oldTop) < 1e-3f,
+             qPrintable(QString("%1 + %2 vs %3").arg(bottom).arg(r2.flameHeight).arg(oldTop)));
+    delete doc;
+}
+
+void Monitor_Test::aFixtureInTheFountainMovesAndTurnsWithIt()
+{
+    Doc *doc = new Doc(this);
+    QLCFixtureDef *def = silkFlameDef();
+    QVERIFY(def != nullptr);
+    QVERIFY(doc->fixtureDefCache()->addFixtureDef(def));
+    MonitorProperties *props = doc->monitorProperties();
+    props->setGridUnits(MonitorProperties::Meters);
+    props->setGridSize(QVector3D(12, 6, 8));
+    // A par, standing free off to the side.
+    Fixture *par = new Fixture(doc);
+    par->setName("Up par");
+    par->setChannels(1);
+    QVERIFY(doc->addFixture(par));
+    props->setFixturePosition(par->id(), 0, 0, QVector3D(1000.0f, 1000.0f, 0.0f));
+    {
+        QWidget parent;
+        parent.resize(1400, 900);
+        Monitor *mon = new Monitor(&parent, doc);
+        parent.show();
+        MonitorGraphicsView *gv = mon->m_graphicsView;
+        Fixture *flame = nullptr;
+        const quint32 gid = addTestFountain(*mon, doc, def, &flame);
+        QVERIFY(gid != 0 && flame != nullptr);
+        StagePlatform *base = props->platforms().first();
+        const Fountain::Parts f = Fountain::ofGroup(props, gid);
+        QVERIFY(f.isValid());
+        gv->updateFixture(par->id());
+
+        // Dropped in the gap in front of the flame: on the base, in the fountain.
+        const QPointF c = base->centre();
+        const QPointF into(c.x(), c.y() + 0.15);
+        QVERIFY(gv->dropIntoFountain(par->id(), into * 1000.0));
+        FixtureRigProps rp = props->fixtureRigProps(par->id());
+        QCOMPARE(rp.deckPlatformId, base->id());
+        QCOMPARE(props->fixtureGroup(par->id()), gid);
+        QCOMPARE(props->fixtureLayer(par->id()), props->group(gid).layerId);
+        // Pointed up at the flame.
+        QVERIFY(rp.fixedAim);
+        QVERIFY2(rp.aimDown < -30.0f, qPrintable(QString::number(rp.aimDown)));
+        // Over the inner wall: on its top.
+        const QVector3D wallPt = f.inner->pointAt(0.0, 0.0);
+        QVERIFY(Fountain::mountIn(doc, props, par->id(), wallPt.x(), wallPt.y()));
+        QVERIFY(qAbs(props->fixtureRigPosition(par->id()).z() - Fountain::innerTop(f)) < 1e-3f);
+        QVERIFY(Fountain::mountIn(doc, props, par->id(), into.x(), into.y()));
+        gv->updateFixture(par->id());
+        // Outside it: nothing.
+        QVERIFY(!Fountain::mountIn(doc, props, par->id(), 0.5, 0.5));
+
+        // Select the whole fountain (a lasso's worth) and drag it.
+        gv->scene()->clearSelection();
+        QList<QPair<QString, quint32> > all;
+        all << qMakePair(QString("platform"), base->id())
+            << qMakePair(QString("scenery"), f.inner->id())
+            << qMakePair(QString("scenery"), f.outer->id())
+            << qMakePair(QString("fixture"), flame->id())
+            << qMakePair(QString("fixture"), par->id());
+        gv->selectMapItems(all);
+        const QPointF baseBefore = base->centre();
+        const QVector3D flameBefore = props->fixtureRigPosition(flame->id());
+        const QVector3D parBefore = props->fixtureRigPosition(par->id());
+        dragOnPlot(gv, gv->m_platformItems.value(base->id()), QPoint(120, 60));
+        const QPointF d = base->centre() - baseBefore;
+        QVERIFY2(QLineF(QPointF(), d).length() > 0.3, "the fountain didn't move");
+        const QVector3D flameNow = props->fixtureRigPosition(flame->id());
+        const QVector3D parNow = props->fixtureRigPosition(par->id());
+        QVERIFY2(qAbs(flameNow.x() - flameBefore.x() - d.x()) < 0.02f
+                 && qAbs(flameNow.y() - flameBefore.y() - d.y()) < 0.02f,
+                 qPrintable(QString("flame moved %1, %2; the base %3, %4")
+                            .arg(flameNow.x() - flameBefore.x()).arg(flameNow.y() - flameBefore.y())
+                            .arg(d.x()).arg(d.y())));
+        QVERIFY(qAbs(parNow.x() - parBefore.x() - d.x()) < 0.02f
+                && qAbs(parNow.y() - parBefore.y() - d.y()) < 0.02f);
+        QCOMPARE(props->fixtureRigProps(flame->id()).deckPlatformId, base->id());
+        QCOMPARE(props->fixtureGroup(flame->id()), gid);
+        QVERIFY(qAbs(flameNow.z() - 0.127f) < 1e-3f);
+        // The plot draws it there too.
+        MonitorFixtureItem *fi = gv->m_fixtures.value(flame->id());
+        QVERIFY(QLineF(fi->realPosition() / 1000.0, QPointF(flameNow.x(), flameNow.y())).length() < 0.3);
+
+        // Turned, it all goes round together.
+        const double flameFromBase = QLineF(base->centre(), QPointF(flameNow.x(), flameNow.y())).length();
+        const double parFromBase = QLineF(base->centre(), QPointF(parNow.x(), parNow.y())).length();
+        QVERIFY(gv->rotateSelectedItems(90.0) >= 4);
+        const QVector3D flameT = props->fixtureRigPosition(flame->id());
+        const QVector3D parT = props->fixtureRigPosition(par->id());
+        QVERIFY(qAbs(QLineF(base->centre(), QPointF(flameT.x(), flameT.y())).length() - flameFromBase) < 0.02);
+        QVERIFY(qAbs(QLineF(base->centre(), QPointF(parT.x(), parT.y())).length() - parFromBase) < 0.02);
+        QVERIFY(base->containsPoint(flameT.x(), flameT.y()));
+        QVERIFY(base->containsPoint(parT.x(), parT.y()));
+        delete mon;
+    }
+    delete doc;
+}
+
+void Monitor_Test::aFountainsFlameUnlocksWhereItShowsLocked()
+{
+    Doc *doc = new Doc(this);
+    QLCFixtureDef *def = silkFlameDef();
+    QVERIFY(def != nullptr);
+    QVERIFY(doc->fixtureDefCache()->addFixtureDef(def));
+    MonitorProperties *props = doc->monitorProperties();
+    props->setGridUnits(MonitorProperties::Meters);
+    props->setGridSize(QVector3D(12, 6, 8));
+    {
+        QWidget parent;
+        Monitor *mon = new Monitor(&parent, doc);
+        MonitorGraphicsView *gv = mon->m_graphicsView;
+        Fixture *flame = nullptr;
+        const quint32 gid = addTestFountain(*mon, doc, def, &flame);
+        QVERIFY(gid != 0 && flame != nullptr);
+        StagePlatform *base = props->platforms().first();
+        MonitorFixtureItem *fi = gv->m_fixtures.value(flame->id());
+        QVERIFY(fi != nullptr);
+        QVERIFY(fi->flags() & QGraphicsItem::ItemIsMovable);
+
+        // The fountain's layer locked (from its base): the flame with it, and back.
+        gv->setItemLayerLocked("platform", base->id(), true);
+        QVERIFY(fi->m_ghosted);
+        QVERIFY(gv->itemHolds("fixture", flame->id()) & ItemLock::HeldLayer);
+        gv->setItemLayerLocked("fixture", flame->id(), false);    // from the flame
+        QVERIFY(!fi->m_ghosted);
+        QVERIFY(!props->layer(base->layerId()).locked);
+        QVERIFY(fi->flags() & QGraphicsItem::ItemIsMovable);
+
+        // The fountain locked as a group: held, and the flame's own menu lifts it.
+        props->setGroupLocked(gid, true);
+        gv->refreshItemLayerState();
+        QVERIFY(!(fi->flags() & QGraphicsItem::ItemIsMovable));
+        QVERIFY(gv->itemHolds("fixture", flame->id()) & ItemLock::HeldFolder);
+        QMenu menu;
+        {
+            ContextMenu cm(&menu);
+            gv->populateItemMenu(&menu, cm, QStringLiteral("fixture"), flame->id(), QPointF());
+        }
+        QAction *unlock = nullptr;
+        foreach (QAction *a, menu.findChildren<QAction *>())
+            if (a->text() == QStringLiteral("Unlock Group Position"))
+                unlock = a;
+        QVERIFY2(unlock != nullptr, "the flame shows held by its group with no unlock beside it");
+        unlock->trigger();
+        QVERIFY(!props->group(gid).locked);
+        QVERIFY(fi->flags() & QGraphicsItem::ItemIsMovable);
+        QCOMPARE(gv->itemHolds("fixture", flame->id()), int(ItemLock::NotHeld));
+
+        // Unlocked, it moves.
+        const QVector3D before = props->fixtureRigPosition(flame->id());
+        gv->scene()->clearSelection();
+        dragOnPlot(gv, fi, QPoint(10, 6));
+        QVERIFY(props->fixtureRigPosition(flame->id()) != before);
+        delete mon;
+    }
+    delete doc;
+}
+
+void Monitor_Test::aWledRingLaysItsPixelsOnTheWallTop()
+{
+    Doc *doc = new Doc(this);
+    QLCFixtureDef *def = silkFlameDef();
+    QVERIFY(def != nullptr);
+    QVERIFY(doc->fixtureDefCache()->addFixtureDef(def));
+    MonitorProperties *props = doc->monitorProperties();
+    props->setGridUnits(MonitorProperties::Meters);
+    props->setGridSize(QVector3D(12, 6, 8));
+    Fixture *ring = makeLedString(doc, 40, "Ring", 0);
+    QVERIFY(ring != nullptr);
+    props->setFixturePosition(ring->id(), 0, 0, QVector3D(1000.0f, 1000.0f, 0.0f));
+    {
+        QWidget parent;
+        Monitor *mon = new Monitor(&parent, doc);
+        MonitorGraphicsView *gv = mon->m_graphicsView;
+        Fixture *flame = nullptr;
+        const quint32 gid = addTestFountain(*mon, doc, def, &flame);
+        const Fountain::Parts f = Fountain::ofGroup(props, gid);
+        QVERIFY(f.isValid());
+        const QPointF c = f.base->centre();
+        QVERIFY(Fountain::mountIn(doc, props, ring->id(), c.x(), c.y() + 0.1));
+        FixtureRigProps rp = props->fixtureRigProps(ring->id());
+        QVERIFY(!rp.fixedAim);                          // a string is not aimed
+        rp.pixelPath = PixelPath::InnerWallTop;
+        props->setFixtureRigProps(ring->id(), rp);
+        gv->updateFixture(ring->id());
+        const QVector<QVector3D> pts = PixelPath::positions(doc, props, ring->id(), 40);
+        QCOMPARE(pts.size(), 40);
+        for (const QVector3D &p : pts)
+            QVERIFY(qAbs(p.z() - Fountain::innerTop(f)) < 0.01f);
+        // In order round the U: the first at one end, the last at the other.
+        const QVector3D endA = f.inner->pointAt(-1.0, 0.0), endB = f.inner->pointAt(1.0, 0.0);
+        QVERIFY(QVector2D(pts.first().x() - endA.x(), pts.first().y() - endA.y()).length()
+                < QVector2D(pts.first().x() - endB.x(), pts.first().y() - endB.y()).length());
+        // The plot draws each one, and in its head's live colour.
+        MonitorFixtureItem *fi = gv->m_fixtures.value(ring->id());
+        QCOMPARE(fi->pathPixels().size(), 40);
+        QByteArray vals(512, char(0));
+        vals[0] = char(255);                            // pixel 1 red
+        vals[3 * 5 + 2] = char(255);                    // pixel 6 blue
+        ring->setChannelValues(vals);
+        fi->slotUpdateValues();
+        QVERIFY2(fi->pathPixelColour(0).red() > 200 && fi->pathPixelColour(0).blue() < 50,
+                 qPrintable(fi->pathPixelColour(0).name(QColor::HexArgb)));
+        QVERIFY(fi->pathPixelColour(5).blue() > 200);
+        delete mon;
+    }
+    delete doc;
+}
+
+void Monitor_Test::aHeldWandGoesWithItsPerformer()
+{
+    Doc *doc = new Doc(this);
+    MonitorProperties *props = doc->monitorProperties();
+    props->setGridUnits(MonitorProperties::Meters);
+    props->setGridSize(QVector3D(12, 6, 8));
+    Fixture *wand = makeLedString(doc, 60, "Wand", 1);
+    QVERIFY(wand != nullptr);
+    props->setFixturePosition(wand->id(), 0, 0, QVector3D(1000.0f, 1000.0f, 0.0f));
+    StageTarget *ann = props->addStageTarget();
+    ann->setName("Ann");
+    ann->setKind(StageTarget::Kind::Person);
+    ann->setX(5.0f);
+    ann->setY(3.0f);
+    {
+        QWidget parent;
+        parent.resize(1400, 900);
+        Monitor *mon = new Monitor(&parent, doc);
+        MonitorGraphicsView *gv = mon->m_graphicsView;
+        FixtureRigProps rp = props->fixtureRigProps(wand->id());
+        rp.pixelPath = PixelPath::Wand;
+        rp.heldBy = ann->id();
+        props->setFixtureRigProps(wand->id(), rp);
+        gv->updateFixture(wand->id());
+        gv->updateTargets();
+        MonitorFixtureItem *fi = gv->m_fixtures.value(wand->id());
+        QCOMPARE(fi->pathPixels().size(), 60);
+        QVERIFY(!fi->m_staffLine.isNull());
+        const QPointF before = fi->sceneBoundingRect().center();
+
+        // She is dragged across the stage: the wand goes with her.
+        TargetItem *ti = gv->m_targetItems.value(ann->id());
+        QVERIFY(ti != nullptr);
+        dragOnPlot(gv, ti, QPoint(100, 0));
+        QVERIFY(ann->x() > 5.5f);
+        QVERIFY(qAbs(props->fixtureRigPosition(wand->id()).x() - ann->x()) < 1e-3f);
+        QVERIFY(fi->sceneBoundingRect().center().x() > before.x() + 50);
+        delete mon;
+    }
+    delete doc;
+}
+
 void Monitor_Test::selectAllTakesEverythingSelectable()
 {
     Doc *doc = new Doc(this);
@@ -29949,3 +30371,4 @@ void Monitor_Test::peopleFollowTheirLine()
     QVERIFY(qAbs((line->linePoints().last() - line->linePoints().first()).length() - lenBefore) < 1e-3f);
     delete doc;
 }
+

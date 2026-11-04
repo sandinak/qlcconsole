@@ -372,6 +372,27 @@ struct FixtureRigProps
     /** Its glass: -1 = as the definition says, 0 = diffusing, 1 = clear. */
     int              lightGlass = -1;
 
+    /** A silk flame: how high the silk rises (metres) from where it starts
+     *  (Fountain::flameBottom(): a fountain's inner wall top, else its own
+     *  top). Below 0 = not set: an older show, given one on load. */
+    float            flameHeight = -1.0f;
+
+    /** Where its LEDs are (PixelPath::Shape, docs/design/FOUNTAIN_WAND.md):
+     *  0 = where its heads are drawn as always; else round a fountain's
+     *  wall top or base, up its flame, or along a wand. */
+    int              pixelPath = 0;
+    /** Turns of a spiral (up the flame) or a wand's helix; 0 = automatic. */
+    float            pixelTurns = 0.0f;
+    /** A wand: the staff's length (metres). */
+    float            wandLength = 1.2f;
+    /** A wand held by a Person target (its id); UINT_MAX = not held. Held,
+     *  its middle is holdHeight up, in front of them, leaning holdTilt
+     *  degrees forward, and it moves with them. */
+    quint32          heldBy = UINT_MAX;
+    float            holdHeight = 1.0f;
+    float            holdTilt = 20.0f;
+    bool isHeld() const { return heldBy != UINT_MAX; }
+
     /** Deck mount: a fixture standing ON TOP of a stage platform ("floor
      *  mounted"). Unlike a riser FACE mount it keeps its free XY position; only
      *  its Z is derived — the platform's top height plus @c deckHeightOffset

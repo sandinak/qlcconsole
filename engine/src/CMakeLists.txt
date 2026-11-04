@@ -110,6 +110,8 @@ add_library(${module_name} SHARED
     gobolibrary.cpp gobolibrary.h
     headlayout.cpp headlayout.h
     righeads.cpp righeads.h
+    fountain.cpp fountain.h
+    pixelpath.cpp pixelpath.h
     hanger.cpp hanger.h
     wledfixture.cpp wledfixture.h
     scenetransition.cpp scenetransition.h
