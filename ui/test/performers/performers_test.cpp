@@ -242,6 +242,37 @@ void Performers_Test::countSpreadsEvenly()
     QVERIFY(PerformerFill::people(&props, t).isEmpty());
 }
 
+void Performers_Test::peopleKeepTheirFractionsWhenTheLineChanges()
+{
+    MonitorProperties props;
+    PerformerFill::Options o;
+    StageTarget *t = PerformerFill::addLine(&props, QVector3D(1.0f, 2.0f, 0.0f),
+                                            QVector3D(9.0f, 2.0f, 0.0f), 5, o, 0);
+    // Shorten by the end: the same fractions of the new length (1..5).
+    QVector<QVector3D> pts = t->linePoints();
+    pts.last() = pts.last() - QVector3D(4.0f, 0.0f, 0.0f);
+    t->setLinePoints(pts);
+    t->recentreLine();
+    QList<PerformerFill::Performer> p = PerformerFill::people(&props, t);
+    for (int i = 0; i < 5; ++i)
+        QVERIFY2(qAbs(p.at(i).feet.x() - (1.0f + i)) < 1e-3f, qPrintable(QString::number(p.at(i).feet.x())));
+    // Bend it: a middle point off the line; still first on one end, last on
+    // the other, and in between along the curve (no one off it).
+    pts = t->linePoints();
+    pts.insert(1, (pts.first() + pts.last()) * 0.5f + QVector3D(0.0f, 2.0f, 0.0f));
+    t->setLinePoints(pts);
+    p = PerformerFill::people(&props, t);
+    const QVector<QVector3D> world = props.targetLinePoints(t);
+    QVERIFY(qAbs(p.first().feet.x() - world.first().x()) < 1e-3f);
+    QVERIFY(qAbs(p.last().feet.x() - world.last().x()) < 1e-3f);
+    QVERIFY(p.at(2).feet.y() > 2.5f);                 // the middle one is up the bend
+    // Moved whole: all of them move with it.
+    const float x0 = p.at(1).feet.x();
+    t->setX(t->x() + 1.5f);
+    p = PerformerFill::people(&props, t);
+    QVERIFY(qAbs(p.at(1).feet.x() - (x0 + 1.5f)) < 1e-3f);
+}
+
 void Performers_Test::feetStandOnTheHighestSurface()
 {
     MonitorProperties props;
