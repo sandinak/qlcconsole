@@ -10,6 +10,29 @@ under `~/.claude/.../memory/`.
 
 ---
 
+## Cue lists on the timeline, the timeline on timecode (design, 2026-11-04) — waiting on Q216–Q221
+
+Design: [docs/design/TIMELINE_SHOWTREE.md](../design/TIMELINE_SHOWTREE.md).
+The cue times in the Show Tree are the one truth. A cue list on a Shows track
+becomes a cue-list clip that draws and edits those times; the timeline's
+playhead is a clock the Show Tree chases (GO by position).
+- **P0** (ROI 30): a timeline edit to a cue list's generated chaser is refused,
+  with the reason; stale shows.md lines fixed. **In progress** (tlguard).
+- **P1** (ROI 4): cue-list clip. It draws sections, cue ticks and anchors from
+  the tree, and its edits are Q198 tree steps:
+  - drag a tick to set that cue's time;
+  - drag a section edge to set the section start (⇧ ripples later sections);
+  - drag the clip to shift the whole list.
+- **P2** (ROI 5.3): the timeline's clock as a fourth TimecodeCues source. A
+  song file runs its cue lists; Learn works with no DAW.
+- **P3** (ROI 6): markers bound to sections by name; "Sections from markers";
+  "Cue list here…" replaces "Link cue list…" (menu count flat).
+- **P4** (ROI 8): a "Timeline 0 =" field and a timecode ruler. The offset
+  mapping moves into the engine; the hour snap is announced and can be undone.
+- Not built: MTC out (LATER, ROI 1.6). LTC out (NO: needs an audio engine).
+- About 11.5 days in all. Starts after the board answers.
+
+
 ## Edit keys the same in every list (WF1-A, W1-27, W2-Q2; wfkeys, 2026-11-04) — built, leftovers
 
 ⌫ / F2 / ⌘C ⌘V / ⌘D / ⌘F / Esc in the Show Tree, Build (Palettes,
