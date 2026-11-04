@@ -51,7 +51,7 @@ private slots:
     /** Moving or turning the riser carries its people; Undo carries them
      *  back; moved out from under them, their feet come down. */
     void movingTheRiserMovesThem();
-    /** The set moves as one piece. */
+    /** The set, picked as a group, moves as one piece; one click picks one line. */
     void theSetMovesAsOnePiece();
     /** Count, seed, spread and costume survive save and load; a plain line
      *  and a mark are written as before. */

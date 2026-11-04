@@ -701,6 +701,21 @@ public:
      *  clicked. */
     void selectItemsInGroup(quint32 gid);
 
+    /** The plot group Select Group picks for an item: the folder it is filed
+     *  in (for a truss or riser, the one around its own parts group); 0 when
+     *  it is in none. */
+    quint32 selectableGroupOf(const QString &kind, quint32 id) const;
+    /** Select Group: every item of selectableGroupOf(@p kind, @p id). */
+    void selectGroupOf(const QString &kind, quint32 id);
+
+    /** Select All Similar, for every kind on the plot: the items of the same
+     *  kind as (@p kind, @p id) -- a fixture's model and mode, a target's
+     *  kind (people: the same set), a structure's type -- itself included,
+     *  in id order. */
+    QList<QPair<QString, quint32> > similarObjects(const QString &kind, quint32 id) const;
+    /** Select them (and in Plot layers). */
+    void selectSimilarTo(const QString &kind, quint32 id);
+
     /** Select a single map item by kind ("fixture"/"truss"/"platform"/
      *  "target"/"power") and id. Used by the Layers tree item leaves. */
     void selectMapItem(const QString &kind, quint32 id);
@@ -1020,6 +1035,7 @@ protected:
 
     /** Right-click on empty canvas emits contextMenuRequested; on items routes to them. */
     void contextMenuEvent(QContextMenuEvent *event) override;
+    bool event(QEvent *e) override;
 
     /** Accept fixtures dragged in from the Inventory panel
      *  ("application/x-qlc-fid": a run of quint32 fixture ids). */
@@ -1144,9 +1160,35 @@ private:
      *  decide whether an auto-group is dedicated (anchorable) or a manual mix. */
     int structuralMembersOf(quint32 gid) const;
 
-    /** Extend the current selection to include every group-mate of any selected
-     *  grouped item (the select-together behaviour). Re-entrancy guarded. */
+    /** A selected truss or riser brings its own parts (its dedicated group:
+     *  bars, hangers, the fixtures rigged on it). Nothing else is extended:
+     *  a click selects exactly what was clicked, and a plot group is picked
+     *  from Plot layers or Select Group. Re-entrancy guarded. */
     void extendSelectionToGroups();
+
+    /** The outermost group a selected item takes along when the selection is
+     *  grouped or moved to a layer: all of it is selected, or the item is a
+     *  structure's part. 0: the item goes on its own. */
+    quint32 groupCarriedBySelection(QGraphicsItem *gi) const;
+
+    /** The built assembly @p gi is part of (MonitorGroup::assembly); 0 if none. */
+    quint32 assemblyOfItem(QGraphicsItem *gi) const;
+    /** The assembly a double-click went into: a click on its parts picks
+     *  one part until Escape or a click outside it. 0: none. */
+    quint32 m_enteredAssembly = 0;
+    void leaveAssembly();
+
+    /** What Select All Similar matches for (@p kind, @p id); empty: nothing. */
+    QString similarKey(const QString &kind, quint32 id) const;
+    /** Select Group, in @p cm's Selection section, when the item is in one. */
+    void addSelectGroup(ContextMenu &cm, const QString &kind, quint32 id);
+    /** What a menu action on (@p kind, @p id) acts on: the selection when it
+     *  was right-clicked inside it, else the item alone. */
+    QList<QPair<QString, quint32> > menuObjects(const QString &kind, quint32 id) const;
+    /** How many things @p objects are: an assembly's parts count once. */
+    int itemUnits(const QList<QPair<QString, quint32> > &objects) const;
+    /** Lock / Unlock Position, or Lock N Items for the selection: one undo. */
+    void addLockAction(QMenu *menu, const QString &kind, quint32 id);
 
     /** Scene-pixel Y of the floor (Z=0) line — bottom of the grid — used as the
      *  baseline for elevation (Front/Side) views. */

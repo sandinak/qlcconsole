@@ -818,6 +818,9 @@ private:
         QColor  color;
         int     kind = 0;           ///< StageTarget::Kind
         QVector<QVector3D> linePoints;   ///< a line's points, relative
+        /** The whole target as saved, minus id and group: kind, colour,
+         *  footprint, aim and person heights, a line's points and people. */
+        QByteArray xml;
     };
 
     /** A fixture hung on a copied truss: pasted as a new fixture on the
@@ -859,6 +862,15 @@ private:
      *  first (PasteFixtures); false when that was cancelled, or there was
      *  nothing to paste. */
     bool pasteClipboard(float dxM, float dyM);
+public:
+    /** Duplicate (Cmd/Ctrl+D, and the right-click menu's Duplicate): copy
+     *  the selection and paste it half a metre on, one undo step. False
+     *  when nothing selected can be copied. */
+    bool duplicateSelected();
+    /** The next free name like @p name among the targets: "Soloist" ->
+     *  "Soloist 2", "Lead 2" -> "Lead 4" when 3 is taken. */
+    QString nextTargetName(const QString &name) const;
+private:
     PasteFixturesAsk m_pasteFixturesAsk;
     /** askPlacementLayer()'s answer, kept until the event loop next runs. */
     bool m_placementAnswered = false;

@@ -38,7 +38,7 @@ Notation in the tables:
 | Place | Items, in order |
 |---|---|
 | **Fixture Manager** tree | Fixture Properties… · Definition && Mode… · Change Definition… · Edit Fixture Definition… · Plot Symbol ▸ · LED Layout… · Output Rules… · `---` · Patch… · Return to Inventory… · `---` · Test Fixture… · Locate · Reset · Why is this on? · `---` · Select All Similar · Group ▸ · Power ▸ · Channel Behaviour && Modifiers… · `---` · Delete… · `---` · Expand All · Collapse All |
-| **Plot** map and **Plot Layers** list (`monitorgraphicsview.cpp` `buildItemMenu`, the same one for both) | Fixture Properties… · LED Layout… · Edit Truss…/Pipe…/Tower… (its mount) · Locate · Why is this on? · Patch… · Split by Head Type… · Select All Similar (N) · Gobo Wheels… · [x] Show Light Footprint · `---` · Mount on ▸ · … · `---` · Show in Plot Layers / Show on Map · Rename… · `---` · Remove from Folder · New Folder from Selection… · Remove from Fixture Group · Create Fixture Group from Selection… · Move to Layer ▸ · New Layer from Selection… · `---` · Remove from View |
+| **Plot** map and **Plot Layers** list (`monitorgraphicsview.cpp` `buildItemMenu`, the same one for both) | Fixture Properties… · LED Layout… · Edit Truss…/Pipe…/Tower… (its mount) · Locate · Why is this on? · Patch… · Split by Head Type… · Select All Similar (N) · Select Group “name” · Gobo Wheels… · [x] Show Light Footprint · `---` · Mount on ▸ · … · `---` · Show in Plot Layers / Show on Map · Rename… · `---` · Remove from Folder · New Folder from Selection… · Remove from Fixture Group · Create Fixture Group from Selection… · Move to Layer ▸ · New Layer from Selection… · `---` · Remove from View |
 | **Riser face editor** (`monitorfixtureitem.cpp` `contextMenuEvent`) | Locate · Why is this on? · `---` · Facing (pan-zero) ▸ · Remove from Truss "X" · Set Mounting Height… |
 | **Structure Studio** fixture (`monitor.cpp`) | Edit fixture… · Remove from Truss |
 | **Build ▸ Groups & fixtures** | Select all similar · `---` · Create fixture group from fixture… · Output Rules… |
@@ -248,7 +248,8 @@ groups and fixtures gets one menu for both.
   (several heads), Gobo Wheels… (its own glass), Output Rules…, Split by
   Head Type… (mixed)
 - Selection: Selection ▸ (Create Fixture Group from Selection… inside),
-  Select All Similar
+  Select All Similar; on the plot and Plot Layers, Select Group “name”
+  (its plot folder)
 - Edit: Rename / Rename… (one fixture)
 - Places on top: Fixture Manager (definition, inventory, test, Group ▸,
   Power ▸; Delete… last), the plot and Plot Layers (Mount on ▸, the mount's
@@ -329,6 +330,10 @@ Layers.
 - Kind: Patch Others Like This…, Duplicate Setup to…, Add ▸, Used By ▸ (a
   target: the Aim palettes pointing at it, each opened to edit), Save as
   Gear Model… (network node), Fixture Layout…, Ungroup
+- Selection: Selection ▸ (fixtures among the selection), Select All Similar
+  (N) (the same kind: a target's kind, people of a set, a truss's type…),
+  Select Group “name” (its plot folder; a click on the plot takes only the
+  item)
 - Edit: Rename (in place in the list) / Rename… (the map)
 - Remove: Delete X / Delete Target…
 - On top: Show Light Footprints, Lock Position, Lock Layer, Show on Map /

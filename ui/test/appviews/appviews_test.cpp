@@ -79,6 +79,8 @@
 #include "monitor.h"
 #include "monitorgraphicsview.h"
 #include "monitorproperties.h"
+#include "stagetarget.h"
+#include "targetitem.h"
 #define protected public
 #include "app.h"
 #include "dmxmonitorwindow.h"
@@ -4813,4 +4815,60 @@ void AppViews_Test::theFooterSaysWhatLightsTheStage()
     QVERIFY(chip->text().endsWith(QString::fromUtf8("\xe2\x80\xa6")));
     QVERIFY(chip->sizeHint().width() <= m_app->width() / 5 + 16);
     QVERIFY(chip->toolTip().contains(QString(120, 'x')));
+}
+
+void AppViews_Test::ctrlDOnThePlotDuplicates()
+{
+    m_app->clearDocument();
+    Doc *doc = m_app->doc();
+    doc->setMode(Doc::Design);
+    m_app->show();
+    m_app->activateWindow();
+    QVERIFY(QTest::qWaitForWindowActive(m_app));
+    m_app->showContext(QStringLiteral("Lighting Studio"));
+    Monitor *mon = Monitor::instance();
+    QVERIFY(mon != nullptr);
+    MonitorGraphicsView *gv = mon->findChild<MonitorGraphicsView *>();
+    QVERIFY(gv != nullptr);
+    MonitorProperties *props = doc->monitorProperties();
+    StageTarget *t = props->addStageTarget();
+    t->setName(QStringLiteral("Soloist"));
+    t->setKind(StageTarget::Kind::Person);
+    t->setPosition(QVector3D(3.0f, 3.0f, 0.0f));
+    gv->updateTargets();
+    QVERIFY(gv->m_targetItems.value(t->id()) != nullptr);
+    gv->scene()->clearSelection();
+    gv->m_targetItems.value(t->id())->setSelected(true);
+    const int before = props->stageTargets().size();
+
+    // Dump DMX opens a dialog: close it if it ever does, and count it.
+    QSignalSpy dumped(m_app->m_dumpDmxAction, &QAction::triggered);
+    QTimer closer;
+    connect(&closer, &QTimer::timeout, [&]() {
+        if (QWidget *modal = QApplication::activeModalWidget())
+            modal->close();
+    });
+    closer.start(50);
+
+    // The key as a person types it: to the focused plot, through the
+    // main window's shortcut map.
+    gv->viewport()->setFocus();
+    QTRY_VERIFY(gv->hasFocus() || gv->viewport()->hasFocus());
+    QTest::keyClick(QApplication::focusWidget(), Qt::Key_D, Qt::ControlModifier);
+    QCoreApplication::processEvents();
+    QCOMPARE(props->stageTargets().size(), before + 1);
+    QCOMPARE(dumped.count(), 0);
+    bool named = false;
+    foreach (StageTarget *o, props->stageTargets())
+        named = named || o->name() == QStringLiteral("Soloist 2");
+    QVERIFY(named);
+
+    // Nothing selected: the plot leaves Ctrl+D to the window (Dump DMX).
+    gv->scene()->clearSelection();
+    QTest::keyClick(QApplication::focusWidget(), Qt::Key_D, Qt::ControlModifier);
+    QCoreApplication::processEvents();
+    QCOMPARE(props->stageTargets().size(), before + 1);
+    QCOMPARE(dumped.count(), 1);
+    closer.stop();
+    m_app->clearDocument();
 }
