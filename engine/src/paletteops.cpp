@@ -301,6 +301,41 @@ quint32 PaletteOps::duplicate(quint32 paletteId)
     return made;
 }
 
+QList<quint32> PaletteOps::duplicate(const QList<quint32> &paletteIds)
+{
+    QList<QLCPalette *> srcs;
+    for (quint32 id : paletteIds)
+        if (QLCPalette *src = m_doc->palette(id))
+            if (isManaged(id) && !srcs.contains(src))
+                srcs << src;
+    if (srcs.size() == 1)
+    {
+        const quint32 one = duplicate(srcs.first()->id());
+        return one == QLCPalette::invalidId() ? QList<quint32>() : QList<quint32>{ one };
+    }
+    QList<quint32> made;
+    if (srcs.isEmpty())
+        return made;
+    step(tr("Duplicate %1 palettes").arg(srcs.size()), {}, [&](QList<quint32> &ids) {
+        for (QLCPalette *src : srcs)
+        {
+            QLCPalette *copy = src->createCopy();
+            if (copy == nullptr)
+                continue;
+            copy->setName(src->name() + tr(" (copy)"));
+            if (!m_doc->addPalette(copy))
+            {
+                delete copy;
+                continue;
+            }
+            made << copy->id();
+            ids << copy->id();
+        }
+        return !made.isEmpty();
+    });
+    return made;
+}
+
 bool PaletteOps::rename(quint32 paletteId, const QString &name)
 {
     QLCPalette *p = m_doc->palette(paletteId);

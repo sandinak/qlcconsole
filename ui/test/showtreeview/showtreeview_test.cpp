@@ -2291,6 +2291,160 @@ void ShowTreeView_Test::dropsOnTheCuePage()
     view.hide();
 }
 
+/* wfaudit 2026-11-03: a drop that is refused, or would change nothing,
+   says why in the drop hint -- while over the spot and after letting go --
+   never just a no-drop cursor or a drop that quietly does nothing. */
+void ShowTreeView_Test::refusedDropsSayWhy()
+{
+    FixtureGroup *towers = group("Towers", 0, 1);
+    FixtureGroup *usts = group("USTs", 1, 1);
+    Scene *fn = new Scene(m_doc);
+    fn->setName("Haze look");
+    m_doc->addFunction(fn);
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L", ListMode::Tracking);
+    const quint32 c1 = st->addCue(list, -1, "One");
+    Target tt;
+    tt.groups << towers->id();
+    const quint32 l1 = st->addLayer(c1, tt);
+    Target ft;
+    ft.function = fn->id();
+    const quint32 opaque = st->addLayer(c1, ft);
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1200, 800);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QLabel *hint = view.findChild<QLabel *>("stDropHint");
+    QVERIFY(hint != nullptr);
+
+    QScopedPointer<QMimeData> towersMime(idsMime(FixtureGroupSource::fixtureGroupMimeType(), { towers->id() }));
+    QScopedPointer<QMimeData> ustsMime(idsMime(FixtureGroupSource::fixtureGroupMimeType(), { usts->id() }));
+    QScopedPointer<QMimeData> fnMime(idsMime(FunctionsTreeWidget::functionDragMimeType(), { fn->id() }));
+
+    // The reasons, in words.
+    QCOMPARE(view.dropRefusal(c1, l1, towersMime.data()),
+             QString("✕ Towers is already in layer Towers (⇧: a child layer on part of it)"));
+    QCOMPARE(view.dropRefusal(c1, l1, fnMime.data()),
+             QString("✕ A function goes on the cue, not on a layer: drop it on the cue's row"));
+    QVERIFY(view.dropRefusal(c1, opaque, ustsMime.data()).startsWith("✕ Layer Haze look plays a function"));
+    QCOMPARE(view.dropRefusal(invalidId(), invalidId(), ustsMime.data()),
+             QString("✕ Drop it on a cue or one of its layers"));
+    // What would do something has no refusal.
+    QVERIFY(view.dropRefusal(c1, l1, ustsMime.data()).isEmpty());
+    QVERIFY(view.dropRefusal(c1, invalidId(), towersMime.data()).isEmpty());
+
+    // A drop that does nothing returns false and leaves the reason.
+    QVERIFY(!view.dropMime(c1, l1, towersMime.data()));
+    QVERIFY(view.lastDropFailure().contains("already in layer Towers"));
+    QCOMPARE(st->cue(c1)->layers.count(), 2);
+
+    // On the cue page: the Towers row refuses Towers and says so, while over
+    // it and after the drop; no second Towers layer appears.
+    QVERIFY(view.selectNode(c1));
+    QListWidget *rows = view.cueLayerList();
+    QPoint onTowers(-1, -1);
+    for (int i = 0; i < rows->count(); ++i)
+        if (rows->item(i)->text().contains("Towers"))
+            onTowers = rows->visualItemRect(rows->item(i)).center();
+    QVERIFY(onTowers.x() >= 0);
+    bool taken = true;
+    const QString said = dragAndDrop(rows->viewport(), onTowers,
+                                     idsMime(FixtureGroupSource::fixtureGroupMimeType(), { towers->id() }),
+                                     hint, Qt::NoModifier, &taken);
+    Q_UNUSED(taken)     // taken as nothing (IgnoreAction), so the page doesn't make it a new layer
+    QVERIFY2(said.contains("already in layer Towers"), qPrintable(said));
+    QVERIFY2(hint->text().contains("already in layer Towers"), qPrintable(hint->text()));
+    QCOMPARE(st->cue(c1)->layers.count(), 2);
+    view.hide();
+}
+
+/* wfaudit 2026-11-03: with several cues or layers selected, a right-click
+   offers what acts on all of them, labelled with how many -- never an item
+   that silently does just the clicked one. */
+void ShowTreeView_Test::severalSelectedMenusActOnAll()
+{
+    FixtureGroup *towers = group("Towers", 0, 1);
+    FixtureGroup *usts = group("USTs", 1, 1);
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L", ListMode::Tracking);
+    const quint32 c1 = st->addCue(list, -1, "One");
+    const quint32 c2 = st->addCue(list, 0, "Two");
+    const quint32 c3 = st->addCue(list, 1, "Three");
+    Target ta, tb;
+    ta.groups << towers->id();
+    tb.groups << usts->id();
+    const quint32 la = st->addLayer(c1, ta);
+    const quint32 lb = st->addLayer(c1, tb);
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1200, 800);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+
+    auto names = [](QMenu *m) {
+        QStringList out;
+        for (QAction *a : m->findChildren<QAction *>())
+            out << a->objectName();
+        return out;
+    };
+    auto text = [](QMenu *m, const char *name) {
+        QAction *a = m->findChild<QAction *>(name);
+        return a == nullptr ? QString() : a->text();
+    };
+
+    // Two layers selected.
+    QVERIFY(view.selectNode(la, c1));
+    QTreeWidgetItem *rowA = view.tree()->currentItem();
+    QVERIFY(view.selectNode(lb, c1));
+    rowA->setSelected(true);
+    {
+        QMenu menu;
+        view.fillTreeMenu(&menu, rowA);
+        QCOMPARE(text(&menu, "stDeleteLayer"), QString("Delete 2 Layers"));
+        QCOMPARE(text(&menu, "stDuplicateLayer"), QString("Duplicate 2 Layers"));
+        QCOMPARE(text(&menu, "stCopyLayer"), QString("Copy 2 Layers"));
+        const QStringList all = names(&menu);
+        for (const char *single : { "stRenameLayer", "stMakeLayerReusable", "stDesignEffectLayer", "stRefineLayer",
+                                    "stDetachLayer", "stSplitLayer" })
+            QVERIFY2(!all.contains(single), single);
+        QVERIFY(all.contains("stSeveralLayers") || menu.findChild<QMenu *>("stSeveralLayers") != nullptr);
+    }
+    // One layer: its own full menu, as before.
+    view.tree()->clearSelection();
+    QVERIFY(view.selectNode(la, c1));
+    {
+        QMenu menu;
+        view.fillTreeMenu(&menu, view.tree()->currentItem());
+        QCOMPARE(text(&menu, "stDeleteLayer"), QString("Delete Layer"));
+        QVERIFY(names(&menu).contains("stRenameLayer"));
+    }
+
+    // Two cues selected (One and Two): Move Down moves both, past Three.
+    view.tree()->clearSelection();
+    QVERIFY(view.selectNode(c1));
+    QTreeWidgetItem *cueOne = view.tree()->currentItem();
+    QVERIFY(view.selectNode(c2));
+    cueOne->setSelected(true);
+    {
+        QMenu menu;
+        view.fillTreeMenu(&menu, cueOne);
+        QCOMPARE(text(&menu, "stDeleteCue"), QString("Delete 2 Cues"));
+        QCOMPARE(text(&menu, "stDuplicateCue"), QString("Duplicate 2 Cues"));
+        QVERIFY(!names(&menu).contains("stRecordAsNew"));
+        QVERIFY(!names(&menu).contains("stCopyToLook"));
+        QAction *down = menu.findChild<QAction *>("stMoveCueDown");
+        QVERIFY(down != nullptr && down->isEnabled());
+        QCOMPARE(down->text(), QString("Move 2 Cues Down"));
+        down->trigger();
+    }
+    const CueList *l = st->cueList(list);
+    QCOMPARE(l->cues.first().id, c3);
+    QCOMPARE(l->indexOf(c1), 1);
+    QCOMPARE(l->indexOf(c2), 2);
+    view.hide();
+}
+
 /* The layer page: several groups dropped on it all join the layer; on a
    carried-in layer's page they bring it into the cue. The tree takes the
    same on a carried-in row. */

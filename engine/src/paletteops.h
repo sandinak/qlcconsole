@@ -116,6 +116,9 @@ public:
                    const std::function<void(QLCPalette *)> &setup = std::function<void(QLCPalette *)>());
     /** A copy, "<name> (copy)", in the same folder. */
     quint32 duplicate(quint32 paletteId);
+    /** Each of @a paletteIds copied, in one undo step: the copies' ids, in
+     *  order (the unmanaged ones are skipped). */
+    QList<quint32> duplicate(const QList<quint32> &paletteIds);
     bool rename(quint32 paletteId, const QString &name);
     /** File @a paletteIds in @a folder ("" none). */
     bool move(const QList<quint32> &paletteIds, const QString &folder);

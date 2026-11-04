@@ -397,7 +397,10 @@ protected:
         ShowTree::Target carried;
         target(e->position().toPoint(), &cue, &layer, &carried);
         const bool child = e->modifiers() & Qt::ShiftModifier;
-        if (cue != ShowTree::invalidId() && m_view->acceptsDrop(cue, layer, e->mimeData(), carried, child))
+        // Refused, or nothing would change: said, never just a no-drop cursor.
+        const QString refusal = m_view->dropRefusal(cue, layer, e->mimeData(), carried, child);
+        if (cue != ShowTree::invalidId() && refusal.isEmpty()
+            && m_view->acceptsDrop(cue, layer, e->mimeData(), carried, child))
         {
             e->acceptProposedAction();
             if (m_hint != nullptr)
@@ -410,7 +413,7 @@ protected:
         {
             e->ignore();
             if (m_hint != nullptr)
-                m_hint->setText(QString());
+                m_hint->setText(refusal);
         }
     }
 
@@ -532,11 +535,15 @@ protected:
             return;
         }
         const bool child = e->modifiers() & Qt::ShiftModifier;
-        if (m_view->acceptsDrop(cue, layer, mime, carried, child)
-            && m_view->dropMime(cue, layer, mime, e->modifiers() & Qt::AltModifier, carried, false, child))
+        if (m_view->dropMime(cue, layer, mime, e->modifiers() & Qt::AltModifier, carried, false, child))
             e->acceptProposedAction();
         else
+        {
+            // Nothing happened: the hint says why (it was cleared above).
             e->ignore();
+            if (m_hint != nullptr)
+                m_hint->setText(m_view->lastDropFailure());
+        }
     }
 
 private:
@@ -824,13 +831,21 @@ public:
 protected:
     bool takes(const QMimeData *mime, bool child = false) const
     {
-        return cue != ShowTree::invalidId() && m_view->acceptsDrop(cue, layer, mime, target, child);
+        return cue != ShowTree::invalidId() && refusal(mime, child).isEmpty()
+               && m_view->acceptsDrop(cue, layer, mime, target, child);
+    }
+    QString refusal(const QMimeData *mime, bool child) const
+    {
+        return m_view->dropRefusal(cue, layer, mime, target, child);
     }
     void dragEnterEvent(QDragEnterEvent *e) override
     {
         const bool child = e->modifiers() & Qt::ShiftModifier;
         if (!takes(e->mimeData(), child))
+        {
+            say(refusal(e->mimeData(), child));
             return;
+        }
         e->acceptProposedAction();
         setDropActive(true);
         say(m_view->dropHint(cue, layer, e->mimeData(), e->modifiers() & Qt::AltModifier, target, child));
@@ -841,6 +856,7 @@ protected:
         if (!takes(e->mimeData(), child))
         {
             e->ignore();
+            say(refusal(e->mimeData(), child));
             return;
         }
         e->acceptProposedAction();
@@ -857,12 +873,14 @@ protected:
         setDropActive(false);
         say(QString());
         const bool child = e->modifiers() & Qt::ShiftModifier;
-        if (takes(e->mimeData(), child)
-            && m_view->dropMime(cue, layer, e->mimeData(), e->modifiers() & Qt::AltModifier, target, stayOnCue,
-                                child))
+        if (m_view->dropMime(cue, layer, e->mimeData(), e->modifiers() & Qt::AltModifier, target, stayOnCue,
+                             child))
             e->acceptProposedAction();
         else
+        {
             e->ignore();
+            say(m_view->lastDropFailure());
+        }
     }
     void paintEvent(QPaintEvent *e) override
     {
@@ -926,13 +944,18 @@ public:
                 t = targets.at(r);
             if (m_view->acceptsDrop(cue, l, mime, t, child))
             {
+                // Onto that row, but nothing would change (already in it):
+                // refused and said, never quietly a new layer instead.
+                if (!m_view->dropRefusal(cue, l, mime, t, child).isEmpty())
+                    return false;
                 *layer = l;
                 *target = t;
                 *row = r;
                 return true;
             }
         }
-        return !child && m_view->acceptsDrop(cue, ShowTree::invalidId(), mime);
+        return !child && m_view->acceptsDrop(cue, ShowTree::invalidId(), mime)
+               && m_view->dropRefusal(cue, ShowTree::invalidId(), mime).isEmpty();
     }
     void clearDropRow()
     {
@@ -964,10 +987,20 @@ protected:
         const bool child = e->modifiers() & Qt::ShiftModifier;
         if (!where(e->position().toPoint(), e->mimeData(), &l, &t, &r, child))
         {
-            e->ignore();
             showRow(-1);
             m_page->setDropActive(false);
-            m_page->say(QString());
+            const QString row = rowRefusal(e->position().toPoint(), e->mimeData(), child);
+            if (!row.isEmpty())
+            {
+                // Taken here, as nothing: an ignored drag goes on to the
+                // page, which would make it a new layer instead.
+                e->setDropAction(Qt::IgnoreAction);
+                e->accept();
+                m_page->say(row);
+                return;
+            }
+            e->ignore();
+            m_page->say(refusalAt(e->position().toPoint(), e->mimeData(), child));
             return;
         }
         e->acceptProposedAction();
@@ -994,10 +1027,57 @@ protected:
         showRow(-1);
         m_page->setDropActive(false);
         m_page->say(QString());
+        const QString row = ok ? QString() : rowRefusal(e->position().toPoint(), e->mimeData(), child);
+        if (!row.isEmpty())
+        {
+            e->setDropAction(Qt::IgnoreAction);
+            e->accept();
+            m_page->say(row);
+            return;
+        }
         if (ok && m_view->dropMime(m_page->cue, l, e->mimeData(), e->modifiers() & Qt::AltModifier, t, true, child))
             e->acceptProposedAction();
         else
+        {
             e->ignore();
+            m_page->say(ok ? m_view->lastDropFailure()
+                           : refusalAt(e->position().toPoint(), e->mimeData(), child));
+        }
+    }
+    /** Why the row at @a pos refuses a drop it would otherwise take ("already
+     *  in it"); empty: no row there, or it takes it, or it never would. */
+    QString rowRefusal(const QPoint &pos, const QMimeData *mime, bool child) const
+    {
+        QListWidgetItem *item = itemAt(pos);
+        if (item == nullptr || m_page->cue == ShowTree::invalidId())
+            return QString();
+        const int r = QListWidget::row(item);
+        quint32 l = ShowTree::invalidId();
+        ShowTree::Target t;
+        if (item->data(ShowTreeView::KindRole).toInt() == ShowTreeView::LayerNode)
+            l = item->data(ShowTreeView::IdRole).toUInt();
+        else if (r < targets.count())
+            t = targets.at(r);
+        if (!m_view->acceptsDrop(m_page->cue, l, mime, t, child))
+            return QString();
+        return m_view->dropRefusal(m_page->cue, l, mime, t, child);
+    }
+    /** Why a drop at @a pos is refused: the row's reason, else the cue's. */
+    QString refusalAt(const QPoint &pos, const QMimeData *mime, bool child) const
+    {
+        quint32 l = ShowTree::invalidId();
+        ShowTree::Target t;
+        if (QListWidgetItem *item = itemAt(pos))
+        {
+            const int r = QListWidget::row(item);
+            if (item->data(ShowTreeView::KindRole).toInt() == ShowTreeView::LayerNode)
+                l = item->data(ShowTreeView::IdRole).toUInt();
+            else if (r < targets.count())
+                t = targets.at(r);
+        }
+        const QString why = m_view->dropRefusal(m_page->cue, l, mime, t, child);
+        return why.isEmpty() ? m_view->dropRefusal(m_page->cue, ShowTree::invalidId(), mime, ShowTree::Target(), child)
+                             : why;
     }
 
 private:
@@ -7104,6 +7184,86 @@ bool ShowTreeView::acceptsDrop(quint32 cueId, quint32 layerId, const QMimeData *
     return targets || mime->hasFormat(QLatin1String(FunctionsTreeWidget::functionDragMimeType()));
 }
 
+QString ShowTreeView::dropRefusal(quint32 cueId, quint32 layerId, const QMimeData *mime, const Target &target,
+                                  bool child) const
+{
+    if (mime == nullptr)
+        return QString();
+    const bool reusables = mime->hasFormat(QLatin1String(reusableMimeType()));
+    const QList<quint32> groups = idsFromMime(mime, FixtureGroupSource::fixtureGroupMimeType());
+    const QList<quint32> fixtures = idsFromMime(mime, FixtureGroupSource::fixtureMimeType());
+    const QList<quint32> sets = idsFromMime(mime, setMimeType());
+    const bool targets = !groups.isEmpty() || !fixtures.isEmpty() || !sets.isEmpty();
+    const bool palettes = mime->hasFormat(QLatin1String(FunctionsTreeWidget::paletteDragMimeType()))
+                          || mime->hasFormat(QLatin1String(targetMimeType()));
+    const QList<quint32> funcs = idsFromMime(mime, FunctionsTreeWidget::functionDragMimeType());
+    if (!reusables && !targets && !palettes && funcs.isEmpty())
+        return QString();   // not something the tree takes at all
+    const Cue *cue = cueId == invalidId() ? nullptr : m_st->cue(cueId);
+    if (cue == nullptr)
+        return tr("✕ Drop it on a cue or one of its layers");
+    if (reusables)
+        return child ? tr("✕ A reusable goes on a cue: let go without ⇧") : QString();
+
+    const Layer *l = layerId == invalidId() ? nullptr : cue->layer(layerId);
+    const Target onto = l != nullptr ? l->target : target;
+    const QString layerName = l != nullptr ? (l->name.isEmpty() ? m_st->targetLabel(l->target) : l->name)
+                                           : m_st->targetLabel(target);
+    const bool onLayer = l != nullptr || !target.isEmpty();
+    Target dropped;
+    dropped.groups = groups;
+    dropped.fixtures = fixtures;
+    dropped.sets = sets;
+    const QString what = groups.isEmpty() && sets.isEmpty() ? tr("These fixtures") : m_st->targetLabel(dropped);
+
+    if (child)
+    {
+        if (l == nullptr)
+            return tr("✕ ⇧: a child layer goes under a layer of this cue's own");
+        if (l->target.isOpaque())
+            return tr("✕ ⇧: layer %1 plays a function, so it has no child layers").arg(layerName);
+        if (!targets)
+            return tr("✕ ⇧ makes a child layer: drag a group or fixtures");
+        return QString();
+    }
+    if (onLayer && onto.isOpaque())
+        return !funcs.isEmpty() && !targets && !palettes
+                   ? tr("✕ A function goes on the cue, not on a layer: drop it on the cue's row")
+                   : tr("✕ Layer %1 plays a function as it is: looks and groups go on a look layer "
+                        "or on the cue").arg(layerName);
+    if (onLayer && !targets && !palettes)
+        return tr("✕ A function goes on the cue, not on a layer: drop it on the cue's row");
+    if (onLayer && targets && !palettes)
+    {
+        // Nothing new for the layer: say so rather than doing nothing.
+        bool adds = false;
+        for (quint32 g : groups)
+            adds |= !onto.groups.contains(g);
+        for (quint32 f : fixtures)
+            adds |= !onto.fixtures.contains(f);
+        for (quint32 s : sets)
+            adds |= !onto.sets.contains(s);
+        if (!adds)
+            return groups.count() + fixtures.count() + sets.count() == 1
+                       ? tr("✕ %1 is already in layer %2 (⇧: a child layer on part of it)").arg(what, layerName)
+                       : tr("✕ %1 are already in layer %2 (⇧: a child layer on part of it)").arg(what, layerName);
+    }
+    if (!onLayer && !funcs.isEmpty() && !targets && !palettes)
+    {
+        bool any = false;
+        for (quint32 f : funcs)
+            any |= !m_st->isGenerated(f) && m_doc->function(f) != nullptr;
+        if (!any)
+            return tr("✕ The Show Tree made that function itself: drop the palette or group it plays");
+    }
+    return QString();
+}
+
+QString ShowTreeView::lastDropFailure() const
+{
+    return m_lastDropFailure.isEmpty() ? tr("✕ Nothing changed: that can't go there") : m_lastDropFailure;
+}
+
 ShowTree::Target ShowTreeView::carriedTarget(quint32 cueId, const QString &signature) const
 {
     const CueList *list = m_st->listOfCue(cueId);
@@ -7145,7 +7305,8 @@ QStringList ShowTreeView::cueLayerItems() const
 bool ShowTreeView::dropMime(quint32 cueId, quint32 layerId, const QMimeData *mime, bool separate,
                             const Target &target, bool stayOnCue, bool child)
 {
-    if (!acceptsDrop(cueId, layerId, mime, target, child))
+    m_lastDropFailure = dropRefusal(cueId, layerId, mime, target, child);
+    if (!m_lastDropFailure.isEmpty() || !acceptsDrop(cueId, layerId, mime, target, child))
         return false;
     if (mime->hasFormat(QLatin1String(reusableMimeType())))
         return dropReusables(cueId, idsFromMime(mime, reusableMimeType()));
@@ -7168,7 +7329,10 @@ bool ShowTreeView::dropMime(quint32 cueId, quint32 layerId, const QMimeData *mim
         QString why;
         done = targets && dropChildLayers(cueId, layerId, groups, fixtures, sets, separate, &why);
         if (!done && !why.isEmpty())
-            m_hint->setText(why);
+        {
+            m_lastDropFailure = tr("✕ %1").arg(why);
+            m_hint->setText(m_lastDropFailure);
+        }
     }
     else if (!pals.isEmpty())
         done = dropPalettes(cueId, layerId, pals, layerId == invalidId() ? target : Target());
@@ -8034,6 +8198,42 @@ void ShowTreeView::fillLayerMenu(ContextMenu &menu, quint32 cueId, quint32 layer
         return;
     const Target t = own != nullptr ? own->target : tracked;
     const bool design = m_doc->mode() == Doc::Design;
+    // Several selected: only what acts on all of them (the "N Selected
+    // Layers" menu above has the rest), never an item that quietly does
+    // just the clicked one.
+    const bool one = place.count <= 1;
+    if (!one)
+    {
+        const int n = place.count;
+        if (place.open)
+            menu.add(ContextMenu::Open, tr("Open in Workbench"), place.open, QStringLiteral("ctxOpenLayer"))
+                ->setToolTip(tr("The cue in the Workbench, on this layer"));
+        if (place.cut)
+            menu.add(ContextMenu::Edit, tr("Cut %1 Layers").arg(n), place.cut, QStringLiteral("stCutLayer"))
+                ->setShortcut(QKeySequence::Cut);
+        if (place.copy)
+            menu.add(ContextMenu::Edit, tr("Copy %1 Layers").arg(n), place.copy, QStringLiteral("stCopyLayer"))
+                ->setShortcut(QKeySequence::Copy);
+        if (place.paste)
+        {
+            const bool cueClip = !m_commander->clipboard.cues.isEmpty();
+            QAction *paste = menu.add(ContextMenu::Edit,
+                                      cueClip ? tr("Paste After This Cue")
+                                              : (m_commander->clipboard.cut ? tr("Move Here, After This Layer")
+                                                                            : tr("Paste After This Layer")),
+                                      place.paste, QStringLiteral("stPasteHere"));
+            paste->setShortcut(QKeySequence::Paste);
+            paste->setEnabled(!m_commander->clipboard.isEmpty());
+        }
+        if (place.duplicate)
+            menu.add(ContextMenu::Edit, tr("Duplicate %1 Layers").arg(n), place.duplicate,
+                     QStringLiteral("stDuplicateLayer"))
+                ->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_D));
+        if (place.remove)
+            menu.add(ContextMenu::Remove, tr("Delete %1 Layers").arg(n), place.remove, QStringLiteral("stDeleteLayer"))
+                ->setToolTip(tr("Take them out of their cues (one undo step)"));
+        return;
+    }
 
     /* ---- This place: a layer carried in can be brought into the cue as it
        is, or start here instead of in the cue that sets it ---- */
@@ -8393,6 +8593,8 @@ void ShowTreeView::fillTreeMenu(QMenu *out, QTreeWidgetItem *item)
             place.paste = [this]() { pasteClipboard(); };
             place.duplicate = [this]() { duplicateSelection(); };
             place.remove = [this]() { slotDelete(); };
+            if (item->isSelected())
+                place.count = qMax(1, int(selectedLayerRefs().count()));
         }
         fillLayerMenu(menu, cueId, kind == LayerNode ? id : invalidId(), tracked, place);
         return;
@@ -8442,7 +8644,10 @@ void ShowTreeView::fillTreeMenu(QMenu *out, QTreeWidgetItem *item)
         colourMenu(menu.addMenu(ContextMenu::Kind, cues.count() == 1 ? tr("Colour")
                                                                      : tr("Colour (%1 Cues)").arg(cues.count()),
                                 QStringLiteral("stColourMenu")), cues);
-        if (!hit && list != nullptr)
+        // Several cues: only items that act on all of them (no item that
+        // quietly does just the clicked one).
+        const bool single = cues.count() == 1;
+        if (!hit && list != nullptr && single)
         {
             menu.add(ContextMenu::Kind, tr("Record as New Cue"), [this, cueId]() { recordFrom(cueId); },
                      QStringLiteral("stRecordAsNew"));
@@ -8484,7 +8689,7 @@ void ShowTreeView::fillTreeMenu(QMenu *out, QTreeWidgetItem *item)
                                    [this]() { convertSelectedCues(false); }, QStringLiteral("stMakeSubCueMenu"));
             if (convert != nullptr)
                 convert->setEnabled(design);
-            if (list != nullptr)
+            if (list != nullptr && single)
             {
                 // P4: a reusable cue, or this use unlinked.
                 if (list->cue(cueId)->reusable == invalidId())
@@ -8509,18 +8714,31 @@ void ShowTreeView::fillTreeMenu(QMenu *out, QTreeWidgetItem *item)
                 lookFolderMenu(menu.addMenu(ContextMenu::Organise, tr("Move to Folder"),
                                             QStringLiteral("stLookMoveToFolder")), list->id, looks);
         }
-        // Up / down: renumbered for the new place, as a drag is.
-        QAction *up = menu.add(ContextMenu::Organise, tr("Move Up"), [this, list, cueId, at]() {
-            dropCues({ cueId }, list->cues.at(at - 1).id, false);
-        }, QStringLiteral("stMoveCueUp"));
-        up->setEnabled(at > 0);
-        QAction *down = menu.add(ContextMenu::Organise, tr("Move Down"), [this, list, cueId, at]() {
-            dropCues({ cueId }, list->cues.at(at + 1).id, true);
-        }, QStringLiteral("stMoveCueDown"));
-        down->setEnabled(list != nullptr && at + 1 < list->cues.count());
+        // Up / down: renumbered for the new place, as a drag is. Several
+        // cues of one list move as a block, past the cue above or below.
+        int first = at, last = at;
+        bool oneList = list != nullptr;
+        for (quint32 c : cues)
+        {
+            const int i = list == nullptr ? -1 : list->indexOf(c);
+            oneList = oneList && i >= 0;
+            first = qMin(first, i);
+            last = qMax(last, i);
+        }
+        if (oneList)
+        {
+            QAction *up = menu.add(ContextMenu::Organise, single ? tr("Move Up") : tr("Move %1 Cues Up").arg(cues.count()), [this, list, cues, first]() {
+                dropCues(cues, list->cues.at(first - 1).id, false);
+            }, QStringLiteral("stMoveCueUp"));
+            up->setEnabled(first > 0);
+            QAction *down = menu.add(ContextMenu::Organise, single ? tr("Move Down") : tr("Move %1 Cues Down").arg(cues.count()), [this, list, cues, last]() {
+                dropCues(cues, list->cues.at(last + 1).id, true);
+            }, QStringLiteral("stMoveCueDown"));
+            down->setEnabled(last + 1 < list->cues.count());
+        }
 
         /* ---- 7. Clipboard and a copy ---- */
-        menu.add(ContextMenu::Edit, tr("Copy"), [this]() { copySelection(); }, QStringLiteral("stCopyCue"))
+        menu.add(ContextMenu::Edit, single ? tr("Copy") : tr("Copy %1 Cues").arg(cues.count()), [this]() { copySelection(); }, QStringLiteral("stCopyCue"))
             ->setShortcut(QKeySequence::Copy);
         QAction *paste = menu.add(ContextMenu::Edit,
                                   !m_commander->clipboard.cues.isEmpty() ? tr("Paste After This Cue")
@@ -8529,11 +8747,14 @@ void ShowTreeView::fillTreeMenu(QMenu *out, QTreeWidgetItem *item)
                                   [this]() { pasteClipboard(); }, QStringLiteral("stPasteHere"));
         paste->setShortcut(QKeySequence::Paste);
         paste->setEnabled(!m_commander->clipboard.isEmpty());
-        menu.add(ContextMenu::Edit, tr("Duplicate"), [this]() { duplicateSelection(); }, QStringLiteral("stDuplicateCue"))
+        menu.add(ContextMenu::Edit, single ? tr("Duplicate") : tr("Duplicate %1 Cues").arg(cues.count()), [this]() { duplicateSelection(); },
+                 QStringLiteral("stDuplicateCue"))
             ->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_D));
 
         /* ---- 8. Delete, last ---- */
-        menu.add(ContextMenu::Remove, hit ? tr("Delete Hit") : sub ? tr("Delete Sub-cue") : tr("Delete Cue"),
+        menu.add(ContextMenu::Remove, !single ? (hit ? tr("Delete %1 Hits").arg(cues.count())
+                                                     : tr("Delete %1 Cues").arg(cues.count()))
+                                      : hit ? tr("Delete Hit") : sub ? tr("Delete Sub-cue") : tr("Delete Cue"),
                  [this]() { slotDelete(); }, QStringLiteral("stDeleteCue"));
         return;
     }
@@ -9976,10 +10197,16 @@ void ShowTreeView::fillLibraryMenu(QMenu *out, QTreeWidgetItem *item)
             menu.add(ContextMenu::Place, tr("Adopt as a Hit"), [this, id]() { adoptAsLook(id); },
                      QStringLiteral("stAdoptAsLook"));
         // Then the function's own menu, as in Build (ContextMenus::function).
+        // On every function selected, as palettes and groups above: the
+        // clicked one first (its name heads single-item labels).
+        QList<quint32> fids { id };
+        for (QTreeWidgetItem *sel : m_library->selectedItems())
+            if (sel->data(0, KindRole).toInt() == LibFunction && !fids.contains(sel->data(0, IdRole).toUInt()))
+                fids << sel->data(0, IdRole).toUInt();
         ContextMenus::FunctionPlace place;
         place.parent = this;
         place.changed = [this]() { reloadLibrary(); };
-        ContextMenus::function(menu, m_doc, { id }, place);
+        ContextMenus::function(menu, m_doc, fids, place);
     }
 }
 

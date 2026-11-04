@@ -1816,6 +1816,9 @@ void ProgrammingOutline::dropEvent(QDropEvent *event)
     const QString plan = dropPlan(mime, qlcEventPos(event), copy, &toScene, &atPalette, &folder);
     if (plan.isEmpty() || plan.startsWith(QLatin1Char('!')))
     {
+        // Refused: the reason stays up (the hover said it; the drop did nothing).
+        if (plan.startsWith(QLatin1Char('!')))
+            emit hintChanged(plan.mid(1));
         event->ignore();
         return;
     }
@@ -1826,9 +1829,15 @@ void ProgrammingOutline::dropEvent(QDropEvent *event)
         {
             QTimer::singleShot(0, this, [this]() { rebuild(); emit itemSelectionChanged(); });
             emit layersEdited();
+            event->setDropAction(Qt::CopyAction);
+            event->accept();
         }
-        event->setDropAction(Qt::CopyAction);
-        event->accept();
+        else
+        {
+            emit hintChanged(m_stack->lastRefusal().isEmpty() ? tr("✕ Nothing changed: that can't go there")
+                                                              : m_stack->lastRefusal());
+            event->ignore();
+        }
         return;
     }
     if (mime->hasFormat(rowMimeType()))
@@ -1936,6 +1945,9 @@ void ProgrammingOutline::keyPressEvent(QKeyEvent *event)
         {
             if (m_stack->clearAttribute(int(rowOf(cur).scene), int(rowOf(cur).id)))
                 emit layersEdited();
+            else
+                emit hintChanged(tr("✕ Nothing to clear: a grey value is carried in from an earlier cue. "
+                                    "Set it here to change it, or clear it in the cue that sets it."));
             return;
         }
         const QList<Row> rows = selectedRows();
@@ -1953,7 +1965,19 @@ void ProgrammingOutline::keyPressEvent(QKeyEvent *event)
             for (QTreeWidgetItem *it : selectedItems())
                 if (it->parent() == nullptr && layerOf(it) >= 0)
                     layers << layerOf(it);
-            removeLayers(layers);
+            if (!layers.isEmpty() && !removeLayers(layers))
+            {
+                // Said, never nothing: grey rows are an earlier cue's.
+                bool tracked = m_stack != nullptr;
+                const QList<WorkbenchStack::Layer> all = m_stack == nullptr ? QList<WorkbenchStack::Layer>()
+                                                                            : m_stack->layers();
+                for (int i : layers)
+                    tracked = tracked && i < all.size() && all.at(i).tracked;
+                emit hintChanged(tracked
+                    ? tr("✕ A grey layer is carried in from an earlier cue: remove it in the cue that sets it, "
+                         "or release it on the cue before this one")
+                    : tr("✕ These layers can't be taken out here"));
+            }
         }
         else if (!scenes.isEmpty())
             emit deleteScenesRequested(scenes);

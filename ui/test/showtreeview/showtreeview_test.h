@@ -85,6 +85,8 @@ private slots:
     void aDimmedColourOnPixelBarsReachesTheUniverse();
     // Drop on the page (2026-10-17)
     void dropsOnTheCuePage();
+    void refusedDropsSayWhy();
+    void severalSelectedMenusActOnAll();
     void dropsOnTheLayerPage();
     // Documenting gaps closed (2026-10-17)
     void mergeLayersBySelectingThem();

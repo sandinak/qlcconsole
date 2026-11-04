@@ -50,6 +50,7 @@ private slots:
     void theFunctionsTabFollowsTheCanon();
 
     void aPaletteHasOneMenuEverywhere();
+    void severalPalettesDuplicateInOneStep();
     void aLookRowPutsItsOwnItemsOnTop();
     void aFunctionHasOneMenuEverywhere();
     void aLayerHasOneMenuEverywhere();

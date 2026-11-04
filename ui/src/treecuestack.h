@@ -96,6 +96,7 @@ public:
     bool takesDrops() const override { return true; }
     QString dropPlanOn(int layer, const QMimeData *mime, bool separate) const override;
     bool dropOn(int layer, const QMimeData *mime, bool separate) override;
+    QString lastRefusal() const override;
     /** Look rows dragged onto layer @a layer (attributeMimeType()): what it
      *  does, "!why" when it can't. */
     QString attributeDropPlan(int layer, const QMimeData *mime, bool copy) const;

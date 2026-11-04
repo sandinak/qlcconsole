@@ -133,6 +133,7 @@ W say the light (⇧W feedback), H hold, ⌘Z undo, Esc leave. See
 | **Esc** | Back out one level: a palette double-clicked open goes back to the page it covered (as its **↩ Back**), a group's layout to its scene (**← Back**), the effect bench to the scene it was opened from (asking first if the effect hasn't been kept), a ▣ layer to its collection (**↩**) ([Backing out](build.md#backing-out-esc)) |
 | ⌘→ / ⌘← | Expand / collapse every row |
 | ⌘Z / ⇧⌘Z | Undo / redo the last change, here or in the Show Tree (one history) |
+| ⌘F | To Build's search (palettes, effects and scenes) |
 | ⇧⌘N | New here: a scene in the selected folder; in the Workbench a scene layer (collection) or the next step (chaser); in Effects a new effect ([New here](build.md#new-here)) |
 | Click a row (outline) | Load it in the Workbench |
 | Double-click a palette / a group | The palette in the Look Editor / the group's head layout |
@@ -195,6 +196,7 @@ W say the light (⇧W feedback), H hold, ⌘Z undo, Esc leave. See
 | Keys | Does |
 |---|---|
 | **Return** / **F2** | Rename the selected fixture, group, group folder or universe in place; Esc cancels ([Layout](fixture-manager.md#layout)) |
+| ⌘F | To the fixture search |
 | Double-click | A group opens its grid editor, a fixture its properties, a folder renames |
 | ⌫ / Delete | Delete the selected fixtures or groups, asking first (as the toolbar's **Delete…**) |
 | ⌘D | Duplicate: a new fixture like each selected one, unpatched in the **Inventory**, named on (Front → Front #2); a group, a copy of it in the same folder |

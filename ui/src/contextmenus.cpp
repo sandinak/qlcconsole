@@ -815,6 +815,15 @@ void ContextMenus::palette(ContextMenu &menu, Doc *doc, const QList<quint32> &pa
     }
 
     /* ---- 7. A copy; its name ---- */
+    if (editable && pids.size() > 1)
+    {
+        // Several selected: each copied, one undo step (as Delete takes them all).
+        menu.add(ContextMenu::Edit, ContextMenu::tr("Duplicate %1 Palettes").arg(pids.size()),
+                 [doc, pids, changed]() {
+            if (!doc->paletteOps()->duplicate(pids).isEmpty() && changed)
+                changed();
+        }, QStringLiteral("ctxDuplicate"));
+    }
     if (editable && pids.size() == 1)
     {
         const std::function<void(quint32)> edit = place.edit;

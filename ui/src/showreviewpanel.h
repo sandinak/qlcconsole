@@ -104,6 +104,9 @@ public:
     static bool allMeantRows(const QList<ReviewFinding> &findings, bool meant);
     /** Fix the selected row: its jump, or a footer row's action. */
     bool fixSelected();
+    /** Fix ▸ / a double-click: fixSelected(), and if it couldn't go there,
+     *  the summary line says so */
+    void fixOrSay();
 
 public slots:
     /** Run every check again, then redraw. */

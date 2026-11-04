@@ -44,6 +44,7 @@
 #include "qlcui_export.h"
 
 class QProgressDialog;
+class QXmlStreamWriter;
 class VideoProvider;
 class QMessageBox;
 class QToolButton;
@@ -473,7 +474,7 @@ private:
      *  About/Preferences/Quit are relocated to the application menu by Qt via
      *  their QAction::menuRole on macOS. */
     void initMenuBar();
-    bool handleFileError(QFile::FileError error);
+    bool handleFileError(QFile::FileError error, const QString &fileName = QString());
     bool saveModifiedDoc(const QString & title, const QString & message);
 
     /** Load @p fileName into a new, throwaway Doc (not m_doc) for File >
@@ -927,6 +928,10 @@ public:
      * @return QFile::NoError if successful.
      */
     QFile::FileError saveXML(const QString& fileName, bool autosave = false);
+    /** Whether everything written to @a file through @a writer reached it
+     *  (no writer error, the flush took): a save that wasn't never replaces
+     *  the file it was to replace. */
+    static bool writtenWhole(const QXmlStreamWriter &writer, QFileDevice *file);
 
     /** Save As's file types: qlcconsole's .qlcc, QLC+ 4's .qxw, any file. */
     static QStringList saveAsFilters();
@@ -1006,6 +1011,8 @@ public:
 private slots:
     /** Slot called by autosave timer to perform autosave */
     void slotAutosave();
+    /** The status chip says the last autosave failed, and @a why on hover */
+    void autosaveFailed(const QString &why);
 
 private:
     /** Initialize autosave system */

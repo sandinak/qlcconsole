@@ -1179,6 +1179,42 @@ void LookEditor_Test::theHostSpreadStandsInForTheEffectsOwn()
     QTRY_COMPARE(ownRows(), 2);                     // its own again
 }
 
+/* wfaudit 2026-11-03: a Pan/Tilt look on a scene of pars used to edit
+   happily and move nothing. It says so, as a gobo look on pars does. */
+void LookEditor_Test::aLookTheTargetsCantDoIsSaid()
+{
+    Doc doc(this);
+    Scene *scene = new Scene(&doc);
+    doc.addFunction(scene);
+    QLCPalette *pos = new QLCPalette(QLCPalette::PanTilt, &doc);
+    pos->setName("Centre");
+    QVERIFY(doc.addPalette(pos));
+    scene->addPalette(pos->id());
+
+    LookEditor ed(&doc);
+    ed.resize(1000, 700);
+    ed.show();
+    // No fixtures yet: nothing to warn about.
+    ed.setContextScene(scene);
+    ed.setPalette(pos->id());
+    QVERIFY(!ed.m_warning->isVisible());
+
+    for (int i = 0; i < 2; ++i)
+    {
+        Fixture *fx = new Fixture(&doc);
+        fx->setName(QString("Par %1").arg(i + 1));
+        fx->setChannels(1);
+        fx->setAddress(quint32(i));
+        QVERIFY(doc.addFixture(fx));
+        scene->addFixture(fx->id());
+    }
+    ed.setContextScene(scene);
+    ed.setPalette(pos->id());
+    QTRY_VERIFY(ed.m_warning->isVisible());
+    QVERIFY(ed.m_warning->text().contains("can pan or tilt"));
+    ed.setContextScene(nullptr);
+}
+
 /* "need S3 .. resolved": the Spread row shows the look's heads coloured by
    phase, and follows the settings as they change. */
 void LookEditor_Test::theSpreadIsPreviewed()

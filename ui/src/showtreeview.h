@@ -229,6 +229,10 @@ public:
         std::function<void()> open;         ///< Open in Workbench
         std::function<void()> cut, copy, paste, duplicate;
         std::function<void()> remove;       ///< Delete Layer
+        /** How many layers are selected (cut, copy, duplicate and delete act
+         *  on all of them): above 1, the one-layer items are left out and
+         *  the labels say how many. */
+        int count = 1;
     };
     /** A layer's own menu (the canon's kind block), the same in the tree and
      *  on the Workbench's layer row; @p layerId invalid: carried in, @p
@@ -441,6 +445,13 @@ public:
     void noteRecentFromMime(const QMimeData *mime);
     bool acceptsDrop(quint32 cueId, quint32 layerId, const QMimeData *mime,
                      const ShowTree::Target &target = ShowTree::Target(), bool child = false) const;
+    /** Why a drop of @a mime here is refused or would change nothing, in
+     *  words for the drop hint ("✕ Towers is already in layer Towers");
+     *  empty when it would do something (or isn't the tree's to take). */
+    QString dropRefusal(quint32 cueId, quint32 layerId, const QMimeData *mime,
+                        const ShowTree::Target &target = ShowTree::Target(), bool child = false) const;
+    /** Why the last dropMime() that returned false did nothing. */
+    QString lastDropFailure() const;
     /** Any drop on (@a cueId, @a layerId or carried-in @a target), as the
      *  tree, the cue page and the layer page take it: palettes set looks,
      *  groups / fixtures make a layer (⌥ @a separate: one each) or join
@@ -1047,6 +1058,7 @@ private:
     QToolButton *m_record;
     QToolButton *m_merge;
     QLabel *m_hint;
+    QString m_lastDropFailure;      //!< why the last refused drop did nothing
     QToolButton *m_previewPlay = nullptr;   //!< RC8: Play over a running show
     QList<QToolButton *> m_pagePlay;        //!< the cue and layer pages' Play / Stop
     QList<QToolButton *> m_pageSolo;        //!< ...and their Solo

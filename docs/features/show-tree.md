@@ -2114,6 +2114,11 @@ menus](fixture-manager.md#right-click-menus)):
   **+ Cue**, **+ Sub-cue** (and **+ Production…** on a production or on
   empty space, with **+ Hit for Everywhere**); on a layer, **Merge Layers**
   and, with several selected, **N Selected Layers ▸**;
+- **several selected:** the menu offers only what acts on all of them, and
+  says how many: **Copy 2 Layers**, **Duplicate 3 Cues**, **Move 2 Cues
+  Down** (they move as a block), **Delete 3 Cues**. Items that work on one
+  thing (Rename, Record as New Cue, Make Reusable, Focus This Cue…) appear
+  when one is selected;
 - a cue: **Open in Workbench** | **Learn Trigger…**, **Skip Cue**, **Don't
   Move in Black into This Cue**, **Mode ▸**, **Colour ▸**, **Record as New
   Cue**, **Copy to a Hit** (what it puts on stage, as a new hit),
@@ -2177,6 +2182,14 @@ half) or after it (its lower half). Each dropped cue is renumbered for its
 new place, and several move as a block ([Reordering and
 numbering](#reordering-and-numbering)). With **⌥** held, the drop makes the
 other cue include it instead (one cue at a time).
+
+**When a drop does nothing, the hint says why.** Over a spot that can't
+take what you drag, the hint at the top right says why instead of going
+blank: *"✕ Towers is already in layer Towers (⇧: a child layer on part of
+it)"*, *"✕ A function goes on the cue, not on a layer: drop it on the cue's
+row"*, *"✕ Layer Haze plays a function as it is: looks and groups go on a
+look layer or on the cue"*. If you let go anyway, the reason stays up. The
+same goes for the cue page, the layer page and the Workbench's rows.
 
 **Deleting.** **Delete** (or Backspace) in the tree deletes the selected cue
 or layer at once. With several cues and layers selected, they all go, in one

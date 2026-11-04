@@ -70,7 +70,13 @@ tablet and setting up users.
   the time. For a show never saved, the next launch offers to **recover
   the unsaved work**. For a saved show the copy is *Show*.qlcc.autosave
   beside it (see [Troubleshooting](troubleshooting.md#files-and-fixtures)).
-  Saving, or a clean quit, removes it.
+  Saving, or a clean quit, removes it. If a recovery copy can't be written
+  (a full disk, a folder you can't write to), the footer turns to **⚠
+  Autosave failed**; hover it for why, and save the show.
+- **A save that can't finish never spoils the show.** The new file is
+  written beside the old one first; if it can't be written whole, the old
+  one stays as it was and the error names the file. Make room or Save As
+  somewhere else.
 - **What changed since the save?** Click **● Unsaved changes** in the
   footer (hover says how many). A list opens, newest first: the time, what
   sort of thing (cue, layer, look, target, fixture, settings) and what was
