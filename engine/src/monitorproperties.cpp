@@ -1753,6 +1753,19 @@ void MonitorProperties::setGroupAssembly(quint32 gid, bool on)
         m_groups[gid].assembly = on;
 }
 
+quint32 MonitorProperties::assemblyOf(quint32 gid) const
+{
+    int guard = 0;
+    while (gid != 0 && m_groups.contains(gid) && guard++ < 64)
+    {
+        const MonitorGroup &g = m_groups[gid];
+        if (g.assembly)
+            return gid;
+        gid = g.parentGroupId;
+    }
+    return 0;
+}
+
 void MonitorProperties::setGroupLocked(quint32 gid, bool locked)
 {
     if (m_groups.contains(gid))

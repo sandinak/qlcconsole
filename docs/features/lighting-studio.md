@@ -437,8 +437,10 @@ scene, not a marker, so they stay drawn while their layer is visible.
 
 Lines go in a **Performers** layer of their own (made the first time). Its
 eye hides them on the plot and in the rig view, and its lock holds them
-still. A fill's lines are one group named for the set: click one to select
-them all and drag the set as one piece; click again to pick one line out.
+still. A fill's lines are one group named for the set: a click picks one line
+(its people with it); click the set's row in **Plot layers**, or
+right-click a line ▸ **Select Group** or **Select All Similar**, to take
+the whole set and drag it as one piece.
 Move or turn a riser and the lines standing on it go with it; move the
 riser out from under a line and its people step down to what is there.
 A fill's lines stay out of the aim-target lists (a Look's Aim target, an
@@ -679,9 +681,11 @@ outer 8" high and the inner 14", 4" apart:
   base, out of sight behind the walls; the **silk starts at the top of the
   inner wall** and rises by the **Fire height** (3 ft unless you set it).
 
-They're one group, on one layer, so the fountain drags and turns (**]** /
-**[**) as one, flame and all, and a layer or group lock holds all of it
-(and lifts from any of its pieces). Light pointed at the inner wall — pars
+It is built as one thing, on one layer: a click on any part selects the
+whole fountain, which drags and turns (**]** / **[**) as one, flame and all,
+and a layer or group lock holds all of it (and lifts from any of its
+pieces). Double-click a part to work on it alone (**Esc**, or a click
+outside, comes back out). Light pointed at the inner wall — pars
 in the gap, uplighting it — lands on its face.
 
 **The fountain's editor.** Double-click the base: its editor is titled with
@@ -1238,6 +1242,51 @@ of, and doesn't override, the real locks above.
 
 ## Selecting and undo on the plot
 
+**One rule for everything on the plot** — fixtures, targets (people,
+points, lines, areas), trusses and other structures, decks, scenery,
+props, images and nodes:
+
+- **A click selects exactly what you click.** One person out of a group of
+  performers is just that person; one line of a choir is that line, its
+  pair of people with it; a truss or riser brings its own parts (its bars,
+  hangers and the fixtures rigged on it), because they are one thing.
+  **Shift**-click adds or takes away one more; a rubber band picks what
+  is inside it.
+- **Built assemblies are one thing.** What a builder makes as one object —
+  **Add Fountain…**'s base, walls and flame, a stamped studio component —
+  selects whole from a click on any part, and moves whole. **Double-click**
+  a part to go into the assembly and pick just that part; **Esc** or a
+  click outside comes back out. **Shift**-click adds the whole assembly.
+  A group *you* made of things placed one by one is not an assembly: its
+  members are clicked one at a time.
+- **A right-click on part of the selection acts on all of it**:
+  **Lock N Items** / **Unlock N Items**, **Move to Layer**, **Duplicate N
+  Items**, **Delete N Items…** — one undo step each, an assembly counted
+  as one item. A fixture has no lock of its own (its layer or what it hangs
+  on holds it), so Lock counts the rest. **Edit…** opens the one you
+  right-clicked. A right-click outside the selection selects just that item
+  first.
+- **Duplicate** (right-click, or **Cmd/Ctrl+D** on the plot) copies the
+  selection half a metre on: a target keeps its kind, colour, size, aim and
+  person heights, a line its points and people, and is numbered on
+  ("Soloist" → "Soloist 2"). **Cmd/Ctrl+C** / **Cmd/Ctrl+V** copy and paste
+  targets the same way, several at once, with trusses, decks and scenery.
+- **Right-click ▸ Select All Similar** picks every one of the same kind:
+  fixtures of the same model and mode; targets of the same kind (people:
+  every person; a performer line: the lines of its set); trusses of the same
+  type and profile; decks or steps; pipes of the same orientation; scenery of
+  the same kind; every stand, tower, hanger, image or power source; network
+  nodes of the same transport.
+- **A group is selected as a group**: click its row in **Plot layers**, or
+  right-click a member ▸ **Select Group “name”**. Drag any of it and all
+  of it moves; click one member again (no drag) to pick it out.
+- Groups are kept as they were: **Group** and **Ungroup** still make and
+  split them, and locks hold as before. **Group** on one member and
+  something else moves that member into the new group (the rest of its
+  group stays); a whole group selected nests inside the new one.
+  **Move selection here** in Plot layers does the same: a whole group goes
+  to the layer, one member leaves its group.
+
 - **The plot's footer bar**: **Grid** (stage size, units, subdivisions);
   **Snap** (below); **Show** — **Rulers**, **Fixture Labels**, **Fixtures
   on the rig** (hide the mounted fixtures while you place structures),
@@ -1254,8 +1303,9 @@ of, and doesn't override, the real locks above.
   snaps by its **centre**, the point its light comes from. A grouped
   selection moves by the same amount as the piece you drag, so it keeps
   its shape.
-- **Group** (Ctrl/⌘+G) makes the selection one piece that selects and
-  moves together; **Ungroup** (Ctrl/⌘+Shift+G) splits it again.
+- **Group** (Ctrl/⌘+G) files the selection as one group, which Plot
+  layers lists as a folder and selects (and moves) as one from its row or
+  **Select Group**; **Ungroup** (Ctrl/⌘+Shift+G) splits it again.
 - **Align Fixtures ▸** (two or more selected) and **Distribute Fixtures
   ▸** (three or more) are on the plot's right-click menu. They work on
   what the plot draws: **Same X** and **Same Y** line up the fixtures'
@@ -1318,9 +1368,10 @@ of, and doesn't override, the real locks above.
   saved in them (whole numbers for older versions, the exact size beside
   them). The first show you ever open decides for you, once, if you had
   never chosen: one saved in feet sets **Settings → General → Units** to feet.
-- **Select All Similar** — on a fixture (plot or list), every fixture of the
-  same model and mode; on a fixture group's Plot layers row, the groups of the
-  same fixtures laid out the same way.
+- **Select All Similar** — on anything on the plot (or its Plot layers
+  row), every one of the same kind (see the rule above); on a fixture
+  group's Plot layers row, the groups of the same fixtures laid out the
+  same way.
 - Selecting on the plot selects the same objects in Plot layers, and vice
   versa; clicking a fixture group's row selects its fixtures on the plot.
   Cmd/Ctrl-click and Shift-click rows to select several: every one of
@@ -1352,7 +1403,9 @@ of, and doesn't override, the real locks above.
    is where you reach it to read its properties.
 
 Select several rows with Cmd/Ctrl-click or Shift-click: the plot selects
-all of them, not just the last one clicked.
+all of them, not just the last one clicked. Click a folder's row (a group,
+a fill's set) to select everything in it; on the plot a click picks one
+member at a time.
 
 Right-click a layer for **New Folder** (named in place) or **New Layer**;
 right-click a folder for **New Folder Inside**. **Move to Layer** on a

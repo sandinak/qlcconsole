@@ -569,10 +569,13 @@ void Performers_Test::theSetMovesAsOnePiece()
         t->setGroupId(gid);
     plot.gv->updateTargets();
 
-    // Picking one picks the set.
+    // Picking one picks just that line (one selection rule, 2026-11-03);
+    // the set is picked from its Plot layers row or Select Group.
     plot.gv->scene()->clearSelection();
     plot.gv->m_targetItems.value(choir.lines.first()->id())->setSelected(true);
     plot.gv->extendSelectionToGroups();
+    QCOMPARE(plot.gv->scene()->selectedItems().size(), 1);
+    plot.gv->selectItemsInGroup(gid);
     foreach (StageTarget *t, choir.lines)
         QVERIFY(plot.gv->m_targetItems.value(t->id())->isSelected());
 
