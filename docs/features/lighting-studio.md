@@ -1481,7 +1481,7 @@ the Rig Overview show what it's actually doing, not just where it sits:
   range turns the glass before it. Stand-ins are a guess at the shape, not
   the real glass: **Gobo Wheels…** lists those slots with their stand-in,
   suggests a library picture by name for each (the pictures stock
-  definitions give a slot of that name), and **Fit suggested pictures** fits
+  definitions give a slot of that name), and **Fit Suggested Pictures** fits
   the first suggestion in every empty slot. Nothing is kept until you press
   OK. Show Review notes it once per definition (**FIX-17**).
 - **Light footprint** (the Show menu / a structure or fixture's context

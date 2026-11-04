@@ -110,7 +110,7 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   generated stand-in in the pool, matched by name, wobbling for a shake
   slot and turning for a "Gobo Rotate Speed" range; "Open", "White" and
   "No gobo" stay open. **Gobo Wheels…** lists those slots, suggests a
-  library picture by name and has **Fit suggested pictures**; Show Review
+  library picture by name and has **Fit Suggested Pictures**; Show Review
   notes it as **FIX-17** once per definition, with Fix opening Gobo Wheels.
   A definition's absolute path into another install's Gobos folder is now
   found in this one's library when the same file is there.

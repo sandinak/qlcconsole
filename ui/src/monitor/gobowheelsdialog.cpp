@@ -299,7 +299,7 @@ GoboWheelsDialog::GoboWheelsDialog(Doc *doc, quint32 fixtureId, QWidget *parent)
     QPushButton *folder = new QPushButton(tr("Open Gobo Folder"), this);
     row->addWidget(m_replace);
     row->addWidget(m_restore);
-    m_fitSuggested = new QPushButton(tr("Fit suggested pictures"), this);
+    m_fitSuggested = new QPushButton(tr("Fit Suggested Pictures"), this);
     m_fitSuggested->setToolTip(tr("Fit the first suggestion in every slot that has no picture of its "
                                   "own. Nothing is kept until you press OK."));
     row->addWidget(m_fitSuggested);
