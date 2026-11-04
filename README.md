@@ -56,7 +56,7 @@ stage-side focus. What it promises QLC+ 4 users is in
 [Download](#download-and-install) · [Getting started](#getting-started) ·
 [For teachers](#for-teachers) · [Documentation](#documentation) ·
 [For developers](#for-developers) · [Support](#support) ·
-[Licence and credits](#thank-you)
+[Licence and credits](#built-on-qlc)
 
 ## Major features
 
@@ -347,31 +347,30 @@ the upstream forum.
 When something isn't doing what you expect, try
 [Troubleshooting](docs/features/troubleshooting.md) first.
 
-## Thank you
+## Built on QLC+
 
-qlcconsole is built entirely on top of the work of the QLC+ and Q Light
-Controller communities. The following list recognizes the contributors whose
-work this fork inherits and builds on.
+qlcconsole is written and maintained by one person, Branson Matheson. It is a
+fork, not a project with its own developer community, and the people below do
+not work on it or endorse it. What they did is the reason it exists.
 
-<details>
-<summary>QLC+ 5</summary>
+**Massimo Callegari** wrote and maintains [QLC+](https://www.qlcplus.org/). The
+engine, the plugins, the fixture library, the web interface and most of what
+qlcconsole does on the wire are his work, along with fifteen years of keeping
+it going. **Heikki Junnila** wrote Q Light Controller, the program QLC+ grew
+from.
 
-*   Eric Arnebäck (3D preview features)
-*   Santiago Benejam Torres (Catalan translation)
-*   Luis García Tornel (Spanish translation)
-*   Nils Van Zuijlen, Jérôme Lebleu (French translation)
-*   Felix Edelmann, Florian Edelmann (fixture definitions, German translation)
-*   Jannis Achstetter (German translation)
-*   Dai Suetake (Japanese translation)
-*   Hannes Bossuyt (Dutch translation)
-*   Aleksandr Gusarov (Russian translation)
-*   Vadim Syniuhin (Ukrainian translation)
-*   Mateusz Kędzierski + smaks6 (Polish translation)
-
-</details>
+qlcconsole also carries code, fixture definitions and translations from many
+QLC+ and Q Light Controller contributors. They are listed below by what they
+gave, and QLC+'s own
+[contributor list](https://github.com/mcallegari/qlcplus/graphs/contributors)
+is the full record. A fix that belongs in QLC+ itself goes
+[upstream](https://github.com/mcallegari/qlcplus), and qlcconsole takes
+upstream's fixes in each release ([UPSTREAM.md](docs/dev/UPSTREAM.md)).
 
 <details>
-<summary>QLC+ 4</summary>
+<summary>Upstream contributors whose work qlcconsole inherits</summary>
+
+**QLC+ 4**
 
 *   Jano Svitok (bugfix, new features and improvements)
 *   David Garyga (bugfix, new features and improvements)
@@ -398,10 +397,12 @@ work this fork inherits and builds on.
 *   Santiago Benejam Torres (Catalan translation)
 *   Koichiro Saito, Dai Suetake (Japanese translation)
 
-</details>
+**Translations and fixtures (from the QLC+ 5 credits, shipped here)**
 
-<details>
-<summary>Q Light Controller</summary>
+*   Felix Edelmann (fixture definitions, German translation)
+*   Hannes Bossuyt (Dutch translation)
+
+**Q Light Controller**
 
 *   Stefan Krumm (Bugfixes, new features)
 *   Christian Suehs (Bugfixes, new features)
@@ -412,16 +413,6 @@ work this fork inherits and builds on.
 *   Ptit Vachon (French translation)
 
 </details>
-
----
-
-<p align="center">
-<a href="https://github.com/mcallegari/qlcplus/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=mcallegari/qlcplus" />
-</a>
-</p>
-
----
 
 ## License
 
