@@ -319,7 +319,10 @@ void Autosave_Test::aSaveThatCannotWriteKeepsTheShowAndSaysSo()
     });
     QVERIFY(addNamedFixture(doc, "First", 0) != nullptr);
     QCOMPARE(m_app->saveXML(show), QFile::NoError);
-    const QByteArray before = [&]() { QFile f(show); f.open(QIODevice::ReadOnly); return f.readAll(); }();
+    const QByteArray before = [&]() {
+        QFile f(show);
+        return f.open(QIODevice::ReadOnly) ? f.readAll() : QByteArray();
+    }();
     QVERIFY(!before.isEmpty());
 
     // The folder can't be written any more (a locked share, a full volume).
