@@ -26,6 +26,17 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   Markdown). A cue's existing note becomes its first entry, and Needs
   work now means "has an open note". Every edit is one undo step; older
   shows open with their cue notes as entries.
+
+- **Bring Into This Cue and Start Here Instead on a grey layer.**
+  Right-click a carried-in layer (tree or Workbench): **Bring Into This
+  Cue** makes it this cue's own with exactly the values it carried, so every
+  cue plays as before and the cues after it track from here;
+  **Start Here Instead** moves its start from the cue that sets it to this
+  one -- that cue and those between no longer have it (the tooltip and a
+  confirm name them). Each is one undo step and is refused, with the
+  reason, where it could not keep the show the same (an include, the base
+  cue, a Cue-only cue, one effect shared with other layers). Editing a
+  grey row still brings it in as before.
 - **Three states for a Show Review warning, visible on the cue.** Open is
   the amber **⚠ cyc**; **I Meant It** turns it green (**cyc ✓**; hover says
   who marked it, when, and the note); **Not a Problem…** (was Accept…)

@@ -6068,6 +6068,111 @@ static QString contextAction(ShowTreeView &view, QTreeWidgetItem *row, const QSt
     return seen;
 }
 
+/* The grey row's two place items: Bring Into This Cue keeps every cue the
+   same and the layer in this cue; Start Here Instead asks first, naming the
+   cues that will no longer have the layer, and moves the start here. */
+void ShowTreeView_Test::aCarriedInLayerCanBeBroughInOrStartHere()
+{
+    FixtureGroup *towers = group("Towers", 0, 2);
+    FixtureGroup *usts = group("USTs", 2, 2);
+    const quint32 full = dimmer(255, "Full");
+    const quint32 half = dimmer(127, "Half");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L", ListMode::Tracking);
+    const quint32 c1 = st->addCue(list, -1, "Verse");
+    const quint32 c2 = st->addCue(list, 0, "Chorus");
+    const quint32 c3 = st->addCue(list, 1, "Bridge");
+    const quint32 c4 = st->addCue(list, 2, "Out");
+    Target tt;
+    tt.groups << towers->id();
+    Target tu;
+    tu.groups << usts->id();
+    const quint32 l1 = st->addLayer(c1, tt);
+    QVERIFY(st->setLayerLook(c1, l1, st->lookForPalette(full)));
+    QVERIFY(st->setTargetLook(c2, tu, st->lookForPalette(half)));
+    QVERIFY(st->setTargetLook(c4, tu, st->lookForPalette(full)));
+    st->clearUndo();
+    const CueList before = *st->cueList(list);
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1280, 700);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QTreeWidget *tree = view.tree();
+    tree->expandAll();
+    auto greyRow = [&](quint32 cue) -> QTreeWidgetItem * {
+        tree->expandAll();
+        for (QTreeWidgetItemIterator it(tree); *it; ++it)
+            if ((*it)->data(0, ShowTreeView::KindRole).toInt() == ShowTreeView::TrackedLayerNode
+                && (*it)->data(0, ShowTreeView::CueRole).toUInt() == cue
+                && (*it)->data(0, ShowTreeView::TargetRole).toString() == tt.signature())
+                return *it;
+        return nullptr;
+    };
+
+    // The sentence names the cues that lose it.
+    QVERIFY(greyRow(c3) != nullptr);
+    QCOMPARE(view.startHereSentence(c3, tt), QString("1 Verse and 2 Chorus will no longer have Towers"));
+
+    // Cancel: nothing happens.
+    auto startHere = [&](QMessageBox::StandardButton answer, QString *seen = nullptr) {
+        QMenu menu;
+        view.fillTreeMenu(&menu, greyRow(c3));
+        QAction *act = menu.findChild<QAction *>("stStartHere");
+        QVERIFY(act != nullptr);
+        QCOMPARE(act->text(), QString("Start Here Instead"));
+        QVERIFY(act->isEnabled());
+        ModalCloser closer([answer](QWidget *w) {
+            QMessageBox *mb = qobject_cast<QMessageBox *>(w);
+            if (mb == nullptr)
+                return false;
+            mb->button(answer)->click();
+            return true;
+        });
+        act->trigger();
+        if (seen != nullptr)
+            *seen = closer.seen.join("\n");
+    };
+    {
+        QString seen;
+        startHere(QMessageBox::Cancel, &seen);
+        QVERIFY2(seen.contains("will no longer have Towers"), qPrintable(seen));
+    }
+    QVERIFY(!st->canUndo());
+    QVERIFY(!stageDiffers(before, *st->cueList(list)));
+
+    // Bring Into This Cue: the row becomes the cue's own, and nothing plays differently.
+    bool enabled = false;
+    QCOMPARE(contextAction(view, greyRow(c3), "stBringIntoCue", nullptr, &enabled), QString("Bring Into This Cue"));
+    QVERIFY(enabled);
+    QCOMPARE(st->cue(c3)->layers.count(), 1);
+    QCOMPARE(view.currentKind(), ShowTreeView::LayerNode);
+    QVERIFY(!stageDiffers(before, *st->cueList(list)));
+    QVERIFY(st->undoText().startsWith("Bring"));
+    QVERIFY(st->undo());
+    QVERIFY(st->cue(c3)->layers.isEmpty());
+
+    // Start Here Instead, confirmed.
+    startHere(QMessageBox::Ok);
+    QVERIFY(st->cue(c1)->layers.isEmpty());
+    QVERIFY(st->cue(c2)->layer(st->cue(c2)->layers.first().id)->target == tu);   // 2 keeps its own USTs
+    QCOMPARE(st->cue(c3)->layers.count(), 1);
+    QVERIFY(st->cue(c3)->layers.first().target == tt);
+    QCOMPARE(view.currentKind(), ShowTreeView::LayerNode);
+    QVERIFY(st->undoText().startsWith("Start"));
+    QVERIFY(st->undo());
+    QVERIFY(!stageDiffers(before, *st->cueList(list)));
+    QCOMPARE(st->cue(c1)->layers.count(), 1);
+
+    // Refused with the reason: a Cue-only cue can't start a layer.
+    QVERIFY(st->setCueMode(c3, CueMode::CueOnly));
+    st->clearUndo();
+    bool offered = true;
+    contextAction(view, greyRow(c3), "stStartHere", nullptr, &offered);
+    QVERIFY(!offered);
+    QVERIFY(st->startHerePlan(c3, tt).why.contains("Cue-only"));
+}
+
 /* 0.4: "need a function to convert subcues to inline cues ... and vice
    versa". A cue's right-click ▸ Make Sub-cue of <the cue before>, a sub-cue's
    ▸ Make Inline Cue; one undo step each, said in the hint line, greyed in

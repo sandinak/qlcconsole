@@ -36,6 +36,7 @@
 #include "qlcpalette.h"
 #include "lineplanview.h"
 
+class QMessageBox;
 class QStackedWidget;
 class QKeyEvent;
 class QListWidget;
@@ -539,6 +540,21 @@ public:
      *  invalid, on the layer carried in on @a target, which then becomes the
      *  cue's own. A layer that plays a function as it is, too. */
     bool setLayerReleaseIn(quint32 cueId, quint32 layerId, const ShowTree::Target &target, bool release);
+    /** Bring Into This Cue (the grey row's place item): the layer carried in
+     *  on @a target becomes the cue's own with the values it carried, so
+     *  nothing on stage changes. One undo step; @a why (if given) the reason
+     *  it was refused. */
+    bool bringIntoCue(quint32 cueId, const ShowTree::Target &target, QString *why = nullptr);
+    /** Start Here Instead: the layer's start moves to this cue. @a ask: first
+     *  a confirm line naming the cues that will no longer have it. One undo
+     *  step. */
+    bool startHereInstead(quint32 cueId, const ShowTree::Target &target, bool ask = true,
+                          QString *why = nullptr);
+    /** The sentence that names them: "1.0.1 Verse and 1.0.2 Chorus will no
+     *  longer have Towers" (empty: Start Here can't). */
+    QString startHereSentence(quint32 cueId, const ShowTree::Target &target) const;
+    /** The confirm box of Start Here Instead, not yet shown */
+    QMessageBox *startHereBox(quint32 cueId, const ShowTree::Target &target);
     /** Colour ▸ (the menus and the pages' Text colour button): the text
      *  colours (ShowTree::textColours()), Custom… and None, for cues
      *  @a cueIds or -- @a listId valid -- the cue list. Each one undo step. */

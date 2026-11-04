@@ -71,6 +71,7 @@ private slots:
     void includesAddMoveRemoveAndNoLoops();
     void nextCueReceivesSaysWhatPassesOn();
     void aCarriedInLayerCanBeReleased();
+    void aCarriedInLayerCanBeBroughInOrStartHere();
     void updateCueWhereATrackedValueWasSet();
     void recordAsNewCueFromTheHeader();
     void theLibraryShowsWhatTheListUses();

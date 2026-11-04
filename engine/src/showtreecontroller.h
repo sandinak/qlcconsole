@@ -628,6 +628,40 @@ public:
      *  cue's own first if it is only carried in: one undo step. */
     bool setTargetRelease(quint32 cueId, const ShowTree::Target &target, bool release);
 
+    /** What Bring Into This Cue / Start Here Instead would do with the
+     *  layer on @a target carried into cue @a cueId (the grey row): whether
+     *  it can, why not, and what it takes (docs/features/show-tree.md,
+     *  "Bring a tracked layer into this cue"). */
+    struct TrackOp
+    {
+        bool ok = false;
+        QString why;                        //!< not ok: the reason, one line
+        /** Start Here: the cue that sets the layer now (the original) and
+         *  every cue from it up to this one, which no longer have the
+         *  layer, in list order (this cue not among them). */
+        quint32 from = 0xFFFFFFFF;
+        QList<quint32> lose;
+        /** What the cue will hold (the carried values, one look per row),
+         *  and where it goes among the cue's own layers. */
+        ShowTree::Layer layer;
+        bool front = true;
+        /** The layers each cue in @a lose has on the target, to take out. */
+        QList<int> range;                   //!< list indexes (internal)
+    };
+    TrackOp bringIntoPlan(quint32 cueId, const ShowTree::Target &target) const;
+    TrackOp startHerePlan(quint32 cueId, const ShowTree::Target &target) const;
+    /** Bring Into This Cue: the cue now holds the layer with exactly the
+     *  values it carried in, so every cue plays as before and the cues
+     *  that tracked it track from here. One undo step; false (@a why):
+     *  refused, nothing changed. */
+    bool bringIntoCue(quint32 cueId, const ShowTree::Target &target, QString *why = nullptr);
+    /** Start Here Instead: the cue that sets the layer and the cues
+     *  between it and this one no longer have it; this cue sets it with
+     *  the carried values and the later cues track from here. One undo
+     *  step; @a lost (if given) the cues that lost it. */
+    bool startLayerHere(quint32 cueId, const ShowTree::Target &target, QString *why = nullptr,
+                        QList<quint32> *lost = nullptr);
+
     /** Includes (D8): add one at the end, take one out, or move one to
      *  @a toIndex in the cue's include order (later wins). An include that
      *  would loop is refused (ShowTree::canInclude); @a why says why. */

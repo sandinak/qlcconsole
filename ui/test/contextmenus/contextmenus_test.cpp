@@ -1081,6 +1081,81 @@ void ContextMenus_Test::aLayerHasOneMenuEverywhere()
     view.closeWorkbench();
 }
 
+/* A grey (carried-in) layer: Bring Into This Cue and Start Here Instead are
+   the place's own, on top, on the tree's row and the Workbench's alike; the
+   layer's own row has neither. */
+void ContextMenus_Test::aCarriedInLayerOffersTheTrackOps()
+{
+    m_doc->setMode(Doc::Design);
+    const quint32 pid = halfPalette(m_doc);
+    const TreeShow show = makeTreeShow(m_doc, m_groupA, pid);
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1400, 800);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    view.m_tree->expandAll();
+
+    auto place = [](QMenu *menu) {
+        const QStringList own = ContextMenu::contextItems(menu);
+        return own;
+    };
+    // The tree: the grey row in cue 2.
+    QTreeWidgetItem *grey = nullptr;
+    for (QTreeWidgetItemIterator it(view.m_tree); *it; ++it)
+        if ((*it)->data(0, ShowTreeView::KindRole).toInt() == ShowTreeView::TrackedLayerNode
+            && (*it)->data(0, ShowTreeView::CueRole).toUInt() == show.cue2)
+            grey = *it;
+    QVERIFY(grey != nullptr);
+    {
+        QMenu menu;
+        view.fillTreeMenu(&menu, grey);
+        VERIFY_CANON(&menu);
+        const QStringList own = place(&menu);
+        QVERIFY2(own.contains("Bring Into This Cue") && own.contains("Start Here Instead"),
+                 qPrintable(own.join(" | ")));
+        QVERIFY(menu.actions().first()->text() == own.first());       // the place's own, on top
+        QAction *bring = menu.findChild<QAction *>("stBringIntoCue");
+        QAction *start = menu.findChild<QAction *>("stStartHere");
+        QVERIFY(bring != nullptr && start != nullptr);
+        QVERIFY(bring->isEnabled() && start->isEnabled());
+        QVERIFY2(start->toolTip().contains("will no longer have"), qPrintable(start->toolTip()));
+    }
+    // The Workbench's row.
+    QVERIFY(view.openInWorkbench(show.cue2));
+    Workbench *bench = view.dockedWorkbench();
+    QVERIFY(bench != nullptr);
+    TreeCueStack *stack = qobject_cast<TreeCueStack *>(bench->stack());
+    QVERIFY(stack != nullptr);
+    int at = -1;
+    const QList<WorkbenchStack::Layer> ls = stack->layers();
+    for (int i = 0; i < ls.size(); ++i)
+        if (ls.at(i).layerId == ShowTree::invalidId())
+            at = i;
+    QVERIFY(at >= 0);
+    {
+        QMenu menu;
+        stack->fillLayerMenu(&menu, at);
+        VERIFY_CANON(&menu);
+        const QStringList own = place(&menu);
+        QVERIFY2(own.contains("Bring Into This Cue") && own.contains("Start Here Instead")
+                     && own.contains("Solo This Layer"),
+                 qPrintable(own.join(" | ")));
+    }
+    view.closeWorkbench();
+    // The layer's own row has neither.
+    view.m_tree->expandAll();
+    QTreeWidgetItem *own = nullptr;
+    for (QTreeWidgetItemIterator it(view.m_tree); *it; ++it)
+        if ((*it)->data(0, ShowTreeView::KindRole).toInt() == ShowTreeView::LayerNode
+            && (*it)->data(0, ShowTreeView::IdRole).toUInt() == show.layer)
+            own = *it;
+    QVERIFY(own != nullptr);
+    QMenu menu;
+    view.fillTreeMenu(&menu, own);
+    QVERIFY(menu.findChild<QAction *>("stBringIntoCue") == nullptr);
+    QVERIFY(menu.findChild<QAction *>("stStartHere") == nullptr);
+}
+
 void ContextMenus_Test::theShowTreeMenusFollowTheCanon()
 {
     m_doc->setMode(Doc::Design);
