@@ -166,6 +166,7 @@ private slots:
     void goHoldsThePreviewSoOnlyTheRunPlays();
     /** The footer's stage chip: LIVE / Blind / Build look / nothing / holds. */
     void theFooterSaysWhatLightsTheStage();
+    void theFooterRightSideSharesOneLine();
     /** The one GO path (docs/design/RUN_COMMANDS.md): the keys, the Run
      *  tab (button and Space), a VC Cue Runner, the pad's chaser step and
      *  OSC all end in App::runCommand(), each with its route; the footer
