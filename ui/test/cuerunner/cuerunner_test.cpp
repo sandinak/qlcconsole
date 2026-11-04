@@ -720,11 +720,13 @@ void CueRunner_Test::aClickInDesignShowsTheCue()
     QCOMPARE(ch->currentStepIndex(), 1);
     QCOMPARE(int(v[0]), 255);
     QCOMPARE(int(v[1]), 255);
-    // Another click: that cue, over the run.
+    // Another click: that cue, and only it -- the run's cue Two goes on
+    // unseen (ShowTreeController::runHeldOffStage).
     emit tree->itemClicked(rowFor(tree, "1"), 1);
     v = settle();
     QCOMPARE(int(v[0]), 127);
-    QCOMPARE(int(v[1]), 255);           // the run's cue Two underneath
+    QCOMPARE(int(v[1]), 0);
+    QVERIFY(ch->isRunning());
     // Leaving the Run: the run alone.
     runner.hide();
     v = settle();

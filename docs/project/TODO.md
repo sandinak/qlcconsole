@@ -10,6 +10,37 @@ under `~/.claude/.../memory/`.
 
 ---
 
+## The tree and the rig in step (rigsync, 2026-11-04) — built, leftovers
+
+Branson on 90c9ef05d: "i disabled USTs tracking in a cue .. but the display
+didn't change"; "a hit can't be soloed .. should have gone to nothing". Root
+cause: in Design the preview played OVER a list running for real (any GO
+in Design leaves one running), winning only the channels it set, so
+anything an edit took away stayed lit from the run, and an empty hit or a
+Solo showed the run. Now the run is held off stage (its cues' faders write
+nothing, Universe::setFunctionsHeld; their effects draw nothing) while the
+preview or a Solo has the stage (`ShowTreeController::runHeldOffStage()`),
+back when the preview stops or on GO. Edits with nothing running already reached the rig in one
+frame (measured on DanceHysteria-0.6). Tests: showtree_test
+(anEditThatTakesLightAwayShowsOverARunningList,
+anEmptyHitShowsNothingAndSoloShowsOnlyIt,
+anAutoFollowUnderThePreviewStaysOffStage), showtreeworkbench_test
+(theEditIsAllThatShowsOverARunningList), effectinstance_test
+(anEffectOfASceneHeldOffStageDrawsNothing). Leftovers:
+- Release on a carried-in row (and its docked menu's "Release (Leaving
+  This Cue)") still means "gone when this cue is left": the cue itself
+  keeps the layer. If "disable tracking here" should take it out of THIS
+  cue (grandMA-style release), that is the user's call (would be a new
+  meaning for the grey row only).
+- Operate stays blind by design (LIVE_BLIND.md): a cue live on stage
+  changes on its next GO, not when edited.
+- A generated scene a VC-fired hit shares with a cue of the running list
+  is held off stage with it while a preview plays (rare: Design, a run,
+  a preview and a hit at once).
+- "Why is this on / not?" (whyon) doesn't yet name the hold: a light the
+  run would light, dark under a Design preview, is not yet explained as
+  "held off stage by the preview".
+
 ## Edit keys the same in every list (WF1-A, W1-27, W2-Q2; wfkeys, 2026-11-04) — built, leftovers
 
 ⌫ / F2 / ⌘C ⌘V / ⌘D / ⌘F / Esc in the Show Tree, Build (Palettes,

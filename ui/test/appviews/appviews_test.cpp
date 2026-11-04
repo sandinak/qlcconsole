@@ -1608,10 +1608,12 @@ void AppViews_Test::goHoldsThePreviewSoOnlyTheRunPlays()
     QCOMPARE(int(st->previewState()), int(ShowTreeController::PreviewState::Held));
     QTest::qWait(100);
     QCOMPARE(int(outputAt(doc, 231)), 0);
-    // ...until Play, which previews over the run.
+    // ...until Play, which previews instead of the run: the list goes on,
+    // held off stage, so only the cue in edit shows (rigsync).
     st->resumePreview();
     QTRY_COMPARE_WITH_TIMEOUT(int(outputAt(doc, 231)), 255, 5000);
-    QCOMPARE(int(outputAt(doc, 230)), 255);
+    QTRY_COMPARE_WITH_TIMEOUT(int(outputAt(doc, 230)), 0, 5000);
+    QVERIFY(list->isRunning());
 
     // The Run tab's GO comes the same way, before it acts.
     m_app->hideViewNotice();

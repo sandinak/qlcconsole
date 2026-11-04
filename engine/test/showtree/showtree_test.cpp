@@ -2037,11 +2037,14 @@ void ShowTree_Test::inDesignTheEditWinsOverARunningList()
     QCOMPARE(int(v[0]), 255);
     QVERIFY(chaser->isRunning());
 
-    // After Play, another cue of the running list shows on top; the
-    // running cue stays on the channels the preview doesn't play.
+    // After Play, another cue of the running list is what shows: the run
+    // keeps going, held off stage (runHeldOffStage), so it no longer lights
+    // the channels the preview doesn't play -- what is in edit is all that
+    // shows (2026-11-04, "the display didn't change").
     st->previewCue(c2);
     v = settle();
-    QCOMPARE(int(v[0]), 255);
+    QVERIFY(st->runHeldOffStage());
+    QCOMPARE(int(v[0]), 0);
     QCOMPARE(int(v[2]), 255);
     st->stopPreview();
     v = settle();
@@ -2064,11 +2067,11 @@ void ShowTree_Test::inDesignTheEditWinsOverARunningList()
     v = settle();
     QCOMPARE(int(v[2]), 0);             // cue Two's fixture dark
     QCOMPARE(int(v[0]), 127);           // the run cue only (One, as edited)
-    // Play brings it back, over the run.
+    // Play brings it back, the run held off stage again.
     st->resumePreview();
     v = settle();
     QCOMPARE(int(v[2]), 255);
-    QCOMPARE(int(v[0]), 127);
+    QCOMPARE(int(v[0]), 0);
 
     // GO through show control (OSC, MSC, a key) holds it at once, before
     // the GO acts -- no tick late.
@@ -2079,6 +2082,194 @@ void ShowTree_Test::inDesignTheEditWinsOverARunningList()
     QCOMPARE(int(st->previewState()), int(ShowTreeController::PreviewState::Held));
     QVERIFY(st->previewFunctions().isEmpty());
     st->stopPreview();
+}
+
+void ShowTree_Test::anEditThatTakesLightAwayShowsOverARunningList()
+{
+    FixtureGroup *towers = group("Towers", { m_fixtures[0] });
+    FixtureGroup *usts = group("USTs", { m_fixtures[2] });
+    const quint32 full = dimmer(255, "Full");
+    const quint32 half = dimmer(127, "Half");
+    const quint32 low = dimmer(51, "Low");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 listId = st->addCueList(st->addProduction("P"), "L", ListMode::Tracking);
+    const quint32 c1 = st->addCue(listId, -1, "One");
+    const quint32 c2 = st->addCue(listId, 0, "Two");
+    st->setLayerLook(c1, st->addLayer(c1, groupTarget(towers->id())), st->lookForPalette(full));
+    const quint32 ustsLayer = st->addLayer(c1, groupTarget(usts->id()));
+    st->setLayerLook(c1, ustsLayer, st->lookForPalette(half));
+    st->setLayerLook(c2, st->addLayer(c2, groupTarget(towers->id())), st->lookForPalette(low));
+    Chaser *chaser = qobject_cast<Chaser *>(m_doc->function(st->cueList(listId)->chaser));
+
+    // GO twice: the list runs cue Two (USTs tracked in from One).
+    go(chaser);
+    tick(3);
+    go(chaser);
+    QHash<quint32, uchar> v = settle(8);
+    QCoreApplication::processEvents();
+    QCOMPARE(int(v[0]), 51);
+    QCOMPARE(int(v[2]), 127);
+    QVERIFY(st->previewHeld());
+
+    // Two picked in the tree: it shows, the run held off stage under it.
+    st->pickCue(c2);
+    v = settle(3);
+    QCOMPARE(int(st->previewState()), int(ShowTreeController::PreviewState::Playing));
+    QVERIFY(st->runHeldOffStage());
+    QCOMPARE(int(v[0]), 51);
+    QCOMPARE(int(v[2]), 127);
+
+    // USTs released in One: it no longer tracks into Two -- dark on the rig
+    // at the next frame, though the run still plays Two as GO left it.
+    QVERIFY(st->setLayerRelease(c1, ustsLayer, true));
+    v = settle(1);
+    QCOMPARE(int(v[2]), 0);
+    QCOMPARE(int(v[0]), 51);
+    QVERIFY(chaser->isRunning());
+    QVERIFY(st->undo());
+    QCOMPARE(int(settle(1)[2]), 127);
+
+    // Two made a Block cue: nothing tracks in.
+    QVERIFY(st->setCueMode(c2, CueMode::Block));
+    QCOMPARE(int(settle(1)[2]), 0);
+    QVERIFY(st->undo());
+    QCOMPARE(int(settle(1)[2]), 127);
+
+    // Release on the carried-in row of Two itself: Two still plays it (it
+    // goes when Two is left), so the rig keeps it.
+    QVERIFY(st->setTargetRelease(c2, groupTarget(usts->id()), true));
+    QCOMPARE(int(settle(1)[2]), 127);
+    QVERIFY(st->undo());
+
+    // The preview stopped: the run comes back as it plays.
+    st->stopPreview();
+    v = settle(3);
+    QVERIFY(!st->runHeldOffStage());
+    QCOMPARE(int(v[0]), 51);
+    QCOMPARE(int(v[2]), 127);
+
+    // Picked again, then GO: the run takes the stage back, whole.
+    st->pickCue(c1);
+    QVERIFY(st->runHeldOffStage());
+    ShowControl::Request r;
+    r.command = ShowControl::Go;
+    r.chaser = chaser->id();
+    QVERIFY(m_doc->showControl()->execute(r));
+    QCOMPARE(int(st->previewState()), int(ShowTreeController::PreviewState::Held));
+    QVERIFY(!st->runHeldOffStage());
+
+    // Operate: nothing is held off stage (the run is the show).
+    st->pickCue(c2);
+    QVERIFY(st->runHeldOffStage());
+    m_doc->setMode(Doc::Operate);
+    QVERIFY(!st->runHeldOffStage());
+}
+
+void ShowTree_Test::anAutoFollowUnderThePreviewStaysOffStage()
+{
+    FixtureGroup *a = group("A", { m_fixtures[0] });
+    FixtureGroup *b = group("B", { m_fixtures[2] });
+    FixtureGroup *c = group("C", { m_fixtures[4] });
+    const quint32 full = dimmer(255, "Full");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 listId = st->addCueList(st->addProduction("P"), "L", ListMode::NonTracking);
+    const quint32 c1 = st->addCue(listId, -1, "One");
+    const quint32 c2 = st->addCue(listId, 0, "Two");
+    const quint32 c3 = st->addCue(listId, 1, "Three");
+    st->setLayerLook(c1, st->addLayer(c1, groupTarget(a->id())), st->lookForPalette(full));
+    st->setLayerLook(c2, st->addLayer(c2, groupTarget(b->id())), st->lookForPalette(full));
+    st->setLayerLook(c3, st->addLayer(c3, groupTarget(c->id())), st->lookForPalette(full));
+    {
+        ShowTree::Cue cue = *st->cue(c1);
+        cue.hold = 100;                 // Two follows by itself after 0.1 s
+        QVERIFY(st->setCue(cue));
+    }
+    Chaser *chaser = qobject_cast<Chaser *>(m_doc->function(st->cueList(listId)->chaser));
+
+    // The list runs One; Three is picked in the tree.
+    go(chaser);
+    tick(1);
+    QCoreApplication::processEvents();
+    st->pickCue(c3);
+    // The run follows on to Two by itself: not a frame of it on stage --
+    // every cue of a running list is held, not only the one playing.
+    int worst = 0;
+    for (int i = 0; i < 20; ++i)
+    {
+        const QHash<quint32, uchar> v = settle(1);
+        QCoreApplication::processEvents();
+        worst = qMax(worst, qMax(int(v[0]), int(v[2])));
+        QCOMPARE(int(v[4]), 255);
+    }
+    QCOMPARE(chaser->currentStepIndex(), 1);
+    QCOMPARE(worst, 0);
+    // Let go of: the run as it plays now (Two).
+    st->stopPreview();
+    const QHash<quint32, uchar> v = settle(2);
+    QCOMPARE(int(v[2]), 255);
+    QCOMPARE(int(v[4]), 0);
+}
+
+void ShowTree_Test::anEmptyHitShowsNothingAndSoloShowsOnlyIt()
+{
+    FixtureGroup *towers = group("Towers", { m_fixtures[0] });
+    FixtureGroup *usts = group("USTs", { m_fixtures[2] });
+    const quint32 full = dimmer(255, "Full");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("P");
+    const quint32 listId = st->addCueList(prod, "L", ListMode::Tracking);
+    const quint32 c1 = st->addCue(listId, -1, "One");
+    st->setLayerLook(c1, st->addLayer(c1, groupTarget(towers->id())), st->lookForPalette(full));
+    const quint32 empty = st->addHit(HitScope::Cue, c1, "Empty");
+    const quint32 stab = st->addHit(HitScope::Cue, c1, "Stab");
+    const quint32 stabTowers = st->addLayer(stab, groupTarget(towers->id()));
+    st->setLayerLook(stab, stabTowers, st->lookForPalette(full));
+    const quint32 stabUsts = st->addLayer(stab, groupTarget(usts->id()));
+    st->setLayerLook(stab, stabUsts, st->lookForPalette(full));
+
+    // Nothing running: the cue, then the empty hit -- dark.
+    st->pickCue(c1);
+    QCOMPARE(int(settle(3)[0]), 255);
+    st->pickCue(empty);
+    QCOMPARE(int(st->previewState()), int(ShowTreeController::PreviewState::Dark));
+    QHash<quint32, uchar> v = settle(3);
+    QCOMPARE(int(v[0]), 0);
+    QCOMPARE(int(v[2]), 0);
+
+    // With the list running One for real: the empty hit is still dark --
+    // the run under it held off stage, not left standing.
+    Chaser *chaser = qobject_cast<Chaser *>(m_doc->function(st->cueList(listId)->chaser));
+    go(chaser);
+    settle(3);
+    QCoreApplication::processEvents();
+    QCOMPARE(int(settle(1)[0]), 255);
+    st->pickCue(empty);
+    QVERIFY(st->runHeldOffStage());
+    v = settle(1);
+    QCOMPARE(int(v[0]), 0);
+    QCOMPARE(int(v[2]), 0);
+
+    // Solo on the empty hit (nothing to solo): still dark.
+    st->setPreviewSolo(empty, invalidId());
+    QCOMPARE(int(settle(1)[0]), 0);
+
+    // The hit with layers: both; Solo on its USTs layer -- only that.
+    st->pickCue(stab);
+    v = settle(1);
+    QCOMPARE(int(v[0]), 255);
+    QCOMPARE(int(v[2]), 255);
+    st->setPreviewSolo(stab, stabUsts);
+    v = settle(3);
+    QCOMPARE(int(v[0]), 0);
+    QCOMPARE(int(v[2]), 255);
+    st->setPreviewSolo(invalidId(), invalidId());
+    QCOMPARE(int(settle(1)[0]), 255);
+
+    // The preview stopped: the run (One) is the stage again.
+    st->stopPreview();
+    v = settle(3);
+    QCOMPARE(int(v[0]), 255);
+    QCOMPARE(int(v[2]), 0);
 }
 
 /* docs/design/LIVE_BLIND.md, Design: "if I select something in the tree

@@ -97,6 +97,12 @@ public slots:
      *  palette has no running instance. */
     void updateEffectParams(quint32 paletteId);
 
+    /** Scenes held off stage (the Show Tree's preview over a running list,
+     *  ShowTreeController::runHeldOffStage()): an effect playing only for
+     *  them draws nothing until they are let go of. It keeps running, so
+     *  it comes back where it would be. Main thread. */
+    void setScenesOffStage(const QSet<quint32> &sceneIds);
+
 public:
     /*********************************************************************
      * Live overrides (a VC control, docs/design/VC_EFFECT_CONTROLS.md):
@@ -218,6 +224,8 @@ private:
      *  same mutex: (scene id << 32) | effect palette id; a failed effect's
      *  palette id alone, with every bit of the scene half set. */
     QSet<quint64> m_drawn;
+    /** setScenesOffStage(); main thread. */
+    QSet<quint32> m_offStage;
 
     /**
      * Parked engines for palettes flagged QLCPalette::persistent(), keyed by

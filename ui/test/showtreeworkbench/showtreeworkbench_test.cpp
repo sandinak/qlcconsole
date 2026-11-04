@@ -1441,6 +1441,97 @@ void ShowTreeWorkbench_Test::escBacksOutInTheShowTree()
     QCOMPARE(view.currentCueId(), s.c2);
 }
 
+void ShowTreeWorkbench_Test::theEditIsAllThatShowsOverARunningList()
+{
+    const Show s = SHOW();
+    ShowTreeController *st = m_doc->showTree();
+    /* The rig views' model: each fixture's values, as App feeds them from
+       what the universe sends (App::slotUniverseWritten). */
+    connect(m_doc->inputOutputMap(), &InputOutputMap::universeWritten, this,
+            [this](quint32 idx, const QByteArray &ua) {
+                for (Fixture *fx : m_doc->fixtures())
+                    if (fx->isPatched() && fx->universe() == idx)
+                        fx->setChannelValues(ua);
+            });
+    auto rig = [this]() {
+        QList<int> out;
+        for (int i = 0; i < 4; ++i)
+        {
+            const QByteArray v = m_doc->fixture(m_fixtures[i])->channelValues();
+            out << (v.isEmpty() ? 0 : int(uchar(v.at(0))));
+        }
+        return out;
+    };
+    const QList<int> dark({ 0, 0, 0, 0 });
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1400, 800);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+
+    // GO in Design: the list runs cue One for real.
+    Chaser *chaser = qobject_cast<Chaser *>(m_doc->function(st->cueList(s.list)->chaser));
+    QVERIFY(m_doc->showControl() != nullptr);
+    m_doc->showControl()->go(chaser, 0);
+    settle(m_doc, 4);
+    QCoreApplication::processEvents();
+    QCOMPARE(settle(m_doc, 2).mid(0, 4), QList<int>({ 255, 255, 128, 128 }));
+    QCOMPARE(rig(), QList<int>({ 255, 255, 128, 128 }));
+
+    // Cue Two picked in the tree: it is what shows (the run held off stage).
+    QVERIFY(view.selectNode(s.c2));
+    QCOMPARE(settle(m_doc, 2).mid(0, 4), QList<int>({ 51, 51, 128, 128 }));
+    QVERIFY(st->runHeldOffStage());
+
+    // "I disabled USTs tracking": released in One, it leaves Two -- dark on
+    // the rig, and in the rig views' model, at the next frame.
+    QVERIFY(st->setLayerRelease(s.c1, s.ustsLayer1, true));
+    QCOMPARE(settle(m_doc, 1).mid(0, 4), QList<int>({ 51, 51, 0, 0 }));
+    QCOMPARE(rig(), QList<int>({ 51, 51, 0, 0 }));
+    QVERIFY(chaser->isRunning());
+
+    // An empty hit selected: nothing, not the run's look (nor Two's).
+    QVERIFY(view.selectNode(s.c2));
+    const quint32 hit = view.newHit();
+    QVERIFY(hit != invalidId());
+    QCOMPARE(st->previewedCue(), hit);
+    QCOMPARE(settle(m_doc, 2).mid(0, 4), dark);
+    QCOMPARE(rig(), dark);
+    // Solo on it, on its page: still nothing.
+    QToolButton *pageSolo = view.findChild<QToolButton *>("stCueSolo");
+    QVERIFY(pageSolo != nullptr && pageSolo->isEnabled());
+    pageSolo->click();
+    QVERIFY(pageSolo->isChecked());
+    QCOMPARE(settle(m_doc, 2).mid(0, 4), dark);
+
+    // Docked, the Workbench's own Solo on the hit: nothing either.
+    QVERIFY(view.openInWorkbench(hit));
+    Workbench *bench = view.dockedWorkbench();
+    QVERIFY(bench != nullptr);
+    bench->m_soloBtn->click();
+    QVERIFY(bench->isSolo());
+    QVERIFY(st->runHeldOffStage());
+    QCOMPARE(settle(m_doc, 2).mid(0, 4), dark);
+    QCOMPARE(rig(), dark);
+
+    // Solo on Two's Towers layer: only it, though the run plays One there.
+    QVERIFY(view.openInWorkbench(s.c2, s.towersLayer2));
+    if (!bench->isSolo())
+        bench->m_soloBtn->click();
+    QVERIFY(bench->isSolo());
+    QCOMPARE(settle(m_doc, 2).mid(0, 4), QList<int>({ 51, 51, 0, 0 }));
+    bench->m_soloBtn->click();
+    QVERIFY(!bench->isSolo());
+    QCOMPARE(settle(m_doc, 2).mid(0, 4), QList<int>({ 51, 51, 0, 0 }));
+
+    // Leaving the tab: the run is the stage again, as GO left it.
+    view.hide();
+    QVERIFY(!st->runHeldOffStage());
+    QCOMPARE(settle(m_doc, 3).mid(0, 4), QList<int>({ 255, 255, 128, 128 }));
+    QCOMPARE(rig(), QList<int>({ 255, 255, 128, 128 }));
+    chaser->stop(FunctionParent::master());
+}
+
 void ShowTreeWorkbench_Test::shots()
 {
     const QString out = qEnvironmentVariable("W3_SHOTS");

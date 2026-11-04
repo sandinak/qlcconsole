@@ -36,6 +36,10 @@ private slots:
     void writeZeroFade();
     void anOverride16BitChannelWritesBothBytes();
     void anOverrideHitMixesOverAnEffectFadingIn();
+    /** Universe::setFunctionsHeld: a held function's faders write nothing
+     *  (the Show Tree holding a run off stage under its Design preview);
+     *  the others write on, and let go of, it writes again. */
+    void aHeldFunctionsFadersWriteNothing();
     void anUnpatchedFixturesValuesAreShownNotWritten();
     void replaceAllSwapsTheWholeSet();
     void aFaderRebuiltEveryTickIsNeverSeenEmpty();

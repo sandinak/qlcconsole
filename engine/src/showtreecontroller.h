@@ -1439,6 +1439,18 @@ public:
     QList<quint32> previewFunctions() const { return m_previewRunning; }
     /** The names of the cue lists running for real (their chaser runs). */
     QStringList listsRunning() const;
+    /** The Workbench's own Solo (TreeCueStack) plays @a function alone --
+     *  invalid: nothing yet -- or stopped (@a on false). While it plays,
+     *  a list running for real is kept off stage as for the preview
+     *  (runHeldOffStage()). */
+    void setSoloPlaying(bool on, quint32 function = 0xFFFFFFFF);
+    /** Design, while the preview or a Solo has the stage over a cue list
+     *  running for real: what is in edit is ALL that shows. The run keeps
+     *  going, unseen (its faders write nothing, its effects draw nothing),
+     *  and comes back when the preview stops or the next GO takes the
+     *  stage -- an edit that takes light away, an empty cue or hit, a Solo
+     *  show on the rig as they are, not the run's look under them. */
+    bool runHeldOffStage() const { return !m_runMuted.isEmpty(); }
     /** The parent preview functions run under: stopping it never stops
      *  anything a chaser, a VC widget or another tab started. */
     static FunctionParent previewParent();
@@ -1509,6 +1521,13 @@ private:
     bool m_previewHeld = false;
     PreviewState m_previewState = PreviewState::Off;
     QList<quint32> m_previewRunning;
+    /** Hold (or let go of) the running lists' cues off stage, as
+     *  runHeldOffStage() says (Universe::setFunctionsHeld,
+     *  EffectScriptRunner::setScenesOffStage). UI thread; nothing per tick. */
+    void syncRunHold();
+    QSet<quint32> m_runMuted;
+    bool m_soloPlaying = false;
+    quint32 m_soloFunction = 0xFFFFFFFF;
     /** Sweeps, by a bake, the generated scenes the preview let go of. */
     QTimer *m_sweepTimer = nullptr;
 

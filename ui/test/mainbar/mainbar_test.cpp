@@ -515,7 +515,8 @@ void MainBar_Test::operateClearsBlindAndMakesItAView()
     const quint32 cue = st->addCue(list, -1, "Blind cue");
     ShowTree::Target t;
     t.groups << grp->id();
-    st->setLayerLook(cue, st->addLayer(cue, t), st->lookForPalette(dim->id()));
+    const quint32 layer = st->addLayer(cue, t);
+    st->setLayerLook(cue, layer, st->lookForPalette(dim->id()));
 
     sc->operateButton()->click();
     QCOMPARE(doc->mode(), Doc::Operate);
@@ -556,6 +557,16 @@ void MainBar_Test::operateClearsBlindAndMakesItAView()
     m_app->refreshBlindView();
     QCOMPARE(uchar(fx->channelValues().at(0)), uchar(90));
     QCOMPARE(uchar(second->channelValues().at(0)), uchar(90));
+    // A tree edit to it (another look, its undo) is drawn at once, not at
+    // the view's next poll (rigsync, 2026-11-04).
+    QLCPalette *dim40 = new QLCPalette(QLCPalette::Dimmer, doc);
+    dim40->setName("Blind 40");
+    dim40->setValue(40);
+    doc->addPalette(dim40);
+    QVERIFY(st->setLayerLook(cue, layer, st->lookForPalette(dim40->id())));
+    QCOMPARE(uchar(fx->channelValues().at(0)), uchar(40));
+    QVERIFY(st->undo());
+    QCOMPARE(uchar(fx->channelValues().at(0)), uchar(90));
     // A group master holds the picture back as it holds the stage back
     // (docs/features/show-tree.md "Group masters"); full again, it is the cue.
     grp->setMaster(true);
@@ -586,6 +597,7 @@ void MainBar_Test::operateClearsBlindAndMakesItAView()
     st->removeProduction(prod);
     doc->deleteFixtureGroup(grp->id());
     doc->deletePalette(dim->id());
+    doc->deletePalette(dim40->id());
     removeAddedFunctionsAndFixtures();
 }
 

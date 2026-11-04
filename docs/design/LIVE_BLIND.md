@@ -16,11 +16,11 @@ model or playback path.
 
 | You do | The stage shows |
 |---|---|
-| Select a cue (or a layer in it) in the Show Tree, or click it again | that cue (the preview, over a running list) |
+| Select a cue (or a layer in it) in the Show Tree, or click it again | that cue, and only it (a running list goes on unseen) |
 | The docked Workbench follows the tree | the same |
 | Click a cue in the Run tab | that cue; it is also on standby, so GO plays it |
 | GO, Back, Sub GO (anywhere) | the run's cue; the preview holds |
-| Play beside the held line | the selected cue again, over the run |
+| Play beside the held line | the selected cue again, instead of the run |
 
 A refresh of the same selection (a rebuild, the tab coming back) is not an
 action and keeps the hold. Leaving the Show Tree or the Run tab lets go of
@@ -77,6 +77,19 @@ Blind: the cue in edit), all of them when nothing is on show or with
 - **Decided (can change): the blind effects keep their own time**, not
   the stage's: a cue that also plays live is not drawn in step with it.
   Input-driven effects (MIDI, audio, joystick) get no input blind.
+- **What is in edit is all that shows** (2026-11-04, Branson: "i disabled
+  USTs tracking in a cue .. but the display didn't change"; "an empty
+  hit .. should have gone to nothing"). The preview used to play over a
+  list running for real, winning only the channels it set, so an edit that
+  took light away (a Release, a Block, a layer out), an empty cue or hit
+  and Solo left the run's look standing. Now, while the preview or a Solo
+  has the stage in Design, the running list's cues are held off stage --
+  their faders write nothing (`Universe::setFunctionsHeld`), their effects
+  draw nothing (`ShowTreeController::runHeldOffStage()`); every cue of the
+  list, so an auto-follow never flashes through. The run keeps going and is
+  the stage again when the preview stops or the next GO takes it. A
+  selected hit plays alone, like a cue; to see it on top of a cue, fire it
+  from its button while the cue runs.
 - **A Run click in Design previews.** It was load-only; in Design it now
   also shows the cue (what you click is what you see; GO plays the same).
 - **Build's Workbench in Operate is unchanged**: what it loads plays live,
@@ -106,6 +119,11 @@ and makes blue mean blind only, in one shade.
 `showtree_test::theLatestActionWins`, `aCuesLevelsAreWhatItPutsOnStage`;
 `showtreeview_test::theLatestActionWinsAndOperateIsBlind`,
 `inDesignTheEditShowsOverItsRunningList`;
+`showtree_test::anEditThatTakesLightAwayShowsOverARunningList`,
+`anEmptyHitShowsNothingAndSoloShowsOnlyIt`,
+`anAutoFollowUnderThePreviewStaysOffStage`;
+`showtreeworkbench_test::theEditIsAllThatShowsOverARunningList`;
+`effectinstance_test::anEffectOfASceneHeldOffStageDrawsNothing`;
 `cuerunner_test::aClickInDesignShowsTheCue`;
 `mainbar_test::operateClearsBlindAndMakesItAView`,
 `theBlindViewMovesTheCuesEffects`; `blindeffects_test` (a dimmer and a

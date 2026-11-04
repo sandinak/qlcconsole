@@ -242,6 +242,48 @@ void GenericFader_Test::anOverrideHitMixesOverAnEffectFadingIn()
     uni->dismissFader(look);
 }
 
+void GenericFader_Test::aHeldFunctionsFadersWriteNothing()
+{
+    Universe *uni = m_doc->inputOutputMap()->universes().at(0);
+    Fixture *fxi = new Fixture(m_doc);
+    QLCFixtureDef *def = m_doc->fixtureDefCache()->fixtureDef("Futurelight", "DJScan250");
+    QVERIFY(def != NULL);
+    fxi->setFixtureDefinition(def, def->mode("Mode 1"));
+    fxi->setAddress(200);
+    m_doc->addFixture(fxi);
+    const quint32 fid = fxi->id();
+    QSharedPointer<GenericFader> run = uni->requestFader();
+    QSharedPointer<GenericFader> edit = uni->requestFader();
+    run->setParentFunctionID(7);
+    edit->setParentFunctionID(8);
+    auto put = [this, fid](QSharedPointer<GenericFader> &f, quint32 ch, uchar v) {
+        FadeChannel fc(m_doc, fid, ch);
+        fc.setStart(v);
+        fc.setCurrent(v);
+        fc.setTarget(v);
+        fc.setFadeTime(0);
+        f->add(fc);
+    };
+    put(run, 5, 180);       // its Shutter (an intensity)
+    put(edit, 4, 90);       // another channel
+    uni->processFaders();
+    QCOMPARE(uchar(uni->preGMValues()[205]), uchar(180));
+    QCOMPARE(uchar(uni->preGMValues()[204]), uchar(90));
+
+    uni->setFunctionsHeld(QSet<quint32>() << 7);
+    uni->processFaders();
+    QCOMPARE(uchar(uni->preGMValues()[205]), uchar(0));
+    QCOMPARE(uchar(uni->preGMValues()[204]), uchar(90));
+
+    uni->setFunctionsHeld(QSet<quint32>());
+    uni->processFaders();
+    QCOMPARE(uchar(uni->preGMValues()[205]), uchar(180));
+
+    uni->dismissFader(run);
+    uni->dismissFader(edit);
+    uni->processFaders();
+}
+
 void GenericFader_Test::writeLoop()
 {
     QList<Universe*> ua = m_doc->inputOutputMap()->universes();

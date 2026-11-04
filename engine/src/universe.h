@@ -486,6 +486,12 @@ public:
      *  This is used from the fadeAndStopAll functionality */
     void setFaderFadeOut(int fadeTime);
 
+    /** The faders of functions @a functionIDs write nothing until let go
+     *  of (an empty set): they keep running, unseen. The Show Tree holds a
+     *  cue list running for real off stage this way while its Design
+     *  preview has the stage (ShowTreeController::runHeldOffStage()). */
+    void setFunctionsHeld(const QSet<quint32> &functionIDs);
+
 public slots:
     void tick();
 
@@ -732,6 +738,8 @@ protected:
 
     /** Mutex used to protect the access to the m_faders array */
     QRecursiveMutex m_fadersMutex;
+    /** setFunctionsHeld(); under m_fadersMutex */
+    QSet<quint32> m_heldFunctions;
 
     /** Held for a whole frame (processFaders()) and by everything that
      *  reallocates what a frame reads: the channel roles and the intensity

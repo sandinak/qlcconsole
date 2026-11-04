@@ -105,8 +105,8 @@ void ShowTreeView::updatePageRig()
         else if (playing)
             play->setToolTip(tr("Stop the preview: it stays off until Play, or until you pick another cue"));
         else if (state == ShowTreeController::PreviewState::Held)
-            play->setToolTip(tr("Preview this cue over the running show (the edit wins on the channels it "
-                                "plays), until the next GO"));
+            play->setToolTip(tr("Preview this cue instead of the running show (it runs on, unseen), until "
+                                "the next GO"));
         else
             play->setToolTip(onLayer ? tr("Play this cue on the rig, this layer in context")
                                      : tr("Play this cue on the rig"));

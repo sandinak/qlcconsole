@@ -154,6 +154,8 @@ private:
     /** The selected layer's place now (-1: none). */
     int focusIndex() const;
     quint32 m_soloScene = 0xFFFFFFFF;
+    /** Solo told the tree it has the stage (setSoloPlaying()). */
+    bool m_soloStage = false;
 };
 
 /** @} */

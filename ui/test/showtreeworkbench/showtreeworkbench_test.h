@@ -101,6 +101,12 @@ private slots:
     void aRealMouseDragMovesALookRowAndAltCopiesIt();
     void aFunctionLayerCanBeReleasedFromTheDockedWorkbench();
     void aHoldTypedInTheStepHeaderIsWhatGoPlays();
+    /** 2026-11-04 (Branson, DanceHysteria): with a list running for real in
+     *  Design, an edit that takes light away from the cue in edit, an empty
+     *  hit and Solo -- on the page and in the docked Workbench -- show on the
+     *  rig and in the rig views' model at the next frame, not the run's
+     *  look left standing under them; the run comes back on leaving. */
+    void theEditIsAllThatShowsOverARunningList();
 
 private:
     quint32 dimmer(int level, const QString &name);
