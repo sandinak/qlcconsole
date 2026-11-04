@@ -879,6 +879,10 @@ signals:
      *  live. */
     void inputSlotChanged(quint32 universe);
 
+    /** @p universe's input was patched or unpatched (setInputPatch()), by
+     *  hand or by its controller slot. */
+    void inputPatchChanged(quint32 universe);
+
     /** Everyone interested in input data should connect to this signal */
     void inputValueChanged(quint32 universe, quint32 channel, uchar value, const QString& key = 0);
 

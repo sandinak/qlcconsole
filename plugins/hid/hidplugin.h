@@ -29,6 +29,7 @@
 
 class HIDPoller;
 class HIDDevice;
+class HIDVirtualPad;
 class HIDProfile;
 class HIDOSXHotplug;
 class QTimer;
@@ -169,6 +170,10 @@ signals:
 public:
     void rescanDevices();
 
+    /** A value from the virtual pad (QLC_HID_VIRTUAL_PAD) on @p input, sent
+     *  on as the pad's own reading would be. False if it is not one. */
+    Q_INVOKABLE bool injectVirtualInput(quint32 input, quint32 channel, uint value);
+
 protected:
     HIDDevice* device(const QString& path) const;
     HIDDevice* device(quint32 index) const;
@@ -222,6 +227,10 @@ private:
     int m_diagnostics = 0;
     /** Devices started only for diagnostics. */
     QSet<HIDDevice *> m_diagnosticsStarted;
+    /** QLC_HID_VIRTUAL_PAD's pads: kept whatever a rescan finds. */
+    QList<HIDVirtualPad *> m_virtualPads;
+    /** QLC_HID_VIRTUAL_ONLY: no system devices at all. */
+    bool m_virtualOnly = false;
 };
 
 #endif

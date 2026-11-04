@@ -282,6 +282,37 @@ ProgrammerController::ProgrammerController(Doc *doc)
         connect(m_doc->monitorProperties(), &MonitorProperties::rigPropsChanged,
                 this, &ProgrammerController::slotRigPropsChanged);
 
+    /* The follow spot's stick is whatever controller the show has patched
+       as an input: found when the show is loaded and again whenever a
+       controller comes, goes or is patched elsewhere -- not only when the
+       Build tab is shown, which was the only time before (a show run from
+       the Show Tree or Run never got a stick). */
+    m_stickRefreshTimer = new QTimer(this);
+    m_stickRefreshTimer->setSingleShot(true);
+    m_stickRefreshTimer->setInterval(0);
+    connect(m_stickRefreshTimer, &QTimer::timeout, this, &ProgrammerController::refreshStickBinding);
+    connect(m_doc, &Doc::loaded, this, &ProgrammerController::scheduleStickRefresh);
+    connect(m_doc, &Doc::clearing, this, [this]() {
+        if (m_boundFromProfile)
+        {
+            m_panBound = m_tiltBound = m_boundFromProfile = false;
+            m_panNorm = m_tiltNorm = 0.5f;
+            emit axisBindingChanged();
+        }
+    });
+    if (InputOutputMap *iom = m_doc->inputOutputMap())
+    {
+        connect(iom, &InputOutputMap::inputSlotChanged, this, &ProgrammerController::scheduleStickRefresh);
+        connect(iom, &InputOutputMap::inputPatchChanged, this, &ProgrammerController::scheduleStickRefresh);
+        connect(iom, &InputOutputMap::inputDeviceConnected, this, &ProgrammerController::scheduleStickRefresh);
+        connect(iom, &InputOutputMap::inputDeviceDisconnected, this, &ProgrammerController::scheduleStickRefresh);
+        connect(iom, &InputOutputMap::profileChanged, this, &ProgrammerController::scheduleStickRefresh);
+        connect(iom, &InputOutputMap::pluginConfigurationChanged, this, &ProgrammerController::scheduleStickRefresh);
+        connect(iom, &InputOutputMap::offlinePatchesChanged, this, &ProgrammerController::scheduleStickRefresh);
+        connect(iom, &InputOutputMap::universeAdded, this, &ProgrammerController::scheduleStickRefresh);
+        connect(iom, &InputOutputMap::universeRemoved, this, &ProgrammerController::scheduleStickRefresh);
+    }
+
     // Drive joystick aim at a steady 50 Hz so a HELD stick keeps moving (velocity
     // ∝ deflection) — input events only fire while the value is changing, so
     // integrating in the event handler made it move only while the stick moved.
@@ -2103,91 +2134,174 @@ QString ProgrammerController::tiltAxisLabel() const
 
 void ProgrammerController::autoBindFromProfile()
 {
-    if (!m_doc->inputOutputMap())
-        return;
-
-    bool changed = false;
-    const auto universeList = m_doc->inputOutputMap()->universes();
-    qDebug() << "[AutoBind] scanning" << universeList.size() << "universes; panBound=" << m_panBound << "tiltBound=" << m_tiltBound;
-    for (quint32 u = 0; u < (quint32)universeList.size(); ++u)
-    {
-        InputPatch *ip = m_doc->inputOutputMap()->inputPatch(u);
-        if (!ip)
-        {
-            qDebug() << "[AutoBind] universe" << u << "- no input patch";
-            continue;
-        }
-        QLCIOPlugin *plugin = ip->plugin();
-        if (!plugin)
-            continue;
-
-        // inputAxisForSlot matches profile by device VID/PID, not by the named profile
-        // assignment in the I/O panel — so no hidProfileName() check needed here.
-        /* The device's channels, as the show sees them: a controller slot's
-           pad may have its controls moved onto the show's (InputPatch). */
-        int panCh = plugin->inputAxisForSlot(ip->input(), QStringLiteral("pan"));
-        int tiltCh = plugin->inputAxisForSlot(ip->input(), QStringLiteral("tilt"));
-        if (panCh >= 0)
-            panCh = int(ip->showChannel(quint32(panCh)));
-        if (tiltCh >= 0)
-            tiltCh = int(ip->showChannel(quint32(tiltCh)));
-        qDebug() << "[AutoBind] universe" << u << "plugin=" << plugin->name()
-                    << "input=" << ip->input() << "profile=" << ip->hidProfileName()
-                    << "panCh=" << panCh << "tiltCh=" << tiltCh;
-
-        if (panCh >= 0 && !m_panBound)
-        {
-            m_panUniverse = u;
-            m_panChannel  = (quint32)panCh;
-            m_panBound    = true;
-            changed = true;
-        }
-        if (tiltCh >= 0 && !m_tiltBound)
-        {
-            m_tiltUniverse = u;
-            m_tiltChannel  = (quint32)tiltCh;
-            m_tiltBound    = true;
-            changed = true;
-        }
-    }
-
-    if (changed)
-    {
-        m_boundFromProfile = true;
-
-        // Capture the device's global deadzone from the matched HID profile so it
-        // reaches effect scripts (followspot.js) via the "joystick" data channel —
-        // otherwise they fall back to a hard-coded default and feel inconsistent.
-        for (quint32 u = 0; u < (quint32)universeList.size(); ++u)
-        {
-            InputPatch *ip2 = m_doc->inputOutputMap()->inputPatch(u);
-            if (!ip2) continue;
-            QLCIOPlugin *plugin2 = ip2->plugin();
-            if (!plugin2) continue;
-            if (plugin2->inputAxisForSlot(ip2->input(), QStringLiteral("pan"))  < 0 &&
-                plugin2->inputAxisForSlot(ip2->input(), QStringLiteral("tilt")) < 0)
-                continue;
-            m_joystickDeadzone = qBound(0.0f, float(plugin2->inputProfileDeadzone(ip2->input())), 0.4f);
-            break;
-        }
-
-        updateFollowspotJsBindings();
-        emit axisBindingChanged();
-    }
-
+    refreshStickBinding();
     // Always connect input so we receive events even when no profile is assigned.
     // Without this, manual bind capture (bindPanAxis/bindTiltAxis) never fires.
     connectControllerInput();
-    qDebug() << "[AutoBind] RESULT: panBound=" << m_panBound << "(u=" << m_panUniverse << "ch=" << m_panChannel << ")"
-                << "tiltBound=" << m_tiltBound << "(u=" << m_tiltUniverse << "ch=" << m_tiltChannel << ")"
-                << "inputConnected=" << m_controllerInputConnected;
+}
+
+ProgrammerController::Stick ProgrammerController::findStick() const
+{
+    /* Controls numbered past this are not a gamepad's (as focusController()). */
+    const quint32 kMaxChannel = 128;
+
+    Stick best;
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    if (iom == nullptr)
+        return best;
+    for (quint32 u = 0; u < iom->universesCount(); ++u)
+    {
+        InputPatch *ip = iom->inputPatch(u);
+        if (ip == nullptr || ip->plugin() == nullptr || !ip->isPatched())
+            continue;
+        QLCIOPlugin *plugin = ip->plugin();
+        /* The device's own pan/tilt slots (its HID profile, matched by
+           vendor and product)... */
+        int panDev = plugin->inputAxisForSlot(ip->input(), QStringLiteral("pan"));
+        int tiltDev = plugin->inputAxisForSlot(ip->input(), QStringLiteral("tilt"));
+        /* ...else its left stick, by the roles its profile gives. */
+        if (panDev < 0 && tiltDev < 0)
+        {
+            for (quint32 ch = 0; ch < kMaxChannel && (panDev < 0 || tiltDev < 0); ++ch)
+            {
+                const GamepadRole::Role role = GamepadRole::fromProfile(
+                    plugin->inputChannelRole(ip->input(), ch), plugin->inputChannelName(ip->input(), ch));
+                if (role == GamepadRole::LeftX && panDev < 0)
+                    panDev = int(ch);
+                else if (role == GamepadRole::LeftY && tiltDev < 0)
+                    tiltDev = int(ch);
+            }
+        }
+        if (panDev < 0 && tiltDev < 0)
+            continue;
+        Stick s;
+        s.universe = u;
+        /* The device's channels, as the show sees them: a controller slot's
+           pad may have its controls moved onto the show's (InputPatch). */
+        if (panDev >= 0)
+        {
+            s.pan = true;
+            s.panChannel = ip->showChannel(quint32(panDev));
+        }
+        if (tiltDev >= 0)
+        {
+            s.tilt = true;
+            s.tiltChannel = ip->showChannel(quint32(tiltDev));
+        }
+        s.deadzone = qBound(0.0f, float(plugin->inputProfileDeadzone(ip->input())), 0.4f);
+        // The pad that owns the tools is the one; else the first found.
+        if (!best.pan && !best.tilt)
+            best = s;
+        if (u == m_ownerUniverse)
+            return s;
+    }
+    return best;
+}
+
+void ProgrammerController::refreshStickBinding()
+{
+    m_stickRetryClock.restart();
+    // A stick bound by hand stays bound; one being bound is not taken from.
+    if ((m_panBound || m_tiltBound) && !m_boundFromProfile)
+    {
+        connectControllerInput();
+        return;
+    }
+    if (m_capturingPan || m_capturingTilt)
+        return;
+
+    const Stick s = findStick();
+    const bool same = s.pan == m_panBound && s.tilt == m_tiltBound
+                      && (!s.pan || (s.universe == m_panUniverse && s.panChannel == m_panChannel))
+                      && (!s.tilt || (s.universe == m_tiltUniverse && s.tiltChannel == m_tiltChannel));
+    if (same)
+    {
+        if (s.pan || s.tilt)
+            connectControllerInput();
+        return;
+    }
+
+    m_panBound = s.pan;
+    m_tiltBound = s.tilt;
+    m_panUniverse = m_tiltUniverse = s.universe;
+    m_panChannel = s.panChannel;
+    m_tiltChannel = s.tiltChannel;
+    m_boundFromProfile = s.pan || s.tilt;
+    // A stick that went leaves nothing deflected; a new one starts centred.
+    m_panNorm = m_tiltNorm = 0.5f;
+    qDebug() << "[Stick]" << (m_boundFromProfile ? "bound:" : "none")
+             << "u=" << s.universe << "pan ch=" << (s.pan ? int(s.panChannel) : -1)
+             << "tilt ch=" << (s.tilt ? int(s.tiltChannel) : -1) << followSpotStickName();
+    if (m_boundFromProfile)
+    {
+        /* The device's deadzone reaches effect scripts (followspot.js) on
+           the "joystick" data channel, so they honour the profile's. */
+        m_joystickDeadzone = s.deadzone;
+        updateFollowspotJsBindings();
+        connectControllerInput();
+    }
+    emit axisBindingChanged();
+}
+
+bool ProgrammerController::stickPatched() const
+{
+    if (!m_panBound && !m_tiltBound)
+        return false;
+    // Bound by hand: as it was (no patch is asked for).
+    if (!m_boundFromProfile)
+        return true;
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    const quint32 u = m_panBound ? m_panUniverse : m_tiltUniverse;
+    InputPatch *ip = iom != nullptr && u < iom->universesCount() ? iom->inputPatch(u) : nullptr;
+    return ip != nullptr && ip->isPatched();
+}
+
+void ProgrammerController::scheduleStickRefresh()
+{
+    if (m_stickRefreshTimer != nullptr && !m_stickRefreshTimer->isActive())
+        m_stickRefreshTimer->start();
+}
+
+QString ProgrammerController::followSpotStickName() const
+{
+    if (!m_panBound && !m_tiltBound)
+        return QString();
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    InputPatch *ip = iom != nullptr ? iom->inputPatch(m_panBound ? m_panUniverse : m_tiltUniverse) : nullptr;
+    if (ip == nullptr || ip->plugin() == nullptr || !ip->isPatched())
+        return QString();
+    /* "DUALSHOCK 4 Wireless Controller (DE:4C:09:77:77:93)" is a
+       DUALSHOCK 4: no address, no "Wireless Controller". */
+    QString name = ip->inputName().trimmed();
+    const int paren = name.lastIndexOf(QLatin1String(" ("));
+    if (paren > 0 && name.endsWith(QLatin1Char(')')))
+        name.truncate(paren);
+    for (const QLatin1String tail : { QLatin1String(" Wireless Controller"), QLatin1String(" Controller") })
+    {
+        if (name.size() > tail.size() && name.endsWith(tail, Qt::CaseInsensitive))
+        {
+            name.chop(tail.size());
+            break;
+        }
+    }
+    // A wired PlayStation pad names its maker, not itself.
+    const QString kind = ip->plugin()->inputDeviceKind(ip->input());
+    if (name.startsWith(QLatin1String("Sony"), Qt::CaseInsensitive) || name.isEmpty())
+    {
+        if (kind == QLatin1String("dualsense"))
+            return QStringLiteral("DualSense");
+        if (kind == QLatin1String("dualshock4"))
+            return QStringLiteral("DualShock 4");
+    }
+    return name.trimmed();
 }
 
 void ProgrammerController::refreshControllerKeepAlive()
 {
     const bool focus = m_focusSession->isActive()
                        || (m_refineSession != nullptr && m_refineSession->isActive());
-    const bool followSpot = hasFollowSpotInput();
+    // The follow spot needs the controller while one is on, not always.
+    const bool followSpot = m_followStatus.state != FollowSpotStatus::Off && hasFollowSpotInput();
     // The Run role needs the controller awake as a tool does.
     m_keepAlive->setFocusActive(focus || (m_padRun != nullptr && m_padRun->isEnabled()));
     m_keepAlive->setFollowSpotActive(followSpot);
@@ -2382,14 +2496,16 @@ ProgrammerController::FocusController ProgrammerController::focusController() co
                 || role == GamepadRole::RightX || role == GamepadRole::RightY)
                 ++used;
         }
-        // The follow spot's bound stick is the left stick here, named or not.
-        if (m_panBound && m_panUniverse == u && !c.controls.contains(GamepadRole::LeftX))
+        /* The follow spot's stick bound by hand is the left stick here,
+           named or not. (One found on the pad is its own left stick, or
+           slot, already counted -- or gone with the pad.) */
+        if (m_panBound && !m_boundFromProfile && m_panUniverse == u && !c.controls.contains(GamepadRole::LeftX))
         {
             c.controls.insert(GamepadRole::LeftX,
                               plugin->inputChannelName(ip->input(), ip->deviceChannel(m_panChannel)));
             ++used;
         }
-        if (m_tiltBound && m_tiltUniverse == u && !c.controls.contains(GamepadRole::LeftY))
+        if (m_tiltBound && !m_boundFromProfile && m_tiltUniverse == u && !c.controls.contains(GamepadRole::LeftY))
         {
             c.controls.insert(GamepadRole::LeftY,
                               plugin->inputChannelName(ip->input(), ip->deviceChannel(m_tiltChannel)));
@@ -2890,6 +3006,11 @@ void ProgrammerController::applyDesignJoystick()
     updateFollowSpotStatus(scene);
     if (!scene)
         return;
+    /* A follow spot on and no stick: look again, once a second, for a
+       controller patched since (in Connections, or one that woke). */
+    if (m_followStatus.state == FollowSpotStatus::NoStick
+        && (!m_stickRetryClock.isValid() || m_stickRetryClock.elapsed() >= 1000))
+        refreshStickBinding();
     if (!m_panBound && !m_tiltBound)
         return;
 
@@ -4118,7 +4239,7 @@ void ProgrammerController::updateFollowSpotStatus(Scene *scene)
         {
             st.sceneId = scene->id();
             st.live = scene->id() == m_liveFollowSceneId;
-            if (!m_panBound && !m_tiltBound)
+            if (!stickPatched())
                 st.state = FollowSpotStatus::NoStick;
             else if (m_followMovedClock.isValid() && m_followMovedClock.elapsed() < 400)
                 st.state = FollowSpotStatus::Moving;
@@ -4130,7 +4251,10 @@ void ProgrammerController::updateFollowSpotStatus(Scene *scene)
     }
     if (st != m_followStatus)
     {
+        const bool onOff = (st.state == FollowSpotStatus::Off) != (m_followStatus.state == FollowSpotStatus::Off);
         m_followStatus = st;
+        if (onOff)
+            refreshControllerKeepAlive();
         emit followSpotStatusChanged();
     }
 }
@@ -4152,20 +4276,28 @@ QString ProgrammerController::followSpotStatusText() const
     {
     case FollowSpotStatus::NoStick:
         return who.isEmpty()
-            ? tr("Follow spot on, flown by hand -- but no stick is bound, so it doesn't move")
-            : tr("Following %1, which doesn't move -- bind a stick to move it").arg(who);
-    case FollowSpotStatus::Moving:
-        return (who.isEmpty() ? tr("Follow spot · flying") : tr("Following %1 · moving").arg(who)) + persists;
-    case FollowSpotStatus::Holding:
+            ? tr("Follow spot on, flown by hand -- but no controller with a stick is patched as an input, so it doesn't move")
+            : tr("Following %1, which doesn't move -- patch a controller as an input (Connections) to move it").arg(who);
     default:
-        return who.isEmpty() ? tr("Follow spot · holding%1 (move the stick to fly it)").arg(persists)
-                             : tr("Following %1 · holding%2 (move the stick to move it)").arg(who, persists);
+        break;
     }
+    const QString stick = followSpotStickName();
+    const QString on = stick.isEmpty() ? QString() : tr(" · %1").arg(stick);
+    if (st.state == FollowSpotStatus::Moving)
+        return (who.isEmpty() ? tr("Follow spot · flying") : tr("Following %1 · moving").arg(who)) + on + persists;
+    return who.isEmpty() ? tr("Follow spot%1 · holding%2 (move the stick to fly it)").arg(on, persists)
+                         : tr("Following %1%2 · holding%3 (move the stick to move it)").arg(who, on, persists);
 }
 
 bool ProgrammerController::hasFollowSpotInput() const
 {
-    return m_controllerInputConnected && (m_panBound || m_tiltBound);
+    if (!m_controllerInputConnected || !stickPatched())
+        return false;
+    if (!m_boundFromProfile)
+        return true;
+    // Found on a pad: that pad still has it (its profile, its roles).
+    const Stick s = findStick();
+    return (s.pan || s.tilt) && s.universe == (m_panBound ? m_panUniverse : m_tiltUniverse);
 }
 
 void ProgrammerController::setJoystickSensitivity(float s)

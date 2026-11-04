@@ -41,6 +41,9 @@
 #include "showtreecontroller.h"
 #include "monitorproperties.h"
 #include "inputoutputmap.h"
+#include "inputpatch.h"
+#include "ioplugincache.h"
+#include "qlcioplugin.h"
 #include "stagetarget.h"
 #include "qlcchannel.h"
 #include "qlcfixturedef.h"
@@ -79,6 +82,81 @@ void settle(int ms = 0)
         QTest::qWait(ms);
 }
 
+/* His controller as the HID plugin lists it on his Mac (dink): a DualShock 4
+   over Bluetooth, vendor 054C product 09CC. The real HID plugin is loaded
+   (its playstation.qxhid profile matching it by vendor and product) with
+   this pad made virtual -- HIDVirtualPad, the one part not real is the
+   reading of the hardware. */
+const char *kDS4 = " DUALSHOCK 4 Wireless Controller (DE:4C:09:77:77:93)";
+/* Others he might connect (not in his show's slot): a DualSense, an Xbox pad. */
+const char *kDualSense = " DualSense Wireless Controller (AA:BB:CC:DD:EE:01)";
+const char *kXbox = "Xbox Wireless Controller";
+
+QLCIOPlugin *hidPlugin(Doc *doc)
+{
+    return doc->ioPluginCache()->plugin(QStringLiteral("HID"));
+}
+
+/* A stick value as the DS4's reading gives it: the HID plugin's own
+   valueChanged() from the pad's line, below every layer of the app. */
+bool padInput(Doc *doc, quint32 channel, uchar value, const char *pad = kDS4)
+{
+    QLCIOPlugin *hid = hidPlugin(doc);
+    if (hid == nullptr)
+        return false;
+    const int line = hid->inputs().indexOf(QString::fromUtf8(pad));
+    bool ok = false;
+    QMetaObject::invokeMethod(hid, "injectVirtualInput", Qt::DirectConnection,
+                              Q_RETURN_ARG(bool, ok), Q_ARG(quint32, quint32(line)),
+                              Q_ARG(quint32, channel), Q_ARG(uint, uint(value)));
+    return ok;
+}
+
+/* U01-Office's input as his show has it: a controller slot -- his
+   DualSense, a wired DS4, the Bluetooth DS4 -- with the "Sony DualShock 4"
+   input profile, the show's channels in the stock pad layout. */
+void patchLikeHis(Doc *doc)
+{
+    QList<Universe::InputSlotDevice> devs;
+    for (const char *uid : { " DualSense Wireless Controller (4C:B9:50:A9:F7:91)",
+                             "Sony Interactive Entertainment Wireless Controller", kDS4 })
+    {
+        Universe::InputSlotDevice d;
+        d.plugin = QStringLiteral("HID");
+        d.uid = QString::fromUtf8(uid);
+        d.profile = QStringLiteral("Sony DualShock 4");
+        devs << d;
+    }
+    doc->inputOutputMap()->setInputSlot(0, devs, InputOutputMap::standardChannelRoles());
+}
+
+/* QLC_FSPOT_SHOTS=<dir>: the footer chip, offscreen, at the window's
+   minimum, laptop and wide sizes (Q207 review pictures; not in the gate). */
+void shootFooter(App *app, const QString &prefix)
+{
+    const QString dir = qEnvironmentVariable("QLC_FSPOT_SHOTS");
+    if (dir.isEmpty())
+        return;
+    QDir().mkpath(dir);
+    app->setTheme(App::ThemeVSCodeDark);
+    const QSize min = app->minimumSizeHint().expandedTo(app->minimumSize());
+    const QList<QPair<QString, QSize>> sizes = { { "min", min }, { "laptop", QSize(1280, 800) },
+                                                 { "wide", QSize(1920, 1080) } };
+    for (const auto &sz : sizes)
+    {
+        app->resize(sz.second);
+        settle(400);
+        const QPixmap full = app->grab();
+        full.save(QString("%1/%2-footer-%3-window.png").arg(dir, prefix, sz.first));
+        const int h = 44;
+        full.copy(0, full.height() - h * int(full.devicePixelRatio()), full.width(), h * int(full.devicePixelRatio()))
+            .save(QString("%1/%2-footer-%3.png").arg(dir, prefix, sz.first));
+        qInfo().noquote() << "shot" << prefix << sz.first << app->size() << app->followChip()->text();
+    }
+    app->resize(1280, 800);
+    settle(200);
+}
+
 QString panTilt(Doc *doc, const QList<quint32> &fixtures)
 {
     QStringList out;
@@ -103,10 +181,26 @@ QString panTilt(Doc *doc, const QList<quint32> &fixtures)
 
 void FollowSpotCue_Test::initTestCase()
 {
+    /* The app's I/O plugins: the real HID plugin alone, with its stock
+       profiles and his DS4 as a virtual pad -- no device of this machine's. */
+    m_pluginDir = new QTemporaryDir();
+    QVERIFY(m_pluginDir->isValid());
+    const QFileInfo hid(QStringLiteral(QLC_HID_PLUGIN_FILE));
+    QVERIFY2(hid.exists(), QLC_HID_PLUGIN_FILE);
+    QVERIFY(QFile::link(hid.absoluteFilePath(), m_pluginDir->filePath(hid.fileName())));
+    qputenv("QLC_IOPLUGIN_DIR", m_pluginDir->path().toLocal8Bit());
+    qputenv("QLC_HID_PROFILE_DIR", QByteArray(QLC_TEST_RESOURCE_ROOT) + "hidprofiles");
+    qputenv("QLC_HID_VIRTUAL_PAD", QByteArray("054c:09cc:") + kDS4 + ";054c:0ce6:" + kDualSense
+                                   + ";045e:0b13:" + kXbox);
+    qputenv("QLC_HID_VIRTUAL_ONLY", "1");
+
     m_app = new App();
     m_app->init();
     m_app->showNormal();
     m_app->resize(1280, 800);
+    QVERIFY2(hidPlugin(m_app->doc()) != nullptr, "the HID plugin did not load");
+    QVERIFY(hidPlugin(m_app->doc())->inputs().contains(QString::fromUtf8(kDS4)));
+    m_app->doc()->inputOutputMap()->loadProfiles(QDir(QString(QLC_TEST_RESOURCE_ROOT) + "inputprofiles"));
 }
 
 void FollowSpotCue_Test::cleanupTestCase()
@@ -115,6 +209,8 @@ void FollowSpotCue_Test::cleanupTestCase()
     m_app->doc()->resetModified();
     delete m_app;
     m_app = nullptr;
+    delete m_pluginDir;
+    m_pluginDir = nullptr;
 }
 
 bool FollowSpotCue_Test::open(const QString &path)
@@ -152,13 +248,20 @@ void FollowSpotCue_Test::hisShow()
     const QString copy = dir.filePath("show.qlcc");
     QVERIFY(QFile::copy(show, copy));
     m_app->doc()->effectScriptRunner()->cache()->addDirectory(QDir(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts"));
+    /* Opened on the Show Tree, as he works: the Build tab is not shown
+       (before 0.4.0 that was the only place a stick was ever bound, so
+       this way it said "no stick" and nothing moved). */
+    ShowTreeView *view = showTree();
     QVERIFY(open(copy));
     Doc *doc = m_app->doc();
     ProgrammerController *pc = doc->programmer();
     const QList<quint32> spots = { 4, 142 };       // AT1-3z, AT2-3z
     const quint32 cue112 = 103, scene = 110, look = 14;
+    QVERIFY(!ProgrammingManager::instance()->isVisible());
+    QTRY_VERIFY_WITH_TIMEOUT(pc->isPanBound() && pc->isTiltBound(), 3000);
+    QVERIFY(!ProgrammingManager::instance()->isVisible());
 
-    ShowTreeView *view = showTree();
+    view = showTree();
     QTreeWidget *tree = view->m_tree;
     QTreeWidgetItem *row = nullptr;
     for (QTreeWidgetItemIterator it(tree); *it; ++it)
@@ -170,28 +273,43 @@ void FollowSpotCue_Test::hisShow()
     // Another scene open in Build (1.1.2's T-Spots, an Aim on the Announcer).
     ProgrammingManager::instance()->workbench()->load(120);
     settle(200);
-    pc->clearAxisBindings();
-    pc->bindPanAxis();
-    pc->slotControllerInputChanged(9, 0, 128, QString());
-    pc->bindTiltAxis();
-    pc->slotControllerInputChanged(9, 1, 128, QString());
+    /* Nothing bound by hand: his show's U01-Office slot takes his DS4 as
+       it opens, and that is the stick. */
+    QTRY_VERIFY_WITH_TIMEOUT(pc->isPanBound() && pc->isTiltBound(), 3000);
+    QCOMPARE(pc->followSpotStickName(), QStringLiteral("DUALSHOCK 4"));
+    QCOMPARE(doc->inputOutputMap()->inputPatch(0)->inputName(), QString::fromUtf8(kDS4));
+    qInfo().noquote() << "his U01-Office input:" << doc->inputOutputMap()->inputPatch(0)->inputName()
+                      << "profile" << doc->inputOutputMap()->inputPatch(0)->profileName()
+                      << "stick" << pc->panAxisLabel() << "/" << pc->tiltAxisLabel();
+    QVERIFY(padInput(doc, 0, 128));
+    QVERIFY(padInput(doc, 1, 128));
 
     auto follows = [&](const QString &how) {
         QTRY_VERIFY2_WITH_TIMEOUT(pc->followSpotStatus().sceneId == scene, qPrintable(how), 3000);
         QVERIFY2(pc->followSpotStatus().live, qPrintable(how));
         QVERIFY(doc->effectScriptRunner()->isPlaying(look));
         const QString before = panTilt(doc, spots);
-        pc->slotControllerInputChanged(9, 0, 30, QString());
+        StageTarget *witch = doc->monitorProperties()->stageTarget(pc->followSpotStatus().targetId);
+        QVERIFY(witch != nullptr);
+        const QVector3D from = witch->positionIn(doc->monitorProperties()->liveBlocking());
+        QVERIFY(padInput(doc, 0, 30));          // the left stick, to the left
         QTest::qWait(1200);
-        pc->slotControllerInputChanged(9, 0, 128, QString());
+        const QString moving = m_app->followChip()->text();
+        QVERIFY(padInput(doc, 0, 128));
         const QString after = panTilt(doc, spots);
-        qInfo().noquote() << how << before << "->" << after << m_app->followChip()->text();
+        const QVector3D to = witch->positionIn(doc->monitorProperties()->liveBlocking());
+        qInfo().noquote() << how << before << "->" << after << "| ES-Witch x" << from.x() << "->" << to.x()
+                          << "z" << from.z() << "->" << to.z() << "|" << moving;
         QVERIFY2(after != before, qPrintable(how + ": " + after));
-        QVERIFY(m_app->followChip()->text().contains(QString::fromUtf8("AT-Spots ← ES-Witch")));
+        QVERIFY2(to.x() < from.x() - 0.2f, qPrintable(how + ": she did not move left"));
+        QVERIFY2(qAbs(to.z() - from.z()) < 1e-4f, qPrintable(how + ": off her height"));
+        QVERIFY2(moving.contains(QString::fromUtf8("AT-Spots ← ES-Witch · DUALSHOCK 4 · stick moving")),
+                 qPrintable(moving));
         QTest::qWait(300);
     };
     tree->setCurrentItem(row);
     follows("selected");
+    shootFooter(m_app, "after");
 
     ShowControl::Request go;
     go.command = ShowControl::Go;
@@ -205,7 +323,6 @@ void FollowSpotCue_Test::hisShow()
     follows("GO in Operate");
     doc->setMode(Doc::Design);
     settle(300);
-    pc->clearAxisBindings();
 }
 
 /* His show again: every cue selected in the Show Tree, forward, back,
@@ -434,11 +551,18 @@ void FollowSpotCue_Test::aCueFollowSpotMovesFromEveryRoute()
     };
     QLabel *chip = m_app->followChip();
     QVERIFY(chip != nullptr);
+    /* His DS4 patched as U01-Office's input, as his show has it -- and
+       nothing else: no stick bound by hand, the Build tab not shown (before
+       0.4.0 only showing it bound a stick, so a show run from the Show Tree
+       or Run said "no stick" and nothing moved). */
+    showTree();
     pc->clearAxisBindings();
-    pc->bindPanAxis();
-    pc->slotControllerInputChanged(9, 0, 128, QString());
-    pc->bindTiltAxis();
-    pc->slotControllerInputChanged(9, 1, 128, QString());
+    QVERIFY(!pc->isPanBound());
+    patchLikeHis(doc);
+    QTRY_VERIFY_WITH_TIMEOUT(pc->isPanBound() && pc->isTiltBound(), 2000);
+    QVERIFY(!ProgrammingManager::instance()->isVisible());
+    QCOMPARE(doc->inputOutputMap()->inputPatch(0)->inputName(), QString::fromUtf8(kDS4));
+    QCOMPARE(pc->followSpotStickName(), QStringLiteral("DUALSHOCK 4"));
 
     // The stick right: the subject walks right at her own height, every
     // head's pan follows, and the footer says who follows whom.
@@ -449,13 +573,17 @@ void FollowSpotCue_Test::aCueFollowSpotMovesFromEveryRoute()
         QTRY_VERIFY2_WITH_TIMEOUT(chip->isVisible(), qPrintable(how), 2000);
         QVERIFY2(chip->text().contains(QString::fromUtf8("AT-Spots ← ES-Witch")), qPrintable(chip->text()));
         QVERIFY2(!chip->text().contains("no stick"), qPrintable(chip->text()));
+        QVERIFY2(chip->text().contains(QString::fromUtf8("· DUALSHOCK 4 · stick")), qPrintable(chip->text()));
         const QVector3D from = witch->position();
         const QList<int> before = pans();
-        pc->slotControllerInputChanged(9, 0, 255, QString());
+        QVERIFY(padInput(doc, 0, 255));        // the left stick, hard right
         QTest::qWait(500);
         const QList<int> after = pans();
-        QVERIFY2(chip->text().contains("moving"), qPrintable(how + ": " + chip->text()));
-        pc->slotControllerInputChanged(9, 0, 128, QString());
+        QVERIFY2(chip->text().contains(QString::fromUtf8("DUALSHOCK 4 · stick moving")),
+                 qPrintable(how + ": " + chip->text()));
+        qInfo().noquote() << how << "pan" << before << "->" << after << "| x" << from.x() << "->"
+                          << witch->position().x() << "|" << chip->text();
+        QVERIFY(padInput(doc, 0, 128));
         QVERIFY2(witch->position().x() > from.x() + 0.2f,
                  qPrintable(QString("%1: the subject did not move (%2 -> %3)").arg(how)
                             .arg(from.x()).arg(witch->position().x())));
@@ -513,9 +641,48 @@ void FollowSpotCue_Test::aCueFollowSpotMovesFromEveryRoute()
     settle(200);
     QTRY_VERIFY_WITH_TIMEOUT((witch->position() - home).length() < 1e-3f, 3000);
 
-    // A follow spot open in the Workbench is programmed there: it has the stick.
-    pc->clearAxisBindings();
+    // The DS4 switched off: no stick, and the chip says so.
+    doc->inputOutputMap()->setInputSlot(0, QList<Universe::InputSlotDevice>());
+    doc->inputOutputMap()->setInputPatch(0, KInputNone, QString(), QLCIOPlugin::invalidLine());
+    tree->setCurrentItem(row);
+    QTRY_VERIFY_WITH_TIMEOUT(chip->isVisible() && chip->text().contains("no stick"), 3000);
+    QTRY_VERIFY_WITH_TIMEOUT(!pc->isPanBound(), 3000);
+    tree->setCurrentItem(row1);
+    QTRY_VERIFY_WITH_TIMEOUT((witch->position() - home).length() < 1e-3f, 3000);
     doc->resetModified();
+}
+
+/* Whatever pad is patched as an input is the stick, found when it is
+   patched -- by a plain patch in Connections too, not only a controller
+   slot -- and named on the chip: a DualSense, an Xbox pad, on any universe. */
+void FollowSpotCue_Test::theStickIsWhicheverPadIsPatched()
+{
+    Doc *doc = m_app->doc();
+    ProgrammerController *pc = doc->programmer();
+    InputOutputMap *iom = doc->inputOutputMap();
+    QLCIOPlugin *hid = hidPlugin(doc);
+    QVERIFY(hid != nullptr);
+    pc->clearAxisBindings();
+    struct Pad { const char *uid; const char *name; quint32 universe; };
+    for (const Pad &pad : { Pad { kDualSense, "DualSense", 1 }, Pad { kXbox, "Xbox", 2 },
+                            Pad { kDS4, "DUALSHOCK 4", 0 } })
+    {
+        const int line = hid->inputs().indexOf(QString::fromUtf8(pad.uid));
+        QVERIFY2(line >= 0, pad.uid);
+        QVERIFY(iom->setInputPatch(pad.universe, QStringLiteral("HID"), QString(), quint32(line)));
+        QTRY_VERIFY2_WITH_TIMEOUT(pc->followSpotStickName() == QLatin1String(pad.name),
+                                  qPrintable(pc->followSpotStickName()), 2000);
+        QCOMPARE(pc->panAxisLabel().contains(QStringLiteral("Left Stick X")), true);
+        // Its stick reaches the follow spot: the value arrives as pan.
+        QVERIFY(padInput(doc, 0, 230, pad.uid));
+        QTRY_COMPARE_WITH_TIMEOUT(pc->m_panNorm, 230 / 255.0f, 2000);
+        QVERIFY(padInput(doc, 0, 128, pad.uid));
+        QTRY_COMPARE_WITH_TIMEOUT(pc->m_panNorm, 128 / 255.0f, 2000);
+        // Unpatched: no stick (the next pad is the one).
+        QVERIFY(iom->setInputPatch(pad.universe, KInputNone, QString(), QLCIOPlugin::invalidLine()));
+        QTRY_VERIFY_WITH_TIMEOUT(!pc->isPanBound(), 2000);
+    }
+    m_app->doc()->resetModified();
 }
 
 /* "selecting a cue doesn't always fire its effect": the first cue selected

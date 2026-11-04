@@ -474,11 +474,14 @@ with an Aim look:
 
 A follow spot doesn't move by itself. It follows its subject -- the
 target its look's **Aim** points at -- and a target stays where it is put
-until something moves it. That something is the **stick**: a game
-controller or joystick whose pan and tilt axes are bound (a controller's
-profile binds them for you; Settings → Advanced → Game controllers). Push
-the stick and the subject walks across the floor; every head on it
-re-aims, so they stay together on the one spot. Let go and it holds.
+until something moves it. That something is the **stick**: the left stick
+of the game controller patched as an input in **Connections** (a
+DualShock 4, a DualSense, an Xbox pad -- its controller profile says which
+axes are pan and tilt). Nothing else to set up: the stick is found when
+the show opens and again whenever a controller comes, goes or is patched,
+on whatever tab you are. Push the stick and the subject walks across the
+floor; every head on it re-aims, so they stay together on the one spot.
+Let go and it holds.
 
 - **In a running cue.** Select the cue in the Show Tree, or fire it (GO,
   the Run tab, the pad, Operate), and the stick moves its follow spot,
@@ -498,21 +501,24 @@ re-aims, so they stay together on the one spot. Let go and it holds.
   glides back to where the show has it over the cue's fade (half a second
   at the least), never in one step. Flying a spot in a cue never changes
   the saved show.
-- **No stick bound**, it holds the subject where it stands, and says so.
+- **No controller patched**, it holds the subject where it stands, and
+  says so.
 - **With no Aim look** it flies each head's angle from the stick itself
   (free-fly); good for one head, not for several.
 
 Where you can see it:
 
 - **The footer**, on every tab (Show Tree, Run, Operate): **◎ Follow:
-  AT-Spots ← ES-Witch · stick moving** while one is on -- which lights
-  follow whom, green while the stick moves them, amber (*· stick*) while
-  it holds, red (*· no stick*) with no stick bound. Gone when no follow
+  AT-Spots ← ES-Witch · DUALSHOCK 4 · stick moving** while one is on --
+  which lights follow whom, with which controller, green while the stick
+  moves them, amber (*· DUALSHOCK 4 · stick*) while it holds, red (*· no
+  stick*) with no controller patched as an input. Gone when no follow
   spot plays. Hover it for the whole sentence.
 
 - **The Followspot effect's editor**: a light and a line --
-  *Following ES-Witch · moving* (green), *· holding* (amber), or *which
-  doesn't move -- bind a stick* (red); *Not playing* when it isn't on.
+  *Following ES-Witch · moving · DUALSHOCK 4* (green), *· holding*
+  (amber), or *which doesn't move -- patch a controller as an input* (red);
+  *Not playing* when it isn't on.
 - **The rig view**: the subject ringed, with a line from each head to it,
   in the same colours.
 - **The Show Tree**: **follow** under Flags on the cue and its layer, lit

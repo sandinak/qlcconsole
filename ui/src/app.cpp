@@ -110,6 +110,7 @@
 #include "doc.h"
 #include "shutterautoopen.h"
 #include "fixture.h"
+#include "qlcchannel.h"
 #include "programmercontroller.h"
 #include "padrun.h"
 #include "refinepanel.h"
@@ -965,6 +966,106 @@ void App::init()
 
     // Initialize autosave
     initAutosave();
+
+    // QLC_FSPOT_PROBE=1: the follow spot's stick, said once a second.
+    if (qEnvironmentVariableIntValue("QLC_FSPOT_PROBE") == 1)
+        startFollowSpotProbe();
+}
+
+void App::startFollowSpotProbe()
+{
+    /* For checking a real controller on a real machine (offscreen, a copy
+       of the show): which controllers the input plugins list, which one is
+       patched where, which the follow spot takes as its stick, what the
+       footer says and where the follow spot's lights point -- to stderr,
+       once a second. QLC_FSPOT_PROBE_GO=1.1.2 also GOes that cue a moment
+       after the show is open, so a follow spot is on. */
+    QTimer *probe = new QTimer(this);
+    probe->setInterval(1000);
+    const qint64 started = QDateTime::currentMSecsSinceEpoch();
+    const QString goCue = qEnvironmentVariable("QLC_FSPOT_PROBE_GO");
+    connect(probe, &QTimer::timeout, this, [this, started, goCue]() {
+        const qint64 t = (QDateTime::currentMSecsSinceEpoch() - started) / 1000;
+        if (!goCue.isEmpty() && t == 3)
+        {
+            ShowControl::Request go;
+            go.command = ShowControl::Go;
+            go.cue = goCue;
+            const bool ok = runCommand(go, ShowControl::RouteRunTab);
+            fprintf(stderr, "[fspot-probe] GO %s: %s\n", qPrintable(goCue), ok ? "ok" : "refused");
+        }
+        ProgrammerController *pc = m_doc->programmer();
+        InputOutputMap *iom = m_doc->inputOutputMap();
+        if (pc == nullptr || iom == nullptr)
+            return;
+        QString chip = m_statusFollowLabel != nullptr && m_statusFollowLabel->isVisible()
+                       ? m_statusFollowLabel->text() : QStringLiteral("(hidden: no follow spot on)");
+        chip.remove(QRegularExpression(QStringLiteral("<[^>]*>")));
+        QStringList lines;
+        lines << QStringLiteral("t=%1s chip=\"%2\"").arg(t).arg(chip.trimmed());
+        lines << QStringLiteral("  status=\"%1\"").arg(pc->followSpotStatusText());
+        lines << QStringLiteral("  stick=\"%1\" pan=%2 tilt=%3 fromProfile=%4")
+                     .arg(pc->followSpotStickName(), pc->panAxisLabel(), pc->tiltAxisLabel())
+                     .arg(pc->isBoundFromProfile() ? "yes" : "no");
+        for (QLCIOPlugin *plugin : m_doc->ioPluginCache()->plugins())
+        {
+            if (!(plugin->capabilities() & QLCIOPlugin::Input) || plugin->name() != QLatin1String("HID"))
+                continue;
+            const QStringList ins = plugin->inputs();
+            for (int i = 0; i < ins.size(); ++i)
+                lines << QStringLiteral("  HID input %1: \"%2\" kind=%3 pan-slot=%4 tilt-slot=%5")
+                             .arg(i).arg(ins.at(i), plugin->inputDeviceKind(quint32(i)))
+                             .arg(plugin->inputAxisForSlot(quint32(i), QStringLiteral("pan")))
+                             .arg(plugin->inputAxisForSlot(quint32(i), QStringLiteral("tilt")));
+        }
+        for (quint32 u = 0; u < iom->universesCount(); ++u)
+        {
+            InputPatch *ip = iom->inputPatch(u);
+            if (ip == nullptr || !ip->isPatched())
+                continue;
+            lines << QStringLiteral("  universe %1 \"%2\": input %3 line %4 \"%5\" profile=%6")
+                         .arg(u + 1).arg(iom->getUniverseNameByIndex(int(u)), ip->pluginName()).arg(ip->input())
+                         .arg(ip->inputName(), ip->profileName());
+        }
+        // Where the follow spot's lights point.
+        const ProgrammerController::FollowSpotStatus st = pc->followSpotStatus();
+        if (const Scene *scene = qobject_cast<const Scene *>(m_doc->function(st.sceneId)))
+        {
+            QList<quint32> fixtures = scene->fixtures();
+            for (quint32 gid : scene->fixtureGroups())
+                if (const FixtureGroup *g = m_doc->fixtureGroup(gid))
+                    fixtures += g->fixtureList();
+            QStringList dmx;
+            QList<Universe *> ua = iom->claimUniverses();
+            for (quint32 fid : fixtures)
+            {
+                const Fixture *f = m_doc->fixture(fid);
+                if (f == nullptr || int(f->universe()) >= ua.size())
+                    continue;
+                const QByteArray v = ua.at(int(f->universe()))->preGMValues();
+                const quint32 p = f->channelNumber(QLCChannel::Pan, QLCChannel::MSB);
+                const quint32 tl = f->channelNumber(QLCChannel::Tilt, QLCChannel::MSB);
+                auto at = [&](quint32 ch) {
+                    return ch == QLCChannel::invalid() || int(f->address() + ch) >= v.size()
+                           ? -1 : int(uchar(v.at(int(f->address() + ch))));
+                };
+                dmx << QStringLiteral("%1 pan %2 tilt %3").arg(f->name()).arg(at(p)).arg(at(tl));
+            }
+            iom->releaseUniverses(false);
+            lines << QStringLiteral("  %1: %2").arg(scene->name(), dmx.join(QStringLiteral(" | ")));
+        }
+        if (st.targetId != UINT_MAX && m_doc->monitorProperties() != nullptr)
+            if (const StageTarget *tg = m_doc->monitorProperties()->stageTarget(st.targetId))
+            {
+                const QVector3D at = tg->positionIn(m_doc->monitorProperties()->liveBlocking());
+                lines << QStringLiteral("  subject %1 at x=%2 y=%3 z=%4").arg(tg->name())
+                             .arg(double(at.x()), 0, 'f', 2).arg(double(at.y()), 0, 'f', 2)
+                             .arg(double(at.z()), 0, 'f', 2);
+            }
+        fprintf(stderr, "[fspot-probe] %s\n", qPrintable(lines.join(QStringLiteral("\n[fspot-probe] "))));
+        fflush(stderr);
+    });
+    probe->start();
 }
 
 void App::setActiveWindow(const QString& name)
@@ -8104,8 +8205,13 @@ void App::initStatusBar()
         slotProgrammerSelectionChanged();
         slotPadModeChanged(m_doc->padMode());
         if (m_doc->programmer() != nullptr)
+        {
             connect(m_doc->programmer(), &ProgrammerController::followSpotStatusChanged,
                     this, &App::updateFollowChip);
+            // Which controller is the stick: named on the chip.
+            connect(m_doc->programmer(), &ProgrammerController::axisBindingChanged,
+                    this, &App::updateFollowChip);
+        }
         updateFollowChip();
     }
 
@@ -9139,14 +9245,17 @@ void App::updateFollowChip()
                                    ? m_doc->monitorProperties()->stageTarget(st.targetId) : nullptr)
             text += QStringLiteral(" ← ") + t->name();
     QString how, colour;
+    // The controller that is the stick, by name: "DUALSHOCK 4 · stick moving".
+    const QString stick = pc->followSpotStickName();
+    const QString pad = stick.isEmpty() ? QString() : stick + QStringLiteral(" · ");
     switch (st.state)
     {
     case Status::Moving:
-        how = tr("stick moving");
+        how = pad + tr("stick moving");
         colour = QStringLiteral("#3ec46d");
         break;
     case Status::Holding:
-        how = tr("stick");
+        how = pad + tr("stick");
         colour = QStringLiteral("#e0a820");
         break;
     case Status::NoStick:
@@ -9156,7 +9265,7 @@ void App::updateFollowChip()
         break;
     }
     m_statusFollowLabel->setText(tr("<span style='color:%1;font-weight:bold;'>◎ Follow: %2 · %3</span>")
-                                 .arg(colour, text.toHtmlEscaped(), how));
+                                 .arg(colour, text.toHtmlEscaped(), how.toHtmlEscaped()));
     m_statusFollowLabel->setToolTip(pc->followSpotStatusText()
                                     + (st.live ? tr("\nFrom the cue playing now; the stick moves its subject "
                                                     "for this run only.")

@@ -384,6 +384,18 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Fixed
 
+- **The follow spot's stick is the controller you have patched** — a
+  DualShock 4, DualSense or Xbox pad patched as an input in Connections
+  (or by a controller slot) now moves the follow spot from the Show Tree,
+  Run and Operate, and the footer names it: **◎ Follow: AT-Spots ←
+  ES-Witch · DUALSHOCK 4 · stick moving**. The stick was only ever looked
+  for when the Build tab was shown, so a show opened and run from the Show
+  Tree or Run -- or a pad that connected after Build was shown -- said
+  *no stick* and nothing moved; the earlier fixes' tests bound the stick
+  by hand and never went through the controller. Now it is found when the
+  show opens and whenever a controller comes, goes or is patched, on any
+  tab, and a pad switched off says *no stick* again.
+
 - **In Design, the cue you are on is all the rig shows** — also with a cue
   list running for real. The preview used to play over the run, winning
   only the channels it set, so an edit that took light away from the

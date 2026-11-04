@@ -512,6 +512,17 @@ public:
      *  load.  Emits axisBindingChanged() if anything was bound. */
     void autoBindFromProfile();
 
+    /** Bind the follow spot's stick to the controller patched as an input
+     *  (its HID profile's pan/tilt slots, else its left stick's roles), or
+     *  unbind it when none is. A stick bound by hand (bindPanAxis()) stays.
+     *  Called on load, whenever a controller comes, goes or is patched, and
+     *  once a second while a follow spot is on without one. */
+    void refreshStickBinding();
+
+    /** The bound stick's controller in a few words ("DUALSHOCK 4",
+     *  "DualSense", "Xbox"); empty with none. */
+    QString followSpotStickName() const;
+
     bool isShowLocked() const;
     void setShowLocked(bool locked);
 
@@ -652,6 +663,21 @@ private:
     /** Tell the keep-alive who needs the controller and how it is. */
     void refreshControllerKeepAlive();
     void connectControllerInput();
+    /** A stick found on a patched input. */
+    struct Stick
+    {
+        bool pan = false, tilt = false;
+        quint32 universe = 0, panChannel = 0, tiltChannel = 0;
+        float deadzone = 0.05f;
+    };
+    Stick findStick() const;
+    /** True if the bound stick's controller is patched now. */
+    bool stickPatched() const;
+    /** refreshStickBinding() once the burst of changes has settled. */
+    void scheduleStickRefresh();
+    QTimer *m_stickRefreshTimer = nullptr;
+    /** When the stick was last looked for. */
+    QElapsedTimer m_stickRetryClock;
     /** Push pan/tilt binding into any followspot.js palette so EffectScriptRunner
      *  routes values to them via its normal universe/channel mechanism. */
     void updateFollowspotJsBindings();
