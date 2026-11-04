@@ -88,6 +88,10 @@ private:
     void finishEdit();
     void applyFace(int face);
     void moveDmx();
+    /** Pixel path, turns, a wand's length and who holds it
+     *  (docs/design/FOUNTAIN_WAND.md): built, wired and filled. */
+    void buildPixelRows(QFormLayout *form, QWidget *parent);
+    void showPixelRows(quint32 fid);
 
     Monitor *m_monitor;
     QFormLayout *m_form;
@@ -107,6 +111,12 @@ private:
     QComboBox *m_placement;
     QDoubleSpinBox *m_angle;
     QDoubleSpinBox *m_tilt;
+    QComboBox *m_pixelPath;     ///< PixelPath::Shape
+    QDoubleSpinBox *m_pixelTurns;
+    QDoubleSpinBox *m_wandLength;
+    QComboBox *m_heldBy;        ///< a Person target, or nobody
+    QDoubleSpinBox *m_holdHeight;
+    QDoubleSpinBox *m_holdTilt;
     LightControls *m_light;
     QWidget *m_dmxBox;
     QSpinBox *m_dmxUni;

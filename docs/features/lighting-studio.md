@@ -672,12 +672,73 @@ outer 8" high and the inner 14", 4" apart:
 - the **base**: a platform with a half-round front;
 - the **outer** and **inner walls**: U-shaped walls on the base, open at the
   back, the outer one's outside face on the base's edge;
-- a **silk flame** in the middle of the inner wall, standing on the base,
-  staged — patch it to the relay's channel (untick it to leave it out).
+- a **silk flame** in the middle of the inner wall, staged — patch it to
+  the relay's channel (untick it to leave it out). Its unit stands on the
+  base, out of sight behind the walls; the **silk starts at the top of the
+  inner wall** and rises by the **Fire height** (3 ft unless you set it).
 
-They're one group, so the fountain drags and turns (**]** / **[**) as one.
-Light pointed at the inner wall — pars in the gap, uplighting it — lands on
-its face.
+They're one group, on one layer, so the fountain drags and turns (**]** /
+**[**) as one, flame and all, and a layer or group lock holds all of it
+(and lifts from any of its pieces). Light pointed at the inner wall — pars
+in the gap, uplighting it — lands on its face.
+
+**The fountain's editor.** Double-click the base: its editor is titled with
+the fountain's name and has a **Fire height** row, in your units, for the
+flame. **Fixtures on this object** lists everything mounted in it. The rig
+view draws the silk from the inner wall's top up, coloured by the
+fountain's own lights when they're on (blue pars make a blue-tinged
+flame); the plot draws its outline, from above as a round and in **Front**
+and **Side** as a flame from the wall's top to its tip.
+
+**Fountains from before.** A show saved before fire heights keeps its flame
+where it was: on load, the silk starts at the inner wall's top and its fire
+height is set so its top stays where it was drawn. A flame (or any fixture)
+standing on a fountain's base but left out of its group joins it, on the
+fountain's layer.
+
+**Fixtures in the fountain.** Drag or add a fixture inside the base and it
+is mounted in the fountain — no Shift needed: on the base, or on the inner
+wall's top when you drop it on the wall. It joins the fountain's group, so
+it moves and turns with it. A par (any fixed light) put there is aimed up
+at the middle of the flame; change it in Aim & Mount. Drag it out of the
+base to take it out.
+
+**A WLED set in the fountain.** A pixel fixture mounted in it (a WLED
+string, a pixel tape) gets a **Pixel path** in its properties: **Inner wall
+top ring**, **Outer wall top ring**, **Base ring** (round the base's edge)
+or **Wrapped up the flame** (a spiral; **Turns** sets how many, Auto about
+one every 30 cm). See [Pixel paths](#pixel-paths).
+
+### Pixel paths
+
+A pixel fixture's LEDs are normally where its body is. **Pixel path** (in
+its properties, for any fixture with more than one LED) lays them out along
+a path instead, in the order of its heads, the first LED at the start: the
+ring paths start at one end of the U (stage right) and run round the front.
+Each LED is drawn where the path puts it, in its live colour, in the plot
+and the rig view: a small point, with a glow as big as it is bright. A WLED
+in effect mode shows its effect running along the path (see
+[Lanterns](#lanterns)). The LEDs light nothing else on the stage, and
+a fixture on a path draws no body or beam in the rig view.
+
+### Wand
+
+A **wand** is a staff with an LED strip wound round it, driven by a WLED.
+Set a pixel fixture's **Pixel path** to **Wand (wound round a staff)**:
+
+- **Wand length**: the staff, 1.2 m unless set.
+- **Turns**: how many times the strip goes round. Auto works it out from
+  the number of LEDs at 2 cm apart on a 25 mm staff (144 LEDs on 1.2 m is
+  about 33 turns).
+- **Held by**: a Person target. The wand is then in their hand: its middle
+  **Held at** 1.0 m above where they stand, a forearm in front of them,
+  **Leaning** 20° toward the audience, and it goes where they go. **Nobody**:
+  it stands upright where it was placed.
+
+The rig view draws a thin dark staff with the LEDs glowing on it in their
+live colours; the plot a short line with coloured dots. A wand throws no
+beam. Per-cue blocking positions aren't built yet: a held wand follows its
+performer's position on the plot.
 
 ## Mounting a fixture
 

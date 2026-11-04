@@ -1564,6 +1564,10 @@ public:
      *  if Shift were held (tests, which cannot hold a key over a call). */
     void setAttachOnDrop(bool on) { m_attachOnDrop = on; }
     bool attachHeld() const;
+    /** A fixture dropped at @p mmCentre (its centre, mm): into the fountain
+     *  there (on its base or inner wall, in its group), or out of the one it
+     *  was in. True when it is in a fountain now (pixelpathdecor.cpp). */
+    bool dropIntoFountain(quint32 fid, const QPointF &mmCentre);
     /** The attach (green) / escape (red) borders of the fixtures being
      *  dragged, as a drop now would leave them. */
     void updateDragBorders();

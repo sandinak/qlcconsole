@@ -45,6 +45,11 @@
 #include "doc.h"
 #include "itemicons.h"
 #include "scenery.h"
+#include "feetinchesspinbox.h"
+#include "pixelpathdecor.h"
+#include "stagetarget.h"
+#include "pixelpath.h"
+#include "fountain.h"
 
 namespace
 {
@@ -268,6 +273,7 @@ FixtureFields::FixtureFields(Monitor *monitor, QFormLayout *form, QWidget *paren
                           "upright face (Front, Back, Stage left or right), upstage on a "
                           "Top face. Angle above turns it flat within its face instead."));
     form->addRow(tr("Tilt:"), m_tilt);
+    buildPixelRows(form, parent);
 
     /* What makes its light and what it is seen through, where that is a
        question: a lantern round one bulb, LEDs, diffusing or clear glass. */
@@ -566,7 +572,10 @@ void FixtureFields::hideAll()
                         static_cast<QWidget *>(m_face), static_cast<QWidget *>(m_placement),
                         static_cast<QWidget *>(m_angle), static_cast<QWidget *>(m_tilt),
                         m_light->lightRow(), static_cast<QWidget *>(m_light->glassCombo()),
-                        m_dmxBox, static_cast<QWidget *>(m_dmxNote), m_wledBox })
+                        m_dmxBox, static_cast<QWidget *>(m_dmxNote), m_wledBox,
+                        static_cast<QWidget *>(m_pixelPath), static_cast<QWidget *>(m_pixelTurns),
+                        static_cast<QWidget *>(m_wandLength), static_cast<QWidget *>(m_heldBy),
+                        static_cast<QWidget *>(m_holdHeight), static_cast<QWidget *>(m_holdTilt) })
         row(w, false);
 }
 
@@ -793,6 +802,7 @@ void FixtureFields::setFixtures(const QList<quint32> &fids, quint32 shown)
     /* A fixed light tips in its yoke (Tilt in yoke, in Aim & Mount), not by
        rolling its body; the row stays only to clear a roll it already has. */
     row(m_tilt, !fixedUnit || !qFuzzyIsNull(rp.studioTilt));
+    showPixelRows(m_shown);
 
     // Its place on a tower: the one shown (a place is one fixture's).
     if (Tower *tw = (onTower && !many) ? props->tower(rp.towerId) : nullptr)
@@ -938,4 +948,132 @@ void FixtureFields::setFixtures(const QList<quint32> &fids, quint32 shown)
     }
 
     m_loading = false;
+}
+
+void FixtureFields::buildPixelRows(QFormLayout *form, QWidget *parent)
+{
+    MonitorProperties *props = m_monitor->m_props;
+    const bool isFeet = (props->gridUnits() == MonitorProperties::Feet);
+    const double toDisp = isFeet ? 3.28084 : 1.0;
+
+    m_pixelPath = new QComboBox(parent);
+    m_pixelPath->setObjectName(QStringLiteral("fixturePixelPath"));
+    for (int k = 0; k < PixelPath::kShapes; ++k)
+        m_pixelPath->addItem(PixelPath::name(k), k);
+    m_pixelPath->setToolTip(tr("Where its LEDs are: round a fountain's wall or base, wound up "
+                               "its flame, or round a wand -- in the order of its heads"));
+    form->addRow(tr("Pixel path:"), m_pixelPath);
+
+    m_pixelTurns = new QDoubleSpinBox(parent);
+    m_pixelTurns->setObjectName(QStringLiteral("fixturePixelTurns"));
+    m_pixelTurns->setRange(0.0, 500.0);
+    m_pixelTurns->setDecimals(1);
+    m_pixelTurns->setSpecialValueText(tr("Auto"));
+    m_pixelTurns->setToolTip(tr("Turns of the strip round the flame or the staff. Auto: a wand's "
+                                "from its LEDs at 2 cm apart, a flame's about one every 30 cm"));
+    form->addRow(tr("Turns:"), m_pixelTurns);
+
+    m_wandLength = new FeetInchesSpinBox(isFeet, parent);
+    m_wandLength->setObjectName(QStringLiteral("fixtureWandLength"));
+    m_wandLength->setRange(0.1 * toDisp, 5.0 * toDisp);
+    m_wandLength->setDecimals(2);
+    form->addRow(tr("Wand length:"), m_wandLength);
+
+    m_heldBy = new QComboBox(parent);
+    m_heldBy->setObjectName(QStringLiteral("fixtureHeldBy"));
+    m_heldBy->setToolTip(tr("A performer holding it: it is in their hand and moves with them"));
+    form->addRow(tr("Held by:"), m_heldBy);
+
+    m_holdHeight = new FeetInchesSpinBox(isFeet, parent);
+    m_holdHeight->setObjectName(QStringLiteral("fixtureHoldHeight"));
+    m_holdHeight->setRange(0.0, 3.0 * toDisp);
+    m_holdHeight->setDecimals(2);
+    m_holdHeight->setToolTip(tr("How high its middle is held, above where they stand"));
+    form->addRow(tr("Held at:"), m_holdHeight);
+
+    m_holdTilt = new QDoubleSpinBox(parent);
+    m_holdTilt->setObjectName(QStringLiteral("fixtureHoldTilt"));
+    m_holdTilt->setRange(-90.0, 90.0);
+    m_holdTilt->setDecimals(0);
+    m_holdTilt->setSuffix(QStringLiteral("°"));
+    m_holdTilt->setToolTip(tr("How far it leans forward, toward the audience, from upright"));
+    form->addRow(tr("Leaning:"), m_holdTilt);
+
+    MonitorGraphicsView *gv = m_monitor->m_graphicsView;
+    auto each = [this, props, gv](const QString &field,
+                                  const std::function<void(FixtureRigProps &)> &set) {
+        if (m_loading || m_fids.isEmpty())
+            return;
+        emit aboutToEdit(field);
+        foreach (quint32 fid, m_fids)
+        {
+            FixtureRigProps rp = props->fixtureRigProps(fid);
+            set(rp);
+            props->setFixtureRigProps(fid, rp);
+            if (gv != nullptr)
+                gv->updateFixture(fid);
+        }
+        finishEdit();
+    };
+    connect(m_pixelPath, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this, each](int) {
+        const int shape = m_pixelPath->currentData().toInt();
+        each(QStringLiteral("pixelPath"), [shape](FixtureRigProps &rp) { rp.pixelPath = shape; });
+    });
+    connect(m_pixelTurns, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [each](double v) {
+        each(QStringLiteral("pixelTurns"), [v](FixtureRigProps &rp) { rp.pixelTurns = float(v); });
+    });
+    connect(m_wandLength, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [each, toDisp](double v) {
+        each(QStringLiteral("wandLength"), [v, toDisp](FixtureRigProps &rp) { rp.wandLength = float(v / toDisp); });
+    });
+    connect(m_heldBy, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this, each](int) {
+        const quint32 who = m_heldBy->currentData().toUInt();
+        each(QStringLiteral("heldBy"), [who](FixtureRigProps &rp) { rp.heldBy = who; });
+    });
+    connect(m_holdHeight, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [each, toDisp](double v) {
+        each(QStringLiteral("holdHeight"), [v, toDisp](FixtureRigProps &rp) { rp.holdHeight = float(v / toDisp); });
+    });
+    connect(m_holdTilt, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [each](double v) {
+        each(QStringLiteral("holdTilt"), [v](FixtureRigProps &rp) { rp.holdTilt = float(v); });
+    });
+}
+
+void FixtureFields::showPixelRows(quint32 fid)
+{
+    Doc *doc = m_monitor->m_doc;
+    MonitorProperties *props = m_monitor->m_props;
+    const FixtureRigProps rp = props->fixtureRigProps(fid);
+    // A string of LEDs (heads, or a WLED device's LEDs), or one already laid out.
+    const bool pixels = PixelPathDecor::ledCount(doc, fid) > 1 || rp.pixelPath != PixelPath::None;
+    if (!pixels)
+        return;
+    const bool isFeet = (props->gridUnits() == MonitorProperties::Feet);
+    const double toDisp = isFeet ? 3.28084 : 1.0;
+    // The fountain paths only in a fountain.
+    const bool inFountain = Fountain::ofFixture(props, fid).isValid()
+                            || Fountain::ofBase(props, rp.deckPlatformId).isValid();
+    if (auto *model = qobject_cast<QStandardItemModel *>(m_pixelPath->model()))
+        for (int k = 0; k < model->rowCount(); ++k)
+            if (QStandardItem *it = model->item(k))
+                it->setEnabled(!PixelPath::needsFountain(k) || inFountain || rp.pixelPath == k);
+    const QSignalBlocker b1(m_pixelPath), b2(m_pixelTurns), b3(m_wandLength), b4(m_heldBy),
+                         b5(m_holdHeight), b6(m_holdTilt);
+    m_pixelPath->setCurrentIndex(qMax(0, m_pixelPath->findData(rp.pixelPath)));
+    row(m_pixelPath, true);
+    const bool wound = rp.pixelPath == PixelPath::Wand || rp.pixelPath == PixelPath::FlameSpiral;
+    m_pixelTurns->setValue(double(rp.pixelTurns));
+    row(m_pixelTurns, wound);
+    const bool wand = rp.pixelPath == PixelPath::Wand;
+    m_wandLength->setValue(double(rp.wandLength) * toDisp);
+    row(m_wandLength, wand);
+    m_heldBy->clear();
+    m_heldBy->addItem(tr("Nobody (stands where placed)"), uint(UINT_MAX));
+    foreach (StageTarget *t, props->stageTargets())
+        if (t != nullptr && t->kind() == StageTarget::Kind::Person)
+            m_heldBy->addItem(t->name(), uint(t->id()));
+    m_heldBy->setCurrentIndex(qMax(0, m_heldBy->findData(uint(rp.heldBy))));
+    row(m_heldBy, wand);
+    m_holdHeight->setValue(double(rp.holdHeight) * toDisp);
+    row(m_holdHeight, wand && rp.isHeld());
+    m_holdTilt->setValue(double(rp.holdTilt));
+    row(m_holdTilt, wand && rp.isHeld());
 }

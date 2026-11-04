@@ -14,6 +14,21 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Added
 
+- **Fountains: fire height, fixtures and a WLED set in them; wands.** A
+  fountain's silk flame now starts at the top of its inner wall and rises
+  by its **Fire height** (3 ft; set it in Add Fountain or the fountain's
+  editor, its base's). A fixture dragged or added inside a fountain is
+  mounted in it, on the base or on the inner wall's top, and moves and
+  turns with it; a par put there points up at the flame, and the flame
+  takes the colour of the lights on it. A pixel fixture (WLED) gets a
+  **Pixel path**: round the inner or outer wall's top, round the base, or
+  wound up the flame, its LEDs drawn in their live colours in the plot and
+  the rig view. **Wand**: the same LEDs wound round a 1.2 m staff, held by
+  a performer (it moves with them) or standing where placed. See
+  [Fountains](docs/features/lighting-studio.md#fountains),
+  [Pixel paths](docs/features/lighting-studio.md#pixel-paths) and
+  [Wand](docs/features/lighting-studio.md#wand).
+
 - **Three states for a Show Review warning, visible on the cue.** Open is
   the amber **⚠ cyc**; **I Meant It** turns it green (**cyc ✓**; hover says
   who marked it, when, and the note); **Not a Problem…** (was Accept…)
@@ -102,6 +117,14 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   otherwise; `make test` now uses ccache too.
 
 ### Fixed
+
+- **A fountain's flame moves, turns and unlocks with the fountain.** The
+  flame was put on the default layer while the rest of the fountain went on
+  the layer you chose, so that layer's lock showed it locked where the
+  fountain wasn't, and unlocking the fountain didn't free it; and a fixture
+  standing on a deck that was dragged with it stayed drawn where the deck
+  had been. Shows from before are repaired on load: what stands on a
+  fountain's base joins its group, on its layer.
 
 - **The rig view holds still under the mouse.** Hovering over the 3D/rig
   view while a show ran made the rig shimmer back and forth by a hair:

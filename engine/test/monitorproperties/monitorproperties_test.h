@@ -217,6 +217,11 @@ private slots:
     void aFaceAimsAFixedLight();
     /** A platform's finish (its paint on the rig) apart from its plot colour. */
     void aPlatformKeepsItsFinish();
+    void pixelPathLaysPointsEvenly();
+    void aRingIsOnTheWallTopInOrder();
+    void aWandHelixHasItsTurns();
+    void aHeldWandMovesWithItsPerson();
+    void fountainPixelsAndWandsRoundTrip();
 };
 
 #endif
