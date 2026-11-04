@@ -411,6 +411,10 @@ static void fix18(ReviewContext &ctx, QList<ReviewFinding> &out)
             acc.tiltMax = eb.tiltMax;
         }
     }
+    // Two definitions can share a name (a copy, a second file): tell them apart.
+    QHash<QString, int> nameCount;
+    for (auto it = byDef.constBegin(); it != byDef.constEnd(); ++it)
+        nameCount[QStringLiteral("%1 %2").arg(it.key()->manufacturer(), it.key()->model()).trimmed()]++;
     for (auto it = byDef.constBegin(); it != byDef.constEnd(); ++it)
     {
         const Fixture::EffectiveBeam &e = shown.value(it.key());
@@ -427,12 +431,19 @@ static void fix18(ReviewContext &ctx, QList<ReviewFinding> &out)
         if (pt)
             assume += QString(assume.isEmpty() ? QString() : QStringLiteral(" / "))
                 + QStringLiteral("%1\u00B0\u00D7%2\u00B0").arg(e.panMax).arg(e.tiltMax);
-        const QString name = QStringLiteral("%1 %2").arg(it.key()->manufacturer(), it.key()->model()).trimmed();
+        QString name = QStringLiteral("%1 %2").arg(it.key()->manufacturer(), it.key()->model()).trimmed();
+        if (nameCount.value(name) > 1)
+        {
+            const QString file = QFileInfo(it.key()->definitionSourceFile()).fileName();
+            Fixture *first = ctx.doc()->fixture(it.value().first());
+            name += QStringLiteral(" (%1)").arg(!file.isEmpty() ? file
+                                               : first != nullptr ? first->name() : QString::number(it.value().first()));
+        }
         out << ReviewContext::make(QStringLiteral("FIX-18"), ReviewFinding::Note,
             trn("%1: %2 in its definition (%n fixture(s)); the rig view and aims assume %3. "
                 "Fix the definition so they use the real figures.",
                 it.value().count()).arg(name, what, assume),
-            fixtureKeys(it.value()), name.toUtf8(),
+            fixtureKeys(it.value()), name.toUtf8() + ':' + idBytes(it.value()),
             QStringLiteral("status:fixtures.output"), QVariantList() << it.key()->definitionSourceFile());
     }
 }

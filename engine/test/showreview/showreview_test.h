@@ -55,6 +55,7 @@ private slots:
     void fix16();
     void fix16Rows();
     void fix18();
+    void fix18SameNameTwoDefinitions();
     void fix16Single();
     void fix16Sources();
     void fix16Save();

@@ -678,6 +678,21 @@ void ShowReview_Test::fix18()
     QVERIFY(quiet("FIX-18"));
 }
 
+void ShowReview_Test::fix18SameNameTwoDefinitions()
+{
+    // Two separate definitions called alike: two rows, told apart.
+    Fixture *a = mover(QStringLiteral("Spot A"), 0);
+    Fixture *b = mover(QStringLiteral("Spot B"), 10);
+    QVERIFY(a != nullptr && b != nullptr);
+    QVERIFY(a->fixtureDef() != b->fixtureDef());
+    QCOMPARE(a->fixtureDef()->model(), b->fixtureDef()->model());
+    const QList<ReviewFinding> all = findings("FIX-18");
+    QCOMPARE(all.size(), 2);
+    QVERIFY(all.at(0).message != all.at(1).message);
+    QVERIFY(all.at(0).fingerprint != all.at(1).fingerprint);
+    QVERIFY2(all.at(0).message.contains(QStringLiteral("(Spot ")), qPrintable(all.at(0).message));
+}
+
 void ShowReview_Test::fix16Rows()
 {
     MonitorProperties *mp = m_doc->monitorProperties();
