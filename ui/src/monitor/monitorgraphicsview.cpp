@@ -4764,6 +4764,39 @@ void MonitorGraphicsView::keyPressEvent(QKeyEvent *event)
         event->accept();
         return;
     }
+    /* The edit keys every list has (docs/features/shortcuts.md, Edit
+       keys): ⌫ takes the selection off the plot (as Remove Selected, one
+       undo step; fixtures back to the Inventory), F2 renames it in Plot
+       layers, ⌘F goes to Plot layers' search, Esc lets go of it. */
+    const Qt::KeyboardModifiers mods = event->modifiers() & ~Qt::KeypadModifier;
+    Monitor *mon = Monitor::instance();
+    const bool picked = !m_scene->selectedItems().isEmpty();
+    if (mon != nullptr && picked && mods == Qt::NoModifier
+        && (event->key() == Qt::Key_Delete || event->key() == Qt::Key_Backspace))
+    {
+        if (m_doc->mode() == Doc::Design)
+            QMetaObject::invokeMethod(mon, [mon]() { mon->removeSelectionWithUndo(); }, Qt::QueuedConnection);
+        event->accept();
+        return;
+    }
+    if (mon != nullptr && picked && mods == Qt::NoModifier && event->key() == Qt::Key_F2)
+    {
+        mon->renameSelected();
+        event->accept();
+        return;
+    }
+    if (mon != nullptr && event->matches(QKeySequence::Find))
+    {
+        mon->focusLayersSearch();
+        event->accept();
+        return;
+    }
+    if (picked && mods == Qt::NoModifier && event->key() == Qt::Key_Escape)
+    {
+        m_scene->clearSelection();
+        event->accept();
+        return;
+    }
     if (event->key() == Qt::Key_Shift && (QGuiApplication::mouseButtons() & Qt::LeftButton))
         updateDragBorders();
     QGraphicsView::keyPressEvent(event);

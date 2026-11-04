@@ -69,6 +69,9 @@
 #include "programmercontroller.h"
 #include "rigowner.h"
 #include "universe.h"
+#include "fixturegroup.h"
+#include "qlcpalette.h"
+#include "scene.h"
 
 #define private public
 #include "qlcfixturedefcache.h"
@@ -81,6 +84,9 @@
 #include "monitorproperties.h"
 #include "stagetarget.h"
 #include "targetitem.h"
+#include "monitorlayerspanel.h"
+#include "monitorfixtureitem.h"
+#include "functionstreewidget.h"
 #define protected public
 #include "app.h"
 #include "dmxmonitorwindow.h"
@@ -4815,6 +4821,431 @@ void AppViews_Test::theFooterSaysWhatLightsTheStage()
     QVERIFY(chip->text().endsWith(QString::fromUtf8("\xe2\x80\xa6")));
     QVERIFY(chip->sizeHint().width() <= m_app->width() / 5 + 16);
     QVERIFY(chip->toolTip().contains(QString(120, 'x')));
+}
+
+/* Dump DMX opens a dialog: closed as soon as it shows, and counted. */
+struct DumpWatch
+{
+    explicit DumpWatch(App *app) : dumped(app->m_dumpDmxAction, &QAction::triggered)
+    {
+        QObject::connect(&closer, &QTimer::timeout, []() {
+            if (QWidget *modal = QApplication::activeModalWidget())
+                modal->close();
+        });
+        closer.start(50);
+    }
+    QSignalSpy dumped;
+    QTimer closer;
+};
+
+/* The key as a person types it: to the focused widget, through the main
+   window's shortcut map. */
+static void typeKey(QWidget *w, Qt::Key key, Qt::KeyboardModifiers mods = Qt::NoModifier)
+{
+    w->setFocus(Qt::OtherFocusReason);
+    QTRY_VERIFY(w->hasFocus());
+    QTest::keyClick(QApplication::focusWidget(), key, mods);
+    QCoreApplication::processEvents();
+}
+
+static QWidget *showFront(App *app, const QString &context)
+{
+    app->show();
+    app->activateWindow();
+    if (!QTest::qWaitForWindowActive(app))
+        return nullptr;
+    app->showContext(context);
+    QCoreApplication::processEvents();
+    return app->m_tab->currentWidget();
+}
+
+/* Before / after pictures of the edit keys (WFKEYS_SHOTS=dir,
+   WFKEYS_PREFIX=before|after): the window at three sizes, dark. Nothing
+   without the variable. */
+static void wfShots(App *app, const QString &name)
+{
+    const QString dir = qEnvironmentVariable("WFKEYS_SHOTS");
+    if (dir.isEmpty())
+        return;
+    QTest::qWait(100);
+    const QString prefix = qEnvironmentVariable("WFKEYS_PREFIX", QStringLiteral("after"));
+    const int was = app->theme();
+    const QSize size = app->size();
+    app->setTheme(App::ThemeVSCodeDark);
+    for (const QSize &s : { QSize(1024, 640), QSize(1280, 800), QSize(1920, 1080) })
+    {
+        app->resize(s);
+        QCoreApplication::processEvents();
+        app->grab().save(QStringLiteral("%1/%2-%3-%4x%5.png").arg(dir, prefix, name)
+                         .arg(s.width()).arg(s.height()));
+    }
+    app->setTheme(was);
+    app->resize(size);
+    QCoreApplication::processEvents();
+}
+
+void AppViews_Test::ctrlDOnTheShowTreeDuplicates()
+{
+    m_app->clearDocument();
+    Doc *doc = m_app->doc();
+    doc->setMode(Doc::Design);
+    ShowTreeController *st = doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction(QStringLiteral("P")), QStringLiteral("Main"));
+    const quint32 cue = st->addCue(list, -1, QStringLiteral("One"));
+    QVERIFY(showFront(m_app, QStringLiteral("Show Tree")) != nullptr);
+    ShowTreeView *view = ShowTreeView::instance();
+    QVERIFY(view != nullptr);
+    QTreeWidget *tree = view->findChild<QTreeWidget *>(QStringLiteral("stTree"));
+    QVERIFY(tree != nullptr);
+    QVERIFY(view->selectNode(cue));
+    QCOMPARE(st->cueList(list)->cues.count(), 1);
+
+    DumpWatch dump(m_app);
+    typeKey(tree, Qt::Key_D, Qt::ControlModifier);
+    wfShots(m_app, QStringLiteral("showtree-cmd-d"));
+    QTRY_COMPARE(st->cueList(list)->cues.count(), 2);
+    QCOMPARE(dump.dumped.count(), 0);
+
+    // Nothing selected: the tree leaves Ctrl+D to the window (Dump DMX).
+    tree->clearSelection();
+    typeKey(tree, Qt::Key_D, Qt::ControlModifier);
+    QCOMPARE(st->cueList(list)->cues.count(), 2);
+    QCOMPARE(dump.dumped.count(), 1);
+    m_app->clearDocument();
+}
+
+void AppViews_Test::ctrlDInBuildListsDuplicates()
+{
+    m_app->clearDocument();
+    Doc *doc = m_app->doc();
+    doc->setMode(Doc::Design);
+    QLCPalette *pal = new QLCPalette(QLCPalette::Dimmer, doc);
+    pal->setName(QStringLiteral("Full"));
+    pal->setValue(255);
+    QVERIFY(doc->addPalette(pal));
+    Scene *scene = new Scene(doc);
+    scene->setName(QStringLiteral("Opening"));
+    QVERIFY(doc->addFunction(scene));
+    EFX *efx = new EFX(doc);
+    efx->setName(QStringLiteral("Circle"));
+    QVERIFY(doc->addFunction(efx));
+    QVERIFY(showFront(m_app, QStringLiteral("Build")) != nullptr);
+    ProgrammingManager *pm = ProgrammingManager::instance();
+    QVERIFY(pm != nullptr);
+    DumpWatch dump(m_app);
+
+    // Palettes.
+    pm->setSection(ProgrammingManager::PalettesSection);
+    pm->m_paletteTree->updateTree();
+    pm->revealPalette(pal->id());
+    QCoreApplication::processEvents();
+    QVERIFY(!pm->m_paletteTree->selectedItems().isEmpty());
+    const int palettes = doc->palettes().count();
+    typeKey(pm->m_paletteTree, Qt::Key_D, Qt::ControlModifier);
+    wfShots(m_app, QStringLiteral("build-palettes-cmd-d"));
+    QTRY_COMPARE(doc->palettes().count(), palettes + 1);
+    QCOMPARE(dump.dumped.count(), 0);
+
+    // Scenes (the outline).
+    pm->setSection(ProgrammingManager::ScenesSection);
+    pm->m_outline->rebuild();
+    QVERIFY(pm->m_outline->selectRow({ ProgrammingOutline::SceneRow, Function::invalidId(), scene->id() }));
+    const int functions = doc->functions().count();
+    typeKey(pm->m_outline, Qt::Key_D, Qt::ControlModifier);
+    QTRY_COMPARE(doc->functions().count(), functions + 1);
+    QCOMPARE(dump.dumped.count(), 0);
+
+    // Effects: Ctrl+D, then Ctrl+C / Ctrl+V copy the effect, not a scene.
+    pm->setSection(ProgrammingManager::EffectsSection);
+    pm->rebuildEffectsNow();
+    pm->selectEffectRow(false, efx->id());
+    QVERIFY(!pm->m_effectsList->selectedItems().isEmpty());
+    typeKey(pm->m_effectsList, Qt::Key_D, Qt::ControlModifier);
+    QTRY_COMPARE(doc->functions().count(), functions + 2);
+    QCOMPARE(dump.dumped.count(), 0);
+    auto efxCount = [doc]() {
+        int n = 0;
+        foreach (Function *f, doc->functions())
+            n += f->type() == Function::EFXType ? 1 : 0;
+        return n;
+    };
+    QCOMPARE(efxCount(), 2);
+    pm->rebuildEffectsNow();
+    pm->selectEffectRow(false, efx->id());
+    typeKey(pm->m_effectsList, Qt::Key_C, Qt::ControlModifier);
+    typeKey(pm->m_effectsList, Qt::Key_V, Qt::ControlModifier);
+    QTRY_COMPARE(efxCount(), 3);
+
+    // Nothing selected: Dump DMX.
+    pm->m_effectsList->clearSelection();
+    typeKey(pm->m_effectsList, Qt::Key_D, Qt::ControlModifier);
+    QCOMPARE(dump.dumped.count(), 1);
+    QCOMPARE(efxCount(), 3);
+    m_app->clearDocument();
+}
+
+void AppViews_Test::editKeysInTheFixturesTab()
+{
+    m_app->clearDocument();
+    Doc *doc = m_app->doc();
+    doc->setMode(Doc::Design);
+    Fixture *fx = new Fixture(doc);
+    fx->setName(QStringLiteral("Front"));
+    fx->setChannels(1);
+    fx->setAddress(0);
+    fx->setUniverse(0);
+    QVERIFY(doc->addFixture(fx));
+    FixtureGroup *grp = new FixtureGroup(doc);
+    grp->setName(QStringLiteral("Wash"));
+    grp->setSize(QSize(2, 1));
+    QVERIFY(doc->addFixtureGroup(grp));
+    grp->assignFixture(fx->id());
+    QVERIFY(showFront(m_app, QStringLiteral("Fixtures")) != nullptr);
+    FixtureManager *fm = FixtureManager::instance();
+    QVERIFY(fm != nullptr);
+    FixtureTreeWidget *tree = fm->m_fixtures_tree;
+    tree->updateTree();
+    QVERIFY(fm->selectFixture(fx->id()));
+    tree->currentItem()->setSelected(true);
+    DumpWatch dump(m_app);
+
+    // Ctrl+D: a new fixture like it, unpatched (the Inventory), named on.
+    typeKey(tree, Qt::Key_D, Qt::ControlModifier);
+    wfShots(m_app, QStringLiteral("fixtures-cmd-d"));
+    QTRY_COMPARE(doc->fixtures().count(), 2);
+    QCOMPARE(dump.dumped.count(), 0);
+    Fixture *copy = nullptr;
+    foreach (Fixture *f, doc->fixtures())
+        if (f->id() != fx->id())
+            copy = f;
+    QVERIFY(copy != nullptr);
+    QVERIFY(!copy->isPatched());
+    QVERIFY(fx->isPatched());
+    QCOMPARE(copy->channels(), fx->channels());
+    QVERIFY(copy->name() != fx->name());
+    QVERIFY(copy->name().startsWith(QStringLiteral("Front")));
+
+    // Ctrl+C, Ctrl+V: another.
+    QVERIFY(fm->selectFixture(fx->id()));
+    tree->currentItem()->setSelected(true);
+    typeKey(tree, Qt::Key_C, Qt::ControlModifier);
+    typeKey(tree, Qt::Key_V, Qt::ControlModifier);
+    QTRY_COMPARE(doc->fixtures().count(), 3);
+
+    // A group: a copy of it, the same members.
+    tree->clearSelection();
+    QTreeWidgetItem *grpRow = nullptr;
+    for (QTreeWidgetItemIterator it(tree); *it != nullptr; ++it)
+        if ((*it)->data(0, PROP_GROUP).isValid()
+            && (*it)->data(0, PROP_GROUP).toUInt() == grp->id())
+            grpRow = *it;
+    QVERIFY(grpRow != nullptr);
+    grpRow->setSelected(true);
+    tree->setCurrentItem(grpRow, 0, QItemSelectionModel::NoUpdate);
+    typeKey(tree, Qt::Key_D, Qt::ControlModifier);
+    QTRY_COMPARE(doc->fixtureGroups().count(), 2);
+    FixtureGroup *gcopy = doc->fixtureGroups().last() == grp ? doc->fixtureGroups().first()
+                                                             : doc->fixtureGroups().last();
+    QCOMPARE(gcopy->fixtureList(), grp->fixtureList());
+    QVERIFY(gcopy->name() != grp->name());
+    QCOMPARE(doc->fixtures().count(), 3);
+
+    // Esc: the selection goes.
+    QVERIFY(!tree->selectedItems().isEmpty());
+    typeKey(tree, Qt::Key_Escape);
+    QVERIFY(tree->selectedItems().isEmpty());
+    QCOMPARE(dump.dumped.count(), 0);
+    m_app->clearDocument();
+}
+
+static Fixture *plotFixture(Doc *doc, MonitorGraphicsView *gv, const QString &name, float xMm)
+{
+    Fixture *fx = new Fixture(doc);
+    fx->setName(name);
+    fx->setChannels(1);
+    fx->setAddress(quint32(xMm / 1000.0f));
+    if (!doc->addFixture(fx))
+        return nullptr;
+    doc->monitorProperties()->setFixturePosition(fx->id(), 0, 0, QVector3D(xMm, 3000.0f, 0));
+    gv->addFixture(fx->id(), QPointF(xMm, 3000.0f));
+    return fx;
+}
+
+void AppViews_Test::editKeysOnThePlot()
+{
+    m_app->clearDocument();
+    Doc *doc = m_app->doc();
+    doc->setMode(Doc::Design);
+    QVERIFY(showFront(m_app, QStringLiteral("Lighting Studio")) != nullptr);
+    Monitor *mon = Monitor::instance();
+    QVERIFY(mon != nullptr);
+    MonitorGraphicsView *gv = mon->findChild<MonitorGraphicsView *>();
+    QVERIFY(gv != nullptr);
+    Fixture *a = plotFixture(doc, gv, QStringLiteral("Left"), 2000.0f);
+    Fixture *b = plotFixture(doc, gv, QStringLiteral("Right"), 5000.0f);
+    QVERIFY(a != nullptr && b != nullptr);
+    mon->findChild<MonitorLayersPanel *>()->reload();
+    gv->scene()->clearSelection();
+    gv->fixtureItemForId(a->id())->setSelected(true);
+    gv->fixtureItemForId(b->id())->setSelected(true);
+
+    // Esc: the selection goes; nothing else does.
+    typeKey(gv, Qt::Key_Escape);
+    QVERIFY(gv->scene()->selectedItems().isEmpty());
+    QVERIFY(gv->fixtureItemForId(a->id()) != nullptr);
+
+    // Backspace: both off the plot, still in the show; one undo step.
+    gv->fixtureItemForId(a->id())->setSelected(true);
+    gv->fixtureItemForId(b->id())->setSelected(true);
+    typeKey(gv, Qt::Key_Backspace);
+    wfShots(m_app, QStringLiteral("plot-backspace"));
+    QTRY_VERIFY(gv->fixtureItemForId(a->id()) == nullptr);
+    QVERIFY(gv->fixtureItemForId(b->id()) == nullptr);
+    QVERIFY(doc->fixture(a->id()) != nullptr && doc->fixture(b->id()) != nullptr);
+    QVERIFY(!doc->monitorProperties()->containsFixture(a->id()));
+    QVERIFY(mon->canUndo());
+    mon->undo();
+    QTRY_VERIFY(gv->fixtureItemForId(a->id()) != nullptr);
+    QVERIFY(gv->fixtureItemForId(b->id()) != nullptr);
+
+    // F2: the selected item's row in Plot layers, renaming.
+    gv->scene()->clearSelection();
+    gv->fixtureItemForId(a->id())->setSelected(true);
+    typeKey(gv, Qt::Key_F2);
+    QLineEdit *editor = qobject_cast<QLineEdit *>(QApplication::focusWidget());
+    QVERIFY(editor != nullptr);
+    QVERIFY(mon->findChild<MonitorLayersPanel *>()->m_tree->isAncestorOf(editor));
+    QCOMPARE(editor->text(), QStringLiteral("Left"));
+    QTest::keyClick(editor, Qt::Key_Escape);
+    QCoreApplication::processEvents();
+
+    // Cmd/Ctrl+F: Plot layers' search.
+    typeKey(gv, Qt::Key_F, Qt::ControlModifier);
+    QCOMPARE(QApplication::focusWidget(), static_cast<QWidget *>(mon->findChild<MonitorLayersPanel *>()->m_search));
+    m_app->clearDocument();
+}
+
+void AppViews_Test::editKeysInPlotLayers()
+{
+    m_app->clearDocument();
+    Doc *doc = m_app->doc();
+    doc->setMode(Doc::Design);
+    QVERIFY(showFront(m_app, QStringLiteral("Lighting Studio")) != nullptr);
+    Monitor *mon = Monitor::instance();
+    MonitorGraphicsView *gv = mon->findChild<MonitorGraphicsView *>();
+    MonitorProperties *props = doc->monitorProperties();
+    StageTarget *t = props->addStageTarget();
+    t->setName(QStringLiteral("Soloist"));
+    t->setKind(StageTarget::Kind::Person);
+    t->setPosition(QVector3D(3.0f, 3.0f, 0.0f));
+    gv->updateTargets();
+    MonitorLayersPanel *panel = mon->findChild<MonitorLayersPanel *>();
+    QVERIFY(panel != nullptr);
+    panel->setVisible(true);
+    panel->reload();
+    // Picked on the plot: the list follows (as a click on its row does the
+    // other way).
+    gv->scene()->clearSelection();
+    gv->m_targetItems.value(t->id())->setSelected(true);
+    QCoreApplication::processEvents();
+    QVERIFY(!panel->selectedObjects().isEmpty());
+    QVERIFY(!gv->scene()->selectedItems().isEmpty());
+    const int before = props->stageTargets().size();
+    DumpWatch dump(m_app);
+
+    // Cmd/Ctrl+D: as on the plot.
+    typeKey(panel->m_tree, Qt::Key_D, Qt::ControlModifier);
+    QTRY_COMPARE(props->stageTargets().size(), before + 1);
+    QCOMPARE(dump.dumped.count(), 0);
+
+    // Esc: the list and the plot let go.
+    panel->reload();
+    // Picked on the plot: the list follows (as a click on its row does the
+    // other way).
+    gv->scene()->clearSelection();
+    gv->m_targetItems.value(t->id())->setSelected(true);
+    QCoreApplication::processEvents();
+    QVERIFY(!panel->selectedObjects().isEmpty());
+    typeKey(panel->m_tree, Qt::Key_Escape);
+    wfShots(m_app, QStringLiteral("plotlayers-esc"));
+    QVERIFY(panel->m_tree->selectedItems().isEmpty());
+    QVERIFY(gv->scene()->selectedItems().isEmpty());
+
+    // Cmd/Ctrl+F: the search.
+    typeKey(panel->m_tree, Qt::Key_F, Qt::ControlModifier);
+    QCOMPARE(QApplication::focusWidget(), static_cast<QWidget *>(panel->m_search));
+
+    // Backspace: off the plot (a target asks first: yes). Selected on the
+    // plot, the list follows.
+    gv->scene()->clearSelection();
+    gv->m_targetItems.value(t->id())->setSelected(true);
+    QCoreApplication::processEvents();
+    QVERIFY(!panel->selectedObjects().isEmpty());
+    dump.closer.stop();
+    QTimer yes;
+    connect(&yes, &QTimer::timeout, [&]() {
+        if (QMessageBox *box = qobject_cast<QMessageBox *>(QApplication::activeModalWidget()))
+        {
+            for (QAbstractButton *btn : box->buttons())
+                if (box->buttonRole(btn) == QMessageBox::AcceptRole
+                    || box->buttonRole(btn) == QMessageBox::YesRole
+                    || box->buttonRole(btn) == QMessageBox::DestructiveRole)
+                {
+                    btn->click();
+                    return;
+                }
+            box->accept();
+        }
+    });
+    yes.start(50);
+    typeKey(panel->m_tree, Qt::Key_Backspace);
+    QTRY_COMPARE(props->stageTargets().size(), before);
+    yes.stop();
+    m_app->clearDocument();
+}
+
+void AppViews_Test::escBacksOutThenClearsTheSelection()
+{
+    m_app->clearDocument();
+    Doc *doc = m_app->doc();
+    doc->setMode(Doc::Design);
+    QLCPalette *pal = new QLCPalette(QLCPalette::Dimmer, doc);
+    pal->setName(QStringLiteral("Full"));
+    pal->setValue(255);
+    QVERIFY(doc->addPalette(pal));
+    ShowTreeController *st = doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction(QStringLiteral("P")), QStringLiteral("Main"));
+    const quint32 cue = st->addCue(list, -1, QStringLiteral("One"));
+    QVERIFY(showFront(m_app, QStringLiteral("Show Tree")) != nullptr);
+    ShowTreeView *view = ShowTreeView::instance();
+    QTreeWidget *tree = view->findChild<QTreeWidget *>(QStringLiteral("stTree"));
+    QVERIFY(view->selectNode(cue));
+    view->editPalette(pal->id());
+    QVERIFY(view->editedPalette() == pal->id());
+
+    // The first Esc closes the Look Editor; the cue stays selected.
+    typeKey(tree, Qt::Key_Escape);
+    QVERIFY(view->editedPalette() != pal->id());
+    QVERIFY(!tree->selectedItems().isEmpty());
+    // The next lets go of the selection.
+    typeKey(tree, Qt::Key_Escape);
+    QVERIFY(tree->selectedItems().isEmpty());
+
+    // Build's palette list: the same.
+    QVERIFY(showFront(m_app, QStringLiteral("Build")) != nullptr);
+    ProgrammingManager *pm = ProgrammingManager::instance();
+    pm->setSection(ProgrammingManager::PalettesSection);
+    pm->m_paletteTree->updateTree();
+    pm->revealPalette(pal->id());
+    QCoreApplication::processEvents();
+    QVERIFY(!pm->m_paletteTree->selectedItems().isEmpty());
+    pm->m_workbench->editPalette(pal->id());
+    typeKey(pm->m_paletteTree, Qt::Key_Escape);
+    QVERIFY(!pm->m_paletteTree->selectedItems().isEmpty());   // backed out first
+    for (int i = 0; i < 4 && !pm->m_paletteTree->selectedItems().isEmpty(); ++i)
+        typeKey(pm->m_paletteTree, Qt::Key_Escape);
+    QVERIFY(pm->m_paletteTree->selectedItems().isEmpty());
+    m_app->clearDocument();
 }
 
 void AppViews_Test::ctrlDOnThePlotDuplicates()

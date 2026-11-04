@@ -31,6 +31,7 @@ add_library(${module_name}
     controllertestdialog.cpp controllertestdialog.h
     apputil.cpp apputil.h
     contextmenus.cpp contextmenus.h
+    editkeys.cpp editkeys.h
     itemicons.cpp itemicons.h
     layoutdiagnostics.cpp layoutdiagnostics.h
     assignhotkey.cpp assignhotkey.h assignhotkey.ui

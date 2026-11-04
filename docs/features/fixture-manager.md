@@ -87,6 +87,12 @@ any of its targets are unpatched.
 - Right-click a **model's folder** (or one staged fixture) →
   **"Add more X to inventory..."** opens Add already on that model and mode;
   on a manufacturer's folder, on that manufacturer.
+- **⌘D** (or **⌘C** then **⌘V**) on a fixture anywhere in the tree adds
+  one more like it to the inventory: the same definition, mode and
+  settings, unpatched, named on ("Front" → "Front #2"). On a group it makes
+  a copy of the group, the same fixtures laid out the same, in its folder.
+  **Esc** lets go of the selection. The keys are the same in every list
+  ([Edit keys](shortcuts.md#edit-keys-the-same-in-every-list)).
 - Adding is Design mode only, like Add Fixture.
 
 ### Patching: the Patch dialog

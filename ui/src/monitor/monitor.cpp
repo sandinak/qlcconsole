@@ -3878,6 +3878,72 @@ void Monitor::slotRemoveSelected()
     m_doc->setModified();
 }
 
+bool Monitor::removeSelectionWithUndo()
+{
+    if (m_graphicsView == nullptr || m_doc->mode() != Doc::Design)
+        return false;
+    const QList<QGraphicsItem *> sel = m_graphicsView->scene()->selectedItems();
+    if (sel.isEmpty())
+        return false;
+    QList<quint32> fixtures;
+    bool features = false;
+    for (QGraphicsItem *gi : sel)
+    {
+        if (auto *mfi = dynamic_cast<MonitorFixtureItem *>(gi))
+        {
+            if (!gi->data(ItemLock::LayerLockedKey).toBool())
+                fixtures << mfi->fixtureID();
+        }
+        else
+            features = true;
+    }
+    const QByteArray before = rigSnapshot();
+    /* The structures as Remove Selected takes them (it asks, naming the
+       fixtures on them); then each fixture still on the plot. */
+    if (features)
+    {
+        slotRemoveSelected();
+        if (rigSnapshot() == before)
+            return false;       // cancelled (or all held by a layer lock)
+    }
+    else
+        hideFixtureItemEditor();
+    for (quint32 fid : fixtures)
+        if (m_graphicsView->fixtureItemForId(fid) != nullptr)
+            m_graphicsView->removeFixture(fid);
+    if (!fixtures.isEmpty())
+    {
+        m_props->recomputeStandMounts();
+        m_graphicsView->refreshFixtureBindings();
+        if (m_layersPanel) m_layersPanel->reload();
+        m_doc->setModified();
+        emit m_graphicsView->mapStructureChanged();
+    }
+    pushRigUndo(before);
+    return rigSnapshot() != before;
+}
+
+void Monitor::renameSelected()
+{
+    if (m_graphicsView == nullptr || m_layersPanel == nullptr || m_doc->mode() != Doc::Design)
+        return;
+    const QList<QPair<QString, quint32> > objects = m_graphicsView->selectedMapObjects();
+    if (objects.isEmpty())
+        return;
+    if (!m_layersPanel->isVisible())
+        m_layersPanel->setVisible(true);
+    m_layersPanel->renameObject(objects.first().first, objects.first().second);
+}
+
+void Monitor::focusLayersSearch()
+{
+    if (m_layersPanel == nullptr)
+        return;
+    if (!m_layersPanel->isVisible())
+        m_layersPanel->setVisible(true);
+    m_layersPanel->focusSearch();
+}
+
 bool Monitor::duplicateSelected()
 {
     /* The clipboard is the paste's source, so a duplicate leaves what was

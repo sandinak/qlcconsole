@@ -327,6 +327,8 @@ private:
 
     /** Duplicate palette $pid ("… (copy)"), add it, and open it for editing. */
     void duplicatePalette(quint32 pid);
+    /** ⌘D on palettes: each copied (one opens to edit, as duplicatePalette()). */
+    void duplicatePalettes(const QList<quint32> &pids);
 
     /** Same convention for the palette tree: the selection if the clicked
      *  row is in it, otherwise the clicked row alone. */

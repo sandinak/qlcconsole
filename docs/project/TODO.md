@@ -10,6 +10,18 @@ under `~/.claude/.../memory/`.
 
 ---
 
+## Edit keys the same in every list (WF1-A, W1-27, W2-Q2; wfkeys, 2026-11-04) — built, leftovers
+
+⌫ / F2 / ⌘C ⌘V / ⌘D / ⌘F / Esc in the Show Tree, Build (Palettes,
+Effects, Scenes), Fixtures, Plot layers and the plot (ui/src/editkeys.*,
+one table in docs/features/shortcuts.md#edit-keys-the-same-in-every-list).
+⌘D is focus-scoped (a list with a selection), Dump DMX keeps it elsewhere
+until Q214 decides. Leftovers:
+- ⌘F in Build and Fixtures comes from wfaudit1 (fix/04-wfaudit1-friction).
+- The Show Tree's Library has no ⌘D (palettes duplicate in Build).
+- ⌘D in the Fixtures tab is not on ⌘Z (the copy is deleted with ⌫).
+- Connections' Universes tab keeps ⌘D = Delete Universe (Q214).
+
 ## Notes beside the Show Tree (Q212, notes, 2026-11-03) — built, leftovers
 
 Notes pane under the cue page (follows the tree row or a Library palette),

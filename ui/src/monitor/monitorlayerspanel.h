@@ -143,6 +143,11 @@ public:
     /** Select and scroll to the row for @p kind / @p id ("Show in Layers").
      *  False when the list has no such row. */
     bool revealItem(const QString &kind, quint32 id);
+    /** Rename @p kind / @p id's row in place (F2 on the plot). False: no
+     *  such row, or the list is read-only. */
+    bool renameObject(const QString &kind, quint32 id);
+    /** ⌘F: to the search box above the tree. */
+    void focusSearch();
 
     /** Mirror the plot's selection: select exactly the rows for @p objects
      *  (kind, id), open their folders and scroll to the first -- without

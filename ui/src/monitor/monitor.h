@@ -867,6 +867,16 @@ public:
      *  the selection and paste it half a metre on, one undo step. False
      *  when nothing selected can be copied. */
     bool duplicateSelected();
+    /** ⌫ / Delete on the plot or in Plot layers: what is selected comes off
+     *  the plot, as Remove Selected does (a structure asks first), and every
+     *  selected fixture with it, back to the Inventory -- one undo step.
+     *  False: nothing came off (nothing selected, or the question was
+     *  cancelled). */
+    bool removeSelectionWithUndo();
+    /** F2 on the plot: rename the (first) selected item in Plot layers. */
+    void renameSelected();
+    /** ⌘F on the plot: to Plot layers' search box (the panel opens). */
+    void focusLayersSearch();
     /** The next free name like @p name among the targets: "Soloist" ->
      *  "Soloist 2", "Lead 2" -> "Lead 4" when 3 is taken. */
     QString nextTargetName(const QString &name) const;
