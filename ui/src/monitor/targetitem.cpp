@@ -155,10 +155,226 @@ QRectF TargetItem::footprintRect() const
 {
     if (m_footprintPx.width() <= 0.0)
         return QRectF();
+    // An instrument is drawn as itself (bandRect()), not as a tinted box.
+    if (m_target != nullptr && StageTarget::isBandKind(m_target->kind()))
+        return QRectF();
     /* A strip in an elevation: the ground it covers, seen edge on, given a few
        pixels of thickness so it can be seen at all. */
     const double h = qMax(6.0, m_footprintPx.height());
     return QRectF(-m_footprintPx.width() * 0.5, -h * 0.5, m_footprintPx.width(), h);
+}
+
+/* The band instruments' glyphs. Floors keep them readable when the whole stage
+   is on screen: a rack is never smaller than a small box. */
+static constexpr double kBandMinW = 16.0;
+static constexpr double kBandMinH = 12.0;
+
+QRectF TargetItem::bandRect() const
+{
+    if (m_target == nullptr || !StageTarget::isBandKind(m_target->kind()))
+        return QRectF();
+    if (m_footprintPx.width() <= 0.0)
+        return QRectF();
+    const double w = qMax(kBandMinW, m_footprintPx.width());
+    if (m_footprintPx.height() > 0.0)           // from above
+    {
+        const double h = qMax(kBandMinH, m_footprintPx.height());
+        return QRectF(-w * 0.5, -h * 0.5, w, h);
+    }
+    if (m_pxPerMetre <= 0.0)
+        return QRectF();
+    // In an elevation: standing on the deck, up to the top of the case.
+    const double h = qMax(kBandMinH * 0.7, std::abs(m_crown.y() - m_feet.y()));
+    return QRectF(m_feet.x() - w * 0.5, m_feet.y() - h, w, h);
+}
+
+void TargetItem::setBandAngle(double deg)
+{
+    if (qFuzzyCompare(m_bandAngle + 1.0, deg + 1.0))
+        return;
+    prepareGeometryChange();
+    m_bandAngle = deg;
+    update();
+}
+
+QRectF TargetItem::bandBounds() const
+{
+    const QRectF r = bandRect();
+    if (!r.isValid() || m_footprintPx.height() <= 0.0 || qFuzzyIsNull(m_bandAngle))
+        return r;
+    return QTransform().rotate(m_bandAngle).mapRect(r);
+}
+
+QPainterPath TargetItem::bandOutline() const
+{
+    QPainterPath path;
+    if (m_footprintPx.height() > 0.0 && !qFuzzyIsNull(m_bandAngle))
+    {
+        // Drawn upright, then turned about the mark.
+        TargetItem *self = const_cast<TargetItem *>(this);
+        const double a = m_bandAngle;
+        self->m_bandAngle = 0.0;
+        const QPainterPath upright = bandOutline();
+        self->m_bandAngle = a;
+        return QTransform().rotate(a).map(upright);
+    }
+    const QRectF r = bandRect();
+    if (r.isValid() == false)
+        return path;
+    const bool top = m_footprintPx.height() > 0.0;
+    const double l = r.left(), t = r.top(), w = r.width(), h = r.height();
+    auto X = [&](double f) { return l + w * f; };
+    auto Y = [&](double f) { return t + h * f; };
+    auto stripes = [&](QPainterPath &p, double x0, double x1, double y0, double y1) {
+        const int n = qBound(4, int((x1 - x0) / 4.0), 40);
+        for (int i = 1; i < n; ++i)
+        {
+            const double x = x0 + (x1 - x0) * i / n;
+            p.moveTo(x, y0);
+            p.lineTo(x, y1);
+        }
+    };
+    auto units = [&](QPainterPath &p, double x0, double x1, double y0, double y1) {
+        const int n = qBound(3, int((y1 - y0) / 4.0), 12);
+        for (int i = 1; i < n; ++i)
+        {
+            const double y = y0 + (y1 - y0) * i / n;
+            p.moveTo(x0, y);
+            p.lineTo(x1, y);
+        }
+    };
+    switch (m_target->kind())
+    {
+    case StageTarget::Kind::Keyboard:
+        if (top)
+        {
+            // The keybed toward the house (down the plot), key stripes across it,
+            // the stand's X showing through the rest.
+            path.addRoundedRect(r, 2.0, 2.0);
+            const double kb = Y(0.42);
+            path.moveTo(l, kb);
+            path.lineTo(l + w, kb);
+            stripes(path, l, l + w, kb, t + h);
+            path.moveTo(X(0.12), t); path.lineTo(X(0.88), kb);
+            path.moveTo(X(0.88), t); path.lineTo(X(0.12), kb);
+        }
+        else
+        {
+            // A slab on an X-stand.
+            const double slab = qMax(3.0, h * 0.09);
+            path.addRect(QRectF(l, t, w, slab));
+            if (!m_sideOn)
+                stripes(path, l, l + w, t, t + slab);
+            const double a = m_sideOn ? 0.30 : 0.18, b = 1.0 - a;
+            path.moveTo(X(a), t + slab); path.lineTo(X(b), t + h);
+            path.moveTo(X(b), t + slab); path.lineTo(X(a), t + h);
+        }
+        break;
+    case StageTarget::Kind::GrandPiano:
+        if (top)
+        {
+            // The grand's case: straight bass side, the curved bent side and
+            // tail, the keybed at the house edge.
+            const double kb = Y(0.88);
+            path.moveTo(l, t + h);
+            path.lineTo(l, Y(0.2));
+            path.quadTo(l, t, X(0.3), t);
+            path.cubicTo(X(0.68), t - h * 0.01, X(0.62), Y(0.45), r.right(), Y(0.5));
+            path.lineTo(r.right(), t + h);
+            path.closeSubpath();
+            path.moveTo(l, kb); path.lineTo(r.right(), kb);
+            stripes(path, X(0.08), X(0.92), kb, t + h);
+            path.moveTo(X(0.12), Y(0.15)); path.lineTo(X(0.12), kb);      // the lid hinge
+        }
+        else
+        {
+            // Lid up. From the side it rises toward the tail; from the front
+            // the open lid shows as a leaning panel behind the case.
+            const double caseTop = Y(0.25), caseBot = Y(0.45);
+            path.addRect(QRectF(l, caseTop, w, caseBot - caseTop));
+            QPolygonF lid;
+            if (m_sideOn)
+                lid << QPointF(X(0.08), caseTop) << QPointF(X(0.96), t) << QPointF(X(1.0), t + h * 0.08)
+                    << QPointF(X(0.2), caseTop);
+            else
+                lid << QPointF(X(0.12), caseTop) << QPointF(X(0.2), t) << QPointF(X(0.96), t)
+                    << QPointF(X(0.88), caseTop);
+            path.addPolygon(lid);
+            path.moveTo(X(0.12), caseBot); path.lineTo(X(0.12), t + h);
+            path.moveTo(X(0.88), caseBot); path.lineTo(X(0.88), t + h);
+            if (m_sideOn) { path.moveTo(X(0.5), caseBot); path.lineTo(X(0.5), t + h); }
+        }
+        break;
+    case StageTarget::Kind::UprightPiano:
+        if (top)
+        {
+            // A box against the wall, the keyboard protruding at the house edge.
+            const double kb = Y(0.72);
+            path.addRoundedRect(r, 1.5, 1.5);
+            path.moveTo(l, kb); path.lineTo(l + w, kb);
+            stripes(path, X(0.04), X(0.96), kb, t + h);
+        }
+        else
+        {
+            path.addRect(r);
+            if (m_sideOn)
+            {
+                path.moveTo(l, Y(0.55)); path.lineTo(X(0.35), Y(0.55));       // the key ledge
+                path.moveTo(X(0.35), Y(0.55)); path.lineTo(X(0.35), Y(0.35));
+            }
+            else
+            {
+                path.moveTo(l, Y(0.45)); path.lineTo(l + w, Y(0.45));
+                path.moveTo(X(0.5), t); path.lineTo(X(0.5), Y(0.45));
+            }
+        }
+        break;
+    case StageTarget::Kind::Rack:
+        path.addRect(r);
+        if (top)
+        {
+            // Rack units across the front half.
+            units(path, l + 2.0, l + w - 2.0, Y(0.5), t + h);
+            path.moveTo(l, Y(0.5)); path.lineTo(l + w, Y(0.5));
+        }
+        else
+            units(path, l + 2.0, l + w - 2.0, t + 2.0, t + h);
+        break;
+    case StageTarget::Kind::Speaker:
+        if (top)
+        {
+            // A cabinet, its cone, and a tick out of the face it points from.
+            path.addRoundedRect(r, 2.0, 2.0);
+            const double cr = qMax(3.0, qMin(w, h) * 0.32);
+            path.addEllipse(QPointF(l + w * 0.5, t + h * 0.5), cr, cr);
+            const double dot = qMax(1.2, cr * 0.28);
+            path.addEllipse(QPointF(l + w * 0.5, t + h * 0.5), dot, dot);
+            path.moveTo(l + w * 0.5, t + h);
+            path.lineTo(l + w * 0.5, t + h + qMax(4.0, h * 0.22));
+        }
+        else
+        {
+            // The box on four little wheels; from the front, the grille's cone.
+            const double caster = h * (0.1 / 1.1);
+            const QRectF box(l, t, w, h - caster);
+            path.addRect(box);
+            if (!m_sideOn)
+            {
+                const double cr = qMax(2.5, qMin(box.width(), box.height()) * 0.3);
+                path.addEllipse(box.center(), cr, cr);
+                path.addEllipse(box.center(), cr * 0.3, cr * 0.3);
+            }
+            else
+                path.addRect(QRectF(l + w * 0.12, t + h * 0.12, w * 0.76, (h - caster) * 0.25));
+            const double wr = qMax(1.2, caster * 0.45);
+            for (double fx : { 0.12, 0.88 })
+                path.addEllipse(QPointF(X(fx), t + h - wr), wr, wr);
+        }
+        break;
+    default:
+        break;
+    }
+    return path;
 }
 
 void TargetItem::setFigure(const QPointF &feet, const QPointF &crown,
@@ -381,6 +597,8 @@ QRectF TargetItem::geometryRect() const
     const QRectF foot = footprintRect();
     if (foot.isValid())
         rect |= foot;
+    if (bandRect().isValid())
+        rect |= bandBounds();
     if (isLine())
         rect |= m_curve.boundingRect();
     return rect;
@@ -405,6 +623,8 @@ QRectF TargetItem::boundingRect() const
     const QRectF foot = footprintRect();
     if (foot.isValid())
         rect |= foot.adjusted(-pad, -pad, pad, pad);
+    if (bandRect().isValid())
+        rect |= bandBounds().adjusted(-pad, -pad, pad, pad);
     if (isLine())
     {
         const double r = kHandleRadius + 4.0;
@@ -462,6 +682,17 @@ void TargetItem::paint(QPainter *painter,
         painter->setPen(edge);
         painter->setBrush(tint);
         painter->drawRoundedRect(foot, 3.0, 3.0);
+    }
+
+    /* A band instrument: the thing itself, in the target's colour, drawn the
+       way the kit's footprint is (same weight, tint and selected state). */
+    if (bandRect().isValid())
+    {
+        QColor tint = col;
+        tint.setAlpha(selected ? 90 : 60);
+        painter->setPen(QPen(col, selected ? 2.0 : 1.4, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+        painter->setBrush(tint);
+        painter->drawPath(bandOutline());
     }
 
     /* A line: the curve, its ends as squares and its mid points as dots, and

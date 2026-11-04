@@ -14,6 +14,14 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Added
 
+- **Band instruments as stage targets.** Beside Drum Kit, Edit Target's
+  **Subject** now has Keyboard (1.4 × 0.5 m, aimed at 1.1 m), Grand piano
+  (1.5 × 1.8 m, 1.1 m), Upright piano (1.5 × 0.6 m, 1.2 m), Equipment rack
+  (0.6 × 0.6 m, 1.2 m tall, 1.0 m) and Speaker on wheels (0.55 × 0.5 m, 0.8 m).
+  Each is drawn as itself on the plot (keybed and stand, the grand's case,
+  rack units, a cone with a facing tick) and as a solid shape at real size
+  in the Rig View; the size is editable and `]` / `[` turn them. Saved as new
+  kind names, so older builds read them as a plain mark.
 - **Three states for a Show Review warning, visible on the cue.** Open is
   the amber **⚠ cyc**; **I Meant It** turns it green (**cyc ✓**; hover says
   who marked it, when, and the note); **Not a Problem…** (was Accept…)

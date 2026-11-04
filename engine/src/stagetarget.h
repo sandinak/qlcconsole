@@ -106,8 +106,27 @@ public:
         DrumKit,     ///< a kit: lower, and wide enough that a point lies
         Structure,   ///< bound to a truss/platform/tower -- follows it
         Area,        ///< a region of deck, not a point
-        Line         ///< a curve in space: each light gets its own point on it
+        Line,        ///< a curve in space: each light gets its own point on it
+        Keyboard,    ///< a keyboard on an X-stand: hands and face at 1.1 m
+        GrandPiano,  ///< a grand, lid up: 1.5 x 1.8 m
+        UprightPiano,///< an upright against a wall: 1.5 x 0.6 m
+        Rack,        ///< an equipment / amp rack: 0.6 x 0.6 m, 1.2 m tall
+        Speaker      ///< a powered speaker on casters: 0.55 x 0.5 m, the box 1.0 m tall, 0.1 m up
     };
+
+    /** The band instruments (Keyboard, pianos, Rack): a kind with a real
+     *  footprint, drawn as the thing itself on the plot and in the rig view. */
+    static bool isBandKind(Kind k)
+    { return k == Kind::Keyboard || k == Kind::GrandPiano || k == Kind::UprightPiano || k == Kind::Rack
+             || k == Kind::Speaker; }
+    /** Kinds that have a footprint to draw and to resize: Area, Drum Kit and the band kinds. */
+    static bool hasFootprintKind(Kind k)
+    { return k == Kind::Area || k == Kind::DrumKit || isBandKind(k); }
+    /** The footprint (W x D, metres) a band kind starts with; empty for the others. */
+    static QSizeF defaultFootprint(Kind k);
+    /** How tall the instrument stands, metres (drawn in the rig view and the
+     *  elevations); 0 for the kinds that are not drawn solid. */
+    static float bodyHeight(Kind k);
 
     static QString kindToString(Kind k);
     static Kind    stringToKind(const QString &s, Kind fallback = Kind::None);
@@ -228,6 +247,12 @@ public:
      *  what lets you see whether an 8-degree beam actually covers it, which is
      *  the question this view is opened to answer. Zero = a point. */
     QSizeF footprint() const { return m_footprint; }
+
+    /** Which way movable gear (a Speaker, an instrument) faces, degrees turned
+     *  from facing the house, as the ] and [ keys turn it. Saved only when
+     *  turned; other kinds ignore it. */
+    float rotation() const { return m_rotation; }
+    void  setRotation(float deg) { m_rotation = deg; }
     void   setFootprint(const QSizeF &s) { m_footprint = s; }
 
     QColor color() const { return m_color; }
@@ -277,6 +302,7 @@ private:
     quint32   m_seed = 0;                    ///< performer line: heights
     QString   m_boundType;                   ///< "platform" | "truss" | "tower"
     quint32   m_boundId = UINT_MAX;
+    float     m_rotation = 0.0f;             ///< degrees, see rotation()
     QSizeF    m_footprint;                   ///< metres; empty = a point
     QVector<QVector3D> m_linePoints;         ///< Line: relative to m_position
     bool      m_locked = false;

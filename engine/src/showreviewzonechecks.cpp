@@ -356,11 +356,12 @@ bool standsOn(const Scenery *sc, const QVector3D &p)
 }
 
 /** Whether target @a tid stands on @a sc: a mark, an area, a structure or a
- *  line (every point of it) -- never a person or a kit, who stand in front. */
+ *  line (every point of it) -- never a person, a kit or a band instrument, who stand in front. */
 bool targetOn(MonitorProperties *mp, quint32 tid, const Scenery *sc)
 {
     const StageTarget *t = mp->stageTarget(tid);
-    if (t == nullptr || t->kind() == StageTarget::Kind::Person || t->kind() == StageTarget::Kind::DrumKit)
+    if (t == nullptr || t->kind() == StageTarget::Kind::Person || t->kind() == StageTarget::Kind::DrumKit
+        || StageTarget::isBandKind(t->kind()))
         return false;
     if (t->isLine())
     {
