@@ -15,6 +15,11 @@ target_include_directories(${module_name} PRIVATE
 
 include_ui_header(${module_name})
 
+# The real HID plugin, loaded as the app loads it (with a virtual DS4).
+add_dependencies(${module_name} hidplugin)
+target_compile_definitions(${module_name} PRIVATE
+    QLC_HID_PLUGIN_FILE="$<TARGET_FILE:hidplugin>")
+
 target_link_libraries(${module_name} PRIVATE
     Qt6::Core
     Qt6::Gui

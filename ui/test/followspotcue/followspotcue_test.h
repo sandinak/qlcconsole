@@ -24,6 +24,7 @@
 #include <QString>
 
 class App;
+class QTemporaryDir;
 class ShowTreeView;
 
 class FollowSpotCue_Test : public QObject
@@ -35,6 +36,7 @@ private slots:
     void cleanupTestCase();
 
     void aCueFollowSpotMovesFromEveryRoute();
+    void theStickIsWhicheverPadIsPatched();
     void everyCueSelectedShowsItsEffect();
     void hisShow();
     void everyCueFiresItsEffects();
@@ -45,6 +47,7 @@ private:
 
 private:
     App *m_app = nullptr;
+    QTemporaryDir *m_pluginDir = nullptr;
 };
 
 #endif

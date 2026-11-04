@@ -28,6 +28,7 @@
 #include "configurehid.h"
 #include "hiddmxdevice.h"
 #include "hidjsdevice.h"
+#include "hidvirtualpad.h"
 #include "hidprofile.h"
 #include "gamepadlayout.h"
 #include "hidprofileeditor.h"
@@ -57,13 +58,32 @@
 
 void HIDPlugin::init()
 {
-    loadProfiles(QLCFile::systemDirectory(QString(HIDPROFILEDIR), QString(".qxhid")));
-    loadProfiles(QLCFile::userDirectory(QString(USERHIDPROFILEDIR), QString(HIDPROFILEDIR),
-                                        QStringList() << "*.qxhid"));
+    /* QLC_HID_PROFILE_DIR: the profiles from there alone (tests: the
+       source tree's, not whatever this machine's user has). */
+    const QString profileDir = qEnvironmentVariable("QLC_HID_PROFILE_DIR");
+    if (!profileDir.isEmpty())
+    {
+        loadProfiles(QDir(profileDir));
+    }
+    else
+    {
+        loadProfiles(QLCFile::systemDirectory(QString(HIDPROFILEDIR), QString(".qxhid")));
+        loadProfiles(QLCFile::userDirectory(QString(USERHIDPROFILEDIR), QString(HIDPROFILEDIR),
+                                            QStringList() << "*.qxhid"));
 #if defined (__APPLE__) || defined(Q_OS_MACOS)
-    /* Where earlier builds looked: read if it is there, never made */
-    loadProfiles(QDir(QDir::homePath() + QStringLiteral("/Library/Application Support/QLC+/HIDProfiles")));
+        /* Where earlier builds looked: read if it is there, never made */
+        loadProfiles(QDir(QDir::homePath() + QStringLiteral("/Library/Application Support/QLC+/HIDProfiles")));
 #endif
+    }
+
+    /* QLC_HID_VIRTUAL_PAD: pads that are not there, read as real ones
+       (HIDVirtualPad). QLC_HID_VIRTUAL_ONLY=1: and none that are. */
+    for (HIDVirtualPad *pad : HIDVirtualPad::fromEnvironment(this))
+    {
+        m_virtualPads << pad;
+        addDevice(pad);
+    }
+    m_virtualOnly = qEnvironmentVariableIntValue("QLC_HID_VIRTUAL_ONLY") == 1;
 
     m_rescanTimer = new QTimer(this);
     m_rescanTimer->setSingleShot(true);
@@ -602,12 +622,14 @@ void HIDPlugin::rescanDevices()
     /* Treat all devices as dead first, until we find them again. Those
        that aren't found, get destroyed at the end of this function. */
     QList <HIDDevice*> destroyList(m_devices);
+    for (HIDVirtualPad *pad : std::as_const(m_virtualPads))
+        destroyList.removeAll(pad);     // never found: never gone
     bool changed = false;
 
     struct hid_device_info *devs, *cur_dev;
     quint32 line = 0;
 
-    devs = hid_enumerate(0x0, 0x0);
+    devs = m_virtualOnly ? nullptr : hid_enumerate(0x0, 0x0);
 
     cur_dev = devs;
 
@@ -669,7 +691,8 @@ void HIDPlugin::rescanDevices()
         cur_dev = cur_dev->next;
     }
 
-    hid_free_enumeration(devs);
+    if (devs != nullptr)
+        hid_free_enumeration(devs);
 
     /* Destroy those devices that were no longer found. */
     while (destroyList.isEmpty() == false)
@@ -693,6 +716,15 @@ void HIDPlugin::rescanDevices()
 
     if (changed)
         emit configurationChanged();
+}
+
+bool HIDPlugin::injectVirtualInput(quint32 input, quint32 channel, uint value)
+{
+    HIDVirtualPad *pad = qobject_cast<HIDVirtualPad *>(device(input));
+    if (pad == nullptr || !m_virtualPads.contains(pad))
+        return false;
+    pad->inject(channel, uchar(qMin(value, 255u)));
+    return true;
 }
 
 HIDDevice* HIDPlugin::device(const QString& path) const

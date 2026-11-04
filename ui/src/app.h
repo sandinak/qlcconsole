@@ -1099,6 +1099,8 @@ private slots:
     void slotPadModeChanged(Doc::PadMode mode);
     /** The follow spot's chip, from ProgrammerController::followSpotStatus(). */
     void updateFollowChip();
+    /** QLC_FSPOT_PROBE: the follow spot's stick on stderr, once a second. */
+    void startFollowSpotProbe();
 
     /** Refresh the global timecode chip (position/state colour). */
     /** The footer's "Next:" -- the main cue list's standby cue. */

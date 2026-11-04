@@ -260,6 +260,25 @@ docs/design/AREA_COVER.md. Changes the DMX of existing area aims
   everyone in its path: no shadowing by the people in front.
 - No "point at the centre" option: add one only if a show needs it.
 
+## The follow spot's stick is the patched controller (fix/04-followspot-real-stick, 2026-11-04) -- built
+
+Third report: "◎ Follow: AT-Spots ← ES-Witch · no stick" with his DS4 on
+HID, patched to U01-Office with the Sony DualShock 4 profile (dink). The
+stick was bound only in `ProgrammingManager::showEvent()`
+(`autoBindFromProfile()`): never shown that session, or shown before the
+pad connected, and there was no stick. Earlier tests bound by hand
+(`bindPanAxis()`) and fed `slotControllerInputChanged()` directly.
+`ProgrammerController::refreshStickBinding()` now binds on load, on every
+input patch/slot/device change (`InputOutputMap::inputPatchChanged`, new)
+and once a second while a follow spot has none; HID profile slots, else
+the left stick's roles. Chip and status name the pad
+(`followSpotStickName()`). `QLC_FSPOT_PROBE=1` (+`QLC_FSPOT_PROBE_GO=1.1.2`)
+logs it all to stderr once a second. Tests drive the real HID plugin with
+a virtual DS4 (`QLC_HID_VIRTUAL_PAD`, `HIDVirtualPad`):
+`FollowSpotCue_Test::aCueFollowSpotMovesFromEveryRoute`,
+`theStickIsWhicheverPadIsPatched`, `hisShow`. Open: confirm live with his
+DS4 on dink. Move to DONE.md when landed.
+
 ## A cue's follow spot and effects, every time (fix/04-cue-fires-effects, 2026-11-04) -- built
 
 "Followspot STILL NOT WORKING in 1.1.2 ... and no indicator" and "selecting

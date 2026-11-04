@@ -628,6 +628,7 @@ bool InputOutputMap::setInputPatch(quint32 universe, const QString &pluginName,
     locker.unlock();
     if (ip != NULL && currProfile != ip->profile())
         emit profileChanged(universe, ip->profileName());
+    emit inputPatchChanged(universe);
 
     return true;
 }
