@@ -912,8 +912,12 @@ there carry over.
 
 - **Window**: the **Theme** (Default, Tan, Blue, QLC+ Original, Red Shift,
   VS Code Dark) and the **Toolbar style** of the tabs, the top bar and
-  every tab's tools: **Icons and text**, **Icons only** (tooltips name
-  them) or **Text only**.
+  every tab's tools: **Automatic** (the default), **Icons and text**,
+  **Icons only** (tooltips name them) or **Text only**. Automatic fits the
+  tabs to the window: full names when they fit, then short names (I/O,
+  Studio, Tree, Console, Desk), then icons alone. It re-measures when you
+  resize, switch the Workspace view, or put a tab in its own window, and
+  Run always stays on the bar. A tab's tooltip always has its full name.
 - **Footer**: whether it shows **the engine load** (off unless you turn
   it on), **the power estimate** (only for a show with its power set up in
   the Lighting Studio), **the grand master** and **the speed masters**, and how the

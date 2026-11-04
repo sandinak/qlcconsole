@@ -857,7 +857,7 @@ void App::init()
     // Load and apply the tab label mode preference.
     {
         QSettings settings;
-        m_tabLabelMode = settings.value(SETTINGS_TAB_LABEL_MODE, TabIconAndText).toInt();
+        m_tabLabelMode = settings.value(SETTINGS_TAB_LABEL_MODE, TabAuto).toInt();
     }
     applyTabLabelMode();
 
@@ -885,6 +885,7 @@ void App::init()
     /* Shift-click a tab: its view in a window of its own (eventFilter()). It
        was a double-click, which broke views out by accident. */
     m_tab->tabBar()->installEventFilter(this);
+    m_tab->installEventFilter(this);    // Auto tab labels follow its width
     connect(m_tab, SIGNAL(currentChanged(int)), this, SLOT(slotTabChanged(int)));
     // The tab on show lends its own tools to the top bar.
     if (m_mainBar != NULL)
@@ -5869,6 +5870,7 @@ void App::slotDetachContext(int index)
     // m_tab's currentIndex/currentChanged (which the window title tracks)
     // never shifts to reflect what's actually still showing.
     m_tab->removeTab(index);
+    fitTabLabels();     // one tab fewer: the others may have room for words
     updateWindowTitle();
     openContextWindow(context, tabLabel);
 }
@@ -6910,11 +6912,98 @@ void App::setTabLabelMode(int mode)
     applyTabLabelMode();
 }
 
+QString App::tabShortLabel(const QString &label) const
+{
+    /* decided: I/O, Studio, Console, Desk, Tree; the rest are short already. */
+    if (label == tr("Connections"))     return tr("I/O");
+    if (label == tr("Lighting Studio")) return tr("Studio");
+    if (label == tr("Virtual Console")) return tr("Console");
+    if (label == tr("Simple Desk"))     return tr("Desk");
+    if (label == tr("Show Tree"))       return tr("Tree");
+    return label;
+}
+
+void App::changeEvent(QEvent *event)
+{
+    QMainWindow::changeEvent(event);
+    if (event->type() == QEvent::LanguageChange && m_tab != NULL)
+        applyTabLabelMode();
+}
+
+void App::fitTabLabels()
+{
+    if (!m_tab || m_fittingTabs || m_tabLabelMode != TabAuto)
+        return;
+    m_fittingTabs = true;
+    QTabBar *bar = m_tab->tabBar();
+    const int count = m_tab->count();
+    /* Room: the strip's own row, less any corner widgets beside it. */
+    int room = m_tab->width();
+    if (QWidget *c = m_tab->cornerWidget(Qt::TopLeftCorner))
+        room -= c->isVisible() ? c->width() : 0;
+    if (QWidget *c = m_tab->cornerWidget(Qt::TopRightCorner))
+        room -= c->isVisible() ? c->width() : 0;
+
+    /* The words are measured with the tabs' usual padding; only the icons
+       step uses the tight padding, so ten icons fit
+       even the window's minimum. */
+    setTabsCompact(false);
+    int fit = TabFitIcons;
+    for (int step = TabFitFull; step <= TabFitIcons; ++step)
+    {
+        for (int i = 0; i < count; ++i)
+        {
+            int o = -1;
+            for (int k = 0; k < m_tabOriginals.size() && o < 0; ++k)
+                if (m_tabOriginals.at(k).first == bar->tabData(i).toString())
+                    o = k;
+            if (o < 0)
+                continue;
+            const QString full = tabDisplayLabel(m_tabOriginals.at(o).first);
+            m_tab->setTabIcon(i, m_tabOriginals.at(o).second);
+            m_tab->setTabText(i, step == TabFitFull ? full
+                                 : step == TabFitShort ? tabShortLabel(m_tabOriginals.at(o).first)
+                                 : QString());
+        }
+        bar->updateGeometry();
+        if (step == TabFitIcons || bar->sizeHint().width() <= room)
+        {
+            fit = step;
+            break;
+        }
+    }
+    m_tabFit = fit;
+    setTabsCompact(fit == TabFitIcons);
+    m_fittingTabs = false;
+}
+
+void App::setTabsCompact(bool compact)
+{
+    if (m_tabsCompact == compact || !m_tab)
+        return;
+    m_tabsCompact = compact;
+    /* On the strip itself, over the window's chrome QSS (default.qss gives
+       a tab 12px each side). */
+    m_tab->tabBar()->setStyleSheet(compact
+        ? QStringLiteral("QTabBar::tab { padding: 6px 1px; }") : QString());
+    m_tab->tabBar()->updateGeometry();
+}
+
 void App::applyTabLabelMode()
 {
     if (!m_tab)
         return;
     const int count = m_tab->count();
+    /* Narrower than its tabs, the strip scrolls and Qt's minimum for the
+       window follows the tabs' text. Auto sizes the tabs to the window, so
+       let the strip shrink with it. */
+    m_tab->tabBar()->setUsesScrollButtons(true);
+    m_tab->tabBar()->setElideMode(Qt::ElideNone);
+    if (m_tabLabelMode != TabAuto)
+    {
+        m_tabFit = TabFitFull;
+        setTabsCompact(false);
+    }
     for (int i = 0; i < count; ++i)
     {
         /* By the tab's own label, not its place: with a view put away or in
@@ -6927,6 +7016,8 @@ void App::applyTabLabelMode()
             continue;
         const QString origText = tabDisplayLabel(m_tabOriginals.at(o).first);
         const QIcon   &origIcon = m_tabOriginals.at(o).second;
+        /* Whatever it shows, the tooltip names the tab in full. */
+        m_tab->setTabToolTip(i, origText);
         switch (m_tabLabelMode)
         {
         case TabIconOnly:
@@ -6937,12 +7028,13 @@ void App::applyTabLabelMode()
             m_tab->setTabText(i, origText);
             m_tab->setTabIcon(i, QIcon());
             break;
-        default: // TabIconAndText
+        default: // TabIconAndText, TabAuto (fitTabLabels() below)
             m_tab->setTabText(i, origText);
             m_tab->setTabIcon(i, origIcon);
             break;
         }
     }
+    fitTabLabels();
 
     // The same mode for the show controls (Design | Operate stays words).
     if (m_showControls != NULL)
@@ -8047,6 +8139,8 @@ QMenu *App::tabContextMenu(int index)
 
 bool App::eventFilter(QObject *watched, QEvent *event)
 {
+    if (m_tab != NULL && watched == m_tab && event->type() == QEvent::Resize && m_tabLabelMode == TabAuto)
+        fitTabLabels();
     if (m_statusFitTimer != nullptr && watched == statusBar()
         && (event->type() == QEvent::LayoutRequest || event->type() == QEvent::Resize
             || event->type() == QEvent::Show))
